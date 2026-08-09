@@ -188,10 +188,8 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         const merged = await clientApi.saveSettingsEx(cwd, 'global', updates);
         setSettings(merged);
         setAppSettings(merged);
-        if (updates.theme) {
-          const { setTheme } = await import('../../api/themeStore');
-          setTheme(updates.theme);
-        }
+        // D3：主题不再直调 setTheme——setAppSettings(merged) 写入 settingsStore 后，
+        // themeProjection 订阅投影自动完成 DOM + crish_theme 缓存同步（单一写端）。
         // fonts：FontSettingsSection 已 setFontPreferences；此处仅当其它入口写入 fonts 时补 apply
         if (updates.fonts) {
           const { setFontPreferences, normalizeFontPrefs } = await import('../../api/fontStore');
@@ -433,8 +431,8 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
                           fonts: { ...DEFAULT_FONT_PREFS },
                         });
                         if (!ok) return;
-                        const { setTheme } = await import('../../api/themeStore');
-                        setTheme('default');
+                        // D3：主题走 save 路径（settingsStore → themeProjection 投影），
+                        // 不再直调 setTheme（crish_theme 单一写端 = themeProjection）
                         await setFontPreferences({ ...DEFAULT_FONT_PREFS });
                         applyDensity('medium');
                       } catch (err) {

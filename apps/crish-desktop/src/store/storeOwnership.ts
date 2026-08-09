@@ -65,7 +65,15 @@ export type StoreOwnership = {
   readonly forbidAlongside?: readonly StoreWriteOwner[];
 };
 
-/** Canonical open/focus/new-draft: shell orchestrates; session body stays on layout. */
+/**
+ * Canonical open/focus/new-draft: shell orchestrates; session body stays on layout.
+ *
+ * D9 纪律声明（T-E 状态治理）：activeSessionId vs shell openTabs 为**设计内单一手势**
+ * ——shell 编排授权（workspaceShellStore 动作内部调 setActiveSessionId），
+ * **组件不得双写**（同一手势同时调 setActiveSessionId 与 shell activate 会漂移）。
+ * 本约束维持纪律型（无运行时守卫，成本高收益低；D5 曾用结构替代纪律，
+ * 判定标准 = 是否有可测的收敛 action——本约束无，故保留纪律）。
+ */
 export const SHELL_TAB_OWNERSHIP = {
   domain: 'shell',
   writeOwner: 'compositionRoot.shell',
@@ -85,3 +93,17 @@ export const SESSION_OWNERSHIP = {
   writeOwner: 'sessionStore',
   forbidAlongside: ['workspaceShellStore'],
 } as const satisfies StoreOwnership;
+
+/**
+ * D10 登记待清理：legacy open-tabs map（api/workspaceChromeTabs）与
+ * workspaceShellStore.openTabs 的运行期双写路径**保留**（跨窗口/重启标签恢复
+ * 依赖 legacy map 存活）。打开/聚焦路径已收敛到统一入口
+ * `syncOpenTabsToLegacy`；move/close 经 moveSessionTab/closeSessionTab
+ * （workspaceChromeTabs 单一模块）。migrateFromOpenTabsMap 覆盖后消费方消失时，
+ * 按该入口单一 grep 删除双写，仅保留启动一次性迁移（store/README.md D10 条目）。
+ */
+export const LEGACY_OPEN_TABS_DUAL_WRITE = {
+  domain: 'shell',
+  writeOwner: 'workspaceShellStore',
+  note: 'D10 登记待清理：syncOpenTabsToLegacy 收敛点；保留运行期双写',
+} as const;

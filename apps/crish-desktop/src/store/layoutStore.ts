@@ -180,6 +180,8 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   setShowSettingsOverlay: (show: boolean) => void;
   setSettingsActiveTab: (tab: SettingsTabType) => void;
   openSettings: (tab?: SettingsTabType) => void;
+  /** 活动工作区切换（clamp 内建；C3 收敛点） */
+  setActiveWorkspaceIndex: (index: number) => void;
 }
 
 // ── Initial state (safe defaults + seed) ────────────────────────────────────

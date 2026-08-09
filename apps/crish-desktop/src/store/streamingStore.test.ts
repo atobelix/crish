@@ -168,6 +168,32 @@ describe('applyStreamTextToMessage', () => {
     const next = applyStreamTextToMessage(msg, 'hi there');
     expect(next.blocks?.[2]).toEqual({ type: 'text', content: ' there' });
   });
+
+  // D1 锁（T-E 批次 5）：分叉兜底分支——既有 streamingStore 旧值与 committed 正文
+  // 不一致（divergence）时，以 stream 全量为权威正文（streamingStore.ts:445-448）。
+  it('分叉兜底：stream 不以 committed 开头 → 以 stream 全量为权威正文', () => {
+    const msg = {
+      text: 'OLD-COMMITTED',
+      blocks: [{ type: 'text', content: 'OLD-COMMITTED' }],
+    };
+    // stream 全量（重放/新 run 覆盖）与 committed 无前缀关系 → 走 divergence 分支
+    const next = applyStreamTextToMessage(msg, 'BRAND-NEW-STREAM');
+    expect(next.text).toBe('BRAND-NEW-STREAM');
+    // 分叉分支语义：blocks 保持既有结构（仅 text 字段以 stream 为权威）
+    expect(next.blocks).toBe(msg.blocks);
+  });
+
+  // D1 锁：committed 有正文、stream 与 committed 同源但更长 → 尾部增量拼到
+  // 最后一个 text block（非分叉路径的对照，锁 merge 兜底分支语义）
+  it('同源增量：stream 以 committed 开头 → trailing delta 追加', () => {
+    const msg = {
+      text: 'AB',
+      blocks: [{ type: 'text', content: 'AB' }],
+    };
+    const next = applyStreamTextToMessage(msg, 'ABCDEF');
+    expect(next.text).toBe('ABCDEF');
+    expect(next.blocks?.[0]).toEqual({ type: 'text', content: 'ABCDEF' });
+  });
 });
 
 describe('applyStreamToolsToMessage', () => {

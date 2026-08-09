@@ -29,7 +29,6 @@ import type {
   WorkspaceActions,
   WorkspaceStoreSlice,
 } from './workspaceActions';
-import { expandToolColumnIfCollapsed } from './layoutHelpers';
 
 const _initialWorkspaces = seedInitialWorkspaces(DEFAULT_WORKSPACE_ID);
 
@@ -118,30 +117,13 @@ export function setGroupActiveCard(
   groupIdx: number,
   cardId: string,
 ): void {
-  useWorkspaceStore.setState((state) => {
-    const group = state.workspaces.find((w) => w.id === wsId)?.columns[colIdx]
-      ?.groups[groupIdx];
-    if (group) group.activeCardId = cardId;
-  });
+  // P3-4：facade 仅转发（真 action 定义见 workspaceActions.setGroupActiveCard）
+  getWorkspaceStoreState().setGroupActiveCard(wsId, colIdx, groupIdx, cardId);
 }
 
 export function focusExistingPanelCard(wsId: string, cardId: string): boolean {
-  let found = false;
-  useWorkspaceStore.setState((state) => {
-    const ws = state.workspaces.find((w) => w.id === wsId);
-    if (!ws) return;
-    for (const c of ws.columns) {
-      for (const g of c.groups) {
-        if (g.cards.some((card) => card.id === cardId)) {
-          g.activeCardId = cardId;
-          found = true;
-          expandToolColumnIfCollapsed(ws);
-          return;
-        }
-      }
-    }
-  });
-  return found;
+  // P3-4：facade 仅转发（真 action 定义见 workspaceActions.focusExistingPanelCard）
+  return getWorkspaceStoreState().focusExistingPanelCard(wsId, cardId);
 }
 
 export type { DraggedTabState };

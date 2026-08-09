@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clientApi, type PackageSource } from '../../api/clientApi';
 import {
-  EXTENSION_CATALOG,
   markCatalogInstalled,
   unmarkCatalogInstalled,
   loadCatalogInstalledIds,
@@ -27,74 +26,27 @@ import {
 import type {
   ExpandMode,
   ExpandTarget,
-  KindFilter,
   MainView,
   ManageKind,
   PendingExpand,
-  PluginInstalledExtension,
 } from './types';
-
-const SKILLS_CACHE_KEY = 'crish_skills_cache_v1';
-const MCP_SERVERS_CACHE_KEY = 'crish_mcp_servers_cache_v1';
-
-function loadSkillsCache(): DesktopSkill[] {
-  try {
-    const raw = localStorage.getItem(SKILLS_CACHE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSkillsCache(list: DesktopSkill[]) {
-  try {
-    localStorage.setItem(SKILLS_CACHE_KEY, JSON.stringify(list));
-  } catch {
-    /* ignore */
-  }
-}
-
-function loadMcpServersCache(): McpServerInfo[] {
-  try {
-    const raw = localStorage.getItem(MCP_SERVERS_CACHE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveMcpServersCache(list: McpServerInfo[]) {
-  try {
-    localStorage.setItem(MCP_SERVERS_CACHE_KEY, JSON.stringify(list));
-  } catch {
-    /* ignore */
-  }
-}
+import { buildInstalledExtensions, packageName } from './buildInstalledExtensions';
+import { useMcpCache } from './useMcpCache';
+import { useMarketQuery } from './useMarketQuery';
+import { useSkillsCache } from './useSkillsCache';
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-function packageName(pkg: string | PackageSource): string {
-  return typeof pkg === 'string' ? pkg : pkg.source;
-}
-
 export function useExtensionMarket(onShowToast: (msg: string) => void) {
   const [view, setView] = useState<MainView>('installed');
 
-  const [searchFilter, setSearchFilter] = useState<{
-    kindFilter: KindFilter;
-    query: string;
-  }>({ kindFilter: 'all', query: '' });
-  const kindFilter = searchFilter.kindFilter;
-  const query = searchFilter.query;
-  const setKindFilter = (val: React.SetStateAction<KindFilter>) =>
-    setSearchFilter((prev) => ({ ...prev, kindFilter: typeof val === 'function' ? val(prev.kindFilter) : val }));
-  const setQuery = (val: React.SetStateAction<string>) =>
-    setSearchFilter((prev) => ({ ...prev, query: typeof val === 'function' ? val(prev.query) : val }));
+  const { skills, setSkills, saveSkills } = useSkillsCache();
+  const { mcpServers, setMcpServers, saveMcpServers } = useMcpCache();
 
   const [loading, setLoading] = useState(
-    () => loadSkillsCache().length === 0 && loadMcpServersCache().length === 0
+    () => skills.length === 0 && mcpServers.length === 0
   );
   const hydratedRef = useRef(false);
 
@@ -107,11 +59,20 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
   const mcpToolBusy = busyState.mcpToolBusy;
   const mcpServerBusy = busyState.mcpServerBusy;
   const setBusyId = (val: React.SetStateAction<string | null>) =>
-    setBusyState((prev) => ({ ...prev, busyId: typeof val === 'function' ? val(prev.busyId) : val }));
+    setBusyState((prev) => ({
+      ...prev,
+      busyId: typeof val === 'function' ? val(prev.busyId) : val,
+    }));
   const setMcpToolBusy = (val: React.SetStateAction<boolean>) =>
-    setBusyState((prev) => ({ ...prev, mcpToolBusy: typeof val === 'function' ? val(prev.mcpToolBusy) : val }));
+    setBusyState((prev) => ({
+      ...prev,
+      mcpToolBusy: typeof val === 'function' ? val(prev.mcpToolBusy) : val,
+    }));
   const setMcpServerBusy = (val: React.SetStateAction<boolean>) =>
-    setBusyState((prev) => ({ ...prev, mcpServerBusy: typeof val === 'function' ? val(prev.mcpServerBusy) : val }));
+    setBusyState((prev) => ({
+      ...prev,
+      mcpServerBusy: typeof val === 'function' ? val(prev.mcpServerBusy) : val,
+    }));
 
   const [manage, setManage] = useState<ManageKind>(null);
 
@@ -122,9 +83,16 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
   const expand = expandState.expand;
   const pendingExpand = expandState.pendingExpand;
   const setExpand = (val: React.SetStateAction<ExpandTarget | null>) =>
-    setExpandState((prev) => ({ ...prev, expand: typeof val === 'function' ? val(prev.expand) : val }));
+    setExpandState((prev) => ({
+      ...prev,
+      expand: typeof val === 'function' ? val(prev.expand) : val,
+    }));
   const setPendingExpand = (val: React.SetStateAction<PendingExpand | null>) =>
-    setExpandState((prev) => ({ ...prev, pendingExpand: typeof val === 'function' ? val(prev.pendingExpand) : val }));
+    setExpandState((prev) => ({
+      ...prev,
+      pendingExpand:
+        typeof val === 'function' ? val(prev.pendingExpand) : val,
+    }));
 
   const [toolTick, setToolTick] = useState(0);
   const [expandedMcpTools, setExpandedMcpTools] = useState<Set<string>>(
@@ -140,55 +108,34 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     });
   }, []);
 
-  const highlightMatch = useCallback(
-    (text: string): React.ReactNode => {
-      const q = query.trim().toLowerCase();
-      if (!q) return text;
-      const lower = text.toLowerCase();
-      if (!lower.includes(q)) return text;
-      const parts: React.ReactNode[] = [];
-      let cursor = 0;
-      let idx = lower.indexOf(q, cursor);
-      while (idx !== -1) {
-        if (idx > cursor) parts.push(text.slice(cursor, idx));
-        parts.push(<mark key={idx}>{text.slice(idx, idx + q.length)}</mark>);
-        cursor = idx + q.length;
-        idx = lower.indexOf(q, cursor);
-      }
-      if (cursor < text.length) parts.push(text.slice(cursor));
-      return parts;
-    },
-    [query]
-  );
-
   const [dataState, setDataState] = useState<{
-    skills: DesktopSkill[];
-    mcpServers: McpServerInfo[];
     packages: (string | PackageSource)[];
     catalogInstalled: Set<string>;
     plugins: PluginCardState[];
   }>(() => ({
-    skills: loadSkillsCache(),
-    mcpServers: loadMcpServersCache(),
     packages: [],
     catalogInstalled: loadCatalogInstalledIds(),
     plugins: listPluginCardStates(),
   }));
-  const skills = dataState.skills;
-  const mcpServers = dataState.mcpServers;
   const packages = dataState.packages;
   const catalogInstalled = dataState.catalogInstalled;
   const plugins = dataState.plugins;
-  const setSkills = (val: React.SetStateAction<DesktopSkill[]>) =>
-    setDataState((prev) => ({ ...prev, skills: typeof val === 'function' ? val(prev.skills) : val }));
-  const setMcpServers = (val: React.SetStateAction<McpServerInfo[]>) =>
-    setDataState((prev) => ({ ...prev, mcpServers: typeof val === 'function' ? val(prev.mcpServers) : val }));
   const setPackages = (val: React.SetStateAction<(string | PackageSource)[]>) =>
-    setDataState((prev) => ({ ...prev, packages: typeof val === 'function' ? val(prev.packages) : val }));
+    setDataState((prev) => ({
+      ...prev,
+      packages: typeof val === 'function' ? val(prev.packages) : val,
+    }));
   const setCatalogInstalled = (val: React.SetStateAction<Set<string>>) =>
-    setDataState((prev) => ({ ...prev, catalogInstalled: typeof val === 'function' ? val(prev.catalogInstalled) : val }));
+    setDataState((prev) => ({
+      ...prev,
+      catalogInstalled:
+        typeof val === 'function' ? val(prev.catalogInstalled) : val,
+    }));
   const setPlugins = (val: React.SetStateAction<PluginCardState[]>) =>
-    setDataState((prev) => ({ ...prev, plugins: typeof val === 'function' ? val(prev.plugins) : val }));
+    setDataState((prev) => ({
+      ...prev,
+      plugins: typeof val === 'function' ? val(prev.plugins) : val,
+    }));
 
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -252,10 +199,8 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
           null
         ),
       ]);
-      setSkills(skillRes.skills || []);
-      saveSkillsCache(skillRes.skills || []);
-      setMcpServers(mcpRes.servers || []);
-      saveMcpServersCache(mcpRes.servers || []);
+      saveSkills(skillRes.skills || []);
+      saveMcpServers(mcpRes.servers || []);
       setPackages(settings?.packages || []);
       setCatalogInstalled(loadCatalogInstalledIds());
       setPlugins(listPluginCardStates());
@@ -277,103 +222,28 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     void refresh();
   }, [refresh]);
 
-  const installed: InstalledExtension[] = useMemo(() => {
-    const out: InstalledExtension[] = [];
+  const installed: InstalledExtension[] = useMemo(
+    () =>
+      buildInstalledExtensions({
+        skills,
+        mcpServers,
+        packages,
+        catalogInstalled,
+        plugins,
+      }),
+    [skills, mcpServers, packages, catalogInstalled, plugins]
+  );
 
-    for (const s of skills) {      out.push({
-        id: `local-skill:${s.id}`,
-        kind: 'skill',
-        source: s.system ? 'official' : 'local',
-        name: s.name,
-        description: s.description || '本机技能',
-        fromSystem: true,
-        skillContent: s.content,
-        skillRaw: s.raw,
-        skillPath: s.filePath,
-      });
-    }
-
-    for (const m of mcpServers) {
-      const tools = Array.isArray(m.tools) ? m.tools.map(String) : [];
-      out.push({
-        id: `local-mcp:${m.id}`,
-        kind: 'mcp',
-        source: 'local',
-        name: m.name || m.id,
-        description:
-          tools.length > 0
-            ? `${tools.length} 个工具`
-            : m.transport
-              ? String(m.transport)
-              : 'MCP 服务',
-        fromSystem: true,
-        mcpId: m.id,
-        mcpTools: tools,
-        ...(m.transport !== undefined && { mcpTransport: m.transport }),
-        mcpState: m.state,
-      });
-    }
-
-    packages.forEach((pkg, idx) => {
-      const name = packageName(pkg);
-      out.push({
-        id: `local-plugin:${idx}:${name}`,
-        kind: 'plugin',
-        source: 'local',
-        name,
-        description: '已安装的扩展包，在工作区工具链中可用',
-        fromSystem: true,
-        installRef: name,
-      });
-    });
-
-    for (const p of plugins) {
-      const already = out.some(
-        (x) =>
-          x.kind === 'plugin' &&
-          (x.name.toLowerCase() === p.name.toLowerCase() ||
-            x.id === `plugin:${p.id}`)
-      );
-      if (already) continue;
-      const item: PluginInstalledExtension = {
-        id: `plugin:${p.id}`,
-        kind: 'plugin',
-        source: p.source,
-        name: p.name,
-        description: p.description,
-        fromSystem: p.fromSystem,
-        installRef: p.installRef,
-        pluginId: p.id,
-        pluginVersion: p.version,
-        pluginTools: p.declaredTools,
-        pluginHooks: p.declaredHooks,
-        pluginTrustLevel: p.trustLevel,
-        pluginEnabled: p.enabled,
-      };
-      out.push(item);
-    }
-
-    for (const entry of EXTENSION_CATALOG) {
-      if (!catalogInstalled.has(entry.id)) continue;
-      const already = out.some(
-        (x) =>
-          x.name.toLowerCase() === entry.name.toLowerCase() &&
-          x.kind === entry.kind
-      );
-      if (already) continue;
-      out.push({
-        id: entry.id,
-        kind: entry.kind,
-        source: entry.source,
-        name: entry.name,
-        description: entry.description,
-        fromSystem: false,
-        installRef: entry.installRef,
-      });
-    }
-
-    return out;
-  }, [skills, mcpServers, packages, catalogInstalled, plugins]);
+  const {
+    kindFilter,
+    setKindFilter,
+    query,
+    setQuery,
+    highlightMatch,
+    matchQ,
+    installedFiltered,
+    catalogFiltered,
+  } = useMarketQuery(installed);
 
   useEffect(() => {
     if (!pendingExpand) return;
@@ -396,33 +266,6 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
       setPendingExpand(null);
     }
   }, [installed, pendingExpand]);
-
-  const matchQ = useCallback(
-    (name: string, desc: string) => {
-      const q = query.trim().toLowerCase();
-      if (!q) return true;
-      return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
-    },
-    [query],
-  );
-
-  const installedFiltered = useMemo(
-    () =>
-      installed.filter((item) => {
-        if (kindFilter !== 'all' && item.kind !== kindFilter) return false;
-        return matchQ(item.name, item.description);
-      }),
-    [installed, kindFilter, matchQ]
-  );
-
-  const catalogFiltered = useMemo(
-    () =>
-      EXTENSION_CATALOG.filter((entry) => {
-        if (kindFilter !== 'all' && entry.kind !== kindFilter) return false;
-        return matchQ(entry.name, entry.description);
-      }),
-    [kindFilter, matchQ]
-  );
 
   const toggleExpand = (
     scope: 'installed' | 'catalog',

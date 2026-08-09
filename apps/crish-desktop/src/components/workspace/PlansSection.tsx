@@ -9,6 +9,7 @@ import type { WorkflowDefinition } from '../../api/workflowApi';
 import { scheduleLabel } from '../../api/workflowApi';
 import { emitUiEvent } from '../../api/uiEvents';
 import { emptyPlansHint } from './runtimePanelLib';
+import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { Button } from '../ui';
 
 export type PlansSectionProps = {
@@ -16,7 +17,6 @@ export type PlansSectionProps = {
   cronJobs: CronJob[];
   planCount: number;
   countLabel: string | null;
-  engineOnline: boolean;
 };
 
 export const PlansSection: React.FC<PlansSectionProps> = ({
@@ -24,8 +24,9 @@ export const PlansSection: React.FC<PlansSectionProps> = ({
   cronJobs,
   planCount,
   countLabel,
-  engineOnline,
 }) => {
+  // D2（C-10）：连接态投影（errorStore 真源），不再由 RuntimePanel props 下传
+  const connectionStatus = useConnectionStatus();
   return (
     <section className={styles.section} aria-labelledby="rt-sec-plan">
       <div className={styles.sectionHead}>
@@ -51,7 +52,7 @@ export const PlansSection: React.FC<PlansSectionProps> = ({
       </div>
       {planCount === 0 ? (
         <div className={styles.empty} role="status">
-          {emptyPlansHint(engineOnline)}
+          {emptyPlansHint(connectionStatus)}
         </div>
       ) : (
         <div className={`${styles.list} ${styles.listScroll}`} role="list" aria-label="计划任务列表">

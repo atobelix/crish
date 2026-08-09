@@ -33,6 +33,7 @@ import {
   normalizeWritableSessionTitle,
   pickFallbackActiveSessionId,
   pruneEmptyShellsInPlace,
+  syncActiveTerminalSession,
 } from './sessionSharedHelpers';
 
 /** 规范化外部导入 meta；非法则丢弃（不写坏字段） */
@@ -94,9 +95,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       '';
     state.activeAgentId = null;
     state.panelAgentId = null;
-    useTerminalStore.getState().setActiveTerminalSession(
-      PENDING_DRAFT_SESSION_ID
-    );
+    syncActiveTerminalSession(PENDING_DRAFT_SESSION_ID);
   };
 
   const actions = {
@@ -158,7 +157,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         if (!same) {
           state.activeAgentId = null;
           state.panelAgentId = null;
-          useTerminalStore.getState().setActiveTerminalSession(nextId);
+          syncActiveTerminalSession(nextId);
         }
       });
       // 未知 ID 且当前 active 也无效 → 进入草稿态收口
@@ -353,7 +352,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
             state.activeSessionId = id;
             state.activeAgentId = null;
             state.panelAgentId = null;
-            useTerminalStore.getState().setActiveTerminalSession(id);
+            syncActiveTerminalSession(id);
             state.draftFolder = '';
           }
           applyTitleIfDefault(existing, requestedTitle);
@@ -400,7 +399,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           state.activeSessionId = id;
           state.activeAgentId = null;
           state.panelAgentId = null;
-          useTerminalStore.getState().setActiveTerminalSession(id);
+          syncActiveTerminalSession(id);
           state.draftFolder = '';
         }
       });
@@ -428,7 +427,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
             state.activeSessionId = fallback;
             state.activeAgentId = null;
             state.panelAgentId = null;
-            useTerminalStore.getState().setActiveTerminalSession(fallback);
+            syncActiveTerminalSession(fallback);
           }
         }
         pruneEmptyShellsInPlace(
@@ -482,9 +481,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           state.activeSessionId = state.sessions[0]?.id || PENDING_DRAFT_SESSION_ID;
           state.activeAgentId = null;
           state.panelAgentId = null;
-          useTerminalStore.getState().setActiveTerminalSession(
-            state.activeSessionId || null
-          );
+          syncActiveTerminalSession(state.activeSessionId || null);
         }
         useTerminalStore
           .getState()

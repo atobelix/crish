@@ -11,6 +11,7 @@ import {
   truncateMessagesForAppend,
   upsertMessageById,
 } from './sessionSharedHelpers';
+import { applySubagentEventToMessages } from '../api/subagentTimeline';
 
 export function createSessionAgentActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>
@@ -20,6 +21,10 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
   | 'patchSessionAgent'
   | 'appendSessionAgentMessage'
   | 'patchAgentTool'
+  | 'patchSessionAgentMessage'
+  | 'applySubagentEventToAgent'
+  | 'patchSessionAgentToolStatus'
+  | 'finalizeAgentMessages'
 > {
   return {
     upsertSessionAgent: (sessionId, agent) =>
@@ -94,6 +99,88 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
           rebindSessionById(state, sessionId, sess);
           return;
         }
+      }),
+
+    // ── 事件写入收敛（T-E 步骤 3：U2/A1/S2、U3/S3、A2 共用承载面）──
+
+    patchSessionAgentMessage: (sessionId, agentId, messageId, patch) =>
+      set((state) => {
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess) return;
+        const ag = getSessionAgent(sess, agentId);
+        const m = ag?.messages?.find((x) => x.id === messageId);
+        if (!m) return;
+        patch(m);
+        rebindSessionById(state, sessionId, sess);
+      }),
+
+    applySubagentEventToAgent: (sessionId, agentId, event) =>
+      set((state) => {
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess) return;
+        const ag = getSessionAgent(sess, agentId);
+        if (!ag) return;
+        ag.messages = applySubagentEventToMessages(ag.messages || [], event);
+        rebindSessionById(state, sessionId, sess);
+      }),
+
+    patchSessionAgentToolStatus: (sessionId, agentId, opts) =>
+      set((state) => {
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess) return;
+        const ag = getSessionAgent(sess, agentId);
+        if (!ag) return;
+        // wire 归一终态（completed/failed/stopped，mapSubagentEndStatus 同口径）
+        ag.status = opts.status as 'completed' | 'failed' | 'stopped';
+        if (opts.summary) ag.summary = opts.summary;
+        ag.endedAt = Date.now();
+        const summary = opts.summary || ag.summary || '';
+        for (const m of ag.messages || []) {
+          if (m.status === 'processing') m.status = 'completed';
+        }
+        const toolId = ag.parentToolCallId;
+        if (toolId && sess?.messages) {
+          for (const m of sess.messages) {
+            const tc = m.toolCalls?.find((t) => t.id === toolId);
+            if (!tc) continue;
+            const st = String(opts.status || '');
+            const failed = /fail|error/i.test(st);
+            const stopped = /cancel|stopp?ed|abort/i.test(st);
+            tc.status = failed || stopped ? 'error' : 'success';
+            const body =
+              summary.trim() ||
+              (failed
+                ? '协作未完成'
+                : stopped
+                  ? '协作已停止'
+                  : '协作已完成');
+            tc.output = body.length > 1200 ? body.slice(0, 1199) + '…' : body;
+          }
+        }
+        rebindSessionById(state, sessionId, sess);
+      }),
+
+    finalizeAgentMessages: (sessionId, agentId) =>
+      set((state) => {
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess) return;
+        const ag = getSessionAgent(sess, agentId);
+        if (!ag?.messages) return;
+        for (const m of ag.messages) {
+          if (m.sender !== 'assistant') continue;
+          if (m.status === 'processing') {
+            m.status = 'completed';
+            if (m.thinking === '正在处理…') m.thinking = '';
+          }
+          for (const tc of m.toolCalls || []) {
+            if (tc.status === 'running' || tc.status === 'pending_approval') {
+              tc.status = 'error';
+              tc.output =
+                tc.output && tc.output !== '执行中…' ? tc.output : '已停止';
+            }
+          }
+        }
+        rebindSessionById(state, sessionId, sess);
       }),
   };
 }

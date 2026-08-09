@@ -50,7 +50,7 @@ import { isPendingDraft } from '../draftSession';
 import { enterDraftMode, setActiveSessionId } from '../../api/storeAccess';
 import {
   closeSessionTab,
-  openSessionTab,
+  syncOpenTabsToLegacy,
   moveSessionTab,
   currentWorkspaceFolderKey,
   type OpenSessionTabsMap,
@@ -294,7 +294,8 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     }
 
     const tab = makeSessionTab(sid, key, opts?.title);
-    openSessionTab(key, sid);
+    // D10：legacy map 同步统一入口（双写路径保留，登记待清理）
+    syncOpenTabsToLegacy(key, sid);
     set({
       openTabs: [...state.openTabs, tab].slice(-MAX_OPEN_SESSION_TABS),
       activeTabId: tab.tabId,

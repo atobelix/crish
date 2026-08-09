@@ -140,32 +140,16 @@ export function useAppBootstrap({
     return () => cleanup();
   }, []);
 
-  // 3. Session folder rebinds（引擎初始化已归一至 useEngineBootstrap，T06.8）
+  // 3. Session folder rebinds（D5 收敛：直写 recipe 换 rebindSessionFolders action；
+  // layoutStore 自订阅已删除——folder 镜像写路径收为「启动一次 + crish-project-changed」）
   useLayoutEffect(() => {
     const rebind = () => {
       try {
         import('../api/projectStore').then(
-          ({
-            listProjects,
-            rebindSessionFoldersToProjects,
-            rememberProjectFolderAlias,
-          }) => {
+          ({ listProjects, rememberProjectFolderAlias }) => {
             const projects = listProjects();
             for (const p of projects) rememberProjectFolderAlias(p.id, p.path);
-            useLayoutStore.setState((state) => {
-              const n = rebindSessionFoldersToProjects(
-                state.sessions,
-                projects
-              );
-              if (n > 0) {
-                for (const s of state.sessions) {
-                  if (s.folder && !state.folderOrder.includes(s.folder)) {
-                    state.folderOrder.push(s.folder);
-                  }
-                }
-                console.info('[crish] rebound session folders', n);
-              }
-            });
+            getCompositionRoot().layout.getState().rebindSessionFolders(projects);
           }
         );
       } catch (e) {
@@ -181,19 +165,10 @@ export function useAppBootstrap({
       });
     });
 
-    let prevSessions = getCompositionRoot().layout.getSessions();
-    const unsubStore = useLayoutStore.subscribe((state) => {
-      if (state.sessions !== prevSessions) {
-        prevSessions = state.sessions;
-        rebind();
-      }
-    });
-
     window.addEventListener('crish-project-changed', rebind);
     return () => {
       if (raf1 !== null) window.cancelAnimationFrame(raf1);
       if (raf2 !== null) window.cancelAnimationFrame(raf2);
-      unsubStore();
       window.removeEventListener('crish-project-changed', rebind);
     };
   }, []);
@@ -224,6 +199,11 @@ export function useAppBootstrap({
     void import('../api/fontStore').then(({ bootstrapFonts }) =>
       bootstrapFonts()
     );
+    // D3：主题订阅投影（settingsStore.appSettings.theme → DOM + crish_theme 单一写端）。
+    // 启动播种（原 applyTheme + persistTheme 双写）已抽为该投影的首次执行。
+    const unsubTheme = import('../store/themeProjection').then(
+      ({ initThemeProjection }) => initThemeProjection()
+    );
     const initApp = async () => {
       try {
         const { clientApi } = await import('../api/clientApi');
@@ -234,13 +214,6 @@ export function useAppBootstrap({
             setAppSettings(settings);
           } else {
             getCompositionRoot().layout.setAppSettings(settings);
-          }
-          if (settings.theme) {
-            const { applyTheme, persistTheme, normalizeTheme } =
-              await import('../api/themeStore');
-            const t = normalizeTheme(settings.theme);
-            applyTheme(t);
-            persistTheme(t);
           }
           if (settings.fonts) {
             const { setFontPreferences, normalizeFontPrefs } =
@@ -259,7 +232,10 @@ export function useAppBootstrap({
         console.error('Failed to load settings or providers on startup', err);
       }
     };
-    initApp();
+    void initApp();
+    return () => {
+      void unsubTheme.then((unsub) => unsub());
+    };
   }, [setAppSettings]);
 
   // 7. Backend daemon engine initialization 已归一至 useEngineBootstrap（T06.8）：

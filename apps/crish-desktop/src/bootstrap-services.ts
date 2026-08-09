@@ -78,7 +78,18 @@ export function bootstrapServices(): () => void {
   installBeforeunloadFlush();
 
   // 3. Start ConnectionManager (fire-and-forget, retries internally)
-  connectionManager.connect().catch(() => {});
+  // R-06 / T-E D2：空 catch 显式登记——连接失败不再静默（ErrorStore.push 内部
+  // 已跑 classifyError；ready 时 resolveByCode 自动关闭，见 7 分支）。
+  connectionManager.connect().catch((err) => {
+    errorStore.push({
+      code: 'ENGINE_CONNECT_FAILED',
+      module: 'bootstrap-services',
+      severity: 'warning',
+      message: '引擎连接失败',
+      technical: err instanceof Error ? err.message : String(err),
+      autoResolve: true, // 连接成功后 resolveByCode('ENGINE_CONNECT_FAILED')
+    });
+  });
 
   // 4. (C3.1) StreamRecovery 已删：连接就绪恢复由 Rust 事件通道有序保证，前端不再重放
 
@@ -94,6 +105,8 @@ export function bootstrapServices(): () => void {
     switch (p.phase) {
       case 'ready':
         errorStore.setConnectionStatus('connected');
+        // R-06：连接成功 → 自动关闭启动期登记的重连失败告警
+        errorStore.resolveByCode('ENGINE_CONNECT_FAILED');
         break;
       case 'recovering':
         errorStore.setConnectionStatus('reconnecting');
@@ -113,7 +126,18 @@ export function bootstrapServices(): () => void {
   // 8. WindowResizeBridge（T06.10 接线）：窗口缩放冻结状态机唯一入口。
   // connect 幂等，StrictMode 双执行安全；disconnect 随 cleanup 对称清理。
   // 原 AppBootstrap E13 手动 classList 双写已删除，is-layout-frozen 自此单源。
-  void WindowResizeBridge.getInstance().connect().catch(() => {});
+  // R-06 / T-E D2：空 catch 显式登记（非连接态软失败，warning 不打扰；
+  // 05 步骤 3 收口时以 grep 实测剔除本处）。
+  void WindowResizeBridge.getInstance().connect().catch((err) => {
+    errorStore.push({
+      code: 'RESIZE_BRIDGE_CONNECT_FAILED',
+      module: 'bootstrap-services',
+      severity: 'warning',
+      message: '窗口缩放桥接初始化失败',
+      technical: err instanceof Error ? err.message : String(err),
+      autoResolve: true,
+    });
+  });
   cleanups.push(() => {
     WindowResizeBridge.getInstance().disconnect();
   });

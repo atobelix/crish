@@ -17,11 +17,15 @@ import {
   setPersistedClaudeImportRoot,
   setPersistedCodexImportRoot,
   type DetectedExternalSession,
-  type ExternalImportRoots,
   type ExternalSessionSource,
 } from '../../api/import';
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
 import { Button, Tooltip } from '../ui';
+import { ImportListSection } from './ImportListSection';
+import {
+  ImportRootsSection,
+  type ImportRootDisplay,
+} from './ImportRootsSection';
 import styles from './ExternalSessionImport.module.css';
 
 export type ExternalSessionImportProps = {
@@ -31,34 +35,6 @@ export type ExternalSessionImportProps = {
   /** 成功导入后回调（条数） */
   onImported?: (count: number) => void;
 };
-
-type RootDisplay = {
-  /** Effective scan root (custom or default) */
-  effective: ExternalImportRoots;
-  /** Home-relative defaults without custom overrides */
-  defaults: ExternalImportRoots;
-  customClaude: boolean;
-  customCodex: boolean;
-};
-
-function formatUpdatedAt(ms: number | undefined): string {
-  if (ms == null || !Number.isFinite(ms) || ms <= 0) return '时间未知';
-  try {
-    return new Date(ms).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return '时间未知';
-  }
-}
-
-function sessionKey(s: DetectedExternalSession): string {
-  return s.id;
-}
 
 export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
   variant = 'settings',
@@ -77,15 +53,15 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [hasScanned, setHasScanned] = useState(false);
-  const [roots, setRoots] = useState<RootDisplay | null>(null);
+  const [roots, setRoots] = useState<ImportRootDisplay | null>(null);
 
   const selectedList = useMemo(
-    () => detected.filter((s) => selected[sessionKey(s)]),
+    () => detected.filter((s) => selected[s.id]),
     [detected, selected],
   );
   const selectedCount = selectedList.length;
   const allSelected =
-    detected.length > 0 && detected.every((s) => selected[sessionKey(s)]);
+    detected.length > 0 && detected.every((s) => selected[s.id]);
   const busy = scanning !== null || importing;
 
   const refreshRoots = useCallback(async () => {
@@ -117,7 +93,7 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
 
   // 列表变化时剪掉无效勾选
   useEffect(() => {
-    const valid = new Set(detected.map(sessionKey));
+    const valid = new Set(detected.map((s) => s.id));
     setSelected((sel) => {
       let changed = false;
       const nextSel: Record<string, boolean> = {};
@@ -193,7 +169,7 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
       return;
     }
     const next: Record<string, boolean> = {};
-    for (const s of detected) next[sessionKey(s)] = true;
+    for (const s of detected) next[s.id] = true;
     setSelected(next);
   };
 
@@ -242,7 +218,7 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
         setSelected((prev) => {
           const next = { ...prev };
           for (const s of selectedList) {
-            delete next[sessionKey(s)];
+            delete next[s.id];
           }
           return next;
         });
@@ -302,100 +278,14 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
   return (
     <div className={rootClass}>
       {roots ? (
-        <div className={styles.importRoots} role="group" aria-label="扫描根目录">
-          <div className={styles.importRootRow}>
-            <div className={styles.importRootInfo}>
-              <span className={styles.importRootLabel}>
-                Claude
-                {roots.customClaude ? (
-                  <span className={styles.importRootBadge}>自定义</span>
-                ) : (
-                  <span className={styles.importRootBadgeMuted}>默认</span>
-                )}
-              </span>
-              <span className={styles.importRootPath} title={roots.effective.claudeConfig}>
-                {roots.effective.claudeConfig || roots.defaults.claudeConfig || '（未解析）'}
-              </span>
-            </div>
-            <div className={styles.importRootBtns}>
-              <Tooltip content="选择非默认的 Claude Code 配置目录（含 projects）">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => {
-                    void pickClaudeRoot();
-                  }}
-                  icon={<Lucide.FolderOpen size={14} aria-hidden />}
-                >
-                  选择 Claude 目录
-                </Button>
-              </Tooltip>
-              {roots.customClaude ? (
-                <Tooltip content={`恢复默认：${roots.defaults.claudeConfig}`}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => {
-                      void resetClaudeRoot();
-                    }}
-                  >
-                    恢复默认
-                  </Button>
-                </Tooltip>
-              ) : null}
-            </div>
-          </div>
-          <div className={styles.importRootRow}>
-            <div className={styles.importRootInfo}>
-              <span className={styles.importRootLabel}>
-                Codex
-                {roots.customCodex ? (
-                  <span className={styles.importRootBadge}>自定义</span>
-                ) : (
-                  <span className={styles.importRootBadgeMuted}>默认</span>
-                )}
-              </span>
-              <span className={styles.importRootPath} title={roots.effective.codexHome}>
-                {roots.effective.codexHome || roots.defaults.codexHome || '（未解析）'}
-              </span>
-            </div>
-            <div className={styles.importRootBtns}>
-              <Tooltip content="选择非默认的 Codex 配置目录（含 sessions）">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => {
-                    void pickCodexRoot();
-                  }}
-                  icon={<Lucide.FolderOpen size={14} aria-hidden />}
-                >
-                  选择 Codex 目录
-                </Button>
-              </Tooltip>
-              {roots.customCodex ? (
-                <Tooltip content={`恢复默认：${roots.defaults.codexHome}`}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => {
-                      void resetCodexRoot();
-                    }}
-                  >
-                    恢复默认
-                  </Button>
-                </Tooltip>
-              ) : null}
-            </div>
-          </div>
-        </div>
+        <ImportRootsSection
+          roots={roots}
+          busy={busy}
+          onPickClaudeRoot={pickClaudeRoot}
+          onPickCodexRoot={pickCodexRoot}
+          onResetClaudeRoot={resetClaudeRoot}
+          onResetCodexRoot={resetCodexRoot}
+        />
       ) : null}
 
       <div className={styles.importActions} role="group" aria-label="扫描外部对话">
@@ -481,114 +371,19 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
       ) : null}
 
       {hasScanned || detected.length > 0 ? (
-        <>
-          <div className={styles.importListToolbar}>
-            <span className={styles.importListMeta}>
-              {detected.length === 0
-                ? '暂无检测结果'
-                : `共 ${detected.length} 条 · 已选 ${selectedCount}`}
-            </span>
-            {detected.length > 0 ? (
-              <Tooltip content={allSelected ? '取消全选' : '全选'}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={toggleAll}
-                >
-                  {allSelected ? '取消全选' : '全选'}
-                </Button>
-              </Tooltip>
-            ) : null}
-          </div>
-
-          {detected.length === 0 ? (
-            <div className={styles.importEmpty} role="status">
-              本机未发现可导入会话。确认已安装 Claude Code / Codex，且会话目录可读。
-            </div>
-          ) : (
-            <ul
-              className={styles.importList}
-              id={listId}
-              role="listbox"
-              aria-label="检测到的外部会话"
-              aria-multiselectable="true"
-            >
-              {detected.map((s) => {
-                const key = sessionKey(s);
-                const checked = Boolean(selected[key]);
-                const checkId = `${baseId}-chk-${key}`;
-                return (
-                  <li
-                    key={key}
-                    className={styles.importItem}
-                    role="option"
-                    aria-selected={checked}
-                  >
-                    <input
-                      id={checkId}
-                      type="checkbox"
-                      className={styles.importCheck}
-                      checked={checked}
-                      disabled={busy}
-                      onChange={() => toggleOne(key)}
-                      aria-label={`选择 ${s.title}`}
-                    />
-                    <label htmlFor={checkId} className={styles.importItemBody}>
-                      <span className={styles.importItemTitle}>{s.title}</span>
-                      <span className={styles.importItemMeta}>
-                        <span className={styles.importItemSource}>
-                          {externalSourceLabel(s.source)}
-                        </span>
-                        {s.project ? <span>项目 {s.project}</span> : null}
-                        <span>{formatUpdatedAt(s.updatedAt)}</span>
-                        <span>{s.messageCount} 条消息</span>
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <div className={styles.importFooter}>
-            <Tooltip
-              content={
-                selectedCount === 0
-                  ? '请先勾选要导入的会话'
-                  : `导入 ${selectedCount} 条所选会话`
-              }
-            >
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                disabled={busy || selectedCount === 0}
-                aria-busy={importing || undefined}
-                onClick={() => {
-                  void handleImport();
-                }}
-                icon={
-                  importing ? (
-                    <Lucide.Loader2 size={14} aria-hidden />
-                  ) : (
-                    <Lucide.Download size={14} aria-hidden />
-                  )
-                }
-              >
-                {importing ? (
-                  '导入中…'
-                ) : (
-                  <>
-                    导入所选
-                    {selectedCount > 0 ? `（${selectedCount}）` : ''}
-                  </>
-                )}
-              </Button>
-            </Tooltip>
-          </div>
-        </>
+        <ImportListSection
+          detected={detected}
+          selected={selected}
+          selectedCount={selectedCount}
+          allSelected={allSelected}
+          busy={busy}
+          importing={importing}
+          listId={listId}
+          baseId={baseId}
+          onToggleOne={toggleOne}
+          onToggleAll={toggleAll}
+          onImport={handleImport}
+        />
       ) : null}
     </div>
   );

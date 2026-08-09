@@ -19,21 +19,22 @@ import {
   emptyBgTasksHint,
   formatBgTaskMeta,
 } from './runtimePanelLib';
+import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { SUSPICIOUS_TASK_TEXT } from '../bg-tasks/bgTaskCardLib';
 
 export type BgTasksSectionProps = {
   bgTasks: BackgroundTaskInfo[];
   countLabel: string | null;
-  engineOnline: boolean;
   onShowToast: (msg: string) => void;
 };
 
 export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
   bgTasks,
   countLabel,
-  engineOnline,
   onShowToast,
 }) => {
+  // D2（C-10）：连接态投影（errorStore 真源），不再由 RuntimePanel props 下传
+  const connectionStatus = useConnectionStatus();
   const [bgOpeningId, setBgOpeningId] = useState<string | null>(null);
 
   const openBgTask = async (t: BackgroundTaskInfo) => {
@@ -72,7 +73,7 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
       </div>
       {bgTasks.length === 0 ? (
         <div className={styles.empty} role="status">
-          {emptyBgTasksHint(engineOnline)}
+          {emptyBgTasksHint(connectionStatus)}
         </div>
       ) : (
         <div

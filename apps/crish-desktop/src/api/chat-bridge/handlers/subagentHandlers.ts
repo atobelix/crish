@@ -13,7 +13,6 @@
  */
 import { surfaceStreamFailure } from '../BridgeErrorPolicy';
 import { useLayoutStore } from '../../../store/layoutStore';
-import { applySubagentEventToMessages } from '../../subagentTimeline';
 import type { LegacyEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
@@ -115,19 +114,13 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
     startedAt: Date.now(),
   });
   if (parentToolCallId) {
-    useLayoutStore.setState((state) => {
-      const sess = state.sessionsById[sid];
-      if (!sess) return;
-      for (const m of sess.messages) {
-        const tc = m.toolCalls?.find((t) => t.id === parentToolCallId);
-        if (!tc) continue;
-        // 终态工具卡不回退为 running（与 sanitizeToolCallUpdates 一致）
-        if (tc.status === 'success' || tc.status === 'error') return;
-        tc.status = 'running';
-        tc.output = '协作进行中…';
-        return;
-      }
-    });
+    // T-E 步骤 3（S1）：raw setState → markToolCallLocalStatus（终态工具卡不回退
+    // running 的守卫在 action 内建；scope 限定本会话避免全表扫描）
+    useLayoutStore
+      .getState()
+      .markToolCallLocalStatus(parentToolCallId, 'running', '协作进行中…', {
+        sessionId: sid,
+      });
   }
 }
 
@@ -143,12 +136,11 @@ export function onSubagentEventGlobal(raw: Record<string, unknown>): void {
     raw.event && typeof raw.event === 'object' && !Array.isArray(raw.event)
       ? (raw.event as Record<string, unknown>)
       : {};
-  useLayoutStore.setState((state) => {
-    const sess = state.sessionsById[sid];
-    const ag = sess?.agents?.find((a) => a.id === subagentId);
-    if (!ag) return;
-    ag.messages = applySubagentEventToMessages(ag.messages || [], ev);
-  });
+  // T-E 步骤 3（S2）：raw setState → applySubagentEventToAgent action
+  //（applySubagentEventToMessages 纯函数复用内建，与 per-run 面 U2 同承载面）
+  useLayoutStore
+    .getState()
+    .applySubagentEventToAgent(sid, subagentId, ev);
 }
 
 /**
@@ -162,31 +154,11 @@ export function onSubagentEndedGlobal(raw: Record<string, unknown>): void {
   if (!sid || !subagentId) return;
   const status = mapSubagentEndStatus(String(raw.status ?? '').toLowerCase());
   const summary = raw.summary ? String(raw.summary) : undefined;
-  useLayoutStore.setState((state) => {
-    const sess = state.sessionsById[sid];
-    const ag = sess?.agents?.find((a) => a.id === subagentId);
-    if (!ag) return;
-    ag.status = status;
-    if (summary) ag.summary = summary;
-    ag.endedAt = Date.now();
-    const agSummary = summary || ag.summary || '';
-    for (const m of ag.messages || []) {
-      if (m.status === 'processing') m.status = 'completed';
-    }
-    const toolId = ag.parentToolCallId;
-    if (toolId && sess?.messages) {
-      for (const m of sess.messages) {
-        const tc = m.toolCalls?.find((t) => t.id === toolId);
-        if (!tc) continue;
-        const failed = /fail|error/i.test(status);
-        const stopped = /cancel|stopp?ed|abort/i.test(status);
-        tc.status = failed || stopped ? 'error' : 'success';
-        const body =
-          agSummary.trim() ||
-          (failed ? '协作未完成' : stopped ? '协作已停止' : '协作已完成');
-        tc.output = body.length > 1200 ? body.slice(0, 1199) + '…' : body;
-      }
-    }
+  // T-E 步骤 3（S3）：raw setState → patchSessionAgentToolStatus action
+  //（与 per-run 面 U3 同一承载面：agent 终态 + 时间线收口 + 父工具卡终态）
+  useLayoutStore.getState().patchSessionAgentToolStatus(sid, subagentId, {
+    status,
+    ...(summary !== undefined ? { summary } : {}),
   });
 }
 

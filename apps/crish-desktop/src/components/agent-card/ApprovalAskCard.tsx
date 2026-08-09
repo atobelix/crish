@@ -17,7 +17,6 @@ import { Tooltip } from '../ui';
 import {
   approvalRiskBadgeLabel,
   approvalRiskKindLabel,
-  approvalRiskLevelLabel,
   approvalRiskSummary,
   approvalTrustZoneHint,
   approvalTrustZoneLabel,
@@ -25,26 +24,25 @@ import {
   type ApprovalRiskMeta,
 } from '../../api/approvalMeta';
 import {
-  allowButtonLabel,
   approvalCardClassName,
   buildApprovalRiskChips,
   nextAllowConfirmPhase,
   plainApprovalQuestion,
   shouldResetAllowConfirmArmed,
-  type ApprovalRiskChip,
 } from '../../api/chatApprovalUi';
-import {
-  approverLabel,
-  DELETE_UNKNOWN_IMPACT_HINT,
-  deleteImpactSummary,
-  formatRefAge,
-  revertGateSummary,
-  shortPath,
-} from '../../api/approvalPayload';
 import type {
   MessageToolApprovalMeta,
   MessageToolApprovalPayload,
 } from '../../store/types';
+import { ApprovalActions } from './ApprovalActions';
+import { ApprovalCountdown } from './ApprovalCountdown';
+import { ApprovalNoteField } from './ApprovalNoteField';
+import { ApprovalPayloadSection } from './ApprovalPayloadSection';
+import {
+  ApprovalRiskChips,
+  dedupeChipLabels,
+  localizeRiskChips,
+} from './ApprovalRiskChips';
 
 type Props = {
   msgId: string;
@@ -87,31 +85,6 @@ function toRiskMeta(
   };
 }
 
-/** 将 helper 产出的英/代码 chips 本地化为中文短标签（不改 chatApprovalUi） */
-function localizeRiskChips(
-  chips: ApprovalRiskChip[],
-  riskMeta: ApprovalRiskMeta | null
-): ApprovalRiskChip[] {
-  if (chips.length === 0) return chips;
-  return chips.map((chip) => {
-    if (chip.key === 'zone') {
-      const zh = approvalTrustZoneLabel(riskMeta?.trustZone || chip.label);
-      return zh && zh !== chip.label ? { ...chip, label: zh } : chip;
-    }
-    if (chip.key === 'risk') {
-      const zh = approvalRiskKindLabel(riskMeta?.risk || chip.label);
-      return zh && zh !== chip.label ? { ...chip, label: zh } : chip;
-    }
-    if (chip.key === 'level') {
-      const raw = riskMeta?.riskLevel || chip.label;
-      const zh = approvalRiskLevelLabel(raw);
-      return zh && zh !== chip.label ? { ...chip, label: zh } : chip;
-    }
-    // double / snap 已是中文
-    return chip;
-  });
-}
-
 /** 状态行 zone 提示：中文信任域 · 风险种类 */
 function chineseZoneHint(riskMeta: ApprovalRiskMeta | null): string {
   if (!riskMeta) return '';
@@ -122,150 +95,6 @@ function chineseZoneHint(riskMeta: ApprovalRiskMeta | null): string {
   if (risk) return risk;
   return '';
 }
-
-/** 去重中文 chip 标签（zone/risk 中文可能撞车，如写操作） */
-function dedupeChipLabels(chips: ApprovalRiskChip[]): ApprovalRiskChip[] {
-  const seen = new Set<string>();
-  const out: ApprovalRiskChip[] = [];
-  for (const c of chips) {
-    const k = c.label.trim().toLowerCase();
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    out.push(c);
-  }
-  return out;
-}
-
-/**
- * S9 审批影响面区段（数据源 = approval-requested 载荷，宽容缺失）：
- * - revert-gate：回退面积摘要（文件数/行数/ref 年代/跨目录/目标）+ 阈值 +
- *   审批人标注 + 指引（S6 拒绝文案同源）；
- * - delete：目标清单 + impact 摘要 + 降级提示（impact 未上报时显式提示）。
- * 无载荷 → null（既有卡行为不变，不新增噪音）。
- */
-const ApprovalPayloadSection: React.FC<{
-  payload?: MessageToolApprovalPayload | null | undefined;
-}> = ({ payload }) => {
-  if (!payload || payload.kind === 'unknown') return null;
-
-  if (payload.kind === 'revert-gate') {
-    const gate = payload.revertGate;
-    const summary = revertGateSummary(gate);
-    const area = gate.area;
-    const chips: string[] = [];
-    if (area?.fileCount != null) chips.push(`${area.fileCount} 个文件`);
-    if (area?.lineCount != null) chips.push(`${area.lineCount} 行`);
-    if (area?.refAgeSeconds != null)
-      chips.push(`ref 年代 ${formatRefAge(area.refAgeSeconds)}`);
-    if (area?.crossDirectory) chips.push('跨目录');
-    if (gate.targetRef) chips.push(`目标 ${gate.targetRef}`);
-    const approver = approverLabel(gate.approver);
-    if (approver) chips.push(approver);
-    return (
-      <div
-        className={styles.approvalCardMeta}
-        role="list"
-        aria-label="回退影响面"
-        data-testid="approval-payload-revert"
-      >
-        {summary ? (
-          <div
-            className={styles.approvalCardDesc}
-            data-testid="revert-gate-summary"
-          >
-            {summary}
-          </div>
-        ) : null}
-        {chips.length > 0 ? (
-          <div role="list" aria-label="回退影响面标签">
-            {chips.map((label) => (
-              <span
-                key={label}
-                role="listitem"
-                className={`${styles.approvalCardChip} ${styles.approvalCardChipDanger}`}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        {gate.guidance ? (
-          <div
-            className={styles.approvalCardHint}
-            role="note"
-            data-testid="revert-gate-guidance"
-          >
-            {gate.guidance}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  const { deleteImpact } = payload;
-  const impactSummary = deleteImpactSummary(deleteImpact.impact);
-  const flagged = deleteImpact.impact?.flagged;
-  const targets = deleteImpact.targets.slice(0, 4);
-  const more = deleteImpact.targets.length - targets.length;
-  return (
-    <div
-      className={styles.approvalCardMeta}
-      role="list"
-      aria-label="删除影响面"
-      data-testid="approval-payload-delete"
-    >
-      {targets.length > 0 ? (
-        <div
-          className={styles.approvalCardCmdWrap}
-          role="list"
-          aria-label="删除目标清单"
-        >
-          {targets.map((t) => (
-            <code
-              key={t}
-              role="listitem"
-              className={styles.approvalCardCmd}
-              data-testid="delete-target"
-            >
-              {shortPath(t)}
-            </code>
-          ))}
-          {more > 0 ? (
-            <span className={styles.approvalCardHint}>
-              …等共 {deleteImpact.targets.length} 个目标
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      {impactSummary ? (
-        <div
-          className={styles.approvalCardDesc}
-          data-testid="delete-impact-summary"
-        >
-          {impactSummary}
-        </div>
-      ) : null}
-      {flagged ? (
-        <div
-          className={`${styles.approvalCardHint} ${styles.approvalCardHintWarn}`}
-          role="alert"
-          data-testid="delete-impact-flagged"
-        >
-          影响面大（超过阈值），请仔细核对后再允许
-        </div>
-      ) : null}
-      {!impactSummary ? (
-        <div
-          className={styles.approvalCardHint}
-          role="note"
-          data-testid="delete-impact-unknown"
-        >
-          {DELETE_UNKNOWN_IMPACT_HINT}
-        </div>
-      ) : null}
-    </div>
-  );
-};
 
 export const ApprovalAskCard: React.FC<Props> = ({
   msgId,
@@ -605,35 +434,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
           </div>
         </Tooltip>
       ) : null}
-      {chips.length > 0 ? (
-        <div
-          className={styles.approvalCardMeta}
-          id={chipsId}
-          role="list"
-          aria-label="风险标签"
-        >
-          {chips.map((chip) => (
-            <Tooltip key={chip.key} content={chip.label}>
-              <span
-                role="listitem"
-                className={`${styles.approvalCardChip} ${
-                  chip.tone === 'warn'
-                    ? styles.approvalCardChipWarn
-                    : chip.tone === 'danger'
-                      ? styles.approvalCardChipDanger
-                      : chip.tone === 'info'
-                        ? styles.approvalCardChipInfo
-                        : chip.tone === 'neutral'
-                          ? styles.approvalCardChipNeutral
-                          : ''
-                }`}
-              >
-                {chip.label}
-              </span>
-            </Tooltip>
-          ))}
-        </div>
-      ) : null}
+      {chips.length > 0 ? <ApprovalRiskChips chips={chips} id={chipsId} /> : null}
       {hasCmd ? (
         <div className={styles.approvalCardCmdWrap}>
           <span className={styles.approvalCardCmdLabel} id={cmdLabelId}>
@@ -663,114 +464,27 @@ export const ApprovalAskCard: React.FC<Props> = ({
         </div>
       ) : null}
 
-      <label className={styles.approvalCardNote} htmlFor={noteId}>
-        <span>补充说明（可选，也可直接写你的要求）</span>
-        <textarea
-          id={noteId}
-          className={styles.approvalCardInput}
-          rows={density === 'compact' && !note ? 1 : 2}
-          maxLength={500}
-          placeholder="例如：只允许这一次 / 不要改测试文件…"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          disabled={busy}
-          aria-label="补充说明（可选）"
-        />
-        {note.length > 0 || density === 'default' ? (
-          <span
-            className={styles.approvalCardCount}
-            aria-hidden={note.length === 0}
-          >
-            {note.length}/500
-          </span>
-        ) : null}
-      </label>
+      <ApprovalNoteField
+        note={note}
+        onNoteChange={setNote}
+        busy={!!busy}
+        density={density}
+        noteId={noteId}
+      />
 
-      <div
-        className={styles.approvalCardActions}
-        role="group"
-        aria-label="审批操作"
-      >
-        {confirmArmed ? (
-          <Tooltip content="取消二次确认准备 (Esc)">
-            <button
-              type="button"
-              className={`${styles.approvalCardBtn} ${styles.ghost} ${styles.disarm}`}
-              disabled={busy}
-              onClick={disarm}
-              aria-label="取消二次确认准备"
-              aria-keyshortcuts="Escape"
-            >
-              取消准备
-            </button>
-          </Tooltip>
-        ) : (
-          <Tooltip content="允许，并将命令前缀加入白名单">
-            <button
-              type="button"
-              className={`${styles.approvalCardBtn} ${styles.ghost}`}
-              disabled={busy}
-              onClick={() => fireAllow(true)}
-              aria-label={
-                needsDouble
-                  ? '记住并准备允许（需再次确认）'
-                  : '允许并记住命令前缀'
-              }
-              aria-busy={busy ? true : undefined}
-            >
-              {allowButtonLabel(needsDouble, confirmArmed, true)}
-            </button>
-          </Tooltip>
-        )}
-        <button
-          type="button"
-          className={`${styles.approvalCardBtn} ${styles.deny}`}
-          disabled={busy}
-          onClick={handleDeny}
-          aria-label="拒绝此操作"
-          aria-busy={busy ? true : undefined}
-        >
-          拒绝
-        </button>
-        <button
-          ref={allowBtnRef}
-          type="button"
-          className={`${styles.approvalCardBtn} ${styles.allow}${confirmArmed ? ` ${styles.isArmed}` : ''}`}
-          disabled={busy}
-          onClick={() => fireAllow(false)}
-          aria-label={
-            confirmArmed
-              ? rememberIntent
-                ? '再次确认允许并记住'
-                : '再次确认允许'
-              : needsDouble
-                ? '准备允许（需再次确认）'
-                : '允许'
-          }
-          aria-pressed={needsDouble ? confirmArmed : undefined}
-          aria-busy={busy ? true : undefined}
-          data-armed={confirmArmed ? 'true' : undefined}
-        >
-          {allowButtonLabel(needsDouble, confirmArmed, rememberIntent)}
-        </button>
-      </div>
+      <ApprovalActions
+        confirmArmed={confirmArmed}
+        rememberIntent={rememberIntent}
+        needsDouble={needsDouble}
+        busy={!!busy}
+        allowBtnRef={allowBtnRef}
+        onDisarm={disarm}
+        onAllow={fireAllow}
+        onDeny={handleDeny}
+      />
 
       {remainingMs != null ? (
-        <div
-          className={`${styles.approvalCardTimeoutBar} ${
-            timeoutPercent <= 0 ? styles.approvalCardTimeoutBarExpired : ''
-          }`}
-          role="progressbar"
-          aria-valuenow={Math.round(timeoutPercent)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`审批剩余时间 ${Math.ceil(remainingMs / 1000)} 秒`}
-        >
-          <span
-            className={styles.approvalCardTimeoutFill}
-            style={{ width: `${timeoutPercent}%` }}
-          />
-        </div>
+        <ApprovalCountdown remainingMs={remainingMs} percent={timeoutPercent} />
       ) : null}
     </div>
   );

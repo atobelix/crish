@@ -3,37 +3,77 @@
  * 从 RuntimePanel.tsx 顶部抽出，零副作用，可独立单测。
  */
 import { backgroundTaskStateLabel } from '../../api/backgroundTasksApi';
+import type { ConnectionStatus } from '../../services/ErrorStore';
+
+/** 连接态 → 引擎可用（在线）判定（RuntimePanel 状态点 on/off 用） */
+export function isReadyStatus(status: ConnectionStatus): boolean {
+  return status === 'connected';
+}
 
 /** 引擎连接短标签（状态点旁） */
-export function formatEngineStatusShort(online: boolean): string {
-  return online ? '就绪' : '未就绪';
+export function formatEngineStatusShort(status: ConnectionStatus): string {
+  switch (status) {
+    case 'connected':
+      return '就绪';
+    case 'reconnecting':
+      return '重连中';
+    case 'waiting':
+      return '连接中';
+    case 'degraded':
+      return '降级';
+    case 'disconnected':
+    default:
+      return '未就绪';
+  }
 }
 
 /** 引擎连接完整 aria / title */
-export function formatEngineStatusFull(online: boolean): string {
-  return online ? '引擎就绪' : '引擎未就绪';
+export function formatEngineStatusFull(status: ConnectionStatus): string {
+  switch (status) {
+    case 'connected':
+      return '引擎就绪';
+    case 'reconnecting':
+      return '引擎重连中';
+    case 'waiting':
+      return '引擎连接中';
+    case 'degraded':
+      return '引擎连接降级';
+    case 'disconnected':
+    default:
+      return '引擎未就绪';
+  }
 }
 
 /** 引擎 title 补充说明 */
-export function formatEngineStatusTitle(online: boolean): string {
-  return online
-    ? '引擎已连接，可接收任务'
-    : '引擎未连接；活动任务与计划可能不完整';
+export function formatEngineStatusTitle(status: ConnectionStatus): string {
+  switch (status) {
+    case 'connected':
+      return '引擎已连接，可接收任务';
+    case 'reconnecting':
+      return '引擎连接中断，正在自动重连';
+    case 'waiting':
+      return '引擎正在建立连接';
+    case 'degraded':
+      return '引擎连接降级，部分能力可能受限';
+    case 'disconnected':
+    default:
+      return '引擎未连接；活动任务与计划可能不完整';
+  }
 }
 
-/** 活动任务空态：离线与空列表分流 */
-export function emptyLiveTasksHint(online: boolean): string {
-  return online ? '暂无进行中的任务' : '未连接';
+/** 活动任务空态：在线与离线分流（离线/重连/等待均显示「未连接」） */
+export function emptyLiveTasksHint(status: ConnectionStatus): string {
+  return isReadyStatus(status) ? '暂无进行中的任务' : '未连接';
 }
 
 /** 后台任务空态 */
-export function emptyBgTasksHint(online: boolean): string {
-  return online ? '暂无后台任务' : '未连接';
+export function emptyBgTasksHint(status: ConnectionStatus): string {
+  return isReadyStatus(status) ? '暂无后台任务' : '未连接';
 }
 
 /** 计划任务空态 */
-export function emptyPlansHint(online: boolean): string {
-  return online ? '暂无计划' : '未连接';
+export function emptyPlansHint(status: ConnectionStatus): string {
+  return isReadyStatus(status) ? '暂无计划' : '未连接';
 }
 
 /** 区段计数（0 不显示，避免空数字噪音） */

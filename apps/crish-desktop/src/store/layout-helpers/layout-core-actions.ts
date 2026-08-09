@@ -30,6 +30,7 @@ export interface LayoutCoreState {
   sidebarCollapsed: boolean;
   tabModeEnabled: boolean;
   workspaces: WorkspaceState[];
+  activeWorkspaceIndex: number;
   showSettingsOverlay: boolean;
   settingsActiveTab: SettingsTabType;
 }
@@ -104,6 +105,19 @@ export function createLayoutCoreActions(
           );
         }
         state.showSettingsOverlay = true;
+      }),
+    /**
+     * 活动工作区切换（C3 收敛：Workspace.tsx 直写 clamp 迁入 store）。
+     * clamp 内建：越界 / 空列表 → 0。
+     */
+    setActiveWorkspaceIndex: (index: number) =>
+      set((state) => {
+        if (!state.workspaces.length) {
+          state.activeWorkspaceIndex = 0;
+          return;
+        }
+        const idx = Math.max(0, Math.floor(index) || 0);
+        state.activeWorkspaceIndex = Math.min(idx, state.workspaces.length - 1);
       }),
   };
 }

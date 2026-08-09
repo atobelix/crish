@@ -122,4 +122,45 @@ describe('ui/Select', () => {
     fireEvent.click(trigger);
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
+
+  it('hint 选项：悬停展示辅助说明（Tooltip），选择不受影响', async () => {
+    const onChange = vi.fn();
+    render(
+      <Select
+        options={[{ id: 'a', label: '选项甲', hint: '仅作说明' }]}
+        onChange={onChange}
+      />
+    );
+    fireEvent.click(screen.getByRole('combobox'));
+    const option = await screen.findByRole('option', { name: '选项甲' });
+    fireEvent.mouseEnter(option);
+    await waitFor(() => expect(screen.getByText('仅作说明')).toBeInTheDocument());
+    fireEvent.click(option);
+    expect(onChange).toHaveBeenCalledWith('a');
+  });
+
+  it('外点关闭：真实外点（pointerdown+click）后面板消失', async () => {
+    render(<ControlledSelect options={OPTIONS} />);
+    fireEvent.click(screen.getByRole('combobox'));
+    await screen.findByRole('listbox');
+    const outside = document.createElement('button');
+    outside.textContent = '外部';
+    document.body.appendChild(outside);
+    fireEvent.pointerDown(outside);
+    fireEvent.click(outside);
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    outside.remove();
+  });
+
+  it('触发器防冒泡：点击触发器不向外部冒泡', async () => {
+    const onOuterClick = vi.fn();
+    render(
+      <div onClick={onOuterClick}>
+        <ControlledSelect options={OPTIONS} />
+      </div>
+    );
+    fireEvent.click(screen.getByRole('combobox'));
+    expect(onOuterClick).not.toHaveBeenCalled();
+    await screen.findByRole('listbox');
+  });
 });

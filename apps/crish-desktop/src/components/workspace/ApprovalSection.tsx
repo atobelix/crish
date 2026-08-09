@@ -63,28 +63,17 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     toolCallId: string | undefined,
     status: 'running' | 'error',
     output: string,
+    runId?: string
   ) => {
     if (!toolCallId) return;
-    useLayoutStore.setState((state) => {
-      for (const s of state.sessions) {
-        for (const m of s.messages || []) {
-          const tc = m.toolCalls?.find((t) => t.id === toolCallId);
-          if (tc) {
-            tc.status = status;
-            tc.output = output;
-          }
-        }
-        for (const ag of s.agents || []) {
-          for (const m of ag.messages || []) {
-            const tc = m.toolCalls?.find((t) => t.id === toolCallId);
-            if (tc) {
-              tc.status = status;
-              tc.output = output;
-            }
-          }
-        }
-      }
-    });
+    // T-E 步骤 4（C2）：raw setState 全表扫描 → markToolCallLocalStatus action
+    //（与 useOverviewState C1 共用同一 action；scope 限定 runId 时只扫 scope 内）
+    useLayoutStore.getState().markToolCallLocalStatus(
+      toolCallId,
+      status,
+      output,
+      runId ? { runId } : undefined
+    );
   };
 
   const handleApprovalAllow = (a: PendingApprovalInfo, e: React.MouseEvent) => {
@@ -96,10 +85,10 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     }
     if (approvalBusyId) return;
     setApprovalBusyId(id);
-    markLocalTool(id, 'running', '执行中…');
+    markLocalTool(id, 'running', '执行中…', a.runId);
     void engineApproveTool(id)
       .catch(() => {
-        markLocalTool(id, 'error', '批准失败');
+        markLocalTool(id, 'error', '批准失败', a.runId);
         onShowToast('批准失败，请重试');
       })
       .finally(() => {
@@ -116,7 +105,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     }
     if (approvalBusyId) return;
     setApprovalBusyId(id);
-    markLocalTool(id, 'error', '已拒绝');
+    markLocalTool(id, 'error', '已拒绝', a.runId);
     void engineDenyTool(id)
       .catch(() => {
         onShowToast('拒绝失败，请重试');

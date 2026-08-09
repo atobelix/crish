@@ -17,6 +17,8 @@ import {
   truncateMessagesForAppend,
   upsertMessageById,
 } from './sessionSharedHelpers';
+import { normalizeAssistantTimeline } from '../api/toolPresentation';
+import type { MessageCacheState } from '@crish/shared-types';
 
 export function createSessionMessageActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>
@@ -32,6 +34,12 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
   | 'setSessionMessageStatus'
   | 'pinMessage'
   | 'unpinMessage'
+  | 'setEngineLastRunId'
+  | 'updateMessageTimeline'
+  | 'applyToolCallPatches'
+  | 'setMessageCacheMetrics'
+  | 'markToolCallLocalStatus'
+  | 'batchRespondToApproval'
 > {
   return {
     addMessage: (_wsId, sessionId, message) =>
@@ -322,6 +330,140 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         sess.pinnedMessageIds = next;
         if (sess.pinnedMessageIds.length === 0) delete sess.pinnedMessageIds;
         rebindSessionById(state, sessionId, sess);
+      }),
+
+    // ── 事件写入收敛（T-E 步骤 3）──────────────
+
+    setEngineLastRunId: (sessionId, runId) =>
+      set((state) => {
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess) return;
+        if (sess.engineLastRunId === runId) return;
+        sess.engineLastRunId = runId;
+        rebindSessionById(state, sessionId, sess);
+      }),
+
+    updateMessageTimeline: (sessionId, messageId) =>
+      set((state) => {
+        const hit = getSessionMessage(state, sessionId, messageId);
+        if (!hit) return;
+        if (hit.message.sender !== 'assistant') return;
+        const n = normalizeAssistantTimeline({ ...hit.message });
+        hit.message.blocks = n.blocks;
+        hit.message.toolCalls = n.toolCalls;
+        rebindSessionById(state, sessionId, hit.session);
+      }),
+
+    applyToolCallPatches: (sessionId, messageId, patches) =>
+      set((state) => {
+        const hit = getSessionMessage(state, sessionId, messageId);
+        if (!hit?.message.toolCalls) return;
+        if (!patches || patches.length === 0) return;
+        for (const p of patches) {
+          const tc = hit.message.toolCalls.find((t) => t.id === p.id);
+          if (!tc) continue;
+          tc.status = p.status;
+          if (p.output !== undefined) tc.output = p.output;
+        }
+        rebindSessionById(state, sessionId, hit.session);
+      }),
+
+    setMessageCacheMetrics: (sessionId, messageId, metrics) =>
+      set((state) => {
+        // metrics 为 null/空时不写（P6 C15：store 保持无字段，渲染层隐藏）
+        if (!metrics || typeof metrics !== 'object') return;
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess?.messages) return;
+        let target = messageId
+          ? sess.messages.find((m) => m.id === messageId)
+          : undefined;
+        if (!target) {
+          // 载荷缺 id 兜底：末条 status === 'processing' 的 assistant 消息
+          for (let i = sess.messages.length - 1; i >= 0; i--) {
+            const m = sess.messages[i];
+            if (!m) continue;
+            if (m.sender === 'assistant' && m.status === 'processing') {
+              target = m;
+              break;
+            }
+          }
+        }
+        if (!target) return;
+        const cacheState: MessageCacheState = {
+          metrics,
+          source: 'engine-message-end',
+        };
+        target.cacheMetrics = cacheState;
+        rebindSessionById(state, sessionId, sess);
+      }),
+
+    markToolCallLocalStatus: (toolCallId, status, output, scope) =>
+      set((state) => {
+        if (!toolCallId) return;
+        const sessions = scope?.sessionId
+          ? state.sessions.filter((s) => s.id === scope.sessionId)
+          : scope?.runId
+            ? state.sessions.filter(
+                (s) => s.engineLastRunId === scope.runId || s.id === scope.runId
+              )
+            : state.sessions;
+        for (const s of sessions) {
+          // getSessionForWrite + rebind：经 sessions[] canonical 写，避免
+          // immer fork 陷阱（sessionsById 持旧引用）——原组件 raw setState
+          // 有该陷阱，迁入 action 后内建索引保障（README:130-133）
+          const sess = getSessionForWrite(state, s.id);
+          if (!sess) continue;
+          let touched = false;
+          // agentId scope 命中：主消息域不扫（「只扫 scope 内」严格语义）
+          if (!scope?.agentId) {
+            for (const m of sess.messages || []) {
+              const tc = m.toolCalls?.find((t) => t.id === toolCallId);
+              if (!tc) continue;
+              // 终态工具卡不回退 running（与 sanitizeToolCallUpdates 同语义守卫）
+              if (
+                status === 'running' &&
+                (tc.status === 'success' || tc.status === 'error')
+              ) {
+                continue;
+              }
+              tc.status = status;
+              tc.output = output;
+              touched = true;
+            }
+          }
+          for (const ag of sess.agents || []) {
+            if (scope?.agentId && ag.id !== scope.agentId) continue;
+            for (const m of ag.messages || []) {
+              const tc = m.toolCalls?.find((t) => t.id === toolCallId);
+              if (!tc) continue;
+              if (
+                status === 'running' &&
+                (tc.status === 'success' || tc.status === 'error')
+              ) {
+                continue;
+              }
+              tc.status = status;
+              tc.output = output;
+              touched = true;
+            }
+          }
+          if (touched) rebindSessionById(state, s.id, sess);
+        }
+      }),
+
+    batchRespondToApproval: (decisions) =>
+      set((state) => {
+        if (!decisions?.length) return;
+        for (const d of decisions) {
+          const hit = getSessionMessage(state, d.sessionId, d.messageId);
+          if (!hit?.message.toolCalls) continue;
+          const tc = hit.message.toolCalls.find((t) => t.id === d.toolCallId);
+          if (!tc) continue;
+          if (tc.approvalDecision !== d.decision) {
+            tc.approvalDecision = d.decision;
+            rebindSessionById(state, d.sessionId, hit.session);
+          }
+        }
       }),
   };
 }

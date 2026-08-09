@@ -180,6 +180,37 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 | `components/Settings*Tab.tsx` | 部分合并写；SettingsPanel 已用 storeAccess.setAppSettings |
 | `api/chatApi.demo.ts` | demo 脚本，非生产路径 |
 
+## 事件写入唯一通道（T-E 批次 5，03 方案步骤 3 落地）
+
+```
+事件 handler（api/chat-bridge/handlers/*）
+  → env.callbacks（handlerEnv）
+  → hooks（useStreamCallbacks / useAgentStream）或全局面（subagentHandlers Global*）
+  → layoutStore action（跨域经 api/storeAccess 编排；命令热路径经 compositionRoot.layout.getState()）
+  → 写 store（immer + getSessionForWrite/rebindSessionById 索引保障内建）
+```
+
+- **规则**：生产代码 `*Store.setState` 零残留（`npm run check:store-writes` 强制；
+  白名单 = store/ 自身 action 定义 + `api/store-access/` + `bootstrapStores.ts` + 测试 + dev-only）。
+- 事件面承载 action（T-E 步骤 3 新增，全部挂 layoutStore 实例）：`setEngineLastRunId` /
+  `patchSessionAgentMessage` / `applySubagentEventToAgent` / `patchSessionAgentToolStatus` /
+  `finalizeAgentMessages` / `updateMessageTimeline` / `applyToolCallPatches` /
+  `setMessageCacheMetrics` / `markToolCallLocalStatus` / `batchRespondToApproval` /
+  `rebindSessionFolders` / `setActiveWorkspaceIndex` / `collapseToolColumnPreserve` /
+  `setGroupActiveCard` / `focusExistingPanelCard`（后两者经 workspace facade 转发）。
+- 数据面子面（taskEventHandlers，轮询快照 = 真源）**不落 store 不迁移**（维持现状）。
+- 组件直引 `store/` 由 `npm run check:store-facade` 度量（基线见
+  `scripts/components-store-direct-imports.json`；迁移由 02-A2 承办，归零后接 CI）。
+
+## D10 登记待清理（legacy open-tabs map 双写）
+
+- 运行期双写路径**保留**（跨窗口/重启标签恢复依赖 legacy map）：shell store 与
+  workspaceChromeHooks 的「打开/聚焦会话 → legacy map」同步已收敛到统一入口
+  `api/workspaceChromeTabs.syncOpenTabsToLegacy`（`migrateFromOpenTabsMap` 覆盖后
+  消费方消失时，按该入口单一 grep 删除双写，仅保留启动一次性迁移）。
+- move/close 同步仍为 `moveSessionTab` / `closeSessionTab` 直接调用（legacy-only
+  fallback 与 shell 路径均经 workspaceChromeTabs 单一模块）。
+
 ## 消息快照桥（P0-1 接线状态）
 
 - **接线状态**：`messageSnapshotsBridge.ts` 的 `bindMessageSnapshotsOps` 由 `bootstrapStores.ts` 装配真实 `MessageSnapshots` 单例（模块图稳定后注入，防 init 环）。`withdrawMessage`（撤回）保存倒向 delta、`deleteSession`（删除会话）清空对应栈——破坏性操作前的数据保护已生效。
@@ -191,6 +222,8 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 
 ```bash
 npm run check:store-types   # scripts/check-no-as-any-store.mjs
+npm run check:store-writes  # scripts/check-no-raw-setstate.mjs（T-E 批次 5.4，已接 CI 快层）
+npm run check:store-facade  # scripts/check-store-facade.mjs（基线模式；CI 接线等 02-A2 迁移归零）
 npm run test:desktop-helpers  # 含 sessionIndex / storeFacades / storeAccess
 npm run check:desktop         # crish-desktop tsc
 ```

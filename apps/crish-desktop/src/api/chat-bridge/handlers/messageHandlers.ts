@@ -10,7 +10,6 @@ import { blockText, mergeAssistantTextPiece } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 import { useLayoutStore } from '../../../store';
-import type { MessageCacheState } from '@crish/shared-types';
 
 /**
  * 把消息级缓存指标挂到 store 的 SessionMessage.cacheMetrics（T-48）。
@@ -21,37 +20,17 @@ import type { MessageCacheState } from '@crish/shared-types';
  *   === 'processing' 的 assistant 消息（即当前流式消息）。
  * - null 语义（P6 C15）：metrics 为 null 时不写入（store 保持无字段，
  *   渲染层隐藏而非显示 0%）。
+ *
+ * T-E 步骤 3（M1）：raw setState 直写 → setMessageCacheMetrics action——
+ * 「必须经 sessions[] canonical 写」的手工纪律（autoIndex 中间件索引保障）
+ * 内建为 action 实现（getSessionForWrite + rebindSessionById）。
  */
 function attachCacheMetricsToStoreMessage(
   sessionId: string,
   messageId: string,
   metrics: MessageCacheMetrics
 ): void {
-  const cacheState: MessageCacheState = {
-    metrics,
-    source: 'engine-message-end',
-  };
-  // 注意：必须经 sessions[]（autoIndex 中间件的 canonical 数组）写入——
-  // 直接改 sessionsById 会在下一次 sessions 变更重建索引时被覆盖。
-  useLayoutStore.setState((state) => {
-    const sess = state.sessions.find((s) => s.id === sessionId);
-    if (!sess?.messages) return;
-    let target = messageId
-      ? sess.messages.find((m) => m.id === messageId)
-      : undefined;
-    if (!target) {
-      for (let i = sess.messages.length - 1; i >= 0; i--) {
-        const m = sess.messages[i];
-        if (!m) continue;
-        if (m.sender === 'assistant' && m.status === 'processing') {
-          target = m;
-          break;
-        }
-      }
-    }
-    if (!target) return;
-    target.cacheMetrics = cacheState;
-  });
+  useLayoutStore.getState().setMessageCacheMetrics(sessionId, messageId, metrics);
 }
 
 /**

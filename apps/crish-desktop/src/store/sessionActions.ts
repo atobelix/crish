@@ -13,9 +13,11 @@
  */
 
 import type { SessionsIndexed } from './sessionIndex';
+import type { ProjectEntry } from '../api/projectStore';
 import type {
   MessageToolCall,
   MessageToolCallApprovalDecision,
+  MessageToolCallStatus,
   SessionAgent,
   SessionAgentPatch,
   SessionGoalMode,
@@ -28,6 +30,10 @@ import { createSessionCrudActions } from './sessionCrudActions';
 import { createSessionOrderingActions } from './sessionOrderingActions';
 import { createSessionMessageActions } from './sessionMessageActions';
 import { createSessionAgentActions } from './sessionAgentActions';
+import {
+  createSessionFolderActions,
+  type RebindSessionFoldersOptions,
+} from './sessionFolderActions';
 
 /**
  * 会话域 action 需要读写的 store 切片（避免与 layoutStore 循环 import）。
@@ -42,6 +48,19 @@ export interface SessionStoreSlice extends SessionsIndexed {
   panelAgentId: string | null;
   composerDrafts: Record<string, string>;
 }
+
+/**
+ * 消息级缓存指标载荷（结构类型，避免 store → chat-bridge handlers 反向依赖；
+ * 与 messageHandlers 的 MessageCacheMetrics 形状对齐）。
+ */
+type MessageCacheMetricsLike = {
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  cacheMissTokens?: number;
+  hitRate?: number;
+  writeRate?: number;
+  inputTotal?: number;
+};
 
 /** 会话 / 消息 / agent 域 action 签名（与 LayoutStore 同名方法一致） */
 export interface SessionActions {
@@ -164,6 +183,90 @@ export interface SessionActions {
   ) => void;
   pinMessage: (sessionId: string, messageId: string) => void;
   unpinMessage: (sessionId: string, messageId: string) => void;
+  /**
+   * 项目 → sessions.folder 镜像 rebind（D5 收敛点，唯一写路径）。
+   * 增量：opts.changedSessionIds 提供时仅处理变更集合。
+   */
+  rebindSessionFolders: (
+    projects: ReadonlyArray<ProjectEntry>,
+    opts?: RebindSessionFoldersOptions
+  ) => void;
+
+  // ── 事件写入收敛（T-E 步骤 3：事件 handler → action，禁止 raw setState）──
+
+  /** 引擎 runId 回填（onRunMeta 路径） */
+  setEngineLastRunId: (sessionId: string, runId: string) => void;
+  /**
+   * agent 消息单条 patch（流式 thinking/chunk/tool 路径；patch 为 immer draft 内
+   * 回调，与既有 buildPatchAsst 语义逐行等价）。
+   */
+  patchSessionAgentMessage: (
+    sessionId: string,
+    agentId: string,
+    messageId: string,
+    patch: (message: SessionMessage) => void
+  ) => void;
+  /** subagent-event → agent 时间线整体投影（applySubagentEventToMessages 纯函数复用） */
+  applySubagentEventToAgent: (
+    sessionId: string,
+    agentId: string,
+    event: Record<string, unknown>
+  ) => void;
+  /**
+   * agent 终态 patch + 时间线 processing→completed 收口 + 父工具卡终态
+   * （U3/S3 双调用方共用；status 为 wire 归一终态 completed/failed/stopped）。
+   */
+  patchSessionAgentToolStatus: (
+    sessionId: string,
+    agentId: string,
+    opts: { status: string; summary?: string }
+  ) => void;
+  /** 全部 processing→completed、running/pending 工具卡→error「已停止」（finalizeInFlight 语义） */
+  finalizeAgentMessages: (sessionId: string, agentId: string) => void;
+  /** timeline 归一（normalizeAssistantTimeline；sender 非 assistant 早退） */
+  updateMessageTimeline: (sessionId: string, messageId: string) => void;
+  /** stop 批量工具终态（buildTerminalToolPatches 结果；批内单次 immer） */
+  applyToolCallPatches: (
+    sessionId: string,
+    messageId: string,
+    patches: Array<{
+      id: string;
+      status: MessageToolCallStatus;
+      output?: string;
+    }>
+  ) => void;
+  /**
+   * 消息级缓存指标挂载（必须经 sessions[] canonical 写；messageId 兜底为
+   * 末条 processing assistant；metrics null 不写）。
+   */
+  setMessageCacheMetrics: (
+    sessionId: string,
+    messageId: string,
+    metrics: MessageCacheMetricsLike
+  ) => void;
+  /**
+   * 本地工具卡置标（审批乐观更新；scope 命中时只扫 scope 内，缺省全表扫描
+   * 与原语义等价；终态工具卡不回退 running）。
+   */
+  markToolCallLocalStatus: (
+    toolCallId: string,
+    status: 'running' | 'error',
+    output: string,
+    scope?: {
+      sessionId?: string;
+      agentId?: string;
+      runId?: string;
+    }
+  ) => void;
+  /** 批量审批决定写入（respondToApproval 单条语义的批量封装） */
+  batchRespondToApproval: (
+    decisions: Array<{
+      sessionId: string;
+      messageId: string;
+      toolCallId: string;
+      decision: MessageToolCallApprovalDecision;
+    }>
+  ) => void;
 }
 
 /**
@@ -189,5 +292,6 @@ export function createSessionActions<T extends SessionStoreSlice>(
     ...createSessionOrderingActions(set),
     ...createSessionMessageActions(set),
     ...createSessionAgentActions(set),
+    ...createSessionFolderActions(set),
   };
 }

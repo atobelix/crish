@@ -6,6 +6,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './RuntimePanel.module.css';
 import type { LiveTask } from './useRuntimePanelData';
+import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import {
   emptyLiveTasksHint,
   formatElapsed,
@@ -15,16 +16,16 @@ import {
 export type LiveTasksSectionProps = {
   liveTasks: LiveTask[];
   countLabel: string | null;
-  engineOnline: boolean;
   onFocusSession: (sessionId: string) => void;
 };
 
 export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
   liveTasks,
   countLabel,
-  engineOnline,
   onFocusSession,
 }) => {
+  // D2（C-10）：连接态投影（errorStore 真源），不再由 RuntimePanel props 下传
+  const connectionStatus = useConnectionStatus();
   return (
     <section className={styles.section} aria-labelledby="rt-sec-live">
       <div className={styles.sectionHead}>
@@ -39,7 +40,7 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
       </div>
       {liveTasks.length === 0 ? (
         <div className={styles.empty} role="status">
-          {emptyLiveTasksHint(engineOnline)}
+          {emptyLiveTasksHint(connectionStatus)}
         </div>
       ) : (
         <div

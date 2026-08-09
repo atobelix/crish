@@ -9,9 +9,6 @@ export type LayoutAnimationType =
   /** OS / 浏览器窗口缩放 pulse（R3 桥；独立于 sash 的 workspace-resizing，避免 Set 无引用计数时误 end） */
   | 'window-resizing'
   | 'tab-dragging'
-  // TODO: 审计 02 M7 — 无外部引用，可删除
-  // | 'panel-split-resizing'
-  // | 'modal-animating'
   ;
 
 /** 布局动画阶段 */
@@ -37,9 +34,6 @@ const TYPE_BODY_CLASSES: Record<LayoutAnimationType, readonly string[]> = {
   // 窗口缩放：兼容旧 CSS 选择器 body.window-resizing；is-layout-frozen 由 active 统一加
   'window-resizing': ['window-resizing', 'is-resizing'],
   'tab-dragging': ['dragging-card'],
-  // TODO: 审计 02 M7 — 无外部引用，可删除
-  // 'panel-split-resizing': ['resizing-active', 'is-resizing'],
-  // 'modal-animating': [],
 };
 
 /** 由 store / helper 管理的 body class（含 window-resizing：R3 已接入 store） */

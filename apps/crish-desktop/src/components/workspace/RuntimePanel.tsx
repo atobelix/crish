@@ -6,6 +6,7 @@ import {
   selectTokenUsage,
 } from '../../store/storeAccess';
 import { useEngineState } from '../../hooks/useEngineState';
+import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { RuntimeSection } from './RuntimeSection';
 import { LiveTasksSection } from './LiveTasksSection';
 import { BgTasksSection } from './BgTasksSection';
@@ -25,6 +26,7 @@ import {
   formatEngineStatusShort,
   formatEngineStatusTitle,
   formatUsageRingAria,
+  isReadyStatus,
 } from './runtimePanelLib';
 
 interface RuntimePanelProps {
@@ -49,6 +51,8 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
   const tokenUsage = useSettingsField(selectTokenUsage);
   const cronJobs = useSettingsField(selectScheduledTasks);
   const ds = useEngineState();
+  // D2：连接态真源 = errorStore.connectionStatus（useEngineState 已去 engineOnline）
+  const connectionStatus = useConnectionStatus();
   const data = useRuntimePanelData();
   const cachePanel = useCacheEventsStore();
   const auditEntries = useSecurityAuditStore((s) => s.entries);
@@ -94,15 +98,15 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
             className={styles.engineStatus}
             role="status"
             aria-live="polite"
-            aria-label={formatEngineStatusFull(ds.engineOnline)}
-            title={formatEngineStatusTitle(ds.engineOnline)}
+            aria-label={formatEngineStatusFull(connectionStatus)}
+            title={formatEngineStatusTitle(connectionStatus)}
           >
             <span
-              className={`${styles.dot} ${ds.engineOnline ? styles.on : styles.off}`}
+              className={`${styles.dot} ${isReadyStatus(connectionStatus) ? styles.on : styles.off}`}
               aria-hidden
             />
             <span className={`${styles.rowMeta} ${styles.engineMeta}`}>
-              {formatEngineStatusShort(ds.engineOnline)}
+              {formatEngineStatusShort(connectionStatus)}
             </span>
           </div>
         }
@@ -153,14 +157,12 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
       <LiveTasksSection
         liveTasks={data.liveTasks}
         countLabel={data.liveCountLabel}
-        engineOnline={ds.engineOnline}
         onFocusSession={data.focusSession}
       />
 
       <BgTasksSection
         bgTasks={ds.bgTasks}
         countLabel={data.bgCountLabel}
-        engineOnline={ds.engineOnline}
         onShowToast={onShowToast}
       />
 
@@ -188,7 +190,6 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
         cronJobs={cronJobs}
         planCount={data.planCount}
         countLabel={data.planCountLabel}
-        engineOnline={ds.engineOnline}
       />
     </div>
   );

@@ -1,0 +1,85 @@
+/* ui/Switch 私有形态样式（T-C 批次 5.2 · T11）
+ * 对齐旧 settings-switch 全局类观感；全部引用 tokens.css 变量，无裸 hex/rgba */
+
+.labelWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.track {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-full);
+  background: var(--switch-track-bg);
+  border: 1px solid var(--tint-strong);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.track:hover:not(:disabled) {
+  border-color: var(--border-color);
+}
+
+.track[aria-checked='true'] {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--accent-green-muted);
+  outline-offset: 2px;
+}
+
+.track:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  box-shadow: var(--switch-thumb-shadow);
+  transition: transform var(--transition-fast);
+}
+
+.track[aria-checked='true'] .thumb {
+  transform: translateX(16px);
+}
+
+.trackSm {
+  width: 28px;
+  height: 16px;
+}
+
+.trackSm .thumb {
+  width: 12px;
+  height: 12px;
+  top: 1px;
+  left: 1px;
+}
+
+.trackSm[aria-checked='true'] .thumb {
+  transform: translateX(12px);
+}

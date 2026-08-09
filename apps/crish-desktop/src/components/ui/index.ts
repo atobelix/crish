@@ -26,3 +26,9 @@ export type { SelectProps, SelectOption } from './Select/Select';
 
 export { ConfirmDialog } from './ConfirmDialog/ConfirmDialog';
 export type { ConfirmDialogProps } from './ConfirmDialog/ConfirmDialog';
+
+export { Switch } from './Switch/Switch';
+export type { SwitchProps, SwitchSize } from './Switch/Switch';
+
+export { TabStrip } from './TabStrip/TabStrip';
+export type { TabStripProps, TabStripItem, TabStripRenderCtx } from './TabStrip/TabStrip';

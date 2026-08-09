@@ -20,6 +20,7 @@ import {
   createDefaultWorkspace,
   ensureChatColumn,
   ensureToolColumn,
+  expandToolColumnIfCollapsed,
   extractCardFromGroup,
   findGroupInWorkspace,
   insertCardIntoGroup,
@@ -28,6 +29,7 @@ import {
   makePanelGroup,
   normalizeColumnWidths,
   placePanelCard,
+  collapseToolColumnPreserve,
   collapseToolColumnToTabs,
   pruneEmptyWorkspaceLayout,
   rebalanceGroupHeights,
@@ -71,6 +73,12 @@ export interface WorkspaceActions {
   applyLayoutPreset: (preset: 'developer-split' | 'full-chat' | 'telemetry-focus') => void;
   /** 从项目布局快照还原活动工作区 columns（卡片 id / 宽高比 / active） */
   applyWorkspaceLayout: (snapshot: LayoutSnapshot) => void;
+  /** 置 group 活动卡（P3-4：facade 转发到本真 action） */
+  setGroupActiveCard: (wsId: string, colIdx: number, groupIdx: number, cardId: string) => void;
+  /** 聚焦既有面板卡（含工具列展开副作用）；返回是否找到（P3-4 转发） */
+  focusExistingPanelCard: (wsId: string, cardId: string) => boolean;
+  /** 折叠工具列并保留活动卡（C4：workspaceChromeHooks 迁入） */
+  collapseToolColumnPreserve: (wsId: string) => void;
 }
 
 /**
@@ -588,6 +596,39 @@ export function createWorkspaceActions<T extends WorkspaceStoreSlice>(
       if (state.tabModeEnabled) {
         collapseToolColumnToTabs(ws);
       }
+    }),
+
+    // ── P3-4：facade recipe 迁入的真 action（W1/W2/C4）────────────
+
+    setGroupActiveCard: (wsId, colIdx, groupIdx, cardId) => set((state) => {
+      const group = state.workspaces.find((w) => w.id === wsId)?.columns[colIdx]
+        ?.groups[groupIdx];
+      if (group) group.activeCardId = cardId;
+    }),
+
+    focusExistingPanelCard: (wsId, cardId) => {
+      let found = false;
+      set((state) => {
+        const ws = findWorkspace(state, wsId);
+        if (!ws) return;
+        for (const c of ws.columns) {
+          for (const g of c.groups) {
+            if (g.cards.some((card) => card.id === cardId)) {
+              g.activeCardId = cardId;
+              found = true;
+              expandToolColumnIfCollapsed(ws);
+              return;
+            }
+          }
+        }
+      });
+      return found;
+    },
+
+    collapseToolColumnPreserve: (wsId) => set((state) => {
+      const ws = findWorkspace(state, wsId);
+      if (!ws) return;
+      collapseToolColumnPreserve(ws);
     }),
   };
 }

@@ -1,0 +1,138 @@
+import React from 'react';
+import * as Lucide from 'lucide-react';
+import { Button, Tooltip } from '../ui';
+import type { AddDraft } from './useModelProfilesState';
+import styles from './ModelsSettingsTab.module.css';
+
+/** 模型列表头部：连通性检查 / 自动获取 / 搜索 / 手动添加 */
+export const ModelListHeader: React.FC<{
+  checkBusy: boolean;
+  scanBusy: boolean;
+  runCheck: () => Promise<void>;
+  runScan: () => Promise<void>;
+  modelFilter: string;
+  setModelFilter: (val: string) => void;
+  manualOpen: boolean;
+  setManualOpen: (val: boolean) => void;
+  setAddDraft: React.Dispatch<React.SetStateAction<AddDraft>>;
+  emptyAddDraft: () => AddDraft;
+}> = ({
+  checkBusy,
+  scanBusy,
+  runCheck,
+  runScan,
+  modelFilter,
+  setModelFilter,
+  manualOpen,
+  setManualOpen,
+  setAddDraft,
+  emptyAddDraft,
+}) => {
+  return (
+    <div className={`${styles.mrdModelsHead} mrd-models-head`}>
+      <span className={`${styles.mrdModelsLabel} mrd-models-label`}>
+        模型列表
+      </span>
+      <div className={`${styles.mrdModelsActions} mrd-models-actions`}>
+        <Tooltip content="检查服务商连通性">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={checkBusy}
+            onClick={() => void runCheck()}
+            style={{
+              height: '28px',
+              width: '28px',
+              padding: '0',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            aria-label="检查连通性"
+            icon={
+              checkBusy ? (
+                <Lucide.Loader2
+                  size={13}
+                  className={styles.loadingSpinner}
+                />
+              ) : (
+                <Lucide.Wifi size={13} />
+              )
+            }
+          />
+        </Tooltip>
+        <Tooltip content="自动获取服务商模型列表">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={scanBusy}
+            onClick={() => void runScan()}
+            style={{
+              height: '28px',
+              width: '28px',
+              padding: '0',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            aria-label="自动获取"
+            icon={
+              scanBusy ? (
+                <Lucide.Loader2
+                  size={13}
+                  className={styles.loadingSpinner}
+                />
+              ) : (
+                <Lucide.RefreshCw size={13} />
+              )
+            }
+          />
+        </Tooltip>
+        <div style={{ position: 'relative' }}>
+          <Lucide.Search
+            size={12}
+            style={{
+              position: 'absolute',
+              left: '8px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-tertiary)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            placeholder="搜索..."
+            value={modelFilter}
+            onChange={(e) => setModelFilter(e.target.value)}
+            className={`${styles.mrdSearch} mrd-search`}
+            spellCheck={false}
+          />
+        </div>
+        <Tooltip content="手动添加模型">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setManualOpen(!manualOpen);
+              setAddDraft(emptyAddDraft());
+            }}
+            style={{
+              height: '28px',
+              width: '28px',
+              padding: '0',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            aria-label="添加模型"
+            icon={<Lucide.Plus size={13} />}
+          />
+        </Tooltip>
+      </div>
+    </div>
+  );
+};

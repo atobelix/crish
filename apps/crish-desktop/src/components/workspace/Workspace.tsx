@@ -66,9 +66,8 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
       if (wsIndex < 0) return;
       const cur = useLayoutStore.getState().activeWorkspaceIndex;
       if (cur === wsIndex) return;
-      useLayoutStore.setState((state) => {
-        state.activeWorkspaceIndex = wsIndex;
-      });
+      // T-E 步骤 4（C3）：raw setState → setActiveWorkspaceIndex action（clamp 内建）
+      useLayoutStore.getState().setActiveWorkspaceIndex(wsIndex);
     }, [wsIndex]);
 
     const renderedColumns = React.useMemo(

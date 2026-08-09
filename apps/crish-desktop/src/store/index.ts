@@ -170,10 +170,3 @@ export type { SettingsStore } from './settingsStore';
 
 // store 侧公共读面（T11 新域读入口）
 export * from './storeAccess';
-
-export { useRustCoreStore } from './rustCoreStore';
-export type {
-  RustCoreStore,
-  RustCoreSlice,
-  RustCoreActions,
-} from './rustCoreStore';

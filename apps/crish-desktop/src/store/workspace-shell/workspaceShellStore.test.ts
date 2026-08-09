@@ -35,6 +35,7 @@ vi.mock('../../api/storeAccess', () => ({
 
 vi.mock('../../api/workspaceChromeTabs', () => ({
   closeSessionTab: vi.fn(),
+  syncOpenTabsToLegacy: vi.fn(),
   openSessionTab: vi.fn(),
   moveSessionTab: vi.fn(),
   currentWorkspaceFolderKey: () => 'general',

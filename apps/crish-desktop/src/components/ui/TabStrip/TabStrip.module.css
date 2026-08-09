@@ -1,0 +1,9 @@
+/* ui/TabStrip 基座私有样式（T-C 批次 5.2 · T12）
+ * 基座只提供默认标签文本与最小退化布局；消费方以 className/scrollClassName
+ * 承载各自形态（ws-chrome / binary-tree / shell 等），不在此收敛视觉 */
+
+.tabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

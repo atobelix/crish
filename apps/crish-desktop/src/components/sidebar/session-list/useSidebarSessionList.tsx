@@ -7,42 +7,31 @@ import React, {
 } from 'react';
 import type { SessionState } from '../../../store/layoutStore';
 import {
-  groupUnpinnedByProject,
   partitionSidebarSessions,
 } from '../../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import {
   SESSION_LIST_TICK_HIDDEN_MS,
-  compareSessionsByActivity,
   sessionListTimeTickMs,
 } from '../../../api/sessionTime';
 import { sessionListDisplayTitle } from '../../../api/sessionTitle';
 import {
-  SIDEBAR_SESSION_ROW_HEIGHT,
-  clampSessionListWindowRange,
-  expandWindowToIndex,
-  measureListOffsetTop,
-  scrollTopToRevealIndex,
-  shouldWindowSessionList,
-  windowContainsIndex,
-  type HeightGetter,
-} from '../../../api/sessionListWindow';
-import {
-  matchSessionSearch,
   storeSessionSearchQuery,
-  type SessionSearchMatch,
 } from '../../../api/sessionSearch';
 import styles from '../SidebarSessionList.module.css';
 import { SessionRow } from './SessionRow';
-import { FULL_RANGE, useSessionListWindow } from './useSessionListWindow';
 import { dedupeSessionsById } from './sessionListUtils';
 import type { SidebarSessionListProps } from './sessionListTypes';
-import {
-  applyDragPreview,
-  isPreviewTargetSection,
-  useSessionListDrag,
-} from './useSessionListDrag';
+import { useSessionListDrag } from './useSessionListDrag';
+import { useSessionGrouping } from './useSessionGrouping';
+import { useSessionSearch } from './useSessionSearch';
+import { useWindowedList } from './useWindowedList';
 
+/**
+ * 会话列表容器 hook（03-detail T10 拆分）：
+ * 窗口化 → useWindowedList；分组/折叠 → useSessionGrouping；
+ * 搜索/排序 → useSessionSearch；拖拽 → 既有 useSessionListDrag。
+ */
 export function useSidebarSessionList(props: SidebarSessionListProps) {
   const {
     sessions,
@@ -67,9 +56,6 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
 
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [renameDraft, setRenameDraft] = useState('');
-  const [expandedProjectFolders, setExpandedProjectFolders] = useState<
-    Record<string, boolean>
-  >({});
   const [showAllGeneralSessions, setShowAllGeneralSessions] = useState(false);
 
   const pinnedZoneRef = useRef<HTMLDivElement>(null);
@@ -90,7 +76,6 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     onMoveSessionRealtime,
   });
 
-  const isSearching = searchQuery.trim().length > 0;
   const isDragging = activeDragItem?.type === 'session';
 
   const { visible: visibleSessions, shellHiddenCount, inputListedCount } =
@@ -165,28 +150,8 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     });
   }, [renamingSessionId, sessions]);
 
-  const searchHits = useMemo(() => {
-    const map = new Map<string, SessionSearchMatch>();
-    const q = searchQuery.trim();
-    if (!q) return map;
-    for (const s of visibleSessions) {
-      const hit = matchSessionSearch(s, q);
-      if (hit.match) map.set(s.id, hit);
-    }
-    return map;
-  }, [visibleSessions, searchQuery]);
-
-  const sortedSessions = useMemo(() => {
-    const q = searchQuery.trim();
-    let list = visibleSessions;
-    if (q) list = list.filter((s) => searchHits.has(s.id));
-    if (sortType === 'name') {
-      return [...list].sort((a, b) =>
-        sessionListDisplayTitle(a).localeCompare(sessionListDisplayTitle(b))
-      );
-    }
-    return [...list].sort(compareSessionsByActivity);
-  }, [visibleSessions, searchQuery, searchHits, sortType]);
+  const { isSearching, searchHits, sortedSessions, isSearchEmpty } =
+    useSessionSearch({ visibleSessions, searchQuery, sortType });
 
   /** Session being dragged (for cross-section preview insertion). */
   const dragSession = useMemo(() => {
@@ -198,106 +163,23 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     );
   }, [dragPreview, sessions, sortedSessions]);
 
-  /** sessions[] index — pin stack free-reorder is stored here via moveSessionRealtime. */
-  const sessionOrderIndex = useMemo(() => {
-    const m = new Map<string, number>();
-    sessions.forEach((s, i) => m.set(s.id, i));
-    return m;
-  }, [sessions]);
-
-  // 分区内一律按 sessions[] 顺序展示（拖拽重排才能持久）；仅 sortType==='name' 时按标题排。
-  // 拖拽中 applyDragPreview 覆盖预览顺序。
-  const bySessionArrayOrder = useCallback(
-    (list: SessionState[]) => {
-      if (sortType === 'name') {
-        return [...list].sort((a, b) =>
-          sessionListDisplayTitle(a).localeCompare(sessionListDisplayTitle(b))
-        );
-      }
-      return [...list].sort(
-        (a, b) =>
-          (sessionOrderIndex.get(a.id) ?? 0) -
-          (sessionOrderIndex.get(b.id) ?? 0)
-      );
-    },
-    [sortType, sessionOrderIndex]
-  );
-
-  const basePinned = useMemo(
-    () => bySessionArrayOrder(sortedSessions.filter((s) => s.isPinned)),
-    [sortedSessions, bySessionArrayOrder]
-  );
-
-  const baseUnpinned = useMemo(
-    () => bySessionArrayOrder(sortedSessions.filter((s) => !s.isPinned)),
-    [sortedSessions, bySessionArrayOrder]
-  );
-
-  const { byProjectId: baseByProjectId, general: baseGeneral } = useMemo(
-    () => groupUnpinnedByProject(baseUnpinned, projects),
-    [baseUnpinned, projects]
-  );
-
-  // Live drag: inject optimistic section order so rows shift in place (activity
-  // sort alone cannot reflect array-position moves from moveSessionRealtime).
-  const pinnedSessions = useMemo(() => {
-    if (!dragPreview || !dragSession) return basePinned;
-    return applyDragPreview(
-      basePinned,
-      dragPreview,
-      dragSession,
-      isPreviewTargetSection(dragPreview, 'pinned')
-    );
-  }, [basePinned, dragPreview, dragSession]);
-
-  const byProjectId = useMemo(() => {
-    if (!dragPreview || !dragSession) return baseByProjectId;
-    const next: Record<string, SessionState[]> = {};
-    for (const p of projects) {
-      const list = baseByProjectId[p.id] || [];
-      next[p.id] = applyDragPreview(
-        list,
-        dragPreview,
-        dragSession,
-        isPreviewTargetSection(dragPreview, 'project', p.id)
-      );
-    }
-    // Preserve any stray keys from base
-    for (const key of Object.keys(baseByProjectId)) {
-      if (next[key] !== undefined) continue;
-      next[key] = applyDragPreview(
-        baseByProjectId[key] || [],
-        dragPreview,
-        dragSession,
-        isPreviewTargetSection(dragPreview, 'project', key)
-      );
-    }
-    return next;
-  }, [baseByProjectId, dragPreview, dragSession, projects]);
-
-  const generalSessions = useMemo(() => {
-    if (!dragPreview || !dragSession) return baseGeneral;
-    return applyDragPreview(
-      baseGeneral,
-      dragPreview,
-      dragSession,
-      isPreviewTargetSection(dragPreview, 'general')
-    );
-  }, [baseGeneral, dragPreview, dragSession]);
-
-  // Auto-collapse empty pin section — skip while dragging so the drop zone stays open.
-  useEffect(() => {
-    if (isDragging) return;
-    if (pinnedSessions.length === 0 && !pinnedCollapsed) {
-      onTogglePinned();
-    }
-  }, [pinnedSessions.length, isDragging]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Expand pin zone when a drag starts so empty/collapsed 置顶 still accepts drops.
-  useEffect(() => {
-    if (!isDragging) return;
-    if (pinnedCollapsed) onTogglePinned();
-  }, [isDragging]); // eslint-disable-line react-hooks/exhaustive-deps
+  const {
+    pinnedSessions,
+    byProjectId,
+    generalSessions,
+    expandedProjectFolders,
+    toggleExpandedProjectFolder,
+  } = useSessionGrouping({
+    sessions,
+    sortedSessions,
+    projects,
+    sortType,
+    dragPreview,
+    dragSession,
+    isDragging,
+    pinnedCollapsed,
+    onTogglePinned,
+  });
 
   const activeGeneralIndex = useMemo(() => {
     if (!activeSessionId) return null;
@@ -333,108 +215,24 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     generalSessions,
   ]);
 
-  // 固定单行高度，禁止按标题测量成两行
-  const rowHeightById = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const s of visibleSessions) {
-      map.set(s.id, SIDEBAR_SESSION_ROW_HEIGHT);
-    }
-    return map;
-  }, [visibleSessions]);
-
-  const defaultRowHeight = SIDEBAR_SESSION_ROW_HEIGHT;
-
-  const getGeneralHeight: HeightGetter = useCallback(
-    (index: number) => {
-      const s = generalSessions[index];
-      if (!s) return defaultRowHeight;
-      return rowHeightById.get(s.id) ?? defaultRowHeight;
-    },
-    [generalSessions, rowHeightById, defaultRowHeight]
-  );
-
-  const generalWindowEnabled =
-    !generalCollapsed &&
-    filterType !== 'pinned' &&
-    shouldWindowSessionList(generalSessions.length, {
-      searching: isSearching,
-      dragging: isDragging,
-    });
-
-  const generalWindowRange = useSessionListWindow(
-    generalSessions.length,
-    sessionListRef,
-    generalListRef,
+  const {
     generalWindowEnabled,
-    activeGeneralIndex,
-    getGeneralHeight
-  );
-
-  const generalRenderRange = useMemo(() => {
-    const base = generalWindowEnabled
-      ? generalWindowRange
-      : FULL_RANGE(generalSessions.length);
-    let r = clampSessionListWindowRange(
-      base,
-      generalSessions.length,
-      undefined,
-      getGeneralHeight
-    );
-    if (
-      activeGeneralIndex != null &&
-      !windowContainsIndex(r, activeGeneralIndex)
-    ) {
-      r = expandWindowToIndex(
-        r,
-        activeGeneralIndex,
-        generalSessions.length,
-        undefined,
-        getGeneralHeight
-      );
-    }
-    return r;
-  }, [
-    generalWindowEnabled,
-    generalWindowRange,
-    generalSessions.length,
-    activeGeneralIndex,
+    generalRenderRange,
     getGeneralHeight,
-  ]);
-
-  const lastRevealedActiveRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (generalCollapsed || filterType === 'pinned') return;
-    if (activeGeneralIndex == null || !activeSessionId) return;
-    const revealKey = `${activeSessionId}@${activeGeneralIndex}`;
-    if (lastRevealedActiveRef.current === revealKey) return;
-    const scrollEl = sessionListRef.current;
-    if (!scrollEl) return;
-    const listEl = generalListRef.current;
-    const listOffsetTop = listEl
-      ? measureListOffsetTop(scrollEl, listEl)
-      : 0;
-    const nextTop = scrollTopToRevealIndex({
-      index: activeGeneralIndex,
-      count: generalSessions.length,
-      viewportHeight: scrollEl.clientHeight || 400,
-      listOffsetTop,
-      scrollTop: scrollEl.scrollTop,
-      align: 'nearest',
-      getHeight: getGeneralHeight,
-    });
-    if (Math.abs(nextTop - scrollEl.scrollTop) > 1) {
-      scrollEl.scrollTop = nextTop;
-      scrollEl.dispatchEvent(new Event('scroll'));
-    }
-    lastRevealedActiveRef.current = revealKey;
-  }, [
+    rowHeightById,
+    defaultRowHeight,
+  } = useWindowedList({
+    visibleSessions,
+    generalSessions,
+    generalCollapsed,
+    filterType,
+    isSearching,
+    isDragging,
     activeSessionId,
     activeGeneralIndex,
-    generalCollapsed,
-    generalSessions.length,
-    filterType,
-    getGeneralHeight,
-  ]);
+    sessionListRef,
+    generalListRef,
+  });
 
   const navigateSession = useCallback(
     (fromId: string, delta: number) => {
@@ -547,15 +345,10 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     ]
   );
 
-  const toggleExpandedProjectFolder = useCallback((id: string) => {
-    setExpandedProjectFolders((prev) => ({ ...prev, [id]: !prev[id] }));
-  }, []);
-
   const toggleShowAllGeneralSessions = useCallback(() => {
     setShowAllGeneralSessions((v) => !v);
   }, []);
 
-  const isSearchEmpty = isSearching && sortedSessions.length === 0;
   const isAllEmpty = !isSearching && visibleSessions.length === 0;
   const showProjectsAndGeneral = filterType !== 'pinned';
 

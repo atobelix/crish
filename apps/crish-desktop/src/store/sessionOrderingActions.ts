@@ -10,12 +10,12 @@ import {
   getSessionIndex,
 } from './sessionIndex';
 import type { SessionActions, SessionStoreSlice, SessionImmerSet } from './sessionActions';
-import { useTerminalStore } from './terminalStore';
 import {
   cloneMessages,
   normalizeWritableSessionTitle,
   pickFallbackActiveSessionId,
   pruneEmptyShellsInPlace,
+  syncActiveTerminalSession,
 } from './sessionSharedHelpers';
 
 export function createSessionOrderingActions<T extends SessionStoreSlice>(
@@ -75,7 +75,7 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
           state.activeSessionId = fallback;
           state.activeAgentId = null;
           state.panelAgentId = null;
-          useTerminalStore.getState().setActiveTerminalSession(fallback);
+          syncActiveTerminalSession(fallback);
           pruneEmptyShellsInPlace(
             state,
             shellPruneKeepIds(fallback || null, null, { activating: true })
@@ -127,7 +127,7 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
         state.activeSessionId = newSess.id;
         state.activeAgentId = null;
         state.panelAgentId = null;
-        useTerminalStore.getState().setActiveTerminalSession(newSess.id);
+        syncActiveTerminalSession(newSess.id);
         pruneEmptyShellsInPlace(
           state,
           shellPruneKeepIds(newSess.id, null, { activating: true })
