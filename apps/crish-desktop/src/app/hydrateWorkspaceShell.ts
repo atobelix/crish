@@ -54,7 +54,7 @@ export function readRestoreLastWorkspace(): boolean {
     if (raw === '1' || raw === 'true') return true;
     if (raw === '0' || raw === 'false') return false;
   } catch {
-    /* ignore */
+    /* swallow-ok: 恢复开关读取失败时回退默认 clean 启动 */
   }
   return false; // 默认 clean
 }
@@ -161,7 +161,7 @@ export function setRestoreLastWorkspace(value: boolean): void {
       value ? 'true' : 'false'
     );
   } catch {
-    /* ignore */
+    /* swallow-ok: 恢复开关写失败仅影响下次启动还原 */
   }
   const prev = (getSettingsState().appSettings || {}) as Record<string, unknown>;
   const ui = {

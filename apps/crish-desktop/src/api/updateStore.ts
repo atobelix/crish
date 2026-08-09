@@ -20,12 +20,12 @@ function setUpdateAvailable(v: boolean): void {
     if (v) localStorage.setItem(KEY, '1');
     else localStorage.removeItem(KEY);
   } catch {
-    /* ignore */
+    /* swallow-ok: 更新标记尽力写，quota/隐私模式失败仅影响本次会话提示 */
   }
   try {
     window.dispatchEvent(new CustomEvent('crish-update-changed', { detail: { available: v } }));
   } catch {
-    /* ignore */
+    /* swallow-ok: 更新事件分发失败不影响已改标记 */
   }
 }
 
@@ -40,7 +40,7 @@ async function hasBlockingTasks(): Promise<boolean> {
       return true;
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: 后台任务探测失败按无阻塞处理，更新放行 */
   }
   return false;
 }
@@ -64,7 +64,7 @@ export async function applyUpdateWhenIdle(): Promise<{ ok: boolean; message: str
       return { ok: false, message: res.message || '更新失败' };
     }
   } catch {
-    /* 无命令时本地标记清除即可演示闭环 */
+    /* swallow-ok: 无命令时本地标记清除即可演示闭环 */
   }
   setUpdateAvailable(false);
   return { ok: true, message: '已开始安装更新' };

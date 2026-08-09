@@ -67,8 +67,15 @@ jobs:
       # store 直引门禁（T-E 批次 5 脚本 + T-C 批次 7.4 迁移归零后接线）：
       # components 直引 src/store/ 非白名单入口（store/index barrel / storeAccess /
       # store/types）计数必须为 0；基线文件 scripts/components-store-direct-imports.json
-      # 随迁移归零而清空（T14 已清零，见 05-detail 提交 G 阶段 3）
+      # 随迁移归零而清空（T14 已清零，见 05-detail 提交 G 阶段 3）。
       - run: npm run check:store-facade
+      # 行数门禁（T-E 批次 7.3 · 05 方案步骤②）：三级语义（85% 警告 / 100% 违规 /
+      # >650 硬阻断）+ per-file 基线（基线记录/frontend-line-counts-baseline.md，
+      # 存量登记、增长必 fail、--update 显式收紧）。
+      - run: npm run check:line-counts
+      # 吞错门禁本体 = eslint 本地规则 local/no-silent-catch（上方 npx eslint . 自动生效，
+      # 零新增 job）；报告模式便于 diff 观察趋势，非门禁本体。
+      - run: npm run check:swallowed-errors-frontend
 
   vitest-fast:
     runs-on: ubuntu-latest
@@ -88,6 +95,28 @@ jobs:
       # G7 统一：vitest 调用走根脚本（npm run test:coverage = vitest run --coverage，
       # 追加 --project=unit 透传快层专项口径）
       - run: npm run test:coverage -- --project=unit --reporter=verbose
+
+  # 生产构建门禁（06-步骤1，P1-1）：产物从未被机器验证 → 首次在 CI 构建并断言。
+  # N2 前置：@crish/shared-types 的 exports.default 指向 dist/index.js（CI 无 dist
+  # 缓存），必须先 build:shared-types——命令链顺序固定，颠倒即失败。
+  # 门禁承载：scripts/check-dist.mjs 单一断言脚本（App <500KB + vendor-tiptap/xterm
+  # 拆分落地 + --csp-enforce 严格 CSP 四断言，T3-4，CSP 唯一真源 cspPlugin 于
+  # 批次 7.2 已落地）；chunk 体积上限由 vite 配置层抛错门禁承载（chunkSizeGatePlugin，
+  # 06-步骤2 onwarn 草案在 vite 7 无 CHUNK_SIZE_WARN 管道，实读 vite 7.3.5 调整）。
+  # 与 typecheck job 的 tsc -b 职责重叠：口径统一优先（06 风险 R6），独立 job 并行。
+  frontend-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build:shared-types
+      - run: npm run build:desktop
+      - run: node scripts/check-dist.mjs --max-app-kb 500 --csp-enforce
 
   audit:
     runs-on: ubuntu-latest

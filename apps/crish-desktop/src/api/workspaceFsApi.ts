@@ -208,7 +208,7 @@ export async function toAssetUrl(filePath: string): Promise<string | null> {
       return (mod as { convertFileSrc: (p: string) => string }).convertFileSrc(path);
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: 浏览器/dev 环境无 convertFileSrc 时回退 null（调用方走原始路径） */
   }
   return null;
 }
@@ -335,7 +335,7 @@ export function addPendingFileAnnotation(input: {
   try {
     window.dispatchEvent(new CustomEvent('crish-file-annotations-changed'));
   } catch {
-    /* ignore */
+    /* swallow-ok: 批注变更事件分发失败不影响已入队的批注 */
   }
   return a;
 }
@@ -351,7 +351,7 @@ export function takePendingFileAnnotations(): PendingFileAnnotation[] {
   try {
     window.dispatchEvent(new CustomEvent('crish-file-annotations-changed'));
   } catch {
-    /* ignore */
+    /* swallow-ok: 批注清空事件分发失败不影响已取出的批注 */
   }
   return list;
 }
@@ -439,7 +439,7 @@ export function extractFilePathFromToolArgs(args: string): string | null {
       }
     }
   } catch {
-    /* plain */
+    /* swallow-ok: JSON 参数解析失败时按原串路径兜底 */
   }
   // 像路径的单行
   if (!raw.includes('\n') && /[\\/]/.test(raw) && raw.length < 400) {

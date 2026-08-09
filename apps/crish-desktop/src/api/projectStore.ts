@@ -85,7 +85,7 @@ function saveAliases(map: AliasMap) {
   try {
     localStorage.setItem(FOLDER_ALIASES_KEY, JSON.stringify(map));
   } catch {
-    /* ignore */
+    /* swallow-ok: 别名映射尽力写，quota/隐私模式失败时下次启动重试 */
   }
 }
 
@@ -158,7 +158,7 @@ export function setNoProject() {
     localStorage.removeItem(ACTIVE_PROJECT_KEY);
     localStorage.removeItem(WORKSPACE_KEY);
   } catch {
-    /* ignore */
+    /* swallow-ok: 项目标记清理尽力而为，失败残留无害键 */
   }
   window.dispatchEvent(new CustomEvent('crish-project-changed'));
 }

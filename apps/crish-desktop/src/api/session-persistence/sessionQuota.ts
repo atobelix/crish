@@ -30,7 +30,7 @@ export function markQuotaTruncated(sessionId: string): void {
   try {
     localStorage.setItem(QUOTA_TRUNCATED_PREFIX + id, '1');
   } catch {
-    /* quota / private mode */
+    /* swallow-ok: quota/隐私模式下标志写失败，截断信息不可见但保存主流程不受影响 */
   }
 }
 
@@ -52,6 +52,6 @@ export function clearQuotaTruncation(sessionId: string): void {
   try {
     localStorage.removeItem(QUOTA_TRUNCATED_PREFIX + id);
   } catch {
-    /* ignore */
+    /* swallow-ok: 截断标志清除失败仅残留过期标记，无功能影响 */
   }
 }

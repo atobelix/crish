@@ -12,14 +12,14 @@ export function setComposerSeed(text: string): void {
   try {
     sessionStorage.setItem(KEY, t);
   } catch {
-    /* private mode */
+    /* swallow-ok: 隐私模式下 sessionStorage 不可用，种子仅本次内存 */
   }
   try {
     window.dispatchEvent(
       new CustomEvent(COMPOSER_SEED_EVENT, { detail: { text: t } }),
     );
   } catch {
-    /* ignore */
+    /* swallow-ok: 种子事件分发失败不影响已写入的种子文本 */
   }
 }
 

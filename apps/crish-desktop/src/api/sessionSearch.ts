@@ -72,7 +72,7 @@ function foldSearchText(text: string): string {
   try {
     s = s.normalize('NFKC');
   } catch {
-    /* 无 normalize 的环境忽略 */
+    /* swallow-ok: 无 normalize 的环境忽略，保持原串搜索 */
   }
   s = s.replace(SEARCH_INVISIBLE_RE, '');
   s = s.replace(UNICODE_SPACE_RE, ' ');
@@ -88,7 +88,7 @@ function prepareSnippetDisplay(text: string): string {
   try {
     s = s.normalize('NFKC');
   } catch {
-    /* ignore */
+    /* swallow-ok: 无 normalize 的环境忽略，摘录保持原串 */
   }
   s = s.replace(SEARCH_INVISIBLE_RE, '');
   s = s.replace(UNICODE_SPACE_RE, ' ').replace(/\s+/g, ' ').trim();
@@ -540,7 +540,7 @@ export function storeSessionSearchQuery(query: string): void {
       sessionStorage.removeItem(SESSION_SEARCH_QUERY_KEY);
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: 搜索词持久化尽力而为，失败仅影响下次会话高亮 */
   }
   // 触发响应式更新（ChatMessageList 通过 useSyncExternalStore 订阅）
   notifySearchQueryListeners();
@@ -561,7 +561,7 @@ const listeners = new Set<Listener>();
 
 function notifySearchQueryListeners(): void {
   for (const fn of listeners) {
-    try { fn(); } catch { /* ignore */ }
+    try { fn(); } catch { /* swallow-ok: 单个订阅者异常不阻断其余通知 */ }
   }
 }
 

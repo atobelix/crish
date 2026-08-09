@@ -68,7 +68,7 @@ export class SessionStreamManager {
       try {
         prev.cancel();
       } catch {
-        /* ignore */
+        /* swallow-ok: 旧流已结束/销毁时 cancel 失败可忽略，新流正常接管 */
       }
     }
     this.streams.set(sessionId, next);
@@ -83,7 +83,7 @@ export class SessionStreamManager {
     try {
       cur.cancel();
     } catch {
-      /* ignore */
+      /* swallow-ok: 流已结束/销毁时 cancel 失败可忽略，句柄已移除 */
     }
     return cur;
   }

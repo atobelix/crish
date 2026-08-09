@@ -42,7 +42,7 @@ function saveAll(map: Record<string, LayoutSnapshot>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
   } catch {
-    /* quota / private mode */
+    /* swallow-ok: 布局快照尽力写，quota/隐私模式失败时仅本次会话生效 */
   }
 }
 
@@ -62,7 +62,7 @@ function saveSessionCustomized(map: Record<string, true>): void {
   try {
     sessionStorage.setItem(SESSION_CUSTOMIZED_KEY, JSON.stringify(map));
   } catch {
-    /* ignore */
+    /* swallow-ok: 会话定制标记尽力写，失败回退未定制 */
   }
 }
 
@@ -184,7 +184,7 @@ export function setSessionAppliedLayoutPath(path: string): void {
     if (key) sessionStorage.setItem(SESSION_APPLIED_KEY, key);
     else sessionStorage.removeItem(SESSION_APPLIED_KEY);
   } catch {
-    /* ignore */
+    /* swallow-ok: 已应用布局路径标记写/清尽力而为 */
   }
 }
 

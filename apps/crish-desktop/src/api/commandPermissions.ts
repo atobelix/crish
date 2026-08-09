@@ -163,7 +163,7 @@ export function saveCommandPermissions(
   try {
     storage?.setItem?.(COMMAND_PERMISSIONS_STORAGE_KEY, JSON.stringify(cleaned));
   } catch {
-    /* ignore */
+    /* swallow-ok: 白名单尽力写，quota/隐私模式失败时回退内存态 */
   }
 }
 
@@ -301,7 +301,7 @@ export function extractCommandForMatch(toolName: unknown, args: unknown): string
       }
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: 命令文本 JSON 解析兜底，失败时按原串展示 */
   }
   return a;
 }

@@ -29,7 +29,7 @@ export function canUseDemoMode(): boolean {
       if (h === 'localhost' || h === '127.0.0.1' || h === 'tauri.localhost') return true;
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: hostname 探测异常时按非 localhost 处理（demo 需显式开关） */
   }
 
   if (import.meta.env.DEV) return true;
@@ -45,7 +45,7 @@ export function getAppMode(): AppMode {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'demo' || stored === 'normal') return stored;
   } catch {
-    /* ignore */
+    /* swallow-ok: 存储不可用时回退默认 normal 模式 */
   }
   // Prefer product-like default even in dev
   return 'normal';
@@ -60,7 +60,7 @@ function setAppMode(mode: AppMode): void {
   try {
     localStorage.setItem(STORAGE_KEY, mode);
   } catch {
-    /* ignore */
+    /* swallow-ok: 模式标记尽力写，失败仅影响下次启动还原 */
   }
 }
 

@@ -42,6 +42,14 @@
   （阶段 B 就绪）；基线 8 → 1。
 - 未决：`useStreamCallbacks.ts`（并行域 M 状态）、`bootstrap-full.ts:8` 与
   `bootstrap-services.ts:81/116`（03-D2 独占裁决 P0-3，05 步骤③ grep 实测剔除）留待后续批次。
+- 2026-08-10（批次 7.3 第二批清理）：14 个文件 34 处 `/* ignore */` 等无信息旧注释升级为
+  `/* swallow-ok: 原因 */` 显式标注（阶段 B 就绪）：App / agentProfiles / appMode(3) /
+  composerSeed(2) / commandPermissions(2) / projectStore(2) / workspaceLayoutStore(3) /
+  updateStore(4) / skillsApi(4) / workspaceFsApi(4) / sessionSearch(4) / sessionStreamManager(2) /
+  hydrateWorkspaceShell(2) / sessionQuota(2)。阶段 A 门禁口径计数不变（原即注解豁免）；
+  阶段 B（markerRequired）切换时这些文件已全部达标。
+- 2026-08-10（批次 7.3 接线）：package.json 新增 `check:swallowed-errors-frontend`（报告模式）
+  并入 `check:desktop`；ci.yml lint job 追加该报告步（门禁本体 = eslint 规则，零新增 job）。
 
 <!-- BASELINE_START -->
 apps/crish-desktop/src/bootstrap-full.ts 1

@@ -50,7 +50,7 @@ function DevHealthOverlayMount() {
       localStorage.getItem('crish_dev_health') === '1' ||
       localStorage.getItem('crish_show_engine_settings') === '1';
   } catch {
-    /* ignore */
+    /* swallow-ok: dev 旗标读取失败时保持默认关闭（仅影响调试面板挂载） */
   }
   if (!on) return null;
   const Overlay = DevHealthOverlayLazy;

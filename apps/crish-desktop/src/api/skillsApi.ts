@@ -231,7 +231,7 @@ async function tryHomeDir(): Promise<string | null> {
       if (h) return String(h);
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: home 目录探测失败时回退 null（调用方走默认目录） */
   }
   return null;
 }
@@ -249,7 +249,7 @@ async function listDirAny(dirPath: string): Promise<FsDirEntry[]> {
         return { name, isDir, path: joinPath(path, name) };
       });
     } catch {
-      /* fall through */
+      /* swallow-ok: 插件 fs 读取失败时回退底层扫描路径 */
     }
   }
   try {
@@ -267,7 +267,7 @@ async function readTextAny(filePath: string, maxLines = 8000): Promise<string | 
     try {
       return await fs.readTextFile(path);
     } catch {
-      /* fall through */
+      /* swallow-ok: 插件 fs 读取失败时回退底层 readTextFile */
     }
   }
   try {
@@ -610,7 +610,7 @@ export async function revealSkillPath(filePath: string): Promise<boolean> {
       return true;
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: opener 插件不可用/失败时继续尝试 shell 打开 */
   }
   try {
     const shell = (await (Function(
@@ -621,7 +621,7 @@ export async function revealSkillPath(filePath: string): Promise<boolean> {
       return true;
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: shell 打开失败时返回 false，由调用方兜底提示 */
   }
   return false;
 }

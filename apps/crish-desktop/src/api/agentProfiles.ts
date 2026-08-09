@@ -74,7 +74,7 @@ export function saveAgentProfiles(list: AgentProfile[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 24)));
   } catch {
-    /* ignore */
+    /* swallow-ok: agent 角色列表尽力写，quota/隐私模式失败时下次启动回退默认 */
   }
 }
 

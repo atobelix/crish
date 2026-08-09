@@ -26,6 +26,43 @@ const PROD_CSP_BASE =
   "worker-src 'self' blob:; frame-src 'self' asset: http://asset.localhost https://asset.localhost; " +
   "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'";
 
+// chunk 体积门禁阈值（06-步骤2，2026-08-10 拆分后实测校准"先拆分后定阈值"）：
+// 全局最大 chunk = vendor-lucide 553.1 kB（图标集，超出拆分面），取 600 留 ~8% 余量；
+// vendor-tiptap 381.3 kB / vendor-xterm 441.0 kB / chat-bridge 479.0 kB 均低于阈值。
+// 阈值 = 抛错门禁（chunkSizeGatePlugin），与 vite:reporter 的 chunkSizeWarningLimit
+// 同值（单真源），避免 reporter 默认 500 对 lucide 误报。
+const CHUNK_SIZE_GATE_KB = 600;
+
+/**
+ * chunk 体积门禁（06-步骤2 / T-G 批次 7.1，P2-4/N4）：
+ * vite 7 的 chunk 超限告警由 vite:reporter 在 generateBundle 直发 logger.warn
+ * （无 CHUNK_SIZE_WARN 结构化 warning，rollupOptions.onwarn 捕获不到——
+ * 实读 vite 7.3.5 dist/node/chunks/config.js:5163-5177，与 07-detail §2.2 草案
+ * 的 onwarn 方案不同，故以插件拦截实现同语义）：任何 JS chunk 超过阈值即抛错，
+ * build 失败（阈值 = 门禁而非降噪开关，chunkSizeWarningLimit: 1100 退役）。
+ * App chunk <500KB 的专属断言由 scripts/check-dist.mjs 承载（全局阈值 + App
+ * 断言双轨，06 风险 R3 缓解）。
+ */
+function chunkSizeGatePlugin(): Plugin {
+  return {
+    name: 'crish-chunk-size-gate',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      for (const [name, chunk] of Object.entries(bundle)) {
+        if (
+          chunk.type === 'chunk' &&
+          chunk.code.length / 1e3 > CHUNK_SIZE_GATE_KB
+        ) {
+          this.error(
+            `chunk size 超限门禁：${name} = ${(chunk.code.length / 1e3).toFixed(1)} kB ` +
+              `> ${CHUNK_SIZE_GATE_KB} kB —— 拆分或校准阈值后放行`
+          );
+        }
+      }
+    },
+  };
+}
+
 function cspPlugin(): Plugin {
   return {
     name: 'crish-csp',
@@ -258,7 +295,13 @@ export default defineConfig({
     'process.env': {},
     'process.platform': JSON.stringify(process.platform || 'win32'),
   },
-  plugins: [react(), crishHttpProxyPlugin(), nodeBuiltinStubPlugin(), cspPlugin()],
+  plugins: [
+    react(),
+    crishHttpProxyPlugin(),
+    nodeBuiltinStubPlugin(),
+    cspPlugin(),
+    chunkSizeGatePlugin(),
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -277,8 +320,9 @@ export default defineConfig({
     target: 'es2022',
     outDir: 'dist',
     emptyOutDir: true,
-    // Lower noise for known large entry; not a substitute for real splits
-    chunkSizeWarningLimit: 1100,
+    // chunk 体积门禁（06-步骤2）：与 chunkSizeGatePlugin 同值（单真源）；
+    // reporter 的同名阈值确保"超限即告警"与"超限即抛错"口径一致（1100 降噪开关退役）
+    chunkSizeWarningLimit: CHUNK_SIZE_GATE_KB,
     commonjsOptions: { transformMixedEsModules: true },
     rollupOptions: {
       output: {
@@ -286,8 +330,15 @@ export default defineConfig({
         manualChunks(id) {
           const n = id.replace(/\\/g, '/');
           if (n.includes('node_modules')) {
-            if (n.includes('react-dom') || n.includes('/react/'))
+            // /react/ 会误伤 @tiptap/react 与 zustand/esm/react/*（→ 循环 chunk
+            // vendor-react↔vendor-tiptap/zustand），收窄为仅 react 包本体；
+            // react-dom 及其浮层 peer（@floating-ui/react-dom 等）继续归 vendor-react
+            if (
+              n.includes('react-dom') ||
+              n.includes('node_modules/react/')
+            ) {
               return 'vendor-react';
+            }
             if (n.includes('zustand') || n.includes('immer'))
               return 'vendor-zustand';
             if (n.includes('lucide-react')) return 'vendor-lucide';
@@ -298,10 +349,11 @@ export default defineConfig({
             // （T2-4 移交：ChatComposer.tsx:21 / CardPanelLayout.tsx:5）
             if (n.includes('@tiptap')) return 'vendor-tiptap';
             if (n.includes('@xterm')) return 'vendor-xterm';
-          } else if (process.env.CRISH_PROBE_APP) {
-            // TEMP 探针：列出进 App chunk 的 node_modules 模块（测后还原）
-            const pkg = n.replace(/.*node_modules[\\/]/, '').split(/[\\/]/)[0];
-            console.log('[PROBE]', pkg);
+            // 06-步骤2 实测校准（拆分后清单 2026-08-10）：App chunk 残留的
+            // dompurify（121.8KB rendered）与 @chenglou/pretext（122.7KB rendered）
+            // 拆出后 App 实测 ≈455KB，达成 <500KB 目标（check-dist 断言承载）
+            if (n.includes('dompurify')) return 'vendor-dompurify';
+            if (n.includes('@chenglou')) return 'vendor-pretext';
           }
           // Business-stable splits (async-heavy chat-bridge/stream cores)
           if (n.includes('/src/api/chatBridge')) return 'chat-bridge';

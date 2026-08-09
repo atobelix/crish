@@ -29,6 +29,9 @@
 - 2026-08-10（批次 7.3）：三级语义 + per-file 基线机制接线完成（基线模式，`--all` 退出 0）；
   CI/package.json 接线因并行域（T-E 批次 5.4 门禁接线同文件在途）暂缓，由主控在
   package.json/ci.yml 合入后追加 `check:line-counts`（`node scripts/check-line-counts.mjs --all`）。
+- 2026-08-10（批次 7.3 补完）：package.json 新增 `check:line-counts` 并并入 `check:desktop`；
+  ci.yml lint job 追加 `npm run check:line-counts`；`.agents/AGENTS.md` 规则 1/3 声明与实现
+  逐条同步（基线豁免句 + 实现载体句）。吞错报告模式（check:swallowed-errors-frontend）同期接线。
 - >650 高发清单（步骤④拆分优先队列输入）：pricingStore.ts / sessionRustDb.ts /
   useStreamCallbacks.ts / modelCatalog.ts / store/layout-tree/operations.ts 等（见标记区实测）。
 
@@ -73,7 +76,7 @@ apps/crish-desktop/src/components/settings-extensions/useExtensionMarket.tsx 438
 apps/crish-desktop/src/components/settings-mcp/McpServerList.tsx 503
 apps/crish-desktop/src/components/settings-models/useModelProfilesState.ts 501
 apps/crish-desktop/src/components/settings-skills/useSkillsSettingsState.ts 635
-apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 446
+apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 447
 apps/crish-desktop/src/components/workspace/TerminalCard.xterm.tsx 431
 apps/crish-desktop/src/hooks/chat-stream/useSlashSend.ts 367
 apps/crish-desktop/src/hooks/chat-stream/useStreamCallbacks.ts 915

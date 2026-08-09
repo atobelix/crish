@@ -7,9 +7,9 @@
 
 ## 1. CI Governance & Decoupling Rules (CI 治理与解耦断言 6 条规则)
 
-1. **按类型分级行数门禁**：UI 组件限 500 行、业务逻辑限 400 行、类型契约放宽至 800 行，避免一刀切。
+1. **按类型分级行数门禁**：UI 组件限 500 行、业务逻辑限 400 行、类型契约放宽至 800 行，避免一刀切。存量超标文件登记于行数基线（`docs/multi-agent-repair/基线记录/frontend-line-counts-baseline.md`），豁免期间以基线为上限；基线清空后声明全量生效。
 2. **注释与空行免惩罚**：仅计算有效代码行，过滤空行与文档注释，鼓励开发者写完善的文档。
-3. **渐进预警与分级阻断**：接近上限时产生 CI 警告提醒重构，只有严重超标（如 >650 行）才硬性阻断 PR。
+3. **渐进预警与分级阻断**：接近上限时产生 CI 警告提醒重构，只有严重超标（如 >650 行）才硬性阻断 PR。实现载体：`scripts/check-line-counts.mjs`（`npm run check:line-counts`，已接入 `check:desktop` 与 CI lint job）。
 4. **状态爆炸识别单一职责**：限制单文件多组件 (`no-multi-comp`) 与单组件 `useState` 数量（>12个），自动拦截“包罗万象”的上帝组件。
 5. **分层硬性解耦与禁逆向依赖**：底层工具包绝不能反向引入上层业务包，前端禁止深路径直接调用引擎内部私有模块（一律经 IPC transport / commandMap / storeAccess 分层）。
 6. **零循环依赖与极速 CI 扫描**：全局硬阻断循环依赖 (`no-circular`)，排除 `dist/` 和 `node_modules`，将扫描耗时控制在 2 秒以内。
