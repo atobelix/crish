@@ -14,7 +14,8 @@
  * 4. 行内原始 HTML（html_element / html_tag）按 CommonMark 语义原样透传
  *    （不转义、不重组），与 Raw HTML 章节的期望一致。
  * 5. 行级块结构全部为确定性映射；登记偏差点有「列表行按 listIndent
- *    启发式分组」与「缩进代码块合并」（见 README「偏差点登记」）。
+ *    启发式分组 + listContinuation 消费 + li 内缩进代码块」与
+ *    「缩进代码块合并」（见 README「偏差点登记」）。
  */
 import type {
   MarkdownDocument,
@@ -57,15 +58,17 @@ function fenceInfo(raw: string): string {
 }
 
 /**
- * 剥离 up to 4 列前导空白（CommonMark 缩进代码块内容规则）：
+ * 剥离 up to limit 列前导空白（CommonMark 缩进代码块内容规则）：
  * tab 按停靠 4 展开（与引擎 computeLineOffsets 的 leadingIndentColumns
- * 列宽语义一致，spec §Tabs）。不足 4 列或行尾残留的空白原样保留
+ * 列宽语义一致，spec §Tabs）。不足 limit 列或行尾残留的空白原样保留
  * （如 6 空格空白行 → 剥 4 列 → 内容保留 2 空格，对齐 spec 例 112）。
+ * limit 缺省 4（文档级缩进代码块）；列表项内代码块按内容缩进 + 4
+ * 剥列（R1.5-C，spec 例 264/271）。
  */
-function stripIndentColumns(s: string): string {
+function stripIndentColumns(s: string, limit: number = 4): string {
   let col = 0;
   let i = 0;
-  while (i < s.length && col < 4) {
+  while (i < s.length && col < limit) {
     if (s[i] === ' ') {
       col++;
       i++;
@@ -77,6 +80,76 @@ function stripIndentColumns(s: string): string {
     }
   }
   return s.substring(i);
+}
+
+/** 字符串的渲染列宽（tab 按停靠 4 展开，与引擎 textColumns 同语义） */
+function textColumns(s: string): number {
+  let col = 0;
+  for (const ch of s) {
+    if (ch === ' ') {
+      col++;
+    } else if (ch === '\t') {
+      col += 4 - (col % 4);
+    } else {
+      col++;
+    }
+  }
+  return col;
+}
+
+/** 行首缩进列宽（tab 按停靠 4 展开，与引擎 leadingIndentColumns 同语义） */
+function leadingIndentColumns(s: string): number {
+  let col = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === ' ') {
+      col++;
+    } else if (s[i] === '\t') {
+      col += 4 - (col % 4);
+    } else {
+      break;
+    }
+  }
+  return col;
+}
+
+/** 剥离 up to 4 列前导空白（引擎 stripFourColumns 镜像，列表标记段判定用） */
+function stripFourColumns(s: string): string {
+  return stripIndentColumns(s, 4);
+}
+
+/**
+ * 列表标记段信息（引擎 listMarkerInfo 的投影器镜像）：行首为列表标记
+ * （task / 项目符号 / 有序）时返回标记前缀与「内容缩进列偏移」——
+ * 标记段列宽 = 标记字符 + 标记后空白（tab 停靠 4）；特例（规范规则 #2/#3）：
+ * 标记后无内容（空项）或标记后空白 ≥5 列（首块为缩进代码）时，
+ * 内容缩进列 = 标记宽 W + 1（spec 例 273/274/279 语义）。
+ */
+function listMarkerInfo(
+  content: string
+): { prefix: string; markerWidth: number } | null {
+  const m = /^([-*+]\s*\[[xX\s]\])[ \t]+|^([-*+])[ \t]+|^(\d+\.)[ \t]+/.exec(
+    content
+  );
+  if (!m) return null;
+  const prefix = m[1] ?? m[2] ?? m[3];
+  const markerSeg = m[0];
+  const wPlusN = textColumns(markerSeg);
+  const n = wPlusN - prefix.length;
+  if (n >= 5 || content.slice(markerSeg.length) === '') {
+    return { prefix, markerWidth: prefix.length + 1 };
+  }
+  return { prefix, markerWidth: wPlusN };
+}
+
+/**
+ * 列表项内容缩进列（spec §5.2 例 257/258/271/273/274 实证）：
+ * = 行首缩进列 + 标记段宽——引擎 listCtx.markerWidth 的投影器镜像，
+ * 供列表项延续 / li 内缩进代码的归属判定与剥列基准。
+ */
+function listContentIndent(line: LineNode): number {
+  const bqContent = stripBlockquotePrefix(line.raw);
+  const info = listMarkerInfo(stripFourColumns(bqContent));
+  return leadingIndentColumns(bqContent) + (info ? info.markerWidth : 0);
 }
 
 /**
@@ -226,88 +299,218 @@ function olStartNumber(line: LineNode): number {
 }
 
 /**
- * 列表容器投影（R1.5 增强）：支持嵌套（listIndent 分层递归）、
- * 松散列表（行间空行 → li 内容包 <p>）、项内段落延续（列表后的
- * 同级 body 行并入 li 以空格连接）。引擎 AST 行级无容器节点，
- * 这是 CommonMark 语义的忠实投影（README 偏差点登记更新）。
+ * 列表项投影累加器（R1.5-C）：以「块序列」模型承载单个 <li> 的内容——
+ * 首段文本（标记行内容 + 紧邻 body 延续，空格连接）与后续块
+ * （<p>…</p> / <pre><code>…</code></pre> / 嵌套列表）。
+ * contentIndent 为 spec §5.2 的内容缩进列（列表项延续 / li 内缩进代码
+ * 归属判定的基准列，见 listContentIndent）。
+ */
+interface ListItemAcc {
+  /** 首段文本：标记行内容 + 紧邻 body 延续（无空行，空格并入） */
+  firstText: string;
+  /** 后续块：<p>…</p> / <pre><code>…</code></pre> / 嵌套列表 HTML */
+  blocks: string[];
+  /** 最后追加的块形态（决定紧邻延续的并入位置） */
+  lastMode: 'first' | 'p' | 'pre' | 'list' | 'text';
+  /** 内容缩进列（列表项延续 / li 内代码判定的基准） */
+  contentIndent: number;
+}
+
+/**
+ * 列表容器投影（R1.5-C 增强）：支持嵌套（listIndent 分层递归，并入当前
+ * 项作为块）、松散列表（项间空行 / 项内多块空行分隔 → 段落包 <p>）、
+ * 项内多段落（listContinuation / 空行后 body → 同一 li 的第二个 <p>，
+ * spec 例 256/258/262/277）、li 内缩进代码块（空行后缩进 ≥ 内容缩进 + 4
+ * 的 code 行 → <pre><code>，剥「内容缩进 + 4」列，spec 例 264/270/271）、
+ * 紧邻 body 延续（无空行 → 空格并入当前段，spec 例 260/279 形态）。
+ * 引擎 AST 行级无容器节点，这是 CommonMark 语义的忠实投影
+ * （README 偏差点登记更新）。
  */
 function renderListGroup(lines: LineNode[], start: number, out: string[]): number {
   const first = lines[start];
   const kind = listKind(first);
   const indent = first.listIndent ?? 0;
   const bq = first.blockquoteLevel ?? 0;
-  const items: string[] = [];
+  const items: ListItemAcc[] = [];
   let j = start;
   let loose = false;
   let anyItem = false;
+  // 「空行后」标志：空白行之后的成员行——列表项延续按新段落处理
+  // （紧邻延续则空格并入），新项 / 嵌套 / 代码块据此置松散。
+  let pendingBlank = false;
+
+  // 追加文本：紧邻延续（无空行）按空格并入——p 段并入 p 内，
+  // 嵌套列表/代码块之后作为新文本段追加（CommonMark 新段落语义的近似）。
+  const appendText = (item: ListItemAcc, inline: string) => {
+    if (item.lastMode === 'p') {
+      item.blocks[item.blocks.length - 1] =
+        item.blocks[item.blocks.length - 1].replace(/<\/p>$/, '') +
+        ' ' +
+        inline +
+        '</p>';
+    } else if (item.lastMode === 'first') {
+      item.firstText += (item.firstText === '' ? '' : ' ') + inline;
+    } else {
+      item.blocks.push(inline);
+      item.lastMode = 'text';
+    }
+  };
+
+  // 追加新段落（listContinuation / 空行后 body）：空项（无首段无块）的
+  // 首段不包 <p>（紧列表语义，spec 例 279 形态）；非空项的后续段包 <p>
+  // 并置松散（项内多块空行分隔，spec §5.3）。
+  const appendParagraph = (item: ListItemAcc, inline: string): boolean => {
+    if (item.firstText === '' && item.blocks.length === 0) {
+      item.firstText = inline;
+      item.lastMode = 'first';
+      return false;
+    }
+    item.blocks.push('<p>' + inline + '</p>');
+    item.lastMode = 'p';
+    return true;
+  };
 
   while (j < lines.length) {
-    let ln = lines[j];
+    const ln = lines[j];
+    const bqContent = stripBlockquotePrefix(ln.raw);
+    const colIndent = leadingIndentColumns(bqContent);
 
-    // 空行：向后看是否仍属同一列表（松散分隔）
-    if (ln.type === 'empty') {
+    // 空白行（type empty 或 纯空白 body）：向后看是否仍属同一列表（松散分隔）
+    if (ln.type === 'empty' || (ln.type === 'body' && bqContent.trim() === '')) {
       let next = j + 1;
-      while (next < lines.length && lines[next].type === 'empty') next++;
-      if (
+      while (
         next < lines.length &&
-        lines[next].listIndent !== undefined &&
-        (lines[next].listIndent ?? 0) >= indent &&
-        (lines[next].blockquoteLevel ?? 0) === bq
+        (lines[next].type === 'empty' ||
+          (lines[next].type === 'body' &&
+            stripBlockquotePrefix(lines[next].raw).trim() === ''))
       ) {
-        loose = true;
-        j = next;
-        continue;
+        next++;
+      }
+      if (next < lines.length && (lines[next].blockquoteLevel ?? 0) === bq) {
+        const nl = lines[next];
+        const nIndent = leadingIndentColumns(stripBlockquotePrefix(nl.raw));
+        const nKind = listKind(nl);
+        const nListIndent = nl.listIndent ?? 0;
+        const last = items[items.length - 1];
+        // 成员判定：同级同种列表项 / 嵌套列表项 / 列表项延续 /
+        // 紧邻归属 body（列缩进 ≥ 内容缩进）/ li 内缩进代码
+        const isMember =
+          (nKind !== null &&
+            nListIndent >= indent &&
+            (nListIndent > indent || nKind === kind)) ||
+          nl.listContinuation === true ||
+          (nl.type === 'body' && last !== undefined && nIndent >= last.contentIndent) ||
+          (nl.type === 'code' && last !== undefined && nIndent >= last.contentIndent + 4);
+        if (isMember) {
+          pendingBlank = true;
+          j = next;
+          continue;
+        }
       }
       break;
     }
 
     if ((ln.blockquoteLevel ?? 0) !== bq) break;
-    if (ln.listIndent === undefined) {
-      // 项内段落延续（同级 body）——并入上一项
-      if (items.length > 0 && ln.type === 'body' && ln.raw.trim() !== '') {
-        items[items.length - 1] =
-          items[items.length - 1].replace(/<\/li>$/, '') +
-          ' ' +
-          renderLineInline(ln) +
-          '</li>';
+
+    // 列表项内缩进代码块（R1.5-C）：li 上下文 code 行 → <pre><code> 并入当前项。
+    // 归属判定：列缩进 ≥ 当前项内容缩进 + 4（spec 例 264/270/271；
+    // 例 257 的出列表代码 < 内容缩进，在此 break 出组）。
+    if (ln.type === 'code') {
+      const last = items[items.length - 1];
+      if (last !== undefined && colIndent >= last.contentIndent + 4) {
+        const { content, end } = collectIndentCode(lines, j, last.contentIndent + 4);
+        last.blocks.push('<pre><code>' + escapeText(content) + '</code></pre>');
+        last.lastMode = 'pre';
+        // 空行后首段之后追加代码块 → 项内多块（松散）
+        if (pendingBlank && (last.firstText !== '' || last.blocks.length > 1)) {
+          loose = true;
+        }
+        pendingBlank = false;
+        j = end;
+        continue;
+      }
+      // 出列表的缩进代码块：组在此结束，交由主循环投影
+      break;
+    }
+
+    if (ln.listIndent === undefined) break;
+
+    // 列表标记行（task / 项目符号 / 有序）：新项或嵌套递归
+    if (listKind(ln) !== null) {
+      if ((ln.listIndent ?? 0) < indent) break;
+      if ((ln.listIndent ?? 0) > indent) {
+        // 嵌套子列表（递归，从更大 indent 开始）——并入当前项作为块
+        const sub: string[] = [];
+        const end = renderListGroup(lines, j, sub);
+        const last = items[items.length - 1];
+        if (last !== undefined) {
+          last.blocks.push(sub.join(''));
+          last.lastMode = 'list';
+          if (pendingBlank && (last.firstText !== '' || last.blocks.length > 1)) {
+            loose = true;
+          }
+        }
+        pendingBlank = false;
+        j = end;
+        anyItem = true;
+        continue;
+      }
+      // 同级不同种列表：新列表（组结束）
+      if (listKind(ln) !== kind) break;
+      // 同级列表项（新项）
+      items.push({
+        firstText: renderLineInline(ln),
+        blocks: [],
+        lastMode: 'first',
+        contentIndent: listContentIndent(ln),
+      });
+      if (pendingBlank) loose = true; // 项间空行 → 列表松散（spec §5.3）
+      pendingBlank = false;
+      j++;
+      anyItem = true;
+      continue;
+    }
+
+    // 非标记行：列表项延续（普通 body）——按列缩进判定归属。listIndent
+    // 对普通 body 恒为 0 不可靠（R1.5-B 起 parseNormalLine 全行输出
+    // listIndent），以「列缩进 ≥ 当前项内容缩进」镜像引擎的列表上下文
+    // 判定（spec §5.2）。
+    if (ln.type === 'body') {
+      const last = items[items.length - 1];
+      if (last !== undefined && ln.raw.trim() !== '' && colIndent >= last.contentIndent) {
+        const inline = renderLineInline(ln);
+        if (pendingBlank || ln.listContinuation === true) {
+          // 空行后：列表项新段落（listContinuation 语义，spec 例 256/258）
+          if (appendParagraph(last, inline)) loose = true;
+        } else {
+          // 紧邻延续（无空行）：空格并入当前段（spec 例 260/279 形态）
+          appendText(last, inline);
+        }
+        pendingBlank = false;
         j++;
         continue;
       }
       break;
     }
-    if ((ln.listIndent ?? 0) < indent) break;
-    if ((ln.listIndent ?? 0) > indent) {
-      // 嵌套子列表（递归，从更大 indent 开始）
-      const sub: string[] = [];
-      const end = renderListGroup(lines, j, sub);
-      items.push('<li>' + sub.join('') + '</li>');
-      j = end;
-      anyItem = true;
-      continue;
-    }
-    // 同级项
-    if (listKind(ln) !== kind) break;
 
-    let itemContent = renderLineInline(ln);
-    // 项内延续 body 行（同 bq、无 listIndent、非空）
-    let k = j + 1;
-    while (
-      k < lines.length &&
-      lines[k].type === 'body' &&
-      lines[k].listIndent === undefined &&
-      (lines[k].blockquoteLevel ?? 0) === bq &&
-      lines[k].raw.trim() !== ''
-    ) {
-      itemContent += ' ' + renderLineInline(lines[k]);
-      k++;
-    }
-    items.push(loose ? '<li><p>' + itemContent + '</p></li>' : '<li>' + itemContent + '</li>');
-    j = k;
-    anyItem = true;
+    // 其余块级行（heading / hr / blockquote / table 等）：组结束
+    break;
   }
 
   if (!anyItem) return j;
-  const joined = items.join('');
+  const joined = items
+    .map((item) => {
+      if (loose) {
+        return (
+          '<li>' +
+          (item.firstText !== '' ? '<p>' + item.firstText + '</p>' : '') +
+          item.blocks.join('') +
+          '</li>'
+        );
+      }
+      return '<li>' + item.firstText + item.blocks.join('') + '</li>';
+    })
+    .join('');
   if (kind === 'ol') {
     const n = olStartNumber(first);
     out.push(`<ol${n > 1 ? ` start="${n}"` : ''}>` + joined + '</ol>');
@@ -364,28 +567,24 @@ function renderFencedBlock(
 }
 
 /**
- * 缩进代码块投影（登记偏差点，详见 README「偏差点登记」）：
- * 引擎 AST 无 codeBlockState 字段（围栏内内容行与缩进代码行同为
- * type==='code'），但围栏内行已由 renderFencedBlock 消费，主循环遇到的
- * 连续 type==='code' 行必然来自缩进代码块（含块内空白行，引擎状态机
- * inIndentCode 保持语义）——以此作为区分启发式，不误合并围栏代码。
- * CommonMark 缩进代码块是整块语义：合并为单个 <pre><code>，每行剥离
- * blockquote 前缀后剥 up to 4 列缩进（stripIndentColumns），按 \n 连接
- * 并以 \n 结尾；块尾空白行（trim 后为空）不属于块内容，剔除（spec 例 117）。
+ * 缩进代码块内容收集（R1.5-C 参数化剥列）：从 start 消费连续 type==='code'
+ * 行，每行剥离引用前缀后按列剥 up to stripCols 列缩进（tab 停靠 4），
+ * 按 \n 连接并以 \n 结尾；块尾空白行（trim 后为空）不属于块内容，剔除
+ * （spec 例 117），块内空白行保留（剥缩进后可能残留空白，spec 例 112）。
+ * stripCols：文档级缩进代码块为 4；li 内代码块为「内容缩进 + 4」
+ * （spec 例 264/271 语义，内容列由 listContentIndent 给出）。
  */
-function renderIndentCodeBlock(
+function collectIndentCode(
   lines: LineNode[],
   start: number,
-  out: string[]
-): number {
+  stripCols: number
+): { content: string; end: number } {
   const contentLines: string[] = [];
   let j = start;
   while (j < lines.length && lines[j].type === 'code') {
-    // 缩进判定发生在 blockquote 前缀剥离之后（与引擎 computeLineOffsets 一致）
-    contentLines.push(stripIndentColumns(stripBlockquotePrefix(lines[j].raw)));
+    contentLines.push(stripIndentColumns(stripBlockquotePrefix(lines[j].raw), stripCols));
     j++;
   }
-  // 块尾空白行剔除（CommonMark：块尾空行不属于代码块内容）
   while (
     contentLines.length > 0 &&
     contentLines[contentLines.length - 1].trim() === ''
@@ -394,8 +593,27 @@ function renderIndentCodeBlock(
   }
   const content =
     contentLines.join('\n') + (contentLines.length > 0 ? '\n' : '');
+  return { content, end: j };
+}
+
+/**
+ * 缩进代码块投影（登记偏差点，详见 README「偏差点登记」）：
+ * 引擎 AST 无 codeBlockState 字段（围栏内内容行与缩进代码行同为
+ * type==='code'），但围栏内行已由 renderFencedBlock 消费，主循环遇到的
+ * 连续 type==='code' 行必然来自缩进代码块（含块内空白行，引擎状态机
+ * inIndentCode 保持语义）——以此作为区分启发式，不误合并围栏代码。
+ * CommonMark 缩进代码块是整块语义：合并为单个 <pre><code>，每行剥离
+ * blockquote 前缀后剥 up to 4 列缩进（stripIndentColumns），块尾空白行
+ * 剔除（spec 例 117）。
+ */
+function renderIndentCodeBlock(
+  lines: LineNode[],
+  start: number,
+  out: string[]
+): number {
+  const { content, end } = collectIndentCode(lines, start, 4);
   out.push('<pre><code>' + escapeText(content) + '</code></pre>');
-  return j;
+  return end;
 }
 
 /**
@@ -403,7 +621,8 @@ function renderIndentCodeBlock(
  * 行级映射：body→<p>、heading→<h{n}>、hr→<hr />、blockquote 按行级
  * blockquoteLevel 开合容器、围栏代码→<pre><code>（renderFencedBlock）、
  * 缩进代码→连续 code 行合并为单个 <pre><code>（renderIndentCodeBlock）、
- * table_row→<tr><td>、列表行→<ul>/<ol><li>（listIndent 启发式分组）。
+ * table_row→<tr><td>、列表行→<ul>/<ol><li>（listIndent 启发式分组；
+ * listContinuation → 同 li 第二个 <p>，li 内缩进代码 → <pre><code>）。
  */
 export function astToHtml(doc: MarkdownDocument): string {
   const out: string[] = [];
@@ -466,8 +685,14 @@ export function astToHtml(doc: MarkdownDocument): string {
             parts.push(renderLineInline(l));
             j++;
           }
-          out.push('<p>' + parts.join(' ') + '</p>');
-          i = j;
+          const text = parts.join(' ');
+          // R1.5-C：纯结构令牌行（如块引用空白行 `>>`）不产出空段落
+          // （CommonMark 空行无输出，spec 例 260 形态）；同时避免
+          // 纯空白 body 行在此自旋（i 不动则无限循环）。
+          if (text.trim() !== '') {
+            out.push('<p>' + text + '</p>');
+          }
+          i = j > i ? j : j + 1;
           continue;
         }
       case 'heading':
