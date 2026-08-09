@@ -1040,3 +1040,61 @@ export function getArrowNavigationIndex(
 
   return bestIndex;
 }
+
+// ============================================================
+// Bidi 感知水平移动（R4 编辑轮·bidi 骨架）
+// ============================================================
+// RTL 段内视觉方向反转：ArrowLeft 在 RTL 段 = 逻辑右移（视觉左移）。
+// lineInfo 为 null（LTR 行快速路径）时退化为原 grapheme 语义——零行为变化。
+// HiddenInput 接线点：水平方向键分支用本函数替代 findPrev/NextGraphemeBoundary
+// （需取行 bidi 信息：lineBidiInfo(当前行文本)）。
+import { lineBidiInfo, type LineBidiInfo } from './Bidi';
+import { findNextGraphemeBoundary, findPrevGraphemeBoundary } from './EditorStore';
+
+/**
+ * bidi 感知水平移动。dir: 'left' | 'right'（视觉方向）。
+ * 返回新位置（图素边界对齐）。lineInfo 为 null 时退化为原语义。
+ */
+export function moveHorizontallyBidi(
+  index: number,
+  dir: 'left' | 'right',
+  lineText: string,
+  lineInfo: LineBidiInfo | null
+): number {
+  if (!lineInfo || lineInfo.spans.length === 0) {
+    // LTR 快速路径：原 grapheme 语义
+    return dir === 'left'
+      ? findPrevGraphemeBoundary(lineText, index)
+      : findNextGraphemeBoundary(lineText, index);
+  }
+
+  // 定位 index 所在的 span（若在 RTL 段内）
+  let inRtlSpan = false;
+  for (const span of lineInfo.spans) {
+    if (index >= span.from && index < span.to) {
+      inRtlSpan = true;
+      break;
+    }
+  }
+
+  if (!inRtlSpan) {
+    return dir === 'left'
+      ? findPrevGraphemeBoundary(lineText, index)
+      : findNextGraphemeBoundary(lineText, index);
+  }
+
+  // RTL 段内：视觉方向反转
+  if (dir === 'left') {
+    // 视觉左移 = 逻辑右移
+    const next = findNextGraphemeBoundary(lineText, index);
+    // 段尾跨出时回到逻辑左（段前位置由调用方下一轮处理，此处保持段内）
+    return next;
+  }
+  // 视觉右移 = 逻辑左移
+  return findPrevGraphemeBoundary(lineText, index);
+}
+
+/** 便捷：获取行 bidi 信息（null = LTR 零开销） */
+export function getLineBidiInfo(lineText: string): LineBidiInfo | null {
+  return lineBidiInfo(lineText);
+}
