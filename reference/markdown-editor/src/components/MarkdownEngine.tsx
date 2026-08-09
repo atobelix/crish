@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
@@ -6,6 +6,7 @@ import { CursorLayer } from './CursorLayer';
 import { useEditorStore } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
+import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
 
 import { type CodeState } from '../core/parser';
 
@@ -14,13 +15,13 @@ const LineItem = React.memo(({
   lineText,
   offset,
   isCode,
-  measureElement
+  rowRefs
 }: {
   virtualRow: any;
   lineText: string;
   offset: number;
   isCode: CodeState;
-  measureElement: (el: HTMLElement | null) => void;
+  rowRefs: React.RefObject<Map<number, HTMLElement>>;
 }) => {
   const activeStateStr = useEditorStore(state => {
     const { cursorPos, selectionStart, selectionEnd } = state;
@@ -66,12 +67,20 @@ const LineItem = React.memo(({
 
   const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
 
+  // 行 ref 注册表：仅挂载/卸载登记，不做任何测量（测量统一走引擎的批量协议，
+  // 取代 measureElement 的逐行 ResizeObserver 双写——09 §4 C2）
+  const registerRowRef = (el: HTMLElement | null) => {
+    if (!rowRefs?.current) return;
+    if (el) rowRefs.current.set(virtualRow.index, el);
+    else rowRefs.current.delete(virtualRow.index);
+  };
+
   return (
     <div
       data-index={virtualRow.index}
       data-line-start={offset}
       data-line-length={lineText.length}
-      ref={measureElement}
+      ref={registerRowRef}
       className={`virtual-row ${activeState ? 'is-active-line' : ''}`.trim()}
       style={{
         position: 'absolute',
@@ -99,21 +108,81 @@ export const MarkdownEngine: React.FC = () => {
   const codeBlockState = useEditorStore(state => state.codeBlockState);
   const setCursorPos = useEditorStore(state => state.setCursorPos);
 
+  // ── 行高模型（R2-B 定位层）：HeightOracle 预测 + HeightMap 回填（01 问题 1/8，09 §4 C2）──
+  const rowRefs = useRef(new Map<number, HTMLElement>());
+  const heightMapRef = useRef<HeightMap | null>(null);
+  const oracleRef = useRef<HeightOracle | null>(null);
+  if (heightMapRef.current === null) heightMapRef.current = new HeightMap();
+  if (oracleRef.current === null) oracleRef.current = new HeightOracle();
+
+  // 容器可用宽度 → oracle 的 wrap 模型基准（左右 padding 16×2 + 滚动条 8 ≈ 40）
+  useLayoutEffect(() => {
+    const el = parentRef.current;
+    if (el && oracleRef.current) oracleRef.current.setContainerWidth(el.clientWidth - 40);
+  }, []);
+
   // Virtualization setup: fixed size = 28px perfectly aligns with grid paper CSS
   const virtualizer = useVirtualizer({
     count: lines.length,
     getScrollElement: () => parentRef.current,
     estimateSize: (i) => {
-      const line = lines[i] || '';
-      if (line.startsWith('# ')) return 46;
-      if (line.startsWith('## ')) return 40;
-      if (line.startsWith('### ')) return 36;
-      if (line.startsWith('#### ')) return 32;
-      if (line.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) return 0; // table separator
+      // 行高来源优先级：HeightMap 存储值（实测回填 / 插入时预测）→ oracle 即时预测
+      const hm = heightMapRef.current;
+      if (hm) {
+        const h = hm.getHeight(i);
+        if (h !== undefined) return h;
+      }
+      const raw = lines[i] ?? '';
+      const st = codeBlockState[i];
+      const oracle = oracleRef.current;
+      if (oracle) return oracle.predict(classifyLine(raw, st), raw, st);
       return 28;
     },
     overscan: 40, // Buffer for smooth scrolling
   });
+
+  // 渲染窗口签名：窗口变化时批量实测回填（滚动管线批将改为命令式位置更新）
+  const virtualItems = virtualizer.getVirtualItems();
+  const windowKey = virtualItems.length
+    ? virtualItems[0].index + '-' + virtualItems[virtualItems.length - 1].index
+    : '';
+
+  // 批量测量协议（09 §4 C2：移除逐行 measureElement 双写 → 统一测量 → 树回填 → 显式刷新一次）：
+  // 1. 行数同步：新增行（流式/编辑）按 oracle 预测补齐，行数减少时截断；
+  // 2. 已挂载行统一实测（单次批量 layout 读 offsetHeight）；
+  // 3. oracle 样本校准（全量样本进 EMA）+ 稳定点检测（与已存储高度比，|Δ| < 0.5px 不回写）；
+  // 4. 回填 HeightMap 并经 virtualizer.resizeItem 写 tanstack 缓存——多次 notify 被
+  //    React 18 自动批处理为单次提交（tanstack 的 measure() 会清空 itemSizeCache 故不可用）。
+  useLayoutEffect(() => {
+    const hm = heightMapRef.current;
+    const oracle = oracleRef.current;
+    if (!hm || !oracle) return;
+    hm.syncTo(lines.length, (i) => {
+      const raw = lines[i] ?? '';
+      const st = codeBlockState[i];
+      return oracle.predict(classifyLine(raw, st), raw, st);
+    });
+    for (const item of virtualizer.getVirtualItems()) {
+      const el = rowRefs.current.get(item.index);
+      if (!el) continue;
+      const raw = lines[item.index];
+      if (raw === undefined) continue;
+      const st = codeBlockState[item.index];
+      const kind = classifyLine(raw, st);
+      const predicted = oracle.predict(kind, raw, st);
+      const measured = el.offsetHeight;
+      // 样本校准：所有实测样本都进 EMA（不设 0.5px 过滤——一旦预测接近实测，
+      // 过滤会把样本全部剔除导致校准停摆；EMA 自身已平均噪声）
+      oracle.calibrate(kind, predicted, measured);
+      // 稳定点检测内置于 setHeight（与已存储高度比，|Δ| < 0.5px 不回写），
+      // 终止测量-回填-重排回环（CM6 Epsilon 同款护栏）；仅实际回填时刷新 tanstack 缓存
+      if (hm.setHeight(item.index, measured)) {
+        virtualizer.resizeItem(item.index, measured);
+      }
+    }
+    hm.flush();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, codeBlockState, windowKey]);
 
   const handleContainerClick = (e: React.MouseEvent) => {
     // If we just finished a drag selection, ignore the synthetic click
@@ -405,7 +474,7 @@ export const MarkdownEngine: React.FC = () => {
                 lineText={lineText}
                 offset={offset}
                 isCode={isCode}
-                measureElement={virtualizer.measureElement}
+                rowRefs={rowRefs}
               />
             );
           })}
