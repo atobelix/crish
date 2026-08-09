@@ -1,5 +1,10 @@
 import type { LineNode, InlineNode, MarkdownDocument } from './ast';
 import { LRUCache } from './LRUCache';
+// 行内规则插件体系（06 分析 §1）：INLINE_RULES 数组迁移为 ruler 注册表——
+// 内置规则初始注册见 buildInlineRuler，宿主自定义语法（@mention 等）经
+// InlineRuler.register 全局注册，无需改动 parser 核心。
+import { InlineRuler } from './InlineRuler';
+import type { InlineRule, InlineRuleContext } from './InlineRuler';
 
 export type CodeState =
   | 'none'
@@ -53,6 +58,13 @@ export interface ListContext {
 type ScanOutcome =
   | { ok: true; tokens: InlineNode[]; length: number }
   | { ok: false };
+
+/** scanTokens 递归帧的起止符规则形态：ruler 内起止符规则经 ctx.recurse 进入递归 */
+interface InlineCloseRule {
+  start: string;
+  close: string;
+  type: string;
+}
 
 /**
  * 命名实体表（02 §2.6）：HTML5 常用命名实体的子集，覆盖 CommonMark 0.31.2
@@ -1246,10 +1258,13 @@ export class MarkdownParser {
     // 不进键会导致跨文档缓存串扰（例 256 的 `  two` 与普通 `  two`）。
     listContext: ListContext | null = null
   ): LineNode {
-    // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 列表上下文 + 完整行文本：
+    // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 列表上下文
+    // + 全局规则版本 + 完整行文本：
     // blockquote 前缀、fence/math 跨行状态、Setext 上下文均已编码在键内
     // （review-02 §7.1/§7.3：上下文必须进键，禁止回写缓存行），
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
+    // 全局规则注册表版本（R5-B）：register/unregister 自定义语法后，同文本行
+    // 的解析结果可能改变——版本进键防跨注册版本串扰（与 refDefs.id 同原则）。
     const cacheKey =
       codeState +
       ':' +
@@ -1258,6 +1273,8 @@ export class MarkdownParser {
       (isRefDefLine ? 1 : 0) +
       ':' +
       (refDefs ? refDefs.id : 0) +
+      ':' +
+      InlineRuler.getGlobalVersion() +
       ':' +
       (listContext ? 'L' + listContext.indent + ',' + listContext.markerWidth : 'Lx') +
       ':' +
@@ -2003,72 +2020,274 @@ export class MarkdownParser {
     };
   }
 
-  private static INLINE_RULES = [
-    {
-      type: 'image',
-      regex: /^!\[((?:[^\]\\]|\\.){0,2000})\]\(((?:[^)\\]|\\.){0,2000})\)/,
-    },
-    // 内联链接（手写匹配，见 tryMatchInlineLink）：栈式 label（含嵌套 `[bar]`）+ 
-    // 目标/标题正则（任务 5：裸目标禁空白、括号嵌套平衡、title 引号/括号边界）。
-    { type: 'link', custom: 'link' },
-    { type: 'checkbox', regex: /^\[\s*[xX\s]\s*\]/ },
-    { type: 'footnote', regex: /^\[\^([0-9a-zA-Z]{1,100})\]/ },
-    // 引用链接（02 §2.3）：footnote 之后、code 之前——链接优先级：内联 > 引用 > 脚注。
-    // 查表失败（未定义）回退文本；`[label][ref]` 完整形式失败不回退直接形式。
-    { type: 'link', custom: 'reference' },
-    { type: 'code', regex: /^(`+)(.*?)\1/ },
-    { type: 'bold_italic', start: '***', close: '***' },
-    { type: 'bold', start: '**', close: '**' },
-    { type: 'italic', start: '*', close: '*' },
-    // `_` 下划线强调族（02 §2.7 / review-02 §7.7 修正）：
-    // 与 `*` 族对称的三规则；围挡校验（Rule 9/10/11/12）只施加于 `_` 族——
-    // `foo*bar*baz` 保持解析（intraword 限制仅属于 `_`），`foo_bar_baz` 不解析。
-    { type: 'bold_italic', start: '___', close: '___' },
-    { type: 'bold', start: '__', close: '__' },
-    { type: 'italic', start: '_', close: '_' },
-    { type: 'strike', start: '~~', close: '~~' },
-    { type: 'mark', start: '==', close: '==' },
-    // 自动链接（02 §2.4）：URI / 邮件正则插在 HTML 起止规则（`<b>` 等）之前——
-    // tagName 白名单修复后 `<http://x>` 不再被 HTML 分支吞掉，此处按 link 语义接管。
-    // URI scheme 必须 2~32 字符（`<m:abc>` 不匹配）；内容不含空白/`<>`（CommonMark 6.9）。
-    {
-      type: 'link',
-      autolink: 'uri',
-      regex: /^<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^<>\x00-\x20]*)>/,
-    },
-    // 邮件自动链接：url 语义带 mailto: 前缀（href 语义），content 为原文（渲染文本）。
-    {
-      type: 'link',
-      autolink: 'email',
-      regex:
+  /**
+   * 内置行内规则注册表（06 分析 §1：INLINE_RULES 数组 → ruler 初始注册，同序同义）：
+   * - 注册顺序 = 原 INLINE_RULES 数组顺序；priority 按注册序严格递减
+   *   （第 k 条 priority = 总数 - k），扫描尝试顺序与原数组顺序完全一致（零行为变化）；
+   * - match 均为纯函数：返回 { type, raw, content, length, ... } 或 null；
+   *   失败位图记忆（memo）由扫描循环经 ctx 注入，规则内不产生副作用；
+   * - 正则规则统一走 regexRule 工厂（content 提取与原 scanTokens 的 regex
+   *   分支逐分支对应）；起止符规则统一走 startCloseRule 工厂（exact-match
+   *   互斥 + `_` 围挡校验 + 失败记忆短路 + 递归解析，与原分支逐行对应）；
+   * - 全局注册表（InlineRuler.register）默认空，注册自定义规则后按 priority
+   *   参与同一排序——同优先级时内置规则优先（稳定排序）。
+   */
+  private static buildInlineRuler(): InlineRuler<RefDefTable | null> {
+    // 行内扫描的 2000 字符窗口（与原 scanTokens 的 sub 截断同义，防超长行 ReDoS）
+    const slice = (text: string, pos: number): string =>
+      text.length - pos > 2000
+        ? text.substring(pos, pos + 2000)
+        : text.substring(pos);
+
+    // —— 正则规则工厂：content 提取与原 scanTokens 的 regex 分支逐分支对应 ——
+    const regexRule = (
+      name: string,
+      type: string,
+      regex: RegExp,
+      autolink?: 'uri' | 'email'
+    ): Omit<InlineRule<RefDefTable | null>, 'priority'> => ({
+      name,
+      match: (text, pos) => {
+        const m = regex.exec(slice(text, pos));
+        if (!m || m.index !== 0) return null;
+        const raw = m[0];
+        let content = '';
+        let url: string | undefined;
+        // 与原 scanTokens regex 分支同义：非 checkbox 规则也输出 isChecked: false
+        // 字段（token 键级守恒——渲染层/断言按 `=== false` 或 `in` 判断时行为一致）。
+        let isChecked = false;
+        if (type === 'image') {
+          // 链接目标内实体解码（02 §2.6 冲突点：`[a](url?x=1&amp;y=2)` → href 含 &）
+          url = MarkdownParser.decodeEntitiesInString(m[2]);
+          content = '🖼️ ' + (m[1] || '图片');
+        } else if (type === 'link') {
+          content = m[1];
+          // 自动链接：url 即捕获的地址原文；邮件自动链接的 href 语义带 mailto: 前缀。
+          url =
+            autolink === 'email'
+              ? 'mailto:' + m[1]
+              : autolink
+                ? m[1]
+                : MarkdownParser.decodeEntitiesInString(m[2]);
+        } else if (type === 'checkbox') {
+          isChecked = raw.includes('x') || raw.includes('X');
+          content = isChecked ? '☑' : '☐';
+        } else if (type === 'footnote') {
+          content = m[1];
+        } else if (type === 'code') {
+          content = m[2];
+        } else if (type === 'sub' || type === 'sup' || type === 'math') {
+          content = m[1] !== undefined ? m[1] : raw;
+        } else {
+          content = raw;
+        }
+        return { type, raw, content, url, isChecked, length: raw.length };
+      },
+    });
+
+    // —— 起止符规则工厂：exact-match 互斥 + `_` 围挡校验 + 失败记忆短路 + 递归解析 ——
+    const startCloseRule = (
+      name: string,
+      start: string,
+      close: string,
+      type: string
+    ): Omit<InlineRule<RefDefTable | null>, 'priority'> => ({
+      name,
+      start,
+      match: (text, pos, ctx) => {
+        if (!text.startsWith(start, pos)) return null;
+        // EXACT MATCH 校验（同字符起止符）：'**' 不得被当作斜体 '*' 的开符
+        // 而残留一个 '*' 悬空（'**' 与 '***' 的 run 长度必须精确匹配）。
+        const char = start[0];
+        const isRepeatingChar = start.split('').every((c) => c === char);
+        let validStart = true;
+        if (isRepeatingChar) {
+          let runLen = 0;
+          while (pos + runLen < text.length && text[pos + runLen] === char) {
+            runLen++;
+          }
+          // 仅当 run 长度恰为规则长度时允许匹配；恰为两倍（'****' 对 '**'）
+          // 且存在更长精确规则接管时本规则让路；其余长度一律无效。
+          if (runLen !== start.length) {
+            if (runLen === start.length * 2) {
+              if (MarkdownParser.inlineRuler.hasExactStart(runLen, char)) {
+                validStart = false;
+              }
+            } else {
+              validStart = false;
+            }
+          }
+        }
+
+        // `_` 族开围挡校验（CommonMark Rule 2/9/10，review-02 §7.7 修正）：
+        // 围挡校验只施加于 `_` 族——`foo*bar*baz` 保持解析（`*` 族无词内
+        // 限制）、`foo_bar_baz` 不解析（LF 且非 RF 或前字符是标点才可开）。
+        if (validStart && char === '_') {
+          const prevChar = pos > 0 ? text[pos - 1] : ' ';
+          const nextChar =
+            pos + start.length < text.length ? text[pos + start.length] : ' ';
+          const { left, right } = MarkdownParser.underscoreFlanking(
+            prevChar,
+            nextChar
+          );
+          if (
+            !left ||
+            (right && !MarkdownParser.IS_UNICODE_PUNCT.test(prevChar))
+          ) {
+            validStart = false;
+          }
+        }
+
+        if (!validStart) return null;
+
+        // 失败记忆短路：同位置同规则已确认失败（或位置 pos 之后已确认无闭合
+        // 标记）→ 直接放弃递归——未闭合起止标记链的指数递归树由此坍缩为
+        // 每位置每规则至多一次尝试（2^n 根治，失败位图与 ruler 共存）。
+        const posKey = start + '@' + pos;
+        const noCloseAt = ctx.noClose.get(start);
+        if (
+          ctx.failedAt.has(posKey) ||
+          (noCloseAt !== undefined && noCloseAt <= pos)
+        ) {
+          return null;
+        }
+        const res = ctx.recurse(start, close, type, pos);
+        if (!res) {
+          // 规则失败：位置级记忆（跨递归层共享），后续同位置尝试直接跳过。
+          ctx.failedAt.add(posKey);
+          return null;
+        }
+        return {
+          type,
+          raw: text.substring(pos, pos + res.length),
+          content: text.substring(
+            pos + start.length,
+            pos + res.length - close.length
+          ),
+          children: res.tokens,
+          length: res.length,
+        };
+      },
+    });
+
+    // —— 规则注册表：注册顺序 = 原 INLINE_RULES 数组顺序（同序同义） ——
+    const rules: Array<Omit<InlineRule<RefDefTable | null>, 'priority'>> = [
+      regexRule(
+        'image',
+        'image',
+        /^!\[((?:[^\]\\]|\\.){0,2000})\]\(((?:[^)\\]|\\.){0,2000})\)/
+      ),
+      // 内联链接（手写匹配，见 tryMatchInlineLink）：栈式 label（含嵌套 `[bar]`）+
+      // 目标/标题正则（任务 5：裸目标禁空白、括号嵌套平衡、title 引号/括号边界）。
+      {
+        name: 'link_inline',
+        match: (text, pos) => {
+          const link = MarkdownParser.tryMatchInlineLink(text, pos);
+          return link
+            ? {
+                type: 'link',
+                raw: link.raw,
+                content: link.content,
+                url: link.url,
+                length: link.raw.length,
+              }
+            : null;
+        },
+      },
+      regexRule('checkbox', 'checkbox', /^\[\s*[xX\s]\s*\]/),
+      regexRule('footnote', 'footnote', /^\[\^([0-9a-zA-Z]{1,100})\]/),
+      // 引用链接（02 §2.3）：footnote 之后、code 之前——链接优先级：内联 > 引用 > 脚注。
+      // 查表失败（未定义）回退文本；`[label][ref]` 完整形式失败不回退直接形式。
+      {
+        name: 'link_reference',
+        match: (text, pos, ctx) => {
+          const link = MarkdownParser.tryMatchReferenceLink(
+            text,
+            pos,
+            ctx.refDefs
+          );
+          return link
+            ? {
+                type: 'link',
+                raw: link.raw,
+                content: link.content,
+                url: link.url,
+                length: link.raw.length,
+              }
+            : null;
+        },
+      },
+      regexRule('code_span', 'code', /^(`+)(.*?)\1/),
+      startCloseRule('bold_italic_strong', '***', '***', 'bold_italic'),
+      startCloseRule('bold_strong', '**', '**', 'bold'),
+      startCloseRule('italic_em', '*', '*', 'italic'),
+      // `_` 下划线强调族（02 §2.7 / review-02 §7.7 修正）：
+      // 与 `*` 族对称的三规则；围挡校验（Rule 9/10/11/12）只施加于 `_` 族——
+      // `foo*bar*baz` 保持解析（intraword 限制仅属于 `_`），`foo_bar_baz` 不解析。
+      startCloseRule('bold_italic_under', '___', '___', 'bold_italic'),
+      startCloseRule('bold_under', '__', '__', 'bold'),
+      startCloseRule('italic_under', '_', '_', 'italic'),
+      startCloseRule('strike', '~~', '~~', 'strike'),
+      startCloseRule('mark', '==', '==', 'mark'),
+      // 自动链接（02 §2.4）：URI / 邮件正则插在 HTML 起止规则（`<b>` 等）之前——
+      // tagName 白名单修复后 `<http://x>` 不再被 HTML 分支吞掉，此处按 link 语义接管。
+      // URI scheme 必须 2~32 字符（`<m:abc>` 不匹配）；内容不含空白/`<>`（CommonMark 6.9）。
+      regexRule(
+        'autolink_uri',
+        'link',
+        /^<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^<>\x00-\x20]*)>/,
+        'uri'
+      ),
+      // 邮件自动链接：url 语义带 mailto: 前缀（href 语义），content 为原文（渲染文本）。
+      regexRule(
+        'autolink_email',
+        'link',
         /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/,
-    },
-    { type: 'bold', start: '<b>', close: '</b>' },
-    { type: 'bold', start: '<strong>', close: '</strong>' },
-    { type: 'italic', start: '<i>', close: '</i>' },
-    { type: 'italic', start: '<em>', close: '</em>' },
-    { type: 'strike', start: '<s>', close: '</s>' },
-    { type: 'strike', start: '<del>', close: '</del>' },
-    { type: 'mark', start: '<mark>', close: '</mark>' },
-    // `<u>` 不在此注册（02 §4.3 实证修复）：CommonMark 中 `<u>` 是 raw HTML
-    // 语义——在 HTML 分支按 html_element 原样透传（tagName 白名单已放开），
-    // 不得再映射为 sub（`<u>x</u>` 曾错误产出下标语义，语义错位）。
-    { type: 'sub', start: '<ins>', close: '</ins>' },
-    { type: 'kbd', start: '<kbd>', close: '</kbd>' },
-    { type: 'sub', start: '<sub>', close: '</sub>' },
-    { type: 'sup', start: '<sup>', close: '</sup>' },
-    { type: 'math', regex: /^\$\$((?:[^\$\\]|\\.){1,2000})\$\$/ },
-    {
-      type: 'math',
-      regex:
-        /^\$((?:[^\s\$\\]|\\.)(?:(?:[^\$\\]|\\.){0,2000}?(?:[^\s\$\\]|\\.))?)\$/,
-    },
-    { type: 'sup', regex: /^\^([^\s^]{1,500})\^/ },
-    { type: 'sub', regex: /^~([^\s~]{1,500})~/ },
-    { type: 'spoiler', start: '||', close: '||' },
-    { type: 'html_tag', regex: /^<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s+[^>]*)?\/?>/ },
-    { type: 'table_pipe', regex: /^\|/ },
-  ];
+        'email'
+      ),
+      startCloseRule('html_bold_b', '<b>', '</b>', 'bold'),
+      startCloseRule('html_bold_strong', '<strong>', '</strong>', 'bold'),
+      startCloseRule('html_italic_i', '<i>', '</i>', 'italic'),
+      startCloseRule('html_italic_em', '<em>', '</em>', 'italic'),
+      startCloseRule('html_strike_s', '<s>', '</s>', 'strike'),
+      startCloseRule('html_strike_del', '<del>', '</del>', 'strike'),
+      startCloseRule('html_mark', '<mark>', '</mark>', 'mark'),
+      // `<u>` 不在此注册（02 §4.3 实证修复）：CommonMark 中 `<u>` 是 raw HTML
+      // 语义——在 HTML 分支按 html_element 原样透传（tagName 白名单已放开），
+      // 不得再映射为 sub（`<u>x</u>` 曾错误产出下标语义，语义错位）。
+      startCloseRule('html_sub_ins', '<ins>', '</ins>', 'sub'),
+      startCloseRule('html_kbd', '<kbd>', '</kbd>', 'kbd'),
+      startCloseRule('html_sub', '<sub>', '</sub>', 'sub'),
+      startCloseRule('html_sup', '<sup>', '</sup>', 'sup'),
+      regexRule('math_display', 'math', /^\$\$((?:[^\$\\]|\\.){1,2000})\$\$/),
+      regexRule(
+        'math_inline',
+        'math',
+        /^\$((?:[^\s\$\\]|\\.)(?:(?:[^\$\\]|\\.){0,2000}?(?:[^\s\$\\]|\\.))?)\$/
+      ),
+      regexRule('sup_caret', 'sup', /^\^([^\s^]{1,500})\^/),
+      regexRule('sub_tilde', 'sub', /^~([^\s~]{1,500})~/),
+      startCloseRule('spoiler', '||', '||', 'spoiler'),
+      regexRule(
+        'html_tag',
+        'html_tag',
+        /^<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s+[^>]*)?\/?>/
+      ),
+      regexRule('table_pipe', 'table_pipe', /^\|/),
+    ];
+
+    // priority = 注册总数 - 下标：严格递减，扫描尝试顺序 = 注册顺序（= 原数组顺序）
+    const ruler = new InlineRuler<RefDefTable | null>();
+    const total = rules.length;
+    for (let i = 0; i < total; i++) {
+      ruler.add({ ...rules[i], priority: total - i });
+    }
+    return ruler;
+  }
+
+  /** 行内规则扫描注册表（INLINE_RULES 数组的迁移产物，见 buildInlineRuler） */
+  private static inlineRuler: InlineRuler<RefDefTable | null> =
+    MarkdownParser.buildInlineRuler();
 
   private static parseInlineTokens(
     text: string,
@@ -2296,7 +2515,7 @@ export class MarkdownParser {
     text: string,
     startIndex: number,
     localOffset: number,
-    rule: any | null,
+    rule: InlineCloseRule | null,
     depth: number,
     memo: ScanFailureMemo,
     refDefs: RefDefTable | null = null
@@ -2368,6 +2587,27 @@ export class MarkdownParser {
       '~',
     ]);
 
+    // 行内规则扫描上下文（ruler.scan 调用参数，06 分析 §1）：递归帧一份，
+    // 供规则 match 访问引用定义表 / 失败位图记忆 / 内层递归入口——
+    // match 保持纯函数形态，扫描环境由循环注入。
+    const rulerCtx: InlineRuleContext<RefDefTable | null> = {
+      refDefs,
+      failedAt: memo.failedAt,
+      noClose: memo.noClose,
+      recurse: (start, close, type, pos) => {
+        const res = this.scanTokens(
+          text,
+          pos,
+          localOffset,
+          { start, close, type },
+          depth + 1,
+          memo,
+          refDefs
+        );
+        return res.ok ? { tokens: res.tokens, length: res.length } : null;
+      },
+    };
+
     while (i < text.length) {
       if (text[i] === '\\' && i + 1 < text.length) {
         const nextChar = text[i + 1];
@@ -2418,9 +2658,10 @@ export class MarkdownParser {
         // Prevent unclosed tags like **未闭合 from being parsed as empty * tags
         if (validClose && i === startIndex + start.length) {
           const combined = start + close;
-          const formsOtherRule = this.INLINE_RULES.some(
-            (r) => r.start === combined
-          );
+          // 「start + close 合并串」若构成其它规则的起始标记（如 '*' + '*' = '**'
+          // 对应 bold 规则）则本闭合无效——hasStartRule 查 ruler 注册表
+          // （原 INLINE_RULES.some(r => r.start === combined) 的迁移）。
+          const formsOtherRule = this.inlineRuler.hasStartRule(combined);
           if (formsOtherRule) {
             validClose = false;
           }
@@ -2468,7 +2709,7 @@ export class MarkdownParser {
             openTag.endsWith('/>') ||
             ['br', 'hr', 'img', 'input', 'meta', 'link'].includes(tagName);
 
-          // isSpecialTag 豁免名单：这些标签由 INLINE_RULES 起止规则接管语义
+          // isSpecialTag 豁免名单：这些标签由 ruler 内置起止规则接管语义
           // （sub/sup/kbd/ins 是编辑器扩展语义）。`<u>` 已移出名单与规则表
           // （02 §4.3 修复）——CommonMark raw HTML 语义，走 html_element 分支。
           const isSpecialTag = ['ins', 'sub', 'sup', 'kbd'].includes(
@@ -2476,7 +2717,7 @@ export class MarkdownParser {
           );
 
           if (!isSelfClosing && !isSpecialTag) {
-            // 失败签名键：与 INLINE_RULES 中同名起止规则（如 '<b>'）共用同一键——
+            // 失败签名键：与 ruler 内置同名起止规则（如 '<b>'）共用同一键——
             // 二者闭合语义一致（闭合标记都是 `</tagName>`），记忆可互查互写。
             const tagKey = '<' + tagName + '>';
             const posKey = tagKey + '@' + i;
@@ -2544,188 +2785,24 @@ export class MarkdownParser {
       }
 
       if (!matched) {
-        for (const r of this.INLINE_RULES) {
-          if (r.custom === 'link') {
-            // 内联链接（栈式 label + 目标/标题校验，见 tryMatchInlineLink）
-            const link = this.tryMatchInlineLink(text, i);
-            if (link) {
-              flushText();
-              innerTokens.push({
-                type: 'link',
-                raw: link.raw,
-                content: link.content,
-                url: link.url,
-                localOffset: localOffset + i,
-                length: link.raw.length,
-              });
-              i += link.raw.length;
-              matched = true;
-              break;
-            }
-          } else if (r.custom === 'reference') {
-            // 引用链接（定义表查表，见 tryMatchReferenceLink）
-            const link = this.tryMatchReferenceLink(text, i, refDefs);
-            if (link) {
-              flushText();
-              innerTokens.push({
-                type: 'link',
-                raw: link.raw,
-                content: link.content,
-                url: link.url,
-                localOffset: localOffset + i,
-                length: link.raw.length,
-              });
-              i += link.raw.length;
-              matched = true;
-              break;
-            }
-          } else if (r.regex) {
-            const m = r.regex.exec(sub);
-            if (m && m.index === 0) {
-              flushText();
-              let raw = m[0];
-              let content = '';
-              let url;
-              let isChecked = false;
-              let imageAlt = '';
-
-              if (r.type === 'image') {
-                imageAlt = m[1];
-                // 链接目标内实体解码（02 §2.6 冲突点：`[a](url?x=1&amp;y=2)` → href 含 &）
-                url = this.decodeEntitiesInString(m[2]);
-                content = '🖼️ ' + (imageAlt || '图片');
-              } else if (r.type === 'link') {
-                content = m[1];
-                // 自动链接：url 即捕获的地址原文；邮件自动链接的 href 语义带 mailto: 前缀。
-                // 内联链接：目标内实体解码。
-                url =
-                  r.autolink === 'email'
-                    ? 'mailto:' + m[1]
-                    : r.autolink
-                      ? m[1]
-                      : this.decodeEntitiesInString(m[2]);
-              } else if (r.type === 'checkbox') {
-                isChecked = raw.includes('x') || raw.includes('X');
-                content = isChecked ? '☑' : '☐';
-              } else if (r.type === 'footnote') {
-                content = m[1];
-              } else if (r.type === 'code') {
-                content = m[2];
-              } else if (
-                r.type === 'sub' ||
-                r.type === 'sup' ||
-                r.type === 'math'
-              ) {
-                content = m[1] !== undefined ? m[1] : raw;
-              } else {
-                content = raw;
-              }
-
-              innerTokens.push({
-                type: r.type as InlineNode['type'],
-                raw,
-                content,
-                url,
-                isChecked,
-                localOffset: localOffset + i,
-                length: raw.length,
-              });
-              i += raw.length;
-              matched = true;
-              break;
-            }
-          } else if (r.start && sub.startsWith(r.start)) {
-            // EXACT MATCH check for identical characters like '*', '**', '***'
-            // We don't want '**' to be parsed as an italic '*' start, leaving one '*' dangling.
-            const char = r.start[0];
-            const isRepeatingChar = r.start.split('').every((c) => c === char);
-            let validStart = true;
-            if (isRepeatingChar) {
-              let runLen = 0;
-              while (i + runLen < text.length && text[i + runLen] === char) {
-                runLen++;
-              }
-              // Only allow match if the run length is EXACTLY the rule length.
-              // EXCEPT if the run length is exactly TWICE the rule length (e.g. **** for bold **),
-              // AND there is no other rule that exactly matches that run length.
-              if (runLen !== r.start.length) {
-                if (runLen === r.start.length * 2) {
-                  const exactRuleExists = this.INLINE_RULES.some(
-                    (r2) =>
-                      r2.start &&
-                      r2.start.length === runLen &&
-                      r2.start[0] === char
-                  );
-                  if (exactRuleExists) {
-                    validStart = false;
-                  }
-                } else {
-                  validStart = false;
-                }
-              }
-            }
-
-            // `_` 族开围挡校验（Rule 2：LF 且（非 RF 或前字符是标点））：
-            // 独立于 `*` 族（review-02 §7.7）——`foo_bar_baz` 词内不强调、
-            // `a_"foo"_` 前字母数字后标点不能开，而 `foo-_(bar)_` 标点围挡可开。
-            if (validStart && r.start[0] === '_') {
-              const prevChar = i > 0 ? text[i - 1] : ' ';
-              const nextChar =
-                i + r.start.length < text.length
-                  ? text[i + r.start.length]
-                  : ' ';
-              const { left, right } = this.underscoreFlanking(
-                prevChar,
-                nextChar
-              );
-              if (!left || (right && !this.IS_UNICODE_PUNCT.test(prevChar))) {
-                validStart = false;
-              }
-            }
-
-            if (validStart) {
-              // 失败记忆短路：同位置同规则已确认失败（或位置 i 之后已确认无闭合标记）→ 直接放弃递归。
-              // 递归返回值只在「完整扫描后确认失败」时才可记忆（位置级）——
-              // 深度剪枝的直接 null 由调用链上层位置承担记忆，绝不允许在此处被当作已确认失败。
-              const posKey = r.start + '@' + i;
-              const noCloseAt = memo.noClose.get(r.start);
-              if (
-                !memo.failedAt.has(posKey) &&
-                (noCloseAt === undefined || noCloseAt > i)
-              ) {
-                const res = this.scanTokens(
-                  text,
-                  i,
-                  localOffset,
-                  r,
-                  depth + 1,
-                  memo,
-                  refDefs
-                );
-                if (res.ok) {
-                  // successfully parsed the block
-                  flushText();
-                  innerTokens.push({
-                    type: r.type as InlineNode['type'],
-                    raw: text.substring(i, i + res.length),
-                    content: text.substring(
-                      i + r.start.length,
-                      i + res.length - r.close.length
-                    ),
-                    children: res.tokens,
-                    localOffset: localOffset + i,
-                    length: res.length,
-                  });
-                  i += res.length;
-                  matched = true;
-                  break;
-                }
-                // 规则失败：位置级记忆（跨递归层共享）——后续同位置尝试直接跳过，
-                // 未闭合 HTML 起止标记链（'<b>x' 等）的指数递归树由此坍缩为每位置一次尝试。
-                memo.failedAt.add(posKey);
-              }
-            }
-          }
+        // 行内规则尝试：ruler 按 priority 降序（= 原 INLINE_RULES 数组顺序）
+        // 逐规则调用纯函数 match，首个命中即消费（06 分析 §1）——
+        // 正则/链接/起止符规则的实现全部迁入 buildInlineRuler 的注册表。
+        const inlineMatch = this.inlineRuler.scan(text, i, rulerCtx);
+        if (inlineMatch) {
+          flushText();
+          innerTokens.push({
+            type: inlineMatch.type as InlineNode['type'],
+            raw: inlineMatch.raw,
+            content: inlineMatch.content,
+            url: inlineMatch.url,
+            isChecked: inlineMatch.isChecked,
+            children: inlineMatch.children,
+            localOffset: localOffset + i,
+            length: inlineMatch.length,
+          });
+          i += inlineMatch.length;
+          matched = true;
         }
       }
 
