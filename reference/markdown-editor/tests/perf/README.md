@@ -99,6 +99,86 @@ PERF_BASE_URL=http://localhost:5173 node tests/perf/baseline-collect.mjs  # 覆�
 
 | 文件 | 说明 |
 |---|---|
-| `baseline-collect.mjs` | 采集脚本（浏览器 + node 降级双模式） |
-| `baseline-20260809.json` | 本次原始数据产物（含全量样本，非仅中位数） |
+| `baseline-collect.mjs` | R0 采集脚本（浏览器 + node 降级双模式） |
+| `baseline-20260809.json` | R0 原始数据产物（含全量样本，非仅中位数） |
+| `baseline-recollect.mjs` | R2 重测脚本（复刻 R0 口径 + R2 新增探针） |
+| `baseline-20260809-r2.json` | R2 重测数据产物 |
 | `README.md` | 本文件：方法 / 环境 / 结果表 / 结论 |
+
+---
+
+# R2 重测对比（2026-08-09，R2-G 验证）
+
+> 定位：R2 轮六项改造（R2-A 尾段零拷贝 + COW / R2-B 行高模型 / R2-C 测量缓存 /
+> R2-D 命令式滚动 / R2-E fence O(1) / R2-F 跨视口箭头）落地后的性能重测，
+> 与 R0 基线（`baseline-20260809.json`）同机、同口径对比。
+> 原始数据：`baseline-20260809-r2.json`（采集脚本 `baseline-recollect.mjs`）。
+
+## 六、重测方法（与 R0 的差异点）
+
+- **计时口径完全复刻 R0**：页面内 `performance.now()`、5 次采样中位数、rAF 帧间隔统计；
+- **R2 新增探针**（append 曲线）：
+  - `mainArrayRefChanged`：主数组引用是否重建（R0 恒 true——全量浅拷贝；
+    R2 预期 false——尾段零拷贝）；
+  - `materializeProbeMs`：物化视图成本 `main.slice(0,-1).concat(tail)` 双数组模拟
+    （R2 过渡期兼容视图，R2-BD 切换访问器后从热路径移除）；
+  - `appendDataNetMs`：端到端中位 - 物化中位 = 数据层净值（零拷贝真实收益）；
+- **行导航升级**：R2 行高实测回填后 headless 下行高 29px（名义 28px），
+  `scrollTop = scrollHeight/2` 会把目标行推离窗口 2 行 → 目标行未挂载 →
+  HiddenInput 光标测量 null → textarea 卸载（R2-F 语义）。重测脚本改用
+  「按已挂载窗口 index 差 × 28px 增量滚动」的渐进行导航（首轮大步跳转 + 微调，
+  通常 2-4 轮收敛），与 R0 的「滚到中间」目标等价（目标行挂载 + 光标测量真实执行）；
+- **击键前归一口径**：`flushStreamTail()` 归一为 R0 同形态（无尾段），
+  隔离数据层真实成本——尾段非空时的击键成本受 KNOWN-DEFECT 污染，另作专项说明。
+
+## 七、机器环境（本次重测，与 R0 同机）
+
+| 项 | 值 |
+|---|---|
+| 平台 | Windows 10/11（win32） |
+| Node | v24.11.0 |
+| 浏览器 | Headless Chrome 151（Playwright chromium，同 R0） |
+| CPU / 内存 | 12 核 / 32 GB（同 R0） |
+| dev server | http://localhost:5173（脚本自动拉起，修复了 Windows spawn EINVAL） |
+
+## 八、R2 vs R0 对比表（浏览器模式实测）
+
+| 指标 | R0 | R2 | 变化率 | 说明 |
+|---|---|---|---|---|
+| 百万行加载（setText 完成） | 18.50 s | **11.44 s** | **-38.1%** | R2 未改分块加载，收益来自每 chunk 的 `lineOffsets.clone()` 由 O(全文) 深拷贝变 COW 浅拷贝（R2-A 附带） |
+| 中部击键 store 层（50 万行中部） | 1.2 ms | 1.6 ms | +33% | 口径污染：R2 的 dispatchSet 链路把 React 同步渲染（含批量测量）计入；隔离实测纯数据层 0.4ms（比 R0 快 3 倍） |
+| 中部击键全链路（input 事件→落定） | 8.0 ms | 17.4 ms | +118% | CDP profile 归因：JS 仅 ~4ms（数据层 0.4 + 渲染 ~3 + 批量测量 0.1 + parseLine 缓存 87/1 命中），其余 ~12ms 为 headless 软件渲染 layout/paint 惩罚（R2 批量测量同步读 + commit 后重排）；GPU 浏览器预期显著不同 |
+| appendText 端到端（1M 行） | 2.5 ms | 6.2 ms | +148% | **过渡期物化成本主导**：双数组 `slice(0,-1)+concat`（3.3ms）+ React 同步渲染；R2-BD 切换访问器后恢复 |
+| appendText 数据层净值（1M 行） | （无此口径） | **0.2 ms**（node）/2.9 ms（浏览器含渲染） | — | **零拷贝成立**：主数组引用不重建（R0 true → R2 false），clone 0ms（R0 1.1ms）；node 降级模式净值 0.24ms 即数据层真实成本 |
+| 光标移动 ArrowLeft ×100 | 13.8 ms/键（P95 17.0） | 14.2 ms/键（P95 15.7） | +3%（P95 -7.6%） | 基本持平：R2-C/F 的测量缓存与索引二分收益被 `getText()` 全量 join（O(全文)，R2 未覆盖）掩盖 |
+| 快速滚动帧 P50 / P95（1M 行） | 16.8 / 20.9 ms | 16.8 / 21.8 ms | 0% / +4% | 测试方法对 R2 不利：每帧 0↔maxTop 强制跳变 = 每帧窗口全变（最坏情况），R2 的「纯位置帧零 React 提交」收益无法体现；layoutThrash **-33%**（270→180）确认命令式路径生效 |
+| layoutThrash（滚动 3s） | +270 | **+180** | **-33.3%** | R2-D 命令式位置 + 测量缓存确认减少 getBoundingClientRect |
+
+## 九、关键结论与遗留（诚实记录）
+
+1. **确认收益**：百万行加载 -38.1%；append 数据层真零拷贝（主数组不重建、
+   clone 0ms、净值 ~0.2-0.3ms）；滚动 layoutThrash -33%；ArrowLeft P95 -7.6%。
+2. **两个环境内回归需谨慎解读**：
+   - append 端到端 +148%：**物化视图（双数组 O(全文) concat）是过渡期成本**，
+     R2-BD 切换 `getLine/getLineCount` 访问器后从 set 热路径移除——当前
+     MarkdownEngine 仍订阅 `state.lines`（未切换），成本实打实存在；
+   - 击键全链路 +118%：JS 部分 R2 更轻（profile 实测 ~4ms），差异集中在
+     headless 软件渲染的 layout/paint；**headless 同口径下 R2 更慢是事实**，
+     但需 GPU 浏览器复测才能定论（R2 的批量测量同步读 offsetHeight 在
+     软件渲染下被放大）。
+3. **ArrowLeft 瓶颈未解决**：`getText()` 全量 join 仍是每键主成本（~10ms+），
+   R2 未覆盖，建议后续轮次改造（行级文本访问器替代全量 join）。
+4. **滚动帧测试方法局限**：强制 0↔maxTop 跳变只测「窗口全变帧」，测不出
+   R2-D 的「纯位置帧零提交」收益；建议 R3 增加「同窗口位置帧」专项。
+5. **KNOWN-DEFECT（R2-G 验证发现，已上报主 Agent）**：`insertText/deleteText/
+   deleteSelection/undo/redo` 编辑触达后 `streamTail` 残留未清空（partial 缺
+   清空键）→ 物化视图与主数组分叉（复现：appendText('hello')+insertText('!')
+   后 getText 返回 'hello' 而非 'hello!'），且流式期间每次编辑额外承担
+   O(全文) 双物化。本表击键/append 数据均已避开该缺陷形态（flush 归一）；
+   缺陷修复后，流式期间的编辑路径成本将一并回落。
+
+## 十、复现
+
+- 重测：`node tests/perf/baseline-recollect.mjs`（浏览器模式，失败自动降级 node）；
+- node 降级：`node tests/perf/baseline-recollect.mjs --node-only`；
+- 数据落盘：`baseline-20260809-r2.json`（R0 对比表在采集汇总尾部自动打印）。

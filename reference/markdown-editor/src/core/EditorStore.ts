@@ -1189,6 +1189,13 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
 
       return {
         ...res,
+        // 编辑触达 → 尾段已并入主数组（mergeTailInto），返回 partial 必须
+        // 显式清空三个尾段键：zustand 合并语义只覆盖 partial 中出现的键，
+        // 缺失时旧 streamTail 残留 → 物化视图把已并入主数组的尾段再拼一遍，
+        // 视图与主数组分叉（R2-G KNOWN-DEFECT：appendText + insertText 丢字）。
+        streamTail: EMPTY_TAIL,
+        streamTailCodeState: EMPTY_STATE_TAIL,
+        streamTailFenceLines: EMPTY_FENCE_TAIL,
         cursorPos: newPos,
         selectionStart: newPos,
         selectionEnd: newPos,
@@ -1506,6 +1513,11 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
 
       return {
         ...res,
+        // 编辑触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText，
+        // 见该处注释；缺失时 zustand 合并后 streamTail 残留 → 视图分叉）。
+        streamTail: EMPTY_TAIL,
+        streamTailCodeState: EMPTY_STATE_TAIL,
+        streamTailFenceLines: EMPTY_FENCE_TAIL,
         cursorPos: s,
         selectionStart: s,
         selectionEnd: s,
@@ -1569,6 +1581,10 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
 
       return {
         ...res,
+        // 编辑触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
+        streamTail: EMPTY_TAIL,
+        streamTailCodeState: EMPTY_STATE_TAIL,
+        streamTailFenceLines: EMPTY_FENCE_TAIL,
         cursorPos: s,
         selectionStart: s,
         selectionEnd: s,
@@ -1615,6 +1631,10 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
 
       return {
         ...res,
+        // 操作触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
+        streamTail: EMPTY_TAIL,
+        streamTailCodeState: EMPTY_STATE_TAIL,
+        streamTailFenceLines: EMPTY_FENCE_TAIL,
         cursorPos: op.cursorBefore,
         selectionStart: op.selectionStartBefore,
         selectionEnd: op.selectionEndBefore,
@@ -1658,6 +1678,10 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
 
       return {
         ...res,
+        // 操作触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
+        streamTail: EMPTY_TAIL,
+        streamTailCodeState: EMPTY_STATE_TAIL,
+        streamTailFenceLines: EMPTY_FENCE_TAIL,
         cursorPos: op.cursorBefore,
         selectionStart: op.selectionStartBefore,
         selectionEnd: op.selectionEndBefore,
