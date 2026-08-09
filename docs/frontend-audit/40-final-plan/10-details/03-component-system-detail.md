@@ -1,15 +1,24 @@
 # T-C 组件体系轨道 · 详细执行计划
 
 > 产出：详细计划子 Agent（只读 + 本文档产出，无代码改动）。
-> 输入：`40-final-plan/00-master-plan.md`（批次 3/5、R-01/05/07/08/09 裁决）+ `20-proposals/02-component-system-proposal.md`（A/B/D 段）+ `30-reviews/01~03`（R-01/05/07/09 及 P0/P1 修正）+ `10-analysis/02-component-architecture-audit.md`。
+> 输入：`40-final-plan/00-master-plan.md`（v1.0，批次 3/4/5/7/8、R-01~R-09 与主控裁决 C-4/C-5/C-7/C-8）+ `20-proposals/02-component-system-proposal.md`（A/B/D 段）+ `30-reviews/01~03`（R-01/05/07/09 及 P0/P1 修正）+ `30-reviews/01-batch-structure-review.md`（B-P0-2/B-P0-3/B-P0-5/B-P0-6）+ `10-analysis/02-component-architecture-audit.md`。
 > 基线：2026-08-09+ 工作区实读（grep 清单与行号均经实读复核，行号执行前语义定位优先——03 评审"行号普遍偏大 3%~8%"教训）。
 > 性质：可派发执行的详细计划；不改变 00-master-plan 的批次边界与串行纪律。
+> 版本：v2（v1 修订：吸收阶段 6 评审与主控裁决 C-4/C-5/C-7/C-8，新增 T14~T17，见「修订日志」）。
+
+---
+
+## 修订日志（v1 → v2，2026-08-09）
+
+| 版本 | 日期 | 修订要点 |
+|---|---|---|
+| v1 → v2 | 2026-08-09 | 吸收阶段 6 评审（`01-batch-structure-review.md` B-P0-2/B-P0-3/B-P0-5/B-P0-6）与主控裁决，任务编号与 master plan v1.0 引用一致：**C-7**——02-E3 由「删除」改语义为「**创建 ui/ConfirmDialog 基座**」（新增 **T15**，批次 4.0，先行于 04 轨道 window.confirm 替换消费；契约按 04-detail §2.1.1）；**C-8**——store 直引迁移 78 文件由 02 轨道承办（新增 **T14**，批次 7.4，消费点改走 store-access facade，与 05-detail「02 承办、03/05 只做门禁」口径一致）；**C-4**——裸 button 剩余批批次归属定案（新增 **T16**，批次 3.4 承接全部波次，含 T8 后续 ~100 文件，内拆 6 子波）；**C-5**——02-C1 props 治理（新增 **T17**，批次 8.0，ChatCard/ChatComposerWrapper/ChatAssistantMessageRow 聚合对象 spread）。**交叉核对**：R-03 门禁归 03/T-E（T1 的 check:store-facade 注释改为指向 T-E 轨道与 T14，确认本轨道无门禁脚本残留）；R-05 useExtensionMarket 归 02（§3.2 任务存在且唯一承办，无重复）。同步更新 ① 总任务表/执行链/依赖前置、⑤ 验证与提交、⑥ 风险、附 实读基线（78 文件域分布、裸 button 分布、C-5 三文件 props 实测口径） |
 
 ---
 
 ## ① 分批总览
 
-### 1.1 总任务表（13 个可派发任务）
+### 1.1 总任务表（17 个可派发任务）
 
 | 任务号 | 批次 | 来源步骤 | 内容 | 执行形态 | 单批上限 |
 |---|---|---|---|---|---|
@@ -26,10 +35,14 @@
 | T11 | 批次 5 | 02-B3 | ui/Switch 新建 + settings 域开关替换（8 消费点） | 语义 + SR 降级验证 | ≤10 |
 | T12 | 批次 5 | 02-B6 | ui/TabStrip 提炼 + 6 消费点收敛（能力盘点先行） | 半语义 | ≤8 |
 | T13 | 批次 5 | 02-B5/B4 | Select 统一（SettingsSelect 11 消费方）+ Input 统一（settings 域输入面） | 语义 + 机械混合 | ≤15 |
+| **T14** | **批次 7.4** | 02-A2（**C-8**） | **store 直引迁移：components/ 78 文件改走 store-access facade（5 批按域聚批，与 03/T-E 门禁基线交接）** | 机械 + 门禁递减 | ≤20 |
+| **T15** | **批次 4.0** | 02-E3 改语义（**C-7**） | **ui/ConfirmDialog 基座新建（基于 ui/Dialog 封装确认语义）+ useConfirmGate Promise 桥（契约按 04-detail §2.1.1，供批次 4.1 的 9 文件 window.confirm 替换消费）** | 基座（一个 Agent） | — |
+| **T16** | **批次 3.4** | 02-B2 波 2 后续（**C-4**） | **ui/Button 接管波 2 剩余批：128 文件裸 button 的剩余 ~100 文件（内拆 6 子波，按域聚批；目标态「业务层裸 button = 0」）** | 语义 + 视觉抽样 | ≤20/子波 |
+| **T17** | **批次 8.0** | 02-C1（**C-5**） | **props 治理：ChatCard（ChatComposer 30 props 展开 → spread）/ChatComposerWrapper（30 props → ribbons 聚合对象）/ChatAssistantMessageRow（28 props 聚合 + 比较器联动）** | 语义（聚合对象） | 3 文件 |
 
 ### 1.2 批次内执行链（同文件串行纪律）
 
-**批次 3（T-C-A）执行链**：`T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8`（接力式，Agent 数 2~3）。
+**批次 3（T-C-A）执行链**：`T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 → T16`（接力式，Agent 数 2~3；**C-4 裁决：批次 3.4 的裸 button 剩余批全部波次并入本链，T8 之后由 T16 承接**——不再悬空）。
 
 不可并行理由（实读文件面重叠）：
 
@@ -41,9 +54,13 @@
 
 **批次 5（T-C-B）执行链**：`T9 → T10`（巨型拆分）与 `T11 → T12 → T13`（原子件接管）**可并行**（文件面错开：settings-models/ 与 settings/ 域 vs ui/ 新建件与 settings 消费面——ModelConfigEditor 同时在 T9 拆分与 T11 Switch 替换中，**同文件串行：T11 的 Switch 基座先行，T9 拆分时消费已就绪的 ui/Switch**；T12 TabStrip 蓝本 UnitSessionTabStrip 亦在 T5 Tooltip 批中已迁移，无冲突）。
 
-批次 3 与批次 4（T-D-A，08 方案）的关系：批次 4 的 4.3 无名称按钮 aria 补齐**必须在批次 3 的 T7/T8 之后**（R-07 串行，见 ④）。
+批次 3 与批次 4（T-D-A，08 方案）的关系：批次 4 的 4.3 无名称按钮 aria 补齐**必须在批次 3 的 T7/T8/T16 之后**（R-07 串行，见 ④）；批次 4 的 **4.0（ui/ConfirmDialog 基座，本轨道 T15）先行于 4.1**（08 轨道 9 文件 window.confirm 替换消费的基座前置，R-02/C-7；T15 文件面仅 ui/Dialog 同目录新建件 + barrel + useConfirmGate，与 4.2/4.3 错开）。
 
 批次 3 与批次 2（T-B 样式基线）的关系：T-B 的 01-S0/S1/S2/S3-任务1（primary 定案 + --accent-inverted token）必须全部先行；**T7 的变体映射表以 01-S3 定案后的 primary 为基准**（R-08）。
+
+**批次 7.4（T14，store 直引迁移，C-8）执行链**：依赖前置 = 05-detail（T-E）批次 5 已入库 `check-store-facade.mjs` + 基线（78 文件红基线可复现）；T14 按域分批（5 批 ≤20 文件/批）逐批迁移，每批 `npm run check:store-facade` 核对违规数递减；**迁移归零后同批由 T-E 完成 CI 接线**（05-detail 提交 G 阶段 3），不跨批悬挂。与批次 7.1~7.3（T-G 工程化）文件面错开（components/** vs .github/vite/tauri）可并行。
+
+**批次 8.0（T17，props 治理，C-5）执行链**：T17 先行聚合 props → T-H（08 轨道）在其上做渲染优化（同文件串行：MessageContent.tsx / ChatMessageList.tsx 由 8.0 先行——master plan §1 T-C↔T-H 重叠点）；08-detail T4.3 的「比较器面在 02-C1 props 聚合后收窄」依赖本任务，T4.3 其余类型级穷尽/清单测试自成闭环不阻塞。
 
 ### 1.3 依赖前置清单（批次 3 开工前必须为真）
 
@@ -51,6 +68,14 @@
 2. 01-S0 已完成：`--tooltip-translate` 静态 fallback 由 01-S0 承办（R-01 裁决），T2 基座就绪只做"确认已修复 + 双份合并时保留 fallback"，**不再重复修样式**。
 3. 01-S3-任务1 已完成：primary 语义定案（深炭/蓝/反相/红四套收敛为 1 套 + accent/danger 变体）。
 4. `npm run check:ui-layer` 现态通过（依赖门禁基线绿）。
+
+**T14 前置（批次 7.4 开工前）**：① 05-detail 批次 5 已落地 `check-store-facade.mjs` 且 `--baseline` 基线（78 文件）已入库、红基线本地可复现；② 本任务各批涉面域的重构（T9/T10 拆分、T16 按钮接管）已合入（**纯读面 selector 替换可先行**，结构面等本域重构——同文件串行）。
+
+**T15 前置（批次 4.0 开工前）**：① ui/Dialog 已具备契约能力（role:'alertdialog'、initialFocusRef、dismissible、showCloseButton、footer、description、Esc 栈 dialogStack——实读已有，无前置依赖）；② 04-detail §2.1.1 契约文本为验收基线；③ 01-S3 primary 定案已合入（danger 变体按钮色依赖）。
+
+**T16 前置（T8 之后接力）**：① T8 已完成 settings 域首批并输出该域剩余清单（grep 实测）；② T7 的 .ui-btn 迁移已合入（裸 button 判定在"已无全局类"基线上进行）；③ 01-S3 已合入（同 T8）。
+
+**T17 前置（批次 8.0 开工前）**：① 本任务三文件所在域的 T2~T6/T16 接管已合入（chat-* 域旧 Tooltip 已迁移、裸 button 已清零，props 聚合面干净）；② 08-detail T4.3 的类型级穷尽清单已登记（聚合前后字段一一核对用）。
 
 ---
 
@@ -102,7 +127,7 @@ export type { SelectProps, SelectOption } from './Select/Select';
 - 新建 `scripts/check-ui-barrel.mjs`（或扩展 `scripts/check-ui-layer.mjs` 为两个检查段——建议独立脚本保持职责单一，仿 `check-ui-layer.mjs` 模式：收集 `ui/` 下所有含组件文件名的子目录（排除 index.ts 自身、非组件文件），逐一断言 `ui/index.ts` 有对应 `export { X }`；新增 `ui/` 子目录未进 barrel 即红）。
 - 接入 `package.json` 根 scripts：`"check:ui-barrel": "node scripts/check-ui-barrel.mjs"`，并并入 `check:ui-layer` 执行链（`"check:ui-layer": "node scripts/check-ui-layer.mjs && node scripts/check-ui-barrel.mjs"`）。
 - 脚本入库（AGENTS.md 测试资产铁律：立即 git add 提交，不留未跟踪状态）。
-- 注：check:store-facade 门禁归 03（R-03 裁决），本任务不实现。
+- 注：check:store-facade 门禁**归 T-E 轨道（05-state-governance-detail，R-03/C-8 裁决：脚本 + 基线 + CI 接线由 03/T-E 承办）**，本任务（T1）不实现；其消费点迁移面由本轨道 **T14（批次 7.4）** 承办——本文件无门禁脚本残留。
 
 **完成判据**：barrel 导出 6 组件 + 类型；`rg "from '.*ui/Menu['\"]"` 生产代码 = 0；`npm run check:ui-barrel` 对"漏导新组件"能红（负向用例：临时移除一行导出后断言退出码 1）；typecheck 绿。
 
@@ -201,7 +226,7 @@ components/sidebar/session-list/<文件>.tsx:  from '../../Tooltip'  →  from '
 
 ### 2.4 T8：ui/Button 接管波 2 首批 —— settings 域裸 `<button>` 语义替换（批次 3）
 
-**现状**：全仓 128 个组件文件含裸 `<button>`；本批只做 settings 域首批（约 20~30 文件），剩余波次由主控在后续轮次派单（**执行缝隙见 ⑥ 风险 5**）。
+**现状**：全仓 128 个组件文件含裸 `<button>`；本批只做 settings 域首批（约 20~30 文件）。**剩余波次由 T16（批次 3.4）承接——C-4 裁决定案，执行缝隙关闭**（原 ⑥ 风险 5 撤销，见 2.10）。
 
 **语义判定规则表（评审用，逐按钮对表）**
 
@@ -328,6 +353,148 @@ components/sidebar/session-list/<文件>.tsx:  from '../../Tooltip'  →  from '
 - **边界**：textarea 场景明确保留 ComposerField 轨（textarea/tiptap 双轨收敛属编辑器专项，本任务不承接）。
 - 完成判据：`settings-field-input` grep = 0；ui/Input 消费数 ≥ 15；每批 3 个表单聚焦视觉回归（focus-ring 一致性）。
 
+### 2.8 T14：store 直引迁移（批次 7.4，02-A2，C-8）
+
+**现状（实读）**：components/ 下 **78 个非测试文件直引 store/**（rg 实测 2026-08-09，`from '../store/...'` / `'../../store/...'` / `'@/store/...'` 命中 components/ 生产代码；口径与 05-detail §0-4 一致）。域分布（实测）：
+
+| 域 | 文件数 | 域 | 文件数 |
+|---|---|---|---|
+| diff | 10 | card-panel | 4 |
+| sidebar | 9 | chat-message-list | 4 |
+| chat-card | 8 | binary-tree | 4 |
+| agent-card | 7 | components/ 根 | 2 |
+| chat-tool-call | 6 | chat-message | 2 |
+| settings | 6 | files | 1 |
+| workspace | 5 | settings-skills | 1 |
+| overview | 5 | | |
+| chat-message-row | 4 | **合计** | **78** |
+
+**分批策略（5 批，每批 ≤20 文件，按域聚批）**：
+
+| 批 | 域面 | 预算 | 备注 |
+|---|---|---|---|
+| 批 1 | diff 10 + files 1 + overview 5 | 16 | 读面最重（DiffCard 系） |
+| 批 2 | sidebar 9 + card-panel 4 + binary-tree 4 | 17 | 与 T10 拆分（SidebarContextMenus）串行：**结构面等拆分合入** |
+| 批 3 | chat-card 8 + chat-message-row 4 + chat-message-list 4 + chat-message 2 | 18 | |
+| 批 4 | agent-card 7 + chat-tool-call 6 + components/ 根 2 | 15 | 与 T9 拆分（ApprovalAskCard/useSidebarSessionList）串行：等合入 |
+| 批 5 | settings 6 + settings-skills 1 + workspace 5 | 12 | 与 T9/T13 面交叉，最后批 |
+
+**每批文件清单原则**：
+1. **按域聚批**：同域文件同批，域间无依赖可稳定并行；单域超过 20 时域内按「读面 → 结构面」拆子批。
+2. **纯读面先行**：只读 selector/state 选择的消费点（`useXxxStore((s) => s.xxx)` 取值）首波替换，改走 `api/store-access` facade / `store/index` barrel / `store/types`（类型导入）——即 05-detail ④ 白名单三入口；**涉及组件结构变动的迁移显式等待本域重构落地**（T9/T10 拆分、T16 按钮接管后同文件串行）。
+3. **只换道不重构**：import 路径与取值路径为唯一改动面，不借机改行为/样式/memo；回调语义、订阅粒度保持等价（组件级整表订阅的收窄属 05 轨道 C15 顺带项，不在本任务）。
+4. 测试文件（若有直引）一并换道，计入每批判据。
+
+**与 03 门禁脚本的交接（05-detail §4.3，口径一致：02 承办迁移、03/T-E 只做门禁）**：
+
+| 阶段 | 责任方 | 内容 | 触发 |
+|---|---|---|---|
+| 1. 脚本就绪 | T-E（批次 5） | check-store-facade.mjs + 基线（78 文件）入库 | **本任务开工硬前置**（脚本是迁移的度量工具） |
+| 2. 迁移执行 | **本任务（T14，批次 7.4）** | 5 批逐批换道；每批跑 `npm run check:store-facade` 核对违规数**单调递减**（78 → 62 → 45 → …） | 每批独立提交 |
+| 3. 清零接线 | T-E（05-detail 提交 G 阶段 3） | 违规归零 → 基线置 0/删除 → **CI 快层接线**（master plan 7.4：迁移归零后同批完成） | T14 末批提交后主控触发 |
+
+**每批验证**：`npm run check:store-facade` 违规数递减断言；typecheck 绿；该批域页面冒烟（打开对应页/交互主路径无异常）；行为等价核对表（换道前后取值源一致）签字。
+
+**完成判据**：components/** 生产代码 store 直引 = 0（或全部命中白名单：store/index barrel / storeAccess / store/types）；check-store-facade 违规归零；CI 接线同批完成（与 05-detail 提交 G 阶段 3）；`rg "from '.*store/" components/**`（非白名单）零命中。
+
+### 2.9 T15：ui/ConfirmDialog 基座 + useConfirmGate 桥（批次 4.0，02-E3 改语义，C-7）
+
+**背景（R-02 修订，C-7 裁决）**：02-E3 由「删除」改语义为「**创建 ui/ConfirmDialog 基座**」——删除的仅为原迁移执行面（与 08 轨道的重复面）；基座由本任务实现，**排批次 4.0，先行于批次 4.1**（08 轨道 9 文件/10 调用 window.confirm 替换消费，不自造基座）。契约按 **04-detail §2.1.1**（04 声明、本任务照此实现与验收）。
+
+**契约基线（04-detail §2.1.1，实读确认）**：基于 ui/Dialog（Dialog.tsx 已具备 `role:'alertdialog'`、`initialFocusRef`、`dismissible`、`showCloseButton`、`footer`、`description` prop，Esc 栈 dialogStack 已实现）；`role="alertdialog"` + title→aria-labelledby + description→aria-describedby；初始焦点落**取消钮**（Dialog 基座默认聚焦首个可交互元素）；danger 变体确认钮**不默认聚焦**；Esc 关闭并归还原焦点（继承 Dialog 三件套）；**无关闭按钮（showCloseButton=false）**。
+
+**基座 props 表（受控组件，最小面）**：
+
+| prop | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| open | boolean | false | 受控开合（基座不管理 open 状态，不设内部状态机） |
+| title | ReactNode | — | 标题，→ aria-labelledby |
+| description | ReactNode | — | 正文，→ aria-describedby（原 confirm 全文入此，含「不可逆/永久丢失」后果说明） |
+| confirmLabel | ReactNode | '确认' | 确认钮文案（2.1.5 文案模板：危险项「确认删除/确认放弃/确认清空/确认强制取消」…） |
+| cancelLabel | ReactNode | '取消' | 取消钮文案 |
+| danger | boolean | false | 危险变体：确认钮 variant="danger"，且**不默认聚焦**（初始焦点仍落取消钮） |
+| onConfirm | () => void | — | 确认回调 |
+| onCancel | () => void | — | 取消回调（Esc / 取消钮 / 遮罩统一归口） |
+| disabled | boolean | false | 确认钮 disabled（异步进行中防重复提交，对齐 BgTaskActions busyAny 语义） |
+| size | DialogSize | 'md' | 透传 ui/Dialog |
+
+**Enter/Esc 语义**：Esc = 取消 + 归还焦点（Dialog 三件套）；**Enter = 浏览器原生激活当前聚焦钮，不劫持为确认**（初始焦点在取消钮 → Enter 即取消，防危险误触——04 §2.1.1 明确）。
+
+**Promise 返回值（C-7 要求落点）**：主控裁决要求「返回值 Promise」。落点 = **`hooks/useConfirmGate.ts` Promise 桥**（04 §2.1.1 形态，本任务一并创建）：
+
+```
+const [confirmGate, renderConfirmGate] = useConfirmGate();
+// 调用点：if (!(await confirmGate({ title, description, confirmLabel, danger }))) return;
+// 渲染点：{renderConfirmGate(<ui/ConfirmDialog ... />)}
+```
+
+- confirmGate 返回 `Promise<boolean>`（确认 → true / 取消·Esc·遮罩 → false），挂起式调用语义 = window.confirm 的异步等价。
+- 桥与基座解耦：基座只承诺确定回调语义（onConfirm/onCancel），桥负责 Promise 化——04 T1 的 9 个消费点只接触 confirmGate，不接触基座细节。
+- 若 04 轨道已有同名实现则合并（04 仅有契约声明，无实现，实读确认）。
+
+**扩展点**：
+- **不扩 props**：多按钮（三选一确认）→ 业务组合层（footer 插槽消化）；动态确认中文案 → disabled + label 组合；遮罩样式/尺寸 → DialogSize 透传。
+- 新增形态纪律：先扩联合类型（如 severity）再全量对齐，穷举而非开放字符串（同 Button 扩展点纪律，2.3）。
+- **禁止**：各调用点自写状态机 / 各自渲染 Dialog（第四套实现）；新引入 `confirm`/`alert`/`prompt`（04 §2.1.1 禁止项，4.1 的 check:no-window-confirm 门禁兜底）。
+
+**测试清单**：
+1. ui/ConfirmDialog 单测：`role="alertdialog"` 断言；title→aria-labelledby / description→aria-describedby 关联断言；**初始焦点 = 取消钮**（含 danger 变体）；danger 时确认钮不可默认聚焦、tab 序确认钮在取消钮之后；Esc → onCancel 且焦点归还原触发元素（useRestoreFocus 断言）；无关闭按钮（无 X）；disabled 确认钮不可交互；size/className 透传。
+2. useConfirmGate 单测：确认 → resolve(true)；取消/Esc/遮罩 → resolve(false)；挂起期间元素单例（重复 renderConfirmGate 不重复挂载）；两次并发调用语义（后调覆盖或排队——以 04 T1 消费面实测为准，登记）；卸载后不 resolve 泄漏。
+3. 键盘走查（每验证轮）：Tab 循环圈定对话框内；Enter 激活聚焦钮；danger 下 Enter 不触发确认。
+4. 交接验收（批次 4.1 侧）：9 文件替换后 `window.confirm` grep = 0（04 T1-6 门禁）。
+
+**完成判据**：ui/ConfirmDialog + hooks/useConfirmGate 入库（进 barrel、测试随组件迁移）；契约表（04 §2.1.1）逐项签字；单测全绿；04 T1 派单前置确认基座可用。
+
+### 2.10 T16：ui/Button 接管波 2 剩余批（批次 3.4，02-B2 波 2 后续，C-4）
+
+**背景（C-4 裁决）**：批次 3 **承接全部裸 button 替换波次**——128 文件裸 button 中 T8 覆盖 settings 域首批后，剩余约 100 文件由本任务内拆 6 子波完成（原 ⑥ 风险 5 执行缝隙关闭）。目标态「**业务层裸 button = 0**」。语义判定规则表、替换红线、视觉抽样纪律全部沿用 T8（2.4）。
+
+**实测分布（2026-08-09，rg `<button` 于 components/ 生产代码，不含测试与 ui/；128 全仓口径含测试与 ui/）**：settings 20、chat-card 11、workspace 9、chat-composer 8、sidebar 8、overview 8、files 6、root 5、settings-skills 5、diff 5、agent-card 5、overlay 4、settings-extensions 3、settings-models 3、chat-tool-call 3、settings-mcp 2、bg-tasks 2、card-panel 2、chat-message-row 2、binary-tree 2、shell 1、provider 1、chat-message-list 1（合计 116 业务文件）。
+
+**子波划分（6 波，每波 ≤20 文件，按域聚批；执行时以 `rg -l "<button" --glob "*.tsx"` 实测清单裁剪，单域超上限时域内再拆）**：
+
+| 子波 | 域面 | 预算 | 备注 |
+|---|---|---|---|
+| W1（波 2） | settings 系收尾（settings/skills/mcp/extensions/models 的 T8 后剩余） | ≤15 | settings 系零残留判据 |
+| W2（波 3） | chat-card 11 + chat-message-row 2 + chat-message-list 1 | 14 | chat 域第一波 |
+| W3（波 4） | chat-composer 8 + chat-tool-call 3 + provider 1 | 12 | chat 域第二波 |
+| W4（波 5） | workspace 9 + overview 8 + bg-tasks 2 + shell 1 | 20 | 壳/状态区 |
+| W5（波 6） | sidebar 8 + files 6 + diff 5 + overlay 4 | 23 → 拆：overlay 4 移 W6 | 超限域内再拆 |
+| W6（波 7） | agent-card 5 + card-panel 2 + binary-tree 2 + root 5 + overlay 4 | 18 | 收尾波 + 清零扫描 |
+
+**每波文件面原则**：
+1. 按域聚批（同域同波），每波 ≤20 文件（master plan §3-3 规模控制），波间文件面不重叠；批次 3 接力式串行（T8 → W1 → … → W6，Agent 轮换）。
+2. 复用 T8 语义判定规则表（2.4 表）逐按钮判定；有明确 class 语义（ghost/icon-btn/link 等）的机械映射，其余语义判定（danger/primary/secondary 归口）。
+3. **替换红线**：只改标签名与 className 段，保留 aria-label/aria-pressed/type/data-*/role 属性行（03 评审 ④.3）；`type="button"` 由 Button 默认值保证。
+4. **R-07 分工**（B-P2-3）：02 侧替换时顺带补其替换面的 aria-label；**未补齐项登记移交 08**（批次 4.3 grep 重扫补剩余 + 建门禁，本轨道不建门禁）。
+5. **豁免面（登记在案，不计入清零判据）**：`role="tab"` 的 tabClose 按钮（归 T12 TabStrip 收敛）；编辑器域（tiptap/textarea 工具栏等第三方/专项组件内部 button，若存在）；ui/ 原子层自身。
+
+**每波验证**：视觉回归抽样 3~5 按钮（tests/visual/ 基线，T-B 已建 8 组件基线则直接复用）；变体判定规则表逐按钮签字（评审物）；aria-label 补齐计入本批判据；键盘走查抽样（Tab 聚焦 + Enter 激活）；波末 grep 该域裸 button 清零；typecheck + `npm run check:ui-layer` 绿。
+
+**完成判据**：业务层 `rg "<button"`（components/ 生产代码，排除豁免面）= 0；116 文件清零表 + 豁免登记表入最终提交说明；全波视觉抽样无差异。
+
+### 2.11 T17：props 治理（批次 8.0，02-C1，C-5）
+
+**背景（C-5 裁决）**：02-C1（P1-12 props drilling 治理）排批次 8.0，作为 T-H（08 轨道）渲染优化的 memo 面前置；本任务供批次 8 派发。目标：三个高 props 数消费面聚合为对象 spread，**只聚合不删减、不改变渲染行为**。
+
+**目标文件与改造要点（实读）**：
+
+| # | 文件（实读行号） | props 现状 | 改造要点 |
+|---|---|---|---|
+| 1 | `components/chat-card/ChatCard.tsx` | ChatCardProps 接口仅 6 字段（:19-30），但 `useChatCardState()` 返回的 composerProps 聚合对象在 `<ChatComposer>` 消费处被**逐属性展开约 30 个**（:43-75，chatInput/setChatInput/isComposing/setIsComposing/slashMenuOpen/…/onOpenSchedule，全部来自 `state.composerProps.*`） | **聚合对象 spread**：`<ChatComposer {...state.composerProps} isProcessing={state.isProcessing} permissionMode={state.permissionMode} onPermissionChange={...} onOpenSchedule={...} />`（仅非 composerProps 项显式保留：isProcessing :62、permissionMode :69、onPermissionChange :70、onOpenSchedule :73）；ChatHeader（:115-137）/ModelBadgePicker（:83-89）展开面若 useChatCardState 已聚合则同法收敛，否则不动 |
+| 2 | `components/chat-card/ChatComposerWrapper.tsx` | ChatComposerWrapperProps 接口 **29 字段**（:11-41）；内部将字段逐项展开传给 `ChatStatusRibbons`（:82-90+，onOpenTerminal/onOpenDiff/diffCount/engineHint/needsKeySetup/needsModelSetup/onEmptySurface/localHasKey 等） | **ribbons 聚合对象**：接口内新增 `ribbons: ChatStatusRibbonsProps` 分组字段（30 props 中属于 ribbons 面的聚合为单一对象），ChatStatusRibbons 消费改 `{...ribbons}`；非 ribbons 字段（composerElement/mainSurface/runNotice/approval 族等）保持平铺；调用方（ChatCard）同步传聚合对象 |
+| 3 | `components/chat-message-row/ChatAssistantMessageRow.tsx` | ChatAssistantMessageRowProps 接口 **24 字段**（:26-51，裁决口径 28 含消费展开差异，执行以实读为准）；消费方 MessageVirtualizer（:352+，约 25 个展开 prop）/AgentMessageRow（:55）逐项展开；**存在自定义 memo 比较器 `assistantRowPropsEqual`（:53-91+）逐字段比较** | **分组聚合 + 比较器联动**：将 msg 相关字段组 / ui 状态组 / 回调组聚合为 2~3 个分组对象；消费方同步 spread；**assistantRowPropsEqual 必须与聚合后结构同步更新**（逐组比较或等价断言），不得扩大重渲染面——08-detail T4.3 的「比较器面收窄」依赖此步 |
+
+**共通纪律**：
+1. 聚合后接口字段数不变（签名兼容，消费方零行为差异）；spread 是纯机械重构，禁止顺手重排 JSX / 改样式 / 动 memo 默认行为。
+2. **比较器联动**（ChatAssistantMessageRow 特有）：props 结构变化必须同步 `assistantRowPropsEqual`，跑既有 memo 相关测试（MessageVirtualizer/流式渲染专项）确认重渲染面不扩大。
+3. 与 T-H 同文件串行：本任务（8.0）先行聚合 → 08 轨道在其上优化渲染（master plan §1 T-C↔T-H）；08-detail T4.3 类型级穷尽/清单测试自成闭环不依赖本任务，其「比较器收窄」段依赖本任务完成后执行。
+4. 类型级穷尽清单（08 T4.3）作为聚合前后字段一一核对的评审物。
+
+**验证**：typecheck 绿；既有组件测试不破（ChatCard/ChatComposerWrapper/ChatMessageRow 相关单测）；聚合后 props 传递语义核对表签字（逐 prop 确认对象内字段一致）；ChatAssistantMessageRow 重渲染断言（比较器更新后不扩大）；性能采样对比与 08 T-H 共用基线。
+
+**完成判据**：三文件聚合对象落地 + 消费方 spread 同步；assistantRowPropsEqual 与结构同步且单测绿；行为变更登记 = 0；typecheck + 快层单元测试全绿。
+
 ---
 
 ## ③ 巨型拆分（批次 5，T9/T10）
@@ -379,6 +546,8 @@ components/sidebar/session-list/<文件>.tsx:  from '../../Tooltip'  →  from '
 | `ConfirmButton` 组 | 确认按钮组段 | 同意/拒绝按钮组（Button 基座，T7 后已有） |
 | `ApprovalPayloadSection` | 既有内部件 :146-269 | 保持，不重复拆 |
 
+> 注（C-7 一致性）：E3 的「确认对话框」族已由主控修订为 **T15（批次 4.0）创建 ui/ConfirmDialog 基座、迁移消费归 08**；E3 的 badge/空态/通知横幅/滚动锚定族仍为 P2 项（批次 9.3 登记入最终修复报告，B-P2-5）。ApprovalRiskChips 与 badge 族收敛的联动面保持原意；确认流程若涉及对话框语义按 T15 基座消费（同文件串行：T15 先行）。
+
 ### 3.5 SidebarContextMenus.tsx（实读 722 行，sidebar/ 域）
 
 | 拆出 | 来源区段 | 职责 |
@@ -405,11 +574,11 @@ components/sidebar/session-list/<文件>.tsx:  from '../../Tooltip'  →  from '
 
 ### 4.1 裁决口径（00-master-plan R-07 + 03 评审 P0-5）
 
-**02-B2 先改结构（批次 3，本轨道 T7/T8）、08-步4 后补 aria（批次 4，T-D 轨道）**。两轮内分开，同文件串行。
+**02-B2 先改结构（批次 3，本轨道 T7/T8/T16）、08-步4 后补 aria（批次 4，T-D 轨道）**。两轮内分开，同文件串行。
 
 ### 4.2 02 侧（本轨道）交接产出清单
 
-02 侧动作 = 替换裸 button / .ui-btn 为 ui/Button 时**顺带补齐 aria-label**（16 个无名称按钮中落在本批文件面的），并输出「迁移后仍无名称按钮清单」（08 步 1 的③ 与本轨道共同产出——Tooltip 迁移后仍无 aria-label 的图标按钮逐一登记）。
+02 侧动作 = 替换裸 button / .ui-btn 为 ui/Button 时**顺带补齐 aria-label**（16 个无名称按钮中落在 T7/T8/T16 文件面的），并输出「迁移后仍无名称按钮清单」（08 步 1 的③ 与本轨道共同产出——Tooltip 迁移后仍无 aria-label 的图标按钮逐一登记；**T16 每子波输出增量清单，波末汇总移交 08 批次 4.3**）。
 
 **16 个无名称按钮所在 5 文件（08 步4 清单，本轨道触碰面）**
 
@@ -441,14 +610,15 @@ components/sidebar/session-list/<文件>.tsx:  from '../../Tooltip'  →  from '
 | 类型检查 | `npm run typecheck`（根，含 4 个 tsconfig） | 每批提交前必绿 |
 | 单元测试 | `npm run test:coverage -- --project=unit`（快层 45/70/65/45） | ui/ 组件测试保活 |
 | 分层门禁 | `npm run check:ui-layer`（T1 后含 check:ui-barrel） | 新增 ui/ 件（Switch/TabStrip）进 barrel 自动校验 |
-| 全量 vitest | `npm run test`（T6 退役步、T9~T13 收尾批） | 退役/结构迁移后强制 |
+| 全量 vitest | `npm run test`（T6 退役步、T9~T13 收尾批、T16 收尾波、T17） | 退役/结构迁移后强制 |
+| store facade | `npm run check:store-facade`（**T14 起强制**；脚本归 T-E 承办，C-8） | 违规数单调递减至 0；基线见 05-detail ④ |
 | e2e 专项 | tests/e2e 5 个 markdown-editor 专项 spec（ast-block-tables/format-checker/ime-composition/keyboard-navigation/wysiwyg-interaction） | **禁止删除**，回归保留 |
 | reference 门禁 | `npm test`（reference/markdown-editor） | 本轨道不触引擎，但改动后需跑通（AGENTS.md 铁律） |
 
 ### 5.2 分批专项验证
 
 | 任务 | 专项验证 |
-|---|---|
+|---|---|---|
 | T1 | barrel 负向用例（漏导即红）；grep Menu 直引清零 |
 | T2~T6 | 每批键盘冒烟抽样（Tab 聚焦 icon 按钮 → tooltip 出现；Shift+Tab 离开 → 消失）；退役步 aria-describedby 关联断言 |
 | T7/T8 | 每批视觉回归抽样 3~5 按钮（tests/visual/ 基线，T-B 批次若已建 8 组件基线直接复用）；变体判定规则表逐按钮签字 |
@@ -456,10 +626,14 @@ components/sidebar/session-list/<文件>.tsx:  from '../../Tooltip'  →  from '
 | T12 | 能力盘点表验收物；ui/TabStrip 单测（移植蓝本 3 套 a11y 专项）；每消费点视觉回归 |
 | T13 | 回调语义核对表签字；5 个代表消费点行为人工验证（打开/选择/关闭/Esc/外点关闭） |
 | T9/T10 | 行为测试全绿 + 拆分收据（子组件清单 + 行数分布）入提交说明 |
+| T14 | 每批 `npm run check:store-facade` 违规数递减断言（78 → 0 单调）；行为等价核对表签字；typecheck + 该批域页面冒烟 |
+| T15 | ui/ConfirmDialog 单测（alertdialog/labelledby/describedby/初始焦点取消钮/danger 不默认聚焦/Esc 归还）；useConfirmGate 两路径断言（确认 true/取消 false）；键盘走查（Tab 圈定/Enter 不劫持） |
+| T16 | 每子波视觉回归抽样 3~5 按钮 + 变体判定规则表逐按钮签字 + 波末该域裸 button 清零 grep + aria-label 补齐计数（R-07）；豁免面登记表 |
+| T17 | 聚合后 props 传递语义核对表签字（逐 prop 字段一致）；assistantRowPropsEqual 联动断言（重渲染面不扩大）；性能采样与 08 T-H 共用基线 |
 
 ### 5.3 提交纪律
 
-1. **每批一个提交**（T1 独立；T2~T6 每批独立；T4 内两子提交；T7/T8 每波独立；T9/T10/T11/T12/T13 各自独立），提交信息带批次号（如 `feat(ui): T-C 批次3-2 Tooltip 迁移批1（chat 域 21 文件）`），遵循仓库风格。
+1. **每批一个提交**（T1 独立；T2~T6 每批独立；T4 内两子提交；T7/T8 每波独立；T9/T10/T11/T12/T13 各自独立；**T14 每批独立（含违规数递减快照）；T15 独立；T16 每子波独立（W1~W6 各一提交）；T17 独立**），提交信息带批次号（如 `feat(ui): T-C 批次3-2 Tooltip 迁移批1（chat 域 21 文件）`），遵循仓库风格。
 2. **CSS 内容改动与 test:snapshots 更新同提交**（8e8c313c 教训）：任何批次若动到 module.css（T11 新建、T13 退役全局类），快照同步更新不分离。
 3. 一次性工具脚本（check-ui-barrel.mjs 等）随 T1 入库，不留未跟踪状态（AGENTS.md 测试资产铁律）。
 4. 禁止 `--no-verify`；任何门禁红即修复或整批回退，不携带黄灯提交（02 方案 4.3）。
@@ -476,12 +650,16 @@ components/sidebar/session-list/<文件>.tsx:  from '../../Tooltip'  →  from '
 | 2 | **按钮视觉差异**：变体映射误判或 `.ui-btn` 无 disabled 规则 vs Button 有 opacity 的观感差 | T7/T8 语义判定错误（danger/ghost 分错） | 变体判定规则表评审前置；每批视觉回归抽样 3~5 按钮；单批可整批回退 |
 | 3 | **primary 语义未定案的残留风险**：若 01-S3-任务1 未完成即开工 T7 | 映射表以旧四套 primary 为基准 → 替换后观感错位（02 风险 6） | 前置条件清单（①1.3-3）显式检查；T7 派单前主控确认 01-S3 提交已合入 |
 | 4 | **Select 迁移行为回归**：group/previewFamily/footer 能力差异处理不当 | FontSettingsSection 字体预览/分组选项渲染走样 | 执行前 grep `group:`/`footer=`/`previewFamily` 在 11 文件命中数（决策点 2 已登记）；FontSettingsSection 视觉回归重点项；逐点核对表签字 |
-| 5 | **执行缝隙（需主控裁决）**：master-plan 批次 3 仅排了「.ui-btn 迁移 + 首批裸 button」，128 文件裸 button 的剩余 5 批未排入批次 5 | T8 之后裸 button 仍大量存在，目标态"业务层裸 button = 0"未达 | 建议：批次 5 与 5.2 并行追加「Button 接管波 2 剩余批」（按域 4~5 批）；本详细计划不做批次边界变更，**登记为待主控裁决项** |
-| 6 | **同文件串行遗漏**：T5（diff 域 Tooltip）与 T7（diff 域 .ui-btn）、T9（ModelConfigEditor 拆分）与 T11（其 cap 开关替换）、T13 退役（SettingsSelect）与 T1（其 Menu 直引）三组同文件双任务 | 并行合并冲突 | 批次内执行链（①1.2）显式串行；派单时同文件清单核对表签字 |
+| 5 | **裸 button 剩余批的波次边界漂移（已裁决，转为执行注意）**：C-4 定案批次 3.4 承接全部波次（T16，6 子波），但实测清单（116 业务文件）随 T8 进度演进 | 子波域预算与实际不符（超 ≤20 上限） | T16 派单前以 `rg -l "<button" --glob "*.tsx"` 实测重扫定稿清单；单域超限域内再拆；豁免面（role="tab" tabClose、编辑器域、ui/）显式登记不计入清零判据 |
+| 6 | **同文件串行遗漏**：T5（diff 域 Tooltip）与 T7（diff 域 .ui-btn）、T9（ModelConfigEditor 拆分）与 T11（其 cap 开关替换）、T13 退役（SettingsSelect）与 T1（其 Menu 直引）、**T16（chat-* 域裸 button）与 T2~T5（同域 Tooltip 迁移）、T17（chat-* 域 props 聚合）与 T16 清零面、T14（agent-card/settings 域直引）与 T9/T10 拆分** 多组同文件双任务 | 并行合并冲突 | 批次内执行链（①1.2）显式串行；派单时同文件清单核对表签字 |
 | 7 | **a11y 升级的「假收益」**：Switch/Tooltip 替换后无人验证 SR 行为 | SR 环境缺失（NVDA 未装） | 降级路径（03 评审 P1-1）：Playwright aria 快照断言 + axe 扫描 + 人工键盘走查；SR 播报留待有环境补录 |
 | 8 | **巨型拆分行为漂移**：拆分时顺手"改进"而非"只搬" | T9/T10 | 「只搬不写」原则 + 行为测试全绿才进入下一步；拆分收据入提交说明 |
 | 9 | **TabStrip 能力对齐不足**：拖拽/溢出/上下文差异超出基座插槽可消化面 | T12 批 B（GlobalSessionTabBar） | 能力盘点表先行；差距大者标「暂缓」或降级业务封装层组合，不扩基座 props |
 | 10 | **双轨扩大**：迁移中途新需求继续用旧件/旧全局类 | T2~T13 期间 | 红线 a（评审拦截）+ 门禁 + 退役步骤排入同阶段验收；`.ui-btn`/`settings-switch`/`settings-field-input`/旧 Tooltip 的 grep 清零判据为强制出口 |
+| 11 | **T14 门禁交接时序**：check-store-facade 基线（T-E 批次 5）未就绪即开工 T14，或迁移归零后 CI 接线跨批悬挂 | 迁移失去度量工具；CI 长期红 | 开工硬前置（①1.3）；归零后主控触发 T-E 同批接线（master plan 7.4）；每批违规数递减快照入提交说明 |
+| 12 | **T15 基座与 04 契约偏差**：实现细节（初始焦点/Enter 语义/danger 不默认聚焦）与 04-detail §2.1.1 或 04 T1 消费预期不一致 | 4.1 消费迁移返工 | 契约逐项签字（04 §2.1.1）；键盘走查含 danger 变体；04 T1 派单前主控确认基座已按契约验收 |
+| 13 | **T17 聚合破坏 memo 比较器**：ChatAssistantMessageRow 的 assistantRowPropsEqual 未随聚合结构更新 → 重渲染面扩大/漏渲染 | 流式渲染性能回退 | 比较器与结构同步更新 + 既有 memo 测试不破断言；与 08 T4.3 比较器收窄交接 |
+| 14 | **R-07 双补/漏补边界**（B-P2-3 落地面）：T16 顺带补 aria-label 与 08 批次 4.3 grep 重扫可能两边都补或都漏 | 名称重复或缺失 | 本轨道只补其替换面并输出「迁移后仍无名称按钮清单」；08 以重扫补剩余 + 建门禁；清单双向交接（见 ④ 4.2） |
 
 ---
 
@@ -492,5 +670,8 @@ components/sidebar/session-list/<文件>.tsx:  from '../../Tooltip'  →  from '
 3. **.ui-btn 消费**：grep 命中 37 文件（含 Button.tsx 自身 1 个），业务 36 个；03 评审口径 42 含 css 与全仓——执行时以 `rg -l "ui-btn" --glob "*.tsx"` 实测清单为准。
 4. **SettingsSelect 消费方**：实测 11 生产文件（R-09 修正落地，含跨 4 域：diff/settings-skills/settings-mcp/Wizard）。
 5. **行号漂移**：所有 `:行号` 基于 2026-08-09 实测（ModelConfigEditor 866、ApprovalAskCard 777、SidebarContextMenus 722、ExternalSessionImport 580、SettingsUsageTab 536、useExtensionMarket 623、useSidebarSessionList 588、UnitSessionTabStrip 505），执行前语义定位优先。
-6. **待主控裁决项**：①风险 5（裸 button 剩余波次承接批次）；②T13 的 group 能力决策（grep 命中数依赖）；③SR 验证环境缺失的正式降级路径确认。
-7. **样式修复边界**：`--tooltip-translate` fallback 归 01-S0（R-01 裁决已办）；`.ui-btn` 段删除、`settings-switch`/`settings-field-input` 段删除的**样式侧**动作归 01-S3/S5 收尾（02 管消费点迁移、01 管删段，握手关系见 02 方案附）。
+6. **待主控裁决项（v2 更新）**：①裸 button 剩余波次承接批次——**已由 C-4 裁决（批次 3.4，T16），销号**；②T13 的 group 能力决策（grep 命中数依赖，执行期判定）；③SR 验证环境缺失的正式降级路径——**已由 U-5/C 系列定案（Playwright aria 快照 + axe + 键盘走查），销号**。
+7. **store 直引 78 文件域分布（T14 分批依据，2026-08-09 实测）**：diff 10 / sidebar 9 / chat-card 8 / agent-card 7 / chat-tool-call 6 / settings 6 / workspace 5 / overview 5 / chat-message-row 4 / card-panel 4 / chat-message-list 4 / binary-tree 4 / components 根 2 / chat-message 2 / files 1 / settings-skills 1。与 05-detail §0-4 口径一致（78 非测试文件）。
+8. **裸 button 业务分布（T16 子波划分依据，2026-08-09 实测）**：116 业务文件（128 全仓口径含测试与 ui/）：settings 20 / chat-card 11 / workspace 9 / chat-composer 8 / sidebar 8 / overview 8 / files 6 / root 5 / settings-skills 5 / diff 5 / agent-card 5 / overlay 4 / settings-extensions 3 / settings-models 3 / chat-tool-call 3 / settings-mcp 2 / bg-tasks 2 / card-panel 2 / chat-message-row 2 / binary-tree 2 / shell 1 / provider 1 / chat-message-list 1；T8 首批约覆盖 settings 系 20~30 文件，T16 以 T8 完成后实测重扫定稿。
+9. **C-5 props 实测口径**：ChatCard.tsx:43-75 的 `<ChatComposer>` 逐属性展开 30 个（全部来自 `state.composerProps.*`，另有 isProcessing/permissionMode/onPermissionChange/onOpenSchedule 独立传参）；ChatComposerWrapper.tsx:11-41 接口 29 字段；ChatAssistantMessageRow.tsx:26-51 接口 24 字段（主控裁决口径 28 含消费展开差异，执行以实读为准）+ 自定义比较器 assistantRowPropsEqual（:53+）。
+10. **样式修复边界**：`--tooltip-translate` fallback 归 01-S0（R-01 裁决已办）；`.ui-btn` 段删除、`settings-switch`/`settings-field-input` 段删除的**样式侧**动作归 01-S3/S5 收尾（02 管消费点迁移、01 管删段，握手关系见 02 方案附）。

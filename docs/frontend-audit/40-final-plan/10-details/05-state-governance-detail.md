@@ -1,9 +1,9 @@
 # T-E 状态治理轨道 · 详细执行计划（05-state-governance-detail）
 
 > 派生子 Agent 产出：`docs/frontend-audit/40-final-plan/10-details/05-state-governance-detail.md`
-> 输入：`00-master-plan.md`（批次 5 / R-03 / R-06）、`20-proposals/03-state-management-proposal.md`（步骤②-⑤）、`30-reviews/01~03`、`10-analysis/03-state-management-audit.md`（D1-D10、16 处 raw setState）
+> 输入：`00-master-plan.md`（批次 5 / R-03 / R-06）、`20-proposals/03-state-management-proposal.md`（步骤②-⑤）、`30-reviews/01~03`、阶段 6 评审 `30-reviews/01-batch-structure-review.md` / `02-detail-technical-review.md`（含 ③-P0-1）、`10-analysis/03-state-management-audit.md`（D1-D10、raw setState 口径以 §0 实读修正 18 处为准）
 > 性质：只读 + 本计划文档；全部结论经 2026-08-09 工作区实读复核（行号为**当前工作区实测**，执行时语义定位优先，参考 03-评审「行号普遍偏大 3%~8%」的漂移纪律）
-> 版本：v1（供主控派单；不改变 00 批次边界与串行纪律）
+> 版本：v2（v1 修订：吸收阶段 6 评审 C-10 与承办分工定案，见「修订日志」；不改变 00 批次边界与串行纪律）
 
 ---
 
@@ -21,6 +21,14 @@
 
 ---
 
+## 修订日志
+
+| 版本 | 日期 | 修订要点 |
+|---|---|---|
+| v1 → v2 | 2026-08-09 | 吸收阶段 6 评审（`02-detail-technical-review.md` ③-P0-1）与主控裁决：**C-10**——D2 连接态消费方清单补齐 **LiveTasksSection / BgTasksSection / PlansSection**（engineOnline 经 RuntimePanel props 下传 :156/:163/:191，三组件各自声明 prop 并用于空态文案）——同步更新 ① 裁决表 D2、①-1 子任务 2、6.2 提交 B 文件面、⑥ 6.1 D2 验收判据（grep engineOnline 零命中的生产文件面补全为 5 个文件 + 测试面）；**交叉核对**：R-06（bootstrap-services:81 归 03）与 §⑤ 已有口径一致（无改动）；store 迁移承办分工显式化——**02 承办（02-A2 消费点迁移）、03/本轨道只做门禁**（§4.3，消除 B-P0-2 所指互等表述）；themeStore 串行登记对称性补声明（02 评审 ③-P1-3/P2-5，见 ①-3 段一-5） |
+
+---
+
 ## ① 双源裁决表（D1-D10：裁决 / 文件 / 任务）
 
 > 优先级（03 方案步骤 2）：实质缺陷面（D2/D3/D5/D10）优先 → 死面（D8）顺手 → 设计内项（D1/D6/D7/D9）只加锁不重构。
@@ -29,7 +37,7 @@
 | # | 数据 | 真源裁决 | 保留/合并/删除 | 涉及文件（实测行号） | 任务 |
 |---|------|----------|----------------|----------------------|------|
 | D1 | 消息正文（流式期） | streamingStore（流式期）+ sessionStore（终态） | **保留**（设计内缓冲） | `store/streamingStore.ts`（applyStreamTextToMessage 分叉兜底 :423-464，早退 :132-147） | 不重构。补回归用例锁 merge 兜底分支（分叉分支 :445-448）：①流式期正文读 streamingStore；②收口 commit 后读 sessionStore；③分叉兜底（既有 streamingStore 旧值时合并）断言。无代码改动 |
-| D2 | 引擎连接态 | `errorStore.connectionStatus`（transport → ConnectionManager.handleStatusChange → eventBus `engine:connection:change` → bootstrap-services:91-110 → ErrorStore.setConnectionStatus，链路完整含重连/失败语义） | **合并**（单真源） | `hooks/useEngineState.ts`（engineOnline 写点 :147/:170-173）、`services/ErrorStore.ts`（:191-198 投影 / :111 分类）、`bootstrap-services.ts`（:81/:116 空 catch）、`components/workspace/RuntimePanel.tsx`（:51/:97-105/:156/:163/:191）、`components/overview/OverviewCard.tsx`（:48）、`runtimePanelLib.ts`（formatEngineStatus*） | **见 ①-1 子任务（含 R-06）** |
+| D2 | 引擎连接态 | `errorStore.connectionStatus`（transport → ConnectionManager.handleStatusChange → eventBus `engine:connection:change` → bootstrap-services:91-110 → ErrorStore.setConnectionStatus，链路完整含重连/失败语义） | **合并**（单真源） | `hooks/useEngineState.ts`（engineOnline 写点 :147/:170-173）、`services/ErrorStore.ts`（:191-198 投影 / :111 分类）、`bootstrap-services.ts`（:81/:116 空 catch）、`components/workspace/RuntimePanel.tsx`（:51/:97-105/:156/:163/:191——engineOnline 经 props 下传三 Section，**C-10 补齐**）、`components/workspace/LiveTasksSection.tsx`（prop 声明 :18/:25，空态文案 :42 emptyLiveTasksHint）、`components/workspace/BgTasksSection.tsx`（prop 声明 :27/:34，:75 emptyBgTasksHint；测试面 BgTasksSection.test.tsx:62-92 同迁）、`components/workspace/PlansSection.tsx`（prop 声明 :18/:26，:52 emptyPlansHint）、`components/overview/OverviewCard.tsx`（:48）、`runtimePanelLib.ts`（formatEngineStatus*） | **见 ①-1 子任务（含 R-06）** |
 | D3 | 主题 theme | `settingsStore.appSettings.theme`（收敛后真源；当前引擎回灌链路缺失见 §0-3） | **合并**（单真源，两段式） | `api/themeStore.ts`（persistTheme :49-65 双键写 / applyTheme :71-91 / setTheme :823-829）、`store/settingsStore.ts`（setAppSettings :71-74）、`app/AppBootstrap.ts`（启动播种 :238-244）、`components/settings/SettingsAppearanceTab.tsx`（save 双写 :182-209，setTheme 调用 :191-192/:433-434） | **见 ①-3 子任务** |
 | D4 | tokenUsage | settingsStore.tokenUsage（当前值）+ usageStore（历史流水） | **保留双 sink**（口径不同）+ 写点收敛 | `hooks/chat-stream/useStreamCallbacks.ts`（:917-924 与 :925-936 并列双写；:957-961 与 :963-970 兜底双写）、`api/store-access/telemetryAccess.ts`（accumulateTokenUsage :152）、`api/usageStore.ts`（recordUsageDelta :131） | accumulateTokenUsage 内单点完成 recordUsageDelta 委托（动态 import usageStore，失败仍静默）。useStreamCallbacks 删 :925-936 与 :962-973 两个并行块（保留 F5 P2 串行化增量注释与 delta 计算）。两处兜底路径（:957-961 估算）同样走单点。单测锁：同事件双写无丢失 |
 | D5 | 项目/文件夹归属 | projectStore（真源）+ sessions.folder/folderOrder 镜像 | **保留镜像** + 收敛写入 | `app/AppBootstrap.ts`（:144-199：动态 import :147、rememberProjectFolderAlias :154、直写 recipe :155-168、双 rAF :178-182、自订阅 layoutStore :184-190、crish-project-changed :192）、`api/projectStore.ts`（listProjects / rebindSessionFoldersToProjects / rememberProjectFolderAlias） | 新 action `rebindSessionFolders(projects)`：store 内实现原 recipe 语义（folderOrder 维护），增量 rebind（按变更 sessionId 集合，避免 O(sessions×projects) 全表扫描）。触发点收为「启动一次 + crish-project-changed 事件」两处；**删除对 layoutStore 自身的订阅**（消除 prevSessions 引用比较防环纪律，AppBootstrap.ts:184-190 整体删除）。AppBootstrap.ts:155 直写交步骤 4 清零 |
@@ -46,10 +54,11 @@
    - **模块其余能力全部保留**：activeRuns/pendingApprovals/bgTasks/workflows 的 4s 轮询（:133-155）、`_setState` 浅等防护（:113-131）、**dataPlaneRouter/subagentPlaneRouter 的 refcount 装配（:178-183 不得动**——P2-7 单点装配风险与 D2 无关）、`onDataPlaneRefresh`（:186-188）。`_setState` 浅等比较同步去掉 engineOnline 项。
    - 唯一保留的 transport 订阅？**transport.onStatus 不再需要**（连接态由 ErrorStore 链承接）：删除 `_unsubState` 的 transport.onStatus 接线（:171-173/:199-202），首订/归零 refcount 逻辑（:88-94/:219-233）不动。
    - **新增连接态投影**：`useEngineState` 输出 `engineOnline` 的替代——在 RuntimePanel/OverviewCard 处新增 `useConnectionStatus()`（`useSyncExternalStore(errorStore.subscribe, ...)`，ErrorStore.ts:223-228 已有订阅接口），**或**在 useEngineState 内以投影字段暴露（二选一，推荐前者：useEngineState 与 errorStore 无依赖，避免模块单例再挂一跳；组件侧消费 `errorStore.getState().connectionStatus`）。
-2. **消费组件迁移**（RuntimePanel.tsx / OverviewCard.tsx）：
+2. **消费组件迁移**（RuntimePanel.tsx / OverviewCard.tsx / LiveTasksSection.tsx / BgTasksSection.tsx / PlansSection.tsx——**C-10 补齐三 Section**）：
    - `ds.engineOnline` → `connectionStatus` 投影（connected → 在线；reconnecting/waiting → 重连/等待中文案由 `runtimePanelLib.ts` 的 formatEngineStatus* 承载，函数签名由 boolean 改为 ConnectionStatus 或保持布尔投影）。
+   - **RuntimePanel 不再向下传 `engineOnline` prop**：删除 :156（LiveTasksSection）/:163（BgTasksSection）/:191（PlansSection）三处下传；三 Section 删除 prop 声明与解构（LiveTasksSection.tsx:18/:25、BgTasksSection.tsx:27/:34、PlansSection.tsx:18/:26），**空态文案按 connectionStatus 投影迁移**（emptyLiveTasksHint :42 / emptyBgTasksHint :75 / emptyPlansHint :52——与 runtimePanelLib 的 formatEngineStatus* 同款语义，离线仍显示「离线」空态提示，不因投影缺失漏判）；BgTasksSection.test.tsx:62-92 的 engineOnline prop 用例同步移除。
    - `ds.loading` / activeRuns 等仍走 useEngineState（不迁移）。
-   - 行为等价验证：连接/断开/重连三态两处 UI 一致无闪烁（EventBus 一跳延迟可接受，见 ⑦ 风险 1）。
+   - 行为等价验证：连接/断开/重连三态四处 UI 一致无闪烁（EventBus 一跳延迟可接受，见 ⑦ 风险 1）。
 3. **bootstrap 空 catch 显式登记（R-06 落点，05 清单剔除）**：`bootstrap-services.ts:81` 改：
    ```ts
    connectionManager.connect().catch((err) => {
@@ -74,6 +83,7 @@
 2. **crish_theme 单一写端**：全仓 grep `persistTheme` 调用点收为「themeProjection 内唯一」。`themeStore.setTheme`（:823-829，persist + dispatch crish-theme-changed）保留为**写端入口函数**（投影内部调用），设置页不再直接调。
 3. **设置页收敛**：SettingsAppearanceTab.save()（:182-209）删除 `setTheme` 直接调用（:191-193），只保留 `saveSettingsEx`（写 crish_settings）+ `setAppSettings(merged)`（写 settingsStore）→ 订阅投影自动完成 DOM + crish_theme 同步；:433-434 的「重置为默认主题」同样改走 save 路径。
 4. **依赖登记**：段二 = 04 批次 1 断链命令修复后，「saveSettingsEx → 引擎命令 → 事件回灌 settingsStore」链路自动完整（04 是否已有引擎设置命令面未实读确认，登记为交叉依赖，见 ⑦ 风险 2）。
+5. **同文件串行声明（02 评审 ③-P1-3/P2-5 对称性补齐）**：`themeStore.ts` 与 02 轨道（T-B 批次 2 的 S1-注入段，02-detail §0 C11 声明）同文件——02 先动 applyTheme 注入段（:706-742/:773-795）、本轨道提交 C 只动 persistTheme/setTheme 与调用面，批次错开（批次 2 → 批次 5）成立，两侧声明对称。
 
 **行为变更验收**：切换即时生效 + 刷新保持（crish_theme 键仍最先读）；`crish_theme` 写端 grep = 1 处。
 
@@ -196,10 +206,10 @@
 | 阶段 | 责任方 | 内容 |
 |------|--------|------|
 | 1. 脚本就绪 | **本轨道（T-E）** | check-store-facade.mjs 落地 + `--baseline` 生成基线（78 文件实测） + 本地跑通（红基线可复现）+ 规则写入 `store/README.md` 消费侧收紧进度表 |
-| 2. 迁移执行 | 02-A2（02 维度） | 78 文件 import 换道（纯读面 selector 替换可先行；涉及组件结构变动的迁移**显式等待 02 重构落地**，同文件串行）；每批跑 `npm run check:store-facade` 核对递减 |
+| 2. 迁移执行 | **02 承办**（02-A2 消费点迁移） | 78 文件 import 换道（纯读面 selector 替换可先行；涉及组件结构变动的迁移**显式等待 02 重构落地**，同文件串行）；每批跑 `npm run check:store-facade` 核对递减 |
 | 3. 清零接线 | **本轨道（T-E）** | 违规归零 → 基线文件置 0/删除 → CI 快层接线 + README 进度表「仍可接受」列清空 → 验收断言（grep 直引 = 0 或全命中白名单） |
 
-**触发条件显式化**：02-A2 迁移**必须等步骤 1 的脚本与基线入库后才可开工**（脚本是迁移的度量工具）；CI 接线**必须等迁移完成**（否则提交即红）；两道门禁（check:store-facade 与 check:store-writes）在批次 5 提交 D 中同时出现。
+**承办分工（阶段 6 主控裁决，替代 B-P0-2 所指的互等表述）**：78 文件 import 换道由 **02 承办**（02-A2 消费点迁移），**本轨道（T-E，承办 03 方案）只做门禁**（check:store-facade 脚本 + 基线 + CI 接线）——双方责任定案，不再互等。**触发条件显式化**：02-A2 迁移**必须等步骤 1 的脚本与基线入库后才可开工**（脚本是迁移的度量工具）；CI 接线**必须等迁移完成**（否则提交即红）；两道门禁（check:store-facade 与 check:store-writes）在批次 5 提交 D 中同时出现。
 
 ### 4.4 与既有门禁的关系
 
@@ -235,7 +245,7 @@
 | 项 | 验证方式 | 断言 |
 |----|----------|------|
 | D1 锁 | `npx vitest run src/store/streamingStore.test.ts` | 分叉兜底分支用例绿 |
-| D2 | 新增 `useConnectionStatus` 单测（mock errorStore 四态）+ RuntimePanel/OverviewCard 投影用例；手测 | 连接/断开/重连两处 UI 一致；`useEngineState.ts` 无 engineOnline 字段（grep 零命中）；`bootstrap-services.ts:81` 无空 catch |
+| D2 | 新增 `useConnectionStatus` 单测（mock errorStore 四态）+ RuntimePanel/OverviewCard/三 Section 投影用例；手测 | 连接/断开/重连四处 UI 一致；**engineOnline 生产文件面 grep 零命中**（useEngineState.ts + RuntimePanel.tsx + LiveTasksSection.tsx + BgTasksSection.tsx + PlansSection.tsx，含「RuntimePanel 不再下传 engineOnline prop」断言；测试面 BgTasksSection.test.tsx 同步清零）；`bootstrap-services.ts:81` 无空 catch |
 | D3 | `settingsStore` 主题订阅投影单测（切换 → DOM data-theme + crish_theme 写）+ 手测 | 切换即时生效 + 刷新保持；`persistTheme` 生产调用点 grep = 1；设置页无直接 setTheme |
 | D4 | `telemetryAccess.tokenUsage.test.ts` 扩展 | 同事件双写无丢失；useStreamCallbacks 无 recordUsageDelta 直调（grep 零命中于 hooks/chat-stream/） |
 | D5 | `rebindSessionFolders` action 单测（folder/folderOrder 一致 + 增量）+ AppBootstrap 测试 | 无 `useLayoutStore.subscribe` 于 AppBootstrap（grep） |
@@ -253,14 +263,14 @@
 | 提交 | 内容 | 文件面（错开要点） |
 |------|------|--------------------|
 | 提交 A（03-步骤2 低风险项） | D8 死面删除 + D9 注释 + D7 terminal helper 收敛 + layoutAnimationStore TODO 清理（:12-15/:40） | `rustCoreStore.ts`（删）、`store/index.ts`、`sessionCrudActions.ts`、`sessionOrderingActions.ts`、`sessionSharedHelpers.ts`、`storeOwnership.ts`、`layoutAnimationStore.ts` |
-| 提交 B（D2 + R-06） | 连接态单真源：useEngineState 去 engineOnline + useConnectionStatus + RuntimePanel/OverviewCard 迁移 + bootstrap :81/:116 显式登记 | `useEngineState.ts`、`bootstrap-services.ts`、`components/workspace/RuntimePanel.tsx`、`components/overview/OverviewCard.tsx`、`runtimePanelLib.ts`、新增 `hooks/useConnectionStatus.ts`（或 errorStore 投影文件） |
+| 提交 B（D2 + R-06） | 连接态单真源：useEngineState 去 engineOnline + useConnectionStatus + RuntimePanel/OverviewCard/三 Section 迁移 + bootstrap :81/:116 显式登记 | `useEngineState.ts`、`bootstrap-services.ts`、`components/workspace/RuntimePanel.tsx`、`components/overview/OverviewCard.tsx`、`components/workspace/LiveTasksSection.tsx`、`components/workspace/BgTasksSection.tsx`（含 BgTasksSection.test.tsx prop 用例）、`components/workspace/PlansSection.tsx`、`runtimePanelLib.ts`、新增 `hooks/useConnectionStatus.ts`（或 errorStore 投影文件） |
 | 提交 C（D3） | 主题收敛段一：settingsStore 订阅投影 + crish_theme 单一写端 + 设置页去双写 | `api/themeStore.ts`、`store/settingsStore.ts`（或新增 themeProjection.ts）、`app/AppBootstrap.ts`、`components/settings/SettingsAppearanceTab.tsx` |
 | 提交 D（D4/D5/D10） | telemetry 单点 + rebindSessionFolders action（含 AppBootstrap 重构去自订阅）+ legacy map 写方 helper 收敛 | `api/store-access/telemetryAccess.ts`、`useStreamCallbacks.ts`（仅 D4 块）、`store/sessionActions.ts`（或 sessionFolderActions.ts）、`app/AppBootstrap.ts`、`api/workspaceChromeTabs.ts`、`workspaceChromeHooks.ts`（仅 :102/:185）、`store/workspace-shell/workspaceShellStore.ts` |
 | 提交 E（03-步骤3 事件收敛） | 新 action 组（② 2.2 全表）+ handlers/hooks 11 处改道（U1-U5/A1-A2/M1/S1-S3）+ README 规则 | `store/sessionActions.ts`、`sessionMessageActions.ts`、`sessionAgentActions.ts`、`workspaceActions.ts`、`store/index.ts`、`api/chat-bridge/handlers/messageHandlers.ts`、`subagentHandlers.ts`、`hooks/chat-stream/useStreamCallbacks.ts`、`hooks/useAgentStream.ts`、`api/store-access/sessionAccess.ts`（如需）、`store/README.md` |
 | 提交 F（03-步骤4 + 写门禁） | B 组 5 处 + C 组 2 处 + `scripts/check-no-raw-setstate.mjs` + package.json `check:store-writes` + CI 接线 | `AppBootstrap.ts`、`useOverviewState.ts`、`ApprovalSection.tsx`、`Workspace.tsx`、`workspaceChromeHooks.ts`、`store/workspaceStore.ts`、`store/workspaceActions.ts`、`scripts/check-no-raw-setstate.mjs`、`package.json`、`.github/workflows/ci.yml` |
 | 提交 G（R-03 门禁 + 验收） | `scripts/check-store-facade.mjs` + 基线 + CI 接线 + README 进度表清空 + 验收断言 | `scripts/check-store-facade.mjs`、`package.json`、`.github/workflows/ci.yml`、`store/README.md`、基线 JSON（入库） |
 
-> 串行纪律：提交 E 依赖提交 D 的 action 承载面（只增补不重构）；提交 F 依赖 E（markToolCallLocalStatus/rebindSessionFolders 等已入 store）；提交 G 依赖 02-A2 迁移完成（跨批次，02 承办的 78 文件 import 换道与 T-E 无文件重叠——迁移面在 components/**，本轨道只动 store/ 与 scripts/）。
+> 串行纪律：提交 E 依赖提交 D 的 action 承载面（只增补不重构）；提交 F 依赖 E（markToolCallLocalStatus/rebindSessionFolders 等已入 store）；提交 G 依赖 02-A2 迁移完成（跨批次，**02 承办的 78 文件 import 换道、本轨道只做门禁**——阶段 6 主控裁决，见 4.3；迁移面在 components/**，与 T-E 无文件重叠，本轨道只动 store/ 与 scripts/）。
 
 ---
 
@@ -268,7 +278,7 @@
 
 | # | 风险 | 等级 | 缓解 |
 |---|------|------|------|
-| 1 | **D2 合并的行为变化**：engineOnline 布尔 vs connectionStatus 四态 → RuntimePanel/OverviewCard 文案变化（recovering 从「离线」变「重连中」）；EventBus 链路多一跳延迟（时序上两 UI 可能短暂不一致）；`_tick` 4s 轮询的 engineOnline 与 transport 事件源的差异消失后，activeRuns 刷新不受影响但状态点文案变了 | 中 | 投影语义映射表先定（connected→在线，reconnecting→重连中，waiting→连接中，disconnected→离线）；验收断言「两处 UI 一致」；文案变更列入行为验证清单（不视为回归） |
+| 1 | **D2 合并的行为变化**：engineOnline 布尔 vs connectionStatus 四态 → RuntimePanel/OverviewCard 文案变化（recovering 从「离线」变「重连中」）+ 三 Section 空态文案（emptyLiveTasksHint/emptyBgTasksHint/emptyPlansHint 的 engineOnline 判定随投影迁移，空态提示语义保持）；EventBus 链路多一跳延迟（时序上四处 UI 可能短暂不一致）；`_tick` 4s 轮询的 engineOnline 与 transport 事件源的差异消失后，activeRuns 刷新不受影响但状态点文案变了 | 中 | 投影语义映射表先定（connected→在线，reconnecting→重连中，waiting→连接中，disconnected→离线）；验收断言「四处 UI 一致」；文案变更列入行为验证清单（不视为回归） |
 | 2 | **D3 两段式收敛的链路缺口**：04 断链修复前无引擎设置事件回灌（§0-3 实读确认 saveSettingsEx 仅写 localStorage），「引擎事件权威回灌」暂为「settingsStore 写入即真源」；若未来事件回灌实现，需防回灌覆盖与前端写入竞态 | 中 | 段一收敛完成后 settingsStore 是唯一写入口（设置页 save 与回灌都经 setAppSettings）；README 登记两段式状态；04 批次 1 后验证回灌不丢字段 |
 | 3 | **步骤 3 改 11 处写路径的回归面**：流式 token/thinking/tool/终态、子代理（per-run + 全局兜底双写入方）、cacheMetrics、stop 批量——幂等语义与时序重组风险 | 高 | 新增 action 语义与原 recipe 逐行等价（对照表评审物）；EventRouter 去重与 `_liveParentRuns` 判活零改动；流式/子代理路径行为验证 + 既有测试不破（useStreamCallbacks.streamStore.test.ts、subagentHandlers.test.ts）；撤回/审批全流程手测 |
 | 4 | **markToolCallLocalStatus scope 化**：调用方（useOverviewState/ApprovalSection）仅知 toolCallId，scope 需从 a.runId 投影——传错 scope 会漏标 | 中 | 默认不传 scope 时行为与原全表扫描等价（保底）；scope 仅在调用方确知 runId 时传（handleApprovalAllow 有 a.runId）；单测覆盖「scope 命中」与「无 scope 全表」两路径 |
@@ -295,7 +305,9 @@
 | 03 方案步骤 5 完成判据 | ④（components 直引归零或白名单内；CI 接线；README 进度表清空） |
 | 30-01 C15（P2-1 整表订阅落点） | ③ 表 C1/C2（markToolCallLocalStatus 收敛时 ApprovalSection 的整表 sessions 订阅顺带按需收窄——**登记为顺带项**，主断言「4 处整表订阅 grep 归零」随本轨道相关文件同步核对） |
 | 30-03 批 7（03-步骤3/4 依赖批 1 产物） | 本轨道提交 D/E 依赖 T-A 批次 1 的 store action 基线（rebindSessionFolders 等），与 00 批次顺序一致 |
+| 02 评审 ③-P0-1（D2 消费方清单缺口） | ①-1-2 + 提交 B + ⑥ 6.1 D2 验收（**C-10**，v2 补齐 LiveTasksSection/BgTasksSection/PlansSection 文件面与 grep 零命中断言） |
+| 01 评审 B-P0-2 + 主控裁决（02-A2 承办） | ④ 4.3（**02 承办迁移、03/本轨道只做门禁**，互等表述消除） |
 
 ---
 
-（T-E 状态治理详细计划 v1 完——待主控派单；未决点：① useConnectionStatus 挂 useEngineState 还是独立 hook（推荐独立）；② S1 父工具卡 patch 复用 updateMessageToolCall 还是新建 patchToolCallPatch（执行时按既有 action 语义选）；③ :116 的 05/03 语义收口（05 验收）。）
+（T-E 状态治理详细计划 v2 完——待主控派单；未决点：① useConnectionStatus 独立 hook——01 评审 附④ 执行期小决策已定（推荐独立，避免 useEngineState 再挂一跳），执行按此；② S1 父工具卡 patch 复用 updateMessageToolCall 还是新建 patchToolCallPatch（执行时按既有 action 语义选）；③ :116 的 05/03 语义收口（05 验收）。）

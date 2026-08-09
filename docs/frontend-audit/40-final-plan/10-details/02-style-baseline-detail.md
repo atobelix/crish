@@ -1,9 +1,17 @@
 # T-B 样式基线轨道 · 详细执行计划（批次 2）
 
 > 产出：`docs/frontend-audit/40-final-plan/10-details/02-style-baseline-detail.md`
-> 输入：`00-master-plan.md`（批次 2 = 2.1 P0 兜底 / 2.2 token 真源 / 2.3 混色收敛）、`20-proposals/01-style-unification-proposal.md`（S0-S2）、`30-reviews/01~03`（R-08 定性修正、R-11 遗漏补充、工具策略建议）、`10-analysis/01-style-consistency-audit.md`（P0-1/2/3 证据）。
+> 输入：`00-master-plan.md`（批次 2 = 2.1 P0 兜底 / 2.2 token 真源 / 2.3 混色收敛 / 2.4 增补登记）、`20-proposals/01-style-unification-proposal.md`（S0-S2）、`30-reviews/01~03`（R-08 定性修正、R-11 遗漏补充、工具策略建议）、阶段 6 评审 `30-reviews/01-batch-structure-review.md` / `02-detail-technical-review.md` 与主控裁决（C-1/C-2/C-3）、`10-analysis/01-style-consistency-audit.md`（P0-1/2/3 证据）。
 > 性质：可派发执行的详细计划（任务粒度 = 单 Agent 单提交）；全部行号为 **2026-08-09 工作区实测**（行号漂移防护：语义定位优先，行号仅作定位提示）。
 > 声明：本文档为只读调研产物；所有"修复内容"为计划建议，执行时以门禁与视觉抽查为准。
+
+---
+
+## 修订日志
+
+| 版本 | 日期 | 修订要点 |
+|---|---|---|
+| v1 → v2 | 2026-08-09 | 吸收阶段 6 评审（`30-reviews/01-batch-structure-review.md` U-1~U-3 / `02-detail-technical-review.md` ②-9、③-P2-2）与主控裁决：**C-1** tint 基底定案 `text-primary`（否决 control-mix，2.2-1 基底决策 / R4）；**C-2** `--tint-strong` 取 12%（否决 14%，2.2-1 档位值决策）；**C-3** 28% 档 settings 高亮 5 处新增专用 `--tint-highlight: 28%`（不进三档；2.2-1 定义值 / 3.2 映射 / 3.3 人工组 / 3.5 工具 / 批 D / 5.3 抽查同步更新）；**数字修正**：混色档位 31→**32**（02 评审 ②-9/P2-2 复核，分布表 32 项每档处数全部精确）；mock 键 13→11 属 01-detail（B6）面，本文档无该数字，不涉及；其余吸收：混色基线 423/426 已按 426 口径（B-P2-2 与本表一致）、批次 2 增补子步 2.4 登记（B-P0-1，见 §0）、themeStore 串行登记对称性由 05 侧补声明（02 评审 ③-P1-3，本侧 C11 不变） |
 
 ---
 
@@ -12,10 +20,12 @@
 | 项 | 值 |
 |---|---|
 | 归属轨道 | T-B 样式基线（与 T-C 组件体系串行：tokens/样式基线先于组件样式接管） |
-| 子任务 | 2.1 P0 兜底（01-S0，R-08 口径）→ 2.2 token 真源 + 双层同源（01-S1）→ 2.3 混色 31 档收敛（01-S2） |
+| 子任务 | 2.1 P0 兜底（01-S0，R-08 口径）→ 2.2 token 真源 + 双层同源（01-S1）→ 2.3 混色 32 档收敛（01-S2）→ 2.4 01-S3-任务1 primary 定案（批次 2 增补，登记见下） |
 | 文件面冲突 | tokens.css 本批独占（批次 2 起至批 12 不交他人）；themeStore.ts 与 T-E 03-步骤2-D3（persistTheme 写端）同文件串行登记（C11），本批只动注入段（applyTheme），不碰 persist 写端 |
 | 提交纪律 | 每子任务独立提交；S1 的"静态新增"与"注入对齐"拆两提交（02 评审 P1-1）；CSS 内容改动与 `test:snapshots` 同提交（8e8c313c 教训） |
 | 派单前置 | `git status` 确认目标文件无并行域脏改动；当前已知脏文件（2026-08-09）：`messageSnapshotsBridge.ts`（R-10 前置清理，不属本批）、`usePreviewNavigation.ts`、`layoutRestorePolicy.ts`、Rust 域文件（严禁触碰） |
+
+**批次 2 增补登记（01 评审 B-P0-1，待 master plan v1.0 落地）**：批次 2 增补子步 **2.4「01-S3-任务1：primary 语义定案 + `--accent-inverted` token（仅定案与 token，不做 .ui-btn 退役删段）」**——与 S2 无文件面冲突（只动 tokens.css 与 Shell 变量段，tokens.css 本批独占成立）；任务明细见 `20-proposals/01-style-unification-proposal.md` S3-任务1，本 detail 不重复展开；T7 派单前主控确认该提交已合入。
 
 ---
 
@@ -111,11 +121,11 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 | 项 | 内容 |
 |---|---|
 | 文件 | `src/styles/tokens.css`（:root 组 + `[data-theme="dark"]` 组） |
-| 建议定义值 | `--tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);` `--tint-active: … 8% …;` `--tint-strong: … 12% …;`（**推荐 12%，对 S1 原文 14% 的修正建议**，见下方决策说明）；专用档：`--tint-focus-ring: 10%`、`--tint-divider: 12%`、`--tint-scrollbar-thumb: 18%`、`--tint-overlay: 25%`（全部 text-primary 基底、transparent 混合） |
-| 基底决策（修正 S1 原文） | S1 原文用 `--control-mix-color` 基底。**实读修正建议：改用 `--text-primary` 基底**——理由：①426 处消费点混色基底全部是 `var(--text-primary)`，tint 同基底则 S2 替换零基底变化，视觉差异仅来自档位收敛；②dark 分支无 `--control-mix-color` 定义（t:391-517），若 tint 用 control-mix，dark 下继承 light 暖棕值，hover 观感突变且需额外补值；③text-primary 在 dark 为 #f0f0f0，天然双主题自适应。**此修正改变 S1 原文，执行前请主控确认** |
-| 档位值决策 | 依据 426 处实测分布（见 ③-1）：hover 档主流 2-5.5%（中位 4%）；active 档主流 6-9%（中位 8%，8% 占 60 处为众数）；strong 档 10/11/15/16%（取 12% 为折中——S1 原文 14% 会使 105 处 10/11% 档变深 27%+，12% 时 10/11→12 微变、15/16→12 微变，梯度 4/8/12 更均匀；**12% vs 14% 请主控裁决，两值均可执行**） |
-| dark 分支 | 7 档 token dark 分支**复用同一 text-primary 基底定义**（淡染强度双主题一致，S1 原文口径），即 dark 块内再写一遍同值定义 |
-| 验收断言 | `rg "--tint-" tokens.css` = 14（7 档 × light/dark）；`rg "--tint-" src` 消费点 = 0（S2 前无消费） |
+| 建议定义值 | `--tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);` `--tint-active: … 8% …;` `--tint-strong: … 12% …;`（**12%——主控 C-2 已定案，否决 14%**）；专用档：`--tint-focus-ring: 10%`、`--tint-divider: 12%`、`--tint-scrollbar-thumb: 18%`、`--tint-overlay: 25%`、**`--tint-highlight: 28%`（C-3 新增：settings 选中/高亮强底专用，不进三档）**（全部 text-primary 基底、transparent 混合） |
+| 基底决策（修正 S1 原文，**主控已裁决：text-primary（C-1，否决 control-mix）**） | S1 原文用 `--control-mix-color` 基底，实读修正后由主控定案 **`--text-primary` 基底**——理由：①426 处消费点混色基底全部是 `var(--text-primary)`，tint 同基底则 S2 替换零基底变化，视觉差异仅来自档位收敛；②dark 分支无 `--control-mix-color` 定义（t:391-517），若 tint 用 control-mix，dark 下继承 light 暖棕值，hover 观感突变且需额外补值；③text-primary 在 dark 为 #f0f0f0，天然双主题自适应。**C-1 定案后此修正正式生效，执行不再需要主控确认** |
+| 档位值决策 | 依据 426 处实测分布（见 ③-1）：hover 档主流 2-5.5%（中位 4%）；active 档主流 6-9%（中位 8%，8% 占 60 处为众数）；strong 档 10/11/15/16%（**主控已裁决取 12%（C-2，否决 14%）**：14% 会使 105 处 10/11% 档变深 27%+；12% 时 10/11→12 微变、15/16→12 微变，梯度 4/8/12 更均匀） |
+| dark 分支 | 8 档 token dark 分支**复用同一 text-primary 基底定义**（淡染强度双主题一致，S1 原文口径），即 dark 块内再写一遍同值定义 |
+| 验收断言 | `rg "--tint-" tokens.css` = 16（8 档 × light/dark，含 C-3 新增 `--tint-highlight`）；`rg "--tint-" src` 消费点 = 0（S2 前无消费） |
 
 ### 任务 2.2-2：语义别名接线 + dark 缺口补齐
 
@@ -150,11 +160,11 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 
 ---
 
-## ③ 混色 31 档收敛（01-S2，426 处基线）
+## ③ 混色 32 档收敛（01-S2，426 处基线）
 
 ### 3.1 档位分布实测（2026-08-09 全仓扫描，口径 = 全部 css/tsx/ts）
 
-`color-mix(in srgb, var(--text-primary) X%, …)` 共 **426 处、31 个档位**（审计 423 处口径差 3，为 tsx/注入段差异；03-评审实测 426 一致）。按 X 值分布（括号为处数）：
+`color-mix(in srgb, var(--text-primary) X%, …)` 共 **426 处、32 个档位**（审计 423 处口径差 3，为 tsx/注入段差异；03-评审实测 426 一致；**02 评审 ②-9/P2-2 复核：分布表 32 项每档处数全部精确匹配，原「31 档」标签 off-by-one，已修正为 32 档**）。按 X 值分布（括号为处数）：
 
 ```
 1.2(2) 1.5(4) 2(18) 2.5(15) 3(22) 3.2(1) 3.5(16) 4(23) 4.5(3) 5(25) 5.5(14)
@@ -174,7 +184,8 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 | `--tint-divider` | 12 / 14 | 19 | 分隔线/描边语义（settings-models.css:2405 border、shell-scrollbar.css:46 thumb 14%、shell-sidebar.css:422/424 渐变 14%） |
 | `--tint-scrollbar-thumb` | 18 | 5 | 滚动条拇指（SettingsSelect.module.css:129 等） |
 | `--tint-overlay` | 20 / 22 / 25 | 10 | 遮罩/backdrop 语义 |
-| **人工复核组（不机械替换）** | 1.2(2) / 1.5(4) / 28(5) / 35(2) / 42(1) | 14 | 见 3.3 |
+| `--tint-highlight` | 28 | 5（脚本面 4 + :1225 人工 1） | settings 域选中/高亮强底 5 处同语义；**主控 C-3 新增专用档（不进三档）**；settings-models.css:1225 为 white 基底不入脚本（见 3.3） |
+| **人工复核组（不机械替换）** | 1.2(2) / 1.5(4) / 35(2) / 42(1) | 9 | 见 3.3 |
 | **排除组（不替换）** | — | 若干 | 见 3.4 |
 
 ### 3.3 例外保留/人工复核清单（宁慢勿错，单独提交）
@@ -183,12 +194,12 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 |---|---|---|---|
 | 1.2% | CheatsheetModal.module.css:62、shell-polish.css:1151 | 极淡，疑似键盘提示/幽灵底 | 人工看现场；若为"极淡装饰底"→ 不归 tint，改引 `--md-code-bg` 类语义 token 或**保留（登记例外）** |
 | 1.5% | DiffCard.module.css:714、CheatsheetModal.module.css:123、ModelsSettingsTab.module.css:720、settings-base.css:1823 | 极淡，md-code-bg 类（tokens.css:41 `--md-code-bg` 即 1.5% control-mix） | 改引用语义 token（`--md-code-bg` 或等价）而非 tint 档位 |
-| 28% | settings-base.css:1594、settings-models.css:1225（**white 基底**）、settings-plugins.css:84/173、settings-usage.css:67 | settings 域 5 处同语义（选中/高亮强底） | 方案 S1/S2 未覆盖此档——建议归 `--tint-strong` 或新增档位；**因 28% 与 12% 差距大，归 strong 有视觉变化，请主控裁决**（倾向：5 处同语义 → 语义化新档 `--tint-selected: 28%` 或直接保留） |
+| 28% | settings-base.css:1594、settings-models.css:1225（**white 基底**）、settings-plugins.css:84/173、settings-usage.css:67 | settings 域 5 处同语义（选中/高亮强底） | **主控已裁决（C-3）：新增专用档 `--tint-highlight: 28%`（不进三档，见 3.2）**——5 处全数归位：脚本面 4 处（transparent 基底）随批 D 替换，settings-models.css:1225 因 white 基底不入脚本，人工改引并确认基底变化观感 |
 | 35% | settings-models.css:387（背景）、shell-polish.css:885（**border**） | border 用法非背景淡染 | 不入 tint 族；border 强调建议改 `--hairline-strong` 或语义色，人工看现场 |
 | 42% | settings-models.css:1416（**color: 文字混 42% text-primary + text-tertiary**） | 文字色混合，非背景 | 不属于 tint 语义，保留或改 `--text-secondary` 强化，人工看现场 |
 | 30% | tokens.css:417（`--focus-ring-color` 定义行） | **token 定义，非消费点** | 不替换 |
 | 99999s | ChatComposer.module.css:105 | autofill hack（R-11） | 保留 + 注释（见 ④-R11-1） |
-| 非 transparent 基底 | settings-models.css:1225（`…28%, white`） | 与 tint 全系 transparent 基底不同 | 单独人工处理，不入脚本 |
+| 非 transparent 基底 | settings-models.css:1225（`…28%, white`） | 与 tint 全系 transparent 基底不同 | 语义同 28% 档（C-3 定案归 `--tint-highlight`），基底为 white 不入脚本——人工改引 `--tint-highlight` 并确认基底变化观感（改 transparent 后深浅微变） |
 
 ### 3.4 排除组（脚本红线：token 定义行与注入段）
 
@@ -205,11 +216,11 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 
 | 项 | 内容 |
 |---|---|
-| 输入 | 映射表 JSON（`scripts/tint-map.json`）：`{"2":"--tint-hover", …, "8.0":"--tint-active", …}`（**8 与 8.0 归一为同一目标**；1.2/1.5/28/35/42 不入表） |
+| 输入 | 映射表 JSON（`scripts/tint-map.json`）：`{"2":"--tint-hover", …, "8.0":"--tint-active", …, "28":"--tint-highlight", …}`（**8 与 8.0 归一为同一目标；28 入表 → `--tint-highlight`（C-3）**；1.2/1.5/35/42 不入表——28% 的 4 处 transparent 基底随批 D 自动命中，:1225 white 基底被主正则天然排除） |
 | 主正则 | `color-mix\(in srgb, var\(--text-primary\) (\d+(?:\.\d+)?)%,(transparent|var\(--bg-primary\))\)` —— 只匹配 text-primary 基底；捕获组 1 查表得 token；捕获组 2 限 transparent 或 bg-primary 基底（settings-models.css:1225 的 `white` 基底不匹配，天然排除） |
 | 排除 | ①行首匹配 `/^\s*--[\w-]+:/` 的定义行；②文件白名单：tokens.css、theme-dark.css、themeStore.ts（硬编码跳过） |
 | 参数 | `--dry-run`（默认，输出 diff 到 `scripts/out/tint-replace-<批次>.diff` 留档）、`--only <相对路径/目录>`（单批应用）、`--apply`（写盘，须配合 --only） |
-| 执行流（分阶段） | **阶段 1**：脚本 dry-run 全仓 → 输出全量 diff 留档（评审物）；**阶段 2**：按档位组 + 文件面分批（每批 5-10 文件，先大档后小档）：批 A `--tint-hover`（137 处）→ 批 B `--tint-active`（124）→ 批 C `--tint-strong`（116）→ 批 D 专用档（divider/scrollbar/overlay/focus-ring，34）→ 批 E 人工复核组（14 处逐处人工）；每批 `--only` 限定文件 → 人工扫 diff 上下文行（确认 hover/active 语义）→ 应用 + `test:snapshots` 同提交 → 下一批；**阶段 3**：全仓 grep 清零校验 |
+| 执行流（分阶段） | **阶段 1**：脚本 dry-run 全仓 → 输出全量 diff 留档（评审物）；**阶段 2**：按档位组 + 文件面分批（每批 5-10 文件，先大档后小档）：批 A `--tint-hover`（137 处）→ 批 B `--tint-active`（124）→ 批 C `--tint-strong`（116）→ 批 D 专用档（divider/scrollbar/overlay/focus-ring/highlight，39；highlight 的 :1225 white 基底处另随批 E 人工）→ 批 E 人工复核组（9 处逐处人工）；每批 `--only` 限定文件 → 人工扫 diff 上下文行（确认 hover/active 语义）→ 应用 + `test:snapshots` 同提交 → 下一批；**阶段 3**：全仓 grep 清零校验 |
 | 红线 | 禁止整仓一次性 `--apply`（无 --only 不写盘）；替换只动 `color-mix(...)` 表达式本身，不动选择器/属性名/其他值；`!important` 等修饰保留 |
 
 **分批提交粒度**：5 档位组 × 每批一个提交 + 人工复核组一个提交，共 ≤6 个提交；单批回退 = `git revert` 该提交。
@@ -273,7 +284,7 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 | S1-静态 | tint token 定义后无任何消费（零视觉变化确认） | computed style 抽查 3 组件 |
 | S1-注入对齐 | light/dark 各 3 组件 hover（侧栏、菜单项、tab）前后对比（控制-soft 百分比对齐的加深可接受性） | 截图对比 |
 | S2 | 5 代表组件：Tab hover、菜单项 hover、sort 行 hover、toast 按钮、滚动条拇指——替换前后 computed style 混色值差异 ≤1.5% 档位变化；深浅观感与原设计意图一致 | Playwright 计算样式 + 截图 |
-| S2-人工组 | 1.5% 极淡 4 处、28% settings 5 处、35% border、42% 文字色 | 逐处看现场 |
+| S2-人工组 | 1.5% 极淡 4 处、35% border、42% 文字色、28%→`--tint-highlight` 观感（settings 5 处，含 :1225 基底变化） | 逐处看现场 |
 
 ---
 
@@ -282,15 +293,15 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 | # | 风险 | 影响 | 缓解 / 回退 |
 |---|---|---|---|
 | R1 | **CSS Modules 哈希漂移**（任何 module.css 改动 → 快照红） | 每步都可能红测试 | 每批 css 改动与 `test:snapshots` 同提交；失败先对照 diff 确认仅哈希（8e8c313c 复用） |
-| R2 | **混色收敛视觉回归**（31 档→7 档，个别组件深浅突变） | 用户感知"样式变了" | 语义归位（非数值归位）+ 每批 5-10 文件 + playwright 计算样式比对 + 单批 `git revert`；1.2/1.5/28/35/42 人工组单独提交 |
+| R2 | **混色收敛视觉回归**（32 档→8 档，个别组件深浅突变） | 用户感知"样式变了" | 语义归位（非数值归位）+ 每批 5-10 文件 + playwright 计算样式比对 + 单批 `git revert`；1.2/1.5/35/42 人工组单独提交（28% 已定案入 `--tint-highlight` 档，仅 :1225 基底变化人工确认） |
 | R3 | **双层漂移复发**（改 tokens.css 不生效） | 排查困难 | 断言 ⑥⑦ 强制"注入名 ∈ 静态名 + 固定值同值"；注入段修改与静态定义同批提交 |
-| R4 | **tint 基底决策风险**（control-mix vs text-primary） | 决策错误 → S2 大范围视觉突变 | 本计划建议 text-primary 基底（理由见 2.2-1）；**执行前主控确认**；若维持 control-mix 基底，则须同时补 dark `--control-mix-color` 且 S2 视觉抽查扩面 |
+| R4 | **tint 基底决策风险**（control-mix vs text-primary） | 决策错误 → S2 大范围视觉突变 | **已定案 text-primary 基底（C-1），风险消除**；dark `--control-mix-color` 缺口仍按 2.2-2 任务②补齐（供依赖它的存量 token 解析），与基底决策解耦 |
 | R5 | **注入对齐微变被误判**（--bg-hover 3.5→4% 加深） | 与"无视觉变化"声明冲突 | 02 评审 P1-1 已裁定：注入对齐单列提交 + 明确"微变可接受" + 视觉抽查；与 2.2-2 的静态别名提交分离，可单独回退 |
 | R6 | **编码重写中途失败**（B 类乱码无法自动恢复） | 注释内容损失 | A 类转码保真；B 类人工重写（先备份原文件）；与快照同提交原子完成；`check-css-encoding.mjs` 防复发 |
 | R7 | **--z-drag-overlay-max 取值与后续批次冲突** | ghost 层被压 | 定义 99999 保持渲染值不变（零风险）；若 S4 inset 治理后层级重构，再评估档位 |
 | R8 | **与 T-E 的 themeStore 冲突**（03-步骤2-D3 persistTheme 写端） | 同文件双改 | 本批只动 applyTheme 注入段（:706-742/:773-795），persist 写端留给 T-E，串行登记（C11） |
 
-**回退总原则**：批次 2 内 3 子任务各自独立提交（2.2 再拆静态/注入两提交）；单步失败仅 `git revert` 该提交，不跨步回滚；token 等价新增步（2.2-1/2.2-4）与视觉可变步（2.2-2 别名、2.2-3 注入对齐、S2 替换）分离，保证"纯基建"提交可随时独立合入。
+**回退总原则**：批次 2 内 4 子任务各自独立提交（2.2 再拆静态/注入两提交；2.4 随批次 2 独立提交）；单步失败仅 `git revert` 该提交，不跨步回滚；token 等价新增步（2.2-1/2.2-4）与视觉可变步（2.2-2 别名、2.2-3 注入对齐、S2 替换）分离，保证"纯基建"提交可随时独立合入。
 
 ---
 
@@ -304,7 +315,7 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 | 2.1-4 | chart 色修正（改用法） | SettingsUsageTab.module.css | S0-B |
 | 2.1-5 | z 档位补全 + 99999 清理 | z-index.css + 2 module | S0-B |
 | 2.1-6 | .card-tab.active 死规则删除 | shell-workspace.css | S0-B |
-| 2.2-1 | tint 7 档 token 定义（light+dark） | tokens.css | S1-静态 |
+| 2.2-1 | tint 8 档 token 定义（light+dark，含 `--tint-highlight`） | tokens.css | S1-静态 |
 | 2.2-2 | 语义别名 + dark 缺口 | tokens.css | S1-静态 |
 | 2.2-3 | themeStore 注入段对齐 | themeStore.ts | S1-注入（独立） |
 | 2.2-4 | 静态等价默认定义补齐 | tokens.css | S1-静态 |
@@ -313,9 +324,9 @@ themeStore.ts 共 23 处 `setProperty`（:455 字体 + :706-769 主题段）。�
 | 2.3-2 | 批 A tint-hover（137 处） | 分 5-10 文件/批 | S2-A |
 | 2.3-3 | 批 B tint-active（124 处） | 同上 | S2-B |
 | 2.3-4 | 批 C tint-strong（116 处） | 同上 | S2-C |
-| 2.3-5 | 批 D 专用档（34 处） | 同上 | S2-D |
-| 2.3-6 | 批 E 人工复核组（14 处） | 逐处人工 | S2-E |
+| 2.3-5 | 批 D 专用档（39 处，含 highlight） | 同上 | S2-D |
+| 2.3-6 | 批 E 人工复核组（9 处） | 逐处人工 | S2-E |
 | R11-1 | ChatComposer 99999 注释说明 | ChatComposer.module.css | S0-A 或 S2 收尾 |
 | R11-2 | 6 文件编码清单登记 + check 脚本 | scripts/ 1 文件 | S7-6（批次 9，预置） |
 
-**合计 19 个任务**（本批可执行 18 个，R11-2 为预置登记）。
+**合计 19 个任务**（本批可执行 18 个，R11-2 为预置登记；批次 2 增补子步 2.4 的 01-S3-任务1 明细见 01 方案 S3，不列入本表）。
