@@ -180,6 +180,13 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 | `components/Settings*Tab.tsx` | 部分合并写；SettingsPanel 已用 storeAccess.setAppSettings |
 | `api/chatApi.demo.ts` | demo 脚本，非生产路径 |
 
+## 消息快照桥（P0-1 接线状态）
+
+- **接线状态**：`messageSnapshotsBridge.ts` 的 `bindMessageSnapshotsOps` 由 `bootstrapStores.ts` 装配真实 `MessageSnapshots` 单例（模块图稳定后注入，防 init 环）。`withdrawMessage`（撤回）保存倒向 delta、`deleteSession`（删除会话）清空对应栈——破坏性操作前的数据保护已生效。
+- **纯内存边界**：栈与容量全在 `MessageSnapshots` 的 `Map` 中，**无落盘，重启即失**；保护窗口仅限同会话（上限 5MB / 栈深 20 淘汰内建）。快照 ≠ 持久化备份。
+- **restore 侧为已知缺口**：`undo` / `peek` / `peekDelta` / `getStack` 生产代码零调用——当前是「只记不读」，用户暂无撤销能力；恢复 UI 待产品决策，未接线。
+- **防静默回归**：桥单测锁（`messageSnapshotsBridge.test.ts` 四断言）+ `AppBootstrap.test.ts` 装配效应断言，注入点丢失即红。
+
 ## 门禁
 
 ```bash

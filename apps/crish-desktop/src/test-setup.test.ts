@@ -42,12 +42,12 @@ describe('Tauri invoke mock 三态语义', () => {
     });
 
     it('invokeResult 包装层返回 ok 状态', async () => {
-      mockTauriCommand('md_render', async (args) => {
+      mockTauriCommand('core_md_render', async (args) => {
         const text = (args as { text?: string })?.text ?? '';
         return `<p>${text}</p>`;
       });
 
-      const res = await invokeResult<string>('md_render', { text: 'hi' });
+      const res = await invokeResult<string>('core_md_render', { text: 'hi' });
       expect(res.status).toBe('ok');
       if (res.status === 'ok') {
         expect(res.data).toBe('<p>hi</p>');
@@ -113,9 +113,9 @@ describe('Tauri invoke mock 三态语义', () => {
     });
 
     it('invokeResult 包装层返回 missing 状态', async () => {
-      mockTauriMissing('md_render');
+      mockTauriMissing('core_md_render');
 
-      const res = await invokeResult('md_render', { text: 'hi' });
+      const res = await invokeResult('core_md_render', { text: 'hi' });
       expect(res.status).toBe('missing');
     });
 

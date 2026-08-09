@@ -1,4 +1,6 @@
 import { invokeResult } from '../api/tauriInvoke';
+import { getWorkspacePath } from '../api/workspaceFsApi';
+import { logInternalError } from '../api/userFacingErrors';
 
 export interface TelemetryLog {
   timestamp: number;
@@ -17,8 +19,8 @@ class TelemetryMonitor {
   private _disposed = false;
   private errorHandler: ((e: ErrorEvent) => void) | null = null;
   private rejectionHandler: ((e: PromiseRejectionEvent) => void) | null = null;
-  // Use absolute path for local disk storage mapped to workspace
-  private logFilePath: string = 'c:/Software/conex/apps/crish-desktop/logs/telemetry_runtime.jsonl';
+  // 日志文件仅存文件名常量；完整路径在 flush 时按当前工作区派生（随工作区切换自然更新）
+  private logFileName: string = 'telemetry_runtime.jsonl';
 
   private constructor() {
     if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
@@ -100,11 +102,16 @@ class TelemetryMonitor {
     const linesToFlush = [...this.buffer];
     this.buffer = [];
     try {
-      const result = await invokeResult('perf_jsonl_append', {
-        path: this.logFilePath,
+      const root = getWorkspacePath()?.trim();
+      // 相对路径由 Rust 侧按 workspace_root 解析；无工作区时传 undefined → for_default_workspace 兜底
+      const logFilePath = root
+        ? `${root}/logs/${this.logFileName}`
+        : `logs/${this.logFileName}`;
+      const result = await invokeResult('core_jsonl_append', {
+        path: logFilePath,
         lines: linesToFlush,
         flush: true,
-        workspaceRoot: 'c:/Software/conex'
+        workspaceRoot: root || undefined,
       });
       if (result.status !== 'ok') {
         this.buffer.unshift(...linesToFlush);
@@ -113,6 +120,13 @@ class TelemetryMonitor {
         }
         if (result.status === 'error') {
           console.error('Failed to flush telemetry logs to native host:', result.message);
+        } else if (result.status === 'missing') {
+          // missing 不再静默：接线后此分支出现即代表 Rust 侧命令未注册
+          if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
+            logInternalError('[telemetry] core_jsonl_append missing — telemetry 落盘未生效', {
+              path: logFilePath,
+            });
+          }
         }
       }
     } catch (err) {

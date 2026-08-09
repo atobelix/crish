@@ -3,13 +3,14 @@
  * Stream C: markdownRenderAsync 异步渲染路径测试
  *
  * 覆盖三条关键路径：
- *   1. Rust md_render 命中：返回 Rust HTML，写入 LRU 缓存
+ *   1. Rust core_md_render 命中：返回 Rust HTML，写入 LRU 缓存
  *   2. Rust missing → 回退 worker pool（highlight.js 路径）
  *   3. LRU 命中时不再调任何 IPC（缓存优先）
  *
  * 同时验证 useAsyncMarkdownHtml hook 的 loading / skeleton 行为。
  */
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import { renderHook, waitFor } from '@testing-library/react';
 import {
   clearMarkdownHtmlCache,
@@ -51,13 +52,15 @@ describe('parseMarkdownToHtmlAsync', () => {
 
   it('Rust 命中：返回 Rust HTML 并写入 LRU 缓存', async () => {
     const rustHtml = '<p>rust rendered</p>';
-    mockTauriCommand('md_render', async (args) => {
+    mockTauriCommand('core_md_render', async (args) => {
       const text = (args as { text?: string })?.text ?? '';
       return `<p>rust rendered</p>`.replace('rust rendered', text === 'hi' ? 'rust rendered' : text);
     });
 
     const result = await parseMarkdownToHtmlAsync('hi');
     expect(result).toBe(rustHtml);
+    // 调用名 = 真实 wire 键（core_md_render），证明走 Rust 路径而非假键
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('core_md_render', { text: 'hi' });
     // 缓存写入
     expect(getMarkdownHtmlCache('hi')).toBe(rustHtml);
     // worker pool 不应被调用
@@ -65,7 +68,7 @@ describe('parseMarkdownToHtmlAsync', () => {
   });
 
   it('Rust missing → 回退 worker pool', async () => {
-    mockTauriMissing('md_render');
+    mockTauriMissing('core_md_render');
     const workerHtml = '<p>worker fallback</p>';
     scheduleSpy.mockResolvedValue(workerHtml);
 
@@ -85,7 +88,7 @@ describe('parseMarkdownToHtmlAsync', () => {
   it('LRU 命中时不调任何 IPC', async () => {
     // 预填缓存
     const cachedHtml = '<p>cached</p>';
-    mockTauriCommand('md_render', async () => {
+    mockTauriCommand('core_md_render', async () => {
       throw new Error('should not be called');
     });
     scheduleSpy.mockImplementation(() => {
@@ -93,20 +96,20 @@ describe('parseMarkdownToHtmlAsync', () => {
     });
 
     // 通过第一次调用建立缓存（先清除 mock 阻断，让 Rust 路径正常返回）
-    mockTauriCommand('md_render', async () => cachedHtml);
+    mockTauriCommand('core_md_render', async () => cachedHtml);
     const first = await parseMarkdownToHtmlAsync('cached-key');
     expect(first).toBe(cachedHtml);
 
     // 第二次调用：缓存命中，不触发任何 IPC
     scheduleSpy.mockReset();
-    mockTauriMissing('md_render'); // 即使 Rust missing 也不应被调用
+    mockTauriMissing('core_md_render'); // 即使 Rust missing 也不应被调用
     const second = await parseMarkdownToHtmlAsync('cached-key');
     expect(second).toBe(cachedHtml);
     expect(scheduleSpy).not.toHaveBeenCalled();
   });
 
   it('空字符串直接返回空（不调 IPC）', async () => {
-    mockTauriCommand('md_render', async () => {
+    mockTauriCommand('core_md_render', async () => {
       throw new Error('should not be called');
     });
     const result = await parseMarkdownToHtmlAsync('');
@@ -115,7 +118,7 @@ describe('parseMarkdownToHtmlAsync', () => {
 
   it('并发去重：同 raw 多次调用只触发一次 Rust IPC', async () => {
     let invokeCount = 0;
-    mockTauriCommand('md_render', async (args) => {
+    mockTauriCommand('core_md_render', async (args) => {
       invokeCount += 1;
       const text = (args as { text?: string })?.text ?? '';
       // 模拟异步延迟
@@ -151,7 +154,7 @@ describe('useAsyncMarkdownHtml', () => {
 
   it('缓存命中：同步返回缓存值，loading 始终为 false', async () => {
     // 预填缓存
-    mockTauriCommand('md_render', async () => '<p>cached</p>');
+    mockTauriCommand('core_md_render', async () => '<p>cached</p>');
     await parseMarkdownToHtmlAsync('cached-md');
 
     const { result } = renderHook(() => useAsyncMarkdownHtml('cached-md'));
@@ -161,7 +164,7 @@ describe('useAsyncMarkdownHtml', () => {
   });
 
   it('Rust 命中：loading=true → 异步返回 HTML → loading=false', async () => {
-    mockTauriCommand('md_render', async (args) => {
+    mockTauriCommand('core_md_render', async (args) => {
       const text = (args as { text?: string })?.text ?? '';
       return `<p>${text}</p>`;
     });
@@ -178,7 +181,7 @@ describe('useAsyncMarkdownHtml', () => {
   });
 
   it('Rust missing → 回退 worker：仍能返回 HTML', async () => {
-    mockTauriMissing('md_render');
+    mockTauriMissing('core_md_render');
     scheduleSpy.mockResolvedValue('<p>fallback</p>');
 
     const { result } = renderHook(() => useAsyncMarkdownHtml('fallback-md'));
@@ -191,7 +194,7 @@ describe('useAsyncMarkdownHtml', () => {
 
   it('markdown 变化时丢弃上一次异步结果（cancelledRef）', async () => {
     let rustInvokeCount = 0;
-    mockTauriCommand('md_render', async (args) => {
+    mockTauriCommand('core_md_render', async (args) => {
       rustInvokeCount += 1;
       const text = (args as { text?: string })?.text ?? '';
       await new Promise((r) => setTimeout(r, 20));

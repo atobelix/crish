@@ -154,7 +154,7 @@ export async function getRustCoreStatus(): Promise<RustCoreStatus | null> {
 // ===== Markdown API =====
 //
 // Stream A 在 Rust 侧已注册 5 个 Tauri command：
-//   md_render / md_render_batch / md_render_stream / highlight_code / md_clear_cache
+//   core_md_render / core_md_render_batch / core_md_render_stream / core_highlight_code / core_md_clear_cache
 // 全部走 tokio::task::spawn_blocking，HTML 输出 byte-for-byte 兼容现有 CSS 选择器，
 // ammonia 已在渲染末端 sanitize（组件层 DOMPurify 为冗余）。
 //
@@ -168,7 +168,7 @@ export async function getRustCoreStatus(): Promise<RustCoreStatus | null> {
  * 命令缺失或失败时返回 null，调用方需回退到 worker pool / JS 实现。
  */
 export async function renderMarkdown(text: string): Promise<string | null> {
-  const res = await invokeResult<string>('md_render', { text });
+  const res = await invokeResult<string>('core_md_render', { text });
   if (res.status === 'ok') return res.data;
   return null;
 }
@@ -183,7 +183,7 @@ export async function highlightCode(
 ): Promise<string | null> {
   const args: Record<string, unknown> = { code };
   if (lang != null && lang !== '') args.lang = lang;
-  const res = await invokeResult<string>('highlight_code', args);
+  const res = await invokeResult<string>('core_highlight_code', args);
   if (res.status === 'ok') return res.data;
   return null;
 }

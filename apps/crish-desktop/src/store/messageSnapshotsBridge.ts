@@ -3,6 +3,7 @@
  * sessionActions 只依赖本桥；bootstrapStores 在模块图稳定后注入真实 messageSnapshots。
  */
 import type { SessionMessage } from './types';
+import { logger } from '../services/LoggerService';
 
 /** 与 MessageSnapshots.save 入参对齐的最小形状（避免 sessionActions 静态 import MessageSnapshots） */
 export type SnapshotSaveEntry = {
@@ -29,6 +30,18 @@ export type MessageSnapshotsOps = {
 };
 
 let _ops: MessageSnapshotsOps | null = null;
+
+/**
+ * 注入真实 MessageSnapshots 适配器（bootstrapStores 在模块图稳定后调用）。
+ * 幂等：同实例重复绑定直接返回；不同实例重复注入以最后一次为准并告警。
+ */
+export function bindMessageSnapshotsOps(ops: MessageSnapshotsOps): void {
+  if (ops === _ops) return;
+  if (_ops !== null) {
+    logger.warn('[Snapshots] bridge already bound — replacing previous ops');
+  }
+  _ops = ops;
+}
 
 export function saveMessageSnapshot(
   sessionId: string,

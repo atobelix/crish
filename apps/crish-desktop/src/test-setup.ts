@@ -54,8 +54,8 @@ vi.mock('@tauri-apps/api/core', () => ({
  * 调用 invoke(cmd, args) 时，impl(args) 的返回值作为 ok 数据。
  *
  * @example
- *   mockTauriCommand('md_render', async (args) => `<p>${args.text}</p>`);
- *   const res = await invokeResult('md_render', { text: 'hi' });
+ *   mockTauriCommand('core_md_render', async (args) => `<p>${args.text}</p>`);
+ *   const res = await invokeResult('core_md_render', { text: 'hi' });
  *   // res = { status: 'ok', data: '<p>hi</p>' }
  */
 export function mockTauriCommand(
@@ -73,7 +73,7 @@ export function mockTauriCommand(
  * 仅用于测试用例需要明确表达 missing 语义时使用。
  *
  * @example
- *   mockTauriMissing('md_render');  // 显式标记 command 未注册
+ *   mockTauriMissing('core_md_render');  // 显式标记 command 未注册
  */
 export function mockTauriMissing(cmd: string): void {
   mockState.commands.set(cmd, { state: 'missing' });
@@ -87,8 +87,8 @@ export function mockTauriMissing(cmd: string): void {
  * 否则 invokeResult 会将其归为 missing。若需测试 missing，请用 mockTauriMissing。
  *
  * @example
- *   mockTauriError('md_render', new Error('invalid input'));
- *   const res = await invokeResult('md_render', { text: 'hi' });
+ *   mockTauriError('core_md_render', new Error('invalid input'));
+ *   const res = await invokeResult('core_md_render', { text: 'hi' });
  *   // res = { status: 'error', message: 'invalid input' }
  */
 export function mockTauriError(cmd: string, error: unknown): void {

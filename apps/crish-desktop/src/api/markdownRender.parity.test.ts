@@ -4,7 +4,7 @@
  *
  * Paths under test:
  *   A. TS sync: `parseMarkdownToHtml` (worker / offline fallback facade)
- *   B. Async + worker: `parseMarkdownToHtmlAsync` when Rust `md_render` is missing
+ *   B. Async + worker: `parseMarkdownToHtmlAsync` when Rust `core_md_render` is missing
  *      → worker pool → same TS parser (must equal A byte-for-byte)
  *   C. Structural contracts for completed-message HTML (CSS SoT classes)
  *
@@ -106,7 +106,7 @@ describe('markdown fixture parity (D0 completed-message)', () => {
       });
 
       it('async worker fallback (Rust missing) equals TS sync byte-for-byte', async () => {
-        mockTauriMissing('md_render');
+        mockTauriMissing('core_md_render');
         // Worker channel runs the same TS parser as sync (render-worker path).
         scheduleSpy.mockImplementation(
           async (_ch: string, type: string, payload: { raw?: string }) => {
@@ -124,12 +124,12 @@ describe('markdown fixture parity (D0 completed-message)', () => {
         assertStructural(asyncHtml, fixture, 'async-worker-fallback');
       });
 
-      it('async Rust path uses md_render HTML and still meets structure when mock is structural', async () => {
+      it('async Rust path uses core_md_render HTML and still meets structure when mock is structural', async () => {
         // Simulate a Rust-shaped response: same structure as TS for these fixtures,
         // proving the completed-message async path prefers Rust when present.
         const rustLike = parseMarkdownToHtml(fixture.md);
         clearMarkdownHtmlCache();
-        mockTauriCommand('md_render', async (args) => {
+        mockTauriCommand('core_md_render', async (args) => {
           const text = (args as { text?: string })?.text ?? '';
           expect(text).toBe(fixture.md);
           return rustLike;
@@ -163,7 +163,7 @@ describe('markdown fixture parity (D0 completed-message)', () => {
     expect(codeInner).toContain('-');
     expect(codeInner).not.toContain('<li');
 
-    mockTauriMissing('md_render');
+    mockTauriMissing('core_md_render');
     scheduleSpy.mockImplementation(
       async (_ch: string, _t: string, payload: { raw?: string }) =>
         parseMarkdownToHtml(payload.raw ?? ''),

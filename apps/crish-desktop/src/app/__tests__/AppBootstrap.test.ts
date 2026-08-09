@@ -24,8 +24,10 @@ interface EffectEntry {
 
 const APP_PATH = resolve(__dirname, '../AppBootstrap.ts');
 const ENGINE_PATH = resolve(__dirname, '../useEngineBootstrap.ts');
+const BOOTSTRAP_STORES_PATH = resolve(__dirname, '../../store/bootstrapStores.ts');
 const APP_SRC = readFileSync(APP_PATH, 'utf-8');
 const ENGINE_SRC = readFileSync(ENGINE_PATH, 'utf-8');
+const BOOTSTRAP_STORES_SRC = readFileSync(BOOTSTRAP_STORES_PATH, 'utf-8');
 
 function extractEffects(src: string, file: EffectEntry['file']): EffectEntry[] {
   const results: EffectEntry[] = [];
@@ -108,5 +110,11 @@ describe('AppBootstrap — 结构分析 (R9-T10 + shell hydrate)', () => {
   it('engine bootstrap 仍在 combined 前端', () => {
     expect(combined[0]?.file).toBe('useEngineBootstrap.ts');
     expect(combined[1]?.file).toBe('useEngineBootstrap.ts');
+  });
+
+  it('T-A-1：bootstrapStores 装配后快照桥已绑定（防注入点被误删）', () => {
+    expect(BOOTSTRAP_STORES_SRC).toContain('bindMessageSnapshotsOps(');
+    expect(BOOTSTRAP_STORES_SRC).toContain("new MessageSnapshots()");
+    expect(BOOTSTRAP_STORES_SRC).toContain("logger.warn('[Snapshots] bridge bind failed");
   });
 });

@@ -7,7 +7,9 @@ import { useWorkerStore } from './workerStore';
 import { usePermissionStore } from './permissionStore';
 import { useSettingsStore } from './settingsStore';
 import { initStoreAccess } from '../api/storeAccess';
-import { logger } from '../services/LoggerService';
+import { MessageSnapshots } from '../api/MessageSnapshots';
+import { bindMessageSnapshotsOps } from './messageSnapshotsBridge';
+import { logger, toErrMeta } from '../services/LoggerService';
 
 // ── Store update frequency logging ──
 const _counters = new Map<string, number>();
@@ -73,6 +75,25 @@ export function bootstrapStores(): () => void {
     useWorkspaceStore,
     useSettingsUiStore,
   );
+
+  // 快照桥接线（P0-1）：注入真实 MessageSnapshots 单例，恢复撤回/归档前的破坏性操作数据保护。
+  // 注入点固定本处（模块图稳定后，AppBootstrap 调用），禁止在 store 定义期 import MessageSnapshots（init 环）。
+  try {
+    const snapshots = new MessageSnapshots();
+    bindMessageSnapshotsOps({
+      save: (sessionId, entry, options) =>
+        snapshots.save(sessionId, entry, { afterMessages: options?.afterMessages ?? [] }),
+      clearSession: (sessionId) => snapshots.clearSession(sessionId),
+    });
+    if (process.env.NODE_ENV === 'development') {
+      logger.debug('[Snapshots] bridge bound', { module: 'store' });
+    }
+  } catch (err) {
+    logger.warn('[Snapshots] bridge bind failed — snapshot protection disabled', {
+      module: 'store',
+      err: toErrMeta(err),
+    });
+  }
 
   return () => {
     _teardownFrequencyLogging();
