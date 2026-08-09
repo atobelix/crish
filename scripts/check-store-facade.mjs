@@ -83,25 +83,24 @@ function scan() {
     if (rel.startsWith('components/ui/')) continue; // ui 原子层由 check:ui-layer 管
 
     const src = readFileSync(abs, 'utf8');
-    const lines = src.split(/\r?\n/);
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const matches = line.matchAll(IMPORT_RE);
-      for (const m of matches) {
-        const spec = m[1];
-        if (!spec || spec.startsWith('react') || spec.includes('@radix-ui')) continue;
-        const resolved = resolveSpecifier(spec, abs);
-        if (!resolved) continue;
-        const resolvedPosix = toPosix(resolved);
-        if (!resolvedPosix.startsWith(STORE_PREFIX)) continue;
-        if (isWhitelisted(resolved)) continue;
-        if (!violations[rel]) violations[rel] = [];
-        violations[rel].push({
-          line: i + 1,
-          importSpec: spec,
-          target: resolvedPosix.replace(srcPrefix + '/', ''),
-        });
-      }
+    const matches = src.matchAll(IMPORT_RE);
+    for (const m of matches) {
+      // 全文扫描（兼容多行 import `import {\n ... \n} from '...'`）；
+      // 行号 = match 起始位置前的换行数 + 1
+      const line = src.slice(0, m.index).split(/\r?\n/).length;
+      const spec = m[1];
+      if (!spec || spec.startsWith('react') || spec.includes('@radix-ui')) continue;
+      const resolved = resolveSpecifier(spec, abs);
+      if (!resolved) continue;
+      const resolvedPosix = toPosix(resolved);
+      if (!resolvedPosix.startsWith(STORE_PREFIX)) continue;
+      if (isWhitelisted(resolved)) continue;
+      if (!violations[rel]) violations[rel] = [];
+      violations[rel].push({
+        line,
+        importSpec: spec,
+        target: resolvedPosix.replace(srcPrefix + '/', ''),
+      });
     }
   }
   return { files: files.length, violations };

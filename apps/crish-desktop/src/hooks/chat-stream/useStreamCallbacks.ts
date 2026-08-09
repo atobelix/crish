@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import { useLayoutStore } from '../../store/layoutStore';
 import { getSessionById } from '../../store/sessionStore';
 import { streamAssistantResponseApi } from '../../api/chatApi';
 import type { StreamRequestOptions } from '../../api/chatApi';
@@ -9,14 +8,12 @@ import {
   sanitizeToolDisplayOutput,
 } from '../../api/toolFeedback';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
-import { normalizeAssistantTimeline } from '../../api/toolPresentation';
 import { checkAndAlertSilentComplete } from '../../api/silentComplete';
 import { recordStreamDiag } from '../../api/streamDiag';
 import {
   applyUsageDelta,
   fetchRunSnapshotUsage,
 } from '../../api/sessionEventHydrate';
-import { applySubagentEventToMessages } from '../../api/subagentTimeline';
 import { getActiveModelId } from '../../api/providerProfiles';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import {
@@ -399,12 +396,8 @@ export function useStreamCallbacks(
           if (entry && entry.assistantMsgId === assistantMsgId) {
             entry.runId = runId;
           }
-          // OPT-H4: immer recipe residual — intentional; LayoutFacade has no setState/patchState.
-          // Command reads use getCompositionRoot().layout.getState() (see above).
-          useLayoutStore.setState((state) => {
-            const s = state.sessionsById[sid];
-            if (s) s.engineLastRunId = runId;
-          });
+          // T-E 步骤 3（U1）：raw setState → setEngineLastRunId action
+          getCompositionRoot().layout.getState().setEngineLastRunId(sid, runId);
         },
         onThought: (thought) => {
           if (!assertLive()) return;
@@ -483,64 +476,22 @@ export function useStreamCallbacks(
         onSubagentEvent: (info) => {
           if (!assertLive()) return;
           if (!info.subagentId) return;
-          // OPT-H4: nested agent message immer patch (no facade method for this recipe).
-          useLayoutStore.setState((state) => {
-            const sess = state.sessionsById[sid];
-            const ag = sess?.agents?.find(
-              (a: SessionAgent) => a.id === info.subagentId
-            );
-            if (!ag) return;
-            ag.messages = applySubagentEventToMessages(
-              ag.messages || [],
-              info.event
-            );
-          });
+          // T-E 步骤 3（U2）：raw setState → applySubagentEventToAgent action
+          getCompositionRoot()
+            .layout.getState()
+            .applySubagentEventToAgent(sid, info.subagentId, info.event);
         },
         onSubagentEnded: (info) => {
           if (!assertLive()) return;
           if (!info.subagentId) return;
-          let parentToolCallId: string | undefined;
-          let summary = info.summary || '';
-          // OPT-H4: multi-field agent terminal patch via immer (intentional residual).
-          useLayoutStore.setState((state) => {
-            const sess = state.sessionsById[sid];
-            const ag = sess?.agents?.find(
-              (a: SessionAgent) => a.id === info.subagentId
-            );
-            if (!ag) return;
-            ag.status = info.status;
-            if (info.summary) ag.summary = info.summary;
-            ag.endedAt = Date.now();
-            parentToolCallId = ag.parentToolCallId;
-            if (!summary) summary = ag.summary || '';
-            for (const m of ag.messages || []) {
-              if (m.status === 'processing') m.status = 'completed';
-            }
-            const toolId = ag.parentToolCallId;
-            if (toolId && sess?.messages) {
-              for (const m of sess.messages) {
-                const tc = m.toolCalls?.find(
-                  (t: MessageToolCall) => t.id === toolId
-                );
-                if (!tc) continue;
-                const st = String(info.status || '');
-                const failed = /fail|error/i.test(st);
-                const stopped =
-                  st === 'stopped' || /cancel|stopp?ed|abort/i.test(st);
-                tc.status = failed || stopped ? 'error' : 'success';
-                const body =
-                  summary.trim() ||
-                  (failed
-                    ? '协作未完成'
-                    : stopped
-                      ? '协作已停止'
-                      : '协作已完成');
-                tc.output =
-                  body.length > 1200 ? body.slice(0, 1199) + '…' : body;
-              }
-            }
-          });
-          void parentToolCallId;
+          // T-E 步骤 3（U3）：raw setState → patchSessionAgentToolStatus action
+          //（agent 终态 + 时间线收口 + 父工具卡终态，与全局面 S3 共用同一 action）
+          getCompositionRoot()
+            .layout.getState()
+            .patchSessionAgentToolStatus(sid, info.subagentId, {
+              status: info.status,
+              ...(info.summary ? { summary: info.summary } : {}),
+            });
         },
         onTerminalLine: (line) => {
           if (!assertLive()) return;
@@ -807,17 +758,10 @@ export function useStreamCallbacks(
               );
               st.updateMessageThinking(sid, assistantMsgId, '');
             }
-            // OPT-H4: timeline normalize mutates msg in place — keep store.setState recipe.
-            useLayoutStore.setState((state) => {
-              const sess = state.sessionsById[sid];
-              const msg = sess?.messages.find(
-                (m: SessionMessage) => m.id === assistantMsgId
-              );
-              if (!msg || msg.sender !== 'assistant') return;
-              const n = normalizeAssistantTimeline({ ...msg });
-              msg.blocks = n.blocks;
-              msg.toolCalls = n.toolCalls;
-            });
+            // T-E 步骤 3（U4）：raw setState → updateMessageTimeline action
+            getCompositionRoot()
+              .layout.getState()
+              .updateMessageTimeline(sid, assistantMsgId);
           } catch {
             /* ignore */
           }
@@ -913,30 +857,17 @@ export function useStreamCallbacks(
                   );
                   // F5 P2 修复：并发增量不丢失——delta 走串行化合并入口，
                   // 不再「读陈旧快照 → 整体替换」（多 run 同刻收尾时后写者
-                  // 覆盖先写者、增量丢失）
+                  // 覆盖先写者、增量丢失）。D4 收敛：历史流水委托内建
+                  // （accumulateTokenUsage 单点完成 recordUsageDelta 委托）。
                   accumulateTokenUsage({
                     input: dIn,
                     output: dOut,
                     cost: dCost,
+                    model,
                     ...(dCacheRead > 0 ? { cacheRead: dCacheRead } : {}),
                     ...(dCacheWrite > 0 ? { cacheWrite: dCacheWrite } : {}),
                     ...(dSavedCost > 0 ? { savedCost: dSavedCost } : {}),
                   });
-                  try {
-                    const { recordUsageDelta } =
-                      await import('../../api/usageStore');
-                    recordUsageDelta({
-                      input: dIn,
-                      output: dOut,
-                      cost: dCost,
-                      model,
-                      ...(dCacheRead > 0 ? { cacheRead: dCacheRead } : {}),
-                      ...(dCacheWrite > 0 ? { cacheWrite: dCacheWrite } : {}),
-                      ...(dSavedCost > 0 ? { savedCost: dSavedCost } : {}),
-                    });
-                  } catch {
-                    /* ignore */
-                  }
                   applied = true;
                 }
               }
@@ -953,24 +884,14 @@ export function useStreamCallbacks(
                 const approxOut = Math.max(0, Math.ceil(asstText.length / 4));
                 const model = getActiveModelId() || 'unknown';
                 const dCost = estimateCostUsd(model, approxIn, approxOut);
-                // F5 P2 修复：估算兜底路径同样走串行化合并（并发不丢增量）
+                // F5 P2 修复：估算兜底路径同样走串行化合并（并发不丢增量）；
+                // D4 收敛：历史流水委托内建（同上，不再并列双写）
                 accumulateTokenUsage({
                   input: approxIn,
                   output: approxOut,
                   cost: dCost,
+                  model,
                 });
-                try {
-                  const { recordUsageDelta } =
-                    await import('../../api/usageStore');
-                  recordUsageDelta({
-                    input: approxIn,
-                    output: approxOut,
-                    cost: dCost,
-                    model,
-                  });
-                } catch {
-                  /* ignore */
-                }
               }
             } catch {
               /* ignore */
@@ -1057,19 +978,10 @@ export function useStreamCallbacks(
     }
     const stopPatches = buildTerminalToolPatches(asst?.toolCalls, 'stop');
     if (stopPatches.length) {
-      // OPT-H4: batch tool-terminal status via immer (no LayoutFacade.setState).
-      useLayoutStore.setState((state) => {
-        const msg = state.sessionsById[sid]?.messages.find(
-          (m: SessionMessage) => m.id === cur.assistantMsgId
-        );
-        if (!msg?.toolCalls) return;
-        for (const p of stopPatches) {
-          const tc = msg.toolCalls.find((t: MessageToolCall) => t.id === p.id);
-          if (!tc) continue;
-          tc.status = p.status;
-          tc.output = p.output;
-        }
-      });
+      // T-E 步骤 3（U5）：raw setState → applyToolCallPatches action（批量终态）
+      getCompositionRoot()
+        .layout.getState()
+        .applyToolCallPatches(sid, cur.assistantMsgId, stopPatches);
     }
     void (async () => {
       try {
@@ -1084,23 +996,14 @@ export function useStreamCallbacks(
         const approxOut = Math.max(0, Math.ceil(asstTxt.length / 4));
         const model = getActiveModelId() || 'unknown';
         const dCost = estimateCostUsd(model, approxIn, approxOut);
-        // F5 P2 修复：stop 兜底路径走串行化合并（并发不丢增量）
+        // F5 P2 修复：stop 兜底路径走串行化合并（并发不丢增量）；
+        // D4 收敛：历史流水委托内建（同上）
         accumulateTokenUsage({
           input: approxIn,
           output: approxOut,
           cost: dCost,
+          model,
         });
-        try {
-          const { recordUsageDelta } = await import('../../api/usageStore');
-          recordUsageDelta({
-            input: approxIn,
-            output: approxOut,
-            cost: dCost,
-            model,
-          });
-        } catch {
-          /* ignore */
-        }
       } catch {
         /* ignore */
       }

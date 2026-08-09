@@ -199,8 +199,9 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
   `rebindSessionFolders` / `setActiveWorkspaceIndex` / `collapseToolColumnPreserve` /
   `setGroupActiveCard` / `focusExistingPanelCard`（后两者经 workspace facade 转发）。
 - 数据面子面（taskEventHandlers，轮询快照 = 真源）**不落 store 不迁移**（维持现状）。
-- 组件直引 `store/` 由 `npm run check:store-facade` 度量（基线见
-  `scripts/components-store-direct-imports.json`；迁移由 02-A2 承办，归零后接 CI）。
+- 组件直引 `store/` 由 `npm run check:store-facade` 度量（T-C 批次 7.4 迁移归零；
+  白名单入口 = `store/index` barrel / `store/storeAccess` / `store/types`；
+  门禁已接 CI 快层 lint job，违规数必须为 0）。
 
 ## D10 登记待清理（legacy open-tabs map 双写）
 

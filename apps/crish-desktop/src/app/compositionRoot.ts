@@ -109,9 +109,12 @@ export type ShellFacade = {
  * **Not layout-tree.** Tree geometry stays on `useLayoutTreeStore` / layout-tree ops.
  * React 组件渲染仍应 `useLayoutStore(selector)`，不要经本门面订阅。
  *
- * **No setState / patchState here (OPT-H4).** Stream hot paths keep `useLayoutStore.setState`
- * immer recipes (nested session/agent/message patches). Command paths use named methods +
- * `getState()` for reads/actions — see `docs/plans/progress/opt-h4-layout-setstate-residual.md`.
+ * **No setState / patchState here（OPT-H4 已收敛，T-E 批次 5）。** 事件写入承载面
+ * 已补全（setEngineLastRunId / patchSessionAgentMessage / patchSessionAgentToolStatus /
+ * updateMessageTimeline / applyToolCallPatches / setMessageCacheMetrics /
+ * markToolCallLocalStatus / batchRespondToApproval / rebindSessionFolders 等），
+ * 生产代码 `*Store.setState` 由 check:store-writes 强制归零；命令路径使用
+ * 命名方法 + `getState()` 读/写（见 store/README.md「事件写入唯一通道」）。
  */
 export type LayoutFacade = {
   /** layoutStore.getState（等同 getLayoutState） */

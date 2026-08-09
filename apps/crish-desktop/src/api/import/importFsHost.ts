@@ -1,7 +1,7 @@
 /**
  * Thin host FS adapter for external import.
  *
- * Reuses existing Tauri commands `list_directory` / `read_file_content` with
+ * Reuses existing Tauri commands `workbench_list_directory` / `workbench_read_file_content` with
  * `workspaceRoot` set to the detected config root (`.claude` or `.codex`),
  * so reads stay allow-rooted and read-only from the product’s perspective.
  *
@@ -114,7 +114,7 @@ export function createTauriImportFs(): ImportFs {
   return {
     async listDir(dirPath: string, allowRoot: string): Promise<ImportDirEntry[]> {
       const res = await invokeResult<{ items?: Array<Record<string, unknown>> }>(
-        'list_directory',
+        'workbench_list_directory',
         {
           path: dirPath,
           workspaceRoot: allowRoot,
@@ -139,7 +139,7 @@ export function createTauriImportFs(): ImportFs {
       const res = await invokeResult<{
         content?: string;
         truncated?: boolean;
-      }>('read_file_content', {
+      }>('workbench_read_file_content', {
         path: filePath,
         maxLines,
         workspaceRoot: allowRoot,

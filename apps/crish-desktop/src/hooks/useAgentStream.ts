@@ -85,6 +85,8 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
 
   const patchSessionAgent = useLayoutStore((s) => s.patchSessionAgent);
   const appendSessionAgentMessage = useLayoutStore((s) => s.appendSessionAgentMessage);
+  const patchSessionAgentMessage = useLayoutStore((s) => s.patchSessionAgentMessage);
+  const finalizeAgentMessages = useLayoutStore((s) => s.finalizeAgentMessages);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -124,23 +126,14 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
     return ag?.subagentRunId ?? null;
   }, [parentSessionId, agentId]);
 
-  // OPT-H4: stream patches stay on useLayoutStore.setState immer recipes — LayoutFacade
-  // intentionally has no setState/patchState (see opt-h4-layout-setstate-residual.md).
-  // Reads for runId use getCompositionRoot().session.getState() above.
+  // T-E 步骤 3（A1）：流式 patch 走 patchSessionAgentMessage action（raw setState 清零）
   const buildPatchAsst = useCallback(
     (asstId: string) =>
       (fn: (m: SessionMessage) => void) => {
         if (!guard()) return;
-        useLayoutStore.setState((state) => {
-          const sess =
-            state.sessionsById[parentSessionId] ||
-            state.sessions.find((s) => s.id === parentSessionId);
-          const ag = sess?.agents?.find((a) => a.id === agentId);
-          const m = ag?.messages?.find((x) => x.id === asstId);
-          if (m) fn(m);
-        });
+        patchSessionAgentMessage(parentSessionId, agentId, asstId, fn);
       },
-    [parentSessionId, agentId, guard],
+    [parentSessionId, agentId, patchSessionAgentMessage, guard],
   );
 
   const buildStreamCallbacks = useCallback(
@@ -276,28 +269,9 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
   );
 
   const finalizeInFlight = useCallback(() => {
-    // OPT-H4: multi-message finalize recipe — intentional store.setState residual.
-    useLayoutStore.setState((state) => {
-      const sess =
-        state.sessionsById[parentSessionId] ||
-        state.sessions.find((s) => s.id === parentSessionId);
-      const ag = sess?.agents?.find((a) => a.id === agentId);
-      if (!ag?.messages) return;
-      for (const m of ag.messages) {
-        if (m.sender !== 'assistant') continue;
-        if (m.status === 'processing') {
-          m.status = 'completed';
-          if (m.thinking === '正在处理…') m.thinking = '';
-        }
-        for (const tc of m.toolCalls || []) {
-          if (tc.status === 'running' || tc.status === 'pending_approval') {
-            tc.status = 'error';
-            tc.output = tc.output && tc.output !== '执行中…' ? tc.output : '已停止';
-          }
-        }
-      }
-    });
-  }, [parentSessionId, agentId]);
+    // T-E 步骤 3（A2）：multi-message finalize 走 finalizeAgentMessages action
+    finalizeAgentMessages(parentSessionId, agentId);
+  }, [parentSessionId, agentId, finalizeAgentMessages]);
 
   const startFollowUp = useCallback(
     (text: string, asstId: string, onStreamDone?: () => void) => {

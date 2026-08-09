@@ -1,7 +1,72 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
+/**
+ * CSP 单一真源（06-步骤3 / T-G 批次 7.2）：
+ * - dev 宽松串 = 原 index.html 静态 meta 字面等价（HMR/供应商代理依赖，零变化）；
+ * - prod 严格串 = 原 tauri.conf.json security.csp 逐指令迁移，并做三处修正：
+ *   · script-src 追加内联主题/字体预载 script 的 sha256 hash（构建期自动计算）；
+ *   · 移除 'wasm-unsafe-eval'（当前无 wasm 依赖；引入时回填，见 07-engineering-detail 附录 B）；
+ *   · connect-src 含 http://ipc.localhost（tauri v2 IPC http 形态，现串一致）。
+ * 切换点登记（isolation pattern / wasm / 新远程面）见 07-engineering-detail 附录 B。
+ */
+const DEV_CSP =
+  "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+  "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+  "connect-src 'self' ipc: http: https: ws: wss:;";
+
+const PROD_CSP_BASE =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "font-src 'self' data:; img-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; " +
+  "media-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; " +
+  "connect-src 'self' ipc: http://ipc.localhost http://localhost:8765 http://127.0.0.1:8765 ws://localhost:8765 ws://127.0.0.1:8765; " +
+  "worker-src 'self' blob:; frame-src 'self' asset: http://asset.localhost https://asset.localhost; " +
+  "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'";
+
+function cspPlugin(): Plugin {
+  return {
+    name: 'crish-csp',
+    transformIndexHtml(html, ctx) {
+      // dev 有 server 上下文（vite serve），build 无 → 按 mode 注入（唯一真源两端成立）
+      const isDev = !!ctx.server;
+      let content: string;
+      if (isDev) {
+        content = DEV_CSP;
+      } else {
+        // 对 html 中无 src 的内联 <script> 计算 sha256（静态内容 hash 稳定；
+        // 未来内联 script 变更则 hash 自动跟随，无人工同步点）
+        const hashes: string[] = [];
+        const inlineRe = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+        let m: RegExpExecArray | null;
+        while ((m = inlineRe.exec(html))) {
+          hashes.push(
+            `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`,
+          );
+        }
+        content = PROD_CSP_BASE.replace(
+          "script-src 'self'",
+          `script-src 'self'${hashes.length ? ' ' + hashes.join(' ') : ''}`,
+        );
+      }
+      return {
+        html,
+        tags: [
+          {
+            tag: 'meta',
+            attrs: {
+              'http-equiv': 'Content-Security-Policy',
+              content,
+            },
+            injectTo: 'head',
+          },
+        ],
+      };
+    },
+  };
+}
 
 /**
  * Dev 代理：浏览器无法直连供应商 API（CORS）时，
@@ -193,7 +258,7 @@ export default defineConfig({
     'process.env': {},
     'process.platform': JSON.stringify(process.platform || 'win32'),
   },
-  plugins: [react(), crishHttpProxyPlugin(), nodeBuiltinStubPlugin()],
+  plugins: [react(), crishHttpProxyPlugin(), nodeBuiltinStubPlugin(), cspPlugin()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -228,6 +293,15 @@ export default defineConfig({
             if (n.includes('lucide-react')) return 'vendor-lucide';
             if (n.includes('highlight.js')) return 'vendor-highlight';
             if (n.includes('@fontsource')) return 'vendor-fonts';
+            // 06-步骤2（P2-4）：tiptap 族（含 @tiptap/pm 的 prosemirror）
+            // 与 xterm 族拆出主 chunk；运行时懒加载点归 07 性能轨道
+            // （T2-4 移交：ChatComposer.tsx:21 / CardPanelLayout.tsx:5）
+            if (n.includes('@tiptap')) return 'vendor-tiptap';
+            if (n.includes('@xterm')) return 'vendor-xterm';
+          } else if (process.env.CRISH_PROBE_APP) {
+            // TEMP 探针：列出进 App chunk 的 node_modules 模块（测后还原）
+            const pkg = n.replace(/.*node_modules[\\/]/, '').split(/[\\/]/)[0];
+            console.log('[PROBE]', pkg);
           }
           // Business-stable splits (async-heavy chat-bridge/stream cores)
           if (n.includes('/src/api/chatBridge')) return 'chat-bridge';

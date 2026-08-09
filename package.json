@@ -41,6 +41,8 @@
     "check:desktop": "npm --workspace @crish/crish-desktop run typecheck && npm run check:ui-layer",
     "check:ui-layer": "node scripts/check-ui-layer.mjs",
     "check:store-types": "node scripts/check-no-as-any-store.mjs",
+    "check:store-writes": "node scripts/check-no-raw-setstate.mjs",
+    "check:store-facade": "node scripts/check-store-facade.mjs",
     "check:conex-db-size": "node scripts/check-conex-db-size.mjs",
     "check:conex-db": "npm run check:conex-db-size && npm run test:conex-db",
     "test:conex-db": "cargo test -p conex-db",

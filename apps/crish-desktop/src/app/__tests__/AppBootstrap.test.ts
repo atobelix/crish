@@ -117,4 +117,14 @@ describe('AppBootstrap — 结构分析 (R9-T10 + shell hydrate)', () => {
     expect(BOOTSTRAP_STORES_SRC).toContain("new MessageSnapshots()");
     expect(BOOTSTRAP_STORES_SRC).toContain("logger.warn('[Snapshots] bridge bind failed");
   });
+
+  it('D5：AppBootstrap 无 layoutStore 自订阅（folder rebind 收敛为 action，防环纪律删除）', () => {
+    // rebind 直写 recipe 已迁 rebindSessionFolders action；prevSessions 引用
+    // 比较防环订阅必须整体删除（结构保障替代纪律）
+    expect(APP_SRC).not.toContain('useLayoutStore.subscribe');
+    expect(APP_SRC).not.toContain('prevSessions');
+    // 触发点 = 启动双 rAF + crish-project-changed 事件（订阅删除后仍完整）
+    expect(APP_SRC).toContain('crish-project-changed');
+    expect(APP_SRC).toContain('rebindSessionFolders');
+  });
 });

@@ -6,9 +6,16 @@
  * - 零 useState，零 useEffect 级联 bump，绝无 Lanes 级联死循环风险
  * - _setState 内做浅比较拦截，数据未变不通知组件
  * - document.visibilityState === 'hidden' 时跳过轮询
+ *
+ * ## 连接态（D2 单真源化，T-E 批次 5）
+ *
+ * `engineOnline` 字段已删除——引擎连接态真源 = `errorStore.connectionStatus`
+ * （transport → ConnectionManager → EventBus → ErrorStore 链路，含重连/失败语义）。
+ * 组件消费改走 `hooks/useConnectionStatus`（useSyncExternalStore(errorStore)）。
+ * 本模块只保留：activeRuns / pendingApprovals / bgTasks / workflows 轮询 + 数据面
+ * 路由装配（P2-7 单点装配保持：ensureDataPlaneRouter / ensureSubagentPlaneRouter）。
  */
 import { useSyncExternalStore } from 'react';
-import { getTransport } from '../api/transport';
 import {
   fetchEngineLiveStatus,
   type ActiveRunInfo,
@@ -30,7 +37,6 @@ export interface WorkflowRunInfo {
 }
 
 export interface EngineState {
-  engineOnline: boolean;
   activeRuns: ActiveRunInfo[];
   pendingApprovals: PendingApprovalInfo[];
   bgTasks: BackgroundTaskInfo[];
@@ -87,7 +93,6 @@ function _normalizeBgTasks(next: BackgroundTaskInfo[]): BackgroundTaskInfo[] {
 
 let _refCount = 0;
 let _intervalId: ReturnType<typeof setInterval> | null = null;
-let _unsubState: (() => void) | null = null;
 let _unsubDataPlane: (() => void) | null = null;
 let _unsubSubagentPlane: (() => void) | null = null;
 let _unsubDataPlaneRefresh: (() => void) | null = null;
@@ -97,7 +102,6 @@ type Listener = () => void;
 const _listeners = new Set<Listener>();
 
 let _state: EngineState = {
-  engineOnline: false,
   activeRuns: [],
   pendingApprovals: [],
   bgTasks: EMPTY_BG_TASKS,
@@ -115,7 +119,6 @@ function _setState(patch: Partial<EngineState>): void {
 
   // 浅等防护：如果核心字段完全一致，直接拦截，避免触发无意义的 React 组件重渲
   if (
-    _state.engineOnline === next.engineOnline &&
     _state.loading === next.loading &&
     _state.activeRuns === next.activeRuns &&
     _state.pendingApprovals === next.pendingApprovals &&
@@ -144,7 +147,6 @@ async function _tick(): Promise<void> {
       listBackgroundTasks().catch(() => EMPTY_BG_TASKS),
     ]);
     _setState({
-      engineOnline: live.connected,
       activeRuns: live.activeRuns,
       pendingApprovals: live.pendingApprovals,
       bgTasks: _normalizeBgTasks(bgs),
@@ -166,11 +168,7 @@ async function _loadWorkflows(): Promise<void> {
 }
 
 function _startSingleton(): void {
-  const transport = getTransport();
-  _setState({ engineOnline: transport.isReady() });
-  _unsubState = transport.onStatus((s) =>
-    _setState({ engineOnline: s === 'connected' })
-  );
+  // 连接态由 ErrorStore 链承接（D2 单真源），transport.onStatus 不再订阅。
   // L1 数据面路由生产激活（14-T7 装配点，A-04 邻接）：轮询层持有
   // ensureDataPlaneRouter() 引用 → transport.onMessage fanout 订阅生效，
   // task/timer/cron 十类事件经 dataPlaneRouter 消费（刷新信号 + 展示面数据源）。
@@ -195,10 +193,6 @@ function _stopSingleton(): void {
   if (_intervalId !== null) {
     clearInterval(_intervalId);
     _intervalId = null;
-  }
-  if (_unsubState !== null) {
-    _unsubState();
-    _unsubState = null;
   }
   if (_unsubDataPlaneRefresh !== null) {
     _unsubDataPlaneRefresh();

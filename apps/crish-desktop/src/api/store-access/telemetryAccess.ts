@@ -146,11 +146,17 @@ export function mergeTokenUsageDelta(
  *
  * 修复：模块级 promise 链串行化——每个 delta 在链上以「读最新状态 → 合并 →
  * 写回」原子完成；单次合并失败只影响该 delta（记 warn），不破坏后续累计。
+ *
+ * D4 收敛（T-E 批次 5）：历史流水 sink（usageStore.recordUsageDelta）委托内建——
+ * 调用方（useStreamCallbacks）不再并列双写；同事件双 sink 单点完成，
+ * usageStore 动态 import 失败静默（历史流水缺失不影响当前值累计）。
  */
 let tokenUsageChain: Promise<void> = Promise.resolve();
 
-export function accumulateTokenUsage(delta: TokenUsageDelta): Promise<void> {
-  const next = tokenUsageChain.then(() => {
+export function accumulateTokenUsage(
+  delta: TokenUsageDelta & { model?: string | null }
+): Promise<void> {
+  const next = tokenUsageChain.then(async () => {
     try {
       const cur = useSettingsStore.getState().tokenUsage;
       useSettingsStore
@@ -158,6 +164,13 @@ export function accumulateTokenUsage(delta: TokenUsageDelta): Promise<void> {
         .syncTelemetryData({ tokenUsage: mergeTokenUsageDelta(cur, delta) });
     } catch (err) {
       console.warn('[accumulateTokenUsage] tokenUsage 合并失败:', err);
+    }
+    // 历史流水双 sink（口径不同：当前值 vs 日/模型历史）；失败静默
+    try {
+      const { recordUsageDelta } = await import('../usageStore');
+      recordUsageDelta(delta);
+    } catch {
+      /* ignore */
     }
   });
   tokenUsageChain = next;

@@ -36,8 +36,25 @@ export type SessionTab = {
   pinned?: boolean;
 };
 
-/** 打开中的会话标签：folderKey → sessionId[]（打开顺序，稳定；点击不重排） */
+/**
+ * 打开中的会话标签：folderKey → sessionId[]（打开顺序，稳定；点击不重排） */
 export type OpenSessionTabsMap = Record<string, string[]>;
+
+/**
+ * legacy open-tabs map 同步统一入口（D10 收敛，T-E 批次 5）。
+ *
+ * 运行期双写路径（shell store ↔ legacy map）**保留**——跨窗口/重启标签恢复
+ * 依赖 legacy map 存活；本 helper 把「打开/聚焦会话 → 同步 legacy map」的散点
+ * 调用（shell store / workspaceChromeHooks 曾各自直调 openSessionTab）收为一处，
+ * 供后续「删除双写」分支（hydrate 覆盖后无消费方时）单一 grep 定位。
+ * 登记待清理：store/README.md D10 条目 + storeOwnership 注释。
+ */
+export function syncOpenTabsToLegacy(
+  workspaceKey: string,
+  sessionId: string,
+): string[] {
+  return openSessionTab(workspaceKey, sessionId);
+}
 
 /**
  * Base localStorage key for open session tabs map.

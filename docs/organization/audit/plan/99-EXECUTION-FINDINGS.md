@@ -22,6 +22,7 @@
 - **描述**：`useSessionStore.setState(_s => ({ sessions: [...s.sessions, …`——形参 `_s` 但引用 `s`，`ReferenceError: s is not defined`。git blame 确认 d82f7468 创建文件时即存在（"handles creating 1000 sessions" 用例从未通过）。根因：测试代码笔误（真实缺陷形态），非 PS-02 引入。已按 T2.1"扩前先确认四目录用例全绿"要求修复为 `_s.sessions`（最小改动，属测试代码修复，任务书允许）。
 - **建议**：无后续动作（已修复并随 T2.1 提交）。
 
+<<<<<<< Updated upstream
 ## P2 长尾收敛清单（knip warn 级，PS-02 T2.6 登记，不阻塞门禁）
 
 | 项                | 量  | 位置                                                                                                                                                                                                                                                       | 收敛建议                                                                          |
@@ -54,6 +55,8 @@
 - **处置**：T2.7/T2.8 提交在对方清理后重试（本地全程见证：staged 内容不变，仅等待钩子放行）。
 - **建议**：钩子层面将 `git diff --check` 收窄为暂存文件（lint-staged 已覆盖），或约定并行 agent 提交前自检；本次由对方自然清理解决。
 
+=======
+>>>>>>> Stashed changes
 ## F-004：T3.3 红测试与修复实现被并行 persist 任务整文件暂存吸收（PS-03 T3.3 执行期）
 
 - **发现日期**：2026-08-07（PS-03 T3.3 执行期）
@@ -61,6 +64,7 @@
 - **描述**：T3.3 执行时并行任务（P0-2/PERSIST-03，persist 批次）正以**未提交**状态占据同一文件族（sessions.rs 已含 run 豁免、orphan_grace_contract.rs 已含 v2 测试）。T3.3 的红测试（5 个用例，追加于文件尾）写好后，并行任务以整文件暂存提交（7e2cde0f）将**实现（run 豁免 + pending 豁免 + hydrated 豁免）与 T3.3 全部测试一并吸收入库**——两段提交（红测试单独一笔）无法按字面执行。红证据改在修复前 HEAD（d4d8853b）临时 worktree 上实跑确认：7 个保护用例全红（含 T3.3 三个主用例），9 个既有宽限期用例全绿。
 - **建议**：同文件族任务派发时明确「提交归属」（谁 commit、何时 commit），或强制串行；并行批次的整文件暂存会吞掉相邻任务的未提交测试，验收方应接受「红证据 + 同提交含测试」的替代证据链。
 
+<<<<<<< Updated upstream
 ## F-008：并行 markdown-editor agent 提交与 T3.2 amend 碰撞 + lint-staged 备份对象可恢复（PS-03 T3.2 执行期）
 
 - **发现日期**：2026-08-08（PS-03 T3.2 执行期）
@@ -68,11 +72,15 @@
 - **描述**：① T3.2 提交期间并行 markdown-editor agent 仍活跃（F-007 同源）——其 `feat(editor): rewrite core architecture...` 提交（b542ba37）恰在本人 `git commit --amend` 前一瞬落 HEAD，被 amend 整体替换（孤儿化，reflog 可查）；其工作区文件随后被本人 `Set-Content -NoNewline` 误写成一整行（683 行合并为 1 行，内容破坏）。② 恢复路径验证：**lint-staged「automatic backup」stash（钩子成功后即 drop，但 commit 对象以悬垂形式保留）可作恢复源**——`git cat-file -t <hash>` 确认后 `git restore --worktree --source=<hash> -- <path>` 无损恢复（本次用 47d7fb76 恢复 EditorStore.ts，diff 与备份仅差 2 行行尾空白）。③ F-007 再现：并行 agent 未提交文件（EditorStore.ts/measure.ts）行尾空白再次阻塞裸 `git diff --check`，本次以字节级正则（UTF-8 无 BOM 保编码、保行尾）仅剥离行尾空白解除阻塞。
 - **处置**：T3.2 红绿两段提交已完成（bbf97172/b815efb7，1 文件各）；b542ba37 内容经备份对象恢复至工作区（未入库，归属并行 agent）；未改他人文件语义。
 - **建议**：① 共享仓库下禁止 `--amend`/`--reset` 前不核对 `git log -1`（HEAD 可能已被并行进程移动）；「提交归属」派单约束（F-004 建议）落实前，改提交用 `git commit --only <paths>` 或提交前临时 unstage 非本职文件。② lint-staged 备份对象是钩子前工作区/索引状态的可靠快照，误写文件时优先查 `git fsck --lost-found`/悬垂 stash 恢复，勿手写整文件。③ 钩子建议（F-007 已提）：`git diff --check` 收窄为 `--cached`。
+=======
+## F-005：T3.3 子项 touch_session 生产接线声明留登记（PS-03 T3.3 执行期）
+>>>>>>> Stashed changes
 
 - **发现日期**：2026-08-07（PS-03 T3.3 执行期）
 - **位置**：`crates/conex-db/src/sessions.rs:283-297`（touch_session 现状：仅 tests.rs 使用，生产零调用——R2 §3 结构性缺位）
 - **描述**：任务书 T3.3 子项「touch 接线（二阶段可选）」：引擎侧 run 启动/终态落库处（crates/orchestrator run 写入面）与前端活跃会话心跳调用 `touch_session`。实现轮评估：接线面横跨 crates/orchestrator 与前端，超出本任务「只改 conex-db」约束，按任务书条款声明留登记。**必做项（删除条件防护）已落地**：两分支 DELETE 共用 protected 条件（hydrated 豁免 + 非终态 run 豁免 queued/initializing/running/awaiting-approval/completing/cancelling + 未决 pending_inputs 豁免，sessions.rs:235-247），与宽限期 `updated_at < grace_cutoff` AND 协同。
 - **建议**：后续批次接线 touch 时，注意与 upsert_session_entry（前端 350ms persist 顺带刷新 updated_at）的语义叠加；接线后 `touch_session` 才承担「运行期活跃」刷新职责。
+<<<<<<< Updated upstream
 
 ## F-009：T3.5 验证窗口内并行 agent 未提交 WIP 两度打破共享依赖编译（PS-03 T3.5 执行期）
 
@@ -266,3 +274,5 @@ pm run typecheck 恢复 EXIT=0；验收方注意快层门禁以并行会话清�
 - **描述**：F-013 红测试（`flow_spawn_row_carries_flow_node_id_for_load_reverse_check` + `non_flow_spawn_preserves_user_description`，约 100 行）写好后，红证据已实测采集（`left: ""` vs `right: "node-a"`，flow 路径行 description 落库空串）。提交前并行 markdown-editor 批次的 37153189 整文件暂存把 subagent_spawner.rs（98 行，含全部红测试）一并吸收入库——与 F-004/F-008/F-011 完全同型事故（git add 前未核对他人未提交文件）。红测试内容完整入库无损。
 - **处置**：绿修复（row_for description = flow_node_id.or(description)）单独提交 3b3f4805（1 文件 14+/1-）；验收以「红证据实测 + 红测试在 37153189 + 绿提交 3b3f4805」为替代证据链（F-004 先例口径）。
 - **建议**：同 F-004/F-008/F-011——「同文件族提交归属」约束（谁 commit、何时 commit）再次落空；并行批次 `git add` 前核对 `git status` 无他人未提交改动；钩子 `git diff --check` 收窄为 `--cached`（F-007 已提，四度复现仍未落实）。
+=======
+>>>>>>> Stashed changes

@@ -139,7 +139,7 @@ export function deleteSessionBody(sessionId: string): void {
     // P18：agents 镜像删除时同步清截断标志，防残留误报
     clearAgentsTruncation(id);
   } catch {
-    /* ignore */
+    /* swallow-ok: 删除镜像尽力而为，失败残留无害键 */
   }
 }
 

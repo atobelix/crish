@@ -217,6 +217,16 @@ const FACADE_REQUIRED = [
       { re: /export\s+function\s+getDropPreview\b/, label: 'getDropPreview' },
       { re: /export\s+function\s+setGroupActiveCard\b/, label: 'setGroupActiveCard' },
       { re: /export\s+function\s+focusExistingPanelCard\b/, label: 'focusExistingPanelCard' },
+      // P3-4（T-E 批次 5）：facade 仅转发真 action（workspaceActions 定义），
+      // facade 层自身不得再出现 setState recipe
+      {
+        re: /getWorkspaceStoreState\(\)\.setGroupActiveCard\b/,
+        label: 'setGroupActiveCard forwards to workspaceActions action',
+      },
+      {
+        re: /getWorkspaceStoreState\(\)\.focusExistingPanelCard\b/,
+        label: 'focusExistingPanelCard forwards to workspaceActions action',
+      },
       { re: /export\s+function\s+setDropPreview\b/, label: 'setDropPreview' },
       { re: /export\s+function\s+useWorkspaceField\b/, label: 'useWorkspaceField' },
     ],

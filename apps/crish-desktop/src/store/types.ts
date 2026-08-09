@@ -597,3 +597,13 @@ export interface DropPreviewState {
   height?: number;
   className?: string;
 }
+
+// ── T14 迁移面补全（components 直引 store/ 的白名单类型入口）──────────────
+// components 的类型导入统一走本文件（05-detail ④ 白名单三入口之一）：
+// 此前经 '../store/layoutStore' 等直引的类型在此集中 re-export，
+// 避免 components 触碰 store 内部模块路径。
+
+export type { LayoutLeaf, LayoutNode, FlatBranch, DropDirection } from './layout-tree/types';
+export type { Rect } from './layout-tree/dropDetection';
+export type { LayoutStore } from './layoutStore';
+export type { DraggedTabState } from './workspaceStore';

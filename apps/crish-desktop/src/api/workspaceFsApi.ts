@@ -101,7 +101,7 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
   const path = resolveWorkspacePath(dirPath || root);
   if (!path) throw new Error('未打开项目工作区，请先选择项目');
 
-  const res = await invokeResult<{ items?: Array<Record<string, unknown>> }>('list_directory', {
+  const res = await invokeResult<{ items?: Array<Record<string, unknown>> }>('workbench_list_directory', {
     path,
     workspaceRoot: workspaceRootArg(),
   });
@@ -153,7 +153,7 @@ export async function readTextFile(
     lineCount?: number;
     line_count?: number;
     truncated?: boolean;
-  }>('read_file_content', {
+  }>('workbench_read_file_content', {
     path,
     maxLines: lines,
     workspaceRoot: workspaceRootArg(),
@@ -187,7 +187,7 @@ export async function writeTextFile(
   overwrite = false,
 ): Promise<void> {
   const path = resolveWorkspacePath(filePath);
-  const res = await invokeResult('write_file_content', {
+  const res = await invokeResult('workbench_write_file_content', {
     path,
     content,
     overwrite,
