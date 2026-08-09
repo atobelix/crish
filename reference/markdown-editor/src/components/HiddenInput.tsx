@@ -1,8 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   useEditorStore,
-  findNextGraphemeBoundary,
-  findPrevGraphemeBoundary,
   snapToGraphemeBoundary,
   type EditorStore,
 } from '../core/EditorStore';
@@ -372,7 +370,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
   const deleteText = editorStore((state) => state.deleteText);
   const setCursorPos = editorStore((state) => state.setCursorPos);
   const setSelection = editorStore((state) => state.setSelection);
-  const lines = editorStore((state) => state.lines);
+  // R6-P1 物化惰性化：不再订阅物化视图 state.lines（读取会触发惰性
+  // 物化——append@1M 流式期间每次 set 的选择器求值 O(全文) concat），
+  // 改为订阅双段存储引用信号 + 行数（与 MarkdownEngine R3-B1 同款）：
+  // 任何内容变更（编辑/append/undo/flush）都至少换其一新引用，
+  // 覆盖原物化视图引用变化的触发语义；行内容/行数读取经访问器。
+  const mainLines = editorStore((state) => state.mainLines);
+  const streamTail = editorStore((state) => state.streamTail);
+  const lineCount = editorStore((state) => state.getLineCount());
   const selectionStart = editorStore((state) => state.selectionStart);
   const selectionEnd = editorStore((state) => state.selectionEnd);
   const [coords, setCoords] = useState<{
@@ -467,7 +472,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
     return () => {
       if (rAF) cancelAnimationFrame(rAF);
     };
-  }, [cursorPos, selectionStart, selectionEnd, containerRef, lines]);
+  }, [cursorPos, selectionStart, selectionEnd, containerRef, mainLines, streamTail, lineCount]);
 
   // —— a11y 光标行 value 同步 + aria-live 播报（R4-H，04 §6.3 短程）——
   // prevLinesRef：本次渲染「行视图是否变化」判据（导航 = 行未变光标动；
@@ -475,7 +480,12 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
   // 同步保持「提交后 value 清空」的空缓冲不变量（浏览器在空缓冲上插入
   // 本次输入，input 整体提交）；播报避免逐字轰炸（SR 对字符输入有自身
   // 朗读通道）。
-  const prevLinesRef = useRef<string[] | null>(null);
+  // R6-P1：判据由「物化 lines 引用」改为「双段引用 + 行数」组合信号
+  // （任何内容变更必然换 mainLines/streamTail 引用或改行数——与物化
+  // 视图引用变化语义等价，但零物化触发）。
+  const prevMainLinesRef = useRef<string[] | null>(null);
+  const prevStreamTailRef = useRef<string[] | null>(null);
+  const prevLineCountRef = useRef<number | null>(null);
   /** 播报去重键：上一次播报的「行:列」（同位置不重复） */
   const lastAnnouncePosRef = useRef('');
   /** 播报节流：上一次播报时间戳（ANNOUNCE_THROTTLE_MS 窗口内不推送） */
@@ -489,8 +499,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     const linesChanged =
-      prevLinesRef.current !== null && prevLinesRef.current !== lines;
-    prevLinesRef.current = lines;
+      prevMainLinesRef.current !== null &&
+      (prevMainLinesRef.current !== mainLines ||
+        prevStreamTailRef.current !== streamTail ||
+        prevLineCountRef.current !== lineCount);
+    prevMainLinesRef.current = mainLines;
+    prevStreamTailRef.current = streamTail;
+    prevLineCountRef.current = lineCount;
     if (linesChanged) return;
     // 合成期（含 compositionend 后 50ms pending flush 窗口）：value 是
     // 组合缓冲载体（R4-C 状态机），同步/播报一律跳过，绝不覆盖缓冲
@@ -522,7 +537,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
     // 是新对象（光标移动重测），若直接依赖会导致本 effect 在坐标重渲染时
     // 重复执行、linesChanged 判据失效（编辑提交后被误同步）；布尔切换只在
     // textarea 挂载/卸载时变化（首帧 coords null → 挂载后补一次同步）
-  }, [cursorPos, selectionStart, selectionEnd, lines, textareaMounted]);
+  }, [cursorPos, selectionStart, selectionEnd, mainLines, streamTail, lineCount, textareaMounted]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -893,9 +908,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
 
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const text = editorStore.getState().getText();
     const { selectionStart, selectionEnd } = editorStore.getState();
     const cursorPos = editorStore.getState().cursorPos;
+    // R6-P1 ArrowLeft 根治：不再无条件全文 getText()（O(全文) join——
+    // 100 万行文档每次按键 14.5ms 的根因之一）。改为各分支按需取文本：
+    // - 左右方向键走行文本模式 moveGrapheme（O(行)，不触碰全文）；
+    // - Home/End 经 LineOffsetTree 定位（O(log n)）；
+    // - 仅真正需要全文的分支（行复制/垂直导航/全选）按需取 getText()。
 
     // Undo / Redo
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -920,7 +939,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
       if (selectionStart === selectionEnd) {
         e.preventDefault();
-        writeClipboardText(linewiseCopyContent(text, cursorPos));
+        // 整行复制需要全文行区间（linewiseCopyContent 全文语义）；
+        // 非热路径，按需取全文
+        writeClipboardText(
+          linewiseCopyContent(editorStore.getState().getText(), cursorPos)
+        );
       }
       return;
     }
@@ -932,7 +955,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
 
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      const newPos = findPrevGraphemeBoundary(text, cursorPos);
+      // R6-P1 行文本模式 grapheme 移动：store.moveGrapheme 内部定位光标
+      // 所在行（getLine + LineOffsetTree）+ 行内 grapheme 边界 + 行边界
+      // 显式跨行——不再全文 getText() join（100 万行文档 14.5ms → <1ms）；
+      // 语义与全文模式等价（行首向左 = 上一行行尾、行尾向右 = 下一行行首）
+      const newPos = editorStore.getState().moveGrapheme(cursorPos, 'left');
       if (e.shiftKey) {
         // R4-B 接线：Shift+Left 扩展 = anchor 不动、head 左移（grapheme 粒度）。
         // 删除旧启发式 selectionStart === cursorPos（光标离开选区端后即失效，
@@ -945,7 +972,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       }
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      const newPos = findNextGraphemeBoundary(text, cursorPos);
+      // R6-P1：同 ArrowLeft——行文本模式 moveGrapheme（见上注释）
+      const newPos = editorStore.getState().moveGrapheme(cursorPos, 'right');
       if (e.shiftKey) {
         // R4-B 接线：Shift+Right 扩展（anchor 不动、head 右移），语义同上
         editorStore.getState().extendSelectionByDirection('right');
@@ -1018,7 +1046,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       }
     } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      setSelection(0, text.length);
+      // R6-P1：全选边界用 textLength（O(1)），不再全文 getText()
+      setSelection(0, editorStore.getState().textLength);
     } else if (e.key === 'Tab') {
       e.preventDefault();
       const state = editorStore.getState();
@@ -1039,7 +1068,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
 
         const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
         const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
-        const endLineLength = state.lines[endLineIdx].length;
+        // R6-P1：行内容经访问器读取（不再读物化视图 state.lines）
+        const endLineLength = state.getLine(endLineIdx)?.length ?? 0;
 
         const blockStart = startLineOffset;
         const blockEnd = endLineOffset + endLineLength;
@@ -1058,7 +1088,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
           if (selStart !== selEnd) {
              newBlockText = blockText.split('\n').map(line => '  ' + line).join('\n');
           } else {
-             const currentLine = state.lines[startLineIdx];
+             // R6-P1：行内容经访问器读取（不再读物化视图 state.lines）
+             const currentLine = state.getLine(startLineIdx) ?? '';
              if (/^(\s*)([-*+]|\d+\.)\s+/.test(currentLine)) {
                newBlockText = '  ' + currentLine;
                cursorDelta = 2;
@@ -1089,6 +1120,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
           containerRef.current
         );
         if (targetIdx !== null) {
+          // 垂直导航列保持的 grapheme 吸附：目标行来自 DOM 测量；
+          // 非左右方向键热路径，按需取全文（保持既有语义零变化）
+          const text = editorStore.getState().getText();
           const newPos = snapToGraphemeBoundary(text, targetIdx);
           if (e.shiftKey) {
             // R4-B 垂直扩展登记：行级——head 移到目标行（列保持由
@@ -1109,6 +1143,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
           containerRef.current
         );
         if (targetIdx !== null) {
+          const text = editorStore.getState().getText();
           const newPos = snapToGraphemeBoundary(text, targetIdx);
           if (e.shiftKey) {
             // R4-B 垂直扩展登记：行级——head 移到目标行，anchor 保持不动
@@ -1120,13 +1155,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       }
     } else if (e.key === 'Home') {
       e.preventDefault();
-      let lineStart = 0;
-      for (let i = cursorPos; i >= 0; i--) {
-        if (i === 0 || text[i - 1] === '\n') {
-          lineStart = i;
-          break;
-        }
-      }
+      // R6-P1：行首定位经 LineOffsetTree（O(log n)），不再全文扫描 \n
+      const s = editorStore.getState();
+      const lineIdx = s.lineOffsets.findLineIndex(cursorPos);
+      const lineStart = s.lineOffsets.getOffset(lineIdx);
       if (e.shiftKey) {
         setSelection(
           selectionStart === cursorPos ? lineStart : selectionStart,
@@ -1136,13 +1168,12 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       fastCursorMove(lineStart);
     } else if (e.key === 'End') {
       e.preventDefault();
-      let lineEnd = text.length;
-      for (let i = cursorPos; i < text.length; i++) {
-        if (text[i] === '\n') {
-          lineEnd = i;
-          break;
-        }
-      }
+      // R6-P1：行尾定位经 LineOffsetTree + getLine（O(log n) + O(行)），
+      // 不再全文扫描 \n（行尾 = 行首 + 行文本长度，不含换行符）
+      const s = editorStore.getState();
+      const lineIdx = s.lineOffsets.findLineIndex(cursorPos);
+      const lineStart = s.lineOffsets.getOffset(lineIdx);
+      const lineEnd = lineStart + (s.getLine(lineIdx) ?? '').length;
       if (e.shiftKey) {
         setSelection(
           selectionStart === cursorPos ? lineEnd : selectionStart,

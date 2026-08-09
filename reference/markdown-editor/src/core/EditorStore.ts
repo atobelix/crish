@@ -539,10 +539,11 @@ export interface EditorState {
   streamTailFenceLines: number[]; // 尾段内 fence 相对行号
 
   lineOffsets: LineOffsetTree;
-  // 兼容视图（数据字段，set 时经 dispatchSet 显式物化）：未切换访问器的
-  // 消费方（LineItem 渲染 / virtualizer count / 既有测试）仍可读 lines
-  // 全量。尾段为空时视图 = 主数组引用（零拷贝）；尾段非空时一次性
-  // concat 物化（过渡期成本，R2-BD 切换访问器后从热路径移除）。
+  // 兼容视图（R6-P1 惰性化）：lines/codeBlockState/fenceLines 已从「set 时
+  // 物化的数据字段」改为「原型链惰性 getter」（见 lazyViewProto）——set 热
+  // 路径零物化（append@1M 移除 3.6ms concat）；未切换访问器的消费方
+  // （measure.ts 视口外导航 / 既有测试 / 调试指标）读取时按需物化：
+  // 尾段为空时零拷贝返回主数组引用，尾段非空时一次性 concat。
   lines: string[];
   codeBlockState: CodeState[];
   fenceLines: number[];
@@ -592,6 +593,13 @@ export interface EditorState {
    *  方向由 anchor/head 相对位置判定，反向移动天然正确（不再依赖旧启发式
    *  「selectionStart === cursorPos」）。 */
   moveHead: (newHead: number) => void;
+  /** R6-P1：行文本模式 grapheme 移动——方向键根治（ArrowLeft 14.5ms → <1ms）。
+   *  不再对全文 getText() join（O(全文)），而是定位光标所在行（getLine +
+   *  LineOffsetTree O(log n)）+ 行内偏移 → 行内 grapheme 边界 → 换算全局
+   *  位置；行边界显式跨行（行首向左 = 上一行行尾、行尾向右 = 下一行行首，
+   *  与全文模式「\n 是普通字符」的语义等价）。返回新位置（文档边界处
+   *  原地不动）。 */
+  moveGrapheme: (pos: number, dir: 'left' | 'right') => number;
   /** R4-B：Shift+方向键扩展——按 grapheme 边界计算新 head 并 moveHead
    *  （anchor 不动）；已到边界时为空操作。dir 为视觉方向（'left' 向左/
    *  'right' 向右），grapheme 粒度与 findPrev/NextGraphemeBoundary 一致。 */
@@ -629,6 +637,9 @@ export interface EditorState {
 
   undo: () => void;
   redo: () => void;
+
+  /** 逻辑视图一致性校验（测试资产使用）：树偏移 vs 逻辑行逐行对齐 */
+  verifyConsistency: () => boolean;
 }
 
 /**
@@ -978,64 +989,77 @@ const EMPTY_TAIL: string[] = [];
 const EMPTY_STATE_TAIL: CodeState[] = [];
 const EMPTY_FENCE_TAIL: number[] = [];
 
-// 触发存储变更的键：命中任一键时需要在 set 时重物化兼容视图
-const STORAGE_KEYS = [
-  'mainLines',
-  'streamTail',
-  'mainCodeState',
-  'streamTailCodeState',
-  'mainFenceLines',
-  'streamTailFenceLines',
-] as const;
-
 /**
- * 兼容视图物化（R2-A 尾段）：在 setState 时把 main* + streamTail* 双段
- * 结构合并为旧字段语义的视图数组（lines / codeBlockState / fenceLines），
- * 保证未切换访问器的消费方与既有测试读到全量视图。
+ * 兼容视图物化（R2-A 尾段）：把 main* + streamTail* 双段结构合并为旧字段
+ * 语义的视图数组（lines / codeBlockState / fenceLines），供未切换访问器的
+ * 消费方与既有测试读取全量视图。
  * - 尾段为空（常规编辑 / 加载路径）：视图 = 主数组引用，零拷贝；
- * - 尾段非空（流式期间）：一次性 concat 物化——过渡期成本，R2-BD
- *   切换 getLine/getLineCount 访问器后从 set 热路径移除；
- * - partial 未触及存储键（如 isComposing）：视图字段不更新（值未变，
- *   保持旧引用，订阅者不会误渲染）。
- * 注意：不能依赖 zustand getter——zustand set 内部 Object.assign({}, state,
- * next) 会把 getter 物化固化为数据属性，视图从此 stale（已踩坑记录）。
+ * - 尾段非空（流式期间）：一次性 concat 物化。
+ * R6-P1 惰性化：本函数不再由 dispatchSet 在 set 时调用（append@1M 热路径
+ * 移除 3.6ms concat），改为 lazyViewProto 原型 getter 在**真正被读取时**
+ * 惰性求值——组件层消费方已全部切换访问器（HiddenInput/BlockRenderer/
+ * MarkdownEngine），运行期零读者 → 热路径零物化。
  */
-function materializeViews(
-  resolved: Record<string, unknown>,
-  prev: EditorState
-): Record<string, unknown> {
-  const touchesStorage = STORAGE_KEYS.some((k) => k in resolved);
-  if (!touchesStorage) return resolved;
-  const out: Record<string, unknown> = { ...resolved };
-  const main = ('mainLines' in out ? out.mainLines : prev.mainLines) as string[];
-  const tail = ('streamTail' in out ? out.streamTail : prev.streamTail) as string[];
-  const mainState = ('mainCodeState' in out ? out.mainCodeState : prev.mainCodeState) as CodeState[];
-  const tailState = ('streamTailCodeState' in out
-    ? out.streamTailCodeState
-    : prev.streamTailCodeState) as CodeState[];
-  const mainFence = ('mainFenceLines' in out ? out.mainFenceLines : prev.mainFenceLines) as number[];
-  const tailFence = ('streamTailFenceLines' in out
-    ? out.streamTailFenceLines
-    : prev.streamTailFenceLines) as number[];
-  if (tail.length === 0) {
-    // 零拷贝：视图直接引用主数组（编辑/加载路径，zustand 订阅需要新引用
-    // 触发渲染——主数组引用随每次编辑更新，语义与旧 lines 字段一致）
-    out.lines = main;
-    out.codeBlockState = mainState;
-    out.fenceLines = mainFence;
-  } else {
-    // 流式期间一次性物化合并视图（过渡期成本，见上方注释）。
-    // 尾段「接管」了主数组最后一行（append 语义：追加到全文末尾，
-    // 被接管行并入尾段首行）——视图中主数组末行被隐藏（slice 掉），
-    // 由尾段全行接续，避免重复。
-    out.lines = main.slice(0, -1).concat(tail);
-    out.codeBlockState = mainState.slice(0, -1).concat(tailState);
-    out.fenceLines = mainFence.concat(
-      tailFence.map((r) => main.length - 1 + r)
-    );
-  }
-  return out;
+interface MaterializedViews {
+  lines: string[];
+  codeBlockState: CodeState[];
+  fenceLines: number[];
 }
+
+function materializeViews(state: EditorState): MaterializedViews {
+  const { mainLines, streamTail } = state;
+  if (streamTail.length === 0) {
+    // 零拷贝：视图直接引用主数组
+    return {
+      lines: mainLines,
+      codeBlockState: state.mainCodeState,
+      fenceLines: state.mainFenceLines,
+    };
+  }
+  // 流式期间一次性物化合并视图。尾段「接管」了主数组最后一行（append
+  // 语义：追加到全文末尾，被接管行并入尾段首行）——视图中主数组末行被
+  // 隐藏（slice 掉），由尾段全行接续，避免重复。
+  return {
+    lines: mainLines.slice(0, -1).concat(streamTail),
+    codeBlockState: state.mainCodeState.slice(0, -1).concat(state.streamTailCodeState),
+    fenceLines: state.mainFenceLines.concat(
+      state.streamTailFenceLines.map((r) => mainLines.length - 1 + r)
+    ),
+  };
+}
+
+// —— 惰性视图原型（R6-P1 物化惰性化，取代「set 时显式物化」）——
+// lines/codeBlockState/fenceLines 作为 getter 挂在原型链上（而非 state 的
+// 自有数据属性）：
+// - set 热路径零物化：zustand 的 Object.assign({}, state, next) 只复制
+//   自有可枚举属性，原型链 getter 不被触碰（也不会像旧 getter 方案那样被
+//   Object.assign 固化造成 stale——数据字段方案的历史坑见旧注释）；
+// - 读取时惰性物化：组件订阅选择器 / tests getState / 未切换访问器的
+//   消费方经原型链命中 getter → materializeViews 按需求值。
+// dispatchSet 在每次 set 后经 setPrototypeOf 恢复原型（zustand 合并产生的
+// 新 state 是普通对象，原型链会丢失）——详见 dispatchSet 注释。
+const lazyViewProto: Record<string, unknown> = {};
+Object.defineProperty(lazyViewProto, 'lines', {
+  configurable: true,
+  enumerable: true,
+  get(this: EditorState): string[] {
+    return materializeViews(this).lines;
+  },
+});
+Object.defineProperty(lazyViewProto, 'codeBlockState', {
+  configurable: true,
+  enumerable: true,
+  get(this: EditorState): CodeState[] {
+    return materializeViews(this).codeBlockState;
+  },
+});
+Object.defineProperty(lazyViewProto, 'fenceLines', {
+  configurable: true,
+  enumerable: true,
+  get(this: EditorState): number[] {
+    return materializeViews(this).fenceLines;
+  },
+});
 
 /**
  * 尾段并入主数组（流式合并，09 归一 §5：append 不进 undo 栈；流式合并
@@ -1276,8 +1300,8 @@ function adjustStreamOpForEdit(
 /**
  * setState 兼容归一（R2-A）：外部消费方（既有测试等）仍按旧字段名
  * lines / codeBlockState / fenceLines 传「整文档重置」——映射到主数组
- * 字段并清空尾段；视图字段由 materializeViews 在物化步骤生成。
- * store 内部 set 一律使用 main* / streamTail* 字段，视图键由物化生成。
+ * 字段并清空尾段；视图字段由 lazyViewProto 惰性 getter 生成（R6-P1）。
+ * store 内部 set 一律使用 main* / streamTail* 字段，视图键由惰性物化生成。
  */
 function normalizeSetStatePartial(
   partial: unknown
@@ -1336,7 +1360,8 @@ function normalizeSetStatePartial(
 }
 
 // 注意：create 的 set 参数弃用——状态更新统一走 dispatchSet
-// （zustand 原生 set 不会生成兼容视图字段，见 materializeViews 说明）。
+// （zustand 原生 set 不会生成兼容视图字段；视图经 lazyViewProto 惰性化，
+// 见 lazyViewProto 说明）。
 /**
  * 构建一个独立的编辑器 store 实例（R5 实例工厂内部实现，06 §8 宿主集成接口）：
  * - 每次调用创建全新的 zustand store（独立 state / 独立订阅 / 独立 dispatchSet
@@ -1346,13 +1371,23 @@ function normalizeSetStatePartial(
  * - store body 内的方法经闭包捕获本实例的 dispatchSet 与 get()，绝不引用
  *   全局单例（旧代码 applyTableChange/insertText 等薄封装引用全局
  *   useEditorStore.getState() 的缺陷在实例化重构中一并根除）。
+ * - R6-P1：初始 state 经 Object.create(lazyViewProto) 挂惰性视图原型，
+ *   lines/codeBlockState/fenceLines 不作为自有数据字段（读取经原型链
+ *   命中 getter 按需物化——若作为数据字段会被 zustand Object.assign
+ *   固化 stale，旧 getter 方案的历史坑已由原型链方案规避）。
  * 全局单例 useEditorStore = buildEditorStore() 的一次实例化（向后兼容）。
  */
 function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
   // 分块加载代际计数（实例内局部，见上方注释）
   let currentLoadGeneration = 0;
 
-  const store = create<EditorState>((_set, get) => ({
+  const store = create<EditorState>((_set, get) => {
+    // R6-P1 惰性视图：初始 state 先以完整数据对象构造（含视图字段占位，
+    // 满足 create 的 EditorState 上下文类型与方法参数推断），随即删除
+    // 视图数据字段并挂惰性视图原型——视图经原型链 getter 惰性物化
+    // （数据字段会遮蔽原型 getter，且会被 zustand Object.assign 固化
+    // 成 stale 数据属性，见 lazyViewProto 注释）
+    const state: EditorState = {
   mainLines: [''],
   streamTail: EMPTY_TAIL,
   mainCodeState: ['none'],
@@ -1362,9 +1397,8 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
 
   lineOffsets: new LineOffsetTree([1]),
 
-  // 兼容视图字段（初始与主数组一致；此后由 dispatchSet 在每次 set 时
-  // 显式物化，见 materializeViews——不能做成 getter：zustand 的
-  // Object.assign({}, state, next) 会把它固化为数据属性导致 stale）
+  // 视图字段占位（初始与主数组一致；随后删除，改由 lazyViewProto
+  // 惰性 getter 提供——见本函数尾部的 delete + setPrototypeOf）
   lines: [''],
   codeBlockState: ['none'],
   fenceLines: [],
@@ -1387,9 +1421,15 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
 
   getText: () => {
     const s = get();
-    // 尾段为空时直接 join 主数组（零物化）；否则走已物化的合并视图
+    // 尾段为空时直接 join 主数组（零物化）；否则双段直接拼接——
+    // R6-P1：不再依赖惰性物化视图（本方法本就是全文序列化 O(n) 语义，
+    // 方向键热路径已改行文本模式不调用它）
     if (s.streamTail.length === 0) return s.mainLines.join('\n');
-    return s.lines.join('\n');
+    const head = s.mainLines.slice(0, -1);
+    return (
+      (head.length > 0 ? head.join('\n') + '\n' : '') +
+      s.streamTail.join('\n')
+    );
   },
 
   // —— 统一行访问器（C4 访问器先行；渲染/virtualizer count 切换点登记）——
@@ -1581,6 +1621,40 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
       };
     }),
 
+  // —— R6-P1 行文本模式 grapheme 移动（方向键根治）——
+  // ArrowLeft/Right 14.5ms/键根因：HiddenInput 方向键分支对全文调
+  // getText()（O(全文) join）+ 全文 grapheme 边界。本方法改为行文本模式：
+  // 定位光标所在行（LineOffsetTree O(log n) + getLine O(1)）→ 行内偏移 →
+  // 行内 grapheme 边界（O(行)）→ 换算全局位置。行边界显式跨行：
+  // - 行首向左 → 上一行行尾（跨过换行符）；文档首行行首 → 0（不动）；
+  // - 行尾向右 → 下一行行首（跨过换行符）；文档末尾 → 自身（不动）。
+  // 与全文模式语义等价：全文模式下 \n 是普通字符，行首向左跨过 \n 落在
+  // 上一行行尾（行尾 = 换行符前一格），行尾向右落在下一行行首。空行
+  // （行首 = 行尾）同样覆盖。返回新全局位置（恒为 grapheme 边界）。
+  moveGrapheme: (pos, dir) => {
+    const s = get();
+    const p = Math.max(0, Math.min(pos, s.textLength));
+    const lineIdx = s.lineOffsets.findLineIndex(p);
+    const lineStart = s.lineOffsets.getOffset(lineIdx);
+    const lineText = s.getLine(lineIdx) ?? '';
+    const inLine = p - lineStart;
+    if (dir === 'left') {
+      // 行内向左：行内 grapheme 边界（不跨 \n——行文本不含换行符）
+      if (inLine > 0) return lineStart + findPrevGraphemeBoundary(lineText, inLine);
+      // 行首向左：跨到上一行行尾（= 本行行首 - 1，即换行符前一格）；
+      // 文档首行行首 = 文档开头（原地不动）
+      return lineIdx > 0 ? lineStart - 1 : 0;
+    }
+    // 行内向右：行内 grapheme 边界
+    if (inLine < lineText.length) {
+      return lineStart + findNextGraphemeBoundary(lineText, inLine);
+    }
+    // 行尾向右：跨到下一行行首（= 本行行尾 + 1，即跨过换行符）；
+    // 文档末尾行尾 = 文档末尾（原地不动）
+    if (p >= s.textLength) return p;
+    return lineStart + lineText.length + 1;
+  },
+
   // —— R4-B 选区方向性核心（04 §3.3 方案 1）——
   // Shift+方向键扩展 = 只动 head 不动 anchor；反向移动时 head 越过 anchor，
   // 选区区间翻转但方向保持——「Shift+Left 后 Shift+Right 第二次方向正确」。
@@ -1609,12 +1683,10 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
     dispatchSet((state) => {
       // 以当前 head 为基点按 grapheme 边界移动（与既有方向键粒度一致）；
       // 已到文档边界时 next === head，返回原状态（幂等空操作）。
-      const text = state.getText();
+      // R6-P1：改用行文本模式 moveGrapheme（不再全文 getText() join——
+      // Shift+方向键与普通方向键同根因的 O(全文) 热路径一并根治）。
       const head = Math.max(0, Math.min(state.headPos, state.textLength));
-      const next =
-        dir === 'left'
-          ? findPrevGraphemeBoundary(text, head)
-          : findNextGraphemeBoundary(text, head);
+      const next = state.moveGrapheme(head, dir);
       if (next === head) return state;
       const anchor = Math.max(0, Math.min(state.anchorPos, state.textLength));
       return {
@@ -2330,17 +2402,28 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
     }
     return true;
   },
-}));
+};
+    // 删除视图数据字段（防遮蔽原型 getter；删除后视图读取经原型链
+    // 命中 lazyViewProto 的惰性 getter，语义 = 物化视图）
+    delete (state as unknown as Record<string, unknown>).lines;
+    delete (state as unknown as Record<string, unknown>).codeBlockState;
+    delete (state as unknown as Record<string, unknown>).fenceLines;
+    // 挂惰性视图原型（此后每次 set 由 dispatchSet 的 setPrototypeOf 恢复）
+    Object.setPrototypeOf(state, lazyViewProto);
+    return state;
+  });
 
-  // —— setState 归一 + 视图物化包装（R2-A）——
+  // —— setState 归一 + 惰性视图原型恢复（R2-A 归一 / R6-P1 惰性化）——
   // 统一分发入口：store 内部方法与外部消费方全部经此更新状态。
   // 1) 归一：外部按旧字段名 lines/codeBlockState/fenceLines 传整档重置时
-  //    映射到主数组字段并清空尾段（视图字段由物化步骤生成，防止 stale）；
-  // 2) 物化：按 main* + streamTail* 双段结构生成兼容视图字段
-  //    （lines/codeBlockState/fenceLines），保证未切换访问器的消费方与
-  //    既有测试读到全量视图（见 materializeViews 的零拷贝/过渡成本说明）。
-  // store 内部 set 也必须经此分发（zustand 原生 set 不会生成视图字段，
-  // 且其 Object.assign({}, state, next) 会破坏 getter——已弃用 getter）。
+  //    映射到主数组字段并清空尾段（视图字段由 lazyViewProto 惰性生成）；
+  // 2) 惰性视图：不再在 set 时物化兼容视图（R6-P1 热路径移除——
+  //    append@1M 场景 3.6ms concat 消失）——lines/codeBlockState/
+  //    fenceLines 是原型链 getter（lazyViewProto），只在真正被读取时
+  //    按需物化。zustand 合并产生的新 state 是普通对象（原型链丢失），
+  //    这里经 setPrototypeOf 恢复；空操作（Object.is 相同，zustand 不
+  //    替换）时 state 未变、原型未丢，判断后自然跳过（幂等零成本）。
+  // store 内部 set 也必须经此分发（zustand 原生 set 不经过归一/原型恢复）。
   // R5 实例化：dispatchSet 闭包绑定本实例（store.getState / store.setState），
   // 实例之间天然隔离；纯内容替换 → diff 事务分支委托本实例的 applyChange。
   const rawSetState = store.setState.bind(store);
@@ -2378,13 +2461,15 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
     }
     const normalized = normalizeSetStatePartial(resolved);
     if (normalized && typeof normalized === 'object' && !Array.isArray(normalized)) {
-      const materialized = materializeViews(
-        normalized as Record<string, unknown>,
-        current
-      );
-      rawSetState(materialized as never, replace as never);
+      rawSetState(normalized as never, replace as never);
     } else {
       rawSetState(normalized as never, replace as never);
+    }
+    // R6-P1：恢复惰性视图原型（zustand 合并产物是普通对象——若使用
+    // replace 路径同理；空操作时 state 未替换，原型未变，判断后跳过）
+    const s = store.getState();
+    if (s !== null && typeof s === 'object' && Object.getPrototypeOf(s) !== lazyViewProto) {
+      Object.setPrototypeOf(s, lazyViewProto);
     }
   }) as typeof store.setState;
 

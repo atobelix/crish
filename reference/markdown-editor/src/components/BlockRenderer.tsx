@@ -17,7 +17,7 @@ import type { LineNode, InlineNode, LineType } from '../core/ast';
 import type { CodeState } from '../core/parser';
 import { checkIsActive, type ActiveState } from '../core/measure';
 import { InlineRenderer } from './InlineRenderer';
-import { useEditorStore } from '../core/EditorStore';
+import { useEditorStore, type EditorStore } from '../core/EditorStore';
 import { renderMathToHtml } from '../core/renderTheme';
 
 const MAX_VISIBLE_LINE_CHARS = 5_000;
@@ -62,23 +62,43 @@ function truncateTokens(tokens: InlineNode[], maxChars: number): InlineNode[] {
  * 区间；否则全文档围栏均已闭合。只对围栏内行判定：缩进代码块
  * （indent_code）无闭合语义，不参与。
  */
-function isInUnclosedFence(
+
+/**
+ * 未闭合围栏判定的双段存储版（R6-P1 物化惰性化）：不再读取物化视图
+ * codeBlockState/fenceLines（读取会触发惰性物化——流式期间每次 set 的
+ * 订阅选择器求值 O(全文) concat），改读双段原始字段（mainCodeState/
+ * streamTailCodeState/mainFenceLines/streamTailFenceLines + 主数组行数）
+ * 在订阅端组合逻辑视图判定，零物化。
+ * 语义与物化视图版 isInUnclosedFence 逐分支等价：行状态经双段访问器
+ * （i < boundary 取主数组，否则取尾段——尾段「接管」主数组末行）；
+ * 尾段 fence 相对行号平移 boundary 后全局有序，最后一个围栏边界 =
+ * 尾段末 fence（若存在）否则主数组末 fence。
+ */
+function isInUnclosedFenceParts(
   lineIndex: number,
-  codeBlockState: CodeState[],
-  fenceLines: number[]
+  mainCodeState: CodeState[],
+  tailCodeState: CodeState[],
+  mainFenceLines: number[],
+  tailFenceLines: number[],
+  mainLineCount: number
 ): boolean {
-  const st = codeBlockState[lineIndex];
+  const boundary = mainLineCount - 1;
+  const getState = (i: number): CodeState =>
+    i < boundary ? mainCodeState[i] : tailCodeState[i - boundary];
+  const st = getState(lineIndex);
   if (st !== 'code' && st !== 'math_block') return false;
-  const n = fenceLines.length;
+  const tailFenceCount = tailFenceLines.length;
+  const n = mainFenceLines.length + tailFenceCount;
   if (n === 0) return false;
-  // 最后一个围栏边界的行状态：起始围栏 → 未闭合区间（从该行起至文档尾）
-  const lastFenceState = codeBlockState[fenceLines[n - 1]];
+  const lastFence =
+    tailFenceCount > 0
+      ? boundary + tailFenceLines[tailFenceCount - 1]
+      : mainFenceLines[mainFenceLines.length - 1];
+  const lastFenceState = getState(lastFence);
   if (lastFenceState !== 'fence_start' && lastFenceState !== 'math_fence_start') {
     return false;
   }
-  // 本行位于未闭合区间起点之后 → 属于未闭合区间（已闭合块内的行在此
-  // 起点之前，不受影响——05 分析「fence_start 后无 fence_end 的区间」）
-  return lineIndex > fenceLines[n - 1];
+  return lineIndex > lastFence;
 }
 
 // ============================================================
@@ -92,6 +112,9 @@ export interface BlockRendererComponentProps {
   lineOffset: number;
   activeState?: ActiveState | null;
   tableId?: string;
+  /** 显式 store 实例（R6-P1 软渲染订阅实例化接线点）：缺省 = 全局单例。
+   *  仅软渲染判定订阅消费（流式围栏未闭合判定），渲染本身零依赖。 */
+  store?: EditorStore;
 }
 
 /** 块渲染器组件类型：Map 值（06 §5：自定义块渲染 + 渲染注册） */
@@ -149,11 +172,27 @@ export function resolveBlockRenderer(
 // ============================================================
 
 /** 订阅「本行是否位于未闭合围栏区间」（R3-C 流式软渲染判定）。
- * 选择器返回布尔值——codeBlockState/fenceLines 引用变化但判定结果不变时，
- * zustand 按 Object.is 比较跳过重渲染，仅在软/硬渲染翻转时更新本行。 */
-function useSoftRender(index: number): boolean {
-  return useEditorStore(state =>
-    isInUnclosedFence(index, state.codeBlockState, state.fenceLines)
+ * R6-P1：选择器改读双段原始字段（isInUnclosedFenceParts）——返回布尔，
+ * 引用变化但判定结果不变时 zustand 按 Object.is 比较跳过重渲染，仅在
+ * 软/硬渲染翻转时更新本行。store 缺省 = 全局单例（向后兼容）；宿主
+ * 多实例场景可经 props.store 传入实例 store（R5 实例化接线点）。
+ * 注意：R5-A 登记「softRender 仍订阅全局单例」——MarkdownEngine 的
+ * LineItem 尚未透传 store prop（MarkdownEngine.tsx 禁碰登记），实例化
+ * 接线待宿主侧接入。 */
+function useSoftRender(
+  index: number,
+  store?: EditorStore
+): boolean {
+  const editorStore = store ?? useEditorStore;
+  return editorStore((state) =>
+    isInUnclosedFenceParts(
+      index,
+      state.mainCodeState,
+      state.streamTailCodeState,
+      state.mainFenceLines,
+      state.streamTailFenceLines,
+      state.mainLines.length
+    )
   );
 }
 
@@ -272,12 +311,13 @@ function MathBlock({
   block,
   index,
   lineOffset,
+  store,
 }: BlockRendererComponentProps) {
   // R3-C 流式软渲染：math fence 未闭合期间不调用 KaTeX renderToString
   //（CPU 重，流式每帧重渲染会积压开销），显示源文本 + 等宽样式；
   // 闭合后 codeBlockState 尾部出现 math_fence_end，本分支自然切回
   // KaTeX 硬渲染（同一 AST 软/硬开关，05 分析「同一 AST 软/硬渲染」）。
-  const softRender = useSoftRender(index);
+  const softRender = useSoftRender(index, store);
   if (softRender) {
     return (
       <div className="line-block line-math-block line-code is-soft-render">
@@ -322,13 +362,14 @@ function CodeBlock({
   index,
   lineOffset,
   activeState,
+  store,
 }: BlockRendererComponentProps) {
   // R3-C 流式软渲染：fence 未闭合期间代码行不跑启发式 token 高亮
   //（parseCodeLine 的 keyword/comment/string），渲染等宽原文 + 轻
   // 高亮（line-code 等宽样式），避免「半块突然变色」的视觉跳变；
   // 闭合后 fence_end 出现，本分支自然走常规路径（无需显式切换，
   // 状态由 codeBlockState 驱动）。
-  const softRender = useSoftRender(index);
+  const softRender = useSoftRender(index, store);
   if (softRender) {
     return (
       <div className="line-block line-code is-soft-render">
@@ -556,13 +597,14 @@ registerDefault('blockquote', BlockquoteBlock);
 registerDefault('table_separator', TableSeparatorBlock);
 registerDefault('table_row', TableRowBlock);
 
-/** BlockRenderer props（对外签名不变：MarkdownEngine 零改动） */
+/** BlockRenderer props（对外签名扩展：新增可选 store，缺省行为零变化） */
 interface BlockRendererProps {
   block: LineNode;
   index: number;
   lineOffset: number;
   activeState?: ActiveState | null;
   tableId?: string;
+  store?: EditorStore;
 }
 
 /**
@@ -571,7 +613,7 @@ interface BlockRendererProps {
  * 其余（body/html_block/自定义未注册类型）走 DefaultBlockRenderer。
  */
 export const BlockRenderer = memo(
-  ({ block, index, lineOffset, activeState, tableId }: BlockRendererProps) => {
+  ({ block, index, lineOffset, activeState, tableId, store }: BlockRendererProps) => {
     const Renderer = resolveBlockRenderer(block.type);
     return (
       <Renderer
@@ -580,6 +622,7 @@ export const BlockRenderer = memo(
         lineOffset={lineOffset}
         activeState={activeState}
         tableId={tableId}
+        store={store}
       />
     );
   }
