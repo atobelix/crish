@@ -302,3 +302,124 @@ node tests/perf/stream-inject-500.mjs --node-only   # node 数据层回放（秒
 |---|---|
 | `stream-inject-500.mjs` | R3-D 采集脚本（浏览器 + node 双模式，多轮 runs 累积） |
 | `stream-inject-report.json` | R3-D 原始数据产物（headless + GPU 两轮全量样本汇总） |
+
+---
+
+# R6 终验复测（2026-08-10，R6-B 验证）
+
+> 定位：R2 六项改造 + R3（R3-A stop-flush / R3-B1 访问器切换）+ R5 功能轮（R5-A 实例
+> 工厂 / R5-B InlineRuler / R5-C 渲染注册表 / R5-D DecorationSet）全部落地后的终验复测，
+> 与 R0（`baseline-20260809.json`）、R2（`baseline-20260809-r2.json`）、R3 GPU
+> （`stream-inject-report.json` runs[1]）同机同口径对比。
+> 原始数据：`final-verify-report.json`（采集脚本 `final-verify.mjs`，部分模式可合并）。
+
+## 十七、终验方法（与既往轮次的差异点）
+
+- **交互项口径完全复刻 R0/R2**：页面内 `performance.now()`、5 次采样中位数、rAF 帧间隔
+  统计、R2 版渐进行导航（headless 行高漂移修复）、`flushStreamTail()` 击键前归一；
+- **流式注入口径完全复刻 R3-D**（`stream-inject-500.mjs` 源码内嵌复用）：token 级 push
+  （500 token/s 时间戳节拍）经内联 StreamBuffer rAF 合并 → 每帧 1 chunk →
+  `store.appendText`；GPU 有头优先，headless 兜底参考；场景 D 附加文本一致性断言；
+- **终验新增探针**：
+  - 滚动场景 longtask 计数（PerformanceObserver，R0/R2 未采集）；
+  - 内存稳态：沿用 R3 流式场景堆探针（1s 采样 + 起止快照），显式汇总 60s 注入堆增长；
+- **引擎现状（实测时核实）**：R3-B1 访问器切换已落地（MarkdownEngine 不再订阅
+  `state.lines`）；R2-G KNOWN-DEFECT 已修复（applyChange 前置 `mergeTailInto` +
+  显式清空尾段键）；R5.5 宿主 streamAppend 接线**未落地**——流式注入仍走
+  `store.appendText` 常规路径（streamAppend 回落等价路径），口径保守；
+  `materializeViews` 仍在 set 热路径（EditorStore.ts:1003）——流式期间尾段非空时
+  每次 setState 仍 O(全文) concat 物化。
+
+## 十八、机器环境（与 R0/R2/R3 同机）
+
+| 项 | 值 |
+|---|---|
+| 平台 | Windows 10/11（win32） |
+| Node | v24.11.0 |
+| 浏览器 | Chrome 151（Playwright chromium 1.62.1） |
+| CPU / 内存 | 12 核 / 32 GB |
+| dev server | http://localhost:5173（vite，运行中） |
+| headless 轮 | 软件渲染，rAF 60Hz（交互项同 R0/R2 口径） |
+| GPU 轮 | `--stream-only`（有头）硬件渲染，rAF ~100Hz（流式同 R3-D GPU 口径） |
+
+## 十九、终验结果表
+
+### 交互项（headless，同 R0/R2 口径）
+
+| 指标 | R0 | R2 | 终验 | R0→终验 | R2→终验 |
+|---|---|---|---|---|---|
+| 百万行加载（setText 完成） | 18495 ms | 11441.8 ms | **12250.9 ms** | **-33.8%** | +7.1% |
+| append@1M 端到端（中位） | 2.5 ms | 6.2 ms | **6.6 ms** | +164% | +6.5% |
+| append@1M 数据层净值 | 无此口径 | 2.9 ms | **3.0 ms** | — | +3.4% |
+| append@1M 主数组重建 | true（全量浅拷贝） | false | **false** | 尾段零拷贝成立 | 成立 |
+| 击键 store 层（50 万行中部，中位） | 1.2 ms | 1.6 ms | **0.9 ms** | **-25%** | -43.8% |
+| 击键全链路（input 事件→落定，中位） | 8.0 ms | 17.4 ms | **1.0 ms** | **-87.5%** | **-94.3%** |
+| ArrowLeft 均值 | 13.8 ms/键 | 14.2 ms/键 | **14.5 ms/键** | +5.5% | +2.1% |
+| ArrowLeft P95 | 17.0 ms | 15.7 ms | **17.4 ms** | +2.4% | +10.8% |
+| 滚动帧 P50 / P95 / P99 | 16.8 / 20.9 / 26.4 ms | 16.8 / 21.8 / 35.4 ms | **17.0 / 21.8 / 39.2 ms** | +1.2% / +4.3% | +1.2% / 0% |
+| 滚动 layoutThrash 增量 | +270 | +180 | **+179** | **-33.7%** | -0.6% |
+| 滚动长任务（3s） | 未采集 | 未采集 | **1 次（99ms）** | 终验新增探针 | — |
+
+### 流式四场景（GPU 有头，500 token/s × 60s，对比 R3 GPU）
+
+| 场景 | R3 GPU P95 | 终验 P50 / P95 / P99 | >16.7ms | 长任务 | 文本一致 | 档位判定 |
+|---|---|---|---|---|---|---|
+| A 纯文本 | 13.4 ms | 9.9 / **13.6** / 17.7 | 80/5841 | 0 | true | **60fps PASS**（等效 101Hz，120fps 名义未达） |
+| B 代码块 | 13.3 ms | 10.0 / **14.3** / 19.3 | 144/5755 | 0 | true | **60fps PASS**（等效 100Hz） |
+| C 公式块 | 14.6 ms | 67.9 / **140.8** / 177.9 | 585/952 | **575（56861ms）** | true | **60fps FAIL（等效 15Hz）——严重回归** |
+| D 编辑+流 | 10.2 ms | 10.0 / **11.5** / 13.5 | 37/5979 | 0 | true | **60fps PASS**（等效 100Hz，四场景最低） |
+
+> 场景 C 三轮复测（首轮 P95 186.5 / 单场景重跑 167.2 / 完整轮 140.8），回归稳定复现。
+
+### 内存稳态（60s 注入后 JS 堆，performance.memory）
+
+| 场景 | 起→止 MB | 增长 | 峰值 MB |
+|---|---|---|---|
+| A 纯文本 | 22.1→65.2 | **+43.1** | 70.9 |
+| B 代码块 | 65.2→106.8 | **+41.6** | 102.0 |
+| C 公式块 | 106.8→28.5 | -78.3（GC 回收） | 163.9 |
+| D 编辑+流 | 37.5→64.4 | **+26.9** | 93.5 |
+
+> 60s 内无泄漏迹象（增长与文档规模/渲染产物滞留量级相符；C 场景峰值 163.9MB 与
+> KaTeX 渲染产物滞留相关，长任务间隙 GC 后回落至 28.5MB）。
+
+## 二十、终验结论（诚实记录）
+
+1. **四项达成 / 保持**：击键全链路 **1.0ms（R0 -87.5% / R2 -94.3%）**——R3-B1 访问器
+   切换（引擎不再订阅物化视图）后编辑落定的同步渲染成本大幅回落，R2 时 17.4ms 的
+   headless 软件渲染惩罚被根治；流式 A/B/D 三场景 GPU 全 PASS（P95 11.5-14.3ms，
+   vs R3 10.2-13.4ms 基本持平）；百万行加载 12251ms（R0 -33.8%）；滚动
+   layoutThrash +179（R0 -33.7% 保持），滚动长任务 ~0。
+2. **一项严重回归（重点上报）**：流式场景 C（公式块）GPU 下 P95 140.8-186.5ms、
+   575 次长任务（总 56861ms）、等效 13-15Hz——R3 GPU 同口径 14.6ms/13 次长任务，
+   **放大 36-44 倍**。三轮复测稳定复现。文本正确性仍通过（一致性无损坏），但帧率
+   判定 FAIL。**疑似根因**（供主 Agent 裁决，需 R5 轮负责人验证）：R5-D
+   DecorationSet 的 decorationVersion 全行刷新机制——appendText 每帧平移光标 →
+   光标装饰变更 → 版本号递增 → 全窗口行 memo 失效 → 每帧全量重渲染 → 可见 math
+   块每帧重跑 KaTeX `renderToString`（R3 时 LineItem 行级订阅光标，仅光标行
+   重渲染，math 块不重跑）。旁证：A/B/D 场景（块渲染廉价）无长任务，仅 C（KaTeX
+   重）爆表。
+3. **两项持平 / 未解决（R2 遗留确认）**：ArrowLeft 14.5ms/键（R0 13.8 +5.5%，
+   P95 17.4）——`getText()` 全量 join（O(全文)）仍是每键主成本，R5 功能轮未覆盖，
+   R2 结论 3 预判成真；滚动帧 P95 21.8ms（R0 20.9 +4.3%，同口径强制 0↔maxTop
+   跳变最坏情形，60fps 判定 FAIL——但长任务 ~0、layoutThrash 维持 -34%，
+   与 R0/R2 同口径可比）。
+4. **append@1M 端到端 6.6ms 未回落**：R2 结论 2 预测「R2-BD 切换访问器后物化成本
+   移除」**未兑现**——`materializeViews` 仍在 set 热路径（EditorStore.ts:1003-1038），
+   流式期间尾段非空时每次 append 仍 O(全文) concat（实测物化中位 3.6ms 主导端到端）。
+   数据层净值 3.0ms（主数组不重建、clone 0ms 成立）。建议后续轮次真正移除
+   materializeViews（R2-BD 收尾项）。
+5. **内存稳态通过**：四场景 60s 注入堆增长 +26.9~+43.1MB（C 场景 GC 回收后回落），
+   峰值 ≤163.9MB，无泄漏迹象；D 场景（编辑+流式）增长最低 +26.9MB。
+
+## 二十一、复现
+
+```bash
+node tests/perf/final-verify.mjs                  # 完整终验（交互项 headless + 流式 GPU）
+node tests/perf/final-verify.mjs --interactive-only  # 只跑交互项（~1 分钟）
+node tests/perf/final-verify.mjs --stream-only       # 只跑流式四场景（GPU，~4.5 分钟）
+STREAM_SCENARIO=C-math-fence node tests/perf/final-verify.mjs --stream-only  # 单场景复测
+node tests/perf/final-verify.mjs --compare-only      # 复用产物重打对比表
+```
+
+数据落盘：`final-verify-report.json`（部分模式与既有产物合并，保留旧指标键）。

@@ -81,13 +81,20 @@
 
 ### G6 · CSS 契约（C2）
 
-| # | 断言点 | 状态 |
-|---|---|---|
-| 1 | `class-inventory.test.ts`（静态）：CSS 选择器集合 A ⊇ 组件 className 字面量集合 B；B − A 为空（删除 class 先炸测试） | ⬜ |
-| 2 | 动态 class（`is-active-token` 拼接产物）入集合 B | ⬜ |
-| 3 | `style-contract.test.ts`（动态 jsdom）：`is-active-token` 非 display:none；`syntax-hidden` 可见性契约；table flex 契约 | ⬜ |
-| 4 | `:root` 变量表完整性（`--text-primary/--text-muted/--border-focus/--blue-selection` 等逐一存在性） | ⬜ |
-| 5 | color-gate 扩展：CSS 文件内禁用 rgb()/hsl() 字面量扫描 | ⬜ |
+> 落地说明：`tests/unit/css-contract.test.ts`（静态文本断言版，7 用例）。
+> 实现口径差异（诚实登记）：组件引用类中 cursor-caret/truncation-indicator/
+> selection-rect/a11y-live-region/virtual-row 等 18 类无全局 CSS 选择器定义
+> （样式由组件内联 style 提供）——故引用覆盖护栏采用「B − A ⊆ 豁免清单」
+> 口径（G6.2），豁免项逐一登记组件与内联样式证据（G6.4）；jsdom 动态
+> getComputedStyle 求值版归渲染层 RTL（G3）域。
+
+| # | 断言点 | 状态 | 落地文件 |
+|---|---|---|---|
+| 1 | `class-inventory.test.ts`（静态）：CSS 选择器集合 A ⊇ 组件 className 字面量集合 B；B − A 为空（删除 class 先炸测试） | ✅ | `tests/unit/css-contract.test.ts` G6.1/G6.2（A ⊇ B 护栏，差集 = 18 项内联豁免清单） |
+| 2 | 动态 class（`is-active-token` 拼接产物）入集合 B | ✅ | `tests/unit/css-contract.test.ts` G6.2（DYNAMIC_COMPONENT_CLASSES：is-active-line/is-active-token/is-search-line/table-header-row） |
+| 3 | `style-contract.test.ts`（动态 jsdom）：`is-active-token` 非 display:none；`syntax-hidden` 可见性契约；table flex 契约 | ✅ | `tests/unit/css-contract.test.ts` G6.3/G6.4/G6.5 静态版：行高关键值（`--grid-size: 28px` + `min-height: 28px/var()`）、`syntax-hidden` 选择器存在、`.line-table-row` flex 定义存在；jsdom 动态求值版归 G3 RTL 域 |
+| 4 | `:root` 变量表完整性（`--text-primary/--text-muted/--border-focus/--blue-selection` 等逐一存在性） | ✅ | `tests/unit/css-contract.test.ts` G6.6（21 个变量逐一存在性 + `--selection-bg`/`--border-focus` 引用抽查） |
+| 5 | color-gate 扩展：CSS 文件内禁用 rgb()/hsl() 字面量扫描 | ✅ | `tests/unit/css-contract.test.ts` G6.7（去注释后：无 hex / 无 rgb() / 无逗号分隔 hsl() / 无 hsla()） |
 
 ### G7 · 运行时 Playwright（E1）——现有 18 spec 保留
 
@@ -116,23 +123,40 @@
 
 ### G9 · 内存门禁（M1）
 
-| # | spec | 方法 | 断言 | 状态 |
-|---|---|---|---|---|
-| 1 | `cache-bounds.spec.ts` | 6 万行不同文本（清缓存后） | `getCacheStats().size ≤ 50_000`；hits+misses 单调 | ⬜ |
-| 2 | `lru-eviction.spec.ts`（unit） | 直接操作 LRUCache | 容量溢出淘汰最久未用；get 提升次序；并发/大容量 | ⬜ |
-| 3 | `heap-growth.spec.ts`（nightly 专属） | 万行加载→滚动→清空 ×10 轮 | 稳态增量 <5% 基线；无单调增长（GC ±10% 允许） | ⬜ |
-| 4 | `store-leak.spec.ts` | OpGen 500 步长编辑 | undo/redo 栈长度有界（≤500）；fenceLines 单调且 ≤ lines | ⬜ |
-| 5 | `chunk-load.spec.ts` | 10 万行文档 | 分块加载不 OOM；lines 全量；DOM 行数有界 | ⬜ |
+> 落地说明：`tests/unit/memory-bounds.test.ts`（5 用例）。#3 heap-growth 与
+> #5 chunk-load 为 e2e（nightly）域 spec，不在本轮文件域，保持 ⬜。
+
+| # | spec | 方法 | 断言 | 状态 | 落地文件 |
+|---|---|---|---|---|---|
+| 1 | `cache-bounds.spec.ts` | 6 万行不同文本（清缓存后） | `getCacheStats().size ≤ 50_000`；hits+misses 单调 | ✅ | `tests/unit/memory-bounds.test.ts` G9.1（6 万唯一行注入 → size ≤ 50_000 且已满容量、misses ≥ 6 万） |
+| 2 | `lru-eviction.spec.ts`（unit） | 直接操作 LRUCache | 容量溢出淘汰最久未用；get 提升次序；并发/大容量 | ✅ | `tests/unit/memory-bounds.test.ts` G9.2（get 提升 → 最久未用先淘汰，misses 计数实证命中/未命中） |
+| 3 | `heap-growth.spec.ts`（nightly 专属） | 万行加载→滚动→清空 ×10 轮 | 稳态增量 <5% 基线；无单调增长（GC ±10% 允许） | ⬜ | tests/e2e/perf（e2e 域，未在本轮文件域） |
+| 4 | `store-leak.spec.ts` | OpGen 500 步长编辑 | undo/redo 栈长度有界（≤500）；fenceLines 单调且 ≤ lines | ✅ | `tests/unit/memory-bounds.test.ts` G9.4（核对结论：当前无硬上限，仅 500ms 合并——登记为显式契约：500 步独立 op 全量入栈；fenceLines 单调断言由 cross-matrix `assertConverged` 每步覆盖） |
+| 5 | `chunk-load.spec.ts` | 10 万行文档 | 分块加载不 OOM；lines 全量；DOM 行数有界 | ⬜ | tests/e2e/perf（e2e 域，未在本轮文件域） |
+
+> 补充（R6-A）：G9.5 编辑后缓存孤儿清理——修改行后旧 key 被 LRU 淘汰
+> （孤儿键不膨胀，容量恒 ≤ 50_000）。streamTail 上界 4096（09 §4 C4）由
+> G9.3 落地：5000 次 append 峰值 ≤ 4096、强制合并发生、flush 后文本一致。
 
 ### G10 · 交叉矩阵（X1，nightly）
 
-| # | 断言点 | 状态 |
-|---|---|---|
-| 1 | 文档轴 6 类：中文/CJK、emoji+ZWJ、纯代码、深嵌套块引用、畸形表格、混合全部语法、超长行 | ⬜ |
-| 2 | 操作轴 4 类：纯键盘、纯程序化批量、undo/redo 风暴、选区删除风暴 | ⬜ |
-| 3 | 模式轴 3 类：正常、光标头/中/尾、选区跨文档尾 | ⬜ |
-| 4 | 断言：I1-I9 子集（page.evaluate 调 store，每 20 步 verifyConsistency）；DOM 行数一致；无 console error | ⬜ |
-| 5 | 全积 72 组合抽样 24 组（LHS 正交表），每组 <60s | ⬜ |
+> 落地说明：`tests/unit/cross-matrix.test.ts`（24 用例，LHS 正交抽样）。
+> e2e 版（真实键盘/DOM）在 tests/e2e 域；本文件为 store/parser 层黑箱正交矩阵。
+
+| # | 断言点 | 状态 | 落地文件 |
+|---|---|---|---|
+| 1 | 文档轴 6 类：中文/CJK、emoji+ZWJ、纯代码、深嵌套块引用、畸形表格、混合全部语法、超长行 | ✅ | `tests/unit/cross-matrix.test.ts`（unit 版 6 类：表格 / 围栏 / 公式 / 嵌套列表 / 嵌套引用 / 混合全语法含 CJK+emoji+超长行） |
+| 2 | 操作轴 4 类：纯键盘、纯程序化批量、undo/redo 风暴、选区删除风暴 | ✅ | 操作轴 6 类（插入/删除/选区删除/undo/redo/append），每类 4 组 |
+| 3 | 模式轴 3 类：正常、光标头/中/尾、选区跨文档尾 | ✅ | 光标 3 类（行首/行中 code-point 安全/行尾）各 8 组；选区跨文档尾留 e2e 域 |
+| 4 | 断言：I1-I9 子集（page.evaluate 调 store，每 20 步 verifyConsistency）；DOM 行数一致；无 console error | ✅ | 每组全量：文本一致（独立参考模型）+ verifyConsistency + codeBlockState 与独立重扫一致 + fenceLines 单调/不越界 |
+| 5 | 全积 72 组合抽样 24 组（LHS 正交表），每组 <60s | ✅ | 全积 6×6×3=108 抽 24 组（每操作 4、每光标 8、每文档 4），单组 <50ms |
+
+> KNOWN-DEFECT 登记（R6-A 终验轮发现，引擎侧未修复）：fence 文档的
+> fence_end 行（'```'）行尾插入 → 该行变为带 info 串的 '```INS'。增量收敛
+> 按 `startsWith('```')` 布尔翻转（EditorStore.ts:782-790）保持 fence_end，
+> 独立重扫按完整关闭条件（parser.ts:701-720）判为 code——两套状态机分歧。
+> 文本一致与 verifyConsistency 不受影响；已在 cross-matrix 中登记现状
+> （assertFenceKnownDefect），修复后应移除登记分支恢复全量收敛断言。
 
 ## 汇总（维护此处进度）
 
@@ -143,12 +167,12 @@
 | G3 | 11 | 0 | 2026-08-09 |
 | G4 | 6 | 0 | 2026-08-09 |
 | G5 | 7 | 0 | 2026-08-09 |
-| G6 | 5 | 0 | 2026-08-09 |
+| G6 | 5 | 5 | 2026-08-10（R6-A：css-contract.test.ts） |
 | G7 | 8 | 0 | 2026-08-09 |
 | G8 | 7 | 0 | 2026-08-09 |
-| G9 | 5 | 0 | 2026-08-09 |
-| G10 | 5 | 0 | 2026-08-09 |
-| **合计** | **71** | **0** | — |
+| G9 | 5 | 3 | 2026-08-10（R6-A：memory-bounds.test.ts，#3/#5 为 e2e 域） |
+| G10 | 5 | 5 | 2026-08-10（R6-A：cross-matrix.test.ts，unit 版） |
+| **合计** | **71** | **13** | — |
 
 > 口径：上表为断言点计划清单（非用例数）。新增**严格用例**总量目标 120-140
 > （09 §3 口径），CommonMark 652 例另计。占位骨架（tests/gate 10 例）不计入断言点。
