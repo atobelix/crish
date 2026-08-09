@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useCallback, useLayoutEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
@@ -10,18 +10,26 @@ import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
 
 import { type CodeState } from '../core/parser';
 
+// 行渲染单元（09 §4 C1 滚动契约）：
+// - 位置由命令式通道独占：tanstack directDomUpdates 模式把行 top 直接写 DOM
+//   （applyDirectStyles 写 el.style.top），本组件不读 virtualRow.start、
+//   不在 style 里写主轴位置——任何 React 重渲染都不会覆盖命令式位置，
+//   这是「位置帧零提交」能成立的代码级前提；
+// - props 只传 index（数字）+ 内容字段（lineText/offset/isCode）+ 稳定 rowRef，
+//   virtualRow 新对象字面量引发的 memo 失效被根治：滚动/光标变化帧行内容不变时
+//   全部 memo 命中，React 仅挂载/卸载窗口边界行（01 问题 6 §6.2-C）。
 const LineItem = React.memo(({
-  virtualRow,
+  index,
   lineText,
   offset,
   isCode,
-  rowRefs
+  rowRef
 }: {
-  virtualRow: any;
+  index: number;
   lineText: string;
   offset: number;
   isCode: CodeState;
-  rowRefs: React.RefObject<Map<number, HTMLElement>>;
+  rowRef: (el: HTMLElement | null) => void;
 }) => {
   const activeStateStr = useEditorStore(state => {
     const { cursorPos, selectionStart, selectionEnd } = state;
@@ -53,7 +61,7 @@ const LineItem = React.memo(({
 
   const tableId = useEditorStore(state => {
     if (!lineText.trim().startsWith('|')) return undefined;
-    let firstTableIndex = virtualRow.index;
+    let firstTableIndex = index;
     while (firstTableIndex > 0) {
        const prevLine = state.lines[firstTableIndex - 1];
        if (prevLine && prevLine.trim().startsWith('|')) {
@@ -67,24 +75,15 @@ const LineItem = React.memo(({
 
   const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
 
-  // 行 ref 注册表：仅挂载/卸载登记，不做任何测量（测量统一走引擎的批量协议，
-  // 取代 measureElement 的逐行 ResizeObserver 双写——09 §4 C2）
-  const registerRowRef = (el: HTMLElement | null) => {
-    if (!rowRefs?.current) return;
-    if (el) rowRefs.current.set(virtualRow.index, el);
-    else rowRefs.current.delete(virtualRow.index);
-  };
-
   return (
     <div
-      data-index={virtualRow.index}
+      data-index={index}
       data-line-start={offset}
       data-line-length={lineText.length}
-      ref={registerRowRef}
+      ref={rowRef}
       className={`virtual-row ${activeState ? 'is-active-line' : ''}`.trim()}
       style={{
         position: 'absolute',
-        top: `${virtualRow.start}px`,
         left: 0,
         width: '100%',
         minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
@@ -92,7 +91,7 @@ const LineItem = React.memo(({
     >
       <BlockRenderer
         block={lineNode}
-        index={virtualRow.index}
+        index={index}
         lineOffset={offset}
         activeState={activeState}
         tableId={tableId}
@@ -126,7 +125,11 @@ export const MarkdownEngine: React.FC = () => {
     count: lines.length,
     getScrollElement: () => parentRef.current,
     estimateSize: (i) => {
-      // 行高来源优先级：HeightMap 存储值（实测回填 / 插入时预测）→ oracle 即时预测
+      // 行高来源优先级：HeightMap 存储值（实测回填 / 插入时预测）→ oracle 即时预测。
+      // （R2-D 核实结论：tanstack count 变化不会清空 itemSizeCache（virtual-core
+      // getMeasurements 仅在 !enabled / lanes 变化时清缓存），estimateSize 只对
+      // 缓存 miss 的行求值——每次 count 变化 ≤ 新增行数，存量行全命中；
+      // 「1M 次 estimateSize」在 3.14.9 版本下不成立，HeightMap 直查已消除该路径）
       const hm = heightMapRef.current;
       if (hm) {
         const h = hm.getHeight(i);
@@ -139,9 +142,34 @@ export const MarkdownEngine: React.FC = () => {
       return 28;
     },
     overscan: 40, // Buffer for smooth scrolling
+    // C1 滚动管线与 tanstack 契约（09 §4 C1 全落实）：
+    // - directDomUpdates（position 模式）：observer 照常通知保持 start 正确，
+    //   但滚动位置帧的 React 提交被合并到「窗口变化帧」——行位置由库直接命令式
+    //   写 el.style.top（绝对值，无 translateY 增量叠加），窗口 range 不变时
+    //   零 React 提交（01 问题 6 §6.2-A/B，120/140fps 目标的决定性优化）；
+    // - useCachedMeasurements：RO 回调只返回缓存值（delta=0 时 resizeItem
+    //   零成本跳过），逐行 DOM 测量回填仍由引擎的批量协议独占（09 §4 C2，
+    //   杜绝「保留 measureElement + 期望消除抖动」的双写状态）。
+    directDomUpdates: true,
+    directDomUpdatesMode: 'position',
+    useCachedMeasurements: true,
   });
 
-  // 渲染窗口签名：窗口变化时批量实测回填（滚动管线批将改为命令式位置更新）
+  // 行 ref 注册表（稳定回调，空依赖不破坏 LineItem memo）：
+  // 挂载时登记到 rowRefs（index 从 data-index 属性读，不依赖闭包），同时调用
+  // virtualizer.measureElement 注册 elementsCache（directDomUpdates 位置写入通道）；
+  // 卸载条目不即时清理——批量测量循环按 isConnected 过滤，天然清除已卸载行，
+  // 防 stale 条目污染测量（行卸载即 DOM 断开，detached 元素 offsetHeight 不可信）。
+  const registerRowRef = useCallback((el: HTMLElement | null) => {
+    virtualizer.measureElement(el);
+    if (!el) return;
+    const idx = parseInt(el.getAttribute('data-index') || '-1', 10);
+    if (idx >= 0) rowRefs.current.set(idx, el);
+  }, [virtualizer]);
+
+  // 渲染窗口签名（首尾 index）：directDomUpdates 模式下 React 渲染仅发生在
+  // 窗口变化帧（range 首尾 index 变化 / isScrolling 翻转），此处读到的窗口
+  // 即「将要渲染的窗口」——批量测量协议只在窗口变化帧运行，位置帧零开销
   const virtualItems = virtualizer.getVirtualItems();
   const windowKey = virtualItems.length
     ? virtualItems[0].index + '-' + virtualItems[virtualItems.length - 1].index
@@ -151,8 +179,10 @@ export const MarkdownEngine: React.FC = () => {
   // 1. 行数同步：新增行（流式/编辑）按 oracle 预测补齐，行数减少时截断；
   // 2. 已挂载行统一实测（单次批量 layout 读 offsetHeight）；
   // 3. oracle 样本校准（全量样本进 EMA）+ 稳定点检测（与已存储高度比，|Δ| < 0.5px 不回写）；
-  // 4. 回填 HeightMap 并经 virtualizer.resizeItem 写 tanstack 缓存——多次 notify 被
-  //    React 18 自动批处理为单次提交（tanstack 的 measure() 会清空 itemSizeCache 故不可用）。
+  // 4. 回填 HeightMap 并经 virtualizer.resizeItem 写 tanstack 缓存——directDomUpdates
+  //    模式下 resizeItem 的 notify 走命令式位置刷新（窗口不变零 React 提交），
+  //    仅实际回填（setHeight 返回 true）才触发（09 §4 C1 窗口变化帧复位协议：
+  //    窗口变化 → React 一次完整渲染 + 库 applyDirectStyles 写全量绝对值位置）。
   useLayoutEffect(() => {
     const hm = heightMapRef.current;
     const oracle = oracleRef.current;
@@ -164,7 +194,11 @@ export const MarkdownEngine: React.FC = () => {
     });
     for (const item of virtualizer.getVirtualItems()) {
       const el = rowRefs.current.get(item.index);
-      if (!el) continue;
+      // 已卸载行（DOM 已断开）直接从注册表剔除，防 stale 条目污染批量测量
+      if (!el || !el.isConnected) {
+        rowRefs.current.delete(item.index);
+        continue;
+      }
       const raw = lines[item.index];
       if (raw === undefined) continue;
       const st = codeBlockState[item.index];
@@ -206,18 +240,23 @@ export const MarkdownEngine: React.FC = () => {
     );
 
     // 1.5 If clicked on padding/margins, try to resolve the line using vertical coordinates
+    // C1 契约：坐标换算统一走 HeightMap.indexAt（O(log n) 像素 → 行），
+    // 不再遍历 virtualRow 线性扫描（01 问题 1 blockAt 同款定位结构）；
+    // contentY 已是容器内容坐标（含 scrollTop、不含 padding），topOffset 传 0，
+    // 与行 top（内容坐标）同一空间。仅接受落在当前虚拟窗口内的命中，
+    // 窗口外的空白点击维持旧语义（回落文末）。
     let clickedPadding = false;
     if (clickedLineIndex === -1 && parentRef.current) {
       const containerRect = parentRef.current.getBoundingClientRect();
       const contentY = e.clientY - containerRect.top + parentRef.current.scrollTop;
-      
-      const virtualItems = virtualizer.getVirtualItems();
-      for (const item of virtualItems) {
-        // Find the line that occupies this vertical space
-        if (contentY >= item.start && contentY < item.start + item.size) {
-          clickedLineIndex = item.index;
+
+      const hm = heightMapRef.current;
+      const items = virtualizer.getVirtualItems();
+      if (hm && items.length) {
+        const idx = hm.indexAt(contentY, 0);
+        if (idx >= items[0].index && idx <= items[items.length - 1].index) {
+          clickedLineIndex = idx;
           clickedPadding = true;
-          break;
         }
       }
     }
@@ -455,26 +494,30 @@ export const MarkdownEngine: React.FC = () => {
           position: 'relative',
         }}
       >
+        {/* C1 契约：内容容器主轴高度由 virtualizer.containerRef 命令式管理
+            （applyContainerSize 写总高，免 React 提交），style 不写 height；
+            marginTop 14px 为横向装饰属性，保留 */}
         <div
+          ref={virtualizer.containerRef}
           style={{
-            height: `${virtualizer.getTotalSize()}px`,
             width: '100%',
             position: 'relative',
             marginTop: '14px',
           }}
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
-            const lineText = lines[virtualRow.index];
-            const offset = offsets.getOffset(virtualRow.index);
-            const isCode = codeBlockState[virtualRow.index];
+            const index = virtualRow.index;
+            const lineText = lines[index];
+            const offset = offsets.getOffset(index);
+            const isCode = codeBlockState[index];
             return (
               <LineItem
-                key={virtualRow.index}
-                virtualRow={virtualRow}
+                key={index}
+                index={index}
                 lineText={lineText}
                 offset={offset}
                 isCode={isCode}
-                rowRefs={rowRefs}
+                rowRef={registerRowRef}
               />
             );
           })}
@@ -483,10 +526,19 @@ export const MarkdownEngine: React.FC = () => {
 
         <CursorLayer
           containerRef={parentRef}
-          layoutDeps={virtualizer
-            .getVirtualItems()
-            .map((v) => v.start)
-            .join(',')}
+          // layoutDeps 紧凑化（01 问题 2 §2.2-C 的布局陷阱消除）：不再每帧生成
+          // 「全部虚拟项 start 的巨型字符串」，改为「窗口首尾 index + 行数 + 总高」
+          // 稳定签名——纯滚动位置帧该签名不变 → CursorLayer 零重测零全扫；
+          // 窗口变化/行高回填（总高变化）时才重测。光标坐标是容器内容坐标
+          // （与行 top 同空间），滚动时内容坐标不变，视觉天然跟随，无需逐帧重测。
+          layoutDeps={(() => {
+            const items = virtualizer.getVirtualItems();
+            const hm = heightMapRef.current;
+            const first = items.length ? items[0].index : -1;
+            const last = items.length ? items[items.length - 1].index : -1;
+            const totalH = hm ? Math.round(hm.totalHeight * 10) : 0;
+            return `${first}-${last}-${lines.length}-${totalH}`;
+          })()}
         />
         <HiddenInput containerRef={parentRef} />
       </div>
