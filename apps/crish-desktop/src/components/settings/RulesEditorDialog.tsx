@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import styles from './SettingsRulesTab.module.css';
-import { Dialog } from '../ui';
+import { Button, Dialog } from '../ui';
 
 export type RulesEditorDialogProps = {
   open: boolean;
@@ -45,25 +45,27 @@ export const RulesEditorDialog: React.FC<RulesEditorDialogProps> = ({
       initialFocusRef={initialFocusRef}
       footer={
         <div className={styles.rulesEditorFoot}>
-          <button
+          <Button
             type="button"
             onClick={() => {
               if (!saving) onClose();
             }}
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             disabled={saving}
           >
             取消
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onSave}
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             disabled={saving}
             aria-busy={saving || undefined}
           >
             {saving ? '保存中…' : '保存'}
-          </button>
+          </Button>
         </div>
       }
     >

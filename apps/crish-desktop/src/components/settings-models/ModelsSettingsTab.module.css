@@ -41,7 +41,7 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -51,7 +51,7 @@
 .mrlAddBtn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  border-color: var(--tint-strong);
 }
 
 .mrlList {
@@ -82,16 +82,16 @@
 }
 
 .mrlItem:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
 }
 
 .mrlItem.isActive {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: var(--tint-hover);
+  border-color: var(--tint-strong);
 }
 
 .mrlItem.isActive:hover {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+  background: var(--tint-hover);
 }
 
 .mrlItemRowTop {
@@ -114,14 +114,14 @@
   font-size: var(--font-size-xxs);
   padding: 1px 5px;
   border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   color: var(--text-tertiary);
   font-weight: var(--font-weight-normal);
   flex-shrink: 0;
 }
 
 .mrlItemTag.isLive {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
@@ -209,7 +209,7 @@
 }
 
 .mrdPillOff {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   color: var(--text-tertiary);
 }
 
@@ -335,7 +335,7 @@
   height: 28px;
   padding: 0 8px 0 26px;
   border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
   background: var(--bg-primary);
   font-size: var(--font-size-xs);
   color: var(--text-primary);
@@ -362,18 +362,18 @@
   gap: var(--space-3);
   padding: 8px 12px;
   border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
+  border: 1px solid var(--tint-hover);
   background: var(--bg-primary);
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
   flex-wrap: wrap;
 }
 
 .mrdModelRow:not(:global(.is-expanded)):hover {
-  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-color: var(--tint-strong);
 }
 
 .mrdModelRow.isLive {
-  border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-color: var(--tint-active);
 }
 
 .mrdModelRow.isOff {
@@ -401,7 +401,7 @@
   font-size: var(--font-size-xxs);
   padding: 1px 5px;
   border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
 }
@@ -435,7 +435,7 @@
   height: 18px;
   border-radius: 999px;
   border: none;
-  background-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background-color: var(--tint-divider);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
@@ -519,7 +519,7 @@
 }
 
 .modelsModelMain:hover {
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
 }
 
 .modelsModelName {
@@ -551,19 +551,19 @@
 }
 
 .modelsCtxBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 
 .modelsCtxInput {
   width: 72px;
   height: 28px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 15%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: var(--radius-md);
   padding: 0 6px;
   font-size: var(--font-size-xs);
   font-family: var(--font-mono);
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-primary));
+  background: var(--tint-hover);
   color: var(--text-primary);
   outline: none;
   box-shadow: none;
@@ -572,7 +572,7 @@
 .modelsCtxInput:focus,
 .modelsCtxInput:focus-visible {
   border-color: transparent;
-  background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-primary));
+  background: var(--tint-hover);
   box-shadow: none;
 }
 
@@ -660,9 +660,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
   padding: 10px 12px;
   cursor: pointer;
   font: inherit;
@@ -671,7 +671,7 @@
 }
 
 .modelsBillingToggle:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
 }
 
 .modelsBillingToggleMain {
@@ -716,8 +716,8 @@
   margin-top: var(--space-2);
   padding: var(--space-3);
   border-radius: var(--radius-xl);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-primary));
+  border: 1px solid var(--tint-active);
+  background: var(--md-code-bg);
   min-width: 0;
 }
 
@@ -764,7 +764,7 @@
   flex-direction: column;
   gap: 0;
   border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border: 1px solid var(--tint-active);
   overflow: hidden;
 }
 
@@ -776,7 +776,7 @@
   padding: 8px 10px;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border-bottom: 1px solid var(--tint-hover);
   background: transparent;
 }
 
@@ -863,8 +863,8 @@
 }
 
 .mrdCapPill:hover {
-  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
-  border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: var(--tint-hover);
+  border-color: var(--tint-divider);
   color: var(--text-primary);
 }
 
@@ -944,7 +944,7 @@
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .mrdAddModelBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
   border-color: var(--text-tertiary);
   color: var(--text-primary);
 }
@@ -982,11 +982,11 @@
   cursor: pointer;
 }
 .addServiceBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 4.5%, transparent);
+  background: var(--tint-hover);
 }
 .addServiceBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .addProviderMenu {
   min-width: 200px;
@@ -1019,5 +1019,5 @@
   cursor: pointer;
 }
 .addMenuOption:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
 }

@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import styles from './RuntimePanel.module.css';
 import { RuntimeSection } from './RuntimeSection';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
 import {
   formatTrashedAt,
@@ -166,26 +166,28 @@ export const TrashSection: React.FC<TrashSectionProps> = ({ onShowToast }) => {
                         : '恢复到原路径'
                     }
                   >
-                    <button
+                    <Button
                       type="button"
-                      className="ui-btn ui-btn-primary ui-btn-sm"
+                      variant="primary"
+                      size="sm"
                       aria-label={`恢复 ${entry.originalPath}`}
                       disabled={Boolean(busyId)}
                       onClick={() => void handleRestore(entry)}
                     >
                       {busy ? '…' : '恢复'}
-                    </button>
+                    </Button>
                   </Tooltip>
                   <Tooltip content="彻底清除（不可恢复）">
-                    <button
+                    <Button
                       type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      variant="ghost"
+                      size="sm"
                       aria-label={`清除 ${entry.originalPath}`}
                       disabled={Boolean(busyId)}
                       onClick={() => void handlePurge(entry)}
                     >
                       清除
-                    </button>
+                    </Button>
                   </Tooltip>
                 </div>
               </div>

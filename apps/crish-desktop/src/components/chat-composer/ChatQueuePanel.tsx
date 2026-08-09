@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatQueuePanel.module.css';
 import type { QueuedMessage } from '../../hooks/useChatStream';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 
 export interface ChatQueuePanelProps {
   queue: QueuedMessage[];

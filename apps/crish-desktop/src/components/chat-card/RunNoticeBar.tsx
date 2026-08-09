@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './RunNoticeBar.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import type { RunNotice } from '../../hooks/useChatStream';
 import {
   resolveRunNoticeAriaLabel,

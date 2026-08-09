@@ -4,7 +4,7 @@ import type { ProjectEntry } from '../../../api/projectStore';
 import { openProject } from '../../../api/projectStore';
 import { emitUiEvent } from '../../../api/uiEvents';
 import { getCompositionRoot } from '../../../app/compositionRoot';
-import { Tooltip } from '../../Tooltip';
+import { Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { ChevronDown, FilePlus2, Folder, FolderOpen, FolderPlus } from 'lucide-react';
 

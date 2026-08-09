@@ -17,7 +17,7 @@ import {
   MODEL_CAPABILITY_OPTIONS,
   setModelEnabled,
 } from '../../api/modelCatalog';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import styles from './ModelsSettingsTab.module.css';
 import type { AddDraft, CfgDraft } from './useModelProfilesState';
 
@@ -196,9 +196,9 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
               className="mrd-head-right"
               style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-sm"
+                size="sm"
                 style={{
                   height: '26px',
                   padding: '0 10px',
@@ -212,7 +212,7 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   background:
                     selected.enabled !== false
                       ? 'color-mix(in srgb, var(--color-active) 12%, transparent)'
-                      : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
+                      : 'var(--tint-hover)',
                   color:
                     selected.enabled !== false
                       ? 'var(--color-active)'
@@ -226,7 +226,7 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                 }}
               >
                 {selected.enabled !== false ? '已启用' : '已停用'}
-              </button>
+              </Button>
 
               {selected.id.startsWith('custom-') && (
                 <div style={{ position: 'relative' }}>
@@ -252,9 +252,10 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                       >
                         确定删除？
                       </span>
-                      <button
+                      <Button
                         type="button"
-                        className="ui-btn ui-btn-secondary ui-btn-sm"
+                        variant="secondary"
+                        size="sm"
                         style={{
                           height: '24px',
                           padding: '0 8px',
@@ -269,10 +270,11 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                         }}
                       >
                         确认
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        variant="ghost"
+                        size="sm"
                         style={{
                           height: '24px',
                           padding: '0 8px',
@@ -282,22 +284,22 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                         onClick={() => setConfirmDeleteId(null)}
                       >
                         取消
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <Tooltip content={`删除「${selectedLabel}」`}>
-                      <button
+                      <Button
                         type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        variant="ghost"
+                        size="sm"
                         style={{
                           padding: '0 6px',
                           height: '28px',
                           color: 'var(--text-tertiary)',
                         }}
                         onClick={() => setConfirmDeleteId(selected.id)}
-                      >
-                        <Lucide.Trash2 size={14} />
-                      </button>
+                        icon={<Lucide.Trash2 size={14} />}
+                      />
                     </Tooltip>
                   )}
                 </div>
@@ -356,9 +358,10 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                       }
                     }}
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    variant="secondary"
+                    size="sm"
                     disabled={!keyDraft.trim()}
                     onClick={() => void saveKey()}
                     style={{
@@ -369,7 +372,7 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                     }}
                   >
                     保存
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -382,9 +385,10 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
             </span>
             <div className={`${styles.mrdModelsActions} mrd-models-actions`}>
               <Tooltip content="检查服务商连通性">
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   disabled={checkBusy}
                   onClick={() => void runCheck()}
                   style={{
@@ -396,21 +400,23 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                     justifyContent: 'center',
                   }}
                   aria-label="检查连通性"
-                >
-                  {checkBusy ? (
-                    <Lucide.Loader2
-                      size={13}
-                      className={styles.loadingSpinner}
-                    />
-                  ) : (
-                    <Lucide.Wifi size={13} />
-                  )}
-                </button>
+                  icon={
+                    checkBusy ? (
+                      <Lucide.Loader2
+                        size={13}
+                        className={styles.loadingSpinner}
+                      />
+                    ) : (
+                      <Lucide.Wifi size={13} />
+                    )
+                  }
+                />
               </Tooltip>
               <Tooltip content="自动获取服务商模型列表">
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   disabled={scanBusy}
                   onClick={() => void runScan()}
                   style={{
@@ -422,16 +428,17 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                     justifyContent: 'center',
                   }}
                   aria-label="自动获取"
-                >
-                  {scanBusy ? (
-                    <Lucide.Loader2
-                      size={13}
-                      className={styles.loadingSpinner}
-                    />
-                  ) : (
-                    <Lucide.RefreshCw size={13} />
-                  )}
-                </button>
+                  icon={
+                    scanBusy ? (
+                      <Lucide.Loader2
+                        size={13}
+                        className={styles.loadingSpinner}
+                      />
+                    ) : (
+                      <Lucide.RefreshCw size={13} />
+                    )
+                  }
+                />
               </Tooltip>
               <div style={{ position: 'relative' }}>
                 <Lucide.Search
@@ -455,9 +462,10 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                 />
               </div>
               <Tooltip content="手动添加模型">
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     setManualOpen(!manualOpen);
                     setAddDraft(emptyAddDraft());
@@ -471,9 +479,8 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                     justifyContent: 'center',
                   }}
                   aria-label="添加模型"
-                >
-                  <Lucide.Plus size={13} />
-                </button>
+                  icon={<Lucide.Plus size={13} />}
+                />
               </Tooltip>
             </div>
           </div>
@@ -549,21 +556,23 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   })}
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setManualOpen(false)}
                   >
                     取消
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    variant="secondary"
+                    size="sm"
                     disabled={!addDraft.modelId.trim()}
                     onClick={handleManualAdd}
                   >
                     添加
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -669,9 +678,10 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                       </button>
                     </Tooltip>
                     <Tooltip content="配置">
-                      <button
+                      <Button
                         type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        variant="ghost"
+                        size="sm"
                         style={{
                           padding: '0 5px',
                           height: '26px',
@@ -684,14 +694,15 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                           if (expanded) closeConfig();
                           else openConfigFor(m);
                         }}
-                      >
-                        <Lucide.SlidersHorizontal size={13} />
-                      </button>
+                        icon={<Lucide.SlidersHorizontal size={13} />}
+                      />
                     </Tooltip>
                     <Tooltip content="删除">
-                      <button
+                      <Button
                         type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm mrd-delete-btn"
+                        variant="ghost"
+                        size="sm"
+                        className="mrd-delete-btn"
                         style={{
                           padding: '0 5px',
                           height: '26px',
@@ -703,9 +714,8 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                           if (configOpenId === m) closeConfig();
                           refresh();
                         }}
-                      >
-                        <Lucide.Trash2 size={13} />
-                      </button>
+                        icon={<Lucide.Trash2 size={13} />}
+                      />
                     </Tooltip>
                   </div>
 
@@ -813,36 +823,40 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                             </span>
                           )}
                           <Tooltip content="测试连通性">
-                            <button
+                            <Button
                               type="button"
-                              className="ui-btn ui-btn-ghost ui-btn-sm"
+                              variant="ghost"
+                              size="sm"
                               disabled={testBusy === tKey}
                               onClick={() => void runTest(m)}
-                            >
-                              {testBusy === tKey ? (
-                                <Lucide.Loader2
-                                  size={13}
-                                  className={styles.loadingSpinner}
-                                />
-                              ) : (
-                                <Lucide.Wifi size={13} />
-                              )}
-                            </button>
+                              icon={
+                                testBusy === tKey ? (
+                                  <Lucide.Loader2
+                                    size={13}
+                                    className={styles.loadingSpinner}
+                                  />
+                                ) : (
+                                  <Lucide.Wifi size={13} />
+                                )
+                              }
+                            />
                           </Tooltip>
-                          <button
+                          <Button
                             type="button"
-                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            variant="ghost"
+                            size="sm"
                             onClick={closeConfig}
                           >
                             收起
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
-                            className="ui-btn ui-btn-secondary ui-btn-sm"
+                            variant="secondary"
+                            size="sm"
                             onClick={saveConfig}
                           >
                             保存
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     </div>

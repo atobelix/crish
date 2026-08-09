@@ -146,7 +146,7 @@
 }
 
 .wsChromeTrailBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
@@ -156,7 +156,7 @@
 }
 
 .wsChromeTrailBtn:global(.is-active):hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent) !important;
+  background: var(--tint-hover) !important;
   color: var(--text-primary);
 }
 
@@ -249,7 +249,7 @@
 .wsChromeRowTitlebar .wsChromeTab:hover,
 .wsChromeRowSessions .wsChromeTab:hover,
 .wsChromeTabSession:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   color: var(--text-secondary);
   border-color: transparent;
 }
@@ -321,7 +321,7 @@
 .wsChromeRowTitlebar .wsChromeTabAdd:hover,
 .wsChromeRowSessions .wsChromeTabAdd:hover {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   box-shadow: none;
   border-color: transparent;
 }
@@ -330,7 +330,7 @@
 .wsChromeRowTitlebar .wsChromeTabAdd[aria-expanded='true'],
 .wsChromeRowSessions .wsChromeTabAdd[aria-expanded='true'] {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+  background: var(--tint-hover);
   box-shadow: none;
   border-color: transparent;
 }
@@ -383,7 +383,7 @@
 
 .wsChromeAddItem:hover,
 .wsChromeAddItem:focus-visible {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   outline: none;
 }
 
@@ -491,6 +491,6 @@
 
 .wsChromeTabClose:hover {
   opacity: 1 !important;
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }

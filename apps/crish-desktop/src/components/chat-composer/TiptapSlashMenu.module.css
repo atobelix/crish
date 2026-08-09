@@ -67,7 +67,7 @@
 
 .menuItem:hover,
 .menuItemActive {
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: var(--tint-active);
 }
 
 .iconWrapper {

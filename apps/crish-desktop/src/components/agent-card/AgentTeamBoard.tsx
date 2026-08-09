@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useId, useMemo, useRef } from 'react';
 import styles from './AgentCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../../store/layoutStore';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';

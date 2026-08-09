@@ -5,7 +5,7 @@ import React, {
 } from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import type {
   FileDiff,
   SessionMessage,

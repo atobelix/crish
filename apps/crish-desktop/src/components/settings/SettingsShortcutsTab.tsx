@@ -11,7 +11,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 
 type Props = {
   onShowToast: (msg: string) => void;

@@ -22,7 +22,7 @@
   padding: 0 8px 0 10px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -36,7 +36,7 @@
 
 .settingsSelectTrigger:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--border-color) 96%, var(--text-primary) 4%);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
 }
 
 .settingsSelectTrigger:active:not(:disabled),
@@ -45,7 +45,7 @@
 .settingsSelectTrigger[aria-expanded='true'],
 .settingsSelect.isOpen .settingsSelectTrigger {
   border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
   box-shadow: var(--focus-ring);
 }
 
@@ -126,7 +126,7 @@
 }
 
 .settingsSelectScroll::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  background: var(--tint-scrollbar-thumb);
   border-radius: var(--radius-xs);
 }
 

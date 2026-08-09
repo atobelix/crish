@@ -35,7 +35,7 @@ import { ChatToolStack } from '../chat-tool-call/ChatToolCallBlock';
 import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
 import { useAgentPanel } from '../../hooks/useAgentStream';
 import { useAgentToolApproval } from '../../hooks/useAgentToolApproval';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 
 /** 内联 denser：比主列 / 侧栏默认 4 行再收一行，避免时间线被撑爆 */
 const INLINE_COMPOSER_MAX_LINES = 3;

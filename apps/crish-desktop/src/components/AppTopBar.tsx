@@ -10,7 +10,7 @@
 
 import React, { lazy, Suspense } from 'react';
 import { MoreHorizontal, Minus, Square, X } from 'lucide-react';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from './ui';
 import { winCtl } from '../app/AppBootstrap';
 import { GlobalSessionTabBar } from './shell/GlobalSessionTabBar';
 import { useSessionTabDrag } from './shell/SessionTabDragContext';

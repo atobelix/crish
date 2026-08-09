@@ -19,7 +19,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import { ExternalSessionImport } from './ExternalSessionImport';
 import { UserViewDebugPanel } from './UserViewDebugPanel';
 import styles from './SettingsProfileTab.module.css';
@@ -226,24 +226,26 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
             control={
               <>
                 <Tooltip content={exporting ? '正在导出…' : '导出备份'}>
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    variant="secondary"
+                    size="sm"
                     disabled={exporting}
                     onClick={() => handleExportSettings()}
                   >
                     {exporting ? '导出中…' : '导出'}
-                  </button>
+                  </Button>
                 </Tooltip>
                 <Tooltip content={importing ? '正在导入…' : '从备份导入'}>
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    variant="secondary"
+                    size="sm"
                     disabled={importing}
                     onClick={() => handleImportSettings()}
                   >
                     {importing ? '导入中…' : '导入'}
-                  </button>
+                  </Button>
                 </Tooltip>
               </>
             }
@@ -270,14 +272,15 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
               desc="Tauri IPC 进程内核心（无 WS 地址）；可测试「核心已初始化」"
               control={
                 <>
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     disabled={busy}
                     onClick={handleTestDaemon}
                   >
                     {busy ? '测试中…' : '测试'}
-                  </button>
+                  </Button>
                   <span
                     id={engineStatusId}
                     className={styles.settingsListMeta}

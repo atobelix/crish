@@ -14,8 +14,7 @@ import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
 import { getSessionStoreState, setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { Check, ChevronRight, Folder, Plus, Search, Trash2 } from 'lucide-react';
-import { Menu } from '../ui/Menu';
-import { Tooltip } from '../Tooltip';
+import { Menu, Tooltip } from '../ui';
 
 /** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
 function syncDraftFolderOnProjectChange(folder: string): void {

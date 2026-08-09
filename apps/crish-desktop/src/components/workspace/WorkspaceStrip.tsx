@@ -2,7 +2,7 @@ import React from 'react';
 import styles from './WorkspaceChromeBars.module.css';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import {
   Folder,
   FolderPlus,

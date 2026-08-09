@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './RuntimePanel.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import {
   BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
   backgroundTaskStateLabel,

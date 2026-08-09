@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { Bot, ChevronDown } from 'lucide-react';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { agentOneLineLabel, agentStatusLabel } from './helpers';

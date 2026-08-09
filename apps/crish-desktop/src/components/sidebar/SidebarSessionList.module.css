@@ -209,7 +209,7 @@
 .folderCount {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background-color: var(--tint-hover);
   padding: 1px 4px;
   border-radius: var(--radius-xs);
   margin-left: var(--space-0_5);

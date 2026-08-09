@@ -14,7 +14,7 @@
 import React from 'react';
 import styles from './AppErrorBoundary.module.css';
 import { errorStore } from '../services/ErrorStore';
-import { Tooltip } from './Tooltip';
+import { Button, Tooltip } from './ui';
 
 type Variant = 'fullscreen' | 'compact' | 'minimal';
 
@@ -233,13 +233,14 @@ export class AppErrorBoundary extends React.Component<Props, State> {
               应用连续 {retryCount} 次发生渲染错误（{RETRY_WINDOW_MS / 1000}秒内），暂时无法自动恢复。
             </div>
             <div className={styles.appErrorActions}>
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-primary ui-btn-sm"
+                variant="primary"
+                size="sm"
                 onClick={this.reload}
               >
                 重新加载
-              </button>
+              </Button>
             </div>
             {stack && (
               <details className={styles.appErrorDetails}>
@@ -278,21 +279,23 @@ export class AppErrorBoundary extends React.Component<Props, State> {
             </Tooltip>
             <div className={styles.appErrorActions}>
               {/* Fix #19: 按钮顺序 [重试] [其他操作] */}
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-primary ui-btn-sm"
+                variant="primary"
+                size="sm"
                 onClick={this.dismiss}
               >
                 重试
-              </button>
+              </Button>
               {this.props.onClose && (
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  variant="secondary"
+                  size="sm"
                   onClick={this.handleClose}
                 >
                   关闭面板
-                </button>
+                </Button>
               )}
               <button
                 type="button"
@@ -320,20 +323,22 @@ export class AppErrorBoundary extends React.Component<Props, State> {
           </Tooltip>
           {/* Fix #19: 按钮顺序 [重试] [其他操作] */}
           <div className={styles.appErrorActions}>
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-primary ui-btn-sm"
+              variant="primary"
+              size="sm"
               onClick={this.dismiss}
             >
               {this.props.onReset ? '重试' : '尝试恢复'}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
+              variant="secondary"
+              size="sm"
               onClick={this.reload}
             >
               重新加载
-            </button>
+            </Button>
           </div>
           {/* 可折叠错误详情 */}
           {stack && (

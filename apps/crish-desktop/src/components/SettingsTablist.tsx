@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './settings/SettingsPanel.module.css';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from './ui';
 import type { TabMeta, TabType } from './settingsTabsMeta';
 
 export type SettingsTablistProps = {

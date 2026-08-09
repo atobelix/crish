@@ -15,7 +15,7 @@
 import React, { useCallback, useEffect, useId, useRef } from 'react';
 import styles from './ChatEmptyState.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import {
   CHAT_EMPTY_QUICK_PROMPTS,
   chatEmptyKindAriaLabel,

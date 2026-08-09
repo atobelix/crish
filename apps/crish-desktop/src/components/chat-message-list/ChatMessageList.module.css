@@ -54,7 +54,7 @@
 
 .pinnedBarToggle:hover {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
 }
 
 .pinnedChevron {

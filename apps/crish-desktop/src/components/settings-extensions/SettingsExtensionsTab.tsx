@@ -7,6 +7,7 @@ import { SettingsPage } from '../settings/SettingsUI';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { useExtensionMarket } from './useExtensionMarket';
 import { ExtensionList } from './ExtensionList';
+import { Button } from '../ui';
 import type { KindFilter } from './types';
 
 const SkillsSettingsTab = lazy(() =>
@@ -68,17 +69,19 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
       <SettingsPage
         title={label}
         meta={
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
+            variant="ghost"
+            size="sm"
+            className="settings-btn-rect"
             onClick={() => {
               setManage(null);
               void refresh();
             }}
+            icon={<ArrowLeft size={14} aria-hidden />}
           >
-            <ArrowLeft size={14} aria-hidden />
             返回扩展
-          </button>
+          </Button>
         }
       >
         <Suspense
@@ -105,19 +108,16 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
       title="扩展"
       meta={
         <div className="settings-head-tools">
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
+            variant="ghost"
+            size="sm"
+            className="settings-btn-rect"
             onClick={() => void refresh()}
             disabled={loading}
             aria-label="刷新"
-          >
-            <RefreshCw
-              size={14}
-              className={loading ? 'spin' : undefined}
-              aria-hidden
-            />
-          </button>
+            icon={<RefreshCw size={14} className={loading ? 'spin' : undefined} aria-hidden />}
+          />
         </div>
       }
     >

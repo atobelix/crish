@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { basename } from './helpers';
 import { ProgressSection } from './ProgressSection';
 import type { SessionState } from '../../store/types';

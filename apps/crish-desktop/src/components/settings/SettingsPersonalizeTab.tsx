@@ -8,6 +8,7 @@ import { getWorkspacePath } from '../../api/projectStore';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
 import { useSettingsField } from '../../store/storeAccess';
 import { SettingsPage } from './SettingsUI';
+import { Button } from '../ui';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 
@@ -187,16 +188,16 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
       <SettingsPage title="通用设置">
         <div style={{ padding: '20px', color: 'var(--accent-red)', textAlign: 'center' }}>
           <p>{loadError}</p>
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary"
+            variant="secondary"
             onClick={() => {
               setLoadError(null);
               setLoadTick((n) => n + 1);
             }}
           >
             重试
-          </button>
+          </Button>
         </div>
       </SettingsPage>
     );

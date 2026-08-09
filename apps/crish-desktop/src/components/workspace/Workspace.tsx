@@ -6,7 +6,7 @@ import type {
 } from '../../store/layoutStore';
 import styles from './Workspace.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { Columns, X } from 'lucide-react';

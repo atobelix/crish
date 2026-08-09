@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './AgentCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import type { SessionAgent } from '../../store/layoutStore';
 import { STATUS_LABEL } from './agentCardUtils';
 

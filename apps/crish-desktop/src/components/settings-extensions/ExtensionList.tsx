@@ -1,6 +1,7 @@
 import React from 'react';
 import type { CatalogEntry, InstalledExtension } from '../../api/extensionCatalog';
 import { ExtensionCard } from './ExtensionCard';
+import { Button } from '../ui';
 import type { ExpandMode, ExpandTarget, KindFilter, MainView, ManageKind } from './types';
 
 export type ExtensionListProps = {
@@ -76,13 +77,15 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
               ? '没有匹配的扩展'
               : '还没有安装扩展'}
             {!(query || kindFilter !== 'all') ? (
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+                variant="secondary"
+                size="sm"
+                className="settings-btn-rect"
                 onClick={() => onSetView('discover')}
               >
                 去发现
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : (

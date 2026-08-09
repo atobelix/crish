@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import type { SessionMessage } from '../../store/layoutStore';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import { Pin } from 'lucide-react';

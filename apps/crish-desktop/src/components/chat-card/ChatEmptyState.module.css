@@ -43,7 +43,7 @@
   border-width: var(--hairline-width);
   border-style: solid;
   border-color: var(--hairline, var(--border-subtle));
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
 }
 
 .chatEmptyIcon {

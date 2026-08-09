@@ -118,7 +118,7 @@
 
 .schedPresetChip:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
 /* 闁哄倹婢樼紓鎾舵媼閳ュ啿鐏婇柨娑欐皑閻濐偊骞掗幒鎴犳憻婵炲牏顣槐婵囨姜椤栨繄缈婚柛蹇嬪劵缁辨繈寮悩鐢稿厙缂備胶鍠庣敮顐︽偨閻斿墎鐟?select */
@@ -174,7 +174,7 @@
 }
 
 .schedFieldInput:focus {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent);
+  box-shadow: 0 0 0 1px var(--tint-scrollbar-thumb);
 }
 
 .schedFieldTextarea {
@@ -214,12 +214,12 @@
 .schedSelect :global(.settings-select-trigger:hover:not(:disabled)),
 .schedField :global(.settings-select-trigger:hover:not(:disabled)) {
   background: var(--bg-primary);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 12%, transparent);
+  box-shadow: 0 0 0 1px var(--tint-divider);
 }
 
 .schedSelect :global(.is-open .settings-select-trigger),
 .schedField :global(.settings-select.is-open .settings-select-trigger) {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent);
+  box-shadow: 0 0 0 1px var(--tint-scrollbar-thumb);
   background: var(--bg-primary);
 }
 

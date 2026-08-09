@@ -1,5 +1,6 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
+import { Button } from '../ui';
 import { Activity, ChevronDown } from 'lucide-react';
 import { formatElapsed } from './helpers';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
@@ -48,8 +49,8 @@ export const ActiveTasksSection = React.memo(function ActiveTasksSection({
                       </span>
                     </button>
                     <div className={styles.rowActions} onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="ui-btn ui-btn-primary ui-btn-xs" disabled={Boolean(approvalBusyId)} onClick={(e) => onApprovalAllow(a, e)}>{busy ? '…' : '允许'}</button>
-                      <button type="button" className="ui-btn ui-btn-ghost ui-btn-xs" disabled={Boolean(approvalBusyId)} onClick={(e) => onApprovalDeny(a, e)}>拒绝</button>
+                      <Button type="button" variant="primary" size="sm" disabled={Boolean(approvalBusyId)} onClick={(e) => onApprovalAllow(a, e)}>{busy ? '…' : '允许'}</Button>
+                      <Button type="button" variant="ghost" size="sm" disabled={Boolean(approvalBusyId)} onClick={(e) => onApprovalDeny(a, e)}>拒绝</Button>
                     </div>
                   </li>
                 );

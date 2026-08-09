@@ -28,7 +28,7 @@
   max-width: 100%;
   flex-shrink: 0;
   padding-bottom: var(--space-2_5);
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-bottom: 1px solid var(--tint-active);
 }
 
 .section:last-child {

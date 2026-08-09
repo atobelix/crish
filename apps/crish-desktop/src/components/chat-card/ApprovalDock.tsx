@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ApprovalDock.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { getSessionById } from '../../api/store-access/componentAccess';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import {

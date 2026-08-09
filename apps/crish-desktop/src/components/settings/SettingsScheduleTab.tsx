@@ -16,6 +16,7 @@ import {
 import { setComposerSeed } from '../../api/composerSeed';
 import { closeSettings } from '../../api/store-access/componentAccess';
 import styles from './SettingsScheduleTab.module.css';
+import { Button } from '../ui';
 import {
   SettingsPage,
   SettingsSection,
@@ -144,9 +145,10 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
               );
             })}
           </div>
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             aria-expanded={createMode !== 'none'}
             aria-controls="sched-settings-form"
             disabled={busy}
@@ -159,10 +161,10 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
                 setOk('');
               }
             }}
+            icon={<Lucide.Plus size={16} aria-hidden />}
           >
-            <Lucide.Plus size={16} aria-hidden />
             {createMode !== 'none' ? '收起' : '新建'}
-          </button>
+          </Button>
         </div>
 
         {(error || ok) && (

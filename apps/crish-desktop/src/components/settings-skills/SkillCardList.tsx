@@ -1,7 +1,7 @@
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
 import type { DesktopSkill } from '../../api/skillsApi';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import {
   ACTIVATION_LABEL,
@@ -89,15 +89,16 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
         >
           <div>暂无技能</div>
           <Tooltip content="导入本机技能或用 AI 创建">
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
+              variant="secondary"
+              size="sm"
               onClick={() => setCreateMode('paths')}
               aria-label="新建技能"
+              icon={<Lucide.Plus size={14} aria-hidden />}
             >
-              <Lucide.Plus size={14} aria-hidden />
               新建技能
-            </button>
+            </Button>
           </Tooltip>
         </div>
       );
@@ -113,14 +114,15 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
         <div>无匹配 · 共 {skills.length} 个技能</div>
         <div className={`${styles.skillsDiscoverActions} skills-discover-actions`} style={{ justifyContent: 'flex-start' }}>
           <Tooltip content={EMPTY_FILTER_HINT}>
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
+              variant="ghost"
+              size="sm"
               onClick={clearFilters}
               aria-label="清除筛选"
             >
               清除筛选
-            </button>
+            </Button>
           </Tooltip>
         </div>
       </div>
@@ -224,14 +226,14 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
               </div>
               <div className="settings-list-control">
                 <Tooltip content="移除此目录">
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     aria-label={`移除目录 ${d}`}
                     onClick={() => handleRemoveExtra(d)}
-                  >
-                    <Lucide.X size={14} aria-hidden />
-                  </button>
+                    icon={<Lucide.X size={14} aria-hidden />}
+                  />
                 </Tooltip>
               </div>
             </div>
@@ -255,24 +257,25 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                 />
               </Tooltip>
               <Tooltip content="浏览文件夹">
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   aria-label="浏览文件夹"
                   onClick={() => void handlePickExtra()}
-                >
-                  <Lucide.FolderOpen size={14} aria-hidden />
-                </button>
+                  icon={<Lucide.FolderOpen size={14} aria-hidden />}
+                />
               </Tooltip>
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm"
+                variant="secondary"
+                size="sm"
                 disabled={!extraDir.trim()}
                 aria-label="添加额外目录"
                 onClick={() => commitExtraDir(extraDir)}
               >
                 添加
-              </button>
+              </Button>
             </div>
           </div>
         </div>

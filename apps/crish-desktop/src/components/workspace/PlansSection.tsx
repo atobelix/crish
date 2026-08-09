@@ -9,6 +9,7 @@ import type { WorkflowDefinition } from '../../api/workflowApi';
 import { scheduleLabel } from '../../api/workflowApi';
 import { emitUiEvent } from '../../api/uiEvents';
 import { emptyPlansHint } from './runtimePanelLib';
+import { Button } from '../ui';
 
 export type PlansSectionProps = {
   workflows: WorkflowDefinition[];
@@ -36,16 +37,17 @@ export const PlansSection: React.FC<PlansSectionProps> = ({
             {countLabel}
           </span>
         ) : null}
-        <button
+        <Button
           type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
+          variant="ghost"
+          size="sm"
           aria-label="管理计划"
           onClick={() => {
             emitUiEvent('open-scheduled');
           }}
         >
           管理
-        </button>
+        </Button>
       </div>
       {planCount === 0 ? (
         <div className={styles.empty} role="status">

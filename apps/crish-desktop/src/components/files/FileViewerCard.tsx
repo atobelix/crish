@@ -6,7 +6,7 @@ import { useTerminalField, selectDiffFiles } from '../../store/storeAccess';
 import { openPathDefault, openWithHostOpener, listOpenOptionsForFile, type HostOpener } from '../../api/hostOpenersApi';
 import { pathDirname, readTextFile, getWorkspacePath } from '../../api/workspaceFsApi';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import styles from './FileViewerCard.module.css';
 
 export interface FileViewerCardProps {

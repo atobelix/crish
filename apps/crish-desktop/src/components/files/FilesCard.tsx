@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import styles from './FilesCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { CornerLeftUp, RotateCw, Search, X } from 'lucide-react';
 import { countPendingFileAnnotations, getWorkspacePath, openPathDefault, pathDirname, resolveWorkspacePath, takePendingOpenPath } from '../../api/workspaceFsApi';
 import { AppErrorBoundary } from '../AppErrorBoundary';

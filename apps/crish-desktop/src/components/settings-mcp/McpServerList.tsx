@@ -4,7 +4,7 @@ import type { McpServerInfo, McpStatusSnapshot } from '../../api/mcpApi';
 import { mcpStateKind, mcpStateLabel } from '../../api/mcpApi';
 import type { McpServer } from '../../api/clientApi';
 import styles from './McpSettingsTab.module.css';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import {
   EMPTY_DEMO_HINT,
   EMPTY_FILTER_HINT,
@@ -145,14 +145,15 @@ export const McpServerList: React.FC<McpServerListProps> = ({
           <span>无匹配</span>
         </Tooltip>
         <Tooltip content={EMPTY_FILTER_HINT}>
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
+            variant="ghost"
+            size="sm"
             onClick={onClearFilter}
             aria-label="清除筛选"
           >
             清除筛选
-          </button>
+          </Button>
         </Tooltip>
       </div>
     );
@@ -161,16 +162,16 @@ export const McpServerList: React.FC<McpServerListProps> = ({
   const renderSharedToolbar = () => (
     <div className={`${styles.mcpToolbar} mcp-toolbar`} role="toolbar" aria-label="扩展服务工具栏">
       <Tooltip content={loading ? '刷新中…' : '刷新列表'}>
-        <button
+        <Button
           type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
+          variant="ghost"
+          size="sm"
           onClick={onRefresh}
           disabled={loading}
           aria-label={loading ? '刷新中' : '刷新列表'}
           aria-busy={loading || undefined}
-        >
-          <Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} aria-hidden />
-        </button>
+          icon={<Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} aria-hidden />}
+        />
       </Tooltip>
       <div className="ui-segment ui-segment--inline settings-segment-pill" role="group" aria-label="排序方式">
         <Tooltip content="按名称排序">
@@ -211,16 +212,17 @@ export const McpServerList: React.FC<McpServerListProps> = ({
       </Tooltip>
       {demo ? (
         <Tooltip content={showAdd ? '收起添加表单' : '添加演示服务'}>
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             onClick={() => onSetShowAdd((v) => !v)}
             aria-label={showAdd ? '收起添加表单' : '添加演示服务'}
             aria-expanded={showAdd}
+            icon={<Lucide.Plus size={14} aria-hidden />}
           >
-            <Lucide.Plus size={14} aria-hidden />
             {showAdd ? '收起' : '添加'}
-          </button>
+          </Button>
         </Tooltip>
       ) : null}
     </div>
@@ -268,26 +270,28 @@ export const McpServerList: React.FC<McpServerListProps> = ({
             <>
               <span>{EMPTY_DEMO_HINT}</span>
               <Tooltip content={EMPTY_DEMO_HINT}>
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => onSetShowAdd(true)}
                   aria-label="添加演示服务"
+                  icon={<Lucide.Plus size={14} aria-hidden />}
                 >
-                  <Lucide.Plus size={14} aria-hidden />
                   添加
-                </button>
+                </Button>
               </Tooltip>
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm"
+                variant="ghost"
+                size="sm"
                 onClick={() => void refreshDemo()}
                 disabled={loading}
                 aria-label="刷新列表"
+                icon={<Lucide.RefreshCw size={14} aria-hidden />}
               >
-                <Lucide.RefreshCw size={14} aria-hidden />
                 刷新
-              </button>
+              </Button>
             </>
           ),
           renderItem: (srv: McpServer) => {
@@ -333,14 +337,14 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                       />
                     </Tooltip>
                     <Tooltip content="删除">
-                      <button
+                      <Button
                         type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        variant="ghost"
+                        size="sm"
                         aria-label={`删除 ${srv.name}`}
                         onClick={() => void onDeleteDemo(srv.id)}
-                      >
-                        <Lucide.Trash2 size={14} aria-hidden />
-                      </button>
+                        icon={<Lucide.Trash2 size={14} aria-hidden />}
+                      />
                     </Tooltip>
                   </div>
                 </div>
@@ -367,16 +371,17 @@ export const McpServerList: React.FC<McpServerListProps> = ({
               </span>
             </Tooltip>
             <Tooltip content="重新向引擎查询列表">
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm"
+                variant="ghost"
+                size="sm"
                 onClick={() => void refreshLive()}
                 disabled={loading}
                 aria-label="刷新列表"
+                icon={<Lucide.RefreshCw size={14} aria-hidden />}
               >
-                <Lucide.RefreshCw size={14} aria-hidden />
                 刷新
-              </button>
+              </Button>
             </Tooltip>
           </>
         ),
@@ -434,63 +439,67 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 </Tooltip>
                 <div className={`${styles.mcpRowActions} mcp-row-actions`}>
                   <Tooltip content={isOpen ? '收起工具' : `展开工具（${toolN}）`}>
-                    <button
+                    <Button
                       type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      variant="ghost"
+                      size="sm"
                       aria-label={isOpen ? `收起 ${srv.name} 的工具` : `展开 ${srv.name} 的工具 ${toolN}`}
                       aria-expanded={isOpen}
                       aria-controls={panelId}
                       onClick={() => onToggleExpanded(srv.id)}
-                    >
-                      {isOpen ? (
-                        <Lucide.ChevronUp size={14} aria-hidden />
-                      ) : (
-                        <Lucide.ChevronDown size={14} aria-hidden />
-                      )}
-                    </button>
+                      icon={
+                        isOpen ? (
+                          <Lucide.ChevronUp size={14} aria-hidden />
+                        ) : (
+                          <Lucide.ChevronDown size={14} aria-hidden />
+                        )
+                      }
+                    />
                   </Tooltip>
                   {canStartStop ? (
                     running ? (
                       <Tooltip content={busy ? '停止中…' : '停止'}>
-                        <button
+                        <Button
                           type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          variant="ghost"
+                          size="sm"
                           disabled={busy}
                           aria-label={`停止 ${srv.name}`}
                           aria-busy={busy || undefined}
                           onClick={() => void onToggleServer(srv.id, 'stop')}
-                        >
-                          <Lucide.Square size={14} aria-hidden />
-                        </button>
+                          icon={<Lucide.Square size={14} aria-hidden />}
+                        />
                       </Tooltip>
                     ) : (
                       <Tooltip content={busy ? '启动中…' : '启动'}>
-                        <button
+                        <Button
                           type="button"
-                          className="ui-btn ui-btn-secondary ui-btn-sm"
+                          variant="secondary"
+                          size="sm"
                           disabled={busy}
                           aria-label={`启动 ${srv.name}`}
                           aria-busy={busy || undefined}
                           onClick={() => void onToggleServer(srv.id, 'start')}
-                        >
-                          <Lucide.Play size={14} aria-hidden />
-                        </button>
+                          icon={<Lucide.Play size={14} aria-hidden />}
+                        />
                       </Tooltip>
                     )
                   ) : (
                     <Tooltip content={stopHint}>
-                      <button
+                      <Button
                         type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm"
+                        variant="ghost"
+                        size="sm"
                         disabled
                         aria-label={running ? '停止不可用' : '启动不可用'}
-                      >
-                        {running ? (
-                          <Lucide.Square size={14} aria-hidden />
-                        ) : (
-                          <Lucide.Play size={14} aria-hidden />
-                        )}
-                      </button>
+                        icon={
+                          running ? (
+                            <Lucide.Square size={14} aria-hidden />
+                          ) : (
+                            <Lucide.Play size={14} aria-hidden />
+                          )
+                        }
+                      />
                     </Tooltip>
                   )}
                 </div>

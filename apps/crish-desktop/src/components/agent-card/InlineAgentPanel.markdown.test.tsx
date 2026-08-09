@@ -63,9 +63,13 @@ vi.mock('../chat-tool-call/ChatToolCallBlock', () => ({
   ChatToolStack: () => <div data-testid="tool-stack" />,
 }));
 
-vi.mock('../Tooltip', () => ({
-  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
+vi.mock('../ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../ui')>();
+  return {
+    ...actual,
+    Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  };
+});
 
 vi.mock('../../api/markdownRenderLite', () => ({
   stripThoughtPlaceholders: (t: string) => t,

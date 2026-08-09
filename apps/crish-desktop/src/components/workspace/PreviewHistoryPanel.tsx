@@ -5,7 +5,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { previewDisplayHost } from '../../api/previewBrowserStore';
 import { HIST_PANEL_ID } from './previewCardLib';
 

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/layoutStore';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 
 export interface ToolCallHeaderProps {
   tc: MessageToolCall;

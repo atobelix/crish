@@ -20,7 +20,7 @@ import {
   openToolInSession,
   openToolInActiveTab,
 } from '../../api/store-access/componentAccess';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import styles from './LeafToolTabStrip.module.css';
 
 const PANEL_LABELS: Record<string, string> = {

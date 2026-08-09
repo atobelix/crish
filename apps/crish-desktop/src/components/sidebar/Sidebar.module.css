@@ -141,7 +141,7 @@
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--text-primary) 25%, transparent) 50%,
+    var(--tint-overlay) 50%,
     transparent 100%
   );
   opacity: 0;

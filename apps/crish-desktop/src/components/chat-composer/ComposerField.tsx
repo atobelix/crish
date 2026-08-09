@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import {
   COMPOSER_DENSE_LINE_HEIGHT,
   COMPOSER_LINE_HEIGHT,

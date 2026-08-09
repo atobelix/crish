@@ -51,7 +51,7 @@
 }
 
 .toastUndoBtn {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: var(--tint-strong);
   border: none;
   color: var(--text-primary);
   font-weight: var(--font-weight-normal);
@@ -65,12 +65,12 @@
 }
 
 .toastUndoBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background: var(--tint-strong);
   color: var(--text-primary);
 }
 
 .toastDismissBtn {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   border: none;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -84,7 +84,7 @@
 }
 
 .toastDismissBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background: var(--tint-strong);
   color: var(--text-primary);
 }
 
@@ -92,7 +92,7 @@
   outline: none;
   box-shadow: var(
     --focus-ring,
-    0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent)
+    0 0 0 2px var(--tint-strong)
   );
 }
 
@@ -100,7 +100,7 @@
   outline: none;
   box-shadow: var(
     --focus-ring,
-    0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent)
+    0 0 0 2px var(--tint-strong)
   );
 }
 

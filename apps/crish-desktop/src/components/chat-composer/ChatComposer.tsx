@@ -15,7 +15,7 @@ import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment, QueuedMessage } from '../../hooks/useChatStream';
 import { TiptapComposerField } from './TiptapComposerField';

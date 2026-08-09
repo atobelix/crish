@@ -17,7 +17,7 @@ import {
   Square,
 } from 'lucide-react';
 import styles from './BrowserPanel.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { useBrowserSession } from './useBrowserSession';
 import {
   BROWSER_AI_READY_TEXT,

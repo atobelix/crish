@@ -5,8 +5,8 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import { activateProfileModel } from '../../api/providerProfiles';
 import styles from './ModelsSettingsTab.module.css';
-import { Menu } from '../ui/Menu';
-import type { SelectOptionItem } from '../ui/Menu/types';
+import { Menu } from '../ui';
+import type { SelectOptionItem } from '../ui';
 import { SettingsCard, SettingsPage, SettingsRow, SettingsSection } from '../settings/SettingsUI';
 import {
   emptyAddDraft,

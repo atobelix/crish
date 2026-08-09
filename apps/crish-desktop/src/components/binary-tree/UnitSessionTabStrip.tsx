@@ -54,7 +54,7 @@ import {
 import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { UnitChromeActions } from '../chat-card/UnitChromeActions';
 import styles from './UnitSessionTabStrip.module.css';
 

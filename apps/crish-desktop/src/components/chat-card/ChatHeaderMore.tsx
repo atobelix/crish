@@ -1,8 +1,8 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatHeaderMore.module.css';
-import { Menu } from '../ui/Menu';
-import type { SelectOptionItem } from '../ui/Menu/types';
+import { Menu } from '../ui';
+import type { SelectOptionItem } from '../ui';
 
 interface Props {
   onClearHistory?: () => void;

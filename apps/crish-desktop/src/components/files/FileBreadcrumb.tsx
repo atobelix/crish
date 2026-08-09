@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { ChevronRight, File, FileCode2, FileText, Folder, Image, Search, Table } from 'lucide-react';
 import { detectFileKind, listDirectory, pathDirname, pathRelativeToRoot, resolveWorkspacePath, type FsDirEntry } from '../../api/workspaceFsApi';
 import { fileExtColor } from '../../api/codeHighlight';

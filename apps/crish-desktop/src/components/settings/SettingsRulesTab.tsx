@@ -14,7 +14,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import { useRulesState } from './useRulesState';
 import {
   RULE_PRESETS,
@@ -110,14 +110,15 @@ export const SettingsRulesTab: React.FC<Props> = ({
                 </div>
               </div>
               <div className="settings-list-control">
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  variant="secondary"
+                  size="sm"
                   aria-label="重新加载规则"
                   onClick={retryLoad}
                 >
                   重试
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -152,16 +153,17 @@ export const SettingsRulesTab: React.FC<Props> = ({
           className="settings-rules-scope-select"
         />
         <Tooltip content={`编辑${scopeLabel}全文`}>
-          <button
+          <Button
             ref={fullEditorBtnRef}
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             onClick={openFullEditor}
             aria-label={`编辑${scopeLabel}全文`}
             disabled={busy}
           >
             编辑全文
-          </button>
+          </Button>
         </Tooltip>
       </div>
     </div>
@@ -187,15 +189,15 @@ export const SettingsRulesTab: React.FC<Props> = ({
                 }
                 control={
                   <Tooltip content="删除此规则">
-                    <button
+                    <Button
                       type="button"
                       onClick={() => handleDeleteCustomRule(idx)}
-                      className="ui-btn ui-btn-ghost ui-btn-sm danger"
+                      variant="danger"
+                      size="sm"
                       aria-label={`删除规则：${rule}`}
                       disabled={busy}
-                    >
-                      <Lucide.Trash2 size={14} aria-hidden />
-                    </button>
+                      icon={<Lucide.Trash2 size={14} aria-hidden />}
+                    />
                   </Tooltip>
                 }
               />
@@ -261,15 +263,17 @@ export const SettingsRulesTab: React.FC<Props> = ({
                 }}
               />
               <Tooltip content={`加入${scopeLabel}短规则`}>
-                <button
+                <Button
                   type="button"
                   onClick={handleAddCustomRule}
-                  className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.actionBtn}`}
+                  variant="secondary"
+                  size="sm"
+                  className={styles.actionBtn}
                   disabled={busy || !normalizeRuleLine(newRuleText)}
                   aria-label="添加规则"
                 >
                   添加
-                </button>
+                </Button>
               </Tooltip>
             </div>
           </div>

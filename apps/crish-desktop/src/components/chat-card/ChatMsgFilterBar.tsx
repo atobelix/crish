@@ -9,7 +9,7 @@
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatMsgFilterBar.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 
 export type ChatMsgFilterBarProps = {
   localMsgFilter: string;

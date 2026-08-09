@@ -13,7 +13,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { TiptapEditorField } from './TiptapEditorField';
 import type { SlashCommandItem, TiptapEditorFieldHandle, MentionCandidate } from './composerTypes';
 import { slashMenuPick } from '../../api/resolveSlashCommand';

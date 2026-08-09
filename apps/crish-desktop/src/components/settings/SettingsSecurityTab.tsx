@@ -10,7 +10,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import {
   usePermissionField,
   selectPermissionMode,
@@ -305,26 +305,30 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                     ? '加入白名单'
                     : '请输入命令'
               }>
-                <button
+                <Button
                   type="button"
-                  className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.actionBtn}`}
+                  variant="secondary"
+                  size="sm"
+                  className={styles.actionBtn}
                   aria-label="添加命令"
                   disabled={!draftTrimmed || draftBlocked}
                   onClick={() => addWhitelist()}
                 >
                   添加
-                </button>
+                </Button>
               </Tooltip>
               {whitelist.length > 0 && !showClearConfirm ? (
                 <Tooltip content={`清空全部 ${whitelist.length} 条（需确认）`}>
-                  <button
+                  <Button
                     type="button"
-                    className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
+                    variant="ghost"
+                    size="sm"
+                    className={styles.actionBtn}
                     aria-label={`清空全部 ${whitelist.length} 条白名单`}
                     onClick={() => setShowClearConfirm(true)}
                   >
                     清空
-                  </button>
+                  </Button>
                 </Tooltip>
               ) : null}
               {showClearConfirm ? (
@@ -332,20 +336,24 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                   <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
                     确定清除所有白名单命令？此操作不可撤销
                   </span>
-                  <button
+                  <Button
                     type="button"
-                    className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.actionBtn}`}
+                    variant="secondary"
+                    size="sm"
+                    className={styles.actionBtn}
                     onClick={doClearWhitelist}
                   >
                     确认
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
+                    variant="ghost"
+                    size="sm"
+                    className={styles.actionBtn}
                     onClick={() => setShowClearConfirm(false)}
                   >
                     取消
-                  </button>
+                  </Button>
                 </div>
               ) : null}
             </div>
@@ -399,14 +407,14 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                   desc={`${riskTag} · ${risk.message}`}
                   control={
                     <Tooltip content={`移除 ${cmd}`}>
-                      <button
+                      <Button
                         type="button"
-                        className="ui-btn ui-btn-ghost ui-btn-sm danger"
+                        variant="danger"
+                        size="sm"
                         onClick={() => removeWhitelist(cmd)}
                         aria-label={`移除 ${cmd}`}
-                      >
-                        <Lucide.Trash2 size={14} aria-hidden />
-                      </button>
+                        icon={<Lucide.Trash2 size={14} aria-hidden />}
+                      />
                     </Tooltip>
                   }
                 />

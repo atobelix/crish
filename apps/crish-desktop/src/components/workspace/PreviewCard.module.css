@@ -42,7 +42,7 @@
 }
 .navBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
 }
 .navBtn:disabled {
@@ -50,7 +50,7 @@
   cursor: default;
 }
 .navBtn.isOn {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 .urlForm {
@@ -110,7 +110,7 @@
 }
 .urlClear:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
 }
 .spin {
@@ -221,7 +221,7 @@
 }
 .quickChip:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   border-color: var(--border-color);
   color: var(--text-primary);
 }
@@ -318,7 +318,7 @@
   outline: none;
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .histX {
   border: none;
@@ -346,7 +346,7 @@
 .histX:focus-visible {
   opacity: 1;
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
 }
 .histEmpty {

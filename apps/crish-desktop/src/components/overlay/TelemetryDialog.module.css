@@ -41,7 +41,7 @@
 }
 
 .btnSecondary {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 

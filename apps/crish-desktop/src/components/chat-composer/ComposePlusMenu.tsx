@@ -6,11 +6,10 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ComposePlusMenu.module.css';
-import { Tooltip } from '../Tooltip';
 import { openSettings } from '../../api/storeAccess';
 import { emitUiEvent } from '../../api/uiEvents';
-import { Menu } from '../ui/Menu';
-import type { SelectOptionItem } from '../ui/Menu/types';
+import { Menu, Tooltip } from '../ui';
+import type { SelectOptionItem } from '../ui';
 
 type Props = {
   open: boolean;

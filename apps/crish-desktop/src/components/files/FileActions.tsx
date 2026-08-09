@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { AppWindow, ChevronDown, ChevronsUpDown, Copy, FolderOpen, MoreHorizontal, Pencil, Save } from 'lucide-react';
 import { revealInOs } from '../../api/workspaceFsApi';
 import { openPathDefault, openWithHostOpener, type HostOpener } from '../../api/hostOpenersApi';

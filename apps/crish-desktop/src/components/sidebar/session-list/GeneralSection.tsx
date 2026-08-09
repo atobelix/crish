@@ -5,7 +5,7 @@ import { emitUiEvent } from '../../../api/uiEvents';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';
-import { Tooltip } from '../../Tooltip';
+import { Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { ChevronDown, ChevronsUpDown, MessageCirclePlus } from 'lucide-react';
 

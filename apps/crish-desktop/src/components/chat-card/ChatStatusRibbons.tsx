@@ -26,7 +26,7 @@ import {
   resolveNeedsModelSoftHintText,
 } from '../../api/chatEmptyState';
 import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { SetupHintBanner, type SetupHintState } from './SetupHintBanner';
 import {
   PlanGoalRibbons,

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 
 interface DiffCardGitActionsProps {
   open: boolean;
@@ -79,27 +79,29 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
         }}
       />
       <div className={styles.commitActions}>
-        <button
+        <Button
           type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
+          variant="ghost"
+          size="sm"
           style={{ height: 28 }}
           disabled={commitLoading || pushLoading}
           onClick={onCommit}
+          icon={<Lucide.GitCommit size={14} style={{ marginRight: 4 }} />}
         >
-          <Lucide.GitCommit size={14} style={{ marginRight: 4 }} />
           {commitLoading ? '提交中…' : stagedCount > 0 ? '提交已暂存' : '暂存并提交'}
-        </button>
+        </Button>
         <Tooltip content="将本地提交推送至远程仓库">
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
+            variant="ghost"
+            size="sm"
             style={{ height: 28 }}
             disabled={commitLoading || pushLoading}
             onClick={onPush}
+            icon={<Lucide.CloudUpload size={14} style={{ marginRight: 4 }} />}
           >
-            <Lucide.CloudUpload size={14} style={{ marginRight: 4 }} />
             {pushLoading ? '推送中…' : '推送 (Push)'}
-          </button>
+          </Button>
         </Tooltip>
       </div>
     </div>

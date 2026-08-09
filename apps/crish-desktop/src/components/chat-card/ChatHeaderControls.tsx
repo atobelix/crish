@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import styles from './ChatCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import {
   getActiveModelId,
   getActiveProfile,

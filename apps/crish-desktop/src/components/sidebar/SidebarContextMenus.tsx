@@ -8,8 +8,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import styles from './SidebarContextMenus.module.css';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { Tooltip } from '../Tooltip';
-import { Menu } from '../ui/Menu';
+import { Menu, Tooltip } from '../ui';
 import { measureMenu } from '../ui/Menu/position';
 import {
   Archive,

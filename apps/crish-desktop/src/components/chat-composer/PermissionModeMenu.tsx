@@ -1,8 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import { Tooltip } from '../Tooltip';
 import styles from './PermissionModeMenu.module.css';
-import { Menu } from '../ui/Menu';
+import { Menu, Tooltip } from '../ui';
 import {
   DESKTOP_PERMISSION_MODE_IDS,
   coercePermissionMode,

@@ -77,7 +77,7 @@
 }
 
 .navBack:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
   border-color: transparent;
 }
@@ -102,9 +102,9 @@
   height: var(--control-height-sm);
   min-height: var(--control-height-sm);
   padding: 0 var(--space-2_5) 0 calc(var(--space-6) + var(--space-1_5));
-  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-xs);
@@ -121,7 +121,7 @@
 .search:focus,
 .search:focus-visible {
   border-color: transparent;
-  background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-primary));
+  background: var(--tint-hover);
   box-shadow: none; /* soft focus: border/bg only, no heavy input shadow */
 }
 
@@ -211,12 +211,12 @@
 }
 
 .sidebarTab:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
 .sidebarTab.active {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
   border: none;

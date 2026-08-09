@@ -128,7 +128,7 @@
 }
 
 .toolRowHead:hover {
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
   color: var(--text-secondary);
 }
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 
 export interface ComposerAttachmentBarProps {
@@ -34,14 +34,15 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
             )}
             <span className={styles.attachName}>{a.name}</span>
             <Tooltip content={`移除 ${a.name}`}>
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-ghost chat-attach-remove"
+                variant="ghost"
+                className="chat-attach-remove"
                 aria-label={`移除附件 ${a.name}`}
                 onClick={() => onRemoveAttachment(a.name)}
               >
                 <Lucide.X size={14} aria-hidden />
-              </button>
+              </Button>
             </Tooltip>
           </span>
         </Tooltip>

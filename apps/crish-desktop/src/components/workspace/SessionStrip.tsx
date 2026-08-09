@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './WorkspaceChromeBars.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { MessageSquarePlus, Pin, Plus, X } from 'lucide-react';
 import {
   useChromeAddMenu,

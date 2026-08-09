@@ -45,7 +45,7 @@
   font-weight: 500;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: var(--tint-divider);
   color: var(--text-primary);
 }
 
@@ -155,7 +155,7 @@
 
 .importCheck:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 12%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-divider));
   border-radius: 3px;
 }
 

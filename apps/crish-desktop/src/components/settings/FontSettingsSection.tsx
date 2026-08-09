@@ -17,7 +17,7 @@ import {
 } from '../../api/fontStore';
 import { SettingsSelect, type SettingsSelectOption } from './SettingsSelect';
 import { SettingsRow } from './SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import styles from './FontSettingsSection.module.css';
 
 interface Props {
@@ -249,32 +249,38 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
           />
           {hasDraft && (
             <Tooltip content="应用自定义字体">
-              <button
+              <Button
                 type="button"
-                className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.customApplyBtn}`}
+                variant="ghost"
+                size="sm"
+                className={styles.customApplyBtn}
                 onClick={() => applyCustom(target)}
               >
                 <Lucide.Check size={12} />
-              </button>
+              </Button>
             </Tooltip>
           )}
         </div>
 
         <Tooltip content="扫描本机字体">
-          <button
+          <Button
             type="button"
-            className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.customActionBtn}`}
+            variant="ghost"
+            size="sm"
+            className={styles.customActionBtn}
             disabled={busy || scanning}
             onClick={() => void scanLocal()}
           >
             {scanning ? <Lucide.Loader2 size={13} className="spin" /> : <Lucide.HardDrive size={13} />}
-          </button>
+          </Button>
         </Tooltip>
 
         <Tooltip content="恢复默认字体">
-          <button
+          <Button
             type="button"
-            className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.customActionBtn}`}
+            variant="ghost"
+            size="sm"
+            className={styles.customActionBtn}
             disabled={busy || (target === 'mono' ? atDefault : prefs.uiFont === DEFAULT_FONT_PREFS.uiFont)}
             onClick={() => {
               if (target === 'mono') {
@@ -285,7 +291,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
             }}
           >
             <Lucide.RotateCcw size={13} />
-          </button>
+          </Button>
         </Tooltip>
       </div>
     );

@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PlanGoalRibbons.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import {
   formatGoalRibbonLabel,
   formatPlanModeRibbonLabel,

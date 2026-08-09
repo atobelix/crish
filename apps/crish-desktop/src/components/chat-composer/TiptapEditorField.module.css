@@ -156,7 +156,7 @@
 }
 
 .proseMirrorField :global(code) {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   padding: 0.15em 0.35em;
   border-radius: var(--radius-sm);
   font-size: 0.9em;

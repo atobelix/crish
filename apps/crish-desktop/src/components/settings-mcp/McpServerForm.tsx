@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './McpSettingsTab.module.css';
 import { SettingsSelect } from '../settings/SettingsSelect';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import { isDemoTransport, transportTitle, type DemoTransport } from './types';
 
 export type McpServerFormProps = {
@@ -94,24 +94,26 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
             />
           </Tooltip>
         )}
-        <button
+        <Button
           type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
+          variant="ghost"
+          size="sm"
           onClick={() => setShowAdd(false)}
           aria-label="取消添加"
         >
           取消
-        </button>
+        </Button>
         <Tooltip content={!newName.trim() ? '请先填写名称' : '保存到本地演示列表'}>
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             disabled={!newName.trim()}
             onClick={() => void onAddDemo()}
             aria-label="保存演示服务"
           >
             保存
-          </button>
+          </Button>
         </Tooltip>
       </div>
     </div>

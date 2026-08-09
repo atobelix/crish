@@ -18,7 +18,7 @@ import {
   type UsageSnapshot,
 } from '../../api/usageStore';
 import { SettingsPage, SettingsSection, SettingsCard } from './SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -70,9 +70,10 @@ const EditablePriceRow: React.FC<{
         className={`settings-field-input ${styles.priceRowInput}`}
         placeholder="出"
       />
-      <button
+      <Button
         type="button"
-        className="ui-btn ui-btn-secondary ui-btn-sm"
+        variant="secondary"
+        size="sm"
         disabled={
           !hasChanged ||
           Number.isNaN(Number(inputVal)) ||
@@ -83,14 +84,15 @@ const EditablePriceRow: React.FC<{
         }}
       >
         保存
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        className="ui-btn ui-btn-ghost ui-btn-sm danger"
+        variant="danger"
+        size="sm"
         onClick={onDelete}
       >
         删除
-      </button>
+      </Button>
     </div>
   );
 };
@@ -208,14 +210,16 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
   };
 
   const headerMeta = (
-    <button
+    <Button
       type="button"
-      className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.configBtn}`}
+      variant="secondary"
+      size="sm"
+      className={styles.configBtn}
       onClick={() => setPricesModalOpen(true)}
+      icon={<Lucide.DollarSign size={14} />}
     >
-      <Lucide.DollarSign size={14} />
       配置单价
-    </button>
+    </Button>
   );
 
   const pricingModal = pricesModalOpen
@@ -292,24 +296,28 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                 }
                 className={`settings-field-input ${styles.modalAddInputFlex1}`}
               />
-              <button
+              <Button
                 type="button"
-                className={`ui-btn ui-btn-secondary ui-btn-sm ${styles.modalAddBtn}`}
+                variant="secondary"
+                size="sm"
+                className={styles.modalAddBtn}
                 disabled={!canAttemptSave}
                 onClick={handleSavePrice}
               >
                 添加
-              </button>
+              </Button>
             </div>
 
             <div className={styles.modalFooter}>
-              <button
+              <Button
                 type="button"
-                className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.modalCloseBtn}`}
+                variant="ghost"
+                size="sm"
+                className={styles.modalCloseBtn}
                 onClick={() => setPricesModalOpen(false)}
               >
                 关闭
-              </button>
+              </Button>
             </div>
           </div>
         </div>,
@@ -506,30 +514,36 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
 
               {/* Bottom Actions */}
               <div className={styles.actionsBar}>
-                <button
+                <Button
                   type="button"
-                  className={`ui-btn ui-btn-ghost ui-btn-sm ${styles.actionBtn}`}
+                  variant="ghost"
+                  size="sm"
+                  className={styles.actionBtn}
                   onClick={() => setHistory(loadUsageSnapshot())}
+                  icon={<Lucide.RefreshCw size={12} />}
                 >
-                  <Lucide.RefreshCw size={12} /> 刷新数据
-                </button>
+                  刷新数据
+                </Button>
                 {(history.totalInput > 0 || history.totalOutput > 0) && (
-                  <button
+                  <Button
                     type="button"
-                    className={`ui-btn ui-btn-ghost ui-btn-sm danger ${styles.actionBtn}`}
+                    variant="danger"
+                    size="sm"
+                    className={styles.actionBtn}
+                    icon={<Lucide.Trash2 size={12} />}
                     onClick={() => {
                       if (
                         typeof window !== 'undefined' &&
                         window.confirm &&
-                        !window.confirm('确定清空本机用量历史？不可撤销。')
+                        !window.confirm('确定清空本机用量历史？不可撤销！')
                       ) {
                         return;
                       }
                       setHistory(clearUsageHistory());
                     }}
                   >
-                    <Lucide.Trash2 size={12} /> 清空历史
-                  </button>
+                    清空历史
+                  </Button>
                 )}
               </div>
             </>

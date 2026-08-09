@@ -17,7 +17,7 @@ import {
 } from '../../api/applyFileDiff';
 import { filterPublishableDiffs, publishToolDiffs } from '../../api/publishToolDiffs';
 import { resolveToolDiffs } from '../../api/toolFeedback';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 
 export type ChangeOverviewCardProps = {
   message: SessionMessage;

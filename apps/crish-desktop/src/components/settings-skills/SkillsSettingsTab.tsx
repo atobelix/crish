@@ -11,7 +11,7 @@ import * as Lucide from 'lucide-react';
 import { SettingsSelect } from '../settings/SettingsSelect';
 import styles from './SkillsSettingsTab.module.css';
 import { SettingsPage } from '../settings/SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import {
   useSkillsSettingsState,
 } from './useSkillsSettingsState';
@@ -96,19 +96,20 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       meta={
         <div className={`${styles.skillsTabActions} skills-tab-actions`} role="toolbar" aria-label="技能操作">
           <Tooltip content="导入本机技能 or AI">
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
+              variant="secondary"
+              size="sm"
               onClick={() =>
                 setCreateMode((m) => (m === 'none' ? 'paths' : 'none'))
               }
               aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
               aria-expanded={createMode !== 'none'}
               aria-controls={createBoxId}
+              icon={<Lucide.Plus size={14} aria-hidden />}
             >
-              <Lucide.Plus size={14} aria-hidden />
               {createMode !== 'none' ? '收起' : '新建'}
-            </button>
+            </Button>
           </Tooltip>
           <SkillsMoreMenu
             moreOpen={moreOpen}
@@ -138,15 +139,16 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           <Tooltip content={loadError}>
             <span>{loadError}</span>
           </Tooltip>{' '}
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
+            variant="ghost"
+            size="sm"
             onClick={() => void refresh()}
             disabled={loading}
             aria-label="重试扫描技能"
           >
             重试
-          </button>
+          </Button>
         </div>
       ) : null}
 

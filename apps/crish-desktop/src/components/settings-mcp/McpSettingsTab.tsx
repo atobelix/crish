@@ -11,7 +11,7 @@ import { SettingsPage } from '../settings/SettingsUI';
 import { useMcpSettings } from './useMcpSettings';
 import { McpServerForm } from './McpServerForm';
 import { McpServerList } from './McpServerList';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 
 type Props = {
   onShowToast?: ((msg: string) => void) | undefined;

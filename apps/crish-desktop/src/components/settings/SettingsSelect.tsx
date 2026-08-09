@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import { Tooltip } from '../Tooltip';
 import styles from './SettingsSelect.module.css';
-import { Menu } from '../ui/Menu';
-import type { SelectOptionItem } from '../ui/Menu/types';
+import { Menu, Tooltip } from '../ui';
+import type { SelectOptionItem } from '../ui';
 
 export type SettingsSelectOption = {
   value: string;

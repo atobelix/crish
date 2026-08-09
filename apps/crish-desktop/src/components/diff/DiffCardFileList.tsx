@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { SettingsSelect } from '../settings/SettingsSelect';
 import { classifyFileDiff } from '../../api/applyFileDiff';
 import { openPathDefault } from '../../api/hostOpenersApi';

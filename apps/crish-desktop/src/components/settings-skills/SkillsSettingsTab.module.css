@@ -120,7 +120,7 @@
   border-radius: var(--radius-xl);
   background: var(--bg-elevated, var(--bg-primary));
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 0 0 1px var(--tint-active),
     0 8px 24px color-mix(in srgb, var(--shadow-color) 8%, transparent);
   z-index: var(--z-popover);
   display: flex;
@@ -143,7 +143,7 @@
 }
 
 .skillsMoreItem:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
 }
 
 .skillsMoreItem:disabled {

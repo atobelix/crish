@@ -6,7 +6,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ScheduledTasksPanel.module.css';
 import { workflowRunStatusLabel, type WorkflowDefinition, type WorkflowRunEntry } from '../../api/workflowApi';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 
 /** 最近运行条数上限（对话内紧凑） */
 const RECENT_RUNS_LIMIT = 10;
@@ -66,17 +66,17 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
               </div>
               <div className={styles.schedItemActions}>
                 <Tooltip content={canOpen ? '打开会话' : '无关联会话'}>
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     aria-label={
                       canOpen ? `打开 ${wfName} 的运行会话` : `${wfName} 无关联会话`
                     }
                     disabled={!canOpen}
                     onClick={() => onOpenRun(r)}
-                  >
-                    <Lucide.MessageSquare size={16} aria-hidden />
-                  </button>
+                    icon={<Lucide.MessageSquare size={16} aria-hidden />}
+                  />
                 </Tooltip>
               </div>
             </li>

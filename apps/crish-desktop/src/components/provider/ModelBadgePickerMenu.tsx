@@ -4,7 +4,7 @@ import styles from './ModelBadgePickerMenu.module.css';
 import { activateProfileModel } from '../../api/providerProfiles';
 import { formatModelDisplayName, getModelMeta, listPickerProfiles } from '../../api/modelCatalog';
 import { openSettings } from '../../api/storeAccess';
-import { Menu } from '../ui/Menu';
+import { Menu } from '../ui';
 
 type Props = {
   activeModel?: string | null;

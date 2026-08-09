@@ -161,7 +161,7 @@
 
 .tab:hover {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
 }
 
 .tab:focus-visible {
@@ -262,7 +262,7 @@
 
 .tabClose:hover {
   opacity: 1 !important;
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: var(--tint-strong);
   color: var(--text-primary);
 }
 
@@ -306,7 +306,7 @@
 
 .tabAdd:hover {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
 }
 
 .tabAdd:focus-visible {

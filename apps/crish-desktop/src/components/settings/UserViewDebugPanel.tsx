@@ -16,7 +16,7 @@ import {
 import { downloadTextFile } from '../../api/sessionExport';
 import { useActiveSession } from '../../api/store-access/componentAccess';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import styles from './UserViewDebugPanel.module.css';
 
 type Props = {
@@ -166,13 +166,14 @@ export const UserViewDebugPanel: React.FC<Props> = ({ onShowToast }) => {
           }
           control={
             summary.stats.hiddenCount > 0 ? (
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm"
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowBucketList((v) => !v)}
               >
                 {showBucketList ? '收起' : '明细'}
-              </button>
+              </Button>
             ) : (
               <span className={styles.metaMuted}>—</span>
             )
@@ -197,15 +198,16 @@ export const UserViewDebugPanel: React.FC<Props> = ({ onShowToast }) => {
 
         <div className={styles.actionsBar}>
           <Tooltip content="下载当前会话 UserView 投影 JSON（只读，不写 ModelView）">
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
+              variant="secondary"
+              size="sm"
               disabled={noSession}
               onClick={handleExport}
+              icon={<Lucide.Download size={14} strokeWidth={1.75} />}
             >
-              <Lucide.Download size={14} strokeWidth={1.75} />
               导出投影 JSON
-            </button>
+            </Button>
           </Tooltip>
           {consoleFlagOn ? (
             <span className={styles.metaMuted} role="status">

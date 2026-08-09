@@ -1,7 +1,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../api/skillsApi';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import { ACTIVATION_OPTIONS, scopeGroupLabel } from './useSkillsSettingsState';
 
@@ -76,14 +76,14 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                   </code>
                 </Tooltip>
                 <Tooltip content="复制斜杠命令">
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     aria-label={`复制命令 ${selectedSlash}`}
                     onClick={() => void copySlashCommand(selected.name)}
-                  >
-                    <Lucide.Copy size={14} aria-hidden />
-                  </button>
+                    icon={<Lucide.Copy size={14} aria-hidden />}
+                  />
                 </Tooltip>
                 <Tooltip content={selected.filePath}>
                   <span className={`${styles.skillsPathInline} skills-path-inline`}>
@@ -91,18 +91,18 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                   </span>
                 </Tooltip>
                 <Tooltip content="在文件管理器中打开位置">
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     aria-label="打开技能文件位置"
                     onClick={() => {
                       void revealSkillPath(selected.filePath).then((ok) => {
                         if (!ok) onShowToast?.('无法打开路径（需桌面壳）');
                       });
                     }}
-                  >
-                    <Lucide.ExternalLink size={14} aria-hidden />
-                  </button>
+                    icon={<Lucide.ExternalLink size={14} aria-hidden />}
+                  />
                 </Tooltip>
               </div>
             </div>
@@ -129,15 +129,17 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                   ))}
                 </div>
               </div>
-              <button
+              <Button
                 type="button"
-                className={`ui-btn ui-btn-ghost ui-btn-sm ${showRaw ? 'is-active' : ''}`}
+                variant="ghost"
+                size="sm"
+                className={showRaw ? 'is-active' : undefined}
                 onClick={() => setShowRaw((v) => !v)}
                 aria-pressed={showRaw}
                 aria-label={showRaw ? '切换为预览' : '切换为原文'}
               >
                 {showRaw ? '预览' : '原文'}
-              </button>
+              </Button>
             </div>
           </div>
 

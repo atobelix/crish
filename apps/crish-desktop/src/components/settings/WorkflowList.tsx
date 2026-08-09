@@ -6,7 +6,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import { scheduleLabel, workflowEnabledLabel, type WorkflowDefinition } from '../../api/workflowApi';
 import { SettingsRow } from './SettingsUI';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
 import settingsStyles from './SettingsScheduleTab.module.css';
 
@@ -92,37 +92,37 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                         />
                       </Tooltip>
                       <Tooltip content="编辑">
-                        <button
+                        <Button
                           type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          variant="ghost"
+                          size="sm"
                           aria-label={`编辑 ${w.name}`}
                           disabled={busy}
                           onClick={() => onEdit?.(w)}
-                        >
-                          <Lucide.Pencil size={16} aria-hidden />
-                        </button>
+                          icon={<Lucide.Pencil size={16} aria-hidden />}
+                        />
                       </Tooltip>
                       <Tooltip content="立即执行">
-                        <button
+                        <Button
                           type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          variant="ghost"
+                          size="sm"
                           aria-label={`立即执行 ${w.name}`}
                           disabled={busy}
                           onClick={() => onTrigger(w)}
-                        >
-                          <Lucide.Zap size={16} aria-hidden />
-                        </button>
+                          icon={<Lucide.Zap size={16} aria-hidden />}
+                        />
                       </Tooltip>
                       <Tooltip content="删除">
-                        <button
+                        <Button
                           type="button"
-                          className="ui-btn ui-btn-ghost ui-btn-sm"
+                          variant="ghost"
+                          size="sm"
                           aria-label={`删除 ${w.name}`}
                           disabled={busy}
                           onClick={() => onDelete(w)}
-                        >
-                          <Lucide.Trash2 size={16} aria-hidden />
-                        </button>
+                          icon={<Lucide.Trash2 size={16} aria-hidden />}
+                        />
                       </Tooltip>
                     </div>
                   }
@@ -168,42 +168,44 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                 </div>
                 <div className={styles.schedItemActions} role="group" aria-label={`${w.name} 操作`}>
                   <Tooltip content="立即触发">
-                    <button
+                    <Button
                       type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      variant="ghost"
+                      size="sm"
                       aria-label={`立即触发 ${w.name}`}
                       disabled={busy}
                       onClick={() => onTrigger(w)}
-                    >
-                      <Lucide.Play size={16} aria-hidden />
-                    </button>
+                      icon={<Lucide.Play size={16} aria-hidden />}
+                    />
                   </Tooltip>
                   <Tooltip content={paused ? '启用' : '暂停'}>
-                    <button
+                    <Button
                       type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      variant="ghost"
+                      size="sm"
                       aria-label={toggleLabel}
                       aria-pressed={!paused}
                       disabled={busy}
                       onClick={() => onToggle(w)}
-                    >
-                      {paused ? (
-                        <Lucide.PlayCircle size={16} aria-hidden />
-                      ) : (
-                        <Lucide.Pause size={16} aria-hidden />
-                      )}
-                    </button>
+                      icon={
+                        paused ? (
+                          <Lucide.PlayCircle size={16} aria-hidden />
+                        ) : (
+                          <Lucide.Pause size={16} aria-hidden />
+                        )
+                      }
+                    />
                   </Tooltip>
                   <Tooltip content="删除">
-                    <button
+                    <Button
                       type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      variant="ghost"
+                      size="sm"
                       aria-label={`删除 ${w.name}`}
                       disabled={busy}
                       onClick={() => onDelete(w)}
-                    >
-                      <Lucide.Trash2 size={16} aria-hidden />
-                    </button>
+                      icon={<Lucide.Trash2 size={16} aria-hidden />}
+                    />
                   </Tooltip>
                 </div>
               </li>

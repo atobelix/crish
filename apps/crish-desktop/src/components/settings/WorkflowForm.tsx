@@ -12,7 +12,7 @@ import {
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import { SettingsSelect } from './SettingsSelect';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
 
 export type WorkflowFormProps = {
@@ -212,23 +212,25 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
           {scheduleSelect}
           {dailyField}
           {intervalField}
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
+            variant="ghost"
+            size="sm"
             disabled={busy}
             onClick={onClose}
           >
             取消
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             disabled={busy}
             aria-busy={busy}
             onClick={onSave}
           >
             {busy ? '…' : (isEditing ? '保存' : '创建')}
-          </button>
+          </Button>
         </div>
         {workspacePath ? (
           <Tooltip content={workspacePath}>
@@ -259,23 +261,25 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
         {intervalField}
       </div>
       <div className={styles.schedFormActions}>
-        <button
+        <Button
           type="button"
-          className="ui-btn ui-btn-secondary ui-btn-sm"
+          variant="secondary"
+          size="sm"
           disabled={busy}
           aria-busy={busy}
           onClick={onSave}
         >
           {busy ? '…' : '保存'}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
+          variant="ghost"
+          size="sm"
           disabled={busy}
           onClick={onClose}
         >
           取消
-        </button>
+        </Button>
       </div>
     </div>
   );

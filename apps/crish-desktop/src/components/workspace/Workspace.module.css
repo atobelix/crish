@@ -16,7 +16,7 @@
 }
 
 .section[data-ws-split="true"][data-ws-active="true"] {
-  outline: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  outline: 1px solid var(--tint-active);
   outline-offset: -1px;
 }
 
@@ -127,9 +127,9 @@
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
-    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
+    var(--tint-active) 20%,
+    var(--tint-strong) 50%,
+    var(--tint-active) 80%,
     transparent 100%
   );
   opacity: 0.5;
@@ -144,9 +144,9 @@
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--text-primary) 12%, transparent) 16%,
-    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 12%, transparent) 84%,
+    var(--tint-divider) 16%,
+    var(--tint-overlay) 50%,
+    var(--tint-divider) 84%,
     transparent 100%
   );
 }
@@ -181,9 +181,9 @@
   background: linear-gradient(
     to right,
     transparent 0%,
-    color-mix(in srgb, var(--text-primary) 9%, transparent) 20%,
-    color-mix(in srgb, var(--text-primary) 15%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 9%, transparent) 80%,
+    var(--tint-active) 20%,
+    var(--tint-strong) 50%,
+    var(--tint-active) 80%,
     transparent 100%
   );
   opacity: 0.5;
@@ -198,9 +198,9 @@
   background: linear-gradient(
     to right,
     transparent 0%,
-    color-mix(in srgb, var(--text-primary) 12%, transparent) 16%,
-    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 12%, transparent) 84%,
+    var(--tint-divider) 16%,
+    var(--tint-overlay) 50%,
+    var(--tint-divider) 84%,
     transparent 100%
   );
 }

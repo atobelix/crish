@@ -19,7 +19,7 @@ import {
   type EngineStatus,
 } from '../../api/engineConfig';
 import { SettingsCard, SettingsPage, SettingsRow, SettingsSection } from './SettingsUI';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import styles from './StatusDiagnosticsPanel.module.css';
 
 type Props = {
@@ -171,16 +171,17 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
             >
               {fetchError ? '连接异常' : '在线'}
             </span>
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
+              variant="ghost"
+              size="sm"
               disabled={refreshing}
               onClick={() => void load()}
               aria-label="刷新状态诊断"
+              icon={<RefreshCw size={14} strokeWidth={1.75} className={refreshing ? styles.spin : undefined} />}
             >
-              <RefreshCw size={14} strokeWidth={1.75} className={refreshing ? styles.spin : undefined} />
               刷新
-            </button>
+            </Button>
           </span>
         </Tooltip>
       }
@@ -192,13 +193,14 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
             <strong>无法获取核心状态</strong>
             <span>{fetchError}</span>
           </div>
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             onClick={() => void load()}
           >
             重试
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -244,15 +246,16 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
                 <span className={styles.lastErrorKind}>{lastError.kind}</span>
                 <span className={styles.lastErrorTs}>{formatTs(lastError.ts)}</span>
                 <Tooltip content="复制错误信息">
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     aria-label="复制错误信息"
                     onClick={() => void handleCopy(lastError)}
+                    icon={<ClipboardCopy size={14} strokeWidth={1.75} />}
                   >
-                    <ClipboardCopy size={14} strokeWidth={1.75} />
                     复制
-                  </button>
+                  </Button>
                 </Tooltip>
               </div>
               <pre className={styles.lastErrorDetail}>{lastError.detail}</pre>

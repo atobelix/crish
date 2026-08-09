@@ -8,7 +8,7 @@ import {
 } from '../../api/providerProfiles';
 import { formatModelDisplayName } from '../../api/modelCatalog';
 import styles from './ModelsSettingsTab.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 
 interface ModelsCascadeSelectProps {
   profiles: ProviderProfile[];

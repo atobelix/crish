@@ -345,16 +345,12 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
     expect(refCount).toBe(2);
   });
 
-  it('双份 Tooltip.module.css 均含 --tooltip-translate 静态 fallback（translate(0) 形态）', () => {
-    for (const rel of [
-      'src/components/ui/Tooltip/Tooltip.module.css',
-      'src/components/Tooltip/Tooltip.module.css',
-    ]) {
-      const src = readFile(rel);
-      const bare = src.match(/var\(--tooltip-translate\)(?!,)/g) ?? [];
-      expect(bare, `${rel} 存在无 fallback 的裸引用`).toEqual([]);
-      expect(src, rel).toContain('var(--tooltip-translate, translate(0))');
-    }
+  it('ui/Tooltip.module.css 含 --tooltip-translate 静态 fallback（translate(0) 形态）', () => {
+    const rel = 'src/components/ui/Tooltip/Tooltip.module.css';
+    const src = readFile(rel);
+    const bare = src.match(/var\(--tooltip-translate\)(?!,)/g) ?? [];
+    expect(bare, `${rel} 存在无 fallback 的裸引用`).toEqual([]);
+    expect(src, rel).toContain('var(--tooltip-translate, translate(0))');
   });
 
   it('tokens.css 含 --accent-green/red-light-adaptive 静态定义（light + dark）', () => {

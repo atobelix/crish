@@ -11,7 +11,7 @@ import {
   LayoutDashboard,
 } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
   openToolInSession,

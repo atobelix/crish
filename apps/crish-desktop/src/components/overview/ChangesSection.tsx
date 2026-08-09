@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { ChevronDown, File, FileCode2, FileText, GitBranch, Image, RefreshCw, Table } from 'lucide-react';
 import { openGitDownloadPage } from '../../api/gitApi';
 import { detectFileKind } from '../../api/workspaceFsApi';

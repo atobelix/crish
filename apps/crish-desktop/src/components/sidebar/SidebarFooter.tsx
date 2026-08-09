@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './Sidebar.module.css';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import { canUseDemoMode, getAppMode, isDemoMode, switchAppMode } from '../../api/appMode';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
 import { RefreshCw } from 'lucide-react';

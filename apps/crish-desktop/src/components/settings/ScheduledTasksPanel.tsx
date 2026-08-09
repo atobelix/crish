@@ -16,7 +16,7 @@ import {
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { setActiveSessionId } from '../../api/storeAccess';
 import styles from './ScheduledTasksPanel.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { ensureScheduledSession } from './workflowsSharedLib';
 import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
@@ -94,24 +94,26 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
       aria-label="定时任务"
     >
       <div className={styles.schedInChatHead}>
-        <button
+        <Button
           type="button"
-          className="ui-btn ui-btn-ghost ui-btn-sm"
+          variant="ghost"
+          size="sm"
           onClick={onBackToChat}
           aria-label="返回对话"
+          icon={<Lucide.ArrowLeft size={16} aria-hidden />}
         >
-          <Lucide.ArrowLeft size={16} aria-hidden />
           返回
-        </button>
+        </Button>
         <div className={styles.schedInChatTitles}>
           <h3 id="sched-in-chat-title">定时任务</h3>
           <span className={styles.schedInChatCount} aria-live="polite">
             {workflows.length > 0 ? `${workflows.length} 条` : ' '}
           </span>
         </div>
-        <button
+        <Button
           type="button"
-          className="ui-btn ui-btn-secondary ui-btn-sm"
+          variant="secondary"
+          size="sm"
           aria-expanded={showForm}
           aria-controls="sched-in-chat-form"
           onClick={() => {
@@ -123,10 +125,10 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
               setOk('');
             }
           }}
+          icon={<Lucide.Plus size={16} aria-hidden />}
         >
-          <Lucide.Plus size={16} aria-hidden />
           {showForm ? '收起' : '新建'}
-        </button>
+        </Button>
       </div>
 
       <div className={styles.schedPresetRow}>

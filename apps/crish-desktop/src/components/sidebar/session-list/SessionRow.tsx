@@ -17,7 +17,7 @@ import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../../api/sessionSearch';
-import { Tooltip } from '../../Tooltip';
+import { Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { MoreHorizontal } from 'lucide-react';
 

@@ -9,8 +9,7 @@
  */
 import React, { useId } from 'react';
 import type { DesktopSkill } from '../../api/skillsApi';
-import { Tooltip } from '../Tooltip';
-import { Dialog } from '../ui';
+import { Button, Dialog, Tooltip } from '../ui';
 import styles from './SkillEditorModal.module.css';
 
 interface SkillEditorModalProps {
@@ -64,34 +63,37 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
         overlayClassName={styles.skillsDiscoverOverlay}
         footer={
           <div className={styles.skillsDiscoverActions}>
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
+              variant="ghost"
+              size="sm"
               disabled={discoverBusy}
               onClick={() => void applyDiscoverImport('skip')}
               aria-label="跳过导入"
             >
               跳过
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
+              variant="ghost"
+              size="sm"
               disabled={discoverBusy}
               onClick={() => void applyDiscoverImport('all')}
               aria-label={`全部启用 ${discoverCandidates?.length ?? 0} 个新技能`}
             >
               全启
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
+              variant="secondary"
+              size="sm"
               disabled={discoverBusy}
               aria-busy={discoverBusy || undefined}
               onClick={() => void applyDiscoverImport('selected')}
               aria-label="启用所选新技能"
             >
               {discoverBusy ? '…' : '启用所选'}
-            </button>
+            </Button>
           </div>
         }
       >
@@ -148,13 +150,14 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               </span>
             </button>
           </div>
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm"
+            variant="ghost"
+            size="sm"
             onClick={() => setCreateMode('manual')}
           >
             高级：手填空白技能…
-          </button>
+          </Button>
         </section>
       ) : null}
 
@@ -197,23 +200,25 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
                 }
               }}
             />
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm"
+              variant="secondary"
+              size="sm"
               disabled={!createName.trim() || createBusy}
               aria-busy={createBusy || undefined}
               onClick={() => void handleCreate()}
               aria-label={createBusy ? '创建中' : '创建技能'}
             >
               {createBusy ? '…' : '创建'}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
+              variant="ghost"
+              size="sm"
               onClick={() => setCreateMode('paths')}
             >
               返回
-            </button>
+            </Button>
           </div>
         </section>
       ) : null}

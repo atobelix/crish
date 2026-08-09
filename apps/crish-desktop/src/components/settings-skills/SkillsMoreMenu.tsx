@@ -9,9 +9,8 @@ import * as Lucide from 'lucide-react';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
 import { getSettingsState } from '../../store/storeAccess';
-import { Tooltip } from '../Tooltip';
 import styles from './SkillsSettingsTab.module.css';
-import { Menu } from '../ui/Menu';
+import { Button, Menu, Tooltip } from '../ui';
 import { errText } from './useSkillsSettingsState';
 import type { DesktopSkill } from '../../api/skillsApi';
 
@@ -135,16 +134,16 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
         onOpenChange={setMoreOpen}
         trigger={
           <Tooltip content="更多操作">
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm"
+              variant="ghost"
+              size="sm"
               aria-expanded={moreOpen}
               aria-controls={moreMenuId}
               aria-haspopup="menu"
               aria-label="更多操作"
-            >
-              <Lucide.MoreHorizontal size={16} aria-hidden />
-            </button>
+              icon={<Lucide.MoreHorizontal size={16} aria-hidden />}
+            />
           </Tooltip>
         }
         options={options}

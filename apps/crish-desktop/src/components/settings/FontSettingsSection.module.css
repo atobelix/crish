@@ -18,7 +18,7 @@
   align-items: center;
   gap: var(--space-1_5);
   padding: 6px 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid var(--tint-active);
   background: var(--bg-subtle);
 }
 

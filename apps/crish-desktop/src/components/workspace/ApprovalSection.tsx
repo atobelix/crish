@@ -4,7 +4,7 @@
  */
 import React, { useState } from 'react';
 import styles from './RuntimePanel.module.css';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
@@ -177,27 +177,29 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Tooltip content="允许">
-                    <button
+                    <Button
                       type="button"
-                      className="ui-btn ui-btn-primary ui-btn-sm"
+                      variant="primary"
+                      size="sm"
                       aria-label={`允许 ${toolLabel}`}
                       aria-busy={busy || undefined}
                       disabled={Boolean(approvalBusyId)}
                       onClick={(e) => handleApprovalAllow(a, e)}
                     >
                       {busy ? '…' : '允许'}
-                    </button>
+                    </Button>
                   </Tooltip>
                   <Tooltip content="拒绝">
-                    <button
+                    <Button
                       type="button"
-                      className="ui-btn ui-btn-ghost ui-btn-sm"
+                      variant="ghost"
+                      size="sm"
                       aria-label={`拒绝 ${toolLabel}`}
                       disabled={Boolean(approvalBusyId)}
                       onClick={(e) => handleApprovalDeny(a, e)}
                     >
                       拒绝
-                    </button>
+                    </Button>
                   </Tooltip>
                 </div>
               </div>

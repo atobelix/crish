@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from './ui';
 
 export type SettingsWindowControlsProps = {
   onClose?: () => void;

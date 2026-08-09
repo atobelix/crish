@@ -21,7 +21,7 @@ import {
   type ExternalSessionSource,
 } from '../../api/import';
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import styles from './ExternalSessionImport.module.css';
 
 export type ExternalSessionImportProps = {
@@ -319,30 +319,32 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
             </div>
             <div className={styles.importRootBtns}>
               <Tooltip content="选择非默认的 Claude Code 配置目录（含 projects）">
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   disabled={busy}
                   onClick={() => {
                     void pickClaudeRoot();
                   }}
+                  icon={<Lucide.FolderOpen size={14} aria-hidden />}
                 >
-                  <Lucide.FolderOpen size={14} aria-hidden />
                   选择 Claude 目录
-                </button>
+                </Button>
               </Tooltip>
               {roots.customClaude ? (
                 <Tooltip content={`恢复默认：${roots.defaults.claudeConfig}`}>
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     disabled={busy}
                     onClick={() => {
                       void resetClaudeRoot();
                     }}
                   >
                     恢复默认
-                  </button>
+                  </Button>
                 </Tooltip>
               ) : null}
             </div>
@@ -363,30 +365,32 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
             </div>
             <div className={styles.importRootBtns}>
               <Tooltip content="选择非默认的 Codex 配置目录（含 sessions）">
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   disabled={busy}
                   onClick={() => {
                     void pickCodexRoot();
                   }}
+                  icon={<Lucide.FolderOpen size={14} aria-hidden />}
                 >
-                  <Lucide.FolderOpen size={14} aria-hidden />
                   选择 Codex 目录
-                </button>
+                </Button>
               </Tooltip>
               {roots.customCodex ? (
                 <Tooltip content={`恢复默认：${roots.defaults.codexHome}`}>
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     disabled={busy}
                     onClick={() => {
                       void resetCodexRoot();
                     }}
                   >
                     恢复默认
-                  </button>
+                  </Button>
                 </Tooltip>
               ) : null}
             </div>
@@ -404,22 +408,25 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
                 : '扫描本机 Claude Code 会话目录'
           }
         >
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             disabled={busy}
             aria-busy={scanning === 'claude-code' || undefined}
             onClick={() => {
               void runScan('claude-code');
             }}
+            icon={
+              scanning === 'claude-code' ? (
+                <Lucide.Loader2 size={14} aria-hidden className="spin" />
+              ) : (
+                <Lucide.ScanSearch size={14} aria-hidden />
+              )
+            }
           >
-            {scanning === 'claude-code' ? (
-              <Lucide.Loader2 size={14} aria-hidden className="spin" />
-            ) : (
-              <Lucide.ScanSearch size={14} aria-hidden />
-            )}
             {scanning === 'claude-code' ? '扫描中…' : '扫描 Claude Code'}
-          </button>
+          </Button>
         </Tooltip>
         <Tooltip
           content={
@@ -430,22 +437,25 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
                 : '扫描本机 Codex 会话目录'
           }
         >
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm"
+            variant="secondary"
+            size="sm"
             disabled={busy}
             aria-busy={scanning === 'codex' || undefined}
             onClick={() => {
               void runScan('codex');
             }}
+            icon={
+              scanning === 'codex' ? (
+                <Lucide.Loader2 size={14} aria-hidden className="spin" />
+              ) : (
+                <Lucide.ScanSearch size={14} aria-hidden />
+              )
+            }
           >
-            {scanning === 'codex' ? (
-              <Lucide.Loader2 size={14} aria-hidden className="spin" />
-            ) : (
-              <Lucide.ScanSearch size={14} aria-hidden />
-            )}
             {scanning === 'codex' ? '扫描中…' : '扫描 Codex'}
-          </button>
+          </Button>
         </Tooltip>
       </div>
 
@@ -480,14 +490,15 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
             </span>
             {detected.length > 0 ? (
               <Tooltip content={allSelected ? '取消全选' : '全选'}>
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   disabled={busy}
                   onClick={toggleAll}
                 >
                   {allSelected ? '取消全选' : '全选'}
-                </button>
+                </Button>
               </Tooltip>
             ) : null}
           </div>
@@ -549,28 +560,32 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
                   : `导入 ${selectedCount} 条所选会话`
               }
             >
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-primary ui-btn-sm"
+                variant="primary"
+                size="sm"
                 disabled={busy || selectedCount === 0}
                 aria-busy={importing || undefined}
                 onClick={() => {
                   void handleImport();
                 }}
+                icon={
+                  importing ? (
+                    <Lucide.Loader2 size={14} aria-hidden />
+                  ) : (
+                    <Lucide.Download size={14} aria-hidden />
+                  )
+                }
               >
                 {importing ? (
-                  <>
-                    <Lucide.Loader2 size={14} aria-hidden />
-                    导入中…
-                  </>
+                  '导入中…'
                 ) : (
                   <>
-                    <Lucide.Download size={14} aria-hidden />
                     导入所选
                     {selectedCount > 0 ? `（${selectedCount}）` : ''}
                   </>
                 )}
-              </button>
+              </Button>
             </Tooltip>
           </div>
         </>

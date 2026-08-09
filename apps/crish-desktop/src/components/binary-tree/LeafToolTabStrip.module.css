@@ -36,7 +36,7 @@
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-primary) 18%, transparent)
+  scrollbar-color: var(--tint-scrollbar-thumb)
     transparent;
 }
 
@@ -45,7 +45,7 @@
 }
 
 .tabs::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  background: var(--tint-scrollbar-thumb);
   border-radius: 999px;
 }
 
@@ -100,7 +100,7 @@
   border-color: color-mix(in srgb, var(--border-subtle) 85%, transparent);
   box-shadow: 
     0 1px 3px color-mix(in srgb, var(--shadow-color) 4%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 3%, transparent);
+    inset 0 1px 0 var(--tint-hover);
 }
 
 .tab:focus-visible {
@@ -131,7 +131,7 @@
 
 .tabClose:hover {
   opacity: 1 !important;
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: var(--tint-strong);
   transform: rotate(90deg) scale(1.05);
 }
 
@@ -186,7 +186,7 @@
   border-radius: 8px;
   box-shadow: 
     0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 4%, transparent);
+    inset 0 1px 0 var(--tint-hover);
   min-width: 100px;
   animation: menuFadeIn var(--transition-fast) ease-out;
 }

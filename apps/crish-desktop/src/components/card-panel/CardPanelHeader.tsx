@@ -21,7 +21,7 @@ import { getPanelTitle } from '../../api/store-access/componentAccess';
 import { ChatHeaderMore } from '../chat-card/ChatHeaderMore';
 import { WorkspaceChromeBars } from '../workspace/WorkspaceChromeBars';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '../ui';
 import type { CardState, GroupState } from '../../store/layoutStore';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 

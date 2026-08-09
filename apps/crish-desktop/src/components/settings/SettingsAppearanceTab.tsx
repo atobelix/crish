@@ -25,6 +25,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
+import { Button } from '../ui';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 import { useIsVisible } from '../../hooks/useIsVisible';
@@ -316,16 +317,17 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
             <SettingsRow
               title={<span className="settings-list-empty" role="alert">{loadError}</span>}
               control={
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
                     setLoadError(null);
                     setLoadTick((n) => n + 1);
                   }}
                 >
                   重试
-                </button>
+                </Button>
               }
             />
           </SettingsCard>
@@ -413,9 +415,10 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
             <SettingsRow
               title="重置外观"
               control={
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-secondary ui-btn-sm"
+                  variant="secondary"
+                  size="sm"
                   disabled={saving}
                   onClick={() => {
                     void (async () => {
@@ -441,7 +444,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
                   }}
                 >
                   重置
-                </button>
+                </Button>
               }
             />
         </SettingsCard>

@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useDeferredValue, useState } from 'react';
 import styles from './DiffCard.module.css';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 import { selectActiveSession, useSessionField } from '../../api/store-access/componentAccess';
 import type { FileDiff } from '../../store/types';
 import {
@@ -209,10 +209,10 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
             <div>暂无变更</div>
             <div className={styles.emptySub}>上方切换「AI 改动」查看本对话回合；或切「Git」加载工作区未提交变更。</div>
             <div className={styles.emptyActions}>
-              <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={!hasAiTurns || applyBusy} onClick={() => switchSource('session')}>AI 改动</button>
-              <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" disabled={gitLoading || applyBusy} onClick={() => switchSource('git')}>
-                <Lucide.GitBranch size={15} aria-hidden />Git
-              </button>
+              <Button type="button" variant="secondary" size="sm" disabled={!hasAiTurns || applyBusy} onClick={() => switchSource('session')}>AI 改动</Button>
+              <Button type="button" variant="ghost" size="sm" disabled={gitLoading || applyBusy} onClick={() => switchSource('git')} icon={<Lucide.GitBranch size={15} aria-hidden />}>
+                Git
+              </Button>
             </div>
           </div>
         ) : null}

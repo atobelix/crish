@@ -9,7 +9,7 @@ import {
 } from '../../api/extensionCatalog';
 import { mcpStateLabel } from '../../api/mcpApi';
 import type { ExpandMode, ManageKind, PluginInstalledExtension } from './types';
-import { Tooltip } from '../Tooltip';
+import { Button, Tooltip } from '../ui';
 
 /** 插件卡片收窄：manifest 元数据条目（useExtensionMarket 构造，id 恒有 pluginId）。 */
 function isPluginCardItem(
@@ -103,13 +103,15 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
             : '安装后的技能可在本机技能目录维护；高级入口提供完整管理。'}
         </p>
         <div className="ext-detail-actions">
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+            variant="secondary"
+            size="sm"
+            className="settings-btn-rect"
             onClick={() => onSetManage?.('skill')}
           >
             高级管理
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -162,15 +164,16 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                 ))}
               {installedItem.mcpTools.length > 12 ? (
                 <li>
-                  <button
+                  <Button
                     type="button"
-                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => onToggleExpandMcpTools?.(installedItem!.id)}
                   >
                     {expandedMcpTools.has(installedItem.id)
                       ? '收起'
                       : `展开全部（${installedItem.mcpTools.length}）`}
-                  </button>
+                  </Button>
                 </li>
               ) : null}
             </ul>
@@ -183,29 +186,35 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
       <div className="ext-inline-panel">
         {installedItem?.mcpId ? (
           <div className="ext-detail-actions">
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+              variant="secondary"
+              size="sm"
+              className="settings-btn-rect"
               disabled={mcpServerBusy}
               onClick={() => void onToggleMcpServer?.(installedItem.mcpId!, true)}
             >
               {mcpServerBusy ? '…' : '启动服务'}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
+              variant="ghost"
+              size="sm"
+              className="settings-btn-rect"
               disabled={mcpServerBusy}
               onClick={() => void onToggleMcpServer?.(installedItem.mcpId!, false)}
             >
               停止服务
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
+              variant="ghost"
+              size="sm"
+              className="settings-btn-rect"
               onClick={() => onSetManage?.('mcp')}
             >
               高级管理
-            </button>
+            </Button>
           </div>
         ) : (
           <p className="ext-detail-desc">
@@ -251,15 +260,16 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
               })}
             {installedItem.mcpTools.length > 12 ? (
               <div style={{ padding: '4px 0' }}>
-                <button
+                <Button
                   type="button"
-                  className="ui-btn ui-btn-ghost ui-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => onToggleExpandMcpTools?.(installedItem!.id)}
                 >
                   {expandedMcpTools.has(installedItem.id)
                     ? '收起'
                     : `展开全部（${installedItem.mcpTools.length}）`}
-                </button>
+                </Button>
               </div>
             ) : null}
           </div>
@@ -348,18 +358,22 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
             </div>
           </div>
           <div className="ext-row-actions">
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
+              variant="ghost"
+              size="sm"
+              className="settings-btn-rect"
               aria-expanded={detailOpen}
               onClick={() => toggleExpand('installed', installedItem.id, 'detail')}
             >
               {detailOpen ? '收起' : '详情'}
-            </button>
+            </Button>
             {pluginCard ? (
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+                variant="secondary"
+                size="sm"
+                className="settings-btn-rect"
                 aria-pressed={pluginCard.pluginEnabled}
                 onClick={() =>
                   onTogglePlugin?.(
@@ -369,25 +383,29 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                 }
               >
                 {pluginCard.pluginEnabled ? '停用' : '启用'}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+                variant="secondary"
+                size="sm"
+                className="settings-btn-rect"
                 aria-expanded={configOpen}
                 onClick={() => toggleExpand('installed', installedItem.id, 'config')}
               >
                 {configOpen ? '收起' : '配置'}
-              </button>
+              </Button>
             )}
             {canUninstall ? (
-              <button
+              <Button
                 type="button"
-                className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect danger"
+                variant="danger"
+                size="sm"
+                className="settings-btn-rect"
                 onClick={() => void onRemovePackage?.(installedItem)}
               >
                 卸载
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
@@ -423,31 +441,37 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
           </div>
         </div>
         <div className="ext-row-actions">
-          <button
+          <Button
             type="button"
-            className="ui-btn ui-btn-ghost ui-btn-sm settings-btn-rect"
+            variant="ghost"
+            size="sm"
+            className="settings-btn-rect"
             aria-expanded={detailOpen}
             onClick={() => toggleExpand('catalog', entry.id, 'detail')}
           >
             {detailOpen ? '收起' : '详情'}
-          </button>
+          </Button>
           {installedMark ? (
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+              variant="secondary"
+              size="sm"
+              className="settings-btn-rect"
               onClick={() => onGoToConfig?.(entry.id)}
             >
               去配置
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+              variant="secondary"
+              size="sm"
+              className="settings-btn-rect"
               disabled={busyId === entry.id}
               onClick={() => void onInstallCatalog?.(entry)}
             >
               {busyId === entry.id ? '安装中…' : '安装'}
-            </button>
+            </Button>
           )}
         </div>
       </div>
