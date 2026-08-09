@@ -16,7 +16,13 @@
 //   3. 双测量源合并：同帧位置结果缓存（posCache），CursorLayer 与 HiddenInput
 //      对同一光标的第二次调用零 DOM 读取直接命中（单测量源语义）；
 //   4. token 级测量缓存：存"容器内容坐标系"（与滚动解耦），同一 token 内
-//      光标移动直接命中；索引重建时随条目一起废弃（等价于 lines 版本失效）。
+//      光标移动直接命中；索引重建时随条目一起废弃（等价于 lines 版本失效）；
+//   5. 跨视口箭头列保持（01 问题 7 §7.2）：目标行未挂载（视口外）时，
+//      数据层取目标行（EditorStore.lines O(1) + LineOffsetTree O(log n)）、
+//      字符宽度 Oracle 列预测、滚动跟随滚入视口——不再退化为行首/行尾，
+//      下一帧行挂载后由 HiddenInput 的越界滚动跟随与常规测量接管精确位置。
+
+import { useEditorStore } from './EditorStore';
 
 export interface MeasuredRect {
   top: number;
@@ -732,8 +738,178 @@ export function checkIsActive(
   }
 }
 
-// 上下箭头跨行导航：当前行与目标行均走行索引（二分 + 属性匹配），
-// 目标行未挂载（视口外）时退回行首/行尾（与旧实现一致）。
+// ============================================================
+// 跨视口箭头导航：数据层列保持（01 问题 7 §7.2）
+// ============================================================
+
+// 等宽/全角字宽缓存：字体键 → { ascii, cjk }（与 tokenFontSize 同款
+// 「首次实测、其后命中」的字体度量语义；字体由应用级 CSS 变量固定，键空间有界）
+interface CharWidths {
+  ascii: number;
+  cjk: number;
+}
+const charWidthCache = new Map<string, CharWidths>();
+
+// 宽字符判定（全角字宽按 2 倍等宽近似）：
+// 谚文 Jamo、CJK 部首与统一表意、谚文音节、兼容表意与全角形式、CJK 扩展 B+
+function isWideChar(code: number): boolean {
+  return (
+    (code >= 0x1100 && code <= 0x11ff) ||
+    (code >= 0x2e80 && code <= 0x9fff) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xff60) ||
+    (code >= 0x20000 && code <= 0x3fffd)
+  );
+}
+
+// 单字符预测宽度：Tab 按 4 倍等宽近似（源码中极少见，仅用于列估计）
+function charAdvance(code: number, w: CharWidths): number {
+  if (code === 9) return w.ascii * 4;
+  return isWideChar(code) ? w.cjk : w.ascii;
+}
+
+// 实测字宽（CM6 measureTextSize 同款）：按字体样式取样的隐藏 span 量 20 个
+// 字符的平均宽；实测不可用（jsdom / display:none）时回退「0.6 × 字号」等宽
+// 启发式（与 HeightMap 默认 charWidth=8.4 同口径），全角 = 2 倍等宽。
+function measureCharWidths(fontEl: HTMLElement): CharWidths {
+  const cs = window.getComputedStyle(fontEl);
+  const probe = document.createElement('span');
+  probe.style.cssText =
+    'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre;pointer-events:none;';
+  // 取样字体与「当前行」完全一致（等宽栈 + 字号 + 字重 + 字距）
+  probe.style.fontFamily = cs.fontFamily;
+  probe.style.fontSize = cs.fontSize;
+  probe.style.fontWeight = cs.fontWeight;
+  probe.style.letterSpacing = cs.letterSpacing;
+  document.body.appendChild(probe);
+  try {
+    probe.textContent = 'M'.repeat(20);
+    const ascii = probe.getBoundingClientRect().width / 20;
+    probe.textContent = '中'.repeat(20);
+    const cjk = probe.getBoundingClientRect().width / 20;
+    if (ascii > 0 && cjk > 0) return { ascii, cjk };
+  } finally {
+    probe.remove();
+  }
+  const fs = parseFloat(cs.fontSize) || 14;
+  const ascii = fs * 0.6;
+  return { ascii, cjk: ascii * 2 };
+}
+
+// 取字符宽度 Oracle（按字体键缓存，字体为应用级 CSS 变量，缓存有界）
+function getCharWidths(fontEl: HTMLElement): CharWidths {
+  const cs = window.getComputedStyle(fontEl);
+  const key = `${cs.fontFamily}|${cs.fontSize}|${cs.fontWeight}|${cs.letterSpacing}`;
+  let w = charWidthCache.get(key);
+  if (!w) {
+    if (charWidthCache.size >= 32) charWidthCache.clear();
+    w = measureCharWidths(fontEl);
+    charWidthCache.set(key, w);
+  }
+  return w;
+}
+
+// 目标行列预测：以「当前列 X（行左缘基准）」为参照，沿目标行文本按等宽/
+// 全角字宽累加，返回与当前列 X 最接近的字符位置。相比「currentX / charWidth」
+// 直接除法，累加对含全角字符的行误差更小（全角占 2 倍宽但计 1 列）；纯 ASCII
+// 等宽行两者等价（01 问题 7 §7.2 colHint 公式的同构实现）。
+function predictColumn(lineText: string, relX: number, w: CharWidths): number {
+  if (relX <= 0) return 0;
+  let best = 0;
+  let bestDist = Infinity;
+  let acc = 0;
+  for (let p = 0; p <= lineText.length; p++) {
+    if (p > 0) acc += charAdvance(lineText.charCodeAt(p - 1), w);
+    const dist = Math.abs(acc - relX);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = p;
+    }
+  }
+  return best;
+}
+
+// 目标行滚动跟随：目标行未挂载 → 无 DOM 可实测其 Y，用「当前行实测矩形」
+// 估算目标行内容 Y（下移 = 当前行顶 + 当前行高；上移 = 当前行顶 − 当前行高。
+// 相邻一行：下移估算精确（目标行顶 = 当前行底），上移误差 ≤ 相邻行高差），
+// 把目标行整行滚到视口上沿内侧 60px（余量吸收估算误差；虚拟器 overscan 40 行
+// ≫ 误差量级，目标行必然挂载）。下一帧行挂载后，HiddenInput 的越界滚动跟随
+// （top<40 / 越下沿，HiddenInput.tsx:62-76）接管精确居中——该跟随只在测量
+// 成功时生效，跨视口场景测量必然失败，故滚动必须在此处（测量层）完成。
+function scrollTargetLineIntoView(
+  container: HTMLElement,
+  currentLineEl: HTMLElement,
+  direction: 'up' | 'down'
+): void {
+  const containerRect = container.getBoundingClientRect();
+  const lineRect = currentLineEl.getBoundingClientRect();
+  // 当前行顶的内容 Y（与行 top 同一坐标系，滚动无关）
+  const lineTop = lineRect.top - containerRect.top + container.scrollTop;
+  // 目标行估算区间（目标行高暂以当前行高近似）
+  const targetTop =
+    direction === 'down' ? lineTop + lineRect.height : lineTop - lineRect.height;
+  const targetBottom = targetTop + lineRect.height;
+
+  const vTop = container.scrollTop;
+  const vBottom = vTop + container.clientHeight;
+  // 估算区间已完全在视口内则不动（避免与浏览器/后续滚动打架）
+  if (targetTop >= vTop && targetBottom <= vBottom) return;
+
+  // 目标行整行滚到视口上沿内侧 60px（下移方向以估算行顶为基准，上移方向
+  // 以估算行底为基准，保证目标行整体入视口）
+  const nextTop =
+    direction === 'down' ? targetTop - 60 : targetBottom - 60;
+  const maxTop = Math.max(0, (container.scrollHeight || 0) - container.clientHeight);
+  container.scrollTop = Math.min(maxTop, Math.max(0, nextTop));
+}
+
+// 目标行未挂载（视口外）时的数据层列保持导航（01 问题 7 §7.2）：
+// 1. 数据层取目标行：lines 数组 O(1) 取行文本，LineOffsetTree.getOffset O(log n) 取行偏移；
+// 2. 列预测：当前列 X（currentRect.left − 行左缘）经字符宽度 Oracle（等宽/
+//    全角字宽）映射为目标行内的最接近列；等宽字体下预测误差 ≤ 1 字符；
+// 3. 滚动跟随：估算目标行 Y 滚入视口（scrollTargetLineIntoView），下一帧行
+//    挂载后由 HiddenInput 的越界滚动跟随 + 常规 DOM 测量接管精确列位置；
+// 4. 两帧校正（可选，登记复杂度）：滚动后一帧目标行进入视口时可用
+//    caretRangeFromPoint 真实测量复核列位置——但校正需 measure 模块反向写
+//    store 光标（测量层越权），且 HiddenInput 已把预测位吸附到 grapheme 边界
+//    （snapToGraphemeBoundary），校正点与吸附结果比较存在竞态。等宽字体下
+//    预测误差 ≤ 1 字符、下一次箭头即用真实测量天然校正，收益低于风险，不落地。
+// 边界：首行上移 / 末行下移返回 null 保持原位（原退化分支会跳到当前行首/行尾）。
+function navigateOffscreenLine(
+  container: HTMLElement,
+  currentRect: MeasuredRect,
+  currentLineEl: HTMLElement,
+  targetIdx: number,
+  direction: 'up' | 'down'
+): number | null {
+  const store = useEditorStore.getState();
+  if (targetIdx < 0 || targetIdx >= store.lines.length) return null;
+
+  // 数据层取目标行文本与行内偏移
+  const targetText = store.lines[targetIdx];
+  const targetStart = store.lineOffsets.getOffset(targetIdx);
+
+  // 1) 当前列 X：以当前行左缘为基准（视口坐标系）
+  const lineRect = currentLineEl.getBoundingClientRect();
+  const relX = Math.max(0, currentRect.left - lineRect.left);
+
+  // 2) 列预测：字符宽度 Oracle（等宽/全角），目标行内累加宽度逼近 relX
+  const fontEl =
+    (currentLineEl.querySelector('[data-token-start]') as HTMLElement | null) ??
+    currentLineEl;
+  const widths = getCharWidths(fontEl);
+  const col = predictColumn(targetText, relX, widths);
+  const newPos = targetStart + Math.min(col, targetText.length);
+
+  // 3) 滚动跟随：目标行估算位置滚入视口，下一帧真实测量接管
+  scrollTargetLineIntoView(container, currentLineEl, direction);
+
+  return newPos;
+}
+
+// 上下箭头跨行导航：当前行与目标行均走行索引（二分 + 属性匹配）；
+// 目标行未挂载（视口外）时走「数据层列保持」（navigateOffscreenLine）：
+// 字符宽度 Oracle 列预测 + 滚动跟随，不再退化为行首/行尾。
 export function getArrowNavigationIndex(
   cursorPos: number,
   direction: 'up' | 'down',
@@ -781,14 +957,15 @@ export function getArrowNavigationIndex(
   }
 
   if (!targetLineEl) {
-    // 目标行未挂载（视口外）：退回行首/行尾（旧实现同款）
-    if (direction === 'up') {
-      return attrInt(currentLineEl, 'data-line-start');
-    } else {
-      const start = attrInt(currentLineEl, 'data-line-start');
-      const len = attrInt(currentLineEl, 'data-line-length');
-      return start + len;
-    }
+    // 目标行未挂载（视口外）：数据层列保持（列预测 + 滚动跟随），
+    // 不再退化为行首/行尾（01 问题 7 §7.2）
+    return navigateOffscreenLine(
+      container,
+      currentRect,
+      currentLineEl,
+      targetIdx,
+      direction
+    );
   }
 
   const targetRect = targetLineEl.getBoundingClientRect();
