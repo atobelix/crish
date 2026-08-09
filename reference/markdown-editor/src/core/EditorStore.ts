@@ -277,6 +277,132 @@ function inferInIndentCode(
   return false;
 }
 
+// —— HTML 块判定镜像（parser.computeLineOffsets 02 §2.5 / R1-D，
+// CommonMark 4.6 spec 0.31.2）——
+// type 1-5 的 start condition（下标 + 1 = 类型号）：
+// 1. <script|<pre|<style|<textarea + 空白/>/行尾（大小写不敏感）；
+// 2. <!--；3. <?；4. <! + ASCII 大写字母；5. <![CDATA[。
+const HTML_BLOCK_START_RE: RegExp[] = [
+  /^ {0,3}<(script|pre|style|textarea)(?=[ \t]|>|$)/i,
+  /^ {0,3}<!--/,
+  /^ {0,3}<\?/,
+  /^ {0,3}<![A-Z]/,
+  /^ {0,3}<!\[CDATA\[/,
+];
+// type 6：< 或 </ + 块级标签名单 + 空白/`>`/`/>`/行尾（大小写不敏感）。
+const HTML_BLOCK_TYPE6_RE = new RegExp(
+  '^ {0,3}<\\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[ \\t]|/?>|$)',
+  'i'
+);
+// type 7：完整开/闭标签行（tag name 排除 pre/script/style/textarea——
+// 它们由 type 1 接管，`</script>` 单独成行按普通段落处理，与 spec 一致）。
+const HTML_BLOCK_TYPE7_RE =
+  /^ {0,3}<(\/?)([a-zA-Z][a-zA-Z0-9-]*)(?:[ \t]+[^>]*)?[ \t]*\/?>[ \t]*$/i;
+
+/**
+ * HTML 块 start condition 判定（镜像 parser.matchHtmlBlockStart）：
+ * - type 1-6 可打断段落，判定独立于 prevBlockKind（`Foo\n<div>` 中 div 是新块）；
+ * - type 7 不可打断段落（`Foo\n<a href="bar">` 中 a 行是段落延续）；
+ * - 列表标记行（`- <div>`）不进 HTML 块（行级模型无容器状态，登记偏差）。
+ * 入参约定：content 已剥离块引用前缀、缩进 <4 列、非空行。
+ */
+function matchHtmlBlockStart(
+  content: string,
+  prevBlockKind: BlockKind
+): { type: number } | null {
+  if (isListMarkerStart(content)) return null;
+  for (let t = 0; t < HTML_BLOCK_START_RE.length; t++) {
+    if (HTML_BLOCK_START_RE[t].test(content)) return { type: t + 1 };
+  }
+  if (HTML_BLOCK_TYPE6_RE.test(content)) return { type: 6 };
+  if (prevBlockKind === 'body' || prevBlockKind === 'list') return null;
+  const t7 = HTML_BLOCK_TYPE7_RE.exec(content);
+  if (t7) {
+    const name = t7[2].toLowerCase();
+    if (
+      name === 'script' ||
+      name === 'pre' ||
+      name === 'style' ||
+      name === 'textarea'
+    ) {
+      return null;
+    }
+    return { type: 7 };
+  }
+  return null;
+}
+
+/**
+ * HTML 块 end condition（镜像 parser.htmlBlockEndCondition）：
+ * type 1 行内含 script/pre/style/textarea 任一闭合标签即结束；
+ * type 2/3/4/5 行内含对应闭合串即结束；type 6/7 遇空行结束
+ * （空行本身不是块内容，由调用方标记 'none'）。
+ */
+function htmlBlockEndCondition(type: number, content: string): boolean {
+  switch (type) {
+    case 1:
+      return /<\/script>|<\/pre>|<\/style>|<\/textarea>/i.test(content);
+    case 2:
+      return content.includes('-->');
+    case 3:
+      return content.includes('?>');
+    case 4:
+      return content.includes('>');
+    case 5:
+      return content.includes(']]>');
+    case 6:
+    case 7:
+      return content.trim() === '';
+    default:
+      return true;
+  }
+}
+
+/**
+ * 从旧行/旧状态回推「编辑点之前是否处于 HTML 块内」及其块类型：
+ * CodeState 数组只记录 'html_block'（不记录 type 1-7），而结束条件
+ * 依赖块类型——因此取编辑点之前连续 html_block 运行段，用
+ * matchHtmlBlockStart / htmlBlockEndCondition 正向仿真，得到进入
+ * 编辑点时的 inHtmlBlock 与 htmlType（与 parser 语义一致）。
+ * 运行段内可能包含多个相邻块（type 1-5 单行块接 type 6 块等），
+ * 仿真逐行推进可正确定位「编辑点所属块」的类型。
+ */
+function inferHtmlBlockState(
+  lines: string[],
+  codeBlockState: CodeState[],
+  before: number
+): { inHtmlBlock: boolean; htmlType: number } {
+  let runStart = before - 1;
+  if (runStart < 0 || codeBlockState[runStart] !== 'html_block') {
+    return { inHtmlBlock: false, htmlType: 0 };
+  }
+  while (runStart > 0 && codeBlockState[runStart - 1] === 'html_block') {
+    runStart--;
+  }
+  let inHtml = false;
+  let htmlType = 0;
+  for (let j = runStart; j < before; j++) {
+    const content = stripBlockquoteContext(lines[j]);
+    if (inHtml) {
+      if (htmlBlockEndCondition(htmlType, content)) {
+        inHtml = false;
+        htmlType = 0;
+      }
+    } else {
+      const start = matchHtmlBlockStart(content, 'code');
+      if (start) {
+        inHtml = true;
+        htmlType = start.type;
+        if (htmlBlockEndCondition(htmlType, content)) {
+          inHtml = false;
+          htmlType = 0;
+        }
+      }
+    }
+  }
+  return { inHtmlBlock: inHtml, htmlType };
+}
+
 export interface EditorOperation {
   startLineIdx: number;
   removedLines: string[];
@@ -357,6 +483,12 @@ function updateLinesIncremental(
     codeBlockState,
     startLineIdx
   );
+  // HTML 块状态（镜像 parser）：inHtmlBlock 为块内标记，htmlType 记录
+  // 块类型（1-7，决定结束条件）——CodeState 不记录类型，从编辑点之前
+  // 连续 html_block 运行段回推（inferHtmlBlockState）。
+  const inferredHtml = inferHtmlBlockState(lines, codeBlockState, startLineIdx);
+  let inHtmlBlock = inferredHtml.inHtmlBlock;
+  let htmlType = inferredHtml.htmlType;
   // 上一非空白行形态记忆（段落打断 / 列表延续 / 表格优先判定所需）
   let prevBlockKind = inferPrevBlockKind(lines, codeBlockState, startLineIdx);
 
@@ -400,7 +532,28 @@ function updateLinesIncremental(
     let isFence = false;
     let newState: CodeState = 'none';
 
-    if (!inMathBlock && trimmed.startsWith('```')) {
+    if (inHtmlBlock) {
+      // —— HTML 块内：优先级最高（镜像 parser）——fence/math/缩进代码
+      // 判定全部让路（spec 4.6：HTML 块内的 ``` 围栏行、`<pre>` 形态行
+      // 均按 html 原样处理）。type 1-5 遇闭合串退出（结束行仍是块的最后
+      // 一行）；type 6/7 遇空行退出（空行本身不是块内容，标记 'none'）。
+      if (htmlBlockEndCondition(htmlType, content)) {
+        inHtmlBlock = false;
+        htmlType = 0;
+        if (trimmed === '') {
+          newState = 'none';
+          if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+        } else {
+          newState = 'html_block';
+          prevBlockKind = 'code';
+        }
+      } else {
+        newState = 'html_block';
+        // 块形态记作 code 类：块后 ≥4 空格行允许开始缩进代码
+        // （type 7 单行块后 `    foo` → 缩进代码，与 CommonMark 一致）。
+        prevBlockKind = 'code';
+      }
+    } else if (!inMathBlock && trimmed.startsWith('```')) {
       isFence = true;
       if (!inCodeBlock) {
         newState = 'fence_start';
@@ -440,9 +593,25 @@ function updateLinesIncremental(
           if (trimmed === '' || indent >= 4) {
             newState = 'indent_code';
           } else {
-            newState = 'none';
+            // 非缩进行结束代码块：该行按普通行处理（可能开启 HTML 块——
+            // CommonMark 中缩进代码块后的 `</div>` 行是 type 6 块）。
             inIndentCode = false;
-            prevBlockKind = guessBlockKind(content, prevBlockKind);
+            const htmlStart = matchHtmlBlockStart(content, prevBlockKind);
+            if (htmlStart) {
+              newState = 'html_block';
+              inHtmlBlock = true;
+              htmlType = htmlStart.type;
+              // 首行同时满足 end condition → 单行块
+              // （`<!-- c -->`、`<!DOCTYPE html>` 等，块即开即闭）。
+              if (htmlBlockEndCondition(htmlType, content)) {
+                inHtmlBlock = false;
+                htmlType = 0;
+              }
+              prevBlockKind = 'code';
+            } else {
+              newState = 'none';
+              prevBlockKind = guessBlockKind(content, prevBlockKind);
+            }
           }
         } else if (trimmed === '') {
           // 空行：不进入缩进代码；段落/表格上下文重置，列表上下文保持
@@ -471,8 +640,24 @@ function updateLinesIncremental(
             prevBlockKind = 'code';
           }
         } else {
-          newState = 'none';
-          prevBlockKind = guessBlockKind(content, prevBlockKind);
+          // —— HTML 块 start 判定（缩进 <4、非空行，镜像 parser）——
+          // type 1-6 可打断段落，判定独立于 prevBlockKind；type 7 段落
+          // 保护在 matchHtmlBlockStart 内部（prevBlockKind 为 body/list
+          // 时禁用——`Foo\n<a href="bar">` 中 a 行是段落延续）。
+          const htmlStart = matchHtmlBlockStart(content, prevBlockKind);
+          if (htmlStart) {
+            newState = 'html_block';
+            inHtmlBlock = true;
+            htmlType = htmlStart.type;
+            if (htmlBlockEndCondition(htmlType, content)) {
+              inHtmlBlock = false;
+              htmlType = 0;
+            }
+            prevBlockKind = 'code';
+          } else {
+            newState = 'none';
+            prevBlockKind = guessBlockKind(content, prevBlockKind);
+          }
         }
       }
     }
@@ -745,6 +930,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       let inMathBlock = false;
       // 缩进代码块状态：末行状态为 'indent_code' 时视为块内（块内空行保持）
       let inIndentCode = false;
+      // HTML 块状态：从旧行回推——增量语义与 updateLinesIncremental 一致，
+      // 「进入合并行的状态」由旧行 [0, lastLineIdx) 决定（末行本身将被
+      // 合并内容替换——若末行是结束块的空行，该空行在合并后可能消失，
+      // 不能把它当作块已退出的依据）；块类型由连续 html_block 运行段
+      // 仿真得出（CodeState 不记录类型，见 inferHtmlBlockState）。
+      const inferredHtml = inferHtmlBlockState(
+        state.lines,
+        state.codeBlockState,
+        lastLineIdx
+      );
+      let inHtmlBlock = inferredHtml.inHtmlBlock;
+      let htmlType = inferredHtml.htmlType;
+      // HTML 块 start（type 7 段落保护）所需的「上一非空白行形态」记忆
+      let prevBlockKind = inferPrevBlockKind(
+        state.lines,
+        state.codeBlockState,
+        lastLineIdx
+      );
       const currentState = state.codeBlockState[lastLineIdx];
       if (currentState === 'fence_start' || currentState === 'code')
         inCodeBlock = true;
@@ -757,22 +960,46 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const segmentCodeStates = new Array(newSegmentLines.length);
       for (let i = 0; i < newSegmentLines.length; i++) {
         const trimmed = newSegmentLines[i].trim();
-        if (!inMathBlock && trimmed.startsWith('```')) {
+        // HTML 块判定使用块引用剥离后的内容（与 parser 一致）
+        const htmlContent = stripBlockquoteContext(newSegmentLines[i]);
+        if (inHtmlBlock) {
+          // —— HTML 块内（优先级最高：fence/math/缩进代码判定全部让路）——
+          if (htmlBlockEndCondition(htmlType, htmlContent)) {
+            inHtmlBlock = false;
+            htmlType = 0;
+            if (htmlContent.trim() === '') {
+              // type 6/7 空行结束块：空行本身不是块内容
+              segmentCodeStates[i] = 'none';
+              if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+            } else {
+              // type 1-5 结束行（行内含闭合标记）：该行仍是块的最后一行
+              segmentCodeStates[i] = 'html_block';
+              prevBlockKind = 'code';
+            }
+          } else {
+            segmentCodeStates[i] = 'html_block';
+            prevBlockKind = 'code';
+          }
+        } else if (!inMathBlock && trimmed.startsWith('```')) {
           segmentCodeStates[i] = inCodeBlock ? 'fence_end' : 'fence_start';
           inCodeBlock = !inCodeBlock;
           inIndentCode = false;
+          prevBlockKind = 'code';
         } else if (!inCodeBlock && trimmed === '$$') {
           segmentCodeStates[i] = inMathBlock
             ? 'math_fence_end'
             : 'math_fence_start';
           inMathBlock = !inMathBlock;
           inIndentCode = false;
+          prevBlockKind = 'code';
         } else if (inCodeBlock) {
           segmentCodeStates[i] = 'code';
           inIndentCode = false;
+          prevBlockKind = 'code';
         } else if (inMathBlock) {
           segmentCodeStates[i] = 'math_block';
           inIndentCode = false;
+          prevBlockKind = 'code';
         } else {
           // —— 缩进代码块判定（与 updateLinesIncremental 同规则）——
           const indent = leadingIndentColumns(newSegmentLines[i]);
@@ -781,14 +1008,47 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             if (trimmed === '' || indent >= 4) {
               segmentCodeStates[i] = 'indent_code';
             } else {
-              segmentCodeStates[i] = 'none';
+              // 非缩进行结束代码块：该行可能开启 HTML 块
               inIndentCode = false;
+              const htmlStart = matchHtmlBlockStart(htmlContent, prevBlockKind);
+              if (htmlStart) {
+                segmentCodeStates[i] = 'html_block';
+                inHtmlBlock = true;
+                htmlType = htmlStart.type;
+                if (htmlBlockEndCondition(htmlType, htmlContent)) {
+                  inHtmlBlock = false;
+                  htmlType = 0;
+                }
+                prevBlockKind = 'code';
+              } else {
+                segmentCodeStates[i] = 'none';
+                prevBlockKind = guessBlockKind(htmlContent, prevBlockKind);
+              }
             }
           } else if (trimmed !== '' && indent >= 4) {
             segmentCodeStates[i] = 'indent_code';
             inIndentCode = true;
-          } else {
+            prevBlockKind = 'code';
+          } else if (trimmed === '') {
+            // 空行：不进入缩进代码；段落/表格上下文重置，列表上下文保持
             segmentCodeStates[i] = 'none';
+            if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+          } else {
+            // —— HTML 块 start 判定（缩进 <4、非空行，镜像 parser）——
+            const htmlStart = matchHtmlBlockStart(htmlContent, prevBlockKind);
+            if (htmlStart) {
+              segmentCodeStates[i] = 'html_block';
+              inHtmlBlock = true;
+              htmlType = htmlStart.type;
+              if (htmlBlockEndCondition(htmlType, htmlContent)) {
+                inHtmlBlock = false;
+                htmlType = 0;
+              }
+              prevBlockKind = 'code';
+            } else {
+              segmentCodeStates[i] = 'none';
+              prevBlockKind = guessBlockKind(htmlContent, prevBlockKind);
+            }
           }
         }
       }
