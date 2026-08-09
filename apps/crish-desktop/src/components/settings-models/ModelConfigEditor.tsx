@@ -21,6 +21,10 @@ import { Button, Tooltip } from '../ui';
 import styles from './ModelsSettingsTab.module.css';
 import type { AddDraft, CfgDraft } from './useModelProfilesState';
 
+// 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
+const CONFIGURE_LABEL = '配置';
+const DELETE_LABEL = '删除';
+
 interface ModelConfigEditorProps {
   selected: ProviderProfile | null;
   profiles: ProviderProfile[];
@@ -677,11 +681,12 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                         <span className={styles.toggleThumb} />
                       </button>
                     </Tooltip>
-                    <Tooltip content="配置">
+                    <Tooltip content={CONFIGURE_LABEL}>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
+                        aria-label={CONFIGURE_LABEL}
                         style={{
                           padding: '0 5px',
                           height: '26px',
@@ -697,11 +702,12 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                         icon={<Lucide.SlidersHorizontal size={13} />}
                       />
                     </Tooltip>
-                    <Tooltip content="删除">
+                    <Tooltip content={DELETE_LABEL}>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
+                        aria-label={DELETE_LABEL}
                         className="mrd-delete-btn"
                         style={{
                           padding: '0 5px',

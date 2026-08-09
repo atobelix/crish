@@ -570,4 +570,156 @@ mod tests {
         assert!(res.probes[1].reason.is_none(), "命中项 reason=None");
         assert_eq!(res.probes[1].source, ProbeSource::SystemChrome);
     }
+
+    // ---------- 公开入口与回退链边界（评审 P2 补强） ----------
+
+    /// 公开入口 resolve_backend：临时 data_root 内建 CfT 缓存 → 必中 CfT
+    /// （数据根布局 `conex/browser/browsers/` 语义端到端验证，不依赖系统浏览器）。
+    #[tokio::test]
+    async fn resolve_backend_entry_cft_cache_hit() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let root = browser_root(dir.path());
+        let cache_dir = root.join("browsers").join("chrome-153.0.1.2");
+        let rel = crate::browser::cft::binary_rel_path().expect("平台路径");
+        let bin = cache_dir.join(rel);
+        std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
+        std::fs::write(&bin, b"fake").expect("二进制");
+
+        let res = resolve_backend(dir.path(), BackendOverride::Auto, &ResolveOptions::default())
+            .await
+            .expect("公开入口应命中 CfT");
+        match res.backend {
+            Backend::ChromeForTesting { version, path } => {
+                assert_eq!(version, "153.0.1.2");
+                assert_eq!(path, bin);
+            }
+            other => panic!("应为 CfT，实际：{other:?}"),
+        }
+        assert_eq!(res.probes.len(), 1, "命中即止，无回退探测");
+        assert_eq!(res.probes[0].source, ProbeSource::CftCache);
+    }
+
+    /// 公开入口契约：空 data_root + Auto → 结果形态自洽（环境无关断言）——
+    /// 命中则末项 reason=None；全失败则全部候选带原因且含 CfT 缺失项。
+    #[tokio::test]
+    async fn resolve_backend_entry_contract_any_environment() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let res = resolve_backend(dir.path(), BackendOverride::Auto, &ResolveOptions::default())
+            .await;
+        match res {
+            Ok(res) => {
+                assert!(
+                    matches!(res.backend, Backend::SystemChrome { .. } | Backend::SystemEdge { .. }),
+                    "无 CfT 缓存时只能命中系统浏览器：{:?}",
+                    res.backend
+                );
+                let last = res.probes.last().expect("命中必有探测记录");
+                assert!(last.reason.is_none(), "命中项 reason=None");
+                let hit_source = match &res.backend {
+                    Backend::SystemChrome { .. } => ProbeSource::SystemChrome,
+                    Backend::SystemEdge { .. } => ProbeSource::SystemEdge,
+                    Backend::ChromeForTesting { .. } => ProbeSource::CftCache,
+                };
+                assert_eq!(last.source, hit_source);
+            }
+            Err(ProcessError::NoBrowser(probes)) => {
+                assert!(!probes.is_empty(), "doctor 清单不得为空");
+                assert!(
+                    probes.iter().all(|p| p.reason.is_some()),
+                    "全失败时每个候选必须携带原因"
+                );
+                assert!(
+                    probes.iter().any(|p| p.source == ProbeSource::CftCache),
+                    "doctor 清单必须含 CfT 缺失项"
+                );
+            }
+            Err(other) => panic!("Auto 回退链不得返回其他错误：{other:?}"),
+        }
+    }
+
+    /// 显式覆盖 SystemEdge：即使 Chrome 候选存在也必须走 Edge 且不探测 Chrome。
+    #[tokio::test]
+    async fn override_system_edge_skips_chrome() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let root = browser_root(dir.path());
+        let chrome = vec![tmp_bin(dir.path(), "sys/chrome.exe")];
+        let edge = vec![tmp_bin(dir.path(), "sys/msedge.exe")];
+        let res = resolve_inner(&root, &chrome, &edge, BackendOverride::SystemEdge, &ResolveOptions::default())
+            .await
+            .expect("应命中 Edge");
+        assert!(matches!(res.backend, Backend::SystemEdge { .. }));
+        assert_eq!(res.probes.len(), 1, "仅 Edge 被探测（不经过 CfT/Chrome）");
+        assert_eq!(res.probes[0].source, ProbeSource::SystemEdge);
+    }
+
+    /// 显式覆盖 ChromeForTesting + 禁止下载：错误载荷只含 CftCache 诊断项。
+    #[tokio::test]
+    async fn override_cft_no_download_single_probe() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let root = browser_root(dir.path());
+        let chrome = vec![tmp_bin(dir.path(), "sys/chrome.exe")];
+        let err = resolve_inner(
+            &root,
+            &chrome,
+            &[],
+            BackendOverride::ChromeForTesting,
+            &ResolveOptions::default(),
+        )
+        .await
+        .expect_err("应失败");
+        match err {
+            ProcessError::NoBrowser(probes) => {
+                assert_eq!(probes.len(), 1, "不回退系统时仅 CfT 缓存一项诊断");
+                assert_eq!(probes[0].source, ProbeSource::CftCache);
+                assert!(probes[0].reason.is_some());
+            }
+            other => panic!("应为 NoBrowser，实际：{other:?}"),
+        }
+    }
+
+    /// 多候选按序探测：首个缺失、第二个存在 → 命中第二个（probe 顺序保真）。
+    #[tokio::test]
+    async fn first_existing_picks_first_valid() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let root = browser_root(dir.path());
+        let missing = dir.path().join("sys/chrome-missing.exe");
+        let hit = tmp_bin(dir.path(), "sys/chrome-hit.exe");
+        let res = resolve_inner(
+            &root,
+            &[missing.clone(), hit.clone()],
+            &[],
+            BackendOverride::SystemChrome,
+            &ResolveOptions::default(),
+        )
+        .await
+        .expect("第二个候选应命中");
+        assert_eq!(res.backend.binary(), &hit, "必须选中存在者");
+        assert_eq!(res.probes.len(), 2);
+        assert_eq!(res.probes[0].path, missing);
+        assert!(res.probes[0].reason.is_some(), "缺失项带原因");
+        assert_eq!(res.probes[1].path, hit);
+        assert!(res.probes[1].reason.is_none());
+    }
+
+    /// Debug 脱敏（§7.3）：Backend/BackendResolution 日志面不落二进制路径。
+    #[test]
+    fn backend_debug_redacts_paths() {
+        let secret_path = "C:\\Users\\secret-user\\AppData\\Local\\chrome.exe";
+        let backend = Backend::SystemChrome { path: PathBuf::from(secret_path) };
+        let debug = format!("{backend:?}");
+        assert!(!debug.contains("secret-user"), "Debug 不得含路径：{debug}");
+        assert!(!debug.contains("chrome.exe"), "Debug 不得含文件名：{debug}");
+
+        let resolution = BackendResolution {
+            backend,
+            probes: vec![CandidateProbe {
+                source: ProbeSource::SystemChrome,
+                path: PathBuf::from(secret_path),
+                reason: None,
+            }],
+        };
+        let debug = format!("{resolution:?}");
+        assert!(!debug.contains("secret-user"), "Resolution Debug 不得含路径：{debug}");
+        assert!(debug.contains("probes: 1"), "候选仅统计数量：{debug}");
+    }
 }

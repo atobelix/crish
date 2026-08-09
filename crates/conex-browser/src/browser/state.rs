@@ -601,4 +601,102 @@ mod tests {
             );
         }
     }
+
+    // ---------- 崩溃窗口 30s 边界（评审 P2 补强：>= 出窗语义逐秒断言） ----------
+
+    /// 驱动到 Running（时间戳注入起点）。
+    fn run_to_running() -> StateMachine {
+        let mut sm = StateMachine::new();
+        sm.on(StateEvent::Start, now(), &CrashBudget::default());
+        sm.on(StateEvent::PortReady, now(), &CrashBudget::default());
+        sm
+    }
+
+    /// 在 t 时刻崩溃并立即重启回 Running（确定性序列）。
+    fn crash_and_restart(sm: &mut StateMachine, t: Instant, budget: &CrashBudget) {
+        sm.on(StateEvent::CrashDetected { reason: CrashReason::ProcessExit(1) }, t, budget);
+        sm.on(StateEvent::RestartTick, t, budget);
+        sm.on(StateEvent::PortReady, t, budget);
+    }
+
+    /// 29s 边界：第 4 次崩溃发生在首崩后 29s → 仍在窗内（29 < 30）→ CrashAbort。
+    #[test]
+    fn crash_window_29s_still_inside() {
+        let budget = CrashBudget::default();
+        let mut sm = run_to_running();
+        let t0 = now();
+        for sec in [0u64, 10, 20, 29] {
+            if sec == 29 {
+                let t = sm.on(
+                    StateEvent::CrashDetected { reason: CrashReason::ProcessExit(4) },
+                    t0 + Duration::from_secs(sec),
+                    &budget,
+                );
+                assert_eq!(t, Transition::CrashAbort { restarts: 4 }, "29s 仍在窗口内 → 超限");
+                assert_eq!(sm.state(), BrowserState::Stopped);
+            } else {
+                crash_and_restart(&mut sm, t0 + Duration::from_secs(sec), &budget);
+            }
+        }
+    }
+
+    /// 恰好 30s 边界：`>= window` 视为出窗（record_crash 剔除语义）——
+    /// 首崩恰满 30s 不计入 → 第 4 次崩溃仍可重启（restarts=3）。
+    #[test]
+    fn crash_window_exact_30s_outside() {
+        let budget = CrashBudget::default();
+        let mut sm = run_to_running();
+        let t0 = now();
+        for sec in [0u64, 10, 20] {
+            crash_and_restart(&mut sm, t0 + Duration::from_secs(sec), &budget);
+        }
+        // 第 4 次崩溃恰在 t0+30s：now - oldest = 30s >= window → 出窗剔除
+        let t = sm.on(
+            StateEvent::CrashDetected { reason: CrashReason::ProcessExit(4) },
+            t0 + Duration::from_secs(30),
+            &budget,
+        );
+        assert!(
+            matches!(t, Transition::CrashEnter { restarts: 3 }),
+            "恰好 30s 必须按出窗处理（>= 语义）：{t:?}"
+        );
+        assert_eq!(sm.restarts(), 3, "30s 前崩溃已被剔除");
+        // 出窗后的新基线：下一个崩溃距最早崩溃（t=10s）不足 30s → 窗口内 4 次 → 超限
+        crash_and_restart(&mut sm, t0 + Duration::from_secs(35), &budget);
+        let t = sm.on(
+            StateEvent::CrashDetected { reason: CrashReason::ProcessExit(7) },
+            t0 + Duration::from_secs(39),
+            &budget,
+        );
+        assert_eq!(t, Transition::CrashAbort { restarts: 4 }, "新窗口内 4 次 → 超限");
+    }
+
+    /// 窗口滑动：29s 间隔连续崩溃，首崩逐渐滑出、计数按窗口收敛
+    /// （滑动去旧语义：窗口是时间窗而非「最近 N 次」）。
+    #[test]
+    fn crash_window_slides_gradually() {
+        let budget = CrashBudget::default();
+        let mut sm = run_to_running();
+        let t0 = now();
+        // 第 1 次（t=0）→ restarts=1
+        crash_and_restart(&mut sm, t0, &budget);
+        assert_eq!(sm.restarts(), 1);
+        // 第 2 次（t=29s）：0 仍在窗内（29 < 30）→ restarts=2
+        crash_and_restart(&mut sm, t0 + Duration::from_secs(29), &budget);
+        assert_eq!(sm.restarts(), 2);
+        // 第 3 次（t=58s）：0 出窗（58-0 >= 30），29 在窗内（58-29=29 < 30）→ restarts=2
+        crash_and_restart(&mut sm, t0 + Duration::from_secs(58), &budget);
+        assert_eq!(sm.restarts(), 2, "窗口滑动：最旧崩溃被剔除，计数不随次数单调");
+        // 第 4 次（t=87s）：29 出窗（87-29=58 >= 30），58 在窗内 → restarts=2 → 仍可重启
+        let t = sm.on(
+            StateEvent::CrashDetected { reason: CrashReason::ProcessExit(4) },
+            t0 + Duration::from_secs(87),
+            &budget,
+        );
+        assert!(
+            matches!(t, Transition::CrashEnter { restarts: 2 }),
+            "滑动窗口内始终只有 2 次 → 不超限：{t:?}"
+        );
+        assert_eq!(sm.restarts(), 2);
+    }
 }

@@ -20,6 +20,12 @@ function isCompareMode(val: string): val is CompareMode {
   return val === 'git' || val === 'session-merged' || val === 'plain' || val.startsWith('turn-');
 }
 
+// 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
+const UNSTAGE_LABEL = '取消暂存此文件';
+const STAGE_LABEL = '暂存此文件';
+const DISCARD_LABEL = '放弃此文件的所有本地修改';
+const REJECT_LABEL = '从列表拒绝（不回滚磁盘）';
+
 interface DiffCardFileListProps {
   files: FileDiff[];
   sourceMode: SourceMode;
@@ -87,6 +93,9 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
     const absolutePath = isAbsolute ? f.filePath : `${cwd}/${f.filePath}`;
     const fileAiTurns = aiTurns.filter((t) => t.files.some((m) => m.filePath === f.filePath));
 
+    // 接受按钮文案随可应用性动态变化（同源约定：Tooltip content 与 aria-label 同引用）
+    const acceptLabel = classifyFileDiff(f).ok ? '接受并写入磁盘' : '此 diff 无法安全自动应用';
+
     const compareOptions: { value: string; label: string; hint?: string }[] = [];
     if (sourceMode === 'git') {
       compareOptions.push({ value: 'git', label: 'Git 工作区改动' });
@@ -148,10 +157,11 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
               {stagingPaths[f.filePath] ? (
                 <Lucide.Loader2 size={13} className={styles.spinner} />
               ) : f.staged ? (
-                <Tooltip content="取消暂存此文件">
+                <Tooltip content={UNSTAGE_LABEL}>
                   <button
                     type="button"
                     className={styles.hoverActBtn}
+                    aria-label={UNSTAGE_LABEL}
                     onClick={(e) => {
                       e.stopPropagation();
                       void onUnstageFile(f.filePath);
@@ -162,10 +172,11 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                 </Tooltip>
               ) : (
                 <>
-                  <Tooltip content="暂存此文件">
+                  <Tooltip content={STAGE_LABEL}>
                     <button
                       type="button"
                       className={styles.hoverActBtn}
+                      aria-label={STAGE_LABEL}
                       onClick={(e) => {
                         e.stopPropagation();
                         void onStageFile(f.filePath);
@@ -174,10 +185,11 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                       <Lucide.Plus size={13} />
                     </button>
                   </Tooltip>
-                  <Tooltip content="放弃此文件的所有本地修改">
+                  <Tooltip content={DISCARD_LABEL}>
                     <button
                       type="button"
                       className={`${styles.hoverActBtn} ${styles.danger}`}
+                      aria-label={DISCARD_LABEL}
                       onClick={(e) => {
                         e.stopPropagation();
                         void onDiscardChanges(f.filePath);
@@ -254,16 +266,11 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
 
                 <div className={styles.actionDivider} />
 
-                <Tooltip
-                  content={
-                    classifyFileDiff(f).ok
-                      ? '接受并写入磁盘'
-                      : '此 diff 无法安全自动应用'
-                  }
-                >
+                <Tooltip content={acceptLabel}>
                   <button
                     type="button"
                     className={`${styles.inlineActionBtn} ${styles.inlineActionAccept}`}
+                    aria-label={acceptLabel}
                     disabled={applyBusy || !classifyFileDiff(f).ok}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -274,10 +281,11 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                   </button>
                 </Tooltip>
 
-                <Tooltip content="从列表拒绝（不回滚磁盘）">
+                <Tooltip content={REJECT_LABEL}>
                   <button
                     type="button"
                     className={styles.inlineActionBtn}
+                    aria-label={REJECT_LABEL}
                     disabled={applyBusy}
                     onClick={(e) => {
                       e.stopPropagation();

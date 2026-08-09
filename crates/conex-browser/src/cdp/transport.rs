@@ -795,4 +795,106 @@ mod tests {
             }
         }
     }
+
+    /// 重连风暴（评审 P2 补强）：3 次循环断线 → 每次重连恢复 → 最终收敛。
+    /// 单调性断言：global_epoch 逐轮 +1、快照版本每轮 +1000、旧版本全部 Stale；
+    /// 收敛断言：连接数/恢复次数精确等于 1 + 3、最终版本 3001。
+    #[tokio::test]
+    async fn transport_reconnect_storm_monotonic_convergence() {
+        let mock = MockServer::spawn().await;
+        mock.set_auto_reply("Browser.getVersion", mock_version_reply());
+
+        let bus = BusHandle::new(64, 8);
+        let tracker = Arc::new(VersionTracker::new(
+            bus.event_tx(),
+            Duration::from_millis(50),
+        ));
+        let mut bus_rx = bus.subscribe();
+        // 版本驱动订阅（ConnectionRestored → VersionReset 全链路）
+        crate::cdp::version::spawn_version_driver(bus.subscribe(), tracker.clone());
+
+        // 风暴前：tab-1 已有版本基线（1）
+        tracker.bump("tab-1", crate::cdp::bus::VersionReason::InputInjected);
+        assert_eq!(tracker.snapshot_version("tab-1"), 1);
+
+        let runs = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hook = Arc::new(RecordingRestoreHook::new(runs.clone()));
+        let endpoint = CdpEndpoint {
+            port: mock.addr.port(),
+            ws_path: "/devtools/browser/storm".to_string(),
+        };
+        let transport = Transport::connect(
+            endpoint,
+            ExpectedBrowser::default(),
+            bus.event_tx(),
+            tracker.epoch_handle(),
+            hook.clone(),
+        )
+        .await
+        .expect("建连失败");
+        transport
+            .restore_now(hook.as_ref())
+            .await
+            .expect("首启恢复失败");
+        assert_eq!(mock.connection_count(), 1, "首连 1 次");
+
+        // 3 次循环断线：每轮等待「ConnectionLost → ConnectionRestored → VersionReset」
+        let mut lost_total = 0usize;
+        for cycle in 1..=3u32 {
+            mock.close_connection();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+            let mut restored_epoch: Option<u64> = None;
+            let mut reset_epoch: Option<u64> = None;
+            while tokio::time::Instant::now() < deadline {
+                tokio::select! {
+                    ev = bus_rx.recv() => match ev {
+                        Ok(BrowserEvent::ConnectionLost { attempt }) => {
+                            lost_total += 1;
+                            assert_eq!(attempt, 0, "断线首信号 attempt=0（未达上报阈值）");
+                        }
+                        Ok(BrowserEvent::ConnectionRestored { epoch, .. }) => {
+                            // 广播时 epoch 为重置前值（重置由版本驱动收到事件后触发）
+                            restored_epoch = Some(epoch);
+                        }
+                        Ok(BrowserEvent::VersionReset { epoch, .. }) => {
+                            reset_epoch = Some(epoch);
+                        }
+                        Ok(_) => {}
+                        Err(_) => break,
+                    },
+                    _ = tokio::time::sleep(Duration::from_millis(10)) => {}
+                }
+                if reset_epoch.is_some() {
+                    break;
+                }
+            }
+            let restored = restored_epoch.expect("第 {cycle} 轮必须广播 ConnectionRestored");
+            let reset = reset_epoch.expect("第 {cycle} 轮必须广播 VersionReset");
+            // 单调性：epoch 逐轮 +1（reset 后 = cycle；restored 携带前置值 = cycle-1）
+            assert_eq!(reset, u64::from(cycle), "global_epoch 必须严格单调递增：第 {cycle} 轮");
+            assert_eq!(restored, u64::from(cycle) - 1, "ConnectionRestored 携带重置前 epoch");
+            assert!(transport.is_ready(), "每轮恢复完成后必须重新可用");
+        }
+        // 最终收敛（精确计数，防重连风暴失控）
+        assert_eq!(lost_total, 3, "恰好 3 次 ConnectionLost（无多余断线信号）");
+        assert_eq!(mock.connection_count(), 4, "首连 + 3 次重连 = 4");
+        assert_eq!(runs.load(Ordering::SeqCst), 4, "恢复流程每次重连重跑");
+        // 版本单调收敛：1 + 3×1000
+        assert_eq!(tracker.epoch(), 3, "epoch 最终 = 3");
+        assert_eq!(tracker.snapshot_version("tab-1"), 3001, "版本每轮 +1000");
+        // 旧版本全部失效（任一中间态版本均 Stale）
+        for stale_version in [1u64, 1001, 2001] {
+            assert!(
+                tracker.validate_snapshot("tab-1", stale_version).is_err(),
+                "版本 {stale_version} 必须判定 Stale"
+            );
+        }
+        assert!(tracker.validate_snapshot("tab-1", 3001).is_ok());
+        // 断线 → 重连循环收敛后可继续服务（发送面恢复）
+        use crate::cdp::sender::CommandChannel;
+        let send = transport
+            .send_command("Browser.getVersion", None, None, Duration::from_secs(5))
+            .await;
+        assert!(send.is_ok(), "收敛后命令面可用：{send:?}");
+    }
 }

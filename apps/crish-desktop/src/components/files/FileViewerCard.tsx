@@ -14,6 +14,11 @@ export interface FileViewerCardProps {
   onShowToast?: (message: string) => void;
 }
 
+// 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
+const OPEN_WITH_LABEL = '选择打开方式';
+const COPY_SOURCE_LABEL = '复制完整源码';
+const MORE_ACTIONS_LABEL = '更多操作';
+
 export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
   ({ filePath, onShowToast }) => {
     const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
@@ -245,11 +250,12 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                 </button>
               </Tooltip>
 
-              <Tooltip content="选择打开方式">
+              <Tooltip content={OPEN_WITH_LABEL}>
                 <button
                   ref={openMenuTriggerRef}
                   type="button"
                   className={styles.filesOpenChev}
+                  aria-label={OPEN_WITH_LABEL}
                   aria-haspopup="menu"
                   aria-expanded={openMenuOpen}
                   onClick={() => {
@@ -303,10 +309,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             </div>
 
             {/* 常驻复制源码按钮 */}
-            <Tooltip content="复制完整源码">
+            <Tooltip content={COPY_SOURCE_LABEL}>
               <button
                 type="button"
                 className={styles.actBtn}
+                aria-label={COPY_SOURCE_LABEL}
                 onClick={handleCopyCode}
               >
                 <Lucide.Copy size={14} />
@@ -315,11 +322,12 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 
             {/* 智能 More 面板收纳其余所有辅助动作 */}
             <div className={styles.filesMoreWrap} ref={moreRef}>
-              <Tooltip content="更多">
+              <Tooltip content={MORE_ACTIONS_LABEL}>
                 <button
                   ref={moreTriggerRef}
                   type="button"
                   className={styles.actBtn}
+                  aria-label={MORE_ACTIONS_LABEL}
                   aria-haspopup="menu"
                   aria-expanded={moreOpen}
                   onClick={() => {

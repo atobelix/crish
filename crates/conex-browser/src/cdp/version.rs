@@ -649,4 +649,131 @@ mod tests {
             }
         );
     }
+
+    // ---------- 多标签/多会话并发隔离（评审 P2 补强） ----------
+
+    /// per-tab 版本互不污染：显式 bump 只推进目标标签，其余标签版本为零。
+    #[tokio::test]
+    async fn version_bump_per_tab_no_pollution() {
+        let (tracker, bus) = test_tracker(VERSION_BUMP_COALESCE);
+        let mut rx = bus.subscribe();
+        tracker.bump("tab-1", VersionReason::InputInjected);
+        tracker.bump("tab-1", VersionReason::InputInjected);
+        tracker.bump("tab-1", VersionReason::ActionDone);
+        tracker.bump("tab-2", VersionReason::ActionDone);
+        tracker.bump("tab-2", VersionReason::InputInjected);
+        // 计数严格按标签独立
+        assert_eq!(tracker.snapshot_version("tab-1"), 3);
+        assert_eq!(tracker.snapshot_version("tab-2"), 2);
+        assert_eq!(tracker.snapshot_version("tab-未出现"), 0, "未出现标签不得有版本");
+        // 广播的 VersionAdvanced 必须携带各自 tab_id（跨标签不串号）
+        let mut advanced = 0;
+        for _ in 0..5 {
+            match rx.recv().await {
+                Ok(BrowserEvent::VersionAdvanced { tab_id, .. }) => {
+                    assert!(tab_id == "tab-1" || tab_id == "tab-2", "tab_id 必须正确：{tab_id}");
+                    advanced += 1;
+                }
+                other => panic!("应收到 VersionAdvanced：{other:?}"),
+            }
+        }
+        assert_eq!(advanced, 5);
+    }
+
+    /// 会话 → 标签路由隔离：不同会话映射不同标签时，事件驱动推进互不干扰
+    /// （导航即时面 + 对话框恒推进面 + 顺序 DOM 窗口面）。
+    #[tokio::test]
+    async fn version_session_isolation_between_tabs() {
+        let (tracker, bus) = test_tracker(Duration::from_millis(50));
+        let mut rx = bus.subscribe();
+        tracker.track_session("s1", "tab-1");
+        tracker.track_session("s2", "tab-2");
+
+        // 导航（即时面）：s1 推进两次、s2 一次 → 各自计数
+        tracker.on_event(&nav_event("s1", true));
+        tracker.on_event(&nav_event("s1", true));
+        tracker.on_event(&nav_event("s2", true));
+        assert_eq!(tracker.snapshot_version("tab-1"), 2, "s1 导航只推 tab-1");
+        assert_eq!(tracker.snapshot_version("tab-2"), 1, "s2 导航只推 tab-2");
+
+        // 对话框会话隔离（恒推进即时面）：s1 的 dialog 不碰 tab-2
+        tracker.on_event(&BrowserEvent::DialogOpened(crate::cdp::bus::DialogInfo {
+            session: "s1".to_string(),
+            dialog_type: "alert".to_string(),
+            message: "hi".to_string(),
+            url: "https://e.com".to_string(),
+            default_prompt: None,
+        }));
+        tracker.on_event(&BrowserEvent::DialogClosed {
+            session: "s1".to_string(),
+            accepted: true,
+        });
+        assert_eq!(tracker.snapshot_version("tab-1"), 4);
+        assert_eq!(tracker.snapshot_version("tab-2"), 1, "s1 对话框不得污染 tab-2");
+
+        // 顺序 DOM 窗口：窗口各自闭合后，两标签各推进一次（跨标签互不合并）
+        tracker.on_event(&dom_event("s1"));
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        tracker.on_event(&dom_event("s2"));
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(tracker.snapshot_version("tab-1"), 5, "s1 DOM 窗口独立提交");
+        assert_eq!(tracker.snapshot_version("tab-2"), 2, "s2 DOM 窗口独立提交");
+
+        // 消费广播（确保无乱入的跨标签推进事件）
+        let mut advanced = 0;
+        for _ in 0..7 {
+            match rx.recv().await {
+                Ok(BrowserEvent::VersionAdvanced { .. }) => advanced += 1,
+                other => panic!("应收到 VersionAdvanced：{other:?}"),
+            }
+        }
+        assert_eq!(advanced, 7, "推进广播总数与版本总量一致（无泄漏推进）");
+    }
+
+    /// TargetDestroyed 跨标签推进：关闭 tab-2 只推进 tab-2，不影响 tab-1。
+    #[tokio::test]
+    async fn version_target_destroyed_cross_tab() {
+        let (tracker, _bus) = test_tracker(VERSION_BUMP_COALESCE);
+        tracker.bump("tab-1", VersionReason::InputInjected);
+        tracker.on_event(&BrowserEvent::TargetDestroyed { target_id: "tab-2".to_string() });
+        assert_eq!(tracker.snapshot_version("tab-1"), 1, "tab-2 关闭不得推进 tab-1");
+        assert_eq!(tracker.snapshot_version("tab-2"), 1, "tab-2 关闭即时 +1");
+        // 再关 tab-1 → 各自 +1（独立计数链）
+        tracker.on_event(&BrowserEvent::TargetDestroyed { target_id: "tab-1".to_string() });
+        assert_eq!(tracker.snapshot_version("tab-1"), 2);
+        assert_eq!(tracker.snapshot_version("tab-2"), 1);
+    }
+
+    /// 同标签多会话（主 frame + iframe 双会话路由到同一标签）：
+    /// 会话层各自驱动、标签层版本同向累计。
+    #[tokio::test]
+    async fn version_same_tab_multi_session_accumulates() {
+        let (tracker, _bus) = test_tracker(Duration::from_millis(50));
+        tracker.track_session("s-main", "tab-1");
+        tracker.track_session("s-iframe", "tab-1");
+
+        // iframe 导航（归窗口）→ 提交后落在 tab-1
+        tracker.on_event(&nav_event("s-iframe", false));
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(tracker.snapshot_version("tab-1"), 1, "iframe 会话导航累计到同一标签");
+        // 主 frame 导航（即时面）→ 同一标签再 +1
+        tracker.on_event(&nav_event("s-main", true));
+        assert_eq!(tracker.snapshot_version("tab-1"), 2);
+        assert_eq!(tracker.snapshot_version("tab-2"), 0, "未登记会话不得产生版本");
+    }
+
+    /// validate_snapshot 的 per-tab 独立性：一标签的推进不使另一标签的合法版本失效。
+    #[tokio::test]
+    async fn version_validate_is_per_tab() {
+        let (tracker, _bus) = test_tracker(VERSION_BUMP_COALESCE);
+        tracker.bump("tab-1", VersionReason::ActionDone);
+        tracker.bump("tab-1", VersionReason::ActionDone);
+        tracker.bump("tab-2", VersionReason::ActionDone);
+        // tab-1 当前 2：其旧版本 1 失效、自身 2 有效
+        assert!(tracker.validate_snapshot("tab-1", 2).is_ok());
+        assert!(tracker.validate_snapshot("tab-1", 1).is_err());
+        // tab-2 当前 1：tab-1 的推进不影响它
+        assert!(tracker.validate_snapshot("tab-2", 1).is_ok(), "tab-1 推进不得失效 tab-2");
+        assert!(tracker.validate_snapshot("tab-2", 0).is_err());
+    }
 }

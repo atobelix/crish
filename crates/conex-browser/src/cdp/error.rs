@@ -253,4 +253,133 @@ mod tests {
         assert!(text.contains("服务器错误"));
         assert!(!text.contains("ws://"));
     }
+
+    // ---------- from_wire 全表（§3.2 映射表逐变体回归，评审 P2 补强） ----------
+
+    fn wire(code: Option<i64>, message: &str) -> WireCdpError {
+        WireCdpError {
+            code,
+            message: message.to_string(),
+            data: None,
+        }
+    }
+
+    /// -32000 特判：Target closed / Cannot find context → ContextGone（维度 14 消费面）。
+    #[test]
+    fn from_wire_context_gone_special_cases() {
+        for msg in [
+            "Target closed",
+            "Cannot find context with specified id",
+            "Cannot find context: context not found",
+            "Runtime execution context was destroyed：Target closed",
+        ] {
+            let got = CdpError::from_wire("Page.navigate", &wire(Some(-32000), msg));
+            assert!(
+                matches!(&got, CdpError::ContextGone { method, .. } if method == "Page.navigate"),
+                "消息含关闭/上下文消失语义必须特判 ContextGone：{msg:?}（实际 {got:?}）"
+            );
+        }
+    }
+
+    /// -32000 特判的否定面：普通服务器消息不进 ContextGone。
+    /// 注：真实 Chrome 的 "Target with specified id is closed" 形态不命中
+    /// "Target closed" 关键字（精确子串匹配局限），当前语义归 Server——
+    /// 该局限已在此断言中锁定，交由主控裁决是否补全关键字。
+    #[test]
+    fn from_wire_32000_generic_is_server() {
+        let got = CdpError::from_wire("Page.navigate", &wire(Some(-32000), "browser process crashed"));
+        match &got {
+            CdpError::Server { code, message } => {
+                assert_eq!(*code, -32000);
+                assert_eq!(message, "browser process crashed");
+            }
+            other => panic!("普通 -32000 消息应为 Server，实际：{other:?}"),
+        }
+        // 真实 Chrome 变体（精确匹配局限的诚实记录）
+        let variant = CdpError::from_wire("Page.navigate", &wire(Some(-32000), "Target with specified id is closed"));
+        assert!(
+            matches!(variant, CdpError::Server { .. }),
+            "当前实现仅按精确关键字特判，该变体归 Server（局限锁定）"
+        );
+    }
+
+    /// -32601 → 域/方法不可用（能力探测降级语义）。
+    #[test]
+    fn from_wire_32601_domain_unavailable() {
+        let got = CdpError::from_wire("Page.captureScreenshot", &wire(Some(-32601), "Method not found"));
+        assert!(
+            matches!(got, CdpError::DomainUnavailable { ref method } if method == "Page.captureScreenshot"),
+            "实际 {got:?}"
+        );
+    }
+
+    /// 未知码原样透传 Server{code}（协议漂移面，码值必须保留）。
+    #[test]
+    fn from_wire_unknown_code_passthrough() {
+        for code in [-1i64, -100, -31999, -40000, 0, 32000, i64::MAX] {
+            let got = CdpError::from_wire("X.y", &wire(Some(code), "drift"));
+            assert!(
+                matches!(&got, CdpError::Server { code: c, message } if *c == code && message == "drift"),
+                "未知码 {code} 必须原样透传（实际 {got:?}）"
+            );
+        }
+    }
+
+    /// 缺码默认 -32000：默认码同样走 ContextGone 特判与 Server 兜底。
+    #[test]
+    fn from_wire_missing_code_defaults_to_32000() {
+        let gone = CdpError::from_wire("Page.navigate", &wire(None, "Cannot find context"));
+        assert!(
+            matches!(gone, CdpError::ContextGone { .. }),
+            "缺码默认 -32000，消息命中特判仍需转 ContextGone"
+        );
+        let server = CdpError::from_wire("Page.navigate", &wire(None, "boom"));
+        assert!(
+            matches!(&server, CdpError::Server { code, .. } if *code == -32000),
+            "缺码默认 -32000 → Server，实际 {server:?}"
+        );
+    }
+
+    /// 错误码映射全表（§3.2）：每个码位 → 唯一变体 + method/message 字段透传。
+    #[test]
+    fn from_wire_full_mapping_table() {
+        // -32700 / -32600 → Protocol（method 可空，message 透传）
+        for code in [-32700i64, -32600] {
+            let got = CdpError::from_wire("X.y", &wire(Some(code), "协议层"));
+            assert!(
+                matches!(&got, CdpError::Protocol { method, message } if method.as_deref() == Some("X.y") && message == "协议层"),
+                "码 {code} 应映射 Protocol（实际 {got:?}）"
+            );
+        }
+        // -32602 → BadParams
+        let got = CdpError::from_wire("X.y", &wire(Some(-32602), "参数错误"));
+        assert!(
+            matches!(&got, CdpError::BadParams { method, message } if method == "X.y" && message == "参数错误"),
+            "实际 {got:?}"
+        );
+        // -32603 → Internal
+        let got = CdpError::from_wire("X.y", &wire(Some(-32603), "内部错误"));
+        assert!(
+            matches!(&got, CdpError::Internal { method, message } if method.as_deref() == Some("X.y") && message == "内部错误"),
+            "实际 {got:?}"
+        );
+    }
+
+    /// is_connection_level 判定（重连/重试决策辅助）。
+    #[test]
+    fn connection_level_classification() {
+        assert!(CdpError::ConnectionLost.is_connection_level());
+        assert!(CdpError::Timeout { method: "x".into(), elapsed: Duration::ZERO }.is_connection_level());
+        assert!(!CdpError::Server { code: -32000, message: "m".into() }.is_connection_level());
+        assert!(!CdpError::DomainUnavailable { method: "x".into() }.is_connection_level());
+        assert!(!CdpError::ContextGone { method: "x".into(), message: "m".into() }.is_connection_level());
+    }
+
+    /// CdpErrorCode::from_i64 边界补强：0 与 i64 极值落 Unknown。
+    #[test]
+    fn error_code_unknown_boundaries() {
+        assert_eq!(CdpErrorCode::from_i64(0), CdpErrorCode::Unknown(0));
+        assert_eq!(CdpErrorCode::from_i64(i64::MIN), CdpErrorCode::Unknown(i64::MIN));
+        assert_eq!(CdpErrorCode::from_i64(i64::MAX), CdpErrorCode::Unknown(i64::MAX));
+    }
 }

@@ -16,6 +16,10 @@ interface FilesCardProps {
   initialPath?: string | null;
 }
 
+// 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
+const PARENT_DIR_LABEL = '上级目录';
+const REFRESH_LABEL = '刷新';
+
 export const FilesCard: React.FC<FilesCardProps> = React.memo(({ initialPath }) => {
   const preview = useFilePreview();
   const nav = useFileNavigation(() => preview.dirty);
@@ -144,13 +148,13 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(({ initialPath }) 
     <AppErrorBoundary variant="compact" title="文件面板出错">
       <div className={styles.filesCard}>
         <div className={styles.filesBar} role="toolbar" aria-label="文件导航">
-          <Tooltip content="上级目录">
-            <button type="button" className={styles.filesNavBtn} disabled={!nav.cwd || nav.cwd === nav.root} onClick={handleGoUp}>
+          <Tooltip content={PARENT_DIR_LABEL}>
+            <button type="button" className={styles.filesNavBtn} aria-label={PARENT_DIR_LABEL} disabled={!nav.cwd || nav.cwd === nav.root} onClick={handleGoUp}>
               <CornerLeftUp size={15} />
             </button>
           </Tooltip>
-          <Tooltip content="刷新">
-            <button type="button" className={styles.filesNavBtn} onClick={handleRefreshBtn}>
+          <Tooltip content={REFRESH_LABEL}>
+            <button type="button" className={styles.filesNavBtn} aria-label={REFRESH_LABEL} onClick={handleRefreshBtn}>
               <RotateCw size={15} />
             </button>
           </Tooltip>

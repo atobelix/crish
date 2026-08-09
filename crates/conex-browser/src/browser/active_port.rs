@@ -385,4 +385,144 @@ mod tests {
         assert!(!joined.contains("127.0.0.1"));
         assert!(joined.contains("<redacted>"));
     }
+
+    // ---------- 真实文件轮询（评审 P2 补强：临时目录 + 真实 DevToolsActivePort） ----------
+
+    fn poll_settings() -> PollSettings {
+        PollSettings {
+            interval: Duration::from_millis(10),
+            timeout: Duration::from_secs(2),
+        }
+    }
+
+    /// 陈旧文件陷阱（S0-02）：残留的**合法**旧端口文件在轮询起点即命中——
+    /// 轮询以文件内容为准，故调用方必须先 remove_stale_active_port
+    /// （本测试锁定该陷阱语义，防止有人绕过启动前删除步骤）。
+    #[tokio::test]
+    async fn wait_active_port_stale_valid_file_hits_immediately() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        std::fs::write(
+            dir.path().join(ACTIVE_PORT_FILE),
+            "9999\n/devtools/browser/stale-uuid\n",
+        )
+        .expect("陈旧内容");
+        let ring = tokio::sync::Mutex::new(StderrRing::new(20));
+        let outcome = wait_active_port(dir.path(), None, &ring, &poll_settings()).await;
+        match outcome {
+            WaitOutcome::Endpoint(ep) => {
+                assert_eq!(ep.port, 9999, "残留合法文件立即命中陈旧端点（陷阱语义）");
+                assert_eq!(ep.ws_path, "/devtools/browser/stale-uuid");
+            }
+            other => panic!("陈旧合法文件应立即命中（不轮询等待），实际：{other:?}"),
+        }
+    }
+
+    /// 陈旧 → 新内容（S0-02 正确流程）：先删除残留，轮询窗口内文件延迟写入
+    /// 新内容 → 以新内容为准拿到新端点。
+    #[tokio::test]
+    async fn wait_active_port_stale_removed_then_fresh() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        std::fs::write(
+            dir.path().join(ACTIVE_PORT_FILE),
+            "9999\n/devtools/browser/stale-uuid\n",
+        )
+        .expect("陈旧内容");
+        // 启动前删除（S0-02 铁律）
+        remove_stale_active_port(dir.path());
+        assert!(!dir.path().join(ACTIVE_PORT_FILE).exists(), "启动前必须删除陈旧文件");
+        // 轮询开始后新进程才写入
+        let dir2 = dir.path().to_path_buf();
+        let write = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            std::fs::write(
+                dir2.join(ACTIVE_PORT_FILE),
+                "34567\n/devtools/browser/fresh-uuid\n",
+            )
+            .expect("写入新内容");
+        });
+        let ring = tokio::sync::Mutex::new(StderrRing::new(20));
+        let outcome = wait_active_port(dir.path(), None, &ring, &poll_settings()).await;
+        match outcome {
+            WaitOutcome::Endpoint(ep) => {
+                assert_eq!(ep.port, 34567, "必须拿到新端点（非陈旧 9999）");
+                assert_eq!(ep.ws_path, "/devtools/browser/fresh-uuid");
+            }
+            other => panic!("陈旧删除后轮询应拿到新端点，实际：{other:?}"),
+        }
+        write.await.expect("写入任务");
+    }
+
+    /// 文件延迟出现：轮询开始后 N 毫秒才写入 → 必须轮询到（而非错过）。
+    #[tokio::test]
+    async fn wait_active_port_file_appears_later() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let path = dir.path().join(ACTIVE_PORT_FILE);
+        let dir2 = dir.path().to_path_buf();
+        let write = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            std::fs::write(dir2.join(ACTIVE_PORT_FILE), "23456\n/devtools/browser/later\n")
+                .expect("延迟写入");
+        });
+        let ring = tokio::sync::Mutex::new(StderrRing::new(20));
+        let outcome = wait_active_port(dir.path(), None, &ring, &poll_settings()).await;
+        match outcome {
+            WaitOutcome::Endpoint(ep) => {
+                assert_eq!(ep.port, 23456);
+                assert_eq!(ep.ws_path, "/devtools/browser/later");
+            }
+            other => panic!("延迟出现应被轮询捕获，实际：{other:?}"),
+        }
+        write.await.expect("写入任务");
+        // 文件真实存在（临时目录 fixture 落盘校验）
+        assert_eq!(std::fs::read_to_string(&path).expect("读回"), "23456\n/devtools/browser/later\n");
+    }
+
+    /// 超时路径：窗口内始终无文件 → WaitOutcome::Timeout（短设置注入）。
+    #[tokio::test]
+    async fn wait_active_port_times_out_without_file() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let ring = tokio::sync::Mutex::new(StderrRing::new(20));
+        let settings = PollSettings {
+            interval: Duration::from_millis(5),
+            timeout: Duration::from_millis(80),
+        };
+        let started = tokio::time::Instant::now();
+        let outcome = wait_active_port(dir.path(), None, &ring, &settings).await;
+        assert!(
+            matches!(outcome, WaitOutcome::Timeout { .. }),
+            "无文件必须超时退出（不无限轮询）"
+        );
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= Duration::from_millis(80),
+            "超时不得提前退出：elapsed={elapsed:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "超时不得拖期：elapsed={elapsed:?}"
+        );
+    }
+
+    /// 不可解析的中间态（启动初期半写）不中断轮询：先写坏内容再写合法内容。
+    #[tokio::test]
+    async fn wait_active_port_recovers_from_partial_write() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        std::fs::write(dir.path().join(ACTIVE_PORT_FILE), "not-a-port\n").expect("半写内容");
+        let dir2 = dir.path().to_path_buf();
+        let write = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            std::fs::write(dir2.join(ACTIVE_PORT_FILE), "45678\n/devtools/browser/ok\n")
+                .expect("修复写入");
+        });
+        let ring = tokio::sync::Mutex::new(StderrRing::new(20));
+        let outcome = wait_active_port(dir.path(), None, &ring, &poll_settings()).await;
+        match outcome {
+            WaitOutcome::Endpoint(ep) => {
+                assert_eq!(ep.port, 45678);
+                assert_eq!(ep.ws_path, "/devtools/browser/ok");
+            }
+            other => panic!("半写恢复应拿到合法端点，实际：{other:?}"),
+        }
+        write.await.expect("写入任务");
+    }
 }

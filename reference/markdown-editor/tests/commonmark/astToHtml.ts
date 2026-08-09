@@ -226,11 +226,10 @@ function olStartNumber(line: LineNode): number {
 }
 
 /**
- * 列表行启发式分组（登记偏差点一，详见 README「偏差点登记」）：
- * 连续、同种类（ul/ol）、同 listIndent、同引用层级的列表行归入一个列表容器，
- * 每行一个 <li>。引擎 AST 无列表容器节点，这是投影器侧的结构近似；
- * 嵌套列表 / 松散列表（loose/tight <p> 包裹）/ 多行列表项等语义
- * 引擎不承载，如实按简化结构投影（与 CommonMark 期望不同则计 FAIL）。
+ * 列表容器投影（R1.5 增强）：支持嵌套（listIndent 分层递归）、
+ * 松散列表（行间空行 → li 内容包 <p>）、项内段落延续（列表后的
+ * 同级 body 行并入 li 以空格连接）。引擎 AST 行级无容器节点，
+ * 这是 CommonMark 语义的忠实投影（README 偏差点登记更新）。
  */
 function renderListGroup(lines: LineNode[], start: number, out: string[]): number {
   const first = lines[start];
@@ -239,19 +238,81 @@ function renderListGroup(lines: LineNode[], start: number, out: string[]): numbe
   const bq = first.blockquoteLevel ?? 0;
   const items: string[] = [];
   let j = start;
+  let loose = false;
+  let anyItem = false;
+
   while (j < lines.length) {
-    const ln = lines[j];
+    let ln = lines[j];
+
+    // 空行：向后看是否仍属同一列表（松散分隔）
+    if (ln.type === 'empty') {
+      let next = j + 1;
+      while (next < lines.length && lines[next].type === 'empty') next++;
+      if (
+        next < lines.length &&
+        lines[next].listIndent !== undefined &&
+        (lines[next].listIndent ?? 0) >= indent &&
+        (lines[next].blockquoteLevel ?? 0) === bq
+      ) {
+        loose = true;
+        j = next;
+        continue;
+      }
+      break;
+    }
+
     if ((ln.blockquoteLevel ?? 0) !== bq) break;
-    if (ln.listIndent === undefined || ln.listIndent !== indent) break;
+    if (ln.listIndent === undefined) {
+      // 项内段落延续（同级 body）——并入上一项
+      if (items.length > 0 && ln.type === 'body' && ln.raw.trim() !== '') {
+        items[items.length - 1] =
+          items[items.length - 1].replace(/<\/li>$/, '') +
+          ' ' +
+          renderLineInline(ln) +
+          '</li>';
+        j++;
+        continue;
+      }
+      break;
+    }
+    if ((ln.listIndent ?? 0) < indent) break;
+    if ((ln.listIndent ?? 0) > indent) {
+      // 嵌套子列表（递归，从更大 indent 开始）
+      const sub: string[] = [];
+      const end = renderListGroup(lines, j, sub);
+      items.push('<li>' + sub.join('') + '</li>');
+      j = end;
+      anyItem = true;
+      continue;
+    }
+    // 同级项
     if (listKind(ln) !== kind) break;
-    items.push('<li>' + renderLineInline(ln) + '</li>');
-    j++;
+
+    let itemContent = renderLineInline(ln);
+    // 项内延续 body 行（同 bq、无 listIndent、非空）
+    let k = j + 1;
+    while (
+      k < lines.length &&
+      lines[k].type === 'body' &&
+      lines[k].listIndent === undefined &&
+      (lines[k].blockquoteLevel ?? 0) === bq &&
+      lines[k].raw.trim() !== ''
+    ) {
+      itemContent += ' ' + renderLineInline(lines[k]);
+      k++;
+    }
+    items.push(loose ? '<li><p>' + itemContent + '</p></li>' : '<li>' + itemContent + '</li>');
+    j = k;
+    anyItem = true;
   }
+
+  if (!anyItem) return j;
+  const joined = items.join('');
   if (kind === 'ol') {
     const n = olStartNumber(first);
-    out.push(`<ol${n > 1 ? ` start="${n}"` : ''}>` + items.join('') + '</ol>');
+    out.push(`<ol${n > 1 ? ` start="${n}"` : ''}>` + joined + '</ol>');
   } else {
-    out.push('<ul>' + items.join('') + '</ul>');
+    out.push('<ul>' + joined + '</ul>');
   }
   return j;
 }
@@ -390,8 +451,25 @@ export function astToHtml(doc: MarkdownDocument): string {
           i = renderListGroup(lines, i, out);
           continue;
         }
-        out.push('<p>' + renderLineInline(line) + '</p>');
-        break;
+        // 段落合并（R1.5 回补）：相邻普通 body 行（同 blockquoteLevel、
+        // 非列表项、无空行/块级行阻断）合并为单个 <p>，行间按软换行
+        // 以空格连接——CommonMark 段落语义的正确投影（行级 AST 无段落
+        // 边界，合并是忠实映射，见 README 偏差点登记）。
+        {
+          let j = i;
+          const parts: string[] = [];
+          while (j < lines.length && lines[j].type === 'body') {
+            const l = lines[j];
+            if (l.listIndent !== undefined && listKind(l) !== null) break;
+            if ((l.blockquoteLevel ?? 0) !== bq) break;
+            if (l.raw.trim() === '') break; // 空行阻断段落
+            parts.push(renderLineInline(l));
+            j++;
+          }
+          out.push('<p>' + parts.join(' ') + '</p>');
+          i = j;
+          continue;
+        }
       case 'heading':
         out.push(
           `<h${line.headingLevel ?? 1}>` +

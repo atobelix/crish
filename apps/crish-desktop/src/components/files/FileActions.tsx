@@ -11,6 +11,10 @@ function getOpenerIcon(op: HostOpener, size = 14) {
   return <AppWindow size={size} aria-hidden style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />;
 }
 
+// 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
+const OPEN_WITH_LABEL = '选择打开方式';
+const MORE_ACTIONS_LABEL = '更多操作';
+
 function useMenu(menuRef: React.RefObject<HTMLElement | null>, triggerRef: React.RefObject<HTMLElement | null>, open: boolean, setOpen: (v: boolean) => void) {
   const prevRef = useRef(false);
   useEffect(() => { if (!open) return; const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); } }; window.addEventListener('keydown', h, true); return () => window.removeEventListener('keydown', h, true); }, [open, setOpen]);
@@ -73,7 +77,7 @@ export const FileActions = React.memo(function FileActions({
             {selected ? (
               <div className={styles.filesOpenCapsule} ref={openMenuRef}>
                 <Tooltip content={`${openDefaultLabel}（系统默认）`}><button type="button" className={styles.filesOpenMain} onClick={handleOpenDefault}><AppWindow size={13} aria-hidden />{openDefaultLabel}</button></Tooltip>
-                <Tooltip content="选择打开方式"><button ref={openMenuTriggerRef} type="button" className={styles.filesOpenChev} aria-haspopup="menu" aria-expanded={openMenuOpen} onClick={() => { setOpenMenuOpen((v) => !v); setOpenMenuMore(false); setMoreOpen(false); }}><ChevronDown size={14} aria-hidden /></button></Tooltip>
+                <Tooltip content={OPEN_WITH_LABEL}><button ref={openMenuTriggerRef} type="button" className={styles.filesOpenChev} aria-label={OPEN_WITH_LABEL} aria-haspopup="menu" aria-expanded={openMenuOpen} onClick={() => { setOpenMenuOpen((v) => !v); setOpenMenuMore(false); setMoreOpen(false); }}><ChevronDown size={14} aria-hidden /></button></Tooltip>
                 {openMenuOpen ? (
                   <div className={`${styles.filesOpenMenu} files-open-menu`} role="menu">
                     <button type="button" className={`${styles.filesOpenItem} files-open-item`} role="menuitem" onClick={() => { onCopyPath('abs'); setOpenMenuOpen(false); }}><Copy size={14} aria-hidden />复制路径</button>
@@ -92,8 +96,8 @@ export const FileActions = React.memo(function FileActions({
       ) : null}
 
       <div className={styles.filesMoreWrap} ref={moreRef}>
-        <Tooltip content="更多">
-          <button ref={moreTriggerRef} type="button" className={styles.filesNavBtn} aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => { setMoreOpen((v) => !v); setOpenMenuOpen(false); }}><MoreHorizontal size={15} /></button>
+        <Tooltip content={MORE_ACTIONS_LABEL}>
+          <button ref={moreTriggerRef} type="button" className={styles.filesNavBtn} aria-label={MORE_ACTIONS_LABEL} aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => { setMoreOpen((v) => !v); setOpenMenuOpen(false); }}><MoreHorizontal size={15} /></button>
         </Tooltip>
         {moreOpen ? (
           <div className={`${styles.filesMoreMenu} files-more-menu`} role="menu">
