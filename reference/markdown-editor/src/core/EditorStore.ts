@@ -130,6 +130,153 @@ export function snapToGraphemeBoundary(text: string, pos: number): number {
   return pos;
 }
 
+/**
+ * 块级形态记忆（镜像 parser.ts 的 BlockKind）：缩进代码判定需要「上一非空白行」
+ * 的形态上下文——段落打断 / 列表延续 / 表格优先都依赖它（computeLineOffsets
+ * 02 §2.2 冲突点）。增量状态机没有 parser 的全局扫描上下文，因此把该判定
+ * 的私有辅助逻辑镜像到本文件，与 parser 保持逐分支一致。
+ */
+type BlockKind =
+  | 'blank'
+  | 'body'
+  | 'list'
+  | 'table'
+  | 'heading'
+  | 'hr'
+  | 'code'
+  | 'other';
+
+/** 剥离块引用前缀（与 parser.stripBlockquoteContext 同一正则 `^\s*>\s?`） */
+function stripBlockquoteContext(line: string): string {
+  let content = line;
+  let m: RegExpMatchArray | null;
+  while ((m = content.match(/^\s*>\s?/))) {
+    content = content.substring(m[0].length);
+  }
+  return content;
+}
+
+/**
+ * 计算行首缩进列宽（镜像 parser.leadingIndentColumns）：tab 按停靠 4 展开
+ * （`  →foo` = 2+4 = 6 列 ≥4 → 代码；`  foo` = 2 列 <4 → 普通行）。
+ */
+function leadingIndentColumns(s: string): number {
+  let col = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === ' ') {
+      col++;
+    } else if (s[i] === '\t') {
+      col += 4 - (col % 4);
+    } else {
+      break;
+    }
+  }
+  return col;
+}
+
+/** 剥离 4 列缩进（镜像 parser.stripFourColumns），供列表标记判定使用 */
+function stripFourColumns(s: string): string {
+  let col = 0;
+  let i = 0;
+  while (i < s.length && col < 4) {
+    if (s[i] === ' ') {
+      col++;
+      i++;
+    } else if (s[i] === '\t') {
+      col += 4 - (col % 4);
+      i++;
+    } else {
+      break;
+    }
+  }
+  return s.substring(i);
+}
+
+/** 去缩进后行首是否为列表标记（镜像 parser.isListMarkerStart） */
+function isListMarkerStart(s: string): boolean {
+  return (
+    /^([-*+]\s*\[[xX\s]\])\s+/.test(s) ||
+    /^([-*+])\s+/.test(s) ||
+    /^(\d+\.)\s+/.test(s)
+  );
+}
+
+/**
+ * 轻量行首形态分类（镜像 parser.guessBlockKind）：只做行首前缀匹配，
+ * 不解析内容——供缩进代码判定的「上一行」上下文使用。
+ */
+function guessBlockKind(line: string, prev: BlockKind): BlockKind {
+  const s = line.replace(/^ {0,3}/, '');
+  if (!s.trim()) return 'blank';
+  if (/^([-*+_]){3,}\s*$/.test(s)) return 'hr';
+  if (/^=+[ \t]*$/.test(s)) return prev === 'body' ? 'heading' : 'body';
+  if (/^#{1,6}\s/.test(s)) return 'heading';
+  const pipeCount = (s.match(/\|/g) || []).length;
+  if (
+    /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(s) ||
+    (pipeCount >= 1 && s.trim().startsWith('|')) ||
+    pipeCount >= 2
+  ) {
+    return 'table';
+  }
+  if (/^([-*+]\s*\[[xX\s]\])\s+/.test(s)) return 'list';
+  if (/^([-*+])\s+/.test(s)) return 'list';
+  if (/^(\d+\.)\s+/.test(s)) return 'list';
+  return 'body';
+}
+
+/**
+ * 从编辑点之前的旧行推断「上一非空白行形态」（增量起点上下文）：
+ * 从 before-1 向前扫描，跳过空行（空行把非列表上下文重置为 blank——
+ * 与 parser 空行分支 `if (prevBlockKind !== 'list') prevBlockKind = 'blank'`
+ * 语义一致），首个非空行按旧状态归类（code 类状态 → 'code'，'none' →
+ * guessBlockKind）。文档开头无前置行时按 'blank' 处理。
+ */
+function inferPrevBlockKind(
+  lines: string[],
+  codeBlockState: CodeState[],
+  before: number
+): BlockKind {
+  let sawBlank = false;
+  for (let j = before - 1; j >= 0; j--) {
+    const content = stripBlockquoteContext(lines[j]);
+    if (content.trim() === '') {
+      sawBlank = true;
+      continue;
+    }
+    let kind: BlockKind;
+    if (codeBlockState[j] !== 'none') {
+      kind = 'code';
+    } else {
+      kind = guessBlockKind(content, 'blank');
+    }
+    // 空行把非列表上下文重置为 blank（列表延续记忆保持）
+    if (sawBlank) return kind === 'list' ? 'list' : 'blank';
+    return kind;
+  }
+  return 'blank';
+}
+
+/**
+ * 从编辑点之前的旧行推断「是否处于缩进代码块内」（增量起点上下文）：
+ * 向前扫描旧状态数组——'indent_code' 行（含块内空行，空行在块内同样保持
+ * indent_code 状态）说明编辑点之前处于缩进代码块；'none' 空行继续向前
+ * （空行保持记忆，可能越过空行链命中代码块）；其他情况一律视为块外。
+ */
+function inferInIndentCode(
+  lines: string[],
+  codeBlockState: CodeState[],
+  before: number
+): boolean {
+  for (let j = before - 1; j >= 0; j--) {
+    const st = codeBlockState[j];
+    if (st === 'indent_code') return true;
+    if (st !== 'none') return false;
+    if (stripBlockquoteContext(lines[j]).trim() !== '') return false;
+  }
+  return false;
+}
+
 export interface EditorOperation {
   startLineIdx: number;
   removedLines: string[];
@@ -203,6 +350,15 @@ function updateLinesIncremental(
 
   let inCodeBlock = false;
   let inMathBlock = false;
+  // 缩进代码块状态（镜像 parser.computeLineOffsets）：行首 ≥4 列缩进（tab
+  // 停靠 4 展开）且非空 → 'indent_code'；块内空行保持；非缩进行退出。
+  let inIndentCode = inferInIndentCode(
+    lines,
+    codeBlockState,
+    startLineIdx
+  );
+  // 上一非空白行形态记忆（段落打断 / 列表延续 / 表格优先判定所需）
+  let prevBlockKind = inferPrevBlockKind(lines, codeBlockState, startLineIdx);
 
   let low = 0,
     high = fenceLines.length - 1;
@@ -231,12 +387,13 @@ function updateLinesIncremental(
   let converged = false;
 
   for (; i < newLinesArr.length; i++) {
-    let trimmed = newLinesArr[i];
+    // 块引用前缀剥离（与 parser 同一正则）：缩进判定发生在前缀剥离之后
+    let content = newLinesArr[i];
     let bMatch;
-    while ((bMatch = trimmed.match(/^\s*>\s?/))) {
-      trimmed = trimmed.substring(bMatch[0].length);
+    while ((bMatch = content.match(/^\s*>\s?/))) {
+      content = content.substring(bMatch[0].length);
     }
-    trimmed = trimmed.trim();
+    const trimmed = content.trim();
 
     const oldState = newCodeState[i]; // pre-filled with shifted old states for i >= startLineIdx + newLines.length
 
@@ -252,6 +409,9 @@ function updateLinesIncremental(
         newState = 'fence_end';
         inCodeBlock = false;
       }
+      // 围栏代码块内缩进不生效（CommonMark）：fence 判定先于缩进代码
+      inIndentCode = false;
+      prevBlockKind = 'code';
     } else if (!inCodeBlock && trimmed === '$$') {
       isFence = true;
       if (!inMathBlock) {
@@ -261,13 +421,59 @@ function updateLinesIncremental(
         newState = 'math_fence_end';
         inMathBlock = false;
       }
+      inIndentCode = false;
+      prevBlockKind = 'code';
     } else {
       if (inCodeBlock) {
         newState = 'code';
+        inIndentCode = false;
+        prevBlockKind = 'code';
       } else if (inMathBlock) {
         newState = 'math_block';
+        inIndentCode = false;
+        prevBlockKind = 'code';
       } else {
-        newState = 'none';
+        // —— 缩进代码块判定（镜像 parser.computeLineOffsets「其余情况」分支）——
+        const indent = leadingIndentColumns(content);
+        if (inIndentCode) {
+          // 块内：空行与 ≥4 列缩进行保持状态；非缩进行结束代码块
+          if (trimmed === '' || indent >= 4) {
+            newState = 'indent_code';
+          } else {
+            newState = 'none';
+            inIndentCode = false;
+            prevBlockKind = guessBlockKind(content, prevBlockKind);
+          }
+        } else if (trimmed === '') {
+          // 空行：不进入缩进代码；段落/表格上下文重置，列表上下文保持
+          newState = 'none';
+          if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+        } else if (indent >= 4) {
+          const afterIndent = stripFourColumns(content);
+          if (isListMarkerStart(afterIndent)) {
+            // 去缩进后以列表标记开头 → 嵌套列表/列表延续，按 body 解析
+            newState = 'none';
+            inIndentCode = false;
+            prevBlockKind = 'list';
+          } else if (
+            prevBlockKind === 'body' ||
+            prevBlockKind === 'list' ||
+            prevBlockKind === 'table'
+          ) {
+            // 段落打断规则 / 列表延续 / 表格优先 → 均不进代码块；
+            // prevBlockKind 保持不变（延续可能有多行）
+            newState = 'none';
+            inIndentCode = false;
+          } else {
+            // 进入缩进代码块（上一行是空行 / 标题 / 分隔线 / 代码等）
+            newState = 'indent_code';
+            inIndentCode = true;
+            prevBlockKind = 'code';
+          }
+        } else {
+          newState = 'none';
+          prevBlockKind = guessBlockKind(content, prevBlockKind);
+        }
       }
     }
 
@@ -537,11 +743,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const newCodeState = [...state.codeBlockState];
       let inCodeBlock = false;
       let inMathBlock = false;
+      // 缩进代码块状态：末行状态为 'indent_code' 时视为块内（块内空行保持）
+      let inIndentCode = false;
       const currentState = state.codeBlockState[lastLineIdx];
       if (currentState === 'fence_start' || currentState === 'code')
         inCodeBlock = true;
       if (currentState === 'math_fence_start' || currentState === 'math_block')
         inMathBlock = true;
+      if (currentState === 'indent_code') inIndentCode = true;
       if (currentState === 'fence_end') inCodeBlock = false;
       if (currentState === 'math_fence_end') inMathBlock = false;
 
@@ -551,17 +760,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (!inMathBlock && trimmed.startsWith('```')) {
           segmentCodeStates[i] = inCodeBlock ? 'fence_end' : 'fence_start';
           inCodeBlock = !inCodeBlock;
+          inIndentCode = false;
         } else if (!inCodeBlock && trimmed === '$$') {
           segmentCodeStates[i] = inMathBlock
             ? 'math_fence_end'
             : 'math_fence_start';
           inMathBlock = !inMathBlock;
+          inIndentCode = false;
+        } else if (inCodeBlock) {
+          segmentCodeStates[i] = 'code';
+          inIndentCode = false;
+        } else if (inMathBlock) {
+          segmentCodeStates[i] = 'math_block';
+          inIndentCode = false;
         } else {
-          segmentCodeStates[i] = inCodeBlock
-            ? 'code'
-            : inMathBlock
-              ? 'math_block'
-              : 'none';
+          // —— 缩进代码块判定（与 updateLinesIncremental 同规则）——
+          const indent = leadingIndentColumns(newSegmentLines[i]);
+          if (inIndentCode) {
+            // 块内：空行与 ≥4 列缩进行保持；非缩进行结束代码块
+            if (trimmed === '' || indent >= 4) {
+              segmentCodeStates[i] = 'indent_code';
+            } else {
+              segmentCodeStates[i] = 'none';
+              inIndentCode = false;
+            }
+          } else if (trimmed !== '' && indent >= 4) {
+            segmentCodeStates[i] = 'indent_code';
+            inIndentCode = true;
+          } else {
+            segmentCodeStates[i] = 'none';
+          }
         }
       }
       newCodeState.splice(lastLineIdx, 1, ...segmentCodeStates);
