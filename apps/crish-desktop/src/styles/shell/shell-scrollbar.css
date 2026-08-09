@@ -37,16 +37,16 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: var(--tint-strong);
   border-radius: 999px;
   transition: background var(--transition-micro);
 }
 ::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:active {
-  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  background: var(--tint-divider);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-primary) 10%, transparent) transparent;
+  scrollbar-color: var(--tint-strong) transparent;
 }

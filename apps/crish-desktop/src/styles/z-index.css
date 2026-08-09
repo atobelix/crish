@@ -44,4 +44,6 @@
   --z-first-run: 100000;
   --z-model-flyout: 100000;
   --z-skip-link: 100000;
+  /* tab 拖拽 ghost 浮层，需高于 settings-panel 20000 与 toast 10000；渲染值保持不变 */
+  --z-drag-overlay-max: 99999;
 }

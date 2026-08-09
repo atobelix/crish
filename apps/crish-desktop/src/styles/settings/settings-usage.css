@@ -35,7 +35,7 @@
   gap: var(--space-2_5);
 }
 .settings-pane--usage .settings-usage-stat-card {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: var(--radius-xl);
   background: transparent;
   padding: 12px 12px 10px;
@@ -58,19 +58,19 @@
 .settings-pane--usage .settings-usage-bar {
   height: 4px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   overflow: hidden;
 }
 .settings-pane--usage .settings-usage-bar-fill {
   height: 100%;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  background: var(--tint-highlight);
 }
 .settings-pane--usage .settings-usage-bar-fill.is-out {
   background: color-mix(in srgb, var(--accent-green) 55%, transparent);
 }
 .settings-pane--usage .settings-usage-bar-fill.is-cost {
-  background: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  background: var(--tint-overlay);
 }
 
 .settings-pane--usage .settings-usage-ratio {
@@ -78,12 +78,12 @@
   height: 6px;
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
   background: transparent;
   margin-top: var(--space-1);
 }
 .settings-pane--usage .settings-usage-ratio-in {
-  background: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  background: var(--tint-overlay);
 }
 .settings-pane--usage .settings-usage-ratio-out {
   background: color-mix(in srgb, var(--accent-green) 45%, transparent);
@@ -111,7 +111,7 @@
   margin-bottom: var(--space-2);
 }
 .settings-pane--usage .settings-choice-btn {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   background: transparent;
   border-radius: var(--radius-lg);
   min-height: 28px;
@@ -121,17 +121,17 @@
   cursor: pointer;
 }
 .settings-pane--usage .settings-choice-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 .settings-pane--usage .settings-choice-btn.active {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
 /* 閻庤鐭悳顖炲箮濡搫缍?*/
 .settings-pane--usage .settings-usage-prices {
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   padding-top: var(--space-2_5);
   margin-top: var(--space-1);
 }
@@ -147,7 +147,7 @@
   display: none;
 }
 .settings-pane--usage .settings-list--usage {
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   margin-top: var(--space-2);
   background: transparent;
   gap: 0;
@@ -157,7 +157,7 @@
   padding: 10px 0;
   gap: 12px 16px;
   align-items: center;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid var(--tint-active);
   border-radius: 0;
   background: transparent;
   margin: 0;
@@ -185,13 +185,13 @@
 }
 .settings-pane--usage .settings-field-input,
 .settings-pane--usage .settings-usage-filter {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
 }
 .settings-pane--usage .settings-field-input:focus,
 .settings-pane--usage .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
   box-shadow: none;
 }
 .settings-pane--usage .settings-usage-model-id {

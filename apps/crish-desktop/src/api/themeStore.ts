@@ -728,15 +728,12 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     
     root.style.setProperty('--control-mix-color', mixColor);
     
-    // --- 🌟 完美同步“反馈跟随”：采用高阶半透明混合色，在任何皮肤下都保证完美的灰度、对比度差值与层级区分 🌟 ---
-    root.style.setProperty('--bg-hover', 'color-mix(in srgb, var(--text-primary) 3.5%, transparent)');
-    root.style.setProperty('--bg-active', 'color-mix(in srgb, var(--text-primary) 8.0%, transparent)');
-    
     // --- 🌟 完美的 Opaque 输入框/按钮背景跟随：在浅色模式下采用高饱黄色调作为混色基底，让按钮与 prompt 卡片 hover 时极其轻柔温润，彻底消灭重黑脏色！ 🌟 ---
+    // 百分比与 tokens.css 静态真源对齐（light 4/4/8%、dark 5/6.5/9.5%），仅保留皮肤引擎基底差异
     const controlSoftBase = isDarkPreset ? mixColor : vibrantTint;
-    const softBgPct = isDarkPreset ? '6.5%' : '6.0%';
-    const softHoverPct = isDarkPreset ? '9.5%' : '11.0%';
-    const softActivePct = isDarkPreset ? '13.5%' : '17.0%';
+    const softBgPct = isDarkPreset ? '5%' : '4%';
+    const softHoverPct = isDarkPreset ? '6.5%' : '4%';
+    const softActivePct = isDarkPreset ? '9.5%' : '8%';
     root.style.setProperty('--control-soft-bg', `color-mix(in srgb, ${controlSoftBase} ${softBgPct}, ${bgSecondary})`);
     root.style.setProperty('--control-soft-bg-hover', `color-mix(in srgb, ${controlSoftBase} ${softHoverPct}, ${bgSecondary})`);
     root.style.setProperty('--control-soft-bg-active', `color-mix(in srgb, ${controlSoftBase} ${softActivePct}, ${bgSecondary})`);
@@ -785,8 +782,6 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     root.style.removeProperty('--border-subtle');
     root.style.removeProperty('--bg-workspace');
     root.style.removeProperty('--shell-inset-bg');
-    root.style.removeProperty('--bg-hover');
-    root.style.removeProperty('--bg-active');
     root.style.removeProperty('--control-mix-color');
     root.style.removeProperty('--control-soft-bg');
     root.style.removeProperty('--control-soft-bg-hover');

@@ -94,7 +94,7 @@
   gap: var(--space-3);
   flex-wrap: wrap;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: var(--radius-xl);
   background: transparent;
 }
@@ -138,7 +138,7 @@
   margin: 0;
   padding: 6px 10px;
   border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
   background: transparent;
   font-size: var(--font-size-xs);
   line-height: 1.35;
@@ -171,13 +171,13 @@
   padding: 0;
 }
 .models-action-hint-x:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 
 /* connection: minimal */
 .models-conn {
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid var(--tint-active);
   padding-bottom: var(--space-2_5);
   margin-bottom: var(--space-0_5);
 }
@@ -226,7 +226,7 @@
   gap: 0;
   border-radius: var(--radius-xl);
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
+  border: 1px solid var(--tint-active);
   padding: 0;
   min-width: 0;
   position: relative;
@@ -240,7 +240,7 @@
   z-index: var(--z-decorative);
 }
 .models-main-row.is-live {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
 }
 .models-main-row.is-off {
   opacity: 0.55;
@@ -305,7 +305,7 @@
   height: 18px;
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
 }
 .models-ico-dot.is-ok {
   color: var(--accent-green);
@@ -333,7 +333,7 @@
   color: var(--text-secondary);
 }
 .models-btn--quiet:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 .models-pill {
@@ -344,13 +344,13 @@
   border-radius: 999px;
   font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-medium);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border: 1px solid var(--tint-strong);
   color: var(--text-secondary);
   white-space: nowrap;
 }
 .models-pill--live {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
 }
 
 /* compact switch */
@@ -371,7 +371,7 @@
   width: 32px;
   height: 18px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   background: transparent;
   position: relative;
   transition: background var(--transition-micro), border-color var(--transition-micro);
@@ -388,8 +388,8 @@
   transition: transform var(--transition-micro), background var(--transition-micro);
 }
 .models-switch input:checked + .models-switch-ui {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-color: var(--tint-strong);
+  background: var(--tint-active);
 }
 .models-switch input:checked + .models-switch-ui::after {
   transform: translateX(12px);
@@ -421,8 +421,8 @@
 .models-main-row .models-icon-btn.is-on {
   opacity: 1;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
-  border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-hover);
+  border-color: var(--tint-active);
 }
 .models-main-row .models-icon-btn.danger:hover {
   color: var(--accent-red);
@@ -439,7 +439,7 @@
   border-radius: 0 0 10px 10px;
   background: transparent;
   border: none;
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   margin: 0;
   min-width: 0;
   max-width: 100%;
@@ -470,7 +470,7 @@
   font-size: var(--font-size-xxs);
   color: var(--text-secondary);
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-md);
   padding: 3px 8px;
 }
@@ -488,7 +488,7 @@
   gap: var(--space-1_5);
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border: 1px solid var(--tint-strong);
   background: transparent;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
@@ -510,8 +510,8 @@
 .models-cap-chip.is-on,
 .models-cap-chip:has(input:checked) {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  border-color: var(--tint-strong);
+  background: var(--tint-hover);
 }
 .models-cap-chip.is-on .models-cap-chip-ico,
 .models-cap-chip:has(input:checked) .models-cap-chip-ico {
@@ -523,7 +523,7 @@
   align-items: center;
   gap: var(--space-2);
   padding-top: var(--space-1);
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-top: 1px solid var(--tint-active);
 }
 .models-config-actions-spacer {
   flex: 1 1 auto;
@@ -534,7 +534,7 @@
 .models-billing {
   margin-top: var(--space-2_5);
   padding-top: var(--space-2_5);
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -640,7 +640,7 @@
   padding: 6px 0;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border-bottom: 1px solid var(--tint-hover);
   background: transparent;
 }
 .models-price-item:last-child {
@@ -667,11 +667,11 @@
 /* buttons: prefer outline over filled primary */
 .models-btn.primary {
   background: transparent;
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
   color: var(--text-primary);
 }
 .models-btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
 }
 
 @media (max-width: 640px) {
@@ -702,7 +702,7 @@
 }
 
 .models-split {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-2xl);
   overflow: hidden;
   background: transparent;
@@ -712,7 +712,7 @@
 .models-rail {
   width: 188px;
   background: transparent;
-  border-right: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-right: 1px solid var(--tint-active);
 }
 .models-rail-list {
   padding: 8px 6px;
@@ -724,7 +724,7 @@
   gap: var(--space-0_5);
 }
 .models-rail-item.is-active {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
+  background: var(--tint-hover);
 }
 .models-rail-name {
   font-size: var(--font-size-sm);
@@ -737,17 +737,17 @@
 }
 .models-rail-add-wrap {
   padding: var(--space-2);
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
 }
 .models-rail-add {
   height: 34px;
   border-radius: var(--radius-lg);
-  border: 1px dashed color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px dashed var(--tint-strong);
   font-size: var(--font-size-xs-plus);
 }
 .models-add-menu {
   border-radius: var(--radius-xl);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border: 1px solid var(--tint-strong);
   box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow-color) 10%, transparent);
   padding: var(--space-1_5);
 }
@@ -790,7 +790,7 @@
   gap: var(--space-3);
   padding: 0 0 14px;
   margin: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid var(--tint-active);
 }
 .models-field-block {
   display: flex;
@@ -831,11 +831,11 @@
   color: var(--text-tertiary);
   padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
 }
 .models-inline-badge--warn {
   color: var(--text-secondary);
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
 }
 
 /* 鐎电鐦芥担璺ㄦ暏閸栫尨绱版稉鈧悰宀冾嚛+ 閸斻劋缍旈敍灞肩瑝閹躲垺膩閸ㄥ鍨 */
@@ -847,7 +847,7 @@
 }
 .models-summary-row {
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-xl);
   background: transparent;
 }
@@ -890,7 +890,7 @@
 }
 .models-main-row {
   border-radius: var(--radius-xl);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
+  border: 1px solid var(--tint-active);
 }
 .models-main-row.is-open,
 .models-main-row.is-live {
@@ -941,7 +941,7 @@
 .models-config-panel,
 .models-config-panel--inline {
   padding: 12px 12px 12px;
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   background: transparent;
 }
 .models-config-field > span:first-child {
@@ -992,14 +992,14 @@
 
 /* 鏉堟挸鍙嗛敍姘辩矎鏉堣顢嬮妴浣戒氦 */
 .models-tab .settings-field-input {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
 }
 .models-tab .settings-field-input:focus,
 .models-tab .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
+  border-color: var(--tint-strong);
+  background: var(--tint-hover);
 }
 
 /* === models-tab polish-v4 === */
@@ -1018,14 +1018,14 @@
 /* 鏉堟挸鍙嗛敍姘€紒鍡樼ガ閻忕増寮挎潏鐧哥礉閼辨氨鍔嶉悾銉︾箒閿涘奔绗夌捄鎶界彯鐎佃 */
 .models-tab .settings-field-input {
   border: 1px solid var(--models-border);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
   box-shadow: none;
 }
 .models-tab .settings-field-input:focus,
 .models-tab .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-primary));
+  border-color: var(--tint-strong);
+  background: var(--tint-hover);
   box-shadow: none;
   outline: none;
 }
@@ -1146,7 +1146,7 @@
 .models-main-row.is-off {
   opacity: 1;
   background: transparent;
-  border-color: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-color: var(--tint-active);
 }
 .models-main-row.is-off .models-main-row-name {
   color: var(--text-tertiary);
@@ -1219,11 +1219,11 @@ html[data-theme="dark"] .models-pill--live {
   width: 34px;
   height: 18px;
   border: 1px solid var(--models-border);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
 }
 .models-switch-ui::after {
-  background: color-mix(in srgb, var(--text-primary) 28%, white);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-highlight);
+  box-shadow: 0 0 0 1px var(--tint-active);
 }
 .models-switch input:checked + .models-switch-ui,
 .models-switch.is-on .models-switch-ui {
@@ -1409,11 +1409,11 @@ html[data-theme="dark"] .models-pill--live {
 
 /* 閸嬫粎鏁ょ悰宀嬬窗閺囧浼嗛妴浣规纯瀵唻绱濋崪灞烩偓灞炬弓娴ｈ法鏁ゆ担鍡楁儙閻劊鈧秵濯哄 */
 .models-tab .models-main-row.is-off {
-  border-color: color-mix(in srgb, var(--text-primary) 7%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  border-color: var(--tint-active);
+  background: var(--tint-hover);
 }
 .models-tab .models-main-row.is-off .models-main-row-name {
-  color: color-mix(in srgb, var(--text-primary) 42%, var(--text-tertiary));
+  color: var(--text-secondary);
 }
 .models-tab .models-main-row.is-off .models-ctx {
   opacity: 0.5;
@@ -1429,7 +1429,7 @@ html[data-theme="dark"] .models-tab {
 }
 html[data-theme="dark"] .models-tab .models-switch-ui {
   background: var(--models-off-track);
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
 }
 html[data-theme="dark"] .models-tab .models-switch-ui::after {
   background: var(--bg-elevated);
@@ -1650,13 +1650,13 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 
 .models-rail-item-card:hover {
-  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  border-color: var(--tint-strong);
+  background: var(--tint-hover);
 }
 
 .models-rail-item-card.is-active {
-  border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-color: var(--tint-divider);
+  background: var(--tint-active);
 }
 
 .models-rail-item-card.is-active::before {
@@ -1894,7 +1894,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .models-status-pill.ok {
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
 }
 .models-status-pill.warn {
   color: var(--color-warning);
@@ -1902,7 +1902,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .models-status-pill.disabled {
   color: var(--text-tertiary);
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
 }
 
 /* Global switch colored when ON (fallback for non .models-tab context) */
@@ -1946,7 +1946,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .mrl-add-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 
@@ -1979,10 +1979,10 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   transition: background var(--transition-micro);
 }
 .mrl-item:hover {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
 }
 .mrl-item.is-active {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
 }
 .mrl-item-name {
   font-size: var(--font-size-sm);
@@ -2046,7 +2046,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   transition: background var(--transition-micro);
 }
 .mrl-add-item:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
 }
 
 /* 閳光偓閳光偓 Detail (right panel) 閳光偓閳光偓 */
@@ -2103,7 +2103,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 }
 .mrd-pill--off {
   color: var(--text-tertiary);
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: var(--tint-active);
 }
 .mrd-toggle-btn {
   font-size: var(--font-size-xs);
@@ -2160,7 +2160,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: var(--radius-lg);
   outline: none;
   font-family: inherit;
@@ -2168,10 +2168,10 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   box-sizing: border-box;
 }
 .mrd-field-input:hover {
-  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  border-color: var(--tint-strong);
 }
 .mrd-field-input:focus {
-  border-color: color-mix(in srgb, var(--text-primary) 20%, transparent);
+  border-color: var(--tint-overlay);
 }
 .mrd-key-row {
   display: flex;
@@ -2205,7 +2205,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   padding: 0 10px 0 26px;
   font-size: var(--font-size-xs);
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
   border: 1px solid transparent;
   border-radius: 7px;
   outline: none;
@@ -2261,7 +2261,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   background: transparent;
 }
 .mrd-cap-pill:hover {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
 }
 .mrd-cap-pill.is-on {
   background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
@@ -2284,13 +2284,13 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   flex-wrap: wrap;
   padding: 8px 12px;
   border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  border: 1px solid var(--tint-active);
+  background: var(--tint-hover);
   gap: var(--space-2);
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 .mrd-model-row:hover {
-  border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-color: var(--tint-divider);
 }
 .mrd-model-row.is-off {
   opacity: 0.45;
@@ -2323,7 +2323,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   padding: 1px 7px;
   border-radius: var(--radius-xs);
 }
@@ -2334,7 +2334,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   width: 18px;
   height: 18px;
   border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-tertiary);
 }
 .mrd-model-actions {
@@ -2396,13 +2396,13 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 .mrd-cap-pill:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 .mrd-cap-pill.is-on {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  border-color: var(--tint-divider);
 }
 .mrd-cfg-actions {
   display: flex;
@@ -2427,7 +2427,7 @@ html[data-theme="dark"] .models-tab .models-btn--use {
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .mrd-add-model-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
   border-color: var(--text-tertiary);
   color: var(--text-primary);
 }

@@ -265,7 +265,7 @@ body.is-resizing * {
 }
 
 .session-item.active {
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 
@@ -403,9 +403,9 @@ body.is-resizing * {
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--text-primary) 10%, transparent) 22%,
-    color-mix(in srgb, var(--text-primary) 16%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 10%, transparent) 78%,
+    var(--tint-strong) 22%,
+    var(--tint-strong) 50%,
+    var(--tint-strong) 78%,
     transparent 100%
   );
   opacity: 0.55;
@@ -419,9 +419,9 @@ body.is-resizing * {
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--text-primary) 14%, transparent) 18%,
-    color-mix(in srgb, var(--text-primary) 22%, transparent) 50%,
-    color-mix(in srgb, var(--text-primary) 14%, transparent) 82%,
+    var(--tint-divider) 18%,
+    var(--tint-overlay) 50%,
+    var(--tint-divider) 82%,
     transparent 100%
   );
 }

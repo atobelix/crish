@@ -13,7 +13,7 @@
   min-width: 168px;
   padding: var(--space-1_5);
   background: var(--bg-elevated, #fff);
-  border: var(--hairline-width, 1px) solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border: var(--hairline-width, 1px) solid var(--tint-active);
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-lg);
   z-index: var(--z-context-menu);
@@ -38,7 +38,7 @@
 }
 
 .chat-more-item:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
+  background: var(--tint-hover);
 }
 
 .chat-more-item:disabled {

@@ -675,7 +675,7 @@ button.overview-live-row:hover {
 .diff-icon-btn:focus-visible,
 .diff-file-item:focus-visible,
 .diff-file-item.is-active:focus-visible {
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: var(--tint-active);
 }
 
 /* 闂佹鍠氬ú蹇涘矗椤栨繃褰ч柨娑欘劇over-only 闁告柣鍔嬬紞鏃堝�?focus-within 闁哄啳鍩栧Ο澶愭偝?*/

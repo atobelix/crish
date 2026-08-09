@@ -15,22 +15,22 @@
 @keyframes tooltip-enter {
   from {
     opacity: 0;
-    transform: var(--tooltip-translate) scale(0.95);
+    transform: var(--tooltip-translate, translate(0)) scale(0.95);
   }
   to {
     opacity: 1;
-    transform: var(--tooltip-translate) scale(1);
+    transform: var(--tooltip-translate, translate(0)) scale(1);
   }
 }
 
 @keyframes tooltip-exit {
   from {
     opacity: 1;
-    transform: var(--tooltip-translate) scale(1);
+    transform: var(--tooltip-translate, translate(0)) scale(1);
   }
   to {
     opacity: 0;
-    transform: var(--tooltip-translate) scale(0.95);
+    transform: var(--tooltip-translate, translate(0)) scale(0.95);
   }
 }
 

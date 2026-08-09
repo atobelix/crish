@@ -272,13 +272,13 @@
 /* segment heights set dynamically via inline style */
 .chartBarOut {
   width: 100%;
-  background: var(--chart-color-1);
+  background: var(--accent-chart-out);
   opacity: 0.85;
 }
 
 .chartBarIn {
   width: 100%;
-  background: var(--chart-color-2);
+  background: var(--accent-chart-in);
 }
 
 .chartBarEmpty {
@@ -318,14 +318,14 @@
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--chart-color-2);
+  background: var(--accent-chart-in);
 }
 
 .chartLegendDotOut {
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--chart-color-1);
+  background: var(--accent-chart-out);
   opacity: 0.85;
 }
 

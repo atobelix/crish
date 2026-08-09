@@ -355,7 +355,7 @@
 }
 .sort-filter-row:hover,
 .sort-filter-row.is-open {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
 }
 .sort-filter-row-label {
   flex: 1;
@@ -399,7 +399,7 @@
   cursor: pointer;
 }
 .sort-filter-option:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
 }
 .sort-filter-option.is-on {
   color: var(--accent-green);

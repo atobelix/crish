@@ -65,7 +65,7 @@
 }
 .sourceBtn.isOn {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  background: var(--tint-active);
 }
 .sourceBtn:disabled {
   opacity: 0.45;
@@ -154,7 +154,7 @@
   color: var(--text-primary);
 }
 .iconBtn.isOn {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 .iconBtn:disabled {
@@ -255,7 +255,7 @@
   border-color: var(--border-color) !important;
 }
 .fileItem.isActive {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   border-color: var(--border-color);
   color: var(--text-primary);
 }
@@ -454,12 +454,12 @@
 
 .accordionItem :global(.fileItem):hover,
 .accordionItem .fileItem:hover {
-  background-color: var(--hover-bg, rgba(0, 0, 0, 0.02)) !important;
+  background-color: var(--bg-hover) !important;
 }
 
 .accordionItem :global(.fileItem).isActive,
 .accordionItem .fileItem.isActive {
-  background-color: var(--active-bg, rgba(0, 0, 0, 0.03)) !important;
+  background-color: var(--bg-active) !important;
   border-bottom: 1px solid var(--hairline, var(--border-subtle)) !important;
 }
 
@@ -580,7 +580,7 @@
 }
 
 .inlineActionAccept:hover:not(:disabled) {
-  background: var(--accent-green-light-adaptive);
+  background: var(--accent-green-light-adaptive, color-mix(in srgb, var(--accent-green) 10%, var(--bg-primary)));
   color: var(--accent-green);
   border-color: var(--accent-green);
 }
@@ -711,7 +711,7 @@
   opacity: 0.55;
   text-align: right;
   border-right: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-primary));
+  background: var(--md-code-bg);
 }
 
 .gutterMarker {
@@ -877,7 +877,7 @@
 }
 
 .hoverActBtn.danger:hover {
-  background: var(--accent-red-light-adaptive);
+  background: var(--accent-red-light-adaptive, color-mix(in srgb, var(--accent-red) 10%, var(--bg-primary)));
   color: var(--accent-red);
   border-color: var(--accent-red);
 }
@@ -985,7 +985,7 @@
 }
 
 .backBtn:hover {
-  background: var(--hover-bg, rgba(0, 0, 0, 0.04));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -1029,7 +1029,7 @@
 
 .tabButton:hover {
   color: var(--text-primary);
-  background: var(--hover-bg, rgba(0, 0, 0, 0.02));
+  background: var(--bg-hover);
 }
 
 .tabActive {
@@ -1058,7 +1058,7 @@
 }
 
 .tabClose:hover {
-  background: var(--hover-bg, rgba(0, 0, 0, 0.08));
+  background: var(--bg-active);
   color: var(--text-primary);
 }
 
@@ -1122,7 +1122,7 @@
 }
 
 .detailIconBtn:hover {
-  background: var(--hover-bg, rgba(0, 0, 0, 0.04));
+  background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-color);
 }
@@ -1157,7 +1157,7 @@
 }
 
 .collapseBar:hover {
-  background-color: var(--hover-bg, rgba(0, 0, 0, 0.04));
+  background-color: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -1181,7 +1181,7 @@
 }
 
 .commitTriggerBar:hover {
-  background: var(--hover-bg, rgba(0, 0, 0, 0.03));
+  background: var(--bg-hover);
   border-color: var(--border-color);
 }
 
@@ -1234,7 +1234,7 @@
 }
 
 .commitCloseBtn:hover {
-  background: var(--hover-bg, rgba(0, 0, 0, 0.05));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 

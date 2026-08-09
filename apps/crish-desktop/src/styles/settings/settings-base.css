@@ -228,12 +228,12 @@ select.settings-field-input {
   min-height: 36px;
 }
 .settings-sidebar-tab:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 .settings-sidebar-tab.active {
   /* 閺堝绨抽懝閺冪姵寮挎潏 */
-  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
   border: none;
@@ -985,7 +985,7 @@ select.settings-field-input {
   font-size: var(--font-size-sm);
   font-family: inherit;
   background: transparent !important;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent) !important;
+  border: 1px solid var(--tint-active) !important;
   box-shadow: none !important;
   line-height: var(--line-height-none);
   color: var(--text-secondary);
@@ -1591,7 +1591,7 @@ select.settings-field-input {
   align-items: center;
   justify-content: center;
   padding: var(--space-5);
-  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  background: var(--tint-highlight);
   backdrop-filter: blur(6px);
   box-sizing: border-box;
 }
@@ -1605,7 +1605,7 @@ select.settings-field-input {
   border-radius: var(--radius-2xl);
   border: none;
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 0 0 1px var(--tint-active),
     0 16px 48px color-mix(in srgb, var(--shadow-color) 14%, transparent);
 }
 /* 濡€崇€烽惄顔肩秿閿涙矮瀵岄悾宀勬桨娑撳秴鐖㈤崙鐘插磩鐞涘矉绱濆鐟扮湴閸愬懐顓搁悶?*/
@@ -1636,7 +1636,7 @@ select.settings-field-input {
   flex-direction: column;
   gap: 0;
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
 }
 .models-catalog-row {
   display: flex;
@@ -1645,7 +1645,7 @@ select.settings-field-input {
   min-height: 40px;
   padding: 6px 10px;
   border-bottom: 1px solid
-    color-mix(in srgb, var(--text-primary) 4%, transparent);
+    var(--tint-hover);
 }
 .models-catalog-row:last-child {
   border-bottom: none;
@@ -1703,8 +1703,8 @@ select.settings-field-input {
   gap: var(--space-2_5);
   padding: 12px 14px;
   border-radius: var(--radius-2xl);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
+  border: 1px solid var(--tint-active);
+  background: var(--tint-hover);
   min-width: 0;
 }
 .models-summary-row {
@@ -1820,8 +1820,8 @@ select.settings-field-input {
   flex-direction: column;
   gap: 0;
   border-radius: var(--radius-2xl);
-  background: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--md-code-bg);
+  border: 1px solid var(--tint-active);
   padding: 2px 4px;
   min-width: 0;
   position: relative;
@@ -1829,7 +1829,7 @@ select.settings-field-input {
   overflow: hidden;
 }
 .models-main-row.is-open {
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
+  background: var(--tint-hover);
   border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   padding: 4px 6px 8px;
   margin: 0;
@@ -1922,8 +1922,8 @@ select.settings-field-input {
   gap: var(--space-3);
   padding: var(--space-3);
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-hover);
+  border: 1px solid var(--tint-active);
   margin: 4px 0 0;
   position: relative;
   z-index: var(--z-base);
@@ -1936,7 +1936,7 @@ select.settings-field-input {
 }
 .models-config-panel--inline {
   margin: 4px 2px 2px;
-  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
+  background: var(--tint-hover);
 }
 .models-config-idline {
   display: flex;
@@ -1958,7 +1958,7 @@ select.settings-field-input {
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
   border-radius: var(--radius-md);
   padding: 4px 8px;
 }
@@ -2002,8 +2002,8 @@ select.settings-field-input {
   gap: var(--space-1_5);
   padding: 6px 10px;
   border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  border: 1px solid var(--tint-active);
+  background: var(--tint-hover);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   cursor: pointer;
@@ -2013,8 +2013,8 @@ select.settings-field-input {
 }
 .models-cap-chip:has(input:checked) {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  background: var(--tint-active);
+  border-color: var(--tint-strong);
 }
 .models-cap-chip input {
   margin: 0;
@@ -2027,7 +2027,7 @@ select.settings-field-input {
   justify-content: flex-end;
   gap: var(--space-2);
   padding-top: var(--space-0_5);
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-top: 1px solid var(--tint-active);
   margin-top: var(--space-0_5);
 }
 @media (max-width: 640px) {
@@ -2051,7 +2051,7 @@ select.settings-field-input {
   border-radius: var(--radius-2xl);
 }
 .ext-row-block.is-expanded {
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
   padding-bottom: var(--space-2);
 }
 .ext-row--static {
@@ -2368,7 +2368,7 @@ textarea.settings-dialog-textarea:focus-visible {
   margin: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-tertiary));
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   position: relative;
   cursor: pointer;
   flex-shrink: 0;
@@ -2410,8 +2410,8 @@ textarea.settings-dialog-textarea:focus-visible {
 }
 html[data-theme='dark'] .settings-switch,
 html[data-theme='dark'] .settings-toggle-row input[type='checkbox'] {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  background: var(--tint-active);
+  border-color: var(--tint-strong);
 }
 html[data-theme='dark'] .settings-switch:checked,
 html[data-theme='dark'] .settings-toggle-row input[type='checkbox']:checked {
@@ -2549,7 +2549,7 @@ html[data-theme='dark'] .settings-toggle-row input[type='checkbox']:checked {
   padding: 0 0 4px;
 }
 .settings-pane--personalize .settings-list--personalize {
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   gap: 0;
   background: transparent;
 }
@@ -2559,7 +2559,7 @@ html[data-theme='dark'] .settings-toggle-row input[type='checkbox']:checked {
   gap: 16px 20px;
   align-items: center;
   border-bottom: 1px solid
-    color-mix(in srgb, var(--text-primary) 8%, transparent);
+    var(--tint-active);
   border-radius: 0;
   background: transparent;
   margin: 0;
@@ -2613,8 +2613,8 @@ html[data-theme='dark'] .settings-toggle-row input[type='checkbox']:checked {
   width: min(168px, 100%);
   max-width: 180px;
   min-width: 120px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
 }
 

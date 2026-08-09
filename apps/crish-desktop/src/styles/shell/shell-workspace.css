@@ -221,7 +221,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 .app-container[data-shell-chrome="classic"] .workspace-card .card-tab:hover {
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: var(--tint-hover);
 }
 .app-container[data-shell-chrome="classic"] .workspace-card .card-tab.active {
   background: var(--shell-inset-bg, var(--bg-primary));
@@ -418,7 +418,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 .app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab:hover,
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab:hover {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent) !important;
+  background: var(--tint-hover) !important;
   color: var(--text-secondary) !important;
   border-color: transparent !important;
 }
@@ -516,7 +516,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-btn:hover,
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-btn[aria-expanded='true'] {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
 }
 
 /* 閸欏厖鏅堕弨鎯版崳闁筋噯绱版稉搴ㄣ€婇弽?trail 閸氬苯鏄傜€甸潻绱濈拹鏉戠俺鐎靛綊缍?*/
@@ -543,7 +543,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   box-shadow: none;
 }
 .app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header-right .card-action-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 /* 閸掓妫跨粩鏍殠閻劎顑囨禍宀冾攽缁捐儻澹婇敍宀勪缉閸忓秶浼嗙敮锔胯厬闂傜繝绔撮柆鎾寸箒閼瑰弶濡稿锕€褰搁崚鍥ㄥ灇娑撱倕顨?*/
@@ -863,11 +863,6 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 
 .card-tab:hover {
   background-color: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.card-tab.active {
-  background-color: var(--bg-active);
   color: var(--text-primary);
 }
 

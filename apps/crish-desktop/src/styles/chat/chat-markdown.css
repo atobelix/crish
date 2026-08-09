@@ -394,7 +394,7 @@
   padding: 6px 10px 6px 0;
   text-align: left;
   border: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-bottom: 1px solid var(--tint-active);
   border-right: none;
   vertical-align: middle;
   color: var(--text-primary);
@@ -418,7 +418,7 @@
   background: transparent;
   color: var(--text-tertiary);
   font-size: var(--font-size-base);
-  border-bottom-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom-color: var(--tint-active);
 }
 .msg-assistant-text tbody .md-tr:last-child .md-td,
 .md-rendered tbody .md-tr:last-child .md-td {
@@ -456,7 +456,7 @@
 .md-rendered table:not(.md-table) th,
 .md-rendered table:not(.md-table) td {
   border: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-bottom: 1px solid var(--tint-active);
   padding: 6px 10px 6px 0;
   color: var(--text-primary);
   background: transparent;
@@ -540,7 +540,7 @@
   text-decoration: none;
 }
 .md-path-link:hover {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
+  background: var(--tint-hover);
   text-decoration: underline;
   text-underline-offset: 2px;
 }

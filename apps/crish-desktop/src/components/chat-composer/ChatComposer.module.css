@@ -102,6 +102,7 @@
 .textarea:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--text-primary);
   caret-color: var(--text-primary);
+  /* autofill hack：99999s 过渡延迟浏览器自动填充底色的瞬变，业界通行写法，不得删除 */
   transition: background-color 99999s ease-out 0s;
   box-shadow: 0 0 0 1000px transparent inset !important;
   background: transparent !important;

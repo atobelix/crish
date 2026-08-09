@@ -1,4 +1,4 @@
-/* --- chat.css (flow / messages / tools / breadcrumbs) 闁?modules under ./chat/ --- */
+/* --- chat.css (flow / messages / tools / breadcrumbs) 消息流主样式，子模块位于 ./chat/ --- */
 @import './chat/chat-markdown.css';
 @import './chat/chat-composer.css';
 @import './chat/chat-approval.css';
@@ -14,7 +14,7 @@
   flex: 1 1 0%;
 }
 
-/* 闁哄牜鍏涚槐鎵嫚濠靛洨啸闁诡収鍨电换鍐煥閵堝棙钂嬮柨娑欐皑閹伙綁宕欓幋婵嗙閻?hairline闁挎稑鐭傞悵顔芥償閿曚礁鍨遍弶?card-header */
+/* 消息过滤条：hairline 结构分隔，对齐 card-header 级 token */
 .chat-msg-filter-bar {
   display: flex;
   align-items: center;
@@ -43,7 +43,7 @@
   min-height: 24px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm, 6px);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
   padding: 0 8px;
   font-size: var(--font-size-xs, 12px);
@@ -53,14 +53,14 @@
   box-sizing: border-box;
 }
 
-/* 闁告绮粊鑽ゆ喆閸繃鐝?search 闁硅矇鍌涱偨濮掓稒顭堥璇层€掗崨瀛樼彑闂佺瓔鍣槐婵堢磼閻斿墎顏遍柣顫妽濞碱垶宕橀崨顔肩樆闂?*/
+/* 搜索框：清除按钮与搜索装饰形态（webkit 私有） */
 .chat-msg-filter-input::-webkit-search-cancel-button,
 .chat-msg-filter-input::-webkit-search-decoration {
   -webkit-appearance: none;
   appearance: none;
 }
 
-/* focus 濞?settings-field-input / composer 闁告艾鑻〃鏍棯閿旇偐绐梩ext-tertiary + --focus-ring */
+/* focus 反馈：与 settings-field-input / composer 一致的 text-tertiary + --focus-ring */
 .chat-msg-filter-input:focus {
   border-color: var(--text-tertiary);
   background: transparent;
@@ -110,7 +110,7 @@
   opacity: 0.8;
 }
 
-/* 閺夆晛娲﹂幎銈夊籍閻樺弶鍤掑☉鎿冨弿缁辩増绋?chat-empty-state 闁告艾鑻崹顏嗏偓?閻忕偛鎳嶉懙鎴︽晬瀹€鍕級闁稿繐绉查埀顒€鐬肩紓澶愬捶閵娿儰绠☉鎾愁焾閳?*/
+/* 消息过滤空态（chat-empty-state）：空结果提示布局 */
 .chat-msg-filter-empty {
   display: flex;
   flex-direction: column;
@@ -141,16 +141,16 @@
   flex-direction: column;
   align-items: center;
   gap: 0;
-  /* 闁稿繈鍔岄鏃堟晬濮橆厾娉婇柛鏂诲妽濞碱垳鎷归弶鎴炶含閻庣數顢婇惁浠嬪礌妤﹁法鐝剁紓鍌涳公缁辨繃绋夊鍫濆灡婵炴垵鐗婃导鍛村礆?*/
+  /* 消息流容器：宽屏撑满，避免右侧留白 */
   max-width: none;
   width: 100%;
   margin: 0;
-  /* 闁哄洤顕弸蹇涘Υ娴ｈ绾悘?chrome闁挎稒鑹鹃顕€寮?Kimi / ChatGPT 濞戞捁顕ч顔炬嫚濠靛牊娈岄柣?*/
+  /* 消息区留白：对齐 Kimi / ChatGPT 类产品的 chrome 观感 */
   padding: 28px 20px 20px;
   box-sizing: border-box;
   background-color: var(--shell-inset-bg, var(--bg-primary));
   color: var(--text-primary);
-  /* 闁哥儐鍨粩瀵哥棯闂堟稒鍊绘繝濠冭壘婵晝鈧湱鎳撳▍鎺楁晬濞戞凹娲ｆ慨婵勫灪閾嗛柛姘灦閹锋椽鎯嶉弶鎴濈仚閻?*/
+  /* 消息滚动区：垂直弹性、横向隐藏溢出 */
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -181,7 +181,7 @@
   color: var(--text-primary);
 }
 .model-badge.is-open {
-  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-color: var(--tint-strong);
 }
 .model-badge.is-open svg {
   transform: rotate(180deg);
@@ -197,7 +197,7 @@
   white-space: nowrap;
 }
 
-/* --- BREADCRUMBS --- folder / title+闁?闁告艾鏈敮鎾绘晬濞戙垻褰幖杈剧畳缁?card-header token */
+/* --- BREADCRUMBS --- folder / title 组合，对齐 card-header token --- */
 .card-header-left.chat-breadcrumb-header,
 .chat-breadcrumb-header {
   display: flex;
@@ -208,7 +208,7 @@
   line-height: 1.35;
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  /* allow 闁?dropdown; title ellipsis lives on .session-name-txt */
+  /* 允许下拉展开；标题省略号由 .session-name-txt 承担 */
   overflow: visible;
   max-width: calc(100% - 40px);
   flex: 1 1 auto;
@@ -270,7 +270,7 @@
   max-width: 24ch;
 }
 
-/* 濞村吋淇洪惁浠嬪冀閸ヮ剦鏆?+ 闁?缂佹瘱鍡楀灡闁瑰瓨鍔楅惃锝夋晬鐏炶偐鐟濋悶?flex 闁瑰嘲顦槐?*/
+/* 标题簇：行内 flex 组合（title + meta） */
 .chat-title-cluster {
   display: inline-flex;
   align-items: center;
@@ -281,13 +281,13 @@
 }
 
 .chat-title-cluster .breadcrumb-item.session-trigger {
-  /* 闁哄秴娲。浠嬪矗椤栨稒鏆紓鍌楁櫔缁遍亶鍩?濠殿喖顑囩划鎾舵嫻閺夋垶韬柡鍌氭搐閻⊙囧矗閸忓懏娅?*/
+  /* 标题簇弹性收缩：窄屏时优先压缩标题 */
   flex: 0 1 auto;
   min-width: 0;
   padding-right: 1px;
 }
 
-/* Header 闁?more: 缂佹瘱鍡楀灡濞村吋淇洪惁浠嬪冀閸ヮ剦鏆柨娑欑瑜板秹宕￠弴鐐村€诲☉鎾愁儏閻秴顕ｉ埀顒勬晬鐏炶偐鐟濋柟鍢庛倗缈婚柛?*/
+/* Header 右侧 more 区：标题簇与操作按钮同排 */
 .chat-header-more-wrap {
   position: relative;
   flex: 0 0 auto;
@@ -298,7 +298,7 @@
   align-self: center;
 }
 
-/* Composer闁挎稒鐭粭灞解槈閸喍绱栭柛鎺擃殔閹挾鈧妫勯惇铏▔椤撱劎骞㈠銈呭缁鳖參鏌呰箛鏃€顫栭幖杈鹃檮缁楀酣宕ｅ鍫㈢濞戞挸绉烽々锕傚极閺夋垶鍋ラ柣褑妫勭花?*/
+/* Composer/footer 容器：flex 布局与过渡 */
 .chat-footer {
   display: flex;
   flex-direction: column;
@@ -306,7 +306,7 @@
   gap: var(--space-1_5);
   padding: 18px 14px 4px;
   border-top: none;
-  /* 闁煎浜欑粭鍌炴嚀鐏炶偐鐟撻柨娑欏哺閳ь剙绻戝Σ?闁?閹煎瓨娲濇竟濠囨晬鐏炲墽啸闁诡収鍨拌ぐ鍙夌鎼存繄鐟撻柡鍌濐潐鐠愪即宕楅妷顖滅token 濞?agent composer 闁稿繗浜弫銈夋晬?*/
+  /* 输入区顶部渐隐（--chat-footer-fade），agent composer 共用 */
   background: var(--chat-footer-fade);
   position: relative;
   z-index: var(--z-card-footer);
@@ -320,12 +320,12 @@
   margin-right: auto;
 }
 
-/* 闁搞儳鍋涢崺宀勫嫉閳ь剟寮敮顔剧獥閻庣數顢婇惁浠嬪礌閸濆嫬绀佸☉鎾愁儓椤骞冮浣界檨闁搞儳鍋撻悥锝夋晬濞戞绉靛ù婊冮椤撴悂骞嶇憴鍕拫闂侇剙鐏濋崢銈夊箰閳╁啫鐦婚梺?*/
+/* 回到顶部浮钮：绝对定位于滚动容器内 */
 .chat-scroll-fab {
   position: absolute;
   right: 18px;
   bottom: 148px;
-  z-index: var(--z-scroll-fab); /* 濡ゅ倹眉缁剛鈧厜鍓濇竟鎺楀级閳藉懐绀夐梺顒€鐏濋崢銈嗙▔鎼粹槅鍚€闁圭數鎳撶亸顖涚閹烘梹绁查梺顒夊枟鐏?*/
+  z-index: var(--z-scroll-fab); /* 回到顶部浮钮层级：高于内容区 */
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -345,9 +345,9 @@
   border-color: var(--border-color) !important;
 }
 
-/* 鐎规悶鍎遍崣璺ㄦ嫬閸愵亝鏆忛柨娑欑缁侊箑顕ｈ箛鎾崇仚閻炴侗鐓夌槐婵嬪籍閻樻彃鐎婚柛鎾瑰皺閸ゅ酣濡存担瑙勶骏濠靛倹顨呴埢?*/
+/* 面板下拉（panel-dropdown）：hairline + elevated 表面规范 */
 
-/* Panel dropdown 闁?hairline elevated surface闁挎稒绋戦ˇ缁樼珶閸愭彃璁插ù婧垮€撶花鏉款浖?strong */
+/* Panel dropdown：elevated surface，hairline 描边取 strong 档 */
 .panel-dropdown {
   background: var(--bg-primary);
   border: 1px solid var(--hairline-strong, var(--border-color));
@@ -373,7 +373,7 @@
   background: var(--bg-hover);
 }
 
-/* 鐎规悶鍎遍崣璺ㄦ偘鐏炲墽鍨介柨娑欑煯缁楀本绋夌拠宸殸閻犲洦绻傞幃鎾绘嚍閸屾凹娈ч柨娑樼灱椤╋箑顫㈤姀鐘茬闁瑰吀绀侀閬嶆嚊閺夋垶绂堥柡宥呮矗缁楀宕?*/
+/* 工具栈（tool stack）：紧凑间距的卡片化容器 */
 .agent-tool-stack {
   margin: 2px 0;
   gap: 1px;
@@ -523,7 +523,7 @@
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* Soft setup banner 闁?chat/chat-approval.css闁挎稑婀慼atStatusRibbons 闁圭鍋撻柡鍫濐槹濞煎牓鏁?*/
+/* 软设置横幅：与 chat/chat-approval.css 的 ChatStatusRibbons 保持一致 */
 .model-picker-error {
   margin: 4px 8px 8px;
   padding: 8px 10px;
@@ -570,8 +570,8 @@
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* Empty chat 闁?闁哄洦娼欓崢鐘诲礆鐠佸湱绐楅悘蹇斿灥濞存﹢寮介崶顏嶆濡ゆ鍩囬埀顑胯兌閻擃參寮崶顭戞敵闁靛棔绀侀妵鍥偩濞嗘垶顏?*/
-/* is-active-project: transparent only 闁?no loud highlight (session row owns attention) */
+/* Empty chat 空态：分区提示容器 */
+/* is-active-project：仅透明底、不做强烈高亮（注意力归会话行） */
 .folder-header.is-active-project {
   background: transparent;
   color: var(--text-secondary);
@@ -582,9 +582,9 @@
   opacity: 0.85;
 }
 
-/* Compact runtime float 闂侇偄顦扮€氥劑宕抽妸銉ュ殥闁衡偓鐠哄搫缍撻柛?panels.css闁?runtime-float-*闁?*/
+/* Compact runtime 浮层：与 panels.css 的 runtime-float-* 对齐 */
 
-/* light/dark 闁稿繗浜弫銈夋晬濮樺厖鍠婂鍨涙櫅閸亝绔熼崘鑼勾缂備胶鍠嶇粩瀛樼▔椤撶啿鍋?token闁挎稑鐭傛导鈺呭礂瀹ュ棙顔傞柤纭呭皺濞呇冪暆?*/
+/* light/dark 双主题自适应：正文/文档流底色 token 统一 */
 .chat-body,
 .chat-doc-flow,
 .workspace-card.flat-layout,
@@ -593,7 +593,7 @@
   background-color: var(--bg-primary);
   color: var(--text-primary);
 }
-/* agent 濞撴皜鍕焿 / 闁告劕鎳撴禒?composer闁挎稒鐭粭灞剧▔?footer 闁告艾鏈粭搴ㄥ矗?chrome + ComposerField 闁告锕埀顒€绻愰敍?*/
+/* agent 卡片内 composer / footer：与 chat chrome + ComposerField 对齐 */
 .agent-card-composer {
   width: 100%;
   max-width: none;
@@ -602,14 +602,14 @@
   border-top: 1px solid transparent;
   background: var(--chat-footer-fade);
 }
-/* 闁?濞撴皜鍕焿 denser composer pad */
+/* agent 卡片紧凑档：更密实的 composer 内边距 */
 .agent-card-composer--dense {
   padding: 8px 6px 6px;
 }
 .agent-card-composer .input-container {
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin: 0 auto;
-  /* 濞戞挸绨肩€靛瞼鈧數顢婇惁鑺ョ▔閳ь剟鎳涙潏鍓х獥濠㈣泛绉堕弫?--composer-shell-bg闁挎稑鐭傚顏嗘兜椤掑倻妞介柣顔昏兌濞呇囧锤?*/
+  /* 输入壳背景：--composer-shell-bg 兜底链 */
   background: var(
     --composer-shell-bg,
     color-mix(in srgb, var(--bg-primary) 72%, transparent)
@@ -628,7 +628,7 @@
   font-size: var(--font-size-xxs);
   color: var(--accent-red);
 }
-/* 濞撴皜鍕焿閻庡厜鍓濇竟鎺楀础閳藉懐绐楅柣锝冨劜閺佽娼忕涵鍛崺闁挎稑濂旂粭澶愬础閻樺啿濮€规悶鍎遍崣鍧楀礆?*/
+/* agent 卡片紧凑档：审批卡/内联面板间距收紧 */
 .agent-card--dense .approval-card,
 .inline-agent--dense .approval-card {
   margin: 4px 0;
@@ -659,7 +659,7 @@
   outline: none;
 }
 
-/* tool stack / timeline闁挎稒鑹鹃悾銊╂濞嗘垹褰ㄩ柛姘灱婵☆厽绺借箛銉у耿闁告劕鎳橀崕鏉懳熼鍛硦濞戞挸绉甸幏娲儘閺夋垵鐏?*/
+/* tool stack / timeline：工具行与消息时间线共用形态 */
 .tool-stack,
 .msg-timeline-tools,
 .agent-tool-stack {
@@ -678,7 +678,7 @@
   overflow-x: auto;
 }
 
-/* 鐎规悶鍎遍崣鍧楀炊閻愵剛鍨奸柨娑欐皑缁儤绋夐埀顒備焊閸濆嫷鍤?+ 闁革箑妫滈～妤呭箵韫囨氨鐝跺瀣閻楁悂鏁嶉崸鍧卲/join round闁?*/
+/* 工具行类型图标：read/join round 等语义图标底色 */
 .tool-row-type-ico,
 .tool-row-type-ico.ico-read,
 .tool-row-type-ico.ico-search,
@@ -708,7 +708,7 @@
   width: 12px !important;
   height: 12px !important;
   color: var(--text-tertiary);
-  /* 闁告瑯鍨甸～鍡涘箑瑜忛弫?.tool-row-chevron-slot 闁硅矇鍐ㄧ厬闁挎稑鐗撶划顖滄媼閵堝顓洪柦妯洪獜缁辨饥over/focus 闁归潧绉瑰﹢鍫曟晬?*/
+  /* .tool-row-chevron-slot：hover/focus 时的图标态切换 */
   opacity: 1;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -729,9 +729,9 @@
   border-color: color-mix(in srgb, var(--accent-red) 30%, var(--border-subtle));
 }
 
-/* ---- Change overview闁挎稒顒irline 闁告帗顨夐妴鍐晬瀹€鍕闁诲繑婢樼花鎶藉础閳藉懐骞㈤柟绋款槸瀹曢亶鎮ч崶褜鍟嶉幖杈剧畳閸ゆ粓鏌呴崒姘卞畨 ---- */
+/* ---- Change overview：hairline 分隔 + 变更摘要面板 ---- */
 
-/* 闁活収鍘介埀顒佺箚閳ь剙鍠涚槐鐗堢▔瀹ュ棗顫戦柛娆戝缁辫鲸绋夋惔銏狀潙闁告瑧濮甸埀顒佺箚閳ь剙鍟幃鎾剁驳閺嶎偅娈?闁?闁哄啰濮鹃崕妤呭疾?閺夊牐顫夐、瀣晬鐎圭炒rtiary 闁稿繐顑呴崺?*/
+/* 思考块纯文本：与 overview 的 tertiary 文字层级一致 */
 .msg-thinking-plain {
   margin: 0 0 6px;
   padding: 0;
@@ -760,7 +760,7 @@
   user-select: text;
 }
 
-/* 闂傗偓閸噮鍤犻悹鍥ㄧ箘閻涖儵宕ｉ敐蹇曠獥闁哄嫬澧介妵姘跺即鐎涙ɑ锛嶆繛鎴濈墛娴?*/
+/* 旧消息窗：多消息分组容器 */
 .chat-msg-window-older {
   display: flex;
   justify-content: center;
@@ -799,7 +799,7 @@
   margin-left: var(--space-1);
 }
 
-/* ===== Responsive闁挎稒姘ㄩ悰搴ㄥ礆?/ 閻庣妫勯崹顏呯▔瀹ュ洤浠?===== */
+/* ===== Responsive：窄屏（≤720px）布局调整 ===== */
 @media (max-width: 720px) {
   .chat-doc-flow {
     padding: 12px 10px 10px;
@@ -885,12 +885,12 @@
 }
 
 /* =============================================================================
- * FD polish (additive) 闁?density / hairline / focus-visible / empty shell /
+  * FD polish（附加层）：density / hairline / focus-visible / empty shell /
  * tool-row default fold / Chinese UI line-heights via tokens
  * Tokens from tokens.css; no component edits. Cascade overrides only.
  * ============================================================================= */
 
-/* --- 1. Chinese UI line-heights闁挎稒鐭懙鎴﹀棘閸ヮ煈鍔€闁哄倸娲ㄩ弳鎰板箮椤掑﹦绀夐柟璨夊倹顐介柣?ui/tight --- */
+/* --- 1. Chinese UI line-heights：中文行高统一（ui/tight 语义） --- */
 .msg-user-bubble {
   line-height: var(--line-height-body, 1.55);
 }
@@ -935,10 +935,10 @@
   line-height: var(--line-height-ui, 1.35);
 }
 
-/* --- 2. Composer / footer 閻庨潧妫楃€规娊鏁嶅纾抋ce 闂傚啳鍩栭～顏堟晬鐏炶偐鐟㈡繛鎴濈墛娴煎懘宕氬Δ鍕濆┑鍌氱箰椤曨喗顬?--- */
+/* --- 2. Composer / footer：space 间距档位统一 --- */
 .chat-footer {
   gap: var(--space-2, 6px);
-  /* 閹?padding 闁告瑯浜為弳鈧柛鎴犲Т閸庢氨妲愰悪鍛闁告帩鍋勯悘姘緞椤忓牏褰?*/
+  /* footer 内边距：space 档位化 */
   padding: var(--space-5, 16px) var(--space-4, 12px) 4px;
 }
 .agent-card-composer {
@@ -976,7 +976,7 @@
   margin-top: var(--space-0_5);
 }
 
-/* --- 3. Tool row 闁硅埖锚瑜?閻忕偞娲栫槐鎴犫偓娑欘殙婢瑰﹪鏁嶅☉銏㈠笡閻犱降鍊栧Λ銈嗘償閺囶亞绀夐柛鏇炵仢閸熲偓闁告ê顑嗘晶搴ｆ偘瀹€鍕蒋 --- */
+/* --- 3. Tool row：工具行结构 --- */
 .tool-row {
   min-height: 0;
 }
@@ -987,7 +987,7 @@
 .tool-row-text {
   gap: var(--space-2);
 }
-/* 闁硅埖锚瑜?閻忕偞娲栫槐鎴︽晬濮橆厽鍠呴悷鏇氱閻⊙囨嚌閼碱儮鏃傗偓瑙勭啲缁辩渹hevron 闁告瑯浜?head hover 闁哄嫰绠栧▓锝夋晬鐏炶棄鐟忛悽顖涙倐閳?opacity */
+/* 工具行折叠箭头：head hover 时透明度切换 */
 .tool-row.is-collapsed .tool-row-summary,
 .tool-row.is-open .tool-row-summary {
   color: var(--text-secondary);
@@ -1002,7 +1002,7 @@
   margin-top: 0;
   margin-bottom: var(--space-1);
 }
-/* 閺夆晝鍋熼悽璇差啅閵夈儱寰旈悶娑樼焿缁变即寮悩鎻掔€婚柛鎾瑰皺閸ゅ酣濡存担瑙勶骏濡増绻傞ˇ?padding闁挎稑鐗嗛惈宥咁嚕閳ь剚绋夊鍡樻毉闁稿繐瀚槐鐢垫偘鐏炶棄娈ゅù锝嗘穿缁?*/
+/* 工具行间距：相邻行 padding 收敛 */
 .tool-stack > .tool-row + .tool-row,
 .msg-timeline-tools > .tool-row + .tool-row,
 .agent-tool-stack > .tool-row + .tool-row {
@@ -1010,7 +1010,7 @@
   margin-top: 0;
   padding-top: 0;
 }
-/* 闂傚牊鐟﹂埀顑挎缁楀宕ｉ娑橆潙閻炴稑鐭夌槐浼村籍閻樺啿鐦归梺钘夌墳缁辨繃绋夊鍡橆唫缂佲偓閸濆嫬璁查柣鎰缁辩湆over 濞寸姴绉磋ぐ?2% 闁诲繑婢樺鑺ワ純?*/
+/* 静态工具行头：hover 淡染 2% 兜底 */
 .tool-row-head--static {
   cursor: default;
 }
@@ -1024,7 +1024,7 @@
   padding: 4px 6px;
 }
 
-/* --- 4. Hairline 缂備胶鍠嶇粩瀵哥磼閹惧鈧垳鐥崠锛勭--hairline-width + hairline 婵℃缍囩槐?--- */
+/* --- 4. Hairline：--hairline-width + hairline 统一 --- */
 .chat-msg-filter-bar {
   border-bottom-width: var(--hairline-width, 1px);
   border-bottom-style: solid;
@@ -1105,17 +1105,17 @@
   border-color: var(--hairline-strong, var(--border-color));
 }
 
-/* --- 5. focus-visible闁挎稒宀搁弫顓㈡儎濡搫璁查弶鍫熸嫕缁?-focus-ring / --focus-ring-strong --- */
+/* --- 5. focus-visible：--focus-ring / --focus-ring-strong 契约 --- */
 .tool-row-head:focus-visible {
   outline: none;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  background: var(--tint-hover);
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .tool-row-head:focus-visible .tool-row-summary {
   color: var(--text-primary);
 }
-/* 闂佹鍠氬ú蹇涙倿閿旀儳浠柡鍐硾閹捇寮介悜鑺ヨ嫙闁告垹鍎ゆ慨宀勫矗閻樻鍞插鎯版彧缁辨瑦绋?hover 濞戞挴鍋撻柤鐤彧缁?*/
+/* 工具行头 focus：chevron 提示弱化，hover 保持可见 */
 .tool-row-head:focus-visible .tool-row-chevron-slot.is-toggle {
   opacity: 0.55;
 }
@@ -1123,7 +1123,7 @@
   outline: none;
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .chat-scroll-fab:focus-visible {
   outline: none;
@@ -1134,23 +1134,23 @@
 .chat-pinned-bar-toggle:focus-visible {
   outline: none;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  background: var(--tint-hover);
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .chat-pinned-jump:focus-visible,
 .chat-pinned-unpin:focus-visible {
   outline: none;
   background: var(--bg-hover, var(--bg-tertiary));
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .chat-msg-filter-clear:focus-visible,
 .chat-msg-filter-close:focus-visible {
   outline: none;
   background: var(--bg-hover, var(--bg-tertiary));
   color: var(--text-primary);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
-/* filter 閺夊牊鎸搁崣鍡涙晬濮樿埖鏆涢柣?focus 闁?strong 闁绘粠鍨界槐婵囩▔?settings 闁告艾鑻〃鏍棯?*/
+/* filter 搜索框 focus：text-tertiary + strong 档（与 settings 对齐） */
 .chat-msg-filter-input:focus-visible {
   border-color: var(--text-tertiary);
   background: transparent;
@@ -1160,19 +1160,19 @@
   outline: none;
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .model-badge:focus-visible {
   outline: none;
   background: var(--bg-secondary);
   color: var(--text-primary);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .chat-breadcrumb-header .breadcrumb-item:focus-visible {
   outline: none;
   background-color: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .msg-plan-approve-chip:focus-visible,
 .perm-pill:focus-visible,
@@ -1193,21 +1193,21 @@
 .chat-empty-project-btn:focus-visible,
 .quick-prompt-card:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .chat-empty-action:focus-visible,
 .chat-empty-project-btn:focus-visible,
 .quick-prompt-card:focus-visible {
   box-shadow: var(--focus-ring-strong, var(--focus-ring));
 }
-/* 闂佹鍠氬ú蹇涘矗椤栨繃褰ч柨娑欑缁夌兘骞?meta 闁搞儳鍋撻悥锝夊捶?focus-within 闁哄啳鍩栧Ο澶愭偝鐢喚绀勫☉鎾崇С缁堕鎸?hover闁?*/
+/* 消息元信息：focus-within 点亮，hover 备选 */
 .msg-user-stack:focus-within .msg-user-meta,
 .msg-row-assistant:focus-within .msg-assistant-meta {
   opacity: 1;
 }
 
-/* --- 6. Empty shell闁挎稒鑹鹃崹顏嗏偓纭呮閻櫕绋?+ 閻庨潧妫楃€?+ 濞戞搩鍘介弸鍐偘瀹€鍕蒋 + hairline chip --- */
-/* 閺夆晛娲﹂幎銈夊籍閻樺弶鍤掑☉鎿冨幘閳规牗绔熺粵鍦獥濞?session empty 闁告艾鑻崹顏嗏偓?閻炴稑鐭傞悵顔界附閹寸姴顔?*/
+/* --- 6. Empty shell：空壳 + footer + 空态图 + hairline chip --- */
+/* 消息过滤空态（session empty）：间距与图标布局 */
 .chat-msg-filter-empty {
   gap: var(--space-3, 8px);
   padding: var(--space-6, 20px) var(--space-5, 16px);
@@ -1217,7 +1217,7 @@
   max-width: 28em;
 }
 
-/* 闁诡剚绻嗛埀顒€鍟慨宀勫矗閻樺眰浠堥柨娑欑煯缁?tool-row 闁告艾鑻惁鎴炴償閿旇棄浠樺ù鐘茬埣閻?*/
+/* 思考折叠摘要：工具行同款间距 */
 .msg-thinking-fold-sum {
   gap: var(--space-2, 6px);
   min-height: var(--control-height-xs, 24px);
@@ -1227,11 +1227,11 @@
 .msg-thinking-fold-sum:focus-visible {
   outline: none;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  background: var(--tint-hover);
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
-/* 缂佹劕瀚崹顏堟晬濮濈垕oter/缂佸瞼鍎ら埀?padding 閻?space 闂傚啳鍩栭～顏堝绩閺堢數顏辨俊?*/
+/* footer：紧凑档 padding 用 space 档位 */
 @media (max-width: 720px) {
   .chat-footer {
     padding: var(--space-4, 12px) var(--space-3, 10px) 4px;

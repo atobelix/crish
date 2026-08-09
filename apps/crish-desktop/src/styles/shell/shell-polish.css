@@ -50,7 +50,7 @@
   background: var(--accent-hover);
 }
 
-/* 婵炲棌鍓濈€垫粓�?= 閺夌儐鍨伴敐鐐哄�?pill闁挎稑鏈Λ銈夊箵韫囨氨鐝堕柨娑樼墕椤曨喗顬囬幇鈹惧亾鐏炵偓鐓€鐎点倖浜介埀顒€绋勭�?*/
+/* 婵炲棌鍓濈€垫粓�?= 閺夌儐鍨伴敐鐐哄�?pill闁挎稑鏈Λ銈夊箵韫囨氨鐝堕柨娑樼墕椤曨喗顬囬幇鈹惧亾鐏炵偓鐓€鐎点倖浜介埀顒€绋勭�?*/
 .ui-btn-secondary {
   background: var(--control-soft-bg);
   color: var(--text-secondary);
@@ -183,7 +183,7 @@ select.ui-input {
   background: var(--text-tertiary);
 }
 
-   Crish shell polish �?distinct from Claude Desktop patterns
+   Crish shell polish �?distinct from Claude Desktop patterns
    ============================================================ */
 
 /* Titlebar drag (Tauri frameless) */
@@ -327,7 +327,7 @@ select.ui-input {
   padding: 7px 10px;
 }
 .session-item.active {
-  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: var(--tint-active);
   box-shadow: none;
 }
 
@@ -398,18 +398,18 @@ select.ui-input {
   flex-direction: column;
   gap: var(--space-1);
   padding: 12px 10px 8px;
-  overflow: hidden; /* 闁告帗顨夐妴鍐礌閸濆嫬绀嬮柣娆樺墯缁挳鏁嶅畝鍕┾偓濠囧冀?缂傚喚鍣ｉ妴濠冪▔瀹ュ牏顎€闁活偀鍋撻�?*/
+  overflow: hidden; /* 闁告帗顨夐妴鍐礌閸濆嫬绀嬮柣娆樺墯缁挳鏁嶅畝鍕┾偓濠囧冀?缂傚喚鍣ｉ妴濠冪▔瀹ュ牏顎€闁活偀鍋撻�?*/
   flex: 1;
   min-height: 0;
 }
-/* 濡炪倕婀卞�?+ 閻庣數顢婇惁浠嬪礂鏉堚晜鏆忓☉鎾亾闁哄鍓濈划鎾礉閵婏附�?*/
+/* 濡炪倕婀卞�?+ 閻庣數顢婇惁浠嬪礂鏉堚晜鏆忓☉鎾亾闁哄鍓濈划鎾礉閵婏附�?*/
 .crish-sidebar .sb-list-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: var(--space-2);
-  /* 婵犲﹥鑹炬慨鈺呭级闄囬崚娑欐交閹存繂绀佸〒姘€鍐ㄧ€婚柛鎾瑰皺閸ゅ酣�?�?px�?*/
+  /* 婵犲﹥鑹炬慨鈺呭级闄囬崚娑欐交閹存繂绀佸〒姘€鍐ㄧ€婚柛鎾瑰皺閸ゅ酣�?�?px�?*/
   margin: 0;
   padding-left: var(--space-0_5);
   padding-right: var(--space-0_5);
@@ -422,8 +422,8 @@ select.ui-input {
 /* [sidebar-top-actions, sb-nav-item, sb-nav-link styles migrated to SidebarNav.module.css] */
 /* [sb-section styles migrated to SidebarSessionList.module.css] */
 /* [folder, session-item, context-menu-compact, session-running-spinner, and sidebar-drag-ghost styles migrated to SidebarSessionList.module.css and SidebarContextMenus.module.css] */
-/* 濞戞捁顕ч崹顏堝礃閸涱厾銈甸柛蹇嬪妼锟?agent 濠㈢懓鍟块崙鈩冩償閻旈纾鹃柨娑欒壘�?agent 闁告瑯浜滃﹢顏呯瑹瑜庨悥?.agent-panel-shell
- * 閻庨潧妫楃€硅櫕绺介幋鐘差唺闁挎稒顒irline 闁告帒妫濆▓?+ 缂佹瘱鍐ㄦ pad闁挎稒绋撻々锕€顫㈤姀鐘海闁秆勵殘娴煎棙�?閻庡湱鏅▍?*/
+/* 濞戞捁顕ч崹顏堝礃閸涱厾銈甸柛蹇嬪妼锟?agent 濠㈢懓鍟块崙鈩冩償閻旈纾鹃柨娑欒壘�?agent 闁告瑯浜滃﹢顏呯瑹瑜庨悥?.agent-panel-shell
+ * 閻庨潧妫楃€硅櫕绺介幋鐘差唺闁挎稒顒irline 闁告帒妫濆▓?+ 缂佹瘱鍐ㄦ pad闁挎稒绋撻々锕€顫㈤姀鐘海闁秆勵殘娴煎棙�?閻庡湱鏅▍?*/
 /* [MIGRATED] agent-card and team-board styles migrated to AgentCard.module.css */
 
 .agent-panel-shell {
@@ -475,7 +475,7 @@ select.ui-input {
 .project-picker-menu { display: none !important; }
 
 
-/* 闁哄秴娲ㄩ鐑藉�?+ 闁挎稑婀sidian 鐎殿喖楠忕槐?*/
+/* 闁哄秴娲ㄩ鐑藉�?+ 闁挎稑婀sidian 鐎殿喖楠忕槐?*/
 .tabs-add-wrap {
   position: relative;
   flex-shrink: 0;
@@ -499,7 +499,7 @@ select.ui-input {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* �?SettingsSelect / 濞戞挸锕ｇ粭鍛村棘閸ヮ亜缍呴柛妤佹礈缁儤绋夐埀顒勬晬濮樺疇鎷繛鎼枛�?*/
+/* �?SettingsSelect / 濞戞挸锕ｇ粭鍛村棘閸ヮ亜缍呴柛妤佹礈缁儤绋夐埀顒勬晬濮樺疇鎷繛鎼枛�?*/
 .tabs-add-menu {
   position: fixed;
   z-index: var(--z-cheatsheet);
@@ -508,7 +508,7 @@ select.ui-input {
   overflow-y: auto;
   padding: var(--space-1_5);
   border-radius: var(--radius-2xl);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border: 1px solid var(--tint-active);
   background: var(--bg-elevated);
   box-shadow:
     0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent),
@@ -533,14 +533,14 @@ select.ui-input {
   transition: background var(--transition-micro);
 }
 .tabs-add-item:hover {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
+  background: var(--tint-hover);
 }
 
 /* =============================================================================
- * ED shell polish �?additive density / hairline / focus / empty-list / 濞戞搩鍘介弸鍐偘瀹€鍕�?
- * 濞寸姴鎳忕粔椋庢�?tokens.css�?-hairline* / --space-* / --focus-ring* / --line-height-*�? * ============================================================================= */
+ * ED shell polish �?additive density / hairline / focus / empty-list / 濞戞搩鍘介弸鍐偘瀹€鍕�?
+ * 濞寸姴鎳忕粔椋庢�?tokens.css�?-hairline* / --space-* / --focus-ring* / --line-height-*�? * ============================================================================= */
 
-/* 1) Chinese UI闁挎稒纰嶉婊堝�?闁硅矇鍌涱偨閻炴稑鐭傞悵顔炬�?token闁挎稑鏈惇鐣屸偓娑欍仦缁楀鎷瑰ǎ顑藉亾娴ｇ鐏欓悶娑栧妺缁楀锟?*/
+/* 1) Chinese UI闁挎稒纰嶉婊堝�?闁硅矇鍌涱偨閻炴稑鐭傞悵顔炬�?token闁挎稑鏈惇鐣屸偓娑欍仦缁楀鎷瑰ǎ顑藉亾娴ｇ鐏欓悶娑栧妺缁楀锟?*/
 body {
   line-height: var(--line-height-body, 1.55);
 }
@@ -639,7 +639,7 @@ body {
   gap: var(--space-2, 6px);
   margin-bottom: var(--space-3, 8px);
 }
-/* 闁瑰吋绮庨崒銊ф偘鐏炵偓笑 div[role=search]闁挎稑鐭佽棢 hover 闁轰礁鐗婇悘澶嬬�?button 濞戞挴鍋撻柤?*/
+/* 闁瑰吋绮庨崒銊ф偘鐏炵偓笑 div[role=search]闁挎稑鐭佽棢 hover 闁轰礁鐗婇悘澶嬬�?button 濞戞挴鍋撻柤?*/
 .sidebar-top-actions .sb-nav-item[role="search"]:hover {
   background: var(--control-soft-bg-hover);
   cursor: text;
@@ -798,7 +798,7 @@ body {
 .crish-sidebar .pinned-drop-zone.drag-over {
   outline: var(--hairline-width, 1px) dashed var(--hairline-strong, var(--border-color));
   outline-offset: 2px;
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
 }
 .pinned-placeholder {
   gap: var(--space-2, 6px);
@@ -831,7 +831,7 @@ body {
 .sb-section-sort:focus-visible,
 .crish-sidebar .folder-new-session:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
 }
 .header-btn:focus-visible,
@@ -856,21 +856,21 @@ body {
 .size-btn:focus-visible,
 .daemon-status-chip:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
 }
 .crish-sidebar .session-item:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
 }
 .card-tab:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
 }
-/* 闁瑰吋绮庨崒銊╂晬濮橆厾璐熸繛鑼额唺缁酣寮告担纭呯獥闁硅绻楃粩鐔兼晬瀹€鈧々锕€顫㈤姀鐘茶摕锟?focus �?*/
+/* 闁瑰吋绮庨崒銊╂晬濮橆厾璐熸繛鑼额唺缁酣寮告担纭呯獥闁硅绻楃粩鐔兼晬瀹€鈧々锕€顫㈤姀鐘茶摕锟?focus �?*/
 .search-bar:focus-within {
   border-color: var(--hairline-strong, var(--border-color));
   box-shadow: none;
@@ -887,15 +887,15 @@ body {
 }
 .url-bar:focus-within {
   border-color: var(--hairline-strong, var(--border-color));
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 .context-menu.context-menu-compact .context-menu-item:focus-visible {
   outline: none;
   background-color: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
-/* 闂佹鍠氬ú蹇涘矗椤栨繃褰ч柨娑欏哺濞堬綁锟?hover-only 闁告柣鍔嬬紞鏃堝�?focus-within 闁哄啳鍩栧Ο澶愭偝?*/
+/* 闂佹鍠氬ú蹇涘矗椤栨繃褰ч柨娑欏哺濞堬綁锟?hover-only 闁告柣鍔嬬紞鏃堝�?focus-within 闁哄啳鍩栧Ο澶愭偝?*/
 .crish-sidebar .session-item:focus-within .session-actions-btn,
 .crish-sidebar .session-item:focus-visible .session-actions-btn {
   opacity: 1;
@@ -1123,7 +1123,7 @@ body {
 /* --- 5. OVERRIDES FOR CODENAME/MESSAGE SURFACES --- */
 /* User Bubble - Dynamic and cozy semi-transparent overlay */
 .msg-user-bubble {
-  background: color-mix(in srgb, var(--text-primary) 4.5%, transparent) !important;
+  background: var(--tint-hover) !important;
   border: 1px solid var(--border-subtle) !important;
   color: var(--text-primary) !important;
 }
@@ -1134,7 +1134,7 @@ body {
 .md-rendered .md-inline-code,
 .md-inline-code,
 .chat-doc-flow p code {
-  background: color-mix(in srgb, var(--text-primary) 3.2%, transparent) !important;
+  background: var(--tint-hover) !important;
   color: var(--text-primary) !important;
   border: none !important;
   border-radius: var(--radius-xs) !important;
@@ -1148,7 +1148,7 @@ body {
 .md-rendered pre,
 .msg-assistant-text .md-code-pre,
 .md-rendered .md-code-pre {
-  background: color-mix(in srgb, var(--text-primary) 1.2%, transparent) !important;
+  background: var(--md-code-bg) !important;
   border: none !important;
   color: var(--text-primary) !important;
   white-space: pre-wrap !important;

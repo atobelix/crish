@@ -21,7 +21,7 @@
   padding: 14px 14px 12px;
   border: none;
   border-radius: var(--radius-2xl);
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
+  background: var(--tint-hover);
   color: var(--text-primary);
   font: inherit;
   text-align: left;
@@ -29,7 +29,7 @@
   transition: background var(--transition-micro);
 }
 .settings-create-path:hover {
-  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary));
+  background: var(--tint-hover);
 }
 .settings-create-path-title {
   font-size: var(--font-size-base);
@@ -58,7 +58,7 @@
   padding: 8px 4px 0;
   margin-bottom: var(--space-2_5);
   border-radius: var(--radius-2xl);
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  background: var(--tint-hover);
 }
 .settings-usage-day-col {
   flex: 1 1 0;
@@ -81,10 +81,10 @@
   max-width: 28px;
   min-height: 2px;
   border-radius: var(--radius-md) 6px 2px 2px;
-  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  background: var(--tint-highlight);
 }
 .settings-usage-day-bar.is-empty {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--tint-active);
 }
 .settings-usage-day-label {
   font-size: var(--font-size-nano);
@@ -141,7 +141,7 @@
   gap: var(--space-1_5);
   padding: 14px 14px 12px;
   border-radius: var(--radius-2xl);
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
+  background: var(--tint-hover);
   min-width: 0;
 }
 .settings-usage-stat-label {
@@ -159,7 +159,7 @@
 .settings-usage-bar {
   height: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   overflow: hidden;
 }
 .settings-usage-bar-fill {
@@ -170,7 +170,7 @@
   transition: width var(--transition-fast);
 }
 .settings-usage-bar-fill.is-out {
-  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  background: var(--tint-highlight);
 }
 .settings-usage-bar-fill.is-cost {
   background: color-mix(in srgb, var(--accent-orange) 65%, transparent);
@@ -180,7 +180,7 @@
   height: 10px;
   border-radius: 999px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   margin-top: var(--space-1);
 }
 .settings-usage-ratio-in {
@@ -188,7 +188,7 @@
   min-width: 0;
 }
 .settings-usage-ratio-out {
-  background: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  background: var(--tint-overlay);
   min-width: 0;
 }
 .settings-usage-meta-row {
@@ -296,7 +296,7 @@
   border-radius: var(--radius-lg);
   font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-medium);
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-secondary);
   flex-shrink: 0;
   border: none;
@@ -371,7 +371,7 @@
   padding: var(--space-4);
   border-radius: var(--radius-2xl);
   border: none;
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-primary));
+  background: var(--tint-hover);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs-plus);
   line-height: var(--line-height-body);
@@ -394,7 +394,7 @@
   padding: 12px 14px;
   border-radius: var(--radius-2xl);
   border: none;
-  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  background: var(--tint-hover);
 }
 .ext-tool-name {
   font-size: var(--font-size-sm);
@@ -626,7 +626,7 @@ pre,
 /* 鏉堟挸鍙嗗鍡楀箵闂勩倛鍎楅弲顖濆婵夘偄鍘栭敍灞肩贩闂堢姵绁懝鑼剁珶濡楀棗灏崚鍡樼负濞茶崵濮搁幀?*/
 .settings-field-input {
   border-style: solid;
-  border-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-color: var(--tint-active);
   background: transparent;
   box-shadow: none;
 }
@@ -645,8 +645,8 @@ pre,
 .settings-select-trigger:focus,
 .settings-select-trigger:focus-visible,
 .settings-select-trigger[aria-expanded='true'] {
-  border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 4.5%, transparent);
+  border-color: var(--tint-strong);
+  background: var(--tint-hover);
   box-shadow: none;
 }
 .settings-select-menu,
@@ -685,7 +685,7 @@ pre,
 .skills-path-btn:focus-visible,
 .mcp-inline-copy:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
 }
 .settings-sidebar-tab:focus-visible {
@@ -719,12 +719,12 @@ textarea.settings-dialog-textarea:focus-visible {
 }
 .settings-segment-pill .ui-segment-item:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   color: var(--text-primary);
 }
 .settings-list-row--clickable:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
   border-radius: var(--radius-sm, 6px);
 }
 
@@ -1001,7 +1001,7 @@ textarea.settings-dialog-textarea:focus-visible {
 }
 .settings-pane .ui-btn-ghost:hover {
   border: none !important;
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent) !important;
+  background: var(--tint-hover) !important;
 }
 .settings-group-label {
   font-size: var(--font-size-xs);

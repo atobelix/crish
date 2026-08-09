@@ -30,7 +30,7 @@
   flex-wrap: wrap;
   gap: var(--space-0_5);
   padding: var(--space-0_5);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: var(--radius-lg);
   background: transparent;
 }
@@ -45,25 +45,25 @@
   cursor: pointer;
 }
 .settings-pane--extensions .settings-choice-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 .settings-pane--extensions .settings-choice-btn.active {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
 .settings-pane--extensions .ext-search,
 .settings-pane--extensions .settings-field-input {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
   min-width: 120px;
   max-width: 180px;
 }
 .settings-pane--extensions .settings-field-input:focus,
 .settings-pane--extensions .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
   box-shadow: none;
 }
 
@@ -75,13 +75,13 @@
   margin-top: var(--space-1);
 }
 .ext-row-block {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: var(--radius-xl);
   background: transparent;
   overflow: hidden;
 }
 .ext-row-block.is-expanded {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
   background: transparent;
 }
 .ext-row,
@@ -138,7 +138,7 @@
   font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: 999px;
   padding: 1px 7px;
   background: transparent;
@@ -162,7 +162,7 @@
 }
 .ext-inline-panel {
   padding: 0 12px 12px;
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   display: flex;
   flex-direction: column;
   gap: var(--space-2_5);
@@ -188,7 +188,7 @@
   max-height: 220px;
   overflow: auto;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-lg);
   background: transparent;
 }

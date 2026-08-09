@@ -10,8 +10,8 @@ html[data-theme="light"] {
   --bg-primary: hsl(35, 12%, 94.0%);     /* 主背景色：极简护眼暖灰 */
   --bg-secondary: hsl(35, 12%, 91.5%);   /* 次级背景/侧栏/顶栏：温暖舒适的暖灰 */
   --bg-tertiary: hsl(35, 12%, 88.5%);    /* 三级背景：配置卡片等下凹底色 */
-  --bg-hover: color-mix(in srgb, var(--control-mix-color) 4%, transparent);      /* 悬浮 */
-  --bg-active: color-mix(in srgb, var(--control-mix-color) 8%, transparent);     /* 激活 */
+  --bg-hover: var(--tint-hover);         /* 悬浮（tint 档位语义别名） */
+  --bg-active: var(--tint-active);       /* 激活（tint 档位语义别名） */
   --bg-card: hsl(35, 10%, 98.0%);       /* 卡片底色：温润暖白，调高白度以增强卡片浮动感 */
   --bg-elevated: hsl(35, 8%, 100.0%);   /* 弹层与下拉底色：高雅温润的乳白，确保亮度高于背景 */
   --bg-workspace: var(--bg-primary);
@@ -19,12 +19,24 @@ html[data-theme="light"] {
   --bg-subtle: var(--bg-secondary);
   --text-primary: #111111;
   --text-secondary: #555555;
-  --text-tertiary: #888888;
+  --text-tertiary: color-mix(in srgb, var(--text-secondary) 70%, transparent);
   --text-muted: var(--text-tertiary);
+
+  /* 淡染档位 token（tint 族）：text-primary 基底 + transparent 混合；
+   * hover/active/strong 三档为主，其余为专用档（含 C-3 定案的 --tint-highlight）；
+   * 全部消费点禁裸 color-mix，统一引用本族 */
+  --tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --tint-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --tint-scrollbar-thumb: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
+  --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
   
   --border-color: hsl(35, 10%, 86.0%);
   --border-subtle: hsl(35, 8%, 91.0%);
-  --composer-bg: color-mix(in srgb, var(--control-mix-color) 2%, #ffffff);
+  --composer-bg: color-mix(in srgb, var(--control-mix-color) 15%, var(--bg-primary));
   --composer-footer-bg: transparent;
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
@@ -59,12 +71,17 @@ html[data-theme="light"] {
   --accent-green-muted: hsl(142, 30%, 82.5%);
   --accent-red: hsl(0, 55%, 55%);         /* 柔和砖红/赤土 */
   --accent-red-light: hsl(0, 55%, 97.5%);   /* 极轻透暖蜜桃 */
+  /* 运行时注入（themeStore applyTheme）的默认皮肤等价静态定义——注入缺失路径的兜底 */
+  --accent-green-light-adaptive: color-mix(in srgb, var(--accent-green, #16a34a) 15.5%, #ffffff);
+  --accent-red-light-adaptive: color-mix(in srgb, var(--accent-red, #dc2626) 12.5%, #ffffff);
   --accent-blue: hsl(217, 91%, 60%);
   --accent-blue-light: hsl(217, 70%, 96%);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(258, 40%, 97%);
   --accent-primary: var(--accent-blue);
   --accent-secondary: var(--accent-blue-light);
+  /* primary 反相底（FirstRunWizard 等深底按钮）；light = text-primary 底、dark = text-secondary 亮底 */
+  --accent-inverted: var(--text-primary);
   --accent-chart-in: hsl(35, 10%, 82%);
   --accent-chart-out: hsl(35, 12%, 35%);
   --text-on-accent: #ffffff;
@@ -393,19 +410,30 @@ html[data-theme="dark"] {
   --bg-primary: hsl(0, 0%, 5%);
   --bg-secondary: hsl(0, 0%, 8%);
   --bg-tertiary: hsl(0, 0%, 11%);
-  --bg-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
-  --bg-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
+  --bg-hover: var(--tint-hover);         /* 悬浮（tint 档位语义别名） */
+  --bg-active: var(--tint-active);       /* 激活（tint 档位语义别名） */
   --bg-card: hsl(0, 0%, 11%);
   --bg-elevated: hsl(0, 0%, 15%);
   --bg-subtle: var(--bg-secondary);
+  --bg-workspace: var(--bg-primary);
   --text-primary: #f0f0f0;
   --text-secondary: #a3a3a3;
-  --text-tertiary: #737373;
+  --text-tertiary: color-mix(in srgb, var(--text-secondary) 62%, transparent);
   --text-muted: var(--text-tertiary);
+
+  /* 淡染档位 token（tint 族）：dark 复用同一 text-primary 基底定义，淡染强度双主题一致 */
+  --tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --tint-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --tint-scrollbar-thumb: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
+  --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
   
   --border-color: hsl(0, 0%, 18%);
   --border-subtle: hsl(0, 0%, 14%);
-  --composer-bg: var(--bg-tertiary);
+  --composer-bg: var(--bg-secondary);
   --composer-footer-bg: var(--bg-secondary);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
@@ -414,6 +442,11 @@ html[data-theme="dark"] {
   --control-soft-bg: color-mix(in srgb, var(--text-primary) 5%, var(--bg-primary));
   --control-soft-bg-hover: color-mix(in srgb, var(--text-primary) 6.5%, var(--bg-primary));
   --control-soft-bg-active: color-mix(in srgb, var(--text-primary) 9.5%, var(--bg-primary));
+  /* dark 分支缺口补齐（01 退化 P2-01）：light 侧栏 hover/active 与 control-mix-color 在 dark 下
+   * 会继承 light 暖棕值，补定义后与 tint 同基底、观感一致 */
+  --sidebar-hover: color-mix(in srgb, var(--text-primary) 5%, var(--bg-secondary));
+  --sidebar-active: color-mix(in srgb, var(--text-primary) 8%, var(--bg-secondary));
+  --control-mix-color: var(--text-primary);
   --focus-ring-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
   --focus-ring: 0 0 0 2px var(--focus-ring-color);
   --focus-ring-strong: 0 0 0 3px color-mix(in srgb, var(--text-primary) 22%, transparent);
@@ -432,15 +465,26 @@ html[data-theme="dark"] {
   --accent-green-muted: hsl(142, 30%, 24%);
   --accent-red: hsl(0, 55%, 55%);
   --accent-red-light: hsl(0, 55%, 16%);
+  /* 运行时注入（themeStore applyTheme）的默认皮肤等价静态定义——dark 兜底 */
+  --accent-green-light-adaptive: color-mix(in srgb, var(--accent-green, #22c55e) 8%, var(--bg-primary));
+  --accent-red-light-adaptive: color-mix(in srgb, var(--accent-red, #ef4444) 8%, var(--bg-primary));
   --accent-blue: hsl(217, 91%, 60%);
   --accent-blue-light: hsl(224, 64%, 33%);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(261, 73%, 23%);
   --accent-primary: var(--accent-blue);
   --accent-secondary: var(--accent-blue-light);
+  /* primary 反相底 dark 分支：text-secondary 亮底 */
+  --accent-inverted: var(--text-secondary);
   --accent-chart-in: var(--accent-blue-light);
   --accent-chart-out: var(--accent-blue);
   --text-on-accent: var(--bg-primary, #0a0a0a);
+  /* legacy/semantic aliases dark 覆盖：值均与 light 相同（继承等价），补齐 dark 分支定义 */
+  --accent-danger: var(--color-error);
+  --text-danger: var(--color-error);
+  --text-success: var(--color-success);
+  --text-on-danger: #ffffff;
+  --color-active: #16a34a;
 
   /* semantic color roles */
   --color-success: var(--accent-green);
@@ -500,6 +544,7 @@ html[data-theme="dark"] {
   --ui-text-primary: inherit;
 
   --bg-glass: rgba(10, 10, 10, 0.75);
+  --bg-overlay: var(--shadow-color);
 
   /* syntax highlighting dark */
   --syntax-keyword: #c4b5fd;

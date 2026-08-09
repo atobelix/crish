@@ -25,13 +25,13 @@
   width: 148px;
   max-width: min(160px, 36vw);
   flex: 0 1 148px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
 }
 .settings-pane--shortcuts .settings-shortcuts-filter:focus,
 .settings-pane--shortcuts .settings-shortcuts-filter:focus-visible {
   border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-primary));
+  background: var(--tint-hover);
 }
 
 .settings-pane--shortcuts .settings-group-label {
@@ -45,7 +45,7 @@
 }
 
 .settings-pane--shortcuts .settings-list--shortcuts {
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
 }
 
 .settings-pane--shortcuts .settings-list-row--shortcuts {
@@ -53,7 +53,7 @@
   padding: 10px 0;
   gap: 12px 16px;
   align-items: center;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid var(--tint-active);
   border-radius: 0;
   background: transparent;
 }
@@ -106,7 +106,7 @@
   height: 30px;
   padding: 0 10px;
   border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-mono);
@@ -115,8 +115,8 @@
   line-height: var(--line-height-none);
 }
 .settings-pane--shortcuts .shortcut-key-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  background: var(--tint-hover);
+  border-color: var(--tint-strong);
 }
 .settings-pane--shortcuts .shortcut-key-btn.recording {
   border-color: var(--border-color);
@@ -129,7 +129,7 @@
 }
 
 html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
-  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  background: var(--tint-divider);
   color: var(--text-primary);
   border-color: var(--border-color) !important;
 }
@@ -180,7 +180,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   padding: 0 0 4px;
 }
 .settings-pane--security .settings-list--security {
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   background: transparent;
   gap: 0;
 }
@@ -189,7 +189,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   padding: 12px 0;
   gap: 14px 18px;
   align-items: center;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid var(--tint-active);
   border-radius: 0;
   background: transparent;
   margin: 0;
@@ -254,14 +254,14 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .settings-pane--security .settings-list-control--security .settings-select {
   width: min(168px, 100%);
   max-width: 180px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
 }
 .settings-pane--security .settings-security-input,
 .settings-pane--security .settings-field-input {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
 }
 .settings-pane--security .settings-security-input:focus,
@@ -275,16 +275,16 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 /* 閼侯垳澧栭敍姘辩矎鏉堣 */
 .settings-pane--security .settings-chip-btn,
 .settings-pane--security .settings-chip {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   background: transparent;
   border-radius: 999px;
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
 }
 .settings-pane--security .settings-chip-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: var(--tint-strong);
 }
 .settings-pane--security .settings-chip-btn:disabled {
   opacity: 0.45;
@@ -362,7 +362,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 
 .settings-pane--rules .settings-list--rules,
 .settings-pane--rules .settings-list {
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
   background: transparent;
   gap: 0;
 }
@@ -371,7 +371,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   padding: 10px 0;
   gap: 12px 16px;
   align-items: center;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid var(--tint-active);
   border-radius: 0;
   background: transparent;
   margin: 0;
@@ -435,8 +435,8 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 
 /* 妫板嫯顔曢懞顖滃 */
 .settings-pane--rules .settings-rule-preset {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary)) !important;
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover) !important;
   border-radius: 999px;
   padding: 5px 10px;
   font-size: var(--font-size-xs);
@@ -447,7 +447,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   max-width: 100%;
 }
 .settings-pane--rules .settings-rule-preset:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 10%, var(--bg-primary)) !important;
+  background: var(--tint-strong) !important;
   color: var(--text-primary);
 }
 .settings-pane--rules .settings-rule-preset.is-disabled,
@@ -460,8 +460,8 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 
 .settings-pane--rules .settings-field-input {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
 }
 .settings-pane--rules .settings-field-input:focus,
@@ -476,8 +476,8 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 /* 閸忋劍鏋冨鐟扮湴鏉堟挸 */
 .settings-pane--rules .settings-dialog-textarea,
 .settings-dialog--rules .settings-dialog-textarea {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
 }
 
 @media (max-width: 640px) {
@@ -535,7 +535,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   flex-wrap: wrap;
   gap: var(--space-0_5);
   padding: var(--space-0_5);
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: var(--radius-lg);
   background: transparent;
 }
@@ -550,11 +550,11 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   cursor: pointer;
 }
 .sched-settings .settings-choice-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 .sched-settings .settings-choice-btn.active {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
@@ -565,7 +565,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   gap: var(--space-2_5);
 }
 .sched-settings .settings-create-path {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   border-radius: var(--radius-xl);
   background: transparent;
   padding: 12px 14px;
@@ -578,7 +578,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   color: var(--text-primary);
 }
 .sched-settings .settings-create-path:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
 }
 .sched-settings .settings-create-path-title {
   font-size: var(--font-size-sm-plus);
@@ -596,12 +596,12 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   flex-direction: column;
   gap: var(--space-2_5);
   padding: 12px 0 4px;
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
 }
 .sched-settings .settings-field-input,
 .sched-settings .sched-settings-select {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-primary));
+  border: 1px solid var(--tint-strong);
+  background: var(--tint-hover);
   border-radius: var(--radius-lg);
 }
 .sched-settings .settings-field-input:focus,
@@ -610,7 +610,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   box-shadow: none;
 }
 .sched-preset-chip {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border: 1px solid var(--tint-strong);
   background: transparent;
   border-radius: 999px;
   padding: 4px 10px;
@@ -619,7 +619,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   cursor: pointer;
 }
 .sched-preset-chip:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 .sched-settings-path {
@@ -635,7 +635,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .sched-settings-list {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-top: 1px solid var(--tint-active);
 }
 .sched-settings-row {
   display: grid;
@@ -644,7 +644,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   align-items: center;
   min-height: 44px;
   padding: 8px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-bottom: 1px solid var(--tint-active);
 }
 .sched-settings-row:last-child {
   border-bottom: none;
