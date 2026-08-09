@@ -131,6 +131,65 @@ export function snapToGraphemeBoundary(text: string, pos: number): number {
 }
 
 /**
+ * 光标方向性 assoc（R4-B，04 编辑深度扩展 §1.2 B2 / §3.3 方案 1）：
+ * 位置 p（位于字符 p-1 与 p 之间）落在行尾时，光标既可视作「行末字符之后」，
+ * 也可视作「下一行行首之前」——Bidi / 行边界导航需要该方向信息区分左右
+ * （对齐 CM6 SelectionRange.assoc 语义，简化为二值）。
+ * 规则：p 位于非空行的行尾（p 之后是换行或文末，且 p 之前非换行）→ 'after'
+ * （光标关联上一字符，渲染在行尾字符的视觉外侧）；否则 → 'before'
+ * （默认关联下一字符）。
+ */
+export function computeAssoc(text: string, pos: number): 'before' | 'after' {
+  const p = Math.max(0, Math.min(pos, text.length));
+  if (
+    p > 0 &&
+    text[p - 1] !== '\n' &&
+    (p === text.length || text[p] === '\n')
+  ) {
+    return 'after';
+  }
+  return 'before';
+}
+
+/**
+ * 行尾 assoc 判定（store 内部版，O(log n)）：基于行偏移树 + 行访问器定位
+ * 「pos 是否落在非空行的行尾」，避免整文本 join——applyChange / appendText
+ * 等热路径调用（每次落点变更都需刷新 assoc）。行尾 → 'after'，否则 'before'。
+ */
+function computeAssocForLines(
+  lineOffsets: LineOffsetTree,
+  getLine: (i: number) => string,
+  pos: number
+): 'before' | 'after' {
+  const p = Math.max(0, pos);
+  if (p <= 0) return 'before';
+  const lineIdx = lineOffsets.findLineIndex(p);
+  const lineStart = lineOffsets.getOffset(lineIdx);
+  const lineEnd = lineStart + getLine(lineIdx).length;
+  // 行尾且该行非空（p 非行首）→ 光标位于行末字符之后，关联上一字符
+  return p === lineEnd && p !== lineStart ? 'after' : 'before';
+}
+
+/**
+ * 从历史 op 的 before 快照（兼容层三元组）推断 anchor/head（R4-B）：
+ * 历史 EditorOperation 未记录方向层字段，按「cursorPos 恒等于 head」的
+ * 主语义恢复——光标恰在选区一端时另一端即 anchor（反向选区：光标在 min
+ * 端 → anchor 是 max 端）；无选区时 anchor=head=cursor；中间态（光标不在
+ * 任一选区端）按 anchor=选区起点兜底。兼容层字段恢复行为不变（336 门禁），
+ * 方向层尽力恢复。
+ */
+function inferAnchorHead(
+  cursor: number,
+  selStart: number,
+  selEnd: number
+): { anchorPos: number; headPos: number } {
+  if (selStart === selEnd) return { anchorPos: cursor, headPos: cursor };
+  if (cursor === selEnd) return { anchorPos: selStart, headPos: selEnd };
+  if (cursor === selStart) return { anchorPos: selEnd, headPos: selStart };
+  return { anchorPos: selStart, headPos: cursor };
+}
+
+/**
  * 块级形态记忆（镜像 parser.ts 的 BlockKind）：缩进代码判定需要「上一非空白行」
  * 的形态上下文——段落打断 / 列表延续 / 表格优先都依赖它（computeLineOffsets
  * 02 §2.2 冲突点）。增量状态机没有 parser 的全局扫描上下文，因此把该判定
@@ -494,6 +553,19 @@ export interface EditorState {
   selectionStart: number;
   selectionEnd: number;
 
+  // —— R4-B 选区方向性（04 编辑深度扩展 §3.3 方案 1，对齐 CM6 SelectionRange）——
+  // anchorPos：选区锚点——Shift+方向键按下时固定的一端；纯移动（无选区）后
+  //   与 head 重合。外部 setSelection(start, end) 兼容路径下「无 anchor 时
+  //   start 即 anchor」（start 参数即锚点，end 参数即活动端）。
+  // headPos：活动端——光标所在端，恒等于 cursorPos（setSelection/moveHead/
+  //   applyChange 等所有落点路径均维持该不变量）。
+  // assoc：光标方向性（'before' 关联下一字符 / 'after' 关联上一字符）——
+  //   光标落在行尾时区分「行末字符之后」与「下一行行首之前」，
+  //   供 Bidi / 行边界导航使用（04 §1.2 B2）。
+  anchorPos: number;
+  headPos: number;
+  assoc: 'before' | 'after';
+
   undoStack: EditorOperation[];
   redoStack: EditorOperation[];
 
@@ -515,6 +587,15 @@ export interface EditorState {
   setText: (text: string) => void;
   setCursorPos: (pos: number) => void;
   setSelection: (start: number, end: number) => void;
+  /** R4-B：只移动选区活动端（head），锚点（anchor）保持不动——Shift+方向键
+   *  扩展语义的存储侧实现：选区区间 = [min(anchor,head), max(anchor,head)]，
+   *  方向由 anchor/head 相对位置判定，反向移动天然正确（不再依赖旧启发式
+   *  「selectionStart === cursorPos」）。 */
+  moveHead: (newHead: number) => void;
+  /** R4-B：Shift+方向键扩展——按 grapheme 边界计算新 head 并 moveHead
+   *  （anchor 不动）；已到边界时为空操作。dir 为视觉方向（'left' 向左/
+   *  'right' 向右），grapheme 粒度与 findPrev/NextGraphemeBoundary 一致。 */
+  extendSelectionByDirection: (dir: 'left' | 'right') => void;
   insertText: (inserted: string) => void;
   appendText: (text: string) => void;
   isComposing: boolean;
@@ -1233,6 +1314,26 @@ function normalizeSetStatePartial(
     out.streamOp = null;
     out.lastUserEditTime = 0;
   }
+  // —— R4-B：方向层默认补齐（外部直改兼容字段时同步 anchor/head/assoc）——
+  // 外部消费方 / 既有测试按旧三元组 setState（selectionchange 回写、
+  // 测试 resetStore 等）时方向层无信息 → 按「无 anchor 时 start 即 anchor、
+  // cursorPos 恒等于 head」的约定补默认：anchor = selectionStart、
+  // head = cursorPos。assoc 保守置 'before'（外部路径无文本上下文，精确
+  // 行尾判定由 store 方法负责——方法路径显式携带方向层字段，不落本分支）。
+  if (
+    ('selectionStart' in out || 'cursorPos' in out) &&
+    !('anchorPos' in out) &&
+    !('headPos' in out)
+  ) {
+    const selStart = 'selectionStart' in out
+      ? (out.selectionStart as number)
+      : (out.cursorPos as number);
+    out.anchorPos = selStart;
+    out.headPos = 'cursorPos' in out
+      ? (out.cursorPos as number)
+      : selStart;
+    if (!('assoc' in out)) out.assoc = 'before';
+  }
   return out;
 }
 
@@ -1264,6 +1365,10 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
   cursorPos: 0,
   selectionStart: 0,
   selectionEnd: 0,
+  // R4-B 方向层初始值：锚点 = 活动端 = 0（无选区），assoc 默认 'before'
+  anchorPos: 0,
+  headPos: 0,
+  assoc: 'before',
   isComposing: false,
   setIsComposing: (isComposing) => dispatchSet({ isComposing }),
 
@@ -1349,6 +1454,10 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
           cursorPos: 0,
           selectionStart: 0,
           selectionEnd: 0,
+          // 整文档重置：方向层一并复位（锚点 = 活动端 = 0，assoc 默认）
+          anchorPos: 0,
+          headPos: 0,
+          assoc: 'before',
           undoStack: [],
           redoStack: [],
         };
@@ -1408,6 +1517,10 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         cursorPos: 0,
         selectionStart: 0,
         selectionEnd: 0,
+        // 整文档重置：方向层一并复位（锚点 = 活动端 = 0，assoc 默认）
+        anchorPos: 0,
+        headPos: 0,
+        assoc: 'before',
         undoStack: [],
         redoStack: [],
       };
@@ -1421,6 +1534,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         cursorPos: bounded,
         selectionStart: bounded,
         selectionEnd: bounded,
+        // 纯移动：锚点 = 活动端 = 新位置（无选区；assoc 按行尾判定刷新）
+        anchorPos: bounded,
+        headPos: bounded,
+        assoc: computeAssocForLines(
+          state.lineOffsets,
+          (i) => state.getLine(i),
+          bounded
+        ),
       };
     }),
 
@@ -1428,10 +1549,72 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
     dispatchSet((state) => {
       const min = Math.max(0, Math.min(start, state.textLength));
       const max = Math.max(0, Math.min(end, state.textLength));
+      const cursorPos = Math.max(0, Math.min(end, state.textLength));
       return {
+        // —— 兼容层（336 门禁零回归）：归一化 min/max、cursorPos 恒等于 end ——
         selectionStart: Math.min(min, max),
         selectionEnd: Math.max(min, max),
-        cursorPos: Math.max(0, Math.min(end, state.textLength)),
+        cursorPos,
+        // —— R4-B 方向层：无 anchor 时 start 即 anchor、head = end ——
+        // 与兼容层解耦存储：start > end（反向选区）时 anchor 保留在 start，
+        // 归一化字段仍为 [end, start]，Shift 扩展方向性不再丢失。
+        anchorPos: Math.max(0, Math.min(start, state.textLength)),
+        headPos: cursorPos,
+        assoc: computeAssocForLines(
+          state.lineOffsets,
+          (i) => state.getLine(i),
+          cursorPos
+        ),
+      };
+    }),
+
+  // —— R4-B 选区方向性核心（04 §3.3 方案 1）——
+  // Shift+方向键扩展 = 只动 head 不动 anchor；反向移动时 head 越过 anchor，
+  // 选区区间翻转但方向保持——「Shift+Left 后 Shift+Right 第二次方向正确」。
+  // 纯方向键（无 Shift）移动 = setSelection(newPos, newPos)（anchor=head=新位置），
+  // 由调用方（HiddenInput R4-E 接线）走 setCursorPos / setSelection 即可。
+  moveHead: (newHead) =>
+    dispatchSet((state) => {
+      const head = Math.max(0, Math.min(newHead, state.textLength));
+      const anchor = Math.max(0, Math.min(state.anchorPos, state.textLength));
+      return {
+        anchorPos: anchor,
+        headPos: head,
+        // 兼容层视图：选区区间恒为 [min(anchor,head), max(anchor,head)]
+        selectionStart: Math.min(anchor, head),
+        selectionEnd: Math.max(anchor, head),
+        cursorPos: head,
+        assoc: computeAssocForLines(
+          state.lineOffsets,
+          (i) => state.getLine(i),
+          head
+        ),
+      };
+    }),
+
+  extendSelectionByDirection: (dir) =>
+    dispatchSet((state) => {
+      // 以当前 head 为基点按 grapheme 边界移动（与既有方向键粒度一致）；
+      // 已到文档边界时 next === head，返回原状态（幂等空操作）。
+      const text = state.getText();
+      const head = Math.max(0, Math.min(state.headPos, state.textLength));
+      const next =
+        dir === 'left'
+          ? findPrevGraphemeBoundary(text, head)
+          : findNextGraphemeBoundary(text, head);
+      if (next === head) return state;
+      const anchor = Math.max(0, Math.min(state.anchorPos, state.textLength));
+      return {
+        anchorPos: anchor,
+        headPos: next,
+        selectionStart: Math.min(anchor, next),
+        selectionEnd: Math.max(anchor, next),
+        cursorPos: next,
+        assoc: computeAssocForLines(
+          state.lineOffsets,
+          (i) => state.getLine(i),
+          next
+        ),
       };
     }),
 
@@ -1560,6 +1743,16 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         cursorPos: newPos,
         selectionStart: newPos,
         selectionEnd: newPos,
+        // R4-B：事务后选区收敛——锚点 = 活动端 = 落点。覆盖输入 / 删除选区
+        // 后光标落点语义统一：head/anchor 任意顺序的选区（反向选区同样）在
+        // 编辑后坍缩为单点，后续 Shift 扩展从落点重新建立方向。
+        anchorPos: newPos,
+        headPos: newPos,
+        assoc: computeAssocForLines(
+          res.lineOffsets,
+          (i) => res.mainLines[i],
+          newPos
+        ),
         undoStack: newUndoStack,
         redoStack: [],
       };
@@ -1853,6 +2046,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
           : streamOp.shiftedLen,
       };
 
+      // —— R4-B：方向层平移 + assoc 刷新 ——
+      // 追加后光标最终位置（普通路径随追加推进 / 前移路径不动）；
+      // anchor/head 与兼容层选区同规则平移（≥ 追加点 +delta）。
+      const finalCursorPos = shiftAnchorToCursor ? s.cursorPos : shiftGE(s.cursorPos);
+      // 追加后的逻辑行访问器（主数组 + 新尾段，boundary 见上：主数组末行索引）
+      const appendLineAt: LineAccessor = (i) =>
+        i < boundary ? mainLines[i] : newTail[i - boundary];
+
       return {
         mainLines,
         streamTail: newTail,
@@ -1863,9 +2064,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         lineOffsets: newOffsets,
         textLength,
         streamOp: nextStreamOp,
-        cursorPos: shiftAnchorToCursor ? s.cursorPos : shiftGE(s.cursorPos),
+        cursorPos: finalCursorPos,
         selectionStart: shiftAnchorToCursor ? shiftGT(s.selectionStart) : shiftGE(s.selectionStart),
         selectionEnd: shiftAnchorToCursor ? shiftGT(s.selectionEnd) : shiftGE(s.selectionEnd),
+        // 方向层与兼容层选区同步平移；assoc 按新行布局判定（光标通常在
+        // 行尾/全文末尾 → 'after'，关联上一字符）
+        anchorPos: shiftAnchorToCursor ? shiftGT(s.anchorPos) : shiftGE(s.anchorPos),
+        headPos: shiftAnchorToCursor ? shiftGT(s.headPos) : shiftGE(s.headPos),
+        assoc: computeAssocForLines(newOffsets, appendLineAt, finalCursorPos),
       };
     }),
 
@@ -1979,6 +2185,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
 
       // 光标/选区回退到组内最早 op 的 before（组前状态的光标快照）
       const firstOp = stack[groupStart];
+      // R4-B：从 before 快照（兼容层三元组）推断方向层 anchor/head——
+      // 光标恰在选区一端时另一端即 anchor（反向选区方向随撤销精确恢复）；
+      // assoc 按撤销后文本（cur 已链式重建）的行布局判定。
+      const undoSel = inferAnchorHead(
+        firstOp.cursorBefore,
+        firstOp.selectionStartBefore,
+        firstOp.selectionEndBefore
+      );
 
       return {
         mainLines: cur.mainLines,
@@ -2001,6 +2215,13 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         cursorPos: firstOp.cursorBefore,
         selectionStart: firstOp.selectionStartBefore,
         selectionEnd: firstOp.selectionEndBefore,
+        anchorPos: undoSel.anchorPos,
+        headPos: undoSel.headPos,
+        assoc: computeAssocForLines(
+          cur.lineOffsets,
+          (i) => cur.mainLines[i],
+          undoSel.headPos
+        ),
         undoStack: stack.slice(0, groupStart),
         redoStack: newRedo,
       };
@@ -2041,6 +2262,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         meta: op.meta,
       };
 
+      // R4-B：从被重做 op 的 before 快照推断方向层（anchor/head），
+      // assoc 按重做后文本（base + res）的行布局判定。
+      const redoSel = inferAnchorHead(
+        op.cursorBefore,
+        op.selectionStartBefore,
+        op.selectionEndBefore
+      );
+
       return {
         ...res,
         // 操作触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
@@ -2058,6 +2287,13 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         cursorPos: op.cursorBefore,
         selectionStart: op.selectionStartBefore,
         selectionEnd: op.selectionEndBefore,
+        anchorPos: redoSel.anchorPos,
+        headPos: redoSel.headPos,
+        assoc: computeAssocForLines(
+          res.lineOffsets,
+          (i) => res.mainLines[i],
+          redoSel.headPos
+        ),
         redoStack: base.redoStack.slice(0, -1),
         undoStack: [...base.undoStack, inverseOp],
       };

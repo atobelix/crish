@@ -18,9 +18,47 @@ import {
   clearCell,
   setCellContent,
 } from '../core/TableOperations';
+import { buildPasteText } from '../core/htmlToMarkdown';
 
 interface HiddenInputProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+/**
+ * 定位 pos 所在行的文本区间 [start, end)（start 为行首偏移、
+ * end 为换行符偏移/文档末尾——不含换行符本身）。
+ * 与 Enter 列表续写分支的既有行区间扫描同款语义，抽为纯函数便于单测。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function lineRangeAt(
+  text: string,
+  pos: number
+): { start: number; end: number } {
+  let start = 0;
+  for (let i = pos - 1; i >= 0; i--) {
+    if (text[i] === '\n') {
+      start = i + 1;
+      break;
+    }
+  }
+  let end = text.length;
+  for (let i = pos; i < text.length; i++) {
+    if (text[i] === '\n') {
+      end = i;
+      break;
+    }
+  }
+  return { start, end };
+}
+
+/**
+ * 无选区复制整行内容（04 §5.2 C5 linewise copy / CM6 copiedRange 对齐）：
+ * 整行文本 + 换行符（VS Code 整行复制语义：粘贴到行尾自动换行）。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function linewiseCopyContent(text: string, pos: number): string {
+  const { start, end } = lineRangeAt(text, pos);
+  return text.substring(start, end) + '\n';
 }
 
 // 组合结束后的提交延迟窗口（对齐 04 §2.3 方案 2 / CM6 input.ts:843-847
@@ -370,6 +408,18 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
       e.preventDefault();
       useEditorStore.getState().redo();
+      return;
+    }
+
+    // Ctrl+C 无选区复制整行（R4-E，04 §5.2 C5 linewise copy）：
+    // 引擎选区 collapsed 时浏览器默认复制 textarea（value 恒为空）无
+    // 内容可复制——这里直接取当前行文本 + 换行写入系统剪贴板；
+    // 有选区时不拦截，走 MarkdownEngine 容器 onCopy 的既有源码复制。
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      if (selectionStart === selectionEnd) {
+        e.preventDefault();
+        writeClipboardText(linewiseCopyContent(text, cursorPos));
+      }
       return;
     }
 
@@ -737,6 +787,61 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     }
   };
 
+  /**
+   * 粘贴处理（R4-E，04 §5 剪贴板语义；原生监听——与 input/beforeinput
+   * 同风格，React 19 合成事件对部分剪贴板字段转发不可靠）：
+   * - 读 clipboardData：text/plain 优先，含 \t 结构 → markdown 表格；
+   *   纯 URL → 选区包 [text](url)（无选区插原文）；HTML → 粗粒度转换；
+   * - 统一走 store.applyChange 一次事务 = 一个 undo 步（04 §5.3 方案 4）；
+   * - 组合缓冲期不干预（合成中的粘贴由浏览器经 value 缓冲处理）。
+   */
+  const handlePaste = (native: ClipboardEvent) => {
+    if (isComposingRef.current || activeCompositionGroup.current) return;
+    const cd = native.clipboardData;
+    if (!cd) return;
+    const s = useEditorStore.getState();
+    const plain = cd.getData('text/plain') ?? '';
+    const html = cd.getData('text/html') ?? '';
+    const selectionText = s.getText().substring(
+      s.selectionStart,
+      s.selectionEnd
+    );
+    const transformed = buildPasteText(plain, html, selectionText);
+    // 无内容：放行浏览器默认（空粘贴无操作）
+    if (transformed == null) return;
+    native.preventDefault();
+    s.applyChange(s.selectionStart, s.selectionEnd, transformed, {
+      merge: 'none',
+    });
+    const ta = textareaRef.current;
+    if (ta) ta.value = '';
+  };
+
+  /**
+   * 写入系统剪贴板：优先 navigator.clipboard（异步，权限拒绝/不可用
+   * 时回退）；兜底走隐藏 textarea 瞬时选中 + execCommand('copy')
+   * （非安全上下文/旧浏览器的传统通道）。jsdom 无 execCommand 能力
+   * 时静默放弃（测试经 mock 断言）。
+   */
+  const execCommandCopy = (content: string) => {
+    const ta = textareaRef.current;
+    if (!ta || typeof document.execCommand !== 'function') return;
+    const prev = ta.value;
+    ta.value = content;
+    ta.select();
+    document.execCommand('copy');
+    ta.value = prev;
+  };
+
+  const writeClipboardText = (content: string) => {
+    const attempt = () => execCommandCopy(content);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(content).catch(attempt);
+    } else {
+      attempt();
+    }
+  };
+
   const handleInput = (e: Event) => {
     // 组合缓冲期（合成中 + end 后 flush 延迟窗口）不直接提交：统一由
     // pending flush 以 value 为准提交，防止中途 flush/候选替换丢字、
@@ -763,9 +868,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     if (!ta) return;
     ta.addEventListener('input', handleInput);
     ta.addEventListener('beforeinput', handleBeforeInput);
+    ta.addEventListener('paste', handlePaste);
     return () => {
       ta.removeEventListener('input', handleInput);
       ta.removeEventListener('beforeinput', handleBeforeInput);
+      ta.removeEventListener('paste', handlePaste);
     };
     // mounted 布尔：coords 在 null ↔ 非 null 间切换（textarea 卸载/重挂）
     // 时重注册；coords 持续更新（光标移动）不重注册
