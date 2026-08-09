@@ -13,6 +13,9 @@ import { useEditorStore, type EditorState, type EditorStore } from '../core/Edit
 import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
+// R5-D 装饰层统一（06 §2）：active/选区/搜索统一进 DecorationSet——
+// 行级 query 派生 activeState，不再经 props 链逐层传裸选区数据
+import { DecorationSet, applyCursorSelectionDecorations } from '../core/DecorationSet';
 
 import { type CodeState } from '../core/parser';
 
@@ -51,6 +54,14 @@ const DIRECT_STREAM_FORBIDDEN_CHARS = new Set(
 // 展示的文本将多于渲染折叠视图（flush 后视觉跳变）。保守起见直刷绝不越过。
 const DIRECT_STREAM_MAX_LINE_CHARS = 5_000;
 
+// ── R5-D 搜索高亮（05 高频项预留）：宿主搜索区间（全局字符偏移对）──
+interface SearchRange {
+  from: number;
+  to: number;
+}
+// 无搜索区间共享引用（不可变约定：只在 set 时整体替换，绝不就地修改）
+const EMPTY_SEARCH_RANGES: readonly SearchRange[] = [];
+
 /**
  * 纯文本行保守判定（C3 限定版：直刷前置条件之一）：
  * - 非空行（空行/纯空白行渲染为 <br/> 结构，无 text token 可直写）；
@@ -87,6 +98,12 @@ export interface MarkdownEngineHandle {
   streamEnd: () => void;
   /** 主动 flush（宿主可提前提交直刷累积；无累积时为空操作，幂等）。 */
   flushStream: () => void;
+  /** 搜索高亮接入点（R5-D，05 高频项）：向统一装饰层添加一个搜索命中
+   *  区间 [from, to)（全局字符偏移）——命中行打 is-search-line class，
+   *  token 级高亮渲染属后续增强（宿主搜索接入本轮为 API + 行级标记）。 */
+  addSearchRange: (from: number, to: number) => void;
+  /** 清空全部搜索高亮（宿主搜索词清空/切换场景）。幂等。 */
+  clearSearch: () => void;
 }
 
 // 行渲染单元（09 §4 C1 滚动契约）：
@@ -104,7 +121,13 @@ const LineItem = React.memo(({
   isCode,
   rowRef,
   streamingDirty,
-  store
+  store,
+  // R5-D：共享装饰集 + 版本号——active/选区/搜索统一数据源（LineItem
+  // 不再订阅 cursorPos/selection*，改经装饰集行级 query 派生；光标/
+  // 选区/搜索变化 → 版本递增 → 本行查询刷新；无变化帧（滚动/内容
+  // 未变）props 全等 → memo 命中，零重渲染）
+  decorations,
+  decorationVersion,
 }: {
   index: number;
   lineText: string;
@@ -114,6 +137,9 @@ const LineItem = React.memo(({
   // R5：行渲染单元的 store 绑定（内容/activeState 经实例读取；多实例
   // 场景缺省传全局单例——LineItem 是模块级 memo 组件，store 引用稳定）。
   store: EditorStore;
+  // R5-D：装饰集与版本号（由引擎维护并注入，见 MarkdownEngine 接线）
+  decorations: DecorationSet;
+  decorationVersion: number;
   // C3 dirty 协议：直刷期间本行 props 行文本滞后于 DOM（直刷文本尚未
   // 提交 store）。为 true 时本行进入冻结渲染（见 frozenContentRef），
   // 并打上 data-streaming-dirty 标记（调试/巡检可见）。
@@ -127,33 +153,36 @@ const LineItem = React.memo(({
   // flush 后 dirty 清除 → 按最新 lineText 全新渲染，DOM 与 store 收敛。
   const frozenContentRef = useRef<React.ReactElement | null>(null);
 
-  const activeStateStr = store(state => {
-    const { cursorPos, selectionStart, selectionEnd } = state;
-    const lineStart = offset;
-    const lineEnd = offset + lineText.length;
+  // R5-D：行级装饰查询（行范围 = 本行字符区间 [offset, offset + 行长)；
+  // 闭区间相交谓词在 DecorationSet.query 内实现——旧 selector 的
+  // active/选区判定逐分支等价迁移，行为零变化）
+  const lineDecorations = React.useMemo(
+    () => decorations.query(offset, offset + lineText.length),
+    // decorationVersion 是装饰集内容变更的语义信号（decorations 为可变
+    // 结构，行内变更不可见，必须经版本号驱动重查；与下方批量测量 effect
+    // 的语义依赖注释同款）
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [decorations, decorationVersion, offset, lineText.length]);
 
-    const hasRange = selectionStart !== selectionEnd;
-    const s = Math.min(selectionStart, selectionEnd);
-    const e = Math.max(selectionStart, selectionEnd);
-
-    const isLineActive = hasRange
-      ? (lineStart < e && lineEnd >= s)
-      : (cursorPos >= lineStart && cursorPos <= lineEnd);
-
-    if (!isLineActive) return null;
-
-    return `${cursorPos},${hasRange ? s : ''},${hasRange ? e : ''}`;
-  });
-
+  // R5-D：activeState 派生（props 结构兼容旧 selector 输出）：
+  // - selection 装饰 → { cursor, selStart, selEnd }——cursor 取选区
+  //   末端（占位：有选区分支的消费方 InlineRenderer / checkIsActive
+  //   不读 cursor，与旧语义一致，值仅保持结构完整）；
+  // - active 装饰（选区折叠的光标）→ { cursor }（selStart/selEnd 缺省）；
+  // - 无装饰 → null（非活动行）。
   const activeState = React.useMemo(() => {
-    if (!activeStateStr) return null;
-    const [cursorStr, selStartStr, selEndStr] = activeStateStr.split(',');
-    return {
-      cursor: Number(cursorStr),
-      selStart: selStartStr ? Number(selStartStr) : undefined,
-      selEnd: selEndStr ? Number(selEndStr) : undefined,
-    };
-  }, [activeStateStr]);
+    const sel = lineDecorations.find((d) => d.kind === 'selection');
+    if (sel) {
+      return { cursor: sel.to, selStart: sel.from, selEnd: sel.to };
+    }
+    const active = lineDecorations.find((d) => d.kind === 'active');
+    return active ? { cursor: active.from } : null;
+  }, [lineDecorations]);
+
+  // 搜索高亮（05 高频项预留）：命中 search 装饰的行打 is-search-line
+  // class——宿主可经 CSS 定制行级标记；token 级高亮渲染属 R5-C 渲染域，
+  // 本轮为「API + 简单高亮 class」接入点
+  const hasSearchDecoration = lineDecorations.some((d) => d.kind === 'search');
 
   const tableId = store(state => {
     if (!lineText.trim().startsWith('|')) return undefined;
@@ -196,7 +225,7 @@ const LineItem = React.memo(({
       data-line-length={lineText.length}
       data-streaming-dirty={streamingDirty ? 'true' : undefined}
       ref={rowRef}
-      className={`virtual-row ${activeState ? 'is-active-line' : ''}`.trim()}
+      className={`virtual-row ${activeState ? 'is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}`.trim()}
       style={{
         position: 'absolute',
         left: 0,
@@ -244,6 +273,42 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   // 选择器每次 set 都执行（O(1)，纯 length 读取），返回值按值比较。
   const lineCount = engineStore(state => state.getLineCount());
   const setCursorPos = engineStore(state => state.setCursorPos);
+
+  // ── R5-D 装饰层统一（06 §2）：active/选区/搜索统一进 DecorationSet ──
+  // 共享装饰集实例：行边界经权威 LineOffsetTree 解析（store 实例切换时
+  // 随 useMemo 重建——多实例场景装饰与内容同实例隔离）。装饰集为可变
+  // 结构，本组件是唯一维护方（下述派生 effect），LineItem/SelectionHighlight
+  // 只经 query/getKind 消费。
+  const decorations = React.useMemo(
+    () =>
+      new DecorationSet({
+        findLineIndex: (pos) => engineStore.getState().lineOffsets.findLineIndex(pos),
+      }),
+    [engineStore]
+  );
+  // 版本号：光标/选区/搜索任一变化递增，驱动行级查询刷新（LineItem /
+  // SelectionHighlight 以 props 消费；无变化帧 props 全等 → memo 命中）
+  const [decorationVersion, setDecorationVersion] = React.useState(0);
+  // 宿主搜索区间（addSearchRange 接入）：与光标/选区同一维护链路
+  const [searchRanges, setSearchRanges] = React.useState<readonly SearchRange[]>(
+    EMPTY_SEARCH_RANGES
+  );
+  // 光标/选区订阅：触发信号（LineItem 不再各自订阅——消费方改经
+  // decorationVersion 驱动，派生收敛到本组件单一维护点）
+  const cursorPos = engineStore(state => state.cursorPos);
+  const selectionStart = engineStore(state => state.selectionStart);
+  const selectionEnd = engineStore(state => state.selectionEnd);
+
+  useLayoutEffect(() => {
+    // 增量维护：remove 只清受影响行 bucket、add 只写新区间跨行 bucket
+    // ——光标/选区/搜索变化 O(受影响行)，不触碰全文（06 §2）。
+    // 行结构变化不直接触发本 effect：store 全编辑路径必伴随光标/选区
+    // 落点变化；append 例外（只追加文末，既有装饰字符区间保持有效）。
+    applyCursorSelectionDecorations(decorations, cursorPos, selectionStart, selectionEnd);
+    decorations.remove('search');
+    for (const r of searchRanges) decorations.add(r.from, r.to, 'search');
+    setDecorationVersion(v => v + 1);
+  }, [decorations, cursorPos, selectionStart, selectionEnd, searchRanges]);
 
   // ── 行高模型（R2-B 定位层）：HeightOracle 预测 + HeightMap 回填（01 问题 1/8，09 §4 C2）──
   const rowRefs = useRef(new Map<number, HTMLElement>());
@@ -400,6 +465,16 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     if (s.streamTail.length > 0 || s.streamOp) s.flushStreamTail();
   }, [flushStreamInternal]);
 
+  // 搜索高亮接入（R5-D）：宿主经 handle.addSearchRange/clearSearch 维护
+  // searchRanges 状态 → 派生 effect 增量重建 search 装饰 → 版本递增驱动
+  // 行级 is-search-line 刷新（见上方装饰维护 effect）
+  const addSearchRange = useCallback((from: number, to: number) => {
+    setSearchRanges((rs) => [...rs, { from, to }]);
+  }, []);
+  const clearSearch = useCallback(() => {
+    setSearchRanges(EMPTY_SEARCH_RANGES);
+  }, []);
+
   // 命令式接口暴露（R5 宿主：engineRef.current.streamAppend / streamEnd）
   useImperativeHandle(
     ref,
@@ -407,8 +482,10 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       streamAppend,
       streamEnd,
       flushStream: flushStreamInternal,
+      addSearchRange,
+      clearSearch,
     }),
-    [streamAppend, streamEnd, flushStreamInternal]
+    [streamAppend, streamEnd, flushStreamInternal, addSearchRange, clearSearch]
   );
 
   // 用户操作监听（C3 flush 时机 2）：keydown/pointerdown/mousedown/
@@ -877,6 +954,8 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
                   streamingDirty={dirtyRefs.current.has(index)}
                   rowRef={registerRowRef}
                   store={engineStore}
+                  decorations={decorations}
+                  decorationVersion={decorationVersion}
                 />
               );
             });
@@ -907,7 +986,13 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
               store={engineStore}
             />
             <HiddenInput containerRef={parentRef} store={engineStore} />
-            <SelectionHighlight store={engineStore} />
+            {/* R5-D：选区高亮消费统一装饰集（selection 装饰 + 版本号），
+                不再直读 store 选区字段 */}
+            <SelectionHighlight
+              store={engineStore}
+              decorations={decorations}
+              decorationVersion={decorationVersion}
+            />
           </>
         )}
       </div>

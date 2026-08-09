@@ -1,22 +1,8 @@
 import * as React from 'react';
 import type { InlineNode } from '../core/ast';
 import { type ActiveState } from '../core/measure';
-import katex from 'katex';
-
-function renderMathToHtml(
-  formula: string,
-  displayMode: boolean = false
-): string {
-  if (!formula) return '';
-  try {
-    return katex.renderToString(formula, {
-      throwOnError: false,
-      displayMode,
-    });
-  } catch {
-    return formula;
-  }
-}
+// R5-C：数学渲染统一走注入点（renderTheme 模块级；KaTeX 默认，可替换）
+import { renderMathToHtml } from '../core/renderTheme';
 
 import { useTableStore } from '../core/TableStore';
 import { useEditorStore } from '../core/EditorStore';

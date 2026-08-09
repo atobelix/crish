@@ -1,0 +1,338 @@
+{
+  "components/agent-card/AgentCard.tsx": [
+    {
+      "line": 13,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/agent-card/agentCardUtils.ts": [
+    {
+      "line": 1,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/agent-card/AgentMessageRow.tsx": [
+    {
+      "line": 2,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/agent-card/AgentStatusChip.tsx": [
+    {
+      "line": 4,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/agent-card/AgentTeamBoard.tsx": [
+    {
+      "line": 9,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/agent-card/InlineAgentPanel.tsx": [
+    {
+      "line": 14,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/binary-tree/topBarDragLib.ts": [
+    {
+      "line": 15,
+      "importSpec": "../../store/layout-tree/types",
+      "target": "store/layout-tree/types"
+    }
+  ],
+  "components/binary-tree/topBarDragTypes.ts": [
+    {
+      "line": 5,
+      "importSpec": "../../store/layout-tree",
+      "target": "store/layout-tree"
+    }
+  ],
+  "components/binary-tree/TreeLeafPanel.tsx": [
+    {
+      "line": 14,
+      "importSpec": "../../store/layout-tree",
+      "target": "store/layout-tree"
+    }
+  ],
+  "components/binary-tree/TreeResizeSash.tsx": [
+    {
+      "line": 24,
+      "importSpec": "../../store/layout-tree",
+      "target": "store/layout-tree"
+    }
+  ],
+  "components/card-panel/CardPanelHeader.tsx": [
+    {
+      "line": 25,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/card-panel/CardPanelLayout.tsx": [
+    {
+      "line": 7,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/card-panel/useCardPanelTabs.ts": [
+    {
+      "line": 8,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/CardPanel.tsx": [
+    {
+      "line": 14,
+      "importSpec": "../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-card/ChatComposerWrapper.tsx": [
+    {
+      "line": 6,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-card/ChatHeaderControls.tsx": [
+    {
+      "line": 14,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-card/ChatScrollAnchor.ts": [
+    {
+      "line": 2,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-card/useChatApprovalHandlers.ts": [
+    {
+      "line": 2,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-card/useChatEmptyKind.ts": [
+    {
+      "line": 2,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-message/MessageActions.tsx": [
+    {
+      "line": 2,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-message/MessageContent.tsx": [
+    {
+      "line": 4,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-message-list/ChatMessageList.tsx": [
+    {
+      "line": 3,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-message-list/useScrollAnchor.ts": [
+    {
+      "line": 7,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-message-row/ChatAssistantMessageRow.tsx": [
+    {
+      "line": 3,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-message-row/chatMessageRowUtils.ts": [
+    {
+      "line": 4,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-message-row/ChatUserMessageRow.tsx": [
+    {
+      "line": 4,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-message-row/MessageActionsBar.tsx": [
+    {
+      "line": 5,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-tool-call/chatToolCallUtils.ts": [
+    {
+      "line": 1,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-tool-call/CompactToolRow.tsx": [
+    {
+      "line": 3,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-tool-call/ToolCallDiffPreview.tsx": [
+    {
+      "line": 3,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-tool-call/ToolCallHeader.tsx": [
+    {
+      "line": 12,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/chat-tool-call/ToolCallOutput.tsx": [
+    {
+      "line": 3,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/diff/ChangeOverviewCard.tsx": [
+    {
+      "line": 10,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/overview/ProgressSection.tsx": [
+    {
+      "line": 7,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/GeneralSection.tsx": [
+    {
+      "line": 2,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/PinnedSection.tsx": [
+    {
+      "line": 2,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/ProjectsSection.tsx": [
+    {
+      "line": 2,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/sessionListTypes.ts": [
+    {
+      "line": 2,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/sessionListUtils.ts": [
+    {
+      "line": 1,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/SessionRow.tsx": [
+    {
+      "line": 8,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/useSessionGrouping.ts": [
+    {
+      "line": 2,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/useSessionListDrag.ts": [
+    {
+      "line": 3,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/useSessionSearch.ts": [
+    {
+      "line": 2,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/useSidebarSessionList.tsx": [
+    {
+      "line": 8,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/useWindowedList.ts": [
+    {
+      "line": 2,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/sidebar/session-list/WindowedSessionUl.tsx": [
+    {
+      "line": 2,
+      "importSpec": "../../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/workspace/WorkspaceCanvas.tsx": [
+    {
+      "line": 4,
+      "importSpec": "../../store/layoutStore",
+      "target": "store/layoutStore"
+    }
+  ],
+  "components/workspace/workspaceLayoutLib.ts": [
+    {
+      "line": 12,
+      "importSpec": "../../store/workspaceActions",
+      "target": "store/workspaceActions"
+    }
+  ]
+}
