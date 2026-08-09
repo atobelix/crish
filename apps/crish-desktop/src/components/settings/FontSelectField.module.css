@@ -1,0 +1,239 @@
+.settingsSelect {
+  position: relative;
+  min-width: 120px;
+  max-width: 280px;
+}
+
+.settingsSelectTriggerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.settingsSelectTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-height-sm);
+  height: var(--control-height-sm);
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--tint-hover);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: none;
+  outline: none;
+  transition: background var(--transition-micro), border-color var(--transition-micro);
+}
+
+.settingsSelectTrigger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--border-color) 96%, var(--text-primary) 4%);
+  background: var(--tint-hover);
+}
+
+.settingsSelectTrigger:active:not(:disabled),
+.settingsSelectTrigger:focus,
+.settingsSelectTrigger:focus-visible,
+.settingsSelectTrigger[aria-expanded='true'],
+.settingsSelect.isOpen .settingsSelectTrigger {
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  background: var(--tint-hover);
+  box-shadow: var(--focus-ring);
+}
+
+.settingsSelectTrigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settingsSelectValue {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsSelectChev {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-micro);
+  opacity: 0.7;
+}
+
+.settingsSelect.isOpen .settingsSelectChev {
+  transform: rotate(180deg);
+}
+
+.settingsSelectIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.settingsSelectIconBtn:hover:not(:disabled) {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.settingsSelectIconBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.settingsSelectMenu,
+.settingsSelectMenuPortal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-lg);
+  padding: 4px 1px 4px 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  z-index: var(--z-settings-tooltip);
+}
+
+.settingsSelectScroll {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.settingsSelectScroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.settingsSelectScroll::-webkit-scrollbar-thumb {
+  background: var(--tint-scrollbar-thumb);
+  border-radius: var(--radius-xs);
+}
+
+.settingsSelectScroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settingsSelectGroup {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  padding: 8px 10px 4px;
+  user-select: none;
+}
+
+.settingsSelectItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  transition: background var(--transition-micro);
+}
+
+.settingsSelectItem:hover {
+  background: var(--bg-hover);
+}
+
+.settingsSelectItem.isActive {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.settingsSelectItem.isActive:hover {
+  background: var(--bg-active);
+}
+
+.settingsSelectItemLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsSelectItemHint {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.settingsSelectCheck {
+  flex-shrink: 0;
+  color: var(--accent-green);
+}
+
+.settingsSelectEmpty {
+  padding: 12px 10px;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.settingsSelectFooter {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1_5);
+}
+
+.settingsSelectCustom {
+  display: flex;
+  gap: var(--space-1_5);
+  padding: 0 2px;
+}
+
+.settingsSelectCustomInput {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0 8px;
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: none;
+  transition: border-color var(--transition-micro);
+}
+
+.settingsSelectCustomInput:focus {
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  outline: none;
+  box-shadow: none;
+}
+.settingsSelectCheckIcon {
+  flex-shrink: 0;
+  color: var(--accent-green);
+}
+

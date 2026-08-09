@@ -15,7 +15,7 @@ import {
   toLocalChoice,
   uiFontOptions,
 } from '../../api/fontStore';
-import { SettingsSelect, type SettingsSelectOption } from './SettingsSelect';
+import { FontSelectField, type FontSelectOption } from './FontSelectField';
 import { SettingsRow } from './SettingsUI';
 import { Button, Tooltip } from '../ui';
 import styles from './FontSettingsSection.module.css';
@@ -117,14 +117,14 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
     }
   }, [onShowToast]);
 
-  const uiOptions: SettingsSelectOption[] = useMemo(() => {
-    const base: SettingsSelectOption[] = uiFontOptions().map((o) => ({
+  const uiOptions: FontSelectOption[] = useMemo(() => {
+    const base: FontSelectOption[] = uiFontOptions().map((o) => ({
       value: o.id,
       label: o.label,
       ...(o.previewFamily !== undefined && { previewFamily: o.previewFamily }),
       ...(o.kind === 'embedded' ? { hint: '内嵌' } : o.kind === 'auto' ? { hint: platformLabel() } : {}),
     }));
-    const locals: SettingsSelectOption[] = localFonts.map((f) => ({
+    const locals: FontSelectOption[] = localFonts.map((f) => ({
       value: `local:${f}`,
       label: f,
       group: '本机',
@@ -144,14 +144,14 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
     return [...base, ...locals];
   }, [localFonts, prefs.uiFont]);
 
-  const monoOptions: SettingsSelectOption[] = useMemo(() => {
-    const base: SettingsSelectOption[] = monoFontOptions().map((o) => ({
+  const monoOptions: FontSelectOption[] = useMemo(() => {
+    const base: FontSelectOption[] = monoFontOptions().map((o) => ({
       value: o.id,
       label: o.label,
       ...(o.previewFamily !== undefined && { previewFamily: o.previewFamily }),
       ...(o.kind === 'embedded' ? { hint: '内嵌' } : o.kind === 'auto' ? { hint: platformLabel() } : {}),
     }));
-    const locals: SettingsSelectOption[] = localFonts.map((f) => ({
+    const locals: FontSelectOption[] = localFonts.map((f) => ({
       value: `local:${f}`,
       label: f,
       group: '本机',
@@ -316,7 +316,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
       <SettingsRow
         title="界面字体"
         control={
-          <SettingsSelect
+          <FontSelectField
             value={uiValue || 'auto'}
             options={uiOptions}
             disabled={busy}
@@ -352,7 +352,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
               />
               <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>连字</span>
             </label>
-            <SettingsSelect
+            <FontSelectField
               value={monoValue || 'auto'}
               options={monoOptions}
               disabled={busy}
