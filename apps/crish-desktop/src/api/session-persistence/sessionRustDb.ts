@@ -56,14 +56,21 @@ import {
   SESSION_ACTIVE_KEY,
   SESSION_AGENTS_PREFIX,
   SESSION_AGENTS_SAVE_CAP,
+  SESSION_AGENTS_OVER_CAP_META_PREFIX,
   SESSION_BODY_PREFIX,
   SESSION_FOLDER_KEY,
   SESSION_INDEX_KEY,
+  type AgentsTruncationRecord,
   type SessionIndexEntry,
 } from './sessionPersistenceTypes';
 import { invokeResult } from '../tauriInvoke';
 import { logInternalError } from '../userFacingErrors';
 import { hasQuotaTruncation } from './sessionQuota';
+import {
+  clearAgentsTruncation,
+  markAgentsTruncated,
+  readAgentsTruncation,
+} from './sessionAgentsTruncation';
 
 // ── Rust 侧类型（serde camelCase 反序列化产物） ─────────────────────────────
 
@@ -534,12 +541,30 @@ function lsSaveSessionAgents(sessionId: string, agents: SessionAgent[]): void {
   try {
     if (!agents || agents.length === 0) {
       localStorage.removeItem(SESSION_AGENTS_PREFIX + sessionId);
+      clearAgentsTruncation(sessionId);
       return;
     }
+    if (agents.length > SESSION_AGENTS_SAVE_CAP) {
+      // P18（AA-07）：LS 镜像受配额保护线约束，截断落盘时置位截断标志
+      // （记录 total/saved/cap 事实），不再静默丢弃——数据面可提示。
+      localStorage.setItem(
+        SESSION_AGENTS_PREFIX + sessionId,
+        JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
+      );
+      markAgentsTruncated(sessionId, {
+        cap: SESSION_AGENTS_SAVE_CAP,
+        total: agents.length,
+        saved: SESSION_AGENTS_SAVE_CAP,
+        at: Date.now(),
+      });
+      return;
+    }
+    // 未超上限：全量落盘并清除历史截断标志（恢复策略，同 P1-F3 quota 口径）
     localStorage.setItem(
       SESSION_AGENTS_PREFIX + sessionId,
-      JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
+      JSON.stringify(agents)
     );
+    clearAgentsTruncation(sessionId);
   } catch {
     /* quota */
   }
@@ -731,6 +756,18 @@ async function saveSessionBody(
  */
 async function loadSessionAgents(sessionId: string): Promise<SessionAgent[]> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return [];
+  // P18（AA-07）：LS 镜像截断标志 → 数据面日志留痕（与 P1-F3 quota 截断同款
+  // 暴露口径）。标志存在意味着某次 LS 镜像写入被配额保护线截断（saved < total），
+  // 回退 LS 展示时数据不完整；SQLite 主路径为全量保存，不属于永久丢失。
+  const trunc = readAgentsTruncation(sessionId);
+  if (trunc) {
+    logInternalError('ls-agents-truncated', {
+      sessionId,
+      cap: trunc.cap,
+      total: trunc.total,
+      saved: trunc.saved,
+    });
+  }
   const res = await invokeResult<RustSessionAgent[]>('load_session_agents', {
     sessionId,
   });
@@ -742,6 +779,11 @@ async function loadSessionAgents(sessionId: string): Promise<SessionAgent[]> {
 /**
  * 保存会话下的协作子 agent。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 agents。
+ *
+ * P18（AA-07）语义变更：SQLite 主路径全量保存，不再 slice——
+ * Rust 侧 save_session_agents 无数量上限，第 41 个起的子代理及其消息不再
+ * 静默丢失；SESSION_AGENTS_SAVE_CAP 退化为「软提示」阈值，超过时写
+ * session_meta 留痕（agents_over_cap:<id>），供数据面提示。
  */
 async function saveSessionAgents(
   sessionId: string,
@@ -763,14 +805,19 @@ async function saveSessionAgents(
     lsSaveSessionAgents(sessionId, []);
     return;
   }
-  const rustAgents = agents
-    .slice(0, SESSION_AGENTS_SAVE_CAP)
-    .map(toRustSessionAgent);
+  const rustAgents = agents.map(toRustSessionAgent);
   const res = await invokeResult<void>('save_session_agents', {
     sessionId,
     agents: rustAgents,
   });
-  if (res.status === 'ok') return;
+  if (res.status === 'ok') {
+    // 超过软上限 → session_meta 记录「子代理过多」事实（全量落盘，saved=total）。
+    // 记录用 upsert 覆盖保持最新，不做删除（留痕供审计与数据面提示）。
+    if (agents.length > SESSION_AGENTS_SAVE_CAP) {
+      await recordAgentsOverCap(sessionId, agents.length);
+    }
+    return;
+  }
   // P1-F1：降级可观测（agents 降级不涉及正文分叉，无需打降级戳）
   logInternalError('persist-degraded-ls', {
     command: 'save_session_agents',
@@ -778,6 +825,43 @@ async function saveSessionAgents(
     status: res.status,
   });
   lsSaveSessionAgents(sessionId, agents);
+}
+
+/**
+ * 写「子代理超过软上限」session_meta 留痕（P18）。
+ * record 携带 cap/total/saved/at 事实；invoke 失败时静默（meta 为提示性记录，
+ * 不阻塞保存主流程，日志由 setSessionMeta 降级路径兜底）。
+ */
+async function recordAgentsOverCap(
+  sessionId: string,
+  total: number
+): Promise<void> {
+  const record: AgentsTruncationRecord = {
+    cap: SESSION_AGENTS_SAVE_CAP,
+    total,
+    // SQLite 主路径全量落盘：saved = total（无丢失，仅超软提示阈值）
+    saved: total,
+    at: Date.now(),
+  };
+  await setSessionMeta(
+    SESSION_AGENTS_OVER_CAP_META_PREFIX + sessionId,
+    JSON.stringify(record)
+  );
+}
+
+/**
+ * 读取「子代理超过软上限」meta 留痕（P18 数据面暴露）。
+ * 返回 null = 从未超过软上限；UI 层据此展示「会话内子代理过多」提示。
+ */
+export async function readAgentsOverCapMeta(
+  sessionId: string
+): Promise<AgentsTruncationRecord | null> {
+  if (!sessionId?.trim() || isPendingDraft(sessionId)) return null;
+  const raw = await getSessionMeta(
+    SESSION_AGENTS_OVER_CAP_META_PREFIX + sessionId
+  );
+  if (!raw) return null;
+  return safeParseJson<AgentsTruncationRecord | null>(raw, null);
 }
 
 /**

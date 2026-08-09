@@ -807,4 +807,40 @@ mod tests {
         assert_eq!(by_id("a3").status, "failed", "spawn 行同样被归一");
         assert_eq!(by_id("a1").messages[0].id, "m1", "目标行 messages 原样");
     }
+
+    /// P18（AA-07）契约固化：Rust 侧 save_session_agents 无数量上限——
+    /// 前端 SQLite 主路径全量保存（截断只发生在 LS 配额保护线），第 41 个
+    /// 起的子代理及其消息不丢。防未来把前端 SESSION_AGENTS_SAVE_CAP 下沉
+    /// 到 Rust 造成静默截断回归。
+    #[test]
+    fn save_session_agents_does_not_truncate_over_cap() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&session_entry("s1")).unwrap();
+
+        // 45 条 > 前端软上限 40：Rust 侧应全量保存
+        let agents: Vec<SessionAgent> = (0..45)
+            .map(|i| {
+                agent(
+                    &format!("a{i}"),
+                    &format!("run-{i}"),
+                    "completed",
+                    "s1",
+                    Some(100 + i as i64),
+                    None,
+                    vec![msg(&format!("m{i}"), "user", i)],
+                )
+            })
+            .collect();
+        db.save_session_agents("s1", &agents).unwrap();
+
+        let rows = db.load_session_agents("s1").unwrap();
+        assert_eq!(rows.len(), 45, "第 41 个起的子代理不截断（全量保存）");
+        // load 排序为 started_at ASC, agent_id ASC（字符串序，非插入序），
+        // 按 id 定位断言：每条 agent 的消息随行原样
+        let by_id = |id: &str| rows.iter().find(|a| a.id == id).unwrap();
+        assert_eq!(by_id("a44").messages.len(), 1, "末位子代理消息不丢");
+        assert_eq!(by_id("a44").messages[0].id, "m44");
+        assert_eq!(by_id("a0").messages[0].id, "m0");
+        assert_eq!(by_id("a40").messages[0].id, "m40", "第 41 个起的子代理消息随行");
+    }
 }

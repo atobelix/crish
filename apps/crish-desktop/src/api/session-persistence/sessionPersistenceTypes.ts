@@ -11,8 +11,39 @@ export const SESSION_FOLDER_KEY = 'crish_folder_order_v1';
 /** 缺省文件夹（与 createSession / disk mirror 对齐） */
 export const DEFAULT_SESSION_FOLDER = '常规会话';
 
-/** 协作 agent 落盘上限 */
+/**
+ * 协作 agent 落盘软上限（P18 修复后语义重定义）。
+ * - 该值不再对 SQLite 主路径生效：save_session_agents 全量保存（Rust 侧无数量
+ *   上限），第 41 个起的子代理不再静默丢失；
+ * - 该值仍是 localStorage 配额保护线（localStorage 体积物理受限，镜像截断时
+ *   置位截断标志留痕，见 sessionAgentsTruncation.ts）与「软提示」阈值
+ *   （超过后写 session_meta 记录 agents_over_cap:<id>，供数据面提示）。
+ */
 export const SESSION_AGENTS_SAVE_CAP = 40;
+
+/** LS 侧 agents 截断标志 key 前缀（值 = AgentsTruncationRecord 的 JSON） */
+export const SESSION_AGENTS_TRUNCATED_PREFIX = 'crish_agents_truncated_';
+
+/** session_meta 中「会话子代理超过软上限」留痕 key 前缀（P18 数据面） */
+export const SESSION_AGENTS_OVER_CAP_META_PREFIX = 'agents_over_cap:';
+
+/**
+ * 子代理落盘截断/超限事实记录（P18 留痕，供数据面提示与审计）。
+ * - LS 截断标志（crish_agents_truncated_<id>）：LS 镜像被配额保护线截断时的
+ *   事实快照（saved < total）；
+ * - session_meta（agents_over_cap:<id>）：SQLite 主路径全量落盘但超过软上限
+ *   时的提示性记录（saved = total，无丢失）。
+ */
+export type AgentsTruncationRecord = {
+  /** 当时生效的软上限 */
+  cap: number;
+  /** 会话内子代理总数（内存态） */
+  total: number;
+  /** 实际落盘条数（LS 截断后 = cap；SQLite 主路径 = total） */
+  saved: number;
+  /** 留痕时间戳（epoch ms） */
+  at: number;
+};
 
 /** 索引侧外部导入溯源（与 SessionState.importMeta 对齐，可选） */
 export type SessionIndexImportMeta = {

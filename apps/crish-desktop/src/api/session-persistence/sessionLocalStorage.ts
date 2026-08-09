@@ -33,6 +33,11 @@ import {
 } from './sessionQuota';
 
 import {
+  clearAgentsTruncation,
+  markAgentsTruncated,
+} from './sessionAgentsTruncation';
+
+import {
   SESSION_ACTIVE_KEY,
   SESSION_AGENTS_PREFIX,
   SESSION_AGENTS_SAVE_CAP,
@@ -131,6 +136,8 @@ export function deleteSessionBody(sessionId: string): void {
   try {
     localStorage.removeItem(bodyKey);
     localStorage.removeItem(agentsKey);
+    // P18：agents 镜像删除时同步清截断标志，防残留误报
+    clearAgentsTruncation(id);
   } catch {
     /* ignore */
   }
@@ -156,16 +163,34 @@ export function saveSessionAgents(
   if (!agents?.length) {
     try {
       localStorage.removeItem(SESSION_AGENTS_PREFIX + id);
+      clearAgentsTruncation(id);
     } catch {
       /* ignore */
     }
     return;
   }
+  // P18（AA-07）：LS 受配额保护线约束，截断落盘时置位截断标志（留痕不静默）；
+  // 未超上限全量落盘并清除历史标志（恢复策略，同 P1-F3 quota 口径）。
+  if (agents.length > SESSION_AGENTS_SAVE_CAP) {
+    try {
+      localStorage.setItem(
+        SESSION_AGENTS_PREFIX + id,
+        JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
+      );
+      markAgentsTruncated(id, {
+        cap: SESSION_AGENTS_SAVE_CAP,
+        total: agents.length,
+        saved: SESSION_AGENTS_SAVE_CAP,
+        at: Date.now(),
+      });
+    } catch {
+      /* quota */
+    }
+    return;
+  }
   try {
-    localStorage.setItem(
-      SESSION_AGENTS_PREFIX + id,
-      JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
-    );
+    localStorage.setItem(SESSION_AGENTS_PREFIX + id, JSON.stringify(agents));
+    clearAgentsTruncation(id);
   } catch {
     /* quota */
   }
