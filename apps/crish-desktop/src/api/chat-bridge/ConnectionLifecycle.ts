@@ -258,7 +258,7 @@ export function resolveContextWindow(
       }
     }
   } catch {
-    /* ignore：目录读取失败不发窗口 */
+    /* swallow-ok: 目录读取失败不发窗口，回退无 meta 路径 */
   }
   return undefined;
 }
@@ -345,16 +345,16 @@ export function createFinishController(
     if (approvalFlow.isDeferredTerminal()) {
       approvalFlow.dispatch({ type: 'force_finish' });
     }
-    state.finished = true;
-    cleanup();
-    try {
-      callbacks.onComplete();
-    } catch {
-      /* ignore */
-    }
-  };
+state.finished = true;
+cleanup();
+try {
+callbacks.onComplete();
+} catch {
+/* swallow-ok: 完成回调抛错不阻断连接终态 */
+}
+};
 
-  const tryResumeFinish = () => {
+const tryResumeFinish = () => {
     if (state.finished || state.cancelled) return;
     const snap = approvalFlow.snapshot();
     if (!snap.deferredTerminal) return;
@@ -400,13 +400,13 @@ export function createStreamCancel(
       reason: mode === 'cooperative' ? 'ui-stop' : 'ui-force-cancel',
     });
 
-    state.finished = true;
-    try {
-      callbacks.onComplete();
-    } catch {
-      /* ignore */
-    }
-  };
+state.finished = true;
+try {
+callbacks.onComplete();
+} catch {
+/* swallow-ok: 完成回调抛错不阻断取消终态 */
+}
+};
 }
 
 /**
@@ -549,10 +549,10 @@ export async function createStreamSession(
         styleMap.medium;
 
       // P4 T-31：contextWindow 解析（设置预留键 → 生效模型 catalog；缺省 undefined）
-      contextWindow = resolveContextWindow(sets);
-    } catch {
-      /* ignore */
-    }
+contextWindow = resolveContextWindow(sets);
+} catch {
+/* swallow-ok: contextWindow 解析失败回退 undefined，引擎按默认窗口执行 */
+}
 
     const goalMode =
       typeof options?.mode === 'string' ? options.mode.trim() : '';
@@ -603,7 +603,7 @@ export async function createStreamSession(
       const body = await loadSessionBody(safeSessionId);
       history = buildHistoryMessages(body, { excludeId: userClientMessageId });
     } catch {
-      /* ignore：历史加载失败不阻塞 run（向后兼容） */
+      /* swallow-ok: 历史加载失败不阻塞 run（向后兼容） */
     }
 
     // P1-F2（F5-04）②：参数组装（动态 import / getSettingsEx / loadSessionBody
@@ -681,11 +681,11 @@ export function streamViaEngine(
     (typeof options?.assistantClientMessageId === 'string' &&
       options.assistantClientMessageId.trim()) ||
     '';
-  try {
-    callbacks.onRunMeta?.({ runId });
-  } catch {
-    /* ignore */
-  }
+try {
+callbacks.onRunMeta?.({ runId });
+} catch {
+/* swallow-ok: runMeta 回调抛错不阻断 run 启动 */
+}
 
   const cleanup = () => {
     cleanupStreamState(state);

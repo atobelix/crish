@@ -89,7 +89,7 @@ function writeLs(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {
-    /* ignore quota / private mode */
+    /* swallow-ok: quota/隐私模式写失败尽力而为，预览回退内存态 */
   }
 }
 
@@ -210,7 +210,7 @@ export function setPreviewUrl(url: string, options?: SetPreviewUrlOptions): void
     localStorage.setItem(URL_KEY, safeUrl);
     pushPreviewHistory(safeUrl);
   } catch {
-    /* ignore */
+    /* swallow-ok: URL 持久化失败不阻断预览跳转 */
   }
   if (!silent) {
     dispatchPreviewUrl(safeUrl);
@@ -222,7 +222,7 @@ function dispatchPreviewUrl(url: string): void {
   try {
     window.dispatchEvent(new CustomEvent('crish-preview-url', { detail: { url } }));
   } catch {
-    /* ignore */
+    /* swallow-ok: 预览 URL 事件分发失败不影响已跳转 */
   }
 }
 
@@ -231,7 +231,7 @@ function dispatchBookmarksChanged(): void {
   try {
     window.dispatchEvent(new CustomEvent('crish-preview-bookmarks'));
   } catch {
-    /* ignore */
+    /* swallow-ok: 书签事件分发失败不影响列表刷新 */
   }
 }
 
@@ -240,7 +240,7 @@ function dispatchHistoryChanged(): void {
   try {
     window.dispatchEvent(new CustomEvent('crish-preview-history'));
   } catch {
-    /* ignore */
+    /* swallow-ok: 历史事件分发失败不影响数据写入 */
   }
 }
 
@@ -369,7 +369,7 @@ export function previewDisplayHost(url: string): string {
       return full.length > 48 ? `${full.slice(0, 46)}…` : full;
     }
   } catch {
-    /* fall through */
+    /* swallow-ok: URL 展示解析失败时回退原始串 */
   }
   return u.length > 48 ? `${u.slice(0, 46)}…` : u;
 }
@@ -382,7 +382,7 @@ export function previewDisplayLabel(url: string): string {
     const parsed = new URL(u);
     if (parsed.hostname) return parsed.hostname;
   } catch {
-    /* fall through */
+    /* swallow-ok: URL 解析失败时回退截断原串 */
   }
   return u.slice(0, 80);
 }

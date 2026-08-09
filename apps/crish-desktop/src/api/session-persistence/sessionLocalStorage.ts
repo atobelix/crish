@@ -76,7 +76,7 @@ export function saveSessionIndex(entries: SessionIndexEntry[]): void {
   try {
     localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify(clean));
   } catch {
-    /* quota / private mode */
+    /* swallow-ok: quota/隐私模式写索引尽力而为，失败走内存态 */
   }
 }
 
@@ -116,14 +116,14 @@ export function saveSessionBody(
     // 全量写成功 = quota 已释放 → 恢复：清除历史截断标志
     clearQuotaTruncation(id);
   } catch {
-    // quota — 保留最后 100 条
+    // swallow-ok: quota — 保留最后 100 条兜底落盘
     const fallback = msgs.slice(-100);
     try {
       localStorage.setItem(key, JSON.stringify(fallback));
       // 截断落盘 → 置位截断标志（P1-F3）：不再静默无痕，hydrate 可提示
       markQuotaTruncated(id);
     } catch {
-      /* quota — drop silently */
+      /* swallow-ok: quota 耗尽时截断落盘也失败，尽力降级（截断标志随主体写失败跳过） */
     }
   }
 }
@@ -165,7 +165,7 @@ export function saveSessionAgents(
       localStorage.removeItem(SESSION_AGENTS_PREFIX + id);
       clearAgentsTruncation(id);
     } catch {
-      /* ignore */
+      /* swallow-ok: 空 agents 清理失败残留无害键 */
     }
     return;
   }
@@ -184,7 +184,7 @@ export function saveSessionAgents(
         at: Date.now(),
       });
     } catch {
-      /* quota */
+      /* swallow-ok: quota 超限时 agents 截断落盘尽力而为 */
     }
     return;
   }
@@ -192,7 +192,7 @@ export function saveSessionAgents(
     localStorage.setItem(SESSION_AGENTS_PREFIX + id, JSON.stringify(agents));
     clearAgentsTruncation(id);
   } catch {
-    /* quota */
+    /* swallow-ok: quota 超限时 agents 全量写尽力而为，失败留引擎侧数据 */
   }
 }
 
@@ -208,14 +208,14 @@ export function saveActiveSessionId(id: string): void {
     try {
       localStorage.removeItem(SESSION_ACTIVE_KEY);
     } catch {
-      /* ignore */
+      /* swallow-ok: 活跃标记清理失败仅影响重启默认选中 */
     }
     return;
   }
   try {
     localStorage.setItem(SESSION_ACTIVE_KEY, String(id).trim());
   } catch {
-    /* quota */
+    /* swallow-ok: quota 超限时活跃标记写失败，重启回退默认会话 */
   }
 }
 
@@ -231,7 +231,7 @@ export function saveFolderOrder(order: string[]): void {
   try {
     localStorage.setItem(SESSION_FOLDER_KEY, JSON.stringify(clean ?? []));
   } catch {
-    /* quota */
+    /* swallow-ok: 文件夹顺序持久化尽力而为，失败回退默认排序 */
   }
 }
 

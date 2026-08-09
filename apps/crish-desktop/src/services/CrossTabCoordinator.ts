@@ -54,7 +54,7 @@ class CrossTabCoordinator {
         this.handleMessage(ev.data);
       };
     } catch {
-      // BroadcastChannel not supported — degrade gracefully
+      // swallow-ok: BroadcastChannel 不可用时降级为单标签模式
     }
 
     this.electLeader();
@@ -65,7 +65,7 @@ class CrossTabCoordinator {
     this.started = false;
     this.stopTimers();
     if (this.isLeader) {
-      try { localStorage.removeItem(LEADER_KEY); } catch { /* ignore */ }
+      try { localStorage.removeItem(LEADER_KEY); } catch { /* swallow-ok: 清理主标签标记尽力而为 */ }
     }
     if (this.channel) {
       this.channel.close();
@@ -84,14 +84,14 @@ class CrossTabCoordinator {
         this.isLeader = current === this.tabId;
       }
     } catch {
-      // localStorage unavailable — degrade
+      // swallow-ok: localStorage 不可用时降级为单标签模式
     }
   }
 
   private startTimers(): void {
     this.heartbeatTimer = setInterval(() => {
       if (this.isLeader) {
-        try { localStorage.setItem(LEADER_KEY, this.tabId); } catch { /* ignore */ }
+        try { localStorage.setItem(LEADER_KEY, this.tabId); } catch { /* swallow-ok: 心跳写主标签标记尽力而为 */ }
       }
     }, 5000);
 
@@ -109,7 +109,7 @@ class CrossTabCoordinator {
           this.isLeader = false;
           eventBus.emit('cross-tab:leader-lost', { tabId: this.tabId, newLeader: current }, 'cross-tab');
         }
-      } catch { /* ignore */ }
+      } catch { /* swallow-ok: 心跳/选举检查失败不阻断协调器 */ }
     }, 3000);
   }
 
@@ -127,7 +127,7 @@ class CrossTabCoordinator {
     if (this.channel) {
       try {
         this.channel.postMessage({ ...msg, tabId: this.tabId } as CrossTabMessage);
-      } catch { /* ignore */ }
+      } catch { /* swallow-ok: 跨标签广播失败仅影响该标签同步 */ }
     }
   }
 

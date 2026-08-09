@@ -30,7 +30,7 @@ export function readStoredTheme(): UiTheme {
       return normalizeTheme(direct === 'light' ? 'default' : direct);
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: 主题键读取失败时回退默认主题 */
   }
   try {
     const raw =
@@ -40,7 +40,7 @@ export function readStoredTheme(): UiTheme {
       if (parsed?.theme) return normalizeTheme(parsed.theme);
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: 旧版 settings 结构解析失败时跳过该来源 */
   }
   return 'default';
 }
@@ -51,7 +51,7 @@ export function persistTheme(theme: UiTheme): void {
   try {
     localStorage.setItem(THEME_KEY, t);
   } catch {
-    /* ignore */
+    /* swallow-ok: quota/隐私模式写主题尽力而为，失败回退内存态 */
   }
   try {
     const raw =
@@ -60,7 +60,7 @@ export function persistTheme(theme: UiTheme): void {
     current.theme = t;
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
   } catch {
-    /* ignore */
+    /* swallow-ok: 同步到旧 settings 键尽力而为，主键已写成功 */
   }
 }
 
@@ -84,7 +84,7 @@ export function applyTheme(theme: UiTheme | string): UiTheme {
     const p = readStoredPersonalization();
     applyPersonalization(p, t);
   } catch {
-    /* ignore during early boot or SSR */
+    /* swallow-ok: early boot 或 SSR 环境无 DOM 时跳过个性化应用 */
   }
 
   return t;
@@ -129,7 +129,7 @@ export function writeStoredPersonalization(p: PersonalizationSettings): void {
     localStorage.setItem('crish_theme_brightness_vibrant', p.themeBrightnessVibrant ? 'true' : 'false');
     localStorage.setItem('crish_theme_brightness_auto_time', p.themeAutoTimeTransition ? 'true' : 'false');
   } catch {
-    /* ignore */
+    /* swallow-ok: 亮度偏好写失败仅影响下次启动还原 */
   }
 }
 
@@ -823,7 +823,7 @@ export function setTheme(theme: UiTheme | string): UiTheme {
   try {
     window.dispatchEvent(new CustomEvent('crish-theme-changed', { detail: { theme: t } }));
   } catch {
-    /* ignore */
+    /* swallow-ok: 主题变更事件分发失败不影响已应用样式 */
   }
   return t;
 }

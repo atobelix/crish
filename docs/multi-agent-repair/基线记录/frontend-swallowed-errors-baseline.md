@@ -28,21 +28,21 @@
 |---|---|
 | （见下方标记区，脚本维护） | — |
 
-合计：未注解空 catch **N** 处（N 个文件）。高发榜前 10 见治理记录。
+合计：建线 8 处（5 文件）→ 第一批治理后 **1 处**（bootstrap-full.ts，03-D2 域留待）。
+高发榜前 10 见治理记录。
 
 ## 治理记录（步骤③分批清零）
 
-- 2026-08-10（批次 7.3 第一批）：基线建线（阶段 A）；第一批清理文件清单
-  （TerminalCard.xterm.tsx / sessionRustDb.ts / sessionLocalStorage.ts / profileStore.ts /
-  fontStore.ts / previewBrowserStore.ts / themeStore.ts / ConnectionLifecycle.ts /
-  CrossTabCoordinator.ts —— useStreamCallbacks.ts 因并行域改动延后）→ `--update` 收紧基线。
-- 未决：`useStreamCallbacks.ts`（并行域 M 状态）、`bootstrap-services.ts:81/116` 与
-  `bootstrap-full.ts:8`（03-D2 独占裁决 P0-3，05 步骤③ grep 实测剔除）留待后续批次。
+- 2026-08-10（批次 7.3 建线）：阶段 A 基线 8 处 / 5 文件（全部为 `.catch(() => {})` 链）。
+  建线当日完成第一批治理：4 个真静默文件（FileActions ×3 / FileViewerCard ×2 / FilesCard ×1
+  补 logInternalError；SettingsShortcutsTab ×1 标注 swallow-ok）+ 9 个高发文件
+  （TerminalCard.xterm.tsx 15 / sessionRustDb.ts 15 / sessionLocalStorage.ts 9 / profileStore.ts 8 /
+  fontStore.ts 7 / previewBrowserStore.ts 7 / themeStore.ts 7 / ConnectionLifecycle.ts 6 /
+  CrossTabCoordinator.ts 6）全部 `/* ignore */` 升级为 `/* swallow-ok: 原因 */` 显式标注
+  （阶段 B 就绪）；基线 8 → 1。
+- 未决：`useStreamCallbacks.ts`（并行域 M 状态）、`bootstrap-full.ts:8` 与
+  `bootstrap-services.ts:81/116`（03-D2 独占裁决 P0-3，05 步骤③ grep 实测剔除）留待后续批次。
 
 <!-- BASELINE_START -->
 apps/crish-desktop/src/bootstrap-full.ts 1
-apps/crish-desktop/src/components/files/FileActions.tsx 3
-apps/crish-desktop/src/components/files/FileViewerCard.tsx 2
-apps/crish-desktop/src/components/files/FilesCard.tsx 1
-apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 1
 <!-- BASELINE_END -->

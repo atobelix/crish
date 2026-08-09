@@ -70,7 +70,7 @@ export function clearActiveModelId(): void {
   try {
     localStorage.removeItem(ACTIVE_MODEL_KEY);
   } catch {
-    /* ignore */
+    /* swallow-ok: 活跃模型标记清理失败仅影响重启默认选中 */
   }
 }
 
@@ -79,7 +79,7 @@ export function clearActiveProfileId(): void {
   try {
     localStorage.removeItem(ACTIVE_PROFILE_KEY);
   } catch {
-    /* ignore */
+    /* swallow-ok: 活跃 profile 标记清理失败仅影响重启默认选中 */
   }
 }
 
@@ -134,7 +134,7 @@ export function saveProfiles(list: ProviderProfile[]) {
   try {
     emitUiEvent('profiles-changed');
   } catch {
-    /* ignore */
+    /* swallow-ok: 变更事件分发失败不影响已落盘的 profile */
   }
 }
 
@@ -218,7 +218,7 @@ export function loadProfiles(): ProviderProfile[] {
         try {
           emitUiEvent('profiles-changed');
         } catch {
-          /* ignore */
+          /* swallow-ok: 迁移后事件分发失败不影响迁移结果 */
         }
       }
     }
@@ -587,10 +587,10 @@ async function persistSelectionToAppSettings(
       const { useSettingsStore } = await import('../../store');
       useSettingsStore.getState().setAppSettings(merged);
     } catch {
-      /* store 未就绪时忽略 */
+      /* swallow-ok: store 未就绪时跳过设置同步 */
     }
   } catch {
-    /* settings 写失败不阻断引擎切换 */
+    /* swallow-ok: settings 写失败不阻断引擎切换 */
   }
 }
 
@@ -598,7 +598,7 @@ function notifyModelChanged(profileId: string, model: string) {
   try {
     emitUiEvent('model-changed', { profileId, model });
   } catch {
-    /* ignore */
+    /* swallow-ok: 模型切换事件分发失败不影响已切换状态 */
   }
 }
 
@@ -658,14 +658,14 @@ export async function activateProfileModel(
     if (!hasLocalKey || (status.ok && status.hasApiKey === false)) {
       return { ok: true, ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}) };
     }
-  } catch {
-    /* ignore verify errors */
-  }
-  return {
-    ok: true,
-    ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
-    ...(applied.apiKeyLast4 ? { apiKeyLast4: applied.apiKeyLast4 } : {}),
-  };
+} catch {
+  /* swallow-ok: 引擎状态核验失败时按乐观路径返回，不阻断切换 */
+}
+return {
+  ok: true,
+  ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
+  ...(applied.apiKeyLast4 ? { apiKeyLast4: applied.apiKeyLast4 } : {}),
+};
 }
 
 /**

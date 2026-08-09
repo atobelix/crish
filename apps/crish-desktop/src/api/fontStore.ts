@@ -69,7 +69,7 @@ export function detectPlatform(): PlatformId {
     if (/Win/i.test(p) || /Windows/i.test(ua)) return 'windows';
     if (/Linux/i.test(p) || /Linux/i.test(ua)) return 'linux';
   } catch {
-    /* ignore */
+    /* swallow-ok: UA 探测失败时按默认字体族降级 */
   }
   return 'unknown';
 }
@@ -405,7 +405,7 @@ export async function ensureFontsLoaded(prefs: FontPreferences): Promise<void> {
   try {
     await document.fonts.ready;
   } catch {
-    /* ignore */
+    /* swallow-ok: document.fonts.ready 等待失败时按已加载字体渲染 */
   }
 }
 
@@ -432,7 +432,7 @@ export function readStoredFonts(): FontPreferences {
     const direct = localStorage.getItem(FONTS_KEY);
     if (direct) return normalizeFontPrefs(JSON.parse(direct));
   } catch {
-    /* ignore */
+    /* swallow-ok: 字体设置 JSON 损坏时回退默认值 */
   }
   try {
     const raw = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(SETTINGS_KEY_LEGACY);
@@ -441,7 +441,7 @@ export function readStoredFonts(): FontPreferences {
       if (parsed?.fonts) return normalizeFontPrefs(parsed.fonts);
     }
   } catch {
-    /* ignore */
+    /* swallow-ok: 旧版 settings 结构解析失败时跳过该来源 */
   }
   return { ...DEFAULT_FONT_PREFS };
 }
@@ -451,7 +451,7 @@ export function persistFonts(prefs: FontPreferences): void {
   try {
     localStorage.setItem(FONTS_KEY, JSON.stringify(p));
   } catch {
-    /* ignore */
+    /* swallow-ok: quota 超限时字体偏好尽力写，失败回退默认 */
   }
   try {
     const raw = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(SETTINGS_KEY_LEGACY);
@@ -459,7 +459,7 @@ export function persistFonts(prefs: FontPreferences): void {
     current.fonts = p;
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
   } catch {
-    /* ignore */
+    /* swallow-ok: 同步到旧 settings 键尽力而为，主键已写成功 */
   }
 }
 
@@ -514,7 +514,7 @@ export async function setFontPreferences(
   try {
     window.dispatchEvent(new CustomEvent('crish-fonts-changed', { detail: next }));
   } catch {
-    /* ignore */
+    /* swallow-ok: 字体变更事件分发失败不影响已应用样式 */
   }
   return next;
 }

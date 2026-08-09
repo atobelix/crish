@@ -302,12 +302,11 @@ fitAddon.fit();
           if (!cancelled) {
             ptyIdRef.current = null;
             onStatusRef.current?.('error', res.message);
-try {
-term.writeln(`\x1b[31m�?${res.message}\x1b[0m`);
-} catch {
-/* swallow-ok: 错误提示写终端失败时状态栏已展示错误 */
-}
-}
+            try {
+              term.writeln(`\x1b[31m✗ ${res.message}\x1b[0m`);
+            } catch {
+              /* ignore */
+            }
           }
           return;
         }
@@ -352,7 +351,7 @@ term.write(p.data);
         const codeLabel =
           p.code === undefined || p.code === null ? '' : ` · exit ${p.code}`;
 try {
-term.writeln(`\r\n\x1b[90m── 进程已退�?{codeLabel} ──\x1b[0m`);
+term.writeln(`\r\n\x1b[90m── 进程已退出{codeLabel} ──\x1b[0m`);
 } catch {
 /* swallow-ok: 退出提示写终端失败不影响状态更新 */
 }
