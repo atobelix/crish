@@ -1,7 +1,7 @@
 /**
  * ChatMessageRow 纯工具函数与类型定义
  */
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 

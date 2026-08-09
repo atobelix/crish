@@ -11,7 +11,7 @@ import type {
   FileDiff,
   MessageToolCall,
   SessionAgent,
-} from '../../store/layoutStore';
+} from '../../store/types';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import { CompactToolRow } from './CompactToolRow';
 

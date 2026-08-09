@@ -39,8 +39,8 @@ export function formatBgTaskMeta(opts: {
 }
 
 export function getGitStatusColor(status: string): string {
-  if (status === 'A' || status === '?') return 'var(--accent-green)';
-  if (status === 'D') return 'var(--accent-red)';
-  if (status === 'U') return 'var(--accent-red)';
-  return 'var(--accent-orange)';
+  // 批次 6.1（08-步6 T5-2 消费面）：状态字走文字专用 token（accent 色仅作图标/装饰）
+  if (status === 'A' || status === '?') return 'var(--text-success-strong)';
+  if (status === 'D' || status === 'U') return 'var(--text-danger)';
+  return 'var(--text-warning-strong)';
 }

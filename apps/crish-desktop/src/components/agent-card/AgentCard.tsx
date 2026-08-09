@@ -10,7 +10,7 @@ import { Tooltip } from '../ui';
 import * as Lucide from 'lucide-react';
 import { browseAgentSidePanel, openAgentInSidePanel } from '../../api/openAgentPanel';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
-import type { FileDiff } from '../../store/layoutStore';
+import type { FileDiff } from '../../store/types';
 import { focusOrOpenPanel, setActiveDiffSource as setActiveDiffSourceAccess } from '../../api/storeAccess';
 import { openFileInPanel } from '../../api/workspaceFsApi';
 import {

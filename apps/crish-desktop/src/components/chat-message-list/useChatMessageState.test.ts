@@ -3,7 +3,7 @@
  * second full-messages store subscription; parent passes allMessages.
  */
 import { describe, expect, it } from 'vitest';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import {
   buildPinnedItems,
   pinnedItemsEqual,

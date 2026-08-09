@@ -3,7 +3,7 @@ import styles from './ChatCard.module.css';
 import { ChatStatusRibbons } from './ChatStatusRibbons';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
-import type { FileDiff } from '../../store/layoutStore';
+import type { FileDiff } from '../../store/types';
 import type { SessionGoalMode } from '../../store/types';
 import type { EngineStatus } from '../../api/engineConfig';
 import type { RunNotice } from '../../hooks/useChatStream';

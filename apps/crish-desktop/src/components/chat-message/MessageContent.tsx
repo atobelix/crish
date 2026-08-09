@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { AlertCircle } from 'lucide-react';
 import styles from '../chat-message-row/ChatMessageRow.module.css';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import {
   buildAssistantTimeline,

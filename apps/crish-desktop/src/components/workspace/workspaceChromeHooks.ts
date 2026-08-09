@@ -20,7 +20,7 @@ import {
   buildWorkspaceTabs,
   closeSessionTab,
   currentWorkspaceFolderKey,
-  openSessionTab,
+  syncOpenTabsToLegacy,
   type SessionTab,
   type WorkspaceTab,
 } from '../../api/workspaceChromeTabs';
@@ -34,7 +34,6 @@ import {
 } from '../../api/storeAccess';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
 import {
-  collapseToolColumnPreserve,
   isChatColumn,
 } from '../../api/store-access/componentAccess';
 import {
@@ -99,7 +98,8 @@ export function useWorkspaceChromeState(onAddProject?: () => void) {
     const sess = getSessionById(globalActiveSessionId);
     if (!sess || sess.isArchived) return;
     const folder = canonicalSessionFolder(sess.folder);
-    openSessionTab(folder, globalActiveSessionId);
+    // D10：legacy map 同步统一入口（双写路径保留，登记待清理）
+    syncOpenTabsToLegacy(folder, globalActiveSessionId);
   }, [globalActiveSessionId]);
 
   const projects: ProjectEntry[] = useMemo(() => {
@@ -180,9 +180,9 @@ export function useWorkspaceChromeState(onAddProject?: () => void) {
       const activeInWs = inWs.find((t) => t.tabId === shell.activeTabId);
       const pick = activeInWs || inWs[0]!;
       shell.activateTab(pick.tabId);
-      // best-effort legacy map
+      // best-effort legacy map（D10：syncOpenTabsToLegacy 统一入口）
       if (!isPendingDraft(pick.sessionId)) {
-        openSessionTab(key, pick.sessionId);
+        syncOpenTabsToLegacy(key, pick.sessionId);
       }
     } else {
       // 本区无 shell 标签：追加/聚焦草稿，不清空其它工作区已打开的 tab
@@ -207,14 +207,15 @@ export function useWorkspaceChromeState(onAddProject?: () => void) {
         workspaceKey: folderKey,
       });
       if (!isPendingDraft(sessionId)) {
-        openSessionTab(folderKey, sessionId);
+        // D10：legacy map 同步统一入口（双写路径保留，登记待清理）
+        syncOpenTabsToLegacy(folderKey, sessionId);
       }
     },
     [folderKey]
   );
 
   const onCloseSession = useCallback(
-    (sessionId: string, e: React.MouseEvent) => {
+    (sessionId: string, e: React.SyntheticEvent) => {
       e.preventDefault();
       e.stopPropagation();
       // Shell redesign：关标签 = 关 TabSurface（含 dock 态 + adapter 归一）
@@ -316,11 +317,8 @@ export function useRightSidebarState() {
       const activeCardId = toolCol?.groups[0]?.activeCardId || 'overview';
       focusOrOpenPanel(wsId, activeCardId);
     } else {
-      useLayoutStore.setState((state) => {
-        const w = state.workspaces.find((x) => x.id === wsId);
-        if (!w) return;
-        collapseToolColumnPreserve(w);
-      });
+      // T-E 步骤 4（C4）：raw setState 直写 workspaces → collapseToolColumnPreserve action
+      useLayoutStore.getState().collapseToolColumnPreserve(wsId);
     }
   }, [activeWs, toggleToolColumnCollapsed, toolColumnCollapsed]);
 

@@ -22,7 +22,7 @@ import { ChatHeaderMore } from '../chat-card/ChatHeaderMore';
 import { WorkspaceChromeBars } from '../workspace/WorkspaceChromeBars';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { Tooltip } from '../ui';
-import type { CardState, GroupState } from '../../store/layoutStore';
+import type { CardState, GroupState } from '../../store/types';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 
 const TABS_ADD_MENU_W = 188;

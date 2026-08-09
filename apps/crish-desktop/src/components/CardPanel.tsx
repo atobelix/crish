@@ -11,7 +11,7 @@ import {
   sessionListDisplayTitle,
   EMPTY_SESSION_TITLE,
 } from '../api/sessionTitle';
-import type { LayoutStore, WorkspaceState } from '../store/layoutStore';
+import type { LayoutStore, WorkspaceState } from '../store/types';
 
 import { CardPanelHeader } from './card-panel/CardPanelHeader';
 import { CardPanelLayout, KNOWN_BODY_IDS } from './card-panel/CardPanelLayout';

@@ -162,7 +162,7 @@ describe('useBrowserSession', () => {
     expect(toast).not.toHaveBeenCalled();
   });
 
-  it('stop：invoke 报错 → error 状态 + 错误 toast', async () => {
+  it('急停（kill）：invoke 报错 → error 状态 + 急停失败 toast', async () => {
     mockTauriError(BROWSER_STOP_CMD, new Error('kill failed'));
     mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'running' as const }));
     const { result } = renderHook(() => useBrowserSession({ onShowToast: toast }));
@@ -171,7 +171,7 @@ describe('useBrowserSession', () => {
     act(() => result.current.kill());
     await waitFor(() => expect(result.current.state).toBe('error'));
     expect(toast).toHaveBeenCalledWith(
-      expect.stringMatching(/停止浏览器失败：kill failed/),
+      expect.stringMatching(/急停浏览器失败：kill failed/),
     );
   });
 

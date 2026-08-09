@@ -1,4 +1,4 @@
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import {
   GENERAL_FOLDER,
   listProjects,

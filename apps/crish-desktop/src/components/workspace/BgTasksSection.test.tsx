@@ -22,6 +22,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BgTasksSection } from './BgTasksSection';
+import { errorStore } from '../../services/ErrorStore';
 import {
   parseBackgroundTask,
   type BackgroundTaskInfo,
@@ -59,22 +60,27 @@ function task(
 function renderSection(opts: {
   bgTasks: BackgroundTaskInfo[];
   countLabel?: string | null;
-  engineOnline?: boolean;
   onShowToast?: (msg: string) => void;
 }) {
   return render(
     <BgTasksSection
       bgTasks={opts.bgTasks}
       countLabel={opts.countLabel ?? null}
-      engineOnline={opts.engineOnline ?? true}
       onShowToast={opts.onShowToast ?? vi.fn()}
     />,
   );
 }
 
+/** D2（C-10）：连接态投影（errorStore 真源）——组件不再接收 engineOnline prop */
+function setEngineConnection(status: 'connected' | 'disconnected'): void {
+  errorStore.setConnectionStatus(status);
+}
+
 beforeEach(() => {
   mockedGetOutput.mockReset();
   mockedOpenTerminal.mockReset();
+  // 默认在线；离线用例显式设置
+  setEngineConnection('connected');
 });
 
 afterEach(() => {
@@ -89,7 +95,8 @@ describe('BgTasksSection 空态', () => {
   });
 
   it('空列表（引擎离线）→ 空态提示「未连接」', () => {
-    renderSection({ bgTasks: [], engineOnline: false });
+    setEngineConnection('disconnected');
+    renderSection({ bgTasks: [] });
     expect(screen.getByRole('status')).toHaveTextContent('未连接');
   });
 });

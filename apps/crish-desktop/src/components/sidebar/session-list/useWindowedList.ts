@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import {
   SIDEBAR_SESSION_ROW_HEIGHT,
   clampSessionListWindowRange,

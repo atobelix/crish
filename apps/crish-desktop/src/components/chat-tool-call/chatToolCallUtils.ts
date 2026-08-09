@@ -1,4 +1,4 @@
-import type { MessageToolCall, SessionAgent } from '../../store/layoutStore';
+import type { MessageToolCall, SessionAgent } from '../../store/types';
 
 /** 工具行状态中文标签（aria / 行尾 / data 共用，避免英文 status 直出） */
 export function toolStatusZh(status: MessageToolCall['status'] | undefined): string {

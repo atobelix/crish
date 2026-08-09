@@ -11,7 +11,7 @@ import {
 } from '../../api/providerProfiles';
 import { fetchEngineStatus, type EngineStatus } from '../../api/engineConfig';
 import { onUiEvent } from '../../api/uiEvents';
-import type { AppSettings } from '../../store/layoutStore';
+import type { AppSettings } from '../../store/types';
 
 import { ModelBadgePickerMenu } from '../provider/ModelBadgePickerMenu';
 

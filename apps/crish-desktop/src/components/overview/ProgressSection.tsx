@@ -4,7 +4,7 @@ import { Tooltip } from '../ui';
 import { Target } from 'lucide-react';
 import { computeChecklistProgress, findCurrentLiveTool, resolveSessionProgressItems } from '../../api/sessionProgressApi';
 import { agentOneLineLabel } from './helpers';
-import type { SessionState } from '../../store/layoutStore';
+import type { SessionState } from '../../store/types';
 
 interface ProgressSectionProps {
   session?: SessionState | null;

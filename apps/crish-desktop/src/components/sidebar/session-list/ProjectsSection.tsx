@@ -1,5 +1,5 @@
 import React from 'react';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import type { ProjectEntry } from '../../../api/projectStore';
 import { openProject } from '../../../api/projectStore';
 import { emitUiEvent } from '../../../api/uiEvents';

@@ -8,8 +8,8 @@ import type {
   ColumnState,
   DropPreviewState,
   WorkspaceState,
-} from '../../store/layoutStore';
-import type { DraggedTabState } from '../../store/workspaceActions';
+} from '../../store/types';
+import type { DraggedTabState } from '../../store/types';
 
 /** 工作区展示序号（去掉 ws- 前缀；非数字则原样） */
 export function workspaceOrdinalLabel(wsId: string): string {

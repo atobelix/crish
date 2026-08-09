@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import {
   partitionSidebarSessions,
 } from '../../../api/store-access/componentAccess';

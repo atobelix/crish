@@ -2,7 +2,7 @@ import React from 'react';
 import styles from './WorkspaceChromeBars.module.css';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
-import { Tooltip } from '../ui';
+import { TabStrip, Tooltip } from '../ui';
 import {
   Folder,
   FolderPlus,
@@ -35,39 +35,47 @@ export const WorkspaceStrip: React.FC<WorkspaceChromeProps> = ({
   const showTrail = true; // Always show trail for the right sidebar toggle button
   const add = useChromeAddMenu();
 
+  const selectTab = (id: string) => {
+    const tab = s.workspaceTabs.find((t) => t.id === id);
+    if (tab) s.selectWorkspace(tab);
+  };
+
   return (
-    <div
+    <TabStrip
       className={`${styles.wsChromeRow} ${styles.wsChromeRowWorkspace} ws-chrome-row ws-chrome-row--workspace ${className || ''}`}
-      role="tablist"
-      aria-label="工作区"
-      data-tauri-drag-region
-    >
-      <div className={`${styles.wsChromeScroll} ws-chrome-scroll`}>
-        {s.workspaceTabs.map((tab) => {
-          const active = tab.id === s.activeWsId;
-          return (
-            <Tooltip key={tab.id} content={tab.path || tab.label}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={`${styles.wsChromeTab} ${active ? styles.isActive + ' is-active' : ''} ws-chrome-tab`}
-                onClick={() => s.selectWorkspace(tab)}
+      data={{ 'data-tauri-drag-region': true }}
+      scrollClassName={`${styles.wsChromeScroll} ws-chrome-scroll`}
+      tabClassName={`${styles.wsChromeTab} ws-chrome-tab`}
+      tabActiveClassName={`${styles.isActive} is-active`}
+      ariaLabel="工作区"
+      activeId={s.activeWsId ?? null}
+      tabs={s.workspaceTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+      onActiveChange={selectTab}
+      renderTab={(tab) => {
+        const meta = s.workspaceTabs.find((t) => t.id === tab.id);
+        return (
+          <Tooltip content={meta?.path || tab.label}>
+            <button
+              type="button"
+              className={`${styles.wsChromeTabMain} ws-chrome-tab-main`}
+              tabIndex={-1}
+              onClick={() => selectTab(tab.id)}
+            >
+              {meta?.kind === 'project' ? (
+                <Folder size={13} strokeWidth={1.75} aria-hidden />
+              ) : (
+                <MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
+              )}
+              <span
+                className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}
               >
-                {tab.kind === 'project' ? (
-                  <Folder size={13} strokeWidth={1.75} aria-hidden />
-                ) : (
-                  <MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
-                )}
-                <span
-                  className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}
-                >
-                  {tab.label}
-                </span>
-              </button>
-            </Tooltip>
-          );
-        })}
+                {tab.label}
+              </span>
+            </button>
+          </Tooltip>
+        );
+      }}
+      trailing={
         <div
           className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`}
           ref={add.wrapRef}
@@ -131,76 +139,78 @@ export const WorkspaceStrip: React.FC<WorkspaceChromeProps> = ({
             </div>
           ) : null}
         </div>
-      </div>
-      {showTrail ? (
-        <div
-          className={`${styles.wsChromeTrail} ws-chrome-trail ws-chrome-trail--win`}
-          role="toolbar"
-          aria-label="顶栏操作"
-        >
-          <Tooltip
-            content={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+      }
+      wrapTrailing={
+        showTrail ? (
+          <div
+            className={`${styles.wsChromeTrail} ws-chrome-trail ws-chrome-trail--win`}
+            role="toolbar"
+            aria-label="顶栏操作"
           >
-            <button
-              type="button"
-              className={`${styles.wsChromeTrailBtn} no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
-              aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
-              onClick={toggleRightSidebar}
+            <Tooltip
+              content={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
             >
-              <IconSidebarRight size={15} aria-hidden />
-            </button>
-          </Tooltip>
+              <button
+                type="button"
+                className={`${styles.wsChromeTrailBtn} no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
+                aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+                onClick={toggleRightSidebar}
+              >
+                <IconSidebarRight size={15} aria-hidden />
+              </button>
+            </Tooltip>
 
-          {onOpenHelp ? (
-            <Tooltip content="快捷键与帮助">
-              <button
-                type="button"
-                className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
-                aria-label="快捷键与帮助"
-                onClick={onOpenHelp}
-              >
-                <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
-              </button>
-            </Tooltip>
-          ) : null}
-          {onWinMinimize ? (
-            <Tooltip content="最小化">
-              <button
-                type="button"
-                className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
-                aria-label="最小化窗口"
-                onClick={onWinMinimize}
-              >
-                <Minus size={14} strokeWidth={1.75} aria-hidden />
-              </button>
-            </Tooltip>
-          ) : null}
-          {onWinMaximize ? (
-            <Tooltip content="最大化">
-              <button
-                type="button"
-                className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
-                aria-label="最大化或还原窗口"
-                onClick={onWinMaximize}
-              >
-                <Square size={12} strokeWidth={1.75} aria-hidden />
-              </button>
-            </Tooltip>
-          ) : null}
-          {onWinClose ? (
-            <Tooltip content="关闭">
-              <button
-                type="button"
-                className={`${styles.wsChromeTrailBtn} ws-chrome-trail-btn--close no-drag ws-chrome-trail-btn`}
-                aria-label="关闭窗口"
-                onClick={onWinClose}
-              >
-                <X size={14} strokeWidth={1.75} aria-hidden />
-              </button>
-            </Tooltip>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+            {onOpenHelp ? (
+              <Tooltip content="快捷键与帮助">
+                <button
+                  type="button"
+                  className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
+                  aria-label="快捷键与帮助"
+                  onClick={onOpenHelp}
+                >
+                  <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
+                </button>
+              </Tooltip>
+            ) : null}
+            {onWinMinimize ? (
+              <Tooltip content="最小化">
+                <button
+                  type="button"
+                  className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
+                  aria-label="最小化窗口"
+                  onClick={onWinMinimize}
+                >
+                  <Minus size={14} strokeWidth={1.75} aria-hidden />
+                </button>
+              </Tooltip>
+            ) : null}
+            {onWinMaximize ? (
+              <Tooltip content="最大化">
+                <button
+                  type="button"
+                  className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
+                  aria-label="最大化或还原窗口"
+                  onClick={onWinMaximize}
+                >
+                  <Square size={12} strokeWidth={1.75} aria-hidden />
+                </button>
+              </Tooltip>
+            ) : null}
+            {onWinClose ? (
+              <Tooltip content="关闭">
+                <button
+                  type="button"
+                  className={`${styles.wsChromeTrailBtn} ws-chrome-trail-btn--close no-drag ws-chrome-trail-btn`}
+                  aria-label="关闭窗口"
+                  onClick={onWinClose}
+                >
+                  <X size={14} strokeWidth={1.75} aria-hidden />
+                </button>
+              </Tooltip>
+            ) : null}
+          </div>
+        ) : null
+      }
+    />
   );
 };

@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createLeaf, createBranch } from '../../store/layout-tree/types';
-import type { LayoutNode } from '../../store/layout-tree/types';
+import type { LayoutNode } from '../../store/types';
 import { moveLeaf, collectLeaves } from '../../store/layout-tree/operations';
 import { findChatLeafBySessionId, listChatLeaves } from '../../store/layout-tree';
 import { planSessionCanvasDrop } from './topBarDragLib';

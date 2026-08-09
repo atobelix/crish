@@ -3,16 +3,22 @@
  * 设置 · 状态诊断面板渲染测试（PE-04 T04.5-2）。
  * mock fetchEngineStatus 数据源，断言四区（子系统就绪 / 日志配置 /
  * 最近错误 / 最近诊断）与错误醒目提示。
+ * T-F 06 T2.5：搜索索引未就绪 → 「重建索引」按钮（core_rebuild_search_index）。
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StatusDiagnosticsPanel } from './StatusDiagnosticsPanel';
 
 const fetchEngineStatus = vi.fn();
+const rebuildSearchIndex = vi.fn();
 
 vi.mock('../../api/engineConfig', () => ({
   fetchEngineStatus: (...args: unknown[]) => fetchEngineStatus(...args),
+}));
+
+vi.mock('../../api/rustCore', () => ({
+  rebuildSearchIndex: (...args: unknown[]) => rebuildSearchIndex(...args),
 }));
 
 const OK_STATUS = {
@@ -32,6 +38,7 @@ const OK_STATUS = {
 
 beforeEach(() => {
   fetchEngineStatus.mockReset();
+  rebuildSearchIndex.mockReset();
 });
 
 describe('StatusDiagnosticsPanel', () => {
@@ -110,5 +117,49 @@ describe('StatusDiagnosticsPanel', () => {
     await waitFor(() => {
       expect(screen.getByTestId('diag-error-banner')).toHaveTextContent('invoke failed');
     });
+  });
+
+  it('T2.5：searchIndexReady=false 时渲染「重建索引」按钮，点击调 rebuildSearchIndex 并刷新状态', async () => {
+    fetchEngineStatus.mockResolvedValue({
+      ok: true,
+      connected: true,
+      engineReady: true,
+      dbReady: true,
+      searchIndexReady: false,
+    });
+    rebuildSearchIndex.mockResolvedValue(true);
+    render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('diag-searchIndexReady')).toHaveTextContent('异常');
+    });
+    const rebuildBtn = screen.getByTestId('diag-rebuild-search-index');
+    expect(rebuildBtn).toBeTruthy();
+    expect(rebuildBtn).toHaveTextContent('重建索引');
+
+    fireEvent.click(rebuildBtn);
+    await waitFor(() => {
+      expect(rebuildSearchIndex).toHaveBeenCalledTimes(1);
+    });
+    // 成功后刷新状态（fetchEngineStatus 再次被调用）
+    await waitFor(() => {
+      expect(fetchEngineStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('T2.5：searchIndexReady=true / 状态未知时不渲染重建按钮', async () => {
+    fetchEngineStatus.mockResolvedValue({
+      ok: true,
+      connected: true,
+      engineReady: true,
+      dbReady: true,
+      searchIndexReady: true,
+    });
+    render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('diag-searchIndexReady')).toHaveTextContent('OK');
+    });
+    expect(screen.queryByTestId('diag-rebuild-search-index')).toBeNull();
   });
 });

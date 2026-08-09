@@ -10,7 +10,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Button, Tooltip } from '../ui';
+import { Button, Select, Tooltip } from '../ui';
 import {
   usePermissionField,
   selectPermissionMode,
@@ -28,7 +28,6 @@ import {
   sanitizeWhitelistEntry,
   type ShellRiskLevel,
 } from '../../api/commandPermissions';
-import { SettingsSelect } from './SettingsSelect';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -187,16 +186,6 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
     ? `${RISK_LABEL_ZH[draftRisk.level]}：${draftRisk.message} · 回车添加`
     : `${WHITELIST_MATCH_HINT} · 回车添加`;
 
-  const permissionOptions = useMemo(
-    () =>
-      PERMISSION_MODES.map((m) => ({
-        value: m.id,
-        label: m.label,
-        hint: m.description,
-      })),
-    [],
-  );
-
   return (
     <SettingsPage title="安全">
       <SettingsSection title="权限">
@@ -205,10 +194,14 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
             title={<span id={`${permLabelId}-row`}>权限模式</span>}
             desc="工具执行前要不要先确认"
             control={
-              <SettingsSelect
+              <Select
                 className="settings-security-select"
                 value={permissionMode}
-                options={permissionOptions}
+                options={PERMISSION_MODES.map((m) => ({
+                  id: m.id,
+                  label: m.label,
+                  hint: m.description,
+                }))}
                 onChange={onPermissionChange}
               />
             }

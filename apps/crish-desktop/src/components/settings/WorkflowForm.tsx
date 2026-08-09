@@ -11,8 +11,7 @@ import {
   WORKFLOW_SCHEDULE_TYPES,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
-import { SettingsSelect } from './SettingsSelect';
-import { Button, Tooltip } from '../ui';
+import { Button, Select, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
 
 export type WorkflowFormProps = {
@@ -99,7 +98,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
   );
 
   const scheduleSelect = (
-    <SettingsSelect
+    <Select
       {...(settingsVariant
         ? { className: 'sched-settings-select' }
         : styles.schedSelect !== undefined
@@ -108,7 +107,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
       value={draft.scheduleType}
       disabled={busy}
       options={WORKFLOW_SCHEDULE_TYPES.map((t) => ({
-        value: t.value,
+        id: t.value,
         label: t.label,
         hint: t.hint,
       }))}

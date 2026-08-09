@@ -2,7 +2,7 @@
  * useTopBarDrag 拖拽源与画布 leaf 命中类型。
  * 从 useTopBarDrag.ts 抽出；语义见壳 hook 注释。
  */
-import type { Rect } from '../../store/layout-tree';
+import type { Rect } from '../../store/types';
 
 /** 拖拽源类型（会话标签 / 功能标签） */
 export type TopBarDragSource =

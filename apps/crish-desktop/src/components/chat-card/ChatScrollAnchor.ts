@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import { useChatAutoScroll } from '../../hooks/useChatAutoScroll';
 
 export interface UseChatScrollAnchorOptions {

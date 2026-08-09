@@ -1,5 +1,5 @@
 import React from 'react';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import styles from '../SidebarSessionList.module.css';
 import { ChevronDown } from 'lucide-react';
 

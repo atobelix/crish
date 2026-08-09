@@ -108,23 +108,23 @@ export const InteractiveXtermTerminal = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
-      focus: () => {
-        try {
-          termRef.current?.focus();
-        } catch {
-          /* ignore */
-        }
-      },
+focus: () => {
+try {
+termRef.current?.focus();
+} catch {
+/* swallow-ok: 终端实例未就绪时聚焦为空操作 */
+}
+},
       clear: () => {
         const term = termRef.current;
         const ptyId = ptyIdRef.current;
         // 本地清屏 + 向 shell 发送 Ctrl+L（与终端习惯一致）
-        try {
-          term?.clear();
-        } catch {
-          /* ignore */
-        }
-        if (ptyId) {
+try {
+term?.clear();
+} catch {
+/* swallow-ok: 清屏失败不阻断后续 Ctrl+L 下发 */
+}
+if (ptyId) {
           void ptyWrite(ptyId, '\x0c');
         }
       },
@@ -192,25 +192,25 @@ export const InteractiveXtermTerminal = forwardRef<
 
     try {
       const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        try {
-          webgl.dispose();
-        } catch {
-          /* ignore */
-        }
-      });
-      term.loadAddon(webgl);
-    } catch {
-      // WebGL 不可用时静默降级 canvas 2d
-    }
+webgl.onContextLoss(() => {
+try {
+webgl.dispose();
+} catch {
+/* swallow-ok: WebGL 上下文已丢失时 dispose 幂等降级 */
+}
+});
+term.loadAddon(webgl);
+} catch {
+// swallow-ok: WebGL 不可用时静默降级 canvas 2d
+}
 
-    requestAnimationFrame(() => {
-      try {
-        fitAddon.fit();
-      } catch {
-        /* ignore */
-      }
-    });
+requestAnimationFrame(() => {
+try {
+fitAddon.fit();
+} catch {
+/* swallow-ok: 容器尚未布局完成时 fit 失败，下一帧重试 */
+}
+});
 
     // stdin → PTY（按当前 ptyId 过滤，避免会话切换竞态）
     const dataDisp = term.onData((data) => {
@@ -221,13 +221,13 @@ export const InteractiveXtermTerminal = forwardRef<
 
     termRef.current = term;
 
-    return () => {
-      dataDisp.dispose();
-      try {
-        term.dispose();
-      } catch {
-        /* ignore */
-      }
+return () => {
+dataDisp.dispose();
+try {
+term.dispose();
+} catch {
+/* swallow-ok: 组件卸载路径 dispose 失败不影响其余清理 */
+}
       termRef.current = null;
       fitAddonRef.current = null;
     };
@@ -247,12 +247,12 @@ export const InteractiveXtermTerminal = forwardRef<
     const key = (sessionKey || '').trim() || '_global';
 
     const start = async () => {
-      onStatusRef.current?.('connecting');
-      try {
-        fitAddon.fit();
-      } catch {
-        /* ignore */
-      }
+onStatusRef.current?.('connecting');
+try {
+fitAddon.fit();
+} catch {
+/* swallow-ok: 连接阶段 fit 失败不阻断 pty 建立 */
+}
 
       const cols = Math.max(2, term.cols || 80);
       const rows = Math.max(1, term.rows || 24);
@@ -302,11 +302,12 @@ export const InteractiveXtermTerminal = forwardRef<
           if (!cancelled) {
             ptyIdRef.current = null;
             onStatusRef.current?.('error', res.message);
-            try {
-              term.writeln(`\x1b[31m✗ ${res.message}\x1b[0m`);
-            } catch {
-              /* ignore */
-            }
+try {
+term.writeln(`\x1b[31m�?${res.message}\x1b[0m`);
+} catch {
+/* swallow-ok: 错误提示写终端失败时状态栏已展示错误 */
+}
+}
           }
           return;
         }
@@ -325,36 +326,36 @@ export const InteractiveXtermTerminal = forwardRef<
       }
 
       // 仅新建会话清屏；复用时保留缓冲（折坞再开续看）
-      if (!reused) {
-        try {
-          term.reset();
-        } catch {
-          /* ignore */
-        }
-      }
+if (!reused) {
+try {
+term.reset();
+} catch {
+/* swallow-ok: reset 失败时终端仍可用，仅缓冲未清 */
+}
+}
 
       activePtyId = ptyId;
       ptyIdRef.current = activePtyId;
       onStatusRef.current?.('ready');
 
-      unsubOut = subscribePtyOutput((p) => {
-        if (cancelled || p.ptyId !== activePtyId) return;
-        try {
-          term.write(p.data);
-        } catch {
-          /* ignore */
-        }
-      });
+unsubOut = subscribePtyOutput((p) => {
+if (cancelled || p.ptyId !== activePtyId) return;
+try {
+term.write(p.data);
+} catch {
+/* swallow-ok: 终端已销毁时输出帧丢弃，不阻断会话 */
+}
+});
 
       unsubExit = subscribePtyExit((p) => {
         if (cancelled || p.ptyId !== activePtyId) return;
         const codeLabel =
           p.code === undefined || p.code === null ? '' : ` · exit ${p.code}`;
-        try {
-          term.writeln(`\r\n\x1b[90m── 进程已退出${codeLabel} ──\x1b[0m`);
-        } catch {
-          /* ignore */
-        }
+try {
+term.writeln(`\r\n\x1b[90m── 进程已退�?{codeLabel} ──\x1b[0m`);
+} catch {
+/* swallow-ok: 退出提示写终端失败不影响状态更新 */
+}
         // 进程自退出：解绑 registry，避免死绑定复用
         void import('../../api/ptyRegistry').then((m) => {
           if (m.ptyRegistry.get(key) === activePtyId) {
@@ -373,16 +374,16 @@ export const InteractiveXtermTerminal = forwardRef<
         if (activePtyId) {
           void ptyResize(activePtyId, term.cols, term.rows);
         }
-      } catch {
-        /* ignore */
-      }
+} catch {
+/* swallow-ok: 尺寸同步失败时 pty 保持旧尺寸，下次 resize 校正 */
+}
 
-      try {
-        term.focus();
-      } catch {
-        /* ignore */
-      }
-    };
+try {
+term.focus();
+} catch {
+/* swallow-ok: 终端未就绪时聚焦为空操作 */
+}
+};
 
     void start();
 
@@ -490,13 +491,13 @@ export const InteractiveXtermTerminal = forwardRef<
     };
     const mo = new MutationObserver(onResizeClassChange);
     try {
-      mo.observe(document.body, {
-        attributes: true,
-        attributeFilter: ['class'],
-      });
-    } catch {
-      /* ignore */
-    }
+mo.observe(document.body, {
+attributes: true,
+attributeFilter: ['class'],
+});
+} catch {
+/* swallow-ok: 主题观察不可用时终端配色不回切，功能不受影响 */
+}
 
     return () => {
       ro.disconnect();
@@ -522,13 +523,13 @@ export const InteractiveXtermTerminal = forwardRef<
       role="application"
       aria-label="交互式 PowerShell 终端"
       tabIndex={0}
-      onClick={() => {
-        try {
-          termRef.current?.focus();
-        } catch {
-          /* ignore */
-        }
-      }}
+onClick={() => {
+try {
+termRef.current?.focus();
+} catch {
+/* swallow-ok: 点击聚焦失败时用户可再点终端内部 */
+}
+}}
     />
   );
 });

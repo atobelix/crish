@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { agentTitle } from './AgentTeamBoard';
 import { agentDisplayName } from './agentCardUtils';
-import type { SessionAgent } from '../../store/layoutStore';
+import type { SessionAgent } from '../../store/types';
 
 /** 最小 SessionAgent 工厂（缺省空展示字段，逐项覆盖断言兜底链） */
 function makeAgent(overrides: Partial<SessionAgent> = {}): SessionAgent {

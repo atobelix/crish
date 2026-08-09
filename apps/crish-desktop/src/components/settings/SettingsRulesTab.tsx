@@ -7,14 +7,13 @@
 import React, { useId, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './SettingsRulesTab.module.css';
-import { SettingsSelect } from './SettingsSelect';
+import { Button, Select, Tooltip } from '../ui';
 import {
   SettingsPage,
   SettingsSection,
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Button, Tooltip } from '../ui';
 import { useRulesState } from './useRulesState';
 import {
   RULE_PRESETS,
@@ -145,9 +144,13 @@ export const SettingsRulesTab: React.FC<Props> = ({
         <label htmlFor={scopeSelectId} className="sr-only">
           规则作用域
         </label>
-        <SettingsSelect
+        <Select
           value={scopeKey}
-          options={scopeOptions}
+          options={scopeOptions.map((o) => ({
+            id: o.value,
+            label: o.label,
+            ...(o.hint !== undefined ? { hint: o.hint } : {}),
+          }))}
           onChange={setScopeKey}
           disabled={busy}
           className="settings-rules-scope-select"

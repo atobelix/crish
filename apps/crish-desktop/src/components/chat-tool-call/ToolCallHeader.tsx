@@ -9,7 +9,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import styles from './ChatToolCallBlock.module.css';
-import type { MessageToolCall } from '../../store/layoutStore';
+import type { MessageToolCall } from '../../store/types';
 import { Tooltip } from '../ui';
 
 export interface ToolCallHeaderProps {

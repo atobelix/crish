@@ -4,7 +4,7 @@ import {
   DEFAULT_RECENT_MESSAGE_COUNT,
   expandedOlderForPinJump,
 } from '../../api/messageWindow';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 
 export function pinSnippet(text?: string, max = 72): string {
   const t = (text || '').replace(/\s+/g, ' ').trim();

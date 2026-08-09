@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import { groupUnpinnedByProject } from '../../../api/store-access/componentAccess';
 import type { ProjectEntry } from '../../../api/projectStore';
 import { sessionListDisplayTitle } from '../../../api/sessionTitle';

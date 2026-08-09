@@ -1,4 +1,4 @@
-import type { SessionAgent } from '../../store/layoutStore';
+import type { SessionAgent } from '../../store/types';
 
 /**
  * 例外声明（T05.5.1 tokens 唯一源）：

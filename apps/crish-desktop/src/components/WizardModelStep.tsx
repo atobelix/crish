@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import styles from './overlay/FirstRunWizard.module.css';
-import { SettingsSelect } from './settings/SettingsSelect';
+import { Select } from './ui';
 import { wizardEmptyModelCatalogHint } from './firstRunWizardLib';
 
 /** 本步用到的可访问 id（useId 生成，壳层透传） */
@@ -56,7 +56,7 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
       </label>
       {hasListedModels ? (
         <>
-          <SettingsSelect
+          <Select
             {...(styles.firstRunSelect !== undefined && {
               className: styles.firstRunSelect,
             })}
@@ -64,8 +64,8 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
             disabled={busy}
             placeholder="从本机列表选择…"
             options={[
-              { value: '', label: '从本机列表选择…' },
-              ...listedModels.map((m) => ({ value: m, label: m })),
+              { id: '', label: '从本机列表选择…' },
+              ...listedModels.map((m) => ({ id: m, label: m })),
             ]}
             onChange={(v) => {
               onChange(v);

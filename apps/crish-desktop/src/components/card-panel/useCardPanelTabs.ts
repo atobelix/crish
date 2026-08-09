@@ -5,7 +5,7 @@ import { onUiEvent } from '../../api/uiEvents';
 import { closeAgentSidePanel } from '../../api/openAgentPanel';
 import { isClosableTab, placeTabsAddMenu } from './CardPanelHeader';
 import { getDockOverlayStyle } from './CardPanelLayout';
-import type { GroupState } from '../../store/layoutStore';
+import type { GroupState } from '../../store/types';
 
 export interface UseCardPanelTabsOptions {
   wsId: string;

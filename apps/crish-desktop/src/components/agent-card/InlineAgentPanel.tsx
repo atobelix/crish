@@ -11,7 +11,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import * as Lucide from 'lucide-react';
-import type { SessionAgent } from '../../store/layoutStore';
+import type { SessionAgent } from '../../store/types';
 import styles from './InlineAgentPanel.module.css';
 import {
   selectActiveAgentId,

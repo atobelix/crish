@@ -1,6 +1,6 @@
 import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
-import type { MessageToolCall } from '../../store/layoutStore';
+import type { MessageToolCall } from '../../store/types';
 import { ApprovalAskCard } from '../agent-card/ApprovalAskCard';
 import { isEditToolName } from '../../api/toolFeedback';
 import {

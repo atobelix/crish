@@ -4,6 +4,7 @@ import type { FileDiff } from '../../store/types';
 import { useLayoutTreeStore, fileViewerInitialModeMap } from '../../api/store-access/componentAccess';
 import { useTerminalField, selectDiffFiles } from '../../store/storeAccess';
 import { openPathDefault, openWithHostOpener, listOpenOptionsForFile, type HostOpener } from '../../api/hostOpenersApi';
+import { logInternalError } from '../../api/userFacingErrors';
 import { pathDirname, readTextFile, getWorkspacePath } from '../../api/workspaceFsApi';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { Tooltip } from '../ui';
@@ -115,7 +116,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     const baseName = filePath.replace(/^.*[\\/]/, '') || filePath;
 
     const handleOpenDefault = () => {
-      void openPathDefault(absolutePath).catch(() => {});
+      void openPathDefault(absolutePath).catch((e) => logInternalError('components/files/FileViewerCard/openDefault', e));
     };
 
     const handleCopyCode = async () => {
@@ -279,7 +280,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                           className={styles.filesOpenItem}
                           role="menuitem"
                           onClick={() => {
-                            void openWithHostOpener(op.id, absolutePath).catch(() => {});
+                            void openWithHostOpener(op.id, absolutePath).catch((e) => logInternalError('components/files/FileViewerCard/openWith', e));
                             setOpenMenuOpen(false);
                           }}
                         >

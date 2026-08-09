@@ -6,7 +6,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import { scheduleLabel, workflowEnabledLabel, type WorkflowDefinition } from '../../api/workflowApi';
 import { SettingsRow } from './SettingsUI';
-import { Button, Tooltip } from '../ui';
+import { Button, Switch, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
 import settingsStyles from './SettingsScheduleTab.module.css';
 
@@ -82,13 +82,11 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                   control={
                     <div className={settingsStyles.controlGroup}>
                       <Tooltip content={enabled ? '暂停' : '启用'}>
-                        <input
-                          type="checkbox"
-                          className="settings-switch"
+                        <Switch
                           checked={enabled}
                           disabled={busy}
                           aria-label={enabled ? `暂停 ${w.name}` : `启用 ${w.name}`}
-                          onChange={() => onToggle(w)}
+                          onCheckedChange={() => onToggle(w)}
                         />
                       </Tooltip>
                       <Tooltip content="编辑">

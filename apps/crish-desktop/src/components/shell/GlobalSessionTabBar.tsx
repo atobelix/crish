@@ -1,21 +1,20 @@
 /**
  * GlobalSessionTabBar — 全局会话标签行（最顶 AppTopBar 中间）。
  *
- * 决策：docs/plans/progress/shell-global-tab-bar.md
- * - openTabs 唯一主标签 UI；非 per-leaf multi-strip
- * - 默认 variant=caption 嵌在 AppTopBar（最顶可见，对齐参考图）
- * - tab 等宽；「+」→ openNewDraftTab only
+ * T-C 批次 5.2 · T12 后为「TabStrip 基座 + 业务封装层」：
+ * - 呈现（tablist/tab/roving/键盘/溢出 fade/关闭钮）由 ui/TabStrip 承担；
+ * - 本层保留业务：窄订阅、工作区标签解析、丢 tab 恢复、选择/关闭/新建路径、
+ *   variant（caption 嵌 AppTopBar / standalone 独立条）；
+ * - 全局上下文（右键菜单等）为业务封装层组合能力，不扩基座 props。
  *
+ * 决策：docs/plans/progress/shell-global-tab-bar.md
  * 数据属性：data-global-session-tab-bar / data-topbar-session-id
  */
 
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
-  useState,
 } from 'react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { MessageSquarePlus, Pin, X } from 'lucide-react';
@@ -40,20 +39,12 @@ import {
 import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
-import { Tooltip } from '../ui';
+import { TabStrip, Tooltip } from '../ui';
 import {
   openTabsStripRelevantEqual,
-  readStripOverflow as readUnitStripOverflow,
+  readStripOverflow,
 } from '../binary-tree/UnitSessionTabStrip';
 import styles from './GlobalSessionTabBar.module.css';
-
-/** 读 scroll 容器溢出边（别名：index 与历史 API 名） */
-function readStripOverflow(el: HTMLElement): {
-  start: boolean;
-  end: boolean;
-} {
-  return readUnitStripOverflow(el);
-}
 
 const ICON_SIZE = 16;
 const TAB_ICON_STROKE = 1.75;
@@ -205,203 +196,57 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
       emitUiEvent('open-chat');
     }, []);
 
-    const activeIndex = useMemo(() => {
-      if (sessionTabs.length === 0) return -1;
-      // 新对话草稿态：无标签高亮（空界面，不是某个 tab）
-      if (isPendingDraft(activeSessionId || '')) return -1;
-      for (let i = 0; i < sessionTabs.length; i++) {
-        if (sessionTabs[i]!.sessionId === activeSessionId) return i;
-      }
-      // activeTabId 兜底
-      if (activeTabId) {
-        const byId = sessionTabs.findIndex((t) => t.tabId === activeTabId);
-        if (byId >= 0) return byId;
-      }
-      return -1;
-    }, [sessionTabs, activeSessionId, activeTabId]);
-
-    // ── roving tabindex ─────────────────────────────────────────
-    const [rovingIndex, setRovingIndex] = useState(0);
-    const tabElsRef = useRef<Array<HTMLDivElement | null>>([]);
-    const scrollRef = useRef<HTMLDivElement | null>(null);
-    const [overflowStart, setOverflowStart] = useState(false);
-    const [overflowEnd, setOverflowEnd] = useState(false);
-
-    const sessionIdsKey = sessionTabs.map((t) => t.sessionId).join('|');
-    useEffect(() => {
-      if (sessionTabs.length === 0) {
-        setRovingIndex(0);
-        return;
-      }
-      const next =
-        activeIndex >= 0
-          ? Math.min(activeIndex, sessionTabs.length - 1)
-          : Math.min(rovingIndex, sessionTabs.length - 1);
-      setRovingIndex(next);
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- rovingIndex 由本效应自洽写入（仅 activeIndex<0 时读取），纳入依赖会引入无意义的二次收敛
-    }, [
-      sessionTabs.length,
-      activeIndex,
-      sessionIdsKey,
-    ]);
-
-    const focusTabAt = useCallback(
-      (index: number, activate: boolean) => {
-        if (sessionTabs.length === 0) return;
-        const i = Math.max(0, Math.min(index, sessionTabs.length - 1));
-        setRovingIndex(i);
-        const el = tabElsRef.current[i];
-        if (el) {
-          try {
-            el.focus({ preventScroll: false });
-          } catch {
-            /* jsdom */
-          }
-          if (typeof el.scrollIntoView === 'function') {
-            el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-          }
-        }
-        if (activate) {
-          const tab = sessionTabs[i];
-          if (tab) selectSession(tab.sessionId);
-        }
-      },
-      [sessionTabs, selectSession]
-    );
-
-    const onTabKeyDown = useCallback(
-      (e: React.KeyboardEvent, index: number) => {
-        const n = sessionTabs.length;
-        if (n === 0) return;
-        switch (e.key) {
-          case 'ArrowRight':
-          case 'ArrowDown':
-            e.preventDefault();
-            focusTabAt((index + 1) % n, true);
-            break;
-          case 'ArrowLeft':
-          case 'ArrowUp':
-            e.preventDefault();
-            focusTabAt((index - 1 + n) % n, true);
-            break;
-          case 'Home':
-            e.preventDefault();
-            focusTabAt(0, true);
-            break;
-          case 'End':
-            e.preventDefault();
-            focusTabAt(n - 1, true);
-            break;
-          case 'Enter':
-          case ' ':
-            e.preventDefault();
-            {
-              const tab = sessionTabs[index];
-              if (tab) selectSession(tab.sessionId);
-            }
-            break;
-          case 'Delete':
-          case 'Backspace':
-            {
-              const tab = sessionTabs[index];
-              if (tab) {
-                e.preventDefault();
-                onCloseSession(tab.sessionId, e);
-              }
-            }
-            break;
-          default:
-            break;
-        }
-      },
-      [sessionTabs, focusTabAt, selectSession, onCloseSession]
-    );
-
-    const updateOverflow = useCallback(() => {
-      const el = scrollRef.current;
-      if (!el) {
-        setOverflowStart(false);
-        setOverflowEnd(false);
-        return;
-      }
-      const { start, end } = readStripOverflow(el);
-      setOverflowStart((prev) => (prev === start ? prev : start));
-      setOverflowEnd((prev) => (prev === end ? prev : end));
-    }, []);
-
-    useLayoutEffect(() => {
-      updateOverflow();
-    }, [sessionTabs.length, sessionTabs, updateOverflow]);
-
-    useEffect(() => {
-      const el = scrollRef.current;
-      if (!el) return;
-      updateOverflow();
-      el.addEventListener('scroll', updateOverflow, { passive: true });
-      const ro =
-        typeof ResizeObserver !== 'undefined'
-          ? new ResizeObserver(() => updateOverflow())
-          : null;
-      ro?.observe(el);
-      return () => {
-        el.removeEventListener('scroll', updateOverflow);
-        ro?.disconnect();
-      };
-    }, [updateOverflow, sessionTabs.length]);
+    const titleOf = (sessionId: string) =>
+      sessionTabs.find((t) => t.sessionId === sessionId)?.title || '';
 
     return (
-      <div
+      <TabStrip
         className={`${styles.bar} ${variant === 'caption' ? styles.barCaption : styles.barStandalone}`}
-        data-testid="global-session-tab-bar"
-        data-global-session-tab-bar="true"
-        data-variant={variant}
-        data-tab-count={sessionTabs.length}
-        data-overflow-start={overflowStart ? 'true' : undefined}
-        data-overflow-end={overflowEnd ? 'true' : undefined}
-        role="navigation"
-        aria-label="会话标签"
-      >
-        <div
-          ref={scrollRef}
-          className={styles.scroll}
-          role="tablist"
-          aria-label="会话"
-          aria-orientation="horizontal"
-        >
-          {sessionTabs.map((tab, index) => {
-            const active = tab.sessionId === activeSessionId;
-            const isRovingStop = index === rovingIndex;
+        wrapRole="navigation"
+        wrapAriaLabel="会话标签"
+        scrollClassName={styles.scroll}
+        tabClassName={styles.tab}
+        tabActiveClassName={styles.isActive}
+        ariaLabel="会话"
+        activeId={
+          isPendingDraft(activeSessionId || '') ? null : activeSessionId || null
+        }
+        tabs={sessionTabs.map((t) => ({
+          id: t.sessionId,
+          label: t.title,
+          data: {
+            'data-testid': 'global-session-tab',
+            'data-session-id': t.sessionId,
+            'data-tab-id': t.tabId,
+            'data-topbar-session-id': t.sessionId,
+          },
+        }))}
+        data={{
+          'data-testid': 'global-session-tab-bar',
+          'data-global-session-tab-bar': 'true',
+          'data-variant': variant,
+          'data-tab-count': sessionTabs.length,
+        }}
+          onActiveChange={selectSession}
+          onClose={(sessionId, e) => onCloseSession(sessionId, e)}
+          onTabPointerDown={
+            startSessionDrag
+              ? (sessionId, e) =>
+                  startSessionDrag(sessionId, titleOf(sessionId), e)
+              : undefined
+          }
+          renderTab={(tab) => {
+            const meta = sessionTabs.find((t) => t.sessionId === tab.id);
             return (
-              <div
-                key={tab.tabId || tab.sessionId}
-                ref={(node) => {
-                  tabElsRef.current[index] = node;
-                }}
-                data-testid="global-session-tab"
-                data-session-id={tab.sessionId}
-                data-tab-id={tab.tabId}
-                data-topbar-session-id={tab.sessionId}
-                draggable={false}
-                className={`${styles.tab} ${active ? styles.isActive : ''}`}
-                role="tab"
-                aria-selected={active}
-                tabIndex={isRovingStop ? 0 : -1}
-                onKeyDown={(e) => onTabKeyDown(e, index)}
-                onFocus={() => setRovingIndex(index)}
-                onPointerDown={
-                  startSessionDrag
-                    ? (e) => startSessionDrag(tab.sessionId, tab.title, e)
-                    : undefined
-                }
-              >
+              <>
                 <button
                   type="button"
                   className={styles.tabMain}
                   tabIndex={-1}
-                  onClick={() => selectSession(tab.sessionId)}
-                  title={tab.title}
+                  onClick={() => selectSession(tab.id)}
+                  title={tab.label}
                 >
-                  {tab.pinned ? (
+                  {meta?.pinned ? (
                     <Pin
                       size={12}
                       strokeWidth={2}
@@ -409,43 +254,43 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
                       className={styles.pinIcon}
                     />
                   ) : null}
-                  <span className={styles.tabLabel}>{tab.title}</span>
+                  <span className={styles.tabLabel}>{tab.label}</span>
                 </button>
                 <Tooltip content="关闭标签">
                   <button
                     type="button"
                     className={styles.tabClose}
                     tabIndex={-1}
-                    aria-label={`关闭会话标签 ${tab.title}`}
-                    onClick={(e) => onCloseSession(tab.sessionId, e)}
+                    aria-label={`关闭会话标签 ${tab.label}`}
+                    onClick={(e) => onCloseSession(tab.id, e)}
                     onPointerDown={(e) => e.stopPropagation()}
                   >
                     <X size={12} strokeWidth={2} aria-hidden />
                   </button>
                 </Tooltip>
-              </div>
+              </>
             );
-          })}
-
-          <div className={styles.addWrap}>
-            <Tooltip content="新建对话">
-              <button
-                type="button"
-                className={styles.tabAdd}
-                data-testid="global-strip-new-session"
-                aria-label="新建对话"
-                onClick={onNewSession}
-              >
-                <MessageSquarePlus
-                  size={ICON_SIZE}
-                  strokeWidth={TAB_ICON_STROKE}
-                  aria-hidden
-                />
-              </button>
-            </Tooltip>
-          </div>
-        </div>
-      </div>
+          }}
+          trailing={
+            <div className={styles.addWrap}>
+              <Tooltip content="新建对话">
+                <button
+                  type="button"
+                  className={styles.tabAdd}
+                  data-testid="global-strip-new-session"
+                  aria-label="新建对话"
+                  onClick={onNewSession}
+                >
+                  <MessageSquarePlus
+                    size={ICON_SIZE}
+                    strokeWidth={TAB_ICON_STROKE}
+                    aria-hidden
+                  />
+                </button>
+              </Tooltip>
+            </div>
+          }
+        />
     );
   });
 

@@ -9,7 +9,7 @@ import { Tooltip } from '../ui';
 import type {
   FileDiff,
   SessionMessage,
-} from '../../store/layoutStore';
+} from '../../store/types';
 import { messageMatchesSearch } from '../../api/sessionSearch';
 import { ChatAssistantMessageRow, ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';

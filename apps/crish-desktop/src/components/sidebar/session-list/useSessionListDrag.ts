@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import styles from '../SidebarSessionList.module.css';
 import type { SidebarDragItem } from './sessionListTypes';
 

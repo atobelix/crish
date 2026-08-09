@@ -1,5 +1,5 @@
 import React from 'react';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import {
   clampSessionListWindowRange,
   type SessionListWindowRange,

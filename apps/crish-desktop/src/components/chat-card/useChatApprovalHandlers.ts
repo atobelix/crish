@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import { getSessionById } from '../../api/store-access/componentAccess';
 import type { SessionAgent } from '../../store/types';
 import {

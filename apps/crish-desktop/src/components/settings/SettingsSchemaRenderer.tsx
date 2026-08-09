@@ -1,5 +1,5 @@
 import React from 'react';
-import { SettingsSelect } from './SettingsSelect';
+import { Select, Switch } from '../ui';
 import {
   SettingsSection,
   SettingsCard,
@@ -75,23 +75,25 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
               if (prop.type === 'boolean') {
                 const checked = Boolean(val);
                 control = (
-                  <input
+                  <Switch
                     id={domId}
-                    type="checkbox"
-                    className="settings-switch settings-switch--personalize"
                     checked={checked}
                     disabled={!ready}
-                    onChange={(e) => {
-                      void onSave({ [prop.key]: e.target.checked });
+                    onCheckedChange={(next) => {
+                      void onSave({ [prop.key]: next });
                     }}
                   />
                 );
               } else if (prop.type === 'select') {
                 control = (
-                  <SettingsSelect
+                  <Select
                     className="settings-personalize-select"
                     value={String(val || '')}
-                    options={prop.options || []}
+                    options={(prop.options || []).map((o) => ({
+                      id: o.value,
+                      label: o.label,
+                      ...(o.hint !== undefined ? { hint: o.hint } : {}),
+                    }))}
                     onChange={(v) => {
                       void onSave({ [prop.key]: v });
                     }}
@@ -190,10 +192,14 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                 );
               } else if (prop.type === 'font-selector') {
                 control = (
-                  <SettingsSelect
+                  <Select
                     className="settings-personalize-select"
                     value={String(val || '')}
-                    options={prop.options || []}
+                    options={(prop.options || []).map((o) => ({
+                      id: o.value,
+                      label: o.label,
+                      ...(o.hint !== undefined ? { hint: o.hint } : {}),
+                    }))}
                     onChange={(v) => void onSave({ [prop.key]: v })}
                     disabled={!ready}
                     placeholder={prop.placeholder || '请选择…'}

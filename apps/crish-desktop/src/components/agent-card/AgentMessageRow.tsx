@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import type { FileDiff, SessionMessage } from '../../store/layoutStore';
+import type { FileDiff, SessionMessage } from '../../store/types';
 import { ChatAssistantMessageRow, ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
 import { useAgentToolApproval } from '../../hooks/useAgentToolApproval';
 

@@ -148,29 +148,18 @@ export function useOverviewState(
   const markLocalTool = (
     toolCallId: string | undefined,
     status: 'running' | 'error',
-    output: string
+    output: string,
+    runId?: string
   ) => {
     if (!toolCallId) return;
-    useLayoutStore.setState((state) => {
-      for (const s of state.sessions) {
-        for (const m of s.messages || []) {
-          const tc = m.toolCalls?.find((t) => t.id === toolCallId);
-          if (tc) {
-            tc.status = status;
-            tc.output = output;
-          }
-        }
-        for (const ag of s.agents || []) {
-          for (const m of ag.messages || []) {
-            const tc = m.toolCalls?.find((t) => t.id === toolCallId);
-            if (tc) {
-              tc.status = status;
-              tc.output = output;
-            }
-          }
-        }
-      }
-    });
+    // T-E 步骤 4（C1）：raw setState 全表扫描 → markToolCallLocalStatus action
+    //（scope 命中时只扫 scope 内；handleApprovalAllow 有 a.runId 可传）
+    useLayoutStore.getState().markToolCallLocalStatus(
+      toolCallId,
+      status,
+      output,
+      runId ? { runId } : undefined
+    );
   };
 
   const handleApprovalAllow = (a: PendingApprovalInfo, e: React.MouseEvent) => {
@@ -182,10 +171,10 @@ export function useOverviewState(
     }
     if (approvalBusyId) return;
     setApprovalBusyId(id);
-    markLocalTool(id, 'running', '执行中…');
+    markLocalTool(id, 'running', '执行中…', a.runId);
     void engineApproveTool(id)
       .catch(() => {
-        markLocalTool(id, 'error', '批准失败');
+        markLocalTool(id, 'error', '批准失败', a.runId);
         showActionErr('批准失败，请重试');
       })
       .finally(() => setApprovalBusyId(null));
@@ -200,7 +189,7 @@ export function useOverviewState(
     }
     if (approvalBusyId) return;
     setApprovalBusyId(id);
-    markLocalTool(id, 'error', '已拒绝');
+    markLocalTool(id, 'error', '已拒绝', a.runId);
     void engineDenyTool(id)
       .catch(() => showActionErr('拒绝失败，请重试'))
       .finally(() => setApprovalBusyId(null));

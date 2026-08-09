@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import styles from './overlay/FirstRunWizard.module.css';
-import { SettingsSelect } from './settings/SettingsSelect';
+import { Select } from './ui';
 import { profileDisplayLabel, type ProviderProfile } from '../api/providerProfiles';
 
 /** 本步用到的可访问 id（useId 生成，壳层透传防重复渲染串 id） */
@@ -46,12 +46,12 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
         服务商
       </label>
       {hasProfiles ? (
-        <SettingsSelect
+        <Select
           {...(styles.firstRunSelect !== undefined && { className: styles.firstRunSelect })}
           value={profileId}
           disabled={busy}
           options={profiles.map((p) => ({
-            value: p.id,
+            id: p.id,
             label: profileDisplayLabel(p),
           }))}
           onChange={(id) => {

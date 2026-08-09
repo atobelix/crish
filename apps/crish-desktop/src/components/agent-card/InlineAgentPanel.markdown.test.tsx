@@ -6,7 +6,7 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { SessionAgent } from '../../store/layoutStore';
+import type { SessionAgent } from '../../store/types';
 
 const asyncMdCalls: Array<{ text: string; isStreaming?: boolean }> = [];
 

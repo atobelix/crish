@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import styles from './Workspace.module.css';
-import type { WorkspaceState } from '../../store/layoutStore';
+import type { WorkspaceState } from '../../store/types';
 import { CardPanel } from '../CardPanel';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { WorkspaceResizer } from './WorkspaceResizer';

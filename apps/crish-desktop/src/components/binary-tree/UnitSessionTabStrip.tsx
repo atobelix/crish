@@ -1,34 +1,20 @@
 /**
  * UnitSessionTabStrip — 每个 chat 域 Conversation Unit 顶部的会话标签行。
  *
+ * T-C 批次 5.2 · T12 后为「TabStrip 基座 + 业务封装层」：
+ * - 呈现（role=tablist/tab、roving tabindex、键盘漫游、溢出 fade、关闭钮）由
+ *   ui/TabStrip 基座承担（对齐 S4.5 a11y 契约）；
+ * - 本层保留业务：窄订阅（openTabs/tree 投影）、标签解析（标题/置顶）、
+ *   选择/关闭/新建会话路径、拖拽入口、多 unit 内联工具；
+ * - readStripOverflow 由基座导出，此处 re-export 保持 GlobalSessionTabBar
+ *   既有 import 路径稳定。
+ *
  * 仅多 chat 分屏时挂载（单 unit 用 AppTopBar GlobalSessionTabBar）。
- * 多 unit：标签 + UnitChromeActions 同一行（30px），与右坞 header 齐平，
- * 避免 AppTopBar + 标签 + ChatHeader 叠成三行。
- *
- * 行为：
- * - 点击 → activateTab / openOrFocusSession
- * - 关闭 → closeTabBySessionId
- * - + → openNewDraftTab（当前工作区草稿）
- * - 拖拽（D5 / useTopBarDrag）：
- *   - 同条 / 跨条悬停另一 tab → reorderSessionTab
- *   - 拖到画布 split 区 → planSessionCanvasDrop（move 不 clone）
- * - 键盘 a11y（S4.5）：roving tabindex + Arrow/Home/End；Delete 关标签
- * - 溢出 fade：scroll 时写 data-overflow-start/end（CSS 已接线）
- *
- * 订阅（D0-5 / strip-subscribe-narrow）：
- * - openTabs 仅在条带相关字段变化时通知（忽略 rightDock 等）
- * - layout 只投影 chat unit 列表，不订整棵 tree.root
- * - 注意：勿在 selector 中引用未导入符号（曾因 listChatLeaves 未导入导致运行时崩溃）。
+ * 行为：点击 → activateTab / openOrFocusSession；关闭 → closeTabBySessionId；
+ * + → openNewDraftTab；拖拽（D5 / useTopBarDrag）经 onTabPointerDown 插槽。
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { MessageSquarePlus, Pin, X } from 'lucide-react';
 import {
@@ -54,9 +40,12 @@ import {
 import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
-import { Tooltip } from '../ui';
+import { TabStrip, Tooltip } from '../ui';
 import { UnitChromeActions } from '../chat-card/UnitChromeActions';
 import styles from './UnitSessionTabStrip.module.css';
+
+/** 基座溢出 helper 别名导出：GlobalSessionTabBar 沿用既有 import 路径 */
+export { readStripOverflow } from '../ui/TabStrip/TabStrip';
 
 const ICON_SIZE = 16;
 const TAB_ICON_STROKE = 1.75;
@@ -144,22 +133,6 @@ export function chatUnitsEqual(
   return true;
 }
 
-/** 读 scroll 容器溢出边，供 data-overflow-* / 测 */
-export function readStripOverflow(el: HTMLElement): {
-  start: boolean;
-  end: boolean;
-} {
-  const maxScroll = el.scrollWidth - el.clientWidth;
-  if (maxScroll <= 1) {
-    return { start: false, end: false };
-  }
-  const left = el.scrollLeft;
-  return {
-    start: left > 1,
-    end: left < maxScroll - 1,
-  };
-}
-
 export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> = React.memo(
   ({ leafId, leafSessionId, startSessionDrag }) => {
     // 窄订阅：仅 tabId/sessionId/title/workspaceKey/kind；rightDock 变化被 equality 吞掉
@@ -240,239 +213,84 @@ export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> = React.mem
       emitUiEvent('open-chat');
     }, []);
 
-    // ── active index（单 unit 跟 shell；多 unit 跟 leaf 绑定） ──
-    const activeIndex = useMemo(() => {
-      if (sessionTabs.length === 0) return -1;
-      // 草稿空界面：不高亮任何真实 tab
-      if (isPendingDraft(activeSessionId || '')) return -1;
-      for (let i = 0; i < sessionTabs.length; i++) {
-        const tab = sessionTabs[i]!;
-        if (tab.sessionId === activeSessionId) return i;
-        if (
-          chatLeafCount > 1 &&
-          leafSessionId &&
-          tab.sessionId === leafSessionId
-        ) {
-          return i;
-        }
-      }
-      return -1;
-    }, [sessionTabs, activeSessionId, chatLeafCount, leafSessionId]);
-
-    // ── roving tabindex（S4.5） ────────────────────────────────
-    const [rovingIndex, setRovingIndex] = useState(0);
-    const tabElsRef = useRef<Array<HTMLDivElement | null>>([]);
-    const scrollRef = useRef<HTMLDivElement | null>(null);
-    const [overflowStart, setOverflowStart] = useState(false);
-    const [overflowEnd, setOverflowEnd] = useState(false);
-
-    // 活动 tab 变化时把 roving 锚到活动项（列表变短时钳制）
-    useEffect(() => {
-      if (sessionTabs.length === 0) {
-        setRovingIndex(0);
-        return;
-      }
-      const next =
-        activeIndex >= 0
-          ? Math.min(activeIndex, sessionTabs.length - 1)
-          : Math.min(rovingIndex, sessionTabs.length - 1);
-      setRovingIndex(next);
-      // 仅随 tabs / active 同步；勿跟 rovingIndex 形成环
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionTabs.length, activeIndex, sessionTabs.map((t) => t.sessionId).join('|')]);
-
-    const focusTabAt = useCallback(
-      (index: number, activate: boolean) => {
-        if (sessionTabs.length === 0) return;
-        const i = Math.max(0, Math.min(index, sessionTabs.length - 1));
-        setRovingIndex(i);
-        const el = tabElsRef.current[i];
-        if (el) {
-          try {
-            el.focus({ preventScroll: false });
-          } catch {
-            /* jsdom / 不可聚焦节点 */
-          }
-          // 溢出时滚入视野（jsdom 无 scrollIntoView）
-          if (typeof el.scrollIntoView === 'function') {
-            el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-          }
-        }
-        if (activate) {
-          const tab = sessionTabs[i];
-          if (tab) selectSession(tab.sessionId);
-        }
-      },
-      [sessionTabs, selectSession]
-    );
-
-    const onTabKeyDown = useCallback(
-      (e: React.KeyboardEvent, index: number) => {
-        const n = sessionTabs.length;
-        if (n === 0) return;
-        switch (e.key) {
-          case 'ArrowRight':
-          case 'ArrowDown':
-            e.preventDefault();
-            focusTabAt((index + 1) % n, true);
-            break;
-          case 'ArrowLeft':
-          case 'ArrowUp':
-            e.preventDefault();
-            focusTabAt((index - 1 + n) % n, true);
-            break;
-          case 'Home':
-            e.preventDefault();
-            focusTabAt(0, true);
-            break;
-          case 'End':
-            e.preventDefault();
-            focusTabAt(n - 1, true);
-            break;
-          case 'Enter':
-          case ' ':
-            e.preventDefault();
-            {
-              const tab = sessionTabs[index];
-              if (tab) selectSession(tab.sessionId);
-            }
-            break;
-          case 'Delete':
-          case 'Backspace':
-            {
-              const tab = sessionTabs[index];
-              if (tab) {
-                e.preventDefault();
-                onCloseSession(tab.sessionId, e);
-              }
-            }
-            break;
-          default:
-            break;
-        }
-      },
-      [sessionTabs, focusTabAt, selectSession, onCloseSession]
-    );
-
-    // ── overflow fade（S4.5 data-overflow-*） ──────────────────
-    const updateOverflow = useCallback(() => {
-      const el = scrollRef.current;
-      if (!el) {
-        setOverflowStart(false);
-        setOverflowEnd(false);
-        return;
-      }
-      const { start, end } = readStripOverflow(el);
-      setOverflowStart((prev) => (prev === start ? prev : start));
-      setOverflowEnd((prev) => (prev === end ? prev : end));
-    }, []);
-
-    useLayoutEffect(() => {
-      updateOverflow();
-    }, [sessionTabs.length, sessionTabs, updateOverflow]);
-
-    useEffect(() => {
-      const el = scrollRef.current;
-      if (!el) return;
-      updateOverflow();
-      el.addEventListener('scroll', updateOverflow, { passive: true });
-      const ro =
-        typeof ResizeObserver !== 'undefined'
-          ? new ResizeObserver(() => updateOverflow())
-          : null;
-      ro?.observe(el);
-      return () => {
-        el.removeEventListener('scroll', updateOverflow);
-        ro?.disconnect();
-      };
-    }, [updateOverflow, sessionTabs.length]);
-
     // 多 unit：标签 + 工具同一行（与右坞 header 同高），消灭第三行 chrome
     const showInlineTools = chatLeafCount > 1;
 
+    // 多 unit 时本 strip 以 leaf 绑定 session 为「当前」；单 unit 跟 shell 活动 tab；
+    // 草稿空界面不高亮任何真实 tab
+    const activeId =
+      chatLeafCount > 1 && leafSessionId
+        ? leafSessionId
+        : isPendingDraft(activeSessionId || '')
+          ? null
+          : activeSessionId || null;
+
+    const titleOf = (sessionId: string) =>
+      sessionTabs.find((t) => t.sessionId === sessionId)?.title || '';
+
     return (
-      <div
+      <TabStrip
         className={styles.strip}
-        data-unit-session-tab-strip="true"
-        data-tab-strip-leaf-id={leafId}
-        data-session-id={leafSessionId || undefined}
-        data-chat-leaf-count={chatLeafCount}
-        data-tab-count={sessionTabs.length}
-        data-inline-tools={showInlineTools ? 'true' : undefined}
-        data-overflow-start={overflowStart ? 'true' : undefined}
-        data-overflow-end={overflowEnd ? 'true' : undefined}
-      >
-        <div
-          ref={scrollRef}
-          className={styles.scroll}
-          role="tablist"
-          aria-label="会话"
-          aria-orientation="horizontal"
-        >
-          {sessionTabs.map((tab, index) => {
-            // 单 unit：跟 shell 活动 tab；多 unit：本 leaf 绑定 session 即本条“当前”
-            const active =
-              tab.sessionId === activeSessionId ||
-              (chatLeafCount > 1 &&
-                Boolean(leafSessionId) &&
-                tab.sessionId === leafSessionId);
-            const isRovingStop = index === rovingIndex;
-            return (
-              <div
-                key={tab.tabId || tab.sessionId}
-                ref={(node) => {
-                  tabElsRef.current[index] = node;
-                }}
-                data-testid="unit-session-tab"
-                data-session-id={tab.sessionId}
-                data-tab-id={tab.tabId}
-                data-topbar-session-id={tab.sessionId}
-                draggable={false}
-                className={`${styles.tab} ${active ? styles.isActive : ''}`}
-                role="tab"
-                aria-selected={active}
-                tabIndex={isRovingStop ? 0 : -1}
-                onKeyDown={(e) => onTabKeyDown(e, index)}
-                onFocus={() => setRovingIndex(index)}
-                onPointerDown={
-                  startSessionDrag
-                    ? (e) => startSessionDrag(tab.sessionId, tab.title, e)
-                    : undefined
-                }
+        scrollClassName={styles.scroll}
+        tabClassName={styles.tab}
+        tabActiveClassName={styles.isActive}
+        ariaLabel="会话"
+        activeId={activeId}
+        tabs={sessionTabs.map((t) => ({
+          id: t.sessionId,
+          label: t.title,
+          data: {
+            'data-testid': 'unit-session-tab',
+            'data-session-id': t.sessionId,
+            'data-tab-id': t.tabId,
+            'data-topbar-session-id': t.sessionId,
+          },
+        }))}
+        onActiveChange={selectSession}
+        onClose={(sessionId, e) => onCloseSession(sessionId, e)}
+        onTabPointerDown={
+          startSessionDrag
+            ? (sessionId, e) =>
+                startSessionDrag(sessionId, titleOf(sessionId), e)
+            : undefined
+        }
+        renderTab={(tab) => {
+          const meta = sessionTabs.find((t) => t.sessionId === tab.id);
+          return (
+            <>
+              <button
+                type="button"
+                className={styles.tabMain}
+                tabIndex={-1}
+                onClick={() => selectSession(tab.id)}
+                title={tab.label}
               >
+                {meta?.pinned ? (
+                  <Pin
+                    size={12}
+                    strokeWidth={2}
+                    aria-hidden
+                    className={styles.pinIcon}
+                  />
+                ) : null}
+                <span className={styles.tabLabel}>{tab.label}</span>
+              </button>
+              <Tooltip content="关闭标签">
                 <button
                   type="button"
-                  className={styles.tabMain}
+                  className={styles.tabClose}
                   tabIndex={-1}
-                  onClick={() => selectSession(tab.sessionId)}
-                  title={tab.title}
+                  aria-label={`关闭会话标签 ${tab.label}`}
+                  onClick={(e) => onCloseSession(tab.id, e)}
+                  onPointerDown={(e) => e.stopPropagation()}
                 >
-                  {tab.pinned ? (
-                    <Pin
-                      size={12}
-                      strokeWidth={2}
-                      aria-hidden
-                      className={styles.pinIcon}
-                    />
-                  ) : null}
-                  <span className={styles.tabLabel}>{tab.title}</span>
+                  <X size={12} strokeWidth={2} aria-hidden />
                 </button>
-                <Tooltip content="关闭标签">
-                  <button
-                    type="button"
-                    className={styles.tabClose}
-                    tabIndex={-1}
-                    aria-label={`关闭会话标签 ${tab.title}`}
-                    onClick={(e) => onCloseSession(tab.sessionId, e)}
-                    onPointerDown={(e) => e.stopPropagation()}
-                  >
-                    <X size={12} strokeWidth={2} aria-hidden />
-                  </button>
-                </Tooltip>
-              </div>
-            );
-          })}
-
+              </Tooltip>
+            </>
+          );
+        }}
+        trailing={
           <div className={styles.addWrap}>
             <Tooltip content="新建对话">
               <button
@@ -490,14 +308,23 @@ export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> = React.mem
               </button>
             </Tooltip>
           </div>
-        </div>
-
-        {showInlineTools ? (
-          <div className={styles.stripActions} data-unit-strip-actions="true">
-            <UnitChromeActions activeSessionId={leafSessionId} />
-          </div>
-        ) : null}
-      </div>
+        }
+        data={{
+          'data-unit-session-tab-strip': 'true',
+          'data-tab-strip-leaf-id': leafId,
+          'data-session-id': leafSessionId || undefined,
+          'data-chat-leaf-count': chatLeafCount,
+          'data-tab-count': sessionTabs.length,
+          'data-inline-tools': showInlineTools ? 'true' : undefined,
+        }}
+        wrapTrailing={
+          showInlineTools ? (
+            <div className={styles.stripActions} data-unit-strip-actions="true">
+              <UnitChromeActions activeSessionId={leafSessionId} />
+            </div>
+          ) : null
+        }
+      />
     );
   }
 );

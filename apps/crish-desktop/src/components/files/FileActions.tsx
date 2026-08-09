@@ -4,6 +4,7 @@ import { Tooltip } from '../ui';
 import { AppWindow, ChevronDown, ChevronsUpDown, Copy, FolderOpen, MoreHorizontal, Pencil, Save } from 'lucide-react';
 import { revealInOs } from '../../api/workspaceFsApi';
 import { openPathDefault, openWithHostOpener, type HostOpener } from '../../api/hostOpenersApi';
+import { logInternalError } from '../../api/userFacingErrors';
 import type { ViewMode } from './hooks/useFilePreview';
 
 function getOpenerIcon(op: HostOpener, size = 14) {
@@ -53,9 +54,9 @@ export const FileActions = React.memo(function FileActions({
     document.addEventListener('mousedown', onDoc); return () => document.removeEventListener('mousedown', onDoc);
   }, [moreOpen, openMenuOpen]);
 
-  const handleOpenDefault = () => { if (selected) void openPathDefault(selected).catch(() => {}); };
-  const handleReveal = () => { if (selected) void revealInOs(selected).catch(() => {}); };
-  const handleOpenWith = (op: HostOpener) => { if (selected) void openWithHostOpener(op.id, selected).catch(() => {}); };
+  const handleOpenDefault = () => { if (selected) void openPathDefault(selected).catch((e) => logInternalError('components/files/FileActions/openDefault', e)); };
+  const handleReveal = () => { if (selected) void revealInOs(selected).catch((e) => logInternalError('components/files/FileActions/revealInOs', e)); };
+  const handleOpenWith = (op: HostOpener) => { if (selected) void openWithHostOpener(op.id, selected).catch((e) => logInternalError('components/files/FileActions/openWith', e)); };
 
   return (
     <>

@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import type { FileDiff, SessionMessage } from '../../store/layoutStore';
+import type { FileDiff, SessionMessage } from '../../store/types';
 import type { PermissionMode } from '../../api/permissionModes';
 import {
   AssistantMessageActionsBar,

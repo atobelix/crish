@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import styles from './ChangeOverviewCard.module.css';
 import * as Lucide from 'lucide-react';
-import type { FileDiff, SessionMessage } from '../../store/layoutStore';
+import type { FileDiff, SessionMessage } from '../../store/types';
 import { useTerminalField } from '../../store/storeAccess';
 import {
   applyFileDiffToDisk,

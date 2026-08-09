@@ -199,7 +199,9 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
         try {
           clientApi.saveSettingsEx('__global__', 'global', {
             shortcuts: updated,
-          }).catch(() => {});
+          }).catch(() => {
+            /* swallow-ok: 远端保存失败时本地已生效，不阻断用户操作 */
+          });
         } catch { /* 远端保存失败时本地已生效，不阻断 */ }
         return true;
       } catch {

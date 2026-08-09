@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import { isDemoMode } from '../../api/appMode';
 import { messageMatchesSearch } from '../../api/sessionSearch';
 import {

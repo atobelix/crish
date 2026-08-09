@@ -3,6 +3,7 @@ import styles from './FilesCard.module.css';
 import { Tooltip } from '../ui';
 import { CornerLeftUp, RotateCw, Search, X } from 'lucide-react';
 import { countPendingFileAnnotations, getWorkspacePath, openPathDefault, pathDirname, resolveWorkspacePath, takePendingOpenPath } from '../../api/workspaceFsApi';
+import { logInternalError } from '../../api/userFacingErrors';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { useFileNavigation } from './hooks/useFileNavigation';
 import { useFilePreview } from './hooks/useFilePreview';
@@ -84,7 +85,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(({ initialPath }) 
 
   const handleOpenFromPreview = useCallback(() => {
     if (preview.selected) {
-      void openPathDefault(preview.selected).catch(() => {});
+      void openPathDefault(preview.selected).catch((e) => logInternalError('components/files/FilesCard/openDefault', e));
     }
   }, [preview.selected]);
 

@@ -3,7 +3,7 @@
  * 同 id 只保留首次，避免 store 抖动幽灵双行。
  */
 import { describe, expect, it } from 'vitest';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import {
   SESSION_LIST_GENERAL_LABEL,
   dedupeSessionsById,

@@ -3,7 +3,7 @@ import type {
   FileDiff,
   SessionAgent,
   SessionMessage,
-} from '../../store/layoutStore';
+} from '../../store/types';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
 import { assistantCopyText } from '../../api/toolPresentation';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';

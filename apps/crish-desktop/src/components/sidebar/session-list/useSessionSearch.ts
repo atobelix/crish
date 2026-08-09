@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { SessionState } from '../../../store/layoutStore';
+import type { SessionState } from '../../../store/types';
 import { compareSessionsByActivity } from '../../../api/sessionTime';
 import { sessionListDisplayTitle } from '../../../api/sessionTitle';
 import {

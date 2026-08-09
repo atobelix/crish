@@ -21,7 +21,7 @@
  */
 
 import React from 'react';
-import type { FlatBranch } from '../../store/layout-tree';
+import type { FlatBranch } from '../../store/types';
 import {
   useLayoutTreeStore,
   MIN_SPLIT_RATIO,

@@ -12,7 +12,7 @@ import {
   type DropZone,
 } from '../../api/store-access/componentAccess';
 import { findParent } from '../../api/store-access/componentAccess';
-import type { DropDirection, LayoutNode } from '../../store/layout-tree/types';
+import type { DropDirection, LayoutNode } from '../../store/types';
 import { TOP_BAR_GHOST_CLASS } from './topBarDragConst';
 import type { LeafRectItem } from './topBarDragTypes';
 

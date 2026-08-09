@@ -39,24 +39,32 @@ describe('formatElapsed', () => {
 });
 
 describe('engine status copy', () => {
-  it('short / full / title follow online flag', () => {
-    expect(formatEngineStatusShort(true)).toBe('就绪');
-    expect(formatEngineStatusShort(false)).toBe('未就绪');
-    expect(formatEngineStatusFull(true)).toBe('引擎就绪');
-    expect(formatEngineStatusFull(false)).toBe('引擎未就绪');
-    expect(formatEngineStatusTitle(true)).toMatch(/已连接/);
-    expect(formatEngineStatusTitle(false)).toMatch(/未连接/);
+  it('short / full / title follow ConnectionStatus 四态（D2 投影）', () => {
+    expect(formatEngineStatusShort('connected')).toBe('就绪');
+    expect(formatEngineStatusShort('reconnecting')).toBe('重连中');
+    expect(formatEngineStatusShort('waiting')).toBe('连接中');
+    expect(formatEngineStatusShort('disconnected')).toBe('未就绪');
+    expect(formatEngineStatusShort('degraded')).toBe('降级');
+    expect(formatEngineStatusFull('connected')).toBe('引擎就绪');
+    expect(formatEngineStatusFull('disconnected')).toBe('引擎未就绪');
+    expect(formatEngineStatusFull('reconnecting')).toBe('引擎重连中');
+    expect(formatEngineStatusTitle('connected')).toMatch(/已连接/);
+    expect(formatEngineStatusTitle('disconnected')).toMatch(/未连接/);
+    expect(formatEngineStatusTitle('reconnecting')).toMatch(/重连/);
   });
 });
 
 describe('empty hints split offline vs empty', () => {
-  it('live / bg / plans', () => {
-    expect(emptyLiveTasksHint(true)).toMatch(/暂无/);
-    expect(emptyLiveTasksHint(false)).toBe('未连接');
-    expect(emptyBgTasksHint(true)).toMatch(/暂无/);
-    expect(emptyBgTasksHint(false)).toBe('未连接');
-    expect(emptyPlansHint(true)).toMatch(/暂无/);
-    expect(emptyPlansHint(false)).toBe('未连接');
+  it('live / bg / plans（connected → 空态文案；其余连接态 → 未连接）', () => {
+    expect(emptyLiveTasksHint('connected')).toMatch(/暂无/);
+    expect(emptyLiveTasksHint('disconnected')).toBe('未连接');
+    expect(emptyLiveTasksHint('reconnecting')).toBe('未连接');
+    expect(emptyBgTasksHint('connected')).toMatch(/暂无/);
+    expect(emptyBgTasksHint('disconnected')).toBe('未连接');
+    expect(emptyBgTasksHint('waiting')).toBe('未连接');
+    expect(emptyPlansHint('connected')).toMatch(/暂无/);
+    expect(emptyPlansHint('disconnected')).toBe('未连接');
+    expect(emptyPlansHint('degraded')).toBe('未连接');
   });
 });
 

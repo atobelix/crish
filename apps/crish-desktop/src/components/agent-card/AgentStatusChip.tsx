@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './AgentCard.module.css';
 import { Tooltip } from '../ui';
-import type { SessionAgent } from '../../store/layoutStore';
+import type { SessionAgent } from '../../store/types';
 import { STATUS_LABEL } from './agentCardUtils';
 
 /** 状态芯片：统一中文 + a11y role/status */

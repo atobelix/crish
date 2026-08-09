@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
-import type { FileDiff, SessionMessage } from '../../store/layoutStore';
+import type { FileDiff, SessionMessage } from '../../store/types';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import { assistantCopyText } from '../../api/toolPresentation';
 import type { PermissionMode } from '../../api/permissionModes';

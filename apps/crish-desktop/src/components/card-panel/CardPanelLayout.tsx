@@ -4,7 +4,7 @@ import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ChatCard } from '../chat-card/ChatCard';
 import { TerminalCard } from '../workspace/TerminalCard';
 import { getPanelTitle } from '../../api/store-access/componentAccess';
-import type { CardState, GroupState } from '../../store/layoutStore';
+import type { CardState, GroupState } from '../../store/types';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 
 import { PanelLazyFallback } from './PanelLazyFallback';

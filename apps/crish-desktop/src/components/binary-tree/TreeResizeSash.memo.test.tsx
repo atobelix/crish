@@ -10,7 +10,7 @@ import {
   flatBranchEqual,
   type TreeResizeSashProps,
 } from './TreeResizeSash';
-import type { FlatBranch } from '../../store/layout-tree';
+import type { FlatBranch } from '../../store/types';
 import { useLayoutTreeStore } from '../../store/layout-tree';
 import { createLeaf, createBranch } from '../../store/layout-tree/types';
 

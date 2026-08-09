@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './WorkspaceChromeBars.module.css';
-import { Tooltip } from '../ui';
+import { TabStrip, Tooltip } from '../ui';
 import { MessageSquarePlus, Pin, Plus, X } from 'lucide-react';
 import {
   useChromeAddMenu,
@@ -14,55 +14,61 @@ export const SessionStrip: React.FC<WorkspaceChromeProps> = ({ className }) => {
   const add = useChromeAddMenu();
 
   return (
-    <div
+    <TabStrip
       className={`${styles.wsChromeRow} ${styles.wsChromeRowSessions} ws-chrome-row ws-chrome-row--sessions ${className || ''}`}
-      role="tablist"
-      aria-label="会话"
-    >
-      <div className={`${styles.wsChromeScroll} ws-chrome-scroll`}>
-        {s.sessionTabs.map((tab) => {
-          const active = tab.sessionId === s.activeSessionId;
-          return (
-            <div
-              key={tab.sessionId}
-              className={`${styles.wsChromeTab} ${styles.wsChromeTabSession} ${active ? styles.isActive + ' is-active' : ''}${tab.pinned ? ' is-pinned' : ''} ws-chrome-tab ws-chrome-tab--session`}
-              role="tab"
-              aria-selected={active}
-            >
-              <Tooltip content={tab.title}>
-                <button
-                  type="button"
-                  className={`${styles.wsChromeTabMain} ws-chrome-tab-main`}
-                  onClick={() => s.selectSession(tab.sessionId)}
+      scrollClassName={`${styles.wsChromeScroll} ws-chrome-scroll`}
+      tabClassName={`${styles.wsChromeTab} ${styles.wsChromeTabSession} ws-chrome-tab ws-chrome-tab--session`}
+      tabActiveClassName={`${styles.isActive} is-active`}
+      ariaLabel="会话"
+      activeId={s.activeSessionId ?? null}
+      tabs={s.sessionTabs.map((tab) => ({
+        id: tab.sessionId,
+        label: tab.title,
+        className: tab.pinned ? 'is-pinned' : undefined,
+      }))}
+      onActiveChange={(sessionId) => s.selectSession(sessionId)}
+      onClose={(sessionId, e) => s.onCloseSession(sessionId, e)}
+      renderTab={(tab) => {
+        const meta = s.sessionTabs.find((t) => t.sessionId === tab.id);
+        return (
+          <>
+            <Tooltip content={tab.label}>
+              <button
+                type="button"
+                className={`${styles.wsChromeTabMain} ws-chrome-tab-main`}
+                tabIndex={-1}
+                onClick={() => s.selectSession(tab.id)}
+              >
+                {meta?.pinned ? (
+                  <Pin
+                    size={12}
+                    strokeWidth={2}
+                    aria-hidden
+                    className={`${styles.wsChromePin} ws-chrome-pin`}
+                  />
+                ) : null}
+                <span
+                  className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}
                 >
-                  {tab.pinned ? (
-                    <Pin
-                      size={12}
-                      strokeWidth={2}
-                      aria-hidden
-                      className={`${styles.wsChromePin} ws-chrome-pin`}
-                    />
-                  ) : null}
-                  <span
-                    className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}
-                  >
-                    {tab.title}
-                  </span>
-                </button>
-              </Tooltip>
-              <Tooltip content="关闭标签">
-                <button
-                  type="button"
-                  className={`${styles.wsChromeTabClose} ws-chrome-tab-close`}
-                  aria-label={`关闭会话标签 ${tab.title}`}
-                  onClick={(e) => s.onCloseSession(tab.sessionId, e)}
-                >
-                  <X size={12} strokeWidth={2} aria-hidden />
-                </button>
-              </Tooltip>
-            </div>
-          );
-        })}
+                  {tab.label}
+                </span>
+              </button>
+            </Tooltip>
+            <Tooltip content="关闭标签">
+              <button
+                type="button"
+                className={`${styles.wsChromeTabClose} ws-chrome-tab-close`}
+                tabIndex={-1}
+                aria-label={`关闭会话标签 ${tab.label}`}
+                onClick={(e) => s.onCloseSession(tab.id, e)}
+              >
+                <X size={12} strokeWidth={2} aria-hidden />
+              </button>
+            </Tooltip>
+          </>
+        );
+      }}
+      trailing={
         <div
           className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`}
           ref={add.wrapRef}
@@ -106,7 +112,7 @@ export const SessionStrip: React.FC<WorkspaceChromeProps> = ({ className }) => {
             </div>
           ) : null}
         </div>
-      </div>
-    </div>
+      }
+    />
   );
 };

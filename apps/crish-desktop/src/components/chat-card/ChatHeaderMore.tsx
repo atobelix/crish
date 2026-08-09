@@ -78,6 +78,7 @@ export const ChatHeaderMore: React.FC<Props> = ({
         <button
           key={opt.id}
           type="button"
+          role="menuitem"
           className={`${styles.moreItem} ${opt.danger ? styles.danger : ''}`}
           onClick={(e) => {
             e.stopPropagation();

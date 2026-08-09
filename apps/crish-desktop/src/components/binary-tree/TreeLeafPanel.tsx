@@ -11,7 +11,7 @@
 
 import React, { lazy, Suspense, useCallback, useLayoutEffect, useRef } from 'react';
 import { useLayoutTreeStore, isChatDomain } from '../../api/store-access/componentAccess';
-import type { LayoutLeaf } from '../../store/layout-tree';
+import type { LayoutLeaf } from '../../store/types';
 import { getPanelTitle } from '../../api/store-access/componentAccess';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { AppErrorBoundary } from '../AppErrorBoundary';
