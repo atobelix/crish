@@ -189,7 +189,8 @@ mod tests {
         let err = not_ready("浏览器会话未注入");
         let payload = err.to_error_payload(0);
         assert_eq!(payload.code, "tool.browser.not_ready");
-        assert!(!payload.retryable);
+        // R-8 语义：恢复期可重试（注册表 Transient/retryable=true，R-9-2）
+        assert!(payload.retryable);
         assert_eq!(err.code(), "tool.browser.not_ready");
     }
 
