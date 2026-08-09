@@ -42,8 +42,12 @@
 pub mod codes;
 mod error;
 mod exec;
-mod gate;
+/// MVP 域名门禁（pub：引擎侧 LazySessionOps 装配 RealSession 时复用同一
+/// 实现实例，与工具注册注入的门禁同源，27 接线方案 S3）
+pub mod gate;
 mod helpers;
+/// 发送层策略钩子 MVP 实现（27 §2.4 D-D：AllowAllPolicy；引擎 connect 注入）
+pub mod policy;
 pub mod session;
 mod tools;
 

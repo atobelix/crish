@@ -26,13 +26,14 @@ import { CRISH_ERROR_REGISTRY, getErrorInfo } from './info';
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
 /// 解析 Rust 侧 error.rs codes 模块的全部码常量
-/// （模式：`pub const NAME: &str = "域名.段名";`，码表常量全符合）
+/// （模式：`pub const NAME: &str = "域名.段名";`，码表常量全符合；
+///  支持三段码：R13/B3 起 tool.browser.* 为三段点分码——两段正则曾静默漏提）
 function rustCodesFromErrorRs(): string[] {
   const src = readFileSync(
     REPO_ROOT + 'crates/conex-types/src/error.rs',
     'utf8'
   );
-  const re = /pub const [A-Z][A-Z0-9_]*: &str = "([a-z][a-z0-9_]*\.[a-z_]+)";/g;
+  const re = /pub const [A-Z][A-Z0-9_]*: &str = "([a-z][a-z0-9_]*(\.[a-z_]+)+)";/g;
   const codes: string[] = [];
   for (const m of src.matchAll(re)) {
     if (m[1] !== undefined) codes.push(m[1]);
@@ -76,10 +77,28 @@ describe('F8-42：TS↔Rust 错误码清单双向漂移', () => {
     expect(tsCodes).toEqual(rustCodes);
   });
 
-  it('每条码均为合法两段式形态且无重复', () => {
+  it('每条码均为合法小写点分形态（两段或三段）且无重复', () => {
     expect(new Set(tsCodes).size).toBe(tsCodes.length);
     for (const c of tsCodes) {
       expect(isCrishErrorCode(c)).toBe(true);
+    }
+  });
+
+  it('R13/B3：tool.browser.* 9 码已进 Rust codes 模块与 TS 注册表（三段码提取核对）', () => {
+    for (const code of [
+      'tool.browser.not_ready',
+      'tool.browser.gate_blocked',
+      'tool.browser.capability_disabled',
+      'tool.browser.stale_snapshot',
+      'tool.browser.node_gone',
+      'tool.browser.cancelled',
+      'tool.browser.eval_forbidden',
+      'tool.browser.tab_limit_exceeded',
+      'tool.browser.unwired',
+    ]) {
+      expect(rustCodes).toContain(code);
+      expect(tsCodes).toContain(code);
+      expect(getErrorInfo(code as CrishErrorCode).code).toBe(code);
     }
   });
 

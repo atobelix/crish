@@ -1,9 +1,11 @@
 // packages/shared-types/src/errors/codes.ts
 // 错误码权威定义，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测码数：73 正式码 + 10 reserved 码 = 83 码 / 20 域
+// 实测码数：82 正式码 + 10 reserved 码 = 92 码 / 20 域
 // （R6 扩展：新增 goal 域 3 码，event_store.read_failed 已在 R1 注册；
 //  PE-03 T03.3 补 store.io / common.invalid_input / common.encoding；
-//  F8-02：tool.write_path_conflict 并入（写路径互斥，agent-tools 局部码注册））
+//  F8-02：tool.write_path_conflict 并入（写路径互斥，agent-tools 局部码注册）；
+//  R13/B3：tool.browser.* 9 码并入 tool 域（维度 17 §1.3 码表 + 22 裁决 U-12，
+//  三段式点分码，isCrishErrorCode 放宽为多段形态））
 
 export type CrishErrorCode =
   // ── config 域（3 正式码）──
@@ -58,6 +60,17 @@ export type CrishErrorCode =
   // F8-02：写路径互斥冲突（I4-M3：同路径被其他持有者声明，与
   // write_not_allowed 越权语义独立——白名单放行但被占用仍返回本码）
   | 'tool.write_path_conflict'
+  // ── tool.browser 子域（9 正式码，维度 17 §1.3 码表 + 22 裁决 U-12；
+  //    浏览器工具面：恢复期 gating（R-9）/域名门禁/能力位红线/急停 等）──
+  | 'tool.browser.not_ready'
+  | 'tool.browser.gate_blocked'
+  | 'tool.browser.capability_disabled'
+  | 'tool.browser.stale_snapshot'
+  | 'tool.browser.node_gone'
+  | 'tool.browser.cancelled'
+  | 'tool.browser.eval_forbidden'
+  | 'tool.browser.tab_limit_exceeded'
+  | 'tool.browser.unwired'
   // ── mcp 域（3 正式码）──
   | 'mcp.connection_failed'
   | 'mcp.protocol_violation'
@@ -151,7 +164,7 @@ export function domainOf(code: CrishErrorCode): CrishErrorDomain {
   return code.split('.')[0] as CrishErrorDomain;
 }
 
-/** 判断字符串是否为合法 CrishErrorCode */
+/** 判断字符串是否为合法 CrishErrorCode（小写点分形态，两段或三段） */
 export function isCrishErrorCode(value: string): value is CrishErrorCode {
-  return /^[a-z_]+\.[a-z_]+$/.test(value);
+  return /^[a-z_]+\.[a-z_]+(\.[a-z_]+)*$/.test(value);
 }

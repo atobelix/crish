@@ -256,6 +256,7 @@ mod tests {
                     client_message_id: None,
                     content: None,
                 }),
+                turn_index: None,
             }),
             DropClass::Critical,
             "message-end 必达（全文兜底）"

@@ -107,6 +107,25 @@ pub mod codes {
     /// 与越权拒绝 tool.write_not_allowed 语义独立——白名单放行但被占用
     /// 仍返回本码。F8-02：由 agent-tools 局部码并入注册表）
     pub const TOOL_WRITE_PATH_CONFLICT: &str = "tool.write_path_conflict";
+    // ── browser 域（9 正式码，17 文档 §1.3 + R-9-2/R-8/U-12）──
+    /// 浏览器恢复中（R-9-2：进程启动/崩溃重启期间工具不可用，可重试）
+    pub const TOOL_BROWSER_NOT_READY: &str = "tool.browser.not_ready";
+    /// 域名门禁拦截（17 §4：白名单/黑名单/IP 阻断，不可重试）
+    pub const TOOL_BROWSER_GATE_BLOCKED: &str = "tool.browser.gate_blocked";
+    /// 能力未开启（17 §2.3：evaluate/upload/剪贴板能力位默认关闭）
+    pub const TOOL_BROWSER_CAPABILITY_DISABLED: &str = "tool.browser.capability_disabled";
+    /// 快照版本失效（R-1：页面已变更，需重拍快照后重试）
+    pub const TOOL_BROWSER_STALE_SNAPSHOT: &str = "tool.browser.stale_snapshot";
+    /// 元素已过期（节点消失/重建，需重拍快照后重试）
+    pub const TOOL_BROWSER_NODE_GONE: &str = "tool.browser.node_gone";
+    /// 浏览器动作已取消（用户接管/急停吊销，不计入重试额度）
+    pub const TOOL_BROWSER_CANCELLED: &str = "tool.browser.cancelled";
+    /// evaluate 被拒（17 §3：白名单外求值，不可重试）
+    pub const TOOL_BROWSER_EVAL_FORBIDDEN: &str = "tool.browser.eval_forbidden";
+    /// 标签数量超限（15 MAX_TABS 上限，不可重试）
+    pub const TOOL_BROWSER_TAB_LIMIT_EXCEEDED: &str = "tool.browser.tab_limit_exceeded";
+    /// 浏览器能力未接线（引擎侧未注入会话，P1 接线后消除）
+    pub const TOOL_BROWSER_UNWIRED: &str = "tool.browser.unwired";
     // ── mcp 域（3 正式码）──
     pub const MCP_CONNECTION_FAILED: &str = "mcp.connection_failed";
     pub const MCP_PROTOCOL_VIOLATION: &str = "mcp.protocol_violation";
@@ -168,7 +187,7 @@ pub mod codes {
 
 /// 错误码元信息注册表（TS 端 CRISH_ERROR_REGISTRY 同构，83 条）
 static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy::new(|| {
-    let mut m = HashMap::with_capacity(83);
+    let mut m = HashMap::with_capacity(92);
     // ── config 域 ──
     m.insert(codes::CONFIG_INVALID, CrishErrorInfo {
         code: codes::CONFIG_INVALID, title: "配置项非法",
@@ -395,6 +414,61 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
         code: codes::TOOL_WRITE_PATH_CONFLICT, title: "写入路径互斥冲突",
         category: CrishErrorCategory::Permanent, retryable: false,
         is_public: true, action: "action.tool.wait_retry",
+    });
+    // ── browser 域（9 正式码：17 文档 §1.3，R-9-2/R-8/U-12 语义）──
+    // R-9-2：恢复期工具门禁——Transient/可重试（等待恢复完成重试）
+    m.insert(codes::TOOL_BROWSER_NOT_READY, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_NOT_READY, title: "浏览器恢复中",
+        category: CrishErrorCategory::Transient, retryable: true,
+        is_public: true, action: "action.browser.wait_recovery",
+    });
+    // 17 §4：域名门禁拦截——Permanent/不可重试（策略拒绝，需改目标域）
+    m.insert(codes::TOOL_BROWSER_GATE_BLOCKED, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_GATE_BLOCKED, title: "域名门禁拦截",
+        category: CrishErrorCategory::Security, retryable: false,
+        is_public: true, action: "action.browser.check_domain",
+    });
+    // 17 §2.3：能力位默认关闭——Security/不可重试（需显式开启）
+    m.insert(codes::TOOL_BROWSER_CAPABILITY_DISABLED, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_CAPABILITY_DISABLED, title: "能力未开启",
+        category: CrishErrorCategory::Security, retryable: false,
+        is_public: true, action: "action.browser.enable_capability",
+    });
+    // R-1：快照版本失效——Transient/可重试（重拍快照后重试）
+    m.insert(codes::TOOL_BROWSER_STALE_SNAPSHOT, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_STALE_SNAPSHOT, title: "快照版本失效",
+        category: CrishErrorCategory::Transient, retryable: true,
+        is_public: true, action: "action.browser.refresh_snapshot",
+    });
+    // 节点过期——Transient/可重试（重拍快照后重试）
+    m.insert(codes::TOOL_BROWSER_NODE_GONE, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_NODE_GONE, title: "元素已过期",
+        category: CrishErrorCategory::Transient, retryable: true,
+        is_public: true, action: "action.browser.refresh_snapshot",
+    });
+    // R-8：用户接管/急停吊销——Permanent/不可重试（不计入重试额度，编排层重试）
+    m.insert(codes::TOOL_BROWSER_CANCELLED, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_CANCELLED, title: "浏览器动作已取消",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: false, action: "action.browser.none",
+    });
+    // 17 §3：evaluate 白名单外——Security/不可重试
+    m.insert(codes::TOOL_BROWSER_EVAL_FORBIDDEN, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_EVAL_FORBIDDEN, title: "evaluate 被拒",
+        category: CrishErrorCategory::Security, retryable: false,
+        is_public: true, action: "action.browser.check_eval_policy",
+    });
+    // 15 MAX_TABS 上限——Permanent/不可重试
+    m.insert(codes::TOOL_BROWSER_TAB_LIMIT_EXCEEDED, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_TAB_LIMIT_EXCEEDED, title: "标签数量超限",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.browser.close_tabs",
+    });
+    // P1 接线前——Permanent/不可重试（引擎侧接线后消除）
+    m.insert(codes::TOOL_BROWSER_UNWIRED, CrishErrorInfo {
+        code: codes::TOOL_BROWSER_UNWIRED, title: "浏览器能力未接线",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.browser.check_supported",
     });
     // ── mcp 域 ──
     m.insert(codes::MCP_CONNECTION_FAILED, CrishErrorInfo {

@@ -1015,6 +1015,10 @@ pub(crate) struct EngineHandle {
     /// 生命周期随 run 启停由上层驱动——session.start 启动 / session.end
     /// 关闭，见 [Self::register_plugin_mcp_server]）
     mcp_bridge: Arc<McpClientBridge>,
+    /// 浏览器会话槽（27 接线方案 S4：browser_* 工具与面板命令共享的
+    /// 进程级惰性单例——BrowserManager + 会话槽 + estop 周期；装配失败
+    /// 仅降级 not_ready，不阻断引擎构造，见 browser/mod.rs）
+    browser_slot: Arc<crate::browser::BrowserSlot>,
     /// engineReady（配置齐备即 true）
     ready: AtomicBool,
     /// 未就绪原因（ready=false 时的诊断文案，PE-04 T04.5 联动）
@@ -1219,6 +1223,32 @@ impl EngineHandle {
                 "内置工具注册失败（工具按 tool.not_found 兜底）"
             );
         }
+        // ── 27 方案 S4：browser_* 工具族注册（浏览器会话槽接线）──────
+        // 进程级惰性单例：BrowserSlot 持有 BrowserManager（惰性启动）与
+        // 会话槽；LazySessionOps 实现 SessionOps 经 BrowserToolsConfig
+        // .session_ops 注入 23 个 browser_* 工具（维度 17 §1.1 后置注册，
+        // **不进** register_builtin_tools——注册数断言不可扰动，17 §1.1）。
+        // 门禁注入槽内同一 MvpDomainGate 实例（动作执行器与导航检查点
+        // 单点真源）。数据根解析失败 → 降级槽（全操作 not_ready），注册
+        // 照常进行；注册失败仅 warn 降级（对齐内置工具先例，27 §5 风险
+        // 预案：仅缺 browser_*，模型侧 tool.not_found / not_ready 兜底）。
+        let browser_slot = Arc::new(crate::browser::BrowserSlot::new());
+        let browser_ops: Arc<dyn conex_browser_tools::session::SessionOps> =
+            Arc::new(crate::browser::LazySessionOps::new(Arc::clone(&browser_slot)));
+        if let Err(error) = conex_browser_tools::register_browser_tools(
+            &mut registry,
+            conex_browser_tools::BrowserToolsConfig {
+                session_ops: Some(browser_ops),
+                gate: Some(browser_slot.gate()),
+                ..conex_browser_tools::BrowserToolsConfig::default()
+            },
+        ) {
+            tracing::warn!(
+                target: "engine",
+                error = %error,
+                "browser_* 工具注册失败（工具按 tool.not_found 兜底）"
+            );
+        }
         let tool_registry = Arc::new(registry);
         // E5：MCP 客户端桥初始化（stdio 服务器管理 + 工具适配；插件
         // mcpServers 经 register_plugin_mcp_server 注册为受管服务器）
@@ -1250,6 +1280,7 @@ impl EngineHandle {
             provider: Mutex::new(provider),
             tool_registry,
             mcp_bridge,
+            browser_slot,
             ready: AtomicBool::new(ready),
             ready_reason: Mutex::new(ready_reason),
             provider_config: Mutex::new(provider_config),
@@ -1357,6 +1388,12 @@ impl EngineHandle {
     #[allow(dead_code)] // E5 接线：core_run_commands 装配 run 启停时消费
     pub(crate) fn mcp_bridge(&self) -> Arc<McpClientBridge> {
         Arc::clone(&self.mcp_bridge)
+    }
+
+    /// 浏览器会话槽（27 方案 S4/S5/S6：run 装配 abort 桥（S5）、面板命令
+    /// browser_commands（S6）与浏览器模块消费；进程级单例）
+    pub(crate) fn browser_slot(&self) -> Arc<crate::browser::BrowserSlot> {
+        Arc::clone(&self.browser_slot)
     }
 
     /// 定时器注册表（T-CF-06 装配产物；TimerChannel 契约经

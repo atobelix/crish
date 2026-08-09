@@ -2,7 +2,8 @@
 //!
 //! 完整六步（急停 → 门禁 → 权限 → 审批 → 执行 → 审计）中 MVP 落地：
 //! ① 急停（ctx.abort_token 自查，17 §6.4 ①，`tool.browser.cancelled`）；
-//! ② 会话就绪（未注入/恢复期 gating，R-9，`tool.browser.not_ready`）；
+//! ② 会话就绪（27 方案 S1/D-B：`ensure_ready` 惰性启动/重连 + 同步
+//!    `readiness` 恢复期 gating，R-9，`tool.browser.not_ready`）；
 //! ③ 执行（导航面门禁由导航工具在发送前调 [check_navigation_url] 先行，§4.4；
 //!    动作面门禁由 `ActionExecutor` 注入的门禁执行，§2.2 流水线第 1 步）。
 //!
@@ -33,10 +34,14 @@ pub(crate) async fn run_browser_action<'s>(
     if ctx.abort_token.is_aborted() {
         return Err(error::cancelled());
     }
-    // ② 会话就绪（R-9 gating）：未注入 / 进程非 Running / 无活动标签 → not_ready
+    // ② 会话就绪（R-9 gating + 27 方案 S1/D-B）：ensure_ready 为惰性会话
+    //    入口（引擎侧 LazySessionOps：未启动则启动、端点漂移则重连，M-2
+    //    桥会话面）；readiness 保留恢复期（Launching/Crashed/Stopping）
+    //    同步 gating——两层串行，工具面 23 个工具零改动
     let ops = session
         .as_ref()
         .ok_or_else(|| error::not_ready("浏览器会话未注入（BrowserToolsConfig.session）"))?;
+    ops.ensure_ready().await.map_err(error::not_ready)?;
     ops.readiness().map_err(error::not_ready)?;
     // ③ 执行（④审批/⑤审计留接线，见模块头）
     tracing::debug!(tool = tool_name, session = %ctx.session_id, "browser 工具执行");

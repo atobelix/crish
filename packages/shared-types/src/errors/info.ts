@@ -1,8 +1,10 @@
 // packages/shared-types/src/errors/info.ts
 // 错误码元信息注册表，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测条目数：73 正式码 + 10 reserved 码 = 83 条
+// 实测条目数：82 正式码 + 10 reserved 码 = 92 条
 // （R6 扩展：新增 goal 域 3 码；PE-03 T03.3 补 store.io / common.invalid_input / common.encoding；
-//  F8-02：tool.write_path_conflict 并入——写路径互斥，原 agent-tools 局部码）
+//  F8-02：tool.write_path_conflict 并入——写路径互斥，原 agent-tools 局部码；
+//  R13/B3：tool.browser.* 9 码并入 tool 域——浏览器工具面（维度 17 §1.3 + 22 裁决 U-12），
+//  语义与 conex-browser-tools/src/codes.rs 及 14 §5.1 分类映射对齐）
 
 import type { CrishErrorCode, CrishErrorCategory } from './codes';
 
@@ -372,6 +374,81 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     retryable: false,
     public: true,
     action: 'action.tool.wait_retry',
+  },
+  // ── tool.browser 子域（9 正式码，维度 17 §1.3 码表 + 22 裁决 U-12）──
+  // 浏览器工具面：恢复期 gating（R-9）/域名门禁/能力位红线/急停/快照版本
+  // 失效/元素过期/MVP 未接线（P1 落地）；分类对齐 14 §5.1 错误分类映射。
+  'tool.browser.not_ready': {
+    code: 'tool.browser.not_ready',
+    title: '浏览器未就绪',
+    category: 'transient',
+    retryable: true,
+    public: true,
+    action: 'action.browser.wait_ready',
+  },
+  'tool.browser.gate_blocked': {
+    code: 'tool.browser.gate_blocked',
+    title: '域名门禁拦截',
+    category: 'security',
+    retryable: false,
+    public: true,
+    action: 'action.browser.check_target',
+  },
+  'tool.browser.capability_disabled': {
+    code: 'tool.browser.capability_disabled',
+    title: '能力未启用（默认拒绝）',
+    category: 'security',
+    retryable: false,
+    public: true,
+    action: 'action.browser.enable_capability',
+  },
+  'tool.browser.stale_snapshot': {
+    code: 'tool.browser.stale_snapshot',
+    title: '快照版本失效',
+    category: 'transient',
+    retryable: true,
+    public: true,
+    action: 'action.browser.resnapshot',
+  },
+  'tool.browser.node_gone': {
+    code: 'tool.browser.node_gone',
+    title: '元素已过期',
+    category: 'transient',
+    retryable: true,
+    public: true,
+    action: 'action.browser.resnapshot',
+  },
+  'tool.browser.cancelled': {
+    code: 'tool.browser.cancelled',
+    title: '操作已取消',
+    category: 'permanent',
+    retryable: false,
+    public: false,
+    action: 'action.runtime.none',
+  },
+  'tool.browser.eval_forbidden': {
+    code: 'tool.browser.eval_forbidden',
+    title: '执行被禁止',
+    category: 'security',
+    retryable: false,
+    public: true,
+    action: 'action.browser.check_whitelist',
+  },
+  'tool.browser.tab_limit_exceeded': {
+    code: 'tool.browser.tab_limit_exceeded',
+    title: '标签页数量超限',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.browser.close_tabs',
+  },
+  'tool.browser.unwired': {
+    code: 'tool.browser.unwired',
+    title: '功能未接线',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.browser.check_version',
   },
   // ── mcp 域（3 正式码）──
   'mcp.connection_failed': {

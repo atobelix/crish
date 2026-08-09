@@ -3,7 +3,7 @@
  * - 内置快照与 Rust `command_manifest.rs` 对齐（条数 = 注册面 + 登记先行、
  *   9 条新增登记齐备、幽灵命令排除、命令名唯一）——双端手工同步的双向守门；
  * - 动态对照（镜像守门）：`extractRustManifestNames()` 直读 Rust 真源（经
- *   `import.meta.url` 上溯仓库根），读失败 fail 不 skip + 提取数哨兵 ≥ 90 +
+ *   `import.meta.url` 上溯仓库根），读失败 fail 不 skip + 提取数哨兵 ≥ 93 +
  *   断言三式（registered 子集逐名 / 总数 / 登记先行双向一致）——防摆设化；
  * - `initCommandManifest`：拉取成功（mock core_list_commands）→ 真源生效；
  * - 拉取失败（missing）→ 回退内置快照（不崩）；
@@ -35,14 +35,15 @@ describe('commandManifest', () => {
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBeGreaterThan(0);
-      // 与 Rust COMMAND_MANIFEST（92 = 注册面 88 + 登记先行 4）保持同步；
+      // 与 Rust COMMAND_MANIFEST（95 = 注册面 91 + 登记先行 4）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
       // F3（T-AB-19）：workbench_send_input 已接线
       // F9（T-CF-14）：workflow 六条 kebab 接线；I2-S5：trash 三条接线
-      expect(registered).toBe(88);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(92);
+      // R13（27 方案 S6）：browser_start / browser_stop / browser_status 已接线
+      expect(registered).toBe(91);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(95);
     });
 
     it('命令名唯一', () => {
@@ -178,7 +179,7 @@ describe('commandManifest', () => {
   //   （monorepo 根；不停在子 workspace 的 package.json），不依赖 process.cwd()；
   // - 读失败/文件缺失 → 抛错（测试 fail），严禁 catch 后 skip——否则回归「摆设
   //   测试」（00 计划总文档 §6.1 风险 6）；
-  // - 哨兵：提取数 ≥ 90（真源 92），提取语法漂移/正则失配空集时直接 fail；
+  // - 哨兵：提取数 ≥ 93（真源 95），提取语法漂移/正则失配空集时直接 fail；
   // - 断言三式：registered 子集逐名带差异清单 + 总数一致 + 登记先行双向一致。
 
   /** Rust 真源相对仓库根的路径（路径耦合由 existsSync fail 兜底） */
@@ -236,10 +237,10 @@ describe('commandManifest', () => {
   }
 
   describe('动态对照（镜像守门：直读 Rust command_manifest.rs 真源）', () => {
-    it('哨兵：Rust 提取数 ≥ 90（防提取语法漂移/正则失配空集摆设化）', () => {
+    it('哨兵：Rust 提取数 ≥ 93（防提取语法漂移/正则失配空集摆设化）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBeGreaterThanOrEqual(90);
+      expect(total).toBeGreaterThanOrEqual(93);
     });
 
     it('断言一式：前端 registered ⊇ Rust registered（逐名断言，缺失带差异清单）', () => {
@@ -257,10 +258,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（92；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（95；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(92);
+      expect(total).toBe(95);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

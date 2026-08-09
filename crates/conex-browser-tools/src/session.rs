@@ -74,6 +74,14 @@ pub struct NetworkEntry {
 /// snapshot_version/element_meta）不落 await，异步方法为 CDP 命令面。
 #[async_trait]
 pub trait SessionOps: Send + Sync {
+    /// 就绪保证（27 接线方案 S1/D-B）：工具执行前异步确保会话可用——
+    /// 引擎侧 `LazySessionOps` 经此入口做惰性启动/端点漂移重连（M-2 桥
+    /// 的会话面）；**默认实现直接放行**：`RealSession` 与测试 mock 的就绪
+    /// gating 仍由同步 [Self::readiness] 承担，零改动（27 §2.2）。
+    async fn ensure_ready(&self) -> Result<(), String> {
+        Ok(())
+    }
+
     /// 就绪检查：Err(原因) = 工具层应返回 `tool.browser.not_ready`（R-9 gating）。
     fn readiness(&self) -> Result<(), String>;
     /// 当前活动标签（target_id + session 会话号）。
@@ -118,7 +126,11 @@ pub trait SessionOps: Send + Sync {
 }
 
 /// 真实会话适配（BrowserSession 包装；仅消费 pub 接口）。
-pub(crate) struct RealSession {
+///
+/// pub 暴露（27 接线方案 S3）：引擎侧 `LazySessionOps`（agent-workbench
+/// browser 模块）在惰性启动/重连后**复用本适配器**消费会话——快照缓存/
+/// 动作执行器/console/network 缓冲逻辑单点维护，不在引擎侧重复实现。
+pub struct RealSession {
     session: Arc<BrowserSession>,
     manager_status: Option<Arc<BrowserManager>>,
     gate: Arc<dyn conex_browser::action::gate::DomainGate>,
@@ -131,7 +143,7 @@ pub(crate) struct RealSession {
 }
 
 impl RealSession {
-    pub(crate) fn new(
+    pub fn new(
         session: Arc<BrowserSession>,
         manager_status: Option<Arc<BrowserManager>>,
         gate: Arc<dyn conex_browser::action::gate::DomainGate>,

@@ -1776,6 +1776,12 @@ impl CoreRunState {
         self.store.as_local_db()
     }
 
+    /// 引擎句柄（27 方案 S5/S6 装配面访问器：run 装配块取浏览器会话槽
+    /// 挂 abort 桥，browser_commands 命令面取同一进程级单例）
+    pub(crate) fn engine(&self) -> Arc<EngineHandle> {
+        Arc::clone(&self.engine)
+    }
+
     /// T-43：注入会话级 Summarizer 工厂（壳层注入通道；None = 无注入——
     /// 不 spawn 后台摘要任务，纯 stub awaiting 永驻，与接线前行为一致）。
     /// **生产装配点已闭环（COMPACTION-01 P0-3）**：[Self::new] 直接装配
@@ -3242,6 +3248,19 @@ pub(crate) async fn run_task_impl(
     // AbortSignal::reset 不实现（Notify 无法复位，跨 run 泄漏语义登记
     // A4-M3 邻接，以「每 run 新信号」契约兜底）
     let abort_signal = AbortSignal::new();
+    // ── 27 方案 S5：browser estop 桥（M-2，run 级 abort → CDP 发送层取消）──
+    // 三层信号联动（27 §1.3 表）：run 级 AbortSignal（L3 强停/用户取消）
+    // → 浏览器会话槽 estop 令牌（发送层在途命令逐 id 取消 +
+    // CdpError::Cancelled）+ 急停旗（新命令拒绝）。每 run 先 reset_estop
+    // 换新周期——新 run 不继承上一 run 的取消态（防跨 run 毒化会话）；
+    // 急停旗随下一启动周期复位（browser/mod.rs BrowserSlot::reset_estop）。
+    // 并发 run 共享同一 estop 周期（最后复位者生效）：多 run 并发操作
+    // 同一浏览器实例登记遗留（27 §6 P1 会话归属迁移）。
+    {
+        let browser_slot = state.engine.browser_slot();
+        browser_slot.reset_estop();
+        crate::browser::spawn_browser_estop_watcher(browser_slot, abort_signal.clone());
+    }
     let (escape_watch, escape_config) = if let Some(dir) = cwd.clone() {
         let root = PathBuf::from(dir);
         let config = EscapeWatchConfig::new(

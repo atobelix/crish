@@ -177,6 +177,11 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("delete-workflow", "workflow", "engine", true),
         entry("trigger-workflow", "workflow", "engine", true),
         entry("list-workflow-runs", "workflow", "engine", true),
+        // ── 浏览器面板命令（27 方案 S6：browser_start/stop/status；代理到
+        //    引擎浏览器会话槽，状态事件 browser://state-changed）──
+        entry("browser_start", "browser", "engine", true),
+        entry("browser_stop", "browser", "engine", true),
+        entry("browser_status", "browser", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),
@@ -198,7 +203,8 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 92 = 注册面 88 + 登记先行 4；变更时双端同步）。
+    /// 95 = 注册面 91 + 登记先行 4；变更时双端同步——27 方案 S6 新增
+    /// browser_start/browser_stop/browser_status 三条已在本侧登记）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -209,8 +215,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 92, "总数 92（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 88, "注册面 88");
+        assert_eq!(total, 95, "总数 95（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 91, "注册面 91");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -357,7 +363,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 92);
+        assert_eq!(manifest.commands.len(), 95);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

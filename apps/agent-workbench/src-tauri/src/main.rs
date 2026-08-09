@@ -27,6 +27,8 @@
 
 mod background;
 mod buffer;
+mod browser;
+mod browser_commands;
 mod catalog_commands;
 mod command_manifest;
 mod commands;
@@ -206,6 +208,11 @@ command_registry![
     ("delete-workflow", workflow_commands::delete_workflow),
     ("trigger-workflow", workflow_commands::trigger_workflow),
     ("list-workflow-runs", workflow_commands::list_workflow_runs),
+    // ── 浏览器面板命令（27 方案 S6：browser_start/stop/status 代理到
+    //    引擎会话槽；状态变更经 browser://state-changed 事件发射）──
+    ("browser_start", browser_commands::browser_start),
+    ("browser_stop", browser_commands::browser_stop),
+    ("browser_status", browser_commands::browser_status),
 ];
 
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info
@@ -342,6 +349,7 @@ fn main() {
             app.manage(Arc::clone(diagnostics));
 
             // 事件桥（B6.3：workbench-run-event 通道；Tauri 发射器）
+            let browser_emitter_handle = app_handle.clone();
             let bridge = EventBridge::new(
                 "workbench-run-event",
                 Arc::new(TauriEmitter::new(app_handle)),
@@ -389,6 +397,13 @@ fn main() {
             app.manage(bridge.clone());
             app.manage(shared_db.clone());
             app.manage(Arc::clone(&background_tasks));
+
+            // ⑧d 27 方案 S6：浏览器会话槽事件发射器接线——`browser://state-changed`
+            // 状态迁移 → 前端面板（挂接幂等：命令面后续 attach 无副作用；
+            // 启动前即挂订阅，首启 Launching→Running 迁移不丢事件）
+            core_state.engine().browser_slot().attach_emitter(Arc::new(
+                TauriEmitter::new(browser_emitter_handle),
+            ));
 
             // ⑧b+ 30 方案 P2/P3 装配：后台任务事件面接线（生产发射链）——
             // ① 任务事件消费器注入（先于 set_event_bridge：EventBridgeSink
