@@ -9,7 +9,7 @@ import {
 } from '../../api/extensionCatalog';
 import { mcpStateLabel } from '../../api/mcpApi';
 import type { ExpandMode, ManageKind, PluginInstalledExtension } from './types';
-import { Button, Tooltip } from '../ui';
+import { Button, Switch, Tooltip } from '../ui';
 
 /** 插件卡片收窄：manifest 元数据条目（useExtensionMarket 构造，id 恒有 pluginId）。 */
 function isPluginCardItem(
@@ -244,15 +244,13 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                       <span className={`ext-detail-meta ${styles.detailMeta}`}>
                         {off ? '禁用' : '启用'}
                       </span>
-                      <input
-                        type="checkbox"
-                        className="settings-switch"
+                      <Switch
                         checked={!off}
                         disabled={mcpToolBusy}
-                        onChange={(e) => {
-                          void onToggleMcpTool?.(serverId, tool, e.target.checked);
-                        }}
                         aria-label={`${off ? '启用' : '禁用'}工具 ${tool}`}
+                        onCheckedChange={(checked) => {
+                          void onToggleMcpTool?.(serverId, tool, checked);
+                        }}
                       />
                     </label>
                   </div>

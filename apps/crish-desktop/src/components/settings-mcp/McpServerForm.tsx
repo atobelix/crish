@@ -1,7 +1,6 @@
 import React from 'react';
 import styles from './McpSettingsTab.module.css';
-import { SettingsSelect } from '../settings/SettingsSelect';
-import { Button, Tooltip } from '../ui';
+import { Button, Select, Tooltip } from '../ui';
 import { isDemoTransport, transportTitle, type DemoTransport } from './types';
 
 export type McpServerFormProps = {
@@ -47,12 +46,20 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
           aria-required
           autoFocus
         />
-        <SettingsSelect
+        <Select
           className="mcp-add-type-select"
           value={newType}
           options={[
-            { value: 'stdio', label: 'stdio', ...(transportTitle('stdio') !== undefined ? { hint: transportTitle('stdio') } : {}) },
-            { value: 'sse', label: 'sse', ...(transportTitle('sse') !== undefined ? { hint: transportTitle('sse') } : {}) },
+            {
+              id: 'stdio',
+              label: 'stdio',
+              ...(transportTitle('stdio') !== undefined ? { hint: transportTitle('stdio') } : {}),
+            },
+            {
+              id: 'sse',
+              label: 'sse',
+              ...(transportTitle('sse') !== undefined ? { hint: transportTitle('sse') } : {}),
+            },
           ]}
           onChange={(v) => {
             if (isDemoTransport(v)) {

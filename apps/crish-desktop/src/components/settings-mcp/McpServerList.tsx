@@ -4,7 +4,7 @@ import type { McpServerInfo, McpStatusSnapshot } from '../../api/mcpApi';
 import { mcpStateKind, mcpStateLabel } from '../../api/mcpApi';
 import type { McpServer } from '../../api/clientApi';
 import styles from './McpSettingsTab.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Switch, Tooltip } from '../ui';
 import {
   EMPTY_DEMO_HINT,
   EMPTY_FILTER_HINT,
@@ -328,12 +328,10 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                   </Tooltip>
                   <div className={`${styles.mcpRowActions} mcp-row-actions`}>
                     <Tooltip content={on ? '禁用' : '启用'}>
-                      <input
-                        type="checkbox"
-                        className="settings-switch"
+                      <Switch
                         checked={on}
                         aria-label={on ? `禁用 ${srv.name}` : `启用 ${srv.name}`}
-                        onChange={() => onToggleDemoEnabled(srv.id)}
+                        onCheckedChange={() => onToggleDemoEnabled(srv.id)}
                       />
                     </Tooltip>
                     <Tooltip content="删除">

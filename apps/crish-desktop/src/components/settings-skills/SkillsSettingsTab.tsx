@@ -8,10 +8,9 @@
  */
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
-import { SettingsSelect } from '../settings/SettingsSelect';
+import { Button, Select, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import { SettingsPage } from '../settings/SettingsUI';
-import { Button, Tooltip } from '../ui';
 import {
   useSkillsSettingsState,
 } from './useSkillsSettingsState';
@@ -171,10 +170,14 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
       />
 
       <div className={`${styles.skillsToolbar} skills-toolbar ${styles.skillsToolbarFocus} skills-toolbar--focus`} role="group" aria-label="筛选">
-        <SettingsSelect
+        <Select
           className={`${styles.skillsScopeSelect} skills-scope-select`}
           value={scopeFilter}
-          options={scopeSelectOptions}
+          options={scopeSelectOptions.map((o) => ({
+            id: o.value,
+            label: o.label,
+            ...(o.hint !== undefined ? { hint: o.hint } : {}),
+          }))}
           onChange={handleScopeFilterChange}
           disabled={loading}
           placeholder="作用域…"
