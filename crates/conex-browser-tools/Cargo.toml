@@ -1,0 +1,34 @@
+[package]
+name = "conex-browser-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# 工具注册面（Tool/ToolDefinition/ToolError/ToolRegistry/ToolContext）：只读消费 pub 接口，
+# 不进入 agent-tools 的 register_builtin_tools（后置注册函数在本 crate）
+agent-tools = { path = "../agent-tools" }
+# 浏览器会话面（BrowserSession/ActionExecutor/SnapshotManager/DomainGate 等 pub 导出）
+conex-browser = { path = "../conex-browser" }
+# 通用 tool.* 错误码复用（conex-types 为叶子 crate，零并行冲突面）
+conex-types = { path = "../conex-types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# 异步 trait（Tool/SessionOps 实现面）：workspace 既有依赖
+async-trait = { workspace = true }
+# 惰性订阅/超时/rt 相关（ConsoleBuffer 后台任务、wait 超时）：workspace 最小集
+tokio = { workspace = true }
+# 结构化日志（调试通道；敏感字段过同一脱敏函数族，31 安全基线 B4）
+tracing = { workspace = true }
+# URL 解析与校验（navigate/new_tab 入参面；2.5 已在锁内，零新增版本面）
+url = { version = "2", features = ["serde"] }
+
+[dev-dependencies]
+# 上传工作区路径校验测试的临时文件夹具：tempfile 3.27 已在锁内（conex-browser dev）
+tempfile = "3"
