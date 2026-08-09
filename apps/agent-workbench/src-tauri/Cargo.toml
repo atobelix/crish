@@ -54,6 +54,9 @@ session-loop = { path = "../../../crates/session-loop" }
 agent-provider = { path = "../../../crates/agent-provider" }
 agent-tools = { path = "../../../crates/agent-tools" }
 conex-telemetry = { path = "../../../crates/conex-telemetry" }
+# 27 接线方案 S3/S6：浏览器进程管理（conex-browser）+ 工具族/门禁（conex-browser-tools）
+conex-browser = { path = "../../../crates/conex-browser" }
+conex-browser-tools = { path = "../../../crates/conex-browser-tools" }
 # Interactive terminal (Windows ConPTY / Unix PTY)
 portable-pty = "0.9"
 
@@ -64,6 +67,10 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+# 浏览器命令面测试：临时数据根（tempfile 3.27 已在锁内，conex-browser dev）
+tempfile = "3"
 
 # G5 豁免登记（2026-08-03）：conex-fs 为 01 方案 S3 同轮新建的删除接管 crate，
 # 删除工具接线中（trash_list/trash_restore），本壳将立即使用，暂不算未用。

@@ -60,6 +60,15 @@ jobs:
       # --ignore-known）；dist 排除已由 .dependency-cruiser.cjs options.exclude
       # 覆盖（node_modules|dist|build|target），与仓库脚本 lint:depcruise 同口径
       - run: npx depcruise --config .dependency-cruiser.cjs packages apps
+      # store 写路径门禁（T-E 批次 5.4）：生产代码 raw *Store.setState 归零 +
+      # store 类型/切片纪律（check:store-types）
+      - run: npm run check:store-writes
+      - run: npm run check:store-types
+      # store 直引门禁（T-E 批次 5 脚本 + T-C 批次 7.4 迁移归零后接线）：
+      # components 直引 src/store/ 非白名单入口（store/index barrel / storeAccess /
+      # store/types）计数必须为 0；基线文件 scripts/components-store-direct-imports.json
+      # 随迁移归零而清空（T14 已清零，见 05-detail 提交 G 阶段 3）
+      - run: npm run check:store-facade
 
   vitest-fast:
     runs-on: ubuntu-latest

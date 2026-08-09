@@ -48,6 +48,11 @@ pub async fn md_render_batch(texts: Vec<String>) -> Result<Vec<String>, CoreErro
 /// CPU 密集（pulldown-cmark 解析 + 可选 syntect 高亮 + ammonia sanitize），走 spawn_blocking。
 ///
 /// wire 名 = `core_md_render_stream`（T03.4 更名 core_md_*）。
+///
+/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（流式主路径
+/// JS 零 IPC 定稿，无消费意图；changelog 33 可查）。函数保留待恢复——
+/// 如需恢复先接前端消费再翻注册。
+#[allow(dead_code)]
 #[tauri::command(rename = "core_md_render_stream")]
 pub async fn md_render_stream(text: String, stream_mode: bool) -> Result<String, CoreError> {
     tokio::task::spawn_blocking(move || {
@@ -78,6 +83,11 @@ pub async fn highlight_code(code: String, lang: Option<String>) -> Result<String
 /// 用于内存压力场景或测试隔离。正常运行时无需调用（moka 自动 LRU 淘汰）。
 ///
 /// wire 名 = `core_md_clear_cache`（T03.4 更名 core_md_*）。
+///
+/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（moka 自动 LRU，
+/// 仅测试隔离用途；changelog 33 可查）。函数保留待恢复——Rust 侧测试直接调
+/// `conex_markdown::clear_cache` 不占命令面。
+#[allow(dead_code)]
 #[tauri::command(rename = "core_md_clear_cache")]
 pub async fn md_clear_cache() -> Result<(), CoreError> {
     tokio::task::spawn_blocking(conex_markdown::clear_cache)

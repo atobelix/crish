@@ -3043,6 +3043,19 @@ pub(crate) async fn core_run_task(
     run_task_impl(Arc::clone(state.inner()), options).await
 }
 
+/// estop 桥装配判定（31 评审 F2 / 30 评审 H-2 邻接）：**仅主 run 装配**——
+/// 子代理 run 不 reset_estop、不挂 watcher。故障链：子代理 run 被取消
+/// （L3/超时/kill_all）→ watcher 触发 cancel_estop → 急停旗置位 → 主 run
+/// 本 run 剩余全部 browser_* 命令被 EmergencyStop 拒绝且同 run 无复位点
+/// （浏览器操作整段失效，直到下一 run 启动）。browser_* 工具已按 27 §3
+/// 从子代理注册面剔除（F1，readonly.rs filter_registry_for_task_type），
+/// 子代理无 estop 消费方，装配即纯风险。
+fn assemble_browser_estop(
+    subagent_config: &Option<crate::subagent_spawner::SubagentRunConfig>,
+) -> bool {
+    subagent_config.is_none()
+}
+
 /// run 任务命令体（core_run_task 与 T-CF-11 idle 续 run 共用装配路径；
 /// 测试可直调，不依赖 Tauri runtime——对齐 background.rs「契约体」模式）。
 /// owned Arc 参数：future 内不持有引用，保证 Send（spawn 任务内可 await）。
@@ -3256,7 +3269,10 @@ pub(crate) async fn run_task_impl(
     // 急停旗随下一启动周期复位（browser/mod.rs BrowserSlot::reset_estop）。
     // 并发 run 共享同一 estop 周期（最后复位者生效）：多 run 并发操作
     // 同一浏览器实例登记遗留（27 §6 P1 会话归属迁移）。
-    {
+    // 31 评审 F2（P1）：装配判定见 [assemble_browser_estop]——仅主 run
+    // （subagent_config = None）装配；子代理 run 不装配（杜绝「子代理
+    // abort → cancel 主 run estop」故障链）。
+    if assemble_browser_estop(&subagent_config) {
         let browser_slot = state.engine.browser_slot();
         browser_slot.reset_estop();
         crate::browser::spawn_browser_estop_watcher(browser_slot, abort_signal.clone());
@@ -5275,6 +5291,101 @@ mod tests {
             .count();
         assert_eq!(starts, 1, "子代理预检压缩应广播 context-compression-start");
         assert_eq!(ends, 1, "子代理预检压缩应广播 context-compression-end");
+    }
+
+    // ── 31 评审 F2（P1）：estop 桥仅主 run 装配（子代理 run 不装配）──
+
+    /// estop 桥装配判定（[assemble_browser_estop]）：仅主 run
+    /// （subagent_config = None）装配 reset_estop + watcher；子代理 run
+    /// （任意 task_type）一律不装配——「子代理 run 不挂 watcher」的单元
+    /// 断言，杜绝「子代理 abort → cancel 主 run estop」故障链（31 评审 F2）。
+    #[test]
+    fn browser_estop_bridge_main_run_only() {
+        assert!(
+            assemble_browser_estop(&None),
+            "主 run（无子代理配置）必须装配 estop 桥"
+        );
+        // 子代理 run：缺省 task_type（None）与各显式类型一律不装配
+        for task_type in [None, Some("analysis"), Some("implementation"), Some("review")] {
+            let config = Some(crate::subagent_spawner::SubagentRunConfig {
+                subagent_id: "sub-1-0".to_string(),
+                subagent_run_id: "sub-run-estop".to_string(),
+                parent_session_id: "s1".to_string(),
+                task_type: task_type.map(String::from),
+                allowed_write_paths: None,
+                output_dir: None,
+                started_at_ms: 1_700_000_000_000,
+            });
+            assert!(
+                !assemble_browser_estop(&config),
+                "子代理 run（task_type={task_type:?}）不得装配 estop 桥"
+            );
+        }
+    }
+
+    /// 集成面：子代理 run 的 L3 强停路径正常收场（aborted）——子代理 run
+    /// 可被中止（触发面不受 estop 桥剔除影响），且 estop 桥装配判定由
+    /// [browser_estop_bridge_main_run_only] 锁定（子代理 abort 不触达主 run
+    /// 的 estop 周期）。
+    #[tokio::test]
+    async fn subagent_run_abort_terminates_without_estop_bridge() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("子代理第一轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_pause(0, 3_000),
+        );
+        let (state, db, _emitter) = run_control_test_state_with_model(provider, "qwen2-5-omni-7b");
+        state.run_restore().await;
+        let session_id = "sub-sess-estop";
+        db.upsert_session_entry(&subagent_test_session_entry(session_id))
+            .expect("子代理会话条目");
+        // 子代理 run：context_window 恒 None（spawner 路径真实装配形状）
+        let options = RunTaskOptions {
+            mode: Some("research".to_string()),
+            history: None,
+            context_window: None,
+            subagent_config: Some(crate::subagent_spawner::SubagentRunConfig {
+                subagent_id: "sub-1-0".to_string(),
+                subagent_run_id: "sub-run-estop".to_string(),
+                parent_session_id: "s1".to_string(),
+                task_type: Some("analysis".to_string()),
+                allowed_write_paths: None,
+                output_dir: None,
+                started_at_ms: 1_700_000_000_000,
+            }),
+            ..test_options("sub-run-estop", session_id, "子代理 estop 装配面")
+        };
+        run_task_impl(Arc::clone(&state), options)
+            .await
+            .expect("子代理 run 发起成功");
+        let active = state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("sub-run-estop")
+            .cloned()
+            .expect("子代理 run 已注册");
+        // L3 强停（用户取消路径：abort_signal + 总线 force_cancel 双写）
+        run_control_impl(
+            &state,
+            "sub-run-estop",
+            "force_cancel",
+            None,
+            Some("测试强停子代理".to_string()),
+            None,
+        )
+        .await
+        .expect("force_cancel 应成功");
+        // 真实 loop 在下一安全点收场：agent-end reason == aborted
+        let end_reason = wait_run_end_reason(&active, Duration::from_secs(30)).await;
+        assert_eq!(end_reason, "aborted", "L3 强停后子代理 run 必须以 aborted 终态");
+        let agent_reason = wait_run_agent_end_reason(&db, session_id, Duration::from_secs(30)).await;
+        assert_eq!(
+            agent_reason, "aborted",
+            "L3 强停后子代理 loop 的 agent-end 收场 reason 必须为 aborted"
+        );
     }
 
     // ── PS-04 T4.3（F4 F1-01）：config_profile_apply 后 provider 重载 ──

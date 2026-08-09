@@ -542,6 +542,11 @@ pub async fn core_read_session_events(
 ///
 /// 入参对齐 daemon read-run-events：`runId` / `sessionId`（可选，缺省从 run 记录反查）/
 /// `afterSequence` / `maxEvents`。
+///
+/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（被
+/// `core_read_session_events` 取代，前端唯一事件读取面消费后者；changelog 33
+/// 可查）。函数保留待恢复——如需恢复先接前端消费再翻注册。
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn core_read_run_events(
     run_id: String,

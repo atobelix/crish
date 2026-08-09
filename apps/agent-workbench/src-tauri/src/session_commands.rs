@@ -170,6 +170,10 @@ pub struct DeleteSessionResult {
 /// delete_session 的 spawn_blocking 段（可测）：删除前读取产出元数据
 /// （`{session_id}:output_dir` / `{session_id}:output_root`，G01/G03 键），
 /// 再删除会话行——meta 必须先读后删，否则行消失后无法定位产出目录。
+///
+/// T-F 06 退役登记：仅随 delete_session 使用（测试直调保留），与命令一同
+/// 保留待存储架构裁决后恢复。
+#[allow(dead_code)]
 fn delete_session_and_read_meta(
     db: &LocalDb,
     session_id: &str,
@@ -188,6 +192,10 @@ fn delete_session_and_read_meta(
     Ok((dir, root))
 }
 
+/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（前端删除走
+/// IndexedDB 本地面，Rust LocalDb 面待存储架构裁决后决定是否恢复；changelog
+/// 33 可查）。函数保留待恢复。
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn delete_session(
     session_id: String,
@@ -331,6 +339,9 @@ pub async fn import_from_localstorage(
     Ok(stats)
 }
 
+/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（无消费意图；
+/// 如需会话列表按活跃排序再恢复；changelog 33 可查）。函数保留待恢复。
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn touch_session(
     session_id: String,

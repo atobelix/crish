@@ -28,6 +28,10 @@ use tauri::Manager;
 pub(crate) const DEFAULT_OUTPUTS_DIR_NAME: &str = ".agent-outputs";
 
 /// 会话级最终产出目录键（`{session_id}:output_dir`，G01 首次 resolve 落键）
+///
+/// T-F 06 退役登记：仅随 delete_session 清理链使用（测试直调保留），
+/// 与命令一同保留待存储架构裁决后恢复。
+#[allow(dead_code)]
 pub(crate) const SESSION_META_KEY_OUTPUT_DIR: &str = "output_dir";
 /// 会话级产出根覆盖键（`{session_id}:output_root`，G03 会话级配置）
 pub(crate) const SESSION_META_KEY_OUTPUT_ROOT: &str = "output_root";
@@ -254,6 +258,10 @@ pub(crate) struct SessionOutputsCleanup {
 /// 删除会话 → 读取 session_meta 产出目录 → `.agent-outputs/<session_id>`
 /// 走 conex-fs trash 删除接管（trash.rs:26-29 铁律，不直接 remove）→
 /// 通知用户（清理结果 + 回收站位置）。
+///
+/// T-F 06 退役登记：仅随 delete_session 使用（测试直调 cleanup_session_outputs_at
+/// 保留），与命令一同保留待存储架构裁决后恢复。
+#[allow(dead_code)]
 pub(crate) fn cleanup_session_outputs(
     app: &tauri::AppHandle,
     session_id: &str,

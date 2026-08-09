@@ -290,6 +290,7 @@ fn message_end_message_object_contract() {
             AgentEvent::MessageEnd {
                 session_id: "s1".into(),
                 message: Arc::new(assistant_message()),
+                turn_index: None,
             },
             Some("r1".into()),
             Some(1),
