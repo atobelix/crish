@@ -776,7 +776,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       // append 路径——直刷写 DOM 会与用户选区/光标错位（B6 M3 已实测
       // 证实真实缺陷：直刷写后相邻行用户选区被折叠）。无选区/光标在
       // 行尾时判定 O(1) 数字比较，零开销。
-      shouldDirectStream(s.selectionStart, s.selectionEnd, s.cursorPos, lastIdx);
+      shouldDirectStream(s.selectionStart, s.selectionEnd, s.cursorPos, lastIdx, s.lineOffsets);
 
     if (canDirect) {
       // 直写 DOM（命令式，绕过 React）：向纯文本 token span 追加；
