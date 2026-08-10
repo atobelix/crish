@@ -46,8 +46,9 @@ describe('commandManifest', () => {
       //   browser_stop_frames / browser_frame_status（90 → 94）
       // T-F 06：退役 5 条（core_read_run_events / delete_session / touch_session /
       //   core_md_render_stream / core_md_clear_cache），95 → 90（changelog 33 可查）
-      expect(registered).toBe(90);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(94);
+      // R1-07：multi_device_pair_* / multi_device_list_devices 四件套已接线（94 → 98）
+      expect(registered).toBe(94);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(98);
     });
 
     it('命令名唯一', () => {

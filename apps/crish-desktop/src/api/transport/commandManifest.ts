@@ -83,6 +83,11 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_discover_skills', 'workbench', 'gui'),
     entry('workbench_http_request', 'workbench', 'gui'),
     entry('workbench_apply_update', 'workbench', 'gui'),
+    // ── 多端互通配对面（R1-07：四件套，registered=true，与 Rust 同步）──
+    entry('multi_device_pair_start', 'multi_device', 'engine'),
+    entry('multi_device_pair_status', 'multi_device', 'engine'),
+    entry('multi_device_pair_cancel', 'multi_device', 'engine'),
+    entry('multi_device_list_devices', 'multi_device', 'engine'),
     // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
     // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
     entry('config_get', 'config', 'engine'),

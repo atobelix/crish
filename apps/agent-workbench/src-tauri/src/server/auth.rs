@@ -230,6 +230,30 @@ impl TokenStore {
     pub fn is_empty(&self) -> bool {
         self.tokens.is_empty()
     }
+
+    /// 令牌数量（未撤销与已撤销都计）。R1-07 状态面消费。
+    pub fn token_count(&self) -> usize {
+        self.tokens.len()
+    }
+
+    /// 全部令牌哈希（含已撤销）。R1-07 撤销全链消费。
+    pub fn all_hashes(&self) -> Vec<String> {
+        self.tokens.iter().map(|record| record.hash.clone()).collect()
+    }
+
+    /// 设备列表（配对管理面；id = 哈希截断 12 字符展示，不泄露原文）。
+    /// R1-07 list_devices 消费。
+    pub fn devices(&self) -> Vec<crate::server::pairing::DeviceInfo> {
+        self.tokens
+            .iter()
+            .map(|record| crate::server::pairing::DeviceInfo {
+                id: record.hash.chars().take(12).collect(),
+                label: record.label.clone(),
+                issued_at_ms: record.issued_at_ms,
+                revoked: record.revoked,
+            })
+            .collect()
+    }
 }
 
 /// SHA-256 hex（64 字符小写）

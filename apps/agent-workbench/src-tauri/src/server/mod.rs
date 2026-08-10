@@ -30,6 +30,7 @@ pub mod core_backend;
 pub mod error;
 pub mod fanout;
 pub mod pair;
+pub mod pairing;
 pub mod router;
 pub mod ws;
 

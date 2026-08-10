@@ -228,6 +228,34 @@ impl PairStateMachine {
         self.codes.clear();
         self.state = PairState::Idle;
     }
+
+    /// 最新活跃码（未消耗未过期；无 → None）。R1-07 配对协调器消费。
+    pub fn active_code(&self, now_ms: u64) -> Option<PairCode> {
+        self.codes
+            .iter()
+            .rev()
+            .find(|record| !record.consumed && !record.is_expired(now_ms))
+            .map(|record| record.code.clone())
+    }
+
+    /// 最新活跃码剩余有效毫秒（无活跃码 → None）。R1-07 状态面消费。
+    pub fn active_code_remaining_ms(&self, now_ms: u64) -> Option<u64> {
+        self.codes
+            .iter()
+            .rev()
+            .find(|record| !record.consumed && !record.is_expired(now_ms))
+            .map(|record| record.expires_at_ms.saturating_sub(now_ms))
+    }
+
+    /// 最新活跃码的失败尝试次数（无活跃码 → 0）。R1-07 状态面消费。
+    pub fn failed_attempts(&self) -> u32 {
+        self.codes
+            .iter()
+            .rev()
+            .find(|record| !record.consumed)
+            .map(|record| record.failed_attempts)
+            .unwrap_or(0)
+    }
 }
 
 /// CSPRNG 生成 12 字符配对码（字符集 = conex-types 常量；

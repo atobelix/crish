@@ -217,8 +217,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 94, "总数 94（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 90, "注册面 90");
+        assert_eq!(total, 98, "总数 98（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 94, "注册面 94");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -365,7 +365,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 94);
+        assert_eq!(manifest.commands.len(), 98);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

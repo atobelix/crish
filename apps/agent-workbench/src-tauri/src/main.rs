@@ -46,8 +46,10 @@ mod git;
 mod host_openers;
 mod host_paths;
 mod markdown_commands;
-// 多端互通模块族（R1-06：TLS + 自签证书 + 指纹固定，multi_device/tls.rs）
+// 多端互通模块族（R1-06：TLS + 自签证书 + 指纹固定，multi_device/tls.rs；
+// R1-07：配对命令面，multi_device_commands.rs）
 mod multi_device;
+mod multi_device_commands;
 mod perf;
 mod power;
 mod process;
@@ -157,7 +159,12 @@ command_registry![
     ("core_cancel_run", core_run_commands::core_cancel_run),
     ("core_approve_tool", core_run_commands::core_approve_tool),
     ("core_deny_tool", core_run_commands::core_deny_tool),
-    // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
+    // ── 多端互通配对面（R1-07：四件套）──
+    ("multi_device_pair_start", multi_device_commands::multi_device_pair_start),
+    ("multi_device_pair_status", multi_device_commands::multi_device_pair_status),
+    ("multi_device_pair_cancel", multi_device_commands::multi_device_pair_cancel),
+    ("multi_device_list_devices", multi_device_commands::multi_device_list_devices),
+    // ── 会话持久化（B，�?.2；含 F3 冻结�?upsert_session_entry）──
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),
     ("save_session_body", session_commands::save_session_body),
@@ -344,9 +351,23 @@ fn main() {
             app.manage(core_commands::SharedGatekeeper::new());
             app.manage(core_commands::SharedSearchState::new());
             let compaction = core_commands::SharedCompactionState::new();
-            // 压缩为纯内存能力（conex-compaction），core_compact_messages 已接线
+            // 压缩为纯内存能力（conex-compaction），core_compact_messages 已接�?
             compaction.set_ready(true);
             app.manage(compaction);
+
+            // �?多端互通配对协调器（R1-07：令牌库 + WS 注册表；重绑钩子与
+            // 端口由服务装配面（R1-11）注入；命令面先独立可用）
+            let pairing_tokens = crate::server::auth::TokenStore::load(
+                &app.path()
+                    .app_config_dir()
+                    .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default())
+                    .join("pairing.json"),
+            );
+            let pairing = crate::server::pairing::PairingCoordinator::new(
+                std::sync::Arc::new(std::sync::Mutex::new(pairing_tokens)),
+                std::sync::Arc::new(crate::server::ws::WsRegistry::new()),
+            );
+            app.manage(pairing);
 
             // ⑥ 状态诊断 manage（与 CoreRunState 共享同一实例）
             app.manage(Arc::clone(diagnostics));
