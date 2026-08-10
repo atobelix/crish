@@ -3,6 +3,7 @@ import React, {
   useImperativeHandle,
   useLayoutEffect,
   useRef,
+  useState,
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { BlockRenderer } from './BlockRenderer';
@@ -23,6 +24,20 @@ import { selectionToMarkdown } from '../core/renderToHtml';
 // B2 查找替换（05 高频项 N6）：查找替换面板（搜索/高亮/跳转/替换/
 // 计数）挂载于引擎根容器内，快捷键 Ctrl+F/Ctrl+H 自监听
 import { FindReplacePanel } from './FindReplacePanel';
+// B3 大纲 + 折叠（N2/N3）：大纲面板 + 折叠占位行渲染
+import { OutlinePanel } from './OutlinePanel';
+import {
+  HeadingIndex,
+  type HeadingEntry,
+  type HeadingExtractor,
+  extractHeading,
+} from '../core/headingIndex';
+import {
+  FoldState,
+  FOLD_PLACEHOLDER_HEIGHT,
+} from '../core/foldState';
+// B3 双段行视图 diff（大纲索引/折叠平移的编辑定位）：共享原语
+import { lineAt, lineCountOf } from '../core/EditorStore';
 
 /**
  * 行状态惰性访问器（R3-B1 访问器切换）：store 目前只暴露了
@@ -71,6 +86,12 @@ const EMPTY_SEARCH_RANGES: readonly SearchRange[] = [];
 // class 已打（宿主可自定义），此处用主题色系内联兜底保证开箱可见；
 // 与 --yellow-tint-2 同族淡黄，护眼对比度约束内）
 const SEARCH_LINE_BG = 'hsl(45 100% 50% / 0.10)';
+
+// B3 折叠占位行摘要截断长度（占位行文本仅作视觉提示，超长截断防撑行）
+const FOLD_SUMMARY_MAX_CHARS = 48;
+
+// B3 空标题共享引用（不可变约定：只在 set 时整体替换，绝不就地修改）
+const EMPTY_HEADINGS: readonly HeadingEntry[] = [];
 
 /**
  * 纯文本行保守判定（C3 限定版：直刷前置条件之一）：
@@ -122,6 +143,16 @@ export interface MarkdownEngineHandle {
    *  scrollToIndex 定位）并在编辑模式选中命中区间 [from, to)——
    *  替换的落点前提（选中即光标落点，applyChange 直接作用）。 */
   scrollToMatch: (from: number, to: number) => void;
+  /** 折叠区间（B3 N3，方案 B：保留行 + 渲染跳过）：折叠 [startLine,
+   *  endLine]（闭区间；至少两行；与既有折叠区间重叠拒绝）。折叠即批量
+   *  行高更新（区间首行占位 1 行高、其余 0）+ virtualizer 缓存刷新；
+   *  折叠行保留在 HeightMap/行号坐标系（展开无损恢复）。返回是否成功。 */
+  foldRange: (startLine: number, endLine: number) => boolean;
+  /** 展开包含 line 的折叠区间（line 可为区间内任意行，含隐藏行——宿主
+   *  消息折叠场景点击占位行/隐藏行展开语义统一）。返回是否命中。 */
+  unfold: (line: number) => boolean;
+  /** 折叠查询：line 是否处于折叠状态（区间内任意行，含占位行） */
+  isFolded: (line: number) => boolean;
 }
 
 // 行渲染单元（09 §4 C1 滚动契约）：
@@ -275,6 +306,136 @@ const LineItem = React.memo(({
 });
 
 /**
+ * B3 折叠占位行（N3 折叠区间，方案 B：保留行 + 渲染跳过）：
+ * 折叠区间首行渲染为本占位行（折叠条 + 展开按钮），区间内其余行跳过渲染。
+ * - 行结构（data-index/ref/class virtual-row）与 LineItem 同构——虚拟滚动
+ *   测量（registerRowRef）与点击定位（handleContainerClick 的 data-index
+ *   解析）零改动复用；行高固定 1 行（28px，overflow hidden 防内容撑行），
+ *   与折叠时 HeightMap 批量置高一致，测量回填稳定；
+ * - 展开按钮点击 stopPropagation（不触发容器点击定位），折叠/展开经
+ *   FoldState 批量行高更新 + virtualizer.resizeItem（引擎接线）；
+ * - 样式全内联（主题变量联动），仅复用既有 virtual-row 类（css-contract
+ *   豁免清单登记）；占位标记走 data-fold-placeholder 属性（禁新增 className）。
+ */
+const FoldPlaceholderRow = React.memo(({
+  index,
+  foldedCount,
+  summary,
+  rowRef,
+  onUnfold,
+}: {
+  index: number;
+  foldedCount: number;
+  summary: string;
+  rowRef: (el: HTMLElement | null) => void;
+  onUnfold: (line: number) => void;
+}) => {
+  const rowStyle = React.useMemo(
+    () => ({
+      position: 'absolute' as const,
+      left: 0,
+      width: '100%',
+      height: FOLD_PLACEHOLDER_HEIGHT,
+      minHeight: FOLD_PLACEHOLDER_HEIGHT,
+      overflow: 'hidden',
+    }),
+    []
+  );
+  return (
+    <div
+      data-index={index}
+      data-fold-placeholder="true"
+      ref={rowRef}
+      className="virtual-row"
+      style={rowStyle}
+    >
+      <button
+        type="button"
+        title="展开折叠区间"
+        aria-label={`展开已折叠的 ${foldedCount} 行`}
+        onClick={(e) => {
+          // 展开按钮独立命中：阻断容器点击定位（编辑态光标不移动）
+          e.stopPropagation();
+          onUnfold(index);
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          width: '100%',
+          height: FOLD_PLACEHOLDER_HEIGHT,
+          border: '1px dashed var(--border-medium)',
+          borderRadius: 4,
+          padding: '0 8px',
+          background: 'var(--yellow-tint-2)',
+          color: 'var(--text-primary)',
+          fontSize: 12,
+          cursor: 'pointer',
+          fontFamily: 'var(--font-mono)',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ color: 'var(--text-muted)', fontSize: 11, flexShrink: 0 }}>
+          ▸ 已折叠 {foldedCount} 行
+        </span>
+        {summary && (
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {summary}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+});
+
+/**
+ * B3 双段行视图 diff：定位编辑区间（大纲索引增量 / 折叠平移的前置）。
+ * 经共享原语 lineAt/lineCountOf 以逻辑行语义比对前后两帧「主数组 + 尾段」，
+ * 输出与 updateLinesIncremental 同构的 (startLineIdx, deleteCount, newLines)。
+ * 实现：前缀扫描找第一个不同行、后缀扫描找最后一个不同行，中间段即编辑
+ * 区间（插入/删除/替换/追加/截断统一表达）。行内容比较为字符串 === 引用
+ * 比较（未变更行共享字符串对象，O(1) 指针比较），每帧成本 O(编辑位置)。
+ * 返回 null 仅表示「无前一帧」（首挂载，调用方走全量重建）。
+ */
+function computeEditSpan(
+  prevMain: readonly string[],
+  prevTail: readonly string[],
+  nextMain: readonly string[],
+  nextTail: readonly string[],
+  prevCount: number,
+  nextCount: number
+): { startLineIdx: number; deleteCount: number; newLines: string[] } | null {
+  if (prevCount === 0) return null;
+  const minLen = Math.min(prevCount, nextCount);
+  // 前缀扫描：第一个不同行
+  let i = 0;
+  while (
+    i < minLen &&
+    lineAt(prevMain, prevTail, i) === lineAt(nextMain, nextTail, i)
+  ) {
+    i++;
+  }
+  // 后缀扫描：最后一个不同行（从两端倒数）
+  let s = 0;
+  while (
+    s < prevCount - i &&
+    s < nextCount - i &&
+    lineAt(prevMain, prevTail, prevCount - 1 - s) ===
+      lineAt(nextMain, nextTail, nextCount - 1 - s)
+  ) {
+    s++;
+  }
+  const startLineIdx = i;
+  const deleteCount = prevCount - i - s;
+  const newSpan = nextCount - i - s;
+  const newLines: string[] = [];
+  for (let k = 0; k < newSpan; k++) {
+    newLines.push(lineAt(nextMain, nextTail, i + k));
+  }
+  return { startLineIdx, deleteCount, newLines };
+}
+
+/**
  * MarkdownEngine props（R5 实例工厂 + readOnly 只读模式，06 §8 宿主集成接口）：
  * - store：显式编辑器 store 实例（createEditorStore() 工厂产出），缺省 =
  *   全局默认单例 useEditorStore（向后兼容，App.tsx 等既有消费方零改动）；
@@ -290,10 +451,13 @@ export interface MarkdownEngineProps {
   /** 查找替换面板（B2）：缺省 true——引擎自带交互组件；宿主可
    *  显式关闭（只读消息历史场景由宿主自备搜索 UI）。 */
   findReplace?: boolean;
+  /** 大纲面板（B3 N2）：缺省 true——引擎自带交互组件（嵌套大纲 +
+   *  点击跳转 + 当前章节高亮）；宿主可显式关闭（自备导航 UI）。 */
+  outline?: boolean;
 }
 
 export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEngineProps>(
-  function MarkdownEngine({ store, readOnly, findReplace = true }, ref) {
+  function MarkdownEngine({ store, readOnly, findReplace = true, outline = true }, ref) {
   const parentRef = useRef<HTMLDivElement>(null);
   // R5 实例绑定：所有订阅/命令式读取统一经 engineStore（缺省回退全局
   // 单例）；zustand 的 useStore 在 store 引用变化时自动切换订阅。
@@ -365,6 +529,44 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const oracleRef = useRef<HeightOracle | null>(null);
   if (heightMapRef.current === null) heightMapRef.current = new HeightMap();
   if (oracleRef.current === null) oracleRef.current = new HeightOracle();
+
+  // ── B3 大纲索引（N2）：HeadingIndex 增量维护 ──
+  // 前一帧双段行视图引用（不拷贝——store 数组只整体替换，引用持有即快照）；
+  // 编辑区间经 computeEditSpan diff 定位（前缀/后缀内容比对，fenceLines
+  // 同款「平移 + 局部重建」范式），增量路径零拷贝快速路径复用旧数组引用。
+  const headingIndexRef = useRef<HeadingIndex | null>(null);
+  const prevDualRef = useRef<{
+    main: readonly string[];
+    tail: readonly string[];
+    count: number;
+  } | null>(null);
+  if (headingIndexRef.current === null) headingIndexRef.current = new HeadingIndex();
+  // 条目数组 state（增量维护后整体替换引用；快速路径同引用 → setState 跳过渲染）
+  const [headings, setHeadings] = useState<readonly HeadingEntry[]>(EMPTY_HEADINGS);
+
+  // ── B3 折叠状态（N3）：FoldState（区间 + 行高备份 + HeightMap 批量联动）──
+  // 实例切换（宿主换 store）：随 decorations 同款重建（foldStoreRef 记录
+  // 绑定实例，引用变化即视为切换——与下方 reconciliation effect 联动复位）
+  const foldStateRef = useRef<FoldState | null>(null);
+  const foldStoreRef = useRef<EditorStore | null>(null);
+  // 折叠/展开动作触发重渲染的信号（内容变更走既有订阅信号，不重复 bump；
+  // 值本身无消费方——状态只需「变化即重渲染」，故省略解构）
+  const [, setFoldVersion] = useState(0);
+  if (foldStateRef.current === null) {
+    foldStateRef.current = new FoldState({
+      predictHeight: (line) => {
+        // 行高重预测（折叠行展开/泄漏恢复的备份缺失回退）：
+        // 经访问器读当前行内容 + oracle 预测（与批量测量同源口径）
+        const s = engineStore.getState();
+        const raw = s.getLine(line) ?? '';
+        const st = getLineState(s, line);
+        return (
+          oracleRef.current?.predict(classifyLine(raw, st), raw, st) ??
+          FOLD_PLACEHOLDER_HEIGHT
+        );
+      },
+    });
+  }
 
   // 容器可用宽度 → oracle 的 wrap 模型基准（左右 padding 16×2 + 滚动条 8 ≈ 40）
   useLayoutEffect(() => {
@@ -553,6 +755,95 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     [virtualizer, readOnly]
   );
 
+  // ── B3 大纲跳转 + 视口行解析（OutlinePanel 接线）──
+
+  // 大纲条目跳转：virtualizer.scrollToIndex 定位行（与 scrollToMatch
+  // 同一设施；折叠区间内的标题落在占位行偏移，跳转即折叠条位置）
+  const jumpToLine = useCallback(
+    (line: number) => {
+      virtualizer.scrollToIndex(line, { align: 'start' });
+    },
+    [virtualizer]
+  );
+
+  // 滚动位置 → 视口首行（OutlinePanel 当前章节高亮用）：
+  // HeightMap.indexAt 二分（像素 → 行），topOffset 28 = 容器 padding-top
+  // 14px + 内容 div margin-top 14px（09 §4 C1 换算口径）
+  const resolveScrollLine = useCallback((scrollTop: number) => {
+    const hm = heightMapRef.current;
+    return hm ? hm.indexAt(scrollTop, 28) : 0;
+  }, []);
+
+  // ── B3 大纲标题提取（HeadingIndex extract 回调注入）──
+  // 块级代码状态过滤：围栏/缩进代码/数学块/HTML 块内形似标题的行不索引
+  // （与 parser 的「fence 内行走代码解析路径」语义对齐——同一行文本在不
+  // 同块级上下文下的标题身份不同，纯文本无法判定，必须经 CodeState）
+  const headingExtract = useCallback<HeadingExtractor>(
+    (line, raw) => {
+      if (getLineState(engineStore.getState(), line) !== 'none') return null;
+      const h = extractHeading(raw);
+      return h ? { line, level: h.level, text: h.text } : null;
+    },
+    [engineStore]
+  );
+
+  // ── B3 折叠/展开动作（行高批量更新 + virtualizer 缓存同步）──
+  // 批量路径：FoldState 内单次 setHeight 循环 + 单次 flush；此处逐行
+  // resizeItem 同步 tanstack itemSizeCache（折叠行保留在 HeightMap 槽位，
+  // 行号零漂移——resizeItem 是 0/占位高落库的最后一公里）
+  const syncVirtualizerSizes = useCallback(
+    (changed: readonly number[]) => {
+      const hm = heightMapRef.current;
+      if (!hm) return;
+      for (const i of changed) {
+        const h = hm.getHeight(i);
+        if (h !== undefined) virtualizer.resizeItem(i, h);
+      }
+    },
+    [virtualizer]
+  );
+
+  // 折叠（宿主 handle.foldRange）：越界钳制 + 至少两行 + 重叠拒绝在
+  // FoldState 内完成；成功后批量行高更新 + 缓存同步 + 重渲染
+  const foldRange = useCallback(
+    (startLine: number, endLine: number) => {
+      const s = engineStore.getState();
+      const maxLine = s.getLineCount() - 1;
+      const lo = Math.max(0, startLine);
+      const hi = Math.min(maxLine, endLine);
+      if (hi <= lo) return false;
+      const fs = foldStateRef.current;
+      const hm = heightMapRef.current;
+      if (!fs || !hm) return false;
+      const changed = fs.foldRange(hm, lo, hi);
+      if (!changed) return false;
+      syncVirtualizerSizes(changed);
+      setFoldVersion((v) => v + 1);
+      return true;
+    },
+    [syncVirtualizerSizes, engineStore]
+  );
+
+  // 展开（宿主 handle.unfold / 占位行按钮）：行高按备份原值批量恢复
+  const unfold = useCallback(
+    (line: number) => {
+      const fs = foldStateRef.current;
+      const hm = heightMapRef.current;
+      if (!fs || !hm) return false;
+      const changed = fs.unfold(hm, line);
+      if (!changed) return false;
+      syncVirtualizerSizes(changed);
+      setFoldVersion((v) => v + 1);
+      return true;
+    },
+    [syncVirtualizerSizes]
+  );
+
+  const isFolded = useCallback(
+    (line: number) => foldStateRef.current?.isFolded(line) ?? false,
+    []
+  );
+
   // 命令式接口暴露（R5 宿主：engineRef.current.streamAppend / streamEnd）
   useImperativeHandle(
     ref,
@@ -564,6 +855,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       clearSearch,
       setSearchRanges,
       scrollToMatch,
+      foldRange,
+      unfold,
+      isFolded,
     }),
     [
       streamAppend,
@@ -573,6 +867,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       clearSearch,
       setSearchRanges,
       scrollToMatch,
+      foldRange,
+      unfold,
+      isFolded,
     ]
   );
 
@@ -709,6 +1006,83 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     hm.flush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey, flushStreamInternal]);
+
+  // ── B3 内容变更增量维护：大纲索引平移/重建 + 折叠区间平移/行高批量修正 ──
+  // 声明序在批量测量 effect 之后（foldState 的行高修正依赖 syncTo 已把新增
+  // 行预测高落库——隐藏行置 0 必须发生在预测落库之后）。
+  // 编辑区间经 computeEditSpan diff 定位（双段行视图前后帧比对），大纲索引
+  // 走 fenceLines 同款「平移 + 局部重建」（快速路径零拷贝复用旧引用 →
+  // setHeadings 同引用跳过渲染）；折叠状态走 applyLineChange（区间平移 +
+  // 备份平移 + 受影响行高批量修正，无折叠态时全部零开销）。
+  useLayoutEffect(() => {
+    const s = engineStore.getState();
+    // 实例切换（宿主换 store）：双段基线/大纲索引/折叠状态全部随实例复位。
+    // 注意：hi/fs 必须在复位之后取——此前实现先取后复位导致复位创建的新
+    // 实例被弃用、后续增量全部落在空实例上（分块加载丢失首块标题的实测
+    // bug）。foldStoreRef 记录绑定实例，与渲染体内的惰性初始化共用判定。
+    if (foldStoreRef.current !== engineStore) {
+      foldStoreRef.current = engineStore;
+      prevDualRef.current = null;
+      headingIndexRef.current = new HeadingIndex();
+      foldStateRef.current = new FoldState({
+        predictHeight: (line) => {
+          const st = engineStore.getState();
+          const raw = st.getLine(line) ?? '';
+          const code = getLineState(st, line);
+          return (
+            oracleRef.current?.predict(classifyLine(raw, code), raw, code) ??
+            FOLD_PLACEHOLDER_HEIGHT
+          );
+        },
+      });
+    }
+    const hi = headingIndexRef.current;
+    const fs = foldStateRef.current;
+    const hm = heightMapRef.current;
+    if (!hi || !fs || !hm) return;
+    const nextMain = s.mainLines;
+    const nextTail = s.streamTail;
+    const nextCount = lineCountOf(nextMain.length, nextTail.length);
+    const prev = prevDualRef.current;
+    const span = prev
+      ? computeEditSpan(
+          prev.main,
+          prev.tail,
+          nextMain,
+          nextTail,
+          prev.count,
+          nextCount
+        )
+      : null;
+    if (span) {
+      // 1) 大纲索引增量（fenceLines 同款：平移 + 局部重建）
+      hi.applyLines(
+        span.startLineIdx,
+        span.deleteCount,
+        span.newLines,
+        headingExtract
+      );
+      // 2) 折叠区间平移 + 行高批量修正（批量路径：单次 setHeight 循环 +
+      //    单次 flush；无折叠态零开销）
+      const changed = fs.applyLineChange(
+        hm,
+        span.startLineIdx,
+        span.deleteCount,
+        span.newLines.length,
+        nextCount
+      );
+      syncVirtualizerSizes(changed);
+    } else {
+      // 全量重建路径（首挂载 / setText 整文档替换 / 切换实例）：
+      // 标题索引全量重扫；折叠区间越界裁剪 + 行高重应用
+      hi.rebuild(nextCount, headingExtract, (i) => s.getLine(i));
+      const changed = fs.clamp(hm, nextCount);
+      syncVirtualizerSizes(changed);
+    }
+    prevDualRef.current = { main: nextMain, tail: nextTail, count: nextCount };
+    setHeadings(hi.getEntries());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainLines, streamTail, engineStore]);
 
   // B4 N9：复制处理器统一入口（编辑态/只读态分支）。
   // - 编辑态：既有语义不变——store 选区 → getText 切片（源码复制）；
@@ -984,6 +1358,17 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       className="engine-container"
       style={{ width: '100%', height: '100%', position: 'relative' }}
     >
+      {/* B3 大纲面板：挂载于根容器内、滚动容器外（不干扰虚拟滚动/行高
+          测量/点击定位）；条目经 HeadingIndex 增量维护，跳转/章节高亮
+          接 handle 链路。宿主可用 outline prop 显式关闭 */}
+      {outline && (
+        <OutlinePanel
+          headings={headings}
+          scrollRef={parentRef}
+          resolveScrollLine={resolveScrollLine}
+          onJump={jumpToLine}
+        />
+      )}
       {/* B2 查找替换面板：挂载于根容器内、滚动容器外（不干扰虚拟
           滚动/行高测量）；store 绑定本实例、跳转/高亮接 handle 链路。
           宿主可用 findReplace prop 显式关闭（只读消息历史场景） */}
@@ -1053,6 +1438,28 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
             const s = engineStore.getState();
             return virtualizer.getVirtualItems().map((virtualRow) => {
               const index = virtualRow.index;
+              // B3 折叠渲染接线（方案 B：保留行 + 渲染跳过）：折叠区间内
+              // 行保留在 HeightMap 槽位（行号/令牌映射零漂移），隐藏行
+              // 跳过渲染（0 高行不物化 DOM——展开时无结构变更、无损恢复）；
+              // 区间首行渲染为折叠占位行（折叠条 + 展开按钮）。
+              const activeFold = foldStateRef.current?.getRangeAt(index);
+              if (activeFold) {
+                if (index !== activeFold.startLine) return null;
+                const raw = s.getLine(index) ?? '';
+                const summary = raw.trim()
+                  ? raw.trim().slice(0, FOLD_SUMMARY_MAX_CHARS)
+                  : '';
+                return (
+                  <FoldPlaceholderRow
+                    key={index}
+                    index={index}
+                    foldedCount={activeFold.endLine - index + 1}
+                    summary={summary}
+                    rowRef={registerRowRef}
+                    onUnfold={unfold}
+                  />
+                );
+              }
               const lineText = s.getLine(index);
               const offset = s.lineOffsets.getOffset(index);
               const isCode = getLineState(s, index);
