@@ -394,8 +394,67 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   );
 };
 
+/**
+ * memo 比较器字段清单（T4.3，R-06 守卫，08-detail 4.1-③）。
+ *
+ * 双层防护：
+ * 1. 类型级穷尽检查（下方 _exhaustedCheck）：新增 prop 忘收录到本清单 →
+ *    `Exclude<keyof Props, 清单成员>` 非 never → tsc 编译红；
+ * 2. 源文本探针（MessageVirtualizer.memo.test.tsx）：清单成员必须出现在
+ *    messageVirtualizerPropsEqual 源码中——收录但忘写比较器 → 测试红。
+ */
+export const MEMO_COMPARE_FIELDS = [
+  'messages',
+  'visibleMessages',
+  'messageWindow',
+  'olderStep',
+  'offerShowAllOlder',
+  'expandOlderStep',
+  'expandOlderAll',
+  'pinnedItems',
+  'pinsOpen',
+  'setPinsOpen',
+  'jumpToPinned',
+  'togglePin',
+  'searchHighlightQuery',
+  'expandedUserMsgs',
+  'onToggleExpandUser',
+  'onWithdraw',
+  'onShowToast',
+  'hideThinkingBlock',
+  'inPlanMode',
+  'planApproved',
+  'lastAssistantId',
+  'thinkingMsgId',
+  'toolStackProps',
+  'handleRegenerateRow',
+  'onBranch',
+  'onOpenDiff',
+  'onOpenDiffPanel',
+  'setPermissionMode',
+  'setPlanApproved',
+  'handleFillFollowUp',
+  'onSendFollowUp',
+  'handleSendFollowUp',
+  'dismissedFollowUps',
+  'handleDismissFollowUp',
+  'showAllMessages',
+  'activeSessionId',
+  'handleMarkdownClick',
+  'clearHeightsSignal',
+] as const satisfies readonly (keyof MessageVirtualizerProps)[];
+
+/** 新增 prop 忘收录 → 编译红（类型级穷尽检查） */
+type _Exhausted = Exclude<
+  keyof MessageVirtualizerProps,
+  typeof MEMO_COMPARE_FIELDS[number]
+> extends never
+  ? true
+  : false;
+const _exhaustedCheck: _Exhausted = true;
+
 /** 仅在可见消息身份/长度、思考中消息、窗口与关键 UI 状态变化时放行重渲染 */
-function messageVirtualizerPropsEqual(
+export function messageVirtualizerPropsEqual(
   prev: MessageVirtualizerProps,
   next: MessageVirtualizerProps
 ): boolean {

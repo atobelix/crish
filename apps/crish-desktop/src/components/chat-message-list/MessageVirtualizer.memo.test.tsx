@@ -14,7 +14,15 @@
 import React from 'react';
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { MessageVirtualizer } from './MessageVirtualizer';
+import {
+  MessageVirtualizer,
+  MEMO_COMPARE_FIELDS,
+  messageVirtualizerPropsEqual,
+} from './MessageVirtualizer';
+import {
+  assistantRowPropsEqual,
+  MEMO_COMPARE_FIELDS as ROW_MEMO_COMPARE_FIELDS,
+} from '../chat-message-row/ChatAssistantMessageRow';
 import type { SessionMessage } from '../../store/types';
 
 globalThis.ResizeObserver = class ResizeObserver {
@@ -112,5 +120,40 @@ describe('MessageVirtualizer memo 契约（F7-F16）', () => {
       <MessageVirtualizer {...createProps(second, first)} />
     );
     expect(container.textContent).toContain('内容乙');
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('比较器字段清单（T4.3，R-06 守卫）', () => {
+  it('MEMO_COMPARE_FIELDS 收录全部 props（类型级穷尽检查的运行时镜像）', () => {
+    // 编译期已由 _exhaustedCheck 强制；此处锁定清单非空且与 props 面一致
+    expect(MEMO_COMPARE_FIELDS.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(MEMO_COMPARE_FIELDS).size).toBe(MEMO_COMPARE_FIELDS.length);
+  });
+
+  it('清单成员全部出现在 messageVirtualizerPropsEqual 源码中（忘写比较器 → 红）', () => {
+    const src = messageVirtualizerPropsEqual.toString();
+    for (const field of MEMO_COMPARE_FIELDS) {
+      expect(
+        src.includes(field),
+        `比较器源码缺少字段「${field}」——新增 prop 忘写比较器会导致每帧全量重渲染`
+      ).toBe(true);
+    }
+  });
+
+  it('ChatAssistantMessageRow 清单成员全部出现在 assistantRowPropsEqual 源码中', () => {
+    const src = assistantRowPropsEqual.toString();
+    for (const field of ROW_MEMO_COMPARE_FIELDS) {
+      expect(
+        src.includes(field),
+        `assistantRowPropsEqual 源码缺少字段「${field}」`
+      ).toBe(true);
+    }
+  });
+
+  it('messageWindow 结构化比较仍在（深比较，非引用比较）', () => {
+    const src = messageVirtualizerPropsEqual.toString();
+    expect(src.includes('a.startIndex')).toBe(true);
+    expect(src.includes('messageWindow')).toBe(true);
   });
 });

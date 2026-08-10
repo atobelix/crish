@@ -144,15 +144,23 @@ export function useVirtualScroll(
 
   const setActual = useCallback(
     (id: string, height: number) => {
+      // T4.1（R-04）：入 pending 前同值跳过——RO 对完成态稳定行重复回调零成本
+      const cur = manager.getActualHeight(id);
+      if (cur !== null && cur === height) return;
       pendingActualRef.current.set(id, height);
       if (actualRafRef.current == null) {
         actualRafRef.current = requestAnimationFrame(() => {
           actualRafRef.current = null;
+          let changed = false;
           for (const [msgId, h] of pendingActualRef.current) {
-            manager.setActual(msgId, h);
+            changed = manager.setActual(msgId, h) || changed;
           }
           pendingActualRef.current.clear();
-          setActualTick((t) => t + 1);
+          // rAF flush 全为同值（未变更）→ 不调 setActualTick：
+          // 完成态稳定行不触发 visibleRange/totalHeight 全列表重算
+          if (changed) {
+            setActualTick((t) => t + 1);
+          }
         });
       }
     },

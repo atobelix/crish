@@ -377,3 +377,38 @@ describe('VirtualScrollManager (messageId + suffix rebuild)', () => {
     });
   });
 });
+
+describe('T4.1（R-04）：setActual 同值跳过', () => {
+  it('同值（actual/estimated 均等于新值）→ 返回 false 且不重建 offset 缓存', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['a', 'b']);
+    expect(vsm.setActual('a', 50)).toBe(true);
+    expect(vsm.getActualHeight('a')).toBe(50);
+    // 同值再写：offset 缓存保持有效（rebuildOffsets 不重跑）
+    expect(vsm.setActual('a', 50)).toBe(false);
+    expect(vsm.getActualHeight('a')).toBe(50);
+    // 不同值 → true
+    expect(vsm.setActual('a', 66)).toBe(true);
+    expect(vsm.getActualHeight('a')).toBe(66);
+  });
+
+  it('invalidate 态（actual == null）仍照常写入', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['a']);
+    vsm.setActual('a', 50);
+    vsm.invalidateActual('a');
+    expect(vsm.getActualHeight('a')).toBe(null);
+    // invalidate 后同高度重测 → 必须视为变更写回
+    expect(vsm.setActual('a', 50)).toBe(true);
+    expect(vsm.getActualHeight('a')).toBe(50);
+  });
+
+  it('过时 generation 返回 false（不 markDirty）', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['a']);
+    vsm.clear();
+    vsm.syncOrder(['a']);
+    expect(vsm.setActual('a', 999, 0)).toBe(false);
+    expect(vsm.getActualHeight('a')).toBe(null);
+  });
+});

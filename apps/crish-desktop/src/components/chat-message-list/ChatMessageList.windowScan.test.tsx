@@ -13,7 +13,10 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { ChatMessageList } from './ChatMessageList';
-import { collectMustIncludeIndices } from '../../api/messageWindow';
+import {
+  collectMustIncludeIndices,
+  collectMustIncludeIndicesCached,
+} from '../../api/messageWindow';
 import type { SessionMessage } from '../../store/types';
 
 globalThis.ResizeObserver = class ResizeObserver {
@@ -22,11 +25,20 @@ globalThis.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
-vi.mock('../../api/sessionSearch', () => ({
-  subscribeSearchQuery: () => () => {},
-  getSearchQuerySnapshot: () => '',
-  messageMatchesSearch: () => false,
-}));
+vi.mock('../../api/sessionSearch', async () => {
+  const actual = await vi.importActual<typeof import('../../api/sessionSearch')>(
+    '../../api/sessionSearch'
+  );
+  return {
+    subscribeSearchQuery: actual.subscribeSearchQuery,
+    getSearchQuerySnapshot: actual.getSearchQuerySnapshot,
+    tokenizeSearchQuery: actual.tokenizeSearchQuery,
+    normalizeSearchQuery: actual.normalizeSearchQuery,
+    messageMatchesSearchTokens: actual.messageMatchesSearchTokens,
+    // 保留既有用例语义：搜索未激活（query 空）时 messageMatchesSearch 恒 false
+    messageMatchesSearch: () => false,
+  };
+});
 
 // 不能再用 `{ spy: true }`：根 vitest.setup.ts 的 afterEach 无条件
 // restoreAllMocks，会把 spy:true 的模块级 spy 还原为原始函数，第二个用例
@@ -41,6 +53,7 @@ vi.mock('../../api/messageWindow', async () => {
   return {
     ...actual,
     collectMustIncludeIndices: vi.fn(actual.collectMustIncludeIndices),
+    collectMustIncludeIndicesCached: vi.fn(actual.collectMustIncludeIndicesCached),
   };
 });
 
@@ -143,6 +156,95 @@ describe('ChatMessageList 窗口扫描 memo 化（F7-F20）', () => {
     const callsAtMount = vi.mocked(collectMustIncludeIndices).mock.calls.length;
     rerender(renderListProps([userMsg('u1', '问题'), pendingApproval('a1', '待审批回复'), userMsg('u2', '新问题')]));
     expect(vi.mocked(collectMustIncludeIndices).mock.calls.length).toBeGreaterThan(
+      callsAtMount
+    );
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('T3.3（S3）：processing 期搜索 keep-alive 重扫节流', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    try {
+      sessionStorage.removeItem('crish_session_search_query');
+    } catch {
+      /* ignore */
+    }
+  });
+
+  afterEach(() => {
+    try {
+      sessionStorage.removeItem('crish_session_search_query');
+    } catch {
+      /* ignore */
+    }
+  });
+
+  function processingAsst(id: string, text: string): SessionMessage {
+    return {
+      id,
+      sender: 'assistant',
+      timestamp: 1000,
+      text,
+      status: 'processing',
+      toolCalls: [],
+      blocks: [{ type: 'text', content: text }],
+    } as SessionMessage;
+  }
+
+  it('搜索激活 + processing 期：流式帧不触发命中扫描（windowScanKey 降级为 id 签名）', () => {
+    // 激活搜索（subscribeSearchQuery 读 sessionStorage）
+    try {
+      sessionStorage.setItem('crish_session_search_query', '命中');
+    } catch {
+      /* ignore */
+    }
+    const base = [userMsg('u1', '问题'), processingAsst('a1', '命中第一段')];
+    const { rerender } = renderList(base);
+    const callsAtMount = vi.mocked(collectMustIncludeIndicesCached).mock.calls.length;
+    expect(callsAtMount).toBeGreaterThanOrEqual(1);
+
+    // 流式帧：同 id、内容增长（processing 期）→ 扫描次数不增长
+    for (let i = 2; i <= 8; i++) {
+      rerender(
+        renderListProps([
+          userMsg('u1', '问题'),
+          processingAsst('a1', `命中第一段·续写第 ${i} 段`),
+        ])
+      );
+      expect(vi.mocked(collectMustIncludeIndicesCached).mock.calls.length).toBe(
+        callsAtMount
+      );
+    }
+  });
+
+  it('搜索激活 + 非流式期：命中扫描恢复（搜索编辑/审批即时响应）', () => {
+    try {
+      sessionStorage.setItem('crish_session_search_query', '命中');
+    } catch {
+      /* ignore */
+    }
+    const completed = [
+      userMsg('u1', '问题'),
+      { ...processingAsst('a1', '命中第一段'), status: 'completed' },
+    ];
+    const { rerender } = renderList(completed);
+    const callsAtMount = vi.mocked(collectMustIncludeIndicesCached).mock.calls.length;
+
+    // 非流式期：消息引用变化（如审批/编辑）→ 重新扫描
+    rerender(
+      renderListProps([
+        userMsg('u1', '问题'),
+        {
+          ...processingAsst('a1', '命中第一段（编辑后）'),
+          status: 'completed',
+          toolCalls: [
+            { id: 't1', name: 'read_file', arguments: '{}', status: 'success' },
+          ],
+        },
+      ])
+    );
+    expect(vi.mocked(collectMustIncludeIndicesCached).mock.calls.length).toBeGreaterThan(
       callsAtMount
     );
   });

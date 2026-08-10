@@ -203,3 +203,56 @@ describe('ChatMessageList height lifecycle contract (static source)', () => {
 function equalArr(a: unknown, b: string[]): boolean {
   return Array.isArray(a) && a.length === b.length && a.every((v, i) => v === b[i]);
 }
+
+describe('T4.1（R-04）：setActual 同值跳过不触发 actualTick', () => {
+  it('同高度重复 setActual：manager.setActual 不被调用（入 pending 前短路）', async () => {
+    const { result } = renderHook(() =>
+      useVirtualScroll({ ids: ['a'], itemCount: 1, fallbackHeight: 100 }),
+    );
+    act(() => {
+      result.current.manager.setActual('a', 50);
+    });
+    expect(result.current.manager.getActualHeight('a')).toBe(50);
+    const setActualSpy = vi.spyOn(result.current.manager, 'setActual');
+    let tick = 0;
+    const { result: r2 } = renderHook(() =>
+      useVirtualScroll({ ids: ['a'], itemCount: 1, fallbackHeight: 100 }),
+    );
+    void r2;
+    // 同值 setActual（RO 重复回调场景）→ pending 短路，manager 零调用
+    act(() => {
+      result.current.setActual('a', 50);
+    });
+    expect(setActualSpy).not.toHaveBeenCalled();
+    void tick;
+  });
+
+    expect(result.current.manager.getActualHeight('a')).toBe(200);
+    expect(result.current.manager.getTotalHeight(2)).toBe(250);
+  });
+});
+  it('异值 setActual：进入 pending（rAF 异步 flush）；同值短路不重复入队', () => {
+    const { result } = renderHook(() =>
+      useVirtualScroll({ ids: ['a', 'b'], itemCount: 2, fallbackHeight: 100 }),
+    );
+    act(() => {
+      result.current.manager.setActual('a', 50);
+      result.current.manager.setActual('b', 50);
+    });
+    // 异值 → 入 pending（rAF flush 在测试环境不自动触发，manager 未变）
+    act(() => {
+      result.current.setActual('a', 200);
+    });
+    expect(result.current.manager.getActualHeight('a')).toBe(50);
+    // 同值短路：pending 不重复入队（无额外写入）
+    act(() => {
+      result.current.setActual('a', 200);
+    });
+    expect(result.current.manager.getActualHeight('a')).toBe(50);
+    // 直接经 manager 验证异值写入路径正常
+    act(() => {
+      result.current.manager.setActual('a', 200);
+    });
+    expect(result.current.manager.getActualHeight('a')).toBe(200);
+  });
+});

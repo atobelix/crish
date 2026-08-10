@@ -84,6 +84,14 @@ export class VirtualScrollManager {
     return this.heightsById.has(id);
   }
 
+  /**
+   * 当前实际高度（未测量 → null）。
+   * T4.1（R-04）：useVirtualScroll.setActual 入 pending 前同值跳过用。
+   */
+  getActualHeight(id: string): number | null {
+    return this.heightsById.get(id)?.actual ?? null;
+  }
+
   /** 返回当前 order 副本 */
   getOrder(): string[] {
     return this.order.slice();
@@ -106,14 +114,20 @@ export class VirtualScrollManager {
   /**
    * 回写实际 DOM 高度（ResizeObserver 渲染后调用）。
    * @param callerGeneration 调用方捕获的 generation；若与当前不一致（过时）则忽略。
+   * @returns 是否实际变更（同值跳过时 false；T4.1 R-04 断言口径）
    */
-  setActual(id: string, height: number, callerGeneration?: number): void {
-    if (callerGeneration !== undefined && callerGeneration !== this.generation) return;
-    if (!id) return;
-    if (!Number.isFinite(height) || height <= 0) return;
+  setActual(id: string, height: number, callerGeneration?: number): boolean {
+    if (callerGeneration !== undefined && callerGeneration !== this.generation) return false;
+    if (!id) return false;
+    if (!Number.isFinite(height) || height <= 0) return false;
     const safeHeight = height;
     const entry = this.heightsById.get(id);
     if (entry) {
+      // T4.1（R-04）：同值跳过——actual/estimated 均等于新值时不再
+      // markDirty（完成态高度稳定的行零 offset 缓存重建）
+      if (entry.actual === safeHeight && entry.estimated === safeHeight) {
+        return false;
+      }
       entry.actual = safeHeight;
       // 同步 estimated，作为「最后一次实测高度」的缓存（invalidateActual 会重置）
       entry.estimated = safeHeight;
@@ -121,6 +135,7 @@ export class VirtualScrollManager {
       this.heightsById.set(id, { estimated: safeHeight, actual: safeHeight });
     }
     this.markDirty();
+    return true;
   }
 
   /** 设置预测量高度（actual 已存在时跳过） */
