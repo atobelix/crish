@@ -418,7 +418,7 @@ impl BrowserManager {
         )
         .await?;
         // 2. 建 profile 目录（§4）
-        let (profile_dir, token) = self.prepare_profile(&config).await?;
+        let (profile_dir, token) = self.prepare_profile(&config)?;
         // 3. 状态机入 Launching + 派发驱动任务（临界区尾：状态置位即释放互斥）
         let (first_tx, first_rx) = oneshot::channel();
         {
@@ -451,7 +451,7 @@ impl BrowserManager {
                 if let Err(payload) = result {
                     let msg = panic_message(&payload);
                     tracing::error!("会话驱动任务 panic（M5 兜底收敛）：{msg}");
-                    mgr.on_driver_panic(&msg).await;
+                    mgr.on_driver_panic(&msg);
                 }
             }));
         }
@@ -478,41 +478,32 @@ impl BrowserManager {
 
     /// 停止（§6.2/§6.3）：意图置位 → 通知驱动 → 等驱动收尾。
     pub async fn stop(&self, reason: StopReason) -> Result<StopReport, ProcessError> {
-        let (driver, cleanup_dir) = {
+        let driver = {
             let mut g = self.lock();
             if g.driver.is_none() {
-                // 无驱动（从未启动/已收敛）：登记遗留 profile（崩溃放弃后的残留），
-                // 锁外 await 删除（M8：remove_ephemeral 已 async 化，跨 await 不持锁）
-                let cleanup_dir =
-                    if let (Some(dir), Some(spec)) = (g.profile_dir.clone(), g.profile_spec.clone())
-                    {
-                        matches!(spec, ProfileSpec::Ephemeral).then_some(dir)
-                    } else {
-                        None
-                    };
+                // 无驱动（从未启动/已收敛）：仅清理遗留 profile（崩溃放弃后的残留）
+                if let (Some(dir), Some(spec)) = (g.profile_dir.clone(), g.profile_spec.clone()) {
+                    if matches!(spec, ProfileSpec::Ephemeral) {
+                        let _ = remove_ephemeral(&dir);
+                    }
+                }
                 g.profile_dir = None;
                 g.profile_spec = None;
                 g.endpoint = None;
-                (None, cleanup_dir)
-            } else {
-                g.intentional = true;
-                g.pending_stop = Some(matches!(reason, StopReason::Graceful));
-                if let Some(tx) = &g.stop_tx {
-                    let _ = tx.send(true);
-                }
-                (g.driver.take(), None)
+                return Ok(StopReport {
+                    state: BrowserState::Stopped,
+                    force_killed: false,
+                    elapsed_ms: 0,
+                    profile_removed: true,
+                });
             }
+            g.intentional = true;
+            g.pending_stop = Some(matches!(reason, StopReason::Graceful));
+            if let Some(tx) = &g.stop_tx {
+                let _ = tx.send(true);
+            }
+            g.driver.take()
         };
-        if let Some(dir) = cleanup_dir {
-            // 无驱动路径：清理遗留 profile 后收敛（删除完成才返回，语义与原实现一致）
-            let _ = remove_ephemeral(&dir).await;
-            return Ok(StopReport {
-                state: BrowserState::Stopped,
-                force_killed: false,
-                elapsed_ms: 0,
-                profile_removed: true,
-            });
-        }
         if let Some(task) = driver {
             let _ = task.await;
         }
@@ -618,8 +609,7 @@ impl BrowserManager {
     }
 
     /// profile 准备（§4.2/§4.3）：Ephemeral → sessions/<uuid>/；Imported → 复制到 managed/。
-    /// M8：async fn——内部 `import_copy` 已 async 化（失败清理路径用 tokio sleep 让出）。
-    async fn prepare_profile(
+    fn prepare_profile(
         &self,
         config: &LaunchConfig,
     ) -> Result<(PathBuf, SessionToken), ProcessError> {
@@ -662,8 +652,7 @@ impl BrowserManager {
                         source_profile,
                         &dest,
                         false,
-                    )
-                    .await?;
+                    )?;
                     tracing::info!(
                         "导入 profile 完成：copied={} skipped={} → {}",
                         report.copied,
@@ -997,7 +986,7 @@ impl BrowserManager {
         first_tx: &mut Option<oneshot::Sender<Result<LaunchReport, ProcessError>>>,
     ) {
         let err_text = err.to_string();
-        self.cleanup_profile().await;
+        self.cleanup_profile();
         {
             let mut g = self.lock();
             g.last_error = Some(err_text.clone());
@@ -1083,7 +1072,7 @@ impl BrowserManager {
             g.machine
                 .on(StateEvent::StopExited, Instant::now(), &self.budget());
         }
-        self.cleanup_profile().await;
+        self.cleanup_profile();
         let elapsed = start.elapsed().as_millis() as u64;
         let (restarts, backend) = self.emit_snapshot();
         {
@@ -1101,15 +1090,14 @@ impl BrowserManager {
     }
 
     /// 清理 profile（§4.4：临时直删；受管保留——用户资产删除由维度 16 经 trash 发起）。
-    /// M8：async fn——`remove_ephemeral` 已 async 化（删除重试等待让出 worker）。
-    async fn cleanup_profile(&self) {
+    fn cleanup_profile(&self) {
         let (dir, spec) = {
             let g = self.lock();
             (g.profile_dir.clone(), g.profile_spec.clone())
         };
         match (&dir, &spec) {
             (Some(dir), Some(ProfileSpec::Ephemeral)) => {
-                if let Err(e) = remove_ephemeral(dir).await {
+                if let Err(e) = remove_ephemeral(dir) {
                     tracing::warn!("临时 profile 清理失败（登记孤儿，下次启动清扫）：{e}");
                 } else {
                     let mut g = self.lock();
@@ -1131,7 +1119,7 @@ impl BrowserManager {
             g.machine
                 .on(StateEvent::Stop { graceful: true }, Instant::now(), &self.budget());
         }
-        self.cleanup_profile().await;
+        self.cleanup_profile();
         let (restarts, backend) = self.emit_snapshot();
         self.emit(ProcessEvent::StateChanged {
             state: BrowserState::Stopped,
@@ -1155,7 +1143,7 @@ impl BrowserManager {
     /// 4. 终态错误记录 + 广播 StateChanged（error 带 panic 原因）——等待方
     ///    （stop()、start() 的 first_rx）随之释放，后续 start() 幂等检查看到
     ///    Stopped，可重新启动。
-    async fn on_driver_panic(&self, msg: &str) {
+    fn on_driver_panic(&self, msg: &str) {
         // 1. 进程杀树兜底（Job 句柄已随 unwind 丢失，KILL_ON_JOB_CLOSE 不触发）
         if let Some(pid) = self.lock().last_pid {
             new_killer().kill_sync(pid);
@@ -1182,7 +1170,7 @@ impl BrowserManager {
             g.intentional = false;
         }
         // 3. 清理 profile + 会话残留（顺序在广播前：事件到达即一切已就绪）
-        self.cleanup_profile().await;
+        self.cleanup_profile();
         self.clear_session_state();
         // 4. 终态错误记录 + 事件广播（reason=panic）
         let err_text = format!("会话驱动异常终止（驱动 panic：{msg}）");

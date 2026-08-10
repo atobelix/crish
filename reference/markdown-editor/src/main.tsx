@@ -4,7 +4,7 @@ import './index.css';
 import App from './App.tsx';
 import { useEditorStore } from './core/EditorStore';
 import { useTableStore } from './core/TableStore';
-import { MarkdownParser } from './core/parser';
+import { metrics } from './core/metrics';
 import { MarkdownFormatChecker } from './core/validator';
 
 declare global {
@@ -23,10 +23,18 @@ declare global {
 window.MarkdownFormatChecker = MarkdownFormatChecker;
 window.__CRISH_SESSION_STORE__ = useEditorStore;
 window.__CRISH_TABLE_STORE__ = useTableStore;
+// B6 指标核心化（N10）：__CRISH_METRICS__ 改走引擎 core metrics 模块
+// 全局默认实例——现有 3 API（getCacheStats/getLineCount/
+// layoutThrashCount）形状保持兼容（宿主调试流式/渲染性能口径不变）。
+// 注意：getLineCount 经访问器读取（R6-P1 口径），不再经 lines.length
+// 触发惰性物化（旧实现每次读取都物化兼容视图，是伪指标）。
+metrics.setLineCountSource(() => useEditorStore.getState().getLineCount());
 window.__CRISH_METRICS__ = {
-  getCacheStats: () => MarkdownParser.getCacheStats(),
-  getLineCount: () => useEditorStore.getState().lines.length,
-  layoutThrashCount: 0,
+  getCacheStats: () => metrics.getCacheStats(),
+  getLineCount: () => metrics.getLineCount(),
+  get layoutThrashCount() {
+    return metrics.layoutThrashCount;
+  },
 };
 
 // --- Forced Synchronous Layout Sentinel ---
@@ -45,7 +53,7 @@ requestAnimationFrame(reportThrashing);
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 Element.prototype.getBoundingClientRect = function () {
   frameLayoutCalls++;
-  window.__CRISH_METRICS__.layoutThrashCount++;
+  metrics.incrementLayoutThrash();
   return originalGetBoundingClientRect.apply(this, arguments as any);
 };
 
@@ -53,7 +61,7 @@ const originalRangeGetBoundingClientRect =
   Range.prototype.getBoundingClientRect;
 Range.prototype.getBoundingClientRect = function () {
   frameLayoutCalls++;
-  window.__CRISH_METRICS__.layoutThrashCount++;
+  metrics.incrementLayoutThrash();
   return originalRangeGetBoundingClientRect.apply(this, arguments as any);
 };
 // ----------------------------------------

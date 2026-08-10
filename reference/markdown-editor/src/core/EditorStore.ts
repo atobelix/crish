@@ -1,6 +1,7 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { isFenceClose, type CodeState } from './parser';
 import { LineOffsetTree } from './SegmentTree';
+import { metrics } from './metrics';
 
 // Use Intl.Segmenter for grapheme cluster boundaries (surrogate pairs, emojis, combining chars)
 const segmenter =
@@ -505,7 +506,45 @@ export interface EditorOperation {
    * 用户 op 之间（undo/redo 逆 op 重建已按当前状态为基准，见 undo/redo）。
    */
   meta?: 'stream';
+  /**
+   * 位置级字段（B6 协作 op 预留，04 §7 近期项 / status-P3 N8）：
+   * 字符级 [from, to) 区间替换为 insert 的完整位置描述——OT/CRDT 可映射
+   * 形状（06 §4 近期项），供变更日志与同步消费端使用：
+   * - applyChange 事务点记录：from/to = 变更前文档坐标、insert = 入参、
+   *   removedText = 区间原文本（从行级快照推导，精确到字符）；
+   * - undo/redo 逆 op：以「逆操作执行时文档」为坐标的整行区间
+   *   （整行替换语义，from = 区间起始行行首、to = 区间末行行尾、
+   *   insert = 逆操作插入内容、removedText = 逆操作删除内容）；
+   * - meta:'stream' 合并 op：stop-flush 时文档坐标的追加区间。
+   * **只增不改**：行级字段语义与 undo/redo 兼容层完全不变（818 门禁），
+   * 既有分支不读新字段；位置字段仅供日志/同步消费端附加消费。
+   */
+  from?: number;
+  to?: number;
+  insert?: string;
+  removedText?: string;
 }
+
+/**
+ * 变更日志条目（B6 协作 op 预留，04 §7 近期项 / N8）：
+ * append-only：seq 单调递增（= 记录时的文档 version），op 为完整事务
+ * op（含位置级字段）。日志与 undo 栈解耦——500ms 合并击键在 undo 栈
+ * 折叠为一步，但每次实际变更都是一条日志条目（同步消费端按事件粒度
+ * 消费，seq 提供无冲突增量拉取顺序）。
+ */
+export interface ChangeLogEntry {
+  /** 条目序号（单调递增，与记录时文档 version 同值） */
+  seq: number;
+  /** 事务 op（含位置级字段） */
+  op: EditorOperation;
+}
+
+/**
+ * 变更日志容量上界（有界环形，防长会话内存无界增长）：
+ * 超过上界丢弃最旧条目（语义 = 环形缓冲；物理实现为整数组裁剪，
+ * 仅在满员时每事务一次 O(上界) 拷贝，常规编辑 O(1) 追加）。
+ */
+export const CHANGE_LOG_LIMIT = 10_000;
 
 /**
  * 流式会话合并记账（R3-A 流式合并 undo）：
@@ -579,6 +618,17 @@ export interface EditorState {
 
   undoStack: EditorOperation[];
   redoStack: EditorOperation[];
+
+  /**
+   * —— B6 协作 op 预留（04 §7 近期项 / status-P3 N8）——
+   * changeLog：append-only 变更日志（{seq, op} 条目，有界环形，
+   * 超过 CHANGE_LOG_LIMIT 丢弃最旧）；version：文档版本号（每次变更
+   * 事务 +1，setText / 整档重置归零）。写入口 = applyChange 事务 +
+   * stop-flush 流式合并 op；undo/redo 不写日志不递增（撤销/重做既有
+   * op，非新编辑事务——「undo/redo 逻辑不变」契约）。
+   */
+  changeLog: ChangeLogEntry[];
+  version: number;
 
   /**
    * 流式会话合并记账（R3-A）：append 期间非 null，stop-flush 时置 null
@@ -1110,6 +1160,10 @@ interface MaterializedViews {
 }
 
 function materializeViews(state: EditorState): MaterializedViews {
+  // 物化计数（B6 指标接线）：每次物化都是「兼容视图被消费方真实读取」
+  // 的性能信号（R6-P1 惰性化后运行期零读者时热路径零物化）——经全局
+  // metrics 实例累计，宿主可据此观测每消息实例化场景的物化成本（N10）。
+  metrics.incrementMaterializations();
   const { mainLines, streamTail } = state;
   // 双段合并经共享原语（P2-A1 回修 2）：尾段空 → 零拷贝主数组引用；
   // 非空 → 主数组 [0, boundary) + 尾段全行（接管语义见 concatDual 注释）。
@@ -1435,6 +1489,10 @@ function normalizeSetStatePartial(
     // （append-cursor 测试与既有测试的 resetStore 均走此路径）。
     out.streamOp = null;
     out.lastUserEditTime = 0;
+    // 整文档重置（B6）：变更日志清空 + 版本号归零——整档重置与
+    // setText 同语义（新文档版本序列），日志条目不再对应当前文档。
+    out.changeLog = [];
+    out.version = 0;
   }
   // —— R4-B：方向层默认补齐（外部直改兼容字段时同步 anchor/head/assoc）——
   // 外部消费方 / 既有测试按旧三元组 setState（selectionchange 回写、
@@ -1508,6 +1566,8 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
 
   undoStack: [],
   redoStack: [],
+  changeLog: [],
+  version: 0,
   streamOp: null,
   lastUserEditTime: 0,
   textLength: 0,
@@ -1559,8 +1619,17 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
       // 合并 op 独立一步入栈（若栈中已有流式期间的用户编辑 op，流式 op
       // 直接追加、不折叠不排序——「流式 op 作为独立一步」登记约定）；
       // redo 栈清空（新一步产生后不可重做）。
+      // —— B6 位置级字段（追加区间，stop-flush 后文档坐标）——
+      // 追加区间 = [startLineIdx, +insertedLineCount) 行（流式内容行）；
+      // from = 区间起始行行首、to = 区间末行行尾、insert = 流式前末行
+      // （undo 恢复内容）、removedText = 流式内容（undo 删除内容）。
+      const streamStartLineIdx = base.streamOp.startLineIdx;
+      const streamStartOff = base.lineOffsets.getOffset(streamStartLineIdx);
+      const streamRemovedText = base.mainLines
+        .slice(streamStartLineIdx, streamStartLineIdx + base.streamOp.insertedLineCount)
+        .join('\n');
       const op: EditorOperation = {
-        startLineIdx: base.streamOp.startLineIdx,
+        startLineIdx: streamStartLineIdx,
         removedLines: base.streamOp.removedLines,
         insertedLineCount: base.streamOp.insertedLineCount,
         cursorBefore: base.streamOp.cursorBefore,
@@ -1572,12 +1641,24 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
         selectionEndAfter: base.selectionEnd,
         timestamp: Date.now(),
         meta: 'stream',
+        from: streamStartOff,
+        to: streamStartOff + streamRemovedText.length,
+        insert: base.streamOp.removedLines.join('\n'),
+        removedText: streamRemovedText,
       };
+      // —— B6 变更日志 + 版本号（meta:'stream' op 也在日志中，N8 口径）——
+      const streamVersion = state.version + 1;
+      const streamLog = [...state.changeLog, { seq: streamVersion, op }];
+      if (streamLog.length > CHANGE_LOG_LIMIT) {
+        streamLog.splice(0, streamLog.length - CHANGE_LOG_LIMIT);
+      }
       return {
         ...(patch ?? {}),
         streamOp: null,
         undoStack: [...base.undoStack, op],
         redoStack: [],
+        changeLog: streamLog,
+        version: streamVersion,
       };
     });
   },
@@ -1607,6 +1688,9 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
           assoc: 'before',
           undoStack: [],
           redoStack: [],
+          // 整文档重置（B6）：变更日志清空 + 版本号归零（新文档版本序列）
+          changeLog: [],
+          version: 0,
         };
       }
 
@@ -1670,6 +1754,9 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
         assoc: 'before',
         undoStack: [],
         redoStack: [],
+        // 整文档重置（B6）：变更日志清空 + 版本号归零（新文档版本序列）
+        changeLog: [],
+        version: 0,
       };
     });
   },
@@ -1815,6 +1902,24 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
 
       const plan = planChange(s, fromB, toB, insert);
 
+      // —— B6 位置级字段推导（从行级计划还原字符级区间）——
+      // removedText = [fromB, toB) 区间原文本：removedLines.join('\n')
+      // 即「startLineIdx 行首 → endLineIdx 行尾」全文（行间换行符在
+      // join 分隔符中），截取 fromB/toB 对应子区间（行内偏移换算）。
+      // 行级 splice 区间 [startLineIdx, +deleteCount) 与字符级区间
+      // [fromB, toB) 严格对应（planChange 由 findLineIndex 定位端点
+      // 行），推导 O(deleteCount)，与事务本身同量级。
+      const posStartLineOff = s.lineOffsets.getOffset(plan.startLineIdx);
+      const posEndLineOff = s.lineOffsets.getOffset(
+        plan.startLineIdx + plan.deleteCount - 1
+      );
+      const posJoinedRemoved = plan.removedLines.join('\n');
+      const removedText = posJoinedRemoved.slice(
+        fromB - posStartLineOff,
+        posJoinedRemoved.length -
+          (posEndLineOff + plan.removedLines[plan.removedLines.length - 1].length - toB)
+      );
+
       const res = updateLinesIncremental(
         s.mainLines,
         s.lineOffsets,
@@ -1839,6 +1944,11 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
         selectionEndAfter: newPos,
         timestamp: Date.now(),
         meta: opts?.meta,
+        // B6 位置级字段（只增不改：undo/redo 兼容层不读，供日志/同步）
+        from: fromB,
+        to: toB,
+        insert,
+        removedText,
       };
 
       let newUndoStack = [...s.undoStack];
@@ -1902,6 +2012,17 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
         newUndoStack.push(newOp);
       }
 
+      // —— B6 变更日志 + 版本号（append-only，有界环形）——
+      // 每次实际变更（非空事务）追加 {seq, op}；seq = 递增后的 version
+      // （版本号每事务 +1，与日志条目一一对应）。500ms 合并击键同样记
+      // 条目（每次击键是一次独立变更事件，与 undo 栈折叠解耦——同步
+      // 消费端按事件粒度拉取）；超限丢弃最旧条目（环形语义）。
+      const nextVersion = state.version + 1;
+      const nextLog = [...state.changeLog, { seq: nextVersion, op: newOp }];
+      if (nextLog.length > CHANGE_LOG_LIMIT) {
+        nextLog.splice(0, nextLog.length - CHANGE_LOG_LIMIT);
+      }
+
       return {
         ...res,
         // 编辑触达 → 尾段已并入主数组（mergeTailInto），返回 partial 必须
@@ -1934,6 +2055,8 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
         ),
         undoStack: newUndoStack,
         redoStack: [],
+        changeLog: nextLog,
+        version: nextVersion,
       };
     }),
 
@@ -2407,12 +2530,20 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
 
         // Forward op to redo stack（以「撤销时刻的当前状态」为基准重建
         // 逆 op，不依赖快照——组撤销下每步当前状态就是链式精确的中间态）
+        const invRemovedLines = cur.mainLines.slice(
+          op.startLineIdx,
+          op.startLineIdx + op.insertedLineCount
+        );
+        // —— B6 位置级字段（整行区间，undo 后 = cur 文档坐标）——
+        // 逆操作（redo）删除 = undo 恢复的 op.removedLines 行（行数 =
+        // op.removedLines.length，与 op.insertedLineCount 不同时按
+        // 「逆操作删除的行」定区间）；insert = redo 插入内容（undo 前
+        // 区间行）；removedText = redo 删除内容（undo 恢复行）。
+        const invFrom = cur.lineOffsets.getOffset(op.startLineIdx);
+        const invRemovedText = op.removedLines.join('\n');
         const inverseOp: EditorOperation = {
           startLineIdx: op.startLineIdx,
-          removedLines: cur.mainLines.slice(
-            op.startLineIdx,
-            op.startLineIdx + op.insertedLineCount
-          ),
+          removedLines: invRemovedLines,
           insertedLineCount: op.removedLines.length,
           cursorBefore: op.cursorAfter,
           selectionStartBefore: op.selectionStartAfter,
@@ -2423,6 +2554,10 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
           timestamp: Date.now(),
           // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
           meta: op.meta,
+          from: invFrom,
+          to: invFrom + invRemovedText.length,
+          insert: invRemovedLines.join('\n'),
+          removedText: invRemovedText,
         };
 
         newRedo.push(inverseOp);
@@ -2490,12 +2625,20 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
         base.mainFenceLines
       );
 
+      // —— B6 位置级字段（整行区间，redo 后文档坐标）——
+      // 逆操作（undo）删除 = redo 插入的 op.removedLines 行（行数 =
+      // op.removedLines.length）；insert = undo 恢复内容（redo 前区间
+      // 行）；removedText = undo 删除内容（redo 插入行）。redo 前后
+      // startLineIdx 行首偏移不变（行级 splice 不动前缀行）。
+      const redoInvFrom = base.lineOffsets.getOffset(op.startLineIdx);
+      const redoInvRemovedText = op.removedLines.join('\n');
+      const redoInvRemovedLines = base.mainLines.slice(
+        op.startLineIdx,
+        op.startLineIdx + op.insertedLineCount
+      );
       const inverseOp: EditorOperation = {
         startLineIdx: op.startLineIdx,
-        removedLines: base.mainLines.slice(
-          op.startLineIdx,
-          op.startLineIdx + op.insertedLineCount
-        ),
+        removedLines: redoInvRemovedLines,
         insertedLineCount: op.removedLines.length,
         cursorBefore: op.cursorAfter,
         selectionStartBefore: op.selectionStartAfter,
@@ -2506,6 +2649,10 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
         timestamp: Date.now(),
         // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
         meta: op.meta,
+        from: redoInvFrom,
+        to: redoInvFrom + redoInvRemovedText.length,
+        insert: redoInvRemovedLines.join('\n'),
+        removedText: redoInvRemovedText,
       };
 
       // R4-B：从被重做 op 的 before 快照推断方向层（anchor/head），
