@@ -107,7 +107,13 @@ pub struct DialogInfo {
 #[derive(Debug, Clone)]
 pub struct FrameChunk {
     pub data: Vec<u8>,
+    /// 信封会话（事件路由面：帧事件送达的会话）。
     pub session: String,
+    /// ack 会话（`Page.screencastFrameAck` 的 params.sessionId）：
+    /// 取帧内 `params.sessionId`，缺省回退信封 session（向后兼容）。
+    /// 真实 Chrome 严格校验 ack 的 params.sessionId，与信封不一致会停滞帧流
+    /// （P1-A 遗留 1/2）。
+    pub ack_session: String,
     pub frame: u64,
     pub timestamp_ms: u64,
     pub device_width: u32,
@@ -456,9 +462,16 @@ pub fn parse_frame(event: &CdpEvent) -> Option<FrameChunk> {
         .ok()?;
     let meta = &event.params["metadata"];
     let timestamp_s = meta["timestamp"].as_f64().unwrap_or(0.0);
+    let session = event.session_id.clone().unwrap_or_default();
+    // ack 会话优先取 params.sessionId（真实 Chrome 严格校验），缺省回退信封
+    let ack_session = event.params["sessionId"]
+        .as_str()
+        .map(String::from)
+        .unwrap_or_else(|| session.clone());
     Some(FrameChunk {
         data,
-        session: event.session_id.clone().unwrap_or_default(),
+        session,
+        ack_session,
         frame: event.params["frameNumber"].as_u64().unwrap_or(0),
         timestamp_ms: (timestamp_s * 1000.0) as u64,
         device_width: meta["deviceWidth"].as_u64().unwrap_or(0) as u32,
@@ -621,6 +634,7 @@ mod tests {
         let parsed = parse_frame(&frame_evt).expect("帧解析失败");
         assert_eq!(parsed.data, b"fake-jpeg-bytes");
         assert_eq!(parsed.session, "S1");
+        assert_eq!(parsed.ack_session, "S1", "ack 会话回退信封（同值用例）");
         assert_eq!(parsed.frame, 42);
         assert_eq!(parsed.timestamp_ms, 1_234_567);
         assert_eq!(parsed.device_width, 1280);
@@ -640,6 +654,51 @@ mod tests {
         // 帧通道独立收到
         let frame = frames.recv().await.expect("帧通道应有帧");
         assert_eq!(frame.frame, 42);
+    }
+
+    /// ack 会话标识优先级（P1-A 遗留 1/2）：params.sessionId 独立于信封时
+    /// ack_session 取 params 值；缺省回退信封 session（向后兼容）。
+    #[test]
+    fn bus_frame_ack_session_precedence() {
+        let chunk = base64::engine::general_purpose::STANDARD.encode(b"fake-jpeg-bytes");
+        // params.sessionId = "ACK-S2" ≠ 信封 "S1"：ack_session 取 params 值
+        let evt = raw(
+            "Page.screencastFrame",
+            json!({
+                "data": chunk,
+                "metadata": { "timestamp": 1.0 },
+                "sessionId": "ACK-S2",
+                "frameNumber": 7
+            }),
+            Some("S1"),
+        );
+        let parsed = parse_frame(&evt).expect("帧解析失败");
+        assert_eq!(parsed.session, "S1", "路由 session 仍为信封");
+        assert_eq!(parsed.ack_session, "ACK-S2", "ack 会话取 params.sessionId");
+        // params 缺省 sessionId：回退信封 session（向后兼容）
+        let evt = raw(
+            "Page.screencastFrame",
+            json!({
+                "data": chunk,
+                "metadata": { "timestamp": 1.0 },
+                "frameNumber": 8
+            }),
+            Some("S1"),
+        );
+        let parsed = parse_frame(&evt).expect("帧解析失败");
+        assert_eq!(parsed.ack_session, "S1", "缺省回退信封 session");
+        // 信封也缺省：空串兜底（宽容解析）
+        let evt = raw(
+            "Page.screencastFrame",
+            json!({
+                "data": chunk,
+                "metadata": { "timestamp": 1.0 },
+                "frameNumber": 9
+            }),
+            None,
+        );
+        let parsed = parse_frame(&evt).expect("帧解析失败");
+        assert_eq!(parsed.ack_session, "", "全部缺省空串兜底");
     }
 
     /// 分类 router 冒烟：导航/对话框/网络/目标事件全表转译。

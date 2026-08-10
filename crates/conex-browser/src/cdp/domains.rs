@@ -29,6 +29,7 @@ pub mod names {
     pub const PAGE_HANDLE_JAVASCRIPT_DIALOG: &str = "Page.handleJavaScriptDialog";
     pub const PAGE_START_SCREENCAST: &str = "Page.startScreencast";
     pub const PAGE_STOP_SCREENCAST: &str = "Page.stopScreencast";
+    pub const PAGE_SCREENCAST_FRAME_ACK: &str = "Page.screencastFrameAck";
     pub const PAGE_GET_LAYOUT_METRICS: &str = "Page.getLayoutMetrics";
     pub const RUNTIME_ENABLE: &str = "Runtime.enable";
     pub const RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER: &str = "Runtime.runIfWaitingForDebugger";
@@ -385,6 +386,13 @@ pub struct StartScreencastParams {
     pub max_height: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub every_nth_frame: Option<i32>,
+}
+
+/// Page.screencastFrameAck 参数（帧泵 ack pacing，维度 12 §2.1）。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreencastFrameAckParams {
+    pub session_id: String,
 }
 
 /// Page.setWindowOpenHandler 参数（走同步 deny/allow 语义，awaitingDebugger 不启用）。
@@ -1358,6 +1366,14 @@ mod tests {
         };
         let v = serde_json::to_value(&p).expect("序列化失败");
         assert_eq!(v["urls"][0], "http://10.0.0.0/8");
+
+        // 帧泵 ack 参数（维度 12 §2.1：sessionId 为 screencast 帧会话标识）
+        let p = ScreencastFrameAckParams {
+            session_id: "S1".to_string(),
+        };
+        let v = serde_json::to_value(&p).expect("序列化失败");
+        assert_eq!(v["sessionId"], "S1");
+        assert_eq!(v.as_object().unwrap().len(), 1, "只含 sessionId 一个字段");
     }
 
     /// 结果反序列化冒烟（含容错字段）。

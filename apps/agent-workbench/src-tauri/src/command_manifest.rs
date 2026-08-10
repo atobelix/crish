@@ -177,6 +177,10 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("browser_start", "browser", "engine", true),
         entry("browser_stop", "browser", "engine", true),
         entry("browser_status", "browser", "engine", true),
+entry("browser_input", "browser", "engine", true),
+entry("browser_start_frames", "browser", "engine", true),
+entry("browser_stop_frames", "browser", "engine", true),
+entry("browser_frame_status", "browser", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),

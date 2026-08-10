@@ -39,6 +39,9 @@
 //! 27 §2.1 槽形含 `owner` 字段（多会话迁移 P1）；MVP 无消费方，未建字段，
 //! owner 切换策略登记 P1（避免死代码占位）。
 
+pub(crate) mod frame_stream;
+pub(crate) mod panel_input;
+
 use crate::core_event_bridge::Emitter;
 use agent_tools::definition::ToolError;
 use async_trait::async_trait;
@@ -50,12 +53,14 @@ use conex_browser::cdp::sender::CancellationToken;
 use conex_browser::cdp::transport::ExpectedBrowser;
 use conex_browser::snapshot::budget::BudgetConfig;
 use conex_browser::{
-    BrowserManager, CrashReason, LaunchConfig, ProcessEvent, SessionRef, StopReason,
+    BrowserManager, BrowserSession, CrashReason, LaunchConfig, ProcessEvent, SessionRef, StopReason,
 };
 use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
 use conex_browser_tools::gate::MvpDomainGate;
 use conex_browser_tools::policy::AllowAllPolicy;
 use conex_browser_tools::session::{ConsoleEntry, NetworkEntry, RealSession, SessionOps, SnapshotView};
+use frame_stream::{FrameStreamController, FrameStreamState};
+use panel_input::{BrowserInputEvent, PanelInputRouter};
 use serde::Serialize;
 use session_loop::AbortSignal;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -160,6 +165,12 @@ pub(crate) struct BrowserSlot {
     start_fail_cooldown: Duration,
     /// 上次启动失败时间戳（冷却期 gating 判定）。
     last_start_failure: Mutex<Option<Instant>>,
+    /// 帧流控制器（P1-B1：Tauri Channel 帧下行 + 帧状态事件；无订阅者不启帧流）。
+    frames: Arc<FrameStreamController>,
+    /// 面板输入路由（P1-B1：browser_input 高频节流 + P1-A InputPipeline 对接）。
+    input: Arc<PanelInputRouter>,
+    /// 底层会话（帧订阅/输入注入版本推进的原始句柄；connect 时登记）。
+    raw_session: Mutex<Option<Arc<BrowserSession>>>,
 }
 
 impl BrowserSlot {
@@ -214,6 +225,9 @@ impl BrowserSlot {
             stop_hard_timeout: DEFAULT_STOP_HARD_TIMEOUT,
             start_fail_cooldown: DEFAULT_START_FAIL_COOLDOWN,
             last_start_failure: Mutex::new(None),
+            frames: Arc::new(FrameStreamController::new()),
+            input: Arc::new(PanelInputRouter::new()),
+            raw_session: Mutex::new(None),
         }
     }
 
@@ -373,6 +387,9 @@ impl BrowserSlot {
             // 丢弃会话（Transport 断开）；进程收口由 manager.stop 承担
             *guard = None;
         }
+        // 停止帧流（无订阅者语义：停流 = 不再下行；帧泵随会话断开自然收尾）
+        self.frames.unsubscribe().await;
+        self.drop_raw_session();
         let reason = if force { StopReason::Force } else { StopReason::Graceful };
         manager
             .stop(reason)
@@ -464,8 +481,12 @@ impl BrowserSlot {
     /// - `CrashRestarting` → 发射 `{ state: "crashed", reason }`（崩溃带原因）；
     /// - 订阅掉队（`Lagged`）**不终止转发**——重订阅续传 + 以当前状态快照补发
     ///   （旧实现 `Err(_) => break` 导致永久停发）；通道关闭才退出。
+    ///
+    /// 帧流状态事件（`browser://frame-state-changed`）随同一发射器接线
+    /// （P1-B1：帧状态 starting/active/stopped，独立事件不与面板状态机混流）。
     pub(crate) fn attach_emitter(self: &Arc<Self>, emitter: Arc<dyn Emitter>) {
-        *self.emitter.lock().unwrap_or_else(|p| p.into_inner()) = Some(emitter);
+        *self.emitter.lock().unwrap_or_else(|p| p.into_inner()) = Some(emitter.clone());
+        self.frames.attach_emitter(emitter);
         if self.forwarder_started.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -511,6 +532,54 @@ impl BrowserSlot {
             .and_then(|g| g.as_ref().cloned())
     }
 
+    /// 帧流控制器（P1-B1 命令面访问器）。
+    pub(crate) fn frames(&self) -> Arc<FrameStreamController> {
+        Arc::clone(&self.frames)
+    }
+
+    /// 面板输入路由（P1-B1 命令面访问器）。
+    pub(crate) fn input(&self) -> Arc<PanelInputRouter> {
+        Arc::clone(&self.input)
+    }
+
+    /// 底层会话同步取用（帧订阅/输入管线装配的原始句柄）。
+    fn raw_session_sync(&self) -> Option<Arc<BrowserSession>> {
+        self.raw_session
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+
+    /// 输入事件转发入口（browser_input 命令消费；no-wait 语义——仅路由/合并，
+    /// 派发由 P1-A 管线后台进行，invoke 立即返回）。版本推进（R-1/U-1 注入
+    /// 即时 +1）与活动钩子（交互期升帧）由管线/帧流会话内部承担。
+    pub(crate) fn forward_input(&self, evt: &BrowserInputEvent) {
+        self.input.route(evt);
+        // 12 §2.5：交互信号 → 升 Interactive 档（无活跃帧流会话时 no-op）
+        self.frames.on_user_input();
+    }
+
+    /// 启动帧流（browser_start_frames 命令消费）：
+    /// 浏览器就绪 → 帧流控制器订阅（懒创建 P1-A ScreencastSession + start）。
+    pub(crate) async fn start_frames(
+        &self,
+        channel: tauri::ipc::Channel<tauri::ipc::Response>,
+    ) -> Result<FrameStreamState, String> {
+        self.ensure_ready().await?;
+        let Some(session) = self.raw_session_sync() else {
+            return Err("浏览器会话不可用（重连中）".to_string());
+        };
+        let ctrl = Arc::clone(&self.frames);
+        ctrl.subscribe(session, channel).await;
+        Ok(ctrl.state())
+    }
+
+    /// 停止帧流（browser_stop_frames 命令消费；幂等）——停止帧泵，会话保留。
+    pub(crate) async fn stop_frames(&self) -> FrameStreamState {
+        self.frames.unsubscribe().await;
+        self.frames.state()
+    }
+
     /// 会话存在且端点匹配（快速路径判定）。
     fn has_session_matching(&self, manager: &BrowserManager) -> bool {
         let present = self.session.try_lock().map(|g| g.is_some()).unwrap_or(false);
@@ -538,6 +607,7 @@ impl BrowserSlot {
         guard: &mut AsyncMutexGuard<'_, Option<Arc<RealSession>>>,
     ) -> Result<(), String> {
         **guard = None;
+        self.drop_raw_session();
         **guard = Some(self.connect(manager).await?);
         Ok(())
     }
@@ -551,6 +621,7 @@ impl BrowserSlot {
         // 新启动周期：换新 estop 令牌 + 复位急停旗（不继承上一周期取消态）
         self.reset_estop();
         **guard = None;
+        self.drop_raw_session();
         manager
             .start(self.launch.clone())
             .await
@@ -582,12 +653,31 @@ impl BrowserSlot {
         );
         *self.connected_endpoint.lock().unwrap_or_else(|p| p.into_inner()) =
             Some(endpoint.url());
+        *self.raw_session.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&session));
+        // P1-B1：装配输入注入管线（P1-A InputPipeline；随连接生命周期——
+        // 版本推进 R-1/U-1 与活动钩子由管线内部承担）
+        let pipeline = conex_browser::input::InputPipeline::new(Arc::clone(&session));
+        let frames = Arc::clone(&self.frames);
+        pipeline.attach_activity(Arc::new(move || {
+            // 12 §2.5：注入成功 → 交互升帧信号（无活跃帧流会话时 no-op）；
+            // 维度 15 用户输入上报为 P1-B2 接线点（TODO）
+            frames.on_user_input();
+        }));
+        self.input.set_pipeline(pipeline);
         Ok(Arc::new(RealSession::new(
             session,
             Some(Arc::clone(manager)),
             Arc::clone(&self.gate),
             BudgetConfig::active(),
         )))
+    }
+
+    /// 丢弃底层会话句柄（停止/重连/重建前调用）：释放帧流会话（shutdown，
+    /// 转发任务随 sink 关闭退出）+ 清除输入管线（旧管线 Drop 终止消费任务）。
+    fn drop_raw_session(&self) {
+        *self.raw_session.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        self.frames.release_session();
+        self.input.clear_pipeline();
     }
 
     /// 当前活动标签 URL（nav_stack 只读面；无标签/未启动 → None）。
@@ -1144,5 +1234,65 @@ mod tests {
         assert!(err.contains("未启动"), "未启动语义：{err}");
         let err = ops.current_tab().unwrap_err();
         assert_eq!(err.code(), TOOL_BROWSER_NOT_READY);
+    }
+
+    /// P1-B1：降级槽（manager=None）start_frames 必须失败（不启帧流）；
+    /// stop_frames / 帧状态查询幂等收敛（stopped）。
+    #[tokio::test]
+    async fn frame_stream_degraded_slot_is_not_ready() {
+        let slot = Arc::new(BrowserSlot::from_parts(None, LaunchConfig::default()));
+        let channel = tauri::ipc::Channel::new(|_| Ok(()));
+        let err = slot.start_frames(channel).await.unwrap_err();
+        assert!(err.contains("未注入"), "降级文案：{err}");
+        assert_eq!(slot.frames().state(), FrameStreamState::Stopped);
+        assert_eq!(slot.stop_frames().await, FrameStreamState::Stopped);
+    }
+
+    /// P1-B1：输入路由接线——forward_input 无会话/管线时路由照常（不 panic、
+    /// 无副作用）；管线未接线判定。
+    #[tokio::test]
+    async fn forward_input_routes_without_session() {
+        let slot = Arc::new(BrowserSlot::from_parts(None, LaunchConfig::default()));
+        let evt = BrowserInputEvent {
+            kind: panel_input::InputEventKind::Mouse,
+            action: Some("down".to_string()),
+            x: Some(1.0),
+            y: Some(2.0),
+            button: Some("left".to_string()),
+            buttons: Some(1),
+            click_count: Some(1),
+            delta_x: None,
+            delta_y: None,
+            modifiers: Some(0),
+            key: None,
+            code: None,
+            text: None,
+            windows_virtual_key_code: None,
+            native_virtual_key_code: None,
+            auto_repeat: None,
+            location: None,
+        };
+        // 无会话/管线：路由吞掉（debug 留痕），invoke 侧无感（no-wait 语义）
+        slot.forward_input(&evt);
+        assert!(!slot.input().pipeline_wired(), "未连接时管线未接线");
+    }
+
+    /// P1-B1：raw_session 生命周期——降级槽恒 None；stop_inner 清理路径
+    /// 不炸（会话槽空 + 帧流退订/释放幂等）。
+    #[tokio::test]
+    async fn raw_session_cleared_on_stop() {
+        let manager = Arc::new(BrowserManager::new(
+            std::env::temp_dir().join("browser-slot-raw-session-test"),
+        ));
+        let slot = Arc::new(BrowserSlot::from_parts(
+            Some(manager),
+            LaunchConfig::default(),
+        ));
+        assert!(slot.raw_session_sync().is_none(), "未连接前无底层会话");
+        slot.frames().release_session(); // 幂等
+        assert_eq!(slot.stop_frames().await, FrameStreamState::Stopped);
+        slot.stop(false).await.expect("未启动停止幂等收敛");
+        assert!(slot.raw_session_sync().is_none(), "停止后无底层会话");
+        assert!(!slot.input().pipeline_wired(), "停止后管线清除");
     }
 }

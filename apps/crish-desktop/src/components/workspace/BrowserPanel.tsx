@@ -1,9 +1,13 @@
 /**
- * AI 受管浏览器面板（MVP：headed 窗口形态）。
+ * AI 受管浏览器面板（P1-B1：帧渲染 + 基础输入转发）。
  *
- * 无帧流 / 无输入转发 / 无 IME 桥（P1 Gate 后的增强）——用户看到的是引擎
- * 拉起的真实受管 Chrome 窗口，本面板只提供：运行状态指示、启动/停止/急停
- * 入口、以及运行态的 AI 操作指示。
+ * P1 形态：引擎拉起的受管浏览器画面经 Tauri Channel 帧流渲染进 canvas
+ * （U-13 裁决：帧下行 Channel / 输入上行 browser_input invoke），用户可
+ * 直接操作面板（点击/滚动/键盘 ASCII 直转）；P1-B2 完善接管 UI 与 IME 桥。
+ *
+ * 状态指示（running 态）：
+ * - 帧流 active → 「帧流已激活」（任务书指示条；P1-B2 完善接管 UI）；
+ * - starting → 「帧流启动中…」；stopped → 「帧流未激活」。
  */
 import React from 'react';
 import {
@@ -28,10 +32,15 @@ import {
   canStopBrowserSession,
   type BrowserSessionState,
 } from './browserSessionLib';
+import { FrameCanvas } from './browser-panel/FrameCanvas';
+import { InputLayer } from './browser-panel/InputLayer';
+import { useFrameStream, type UseFrameStreamOptions } from './browser-panel/useFrameStream';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 
 export interface BrowserPanelProps {
   onShowToast: ShowToastFn;
+  /** 测试注入：帧通道工厂（缺省惰性加载 @tauri-apps/api/core；非 Tauri 降级）。 */
+  frameChannelFactory?: UseFrameStreamOptions['channelFactory'];
 }
 
 /** 状态图标：launching/stopping 为旋转加载态，其余为静态态标 */
@@ -58,11 +67,25 @@ function renderStateIcon(state: BrowserSessionState, spinClass?: string) {
   }
 }
 
+/** 帧流指示条文案（P1-B1 基础版；P1-B2 完善接管 UI）。 */
+function frameIndicatorText(state: 'starting' | 'active' | 'stopped'): string {
+  if (state === 'active') return '帧流已激活';
+  if (state === 'starting') return '帧流启动中…';
+  return '帧流未激活';
+}
+
 export const BrowserPanel: React.FC<BrowserPanelProps> = ({
   onShowToast,
+  frameChannelFactory,
 }) => {
   const { state, url, busy, start, stop, kill } = useBrowserSession({
     onShowToast,
+  });
+
+  const running = state === 'running';
+  const { frameState, lastFrame, canvasRef } = useFrameStream({
+    active: running,
+    channelFactory: frameChannelFactory,
   });
 
   const startReady = canStartBrowserSession(state);
@@ -98,6 +121,24 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
         <div className={styles.aiReady} role="status">
           <span className={styles.readyDot} aria-hidden />
           {BROWSER_AI_READY_TEXT}
+        </div>
+      ) : null}
+
+      {running ? (
+        <div className={styles.frameStageWrap} data-frame-state={frameState}>
+          <FrameCanvas
+            frameState={frameState}
+            lastFrame={lastFrame}
+            canvasRef={canvasRef}
+          />
+          <InputLayer
+            active={frameState === 'active'}
+            getFrameMeta={() => lastFrame}
+          />
+          <div className={styles.frameIndicator} role="status">
+            <span className={styles.frameIndicatorDot} aria-hidden />
+            {frameIndicatorText(frameState)}
+          </div>
         </div>
       ) : null}
 

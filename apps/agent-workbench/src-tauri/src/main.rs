@@ -209,6 +209,10 @@ command_registry![
     ("browser_start", browser_commands::browser_start),
     ("browser_stop", browser_commands::browser_stop),
     ("browser_status", browser_commands::browser_status),
+    ("browser_input", browser_commands::browser_input),
+    ("browser_start_frames", browser_commands::browser_start_frames),
+    ("browser_stop_frames", browser_commands::browser_stop_frames),
+    ("browser_frame_status", browser_commands::browser_frame_status),
 ];
 
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info

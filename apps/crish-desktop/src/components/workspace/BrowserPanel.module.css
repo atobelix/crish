@@ -189,3 +189,100 @@
     animation: none;
   }
 }
+
+/* ── P1-B1 帧流舞台（canvas 渲染 + 输入层 + 指示条） ─────────────────── */
+
+.frameStageWrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: #000;
+  overflow: hidden;
+}
+
+.frameStage {
+  position: absolute;
+  inset: 0;
+}
+
+.frameCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.framePlaceholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  pointer-events: none;
+  background: var(--bg-secondary);
+}
+
+.frameMeta {
+  position: absolute;
+  top: var(--space-0_5);
+  right: var(--space-0_5);
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  pointer-events: none;
+}
+
+/* 输入层：覆盖画布（z-index 高于 canvas 低于指示条，12 §3.1） */
+.inputLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  cursor: default;
+  outline: none;
+}
+
+.frameIndicator {
+  position: absolute;
+  left: var(--space-0_5);
+  bottom: var(--space-0_5);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  pointer-events: none;
+}
+
+.frameIndicatorDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.frameStageWrap[data-frame-state='active'] .frameIndicator {
+  color: var(--text-success);
+}
+
+.frameStageWrap[data-frame-state='active'] .frameIndicatorDot {
+  background: var(--color-success);
+  animation: readyPulse 1.6s ease-in-out infinite;
+}
+
+.frameStageWrap[data-frame-state='starting'] .frameIndicatorDot {
+  background: var(--color-warning);
+  animation: spinKeyframe 0.8s linear infinite;
+}
+

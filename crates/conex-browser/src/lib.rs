@@ -29,7 +29,9 @@
 pub mod action;
 pub mod browser;
 pub mod cdp;
+pub mod frames;
 pub mod import;
+pub mod input;
 pub mod snapshot;
 
 pub use import::ImportService;
@@ -392,6 +394,21 @@ impl BrowserSession {
             .await
     }
 
+    /// 会话级 no-wait 快捷（P1-A 遗留 2/2）：写入 CDP socket 即返回，不等待
+    /// 响应（输入注入/高频帧面快速路径，agent-browser websocket.rs:609-615
+    /// 语义）；断连/序列化失败仍报错。签名对齐 `send_page`。
+    pub async fn send_page_no_wait(
+        &self,
+        session: &str,
+        method: &str,
+        params: impl serde::Serialize,
+    ) -> Result<(), CdpError> {
+        let cmd = Command::new(method).params(params).with_session(session);
+        self.transport
+            .send_command_no_wait(&cmd.method, Some(cmd.params), cmd.session_id.as_deref())
+            .await
+    }
+
     /// browser 级快捷（§8）。
     pub async fn send_browser<T: DeserializeOwned>(
         &self,
@@ -701,6 +718,60 @@ mod tests {
             4,
             "对话框出现/关闭应恒推进版本"
         );
+
+        session.shutdown().await;
+    }
+
+    /// P1-A 遗留 2/2：send_page_no_wait 不等待响应——mock 不回包（Silent）时
+    /// 命令写入 socket 后立即返回 Ok（对比 send_page 会挂到超时/取消）。
+    #[tokio::test]
+    async fn session_send_page_no_wait_returns_without_reply() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        let endpoint = CdpEndpoint {
+            port: mock.addr.port(),
+            ws_path: "/devtools/browser/no-wait".to_string(),
+        };
+        let session = BrowserSession::connect(
+            endpoint,
+            ExpectedBrowser::default(),
+            Arc::new(AllowHooks::new()),
+        )
+        .await
+        .expect("建连失败");
+        mock.send_event(
+            "Target.attachedToTarget",
+            json!({
+                "sessionId": "S1",
+                "targetInfo": { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" },
+                "waitingForDebugger": false,
+            }),
+            None,
+        );
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        while session.current_session().is_err() && tokio::time::Instant::now() < deadline {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        session.current_session().expect("应有活动标签");
+
+        // 目标方法改不回包：no-wait 必须立即返回（不等响应）
+        mock.set_auto_reply("Runtime.evaluate", MockReply::Silent);
+        let started = tokio::time::Instant::now();
+        session
+            .send_page_no_wait("S1", "Runtime.evaluate", json!({ "expression": "1" }))
+            .await
+            .expect("no-wait 写入不应失败");
+        assert!(
+            started.elapsed() < std::time::Duration::from_millis(500),
+            "no-wait 必须不等响应（实际 {:?}）",
+            started.elapsed()
+        );
+        // 命令确已写入 wire
+        let cmd = mock.expect_command("Runtime.evaluate").await;
+        assert_eq!(cmd["params"]["expression"], "1");
+        assert_eq!(cmd["sessionId"], "S1");
 
         session.shutdown().await;
     }
