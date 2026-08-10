@@ -439,3 +439,5 @@ orchestrator-snapshot.json.prev
 !scripts/generate-protocol-bindings.mjs
 !apps/crish-mobile/jest.config.*
 !apps/crish-mobile/babel.config.*
+
+!tests/fixtures/device-protocol/*.json
