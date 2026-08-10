@@ -441,3 +441,13 @@ orchestrator-snapshot.json.prev
 !apps/crish-mobile/babel.config.*
 
 !tests/fixtures/device-protocol/*.json
+
+# markdown-editor 测试/基准数据入库放行（全局 *.mjs/*.json/*.txt 忽略误伤——
+# perf 四脚本+基线、B6 suite、compliance spec 与报告均为可复现性资产，缺失则
+# npm run test:perf / test:commonmark 在全新 clone 上不可运行；对齐 AGENTS.md 测试资产铁律）
+!reference/markdown-editor/tests/perf/**
+!reference/markdown-editor/tests/commonmark/spec.txt
+!reference/markdown-editor/tests/commonmark/run-compliance.mjs
+!reference/markdown-editor/tests/commonmark/compliance-report.json
+!reference/markdown-editor/compliance-report-baseline.json
+!reference/markdown-editor/perf.mjs

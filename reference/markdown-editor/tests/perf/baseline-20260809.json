@@ -1,0 +1,337 @@
+{
+  "schema": "conex-r0-perf-baseline/v1",
+  "collectedAt": "2026-08-08T20:11:23.780Z",
+  "mode": "browser",
+  "environment": {
+    "platform": "win32",
+    "nodeVersion": "v24.11.0",
+    "serverBase": "http://localhost:5173",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+    "hardwareConcurrency": 12,
+    "deviceMemory": 32,
+    "language": "zh-CN"
+  },
+  "metrics": {
+    "appendCopyCurve": {
+      "sizes": [
+        10000,
+        100000,
+        500000,
+        1000000
+      ],
+      "perSize": [
+        {
+          "size": 10000,
+          "loadMs": 112.1,
+          "loadedLines": 10000,
+          "arrayRefChanged": true,
+          "firstLineShared": true,
+          "lenDelta": 0,
+          "spreadCopyMs": {
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "medianMs": 0
+          },
+          "offsetsCloneMs": {
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "medianMs": 0
+          },
+          "appendTotalMs": {
+            "samples": [
+              0.1,
+              0,
+              0,
+              0.1,
+              0
+            ],
+            "medianMs": 0
+          }
+        },
+        {
+          "size": 100000,
+          "loadMs": 851.6,
+          "loadedLines": 100000,
+          "arrayRefChanged": true,
+          "firstLineShared": true,
+          "lenDelta": 0,
+          "spreadCopyMs": {
+            "samples": [
+              0.1,
+              0,
+              0,
+              0,
+              0
+            ],
+            "medianMs": 0
+          },
+          "offsetsCloneMs": {
+            "samples": [
+              0.1,
+              0.1,
+              0,
+              0,
+              0
+            ],
+            "medianMs": 0
+          },
+          "appendTotalMs": {
+            "samples": [
+              0.2,
+              0.2,
+              0.1,
+              0.3,
+              0.2
+            ],
+            "medianMs": 0.2
+          }
+        },
+        {
+          "size": 500000,
+          "loadMs": 5291.1,
+          "loadedLines": 500000,
+          "arrayRefChanged": true,
+          "firstLineShared": true,
+          "lenDelta": 0,
+          "spreadCopyMs": {
+            "samples": [
+              0.3,
+              0.3,
+              0.2,
+              0.3,
+              0.2
+            ],
+            "medianMs": 0.3
+          },
+          "offsetsCloneMs": {
+            "samples": [
+              0.4,
+              0.4,
+              2.6,
+              0.5,
+              0.4
+            ],
+            "medianMs": 0.4
+          },
+          "appendTotalMs": {
+            "samples": [
+              1.4,
+              1.2,
+              1.1,
+              1,
+              4.7
+            ],
+            "medianMs": 1.2
+          }
+        },
+        {
+          "size": 1000000,
+          "loadMs": 18495.2,
+          "loadedLines": 1000000,
+          "arrayRefChanged": true,
+          "firstLineShared": true,
+          "lenDelta": 0,
+          "spreadCopyMs": {
+            "samples": [
+              0.6,
+              0.6,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "medianMs": 0.5
+          },
+          "offsetsCloneMs": {
+            "samples": [
+              0.9,
+              5.6,
+              1,
+              2.3,
+              1.1
+            ],
+            "medianMs": 1.1
+          },
+          "appendTotalMs": {
+            "samples": [
+              2.6,
+              2.3,
+              5.6,
+              2.5,
+              2.2
+            ],
+            "medianMs": 2.5
+          }
+        }
+      ]
+    },
+    "typingAtMiddle": {
+      "docLines": 500000,
+      "lineIndex": 250000,
+      "storeLayerMs": {
+        "samples": [
+          1.8,
+          1.2,
+          0.9,
+          1.2,
+          1
+        ],
+        "medianMs": 1.2
+      },
+      "fullChainMs": {
+        "samples": [
+          19.7,
+          17.9,
+          8,
+          5.5,
+          5.8
+        ],
+        "medianMs": 8
+      },
+      "offsetUsed": 6888895
+    },
+    "arrowLeft": {
+      "count": 100,
+      "offsetUsed": 6888905,
+      "avgMs": 13.751,
+      "p50Ms": 13.4,
+      "p95Ms": 17,
+      "minMs": 11.7,
+      "maxMs": 18.5,
+      "samples": [
+        14.1,
+        13.3,
+        14.2,
+        14.5,
+        13.7,
+        13.4,
+        14,
+        13,
+        13.9,
+        14,
+        15.9,
+        16.5,
+        14.4,
+        13,
+        14.7,
+        14.3,
+        14.5,
+        16.3,
+        18.5,
+        13.5,
+        12.5,
+        12.9,
+        13.1,
+        13.6,
+        14.6,
+        12.9,
+        14.2,
+        15.7,
+        14.8,
+        13.1,
+        13.2,
+        14.3,
+        13.3,
+        13.1,
+        12.7,
+        14.4,
+        13.4,
+        12.9,
+        15.2,
+        13,
+        13.6,
+        16.7,
+        12.8,
+        15.5,
+        14.1,
+        13,
+        12.8,
+        12.5,
+        12.5,
+        12.7,
+        12.1,
+        13.4,
+        14.1,
+        12.7,
+        12.1,
+        17.1,
+        16.7,
+        14.5,
+        13.1,
+        14.8,
+        12.7,
+        12.5,
+        13.5,
+        16.3,
+        14.5,
+        12.5,
+        12,
+        12.5,
+        12.6,
+        12.8,
+        12.8,
+        11.7,
+        13.4,
+        12.2,
+        13.2,
+        12.9,
+        15.1,
+        12.2,
+        14.5,
+        13.5,
+        12.1,
+        12.4,
+        13.6,
+        17.6,
+        13.3,
+        17,
+        13.5,
+        12.4,
+        13.5,
+        14.8,
+        12.4,
+        13.6,
+        13.5,
+        12.8,
+        12.7,
+        12.3,
+        17.1,
+        13.5,
+        12.2,
+        12
+      ]
+    },
+    "load1MLines": {
+      "ok": true,
+      "elapsedMs": 18495.2,
+      "syncMs": 53.6,
+      "genMs": 147.9,
+      "loadedLines": 1000000
+    },
+    "scrollFrames": {
+      "docLines": 1000000,
+      "durationMs": 3000,
+      "frameCount": 179,
+      "nominalFrameMs": 12.3,
+      "intervalP50Ms": 16.8,
+      "intervalP95Ms": 20.9,
+      "intervalP99Ms": 26.4,
+      "meanMs": 16.8,
+      "framesOver16_7": 91,
+      "layoutThrashDelta": 270
+    }
+  },
+  "notes": [
+    "计时全部在页面内 performance.now() 完成，规避 Playwright 外部计时污染",
+    "append 曲线各档为 5 次采样中位数；纯文本文档（无 fence/表格），隔离数据层成本"
+  ]
+}
