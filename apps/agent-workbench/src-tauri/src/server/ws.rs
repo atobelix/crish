@@ -1284,7 +1284,7 @@ mod tests {
     use crate::server::{ServerConfig, ServerHandle, ServerInstance, ServerState, router};
     use crate::server::auth::{TokenStore, sha256_hex};
     use conex_types::device::{
-        ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, EventPageParams,
+        ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, EventPageParams,
         EventPageResult, ListCommandsResult, ListSessionsParams, ListSessionsResult,
         RunControlParams, RunControlResult, RunSnapshotParams, RunSnapshotResult,
         RunTaskParams, RunTaskResult,
@@ -1348,7 +1348,7 @@ mod tests {
         async fn approve(&self, _p: ApproveParams) -> Result<ApproveResult, ServerError> {
             Err(ServerError::internal("测试后端不支持"))
         }
-        async fn deny(&self, _p: ApproveParams) -> Result<ApproveResult, ServerError> {
+        async fn deny(&self, _p: DenyParams) -> Result<ApproveResult, ServerError> {
             Err(ServerError::internal("测试后端不支持"))
         }
         async fn list_sessions(

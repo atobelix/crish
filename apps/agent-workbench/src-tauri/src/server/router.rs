@@ -33,11 +33,11 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Path, RawQuery, State},
+    extract::{FromRequest, Path, RawQuery, Request, State},
     http::{StatusCode, Uri},
     middleware,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use conex_types::device::commands::{TaskOutputParams, TaskOutputResult};
@@ -45,15 +45,18 @@ use conex_types::device::version::PAGE_SIZE_MAX;
 #[cfg(test)]
 use conex_types::device::version::PAGE_SIZE_DEFAULT;
 use conex_types::device::{
-    DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, FlowSnapshotParams,
-    FlowSnapshotResult, ListCommandsResult, ListSessionsParams, ListSessionsResult,
-    ListTasksParams, ListTasksResult, RunEventsParams, RunSnapshotParams,
-    RunSnapshotResult, SearchIndexResult,
+    ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
+    CancelRunResult, DenyParams, DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult,
+    FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
+    ListCommandsResult, ListPendingApprovalsParams, ListPendingApprovalsResult,
+    ListSessionsParams, ListSessionsResult, ListTasksParams, ListTasksResult, RunControlParams,
+    RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
+    RunTaskResult, SearchIndexResult,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::server::backend::ApiBackend;
+use crate::server::backend::{ApiBackend, SettingsUpdateParams};
 use crate::server::{ServerError, ServerState, now_ms};
 
 /// 服务自报路由（免鉴权）
@@ -82,6 +85,27 @@ pub const COMMANDS_PATH: &str = "/v1/commands";
 /// C10 搜索索引就绪状态（GET /v1/search/index；D2 §8.2 未列，R1-03 新增
 /// 路由，对齐 M6 C10 getSearchIndex 命令名）
 pub const SEARCH_INDEX_PATH: &str = "/v1/search/index";
+
+// ── R1-04 写面路径（M6 §4：F5 会话域 + F2 审批域 + F6 设置域 REST 形态）──
+
+/// C24 发起 run（POST /v1/runs；body = RunTaskParams）
+pub const RUNS_PATH: &str = "/v1/runs";
+/// C25 run 控制（POST /v1/runs/{id}/control；body = RunControlParams，
+/// 路径 runId 优先）
+pub const RUN_CONTROL_PATH: &str = "/v1/runs/{id}/control";
+/// C26 取消 run（POST /v1/runs/{id}/cancel；body = {reason?}）
+pub const RUN_CANCEL_PATH: &str = "/v1/runs/{id}/cancel";
+/// C11 审批批准（POST /v1/approval/{toolCallId}/approve；body = {runId?}；
+/// toolCallId 为真键，I-02 pending 校验不变）
+pub const APPROVAL_APPROVE_PATH: &str = "/v1/approval/{toolCallId}/approve";
+/// C12 审批拒绝（POST /v1/approval/{toolCallId}/deny；body = {runId?, reason?}）
+pub const APPROVAL_DENY_PATH: &str = "/v1/approval/{toolCallId}/deny";
+/// C13 待审批对账（GET /v1/approvals/pending；afterSequence 增量对账扩展）
+pub const APPROVALS_PENDING_PATH: &str = "/v1/approvals/pending";
+/// C14 审批历史补拉（GET /v1/approvals/history；sessionId / afterSequence / limit）
+pub const APPROVALS_HISTORY_PATH: &str = "/v1/approvals/history";
+/// C28/C29 设置（GET /v1/settings 快照 / PUT /v1/settings 非敏感更新）
+pub const SETTINGS_PATH: &str = "/v1/settings";
 
 /// 鉴权握手载荷（GET /v1/hello；D2 §8.2 形状）
 #[derive(Debug, Clone, Serialize)]
@@ -120,6 +144,15 @@ pub fn build_router(state: ServerState) -> Router {
         .route(SESSION_FLOW_PATH, get(handle_flow_snapshot))
         .route(COMMANDS_PATH, get(handle_list_commands))
         .route(SEARCH_INDEX_PATH, get(handle_search_index))
+        // ── R1-04 写面（8 端点；与只读面同一鉴权组，零信任）──
+        .route(RUNS_PATH, post(handle_run_task))
+        .route(RUN_CONTROL_PATH, post(handle_run_control))
+        .route(RUN_CANCEL_PATH, post(handle_run_cancel))
+        .route(APPROVAL_APPROVE_PATH, post(handle_approve))
+        .route(APPROVAL_DENY_PATH, post(handle_deny))
+        .route(APPROVALS_PENDING_PATH, get(handle_approvals_pending))
+        .route(APPROVALS_HISTORY_PATH, get(handle_approvals_history))
+        .route(SETTINGS_PATH, get(handle_settings_get).put(handle_settings_set))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::server::auth::require_bearer_token,
@@ -292,6 +325,183 @@ async fn handle_search_index(
 ) -> Result<Json<SearchIndexResult>, ServerError> {
     let backend = require_backend(&state)?;
     Ok(Json(backend.get_search_index().await?))
+}
+
+// ── R1-04 写面：F5 会话域 / F2 审批域 / F6 设置域 handler ──
+
+/// POST /v1/runs：C24 发起 run（body = RunTaskParams；runId 桌面生成，
+/// sessionId 缺省 = 新建会话）
+async fn handle_run_task(
+    State(state): State<ServerState>,
+    JsonBody(params): JsonBody<RunTaskParams>,
+) -> Result<Json<RunTaskResult>, ServerError> {
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.run_task(params).await?))
+}
+
+/// POST /v1/runs/{id}/control：C25 run 控制（body = RunControlParams；
+/// 路径 runId 优先，覆盖 body 携带值——REST 资源地址即命令真键）
+async fn handle_run_control(
+    State(state): State<ServerState>,
+    Path(run_id): Path<String>,
+    JsonBody(mut params): JsonBody<RunControlParams>,
+) -> Result<Json<RunControlResult>, ServerError> {
+    params.run_id = run_id;
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.run_control(params).await?))
+}
+
+/// POST /v1/runs/{id}/cancel：C26 取消 run（body = {reason?}；路径 runId
+/// 为真键；重复取消无副作用）
+async fn handle_run_cancel(
+    State(state): State<ServerState>,
+    Path(run_id): Path<String>,
+    JsonBody(body): JsonBody<serde_json::Value>,
+) -> Result<Json<CancelRunResult>, ServerError> {
+    let reason = body
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.cancel_run(CancelRunParams { run_id, reason }).await?))
+}
+
+/// POST /v1/approval/{toolCallId}/approve：C11 审批批准（body = {runId?}；
+/// toolCallId 以路径为真键，I-02 pending 校验不变；重复决策 →
+/// cmd.approval_mismatch 409）
+async fn handle_approve(
+    State(state): State<ServerState>,
+    Path(tool_call_id): Path<String>,
+    JsonBody(body): JsonBody<serde_json::Value>,
+) -> Result<Json<ApproveResult>, ServerError> {
+    let run_id = body
+        .get("runId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.approve(ApproveParams { tool_call_id, run_id }).await?))
+}
+
+/// POST /v1/approval/{toolCallId}/deny：C12 审批拒绝（body = {runId?, reason?}；
+/// reason ≤256 字符，缺省 "user denied"）
+async fn handle_deny(
+    State(state): State<ServerState>,
+    Path(tool_call_id): Path<String>,
+    JsonBody(body): JsonBody<serde_json::Value>,
+) -> Result<Json<ApproveResult>, ServerError> {
+    let run_id = body
+        .get("runId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let reason = body
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .deny(DenyParams {
+                tool_call_id,
+                run_id,
+                reason,
+            })
+            .await?,
+    ))
+}
+
+/// GET /v1/approvals/pending：C13 待审批对账（afterSequence 增量对账扩展）
+async fn handle_approvals_pending(
+    State(state): State<ServerState>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<ListPendingApprovalsResult>, ServerError> {
+    let query = QueryParams::parse(raw.as_deref())?;
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .list_pending_approvals(ListPendingApprovalsParams {
+                after_sequence: query.get_u64("afterSequence")?,
+            })
+            .await?,
+    ))
+}
+
+/// GET /v1/approvals/history：C14 审批历史补拉（sessionId / afterSequence /
+/// limit 水位分页）
+async fn handle_approvals_history(
+    State(state): State<ServerState>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<ApprovalHistoryResult>, ServerError> {
+    let query = QueryParams::parse(raw.as_deref())?;
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .approval_history(ApprovalHistoryParams {
+                session_id: query.get("sessionId").map(str::to_string),
+                after_sequence: query.get_u64("afterSequence")?,
+                limit: query.get_u32("limit")?,
+            })
+            .await?,
+    ))
+}
+
+/// GET /v1/settings：C28 设置脱敏快照（keys 逗号分隔子集过滤；apiKey
+/// 恒空串脱敏由 config 层保证）
+async fn handle_settings_get(
+    State(state): State<ServerState>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<GetSettingsResult>, ServerError> {
+    let query = QueryParams::parse(raw.as_deref())?;
+    let backend = require_backend(&state)?;
+    let keys = query.get("keys").map(|raw_keys| {
+        raw_keys
+            .split(',')
+            .map(|key| key.trim().to_string())
+            .filter(|key| !key.is_empty())
+            .collect::<Vec<_>>()
+    });
+    Ok(Json(backend.settings_get(GetSettingsParams { keys }).await?))
+}
+
+/// PUT /v1/settings：C29 非敏感配置更新（body = SettingsUpdateParams；
+/// credentialMode / endpoint / stream 明确拒绝 cmd.invalid）
+async fn handle_settings_set(
+    State(state): State<ServerState>,
+    JsonBody(params): JsonBody<SettingsUpdateParams>,
+) -> Result<Json<GetSettingsResult>, ServerError> {
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.settings_set(params).await?))
+}
+
+/// JSON body 请求体上限（2 MiB，与 axum 默认 DefaultBodyLimit 一致；
+/// 命令请求默认 ≤64 KiB，超限即拒绝）
+const JSON_BODY_LIMIT: usize = 2 * 1024 * 1024;
+
+/// JSON body extractor（反序列化失败 → cmd.invalid 400 + ErrorBody——axum
+/// 默认 Json rejection 为文本 400，REST 面统一走 [ServerError] 错误协议
+/// 出网，与查询参数非法同码）
+struct JsonBody<T>(pub T);
+
+impl<S, T> FromRequest<S> for JsonBody<T>
+where
+    T: DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = ServerError;
+
+    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
+        let bytes = axum::body::to_bytes(req.into_body(), JSON_BODY_LIMIT)
+            .await
+            .map_err(|e| {
+                ServerError::protocol(
+                    DeviceErrorCode::CmdInvalid,
+                    format!("读取请求体失败：{e}"),
+                )
+            })?;
+        let value: T = serde_json::from_slice(&bytes).map_err(|e| {
+            ServerError::protocol(DeviceErrorCode::CmdInvalid, format!("请求体 JSON 非法：{e}"))
+        })?;
+        Ok(Self(value))
+    }
 }
 
 /// 兜底 404（统一 ErrorBody JSON；cmd.not_found）
@@ -481,14 +691,19 @@ mod tests {
 
     /// 测试路由状态（临时目录独立令牌库 + 可选内存后端）
     fn test_state_with(backend: Option<MockBackend>) -> ServerState {
+        let backend = backend.map(|b| Arc::new(b) as Arc<dyn ApiBackend>);
+        test_state_from_backend(backend)
+    }
+
+    /// 以注入后的后端引用构造状态（R1-04 写面测试：请求后可经共享
+    /// Arc 检查 mock 状态——路径 runId 覆盖 / reason 透传 / keys 透传断言）
+    fn test_state_from_backend(backend: Option<Arc<dyn ApiBackend>>) -> ServerState {
         let config = ServerConfig::new(std::env::temp_dir());
         let handle = ServerHandle::new(config, "127.0.0.1:0".parse().expect("固定测试地址"));
         let seq = TOKEN_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let tokens = TokenStore::new(
             std::env::temp_dir().join(format!("pairing-router-test-{seq}.json")),
         );
-        let backend: Option<Arc<dyn ApiBackend>> =
-            backend.map(|b| Arc::new(b) as Arc<dyn ApiBackend>);
         ServerState::new(&handle, tokens, backend)
     }
 
@@ -513,6 +728,22 @@ mod tests {
             .uri(uri)
             .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
             .body(Body::empty())
+            .unwrap()
+    }
+
+    /// 带 Bearer 令牌 + JSON body 的写请求（R1-04 写面测试）
+    fn authed_body(
+        method: &str,
+        uri: &str,
+        token: &str,
+        body: serde_json::Value,
+    ) -> axum::http::Request<Body> {
+        axum::http::Request::builder()
+            .uri(uri)
+            .method(method)
+            .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
             .unwrap()
     }
 
@@ -541,7 +772,9 @@ mod tests {
     }
 
     /// 内存后端（router 测试驱动：可编程事件流 + 可编程错误；语义对齐
-    /// core_query_commands 契约体——游标分页 / 未知 id 404 / 错误映射）
+    /// core_query_commands 契约体——游标分页 / 未知 id 404 / 错误映射；
+    /// R1-04 扩展写面：审批幂等（已裁决集合）+ runTask clientMessageId
+    /// 幂等 + 路径 runId 覆盖观测）
     struct MockBackend {
         /// 会话事件流（按 sequence 升序；分页契约体）
         events: Vec<serde_json::Value>,
@@ -549,6 +782,17 @@ mod tests {
         lines: Vec<String>,
         /// 可编程错误（Some → 全部命令方法返回该错误；错误映射测试用）
         failure: Option<ServerError>,
+        /// 已裁决的 tool_call_id（approve/deny 幂等语义：首次成功、重复
+        /// 决策 → cmd.approval_mismatch 冲突信号）
+        resolved: std::sync::Mutex<std::collections::HashSet<String>>,
+        /// client_message_id → run_id（runTask 幂等：重发回显首次结果）
+        run_ids: std::sync::Mutex<std::collections::HashMap<String, String>>,
+        /// 最近一次 run_control 收到的参数（路径 runId 覆盖断言）
+        last_run_control: std::sync::Mutex<Option<RunControlParams>>,
+        /// 最近一次 deny 收到的原因（reason 透传断言）
+        last_deny_reason: std::sync::Mutex<Option<String>>,
+        /// 最近一次 settings_get 收到的 keys（keys 透传断言）
+        last_settings_keys: std::sync::Mutex<Option<Vec<String>>>,
     }
 
     impl MockBackend {
@@ -558,6 +802,11 @@ mod tests {
                 events: events(5),
                 lines: (0..100).map(|i| format!("line {i}")).collect(),
                 failure: None,
+                resolved: std::sync::Mutex::new(std::collections::HashSet::new()),
+                run_ids: std::sync::Mutex::new(std::collections::HashMap::new()),
+                last_run_control: std::sync::Mutex::new(None),
+                last_deny_reason: std::sync::Mutex::new(None),
+                last_settings_keys: std::sync::Mutex::new(None),
             }
         }
 
@@ -567,6 +816,11 @@ mod tests {
                 events: events(count),
                 lines: Vec::new(),
                 failure: None,
+                resolved: std::sync::Mutex::new(std::collections::HashSet::new()),
+                run_ids: std::sync::Mutex::new(std::collections::HashMap::new()),
+                last_run_control: std::sync::Mutex::new(None),
+                last_deny_reason: std::sync::Mutex::new(None),
+                last_settings_keys: std::sync::Mutex::new(None),
             }
         }
 
@@ -576,6 +830,11 @@ mod tests {
                 events: Vec::new(),
                 lines: Vec::new(),
                 failure: Some(ServerError::protocol(code, "mock 可编程错误")),
+                resolved: std::sync::Mutex::new(std::collections::HashSet::new()),
+                run_ids: std::sync::Mutex::new(std::collections::HashMap::new()),
+                last_run_control: std::sync::Mutex::new(None),
+                last_deny_reason: std::sync::Mutex::new(None),
+                last_settings_keys: std::sync::Mutex::new(None),
             }
         }
 
@@ -839,33 +1098,225 @@ mod tests {
 
         async fn run_task(
             &self,
-            _params: RunTaskParams,
+            params: RunTaskParams,
         ) -> Result<RunTaskResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-04）"))
+            self.fail()?;
+            if params.prompt.trim().is_empty() {
+                return Err(Self::invalid("prompt 不能为空（mock）"));
+            }
+            // clientMessageId 幂等：同 id 重发回显首次 runId（M6 C24）
+            if let Some(client_message_id) = params.client_message_id.as_deref() {
+                let mut run_ids = self.run_ids.lock().unwrap();
+                if let Some(existing) = run_ids.get(client_message_id) {
+                    return Ok(RunTaskResult {
+                        run_id: existing.clone(),
+                        session_id: "s-1".to_string(),
+                    });
+                }
+                let run_id = format!("r-{}", run_ids.len() + 1);
+                run_ids.insert(client_message_id.to_string(), run_id.clone());
+                return Ok(RunTaskResult {
+                    run_id,
+                    session_id: "s-1".to_string(),
+                });
+            }
+            Ok(RunTaskResult {
+                run_id: "r-remote".to_string(),
+                session_id: "s-1".to_string(),
+            })
         }
         async fn run_control(
             &self,
-            _params: conex_types::device::RunControlParams,
+            params: conex_types::device::RunControlParams,
         ) -> Result<conex_types::device::RunControlResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-04）"))
+            self.fail()?;
+            // 记录收到的参数（路径 runId 覆盖断言）
+            *self.last_run_control.lock().unwrap() = Some(params.clone());
+            Ok(conex_types::device::RunControlResult { ok: true })
         }
         async fn cancel_run(
             &self,
-            _params: conex_types::device::CancelRunParams,
+            params: conex_types::device::CancelRunParams,
         ) -> Result<conex_types::device::CancelRunResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-04）"))
+            self.fail()?;
+            if params.run_id == "r-missing" {
+                return Err(Self::not_found("run not found（mock）"));
+            }
+            Ok(conex_types::device::CancelRunResult {
+                ok: true,
+                run_id: params.run_id,
+            })
         }
         async fn approve(
             &self,
-            _params: conex_types::device::ApproveParams,
+            params: conex_types::device::ApproveParams,
         ) -> Result<conex_types::device::ApproveResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-04）"))
+            self.fail()?;
+            self.decide(&params.tool_call_id, "approved")
         }
         async fn deny(
             &self,
-            _params: conex_types::device::ApproveParams,
+            params: DenyParams,
         ) -> Result<conex_types::device::ApproveResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-04）"))
+            self.fail()?;
+            *self.last_deny_reason.lock().unwrap() = params.reason.clone();
+            self.decide(&params.tool_call_id, "denied")
+        }
+
+        async fn list_pending_approvals(
+            &self,
+            _params: conex_types::device::ListPendingApprovalsParams,
+        ) -> Result<conex_types::device::ListPendingApprovalsResult, ServerError> {
+            self.fail()?;
+            Ok(conex_types::device::ListPendingApprovalsResult {
+                approvals: vec![
+                    conex_types::device::PendingApproval {
+                        request_id: "approval-tc-9".to_string(),
+                        tool_call_id: "tc-9".to_string(),
+                        tool_name: "shell:write".to_string(),
+                        summary: Some("call shell:write".to_string()),
+                        cwd: Some("C:\\Software\\conex".to_string()),
+                        session_id: Some("s-1".to_string()),
+                        run_id: Some("r-1".to_string()),
+                        requester_run_id: None,
+                        reason: None,
+                        arbiter: conex_types::device::Arbiter::User,
+                        requested_at: 1_754_700_000_000,
+                        expires_at: 1_754_700_120_000,
+                        danger_level: 2,
+                        param_keys: Some(vec!["script".to_string()]),
+                    },
+                    conex_types::device::PendingApproval {
+                        request_id: "approval-tc-8".to_string(),
+                        tool_call_id: "tc-8".to_string(),
+                        tool_name: "read_file".to_string(),
+                        summary: Some("call read_file".to_string()),
+                        cwd: Some("C:\\Software\\conex".to_string()),
+                        session_id: Some("s-1".to_string()),
+                        run_id: Some("r-1".to_string()),
+                        requester_run_id: None,
+                        reason: None,
+                        arbiter: conex_types::device::Arbiter::User,
+                        requested_at: 1_754_700_000_000,
+                        expires_at: 1_754_700_120_000,
+                        danger_level: 1,
+                        param_keys: None,
+                    },
+                ],
+                latest_sequence: None,
+            })
+        }
+
+        async fn approval_history(
+            &self,
+            _params: conex_types::device::ApprovalHistoryParams,
+        ) -> Result<conex_types::device::ApprovalHistoryResult, ServerError> {
+            self.fail()?;
+            Ok(conex_types::device::ApprovalHistoryResult {
+                items: vec![
+                    conex_types::device::ApprovalHistoryItem {
+                        sequence: 12,
+                        tool_call_id: "tc-5".to_string(),
+                        tool_name: None,
+                        decision: conex_types::events::ApprovalDecision::Approved,
+                        reason: None,
+                        channel: Some(conex_types::device::ApprovalChannel::Mobile),
+                        resolved_at: Some(1_754_700_005_000),
+                        session_id: Some("s-1".to_string()),
+                        run_id: Some("r-1".to_string()),
+                    },
+                    conex_types::device::ApprovalHistoryItem {
+                        sequence: 14,
+                        tool_call_id: "tc-6".to_string(),
+                        tool_name: None,
+                        decision: conex_types::events::ApprovalDecision::Denied,
+                        reason: Some("风险过高".to_string()),
+                        channel: Some(conex_types::device::ApprovalChannel::Mobile),
+                        resolved_at: Some(1_754_700_006_000),
+                        session_id: Some("s-1".to_string()),
+                        run_id: Some("r-1".to_string()),
+                    },
+                ],
+                next_after_sequence: Some(14),
+                has_more: Some(false),
+            })
+        }
+
+        async fn settings_get(
+            &self,
+            params: conex_types::device::GetSettingsParams,
+        ) -> Result<conex_types::device::GetSettingsResult, ServerError> {
+            self.fail()?;
+            *self.last_settings_keys.lock().unwrap() = params.keys.clone();
+            Ok(conex_types::device::GetSettingsResult {
+                settings: serde_json::json!({
+                    "apiKey": "",
+                    "baseUrl": "https://api.example.com",
+                    "model": "deepseek-v4",
+                    "hasApiKey": true,
+                    "credentialMode": "direct",
+                    "endpoint": "responses",
+                    "stream": true,
+                }),
+            })
+        }
+
+        async fn settings_set(
+            &self,
+            params: SettingsUpdateParams,
+        ) -> Result<conex_types::device::GetSettingsResult, ServerError> {
+            self.fail()?;
+            if params.credential_mode.is_some() || params.endpoint.is_some() || params.stream.is_some()
+            {
+                return Err(Self::invalid(
+                    "credentialMode / endpoint / stream 不在 REST 非敏感配置更新面（mock）",
+                ));
+            }
+            Ok(conex_types::device::GetSettingsResult {
+                settings: serde_json::json!({
+                    "apiKey": "",
+                    "baseUrl": params.base_url.unwrap_or_else(|| "https://api.example.com".to_string()),
+                    "model": params.model.unwrap_or_else(|| "deepseek-v4".to_string()),
+                    "hasApiKey": true,
+                    "credentialMode": "direct",
+                    "endpoint": "responses",
+                    "stream": true,
+                }),
+            })
+        }
+    }
+
+    impl MockBackend {
+        /// 审批决策（幂等语义：首次成功并记入已裁决集合；重复决策 →
+        /// cmd.approval_mismatch 冲突信号——M6 §1.3 / F2 §11.2；
+        /// 从未出现的 tool_call_id → cmd.not_found）
+        fn decide(
+            &self,
+            tool_call_id: &str,
+            decision: &'static str,
+        ) -> Result<conex_types::device::ApproveResult, ServerError> {
+            if tool_call_id == "tc-missing" {
+                return Err(Self::not_found("tool_call_id 从未出现（mock）"));
+            }
+            let mut resolved = self.resolved.lock().unwrap();
+            if resolved.contains(tool_call_id) {
+                return Err(ServerError::protocol(
+                    DeviceErrorCode::CmdApprovalMismatch,
+                    format!("该请求已被处理或已过期：{tool_call_id}"),
+                ));
+            }
+            resolved.insert(tool_call_id.to_string());
+            Ok(conex_types::device::ApproveResult {
+                ok: true,
+                tool_call_id: tool_call_id.to_string(),
+                decision: serde_json::from_value(serde_json::Value::String(decision.to_string()))
+                    .expect("决策规范值"),
+            })
+        }
+
+        /// 参数非法（cmd.invalid 400）
+        fn invalid(detail: &str) -> ServerError {
+            ServerError::protocol(DeviceErrorCode::CmdInvalid, detail)
         }
     }
 
@@ -1496,5 +1947,472 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CONFLICT);
         let body = json_body(response).await;
         assert_eq!(body["code"], "cmd.engine_not_ready");
+    }
+
+    // ── R1-04 写面：鉴权 ──
+
+    /// 全部 8 条写端点无令牌必须 401（D2 §7.1 零信任；与只读面同组）
+    #[tokio::test]
+    async fn all_write_endpoints_require_token() {
+        let app = build_router(test_state());
+        for (method, path, label) in [
+            ("POST", RUNS_PATH, "run task"),
+            ("POST", RUN_CONTROL_PATH, "run control"),
+            ("POST", RUN_CANCEL_PATH, "run cancel"),
+            ("POST", APPROVAL_APPROVE_PATH, "approve"),
+            ("POST", APPROVAL_DENY_PATH, "deny"),
+            ("GET", APPROVALS_PENDING_PATH, "approvals pending"),
+            ("GET", APPROVALS_HISTORY_PATH, "approvals history"),
+            ("GET", SETTINGS_PATH, "settings get"),
+            ("PUT", SETTINGS_PATH, "settings set"),
+        ] {
+            // 路径参数用具体值（{id} 段占位符不可直接请求）
+            let uri = path
+                .replace("{id}", "r-1")
+                .replace("{toolCallId}", "tc-9");
+            let request = if method == "GET" {
+                axum::http::Request::builder()
+                    .uri(&uri)
+                    .body(Body::empty())
+                    .unwrap()
+            } else {
+                axum::http::Request::builder()
+                    .uri(&uri)
+                    .method(method)
+                    .header(axum::http::header::CONTENT_TYPE, "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap()
+            };
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::UNAUTHORIZED,
+                "{label}（{method} {uri}）无令牌必须 401"
+            );
+        }
+    }
+
+    // ── R1-04 写面：C24 发起 run ──
+
+    #[tokio::test]
+    async fn run_task_endpoint_starts_run() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                RUNS_PATH,
+                &token,
+                serde_json::json!({ "prompt": "帮我修登录页 bug" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["runId"], "r-remote");
+        assert_eq!(body["sessionId"], "s-1");
+    }
+
+    #[tokio::test]
+    async fn run_task_idempotent_by_client_message_id() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // 同 clientMessageId 重发 → 回显首次 runId（M6 C24 幂等键）
+        let first = app
+            .clone()
+            .oneshot(authed_body(
+                "POST",
+                RUNS_PATH,
+                &token,
+                serde_json::json!({
+                    "prompt": "帮我修 bug",
+                    "clientMessageId": "msg-01HZ...",
+                }),
+            ))
+            .await
+            .unwrap();
+        let second = app
+            .oneshot(authed_body(
+                "POST",
+                RUNS_PATH,
+                &token,
+                serde_json::json!({
+                    "prompt": "帮我修 bug",
+                    "clientMessageId": "msg-01HZ...",
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(second.status(), StatusCode::OK);
+        let first_body = json_body(first).await;
+        let second_body = json_body(second).await;
+        assert_eq!(
+            first_body["runId"], second_body["runId"],
+            "同 clientMessageId 必须返回同一 runId"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_task_empty_prompt_is_400() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                RUNS_PATH,
+                &token,
+                serde_json::json!({ "prompt": "  " }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.invalid");
+    }
+
+    #[tokio::test]
+    async fn run_task_malformed_body_is_400() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // 非 JSON / 缺 prompt 字段 → cmd.invalid 400（JsonBody extractor）
+        for payload in ["not-json", "{}", r#"{"prompt": 42}"#] {
+            let response = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(RUNS_PATH)
+                        .method("POST")
+                        .header(
+                            axum::http::header::AUTHORIZATION,
+                            format!("Bearer {token}"),
+                        )
+                        .header(axum::http::header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(payload.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "载荷 {payload:?} 必须 400");
+            let body = json_body(response).await;
+            assert_eq!(body["code"], "cmd.invalid");
+        }
+    }
+
+    // ── R1-04 写面：C25 run 控制 ──
+
+    #[tokio::test]
+    async fn run_control_endpoint_uses_path_run_id() {
+        let mock = Arc::new(MockBackend::new());
+        let state = test_state_from_backend(Some(Arc::clone(&mock) as Arc<dyn ApiBackend>));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // 路径 runId = r-1，body 携带 r-wrong → 路径优先（REST 资源地址即真键）
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                "/v1/runs/r-1/control",
+                &token,
+                serde_json::json!({
+                    "level": "cooperative_stop",
+                    "runId": "r-wrong",
+                    "sessionId": "s-1",
+                    "reason": "用户远程暂停",
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["ok"], true);
+        let received = mock.last_run_control.lock().unwrap().clone().unwrap();
+        assert_eq!(received.run_id, "r-1", "路径 runId 必须覆盖 body 值");
+        assert_eq!(received.session_id, "s-1");
+        assert_eq!(received.reason.as_deref(), Some("用户远程暂停"));
+    }
+
+    #[tokio::test]
+    async fn run_control_invalid_level_is_400() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                "/v1/runs/r-1/control",
+                &token,
+                serde_json::json!({
+                    "level": "sideways",
+                    "runId": "r-1",
+                    "sessionId": "s-1",
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.invalid");
+    }
+
+    // ── R1-04 写面：C26 取消 run ──
+
+    #[tokio::test]
+    async fn cancel_run_endpoint_ok() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                "/v1/runs/r-1/cancel",
+                &token,
+                serde_json::json!({ "reason": "用户远程取消" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["runId"], "r-1");
+    }
+
+    #[tokio::test]
+    async fn cancel_run_unknown_run_is_404() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                "/v1/runs/r-missing/cancel",
+                &token,
+                serde_json::json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.not_found");
+    }
+
+    // ── R1-04 写面：C11 审批批准 / C12 审批拒绝（I-02 语义核心）──
+
+    #[tokio::test]
+    async fn approve_endpoint_ok() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                "/v1/approval/tc-9/approve",
+                &token,
+                serde_json::json!({ "runId": "r-1" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["toolCallId"], "tc-9");
+        assert_eq!(body["decision"], "approved");
+    }
+
+    #[tokio::test]
+    async fn approve_duplicate_decision_conflicts_409() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // 首次决策 → 200；重复决策（幂等键冲突信号）→ 409 approval_mismatch
+        let first = app
+            .clone()
+            .oneshot(authed_body(
+                "POST",
+                "/v1/approval/tc-9/approve",
+                &token,
+                serde_json::json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let second = app
+            .oneshot(authed_body(
+                "POST",
+                "/v1/approval/tc-9/approve",
+                &token,
+                serde_json::json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(second.status(), StatusCode::CONFLICT, "重复决策必须 409");
+        let body = json_body(second).await;
+        assert_eq!(body["code"], "cmd.approval_mismatch");
+        assert_eq!(body["retryable"], false);
+    }
+
+    #[tokio::test]
+    async fn approve_unknown_tool_call_is_404() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                "/v1/approval/tc-missing/approve",
+                &token,
+                serde_json::json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.not_found");
+    }
+
+    #[tokio::test]
+    async fn deny_endpoint_ok_with_reason() {
+        let mock = Arc::new(MockBackend::new());
+        let state = test_state_from_backend(Some(Arc::clone(&mock) as Arc<dyn ApiBackend>));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                "/v1/approval/tc-7/deny",
+                &token,
+                serde_json::json!({ "reason": "风险过高" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["toolCallId"], "tc-7");
+        assert_eq!(body["decision"], "denied");
+        assert_eq!(
+            mock.last_deny_reason.lock().unwrap().as_deref(),
+            Some("风险过高"),
+            "deny 的 reason 必须透传到后端"
+        );
+    }
+
+    // ── R1-04 写面：C13 待审批对账 / C14 审批历史 ──
+
+    #[tokio::test]
+    async fn approvals_pending_endpoint_returns_list() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/approvals/pending", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        let approvals = body["approvals"].as_array().unwrap();
+        assert_eq!(approvals.len(), 2);
+        assert_eq!(approvals[0]["toolCallId"], "tc-9");
+        assert_eq!(approvals[0]["toolName"], "shell:write");
+        assert_eq!(approvals[0]["dangerLevel"], 2);
+        assert_eq!(approvals[0]["requestId"], "approval-tc-9");
+        assert_eq!(approvals[1]["dangerLevel"], 1);
+    }
+
+    #[tokio::test]
+    async fn approvals_history_endpoint_returns_items() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get(
+                "/v1/approvals/history?sessionId=s-1&afterSequence=10&limit=5",
+                &token,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        let items = body["items"].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["sequence"], 12);
+        assert_eq!(items[0]["decision"], "approved");
+        assert_eq!(items[1]["decision"], "denied");
+        assert_eq!(items[1]["reason"], "风险过高");
+        assert_eq!(body["nextAfterSequence"], 14);
+        assert_eq!(body["hasMore"], false);
+    }
+
+    // ── R1-04 写面：C28 设置快照 / C29 非敏感配置更新 ──
+
+    #[tokio::test]
+    async fn settings_get_endpoint_returns_snapshot_and_forwards_keys() {
+        let mock = Arc::new(MockBackend::new());
+        let state = test_state_from_backend(Some(Arc::clone(&mock) as Arc<dyn ApiBackend>));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/settings?keys=model,baseUrl", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["settings"]["model"], "deepseek-v4");
+        // 快照脱敏：apiKey 恒空串（K-02 由 config 层保证，mock 同形状）
+        assert_eq!(body["settings"]["apiKey"], "");
+        assert_eq!(
+            mock.last_settings_keys.lock().unwrap().as_deref(),
+            Some(vec!["model".to_string(), "baseUrl".to_string()]).as_deref(),
+            "keys 必须解析为列表透传到后端"
+        );
+    }
+
+    #[tokio::test]
+    async fn settings_set_endpoint_updates() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "PUT",
+                SETTINGS_PATH,
+                &token,
+                serde_json::json!({ "model": "deepseek-v5" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["settings"]["model"], "deepseek-v5");
+    }
+
+    #[tokio::test]
+    async fn settings_set_restricted_fields_are_400() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        for (payload, label) in [
+            (
+                serde_json::json!({ "credentialMode": "direct" }),
+                "credentialMode 拒绝字段",
+            ),
+            (
+                serde_json::json!({ "endpoint": "auto" }),
+                "endpoint 拒绝字段",
+            ),
+            (serde_json::json!({ "stream": false }), "stream 拒绝字段"),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(authed_body("PUT", SETTINGS_PATH, &token, payload))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{label} 必须 400");
+            let body = json_body(response).await;
+            assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
+        }
     }
 }

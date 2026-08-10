@@ -26,6 +26,7 @@
 pub mod auth;
 pub mod backend;
 pub mod config;
+pub mod core_backend;
 pub mod error;
 pub mod fanout;
 pub mod pair;

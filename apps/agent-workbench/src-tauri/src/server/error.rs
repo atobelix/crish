@@ -119,6 +119,10 @@ impl ServerError {
                 | DeviceErrorCode::AuthRotateConflict => 401,
                 DeviceErrorCode::CmdInvalid => 400,
                 DeviceErrorCode::CmdNotFound => 404,
+                // 审批冲突（F2 §11.2：重复决策 / 已被其他设备处理 / 已过期）
+                // → 409（与 session busy / engine 未就绪同档：请求方需收敛
+                // 状态而非重试同一请求）
+                DeviceErrorCode::CmdApprovalMismatch => 409,
                 DeviceErrorCode::CmdRestoreInProgress
                 | DeviceErrorCode::CmdEngineNotReady
                 | DeviceErrorCode::CmdSessionBusy => 409,
@@ -183,6 +187,11 @@ mod tests {
         );
         assert_eq!(
             ServerError::protocol(DeviceErrorCode::CmdRestoreInProgress, "x").http_status(),
+            409
+        );
+        // R1-04：审批冲突 → 409（F2 §11.2 收敛语义）
+        assert_eq!(
+            ServerError::protocol(DeviceErrorCode::CmdApprovalMismatch, "x").http_status(),
             409
         );
         assert_eq!(

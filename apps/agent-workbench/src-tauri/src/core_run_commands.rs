@@ -36,7 +36,8 @@ use agent_provider::request::build_system_prompt;
 use agent_tools::audit::{AuditSink, SecurityAuditSink};
 use agent_tools::backup::BackupMiddleware;
 use agent_tools::background::{
-    BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef, TaskState,
+    BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef, LogSlice,
+    TaskState,
 };
 use agent_tools::context::ExploreDocsQuotaContext;
 use agent_tools::definition::ToolError;
@@ -46,6 +47,10 @@ use conex_db::LocalDb;
 // DEEPCHECK-01 P0：历史 token 估算复用 conex-compaction count_tokens 启发式
 // （ASCII 单词约 4 字符/token，与前端 estimateTextTokens 对齐）
 use conex_compaction::count_tokens;
+use conex_types::device::{
+    ApprovalChannel as RemoteApprovalChannel, ApprovalHistoryItem, ApprovalHistoryResult, Arbiter,
+    PendingApproval,
+};
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
     RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
@@ -150,6 +155,34 @@ impl RunProducer for SessionLoopProducer {
 
 // ── 审批门（ApprovalGate 实现）────────────────────────────────────
 
+/// 待审批请求元信息（R1-04 REST 写面 [list_pending_approvals_impl] 数据源）
+///
+/// 生命周期与 [ApprovalGateImpl::pending] 的 oneshot 通道完全一致：
+/// `request_approval` 登记、`resolve` 清除——「已请求未裁决」的运行时真源
+/// （M6 C13 派生态的实时版本；run 终态移出活动注册表，天然满足「run 未
+/// 终态」条件）。parameters 全量不下发（隐私红线，D6 §7.2），只记键名。
+pub(crate) struct PendingRequestMeta {
+    /// 工具名
+    pub tool_name: String,
+    /// 请求摘要
+    pub summary: String,
+    /// 工具工作目录
+    pub cwd: String,
+    /// 会话 id
+    pub session_id: String,
+    /// 请求方 run 归属（None = 主 agent run；与 approval-requested 同源）
+    pub requester_run_id: Option<String>,
+    /// 申请理由（子代理来源；None = 主 agent 请求）
+    pub reason: Option<String>,
+    /// 裁决者 wire 名（user / main-agent；与
+    /// approval-requested.metadata.arbiter 同源）
+    pub arbiter: String,
+    /// 请求时刻（epoch ms；expiresAt = requestedAt + APPROVAL_TIMEOUT）
+    pub requested_at_ms: u64,
+    /// 参数键名列表（parameters 全量不下发，仅键名，M6 C13）
+    pub param_keys: Vec<String>,
+}
+
 /// 审批门（B6.1：approval-requested 先发后等防死锁，01 §五.8）
 ///
 /// - `request_approval`：广播 approval-requested（经缓冲事件桥，实时通道）
@@ -178,6 +211,9 @@ pub(crate) struct ApprovalGateImpl {
     broadcast: Box<dyn Fn(AgentEvent) + Send + Sync>,
     /// 待审批集合：tool_call_id → 决策通道（I-02 校验依据）
     pending: std::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<ApprovalDecision>>>,
+    /// 待审批请求元信息（R1-04：与 [Self::pending] 同生命周期，见
+    /// [PendingRequestMeta]——request 登记、resolve 清除）
+    pending_meta: std::sync::Mutex<HashMap<String, PendingRequestMeta>>,
     /// run 状态机联动（awaiting-approval 中间态落库）
     handle: Arc<tokio::sync::Mutex<RunHandle>>,
     /// store（状态机转移落库）
@@ -204,6 +240,7 @@ impl ApprovalGateImpl {
             deadlock_detector: None,
             broadcast,
             pending: std::sync::Mutex::new(HashMap::new()),
+            pending_meta: std::sync::Mutex::new(HashMap::new()),
             handle,
             store,
             cwd,
@@ -227,6 +264,9 @@ impl ApprovalGateImpl {
     ///
     /// I-02（T12.3）：tool_call_id 必须在待审批集合，不匹配返回
     /// NotFound（杜绝伪造 approval-resolved 审计事件 / 提前审批）。
+    /// 文案含 `pending` 关键字：`DeviceErrorCode::from_core_error` 对
+    /// 审批域 NotFound 升级为 cmd.approval_mismatch（F2 §11.2 冲突信号，
+    /// 移动端据此收敛「已被其他设备处理 / 已过期」）。
     pub(crate) async fn resolve(
         &self,
         tool_call_id: &str,
@@ -239,10 +279,16 @@ impl ApprovalGateImpl {
             .remove(tool_call_id)
             .ok_or_else(|| {
                 CoreError::NotFound(format!(
-                    "tool_call_id 不在待审批集合（run={}）：{tool_call_id}",
+                    "tool_call_id not in pending approvals（run={}）：{tool_call_id}",
                     self.run_id
                 ))
             })?;
+        // R1-04：与决策通道同步清除待办元信息（list_pending_approvals
+        // 不再返回已裁决条目）
+        self.pending_meta
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(tool_call_id);
         let _ = sender.send(decision);
         // 状态机恢复：awaiting-approval → running（B4.1 审批恢复路径）
         let mut handle = self.handle.lock().await;
@@ -255,6 +301,41 @@ impl ApprovalGateImpl {
             );
         }
         Ok(())
+    }
+
+    /// 待审批集合是否包含指定工具调用（R1-04：run_id 缺失时按待审批
+    /// 集合反查——M6 C11「runId 缺失容错」）
+    pub(crate) fn contains_pending(&self, tool_call_id: &str) -> bool {
+        self.pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(tool_call_id)
+    }
+
+    /// 待审批请求元信息快照（R1-04：[list_pending_approvals_impl]
+    /// 数据源；返回 (tool_call_id, meta) 列表，与 pending 通道同生命周期）
+    pub(crate) fn pending_requests(&self) -> Vec<(String, PendingRequestMeta)> {
+        self.pending_meta
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .map(|(tool_call_id, meta)| {
+                (
+                    tool_call_id.clone(),
+                    PendingRequestMeta {
+                        tool_name: meta.tool_name.clone(),
+                        summary: meta.summary.clone(),
+                        cwd: meta.cwd.clone(),
+                        session_id: meta.session_id.clone(),
+                        requester_run_id: meta.requester_run_id.clone(),
+                        reason: meta.reason.clone(),
+                        arbiter: meta.arbiter.clone(),
+                        requested_at_ms: meta.requested_at_ms,
+                        param_keys: meta.param_keys.clone(),
+                    },
+                )
+            })
+            .collect()
     }
 }
 
@@ -333,6 +414,32 @@ impl ApprovalGate for ApprovalGateImpl {
                 let _ = pending.remove(call_id);
             }
             pending.insert(call_id.to_string(), tx);
+        }
+        // R1-04：同步登记待办元信息（list_pending_approvals 对账数据源；
+        // 与 pending 通道同生命周期，resolve 时清除）。arbiter wire 名与
+        // 上方广播的 metadata.arbiter 同源（main-agent / user）。
+        {
+            let mut meta = self.pending_meta.lock().unwrap_or_else(|e| e.into_inner());
+            meta.insert(
+                call_id.to_string(),
+                PendingRequestMeta {
+                    tool_name: tool_name.to_string(),
+                    summary: format!("call {tool_name}"),
+                    cwd: self.cwd.clone().unwrap_or_default(),
+                    session_id: self.session_id.clone(),
+                    requester_run_id: requester.map(|r| r.run_id.clone()),
+                    reason: requester.and_then(|r| r.reason.clone()),
+                    arbiter: match arbiter {
+                        session_loop::approval_router::Arbiter::MainAgent => "main-agent".to_string(),
+                        session_loop::approval_router::Arbiter::User => "user".to_string(),
+                    },
+                    requested_at_ms: crate::server::now_ms(),
+                    param_keys: args
+                        .as_object()
+                        .map(|map| map.keys().cloned().collect())
+                        .unwrap_or_default(),
+                },
+            );
         }
 
         // 4. 等待决策（超时 → Expired；工具侧按非致命处理，01 §五.8）
@@ -3743,8 +3850,20 @@ pub(crate) async fn core_cancel_run(
     run_id: String,
     mode: Option<String>,
 ) -> Result<CancelRunResponse, CoreError> {
-    let active = active_run(state.inner(), run_id.trim())?;
-    let cancel_mode = match mode.as_deref() {
+    cancel_run_impl(state.inner(), &run_id, mode.as_deref(), None).await
+}
+
+/// 取消 run 直调体（R1-04 REST 写面：与 core_cancel_run 同一语义——
+/// L2 协作 / L3 强制；不依赖 Tauri runtime）。reason 缺省
+/// "cancelled-by-user"（与 IPC 命令面行为一致）。
+pub(crate) async fn cancel_run_impl(
+    state: &CoreRunState,
+    run_id: &str,
+    mode: Option<&str>,
+    reason: Option<&str>,
+) -> Result<CancelRunResponse, CoreError> {
+    let active = active_run(state, run_id.trim())?;
+    let cancel_mode = match mode {
         Some("cooperative") => CancelMode::Cooperative,
         _ => CancelMode::Force,
     };
@@ -3756,8 +3875,8 @@ pub(crate) async fn core_cancel_run(
         .cancel_run(
             cancel_mode,
             Some(&engine),
-            "cancelled-by-user",
-            state.inner().store.as_ref(),
+            reason.unwrap_or("cancelled-by-user"),
+            state.store.as_ref(),
         )
         .await
         .map_err(crate::core_error::map_run_err)?;
@@ -3766,7 +3885,7 @@ pub(crate) async fn core_cancel_run(
         target: "run",
         run_id = %active.run_id,
         path = ?path,
-        "core_cancel_run（终态由 drive_run_loop 收口）：后台任务注册表未清理、任务不级联杀（T-AB-19 契约）"
+        "cancel_run_impl（终态由 drive_run_loop 收口）：后台任务注册表未清理、任务不级联杀（T-AB-19 契约）"
     );
     Ok(CancelRunResponse {
         ok: true,
@@ -3788,7 +3907,19 @@ pub(crate) async fn core_approve_tool(
     tool_call_id: String,
     decision: Option<String>,
 ) -> Result<ApproveResponse, CoreError> {
-    let active = active_run(state.inner(), run_id.trim())?;
+    approve_tool_impl(state.inner(), &run_id, &tool_call_id, decision).await
+}
+
+/// 批准工具调用直调体（R1-04 REST 写面：与 core_approve_tool 同一
+/// 语义——I-02 pending 校验 + approval-resolved 落库与实时发射；
+/// 不依赖 Tauri runtime）。
+pub(crate) async fn approve_tool_impl(
+    state: &CoreRunState,
+    run_id: &str,
+    tool_call_id: &str,
+    decision: Option<String>,
+) -> Result<ApproveResponse, CoreError> {
+    let active = active_run(state, run_id.trim())?;
     // 仅接受 approved（其余值按 InvalidInput 拒绝，杜绝伪造）
     if decision.is_some_and(|d| d != "approved") {
         return Err(CoreError::invalid_input(
@@ -3797,12 +3928,12 @@ pub(crate) async fn core_approve_tool(
     }
     active
         .approval
-        .resolve(&tool_call_id, ApprovalDecision::Approved)
+        .resolve(tool_call_id, ApprovalDecision::Approved)
         .await?;
-    emit_approval_resolved(&active, &tool_call_id, WireApprovalDecision::Approved).await;
+    emit_approval_resolved(&active, tool_call_id, WireApprovalDecision::Approved).await;
     Ok(ApproveResponse {
         ok: true,
-        tool_call_id,
+        tool_call_id: tool_call_id.to_string(),
         decision: "approved",
     })
 }
@@ -3815,22 +3946,205 @@ pub(crate) async fn core_deny_tool(
     tool_call_id: String,
     reason: Option<String>,
 ) -> Result<ApproveResponse, CoreError> {
-    let active = active_run(state.inner(), run_id.trim())?;
+    deny_tool_impl(state.inner(), &run_id, &tool_call_id, reason.as_deref()).await
+}
+
+/// 拒绝工具调用直调体（R1-04 REST 写面：与 core_deny_tool 同一语义；
+/// 不依赖 Tauri runtime；reason 缺省 "user denied"）。
+pub(crate) async fn deny_tool_impl(
+    state: &CoreRunState,
+    run_id: &str,
+    tool_call_id: &str,
+    reason: Option<&str>,
+) -> Result<ApproveResponse, CoreError> {
+    let active = active_run(state, run_id.trim())?;
     active
         .approval
         .resolve(
-            &tool_call_id,
+            tool_call_id,
             ApprovalDecision::Denied {
-                reason: reason.unwrap_or_else(|| "user denied".to_string()),
+                reason: reason.unwrap_or("user denied").to_string(),
             },
         )
         .await?;
-    emit_approval_resolved(&active, &tool_call_id, WireApprovalDecision::Denied).await;
+    emit_approval_resolved(&active, tool_call_id, WireApprovalDecision::Denied).await;
     Ok(ApproveResponse {
         ok: true,
-        tool_call_id,
+        tool_call_id: tool_call_id.to_string(),
         decision: "denied",
     })
+}
+
+/// 按待审批集合反查 run（R1-04：M6 C11「runId 缺失容错」——toolCallId
+/// 为真键，run_id 缺失时遍历活动 run 注册表命中首个包含该 tool_call_id
+/// 的 run；未命中 None）
+pub(crate) fn find_run_by_pending_tool_call(
+    state: &CoreRunState,
+    tool_call_id: &str,
+) -> Option<String> {
+    state
+        .active_runs
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .find(|(_, active)| active.approval.contains_pending(tool_call_id))
+        .map(|(run_id, _)| run_id.clone())
+}
+
+/// 待审批对账（R1-04 / M6 C13：活动 run 审批门待审批集合快照——「已
+/// 请求未裁决」的运行时真源；run 未终态天然成立（终态移出活动注册表）。
+/// after_sequence 增量水位属 wire 层对账扩展，实现为全量对账（M6 C13
+/// 参数可选，缺省即全量）。
+pub(crate) fn list_pending_approvals_impl(state: &CoreRunState) -> Vec<PendingApproval> {
+    state
+        .active_runs
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .values()
+        .flat_map(|active| {
+            active.approval.pending_requests().into_iter().map(move |(tool_call_id, meta)| {
+                // 危险级别在字段 move 前计算（tool_name 随后移入结构体）
+                let danger_level = derive_danger_level(&meta.tool_name, &meta.param_keys);
+                PendingApproval {
+                    request_id: format!("approval-{tool_call_id}"),
+                    tool_call_id,
+                    tool_name: meta.tool_name,
+                    summary: Some(meta.summary),
+                    cwd: Some(meta.cwd),
+                    session_id: Some(meta.session_id),
+                    run_id: Some(active.run_id.clone()),
+                    requester_run_id: meta.requester_run_id,
+                    reason: meta.reason,
+                    arbiter: if meta.arbiter == "main-agent" {
+                        Arbiter::MainAgent
+                    } else {
+                        Arbiter::User
+                    },
+                    requested_at: meta.requested_at_ms,
+                    expires_at: meta.requested_at_ms + APPROVAL_TIMEOUT.as_millis() as u64,
+                    danger_level,
+                    param_keys: Some(meta.param_keys),
+                }
+            })
+        })
+        .collect()
+}
+
+/// 危险级别推导（R1-04 / M6 C13：桌面按 F2 §2.2 表推导，移动端不重算）
+///
+/// 轻量启发式（与前端 approvalHandlers S9 宽容解析同语义的子集）：
+/// 删除类工具 / 参数含删除语义 → 2（高风险，移动端二次确认），其余
+/// 常规确认 → 1。红线请求不会到达审批门（decide_with_redline 先行拒绝），
+/// 此处无需红线分支。
+fn derive_danger_level(tool_name: &str, param_keys: &[String]) -> u8 {
+    const DESTRUCTIVE_TOOLS: [&str; 5] = [
+        "shell:write",
+        "shell:exec",
+        "git:revert",
+        "file:delete",
+        "workspace:delete",
+    ];
+    if DESTRUCTIVE_TOOLS.contains(&tool_name) {
+        return 2;
+    }
+    if param_keys
+        .iter()
+        .any(|k| k.contains("delete") || k.contains("remove") || k.contains("overwrite"))
+    {
+        return 2;
+    }
+    1
+}
+
+/// 审批历史补拉（R1-04 / M6 C14：approval-resolved 事件白名单投影——
+/// events 表按事件类型过滤，不携带参数全量（同 C13 隐私红线）。
+/// sessionId 提供时按会话内 sequence 水位过滤，缺省跨会话按落库时刻
+/// 近似排序；limit 缺省 100、上限 500。
+pub(crate) async fn approval_history_impl(
+    state: &CoreRunState,
+    session_id: Option<&str>,
+    after_sequence: Option<u64>,
+    limit: Option<u32>,
+) -> Result<ApprovalHistoryResult, CoreError> {
+    let limit = limit.unwrap_or(100).clamp(1, 500) as usize;
+    let Some(db) = state.local_db() else {
+        // 无本地库（测试替身 store）：诚实返回空历史（不编造）
+        return Ok(ApprovalHistoryResult {
+            items: Vec::new(),
+            next_after_sequence: None,
+            has_more: None,
+        });
+    };
+    let after = after_sequence.unwrap_or(0);
+    // 会话范围：显式 sessionId → 单会话；缺省 → 全部会话索引
+    let session_ids: Vec<String> = match session_id {
+        Some(id) if !id.trim().is_empty() => vec![id.trim().to_string()],
+        _ => db.list_sessions().map_err(map_db_failure)?.into_iter().map(|s| s.id).collect(),
+    };
+    // 逐会话拉取 approval-resolved 事件行（(sequence, created_at, payload)；
+    // created_at 为 ISO 字符串列，跨会话排序按字典序 = 时间序）
+    let mut rows: Vec<(i64, String, serde_json::Value)> = Vec::new();
+    for sid in &session_ids {
+        let events = db
+            .query_events(sid, after as i64, None)
+            .map_err(map_db_failure)?;
+        for event in events {
+            if event.event_type != "approval-resolved" {
+                continue;
+            }
+            let Ok(payload) = serde_json::from_str::<serde_json::Value>(&event.payload) else {
+                continue; // 损坏载荷跳过（防御性，与 core_read_session_events 同口径）
+            };
+            rows.push((event.sequence, event.created_at, payload));
+        }
+    }
+    // 排序：跨会话按落库时刻（单会话天然按 sequence 升序，created_at 同序）
+    rows.sort_by(|a, b| a.1.cmp(&b.1));
+    let has_more = rows.len() > limit;
+    let page = rows.into_iter().take(limit).collect::<Vec<_>>();
+    let next_after_sequence = page.last().map(|(sequence, _, _)| (*sequence).max(0) as u64);
+    let items = page
+        .into_iter()
+        .filter_map(|(sequence, _, payload)| {
+            let tool_call_id = payload
+                .get("toolCallId")
+                .and_then(serde_json::Value::as_str)?
+                .to_string();
+            let decision = serde_json::from_value(payload.get("decision").cloned().unwrap_or_default())
+                .unwrap_or(conex_types::events::ApprovalDecision::Expired);
+            let resolved_at = payload
+                .get("timestamp")
+                .and_then(serde_json::Value::as_str)
+                .map(|iso| iso8601_to_epoch_millis(iso).max(0) as u64);
+            Some(ApprovalHistoryItem {
+                sequence: sequence.max(0) as u64,
+                tool_call_id,
+                tool_name: None,
+                decision,
+                reason: None,
+                channel: Some(RemoteApprovalChannel::Mobile),
+                resolved_at,
+                session_id: payload
+                    .get("sessionId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+                run_id: payload
+                    .get("runId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+            })
+        })
+        .collect();
+    Ok(ApprovalHistoryResult {
+        items,
+        next_after_sequence,
+        has_more: Some(has_more),
+    })
+}
+
+/// conex-db [conex_db::DbFailure] → CoreError（本地库访问直调面通用映射）
+fn map_db_failure(error: conex_db::DbFailure) -> CoreError {
+    CoreError::Io(format!("本地库访问失败：{error}"))
 }
 
 /// 落地 approval-resolved 事件（持久化 + 实时发射）
@@ -3866,6 +4180,399 @@ async fn emit_approval_resolved(
                 "approval-resolved 落库失败"
             );
         }
+    }
+}
+
+// ── R1-04 REST 写面：只读查询直调体（服务网关 CoreStateBackend 接入；
+//    不依赖 Tauri runtime——与既有 *_impl 契约体同范式）──────────────
+
+/// 会话事件分页直调体（与 core_read_session_events 同一语义：store 游标
+/// 分页 + 信封解析；after_sequence 开区间，max_events 缺省 200 夹紧 1000）
+pub(crate) async fn read_session_events_impl(
+    state: &CoreRunState,
+    session_id: &str,
+    after_sequence: Option<u64>,
+    max_events: Option<u64>,
+) -> Result<crate::core_query_commands::EventPage, CoreError> {
+    if session_id.trim().is_empty() {
+        return Err(CoreError::invalid_input("session_id 不能为空"));
+    }
+    let page_size = normalize_remote_page_size(max_events);
+    let after = after_sequence.unwrap_or(0);
+    let store = state.store();
+    let events = store
+        .query_events(session_id, after)
+        .await
+        .map_err(crate::core_error::map_store_err)?;
+    let page_items: Vec<(u64, serde_json::Value)> = events
+        .iter()
+        .filter_map(|event| {
+            let envelope: AgentEventEnvelope = serde_json::from_str(&event.payload).ok()?;
+            serde_json::to_value(envelope)
+                .ok()
+                .map(|value| (event.sequence, value))
+        })
+        .collect();
+    let (page, has_more) = paginate_remote(page_items, page_size);
+    let next_after_sequence = page.last().map(|(seq, _)| *seq).unwrap_or(after);
+    Ok(crate::core_query_commands::EventPage {
+        events: page.into_iter().map(|(_, value)| value).collect(),
+        next_after_sequence,
+        has_more,
+    })
+}
+
+/// run 事件分页直调体（与 core_read_run_events 同一语义：按信封 runId
+/// 过滤的会话事件子集；sessionId 缺省从 run 记录反查）
+pub(crate) async fn read_run_events_impl(
+    state: &CoreRunState,
+    run_id: &str,
+    session_id: Option<&str>,
+    after_sequence: Option<u64>,
+    max_events: Option<u64>,
+) -> Result<crate::core_query_commands::EventPage, CoreError> {
+    if run_id.trim().is_empty() {
+        return Err(CoreError::invalid_input("run_id 不能为空"));
+    }
+    let page_size = normalize_remote_page_size(max_events);
+    let after = after_sequence.unwrap_or(0);
+    let store = state.store();
+    // 未提供 sessionId：从 run 记录反查（与 core_read_run_events 同语义）
+    let session_id = match session_id {
+        Some(id) if !id.trim().is_empty() => id.trim().to_string(),
+        _ => {
+            let runs = store
+                .query_runs()
+                .await
+                .map_err(crate::core_error::map_store_err)?;
+            runs.into_iter()
+                .find(|run| run.run_id == run_id)
+                .map(|run| run.session_id)
+                .ok_or_else(|| CoreError::NotFound(format!("run not found: {run_id}")))?
+        }
+    };
+    let events = store
+        .query_events(&session_id, after)
+        .await
+        .map_err(crate::core_error::map_store_err)?;
+    let run_events: Vec<(u64, serde_json::Value)> = events
+        .iter()
+        .filter_map(|event| {
+            let envelope: AgentEventEnvelope = serde_json::from_str(&event.payload).ok()?;
+            if envelope.run_id.as_deref() != Some(run_id) {
+                return None;
+            }
+            serde_json::to_value(envelope)
+                .ok()
+                .map(|value| (event.sequence, value))
+        })
+        .collect();
+    let (page, has_more) = paginate_remote(run_events, page_size);
+    let next_after_sequence = page.last().map(|(seq, _)| *seq).unwrap_or(after);
+    Ok(crate::core_query_commands::EventPage {
+        events: page.into_iter().map(|(_, value)| value).collect(),
+        next_after_sequence,
+        has_more,
+    })
+}
+
+/// run 快照直调体（与 core_get_run_snapshot 同一语义：store run 记录 +
+/// usage 缓存；sessionId 提供时校验与 run 记录一致）
+pub(crate) async fn get_run_snapshot_impl(
+    state: &CoreRunState,
+    run_id: &str,
+    session_id: Option<&str>,
+) -> Result<crate::core_query_commands::RunSnapshotResponse, CoreError> {
+    if run_id.trim().is_empty() {
+        return Err(CoreError::invalid_input("run_id 不能为空"));
+    }
+    let store = state.store();
+    let runs = store
+        .query_runs()
+        .await
+        .map_err(crate::core_error::map_store_err)?;
+    let run = runs
+        .into_iter()
+        .find(|run| run.run_id == run_id)
+        .ok_or_else(|| CoreError::NotFound(format!("run not found: {run_id}")))?;
+    if let Some(session_id) = session_id {
+        if !session_id.is_empty() && session_id != run.session_id {
+            return Err(CoreError::InvalidInput(format!(
+                "session_id mismatch: run {run_id} belongs to session {}, got {session_id}",
+                run.session_id
+            )));
+        }
+    }
+    Ok(crate::core_query_commands::RunSnapshotResponse {
+        snapshot: crate::core_query_commands::RunSnapshot {
+            run_id: run.run_id.clone(),
+            session_id: run.session_id.clone(),
+            status: run.status.as_str().to_string(),
+            cursor: run.cursor.max(0) as u64,
+            created_at: run.created_at,
+            updated_at: run.updated_at,
+            end_reason: run.end_reason.clone(),
+            error: state.run_error(run_id),
+            usage: state.run_usage(run_id),
+        },
+    })
+}
+
+/// 会话列表直调体（LocalDb 索引直读；includeLastMessage 预览属 F5 增量
+/// 面，R1-04 直调面不实现——缺省语义不变）
+pub(crate) fn list_sessions_impl(
+    state: &CoreRunState,
+) -> Result<Vec<conex_types::SessionIndexEntry>, CoreError> {
+    let Some(db) = state.local_db() else {
+        return Ok(Vec::new());
+    };
+    db.list_sessions().map_err(map_db_failure)
+}
+
+/// 子代理 DAG 概览直调体（M6 C08 行投影：完整消息树不下发（D6 §3.3
+/// N8），仅 flowDeclaration / flowState 原样 + agents 行投影
+/// （agentId/status/description/summary/depth）；depth = 1——agents 表
+/// 仅子代理行，主 agent 不在其中）
+pub(crate) fn get_flow_snapshot_impl(
+    state: &CoreRunState,
+    session_id: &str,
+) -> Result<serde_json::Value, CoreError> {
+    if session_id.trim().is_empty() {
+        return Err(CoreError::invalid_input("session_id 不能为空"));
+    }
+    let Some(db) = state.local_db() else {
+        return Err(CoreError::NotFound(format!("会话不存在：{session_id}")));
+    };
+    let declaration = db
+        .get_session_meta(orchestrator::flow_graph::FLOW_DECLARATION_KEY)
+        .map_err(map_db_failure)?;
+    let flow_state = db
+        .get_session_meta(orchestrator::flow_graph::FLOW_STATE_KEY)
+        .map_err(map_db_failure)?;
+    let agents = db.load_session_agents(session_id).map_err(map_db_failure)?;
+    let agents: Vec<serde_json::Value> = agents
+        .into_iter()
+        .map(|agent| {
+            serde_json::json!({
+                "agentId": agent.id,
+                "status": agent.status,
+                "description": agent.description,
+                "summary": agent.summary,
+                "depth": 1_u8,
+            })
+        })
+        .collect();
+    let parse_meta = |raw: Option<String>| {
+        raw.and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+    };
+    Ok(serde_json::json!({
+        "flowDeclaration": parse_meta(declaration),
+        "flowState": parse_meta(flow_state),
+        "agents": agents,
+    }))
+}
+
+/// 页大小归一（缺省 200、夹紧 [1, 1000]，与
+/// core_query_commands::normalize_max_events 同口径）
+fn normalize_remote_page_size(max_events: Option<u64>) -> usize {
+    max_events
+        .unwrap_or(crate::core_query_commands::DEFAULT_PAGE_SIZE)
+        .clamp(1, crate::core_query_commands::MAX_PAGE_SIZE) as usize
+}
+
+/// 纯分页（与 core_query_commands::paginate 同语义：全量切前 max 条）
+fn paginate_remote<T>(all: Vec<T>, max: usize) -> (Vec<T>, bool) {
+    if all.len() <= max {
+        return (all, false);
+    }
+    let page = all.into_iter().take(max).collect::<Vec<_>>();
+    (page, true)
+}
+
+// ── R1-04 REST 写面：设置域直调体（M6 C28/C29 的 REST T1 形态）──────
+
+/// 设置脱敏快照直调体（M6 C28：config_get 直透——apiKey 恒空串 + last4
+/// 脱敏由 config 层保证；keys 子集过滤在服务层完成）
+pub(crate) fn settings_get_impl() -> Result<serde_json::Value, CoreError> {
+    crate::config::config_get()
+}
+
+/// 非敏感配置更新直调体（Z0 §9.3 R1-04「配置非敏感更新」：与
+/// config_update 同语义——baseUrl / model 两键可写（config store setter
+/// pub(crate) 直调面），写成功后重载引擎 provider（下一次 run 用新值）。
+/// credentialMode / endpoint / stream 属 config 模块私有写面，R1-04
+/// **显式拒绝**（fail-closed：不静默忽略，避免「请求成功但未生效」）。
+pub(crate) fn settings_update_impl(
+    state: &CoreRunState,
+    base_url: Option<String>,
+    model: Option<String>,
+    credential_mode: Option<String>,
+    endpoint: Option<String>,
+    stream: Option<bool>,
+) -> Result<serde_json::Value, CoreError> {
+    if credential_mode.is_some() || endpoint.is_some() || stream.is_some() {
+        return Err(CoreError::invalid_input(
+            "credentialMode / endpoint / stream 不在 REST 非敏感配置更新面（仅 baseUrl / model）",
+        ));
+    }
+    crate::config::with_store_mut(|store| {
+        if let Some(url) = base_url {
+            store.set_base_url(url)?;
+        }
+        if let Some(m) = model {
+            store.set_model(m)?;
+        }
+        Ok(())
+    })?;
+    // 与 config_update 同语义：store 写成功后重载引擎 provider
+    state.reload_provider();
+    crate::config::config_get()
+}
+
+// ── R1-04 REST 写面：run 发起装配辅助（桌面侧生成 id，M6 C24）──────
+
+/// 生成 run id（桌面生成：对齐前端 `run-<base36 时间戳>-<base36 随机>`
+/// 命名风格；随机段经 CSPRNG getrandom）
+pub(crate) fn generate_run_id() -> String {
+    let mut random = [0u8; 4];
+    let _ = getrandom::getrandom(&mut random);
+    format!(
+        "run-{}-{}",
+        base36(now_ms_internal()),
+        base36(u32::from_le_bytes(random) as u64)
+    )
+}
+
+/// 生成会话 id（sessionId 缺省时桌面新建会话，对齐前端 `sess-<时间戳>`
+/// 命名风格）
+pub(crate) fn generate_session_id() -> String {
+    format!("sess-{}", base36(now_ms_internal()))
+}
+
+/// 当前 epoch ms（模块内 id 生成用；与 crate::server::now_ms 同源）
+fn now_ms_internal() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or_default()
+}
+
+/// base36 编码（0-9a-z；对齐前端 `Date.now().toString(36)` 风格）
+fn base36(value: u64) -> String {
+    const DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    if value == 0 {
+        return "0".to_string();
+    }
+    let mut buffer = [0u8; 16];
+    let mut i = 16;
+    let mut v = value;
+    while v > 0 {
+        i -= 1;
+        buffer[i] = DIGITS[(v % 36) as usize];
+        v /= 36;
+    }
+    String::from_utf8(buffer[i..].to_vec()).expect("base36 恒为 ASCII")
+}
+
+/// 后台任务列表直调面（R1-04；未接线 → 空列表，与 summary 全零缺省
+/// 同口径；TOOL_NOT_FOUND → NotFound，其余 → internal）
+pub(crate) async fn list_background_tasks_impl(
+    state: &CoreRunState,
+) -> Result<Vec<serde_json::Value>, CoreError> {
+    let tasks = state.background_manager().list_tasks().await?;
+    Ok(tasks
+        .into_iter()
+        .map(|info| {
+            serde_json::json!({
+                "taskId": info.task_id,
+                "command": info.command,
+                "cwd": info.cwd,
+                "status": serde_json::to_value(info.status).unwrap_or_default(),
+                "isDaemon": info.is_daemon,
+                "startedAt": info.started_at_ms,
+                "exitCode": info.exit_code,
+                "lineCount": info.line_count,
+            })
+        })
+        .collect())
+}
+
+/// 任务输出补取直调面（R1-04 / M6 C07：after_line 偏移分页——read_log
+/// 行范围语义；next_after_line / has_more 由 LogSlice 首末行推导）
+pub(crate) async fn get_task_output_impl(
+    state: &CoreRunState,
+    task_id: &str,
+    max_lines: Option<u32>,
+    after_line: Option<u64>,
+) -> Result<conex_types::device::commands::TaskOutputResult, CoreError> {
+    let max_lines = max_lines.unwrap_or(200).clamp(1, 1000);
+    let slice = state
+        .background_manager()
+        .read_task_log(task_id, after_line, max_lines as u64)
+        .await?;
+    let start = slice.start_line;
+    let end = slice.end_line;
+    let has_more = slice.truncated || end < slice.total_lines;
+    Ok(conex_types::device::commands::TaskOutputResult {
+        lines: slice.lines,
+        truncated: slice.truncated,
+        line_count: slice.total_lines,
+        next_after_line: Some(if end >= start { end + 1 } else { start }),
+        has_more: Some(has_more),
+    })
+}
+
+// ── R1-04 REST 写面：CoreRunState 访问器 ────────────────────────────
+
+impl CoreRunState {
+    /// 状态诊断访问器（get_status 直调面——与 main.rs managed 的
+    /// StatusDiagnostics 为同一实例，避免写入侧与读取侧漂移）
+    pub(crate) fn status_diagnostics(&self) -> Arc<StatusDiagnostics> {
+        Arc::clone(&self.diagnostics)
+    }
+
+    /// 后台任务管理器访问器（list_background_tasks / get_task_output
+    /// 直调面）
+    pub(crate) fn background_manager(&self) -> Arc<RunAwareBackgroundManager> {
+        Arc::clone(&self.background)
+    }
+}
+
+impl RunAwareBackgroundManager {
+    /// 任务列表直调面（R1-04；未接线 → 空列表，与 summary 全零缺省同
+    /// 口径；TOOL_NOT_FOUND → NotFound，其余 → internal）
+    pub(crate) async fn list_tasks(&self) -> Result<Vec<BackgroundTaskInfo>, CoreError> {
+        let Some(manager) = &self.inner else {
+            return Ok(Vec::new());
+        };
+        manager.list(true).await.map_err(map_tool_error)
+    }
+
+    /// 任务日志直调面（R1-04：read_log 行范围语义；start_line=None 读
+    /// 尾部 max_lines 行；未知任务 → NotFound）
+    pub(crate) async fn read_task_log(
+        &self,
+        task_id: &str,
+        start_line: Option<u64>,
+        max_lines: u64,
+    ) -> Result<LogSlice, CoreError> {
+        let Some(manager) = &self.inner else {
+            return Err(CoreError::NotFound(format!("任务不存在：{task_id}")));
+        };
+        manager
+            .read_log(task_id, start_line, max_lines)
+            .await
+            .map_err(map_tool_error)
+    }
+}
+
+/// 工具错误 → CoreError（TOOL_NOT_FOUND → NotFound，其余 → internal；
+/// 与 background.rs tool_err_to_core 同语义）
+fn map_tool_error(error: agent_tools::definition::ToolError) -> CoreError {
+    if error.code() == codes::TOOL_NOT_FOUND {
+        CoreError::NotFound(error.to_string())
+    } else {
+        CoreError::Internal(error.to_string())
     }
 }
 
