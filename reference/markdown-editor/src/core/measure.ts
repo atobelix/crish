@@ -18,8 +18,10 @@
 //   4. token 级测量缓存：存"容器内容坐标系"（与滚动解耦），同一 token 内
 //      光标移动直接命中；索引重建时随条目一起废弃（等价于 lines 版本失效）；
 //   5. 跨视口箭头列保持（01 问题 7 §7.2）：目标行未挂载（视口外）时，
-//      数据层取目标行（EditorStore.lines O(1) + LineOffsetTree O(log n)）、
-//      字符宽度 Oracle 列预测、滚动跟随滚入视口——不再退化为行首/行尾，
+//      数据层取目标行（getLine/getLineCount 双段访问器 O(1) + LineOffsetTree
+//      O(log n)——P2-A1 回修 1：不再读惰性物化视图 store.lines，流式期间
+//      （尾段非空）旧路径每键触发 O(全文) concat 物化）、字符宽度 Oracle
+//      列预测、滚动跟随滚入视口——不再退化为行首/行尾，
 //      下一帧行挂载后由 HiddenInput 的越界滚动跟随与常规测量接管精确位置。
 
 import { useEditorStore } from './EditorStore';
@@ -883,10 +885,13 @@ function navigateOffscreenLine(
   direction: 'up' | 'down'
 ): number | null {
   const store = useEditorStore.getState();
-  if (targetIdx < 0 || targetIdx >= store.lines.length) return null;
+  // 行数/行文本经访问器读取（P2-A1 回修 1：不再读惰性物化视图 store.lines
+  // ——流式期间（尾段非空）旧路径每次键触发 O(全文) concat 物化；getLine/
+  // getLineCount 为双段 O(1) 访问，尾段非空同样零物化）
+  if (targetIdx < 0 || targetIdx >= store.getLineCount()) return null;
 
   // 数据层取目标行文本与行内偏移
-  const targetText = store.lines[targetIdx];
+  const targetText = store.getLine(targetIdx) ?? '';
   const targetStart = store.lineOffsets.getOffset(targetIdx);
 
   // 1) 当前列 X：以当前行左缘为基准（视口坐标系）

@@ -309,6 +309,32 @@ type ScanFailureMemo = {
   noClose: Map<string, number>;
 };
 
+// —— 围栏关闭判定（P2-A1 fence 单源化，评审裁决：parser.ts 导出共享函数）——
+// 完整关闭条件（spec 0.31.2 Fenced code blocks）：关闭行必须
+//   1) 与开栏同字符（反引号/波浪线不可混用，` ``` ` 不能关 `~~~` 开栏）；
+//   2) run 长度 ≥ 开栏长度（```` 开栏不能被 ``` 关闭——"at least as long as"）；
+//   3) 行内除尾随空白外无 info 串（closing fence 不能有 info string——
+//      ` ``` js` 保持 code；` ```INS`（fence_end 行尾插入的 info）同样不闭合）。
+// 单源化：parser 全量重扫（computeLineOffsets）与 EditorStore 增量状态机
+// （updateLinesIncremental / appendText 段状态机）共用本函数，消除两套状态机
+// 在 fence_end 行尾插入场景的分歧（KNOWN-DEFECT，P2 现状盘点项 2）。
+// 入参约定：trimmed = 已剥离块引用前缀并 trim 的行（与 computeLineOffsets
+// 的判定基线一致——trim 后判定的既有行为保留，`    ``` ` 四空格缩进仍按
+// 围栏处理，02 §7.2 登记偏差不动）；openMarker = 开栏标记字符（'`' | '~'），
+// openLen = 开栏 run 长度（≥3）。
+export function isFenceClose(
+  trimmed: string,
+  openMarker: string,
+  openLen: number
+): boolean {
+  const close = /^(`+|~+)[ \t]*$/.exec(trimmed);
+  return (
+    close !== null &&
+    close[1][0] === openMarker &&
+    close[1].length >= openLen
+  );
+}
+
 export class MarkdownParser {
   private static idCounter = 0;
   private static generateId(): string {
@@ -702,12 +728,10 @@ export class MarkdownParser {
           // 代码块内：仅「同字符 + run 长度 ≥ 开栏长度 + 行内除尾随空白
           // 无信息串」才关闭；` ``` js`（信息串）与 3 反引号关 4 反引号
           // 均保持 code（spec：closing fence 不能有 info string）。
-          const close = /^(`+|~+)[ \t]*$/.exec(trimmed);
-          if (
-            close &&
-            close[1][0] === fenceState.marker &&
-            close[1].length >= fenceState.length
-          ) {
+          // 判定经 isFenceClose 共享函数（P2-A1 fence 单源化：与 EditorStore
+          // 增量状态机共用同一完整关闭条件，消除 fence_end 行尾插入的
+          // 增量/重扫分歧——见 isFenceClose 定义注释）。
+          if (isFenceClose(trimmed, fenceState.marker, fenceState.length)) {
             codeBlockState[i] = 'fence_end';
             fenceState = null;
             inCodeBlock = false;

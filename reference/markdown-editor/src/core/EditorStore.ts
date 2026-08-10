@@ -1,5 +1,5 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
-import { type CodeState } from './parser';
+import { isFenceClose, type CodeState } from './parser';
 import { LineOffsetTree } from './SegmentTree';
 
 // Use Intl.Segmenter for grapheme cluster boundaries (surrogate pairs, emojis, combining chars)
@@ -345,6 +345,16 @@ function inferInIndentCode(
   }
   return false;
 }
+
+// —— 围栏形态判定（P2-A1 fence 单源化：镜像 parser.computeLineOffsets）——
+// 开栏正则与 parser.ts 的 fenceOpen 同源（trim 后行）：反引号 run ≥3
+// （info 串不允许含反引号——` ``` aa `` ` 整行不是围栏，退化为段落）或
+// 波浪线 run ≥3（info 串无限制）。关闭判定经 parser 导出的 isFenceClose
+// 共享函数（同字符 + run ≥ 开栏长度 + 仅尾随空白），增量状态机与全量
+// 重扫共用同一判定，不再各自维护（旧 `trimmed.startsWith('```')` 布尔
+// 翻转在 fence_end 行尾插入 / 波浪线围栏场景与重扫分歧——KNOWN-DEFECT，
+// P2 现状盘点项 2；startsWith 只认反引号且不校验关闭条件，已废弃）。
+const FENCE_OPEN_RE = /^(```+)([^`]*)$|^(~~~+).*$/;
 
 // —— HTML 块判定镜像（parser.computeLineOffsets 02 §2.5 / R1-D，
 // CommonMark 4.6 spec 0.31.2）——
@@ -722,10 +732,27 @@ function updateLinesIncremental(
   // splitIdx = 0（编辑点前无 fence）时入状态恒为双 false。
   let inCodeBlock = false;
   let inMathBlock = false;
+  // 开栏状态镜像（P2-A1 fence 单源化）：CodeState 不记录开栏的标记字符与
+  // run 长度，而关闭判定需要它们——从「编辑点前最后一个前缀 fence 行」
+  // 的原文提取（该行在编辑点之前、未被编辑触及，内容权威）。前缀 fence
+  // 为 fence_start 时其行必匹配 FENCE_OPEN_RE（该行当初就是这样被判定
+  // 为开栏的），提取失败仅为防御（代码块保持 in，关闭判定退化为永不
+  // 匹配——与 parser 的「inCodeBlock 但无状态」防御分支同向，见下）。
+  let fenceState: { marker: string; length: number } | null = null;
   if (splitIdx > 0) {
-    const lastPrefixFenceState = codeBlockState[fenceLines[splitIdx - 1]];
-    if (lastPrefixFenceState === 'fence_start') inCodeBlock = true;
-    else if (lastPrefixFenceState === 'math_fence_start') inMathBlock = true;
+    const lastPrefixFenceIdx = fenceLines[splitIdx - 1];
+    const lastPrefixFenceState = codeBlockState[lastPrefixFenceIdx];
+    if (lastPrefixFenceState === 'fence_start') {
+      inCodeBlock = true;
+      const fenceContent = stripBlockquoteContext(lines[lastPrefixFenceIdx]);
+      const fenceOpen = FENCE_OPEN_RE.exec(fenceContent.trim());
+      if (fenceOpen) {
+        fenceState = {
+          marker: fenceOpen[1] !== undefined ? '`' : '~',
+          length: (fenceOpen[1] ?? fenceOpen[3]).length,
+        };
+      }
+    } else if (lastPrefixFenceState === 'math_fence_start') inMathBlock = true;
     // fence_end / math_fence_end → 围栏已闭合，两状态保持 false
   }
   // 缩进代码块状态（镜像 parser.computeLineOffsets）：行首 ≥4 列缩进（tab
@@ -766,7 +793,6 @@ function updateLinesIncremental(
 
     const oldState = newCodeState[i]; // pre-filled with shifted old states for i >= startLineIdx + newLines.length
 
-    let isFence = false;
     let newState: CodeState = 'none';
 
     if (inHtmlBlock) {
@@ -790,20 +816,32 @@ function updateLinesIncremental(
         // （type 7 单行块后 `    foo` → 缩进代码，与 CommonMark 一致）。
         prevBlockKind = 'code';
       }
-    } else if (!inMathBlock && trimmed.startsWith('```')) {
-      isFence = true;
+    } else if (!inMathBlock && FENCE_OPEN_RE.test(trimmed)) {
+      // P2-A1 fence 单源化：开/关判定镜像 parser.computeLineOffsets——
+      // 开栏行记录 marker/length（fenceState），块内 fence 形态行仅当
+      // isFenceClose（同字符 + run ≥ 开栏长度 + 仅尾随空白）才关闭；
+      // ` ```INS`（fence_end 行尾插入）与 ` ``` js`（info 串）均保持
+      // code——根治 KNOWN-DEFECT（旧 startsWith('```') 布尔翻转在这些
+      // 场景把行误判为 fence_end，增量与重扫两套状态机分歧）。
       if (!inCodeBlock) {
         newState = 'fence_start';
         inCodeBlock = true;
-      } else {
+        const fenceOpen = FENCE_OPEN_RE.exec(trimmed);
+        fenceState = {
+          marker: fenceOpen![1] !== undefined ? '`' : '~',
+          length: (fenceOpen![1] ?? fenceOpen![3]).length,
+        };
+      } else if (fenceState && isFenceClose(trimmed, fenceState.marker, fenceState.length)) {
         newState = 'fence_end';
         inCodeBlock = false;
+        fenceState = null;
+      } else {
+        newState = 'code';
       }
       // 围栏代码块内缩进不生效（CommonMark）：fence 判定先于缩进代码
       inIndentCode = false;
       prevBlockKind = 'code';
     } else if (!inCodeBlock && trimmed === '$$') {
-      isFence = true;
       if (!inMathBlock) {
         newState = 'math_fence_start';
         inMathBlock = true;
@@ -901,7 +939,17 @@ function updateLinesIncremental(
 
     newCodeState[i] = newState;
 
-    if (isFence) {
+    // 仅四态行记入 fenceLines（P2-A1 fence 单源化修正）：fence 形态行
+    // 判为 code 时（如 ` ```INS` 带 info 串不闭合）**不**记录——fenceLines
+    // 的「严格交替」不变量（前缀状态恢复与 BlockRenderer 软渲染判定依赖）
+    // 只对围栏边界行成立，形态行计入会破坏交替性（前缀恢复会把状态为
+    // code 的形态行误当作围栏边界，恢复出错误的 inCodeBlock）。
+    if (
+      newState === 'fence_start' ||
+      newState === 'fence_end' ||
+      newState === 'math_fence_start' ||
+      newState === 'math_fence_end'
+    ) {
       scannedFencePushed = true;
       // 惰性创建：常规击键（无 fence 行被触及）不分配
       if (!scannedFences) scannedFences = [];
@@ -984,10 +1032,65 @@ const STREAM_TAIL_MAX_LINES = 4096;
 // 用户活跃编辑窗口（01 问题 5 方案 5.2）：该窗口内光标落在末尾行
 // 视为「用户正在编辑末尾行」，append 追加点前移至光标处，不打断输入。
 const STREAM_USER_EDIT_WINDOW_MS = 1000;
+// —— 分块加载参数（P2 项 1 参数化，导出租给 TTI 基准测试断言）——
+// 首块行数：setText 同步帧一次性载入（首屏可交互（TTI）的保障——首帧
+// 内容就绪即可击键/滚动，续载在空闲分片里完成，见 setText 分块注释）；
+// 续块行数：每块 requestIdleCallback 分片续载的行数上限（单块解析
+// O(块长)，分片粒度 = 单帧空闲预算的粗控）；
+// 续载回退节流：requestIdleCallback 不可用（SSR / 无 window 环境）时的
+// setTimeout 回退间隔（ms）。
+export const FIRST_CHUNK_LINES = 1000;
+export const CHUNK_SIZE = 2000;
+export const CHUNK_FALLBACK_DELAY_MS = 10;
 // 空尾段共享引用（不可变约定：尾段数组只在 set 时整体替换，绝不就地修改）
 const EMPTY_TAIL: string[] = [];
 const EMPTY_STATE_TAIL: CodeState[] = [];
 const EMPTY_FENCE_TAIL: number[] = [];
+
+// —— 双段合并共享原语（P2-A1 回修 2：7 处重复实现收敛为单一抽象）——
+// 双段结构不变量：尾段非空时「接管」主数组末行（append 语义：追加到全文
+// 末尾，被接管行并入尾段首行），逻辑全量视图 = 主数组 [0, boundary) +
+// 尾段全行（boundary = 主数组长度 - 1）。此前该语义散布于 7 处独立实现
+// （materializeViews / getText / flushStreamTail / getLine / getLineCount /
+// appendText 内联访问器 / BlockRenderer isInUnclosedFenceParts），语义靠
+// 测试维系、易漂移（review-P1 回修 2）——现收敛为下方共享原语；BlockRenderer
+// 为组件层禁碰文件，其实现保持与 lineAt/countOf 逐点一致（登记：后续轮次
+// 切换）。后续再增双段消费点一律经此组函数。
+/** 逻辑行总数：尾段空 = 主数组长度；非空 = 主数组 − 1（被接管行）+ 尾段 */
+export function lineCountOf(mainLen: number, tailLen: number): number {
+  return tailLen === 0 ? mainLen : mainLen - 1 + tailLen;
+}
+
+/**
+ * 逻辑行 i 的元素（行文本 / 块状态 / fence 号通用）：
+ * i < boundary → 主数组行；否则 → 尾段行（被接管行由尾段首行替代）。
+ * 越界返回 undefined（由调用方语义兜底，与旧 getLine 行为一致）。
+ */
+export function lineAt<T>(
+  main: readonly T[],
+  tail: readonly T[],
+  index: number
+): T {
+  if (tail.length === 0) return main[index];
+  const boundary = main.length - 1;
+  return index < boundary ? main[index] : tail[index - boundary];
+}
+
+/** 双段合并为逻辑全量数组：尾段空 → 零拷贝返回主数组引用；非空 → 拼接 */
+export function concatDual<T>(main: readonly T[], tail: readonly T[]): T[] {
+  if (tail.length === 0) return main as T[];
+  return main.slice(0, -1).concat(tail);
+}
+
+/** 双段 fence 行合并：尾段相对行号平移 boundary（两段各自升序、拼接升序） */
+export function concatDualFences(
+  main: readonly number[],
+  tail: readonly number[],
+  boundary: number
+): number[] {
+  if (tail.length === 0) return main as number[];
+  return main.concat(tail.map((r) => boundary + r));
+}
 
 /**
  * 兼容视图物化（R2-A 尾段）：把 main* + streamTail* 双段结构合并为旧字段
@@ -1008,22 +1111,15 @@ interface MaterializedViews {
 
 function materializeViews(state: EditorState): MaterializedViews {
   const { mainLines, streamTail } = state;
-  if (streamTail.length === 0) {
-    // 零拷贝：视图直接引用主数组
-    return {
-      lines: mainLines,
-      codeBlockState: state.mainCodeState,
-      fenceLines: state.mainFenceLines,
-    };
-  }
-  // 流式期间一次性物化合并视图。尾段「接管」了主数组最后一行（append
-  // 语义：追加到全文末尾，被接管行并入尾段首行）——视图中主数组末行被
-  // 隐藏（slice 掉），由尾段全行接续，避免重复。
+  // 双段合并经共享原语（P2-A1 回修 2）：尾段空 → 零拷贝主数组引用；
+  // 非空 → 主数组 [0, boundary) + 尾段全行（接管语义见 concatDual 注释）。
   return {
-    lines: mainLines.slice(0, -1).concat(streamTail),
-    codeBlockState: state.mainCodeState.slice(0, -1).concat(state.streamTailCodeState),
-    fenceLines: state.mainFenceLines.concat(
-      state.streamTailFenceLines.map((r) => mainLines.length - 1 + r)
+    lines: concatDual(mainLines, streamTail),
+    codeBlockState: concatDual(state.mainCodeState, state.streamTailCodeState),
+    fenceLines: concatDualFences(
+      state.mainFenceLines,
+      state.streamTailFenceLines,
+      mainLines.length - 1
     ),
   };
 }
@@ -1039,6 +1135,13 @@ function materializeViews(state: EditorState): MaterializedViews {
 // dispatchSet 在每次 set 后经 setPrototypeOf 恢复原型（zustand 合并产生的
 // 新 state 是普通对象，原型链会丢失）——详见 dispatchSet 注释。
 const lazyViewProto: Record<string, unknown> = {};
+// 订阅同步窗口登记（review-P1 回修 7）：rawSetState 内部同步触发 zustand
+// listeners 时，setPrototypeOf 尚未执行——非 React 订阅者若在监听回调内
+// 同步读 state.lines 会得到 undefined。项目内 subscribe 仅测试使用
+// （store-factory/readonly，均不读 lines）；React 订阅者的 getSnapshot 在
+// 渲染期执行（批处理后），无实际风险。另：getter 为可枚举属性，
+// for-in/Object.keys(state) 会触发惰性物化并多出 3 个键——当前无此消费方，
+// 未来引入前需复查。
 Object.defineProperty(lazyViewProto, 'lines', {
   configurable: true,
   enumerable: true,
@@ -1071,19 +1174,16 @@ Object.defineProperty(lazyViewProto, 'fenceLines', {
 function flushStreamTail(state: EditorState): Partial<EditorState> | null {
   if (state.streamTail.length === 0) return null;
   // 尾段接管了主数组最后一行（append 语义：追加到全文末尾）：
-  // 弹出被接管行，再并入尾段全行。
+  // 弹出被接管行，再并入尾段全行——双段合并经共享原语（P2-A1 回修 2）。
   const boundary = state.mainLines.length - 1;
-  const newMain = state.mainLines.slice(0, boundary).concat(state.streamTail);
-  const newState = state.mainCodeState
-    .slice(0, boundary)
-    .concat(state.streamTailCodeState);
+  const newMain = concatDual(state.mainLines, state.streamTail);
+  const newState = concatDual(state.mainCodeState, state.streamTailCodeState);
   // 尾段 fence 相对行号平移为全局行号（追加在文档末尾，顺序保持有序）
-  const newFence =
-    state.mainFenceLines.length === 0 && state.streamTailFenceLines.length === 0
-      ? state.mainFenceLines
-      : state.mainFenceLines.concat(
-          state.streamTailFenceLines.map((r) => boundary + r)
-        );
+  const newFence = concatDualFences(
+    state.mainFenceLines,
+    state.streamTailFenceLines,
+    boundary
+  );
   return {
     mainLines: newMain,
     mainCodeState: newState,
@@ -1371,7 +1471,10 @@ function normalizeSetStatePartial(
  * - store body 内的方法经闭包捕获本实例的 dispatchSet 与 get()，绝不引用
  *   全局单例（旧代码 applyTableChange/insertText 等薄封装引用全局
  *   useEditorStore.getState() 的缺陷在实例化重构中一并根除）。
- * - R6-P1：初始 state 经 Object.create(lazyViewProto) 挂惰性视图原型，
+ * - R6-P1：初始 state 以完整字面量对象构造（含视图字段占位，满足
+ *   create 的类型推断），随后 delete 视图字段并经 Object.setPrototypeOf
+ *   挂 lazyViewProto 惰性视图原型（非 Object.create——zustand create
+ *   的 state 须在构造后改原型，见本函数尾部的 delete + setPrototypeOf），
  *   lines/codeBlockState/fenceLines 不作为自有数据字段（读取经原型链
  *   命中 getter 按需物化——若作为数据字段会被 zustand Object.assign
  *   固化 stale，旧 getter 方案的历史坑已由原型链方案规避）。
@@ -1421,32 +1524,23 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
 
   getText: () => {
     const s = get();
-    // 尾段为空时直接 join 主数组（零物化）；否则双段直接拼接——
-    // R6-P1：不再依赖惰性物化视图（本方法本就是全文序列化 O(n) 语义，
-    // 方向键热路径已改行文本模式不调用它）
-    if (s.streamTail.length === 0) return s.mainLines.join('\n');
-    const head = s.mainLines.slice(0, -1);
-    return (
-      (head.length > 0 ? head.join('\n') + '\n' : '') +
-      s.streamTail.join('\n')
-    );
+    // 双段合并经共享原语（P2-A1 回修 2）：尾段空时零拷贝主数组引用、
+    // join 零物化；非空时一次性拼接——本方法本就是全文序列化 O(n) 语义，
+    // 方向键热路径已改行文本模式不调用它（R6-P1）
+    return concatDual(s.mainLines, s.streamTail).join('\n');
   },
 
   // —— 统一行访问器（C4 访问器先行；渲染/virtualizer count 切换点登记）——
   // 逻辑行视图：i < 主数组边界 → 主数组行；否则 → 尾段行（被接管行由
   // 尾段首行替代——append 把文本拼在全文末尾，被接管行并入尾段首行）。
+  // 双段换算经共享原语 lineAt/lineCountOf（P2-A1 回修 2 去重）。
   getLine: (i) => {
     const s = get();
-    const main = s.mainLines;
-    if (s.streamTail.length === 0) return main[i];
-    const boundary = main.length - 1;
-    return i < boundary ? main[i] : s.streamTail[i - boundary];
+    return lineAt(s.mainLines, s.streamTail, i);
   },
   getLineCount: () => {
     const s = get();
-    return s.streamTail.length === 0
-      ? s.mainLines.length
-      : s.mainLines.length - 1 + s.streamTail.length;
+    return lineCountOf(s.mainLines.length, s.streamTail.length);
   },
   getLineIndex: (pos) => get().lineOffsets.findLineIndex(pos),
 
@@ -1493,7 +1587,7 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
     dispatchSet(() => {
       const lines = text.split('\n');
 
-      if (lines.length <= 1000) {
+      if (lines.length <= FIRST_CHUNK_LINES) {
         const res = updateLinesIncremental([], new LineOffsetTree([]), [], 0, 0, lines, []);
         return {
           ...res,
@@ -1517,11 +1611,11 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
       }
 
       // Chunked loading for large files
-      const firstChunk = lines.slice(0, 1000);
+      const firstChunk = lines.slice(0, FIRST_CHUNK_LINES);
       const res = updateLinesIncremental([], new LineOffsetTree([]), [], 0, 0, firstChunk, []);
 
-      let currentIdx = 1000;
-      const chunkSize = 2000;
+      let currentIdx = FIRST_CHUNK_LINES;
+      const chunkSize = CHUNK_SIZE;
 
       const processNextChunk = () => {
         if (generation !== currentLoadGeneration) return;
@@ -1549,14 +1643,14 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
         if (typeof window !== 'undefined' && window.requestIdleCallback) {
           window.requestIdleCallback(processNextChunk);
         } else {
-          setTimeout(processNextChunk, 10);
+          setTimeout(processNextChunk, CHUNK_FALLBACK_DELAY_MS);
         }
       };
 
       if (typeof window !== 'undefined' && window.requestIdleCallback) {
         window.requestIdleCallback(processNextChunk);
       } else {
-        setTimeout(processNextChunk, 10);
+        setTimeout(processNextChunk, CHUNK_FALLBACK_DELAY_MS);
       }
 
       return {
@@ -1899,15 +1993,11 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
       // 逻辑行/状态访问器（infer* 的尾段双段视图，无需物化全量数组）：
       // 尾段为空时 = 主数组全量；非空时尾段「接管」主数组末行（tail[0]
       // 替代 main[boundary]），i ≥ boundary 从尾段取。
-      const getLineAt: LineAccessor =
-        tailLen === 0
-          ? (i) => mainLines[i]
-          : (i) => (i < boundary ? mainLines[i] : streamTail[i - boundary]);
-      const getStateAt: StateAccessor =
-        tailLen === 0
-          ? (i) => s.mainCodeState[i]
-          : (i) =>
-              i < boundary ? s.mainCodeState[i] : s.streamTailCodeState[i - boundary];
+      // 双段换算经共享原语 lineAt（P2-A1 回修 2 去重）。
+      const getLineAt: LineAccessor = (i) =>
+        lineAt(mainLines, streamTail, i);
+      const getStateAt: StateAccessor = (i) =>
+        lineAt(s.mainCodeState, s.streamTailCodeState, i);
 
       // —— 追加点锚定（01 问题 5 方案 5.2 / R3-A）——
       // userEditingTail：光标落在逻辑末行内（非全文末尾）+ 用户有活跃编辑。
@@ -1944,8 +2034,59 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
       // 合并内容替换——若末行是结束块的空行，该空行在合并后可能消失，
       // 不能把它当作块已退出的依据）；块类型由连续 html_block 运行段
       // 仿真得出（CodeState 不记录类型，见 inferHtmlBlockState）。
+      // P2-A1 fence 单源化：fence/math 基线改为经 fence 行集合二分回推
+      // （旧实现按 lastLineIdx 自身状态推断：若旧行是 fence_start/math 开栏
+      // 行，合并后行仍为开栏形态时应由段循环重新判定开栏，而非沿用旧行
+      // 的块内状态——旧推断在该场景把合并行误判为 code/fence_end，与全量
+      // 重扫分歧；本次与 updateLinesIncremental 同源修正）。
       let inCodeBlock = false;
       let inMathBlock = false;
+      // 开栏状态（marker/length）：从最近 fence_start 行原文提取（该行未
+      // 被本次追加触及，内容权威）；块内行（fenceIdx 为 fence_start 且
+      // lastLineIdx 其后）无法从单行回推时保持 null——仅影响「块内 fence
+      // 形态行」的关闭判定，与 parser 的防御分支同向（fenceState 为 null
+      // 时块内 fence 形态行按 code 处理，见段循环）。
+      let fenceState: { marker: string; length: number } | null = null;
+      {
+        // 双段 fence 行集合（mainFenceLines + 尾段相对行号平移 boundary，
+        // 各自升序、拼接后整体升序）二分定位 < lastLineIdx 的最近 fence 行。
+        let lo = 0;
+        let hi = s.mainFenceLines.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          if (s.mainFenceLines[mid] < lastLineIdx) lo = mid + 1;
+          else hi = mid;
+        }
+        let fenceIdx = lo > 0 ? s.mainFenceLines[lo - 1] : -1;
+        for (let k = s.streamTailFenceLines.length - 1; k >= 0; k--) {
+          const abs = boundary + s.streamTailFenceLines[k];
+          if (abs < lastLineIdx) {
+            if (abs > fenceIdx) fenceIdx = abs;
+            break;
+          }
+        }
+        if (fenceIdx >= 0) {
+          const st = getStateAt(fenceIdx);
+          if (st === 'fence_start') {
+            inCodeBlock = true;
+            const fenceOpen = FENCE_OPEN_RE.exec(
+              stripBlockquoteContext(getLineAt(fenceIdx)).trim()
+            );
+            if (fenceOpen) {
+              fenceState = {
+                marker: fenceOpen[1] !== undefined ? '`' : '~',
+                length: (fenceOpen[1] ?? fenceOpen[3]).length,
+              };
+            }
+          } else if (st === 'fence_end') {
+            inCodeBlock = false;
+          } else if (st === 'math_fence_start') {
+            inMathBlock = true;
+          } else if (st === 'math_fence_end') {
+            inMathBlock = false;
+          }
+        }
+      }
       // 缩进代码块状态：末行状态为 'indent_code' 时视为块内（块内空行保持）
       let inIndentCode = false;
       // HTML 块状态：从旧行回推——增量语义与 updateLinesIncremental 一致
@@ -1955,13 +2096,7 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
       // HTML 块 start（type 7 段落保护）所需的「上一非空白行形态」记忆
       let prevBlockKind = inferPrevBlockKind(getLineAt, getStateAt, lastLineIdx);
       const currentState = getStateAt(lastLineIdx);
-      if (currentState === 'fence_start' || currentState === 'code')
-        inCodeBlock = true;
-      if (currentState === 'math_fence_start' || currentState === 'math_block')
-        inMathBlock = true;
       if (currentState === 'indent_code') inIndentCode = true;
-      if (currentState === 'fence_end') inCodeBlock = false;
-      if (currentState === 'math_fence_end') inMathBlock = false;
 
       const segmentCodeStates = new Array(newSegmentLines.length);
       for (let i = 0; i < newSegmentLines.length; i++) {
@@ -1986,9 +2121,33 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
             segmentCodeStates[i] = 'html_block';
             prevBlockKind = 'code';
           }
-        } else if (!inMathBlock && trimmed.startsWith('```')) {
-          segmentCodeStates[i] = inCodeBlock ? 'fence_end' : 'fence_start';
-          inCodeBlock = !inCodeBlock;
+        } else if (!inMathBlock && FENCE_OPEN_RE.test(htmlContent.trim())) {
+          // P2-A1 fence 单源化（镜像 parser / updateLinesIncremental）：
+          // 判定输入 = 块引用剥离后 trim（htmlContent 与 parser 的
+          // bqContent 同源；旧实现用未剥离的 trimmed，`> ``` ` 块引用
+          // 围栏行在段状态机内不被识别，与重扫分歧——一并修正）。
+          // 开栏记录 marker/length；块内 fence 形态行仅当 isFenceClose
+          // 才关闭（` ```INS` / ` ``` js` 保持 code）——根治 appendText
+          // 路径的 KNOWN-DEFECT（旧布尔翻转在 fence_end 行尾追加时把
+          // 合并行误判为 fence_end，与全量重扫分歧）。
+          if (!inCodeBlock) {
+            segmentCodeStates[i] = 'fence_start';
+            inCodeBlock = true;
+            const fenceOpen = FENCE_OPEN_RE.exec(htmlContent.trim());
+            fenceState = {
+              marker: fenceOpen![1] !== undefined ? '`' : '~',
+              length: (fenceOpen![1] ?? fenceOpen![3]).length,
+            };
+          } else if (
+            fenceState &&
+            isFenceClose(trimmed, fenceState.marker, fenceState.length)
+          ) {
+            segmentCodeStates[i] = 'fence_end';
+            inCodeBlock = false;
+            fenceState = null;
+          } else {
+            segmentCodeStates[i] = 'code';
+          }
           inIndentCode = false;
           prevBlockKind = 'code';
         } else if (!inCodeBlock && trimmed === '$$') {
@@ -2460,11 +2619,9 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
       }
     }
     const normalized = normalizeSetStatePartial(resolved);
-    if (normalized && typeof normalized === 'object' && !Array.isArray(normalized)) {
-      rawSetState(normalized as never, replace as never);
-    } else {
-      rawSetState(normalized as never, replace as never);
-    }
+    // P2-A1 回修 3：旧 if/else 两分支完全相同（历史遗留——前身 if 分支
+    // 为 materializeViews 产物，移除后未合并），合并为单语句
+    rawSetState(normalized as never, replace as never);
     // R6-P1：恢复惰性视图原型（zustand 合并产物是普通对象——若使用
     // replace 路径同理；空操作时 state 未替换，原型未变，判断后跳过）
     const s = store.getState();

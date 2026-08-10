@@ -360,6 +360,47 @@ export function formatAnnouncement(
 // 继续累积 value，窗口到期后以 textarea.value 为准一次性提交。
 const FLUSH_DELAY_MS = 50;
 
+/**
+ * 翻页目标行计算（P2 项 4 键盘增强：PageUp/PageDown）：
+ * 以「已挂载行几何」为视口行号来源（HeightMap.indexAt 像素→行的 DOM
+ * 等价实现）：视口顶行 = 第一个 bottom > scrollTop 的行，视口底行 =
+ * 最后一个 top < scrollTop + clientHeight 的行；页行数 = 顶底行号差
+ * （≥1，行高不均匀时近似，与 CM6 页翻语义同量级）：
+ * - PageUp 目标行 = 顶行 − 页行数（上翻一屏后位于新视口顶部的行）；
+ * - PageDown 目标行 = 底行 + 页行数；
+ * 收敛到 [0, lineCount-1]。滚动跟随由 HiddenInput 的光标越界滚动 effect
+ * 接管（目标行视口外时自动滚入，与 ArrowUp/Down 同机制）。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function pageNavigationTarget(
+  direction: 'up' | 'down',
+  scrollTop: number,
+  clientHeight: number,
+  lineCount: number,
+  mounted: MountedLineGeom[]
+): number {
+  if (lineCount <= 0 || mounted.length === 0) return 0;
+  const top = scrollTop;
+  const bottom = top + clientHeight;
+  // 视口顶行：第一个 bottom > scrollTop 的行（其前所有行都在视口上方）
+  let firstIdx = mounted[mounted.length - 1].index;
+  for (const m of mounted) {
+    if (m.bottom > top) {
+      firstIdx = m.index;
+      break;
+    }
+  }
+  // 视口底行：最后一个 top < scrollTop + clientHeight 的行
+  let lastIdx = mounted[0].index;
+  for (const m of mounted) {
+    if (m.top < bottom) lastIdx = m.index;
+    else break;
+  }
+  const pageLines = Math.max(1, lastIdx - firstIdx);
+  if (direction === 'up') return Math.max(0, firstIdx - pageLines);
+  return Math.min(lineCount - 1, lastIdx + pageLines);
+}
+
 export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store }) => {
   // R5：绑定实例 store（缺省回退全局单例）；组件内所有 store 读写
   // （订阅 / getState / setState）统一经本变量，多实例输入互不串台
@@ -1153,6 +1194,77 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
           }
         }
       }
+    } else if (e.key === 'PageUp' || e.key === 'PageDown') {
+      e.preventDefault();
+      // P2 项 4 键盘增强：翻页导航（浏览器默认在隐藏 textarea 上无效——
+      // value 恒空、无内容可翻，显式接管）。
+      // 目标行 = 视口顶/底行 ± 页行数（pageNavigationTarget，已挂载行
+      // 几何 = HeightMap.indexAt 的 DOM 等价实现）；列保持与 ArrowUp/Down
+      // 同款（字符宽度 Oracle 列预测 + grapheme 吸附）；滚动跟随由光标
+      // 越界滚动 effect 自动接管（目标行滚入视口）。
+      const container = containerRef.current;
+      if (!container) return;
+      const s = editorStore.getState();
+      const lineCount = s.getLineCount();
+      const mounted = collectMountedLines(
+        container,
+        container.getBoundingClientRect()
+      );
+      if (mounted.length === 0) return;
+      const targetIdx = pageNavigationTarget(
+        e.key === 'PageUp' ? 'up' : 'down',
+        container.scrollTop,
+        container.clientHeight,
+        lineCount,
+        mounted
+      );
+      const targetStart = s.lineOffsets.getOffset(targetIdx);
+      const targetText = s.getLine(targetIdx) ?? '';
+      // 列保持：当前光标列 X（相对当前行左缘）→ 目标行内最接近列
+      const curRect = getCoordinatesFromIndex(cursorPos, container);
+      let newPos = targetStart;
+      if (curRect) {
+        const curLineIdx = s.lineOffsets.findLineIndex(cursorPos);
+        const curLineEl = container.querySelector(
+          `[data-index="${curLineIdx}"]`
+        );
+        const relX = curLineEl
+          ? Math.max(0, curRect.left - curLineEl.getBoundingClientRect().left)
+          : 0;
+        const col = predictColumn(
+          targetText,
+          relX,
+          fallbackCharWidths(container)
+        );
+        newPos = targetStart + Math.min(col, targetText.length);
+      }
+      // grapheme 吸附（列预测可能劈开组合序列，与 ArrowUp/Down 同款）
+      newPos = targetStart + snapToGraphemeBoundary(targetText, newPos - targetStart);
+      if (e.shiftKey) {
+        // Shift+PageUp/Down：选区扩展——head 移到目标行，anchor 保持不动
+        editorStore.getState().moveHead(newPos);
+      } else {
+        fastCursorMove(newPos);
+      }
+    } else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      // P2 项 4 键盘增强：Ctrl+Home 文档首——位置 0 即文档开头（O(1)；
+      // 浏览器默认在隐藏 textarea 上无效，显式接管）
+      if (e.shiftKey) {
+        setSelection(selectionStart === cursorPos ? 0 : selectionStart, 0);
+      }
+      fastCursorMove(0);
+    } else if (e.key === 'End' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      // P2 项 4 键盘增强：Ctrl+End 文档尾——textLength O(1)（同 Ctrl+Home）
+      const textLength = editorStore.getState().textLength;
+      if (e.shiftKey) {
+        setSelection(
+          selectionStart === cursorPos ? textLength : selectionStart,
+          textLength
+        );
+      }
+      fastCursorMove(textLength);
     } else if (e.key === 'Home') {
       e.preventDefault();
       // R6-P1：行首定位经 LineOffsetTree（O(log n)），不再全文扫描 \n

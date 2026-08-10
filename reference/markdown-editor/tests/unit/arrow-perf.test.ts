@@ -188,7 +188,15 @@ describe('R6-P1 性能（ArrowLeft 行文本路径 / 物化惰性化）', () => 
     // 100 万行主数组 + 3k 尾段：旧实现在 set 热路径每次 O(全文) concat
     // 物化（约 3.6ms/append@1M）；惰性化后 append 只触尾段，O(尾段)
     const store = buildHugeStore(1_000_000);
-    store.setState({ streamTail: new Array(3000).fill('tail') });
+    store.setState({
+      streamTail: new Array(3000).fill('tail'),
+      // A1 回修 6：同时补 streamTailCodeState，使尾段行数与块状态数匹配
+      // （此前只设 streamTail，物化视图 codeBlockState 长度与 lines 不一致，
+      // 测试构造不完整；append 性能路径只测耗时不受影响，但构造应如实
+      // 反映双段存储语义——materializeViews 按 主数组.slice(0,-1) +
+      // 尾段 拼接，补全后 codeBlockState.length === lines.length）
+      streamTailCodeState: new Array(3000).fill('none'),
+    });
     const s = store.getState();
     // 物化视图此时应能正确读出（惰性 getter 按需物化，语义保持）
     expect(s.lines.length).toBe(1_000_000 + 3000 - 1);

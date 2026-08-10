@@ -114,7 +114,8 @@ const refDeleteBackward = (t: string, p: number): string => {
 const refDeleteRange = (t: string, a: number, b: number): string =>
   t.slice(0, a) + t.slice(b);
 
-/** 收敛断言：文本一致 + verifyConsistency + codeBlockState 与重扫一致 + fenceLines */
+/** 黑箱收敛断言（含 codeBlockState 与重扫逐行一致——KNOWN-DEFECT 登记
+ *  分支已随 P2-A1 fence 单源化修复删除，全量收敛断言恢复） */
 function assertConverged(label: string, expectedText: string): void {
   const s = useEditorStore.getState();
   expect(s.getText(), `${label}: 文本一致`).toBe(expectedText);
@@ -131,13 +132,6 @@ function assertConverged(label: string, expectedText: string): void {
   expect(s.fenceLines.length, `${label}: fenceLines 不越界`).toBeLessThanOrEqual(
     s.getLineCount()
   );
-}
-
-/** 黑箱收敛断言（不含 codeBlockState——供 KNOWN-DEFECT 登记分支复用） */
-function assertTextConsistent(label: string, expectedText: string): void {
-  const s = useEditorStore.getState();
-  expect(s.getText(), `${label}: 文本一致`).toBe(expectedText);
-  expect(s.verifyConsistency(), `${label}: verifyConsistency`).toBe(true);
 }
 
 describe('X1 交叉矩阵（unit 版：6 文档 × 6 操作 × 3 光标，24 组 LHS 抽样）', () => {
@@ -166,26 +160,21 @@ describe('X1 交叉矩阵（unit 版：6 文档 × 6 操作 × 3 光标，24 组
     const lineIdx = Math.floor(s.getLineCount() / 2);
     const pos = cursorPosFor(lineIdx, cursor);
 
-    // —— KNOWN-DEFECT 登记（R6-A 终验轮发现，引擎侧未修复，禁碰 src/）——
-    // fence 文档中间行恰为 fence_end 行（'```'）；光标落在其行尾时，插入
-    // 使该行变为 '```INS'（带 info 串，不再满足 parser 的闭合条件）。增量
-    // 收敛按 `trimmed.startsWith('```')` 布尔翻转判定（EditorStore.ts:782-790）
-    // 仍输出 fence_end；独立重扫按完整关闭条件（同字符 + run 长度 ≥ 开栏 +
-    // 无 info 串，parser.ts:701-720）输出 code——两套状态机在此组合分歧。
-    // 文本一致与 verifyConsistency 不受影响；分歧为渲染语义差异（UI 显示
-    // 围栏已关闭 vs 重扫语义仍在代码块内）。修复路径：增量 fence 判定镜像
-    // parser 完整关闭条件。修复后应删除本分支，恢复全量收敛断言。
-    const knownFenceEndInfoInsert =
-      docKey === 'fence' && cursor === 'end' && (op === 'insert' || op === 'redo');
+    // —— KNOWN-DEFECT 已修复（P2-A1 fence 单源化）——
+    // 原登记（R6-A 终验轮）：fence 文档中间行恰为 fence_end 行（'```'）；
+    // 光标落在其行尾时插入使该行变为 '```INS'（带 info 串，不再满足
+    // parser 的闭合条件）。旧增量按 `trimmed.startsWith('```')` 布尔翻转
+    // 仍判 fence_end，独立重扫按完整关闭条件（同字符 + run 长度 ≥ 开栏 +
+    // 无 info 串）判 code——两套状态机分歧。修复：parser.ts 导出
+    // isFenceClose 共享函数，增量状态机（updateLinesIncremental /
+    // appendText 段状态机）镜像 parser 完整围栏语义，增量与重扫收敛为
+    // 同一判定（fence-sync.test.ts 专项覆盖）。登记分支已删除，恢复
+    // assertConverged 全量收敛断言（含 codeBlockState 与重扫逐行一致）。
 
     if (op === 'insert') {
       useEditorStore.getState().setCursorPos(pos);
       useEditorStore.getState().insertText(INS_TEXT);
-      if (knownFenceEndInfoInsert) {
-        assertFenceKnownDefect(`${docKey} 插入`, refInsert(doc, pos, INS_TEXT));
-      } else {
-        assertConverged(`${docKey} 插入`, refInsert(doc, pos, INS_TEXT));
-      }
+      assertConverged(`${docKey} 插入`, refInsert(doc, pos, INS_TEXT));
     } else if (op === 'delete') {
       useEditorStore.getState().setCursorPos(pos);
       useEditorStore.getState().deleteText(true);
@@ -204,40 +193,13 @@ describe('X1 交叉矩阵（unit 版：6 文档 × 6 操作 × 3 光标，24 组
       useEditorStore.getState().setCursorPos(pos);
       useEditorStore.getState().insertText(INS_TEXT);
       const afterInsert = refInsert(doc, pos, INS_TEXT);
-      if (knownFenceEndInfoInsert) {
-        assertFenceKnownDefect(`${docKey} 插入(undo/redo 前置)`, afterInsert);
-      } else {
-        assertConverged(`${docKey} 插入(undo/redo 前置)`, afterInsert);
-      }
+      assertConverged(`${docKey} 插入(undo/redo 前置)`, afterInsert);
 
       useEditorStore.getState().undo();
       assertConverged(`${docKey} undo 回退`, doc);
 
       useEditorStore.getState().redo();
-      if (knownFenceEndInfoInsert) {
-        assertFenceKnownDefect(`${docKey} redo 重放`, afterInsert);
-      } else {
-        assertConverged(`${docKey} redo 重放`, afterInsert);
-      }
+      assertConverged(`${docKey} redo 重放`, afterInsert);
     }
   });
 });
-
-/**
- * KNOWN-DEFECT 登记断言：文本/一致性不受影响，仅 codeBlockState 与重扫
- * 分歧（增量 startsWith 布尔翻转 vs parser 完整关闭条件）。登记现状，
- * 引擎修复后本函数应移除（连同调用点），恢复 assertConverged 全量收敛。
- */
-function assertFenceKnownDefect(label: string, expectedText: string): void {
-  assertTextConsistent(label, expectedText);
-  const s = useEditorStore.getState();
-  const rescan = MarkdownParser.computeLineOffsets(s.getText());
-  // 登记分支仅用于 fence 文档（DOCS.fence 固定 6 行），fence_end 行恒为 3
-  const fenceIdx = 3;
-  // 现状登记（白箱）：增量按 startsWith 布尔翻转保持 fence_end
-  expect(s.codeBlockState[fenceIdx], `${label}: 增量现状=fence_end`).toBe('fence_end');
-  // 重扫语义（正确）：带 info 串的行不能闭合围栏
-  expect(rescan.codeBlockState[fenceIdx], `${label}: 重扫语义=code`).toBe('code');
-  // 两套状态分歧是引擎已知偏差（注释见 MATRIX 用例内登记说明），
-  // 本断言仅在偏差被修复（或增量/重扫同步）时失效——届时移除此登记分支。
-}
