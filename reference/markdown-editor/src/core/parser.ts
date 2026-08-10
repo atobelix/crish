@@ -380,7 +380,12 @@ export class MarkdownParser {
         listContexts[i],
         // 懒延续继承层级（B8a）：无块引用标记（或标记层数不足）的段落
         // 延续行继承前一非空白块引用段落行的容器层级（null = 非懒延续）。
-        lazyContinuation[i]
+        lazyContinuation[i],
+        // B8c：行尾硬换行上下文——本行是否为「块结束」（无后继行或下一行
+        // 为空白行）：硬换行不发生在块末尾（spec 例 644/645），块末行尾的
+        // 尾随空白/反斜杠保持文本语义。近似判定（列表项/标题后紧邻行的
+        // 精确块边界超出行级模型，登记偏差）。
+        i === lines.length - 1 || lines[i + 1].trim() === ''
       );
     }
     return {
@@ -735,9 +740,17 @@ export class MarkdownParser {
       // 围栏形态判定（开/关共用，trim 后行）：反引号 run ≥3（info 串不允许
       // 含反引号——spec 原文：backtick fences 的 info string 不能含 backtick，
       // ` ``` aa `` ` 整行不是围栏，退化为段落）或波浪线 run ≥3（info 串无限制，
-      // `~~~ aa ``` ~~~` 合法）。trim 后判定的既有行为保留（`    ``` 四空格
-      // 缩进仍按围栏处理，02 §7.2 登记偏差，不动）。
-      const fenceOpen = /^(```+)([^`]*)$|^(~~~+).*$/.exec(trimmed);
+      // `~~~ aa ``` ~~~` 合法）。
+      // B8c（spec 例 134/137）：开/闭围栏行允许至多 3 空格缩进——前导缩进
+      // ≥4 列（tab 按停靠 4 展开）的行不是围栏形态（`    ``` 是缩进代码块
+      // 的内容，spec 例 134）；开围栏行 1-3 空格缩进合法（spec 例 131-133，
+      // 开行缩进量的内容剥除属投影器配合项）。indentCols 在剥离块引用
+      // 前缀后的内容行上计算（`> ``` 为 0 列、`>   ``` 为 2 列）。
+      const indentCols = this.leadingIndentColumns(bqContent);
+      const fenceOpen =
+        indentCols <= 3
+          ? /^(```+)([^`]*)$|^(~~~+).*$/.exec(trimmed)
+          : null;
       // HTML 块内行：优先级最高——fence/math/缩进代码判定全部让路
       // （spec 4.6：「HTML 块内的 HTML 若可被识别为 start condition 将
       // 原样透传、不改变解析器状态」——`<div>` 块内的 ``` 围栏行、`<pre>`
@@ -849,7 +862,8 @@ export class MarkdownParser {
           codeBlockState[i] = 'code';
         }
         // 围栏代码块内缩进不生效（CommonMark）；fence 判定先于缩进代码，
-        // 且 `    ```（4 空格）仍按 fence 处理——trim 后判定的既有行为，登记偏差。
+        // 且 `    ```（4 空格）已由 B8c 围栏缩进门挡在围栏形态之外——
+        // 落入下方缩进代码判定（spec 例 134，02 §7.2 登记偏差已修复）。
         inIndentCode = false;
         prevBlockKind = 'code';
       } else if (!inCodeBlock && trimmed === '$$') {
@@ -1129,15 +1143,16 @@ export class MarkdownParser {
   }
 
   /**
-   * 剥离块引用前缀（与 parseNormalLine 同一正则 `^\s*>\s?`），
-   * 返回前缀层级与剥离后的内容——Setext 判定必须发生在前缀剥离之后
-   * （02-解析器正确性.md §2.1 冲突点）。
-   * 已知偏差（B8a 复核保留）：正则 `\s*` 会吞掉前导缩进（`    > foo`
-   * 被当作块引用前缀、`> >     > Even` 剥成 3 层）——CommonMark 规定
-   * marker 前至多 3 空格缩进（spec 例 231：4 空格是缩进代码块），但
-   * 既有行为被 tests/unit/fuzz-document-typography.test.ts 注册（断言
-   * `> >     > Even` 为 3 层 body），且投影器 stripBlockquotePrefix 同步
-   * 依赖该贪婪语义；修正需引擎+投影器+测试三方协同，上报主调度裁决。
+   * 剥离块引用前缀（与 parseLine / parseNormalLine / parseCodeLine 同一
+   * 正则 `^ {0,3}>\s?`），返回前缀层级与剥离后的内容——Setext 判定必须
+   * 发生在前缀剥离之后（02-解析器正确性.md §2.1 冲突点）。
+   * B8c（spec 例 231）：marker 前至多 3 空格缩进——`    > foo`（4 空格）
+   * 不再是块引用，落入缩进代码块判定（CommonMark：>3 空格缩进的 `>`
+   * 行按缩进代码块处理）。贪婪 `\s*` 吞缩进的旧行为（`> >     > Even`
+   * 剥成 3 层）为非 CommonMark 注册行为，B8a 已登记偏差，本轮收紧——
+   * tests/unit/fuzz-document-typography.test.ts 的 3 层断言需同步
+   * （测试断言更新登记，tests/ 域禁碰）；投影器 stripBlockquotePrefix
+   * 同步收紧属 B8c 登记配合项（tests/commonmark/ 只读域）。
    */
   private static stripBlockquoteContext(
     line: string
@@ -1145,7 +1160,7 @@ export class MarkdownParser {
     let level = 0;
     let content = line;
     let m: RegExpMatchArray | null;
-    while ((m = content.match(/^\s*>\s?/))) {
+    while ((m = content.match(/^ {0,3}>\s?/))) {
       level++;
       content = content.substring(m[0].length);
     }
@@ -1328,11 +1343,9 @@ export class MarkdownParser {
     '^ {0,3}<\\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[ \\t]|/?>|$)',
     'i'
   );
-  // type 7：完整开/闭标签行（tag name 排除 pre/script/style/textarea——
-  // 它们由 type 1 接管，`</script>` 单独成行既非 type 1 start 也非 type 7，
-  // 按普通段落处理，与 spec 一致）。
-  private static HTML_BLOCK_TYPE7_RE =
-    /^ {0,3}<(\/?)([a-zA-Z][a-zA-Z0-9-]*)(?:[ \t]+[^>]*)?[ \t]*\/?>[ \t]*$/i;
+  // type 7 判定自 B8c 起由 matchRawHtmlTag（6.11 严格文法）单源接管——
+  // 见 matchHtmlBlockStart 注释（旧的宽松 `[^>]*` 属性串已移除；
+  // EditorStore 增量路径的 HTML_BLOCK_TYPE7_RE 副本待同步，登记配合项）。
 
   /**
    * HTML 块 start condition 判定（CommonMark 4.6）：
@@ -1344,6 +1357,11 @@ export class MarkdownParser {
    * - 列表标记行（`- <div>`、`1. <div>`）不进 HTML 块——行级模型无
    *   容器状态，若判块会丢失 `<li>` 容器投影（spec 例 175 的列表渲染
    *   依赖列表行内 html 原样透传，登记偏差）。
+   * - B8c（spec 例 619/622/624/632）：type 7 的「完整标签行」必须通过
+   *   6.11 行内 HTML 严格文法（matchRawHtmlTag 单源判定）——`<a h*#ref>`
+   *   （非法属性名）、`</a href>`（闭合标签带属性）、`<a href="\"">`
+   *   （引号值不闭合）等非法标签行不是 HTML 块，按段落文本转义；
+   *   旧的宽松 `[^>]*` 属性串会把非法行误判为块。
    * 入参约定：content 已剥离块引用前缀、缩进 <4 列、非空行。
    */
   private static matchHtmlBlockStart(
@@ -1356,20 +1374,27 @@ export class MarkdownParser {
     }
     if (this.HTML_BLOCK_TYPE6_RE.test(content)) return { type: 6 };
     if (prevBlockKind === 'body' || prevBlockKind === 'list') return null;
-    const t7 = this.HTML_BLOCK_TYPE7_RE.exec(content);
-    if (t7) {
-      const name = t7[2].toLowerCase();
-      if (
-        name === 'script' ||
-        name === 'pre' ||
-        name === 'style' ||
-        name === 'textarea'
-      ) {
-        return null;
+    // type 7：完整开/闭标签行——整行（≤3 前导空格 + 标签 + 尾随空白）
+    // 必须是单个合法 open/close 标签（6.11 文法）；script/pre/style/
+    // textarea 由 type 1 接管（`</script>` 单独成行既非 type 1 start
+    // 也非 type 7，按普通段落处理，与 spec 一致）。
+    {
+      const lineContent = content.replace(/^ {0,3}/, '');
+      const tag = this.matchRawHtmlTag(lineContent);
+      if (tag && (tag.kind === 'open' || tag.kind === 'close')) {
+        const name = (tag.tagName ?? '').toLowerCase();
+        if (
+          name !== 'script' &&
+          name !== 'pre' &&
+          name !== 'style' &&
+          name !== 'textarea' &&
+          lineContent.slice(tag.raw.length).trim() === ''
+        ) {
+          return { type: 7 };
+        }
       }
-      return { type: 7 };
+      return null;
     }
-    return null;
   }
 
   /**
@@ -1398,6 +1423,87 @@ export class MarkdownParser {
       default:
         return true;
     }
+  }
+
+  /**
+   * 行内原始 HTML 标签匹配（CommonMark 6.11，B8c 重写）：
+   * 六种形态按 spec 文法严格匹配（单行窗口，跨行标签属行式解析器已知局限）：
+   * - 注释：`<!-->` / `<!--->` / `<!--` + 不含 `-->` 的串 + `-->`
+   *   （spec 例 626：`<!-->` 是注释、`<!--> foo -->` 中首段注释后
+   *   残余 `-->` 按文本转义）；
+   * - 处理指令：`<?` + 不含 `?>` 的串 + `?>`（例 627）；
+   * - 声明：`<!` + ASCII 字母 + 不含 `>` 的串 + `>`（例 628）；
+   * - CDATA 段：`<![CDATA[` + 不含 `]]>` 的串 + `]]>`（例 629）；
+   * - 闭合标签：`</` + 标签名 + 可选空白 + `>`（**不含属性**，例 624）；
+   * - 开标签：`<` + 标签名 + 属性* + 可选空白 + 可选 `/` + `>`——
+   *   标签名 = 字母 + 字母/数字/连字符（`<responsive-image>`，例 617）；
+   *   属性名 = `[A-Za-z_:][A-Za-z0-9_.:-]*`（`h*#ref` 非法，例 619）；
+   *   属性值 = 单/双引号串（闭合引号内任意非引号字符）或非空裸值
+   *   （不含空白/`"'=<>`/反引号；`hi'` 非法，例 620；`\"` 不转义引号，
+   *   `href="\""` 非法，例 632）；属性间须有空白（`'bar'title` 非法，
+   *   例 622）。
+   * 返回值含开标签的 attr 原文（供 html_element 属性解析）与自闭合
+   * 标志；匹配失败返回 null（按普通文本转义输出，不猜测性透传）。
+   */
+  private static matchRawHtmlTag(
+    sub: string
+  ):
+    | {
+        raw: string;
+        kind: 'comment' | 'pi' | 'declaration' | 'cdata' | 'open' | 'close';
+        tagName?: string;
+        attrStr?: string;
+        isSelfClosing?: boolean;
+      }
+    | null {
+    // 注释（`<!-->` 与 `<!--->` 为 spec 特例形态，先于一般形态）
+    let m: RegExpExecArray | null;
+    if (sub.startsWith('<!-->')) {
+      return { raw: '<!-->', kind: 'comment' };
+    }
+    if (sub.startsWith('<!--->')) {
+      return { raw: '<!--->', kind: 'comment' };
+    }
+    m = /^<!--(?:[^-]|-(?!->))*-->/.exec(sub);
+    if (m) return { raw: m[0], kind: 'comment' };
+    // 处理指令
+    m = /^<\?(?:[^?]|\?(?!>))*\?>/.exec(sub);
+    if (m) return { raw: m[0], kind: 'pi' };
+    // CDATA 段（先于声明——`<![` 的 `[` 不在声明首字母范围，天然互斥）
+    m = /^<!\[CDATA\[(?:[^\]]|\](?!\]>))*\]\]>/.exec(sub);
+    if (m) return { raw: m[0], kind: 'cdata' };
+    // 声明
+    m = /^<![A-Za-z][^>]*>/.exec(sub);
+    if (m) return { raw: m[0], kind: 'declaration' };
+    // 闭合标签（无属性）
+    m = /^<\/[A-Za-z][A-Za-z0-9-]*[ \t]*>/.exec(sub);
+    if (m) {
+      return {
+        raw: m[0],
+        kind: 'close',
+        tagName: m[0].slice(2).replace(/[ \t]*>$/, ''),
+      };
+    }
+    // 开标签：tagname + attrs* + 空白 + 可选 `/` + `>`
+    m =
+      /^<([A-Za-z][A-Za-z0-9-]*)((?:[ \t]+[A-Za-z_:][A-Za-z0-9_.:-]*(?:[ \t]*=[ \t]*(?:"[^"]*"|'[^']*'|[^ \t"'=<>`]+))?)*)[ \t]*(\/)?>/.exec(
+        sub
+      );
+    if (m) {
+      const tagName = m[1].toLowerCase();
+      // 自闭合：显式 `/>`，或 HTML 空元素名单（`<br>` 等，渲染惯例）
+      const isSelfClosing =
+        m[3] !== undefined ||
+        ['br', 'hr', 'img', 'input', 'meta', 'link'].includes(tagName);
+      return {
+        raw: m[0],
+        kind: 'open',
+        tagName,
+        attrStr: m[2],
+        isSelfClosing,
+      };
+    }
+    return null;
   }
 
   /**
@@ -1507,10 +1613,15 @@ export class MarkdownParser {
     // 懒延续继承层级（B8a）：null = 非懒延续行。必须进缓存键——同文本行
     // 在「块引用段落懒延续」与「文档根普通行」下产出不同 blockquoteLevel
     // （例 247 的 `baz` 与文档根 `baz`），不进键会跨文档缓存串扰。
-    lazyInherit: number | null = null
+    lazyInherit: number | null = null,
+    // B8c：本行是否为块结束（parse 预扫描产物；渲染路径不传按 false——
+    // 硬换行标记仅在全量 parse 携带上下文时启用，行尾尾随空白语义不变）。
+    // 必须进缓存键——同文本行在「块中段」与「块末尾」产出不同 token
+    // （`foo  ` 块中段是 hard_break、块末尾保持文本，spec 例 644/645）。
+    blockEnd: boolean = false
   ): LineNode {
     // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 列表上下文
-    // + 懒延续层级 + 全局规则版本 + 完整行文本：
+    // + 懒延续层级 + 块结束标志 + 全局规则版本 + 完整行文本：
     // blockquote 前缀、fence/math 跨行状态、Setext 上下文均已编码在键内
     // （review-02 §7.1/§7.3：上下文必须进键，禁止回写缓存行），
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
@@ -1531,6 +1642,8 @@ export class MarkdownParser {
       ':' +
       (lazyInherit !== null ? 'B' + lazyInherit : 'Bx') +
       ':' +
+      (blockEnd ? 'E1' : 'E0') +
+      ':' +
       lineText;
     const cached = this.astCache.get(cacheKey);
     if (cached) {
@@ -1548,9 +1661,9 @@ export class MarkdownParser {
     let blockquoteLevel = 0;
     let trimmed = lineText;
     let bMatch;
-    // 前缀正则 `^\s*>\s?`（含贪婪吞缩进，B8a 复核保留——见
-    // stripBlockquoteContext 的已知偏差登记）
-    while ((bMatch = trimmed.match(/^\s*>\s?/))) {
+    // 前缀正则 `^ {0,3}>\s?`（B8c 收紧：marker 前至多 3 空格缩进，
+    // spec 例 231——见 stripBlockquoteContext 注释）
+    while ((bMatch = trimmed.match(/^ {0,3}>\s?/))) {
       blockquoteLevel++;
       trimmed = trimmed.substring(bMatch[0].length);
     }
@@ -1712,7 +1825,8 @@ export class MarkdownParser {
       setextLevel,
       refDefs,
       listContext,
-      lazyInherit
+      lazyInherit,
+      blockEnd
     );
     // B8a：懒延续行的 blockquoteLevel 由上下文决定（parseLine 与
     // parseNormalLine 计算一致，此处幂等覆盖兜底）
@@ -1758,9 +1872,9 @@ export class MarkdownParser {
     let remainingTextForPrefix = lineText;
     let blockquoteMatch;
 
-    // 前缀正则 `^\s*>\s?`（含贪婪吞缩进，B8a 复核保留——见
-    // stripBlockquoteContext 的已知偏差登记）
-    while ((blockquoteMatch = remainingTextForPrefix.match(/^\s*>\s?/))) {
+    // 前缀正则 `^ {0,3}>\s?`（B8c 收紧：marker 前至多 3 空格缩进，
+    // spec 例 231——见 stripBlockquoteContext 注释）
+    while ((blockquoteMatch = remainingTextForPrefix.match(/^ {0,3}>\s?/))) {
       pos += blockquoteMatch[0].length;
       remainingTextForPrefix = remainingTextForPrefix.substring(blockquoteMatch[0].length);
     }
@@ -1875,7 +1989,10 @@ export class MarkdownParser {
     // 懒延续继承层级（B8a）：非 null 时本行是块引用段落的懒延续行——
     // 跳过全部块级判定（hr/ATX/表格/列表），按段落文本行内解析
     // （spec 5.2 Laziness，例 238：`    - bar` 是段落文本而非列表）。
-    lazyInherit: number | null = null
+    lazyInherit: number | null = null,
+    // B8c：本行是否为块结束（parse 预扫描产物，见 parseLine 注释）——
+    // 硬换行标记的门控：块末尾行尾的 2+ 空格/反斜杠保持文本语义。
+    blockEnd: boolean = false
   ): LineNode {
     const tokens: InlineNode[] = [];
     let pos = 0;
@@ -1916,9 +2033,9 @@ export class MarkdownParser {
     // Parse blockquote prefixes first
     let remainingTextForPrefix = lineText;
     let blockquoteMatch;
-    // 前缀正则 `^\s*>\s?`（含贪婪吞缩进，B8a 复核保留——见
-    // stripBlockquoteContext 的已知偏差登记）
-    while ((blockquoteMatch = remainingTextForPrefix.match(/^\s*>\s?/))) {
+    // 前缀正则 `^ {0,3}>\s?`（B8c 收紧：marker 前至多 3 空格缩进，
+    // spec 例 231——见 stripBlockquoteContext 注释）
+    while ((blockquoteMatch = remainingTextForPrefix.match(/^ {0,3}>\s?/))) {
       blockquoteLevel++;
       pos += blockquoteMatch[0].length;
       remainingTextForPrefix = remainingTextForPrefix.substring(blockquoteMatch[0].length);
@@ -2111,6 +2228,46 @@ export class MarkdownParser {
       ? this.groupTableCells(tokens)
       : tokens;
 
+    // —— B8c：硬换行标记（CommonMark 6.13）——
+    // 行尾 2+ 空格/tab（或行尾反斜杠）后的换行是硬换行（`foo  \nbaz` →
+    // `<br />`）。行式解析器在行级标记：把最后一个文本 token 的尾随
+    // 空白/反斜杠拆出为 hard_break 令牌（raw 保持覆盖守恒；content 置空，
+    // 与 heading_prefix 等结构令牌同构——编辑器不渲染尾随空白）。投影器
+    // 把 hard_break 映射 `<br />` 属 B8c 登记配合项（tests/commonmark/
+    // 只读域；投影前该令牌零输出，跑分无回归）。已知偏差（登记）：
+    // 未闭合代码 span / 未闭合 HTML 标签内的行尾不产生硬换行
+    // （spec 例 640/642），行级模型无法判定跨行闭合，留待投影器配合轮
+    // 按段落上下文收敛。仅作用于 body 段落行——ATX/Setext 标题行尾
+    // 空白由标题语义剥除（spec 例 647），不产生硬换行；块末尾
+    // （blockEnd）行尾空白/反斜杠保持文本语义（spec 例 644/645）。
+    if (lineType === 'body' && !isSetextHeading && !blockEnd && finalTokens.length > 0) {
+      const hbSuffix = this.matchHardBreakSuffix(lineText);
+      if (hbSuffix) {
+        const last = finalTokens[finalTokens.length - 1];
+        if (
+          last.type === 'text' &&
+          last.raw.length > hbSuffix.length &&
+          last.raw.endsWith(hbSuffix)
+        ) {
+          const textLen = last.raw.length - hbSuffix.length;
+          const head: InlineNode = {
+            ...last,
+            raw: last.raw.slice(0, textLen),
+            content: last.content.slice(0, last.content.length - hbSuffix.length),
+            length: textLen,
+          };
+          const hardBreak: InlineNode = {
+            type: 'hard_break' as InlineNode['type'],
+            raw: hbSuffix,
+            content: '',
+            localOffset: last.localOffset + textLen,
+            length: hbSuffix.length,
+          };
+          finalTokens.splice(finalTokens.length - 1, 1, head, hardBreak);
+        }
+      }
+    }
+
     // R1.5-B：空行后列表项延续（例 256/258/262/277）——行仍是普通段落
     // （body），但携带列表容器上下文：listIndent = 列表缩进 + listContinuation
     // 标志，投影器据此把该行并入同一 <li> 的第二个 <p>（AST 层与普通
@@ -2215,6 +2372,9 @@ export class MarkdownParser {
    * 从 `[` 位置开始，`[` 深度 +1、未转义 `]` 深度 -1，深度归 0 即 label 结束。
    * `[link [foo [bar]]]` 与 `[ref[]`（未平衡）由此正确区分——
    * 后者扫描到行尾深度未归 0 → 匹配失败（不解析，spec 例 65/66）。
+   * B8c（spec 例 342）：代码 span 内的 `]` 不终止 label——遇反引号 run
+   * 时按 6.1 尝试等长闭合（matchCodeSpan 语义），闭合成功则整段跳过，
+   * 否则反引号按字面继续逐字符扫描。
    * 长度上限 2000（现状偏差，CommonMark 为 999）。
    */
   private static matchLinkLabel(
@@ -2231,6 +2391,14 @@ export class MarkdownParser {
         j += 2;
         continue;
       }
+      if (c === '`') {
+        // 代码 span 边界：等长 run 闭合则跳过整段（span 内 `]` 不计数）
+        const span = this.matchCodeSpan(text, j);
+        if (span) {
+          j += span.length;
+          continue;
+        }
+      }
       if (c === '[') {
         depth++;
       } else if (c === ']') {
@@ -2239,6 +2407,86 @@ export class MarkdownParser {
       }
       j++;
     }
+    return null;
+  }
+
+  /**
+   * 代码 span 匹配（CommonMark 6.1，B8c 重写）：
+   * 以「完整反引号 run」为开括串（run 即前后无接续反引号的最大连续段），
+   * 向后扫描「等长反引号串」闭合——run 长度 ≠ 开括长度的其它反引号串
+   * 一律跳过（`` ` `` ` `` 的 2-run 是内容，spec 例 330/331/340；
+   * ```foo`` 无等长闭合 → 整段回退文本，spec 例 347）。
+   * 内容按 6.1 归一化：行尾换行 → 空格（行式解析器单行内无换行，
+   * 跨行代码 span 属已知局限）；首尾均为空格且非全空格时各剥一个。
+   * 反斜杠在代码 span 内按字面保留（原子上下文，不参与转义）。
+   * 扫描窗口与 matchLinkLabel 同界（2000 字符，防超长行 ReDoS）。
+   */
+  private static matchCodeSpan(
+    text: string,
+    pos: number
+  ): { raw: string; content: string; length: number } | null {
+    if (text[pos] !== '`') return null;
+    let openLen = 0;
+    while (pos + openLen < text.length && text[pos + openLen] === '`') {
+      openLen++;
+    }
+    const max = Math.min(text.length, pos + 2000);
+    let j = pos + openLen;
+    while (j < max) {
+      if (text[j] === '`') {
+        let run = 0;
+        while (j + run < max && text[j + run] === '`') {
+          run++;
+        }
+        if (run === openLen) {
+          const raw = text.substring(pos, j + run);
+          return {
+            raw,
+            content: this.normalizeCodeSpanContent(text.substring(pos + openLen, j)),
+            length: j + run - pos,
+          };
+        }
+        j += run;
+      } else {
+        j++;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 代码 span 内容归一化（CommonMark 6.1）：换行 → 空格；若结果以空格
+   * 开头且以空格结尾、且非全空格，则首尾各剥一个空格
+   * （`` ` `` ` `` → `` `` ` ``，spec 例 330；`` `  ``  ` `` → `` `` ` ``）。
+   */
+  private static normalizeCodeSpanContent(s: string): string {
+    const c = s.replace(/\r\n|\r|\n/g, ' ');
+    if (
+      c.length >= 2 &&
+      c[0] === ' ' &&
+      c[c.length - 1] === ' ' &&
+      c.trim() !== ''
+    ) {
+      return c.slice(1, -1);
+    }
+    return c;
+  }
+
+  /**
+   * 行尾硬换行后缀判定（CommonMark 6.13，B8c）：
+   * - 行尾 2+ 空格/tab（`foo  `，混合空白 run 同样成立）→ 返回该 run；
+   * - 行尾奇数个反斜杠（`foo\`，末个反斜杠紧跟换行即硬换行；偶数个时
+   *   末个反斜杠是转义对的产物，行尾是普通软换行）→ 返回 `\`；
+   * - 其余（含单个尾随空格、无后缀）→ null（软换行）。
+   */
+  private static matchHardBreakSuffix(line: string): string | null {
+    const sp = /[ \t]{2,}$/.exec(line);
+    if (sp) return sp[0];
+    let k = 0;
+    for (let idx = line.length - 1; idx >= 0 && line[idx] === '\\'; idx--) {
+      k++;
+    }
+    if (k % 2 === 1) return '\\';
     return null;
   }
 
@@ -2477,6 +2725,22 @@ export class MarkdownParser {
         'image',
         /^!\[((?:[^\]\\]|\\.){0,2000})\]\(((?:[^)\\]|\\.){0,2000})\)/
       ),
+      // 代码 span（B8c 重写，CommonMark 6.1 优先于链接——spec 例 342：
+      // `[not a `link](/foo`)` 中 code span 先消费，`[` 不构成链接）：
+      // 完整反引号 run 开括 + 等长 run 闭合，内容首尾空格归一化。
+      {
+        name: 'code_span',
+        match: (text, pos) => {
+          const span = MarkdownParser.matchCodeSpan(text, pos);
+          if (!span) return null;
+          return {
+            type: 'code',
+            raw: span.raw,
+            content: span.content,
+            length: span.length,
+          };
+        },
+      },
       // 内联链接（手写匹配，见 tryMatchInlineLink）：栈式 label（含嵌套 `[bar]`）+
       // 目标/标题正则（任务 5：裸目标禁空白、括号嵌套平衡、title 引号/括号边界）。
       {
@@ -2517,7 +2781,6 @@ export class MarkdownParser {
             : null;
         },
       },
-      regexRule('code_span', 'code', /^(`+)(.*?)\1/),
       startCloseRule('bold_italic_strong', '***', '***', 'bold_italic'),
       startCloseRule('bold_strong', '**', '**', 'bold'),
       startCloseRule('italic_em', '*', '*', 'italic'),
@@ -2568,11 +2831,24 @@ export class MarkdownParser {
       regexRule('sup_caret', 'sup', /^\^([^\s^]{1,500})\^/),
       regexRule('sub_tilde', 'sub', /^~([^\s~]{1,500})~/),
       startCloseRule('spoiler', '||', '||', 'spoiler'),
-      regexRule(
-        'html_tag',
-        'html_tag',
-        /^<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s+[^>]*)?\/?>/
-      ),
+      // 原始 HTML 标签（B8c 重写，CommonMark 6.11 严格文法）：
+      // 注释 / PI / 声明 / CDATA / 开闭标签经 matchRawHtmlTag 单源判定——
+      // 取代宽松正则（`<a h*#ref>`、`<a href="hi'` 等非法标签按文本转义，
+      // spec 例 619/620）。scanTokens 的 `<` 分支对开标签已先行配对
+      // html_element，此处兜底其余形态（自闭合 / 孤立标签 / 闭合标签）。
+      {
+        name: 'html_tag',
+        match: (text, pos) => {
+          const tag = MarkdownParser.matchRawHtmlTag(slice(text, pos));
+          if (!tag) return null;
+          return {
+            type: 'html_tag',
+            raw: tag.raw,
+            content: tag.raw,
+            length: tag.raw.length,
+          };
+        },
+      },
       regexRule('table_pipe', 'table_pipe', /^\|/),
     ];
 
@@ -2995,20 +3271,14 @@ export class MarkdownParser {
 
       // Check for HTML open tag with possible closing tag on the line
       if (sub.startsWith('<')) {
-        // tagName 白名单校验（02 §4.3 根因修复）：HTML 标签名后必须紧跟
-        // 空白（属性）或 `/>` 或 `>`——`<http://x>` 中 `http` 后直接是 `://`，
-        // 不再被当作标签名，避免无谓的全行 `</http>` 闭合查找；自动链接由此让路。
-        const htmlMatch = /^<([a-zA-Z][a-zA-Z0-9-]*)(?:\s+([^>]*?))?(\/?)>/.exec(
-          sub
-        );
-        if (htmlMatch) {
-          const tagName = htmlMatch[1].toLowerCase();
-          const attrStr = htmlMatch[2] ?? '';
-          const openTag = htmlMatch[0];
-          const isSelfClosing =
-            openTag.endsWith('/>') ||
-            ['br', 'hr', 'img', 'input', 'meta', 'link'].includes(tagName);
-
+        // B8c：CommonMark 6.11 严格标签文法（matchRawHtmlTag 单源判定）——
+        // 取代旧的宽松正则：`<a h*#ref="hi">`（非法属性名，例 619）、
+        // `<a href="hi'>`（引号值未闭合，例 620）、`</a href>`（闭合标签
+        // 带属性，例 624）等一律按普通文本转义，不再猜测性透传。
+        // `<http://x>` 自动链接依旧让路（`:` 非标签名/属性字符）。
+        const tag = this.matchRawHtmlTag(sub);
+        if (tag) {
+          const tagName = tag.tagName ?? '';
           // isSpecialTag 豁免名单：这些标签由 ruler 内置起止规则接管语义
           // （sub/sup/kbd/ins 是编辑器扩展语义）。`<u>` 已移出名单与规则表
           // （02 §4.3 修复）——CommonMark raw HTML 语义，走 html_element 分支。
@@ -3016,7 +3286,7 @@ export class MarkdownParser {
             tagName
           );
 
-          if (!isSelfClosing && !isSpecialTag) {
+          if (tag.kind === 'open' && !tag.isSelfClosing && !isSpecialTag) {
             // 失败签名键：与 ruler 内置同名起止规则（如 '<b>'）共用同一键——
             // 二者闭合语义一致（闭合标记都是 `</tagName>`），记忆可互查互写。
             const tagKey = '<' + tagName + '>';
@@ -3029,12 +3299,14 @@ export class MarkdownParser {
               const closeTag = `</${tagName}>`;
               const closeIdx = text
                 .toLowerCase()
-                .indexOf(closeTag.toLowerCase(), i + openTag.length);
+                .indexOf(closeTag.toLowerCase(), i + tag.raw.length);
               if (closeIdx !== -1) {
-                const { attributes, style } = this.parseHtmlAttributes(attrStr);
+                const { attributes, style } = this.parseHtmlAttributes(
+                  tag.attrStr ?? ''
+                );
                 const htmlRule = {
                   type: 'html_element',
-                  start: openTag,
+                  start: tag.raw,
                   close: closeTag,
                   tagName,
                   attributes,
@@ -3055,7 +3327,7 @@ export class MarkdownParser {
                     type: 'html_element',
                     raw: text.substring(i, i + res.length),
                     content: text.substring(
-                      i + openTag.length,
+                      i + tag.raw.length,
                       i + res.length - closeTag.length
                     ),
                     children: res.tokens,
@@ -3080,6 +3352,19 @@ export class MarkdownParser {
                 }
               }
             }
+          } else if (!isSpecialTag) {
+            // 注释 / PI / 声明 / CDATA / 闭合标签 / 自闭合开标签：
+            // raw 原样透传（html_tag 语义，CommonMark raw HTML 逐字节输出）
+            flushText();
+            innerTokens.push({
+              type: 'html_tag' as InlineNode['type'],
+              raw: tag.raw,
+              content: tag.raw,
+              localOffset: localOffset + i,
+              length: tag.raw.length,
+            });
+            i += tag.raw.length;
+            matched = true;
           }
         }
       }
