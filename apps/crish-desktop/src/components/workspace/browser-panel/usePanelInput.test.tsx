@@ -13,12 +13,22 @@ import type { BrowserFrameMeta } from './browserPanelTypes';
 const META: BrowserFrameMeta = { seq: 1, width: 800, height: 600 };
 
 /** 测试载体：把 handlers 挂到 div 上（getRect 走 jsdom 零值 DOMRect）。 */
-function Harness({ enabled }: { enabled: boolean }) {
+function Harness({
+  enabled,
+  composing,
+  onUserInput,
+}: {
+  enabled: boolean;
+  composing?: boolean;
+  onUserInput?: () => void;
+}) {
   const ref = useRef<HTMLDivElement | null>(null);
   const h = usePanelInput({
     enabled,
     getFrameMeta: () => META,
     getRect: () => ref.current?.getBoundingClientRect() ?? null,
+    composing,
+    onUserInput,
   });
   return (
     <div
@@ -209,5 +219,66 @@ describe('usePanelInput', () => {
     fireEvent.mouseDown(layer, { clientX: 400, clientY: 400, button: 0, buttons: 1 });
     await waitInvocations(3);
     expect(input.mock.calls[2][0].event.clickCount).toBe(1);
+  });
+
+  // ── P1-B2：合成期阻断（IME 桥 composing 面）──
+
+  it('合成期（composing）：keydown/keyup 一律不转发（12 §3.7 防双输入）', async () => {
+    render(<Harness enabled composing />);
+    const layer = screen.getByTestId('layer');
+    fireEvent.keyDown(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
+    fireEvent.keyDown(layer, { key: 'Enter', code: 'Enter', keyCode: 13 });
+    fireEvent.keyUp(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(input).not.toHaveBeenCalled();
+  });
+
+  it('合成结束（composing 翻转 false）：普通按键恢复转发', async () => {
+    const { rerender } = render(<Harness enabled composing />);
+    const layer = screen.getByTestId('layer');
+    fireEvent.keyDown(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
+    rerender(<Harness enabled composing={false} />);
+    fireEvent.keyDown(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
+    await waitInvocations(1);
+    expect(input.mock.calls[0][0].event).toMatchObject({
+      kind: 'key',
+      action: 'down',
+      key: 'a',
+      text: 'a',
+    });
+  });
+
+  // ── P1-B2：用户活动信号（接管观察）──
+
+  it('onUserInput：mousedown/wheel/keydown 触发；mousemove 不触发（非意图输入）', async () => {
+    const onUserInput = vi.fn();
+    render(<Harness enabled onUserInput={onUserInput} />);
+    const layer = screen.getByTestId('layer');
+    fireEvent.mouseMove(layer, { clientX: 10, clientY: 10, buttons: 0 });
+    expect(onUserInput).not.toHaveBeenCalled();
+    fireEvent.mouseDown(layer, { clientX: 10, clientY: 10, button: 0, buttons: 1 });
+    fireEvent.keyDown(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
+    fireEvent.wheel(layer, { clientX: 10, clientY: 10, deltaMode: 0, deltaX: 1, deltaY: 1 });
+    // 注入面：down + key + 合并窗 flush（move+wheel 同窗合并为 2 条）
+    await waitInvocations(4);
+    expect(onUserInput).toHaveBeenCalledTimes(3);
+  });
+
+  it('onUserInput：合成期 keydown 被阻断时不触发（该事件不构成转发）', async () => {
+    const onUserInput = vi.fn();
+    render(<Harness enabled composing onUserInput={onUserInput} />);
+    const layer = screen.getByTestId('layer');
+    fireEvent.keyDown(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(onUserInput).not.toHaveBeenCalled();
+  });
+
+  it('onUserInput：disabled（帧流未激活）时不触发', async () => {
+    const onUserInput = vi.fn();
+    render(<Harness enabled={false} onUserInput={onUserInput} />);
+    const layer = screen.getByTestId('layer');
+    fireEvent.mouseDown(layer, { clientX: 10, clientY: 10, button: 0, buttons: 1 });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(onUserInput).not.toHaveBeenCalled();
   });
 });

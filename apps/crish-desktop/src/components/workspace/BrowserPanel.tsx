@@ -1,13 +1,18 @@
 /**
- * AI 受管浏览器面板（P1-B1：帧渲染 + 基础输入转发）。
+ * AI 受管浏览器面板（P1-B1 + P1-B2：帧渲染 + 输入转发 + IME 桥 + 指示条/接管）。
  *
  * P1 形态：引擎拉起的受管浏览器画面经 Tauri Channel 帧流渲染进 canvas
  * （U-13 裁决：帧下行 Channel / 输入上行 browser_input invoke），用户可
- * 直接操作面板（点击/滚动/键盘 ASCII 直转）；P1-B2 完善接管 UI 与 IME 桥。
+ * 直接操作面板（点击/滚动/键盘 ASCII 直转）；P1-B2 落地 IME 隐藏输入框桥
+ * （12 §3.7：compositionend 整串 insertText 注入）与指示条/接管状态机
+ * （12 §5：idle/ai-busy/paused/user-taking-over，800ms 过渡 T-12）。
  *
  * 状态指示（running 态）：
- * - 帧流 active → 「帧流已激活」（任务书指示条；P1-B2 完善接管 UI）；
- * - starting → 「帧流启动中…」；stopped → 「帧流未激活」。
+ * - 帧流 active → 「帧流已激活」（帧指示条）；
+ * - 协作状态 → IndicatorBar（AI 空闲/AI 正在操作/已暂停/已接管）；
+ * - AI 忙信号：引擎侧未接线（browser:status 事件，12 §5.2），前端先按
+ *   帧流 active + 帧在动 + 无用户输入推断（usePanelStatus 注释说明）；
+ *   引擎接线后经 `engineAiBusy` 注入。
  */
 import React from 'react';
 import {
@@ -33,8 +38,10 @@ import {
   type BrowserSessionState,
 } from './browserSessionLib';
 import { FrameCanvas } from './browser-panel/FrameCanvas';
+import { IndicatorBar } from './browser-panel/IndicatorBar';
 import { InputLayer } from './browser-panel/InputLayer';
 import { useFrameStream, type UseFrameStreamOptions } from './browser-panel/useFrameStream';
+import { usePanelStatus } from './browser-panel/usePanelStatus';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 
 export interface BrowserPanelProps {
@@ -67,7 +74,7 @@ function renderStateIcon(state: BrowserSessionState, spinClass?: string) {
   }
 }
 
-/** 帧流指示条文案（P1-B1 基础版；P1-B2 完善接管 UI）。 */
+/** 帧流指示条文案（P1-B1 基础版；协作状态由 IndicatorBar 呈现）。 */
 function frameIndicatorText(state: 'starting' | 'active' | 'stopped'): string {
   if (state === 'active') return '帧流已激活';
   if (state === 'starting') return '帧流启动中…';
@@ -86,6 +93,14 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
   const { frameState, lastFrame, canvasRef } = useFrameStream({
     active: running,
     channelFactory: frameChannelFactory,
+  });
+
+  // 协作状态机（12 §5）：AI 忙信号引擎侧未接线（browser:status 事件）——
+  // 传 null 走「帧在动 + 用户安静」推断（usePanelStatus 注释说明接线点）
+  const { status, onUserInput, pause, resume } = usePanelStatus({
+    frameState,
+    lastFrameSeq: lastFrame?.seq ?? null,
+    engineAiBusy: null,
   });
 
   const startReady = canStartBrowserSession(state);
@@ -134,6 +149,12 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
           <InputLayer
             active={frameState === 'active'}
             getFrameMeta={() => lastFrame}
+            onUserInput={onUserInput}
+          />
+          <IndicatorBar
+            status={status}
+            aiActionText={null}
+            onTogglePause={status === 'paused' ? resume : pause}
           />
           <div className={styles.frameIndicator} role="status">
             <span className={styles.frameIndicatorDot} aria-hidden />

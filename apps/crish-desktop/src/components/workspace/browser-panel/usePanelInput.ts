@@ -15,7 +15,10 @@
  * - 阻止默认行为：wheel / contextmenu / Tab（保持焦点在输入层内）。
  *
  * 键盘：本期仅 ASCII/功能键直转（key/code/VK 直取浏览器事件，§3.3）；
- * **IME 隐藏输入框桥本期不做（P1-B2 轮）**——合成键（keyCode 229）不转发。
+ * **合成期阻断**（P1-B2 IME 桥接管该路径）：`compositionstart` 至
+ * `compositionend` 期间 keydown/keyup 一律不转发（12 §3.7 防双输入）；
+ * 合成键（keyCode 229）恒不转发（S0-03 C1：Process 键无转发价值，
+ * 页面不会因 229 触发合成——转发虽无害但无意义）。
  *
  * 反馈约定：输入事件不 toast（高频面，仅 console.debug 留痕）；invoke
  * 失败静默（no-wait 语义，引擎侧路由吞错）。
@@ -43,6 +46,11 @@ export interface UsePanelInputOptions {
   getFrameMeta: () => BrowserFrameMeta | null;
   /** 输入层 DOMRect（相对坐标基准 = 面板内容区 CSS 尺寸）。 */
   getRect: () => DOMRect | null;
+  /** 合成期（IME 桥）：合成中一律不转发键盘（12 §3.7；ref 读最新）。 */
+  composing?: boolean;
+  /** 用户活动回调（接管信号观察：mousedown/wheel/keydown 时触发；
+   *  吊销链在维度 15 Coordinator，前端仅发信号——T-12/U-9③）。 */
+  onUserInput?: () => void;
 }
 
 export interface PanelInputHandlers {
@@ -80,6 +88,11 @@ export function usePanelInput(opts: UsePanelInputOptions): PanelInputHandlers {
   metaRef.current = getFrameMeta;
   const rectRef = useRef(getRect);
   rectRef.current = getRect;
+  // 合成期（IME 桥）与用户活动回调：ref 面读最新（高频不触发渲染）
+  const composingRef = useRef(opts.composing ?? false);
+  composingRef.current = opts.composing ?? false;
+  const userInputRef = useRef(opts.onUserInput);
+  userInputRef.current = opts.onUserInput;
 
   // 状态面（ref：高频读写不触发渲染）
   const buttonsRef = useRef(0);
@@ -210,6 +223,7 @@ export function usePanelInput(opts: UsePanelInputOptions): PanelInputHandlers {
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      if (enabledRef.current) userInputRef.current?.();
       const { x, y } = toPagePoint(e.clientX, e.clientY);
       const button: NonNullable<BrowserInputEventPayload['button']> =
         e.button === 0
@@ -299,6 +313,7 @@ export function usePanelInput(opts: UsePanelInputOptions): PanelInputHandlers {
     (e: React.WheelEvent) => {
       e.preventDefault(); // 阻止 webview 自身滚动（12 §3.1）
       if (!enabledRef.current) return;
+      userInputRef.current?.();
       const { x, y } = toPagePoint(e.clientX, e.clientY);
       const rect = rectRef.current();
       const viewportHeight = rect?.height || 0;
@@ -362,7 +377,9 @@ export function usePanelInput(opts: UsePanelInputOptions): PanelInputHandlers {
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // 合成键（IME 在途）不转发（12 §3.7；P1-B2 IME 桥接入后由桥接管）
+      // 合成期（IME 桥）：keydown/keyup 一律不转发（12 §3.7 防双输入）
+      if (composingRef.current) return;
+      // 合成键（keyCode 229）恒不转发（S0-03 C1：Process 键无转发价值）
       if (e.keyCode === 229) return;
       // Tab：阻止焦点逃逸（Tab 注入页面而非浏览器 chrome）
       if (e.key === 'Tab') e.preventDefault();
@@ -372,6 +389,7 @@ export function usePanelInput(opts: UsePanelInputOptions): PanelInputHandlers {
       else if (e.key === 'Shift') m.shift = true;
       else if (e.key === 'Alt') m.alt = true;
       else if (e.key === 'Meta') m.meta = true;
+      if (enabledRef.current) userInputRef.current?.();
       send(keyPayload(e, false));
     },
     [send, keyPayload],
@@ -379,6 +397,8 @@ export function usePanelInput(opts: UsePanelInputOptions): PanelInputHandlers {
 
   const onKeyUp = useCallback(
     (e: React.KeyboardEvent) => {
+      // 合成期（IME 桥）不转发（12 §3.7）
+      if (composingRef.current) return;
       if (e.keyCode === 229) return;
       const m = modifiersRef.current;
       if (e.key === 'Control') m.ctrl = false;

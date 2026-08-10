@@ -11,6 +11,9 @@
 /** 帧流状态（引擎契约：starting/active/stopped）。 */
 export type BrowserFrameState = 'starting' | 'active' | 'stopped';
 
+/** 面板协作状态（12 文档 §5.1：idle/ai-busy/paused/user-taking-over）。 */
+export type PanelStatus = 'idle' | 'ai-busy' | 'paused' | 'user-taking-over';
+
 /** 帧元信息（解码自帧二进制头；宽高 = 帧图像素 = 视口 CSS 像素，emulation 锁 1:1）。 */
 export interface BrowserFrameMeta {
   /** 帧序号（丢帧统计/诊断用；u32 回绕可接受） */

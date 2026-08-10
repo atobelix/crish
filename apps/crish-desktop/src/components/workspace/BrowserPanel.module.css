@@ -103,7 +103,7 @@
   height: 8px;
   border-radius: 50%;
   background: var(--color-success);
-  animation: readyPulse 1.6s ease-in-out infinite;
+  animation: readyPulse var(--transition-pulse) infinite;
   flex-shrink: 0;
 }
 @keyframes readyPulse {
@@ -177,7 +177,7 @@
 }
 
 .spin {
-  animation: spinKeyframe 0.8s linear infinite;
+  animation: spinKeyframe var(--transition-spin) infinite;
 }
 @keyframes spinKeyframe {
   to {
@@ -278,11 +278,109 @@
 
 .frameStageWrap[data-frame-state='active'] .frameIndicatorDot {
   background: var(--color-success);
-  animation: readyPulse 1.6s ease-in-out infinite;
+  animation: readyPulse var(--transition-pulse) infinite;
 }
 
 .frameStageWrap[data-frame-state='starting'] .frameIndicatorDot {
   background: var(--color-warning);
   animation: spinKeyframe 0.8s linear infinite;
+}
+
+/* ── P1-B2 指示条 / 接管层（12 §5：z-index 高于输入层） ────────────────── */
+
+.indicatorBar {
+  position: absolute;
+  top: var(--space-0_5);
+  left: var(--space-0_5);
+  right: var(--space-0_5);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+}
+
+.indicatorDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.indicatorText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indicatorBar[data-status='ai-busy'] {
+  color: var(--accent-color);
+}
+.indicatorBar[data-status='ai-busy'] .indicatorDot {
+  background: var(--accent-color);
+  animation: readyPulse 1.6s ease-in-out infinite;
+}
+.indicatorBar[data-status='paused'] {
+  color: var(--color-warning);
+}
+.indicatorBar[data-status='paused'] .indicatorDot {
+  background: var(--color-warning);
+}
+.indicatorBar[data-status='user-taking-over'] {
+  color: var(--color-success);
+}
+.indicatorBar[data-status='user-taking-over'] .indicatorDot {
+  background: var(--color-success);
+  animation: readyPulse 1.6s ease-in-out infinite;
+}
+
+.indicatorToggle {
+  flex-shrink: 0;
+  border: var(--hairline-width, 1px) solid
+    color-mix(in srgb, var(--text-secondary) 45%, transparent);
+  background: transparent;
+  color: inherit;
+  border-radius: var(--radius-sm);
+  padding: 1px 8px;
+  font-size: var(--font-size-xxs);
+  font-family: inherit;
+  line-height: var(--line-height-compact);
+  cursor: pointer;
+}
+.indicatorToggle:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+.indicatorToggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  border-color: var(--border-color);
+}
+
+/* ── P1-B2 IME 隐藏输入框桥（12 §3.7：1px 隐形但可聚焦可接收 IME） ───── */
+
+.imeBridge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  font-size: 1px;
+  caret-color: transparent;
+  outline: none;
+  /* 不拦截鼠标（点击落向输入层）；程序化聚焦与 IME 会话不受影响 */
+  pointer-events: none;
+  z-index: 2;
 }
 

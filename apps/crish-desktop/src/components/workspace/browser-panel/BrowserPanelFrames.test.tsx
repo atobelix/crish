@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { mockTauriCommand } from '../../../test-setup';
 import { BrowserPanel } from '../BrowserPanel';
 import {
@@ -94,7 +94,7 @@ describe('BrowserPanel 帧舞台', () => {
     expect(screen.queryByRole('application')).toBeNull();
   });
 
-  it('帧消息到达 → 指示条「帧流已激活」+ 画布 aria 标注', async () => {
+  it('帧消息到达 → 指示条「帧流已激活」+ 画布 aria 标注 + 协作指示条呈现', async () => {
     const channel: FakeChannel = { onmessage: null };
     render(
       <BrowserPanel
@@ -111,6 +111,9 @@ describe('BrowserPanel 帧舞台', () => {
     });
     await waitFor(() => expect(screen.getByText('帧流已激活')).toBeTruthy());
     expect(screen.getByRole('img', { name: '受管浏览器画面' })).toBeTruthy();
+    // P1-B2：协作指示条（12 §5.1 四态投影；初始 idle = AI 空闲）
+    expect(screen.getByRole('status', { name: 'AI 协作状态' })).toBeTruthy();
+    expect(screen.getByText('AI 空闲')).toBeTruthy();
   });
 
   it('停止浏览器（事件驱动 stopped）→ 帧舞台卸载', async () => {
