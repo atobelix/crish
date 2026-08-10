@@ -27,6 +27,16 @@ tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
 url = "2"
 reqwest.workspace = true
+# 本地服务化（D2 §6.4 / R1-02）：axum 0.8 默认关 feature，显式开
+# ws/json/http1/tokio（PE-10 登记：axum 全家一次登记；ws 实际使用留
+# R1-05，ws feature 内层 tokio-tungstenite 已在锁文件被 conex-browser
+# 消费，不新增版本）
+axum = { version = "0.8", default-features = false, features = ["ws", "json", "http1", "tokio"] }
+# 令牌 / 配对码 CSPRNG（D2 §7.3：rand 与 getrandom 二选一；getrandom 0.2
+# 已在锁文件，直接声明复用，不新增锁文件条目）
+getrandom = "0.2"
+# 令牌哈希 / 配对码 hex 编码（workspace 已有声明）
+hex.workspace = true
 
 sha2 = "0.10"
 base64 = "0.22"
@@ -59,6 +69,21 @@ conex-browser = { path = "../../../crates/conex-browser" }
 conex-browser-tools = { path = "../../../crates/conex-browser-tools" }
 # Interactive terminal (Windows ConPTY / Unix PTY)
 portable-pty = "0.9"
+# 多端互通 R1-06（TLS + 自签证书 + 指纹固定，multi_device/tls.rs）：
+# - rustls（ring provider，显式装配）与 reqwest 0.13 的 rustls-ring 同栈，不引入第二套 TLS 实现；
+# - rcgen 自签 CA/叶子签发（默认 crypto+pem+ring；x509-parser 特性用于从磁盘还原 CA 续签叶子）；
+# - tokio-rustls 提供 TlsAcceptor（server 骨架 R1-02 消费）；
+# - rustls-pemfile 读取 PEM 证书/私钥（rustls 生态标准件，零传递依赖）；
+# - time 构造证书有效期；x509-parser 提取 SPKI 指纹与有效期（版本与 rcgen 的 x509-parser 特性对齐）；
+# - fs2 并发启动文件锁（unix flock / windows LockFileEx，进程退出自动释放，防双实例竞写）
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = "0.26"
+rcgen = { version = "0.13", features = ["x509-parser"] }
+rustls-pemfile = "2"
+time = "0.3"
+x509-parser = "0.16"
+fs2 = "0.4"
+thiserror.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 # Win32_UI_Shell / Win32_UI_WindowsAndMessaging：P1-S5 host_openers 默认关联
@@ -71,6 +96,9 @@ libc = "0.2"
 [dev-dependencies]
 # 浏览器命令面测试：临时数据根（tempfile 3.27 已在锁内，conex-browser dev）
 tempfile = "3"
+# 服务路由测试（R1-02）：axum Router oneshot（tower util feature；tower
+# 0.5 已在锁文件，不新增版本）
+tower = { version = "0.5", features = ["util"] }
 
 # G5 豁免登记（2026-08-03）：conex-fs 为 01 方案 S3 同轮新建的删除接管 crate，
 # 删除工具接线中（trash_list/trash_restore），本壳将立即使用，暂不算未用。

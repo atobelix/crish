@@ -46,6 +46,8 @@ mod git;
 mod host_openers;
 mod host_paths;
 mod markdown_commands;
+// 多端互通模块族（R1-06：TLS + 自签证书 + 指纹固定，multi_device/tls.rs）
+mod multi_device;
 mod perf;
 mod power;
 mod process;
@@ -53,6 +55,7 @@ mod pty;
 mod resource;
 
 mod session_commands;
+mod server;
 mod status_diagnostics;
 // T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
 // 与 core_run_commands / engine 同目标，互引 crate:: 内部路径）
@@ -462,6 +465,45 @@ fn main() {
             // setup 完成标记（PE-01 T01.2：initialized 如实反映）
             core_state.mark_initialized();
 
+            // ⑪ 本地服务（D2 §5 / R1-02）：loopback 恒监听（8765，占用
+            // 时探测兜底）；配对模式（0.0.0.0 重绑 + 令牌签发）归 R1-07。
+            // 启动失败 = 仅关多端服务，不阻断应用（D1 §3.4 铁律；诊断
+            // 经 StatusDiagnostics 环形缓冲如实上报，core_get_status
+            // 可见）
+            {
+                let server_config = server::config::ServerConfig::default();
+                let server_diagnostics = Arc::clone(diagnostics);
+                // 注意：app_handle 已被上方 TauriEmitter::new 移入，此处从
+                // app 重新取句柄（AppHandle 可任意 clone）
+                let server_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match server::ServerInstance::bind(server_config).await {
+                        Ok(instance) => {
+                            let addr = instance.addr();
+                            // state 注入：退出钩子经 try_state 优雅关停
+                            server_handle.manage(instance.handle().clone());
+                            server_diagnostics.record("server", true, Some(addr.to_string()));
+                            let router = instance.router(None);
+                            if let Err(error) = instance.serve(router).await {
+                                tracing::error!(
+                                    target: "server",
+                                    error = %error,
+                                    "本地服务异常退出"
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            tracing::error!(
+                                target: "server",
+                                error = %error,
+                                "本地服务启动失败（多端能力降级，GUI 不受影响）"
+                            );
+                            server_diagnostics.record("server", false, Some(error.to_string()));
+                        }
+                    }
+                });
+            }
+
             tracing::info!(
                 target: "setup",
                 level = %level,
@@ -480,6 +522,11 @@ fn main() {
             // restore_failed 已置位）——防「0 会话半水合快照」覆盖主快照
             // 导致会话树分支历史永久丢失；跳过时 snapshot_last_error 可观测。
             if let tauri::RunEvent::Exit = event {
+                // 本地服务优雅关停（D2 §5.3：先停服务再存快照；客户端收到
+                // 服务端关闭信号，避免误判断线重试风暴）
+                if let Some(server) = app_handle.try_state::<server::ServerHandle>() {
+                    server.shutdown();
+                }
                 pty::kill_all_sessions();
                 if let Some(core) = app_handle.try_state::<Arc<core_run_commands::CoreRunState>>() {
                     let core = Arc::clone(core.inner());
