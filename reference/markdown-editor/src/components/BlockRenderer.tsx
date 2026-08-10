@@ -21,6 +21,9 @@ import { useEditorStore, type EditorStore, type EditorState } from '../core/Edit
 import { renderMathToHtml } from '../core/renderTheme';
 // B4 N5：复制按钮剪贴板工具 + 引用前缀剥离（与导出投影器共享单源）
 import { copyTextToClipboard, stripBlockquotePrefix } from '../core/renderToHtml';
+// B5 bidi 接线：行级 RTL 检测（isRtlLine——弱类型扫描，LTR 行快速
+// 路径返回 false，零开销；渲染时调用，memo 保证行不变不重算）
+import { isRtlLine } from '../core/Bidi';
 
 const MAX_VISIBLE_LINE_CHARS = 5_000;
 
@@ -123,6 +126,11 @@ export interface BlockRendererComponentProps {
   lineOffset: number;
   activeState?: ActiveState | null;
   tableId?: string;
+  /** B5 bidi：本行是否 RTL（isRtlLine 检测结果，BlockRenderer 顶层
+   *   memo 内计算一次，随 props 传入——行不变不重算，memo 友好）。
+   *   LTR 行 = false；渲染器自行决定 dir 落点（整行容器/blockquote
+   *   内容），未消费的渲染器忽略（行为零变化）。 */
+  rtl?: boolean;
   /** 显式 store 实例（R6-P1 软渲染订阅实例化接线点）：缺省 = 全局单例。
    *  仅软渲染判定订阅消费（流式围栏未闭合判定），渲染本身零依赖。 */
   store?: EditorStore;
@@ -808,11 +816,14 @@ function HeadingBlock({
   block,
   lineOffset,
   activeState,
+  rtl,
 }: BlockRendererComponentProps) {
   const level = block.headingLevel || 1;
   const className = `line-block line-h${level}`;
   return (
-    <div className={className}>
+    // B5 bidi：整行 RTL（标题行级 dir——isRtlLine 对含前缀的整行检测，
+    // 标题前缀 # 为 ASCII，不影响 RTL 判定；LTR 行无 dir 属性）
+    <div className={className} dir={rtl ? 'rtl' : undefined}>
       {block.inlineTokens && (
         <InlineRenderer
           tokens={block.inlineTokens}
@@ -847,6 +858,7 @@ function BlockquoteBlock({
   block,
   lineOffset,
   activeState,
+  rtl,
 }: BlockRendererComponentProps) {
   const prefixMatch = block.raw.match(/^(>\s?)+/);
   const prefix = prefixMatch ? prefixMatch[0] : '';
@@ -859,7 +871,10 @@ function BlockquoteBlock({
       >
         {prefix}
       </span>
-      <span className="blockquote-rendered">
+      {/* B5 bidi：blockquote 内容级 RTL——dir 落在渲染体 span（前缀
+          语法保持 LTR 排版；整行检测与内容检测等价——前缀为 ASCII，
+          内容含 RTL 字符时整行必命中，内容纯 LTR 时整行不命中） */}
+      <span className="blockquote-rendered" dir={rtl ? 'rtl' : undefined}>
         {block.inlineTokens && block.inlineTokens.length > 0 ? (
           <InlineRenderer
             tokens={block.inlineTokens}
@@ -934,6 +949,7 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
   block,
   lineOffset,
   activeState,
+  rtl,
 }: BlockRendererComponentProps) {
   // 列表缩进接线：统一使用每空格 8px 的缩进率（4空格=32px）。这样既更深，也确保对齐。
   const baseIndentPx = Math.min(block.listIndent || 0, 12) * 8;
@@ -962,7 +978,10 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
   }
 
   return (
-    <div className="line-block" style={indentStyle}>
+    // B5 bidi：整行级 RTL（body/列表/未知类型行统一落点——行级
+    // dir 使 InlineRenderer 全部 token 继承 RTL 排版；LTR 行不设
+    // dir 属性，行为零变化）
+    <div className="line-block" style={indentStyle} dir={rtl ? 'rtl' : undefined}>
       {tokensToRender && tokensToRender.length > 0 ? (
         <>
           <InlineRenderer
@@ -1021,6 +1040,9 @@ interface BlockRendererProps {
 export const BlockRenderer = memo(
   ({ block, index, lineOffset, activeState, tableId, store }: BlockRendererProps) => {
     const Renderer = resolveBlockRenderer(block.type);
+    // B5 bidi：memo 顶层计算一次行级 RTL（行文本不变 → memo 命中 →
+    // 不重算；结果并入行渲染 props 供各渲染器消费）
+    const rtl = isRtlLine(block.raw);
     return (
       <Renderer
         block={block}
@@ -1028,6 +1050,7 @@ export const BlockRenderer = memo(
         lineOffset={lineOffset}
         activeState={activeState}
         tableId={tableId}
+        rtl={rtl}
         store={store}
       />
     );
