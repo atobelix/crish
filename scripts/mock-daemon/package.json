@@ -1,0 +1,28 @@
+{
+  "name": "@crish/mock-daemon",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "多端互通 R0-06 产物：mock daemon v0（按 device-protocol.json 生成的 WS 夹具服务器 + 夹具事件集），供移动端 R2 联调使用。纯测试基建，不进生产代码。",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "smoke": "tsx examples/smoke-client.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
