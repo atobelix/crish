@@ -4,6 +4,10 @@
 > 输入：`50-reverify/01-signoff-verification.md`（§3.1 四文件 mojibake 残留 + §3.3 check-css-encoding 盲区坐实）、`50-reverify/02-convergence-thoroughness.md`（R15 未登记混色变量 / R16 菜单圆角残余）、`50-reverify/03-regression-check.md`（P3 清单）、`scripts/check-css-encoding.mjs`（门禁现状实读）、`20-proposals/01-convergence-completion.md`（同轮 A 块 .ui-btn 删除方案，D 节联动）。
 > 性质：卫生收尾 + 门禁补盲（让「mojibake 清零」可机器验证）；只读实证，全部行号与计数经 2026-08-10 工作区实读复核。
 > 验收前置：本文档自身即任务书；执行时以 `rg`/`python` 实测为准（口径见 §附）。
+> 修订日志 v2（2026-08-10，吸收评审 `30-reviews/02-technical-correctness.md`）：
+> 1. **白名单时序修正**：`--whitelist-dirty-check` 与 01 方案 A 块删除的时序缺口——01 A 块（批次 R2-2）物理删除会命中白名单挂账行号（settings-base :1193-1210 / settings-plugins :986-1005 / theme-dark :126-134 等），删除提交若不同步清理白名单则 dirty-check 立即红。**处置：删除 + 白名单清理 + 基线调整同一提交原子化**（评审 C-P1-2 / R-4，§2.3/§2.4/§4.3 已落地）；
+> 2. **基线收口口径**：style-contract 基线（66→62 / 633→628）改在**批次 R2-2 提交内原子化**收口（主控裁决 P0-3，覆盖 master plan C-3 旧口径「R2-3 收口」；评审 C-P1-1——style-contract.test.ts 三方争夺 01×03×04，01+03 同提交、04 W2 紧随）；
+> 3. `--whitelist-dirty-check` 的 CI 启用时点后置到 R2-2 白名单清理落地后（§2.4）。
 
 ---
 
@@ -14,7 +18,7 @@
 | A | §3.1 四文件 25 行 mojibake 残留（实读修正为 **26 行**，补 :356） | 人工重写 + 门禁转绿 | 4 文件 26 行（workspace 15 / dragdrop 6 / panels 3 / polish 2） | 2 步 |
 | B | §3.3 门禁盲区坐实：只查 FFFD/BOM，检测不到乱码固化 | 三层检测升级（PUA / GBK 逆变换 / 特征字表）+ 接线 package.json + CI | 1 脚本重写 + 2 处接线 | 1 步 |
 | C | R15 未登记 / R16 圆角 / 03 文档 P3 清单 | 登记或收敛（P3 粒度） | R15 15 变量 / R16 4 处 / P3×6 项逐条裁决 | 2 步 |
-| D | 01 方案 A 块声称「无需同步门禁」——**实读不实** | style-contract 基线同步下调 | !important 633→628、999px 66→62 | 随 A 块提交 |
+| D | 01 方案 A 块声称「无需同步门禁」——**实读不实** | style-contract 基线同步下调（**批次 R2-2 同提交原子化**，主控裁决 P0-3，v2 修正收口时点） | !important 633→628、999px 66→62 | 随 A 块提交 |
 
 **一句话**：先建三层 mojibake 门禁（检测出 26 行残留）→ 人工重写四文件 → 门禁转绿；顺带修正 01 方案「门禁无需同步」的错误结论（删死 CSS 后基线必须下调锁定成果），P3 零星逐条裁决。
 
@@ -99,13 +103,14 @@
 - 白名单文件：`scripts/css-encoding-whitelist.json`，格式 `{ "文件相对路径": { "行号": "理由" } }`；脚本启动时加载，白名单行在层 3 命中时报 warning 不报 error（`--strict` 下也 error）。
 - **与挂账衔接**：01/02 文档登记的「清单外 ~100 处」挂账（settings-base 57 行 / settings-models 43 / settings-plugins 21 / chat-markdown 17 / settings-advanced 9 / chat-approval 4 / settings-extensions 2 / settings-usage 4 / shell-menus 4 / shell-sidebar 2 等，实测约 163 行 + module.css 族 ~66 行 + terminalStore 15 行，合计约 244 行）**绝大部分命中层 1/层 2**（PUA 行占约 210）——层 1/2 零豁免则全仓立即红。**处理口径**：挂账面按文件整体登记（每文件白名单行号 = 当前全部命中行，理由「挂账，见 50-reverify 01 §3.2 / 后续卫生轮次」），本轮只清零 4 文件；**新增行不被白名单覆盖**（行号精确匹配），挂账文件新增乱码仍报 error。
 - 白名单维护：`node scripts/check-css-encoding.mjs --init-whitelist` 生成当前命中快照；修复后手工删除已修复行号；CI 加 `--whitelist-dirty-check`（白名单中存在「文件当前已不命中」的行号 → 报错要求清理，防白名单膨胀）。
+- **时序联动（v2 新增，评审 C-P1-2 / R-4）**：01 方案 A 块（批次 R2-2）的物理删除面与白名单挂账行号**直接重叠**——settings-base.css:1193（mojibake 注释行，位于删除段 :1194-1210 前邻）/1194-1210、settings-plugins.css:986-1005 段、theme-dark.css:126-134、settings-switch 段（:552/723/2362-2416）等均在挂账白名单内。**时序缺口**：R2-1 门禁先建并生成快照 → R2-2 删除 → 白名单出现「已不命中」行号 → `--whitelist-dirty-check` 立即红。**处置：01 A 块删除提交与白名单清理同一提交**（删除面行号同步从 whitelist.json 摘除），`--whitelist-dirty-check` 方可持续为绿；CI step 启用时点见 §2.4。
 
 ### 2.4 接线（新发现 N2 的修复）
 
 | 位置 | 改动 |
 |---|---|
 | `package.json` scripts | `"check:css-encoding": "node scripts/check-css-encoding.mjs --whitelist-dirty-check"` |
-| `ci.yml` 快层 lint job | `- run: npm run check:css-encoding`（插在 `check:swallowed-errors-frontend` 之后） |
+| `ci.yml` 快层 lint job | `- run: npm run check:css-encoding`（插在 `check:swallowed-errors-frontend` 之后）；**`--whitelist-dirty-check` 生效时点（v2 修正）**：R2-1 接线时可先以不带 dirty-check 的形态入库（白名单挂账面随时会因 R2-2 删除而脏）；R2-2 白名单清理落地后启用含 dirty-check 的完整形态（或 R2-1 即含 flag、R2-2 删除与清理严格同提交——两条路径二选一，派单时锁定） |
 | `scripts/check-css-encoding.mjs` | 保留既有三项检查（A 类/BOM/FFFD）+ 层 1/2/3；退出码非 0 = 违规；输出带文件:行号 + 层号 + 恢复提示（层 2） |
 
 ### 2.5 验证 / 判据
@@ -200,7 +205,7 @@
 |---|---|
 | `style-contract.test.ts:188` | `RADIUS_999_BASELINE = 66` → `62`（注释注明：随 01 A 块删 .ui-btn -3 + settings-switch -1） |
 | `style-contract.test.ts:233` | `IMPORTANT_BASELINE = 633` → `628`（注释注明：随 01 A 块删 settings-plugins 死规则 -5） |
-| 提交时机 | **与 01 方案 A 块同一提交**（删除与基线下调原子化——否则中间态 CI 绿但基线虚高；或 A 块先删、联动提交紧随） |
+| 提交时机 | **与 01 方案 A 块同一提交**（批次 R2-2 内原子化，主控裁决 P0-3，v2 修正——**删除 + 基线 62/628 + 白名单清理三件事同一提交**，覆盖 master plan C-3 旧口径「R2-3 收口」；评审 C-P1-1：style-contract.test.ts 三方争夺 01 A 块 × 03 D 块 × 04 W2，01+03 严格串行原子化后 04 W2 紧随）。否则中间态 CI 绿但基线虚高（未来可回填 4 个 999px + 5 个 !important 不红，成果流失）；严禁 A 块先删、基线后调的两提交拆分 |
 | 防回填 | 01 方案 A 块完成后跑一次全量 vitest + `rg "999px"` 计数复核，确认 62/628 与实际吻合 |
 
 **验证/判据**：A 块删除后 `rg -o "border-radius:\s*999(?!\d)"` 全仓计数 = 62；`rg -o "!important"` = 628；style-contract 23/23 绿；01 方案 A 块判据（rg .ui-btn 仅注释命中）维持。
@@ -213,12 +218,12 @@
 |---|---|---|---|---|
 | 1 | **B-1 门禁先建**：check-css-encoding.mjs 三层升级 + `--init-whitelist` 生成挂账白名单 + package.json/ci.yml 接线 | 1 脚本 + 2 配置 | 全仓跑：4 文件 26 行红、挂账白名单全命中 | 三层检测实跑输出与 §1.1 清单一致 |
 | 2 | **A-2 修复**：四文件 26 行人工重写（每文件完立即跑门禁） | 4 css | 门禁四文件零命中 + 语义签字表 | 26/26 清零、无新增 |
-| 3 | **D 联动**：style-contract 基线 66→62 / 633→628（与 01 方案 A 块同提交） | style-contract.test.ts | style-contract 23/23 + 计数复核 | 62/628 实读吻合 |
+| 3 | **D 联动（随 R2-2 批执行，v2 修正不单独成步）**：style-contract 基线 66→62 / 633→628 + 白名单清理（§2.3）——**与 01 方案 A 块删除同一提交**（批次 R2-2 内原子化，主控裁决 P0-3）；本方案提供口径与验证，执行点归属 01 A 块提交 | style-contract.test.ts + scripts/css-encoding-whitelist.json | style-contract 23/23 + 计数复核 | 62/628 实读吻合；dirty-check 无脏行 |
 | 4 | **C-1 登记**：R15 登记、R16 3 处保留登记、P3-2/P3-5 视觉轮次登记 | style-contract.test.ts 注释 + 本方案签字 | style-contract 计数不变 | 23/23 绿 |
 | 5 | **C-2 改动**：ComposePlusMenu:111 token 化 + store/README 同步 + P3-4 注释清理 | 3 文件 | typecheck + 快层测试 | 全绿、零行为变更 |
 | 6 | **收尾**：全量验证批 | — | `npm run typecheck` + 快层 unit + style-contract + `check:css-encoding` + `check:ui-layer` | 全部绿 |
 
-**顺序理由**：门禁先建（红）→ 修复（绿）的闭环优先级高于 P3 零星；D 联动与 01 方案 A 块强耦合（同文件同提交），必须排在 A 块删除之后、不得提前改基线；C 块独立可并行（文档/注释面），但避免与 01 A 块同文件（style-contract.test.ts 由 D 独占）。
+**顺序理由**：门禁先建（红）→ 修复（绿）的闭环优先级高于 P3 零星；D 联动与 01 方案 A 块强耦合——**同一提交原子化（批次 R2-2，主控裁决 P0-3，v2 修正）**：删除 + 基线 + 白名单清理三件事不得拆提交、不得提前改基线（否则中间态基线虚高或 dirty-check 红）；C 块独立可并行（文档/注释面），但避免与 01 A 块同文件（style-contract.test.ts 由 D 独占）。
 
 ---
 
@@ -242,9 +247,9 @@
 |---|---|---|---|
 | 1 | 层 2（GBK 逆变换）误报：合法中文行偶然逆变换成功 | 门禁误红、挫伤可信度 | 实测零命中（全仓 9 文件 13 行全部为 mojibake）；要求恢复串 CJK ≥2；白名单兜底 |
 | 2 | 层 3 特征字表误报（片假名 / 罕见字合法出现） | 误红 | 白名单行级登记 + 上下文佐证条件（≥2 特征字） |
-| 3 | 白名单膨胀：挂账行号快照陈旧 → 白名单掩盖新增 | 门禁失效 | `--whitelist-dirty-check`（CI 强制）：白名单存在「已不命中」行号即 exit 1 |
+| 3 | 白名单膨胀：挂账行号快照陈旧 → 白名单掩盖新增；**R2-2 删除面使白名单出现「已不命中」行号（v2 补）** | 门禁失效 / dirty-check 立即红 | `--whitelist-dirty-check`（CI 强制）：白名单存在「已不命中」行号即 exit 1；**删除面行号与 01 A 块删除同提交清理（§2.3 时序联动）** |
 | 4 | 人工重写语义偏差（注释语义不可恢复处） | 注释误导 | 签字表逐行核对；可恢复语义的行用层 2 恢复串做参考 |
-| 5 | 与 01 方案 A 块同文件并发（shell-polish.css / style-contract.test.ts） | 编辑冲突 | D 块与 01 A 块同提交原子化；C 块避开 A 块文件面 |
+| 5 | 与 01 方案 A 块同文件并发（shell-polish.css / style-contract.test.ts / css-encoding-whitelist.json，v2 补） | 编辑冲突 | D 块与 01 A 块同提交原子化（批次 R2-2，主控裁决 P0-3）；白名单清理并入同一提交（§2.3）；C 块避开 A 块文件面 |
 | 6 | 批量恢复脚本自动写回导致二次损坏 | 数据损失 | **禁止自动写回**（恢复串仅提示）；修复一律人工 edit |
 | 7 | 挂账文件（settings-* 等 ~200 行）本不动，用户视角乱码仍可见 | 观感残留 | 与 01 文档挂账口径一致（如实登记，非本轮承诺）；白名单清单即后续轮次路线图 |
 
