@@ -151,10 +151,6 @@ export interface Manifest {
   commands: ManifestEntry[];
 }
 
-export interface ResumeState {
-  entries: JsonValue;
-}
-
 export interface PendingApproval {
   requestId: string;
   toolCallId: string;

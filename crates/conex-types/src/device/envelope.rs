@@ -72,110 +72,84 @@ impl AuthHeader {
 /// 计数基线（M6 §1.1）：events 11 + stream 4 + pair 4 + auth 3（rotate 为
 /// 可选扩展，不在 103 内）+ device 4 + heartbeat 2 + error 1 = 29 静态；
 /// 命令 37 + 响应 37 = 74；合计 103。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+///
+/// 序列化实现：手动 [Serialize]（与 [Deserialize] / [MessageKind::as_str]
+/// 对称，wire 一律裸字符串）——derive 外部标签会对 `Remote/Result` 新类型
+/// 变体输出 `{"Remote":"approve"}`，破坏 wire 形态（R0-05 对拍发现）。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MessageKind {
     // ── 事件会话面（11）──
     /// 按会话订阅
-    #[serde(rename = "events.subscribe")]
     EventsSubscribe,
     /// 全局轻订阅
-    #[serde(rename = "events.subscribeAll")]
     EventsSubscribeAll,
     /// 订阅确认
-    #[serde(rename = "events.subscribe.ok")]
     EventsSubscribeOk,
     /// 事件实时推送（一帧一事件）
-    #[serde(rename = "events.push")]
     EventsPush,
     /// 事件确认（仅 ackMode=critical 诊断模式）
-    #[serde(rename = "events.ack")]
     EventsAck,
     /// 断线续传请求
-    #[serde(rename = "events.resume")]
     EventsResume,
     /// 续传分页
-    #[serde(rename = "events.resume.page")]
     EventsResumePage,
     /// 续传完成
-    #[serde(rename = "events.resume.done")]
     EventsResumeDone,
     /// 会话索引变更广播
-    #[serde(rename = "session.updated")]
     SessionUpdated,
     /// 会话删除广播
-    #[serde(rename = "session.removed")]
     SessionRemoved,
     /// 会话索引全量刷新信号
-    #[serde(rename = "session.updatedAll")]
     SessionUpdatedAll,
 
     // ── 流控制（4）──
     /// 大载荷流开启
-    #[serde(rename = "stream.open")]
     StreamOpen,
     /// 流数据块
-    #[serde(rename = "stream.chunk")]
     StreamChunk,
     /// 断线续传
-    #[serde(rename = "stream.resume")]
     StreamResume,
     /// 流结束
-    #[serde(rename = "stream.close")]
     StreamClose,
 
     // ── 配对（4）──
     /// 配对请求
-    #[serde(rename = "pair.hello")]
     PairHello,
     /// 挑战 + 桌面公钥
-    #[serde(rename = "pair.challenge")]
     PairChallenge,
     /// 挑战签名
-    #[serde(rename = "pair.verify")]
     PairVerify,
     /// 配对成功
-    #[serde(rename = "pair.ok")]
     PairOk,
 
     // ── 认证（3 + rotate 可选扩展，M6 §1.1）──
     /// 会话握手（版本协商）
-    #[serde(rename = "auth.hello")]
     AuthHello,
     /// 握手成功
-    #[serde(rename = "auth.hello.ok")]
     AuthHelloOk,
     /// 重连刷新
-    #[serde(rename = "auth.refresh")]
     AuthRefresh,
     /// 签名上下文轮换（可选扩展，不在 103 注册数内）
-    #[serde(rename = "auth.rotate")]
     AuthRotate,
 
     // ── 设备生命周期（4）──
     /// 配对完成后通知可正常会话
-    #[serde(rename = "device.ready")]
     DeviceReady,
     /// 移动端主动解除配对
-    #[serde(rename = "device.unlink")]
     DeviceUnlink,
     /// 桌面撤销设备广播
-    #[serde(rename = "device.revoked")]
     DeviceRevoked,
     /// 设备域审计
-    #[serde(rename = "device.audit")]
     DeviceAudit,
 
     // ── 保活（2）──
     /// 心跳（30s）
-    #[serde(rename = "heartbeat")]
     Heartbeat,
     /// 心跳回执（60s）
-    #[serde(rename = "heartbeat.ok")]
     HeartbeatOk,
 
     // ── 统一错误（1）──
     /// 错误通知
-    #[serde(rename = "error")]
     Error,
 
     // ── 命令（37 动态后缀，M6 §4）──
@@ -234,6 +208,15 @@ impl<'de> Deserialize<'de> for MessageKind {
     }
 }
 
+impl Serialize for MessageKind {
+    /// 序列化：与 [MessageKind::as_str] 对称的裸字符串（wire 形态）。
+    /// 静态变体输出注册 wire 名；`Remote/Result` 拼出 `remote.<name>` /
+    /// `result.<name>`；`Unknown` 原样透传。
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.as_str())
+    }
+}
+
 /// 已注册的 29 个静态 kind（M6 §1.1 账目；不含可选扩展 auth.rotate）
 pub const STATIC_KINDS: [&str; 29] = [
     "events.subscribe",
@@ -269,8 +252,7 @@ pub const STATIC_KINDS: [&str; 29] = [
 
 impl MessageKind {
     /// wire 字面量（动态命令类拼出 `remote.<name>` / `result.<name>`）
-    pub fn as_str(&self) -> String {
-        match self {
+    pub fn as_str(&self) -> String {        match self {
             MessageKind::EventsSubscribe => "events.subscribe".to_string(),
             MessageKind::EventsSubscribeAll => "events.subscribeAll".to_string(),
             MessageKind::EventsSubscribeOk => "events.subscribe.ok".to_string(),
@@ -489,6 +471,24 @@ mod tests {
         assert_eq!(kind, MessageKind::Remote("runTask".into()));
         let kind: MessageKind = serde_json::from_str("\"result.listSessions\"").unwrap();
         assert_eq!(kind, MessageKind::Result("listSessions".into()));
+    }
+
+    #[test]
+    fn kind_serde_is_symmetric_bare_string() {
+        // R0-05 对拍发现：derive Serialize 会把 Remote/Result 序列化为
+        // {"Remote":"approve"} 外部标签；修复后 wire 一律裸字符串且可往返。
+        for (wire, expected) in [
+            ("pair.hello", MessageKind::PairHello),
+            ("events.push", MessageKind::EventsPush),
+            ("remote.approve", MessageKind::Remote("approve".into())),
+            ("result.approve", MessageKind::Result("approve".into())),
+            ("future.kind", MessageKind::Unknown("future.kind".into())),
+        ] {
+            let serialized = serde_json::to_string(&expected).unwrap();
+            assert_eq!(serialized, format!("\"{wire}\""), "kind [{wire}] 序列化非裸字符串");
+            let back: MessageKind = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(back, expected, "kind [{wire}] 序列化-反序列化不对称");
+        }
     }
 
     #[test]

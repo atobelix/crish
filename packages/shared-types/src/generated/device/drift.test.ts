@@ -14,7 +14,7 @@
 // 红→绿验证方式：`npm run test`（unit 项目含本文件）或 CI 中层 test job；
 // 修复方式：node scripts/generate-engine-bindings.mjs 后提交生成产物。
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -149,7 +149,12 @@ describe('R0-03 device 生成产物运行时冒烟', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.kind).toBe('heartbeat');
-      expect(result.data.body.ts).toBe(1754651200000);
+      // body 为未打标联合（kind 与 body 类型无判别关联），用 in 守卫收窄
+      const body = result.data.body;
+      if (!('ts' in body)) {
+        throw new Error('heartbeat body 缺少 ts 字段');
+      }
+      expect(body.ts).toBe(1754651200000);
     }
   });
 

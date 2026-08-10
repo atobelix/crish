@@ -120,7 +120,7 @@
   ],
   "messages": [
     { "id": 1, "kind": "pair.hello", "rustVariant": "PairHello", "family": "pair", "direction": "mobile-to-desktop", "authPhase": "pairing", "description": "配对请求（D3 §4.8 step 1）", "fields": [
-      { "name": "code", "type": "string", "required": true, "description": "配对码（CXN-XXXX-XXXX-XXXX，传输统一大写无空格）" },
+      { "name": "code", "type": "string", "required": true, "description": "配对码（D3 §4.1 / ADR-06 唯一真源：12 字符大写字母+数字，去 0/O/1/I，含 L；传输统一无前缀无分隔符；TS 层形状校验宽容，字符集权威校验在网关）" },
       { "name": "deviceId", "type": "string", "required": true, "description": "移动端生成 UUID" },
       { "name": "mobilePub", "type": "string", "required": true, "description": "X25519 一次性公钥 base64" },
       { "name": "mobileLongPub", "type": "string", "required": true, "description": "移动长期公钥 base64（设备身份）" },
@@ -146,7 +146,7 @@
       { "name": "capabilities", "type": "string[]", "required": false, "description": "移动端能力位（fileRead/taskInput/runTask/...）" },
       { "name": "appVersion", "type": "string", "required": true, "description": "应用版本 ≤ 32" },
       { "name": "platform", "type": "Platform", "required": true },
-      { "name": "resume", "type": "JsonValue", "required": false, "description": "断线重连时携带的逐会话游标（ResumeState 映射）" }
+      { "name": "resume", "type": "JsonValue", "required": false, "description": "断线重连时携带的逐会话游标（ResumeState：会话 id → 已确认 sequence 整数映射，Rust 侧 transparent 形态，R0-05 对拍锚定）" }
     ] },
     { "id": 6, "kind": "auth.hello.ok", "rustVariant": "HelloOk", "family": "auth", "direction": "desktop-to-mobile", "authPhase": "handshake", "description": "握手成功（协议协商结果 + manifest + serverTime）", "fields": [
       { "name": "protocolVersion", "type": "number", "required": true, "integer": true, "description": "min(客户端最高, 桌面支持最高)" },
@@ -176,7 +176,7 @@
     ] },
     { "id": 12, "kind": "events.subscribe", "rustVariant": "Subscribe", "family": "events", "direction": "mobile-to-desktop", "authPhase": "session", "description": "按会话订阅（≤ 32 会话/设备；携带断线游标 lastSequences）", "fields": [
       { "name": "sessions", "type": "string[]", "required": true, "description": "订阅会话 id 列表（maxItems 32）" },
-      { "name": "lastSequences", "type": "JsonValue", "required": true, "description": "会话 → 最后已确认持久化序列（ResumeState 映射）" },
+      { "name": "lastSequences", "type": "JsonValue", "required": true, "description": "会话 → 最后已确认持久化序列（ResumeState：会话 id → sequence 整数映射，Rust 侧 transparent 形态，R0-05 对拍锚定）" },
       { "name": "ackMode", "type": "AckMode", "required": false, "description": "none（默认）| critical（诊断模式）" },
       { "name": "granularity", "type": "Granularity", "required": false, "description": "摘要档位 light/standard/full（§5.2.2）" }
     ] },
@@ -612,9 +612,6 @@
       { "name": "contractVersion", "type": "string", "required": true },
       { "name": "commands", "type": "ManifestEntry[]", "required": true }
     ] },
-    "ResumeState": { "kind": "struct", "description": "会话 → 最后已确认持久化序列映射（断线续传游标）", "fields": [
-      { "name": "entries", "type": "JsonValue", "required": true, "description": "patternProperties: {会话id: integer ≥ 0}；wire 形态为对象映射" }
-    ] },
     "PendingApproval": { "kind": "struct", "description": "待审批条目（C13 响应元素；parameters 全量不下发）", "fields": [
       { "name": "requestId", "type": "string", "required": true },
       { "name": "toolCallId", "type": "string", "required": true },
@@ -706,7 +703,7 @@
     ] },
     "Subscribe": { "kind": "struct", "description": "events.subscribe body", "fields": [
       { "name": "sessions", "type": "string[]", "required": true, "description": "≤ 32" },
-      { "name": "lastSequences", "type": "JsonValue", "required": true, "description": "ResumeState 映射" },
+      { "name": "lastSequences", "type": "JsonValue", "required": true, "description": "ResumeState（会话 id → sequence 整数映射，Rust 侧 transparent 形态）" },
       { "name": "ackMode", "type": "AckMode", "required": false },
       { "name": "granularity", "type": "Granularity", "required": false }
     ] },
