@@ -117,6 +117,31 @@ export function isPlainTextLine(lineText: string): boolean {
 }
 
 /**
+ * P3 B3 选区保护判定（plan-A3 方案 B 主——纯函数，O(1)）：
+ * 引擎选区与流式末行相交、或光标位于末行行中 → 返回 false（直刷降级
+ * 走常规 append 路径——直刷写 DOM 会与用户选区/光标错位，B6 M3 已实测
+ * 证实：直刷写后相邻行用户选区被折叠）。无选区且光标在末行行首或之外
+ * 时返回 true（直刷照常，零开销）。
+ */
+export function shouldDirectStream(
+  selectionStart: number,
+  selectionEnd: number,
+  cursorPos: number,
+  lastLineIdx: number,
+  lineOffsets: { getOffset: (lineIndex: number) => number }
+): boolean {
+  if (lastLineIdx < 0) return true;
+  const lineStart = lineOffsets.getOffset(lastLineIdx);
+  const s = Math.min(selectionStart, selectionEnd);
+  const e = Math.max(selectionStart, selectionEnd);
+  // 有选区且终点 ≥ 末行起点（选区覆盖末行任意部分）→ 降级
+  if (s !== e && e >= lineStart) return false;
+  // 光标在末行行中（> 行首）——用户正在编辑末尾区域 → 降级
+  if (cursorPos > lineStart) return false;
+  return true;
+}
+
+/**
  * MarkdownEngine 命令式流式接口（R5 集成轮宿主接线）：
  * 宿主流式路径 = streamAppend(chunk)（直刷优先）→ streamEnd()（flush 收口）。
  * 直刷的 flush 提交走 store.appendText（R3-A stop-flush 语义自动生效：
@@ -742,10 +767,16 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       !chunk.includes('\n') &&
       merged.length <= DIRECT_STREAM_MAX_LINE_CHARS &&
       isPlainTextLine(merged) &&
-      // 「LineNode 仅 text token」的块级保证：围栏内/缩进代码/数学块/
-      // HTML 块内的"看似纯文本"行不算纯文本行（CodeState 权威判定）
+      // 「LineNode �?text token」的块级保证：围栏内/缩进代码/数学�?
+      // HTML 块内�?看似纯文�?行不算纯文本行（CodeState 权威判定�?
       getLineState(s, lastIdx) === 'none' &&
-      tokenEl !== null;
+      tokenEl !== null &&
+      // P3 B3 选区保护（plan-A3 方案 B 主）：引擎选区与末行相交、或
+      // 光标位于末行行中（用户正在编辑/选中末尾区域）→ 降级走常规
+      // append 路径——直刷写 DOM 会与用户选区/光标错位（B6 M3 已实测
+      // 证实真实缺陷：直刷写后相邻行用户选区被折叠）。无选区/光标在
+      // 行尾时判定 O(1) 数字比较，零开销。
+      shouldDirectStream(s.selectionStart, s.selectionEnd, s.cursorPos, lastIdx);
 
     if (canDirect) {
       // 直写 DOM（命令式，绕过 React）：向纯文本 token span 追加；
