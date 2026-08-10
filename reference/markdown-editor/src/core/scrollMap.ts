@@ -20,13 +20,14 @@ const END_MARGIN = 1_000_000; // 恒等区到物理上限的保留余量（保�
 
 export class ScrollMap {
   private logicalHeight: () => number;
-  // _viewportHeight 预留：动态视口锚定增强（A1 登记项）——当前分段为
-  // 全局固定（恒等区以物理上限为基准），未消费视口高；保留构造签名兼容。
+  // viewportHeight 预留：动态视口锚定增强（A1 登记项）——当前分段为
+  // 全局固定（恒等区以物理上限为基准），未消费视口高；保留签名兼容。
   private _viewportHeight: () => number;
 
   constructor(logicalHeight: () => number, viewportHeight: () => number) {
     this.logicalHeight = logicalHeight;
     this._viewportHeight = viewportHeight;
+    void this._viewportHeight; // 预留字段标记（动态视口锚定增强时启用）
   }
 
   /** 是否启用映射（恒等短路） */
