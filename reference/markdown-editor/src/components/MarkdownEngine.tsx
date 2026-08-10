@@ -705,6 +705,42 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const pendingStreamRef = useRef('');
   const dirtyRowOutOfViewRef = useRef(false);
 
+  // P3 B3 选区保护（plan-A3 方案 A 兜底，O(1)）：直刷提交前的越界
+  // 钳制——原生 DOM 选区轨（HiddenInput handleSelectionChange 无钳制
+  // setState 写入，HiddenInput.tsx:878-882）在直刷期间可越过 store
+  // 边界（DOM 长度 > store 长度，plan-A3 §1.2 问题 5：高亮消失的
+  // 边界）。越界值语义 = 用户选中了直刷文本，flush 后文本已提交，
+  // clamp 即正确的恢复目标。修复走既有原子链路：setSelection → 装饰
+  // 维护 effect（applyCursorSelectionDecorations）与 SelectionHighlight
+  // 同 commit 链单帧重测，无中间态、无闪烁。仅越界时 setState——正常
+  // 路径三次数字比较，零分配零开销。
+  const clampSelectionOOB = useCallback(() => {
+    const s = engineStore.getState();
+    if (
+      s.selectionStart > s.textLength ||
+      s.selectionEnd > s.textLength ||
+      s.cursorPos > s.textLength
+    ) {
+      s.setSelection(s.selectionStart, s.selectionEnd);
+    }
+  }, []);
+
+  // 直刷文本提交通道统一出口（flush + 降级路径共用）：appendText 前
+  // 恒做一次越界钳制（见 clampSelectionOOB）。钳制放在提交前而非提交后：
+  // appendText 内部的 shiftGE/computeAssocForLines 对越界值不平移、
+  // 越界光标行号会直接崩溃（EditorStore.computeAssocForLines 不防御）；
+  // 先收敛到 textLength 再平移——「提交前钳制 + shiftGE」与「shiftGE
+  // + 提交后钳制」结果一致（plan-A3 §2.1），且原生轨越界值语义 = 用户
+  // 选中了直刷文本，提交前收敛即正确的恢复目标。钳制幂等，未越界零
+  // 副作用（正常路径三次数字比较，零分配零开销）。
+  const appendTextWithClamp = useCallback(
+    (text: string) => {
+      clampSelectionOOB();
+      engineStore.getState().appendText(text);
+    },
+    [clampSelectionOOB]
+  );
+
   // flush 实现（C3）：累积直刷文本经 store.appendText 一次提交 →
   // dirty 清除 → 恢复常规路径。R3-A 语义自动生效：appendText 内部的
   // 追加点锚定/光标平移/流式合并记账（meta:'stream'）统一接管，
@@ -718,8 +754,10 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     pendingStreamRef.current = '';
     dirtyRefs.current.clear();
     dirtyRowOutOfViewRef.current = false;
-    engineStore.getState().appendText(pending);
-  }, []);
+    // P3 B3：提交通道统一走 appendTextWithClamp——flush 是原生轨越界
+    // 选区的主要修复点（直刷期间用户选中了 DOM 上的直刷字符）。
+    appendTextWithClamp(pending);
+  }, [appendTextWithClamp]);
 
   // 直刷行可见性判定（O(1)：HeightMap.indexAt 二分像素→行）：
   // 用于「滚动到尾部触达 dirty 行 → flush」与直刷会话起点初值。
@@ -794,9 +832,11 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     // 常规路径（含 \n / 合并后非纯文本 / 超长 / 行未挂载 / dirty 行卸载）：
     // 先 flush 累积（"若含 \n 先 flush"推广到一切回落情形——保证直刷文本
     // 永远先于后续内容提交，顺序不颠倒），再 appendText 交给 store。
+    // P3 B3：降级路径的提交同样走 appendTextWithClamp——原生轨越界选区
+    // （DOM 坐标）在降级帧的 appendText 平移后仍可能越界，一并钳制兜底。
     flushStreamInternal();
-    engineStore.getState().appendText(chunk);
-  }, [flushStreamInternal, isRowInVisibleViewport]);
+    appendTextWithClamp(chunk);
+  }, [flushStreamInternal, isRowInVisibleViewport, appendTextWithClamp]);
 
   // 流式结束（宿主调用）：flush 直刷累积（appendText 一次提交），并
   // stop-flush 尾段——R3-A 将本次流式会话合并为单个 meta:'stream'
@@ -1537,13 +1577,18 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
         />
       )}
       {/* B2 查找替换面板：挂载于根容器内、滚动容器外（不干扰虚拟
-          滚动/行高测量）；store 绑定本实例、跳转/高亮接 handle 链路。
-          宿主可用 findReplace prop 显式关闭（只读消息历史场景） */}
+           滚动/行高测量）；store 绑定本实例、跳转/高亮接 handle 链路。
+           P3 B3（plan-A3 §3 顺带修复）：onBeforeReplace 接 flush——
+           面板在滚动容器外，容器 capture flush 监听不触达面板 keydown，
+           替换动作先提交直刷 pending（命中在末行时 B 判定已保证无
+           pending，空转零开销）。宿主可用 findReplace prop 显式关闭
+           （只读消息历史场景） */}
       {findReplace && (
         <FindReplacePanel
           store={engineStore}
           onGoToMatch={scrollToMatch}
           onSetHighlights={setSearchRanges}
+          onBeforeReplace={flushStreamInternal}
           readOnly={readOnly}
         />
       )}
