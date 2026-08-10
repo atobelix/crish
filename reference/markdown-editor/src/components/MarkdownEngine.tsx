@@ -19,6 +19,8 @@ import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
 import { DecorationSet, applyCursorSelectionDecorations } from '../core/DecorationSet';
 
 import { type CodeState } from '../core/parser';
+// P3 B1 scroll factor：逻辑↔物理滚动高度分段映射（超长文档防浏览器高度触顶）
+import { ScrollMap } from '../core/scrollMap';
 // B4 N9：只读复制为 Markdown——DOM 选区 → 源码偏移映射 + getText 切片
 import { selectionToMarkdown } from '../core/renderToHtml';
 // B2 查找替换（05 高频项 N6）：查找替换面板（搜索/高亮/跳转/替换/
@@ -526,9 +528,20 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   // ── 行高模型（R2-B 定位层）：HeightOracle 预测 + HeightMap 回填（01 问题 1/8，09 §4 C2）──
   const rowRefs = useRef(new Map<number, HTMLElement>());
   const heightMapRef = useRef<HeightMap | null>(null);
+  // P3 B1 scroll factor：分段映射实例（恒等短路——总高 ≤ 30M px 时零开销直通）
+  const scrollMapRef = useRef<ScrollMap | null>(null);
+  // 内容容器 div（tanstack containerRef 是回调——物理总高覆盖经此）
+  const contentDivRef = useRef<HTMLDivElement | null>(null);
   const oracleRef = useRef<HeightOracle | null>(null);
   if (heightMapRef.current === null) heightMapRef.current = new HeightMap();
   if (oracleRef.current === null) oracleRef.current = new HeightOracle();
+  // P3 B1：ScrollMap 实例（逻辑总高 + 视口高——恒等短路自动处理低文档）
+  if (scrollMapRef.current === null) {
+    scrollMapRef.current = new ScrollMap(
+      () => heightMapRef.current?.totalHeight ?? 0,
+      () => parentRef.current?.clientHeight ?? 0
+    );
+  }
 
   // ── B3 大纲索引（N2）：HeadingIndex 增量维护 ──
   // 前一帧双段行视图引用（不拷贝——store 数组只整体替换，引用持有即快照）；
@@ -600,6 +613,50 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       return 28;
     },
     overscan: 40, // Buffer for smooth scrolling
+    // P3 B1 scroll factor 接线（review-P3 高危修订已内化）：
+    // - observeElementOffset 自定义：scroll 事件 rAF 合并后喂「逻辑值」
+    //   （物理 el.scrollTop → ScrollMap.inverse）——tanstack 内部 offset
+    //   全程逻辑坐标，窗口计算/行 top（directDomUpdates 写 el.style.top）
+    //   与 HeightMap 逻辑坐标系一致，零改动；
+    // - scrollToFn 自定义：逻辑目标 → ScrollMap.apply → 写物理 scrollTop
+    //   （scrollToIndex/大纲跳转/查找跳转全部经此）；
+    // - 内容容器高度（applyContainerSize 写逻辑总高）由批量测量 effect
+    //   同帧覆盖为物理总高 ScrollMap.physicalTotalHeight（评审修订：
+    //   保留 containerRef——tanstack applyDirectStyles 在 container null
+    //   时 return 会禁用行定位）。
+    observeElementOffset: (instance, cb) => {
+      const el = instance.scrollElement;
+      if (!el) return;
+      let rafId = 0;
+      let latest = 0;
+      let isUpdating = false;
+      const onScroll = () => {
+        latest = el.scrollTop;
+        if (!isUpdating) {
+          isUpdating = true;
+          rafId = requestAnimationFrame(() => {
+            cb(scrollMapRef.current ? scrollMapRef.current.inverse(latest) : latest, false);
+            isUpdating = false;
+          });
+        }
+      };
+      cb(scrollMapRef.current ? scrollMapRef.current.inverse(el.scrollTop) : el.scrollTop, false);
+      el.addEventListener('scroll', onScroll, { passive: true });
+      return () => {
+        el.removeEventListener('scroll', onScroll);
+        if (rafId) cancelAnimationFrame(rafId);
+      };
+    },
+    scrollToFn: (offset, opts, instance) => {
+      const el = instance.scrollElement;
+      if (!el) return;
+      const physical = scrollMapRef.current ? scrollMapRef.current.apply(offset) : offset;
+      if (opts.behavior === 'smooth') {
+        el.scrollTo({ top: physical, behavior: 'smooth' });
+      } else {
+        el.scrollTop = physical;
+      }
+    },
     // C1 滚动管线与 tanstack 契约（09 §4 C1 全落实）：
     // - directDomUpdates（position 模式）：observer 照常通知保持 start 正确，
     //   但滚动位置帧的 React 提交被合并到「窗口变化帧」——行位置由库直接命令式
@@ -646,8 +703,11 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     const hm = heightMapRef.current;
     // 容器/行高模型未就绪时保守视为可见（不误触发触达 flush）
     if (!el || !hm) return true;
-    const first = hm.indexAt(el.scrollTop, 0);
-    const last = hm.indexAt(el.scrollTop + el.clientHeight, 0);
+    // P3 B1：物理 scrollTop → 逻辑（超长文档压缩区换算；恒等短路零开销）
+    const physTop = el.scrollTop;
+    const logicTop = scrollMapRef.current ? scrollMapRef.current.inverse(physTop) : physTop;
+    const first = hm.indexAt(logicTop, 0);
+    const last = hm.indexAt(logicTop + el.clientHeight, 0);
     if (first < 0 || last < 0) return true;
     return rowIdx >= first && rowIdx <= last;
   }, []);
@@ -771,7 +831,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   // 14px + 内容 div margin-top 14px（09 §4 C1 换算口径）
   const resolveScrollLine = useCallback((scrollTop: number) => {
     const hm = heightMapRef.current;
-    return hm ? hm.indexAt(scrollTop, 28) : 0;
+    // P3 B1：OutlinePanel 传入的是物理 scrollTop——先逆映射为逻辑
+    const logicTop = scrollMapRef.current ? scrollMapRef.current.inverse(scrollTop) : scrollTop;
+    return hm ? hm.indexAt(logicTop, 28) : 0;
   }, []);
 
   // ── B3 大纲标题提取（HeadingIndex extract 回调注入）──
@@ -1004,6 +1066,17 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       }
     }
     hm.flush();
+    // P3 B1（review-P3 修订）：内容容器高度同帧覆盖为物理总高——
+    // tanstack applyContainerSize（directDomUpdates 内）写逻辑总高，
+    // 本 effect 声明序在其后（渲染后），同帧覆盖 f(H)，避免浏览器
+    // 滚动高度触顶；containerRef 保留（applyDirectStyles 依赖它）。
+    const containerEl = contentDivRef.current;
+    if (containerEl) {
+      const phys = scrollMapRef.current?.physicalTotalHeight();
+      if (typeof phys === 'number') {
+        containerEl.style.height = `${phys}px`;
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey, flushStreamInternal]);
 
@@ -1154,7 +1227,10 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     let clickedPadding = false;
     if (clickedLineIndex === -1 && parentRef.current) {
       const containerRect = parentRef.current.getBoundingClientRect();
-      const contentY = e.clientY - containerRect.top + parentRef.current.scrollTop;
+      // P3 B1：物理 scrollTop → 逻辑（点击定位在逻辑坐标系——HeightMap 行 top）
+      const physTop = parentRef.current.scrollTop;
+      const logicTop = scrollMapRef.current ? scrollMapRef.current.inverse(physTop) : physTop;
+      const contentY = e.clientY - containerRect.top + logicTop;
 
       const hm = heightMapRef.current;
       const items = virtualizer.getVirtualItems();
@@ -1419,9 +1495,13 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       >
         {/* C1 契约：内容容器主轴高度由 virtualizer.containerRef 命令式管理
             （applyContainerSize 写总高，免 React 提交），style 不写 height；
-            marginTop 14px 为横向装饰属性，保留 */}
+            marginTop 14px 为横向装饰属性，保留。P3 B1：contentDivRef 双挂
+            （tanstack 回调 ref 无 .current——物理总高覆盖经本 ref） */}
         <div
-          ref={virtualizer.containerRef}
+          ref={(node) => {
+            virtualizer.containerRef(node);
+            contentDivRef.current = node;
+          }}
           style={{
             width: '100%',
             position: 'relative',
