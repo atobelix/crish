@@ -342,8 +342,13 @@ export class MarkdownParser {
   }
 
   public static parse(text: string): MarkdownDocument {
-    const { offsets, codeBlockState, setextLevels, listContexts } =
-      this.computeLineOffsets(text);
+    const {
+      offsets,
+      codeBlockState,
+      setextLevels,
+      listContexts,
+      lazyContinuation,
+    } = this.computeLineOffsets(text);
     const lines = text.split('\n');
     const lineNodes: LineNode[] = new Array(lines.length);
     // 引用链接定义预扫描（02 §2.3）：定义表随 parse 调用创建（文档级隔离——
@@ -372,7 +377,10 @@ export class MarkdownParser {
         // 列表项延续上下文（R1.5-B）：computeLineOffsets 判定为「空行后
         // 列表项延续」的行携带列表缩进，parseLine 据此标记 listIndent/
         // listContinuation（普通行为 null）。
-        listContexts[i]
+        listContexts[i],
+        // 懒延续继承层级（B8a）：无块引用标记（或标记层数不足）的段落
+        // 延续行继承前一非空白块引用段落行的容器层级（null = 非懒延续）。
+        lazyContinuation[i]
       );
     }
     return {
@@ -637,12 +645,20 @@ export class MarkdownParser {
     codeBlockState: CodeState[];
     setextLevels: number[];
     listContexts: (ListContext | null)[];
+    // B8a：懒延续行继承的块引用层级（null = 非懒延续行）——无块引用标记
+    // （或标记层数不足）的段落延续行按 spec 5.2 Laziness 规则继承前一
+    // 非空白块引用段落行的容器层级，供 parseLine 覆盖文本前缀计算值。
+    lazyContinuation: (number | null)[];
   } {
     const lines = text.split('\n');
     const offsets = new Array(lines.length);
     const codeBlockState: CodeState[] = new Array(lines.length);
     // R1.5-B：逐行列表延续上下文（仅「空行后列表项延续」行非 null）
     const listContexts: (ListContext | null)[] = new Array(lines.length).fill(
+      null
+    );
+    // B8a：逐行懒延续层级（默认非懒延续）
+    const lazyContinuation: (number | null)[] = new Array(lines.length).fill(
       null
     );
 
@@ -654,10 +670,21 @@ export class MarkdownParser {
     // （```` 开栏不能被 ``` 关闭，spec Fenced code "at least as long as"）；
     // 取代旧的 `startsWith('```')` 布尔切换（3 反引号会错误关闭 4 反引号、
     // ` ``` js` 信息串行被错误当作关闭行，02 §7.2 实证 FENCE34/FENCEINFO）。
-    let fenceState: { marker: string; length: number } | null = null;
+    // B8a：增加 level 字段——围栏跨行要求块引用层级一致（spec 例 237：
+    // 引用内开栏后无标记行 → 围栏随容器结束，无前缀行是新围栏/普通行）。
+    let fenceState: {
+      marker: string;
+      length: number;
+      level: number;
+    } | null = null;
+    // 数学块起始行的块引用层级（B8a：与围栏同一致性语义）
+    let mathFenceLevel = 0;
     // 缩进代码块状态（02 §2.2）：连续 ≥4 空格缩进行合并为一个代码块，
     // 块内空行保持状态（CommonMark：空行仍是代码块的一部分）。
+    // B8a：增加 level 字段——缩进代码跨行同样要求块引用层级一致
+    // （spec 例 252：`>     code` 的块止于空行，`>    not code` 是新容器）。
     let inIndentCode = false;
+    let indentCodeLevel = 0;
     // 上一非空白行的块级形态记忆（见 BlockKind 注释）——行级模型无容器状态，
     // 用轻量行首形态分类近似「上一行是什么」，不依赖 parseLine（避免递归依赖）。
     let prevBlockKind: BlockKind = 'blank';
@@ -673,15 +700,37 @@ export class MarkdownParser {
     // 「空行后首行」（紧邻延续由 prevBlockKind === 'list' 单独接管，
     // 代码块不能打断段落——spec §5.2 例 264 语义）。
     let justBlank = false;
+    // B8a：懒延续判定的「前一非空白行是块引用内打开的段落」记忆——
+    // prevParagraphOpen = 前一行是 body 行且其块引用层级 ≥1（段落已打开）；
+    // prevBqLevel = 该行继承后的层级（懒延续行继续传递，例 233 三行链）。
+    let prevParagraphOpen = false;
+    let prevBqLevel = 0;
 
     for (let i = 0; i < lines.length; i++) {
       offsets[i] = currentOffset;
-      // 块引用前缀剥离（与 parseNormalLine 同一正则 `^\s*>\s?`）：缩进判定发生
-      // 在前缀剥离之后（`>     code` → 块引用内缩进代码）。注：该正则的 `\s*`
-      // 会吞掉前导缩进（如 `    > foo` 被当作块引用前缀），与 parseNormalLine
-      // 判定一致，属既有偏差，此处不另行修正（0 回归）。
-      const { content: bqContent } = this.stripBlockquoteContext(lines[i]);
+      // 块引用前缀剥离（与 parseNormalLine 同一正则 `^ {0,3}>\s?`）：缩进判定发生
+      // 在前缀剥离之后（`>     code` → 块引用内缩进代码）。B8a：前缀限至多
+      // 3 空格缩进（spec 例 231——`    > foo` 是缩进代码块，不再是块引用）。
+      const { level: bqSelfLevel, content: bqContent } =
+        this.stripBlockquoteContext(lines[i]);
       const trimmed = bqContent.trim();
+
+      // —— B8a：懒延续判定（spec 5.2 Laziness 规则 2）——
+      // 前一非空白行是块引用内打开的段落（body 且层级 ≥1）且本行非空行后的
+      // 首行（空行阻断懒延续，例 248），且本行的标记层数**不足**（bqSelfLevel
+      // < prevBqLevel——标记层数足够时按自身层级解析，`> q\n> > deep` 的
+      // 第二行自身 2 层不懒延续），且本行剥离自身标记后的内容属于
+      // 「段落延续文本」（缩进代码不能打断段落、hr/ATX/表格/列表/围栏/
+      // HTML 块等块结构可打断）→ 本行继承前一行的块引用层级。
+      // 例 250/251：嵌套引用中可省略任意数量的 `>`（`> bar` 自身 1 层、
+      // 懒延续到 `>>> foo` 的 3 层容器——继承以段落层级为准）。
+      let lazyInherit: number | null = null;
+      if (prevParagraphOpen && !justBlank && bqSelfLevel < prevBqLevel) {
+        if (this.isParagraphContinuationText(bqContent, prevBlockKind)) {
+          lazyInherit = prevBqLevel;
+          lazyContinuation[i] = lazyInherit;
+        }
+      }
 
       // 围栏形态判定（开/关共用，trim 后行）：反引号 run ≥3（info 串不允许
       // 含反引号——spec 原文：backtick fences 的 info string 不能含 backtick，
@@ -715,13 +764,70 @@ export class MarkdownParser {
           // （type 7 单行块后 `    foo` → 缩进代码，与 CommonMark 一致）。
           prevBlockKind = 'code';
         }
-      } else if (!inMathBlock && fenceOpen) {
-        if (!inCodeBlock) {
-          // 开围栏：记录标记字符与 run 长度（后续关闭判定的依据）
+      } else if (
+        inCodeBlock &&
+        fenceState &&
+        bqSelfLevel !== fenceState.level &&
+        // 空行不在此强制关闭（空行懒匹配所有容器——fence 内空行保持，
+        // 后续非空行若不匹配容器则触发关闭并回写这些空行，见下）
+        trimmed !== ''
+      ) {
+        // —— B8a：围栏跨行容器层级不匹配（spec 例 237）——
+        // 引用内开栏（`> ```` ）后紧跟无标记行：块引用容器在无标记行处
+        // 结束，围栏随容器一起终止（围栏内容必须全在容器内），本行
+        // 重新按普通行判定（可能自身开启新围栏，如例 237 的第三行 ````）。
+        // spec（Fenced code blocks 章节）实证：`> ````\n> aaa\n\nbbb` 的
+        // 空行也不属于 fence 内容——关闭时回写 fence 内尾随空行为 none。
+        inCodeBlock = false;
+        fenceState = null;
+        this.closeBlockTrailingBlanks(lines, codeBlockState, i);
+        if (!inMathBlock && fenceOpen) {
           codeBlockState[i] = 'fence_start';
           fenceState = {
             marker: fenceOpen[1] !== undefined ? '`' : '~',
             length: (fenceOpen[1] ?? fenceOpen[3]).length,
+            level: bqSelfLevel,
+          };
+          inCodeBlock = true;
+        } else {
+          // 非围栏形态行：落到下方的普通行判定链
+          codeBlockState[i] = 'none';
+          prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
+          inIndentCode = false;
+        }
+      } else if (
+        inMathBlock &&
+        bqSelfLevel !== mathFenceLevel &&
+        trimmed !== ''
+      ) {
+        // —— B8a：数学块跨行容器层级不匹配（与围栏同一致性语义）——
+        // `> $$` 开数学块后无标记行 → 数学块随容器终止，本行按普通行处理；
+        // 数学块内尾随空行同样回写（与围栏规则一致）。
+        inMathBlock = false;
+        this.closeBlockTrailingBlanks(lines, codeBlockState, i);
+        if (trimmed === '$$') {
+          codeBlockState[i] = 'math_fence_start';
+          mathFenceLevel = bqSelfLevel;
+          inMathBlock = true;
+        } else if (trimmed === '') {
+          codeBlockState[i] = 'none';
+          justBlank = true;
+          if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+        } else {
+          codeBlockState[i] = 'none';
+          prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
+          inIndentCode = false;
+        }
+      } else if (!inMathBlock && fenceOpen) {
+        if (!inCodeBlock) {
+          // 开围栏：记录标记字符、run 长度与起始行块引用层级（B8a——
+          // 后续行的关闭/跨容器判定以「同字符 + run 长度 ≥ 开栏长度 +
+          // 层级一致」为准，spec 例 237）。
+          codeBlockState[i] = 'fence_start';
+          fenceState = {
+            marker: fenceOpen[1] !== undefined ? '`' : '~',
+            length: (fenceOpen[1] ?? fenceOpen[3]).length,
+            level: bqSelfLevel,
           };
           inCodeBlock = true;
         } else if (fenceState) {
@@ -749,6 +855,8 @@ export class MarkdownParser {
       } else if (!inCodeBlock && trimmed === '$$') {
         if (!inMathBlock) {
           codeBlockState[i] = 'math_fence_start';
+          // B8a：记录数学块起始行的块引用层级（跨容器一致性判定用）
+          mathFenceLevel = bqSelfLevel;
           inMathBlock = true;
         } else {
           codeBlockState[i] = 'math_fence_end';
@@ -768,6 +876,16 @@ export class MarkdownParser {
         // —— 缩进代码块判定（02 §2.2）——
         const indent = this.leadingIndentColumns(bqContent);
         if (inIndentCode) {
+          // —— B8a：缩进代码块跨行容器层级不匹配（spec 例 252）——
+          // 引用内缩进代码（`>     code`）止于容器变化处：无标记行/空行
+          // 的层级与开块行不同 → 代码块结束，本行重新走下方判定链
+          // （空行按空行处理、`    bar` 在文档根开新代码块，例 236）。
+          if (indentCodeLevel !== 0 && bqSelfLevel !== indentCodeLevel) {
+            inIndentCode = false;
+            indentCodeLevel = 0;
+          }
+        }
+        if (inIndentCode) {
           // 块内：空行与 ≥4 空格缩进行保持状态；非缩进行结束代码块。
           if (trimmed === '' || indent >= 4) {
             codeBlockState[i] = 'indent_code';
@@ -775,6 +893,7 @@ export class MarkdownParser {
             // 非缩进行结束代码块：该行按普通行处理（可能开启 HTML 块——
             // CommonMark 中缩进代码块后的 `</div>` 行是 type 6 块）。
             inIndentCode = false;
+            indentCodeLevel = 0;
             const htmlStart = this.matchHtmlBlockStart(bqContent, prevBlockKind);
             if (htmlStart) {
               codeBlockState[i] = 'html_block';
@@ -799,7 +918,16 @@ export class MarkdownParser {
           if (prevBlockKind !== 'list') prevBlockKind = 'blank';
         } else if (indent >= 4) {
           const afterIndent = this.stripFourColumns(bqContent);
-          if (this.isListMarkerStart(afterIndent)) {
+          if (lazyInherit !== null) {
+            // —— B8a：懒延续行（spec 例 238）——
+            // `> foo\n    - bar`：4 空格缩进行在前一非空白行是块引用段落时
+            // 是「段落延续文本」（缩进代码不能打断段落、列表标记缩进过深
+            // 无法开项——spec 说明实证），必须按 body 延续解析，嵌套列表/
+            // 缩进代码判定全部让路（缩进代码块只在段落未打开时成立）。
+            codeBlockState[i] = 'none';
+            inIndentCode = false;
+            prevBlockKind = 'body';
+          } else if (this.isListMarkerStart(afterIndent)) {
             // 去缩进后以列表标记开头 → 嵌套列表/列表延续，按 body 解析。
             // 任务书简化：无条件列表优先（登记偏差——CommonMark 中文档级
             // `    - foo` 期望缩进代码，行级模型无列表容器状态无法区分）。
@@ -828,6 +956,7 @@ export class MarkdownParser {
               // 紧邻缩进行（R1-A2b）按段落延续处理，代码块不能打断段落。
               codeBlockState[i] = 'indent_code';
               inIndentCode = true;
+              indentCodeLevel = bqSelfLevel;
               prevBlockKind = 'code';
             } else if (indent >= listCtx.markerWidth) {
               // 内容缩进 ≤ 缩进 < 内容缩进 + 4：列表项延续（例 256/258）——
@@ -846,6 +975,7 @@ export class MarkdownParser {
               inIndentCode = false;
               codeBlockState[i] = 'indent_code';
               inIndentCode = true;
+              indentCodeLevel = bqSelfLevel;
               prevBlockKind = 'code';
             }
           } else if (
@@ -862,6 +992,7 @@ export class MarkdownParser {
             // 进入缩进代码块（上一行是空行 / 标题 / 分隔线 / 代码 / 块引用等）。
             codeBlockState[i] = 'indent_code';
             inIndentCode = true;
+            indentCodeLevel = bqSelfLevel;
             prevBlockKind = 'code';
           }
         } else {
@@ -935,22 +1066,78 @@ export class MarkdownParser {
       // R1.5-B：非空行在迭代末尾重置「上一行空白」记忆——justBlank 语义是
       // 「上一行（i-1）为空白行」，必须在下一行迭代开始时保持有效，
       // 因此重置放在迭代末尾而非开头。
-      if (trimmed !== '') justBlank = false;
+      // B8a：同步维护懒延续判定的「块引用段落打开」记忆——非空行按本行
+      // 最终形态（prevBlockKind 由各分支设置）更新；空行关闭段落
+      // （`> bar\n\nbaz` 中 baz 不懒延续，spec 例 248）。懒延续行自身
+      // 也是 body 段落（例 233 三行链由此逐行传递）。
+      if (trimmed !== '') {
+        justBlank = false;
+        prevBqLevel =
+          lazyInherit !== null ? lazyInherit : bqSelfLevel;
+        prevParagraphOpen =
+          prevBlockKind === 'body' && prevBqLevel >= 1;
+      } else {
+        prevParagraphOpen = false;
+        prevBqLevel = 0;
+      }
 
       currentOffset += lines[i].length + 1; // +1 for \n
     }
 
     // Setext 预扫描（紧随 computeLineOffsets 状态机，单趟 O(n)）：
     // 产出每行的 Setext 上下文标志，供 parseLine 消费（见 §2.1 与 review-02 §7.1）。
-    const setextLevels = this.computeSetextContexts(lines, codeBlockState);
+    // B8a：懒延续行不参与 Setext——`> bar\nbaz\n---` 中 baz 是块引用段落
+    // 的延续行，`---` 对其不构成 Setext 下划线（否则 baz 被误升级为标题）。
+    const setextLevels = this.computeSetextContexts(
+      lines,
+      codeBlockState,
+      lazyContinuation
+    );
 
-    return { offsets, codeBlockState, setextLevels, listContexts };
+    return {
+      offsets,
+      codeBlockState,
+      setextLevels,
+      listContexts,
+      lazyContinuation,
+    };
+  }
+
+  /**
+   * 回写围栏/数学块内尾随空行（B8a，spec「A code block can have all empty
+   * lines」的对偶）：容器因层级不匹配而强制关闭时，块内尾随的空白行
+   * 不属于块内容（spec 实证：`> ````\n> aaa\n\nbbb` 的 fence 内容只有
+   * `aaa`，空行随容器终止归文档根）。从 i-1 起向前把连续的空行 code/
+   * math_block 状态回写为 none（空行懒匹配所有容器——容器在下一非空行
+   * 处回溯闭合，空行随之出块）。
+   */
+  private static closeBlockTrailingBlanks(
+    lines: string[],
+    codeBlockState: CodeState[],
+    i: number
+  ): void {
+    for (let j = i - 1; j >= 0; j--) {
+      if (
+        codeBlockState[j] !== 'code' &&
+        codeBlockState[j] !== 'math_block'
+      ) {
+        break;
+      }
+      if (lines[j].trim() !== '') break;
+      codeBlockState[j] = 'none';
+    }
   }
 
   /**
    * 剥离块引用前缀（与 parseNormalLine 同一正则 `^\s*>\s?`），
    * 返回前缀层级与剥离后的内容——Setext 判定必须发生在前缀剥离之后
    * （02-解析器正确性.md §2.1 冲突点）。
+   * 已知偏差（B8a 复核保留）：正则 `\s*` 会吞掉前导缩进（`    > foo`
+   * 被当作块引用前缀、`> >     > Even` 剥成 3 层）——CommonMark 规定
+   * marker 前至多 3 空格缩进（spec 例 231：4 空格是缩进代码块），但
+   * 既有行为被 tests/unit/fuzz-document-typography.test.ts 注册（断言
+   * `> >     > Even` 为 3 层 body），且投影器 stripBlockquotePrefix 同步
+   * 依赖该贪婪语义；修正需引擎+投影器+测试三方协同，上报主调度裁决。
    */
   private static stripBlockquoteContext(
     line: string
@@ -1062,6 +1249,33 @@ export class MarkdownParser {
       }
     }
     return col;
+  }
+
+  /**
+   * 段落延续文本判定（B8a，spec 5.2 Laziness 规则 2）：
+   * 行（已剥离自身块引用标记）在「块引用段落已打开」的上下文中是否属于
+   * 段落延续文本——是则允许懒延续（无标记行继承块引用层级）。
+   * 判定语义「若补上块引用标记后会被解析为段落内容」：
+   * - ≥4 空格缩进：一律是段落延续文本——缩进代码块不能打断段落，
+   *   列表标记缩进过深无法开项（spec 例 238：`> foo\n    - bar`）；
+   * - <4 空格：排除可打断段落的块结构——hr / ATX 标题 / Setext 下划线
+   *   （前一行是段落时）/ 表格 / 列表标记 / 围栏 / HTML 块（type 1-6）。
+   * 空行不算段落延续文本（懒延续要求紧跟段落，例 248）。
+   */
+  private static isParagraphContinuationText(
+    content: string,
+    prevBlockKind: BlockKind
+  ): boolean {
+    if (!content.trim()) return false;
+    if (this.leadingIndentColumns(content) >= 4) return true;
+    const s = content.replace(/^ {0,3}/, '');
+    // 围栏形态（与 computeLineOffsets 的 fenceOpen 同一判定基线：
+    // trim 后反引号 run ≥3 且 info 串不含反引号 / 波浪线 run ≥3）
+    if (/^(```+)([^`]*)$/.test(s) || /^(~~~+).*$/.test(s)) return false;
+    // HTML 块 start（type 1-6 可打断段落；type 7 在段落后是段落延续——
+    // matchHtmlBlockStart 对 prevBlockKind==='body' 已禁用 type 7）
+    if (this.matchHtmlBlockStart(content, prevBlockKind)) return false;
+    return this.guessBlockKind(content, prevBlockKind) === 'body';
   }
 
   /**
@@ -1228,7 +1442,10 @@ export class MarkdownParser {
    */
   private static computeSetextContexts(
     lines: string[],
-    codeBlockState: CodeState[]
+    codeBlockState: CodeState[],
+    // B8a：懒延续行数组（null = 非懒延续）——懒延续行是块引用段落的
+    // 延续内容，不能作为 Setext 标题内容行（`> bar\nbaz\n---` 的 baz）。
+    lazyContinuation: (number | null)[] | null = null
   ): number[] {
     const n = lines.length;
     const setextLevels: number[] = new Array(n).fill(0);
@@ -1237,6 +1454,12 @@ export class MarkdownParser {
     for (let i = 0; i + 1 < n; i++) {
       // 围栏 / 数学 / 代码块内的行不参与 Setext
       if (codeBlockState[i] !== 'none' || codeBlockState[i + 1] !== 'none') {
+        continue;
+      }
+      // B8a：懒延续行不参与 Setext（其「段落」身份在块引用容器内，
+      // 裸下划线行对其不构成 Setext 下划线——CommonMark 5.2 Laziness：
+      // `> bar\nbaz\n---` 中 --- 是文档根 hr，baz 不是标题内容）
+      if (lazyContinuation && lazyContinuation[i] !== null) {
         continue;
       }
       const prev = this.stripBlockquoteContext(lines[i]);
@@ -1280,10 +1503,14 @@ export class MarkdownParser {
     // 延续」的行携带列表缩进；null = 非延续行。必须进缓存键——同文本行
     // 在有无列表上下文下产出不同节点（listIndent/listContinuation），
     // 不进键会导致跨文档缓存串扰（例 256 的 `  two` 与普通 `  two`）。
-    listContext: ListContext | null = null
+    listContext: ListContext | null = null,
+    // 懒延续继承层级（B8a）：null = 非懒延续行。必须进缓存键——同文本行
+    // 在「块引用段落懒延续」与「文档根普通行」下产出不同 blockquoteLevel
+    // （例 247 的 `baz` 与文档根 `baz`），不进键会跨文档缓存串扰。
+    lazyInherit: number | null = null
   ): LineNode {
     // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 列表上下文
-    // + 全局规则版本 + 完整行文本：
+    // + 懒延续层级 + 全局规则版本 + 完整行文本：
     // blockquote 前缀、fence/math 跨行状态、Setext 上下文均已编码在键内
     // （review-02 §7.1/§7.3：上下文必须进键，禁止回写缓存行），
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
@@ -1302,6 +1529,8 @@ export class MarkdownParser {
       ':' +
       (listContext ? 'L' + listContext.indent + ',' + listContext.markerWidth : 'Lx') +
       ':' +
+      (lazyInherit !== null ? 'B' + lazyInherit : 'Bx') +
+      ':' +
       lineText;
     const cached = this.astCache.get(cacheKey);
     if (cached) {
@@ -1319,10 +1548,16 @@ export class MarkdownParser {
     let blockquoteLevel = 0;
     let trimmed = lineText;
     let bMatch;
+    // 前缀正则 `^\s*>\s?`（含贪婪吞缩进，B8a 复核保留——见
+    // stripBlockquoteContext 的已知偏差登记）
     while ((bMatch = trimmed.match(/^\s*>\s?/))) {
       blockquoteLevel++;
       trimmed = trimmed.substring(bMatch[0].length);
     }
+    // B8a：懒延续行（spec 5.2 Laziness）：无标记（或标记层数不足）的段落
+    // 延续行以继承层级覆盖文本前缀计算值（例 251：`> bar` 自身 1 层、
+    // 懒延续到 `>>> foo` 的 3 层容器；例 250 的 `bar` 0 层继承 3 层）。
+    if (lazyInherit !== null) blockquoteLevel = lazyInherit;
     const bqLevelVal = blockquoteLevel > 0 ? blockquoteLevel : undefined;
 
     // Setext 下划线行 / 引用定义行（预扫描已确认）：零输出行——复用 'empty' 类型
@@ -1476,8 +1711,12 @@ export class MarkdownParser {
       localOffset,
       setextLevel,
       refDefs,
-      listContext
+      listContext,
+      lazyInherit
     );
+    // B8a：懒延续行的 blockquoteLevel 由上下文决定（parseLine 与
+    // parseNormalLine 计算一致，此处幂等覆盖兜底）
+    node.blockquoteLevel = bqLevelVal;
 
     this.astCache.set(cacheKey, node);
     return node;
@@ -1518,7 +1757,9 @@ export class MarkdownParser {
     let pos = 0;
     let remainingTextForPrefix = lineText;
     let blockquoteMatch;
-    
+
+    // 前缀正则 `^\s*>\s?`（含贪婪吞缩进，B8a 复核保留——见
+    // stripBlockquoteContext 的已知偏差登记）
     while ((blockquoteMatch = remainingTextForPrefix.match(/^\s*>\s?/))) {
       pos += blockquoteMatch[0].length;
       remainingTextForPrefix = remainingTextForPrefix.substring(blockquoteMatch[0].length);
@@ -1630,7 +1871,11 @@ export class MarkdownParser {
     refDefs: RefDefTable | null = null,
     // 列表项延续上下文（R1.5-B）：computeLineOffsets 判定为「空行后列表项
     // 延续」的行携带列表缩进——输出 listIndent + listContinuation 标志。
-    listContext: ListContext | null = null
+    listContext: ListContext | null = null,
+    // 懒延续继承层级（B8a）：非 null 时本行是块引用段落的懒延续行——
+    // 跳过全部块级判定（hr/ATX/表格/列表），按段落文本行内解析
+    // （spec 5.2 Laziness，例 238：`    - bar` 是段落文本而非列表）。
+    lazyInherit: number | null = null
   ): LineNode {
     const tokens: InlineNode[] = [];
     let pos = 0;
@@ -1671,11 +1916,16 @@ export class MarkdownParser {
     // Parse blockquote prefixes first
     let remainingTextForPrefix = lineText;
     let blockquoteMatch;
+    // 前缀正则 `^\s*>\s?`（含贪婪吞缩进，B8a 复核保留——见
+    // stripBlockquoteContext 的已知偏差登记）
     while ((blockquoteMatch = remainingTextForPrefix.match(/^\s*>\s?/))) {
       blockquoteLevel++;
       pos += blockquoteMatch[0].length;
       remainingTextForPrefix = remainingTextForPrefix.substring(blockquoteMatch[0].length);
     }
+    // B8a：懒延续行以继承层级覆盖文本前缀计算值（spec 5.2 Laziness——
+    // 例 251：`> bar` 自身 1 层，懒延续到 `>>> foo` 的 3 层容器）
+    if (lazyInherit !== null) blockquoteLevel = lazyInherit;
 
     if (pos > 0) {
       tokens.push({
@@ -1687,9 +1937,35 @@ export class MarkdownParser {
       });
     }
 
+    // —— B8a：纯块引用标记行（空引用行，spec 例 239-241/244）——
+    // 剥完全部前缀后无内容（`>` / `>  ` / `> >`）：输出 empty 节点。
+    // 投影器对 empty 行不产出内容但保持 blockquote 容器开合（例 244：
+    // `> foo\n>\n> bar` 的空 `>` 行阻断段落合并，产出两个 <p>）。
+    // raw 保留原文供覆盖守恒与编辑回写。
+    if (remainingTextForPrefix.trim() === '') {
+      return {
+        id: this.generateId(),
+        type: 'empty',
+        raw: lineText,
+        blockquoteLevel: blockquoteLevel > 0 ? blockquoteLevel : undefined,
+        inlineTokens: [
+          {
+            type: 'text',
+            raw: lineText,
+            content: lineText,
+            localOffset: 0,
+            length: lineText.length,
+          },
+        ],
+        length: lineText.length,
+        localOffset,
+      };
+    }
+
     // Setext 标题内容行跳过全部块级判定（hr/ATX/表格/列表），直接进入行内解析；
     // 普通行维持原有判定顺序：hr → ATX → 表格 → 列表（02 §2.1 第 3 点）。
-    if (!isSetextHeading) {
+    // B8a：懒延续行同理跳过块级判定（段落延续文本语义，spec 5.2 Laziness）。
+    if (!isSetextHeading && lazyInherit === null) {
         let isHr = false;
         const nestedText = lineText.slice(pos);
         const nestedLocalOffset = pos;
