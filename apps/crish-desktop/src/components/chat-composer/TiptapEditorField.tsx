@@ -63,6 +63,13 @@ function safeViewDom(
 /** 编辑器最大长度防爆上限（与草稿截断一致，SRS 安全红线兜底） */
 const COMPOSER_MAX_LENGTH = 100000;
 
+/**
+ * 大文档序列化警告阈值（R-08，08-detail T5.5）：建议 50KB，
+ * 实现时按压测校准（100KB 级序列化全量同步成本见 07 审计 R-08）。
+ * 超过阈值在防抖窗口末帧 / 发送路径回调 onOversizeWarning（宿主 toast）。
+ */
+const SERIALIZE_WARN_CHARS = 50000;
+
 export const TiptapEditorField = React.forwardRef<
   TiptapEditorFieldHandle,
   TiptapEditorFieldProps
@@ -76,6 +83,7 @@ export const TiptapEditorField = React.forwardRef<
   onCompositionChange,
   onDropFiles,
   onPasteImage,
+  onOversizeWarning,
   ariaLabel,
   ariaExpanded,
   ariaControls,
@@ -107,7 +115,10 @@ export const TiptapEditorField = React.forwardRef<
     onCompositionChange,
     onDropFiles,
     onPasteImage,
+    onOversizeWarning,
   });
+  /** R-08：大文档警告已发标记（回落阈值以下后重置，避免每帧 spam） */
+  const oversizeWarnedRef = useRef(false);
 
   useEffect(() => {
     placeholderRef.current = placeholder ?? '';
@@ -132,8 +143,25 @@ export const TiptapEditorField = React.forwardRef<
       onCompositionChange,
       onDropFiles,
       onPasteImage,
+      onOversizeWarning,
     };
-  }, [onSendMarkdown, onMarkdownChange, onCompositionChange, onDropFiles, onPasteImage]);
+  }, [onSendMarkdown, onMarkdownChange, onCompositionChange, onDropFiles, onPasteImage, onOversizeWarning]);
+
+  /**
+   * R-08：序列化结果大文档检查（防抖末帧 / 发送路径共用）。
+   * 超过阈值且未警告过 → 回调宿主（toast）；回落阈值以下后允许再次警告。
+   */
+  const checkOversize = (markdown: string): void => {
+    const len = markdown?.length ?? 0;
+    if (len > SERIALIZE_WARN_CHARS) {
+      if (!oversizeWarnedRef.current) {
+        oversizeWarnedRef.current = true;
+        callbacksRef.current.onOversizeWarning?.(len);
+      }
+    } else if (oversizeWarnedRef.current) {
+      oversizeWarnedRef.current = false;
+    }
+  };
 
   // ── 编辑器装配（稳定实例）─────────────────────────────────────────────────
   // 注意：装配一次性固定（useMemo 空依赖），回调全部经 ref 桥接取最新值；
@@ -177,6 +205,8 @@ export const TiptapEditorField = React.forwardRef<
         debounceTimerRef.current = setTimeout(() => {
           const markdown = serializeToMarkdown(editor.getJSON());
           lastContentRef.current = markdown;
+          // R-08：防抖窗口末帧全量序列化的大文档预算提示（宿主 toast）
+          checkOversize(markdown);
           callbacksRef.current.onMarkdownChange?.(markdown);
         }, 150);
       },
@@ -223,6 +253,9 @@ export const TiptapEditorField = React.forwardRef<
               // 强制立即执行一次同步转换以保证发送内容最新
               const json = editor.getJSON();
               const markdown = serializeToMarkdown(json).trim() || editor.getText().trim();
+
+              // R-08：发送瞬间同步全量序列化的大文档预算提示
+              checkOversize(markdown);
 
               if (markdown && callbacksRef.current.onSendMarkdown) {
                 callbacksRef.current.onSendMarkdown(markdown);

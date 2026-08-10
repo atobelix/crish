@@ -9,13 +9,31 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ESLint } from 'eslint';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 const RULE = 'local/no-silent-catch';
+// 基线条目与 lintText 的 filePath 必须同为「相对仓库根」口径：
+// 规则（eslint.config.js toRepoRelative）按 REPO_ROOT（eslint.config.js 所在目录）
+// 剥离绝对路径前缀，基线 map 键为相对 posix 路径小写——FIXTURE_ABS 必须是
+// REPO_ROOT 下的绝对路径（不能拼 process.cwd()，vitest cwd 是子 workspace）。
 const FIXTURE_REL = 'apps/crish-desktop/src/api/zzzNoSilentCatchFixture.ts';
-const FIXTURE_ABS = `${process.cwd()}/${FIXTURE_REL}`;
+
+function locateRepoRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  while (true) {
+    if (existsSync(join(dir, 'eslint.config.js'))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) {
+      throw new Error(`无法定位仓库根：上溯未找到 eslint.config.js（起始于 ${dir}）`);
+    }
+    dir = parent;
+  }
+}
+
+const FIXTURE_ABS = join(locateRepoRoot(), FIXTURE_REL);
 
 let tempDir: string;
 let tempBaseline: string;

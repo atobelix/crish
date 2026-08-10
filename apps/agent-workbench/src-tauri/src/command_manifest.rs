@@ -4,8 +4,8 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（90 = 注册面 86 + 登记先行 4，
-//!   T-F 06 退役 5 条后同步为 90 = 86 + 4）。
+//! - 前端侧：`commandManifest.test.ts`（94 = 注册面 90 + 登记先行 4，
+//!   T-F 06 退役 5 条后 95 → 90，浏览器域追加 4 条 browser_* 后 90 → 94）。
 //!
 //! 维护规则：
 //! - `registered = true` 子集 = main.rs `make_handlers!` 当前注册面（integration agent
@@ -202,9 +202,11 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 90 = 注册面 86 + 登记先行 4；变更时双端同步——T-F 06 退役 5 条
+    /// 94 = 注册面 90 + 登记先行 4；变更时双端同步——T-F 06 退役 5 条
     /// （core_read_run_events / delete_session / touch_session /
-    /// core_md_render_stream / core_md_clear_cache）后 95 → 90）。
+    /// core_md_render_stream / core_md_clear_cache）后 95 → 90，浏览器域
+    /// 追加 browser_input / browser_start_frames / browser_stop_frames /
+    /// browser_frame_status 后 90 → 94）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -215,8 +217,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 90, "总数 90（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 86, "注册面 86");
+        assert_eq!(total, 94, "总数 94（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 90, "注册面 90");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -363,7 +365,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 90);
+        assert_eq!(manifest.commands.len(), 94);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

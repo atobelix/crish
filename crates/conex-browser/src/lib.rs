@@ -263,6 +263,10 @@ pub struct BrowserSession {
     version: Arc<VersionTracker>,
     dialogs: Arc<DialogRegistry>,
     active: Arc<Mutex<Option<(String, String)>>>, // (target_id, session) 活动标签
+    /// per-tab 会话路由表（P1 多标签）：tab_id(targetId) → 主 frame CDP 会话。
+    /// 登记：SessionAttached（首次附着者胜——主 frame 会话优先，iframe 会话不覆盖）；
+    /// 清理：TargetDestroyed 移除整条（标签关闭后动作按 tab_id 路由失败 → 目标过期）。
+    tabs: Arc<Mutex<std::collections::HashMap<String, String>>>,
     probe: OnceLock<CapabilityReport>,
 }
 
@@ -329,25 +333,38 @@ impl BrowserSession {
             });
         }
 
-        // 活动标签跟踪（current_session 依据）
+        // 活动标签跟踪（current_session 依据）+ per-tab 会话路由表（P1 多标签）：
+        // 同一订阅任务维护双面（SessionAttached 登记、TargetDestroyed 清理），
+        // 保证活动标签与路由表视角一致
         let active: Arc<Mutex<Option<(String, String)>>> = Arc::new(Mutex::new(None));
+        let tabs: Arc<Mutex<std::collections::HashMap<String, String>>> =
+            Arc::new(Mutex::new(std::collections::HashMap::new()));
         {
             let active = active.clone();
+            let tabs = tabs.clone();
             let mut rx = bus.subscribe();
             tokio::spawn(async move {
                 loop {
                     match rx.recv().await {
                         Ok(BrowserEvent::SessionAttached { target_id, session }) => {
                             *active.lock().unwrap_or_else(|p| p.into_inner()) =
-                                Some((target_id, session));
+                                Some((target_id.clone(), session.clone()));
+                            // 首次附着者胜：主 frame 会话优先（iframe 双会话路由不顶替）
+                            let mut table = tabs.lock().unwrap_or_else(|p| p.into_inner());
+                            table.entry(target_id).or_insert(session);
                         }
                         Ok(BrowserEvent::TargetDestroyed { target_id }) => {
-                            let mut guard = active.lock().unwrap_or_else(|p| p.into_inner());
-                            if let Some((t, _)) = guard.as_ref() {
-                                if *t == target_id {
-                                    *guard = None;
+                            {
+                                let mut guard = active.lock().unwrap_or_else(|p| p.into_inner());
+                                if let Some((t, _)) = guard.as_ref() {
+                                    if *t == target_id {
+                                        *guard = None;
+                                    }
                                 }
                             }
+                            tabs.lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .remove(&target_id);
                         }
                         Ok(_) => {}
                         Err(_) => break,
@@ -368,6 +385,7 @@ impl BrowserSession {
             version,
             dialogs,
             active,
+            tabs,
             probe: OnceLock::new(),
         })
     }
@@ -432,6 +450,33 @@ impl BrowserSession {
             }),
             None => Err(CdpError::NoActiveTab),
         }
+    }
+
+    // —— P1 多标签：per-tab 会话路由面（15 文档 §7）——
+
+    /// 按 tab_id（targetId 语义）路由到对应 CDP 会话（主 frame 会话）。
+    /// 标签未 attach 或已关闭（TargetDestroyed 清理）→ None；
+    /// 工具面据此返回目标过期（node_gone）语义。
+    pub fn tab_session(&self, tab_id: &str) -> Option<SessionRef> {
+        let table = self.tabs.lock().unwrap_or_else(|p| p.into_inner());
+        table.get(tab_id).map(|session| SessionRef {
+            target_id: tab_id.to_string(),
+            session: session.clone(),
+        })
+    }
+
+    /// 显式切换活动标签（P1：Target.activateTarget 不产生 SessionAttached，
+    /// 引擎侧活动槽必须显式更新——switch_tab 工具调用后接线）。
+    /// 目标标签无会话（未 attach/已关闭）→ Err(NoSuchTab)。
+    pub fn activate_tab(&self, tab_id: &str) -> Result<(), CdpError> {
+        let session = self
+            .tab_session(tab_id)
+            .ok_or_else(|| CdpError::NoSuchTab {
+                tab_id: tab_id.to_string(),
+            })?;
+        *self.active.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some((session.target_id, session.session));
+        Ok(())
     }
 
     // —— 事件面（§8）——
@@ -772,6 +817,108 @@ mod tests {
         let cmd = mock.expect_command("Runtime.evaluate").await;
         assert_eq!(cmd["params"]["expression"], "1");
         assert_eq!(cmd["sessionId"], "S1");
+
+        session.shutdown().await;
+    }
+
+    /// P1 多标签会话路由（15 §7）：SessionAttached 登记 per-tab 路由表、
+    /// 首次附着者胜（iframe 不顶替）、activate_tab 显式切换活动标签、
+    /// TargetDestroyed 清理路由与活动槽。
+    #[tokio::test]
+    async fn session_per_tab_routing_lifecycle() {
+        let mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        let endpoint = CdpEndpoint {
+            port: mock.addr.port(),
+            ws_path: "/devtools/browser/per-tab".to_string(),
+        };
+        let session = BrowserSession::connect(
+            endpoint,
+            ExpectedBrowser::default(),
+            Arc::new(AllowHooks::new()),
+        )
+        .await
+        .expect("建连失败");
+
+        // 注入双标签附着（T1 主会话 S1、T2 主会话 S2）
+        for (target_id, sess) in [("T1", "S1"), ("T2", "S2")] {
+            mock.send_event(
+                "Target.attachedToTarget",
+                json!({
+                    "sessionId": sess,
+                    "targetInfo": { "targetId": target_id, "type": "page", "title": "", "url": "about:blank" },
+                    "waitingForDebugger": false,
+                }),
+                None,
+            );
+        }
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        while session.tab_session("T1").is_none() || session.tab_session("T2").is_none() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "双标签路由未就绪"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        // 未附着/已销毁标签 → None（目标过期语义）
+        assert!(session.tab_session("T3").is_none(), "未附着标签不得路由");
+
+        // iframe 双会话路由保护：T1 的 iframe 会话不顶替主会话
+        mock.send_event(
+            "Target.attachedToTarget",
+            json!({
+                "sessionId": "S1-iframe",
+                "targetInfo": { "targetId": "T1", "type": "iframe", "title": "", "url": "about:blank" },
+                "waitingForDebugger": false,
+            }),
+            None,
+        );
+        // 异步事件处理：轮询等待 iframe 附着事件落表后再断言主会话未被顶替
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut saw_iframe = false;
+        while tokio::time::Instant::now() < deadline {
+            let mut rx = session.subscribe();
+            if let Ok(BrowserEvent::SessionAttached { session, .. }) = rx.try_recv() {
+                if session == "S1-iframe" {
+                    saw_iframe = true;
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(saw_iframe, "iframe 附着事件应到达");
+        let t1 = session.tab_session("T1").expect("T1 应可路由");
+        assert_eq!(t1.session, "S1", "iframe 会话不得顶替主 frame 会话（首次附着者胜）");
+
+        // activate_tab：显式切换活动标签（activateTarget 无 SessionAttached）
+        session.activate_tab("T2").expect("切换 T2 应成功");
+        let current = session.current_session().expect("活动标签应为 T2");
+        assert_eq!(current.target_id, "T2");
+        assert_eq!(current.session, "S2");
+        // 未附着目标 → NoSuchTab（工具面映射 node_gone）
+        assert!(matches!(
+            session.activate_tab("T9"),
+            Err(CdpError::NoSuchTab { .. })
+        ));
+
+        // TargetDestroyed：清理路由表 + 活动槽（T2 为活动标签 → 一并清空）
+        mock.send_event("Target.targetDestroyed", json!({ "targetId": "T2" }), None);
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        while session.tab_session("T2").is_some() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "T2 路由表应在 TargetDestroyed 后清理"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(session.tab_session("T2").is_none(), "T2 路由已清理");
+        assert!(session.tab_session("T1").is_some(), "T1 不受 T2 关闭影响");
+        assert!(
+            session.current_session().is_err(),
+            "活动标签销毁后 current_session 应无会话"
+        );
 
         session.shutdown().await;
     }

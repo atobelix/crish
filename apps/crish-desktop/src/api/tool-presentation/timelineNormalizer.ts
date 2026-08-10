@@ -227,3 +227,66 @@ export function buildAssistantTimeline(msg: SessionMessage): AssistantTimelineIt
     return [];
   }
 }
+
+/**
+ * Timeline 结构签名（T1.2，08-detail D5）。
+ *
+ * 规则：**最后 text 块内容不进签名**——纯文本流式期间它每帧增长，
+ * 若进签名则签名每帧失效、缓存无意义；工具区（dedupe/分组）与
+ * 非最后 text 块在流式期间稳定，签名命中时直接复用上次 timeline 引用。
+ *
+ * 覆盖面 = buildAssistantTimeline 的全部输入依赖：
+ * - blocks 序列（type/id + 非最后 text 块 content；最后 text 块仅记标记）
+ * - toolCalls 值（id/name/status/output/arguments/explanation —— 全部喂给
+ *   buildToolRenderItems 的 dedupe/分组/标签）
+ * - msg.text 不进签名：有 text 块时 timeline 不用 msg.text；无 text 块时
+ *   msg.text 落为「最后 text 项」= 流式增长内容，由调用方按流式区处理。
+ */
+export function timelineSignature(msg: SessionMessage): string {
+  const blocks = msg.blocks || [];
+  let lastTextIdx = -1;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i]?.type === 'text') {
+      lastTextIdx = i;
+      break;
+    }
+  }
+  const blocksProj = blocks.map((b, i) => {
+    if (b.type === 'text') {
+      // 最后 text 块只记标记（流式增长面），不进内容——
+      // 但空态必须入签名：空→非空转换（首帧）会改变 timeline 结构
+      //（空尾块被 buildAssistantTimeline 排除），漏记会导致缓存命中
+      // 返回缺尾块的陈旧 timeline（F1-08 流式区定位回归）
+      return i === lastTextIdx
+        ? { t: 'text', last: 1, e: (b.content || '') === '' ? 1 : 0 }
+        : { t: 'text', c: b.content };
+    }
+    return { t: b.type, id: b.id };
+  });
+  const toolsProj = (msg.toolCalls || []).map((tc) => ({
+    id: tc.id,
+    n: tc.name,
+    s: tc.status,
+    o: tc.output,
+    a: tc.arguments,
+    e: tc.explanation,
+  }));
+  return JSON.stringify({ b: blocksProj, t: toolsProj });
+}
+
+/**
+ * 带签名缓存的 timeline 构建（T1.2）。
+ * 签名命中（纯文本流式帧）→ 返回上次 timeline 引用（零重建）；
+ * 签名失效（工具事件/块结构变化）→ 全量重建。
+ */
+export function buildAssistantTimelineCached(
+  msg: SessionMessage,
+  prevSig: string | null,
+  prevTimeline: AssistantTimelineItem[] | null,
+): { sig: string; timeline: AssistantTimelineItem[] } {
+  const sig = timelineSignature(msg);
+  if (sig === prevSig && prevTimeline) {
+    return { sig, timeline: prevTimeline };
+  }
+  return { sig, timeline: buildAssistantTimeline(msg) };
+}

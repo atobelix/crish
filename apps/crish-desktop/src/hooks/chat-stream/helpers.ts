@@ -53,9 +53,17 @@ function publishToolDiffsLazy(files: Parameters<PublishToolDiffsFn>[0]): void {
 export function scheduleFinalMarkdownHtml(
   sessionId: string,
   messageId: string,
-  fullText: string
+  fullText: string,
+  options?: {
+    /** true = fullText 已由调用方预清理（N6 单次化，08-detail 3.3），不再二次 strip */
+    preCleaned?: boolean;
+  }
 ): void {
-  const cleaned = stripThoughtPlaceholders(fullText || '');
+  // N6：complete 路径已预清理（onComplete 算一次 strip），本处不再重复；
+  // 未预清理调用方（stop 等）保持原行为
+  const cleaned = options?.preCleaned
+    ? fullText || ''
+    : stripThoughtPlaceholders(fullText || '');
   if (!cleaned.trim()) return;
   void parseMarkdownToHtmlAsync(cleaned)
     .then((html) => {
@@ -220,6 +228,10 @@ export function commitStreamToSession(
  * Snapshot current stream text into the session store WITHOUT clearing the
  * streaming entry (UI keeps reading the live buffer). Used before tool
  * patches so streamTextOffset / blocks stay correct for interleaving.
+ *
+ * T4.2（R-05）：同值短路——streamText 与现有 msg.text 相同时跳过
+ * updateMessageText（工具开始调用时文本常未变，避免无谓 messages 引用
+ * 变更 → 全链重渲染）。
  */
 export function snapshotStreamTextToSession(
   sessionId: string,
@@ -231,7 +243,12 @@ export function snapshotStreamTextToSession(
     fallbackText ||
     '';
   if (text) {
-    updateMessageText(sessionId, messageId, text);
+    const msg = getSessionById(sessionId)?.messages?.find(
+      (m) => m.id === messageId
+    );
+    if (msg?.text !== text) {
+      updateMessageText(sessionId, messageId, text);
+    }
   }
   return text;
 }

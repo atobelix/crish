@@ -15,6 +15,10 @@ import { useSessionStore } from '../store/sessionStore';
 import { DiffCard } from '../components/diff/DiffCard';
 import { CardPanel } from '../components/CardPanel';
 import { MessageVirtualizer } from '../components/chat-message-list/MessageVirtualizer';
+import {
+  subscribeSearchQuery,
+  storeSessionSearchQuery,
+} from '../api/sessionSearch';
 import type { SessionMessage } from '../store/types';
 
 // Mock ResizeObserver
@@ -163,8 +167,7 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
     expect(activeSubscriptions).toBe(baselineActive);
   });
 
-  it('DOM 节点零残留：50 次 Mount/Unmount 循环后，容器 DOM 节点及 body 残留数为 0', () => {
-    const mockMessages: SessionMessage[] = [
+  it('DOM 节点零残留：50 次 Mount/Unmount 循环后，容器 DOM 节点及 body 残留数为 0', () => {    const mockMessages: SessionMessage[] = [
       {
         id: 'msg-leak-1',
         sender: 'user',
@@ -246,5 +249,50 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
 
       document.body.removeChild(container);
     }
+  });
+
+  it('R-12：EventBus 监听器 >10 触发 warn，退订后监听器数回落基线', () => {
+    const initialCount = eventBus.listenerCount();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const unsubs: Array<() => void> = [];
+    // 11 个监听器（> MAX_LISTENERS_WARN=10）→ 触发 warn
+    for (let i = 0; i < 11; i++) {
+      unsubs.push(eventBus.on('workspace-switch', () => {}));
+    }
+    expect(warnSpy).toHaveBeenCalled();
+    expect(warnSpy.mock.calls.some((c) => String(c[0]).includes('possible leak'))).toBe(true);
+    // 全量退订 → 监听器数回落
+    for (const unsub of unsubs) unsub();
+    expect(eventBus.listenerCount()).toBe(initialCount);
+    warnSpy.mockRestore();
+  });
+
+  it('R-12：sessionSearch 订阅/退订循环后监听器不增长（Set 清理断言）', () => {
+    const seen: string[] = [];
+    const unsubs: Array<() => void> = [];
+    // 50 次订阅+退订循环：退订后不残留
+    for (let i = 0; i < 50; i++) {
+      const unsub = subscribeSearchQuery(() => seen.push('x'));
+      unsub();
+      unsubs.push(unsub);
+    }
+    // 退订后再通知：无监听器被调用（残留监听器会收到通知）
+    seen.length = 0;
+    try {
+      storeSessionSearchQuery('R-12 泄漏探针');
+    } catch {
+      /* sessionStorage 不可用时跳过 */
+    }
+    expect(seen).toHaveLength(0);
+    // 部分退订：仅存活监听器收到通知
+    const alive: string[] = [];
+    const keep = subscribeSearchQuery(() => alive.push('alive'));
+    try {
+      storeSessionSearchQuery('R-12 存活探针');
+    } catch {
+      /* ignore */
+    }
+    expect(alive).toEqual(['alive']);
+    keep();
   });
 });

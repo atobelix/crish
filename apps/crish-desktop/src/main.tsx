@@ -38,9 +38,12 @@ async function startup() {
   }
 
   // Phase 1.5: 动态加载 React + App（失败则展示错误边界 fallback）
+  // R-09（T5.3）：AppErrorBoundary chunk 与 React/App 并行预取——
+  // 首屏渲染不再被 boundary chunk 加载阻塞一拍（原 render 前单独 await）
   let StrictMode: React.ComponentType<{ children?: React.ReactNode }> | null = null;
   let createRoot: typeof import('react-dom/client').createRoot | null = null;
   let App: React.ComponentType<Record<string, never>> | null = null;
+  const boundaryLoad = import('./components/AppErrorBoundary');
   try {
     const [{ StrictMode: SM }, { createRoot: CR }] = await Promise.all([
       import('react'),
@@ -69,8 +72,8 @@ async function startup() {
   // 首次渲染：骨架屏由 index.html 内联提供，createRoot 替换为 React 树
   // 外包 AppErrorBoundary 捕获渲染阶段异常，防止白屏
   try {
-    // 动态加载 AppErrorBoundary 避免与 App 同 chunk 捆绑
-    const { AppErrorBoundary } = await import('./components/AppErrorBoundary');
+    // 动态加载 AppErrorBoundary 避免与 App 同 chunk 捆绑（已并行预取）
+    const { AppErrorBoundary } = await boundaryLoad;
     root.render(
       <StrictMode>
         <AppErrorBoundary>
@@ -86,6 +89,15 @@ async function startup() {
       </StrictMode>,
     );
   }
+
+  // R-09（T5.3）：React 首帧渲染完成标记——root.render 后首个 rAF 打点，
+  // 回答「App 何时可交互」（07 审计 R-09 / 4.3）
+  requestAnimationFrame(() => {
+    window.__crish_perf = {
+      ...window.__crish_perf,
+      reactInteractiveReady: performance.now(),
+    };
+  });
 
   // Phase 2: idle 时加载完整 UI（后台连接、设置同步、会话元数据）
   // 失败不应阻塞已有 UI，只记日志

@@ -45,8 +45,8 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（90 = 注册面 86 + 登记先行 4；与
- * command_manifest.rs:63 行注释及 manifest_count_matches_registered_surface 测试对齐）。
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（94 = 注册面 90 + 登记先行 4；与
+ * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
  * commandManifest.test.ts 的条数/登记断言 + 动态对照测试（直读 Rust 真源）拦截。
@@ -161,14 +161,14 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('trigger-workflow', 'workflow', 'engine'),
     entry('list-workflow-runs', 'workflow', 'engine'),
     // ── 浏览器面板命令（27 方案 S6：browser_start/stop/status；代理到
-    //    browser_commands.rs；与 Rust command_manifest.rs 95/91 镜像）──
+    //    browser_commands.rs；并行域追加 browser_input / browser_*_frames）──
     entry('browser_start', 'browser', 'engine'),
     entry('browser_stop', 'browser', 'engine'),
     entry('browser_status', 'browser', 'engine'),
-entry('browser_input', 'browser', 'engine'),
-entry('browser_start_frames', 'browser', 'engine'),
-entry('browser_stop_frames', 'browser', 'engine'),
-entry('browser_frame_status', 'browser', 'engine'),
+    entry('browser_input', 'browser', 'engine'),
+    entry('browser_start_frames', 'browser', 'engine'),
+    entry('browser_stop_frames', 'browser', 'engine'),
+    entry('browser_frame_status', 'browser', 'engine'),
     // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
     // PE-07 T07.4：config_profile_apply / config_secret_reveal 已接线（registered=true）
     entry('append_session_messages', 'session', 'engine', false),

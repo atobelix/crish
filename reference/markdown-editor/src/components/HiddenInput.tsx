@@ -23,6 +23,13 @@ import type { LineOffsetTree } from '../core/SegmentTree';
 // 共用同一词类模型（wordClassAt / wordBoundary——字母数字段/中文段/
 // 符号段），词边界语义单源（src/core/search.ts 文件头注释）
 import { wordBoundary, wordClassAt } from '../core/search';
+// B5 自动补全触发（触发检测/候选过滤为纯函数，见 src/core/autocomplete.ts）
+import {
+  findAutocompleteTriggerInLine,
+  filterAutocompleteCandidates,
+  getAutocompleteTriggers,
+  getAutocompleteCandidates,
+} from '../core/autocomplete';
 
 interface HiddenInputProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -528,7 +535,109 @@ export function doubleClickWordSelection(
   return { start, end };
 }
 
-export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store }) => {
+// ============================================================
+// 拖放文件/文本（B5 项 4：drop 事件 → FileReader.readAsText → 插入光标处）
+// ============================================================
+// 设计：
+// - 事件层薄壳（组件内注册 dragenter/dragover/dragleave/drop），核心
+//   决策与落盘抽为模块级纯函数（planDropInsert / applyDroppedContent），
+//   便于单测——jsdom 无法构造真实 DataTransfer，测试以行为级等价
+//   的对象字面量 + FileReader mock 注入（限制说明见 dnd.test.ts）；
+// - 文件拖入：扩展名白名单（md/txt 等）→ readDroppedFile（UTF-8 文本
+//   读取）→ 替换「drop 时刻的选区」（与粘贴语义一致，单步 undo）；
+// - 文本拖入（含源内文本移动的落点——引擎自绘拖选 + userSelect none
+//   下原生文本拖移不可行，「拖选 → 剪切 → 目标处拖入文本」为等价路径，
+//   源内移动本身登记为低优先级不做）：读 text/plain 同步插入；
+// - 悬停高亮：fixed 全屏 overlay（内联样式 + data-drag-drop-overlay，
+//   css-contract G6 豁免策略一致——不新增未登记 className）；
+// - 组合期（IME）不接管（与 paste 同款红线）。
+
+/** 拖入文件扩展名白名单（.md/.markdown/.txt 等；小写匹配） */
+export const SUPPORTED_DROP_EXTENSIONS = [
+  '.md',
+  '.markdown',
+  '.txt',
+  '.json',
+  '.log',
+  '.html',
+  '.css',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.ts',
+  '.tsx',
+] as const;
+
+/** 拖入文件名是否在白名单内（纯函数，供单测） */
+// oxlint-disable-next-line react/only-export-components
+export function isSupportedDroppedFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  return SUPPORTED_DROP_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/** drop 载荷决策（纯函数）：Files 优先（白名单校验）→ text/plain 兜底
+ *  → 无内容。types 为空数组视为无（jsdom 测试注入兼容） */
+// oxlint-disable-next-line react/only-export-components
+export function planDropInsert(
+  types: readonly string[],
+  files: readonly File[],
+  plainText: string
+): { kind: 'file'; file: File } | { kind: 'text'; text: string } | { kind: 'none' } {
+  const hasFiles = Array.from(types ?? []).some(
+    (t) => t.toLowerCase() === 'files'
+  );
+  const hasText = Array.from(types ?? []).some(
+    (t) => t.toLowerCase() === 'text/plain'
+  );
+  if (hasFiles && files.length > 0) {
+    const file = files[0];
+    if (!isSupportedDroppedFile(file.name)) return { kind: 'none' };
+    return { kind: 'file', file };
+  }
+  if (hasText && plainText.length > 0) {
+    return { kind: 'text', text: plainText };
+  }
+  return { kind: 'none' };
+}
+
+/**
+ * 文件 → UTF-8 文本（Promise 封装，可 mock 注入——jsdom 的 FileReader
+ * 行为不可靠，测试经 stubGlobal 替换，见 dnd.test.ts 限制说明）。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function readDroppedFile(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () =>
+      reject(reader.error ?? new Error('FileReader 读取失败'));
+    reader.readAsText(file);
+  });
+}
+
+/**
+ * 应用拖放内容（纯落盘函数，供单测）：文件 → 异步读取（空内容跳过，
+ * 防 applyChange(from, to, '') 误删选区）→ store.applyChange 替换
+ * [from, to)（drop 时刻的选区快照，与粘贴语义一致）→ 返回是否落盘。
+ */
+// oxlint-disable-next-line react/only-export-components
+export async function applyDroppedContent(
+  plan:
+    | { kind: 'file'; file: File }
+    | { kind: 'text'; text: string },
+  store: Pick<EditorStore, 'applyChange'>,
+  from: number,
+  to: number
+): Promise<boolean> {
+  const content =
+    plan.kind === 'file' ? await readDroppedFile(plan.file) : plan.text;
+  if (content.length === 0) return false;
+  store.applyChange(from, to, content, { merge: 'none' });
+  return true;
+}
+
+
   // R5：绑定实例 store（缺省回退全局单例）；组件内所有 store 读写
   // （订阅 / getState / setState）统一经本变量，多实例输入互不串台
   const editorStore = store ?? useEditorStore;

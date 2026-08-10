@@ -25,13 +25,70 @@ const _STORE_NAMES = [
 ];
 let _freqInterval: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * R-13（T5.4，08-detail 6.4）：订阅者计数 + 重渲染范围统计。
+ * 包装各 store 的 subscribe：统计活跃订阅者数与订阅回调执行次数
+ * （一次 set 触发多少组件重渲染的近似口径）。仅 dev overlay/日志消费。
+ */
+type SubscribeFn = (listener: (state: unknown, prev: unknown) => void) => () => void;
+const _subscriberStats = new Map<
+  string,
+  () => { active: number; invocations: number }
+>();
+
+function _wrapSubscriberCounting(
+  store: { subscribe: SubscribeFn },
+  name: string
+): void {
+  const orig = store.subscribe.bind(store);
+  let active = 0;
+  let invocations = 0;
+  store.subscribe = ((listener: (state: unknown, prev: unknown) => void) => {
+    active++;
+    const wrapped = (state: unknown, prev: unknown) => {
+      invocations++;
+      listener(state, prev);
+    };
+    const unsub = orig(wrapped);
+    return () => {
+      active = Math.max(0, active - 1);
+      unsub();
+    };
+  }) as SubscribeFn;
+  _subscriberStats.set(name, () => ({ active, invocations }));
+}
+
+/** 订阅者/重渲染范围统计读取面（dev overlay 消费；快照语义） */
+export function getStoreFreqStats(): Record<
+  string,
+  { activeSubscribers: number; subscriberInvocations: number }
+> {
+  const out: Record<
+    string,
+    { activeSubscribers: number; subscriberInvocations: number }
+  > = {};
+  for (const [name, read] of _subscriberStats) {
+    const s = read();
+    out[name] = {
+      activeSubscribers: s.active,
+      subscriberInvocations: s.invocations,
+    };
+  }
+  return out;
+}
+
 function _setupFrequencyLogging(): void {
   if (process.env.NODE_ENV !== 'development') return;
   _freqInterval = setInterval(() => {
     for (const name of _STORE_NAMES) {
       const count = _counters.get(name) ?? 0;
-      if (count > 0) {
-        logger.debug(`[StoreFreq] ${name}: ${count} updates in last 60s`, { module: 'perf' });
+      const sub = _subscriberStats.get(name)?.() ?? null;
+      if (count > 0 || (sub && sub.active > 0)) {
+        logger.debug(
+          `[StoreFreq] ${name}: ${count} updates in last 60s` +
+            (sub ? `, subscribers=${sub.active}, invocations=${sub.invocations}` : ''),
+          { module: 'perf' }
+        );
       }
       _counters.set(name, 0);
     }
@@ -54,6 +111,8 @@ export function bootstrapStores(): () => void {
   unsubs.push(useLayoutStore.subscribe(() => {
     _counters.set('layoutStore', (_counters.get('layoutStore') ?? 0) + 1);
   }));
+  // R-13（T5.4）：订阅者计数 + 重渲染范围统计（dev overlay 消费面）
+  _wrapSubscriberCounting(useLayoutStore, 'layoutStore');
   // T11 域 store：独立实例，各计各的
   const domainHooks = [
     useTerminalStore,
@@ -69,6 +128,9 @@ export function bootstrapStores(): () => void {
       })
     )
   );
+  for (let i = 0; i < domainHooks.length; i++) {
+    _wrapSubscriberCounting(domainHooks[i]!, _STORE_NAMES[4 + i]!);
+  }
 
   initStoreAccess(
     useSessionStore,

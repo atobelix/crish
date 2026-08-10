@@ -50,7 +50,52 @@ export type ChatAssistantMessageRowProps = {
   virtualScrollManager: VirtualScrollManager | null;
 };
 
-function assistantRowPropsEqual(
+/**
+ * 比较器字段清单（T4.3，R-06 守卫，与 MessageVirtualizer 同法）。
+ *
+ * messageIndex / virtualScrollManager 为组件内 void 化的非渲染字段
+ *（改动不影响输出），豁免比较器覆盖（_NON_COMPARED_FIELDS 白名单）；
+ * 其余字段必须出现在 assistantRowPropsEqual 源码中（memo 测试源文本
+ * 探针锁定），新增 prop 忘收录 → 类型级穷尽检查编译红。
+ */
+export const MEMO_COMPARE_FIELDS = [
+  'msg',
+  'isFollowUp',
+  'isPinned',
+  'isSearchHit',
+  'isThinkingMsg',
+  'hideThinkingBlock',
+  'inPlanMode',
+  'planApproved',
+  'isLastAssistant',
+  'toolStackProps',
+  'onTogglePin',
+  'onShowToast',
+  'onRegenerate',
+  'onBranch',
+  'onOpenDiff',
+  'onOpenDiffPanel',
+  'setPermissionMode',
+  'setPlanApproved',
+  'onFillFollowUp',
+  'onSendFollowUp',
+  'followUpDismissed',
+  'onDismissFollowUp',
+] as const satisfies readonly (keyof ChatAssistantMessageRowProps)[];
+
+/** 组件内 void 化的非渲染字段（豁免比较器覆盖） */
+type _NonComparedFields = 'messageIndex' | 'virtualScrollManager';
+
+/** 新增 prop 忘收录 → 编译红（类型级穷尽检查） */
+type _Exhausted = Exclude<
+  keyof ChatAssistantMessageRowProps,
+  typeof MEMO_COMPARE_FIELDS[number] | _NonComparedFields
+> extends never
+  ? true
+  : false;
+const _exhaustedCheck: _Exhausted = true;
+
+export function assistantRowPropsEqual(
   prev: ChatAssistantMessageRowProps,
   next: ChatAssistantMessageRowProps
 ): boolean {

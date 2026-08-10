@@ -15,7 +15,9 @@ export type {
 
 export {
   buildAssistantTimeline,
+  buildAssistantTimelineCached,
   normalizeAssistantTimeline,
+  timelineSignature,
 } from './tool-presentation/timelineNormalizer';
 
 export {

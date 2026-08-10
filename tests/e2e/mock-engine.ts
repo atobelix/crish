@@ -575,6 +575,96 @@ export function tableRunEvents(): MockEvent[] {
   ];
 }
 
+/**
+ * 性能压测 fixture（08-detail 6.3，T5.2）：100KB 文本 + 20 工具事件。
+ * - 文本按 ~4KB 分块（message-delta），对齐真实 SSE 流式形态；
+ * - 20 个工具 start/update/end 穿插，压工具区 timeline 重建；
+ * - delayMs=0~1 压榨渲染管线（mock 引擎逐条 setTimeout 投递）。
+ */
+export function bigRunEvents(): MockEvent[] {
+  const text =
+    '## 性能压测流式输出\n' +
+    '- 目标：100KB 级文本流式渲染 + 20 工具事件交错\n' +
+    '- 锚点词：吞吐基线 / 延迟基线 / 帧预算 / 完成收敛\n\n' +
+    '正文内容用于撑满文本体积：' +
+    Array.from(
+      { length: 120 },
+      (_, i) =>
+        `段落 ${i}：流式渲染管线在 rAF 帧预算内增量写出，` +
+        `占位行与总结标题在完成态统一剥离。标记词 marker-${i}。\n`
+    ).join('') +
+    '\n## 本轮总结\n' +
+    '流式增量渲染完成，等待收口。';
+  // 撑到 100KB
+  let body = text;
+  while (body.length < 100 * 1024) {
+    body += `\n补充段落（${body.length}）：性能压测文本填充，用于验证增量渲染的线性成本边界。`;
+  }
+
+  const events: MockEvent[] = [{ type: 'message-start' }];
+  // 20 个工具（交错在文本块之间）
+  for (let i = 0; i < 20; i++) {
+    const toolId = `perf-tool-${i}`;
+    const call = {
+      id: toolId,
+      toolName: i % 2 === 0 ? 'shell_command' : 'read_file',
+      summary: `性能压测工具 ${i}`,
+      input: { command: `echo step-${i}` },
+      category: 'terminal' as const,
+      concurrency: 'sequential' as const,
+    };
+    events.push(
+      { type: 'tool-batch-start', sessionId: 's', batchId: `batch-${i}`, timestamp: `t${i}`, summary: `执行第 ${i} 步`, calls: [call] },
+      { type: 'tool-start', sessionId: 's', batchId: `batch-${i}`, timestamp: `t${i}`, call },
+      toolUpdateEvent(
+        { text: `第 ${i} 步执行中…`, metadata: { kind: 'tool-progress' } },
+        { timestamp: `t${i}.1` }
+      ),
+      {
+        type: 'tool-end',
+        sessionId: 's',
+        batchId: `batch-${i}`,
+        timestamp: `t${i}.2`,
+        result: { id: toolId, toolName: call.toolName, output: { text: `第 ${i} 步完成` }, isError: false, durationMs: 100 },
+      },
+      {
+        type: 'tool-batch-end',
+        sessionId: 's',
+        batchId: `batch-${i}`,
+        timestamp: `t${i}.3`,
+        calls: [
+          { id: toolId, toolName: call.toolName, output: { text: `第 ${i} 步完成` }, isError: false, durationMs: 100 },
+        ],
+      }
+    );
+    // 工具间穿插文本块（约 3KB）
+    events.push({
+      type: 'message-delta',
+      block: { type: 'text', text: `\n工具 ${i} 完成后的文本段落：${body.slice(i * 1024, i * 1024 + 3000)}\n` },
+    });
+  }
+  // 剩余文本按 ~4KB 分块
+  const start = 20 * 1024;
+  for (let pos = start; pos < body.length; pos += 4096) {
+    events.push({
+      type: 'message-delta',
+      block: { type: 'text', text: body.slice(pos, pos + 4096) },
+    });
+  }
+  events.push(
+    {
+      type: 'message-end',
+      message: {
+        role: 'assistant',
+        content: body,
+        blocks: [{ type: 'text', text: body }],
+      },
+    },
+    { type: 'run-terminal', terminal: 'completed' }
+  );
+  return events;
+}
+
 /** 错误路径：core_run_task 拒绝 → 前端提示 */
 export function errorRunConfig(): { error: { kind: string; message: string } } {
   return {

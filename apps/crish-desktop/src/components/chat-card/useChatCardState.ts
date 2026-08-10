@@ -3,13 +3,14 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useReducer,
 } from 'react';
 import {
   useLayoutStore,
   useSessionField,
   selectActiveSessionId,
 } from '../../api/store-access/componentAccess';
-import type { FileDiff } from '../../store/types';
+import type { FileDiff, SessionState } from '../../store/types';
 import {
   useTerminalField,
   usePermissionField,
@@ -44,6 +45,71 @@ import { useChatHandlers } from './useChatHandlers';
 
 const EMPTY_ARRAY: never[] = [];
 
+type SessionStoreStateShape = {
+  activeSessionId: string;
+  sessionsById: Record<string, SessionState | undefined>;
+};
+
+/**
+ * 会话级订阅短路（T4.2，R-05，08-detail 4.1-②）。
+ *
+ * 任何 session 域变更（工具快照/审批/subagent 事件 immer patch）都会触发
+ * zustand 订阅——普通 selector 路径每次变更都要重求值 + Object.is 比较。
+ * 本 hook 用 vanilla subscribe((state, prev) => ...) 在监听器层短路：
+ * 本会话引用未变（immer 结构共享保证未变会话引用不变）且 activeSessionId
+ * 未变 → 不重求值、不触发渲染。
+ *
+ * 语义边界：短路仅省求值与渲染，不改变渲染结果（依赖「activeSessionId
+ * 恒与渲染中的 ChatCard 一致」的既有假设；多会话多 Tab 现状已在 R-05
+ * 判定为浪费面，短路后视觉无变化——07 方案风险 7）。
+ */
+export function useScopedSessionField<T>(
+  resolveSid: (state: SessionStoreStateShape) => string,
+  selector: (session: SessionState | undefined) => T
+): T {
+  const [, forceUpdate] = useReducer((n: number) => n + 1, 0);
+  const resolveSidRef = useRef(resolveSid);
+  resolveSidRef.current = resolveSid;
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
+  const cacheRef = useRef<{
+    sid: string;
+    session: SessionState | undefined;
+    value: T;
+  } | null>(null);
+
+  useEffect(() => {
+    return useLayoutStore.subscribe((state, prev) => {
+      const st = state as SessionStoreStateShape;
+      const sid = resolveSidRef.current(st);
+      const prevSid = resolveSidRef.current(prev as SessionStoreStateShape);
+      const session = st.sessionsById[sid];
+      const cached = cacheRef.current;
+      // 会话级订阅短路：本会话引用未变 + activeSessionId 未变 → 直接短路
+      if (
+        cached &&
+        cached.sid === prevSid &&
+        cached.session === session &&
+        (prev as SessionStoreStateShape).activeSessionId === st.activeSessionId
+      ) {
+        return;
+      }
+      cacheRef.current = { sid, session, value: selectorRef.current(session) };
+      forceUpdate();
+    });
+  }, []);
+
+  // 渲染期求值（首次挂载 / forceUpdate 后）：缓存命中直接复用
+  const st = useLayoutStore.getState() as SessionStoreStateShape;
+  const sid = resolveSid(st);
+  const session = st.sessionsById[sid];
+  const cached = cacheRef.current;
+  if (!cached || cached.sid !== sid || cached.session !== session) {
+    cacheRef.current = { sid, session, value: selector(session) };
+  }
+  return cacheRef.current!.value;
+}
+
 export interface UseChatCardStateOptions {
   wsId: string;
   onShowToast: ShowToastFn;
@@ -66,68 +132,45 @@ export function useChatCardState({
       [sessionIdProp]
     )
   );
-  const messages = useSessionField(
+  // T4.2（R-05）：会话级订阅短路——非活跃会话变更不再触发本会话 7 个
+  // selector 重求值；sid 解析（prop ?? activeSessionId）经 ref 桥接
+  const resolveSessionId = useCallback(
+    (s: SessionStoreStateShape) => sessionIdProp ?? s.activeSessionId ?? '',
+    [sessionIdProp]
+  );
+  const messages = useScopedSessionField(
+    resolveSessionId,
     useCallback(
-      (s) => {
-        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
-        return s.sessionsById[sid]?.messages || EMPTY_ARRAY;
-      },
-      [sessionIdProp]
+      (session) => session?.messages || EMPTY_ARRAY,
+      []
     )
   );
-  const agents = useSessionField(
+  const agents = useScopedSessionField(
+    resolveSessionId,
     useCallback(
-      (s) => {
-        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
-        return s.sessionsById[sid]?.agents || EMPTY_ARRAY;
-      },
-      [sessionIdProp]
+      (session) => session?.agents || EMPTY_ARRAY,
+      []
     )
   );
-  const goalMode = useSessionField(
-    useCallback(
-      (s) => {
-        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
-        return s.sessionsById[sid]?.goalMode;
-      },
-      [sessionIdProp]
-    )
+  const goalMode = useScopedSessionField(
+    resolveSessionId,
+    useCallback((session) => session?.goalMode, [])
   );
-  const hydratedFromEngine = useSessionField(
-    useCallback(
-      (s) => {
-        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
-        return s.sessionsById[sid]?.hydratedFromEngine;
-      },
-      [sessionIdProp]
-    )
+  const hydratedFromEngine = useScopedSessionField(
+    resolveSessionId,
+    useCallback((session) => session?.hydratedFromEngine, [])
   );
-  const engineCursor = useSessionField(
-    useCallback(
-      (s) => {
-        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
-        return s.sessionsById[sid]?.engineCursor;
-      },
-      [sessionIdProp]
-    )
+  const engineCursor = useScopedSessionField(
+    resolveSessionId,
+    useCallback((session) => session?.engineCursor, [])
   );
-  const engineLastRunId = useSessionField(
-    useCallback(
-      (s) => {
-        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
-        return s.sessionsById[sid]?.engineLastRunId;
-      },
-      [sessionIdProp]
-    )
+  const engineLastRunId = useScopedSessionField(
+    resolveSessionId,
+    useCallback((session) => session?.engineLastRunId, [])
   );
-  const activeSessionTitle = useSessionField(
-    useCallback(
-      (s) => {
-        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
-        return s.sessionsById[sid]?.title;
-      },
-      [sessionIdProp]
-    )
+  const activeSessionTitle = useScopedSessionField(
+    resolveSessionId,
+    useCallback((session) => session?.title, [])
   );
 
   const appSettings = useSettingsField(selectAppSettings);

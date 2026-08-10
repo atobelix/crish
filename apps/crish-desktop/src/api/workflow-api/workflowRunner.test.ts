@@ -2,7 +2,7 @@
  * workflowRunner 测试（T-CF-14 前端去幽灵化 + 14-T4 错误透传）：
  * - createWorkflow 不再恒 false、listWorkflows 不再恒空——真实 invoke IPC；
  * - mock invoke 断言 wire 形状（命令名 + 参数 camelCase）；
- * - create / update / trigger 走 invokeTyped 三态：missing 未就绪文案、
+ * - create / update / trigger / list* 走 invokeTyped 三态：missing 未就绪文案、
  *   error 透传原始 message + kind、成功路径形状不变；
  * - delete-workflow 成功返回 null，须经 invokeResult 三态区分成败。
  */
@@ -10,12 +10,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../tauriInvoke', () => ({
-  invokeCmd: vi.fn(),
   invokeResult: vi.fn(),
   invokeTyped: vi.fn(),
 }));
 
-import { invokeCmd, invokeResult, invokeTyped } from '../tauriInvoke';
+import { invokeResult, invokeTyped } from '../tauriInvoke';
 import {
   createWorkflow,
   deleteWorkflow,
@@ -25,12 +24,10 @@ import {
   updateWorkflow,
 } from './workflowRunner';
 
-const mockedInvoke = vi.mocked(invokeCmd);
 const mockedInvokeResult = vi.mocked(invokeResult);
 const mockedInvokeTyped = vi.mocked(invokeTyped);
 
 beforeEach(() => {
-  mockedInvoke.mockReset();
   mockedInvokeResult.mockReset();
   mockedInvokeTyped.mockReset();
 });
@@ -41,21 +38,24 @@ afterEach(() => {
 
 describe('listWorkflows', () => {
   it('读真实列表：mock invoke 返回 wire 数组 → 解析为 WorkflowDefinition', async () => {
-    mockedInvoke.mockResolvedValue([
-      {
-        id: 'cron-0',
-        name: '每日检查',
-        prompt: '检查仓库状态',
-        enabled: true,
-        schedule: { type: 'daily', time: '09:30', timezone: 'Asia/Shanghai' },
-        createdAt: '2026-08-05T00:00:00.000Z',
-        updatedAt: '2026-08-05T00:00:00.000Z',
-        nextRunAt: '2026-08-06T01:30:00.000Z',
-        lastRunAt: null,
-      },
-    ]);
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'ok',
+      data: [
+        {
+          id: 'cron-0',
+          name: '每日检查',
+          prompt: '检查仓库状态',
+          enabled: true,
+          schedule: { type: 'daily', time: '09:30', timezone: 'Asia/Shanghai' },
+          createdAt: '2026-08-05T00:00:00.000Z',
+          updatedAt: '2026-08-05T00:00:00.000Z',
+          nextRunAt: '2026-08-06T01:30:00.000Z',
+          lastRunAt: null,
+        },
+      ],
+    });
     const list = await listWorkflows();
-    expect(mockedInvoke).toHaveBeenCalledWith('list-workflows');
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('list-workflows');
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({
       id: 'cron-0',
@@ -67,13 +67,13 @@ describe('listWorkflows', () => {
   });
 
   it('不再恒空：invoke 缺失时降级空表（旧恒空语义兼容）', async () => {
-    mockedInvoke.mockResolvedValue(null);
+    mockedInvokeTyped.mockResolvedValue({ status: 'missing' });
     const list = await listWorkflows();
     expect(list).toEqual([]);
   });
 
   it('非法载荷（非数组）降级空表，不抛', async () => {
-    mockedInvoke.mockResolvedValue({ weird: true });
+    mockedInvokeTyped.mockResolvedValue({ status: 'ok', data: { weird: true } });
     const list = await listWorkflows();
     expect(list).toEqual([]);
   });
@@ -278,19 +278,22 @@ describe('triggerWorkflow', () => {
 
 describe('listWorkflowRuns', () => {
   it('读真实运行历史（可按 workflowId 过滤）', async () => {
-    mockedInvoke.mockResolvedValue([
-      {
-        workflowId: 'cron-1',
-        runId: 'cron-1-fire-1',
-        sessionId: null,
-        scheduledFor: '2026-08-05T00:00:00.000Z',
-        startedAt: '2026-08-05T00:00:00.000Z',
-        status: 'pending',
-        error: null,
-      },
-    ]);
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'ok',
+      data: [
+        {
+          workflowId: 'cron-1',
+          runId: 'cron-1-fire-1',
+          sessionId: null,
+          scheduledFor: '2026-08-05T00:00:00.000Z',
+          startedAt: '2026-08-05T00:00:00.000Z',
+          status: 'pending',
+          error: null,
+        },
+      ],
+    });
     const runs = await listWorkflowRuns('cron-1');
-    expect(mockedInvoke).toHaveBeenCalledWith('list-workflow-runs', {
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('list-workflow-runs', {
       workflowId: 'cron-1',
     });
     expect(runs).toHaveLength(1);
@@ -302,8 +305,8 @@ describe('listWorkflowRuns', () => {
   });
 
   it('不带过滤参数时不下发 workflowId', async () => {
-    mockedInvoke.mockResolvedValue([]);
+    mockedInvokeTyped.mockResolvedValue({ status: 'ok', data: [] });
     await listWorkflowRuns();
-    expect(mockedInvoke).toHaveBeenCalledWith('list-workflow-runs', {});
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('list-workflow-runs', {});
   });
 });

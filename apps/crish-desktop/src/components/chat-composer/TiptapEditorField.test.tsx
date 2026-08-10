@@ -6,7 +6,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { TiptapEditorField } from './TiptapEditorField';
 
 // jsdom 缺 ClipboardEvent：prosemirror-view.pasteHTML 会构造合成事件，补最小实现
@@ -354,5 +354,62 @@ describe('TiptapEditorField T8 提及与 aria 全链', () => {
     expect(dom.getAttribute('aria-controls')).toBeNull();
     expect(dom.getAttribute('aria-activedescendant')).toBeNull();
     expect(document.getElementById(listboxId)).toBeNull();
+  });
+});
+
+
+// ──────────────────────────────────────────────
+// R-08（08-detail T5.5）：大文档序列化阈值警告
+describe('TiptapEditorField 大文档警告（R-08）', () => {
+  it('超过阈值（50KB）→ onOversizeWarning 回调一次；回落后再超可再次触发', async () => {
+    const warns: number[] = [];
+    const { unmount } = render(
+      <TiptapEditorField onOversizeWarning={(n) => warns.push(n)} />
+    );
+    const dom = getEditorDom();
+    // 大文档输入（阈值 50KB 之上）
+    const big = '大文档段落。' + 'x'.repeat(52 * 1024);
+    await act(async () => {
+      dom.textContent = big;
+      dom.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // 防抖 150ms 末帧序列化 → 警告
+    await waitFor(() => {
+      expect(warns.length).toBe(1);
+      expect(warns[0]).toBeGreaterThan(50000);
+    });
+    // 同阈值内继续输入（不再次警告）
+    await act(async () => {
+      dom.textContent = big + 'y';
+      dom.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await new Promise((r) => setTimeout(r, 250));
+    expect(warns.length).toBe(1);
+    // 清空回落 → 可再次触发
+    await act(async () => {
+      dom.textContent = '';
+      dom.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await new Promise((r) => setTimeout(r, 250));
+    await act(async () => {
+      dom.textContent = '再次大文档。' + 'z'.repeat(52 * 1024);
+      dom.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await waitFor(() => {
+      expect(warns.length).toBe(2);
+    });
+    unmount();
+  });
+
+  it('阈值以下不触发警告', async () => {
+    const warns: number[] = [];
+    render(<TiptapEditorField onOversizeWarning={(n) => warns.push(n)} />);
+    const dom = getEditorDom();
+    await act(async () => {
+      dom.textContent = '正常大小的文档内容';
+      dom.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await new Promise((r) => setTimeout(r, 250));
+    expect(warns).toHaveLength(0);
   });
 });

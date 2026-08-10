@@ -12,7 +12,47 @@ import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
 import { DiffCard } from '../components/diff/DiffCard';
 import { CardPanel } from '../components/CardPanel';
+import { MessageContent } from '../components/chat-message/MessageContent';
+import { useStreamingStore } from '../api/store-access/componentAccess';
 import type { SessionMessage } from '../store/types';
+
+// ── T1.7/T4.4：流式增量渲染监控（08-detail 任务清单）──────────────────────
+// AsyncMarkdownBlock / MessageToolCallsSection 替换为渲染计数探针：
+// 流式纯文本帧期间稳定块渲染 0 次（签名缓存 + memo 短路），
+// 工具事件 → 仅工具区重渲染（全链重渲染 = 工具事件数，而非帧数）。
+const { mockAmdRenders, mockToolSectionRenders } = vi.hoisted(() => ({
+  mockAmdRenders: [] as string[],
+  mockToolSectionRenders: [] as number[],
+}));
+
+vi.mock('../components/chat-message-row/AsyncMarkdownBlock', async () => {
+  const ReactMod = await import('react');
+  return {
+    AsyncMarkdownBlock: ReactMod.memo((props: { text?: string; isStreaming?: boolean }) => {
+      if (!props.text) return null; // 与真实组件语义一致：空文本不渲染
+      mockAmdRenders.push(props.text ?? '');
+      return ReactMod.createElement(
+        'div',
+        { 'data-testid': 'amd-block', 'data-streaming': String(!!props.isStreaming) },
+        props.text ?? ''
+      );
+    }),
+  };
+});
+
+vi.mock('../components/chat-message-row/MessageToolCallsSection', async () => {
+  const ReactMod = await import('react');
+  return {
+    MessageToolCallsSection: ReactMod.memo((props: { items?: unknown[] }) => {
+      mockToolSectionRenders.push(props.items?.length ?? 0);
+      return ReactMod.createElement(
+        'div',
+        { 'data-testid': 'tool-section' },
+        `tools:${props.items?.length ?? 0}`
+      );
+    }),
+  };
+});
 
 // Mock ResizeObserver
 globalThis.ResizeObserver = class ResizeObserver {
@@ -232,5 +272,182 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
 
     // 核心断言：React.memo 阻止了 MemoizedChild 的无效重渲染 (子组件渲染计数保持为 1)
     expect(childRenderCount).toBe(1);
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('流式增量渲染监控（T1.7：纯文本帧零重渲染）', () => {
+  const SID = 'sess-stream-1';
+  const MID = 'asst-stream-1';
+  const toolStackProps = {
+    activeSessionId: SID,
+    onShowToast: vi.fn(),
+    onOpenDiff: vi.fn(),
+    onOpenDiffPanel: vi.fn(),
+  } as never;
+
+  function streamingMsg(): SessionMessage {
+    return {
+      id: MID,
+      sender: 'assistant',
+      text: '',
+      thinking: '',
+      timestamp: Date.now(),
+      status: 'processing',
+      toolCalls: [],
+      blocks: [
+        { type: 'text', content: '稳定历史块内容\n' },
+        { type: 'text', content: '' },
+      ],
+    };
+  }
+
+  beforeEach(() => {
+    mockAmdRenders.length = 0;
+    mockToolSectionRenders.length = 0;
+    useStreamingStore.setState({
+      byKey: Object.create(null) as Record<string, never>,
+    });
+  });
+
+  it('流式纯文本帧：稳定历史块渲染 0 次；增量累积 = strip 后全文', () => {
+    const { container } = render(
+      <MessageContent
+        msg={streamingMsg()}
+        isThinkingMsg
+        toolStackProps={toolStackProps}
+      />
+    );
+    // 首帧：稳定块渲染 1 次（初始挂载）；空尾块不渲染
+    expect(mockAmdRenders).toEqual(['稳定历史块内容']);
+
+    // 模拟 6 个流式帧（文本单调增长，含占位行）
+    const frames = [
+      '正在思考中…\n',
+      '正在思考中…\n第一行完成\n',
+      '正在思考中…\n第一行完成\n第二行完成\n',
+      '正在思考中…\n第一行完成\n第二行完成\n## 本轮总结\n',
+      '正在思考中…\n第一行完成\n第二行完成\n## 本轮总结\n正文继续\n',
+      '正在思考中…\n第一行完成\n第二行完成\n## 本轮总结\n正文继续\n收尾行',
+    ];
+    for (const f of frames) {
+      act(() => {
+        useStreamingStore.getState().setStreamText(SID, MID, f);
+      });
+    }
+
+    // 稳定历史块全程零额外渲染（签名缓存 + TimelineBody memo + 块 memo）
+    expect(mockAmdRenders).toEqual(['稳定历史块内容']);
+    // 增量区 DOM 累积 = strip(全文)（占位行/总结标题被剥）
+    expect(container.textContent).toContain('第一行完成');
+    expect(container.textContent).toContain('正文继续');
+    expect(container.textContent).not.toContain('正在思考中');
+    expect(container.textContent).not.toContain('## 本轮总结');
+    // 流式区标记存在（StreamingTextBlock data-streaming）
+    expect(container.querySelector('[data-streaming="true"]')).not.toBeNull();
+  });
+
+  it('complete 后流式节点卸载：稳定块接管全文（无重复文本）', () => {
+    const { container } = render(
+      <MessageContent
+        msg={streamingMsg()}
+        isThinkingMsg
+        toolStackProps={toolStackProps}
+      />
+    );
+    act(() => {
+      useStreamingStore.getState().setStreamText(SID, MID, '正文一\n正文二\n');
+    });
+    expect(container.querySelector('[data-streaming="true"]')).not.toBeNull();
+    // complete：流式 store 清空 → 订阅断开，流式节点卸载
+    act(() => {
+      useStreamingStore.setState({
+        byKey: Object.create(null) as Record<string, never>,
+      });
+    });
+    expect(container.querySelector('[data-streaming="true"]')).toBeNull();
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('工具密集会话全链重渲染（T4.4：= 工具事件数，而非帧数）', () => {
+  const SID = 'sess-tools-1';
+  const MID = 'asst-tools-1';
+  const toolStackProps = {
+    activeSessionId: SID,
+    onShowToast: vi.fn(),
+    onOpenDiff: vi.fn(),
+    onOpenDiffPanel: vi.fn(),
+  } as never;
+
+  function toolRichMsg(): SessionMessage {
+    return {
+      id: MID,
+      sender: 'assistant',
+      text: '',
+      thinking: '',
+      timestamp: Date.now(),
+      status: 'processing',
+      toolCalls: [
+        { id: 't-1', name: 'read_file', arguments: '{}', status: 'running' },
+      ],
+      blocks: [
+        { type: 'text', content: '前置稳定文本\n' },
+        { type: 'tool_call', id: 't-1' },
+        { type: 'text', content: '' },
+      ],
+    };
+  }
+
+  beforeEach(() => {
+    mockAmdRenders.length = 0;
+    mockToolSectionRenders.length = 0;
+    useStreamingStore.setState({
+      byKey: Object.create(null) as Record<string, never>,
+    });
+  });
+
+  it('20 个工具事件：工具区渲染 = 工具事件数，稳定文本块零额外渲染', () => {
+    render(
+      <MessageContent
+        msg={toolRichMsg()}
+        isThinkingMsg
+        toolStackProps={toolStackProps}
+      />
+    );
+    // 初始：稳定文本块 1 次 + 工具区 1 次
+    expect(mockAmdRenders).toEqual(['前置稳定文本']);
+    expect(mockToolSectionRenders).toHaveLength(1);
+
+    // 穿插：流式文本帧——流式区首次出现时主体拆分变化（last text 项移出
+    // TimelineBody）→ 工具区多渲染 1 次；此后再无任何下游重渲染
+    act(() => {
+      useStreamingStore.getState().setStreamText(SID, MID, '流式正文第 1 行\n');
+    });
+    expect(mockAmdRenders).toEqual(['前置稳定文本']);
+    expect(mockToolSectionRenders).toHaveLength(2);
+
+    // 纯文本帧继续增长：稳定文本块 + 工具区零额外渲染
+    act(() => {
+      useStreamingStore.getState().setStreamText(SID, MID, '流式正文第 1 行\n第二行\n');
+    });
+    expect(mockAmdRenders).toEqual(['前置稳定文本']);
+    expect(mockToolSectionRenders).toHaveLength(2);
+
+    // 20 个工具事件（status 推进）→ 每次 1 次工具区渲染
+    for (let i = 0; i < 20; i++) {
+      act(() => {
+        useStreamingStore.getState().setStreamTool(SID, MID, 't-1', {
+          id: 't-1',
+          name: 'read_file',
+          status: i % 2 === 0 ? 'running' : 'success',
+          output: `第 ${i} 步输出`,
+        });
+      });
+    }
+
+    // 全链重渲染次数 = 初始 1 + 拆分 1 + 工具事件 20；稳定文本块零额外渲染
+    expect(mockToolSectionRenders).toHaveLength(22);
+    expect(mockAmdRenders).toEqual(['前置稳定文本']);
   });
 });

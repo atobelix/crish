@@ -64,6 +64,12 @@ export interface TiptapEditorFieldProps {
   slashExtraItems?: SlashCommandItem[];
   /** 提及候选人（@ 触发；引用桥接动态更新，未接入时留空兜底） */
   mentionCandidates?: ReadonlyArray<MentionCandidate>;
+  /**
+   * 大文档序列化警告（R-08，08-detail T5.5）：粘贴/输入超过阈值
+   * （SERIALIZE_WARN_CHARS=50KB，实现时按压测校准）时回调一次，
+   * 宿主负责 toast 提示；防抖窗口末帧的全量序列化成本由既有权衡保留。
+   */
+  onOversizeWarning?: (charCount: number) => void;
   /** 挂载后自动聚焦编辑器 */
   autoFocus?: boolean;
 }

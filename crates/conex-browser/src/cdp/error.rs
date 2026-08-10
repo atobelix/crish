@@ -110,6 +110,9 @@ pub enum CdpError {
     NotReady(String),
     /// 无活动标签会话（current_session 无可用会话）
     NoActiveTab,
+    /// 按 tab_id（targetId）路由不到会话（P1 多标签：标签已关闭/未 attach）。
+    /// 工具面映射 node_gone（目标过期语义，14 §5.1 TargetClosed 同源）。
+    NoSuchTab { tab_id: String },
 }
 
 impl CdpError {
@@ -218,6 +221,7 @@ impl std::fmt::Display for CdpError {
             CdpError::Serialize { method, message } => write!(f, "序列化失败[{method}]：{message}"),
             CdpError::NotReady(detail) => write!(f, "浏览器恢复中，工具面不可用：{detail}"),
             CdpError::NoActiveTab => write!(f, "无活动标签会话"),
+            CdpError::NoSuchTab { tab_id } => write!(f, "标签 {tab_id} 不存在或已关闭（无可用会话）"),
         }
     }
 }

@@ -71,7 +71,11 @@ pub struct NetworkEntry {
 /// 会话操作抽象（MVP 工具面与浏览器会话的唯一交互面；测试注入 mock 替身）。
 ///
 /// 全部方法仅消费 conex-browser 的 pub 接口；同步方法（readiness/current_tab/
-/// snapshot_version/element_meta）不落 await，异步方法为 CDP 命令面。
+/// tab_session/snapshot_version/element_meta）不落 await，异步方法为 CDP 命令面。
+/// P1 多标签新增面（15 文档 §7）：`tab_session` 按 tab_id（targetId 语义）路由、
+/// `activate_tab` 显式切换活动标签、`note_action_done` 即时推进目标标签版本——
+/// 三方法提供默认实现（缺省语义见各注释），**引擎侧 LazySessionOps 未覆盖时为
+/// 兼容降级**（活动标签兜底/空操作，遗留注记），RealSession 与测试 mock 显式覆盖。
 #[async_trait]
 pub trait SessionOps: Send + Sync {
     /// 就绪保证（27 接线方案 S1/D-B）：工具执行前异步确保会话可用——
@@ -86,6 +90,25 @@ pub trait SessionOps: Send + Sync {
     fn readiness(&self) -> Result<(), String>;
     /// 当前活动标签（target_id + session 会话号）。
     fn current_tab(&self) -> Result<SessionRef, ToolError>;
+    /// 按 tab_id（targetId 语义）路由到对应 CDP 会话（P1 多标签，15 §7）。
+    /// None = 标签不存在/已关闭（TargetDestroyed 清理后）→ 工具面 node_gone 语义。
+    /// 默认实现：活动标签兜底（仅当 tab_id == 活动标签时命中）——引擎侧
+    /// LazySessionOps 未接线 per-tab 路由前的兼容降级。
+    fn tab_session(&self, tab_id: &str) -> Option<SessionRef> {
+        self.current_tab()
+            .ok()
+            .filter(|r| r.target_id == tab_id)
+    }
+    /// 显式切换活动标签（P1：Target.activateTarget 无 SessionAttached 事件，
+    /// 引擎活动槽必须显式更新）。Err = 目标标签无会话（node_gone 语义）。
+    /// 默认实现：空操作（引擎侧未接线时的兼容降级，活动标签仍随事件流）。
+    fn activate_tab(&self, _tab_id: &str) -> Result<(), ToolError> {
+        Ok(())
+    }
+    /// AI 动作成功即时推进目标标签版本（R-1，15 文档 §5.1：ActionDone 即时 +1；
+    /// switch_tab 切换后旧快照随之失效 → 强制重快照）。
+    /// 默认实现：空操作（无版本面实现的 mock/旧适配层降级）。
+    fn note_action_done(&self, _tab_id: &str) {}
     /// 会话级 CDP 命令（页面域，绑定具体会话）。
     async fn send_page(
         &self,
@@ -137,7 +160,9 @@ pub struct RealSession {
     budgets: BudgetConfig,
     /// 共享快照管理器（采集 + 索引解析同实例，缓存一致性）
     snapshots: Arc<SnapshotManager>,
-    executor: Mutex<Option<Arc<ActionExecutor>>>,
+    /// per-tab 动作执行器缓存（P1 多标签：键 = tab_id，各绑定目标标签会话；
+    /// 并发动作天然隔离——CDP 命令按 request_id 匹配，跨 tab 无共享态漂移）
+    executors: Mutex<std::collections::HashMap<String, Arc<ActionExecutor>>>,
     console: Arc<ConsoleBuffer>,
     network: Arc<NetworkBuffer>,
 }
@@ -156,30 +181,45 @@ impl RealSession {
             gate,
             budgets,
             snapshots,
-            executor: Mutex::new(None),
+            executors: Mutex::new(std::collections::HashMap::new()),
             console: Arc::new(ConsoleBuffer::default()),
             network: Arc::new(NetworkBuffer::default()),
         }
     }
 
-    /// 惰性构建动作执行器（复用共享快照管理器与注入门禁）。
-    fn executor(&self) -> Result<Arc<ActionExecutor>, ActionError> {
-        let mut guard = self.executor.lock().unwrap_or_else(|p| p.into_inner());
-        if let Some(ex) = guard.as_ref() {
+    /// 目标标签会话解析（per-tab 路由；无会话 = 标签已关闭/未 attach →
+    /// TargetClosed，14 §5.1 目标过期语义）。
+    fn session_of(&self, tab_id: &str) -> Result<String, ActionError> {
+        self.session.tab_session(tab_id).map(|r| r.session).ok_or_else(|| {
+            ActionError::new(
+                ActionErrorKind::TargetClosed,
+                format!("标签 {tab_id} 不存在或已关闭（无可用会话）"),
+            )
+        })
+    }
+
+    /// 惰性构建目标标签的动作执行器（复用共享快照管理器与注入门禁；
+    /// 按 tab_id 缓存，各绑定目标标签会话——per-tab 动作路由）。
+    fn executor_for(&self, tab_id: &str, session: &str) -> Result<Arc<ActionExecutor>, ActionError> {
+        let mut guard = self.executors.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(ex) = guard.get(tab_id) {
             return Ok(ex.clone());
         }
-        let ops: Arc<dyn PageOps> = Arc::new(BrowserPageOps::new(self.session.clone()));
+        let ops: Arc<dyn PageOps> = Arc::new(
+            BrowserPageOps::new(self.session.clone()).with_session(session.to_string()),
+        );
         let store: Arc<dyn SnapshotStore> = Arc::new(ToolSnapshotStore {
             session: self.session.clone(),
             snapshots: self.snapshots.clone(),
-            session_for: conex_browser::action::ops::session_for_active(self.session.clone()),
+            // P1：per-tab 会话解析（15 §7.1 路由；重快照与动作同口径）
+            session_for: conex_browser::action::ops::session_for_tab(self.session.clone()),
         });
         let executor = Arc::new(
             ActionExecutor::new(ops, store, CancellationToken::new())
                 .with_gate(self.gate.clone())
                 .with_delay(Arc::new(TokioDelay)),
         );
-        *guard = Some(executor.clone());
+        guard.insert(tab_id.to_string(), executor.clone());
         Ok(executor)
     }
 }
@@ -206,6 +246,20 @@ impl SessionOps for RealSession {
         self.session
             .current_session()
             .map_err(|e| error::map_cdp_error("current_session", e))
+    }
+
+    fn tab_session(&self, tab_id: &str) -> Option<SessionRef> {
+        self.session.tab_session(tab_id)
+    }
+
+    fn activate_tab(&self, tab_id: &str) -> Result<(), ToolError> {
+        self.session
+            .activate_tab(tab_id)
+            .map_err(|e| error::map_cdp_error("activate_tab", e))
+    }
+
+    fn note_action_done(&self, tab_id: &str) {
+        self.session.bump(&tab_id.to_string(), VersionReason::ActionDone);
     }
 
     async fn send_page(

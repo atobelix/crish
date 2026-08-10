@@ -355,6 +355,86 @@ export type CollectMustIncludeOptions<T> = {
 };
 
 /**
+ * 命中缓存（T3.2，08-detail S2 / R-02）：immer 对象身份缓存。
+ *
+ * 流式期只有最后一条消息换引用（其余消息引用不变）→ 逐消息
+ * `cache.get(id)?.msgRef === msg` 命中直接复用，O(1)/帧；
+ * 工具状态变更 → 仅该消息重求值。queryKey 变更 → 整体失效重扫。
+ */
+export type MustIncludeHitCache = {
+  /** 当前缓存所属的查询键（规范化 query；变更即整体失效） */
+  queryKey: string;
+  /** msgId → { msgRef, hit }（msgRef 为 immer 消息对象引用） */
+  byId: Map<string, { msgRef: unknown; hit: boolean }>;
+};
+
+export function createMustIncludeHitCache(): MustIncludeHitCache {
+  return { queryKey: '', byId: new Map() };
+}
+
+/**
+ * collectMustIncludeIndices 的缓存变体：match 分支逐消息命中缓存。
+ * 输出与 collectMustIncludeIndices 逐项相等（对拍由调用方测试锁定）。
+ */
+export function collectMustIncludeIndicesCached<
+  T extends { id: string; toolCalls?: readonly { status?: string }[] | undefined },
+>(
+  messages: readonly T[],
+  options: CollectMustIncludeOptions<T> & {
+    cache: MustIncludeHitCache;
+    queryKey: string;
+  },
+): number[] {
+  if (!messages.length) return [];
+  const parts: number[] = [];
+  if (options.includePendingApprovals) {
+    parts.push(...findPendingApprovalIndices(messages));
+  }
+  if (options.pinIds?.length) {
+    parts.push(...findIndicesByIds(messages, options.pinIds));
+  }
+  if (options.extraIndices?.length) {
+    parts.push(...options.extraIndices);
+  }
+  if (options.match) {
+    const cache = options.cache;
+    // query 变更 / 会话切换 → 整体失效（msgId 键空间变化，重扫重建）
+    if (cache.queryKey !== options.queryKey) {
+      cache.queryKey = options.queryKey;
+      cache.byId.clear();
+    }
+    // 防膨胀：消息被大量移除/切换后清理陈旧条目
+    if (cache.byId.size > messages.length * 2) {
+      cache.byId.clear();
+    }
+    const byId = cache.byId;
+    const onlyFirst = options.matchOnlyFirst !== false;
+    const hits: number[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i]!;
+      const cached = byId.get(m.id);
+      let hit: boolean;
+      if (cached && cached.msgRef === m) {
+        // 引用未变 → 命中复用（纯文本流式期除最后一条外全部命中）
+        hit = cached.hit;
+      } else {
+        hit = !!options.match(m, i);
+        byId.set(m.id, { msgRef: m, hit });
+      }
+      if (hit) {
+        hits.push(i);
+        if (onlyFirst) break;
+      }
+    }
+    if (hits.length) {
+      parts.push(...(onlyFirst ? [hits[0]!] : hits));
+    }
+  }
+  // 绑定到当前列表长度，丢弃 OOB extraIndices / 脏数据
+  return uniqueSortedIndices(parts, messages.length);
+}
+
+/**
  * 汇总必须进窗的下标：待审批 ∪ pin ∪ 搜索命中（可只取最早）∪ 额外。
  * 纯函数，供 windowMessages.mustIncludeIndices 与 expandedOlder 抬升共用。
  */

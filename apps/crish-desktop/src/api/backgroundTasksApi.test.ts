@@ -35,12 +35,14 @@ import {
 } from './backgroundTasksApi';
 
 vi.mock('./tauriInvoke', () => ({
-  invokeCmd: vi.fn(),
+  invokeResult: vi.fn(),
+  invokeTyped: vi.fn(),
 }));
 
-import { invokeCmd } from './tauriInvoke';
+import { invokeResult, invokeTyped } from './tauriInvoke';
 
-const mockedInvoke = vi.mocked(invokeCmd);
+const mockedInvokeResult = vi.mocked(invokeResult);
+const mockedInvokeTyped = vi.mocked(invokeTyped);
 
 function task(
   partial: Partial<BackgroundTaskInfo> & Pick<BackgroundTaskInfo, 'id'>,
@@ -56,7 +58,8 @@ function task(
 }
 
 beforeEach(() => {
-  mockedInvoke.mockReset();
+  mockedInvokeResult.mockReset();
+  mockedInvokeTyped.mockReset();
 });
 
 afterEach(() => {
@@ -501,13 +504,15 @@ describe('parseCancelBackgroundTaskResult', () => {
 
 describe('listBackgroundTasks', () => {
   it('returns [] when invoke returns null', async () => {
-    mockedInvoke.mockResolvedValueOnce(null);
+    mockedInvokeTyped.mockResolvedValueOnce({ status: 'missing' });
     await expect(listBackgroundTasks()).resolves.toEqual([]);
-    expect(mockedInvoke).toHaveBeenCalledWith('workbench_list_background_tasks');
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('workbench_list_background_tasks');
   });
 
   it('parses real wire payload ({ tasks: [...] }) and dedupes', async () => {
-    mockedInvoke.mockResolvedValueOnce({
+    mockedInvokeTyped.mockResolvedValueOnce({
+      status: 'ok',
+      data: {
       tasks: [
         {
           taskId: 'a',
@@ -539,6 +544,7 @@ describe('listBackgroundTasks', () => {
           ownerRunId: 'run-1',
         },
       ],
+      },
     });
     const list = await listBackgroundTasks();
     expect(list).toHaveLength(2);
@@ -558,7 +564,9 @@ describe('listBackgroundTasks', () => {
   });
 
   it('terminal wire entries render without summary (resource missing tolerated)', async () => {
-    mockedInvoke.mockResolvedValueOnce({
+    mockedInvokeTyped.mockResolvedValueOnce({
+      status: 'ok',
+      data: {
       tasks: [
         {
           taskId: 't1',
@@ -589,6 +597,7 @@ describe('listBackgroundTasks', () => {
           ownerRunId: 'run-1',
         },
       ],
+      },
     });
     const list = await listBackgroundTasks();
     expect(list).toHaveLength(2);
@@ -609,11 +618,13 @@ describe('listBackgroundTasks', () => {
 describe('getBackgroundTaskOutput', () => {
   it('returns empty for blank id without invoke', async () => {
     await expect(getBackgroundTaskOutput('  ')).resolves.toBe('');
-    expect(mockedInvoke).not.toHaveBeenCalled();
+    expect(mockedInvokeTyped).not.toHaveBeenCalled();
   });
 
   it('trims id and parses wire payload (output = status.tail)', async () => {
-    mockedInvoke.mockResolvedValueOnce({
+    mockedInvokeTyped.mockResolvedValueOnce({
+      status: 'ok',
+      data: {
       output: 'log line',
       taskId: 'tid',
       status: 'running',
@@ -626,25 +637,28 @@ describe('getBackgroundTaskOutput', () => {
       tail: 'log line',
       prompt: null,
       terminationDiagnostics: [],
+      },
     });
     await expect(getBackgroundTaskOutput('  tid  ')).resolves.toBe('log line');
-    expect(mockedInvoke).toHaveBeenCalledWith('workbench_get_background_task_output', {
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('workbench_get_background_task_output', {
       taskId: 'tid',
     });
   });
 
   it('null invoke → empty string', async () => {
-    mockedInvoke.mockResolvedValueOnce(null);
+    mockedInvokeTyped.mockResolvedValueOnce({ status: 'missing' });
     await expect(getBackgroundTaskOutput('x')).resolves.toBe('');
   });
 
   it('failure is tolerated: rejected invoke → empty string (fallback display)', async () => {
-    mockedInvoke.mockRejectedValueOnce(new Error('NotFound'));
+    mockedInvokeTyped.mockRejectedValueOnce(new Error('NotFound'));
     await expect(getBackgroundTaskOutput('missing')).resolves.toBe('');
   });
 
   it('resource present as full sample does not disturb output parse', async () => {
-    mockedInvoke.mockResolvedValueOnce({
+    mockedInvokeTyped.mockResolvedValueOnce({
+      status: 'ok',
+      data: {
       output: 'tail-1\ntail-2',
       taskId: 'r1',
       status: 'completed',
@@ -664,6 +678,7 @@ describe('getBackgroundTaskOutput', () => {
       tail: 'tail-1\ntail-2',
       prompt: null,
       terminationDiagnostics: [],
+      },
     });
     await expect(getBackgroundTaskOutput('r1')).resolves.toBe('tail-1\ntail-2');
   });
@@ -675,24 +690,26 @@ describe('cancelBackgroundTask', () => {
     await expect(
       cancelBackgroundTask('done', [task({ id: 'done', state: 'failed' })]),
     ).resolves.toBeNull();
-    expect(mockedInvoke).not.toHaveBeenCalled();
+    expect(mockedInvokeTyped).not.toHaveBeenCalled();
   });
 
   it('invokes and parses KillResult::killed as cancelled', async () => {
-    mockedInvoke.mockResolvedValueOnce({
-      killed: { taskId: 'run', viaForce: false },
+    mockedInvokeTyped.mockResolvedValueOnce({
+      status: 'ok',
+      data: { killed: { taskId: 'run', viaForce: false } },
     });
     const known = [task({ id: 'run', state: 'running' })];
     const res = await cancelBackgroundTask('run', known);
     expect(res).toMatchObject({ id: 'run', label: 'run', state: 'cancelled' });
-    expect(mockedInvoke).toHaveBeenCalledWith('workbench_cancel_background_task', {
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('workbench_cancel_background_task', {
       taskId: 'run',
     });
   });
 
   it('parses KillResult::alreadyExited as terminal info', async () => {
-    mockedInvoke.mockResolvedValueOnce({
-      alreadyExited: { taskId: 'run', exitCode: 0 },
+    mockedInvokeTyped.mockResolvedValueOnce({
+      status: 'ok',
+      data: { alreadyExited: { taskId: 'run', exitCode: 0 } },
     });
     const known = [task({ id: 'run', state: 'running' })];
     const res = await cancelBackgroundTask('run', known);
@@ -700,7 +717,7 @@ describe('cancelBackgroundTask', () => {
   });
 
   it('null invoke → null', async () => {
-    mockedInvoke.mockResolvedValueOnce(null);
+    mockedInvokeTyped.mockResolvedValueOnce({ status: 'missing' });
     await expect(cancelBackgroundTask('x')).resolves.toBeNull();
   });
 });

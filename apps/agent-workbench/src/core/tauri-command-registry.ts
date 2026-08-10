@@ -64,7 +64,7 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   // ── 查询与运行（A/B，§2.2）──
   { command: "core_get_status", status: "implemented", feature: "engine status snapshot" },
   { command: "core_get_run_snapshot", status: "implemented", feature: "run snapshot read" },
-  { command: "core_read_run_events", status: "implemented", feature: "run event read" },
+  // T-F 06 退役：core_read_run_events 已被 core_read_session_events 取代（changelog 33）
   { command: "core_read_session_events", status: "implemented", feature: "session event read" },
   { command: "core_run_task", status: "implemented", feature: "task run start" },
   { command: "core_run_control", status: "implemented", feature: "run control signal" },
@@ -72,17 +72,17 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   { command: "core_approve_tool", status: "implemented", feature: "tool approval" },
   { command: "core_deny_tool", status: "implemented", feature: "tool denial" },
   // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
+  // T-F 06 退役：delete_session / touch_session 已从命令面退役（changelog 33；
+  // 前端删除走 IndexedDB 本地面，活跃时间戳面无前端依赖）
   { command: "list_sessions", status: "implemented", feature: "session history" },
   { command: "load_session_body", status: "implemented", feature: "session body read" },
   { command: "save_session_body", status: "implemented", feature: "session body save" },
-  { command: "delete_session", status: "implemented", feature: "session deletion" },
   { command: "load_session_agents", status: "implemented", feature: "session agent list read" },
   { command: "save_session_agents", status: "implemented", feature: "session agent list save" },
   { command: "get_session_meta", status: "implemented", feature: "session metadata read" },
   { command: "set_session_meta", status: "implemented", feature: "session metadata write" },
   { command: "cleanup_orphan_sessions", status: "implemented", feature: "orphan session cleanup" },
   { command: "import_from_localstorage", status: "implemented", feature: "localstorage session import" },
-  { command: "touch_session", status: "implemented", feature: "session touch" },
   { command: "upsert_session_entry", status: "implemented", feature: "session entry upsert" },
   // ── F 轮新增命令（F1/F3 后台任务 + F10 产出根 + F11b DAG 快照 + catalog/trash）──
   { command: "workbench_list_background_tasks", status: "implemented", feature: "background task list" },

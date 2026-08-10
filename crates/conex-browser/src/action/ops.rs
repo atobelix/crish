@@ -2,10 +2,10 @@
 //!
 //! - `PageOps`：动作层全部 CDP 交互的 trait 抽象——真实实现 `BrowserPageOps`
 //!   （经统一发送层 `BrowserSession`）与确定性测试 mock（mocks.rs）共用同一执行器；
-//! - `BrowserPageOps`：`BrowserSession` 包装（MVP 绑定当前活动标签；P1 恢复 per-tab
-//!   会话路由时按 `tab_id` 解析，标注于各方法）；
+//! - `BrowserPageOps`：`BrowserSession` 包装（缺省绑定当前活动标签；P1 经
+//!   `with_session` 绑定具体标签会话——per-tab 动作路由，动作入口按 tab_id 解析）；
 //! - `BrowserSnapshotStore`：`SnapshotStore` 契约的真实实现（维度 11/13 门面，
-//!   R-1 per-tab 签名）；
+//!   R-1 per-tab 签名；会话解析经注入闭包，P1 提供 `session_for_tab` 辅助）；
 //! - `Delay`：延迟注入抽象（真实 tokio sleep / 测试记录型），重试延迟与 type 节流共用。
 //!
 //! 错误映射：`CdpError` → `ActionError` 按维度 14 §5.1 表（TargetClosed/ContextGone/
@@ -192,6 +192,7 @@ fn map_cdp_error(err: CdpError, method: &str) -> ActionError {
         CdpError::ApprovalDenied { .. } => ActionErrorKind::ApprovalDenied,
         CdpError::NotReady(_) => ActionErrorKind::TargetRestarting,
         CdpError::NoActiveTab => ActionErrorKind::TargetClosed,
+        CdpError::NoSuchTab { .. } => ActionErrorKind::TargetClosed,
         CdpError::Server { message, .. } => {
             if message.contains("No node with given id found")
                 || message.contains("Could not compute box model")
@@ -210,21 +211,39 @@ fn map_cdp_error(err: CdpError, method: &str) -> ActionError {
     ActionError::new(kind, format!("CDP 命令失败[{method}]：{raw}")).with_cdp_raw(raw)
 }
 
-/// 真实浏览器 ops（`BrowserSession` 包装；MVP 绑定当前活动标签会话）。
+/// 真实浏览器 ops（`BrowserSession` 包装；默认绑定当前活动标签会话，
+/// P1 可用 `with_session` 绑定具体标签会话——per-tab 动作路由）。
 pub struct BrowserPageOps {
     session: Arc<BrowserSession>,
     network: Arc<NetworkCounter>,
+    /// 绑定的 CDP 会话（P1 多标签：per-tab 执行器按目标标签解析一次后绑定；
+    /// None = 活动标签兜底，向后兼容）
+    bound_session: Option<String>,
 }
 
 impl BrowserPageOps {
-    /// 新建 ops（自动启动在途请求计数订阅，维度 11 事件总线）。
+    /// 新建 ops（自动启动在途请求计数订阅，维度 11 事件总线；活动标签兜底）。
     pub fn new(session: Arc<BrowserSession>) -> Self {
         let network = NetworkCounter::new(session.subscribe());
-        BrowserPageOps { session, network }
+        BrowserPageOps {
+            session,
+            network,
+            bound_session: None,
+        }
     }
 
-    /// 当前活动标签会话（MVP 单标签语义；P1 恢复 per-tab 路由后按 tab_id 解析）。
+    /// 绑定具体标签会话（P1 多标签：动作入口按 tab_id 路由解析后绑定，
+    /// 后续全部 CDP 调用固定走该会话——并发动作天然隔离，无共享态漂移）。
+    pub fn with_session(mut self, session: String) -> Self {
+        self.bound_session = Some(session);
+        self
+    }
+
+    /// 当前目标会话（绑定会话优先；缺省活动标签会话）。
     fn session_id(&self) -> Result<String, ActionError> {
+        if let Some(bound) = &self.bound_session {
+            return Ok(bound.clone());
+        }
         self.session
             .current_session()
             .map(|r| r.session)
@@ -647,6 +666,14 @@ pub fn session_for_active(session: Arc<BrowserSession>) -> SessionResolver {
     })
 }
 
+/// 会话解析辅助（P1 多标签）：按 tab_id（targetId 语义）经 `tab_session`
+/// 路由到对应 CDP 会话——重快照/动作路由与工具面 `resolve_tab` 同一口径。
+pub fn session_for_tab(session: Arc<BrowserSession>) -> SessionResolver {
+    Arc::new(move |tab_id: &TabId| {
+        session.tab_session(tab_id).map(|r| r.session)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -813,6 +840,69 @@ mod tests {
             );
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
+    }
+
+    /// P1 多标签：`with_session` 绑定具体标签会话——全部 CDP 命令固定路由到
+    /// 绑定会话，活动标签切换不影响绑定路由（per-tab 动作隔离）。
+    #[tokio::test]
+    async fn browser_page_ops_bound_session_routes_commands() {
+        let mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        let session = Arc::new(
+            crate::BrowserSession::connect(
+                CdpEndpoint {
+                    port: mock.addr.port(),
+                    ws_path: "/devtools/browser/ops-bound".to_string(),
+                },
+                crate::cdp::transport::ExpectedBrowser::default(),
+                Arc::new(AllowHooks),
+            )
+            .await
+            .expect("会话建连失败"),
+        );
+        // 注入双标签附着（T1/S1、T2/S2），活动标签为最后附着者 T2
+        for (target_id, sess) in [("T1", "S1"), ("T2", "S2")] {
+            mock.send_event(
+                "Target.attachedToTarget",
+                json!({
+                    "sessionId": sess,
+                    "targetInfo": { "targetId": target_id, "type": "page", "title": "", "url": "about:blank" },
+                    "waitingForDebugger": false,
+                }),
+                None,
+            );
+        }
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while session.tab_session("T1").is_none() || session.tab_session("T2").is_none() {
+            assert!(tokio::time::Instant::now() < deadline, "双标签路由未就绪");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        mock.set_auto_reply("Page.getNavigationHistory", MockReply::Ok(json!({
+            "entries": [ { "id": 1, "url": "https://b.example/", "title": "B" } ],
+            "currentIndex": 0
+        })));
+        // 绑定 T2 会话（S2）：命令必须路由到 S2
+        let ops = BrowserPageOps::new(session.clone()).with_session("S2".to_string());
+        let url = ops.current_url().await.expect("绑定会话命令应成功");
+        assert_eq!(url, "https://b.example/");
+        let cmd = mock.expect_command("Page.getNavigationHistory").await;
+        assert_eq!(cmd["sessionId"], "S2", "绑定会话路由必须命中 S2");
+
+        // 活动标签切到 T1：绑定路由不受影响（仍走 S2）
+        session.activate_tab("T1").expect("切换活动标签");
+        let url2 = ops.current_url().await.expect("绑定会话命令应成功");
+        assert_eq!(url2, "https://b.example/");
+        let cmd2 = mock.expect_command("Page.getNavigationHistory").await;
+        assert_eq!(cmd2["sessionId"], "S2", "活动标签切换不得影响绑定路由");
+
+        // 未绑定的 ops 走活动标签（向后兼容兜底）
+        let fallback = BrowserPageOps::new(session.clone());
+        let _ = fallback.current_url().await.expect("活动标签兜底命令应成功");
+        let cmd3 = mock.expect_command("Page.getNavigationHistory").await;
+        assert_eq!(cmd3["sessionId"], "S1", "未绑定 ops 走活动标签会话");
     }
 
     /// 会话恢复所需 mock 自动应答全表（与 lib.rs 会话面集成测试同源）。
