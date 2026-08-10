@@ -114,7 +114,7 @@
   color: var(--text-primary);
 }
 .spin {
-  animation: spinKeyframe 0.8s linear infinite;
+  animation: spinKeyframe var(--transition-spin) infinite;
 }
 @keyframes spinKeyframe {
   to {

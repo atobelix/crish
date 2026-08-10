@@ -429,7 +429,7 @@
 
 /* 引用 panels.css 中的 crish-spin keyframe */
 .spin {
-  animation: crish-spin 0.8s linear infinite;
+  animation: crish-spin var(--transition-spin) infinite;
 }
 
 /* mono feature: code / terminal / tools */

@@ -28,7 +28,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  animation: modal-slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: modal-slide-up var(--transition-modal-enter);
   box-sizing: border-box;
 }
 

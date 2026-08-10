@@ -26,7 +26,7 @@
   padding: var(--space-1);
   outline: none;
   box-shadow: none !important;
-  animation: popoverFadeIn 0.15s ease-out;
+  animation: popoverFadeIn var(--transition-fast);
   scrollbar-width: thin;
 }
 

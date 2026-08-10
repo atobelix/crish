@@ -102,7 +102,7 @@
 
 .cheatsheetCategoryTitle {
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semi, 600);
+  font-weight: var(--font-weight-semibold, 600);
   color: var(--text-tertiary);
   padding: 10px 8px 4px;
   text-transform: uppercase;

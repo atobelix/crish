@@ -45,7 +45,8 @@
   align-items: center;
   gap: var(--space-2);
   z-index: var(--z-toast);
-  animation: slideInUp var(--transition-popover-enter);
+  /* S7 P2-6：删除悬空 animation 引用（slideInUp 从未定义；进入/退出动画
+   * 由 .toast--enter/.toast--exit 的 toast-slide-in/out 承担，见下） */
   backdrop-filter: blur(8px);
   box-sizing: border-box;
 }

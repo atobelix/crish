@@ -257,22 +257,24 @@
   word-break: break-all;
 }
 
+/* S6 P1-4：diff 增删底色走 --accent-*-light-adaptive（与 DiffCard 同 token 系，
+ * 含 dark 自适应；观感与历史 GitHub rgba 淡染一致） */
 .diffAddition {
-  background: rgba(46, 160, 67, 0.15);
+  background: var(--accent-green-light-adaptive);
   color: var(--text-primary);
 }
 
 .diffAddition .diffGutter {
-  background: rgba(46, 160, 67, 0.25);
+  background: var(--accent-green-light-adaptive);
 }
 
 .diffDeletion {
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--accent-red-light-adaptive);
   color: var(--text-primary);
 }
 
 .diffDeletion .diffGutter {
-  background: rgba(248, 81, 73, 0.25);
+  background: var(--accent-red-light-adaptive);
 }
 
 .diffEmpty {

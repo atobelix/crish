@@ -1,5 +1,6 @@
 /* reduced-motion.css — 尊重用户减少动效偏好 */
-/* 通过 prefers-reduced-motion media query 禁用所有 cds- 动画和过渡 */
+/* 双通道：@media (prefers-reduced-motion) 系统偏好 + [data-reduced-motion]
+ * 属性开关（lightweightMode.ts:56 写入，R-04 接线——两者同语义） */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -34,6 +35,9 @@
     --transition-accordion: 0ms !important;
     --transition-press: 0ms !important;
     --transition-skeleton: 0ms !important;
+    --transition-spin: 0ms !important;
+    --transition-pulse: 0ms !important;
+    --transition-blink: 0ms !important;
     --duration-instant: 0ms !important;
     --duration-micro: 0ms !important;
     --duration-fast: 0ms !important;
@@ -48,4 +52,49 @@
     animation-iteration-count: 1 !important;
     transition-duration: 1.5s !important;
   }
+}
+
+/* [data-reduced-motion] 属性通道（与 @media 同语义；app 内开关免重启生效） */
+[data-reduced-motion] *,
+[data-reduced-motion] *::before,
+[data-reduced-motion] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+[data-reduced-motion] [class*="cds-animate-"] {
+  animation: none !important;
+}
+
+[data-reduced-motion] {
+  --transition-micro: 0ms !important;
+  --transition-fast: 0ms !important;
+  --transition-normal: 0ms !important;
+  --transition-slow: 0ms !important;
+  --transition-spring-enter: 0ms !important;
+  --transition-spring-exit: 0ms !important;
+  --transition-popover-enter: 0ms !important;
+  --transition-popover-exit: 0ms !important;
+  --transition-modal-enter: 0ms !important;
+  --transition-modal-exit: 0ms !important;
+  --transition-accordion: 0ms !important;
+  --transition-press: 0ms !important;
+  --transition-skeleton: 0ms !important;
+  --transition-spin: 0ms !important;
+  --transition-pulse: 0ms !important;
+  --transition-blink: 0ms !important;
+  --duration-instant: 0ms !important;
+  --duration-micro: 0ms !important;
+  --duration-fast: 0ms !important;
+  --duration-normal: 0ms !important;
+  --duration-slow: 0ms !important;
+  --transition-spring: 0ms !important;
+}
+
+[data-reduced-motion] .essential-animation {
+  animation-duration: 1.5s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1.5s !important;
 }

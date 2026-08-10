@@ -247,6 +247,10 @@ html[data-theme="light"] {
   --transition-press: 80ms ease-out;
   --transition-skeleton: 1.5s ease-in-out;
   --transition-spin: 0.8s linear;
+  /* 批次 9.1（S7 动效时长 token 化）：脉冲/呼吸类动画统一档
+   * （原散装 1.1-2.2s 收敛到 1.6s）；光标/终端闪烁档（step-end 语义） */
+  --transition-pulse: 1.6s ease-in-out;
+  --transition-blink: 1s step-end;
 
   --duration-instant: 0ms;
   --duration-micro: 100ms;
@@ -309,7 +313,10 @@ html[data-theme="light"] {
   --letter-spacing-tighter: -0.02em;
   --letter-spacing-tightest: -0.025em;
 
-  /* 层级变量统一以 styles/z-index.css 为唯一真源（TS 侧 tokens/zindex.ts 由 check:zindex 校验） */
+  /* 层级变量统一以 styles/z-index.css 为唯一真源 */
+  /* --font-mono-features 由 fontStore.ts 运行时注入（字体特性开关）；此处补静态
+   * 默认定义（对齐注入默认值），注入缺失时降级可用 */
+  --font-mono-features: "calt" 0, "liga" 0;
 
   --breakpoint-sm: 640px;
   --breakpoint-md: 768px;
@@ -461,6 +468,10 @@ html[data-theme="dark"] {
   --border-subtle: hsl(0, 0%, 14%);
   --composer-bg: var(--bg-secondary);
   --composer-footer-bg: var(--bg-secondary);
+  /* S6 收编（自 theme-dark.css 迁入，值不变）：暗色代码面抬浅灰底，避免死黑终端感 */
+  --md-code-bg: var(--bg-tertiary);
+  --md-code-border: var(--hairline, var(--border-subtle));
+  --md-code-fg: var(--text-primary);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
@@ -744,11 +755,10 @@ html[data-theme="dark"] {
   --diff-file-chip-min-xs: 88px;
 }
 
-/* Premium dynamic text selection matching skin-specific themes */
-::selection {
-  background-color: color-mix(in srgb, var(--text-primary) 9%, transparent);
-  color: inherit;
-}
+/* 以下 html[data-perf-tier=...] 为性能档位的 token 覆盖定义（与
+ * html[data-theme] 皮肤块同类，属 token 体系；::selection / keyframes /
+ * .ui-popover-animate / [data-panel] 等全局规则已迁出至 design-system.css
+ * （S7-3 纯 token 化），tokens.css 只保留 token 定义。 */
 
 /* --- Conex System Performance Tiers --- */
 
@@ -787,73 +797,4 @@ html[data-perf-tier="eco"] {
   --transition-accordion: 0ms !important;
 }
 
-/* Dynamic Spring Motion & Keyframe Animations */
-@keyframes crish-popover-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.96) translateY(-4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-modal-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.96) translateY(8px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-.ui-popover-animate {
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
-  transform-origin: top center;
-}
-
-.ui-modal-animate {
-  animation: crish-modal-enter var(--transition-modal-enter) forwards;
-  transform-origin: center center;
-}
-
-/* ── 面板/浮层基准样式 ── */
-[data-panel] {
-  background: var(--bg-elevated);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-1);
-}
-[data-panel="modal"] {
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-2xl);
-  padding: var(--space-3);
-}
-[data-panel="overlay"] {
-  background: var(--bg-primary);
-  border-radius: 0;
-  box-shadow: none;
-}
-
-/* ── 面板动画（新增）── */
-@keyframes panel-enter {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
-}
-@keyframes panel-exit {
-  from { opacity: 1; transform: scale(1); }
-  to   { opacity: 0; transform: scale(0.96); }
-}
-/* ── 弹出层退出动画（已有进入，补退出）── */
-@keyframes crish-popover-exit {
-  from { opacity: 1; transform: scale(1) translateY(0); }
-  to   { opacity: 0; transform: scale(0.96) translateY(-4px); }
-}
-/* ── 模态框退出动画（已有进入，补退出）── */
-@keyframes crish-modal-exit {
-  from { opacity: 1; transform: scale(1) translateY(0); }
-  to   { opacity: 0; transform: scale(0.96) translateY(8px); }
-}
+/* ── 全局动画/浮层规则已迁至 design-system.css（S7-3）── */

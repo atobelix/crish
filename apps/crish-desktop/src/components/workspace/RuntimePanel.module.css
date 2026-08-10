@@ -258,7 +258,7 @@
   border: 1.5px solid var(--accent-color);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin var(--transition-spin) infinite;
   flex-shrink: 0;
 }
 

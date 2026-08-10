@@ -35,9 +35,9 @@
   background-color: var(--bg-primary);
 }
 
-/* ── Drag & Drop Indicators ─────────────────────────────────────────────── */
+/* 鈹€鈹€ Drag & Drop Indicators 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
 
-/* The main drop zone indicator (side/top/bottom strips) �?positioned via JS */
+/* The main drop zone indicator (side/top/bottom strips) 鈥?positioned via JS */
 .drop-indicator {
   position: fixed;
   background-color: color-mix(
@@ -55,7 +55,7 @@
     border-color var(--transition-fast);
 }
 
-/* Tab insert position line �?rendered via JS into document.body */
+/* Tab insert position line 鈥?rendered via JS into document.body */
 .tab-insert-line {
   position: fixed;
   width: 2px;
@@ -66,7 +66,7 @@
   box-shadow: none;
 }
 
-/* Drag preview overlay �?cloned card following cursor */
+/* Drag preview overlay 鈥?cloned card following cursor */
 .drag-overlay-preview-card {
   position: fixed;
   pointer-events: none;
@@ -85,7 +85,7 @@ body.dragging-card * {
   cursor: grabbing !important;
 }
 
-/* 顶栏会话标签拖拽：保�?tab 可命中（reorder），ghost 永不拦截 pointer */
+/* 椤舵爮浼氳瘽鏍囩鎷栨嫿锛氫繚鎸?tab 鍙懡涓紙reorder锛夛紝ghost 姘镐笉鎷︽埅 pointer */
 body.topbar-dragging {
   cursor: grabbing !important;
 }
@@ -93,7 +93,7 @@ body.topbar-dragging .topbar-drag-ghost,
 body.topbar-dragging .topbar-drag-ghost * {
   pointer-events: none !important;
 }
-/* 拖拽中仍允许命中其它 session tab（勿全局 none�?*/
+/* 鎷栨嫿涓粛鍏佽鍛戒腑鍏跺畠 session tab锛堝嬁鍏ㄥ眬 none锛?*/
 body.topbar-dragging [data-topbar-session-id] {
   pointer-events: auto !important;
 }

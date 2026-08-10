@@ -384,7 +384,8 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--text-primary) 35%, transparent);
+  /* 批次 9.1 复审：35% 强底归 --tint-highlight 派生档（开关 thumb 语义） */
+  background: var(--tint-highlight);
   transition: transform var(--transition-micro), background var(--transition-micro);
 }
 .models-switch input:checked + .models-switch-ui {

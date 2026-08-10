@@ -966,27 +966,27 @@ select.settings-field-input {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  background: transparent !important;
-  border: none !important;
+  background: transparent;
+  border: none;
   border-radius: 0;
-  padding: 0 !important;
-  gap: var(--space-2) !important;
-  box-shadow: none !important;
+  padding: 0;
+  gap: var(--space-2);
+  box-shadow: none;
 }
 /* 閺堫亝绺哄ú浼欑窗娴犲懏绁幓蹇氱珶閿涙稒绺哄ú浼欑窗娴犲懓钂嬫惔鏇樷偓鍌滎洣濮濄垹鏉堢懓褰旈悽 */
 .settings-segment-pill .ui-segment-item,
 .settings-segment-rect .ui-segment-item,
 .settings-choice-group .ui-segment-item,
 .settings-choice-btn {
-  border-radius: var(--radius-xl) !important;
+  border-radius: var(--radius-xl);
   min-width: 48px;
   min-height: 32px;
-  padding: 0 14px !important;
+  padding: 0 14px;
   font-size: var(--font-size-sm);
   font-family: inherit;
-  background: transparent !important;
-  border: 1px solid var(--tint-active) !important;
-  box-shadow: none !important;
+  background: transparent;
+  border: 1px solid var(--tint-active);
+  box-shadow: none;
   line-height: var(--line-height-none);
   color: var(--text-secondary);
   cursor: pointer;
@@ -1019,7 +1019,7 @@ select.settings-field-input {
   border-color: transparent !important;
   color: var(--text-primary) !important;
   font-weight: var(--font-weight-medium);
-  box-shadow: none !important;
+  box-shadow: none;
 }
 /* 缁涘顔旂捄顖氱閺佺増宓侀敍姘剁帛鐠併倕褰茬憴渚婄礄娑撳秵妲哥敮顔煎И閺傚洦顢嶉敍澶涚幢娴兼ê鍘涢崡鏇☆攽閻胶锟 */
 .settings-list-sub--mono {
@@ -2144,7 +2144,7 @@ textarea.settings-dialog-textarea:focus-visible {
   outline: none;
   border-color: var(--border-color) !important;
   background: var(--bg-card) !important;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 .settings-dialog--rules textarea.settings-dialog-textarea.settings-field-input,
 .settings-dialog--rules .settings-dialog-textarea {
@@ -2257,7 +2257,7 @@ textarea.settings-dialog-textarea:focus-visible {
   height: 100%;
   background: var(--text-tertiary);
   border-radius: 1px;
-  animation: loading-bar 1.2s infinite linear;
+  animation: loading-bar var(--transition-pulse) infinite;
 }
 /* ===== Settings rows閿涙矮绔存い閫涚锟?===== */
 .settings-rows {

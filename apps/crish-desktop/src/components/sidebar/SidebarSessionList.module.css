@@ -474,7 +474,7 @@
   border: 1.5px solid var(--text-tertiary);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin var(--transition-spin) infinite;
   flex-shrink: 0;
 }
 
@@ -484,7 +484,7 @@
 }
 
 .sessionItem.isRunning:not(.active) {
-  animation: session-running-pulse 2.2s ease-in-out infinite;
+  animation: session-running-pulse var(--transition-pulse) infinite;
 }
 
 .sessionItemWrap.isRunning > .sessionItem.active {

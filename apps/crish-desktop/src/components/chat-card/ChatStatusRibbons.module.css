@@ -73,7 +73,7 @@
   border-radius: 50%;
   background: var(--accent-green);
   flex-shrink: 0;
-  animation: pulseDot 1.6s ease-in-out infinite;
+  animation: pulseDot var(--transition-pulse) infinite;
 }
 
 @keyframes pulseDot {

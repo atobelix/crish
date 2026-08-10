@@ -63,8 +63,9 @@ function walkSrc(): string[] {
 /** 行首 token 定义行（如 `--foo: color-mix(...)`），替换脚本与契约测试共同白名单 */
 const DEF_LINE_RE = /^\s*--[\w-]+\s*:/;
 
-/** 双层同源扫描排除文件（tokens.css 定义面 / theme-dark.css 补丁面 / themeStore 注入面） */
-const MIX_SKIP_FILE_NAMES = ['tokens.css', 'theme-dark.css', 'themeStore.ts'];
+/** 双层同源扫描排除文件（tokens.css 定义面 / theme-dark.css 补丁面 / themeStore 注入面；
+ *  design-system.css：批次 9.1 S7-3 迁入的 ::selection 全局规则（原 tokens.css 内，非消费点）） */
+const MIX_SKIP_FILE_NAMES = ['tokens.css', 'theme-dark.css', 'themeStore.ts', 'design-system.css'];
 
 const LIGHT_BLOCK_RE = /:root,[\s\S]*?\n\}/;
 const DARK_BLOCK_RE = /html\[data-theme="dark"\]\s*\{[\s\S]*?\n\}/;
@@ -156,12 +157,13 @@ describe('批次 2 · ① dark 分支覆盖（泛化 F7-F27）', () => {
 });
 
 describe('批次 2 · ② 禁新裸混色（text-primary 基底，ratchet）', () => {
-  // 基线 = 批次 2 S2 收敛完成后的保留登记例外（4 处）：
-  //   UnitSessionTabStrip.module.css:333（6% 非标准基底）
-  //   settings-base.css:2370（5% 非标准基底）
-  //   settings-models.css:387 / shell-polish.css:885（35% 不入 tint 族，人工保留）
+  // 基线 = 批次 2 S2 收敛完成后的保留登记例外（批次 9.1 复审后 3 处）：
+  //   UnitSessionTabStrip.module.css:333（6% 非标准基底 var(--unit-tab-active-bg)）
+  //   settings-base.css:2370（5% 非标准基底 var(--bg-tertiary)）
+  //   shell-polish.css:885（35% border 用法不入 tint 族，detail 02 §3.3 口径）
+  // 批次 9.1 复审：settings-models.css:387 的 35% 强底已归 --tint-highlight 派生档。
   // 后续批次应单调递减，禁止新增裸混色消费点。
-  const BARE_MIX_BASELINE = 4;
+  const BARE_MIX_BASELINE = 3;
   const mixRe = /color-mix\(in srgb, var\(--text-primary\) \d+(?:\.\d+)?%,/g;
 
   it(`全仓裸混色计数 ≤ ${BARE_MIX_BASELINE}（排除 tokens/theme-dark/themeStore 与定义行）`, () => {
@@ -225,12 +227,18 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
 });
 
 describe('批次 2 · ⑤ !important ratchet', () => {
-  const IMPORTANT_BASELINE = 676; // 当前基线（后续批次治理后递减）
+  // 基线 633 = 批次 9.1 治理后（settings-base segment 组 12 处 + chat.css 双重
+  // border 2 处去除；reduced-motion.css 白名单——R-04 双通道机制性 !important
+  // 按 01 方案 S7 口径「保留 reduced-motion 27 处 + 白名单注明」豁免，防误伤）。
+  const IMPORTANT_BASELINE = 633;
+  const IMPORTANT_SKIP_FILE_NAMES = ['reduced-motion.css'];
 
-  it(`全仓 !important 计数 ≤ ${IMPORTANT_BASELINE}`, () => {
+  it(`全仓 !important 计数 ≤ ${IMPORTANT_BASELINE}（reduced-motion 白名单）`, () => {
     const files = walkSrc().filter((p) => /\.(?:css|tsx|ts)$/.test(p));
     let total = 0;
     for (const p of files) {
+      const base = p.split(/[\\/]/).pop() ?? '';
+      if (IMPORTANT_SKIP_FILE_NAMES.includes(base)) continue;
       total += (readFileSync(p, 'utf8').match(/!important/g) ?? []).length;
     }
     expect(total, `!important 总数 ${total} 超过基线`).toBeLessThanOrEqual(IMPORTANT_BASELINE);

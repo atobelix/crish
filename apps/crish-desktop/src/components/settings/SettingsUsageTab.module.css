@@ -432,7 +432,7 @@
   height: 20px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-xs);
-  animation: shimmer 1.5s infinite ease-in-out;
+  animation: shimmer var(--transition-skeleton) infinite;
 }
 
 @keyframes shimmer {

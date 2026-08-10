@@ -166,7 +166,8 @@
 .overlayBackdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
+  /* S6：遮罩档 token（--tint-overlay 25% text-primary，双主题自适应） */
+  background: var(--tint-overlay);
   z-index: calc(var(--z-sidebar, 100) - 1);
 }
 

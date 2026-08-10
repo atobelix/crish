@@ -39,7 +39,7 @@
   background: var(--accent-orange);
   flex-shrink: 0;
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 45%, transparent);
-  animation: approval-dock-dot-pulse 1.8s ease-out infinite;
+  animation: approval-dock-dot-pulse var(--transition-pulse) infinite;
 }
 
 @keyframes approval-dock-dot-pulse {

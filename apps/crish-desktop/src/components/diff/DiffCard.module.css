@@ -1256,7 +1256,7 @@
 }
 
 .spinner {
-  animation: spin 0.8s linear infinite;
+  animation: spin var(--transition-spin) infinite;
   color: var(--text-tertiary);
   display: inline-block;
   margin-right: var(--space-1);

@@ -8,7 +8,7 @@
   position: relative;
 }
 
-/* --- APP TOP BAR (固定 caption：左�?toggle + 拖拽�?+ 窗口控制；session tabs per unit) --- */
+/* --- APP TOP BAR（固定 caption：左侧 toggle + 拖拽区 + 窗口控制；session tabs per unit）--- */
 .app-top-bar {
   position: relative;
   height: var(--header-height);
@@ -20,14 +20,14 @@
   flex-shrink: 0;
   width: 100%;
   background: var(--bg-secondary);
-  /* �?hairline 底边，避�?box-shadow �?border 造成顶栏下双层间距感 */
+  /* hairline 底边，避免 box-shadow / border 造成顶栏下方双层间距感 */
   border-bottom: 1px solid var(--border-color);
   box-shadow: none;
   -webkit-app-region: drag;
   app-region: drag;
   box-sizing: border-box;
   user-select: none;
-  /* 高于 unit tab strips�?-z-sticky-bar），避免 strips 叠到 caption 窗口控件�?*/
+  /* 高于 unit tab strips（--z-sticky-bar），避免 strips 叠到 caption 窗口控件 */
   z-index: var(--z-sidebar);
 }
 
@@ -47,13 +47,13 @@
   app-region: drag;
 }
 
-/* 侧栏折叠�?rail 收缩至只容纳 toggle */
+/* 侧栏折叠：rail 收缩至只容纳 toggle */
 .app-top-bar--collapsed .app-top-bar__rail {
   width: var(--header-height);
   min-width: var(--header-height);
 }
 
-/* sidebar toggle 按钮 �?titlebar-item-h，在 header 内垂直居�?*/
+/* sidebar toggle 按钮（titlebar-item-h），在 header 内垂直居中 */
 .app-top-bar__sidebar-btn {
   flex-shrink: 0;
   width: var(--titlebar-item-h);
@@ -83,7 +83,7 @@
   display: block;
 }
 
-/* 确保所�?no-drag 元素支持交互 */
+/* 确保所有 no-drag 元素支持交互 */
 .app-top-bar .no-drag {
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
@@ -168,7 +168,7 @@
   box-sizing: border-box;
 }
 
-/* 顶栏 trail / 侧栏 toggle 控件统一 titlebar-item-h 并垂直居�?*/
+/* 顶栏 trail / 侧栏 toggle 控件统一 titlebar-item-h 并垂直居中 */
 .app-top-bar .header-btn {
   width: var(--titlebar-item-h);
   height: var(--titlebar-item-h);
@@ -291,7 +291,7 @@
 .daemon-status-dot--connecting,
 .daemon-status-dot--reconnecting {
   background: var(--text-secondary);
-  animation: daemon-pulse 1.2s ease-in-out infinite;
+  animation: daemon-pulse var(--transition-pulse) infinite;
 }
 
 .daemon-status-dot--failed,
@@ -310,7 +310,7 @@
 }
 
 /* Product boot: integrated app, no "shell without engine" */
-/* 鍚姩锛氱湡鐣岄潰绔嬪埢涓婏紝浠呴《鏍忚交鎻愮ず寮曟搸杩炴帴锛堟瘮鏁撮〉楠ㄦ灦鏇村揩锛?*/
+/* 产品启动横幅：真界面立即可用，仅顶栏轻提示引擎连接（比整页骨架更快） */
 .app-boot-banner {
   display: flex;
   align-items: center;
@@ -328,7 +328,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--accent-green);
-  animation: app-boot-pulse 1.1s ease-in-out infinite;
+  animation: app-boot-pulse var(--transition-pulse) infinite;
   flex-shrink: 0;
 }
 @keyframes app-boot-pulse {
@@ -360,7 +360,7 @@
   border-radius: 50%;
   border: 2.5px solid var(--border-subtle);
   border-top-color: var(--text-primary);
-  animation: product-boot-spin 0.75s linear infinite;
+  animation: product-boot-spin var(--transition-spin) infinite;
 }
 
 .product-boot-title {
@@ -475,7 +475,7 @@
 }
 
 .win-btn i, .win-btn svg {
-  /* 绐楀彛鎺т欢鐣ュ皬浜庝富鍥炬爣锛岄伩鍏嶈瑙夎繃閲?*/
+  /* 窗口按钮图标尺寸（14px，统一规格） */
   width: 14px;
   height: 14px;
 }

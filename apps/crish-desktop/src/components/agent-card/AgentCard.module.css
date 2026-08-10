@@ -414,7 +414,7 @@
 }
 
 .spinnerSvg {
-  animation: rotateSpinner 1.2s linear infinite;
+  animation: rotateSpinner var(--transition-spin) infinite;
   width: 12px;
   height: 12px;
 }
@@ -657,7 +657,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--border-subtle);
-  animation: skeletonPulse 1.5s infinite ease-in-out;
+  animation: skeletonPulse var(--transition-skeleton) infinite;
 }
 
 .skeletonLineShort {
@@ -665,7 +665,7 @@
   width: 50px;
   border-radius: var(--radius-xs);
   background: var(--border-subtle);
-  animation: skeletonPulse 1.5s infinite ease-in-out;
+  animation: skeletonPulse var(--transition-skeleton) infinite;
 }
 
 .skeletonLineLong {
@@ -673,7 +673,7 @@
   width: 85%;
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--border-subtle) 80%, transparent);
-  animation: skeletonPulse 1.5s infinite ease-in-out;
+  animation: skeletonPulse var(--transition-skeleton) infinite;
   animation-delay: 0.15s;
 }
 
@@ -682,7 +682,7 @@
   width: 60%;
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--border-subtle) 80%, transparent);
-  animation: skeletonPulse 1.5s infinite ease-in-out;
+  animation: skeletonPulse var(--transition-skeleton) infinite;
   animation-delay: 0.3s;
 }
 

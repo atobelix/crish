@@ -71,7 +71,7 @@
 .stateDotSpinner {
   border: 1.5px solid;
   border-top-color: transparent;
-  animation: flowSpin 1s linear infinite;
+  animation: flowSpin var(--transition-spin) infinite;
 }
 
 @keyframes flowSpin {

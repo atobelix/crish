@@ -1,4 +1,5 @@
-/* 设置 · 状态诊断（PE-04 T04.5-2）——复用 SettingsUI 布局原语的轻量样式 */
+/* 设置 · 状态诊断（PE-04 T04.5-2）——复用 SettingsUI 布局原语的轻量样式
+ * S6 P1-8：--ui-* 遗留命名与 rgba 硬编码 → --color-* 语义系（tokens.css 真源） */
 
 .pageMeta {
   display: inline-flex;
@@ -8,15 +9,15 @@
 }
 
 .connOk {
-  color: var(--ui-text-success);
+  color: var(--text-success);
 }
 
 .connBad {
-  color: var(--ui-text-danger);
+  color: var(--text-danger);
 }
 
 .spin {
-  animation: diag-spin 0.8s linear infinite;
+  animation: diag-spin var(--transition-spin) infinite;
 }
 
 @keyframes diag-spin {
@@ -32,10 +33,10 @@
   gap: 10px;
   padding: 12px 14px;
   margin-bottom: 16px;
-  border: 1px solid var(--ui-border-danger, rgba(224, 49, 49, 0.4));
+  border: 1px solid var(--color-error-border);
   border-radius: 8px;
-  background: var(--ui-bg-danger-soft, rgba(224, 49, 49, 0.08));
-  color: var(--ui-text-danger);
+  background: var(--color-error-bg);
+  color: var(--text-danger);
 }
 
 .errorBanner svg {
@@ -63,8 +64,8 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ui-text-success);
-  background: rgba(47, 158, 68, 0.12);
+  color: var(--text-success);
+  background: var(--color-success-bg);
 }
 
 .badgeBad {
@@ -74,16 +75,16 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ui-text-danger);
-  background: rgba(224, 49, 49, 0.12);
+  color: var(--text-danger);
+  background: var(--color-error-bg);
 }
 
 .monoBadge {
-  font-family: var(--ui-font-mono, ui-monospace, Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 6px;
-  background: var(--ui-bg-soft, rgba(127, 127, 127, 0.12));
+  background: var(--tint-strong);
 }
 
 .monoEllipsis {
@@ -93,7 +94,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: ltr;
-  font-family: var(--ui-font-mono, ui-monospace, Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   vertical-align: middle;
 }
@@ -104,9 +105,9 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px;
-  border: 1px solid var(--ui-border-danger, rgba(224, 49, 49, 0.4));
+  border: 1px solid var(--color-error-border);
   border-radius: 8px;
-  background: var(--ui-bg-danger-soft, rgba(224, 49, 49, 0.08));
+  background: var(--color-error-bg);
 }
 
 .lastErrorHead {
@@ -116,29 +117,29 @@
 }
 
 .lastErrorKind {
-  font-family: var(--ui-font-mono, ui-monospace, Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 6px;
-  color: var(--ui-text-danger);
-  background: rgba(224, 49, 49, 0.14);
+  color: var(--text-danger);
+  background: var(--color-error-bg);
 }
 
 .lastErrorTs {
   flex: 1;
   font-size: 12px;
-  color: var(--ui-text-muted);
+  color: var(--text-tertiary);
 }
 
 .lastErrorDetail {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
-  font-family: var(--ui-font-mono, ui-monospace, Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ui-text-danger);
+  color: var(--text-danger);
 }
 
 /* 无错误 / 无诊断空态 */
@@ -148,7 +149,7 @@
   gap: 8px;
   padding: 10px 4px;
   font-size: 13px;
-  color: var(--ui-text-muted);
+  color: var(--text-tertiary);
 }
 
 /* 最近诊断列表 */
@@ -165,7 +166,7 @@
   align-items: baseline;
   gap: 10px;
   padding: 7px 4px;
-  border-bottom: 1px solid var(--ui-border-soft, rgba(127, 127, 127, 0.14));
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 13px;
 }
 
@@ -177,7 +178,7 @@
   flex-shrink: 0;
   width: 52px;
   text-align: center;
-  font-family: var(--ui-font-mono, ui-monospace, Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
   padding: 1px 0;
@@ -185,31 +186,31 @@
 }
 
 .diagLevel_debug {
-  color: var(--ui-text-muted);
-  background: rgba(127, 127, 127, 0.14);
+  color: var(--text-tertiary);
+  background: var(--tint-strong);
 }
 
 .diagLevel_info {
-  color: var(--ui-text-info);
-  background: rgba(25, 113, 194, 0.12);
+  color: var(--color-info);
+  background: var(--color-info-bg);
 }
 
 .diagLevel_warn,
 .diagLevel_warning {
-  color: var(--ui-text-warning);
-  background: rgba(232, 89, 12, 0.12);
+  color: var(--text-warning-strong);
+  background: var(--color-warning-bg);
 }
 
 .diagLevel_error {
-  color: var(--ui-text-danger);
-  background: rgba(224, 49, 49, 0.12);
+  color: var(--text-danger);
+  background: var(--color-error-bg);
 }
 
 .diagTs {
   flex-shrink: 0;
-  font-family: var(--ui-font-mono, ui-monospace, Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ui-text-muted);
+  color: var(--text-tertiary);
   white-space: nowrap;
 }
 
@@ -217,5 +218,5 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ui-text-primary);
+  color: var(--text-primary);
 }
