@@ -3,6 +3,15 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // R2-4 P3-1：Tauri 插件动态 import 测试 stub（浏览器构建 external，
+  // vitest 解析不到 → alias 指向本地 stub；运行时非 Tauri 环境 catch 回退）
+  resolve: {
+    alias: {
+      '@tauri-apps/plugin-fs': new URL('./src/test-setup-tauri-plugins-stub.ts', import.meta.url).pathname,
+      '@tauri-apps/plugin-opener': new URL('./src/test-setup-tauri-plugins-stub.ts', import.meta.url).pathname,
+      '@tauri-apps/plugin-shell': new URL('./src/test-setup-tauri-plugins-stub.ts', import.meta.url).pathname,
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

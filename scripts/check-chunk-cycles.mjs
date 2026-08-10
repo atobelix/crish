@@ -10,9 +10,9 @@
  * 退出码 0 = 无环；1 = 存在环（输出环路径）。
  */
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
-const distDir = process.argv[2] ?? new URL('../apps/crish-desktop/dist', import.meta.url).pathname;
+const distDir = process.argv[2] ?? resolve(new URL('../apps/crish-desktop/dist', import.meta.url).pathname.replace(/^\/[A-Za-z]:/, ''));
 if (!existsSync(distDir)) {
   console.error(`check-chunk-cycles: dist 目录不存在（${distDir}）——先运行 build:desktop`);
   process.exit(1);
@@ -30,10 +30,12 @@ const graph = new Map(); // chunk -> Set<chunk>
 for (const f of jsFiles) {
   const content = readFileSync(join(assetsDir, f), 'utf8');
   const deps = new Set();
-  // es2022 输出：静态 import "./x.js" / import("./x.js") 保留字面量
-  const re = /(?:from|import)\s*\(\s*["']\.\/([A-Za-z0-9_.-]+\.js)["']\s*\)/g;
+  // 仅静态 import（`from "./x.js"`）计入环检测——静态边决定模块初始化顺序，
+  // 动态 import（`import("./x.js")`）是延迟加载、天然依赖主 chunk（先执行主
+  // chunk 再按需加载），不构成初始化顺序环（App↔lazy-chunk 是正常架构）。
+  const staticRe = /\bfrom\s*["']\.\/([A-Za-z0-9_.-]+\.js)["']/g;
   let m;
-  while ((m = re.exec(content)) !== null) {
+  while ((m = staticRe.exec(content)) !== null) {
     deps.add(m[1]);
   }
   graph.set(f, deps);

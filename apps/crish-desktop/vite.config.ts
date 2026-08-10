@@ -325,6 +325,14 @@ export default defineConfig({
     chunkSizeWarningLimit: CHUNK_SIZE_GATE_KB,
     commonjsOptions: { transformMixedEsModules: true },
     rollupOptions: {
+      // R2-4 P3-1：Tauri 专属插件模块外部化——浏览器构建（vite build）下
+      // rollup 不打包、运行时动态 import 拒绝 → skillsApi/importFsHost 的
+      // catch 回退；Tauri 壳内运行时由 webview 插件面提供（解析成功）。
+      external: [
+        '@tauri-apps/plugin-fs',
+        '@tauri-apps/plugin-opener',
+        '@tauri-apps/plugin-shell',
+      ],
       output: {
         // Function form: Windows-safe path match + incremental vendor/business splits
         manualChunks(id) {

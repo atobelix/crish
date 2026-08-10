@@ -49,6 +49,27 @@ vi.mock('@tauri-apps/api/core', () => ({
   }),
 }));
 
+// R2-4 P3-1：Tauri 插件动态 import 模块 mock——vitest 解析不到
+// （vite build 已 external，测试环境需 stub；skillsApi/importFsHost
+// 的动态 import 在测试中会解析到这些 mock，非 Tauri 环境走 catch 回退）。
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  exists: vi.fn(),
+  readDir: vi.fn(),
+  mkdir: vi.fn(),
+  remove: vi.fn(),
+  rename: vi.fn(),
+  stat: vi.fn(),
+}));
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openPath: vi.fn(),
+  revealItemInDir: vi.fn(),
+}));
+vi.mock('@tauri-apps/plugin-shell', () => ({
+  open: vi.fn(),
+}));
+
 /**
  * 注册一个 ok 状态的 mock command。
  * 调用 invoke(cmd, args) 时，impl(args) 的返回值作为 ok 数据。

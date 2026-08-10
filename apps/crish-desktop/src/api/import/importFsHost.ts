@@ -50,7 +50,7 @@ export async function resolveHostImportEnv(
     try {
       // Dynamic import avoids hard-failing unit tests without Tauri plugins.
       const pathApi = await (
-        Function('return import("@tauri-apps/api/path")')() as Promise<{
+        import(/* @vite-ignore */ '@tauri-apps/api/path') as Promise<{
           homeDir?: () => Promise<string>;
         } | null>
       ).catch(() => null);

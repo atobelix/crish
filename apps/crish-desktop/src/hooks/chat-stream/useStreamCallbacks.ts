@@ -306,8 +306,13 @@ export function useStreamCallbacks(
         // 收口帧恒落盘：本 run 的 buffer 属主（message id 唯一，新 run 用新 id
         // 不冲突）；complete 路径（draining）触发 finishComplete 收口，
         // stop 路径（非 draining）只落盘、收口由 finalizeStopGeneration 自管。
-        setStreamText(sid, assistantMsgId, frame.full);
-        if (draining) finishComplete();
+        // F1c（R2-4）：stop 路径（!draining）isFinal 帧仅为预算循环终止信号——
+        // 收口已由 finalizeStopGeneration 同步完成（commit 含全量文本 + clearStream），
+        // 跳过 setStreamText 避免 commit 后残留写入（byKey 累积）；complete 路径保持原逻辑。
+        if (draining) {
+          setStreamText(sid, assistantMsgId, frame.full);
+          finishComplete();
+        }
         return;
       }
       // T2.2 drain 帧守卫放宽：complete 分帧 drain 期间中间帧是「最终文本
@@ -1003,8 +1008,10 @@ export function useStreamCallbacks(
     const stopBuf = renderBufferRef.current;
     // T2.2：stop 路径走预算式收口（常态 ≤2 帧同步刷完，行为不变；
     // 大残余分帧，isFinal 帧落盘后收口仍由本函数自管）
+    // F1a（R2-4）：不再调用 stopBuf?.stop()——它 cancelScheduledFlush 中断预算
+    // 循环，大残余（>16KB）时 isFinal 帧永不到达（P2-1 截断根因）。buffer 已
+    // finalMarked，后续 push 被拒绝，预算循环至多 N 帧自然收口于 isFinal 帧。
     stopBuf?.flushFinal();
-    stopBuf?.stop();
     flushStreamBatchers();
     const st = getCompositionRoot().layout.getState();
     if (getSessionById(sid)?.goalMode?.active) {
@@ -1012,9 +1019,13 @@ export function useStreamCallbacks(
       patchSession(sid, { goalMode: null });
     }
     // Persist partial stream text only（禁止把「已停止」等系统句写入气泡）
+    // F1b（R2-4）：stopBuf.currentText() 优先——它 = fullText + pending.join('')
+    // 恒为完整全文（大残余首帧同步刷入 ≤8KB 后剩余仍在 pending 中）；
+    // getStreamText 是「停止前最后一帧」写入的陈旧截断值，降为兜底（P2-1 截断根因）。
+    const stopBufFull = stopBuf?.currentText() ?? '';
     const partialText =
+      stopBufFull ||
       getStreamText(sid, cur.assistantMsgId) ||
-      stopBuf?.currentText() ||
       getSessionById(sid)?.messages.find(
         (m: SessionMessage) => m.id === cur.assistantMsgId
       )?.text ||
@@ -1023,6 +1034,18 @@ export function useStreamCallbacks(
     commitStreamToolsToSession(sid, cur.assistantMsgId);
     if (stopText) {
       commitStreamToSession(sid, cur.assistantMsgId, { text: stopText });
+      // F1d（R2-4）：截断防御断言——commit 文本不得短于 buffer 完整终稿，
+      // 正常路径恒等，为将来任何 drain 回归的哨兵
+      if (stopBufFull && stopText.length < stopBufFull.length) {
+        console.warn(
+          `[crish-desktop][stop-truncation] stop 终稿截断：committed=${stopText.length} buffered=${stopBufFull.length}`
+        );
+        recordStreamDiag({
+          kind: 'stop-truncation',
+          scope: 'chat-stream',
+          message: `stop 终稿截断 committed=${stopText.length} buffered=${stopBufFull.length}`,
+        });
+      }
     } else {
       // 无正文：清空占位，用横幅提示停止（不写 assistant 正文）
       st.updateMessageText(sid, cur.assistantMsgId, '');

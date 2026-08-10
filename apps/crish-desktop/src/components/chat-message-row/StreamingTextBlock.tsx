@@ -4,6 +4,11 @@ import styles from './ChatMessageRow.module.css';
 export interface StreamingTextBlockProps {
   /** 本帧新增文本（可为 ''）；append 语义必须单调累积 */
   delta: string;
+  /** 单调帧序号（R2-4 N1 修复）：区分「同值新帧」与「StrictMode 双执行」——
+   * 连续两帧 delta 字符串相同（如逐字输出「哈」「哈」）时，仅靠 delta 相等
+   * 判定幂等会吞掉第二帧（丢字）；以 seq 记录「已写帧」，同 seq 拦截
+   * （StrictMode 双执行），seq+1 同值帧照常 append。 */
+  seq: number;
 }
 
 /**
@@ -25,19 +30,19 @@ export interface StreamingTextBlockProps {
  * caret/滚动跟随：沿用现有 `.isStreaming` CSS（含 caret 样式）。
  */
 export const StreamingTextBlock: React.FC<StreamingTextBlockProps> = React.memo(
-  ({ delta }) => {
+  ({ delta, seq }) => {
     const ref = useRef<HTMLDivElement>(null);
-    /** 最近一次已 append 的 delta 值：StrictMode 双执行防重（幂等守卫） */
-    const lastDeltaRef = useRef<string | null>(null);
+    /** 最近一次已 append 的帧序号：StrictMode 双执行（同 seq）防重 */
+    const lastSeqRef = useRef<number | null>(null);
 
     useLayoutEffect(() => {
       const el = ref.current;
       if (!el) return;
-      // StrictMode 双执行 / 同值帧：本 delta 已写入 → 跳过，避免重复 append
-      if (lastDeltaRef.current === delta) return;
-      lastDeltaRef.current = delta;
+      // 同 seq（StrictMode 双执行）→ 已写，跳过；seq+1（含同值新帧）→ 照常 append
+      if (lastSeqRef.current === seq) return;
+      lastSeqRef.current = seq;
       if (delta) el.appendChild(document.createTextNode(delta));
-    }, [delta]);
+    }, [delta, seq]);
 
     return (
       <div
@@ -46,7 +51,8 @@ export const StreamingTextBlock: React.FC<StreamingTextBlockProps> = React.memo(
         data-streaming="true"
       />
     );
-  }
+  },
+  (prev, next) => prev.delta === next.delta && prev.seq === next.seq
 );
 
 StreamingTextBlock.displayName = 'StreamingTextBlock';

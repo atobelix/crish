@@ -211,7 +211,7 @@ async function tryPluginFs(): Promise<{
   exists?: (p: string) => Promise<boolean>;
 } | null> {
   try {
-    const fs: unknown = await (Function('return import("@tauri-apps/plugin-fs")')() as Promise<unknown>).catch(
+    const fs: unknown = await (import(/* @vite-ignore */ '@tauri-apps/plugin-fs') as Promise<unknown>).catch(
       () => null,
     );
     if (!fs) return null;
@@ -223,9 +223,7 @@ async function tryPluginFs(): Promise<{
 
 async function tryHomeDir(): Promise<string | null> {
   try {
-    const pathApi = (await (Function(
-      'return import("@tauri-apps/api/path")',
-    )() as Promise<unknown>).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
+    const pathApi = (await (import(/* @vite-ignore */ '@tauri-apps/api/path') as Promise<unknown>).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
     if (pathApi?.homeDir) {
       const h = await pathApi.homeDir();
       if (h) return String(h);
@@ -595,9 +593,7 @@ export async function pickSkillDirectory(): Promise<string | null> {
 /** 在系统资源管理器中显示路径 */
 export async function revealSkillPath(filePath: string): Promise<boolean> {
   try {
-    const opener = (await (Function(
-      'return import("@tauri-apps/plugin-opener")',
-    )() as Promise<unknown>).catch(() => null)) as {
+    const opener = (await (import(/* @vite-ignore */ '@tauri-apps/plugin-opener') as Promise<unknown>).catch(() => null)) as {
       openPath?: (p: string) => Promise<unknown>;
       revealItemInDir?: (p: string) => Promise<unknown>;
     } | null;
@@ -613,9 +609,7 @@ export async function revealSkillPath(filePath: string): Promise<boolean> {
     /* swallow-ok: opener 插件不可用/失败时继续尝试 shell 打开 */
   }
   try {
-    const shell = (await (Function(
-      'return import("@tauri-apps/plugin-shell")',
-    )() as Promise<unknown>).catch(() => null)) as { open?: (url: string) => Promise<unknown> } | null;
+    const shell = (await (import(/* @vite-ignore */ '@tauri-apps/plugin-shell') as Promise<unknown>).catch(() => null)) as { open?: (url: string) => Promise<unknown> } | null;
     if (shell?.open) {
       await shell.open(dirname(filePath));
       return true;

@@ -21,6 +21,9 @@
 use conex_types::device::version::MAX_FRAME_BYTES;
 
 /// 空闲读超时（毫秒）：D5 §7.2「空闲读超时 10s」/ §7.5 慢速攻击覆盖半帧
+// R1-10 备注：当前 ws.rs 心跳侧沿用 D2 90s 超时（10s 与 30s Ping 节奏不
+// 兼容，见模块头注）；常量由测试消费，未来会话层接线——dead_code 静音
+#[cfg_attr(not(test), allow(dead_code))]
 pub const READ_TIMEOUT_MS: u64 = 10_000;
 
 /// 帧大小判定（结构化，D3 §5.5 / D5 §7.5；T-13 断言映射目标）
@@ -52,6 +55,8 @@ pub fn read_timeout_exceeded(last_activity_ms: u64, now_ms: u64, timeout_ms: u64
 }
 
 /// 默认空闲读超时判定（10s，D5 §7.2）
+// R1-10 备注：测试消费 + 未来会话层接线——dead_code 静音（测试构建保持检查）
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn idle_read_timeout_exceeded(last_activity_ms: u64, now_ms: u64) -> bool {
     read_timeout_exceeded(last_activity_ms, now_ms, READ_TIMEOUT_MS)
 }

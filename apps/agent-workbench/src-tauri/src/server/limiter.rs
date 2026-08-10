@@ -36,6 +36,9 @@ pub const DEFAULT_TOTAL_LIMIT: usize = 8;
 
 /// 限流判定结果（结构化错误，D5 §7.2「新连接拒绝（too-many-connections
 /// 结构化错误 + 审计）」；T-12 断言映射目标）
+// R1-10 备注：register 接线待主 Agent 裁决（P0-3 踢旧 vs 每设备 2）——
+// dead_code 静音（测试构建保持检查）
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LimiterOutcome {
     /// 额度占用成功（放行）
@@ -47,6 +50,8 @@ pub enum LimiterOutcome {
 }
 
 /// 记账内部态（单锁串行化）
+// R1-10 备注：字段由 acquire/release 读写，接线待裁决——dead_code 静音
+#[cfg_attr(not(test), allow(dead_code))]
 struct LimiterInner {
     /// token_key（令牌哈希，每设备一个键）→ 当前并发连接数
     by_token: HashMap<String, u32>,
@@ -63,6 +68,9 @@ struct LimiterInner {
 ///   重复释放不会把计数减到 0 以下）；
 /// - [ConnectionLimiter::reset]：整体清零占用与键表（审计计数保留——审计
 ///   是累计面，不随状态重置抹除）。
+// R1-10 备注：字段与多数方法由测试消费，register 接线待裁决——dead_code
+// 静音（测试构建保持检查）
+#[cfg_attr(not(test), allow(dead_code))]
 pub struct ConnectionLimiter {
     /// 每设备并发上限
     per_device_limit: usize,
@@ -76,6 +84,8 @@ pub struct ConnectionLimiter {
     rejected_total: AtomicU64,
 }
 
+// R1-10 备注：接线待裁决，方法由测试消费——dead_code 静音（测试构建保持检查）
+#[cfg_attr(not(test), allow(dead_code))]
 impl ConnectionLimiter {
     /// 默认限值（每设备 2 / 总量 8，D5 §7.2）
     pub fn new() -> Self {
@@ -185,6 +195,8 @@ impl Default for ConnectionLimiter {
 }
 
 /// Mutex 锁（中毒自愈，跟随 ws.rs 先例）
+// R1-10 备注：接线待裁决——dead_code 静音（测试构建保持检查）
+#[cfg_attr(not(test), allow(dead_code))]
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }

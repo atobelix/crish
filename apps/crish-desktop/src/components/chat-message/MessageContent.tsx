@@ -157,6 +157,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(({
   }
   /** 流式节点重挂载 key（resync 时 +1；DOM 文本清零重 append） */
   const [streamKey, setStreamKey] = useState(0);
+  /** 流式帧单调序号（R2-4 N1 修复）：同值新帧（delta 相同）也能被 StreamingTextBlock
+   * 区分（seq+1）照常 append；StrictMode 双执行（同 seq）仍被拦截 */
+  const streamSeqRef = useRef(0);
   /** 流式期增量图片（尾窗扫描，O(增量)） */
   const [streamImgs, setStreamImgs] = useState<string[]>([]);
   const streamImgScanRef = useRef<{ tail: string; seen: Set<string> }>({
@@ -202,10 +205,13 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(({
     streamText.length > 0;
 
   let streamDelta = '';
+  let streamSeq = 0;
   const stripper = stripperRef.current;
   if (streaming) {
     const frame = stripper.next(streamText!);
     streamDelta = frame.appended;
+    // N1：每帧递增 seq（含同值帧），供 StreamingTextBlock 区分「同值新帧」与 StrictMode 双执行
+    streamSeq = ++streamSeqRef.current;
     if (frame.resynced) {
       // 文本收缩/流重启：复位增量状态 + 重挂载流式节点（渲染期调整模式，
       // 幂等：StrictMode 双渲染第二次 next() 命中同值缓存不再触发）
@@ -318,6 +324,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(({
           <StreamingTextBlock
             key={`${msg.id}-${streamKey}`}
             delta={streamDelta}
+            seq={streamSeq}
           />
           {streamImgs.length > 0 && (
             <div className={styles.inlineImages}>
