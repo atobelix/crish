@@ -5,6 +5,10 @@
 //! - 解压：zip 流式解压 + 顶部 `chrome-<platform>/` 前缀剥离 +
 //!   `enclosed_name()` 路径穿越防护（§2.2 表）；
 //! - 下载重试：3 次退避 1s/2s，仅连接失败/超时/5xx 重试，4xx 立即失败；
+//! - 资源上限（评审 29 §M7）：下载响应 ≤512MB（含分块流累积校验）、解压条目
+//!   ≤10 万、解压总字节 ≤2GB（zip 炸弹防护），超限即中止并清理半成品；
+//! - 版本目录名 `chrome-{version}` 先经 sanitize（拒绝分隔符/`..`/Windows 非法
+//!   字符），防路径注入逃逸缓存根；
 //! - 失败即 `remove_dir_all` 目标版本目录（残留清理），下载失败走系统回退链。
 //!
 //! 锁纪律（31-security-baseline B8）：本模块无锁。
@@ -21,6 +25,34 @@ pub const LKG_URL: &str = "https://googlechromelabs.github.io/chrome-for-testing
 pub const DEFAULT_RETRIES: u32 = 3;
 /// 退避序列（1s/2s，§2.2）。
 pub const DEFAULT_BACKOFF: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(2)];
+
+/// 下载响应字节上限（评审 29 §M7：防超大响应整包入内存）。
+pub const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
+/// 解压条目数上限（评审 29 §M7：zip 炸弹防护）。
+pub const MAX_EXTRACT_ENTRIES: usize = 100_000;
+/// 解压总字节数上限（评审 29 §M7：zip 炸弹防护）。
+pub const MAX_EXTRACT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// 下载/解压资源上限（测试可注入缩小值做确定性覆盖，生产恒用默认）。
+#[derive(Debug, Clone, Copy)]
+pub struct CftLimits {
+    /// 下载响应最大字节数（含无 Content-Length 的分块流累积校验）。
+    pub max_download_bytes: u64,
+    /// 解压条目数上限。
+    pub max_entries: usize,
+    /// 解压总字节数上限（按实际写出量累计，不信任中心目录声明值）。
+    pub max_extract_bytes: u64,
+}
+
+impl Default for CftLimits {
+    fn default() -> Self {
+        CftLimits {
+            max_download_bytes: MAX_DOWNLOAD_BYTES,
+            max_entries: MAX_EXTRACT_ENTRIES,
+            max_extract_bytes: MAX_EXTRACT_BYTES,
+        }
+    }
+}
 
 /// CfT 缓存命中项。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +98,14 @@ pub enum CftError {
     DownloadFailed { retries: u32, last: String },
     #[error("解压失败：{0}")]
     Extract(String),
+    #[error("超出{what}上限：上限 {limit}，实际 {actual}")]
+    TooLarge {
+        what: &'static str,
+        limit: u64,
+        actual: u64,
+    },
+    #[error("版本目录名非法：{0}")]
+    InvalidVersion(String),
     #[error("I/O 错误：{0}")]
     Io(String),
 }
@@ -173,6 +213,23 @@ fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     std::cmp::Ordering::Equal
 }
 
+/// 版本目录名 sanitize（评审 29 §M7，防路径注入）：
+/// 拒绝空串、`.`/`..`、路径分隔符与 Windows 非法字符，仅放行安全单组件名。
+fn sanitize_version_dir(version: &str) -> Result<String, CftError> {
+    if version.is_empty() {
+        return Err(CftError::InvalidVersion("空版本号".to_string()));
+    }
+    if version == "." || version == ".." {
+        return Err(CftError::InvalidVersion(format!("非法版本号：{version}")));
+    }
+    if version.contains(['/', '\\', ':', '<', '>', '"', '|', '?', '*', '\0']) {
+        return Err(CftError::InvalidVersion(format!(
+            "含路径分隔符或非法字符：{version}"
+        )));
+    }
+    Ok(version.to_string())
+}
+
 /// last-known-good JSON 响应（只取用到的字段，宽容解析）。
 #[derive(Debug, Deserialize)]
 struct LkgResponse {
@@ -228,7 +285,10 @@ async fn fetch_lkg(client: &reqwest::Client, url: &str, key: &str) -> Result<(St
     Ok((version, url))
 }
 
-/// 下载 zip（重试语义：连接失败/超时/5xx/I/O 重试，4xx 立即失败）。
+/// 下载 zip（重试语义：连接失败/超时/5xx/I/O 重试，4xx 与超限立即失败）。
+/// `max_bytes` 为响应字节上限（评审 29 §M7）：Content-Length 已知即超限 → 读取前
+/// 中止（零写入）；分块流（无 Content-Length）→ 累积写出量超限中止。
+/// 超限为确定性失败（重试无益）→ 不重试，最终失败路径清理半成品文件。
 /// 豁免 clippy 删除禁令：失败残留清理是自家生成物（下载半成品），
 /// 与「自管文件轮转」同豁免面（clippy.toml 注释），不留可恢复副本。
 #[allow(clippy::disallowed_methods)]
@@ -237,15 +297,17 @@ async fn download_zip(
     url: &str,
     dest: &Path,
     opts: &DownloadOpts,
+    max_bytes: u64,
 ) -> Result<(), CftError> {
     let mut attempt = 0u32;
     loop {
         attempt += 1;
-        match download_once(client, url, dest, opts).await {
+        match download_once(client, url, dest, opts, max_bytes).await {
             Ok(()) => return Ok(()),
             Err(e) => {
                 let retryable = match &e {
                     CftError::Http(m) => !m.starts_with("4xx 立即失败"),
+                    CftError::TooLarge { .. } => false,
                     CftError::Io(_) => true,
                     _ => true,
                 };
@@ -273,6 +335,7 @@ async fn download_once(
     url: &str,
     dest: &Path,
     opts: &DownloadOpts,
+    max_bytes: u64,
 ) -> Result<(), CftError> {
     let mut resp = client
         .get(url)
@@ -286,7 +349,16 @@ async fn download_once(
     if status.is_server_error() {
         return Err(CftError::Http(format!("5xx 服务端错误：{status}")));
     }
-    let total = resp.content_length().unwrap_or(0);
+    // 上限防护（评审 29 §M7）：Content-Length 已知且超限 → 创建文件前即中止（零写入）。
+    let declared = resp.content_length().unwrap_or(0);
+    if declared > max_bytes {
+        return Err(CftError::TooLarge {
+            what: "下载字节数",
+            limit: max_bytes,
+            actual: declared,
+        });
+    }
+    let total = declared;
     let mut written = 0u64;
     let mut out = std::fs::File::create(dest)?;
     while let Some(chunk) = resp
@@ -296,6 +368,14 @@ async fn download_once(
     {
         out.write_all(&chunk)?;
         written += chunk.len() as u64;
+        // 分块流（无 Content-Length）或声明值失真的累积兜底校验
+        if written > max_bytes {
+            return Err(CftError::TooLarge {
+                what: "下载字节数",
+                limit: max_bytes,
+                actual: written,
+            });
+        }
         if let Some(progress) = &opts.progress {
             progress(written, total);
         }
@@ -304,12 +384,27 @@ async fn download_once(
     Ok(())
 }
 
-/// 解压 zip 到目标目录：顶部 `chrome-<platform>/` 前缀剥离 +
-/// `enclosed_name()` 路径穿越防护 + `starts_with(dest)` 校验（§2.2）。
-pub fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), CftError> {
+/// 解压 zip 到目标目录（带资源上限，评审 29 §M7）：
+/// 条目数超限在解压任何文件前中止（中心目录 O(1) 校验，目标目录零创建）；
+/// 总字节数按实际写出量累计（不信任中心目录声明值，防声明失真的 zip 炸弹）。
+/// 超限中止时已写出的部分文件残留由调用方清理（`ensure_downloaded_from`
+/// 失败即 `remove_dir_all` 版本目录，§2.2 残留清理）。
+fn extract_zip_limited(
+    zip_path: &Path,
+    dest_dir: &Path,
+    limits: CftLimits,
+) -> Result<(), CftError> {
     let file = std::fs::File::open(zip_path)?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| CftError::Extract(format!("打开 zip 失败：{e}")))?;
+    // 条目数上限：先于 create_dir_all 与任何写出（防海量条目写爆目录）
+    if archive.len() > limits.max_entries {
+        return Err(CftError::TooLarge {
+            what: "解压条目数",
+            limit: limits.max_entries as u64,
+            actual: archive.len() as u64,
+        });
+    }
     std::fs::create_dir_all(dest_dir)?;
 
     // 顶部前缀探测：取第一个条目的第一段（Chrome 包统一 `chrome-<platform>/`）
@@ -325,6 +420,7 @@ pub fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), CftError> {
             .map(|c| c.as_os_str().to_os_string())
     };
 
+    let mut extracted_bytes = 0u64;
     for i in 0..archive.len() {
         let mut entry = archive
             .by_index(i)
@@ -371,7 +467,16 @@ pub fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), CftError> {
                 std::fs::create_dir_all(parent)?;
             }
             let mut out = std::fs::File::create(&dest)?;
-            std::io::copy(&mut entry, &mut out)?;
+            let copied = std::io::copy(&mut entry, &mut out)?;
+            extracted_bytes += copied;
+            // 总解压字节上限：按实际写出量累计，超限即中止（zip 炸弹防护）
+            if extracted_bytes > limits.max_extract_bytes {
+                return Err(CftError::TooLarge {
+                    what: "解压总字节数",
+                    limit: limits.max_extract_bytes,
+                    actual: extracted_bytes,
+                });
+            }
             // unix 权限位回写（install.rs 同款；Windows 无此语义）
             #[cfg(unix)]
             {
@@ -385,18 +490,24 @@ pub fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), CftError> {
     Ok(())
 }
 
+/// 解压 zip 到目标目录（默认资源上限）：顶部 `chrome-<platform>/` 前缀剥离 +
+/// `enclosed_name()` 路径穿越防护 + `starts_with(dest)` 校验（§2.2）。
+pub fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), CftError> {
+    extract_zip_limited(zip_path, dest_dir, CftLimits::default())
+}
 /// 下载并解压到版本缓存目录；失败即清理目标目录（残留清理，§2.2）。
 pub async fn ensure_downloaded(root: &Path, opts: &DownloadOpts) -> Result<CftCache, CftError> {
     let key = platform_key()?;
     let client = build_client()?;
     let (version, url) = fetch_lkg(&client, LKG_URL, key).await?;
-    ensure_downloaded_from(&client, &version, &url, root, opts).await
+    ensure_downloaded_from(&client, &version, &url, root, opts, CftLimits::default()).await
 }
 
 /// 内部流程（URL 注入，测试用 mock 服务端全量覆盖下载/解压/清理路径）。
 /// `pub(crate)`（评审 G2 修复）：下载失败回退链（discover::resolve_inner 的
 /// CftDownload 探测项 → 回退系统浏览器）以本函数的失败信号为输入，跨模块
 /// 可见性使 mock 下载失败可在回退链测试中注入（不真实联网）。
+/// `limits` 为下载/解压资源上限（评审 29 §M7，测试注入缩小值；生产恒默认）。
 /// 豁免 clippy 删除禁令：版本目录/zip 是自家缓存生成物，失败即清半成品
 /// （§2.2 残留清理），与「自管文件轮转」同豁免面。
 #[allow(clippy::disallowed_methods)]
@@ -406,8 +517,11 @@ pub(crate) async fn ensure_downloaded_from(
     url: &str,
     root: &Path,
     opts: &DownloadOpts,
+    limits: CftLimits,
 ) -> Result<CftCache, CftError> {
-    let dest_dir = cft_root(root).join(format!("chrome-{version}"));
+    // 版本目录名 sanitize（评审 29 §M7）：先于一切路径操作，防 `chrome-{version}`
+    // 拼接逃逸缓存根（version 含 `/`/`\`/`..` 等直接拒绝，结构化错误）。
+    let dest_dir = cft_root(root).join(format!("chrome-{}", sanitize_version_dir(version)?));
     // 已存在且二进制完整 → 视为已装（不校验 hash，§2.2）
     if let Some(binary) = find_binary(&dest_dir) {
         return Ok(CftCache {
@@ -422,11 +536,11 @@ pub(crate) async fn ensure_downloaded_from(
     }
     std::fs::create_dir_all(&dest_dir)?;
     let zip_path = dest_dir.join("chrome.zip");
-    if let Err(e) = download_zip(client, url, &zip_path, opts).await {
+    if let Err(e) = download_zip(client, url, &zip_path, opts, limits.max_download_bytes).await {
         let _ = std::fs::remove_dir_all(&dest_dir);
         return Err(e);
     }
-    if let Err(e) = extract_zip(&zip_path, &dest_dir) {
+    if let Err(e) = extract_zip_limited(&zip_path, &dest_dir, limits) {
         let _ = std::fs::remove_dir_all(&dest_dir);
         return Err(e);
     }
@@ -562,6 +676,7 @@ mod tests {
                 backoff: vec![Duration::from_millis(5)],
                 progress: None,
             },
+            CftLimits::default().max_download_bytes,
         )
         .await
         .expect_err("应失败");
@@ -585,6 +700,7 @@ mod tests {
                 backoff: vec![Duration::from_millis(2)],
                 progress: None,
             },
+            CftLimits::default().max_download_bytes,
         )
         .await
         .expect_err("应失败");
@@ -615,6 +731,7 @@ mod tests {
                     calls2.fetch_add(1, Ordering::SeqCst);
                 })),
             },
+            CftLimits::default().max_download_bytes,
         )
         .await
         .expect("下载");
@@ -641,6 +758,7 @@ mod tests {
                 backoff: vec![Duration::from_millis(2)],
                 progress: None,
             },
+            CftLimits::default().max_download_bytes,
         )
         .await
         .expect_err("应失败");
@@ -655,7 +773,7 @@ mod tests {
         let client = reqwest::Client::new();
         let dir = tempfile::tempdir().expect("临时目录");
         let root = dir.path().join("browser");
-        let err = ensure_downloaded_from(&client, "9.9.9.9", &url, &root, &DownloadOpts::default())
+        let err = ensure_downloaded_from(&client, "9.9.9.9", &url, &root, &DownloadOpts::default(), CftLimits::default())
             .await
             .expect_err("损坏 zip 应失败");
         assert!(
@@ -688,6 +806,7 @@ mod tests {
                 backoff: vec![],
                 progress: None,
             },
+            CftLimits::default(),
         )
         .await
         .expect_err("4xx 下载必须失败");
@@ -721,13 +840,246 @@ mod tests {
         let (_server, url) = mock_vec_server(zip_bytes, 1).await;
         let client = reqwest::Client::new();
         let root = dir.path().join("browser");
-        let cache = ensure_downloaded_from(&client, "151.0.7922.77", &url, &root, &DownloadOpts::default())
+        let cache = ensure_downloaded_from(&client, "151.0.7922.77", &url, &root, &DownloadOpts::default(), CftLimits::default())
             .await
             .expect("成功");
         assert_eq!(cache.version, "151.0.7922.77");
         assert!(cache.binary.is_file(), "二进制必须就位：{}", cache.binary.display());
         assert_eq!(std::fs::read(&cache.binary).unwrap(), b"bin");
         assert!(!cft_root(&root).join("chrome-151.0.7922.77/chrome.zip").exists(), "zip 残留应删除");
+    }
+
+    /// 评审 29 §M7：版本目录名 sanitize 放行合法版本。
+    #[test]
+    fn sanitize_version_dir_accepts_valid() {
+        assert_eq!(
+            sanitize_version_dir("151.0.7922.77").expect("合法版本"),
+            "151.0.7922.77"
+        );
+    }
+
+    /// 评审 29 §M7：非法版本目录名全部拒绝（路径注入面）。
+    #[test]
+    fn sanitize_version_dir_rejects_injection() {
+        for bad in ["../evil", "a/b", "a\\b", "..", ".", "", "a:b", "a\0b"] {
+            assert!(
+                sanitize_version_dir(bad).is_err(),
+                "应拒绝非法版本名：{bad:?}"
+            );
+        }
+    }
+
+    /// 评审 29 §M7：版本注入经 ensure_downloaded_from 拒绝——
+    /// sanitize 先于一切路径操作（零网络零写入），结构化错误 + 缓存根零残留。
+    #[tokio::test]
+    async fn ensure_downloaded_rejects_version_injection() {
+        let client = reqwest::Client::new();
+        for bad in ["../evil", "a/b", "a\\b", "..", ""] {
+            let dir = tempfile::tempdir().expect("临时目录");
+            let root = dir.path().join("browser");
+            let err = ensure_downloaded_from(
+                &client,
+                bad,
+                "http://127.0.0.1:1/never",
+                &root,
+                &DownloadOpts::default(),
+                CftLimits::default(),
+            )
+            .await
+            .expect_err("非法版本必须拒绝");
+            assert!(
+                matches!(err, CftError::InvalidVersion(_)),
+                "应报 InvalidVersion：{err}"
+            );
+            assert!(
+                !cft_root(&root).join("evil").exists(),
+                "路径注入不得写出缓存根外"
+            );
+            let leftover = if cft_root(&root).exists() {
+                std::fs::read_dir(cft_root(&root)).unwrap().count()
+            } else {
+                0
+            };
+            assert_eq!(leftover, 0, "缓存根必须零残留");
+        }
+    }
+
+    /// 评审 29 §M7：下载超限（Content-Length 已知超限）→ 读取前中止、
+    /// 不重试（确定性失败）、半成品清理。
+    #[tokio::test]
+    async fn download_too_large_aborts_and_cleans() {
+        let payload = vec![0x41u8; 65536];
+        let (_server, url) = mock_vec_server(payload, 1).await;
+        let client = reqwest::Client::new();
+        let dir = tempfile::tempdir().expect("临时目录");
+        let dest = dir.path().join("out.zip");
+        let err = download_zip(
+            &client,
+            &url,
+            &dest,
+            &DownloadOpts {
+                retries: 3,
+                backoff: vec![Duration::from_millis(2)],
+                progress: None,
+            },
+            1024,
+        )
+        .await
+        .expect_err("应因超限失败");
+        assert!(err.to_string().contains("上限"), "错误应指向超限：{err}");
+        assert!(
+            matches!(err, CftError::DownloadFailed { retries: 1, .. }),
+            "超限不得重试：{err}"
+        );
+        assert!(!dest.exists(), "失败后不得残留半成品");
+    }
+
+    /// 评审 29 §M7：分块流（无 Content-Length）累积字节超限 → 中止 + 清理。
+    #[tokio::test]
+    async fn download_chunked_too_large_aborts_and_cleans() {
+        let payload = vec![0x42u8; 65536];
+        let (_server, url) = mock_chunked_server(payload, 4096, 1).await;
+        let client = reqwest::Client::new();
+        let dir = tempfile::tempdir().expect("临时目录");
+        let dest = dir.path().join("out.zip");
+        let err = download_zip(
+            &client,
+            &url,
+            &dest,
+            &DownloadOpts {
+                retries: 1,
+                backoff: vec![],
+                progress: None,
+            },
+            1024,
+        )
+        .await
+        .expect_err("应因累积超限失败");
+        assert!(err.to_string().contains("上限"), "错误应指向超限：{err}");
+        assert!(!dest.exists(), "失败后不得残留半成品");
+    }
+
+    /// 评审 29 §M7：解压条目数超限 → 中止（中心目录 O(1) 校验，目标目录零创建）。
+    #[test]
+    fn extract_limits_entries_exceeded() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let zip_path = dir.path().join("many.zip");
+        std::fs::write(&zip_path, build_test_zip(&["a.txt", "b.txt", "c.txt"], b"x"))
+            .expect("写入");
+        let dest = dir.path().join("dest");
+        let limits = CftLimits {
+            max_download_bytes: 0,
+            max_entries: 2,
+            max_extract_bytes: 0,
+        };
+        let err = extract_zip_limited(&zip_path, &dest, limits)
+            .expect_err("应拒绝超条目数");
+        assert!(
+            matches!(
+                err,
+                CftError::TooLarge { what: "解压条目数", limit: 2, actual: 3 }
+            ),
+            "应为条目数上限错误：{err}"
+        );
+        assert!(!dest.exists(), "超条目数不得创建目标目录");
+    }
+
+    /// 评审 29 §M7：解压总字节超限 → 中止（按实际写出量累计，不信任声明值）。
+    #[test]
+    fn extract_limits_bytes_exceeded() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let zip_path = dir.path().join("bomb.zip");
+        let content = vec![0x42u8; 4096];
+        // 两层路径：首段作顶部前缀被剥离后仍剩文件名（单层名会被整段剥离而跳过）
+        std::fs::write(&zip_path, build_test_zip(&["dir/big.bin"], &content)).expect("写入");
+        let dest = dir.path().join("dest");
+        let limits = CftLimits {
+            max_download_bytes: 0,
+            max_entries: 100,
+            max_extract_bytes: 1024,
+        };
+        let err = extract_zip_limited(&zip_path, &dest, limits)
+            .expect_err("应拒绝超字节数");
+        assert!(
+            matches!(
+                err,
+                CftError::TooLarge { what: "解压总字节数", limit: 1024, actual: 4096 }
+            ),
+            "应为字节数上限错误：{err}"
+        );
+    }
+
+    /// 评审 29 §M7：解压超限经 ensure_downloaded_from → 中止 + 版本目录清理。
+    #[tokio::test]
+    async fn ensure_downloaded_extract_limit_cleans_up() {
+        let key = platform_key().expect("平台键");
+        let dir = tempfile::tempdir().expect("临时目录");
+        let zip_bytes = {
+            let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            let top = format!("chrome-{key}");
+            writer.start_file(format!("{top}/chrome.exe"), options).expect("start");
+            writer.write_all(b"bin").expect("写入");
+            writer.start_file(format!("{top}/sub/f.txt"), options).expect("start");
+            writer.write_all(b"txt").expect("写入");
+            writer.finish().expect("finish").into_inner()
+        };
+        let (_server, url) = mock_vec_server(zip_bytes, 1).await;
+        let client = reqwest::Client::new();
+        let root = dir.path().join("browser");
+        let limits = CftLimits {
+            max_download_bytes: 1024 * 1024 * 1024,
+            max_entries: 1,
+            max_extract_bytes: 0,
+        };
+        let err = ensure_downloaded_from(
+            &client,
+            "9.9.9.7",
+            &url,
+            &root,
+            &DownloadOpts::default(),
+            limits,
+        )
+        .await
+        .expect_err("超条目数应失败");
+        assert!(
+            matches!(err, CftError::TooLarge { .. }),
+            "应为上限错误：{err}"
+        );
+        assert!(
+            !cft_root(&root).join("chrome-9.9.9.7").exists(),
+            "失败后版本目录必须清理（残留清理，§2.2）"
+        );
+    }
+
+    /// 评审 29 §M7：截断 zip（合法文件头 + 截断中心目录）→ 结构化错误 + 版本目录清理。
+    #[tokio::test]
+    async fn ensure_downloaded_truncated_zip_cleans_up() {
+        let full = build_test_zip(&["chrome-win64/chrome.exe"], b"bin");
+        let truncated = full[..full.len() / 2].to_vec();
+        let (_server, url) = mock_vec_server(truncated, 1).await;
+        let client = reqwest::Client::new();
+        let dir = tempfile::tempdir().expect("临时目录");
+        let root = dir.path().join("browser");
+        let err = ensure_downloaded_from(
+            &client,
+            "9.9.9.6",
+            &url,
+            &root,
+            &DownloadOpts::default(),
+            CftLimits::default(),
+        )
+        .await
+        .expect_err("截断 zip 应失败");
+        assert!(
+            err.to_string().contains("zip"),
+            "错误应指向解压失败：{err}"
+        );
+        assert!(
+            !cft_root(&root).join("chrome-9.9.9.6").exists(),
+            "失败后版本目录必须清理"
+        );
     }
 
     // ---------- mock HTTP 服务端（tokio TcpListener，仅测试用） ----------
@@ -773,6 +1125,51 @@ mod tests {
             }
         });
         (handle, url)
+    }
+
+    /// 分块编码应答（无 Content-Length，测累积字节上限路径）。
+    async fn mock_chunked_server(
+        payload: Vec<u8>,
+        chunk: usize,
+        count: usize,
+    ) -> (tokio::task::JoinHandle<()>, String) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("绑定");
+        let addr = listener.local_addr().expect("地址");
+        let url = format!("http://{addr}/chunked");
+        let handle = tokio::spawn(async move {
+            for _ in 0..count {
+                let (mut sock, _) = listener.accept().await.expect("accept");
+                let mut buf = [0u8; 2048];
+                let _ = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await;
+                use tokio::io::AsyncWriteExt;
+                let _ = sock
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+                    )
+                    .await;
+                for part in payload.chunks(chunk) {
+                    let _ = sock
+                        .write_all(format!("{:x}\r\n", part.len()).as_bytes())
+                        .await;
+                    let _ = sock.write_all(part).await;
+                    let _ = sock.write_all(b"\r\n").await;
+                }
+                let _ = sock.write_all(b"0\r\n\r\n").await;
+            }
+        });
+        (handle, url)
+    }
+
+    /// 构造简单 zip（多文件同内容，Stored 压缩，供上限测试的确定性 fixture）。
+    fn build_test_zip(files: &[&str], content: &[u8]) -> Vec<u8> {
+        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for name in files {
+            writer.start_file(name.to_string(), options).expect("start_file");
+            writer.write_all(content).expect("写入");
+        }
+        writer.finish().expect("finish").into_inner()
     }
 
     async fn write_http(

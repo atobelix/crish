@@ -91,15 +91,23 @@ pub fn create_ephemeral(root: &Path, token: &SessionToken) -> Result<PathBuf, Pr
 /// 豁免 clippy 删除禁令：R-2 裁决显式要求 sessions/ 临时 profile 直删
 /// （运行期受管目录而非用户资产，删除语义与 AGENTS.md 会话产出目录不同），
 /// 受管 profile 才走 trash（`trash_managed`）。
+///
+/// M8 修复：async fn（调用链 `BrowserManager::stop`/`cleanup_profile` 均处于
+/// async 上下文）——重试等待改 `tokio::time::sleep`，不再用同步 `std::thread::sleep`
+/// 阻塞 tokio worker 线程。
 #[allow(clippy::disallowed_methods)]
-pub fn remove_ephemeral(dir: &Path) -> Result<(), ProcessError> {
-    remove_dir_retry(dir, 3, Duration::from_millis(100))
+pub async fn remove_ephemeral(dir: &Path) -> Result<(), ProcessError> {
+    remove_dir_retry(dir, 3, Duration::from_millis(100)).await
 }
 
 /// 删除目录（带重试；不存在视为成功）。
 /// 豁免理由同 `remove_ephemeral`（R-2 直删裁决）。
+///
+/// M8 修复：async fn + `tokio::time::sleep`——调用链（`remove_ephemeral`/
+/// `import_copy` → `BrowserManager::stop`/`drive_session`）处于 async 上下文，
+/// 同步 sleep 会冻结 current_thread runtime 的 worker；`.await` 等待让出线程。
 #[allow(clippy::disallowed_methods)]
-pub fn remove_dir_retry(
+pub async fn remove_dir_retry(
     dir: &Path,
     tries: u32,
     interval: Duration,
@@ -117,7 +125,7 @@ pub fn remove_dir_retry(
                     tries,
                     dir.display()
                 );
-                std::thread::sleep(interval);
+                tokio::time::sleep(interval).await;
             }
         }
     }
@@ -229,7 +237,11 @@ const MAX_COPY_NODES: u64 = 100_000;
 /// - 复制 `Local State` + `<source_profile>/` 到 dest（best-effort 逐文件）；
 /// - 排除表 + 瞬态文件跳过；目录级失败 → 整体报错并清理半成品；
 /// - `lock_policy`：源锁存活检测（Alive → 报错「请关闭来源浏览器后再导入」）。
-pub fn import_copy(
+///
+/// M8 修复：async fn——调用链（`BrowserManager::prepare_profile` ← `drive_session`）
+/// 处于 async 上下文，内部失败清理路径的重试等待必须用 `tokio::time::sleep`
+/// （`.await` 让出线程），不得以同步 sleep 阻塞 tokio worker。
+pub async fn import_copy(
     source_user_data: &Path,
     source_profile: &str,
     dest: &Path,
@@ -267,7 +279,7 @@ pub fn import_copy(
         Ok(r) => r,
         Err(e) => {
             // 目录级失败 → 清理半成品（§4.3 失败语义）
-            let _ = remove_dir_retry(dest, 2, Duration::from_millis(20));
+            let _ = remove_dir_retry(dest, 2, Duration::from_millis(20)).await;
             return Err(ProcessError::ImportFailed(e));
         }
     };
@@ -480,8 +492,8 @@ mod tests {
     }
 
     /// 临时 profile 目录创建/命名/清理（含删除失败注入）。
-    #[test]
-    fn ephemeral_dir_creation_and_cleanup() {
+    #[tokio::test]
+    async fn ephemeral_dir_creation_and_cleanup() {
         let dir = tempfile::tempdir().expect("临时目录");
         let root = browser_root(dir.path());
         let t = token();
@@ -495,26 +507,28 @@ mod tests {
         assert!(p.is_dir());
         assert!(p.starts_with(sessions_root(&root)));
         // 直删
-        remove_ephemeral(&p).expect("删除");
+        remove_ephemeral(&p).await.expect("删除");
         assert!(!p.exists());
         // 不存在删除幂等
-        remove_ephemeral(&p).expect("重复删除幂等");
+        remove_ephemeral(&p).await.expect("重复删除幂等");
     }
 
     /// 删除重试：非空目录直删冒烟（重试路径正常收敛）。
-    #[test]
-    fn remove_dir_retry_smoke() {
+    #[tokio::test]
+    async fn remove_dir_retry_smoke() {
         let dir = tempfile::tempdir().expect("临时目录");
         let target = dir.path().join("nested");
         std::fs::create_dir_all(target.join("sub")).expect("目录");
         std::fs::write(target.join("sub/f.txt"), b"x").expect("写入");
-        remove_dir_retry(&target, 3, Duration::from_millis(5)).expect("删除");
+        remove_dir_retry(&target, 3, Duration::from_millis(5))
+            .await
+            .expect("删除");
         assert!(!target.exists());
     }
 
     /// 受管删除走 trash（R-2 铁律回归）；临时直删不走 trash（对照断言）。
-    #[test]
-    fn managed_delete_goes_trash() {
+    #[tokio::test]
+    async fn managed_delete_goes_trash() {
         let dir = tempfile::tempdir().expect("临时目录");
         let trash = dir.path().join("trash-root");
         // 受管 profile（用户资产）
@@ -530,14 +544,14 @@ mod tests {
         let t = token();
         let ephemeral = create_ephemeral(&root, &t).expect("创建");
         std::fs::write(ephemeral.join("DevToolsActivePort"), b"x").expect("写入");
-        remove_ephemeral(&ephemeral).expect("直删");
+        remove_ephemeral(&ephemeral).await.expect("直删");
         assert!(!ephemeral.exists());
         assert_eq!(service.list().len(), 1, "临时直删不得产生 trash 条目");
     }
 
     /// 导入排除表参数化断言（§4.3 全表，评审 21-L9）。
-    #[test]
-    fn import_copy_excludes_sensitive() {
+    #[tokio::test]
+    async fn import_copy_excludes_sensitive() {
         let dir = tempfile::tempdir().expect("临时目录");
         let src_root = dir.path().join("src-user-data");
         let src_profile = src_root.join("Default");
@@ -566,7 +580,9 @@ mod tests {
         std::fs::write(src_profile.join("DevToolsActivePort"), b"1\n/p\n").expect("瞬态");
 
         let dest = dir.path().join("managed-out");
-        let report = import_copy(&src_root, "Default", &dest, true).expect("复制");
+        let report = import_copy(&src_root, "Default", &dest, true)
+            .await
+            .expect("复制");
         assert!(dest.join("Local State").is_file());
         assert!(dest.join("Preferences").is_file());
         for excl in IMPORT_EXCLUDE_COMPONENTS {
@@ -586,8 +602,8 @@ mod tests {
     }
 
     /// 导入锁检测：源 SingletonLock + 存活 PID → ImportFailed。
-    #[test]
-    fn import_lock_detection() {
+    #[tokio::test]
+    async fn import_lock_detection() {
         let dir = tempfile::tempdir().expect("临时目录");
         let src_root = dir.path().join("src-user-data");
         let src_profile = src_root.join("Default");
@@ -596,7 +612,9 @@ mod tests {
         let pid = std::process::id();
         std::fs::write(src_root.join("SingletonLock"), pid.to_string()).expect("锁");
         let dest = dir.path().join("out");
-        let err = import_copy(&src_root, "Default", &dest, false).expect_err("应失败");
+        let err = import_copy(&src_root, "Default", &dest, false)
+            .await
+            .expect_err("应失败");
         assert!(
             matches!(err, ProcessError::ImportFailed(_)),
             "存活锁 → ImportFailed：{err:?}"
@@ -605,8 +623,8 @@ mod tests {
     }
 
     /// stale 锁自愈：PID 不存在 → 删除锁继续。
-    #[test]
-    fn stale_singleton_lock_ignored() {
+    #[tokio::test]
+    async fn stale_singleton_lock_ignored() {
         let dir = tempfile::tempdir().expect("临时目录");
         let src_root = dir.path().join("src-user-data");
         let src_profile = src_root.join("Default");
@@ -614,7 +632,9 @@ mod tests {
         std::fs::write(src_root.join("SingletonLock"), b"4294967294").expect("锁（不可能存活）");
         std::fs::write(src_profile.join("Preferences"), b"p").expect("写入");
         let dest = dir.path().join("out");
-        let report = import_copy(&src_root, "Default", &dest, false).expect("stale 锁应自愈");
+        let report = import_copy(&src_root, "Default", &dest, false)
+            .await
+            .expect("stale 锁应自愈");
         assert!(report.copied >= 1);
         assert!(!src_root.join("SingletonLock").exists(), "stale 锁应被删除");
     }
@@ -703,8 +723,8 @@ mod tests {
     /// 链接」→ 全部跳过不复制、不崩溃。修复前 `is_dir/is_file` 跟随链接：
     /// 自环 → 无限递归栈溢出；外部目录链接 → 外部整目录被复制进受管 profile。
     #[cfg(unix)]
-    #[test]
-    fn copy_tree_skips_symlinks_without_following() {
+    #[tokio::test]
+    async fn copy_tree_skips_symlinks_without_following() {
         use std::os::unix::fs::symlink;
         let dir = tempfile::tempdir().expect("临时目录");
         let src_root = dir.path().join("src-user-data");
@@ -727,7 +747,9 @@ mod tests {
         .expect("外部文件链接");
 
         let dest = dir.path().join("managed-out");
-        let report = import_copy(&src_root, "Default", &dest, true).expect("复制不得崩溃");
+        let report = import_copy(&src_root, "Default", &dest, true)
+            .await
+            .expect("复制不得崩溃");
         // 正常文件照常复制
         assert!(dest.join("Preferences").is_file());
         // 三类链接一律未复制（不跟随）
@@ -743,8 +765,8 @@ mod tests {
     }
 
     /// H5 加固回归：超深目录树（> MAX_COPY_DEPTH 层）→ 复制中止报错而非栈溢出。
-    #[test]
-    fn copy_tree_depth_cap_aborts() {
+    #[tokio::test]
+    async fn copy_tree_depth_cap_aborts() {
         let dir = tempfile::tempdir().expect("临时目录");
         let src_root = dir.path().join("src-user-data");
         let src_profile = src_root.join("Default");
@@ -757,7 +779,9 @@ mod tests {
         std::fs::write(deep.join("leaf.txt"), b"x").expect("写入");
 
         let dest = dir.path().join("out");
-        let err = import_copy(&src_root, "Default", &dest, true).expect_err("超深应中止");
+        let err = import_copy(&src_root, "Default", &dest, true)
+            .await
+            .expect_err("超深应中止");
         assert!(err.to_string().contains("深度"), "应说明深度上限：{err}");
         assert!(!dest.exists(), "失败不得留下半成品");
     }
@@ -840,10 +864,11 @@ mod tests {
     }
 
     /// 导入失败：源 profile 不存在 → ImportFailed。
-    #[test]
-    fn import_missing_source_profile() {
+    #[tokio::test]
+    async fn import_missing_source_profile() {
         let dir = tempfile::tempdir().expect("临时目录");
         let err = import_copy(&dir.path().join("src"), "Default", &dir.path().join("out"), true)
+            .await
             .expect_err("应失败");
         assert!(matches!(err, ProcessError::ImportFailed(_)));
     }

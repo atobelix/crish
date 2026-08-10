@@ -176,6 +176,21 @@ fn assign_to_job(job: HANDLE, child: &tokio::process::Child) -> Result<(), Strin
 /// 恢复主线程（CREATE_SUSPENDED 冻结 → ResumeThread）。
 /// 线程快照枚举与进程创建存在偶发竞态（高负载下快照暂不可见主线程），
 /// 有限重试 3 次（20ms 间隔）仍失败才报错，降低 attach 偶发降级。
+///
+/// M8 调用约束（评审 29 §M8）：本函数为**同步 Win32 调用面**（CreateToolhelp32Snapshot
+/// 快照枚举 + 20ms×3 恢复等待）。当前 `attach` 为跨平台同步 trait 契约
+/// （platform/mod.rs `ProcessTreeKiller::attach`），Windows 侧**无法在同步契约内**
+/// 把等待 async 化——生产 runtime 为 current_thread（engine.rs:909），该形态下
+/// `tokio::task::block_in_place`/`Handle::block_on` 均不可用（前者 panic，后者
+/// 在 runtime 上下文内禁止），同步函数内也无法 await `spawn_blocking`。
+///
+/// **调用约束**：不得在 async 上下文（tokio worker 上）直接透传本函数阻塞面；
+/// `attach` 的调用点若处于 async 上下文（如 `BrowserManager::launch_once`），
+/// 阻塞面应由调用方以 `tokio::task::spawn_blocking` 包裹整个 attach 收敛。
+/// 当前因 `tokio::process::Child` 生命周期贯穿 launch_once（attach 后仍需
+/// id/stderr/wait）无法在调用点包裹，**列后续项：`ProcessTreeKiller` 接口
+/// async 化后，本函数改由 `spawn_blocking(move || resume_main_thread_raw(pid,
+/// raw_handle)).await` 承接**。改动本函数前须先阅读平台/模块契约。
 fn resume_main_thread(child: &tokio::process::Child) -> Result<(), String> {
     let mut last_err = String::new();
     for _ in 0..3 {

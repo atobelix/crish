@@ -55,6 +55,7 @@ use crate::browser::state::{
     BrowserState, CrashBudget, CrashReason, StateEvent, StateMachine, Transition,
 };
 use crate::cdp::transport::ExpectedBrowser;
+use futures_util::FutureExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -70,6 +71,16 @@ pub enum StopReason {
     Graceful,
     /// 强制停止：直接杀树（§6.2 第 7 行）。
     Force,
+}
+
+/// 驱动内部确定性 panic 注入点（M5 回归专用，仅测试构建可见）。
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DriverPanicPoint {
+    /// 启动路径（PortReady 前：状态 Launching，进程未派生）。
+    PreReady,
+    /// 运行期（PortReady 后、运行 select 前：endpoint/last_pid/stop_tx 全部就绪）。
+    PostReady,
 }
 
 /// 启动/运行时参数微调（默认对齐 10 文档；测试注入缩短）。
@@ -252,6 +263,13 @@ struct Inner {
     pending_stop: Option<bool>,
     stop_tx: Option<watch::Sender<bool>>,
     driver: Option<tokio::task::JoinHandle<()>>,
+    /// M5 测试钩子：驱动内部确定性 panic 注入点（Inner 共享 Arc，触发后自清除，
+    /// 见 `maybe_panic_driver`——清除落在共享态上，恢复路径不被污染）。
+    #[cfg(test)]
+    driver_panic_point: Option<DriverPanicPoint>,
+    /// M5 测试探针：PostReady 注入时记录的进程 PID（断言兜底杀树用）。
+    #[cfg(test)]
+    panic_probe_pid: Option<u32>,
     last_pid: Option<u32>,
     last_error: Option<String>,
     force_killed: bool,
@@ -273,6 +291,10 @@ impl Inner {
             pending_stop: None,
             stop_tx: None,
             driver: None,
+            #[cfg(test)]
+            driver_panic_point: None,
+            #[cfg(test)]
+            panic_probe_pid: None,
             last_pid: None,
             last_error: None,
             force_killed: false,
@@ -326,6 +348,35 @@ impl BrowserManager {
         }
     }
 
+    /// 测试钩子：注入驱动内部确定性 panic（M5 回归专用；注入点写入共享 Inner，
+    /// 触发后自清除——`maybe_panic_driver` 在共享态上清除，恢复路径不被污染）。
+    #[cfg(test)]
+    fn inject_driver_panic(&self, point: DriverPanicPoint) {
+        self.lock().driver_panic_point = Some(point);
+    }
+
+    /// 测试钩子执行点：到达注入点时确定性 panic（触发后自清除）。
+    #[cfg(test)]
+    fn maybe_panic_driver(&self, point: DriverPanicPoint) {
+        let (fire, probe) = {
+            let mut g = self.lock();
+            if g.driver_panic_point == Some(point) {
+                g.driver_panic_point = None;
+                (true, g.last_pid)
+            } else {
+                (false, None)
+            }
+        };
+        if fire {
+            // 探针：panic 前把当前进程 PID 落盘（测试断言兜底杀树用；触发后
+            // 状态机/句柄清理会抹掉 last_pid，probe 独立保留）
+            if let Some(pid) = probe {
+                self.lock().panic_probe_pid = Some(pid);
+            }
+            panic!("M5 测试注入：驱动任务 panic（{point:?}）");
+        }
+    }
+
     /// 事件订阅（面板/工具层）。
     pub fn subscribe(&self) -> broadcast::Receiver<ProcessEvent> {
         self.events.subscribe()
@@ -367,7 +418,7 @@ impl BrowserManager {
         )
         .await?;
         // 2. 建 profile 目录（§4）
-        let (profile_dir, token) = self.prepare_profile(&config)?;
+        let (profile_dir, token) = self.prepare_profile(&config).await?;
         // 3. 状态机入 Launching + 派发驱动任务（临界区尾：状态置位即释放互斥）
         let (first_tx, first_rx) = oneshot::channel();
         {
@@ -387,7 +438,21 @@ impl BrowserManager {
             g.force_killed = false;
             let mgr = self.clone();
             g.driver = Some(tokio::spawn(async move {
-                mgr.drive_session(config, first_tx).await;
+                // M5 加固（评审 29 §M5）：驱动任务外包 catch_unwind——驱动内部
+                // 任何 panic（expect 断言/运行时内部/测试钩子）都不得让管理器
+                // 卡死。旧实现：panic 后状态冻结在非 Stopped、driver 句柄残留、
+                // stop() 等到的只是已 panic 任务并报告错误状态、后续 start()
+                // 幂等分支永久返回陈旧报告。现实现：panic 时回调 on_driver_panic
+                // （终态收敛 + 进程杀树兜底 + 终态事件广播 + 清句柄释放等待方），
+                // stop()/start() 均收敛，后续可重新启动（可恢复性）。
+                let result = std::panic::AssertUnwindSafe(mgr.drive_session(config, first_tx))
+                    .catch_unwind()
+                    .await;
+                if let Err(payload) = result {
+                    let msg = panic_message(&payload);
+                    tracing::error!("会话驱动任务 panic（M5 兜底收敛）：{msg}");
+                    mgr.on_driver_panic(&msg).await;
+                }
             }));
         }
         drop(critical);
@@ -413,32 +478,41 @@ impl BrowserManager {
 
     /// 停止（§6.2/§6.3）：意图置位 → 通知驱动 → 等驱动收尾。
     pub async fn stop(&self, reason: StopReason) -> Result<StopReport, ProcessError> {
-        let driver = {
+        let (driver, cleanup_dir) = {
             let mut g = self.lock();
             if g.driver.is_none() {
-                // 无驱动（从未启动/已收敛）：仅清理遗留 profile（崩溃放弃后的残留）
-                if let (Some(dir), Some(spec)) = (g.profile_dir.clone(), g.profile_spec.clone()) {
-                    if matches!(spec, ProfileSpec::Ephemeral) {
-                        let _ = remove_ephemeral(&dir);
-                    }
-                }
+                // 无驱动（从未启动/已收敛）：登记遗留 profile（崩溃放弃后的残留），
+                // 锁外 await 删除（M8：remove_ephemeral 已 async 化，跨 await 不持锁）
+                let cleanup_dir =
+                    if let (Some(dir), Some(spec)) = (g.profile_dir.clone(), g.profile_spec.clone())
+                    {
+                        matches!(spec, ProfileSpec::Ephemeral).then_some(dir)
+                    } else {
+                        None
+                    };
                 g.profile_dir = None;
                 g.profile_spec = None;
                 g.endpoint = None;
-                return Ok(StopReport {
-                    state: BrowserState::Stopped,
-                    force_killed: false,
-                    elapsed_ms: 0,
-                    profile_removed: true,
-                });
+                (None, cleanup_dir)
+            } else {
+                g.intentional = true;
+                g.pending_stop = Some(matches!(reason, StopReason::Graceful));
+                if let Some(tx) = &g.stop_tx {
+                    let _ = tx.send(true);
+                }
+                (g.driver.take(), None)
             }
-            g.intentional = true;
-            g.pending_stop = Some(matches!(reason, StopReason::Graceful));
-            if let Some(tx) = &g.stop_tx {
-                let _ = tx.send(true);
-            }
-            g.driver.take()
         };
+        if let Some(dir) = cleanup_dir {
+            // 无驱动路径：清理遗留 profile 后收敛（删除完成才返回，语义与原实现一致）
+            let _ = remove_ephemeral(&dir).await;
+            return Ok(StopReport {
+                state: BrowserState::Stopped,
+                force_killed: false,
+                elapsed_ms: 0,
+                profile_removed: true,
+            });
+        }
         if let Some(task) = driver {
             let _ = task.await;
         }
@@ -544,7 +618,8 @@ impl BrowserManager {
     }
 
     /// profile 准备（§4.2/§4.3）：Ephemeral → sessions/<uuid>/；Imported → 复制到 managed/。
-    fn prepare_profile(
+    /// M8：async fn——内部 `import_copy` 已 async 化（失败清理路径用 tokio sleep 让出）。
+    async fn prepare_profile(
         &self,
         config: &LaunchConfig,
     ) -> Result<(PathBuf, SessionToken), ProcessError> {
@@ -587,7 +662,8 @@ impl BrowserManager {
                         source_profile,
                         &dest,
                         false,
-                    )?;
+                    )
+                    .await?;
                     tracing::info!(
                         "导入 profile 完成：copied={} skipped={} → {}",
                         report.copied,
@@ -606,6 +682,10 @@ impl BrowserManager {
         config: LaunchConfig,
         first_tx: oneshot::Sender<Result<LaunchReport, ProcessError>>,
     ) {
+        // M5 测试钩子：启动路径注入确定性 panic（回归用例驱动；触发后自清除，
+        // 见 maybe_panic_driver——清除落在共享 Inner 上，恢复路径不受污染）。
+        #[cfg(test)]
+        self.maybe_panic_driver(DriverPanicPoint::PreReady);
         let mut first_tx = Some(first_tx);
         // 导航栈恢复（崩溃重启保留 nav_stack.json 落盘，U-7）
         let profile_dir = self.lock().profile_dir.clone();
@@ -664,6 +744,11 @@ impl BrowserManager {
                 self.stop_path(&mut wait_task, &mut process, false).await;
                 break;
             }
+            // M5 测试钩子：运行期注入确定性 panic（回归用例驱动；此刻 endpoint/
+            // last_pid/stop_tx/wait_task 全部就绪——panic 后必须全部清理、孤儿
+            // 进程必须兜底杀树、等待方必须释放）。
+            #[cfg(test)]
+            self.maybe_panic_driver(DriverPanicPoint::PostReady);
             let exit_status = tokio::select! {
                 status = &mut wait_task => {
                     // 进程退出（可能是我杀的，也可能是它崩的）
@@ -912,7 +997,7 @@ impl BrowserManager {
         first_tx: &mut Option<oneshot::Sender<Result<LaunchReport, ProcessError>>>,
     ) {
         let err_text = err.to_string();
-        self.cleanup_profile();
+        self.cleanup_profile().await;
         {
             let mut g = self.lock();
             g.last_error = Some(err_text.clone());
@@ -998,7 +1083,7 @@ impl BrowserManager {
             g.machine
                 .on(StateEvent::StopExited, Instant::now(), &self.budget());
         }
-        self.cleanup_profile();
+        self.cleanup_profile().await;
         let elapsed = start.elapsed().as_millis() as u64;
         let (restarts, backend) = self.emit_snapshot();
         {
@@ -1016,14 +1101,15 @@ impl BrowserManager {
     }
 
     /// 清理 profile（§4.4：临时直删；受管保留——用户资产删除由维度 16 经 trash 发起）。
-    fn cleanup_profile(&self) {
+    /// M8：async fn——`remove_ephemeral` 已 async 化（删除重试等待让出 worker）。
+    async fn cleanup_profile(&self) {
         let (dir, spec) = {
             let g = self.lock();
             (g.profile_dir.clone(), g.profile_spec.clone())
         };
         match (&dir, &spec) {
             (Some(dir), Some(ProfileSpec::Ephemeral)) => {
-                if let Err(e) = remove_ephemeral(dir) {
+                if let Err(e) = remove_ephemeral(dir).await {
                     tracing::warn!("临时 profile 清理失败（登记孤儿，下次启动清扫）：{e}");
                 } else {
                     let mut g = self.lock();
@@ -1045,7 +1131,7 @@ impl BrowserManager {
             g.machine
                 .on(StateEvent::Stop { graceful: true }, Instant::now(), &self.budget());
         }
-        self.cleanup_profile();
+        self.cleanup_profile().await;
         let (restarts, backend) = self.emit_snapshot();
         self.emit(ProcessEvent::StateChanged {
             state: BrowserState::Stopped,
@@ -1054,6 +1140,63 @@ impl BrowserManager {
             error: Some("启动中被停止".to_string()),
         });
         self.clear_session_state();
+    }
+
+    /// M5 兜底（评审 29 §M5）：驱动任务 panic 回调——任意状态下驱动崩溃都
+    /// 不得让管理器卡死。本回调自身必须零 panic（二次 panic 会让任务再次
+    /// 崩溃、状态再次卡死），执行序：
+    /// 1. 进程杀树兜底：驱动栈上的 ManagedProcess/killer 已随 unwind 丢弃
+    ///    （JobTreeKiller 无 Drop 实现，KILL_ON_JOB_CLOSE 不会触发——孤儿
+    ///    进程只能按 Inner.last_pid 终结；kill_sync 对不存在 PID 幂等）；
+    /// 2. 状态机事件驱动收敛 Stopped（复用 §6.2 迁移表，不绕过语义）：
+    ///    Running→Stop(force)→Stopping→StopExited；Launching/Crashed→Stop
+    ///    直接 StoppedClean；Stopping→StopExited；循环防御非法迁移死循环；
+    /// 3. 清理 profile + 清会话残留（endpoint/stop_tx/driver 句柄）；
+    /// 4. 终态错误记录 + 广播 StateChanged（error 带 panic 原因）——等待方
+    ///    （stop()、start() 的 first_rx）随之释放，后续 start() 幂等检查看到
+    ///    Stopped，可重新启动。
+    async fn on_driver_panic(&self, msg: &str) {
+        // 1. 进程杀树兜底（Job 句柄已随 unwind 丢失，KILL_ON_JOB_CLOSE 不触发）
+        if let Some(pid) = self.lock().last_pid {
+            new_killer().kill_sync(pid);
+        }
+        // 2. 状态机收敛（全部状态已覆盖，最多 2 轮；Invalid 兜底退出防死循环）
+        {
+            let mut g = self.lock();
+            for _ in 0..4 {
+                let event = match g.machine.state() {
+                    BrowserState::Stopped => break,
+                    BrowserState::Stopping { .. } => StateEvent::StopExited,
+                    BrowserState::Running => StateEvent::Stop { graceful: false },
+                    BrowserState::Launching { .. } | BrowserState::Crashed { .. } => {
+                        StateEvent::Stop { graceful: true }
+                    }
+                };
+                let transition = g.machine.on(event, Instant::now(), &self.budget());
+                if matches!(transition, Transition::Invalid { .. }) {
+                    tracing::error!("M5 兜底收敛异常迁移（忽略）：{transition:?}");
+                    break;
+                }
+            }
+            g.pending_stop = None;
+            g.intentional = false;
+        }
+        // 3. 清理 profile + 会话残留（顺序在广播前：事件到达即一切已就绪）
+        self.cleanup_profile().await;
+        self.clear_session_state();
+        // 4. 终态错误记录 + 事件广播（reason=panic）
+        let err_text = format!("会话驱动异常终止（驱动 panic：{msg}）");
+        {
+            let mut g = self.lock();
+            g.last_error = Some(err_text.clone());
+        }
+        let (restarts, backend) = self.emit_snapshot();
+        self.emit(ProcessEvent::StateChanged {
+            state: BrowserState::Stopped,
+            restarts,
+            backend,
+            error: Some(err_text),
+        });
     }
 
     /// 崩溃瞬间冻结导航栈（内存 + 落盘，§6.4）。
@@ -1133,6 +1276,17 @@ fn classify_exit(status: &std::process::ExitStatus) -> CrashReason {
         Some(21) => CrashReason::ProcessExit(21),
         Some(other) => CrashReason::ProcessExit(other),
         None => CrashReason::Unknown,
+    }
+}
+
+/// 提取 panic 载荷文本（&str / String / 其他载荷 → 兜底描述；M5 诊断面）。
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "未知 panic 载荷".to_string()
     }
 }
 
@@ -1702,6 +1856,123 @@ mod tests {
             .expect("停止失败");
         assert!(matches!(stop.state, BrowserState::Stopped));
         assert_eq!(mgr.status().state, BrowserState::Stopped);
+    }
+
+    /// 等待终态事件（Stopped + error 含 "panic"；M5 回归共用，事件等待替代
+    /// 裸 sleep——事件由 on_driver_panic 在全部收敛动作完成后广播，收到即
+    /// 一切就绪，无竞态）。
+    async fn wait_terminal_panic_event(rx: &mut broadcast::Receiver<ProcessEvent>) -> String {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let ev = rx.recv().await.expect("通道关闭");
+                if let ProcessEvent::StateChanged {
+                    state: BrowserState::Stopped,
+                    error: Some(e),
+                    ..
+                } = ev
+                {
+                    return e;
+                }
+            }
+        })
+        .await
+        .expect("等待终态事件超时（驱动 panic 未广播终态）")
+    }
+
+    /// M5 回归（评审 29 §M5）：驱动任务**启动路径** panic（PreReady 注入）。
+    /// 旧实现：panic 后状态卡死非 Stopped、driver 句柄残留、stop() 报告错误
+    /// 状态、后续 start() 幂等分支永久返回陈旧报告。新实现（catch_unwind
+    /// 外包）：状态可达终态 Stopped、终态事件已广播（error 带 panic 原因）、
+    /// stop() 有界收敛（10s 超时上限，旧实现此场景 stop() 挂死）、后续
+    /// start() 可重新启动（可恢复性）。
+    #[tokio::test]
+    async fn driver_panic_before_ready_converges_and_recovers() {
+        let Some(h) = Harness::new() else { return };
+        let cfg = h.config(&script_ok());
+        let mgr = h.manager.clone();
+        mgr.inject_driver_panic(DriverPanicPoint::PreReady);
+        let mut rx = mgr.subscribe();
+        // first_tx 随 panic unwind 丢弃 → 通道断开 → start() 返回内部错误
+        let err = mgr
+            .start(cfg.clone())
+            .await
+            .expect_err("驱动 panic 后 start() 必须返回错误");
+        assert!(matches!(err, ProcessError::Internal(_)), "{err:?}");
+        // 终态事件已广播（reason=panic）
+        let terminal = wait_terminal_panic_event(&mut rx).await;
+        assert!(terminal.contains("panic"), "终态事件必须带 panic 原因：{terminal}");
+        // 状态可达终态
+        assert_eq!(mgr.status().state, BrowserState::Stopped);
+        // stop() 有界收敛（驱动句柄已清，不得永久 await）
+        let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
+            .await
+            .expect("stop() 必须在驱动 panic 后有界收敛（不得永久 await）")
+            .expect("停止失败");
+        assert!(matches!(stop.state, BrowserState::Stopped));
+        // 可恢复性：panic 收敛后重新启动成功
+        let report = mgr.start(cfg).await.expect("驱动 panic 后必须可重新启动");
+        assert!(matches!(report.state, BrowserState::Running));
+        mgr.stop(StopReason::Force).await.expect("停止");
+    }
+
+    /// M5 回归（评审 29 §M5）：驱动任务**运行期** panic（PostReady 注入）。
+    /// 此刻浏览器进程已派生（假浏览器常驻）、endpoint/last_pid/stop_tx 全部
+    /// 就绪：panic 后必须 ① 兜底杀树（驱动栈 killer 已随 unwind 丢失，按
+    /// last_pid 终结，防孤儿进程泄漏）② 端点/句柄清理 ③ 终态收敛 + 广播
+    /// ④ 可重新启动。进程终结判定复用 F1 三因子（创建时间 + STILL_ACTIVE），
+    /// 排除并行负载下 PID 复用误判；进程对象已回收（创建时间不可见）视为
+    /// 已终结。
+    #[tokio::test]
+    async fn driver_panic_after_ready_converges_and_kills() {
+        let Some(h) = Harness::new() else { return };
+        let cfg = h.config(&script_ok());
+        let mgr = h.manager.clone();
+        mgr.inject_driver_panic(DriverPanicPoint::PostReady);
+        let mut rx = mgr.subscribe();
+        // first_tx 先于注入点送达 → start() 正常返回 Running
+        let report = mgr
+            .start(cfg.clone())
+            .await
+            .expect("启动（注入点在首启报告送达之后）");
+        assert!(matches!(report.state, BrowserState::Running));
+        // 终态事件已广播（处理器先杀树→收敛→清残留→再广播，事件到达即就绪）
+        let terminal = wait_terminal_panic_event(&mut rx).await;
+        assert!(terminal.contains("panic"), "终态事件必须带 panic 原因：{terminal}");
+        // 注入点记录的进程 PID（panic 前落盘，事件到达后读取无竞态）
+        let pid = mgr
+            .inner
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .panic_probe_pid
+            .expect("PostReady 注入必须记录进程 PID");
+        // 兜底杀树生效：进程不得仍存活（F1 三因子；已回收视为已终结）
+        let creation = process_creation_time(pid);
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let alive = creation.is_some_and(|t| process_creation_time(pid) == Some(t))
+                && process_state(pid) == Some(Err(()));
+            if !alive {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "驱动 panic 兜底杀树未生效（PID {pid} 仍存活）"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        // 状态可达终态 + 会话残留清理
+        assert_eq!(mgr.status().state, BrowserState::Stopped);
+        assert!(mgr.endpoint().is_none(), "panic 后端点必须清空（私有通道不残留）");
+        // stop() 有界收敛（驱动句柄已清，不得永久 await）
+        let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
+            .await
+            .expect("stop() 必须在驱动 panic 后有界收敛（不得永久 await）")
+            .expect("停止失败");
+        assert!(matches!(stop.state, BrowserState::Stopped));
+        // 可恢复性：panic 收敛后重新启动成功
+        let report2 = mgr.start(cfg).await.expect("驱动 panic 后必须可重新启动");
+        assert!(matches!(report2.state, BrowserState::Running));
+        mgr.stop(StopReason::Force).await.expect("停止");
     }
 
     /// 评审 H6 回归（29-评审-代码质量与安全）：并发 start() 只启动一个浏览器
