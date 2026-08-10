@@ -989,3 +989,607 @@ fn registry_drift_cron_fired_registered() {
         "cron-fired 的 type_name 与注册表 wire 不一致"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. 设备协议注册表护栏（R0-03：device-protocol.json ↔
+//    crates/conex-types/src/device/** 双向锁定）
+//
+// 唯一事实源：crates/conex-types/src/device/ 模块族（R0-02b 交付），注册表
+// contracts/device-protocol.json 是给生成脚本（scripts/generate-engine-
+// bindings.mjs，R0-03 泛化为多注册表分发）的机器可读导出。本段把注册表与
+// Rust 侧真实 serde 行为锁定：
+//
+// - kind 全量：注册表 103 条 kind（messageId 1-103 连续）== 模块
+//   [conex_types::device::all_kinds]（静态 29 + remote 37 + result 37），
+//   且 messages 与 kinds 一一对应（id/kind/rustVariant 引用可解析）；
+// - 错误码全量：注册表 errors 段（common+protocol+business）去重后 45 个
+//   == [conex_types::device::ALL_ERROR_CODES]，且 common 码必须重新登记在
+//   protocol|business（防分段漂移）；
+// - 能力位全量：注册表 capabilities 段 17 位 ==
+//   [conex_types::device::ALL_CAPABILITIES] 的 wire 名（serde camelCase）；
+// - 事件双面策略：注册表 events 段 41 条与 engine-events.json / 
+//   [AgentEvent::ALL_TYPE_NAMES] 同名同序；sync 标志 == [SYNC_ELIGIBLE_TYPES]
+//   白名单；strategy 与 [event_cross_strategy] 逐一锁定（13/18/10 分组）；
+// - 消息体字段：29 条静态消息（内联 fields）按注册表必填字段构造样本 →
+//   反序列化为对应 Rust 类型 → 回序列化，断言必填字段在场且无注册表外
+//   字段（字段名漂移即失败）；
+// - 协议常量：注册表 constants 段关键项与 [conex_types::device::version]
+//   常量一致（MAX_FRAME_BYTES / EVENT_WINDOW / MAX_SUBSCRIPTIONS /
+//   MAX_STREAMS 等）。
+//
+// 任何一侧改动不同步（改 Rust 类型不更新注册表 / 改注册表不匹配 serde），
+// `cargo test -p conex-types` 立即失败；生成产物（TS 面）漂移由
+// packages/shared-types/src/generated/device/drift.test.ts 与 CI
+// engine-bindings-drift job 兜底。
+
+use conex_types::device::{
+    all_kinds, ALL_ERROR_CODES, CommandRequest, CommandResult, DeviceErrorCode, DeviceReady,
+    DeviceUnlink, ErrorBody, EventAck, EventsPush, Heartbeat, HeartbeatOk, Hello, HelloOk,
+    PairAudit, PairChallenge, PairHello, PairOk, PairVerify, Refresh, REMOTE_KINDS,
+    RESULT_KINDS, Resume, ResumeDone, ResumePage, SessionRemoved, SessionUpdated,
+    SessionUpdatedAll, StreamChunk, StreamClose, StreamOpen, StreamResume, Subscribe,
+    SubscribeAll, SubscribeOk,
+};
+use conex_types::device::version::{
+    ALL_CAPABILITIES, EVENT_WINDOW, MAX_FRAME_BYTES, MAX_STREAMS, MAX_SUBSCRIPTIONS,
+    MIN_PROTOCOL_VERSION, PROTOCOL_VERSION,
+};
+use conex_types::device::{Capability, EventRedactStrategy, SYNC_ELIGIBLE_TYPES};
+use conex_types::device::events::event_cross_strategy;
+
+/// 设备注册表 JSON 结构（与 contracts/device-protocol.json 逐字段对应）
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceRegistry {
+    contract: String,
+    schema_version: u32,
+    protocol_version: u32,
+    message_count: u32,
+    kinds: Vec<DeviceKindSpec>,
+    messages: Vec<DeviceMessageSpec>,
+    commands: Vec<DeviceCommandSpec>,
+    events: Vec<DeviceEventSpec>,
+    errors: DeviceErrorsSpec,
+    capabilities: Vec<DeviceCapabilitySpec>,
+    types: std::collections::BTreeMap<String, TypeSpec>,
+    enums: std::collections::BTreeMap<String, EnumSpec>,
+    constants: std::collections::BTreeMap<String, Value>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceKindSpec {
+    kind: String,
+    family: String,
+    direction: String,
+    auth_phase: String,
+    message_id: u32,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceMessageSpec {
+    id: u32,
+    kind: String,
+    rust_variant: String,
+    family: String,
+    #[serde(default)]
+    fields: Option<Vec<FieldSpec>>,
+    #[serde(default)]
+    params_type: Option<String>,
+    #[serde(default)]
+    result_type: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceCommandSpec {
+    number: String,
+    name: String,
+    kind: String,
+    tauri_command: String,
+    surface: String,
+    registered: bool,
+    domain: String,
+    write: bool,
+    outbox: bool,
+    idempotency_key: String,
+    params_type: String,
+    result_type: String,
+    error_codes: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceEventSpec {
+    id: u32,
+    #[serde(rename = "type")]
+    wire: String,
+    strategy: String,
+    realtime: DeviceEventRealtimeSpec,
+    sync: bool,
+    push_level: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceEventRealtimeSpec {
+    push: bool,
+    backpressure: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceErrorsSpec {
+    common_to_all_commands: Vec<String>,
+    protocol: Vec<DeviceErrorEntrySpec>,
+    business: Vec<DeviceErrorEntrySpec>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceErrorEntrySpec {
+    code: String,
+    retryable: bool,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceCapabilitySpec {
+    name: String,
+    owner: String,
+    commands: Vec<String>,
+}
+
+fn device_registry() -> DeviceRegistry {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/contracts/device-protocol.json");
+    let text = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("读取设备注册表 {path} 失败：{e}"));
+    serde_json::from_str(&text).unwrap_or_else(|e| panic!("解析设备注册表失败：{e}"))
+}
+
+/// 注册表错误码去重全集（common 优先序，与生成 errors.ts 同序）
+fn all_device_error_codes(reg: &DeviceRegistry) -> Vec<&str> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut codes = Vec::new();
+    for code in &reg.errors.common_to_all_commands {
+        if seen.insert(code.as_str()) {
+            codes.push(code.as_str());
+        }
+    }
+    for entry in reg
+        .errors
+        .protocol
+        .iter()
+        .chain(reg.errors.business.iter())
+    {
+        if seen.insert(entry.code.as_str()) {
+            codes.push(entry.code.as_str());
+        }
+    }
+    codes
+}
+
+/// 设备样本覆盖表：注册表以 JsonValue/string 建模但 Rust 侧有更强 wire 类型
+/// 的字段（配对码 / 游标映射 / 错误码），构造样本时用合法值替代裸 null/"x"。
+fn device_sample_override(owner: &str, field: &str) -> Option<Value> {
+    match (owner, field) {
+        ("PairHello", "code") => Some(json!("CXN-7K4P-Q2MB-9XRT")),
+        ("Subscribe", "lastSequences") => Some(json!({ "s-1": 7 })),
+        ("ErrorBody", "code") => Some(json!("cmd.denied")),
+        _ => None,
+    }
+}
+
+/// 按注册表类型引用构造最小样本 JSON（只填必填字段；owner 为上级类型名）
+fn device_sample_value(reg: &DeviceRegistry, ty: &str, owner: &str) -> Value {
+    if let Some(inner) = ty.strip_suffix("[]") {
+        return Value::Array(vec![device_sample_value(reg, inner, owner)]);
+    }
+    match ty {
+        "string" => Value::String("x".into()),
+        "number" => Value::from(0),
+        "boolean" => Value::Bool(false),
+        "JsonValue" => Value::Null,
+        _ => {
+            if let Some(spec) = reg.enums.get(ty) {
+                let first = spec
+                    .values
+                    .first()
+                    .unwrap_or_else(|| panic!("枚举 {ty} 不能为空"));
+                return Value::String(first.clone());
+            }
+            match reg.types.get(ty) {
+                Some(TypeSpec::Struct { fields }) => {
+                    let mut obj = Map::new();
+                    for f in fields.iter().filter(|f| f.required) {
+                        obj.insert(
+                            f.name.clone(),
+                            device_sample_override(ty, &f.name)
+                                .unwrap_or_else(|| device_sample_value(reg, &f.ts_type, ty)),
+                        );
+                    }
+                    Value::Object(obj)
+                }
+                Some(TypeSpec::Tagged { tag, variants }) => {
+                    let v = variants
+                        .first()
+                        .unwrap_or_else(|| panic!("tagged 类型 {ty} 不能没有变体"));
+                    let mut obj = Map::new();
+                    obj.insert(tag.clone(), Value::String(v.name.clone()));
+                    for f in v.fields.iter().filter(|f| f.required) {
+                        obj.insert(f.name.clone(), device_sample_value(reg, &f.ts_type, ty));
+                    }
+                    Value::Object(obj)
+                }
+                None => panic!("设备注册表引用了未知类型 {ty}"),
+            }
+        }
+    }
+}
+
+/// 按注册表 rustVariant 映射到 Rust 类型做回环校验（29 条静态消息体 +
+/// 命令/响应/错误信封，全量覆盖 103 kind 的 wire 载荷形态）
+fn check_device_body_roundtrip(rust_variant: &str, fields: &[FieldSpec], sample: Value) {
+    match rust_variant {
+        "PairHello" => check_roundtrip::<PairHello>(rust_variant, fields, sample),
+        "PairChallenge" => check_roundtrip::<PairChallenge>(rust_variant, fields, sample),
+        "PairVerify" => check_roundtrip::<PairVerify>(rust_variant, fields, sample),
+        "PairOk" => check_roundtrip::<PairOk>(rust_variant, fields, sample),
+        "Hello" => check_roundtrip::<Hello>(rust_variant, fields, sample),
+        "HelloOk" => check_roundtrip::<HelloOk>(rust_variant, fields, sample),
+        "Refresh" => check_roundtrip::<Refresh>(rust_variant, fields, sample),
+        "DeviceReady" => check_roundtrip::<DeviceReady>(rust_variant, fields, sample),
+        "DeviceUnlink" => check_roundtrip::<DeviceUnlink>(rust_variant, fields, sample),
+        "PairAudit" => check_roundtrip::<PairAudit>(rust_variant, fields, sample),
+        "Subscribe" => check_roundtrip::<Subscribe>(rust_variant, fields, sample),
+        "SubscribeAll" => check_roundtrip::<SubscribeAll>(rust_variant, fields, sample),
+        "SubscribeOk" => check_roundtrip::<SubscribeOk>(rust_variant, fields, sample),
+        "EventsPush" => check_roundtrip::<EventsPush>(rust_variant, fields, sample),
+        "EventAck" => check_roundtrip::<EventAck>(rust_variant, fields, sample),
+        "Resume" => check_roundtrip::<Resume>(rust_variant, fields, sample),
+        "ResumePage" => check_roundtrip::<ResumePage>(rust_variant, fields, sample),
+        "ResumeDone" => check_roundtrip::<ResumeDone>(rust_variant, fields, sample),
+        "SessionUpdated" => check_roundtrip::<SessionUpdated>(rust_variant, fields, sample),
+        "SessionRemoved" => check_roundtrip::<SessionRemoved>(rust_variant, fields, sample),
+        "SessionUpdatedAll" => check_roundtrip::<SessionUpdatedAll>(rust_variant, fields, sample),
+        "StreamOpen" => check_roundtrip::<StreamOpen>(rust_variant, fields, sample),
+        "StreamChunk" => check_roundtrip::<StreamChunk>(rust_variant, fields, sample),
+        "StreamResume" => check_roundtrip::<StreamResume>(rust_variant, fields, sample),
+        "StreamClose" => check_roundtrip::<StreamClose>(rust_variant, fields, sample),
+        "Heartbeat" => check_roundtrip::<Heartbeat>(rust_variant, fields, sample),
+        "HeartbeatOk" => check_roundtrip::<HeartbeatOk>(rust_variant, fields, sample),
+        "ErrorBody" => check_roundtrip::<ErrorBody>(rust_variant, fields, sample),
+        "CommandRequest" => check_roundtrip::<CommandRequest>(rust_variant, fields, sample),
+        "CommandResult" => check_roundtrip::<CommandResult>(rust_variant, fields, sample),
+        other => panic!("未接入设备回环校验的 rustVariant {other}"),
+    }
+}
+
+// ── 9.1 kind 全量：注册表 103 条 ↔ Rust all_kinds() ──
+
+#[test]
+fn device_registry_kinds_match_rust_all_kinds() {
+    let reg = device_registry();
+    assert_eq!(reg.contract, "device-protocol", "注册表契约名必须为 device-protocol");
+    assert_eq!(reg.schema_version, 1);
+    assert_eq!(reg.protocol_version, 1);
+    assert_eq!(reg.message_count, 103, "M6 §1.1：kind 总数必须为 103");
+    assert_eq!(reg.kinds.len(), 103);
+    assert_eq!(reg.messages.len(), 103);
+
+    // kinds 与 messages 一一对应（id/kind 双键）
+    for (i, kind) in reg.kinds.iter().enumerate() {
+        assert_eq!(kind.message_id as usize, i + 1, "kind messageId 必须从 1 连续递增");
+        let msg = &reg.messages[i];
+        assert_eq!(msg.id as usize, i + 1, "message id 必须与 kinds 对齐");
+        assert_eq!(msg.kind, kind.kind, "message.kind 必须与 kinds 对齐");
+        assert!(
+            matches!(kind.family.as_str(), "pair" | "auth" | "device" | "events" | "remote" | "result" | "stream" | "heartbeat" | "error"),
+            "kind {} 的 family 非法：{}",
+            kind.kind,
+            kind.family
+        );
+        assert!(
+            matches!(kind.direction.as_str(), "mobile-to-desktop" | "desktop-to-mobile" | "both"),
+            "kind {} 的 direction 非法：{}",
+            kind.kind,
+            kind.direction
+        );
+        assert!(
+            matches!(kind.auth_phase.as_str(), "pairing" | "handshake" | "session" | "both"),
+            "kind {} 的 authPhase 非法：{}",
+            kind.kind,
+            kind.auth_phase
+        );
+        // rustVariant 必须可解析（types 表内或命令/响应信封）
+        assert!(
+            reg.types.contains_key(&msg.rust_variant)
+                || matches!(msg.rust_variant.as_str(), "CommandRequest" | "CommandResult"),
+            "message {} 的 rustVariant {} 未在 types 登记",
+            msg.kind,
+            msg.rust_variant
+        );
+        // family 与 kinds 对齐；remote/result 必须声明可解析的 params/result 类型
+        assert_eq!(msg.family, kind.family, "message.family 必须与 kinds 对齐");
+        if matches!(msg.family.as_str(), "remote" | "result") {
+            let params = msg.params_type.as_deref().expect("remote/result 必须声明 paramsType");
+            let result = msg.result_type.as_deref().expect("remote/result 必须声明 resultType");
+            assert!(reg.types.contains_key(params), "{} 的 paramsType {} 未登记", msg.kind, params);
+            assert!(reg.types.contains_key(result), "{} 的 resultType {} 未登记", msg.kind, result);
+        }
+    }
+
+    // 与 Rust 侧 103 全量集合一致（all_kinds = 静态 29 + remote 37 + result 37）
+    let rust_kinds: std::collections::BTreeSet<&str> = all_kinds().into_iter().collect();
+    assert_eq!(rust_kinds.len(), 103);
+    let reg_kinds: std::collections::BTreeSet<&str> =
+        reg.kinds.iter().map(|k| k.kind.as_str()).collect();
+    assert_eq!(reg_kinds, rust_kinds, "注册表 kind 集合与 Rust all_kinds() 不一致");
+}
+
+// ── 9.2 错误码全量：注册表去重 45 ↔ Rust ALL_ERROR_CODES ──
+
+#[test]
+fn device_registry_error_codes_match_rust_all_error_codes() {
+    let reg = device_registry();
+    let codes = all_device_error_codes(&reg);
+    assert_eq!(codes.len(), 45, "注册表错误码去重后必须为 45（D3 §6.2 / M6 §6.2）");
+    // common 码必须重新登记在 protocol|business（防分段漂移）
+    let protocol_business: std::collections::BTreeSet<&str> = reg
+        .errors
+        .protocol
+        .iter()
+        .chain(reg.errors.business.iter())
+        .map(|e| e.code.as_str())
+        .collect();
+    for code in &reg.errors.common_to_all_commands {
+        assert!(
+            protocol_business.contains(code.as_str()),
+            "common 错误码 {code} 必须重新登记在 protocol|business"
+        );
+    }
+    let reg_set: std::collections::BTreeSet<&str> = codes.into_iter().collect();
+    let rust_set: std::collections::BTreeSet<&str> =
+        ALL_ERROR_CODES.iter().copied().collect();
+    assert_eq!(reg_set, rust_set, "注册表错误码集合与 Rust ALL_ERROR_CODES 不一致");
+    // retryable 标志 ↔ Rust 静态判定表（D3 §6.2：retryable=true 才允许自动重试）
+    for entry in reg
+        .errors
+        .protocol
+        .iter()
+        .chain(reg.errors.business.iter())
+    {
+        let code: DeviceErrorCode = serde_json::from_value(Value::String(entry.code.clone()))
+            .unwrap_or_else(|e| panic!("错误码 {} 反序列化失败：{e}", entry.code));
+        assert_eq!(
+            entry.retryable,
+            code.retryable(),
+            "错误码 {} 的 retryable 与 Rust 静态判定表不一致",
+            entry.code
+        );
+    }
+}
+
+// ── 9.2.5 命令面：37 条 C01-C37 ↔ Rust REMOTE_KINDS/RESULT_KINDS ──
+
+#[test]
+fn device_registry_commands_match_rust_kinds() {
+    let reg = device_registry();
+    assert_eq!(reg.commands.len(), 37, "命令必须为 37 条（M6 §4：F1 10 + F2 5 + F4 8 + F5 4 + F6 5 + 设备域 5）");
+    let error_codes: std::collections::BTreeSet<&str> =
+        all_device_error_codes(&reg).into_iter().collect();
+    let command_numbers: std::collections::BTreeSet<&str> =
+        reg.commands.iter().map(|c| c.number.as_str()).collect();
+    for (i, cmd) in reg.commands.iter().enumerate() {
+        let expected_number = format!("C{:02}", i + 1);
+        assert_eq!(cmd.number, expected_number, "命令编号必须 C01-C37 连续");
+        assert_eq!(cmd.kind, format!("remote.{}", cmd.name), "命令 kind 必须为 remote.<name>");
+        assert!(!cmd.tauri_command.is_empty(), "命令 {} 缺 tauriCommand", cmd.kind);
+        assert!(matches!(cmd.surface.as_str(), "engine" | "gui"), "命令 {} surface 非法", cmd.kind);
+        assert!(!cmd.domain.is_empty(), "命令 {} 缺 domain", cmd.kind);
+        assert!(!cmd.idempotency_key.is_empty(), "命令 {} 缺 idempotencyKey", cmd.kind);
+        // outbox 语义锁定：出站队列化的必然是写命令（审批/写文件/设置/自动化）
+        if cmd.outbox {
+            assert!(cmd.write, "命令 {} outbox=true 但 write=false", cmd.kind);
+        }
+        assert!(reg.types.contains_key(&cmd.params_type), "命令 {} paramsType 未登记", cmd.kind);
+        assert!(reg.types.contains_key(&cmd.result_type), "命令 {} resultType 未登记", cmd.kind);
+        for code in &cmd.error_codes {
+            assert!(error_codes.contains(code.as_str()), "命令 {} 引用未登记错误码 {code}", cmd.kind);
+        }
+    }
+    // 白名单（M6 §4.7 B/C 面：registered=true ∩ surface=engine）必须成规模非空
+    let whitelist_count = reg
+        .commands
+        .iter()
+        .filter(|c| c.registered && c.surface == "engine")
+        .count();
+    assert!(whitelist_count >= 10, "命令白名单必须成规模非空：{whitelist_count}");
+    // remote.* 37 个 kind == Rust REMOTE_KINDS；result.* 37 个 kind == RESULT_KINDS
+    let remote_kinds: std::collections::BTreeSet<&str> =
+        reg.commands.iter().map(|c| c.kind.as_str()).collect();
+    let rust_remote: std::collections::BTreeSet<&str> =
+        REMOTE_KINDS.iter().copied().collect();
+    assert_eq!(remote_kinds, rust_remote, "注册表 remote.* kind 与 Rust REMOTE_KINDS 不一致");
+    let result_kinds: std::collections::BTreeSet<&str> = reg
+        .kinds
+        .iter()
+        .filter(|k| k.family == "result")
+        .map(|k| k.kind.as_str())
+        .collect();
+    let rust_result: std::collections::BTreeSet<&str> =
+        RESULT_KINDS.iter().copied().collect();
+    assert_eq!(result_kinds, rust_result, "注册表 result.* kind 与 Rust RESULT_KINDS 不一致");
+    // C 编号集合必须与命令表一一对应（防能力位引用悬空）
+    assert_eq!(command_numbers.len(), 37);
+}
+
+// ── 9.3 能力位全量：注册表 17 位 ↔ Rust ALL_CAPABILITIES wire 名 ──
+
+#[test]
+fn device_registry_capabilities_match_rust_all_capabilities() {
+    let reg = device_registry();
+    assert_eq!(reg.capabilities.len(), 17, "能力位必须为 17 位（M6 §11.2）");
+    let reg_names: Vec<String> = reg.capabilities.iter().map(|c| c.name.clone()).collect();
+    let rust_wire: Vec<String> = ALL_CAPABILITIES
+        .iter()
+        .map(|c| serde_json::to_value(c).unwrap().as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        reg_names, rust_wire,
+        "注册表能力位名（camelCase）与 Rust ALL_CAPABILITIES 序列化名不一致"
+    );
+    // 每个能力位必须可反序列化还原
+    for name in &reg_names {
+        let parsed: Capability = serde_json::from_value(Value::String(name.clone()))
+            .unwrap_or_else(|e| panic!("能力位 {name} 反序列化失败：{e}"));
+        assert_eq!(serde_json::to_value(parsed).unwrap(), Value::String(name.clone()));
+    }
+    // owner 域合法；C 编号引用必须命中命令表（通配符/kind 字面量允许）
+    let command_numbers: std::collections::BTreeSet<&str> =
+        reg.commands.iter().map(|c| c.number.as_str()).collect();
+    for cap in &reg.capabilities {
+        assert!(
+            matches!(cap.owner.as_str(), "desktop" | "mobile" | "both"),
+            "能力位 {} 的 owner 非法：{}",
+            cap.name,
+            cap.owner
+        );
+        for reference in &cap.commands {
+            if reference.len() == 3 && reference.starts_with('C') {
+                assert!(
+                    command_numbers.contains(reference.as_str()),
+                    "能力位 {} 引用了未登记命令 {reference}",
+                    cap.name
+                );
+            }
+        }
+    }
+}
+
+// ── 9.4 事件双面策略：41 条同名同序 + sync 白名单 + strategy 逐一锁定 ──
+
+#[test]
+fn device_registry_events_match_engine_and_sync_whitelist() {
+    let reg = device_registry();
+    let engine = registry();
+    assert_eq!(reg.events.len(), 41, "事件段必须为 41 条（41 变体冻结，P-3 裁决）");
+    let mut strategy_counts: std::collections::BTreeMap<&str, usize> =
+        std::collections::BTreeMap::new();
+    for (i, ev) in reg.events.iter().enumerate() {
+        assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
+        assert_eq!(
+            ev.wire,
+            AgentEvent::ALL_TYPE_NAMES[i],
+            "事件第 {} 条与 AgentEvent 声明顺序不一致",
+            i + 1
+        );
+        assert_eq!(
+            ev.wire,
+            engine.events[i].wire,
+            "设备注册表事件段与 engine-events.json 同名同序（D3 §7 透传基）"
+        );
+        assert!(matches!(ev.strategy.as_str(), "transparent" | "redacted" | "tuple"));
+        assert!(matches!(ev.realtime.backpressure.as_str(), "delta" | "soft" | "critical"));
+        assert!(matches!(ev.push_level.as_str(), "p0" | "p1" | "p2" | "none"));
+        // 41 变体全部可经实时面 events.push 下发（P-3 冻结，无 push=false 事件）
+        assert!(ev.realtime.push, "事件 {} 必须可实时推送（events.push）", ev.wire);
+        // sync 标志 ↔ 同步面白名单
+        assert_eq!(
+            ev.sync,
+            SYNC_ELIGIBLE_TYPES.contains(&ev.wire.as_str()),
+            "事件 {} 的 sync 标志与 SYNC_ELIGIBLE_TYPES 不一致",
+            ev.wire
+        );
+        // strategy ↔ Rust 静态判定（M6 §5.1 13/18/10 分组）
+        let sample = build_event_sample(&engine, &engine.events[i]);
+        let parsed: AgentEvent = serde_json::from_value(sample)
+            .unwrap_or_else(|e| panic!("事件 {} 按注册表样本反序列化失败：{e}", ev.wire));
+        let expected = match ev.strategy.as_str() {
+            "transparent" => EventRedactStrategy::Transparent,
+            "redacted" => EventRedactStrategy::Redacted,
+            "tuple" => EventRedactStrategy::Tuple,
+            other => panic!("事件 {} 注册表 strategy 非法：{other}", ev.wire),
+        };
+        assert_eq!(
+            event_cross_strategy(&parsed),
+            expected,
+            "事件 {} 的跨端裁剪策略与 Rust 判定不一致",
+            ev.wire
+        );
+        *strategy_counts.entry(ev.strategy.as_str()).or_insert(0) += 1;
+    }
+    assert_eq!(
+        strategy_counts.get("transparent").copied().unwrap_or(0),
+        13,
+        "透明透传必须为 13 类（M6 §5.1）"
+    );
+    assert_eq!(
+        strategy_counts.get("redacted").copied().unwrap_or(0),
+        18,
+        "摘要化必须为 18 类（M6 §5.1）"
+    );
+    assert_eq!(
+        strategy_counts.get("tuple").copied().unwrap_or(0),
+        10,
+        "元组下发必须为 10 类（M6 §5.1）"
+    );
+}
+
+// ── 9.5 消息体字段：29 条静态消息 ↔ Rust serde 双向锁定 ──
+
+#[test]
+fn device_registry_static_message_bodies_match_serde_wire() {
+    let reg = device_registry();
+    let mut checked = 0;
+    for msg in &reg.messages {
+        let Some(fields) = &msg.fields else {
+            continue; // remote/result 走 CommandRequest/CommandResult 信封（下方单独锁）
+        };
+        let mut obj = Map::new();
+        for f in fields.iter().filter(|f| f.required) {
+            obj.insert(
+                f.name.clone(),
+                device_sample_override(&msg.rust_variant, &f.name)
+                    .unwrap_or_else(|| device_sample_value(&reg, &f.ts_type, &msg.rust_variant)),
+            );
+        }
+        check_device_body_roundtrip(&msg.rust_variant, fields, Value::Object(obj));
+        checked += 1;
+    }
+    assert_eq!(checked, 29, "静态消息（内联 fields）必须为 29 条（103 - 37 - 37）");
+
+    // 命令/响应信封单独锁定（remote.* / result.* 共 74 条共用两个 body 类型）
+    let request_fields = match reg.types.get("CommandRequest") {
+        Some(TypeSpec::Struct { fields }) => fields,
+        _ => panic!("types 表必须登记 CommandRequest"),
+    };
+    let result_fields = match reg.types.get("CommandResult") {
+        Some(TypeSpec::Struct { fields }) => fields,
+        _ => panic!("types 表必须登记 CommandResult"),
+    };
+    let request_sample = device_sample_value(&reg, "CommandRequest", "CommandRequest");
+    check_device_body_roundtrip("CommandRequest", request_fields, request_sample);
+    let result_sample = device_sample_value(&reg, "CommandResult", "CommandResult");
+    check_device_body_roundtrip("CommandResult", result_fields, result_sample);
+}
+
+// ── 9.6 协议常量：注册表 constants 段 ↔ Rust version 常量 ──
+
+#[test]
+fn device_registry_constants_match_rust_version_consts() {
+    let reg = device_registry();
+    let consts = &reg.constants;
+    let expect_u64 = |key: &str, expected: u64| {
+        let v = consts.get(key).unwrap_or_else(|| panic!("注册表缺常量 {key}"));
+        let actual = v.as_u64().unwrap_or_else(|| panic!("常量 {key} 必须为整数"));
+        assert_eq!(actual, expected, "常量 {key} 与 Rust version 常量不一致");
+    };
+    expect_u64("PROTOCOL_VERSION", PROTOCOL_VERSION as u64);
+    expect_u64("MIN_PROTOCOL_VERSION", MIN_PROTOCOL_VERSION as u64);
+    expect_u64("MAX_FRAME_BYTES", MAX_FRAME_BYTES as u64);
+    expect_u64("EVENT_WINDOW", EVENT_WINDOW as u64);
+    expect_u64("MAX_SUBSCRIPTIONS", MAX_SUBSCRIPTIONS as u64);
+    expect_u64("MAX_STREAMS", MAX_STREAMS as u64);
+}
