@@ -47,7 +47,8 @@ mod host_openers;
 mod host_paths;
 mod markdown_commands;
 // 多端互通模块族（R1-06：TLS + 自签证书 + 指纹固定，multi_device/tls.rs；
-// R1-07：配对命令面，multi_device_commands.rs）
+// R1-07：配对命令面，multi_device_commands.rs；R1-09：单实例锁，
+// single_instance.rs——G-2 桌面多实例端口竞争）
 mod multi_device;
 mod multi_device_commands;
 mod perf;
@@ -58,6 +59,7 @@ mod resource;
 
 mod session_commands;
 mod server;
+mod single_instance;
 mod status_diagnostics;
 // T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
 // 与 core_run_commands / engine 同目标，互引 crate:: 内部路径）
@@ -225,6 +227,8 @@ command_registry![
     ("browser_start_frames", browser_commands::browser_start_frames),
     ("browser_stop_frames", browser_commands::browser_stop_frames),
     ("browser_frame_status", browser_commands::browser_frame_status),
+    ("browser_export_storage_state", browser_commands::browser_export_storage_state),
+    ("browser_import_storage_state", browser_commands::browser_import_storage_state),
 ];
 
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info
@@ -297,7 +301,13 @@ fn main() {
     let setup_level = level.clone();
     let setup_app_dir = app_dir.clone();
 
-    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    // G-2 单实例锁（R1-09）：官方插件必须**最先**注册——插件 setup 在
+    // build() 阶段执行，第二实例在此即 cleanup + exit(0)，不会走到 run()
+    // （不初始化窗口/本地服务 8765-8775/数据库），端口竞争由此消除；
+    // 首实例在插件回调里执行窗口前置提示（single_instance.rs）
+    let builder = tauri::Builder::default()
+        .plugin(single_instance::register())
+        .plugin(tauri_plugin_dialog::init());
 
     // setup 序列 ⑩：MCP 调试插件（默认关闭，CRISH_MCP_SOCKET=1 开启；
     // release 由插件自身拒绝兜底，注册点本身亦被 cfg 隔离）。

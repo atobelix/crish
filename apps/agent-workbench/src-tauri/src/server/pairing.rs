@@ -9,7 +9,10 @@
 //! - 撤销全链：revoke 令牌 → pairing.json 落盘 → WS 踢出
 //!   （[ws::WsRegistry::kick_by_token_hash]）→ REST 鉴权自然 401；
 //! - 二维码 / 防火墙提示：qr_data 编码（默认路由 IP + 端口 + 码）、
-//!   firewall_hint 文本（Windows 放行引导）。
+//!   firewall_hint 文本（Windows 放行引导）；
+//! - 网络环境检测（G-4）：本机 IP 集合 + 网络配置文件类别
+//!   （专用/公用/未知，基于 IP 网段的启发式判定，诚实标注粒度），
+//!   UI 侧据此引导「公用网络切专用」「AP 隔离时手动输 IP」。
 
 use std::sync::{Arc, Mutex};
 
@@ -25,6 +28,21 @@ use conex_types::device::DeviceErrorCode;
 /// main.rs 装配真实重绑；测试注入记录器验证钩子触发。
 pub type RebindHook = Arc<dyn Fn(bool /* lan */) + Send + Sync>;
 
+/// 网络配置文件类别（G-4 检测结果，UI 据此渲染引导文案）。
+/// 诚实标注粒度：真实 Windows 网络配置文件（专用/公用）无法从纯 IP 判定，
+/// 本枚举为「推荐 IP 网段」启发式——私有网段大概率专用网络、公网网段
+/// 大概率公用网络；无网络或无法判定时为 Unknown。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NetworkProfile {
+    /// 推荐 IP 位于私有网段（RFC1918 / IPv6 ULA）：大概率专用网络
+    Private,
+    /// 推荐 IP 位于公网网段：大概率公用网络（Windows 默认拦截入站）
+    Public,
+    /// 无网络或无法判定（如默认路由探测失败）
+    Unknown,
+}
+
 /// 配对启动结果（命令面与 UI 消费）
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PairStartResult {
@@ -34,6 +52,15 @@ pub struct PairStartResult {
     pub qr: String,
     /// Windows 防火墙放行提示（非 Windows 返回空串）
     pub firewall_hint: String,
+    /// 推荐本机 IP（与二维码内嵌同源；供 AP 隔离时手机手动输入首选）
+    #[serde(rename = "recommendedIp")]
+    pub recommended_ip: String,
+    /// 本机全部可达 IP（多网卡/VPN 场景备选；检测失败时仅含推荐 IP）
+    #[serde(rename = "localIps")]
+    pub local_ips: Vec<String>,
+    /// 网络配置文件类别（专用/公用/未知；启发式判定，见 [NetworkProfile]）
+    #[serde(rename = "networkProfile")]
+    pub network_profile: NetworkProfile,
 }
 
 /// 配对状态快照（状态命令消费）
@@ -130,13 +157,18 @@ impl PairingCoordinator {
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = true;
         let port = *self.port.lock().unwrap_or_else(|e| e.into_inner());
-        let host = default_route_ip();
+        let host = recommended_ip();
+        let local_ips = local_ip_list();
+        let network_profile = network_profile_for(&host);
         drop(pair);
         self.fire_rebind(true);
         Ok(PairStartResult {
             qr: format!("crish-pair://{}@{host}:{port}", code.display()),
             code: code.display(),
             firewall_hint: firewall_hint(),
+            recommended_ip: host,
+            local_ips,
+            network_profile,
         })
     }
 
@@ -279,7 +311,7 @@ impl PairingCoordinator {
     }
 }
 
-// ── 网络数据（无新依赖）────────────────────────────────────────────
+// ── 网络数据（G-4 检测：无新 crate 依赖）──────────────────────────────
 
 /// 默认路由 IP（UDP connect 技巧：零依赖、非 Windows 专用）。
 /// 失败（无网络/多网卡环境）返回 "0.0.0.0"——UI 侧允许手动输入。
@@ -298,12 +330,197 @@ fn default_route_ip() -> String {
     }
 }
 
+/// 推荐 IP：默认路由 IP 优先（与二维码内嵌同源，保证手动输入与扫码一致）；
+/// 默认路由探测失败时从本机 IP 集合挑选（私有网段 IPv4 优先）。
+fn recommended_ip() -> String {
+    let host = default_route_ip();
+    if host != "0.0.0.0" {
+        return host;
+    }
+    pick_recommended_ip(&local_ip_list()).unwrap_or_else(|| "0.0.0.0".to_string())
+}
+
+/// 本机可达 IP 集合：Windows 枚举网卡单播地址 ∪ 默认路由 IP（保证在列）。
+/// 枚举失败或非 Windows 平台时仅含默认路由 IP（或 "0.0.0.0" 占位）。
+fn local_ip_list() -> Vec<String> {
+    let mut ips: Vec<String> = Vec::new();
+    #[cfg(windows)]
+    {
+        ips.extend(
+            windows_ip_enum::local_unicast_ips()
+                .into_iter()
+                .filter(is_usable_lan_ip)
+                .map(|ip| ip.to_string()),
+        );
+    }
+    let host = default_route_ip();
+    if host != "0.0.0.0" && !ips.iter().any(|s| s == &host) {
+        ips.insert(0, host.clone());
+    }
+    if ips.is_empty() {
+        ips.push(host);
+    }
+    ips
+}
+
+/// 挑选推荐 IP：私有网段 IPv4 优先 → 任意非回环 IPv4 → 任意可用地址。
+/// 供默认路由探测失败时兜底；返回 None 表示无可选地址。
+fn pick_recommended_ip(ips: &[String]) -> Option<String> {
+    let parse = |s: &str| s.parse::<std::net::IpAddr>().ok();
+    for s in ips {
+        if let Some(ip) = parse(s) {
+            if ip.is_ipv4() && is_private_ip(&ip) && !ip.is_loopback() {
+                return Some(s.clone());
+            }
+        }
+    }
+    for s in ips {
+        if let Some(ip) = parse(s) {
+            if ip.is_ipv4() && !ip.is_loopback() {
+                return Some(s.clone());
+            }
+        }
+    }
+    for s in ips {
+        if let Some(ip) = parse(s) {
+            if is_usable_lan_ip(&ip) {
+                return Some(s.clone());
+            }
+        }
+    }
+    None
+}
+
+/// 判定 IP 是否属于私有网段：RFC1918（10/8、172.16/12、192.168/16）+
+/// IPv6 ULA（fc00::/7）。家庭/办公局域网基本都在私有网段。
+fn is_private_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            let o = v4.octets();
+            o[0] == 10
+                || (o[0] == 172 && (16..=31).contains(&o[1]))
+                || (o[0] == 192 && o[1] == 168)
+        }
+        std::net::IpAddr::V6(v6) => (v6.segments()[0] & 0xfe00) == 0xfc00,
+    }
+}
+
+/// 判定 IP 是否可被手机直连：排除回环/未指定/链路本地/组播。
+/// 服务监听为 IPv4（0.0.0.0），IPv6 地址不可直连，不在集合内。
+fn is_usable_lan_ip(ip: &std::net::IpAddr) -> bool {
+    ip.is_ipv4() && !ip.is_loopback() && !ip.is_unspecified() && !ip.is_link_local()
+        && !ip.is_multicast()
+}
+
+/// 网络配置文件类别（启发式）：私有网段 → 专用；公网网段 → 公用；
+/// 不可用地址/解析失败 → 未知。
+fn network_profile_for(ip: &str) -> NetworkProfile {
+    match ip.parse::<std::net::IpAddr>() {
+        Ok(parsed) if !is_usable_lan_ip(&parsed) => NetworkProfile::Unknown,
+        Ok(parsed) if is_private_ip(&parsed) => NetworkProfile::Private,
+        Ok(_) => NetworkProfile::Public,
+        Err(_) => NetworkProfile::Unknown,
+    }
+}
+
 /// Windows 防火墙放行提示（非 Windows 返回空）
 fn firewall_hint() -> String {
     if cfg!(windows) {
         "请在 Windows 防火墙弹窗中允许 crish（专用网络），否则手机无法直连局域网服务。".to_string()
     } else {
         String::new()
+    }
+}
+
+/// Windows 网卡单播地址枚举（GetAdaptersAddresses，经 windows-sys 直调；
+/// 无新增 crate，仅追加 feature）。失败返回空 Vec——调用方回退默认路由 IP。
+/// # Safety
+/// 该模块仅在配对开启等低频路径调用，错误路径全部安全降级。
+#[cfg(windows)]
+mod windows_ip_enum {
+    #![allow(unsafe_code)] // 受控 FFI：仅指针遍历 + 明确的结构体读取，已评审
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    use windows_sys::Win32::Networking::WinSock::{
+        AF_INET, SOCKADDR_IN, SOCKADDR_IN6, SOCKET_ADDRESS,
+    };
+
+    /// 固定大小对齐缓冲（IP_ADAPTER_ADDRESSES_LH 要求 8 字节对齐读取）
+    #[repr(C, align(8))]
+    struct Align8Buf([u8; 65536]);
+
+    /// 遍历适配器单播地址链表，仅取 IPv4（服务监听 0.0.0.0，v6 不可直连）。
+    pub fn local_unicast_ips() -> Vec<IpAddr> {
+        use windows_sys::Win32::NetworkManagement::IpHelper::{
+            GetAdaptersAddresses, IP_ADAPTER_ADDRESSES_LH,
+        };
+        let mut out = Vec::new();
+        let mut buf = Box::new(Align8Buf([0u8; 65536]));
+        let mut size = std::mem::size_of::<Align8Buf>() as u32;
+        let first = buf.0.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH;
+        let rc = unsafe { GetAdaptersAddresses(0, 0, std::ptr::null(), first, &mut size) };
+        if rc == 0 {
+            unsafe { collect_ips(first, &mut out) };
+        }
+        // 缓冲区不足（ERROR_BUFFER_OVERFLOW）：按 API 报告 size 动态扩容重试一次
+        if rc == 111 && size > std::mem::size_of::<Align8Buf>() as u32 {
+            let layout =
+                std::alloc::Layout::from_size_align(size as usize, 8).expect("布局参数合法");
+            let raw = unsafe { std::alloc::alloc_zeroed(layout) };
+            let first = raw as *mut IP_ADAPTER_ADDRESSES_LH;
+            let rc2 = unsafe { GetAdaptersAddresses(0, 0, std::ptr::null(), first, &mut size) };
+            if rc2 == 0 {
+                unsafe { collect_ips(first, &mut out) };
+            }
+            unsafe { std::alloc::dealloc(raw, layout) };
+        }
+        out
+    }
+
+    /// 遍历单播地址链表收集 IPv4 地址（去重）。
+    /// # Safety
+    /// first 必须指向 GetAdaptersAddresses 成功返回的合法链表头。
+    unsafe fn collect_ips(first: *mut IP_ADAPTER_ADDRESSES_LH, out: &mut Vec<IpAddr>) {
+        let mut node = first;
+        while !node.is_null() {
+            let mut unicast = (*node).FirstUnicastAddress;
+            while !unicast.is_null() {
+                if let Some(ip) = sockaddr_to_ipv4(&(*unicast).Address) {
+                    if !out.contains(&ip) {
+                        out.push(ip);
+                    }
+                }
+                unicast = (*unicast).Next;
+            }
+            node = (*node).Next;
+        }
+    }
+
+    /// 从 SOCKET_ADDRESS 读取 IPv4；非 AF_INET（v6 等）返回 None。
+    /// # Safety
+    /// lpSockaddr 由系统填充且长度字段约束为完整 sockaddr，类型按 sin_family 判定。
+    unsafe fn sockaddr_to_ipv4(sa: &SOCKET_ADDRESS) -> Option<IpAddr> {
+        if sa.lpSockaddr.is_null() || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN>() as i32 {
+            return None;
+        }
+        if *(sa.lpSockaddr as *const u16) != AF_INET {
+            return None;
+        }
+        let sin = &*(sa.lpSockaddr as *const SOCKADDR_IN);
+        // sin_addr 以网络字节序存储：from_be 还原内存字节序
+        Some(IpAddr::V4(Ipv4Addr::from(u32::from_be(sin.sin_addr.S_un.S_addr))))
+    }
+
+    /// 备用：SOCKADDR_IN6 读取（保留给未来 v6 监听支持；当前未用）
+    #[allow(dead_code)]
+    unsafe fn sockaddr_to_ipv6(sa: &SOCKET_ADDRESS) -> Option<IpAddr> {
+        if sa.lpSockaddr.is_null() || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN6>() as i32 {
+            return None;
+        }
+        if *(sa.lpSockaddr as *const u16) == AF_INET {
+            return None;
+        }
+        let sin6 = &*(sa.lpSockaddr as *const SOCKADDR_IN6);
+        Some(IpAddr::V6(Ipv6Addr::from(sin6.sin6_addr.u.Byte)))
     }
 }
 
@@ -360,12 +577,87 @@ mod tests {
         assert!(result.qr.contains(":8765"));
         assert!(!result.firewall_hint.is_empty() || !cfg!(windows));
 
+        // G-4 网络检测字段：推荐 IP 与二维码内嵌同源；集合非空；类别枚举合法
+        assert!(result.qr.contains(&result.recommended_ip), "二维码内嵌推荐 IP");
+        assert!(!result.local_ips.is_empty(), "本机 IP 集合不应为空");
+        assert!(result.local_ips.contains(&result.recommended_ip), "推荐 IP 应在集合内");
+        assert!(
+            matches!(
+                result.network_profile,
+                NetworkProfile::Private | NetworkProfile::Public | NetworkProfile::Unknown
+            ),
+            "网络类别必须为三态之一"
+        );
+
         assert!(coordinator.pairing_enabled());
         let status = coordinator.status(now);
         assert_eq!(status.state, "waiting-input");
         assert_eq!(status.bind_mode, "lan");
         assert!(status.code_remaining_ms.is_some());
         assert_eq!(*rebinds.lock().unwrap_or_else(|e| e.into_inner()), vec![true]);
+    }
+
+    #[test]
+    fn classify_private_vs_public_ip() {
+        use std::net::IpAddr;
+        let private_ips = [
+            "10.0.0.1", "10.255.255.255", "172.16.0.1", "172.31.255.255", "192.168.1.5",
+            "fc00::1", "fd12:3456::1",
+        ];
+        let public_ips = [
+            "8.8.8.8", "100.64.0.1", "172.15.255.255", "172.32.0.1", "192.169.0.1",
+            "2001:4860:4860::8888", "169.254.1.1", "127.0.0.1",
+        ];
+        for s in private_ips {
+            let ip: IpAddr = s.parse().expect("测试 IP 合法");
+            assert!(is_private_ip(&ip), "{s} 应为私有网段");
+        }
+        for s in public_ips {
+            let ip: IpAddr = s.parse().expect("测试 IP 合法");
+            assert!(!is_private_ip(&ip), "{s} 不应为私有网段");
+        }
+    }
+
+    #[test]
+    fn network_profile_classification() {
+        assert_eq!(network_profile_for("192.168.1.5"), NetworkProfile::Private);
+        assert_eq!(network_profile_for("10.0.0.8"), NetworkProfile::Private);
+        assert_eq!(network_profile_for("172.20.3.3"), NetworkProfile::Private);
+        assert_eq!(network_profile_for("8.8.8.8"), NetworkProfile::Public);
+        assert_eq!(network_profile_for("100.64.0.1"), NetworkProfile::Public);
+        // 不可用地址（回环/未指定/链路本地）与解析失败 → 未知
+        assert_eq!(network_profile_for("127.0.0.1"), NetworkProfile::Unknown);
+        assert_eq!(network_profile_for("169.254.1.1"), NetworkProfile::Unknown);
+        assert_eq!(network_profile_for("0.0.0.0"), NetworkProfile::Unknown);
+        assert_eq!(network_profile_for("not-an-ip"), NetworkProfile::Unknown);
+    }
+
+    #[test]
+    fn pick_recommended_ip_prefers_private_ipv4() {
+        let list = vec![
+            "127.0.0.1".to_string(),
+            "169.254.1.1".to_string(),
+            "8.8.8.8".to_string(),
+            "192.168.1.5".to_string(),
+        ];
+        assert_eq!(pick_recommended_ip(&list).as_deref(), Some("192.168.1.5"));
+
+        // 无私有 IP 时回退任意非回环 IPv4
+        let only_public = vec!["8.8.8.8".to_string(), "127.0.0.1".to_string()];
+        assert_eq!(pick_recommended_ip(&only_public).as_deref(), Some("8.8.8.8"));
+
+        // 全部不可用 → None
+        let none = vec!["127.0.0.1".to_string(), "0.0.0.0".to_string()];
+        assert_eq!(pick_recommended_ip(&none), None);
+        assert_eq!(pick_recommended_ip(&[]), None);
+    }
+
+    #[test]
+    fn local_ip_list_contains_recommended() {
+        let list = local_ip_list();
+        assert!(!list.is_empty(), "IP 集合不应为空");
+        let host = recommended_ip();
+        assert!(list.contains(&host), "推荐 IP {host} 应在集合内");
     }
 
     #[test]

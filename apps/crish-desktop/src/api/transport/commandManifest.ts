@@ -177,6 +177,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('browser_start_frames', 'browser', 'engine'),
     entry('browser_stop_frames', 'browser', 'engine'),
     entry('browser_frame_status', 'browser', 'engine'),
+entry('browser_export_storage_state', 'browser', 'engine'),
+entry('browser_import_storage_state', 'browser', 'engine'),
     // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
     // PE-07 T07.4：config_profile_apply / config_secret_reveal 已接线（registered=true）
     entry('append_session_messages', 'session', 'engine', false),

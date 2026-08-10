@@ -38,8 +38,36 @@
 //! ## 会话归属（遗留登记 27 §6）
 //! 27 §2.1 槽形含 `owner` 字段（多会话迁移 P1）；MVP 无消费方，未建字段，
 //! owner 切换策略登记 P1（避免死代码占位）。
+//!
+//! ## MCP attach 消费接线（34 §5.2 E-1/E-2/E-4，R-12）
+//! 外部浏览器类 MCP（chrome-devtools-mcp 族）经 `--browserUrl` 附加受管
+//! 实例 CDP 端点的 **browser 域消费面**（实现细节见 `mcp_attach` 模块头）：
+//! - **E-1 端点暴露守卫**：本槽装配 [BrowserSlot::with_mcp_attach_allowed]
+//!   （默认 false = R-12 零暴露）；[BrowserSlot::mcp_attach_endpoint] 守卫——
+//!   开关关闭时结构化拒绝 `tool.browser.capability_disabled`（任何进程状态下
+//!   端点信息不对外），开启且受管实例就绪时返回注入形态
+//!   `http://127.0.0.1:<port>`（McpServerConfig args `--browserUrl`）；
+//! - **E-2 spawn 分派**：Windows 下外部 MCP 必须经 `cmd /c npx` 分派
+//!   （34 §4.2 实测：直接 `spawn("npx")` → NotFound），配置面分派见
+//!   `mcp_attach::mcp_attach_server_config`（桥自身不改动）；
+//! - **E-4 工具注册**：既有桥 `register_plugin_server` 零改动承接
+//!   browserUrl 型 server（参数注入面已确认，验证方法见 `mcp_attach` 模块头）。
+//! - **接线点登记（engine.rs 并行域，本任务不触碰）**：会话装配读
+//!   `BrowserToolsConfig.mcp_attach_allowed` → `with_mcp_attach_allowed`
+//!   注入（engine.rs 装配 `BrowserSlot::new()` 处）；MCP spawn 前
+//!   `mcp_attach_endpoint` 守卫取端点 → `mcp_attach::mcp_attach_server_config`
+//!   构建配置 → `register_plugin_mcp_server`（engine.rs，E-4 承载面）。
+//!
+//! ## storage_state 命令发送面（J1b，维度 16 §5 CDP 实读/注入接线）
+//! [BrowserSlot::storage_ops] 返回 [StorageStateOps]（`Storage.getCookies`
+//! 实读 / `Storage.setCookies` 注入的 CDP 发送面抽象）：会话连接成功时
+//! 装配 [SessionBackedStorage]（经统一发送层 `send_browser`，browser 级
+//! 命令）；停止/断开/重连换回 [UnwiredStorageOps]（命令返回 not_ready
+//! 结构化错误，不触发惰性启动——storage_state 是辅助通道，须先显式
+//! `browser_start`）；测试经 [BrowserSlot::inject_storage_ops] 注入 mock。
 
 pub(crate) mod frame_stream;
+pub(crate) mod mcp_attach;
 pub(crate) mod panel_input;
 
 use crate::core_event_bridge::Emitter;
@@ -49,6 +77,9 @@ use conex_browser::action::gate::{DomainGate, GateDenial};
 use conex_browser::action::{ActionRequest, ActionSuccess, ElementMeta, WaitCondition, WaitOptions};
 use conex_browser::browser::profile::data_root;
 use conex_browser::browser::state::BrowserState;
+use conex_browser::cdp::domains::{
+    Cookie as CdpCookie, SetCookieParam, StorageGetCookiesResult, StorageSetCookiesParams,
+};
 use conex_browser::cdp::sender::CancellationToken;
 use conex_browser::cdp::transport::ExpectedBrowser;
 use conex_browser::snapshot::budget::BudgetConfig;
@@ -60,6 +91,7 @@ use conex_browser_tools::gate::MvpDomainGate;
 use conex_browser_tools::policy::AllowAllPolicy;
 use conex_browser_tools::session::{ConsoleEntry, NetworkEntry, RealSession, SessionOps, SnapshotView};
 use frame_stream::{FrameStreamController, FrameStreamState};
+use mcp_attach::McpAttachEndpoint;
 use panel_input::{BrowserInputEvent, PanelInputRouter};
 use serde::Serialize;
 use session_loop::AbortSignal;
@@ -171,6 +203,16 @@ pub(crate) struct BrowserSlot {
     input: Arc<PanelInputRouter>,
     /// 底层会话（帧订阅/输入注入版本推进的原始句柄；connect 时登记）。
     raw_session: Mutex<Option<Arc<BrowserSession>>>,
+    /// attach 型外部浏览器类 MCP 会话级开关（R-12，34 §5.2 E-1 消费面；
+    /// 默认 false = 端点信息零暴露；引擎侧会话装配读
+    /// `BrowserToolsConfig.mcp_attach_allowed` 后经
+    /// [BrowserSlot::with_mcp_attach_allowed] 注入，接线点见模块头登记）。
+    mcp_attach_allowed: bool,
+    /// storage_state 命令的 CDP 发送面（J1b，维度 16 §5）：会话连接成功时
+    /// 装配 [SessionBackedStorage]，停止/断开/重连换回 [UnwiredStorageOps]
+    /// （命令返回 not_ready，不触发惰性启动）；测试经
+    /// [BrowserSlot::inject_storage_ops] 注入 mock。
+    storage_ops: Mutex<Arc<dyn StorageStateOps>>,
 }
 
 impl BrowserSlot {
@@ -228,6 +270,11 @@ impl BrowserSlot {
             frames: Arc::new(FrameStreamController::new()),
             input: Arc::new(PanelInputRouter::new()),
             raw_session: Mutex::new(None),
+            // R-12 安全默认：attach 开关默认关闭（未显式授权不向外部 MCP
+            // 暴露受管端点，34 §5.1）
+            mcp_attach_allowed: false,
+            // J1b：会话连接前恒为未连接面（storage 命令 not_ready）
+            storage_ops: Mutex::new(Arc::new(UnwiredStorageOps)),
         }
     }
 
@@ -542,12 +589,55 @@ impl BrowserSlot {
         Arc::clone(&self.input)
     }
 
+    /// storage_state 命令发送面（J1b 访问器）：会话连接中 = 会话委托
+    /// （Storage 域 browser 级实读/注入）；未连接/停止/恢复期 = 未连接面
+    /// （命令映射 not_ready 结构化错误）。
+    pub(crate) fn storage_ops(&self) -> Arc<dyn StorageStateOps> {
+        Arc::clone(&self.storage_ops.lock().unwrap_or_else(|p| p.into_inner()))
+    }
+
+    /// 注入 storage 发送面（J1b 测试替身注入点；生产路径不调用——连接
+    /// 生命周期自动装配/换回，见 [Self::connect] 与 [Self::drop_raw_session]）。
+    #[cfg(test)]
+    pub(crate) fn inject_storage_ops(&self, ops: Arc<dyn StorageStateOps>) {
+        *self.storage_ops.lock().unwrap_or_else(|p| p.into_inner()) = ops;
+    }
+
     /// 底层会话同步取用（帧订阅/输入管线装配的原始句柄）。
     fn raw_session_sync(&self) -> Option<Arc<BrowserSession>> {
         self.raw_session
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .clone()
+    }
+
+    /// 注入 attach 会话级开关（E-1 消费面：`BrowserToolsConfig.mcp_attach_allowed`
+    /// 由引擎侧会话装配读取后经本方法装配；接线点见模块头登记——engine.rs
+    /// 装配 [BrowserSlot::new] 处为并行域 TODO，接线前保持默认 false）。
+    #[allow(dead_code)] // E-1 接线登记：engine.rs 会话装配消费（34 §5.2 E-1），接线后移除
+    pub(crate) fn with_mcp_attach_allowed(mut self, allowed: bool) -> Self {
+        self.mcp_attach_allowed = allowed;
+        self
+    }
+
+    /// 端点暴露守卫（E-1 消费面，R-12）：受管实例启动后取 attach 端点注入
+    /// 形态（`http://127.0.0.1:<port>`，34 §5.2 E-1），供引擎侧 MCP server
+    /// 启动配置注入（`McpServerConfig.args` 的 `--browserUrl`）。
+    ///
+    /// 语义（详见 [mcp_attach::attach_exposure_decision]）：
+    /// - 开关关闭（默认）→ `tool.browser.capability_disabled`（端点信息
+    ///   零暴露，任何进程状态下都不返回）；
+    /// - 开关开启但浏览器未就绪（未启动/恢复期/降级槽）→
+    ///   `tool.browser.not_ready`；
+    /// - 开关开启且就绪 → [McpAttachEndpoint]（browserUrl + ws 串）。
+    ///
+    /// 引擎侧接线（TODO E-1，engine.rs 并行域）：`register_plugin_mcp_server`
+    /// spawn 前先经本守卫取端点，再 `mcp_attach::mcp_attach_server_config`
+    /// 构建配置注入 `--browserUrl`（E-4 桥零改动，见 mcp_attach 模块头）。
+    #[allow(dead_code)] // E-1 接线登记：engine.rs 会话装配消费（34 §5.2 E-1），接线后移除
+    pub(crate) fn mcp_attach_endpoint(&self) -> Result<McpAttachEndpoint, ToolError> {
+        let endpoint = self.manager.as_ref().and_then(|m| m.endpoint());
+        mcp_attach::attach_exposure_decision(self.mcp_attach_allowed, endpoint.as_ref())
     }
 
     /// 输入事件转发入口（browser_input 命令消费；no-wait 语义——仅路由/合并，
@@ -654,6 +744,9 @@ impl BrowserSlot {
         *self.connected_endpoint.lock().unwrap_or_else(|p| p.into_inner()) =
             Some(endpoint.url());
         *self.raw_session.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&session));
+        // J1b：storage_state 命令发送面随会话装配（Storage 域 browser 级命令）
+        *self.storage_ops.lock().unwrap_or_else(|p| p.into_inner()) =
+            Arc::new(SessionBackedStorage::new(Arc::clone(&session)));
         // P1-B1：装配输入注入管线（P1-A InputPipeline；随连接生命周期——
         // 版本推进 R-1/U-1 与活动钩子由管线内部承担）
         let pipeline = conex_browser::input::InputPipeline::new(Arc::clone(&session));
@@ -676,6 +769,9 @@ impl BrowserSlot {
     /// 转发任务随 sink 关闭退出）+ 清除输入管线（旧管线 Drop 终止消费任务）。
     fn drop_raw_session(&self) {
         *self.raw_session.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        // J1b：会话失效 → storage 发送面换回未连接（陈旧会话不得滞留）
+        *self.storage_ops.lock().unwrap_or_else(|p| p.into_inner()) =
+            Arc::new(UnwiredStorageOps);
         self.frames.release_session();
         self.input.clear_pipeline();
     }
@@ -775,6 +871,77 @@ impl<R: tauri::Runtime> Emitter for TauriStateEmitter<R> {
 /// 不在引擎侧重复实现；可见性扩展见 conex-browser-tools session.rs）。
 pub(crate) struct LazySessionOps {
     slot: Arc<BrowserSlot>,
+}
+
+// ---------------------------------------------------------------------------
+// storage_state CDP 发送面（J1b，维度 16 §5：Storage.getCookies 实读 /
+// Storage.setCookies 注入）
+// ---------------------------------------------------------------------------
+
+/// storage_state 命令的 CDP 发送面（J1b 抽象；测试注入 mock，生产经
+/// [SessionBackedStorage] 委托底层会话）。命令面见
+/// [crate::browser_commands]（browser_export_storage_state /
+/// browser_import_storage_state）。
+#[async_trait]
+pub(crate) trait StorageStateOps: Send + Sync {
+    /// 实读默认浏览器上下文全量 cookie（browser 级 `Storage.getCookies`，
+    /// 维度 16 §5.2 导出取数面）。Err = 会话不可用（命令映射
+    /// `tool.browser.not_ready`）。
+    async fn get_all_cookies(&self) -> Result<Vec<CdpCookie>, String>;
+    /// 批量注入 cookie（browser 级 `Storage.setCookies`，维度 16 §5.3
+    /// 注入面；`to_cdp_params` 类型化参数已做会话 cookie 归一化/幂等去重）。
+    async fn set_cookies(&self, cookies: Vec<SetCookieParam>) -> Result<(), String>;
+}
+
+/// 未连接实现（会话槽为空 / 降级槽）：storage 命令返回 not_ready 语义错误。
+/// **不触发惰性启动**——storage_state 是辅助通道（维度 16 §0.1），用户须
+/// 先经面板 `browser_start` 显式启动后才可导出/导入登录态。
+struct UnwiredStorageOps;
+
+#[async_trait]
+impl StorageStateOps for UnwiredStorageOps {
+    async fn get_all_cookies(&self) -> Result<Vec<CdpCookie>, String> {
+        Err("浏览器未连接（请先 browser_start 后再导出/导入登录态）".to_string())
+    }
+    async fn set_cookies(&self, _cookies: Vec<SetCookieParam>) -> Result<(), String> {
+        Err("浏览器未连接（请先 browser_start 后再导出/导入登录态）".to_string())
+    }
+}
+
+/// 会话委托实现（[BrowserSlot::connect] 成功时装配）：经统一发送层
+/// `send_browser`（browser 级命令，无 session 依赖）调 Storage 域——
+/// 不需要活动标签，与维度 16 §4.1 回读校验的 CDP 实读同口径。
+struct SessionBackedStorage {
+    session: Arc<BrowserSession>,
+}
+
+impl SessionBackedStorage {
+    fn new(session: Arc<BrowserSession>) -> Self {
+        SessionBackedStorage { session }
+    }
+}
+
+#[async_trait]
+impl StorageStateOps for SessionBackedStorage {
+    async fn get_all_cookies(&self) -> Result<Vec<CdpCookie>, String> {
+        let result: StorageGetCookiesResult = self
+            .session
+            .send_browser("Storage.getCookies", serde_json::json!({}))
+            .await
+            .map_err(|e| format!("Storage.getCookies 实读失败：{e}"))?;
+        Ok(result.cookies)
+    }
+    async fn set_cookies(&self, cookies: Vec<SetCookieParam>) -> Result<(), String> {
+        let params = StorageSetCookiesParams {
+            cookies,
+            browser_context_id: None,
+        };
+        self.session
+            .send_browser::<serde_json::Value>("Storage.setCookies", params)
+            .await
+            .map_err(|e| format!("Storage.setCookies 注入失败：{e}"))?;
+        Ok(())
+    }
 }
 
 impl LazySessionOps {
@@ -1294,5 +1461,85 @@ mod tests {
         slot.stop(false).await.expect("未启动停止幂等收敛");
         assert!(slot.raw_session_sync().is_none(), "停止后无底层会话");
         assert!(!slot.input().pipeline_wired(), "停止后管线清除");
+    }
+
+    /// E-1 端点暴露守卫（槽级，R-12 安全默认）：默认槽（attach 开关关闭）
+    /// 端点**零暴露**——无论 manager 注入与否，`mcp_attach_endpoint` 一律
+    /// 结构化拒绝 `tool.browser.capability_disabled`（判定序：开关先行，
+    /// 不触碰端点状态；未显式授权不向外部 MCP 暴露受管端点，34 §5.2 E-1）。
+    #[tokio::test]
+    async fn mcp_attach_guard_default_off_zero_exposure() {
+        use conex_browser_tools::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
+        // 注入 manager 的槽：即便进程存在，开关关闭仍拒绝（零暴露）
+        let manager = Arc::new(BrowserManager::new(
+            std::env::temp_dir().join("browser-slot-mcp-attach-off-test"),
+        ));
+        let slot = Arc::new(BrowserSlot::from_parts(
+            Some(manager),
+            LaunchConfig::default(),
+        ));
+        let err = slot.mcp_attach_endpoint().unwrap_err();
+        assert_eq!(err.code(), TOOL_BROWSER_CAPABILITY_DISABLED);
+        // 降级槽（manager=None）：开关关闭同样拒绝（开关先行，与降级无关）
+        let degraded = Arc::new(BrowserSlot::from_parts(None, LaunchConfig::default()));
+        let err = degraded.mcp_attach_endpoint().unwrap_err();
+        assert_eq!(err.code(), TOOL_BROWSER_CAPABILITY_DISABLED);
+    }
+
+    /// E-1 端点暴露守卫（槽级，开启面）：`with_mcp_attach_allowed(true)`
+    /// 装配后守卫进入放行判定——浏览器未启动（端点不可用）→ 结构化
+    /// `tool.browser.not_ready`（不开返回端点；就绪面由 mcp_attach.rs
+    /// 纯函数测试以样例端点覆盖——单测不触发真实浏览器启动）。
+    #[tokio::test]
+    async fn mcp_attach_guard_enabled_requires_running_endpoint() {
+        let manager = Arc::new(BrowserManager::new(
+            std::env::temp_dir().join("browser-slot-mcp-attach-on-test"),
+        ));
+        let slot = Arc::new(
+            BrowserSlot::from_parts(Some(manager), LaunchConfig::default())
+                .with_mcp_attach_allowed(true),
+        );
+        let err = slot.mcp_attach_endpoint().unwrap_err();
+        assert_eq!(err.code(), TOOL_BROWSER_NOT_READY);
+    }
+
+    /// J1b：storage 发送面生命周期——未连接槽恒为未连接面（get/set 均
+    /// not_ready 语义）；注入 mock 后命令面取到 mock（测试替身注入点）；
+    /// drop_raw_session 换回未连接（陈旧会话不得滞留）。
+    #[tokio::test]
+    async fn storage_ops_lifecycle_unwired_then_injected() {
+        use conex_browser::cdp::domains::{Cookie as CdpCookie, SetCookieParam};
+
+        struct EchoOps;
+        #[async_trait]
+        impl StorageStateOps for EchoOps {
+            async fn get_all_cookies(&self) -> Result<Vec<CdpCookie>, String> {
+                Err("echo".to_string())
+            }
+            async fn set_cookies(&self, _cookies: Vec<SetCookieParam>) -> Result<(), String> {
+                Err("echo".to_string())
+            }
+        }
+
+        let slot = Arc::new(BrowserSlot::from_parts(None, LaunchConfig::default()));
+        // 未连接面：错误文案指向 browser_start（辅助通道须显式启动）
+        let err = slot
+            .storage_ops()
+            .get_all_cookies()
+            .await
+            .unwrap_err();
+        assert!(err.contains("未连接"), "未连接文案：{err}");
+        // 注入 mock → 取到注入实现
+        slot.inject_storage_ops(Arc::new(EchoOps));
+        let err = slot.storage_ops().get_all_cookies().await.unwrap_err();
+        assert_eq!(err, "echo");
+        // drop_raw_session（停止路径）→ 换回未连接面
+        slot.drop_raw_session();
+        let err = slot
+            .storage_ops()
+            .set_cookies(Vec::new())
+            .await
+            .unwrap_err();
+        assert!(err.contains("未连接"), "换回未连接：{err}");
     }
 }

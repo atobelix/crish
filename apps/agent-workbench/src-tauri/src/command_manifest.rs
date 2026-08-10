@@ -188,6 +188,8 @@ entry("browser_input", "browser", "engine", true),
 entry("browser_start_frames", "browser", "engine", true),
 entry("browser_stop_frames", "browser", "engine", true),
 entry("browser_frame_status", "browser", "engine", true),
+entry("browser_export_storage_state", "browser", "engine", true),
+entry("browser_import_storage_state", "browser", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),
@@ -225,8 +227,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 100, "总数 100（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 96, "注册面 96");
+        assert_eq!(total, 102, "总数 102（+browser_export/import_storage_state，与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 98, "注册面 98");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -373,7 +375,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 100);
+        assert_eq!(manifest.commands.len(), 102);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
