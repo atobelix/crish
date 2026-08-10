@@ -164,6 +164,8 @@ command_registry![
     ("multi_device_pair_status", multi_device_commands::multi_device_pair_status),
     ("multi_device_pair_cancel", multi_device_commands::multi_device_pair_cancel),
     ("multi_device_list_devices", multi_device_commands::multi_device_list_devices),
+    ("multi_device_revoke_device", multi_device_commands::multi_device_revoke_device),
+    ("multi_device_rename_device", multi_device_commands::multi_device_rename_device),
     // ── 会话持久化（B，�?.2；含 F3 冻结�?upsert_session_entry）──
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),

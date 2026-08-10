@@ -45,6 +45,9 @@ const SettingsAppearanceTab = lazy(() =>
 const SettingsUsageTab = lazy(() =>
   import('./SettingsUsageTab').then((m) => ({ default: m.SettingsUsageTab })),
 );
+const SettingsDevicesTab = lazy(() =>
+  import('./SettingsDevicesTab').then((m) => ({ default: m.SettingsDevicesTab })),
+);
 const SettingsShortcutsTab = lazy(() =>
   import('./SettingsShortcutsTab').then((m) => ({ default: m.SettingsShortcutsTab })),
 );
@@ -296,6 +299,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <Suspense key="tab-usage-suspense" fallback={<SettingsTabSuspenseFallback tabName="用量" />}>
               <AppErrorBoundary key="tab-usage" compact title="设置页面出错">
                 <SettingsUsageTab onShowToast={onShowToast} />
+              </AppErrorBoundary>
+            </Suspense>
+          )}
+
+          {safeActiveTab === 'devices' && (
+            <Suspense key="tab-devices-suspense" fallback={<SettingsTabSuspenseFallback tabName="多端互通" />}>
+              <AppErrorBoundary key="tab-devices" compact title="设置页面出错">
+                <SettingsDevicesTab onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
           )}

@@ -47,8 +47,9 @@ describe('commandManifest', () => {
       // T-F 06：退役 5 条（core_read_run_events / delete_session / touch_session /
       //   core_md_render_stream / core_md_clear_cache），95 → 90（changelog 33 可查）
       // R1-07：multi_device_pair_* / multi_device_list_devices 四件套已接线（94 → 98）
-      expect(registered).toBe(94);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(98);
+      // R1-08：multi_device_revoke_device / multi_device_rename_device 已接线（98 → 100）
+      expect(registered).toBe(96);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(100);
     });
 
     it('命令名唯一', () => {
@@ -263,10 +264,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（94；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（100；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(94);
+      expect(total).toBe(100);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

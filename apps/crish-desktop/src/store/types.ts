@@ -29,6 +29,7 @@ export type SettingsTabType =
   | 'personalize'
   | 'models'
   | 'usage'
+  | 'devices'
   | 'schedule'
   | 'rules'
   | 'shortcuts'

@@ -88,6 +88,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('multi_device_pair_status', 'multi_device', 'engine'),
     entry('multi_device_pair_cancel', 'multi_device', 'engine'),
     entry('multi_device_list_devices', 'multi_device', 'engine'),
+    // R1-08：设备管理页撤销/改名两件套（registered=true，与 Rust 同步）
+    entry('multi_device_revoke_device', 'multi_device', 'engine'),
+    entry('multi_device_rename_device', 'multi_device', 'engine'),
     // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
     // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
     entry('config_get', 'config', 'engine'),

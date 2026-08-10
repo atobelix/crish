@@ -37,3 +37,32 @@ pub fn multi_device_pair_cancel(coordinator: State<'_, PairingCoordinator>) {
 pub fn multi_device_list_devices(coordinator: State<'_, PairingCoordinator>) -> Vec<DeviceInfo> {
     coordinator.list_devices()
 }
+
+/// 撤销指定设备（令牌失效 → 落盘 → WS 踢出；R1-08 设备管理页消费）。
+#[tauri::command]
+pub fn multi_device_revoke_device(
+    coordinator: State<'_, PairingCoordinator>,
+    hash: String,
+) -> Result<bool, String> {
+    if hash.len() != 64 {
+        return Err("无效的令牌哈希".to_string());
+    }
+    Ok(coordinator.revoke_device(&hash))
+}
+
+/// 重命名设备标签（R1-08 设备管理页改名消费）。
+#[tauri::command]
+pub fn multi_device_rename_device(
+    coordinator: State<'_, PairingCoordinator>,
+    hash: String,
+    new_label: String,
+) -> Result<bool, String> {
+    if hash.len() != 64 {
+        return Err("无效的令牌哈希".to_string());
+    }
+    let label = new_label.trim();
+    if label.is_empty() || label.chars().count() > 40 {
+        return Err("标签需为 1-40 字符".to_string());
+    }
+    Ok(coordinator.rename_device(&hash, label))
+}

@@ -165,13 +165,17 @@ impl TokenStore {
         TokenVerdict::Invalid
     }
 
-    /// 撤销单个令牌（按哈希匹配；返回是否命中）
+    /// 撤销单个令牌（按哈希匹配；仅未撤销记录可撤销——重复撤销返回
+    /// false，语义：撤销 = 解除配对关系，幂等拒绝）
     // R1-02 备注：R1-07 设备撤销消费——dead_code 静音（测试构建保持检查）
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn revoke(&mut self, hash: &str) -> bool {
         let mut found = false;
         for record in &mut self.tokens {
             if constant_time_eq(&record.hash, hash) {
+                if record.revoked {
+                    return false;
+                }
                 record.revoked = true;
                 found = true;
             }
@@ -182,7 +186,22 @@ impl TokenStore {
         found
     }
 
-    /// 撤销全部令牌（关闭配对语义，D2 §5.4）
+    /// 重命名设备标签（按哈希匹配；返回是否命中）
+    // R1-08 备注：设备管理页改名消费——dead_code 静音（测试构建保持检查）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn rename(&mut self, hash: &str, new_label: &str) -> bool {
+        let mut found = false;
+        for record in &mut self.tokens {
+            if constant_time_eq(&record.hash, hash) {
+                record.label = new_label.to_string();
+                found = true;
+            }
+        }
+        if found {
+            let _ = self.save();
+        }
+        found
+    }
     // R1-02 备注：R1-07 关闭配对消费——dead_code 静音（测试构建保持检查）
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn revoke_all(&mut self) {
@@ -231,9 +250,10 @@ impl TokenStore {
         self.tokens.is_empty()
     }
 
-    /// 令牌数量（未撤销与已撤销都计）。R1-07 状态面消费。
+    /// 有效令牌数量（仅未撤销）。R1-07 状态面/回 Loopback 判断消费——
+    /// 撤销 = 解除配对，已撤销不计。
     pub fn token_count(&self) -> usize {
-        self.tokens.len()
+        self.tokens.iter().filter(|r| !r.revoked).count()
     }
 
     /// 全部令牌哈希（含已撤销）。R1-07 撤销全链消费。
@@ -242,10 +262,12 @@ impl TokenStore {
     }
 
     /// 设备列表（配对管理面；id = 哈希截断 12 字符展示，不泄露原文）。
+    /// 仅返回未撤销设备——撤销 = 解除配对关系，列表即移除。
     /// R1-07 list_devices 消费。
     pub fn devices(&self) -> Vec<crate::server::pairing::DeviceInfo> {
         self.tokens
             .iter()
+            .filter(|record| !record.revoked)
             .map(|record| crate::server::pairing::DeviceInfo {
                 id: record.hash.chars().take(12).collect(),
                 label: record.label.clone(),

@@ -95,6 +95,13 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_discover_skills", "workbench", "gui", true),
         entry("workbench_http_request", "workbench", "gui", true),
         entry("workbench_apply_update", "workbench", "gui", true),
+        // ── 多端互通配对面（R1-07 四件套 + R1-08 撤销/改名，registered=true，与前端同步）──
+        entry("multi_device_pair_start", "multi_device", "engine", true),
+        entry("multi_device_pair_status", "multi_device", "engine", true),
+        entry("multi_device_pair_cancel", "multi_device", "engine", true),
+        entry("multi_device_list_devices", "multi_device", "engine", true),
+        entry("multi_device_revoke_device", "multi_device", "engine", true),
+        entry("multi_device_rename_device", "multi_device", "engine", true),
         // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
         // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
         entry("config_get", "config", "engine", true),
@@ -206,7 +213,8 @@ mod tests {
     /// （core_read_run_events / delete_session / touch_session /
     /// core_md_render_stream / core_md_clear_cache）后 95 → 90，浏览器域
     /// 追加 browser_input / browser_start_frames / browser_stop_frames /
-    /// browser_frame_status 后 90 → 94）。
+    /// browser_frame_status 后 90 → 94；R1-07 多端互通四件套 + R1-08
+    /// 撤销/改名两件套后 94 → 100）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -217,8 +225,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 98, "总数 98（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 94, "注册面 94");
+        assert_eq!(total, 100, "总数 100（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 96, "注册面 96");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -365,7 +373,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 98);
+        assert_eq!(manifest.commands.len(), 100);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

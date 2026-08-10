@@ -232,6 +232,14 @@ impl PairingCoordinator {
         revoked
     }
 
+    /// 重命名设备标签（令牌库内更新 + 落盘；返回是否命中）
+    pub fn rename_device(&self, hash: &str, new_label: &str) -> bool {
+        self.tokens
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .rename(hash, new_label)
+    }
+
     /// 撤销全部设备（含踢出与回 Loopback）
     pub fn revoke_all(&self) {
         {
@@ -313,8 +321,14 @@ mod tests {
 
     /// 测试协调器：注入记录重绑的钩子与临时令牌库
     fn test_coordinator() -> (Arc<PairingCoordinator>, Arc<Mutex<Vec<bool>>>) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+        let unique = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let tokens = Arc::new(Mutex::new(TokenStore::new(
-            std::env::temp_dir().join(format!("pairing-test-{}.json", std::process::id())),
+            std::env::temp_dir().join(format!(
+                "pairing-test-{}-{unique}.json",
+                std::process::id()
+            )),
         )));
         let ws = Arc::new(WsRegistry::new());
         let coordinator = Arc::new(PairingCoordinator::new(tokens, ws));
