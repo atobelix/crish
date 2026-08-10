@@ -6,6 +6,7 @@ import { ChatEmptyState } from './ChatEmptyState';
 import { ChatComposer } from '../chat-composer/ChatComposer';
 import { ModelBadgePicker } from './ChatHeaderControls';
 import { useChatCardState } from './useChatCardState';
+import { anyProfileHasKey } from '../../api/providerProfiles';
 import { ChatHeader } from './ChatHeader';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
 import { WithdrawConfirmDialog } from '../overlay/WithdrawConfirmDialog';
@@ -38,34 +39,16 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       sessionId,
     });
 
+    // R2-5 B1（P1-12 聚合）：ChatComposer 主要 props 经 spread 传递；
+    // on* 命名差异字段（handle* → on*）保持显式映射（消除 30 字段逐项拆包）
     const composerElement = (
       <ChatComposer
-        chatInput={state.composerProps.chatInput}
-        setChatInput={state.composerProps.setChatInput}
-        isComposing={state.composerProps.isComposing}
-        setIsComposing={state.composerProps.setIsComposing}
-        slashMenuOpen={state.composerProps.slashMenuOpen}
-        setSlashMenuOpen={state.composerProps.setSlashMenuOpen}
-        slashSelectedIndex={state.composerProps.slashSelectedIndex}
-        setSlashSelectedIndex={state.composerProps.setSlashSelectedIndex}
-        filteredCommands={state.composerProps.filteredCommands}
-        loadSkillSlash={state.composerProps.loadSkillSlash}
+        {...state.composerProps}
         onPasteImage={state.composerProps.handlePasteImage}
-        onSend={state.composerProps.onSend}
         onStop={state.composerProps.handleStopGeneration}
         onForceStop={state.composerProps.handleForceCancelGeneration}
-        queuedMessages={state.composerProps.queuedMessages}
-        onSendQueuedNow={state.composerProps.sendQueuedMessageNow}
-        onEditQueued={state.composerProps.editQueuedMessage}
-        onDeleteQueued={state.composerProps.deleteQueuedMessage}
-        canSend={state.composerProps.canSend}
-        isProcessing={state.isProcessing}
-        attachments={state.composerProps.attachments}
-        setAttachments={state.composerProps.setAttachments}
-        fileInputRef={state.composerProps.fileInputRef}
         onFilesSelected={state.composerProps.handleFilesSelected}
-        showPlusMenu={state.composerProps.showPlusMenu}
-        setShowPlusMenu={state.composerProps.setShowPlusMenu}
+        isProcessing={state.isProcessing}
         permissionMode={state.permissionMode}
         onPermissionChange={(m) => {
           state.setPermissionMode(m);
@@ -73,11 +56,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onOpenSchedule={() => {
           state.setMainSurface('scheduled');
         }}
-        // P1-F4 根因修复：移除「打开 + 菜单时把 showPlusMenu 置 false」的错误
-        // 接线——ChatComposer 打开「+」菜单时回调 onCloseSiblingMenus，此处
-        // 却把刚打开的菜单关掉（React 批处理后 state 恒为 false，菜单永远
-        // 打不开）；且 ChatComposer 其余兄弟菜单（权限模式等）均为自管状态，
-        // 本接线既无关闭对象又自相矛盾，删除。
         rightActions={
           state.showModelPicker ? (
             <ModelBadgePicker
@@ -90,6 +68,45 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           ) : null
         }
       />
+    );
+
+    // R2-5 B3（P1-12 聚合）：ChatStatusRibbons 专属字段分组 + 派生上移（案甲）——
+    // ① localHasKey 上移（模块级调用稳定）② onOpenTerminal/onOpenDiff 闭包上移
+    // ③ goalMode 四派生值在此计算；ribbons 对象 useMemo 稳定引用
+    const ribbons = React.useMemo(
+      () => ({
+        onOpenTerminal: () => state.openSidePanel('terminal'),
+        onOpenDiff: () => state.openSidePanel('diff'),
+        diffCount: state.diffFiles.length,
+        engineHint: state.engineHint,
+        needsKeySetup: state.needsKeySetup,
+        needsModelSetup: state.needsModelSetup,
+        onEmptySurface: state.onEmptySurface,
+        localHasKey: anyProfileHasKey(),
+        onOpenModelSettings: () => state.openSettings('models'),
+        onOpenModelDropdown: () => state.setShowModelDropdown(true),
+        inPlanMode: state.inPlanMode,
+        planApproved: state.planApproved,
+        onApprovePlan: () => {
+          state.setPermissionMode('ask');
+          state.setPlanApproved(true);
+        },
+        goalModeActive: state.goalModeActive,
+        goalText: state.goalMode?.goal || '',
+        goalIteration: state.goalMode?.iteration ?? 0,
+        goalTasksDone: (state.goalMode?.tasks || []).filter((t) => t.done).length,
+        goalTasksTotal: (state.goalMode?.tasks || []).length,
+        onStopGoal: () => {
+          state.composerProps.handleStopGeneration();
+          if (state.activeSessionId) {
+            state.patchSession(state.activeSessionId, { goalMode: null });
+          }
+        },
+        showScrollToBottom: state.showScrollToBottom,
+        onScrollToBottom: state.scrollToBottom,
+      }),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [state]
     );
 
     return (
@@ -202,29 +219,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             mainSurface={state.mainSurface}
             emptyKind={state.emptyKind}
             composerElement={composerElement}
-            diffFiles={state.diffFiles}
-            engineHint={state.engineHint}
-            needsKeySetup={state.needsKeySetup}
-            needsModelSetup={state.needsModelSetup}
-            onEmptySurface={state.onEmptySurface}
-            onOpenModelSettings={() => state.openSettings('models')}
-            onOpenModelDropdown={() => state.setShowModelDropdown(true)}
-            inPlanMode={state.inPlanMode}
-            planApproved={state.planApproved}
-            onApprovePlan={() => {
-              state.setPermissionMode('ask');
-              state.setPlanApproved(true);
-            }}
-            goalModeActive={state.goalModeActive}
-            goalMode={state.goalMode}
-            onStopGoal={() => {
-              state.composerProps.handleStopGeneration();
-              if (state.activeSessionId) {
-                state.patchSession(state.activeSessionId, { goalMode: null });
-              }
-            }}
-            showScrollToBottom={state.showScrollToBottom}
-            onScrollToBottom={state.scrollToBottom}
+            ribbons={ribbons}
             runNotice={state.composerProps.runNotice}
             onDismissRunNotice={() => state.composerProps.setRunNotice(null)}
             pendingApprovalCount={state.approvalState.pendingApprovalCount}
