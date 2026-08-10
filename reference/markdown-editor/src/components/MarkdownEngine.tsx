@@ -1077,6 +1077,66 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
         containerEl.style.height = `${phys}px`;
       }
     }
+    // P3 B4 列宽定型（表格闭合后一次性，避免流式中跳动）：可见行中定位
+    // 最后一个 table_separator → 表头行 + 连续 table_row 段 → 段后紧邻行
+    // 非 table_row（表格已闭合）且该表未定型 → 测量 cell 内容宽
+    // （scrollWidth 逐列 max）→ setTableWidths 一次（M6 计数随页面探针）。
+    // 流式中（表格未闭合）不触发——无跳动。行类型经 parseLine（AST 缓存
+    // 命中，O(可见) 可忽略）。核实修正（plan-A4）：parser 独立判定
+    // table_row，表头高亮（isHeaderRow）流式中即时生效——无需候选态/回溯。
+    try {
+      const st = engineStore.getState();
+      const items = virtualizer.getVirtualItems();
+      let sepIdx = -1;
+      for (const item of items) {
+        const rawL = st.getLine(item.index);
+        if (rawL === undefined) continue;
+        const ln = MarkdownParser.parseLine(rawL, item.index, getLineState(st, item.index));
+        if (ln.type === 'table_separator') sepIdx = item.index;
+      }
+      if (sepIdx !== -1) {
+        let headerIdx = sepIdx - 1;
+        while (headerIdx >= 0) {
+          const rawH = st.getLine(headerIdx);
+          if (rawH === undefined) break;
+          const lnH = MarkdownParser.parseLine(rawH, headerIdx, getLineState(st, headerIdx));
+          if (lnH.type !== 'table_row') break;
+          headerIdx--;
+        }
+        headerIdx++;
+        let segEnd = sepIdx + 1;
+        while (segEnd < st.getLineCount()) {
+          const rawE = st.getLine(segEnd);
+          if (rawE === undefined) break;
+          const lnE = MarkdownParser.parseLine(rawE, segEnd, getLineState(st, segEnd));
+          if (lnE.type !== 'table_row') break;
+          segEnd++;
+        }
+        const nextLn = segEnd < st.getLineCount() ? (() => {
+          const rawN = st.getLine(segEnd);
+          if (rawN === undefined) return null;
+          return MarkdownParser.parseLine(rawN, segEnd, getLineState(st, segEnd));
+        })() : null;
+        const tableId = `table-${headerIdx}`;
+        const tableStore = useTableStore.getState();
+        if ((nextLn === null || nextLn.type !== 'table_row') && !tableStore.tableWidths[tableId]) {
+          const colWidths: number[] = [];
+          for (let r = headerIdx; r < segEnd; r++) {
+            const rowEl = rowRefs.current.get(r);
+            if (!rowEl || !rowEl.isConnected) continue;
+            rowEl.querySelectorAll<HTMLElement>('.token-table-cell').forEach((cell, ci) => {
+              const w = cell.scrollWidth;
+              if (w > 0) colWidths[ci] = Math.max(colWidths[ci] ?? 0, w);
+            });
+          }
+          if (colWidths.length > 0) {
+            useTableStore.getState().setTableWidths(tableId, colWidths);
+          }
+        }
+      }
+    } catch {
+      // 定型失败静默（渲染路径不因测量异常中断）
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey, flushStreamInternal]);
 
