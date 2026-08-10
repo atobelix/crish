@@ -206,11 +206,13 @@ type BlockKind =
   | 'code'
   | 'other';
 
-/** 剥离块引用前缀（与 parser.stripBlockquoteContext 同一正则 `^\s*>\s?`） */
+/** 剥离块引用前缀（与 parser.stripBlockquoteContext 同一正则 `^ {0,3}>\s?`——
+ * B8c 配合收紧：marker 前至多 3 空格缩进，4 空格缩进的 `>` 行不是引用
+ * （spec 例 231 语义，增量与全量重扫同规）。 */
 function stripBlockquoteContext(line: string): string {
   let content = line;
   let m: RegExpMatchArray | null;
-  while ((m = content.match(/^\s*>\s?/))) {
+  while ((m = content.match(/^ {0,3}>\s?/))) {
     content = content.substring(m[0].length);
   }
   return content;
@@ -374,15 +376,42 @@ const HTML_BLOCK_TYPE6_RE = new RegExp(
   '^ {0,3}<\\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[ \\t]|/?>|$)',
   'i'
 );
-// type 7：完整开/闭标签行（tag name 排除 pre/script/style/textarea——
-// 它们由 type 1 接管，`</script>` 单独成行按普通段落处理，与 spec 一致）。
-const HTML_BLOCK_TYPE7_RE =
-  /^ {0,3}<(\/?)([a-zA-Z][a-zA-Z0-9-]*)(?:[ \t]+[^>]*)?[ \t]*\/?>[ \t]*$/i;
+
+/**
+ * 单行完整 HTML 标签判定（B8c 配合：镜像 parser.matchRawHtmlTag 的
+ * open/close 分支，6.11 严格文法单源）——旧宽松 `[^>]*` 属性串副本已
+ * 移除（增量路径曾与全量重扫分歧）。闭合标签无属性；开标签 = tagName
+ * + attrs* + 空白 + 可选 `/` + `>`；属性名合法字符集、引号值规则与
+ * parser 逐字一致（`<a h*#ref>` / `</a href>` / `<a href="\"">` 等
+ * 非法标签行返回 null——spec 例 619/622/624/632 语义）。
+ */
+function matchSingleTagLine(
+  s: string
+): { tagName: string; kind: 'open' | 'close' } | null {
+  const close = /^<\/[A-Za-z][A-Za-z0-9-]*[ \t]*>/.exec(s);
+  if (close) {
+    return {
+      tagName: close[0].slice(2).replace(/[ \t]*>$/, ''),
+      kind: 'close',
+    };
+  }
+  const open =
+    /^<([A-Za-z][A-Za-z0-9-]*)((?:[ \t]+[A-Za-z_:][A-Za-z0-9_.:-]*(?:[ \t]*=[ \t]*(?:"[^"]*"|'[^']*'|[^ \t"'=<>`]+))?)*)[ \t]*(\/)?>/.exec(
+      s
+    );
+  if (open) {
+    return { tagName: open[1], kind: 'open' };
+  }
+  return null;
+}
 
 /**
  * HTML 块 start condition 判定（镜像 parser.matchHtmlBlockStart）：
  * - type 1-6 可打断段落，判定独立于 prevBlockKind（`Foo\n<div>` 中 div 是新块）；
  * - type 7 不可打断段落（`Foo\n<a href="bar">` 中 a 行是段落延续）；
+ * - type 7 的「完整标签行」必须通过 6.11 严格文法（matchSingleTagLine）——
+ *   B8c 配合项：与 parser 的 matchRawHtmlTag 同规，非法标签行按段落文本
+ *   处理（spec 例 619/622/624/632）；
  * - 列表标记行（`- <div>`）不进 HTML 块（行级模型无容器状态，登记偏差）。
  * 入参约定：content 已剥离块引用前缀、缩进 <4 列、非空行。
  */
@@ -396,20 +425,25 @@ function matchHtmlBlockStart(
   }
   if (HTML_BLOCK_TYPE6_RE.test(content)) return { type: 6 };
   if (prevBlockKind === 'body' || prevBlockKind === 'list') return null;
-  const t7 = HTML_BLOCK_TYPE7_RE.exec(content);
-  if (t7) {
-    const name = t7[2].toLowerCase();
-    if (
-      name === 'script' ||
-      name === 'pre' ||
-      name === 'style' ||
-      name === 'textarea'
-    ) {
-      return null;
+  // type 7：整行（≤3 前导空格 + 标签 + 尾随空白）必须是单个合法
+  // open/close 标签；script/pre/style/textarea 由 type 1 接管
+  // （`</script>` 单独成行按普通段落处理，与 spec 一致）。
+  {
+    const lineContent = content.replace(/^ {0,3}/, '');
+    const tag = matchSingleTagLine(lineContent);
+    if (tag && (tag.kind === 'open' || tag.kind === 'close')) {
+      const name = tag.tagName.toLowerCase();
+      if (
+        name !== 'script' &&
+        name !== 'pre' &&
+        name !== 'style' &&
+        name !== 'textarea'
+      ) {
+        return { type: 7 };
+      }
     }
-    return { type: 7 };
+    return null;
   }
-  return null;
 }
 
 /**
@@ -833,10 +867,12 @@ function updateLinesIncremental(
   let converged = false;
 
   for (; i < newLinesArr.length; i++) {
-    // 块引用前缀剥离（与 parser 同一正则）：缩进判定发生在前缀剥离之后
+    // 块引用前缀剥离（与 parser 同一正则 `^ {0,3}>\s?`——B8c 收紧：
+    // marker 前至多 3 空格缩进，4 空格缩进的 `>` 行不剥前缀、落入
+    // 缩进代码判定（spec 例 231）；缩进判定发生在前缀剥离之后）
     let content = newLinesArr[i];
     let bMatch;
-    while ((bMatch = content.match(/^\s*>\s?/))) {
+    while ((bMatch = content.match(/^ {0,3}>\s?/))) {
       content = content.substring(bMatch[0].length);
     }
     const trimmed = content.trim();
@@ -866,7 +902,14 @@ function updateLinesIncremental(
         // （type 7 单行块后 `    foo` → 缩进代码，与 CommonMark 一致）。
         prevBlockKind = 'code';
       }
-    } else if (!inMathBlock && FENCE_OPEN_RE.test(trimmed)) {
+    } else if (
+      !inMathBlock &&
+      // B8c 配合：围栏形态行补「开栏缩进 ≤3 列」门槛（镜像 parser 的
+      // indentCols <= 3——4 空格缩进的 ``` 行是缩进代码候选而非围栏，
+      // spec 例 134；增量与全量重扫一致，见 updateLinesIncremental）。
+      leadingIndentColumns(content) <= 3 &&
+      FENCE_OPEN_RE.test(trimmed)
+    ) {
       // P2-A1 fence 单源化：开/关判定镜像 parser.computeLineOffsets——
       // 开栏行记录 marker/length（fenceState），块内 fence 形态行仅当
       // isFenceClose（同字符 + run ≥ 开栏长度 + 仅尾随空白）才关闭；
@@ -2244,7 +2287,14 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
             segmentCodeStates[i] = 'html_block';
             prevBlockKind = 'code';
           }
-        } else if (!inMathBlock && FENCE_OPEN_RE.test(htmlContent.trim())) {
+        } else if (
+          !inMathBlock &&
+          // B8c 配合：围栏形态行补「开栏缩进 ≤3 列」门槛（与
+          // updateLinesIncremental 同规，镜像 parser 的 indentCols <= 3——
+          // 4 空格缩进的 ``` 行是缩进代码候选而非围栏，spec 例 134）。
+          leadingIndentColumns(htmlContent) <= 3 &&
+          FENCE_OPEN_RE.test(htmlContent.trim())
+        ) {
           // P2-A1 fence 单源化（镜像 parser / updateLinesIncremental）：
           // 判定输入 = 块引用剥离后 trim（htmlContent 与 parser 的
           // bqContent 同源；旧实现用未剥离的 trimmed，`> ``` ` 块引用

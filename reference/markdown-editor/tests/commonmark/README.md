@@ -46,7 +46,10 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
    的纯文本渲染必然不等（计 FAIL）——**不得折叠为纯文本掩盖差异**。
 4. **行内原始 HTML 原样透传**：`html_element` / `html_tag` 节点按 CommonMark
    raw HTML 语义逐字节输出（不转义、不重组），与 Raw HTML 章节期望一致。
-5. **文本转义**：text 与 code 内容按 CommonMark 规则转义 `& < >`。
+5. **文本转义**：text 与 code 内容按 CommonMark 规则转义 `& < > "`
+   （commonmark.js 的 escapeXml 对 text/code 统一转义四字符——B8c 配合项：
+   `"` → `&quot;`，spec 例 343 的 code 内容与例 619/620/624/632 的非法
+   标签行文本均期望 `&quot;`）。
 6. **锚定机制**：10 个黄金判定对（`projector.test.ts`）的期望输出经人工
    逐行核对引擎 AST 行为后手工写出，并由真实引擎解析复核；投影器行为
    变更必须先改黄金对，防止测量工具自身悄悄漂移。
@@ -61,7 +64,7 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 | `heading` | `<h{n}>内联</h{n}>`（n = headingLevel） |
 | `hr` | `<hr />` |
 | `blockquote`（行级 blockquoteLevel） | 按层级连续行合并开合 `<blockquote>` 容器 |
-| `code`（围栏内，B8b 配合项） | `<pre><code>内容\n</code></pre>`；围栏信息串取首个词 → `class="language-…"`；内容行按行原文投影、`\n` 连接并以 `\n` 结尾（空块除外）。剥引用前缀仅限「行引用层级与围栏一致」的内容行（围栏内 ` >` 是内容，spec 例 119/120）；遇非 code 行（body/empty 等）即终止交还主循环（spec 例 237/128：引用容器边界/段落打断结束围栏，不吞行）；未闭合围栏剔除引擎文档尾幻影空 code 行（spec 例 126/127/137/237） |
+| `code`（围栏内，B8b 配合项） | `<pre><code>内容\n</code></pre>`；围栏信息串取首个词 → `class="language-…"`（` ``` ` 与 `~~~` 开栏同规——B8c 配合项，spec 例 143/146）；内容行按行原文投影、`\n` 连接并以 `\n` 结尾（空块除外）。B8c 配合项：内容行剥 up to 开栏缩进列（开栏行允许 1-3 空格缩进，spec 例 131-133；开栏缩进在剥离引用前缀后的行上计算）。剥引用前缀仅限「行引用层级与围栏一致」的内容行（围栏内 ` >` 是内容，spec 例 119/120）；遇非 code 行（body/empty 等）即终止交还主循环（spec 例 237/128：引用容器边界/段落打断结束围栏，不吞行）；未闭合围栏剔除引擎文档尾幻影空 code 行（spec 例 126/127/137/237） |
 | `code`（缩进代码块，R1-A2d / B8b 配合项） | 连续 `code` 行合并为单个 `<pre><code>内容\n</code></pre>`；每行剥离引用前缀后剥 up to 4 列缩进（tab 按停靠 4 展开），`\n` 连接并以 `\n` 结尾；块尾空白行（trim 后为空）剔除，块内空白行保留（剥缩进后可能残留空白，如 spec 例 112）。**合并仅限同 blockquoteLevel 的连续行**——跨容器/跨引用层级不合并（spec 例 236：引用内与文档级各成一块） |
 | `table_row` | `<tr><td>…</td></tr>`（table_separator 跳过；CommonMark 无表格语义，仅为完整映射） |
 | `empty` | 无输出 |
@@ -71,10 +74,11 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 
 | 引擎 AST | 投影 |
 | --- | --- |
-| `text` | 内容转义 `& < >`（content 字段即显示文本，反斜杠转义已解） |
+| `text` | 内容转义 `& < > "`（content 字段即显示文本，反斜杠转义已解） |
 | `bold` / `italic` / `strike` | `<strong>` / `<em>` / `<del>` |
 | `bold_italic` | `<em><strong>…</strong></em>`（按 CommonMark 参考实现嵌套惯例） |
 | `code` | `<code>内容转义</code>` |
+| `hard_break`（B8c 配合项） | `<br />`——行尾 2+ 空格/tab 或反斜杠后的换行（CommonMark 6.13，spec 例 632/633）；令牌由引擎在行尾拆分，行式模型的段落合并以空格连接相邻行，归一化折叠后与 spec 的软换行形态等价 |
 | `link` | `<a href="…" [title="…"]>`；url 字段按 CommonMark 规则拆分 href/title（渲染惯例） |
 | `image` | `<img src="…" alt="…" />`；alt 从 raw 提取，title 同 link 拆分 |
 | `html_element` / `html_tag` | raw 原样透传 |
@@ -140,27 +144,35 @@ B8b 起 `renderFencedBlock` 按 CommonMark 围栏语义投影，三处行为登�
    终止并交还主循环（引用容器边界或段落打断会结束围栏，spec 例 237 的
    `foo`、例 128 的空行），不再吞并后续行——同时保证 blockquote 容器在
    syncQuotes 处按行级 blockquoteLevel 正确闭合重开。
-2. **引用前缀剥离仅限层级一致行**：引擎前缀正则 `\s*>\s?` 会把围栏内的
-   ` >` 文本行误判为引用层级（spec 例 119/120），投影器仅在「行引用层级
-   与围栏一致」时剥离前缀，误判行按内容原样保留（引擎 AST 语义层的
-   识别偏差，如实投影；根因登记见下文 spec-231 项）。
+2. **引用前缀剥离仅限层级一致行**：引擎前缀正则 `{0,3}` 版本仍会把
+   围栏内的 ` >` 文本行误判为引用层级（spec 例 119/120），投影器仅在
+   「行引用层级与围栏一致」时剥离前缀，误判行按内容原样保留（引擎
+   AST 语义层的识别偏差，如实投影）。
 3. **未闭合围栏的幻影尾行**：围栏扫到文档尾仍无 `code_fence_end` 时，
    引擎会在末行输出一条幻影空 code 行（最终换行符的切分产物，不属于
    内容），投影器剔除该行（spec 例 126/127/137/237 形态）。
 
 连带修复（同属 B8b 变更的自然结果）：spec 例 119/120/126/127/128/137
-从 FAIL 转 PASS；Fenced code 章节 15/29 → 21/29。
+从 FAIL 转 PASS；Fenced code 章节 15/29 → 21/29（B8c + 本任务后 → 28/29，
+剩余 1 fail 为例 121：`` 2 反引号按围栏解析的引擎域登记项）。
 
-### 偏差点四：spec-231 三方协同项登记（引擎域，超出投影器域，待引擎轮）
+### 偏差点四：spec-231 三方协同项（B8c 引擎域已修 + 本任务投影器同步，完成）
 
 spec 例 231（`    > # Foo`，4 空格缩进的 `>` 行）应为缩进代码块
-（`<pre><code>&gt; # Foo…`），引擎当前按引用解析（前缀正则 `^\s*>\s?`
-允许任意前导空白，应收紧为 `^ {0,3}>\s?`）。**根因在引擎 parser 与
-fuzz 测试更新，超出投影器文件域（`src/` 禁碰），B8b 登记待调度者
-派发引擎轮处理**；投影器不得补偿（补偿即作弊）。同类引擎域问题一并登记：
-spec 例 121（`` 2 反引号按围栏解析，应为行内 code span）、例 134
-（4 空格缩进 ``` 按围栏解析，应为缩进代码块）、例 131/132/133
-（围栏开括行 1-3 空格缩进未从内容行剥除，投影器无开括行缩进信息）。
+（`<pre><code>&gt; # Foo…`）。三方协同闭环：
+
+- **引擎域（B8c 完成）**：parser 前缀正则 `^\s*>\s?` 收紧为 `^ {0,3}>\s?`
+  （marker 前至多 3 空格缩进），并加围栏开栏缩进 ≤3 列门槛（`    ```` 是
+  缩进代码候选，spec 例 134）；
+- **投影器域（本任务同步）**：stripBlockquotePrefix 同步 `{0,3}`；围栏
+  内容行剥 up to 开栏缩进列（spec 例 131/132/133）；fenceInfo 支持 `~~~`
+  开栏（spec 例 143/146）；fuzz-document-typography 断言随新行为更新；
+- **EditorStore 域（本任务同步）**：stripBlockquoteContext / 主循环前缀
+  正则 / 围栏形态缩进门与 parser 同规（增量与全量重扫一致）。
+
+n231/134/131/132/133/143/146 已转 PASS。仍留引擎域：spec 例 121
+（`` 2 反引号按围栏解析，应为行内 code span，B8c 代码 span 重构后
+仍未覆盖该形态，登记待后续引擎轮）。
 
 其余投影均为确定性结构映射，无第五处偏差点。
 

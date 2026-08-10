@@ -23,12 +23,18 @@ import type {
   InlineNode,
 } from '../../src/core/ast';
 
-/** 文本转义：& < >（与 CommonMark 渲染器的文本转义规则一致） */
+/**
+ * 文本转义：& < > "（与 CommonMark 渲染器的文本转义规则一致——
+ * commonmark.js 的 escapeXml 对 text 与 code 内容统一转义四字符；
+ * B8c 配合项：`"` → `&quot;`，spec 例 343 的 code 内容 `<a href="`
+ * 与例 619/620/624/632 的非法标签行文本均期望 &quot;）。
+ */
 export function escapeText(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 /** 属性值转义：& < > "（用于 href / alt / class 等属性） */
@@ -40,21 +46,30 @@ function escapeAttr(s: string): string {
     .replace(/>/g, '&gt;');
 }
 
-/** 从行原文中剥离行首的 blockquote 前缀（> 及其前导空白） */
+/**
+ * 从行原文中剥离行首的 blockquote 前缀（> 及其后至多一个空白）。
+ * B8c 配合项：前缀正则 `^\s*>\s?` 收紧为 `^ {0,3}>\s?`——marker 前至多
+ * 3 空格缩进，4 空格缩进的 `>` 行（spec 例 231）是缩进代码块内容、
+ * 不剥前缀；与引擎 parser 的 stripBlockquoteContext 同规。
+ */
 function stripBlockquotePrefix(raw: string): string {
   let s = raw;
   let m: RegExpExecArray | null;
-  while ((m = /^\s*>\s?/.exec(s))) {
+  while ((m = /^ {0,3}>\s?/.exec(s))) {
     s = s.slice(m[0].length);
   }
   return s;
 }
 
-/** 围栏信息串（raw 中 ``` 之后的部分，已剥离引用前缀并 trim） */
+/**
+ * 围栏信息串（raw 中 ``` 或 ~~~ 之后的部分，已剥离引用前缀并 trim）。
+ * B8c 配合项：支持波浪线围栏（spec 例 143/146）——`~~~` 开栏的 info 串
+ * 可含反引号等任意字符，取首个空白分隔词为 language。
+ */
 function fenceInfo(raw: string): string {
   const s = stripBlockquotePrefix(raw);
-  const m = /^```+(.*)$/.exec(s);
-  return m ? m[1].trim() : '';
+  const m = /^(```+|~~~+)(.*)$/.exec(s);
+  return m ? m[2].trim() : '';
 }
 
 /**
@@ -250,6 +265,13 @@ function renderInline(t: InlineNode): string {
       return t.isChecked
         ? '<input type="checkbox" checked="" disabled="" />'
         : '<input type="checkbox" disabled="" />';
+    // 硬换行令牌（B8c 配合项）：行尾 2+ 空格/tab 或反斜杠后的换行
+    // → <br />（CommonMark 6.13，spec 例 632/633）。令牌由引擎
+    // parseNormalLine 在行尾拆分（raw = 尾随空白/反斜杠，content 置空），
+    // 属结构令牌——投影 <br />；行式模型的段落合并以空格连接相邻行，
+    // 归一化折叠后与 spec 的软换行形态等价。
+    case 'hard_break' as InlineNode['type']:
+      return '<br />';
     // 代码高亮令牌（仅存在于代码行内，代码行按 raw 投影故此处不产出）
     case 'comment':
     case 'string':
@@ -556,6 +578,14 @@ function renderFencedBlock(
   out: string[]
 ): number {
   const fenceBq = lines[start].blockquoteLevel ?? 0;
+  // B8c 配合项（spec 例 131-133）：开栏行允许 1-3 空格缩进，内容行剥
+  // up to 开栏缩进列（引擎 AST 的 code 行 raw 保留原文缩进，投影器按
+  // CommonMark 语义剥除）。开栏缩进在剥离引用前缀后的行上计算——
+  // 引用内开栏（`>   ````）的开栏缩进为 2 列；开栏无缩进（openIndent
+  // = 0）时剥 0 列，既有行为不变。
+  const openIndent = leadingIndentColumns(
+    stripBlockquotePrefix(lines[start].raw)
+  );
   const info = fenceInfo(lines[start].raw);
   const lang = info ? info.split(/\s+/)[0] : '';
   const contentLines: string[] = [];
@@ -573,7 +603,7 @@ function renderFencedBlock(
       (ln.blockquoteLevel ?? 0) === fenceBq
         ? stripBlockquotePrefix(ln.raw)
         : ln.raw;
-    contentLines.push(raw);
+    contentLines.push(stripIndentColumns(raw, openIndent));
     j++;
   }
   if (!closed && contentLines.length > 0 && contentLines[contentLines.length - 1] === '') {
