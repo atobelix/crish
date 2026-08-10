@@ -19,6 +19,11 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 # G5 清理（2026-08-03）：serde 本体无引用（仅 serde_json::json! 使用，cargo machete 实证）
 serde_json = { workspace = true }
+# M-REDACT 打码铁律（D5 §6.3，R1-10）：redact.rs 的 sha256 前缀 12 hex 需要
+# sha2/hex——均为 workspace 既有声明（auth.rs / conex-fs 先例），
+# conex-telemetry 仍保持 leaf-level（不引入更高层 crate）
+sha2 = { workspace = true }
+hex = { workspace = true }
 # CrishErrorPayload / CrishErrorCategory are produced by Agent 10-A in
 # crates/conex-types/src/error.rs (ROUND-10-rust.md §3.2). This dependency is
 # the sole bridge to conex-types; conex-telemetry otherwise stays leaf-level.

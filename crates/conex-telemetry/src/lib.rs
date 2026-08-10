@@ -24,6 +24,7 @@ pub mod crash;
 pub mod file;
 pub mod format;
 pub mod panic_hook;
+pub mod redact;
 pub mod subscriber;
 
 pub use crash::catch_unwind;
