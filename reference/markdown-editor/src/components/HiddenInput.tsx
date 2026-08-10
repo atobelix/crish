@@ -3,6 +3,7 @@ import {
   useEditorStore,
   snapToGraphemeBoundary,
   type EditorStore,
+  type EditorState,
 } from '../core/EditorStore';
 import {
   getCoordinatesFromIndex,
@@ -553,6 +554,7 @@ export function doubleClickWordSelection(
 // - 组合期（IME）不接管（与 paste 同款红线）。
 
 /** 拖入文件扩展名白名单（.md/.markdown/.txt 等；小写匹配） */
+// oxlint-disable-next-line react/only-export-components
 export const SUPPORTED_DROP_EXTENSIONS = [
   '.md',
   '.markdown',
@@ -620,13 +622,15 @@ export function readDroppedFile(file: File): Promise<string> {
  * 应用拖放内容（纯落盘函数，供单测）：文件 → 异步读取（空内容跳过，
  * 防 applyChange(from, to, '') 误删选区）→ store.applyChange 替换
  * [from, to)（drop 时刻的选区快照，与粘贴语义一致）→ 返回是否落盘。
+ * store 参数为 EditorState 子集（applyChange 所在层——组件侧传入
+ * getState() 快照，applyChange 为稳定引用，异步回调安全）。
  */
 // oxlint-disable-next-line react/only-export-components
 export async function applyDroppedContent(
   plan:
     | { kind: 'file'; file: File }
     | { kind: 'text'; text: string },
-  store: Pick<EditorStore, 'applyChange'>,
+  store: Pick<EditorState, 'applyChange'>,
   from: number,
   to: number
 ): Promise<boolean> {
@@ -637,6 +641,7 @@ export async function applyDroppedContent(
   return true;
 }
 
+export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store }) => {
 
   // R5：绑定实例 store（缺省回退全局单例）；组件内所有 store 读写
   // （订阅 / getState / setState）统一经本变量，多实例输入互不串台
@@ -663,6 +668,8 @@ export async function applyDroppedContent(
     height: number;
   } | null>(null);
   const [isComposing, setIsComposing] = useState(false);
+  // B5 拖放：文件拖入悬停高亮（全屏 overlay，内联样式 + data 属性）
+  const [dragOverlayVisible, setDragOverlayVisible] = useState(false);
 
   // —— IME 合成状态机（R4-C，04 §2 深水区）——
   // 设计：合成期间文本变更一律缓冲（不清空 value、不逐次提交 store），
@@ -890,6 +897,8 @@ export async function applyDroppedContent(
     
     const handleGlobalMouseDown = () => {
       (window as any).__CRISH_IS_MOUSE_DOWN = true;
+      // B5 自动补全：点击定位/拖选开始 → 关闭候选菜单（光标将移动）
+      window.dispatchEvent(new Event('close-autocomplete-menu'));
     };
     const handleGlobalMouseUp = () => {
       (window as any).__CRISH_IS_MOUSE_DOWN = false;
@@ -910,6 +919,8 @@ export async function applyDroppedContent(
           e.preventDefault();
           state.deleteSelection(state.selectionStart, state.selectionEnd);
           window.getSelection()?.removeAllRanges();
+          // B5 自动补全：选区删除后光标移动，关闭候选菜单
+          window.dispatchEvent(new Event('close-autocomplete-menu'));
           textareaRef.current?.focus();
         }
       }
@@ -1069,10 +1080,63 @@ export async function applyDroppedContent(
       s.setSelection(lineStart + sel.start, lineStart + sel.end);
     };
 
+    // —— B5 拖放文件/文本（拖入悬停高亮 + drop 落盘）——
+    // dragover 必须 preventDefault 才能接收 drop（浏览器默认阻止）；
+    // 仅文件拖入时显示 overlay（文本拖入不干扰编辑视觉）；
+    // dragleave 需排除子元素间移动（relatedTarget 仍在容器内不隐藏）。
+    const handleDragEnter = (e: DragEvent) => {
+      const dt = e.dataTransfer;
+      if (!dt) return;
+      if (Array.from(dt.types).some((t) => t.toLowerCase() === 'files')) {
+        e.preventDefault();
+        dt.dropEffect = 'copy';
+        setDragOverlayVisible(true);
+      }
+    };
+    const handleDragOver = (e: DragEvent) => {
+      const dt = e.dataTransfer;
+      if (!dt) return;
+      if (Array.from(dt.types).some((t) => t.toLowerCase() === 'files')) {
+        e.preventDefault();
+        dt.dropEffect = 'copy';
+      }
+    };
+    const handleDragLeave = (e: DragEvent) => {
+      const container = containerRef.current;
+      if (!container) return;
+      const rel = e.relatedTarget as Node | null;
+      if (rel && container.contains(rel)) return;
+      setDragOverlayVisible(false);
+    };
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      setDragOverlayVisible(false);
+      // 组合期不接管（与 paste 同款红线：value 缓冲期干预会丢字）
+      if (isComposingRef.current || activeCompositionGroup.current) return;
+      const dt = e.dataTransfer;
+      if (!dt) return;
+      const plan = planDropInsert(
+        dt.types,
+        Array.from(dt.files),
+        dt.getData('text/plain')
+      );
+      if (plan.kind === 'none') return;
+      // drop 时刻的选区快照（文件读取异步——回调时若光标已移动仍按
+      // 拖入时选区插入，与粘贴语义一致；读取通常 <10ms，冲突窗口登记）
+      const s = editorStore.getState();
+      const from = s.selectionStart;
+      const to = s.selectionEnd;
+      void applyDroppedContent(plan, s, from, to);
+    };
+
     const containerEl = containerRef.current;
     if (containerEl) {
       containerEl.addEventListener('mousedown', handleDragMouseDown);
       containerEl.addEventListener('dblclick', handleContainerDblClick);
+      containerEl.addEventListener('dragenter', handleDragEnter);
+      containerEl.addEventListener('dragover', handleDragOver);
+      containerEl.addEventListener('dragleave', handleDragLeave);
+      containerEl.addEventListener('drop', handleDrop);
     }
     window.addEventListener('mousemove', handleDragMouseMove);
     window.addEventListener('mouseup', handleDragMouseUp);
@@ -1091,6 +1155,10 @@ export async function applyDroppedContent(
       if (containerEl) {
         containerEl.removeEventListener('mousedown', handleDragMouseDown);
         containerEl.removeEventListener('dblclick', handleContainerDblClick);
+        containerEl.removeEventListener('dragenter', handleDragEnter);
+        containerEl.removeEventListener('dragover', handleDragOver);
+        containerEl.removeEventListener('dragleave', handleDragLeave);
+        containerEl.removeEventListener('drop', handleDrop);
         // 异常卸载兜底：恢复 userSelect（拖选中卸载时防样式残留）
         containerEl.style.userSelect = '';
       }
@@ -1224,6 +1292,9 @@ export async function applyDroppedContent(
   };
 
   const fastCursorMove = (newPos: number) => {
+    // B5 自动补全：任何光标移动（方向键/Home/End/翻页/词级跳选）关闭
+    // 候选菜单——候选列表基于原光标语义，移动后由下次输入重新触发
+    closeAutocomplete();
     setCursorPos(newPos);
     // We don't need manual dom manipulation here anymore, since useEffect handles it on cursorPos change
   };
@@ -1241,6 +1312,8 @@ export async function applyDroppedContent(
     // Undo / Redo
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
       e.preventDefault();
+      // B5 自动补全：撤销/重做后光标可能大变，关闭候选菜单
+      closeAutocomplete();
       if (e.shiftKey) {
         editorStore.getState().redo();
       } else {
@@ -1250,6 +1323,7 @@ export async function applyDroppedContent(
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
       e.preventDefault();
+      closeAutocomplete();
       editorStore.getState().redo();
       return;
     }
@@ -1349,10 +1423,13 @@ export async function applyDroppedContent(
       // 绝不触达文档——防误删已提交内容（composition 内不重复处理）
       if (isComposingRef.current) return;
       deleteText(true);
+      // B5 自动补全：删除后重新检测（触发词可能仍在——@alic → @ali）
+      maybeOpenAutocomplete();
     } else if (e.key === 'Delete') {
       e.preventDefault();
       if (isComposingRef.current) return;
       deleteText(false);
+      maybeOpenAutocomplete();
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (isComposing) return;
@@ -1812,6 +1889,69 @@ export async function applyDroppedContent(
     }
   };
 
+  // —— B5 自动补全触发（候选菜单 UI 由 ContextMenu 承载）——
+  // 触发检测：光标所在行内扫触发字符（O(行)，不全文 getText join）；
+  // 命中且候选非空且光标可测量 → dispatch open-autocomplete-menu
+  // （携带 store 实例 + 替换区间 + 过滤后候选 + 菜单坐标）；
+  // 未命中/无候选 → dispatch close（菜单保持关闭或刷新为空）。
+  // 组合期（IME）不触发（value 缓冲期光标语义不可靠）。
+  const maybeOpenAutocomplete = () => {
+    if (isComposingRef.current || activeCompositionGroup.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const s = editorStore.getState();
+    const triggers = getAutocompleteTriggers();
+    if (triggers.length === 0) {
+      window.dispatchEvent(new Event('close-autocomplete-menu'));
+      return;
+    }
+    const lineIdx = s.lineOffsets.findLineIndex(s.cursorPos);
+    const lineStart = s.lineOffsets.getOffset(lineIdx);
+    const lineText = s.getLine(lineIdx) ?? '';
+    const q = findAutocompleteTriggerInLine(
+      lineText,
+      s.cursorPos - lineStart,
+      triggers
+    );
+    if (!q) {
+      window.dispatchEvent(new Event('close-autocomplete-menu'));
+      return;
+    }
+    const candidates = filterAutocompleteCandidates(
+      q.query,
+      getAutocompleteCandidates(q.trigger)
+    );
+    if (candidates.length === 0) {
+      window.dispatchEvent(new Event('close-autocomplete-menu'));
+      return;
+    }
+    const rect = getCoordinatesFromIndex(s.cursorPos, container);
+    if (!rect) {
+      // 光标行未挂载（虚拟化视口外）：不打开，下次输入重试
+      window.dispatchEvent(new Event('close-autocomplete-menu'));
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent('open-autocomplete-menu', {
+        detail: {
+          x: rect.left,
+          y: rect.top + 24,
+          trigger: q.trigger,
+          query: q.query,
+          start: lineStart + q.start,
+          cursorPos: s.cursorPos,
+          candidates,
+          store: editorStore,
+        },
+      })
+    );
+  };
+
+  /** 光标移动/编辑后强制关闭候选菜单（方向键/撤销/选区删除等） */
+  const closeAutocomplete = () => {
+    window.dispatchEvent(new Event('close-autocomplete-menu'));
+  };
+
   const handleInput = (e: Event) => {
     // 组合缓冲期（合成中 + end 后 flush 延迟窗口）不直接提交：统一由
     // pending flush 以 value 为准提交，防止中途 flush/候选替换丢字、
@@ -1823,6 +1963,9 @@ export async function applyDroppedContent(
       editorStore.getState().insertText(value);
       // reset textarea so we can catch next input cleanly
       ta.value = '';
+      // B5 自动补全：提交后重新检测触发（新 query → 刷新候选菜单；
+      // 未命中自动关闭）
+      maybeOpenAutocomplete();
     }
   };
 
@@ -1853,6 +1996,29 @@ export async function applyDroppedContent(
 
   return (
     <>
+      {/* B5 拖放悬停高亮：文件拖入容器期间的全屏 overlay（fixed 覆盖，
+          内联样式 + data-drag-drop-overlay 供测试定位；pointerEvents
+          none 不拦截鼠标，drop 由容器原生事件接管） */}
+      {dragOverlayVisible && (
+        <div
+          data-drag-drop-overlay
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9000,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '14px',
+            color: 'var(--text-secondary)',
+            background: 'var(--selection-bg)',
+            border: '2px dashed var(--border-focus)',
+          }}
+        >
+          松开以插入文件内容
+        </div>
+      )}
       {/* a11y 播报节点（R4-H）：aria-live polite 静默区——光标位置/选区
           变化播报承载，SR 朗读；clip 视觉隐藏（不占布局、不进 Tab 序），
           aria-live 区域须常驻 DOM 才能播报 */}
