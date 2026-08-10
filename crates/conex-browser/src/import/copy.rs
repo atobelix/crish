@@ -109,7 +109,10 @@ where
 {
     // 0. 锁检测前置（§3.2 主判据）：Singleton* → Running 阻断；
     //    Uncertain（仅进程/WAL 残留命中）不阻断——调用方负责用户确认
-    if matches!(detect_running(&source.user_data_dir), RunningStatus::Running) {
+    if matches!(
+        detect_running(&source.user_data_dir),
+        RunningStatus::Running
+    ) {
         return Err(CopyError::SourceLocked {
             status: RunningStatus::Running,
         });
@@ -128,9 +131,8 @@ where
     let staging_root = managed_root.join(STAGING_DIR);
     let tmp_id = short_id();
     let staging = staging_root.join(format!("{target_name}-{tmp_id}"));
-    std::fs::create_dir_all(&staging).map_err(|e| {
-        CopyError::Io(format!("创建 staging 失败 {}：{e}", staging.display()))
-    })?;
+    std::fs::create_dir_all(&staging)
+        .map_err(|e| CopyError::Io(format!("创建 staging 失败 {}：{e}", staging.display())))?;
 
     // 3-5. 白名单复制 → 结构校验 → rename 提交；
     //      任一失败统一清理 staging（M-10：中断不留残留，目标不产生半成品）
@@ -169,17 +171,18 @@ where
         let cookie_ok = dest_profile_dir.join("Cookies").is_file()
             || dest_profile_dir.join(NETWORK_COOKIES_REL).is_file();
         if !ls_ok || !cookie_ok {
-            let reason = if !ls_ok { "Local State 缺失" } else { "cookie 库缺失" };
+            let reason = if !ls_ok {
+                "Local State 缺失"
+            } else {
+                "cookie 库缺失"
+            };
             return Err(CopyError::StructureInvalid(reason.to_string()));
         }
 
         // 5. rename 提交（M-10：同目录原子改名；失败回滚清理 staging）
-        std::fs::rename(&staging, &target)
-            .map_err(|e| CopyError::RenameFailed(format!(
-                "{} → {}：{e}",
-                staging.display(),
-                target.display()
-            )))?;
+        std::fs::rename(&staging, &target).map_err(|e| {
+            CopyError::RenameFailed(format!("{} → {}：{e}", staging.display(), target.display()))
+        })?;
         Ok(report)
     })();
     if result.is_err() {
@@ -207,9 +210,8 @@ where
         return Ok(());
     }
     if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            CopyError::Io(format!("创建目标父目录失败 {}：{e}", parent.display()))
-        })?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| CopyError::Io(format!("创建目标父目录失败 {}：{e}", parent.display())))?;
     }
     match copier(src, dest) {
         Ok(_) => {
@@ -339,7 +341,11 @@ fn infer_process_name(user_data_dir: &Path) -> &'static str {
     let p = user_data_dir.to_string_lossy();
     #[cfg(windows)]
     {
-        if p.contains("Edge") { "msedge.exe" } else { "chrome.exe" }
+        if p.contains("Edge") {
+            "msedge.exe"
+        } else {
+            "chrome.exe"
+        }
     }
     #[cfg(target_os = "linux")]
     {
@@ -353,7 +359,11 @@ fn infer_process_name(user_data_dir: &Path) -> &'static str {
     }
     #[cfg(target_os = "macos")]
     {
-        if p.contains("Edge") { "Microsoft Edge" } else { "Google Chrome" }
+        if p.contains("Edge") {
+            "Microsoft Edge"
+        } else {
+            "Google Chrome"
+        }
     }
 }
 
@@ -415,7 +425,11 @@ mod platform {
                 .unwrap_or(c)
         }
         let len = buf.iter().take_while(|&&c| c != 0).count();
-        len == want.len() && buf[..len].iter().zip(want).all(|(&a, &b)| lower(a) == lower(b))
+        len == want.len()
+            && buf[..len]
+                .iter()
+                .zip(want)
+                .all(|(&a, &b)| lower(a) == lower(b))
     }
 }
 
@@ -474,7 +488,12 @@ mod tests {
             if p.is_dir() {
                 walk_files(&p, root, out);
             } else {
-                out.push(p.strip_prefix(root).expect("前缀").to_string_lossy().replace('\\', "/"));
+                out.push(
+                    p.strip_prefix(root)
+                        .expect("前缀")
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
             }
         }
     }
@@ -513,7 +532,10 @@ mod tests {
         );
         // 排除/噪音项永不复制
         for excluded in [
-            "Login Data", "Login Data For Account", "History", "Web Data",
+            "Login Data",
+            "Login Data For Account",
+            "History",
+            "Web Data",
         ] {
             assert!(
                 !target.join("Default").join(excluded).exists(),
@@ -521,13 +543,18 @@ mod tests {
             );
         }
         for noise in ["Extensions", "Cache", "IndexedDB", "Sync Data"] {
-            assert!(!target.join("Default").join(noise).exists(), "噪音项不得复制：{noise}");
+            assert!(
+                !target.join("Default").join(noise).exists(),
+                "噪音项不得复制：{noise}"
+            );
         }
         // 报告：5 文件 copied，skipped 含噪音项
         assert_eq!(report.copied, 5);
         assert_eq!(report.copied_files.len(), 5);
         assert!(report.copied_files.contains(&"Local State".to_string()));
-        assert!(report.copied_files.contains(&"Default/Network/Cookies".to_string()));
+        assert!(report
+            .copied_files
+            .contains(&"Default/Network/Cookies".to_string()));
         // 来源完好：排除项仍在源（只读语义）
         assert!(ud.join("Default/Login Data").is_file());
         assert!(ud.join("Default/Extensions/x/1.json").is_file());
@@ -557,10 +584,23 @@ mod tests {
     #[test]
     fn running_status_classify() {
         assert_eq!(classify_running(true, false, false), RunningStatus::Running);
-        assert_eq!(classify_running(true, true, false), RunningStatus::Running, "锁优先");
-        assert!(matches!(classify_running(false, true, false), RunningStatus::Uncertain { .. }));
-        assert!(matches!(classify_running(false, false, true), RunningStatus::Uncertain { .. }));
-        assert_eq!(classify_running(false, false, false), RunningStatus::NotRunning);
+        assert_eq!(
+            classify_running(true, true, false),
+            RunningStatus::Running,
+            "锁优先"
+        );
+        assert!(matches!(
+            classify_running(false, true, false),
+            RunningStatus::Uncertain { .. }
+        ));
+        assert!(matches!(
+            classify_running(false, false, true),
+            RunningStatus::Uncertain { .. }
+        ));
+        assert_eq!(
+            classify_running(false, false, false),
+            RunningStatus::NotRunning
+        );
     }
 
     /// Singleton* 任一锁文件存在 → Running（参数化，各锁独立 tempdir 避免删除 API）。
@@ -603,7 +643,10 @@ mod tests {
         let err = copy_profile_atomic(&source(&ud, "p1"), &managed).expect_err("应阻断");
         assert!(matches!(err, CopyError::SourceLocked { .. }));
         assert!(!managed.join("p1").exists(), "阻断不得产生目标");
-        assert!(!managed.join(STAGING_DIR).exists(), "锁阻断发生在 staging 创建前");
+        assert!(
+            !managed.join(STAGING_DIR).exists(),
+            "锁阻断发生在 staging 创建前"
+        );
     }
 
     /// PermissionError（含 WinError 32）→ 中止（LockConflict）+ staging 清理 +
@@ -616,7 +659,10 @@ mod tests {
         std::fs::create_dir_all(&managed).expect("目录");
         let src = source(&ud, "p1");
         let mut copier = |_: &Path, _: &Path| {
-            Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "共享冲突"))
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "共享冲突",
+            ))
         };
         let err = copy_profile_atomic_with(&src, &managed, &mut copier).expect_err("应中止");
         assert!(matches!(err, CopyError::LockConflict { .. }));
@@ -646,7 +692,10 @@ mod tests {
         let src = source(&ud, "p1");
         let mut copier = |s: &Path, d: &Path| {
             if d.ends_with("Local State") {
-                Err(std::io::Error::new(std::io::ErrorKind::NotFound, "模拟缺失"))
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "模拟缺失",
+                ))
             } else {
                 std::fs::copy(s, d)
             }
@@ -682,7 +731,10 @@ mod tests {
         std::fs::write(managed.join("p1/profile_meta.json"), b"{}").expect("写入");
         let err = copy_profile_atomic(&source(&ud, "p1"), &managed).expect_err("应拒绝");
         assert!(matches!(err, CopyError::AlreadyExists(_)));
-        assert!(managed.join("p1/profile_meta.json").is_file(), "既有资产不受影响");
+        assert!(
+            managed.join("p1/profile_meta.json").is_file(),
+            "既有资产不受影响"
+        );
     }
 
     /// rename 失败 → RenameFailed + staging 回滚 + 目标非半成品目录。
@@ -713,7 +765,10 @@ mod tests {
         let staging = managed.join(STAGING_DIR);
         if staging.exists() {
             assert!(
-                std::fs::read_dir(&staging).expect("读 staging").next().is_none(),
+                std::fs::read_dir(&staging)
+                    .expect("读 staging")
+                    .next()
+                    .is_none(),
                 "staging 已回滚清理"
             );
         }
@@ -728,7 +783,8 @@ mod tests {
         let managed = dir.path().join("managed");
         std::fs::create_dir_all(&managed).expect("目录");
         // profile_name 注入：sanitize 后单层目录名
-        let report = copy_profile_atomic(&source(&ud, "../evil"), &managed).expect("sanitize 后安全");
+        let report =
+            copy_profile_atomic(&source(&ud, "../evil"), &managed).expect("sanitize 后安全");
         assert!(report.copied >= 4);
         let target = managed.join(".._evil");
         assert!(target.is_dir(), "目标为消毒后的单层目录");
@@ -761,11 +817,17 @@ mod tests {
     #[test]
     fn win_error_32_detected() {
         let e = std::io::Error::from_raw_os_error(32);
-        assert!(is_win_error_32(&e), "raw=32 识别为共享冲突（kind=Uncategorized 不阻碍）");
+        assert!(
+            is_win_error_32(&e),
+            "raw=32 识别为共享冲突（kind=Uncategorized 不阻碍）"
+        );
         assert!(is_lock_conflict(&e), "共享冲突 → 中止复制");
         let other = std::io::Error::from_raw_os_error(5);
         assert!(!is_win_error_32(&other), "raw=5 非 WinError 32");
-        assert!(is_lock_conflict(&other), "PermissionError 一律中止（§3.2「等 PermissionError」）");
+        assert!(
+            is_lock_conflict(&other),
+            "PermissionError 一律中止（§3.2「等 PermissionError」）"
+        );
     }
 
     /// 非 Windows：is_win_error_32 恒 false。
@@ -788,7 +850,10 @@ mod tests {
         let staging = managed.join(STAGING_DIR);
         if staging.exists() {
             assert!(
-                std::fs::read_dir(&staging).expect("读 staging").next().is_none(),
+                std::fs::read_dir(&staging)
+                    .expect("读 staging")
+                    .next()
+                    .is_none(),
                 "成功后 staging 内无残留"
             );
         }

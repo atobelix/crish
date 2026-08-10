@@ -5,31 +5,52 @@
 //!   自定义目录校验 / App-Bound 前置检测）
 //! - [`copy`]：最小文件集复制（§3：白名单 / 锁检测 / staging 原子化 M-10）
 //! - [`verify`]：回读校验（§4：N_db 数据完整性兜底 / CDP 实读接口，S0 修订版）
+//! - [`storage_state`]：storage_state 导入/导出（§5：内存传递 + 显式授权 +
+//!   domain/origin 守卫 + 幂等去重）
+//! - [`bookmarks`]：书签 JSON 解析（§6.1：四树递归 / 去重 / 深度守卫）
+//! - [`history`]：历史 SQLite 只读读取（§6.2：WebKit 时间换算 / 只读保证）
 //! - [`persist`]：profile_meta 管理（§7：persist 开关唯一源 U-11 / 结论落盘 /
 //!   staging 清扫）
 //! - [`types`]：公共类型
 //!
-//! MVP 范围（R-13 分层裁决 + 任务书）：引导登录 persist 开关 + 来源发现 +
-//! 前置检测 + 最小文件集复制；**storage_state（§5）/ 书签（§6.1）/ 历史
-//! （§6.2）推迟 P1**，本模块不含其实现。
+//! 分层（R-13 裁决 + 任务书）：MVP 落地引导登录 persist 开关 + 来源发现 +
+//! 前置检测 + 最小文件集复制；**P1 补 storage_state（§5）/ 书签（§6.1）/
+//! 历史（§6.2）** 独立入口（本文件接线）。
 //!
-//! [`ImportService`] 为聚合入口（Tauri command 接线面，MVP 轻量形态：
-//! 无状态、路径注入，方法均为同步文件系统操作）。
+//! [`ImportService`] 为聚合入口（Tauri command 接线面，轻量形态：
+//! 无状态、路径注入，方法均为同步文件系统/内存操作）。
 
+pub mod bookmarks;
 pub mod copy;
 pub mod discovery;
+pub mod history;
 pub mod persist;
+pub mod storage_state;
 pub mod types;
 pub mod verify;
 
+pub use bookmarks::{
+    parse_bookmarks, BookmarkItem, BookmarksError, BookmarksOptions, BookmarksReport,
+    BOOKMARKS_DEFAULT_LIMIT, BOOKMARKS_MAX_DEPTH,
+};
 pub use copy::{CopyError, CopyReport, CopySource, STAGING_DIR};
 pub use discovery::{
     detect_app_bound, discover_sources, filter_existing, list_profiles, platform_candidates,
     validate_custom_dir, UserDataCandidate,
 };
+pub use history::{
+    read_history, HistoryError, HistoryItem, HistoryOptions, HistoryReport, HISTORY_DEFAULT_DAYS,
+    HISTORY_DEFAULT_LIMIT, WEBKIT_UNIX_OFFSET_US,
+};
 pub use persist::{
-    cleanup_staging, list_managed, load_profile_meta, new_meta, set_persist,
-    write_profile_meta, write_verify_result, PersistError, PROFILE_META_FILE,
+    cleanup_staging, list_managed, load_profile_meta, new_meta, set_persist, write_profile_meta,
+    write_verify_result, PersistError, PROFILE_META_FILE,
+};
+pub use storage_state::{
+    build_import_plan, export_storage_state, origin_guard_script, parse_storage_state,
+    validate_cookie_domain, validate_origin, ExportAuthorization, ImportPlan, ImportStats,
+    OriginScript, StorageCookie, StorageItem, StorageOrigin, StorageState, StorageStateError,
+    SESSION_COOKIE_EXPIRES, STORAGE_STATE_MAX_BYTES, STORAGE_STATE_MAX_COOKIES,
 };
 pub use types::{
     AppBoundStatus, BrowserFamily, BrowserSource, ChromeProfile, ProfileMeta, ProfileOrigin,
@@ -41,6 +62,7 @@ pub use verify::{
 };
 
 use crate::browser::profile::{browser_root, managed_root};
+use crate::cdp::domains::Cookie;
 use std::path::{Path, PathBuf};
 
 /// 数据导入服务聚合（Tauri command 接线面；受管根注入，测试/自定义布局可覆盖）。
@@ -101,7 +123,11 @@ impl ImportService {
     }
 
     /// 持久化开关（U-11：persist 唯一存于 profile_meta.json，撤销双源）。
-    pub fn set_persist(&self, profile_dir: &Path, persist: bool) -> Result<ProfileMeta, PersistError> {
+    pub fn set_persist(
+        &self,
+        profile_dir: &Path,
+        persist: bool,
+    ) -> Result<ProfileMeta, PersistError> {
         set_persist(profile_dir, persist)
     }
 
@@ -124,6 +150,48 @@ impl ImportService {
     /// 接线清单见 [`verify::CdpCookieReader`]（依赖维度 10/11 进程管理）。
     pub fn cdp_reader(&self) -> Box<dyn CdpCookieReader + Send + Sync> {
         Box::new(UnwiredCdpCookieReader)
+    }
+
+    /// storage_state 导出（§5.2）：**需显式授权**（授权对话框确认后传
+    /// `ExportAuthorization::Confirmed`）；**内存传递**——返回内存
+    /// [`StorageState`]，不落盘任何文件（写盘仅走前端显式「另存为」路径）；
+    /// cookie 来源为 CDP `Storage.getCookies` 结果（调用方经 CDP 获取后传入）。
+    pub fn export_storage_state(
+        &self,
+        cookies: &[Cookie],
+        auth: ExportAuthorization,
+    ) -> Result<StorageState, StorageStateError> {
+        storage_state::export_storage_state(cookies, auth)
+    }
+
+    /// storage_state 导入（§5.3）：JSON 解析 + 校验（大小/数量上限、domain 守卫、
+    /// origin 守卫）→ [`ImportPlan`]（`Network.setCookies` 参数 + localStorage
+    /// origin 守卫脚本；同 (domain, name, path) 幂等去重、覆盖语义）。
+    pub fn import_storage_state(&self, json: &str) -> Result<ImportPlan, StorageStateError> {
+        let state = storage_state::parse_storage_state(json)?;
+        Ok(storage_state::build_import_plan(&state))
+    }
+
+    /// 书签导入（§6.1，独立入口）：Chrome Bookmarks JSON 解析（四树递归）→
+    /// 扁平化列表；(url, name) 幂等去重；默认上限 10000 条。纯数据解析，
+    /// 无网络请求；结果写入本地书签库属 conex-db 接线（遗留）。
+    pub fn import_bookmarks(
+        &self,
+        json: &str,
+        options: &BookmarksOptions,
+    ) -> Result<BookmarksReport, BookmarksError> {
+        bookmarks::parse_bookmarks(json, options)
+    }
+
+    /// 历史导入（§6.2，独立入口）：Chrome History SQLite **只读**读取
+    /// （`SQLITE_OPEN_READ_ONLY`，绝不写来源库）→ WebKit 时间戳换算 →
+    /// 时间倒序列表；默认最近 90 天 / 上限 1000 条（可配）。
+    pub fn import_history(
+        &self,
+        history_db: &Path,
+        options: &HistoryOptions,
+    ) -> Result<HistoryReport, HistoryError> {
+        history::read_history(history_db, options)
     }
 }
 
@@ -187,7 +255,10 @@ mod tests {
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].directory, "Default");
         // 3. App-Bound 前置检测（fixture 无 app_bound 字段 → Absent）
-        assert_eq!(svc.detect_app_bound(&ud.join("Local State")), AppBoundStatus::Absent);
+        assert_eq!(
+            svc.detect_app_bound(&ud.join("Local State")),
+            AppBoundStatus::Absent
+        );
         // 4. 复制（组合完整来源；目标名走 sanitize（非 ASCII 换下划线，见
         //    browser::profile::sanitize_profile_name），测试用 ASCII 名）
         let full_source = found[0].with_profile(&profiles[0]);
@@ -222,5 +293,99 @@ mod tests {
             svc.cdp_reader().count_persistent_cookies(),
             Err(VerifyError::NotImplemented(_))
         ));
+    }
+
+    /// P1 独立入口冒烟（§5/§6）：storage_state 导出（授权）→ 导入（注入计划）→
+    /// 书签解析 → 历史只读读取；**不落盘保证**（§5.4）：全程不创建任何文件。
+    #[test]
+    fn import_service_p1_methods_no_persist() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let svc = ImportService::with_root(dir.path().join("managed"));
+        // 1. 导出需显式授权（§5.2）
+        let cdp_cookie = Cookie {
+            name: "sid".to_string(),
+            value: "abc123".to_string(),
+            domain: ".example.com".to_string(),
+            path: "/".to_string(),
+            expires: -1.0,
+            size: 10,
+            http_only: true,
+            secure: true,
+            session: true,
+            same_site: Some("Lax".to_string()),
+            priority: None,
+        };
+        assert!(svc
+            .export_storage_state(
+                std::slice::from_ref(&cdp_cookie),
+                ExportAuthorization::Denied
+            )
+            .is_err());
+        let state = svc
+            .export_storage_state(&[cdp_cookie], ExportAuthorization::Confirmed)
+            .expect("导出");
+        // 2. 导入往返（§5.3）：序列化 → 解析 → 注入计划
+        let json = state.to_json();
+        let plan = svc.import_storage_state(&json).expect("导入");
+        assert_eq!(plan.stats.cookies, 1);
+        let v = serde_json::to_value(&plan.cookies).expect("序列化");
+        assert!(
+            v[0].get("expires").is_none(),
+            "会话 cookie 归一化移除 expires"
+        );
+        assert_eq!(v[0]["sameSite"], "Lax");
+        // 3. 书签解析（§6.1）：非法 JSON 报错、合法树去重
+        assert!(svc
+            .import_bookmarks("{bad", &BookmarksOptions::default())
+            .is_err());
+        let bookmarks = svc
+            .import_bookmarks(
+                r#"{"roots":{"bookmark_bar":{"type":"folder","name":"书签栏","children":[
+                    {"type":"url","name":"A","url":"https://a.example.com"},
+                    {"type":"url","name":"A","url":"https://a.example.com"}
+                ]}}}"#,
+                &BookmarksOptions::default(),
+            )
+            .expect("书签解析");
+        assert_eq!(bookmarks.items.len(), 1, "同 (url, name) 去重");
+        assert_eq!(bookmarks.items[0].folder_path, vec!["书签栏"]);
+        // 4. 历史只读读取（§6.2）：真实 SQLite fixture + 时间换算
+        let hist = dir.path().join("History");
+        {
+            let conn = rusqlite::Connection::open(&hist).expect("建库");
+            conn.execute_batch(
+                "CREATE TABLE urls (id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT NOT NULL, title TEXT);
+                 CREATE TABLE visits (id INTEGER PRIMARY KEY AUTOINCREMENT, url INTEGER NOT NULL, visit_time INTEGER NOT NULL);",
+            )
+            .expect("建表");
+            conn.execute(
+                "INSERT INTO urls (url, title) VALUES ('https://h.example.com', 'H')",
+                [],
+            )
+            .expect("插行");
+            let id = conn.last_insert_rowid();
+            let now_secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("时钟")
+                .as_secs() as i64;
+            conn.execute(
+                "INSERT INTO visits (url, visit_time) VALUES (?1, ?2)",
+                rusqlite::params![id, (now_secs - 86_400 + 11_644_473_600) * 1_000_000],
+            )
+            .expect("插行");
+        }
+        let report = svc
+            .import_history(&hist, &HistoryOptions::default())
+            .expect("历史读取");
+        assert_eq!(report.items.len(), 1);
+        assert_eq!(
+            report.items[0].url, "https://h.example.com",
+            "WebKit 时间戳换算后读取"
+        );
+        // 5. 不落盘保证（§5.4）：以上全部操作不得创建任何文件
+        assert!(
+            !svc.managed_root.exists(),
+            "storage_state/书签/历史导入导出全程不落盘（§5.4 强制面）"
+        );
     }
 }

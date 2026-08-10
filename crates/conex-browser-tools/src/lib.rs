@@ -15,6 +15,24 @@
 //! 内无键冲突，同名返回 `tool.version_conflict` 的保护同样生效；注册次序与 MCP
 //! 工具无依赖（`register_runtime` 幂等跳过已并入的同名项）。外部 MCP 与自研工具
 //! 共存注册、模型同时可见两族工具、名称无歧义（08 §5 S9 验收口径）。
+//! 实测（34-MCPattach验证.md）：chrome-devtools-mcp 1.6.0 枚举 29 个工具（新版
+//! 工具面 `take_snapshot`/`list_console_messages`/`evaluate_script` 等，无
+//! `browser_*` 前缀），经桥适配为 `mcp_<server>__*` 后与自研工具零冲突。
+//!
+//! ## MCP 并存规则（17 §5.2/§5.3，R-12 只读能力集）
+//! - attach 型外部浏览器类 MCP（chrome-devtools-mcp 族）经 `--browserUrl`
+//!   `http://127.0.0.1:<随机端口>` 附加受管实例 CDP 端点（DevToolsActivePort
+//!   双层不透明 token：随机端口 + WS path uuid，会话存活期间开放）；
+//! - 权限独立：自研 `browser_*` 走本 crate 分级表；MCP 工具不继承浏览器分级，
+//!   维持既有适配现状 `dangerous: false`（bridge.rs），权限由「用户显式配置该
+//!   MCP server」的信任面承载；
+//! - **只读能力集（R-12）**：attach 会话下，引擎侧 CDP 会话面仅授予只读命令域
+//!   （snapshot/screenshot/console/network 对应域）；交互/求值类（Input 注入、
+//!   evaluate、cookie 全量读写）按既有权限矩阵审批且**默认拒绝**——外部 MCP
+//!   默认视为只读，如需交互由用户显式配置该 server 时知晓；attach 允许与否由
+//!   会话级开关 [BrowserToolsConfig::mcp_attach_allowed] 控制（默认关闭）；
+//! - 冲突规避：两族工具共享同一实例/同一 DOM，但快照索引不互通（MCP 用自家
+//!   uid、自研用 snapshotVersion 绑定索引），模型侧由命名空间区分。
 //!
 //! ## 工具清单（MVP 子集 23 个，R-13 §8.2 第 7 项）
 //! - 导航 8（dangerous=false）：navigate/back/forward/reload/list_tabs/new_tab/
@@ -79,18 +97,18 @@ pub struct SensitiveCapabilities {
 
 /// 浏览器工具注册配置（引擎侧会话装配时注入，17 §1.4）。
 ///
-/// - `session`：浏览器会话（未注入 → 工具面 `tool.browser.not_ready` gating）；
-/// - `manager`：进程管理器（可选；状态非 Running 时恢复期 gating，R-9）；
-/// - `gate`：域名门禁实现（缺省用本 crate 的 MVP 实现，17 §4 正式实现落地后
-///   由引擎侧注入替换）；
-/// - `gate_allowlist`/`gate_blocklist`：MVP 门禁的域名模式（仅当 `gate` 缺省时生效；
-///   空白名单 = 默认全允许（限公共互联网，17 §4.1）；黑名单命中不可豁免）；
 /// - `sensitive`：敏感能力开关（默认全关）；
 /// - `budgets`：快照预算（缺省 [BudgetConfig::active] 全额预算）；
 /// - `max_tabs`：标签数量上限（15 文档 §7.3 MAX_TABS 裁决：缺省 8，范围 1-16；
 ///   超限 new_tab 返回 `tool.browser.tab_limit_exceeded`，U-12 码）；
 /// - `session_ops`：会话操作层直接注入（测试替身/引擎高级接线；优先于 `session`，
-///   经 `session::SessionOps` trait 面）。
+///   经 `session::SessionOps` trait 面）；
+/// - `mcp_attach_allowed`：attach 型外部浏览器类 MCP 的**会话级开关**（R-12，
+///   默认 false）。开启后引擎才允许把受管实例 CDP 端点（`http://127.0.0.1:<port>`，
+///   17 §5.3）注入外部浏览器类 MCP（chrome-devtools-mcp 族）的启动参数/env
+///   （`McpServerConfig.args/env`）；**未开启时引擎不向任何外部 MCP 暴露受管
+///   端点信息**（引擎侧接线点：session 装配/面板开关处读取本字段，engine.rs
+///   不在此 crate——接线登记见 34-MCPattach验证.md §5）。
 #[derive(Clone, Default)]
 pub struct BrowserToolsConfig {
     pub session: Option<Arc<BrowserSession>>,
@@ -102,6 +120,8 @@ pub struct BrowserToolsConfig {
     pub budgets: Option<BudgetConfig>,
     pub max_tabs: Option<usize>,
     pub session_ops: Option<Arc<dyn SessionOps>>,
+    /// attach 型外部浏览器类 MCP 会话级开关（R-12，默认 false）
+    pub mcp_attach_allowed: bool,
 }
 
 /// 注册全部 23 个 browser_* 工具（后置注册函数，**不进入** agent-tools 的
@@ -149,4 +169,46 @@ pub fn register_browser_tools(
         max_tabs,
     });
     tools::register_all(registry, ctx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// R-12 安全默认：attach 开关默认关闭（会话级，未显式授权不向外部 MCP
+    /// 暴露受管端点信息）。
+    #[test]
+    fn mcp_attach_allowed_defaults_false() {
+        let config = BrowserToolsConfig::default();
+        assert!(
+            !config.mcp_attach_allowed,
+            "attach 型 MCP 会话级开关必须默认关闭（R-12 安全默认）"
+        );
+        // 结构体更新语法不破坏其它默认值（回归面）
+        let rest = BrowserToolsConfig {
+            mcp_attach_allowed: true,
+            ..BrowserToolsConfig::default()
+        };
+        assert!(rest.mcp_attach_allowed);
+        assert!(!rest.sensitive.evaluate, "其余字段不受影响");
+    }
+
+    /// 开关不参与注册面：开启与否均不影响 24 个工具注册（该字段由引擎侧
+    /// 会话装配消费，注册函数无需感知）。
+    #[test]
+    fn mcp_attach_allowed_does_not_affect_registration() {
+        for allowed in [false, true] {
+            let mut registry = ToolRegistry::new();
+            let config = BrowserToolsConfig {
+                mcp_attach_allowed: allowed,
+                ..BrowserToolsConfig::default()
+            };
+            register_browser_tools(&mut registry, config).expect("注册应成功");
+            assert_eq!(
+                registry.len(),
+                24,
+                "注册数不随 attach 开关变化（allowed={allowed}）"
+            );
+        }
+    }
 }

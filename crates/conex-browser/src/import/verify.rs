@@ -40,9 +40,12 @@ pub enum VerifyError {
 /// 启动器与回读校验均按存在性探测，两个路径不合并）。
 pub fn locate_cookies_db(profile_dir: &Path) -> Option<PathBuf> {
     let default = profile_dir.join("Default");
-    [default.join("Network").join("Cookies"), default.join("Cookies")]
-        .into_iter()
-        .find(|p| p.is_file())
+    [
+        default.join("Network").join("Cookies"),
+        default.join("Cookies"),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
 }
 
 /// 统计目标 Cookies 库持久 cookie 行数 `N_db`（§4.1 第 1 步：`expires_utc > 0`）。
@@ -54,9 +57,11 @@ pub fn count_persistent_cookies(db_path: &Path) -> Result<u64, VerifyError> {
     )
     .map_err(|e| VerifyError::Unreadable(e.to_string()))?;
     let n: i64 = conn
-        .query_row("SELECT COUNT(*) FROM cookies WHERE expires_utc > 0", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT COUNT(*) FROM cookies WHERE expires_utc > 0",
+            [],
+            |row| row.get(0),
+        )
         .map_err(|e| VerifyError::Unreadable(e.to_string()))?;
     Ok(n.max(0) as u64)
 }
@@ -293,7 +298,11 @@ mod tests {
         std::fs::create_dir_all(&ok).expect("目录");
         cookies_fixture(
             &ok.join("Default/Cookies"),
-            &[(".a.com", 1_700_000_000), (".b.com", 1_700_000_100), (".c.com", 0)],
+            &[
+                (".a.com", 1_700_000_000),
+                (".b.com", 1_700_000_100),
+                (".c.com", 0),
+            ],
         );
         let r = run_db_verify(&ok, AppBoundStatus::Detected);
         assert_eq!(r.conclusion, VerifyConclusion::Readable);
@@ -303,7 +312,10 @@ mod tests {
         // 新布局（Network/Cookies）同样命中
         let new_layout = dir.path().join("new_layout");
         std::fs::create_dir_all(&new_layout).expect("目录");
-        cookies_fixture(&new_layout.join("Default/Network/Cookies"), &[(".a.com", 1_700_000_000)]);
+        cookies_fixture(
+            &new_layout.join("Default/Network/Cookies"),
+            &[(".a.com", 1_700_000_000)],
+        );
         let r = run_db_verify(&new_layout, AppBoundStatus::Absent);
         assert_eq!(r.conclusion, VerifyConclusion::Readable);
         assert_eq!(r.n_db, 1);
@@ -315,7 +327,10 @@ mod tests {
         let dir = tempfile::tempdir().expect("临时目录");
         let profile = dir.path().join("m");
         std::fs::create_dir_all(&profile).expect("目录");
-        cookies_fixture(&profile.join("Default/Cookies"), &[(".a.com", 1_700_000_000)]);
+        cookies_fixture(
+            &profile.join("Default/Cookies"),
+            &[(".a.com", 1_700_000_000)],
+        );
         // 来源 Local State 含 app_bound 字段
         let ls = dir.path().join("src-Local State");
         std::fs::write(&ls, r#"{"os_crypt": {"app_bound_encrypted_key": "x"}}"#).expect("写入");
@@ -334,7 +349,10 @@ mod tests {
         let dir = tempfile::tempdir().expect("临时目录");
         let profile = dir.path().join("m");
         std::fs::create_dir_all(&profile).expect("目录");
-        cookies_fixture(&profile.join("Default/Cookies"), &[(".a.com", 1_700_000_000)]);
+        cookies_fixture(
+            &profile.join("Default/Cookies"),
+            &[(".a.com", 1_700_000_000)],
+        );
         let mut r = run_db_verify(&profile, AppBoundStatus::Absent);
         assert_eq!(r.conclusion, VerifyConclusion::Readable);
         // CDP 回读 0（复制损坏/权限/跨机器凭据失效）→ 降级 Unreadable

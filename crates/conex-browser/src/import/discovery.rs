@@ -36,12 +36,36 @@ pub fn platform_candidates(base: &Path) -> Vec<UserDataCandidate> {
         dir: base.join(rel),
     };
     vec![
-        cand(BrowserFamily::Chrome, "Google Chrome", "Google/Chrome/User Data"),
-        cand(BrowserFamily::Chrome, "Google Chrome Canary", "Google/Chrome SxS/User Data"),
-        cand(BrowserFamily::Edge, "Microsoft Edge", "Microsoft/Edge/User Data"),
-        cand(BrowserFamily::Edge, "Microsoft Edge Beta", "Microsoft/Edge Beta/User Data"),
-        cand(BrowserFamily::Edge, "Microsoft Edge Dev", "Microsoft/Edge Dev/User Data"),
-        cand(BrowserFamily::Edge, "Microsoft Edge Canary", "Microsoft/Edge SxS/User Data"),
+        cand(
+            BrowserFamily::Chrome,
+            "Google Chrome",
+            "Google/Chrome/User Data",
+        ),
+        cand(
+            BrowserFamily::Chrome,
+            "Google Chrome Canary",
+            "Google/Chrome SxS/User Data",
+        ),
+        cand(
+            BrowserFamily::Edge,
+            "Microsoft Edge",
+            "Microsoft/Edge/User Data",
+        ),
+        cand(
+            BrowserFamily::Edge,
+            "Microsoft Edge Beta",
+            "Microsoft/Edge Beta/User Data",
+        ),
+        cand(
+            BrowserFamily::Edge,
+            "Microsoft Edge Dev",
+            "Microsoft/Edge Dev/User Data",
+        ),
+        cand(
+            BrowserFamily::Edge,
+            "Microsoft Edge Canary",
+            "Microsoft/Edge SxS/User Data",
+        ),
         cand(BrowserFamily::Chromium, "Chromium", "Chromium/User Data"),
     ]
 }
@@ -56,7 +80,11 @@ pub fn platform_candidates(base: &Path) -> Vec<UserDataCandidate> {
     };
     vec![
         cand(BrowserFamily::Chrome, "Google Chrome", "Google/Chrome"),
-        cand(BrowserFamily::Chrome, "Google Chrome Canary", "Google/Chrome Canary"),
+        cand(
+            BrowserFamily::Chrome,
+            "Google Chrome Canary",
+            "Google/Chrome Canary",
+        ),
         cand(BrowserFamily::Edge, "Microsoft Edge", "Microsoft Edge"),
         cand(BrowserFamily::Chromium, "Chromium", "Chromium"),
     ]
@@ -163,7 +191,9 @@ pub fn list_profiles(user_data_dir: &Path, family: BrowserFamily) -> Vec<ChromeP
     };
     let mut out: Vec<ChromeProfile> = Vec::new();
     for (directory, info) in cache {
-        let Some(info_obj) = info.as_object() else { continue };
+        let Some(info_obj) = info.as_object() else {
+            continue;
+        };
         // display_name 回退链：name → user_name → directory（§2.2 表）
         let display_name = info_obj
             .get("name")
@@ -226,7 +256,10 @@ pub fn detect_app_bound(local_state: &Path) -> AppBoundStatus {
     let Ok(root) = serde_json::from_str::<Value>(&text) else {
         return AppBoundStatus::Absent;
     };
-    match root.get("os_crypt").and_then(|o| o.get("app_bound_encrypted_key")) {
+    match root
+        .get("os_crypt")
+        .and_then(|o| o.get("app_bound_encrypted_key"))
+    {
         Some(v) if !v.is_null() => AppBoundStatus::Detected,
         _ => AppBoundStatus::Absent,
     }
@@ -252,11 +285,19 @@ mod tests {
             assert_eq!(table[0].family, BrowserFamily::Chrome);
             assert_eq!(table[0].browser_name, "Google Chrome");
             assert_eq!(table[0].dir, base.join("Google/Chrome/User Data"));
-            assert_eq!(table[1].dir, base.join("Google/Chrome SxS/User Data"), "Canary SxS");
+            assert_eq!(
+                table[1].dir,
+                base.join("Google/Chrome SxS/User Data"),
+                "Canary SxS"
+            );
             assert_eq!(table[2].browser_name, "Microsoft Edge");
-            assert!(table.iter().any(|c| c.browser_name == "Microsoft Edge Beta"));
+            assert!(table
+                .iter()
+                .any(|c| c.browser_name == "Microsoft Edge Beta"));
             assert!(table.iter().any(|c| c.browser_name == "Microsoft Edge Dev"));
-            assert!(table.iter().any(|c| c.browser_name == "Microsoft Edge Canary"));
+            assert!(table
+                .iter()
+                .any(|c| c.browser_name == "Microsoft Edge Canary"));
             assert!(table.iter().any(|c| c.family == BrowserFamily::Chromium));
             assert!(table.iter().all(|c| c.dir.starts_with(base)));
         }
@@ -286,7 +327,10 @@ mod tests {
         // 候选目录全部不存在
         let none = platform_candidates(base)
             .into_iter()
-            .map(|c| UserDataCandidate { dir: c.dir.join("missing"), ..c })
+            .map(|c| UserDataCandidate {
+                dir: c.dir.join("missing"),
+                ..c
+            })
             .collect();
         assert!(filter_existing(none).is_empty());
     }
@@ -314,18 +358,40 @@ mod tests {
         std::fs::write(&not_dir, b"file").expect("写入");
 
         let table = vec![
-            UserDataCandidate { family: BrowserFamily::Chrome, browser_name: "A", dir: with_ls },
-            UserDataCandidate { family: BrowserFamily::Edge, browser_name: "B", dir: with_profile },
-            UserDataCandidate { family: BrowserFamily::Chromium, browser_name: "C", dir: empty },
-            UserDataCandidate { family: BrowserFamily::Chrome, browser_name: "D", dir: ghost },
-            UserDataCandidate { family: BrowserFamily::Edge, browser_name: "E", dir: not_dir },
+            UserDataCandidate {
+                family: BrowserFamily::Chrome,
+                browser_name: "A",
+                dir: with_ls,
+            },
+            UserDataCandidate {
+                family: BrowserFamily::Edge,
+                browser_name: "B",
+                dir: with_profile,
+            },
+            UserDataCandidate {
+                family: BrowserFamily::Chromium,
+                browser_name: "C",
+                dir: empty,
+            },
+            UserDataCandidate {
+                family: BrowserFamily::Chrome,
+                browser_name: "D",
+                dir: ghost,
+            },
+            UserDataCandidate {
+                family: BrowserFamily::Edge,
+                browser_name: "E",
+                dir: not_dir,
+            },
         ];
         let found = filter_existing(table);
         assert_eq!(found.len(), 2, "仅 A/B 命中");
         assert_eq!(found[0].family, BrowserFamily::Chrome);
         assert_eq!(found[0].browser_name, "A");
         assert_eq!(found[1].family, BrowserFamily::Edge);
-        assert!(found.iter().all(|s| s.profile_dir.is_empty() && s.display_name.is_empty()));
+        assert!(found
+            .iter()
+            .all(|s| s.profile_dir.is_empty() && s.display_name.is_empty()));
     }
 
     /// list_profiles 正常路径：回退链（name → user_name → directory）+
@@ -389,9 +455,15 @@ mod tests {
             r#"{"profile": { "info_cache": { "Default": "not-an-object", "Ghost": { "name": "x" } } }}"#,
         );
         let list = list_profiles(&ud, BrowserFamily::Chrome);
-        assert!(list.is_empty(), "Default 值为字符串 → 跳过；Ghost 无目录 → 过滤");
+        assert!(
+            list.is_empty(),
+            "Default 值为字符串 → 跳过；Ghost 无目录 → 过滤"
+        );
         // 6. is_using_default_name 缺失 → false 默认
-        write_local_state(&ud, r#"{"profile": { "info_cache": { "Default": { "name": "x" } } }}"#);
+        write_local_state(
+            &ud,
+            r#"{"profile": { "info_cache": { "Default": { "name": "x" } } }}"#,
+        );
         let list = list_profiles(&ud, BrowserFamily::Chrome);
         assert_eq!(list.len(), 1);
         assert!(!list[0].is_using_default_name);
@@ -429,8 +501,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("临时目录");
         let ls = dir.path().join("Local State");
         // 1. 字段存在（字符串值）→ Detected
-        std::fs::write(&ls, r#"{"os_crypt": {"app_bound_encrypted_key": "abc", "encrypted_key": "def"}}"#)
-            .expect("写入");
+        std::fs::write(
+            &ls,
+            r#"{"os_crypt": {"app_bound_encrypted_key": "abc", "encrypted_key": "def"}}"#,
+        )
+        .expect("写入");
         assert_eq!(detect_app_bound(&ls), AppBoundStatus::Detected);
         // 2. 字段缺失（S0 实测本机形态：仅 encrypted_key）→ Absent
         std::fs::write(&ls, r#"{"os_crypt": {"encrypted_key": "def"}}"#).expect("写入");
@@ -448,6 +523,9 @@ mod tests {
         std::fs::write(&ls, b"\x00\x01not-json").expect("写入");
         assert_eq!(detect_app_bound(&ls), AppBoundStatus::Absent);
         // 7. 文件缺失 → Absent
-        assert_eq!(detect_app_bound(&ls.parent().unwrap().join("Missing")), AppBoundStatus::Absent);
+        assert_eq!(
+            detect_app_bound(&ls.parent().unwrap().join("Missing")),
+            AppBoundStatus::Absent
+        );
     }
 }

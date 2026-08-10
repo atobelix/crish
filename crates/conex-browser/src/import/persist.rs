@@ -50,12 +50,17 @@ pub fn profile_meta_path(profile_dir: &Path) -> PathBuf {
 pub fn write_profile_meta(profile_dir: &Path, meta: &ProfileMeta) -> Result<(), PersistError> {
     let path = profile_meta_path(profile_dir);
     let tmp = profile_dir.join(format!(".{PROFILE_META_FILE}.{}.tmp", short_id()));
-    let json = serde_json::to_string_pretty(meta)
-        .map_err(|e| PersistError::Serialize(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(meta).map_err(|e| PersistError::Serialize(e.to_string()))?;
     std::fs::write(&tmp, json)
         .map_err(|e| PersistError::Io(format!("写临时文件失败 {}：{e}", tmp.display())))?;
-    std::fs::rename(&tmp, &path)
-        .map_err(|e| PersistError::Io(format!("原子提交失败 {} → {}：{e}", tmp.display(), path.display())))?;
+    std::fs::rename(&tmp, &path).map_err(|e| {
+        PersistError::Io(format!(
+            "原子提交失败 {} → {}：{e}",
+            tmp.display(),
+            path.display()
+        ))
+    })?;
     Ok(())
 }
 
@@ -65,7 +70,12 @@ pub fn load_profile_meta(profile_dir: &Path) -> Result<Option<ProfileMeta>, Pers
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(PersistError::Io(format!("读取失败 {}：{e}", path.display()))),
+        Err(e) => {
+            return Err(PersistError::Io(format!(
+                "读取失败 {}：{e}",
+                path.display()
+            )))
+        }
     };
     serde_json::from_str(&text)
         .map(Some)
@@ -195,9 +205,7 @@ pub(crate) fn short_id() -> String {
 mod tests {
     use super::*;
     use crate::import::copy::STAGING_DIR;
-    use crate::import::types::{
-        AppBoundStatus, BrowserFamily, VerifyConclusion, VerifyReport,
-    };
+    use crate::import::types::{AppBoundStatus, BrowserFamily, VerifyConclusion, VerifyReport};
 
     fn sample_meta() -> ProfileMeta {
         let mut meta = new_meta(
@@ -232,7 +240,10 @@ mod tests {
         write_profile_meta(&pd, &meta).expect("写入");
         let loaded = load_profile_meta(&pd).expect("读取").expect("存在");
         assert_eq!(loaded, meta);
-        assert_eq!(loaded.source.as_ref().expect("source").profile_dir, "Default");
+        assert_eq!(
+            loaded.source.as_ref().expect("source").profile_dir,
+            "Default"
+        );
         assert_eq!(loaded.verify_result.as_ref().expect("vr").n_db, 128);
         // 落盘文件合法 JSON（profile_meta.json 存在）
         assert!(pd.join(PROFILE_META_FILE).is_file());
@@ -289,7 +300,10 @@ mod tests {
         t1.join().expect("join t1");
         t2.join().expect("join t2");
         let meta = load_profile_meta(&pd).expect("读取").expect("存在");
-        assert!(!meta.profile_id.is_empty(), "文件为完整 meta（原子 rename 无半成品）");
+        assert!(
+            !meta.profile_id.is_empty(),
+            "文件为完整 meta（原子 rename 无半成品）"
+        );
         // 无临时文件残留
         let leftovers: Vec<_> = std::fs::read_dir(&pd)
             .expect("读目录")
@@ -335,7 +349,10 @@ mod tests {
             VerifyConclusion::Unreadable
         );
         assert_eq!(
-            load_profile_meta(&pd).expect("读取").expect("存在").verify_result,
+            load_profile_meta(&pd)
+                .expect("读取")
+                .expect("存在")
+                .verify_result,
             Some(verify)
         );
     }
@@ -351,7 +368,10 @@ mod tests {
         assert!(meta.source.is_none());
         assert!(meta.verify_result.is_none());
         let with_src = new_meta(ProfileOrigin::Copied, None);
-        assert!(Uuid::parse_str(&with_src.profile_id).is_ok(), "profile_id 为合法 uuid");
+        assert!(
+            Uuid::parse_str(&with_src.profile_id).is_ok(),
+            "profile_id 为合法 uuid"
+        );
     }
 
     /// cleanup_staging：残留目录/文件被清，staging 根保留；无 staging 根 → 空。
@@ -371,7 +391,10 @@ mod tests {
         assert_eq!(removed.len(), 1, "目录残留被清（文件残留不计数）");
         assert!(staging.exists(), "staging 根保留（复制流程使用）");
         assert!(
-            std::fs::read_dir(&staging).expect("读 staging").next().is_none(),
+            std::fs::read_dir(&staging)
+                .expect("读 staging")
+                .next()
+                .is_none(),
             "staging 内无残留"
         );
     }
