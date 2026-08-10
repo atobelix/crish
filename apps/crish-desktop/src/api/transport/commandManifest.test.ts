@@ -48,8 +48,9 @@ describe('commandManifest', () => {
       //   core_md_render_stream / core_md_clear_cache），95 → 90（changelog 33 可查）
       // R1-07：multi_device_pair_* / multi_device_list_devices 四件套已接线（94 → 98）
       // R1-08：multi_device_revoke_device / multi_device_rename_device 已接线（98 → 100）
-      expect(registered).toBe(98);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(102);
+      // R1-09（G-4）：multi_device_network_info 已接线（102 → 103）
+      expect(registered).toBe(99);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(103);
     });
 
     it('命令名唯一', () => {
@@ -123,6 +124,8 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('workbench_fs_delete_file')).toBe(true);
       expect(isRegisteredCommand('config_profile_apply')).toBe(true);
       expect(isRegisteredCommand('config_secret_reveal')).toBe(true);
+      // R1-09（G-4）：网络环境检测已接线
+      expect(isRegisteredCommand('multi_device_network_info')).toBe(true);
       // 登记先行：尚未接线，不得视为可调用
       expect(isRegisteredCommand('append_session_messages')).toBe(false);
       // 未知名
@@ -264,10 +267,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（100；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（103；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(102);
+      expect(total).toBe(103);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

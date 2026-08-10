@@ -91,6 +91,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // R1-08：设备管理页撤销/改名两件套（registered=true，与 Rust 同步）
     entry('multi_device_revoke_device', 'multi_device', 'engine'),
     entry('multi_device_rename_device', 'multi_device', 'engine'),
+    // R1-09（G-4）：网络环境检测（注册表网络配置文件 + 可直连 IP + 引导文案）
+    entry('multi_device_network_info', 'multi_device', 'engine'),
     // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
     // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
     entry('config_get', 'config', 'engine'),

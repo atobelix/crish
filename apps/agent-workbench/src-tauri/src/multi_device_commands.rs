@@ -1,11 +1,12 @@
 //! 多端互通配对命令面（R1-07 四件套：pair_start / pair_status /
-//! pair_cancel / list_devices）。
+//! pair_cancel / list_devices；R1-08 撤销/改名；R1-09 网络环境检测）。
 //!
 //! 实现面直调 [server::pairing::PairingCoordinator]（经 Tauri state 注入）；
 //! 配对完成后令牌签发、撤销全链（WS 踢出 + REST 401）均由协调器负责。
 
 use tauri::State;
 
+use crate::multi_device_network::NetworkEnvInfo;
 use crate::server::pairing::{DeviceInfo, PairStartResult, PairStatus, PairingCoordinator};
 
 /// 激活配对：生成 CXN 码 → 开启局域网监听 → 返回码/二维码/防火墙提示。
@@ -65,4 +66,11 @@ pub fn multi_device_rename_device(
         return Err("标签需为 1-40 字符".to_string());
     }
     Ok(coordinator.rename_device(&hash, label))
+}
+
+/// 网络环境检测（R1-09 G-4）：网络配置文件类别（公用/专用/域，注册表
+/// NetworkList\Profiles）+ 可直连 IP 列表 + 引导文案（防火墙/AP 隔离）。
+#[tauri::command]
+pub fn multi_device_network_info() -> NetworkEnvInfo {
+    crate::multi_device_network::network_env_info()
 }

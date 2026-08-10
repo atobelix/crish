@@ -21,6 +21,10 @@ serde_json.workspace = true
 # test：壳测试（tauri::test 依赖，PE-11 测试策略）
 tauri = { workspace = true, features = ["protocol-asset", "test"] }
 tauri-plugin-dialog = "2"
+# G-2 单实例锁（R1-09）：官方插件。Windows 内部为命名互斥（CreateMutexW +
+# ERROR_ALREADY_EXISTS，互斥名 `{identifier}-sim`），第二实例经 WM_COPYDATA
+# 唤醒首实例后自行退出；注册/回调接线见 src/single_instance.rs
+tauri-plugin-single-instance = "2"
 # Dev MCP bridge (Grok/Cursor 调试 live workbench)。仅 debug 注册；插件自身 release 默认不启 socket。
 tauri-plugin-mcp = { git = "https://github.com/P3GLEG/tauri-plugin-mcp" }
 tokio = { version = "1", features = ["full"] }
@@ -88,7 +92,14 @@ thiserror.workspace = true
 [target.'cfg(windows)'.dependencies]
 # Win32_UI_Shell / Win32_UI_WindowsAndMessaging：P1-S5 host_openers 默认关联
 # 打开改 ShellExecuteW 直调（弃 cmd /C start，防 cmd 二次解释注入）
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# Win32_System_Threading：single_instance.rs 单元测试验证命名互斥语义
+# （CreateMutexW/ReleaseMutex；真实应用锁由 tauri-plugin-single-instance
+# 持有，其自身声明所需 feature）
+# Win32_NetworkManagement_IpHelper/Ndis + Win32_Networking_WinSock：
+# G-4 网络环境检测（pairing.rs 枚举本机网卡 IP，GetAdaptersAddresses）
+# Win32_System_Registry：R1-09 G-4 网络配置文件检测（multi_device_network.rs
+# 读 NetworkList\Profiles 的 Category 值判定公用/专用/域）
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_Registry", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

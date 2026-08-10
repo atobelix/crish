@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * 设置 · 多端互通面板渲染测试（R1-08 验收锚点：配对开关 → 二维码出现 →
- * 设备列表/撤销闭环）。mock multiDevice API 层，断言四区与操作路径。
+ * 设备列表/撤销闭环；R1-09 网络环境卡片：配置文件类别 + 可直连 IP +
+ * 公用网络切换提示 / AP 隔离引导）。mock multiDevice API 层，断言四区与操作路径。
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -14,6 +15,7 @@ const pairCancel = vi.fn();
 const listDevices = vi.fn();
 const revokeDevice = vi.fn();
 const renameDevice = vi.fn();
+const networkEnvInfo = vi.fn();
 
 vi.mock('../../api/multiDevice', () => ({
   pairStart: (...args: unknown[]) => pairStart(...args),
@@ -22,6 +24,7 @@ vi.mock('../../api/multiDevice', () => ({
   listDevices: (...args: unknown[]) => listDevices(...args),
   revokeDevice: (...args: unknown[]) => revokeDevice(...args),
   renameDevice: (...args: unknown[]) => renameDevice(...args),
+  networkEnvInfo: (...args: unknown[]) => networkEnvInfo(...args),
 }));
 
 const IDLE_STATUS = {
@@ -53,6 +56,12 @@ const DEVICES = [
   { id: 'b'.repeat(64), label: '旧平板', issued_at_ms: 1700000100000, revoked: true },
 ];
 
+const PRIVATE_NET_ENV = {
+  profile: 'private' as const,
+  usable_ips: ['192.168.1.5', '10.0.0.8'],
+  hint: '手机无法连接时请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。',
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   pairStatus.mockResolvedValue(IDLE_STATUS);
@@ -61,6 +70,7 @@ beforeEach(() => {
   pairCancel.mockResolvedValue(true);
   revokeDevice.mockResolvedValue(true);
   renameDevice.mockResolvedValue(true);
+  networkEnvInfo.mockResolvedValue(PRIVATE_NET_ENV);
 });
 
 function renderTab() {
@@ -147,5 +157,54 @@ describe('SettingsDevicesTab', () => {
     await waitFor(() =>
       expect(renameDevice).toHaveBeenCalledWith('a'.repeat(64), 'Pixel-9 Pro'),
     );
+  });
+
+  it('配对开启时显示网络环境卡片：配置文件类别 + IP 列表 + AP 隔离提示（R1-09 G-4）', async () => {
+    pairStatus.mockResolvedValue(ACTIVE_STATUS);
+    renderTab();
+    const card = await screen.findByTestId('network-env');
+    expect(card.textContent).toContain('专用网络');
+    expect(card.textContent).toContain('192.168.1.5');
+    expect(card.textContent).toContain('10.0.0.8');
+    expect(card.textContent).toContain('关闭路由器客户端隔离');
+    expect(card.textContent).toContain('手动输入上方 IP');
+    // 专用网络不显示「切换到专用网络」提示
+    expect(screen.queryByTestId('network-public-hint')).toBeNull();
+  });
+
+  it('公用网络显示切换提示（R1-09：请切换到专用网络）', async () => {
+    pairStatus.mockResolvedValue(ACTIVE_STATUS);
+    networkEnvInfo.mockResolvedValue({
+      profile: 'public',
+      usable_ips: ['192.168.1.5'],
+      hint: '当前为公用网络，请切换到专用网络后重试；若手机仍无法连接，请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。',
+    });
+    renderTab();
+    expect(await screen.findByTestId('network-public-hint')).toBeTruthy();
+    expect(screen.getByTestId('network-public-hint').textContent).toContain(
+      '请切换到专用网络',
+    );
+    expect(screen.getByTestId('network-env').textContent).toContain('公用网络');
+  });
+
+  it('IP 占位 0.0.0.0 不渲染；空列表显示检查网络提示', async () => {
+    pairStatus.mockResolvedValue(ACTIVE_STATUS);
+    networkEnvInfo.mockResolvedValue({
+      profile: 'unknown',
+      usable_ips: ['0.0.0.0'],
+      hint: '未能识别当前网络类型。若手机无法连接，请检查 Windows 防火墙放行与路由器客户端隔离设置。',
+    });
+    renderTab();
+    const card = await screen.findByTestId('network-env');
+    expect(card.textContent).toContain('未知');
+    expect(card.textContent).toContain('未检测到可直连地址');
+    expect(card.textContent).not.toContain('0.0.0.0');
+    expect(card.textContent).toContain('未能识别当前网络类型');
+  });
+
+  it('配对未开启时不显示网络环境卡片', async () => {
+    renderTab();
+    await waitFor(() => expect(networkEnvInfo).toHaveBeenCalled());
+    expect(screen.queryByTestId('network-env')).toBeNull();
   });
 });

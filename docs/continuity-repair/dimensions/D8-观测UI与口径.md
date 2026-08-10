@@ -5,6 +5,7 @@
 > 定位：任务连续性多 Agent 协同修复方案·维度文档（D8）。本维度是**横切维度**——让恢复/续跑能力被用户看见（UI）、被事件检索（数据面）、被文档正名（口径）。
 > 输入：00-总纲-维度设计.md、01-敲定方案.md、proposals/01、05、reviews/selection-01~03、领域分析 03/05、docs/rust-rewrite/33-event-schema-changelog.md。
 > 引用统一为 `文件路径:行号`；行号以抽查当日代码为准，漂移以代码为真源。
+> **派单拆分**（02-定夺 评审02 采纳）：**D8a 事件登记+检索簇**（轮 1，与 D3/D5 同批）、**D8b UI 簇**（随 D4）、**D8c 口径簇**（可并入 D5 或 D8b）。
 
 ---
 
@@ -13,7 +14,7 @@
 1. **事件登记收口（41 → 49）**：recovery-* ×5 + goal-* ×3 一次集中登记，改动面实测为 **9 处 + 生成产物**——05 方案列出的「六处」漏了 `registry_drift.rs` 硬编码 41 断言、`events_roundtrip.rs` 穷举构造、`event_hook_mapping.rs` 划分断言三处测试面（本文档 §3.1 给出逐文件清单）。
 2. **检索面存在一个 05 未覆盖的架构事实**：`RecoveryStore::append_event` 直写的是**无 type 的事件体**（recovery.rs:635-651 只有 payload 无信封），而 `core_read_session_events` 的 `parse_envelopes` 只解析**信封形 payload**（core_query_commands.rs:483-491）——登记后若不处理读面，恢复事件仍然「被检索」不了。本维度裁决：读面合成（不改写面），见 §3.2 与动态决策 D-2。
 3. **core_get_status 恢复域**：`RecoveryStatus`（recoverNeedsUser / recoverEpisodes / pendingRecoveries）+ `GoalStatusSummary`（goal/maxRounds/currentRound/stalledRounds/maxStalledRounds/stoppedReason），数据源 = RecoveryCoordinator 内存态访问器（recovery.rs:884-904）+ goal_state 键。
-4. **前端**：失败态卡片（错误 kind/重试次数 + resume/kill/kill_all 按钮，消费 D4 命令面）+ 恢复状态行（「需人工介入」横幅）；goal 前端投影化过渡（useGoalMode 消费 goal-round-* 事件，decideGoalContinuation 保留为过渡兼容）；`useStreamCallbacks.ts:661` 的 `?? 5` 统一为 12。
+4. **前端**：失败态卡片（错误 kind/重试次数 + resume/kill/kill_all 按钮，消费 D4 命令面）+ 恢复状态行（「需人工介入」横幅）；goal 前端投影化过渡（useGoalMode 消费 goal-round-* 事件，decideGoalContinuation 保留为过渡兼容）；`useStreamCallbacks.ts:661` 的 `?? 5` 修正为**验收项**（02-定夺 M1：实现归 D5，本维度复核）。
 5. **水合契约**（本维度定义，D7 接线）：error 态放行 + metadata `{kind:"failed-turn"}`，无 schema 改动；既有测试 `incomplete_and_error_status_entries_skipped`（hydrate.rs:376-387）必须改写。
 6. **口径修正**：AGENTS.md 行 23/48 两处「一轮最多 12 个子 Agent」→「同时运行（未终态）子代理 ≤12、同父 ≤5、深度仅 1」（引擎真值 subagent.rs:497-501）。
 
@@ -32,12 +33,12 @@
 | ③ | 前端失败态卡片 + resume/kill/kill_all 按钮 + 恢复状态展示；goal 前端投影化过渡 | UI 面随 D4（00 总纲 §4） | crish-desktop（agent-card 组件族、useGoalMode、useStreamCallbacks） |
 | ④ | 水合 error 态放行 + failed-turn 标记（本轮，非可选） | 契约本维度定义，接线 D7（hydrate.rs 文件域归 D7） | 契约落点：本文件 §3.4；实现落点：hydrate.rs |
 | ⑤ | 诉求 2 口径修正：AGENTS.md「一轮最多 12 个」→「同时运行 ≤12、同父 ≤5、深度 1」 | D8 独占 | AGENTS.md |
-| ⑥ | 前端 `?? 5` 分叉统一为 12（引擎权威后前端为投影初始值） | D8 前端轮（配合 D5） | useStreamCallbacks.ts |
+| ⑥ | 前端 `?? 5` 分叉统一为 12（引擎权威后前端为投影初始值）——**验收项**（02-定夺 M1：实现归 D5，本维度复核） | D5 实现，D8 验收复核 | useStreamCallbacks.ts |
 
 ### 1.2 验收断言（最低线细化）
 
 **A1 · 事件注册表一致性（registry_drift 绿）**
-- `cargo test -p conex-types` 全绿；`v1_baseline_has_exactly_49_event_types`（旧名 `...41...` 留痕注释）；`registry_drift.rs` 三处 41 断言（:208-213、:501-502、:829-838）改为 49；`event_hook_mapping.rs` 划分断言 `41 = 11 + 30` → `49 = 11 + 38`；`events_roundtrip.rs` 穷举构造补 8 变体。
+- `cargo test -p conex-types` 全绿；`v1_baseline_has_exactly_49_event_types`（旧名 `...41...` 留痕注释）；`registry_drift.rs` 41 锚点全量枚举（02-定夺 C11/P3-5：`:208-213`、`:501-502`、`:829-838`、`:933-938` 计数断言 41→49；`:894`/`:948` cron-fired 编号恒 41 断言保留；`:1471-1496` 双面策略事件段 `:1477` 41→49）——逐条核对 §3.1 清单；`event_hook_mapping.rs` 划分断言 `41 = 11 + 30` → `49 = 11 + 38`；`events_roundtrip.rs` 穷举构造补 8 变体。
 - engine-events.json `eventCount: 49`，id 42-49 逐条与 enum 声明序一致，backpressure 全 `critical`。
 - fixtures/events-v1/ 追加 8 条（event-recovery-*.json ×5 + event-goal-*.json ×3），全量解析 + roundtrip 保真。
 - 生成脚本重跑产出 TS 类型后，前端 `npm run typecheck` 绿。
@@ -53,6 +54,7 @@
 
 **A4 · 前端失败态卡片可操作**
 - 子代理 failed 卡片展示错误 kind 与重试次数（数据源：subagent-ended summary + recovery-* 事件流 + run 终态 error，三级回退）。
+- 会话域断言（02-定夺 W7）：recovery-* 事件（含 recovery-escalated）落**子代理会话（sub-sess-*）**事件流；前端经 subagent 会话事件消费面读取或经 subagent 行关联检索可命中（失败卡片 kind 数据源成立）。
 - resume / kill / kill_all 按钮调用 D4 命令面 wrapper（命令未注册期按钮禁用——UI 面随 D4 批次落地）；触发后事件留痕（resume→recovery-fork 或新 run 事件）。
 - 恢复状态行：`recoverNeedsUser` 非空展示「需人工介入：run X」；`pendingRecoveries` 计数展示；组件单测 + typecheck 绿。
 
@@ -62,8 +64,8 @@
 **A6 · 口径更新**
 - AGENTS.md 行 23/48 两处替换为新口径文本（§3.5）；仓库内无残留「一轮最多 12 个」表述（grep 验证）。
 
-**A7 · 前端 ?? 5 统一**
-- `useStreamCallbacks.ts:661` 的 `?? 5` 改为 `?? GOAL_DEFAULT_MAX_ITERATIONS`（12）；断言/组件测试覆盖。
+**A7 · 前端 ?? 5 统一（验收项：D5 实现，本维度复核）**
+- `useStreamCallbacks.ts:661` 的 `?? 5` 改为 `?? GOAL_DEFAULT_MAX_ITERATIONS`（12）（02-定夺 M1：实现归 D5）；断言/组件测试覆盖（本维度复核）。
 
 ---
 
@@ -75,7 +77,7 @@
 - `crates/orchestrator/src/recovery.rs:99-111` 自述：「恢复域事件类型（events 表留痕；M7 事件注册表外，M14 事件源补齐时登记进 conex-types 注册表与 engine-events.json）」——五事件常量 `RECOVER_ESCALATED/STEERING/FORK/REPORT/BUDGET_DENIED_EVENT`（recovery.rs:103-111）是纯字符串，通过 `RecoveryStore::append_event`（recovery.rs:635-651）直写事件表。
 - `packages/shared-types/src/stored-event.ts:14-16`：`goal-round-started / goal-round-completed / goal-continuation-decided` 仅存在于 TS `StoredEventType` 联合（孤儿类型，05 领域文档确认 Rust 注册表无对应、无发射点）。
 - `crates/conex-types/contracts/engine-events.json` `eventCount: 41`（:7），事件编号 1-41 与 enum 声明序一一对应（registry_drift 锁定）。
-- **登记面现状**：`crates/conex-types/tests/events_schema_version.rs:35-83` V1_EVENT_TYPES 清单（41 条）；`:96-105` `v1_baseline_has_exactly_41_event_types`；`crates/conex-types/tests/registry_drift.rs:208-213`、`:501-502`、`:829-838` 三处硬编码 41；`crates/conex-types/tests/events_roundtrip.rs:243-` `all_events()` 穷举构造（41 实例，与 ALL_TYPE_NAMES 序一一对应）；`crates/conex-types/tests/event_hook_mapping.rs:157-183` 划分断言 `41 = 11 映射 + 30 无对应`。
+- **登记面现状**：`crates/conex-types/tests/events_schema_version.rs:35-83` V1_EVENT_TYPES 清单（41 条）；`:96-105` `v1_baseline_has_exactly_41_event_types`；`crates/conex-types/tests/registry_drift.rs` 41 锚点分散多处——计数断言 `:208-213`、`:501-502`、`:829-838`（`registry_drift_timer_events_registered`）、`:933-938`（`registry_drift_cron_fired_registered`），双面策略事件段 `:1477`（:1471-1496 9.4 锚点），另 `:894`/`:948` cron-fired 编号恒 41 断言（02-定夺 C11/P3-5 全量枚举）；`crates/conex-types/tests/events_roundtrip.rs:243-` `all_events()` 穷举构造（41 实例，与 ALL_TYPE_NAMES 序一一对应）；`crates/conex-types/tests/event_hook_mapping.rs:157-183` 划分断言 `41 = 11 映射 + 30 无对应`。
 
 ### 2.2 检索面：append_event 直写事件当前不可被 core_read_session_events 读到（05 未覆盖的事实）
 
@@ -123,7 +125,7 @@
 | 2 | `crates/conex-types/contracts/engine-events.json` | `eventCount` 41→49（:7）；`events` 追加 id 42-49 条目（type/rustVariant/domain/fields/backpressure=critical） | 每事件 backpressure 字段（registry_drift 锁定，:16-19） |
 | 3 | `crates/conex-types/tests/events_schema_version.rs` | `V1_EVENT_TYPES` 追加 8 条（:35-83）；`:96` 断言改名 `v1_baseline_has_exactly_49_event_types`（旧名留痕注释，对齐 1.5/1.6 改名惯例 :89-94） | changelog 1.5/1.6 登记行 |
 | 4 | `crates/conex-types/tests/fixtures/events-v1/` | 追加 8 个同形 fixture：`event-recovery-escalated.json` / `event-recovery-steering.json` / `event-recovery-fork.json` / `event-recovery-report.json` / `event-recovery-budget-denied.json` / `event-goal-round-started.json` / `event-goal-round-completed.json` / `event-goal-continuation-decided.json`；内容 = 信封形 JSON（`type` + `sessionId` + 字段，无 schemaVersion/runId/sequence，对齐 event-timer-fired.json 既有形态） | `v1_fixture_files_cover_all_event_types`（events_schema_version.rs:107-114） |
-| 5 | `crates/conex-types/tests/registry_drift.rs` | ① `:208-213` 注册表数断言 41→49；② `:501-502` 事件数断言 41→49；③ `:829-838` 累计基线断言 41→49（留痕注释）；④ 新增 8 事件登记断言（id 42-49、rustVariant、domain=recovery/goal、backpressure=critical），仿 `registry_drift_timer_events_registered`（:829-849） | 本处是 05「六处」之外的实测第三处测试面 |
+| 5 | `crates/conex-types/tests/registry_drift.rs` | ① `:208-213` 注册表数断言 41→49（`registry_event_types_match_enum_declaration_order`）；② `:501-502` 事件数断言 41→49；③ `:829-838` 累计基线断言 41→49（留痕注释；`registry_drift_timer_events_registered`，同测试内 `:894` cron-fired 编号恒 41 断言**保留 41**）；④ `:933-938` `registry_drift_cron_fired_registered` 累计基线断言（event_count/events.len()/ALL_TYPE_NAMES.len()）41→49（`:948` cron.id 恒 41 断言保留——cron-fired 仍为 41，新事件追加 42-49）；⑤ **双面策略 41 锚点**（`:1471-1496` 9.4 `device_registry_events_match_engine_and_sync_whitelist`：`:1477` 事件段 41 条→49，`:1496` 注释同步）；⑥ 新增 8 事件登记断言（id 42-49、rustVariant、domain=recovery/goal、backpressure=critical），仿 `registry_drift_timer_events_registered`（:829-849） | 本处是 05「六处」之外的实测第三处测试面；「三处 41」扩为全量枚举（02-定夺 C11/P3-5） |
 | 6 | `crates/conex-types/tests/events_roundtrip.rs` | `all_events()`（:243-）追加 8 实例（与 ALL_TYPE_NAMES 声明序一一对应；编译期强制，漏补即编译错） | 穷举 roundtrip（:1-3） |
 | 7 | `crates/conex-types/tests/event_hook_mapping.rs` | `UNMAPPED_EVENTS` 追加 8（recovery-*/goal-* 无对应钩子）；划分断言 `41 = 11 + 30` → `49 = 11 + 38`（:163-183） | 对齐 1.6 先例「hooks 不扩展」 |
 | 8 | `docs/rust-rewrite/33-event-schema-changelog.md` | 变更登记表追加 **1.9 行**（minor 兼容新增：恢复域 5 事件 + goal 域 3 事件，41→49；背压全 critical；`V1_EVENT_TYPES` 清单 41→49 断言改名留痕；fixture 追加 8 条） | 1.5/1.6 行格式照抄（33-changelog:112-113） |
@@ -135,17 +137,17 @@
 
 | 事件（type / rustVariant） | 字段（camelCase） | payload 真源 |
 |---|---|---|
-| `recovery-escalated` / `RecoveryEscalated` | sessionId, subagentRunId, kind, retries, elapsedMs | recovery.rs:941-946（escalate 升级留痕） |
+| `recovery-escalated` / `RecoveryEscalated` | sessionId, subagentRunId: Option\<String\>, kind, retries, elapsedMs, detail: Option\<String\> | recovery.rs:941-946（escalate 升级留痕）；双发射方（02-定夺 W1）：子代理侧 subagentRunId=Some、detail=None；熔断侧（D1 §3.2.2 C5）subagentRunId=None、detail=Some("circuit-trip") |
 | `recovery-steering` / `RecoverySteering` | sessionId, subagentId, subagentRunId, fingerprint, retries, remainingStatus, pending, createdAtMs | `RecoveryNotification` serde camelCase（recovery.rs:341-358）经 :1008-1016 序列化 |
 | `recovery-fork` / `RecoveryFork` | sessionId + `ForkRecord` 全字段（fingerprint, subagentId, fromRunId, fromLeafId, newRunId, ...） | `ForkRecord` serde camelCase（recovery.rs:445-464 起）经 :1162-1168 序列化 |
 | `recovery-report` / `RecoveryReport` | sessionId + `UserReport` 全字段 | `build_user_report` 产出（recovery.rs:518-531、:1185-1193）经 :1198-1204 序列化 |
-| `recovery-budget-denied` / `RecoveryBudgetDenied` | sessionId, subagentRunId, fingerprint, count, max | recovery.rs:1054-1059（预算拒绝留痕） |
-| `goal-round-started` / `GoalRoundStarted` | sessionId, round, maxRounds, goal | 新载荷（D5 RoundAssessment 发射）；round 从 1 计 |
-| `goal-round-completed` / `GoalRoundCompleted` | sessionId, round, maxRounds, outcome, progressSignature | 新载荷；outcome ∈ needs-continuation/no-progress/completed/blocked（对齐 orchestration.ts:62-63 GoalRoundAssessmentState.state） |
-| `goal-continuation-decided` / `GoalContinuationDecided` | sessionId, action, reason, prompt?, progressSignature?, detail? | 对齐 TS `GoalContinuationDecision`（orchestration.ts:38-44：action/reason/prompt/progressSignature/detail） |
+| `recovery-budget-denied` / `RecoveryBudgetDenied` | sessionId, subagentRunId: Option\<String\>, fingerprint, count, max | 双发射方（02-定夺 W6）：D2 主 run 侧（subagentRunId=None，预算耗尽留痕，D2 §3.4 伪代码 / recovery.rs:111）+ D3 子代理侧（subagentRunId=Some，recovery.rs:1054-1059 预算拒绝留痕） |
+| `goal-round-started` / `GoalRoundStarted` | round, maxRounds, goal | 新载荷（D5 RoundAssessment 发射）；round 从 1 计；envelope 事件不列 sessionId 变体字段（读侧信封已含，02-定夺 B2 约定） |
+| `goal-round-completed` / `GoalRoundCompleted` | round, toolCallCount, toolSuccessCount, messageCount, decision, reasonDetail, stalledDelta, evidence | 新载荷（02-定夺 B2 统一单一字段集，与 D5 §3.9 同批同形状）；字段名按仓库惯例 snake_case 序列化；stalledDelta 表达本轮增量，stalled 总数在 goal_state 键；decision ∈ Continue/Completed/NoProgress/Blocked/NoGoal（D5 §3.3 GoalDecision）；envelope 事件不列 sessionId 变体字段（读侧信封已含） |
+| `goal-continuation-decided` / `GoalContinuationDecided` | action, reason, prompt?, progressSignature?, detail? | 对齐 TS `GoalContinuationDecision`（orchestration.ts:38-44：action/reason/prompt/progressSignature/detail）；envelope 事件不列 sessionId 变体字段（读侧信封已含） |
 
 - 全部字段 `String`/`u32`/`u64`/`bool` 基元，**不引入新 payload struct 与 enum**（注册表可达性护栏：无死条目，registry_drift.rs:20-21）；可选字段 `#[serde(default, skip_serializing_if = "Option::is_none")]`（33-changelog:27-28 纪律）。
-- **payload 语义属主**：recovery 五事件 = D3（escalate/fork/report 发射点已存在，recovery.rs:938、1008、1162、1198、1051）；goal 三事件 = D5（RoundAssessment 收口发射，新写）。D8 只登记契约 + 暴露检索，**不移动发射点、不改写面**（敲定 §2.2「recovery 域继续走 append_event 直写，不改造 emit 层」）。
+- **payload 语义属主**：recovery 五事件 = D3（escalate/fork/report 发射点已存在，recovery.rs:938、1008、1162、1198、1051）——**recovery-escalated 与 recovery-budget-denied 为双发射方**：escalated 另含 D1 熔断侧（detail=Some("circuit-trip")，02-定夺 W1）、budget-denied 另含 D2 主 run 侧（subagentRunId=None，02-定夺 W6）；goal 三事件 = D5（RoundAssessment 收口发射，新写）。D8 只登记契约 + 暴露检索，**不移动发射点、不改写面**（敲定 §2.2「recovery 域继续走 append_event 直写，不改造 emit 层」）。
 - 字段镜像漂移防护：登记同批时以 recovery.rs 实际 append_event payload 为准写 fixture；events.rs 变体字段与 fixture 由 registry_drift roundtrip 锁定（注册表 → AgentEvent → 回序列化，registry_drift.rs:12-14），orchestrator 侧载荷形状由 fixture 作为跨层锚点（动态决策 D-3）。
 
 ### 3.2 恢复事件检索面：parse_envelopes 合成 fallback（对「被事件检索」的落地）
@@ -172,6 +174,7 @@ fn parse_envelopes(events: &[PersistedEvent]) -> Vec<(u64, AgentEventEnvelope)> 
 ```
 
 - **改动面**：`parse_envelopes` ~12 行 + 单测；无 schema 改动、无事件表迁移。
+- **会话域**（02-定夺 W7）：append_event 的 session_id 语义保持现状——子代理恢复事件落**子代理会话（sub-sess-*）**；合成路径以事件行 `(event_type, session_id)` 合成信封，session_id 即子代理会话 id，读侧按子代理会话检索（前端已有 subagent 会话事件消费面，见 §3.7.1）。
 - **语义**：写入面零改动（遵守敲定「recovery 域继续走 append_event 直写」）；读面对 41 基线信封形事件行为完全不变（`filter_map` 失败回退仅发生在 payload 无 type 时）。
 - **历史行**：若历史存在 body-only recovery 事件行（测试库/未来生产），合成后自动可读；损坏 payload（非 JSON）仍跳过（防御性不变，:481-482 注释语义）。
 - **验收**：A2 断言。
@@ -257,11 +260,13 @@ pub struct RecoveryStatus {
 - `00-总纲-维度设计.md:146`「每轮 ≤12 个 Agent，按实际需求灵活确定数量」——这是轮次执行规则（调度批次惯例），与引擎守卫不冲突，**保留不改**；如评审要求可在该行加注「批次惯例，非引擎上限」。
 - 仓库 grep 验证无残留「一轮最多 12 个」表述（验收 A6）。
 
-### 3.6 前端 ?? 5 分叉统一（⑥）
+### 3.6 前端 ?? 5 分叉统一（⑥）——验收项（02-定夺 M1：实现归 D5，本维度复核）
 
-**改动**：`useStreamCallbacks.ts:661` `maxIterations: liveGm.maxIterations ?? 5` → `maxIterations: liveGm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS`（`GOAL_DEFAULT_MAX_ITERATIONS = 12`，goalModeController.ts:16；useSlashSend.ts:18 与 useGoalMode.ts:7 已有该 import 先例）。
+> 标注：本项实现归 D5（00 总纲关键文件归属），**不作为本维度实现项**；D8 侧负责验收复核（断言/组件测试覆盖，见 A7）。
 
-**语义**：引擎权威化后（D5 goal_state.max_rounds 默认 12），前端数值仅是**投影初始值**（03 评审建议 8）；本轮先修分叉，保证下发字段与引擎默认一致，消除「12 轮上限语义漂移」（selection-02 P-10）。
+**改动（D5 实现）**：`useStreamCallbacks.ts:661` `maxIterations: liveGm.maxIterations ?? 5` → `maxIterations: liveGm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS`（`GOAL_DEFAULT_MAX_ITERATIONS = 12`，goalModeController.ts:16；useSlashSend.ts:18 与 useGoalMode.ts:7 已有该 import 先例）。
+
+**语义**：引擎权威化后（D5 goal_state.max_rounds 默认 12），前端数值仅是**投影初始值**（03 评审建议 8）；修正分叉后，下发字段与引擎默认一致，消除「12 轮上限语义漂移」（selection-02 P-10）。
 
 ### 3.7 前端组件设计（③）
 
@@ -272,7 +277,7 @@ pub struct RecoveryStatus {
 **新增内容**：
 
 1. **失败摘要行**（failed 且空态时替换 `emptyStreamCopy` 失败文案 :195）：
-   - 错误 kind：三级数据源回退——① 最近 `recovery-escalated` 事件 `kind` 字段（core_read_session_events 检索，§3.2 使该路径成立）；② 子代理 run 终态 error 文案（`core_get_run_snapshot` RunSnapshot.error，core_query_commands.rs:436-438）；③ subagent-ended `summary`（events.rs:621-623）。
+   - 错误 kind：三级数据源回退——① 最近 `recovery-escalated` 事件 `kind` 字段：**读子代理会话（sub-sess-*）事件**（前端已有 subagent 会话事件消费面）或经 subagent 行关联检索（02-定夺 W7；§3.2 合成路径使该路径成立）；② 子代理 run 终态 error 文案（`core_get_run_snapshot` RunSnapshot.error，core_query_commands.rs:436-438）；③ subagent-ended `summary`（events.rs:621-623）。
    - 重试次数：`recovery-escalated.retries`（阶梯 1 已重试次数）＋ `recoverEpisodes` 对应指纹 count（已 fork/恢复次数）。
    - 「需人工介入」徽标：`core_get_status.recovery.recoverNeedsUser` 含该 subagentRunId 时展示（对齐 recover_needs_user 设计语义 recovery.rs:30-31、897-904）。
 2. **操作按钮组**（failed 态专属，运行中仍只有 stop/force-stop）：
@@ -280,7 +285,7 @@ pub struct RecoveryStatus {
    - `kill`：调 D4 `kill_subagent`（单目标 L3 强停 + mark_row_failed）。
    - `kill_all`：调 D4 `kill_all`（批量终止全部 running 子代理，lifecycle.rs:165-224）。
    - 按钮禁用逻辑：命令未注册期（D4 未落地）禁用 + tooltip「引擎未接线」；发送中/运行中禁用；resume 后卡片转 running 态。
-3. **恢复状态行**（会话级，挂在 ChatStatusRibbons 或 AgentTeamBoard）：`recoverNeedsUser` 非空 → 「需人工介入：run X（Y 项）」横幅；`pendingRecoveries` > 0 → 「N 条恢复通知待处理」；`goalState` → 「目标轮次 current/max，stalled 连续 stalledRounds/maxStalledRounds」（token 成本观测护栏 10 的消费面）。
+3. **恢复状态行**（会话级，挂在 ChatStatusRibbons 或 AgentTeamBoard）：`recoverNeedsUser` 非空 → 「需人工介入：run X（Y 项）」横幅；`pendingRecoveries` > 0 → 「N 条恢复通知待处理」；`goalState` → 「目标轮次 current/max，stalled 连续 stalledRounds/maxStalledRounds」（token 成本观测护栏 10 的消费面）；**熔断横幅消费面**（02-定夺 S5/W1）：消费 `runtime-intervention-required` 事件（04 既有先例 steering_evaluation.rs:68-75）与 `recovery-escalated`（detail=Some("circuit-trip")，subagentRunId=None）→ 展示「熔断已触发，需人工介入」横幅。
 
 **数据获取**：`core_get_status` 拉取（复用 engineStatus.ts:53 既有 IPC 面）＋ 事件面 subagent-ended 推送即时刷新（dispatch.ts:119/141 既有接线）。
 
@@ -301,13 +306,13 @@ pub struct RecoveryStatus {
 
 | 事件 | domain | 载荷 | 发射方（属主） | 背压 |
 |---|---|---|---|---|
-| recovery-escalated | recovery | subagentRunId/kind/retries/elapsedMs | D3 escalate（recovery.rs:938-950） | critical |
+| recovery-escalated | recovery | subagentRunId?/kind/retries/elapsedMs/detail? | 双发射方（02-定夺 W1）：D3 escalate（recovery.rs:938-950，subagentRunId=Some、detail=None）+ D1 熔断侧（subagentRunId=None、detail=Some("circuit-trip")） | critical |
 | recovery-steering | recovery | RecoveryNotification 全字段 | D3 escalate（recovery.rs:1008-1016） | critical |
 | recovery-fork | recovery | ForkRecord 全字段 | D3 fork_and_reassign（recovery.rs:1162-1168） | critical |
 | recovery-report | recovery | UserReport 全字段 | D3 report_to_user（recovery.rs:1198-1204） | critical |
-| recovery-budget-denied | recovery | subagentRunId/fingerprint/count/max | D3 预算拒绝（recovery.rs:1051-1063） | critical |
+| recovery-budget-denied | recovery | subagentRunId?/fingerprint/count/max | 双发射方（02-定夺 W6）：D2 主 run 侧（subagentRunId=None）+ D3 子代理侧预算拒绝（recovery.rs:1051-1063） | critical |
 | goal-round-started | goal | round/maxRounds/goal | D5 RoundAssessment（新发射） | critical |
-| goal-round-completed | goal | round/maxRounds/outcome/progressSignature | D5 RoundAssessment（新发射） | critical |
+| goal-round-completed | goal | round/toolCallCount/toolSuccessCount/messageCount/decision/reasonDetail/stalledDelta/evidence | D5 RoundAssessment（新发射；02-定夺 B2 统一单一字段集，snake_case 序列化） | critical |
 | goal-continuation-decided | goal | action/reason/prompt?/progressSignature?/detail? | D5（新发射；载荷对齐 GoalContinuationDecision orchestration.ts:38-44） | critical |
 
 - 全部 minor 兼容新增：不删不改既有字段（33-changelog:26-29 未知键忽略、:137 不改变现有事件字段）；信封 schemaVersion 恒 1。
@@ -349,9 +354,9 @@ pub struct RecoveryStatus {
 | 面 | 断言 |
 |---|---|
 | 失败态卡片 | failed 态渲染错误 kind/重试次数；resume/kill/kill_all 按钮存在且调用对应命令 wrapper；命令未注册期禁用；「需人工介入」徽标条件渲染 |
-| 恢复状态行 | recoverNeedsUser 非空 → 横幅文案；pendingRecoveries 计数；goalState 轮次展示 |
+| 恢复状态行 | recoverNeedsUser 非空 → 横幅文案；pendingRecoveries 计数；goalState 轮次展示；熔断横幅（runtime-intervention-required / recovery-escalated detail=circuit-trip → 展示「熔断已触发」） |
 | goal 投影 | useGoalMode 消费 goal-round-*/goal-continuation-decided 事件 → session.goalMode 字段更新；decideGoalContinuation 过渡回退 |
-| ?? 5 修正 | useStreamCallbacks goalOpts 下发 maxIterations 缺省 = 12（非 5） |
+| ?? 5 修正（验收复核） | useStreamCallbacks goalOpts 下发 maxIterations 缺省 = 12（非 5）（D5 实现，本维度复核，02-定夺 M1） |
 
 ### 5.3 回归与门禁
 
@@ -389,7 +394,7 @@ pub struct RecoveryStatus {
 | 命令面（resume/kill/kill_all） | D4 → D8 | D4 双端四步登记（01-敲定 §2.4）；D8 前端按钮消费 wrapper；命令未注册期禁用；spawn_blocking 由 D4 保证（F2-27） | §3.7.1 |
 | 水合契约 | D8 ↔ D7 | 契约本文件 §3.4 冻结；hydrate.rs 文件域归 D7 单写方接线；D8 提供验收断言 | §3.4 |
 | 失败通知链（subagent-ended） | 既有 → D8 | 卡片即时刷新源（dispatch.ts:119/141 既有）；RunSnapshot.error 二级数据源 | §3.7.1 |
-| 前端 ?? 5 | D5 → D8 | 引擎权威后前端数值 = 投影初始值；本维度先修分叉（12） | §3.6 |
+| 前端 ?? 5 | D5 → D8 | **验收项**（02-定夺 M1）：D5 实现（引擎权威后前端数值 = 投影初始值），本维度复核 | §3.6 |
 | provider_error 数据面 | D1/D2 → D8 | 错误 kind/retries 经 RunFailureContext/run 终态上行（D1 数据面）；卡片展示消费（非本维度实现） | §3.7.1 |
 
 **契约冲突**：无。**注意点**：① core_get_status 的 recovery 域在 D3 装配 coordinator 前返回缺省（诚实化，不假装有数据）；② hydrate.rs 同文件串行——D8 轮不触碰，D7 接线时按 §3.4 契约实现。

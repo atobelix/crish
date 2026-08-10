@@ -130,3 +130,70 @@
   gap: 6px;
   align-items: center;
 }
+
+/* ── R1-09 G-4 网络环境卡片 ── */
+.networkEnv {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.networkProfile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.networkPublicBadge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-danger-bg, rgba(220, 60, 60, 0.15));
+  color: var(--color-danger-text, #c0392b);
+}
+
+.ipList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+
+.ipListTitle {
+  font-size: 12px;
+}
+
+.ipList ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ipList code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-bg-subtle, rgba(128, 128, 128, 0.1));
+  user-select: all;
+}
+
+.ipListEmpty {
+  font-size: 12px;
+  color: var(--color-warn-text, #b8860b);
+}
+
+.apIsolationHint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-dim);
+  line-height: 1.5;
+}

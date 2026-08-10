@@ -30,9 +30,9 @@
 
 ### 1.3 与敲定冲突声明
 
-1. **范围迁移一(显式标注,非冲突)**:00 总纲 §3 的 D1 行「⑤ 流中断结构化标注(providerErrorKind)」(00-总纲-维度设计.md:75)与 D7 行「⑤ 错误消息语义完整化(04 结构化标注 + 水合 failed-turn 标记)」存在边界重叠。任务书 D7 范围④明确把「04 结构化标注」划入 D7,且 04 §2.6 标注的改动点在 `agent-provider/src/consume/mod.rs:308-347` 与 `crates/session-loop/src/stream.rs:439-481`(两处镜像)——这两个文件不在 00 总纲 D1 的关键文件清单(stream_error.rs/loop/end.rs/handlers/mod.rs/loop/mod.rs/engine.rs)内。**本维度裁定:流中断标注的主体改动(consume/stream 两处镜像 + streaming.rs 透传 kind)归 D7;D1 只负责 `RunOutcome.provider_error` 数据面(stream_error.rs:237-269 fatal 填充)**,两者文件域不重叠。唯一交叉点:engine.rs `to_loop_event` 映射(04 §3-5 提及)与 D1 的 engine.rs 改动同文件,按 00 总纲 §4 同文件串行纪律处理(§7)。
+1. **范围迁移一(已批准,02-定夺 B1)**:00 总纲 §3 的 D1 行「⑤ 流中断结构化标注(providerErrorKind)」(00-总纲-维度设计.md:75)与 D7 行「⑤ 错误消息语义完整化(04 结构化标注 + 水合 failed-turn 标记)」存在边界重叠。任务书 D7 范围④明确把「04 结构化标注」划入 D7,且 04 §2.6 标注的改动点在 `agent-provider/src/consume/mod.rs:308-347` 与 `crates/session-loop/src/stream.rs:439-481`(两处镜像)——这两个文件不在 00 总纲 D1 的关键文件清单(stream_error.rs/loop/end.rs/handlers/mod.rs/loop/mod.rs/engine.rs)内。**已批准:流中断标注的主体改动(consume/stream 两处镜像 + streaming.rs 透传 kind)确认归本维度;D1 已移交(只保留 `RunOutcome.provider_error` 数据面,stream_error.rs:237-269 fatal 填充)**,两者文件域不重叠。唯一交叉点:engine.rs `to_loop_event` 映射(04 §3-5 提及)与 D1 的 engine.rs 改动同文件,按 00 总纲 §4 同文件串行纪律处理(§7)。
 2. **范围迁移二(显式标注,非冲突)**:00 总纲 §3 D8 行「④ 水合 error 态放行 + failed-turn 标记(本轮,非可选)」与 D7 行「⑤ 错误消息语义完整化(… + 水合 failed-turn 标记)」重叠。任务书 D7 范围④包含水合 error 态放行,且 00 总纲 §6 契约表「hydrate 标记 | D7→模型 | error 态保留 + metadata {kind:"failed-turn"};无 schema 改动 | D7」(00-总纲-维度设计.md:138)已把 hydrate 改动属主定为 D7。**本维度裁定:hydrate.rs 的放行+标记改造归 D7;D8 保留「观测面」职责(事件/UI/口径),不重复改 hydrate.rs**。
-3. **契约扩展(与 00 总纲 §6 冲突,需显式批准)**:00 总纲 §6 冻结的 `RunFailureContext 还原 | D2 壳层→D3 | subagent_id/task/error_kind/retries/produced_content/from_leaf_id/inject_bytes/window_bytes`(00-总纲-维度设计.md:130)不含 history。裁决 #19(history 注入)落在 fork 路径(02 选型 C 原描述即「spawn 请求的 history: None 缺口」),而 fork 的上下文载体是 `RunFailureContext`(recovery.rs:757-780)→ 本维度**新增 `RunFailureContext.history: Option<Vec<HistoryMessage>>` 字段与 `SubagentSpawnRequest.history` 字段**(§3.4),属对契约表的 minor 扩展;RecoveryBudget/键形状零改动。理由:history 数据必须在 fork 决策处随 ctx 传递,不经 ctx 则需在 orchestrator 侧另建第二数据通道,违反「数据面集中」纪律。
+3. **契约扩展(已批准,02-定夺 W3)**:00 总纲 §6 冻结的 `RunFailureContext 还原 | D2 壳层→D3 | subagent_id/task/error_kind/retries/produced_content/from_leaf_id/inject_bytes/window_bytes`(00-总纲-维度设计.md:130)不含 history。裁决 #19(history 注入)落在 fork 路径(02 选型 C 原描述即「spawn 请求的 history: None 缺口」),而 fork 的上下文载体是 `RunFailureContext`(recovery.rs:757-780)→ 本维度**新增 `RunFailureContext.history: Option<Vec<HistoryMessage>>` 字段与 `SubagentSpawnRequest.history` 字段**(§3.4),属对契约表的 minor 扩展;RecoveryBudget/键形状零改动。理由:history 数据必须在 fork 决策处随 ctx 传递,不经 ctx 则需在 orchestrator 侧另建第二数据通道,违反「数据面集中」纪律。D3 §3.2.4 装配表与 D4 §3.5 prepare_resume 已同步补 history 字段(见 §3.4 注记)。
 
 ---
 
@@ -142,6 +142,8 @@ let checkpoint_section = format!(
 
 **目标**:Verbatim 场景把原 run 消息作为新 run 的 history,先于 Summarized 摘要(Summarized 的摘要注入明确后置——Summarizer 生产装配断链,02 选型 C)。
 
+**同步注记(02-定夺 W3 已批准)**:D3 §3.2.4 装配表与 D4 §3.5 prepare_resume 已同步补 history 字段(数据源 = session_history.get(子代理会话)/row.messages→HistoryMessage 转换),与本维度的字段形状 `history: Option<Vec<HistoryMessage>>` 一致。
+
 **数据流(三处改动)**:
 
 ```
@@ -245,7 +247,8 @@ fn status_kind(entry) -> StatusKind { Completed | Failed | Skipped }
 | T6 | 收口→注入全链路 | 同一会话:run 1 收口写叶子 → run 2 经 spawn_idle_resume_run 拉起,prompt 含 run 1 的 checkpoint 摘要 | core_run_commands.rs 集成域 |
 | T7 | history 注入:Verbatim | decide_fork_context = Verbatim 且 ctx.history 非空 → fork 新 run 的 RunTaskOptions.history = 原 run 消息序列(断言非 None 且首条 id 匹配) | recovery.rs 既有测试域 + 壳层 spawner 测试 |
 | T8 | history 注入:Summarized/New/空 | Summarized/New 或 history 空 → RunTaskOptions.history 仍 None(不伪造摘要);新 run 水合后对话含原 run 消息(经 hydrate_history,含 error 态消息带 failed-turn 标记) | 同上 |
-| T9 | 流中断结构化标注 | 部分保留断流 → 消息 metadata 含 providerError(字符串保持)+ providerErrorKind + providerErrorRetryable;既有 `text_then_error_stop_yields_message` 扩展断言不删改 | consume/mod.rs、stream.rs 测试域 |
+| T9 | 流中断结构化标注 | 部分保留断流 → 消息 metadata 含 providerError(字符串保持)+ providerErrorKind + providerErrorRetryable;既有 `text_then_error_stop_yields_message` 扩展断言不删改 | crates/session-loop/src/stream.rs:546(`text_then_error_stop_yields_message` 实测位置)、consume/mod.rs 测试域 |
+| T10 | checkpoint 跨重启水合(集成,C10) | 写叶子 → 快照 → 新实例 run_restore → 拉起 run 2 → `RunTaskOptions.prompt` 含 checkpoint 摘要(跨重启闭环,05 数据面 #18) | orchestrator 集成域(跨重启) |
 
 ### 5.2 回归面
 
@@ -256,7 +259,7 @@ fn status_kind(entry) -> StatusKind { Completed | Failed | Skipped }
 
 ### 5.3 验收断言 ↔ 测试映射
 
-A1→T2、A2→T3/T4、A3→T5、A4→T1/T6、A5→T7/T8、A6→T9。
+A1→T2、A2→T3/T4、A3→T5、A4→T1/T6/T10、A5→T7/T8、A6→T9。
 
 ---
 
@@ -293,7 +296,7 @@ A1→T2、A2→T3/T4、A3→T5、A4→T1/T6、A5→T7/T8、A6→T9。
 
 | # | 问题 | 决策 | 理由 | 影响面 |
 |---|---|---|---|---|
-| 1 | 采集/注入写面的会话树实例从哪来(00 总纲 D3 才装配 session_trees 表,D7 派单可能先于 D3) | **基线自洽路径:经 `state.sessions` 快照注册表临时重建**——`from_session_record`(session.rs:589)→ 读写 → `to_session_record` 回写;D3 的 session_trees 表落地后切换共享实例(同函数体,一行访问器差异) | 消除对 D3 的隐藏依赖,保持 D7 可独立验收;重建成本 = 收口一次 O(树大小) 纯内存拷贝,频率极低可接受;复用冻结资产(read/set_leaf_checkpoint)不重复实现三态解析 | §3.1/§3.2 树访问器 |
+| 1 | 采集/注入写面的会话树实例从哪来(00 总纲 D3 才装配 session_trees 表,D7 派单可能先于 D3) | **基线自洽路径:经 `state.sessions` 快照注册表临时重建**——`from_session_record`(session.rs:589)→ 读写 → `to_session_record` 回写;D3 的 session_trees 表落地后切换共享实例(同函数体,一行访问器差异)。**派单注记(02-定夺 M4)**:壳层面排 D3 之后;独立面(水合/标注/字段)不受此约束 | 消除对 D3 的隐藏依赖,保持 D7 可独立验收;重建成本 = 收口一次 O(树大小) 纯内存拷贝,频率极低可接受;复用冻结资产(read/set_leaf_checkpoint)不重复实现三态解析 | §3.1/§3.2 树访问器 |
 | 2 | 无树/无叶子会话(新会话、子代理会话)的采集语义 | 写面无记录或无 current_leaf_id → **跳过**(Absent 语义),不建占位树 | 树的叶子是分支语义(C6 主写权),采集为 checkpoint 建叶子是侵入;无叶子时「无 checkpoint 行为不变」与现状一致;验收场景(带 checkpoint 叶子会话)由 fork 过/恢复过的会话构造 | §3.1 触发范围 |
 | 3 | 采集触发点:安全点采集 vs 收口采集 | **收口采集一次**(produce 后、drive_outcome 前),finalize_failed 防御路径跳过并注释 | 每 turn 安全点采集过频且安全点无 outcome 消息句柄;收口采集覆盖 error 收场(部分产出含最新 checkpoint 行,恢复质量关键);finalize_failed 是 drive 失败防御路径,消息未消费属极罕见,跳过可接受 | §3.1 |
 | 4 | 注入摘要长度护栏 | summary 字段截断 **≤500 字符**(超长截断 + 省略号),completed/next 各 ≤5 项 | 注入文本过长稀释注意力且浪费 token;500 字符约为 2-3 句话,足够承载「已完成/下一步」要点 | §3.2 |

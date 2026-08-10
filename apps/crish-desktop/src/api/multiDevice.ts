@@ -1,5 +1,5 @@
 /**
- * 多端互通 API 桥接层（R1-07 配对四件套 + R1-08 撤销/改名）。
+ * 多端互通 API 桥接层（R1-07 配对四件套 + R1-08 撤销/改名 + R1-09 网络检测）。
  * 所有调用经 Tauri invoke 转发到 Rust 侧 multi_device_* 命令面；
  * 失败按 invokeTyped 三态路由，错误经 logInternalError 登记。
  */
@@ -31,6 +31,16 @@ export interface DeviceInfo {
   label: string;
   issued_at_ms: number;
   revoked: boolean;
+}
+
+/** 网络环境检测结果（R1-09 G-4：网络配置文件类别 + 可直连 IP + 引导文案） */
+export interface NetworkEnvInfo {
+  /** 网络配置文件类别：public / private / domain / unknown */
+  profile: 'public' | 'private' | 'domain' | 'unknown';
+  /** 可直连 IP 列表（推荐 IP 恒在首位；空网络含 0.0.0.0 占位） */
+  usable_ips: string[];
+  /** 引导文案（公用网络切换 / AP 隔离兜底，UI 直接渲染） */
+  hint: string;
 }
 
 // ── 命令封装（三态返回，missing/error 均不抛，调用方诚实呈现）────────
@@ -84,4 +94,12 @@ export async function renameDevice(hash: string, newLabel: string): Promise<bool
   if (res.status === 'ok') return res.data;
   logInternalError('renameDevice', `multi_device_rename_device ${res.status === 'missing' ? 'missing' : res.message}`);
   return false;
+}
+
+/** 网络环境检测（配对页消费：公用网络切换提示 / AP 隔离引导手动输 IP） */
+export async function networkEnvInfo(): Promise<NetworkEnvInfo | null> {
+  const res = await invokeTyped<NetworkEnvInfo>('multi_device_network_info', {});
+  if (res.status === 'ok') return res.data;
+  logInternalError('networkEnvInfo', `multi_device_network_info ${res.status === 'missing' ? 'missing' : res.message}`);
+  return null;
 }

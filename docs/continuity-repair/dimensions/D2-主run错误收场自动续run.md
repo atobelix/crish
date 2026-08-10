@@ -21,14 +21,15 @@
 
 | # | 最低线断言 | 细化(测试写法) | 对应测试 |
 |---|---|---|---|
-| A1 | 模拟 3 次重试耗尽 → 自动拉起新 run 且上下文完整 | mock run 1 的 provider 每次调用均返回瞬态错误 → run 内 3 次重试耗尽 → `RunOutcome.reason == Error` 且 `provider_error = Some{retryable: true, retries: 3}` → `decide_idle_resume` 返回 `Some`(注入文本含「继续任务」)→ 拉起器被调用(断言 run 计数 +1、新 run 存在);上下文完整 = 新 run 的 history 参数回退 `SessionHistoryCache`(core_run_commands.rs:2718 收口已缓存),断言新 run 首轮对话含 run 1 的部分产出消息 | T1/T2 |
+| A1 | 模拟 3 次重试耗尽 → 自动拉起新 run 且上下文完整 | mock run 1 的 provider 每次调用均返回瞬态错误 → run 内 3 次重试耗尽 → `RunOutcome.reason == Error` 且 `provider_error = Some{retryable: true, retries: 3}` → `decide_idle_resume` 返回 `Some`(注入文本**锁定精确模板**「上一轮 provider 中断(<kind>),继续任务」)→ 拉起器被调用(断言 run 计数 +1、新 run 存在);上下文完整 = 新 run 的 history 参数回退 `SessionHistoryCache`(core_run_commands.rs:2718 收口已缓存),断言新 run 首轮对话含 run 1 的部分产出消息;**实现时需核证 `resolve_history_source` Cache 分支既有测试**(C8) | T1/T2 |
 | A2 | 第 4 次 error 停止自动续 | 连续 4 次 error 收场(每次 run 内 3 次重试耗尽):前 3 次各自动续 run 一次(预算 0→3),第 4 次 `decide_idle_resume` 返回 `None`,留 `recovery-budget-denied` 事件,`recover_episodes` 键 count=3 | T3 |
 | A3 | 用户停止/abort 永不续 | `reason == Stopped` / `reason == Aborted` / `abort_signal.is_aborted()` / `user_touched` 四组输入均返回 `None`(即使 provider_error retryable 且预算内) | T4 |
 | A4 | 非 retryable 不续 | `provider_error = Some{retryable: false}`(Auth/Quota 类)→ `None`;`provider_error = None`(非 PROVIDER_ERROR 的 error 收场)→ `None` | T5 |
 | A5 | 指纹按唤醒源隔离 | 同任务文本、source 分别为 `error-retry` 与 `user` → 指纹不同,预算计数互不消耗;`timer-<id1>` 与 `timer-<id2>` 指纹不同(供 D6 回归) | T6 |
 | A6 | 熔断期不续 | D1 提供 `is_tripped` 判定为 true → error 分支拒绝(即使 retryable 且预算内) | T7 |
 | A7 | error 轮不计空转 streak | 连续 2 次 error 续 run 后空转计数不增;随后一次 Stop 收场三源全空 → 空转计数从 0 起步(而非继承 2) | T8 |
-| A8 | 退避序列 | 时钟注入(tokio pause):第 1/2/3 次 error 续 run 前等待 ≥ 750/1500/3000ms(镜像 recovery.rs:116-118 常量) | T9 |
+| A8 | 退避序列 | 延迟函数注入(`retry_delay` 注入点,测试直接驱动):第 1/2/3 次 error 续 run 前等待 ≥ 750/1500/3000ms(镜像 recovery.rs:116-118 常量),断言与注入方式绑定写死(不依赖 tokio pause,C4) | T9 |
+| A9 | error 续 run 走主 run idle 通道(说明性断言) | error 续 run 拉起复用主 run idle 通道:`spawn_idle_resume_run` 以 subagent_config=None 拉起(core_run_commands.rs:2660-2661),不经过 spawn 守卫(spawn 守卫为子代理 run 面);嵌套禁令不变,12/5/1 不受影响(C12/P3-4) | —(说明性) |
 
 ### 1.3 与敲定冲突声明
 
@@ -106,9 +107,9 @@ async fn decide_idle_resume(
                 // 超限:recovery-budget-denied 事件留痕(§3.4)+ 不续
                 return None;
             }
-            // 3f. 跨 run 退避(常量镜像 recovery.rs:116-118;时钟可注入)
+            // 3f. 跨 run 退避(常量镜像 recovery.rs:116-118;延迟函数注入,测试直接驱动)
             let delay = backoff_for_attempt(state, &active.session_id).await;
-            state.sleep_resume_backoff(delay).await;   // tokio sleep,可注入
+            state.sleep_resume_backoff(delay).await;   // 经 state 注入点调用(默认 tokio sleep)
             if active.abort_signal.is_aborted() { return None; }   // 退避期 abort 复查
             // 3g. 恢复条目入队 → drain 注入 → 拉起(与任务书①一致)
             build_main_resume_entry(&active.run_id, &pe, now_ms())
@@ -134,6 +135,7 @@ async fn decide_idle_resume(
 - **传递**:idle 判定调用点 :2873-2879 增传 `resume_provider_error.as_ref()`。
 - **签名**:`decide_idle_resume(state, active, reason, had_ai_output, provider_error: Option<&ProviderErrorSummary>)`。
 - **子代理 run 不参与**:`active.subagent.is_none()` 守卫(:2872)保持——子代理恢复走 D3 阶梯,error 分支只服务主 run(02 D10)。
+- **主 run idle 通道说明(C12/P3-4)**:error 续 run 的拉起复用**主 run idle 通道**——`spawn_idle_resume_run` 以 subagent_config=None 拉起(core_run_commands.rs:2660-2661),**不经过 spawn 守卫**(spawn 守卫是子代理 run 面,主 run idle 拉起不经其校验);嵌套禁令不变、12/5/1 不受影响。
 
 ### 3.3 指纹构造(裁决 #8)
 
@@ -144,6 +146,8 @@ pub const WAKE_SOURCE_USER: &str = "user";
 pub const WAKE_SOURCE_ERROR_RETRY: &str = "error-retry";
 // timer-<id> / cron-<id> 为动态拼接(D6);restore / goal 为静态(D6/D5)
 ```
+
+> **注(W8 定夺)**:唤醒源枚举为**前瞻设计**,预算实际仅 `error-retry` 域消费;restore/timer/cron/goal 源**不消费预算**(各自独立护栏)。
 
 **指纹函数**(recovery.rs 新增,既有两参 `fingerprint` 保持不动——40+ 单测锁定其行为):
 
@@ -172,7 +176,7 @@ pub fn fingerprint_with_source(subagent_id: &str, task: &str, source: &str) -> S
 fn build_main_resume_entry(run_id: &str, pe: &ProviderErrorSummary, now: u64) -> SteeringInputEntry {
     SteeringInputEntry {
         id: format!("recovery-main-{run_id}-{now}"),
-        text: format!("上一轮 provider 中断（{}），继续任务", kind_str(&pe.kind)),
+        text: format!("上一轮 provider 中断({}),继续任务", kind_str(&pe.kind)),   // C8 锁定精确模板(<kind> 半角,与断言一致)
         attachments: Vec::new(),
         enqueued_at: now,
         group_id: Some(format!("{RECOVER_GROUP_PREFIX}{run_id}")),   // "recovery-<run_id>"
@@ -200,8 +204,11 @@ async fn consume_main_episode(state, session_id, fp) -> bool {
         true
     }).await;
     if !result {
+        // 发射载荷(W6 定夺):subagentRunId 为 Option<String>,双发射方语义 ——
+        //   D2 主 run 侧发射 = None(主 run 无子代理域);D3 子代理侧 = Some(<subagent_run_id>)
+        //   (sessionId 由事件信封携带,载荷不列)
         append_event(session_id, RECOVER_BUDGET_DENIED_EVENT,                       // recovery.rs:111
-            json!({ "fingerprint": fp, "count": 3, "max": limit }));
+            json!({ "subagentRunId": None, "fingerprint": fp, "count": 3, "max": limit }));
         conex_types::denied_stats::global_denied_stats().record_recovery_budget_denied();  // recovery.rs:972-973
     }
     result
@@ -209,13 +216,14 @@ async fn consume_main_episode(state, session_id, fp) -> bool {
 ```
 
 - 读-改-写安全性:会话内串行守卫(同会话单活动 run,core_run_commands.rs:3208-3216)保证同一时刻仅一个 run 收口写该会话预算键;与 D3 coordinator 的 persist_budget 写同键时指纹域互斥(子代理指纹 = 两参;主 run 指纹 = 三参),无键冲突。00 总纲 §6 契约表「RecoveryCoordinator 单写方」精确化为:**同键同形状,写方 = D3 子代理路径 + D2 主 run 路径,指纹域互斥 + 会话串行保证无并发写**(01 敲定方案 §2.1 已明确「D2 主 run 预算写入同键」,属裁决在先)。
+- **直写后内存态口径(W5 定夺)**:D2 直写 recover_episodes 后**不刷新 RecoveryCoordinator 内存态**;观测侧(D8)与重启恢复均以 session_meta 键直读/读盘为准,无陈旧窗口问题。
 - F2-27:读写走 `spawn_blocking`(01 敲定方案 §3 接线时序 5 的既有约束,同表覆盖「goal_state/provider_fail_streak 读写」,recover_episodes 同批纳入)。
 - 消费语义与 C7 阶梯 1 的区别:**主 run error 续 run 每次 error 收场消费一次预算**(每次都是一次自动恢复动作,由「连续 error ≤3」验收倒推,00 总纲 D2 最低线 A2);C7 阶梯 1「重派不消费 Episode」(recovery.rs:13-14、02 方案 Y)是子代理同任务重试的语义,两者分域。
 
 **跨 run 退避**:
 
 - 公式:`delay = min(RECOVERY_BASE_DELAY_MS << (attempt - 1), RECOVERY_MAX_DELAY_MS)`(750→1500→3000,attempt = 本次消费后的预算计数;镜像 recovery.rs:116-118,测试锁定同期望值防漂移,selection-01 分歧 1 附带裁决)。
-- 落点:decide_idle_resume error 分支内(预算消费后、入队前),`tokio::time::sleep`;时钟注入方式:`state` 上放可替换的延迟函数(测试注入即时返回或用 tokio pause,02 W2 同款)。
+- 落点:decide_idle_resume error 分支内(预算消费后、入队前);时钟策略**锁死为实现侧可注入延迟函数**(C4 定夺):`state` 上放 `retry_delay: Box<dyn Fn(u32) -> Duration>` 或等价注入点,测试直接驱动(不依赖 tokio pause,删除二选一表述)。
 - 与 D1 退避的关系:D1 是 run 内瞬态重试退避(stream_error.rs),D2 是跨 run 续 run 退避(壳层),两层独立、常量共享、同批落地(00 总纲 §4:退避未接时 error 续 run 会在跨 run 层面复现「快速连打」风暴,selection-02 §2.4)。
 
 **拉起器 mode 参数化**(共享接口):
@@ -269,7 +277,7 @@ D2 侧实现仅保证「error 分支独立返回、不触碰 goal_state 键」;R
 
 | # | 用例 | 断言 |
 |---|---|---|
-| T1 | 3 次重试耗尽自动拉起 | 构造 `reason=Error + provider_error Some{kind: Network, retryable: true, retries: 3}` → `decide_idle_resume` 返回 Some,注入文本含「继续任务」与 kind 名;拉起器 mock 计数 +1 |
+| T1 | 3 次重试耗尽自动拉起 | 构造 `reason=Error + provider_error Some{kind: Network, retryable: true, retries: 3}` → `decide_idle_resume` 返回 Some,注入文本**精确等于锁定模板**「上一轮 provider 中断(Network),继续任务」(C8);拉起器 mock 计数 +1 |
 | T2 | 上下文完整 | T1 场景:SessionHistoryCache 已存 run 1 消息(:2718)→ 新 run 装配 history 回退缓存,断言新 run 首轮对话含 run 1 部分产出(02 W5 验收①) |
 | T3 | 第 4 次 error 停止 | 预算 3 次消费后第 4 次 error → None;recover_episodes count=3;recovery-budget-denied 事件留痕(00 总纲 D2 最低线 A2) |
 | T4 | 用户停止/abort 不续 | Stopped / Aborted / abort_signal / user_touched 四组 → None(即使 retryable 且预算内) |
@@ -277,7 +285,7 @@ D2 侧实现仅保证「error 分支独立返回、不触碰 goal_state 键」;R
 | T6 | 指纹隔离 | 同任务:source=error-retry 与 source=user 指纹串不同;预算互不消耗;timer-<a> 与 timer-<b> 指纹不同 |
 | T7 | 熔断不续 | is_tripped=true(fake 判定器)→ None |
 | T8 | 不计空转 streak | 连续 2 次 error 续 run 后 `resume_empty_streak` 无该会话条目或值为 0;随后 Stop 收场三源空 → 空转从 0 计起 |
-| T9 | 退避序列 | tokio pause 时钟:第 1/2/3 次续 run 前等待 ≥750/1500/3000ms;第 4 次 error(预算耗尽)无等待 |
+| T9 | 退避序列 | 注入 `retry_delay: Box<dyn Fn(u32)->Duration>` 记录调用序列:第 1/2/3 次续 run 前注入点收到 delay ≥750/1500/3000ms;第 4 次 error(预算耗尽)注入点不被调用;断言与注入方式绑定写死(C4) |
 | T10 | 预算可配 | `recover_max_episodes=1` → 第 2 次 error 即停 |
 | T11 | 熔断期预算不消费 | is_tripped → None 且 recover_episodes 不变(动作未发生不消费,02 选型 E 语义) |
 | T12 | 拉起失败不重复消费 | 拉起器返回错误(仅告警)→ 预算已计 1 次,条目滞留队列;下一收口判定同 run 条目原位替换不堆积 |
@@ -338,7 +346,7 @@ D2 侧实现仅保证「error 分支独立返回、不触碰 goal_state 键」;R
 | D2-1 | 裁决 #8 要求三参指纹,而 recovery.rs「零改动」 | recovery.rs 新增 `fingerprint_with_source(subagent_id, task, source)`,既有两参 `fingerprint` 保持(40+ 测试不动);「零改动」= RecoveryBudget 机制与键形状零改动,指纹属调用面构造 | 敲定 #8 是更新裁决(唤醒源混淆修正,selection-03 评审护栏 5),00 总纲「零改动」表述取其预算本体语义;改签名会破坏既有测试面 | recovery.rs 单点新增函数 |
 | D2-2 | 任务文本取「首条 user 消息」在 error 续 run 下会漂移(首条 user 变注入模板) | 取会话历史首条**非 steering 元数据** user 消息(SessionHistoryCache);回退链:当前 run messages 首条非 steering user 消息 → 空串 | selection-03 评审护栏 5 的同类混淆;derive_task(lifecycle.rs:353-361)语义的会话级等价物 | 指纹稳定性;main_task_text helper |
 | D2-3 | 预算消费时机 | 判定时消费(拉起前),拉起失败不重复消费;预算在退避前消费 | 预算 = 恢复动作计数,判定通过即动作成立;拉起失败是传输问题,条目滞留由 watcher 兜底,重复消费会把「连续 error ≤3」误算成「拉起失败」 | consume_main_episode 顺序;T12 |
-| D2-4 | 跨 run 退避落点 | decide_idle_resume error 分支内(tokio sleep + abort 复查),常量镜像 recovery.rs:116-118,时钟可注入 | 与 D1 退避(stream_error.rs)分域不冲突;放判定内语义完整(退避期用户 abort 不续);放拉起器内则判定与等待脱节 | 判定顺序 3f;T9 |
+| D2-4 | 跨 run 退避落点 | decide_idle_resume error 分支内(经 state 注入点调用延迟函数 + abort 复查),常量镜像 recovery.rs:116-118,时钟策略**锁死为可注入延迟函数**(`retry_delay: Box<dyn Fn(u32)->Duration>`,测试直接驱动,C4) | 与 D1 退避(stream_error.rs)分域不冲突;放判定内语义完整(退避期用户 abort 不续);放拉起器内则判定与等待脱节 | 判定顺序 3f;T9 |
 | D2-5 | 恢复条目 group_id | 复用 `recovery-<run_id>`(RECOVER_GROUP_PREFIX),与 C7 阶梯 2 同前缀不同 id 域 | 00 总纲 §6 前缀表 recovery- 即恢复域;replace_or_enqueue 按完整 group_id 去重,无冲突;不新造前缀 | 条目形状 |
 | D2-6 | 拉起器 mode | `spawn_idle_resume_run` 增 mode 参数:error 续 run="recovery-retry"、Stop 三源="idle-resume"、goal 续轮="goal-continue" | 02 D9(自动恢复类型可观测);D5/D6 共享入口一次改造,不二次接线 | 共享接口;D5/D6 复用 |
 | D2-7 | 事件面 | D2 不新增事件,预算耗尽复用 `recovery-budget-denied` + denied 月度统计 | 01 敲定 §2.2 事件表已冻结(41→47/49 不增项);主 run 恢复观测经既有事件 + D8 的 mode 检索 | 无新登记 |

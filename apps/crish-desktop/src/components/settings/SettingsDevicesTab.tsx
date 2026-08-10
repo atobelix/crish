@@ -1,7 +1,9 @@
 /**
- * 设置 · 多端互通（R1-08 桌面配对 UI + 设备管理页）。
- * 闭环：配对模式开关 → 二维码/CXN 码出现 → 设备列表/撤销/改名。
- * 状态经 3s 轮询（pairStatus + listDevices）保持与服务端一致；
+ * 设置 · 多端互通（R1-08 桌面配对 UI + 设备管理页；R1-09 网络环境引导）。
+ * 闭环：配对模式开关 → 二维码/CXN 码出现 → 设备列表/撤销/改名；
+ * 配对开启时展示网络环境卡片（网络配置文件类别 + 可直连 IP +
+ * 公用网络切换提示 / AP 隔离手动输 IP 引导，R1-09 G-4）。
+ * 状态经 3s 轮询（pairStatus + listDevices + networkEnvInfo）保持与服务端一致；
  * 二维码数据仅本会话保留（Rust 不持久化配对码，重启后需重新开启）。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,9 +19,11 @@ import {
   listDevices,
   revokeDevice,
   renameDevice,
+  networkEnvInfo,
   type PairStartResult,
   type PairStatus,
   type DeviceInfo,
+  type NetworkEnvInfo,
 } from '../../api/multiDevice';
 
 type Props = {
@@ -37,6 +41,14 @@ function formatRemaining(ms: number | null): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+/** 网络配置文件类别 → 展示名（Rust multi_device_network_info 四态） */
+const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {
+  public: '公用网络',
+  private: '专用网络',
+  domain: '域网络',
+  unknown: '未知',
+};
+
 export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
   const [status, setStatus] = useState<PairStatus | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -45,13 +57,15 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
   const [revokeHash, setRevokeHash] = useState<string | null>(null);
   const [renamingHash, setRenamingHash] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [netEnv, setNetEnv] = useState<NetworkEnvInfo | null>(null);
   const mountedRef = useRef(true);
 
   const load = useCallback(async () => {
-    const [s, d] = await Promise.all([pairStatus(), listDevices()]);
+    const [s, d, n] = await Promise.all([pairStatus(), listDevices(), networkEnvInfo()]);
     if (!mountedRef.current) return;
     if (s) setStatus(s);
     setDevices(d);
+    if (n) setNetEnv(n);
   }, []);
 
   useEffect(() => {
@@ -181,6 +195,51 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
           )}
         </SettingsCard>
       </SettingsSection>
+
+      {enabled && netEnv && (
+        <SettingsSection title="网络环境">
+          <SettingsCard>
+            <div className={styles.networkEnv} data-testid="network-env">
+              <div className={styles.networkProfile}>
+                <Lucide.Wifi size={16} aria-hidden />
+                <span>当前网络：{PROFILE_LABELS[netEnv.profile] ?? netEnv.profile}</span>
+                {netEnv.profile === 'public' && (
+                  <span className={styles.networkPublicBadge}>公用网络</span>
+                )}
+              </div>
+              {netEnv.profile === 'public' && (
+                <div className={styles.firewallHint} data-testid="network-public-hint">
+                  <Lucide.ShieldAlert size={14} aria-hidden />
+                  请切换到专用网络，否则 Windows 防火墙会阻止手机访问本机服务。
+                </div>
+              )}
+              <div className={styles.ipList}>
+                <span className={styles.ipListTitle}>手机可直连地址（AP 隔离时手动输入）：</span>
+                {(() => {
+                  const ips = netEnv.usable_ips.filter((ip) => ip !== '0.0.0.0');
+                  return ips.length > 0 ? (
+                    <ul>
+                      {ips.map((ip) => (
+                        <li key={ip}>
+                          <code>{ip}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className={styles.ipListEmpty}>未检测到可直连地址，请检查网络连接。</span>
+                  );
+                })()}
+              </div>
+              {netEnv.hint && (
+                <div className={styles.apIsolationHint} data-testid="network-hint">
+                  <Lucide.Router size={14} aria-hidden />
+                  {netEnv.hint}
+                </div>
+              )}
+            </div>
+          </SettingsCard>
+        </SettingsSection>
+      )}
 
       {showPairCard && (
         <SettingsSection title="扫码配对">

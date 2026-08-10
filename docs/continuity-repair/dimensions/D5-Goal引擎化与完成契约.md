@@ -25,7 +25,7 @@
 | A5 | 前端发 /goal（不带 maxIterations）→ 引擎 goal_state.max_rounds == 12 | 03 §1.4-1 | 消除 useStreamCallbacks.ts:661 `?? 5` 分叉；引擎缺省 DEFAULT_GOAL_MAX_ROUNDS=12（对齐 GOAL_DEFAULT_MAX_ITERATIONS，goalModeController.ts:16） |
 | A6 | checklist 全勾或（无清单且文案 DONE）→ goal-completed 终态，前端投影 phase=completed 且无第二次续轮 | 03 §1.4-4 / 敲定 V4 | 完成轮 run 终态=Completed 类 + reason=goal-completed（03 决策 4）；前端投影 completed 判定兼容（goalModeController.ts:497-509 既有判定复用） |
 | A7 | 重启后重读 goal_state：current_round 不归零、续轮从断点继续 | 03 §1.4-6 | run_restore 后惰性重读；重启打断的轮不计 stalled（03 护栏 8） |
-| A8 | 事件登记 goal-round-* ×3 与 recovery-* ×5 集中一次（41 → 47/49） | 00 §3 D8① / 01 §2.2 | 六处改动面一次改完（05 §2A：events.rs 变体/engine-events.json/V1_EVENT_TYPES+断言名/fixtures/event_backpressure/changelog + 生成产物） |
+| A8 | 事件登记 goal-round-* ×3 与 recovery-* ×5 集中一次（41 → 49） | 00 §3 D8① / 01 §2.2 | 九处改动面一次改完，以 D8 §3.1 清单为准（registry_drift.rs 三处断言 + events_roundtrip.rs + event_hook_mapping.rs 等；05 §2A 原「六处」口径扩面，02-定夺 P3） |
 | A9 | 子代理 run 不参与 goal 续轮 | 00 §4 / 03 护栏 7 | 沿用 core_run_commands.rs:2872 `active.subagent.is_none()` 判定 |
 | A10 | 用户显式停止永不自动续 | 00 §5 护栏 2 | abort_signal / user_touched / reason!=Stop 硬条件保留（core_run_commands.rs:2513-2519） |
 
@@ -129,7 +129,7 @@ pub fn save_goal_state(store: &dyn Store, session_id: &str, state: &GoalState)
 
 ### 3.3 收口 RoundAssessment 纯函数（D5 核心）
 
-**位置**：`crates/orchestrator` 域新模块（纯函数，无 IO 依赖，直接单测）；调用点在 drive_run_loop 收口（core_run_commands.rs:2861 idle 判定同区、子代理收口 :2844-2852 之后、:2872 判定之前）。**allows_auto_continue 首个生产调用**（normalize.rs:177-179 激活）。
+**位置**：`crates/orchestrator` 域新模块（纯函数，无 IO 依赖，直接单测）；调用点在 drive_run_loop 收口（core_run_commands.rs:2861 idle 判定同区、子代理收口 :2844-2852 之后、:2872 判定之前）。**前置守卫**：仅 `active.subagent.is_none()` 时评估（子代理 run 不做 goal 评估，02-定夺 S10；复用 :2872 判定面）。**allows_auto_continue 首个生产调用**（normalize.rs:177-179 激活）。
 
 **签名**：
 
@@ -196,7 +196,7 @@ emit goal-round-completed（§3.9）
 - **签名** = 本轮工具批序列哈希：对每笔工具调用取 `tool_name + 参数 JSON 顶层 key 集合`（排序后拼串），序列整体 FNV-1a 哈希（复用 recovery.rs:251-262 fingerprint 模式）；参数值噪声（时间戳/随机值）被 key 集降级容忍（03 §2D D2、selection-01 分歧 3 附带裁决）。
 - **无工具轮 → 签名不变**（不产出新签名，沿用上轮 progress_signature）——纯文字总结轮自动落入「签名相同」轨道，正确计入 stalled（03 §2D 论证：消息 id 链误判率高已弃用）。
 - **重置**：本轮有成功工具结果（tool_success_count > 0）→ stalled_rounds=0 并更新签名；签名变化 → stalled_rounds=0。
-- **与空转护栏的关系**（01 敲定 #21 分场景并存）：stalled 独立计数管「签名相同无进展」；decide_idle_resume 空转护栏（IDLE_RESUME_MAX_EMPTY_ROUNDS=3，core_run_commands.rs:2571）管「无 AI 产出」（resume_turn_index==0 && resume_tool_calls==0，:2877-2878）——两条独立停机路径（03 护栏 3 注释、selection-03 D3）。
+- **与空转护栏的关系**（01 敲定 #21 分场景并存）：stalled 独立计数管「签名相同无进展」；decide_idle_resume 空转护栏（IDLE_RESUME_MAX_EMPTY_ROUNDS=3，core_run_commands.rs:2571）管「无 AI 产出」（resume_turn_index==0 && resume_tool_calls==0，:2877-2878）——两条独立停机路径（03 护栏 3 注释、selection-03 D3）。**goal 续轮无 AI 产出计入空转且按 stalled 独立计数**（02-定夺 W2 确认：实现按唤醒源区分计数分支，D6 §3.5）。
 - **error 轮不计 stalled**：§3.3 步骤 2 已拦截（stalled_delta=0）。
 - **重启打断的轮不计 stalled**：被打断 run 无收口评估，stalled_rounds 保持（03 护栏 8、动态决策 03-8）。
 
@@ -284,10 +284,12 @@ pub fn read_latest_summary_next_steps(db: &LocalDb, session_id: &str) -> Option<
 | 事件 | 发射点 | 载荷 | 通道 |
 |---|---|---|---|
 | goal-round-started | run_task_impl 装配 goal_state 后（run 启动，session 级串行上下文） | goal / round（=current_round+1）/ maxRounds | 当前 run 的 BufferedRunEventBridge emit（envelope 带 run_id+sequence，core_run_commands.rs:3263-3266） |
-| goal-round-completed | drive_run_loop 收口 RoundAssessment 后（:2872 判定前） | round / 产出统计（toolCallCount、toolSuccessCount、messageCount）/ 评估结论（decision/reasonDetail/stalledDelta）/ evidence（L2 计数） | 同上 |
+| goal-round-completed | drive_run_loop 收口 RoundAssessment 后（:2872 判定前） | round / toolCallCount / toolSuccessCount / messageCount / decision / reasonDetail / stalledDelta / evidence（02-定夺 B2 统一单一字段集，与 §4.2 合并；字段名按仓库惯例 snake_case 序列化；stalledDelta 表达本轮增量，stalled 总数在 goal_state 键） | 同上 |
 | goal-continuation-decided | decide_idle_resume 命中 goal_pending（注入拼接处） | 对齐 GoalContinuationDecision：action=continue/complete/block、reason、prompt、progressSignature、detail（orchestration.ts:38-44；progressSignature 与 goal_state.progress_signature 同源——05 §2B「必须同源同函数」） | 同上 |
 
-登记改动面 = 05 §2A 六处 + 生成产物（与 D3 的 recovery-* ×5 同批，禁止分两次；01 敲定 §3 第4条）。事件登记后 Rust 侧 `event_backpressure` 补 goal 域分支，backpressure 全 critical（05 §2A；对齐 timer-fired 先例，changelog 1.5）。
+goal-round-completed 载荷与 D8 §3.1.1 登记面**同批同形状**；envelope 事件**不列 sessionId 变体字段**（读侧信封已含，02-定夺 B2 约定）。
+
+登记改动面 = 05 §2A 六处扩为**九处**（以 D8 §3.1 清单为准：registry_drift.rs 三处断言 + events_roundtrip.rs + event_hook_mapping.rs 等，02-定夺 P3）+ 生成产物（与 D3 的 recovery-* ×5 同批，禁止分两次；01 敲定 §3 第4条）。事件登记后 Rust 侧 `event_backpressure` 补 goal 域分支，backpressure 全 critical（05 §2A；对齐 timer-fired 先例，changelog 1.5）。
 
 ### 3.10 CompletionRequirement 轻量版（08 §3 P1，挂同评估点）
 
@@ -306,26 +308,27 @@ pub fn read_latest_summary_next_steps(db: &LocalDb, session_id: &str) -> Option<
 {
   "schemaVersion": 1,
   "goal": "修复构建",
-  "maxRounds": 12,
-  "maxStalledRounds": 2,
-  "currentRound": 3,
-  "stalledRounds": 0,
-  "progressSignature": "tools:fnv1a:7f3a…",
-  "stoppedReason": "stop",
+  "max_rounds": 12,
+  "max_stalled_rounds": 2,
+  "current_round": 3,
+  "stalled_rounds": 0,
+  "progress_signature": "tools:fnv1a:7f3a…",
+  "stopped_reason": "stop",
   "updatedAtMs": 1789000000000
 }
 ```
 
 - 键命名空间独占 `goal_state`（不复用 recover_* 前缀，05 §2B 纪律；01 敲定 §2.1）。
 - 宽容解析 fail-open：缺键=无 goal、坏 JSON=无 goal（recovery.rs:327-335、1286-1292 先例）；内嵌 schemaVersion 仅为自描述，缺省视为 1，不参与迁移判定（05 §4-4）。
-- 字段说明：stoppedReason ∈ {stop, goal-completed, goal-max-rounds, goal-stalled, error, max-turns, aborted, stopped}（终态后 status 由 stoppedReason 推断，completedRounds 不单列——避免双计数源，05 §2B 的 completedRounds 字段以 stoppedReason 表达，见 §8 决策 3）。
+- 字段说明：stopped_reason ∈ {stop, goal-completed, goal-max-rounds, goal-stalled, error, max-turns, aborted, stopped}（终态后 status 由 stopped_reason 推断，completedRounds 不单列——避免双计数源，05 §2B 的 completedRounds 字段以 stopped_reason 表达，见 §8 决策 3）。
+- 键字段名统一 snake_case（goal/max_rounds/max_stalled_rounds/current_round/stalled_rounds/progress_signature/stopped_reason，对齐 01 §2.1 冻结形状与 D1 provider_fail_streak 键惯例，02-定夺 S1）；schemaVersion/updatedAtMs 两字段经 02-定夺 S1 批准纳入（自决追加追认）。
 
 ### 4.2 goal-* 事件载荷（对齐 TS 契约孤儿，05 §2A）
 
 | 事件 | 载荷字段 | 对齐 |
 |---|---|---|
 | goal-round-started | goal、round、maxRounds | OrchestratorGoalRunState 子集（orchestration.ts:49-60） |
-| goal-round-completed | round、decision、reasonDetail、toolCallCount、toolSuccessCount、stalledRounds、evidence | GoalRoundAssessmentState 子集（orchestration.ts:62-89：progress{toolCallCount/toolResultCount}、budget{currentRound/maxRounds/stalledRounds/maxStalledRounds}） |
+| goal-round-completed | round、toolCallCount、toolSuccessCount、messageCount、decision、reasonDetail、stalledDelta、evidence（与 §3.9 同一单一字段集，02-定夺 B2；stalledDelta 表达本轮增量，stalled 总数在 goal_state 键） | GoalRoundAssessmentState 子集（orchestration.ts:62-89）；与 D8 §3.1.1 登记面同批同形状；envelope 事件不列 sessionId 变体字段（读侧信封已含） |
 | goal-continuation-decided | action、reason、prompt、progressSignature、detail | GoalContinuationDecision 全字段（orchestration.ts:38-44） |
 
 ### 4.3 RunTaskOptions 新增字段（01 敲定 §2.3）
@@ -350,7 +353,7 @@ pub fn read_latest_summary_next_steps(db: &LocalDb, session_id: &str) -> Option<
 | # | 用例 | 断言 |
 |---|---|---|
 | U1 | goal 未完成 stop 收场 | decision=Continue、should_continue=true（allows_auto_continue 生产调用首例，normalize.rs:177-179） |
-| U2 | checklist 全勾 stop 收场 | Completed（L1）；stoppedReason=goal-completed |
+| U2 | checklist 全勾 stop 收场 | Completed（L1）；stopped_reason=goal-completed |
 | U3 | 无 checklist 文案 DONE stop 收场 | Completed（L0 收口） |
 | U4 | 文案 DONE 但 checklist 未全勾 | 不 Completed → Continue（prematureDoneClaim 对齐） |
 | U5 | 工具批指纹连续相同 | stalled_delta=1；达 max_stalled → Blocked(goal-stalled) |
@@ -367,9 +370,9 @@ pub fn read_latest_summary_next_steps(db: &LocalDb, session_id: &str) -> Option<
 | # | 用例 | 断言 |
 |---|---|---|
 | I1 | /goal 三字段透传 | core_run_task 下发 visibleGoal/maxRounds → run_task_impl 装配 goal_state（serde camelCase 激活，ConnectionLifecycle.ts:628-631 已发字段不再丢弃） |
-| I2 | goal 未完成 stop 收场 → 自动续轮 | 收口后 spawn_idle_resume_run 拉起 mode=goal-continue 新 run；注入文本含 goal 前缀 |
-| I3 | 工具批指纹 stalled → goal-stalled | 连续 max_stalled_rounds 轮签名相同 → 终态 reason=goal-stalled 落库（is_blocked_reason 命中，restore.rs:812-817） |
-| I4 | max_rounds 耗尽 → goal-max-rounds | 终态 reason 落库；后续收口 goal_pending 恒 false |
+| I2 | goal 未完成 stop 收场 → 自动续轮 | 收口后 spawn_idle_resume_run 拉起 mode=goal-continue 新 run；注入文本含 goal 前缀；依赖 D2 的 mode 参数化落地后执行（D2 先行，02-定夺 C13） |
+| I3 | 工具批指纹 stalled → goal-stalled | 连续 max_stalled_rounds 轮签名相同 → 终态 reason=goal-stalled 落库（is_blocked_reason 命中，restore.rs:812-817）；断言落点补 runs 表 end_reason 查询面（core_run_commands.rs:2932-2936，D3 §5.3 同款，02-定夺 C6） |
+| I4 | max_rounds 耗尽 → goal-max-rounds | 终态 reason 落库；后续收口 goal_pending 恒 false；断言落点补 runs 表 end_reason 查询面（core_run_commands.rs:2932-2936，D3 §5.3 同款，02-定夺 C6） |
 | I5 | 错误收场不触发 goal_pending | provider error 收场 → 无续轮；stalled_rounds/current_round 不变 |
 | I6 | error 轮不计 stalled | error 轮之间穿插 stalled 判定，计数不递增 |
 | I7 | 重启恢复 | run_restore 后重读 goal_state：current_round 不归零；续轮从断点继续；被打断轮不计 stalled |
@@ -382,7 +385,7 @@ pub fn read_latest_summary_next_steps(db: &LocalDb, session_id: &str) -> Option<
 - recovery.rs 40+ 单测 + 4 集成测试作接线回归面（01 敲定 §4-4；本次 goal_state 读写/指纹不触碰 recover_* 键）。
 - normalize.rs allows_auto_continue 既有测试（normalize.rs:521-525）保持，新增生产调用断言。
 - 前端：useStreamCallbacks.ts:661 `?? 5` → 12 后，goalModeController 单测基线不变（GOAL_DEFAULT_MAX_ITERATIONS 已是 12）；npm run typecheck + vitest 门禁。
-- 事件登记后 registry_drift 绿 + fixtures 全量解析 + `v1_baseline_has_exactly_4X_event_types` 改名留痕（05 §2A 六处）。
+- 事件登记后 registry_drift 绿 + fixtures 全量解析 + `v1_baseline_has_exactly_4X_event_types` 改名留痕（05 §2A 六处扩为九处，以 D8 §3.1 清单为准）。
 
 ---
 
@@ -399,7 +402,7 @@ pub fn read_latest_summary_next_steps(db: &LocalDb, session_id: &str) -> Option<
 | 7 | goal_state 并发写 | 单写方 = run 收口 RoundAssessment；会话串行守卫保证无并发；读-改-写走 spawn_blocking | 05 §2B；01 敲定 §3-5 |
 | 8 | 摘要缺失时续轮空洞 | 注入主源 = goal_state.goal（每轮必有），nextSteps 仅「有最新 summary_json」时增强拼接 | 03 决策 7；05 §6 D2 |
 | 9 | 重启误判停滞 | 重启打断的轮不参与 stalled 计数（恢复轮不评估） | 03 §5 护栏 8 |
-| 10 | 事件登记拆批返工 | 与 D3 recovery-* 集中一次登记（六处改动面），禁止分两批 | 01 敲定 #14 / §3 第4条 |
+| 10 | 事件登记拆批返工 | 与 D3 recovery-* 集中一次登记（九处改动面，以 D8 §3.1 清单为准），禁止分两批 | 01 敲定 #14 / §3 第4条 |
 
 ---
 
@@ -425,7 +428,7 @@ pub fn read_latest_summary_next_steps(db: &LocalDb, session_id: &str) -> Option<
 |---|---|---|---|---|
 | 1 | RoundAssessment 纯函数的放置域 | orchestrator 域新模块（纯函数），壳层 drive_run_loop 收口调用 | 03 选型 A1 已裁决位置；纯函数无 IO 直接单测；orchestrator 域可被壳层与未来内核复用；steering BeforeTurn 相位错位论证成立（03 §2A） | §3.3 |
 | 2 | current_round 的递增规则 | 仅正常 Stop 收场轮递增；error/max-turns/aborted/stopped 轮不递增 | error 轮不消耗轮数预算（与「error 轮不计 stalled」同语义，01 §3 第3条精神）；max-turns 是 run 内预算耗尽，goal 轮数预算是跨 run 独立预算，不互斥消耗 | §3.3 |
-| 3 | goal_state 键是否含 completedRounds | 不含——stoppedReason 表达完成状态（stoppedReason=goal-completed），避免双计数源 | 05 §2B 形状含 completedRounds；01 敲定 §2.1 冻结形状不含。以敲定冻结形状为准（completedRounds 可由 stoppedReason 推导），键形状与敲定严格一致 | §4.1 |
+| 3 | goal_state 键是否含 completedRounds | 不含——stopped_reason 表达完成状态（stopped_reason=goal-completed），避免双计数源 | 05 §2B 形状含 completedRounds；01 敲定 §2.1 冻结形状不含。以敲定冻结形状为准（completedRounds 可由 stopped_reason 推导），键形状与敲定严格一致；§4.1 键字段名 snake_case（goal/max_rounds/max_stalled_rounds/current_round/stalled_rounds/progress_signature/stopped_reason），schemaVersion/updatedAtMs 经 02-定夺 S1 批准纳入，与 §4.1 一致性修订 | §4.1 |
 | 4 | goal-* 事件通道：envelope emit 而非 append_event | 三个事件都经当前 run 的 BufferedRunEventBridge emit（envelope 带 runId/sequence） | 前端投影化消费需要实时推送（03 §1.3）；与 recovery 域「append_event 直写」不同——recovery 事件无需前端实时（05 §6 D1），goal 投影需要。落库由 EventQueue 既有机制保证 | §3.9 |
 | 5 | goal-continuation-decided 的发射时序 | 在 decide_idle_resume 命中 goal_pending、注入拼接处发射（:2585-2592 区） | 决策与发射同位，事件承载决策产物（prompt/progressSignature）；run 已移出注册表（:2809-2813）但 bridge 仍持有，可 emit | §3.9 |
 | 6 | CompletionRequirement 轻量版输入形态 | 不新增 RunTaskOptions 字段；语义 =「未完成且无成功工具结果」→ reminder 注入，内存态独立预算（上限 2） | 全量版需必备工具清单声明与退避重试（grok turn.rs:1509-1647），字段扩展超出敲定冻结的三字段面；轻量版零扩展直接服务「半途而废」；若未来升级，`required_tools: Option<Vec<String>>` 为向后兼容扩展 | §3.10 |

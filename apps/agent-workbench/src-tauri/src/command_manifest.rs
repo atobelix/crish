@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（90 条 = 注册面 86 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（102 条 = 注册面 98 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -102,6 +102,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("multi_device_list_devices", "multi_device", "engine", true),
         entry("multi_device_revoke_device", "multi_device", "engine", true),
         entry("multi_device_rename_device", "multi_device", "engine", true),
+        // R1-09 G-4：网络环境检测（注册表网络配置文件类别 + 可直连 IP + 引导文案）
+        entry("multi_device_network_info", "multi_device", "engine", true),
         // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
         // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
         entry("config_get", "config", "engine", true),
@@ -216,7 +218,8 @@ mod tests {
     /// core_md_render_stream / core_md_clear_cache）后 95 → 90，浏览器域
     /// 追加 browser_input / browser_start_frames / browser_stop_frames /
     /// browser_frame_status 后 90 → 94；R1-07 多端互通四件套 + R1-08
-    /// 撤销/改名两件套后 94 → 100）。
+    /// 撤销/改名两件套后 94 → 100；browser_export/import_storage_state
+    /// 追加后 100 → 102；R1-09 multi_device_network_info 追加后 102 → 103）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -227,8 +230,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 102, "总数 102（+browser_export/import_storage_state，与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 98, "注册面 98");
+        assert_eq!(total, 103, "总数 103（+multi_device_network_info，与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 99, "注册面 99");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -375,7 +378,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 102);
+        assert_eq!(manifest.commands.len(), 103);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

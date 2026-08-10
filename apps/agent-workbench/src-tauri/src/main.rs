@@ -51,6 +51,9 @@ mod markdown_commands;
 // single_instance.rs——G-2 桌面多实例端口竞争）
 mod multi_device;
 mod multi_device_commands;
+// R1-09 G-4：网络环境检测（multi_device_network.rs：注册表网络配置文件
+// 类别 + 可直连 IP 枚举 + 防火墙/AP 隔离引导文案）
+mod multi_device_network;
 mod perf;
 mod power;
 mod process;
@@ -64,6 +67,7 @@ mod status_diagnostics;
 // T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
 // 与 core_run_commands / engine 同目标，互引 crate:: 内部路径）
 mod subagent_spawner;
+mod system_power;
 mod timers;
 mod sched;
 mod workflow_commands;
@@ -168,6 +172,8 @@ command_registry![
     ("multi_device_list_devices", multi_device_commands::multi_device_list_devices),
     ("multi_device_revoke_device", multi_device_commands::multi_device_revoke_device),
     ("multi_device_rename_device", multi_device_commands::multi_device_rename_device),
+    // R1-09 G-4：网络环境检测（注册表网络配置文件 + 可直连 IP + 引导文案）
+    ("multi_device_network_info", multi_device_commands::multi_device_network_info),
     // ── 会话持久化（B，�?.2；含 F3 冻结�?upsert_session_entry）──
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),
@@ -301,6 +307,14 @@ fn main() {
     let setup_level = level.clone();
     let setup_app_dir = app_dir.clone();
 
+    // G-1（R1-09）：本地服务生命周期槽（句柄 + serve task 单一真源）。
+    // rebind 钩子与退出钩子共用同一实例——重建后句柄自动更新，退出关停
+    // 无需再依赖 Tauri state 注入；setup 与退出闭包各自预克隆。
+    let server_lifecycle: Arc<std::sync::Mutex<ServerLifecycle>> =
+        Arc::new(std::sync::Mutex::new(ServerLifecycle::default()));
+    let setup_lifecycle = Arc::clone(&server_lifecycle);
+    let exit_lifecycle = Arc::clone(&server_lifecycle);
+
     // G-2 单实例锁（R1-09）：官方插件必须**最先**注册——插件 setup 在
     // build() 阶段执行，第二实例在此即 cleanup + exit(0)，不会走到 run()
     // （不初始化窗口/本地服务 8765-8775/数据库），端口竞争由此消除；
@@ -375,9 +389,12 @@ fn main() {
                     .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default())
                     .join("pairing.json"),
             );
+            // G-1：WS 注册表保留 Arc 副本（唤醒恢复「已有 WS 踢重连」消费；
+            // 与协调器内部持有的是同一实例）
+            let ws_registry = Arc::new(crate::server::ws::WsRegistry::new());
             let pairing = crate::server::pairing::PairingCoordinator::new(
                 std::sync::Arc::new(std::sync::Mutex::new(pairing_tokens)),
-                std::sync::Arc::new(crate::server::ws::WsRegistry::new()),
+                Arc::clone(&ws_registry),
             );
             app.manage(pairing);
 
@@ -500,40 +517,79 @@ fn main() {
 
             // ⑪ 本地服务（D2 §5 / R1-02）：loopback 恒监听（8765，占用
             // 时探测兜底）；配对模式（0.0.0.0 重绑 + 令牌签发）归 R1-07。
+            // G-1（R1-09）：重绑钩子与电源监视在此装配——睡眠唤醒后 lan
+            // 态经 system_power::run_resume_recovery 触发重建 + WS 踢重连。
             // 启动失败 = 仅关多端服务，不阻断应用（D1 §3.4 铁律；诊断
             // 经 StatusDiagnostics 环形缓冲如实上报，core_get_status
             // 可见）
             {
                 let server_config = server::config::ServerConfig::default();
                 let server_diagnostics = Arc::clone(diagnostics);
-                // 注意：app_handle 已被上方 TauriEmitter::new 移入，此处从
-                // app 重新取句柄（AppHandle 可任意 clone）
-                let server_handle = app.handle().clone();
+                let lifecycle = Arc::clone(&setup_lifecycle);
+                // rebind 防抖：重建进行中忽略重复触发（低频事件：配对
+                // 切换 / 睡眠唤醒，重建通常 1s 内完成）
+                let rebinding = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+                // 重绑钩子（R1-07 配对模式切换 fire_rebind 与 G-1 唤醒
+                // 恢复共用）：目标模式（Lan/Loopback）→ 关停旧实例 → 等
+                // 端口释放 → 重建；真实重建经 tauri::async_runtime 派发。
+                let rebind_hook: crate::server::pairing::RebindHook = {
+                    let rebinding = Arc::clone(&rebinding);
+                    let lifecycle = Arc::clone(&lifecycle);
+                    let server_diagnostics = Arc::clone(&server_diagnostics);
+                    let base = server_config.clone();
+                    Arc::new(move |lan: bool| {
+                        if rebinding.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                            tracing::info!(target: "server", lan, "重绑进行中，跳过重复触发");
+                            return;
+                        }
+                        let mut config = base.clone();
+                        config.bind_mode = if lan {
+                            server::config::BindMode::Lan
+                        } else {
+                            server::config::BindMode::Loopback
+                        };
+                        config.pairing_enabled = lan;
+                        // Fn 闭包可被多次调用：每次调用内 clone 一份所有权
+                        // 供 async 任务消费（捕获变量不可整体 move）
+                        let rebinding = Arc::clone(&rebinding);
+                        let lifecycle = Arc::clone(&lifecycle);
+                        let server_diagnostics = Arc::clone(&server_diagnostics);
+                        tauri::async_runtime::spawn(async move {
+                            restart_server(config, lifecycle, server_diagnostics).await;
+                            rebinding.store(false, std::sync::atomic::Ordering::SeqCst);
+                        });
+                    })
+                };
+                // 装配进配对协调器（R1-11 服务装配面正式版落地前的
+                // G-1 最小装配：配对切换与唤醒恢复共用同一钩子）
+                app.state::<crate::server::pairing::PairingCoordinator>()
+                    .set_rebind_hook(Arc::clone(&rebind_hook));
+
+                // G-1 电源监视：唤醒事件 → lan 态判定 → rebind(true) +
+                // WS 全量踢重连（Windows 注册 Suspend/Resume 回调；
+                // 非 Windows no-op）
+                crate::system_power::start({
+                    let wake_app = app.handle().clone();
+                    let rebind_hook = Arc::clone(&rebind_hook);
+                    let ws_registry = Arc::clone(&ws_registry);
+                    Arc::new(move || {
+                        let pairing =
+                            wake_app.state::<crate::server::pairing::PairingCoordinator>();
+                        let recovered = crate::system_power::run_resume_recovery(
+                            pairing.pairing_enabled(),
+                            &*rebind_hook,
+                            &|| crate::system_power::kick_all_ws(&ws_registry),
+                        );
+                        if !recovered {
+                            tracing::debug!(target: "system-power", "唤醒但处于 loopback 态，无需重绑");
+                        }
+                    })
+                });
+
+                // 初始启动（loopback 恒监听；与重绑共用同一重建路径）
                 tauri::async_runtime::spawn(async move {
-                    match server::ServerInstance::bind(server_config).await {
-                        Ok(instance) => {
-                            let addr = instance.addr();
-                            // state 注入：退出钩子经 try_state 优雅关停
-                            server_handle.manage(instance.handle().clone());
-                            server_diagnostics.record("server", true, Some(addr.to_string()));
-                            let router = instance.router(None);
-                            if let Err(error) = instance.serve(router).await {
-                                tracing::error!(
-                                    target: "server",
-                                    error = %error,
-                                    "本地服务异常退出"
-                                );
-                            }
-                        }
-                        Err(error) => {
-                            tracing::error!(
-                                target: "server",
-                                error = %error,
-                                "本地服务启动失败（多端能力降级，GUI 不受影响）"
-                            );
-                            server_diagnostics.record("server", false, Some(error.to_string()));
-                        }
-                    }
+                    restart_server(server_config, lifecycle, server_diagnostics).await;
                 });
             }
 
@@ -547,7 +603,7 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
+        .run(move |app_handle, event| {
             // 退出钩子：PTY 清理（优雅路径）+ 退出前快照保存（独立线程，
             // save_snapshot_blocking 为阻塞语义，不拖累事件循环收口）。
             // PERSIST-02 P1-2：restore 未完成或失败时保存被
@@ -556,8 +612,14 @@ fn main() {
             // 导致会话树分支历史永久丢失；跳过时 snapshot_last_error 可观测。
             if let tauri::RunEvent::Exit = event {
                 // 本地服务优雅关停（D2 §5.3：先停服务再存快照；客户端收到
-                // 服务端关闭信号，避免误判断线重试风暴）
-                if let Some(server) = app_handle.try_state::<server::ServerHandle>() {
+                // 服务端关闭信号，避免误判断线重试风暴）。句柄经生命周期
+                // 槽取得——rebind 重建后句柄已更新，同样覆盖
+                if let Some(server) = exit_lifecycle
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .handle
+                    .take()
+                {
                     server.shutdown();
                 }
                 pty::kill_all_sessions();
@@ -567,6 +629,78 @@ fn main() {
                 }
             }
         });
+}
+
+/// 本地服务生命周期槽（G-1 装配）：当前句柄 + serve task 的单一真源。
+///
+/// 退出钩子经 handle 优雅关停；重绑（rebind 钩子）先取走旧 task 并 await
+/// （serve 收尾 = listener 释放，端口立即可重绑）再重建——保证睡眠唤醒 /
+/// 配对切换后端口不漂移（移动端重连沿用旧地址与二维码内嵌端口）。
+#[derive(Default)]
+struct ServerLifecycle {
+    /// 当前生效服务句柄（退出钩子关停用）
+    handle: Option<server::ServerHandle>,
+    /// 当前 serve 任务（重绑前 await 等待端口释放）
+    task: Option<tauri::async_runtime::JoinHandle<()>>,
+}
+
+/// 本地服务重建（G-1 重绑钩子与初始启动共用）：
+///
+/// 1. 取走旧句柄与旧 serve task，shutdown 旧句柄并 await 旧 task——serve
+///    收尾即 listener 释放，随后按同端口重建（8765 优先，占用探测兜底
+///    语义不变，R1-02）；
+/// 2. bind 新实例（绑定模式按 config：Loopback / Lan）→ 更新生命周期槽 →
+///    serve（新 task 入槽）。失败仅记录诊断，不阻断应用（D1 §3.4 铁律）。
+async fn restart_server(
+    config: server::ServerConfig,
+    lifecycle: Arc<std::sync::Mutex<ServerLifecycle>>,
+    diagnostics: Arc<status_diagnostics::StatusDiagnostics>,
+) {
+    // ① 关停旧实例（先取走，避免退出钩子重复 shutdown——幂等无害）
+    let (old_handle, old_task) = {
+        let mut slot = lifecycle.lock().unwrap_or_else(|e| e.into_inner());
+        (slot.handle.take(), slot.task.take())
+    };
+    if let Some(old) = old_handle {
+        tracing::info!(target: "server", "关闭旧服务实例（重绑重建）");
+        old.shutdown();
+    }
+    if let Some(old_task) = old_task {
+        // serve 收尾 = listener 释放（axum graceful shutdown 停止接受
+        // 新连接后返回；已升级的 WS 连接由各自 task 继续收尾）
+        let _ = old_task.await;
+    }
+    // ② 重建并 serve
+    match server::ServerInstance::bind(config).await {
+        Ok(instance) => {
+            let addr = instance.addr();
+            let handle = instance.handle().clone();
+            {
+                let mut slot = lifecycle.lock().unwrap_or_else(|e| e.into_inner());
+                slot.handle = Some(handle);
+            }
+            diagnostics.record("server", true, Some(addr.to_string()));
+            tracing::info!(target: "server", addr = %addr, "本地服务已重建（重绑完成）");
+            let router = instance.router(None);
+            let serve_task = tauri::async_runtime::spawn(async move {
+                if let Err(error) = instance.serve(router).await {
+                    tracing::error!(target: "server", error = %error, "本地服务异常退出");
+                }
+            });
+            lifecycle
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .task = Some(serve_task);
+        }
+        Err(error) => {
+            tracing::error!(
+                target: "server",
+                error = %error,
+                "本地服务重建失败（多端能力降级，GUI 不受影响）"
+            );
+            diagnostics.record("server", false, Some(error.to_string()));
+        }
+    }
 }
 
 #[cfg(test)]
