@@ -562,7 +562,6 @@ button.overview-live-row:hover {
  * / --card-header-* / --panel-* / --control-height* / --row-height*). No token edits.
  * ============================================================================= */
 
- * ============================================================================= */
 .line-num-col {
   border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
 }

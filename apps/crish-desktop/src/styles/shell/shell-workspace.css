@@ -98,9 +98,8 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .app-container[data-shell-chrome="classic"] .main-layout {
   padding: 0 0 var(--shell-inset-pad) 0;
 }
-/*
-/*
- *  inset 皮肤布局说明：rail（= sidebar-width）+ main（= 内容区）
+
+/* inset 皮肤布局说明：rail（= sidebar-width）+ main（= 内容区） */
 .app-container[data-shell-chrome="inset"] {
   --shell-content-pad-x: 14px;
 }
@@ -108,11 +107,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   /* padding 归零：由 --shell-inset-pad 控制 */
   padding: 0 0 var(--shell-inset-pad) 0;
 }
- */
 
-/*
- */
- */
 .app-container[data-shell-chrome="classic"] .workspaces-column,
 .app-container[data-shell-chrome="inset"] .workspaces-column {
   background: transparent !important;
@@ -138,8 +133,6 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
-/*
- * 兼容经典容器（workspaces-container）与 stack 布局
 .app-container[data-shell-chrome="classic"] .workspaces-stack > .workspaces-container,
 .app-container[data-shell-chrome="inset"] .workspaces-stack > .workspaces-container {
   border-radius: 0;
@@ -308,15 +301,13 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .sidebar-wrapper.collapsed:not(.hoverExpanded) .sb-nav-item {
   display: none !important;
 }
-/*
-/*
+/* inset 皮肤变量覆盖（padding/header 档位） */
 .app-container[data-shell-chrome="inset"] {
   --ws-chrome-merge: var(--shell-inset-bg);
   --ws-session-strip: var(--card-header-bg);
   --ws-session-line: var(--border-subtle);
   --ws-row2-min-h: 38px;
   --ws-row2-pad-t: 6px;
-/* inset 皮肤变量覆盖（padding/header 档位） */
   --ws-row2-tab-h: 32px;
   --ws-row2-tab-radius: 8px 8px 0 0;
   --ws-row2-tab-font: 13px;

@@ -45,6 +45,14 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   { command: "workbench_discover_skills", status: "implemented", feature: "skill discovery" },
   { command: "workbench_http_request", status: "implemented", feature: "HTTP request tool" },
   { command: "workbench_apply_update", status: "implemented", feature: "app update application" },
+  // ── 浏览器面板（S6 接线 + browser 域追加：frame stream / input 管线）──
+  { command: "browser_start", status: "implemented", feature: "browser session start" },
+  { command: "browser_stop", status: "implemented", feature: "browser session stop" },
+  { command: "browser_status", status: "implemented", feature: "browser session status" },
+  { command: "browser_input", status: "implemented", feature: "browser input dispatch" },
+  { command: "browser_start_frames", status: "implemented", feature: "browser frame stream start" },
+  { command: "browser_stop_frames", status: "implemented", feature: "browser frame stream stop" },
+  { command: "browser_frame_status", status: "implemented", feature: "browser frame stream status" },
   // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
   { command: "config_get", status: "implemented", feature: "provider config read" },
   { command: "config_update", status: "implemented", feature: "provider config update" },
@@ -106,11 +114,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   { command: "trigger-workflow", status: "implemented", feature: "workflow trigger" },
   { command: "list-workflow-runs", status: "implemented", feature: "workflow runs list" },
   // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
+  // T-F 06 退役：core_md_render_stream（流式主路径 JS 零 IPC）/ core_md_clear_cache
+  // （moka 自动 LRU，仅测试隔离用途）已退役（changelog 33）
   { command: "core_md_render", status: "implemented", feature: "markdown render" },
   { command: "core_md_render_batch", status: "implemented", feature: "markdown batch render" },
-  { command: "core_md_render_stream", status: "implemented", feature: "markdown stream render" },
   { command: "core_highlight_code", status: "implemented", feature: "code highlight" },
-  { command: "core_md_clear_cache", status: "implemented", feature: "markdown cache clear" },
   // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
   { command: "core_hash_compute", status: "implemented", feature: "hash computation" },
   { command: "core_base64_encode", status: "implemented", feature: "base64 encode" },

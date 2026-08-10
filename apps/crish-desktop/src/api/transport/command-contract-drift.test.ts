@@ -24,7 +24,7 @@
  * 有效性自证：临时改一个前端调用名 / 加一条 Rust 注册 → 断言立即红。
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -159,7 +159,7 @@ function extractFrontendInvokeNames(): { names: string[]; dynamicTemplates: numb
       // `invokeTyped,` / `invokeTyped }`）不是调用点——`from` 拦截
       const between = src.slice(m.index + m[0].length, openParen);
       if (
-        !/^[\s<>{}?:,|&'"\[\]\w;]*$/.test(between) ||
+        !/^[\s<>{}?:,|&'"[\]\w;]*$/.test(between) ||
         /\bfrom\b/.test(between)
       ) {
         continue;

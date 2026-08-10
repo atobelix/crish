@@ -183,8 +183,7 @@ select.ui-input {
   background: var(--text-tertiary);
 }
 
- * ============================================================
-   ============================================================ */
+/* ============================================================ */
 
 /* Titlebar drag (Tauri frameless) */
 .app-header {
@@ -422,9 +421,7 @@ select.ui-input {
 /* [sidebar-top-actions, sb-nav-item, sb-nav-link styles migrated to SidebarNav.module.css] */
 /* [sb-section styles migrated to SidebarSessionList.module.css] */
 /* [folder, session-item, context-menu-compact, session-running-spinner, and sidebar-drag-ghost styles migrated to SidebarSessionList.module.css and SidebarContextMenus.module.css] */
-/* 代理面板（agent）：agent-panel-shell 容器与 hairline 分界 */
- * 内部 padding 收敛到 --space 档位；细节见 .agent-panel-shell */
-/* [MIGRATED] agent-card and team-board styles migrated to AgentCard.module.css */
+/* 代理面板（agent）：agent-panel-shell 容器与 hairline 分界；内部 padding 收敛到 --space 档位 */
 
 .agent-panel-shell {
   flex: 1 1 0%;
@@ -540,6 +537,7 @@ select.ui-input {
  * ED shell polish：additive density / hairline / focus / empty-list / 空态
  * 只消费 tokens.css：--hairline* / --space-* / --focus-ring* / --line-height-*
 
+ * ====================================================================== */
 /* 1) 中文界面排版：字号/行高收敛到 token 档位 */
 body {
   line-height: var(--line-height-body, 1.55);

@@ -258,5 +258,5 @@
 }
 
 /* S6 收编：.cardSurface/.dropdownSurface 死补丁已删除（全仓零消费，S5 表面族
- * 收敛后无对应类；卡片/浮层暗色抬亮由 .elevation-*/bg-elevated 体系承担） */
+ * 收敛后无对应类；卡片/浮层暗色抬亮由 elevation 工具类与 bg-elevated 体系承担） */
 
