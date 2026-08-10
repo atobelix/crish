@@ -143,20 +143,23 @@ async fn new_tab_gate_and_create() {
 }
 
 #[tokio::test]
-async fn close_and_switch_tab_by_seq() {
+async fn close_and_switch_tab_by_target_id() {
     let h = harness(true);
-    let out = h.run_ok("browser_close_tab", json!({ "tab_id": 2 })).await;
+    let out = h.run_ok("browser_close_tab", json!({ "tab_id": "T2" })).await;
     assert_eq!(out["closedTabId"], "T2");
-    assert_eq!(out["remainingTabs"], 2);
+    assert_eq!(out["remainingTabs"], 1, "T2 关闭后剩 T1");
     h.mock
         .assert_recorded("browser:Target.closeTarget {\"targetId\":\"T2\"}");
 
     let h = harness(true);
-    let out = h.run_ok("browser_switch_tab", json!({ "tab_id": 1 })).await;
+    let out = h.run_ok("browser_switch_tab", json!({ "tab_id": "T1" })).await;
     assert_eq!(out["tabId"], "T1");
     assert_eq!(out["url"], "https://a.example/after");
     h.mock
         .assert_recorded("browser:Target.activateTarget {\"targetId\":\"T1\"}");
+    // P1：切换后引擎活动槽显式更新 + 目标标签版本即时推进（R-1）
+    h.mock.assert_recorded("activate-tab:T1");
+    h.mock.assert_recorded("bump:T1");
 }
 
 // ── 感知 5 ─────────────────────────────────────────────────────────────
@@ -497,24 +500,25 @@ async fn invalid_inputs_are_structured() {
         assert_eq!(err.code(), "tool.invalid_input", "select_option 非法入参");
     }
 
-    // 标签序号：0/越界
+    // 标签 targetId 语义：数字入参（类型错）→ invalid_input；
+    // 不存在的 targetId（已关闭/销毁）→ node_gone（目标过期，P1）
+    for args in [json!({ "tab_id": 0 }), json!({ "tab_id": 99 })] {
+        let err = h.run_err("browser_close_tab", args).await;
+        assert_eq!(err.code(), "tool.invalid_input", "close_tab 数字入参应拒绝");
+    }
     assert_eq!(
-        h.run_err("browser_close_tab", json!({ "tab_id": 0 }))
+        h.run_err("browser_close_tab", json!({ "tab_id": "T9" }))
             .await
             .code(),
-        "tool.invalid_input"
+        "tool.browser.node_gone",
+        "不存在的标签应 node_gone"
     );
     assert_eq!(
-        h.run_err("browser_close_tab", json!({ "tab_id": 99 }))
+        h.run_err("browser_switch_tab", json!({ "tab_id": "T9" }))
             .await
             .code(),
-        "tool.invalid_input"
-    );
-    assert_eq!(
-        h.run_err("browser_switch_tab", json!({ "tab_id": 99 }))
-            .await
-            .code(),
-        "tool.invalid_input"
+        "tool.browser.node_gone",
+        "不存在的标签应 node_gone"
     );
 
     // 感知：预算越界/format 非法/条件非法
@@ -642,4 +646,43 @@ async fn malicious_strings_are_contained() {
     .await;
     h.mock
         .assert_recorded("wait:Text(\"\\\"); alert(1); (\\\"\\\" )\")");
+}
+
+/// browser_evaluate 能力位红线（17 §2.3）：未开启 → Deny，零 CDP 命令。
+#[tokio::test]
+async fn evaluate_capability_disabled_denies_zero_commands() {
+    let h = harness(false); // evaluate 默认关（SensitiveCapabilities 默认）
+    let err = h
+        .run_err("browser_evaluate", json!({ "expression": "__crish_read.text('#a')" }))
+        .await;
+    assert_eq!(err.code(), "tool.browser.capability_disabled");
+    // 零 CDP 命令（能力位检查先于任何执行）
+    assert!(h.mock.calls().is_empty(), "能力位关闭不应有任何 CDP 命令");
+}
+
+/// browser_evaluate 入参校验：expression 必填、timeout_ms 上限、未知键拒绝。
+/// （能力位开启后校验面生效；能力位关闭时一律 capability_disabled 优先——红线语义）
+#[tokio::test]
+async fn evaluate_input_validation() {
+    let mock = MockSession::new();
+    let mut registry = agent_tools::registry::ToolRegistry::new();
+    let mut config = mock_config(&mock, true);
+    config.sensitive.evaluate = true;
+    config.gate = Some(Arc::new(
+        MvpDomainGate::with_resolver(&[], &[], Arc::new(AlwaysPublicResolver))
+            .expect("门禁构造"),
+    ));
+    register_browser_tools(&mut registry, config).expect("注册成功");
+    let ctx = create_mock_tool_context();
+    let run_err = |args: Value| {
+        let tool = registry.get("browser_evaluate").expect("工具应注册");
+        let ctx = &ctx;
+        async move { tool.execute(ctx, args).await.unwrap_err() }
+    };
+    let err = run_err(json!({ "tab_id": "t1" })).await;
+    assert_eq!(err.code(), "tool.invalid_input");
+    let err = run_err(json!({ "expression": "x", "timeout_ms": 5000 })).await;
+    assert_eq!(err.code(), "tool.invalid_input");
+    let err = run_err(json!({ "expression": "x", "evil": 1 })).await;
+    assert_eq!(err.code(), "tool.invalid_input");
 }

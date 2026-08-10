@@ -366,6 +366,14 @@ impl BrowserSession {
                                 .unwrap_or_else(|p| p.into_inner())
                                 .remove(&target_id);
                         }
+                        // 断线：旧会话全部失效——清空路由表，恢复流程重 attach 后
+                        // 由 SessionAttached 重新登记（首次附着者胜语义对新生会话
+                        // 同样成立；避免陈旧会话滞留导致动作路由到死会话）
+                        Ok(BrowserEvent::ConnectionLost { .. }) => {
+                            tabs.lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .clear();
+                        }
                         Ok(_) => {}
                         Err(_) => break,
                     }
@@ -866,6 +874,8 @@ mod tests {
         assert!(session.tab_session("T3").is_none(), "未附着标签不得路由");
 
         // iframe 双会话路由保护：T1 的 iframe 会话不顶替主会话
+        // （先订阅后注入，订阅时序铁律）
+        let mut iframe_rx = session.subscribe();
         mock.send_event(
             "Target.attachedToTarget",
             json!({
@@ -875,18 +885,22 @@ mod tests {
             }),
             None,
         );
-        // 异步事件处理：轮询等待 iframe 附着事件落表后再断言主会话未被顶替
+        // 异步事件处理：等待 iframe 附着事件落表后再断言主会话未被顶替
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
         let mut saw_iframe = false;
         while tokio::time::Instant::now() < deadline {
-            let mut rx = session.subscribe();
-            if let Ok(BrowserEvent::SessionAttached { session, .. }) = rx.try_recv() {
-                if session == "S1-iframe" {
+            if let Ok(ev) = tokio::time::timeout(
+                std::time::Duration::from_millis(50),
+                iframe_rx.recv(),
+            )
+            .await
+            {
+                if matches!(ev, Ok(BrowserEvent::SessionAttached { session, .. }) if session == "S1-iframe")
+                {
                     saw_iframe = true;
                     break;
                 }
             }
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
         assert!(saw_iframe, "iframe 附着事件应到达");
         let t1 = session.tab_session("T1").expect("T1 应可路由");
@@ -918,6 +932,107 @@ mod tests {
         assert!(
             session.current_session().is_err(),
             "活动标签销毁后 current_session 应无会话"
+        );
+
+        session.shutdown().await;
+    }
+
+    /// 断线重连：ConnectionLost 清空路由表（旧会话全部失效），恢复流程重 attach
+    /// 后由 SessionAttached 重新登记——陈旧会话不得滞留导致动作路由到死会话。
+    #[tokio::test]
+    async fn session_routing_refreshed_after_disconnect() {
+        let mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        let endpoint = CdpEndpoint {
+            port: mock.addr.port(),
+            ws_path: "/devtools/browser/reconnect-routing".to_string(),
+        };
+        let session = BrowserSession::connect(
+            endpoint,
+            ExpectedBrowser::default(),
+            Arc::new(AllowHooks::new()),
+        )
+        .await
+        .expect("建连失败");
+        // 注入双标签附着（T1/S1、T2/S2）
+        for (target_id, sess) in [("T1", "S1"), ("T2", "S2")] {
+            mock.send_event(
+                "Target.attachedToTarget",
+                json!({
+                    "sessionId": sess,
+                    "targetInfo": { "targetId": target_id, "type": "page", "title": "", "url": "about:blank" },
+                    "waitingForDebugger": false,
+                }),
+                None,
+            );
+        }
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        while session.tab_session("T1").is_none() || session.tab_session("T2").is_none() {
+            assert!(tokio::time::Instant::now() < deadline, "双标签路由未就绪");
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            session.tab_session("T2").map(|r| r.session).as_deref(),
+            Some("S2")
+        );
+
+        // 强制断线：transport 监督器广播 ConnectionLost → 路由表清空
+        // （T2 不被恢复流程重 attach，是「陈旧会话被清除」的判别标签）
+        let mut conn_rx = session.subscribe();
+        mock.close_connection();
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut saw_lost = false;
+        let mut saw_restored = false;
+        while tokio::time::Instant::now() < deadline {
+            if saw_lost && saw_restored {
+                break;
+            }
+            if let Ok(ev) = tokio::time::timeout(
+                std::time::Duration::from_millis(50),
+                conn_rx.recv(),
+            )
+            .await
+            {
+                match ev {
+                    Ok(BrowserEvent::ConnectionLost { .. }) => saw_lost = true,
+                    Ok(BrowserEvent::ConnectionRestored { .. }) => saw_restored = true,
+                    _ => {}
+                }
+            }
+        }
+        assert!(saw_lost, "应广播 ConnectionLost");
+        assert!(saw_restored, "重连恢复应完成（ConnectionRestored）");
+        assert!(
+            session.tab_session("T2").is_none(),
+            "断线后陈旧会话必须被清除（重连恢复流程不重 attach T2）"
+        );
+
+        // 恢复流程重 attach（真实浏览器在 restore 期间重发 attachedToTarget；
+        // mock 不合成事件，此处手动注入模拟）→ 路由表以新会话重新登记
+        mock.send_event(
+            "Target.attachedToTarget",
+            json!({
+                "sessionId": "S1-new",
+                "targetInfo": { "targetId": "T1", "type": "page", "title": "", "url": "about:blank" },
+                "waitingForDebugger": false,
+            }),
+            None,
+        );
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut t1_session = None;
+        while tokio::time::Instant::now() < deadline {
+            if let Some(r) = session.tab_session("T1") {
+                t1_session = Some(r.session);
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            t1_session.as_deref(),
+            Some("S1-new"),
+            "恢复后 T1 应重新路由到新会话（陈旧会话不得残留）"
         );
 
         session.shutdown().await;

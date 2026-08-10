@@ -34,6 +34,7 @@ pub mod names {
     pub const RUNTIME_ENABLE: &str = "Runtime.enable";
     pub const RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER: &str = "Runtime.runIfWaitingForDebugger";
     pub const RUNTIME_EVALUATE: &str = "Runtime.evaluate";
+    pub const RUNTIME_CREATE_ISOLATED_WORLD: &str = "Runtime.createIsolatedWorld";
     pub const DOM_ENABLE: &str = "DOM.enable";
     pub const DOM_GET_DOCUMENT: &str = "DOM.getDocument";
     pub const NETWORK_ENABLE: &str = "Network.enable";
@@ -389,10 +390,13 @@ pub struct StartScreencastParams {
 }
 
 /// Page.screencastFrameAck 参数（帧泵 ack pacing，维度 12 §2.1）。
+/// sessionId 为 **Value**：Chrome 151 实测事件内 sessionId 为 JSON 数字
+/// （如 `1`），ack 参数须与原始形态一致（类型敏感，字符串化被拒
+/// → Invalid parameters → 帧流停滞）；旧协议字符串形态亦可无损透传。
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScreencastFrameAckParams {
-    pub session_id: String,
+    pub session_id: Value,
 }
 
 /// Page.setWindowOpenHandler 参数（走同步 deny/allow 语义，awaitingDebugger 不启用）。
@@ -532,6 +536,12 @@ pub struct EvaluateParams {
 pub struct EvaluateResult {
     pub result: RemoteObject,
     pub exception_details: Option<ExceptionDetails>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateIsolatedWorldResult {
+    pub execution_context_id: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1367,13 +1377,20 @@ mod tests {
         let v = serde_json::to_value(&p).expect("序列化失败");
         assert_eq!(v["urls"][0], "http://10.0.0.0/8");
 
-        // 帧泵 ack 参数（维度 12 §2.1：sessionId 为 screencast 帧会话标识）
+        // 帧泵 ack 参数（维度 12 §2.1：sessionId 为 screencast 帧会话标识；
+        // Value 形态无损透传——数字（Chrome 151 实测）与字符串均可）
         let p = ScreencastFrameAckParams {
-            session_id: "S1".to_string(),
+            session_id: Value::String("S1".to_string()),
         };
         let v = serde_json::to_value(&p).expect("序列化失败");
         assert_eq!(v["sessionId"], "S1");
         assert_eq!(v.as_object().unwrap().len(), 1, "只含 sessionId 一个字段");
+        // Chrome 151 数字形态：保持数字（类型敏感，字符串化被 Chrome 拒绝）
+        let p = ScreencastFrameAckParams {
+            session_id: Value::from(1),
+        };
+        let v = serde_json::to_value(&p).expect("序列化失败");
+        assert_eq!(v["sessionId"], Value::from(1), "数字形态保持数字（Chrome 151 校验类型）");
     }
 
     /// 结果反序列化冒烟（含容错字段）。

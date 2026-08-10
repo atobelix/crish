@@ -2,8 +2,13 @@
 //!
 //! 工具经构造注入 `Option<Arc<BrowserSession>>`（BrowserToolsConfig.session），内部经
 //! `SessionOps` trait 消费——真实实现 `RealSession` 仅使用 conex-browser 的 pub 接口
-//! （send_page/send_browser/current_session/subscribe/snapshot_version/snapshot_manager），
-//! 测试注入 mock 替身（tests/ 下 MockSession）断言参数透传与返回结构。
+//! （send_page/send_browser/current_session/tab_session/subscribe/snapshot_version/
+//! snapshot_manager），测试注入 mock 替身（tests/ 下 MockSession）断言参数透传与返回结构。
+//!
+//! P1 多标签（15 文档 §7）：`RealSession` 支持 per-tab 路由——动作/快照/注入按
+//! tab_id（targetId 语义）经 `BrowserSession::tab_session` 路由到对应 CDP 会话；
+//! 动作执行器按 tab_id 缓存、各绑定目标标签会话（`BrowserPageOps::with_session`），
+//! 版本校验/快照缓存 (tab_id, version)/动作后 bump 全按目标标签独立（R-1 per-tab）。
 //!
 //! 接线要点：
 //! - **就绪 gating（R-9）**：manager 状态非 Running（启动中/崩溃重启中）或活动标签
@@ -109,6 +114,11 @@ pub trait SessionOps: Send + Sync {
     /// switch_tab 切换后旧快照随之失效 → 强制重快照）。
     /// 默认实现：空操作（无版本面实现的 mock/旧适配层降级）。
     fn note_action_done(&self, _tab_id: &str) {}
+    /// 目标会话的动作执行器（browser_evaluate 受限求值入口，17 §3）。
+    /// 默认实现：None（未接线；工具返回 unwired 语义）。
+    fn executor(&self, _session: &str) -> Option<Arc<conex_browser::action::ActionExecutor>> {
+        None
+    }
     /// 会话级 CDP 命令（页面域，绑定具体会话）。
     async fn send_page(
         &self,
@@ -160,9 +170,12 @@ pub struct RealSession {
     budgets: BudgetConfig,
     /// 共享快照管理器（采集 + 索引解析同实例，缓存一致性）
     snapshots: Arc<SnapshotManager>,
-    /// per-tab 动作执行器缓存（P1 多标签：键 = tab_id，各绑定目标标签会话；
-    /// 并发动作天然隔离——CDP 命令按 request_id 匹配，跨 tab 无共享态漂移）
+    /// 动作执行器缓存（P1 多标签：键 = **CDP 会话号**——每会话唯一绑定一个
+    /// 标签；断线重连后新会话自然换键，陈旧执行器由 ConnectionLost 清理任务
+    /// 整体清除，杜绝绑定死会话的陈旧路由）
     executors: Mutex<std::collections::HashMap<String, Arc<ActionExecutor>>>,
+    // 执行器清理任务（P1 遗留：ConnectionLost 时按会话键整体清除）
+    // 暂未实现；字段随实现加回
     console: Arc<ConsoleBuffer>,
     network: Arc<NetworkBuffer>,
 }
@@ -224,8 +237,25 @@ impl RealSession {
     }
 }
 
+
 #[async_trait]
 impl SessionOps for RealSession {
+    fn executor(&self, session: &str) -> Option<Arc<conex_browser::action::ActionExecutor>> {
+        // 按标签路由：session 参数为 CDP 会话号；查 executors 缓存（键 = tab_id，
+        // 遍历取匹配会话——executors 惰性按 tab 构建，逐项比对代价小）
+        let guard = self.executors.lock().unwrap_or_else(|p| p.into_inner());
+        for (tab_id, ex) in guard.iter() {
+            if self
+                .session
+                .tab_session(tab_id)
+                .is_some_and(|r| r.session == session)
+            {
+                return Some(ex.clone());
+            }
+        }
+        None
+    }
+
     fn readiness(&self) -> Result<(), String> {
         if let Some(manager) = &self.manager_status {
             let status = manager.status();
@@ -327,7 +357,10 @@ impl SessionOps for RealSession {
     }
 
     async fn execute_action(&self, req: ActionRequest) -> Result<ActionSuccess, ActionError> {
-        self.executor()?.execute(req).await
+        // P1 多标签：动作按 tab_id（targetId 语义）路由到对应 CDP 会话——
+        // 路由表无该标签（已关闭/未 attach）→ TargetClosed（14 §5.1 目标过期）
+        let session = self.session_of(&req.tab_id)?;
+        self.executor_for(&req.tab_id, &session)?.execute(req).await
     }
 
     async fn wait_for(
@@ -335,7 +368,11 @@ impl SessionOps for RealSession {
         cond: conex_browser::action::WaitCondition,
         opts: conex_browser::action::WaitOptions,
     ) -> Result<ActionSuccess, ActionError> {
-        self.executor()?.wait_for(cond, opts).await
+        // P1 多标签：等待作用标签由 WaitOptions.tab_id 指定（感知面同口径路由）
+        let session = self.session_of(&opts.tab_id)?;
+        self.executor_for(&opts.tab_id, &session)?
+            .wait_for(cond, opts)
+            .await
     }
 
     async fn console_entries(&self, since_seq: u64) -> Vec<ConsoleEntry> {
@@ -389,7 +426,7 @@ fn warnings_of(doc: &SnapshotDocument) -> Vec<String> {
 struct ToolSnapshotStore {
     session: Arc<BrowserSession>,
     snapshots: Arc<SnapshotManager>,
-    // 复用 conex-browser 的会话解析器类型（引擎侧维度 15 标签管理注入；MVP 活动标签兜底）
+    // per-tab 会话解析器（P1：session_for_tab 按 tab_id 路由；重快照与动作同口径）
     session_for: conex_browser::action::ops::SessionResolver,
 }
 

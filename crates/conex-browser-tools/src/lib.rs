@@ -60,6 +60,11 @@ use conex_browser::BrowserSession;
 use session::SessionOps;
 use std::sync::Arc;
 
+/// 标签数量上限默认值（15 文档 §7.3 MAX_TABS 裁决：默认 8，可配 1-16）。
+pub const DEFAULT_MAX_TABS: usize = 8;
+/// 标签数量上限配置范围（15 §7.3：1-16，16 以上不开放——超出即触顶）。
+pub const MAX_TABS_RANGE: std::ops::RangeInclusive<usize> = 1..=16;
+
 /// 会话级敏感能力开关（17 §2.3 默认拒绝面：默认全关 = 兜底拒绝，红线语义；
 /// 开启仅能由用户经会话设置显式授权，Agent 无权自开）。
 #[derive(Debug, Clone, Default)]
@@ -82,6 +87,8 @@ pub struct SensitiveCapabilities {
 ///   空白名单 = 默认全允许（限公共互联网，17 §4.1）；黑名单命中不可豁免）；
 /// - `sensitive`：敏感能力开关（默认全关）；
 /// - `budgets`：快照预算（缺省 [BudgetConfig::active] 全额预算）；
+/// - `max_tabs`：标签数量上限（15 文档 §7.3 MAX_TABS 裁决：缺省 8，范围 1-16；
+///   超限 new_tab 返回 `tool.browser.tab_limit_exceeded`，U-12 码）；
 /// - `session_ops`：会话操作层直接注入（测试替身/引擎高级接线；优先于 `session`，
 ///   经 `session::SessionOps` trait 面）。
 #[derive(Clone, Default)]
@@ -93,6 +100,7 @@ pub struct BrowserToolsConfig {
     pub gate_blocklist: Vec<String>,
     pub sensitive: SensitiveCapabilities,
     pub budgets: Option<BudgetConfig>,
+    pub max_tabs: Option<usize>,
     pub session_ops: Option<Arc<dyn SessionOps>>,
 }
 
@@ -114,6 +122,13 @@ pub fn register_browser_tools(
         ),
     };
     let budgets = config.budgets.unwrap_or_else(BudgetConfig::active);
+    // MAX_TABS 上限校验（15 §7.3：1-16 配置范围；非法配置注册期拒绝）
+    let max_tabs = config.max_tabs.unwrap_or(DEFAULT_MAX_TABS);
+    if !MAX_TABS_RANGE.contains(&max_tabs) {
+        return Err(ToolError::invalid_input(format!(
+            "max_tabs 超出范围（1..16），收到 {max_tabs}"
+        )));
+    }
     // 会话注入：测试/引擎接线面（session_ops）优先，其次构造注入的 BrowserSession
     let session: Option<Arc<dyn SessionOps>> = match config.session_ops {
         Some(ops) => Some(ops),
@@ -131,6 +146,7 @@ pub fn register_browser_tools(
         gate,
         sensitive: config.sensitive,
         budgets,
+        max_tabs,
     });
     tools::register_all(registry, ctx)
 }

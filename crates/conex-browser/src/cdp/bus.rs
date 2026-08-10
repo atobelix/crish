@@ -110,10 +110,11 @@ pub struct FrameChunk {
     /// 信封会话（事件路由面：帧事件送达的会话）。
     pub session: String,
     /// ack 会话（`Page.screencastFrameAck` 的 params.sessionId）：
-    /// 取帧内 `params.sessionId`，缺省回退信封 session（向后兼容）。
-    /// 真实 Chrome 严格校验 ack 的 params.sessionId，与信封不一致会停滞帧流
-    /// （P1-A 遗留 1/2）。
-    pub ack_session: String,
+    /// 取帧内 `params.sessionId` 的**原始 JSON 形态**（Chrome 151 实测为数字
+    /// 如 `1`，旧协议为字符串——ack 参数须与事件原始形态一致，类型敏感，
+    /// 形态不一致会被 Chrome 拒绝（Invalid parameters）→ ack 失败 → 帧流
+    /// 停滞）；缺省回退信封 session（向后兼容，P1-A 遗留 1/2）。
+    pub ack_session: Value,
     pub frame: u64,
     pub timestamp_ms: u64,
     pub device_width: u32,
@@ -452,6 +453,17 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
 }
 
 /// screencastFrame 解析为帧块（base64 JPEG 解码；大消息走专用 mpsc 不过 typed 总线）。
+///
+/// Chrome 151 协议漂移（G-3 真实链路实测，2026-08-10）：
+/// - `metadata.deviceWidth/deviceHeight` 实测为浮点值（如 `deviceHeight: 633.6`），
+///   `as_u64` 对浮点返回 None 导致尺寸落 0（修复前帧尺寸恒 0）；
+/// - `frameNumber` 字段实测**不再发送**，`as_u64().unwrap_or(0)` 使帧序号恒 0，
+///   帧泵去重表 (session, frame) 会把首帧后的全部帧误判为重复丢弃 → 帧流停滞
+///   （修复前 e2e 仅能收到 1 帧）。回退策略：帧序号取帧时间戳毫秒值
+///   （秒级浮点 → 毫秒整数；帧间隔 ~100ms 保证同毫秒双帧概率可忽略）；
+/// - `params.sessionId` 实测为 **JSON 数字**（如 `1`，旧协议为字符串）——ack
+///   会话需保留**原始形态**原样回传（Chrome 对 ack 参数类型敏感，字符串化
+///   后回传被拒绝：Invalid parameters → ack 全失败 → Chrome 停发新帧）。
 pub fn parse_frame(event: &CdpEvent) -> Option<FrameChunk> {
     if event.method != "Page.screencastFrame" {
         return None;
@@ -462,20 +474,28 @@ pub fn parse_frame(event: &CdpEvent) -> Option<FrameChunk> {
         .ok()?;
     let meta = &event.params["metadata"];
     let timestamp_s = meta["timestamp"].as_f64().unwrap_or(0.0);
+    let timestamp_ms = (timestamp_s * 1000.0) as u64;
     let session = event.session_id.clone().unwrap_or_default();
-    // ack 会话优先取 params.sessionId（真实 Chrome 严格校验），缺省回退信封
-    let ack_session = event.params["sessionId"]
-        .as_str()
-        .map(String::from)
-        .unwrap_or_else(|| session.clone());
+    // ack 会话优先取 params.sessionId 原始值（形态无损），缺省回退信封
+    let ack_session = match event.params.get("sessionId") {
+        Some(v) if !v.is_null() => v.clone(),
+        _ => Value::String(session.clone()),
+    };
     Some(FrameChunk {
         data,
         session,
         ack_session,
-        frame: event.params["frameNumber"].as_u64().unwrap_or(0),
-        timestamp_ms: (timestamp_s * 1000.0) as u64,
-        device_width: meta["deviceWidth"].as_u64().unwrap_or(0) as u32,
-        device_height: meta["deviceHeight"].as_u64().unwrap_or(0) as u32,
+        // frameNumber 缺省回退帧时间戳毫秒（Chrome 151 实测不发该字段）
+        frame: event.params["frameNumber"]
+            .as_u64()
+            .unwrap_or(timestamp_ms),
+        timestamp_ms,
+        // 尺寸按浮点解析取整（Chrome 151 实测为浮点值）
+        device_width: meta["deviceWidth"].as_f64().unwrap_or(0.0).round() as u32,
+        device_height: meta["deviceHeight"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .round() as u32,
     })
 }
 
@@ -699,6 +719,92 @@ mod tests {
         );
         let parsed = parse_frame(&evt).expect("帧解析失败");
         assert_eq!(parsed.ack_session, "", "全部缺省空串兜底");
+    }
+
+    /// Chrome 151 真实形态（G-3 实测回归）：metadata 尺寸为浮点值
+    /// （deviceHeight: 633.6）、frameNumber 字段缺失——修复前尺寸落 0、
+    /// 帧序号恒 0 导致去重误杀后续帧（帧流停滞）。断言：尺寸取整解析、
+    /// 帧序号回退时间戳毫秒且唯一、时间戳毫秒正确。
+    #[test]
+    fn bus_frame_chrome151_float_metadata_missing_frame_number() {
+        let chunk = base64::engine::general_purpose::STANDARD.encode(b"fake-jpeg-bytes");
+        // Chrome 151 headed 实测形态：deviceWidth 整数、deviceHeight 浮点、无 frameNumber
+        let evt = raw(
+            "Page.screencastFrame",
+            json!({
+                "data": chunk,
+                "metadata": {
+                    "pageScaleFactor": 1.0,
+                    "deviceWidth": 1280,
+                    "deviceHeight": 633.6000366210938,
+                    "timestamp": 1786338969.668515
+                },
+                "sessionId": "S1"
+            }),
+            Some("S1"),
+        );
+        let parsed = parse_frame(&evt).expect("帧解析失败");
+        assert_eq!(parsed.device_width, 1280, "浮点宽度取整");
+        assert_eq!(parsed.device_height, 634, "浮点高度取整（633.6 → 634）");
+        assert_eq!(parsed.timestamp_ms, 1_786_338_969_668, "时间戳毫秒");
+        assert_eq!(parsed.frame, 1_786_338_969_668, "无 frameNumber 回退时间戳毫秒");
+
+        // 同信封两帧：帧序号（时间戳回退）互异 → 帧泵去重不误杀
+        let evt2 = raw(
+            "Page.screencastFrame",
+            json!({
+                "data": chunk,
+                "metadata": {
+                    "deviceWidth": 1280,
+                    "deviceHeight": 633.6,
+                    "timestamp": 1786338969.768515
+                },
+                "sessionId": "S1"
+            }),
+            Some("S1"),
+        );
+        let parsed2 = parse_frame(&evt2).expect("第二帧解析失败");
+        assert_ne!(
+            parsed.frame, parsed2.frame,
+            "相邻帧序号必须互异（修复前恒 0，去重误杀）"
+        );
+
+        // frameNumber 存在时仍优先（旧协议向后兼容）
+        let evt3 = raw(
+            "Page.screencastFrame",
+            json!({
+                "data": chunk,
+                "metadata": { "timestamp": 1.0 },
+                "frameNumber": 42
+            }),
+            Some("S1"),
+        );
+        assert_eq!(parse_frame(&evt3).expect("解析失败").frame, 42);
+    }
+
+    /// Chrome 151 数字 sessionId 形态（G-3 实测回归）：params.sessionId 为
+    /// JSON 数字（1）而非字符串——ack 参数须保持数字原样回传（Chrome 对
+    /// ack 参数类型敏感：字符串化被拒 Invalid parameters → ack 全失败 →
+    /// 帧流停滞）。修复前 as_str 失败回退信封会话，同样被 Chrome 拒绝。
+    #[test]
+    fn bus_frame_numeric_session_id_parsed_for_ack() {
+        let chunk = base64::engine::general_purpose::STANDARD.encode(b"fake-jpeg-bytes");
+        let evt = raw(
+            "Page.screencastFrame",
+            json!({
+                "data": chunk,
+                "metadata": { "timestamp": 1.0 },
+                "sessionId": 1
+            }),
+            Some("S1"),
+        );
+        let parsed = parse_frame(&evt).expect("帧解析失败");
+        assert_eq!(parsed.session, "S1", "信封路由仍为信封会话");
+        assert_eq!(
+            parsed.ack_session,
+            Value::from(1),
+            "数字 sessionId 保持数字形态（修复前回退/字符串化均被 Chrome 拒绝）"
+        );
     }
 
     /// 分类 router 冒烟：导航/对话框/网络/目标事件全表转译。

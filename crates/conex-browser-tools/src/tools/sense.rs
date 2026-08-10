@@ -3,7 +3,7 @@
 use crate::error;
 use crate::exec;
 use crate::helpers;
-use crate::tools::{Ctx, CDP_PAGE_CAPTURE_SCREENSHOT};
+use crate::tools::{resolve_tab, validate_tab_id, Ctx, CDP_PAGE_CAPTURE_SCREENSHOT};
 use agent_tools::context::ToolContext;
 use agent_tools::definition::{Tool, ToolDefinition, ToolError};
 use async_trait::async_trait;
@@ -11,6 +11,15 @@ use conex_browser::action::{ActionErrorKind, WaitCondition, WaitOptions};
 use conex_browser::snapshot::budget::BudgetConfig;
 use serde_json::{json, Value};
 use std::sync::Arc;
+
+/// 可选 tab_id（targetId 字符串语义，P1）入参解析：校验后返回，缺省 = 活动标签。
+fn optional_tab_id(args: &Value) -> Result<Option<String>, ToolError> {
+    let tab_id = helpers::optional_string(args, "tab_id")?;
+    if let Some(id) = &tab_id {
+        validate_tab_id(id, "tab_id")?;
+    }
+    Ok(tab_id)
+}
 
 /// browser_snapshot：感知快照（紧凑文本树 + 索引；只读，脱敏，17 §1.2）。
 pub(crate) struct SnapshotTool {
@@ -28,7 +37,7 @@ impl SnapshotTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
-                        "tab_id": { "type": "number", "description": "可选，标签页序号（MVP 单标签：仅校验，P1 多标签接线）" },
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（browser_list_tabs 输出；缺省 = 当前活动标签）" },
                         "max_depth": { "type": "number", "description": "可选，树深度预算覆盖（1..128；缺省用配置预算）" },
                         "max_elements": { "type": "number", "description": "可选，元素数预算覆盖（1..50000；缺省用配置预算）" },
                         "max_text": { "type": "number", "description": "可选，单节点文本预算覆盖（1..2000000；缺省用配置预算）" }
@@ -55,12 +64,8 @@ impl Tool for SnapshotTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_snapshot", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["tab_id", "max_depth", "max_elements", "max_text"])?;
-        // tab_id 仅校验（MVP 单标签，P1 多标签接线）
-        if let Some(tab_id) = helpers::optional_u64(&args, "tab_id")? {
-            if tab_id == 0 {
-                return Err(ToolError::invalid_input("tab_id 为 1 起始的标签序号"));
-            }
-        }
+        // P1 多标签：tab_id = targetId 字符串（缺省 = 活动标签）；路由失败 → node_gone
+        let tab_id = optional_tab_id(&args)?;
         let max_depth = helpers::optional_u32(&args, "max_depth")?;
         let max_elements = helpers::optional_u32(&args, "max_elements")?;
         let max_text = helpers::optional_u32(&args, "max_text")?;
@@ -87,7 +92,8 @@ impl Tool for SnapshotTool {
                 .unwrap_or(self.ctx.budgets.max_text_len),
             ..self.ctx.budgets
         };
-        let tab = ops.current_tab()?;
+        // P1：快照按 tab_id 路由（缺省活动标签；感知面与动作面同口径）
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let view = ops
             .capture_snapshot(&tab.target_id, &tab.session, budgets)
             .await?;
@@ -116,7 +122,7 @@ impl ScreenshotTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
-                        "tab_id": { "type": "number", "description": "可选，标签页序号（MVP 单标签：仅校验）" },
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" },
                         "format": { "type": "string", "description": "可选，png|jpeg（缺省 png）" },
                         "full_page": { "type": "boolean", "description": "可选，整页截图（缺省 false）" }
                     },
@@ -142,11 +148,7 @@ impl Tool for ScreenshotTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_screenshot", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["tab_id", "format", "full_page"])?;
-        if let Some(tab_id) = helpers::optional_u64(&args, "tab_id")? {
-            if tab_id == 0 {
-                return Err(ToolError::invalid_input("tab_id 为 1 起始的标签序号"));
-            }
-        }
+        let tab_id = optional_tab_id(&args)?;
         let format =
             helpers::optional_string(&args, "format")?.unwrap_or_else(|| "png".to_string());
         let full_page = helpers::optional_bool(&args, "full_page")?.unwrap_or(false);
@@ -159,7 +161,8 @@ impl Tool for ScreenshotTool {
                 )))
             }
         };
-        let tab = ops.current_tab()?;
+        // P1：截图按 tab_id 路由（缺省活动标签）
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let value = ops
             .send_page(
                 &tab.session,
@@ -198,7 +201,7 @@ impl WaitForTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
-                        "tab_id": { "type": "number", "description": "可选，标签页序号（MVP 单标签：仅校验）" },
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" },
                         "condition": { "type": "string", "description": "element|text|url|network_idle" },
                         "ref": { "type": "number", "description": "condition=element 时的快照索引 [N]" },
                         "text": { "type": "string", "description": "condition=text 时的页面纯文本子串" },
@@ -231,11 +234,7 @@ impl Tool for WaitForTool {
             &args,
             &["tab_id", "condition", "ref", "text", "url", "timeout_ms"],
         )?;
-        if let Some(tab_id) = helpers::optional_u64(&args, "tab_id")? {
-            if tab_id == 0 {
-                return Err(ToolError::invalid_input("tab_id 为 1 起始的标签序号"));
-            }
-        }
+        let tab_id = optional_tab_id(&args)?;
         let condition = helpers::require_string(&args, "condition")?;
         let timeout_ms = helpers::optional_u32(&args, "timeout_ms")?;
         if timeout_ms.is_some_and(|t| t == 0 || t > 120_000) {
@@ -281,7 +280,9 @@ impl Tool for WaitForTool {
                 )))
             }
         };
-        let tab = ops.current_tab()?;
+        // P1：wait_for 作用标签由 tab_id 指定（缺省活动标签；等待器内部按
+        // WaitOptions.tab_id 路由到对应会话）
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let opts = WaitOptions::for_condition(&cond, tab.target_id.clone());
         let opts = if let Some(t) = timeout_ms {
             opts.with_timeout_ms(t)
@@ -322,7 +323,7 @@ impl GetUrlTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
-                        "tab_id": { "type": "number", "description": "可选，标签页序号（MVP 单标签：仅校验）" }
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" }
                     },
                     "additionalProperties": false
                 }),
@@ -346,12 +347,8 @@ impl Tool for GetUrlTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_get_url", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["tab_id"])?;
-        if let Some(tab_id) = helpers::optional_u64(&args, "tab_id")? {
-            if tab_id == 0 {
-                return Err(ToolError::invalid_input("tab_id 为 1 起始的标签序号"));
-            }
-        }
-        let tab = ops.current_tab()?;
+        let tab_id = optional_tab_id(&args)?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let (_, url) = super::target_info(ops, &tab.target_id).await?;
         Ok(json!({ "ok": true, "url": url.unwrap_or_default() }))
     }
@@ -373,7 +370,7 @@ impl GetTitleTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
-                        "tab_id": { "type": "number", "description": "可选，标签页序号（MVP 单标签：仅校验）" }
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" }
                     },
                     "additionalProperties": false
                 }),
@@ -397,12 +394,8 @@ impl Tool for GetTitleTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_get_title", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["tab_id"])?;
-        if let Some(tab_id) = helpers::optional_u64(&args, "tab_id")? {
-            if tab_id == 0 {
-                return Err(ToolError::invalid_input("tab_id 为 1 起始的标签序号"));
-            }
-        }
-        let tab = ops.current_tab()?;
+        let tab_id = optional_tab_id(&args)?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let (title, _) = super::target_info(ops, &tab.target_id).await?;
         Ok(json!({ "ok": true, "title": title.unwrap_or_default() }))
     }

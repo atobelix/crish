@@ -106,7 +106,7 @@ fn name_definition_consistent() {
 fn definitions_serialize_for_provider() {
     let registry = registry_with(empty_config());
     let defs = registry.list_definitions();
-    assert_eq!(defs.len(), 23);
+    assert_eq!(defs.len(), 24); // 23 + browser_evaluate（P1-C2）
     for def in &defs {
         let v = serde_json::to_value(def).expect("可序列化");
         assert_eq!(v["name"], def.name.as_str());

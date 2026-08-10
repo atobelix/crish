@@ -20,11 +20,11 @@ fn registry_with(config: conex_browser_tools::BrowserToolsConfig) -> ToolRegistr
     registry
 }
 
-/// 注册数精确断言 + 名称清单一致（17 T-1：26 全量 → MVP 子集 23）。
+/// 注册数精确断言 + 名称清单一致（17 T-1：26 全量 → 当前子集 24）。
 #[test]
 fn registration_count_and_names_exact() {
     let registry = registry_with(empty_config());
-    assert_eq!(registry.len(), 23, "MVP 子集应恰好注册 23 个工具");
+    assert_eq!(registry.len(), 24, "工具族应恰好注册 24 个（23 + browser_evaluate，P1-C2）");
     let mut names: Vec<String> = registry
         .list()
         .iter()
@@ -42,7 +42,7 @@ fn registration_twice_is_idempotent() {
     let mut registry = ToolRegistry::new();
     register_browser_tools(&mut registry, empty_config()).expect("首次注册成功");
     register_browser_tools(&mut registry, empty_config()).expect("重复注册应幂等跳过");
-    assert_eq!(registry.len(), 23);
+    assert_eq!(registry.len(), 24);
     // 无 tool.version_conflict 报错（同名已存在时跳过而非冲突）
     let err = register_browser_tools(&mut registry, empty_config());
     assert!(err.is_ok());
@@ -56,7 +56,7 @@ fn registration_skips_pre_registered_same_name() {
         .register_runtime(Arc::new(FakeTool::new("browser_navigate")))
         .expect("预注册");
     register_browser_tools(&mut registry, empty_config()).expect("注册应成功（同名跳过）");
-    assert_eq!(registry.len(), 23, "预注册同名被跳过，注册数保持 23");
+    assert_eq!(registry.len(), 24, "预注册同名被跳过，注册数保持 24（23 + evaluate）");
     // 既有工具未被覆盖
     let pre = registry.get("browser_navigate").expect("可查得");
     assert_eq!(pre.definition().description, "预注册替身");
@@ -70,7 +70,7 @@ fn mcp_namespace_coexists_with_browser_tools() {
         .register_runtime(Arc::new(FakeTool::new("mcp_demo__search")))
         .expect("MCP 工具注册");
     register_browser_tools(&mut registry, empty_config()).expect("浏览器工具注册");
-    assert_eq!(registry.len(), 24, "两族工具共存（23 + 1 MCP）");
+    assert_eq!(registry.len(), 25, "两族工具共存（24 + 1 MCP）");
     assert!(registry.has("mcp_demo__search"));
     assert!(registry.has("browser_navigate"));
     // 模型可见面：list_definitions 含两族且名称无歧义
@@ -120,7 +120,7 @@ fn explicit_gate_overrides_builtin() {
         ..empty_config()
     };
     register_browser_tools(&mut registry, config).expect("显式门禁注入");
-    assert_eq!(registry.len(), 23);
+    assert_eq!(registry.len(), 24);
 }
 
 /// 注册后工具可执行闭环（最小面：not_ready 在空会话下结构化返回）。

@@ -1,9 +1,10 @@
 //! 导航类工具（8 个，17 §1.2 导航表）
 //!
 //! 全部导航命令发送前过导航检查点（17 §4.4：navigate/new_tab 校验目标 URL，
-//! back/forward/reload 校验当前页 URL + 动作后复核）；`tab_id` 入参语义：
-//! MVP 单标签 + 标签列表序号（1 起始，browser_list_tabs 输出序），P1 多标签
-//! 以真实 targetId 字符串统一（遗留注记）。
+//! back/forward/reload 校验当前页 URL + 动作后复核）；`tab_id` 入参语义（P1
+//! 多标签，15 文档 §7）：close_tab/switch_tab 统一为**真实 targetId 字符串**
+//! （browser_list_tabs 输出，撤销 MVP 序号语义）；new_tab 受 MAX_TABS=8 上限
+//! 约束（可配 1-16，超限返回 `tool.browser.tab_limit_exceeded`，U-12 码）。
 
 use crate::error;
 use crate::exec;
@@ -481,6 +482,12 @@ impl Tool for NewTabTool {
         let url = helpers::validate_http_url(&helpers::require_string(&args, "url")?)?;
         // background 语义（Target.createTarget 无背景面）MVP 忽略，P1 接线
         let _background = helpers::optional_bool(&args, "background")?;
+        // MAX_TABS 上限（15 文档 §7.3 裁决 + U-12 码）：createTarget 之前计数
+        // 注入检查——超限返回 tab_limit_exceeded，不派发任何命令
+        let current = super::page_targets(ops).await?.len();
+        if current >= self.ctx.max_tabs {
+            return Err(error::tab_limit_exceeded(self.ctx.max_tabs));
+        }
         // 导航检查点（17 §4.4）：Target.createTarget 发送之前
         exec::check_navigation_url(self.ctx.gate.as_ref(), url.as_str())?;
         let value = ops
@@ -513,24 +520,16 @@ impl Tool for NewTabTool {
     }
 }
 
-/// 标签序号 → 目标（1 起始列表序号，MVP 语义；越界 → invalid_input）。
-async fn target_by_seq(ops: &dyn SessionOps, seq: u64) -> Result<TargetInfoLite, ToolError> {
-    if seq == 0 {
-        return Err(ToolError::invalid_input(
-            "tab_id 为 1 起始的标签列表序号（browser_list_tabs 输出序）",
-        ));
-    }
+/// 标签 targetId（targetId 字符串语义，P1）→ 目标信息。
+/// 未找到（标签已关闭/不存在）→ node_gone（目标过期，14 §5.1 同源）。
+async fn target_by_id(ops: &dyn SessionOps, tab_id: &str) -> Result<TargetInfoLite, ToolError> {
     let targets = super::page_targets(ops).await?;
-    if seq as usize > targets.len() {
-        return Err(ToolError::invalid_input(format!(
-            "标签序号 {seq} 越界（当前 {} 个标签页）",
-            targets.len()
-        )));
+    match targets.into_iter().find(|t| t.target_id == tab_id) {
+        Some(target) => Ok(target),
+        None => Err(error::node_gone(format!(
+            "标签 {tab_id} 不存在或已关闭（请先 browser_list_tabs 确认后重试）"
+        ))),
     }
-    Ok(targets
-        .into_iter()
-        .nth(seq as usize - 1)
-        .expect("越界检查后序号必命中"))
 }
 
 /// browser_close_tab：关闭标签页（审计面：关闭动作本身入审计由引擎侧 M-4 接线）。
@@ -545,11 +544,11 @@ impl CloseTabTool {
             ctx,
             def: ToolDefinition {
                 name: "browser_close_tab".to_string(),
-                description: "按标签序号（1 起始，browser_list_tabs 输出序）关闭标签页。返回被关闭标签 id 与剩余标签数。".to_string(),
+                description: "按标签 targetId（browser_list_tabs 输出）关闭标签页。返回被关闭标签 id 与剩余标签数。".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
-                        "tab_id": { "type": "number", "description": "标签序号（1 起始；MVP 单标签语义的列表序号，P1 多标签统一）" }
+                        "tab_id": { "type": "string", "description": "标签 targetId（browser_list_tabs 输出）" }
                     },
                     "required": ["tab_id"],
                     "additionalProperties": false
@@ -574,8 +573,9 @@ impl Tool for CloseTabTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_close_tab", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["tab_id"])?;
-        let seq = helpers::require_u64(&args, "tab_id")?;
-        let target = target_by_seq(ops, seq).await?;
+        let tab_id = helpers::require_string(&args, "tab_id")?;
+        super::validate_tab_id(&tab_id, "tab_id")?;
+        let target = target_by_id(ops, &tab_id).await?;
         let value = ops
             .send_browser(
                 CDP_TARGET_CLOSE_TARGET,
@@ -597,7 +597,7 @@ impl Tool for CloseTabTool {
     }
 }
 
-/// browser_switch_tab：切换活动标签。
+/// browser_switch_tab：切换活动标签（tab_id = targetId 字符串语义，P1）。
 pub(crate) struct SwitchTabTool {
     ctx: Arc<Ctx>,
     def: ToolDefinition,
@@ -609,11 +609,11 @@ impl SwitchTabTool {
             ctx,
             def: ToolDefinition {
                 name: "browser_switch_tab".to_string(),
-                description: "按标签序号（1 起始，browser_list_tabs 输出序）切换活动标签。返回目标标签 id/URL/标题。".to_string(),
+                description: "按标签 targetId（browser_list_tabs 输出）切换活动标签。返回目标标签 id/URL/标题；切换后目标标签快照版本推进（旧快照失效，需重新快照）。".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
-                        "tab_id": { "type": "number", "description": "标签序号（1 起始；MVP 单标签语义的列表序号，P1 多标签统一）" }
+                        "tab_id": { "type": "string", "description": "标签 targetId（browser_list_tabs 输出）" }
                     },
                     "required": ["tab_id"],
                     "additionalProperties": false
@@ -638,19 +638,27 @@ impl Tool for SwitchTabTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_switch_tab", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["tab_id"])?;
-        let seq = helpers::require_u64(&args, "tab_id")?;
-        let target = target_by_seq(ops, seq).await?;
+        let tab_id = helpers::require_string(&args, "tab_id")?;
+        super::validate_tab_id(&tab_id, "tab_id")?;
+        let target = target_by_id(ops, &tab_id).await?;
         ops.send_browser(
             CDP_TARGET_ACTIVATE_TARGET,
             json!({ "targetId": &target.target_id }),
         )
         .await?;
+        // P1：activateTarget 无 SessionAttached 事件——引擎活动槽显式切换；
+        // 失败（路由表无该标签）→ node_gone（目标过期）
+        ops.activate_tab(&tab_id)?;
+        // R-1：切换本身是 AI 动作——目标标签即时 +1（旧快照失效 → 强制重快照，
+        // 15 §7.2「AI 主动切换不吊销令牌，动作前按需重快照」）
+        ops.note_action_done(&tab_id);
         let (title, url) = super::target_info(ops, &target.target_id).await?;
         Ok(json!({
             "ok": true,
             "tabId": target.target_id,
             "url": url.unwrap_or_default(),
             "title": title.unwrap_or_default(),
+            "snapshotVersion": ops.snapshot_version(&target.target_id),
         }))
     }
 }
@@ -690,10 +698,11 @@ mod tests {
     }
 
     /// 记录型会话替身：记录全部命令 + 可配 Target.getTargetInfo 最终 URL
-    /// （模拟 302 重定向后的落地 URL）。
+    /// （模拟 302 重定向后的落地 URL）+ 可配 page 目标列表（MAX_TABS 计数面）。
     struct NavigateOps {
         log: Mutex<Vec<String>>,
         info_url: String,
+        tab_ids: Mutex<Vec<String>>,
     }
 
     impl NavigateOps {
@@ -701,7 +710,14 @@ mod tests {
             Arc::new(NavigateOps {
                 log: Mutex::new(Vec::new()),
                 info_url: info_url.to_string(),
+                tab_ids: Mutex::new(Vec::new()),
             })
+        }
+        fn with_tabs(info_url: &str, tab_ids: &[&str]) -> Arc<Self> {
+            let ops = NavigateOps::new(info_url);
+            *ops.tab_ids.lock().unwrap_or_else(|p| p.into_inner()) =
+                tab_ids.iter().map(|t| t.to_string()).collect();
+            ops
         }
         fn calls(&self) -> Vec<String> {
             self.log.lock().unwrap_or_else(|p| p.into_inner()).clone()
@@ -733,6 +749,19 @@ mod tests {
                 session: "S1".to_string(),
             })
         }
+        fn activate_tab(&self, tab_id: &str) -> Result<(), ToolError> {
+            self.log
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(format!("activate-tab:{tab_id}"));
+            Ok(())
+        }
+        fn note_action_done(&self, tab_id: &str) {
+            self.log
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(format!("bump:{tab_id}"));
+        }
         async fn send_page(
             &self,
             session: &str,
@@ -752,7 +781,17 @@ mod tests {
                 .push(format!("browser:{method} {params}"));
             match method {
                 "Target.createTarget" => Ok(json!({ "targetId": "T9" })),
-                "Target.getTargets" => Ok(json!({ "targetInfos": [] })),
+                "Target.getTargets" => {
+                    let ids = self.tab_ids.lock().unwrap_or_else(|p| p.into_inner());
+                    Ok(json!({
+                        "targetInfos": ids.iter().map(|id| json!({
+                            "targetId": id,
+                            "type": "page",
+                            "title": "页",
+                            "url": "https://a.example/"
+                        })).collect::<Vec<_>>()
+                    }))
+                }
                 "Target.getTargetInfo" => Ok(json!({
                     "targetInfo": {
                         "targetId": "T1",
@@ -820,11 +859,16 @@ mod tests {
 
     /// 组装工具上下文（注入记录型会话 + 拒绝指定 host 的门禁替身）。
     fn tool_ctx(ops: Arc<NavigateOps>, denied_host: &'static str) -> Arc<Ctx> {
+        tool_ctx_with_max(ops, denied_host, 8)
+    }
+
+    fn tool_ctx_with_max(ops: Arc<NavigateOps>, denied_host: &'static str, max_tabs: usize) -> Arc<Ctx> {
         Arc::new(Ctx {
             session: Some(ops),
             gate: Arc::new(StubGate { denied_host }),
             sensitive: crate::SensitiveCapabilities::default(),
             budgets: BudgetConfig::active(),
+            max_tabs,
         })
     }
 
@@ -887,5 +931,124 @@ mod tests {
         assert_eq!(out["url"], "https://a.example/after", "返回真实落地 URL");
         assert_eq!(out["snapshotVersion"], 7);
         ops.assert_not_called("Page.goBack");
+    }
+
+    // ---------- P1 多标签（15 文档 §7）：MAX_TABS / targetId 语义 ----------
+
+    /// MAX_TABS 上限（验收 9.1-9）：8 个标签已满时 new_tab 返回 tab_limit_exceeded
+    /// （U-12 码），createTarget 零注入；关闭一个后可再开。
+    #[tokio::test]
+    async fn new_tab_rejects_when_at_max_tabs() {
+        let ops = NavigateOps::with_tabs("https://a.example/after", &[
+            "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8",
+        ]);
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        let tool = NewTabTool::new(ctx);
+        let err = tool
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "url": "https://x.example/" }),
+            )
+            .await
+            .expect_err("8 个标签已满应拒绝");
+        assert_eq!(err.code(), "tool.browser.tab_limit_exceeded", "错误码：{err}");
+        assert!(err.to_string().contains("MAX_TABS=8"), "应携带上限值：{err}");
+        ops.assert_not_called("Target.createTarget");
+    }
+
+    /// MAX_TABS 上限可配（1-16）：max_tabs=2 时第 3 个标签被拒绝（注入计数 2）。
+    #[tokio::test]
+    async fn new_tab_limit_configurable_and_injection_counted() {
+        let ops = NavigateOps::with_tabs("https://a.example/after", &["T1", "T2"]);
+        let ctx = tool_ctx_with_max(ops.clone(), "192.168.1.1", 2);
+        let tool = NewTabTool::new(ctx);
+        let err = tool
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "url": "https://x.example/" }),
+            )
+            .await
+            .expect_err("max_tabs=2 时第 3 个标签应拒绝");
+        assert_eq!(err.code(), "tool.browser.tab_limit_exceeded");
+        let injected = ops
+            .calls()
+            .iter()
+            .filter(|c| c.contains("Target.createTarget"))
+            .count();
+        assert_eq!(injected, 0, "超限时 createTarget 零注入");
+    }
+
+    /// close_tab 按 targetId（字符串语义，P1）：命中目标 → closeTarget 派发；
+    /// 目标不存在（target destroyed 后）→ node_gone（目标过期语义）。
+    #[tokio::test]
+    async fn close_tab_by_target_id_and_missing() {
+        let ops = NavigateOps::with_tabs("https://a.example/after", &["T1", "T2"]);
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        let out = CloseTabTool::new(ctx.clone())
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "tab_id": "T2" }),
+            )
+            .await
+            .expect("按 targetId 关闭应成功");
+        assert_eq!(out["closedTabId"], "T2");
+        ops.assert_called("Target.closeTarget {\"targetId\":\"T2\"}");
+
+        // 已关闭/不存在的标签 → node_gone（不派发 closeTarget）
+        let err = CloseTabTool::new(ctx)
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "tab_id": "T9" }),
+            )
+            .await
+            .expect_err("不存在的标签应 node_gone");
+        assert_eq!(err.code(), "tool.browser.node_gone", "错误码：{err}");
+        ops.assert_not_called("Target.closeTarget {\"targetId\":\"T9\"}");
+    }
+
+    /// switch_tab 按 targetId：activateTarget 派发 + 引擎活动槽显式切换
+    /// （activate_tab）+ 目标标签版本即时推进（note_action_done，R-1）。
+    #[tokio::test]
+    async fn switch_tab_by_target_id_updates_active_and_bumps() {
+        let ops = NavigateOps::with_tabs("https://a.example/after", &["T1", "T2"]);
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        let out = SwitchTabTool::new(ctx)
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "tab_id": "T2" }),
+            )
+            .await
+            .expect("按 targetId 切换应成功");
+        assert_eq!(out["tabId"], "T2");
+        ops.assert_called("Target.activateTarget {\"targetId\":\"T2\"}");
+        ops.assert_called("activate-tab:T2");
+        ops.assert_called("bump:T2");
+
+        // 目标不存在 → node_gone，不派发 activateTarget
+        let err = SwitchTabTool::new(tool_ctx(ops.clone(), "192.168.1.1"))
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "tab_id": "T9" }),
+            )
+            .await
+            .expect_err("不存在的标签应 node_gone");
+        assert_eq!(err.code(), "tool.browser.node_gone", "错误码：{err}");
+        ops.assert_not_called("Target.activateTarget {\"targetId\":\"T9\"}");
+    }
+
+    /// tab_id 入参护栏：空串/超长/控制字符 → invalid_input（不派发任何命令）。
+    #[tokio::test]
+    async fn tab_id_argument_guards() {
+        let ops = NavigateOps::with_tabs("https://a.example/after", &["T1"]);
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        for bad in ["", "x".repeat(300).as_str(), "a\u{0}b"] {
+            let err = SwitchTabTool::new(ctx.clone())
+                .execute(&create_mock_tool_context(), json!({ "tab_id": bad }))
+                .await
+                .expect_err("非法 tab_id 应拒绝");
+            assert_eq!(err.code(), "tool.invalid_input", "tab_id={bad:?}");
+        }
+        ops.assert_not_called("Target.activateTarget");
+        ops.assert_not_called("Target.closeTarget");
     }
 }

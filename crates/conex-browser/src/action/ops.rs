@@ -47,6 +47,7 @@ const CDP_DOM_RESOLVE_NODE: &str = "DOM.resolveNode";
 const CDP_DOM_SET_FILE_INPUT_FILES: &str = "DOM.setFileInputFiles";
 const CDP_RUNTIME_CALL_FUNCTION_ON: &str = "Runtime.callFunctionOn";
 const CDP_RUNTIME_EVALUATE: &str = "Runtime.evaluate";
+const CDP_RUNTIME_CREATE_ISOLATED_WORLD: &str = "Runtime.createIsolatedWorld";
 const CDP_INPUT_DISPATCH_MOUSE: &str = "Input.dispatchMouseEvent";
 const CDP_INPUT_DISPATCH_KEY: &str = "Input.dispatchKeyEvent";
 const CDP_INPUT_INSERT_TEXT: &str = "Input.insertText";
@@ -102,6 +103,11 @@ pub trait PageOps: Send + Sync {
     async fn insert_text(&self, text: &str) -> Result<(), ActionError>;
     /// Runtime.evaluate（固定模板只读求值；wait_for 文本轮询/回读校验）。
     async fn evaluate(&self, expression: &str) -> Result<Value, ActionError>;
+    /// Runtime.createIsolatedWorld（17 §3.2：evaluate 受限求值的隔离世界）。
+    async fn create_isolated_world(&self) -> Result<String, ActionError>;
+    /// Runtime.evaluate 于隔离世界执行（17 §3.2：awaitPromise/2s 超时/userGesture=false/
+    /// returnByValue=true；返回纯 JSON 拷贝）。
+    async fn evaluate_isolated(&self, world_id: &str, expression: &str) -> Result<Value, ActionError>;
     /// 在途请求数（wait_for NetworkIdle 条件）。
     async fn network_in_flight(&self) -> Result<usize, ActionError>;
     /// DOM.setFileInputFiles（上传直接路径，§9.1 4a）。
@@ -458,6 +464,59 @@ impl PageOps for BrowserPageOps {
             return Err(ActionError::new(
                 ActionErrorKind::Unsupported,
                 "页面求值异常（固定模板不应失败）",
+            ));
+        }
+        Ok(evaluated.result.value.unwrap_or(Value::Null))
+    }
+
+    async fn create_isolated_world(&self) -> Result<String, ActionError> {
+        let value = self
+            .send(
+                CDP_RUNTIME_CREATE_ISOLATED_WORLD,
+                json!({ "worldName": "crish-read-only", "grantUniversalAccess": false }),
+                CMD_TIMEOUT,
+            )
+            .await?;
+        let world: crate::cdp::domains::CreateIsolatedWorldResult =
+            serde_json::from_value(value).map_err(|e| {
+                ActionError::new(
+                    ActionErrorKind::Unsupported,
+                    format!("createIsolatedWorld 结果解析失败：{e}"),
+                )
+            })?;
+        Ok(world.execution_context_id.to_string())
+    }
+
+    async fn evaluate_isolated(&self, world_id: &str, expression: &str) -> Result<Value, ActionError> {
+        let context_id: i64 = world_id.parse().map_err(|_| {
+            ActionError::new(ActionErrorKind::Unsupported, "非法隔离世界标识")
+        })?;
+        let value = self
+            .send(
+                CDP_RUNTIME_EVALUATE,
+                json!({
+                    "expression": expression,
+                    "contextId": context_id,
+                    "returnByValue": true,
+                    "awaitPromise": true,
+                    "userGesture": false,
+                    "timeout": 2000,
+                    "generatePreview": false,
+                }),
+                CMD_TIMEOUT,
+            )
+            .await?;
+        let evaluated: crate::cdp::domains::EvaluateResult = serde_json::from_value(value)
+            .map_err(|e| {
+                ActionError::new(
+                    ActionErrorKind::Unsupported,
+                    format!("evaluate_isolated 结果解析失败：{e}"),
+                )
+            })?;
+        if evaluated.exception_details.is_some() {
+            return Err(ActionError::new(
+                ActionErrorKind::InvalidInput,
+                "受限求值执行异常",
             ));
         }
         Ok(evaluated.result.value.unwrap_or(Value::Null))
@@ -846,7 +905,7 @@ mod tests {
     /// 绑定会话，活动标签切换不影响绑定路由（per-tab 动作隔离）。
     #[tokio::test]
     async fn browser_page_ops_bound_session_routes_commands() {
-        let mock = MockServer::spawn().await;
+        let mut mock = MockServer::spawn().await;
         for (method, reply) in restore_reply_map() {
             mock.set_auto_reply(method, reply);
         }

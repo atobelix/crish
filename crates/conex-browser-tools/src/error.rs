@@ -54,6 +54,14 @@ pub fn node_gone(message: impl Into<String>) -> ToolError {
     ToolError::new(browser_codes::TOOL_BROWSER_NODE_GONE, message)
 }
 
+/// 标签数量超限（15 文档 §7.3 MAX_TABS 裁决 + 22 裁决 U-12：`tool.browser.tab_limit_exceeded`）。
+pub fn tab_limit_exceeded(max: usize) -> ToolError {
+    ToolError::new(
+        browser_codes::TOOL_BROWSER_TAB_LIMIT_EXCEEDED,
+        format!("标签数量已达上限（MAX_TABS={max}，可配 1-16），请先关闭部分标签"),
+    )
+}
+
 /// MVP 边界未接线（`tool.browser.unwired`，P1 落地后替换为真实路径）。
 pub fn unwired(what: impl Into<String>) -> ToolError {
     ToolError::new(
@@ -96,6 +104,8 @@ pub fn map_cdp_error(method: &str, err: CdpError) -> ToolError {
         CdpError::ConnectionLost => browser_codes::TOOL_BROWSER_NOT_READY,
         CdpError::NotReady(_) => browser_codes::TOOL_BROWSER_NOT_READY,
         CdpError::NoActiveTab => browser_codes::TOOL_BROWSER_NOT_READY,
+        // P1 多标签：按 tab_id 路由不到会话（标签已关闭/未 attach）→ 目标过期
+        CdpError::NoSuchTab { .. } => browser_codes::TOOL_BROWSER_NODE_GONE,
         CdpError::Cancelled { .. } => browser_codes::TOOL_BROWSER_CANCELLED,
         CdpError::ApprovalDenied { .. } => codes::APPROVAL_REJECTED,
         CdpError::BadParams { .. } | CdpError::Protocol { .. } => codes::TOOL_INVALID_INPUT,
@@ -253,5 +263,26 @@ mod tests {
             .code(),
             codes::TOOL_EXECUTION_FAILED
         );
+    }
+
+    /// P1 多标签错误面：标签数量超限（U-12 码）+ NoSuchTab → node_gone。
+    #[test]
+    fn multi_tab_error_codes() {
+        let err = tab_limit_exceeded(8);
+        assert_eq!(err.code(), "tool.browser.tab_limit_exceeded");
+        assert!(err.to_string().contains("MAX_TABS=8"));
+
+        let mapped = map_cdp_error(
+            "activate_tab",
+            conex_browser::cdp::error::CdpError::NoSuchTab {
+                tab_id: "T9".to_string(),
+            },
+        );
+        assert_eq!(
+            mapped.code(),
+            browser_codes::TOOL_BROWSER_NODE_GONE,
+            "标签路由不到会话必须映射 node_gone（目标过期语义）"
+        );
+        assert!(mapped.to_string().contains("T9"), "错误应携带目标 tab_id");
     }
 }

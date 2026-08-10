@@ -1,7 +1,9 @@
 //! e2e_browser.rs —— MVP 核心链路 e2e（真实浏览器集成验证）
 //!
 //! 覆盖（对齐 10/11 文档 e2e 口径）：E1 启动+连接 → E2 导航+快照 →
-//! E3 动作（click/type_text）→ E4 版本推进 → E5 关闭。
+//! E3 动作（click/type_text）→ E4 版本推进 → E5 关闭；
+//! G-3 帧流/输入链路扩展：E6 帧流端到端（pacing/延迟）→ E7 输入注入后帧变化
+//! → E8 IME insertText 中文端到端 → E9 快照-动作-帧联动。
 //!
 //! 运行（`#[ignore]` + 串行，10 文档 §10.2 / 11 文档 §9.2 约定）：
 //!
@@ -31,8 +33,11 @@ use conex_browser::action::gate::{DomainGate, GateDenial};
 use conex_browser::action::ops::{
     BrowserPageOps, BrowserSnapshotStore, session_for_active,
 };
+use conex_browser::browser::args::EngineMode;
 use conex_browser::browser::discover::{resolve_backend, BackendOverride, ResolveOptions};
 use conex_browser::browser::{BrowserManager, LaunchConfig, ProcessError, StopReason};
+use conex_browser::frames::{ScreencastConfig, ScreencastSession, ScreencastStatus};
+use conex_browser::input::{InputCmd, InputPipeline};
 use conex_browser::snapshot::{BudgetConfig, SnapshotDocument, SnapshotError, SnapshotManager};
 use conex_browser::{BrowserSession, BrowserState, CdpError};
 use serde_json::{json, Value};
@@ -81,6 +86,51 @@ const TEST_HTML: &str = r#"<!DOCTYPE html>
 </body>
 </html>"#;
 
+/// 帧流测试页（E6）：CSS 动画（合成器驱动，不受 background timer throttling
+/// 影响——headless 下 setInterval 会被节流到 ~1s/次导致帧流近停）+ JS 定时器
+/// 双保险，保证页面持续变化、帧流持续产出（供 pacing/延迟测量）。
+const TEST_HTML_FRAMES: &str = r#"<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>帧流测试页</title>
+<style>
+  #tick { width: 240px; height: 24px; background: #369;
+          animation: pulse 0.4s ease-in-out infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: 0.3; } }
+</style>
+</head>
+<body>
+<h1>帧流测试页</h1>
+<div id="tick">tick0</div>
+<div id="dyn">初始文本</div>
+<script>
+  setInterval(function () {
+    document.getElementById('tick').textContent = 'tick' + Date.now();
+  }, 100);
+</script>
+</body>
+</html>"#;
+
+/// IME 注入测试页（E8）：输入框 + contenteditable + 事件计数（C2 实测面：
+/// insertText 应仅触发 beforeinput+input 各 1，无 composition/keydown）。
+const TEST_HTML_IME: &str = r#"<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>IME 注入页</title></head>
+<body>
+<h1>IME 注入页</h1>
+<input id="ime">
+<div id="ce" contenteditable="true"></div>
+<script>
+  window.__evt = { beforeinput: 0, input: 0, compositionstart: 0, compositionend: 0, keydown: 0 };
+  (function () {
+    var el = document.getElementById('ime');
+    ['beforeinput', 'input', 'compositionstart', 'compositionend', 'keydown'].forEach(function (t) {
+      el.addEventListener(t, function () { window.__evt[t] += 1; });
+    });
+  })();
+</script>
+</body>
+</html>"#;
+
 /// HTML → data: URL（UTF-8 百分号编码；仅保留 RFC 3986 unreserved 与标点）。
 fn data_url(html: &str) -> String {
     let mut out = String::from("data:text/html;charset=utf-8,");
@@ -113,11 +163,21 @@ struct E2eEnv {
 impl E2eEnv {
     /// 启动（Auto 回退链）→ 建连（身份校验）→ 等活动标签 → 组装管线。
     async fn launch() -> E2eEnv {
+        Self::launch_with_mode(EngineMode::HeadlessNew).await
+    }
+
+    /// 指定引擎模式启动（帧流用例用 HeadedOffscreen：headless 下页面视口
+    /// 不可见 → timer/动画被节流，screencast 帧近停；headed 离屏模式页面
+    /// 可见性与真实面板一致）。
+    async fn launch_with_mode(mode: EngineMode) -> E2eEnv {
         let root = tempfile::tempdir().expect("创建临时数据根失败");
         let mgr = BrowserManager::new(root.path().to_path_buf());
         let started = Instant::now();
         let report = mgr
-            .start(LaunchConfig::default())
+            .start(LaunchConfig {
+                mode,
+                ..Default::default()
+            })
             .await
             .expect("浏览器启动失败（无 CfT 缓存时回退系统 Chrome/Edge）");
         let launch_ms = started.elapsed().as_millis() as u64;
@@ -560,4 +620,328 @@ async fn e2e_clean_stop() {
         "[E5] 停止耗时 {}ms force_killed={} profile_removed={}",
         report.elapsed_ms, report.force_killed, report.profile_removed
     );
+}
+
+// ---------------------------------------------------------------------------
+// G-3 帧流/输入链路扩展（真实 Chrome；维度 12 §2 帧流数据面 + §3/§4 输入管线）
+// ---------------------------------------------------------------------------
+
+/// 排序后中位数（毫秒；空切片返回 None）。
+fn median_ms(values: &[u64]) -> Option<u64> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut v = values.to_vec();
+    v.sort_unstable();
+    Some(v[v.len() / 2])
+}
+
+/// P95（毫秒；95% 分位下标，最小 1 样本）。
+fn p95_ms(values: &[u64]) -> u64 {
+    let mut v = values.to_vec();
+    v.sort_unstable();
+    let idx = (v.len().saturating_mul(95) / 100).min(v.len() - 1);
+    v[idx]
+}
+
+// ---------------------------------------------------------------------------
+// E6 帧流端到端：启动 → 连接 → ScreencastSession::start → 订阅帧 → 内容页
+// 持续产帧（JS 定时器）→ JPEG 非空/尺寸合理/序号递增 → ack pacing（Base 档
+// 8fps 宽松断言防 flaky：间隔中位下界 + 每帧恰一 ack）→ 帧延迟测量（注入
+// DOM 变化 → 含变化帧到达，≥5 样本记录 min/avg/p95 非硬断言）→ stop → 通道关闭。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_frame_stream_end_to_end() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch_with_mode(EngineMode::HeadedOffscreen).await;
+    let url = data_url(TEST_HTML_FRAMES);
+    navigate_and_wait(&env, &url).await;
+
+    // 帧流会话（Base 档启动，验证 8fps ack pacing）
+    let frames = ScreencastSession::new(env.session.clone(), ScreencastConfig::default());
+    let rx = frames.subscribe_frames();
+    let s_started = Instant::now();
+    frames.start().await.expect("帧流启动失败");
+    let start_ms = s_started.elapsed().as_millis() as u64;
+    assert_eq!(frames.status(), ScreencastStatus::Active, "启动后应 Active");
+
+    // —— 帧有效性：≥3 帧，JPEG 非空、尺寸合理、序号递增 ——
+    let mut seqs: Vec<u64> = Vec::new();
+    let mut total_bytes = 0usize;
+    for _ in 0..3 {
+        let f = rx
+            .recv_timeout(Duration::from_secs(5))
+            .await
+            .unwrap_or_else(|| panic!("帧流超时未产出（已收 {} 帧）", seqs.len()));
+        seqs.push(f.seq);
+        total_bytes += f.data.len();
+        assert!(!f.data.is_empty(), "帧数据不得为空");
+        assert!(f.data.len() > 200, "JPEG 帧应有体量（{} 字节）", f.data.len());
+        assert!(
+            f.data.starts_with(&[0xFF, 0xD8]),
+            "JPEG SOI 头（FF D8），前 2 字节 {:02X}{:02X}",
+            f.data[0],
+            f.data[1]
+        );
+        assert!(
+            f.width >= 100 && f.height >= 100,
+            "帧尺寸合理：{}x{}",
+            f.width,
+            f.height
+        );
+    }
+    assert!(
+        seqs.windows(2).all(|w| w[1] > w[0]),
+        "帧序号单调递增：{seqs:?}"
+    );
+
+    // —— ack pacing（Base 档 8fps）：2s 窗口帧间隔中位下界（宽松防 flaky）——
+    let mut intervals: Vec<u64> = Vec::new();
+    let mut last: Option<Instant> = None;
+    let window = Instant::now();
+    while window.elapsed() < Duration::from_secs(2) && intervals.len() < 12 {
+        match rx.recv_timeout(Duration::from_millis(300)).await {
+            Some(_) => {
+                let now = Instant::now();
+                if let Some(l) = last {
+                    intervals.push(now.duration_since(l).as_millis() as u64);
+                }
+                last = Some(now);
+            }
+            None => break,
+        }
+    }
+    let stats = frames.stats();
+    assert!(
+        intervals.len() >= 2,
+        "pacing 窗口内帧间间隔样本应 ≥2（实际 {}，页面可能未持续产帧）",
+        intervals.len()
+    );
+    let med = median_ms(&intervals).expect("间隔样本非空");
+    assert!(
+        med >= 90,
+        "Base 档 ack 持住应使帧间隔中位 ≥90ms（8fps 换算持住 125ms，实际 {med}ms）"
+    );
+    // 每帧恰一 ack：持续产帧页面下快照瞬时允许 1 帧在途（已输出未 ack，
+    // 持住 125ms 后即发）；ack_failures 必须为 0（修复前 ack 全失败停流）
+    assert!(
+        stats.acks_sent + 1 >= stats.frames_sent,
+        "每帧恰一 ack（pacing 生效；允许 1 帧在途）：acks={} sent={}",
+        stats.acks_sent,
+        stats.frames_sent
+    );
+    assert!(stats.frames_sent >= 5, "帧流应持续产出（实际 {}）", stats.frames_sent);
+    assert_eq!(stats.ack_failures, 0, "ack 发送不得失败");
+
+    // —— 帧延迟测量：注入 DOM 变化 → 含变化帧到达（≥5 样本，记录 min/avg/p95）——
+    while rx.recv_timeout(Duration::from_millis(50)).await.is_some() {} // 排空积压
+    let mut lats: Vec<u64> = Vec::new();
+    for _ in 0..5 {
+        let started = Instant::now();
+        eval_dom(&env, "document.getElementById('dyn').textContent='注入'+Date.now()").await;
+        let f = rx
+            .recv_timeout(Duration::from_secs(2))
+            .await
+            .unwrap_or_else(|| panic!("注入后未收到含变化帧"));
+        lats.push(started.elapsed().as_millis() as u64);
+        assert!(f.data.len() > 200, "变化帧数据有效");
+    }
+    let lat_min = lats.iter().min().copied().unwrap_or(0);
+    let lat_avg = lats.iter().sum::<u64>() / lats.len() as u64;
+    let lat_p95 = p95_ms(&lats);
+
+    // —— stop：状态回 Idle、帧停止输出、通道关闭 ——
+    frames.stop().await;
+    assert_eq!(frames.status(), ScreencastStatus::Idle, "stop 后回 Idle");
+    let after_stop = frames.stats().frames_sent;
+    eval_dom(&env, "document.getElementById('dyn').textContent='停流后注入'").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(frames.stats().frames_sent, after_stop, "stop 后不再输出帧");
+    assert!(
+        rx.recv_timeout(Duration::from_millis(50)).await.is_none(),
+        "stop 后输出槽应排空"
+    );
+    frames.shutdown().await;
+    assert!(rx.recv().await.is_none(), "shutdown 后帧通道关闭（recv=None）");
+
+    println!(
+        "[E6] start={start_ms}ms 帧数={} 总字节={} 间隔中位={med}ms \
+         延迟 min/avg/p95={lat_min}/{lat_avg}/{lat_p95}ms acks={}",
+        stats.frames_sent, total_bytes, stats.acks_sent
+    );
+    env.shutdown().await;
+}
+
+// ---------------------------------------------------------------------------
+// E7 输入注入后帧变化：start 帧流 → InputPipeline::dispatch(Text 中文) →
+// 版本推进 +1（R-1/U-1）+ 旧版本 Stale → 注入后收到新帧（帧变化链路）。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_input_injection_frame_change() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch_with_mode(EngineMode::HeadedOffscreen).await;
+    let url = data_url(TEST_HTML);
+    navigate_and_wait(&env, &url).await;
+
+    let pipeline = InputPipeline::new(env.session.clone());
+    let frames = ScreencastSession::new(env.session.clone(), ScreencastConfig::default());
+    let rx = frames.subscribe_frames();
+    frames.start().await.expect("帧流启动失败");
+    // 聚焦输入框（insertText 落点确定性）+ 排空积压帧
+    eval_dom(&env, "document.getElementById('name').focus()").await;
+    while rx.recv_timeout(Duration::from_millis(50)).await.is_some() {}
+
+    let v0 = env.session.snapshot_version(&env.tab_id);
+    let t0 = Instant::now();
+    pipeline
+        .dispatch(InputCmd::Text {
+            text: "你好世界".to_string(),
+        })
+        .await
+        .expect("中文注入失败");
+    let v1 = env.session.snapshot_version(&env.tab_id);
+    assert_eq!(v1, v0 + 1, "R-1/U-1：注入成功即时 +1");
+    assert!(
+        env.session.validate_snapshot(&env.tab_id, v0).is_err(),
+        "旧版本应 Stale"
+    );
+    let f = rx
+        .recv_timeout(Duration::from_secs(2))
+        .await
+        .expect("注入后应收到新帧（帧变化链路）");
+    let latency_ms = t0.elapsed().as_millis() as u64;
+    let value = eval_dom(&env, "document.getElementById('name').value").await;
+    assert_eq!(value, "你好世界", "注入内容应落位");
+    println!(
+        "[E7] v{v0}→v{v1} 帧 seq={} 注入→帧到达 {latency_ms}ms injected={}",
+        f.seq,
+        pipeline.stats().injected
+    );
+
+    frames.shutdown().await;
+    env.shutdown().await;
+}
+
+// ---------------------------------------------------------------------------
+// E8 IME insertText 中文端到端：input 框 + contenteditable 双形态——
+// InputPipeline::dispatch(Text 中文) → Runtime.evaluate 回读 value/textContent
+// 整串落位 + input 事件计数（C2 实测面：仅 beforeinput+input 各 1，无合成/
+// 键盘事件污染）。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_ime_insert_text_chinese() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch_with_mode(EngineMode::HeadedOffscreen).await;
+    let url = data_url(TEST_HTML_IME);
+    navigate_and_wait(&env, &url).await;
+    let pipeline = InputPipeline::new(env.session.clone());
+
+    // —— 输入框（input）：整串中文注入 + 事件干净度 ——
+    eval_dom(&env, "document.getElementById('ime').focus()").await;
+    let t0 = Instant::now();
+    pipeline
+        .dispatch(InputCmd::Text {
+            text: "你好世界".to_string(),
+        })
+        .await
+        .expect("insertText 注入失败");
+    let inject_ms = t0.elapsed().as_millis() as u64;
+    let value = eval_dom(&env, "document.getElementById('ime').value").await;
+    assert_eq!(value, "你好世界", "输入框 value 应整串落位（无逐字拆分）");
+    let evt_json = eval_dom(&env, "JSON.stringify(window.__evt)").await;
+    let evt_json = evt_json.as_str().expect("事件计数应为 JSON 串");
+    let evt: Value = serde_json::from_str(evt_json).expect("事件计数 JSON 解析失败");
+    assert_eq!(evt["input"], 1, "input 事件应恰 1 条（C2）");
+    assert_eq!(evt["beforeinput"], 1, "beforeinput 应恰 1 条（C2）");
+    assert_eq!(evt["compositionstart"], 0, "insertText 不得触发合成");
+    assert_eq!(evt["compositionend"], 0, "insertText 不得触发合成结束");
+    assert_eq!(evt["keydown"], 0, "insertText 不得触发键盘事件（无 229/Process 污染）");
+
+    // —— contenteditable：同样整串注入（C6 实测面） ——
+    eval_dom(
+        &env,
+        "document.getElementById('ce').textContent=''; document.getElementById('ce').focus()",
+    )
+    .await;
+    pipeline
+        .dispatch(InputCmd::Text {
+            text: "你好世界".to_string(),
+        })
+        .await
+        .expect("contenteditable 注入失败");
+    let tc = eval_dom(&env, "document.getElementById('ce').textContent").await;
+    assert_eq!(tc, "你好世界", "contenteditable 文本应整串落位");
+
+    println!(
+        "[E8] 注入={inject_ms}ms input事件={} value=你好世界 contenteditable=你好世界",
+        evt["input"]
+    );
+    env.shutdown().await;
+}
+
+// ---------------------------------------------------------------------------
+// E9 快照-动作-帧联动：capture → 按索引 click（版本推进 +1）→ 帧到达（动作
+// 触发页面变化）→ 重快照断言页面状态变化（R-1 契约全链路）。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_snapshot_action_frame_linkage() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch_with_mode(EngineMode::HeadedOffscreen).await;
+    let url = data_url(TEST_HTML);
+    navigate_and_wait(&env, &url).await;
+
+    let frames = ScreencastSession::new(env.session.clone(), ScreencastConfig::default());
+    let rx = frames.subscribe_frames();
+    frames.start().await.expect("帧流启动失败");
+    while rx.recv_timeout(Duration::from_millis(50)).await.is_some() {}
+
+    let doc = capture_snapshot(&env).await;
+    let v0 = doc.meta.snapshot_version;
+    let btn = element_ref_by_tag(&doc, "button");
+
+    let t0 = Instant::now();
+    env.exec
+        .click(&env.tab_id, v0, btn, MouseButton::Left, 1)
+        .await
+        .expect("click 失败");
+    let v1 = env.session.snapshot_version(&env.tab_id);
+    assert!(v1 > v0, "动作后版本应推进：v{v0} → v{v1}");
+    let f = rx
+        .recv_timeout(Duration::from_secs(2))
+        .await
+        .expect("click 后应收到变化帧");
+    let frame_ms = t0.elapsed().as_millis() as u64;
+
+    // 重快照：版本不回退 + 页面状态反映点击（快照-动作-帧联动闭环）
+    let doc2 = capture_snapshot(&env).await;
+    assert!(doc2.meta.snapshot_version >= v1, "重拍版本不得回退");
+    let out = eval_dom(&env, "document.getElementById('out').textContent").await;
+    assert_eq!(out, "点击成功：", "重快照后页面状态应反映点击");
+
+    println!(
+        "[E9] v{v0}→v{v1} 帧 seq={} click→帧到达 {frame_ms}ms 重拍 v{}",
+        f.seq, doc2.meta.snapshot_version
+    );
+    frames.shutdown().await;
+    env.shutdown().await;
 }

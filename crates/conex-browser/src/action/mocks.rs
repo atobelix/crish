@@ -32,6 +32,8 @@ pub enum MockOp {
     KeyEvent,
     InsertText,
     Evaluate,
+    CreateIsolatedWorld,
+    EvaluateIsolated,
     NetworkInFlight,
     SetFileInputFiles,
     IsFileInput,
@@ -93,6 +95,10 @@ pub struct MockOpsState {
     pub hang: HashSet<MockOp>,
     /// 第 N 个键盘事件后触发取消（type 分块间 abort 注入）
     pub cancel_after_char: Option<(u32, CancellationToken)>,
+    /// 隔离世界标识（CreateIsolatedWorld 返回；None → 世界创建失败注入）
+    pub isolated_world: Option<String>,
+    /// 隔离世界求值返回（EvaluateIsolated 结果；表达式关键字可分支）
+    pub isolated_result: Value,
 }
 
 /// 确定性 CDP mock（全部方法即时返回；注入面见 MockOpsState）。
@@ -137,6 +143,8 @@ impl MockOps {
             on_fail_cancel: None,
             hang: HashSet::new(),
             cancel_after_char: None,
+            isolated_world: Some("world-42".to_string()),
+            isolated_result: Value::Null,
         };
         MockOps { state: Arc::new(Mutex::new(state)) }
     }
@@ -395,6 +403,26 @@ impl PageOps for MockOps {
             serde_json::json!(s.text_match)
         };
         Ok(value)
+    }
+
+    async fn create_isolated_world(&self) -> Result<String, ActionError> {
+        self.record(MockOp::CreateIsolatedWorld, "");
+        if let Some(err) = self.inject(MockOp::CreateIsolatedWorld) {
+            return Err(err);
+        }
+        let s = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        s.isolated_world
+            .clone()
+            .ok_or_else(|| ActionError::new(ActionErrorKind::Unsupported, "世界创建失败（注入）"))
+    }
+
+    async fn evaluate_isolated(&self, world_id: &str, expression: &str) -> Result<Value, ActionError> {
+        self.record(MockOp::EvaluateIsolated, format!("world={world_id} expr={expression}"));
+        if let Some(err) = self.inject(MockOp::EvaluateIsolated) {
+            return Err(err);
+        }
+        let s = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        Ok(s.isolated_result.clone())
     }
 
     async fn network_in_flight(&self) -> Result<usize, ActionError> {

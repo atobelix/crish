@@ -12,13 +12,22 @@
 use crate::error;
 use crate::exec;
 use crate::helpers;
-use crate::tools::{resolve_ref, Ctx};
+use crate::tools::{resolve_ref, resolve_tab, validate_tab_id, Ctx};
 use agent_tools::context::ToolContext;
 use agent_tools::definition::{Tool, ToolDefinition, ToolError};
 use async_trait::async_trait;
 use conex_browser::action::{ActionRequest, MouseButton, PathBufLike, Primitive, ScrollDir};
 use serde_json::{json, Value};
 use std::sync::Arc;
+
+/// 可选 tab_id（targetId 字符串语义，P1）入参解析：校验后返回，缺省 = 活动标签。
+fn optional_tab_id(args: &Value) -> Result<Option<String>, ToolError> {
+    let tab_id = helpers::optional_string(args, "tab_id")?;
+    if let Some(id) = &tab_id {
+        validate_tab_id(id, "tab_id")?;
+    }
+    Ok(tab_id)
+}
 
 /// browser_click：点击元素（左/右/双击；ref 快照索引）。
 pub(crate) struct ClickTool {
@@ -36,6 +45,7 @@ impl ClickTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（browser_list_tabs 输出；缺省 = 当前活动标签）" },
                         "ref": { "type": "number", "description": "快照索引 [N]（browser_snapshot 输出）" },
                         "button": { "type": "string", "description": "可选，left|right|middle（缺省 left）" },
                         "double_click": { "type": "boolean", "description": "可选，双击（缺省 false）" },
@@ -63,7 +73,8 @@ impl Tool for ClickTool {
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_click", &self.ctx.session).await?;
-        helpers::reject_unknown(&args, &["ref", "button", "double_click", "modifiers"])?;
+        helpers::reject_unknown(&args, &["tab_id", "ref", "button", "double_click", "modifiers"])?;
+        let tab_id = optional_tab_id(&args)?;
         let index = helpers::require_u64(&args, "ref")?;
         let button =
             helpers::optional_string(&args, "button")?.unwrap_or_else(|| "left".to_string());
@@ -90,7 +101,8 @@ impl Tool for ClickTool {
             // modifiers 未接线（执行器无修饰键面，P1）；校验后忽略并留痕
             tracing::debug!(tool = "browser_click", "modifiers 未接线（P1），已忽略");
         }
-        let tab = ops.current_tab()?;
+        // P1 多标签：缺省活动标签，可指定 targetId 路由到目标标签
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let el = resolve_ref(ops, &tab, index)?;
         ops.execute_action(ActionRequest {
             tab_id: tab.target_id.clone(),
@@ -126,6 +138,7 @@ impl TypeTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" },
                         "ref": { "type": "number", "description": "快照索引 [N]" },
                         "text": { "type": "string", "description": "输入文本（上限 65536 字符）" },
                         "submit_key": { "type": "string", "description": "可选，结尾提交键（如 Enter/Tab）" },
@@ -153,7 +166,11 @@ impl Tool for TypeTool {
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_type", &self.ctx.session).await?;
-        helpers::reject_unknown(&args, &["ref", "text", "submit_key", "delay_ms"])?;
+        helpers::reject_unknown(
+            &args,
+            &["tab_id", "ref", "text", "submit_key", "delay_ms"],
+        )?;
+        let tab_id = optional_tab_id(&args)?;
         let index = helpers::require_u64(&args, "ref")?;
         let text = helpers::require_string(&args, "text")?;
         let submit_key = helpers::optional_string(&args, "submit_key")?;
@@ -185,7 +202,7 @@ impl Tool for TypeTool {
             // delay_ms 未接线（分块节流为执行器内部 50 字符/12ms 节奏，R-4）
             tracing::debug!(tool = "browser_type", "delay_ms 未接线（P1），已忽略");
         }
-        let tab = ops.current_tab()?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let el = resolve_ref(ops, &tab, index)?;
         ops.execute_action(ActionRequest {
             tab_id: tab.target_id.clone(),
@@ -219,7 +236,7 @@ impl KeyTool {
                     "type": "object",
                     "properties": {
                         "keys": { "type": "array", "items": { "type": "string" }, "description": "组合键序列（每项 ≤ 64 字符，总量 ≤ 1024）" },
-                        "tab_id": { "type": "number", "description": "可选，标签页序号（MVP 单标签：仅校验）" }
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" }
                     },
                     "required": ["keys"],
                     "additionalProperties": false
@@ -244,11 +261,7 @@ impl Tool for KeyTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_key", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["keys", "tab_id"])?;
-        if let Some(tab_id) = helpers::optional_u64(&args, "tab_id")? {
-            if tab_id == 0 {
-                return Err(ToolError::invalid_input("tab_id 为 1 起始的标签序号"));
-            }
-        }
+        let tab_id = optional_tab_id(&args)?;
         let keys = helpers::require_string_array(&args, "keys")?;
         if keys.is_empty() {
             return Err(ToolError::invalid_input("keys 不能为空数组"));
@@ -267,7 +280,7 @@ impl Tool for KeyTool {
         if joined.chars().count() > 1024 {
             return Err(ToolError::invalid_input("keys 总量超长（> 1024 字符）"));
         }
-        let tab = ops.current_tab()?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         ops.execute_action(ActionRequest {
             tab_id: tab.target_id.clone(),
             snapshot_version: ops.snapshot_version(&tab.target_id),
@@ -299,6 +312,7 @@ impl ScrollTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" },
                         "ref": { "type": "number", "description": "可选，元素内滚动容器的快照索引 [N]" },
                         "direction": { "type": "string", "description": "up|down|left|right" },
                         "amount": { "type": "number", "description": "滚动距离（像素，1..1000000）" }
@@ -325,7 +339,8 @@ impl Tool for ScrollTool {
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_scroll", &self.ctx.session).await?;
-        helpers::reject_unknown(&args, &["ref", "direction", "amount"])?;
+        helpers::reject_unknown(&args, &["tab_id", "ref", "direction", "amount"])?;
+        let tab_id = optional_tab_id(&args)?;
         let index = helpers::optional_u64(&args, "ref")?;
         let direction = helpers::require_string(&args, "direction")?;
         let amount = helpers::require_u64(&args, "amount")?;
@@ -343,7 +358,7 @@ impl Tool for ScrollTool {
                 )))
             }
         };
-        let tab = ops.current_tab()?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let el = if let Some(i) = index {
             Some(resolve_ref(ops, &tab, i)?)
         } else {
@@ -383,6 +398,7 @@ impl HoverTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" },
                         "ref": { "type": "number", "description": "快照索引 [N]" }
                     },
                     "required": ["ref"],
@@ -407,9 +423,10 @@ impl Tool for HoverTool {
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_hover", &self.ctx.session).await?;
-        helpers::reject_unknown(&args, &["ref"])?;
+        helpers::reject_unknown(&args, &["tab_id", "ref"])?;
+        let tab_id = optional_tab_id(&args)?;
         let index = helpers::require_u64(&args, "ref")?;
-        let tab = ops.current_tab()?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let el = resolve_ref(ops, &tab, index)?;
         ops.execute_action(ActionRequest {
             tab_id: tab.target_id.clone(),
@@ -440,6 +457,7 @@ impl DragTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" },
                         "from_ref": { "type": "number", "description": "拖拽起点快照索引 [N]" },
                         "to_ref": { "type": "number", "description": "拖拽终点快照索引 [N]" }
                     },
@@ -465,10 +483,11 @@ impl Tool for DragTool {
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_drag", &self.ctx.session).await?;
-        helpers::reject_unknown(&args, &["from_ref", "to_ref"])?;
+        helpers::reject_unknown(&args, &["tab_id", "from_ref", "to_ref"])?;
+        let tab_id = optional_tab_id(&args)?;
         let from_index = helpers::require_u64(&args, "from_ref")?;
         let to_index = helpers::require_u64(&args, "to_ref")?;
-        let tab = ops.current_tab()?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let from = resolve_ref(ops, &tab, from_index)?;
         let to = resolve_ref(ops, &tab, to_index)?;
         ops.execute_action(ActionRequest {
@@ -502,6 +521,7 @@ impl SelectOptionTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" },
                         "ref": { "type": "number", "description": "快照索引 [N]" },
                         "value": { "type": "string", "description": "选项 value（与 label/index 三选一）" },
                         "label": { "type": "string", "description": "选项 label（未接线，P1）" },
@@ -530,7 +550,8 @@ impl Tool for SelectOptionTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops =
             exec::run_browser_action(tctx, "browser_select_option", &self.ctx.session).await?;
-        helpers::reject_unknown(&args, &["ref", "value", "label", "index"])?;
+        helpers::reject_unknown(&args, &["tab_id", "ref", "value", "label", "index"])?;
+        let tab_id = optional_tab_id(&args)?;
         let index = helpers::require_u64(&args, "ref")?;
         let value = helpers::optional_string(&args, "value")?;
         let label = helpers::optional_string(&args, "label")?;
@@ -561,7 +582,7 @@ impl Tool for SelectOptionTool {
                 ))
             }
         };
-        let tab = ops.current_tab()?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let el = resolve_ref(ops, &tab, index)?;
         ops.execute_action(ActionRequest {
             tab_id: tab.target_id.clone(),
@@ -594,6 +615,7 @@ impl UploadTool {
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "tab_id": { "type": "string", "description": "可选，标签 targetId（缺省 = 当前活动标签）" },
                         "ref": { "type": "number", "description": "快照索引 [N]（文件输入元素）" },
                         "files": { "type": "array", "items": { "type": "string" }, "description": "工作区内文件路径（1..8 个）" }
                     },
@@ -623,7 +645,8 @@ impl Tool for UploadTool {
         if !self.ctx.sensitive.upload {
             return Err(error::capability_disabled("upload"));
         }
-        helpers::reject_unknown(&args, &["ref", "files"])?;
+        helpers::reject_unknown(&args, &["tab_id", "ref", "files"])?;
+        let tab_id = optional_tab_id(&args)?;
         let index = helpers::require_u64(&args, "ref")?;
         let files = helpers::require_string_array(&args, "files")?;
         if files.is_empty() {
@@ -638,7 +661,7 @@ impl Tool for UploadTool {
             helpers::validate_no_control_chars(file, "files")?;
             resolved.push(helpers::resolve_workspace_path(&tctx.workspace_root, file)?);
         }
-        let tab = ops.current_tab()?;
+        let tab = resolve_tab(ops, tab_id.as_deref())?;
         let el = resolve_ref(ops, &tab, index)?;
         // MVP：逐文件执行上传原语（多文件一次 setFileInputFiles 合并为 P1 接线项）
         for path in &resolved {

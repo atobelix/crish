@@ -14,6 +14,7 @@
 //! 错误构造见 `error::unwired`）与剪贴板 2（面板 UI 桥，M-7，P1）。
 
 pub(crate) mod debug;
+pub(crate) mod eval;
 pub(crate) mod interact;
 pub(crate) mod navigate;
 pub(crate) mod sense;
@@ -66,6 +67,9 @@ pub(crate) struct Ctx {
     pub gate: Arc<dyn DomainGate>,
     pub sensitive: crate::SensitiveCapabilities,
     pub budgets: BudgetConfig,
+    /// 标签数量上限（15 文档 §7.3 MAX_TABS 裁决：默认 8，可配 1-16；
+    /// 超限 new_tab 返回 `tool.browser.tab_limit_exceeded`，U-12 码）
+    pub max_tabs: usize,
 }
 
 /// 注册全部 browser_* 工具（幂等：同名重复注册跳过，17 §1.4）。
@@ -94,6 +98,7 @@ pub(crate) fn register_all(registry: &ToolRegistry, ctx: Arc<Ctx>) -> Result<(),
         Arc::new(interact::UploadTool::new(ctx.clone())),
         Arc::new(debug::ConsoleTool::new(ctx.clone())),
         Arc::new(debug::NetworkTool::new(ctx.clone())),
+        Arc::new(eval::EvaluateTool::new(ctx.clone())),
     ];
     for tool in tools {
         if !registry.has(tool.name()) {
@@ -157,5 +162,35 @@ pub(crate) fn resolve_ref(
         None => Err(error::node_gone(format!(
             "快照索引 [{index}] 在当前快照（v{version}）中不存在（元素过期，请重新快照）"
         ))),
+    }
+}
+
+// —— P1 多标签：tab_id（targetId 语义）路由辅助面 ——
+
+/// tab_id 入参校验（targetId 字符串：非空、长度 ≤ 256、无控制字符护栏）。
+pub(crate) fn validate_tab_id(tab_id: &str, what: &str) -> Result<(), ToolError> {
+    if tab_id.is_empty() || tab_id.chars().count() > 256 {
+        return Err(ToolError::invalid_input(format!(
+            "{what} 非法（targetId 非空且 ≤ 256 字符）"
+        )));
+    }
+    crate::helpers::validate_no_control_chars(tab_id, what)
+}
+
+/// 目标标签会话解析（P1 多标签统一入口，15 §7.1）：
+/// - 缺省（None）= 当前活动标签（MVP 语义向后兼容）；
+/// - 指定 tab_id（targetId 语义）= 经会话路由表解析——标签已关闭/未 attach
+///   → `tool.browser.node_gone`（目标过期，14 §5.1 TargetClosed 同源）。
+pub(crate) fn resolve_tab(
+    ops: &dyn SessionOps,
+    tab_id: Option<&str>,
+) -> Result<SessionRef, ToolError> {
+    match tab_id {
+        None => ops.current_tab(),
+        Some(id) => ops.tab_session(id).ok_or_else(|| {
+            error::node_gone(format!(
+                "标签 {id} 不存在或已关闭（请先 browser_list_tabs 确认后重试）"
+            ))
+        }),
     }
 }
