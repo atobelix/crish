@@ -1,11 +1,14 @@
 //! 统一发送层（维度 11 §4：五段管线 幂等→急停→审批→审计→传输）
 //!
 //! ```text
-//! execute(cmd) ──▶ ① 幂等  ② 急停  ③ 审批  ④ 审计(before)  ⑤ 传输+超时  ⑥ 审计(after)
+//! execute(cmd) ──▶ ⓪ 能力集 ① 幂等  ② 急停  ③ 审批  ④ 审计(before)  ⑤ 传输+超时  ⑥ 审计(after)
 //! ```
 //!
 //! - 插桩点 = 唯一函数 `CommandSender::execute`，无旁路（send_page/send_browser
 //!   均构造 Command 走本管线；恢复期 enable 序列属引擎内部流程，直连低层 client）
+//! - ⓪ 能力集（R-12）：attach 会话只读白名单检查（`CommandPolicyHooks::attach_caps`
+//!   注入，默认 None = 不启用）——fail-closed，先于幂等/审批一切阶段，拒绝返回
+//!   `CdpError::CapabilityDenied` + Blocked 审计，不可审批豁免（17 §2.3 红线同级）
 //! - 幂等：sender 层在途合并（同 IdKey 并发共享同一 pending，仅一次 WS 发送）+
 //!   工具层 `hooks::idempotent` 短路（已完成命令缓存）
 //! - 急停：`emergency_stop` 旗置位 → 新命令拒绝；`abort_token` 取消在途
@@ -17,6 +20,7 @@
 
 use crate::cdp::client::CdpClient;
 use crate::cdp::error::{CancelReason, CdpError};
+use crate::cdp::session_caps::ReadonlyCaps;
 use async_trait::async_trait;
 use serde::Serialize;
 use serde_json::Value;
@@ -110,6 +114,12 @@ pub trait CommandPolicyHooks: Send + Sync {
     fn emergency_stop(&self) -> Arc<AtomicBool>;
     /// abort 令牌（用户接管/急停时触发；取消全部在途命令）
     fn abort_token(&self) -> CancellationToken;
+    /// 会话只读能力集（R-12，34 §5.2 E-3）：attach 会话由引擎侧注入，
+    /// 非白名单命令 fail-closed 拒绝（先于幂等/审批一切阶段，不可审批豁免）。
+    /// **默认 None = 不启用**——正常 browser_* 工具面（无 attach 会话）不受影响。
+    fn attach_caps(&self) -> Option<Arc<ReadonlyCaps>> {
+        None
+    }
 }
 
 /// 取消令牌：watch<bool> 自研实现（30 行，零新增依赖；§4.2 注释口径：
@@ -311,8 +321,32 @@ impl CommandSender {
             in_flight: Arc::new(Mutex::new(HashMap::new())),
         }
     }
-    /// 五段管线执行（幂等→急停→审批→审计→传输→审计）。
+    /// 五段管线执行（能力集→幂等→急停→审批→审计→传输→审计）。
     pub async fn execute(&self, cmd: Command) -> Result<Value, CdpError> {
+        // —— ⓪ 会话只读能力集（R-12）：attach 会话白名单检查（fail-closed，
+        //    先于一切阶段——非白名单命令不进入幂等合并/缓存/审批，拒绝不可豁免）——
+        if let Some(caps) = self.hooks.attach_caps() {
+            if !caps.allows_command(&cmd.method) {
+                let view = CdpCommandView {
+                    method: cmd.method.clone(),
+                    session: cmd.session_id.clone().unwrap_or_default(),
+                    target_summary: cmd.summary.clone(),
+                    dangerous: cmd.dangerous,
+                };
+                // Blocked 相位：门禁拦截语义（维度 17 接线，含 attach 能力集拦截面）
+                self.hooks.audit(BrowserAuditEvent {
+                    phase: AuditPhase::Blocked,
+                    cmd: view,
+                    ok: false,
+                    duration_ms: None,
+                    snapshot_version: 0,
+                });
+                return Err(CdpError::CapabilityDenied {
+                    method: cmd.method,
+                });
+            }
+        }
+
         // —— ① 幂等：在途合并（同键并发共享同一 pending，仅一次 WS 发送）——
         let mut guard = None;
         if let Some(key) = cmd.idempotency_key.clone() {
@@ -453,6 +487,8 @@ mod tests {
         stop: Arc<AtomicBool>,
         token: CancellationToken,
         approve_ok: bool,
+        /// 会话只读能力集（R-12）：None = 不启用（默认，正常工具面）
+        caps: Mutex<Option<Arc<ReadonlyCaps>>>,
         idempotent_cached: Mutex<Option<Result<Value, CdpError>>>,
         /// 幂等钩子返回前的延迟（H3 测试用：让并发合并方先订阅在途通道，
         /// 确定性复现「缓存命中 + 在途等待方」时序）
@@ -466,9 +502,16 @@ mod tests {
                 stop: Arc::new(AtomicBool::new(false)),
                 token: CancellationToken::new(),
                 approve_ok,
+                caps: Mutex::new(None),
                 idempotent_cached: Mutex::new(None),
                 cache_delay: Mutex::new(None),
             }
+        }
+        fn set_caps(&self, caps: ReadonlyCaps) {
+            *self
+                .caps
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(caps));
         }
         fn record(&self, step: &str) {
             self.order
@@ -520,6 +563,12 @@ mod tests {
         }
         fn abort_token(&self) -> CancellationToken {
             self.token.clone()
+        }
+        fn attach_caps(&self) -> Option<Arc<ReadonlyCaps>> {
+            self.caps
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone()
         }
     }
 
@@ -711,5 +760,116 @@ mod tests {
             "合并等待方应共享正确结果"
         );
         assert_eq!(mock.commands_seen(), 0, "缓存命中不得发送命令到线上");
+    }
+
+    // ---------- R-12 会话只读能力集（34 §5.2 E-3）管线接线测试 ----------
+
+    /// attach 会话下非白名单命令 fail-closed 拒绝：CapabilityDenied + 零命令发送
+    /// + Blocked 审计（且无 before/after 审计——未进入传输段）。
+    #[tokio::test]
+    async fn sender_attach_caps_denies_non_readonly() {
+        let (mock, client, hooks) = setup(true).await;
+        hooks.set_caps(ReadonlyCaps::mcp_attach_default());
+        let channel: Arc<dyn CommandChannel> = client;
+        let sender = CommandSender::new(channel, hooks.clone());
+
+        for method in [
+            "Runtime.evaluate",         // 求值类（34 §4.3：唯一拦截点）
+            "Input.dispatchMouseEvent", // 交互注入
+            "Network.getAllCookies",    // cookie 全量读取
+            "Page.navigate",            // 导航
+        ] {
+            let err = sender
+                .execute(Command::new(method).params(json!({})))
+                .await
+                .expect_err("attach 会话非白名单命令应被拒绝");
+            assert!(
+                matches!(&err, CdpError::CapabilityDenied { method: m } if m == method),
+                "{method} 应返回 CapabilityDenied，实际 {err:?}"
+            );
+        }
+        assert_eq!(mock.commands_seen(), 0, "拒绝的命令不得发送到线上");
+        let steps = hooks.steps();
+        assert_eq!(
+            steps.iter().filter(|s| s.as_str() == "audit:blocked").count(),
+            4,
+            "每条拒绝应有一条 Blocked 审计，实际 {steps:?}"
+        );
+        assert!(
+            !steps.iter().any(|s| s == "audit:before"),
+            "拒绝后不得有 before 审计，实际 {steps:?}"
+        );
+    }
+
+    /// attach 会话下白名单命令正常放行：Page.captureScreenshot 到达线上并成功。
+    #[tokio::test]
+    async fn sender_attach_caps_allows_readonly() {
+        let (mock, client, hooks) = setup(true).await;
+        mock.set_auto_reply(
+            "Page.captureScreenshot",
+            MockReply::Ok(json!({ "data": "base64" })),
+        );
+        hooks.set_caps(ReadonlyCaps::mcp_attach_default());
+        let channel: Arc<dyn CommandChannel> = client;
+        let sender = CommandSender::new(channel, hooks.clone());
+
+        let result = sender
+            .execute(Command::new("Page.captureScreenshot").params(json!({ "format": "png" })))
+            .await
+            .expect("只读命令应放行");
+        assert_eq!(result["data"], "base64");
+        assert_eq!(mock.commands_seen(), 1, "放行的命令应恰好发送一次");
+        let steps = hooks.steps();
+        assert!(steps.contains(&"audit:before".to_string()), "应有 before 审计");
+        assert!(steps.contains(&"audit:after".to_string()), "应有 after 审计");
+        assert!(!steps.contains(&"audit:blocked".to_string()), "放行命令不得有 Blocked 审计");
+    }
+
+    /// 隔离断言：无能力集注入（默认 None）时正常 browser_* 工具面不受影响——
+    /// Runtime.evaluate 照常发送执行（能力集仅 attach 会话生效）。
+    #[tokio::test]
+    async fn sender_without_caps_normal_tool_surface_unaffected() {
+        let (mock, client, hooks) = setup(true).await;
+        mock.set_auto_reply("Runtime.evaluate", MockReply::Ok(json!({ "result": { "value": 1 } })));
+        // hooks 默认无能力集（RecordingHooks::new 不 set_caps）
+        let channel: Arc<dyn CommandChannel> = client;
+        let sender = CommandSender::new(channel, hooks.clone());
+
+        let result = sender
+            .execute(Command::new("Runtime.evaluate").params(json!({ "expression": "1" })))
+            .await
+            .expect("无能力集时正常面应放行");
+        assert_eq!(result["result"]["value"], 1);
+        assert_eq!(mock.commands_seen(), 1, "命令应到达线上");
+        assert!(
+            !hooks.steps().contains(&"audit:blocked".to_string()),
+            "正常面不得出现能力集拦截审计"
+        );
+    }
+
+    /// 能力集先于审批段：dangerous 非白名单命令被拒且不触发 approve 钩子
+    /// （17 §2.3 默认拒绝面不可审批豁免——红线语义）。
+    #[tokio::test]
+    async fn sender_attach_caps_rejects_before_approval() {
+        let (mock, client, hooks) = setup(true).await;
+        hooks.set_caps(ReadonlyCaps::mcp_attach_default());
+        let channel: Arc<dyn CommandChannel> = client;
+        let sender = CommandSender::new(channel, hooks.clone());
+
+        let err = sender
+            .execute(
+                Command::new("Input.dispatchMouseEvent")
+                    .params(json!({ "type": "mousePressed" }))
+                    .dangerous(),
+            )
+            .await
+            .expect_err("交互注入应被能力集拒绝");
+        assert!(matches!(err, CdpError::CapabilityDenied { .. }));
+        let steps = hooks.steps();
+        assert!(
+            !steps.contains(&"approve".to_string()),
+            "能力集拒绝必须先于审批（不可豁免），实际 {steps:?}"
+        );
+        assert_eq!(mock.commands_seen(), 0, "拒绝的命令不得发送");
     }
 }

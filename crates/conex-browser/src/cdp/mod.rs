@@ -11,6 +11,7 @@ pub mod domains;
 pub mod error;
 pub mod probe;
 pub mod sender;
+pub mod session_caps;
 pub mod transport;
 pub mod types;
 pub mod version;

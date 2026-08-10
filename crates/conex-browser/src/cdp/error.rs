@@ -100,6 +100,13 @@ pub enum CdpError {
     ApprovalDenied {
         reason: String,
     },
+    /// 会话只读能力集拦截（R-12，34 §5.2 E-3）：attach 会话下命令不在只读
+    /// 白名单 → fail-closed 拒绝（维度 17 §2.3 默认拒绝面同级，不可审批豁免，
+    /// 检查先于审批段）。工具层映射 `tool.browser.capability_disabled`
+    /// （conex-types error.rs 已登记，双端口径一致）。
+    CapabilityDenied {
+        method: String,
+    },
     /// 序列化失败（出站信封/参数编码）
     Serialize {
         method: String,
@@ -218,6 +225,10 @@ impl std::fmt::Display for CdpError {
             CdpError::ConnectionLost => write!(f, "CDP 连接已丢失"),
             CdpError::Cancelled { reason } => write!(f, "命令已取消：{reason:?}"),
             CdpError::ApprovalDenied { reason } => write!(f, "审批拒绝：{reason}"),
+            CdpError::CapabilityDenied { method } => write!(
+                f,
+                "会话只读能力集拒绝[{method}]：attach 会话仅授予只读命令域"
+            ),
             CdpError::Serialize { method, message } => write!(f, "序列化失败[{method}]：{message}"),
             CdpError::NotReady(detail) => write!(f, "浏览器恢复中，工具面不可用：{detail}"),
             CdpError::NoActiveTab => write!(f, "无活动标签会话"),

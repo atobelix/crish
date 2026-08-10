@@ -213,6 +213,10 @@ fn map_cdp_error(err: CdpError, method: &str) -> ActionError {
         // 策略不重试）；旧实现误归 ContextGone 白白延迟重试 3 次并掩盖真实错误
         CdpError::Internal { .. } | CdpError::Serialize { .. } => ActionErrorKind::Unsupported,
         CdpError::DomainUnavailable { .. } => ActionErrorKind::Unsupported,
+        // R-12 会话只读能力集拦截（34 §5.2 E-3）：与域名门禁同为维度 17 安全
+        // 拦截面（sender 审计同用 Blocked 相位）——归 GateDenied 类（不重试、
+        // 不升级；工具层映射 tool.browser.capability_disabled）
+        CdpError::CapabilityDenied { .. } => ActionErrorKind::GateDenied,
     };
     ActionError::new(kind, format!("CDP 命令失败[{method}]：{raw}")).with_cdp_raw(raw)
 }

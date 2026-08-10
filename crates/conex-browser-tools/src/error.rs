@@ -109,6 +109,8 @@ pub fn map_cdp_error(method: &str, err: CdpError) -> ToolError {
         CdpError::Cancelled { .. } => browser_codes::TOOL_BROWSER_CANCELLED,
         CdpError::ApprovalDenied { .. } => codes::APPROVAL_REJECTED,
         CdpError::BadParams { .. } | CdpError::Protocol { .. } => codes::TOOL_INVALID_INPUT,
+        // 并行域新增：浏览器能力位拒绝（conex-browser 侧 CapabilityDenied）→ 能力未开启语义
+        CdpError::CapabilityDenied { .. } => browser_codes::TOOL_BROWSER_CAPABILITY_DISABLED,
         CdpError::Timeout { .. }
         | CdpError::Server { .. }
         | CdpError::Internal { .. }
