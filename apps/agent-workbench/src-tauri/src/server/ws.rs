@@ -58,7 +58,7 @@ use conex_types::device::{
     Subscribe, SubscribeAll, SubscribeOk,
 };
 use conex_types::device::version::{
-    EVENT_WINDOW, MAX_FRAME_BYTES, MAX_SUBSCRIPTIONS, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX,
+    EVENT_WINDOW, MAX_SUBSCRIPTIONS, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX,
 };
 use conex_types::events::BackpressureLevel;
 use futures_util::{SinkExt, StreamExt};
@@ -67,7 +67,7 @@ use serde_json::Value;
 use tokio::sync::{mpsc, watch};
 
 use crate::server::fanout::{FanoutError, FanoutReceiver, SubscriptionFilter};
-use crate::server::{ServerError, ServerState, auth, now_ms};
+use crate::server::{ServerError, ServerState, auth, gateway, now_ms};
 
 /// WS 事件端点路径（R1-02 占位登记；R1-05 注册路由）
 pub const WS_EVENTS_PATH: &str = "/v1/events";
@@ -714,9 +714,9 @@ async fn heartbeat_loop(
         let Some(last_frame) = registry.last_frame_at(conn_id) else {
             break;
         };
-        // 半开检测：90s 无任何客户端帧 → 踢出（D2 §10.2；虚拟时钟，
-        // 与 touch 同源）
-        if virtual_now_ms().saturating_sub(last_frame) >= HEARTBEAT_TIMEOUT_MS {
+        // 半开检测：90s 无任何客户端帧 → 踢出（D2 §10.2；超时判定经帧网关
+        // [gateway::read_timeout_exceeded] 纯函数，虚拟时钟与 touch 同源）
+        if gateway::read_timeout_exceeded(last_frame, virtual_now_ms(), HEARTBEAT_TIMEOUT_MS) {
             tracing::warn!(target: "ws", conn_id, "心跳超时（90s 无客户端帧），踢出");
             registry.kick(conn_id, KICK_TIMEOUT);
             break;
@@ -788,8 +788,9 @@ async fn drain_loop(
 
 /// 客户端文本帧处理（消息循环分发）
 async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
-    // 帧大小上限（D3 §6.2：超限断链防内存放大）
-    if text.len() > MAX_FRAME_BYTES {
+    // 帧大小上限（D3 §5.5 / D5 §7.5：超限断链防内存放大；1 MiB 上限经
+    // 帧网关 [gateway::validate_frame_size] 单一事实源判定）
+    if gateway::validate_frame_size(text.len()) != gateway::FrameVerdict::Ok {
         tracing::warn!(target: "ws", conn_id = ctx.conn_id, bytes = text.len(), "帧超 1 MiB 上限");
         let frame = error_frame(
             ctx.conn_id,
@@ -1283,6 +1284,7 @@ mod tests {
     use crate::server::fanout::FanOutEmitter;
     use crate::server::{ServerConfig, ServerHandle, ServerInstance, ServerState, router};
     use crate::server::auth::{TokenStore, sha256_hex};
+    use conex_types::device::version::MAX_FRAME_BYTES;
     use conex_types::device::{
         ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, EventPageParams,
         EventPageResult, ListCommandsResult, ListSessionsParams, ListSessionsResult,

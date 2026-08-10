@@ -16,7 +16,9 @@
 //! - [router]：axum 路由注册（REST /v1/**；WS /v1/events 留 R1-05）；
 //! - [error]：服务错误 → DeviceErrorCode / HTTP 状态映射；
 //! - [ws]：WS 事件端点占位（R1-05 实现）；
-//! - [fanout]：事件扇出（FanOutEmitter + WsBroadcast，R1-01）。
+//! - [fanout]：事件扇出（FanOutEmitter + WsBroadcast，R1-01）；
+//! - [gateway]：帧网关（帧大小 1 MiB / 读超时 10s 纯判定，R1-10）；
+//! - [limiter]：连接限流器（每设备 2 / 总量 8 状态机 + 审计计数，R1-10）。
 //!
 //! 可测试性架构（D2 §4.3）：本模块除 conex-types 外仅 fanout 引用
 //! `crate::core_event_bridge`（实现其 Emitter trait——D2 §11-A 融合点 A
@@ -29,6 +31,8 @@ pub mod config;
 pub mod core_backend;
 pub mod error;
 pub mod fanout;
+pub mod gateway;
+pub mod limiter;
 pub mod pair;
 pub mod pairing;
 pub mod router;
@@ -239,6 +243,9 @@ pub struct ServerState {
     backend: Option<Arc<dyn backend::ApiBackend>>,
     /// WS 连接注册表（R1-05：连接上限 / 踢出 / 订阅管理，D2 §10.5）
     ws_registry: Arc<ws::WsRegistry>,
+    /// 连接限流器（R1-10：D5 §7.2 每设备 2 / 总量 8 并发上限状态机 +
+    /// 审计计数；装配就绪，register 接线待 P0-3 裁决）
+    conn_limiter: Arc<limiter::ConnectionLimiter>,
     /// 事件扇出源（R1-01 FanOutEmitter；未装配 = 广播 drain 不启动，
     /// 订阅/续传/心跳仍可用）
     event_stream: Option<Arc<fanout::FanOutEmitter>>,
@@ -258,6 +265,7 @@ impl ServerState {
             tokens: Arc::new(Mutex::new(tokens)),
             backend,
             ws_registry: Arc::new(ws::WsRegistry::new()),
+            conn_limiter: Arc::new(limiter::ConnectionLimiter::new()),
             event_stream: None,
             started_at_ms: now_ms(),
         }
@@ -294,6 +302,15 @@ impl ServerState {
     /// 经 [ws::WsRegistry::kick_by_token_hash] 消费）
     pub fn ws_registry(&self) -> Arc<ws::WsRegistry> {
         Arc::clone(&self.ws_registry)
+    }
+
+    /// 连接限流器（R1-10：D5 §7.2 每设备 2 / 总量 8 并发上限；装配就绪，
+    /// 连接建立/注销路径接线待主 Agent 裁决（P0-3 踢旧 vs 每设备 2），
+    /// 测试直接消费）
+    // R1-10 备注：register 接线待裁决——dead_code 静音（测试构建保持检查）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn conn_limiter(&self) -> Arc<limiter::ConnectionLimiter> {
+        Arc::clone(&self.conn_limiter)
     }
 
     /// 事件扇出源（R1-01 FanOutEmitter；None = 未装配，WS 广播推送不可用）
