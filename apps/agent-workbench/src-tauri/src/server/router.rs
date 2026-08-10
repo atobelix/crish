@@ -1,35 +1,87 @@
 //! axum 路由注册与 handler（D2 §8：REST /v1/**；WS /v1/events 留 R1-05）
 //!
-//! 骨架期路由（R1-02）：
-//! - `GET /v1/info`：免鉴权服务自报（loopback-only 路由可达；D2 §5.1，
-//!   ADR-05 L4 清单 1）；
-//! - `GET /v1/hello`：鉴权握手（D2 §8.2 形状 {serverVersion,
-//!   protocolVersion, serverTimeMs}）——同时充当 Bearer 鉴权中间件的
-//!   验证载体（无令牌 401）；
-//! - 兜底 404：统一 ErrorBody JSON（防幽灵路由，对齐幽灵命令排除纪律）。
+//! 服务面（R1-02）：`GET /v1/info`（免鉴权服务自报）、`GET /v1/hello`
+//! （鉴权握手）+ 兜底 404（统一 ErrorBody JSON，防幽灵路由）。
 //!
-//! R1-03/04 在此追加 T1/T2 路由（状态 / 会话 / 事件分页 / run 控制 /
-//! 审批 / 配置），全部 handler 只依赖 [ServerState] + [ApiBackend] +
-//! conex-types（D2 §4.3 可测试性架构）。
+//! 只读查询面（R1-03 = M6 §4.1 F1 监控域 C01-C10 的 REST 形态）：
+//!
+//! | M6 命令 | REST 路由 | 查询参数 |
+//! |---|---|---|
+//! | getStatus | `GET /v1/status` | —（D2 §8.2 直透；include 聚合预留 P-7）|
+//! | getRunSnapshot | `GET /v1/runs/{id}/snapshot` | sessionId |
+//! | readSessionEvents | `GET /v1/sessions/{id}/events` | afterSequence / maxEvents / direction |
+//! | readRunEvents | `GET /v1/runs/{id}/events` | sessionId / afterSequence / maxEvents |
+//! | listSessions | `GET /v1/sessions` | includeLastMessage |
+//! | listBackgroundTasks | `GET /v1/tasks` | — |
+//! | getTaskOutput | `GET /v1/tasks/{id}/output` | maxLines / afterLine |
+//! | getFlowSnapshot | `GET /v1/sessions/{id}/flow` | — |
+//! | listCommands | `GET /v1/commands` | — |
+//! | getSearchIndex | `GET /v1/search/index` | — |
+//!
+//! 约定：
+//! - 全部只读端点挂 Bearer 鉴权中间件（无令牌 401，D2 §7.1 零信任）；
+//! - 响应 = M6 §10.6.2 各命令 `*Result` 的 camelCase JSON（D2 §8.1
+//!   「命令体直调」：handler 只做参数搬运，语义由契约体与后端保证）；
+//! - 错误 = [ServerError] → HTTP 状态 + ErrorBody（error.rs 映射面）；
+//! - 事件分页契约 = core_query_commands 的 EventPage 语义（afterSequence
+//!   开区间 + maxEvents 夹紧 200/1000，M6 §4.1.3 / D3 §7.5）；
+//! - 查询串手写解析：axum `query` feature 未启用（D2 §6.4 显式 feature
+//!   面不含 query，R1-03 不扩依赖面），语义对齐 serde 宽松解析——未知键
+//!   忽略、重复键取首个、`%XX`/`+` 解码；非法编码/非法值 → cmd.invalid 400。
+
+use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::State,
+    extract::{Path, RawQuery, State},
     http::{StatusCode, Uri},
     middleware,
     response::{IntoResponse, Response},
     routing::get,
     Router,
 };
-use conex_types::device::{DeviceErrorCode, ErrorBody};
+use conex_types::device::commands::{TaskOutputParams, TaskOutputResult};
+use conex_types::device::version::PAGE_SIZE_MAX;
+#[cfg(test)]
+use conex_types::device::version::PAGE_SIZE_DEFAULT;
+use conex_types::device::{
+    DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, FlowSnapshotParams,
+    FlowSnapshotResult, ListCommandsResult, ListSessionsParams, ListSessionsResult,
+    ListTasksParams, ListTasksResult, RunEventsParams, RunSnapshotParams,
+    RunSnapshotResult, SearchIndexResult,
+};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use crate::server::backend::ApiBackend;
 use crate::server::{ServerError, ServerState, now_ms};
 
 /// 服务自报路由（免鉴权）
 pub const INFO_PATH: &str = "/v1/info";
 /// 鉴权握手路由（Bearer 校验）
 pub const HELLO_PATH: &str = "/v1/hello";
+/// C01 状态查询（GET /v1/status）
+pub const STATUS_PATH: &str = "/v1/status";
+/// C02 run 快照（GET /v1/runs/{id}/snapshot）
+pub const RUN_SNAPSHOT_PATH: &str = "/v1/runs/{id}/snapshot";
+/// C03 会话事件分页（GET /v1/sessions/{id}/events；与 WS 续传重放同契约）
+pub const SESSION_EVENTS_PATH: &str = "/v1/sessions/{id}/events";
+/// C04 run 事件分页（GET /v1/runs/{id}/events）
+pub const RUN_EVENTS_PATH: &str = "/v1/runs/{id}/events";
+/// C05 会话列表（GET /v1/sessions）
+pub const SESSIONS_PATH: &str = "/v1/sessions";
+/// C06 后台任务列表（GET /v1/tasks）
+pub const TASKS_PATH: &str = "/v1/tasks";
+/// C07 任务输出补取（GET /v1/tasks/{id}/output）
+pub const TASK_OUTPUT_PATH: &str = "/v1/tasks/{id}/output";
+/// C08 子代理 DAG 概览（GET /v1/sessions/{id}/flow；D2 §8.2 表内标 POST 为
+/// 早期笔误——M6 C08 为只读查询，REST 只读面统一 GET，与 R1-04 写面不冲突）
+pub const SESSION_FLOW_PATH: &str = "/v1/sessions/{id}/flow";
+/// C09 命令清单（GET /v1/commands；core_list_commands 直透）
+pub const COMMANDS_PATH: &str = "/v1/commands";
+/// C10 搜索索引就绪状态（GET /v1/search/index；D2 §8.2 未列，R1-03 新增
+/// 路由，对齐 M6 C10 getSearchIndex 命令名）
+pub const SEARCH_INDEX_PATH: &str = "/v1/search/index";
 
 /// 鉴权握手载荷（GET /v1/hello；D2 §8.2 形状）
 #[derive(Debug, Clone, Serialize)]
@@ -43,19 +95,38 @@ pub struct HelloInfo {
     pub server_time_ms: u64,
 }
 
-/// 构建服务路由（骨架期；R1-03/04 增补 T1/T2 面）
+/// 构建服务路由（R1-03：info/hello + F1 监控域 10 条只读端点；
+/// R1-05：WS /v1/events 挂载）
 pub fn build_router(state: ServerState) -> Router {
     // 免鉴权面（/v1/info；/v1/pair 归 R1-07）
     let info = Router::new().route(INFO_PATH, get(handle_info));
-    // 鉴权面（Bearer 中间件；R1-03/04 的全部 /v1/** 命令路由挂此组）
+    // WS 事件端点（R1-05）：handler 内自鉴权（Bearer 头或 ?token= 双通道，
+    // D2 §10.1）——不进 require_bearer_token 中间件组（浏览器 WS 无法携带
+    // 自定义头，且 401 响应会破坏升级握手语义）
+    let ws_router = Router::new().route(
+        crate::server::ws::WS_EVENTS_PATH,
+        get(crate::server::ws::handle_ws_upgrade),
+    );
+    // 鉴权面（Bearer 中间件；全部只读端点挂此组，D2 §7.1 零信任）
     let protected = Router::new()
         .route(HELLO_PATH, get(handle_hello))
+        .route(STATUS_PATH, get(handle_status))
+        .route(RUN_SNAPSHOT_PATH, get(handle_run_snapshot))
+        .route(SESSION_EVENTS_PATH, get(handle_session_events))
+        .route(RUN_EVENTS_PATH, get(handle_run_events))
+        .route(SESSIONS_PATH, get(handle_list_sessions))
+        .route(TASKS_PATH, get(handle_list_tasks))
+        .route(TASK_OUTPUT_PATH, get(handle_task_output))
+        .route(SESSION_FLOW_PATH, get(handle_flow_snapshot))
+        .route(COMMANDS_PATH, get(handle_list_commands))
+        .route(SEARCH_INDEX_PATH, get(handle_search_index))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::server::auth::require_bearer_token,
         ));
     Router::new()
         .merge(info)
+        .merge(ws_router)
         .merge(protected)
         .fallback(handle_not_found)
         .with_state(state)
@@ -76,23 +147,322 @@ async fn handle_hello(State(state): State<ServerState>) -> Json<HelloInfo> {
     })
 }
 
+/// GET /v1/status：C01 核心状态卡（D2 §8.2「core_get_status 直透」——
+/// 后端返回 M6 C01 裁剪口径的 JSON，REST 层原样透传；include 聚合项
+/// 预留（F1 §6.4 / P-7 首页聚合端点决策，R1-03 不实现））
+async fn handle_status(
+    State(state): State<ServerState>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.get_status().await?))
+}
+
+/// GET /v1/runs/{id}/snapshot：C02 run 快照（sessionId 可选供校验）
+async fn handle_run_snapshot(
+    State(state): State<ServerState>,
+    Path(run_id): Path<String>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<RunSnapshotResult>, ServerError> {
+    let query = QueryParams::parse(raw.as_deref())?;
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .get_run_snapshot(RunSnapshotParams {
+                run_id,
+                session_id: query.get("sessionId").map(str::to_string),
+            })
+            .await?,
+    ))
+}
+
+/// GET /v1/sessions/{id}/events：C03 会话事件分页（EventPage 契约；
+/// afterSequence 开区间游标，maxEvents 缺省 200 夹紧 1000）
+async fn handle_session_events(
+    State(state): State<ServerState>,
+    Path(session_id): Path<String>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<EventPageResult>, ServerError> {
+    let query = QueryParams::parse(raw.as_deref())?;
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .read_session_events(EventPageParams {
+                session_id,
+                after_sequence: query.get_u64("afterSequence")?,
+                // 夹紧语义对齐 core_query_commands::normalize_max_events
+                // （缺省 200、上限 1000，超出截断不报错——契约体优先于
+                // M6 静态错误表，D2 §8.1 原则 1）
+                max_events: query.get_u32("maxEvents")?.map(normalize_max_events),
+                direction: query.get_enum("direction")?,
+            })
+            .await?,
+    ))
+}
+
+/// GET /v1/runs/{id}/events：C04 run 事件分页（按信封 runId 过滤的会话
+/// 事件子集；同 EventPage 游标语义）
+async fn handle_run_events(
+    State(state): State<ServerState>,
+    Path(run_id): Path<String>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<EventPageResult>, ServerError> {
+    let query = QueryParams::parse(raw.as_deref())?;
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .read_run_events(RunEventsParams {
+                run_id,
+                session_id: query.get("sessionId").map(str::to_string),
+                after_sequence: query.get_u64("afterSequence")?,
+                max_events: query.get_u32("maxEvents")?.map(normalize_max_events),
+            })
+            .await?,
+    ))
+}
+
+/// GET /v1/sessions：C05 会话列表（includeLastMessage 携带 ≤80 字符预览）
+async fn handle_list_sessions(
+    State(state): State<ServerState>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<ListSessionsResult>, ServerError> {
+    let query = QueryParams::parse(raw.as_deref())?;
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .list_sessions(ListSessionsParams {
+                include_last_message: query.get_bool("includeLastMessage")?,
+            })
+            .await?,
+    ))
+}
+
+/// GET /v1/tasks：C06 后台任务列表（摘要，不携带输出内容）
+async fn handle_list_tasks(
+    State(state): State<ServerState>,
+) -> Result<Json<ListTasksResult>, ServerError> {
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.list_background_tasks(ListTasksParams {}).await?))
+}
+
+/// GET /v1/tasks/{id}/output：C07 任务输出补取（afterLine 偏移分页）
+async fn handle_task_output(
+    State(state): State<ServerState>,
+    Path(task_id): Path<String>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<TaskOutputResult>, ServerError> {
+    let query = QueryParams::parse(raw.as_deref())?;
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .get_task_output(TaskOutputParams {
+                task_id,
+                max_lines: query.get_u32("maxLines")?,
+                after_line: query.get_u64("afterLine")?,
+            })
+            .await?,
+    ))
+}
+
+/// GET /v1/sessions/{id}/flow：C08 子代理 DAG 概览（行投影，完整消息树
+/// 不下发，D6 §3.3 N8）
+async fn handle_flow_snapshot(
+    State(state): State<ServerState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<FlowSnapshotResult>, ServerError> {
+    let backend = require_backend(&state)?;
+    Ok(Json(
+        backend
+            .get_flow_snapshot(FlowSnapshotParams { session_id })
+            .await?,
+    ))
+}
+
+/// GET /v1/commands：C09 命令清单（manifest 原样透传）
+async fn handle_list_commands(
+    State(state): State<ServerState>,
+) -> Result<Json<ListCommandsResult>, ServerError> {
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.list_commands().await?))
+}
+
+/// GET /v1/search/index：C10 搜索索引就绪状态（ready/state 子集；
+/// core_rebuild_search_index 等写面不在白名单，M6 §4.1.10）
+async fn handle_search_index(
+    State(state): State<ServerState>,
+) -> Result<Json<SearchIndexResult>, ServerError> {
+    let backend = require_backend(&state)?;
+    Ok(Json(backend.get_search_index().await?))
+}
+
 /// 兜底 404（统一 ErrorBody JSON；cmd.not_found）
 async fn handle_not_found(uri: Uri) -> Response {
     let body = ErrorBody::new(DeviceErrorCode::CmdNotFound, format!("路径不存在：{uri}"));
     (StatusCode::NOT_FOUND, Json(body)).into_response()
 }
 
-/// 错误响应（HTTP 状态 + ErrorBody 载荷；R1-03/04 handler 共用）
-// R1-02 备注：R1-03/04 handler 消费——dead_code 静音（测试构建保持检查）
+/// 错误响应（HTTP 状态 + ErrorBody 载荷；与 [ServerError] 的
+/// IntoResponse 同一映射路径，供无需 `?` 传播的场景复用）
+// R1-02 备注：测试与 fallback 消费——dead_code 静音（测试构建保持检查）
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn error_response(err: &ServerError) -> Response {
-    let status =
-        StatusCode::from_u16(err.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    (status, Json(err.error_body())).into_response()
+    err.clone().into_response()
+}
+
+/// 取命令后端（None = 服务未注入 CoreStateBackend → internal 500 诚实
+/// 降级，不 panic；R1-04 在 main.rs 装配面注入）
+fn require_backend(state: &ServerState) -> Result<Arc<dyn ApiBackend>, ServerError> {
+    state
+        .backend()
+        .ok_or_else(|| ServerError::internal("服务命令后端未接线（CoreStateBackend 由 R1-04 注入）"))
+}
+
+/// 归一化 maxEvents：缺省 200，夹紧 [1, 1000]（对齐
+/// core_query_commands::normalize_max_events 语义）
+fn normalize_max_events(max_events: u32) -> u32 {
+    max_events.clamp(1, PAGE_SIZE_MAX)
 }
 
 /// /v1/info 载荷类型别名（wire 形状见 ServerInfo）
 type ServerInfoWire = crate::server::ServerInfo;
+
+/// 轻量查询参数表
+///
+/// axum `query` feature 未启用（D2 §6.4 显式 feature 面），R1-03 不扩依赖
+/// 面，手写解析等价语义：未知键忽略、重复键取首个、`%XX`/`+` 解码；
+/// 非法编码或非法值 → cmd.invalid 400。
+#[derive(Debug, Default)]
+struct QueryParams {
+    pairs: Vec<(String, String)>,
+}
+
+impl QueryParams {
+    /// 解析查询串（`a=1&b=2` 形态；空串/无参 → 空表）
+    fn parse(raw: Option<&str>) -> Result<Self, ServerError> {
+        let mut pairs = Vec::new();
+        if let Some(raw) = raw {
+            for part in raw.split('&') {
+                if part.is_empty() {
+                    continue;
+                }
+                let mut it = part.splitn(2, '=');
+                let key = percent_decode(it.next().unwrap_or_default())?;
+                if key.is_empty() {
+                    continue;
+                }
+                let value = percent_decode(it.next().unwrap_or_default())?;
+                pairs.push((key, value));
+            }
+        }
+        Ok(Self { pairs })
+    }
+
+    /// 取首个值（重复键取首个；未知键 → None）
+    fn get(&self, key: &str) -> Option<&str> {
+        self.pairs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    }
+
+    /// u64 值（非法 → cmd.invalid 400；afterSequence 负值落入此路径）
+    fn get_u64(&self, key: &str) -> Result<Option<u64>, ServerError> {
+        match self.get(key) {
+            None => Ok(None),
+            Some(raw) => raw
+                .parse::<u64>()
+                .map(Some)
+                .map_err(|_| invalid_param(key, raw)),
+        }
+    }
+
+    /// u32 值（非法 → cmd.invalid 400）
+    fn get_u32(&self, key: &str) -> Result<Option<u32>, ServerError> {
+        match self.get(key) {
+            None => Ok(None),
+            Some(raw) => raw
+                .parse::<u32>()
+                .map(Some)
+                .map_err(|_| invalid_param(key, raw)),
+        }
+    }
+
+    /// bool 值（仅接受 true/false 字面量）
+    fn get_bool(&self, key: &str) -> Result<Option<bool>, ServerError> {
+        match self.get(key) {
+            None => Ok(None),
+            Some("true") => Ok(Some(true)),
+            Some("false") => Ok(Some(false)),
+            Some(raw) => Err(invalid_param(key, raw)),
+        }
+    }
+
+    /// 枚举值（经 serde 反序列化，wire 形状由枚举 rename 规则决定——
+    /// 如 direction=forward / include=coreStatus）
+    fn get_enum<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, ServerError> {
+        match self.get(key) {
+            None => Ok(None),
+            Some(raw) => serde_json::from_value(serde_json::Value::String(raw.to_string()))
+                .map(Some)
+                .map_err(|_| invalid_param(key, raw)),
+        }
+    }
+}
+
+/// 查询参数非法（cmd.invalid 400）
+fn invalid_param(key: &str, raw: &str) -> ServerError {
+    ServerError::protocol(
+        DeviceErrorCode::CmdInvalid,
+        format!("查询参数 {key} 非法：{raw}"),
+    )
+}
+
+/// 百分号解码（`+` → 空格；`%XX` → 字节；非法序列/非法 UTF-8 → 400）
+fn percent_decode(input: &str) -> Result<String, ServerError> {
+    let bytes = input.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' => {
+                let Some(hi) = bytes.get(i + 1).and_then(|b| hex_digit(*b)) else {
+                    return Err(invalid_query_encoding(input));
+                };
+                let Some(lo) = bytes.get(i + 2).and_then(|b| hex_digit(*b)) else {
+                    return Err(invalid_query_encoding(input));
+                };
+                out.push((hi << 4) | lo);
+                i += 3;
+            }
+            byte => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).map_err(|_| invalid_query_encoding(input))
+}
+
+/// 十六进制字符值（0-9 / a-f / A-F）
+fn hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// 查询串含非法百分号编码（cmd.invalid 400）
+fn invalid_query_encoding(raw: &str) -> ServerError {
+    ServerError::protocol(
+        DeviceErrorCode::CmdInvalid,
+        format!("查询串含非法百分号编码：{raw}"),
+    )
+}
 
 #[cfg(test)]
 mod tests {
@@ -100,27 +470,373 @@ mod tests {
     use crate::server::auth::{TokenStore, sha256_hex};
     use crate::server::{ServerConfig, ServerHandle};
     use axum::body::Body;
-    use conex_types::device::{RunTaskParams, RunTaskResult};
+    use conex_types::device::{CommandSurface, ManifestEntry, RunTaskParams, RunTaskResult};
+    use conex_types::SessionIndexEntry;
     use tower::ServiceExt;
 
-    /// 测试路由状态（临时目录令牌库 + 空后端）
-    fn test_state() -> ServerState {
+    /// 每测试独立令牌文件序号（并发测试共享同一 pairing.json 会竞态
+    /// tmp rename——auth.rs save 的原子写先例在单进程多线程测试下需
+    /// 每测试唯一路径隔离）
+    static TOKEN_FILE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    /// 测试路由状态（临时目录独立令牌库 + 可选内存后端）
+    fn test_state_with(backend: Option<MockBackend>) -> ServerState {
         let config = ServerConfig::new(std::env::temp_dir());
         let handle = ServerHandle::new(config, "127.0.0.1:0".parse().expect("固定测试地址"));
-        let tokens =
-            TokenStore::new(std::env::temp_dir().join("pairing-router-test.json"));
-        ServerState::new(&handle, tokens, None)
+        let seq = TOKEN_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let tokens = TokenStore::new(
+            std::env::temp_dir().join(format!("pairing-router-test-{seq}.json")),
+        );
+        let backend: Option<Arc<dyn ApiBackend>> =
+            backend.map(|b| Arc::new(b) as Arc<dyn ApiBackend>);
+        ServerState::new(&handle, tokens, backend)
     }
 
-    /// 内存后端（骨架验证：证明 ApiBackend trait 可实现；R1-03 以
-    /// CoreStateBackend 替换）
-    struct MockBackend;
+    /// 无后端路由状态（401 / 未接线 500 测试用）
+    fn test_state() -> ServerState {
+        test_state_with(None)
+    }
+
+    /// 签发测试令牌（鉴权面测试用）
+    fn issue_token(state: &ServerState) -> String {
+        state
+            .tokens()
+            .lock()
+            .unwrap()
+            .issue("test-device", now_ms())
+            .expect("签发必须成功")
+    }
+
+    /// 带 Bearer 令牌的 GET 请求（tower oneshot 驱动）
+    fn authed_get(uri: &str, token: &str) -> axum::http::Request<Body> {
+        axum::http::Request::builder()
+            .uri(uri)
+            .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    /// 读取响应 JSON 载荷
+    async fn json_body(response: axum::response::Response) -> serde_json::Value {
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    /// 测试事件流（sequence 1..=count；sessionId/runId 固定）
+    fn events(count: u64) -> Vec<serde_json::Value> {
+        (1..=count)
+            .map(|seq| {
+                serde_json::json!({
+                    "type": "agent-start",
+                    "sessionId": "s-1",
+                    "sequence": seq,
+                    "schemaVersion": 1,
+                    "runId": "r-1",
+                    "timestamp": "2026-01-01T00:00:00Z",
+                })
+            })
+            .collect()
+    }
+
+    /// 内存后端（router 测试驱动：可编程事件流 + 可编程错误；语义对齐
+    /// core_query_commands 契约体——游标分页 / 未知 id 404 / 错误映射）
+    struct MockBackend {
+        /// 会话事件流（按 sequence 升序；分页契约体）
+        events: Vec<serde_json::Value>,
+        /// 任务输出行（afterLine 偏移分页）
+        lines: Vec<String>,
+        /// 可编程错误（Some → 全部命令方法返回该错误；错误映射测试用）
+        failure: Option<ServerError>,
+    }
+
+    impl MockBackend {
+        /// 默认后端：5 条事件 + 100 行任务输出
+        fn new() -> Self {
+            Self {
+                events: events(5),
+                lines: (0..100).map(|i| format!("line {i}")).collect(),
+                failure: None,
+            }
+        }
+
+        /// 指定事件数的后端（页大小 / 夹紧测试用）
+        fn with_events(count: u64) -> Self {
+            Self {
+                events: events(count),
+                lines: Vec::new(),
+                failure: None,
+            }
+        }
+
+        /// 可编程错误后端（失败路径测试用）
+        fn failing(code: DeviceErrorCode) -> Self {
+            Self {
+                events: Vec::new(),
+                lines: Vec::new(),
+                failure: Some(ServerError::protocol(code, "mock 可编程错误")),
+            }
+        }
+
+        /// 可编程错误短路
+        fn fail(&self) -> Result<(), ServerError> {
+            self.failure.clone().map_or(Ok(()), Err)
+        }
+
+        /// 未知会话 404（对齐 core_read_session_events 的 NotFound 语义）
+        fn not_found(detail: &str) -> ServerError {
+            ServerError::protocol(DeviceErrorCode::CmdNotFound, detail)
+        }
+
+        /// 游标分页（对齐 EventPage 契约：开区间过滤 → 截取 → nextAfter）
+        fn paginate(&self, after: u64, max: usize) -> EventPageResult {
+            let tail: Vec<_> = self
+                .events
+                .iter()
+                .filter(|e| e["sequence"].as_u64().unwrap_or(0) > after)
+                .cloned()
+                .collect();
+            let has_more = tail.len() > max;
+            let page: Vec<_> = tail.into_iter().take(max).collect();
+            let next = page
+                .last()
+                .and_then(|e| e["sequence"].as_u64())
+                .unwrap_or(after);
+            EventPageResult {
+                events: page,
+                next_after_sequence: next,
+                has_more,
+                latest_sequence: Some(
+                    self.events
+                        .last()
+                        .and_then(|e| e["sequence"].as_u64())
+                        .unwrap_or(0),
+                ),
+            }
+        }
+    }
 
     #[async_trait::async_trait]
-    impl crate::server::backend::ApiBackend for MockBackend {
+    impl ApiBackend for MockBackend {
         async fn get_status(&self) -> Result<serde_json::Value, ServerError> {
-            Ok(serde_json::json!({ "initialized": true }))
+            self.fail()?;
+            Ok(serde_json::json!({
+                "initialized": true,
+                "version": "1.4.2-test",
+                "engineReady": true,
+                "dbReady": true,
+                "searchIndexReady": true,
+                "compactionReady": false,
+                "providerStatus": {
+                    "hasApiKey": true,
+                    "model": "deepseek-v4",
+                    "credentialMode": "direct",
+                },
+                "logLevel": "info",
+                "restore": {
+                    "state": "done",
+                    "mode": "snapshot-incremental",
+                    "interruptedCount": 0,
+                },
+                "backgroundTasks": {
+                    "activeCount": 1,
+                    "daemonCount": 1,
+                },
+                "activeRuns": [
+                    { "runId": "r-1", "sessionId": "s-1", "status": "running" }
+                ],
+                "pendingApprovals": [
+                    {
+                        "toolCallId": "tc-9",
+                        "toolName": "shell:write",
+                        "runId": "r-1",
+                        "summary": "npm test 需要执行权限",
+                    }
+                ],
+            }))
         }
+
+        async fn get_run_snapshot(
+            &self,
+            params: RunSnapshotParams,
+        ) -> Result<RunSnapshotResult, ServerError> {
+            self.fail()?;
+            if params.run_id == "r-missing" {
+                return Err(Self::not_found("run not found（mock）"));
+            }
+            Ok(RunSnapshotResult {
+                snapshot: serde_json::json!({
+                    "runId": params.run_id,
+                    "sessionId": "s-1",
+                    "status": "running",
+                    "cursor": 127,
+                    "createdAt": 1_754_700_000_000_i64,
+                    "updatedAt": 1_754_700_030_000_i64,
+                    "endReason": null,
+                    "error": null,
+                    "usage": {
+                        "promptTokens": 2100,
+                        "completionTokens": 1400,
+                        "totalTokens": 3500,
+                        "sampleCount": 3,
+                    },
+                }),
+            })
+        }
+
+        async fn read_session_events(
+            &self,
+            params: EventPageParams,
+        ) -> Result<EventPageResult, ServerError> {
+            self.fail()?;
+            if params.session_id == "s-missing" {
+                return Err(Self::not_found("会话不存在（mock）"));
+            }
+            let after = params.after_sequence.unwrap_or(0);
+            let max = params.max_events.unwrap_or(PAGE_SIZE_DEFAULT) as usize;
+            Ok(self.paginate(after, max))
+        }
+
+        async fn read_run_events(
+            &self,
+            params: RunEventsParams,
+        ) -> Result<EventPageResult, ServerError> {
+            self.fail()?;
+            if params.run_id == "r-missing" {
+                return Err(Self::not_found("run not found（mock）"));
+            }
+            let after = params.after_sequence.unwrap_or(0);
+            let max = params.max_events.unwrap_or(PAGE_SIZE_DEFAULT) as usize;
+            Ok(self.paginate(after, max))
+        }
+
+        async fn list_sessions(
+            &self,
+            _params: ListSessionsParams,
+        ) -> Result<ListSessionsResult, ServerError> {
+            self.fail()?;
+            Ok(ListSessionsResult {
+                sessions: vec![SessionIndexEntry {
+                    id: "s-1".to_string(),
+                    title: "修复登录页 bug".to_string(),
+                    folder: "常规会话".to_string(),
+                    is_pinned: false,
+                    is_archived: false,
+                    branch_parent_id: None,
+                    timestamp: "2026-08-09T08:00:00Z".to_string(),
+                    updated_at: 1_754_700_000_000,
+                    message_count: 42,
+                    pinned_message_ids: None,
+                    engine_cursor: Some(128),
+                    engine_last_run_id: Some("r-1".to_string()),
+                    hydrated_from_engine: Some(true),
+                }],
+            })
+        }
+
+        async fn list_background_tasks(
+            &self,
+            _params: ListTasksParams,
+        ) -> Result<ListTasksResult, ServerError> {
+            self.fail()?;
+            Ok(ListTasksResult {
+                tasks: vec![
+                    serde_json::json!({
+                        "taskId": "t-1",
+                        "command": "npm run build",
+                        "cwd": "C:\\Software\\conex",
+                        "status": "running",
+                        "isDaemon": false,
+                        "startedAt": 1_754_700_000_000_i64,
+                        "exitCode": null,
+                        "lineCount": 42,
+                    }),
+                    serde_json::json!({
+                        "taskId": "t-2",
+                        "command": "npm test",
+                        "cwd": "C:\\Software\\conex",
+                        "status": "completed",
+                        "isDaemon": false,
+                        "startedAt": 1_754_600_000_000_i64,
+                        "exitCode": 0,
+                        "lineCount": 128,
+                    }),
+                ],
+            })
+        }
+
+        async fn get_task_output(
+            &self,
+            params: TaskOutputParams,
+        ) -> Result<TaskOutputResult, ServerError> {
+            self.fail()?;
+            if params.task_id == "t-missing" {
+                return Err(Self::not_found("任务不存在（mock）"));
+            }
+            let after = params.after_line.unwrap_or(0) as usize;
+            let max = params.max_lines.unwrap_or(PAGE_SIZE_DEFAULT) as usize;
+            let page: Vec<String> = self.lines.iter().skip(after).take(max).cloned().collect();
+            let next = (after + page.len()) as u64;
+            let has_more = (after + page.len()) < self.lines.len();
+            Ok(TaskOutputResult {
+                lines: page,
+                truncated: has_more,
+                line_count: self.lines.len() as u64,
+                next_after_line: Some(next),
+                has_more: Some(has_more),
+            })
+        }
+
+        async fn get_flow_snapshot(
+            &self,
+            params: FlowSnapshotParams,
+        ) -> Result<FlowSnapshotResult, ServerError> {
+            self.fail()?;
+            if params.session_id == "s-missing" {
+                return Err(Self::not_found("会话不存在（mock）"));
+            }
+            Ok(FlowSnapshotResult {
+                flow: serde_json::json!({
+                    "flowDeclaration": { "id": "f-1" },
+                    "flowState": { "phase": "running" },
+                    "agents": [
+                        {
+                            "agentId": "sub-3",
+                            "status": "running",
+                            "description": "调研",
+                            "summary": null,
+                            "depth": 1,
+                        }
+                    ],
+                }),
+            })
+        }
+
+        async fn list_commands(&self) -> Result<ListCommandsResult, ServerError> {
+            self.fail()?;
+            Ok(ListCommandsResult {
+                contract_version: "1.0.0".to_string(),
+                commands: vec![ManifestEntry {
+                    name: "core_get_status".to_string(),
+                    family: "core".to_string(),
+                    surface: CommandSurface::Engine,
+                    registered: true,
+                }],
+            })
+        }
+
+        async fn get_search_index(&self) -> Result<SearchIndexResult, ServerError> {
+            self.fail()?;
+            Ok(SearchIndexResult {
+                ready: true,
+                state: Some(serde_json::json!({
+                    "totalFiles": 1200,
+                    "lastBuiltAt": 1_754_600_000_000_i64,
+                })),
+            })
+        }
+
         async fn run_task(
             &self,
             _params: RunTaskParams,
@@ -151,29 +867,6 @@ mod tests {
         ) -> Result<conex_types::device::ApproveResult, ServerError> {
             Err(ServerError::internal("未接线（R1-04）"))
         }
-        async fn list_sessions(
-            &self,
-            _params: conex_types::device::ListSessionsParams,
-        ) -> Result<conex_types::device::ListSessionsResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-03）"))
-        }
-        async fn read_session_events(
-            &self,
-            _params: conex_types::device::EventPageParams,
-        ) -> Result<conex_types::device::EventPageResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-03）"))
-        }
-        async fn get_run_snapshot(
-            &self,
-            _params: conex_types::device::RunSnapshotParams,
-        ) -> Result<conex_types::device::RunSnapshotResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-03）"))
-        }
-        async fn list_commands(
-            &self,
-        ) -> Result<conex_types::device::ListCommandsResult, ServerError> {
-            Err(ServerError::internal("未接线（R1-03）"))
-        }
     }
 
     #[test]
@@ -182,11 +875,13 @@ mod tests {
             ServerConfig::new(std::env::temp_dir()),
             "127.0.0.1:0".parse().unwrap(),
         );
-        let backend: Option<std::sync::Arc<dyn crate::server::backend::ApiBackend>> =
-            Some(std::sync::Arc::new(MockBackend));
+        let backend: Option<Arc<dyn crate::server::backend::ApiBackend>> =
+            Some(Arc::new(MockBackend::new()));
         let state = ServerState::new(
             &handle,
-            TokenStore::new(std::env::temp_dir().join("pairing-router-test.json")),
+            TokenStore::new(
+                std::env::temp_dir().join("pairing-router-inject-test.json"),
+            ),
             backend,
         );
         assert!(state.backend().is_some(), "backend 注入后应可读取");
@@ -245,12 +940,7 @@ mod tests {
     #[tokio::test]
     async fn hello_with_valid_token_succeeds() {
         let state = test_state();
-        let raw = state
-            .tokens()
-            .lock()
-            .unwrap()
-            .issue("test-device", now_ms())
-            .expect("签发必须成功");
+        let raw = issue_token(&state);
         let app = build_router(state);
         let response = app
             .oneshot(
@@ -275,12 +965,7 @@ mod tests {
     #[tokio::test]
     async fn hello_with_revoked_token_is_401() {
         let state = test_state();
-        let raw = state
-            .tokens()
-            .lock()
-            .unwrap()
-            .issue("test-device", now_ms())
-            .expect("签发必须成功");
+        let raw = issue_token(&state);
         let hash = sha256_hex(raw.as_bytes());
         assert!(state.tokens().lock().unwrap().revoke(&hash));
         let app = build_router(state);
@@ -346,5 +1031,470 @@ mod tests {
             "配对码已过期",
         ));
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: ErrorBody = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body.code, DeviceErrorCode::PairExpired);
+    }
+
+    // ── R1-03 只读面：鉴权 ──
+
+    /// 全部 10 条只读端点无令牌必须 401（D2 §7.1 零信任）
+    #[tokio::test]
+    async fn all_read_endpoints_require_token() {
+        let app = build_router(test_state());
+        for (path, label) in [
+            (STATUS_PATH, "status"),
+            (RUN_SNAPSHOT_PATH, "run snapshot"),
+            (RUN_EVENTS_PATH, "run events"),
+            (SESSIONS_PATH, "sessions"),
+            (SESSION_EVENTS_PATH, "session events"),
+            (SESSION_FLOW_PATH, "session flow"),
+            (TASKS_PATH, "tasks"),
+            (TASK_OUTPUT_PATH, "task output"),
+            (COMMANDS_PATH, "commands"),
+            (SEARCH_INDEX_PATH, "search index"),
+        ] {
+            // 路径参数用具体值（{id} 段占位符不可直接请求）
+            let uri = path
+                .replace("{id}", "x-1")
+                .replace("{sessionId}", "s-1")
+                .replace("{runId}", "r-1")
+                .replace("{taskId}", "t-1");
+            let response = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(&uri)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::UNAUTHORIZED,
+                "{label}（{uri}）无令牌必须 401"
+            );
+        }
+    }
+
+    // ── R1-03 只读面：C01 状态 ──
+
+    #[tokio::test]
+    async fn status_endpoint_returns_m6_subset() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/status", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["initialized"], true);
+        assert_eq!(body["engineReady"], true);
+        assert_eq!(body["providerStatus"]["model"], "deepseek-v4");
+        assert_eq!(body["restore"]["state"], "done");
+        assert_eq!(body["activeRuns"][0]["runId"], "r-1");
+        assert_eq!(body["pendingApprovals"][0]["toolCallId"], "tc-9");
+    }
+
+    #[tokio::test]
+    async fn query_params_are_percent_decoded() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // %2D = '-'（编码后的查询值仍应正确解码 → 200 而非 400）
+        let response = app
+            .clone()
+            .oneshot(authed_get("/v1/runs/r-1/snapshot?sessionId=s%2D1", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        // 非法百分号编码 → cmd.invalid 400
+        let response = app
+            .oneshot(authed_get("/v1/runs/r-1/snapshot?sessionId=s%ZZ1", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.invalid");
+    }
+
+    // ── R1-03 只读面：C02 run 快照 ──
+
+    #[tokio::test]
+    async fn run_snapshot_endpoint_returns_snapshot() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/runs/r-1/snapshot?sessionId=s-1", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["snapshot"]["runId"], "r-1");
+        assert_eq!(body["snapshot"]["status"], "running");
+        assert_eq!(body["snapshot"]["cursor"], 127);
+        assert_eq!(body["snapshot"]["usage"]["sampleCount"], 3);
+    }
+
+    #[tokio::test]
+    async fn run_snapshot_unknown_run_is_404() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/runs/r-missing/snapshot", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.not_found");
+    }
+
+    // ── R1-03 只读面：C03 会话事件分页（游标契约核心）──
+
+    #[tokio::test]
+    async fn session_events_cursor_pagination_forward() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // afterSequence=2 开区间 + maxEvents=2 → 取 [3,4]，hasMore
+        let response = app
+            .oneshot(authed_get("/v1/sessions/s-1/events?afterSequence=2&maxEvents=2", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["events"].as_array().unwrap().len(), 2);
+        assert_eq!(body["events"][0]["sequence"], 3);
+        assert_eq!(body["events"][1]["sequence"], 4);
+        assert_eq!(body["nextAfterSequence"], 4);
+        assert_eq!(body["hasMore"], true);
+        assert_eq!(body["latestSequence"], 5);
+    }
+
+    #[tokio::test]
+    async fn session_events_next_page_terminates() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/sessions/s-1/events?afterSequence=4&maxEvents=10", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["events"].as_array().unwrap().len(), 1);
+        assert_eq!(body["events"][0]["sequence"], 5);
+        assert_eq!(body["nextAfterSequence"], 5);
+        assert_eq!(body["hasMore"], false);
+    }
+
+    #[tokio::test]
+    async fn session_events_default_page_size_200() {
+        let state = test_state_with(Some(MockBackend::with_events(250)));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // 缺省 maxEvents = 200（对齐 EventPage 契约）
+        let response = app
+            .oneshot(authed_get("/v1/sessions/s-1/events", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["events"].as_array().unwrap().len(), 200);
+        assert_eq!(body["hasMore"], true);
+    }
+
+    #[tokio::test]
+    async fn session_events_max_events_clamped_to_1000() {
+        let state = test_state_with(Some(MockBackend::with_events(1500)));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // maxEvents=10000 夹紧到 1000（对齐 normalize_max_events，不报错）
+        let response = app
+            .oneshot(authed_get("/v1/sessions/s-1/events?maxEvents=10000", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["events"].as_array().unwrap().len(), 1000);
+        assert_eq!(body["hasMore"], true);
+    }
+
+    #[tokio::test]
+    async fn session_events_empty_page_keeps_cursor() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // 游标越过尾部 → 空页，nextAfterSequence 保持入参（对齐 EventPage）
+        let response = app
+            .oneshot(authed_get("/v1/sessions/s-1/events?afterSequence=99", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["events"].as_array().unwrap().len(), 0);
+        assert_eq!(body["nextAfterSequence"], 99);
+        assert_eq!(body["hasMore"], false);
+    }
+
+    #[tokio::test]
+    async fn session_events_unknown_session_is_404() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/sessions/s-missing/events", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.not_found");
+    }
+
+    #[tokio::test]
+    async fn session_events_invalid_params_are_400() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        for (uri, label) in [
+            ("/v1/sessions/s-1/events?afterSequence=abc", "afterSequence 非数字"),
+            ("/v1/sessions/s-1/events?afterSequence=-5", "afterSequence 负值"),
+            ("/v1/sessions/s-1/events?maxEvents=-5", "maxEvents 负值"),
+            ("/v1/sessions/s-1/events?direction=sideways", "direction 非法"),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(authed_get(uri, &token))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{label} 必须 400");
+            let body = json_body(response).await;
+            assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
+        }
+    }
+
+    // ── R1-03 只读面：C04 run 事件分页 ──
+
+    #[tokio::test]
+    async fn run_events_endpoint_paginates_by_cursor() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .clone()
+            .oneshot(authed_get("/v1/runs/r-1/events?afterSequence=0&maxEvents=3", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["events"].as_array().unwrap().len(), 3);
+        assert_eq!(body["nextAfterSequence"], 3);
+        assert_eq!(body["hasMore"], true);
+        // 未知 run → 404（对齐 core_read_run_events NotFound 语义）
+        let response = app
+            .oneshot(authed_get("/v1/runs/r-missing/events", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.not_found");
+    }
+
+    // ── R1-03 只读面：C05 会话列表 ──
+
+    #[tokio::test]
+    async fn list_sessions_endpoint_returns_index() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/sessions?includeLastMessage=true", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["sessions"][0]["id"], "s-1");
+        assert_eq!(body["sessions"][0]["title"], "修复登录页 bug");
+        assert_eq!(body["sessions"][0]["messageCount"], 42);
+        assert_eq!(body["sessions"][0]["engineCursor"], 128);
+    }
+
+    // ── R1-03 只读面：C06 后台任务列表 ──
+
+    #[tokio::test]
+    async fn list_tasks_endpoint_returns_summary() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/tasks", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["tasks"].as_array().unwrap().len(), 2);
+        assert_eq!(body["tasks"][0]["taskId"], "t-1");
+        assert_eq!(body["tasks"][0]["status"], "running");
+        assert_eq!(body["tasks"][1]["status"], "completed");
+        assert!(body["tasks"][0].get("output").is_none(), "列表不携带输出内容");
+    }
+
+    // ── R1-03 只读面：C07 任务输出补取 ──
+
+    #[tokio::test]
+    async fn task_output_endpoint_paginates_lines() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        // afterLine 偏移分页
+        let response = app
+            .clone()
+            .oneshot(authed_get("/v1/tasks/t-1/output?maxLines=10&afterLine=5", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["lines"].as_array().unwrap().len(), 10);
+        assert_eq!(body["lines"][0], "line 5");
+        assert_eq!(body["lines"][9], "line 14");
+        assert_eq!(body["lineCount"], 100);
+        assert_eq!(body["nextAfterLine"], 15);
+        assert_eq!(body["hasMore"], true);
+        assert_eq!(body["truncated"], true);
+        // 缺省整页（maxLines 缺省 200 > 100 行 → 全部 + 无更多）
+        let response = app
+            .oneshot(authed_get("/v1/tasks/t-1/output", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["lines"].as_array().unwrap().len(), 100);
+        assert_eq!(body["hasMore"], false);
+    }
+
+    #[tokio::test]
+    async fn task_output_unknown_task_is_404() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/tasks/t-missing/output", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.not_found");
+    }
+
+    // ── R1-03 只读面：C08 流程快照 ──
+
+    #[tokio::test]
+    async fn flow_snapshot_endpoint_returns_dag_summary() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .clone()
+            .oneshot(authed_get("/v1/sessions/s-1/flow", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["flow"]["agents"][0]["agentId"], "sub-3");
+        assert_eq!(body["flow"]["agents"][0]["status"], "running");
+        // 未知会话 → 404
+        let response = app
+            .oneshot(authed_get("/v1/sessions/s-missing/flow", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.not_found");
+    }
+
+    // ── R1-03 只读面：C09 命令清单 ──
+
+    #[tokio::test]
+    async fn list_commands_endpoint_returns_manifest() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/commands", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["contractVersion"], "1.0.0");
+        assert_eq!(body["commands"][0]["name"], "core_get_status");
+        assert_eq!(body["commands"][0]["surface"], "engine");
+        assert_eq!(body["commands"][0]["registered"], true);
+    }
+
+    // ── R1-03 只读面：C10 搜索索引状态 ──
+
+    #[tokio::test]
+    async fn search_index_endpoint_returns_ready_state() {
+        let state = test_state_with(Some(MockBackend::new()));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/search/index", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["ready"], true);
+        assert_eq!(body["state"]["totalFiles"], 1200);
+    }
+
+    // ── R1-03 只读面：错误映射 ──
+
+    #[tokio::test]
+    async fn backend_not_wired_returns_500_internal() {
+        let state = test_state();
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/status", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "internal");
+    }
+
+    #[tokio::test]
+    async fn failing_backend_maps_http_status_by_code_domain() {
+        let state = test_state_with(Some(MockBackend::failing(DeviceErrorCode::Internal)));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .clone()
+            .oneshot(authed_get("/v1/sessions", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "internal");
+
+        // engine 未就绪 → 409（D2 §8.1.2 映射）
+        let state = test_state_with(Some(MockBackend::failing(DeviceErrorCode::CmdEngineNotReady)));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_get("/v1/status", &token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.engine_not_ready");
     }
 }

@@ -1326,6 +1326,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-rustls",
+ "tokio-tungstenite 0.29.0",
  "tower",
  "tracing",
  "url",

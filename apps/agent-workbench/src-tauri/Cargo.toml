@@ -99,6 +99,9 @@ tempfile = "3"
 # 服务路由测试（R1-02）：axum Router oneshot（tower util feature；tower
 # 0.5 已在锁文件，不新增版本）
 tower = { version = "0.5", features = ["util"] }
+# WS 集成测试客户端（R1-05）：版本与 axum 0.8 的 ws feature 内置
+# tokio-tungstenite 0.29 对齐（锁文件已有条目，零新增锁版本）
+tokio-tungstenite = "0.29"
 
 # G5 豁免登记（2026-08-03）：conex-fs 为 01 方案 S3 同轮新建的删除接管 crate，
 # 删除工具接线中（trash_list/trash_restore），本壳将立即使用，暂不算未用。

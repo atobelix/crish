@@ -15,15 +15,19 @@
 //!   直调既有 *_impl 契约体）；
 //! - [router]：axum 路由注册（REST /v1/**；WS /v1/events 留 R1-05）；
 //! - [error]：服务错误 → DeviceErrorCode / HTTP 状态映射；
-//! - [ws]：WS 事件端点占位（R1-05 实现）。
+//! - [ws]：WS 事件端点占位（R1-05 实现）；
+//! - [fanout]：事件扇出（FanOutEmitter + WsBroadcast，R1-01）。
 //!
-//! 可测试性架构（D2 §4.3）：本模块除 conex-types 外不引用任何
-//! crate:: 内部模块——router 测试经 tower oneshot 驱动（无 Tauri 环境）。
+//! 可测试性架构（D2 §4.3）：本模块除 conex-types 外仅 fanout 引用
+//! `crate::core_event_bridge`（实现其 Emitter trait——D2 §11-A 融合点 A
+//! 的既定例外，其余模块零 crate:: 内部引用；router 测试经 tower
+//! oneshot 驱动（无 Tauri 环境）。
 
 pub mod auth;
 pub mod backend;
 pub mod config;
 pub mod error;
+pub mod fanout;
 pub mod pair;
 pub mod router;
 pub mod ws;
@@ -221,8 +225,8 @@ impl ServerInstance {
 }
 
 /// axum 路由共享状态（D2 §4.2「ServerState」：端口 / 绑定 / 令牌表 /
-/// 后端句柄；服务状态自持，不进 app.manage——main.rs 仅注入
-/// [ServerHandle] 供退出钩子关停）
+/// 后端句柄 / WS 连接注册表 / 事件流源；服务状态自持，不进 app.manage——
+/// main.rs 仅注入 [ServerHandle] 供退出钩子关停）
 #[derive(Clone)]
 pub struct ServerState {
     config: ServerConfig,
@@ -231,6 +235,11 @@ pub struct ServerState {
     // R1-02 备注：R1-03 CoreStateBackend 注入——dead_code 静音
     #[cfg_attr(not(test), allow(dead_code))]
     backend: Option<Arc<dyn backend::ApiBackend>>,
+    /// WS 连接注册表（R1-05：连接上限 / 踢出 / 订阅管理，D2 §10.5）
+    ws_registry: Arc<ws::WsRegistry>,
+    /// 事件扇出源（R1-01 FanOutEmitter；未装配 = 广播 drain 不启动，
+    /// 订阅/续传/心跳仍可用）
+    event_stream: Option<Arc<fanout::FanOutEmitter>>,
     started_at_ms: u64,
 }
 
@@ -246,6 +255,8 @@ impl ServerState {
             actual_addr: handle.actual_addr,
             tokens: Arc::new(Mutex::new(tokens)),
             backend,
+            ws_registry: Arc::new(ws::WsRegistry::new()),
+            event_stream: None,
             started_at_ms: now_ms(),
         }
     }
@@ -275,6 +286,25 @@ impl ServerState {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn backend(&self) -> Option<Arc<dyn backend::ApiBackend>> {
         self.backend.clone()
+    }
+
+    /// WS 连接注册表（R1-05：连接上限 / 踢出 / 订阅管理；R1-07 撤销全链
+    /// 经 [ws::WsRegistry::kick_by_token_hash] 消费）
+    pub fn ws_registry(&self) -> Arc<ws::WsRegistry> {
+        Arc::clone(&self.ws_registry)
+    }
+
+    /// 事件扇出源（R1-01 FanOutEmitter；None = 未装配，WS 广播推送不可用）
+    pub fn fanout(&self) -> Option<Arc<fanout::FanOutEmitter>> {
+        self.event_stream.clone()
+    }
+
+    /// 注入事件扇出源（R1-01 装配点：main.rs 构造 FanOutEmitter 后注入；
+    /// 测试注入空发射器）
+    // R1-01 备注：main.rs 装配消费——dead_code 静音（测试构建保持检查）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn set_event_stream(&mut self, stream: Option<Arc<fanout::FanOutEmitter>>) {
+        self.event_stream = stream;
     }
 
     /// 服务启动时刻（epoch ms；R1-03 /v1/status 消费）

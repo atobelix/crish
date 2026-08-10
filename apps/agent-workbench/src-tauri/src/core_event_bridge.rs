@@ -16,7 +16,7 @@
 //! 载荷形状：信封 [conex_types::events::AgentEventEnvelope] 序列化为扁平
 //! 顶层 JSON（runId / sequence / schemaVersion 由信封注入，03 §5.3-2/6）。
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use conex_types::events::AgentEventEnvelope;
 
@@ -90,15 +90,59 @@ pub struct EventBridge {
     channel: Arc<str>,
     /// 发射器（Tauri 通道 / 测试替身）
     emitter: Arc<dyn Emitter>,
+    /// 跨端扇出槽（R1-01：可选订阅者；未装配时零开销）
+    fanout: Arc<FanoutSlot>,
+}
+
+/// 跨端扇出槽（内部可变：EventBridge 共享形态下运行期挂接 FanOutEmitter）
+///
+/// 保持本模块「零 crate:: 内部引用」纪律（AA-02：可经 #[path] 独立编译
+/// 测试）：槽位类型为既有 [Emitter] trait 对象，FanOutEmitter
+/// （[crate::server::fanout]）实现该 trait 后在装配点挂入；未挂接（None）
+/// 时 emit_payload 仅多一次判空，服务未启动零开销。
+#[derive(Default)]
+struct FanoutSlot {
+    inner: Mutex<Option<Arc<dyn Emitter>>>,
+}
+
+impl FanoutSlot {
+    /// 读取当前扇出器（无则 None）
+    fn get(&self) -> Option<Arc<dyn Emitter>> {
+        match self.inner.lock() {
+            Ok(slot) => slot.clone(),
+            Err(_) => None,
+        }
+    }
+
+    /// 挂接扇出器（幂等：重复挂接覆盖旧值）
+    // R1-01 备注：装配点（main.rs）接线消费——dead_code 静音
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn set(&self, fanout: Arc<dyn Emitter>) {
+        if let Ok(mut slot) = self.inner.lock() {
+            *slot = Some(fanout);
+        }
+    }
 }
 
 impl EventBridge {
-    /// 新建事件桥（通道名 + 发射器）
+    /// 新建事件桥（通道名 + 发射器；跨端扇出默认未挂接）
     pub fn new(channel: impl Into<String>, emitter: Arc<dyn Emitter>) -> Self {
         Self {
             channel: Arc::from(channel.into()),
             emitter,
+            fanout: Arc::new(FanoutSlot::default()),
         }
+    }
+
+    /// 挂接跨端扇出器（R1-01：FanOutEmitter，见 server/fanout.rs）。
+    ///
+    /// 共享形态（Clone）下运行期挂接：服务装配点（main.rs）构造
+    /// FanOutEmitter 后调用；幂等（重复挂接覆盖旧值）；不挂接时扇出
+    /// 路径零开销（emit_payload 一次判空）。
+    // R1-01 备注：装配点（main.rs）接线消费——dead_code 静音
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn attach_fanout(&self, fanout: Arc<dyn Emitter>) {
+        self.fanout.set(fanout);
     }
 
     /// 序列化信封（缓冲层在入队时即序列化，flush 直接发射字符串，AA-06 P9）
@@ -136,6 +180,11 @@ impl EventBridge {
     /// 顶层 JSON 不做二次包装）
     pub fn emit_payload(&self, payload: &str) -> EmitReport {
         self.emitter.emit(&self.channel, payload);
+        // 跨端扇出（R1-01）：可选订阅者——未挂接（服务未启动）时零开销；
+        // FanOutEmitter 内部按订阅过滤 + 丢帧分级 + 端级背压，失败自兜底
+        if let Some(fanout) = self.fanout.get() {
+            fanout.emit(&self.channel, payload);
+        }
         EmitReport {
             emitted: 1,
             buffered: 0,
@@ -251,5 +300,21 @@ mod tests {
                 dropped: 1,
             }
         );
+    }
+
+    /// 挂接扇出后双通道发射（R1-01：attach_fanout → 扇出侧收到同载荷；
+    /// FanOutEmitter 本身的过滤/分级在 server/fanout.rs 单独测试）
+    #[test]
+    fn attach_fanout_routes_same_payload() {
+        let (bridge, emitter) = recording_bridge();
+        // 扇出侧测试替身（同 RecordingEmitter：attach 面契约 = Emitter trait）
+        let fanout = Arc::new(RecordingEmitter::default());
+        bridge.attach_fanout(Arc::clone(&fanout) as Arc<dyn Emitter>);
+
+        let report = bridge.emit_envelope(&envelope());
+        assert_eq!(report.emitted, 1);
+        assert_eq!(emitter.calls().len(), 1, "原通道照常发射");
+        assert_eq!(fanout.calls().len(), 1, "扇出通道应收到同一条事件");
+        assert_eq!(emitter.calls()[0], fanout.calls()[0], "双通道载荷逐字节一致");
     }
 }
