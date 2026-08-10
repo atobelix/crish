@@ -250,7 +250,6 @@
   color: inherit;
   margin-bottom: var(--space-0_5);
 }
-/* 閺佺顢戞稉宥夌彯娴滎噯绱辨禒鍛瘻.ui-btn / 瀵偓閸忓磭鐡戦幒褌娆㈤懛顏囬煩 hover */
 .ext-row--card:hover {
   background: transparent;
 }
@@ -712,11 +711,6 @@ textarea.settings-dialog-textarea:focus-visible {
   border-color: transparent;
   box-shadow: none;
 }
-.settings-switch:focus-visible,
-.settings-toggle-row input[type="checkbox"]:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring-strong, var(--focus-ring));
-}
 .settings-segment-pill .ui-segment-item:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
@@ -983,25 +977,8 @@ textarea.settings-dialog-textarea:focus-visible {
   align-items: stretch;
 }
 /* 鐠佸墽鐤嗛崘鍛瘻闁筋噯绱伴崷鍡氼潡閻晛鑸伴敍娑滆拫鎼存洘瀵滈柦顔绢洣濮濄垹鍟€閸旂姵寮挎 */
-.settings-pane .ui-btn,
-.settings-pane .ui-btn-sm,
-.settings-pane .models-btn,
 .settings-btn-rect {
   border-radius: var(--radius-xl) !important;
-}
-
-.settings-pane .models-btn:not(.ghost),
-.settings-pane .models-btn:not(.ghost):hover {
-  border: none !important;
-  box-shadow: none !important;
-}
-.settings-pane .ui-btn-ghost {
-  border: none !important;
-  background: transparent;
-}
-.settings-pane .ui-btn-ghost:hover {
-  border: none !important;
-  background: var(--tint-hover) !important;
 }
 .settings-group-label {
   font-size: var(--font-size-xs);
@@ -1012,8 +989,7 @@ textarea.settings-dialog-textarea:focus-visible {
 .settings-chip-btn,
 .settings-rule-preset,
 .sched-settings .sched-preset-chip,
-.settings-list .sched-preset-chip,
-.settings-preset-chip {
+.settings-list .sched-preset-chip {
   writing-mode: horizontal-tb;
   text-orientation: mixed;
   white-space: nowrap;
@@ -1034,8 +1010,7 @@ textarea.settings-dialog-textarea:focus-visible {
 .sched-settings .sched-preset-chip:hover,
 .settings-list .sched-preset-chip:hover,
 .settings-chip:hover,
-.settings-chip-btn:hover,
-.settings-preset-chip:hover {
+.settings-chip-btn:hover {
   background: var(--control-soft-bg-hover, var(--bg-hover));
 }
 /* 缁愬嫬顔旈敍姘嚤锟?閸愬懎顔愮紒褏鐢婚崥?density token */

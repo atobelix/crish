@@ -122,18 +122,6 @@
   border-color: var(--hairline, var(--border-subtle));
 }
 
-/* 开关：token 混色，禁止硬编码；settings-toggle-row 死类已清 */
-:where(html[data-theme="dark"]) .settings-switch {
-  background: color-mix(in srgb, var(--text-tertiary) 45%, var(--bg-tertiary));
-}
-
-:where(html[data-theme="dark"]) .settings-switch:checked {
-  background: var(--accent-green);
-}
-
-:where(html[data-theme="dark"]) .settings-switch::after {
-  background: var(--bg-elevated);
-}
 
 /* highlight.js dark — 全 token 可读对比（浅色 chat-markdown 用偏暗色，此处整体抬亮） */
 :where(html[data-theme="dark"]) .hljs {

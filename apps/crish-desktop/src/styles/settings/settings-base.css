@@ -364,8 +364,6 @@ select.settings-field-input {
 
 /* ============================================================
    Settings Design System v3閿涘牅閲滄禍?閺呴缚鍏橀柌宥堫啎鐠佲槄锟?   閸樼喎鍨敍姘冲垱鐎佃壈鍩呭锕€顕鎰剁幢閸旂喕鍏橀崣浼存姜鐠囧瓨妲戞稊锔肩幢閻樿埖鈧讲澧佃ぐ鎾冲閸婄》绱辩€涙?1閿涙稖顢戞姗€鈧倷锟?   ============================================================ */
-/* 按钮统一说明（T05.5.2）：全局 .ui-btn 体系（shell-polish.css）为设置面板唯一按钮规范；
-   原 6 个 pane 对 ui-btn-secondary/ghost 的 border-color 覆写已删除（基础定义 border:none，覆写不产生渲染效果）。 */
 .settings-pane--modern {
   gap: var(--space-4);
   width: 100%;
@@ -549,12 +547,6 @@ select.settings-field-input {
   text-overflow: ellipsis;
   text-align: right;
 }
-.sched-settings-row .settings-switch {
-  flex-shrink: 0;
-}
-.sched-settings-row .ui-btn {
-  flex-shrink: 0;
-}
 /* 閸忕厧顔愰敍姘灙鐞涖劌鍞村畵灞灸侀弶鑳П閻楀浄绱欓崗鏈电铂妞ょ敻娼伴懟銉ょ矝settings-list 閸栧懓锛欓敍 */
 .settings-list .sched-preset-chips {
   display: flex;
@@ -720,9 +712,6 @@ select.settings-field-input {
   max-width: 168px;
   width: 148px;
 }
-.settings-switch--personalize {
-  flex-shrink: 0;
-}
 .settings-pane--personalize .settings-list-row--clickable:hover {
   background: transparent;
 }
@@ -812,10 +801,6 @@ select.settings-field-input {
   flex: 1 1 120px;
   min-width: 96px;
   max-width: 180px;
-}
-.settings-security-icon-btn.ui-btn {
-  flex-shrink: 0;
-  padding-inline: 6px;
 }
 /* 韫囶偅锟/ 瀹告彃鍘戠拋闈╃窗閸欏厖chips 閸欘垱宕茬悰宀嬬礉瀹革缚鏅堕弽鍥暯娴犲秴宕熺 */
 .settings-list-row--security-chips {
@@ -1189,24 +1174,6 @@ select.settings-field-input {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1_5);
-}
-/* 妫板嫯顔曢懞顖滃閿涙氨顩﹀銏㈢彨閹烘帗鐪界€涙绱遍悽銊︽纯妤傛澹掑鍌涒偓褌鍞!important 閸棗锟 */
-.settings-preset-chips,
-.settings-list-stack-actions {
-  writing-mode: horizontal-tb;
-}
-.settings-list-stack-actions .ui-btn.settings-preset-chip,
-.settings-preset-chip,
-.settings-list-stack-actions .ui-btn {
-  writing-mode: horizontal-tb;
-  white-space: nowrap;
-  height: auto;
-  min-height: var(--control-height-sm);
-  max-width: none;
-  line-height: var(--line-height-compact);
-  text-align: center;
-  word-break: keep-all;
-  overflow-wrap: normal;
 }
 /* ============================================================
    閻劑鍣烘い纰夌窗閸楁洝顢戠€靛棗瀹抽敍鍫滅窗?token 閹槒锟?+ 鐎规矮鐜悰顭掔?   閺佹澘鈧厧褰哥€靛綊锟?tabular-nums閿涙稖顕╅弰搴ょ?title閿涙稒鍨氶崝鐔兼饯锟?/ 闁挎瑨锟?toast
@@ -2357,66 +2324,6 @@ textarea.settings-dialog-textarea:focus-visible {
 .ui-segment--inline {
   width: auto;
   max-width: none;
-}
-/* 娴滃矂鈧绔村鈧崗绛圭窗閸忓疇寤虹挧text-tertiary 濞ｇ柉澹婇敍鍫熺閺嗘鍤滈柅鍌氱安閿涘绱卞锟accent-green閿涙盯鎸抽悽elevated閿涙稑鐦戞惔锔炬殣锟 */
-.settings-switch,
-.settings-toggle-row input[type='checkbox'] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 36px;
-  height: 20px;
-  margin: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-tertiary));
-  border: 1px solid var(--tint-strong);
-  position: relative;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast);
-}
-.settings-switch::after,
-.settings-toggle-row input[type='checkbox']::after {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  top: 2px;
-  left: 2px;
-  transition: transform var(--transition-fast);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
-}
-.settings-switch:checked,
-.settings-toggle-row input[type='checkbox']:checked {
-  background: var(--accent-green);
-  border-color: var(--accent-green);
-}
-.settings-switch:checked::after,
-.settings-toggle-row input[type='checkbox']:checked::after {
-  transform: translateX(16px);
-}
-.settings-switch:focus-visible,
-.settings-toggle-row input[type='checkbox']:focus-visible {
-  outline: 2px solid var(--accent-green-muted);
-  outline-offset: 2px;
-}
-.settings-switch:disabled,
-.settings-toggle-row input[type='checkbox']:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-html[data-theme='dark'] .settings-switch,
-html[data-theme='dark'] .settings-toggle-row input[type='checkbox'] {
-  background: var(--tint-active);
-  border-color: var(--tint-strong);
-}
-html[data-theme='dark'] .settings-switch:checked,
-html[data-theme='dark'] .settings-toggle-row input[type='checkbox']:checked {
-  background: var(--accent-green);
-  border-color: var(--accent-green);
 }
 /* [MIGRATED] .settings-select styles migrated to SettingsSelect.module.css
    （下方 @media 内的 .settings-select 规则仍被 ModelProfileList 消费，保留；标注待确认） */

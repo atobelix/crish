@@ -469,9 +469,6 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   box-shadow: none;
 }
-.settings-pane--rules .ui-btn.danger:hover {
-  color: var(--accent-red);
-}
 
 /* 閸忋劍鏋冨鐟扮湴鏉堟挸 */
 .settings-pane--rules .settings-dialog-textarea,

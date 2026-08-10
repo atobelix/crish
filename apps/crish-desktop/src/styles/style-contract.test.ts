@@ -185,7 +185,7 @@ describe('批次 2 · ② 禁新裸混色（text-primary 基底，ratchet）', (
 });
 
 describe('批次 2 · ③ 禁裸 999px / 裸 99999', () => {
-  const RADIUS_999_BASELINE = 66; // 当前基线（S5 表面族收敛后递减）
+  const RADIUS_999_BASELINE = 62; // 当前基线（S5 表面族收敛后递减）
   const BARE_99999_WHITELIST = ['ChatComposer.module.css']; // autofill hack（R-11）
 
   it(`border-radius: 999px 裸值计数 ≤ ${RADIUS_999_BASELINE}`, () => {
@@ -230,7 +230,7 @@ describe('批次 2 · ⑤ !important ratchet', () => {
   // 基线 633 = 批次 9.1 治理后（settings-base segment 组 12 处 + chat.css 双重
   // border 2 处去除；reduced-motion.css 白名单——R-04 双通道机制性 !important
   // 按 01 方案 S7 口径「保留 reduced-motion 27 处 + 白名单注明」豁免，防误伤）。
-  const IMPORTANT_BASELINE = 633;
+  const IMPORTANT_BASELINE = 626;
   const IMPORTANT_SKIP_FILE_NAMES = ['reduced-motion.css'];
 
   it(`全仓 !important 计数 ≤ ${IMPORTANT_BASELINE}（reduced-motion 白名单）`, () => {

@@ -356,26 +356,6 @@
   min-width: 0;
   max-width: 100%;
 }
-.applyActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  min-width: 0;
-  justify-content: flex-end;
-}
-.applyActions :global(.ui-btn),
-.applyBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  flex: 0 1 auto;
-  min-width: 0;
-  white-space: nowrap;
-  box-sizing: border-box;
-}
 .applyLabel {
   min-width: 0;
   overflow: hidden;
