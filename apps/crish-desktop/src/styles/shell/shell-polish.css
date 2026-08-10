@@ -553,7 +553,7 @@ body {
   height: var(--hairline-width, 1px);
 }
 
-/* 3) Sidebar density闁挎稒宀稿Λ璺ㄦ崉濠靛鈻夋慨?--space-*闁挎稑鐭侀、鎴烆殗濡警鍤犲?--row-height */
+/* 3) Sidebar density：--space-* 与 --row-height 对齐 */
 .crish-sidebar .sidebar-scroll {
   gap: var(--space-1, 4px);
   padding: 0 2px var(--space-2, 6px) 6px !important;
@@ -738,7 +738,7 @@ body {
   min-height: calc(var(--control-height, 32px) + var(--space-2, 6px));
 }
 
-/* 5) focus-visible闁挎稒鑹鹃敍鎾朵沪閸屾稑浠樺ù鐘插缁儤绋夐埀?--focus-ring / --focus-ring-strong */
+/* 5) focus-visible：--focus-ring / --focus-ring-strong 统一 */
 .header-btn:focus-visible,
 .icon-btn:focus-visible,
 .files-nav-btn:focus-visible,

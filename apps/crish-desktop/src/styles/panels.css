@@ -214,7 +214,7 @@
   margin: 0;
   padding: 2px 10px;
   white-space: pre;
-  overflow-x: visible; /* 婵犲﹥鑹炬慨鈺傜閵堝洨鑸堕悗鍦嚀濞呮帡鏁嶅畝鍕級闁稿繐绉甸惁锛勬偘鐏炶偐顏遍柡澶嗗墲閾嗛敓?*/
+  overflow-x: visible; /* 面板头溢出可见（工具条场景）*/
   flex: 1;
   color: var(--text-primary);
   font-weight: var(--font-weight-code, 400);
@@ -228,7 +228,7 @@
   border-radius: 50%;
   animation: spin var(--transition-spin) infinite;
 }
-/* 鐎规悶鍎遍崣鍧楀箺濡娲ｉ悶娑樿嫰閸炴挳鏁嶅顒傛瘓濞戞挴鍋撻柛娆擃棑鐠炪垽宕?*/
+/* 面板折叠态内边距 */
 .tool-row-ico-slot .loading-spinner {
   border-width: 1.5px;
   border-color: color-mix(in srgb, var(--accent-green) 28%, transparent);

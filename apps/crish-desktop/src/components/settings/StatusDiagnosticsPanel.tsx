@@ -160,7 +160,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
    * 重建搜索索引（T-F 06 T2.5 / M7 入口）：调 rustCore.rebuildSearchIndex
    * （core_rebuild_search_index），成功后刷新状态（诚实等待 searchIndexReady
    * 反映重建结果）；失败保留原状态，按钮可重试。组件本地状态，不依赖
-   * DEAD 的 rustCoreStore。
+   * 已退役的 rustCoreStore（批次 5 D8 删除，此处注释随批清理）。
    */
   const handleRebuild = useCallback(async () => {
     if (rebuilding) return;

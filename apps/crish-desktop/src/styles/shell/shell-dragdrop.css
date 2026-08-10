@@ -35,7 +35,7 @@
   background-color: var(--bg-primary);
 }
 
-/* 鈹€鈹€ Drag & Drop Indicators 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ─── Drag & Drop Indicators ─── */
 
 /* The main drop zone indicator (side/top/bottom strips) 鈥?positioned via JS */
 .drop-indicator {
@@ -85,7 +85,7 @@ body.dragging-card * {
   cursor: grabbing !important;
 }
 
-/* 椤舵爮浼氳瘽鏍囩鎷栨嫿锛氫繚鎸?tab 鍙懡涓紙reorder锛夛紝ghost 姘镐笉鎷︽埅 pointer */
+/* 顶部会话标签拖拽：保持 tab 可命中（reorder），ghost 永不拦截 pointer */
 body.topbar-dragging {
   cursor: grabbing !important;
 }
@@ -93,7 +93,7 @@ body.topbar-dragging .topbar-drag-ghost,
 body.topbar-dragging .topbar-drag-ghost * {
   pointer-events: none !important;
 }
-/* 鎷栨嫿涓粛鍏佽鍛戒腑鍏跺畠 session tab锛堝嬁鍏ㄥ眬 none锛?*/
+/* 拖拽中仍允许命中其他 session tab（勿全局 none）*/
 body.topbar-dragging [data-topbar-session-id] {
   pointer-events: auto !important;
 }

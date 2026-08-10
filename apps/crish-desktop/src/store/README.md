@@ -262,3 +262,7 @@ npm run check:desktop         # crish-desktop tsc
 - demo 模式不落盘；持久化见 `initLayoutStorePersistence`。
 - workspace DnD 纯逻辑进 `layoutHelpers`（`findGroupInWorkspace` / `extractCardFromGroup` 等），actions 只编排。
 - 新组件 **禁止** 在 render 中 `useLayoutStore.getState()`；事件回调走 `storeAccess`。
+
+### 连接态真源（R2 收口）
+- `errorStore.connectionStatus` 为连接态唯一真源（D2 合并：useEngineState 的 engineOnline 已删除，投影经 `hooks/useConnectionStatus.ts` 消费，RuntimePanel/三 Section 经 prop 下传）。
+- sessionActions 已拆分：sessionFolderActions / sessionAgentActions 等（批次 5）。
