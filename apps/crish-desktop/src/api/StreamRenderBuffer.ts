@@ -101,6 +101,31 @@ export class StreamRenderBuffer {
     }
   }
 
+  /**
+   * 预算式收口（08-detail 3.1，T2.1）：complete/stop 终态路径专用。
+   *
+   * - 残余 ≤ 2 × maxBytesPerFrame（≈16KB，常态）：同步 force 单帧刷完，
+   *   帧成本有界（数毫秒级 setStreamText + 渲染），无长任务；
+   * - 大残余（异常积压，如 100KB）：markFinal + 普通预算帧循环
+   *   （每帧 ≤ maxBytesPerFrame），isFinal 仅出现在最后一帧——不再
+   *   单帧全量 flush（R-01）。
+   *
+   * 与 flush(force) 的关系：flush(true) 语义保留（force 仍可用），但
+   * complete/stop 路径不再调用它；本方法内部自行管理 final 标记，
+   * 调用方无需再 push('', true)。
+   */
+  flushFinal(): void {
+    this.cancelScheduledFlush();
+    this.markFinal();
+    if (this.bufferedLength() <= this.maxBytesPerFrame * 2) {
+      // 常态：单帧同步刷完（force 有界，≤16KB）
+      this.flushFrame(true);
+    } else {
+      // 大残余：预算分帧；flushFrame 内部对剩余 pending 继续 rAF 调度
+      this.flushFrame(false);
+    }
+  }
+
   /** 重置累积缓冲区，清调度。切会话/新 run 时调用 */
   reset(): void {
     this.cancelScheduledFlush();

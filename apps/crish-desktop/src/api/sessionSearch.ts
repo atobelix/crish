@@ -341,20 +341,40 @@ function matchToolCalls(
   return { hits, score, snippet };
 }
 
-/** 单条消息是否匹配（供消息列表高亮） */
-export function messageMatchesSearch(msg: SessionMessage | null | undefined, query: string): boolean {
+/**
+ * 单条消息是否匹配（预折叠版，T3.1 / R-02 / N4 修复）。
+ *
+ * query 已在调用方 tokenize + normalize 一次（searchMatch useMemo 内），
+ * 逐消息不再重复 NFKC 预处理——N 条消息 × 每帧 = N 次 normalize 的
+ * 每帧成本收敛为 O(增量)。
+ *
+ * @param tokens 预分词 token（tokenizeSearchQuery(query)，空数组 = 不匹配）
+ * @param normQuery 规范化 query（normalizeSearchQuery(query)，供摘录）
+ */
+export function messageMatchesSearchTokens(
+  msg: SessionMessage | null | undefined,
+  tokens: readonly string[],
+  normQuery: string
+): boolean {
   if (!msg) return false;
-  const tokens = tokenizeSearchQuery(query);
   if (!tokens.length) return false;
   if (textMatchesTokens(msg.text, tokens)) return true;
   if (textMatchesTokens(msg.thinking, tokens)) return true;
-  if (matchToolCalls(msg.toolCalls, tokens, normalizeSearchQuery(query)).hits > 0) {
+  if (matchToolCalls(msg.toolCalls, tokens, normQuery).hits > 0) {
     return true;
   }
   for (const b of msg.blocks || []) {
     if (b && b.type === 'text' && textMatchesTokens(b.content, tokens)) return true;
   }
   return false;
+}
+
+/** 单条消息是否匹配查询（包装：内部预折叠；供单次/低频消费方使用） */
+export function messageMatchesSearch(msg: SessionMessage | null | undefined, query: string): boolean {
+  if (!msg) return false;
+  const tokens = tokenizeSearchQuery(query);
+  if (!tokens.length) return false;
+  return messageMatchesSearchTokens(msg, tokens, normalizeSearchQuery(query));
 }
 
 function matchMessage(

@@ -264,12 +264,26 @@ export function useStreamCallbacks(
     let runClosed = false;
     let streamedFullText = '';
     let finalHtmlScheduled = false;
+    /**
+     * complete 收口 drain 标志（T2.2，08-detail 3.2）：
+     * - onComplete 置 draining=true（不置 runClosed），调 flushFinal()；
+     * - drain 期间中间帧照常 setStreamText（UI 以预算节奏自然流完）；
+     * - isFinal 帧到达 → finishComplete()（commit/status/HTML 收口），
+     *   执行后 runClosed=true、draining=false。
+     */
+    let draining = false;
+    /** finishComplete 幂等守卫（drain 无残余时同步调用 + isFinal 帧双路径） */
+    let completed = false;
 
     const scheduleRunFinalHtml = (fullText: string) => {
       if (finalHtmlScheduled) return;
       if (!(fullText || '').trim()) return;
       finalHtmlScheduled = true;
-      scheduleFinalMarkdownHtml(sid, assistantMsgId, fullText);
+      // N6（08-detail 3.3）：fullText 已由 finishComplete 预清理，
+      // helpers 不再二次 strip（预清理文本直接入 HTML 调度）
+      scheduleFinalMarkdownHtml(sid, assistantMsgId, fullText, {
+        preCleaned: true,
+      });
     };
 
     const buffer = new StreamRenderBuffer();
@@ -288,12 +302,21 @@ export function useStreamCallbacks(
     };
 
     buffer.onFrame = (frame) => {
-      if (runClosed && !frame.isFinal) return;
-      if (!assertLive() && !frame.isFinal) return;
+      if (frame.isFinal) {
+        // 收口帧恒落盘：本 run 的 buffer 属主（message id 唯一，新 run 用新 id
+        // 不冲突）；complete 路径（draining）触发 finishComplete 收口，
+        // stop 路径（非 draining）只落盘、收口由 finalizeStopGeneration 自管。
+        setStreamText(sid, assistantMsgId, frame.full);
+        if (draining) finishComplete();
+        return;
+      }
+      // T2.2 drain 帧守卫放宽：complete 分帧 drain 期间中间帧是「最终文本
+      // 增量」，照常 setStreamText（UI 以预算节奏自然流完，无跳跃感）
+      if (runClosed && !draining) return;
+      if (!assertLive() && !draining) return;
       if (myGen !== generationMapRef.current.get(sid)) return;
       // Lightweight store only — avoid immer/session messages ref churn per token.
       setStreamText(sid, assistantMsgId, frame.full);
-      if (myGen !== generationMapRef.current.get(sid)) return;
     };
     buffer.start();
     preloadPublishToolDiffs();
@@ -324,6 +347,261 @@ export function useStreamCallbacks(
       status: 'processing',
       toolCalls: [],
     });
+
+    /**
+     * complete 收口（T2.2 拆分）：isFinal 帧到达（或 drain 无残余）后执行。
+     * 与旧 onComplete 的差异：
+     * - commit 文本来源 = buffer.currentText() 优先（drain 帧被新 run 接管
+     *   丢弃时 getStreamText 可能停在残余前——buffer 始终持有完整全文）；
+     * - recordStreamDiag / checkAndAlertSilentComplete 移出同步主块（微任务，
+     *   主块瘦身，T2.3）；
+     * - scheduleRunFinalHtml 收预清理文本（N6 单次化，helpers 不再二次 strip）。
+     */
+    const finishComplete = () => {
+      if (completed) return;
+      completed = true;
+      // ONE durable commit of final stream text + thinking; clear streaming entry.
+      const committedText = commitStreamToSession(sid, assistantMsgId, {
+        text:
+          buffer.currentText() ||
+          getStreamText(sid, assistantMsgId) ||
+          streamedFullText ||
+          '',
+      });
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      const st = getCompositionRoot().layout.getState();
+      const asst = getSessionById(sid)?.messages.find(
+        (m: SessionMessage) => m.id === assistantMsgId
+      );
+      const lastTool = (asst?.toolCalls || []).findLast(Boolean);
+      const runningLeft = (asst?.toolCalls || []).filter(
+        (t: MessageToolCall) => t.status === 'running'
+      ).length;
+      // T2.3 主块瘦身：diag 移出同步主块（微任务）
+      queueMicrotask(() => {
+        recordStreamDiag({
+          sessionId: sid,
+          runId: localRunId || undefined,
+          scope: 'run-complete',
+          kind: 'complete',
+          message: runningLeft
+            ? `流已收口，但仍有 ${runningLeft} 个工具显示运行中`
+            : '流正常收口',
+          context: {
+            lastTool: lastTool?.name ?? null,
+            lastToolStatus: lastTool?.status ?? null,
+            toolCount: asst?.toolCalls?.length ?? 0,
+            gotRealText,
+            elapsedSec: elapsed,
+          },
+        });
+      });
+      // network 错误收口：不弹空回复横幅（持久条已承载错误），也不清持久条
+      if (!runEndedWithNetworkError) {
+        if (
+          asst &&
+          !gotRealText &&
+          !(asst.text || committedText || '').trim()
+        ) {
+          const hasTools = (asst.toolCalls || []).some(
+            (t: MessageToolCall) =>
+              t.status === 'success' ||
+              t.status === 'error' ||
+              t.status === 'running'
+          );
+          if (!hasTools) {
+            pushRunNotice(
+              {
+                text: '这一轮没有文字回复。若刚改过配置，请检查模型与网络。',
+                kind: 'empty',
+              },
+              6000
+            );
+          } else {
+            dismissTransientRunNotice();
+          }
+        } else if (
+          gotRealText ||
+          (asst?.text || committedText || '').trim()
+        ) {
+          dismissTransientRunNotice();
+        }
+      }
+      const toolPatches = buildTerminalToolPatches(
+        asst?.toolCalls,
+        'complete'
+      );
+      for (const p of toolPatches) {
+        st.updateMessageToolCall(sid, assistantMsgId, p.id, {
+          status: p.status,
+          output: p.output,
+        });
+      }
+      let finalTextForHtml = '';
+      try {
+        const latest = getSessionById(sid)?.messages.find(
+          (m: SessionMessage) => m.id === assistantMsgId
+        );
+        const raw = latest?.text || committedText || streamedFullText || '';
+        const cleaned = stripThoughtPlaceholders(raw);
+        if (cleaned !== raw)
+          st.updateMessageText(sid, assistantMsgId, cleaned);
+        finalTextForHtml = cleaned || raw;
+        const th = latest?.thinking || '';
+        if (th === '正在处理…' || th === '正在思考中...') {
+          thinkingBatcherRef.current?.drop(
+            streamBatchKey(sid, assistantMsgId)
+          );
+          st.updateMessageThinking(sid, assistantMsgId, '');
+        }
+        // T-E 步骤 3（U4）：raw setState → updateMessageTimeline action
+        getCompositionRoot()
+          .layout.getState()
+          .updateMessageTimeline(sid, assistantMsgId);
+      } catch {
+        /* ignore */
+      }
+      // N6 单次化：finalTextForHtml 已预清理，helpers 不再二次 strip
+      scheduleRunFinalHtml(finalTextForHtml);
+      const latestUserMsg = getSessionById(sid)?.messages.find(
+        (m: SessionMessage) => m.id === userMsgId
+      );
+      const latestAssistantMsg = getSessionById(sid)?.messages.find(
+        (m: SessionMessage) => m.id === assistantMsgId
+      );
+      // 只在消息仍处于 processing 时标记完成；error/cancelled 等终态保持原状，
+      // 避免触发 error → completed 这类非法状态转换。
+      if (latestUserMsg?.status === 'processing') {
+        st.setSessionMessageStatus(sid, userMsgId, 'completed');
+      }
+      if (latestAssistantMsg?.status === 'processing') {
+        st.setSessionMessageStatus(
+          sid,
+          assistantMsgId,
+          'completed',
+          elapsed
+        );
+      }
+      // D2-5：终态后检测 silent complete（无 UserView 可见正文/工具）；
+      // T2.3 主块瘦身：移出同步主块（微任务）
+      queueMicrotask(() => {
+        try {
+          const finalizedAsst = getSessionById(sid)?.messages.find(
+            (m: SessionMessage) => m.id === assistantMsgId
+          );
+          checkAndAlertSilentComplete(finalizedAsst, {
+            sessionId: sid,
+            runId: localRunId || undefined,
+            messageId: assistantMsgId,
+          });
+        } catch {
+          /* ignore alert failures */
+        }
+      });
+      // streamManager entry 已在 onComplete 同步释放；generationMap 在此清理
+      //（drain 期间保持，供 myGen 守卫放行中间帧；新 run 只会发生在
+      //  finishComplete 之后，不会覆盖本 run 的 gen）
+      generationMapRef.current.delete(sid);
+      runClosed = true;
+      draining = false;
+      void (async () => {
+        try {
+          const runId = localRunId;
+          let applied = false;
+          const { estimateCostUsd, estimateCostUsd4d, estimateSavingsUsd } =
+            await import('../../api/pricingStore');
+          if (runId) {
+            await new Promise((r) => setTimeout(r, 400));
+            const usage = await fetchRunSnapshotUsage(runId);
+            if (
+              usage &&
+              (usage.sampleCount ?? 0) > 0 &&
+              (usage.promptTokens || usage.completionTokens)
+            ) {
+              const model = getActiveModelId() || 'unknown';
+              const cur = getSettingsState().tokenUsage;
+              // T-47：4D 消费——缓存字段上报时用 estimateCostUsd4d + estimateSavingsUsd
+              //（savedCost = 2D 全价 - 4D 实际价）；缓存缺失回退 2D，不虚报节省
+              const { estimateCost, estimateSavings } =
+                pickUsageCostEstimators(
+                  usage,
+                  {
+                    estimateCostUsd,
+                    estimateCostUsd4d,
+                    estimateSavingsUsd,
+                  },
+                  model
+                );
+              const next = applyUsageDelta(
+                cur,
+                usage,
+                estimateCost,
+                estimateSavings
+              );
+              const dIn = Math.max(0, (next.input || 0) - (cur.input || 0));
+              const dOut = Math.max(
+                0,
+                (next.output || 0) - (cur.output || 0)
+              );
+              const dCost = Math.max(0, (next.cost || 0) - (cur.cost || 0));
+              const dCacheRead = Math.max(
+                0,
+                (next.cacheRead || 0) - (cur.cacheRead || 0)
+              );
+              const dCacheWrite = Math.max(
+                0,
+                (next.cacheWrite || 0) - (cur.cacheWrite || 0)
+              );
+              const dSavedCost = Math.max(
+                0,
+                (next.savedCost || 0) - (cur.savedCost || 0)
+              );
+              // F5 P2 修复：并发增量不丢失——delta 走串行化合并入口，
+              // 不再「读陈旧快照 → 整体替换」（多 run 同刻收尾时后写者
+              // 覆盖先写者、增量丢失）。D4 收敛：历史流水委托内建
+              // （accumulateTokenUsage 单点完成 recordUsageDelta 委托）。
+              accumulateTokenUsage({
+                input: dIn,
+                output: dOut,
+                cost: dCost,
+                model,
+                ...(dCacheRead > 0 ? { cacheRead: dCacheRead } : {}),
+                ...(dCacheWrite > 0 ? { cacheWrite: dCacheWrite } : {}),
+                ...(dSavedCost > 0 ? { savedCost: dSavedCost } : {}),
+              });
+              applied = true;
+            }
+          }
+          if (!applied) {
+            const sess = getSessionById(sid);
+            const userText =
+              sess?.messages.find((m: SessionMessage) => m.id === userMsgId)
+                ?.text || '';
+            const asstText =
+              sess?.messages.find(
+                (m: SessionMessage) => m.id === assistantMsgId
+              )?.text || '';
+            const approxIn = Math.max(1, Math.ceil(userText.length / 4));
+            const approxOut = Math.max(0, Math.ceil(asstText.length / 4));
+            const model = getActiveModelId() || 'unknown';
+            const dCost = estimateCostUsd(model, approxIn, approxOut);
+            // F5 P2 修复：估算兜底路径同样走串行化合并（并发不丢增量）；
+            // D4 收敛：历史流水委托内建（同上，不再并列双写）
+            accumulateTokenUsage({
+              input: approxIn,
+              output: approxOut,
+              cost: dCost,
+              model,
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+      })();
+      if (!maybeContinueGoalMode(sid, assistantMsgId)) {
+        drainQueuedAfterComplete(sid);
+      }
+    };
 
     const queueToolCallPatch = (
       toolId: string,
@@ -651,6 +929,14 @@ export function useStreamCallbacks(
             }
           }
           flushStreamBatchers();
+          // R-11（08-detail T5.4）：error 收口补清理——先预算刷残余帧
+          //（避免残余文本被 gen 守卫丢弃），再按 complete 同语义删 gen
+          //（entry 匹配守卫：被新 run 接管时不误删新 run 的 generationMap）
+          renderBufferRef.current?.flush(false);
+          const errCur = streamManagerRef.current!.get(sid);
+          if (errCur?.assistantMsgId === assistantMsgId) {
+            generationMapRef.current.delete(sid);
+          }
         },
         onComplete: () => {
           if (runClosed) return;
@@ -661,245 +947,25 @@ export function useStreamCallbacks(
             // Replaced by a newer run — that run owns streamingActive; do not clear.
             return;
           }
-          runClosed = true;
+          // T2.2（08-detail 3.2）：drain 标志放宽——不置 runClosed，分帧 drain
+          // 期间中间帧照常 setStreamText（UI 以预算节奏自然流完，无「停一下再出
+          // 最终版」跳跃感）；isFinal 帧到达后由 finishComplete 收口。
+          draining = true;
           markStreamingActive(false);
-
-          buffer.push('', true);
-          buffer.flush(true);
-          flushStreamBatchers();
-          // ONE durable commit of final stream text + thinking; clear streaming entry.
-          const committedText = commitStreamToSession(sid, assistantMsgId, {
-            text:
-              getStreamText(sid, assistantMsgId) ||
-              buffer.currentText() ||
-              streamedFullText ||
-              '',
-          });
-          const elapsed = Math.round((Date.now() - startTime) / 1000);
-          const st = getCompositionRoot().layout.getState();
-          const asst = getSessionById(sid)?.messages.find(
-            (m: SessionMessage) => m.id === assistantMsgId
-          );
-          const lastTool = (asst?.toolCalls || []).findLast(Boolean);
-          const runningLeft = (asst?.toolCalls || []).filter(
-            (t: MessageToolCall) => t.status === 'running'
-          ).length;
-          recordStreamDiag({
-            sessionId: sid,
-            runId: localRunId || undefined,
-            scope: 'run-complete',
-            kind: 'complete',
-            message: runningLeft
-              ? `流已收口，但仍有 ${runningLeft} 个工具显示运行中`
-              : '流正常收口',
-            context: {
-              lastTool: lastTool?.name ?? null,
-              lastToolStatus: lastTool?.status ?? null,
-              toolCount: asst?.toolCalls?.length ?? 0,
-              gotRealText,
-              elapsedSec: elapsed,
-            },
-          });
-          // network 错误收口：不弹空回复横幅（持久条已承载错误），也不清持久条
-          if (!runEndedWithNetworkError) {
-            if (
-              asst &&
-              !gotRealText &&
-              !(asst.text || committedText || '').trim()
-            ) {
-              const hasTools = (asst.toolCalls || []).some(
-                (t: MessageToolCall) =>
-                  t.status === 'success' ||
-                  t.status === 'error' ||
-                  t.status === 'running'
-              );
-              if (!hasTools) {
-                pushRunNotice(
-                  {
-                    text: '这一轮没有文字回复。若刚改过配置，请检查模型与网络。',
-                    kind: 'empty',
-                  },
-                  6000
-                );
-              } else {
-                dismissTransientRunNotice();
-              }
-            } else if (
-              gotRealText ||
-              (asst?.text || committedText || '').trim()
-            ) {
-              dismissTransientRunNotice();
-            }
-          }
-          const toolPatches = buildTerminalToolPatches(
-            asst?.toolCalls,
-            'complete'
-          );
-          for (const p of toolPatches) {
-            st.updateMessageToolCall(sid, assistantMsgId, p.id, {
-              status: p.status,
-              output: p.output,
-            });
-          }
-          let finalTextForHtml = '';
-          try {
-            const latest = getSessionById(sid)?.messages.find(
-              (m: SessionMessage) => m.id === assistantMsgId
-            );
-            const raw = latest?.text || committedText || streamedFullText || '';
-            const cleaned = stripThoughtPlaceholders(raw);
-            if (cleaned !== raw)
-              st.updateMessageText(sid, assistantMsgId, cleaned);
-            finalTextForHtml = cleaned || raw;
-            const th = latest?.thinking || '';
-            if (th === '正在处理…' || th === '正在思考中...') {
-              thinkingBatcherRef.current?.drop(
-                streamBatchKey(sid, assistantMsgId)
-              );
-              st.updateMessageThinking(sid, assistantMsgId, '');
-            }
-            // T-E 步骤 3（U4）：raw setState → updateMessageTimeline action
-            getCompositionRoot()
-              .layout.getState()
-              .updateMessageTimeline(sid, assistantMsgId);
-          } catch {
-            /* ignore */
-          }
-          scheduleRunFinalHtml(finalTextForHtml);
-          const latestUserMsg = getSessionById(sid)?.messages.find(
-            (m: SessionMessage) => m.id === userMsgId
-          );
-          const latestAssistantMsg = getSessionById(sid)?.messages.find(
-            (m: SessionMessage) => m.id === assistantMsgId
-          );
-          // 只在消息仍处于 processing 时标记完成；error/cancelled 等终态保持原状，
-          // 避免触发 error → completed 这类非法状态转换。
-          if (latestUserMsg?.status === 'processing') {
-            st.setSessionMessageStatus(sid, userMsgId, 'completed');
-          }
-          if (latestAssistantMsg?.status === 'processing') {
-            st.setSessionMessageStatus(
-              sid,
-              assistantMsgId,
-              'completed',
-              elapsed
-            );
-          }
-          // D2-5：终态后检测 silent complete（无 UserView 可见正文/工具）；仅 metric + dev warn，不改成功语义
-          try {
-            const finalizedAsst = getSessionById(sid)?.messages.find(
-              (m: SessionMessage) => m.id === assistantMsgId
-            );
-            checkAndAlertSilentComplete(finalizedAsst, {
-              sessionId: sid,
-              runId: localRunId || undefined,
-              messageId: assistantMsgId,
-            });
-          } catch {
-            /* ignore alert failures */
-          }
+          // streamManager entry 同步释放：L1 follow_up 拒绝窗口以 streamManager
+          // 为门，drain 期间新发送可入队不误拒；generationMap 保留到
+          // finishComplete（drain 中间帧需通过 myGen 守卫）。
           const curStream = streamManagerRef.current!.get(sid);
           if (curStream?.assistantMsgId === assistantMsgId) {
             streamManagerRef.current!.delete(sid);
-            generationMapRef.current.delete(sid);
           }
-          void (async () => {
-            try {
-              const runId = localRunId;
-              let applied = false;
-              const { estimateCostUsd, estimateCostUsd4d, estimateSavingsUsd } =
-                await import('../../api/pricingStore');
-              if (runId) {
-                await new Promise((r) => setTimeout(r, 400));
-                const usage = await fetchRunSnapshotUsage(runId);
-                if (
-                  usage &&
-                  (usage.sampleCount ?? 0) > 0 &&
-                  (usage.promptTokens || usage.completionTokens)
-                ) {
-                  const model = getActiveModelId() || 'unknown';
-                  const cur = getSettingsState().tokenUsage;
-                  // T-47：4D 消费——缓存字段上报时用 estimateCostUsd4d + estimateSavingsUsd
-                  //（savedCost = 2D 全价 - 4D 实际价）；缓存缺失回退 2D，不虚报节省
-                  const { estimateCost, estimateSavings } =
-                    pickUsageCostEstimators(
-                      usage,
-                      {
-                        estimateCostUsd,
-                        estimateCostUsd4d,
-                        estimateSavingsUsd,
-                      },
-                      model
-                    );
-                  const next = applyUsageDelta(
-                    cur,
-                    usage,
-                    estimateCost,
-                    estimateSavings
-                  );
-                  const dIn = Math.max(0, (next.input || 0) - (cur.input || 0));
-                  const dOut = Math.max(
-                    0,
-                    (next.output || 0) - (cur.output || 0)
-                  );
-                  const dCost = Math.max(0, (next.cost || 0) - (cur.cost || 0));
-                  const dCacheRead = Math.max(
-                    0,
-                    (next.cacheRead || 0) - (cur.cacheRead || 0)
-                  );
-                  const dCacheWrite = Math.max(
-                    0,
-                    (next.cacheWrite || 0) - (cur.cacheWrite || 0)
-                  );
-                  const dSavedCost = Math.max(
-                    0,
-                    (next.savedCost || 0) - (cur.savedCost || 0)
-                  );
-                  // F5 P2 修复：并发增量不丢失——delta 走串行化合并入口，
-                  // 不再「读陈旧快照 → 整体替换」（多 run 同刻收尾时后写者
-                  // 覆盖先写者、增量丢失）。D4 收敛：历史流水委托内建
-                  // （accumulateTokenUsage 单点完成 recordUsageDelta 委托）。
-                  accumulateTokenUsage({
-                    input: dIn,
-                    output: dOut,
-                    cost: dCost,
-                    model,
-                    ...(dCacheRead > 0 ? { cacheRead: dCacheRead } : {}),
-                    ...(dCacheWrite > 0 ? { cacheWrite: dCacheWrite } : {}),
-                    ...(dSavedCost > 0 ? { savedCost: dSavedCost } : {}),
-                  });
-                  applied = true;
-                }
-              }
-              if (!applied) {
-                const sess = getSessionById(sid);
-                const userText =
-                  sess?.messages.find((m: SessionMessage) => m.id === userMsgId)
-                    ?.text || '';
-                const asstText =
-                  sess?.messages.find(
-                    (m: SessionMessage) => m.id === assistantMsgId
-                  )?.text || '';
-                const approxIn = Math.max(1, Math.ceil(userText.length / 4));
-                const approxOut = Math.max(0, Math.ceil(asstText.length / 4));
-                const model = getActiveModelId() || 'unknown';
-                const dCost = estimateCostUsd(model, approxIn, approxOut);
-                // F5 P2 修复：估算兜底路径同样走串行化合并（并发不丢增量）；
-                // D4 收敛：历史流水委托内建（同上，不再并列双写）
-                accumulateTokenUsage({
-                  input: approxIn,
-                  output: approxOut,
-                  cost: dCost,
-                  model,
-                });
-              }
-            } catch {
-              /* ignore */
-            }
-          })();
-          if (!maybeContinueGoalMode(sid, assistantMsgId)) {
-            drainQueuedAfterComplete(sid);
-          }
+          const hadPending = buffer.bufferedLength() > 0;
+          // 预算式收口（T2.1 flushFinal）：≤2 帧同步刷完（isFinal 帧同步到达 →
+          // finishComplete 同步执行）；大残余走 rAF 预算循环。
+          buffer.flushFinal();
+          flushStreamBatchers();
+          // 无残余：isFinal 帧不会到达 → 同步收口（finishComplete 幂等）
+          if (!hadPending) finishComplete();
         },
       },
       sid,
@@ -935,8 +1001,9 @@ export function useStreamCallbacks(
     generationMapRef.current.delete(sid);
     markStreamingActive(false);
     const stopBuf = renderBufferRef.current;
-    stopBuf?.push('', true);
-    stopBuf?.flush(true);
+    // T2.2：stop 路径走预算式收口（常态 ≤2 帧同步刷完，行为不变；
+    // 大残余分帧，isFinal 帧落盘后收口仍由本函数自管）
+    stopBuf?.flushFinal();
     stopBuf?.stop();
     flushStreamBatchers();
     const st = getCompositionRoot().layout.getState();

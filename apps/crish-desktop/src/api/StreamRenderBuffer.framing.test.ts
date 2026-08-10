@@ -172,6 +172,89 @@ describe('maxBacklogBytes 降级跳帧', () => {
 });
 
 // ──────────────────────────────────────────────
+describe('flushFinal 预算式收口（T2.1，08-detail 3.1）', () => {
+  it('常态（≤2×maxBytesPerFrame）：单帧同步刷完且 isFinal=true', async () => {
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    // 100 ≤ 2×64=128 → 单帧
+    buf.push('x'.repeat(100));
+    buf.flushFinal();
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.delta).toBe('x'.repeat(100));
+    expect(frames[0]!.isFinal).toBe(true);
+    expect(buf.bufferedLength()).toBe(0);
+  });
+
+  it('临界 2×maxBytesPerFrame 恰好单帧收口', async () => {
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.push('y'.repeat(128));
+    buf.flushFinal();
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.delta).toBe('y'.repeat(128));
+    expect(frames[0]!.isFinal).toBe(true);
+  });
+
+  it('大残余（64KB）：预算恒成立，isFinal 仅最后一帧，拼接 = 全文', async () => {
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.push('a'.repeat(64 * 1024));
+    buf.flushFinal();
+    // 大残余路径：flushFrame(false) 已同步出首帧，剩余经 rAF 调度
+    //（测试环境 rAF 为 stub）→ 手动循环刷完
+    while (buf.bufferedLength() > 0) {
+      await buf.flush(false);
+    }
+
+    const allDelta = frames.map((f) => f.delta).join('');
+    expect(allDelta).toBe('a'.repeat(64 * 1024));
+    expect(frames.length).toBeGreaterThan(1);
+    for (const f of frames) {
+      expect(f.delta.length).toBeLessThanOrEqual(64);
+    }
+    // isFinal 仅最后一帧
+    const finalFrames = frames.filter((f) => f.isFinal);
+    expect(finalFrames).toHaveLength(1);
+    expect(finalFrames[0]!).toBe(frames[frames.length - 1]);
+    // 64KB 是 64 的整数倍 → 最后一帧恰好 64B（无残差）
+    expect(frames[frames.length - 1]!.delta).toBe('a'.repeat(64));
+  });
+
+  it('无残余时 flushFinal 不产出帧（幂等，无副作用）', () => {
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.flushFinal();
+    expect(frames).toHaveLength(0);
+    buf.flushFinal();
+    expect(frames).toHaveLength(0);
+  });
+
+  it('flushFinal 后 push 不再接收（final 标记生效）', () => {
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.push('early');
+    buf.flushFinal();
+    buf.push('late');
+    buf.flushFinal();
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.delta).toBe('early');
+  });
+});
+
+// ──────────────────────────────────────────────
 describe('flush(true) 强制', () => {
   it('无视 maxBytesPerFrame 一次性刷完', async () => {
     const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
