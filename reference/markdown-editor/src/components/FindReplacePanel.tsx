@@ -45,6 +45,15 @@ export interface FindReplacePanelProps {
   onGoToMatch: (from: number, to: number) => void;
   /** 批量高亮命中（引擎接线：setSearchRanges——全量替换搜索装饰） */
   onSetHighlights: (ranges: readonly { from: number; to: number }[]) => void;
+  /** P3 B3 替换动作前置回调（plan-A3 §3 顺带修复）：替换当前/全部替换
+   *  在 applyChange 之前调用——面板挂载于引擎根容器内、滚动容器外
+   *  （MarkdownEngine 渲染处），容器 capture flush 监听不触达面板
+   *  keydown：直刷 pending 存在时替换会作用在滞后 store 上（吞掉直刷
+   *  文本）。引擎接线为 flushStreamInternal（提交 pending 后再替换）。
+   *  命中在末行时 B 判定（shouldDirectStream）已保证无 pending，本
+   *  回调空转零开销——末行分支的竞态由 B 覆盖，非末行分支由本回调
+   *  一并闭环。 */
+  onBeforeReplace?: () => void;
   /** 只读模式：禁用替换（搜索/高亮/跳转/计数保留） */
   readOnly?: boolean;
 }
@@ -110,6 +119,7 @@ export const FindReplacePanel: React.FC<FindReplacePanelProps> = ({
   store,
   onGoToMatch,
   onSetHighlights,
+  onBeforeReplace,
   readOnly,
 }) => {
   // —— 面板可见态与模式（Ctrl+F = 查找 / Ctrl+H = 替换）——
@@ -323,6 +333,12 @@ export const FindReplacePanel: React.FC<FindReplacePanelProps> = ({
   // 长度——applyChange 默认光标落点同值，续位语义自然）
   const replaceCurrent = useCallback(() => {
     if (readOnly || searching || currentIdx < 0) return;
+    // P3 B3（plan-A3 §3）：替换动作前置提交直刷 pending（引擎接线 =
+    // flushStreamInternal）——直刷会话中 store 滞后于 DOM，applyChange
+    // 基于 matches 快照（搜索时位置）作用在滞后 store 上会吞掉直刷
+    // 文本；先 flush 保证替换落在最新 store。命中在末行时 B 判定已
+    // 降级（无 pending），空转零开销。
+    onBeforeReplace?.();
     const qlen = queryRef.current.length;
     const from = matches[currentIdx];
     const to = from + qlen;
@@ -330,13 +346,16 @@ export const FindReplacePanel: React.FC<FindReplacePanelProps> = ({
       merge: 'none',
     });
     scheduleSearch(from + replaceRef.current.length);
-  }, [readOnly, searching, currentIdx, matches, store, scheduleSearch]);
+  }, [readOnly, searching, currentIdx, matches, store, scheduleSearch, onBeforeReplace]);
 
   // —— 全部替换：单事务合并（等价逐命中 applyChange 的偏移平移）——
   // 拼接 [首命中, 末命中尾) 区间：命中段替换为替换文本、命中间
   // 原文保留，一次 applyChange = 单步撤销 + 单次解析/渲染
   const replaceAll = useCallback(() => {
     if (readOnly || searching || matches.length === 0) return;
+    // P3 B3（plan-A3 §3）：同 replaceCurrent——全部替换同样前置提交
+    // 直刷 pending，防拼接区间作用在滞后 store 上。
+    onBeforeReplace?.();
     const qlen = queryRef.current.length;
     const repl = replaceRef.current;
     const s = store.getState();
@@ -355,7 +374,7 @@ export const FindReplacePanel: React.FC<FindReplacePanelProps> = ({
     // 替换后重搜：定位替换区间之后的第一命中（replacement 含
     // query 时可能续命；否则回绕第一处/无命中）
     scheduleSearch(first + repl.length);
-  }, [readOnly, searching, matches, store, scheduleSearch]);
+  }, [readOnly, searching, matches, store, scheduleSearch, onBeforeReplace]);
 
   // 输入框 Enter：查找模式 = 下一处；替换模式 = 替换当前
   const handleQueryKeyDown = (e: React.KeyboardEvent) => {

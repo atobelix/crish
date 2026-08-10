@@ -38,8 +38,16 @@ import {
   FoldState,
   FOLD_PLACEHOLDER_HEIGHT,
 } from '../core/foldState';
+// P3 B5（A5 渲染分层 L3 接缝）：Canvas 只读层预留——渲染模式判定
+// （触发条件登记：readOnly && 行数阈值 && 注册表存在），本轮不实现
+import { resolveRenderMode, type RenderMode } from '../core/rowSurface';
 // B3 双段行视图 diff（大纲索引/折叠平移的编辑定位）：共享原语
 import { lineAt, lineCountOf } from '../core/EditorStore';
+// P3 B2（plan-A2 方案 B 样式预演）：流式末行未闭合行内标记检测纯函数
+// （只读派生、数据层零篡改）+ 预演提示上下文（LineItem 注入、
+// InlineRenderer 的 text token 消费——零新 DOM 节点）
+import { decorateIncompleteInline } from '../core/decorateIncompleteInline';
+import { InlinePreviewContext } from './InlineRenderer';
 
 /**
  * 行状态惰性访问器（R3-B1 访问器切换）：store 目前只暴露了
@@ -91,6 +99,21 @@ const SEARCH_LINE_BG = 'hsl(45 100% 50% / 0.10)';
 
 // B3 折叠占位行摘要截断长度（占位行文本仅作视觉提示，超长截断防撑行）
 const FOLD_SUMMARY_MAX_CHARS = 48;
+
+// P3 B5（A5 渲染分层 L2 GPU 合成）：档位常量——GPU 层（方案 B+C+D）
+// 的单点回退开关（A5 §5.3 整体回退：改动收敛于本常量 + directDomUpdatesMode
+// 一行 + 行级两属性）。改此处为 false 即整档回退：virtualizer 回 position
+// 定位模式（style.top 通道）、行级 contain: paint 与 dirty 行 will-change
+// 独立层类全部移除，行为回到纯 DOM 定位基线。回退语义为「配置级（启动前
+// 确定）」：运行中热切（prop 变化不 remount 行）时 tanstack lastPositions
+// 弱表以行节点为键、同值跳过写入，行保留原定位属性（视觉同值一致），
+// 详见 directDomUpdatesMode 处注释。宿主亦可一行传 useGpuLayer={false}
+// 覆盖本常量（显式 prop 优先）。
+const RENDER_LAYER_GPU_OPTS = {
+  /** 是否启用 GPU 合成层（方案 B transform 绝对定位 + C 行级 contain:
+   *  paint + D 直刷 dirty 行 will-change 独立合成层） */
+  useGpuLayer: true,
+} as const;
 
 // B3 空标题共享引用（不可变约定：只在 set 时整体替换，绝不就地修改）
 const EMPTY_HEADINGS: readonly HeadingEntry[] = [];
@@ -210,6 +233,7 @@ const LineItem = React.memo(({
   // 不变 → memo 命中。
   decorations,
   rowDecorationVersion,
+  useGpuLayer,
 }: {
   index: number;
   lineText: string;
@@ -228,6 +252,11 @@ const LineItem = React.memo(({
   // 提交 store）。为 true 时本行进入冻结渲染（见 frozenContentRef），
   // 并打上 data-streaming-dirty 标记（调试/巡检可见）。
   streamingDirty?: boolean;
+  // P3 B5（A5 渲染分层 L2）：GPU 合成开关——true 时行容器附加
+  // virtual-row-gpu（contain: paint，方案 C）；dirty 行附加
+  // virtual-row-gpu-dirty（will-change: transform 独立层，方案 D）。
+  // 布尔 prop 引用稳定，不破坏 React.memo 命中。
+  useGpuLayer?: boolean;
 }) => {
   // C3 直刷冻结快照（dirty 覆盖渲染路径，09 §4 C3 代码级落实）：
   // 干净渲染时把「本次 BlockRenderer 元素」存入 ref；dirty 渲染时返回
@@ -287,14 +316,45 @@ const LineItem = React.memo(({
 
   const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
 
+  // P3 B2 流式末行判定（plan-A2 §3 作用范围）：预演仅作用于「流式会话
+  // 进行中的文档末行」——编辑态/非末行/代码行一律不预演。
+  // - 末行判定 = streamingDirty（直刷协议扩展：直刷行并入，纯文本行
+  //   无预演候选标记，decorateIncompleteInline 自然短路）∪ store.
+  //   streamOp 非空（流式会话进行中，stop-flush 前）且本行为文档末行
+  //   （append 逐 chunk 增长，末行即流式写入目标行）；
+  // - 纯派生：只读行文本与行状态，不写 store、不产新 token——undo/
+  //   编辑/序列化/光标测量（data-token 映射）零影响。
+  // 流式会话进行中的末行订阅（无条件 hook——与 streamingDirty 的并集
+  // 在订阅结果之上合并，不得短路 hook 调用：直刷期间 streamingDirty 为
+  // true，若直接 `!!streamingDirty || store(...)` 会跳过订阅 → flush 后
+  // hook 数变化 → React 报「rendered fewer hooks」）
+  const streamTailFlag = store(
+    (s) => s.streamOp !== null && index === s.getLineCount() - 1
+  );
+  const isStreamingTail = !!streamingDirty || streamTailFlag;
+  // 单趟 O(行长) 扫描（流式末行才执行；编辑态/代码行短路零开销）
+  const previewDecoration = React.useMemo(
+    () => decorateIncompleteInline(lineText, isStreamingTail, isCode),
+    [lineText, isCode, isStreamingTail]
+  );
+  // 上下文值稳定化：非预演恒为 null（引用稳定——memo 命中不受影响）；
+  // 预演期间逐 chunk 更新（预演段随流式文本增长）
+  const previewContextValue =
+    previewDecoration.hint !== undefined ? previewDecoration : null;
+
   const freshContent = (
-    <BlockRenderer
-      block={lineNode}
-      index={index}
-      lineOffset={offset}
-      activeState={activeState}
-      tableId={tableId}
-    />
+    // P3 B2：预演提示经 React context 注入（Provider 不产生 DOM 节点，
+    // 零 DOM 结构变化；BlockRenderer 各渲染器共享同一提示——text token
+    // 命中预演段时追加 is-preview-* 类，闭合切换即同一节点的类微调）
+    <InlinePreviewContext.Provider value={previewContextValue}>
+      <BlockRenderer
+        block={lineNode}
+        index={index}
+        lineOffset={offset}
+        activeState={activeState}
+        tableId={tableId}
+      />
+    </InlinePreviewContext.Provider>
   );
   if (!streamingDirty) {
     frozenContentRef.current = freshContent;
@@ -324,7 +384,9 @@ const LineItem = React.memo(({
       data-line-length={lineText.length}
       data-streaming-dirty={streamingDirty ? 'true' : undefined}
       ref={rowRef}
-      className={`virtual-row ${activeState ? 'is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}`.trim()}
+      // P3 B5 GPU 类拼接：useGpuLayer=false 时退化为原 virtual-row 单类
+      // （contain/will-change 全部移除，一行回退到纯 position 定位通道）
+      className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}${streamingDirty && useGpuLayer ? ' virtual-row-gpu-dirty' : ''}${activeState ? ' is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}`.trim()}
       style={rowStyle}
     >
       {rowContent}
@@ -350,12 +412,16 @@ const FoldPlaceholderRow = React.memo(({
   summary,
   rowRef,
   onUnfold,
+  // P3 B5：GPU 合成开关（与 LineItem 同款——占位行同为 transform 定位
+  // 的行容器，contain: paint 隔离折叠条重绘不外溢）
+  useGpuLayer,
 }: {
   index: number;
   foldedCount: number;
   summary: string;
   rowRef: (el: HTMLElement | null) => void;
   onUnfold: (line: number) => void;
+  useGpuLayer?: boolean;
 }) => {
   const rowStyle = React.useMemo(
     () => ({
@@ -373,7 +439,7 @@ const FoldPlaceholderRow = React.memo(({
       data-index={index}
       data-fold-placeholder="true"
       ref={rowRef}
-      className="virtual-row"
+      className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}`.trim()}
       style={rowStyle}
     >
       <button
@@ -481,10 +547,26 @@ export interface MarkdownEngineProps {
   /** 大纲面板（B3 N2）：缺省 true——引擎自带交互组件（嵌套大纲 +
    *  点击跳转 + 当前章节高亮）；宿主可显式关闭（自备导航 UI）。 */
   outline?: boolean;
+  /** GPU 合成优化开关（P3 B5 / A5 渲染分层 L2，组合 B+C+D）：
+   *  - B：tanstack transform 绝对定位（directDomUpdatesMode 一行切换）；
+   *  - C：行级 contain: paint（virtual-row-gpu 类，行重绘不外溢）；
+   *  - D：直刷 dirty 行 will-change: transform 独立合成层（virtual-row-gpu-dirty）。
+   *  缺省 true；宿主一行传 false 整体回退（配置级回退——启动前确定）。
+   *  运行中热切（prop 变化不 remount 行）时：tanstack lastPositions 弱表
+   *  以行节点为键、同值跳过写入，行保留原定位属性（视觉同值一致），
+   *  详见 virtualizer 配置处注释——回退语义以「配置级」为准。 */
+  useGpuLayer?: boolean;
+  /** 渲染模式（P3 B5 / A5 渲染分层 L3 Canvas 接缝）：'dom' = 现 LineItem
+   *  虚拟化行通道（缺省，行为零变化）；'canvas' = Canvas 只读层意图声明
+   *  （预留——Canvas 未实现：无 'canvas' 注册、readOnly=false、行数不足
+   *  阈值任一不满足即回落 'dom'，普适性由 DOM 回退兜底，A5 §3.1/§3.2）。
+   *  触发条件登记 = readOnly && 行数 ≥ 5 万 && registerRowSurface('canvas')
+   *  已注册；模式经 data-render-mode 属性暴露（测试可测落点）。 */
+  renderMode?: RenderMode;
 }
 
 export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEngineProps>(
-  function MarkdownEngine({ store, readOnly, findReplace = true, outline = true }, ref) {
+  function MarkdownEngine({ store, readOnly, findReplace = true, outline = true, renderMode: requestedRenderMode = 'dom', useGpuLayer = RENDER_LAYER_GPU_OPTS.useGpuLayer }, ref) {
   const parentRef = useRef<HTMLDivElement>(null);
   // R5 实例绑定：所有订阅/命令式读取统一经 engineStore（缺省回退全局
   // 单例）；zustand 的 useStore 在 store 引用变化时自动切换订阅。
@@ -625,7 +707,10 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       const hm = heightMapRef.current;
       if (hm) {
         const h = hm.getHeight(i);
-        if (h !== undefined) return h;
+        // A5 防跳动清单①：位置值取整（transform 模式下小数像素会产生
+        // 合成器取整抖动）——HeightMap 实测回填值为整数（offsetHeight
+        // 恒整数），此处取整仅兜底预测落库路径的小数
+        if (h !== undefined) return Math.round(h);
       }
       // R3-B1：行内容/状态经访问器惰性读取（estimateSize 可能在渲染期间
       // 被库调用，直接 getState() 读最新——同一同步 tick 内与订阅状态一致；
@@ -634,7 +719,10 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       const raw = s.getLine(i) ?? '';
       const st = getLineState(s, i);
       const oracle = oracleRef.current;
-      if (oracle) return oracle.predict(classifyLine(raw, st), raw, st);
+      // A5 防跳动清单①（review-P3 §3.5 取整点钉死）：oracle 预测输出
+      // Math.round——未回填的预测行（oracle 输出 rows × 28 × 倍率 ×
+      // correction 可能非整数）经取整后写 transform，杜绝亚像素抖动
+      if (oracle) return Math.round(oracle.predict(classifyLine(raw, st), raw, st));
       return 28;
     },
     overscan: 40, // Buffer for smooth scrolling
@@ -691,7 +779,23 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     //   零成本跳过），逐行 DOM 测量回填仍由引擎的批量协议独占（09 §4 C2，
     //   杜绝「保留 measureElement + 期望消除抖动」的双写状态）。
     directDomUpdates: true,
-    directDomUpdatesMode: 'position',
+    // P3 B5（A5 渲染分层 L2 方案 B，GPU 层核心）：transform 绝对定位——
+    // 已核对 tanstack 3.14.9 源码（react-virtual esm applyDirectStyles：
+    // position 模式写 el.style.top，transform 模式写
+    // el.style.transform = translate3d(0, ${item.start - scrollMargin}px, 0)，
+    // 均为「绝对值」非增量 delta；本引擎未设 scrollMargin（缺省 0）→
+    // transform 值与 position 模式的 top 同值，视觉逐像素等价）。
+    // 双写缺陷排除（review-02 缺陷 B「React 写 top + 增量 translateY 叠加」）：
+    // ① tanstack 写绝对值；② LineItem position-exclusive 契约（不读
+    // virtualRow.start、不写主轴位置，见 LineItem 注释）——不存在任何
+    // top/transform 双写叠加。收益：高度回填级联帧从「layout + 整视口
+    // paint」降为「合成器位移」（style.top 是布局属性、transform 是合成
+    // 属性，A5 §2.2 收益量化）。useGpuLayer=false 一行回退 position 模式。
+    // 诚实边界（运行中热切）：tanstack lastPositions 弱表以行节点为键、
+    // 同值跳过写入——运行中翻转 prop 时行保留原定位属性（视觉同值一致），
+    // 回退语义以「配置级（启动前确定）」为准；如需运行中热切需行节点
+    // 重新挂载（key 变化）触发全量重写，属宿主侧协议。
+    directDomUpdatesMode: useGpuLayer ? 'transform' : 'position',
     useCachedMeasurements: true,
   });
 
@@ -1077,6 +1181,24 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const windowKey = virtualItems.length
     ? virtualItems[0].index + '-' + virtualItems[virtualItems.length - 1].index
     : '';
+
+  // P3 B5（A5 渲染分层 L3 Canvas 接缝——预留消费点，本轮不实际切渲染）：
+  // 渲染模式判定（rowSurface.resolveRenderMode，触发条件登记 = readOnly &&
+  // 行数 ≥ 阈值 && 'canvas' 注册表存在，见 rowSurface.ts）。当前 Canvas 层
+  // 未立项恒得 'dom'；行渲染仍走 LineItem 通道（DOM 实现 = 现通道原样封装，
+  // 行为零变化）。后续 Canvas 立项时在此消费 RowSurface：
+  //   const surface = createDomRowSurface(contentEl) / 注册表工厂能力检测命中；
+  //   mountRows → 窗口变化（现 map 挂载点）、updateRows → dirty/行版本 bump、
+  //   unmountRows → 行离开窗口、locateRow → 像素定位（现 HeightMap 二分）；
+  // 行粒度 DOM 回退由 RowSurface 工厂能力检测失败兜底（A5 §3.1）。
+  // renderMode prop 为宿主意图声明（缺省 'dom' = 零行为变化），
+  // resolveRenderMode 门禁内消费：'canvas' 意图在 readOnly/行数阈值/
+  // 注册表任一不满足时回落 'dom'（canvas 未实现时登记语义）。
+  const renderMode = resolveRenderMode({
+    readOnly: !!readOnly,
+    lineCount,
+    requested: requestedRenderMode,
+  });
 
   // 批量测量协议（09 §4 C2：移除逐行 measureElement 双写 → 统一测量 → 树回填 → 显式刷新一次）：
   // 1. 行数同步：新增行（流式/编辑）按 oracle 预测补齐，行数减少时截断；
@@ -1622,6 +1744,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
               }
         }
         data-readonly={readOnly ? 'true' : undefined}
+        // P3 B5：渲染模式登记（Canvas 接缝触发条件的可测落点——当前恒
+        // 'dom'，canvas 注册/阈值/readOnly 任一不满足即回落 dom）
+        data-render-mode={renderMode}
         style={{
           height: '100%',
           overflow: 'auto',
@@ -1673,6 +1798,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
                     summary={summary}
                     rowRef={registerRowRef}
                     onUnfold={unfold}
+                    useGpuLayer={useGpuLayer}
                   />
                 );
               }
@@ -1695,6 +1821,8 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
                   // 其他行版本不变 → memo 命中（不重跑 BlockRenderer/
                   // InlineRenderer/KaTeX）
                   rowDecorationVersion={decorations.getRowVersion(index)}
+                  // P3 B5：GPU 合成开关（B+C+D 组合，false 一行回退）
+                  useGpuLayer={useGpuLayer}
                 />
               );
             });

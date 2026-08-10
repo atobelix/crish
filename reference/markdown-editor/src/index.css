@@ -469,6 +469,24 @@ body {
   overflow-anchor: none;
 }
 
+/* P3 B5（A5 渲染分层 L2 GPU 合成）：
+   - .virtual-row-gpu：行级 contain: paint——行重绘不外溢（行盒裁剪），
+     行内容变化（流式文本/搜索高亮底色/active 行样式）不使兄弟行像素
+     失效（A5 §2.3 方案 C）。护栏：禁止 contain: size——size containment
+     使行盒尺寸脱离内容，直接破坏行高测量协议（offsetHeight 读值）与
+     oracle 校准（A5 §2.3 风险，零容忍）；
+   - .virtual-row-gpu-dirty：直刷 dirty 行 will-change: transform——
+     独立合成层（dirtyRefs 恒 ≤ 1 元素，成本≈零），直刷行逐 chunk
+     textContent 重绘不触内容层/兄弟行，流式与滚动/编辑并发互不污染
+     （A5 §2.4 方案 D，flush 后类移除层销毁）。 */
+.virtual-row-gpu {
+  contain: paint;
+}
+
+.virtual-row-gpu-dirty {
+  will-change: transform;
+}
+
 .is-active-line .token-blockquote-prefix .syntax-content,
 .is-active-line .blockquote-guide {
   display: none;

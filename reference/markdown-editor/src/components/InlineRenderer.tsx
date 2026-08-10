@@ -3,9 +3,37 @@ import type { InlineNode } from '../core/ast';
 import { type ActiveState } from '../core/measure';
 // R5-C：数学渲染统一走注入点（renderTheme 模块级；KaTeX 默认，可替换）
 import { renderMathToHtml } from '../core/renderTheme';
+// P3 B2（plan-A2 方案 B 样式预演）：未闭合行内标记检测结果类型——
+// 预演提示经 InlinePreviewContext 由 MarkdownEngine 的 LineItem 注入
+import {
+  type IncompleteInlineDecoration,
+  type IncompleteInlineHint,
+} from '../core/decorateIncompleteInline';
 
 import { useTableStore } from '../core/TableStore';
 import { useEditorStore } from '../core/EditorStore';
+
+/**
+ * P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）：
+ * 预演提示上下文（值 = decorateIncompleteInline 结果；非预演为 null）。
+ * - Provider 由 MarkdownEngine 的 LineItem 注入（不产生 DOM 节点）；
+ * - 消费方仅 text token：命中预演段时在既有 span 上追加预演类——
+ *   零新 DOM 节点、零 data-* 变化（data-token 映射不变 → 光标测量
+ *   零影响）；闭合切换 = 同一节点类微调（is-preview-* → style-*）。
+ */
+// oxlint-disable-next-line react/only-export-components -- 上下文随组件导出（LineItem 注入消费）
+export const InlinePreviewContext = React.createContext<IncompleteInlineDecoration | null>(null);
+
+/** 预演类映射（样式定义见组件内 <style> 块——与真实 style-* 族同参数，
+ *  闭合切换肉眼不可察） */
+const PREVIEW_CLASS_BY_HINT: Record<IncompleteInlineHint, string> = {
+  bold: 'is-preview-bold',
+  italic: 'is-preview-italic',
+  bold_italic: 'is-preview-bold-italic',
+  code: 'is-preview-code',
+  strike: 'is-preview-strike',
+  math: 'is-preview-math',
+};
 
 interface InlineRendererProps {
   tokens: InlineNode[];
@@ -19,14 +47,35 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
   ({ tokens, lineOffset, activeState, tableId, lineIndex }) => {
     const tableWidths = useTableStore(state => tableId ? state.tableWidths[tableId] : null);
     const selectedCell = useTableStore(state => state.selectedCell);
+    // P3 B2：预演提示（LineItem 注入；React.memo 不拦截 context 更新——
+    // 预演类随提示变化即时刷新，非预演恒 null 引用稳定零重渲染）
+    const previewHint = React.useContext(InlinePreviewContext);
     let colIndexCounter = 0;
 
     return (
       <>
-        {tokens.map((token, index) => {
-          const key = `${token.type}-${index}`;
+        {/* P3 B2：预演样式定义（仅流式预演期间挂载——非预演不渲染该
+            节点；类选择器与真实 style-* 族同参数，闭合切换像素一致） */}
+        {previewHint !== null && (
+          <style>{`
+.is-preview-bold{font-weight:700}
+.is-preview-italic{font-style:italic}
+.is-preview-bold-italic{font-weight:700;font-style:italic}
+.is-preview-strike{text-decoration:line-through}
+.is-preview-code{font-family:var(--font-mono);font-size:0.9em}
+.is-preview-math{font-style:italic;font-family:'Times New Roman',serif}
+`}</style>
+        )}
+        {tokens.map((token) => {
           const start = lineOffset + token.localOffset;
           const len = token.length;
+          // P3 B2 零跳动键（plan-A2 §2）：token key 取「起始偏移」而非
+          // 「type-index」——同一源码区间的 token 在类型演化时（text →
+          // bold/code/math，如 `**text` 闭合）保持同一 DOM 节点，React
+          // 原地更新类与内容：闭合切换 = 类微调（is-preview-* → style-*），
+          // 非重建。偏移在行内 token 序列中唯一（顺序无缝覆盖），
+          // 各递归层 key 空间独立（子 InlineRenderer 各自 map）。
+          const key = `${start}`;
 
           let className = '';
           switch (token.type) {
@@ -171,6 +220,22 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
           let finalClassName = isActive ? `${baseClassName} is-active-token` : baseClassName;
           if (isSelected) {
             finalClassName += ' is-selected-token';
+          }
+          // P3 B2：预演段判定（仅 text token）——token 与预演段
+          // [previewStart, 行尾) 重叠即命中。未闭合 `**text` 整段是一个
+          // text token（含标记字符原文），与预演段部分重叠时对整个既有
+          // span 追加预演类：零新 DOM 节点、不拆 token、不改 data-token
+          // 映射（测量零影响）；闭合后同一节点切换为真实样式类。
+          const previewClass =
+            previewHint !== null &&
+            previewHint.previewStart !== undefined &&
+            previewHint.hint !== undefined &&
+            token.type === 'text' &&
+            token.localOffset + len > previewHint.previewStart
+              ? ` ${PREVIEW_CLASS_BY_HINT[previewHint.hint]}`
+              : '';
+          if (previewClass) {
+            finalClassName += previewClass;
           }
 
           // Specialized KaTeX rendering for math formulas
