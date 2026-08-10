@@ -8,6 +8,7 @@ pub mod checkpoint;
 pub mod context;
 pub mod cron;
 pub mod denied_stats;
+pub mod device;
 pub mod error;
 pub mod events;
 pub mod history;
@@ -54,6 +55,15 @@ pub use tool::{
     ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput, ToolProgressUpdate,
 };
 pub use transition::{AgentTransition, AgentTransitionEffect, TransitionError};
+
+// ===== 多端互通设备域（R0-02；D3 §12.2 / M6 §12.1 落位）=====
+// 消费方以 conex_types::device::* 模块路径引用为主；根级重导出核心信封与
+// 错误类型（DeviceEnvelope/MessageKind/AuthHeader/DeviceErrorCode/ErrorBody/
+// CommandRequest/CommandResult/PairCode），与 events 域两形并存惯例一致。
+pub use device::commands::{CommandRequest, CommandResult};
+pub use device::envelope::{AuthHeader, DeviceEnvelope, DeviceEndpoint, MessageKind};
+pub use device::error::{DeviceErrorCode, ErrorBody};
+pub use device::pair::PairCode;
 
 // ===== Diff Types (对齐 rustCore.ts DiffResult/DiffHunk/DiffLine) =====
 
