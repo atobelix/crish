@@ -104,6 +104,88 @@ node tests/perf/suite/runner.mjs --node-only            # 数据层降级（stor
 - **M5c 仅 nightly 判定**（ci 单轮曲线只判 M5a/M5b）；**M6 仅 nightly/local**
   跑（ci 档不执行，场景注册表按档位过滤）。
 
+## P3 首跑定档表（2026-08-11，ci 档，headless）
+
+> 首跑任务（P3 波 4）：基准套件首跑定档 + 全量验证。执行：
+> `node tests/perf/suite/runner.mjs`（ci 档，7 场景）。首跑数据源：
+> `reports/suite-report-2026-08-11-P3-ci-full.json`（全量第二轮，与首轮
+> 结果一致：PASS=5 / FAIL=2，两轮全量均稳定复现）。
+
+### 运行环境（环境指纹，A6 §3.4）
+
+| 项 | 值 |
+|---|---|
+| 档位 / 模式 | ci / browser（headless） |
+| 平台 / Node | win32 / v24.11.0 |
+| 渲染后端 | **SwiftShader 软件渲染**（CDP GPU vendorId=65535，GPU 不可用）——M1b 阈值取 headless 档 20ms |
+| 文档规模 | 3 万行（矩阵/滚动场景）；选区/补全专项小文档 |
+| 运行日期 | 2026-08-11（本地）05:16/05:33 两轮全量 |
+| 时长 | 约 60s/轮（7 场景） |
+
+### M1-M6 首跑值 + 达标判定
+
+| 指标 | 定义 | 首跑值（ci/headless） | 预算 | 判定 |
+|---|---|---|---|---|
+| M1a | 帧内 JS 段 P95 | 0.1-0.4ms（各场景 jsP95） | ≤4ms | **PASS**（余量 ×10） |
+| M1b | 帧内 layout+paint P95（L1 CDP 窗口增量/帧） | ≈0ms（0.0002-0.0006） | ≤20ms（headless 档） | **PASS** |
+| M1c | 长任务计数（滚动 3s / 流式 10s） | scroll-smooth 0、plain 0、plain-inject 0、math5-inject 1、**fence30 3** | ≥2 FAIL | **fence30 组合 FAIL**（已知语义，见异常登记 ①） |
+| M1-fps | 帧率硬门槛（ci 降档 30fps） | frameP95：17.8 / 18.2 / 18.1 / 18.0 / 32.4ms | <33.3ms | **PASS**（fence30 边缘抖动：首轮 33.5 FAIL、次轮 32.4 PASS） |
+| M2a | 帧间位移突变（相对脱节，0 容忍） | relDetach=0（scroll-smooth + std-plain-none） | 0 次 | **PASS 但采样失效**（见异常登记 ②） |
+| M2b | 滚动条/内容一致性 | anchorRowErrorP95=1 行；scrollHeightError 0.35-0.44%；monotonic=true | ≤1 行 / ≤1% | **PASS** |
+| M2c | 直刷期间滚动（流式+滚动并发，0 容忍） | relDetach=0（std-plain-inject / std-math5-inject） | 0 次 | **PASS 但场景失真**（见异常登记 ③） |
+| M3 | 选区丢失率（0 容忍） | **selectionLost=1**（两轮全量均现）；单场景复跑 lost=0 | 0 次 | **FAIL（偶发）**（见异常登记 ④） |
+| M4 | 补全闪烁（存量行重建，0 容忍） | remounted=0、addedNodes=0、textMatch=true | 0 行 | **PASS** |
+| M5a/M5b | 堆增长/峰值 | ci 档注入 10s：start=end=45.2MB（报告项）；M5a/M5b 判定为 nightly 口径 | ≤60MB / ≤256MB | **ci 不判**（M5c 仅 nightly） |
+| M6a/M6b | 表格列宽定型 / reflow | ci 档不执行（nightly/local 专属）；`tuned=false` 首采定档保持 | ≤2 次 / ≤×2 | **未采集**（M6a 引擎零调用方，未接线，README §定档说明已登记） |
+
+首跑定档结论：**7 场景 PASS=5 / FAIL=2，退出码 1**。硬门槛类 PASS 项
+（M2b/M4）与数值类（M1a/M1b/M1-fps）全绿；FAIL 与有效性缺陷全部如实
+登记如下，不掩盖。
+
+### 异常登记（首跑发现，须上报主 Agent）
+
+**① fence30 组合 ci 档 FAIL（预期语义内）**：longTaskCount=3（预算 ≥2 即
+FAIL，两轮一致）。帧率边缘抖动：首轮 frameP95=33.5ms FAIL、次轮 32.4ms
+PASS——headless 软渲染下 fence 重放首轮成本（R6 已记载），README §定档
+说明已登记：ci 档该组合判定语义 = 回归趋势基线，**nightly GPU 档为达标
+判定位**。
+
+**② M2a 锚点探针采样失效（探针缺陷，两轮一致）**：scroll-smooth 场景
+`anchorSamples=0 / anchorSwitchFrames=181`——ramp 120px/帧 下**首可见行
+1 帧即滚出视口**（行高 28px < 120px，诊断脚本实测证实：锚点行次帧
+top≈-130、bottom≤0，恒切换 → 零采样）。「沿用上一帧锚点行」的防切换
+设计在 120px/帧 下不成立 → relDetach=0 为**零样本空转判定**，M2a 未真正
+验证。建议（上报主 Agent 裁决）：锚点改用视口中部行（如
+`[data-index]` 第 N 行，N≈视口行数/2）而非首可见行，或 ramp 减速至
+半行/帧以下；修复前 M2a 判定应标注「采样失效」。
+
+**③ M2c 注入场景滚动失真（引擎行为，两轮一致）**：流式注入期间
+**引擎将 scrollTop 复位并锁死**（诊断脚本实测：注入 24ms 时 scrollTop
+253027→3633（-249394px），随后锁在 ~120px，frozen=354/moving=2 帧；
+报告侧 maxJumpErrPx=250089、freeze=594/600 帧）→ 滚动实际未发生，
+「流式+滚动并发」退化为「流式+静止」，relDetach=0 为假 PASS。README
+§口径与边界「M3 选区行挂载与滚动稳定」已记载同类现象（setText 后
+scrollTop 被复位为 0）。建议上报主 Agent：注入场景需解除滚动锁死
+（引擎侧）或探针侧改用「注入完成后恢复滚动」变体，否则 M2c 无法验证
+直刷 flush 跳动。
+
+**④ M3 偶发 FAIL（B3 已知缺陷量化复现，须上报主 Agent）**：两轮全量跑
+selectionLost=1（首轮 chunk=2 / 次轮 chunk=3，lossRate=33.3%）；单场景
+独立复跑 PASS（chunk=1，lost=0）——直刷 chunk 数与执行时序相关（全量
+跑中前序场景后 chunk 数更多 → 触发概率更高）。诊断与 README §定档说明
+已登记的「直刷写后相邻行用户选区被折叠」（rangeCount=1 且 anchorInDoc
+=true 但所选文本变空）一致——**A6 §6 预测的「直刷写死选区」既有缺陷
+被首跑量化证实**，属 B3 域（选区跨直刷行纳入 canDirect 禁入条件）修复
+面；M3 指标即为该修复的验收面。
+
+### 全量门禁确认（同次验证，P3 波 4）
+
+| 门禁 | 结果 |
+|---|---|
+| `npx tsc -b` | **0 错误**（exit 0） |
+| `npm run test:gate` | **73 文件 / 959 测试全绿**（5.6s） |
+| 编码校验 | 新增报告 UTF-8 无 BOM ✓ |
+
 ## 防抖（环境噪声治理，A6 §3.4）
 
 1. **环境指纹**：UA / hardwareConcurrency / deviceMemory / CDP

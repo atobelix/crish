@@ -1,6 +1,6 @@
 {
   "schema": "conex-perf-suite/v1",
-  "collectedAt": "2026-08-10T11:12:10.054Z",
+  "collectedAt": "2026-08-10T21:33:03.558Z",
   "tier": "ci",
   "mode": "browser",
   "params": {
@@ -47,7 +47,7 @@
       "id": "scroll-smooth",
       "title": "平滑滚动跳动检测（M2a 相对脱节 / M2b 滚动条一致性 / M1 帧内分布）",
       "tier": "ci",
-      "elapsedMs": 5041,
+      "elapsedMs": 5008,
       "status": "PASS",
       "checks": [
         {
@@ -143,7 +143,7 @@
         {
           "metric": "M1-fps",
           "name": "frameP95Ms（帧率硬门槛）",
-          "actual": 19.6,
+          "actual": 17.8,
           "budget": 33.3,
           "pass": true,
           "reportOnly": false,
@@ -182,13 +182,13 @@
         }
       ],
       "notes": [
-        "文档加载 30000 行 433ms，实测行高 28px"
+        "文档加载 30000 行 424ms，实测行高 28px"
       ],
       "ok": true,
       "metrics": {
         "build": {
-          "ms": 432.8999999985099,
-          "syncMs": 2.2,
+          "ms": 424,
+          "syncMs": 2.4,
           "loadedLines": 30000,
           "ok": true,
           "rowHeight": 28
@@ -198,11 +198,11 @@
           "rampPx": 120,
           "frames": {
             "count": 180,
-            "p50": 16.69999999552965,
-            "p95": 19.600000001490116,
-            "p99": 22.19999999552965,
-            "mean": 16.696111111094556,
-            "over16_7": 85,
+            "p50": 16.700000001117587,
+            "p95": 17.799999998882413,
+            "p99": 18.199999999254942,
+            "mean": 16.663888888888888,
+            "over16_7": 90,
             "over33_3": 0
           },
           "ramp": {
@@ -230,135 +230,135 @@
             {
               "pos": 5,
               "scrollTop": 42151,
-              "firstIdx": 1373,
+              "firstIdx": 1376,
               "predicted": null,
               "errorRows": null
             },
             {
               "pos": 10,
               "scrollTop": 84302,
-              "firstIdx": 2879,
-              "predicted": 2878,
+              "firstIdx": 2882,
+              "predicted": 2881,
               "errorRows": 1
             },
             {
               "pos": 15,
               "scrollTop": 126454,
-              "firstIdx": 4384,
-              "predicted": 4384,
+              "firstIdx": 4387,
+              "predicted": 4387,
               "errorRows": 0
             },
             {
               "pos": 20,
               "scrollTop": 168605,
-              "firstIdx": 5889,
-              "predicted": 5889,
-              "errorRows": 0
+              "firstIdx": 5893,
+              "predicted": 5892,
+              "errorRows": 1
             },
             {
               "pos": 25,
               "scrollTop": 210756,
-              "firstIdx": 7395,
-              "predicted": 7394,
-              "errorRows": 1
+              "firstIdx": 7398,
+              "predicted": 7398,
+              "errorRows": 0
             },
             {
               "pos": 30,
               "scrollTop": 252907,
-              "firstIdx": 8900,
-              "predicted": 8900,
+              "firstIdx": 8903,
+              "predicted": 8903,
               "errorRows": 0
             },
             {
               "pos": 35,
               "scrollTop": 295058,
-              "firstIdx": 10406,
-              "predicted": 10405,
+              "firstIdx": 10409,
+              "predicted": 10408,
               "errorRows": 1
             },
             {
               "pos": 40,
               "scrollTop": 337210,
-              "firstIdx": 11911,
-              "predicted": 11911,
+              "firstIdx": 11914,
+              "predicted": 11914,
               "errorRows": 0
             },
             {
               "pos": 45,
               "scrollTop": 379361,
-              "firstIdx": 13416,
-              "predicted": 13416,
-              "errorRows": 0
+              "firstIdx": 13420,
+              "predicted": 13419,
+              "errorRows": 1
             },
             {
               "pos": 50,
               "scrollTop": 421512,
-              "firstIdx": 14922,
-              "predicted": 14921,
-              "errorRows": 1
+              "firstIdx": 14925,
+              "predicted": 14925,
+              "errorRows": 0
             },
             {
               "pos": 55,
               "scrollTop": 463663,
-              "firstIdx": 16427,
-              "predicted": 16427,
+              "firstIdx": 16430,
+              "predicted": 16430,
               "errorRows": 0
             },
             {
               "pos": 60,
               "scrollTop": 505814,
-              "firstIdx": 17933,
-              "predicted": 17932,
+              "firstIdx": 17936,
+              "predicted": 17935,
               "errorRows": 1
             },
             {
               "pos": 65,
               "scrollTop": 547966,
-              "firstIdx": 19438,
-              "predicted": 19438,
+              "firstIdx": 19441,
+              "predicted": 19441,
               "errorRows": 0
             },
             {
               "pos": 70,
               "scrollTop": 590117,
-              "firstIdx": 20943,
-              "predicted": 20943,
-              "errorRows": 0
+              "firstIdx": 20947,
+              "predicted": 20946,
+              "errorRows": 1
             },
             {
               "pos": 75,
               "scrollTop": 632268,
-              "firstIdx": 22449,
-              "predicted": 22448,
-              "errorRows": 1
+              "firstIdx": 22452,
+              "predicted": 22452,
+              "errorRows": 0
             },
             {
               "pos": 80,
               "scrollTop": 674419,
-              "firstIdx": 23954,
-              "predicted": 23954,
+              "firstIdx": 23957,
+              "predicted": 23957,
               "errorRows": 0
             },
             {
               "pos": 85,
               "scrollTop": 716570,
-              "firstIdx": 25460,
-              "predicted": 25459,
+              "firstIdx": 25463,
+              "predicted": 25462,
               "errorRows": 1
             },
             {
               "pos": 90,
               "scrollTop": 758722,
-              "firstIdx": 26965,
-              "predicted": 26965,
+              "firstIdx": 26968,
+              "predicted": 26968,
               "errorRows": 0
             },
             {
               "pos": 95,
               "scrollTop": 800873,
-              "firstIdx": 28470,
-              "predicted": 28470,
-              "errorRows": 0
+              "firstIdx": 28474,
+              "predicted": 28473,
+              "errorRows": 1
             }
           ],
           "scrollHeightSpreadPx": 0,
@@ -368,25 +368,25 @@
           "monotonic": true,
           "error": null
         },
-        "layoutPaintPerFrame": 0.00045041666666666673,
-        "layoutPerSec": 120,
+        "layoutPaintPerFrame": 0.0005727277777777778,
+        "layoutPerSec": 179,
         "l2": null,
         "jsPhaseMs": {
           "count": 181,
-          "rejected": 2,
+          "rejected": 0,
           "medianMs": 0.1,
           "p95Ms": 0.2,
-          "p99Ms": 0.2,
-          "meanMs": 0.075,
+          "p99Ms": 0.3,
+          "meanMs": 0.114,
           "minMs": 0,
-          "maxMs": 0.2,
+          "maxMs": 0.3,
           "rawP95Ms": 0.2,
           "rawMedianMs": 0.1
         },
         "frameStats": {
-          "p50": 16.69999999552965,
-          "p95": 19.600000001490116,
-          "over16_7": 85,
+          "p50": 16.700000001117587,
+          "p95": 17.799999998882413,
+          "over16_7": 90,
           "over33_3": 0,
           "count": 180
         }
@@ -401,7 +401,7 @@
       "id": "matrix-std-plain-none",
       "title": "矩阵：标准行高 28px × 纯文本 × 无滚动注入",
       "tier": "ci",
-      "elapsedMs": 4996,
+      "elapsedMs": 4959,
       "status": "PASS",
       "checks": [
         {
@@ -427,7 +427,7 @@
         {
           "metric": "M1-fps",
           "name": "frameP95Ms（帧率硬门槛）",
-          "actual": 18.7,
+          "actual": 18.2,
           "budget": 33.3,
           "pass": true,
           "reportOnly": false,
@@ -520,17 +520,17 @@
       "metrics": {
         "id": "matrix-std-plain-none",
         "build": {
-          "ms": 398.09999999403954,
-          "syncMs": 1.6,
+          "ms": 392.2000000011176,
+          "syncMs": 2.2,
           "loadedLines": 30000,
           "ok": true,
           "rowHeight": 28
         },
         "detach": 0,
         "jsP95Ms": 0.2,
-        "frameP95": 18.69999999552965,
-        "layoutPaintPerFrame": 0.0004142402234636872,
-        "layoutPerSec": 119.33333333333333,
+        "frameP95": 18.199999999254942,
+        "layoutPaintPerFrame": 0.0005311222222222222,
+        "layoutPerSec": 179,
         "longTasks": {
           "count": 0,
           "totalMs": 0,
@@ -545,135 +545,135 @@
             {
               "pos": 5,
               "scrollTop": 42117,
-              "firstIdx": 1397,
+              "firstIdx": 1399,
               "predicted": null,
               "errorRows": null
             },
             {
               "pos": 10,
               "scrollTop": 84234,
-              "firstIdx": 2901,
-              "predicted": 2901,
+              "firstIdx": 2903,
+              "predicted": 2903,
               "errorRows": 0
             },
             {
               "pos": 15,
-              "scrollTop": 126350,
-              "firstIdx": 4405,
-              "predicted": 4405,
+              "scrollTop": 126351,
+              "firstIdx": 4407,
+              "predicted": 4407,
               "errorRows": 0
             },
             {
               "pos": 20,
-              "scrollTop": 168467,
-              "firstIdx": 5909,
-              "predicted": 5909,
+              "scrollTop": 168468,
+              "firstIdx": 5911,
+              "predicted": 5911,
               "errorRows": 0
             },
             {
               "pos": 25,
-              "scrollTop": 210584,
-              "firstIdx": 7413,
-              "predicted": 7413,
+              "scrollTop": 210586,
+              "firstIdx": 7415,
+              "predicted": 7415,
               "errorRows": 0
             },
             {
               "pos": 30,
-              "scrollTop": 252701,
-              "firstIdx": 8917,
-              "predicted": 8917,
-              "errorRows": 0
-            },
-            {
-              "pos": 35,
-              "scrollTop": 294818,
-              "firstIdx": 10422,
-              "predicted": 10421,
+              "scrollTop": 252703,
+              "firstIdx": 8920,
+              "predicted": 8919,
               "errorRows": 1
             },
             {
+              "pos": 35,
+              "scrollTop": 294820,
+              "firstIdx": 10424,
+              "predicted": 10424,
+              "errorRows": 0
+            },
+            {
               "pos": 40,
-              "scrollTop": 336934,
-              "firstIdx": 11926,
-              "predicted": 11926,
+              "scrollTop": 336937,
+              "firstIdx": 11928,
+              "predicted": 11928,
               "errorRows": 0
             },
             {
               "pos": 45,
-              "scrollTop": 379051,
-              "firstIdx": 13430,
-              "predicted": 13430,
+              "scrollTop": 379054,
+              "firstIdx": 13432,
+              "predicted": 13432,
               "errorRows": 0
             },
             {
               "pos": 50,
-              "scrollTop": 421168,
-              "firstIdx": 14934,
-              "predicted": 14934,
+              "scrollTop": 421171,
+              "firstIdx": 14936,
+              "predicted": 14936,
               "errorRows": 0
             },
             {
               "pos": 55,
-              "scrollTop": 463285,
-              "firstIdx": 16438,
-              "predicted": 16438,
-              "errorRows": 0
+              "scrollTop": 463288,
+              "firstIdx": 16441,
+              "predicted": 16440,
+              "errorRows": 1
             },
             {
               "pos": 60,
-              "scrollTop": 505402,
-              "firstIdx": 17942,
-              "predicted": 17942,
+              "scrollTop": 505405,
+              "firstIdx": 17945,
+              "predicted": 17945,
               "errorRows": 0
             },
             {
               "pos": 65,
-              "scrollTop": 547518,
-              "firstIdx": 19447,
-              "predicted": 19446,
-              "errorRows": 1
+              "scrollTop": 547522,
+              "firstIdx": 19449,
+              "predicted": 19449,
+              "errorRows": 0
             },
             {
               "pos": 70,
-              "scrollTop": 589635,
-              "firstIdx": 20951,
-              "predicted": 20951,
+              "scrollTop": 589639,
+              "firstIdx": 20953,
+              "predicted": 20953,
               "errorRows": 0
             },
             {
               "pos": 75,
-              "scrollTop": 631752,
-              "firstIdx": 22455,
-              "predicted": 22455,
+              "scrollTop": 631757,
+              "firstIdx": 22457,
+              "predicted": 22457,
               "errorRows": 0
             },
             {
               "pos": 80,
-              "scrollTop": 673869,
-              "firstIdx": 23959,
-              "predicted": 23959,
+              "scrollTop": 673874,
+              "firstIdx": 23961,
+              "predicted": 23961,
               "errorRows": 0
             },
             {
               "pos": 85,
-              "scrollTop": 715986,
-              "firstIdx": 25463,
-              "predicted": 25463,
-              "errorRows": 0
+              "scrollTop": 715991,
+              "firstIdx": 25466,
+              "predicted": 25465,
+              "errorRows": 1
             },
             {
               "pos": 90,
-              "scrollTop": 758102,
-              "firstIdx": 26967,
-              "predicted": 26967,
+              "scrollTop": 758108,
+              "firstIdx": 26970,
+              "predicted": 26970,
               "errorRows": 0
             },
             {
               "pos": 95,
-              "scrollTop": 800219,
-              "firstIdx": 28472,
-              "predicted": 28471,
-              "errorRows": 1
+              "scrollTop": 800225,
+              "firstIdx": 28474,
+              "predicted": 28474,
+              "errorRows": 0
             }
           ],
           "scrollHeightSpreadPx": 0,
@@ -694,7 +694,7 @@
       "id": "matrix-std-plain-inject",
       "title": "矩阵：标准行高 28px × 纯文本 × 滚动中注入（500tps 流式 + 匀速滚动并发）",
       "tier": "ci",
-      "elapsedMs": 11423,
+      "elapsedMs": 11353,
       "status": "PASS",
       "checks": [
         {
@@ -720,7 +720,7 @@
         {
           "metric": "M1-fps",
           "name": "frameP95Ms（帧率硬门槛）",
-          "actual": 17.9,
+          "actual": 18.1,
           "budget": 33.3,
           "pass": true,
           "reportOnly": false,
@@ -760,7 +760,7 @@
         {
           "metric": "M2c",
           "name": "jumpCount（绝对突变帧数，报告项）",
-          "actual": 594,
+          "actual": 597,
           "budget": 0,
           "pass": false,
           "reportOnly": true,
@@ -770,7 +770,7 @@
         {
           "metric": "M2c",
           "name": "freezeFrames（停顿帧数，报告项）",
-          "actual": 594,
+          "actual": 597,
           "budget": 2,
           "pass": false,
           "reportOnly": true,
@@ -813,40 +813,40 @@
       "metrics": {
         "id": "matrix-std-plain-inject",
         "build": {
-          "ms": 361.5,
-          "syncMs": 24.2,
+          "ms": 324.69999999925494,
+          "syncMs": 2,
           "loadedLines": 30000,
           "ok": true,
           "rowHeight": 28
         },
         "detach": 0,
         "jsP95Ms": 0.1,
-        "frameP95": 17.899999998509884,
-        "layoutPaintPerFrame": 0.00021010033444816053,
-        "layoutPerSec": 60.8,
+        "frameP95": 18.09999999962747,
+        "layoutPaintPerFrame": 0.00018703166666666663,
+        "layoutPerSec": 61.5,
         "longTasks": {
           "count": 0,
           "totalMs": 0,
           "maxMs": 0
         },
         "inject": {
-          "injectedTokens": 5001,
-          "chunkP95Ms": 0.20000000298023224,
+          "injectedTokens": 5002,
+          "chunkP95Ms": 0.2000000011175871,
           "textMatch": true,
           "consistency": true,
           "heap": {
-            "startMB": 45.2,
-            "peakMB": 45.2,
-            "endMB": 45.2
+            "startMB": 42.6,
+            "peakMB": 42.6,
+            "endMB": 42.6
           },
           "ramp": {
-            "anchorSamples": 595,
+            "anchorSamples": 597,
             "anchorSwitchFrames": 4,
             "relDetachCount": 0,
             "maxRelErrPx": 0,
-            "jumpCount": 594,
-            "maxJumpErrPx": 240,
-            "freezeFrames": 594
+            "jumpCount": 597,
+            "maxJumpErrPx": 250089,
+            "freezeFrames": 597
           }
         },
         "m2b": null
@@ -861,7 +861,7 @@
       "id": "matrix-std-math5-inject",
       "title": "矩阵：标准行高 28px × 公式 5% × 滚动中注入（500tps 流式 + 匀速滚动并发）",
       "tier": "ci",
-      "elapsedMs": 11346,
+      "elapsedMs": 11349,
       "status": "PASS",
       "checks": [
         {
@@ -917,7 +917,7 @@
         {
           "metric": "M2c",
           "name": "maxRelErrPx（最大脱节，报告项）",
-          "actual": 0,
+          "actual": 0.02,
           "budget": 2,
           "pass": true,
           "reportOnly": true,
@@ -927,7 +927,7 @@
         {
           "metric": "M2c",
           "name": "jumpCount（绝对突变帧数，报告项）",
-          "actual": 593,
+          "actual": 594,
           "budget": 0,
           "pass": false,
           "reportOnly": true,
@@ -937,7 +937,7 @@
         {
           "metric": "M2c",
           "name": "freezeFrames（停顿帧数，报告项）",
-          "actual": 593,
+          "actual": 594,
           "budget": 2,
           "pass": false,
           "reportOnly": true,
@@ -980,8 +980,8 @@
       "metrics": {
         "id": "matrix-std-math5-inject",
         "build": {
-          "ms": 279.69999999552965,
-          "syncMs": 2.1,
+          "ms": 288.3999999985099,
+          "syncMs": 1.9,
           "loadedLines": 31000,
           "ok": true,
           "rowHeight": 28
@@ -989,31 +989,31 @@
         "detach": 0,
         "jsP95Ms": 0.1,
         "frameP95": 18,
-        "layoutPaintPerFrame": 0.00019286912751677847,
-        "layoutPerSec": 62.6,
+        "layoutPaintPerFrame": 0.0001820854271356785,
+        "layoutPerSec": 63.7,
         "longTasks": {
           "count": 1,
-          "totalMs": 78,
-          "maxMs": 78
+          "totalMs": 65,
+          "maxMs": 65
         },
         "inject": {
-          "injectedTokens": 5000,
-          "chunkP95Ms": 0.20000000298023224,
+          "injectedTokens": 5002,
+          "chunkP95Ms": 0.2000000011175871,
           "textMatch": true,
           "consistency": true,
           "heap": {
-            "startMB": 45.2,
-            "peakMB": 45.2,
-            "endMB": 45.2
+            "startMB": 42.6,
+            "peakMB": 42.6,
+            "endMB": 42.6
           },
           "ramp": {
-            "anchorSamples": 593,
+            "anchorSamples": 594,
             "anchorSwitchFrames": 4,
             "relDetachCount": 0,
-            "maxRelErrPx": 0,
-            "jumpCount": 593,
-            "maxJumpErrPx": 240,
-            "freezeFrames": 593
+            "maxRelErrPx": 0.02,
+            "jumpCount": 594,
+            "maxJumpErrPx": 262770,
+            "freezeFrames": 594
           }
         },
         "m2b": null
@@ -1028,13 +1028,13 @@
       "id": "matrix-mixed-fence30-none",
       "title": "矩阵：混合行高（标题 40px + 正文 28px） × fence 30% × 无滚动注入",
       "tier": "ci",
-      "elapsedMs": 6291,
+      "elapsedMs": 5961,
       "status": "FAIL",
       "checks": [
         {
           "metric": "M1a",
           "name": "jsP95Ms（帧内 JS 段 P95）",
-          "actual": 0.4,
+          "actual": 0.2,
           "budget": 4,
           "pass": true,
           "reportOnly": false,
@@ -1054,9 +1054,9 @@
         {
           "metric": "M1-fps",
           "name": "frameP95Ms（帧率硬门槛）",
-          "actual": 99.5,
+          "actual": 32.4,
           "budget": 33.3,
-          "pass": false,
+          "pass": true,
           "reportOnly": false,
           "tuned": true,
           "na": false
@@ -1084,7 +1084,7 @@
         {
           "metric": "M2a",
           "name": "maxRelErrPx（最大脱节，报告项）",
-          "actual": 0,
+          "actual": 2,
           "budget": 2,
           "pass": true,
           "reportOnly": true,
@@ -1094,9 +1094,9 @@
         {
           "metric": "M2a",
           "name": "maxJumpErrPx（最大绝对突变，报告项）",
-          "actual": 0,
+          "actual": 121,
           "budget": 8,
-          "pass": true,
+          "pass": false,
           "reportOnly": true,
           "tuned": true,
           "na": false
@@ -1104,9 +1104,9 @@
         {
           "metric": "M2a",
           "name": "jumpCount（绝对突变帧数，报告项）",
-          "actual": 0,
+          "actual": 1,
           "budget": 0,
-          "pass": true,
+          "pass": false,
           "reportOnly": true,
           "tuned": true,
           "na": false
@@ -1114,7 +1114,7 @@
         {
           "metric": "M2a",
           "name": "freezeFrames（停顿帧数，报告项）",
-          "actual": 0,
+          "actual": 1,
           "budget": 2,
           "pass": true,
           "reportOnly": true,
@@ -1133,28 +1133,27 @@
         }
       ],
       "notes": [
-        "混合行高：线性模型不适用，锚点误差标记 na；判首行索引单调性（单调=true）",
-        "ci 档 headless 软渲染下 fence/公式重放首轮成本（R6 已记载软件渲染惩罚）；nightly GPU 档为达标判定位，本组合 ci 判定语义 = 回归趋势基线（对比首跑快照，不绝对达标）"
+        "混合行高：线性模型不适用，锚点误差标记 na；判首行索引单调性（单调=true）"
       ],
       "ok": true,
       "metrics": {
         "id": "matrix-mixed-fence30-none",
         "build": {
-          "ms": 647.7000000029802,
-          "syncMs": 2.8,
+          "ms": 640.1999999992549,
+          "syncMs": 3.1,
           "loadedLines": 31000,
           "ok": true,
           "rowHeight": 28
         },
         "detach": 0,
-        "jsP95Ms": 0.4,
-        "frameP95": 99.5,
-        "layoutPaintPerFrame": 0.0005787288135593217,
-        "layoutPerSec": 57,
+        "jsP95Ms": 0.2,
+        "frameP95": 32.40000000037253,
+        "layoutPaintPerFrame": 0.0006953272727272728,
+        "layoutPerSec": 134,
         "longTasks": {
           "count": 3,
-          "totalMs": 197,
-          "maxMs": 67
+          "totalMs": 213,
+          "maxMs": 75
         },
         "inject": null,
         "m2b": {
@@ -1164,140 +1163,140 @@
           "samples": [
             {
               "pos": 5,
-              "scrollTop": 53548,
-              "firstIdx": 1807,
+              "scrollTop": 53538,
+              "firstIdx": 1813,
               "predicted": null,
               "errorRows": null
             },
             {
               "pos": 10,
-              "scrollTop": 107121,
-              "firstIdx": 3695,
-              "predicted": 3695,
+              "scrollTop": 107105,
+              "firstIdx": 3704,
+              "predicted": 3704,
               "errorRows": 0
             },
             {
               "pos": 15,
-              "scrollTop": 160693,
-              "firstIdx": 5592,
-              "predicted": 5592,
+              "scrollTop": 160659,
+              "firstIdx": 5602,
+              "predicted": 5602,
               "errorRows": 0
             },
             {
               "pos": 20,
-              "scrollTop": 214261,
-              "firstIdx": 7494,
-              "predicted": 7494,
+              "scrollTop": 214214,
+              "firstIdx": 7501,
+              "predicted": 7501,
               "errorRows": 0
             },
             {
               "pos": 25,
-              "scrollTop": 267828,
-              "firstIdx": 9398,
-              "predicted": 9398,
+              "scrollTop": 267766,
+              "firstIdx": 9400,
+              "predicted": 9400,
               "errorRows": 0
             },
             {
               "pos": 30,
-              "scrollTop": 321394,
-              "firstIdx": 11298,
-              "predicted": 11298,
+              "scrollTop": 321325,
+              "firstIdx": 11294,
+              "predicted": 11294,
               "errorRows": 0
             },
             {
               "pos": 35,
-              "scrollTop": 374960,
-              "firstIdx": 13203,
-              "predicted": 13203,
+              "scrollTop": 374874,
+              "firstIdx": 13194,
+              "predicted": 13194,
               "errorRows": 0
             },
             {
               "pos": 40,
-              "scrollTop": 428526,
-              "firstIdx": 15109,
-              "predicted": 15109,
+              "scrollTop": 428428,
+              "firstIdx": 15093,
+              "predicted": 15093,
               "errorRows": 0
             },
             {
               "pos": 45,
-              "scrollTop": 482089,
-              "firstIdx": 17014,
-              "predicted": 17014,
+              "scrollTop": 481983,
+              "firstIdx": 16992,
+              "predicted": 16992,
               "errorRows": 0
             },
             {
               "pos": 50,
-              "scrollTop": 535657,
-              "firstIdx": 18920,
-              "predicted": 18920,
+              "scrollTop": 535539,
+              "firstIdx": 18891,
+              "predicted": 18891,
               "errorRows": 0
             },
             {
               "pos": 55,
-              "scrollTop": 589223,
-              "firstIdx": 20826,
-              "predicted": 20826,
+              "scrollTop": 589092,
+              "firstIdx": 20789,
+              "predicted": 20789,
               "errorRows": 0
             },
             {
               "pos": 60,
-              "scrollTop": 642787,
-              "firstIdx": 22732,
-              "predicted": 22732,
+              "scrollTop": 642647,
+              "firstIdx": 22688,
+              "predicted": 22688,
               "errorRows": 0
             },
             {
               "pos": 65,
-              "scrollTop": 696354,
-              "firstIdx": 24637,
-              "predicted": 24637,
+              "scrollTop": 696201,
+              "firstIdx": 24587,
+              "predicted": 24587,
               "errorRows": 0
             },
             {
               "pos": 70,
-              "scrollTop": 749920,
-              "firstIdx": 26543,
-              "predicted": 26543,
+              "scrollTop": 749755,
+              "firstIdx": 26486,
+              "predicted": 26486,
               "errorRows": 0
             },
             {
               "pos": 75,
-              "scrollTop": 803487,
-              "firstIdx": 28449,
-              "predicted": 28449,
+              "scrollTop": 803309,
+              "firstIdx": 28384,
+              "predicted": 28384,
               "errorRows": 0
             },
             {
               "pos": 80,
-              "scrollTop": 857051,
-              "firstIdx": 30355,
-              "predicted": 30355,
+              "scrollTop": 856863,
+              "firstIdx": 30283,
+              "predicted": 30283,
               "errorRows": 0
             },
             {
               "pos": 85,
-              "scrollTop": 910617,
-              "firstIdx": 32261,
-              "predicted": 32261,
+              "scrollTop": 910418,
+              "firstIdx": 32182,
+              "predicted": 32182,
               "errorRows": 0
             },
             {
               "pos": 90,
-              "scrollTop": 964188,
-              "firstIdx": 34167,
-              "predicted": 34167,
+              "scrollTop": 963979,
+              "firstIdx": 34089,
+              "predicted": 34089,
               "errorRows": 0
             },
             {
               "pos": 95,
-              "scrollTop": 1017748,
-              "firstIdx": 36072,
-              "predicted": 36072,
+              "scrollTop": 1017531,
+              "firstIdx": 36001,
+              "predicted": 36001,
               "errorRows": 0
             }
           ],
-          "scrollHeightSpreadPx": 37,
-          "scrollHeightErrorPct": 0.74,
+          "scrollHeightSpreadPx": 33,
+          "scrollHeightErrorPct": 0.72,
           "anchorRowErrorP95": 0,
           "anchorRowErrorMax": 0,
           "monotonic": true,
@@ -1307,7 +1306,6 @@
       "extra": null,
       "summary": {
         "hardFails": [
-          "frameP95Ms（帧率硬门槛）",
           "longTaskCount（≥2 判 FAIL）"
         ],
         "untunedFails": []
@@ -1317,15 +1315,15 @@
       "id": "selection-direct",
       "title": "直刷期间选区完整性（M3，0 容忍）",
       "tier": "ci",
-      "elapsedMs": 11372,
-      "status": "PASS",
+      "elapsedMs": 11413,
+      "status": "FAIL",
       "checks": [
         {
           "metric": "M3",
           "name": "selectionLostCount（选区中断数，0 容忍）",
-          "actual": 0,
+          "actual": 1,
           "budget": 0,
-          "pass": true,
+          "pass": false,
           "reportOnly": false,
           "tuned": true,
           "na": false
@@ -1333,9 +1331,9 @@
         {
           "metric": "M3",
           "name": "lossRate（丢失率 = 中断数/直刷 chunk 数，报告项）",
-          "actual": 0,
+          "actual": 0.3333,
           "budget": 0,
-          "pass": true,
+          "pass": false,
           "reportOnly": true,
           "tuned": true,
           "na": false
@@ -1343,24 +1341,35 @@
       ],
       "notes": [
         "引擎登记点 recordSelectionLost 未接线（pending）；本轮以页面探针口径判定",
-        "参考选区文本「直刷选区基准第97行：稳定文本内…」，直刷 chunk 近似 2 次，文本一致性=true"
+        "参考选区文本「直刷选区基准第97行：稳定文本内…」，直刷 chunk 近似 3 次，文本一致性=true"
       ],
       "ok": true,
       "metrics": {
         "refText": "直刷选区基准第97行：稳定文本内容，用于选区中断检测。",
-        "selectionLostCount": 0,
-        "lostDiagnostics": [],
+        "selectionLostCount": 1,
+        "lostDiagnostics": [
+          {
+            "flushIndex": 3,
+            "rangeCount": 1,
+            "anchorInDoc": true,
+            "textMatch": false,
+            "txtLen": 0,
+            "refLen": 27
+          }
+        ],
         "engineSelectionLost": null,
         "engineProbe": "pending",
-        "directFlushChunkCount": 2,
-        "mountedRows": 5,
-        "lossRate": 0,
+        "directFlushChunkCount": 3,
+        "mountedRows": 8,
+        "lossRate": 0.3333,
         "textMatch": true,
         "error": null
       },
       "extra": null,
       "summary": {
-        "hardFails": [],
+        "hardFails": [
+          "selectionLostCount（选区中断数，0 容忍）"
+        ],
         "untunedFails": []
       }
     },
@@ -1368,7 +1377,7 @@
       "id": "completion",
       "title": "补全闪烁（M4，完成态切换存量行节点身份，0 容忍）",
       "tier": "ci",
-      "elapsedMs": 4234,
+      "elapsedMs": 9344,
       "status": "PASS",
       "checks": [
         {
@@ -1402,7 +1411,7 @@
         "addedNodesTotal": 0,
         "addedRows": 0,
         "addedNodesWithinBudget": true,
-        "injectedTokens": 2002,
+        "injectedTokens": 2001,
         "textMatch": true,
         "error": null
       },
@@ -1414,9 +1423,9 @@
     }
   ],
   "summary": {
-    "PASS": 6,
+    "PASS": 5,
     "WARN": 0,
-    "FAIL": 1,
+    "FAIL": 2,
     "ERROR": 0,
     "total": 7,
     "exitCode": 1

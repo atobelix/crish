@@ -1,0 +1,1433 @@
+{
+  "schema": "conex-perf-suite/v1",
+  "collectedAt": "2026-08-10T21:33:03.558Z",
+  "tier": "ci",
+  "mode": "browser",
+  "params": {
+    "matrixLines": 30000,
+    "matrixInjectMs": 10000,
+    "rampDurationMs": 3000,
+    "memoryRounds": 1,
+    "memoryInjectMs": 20000,
+    "tableDurationMs": 15000,
+    "label": "headless 快档（中位数 + 长任务 + 0 容忍结构指标）"
+  },
+  "commandLine": [],
+  "environment": {
+    "platform": "win32",
+    "nodeVersion": "v24.11.0",
+    "serverBase": "http://localhost:5174",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+    "hardwareConcurrency": 12,
+    "deviceMemory": 32,
+    "language": "zh-CN",
+    "gpu": {
+      "vendorId": 65535,
+      "deviceId": 65535,
+      "renderer": null,
+      "available": false,
+      "gpuActive": false
+    },
+    "cdp": {
+      "model": ""
+    }
+  },
+  "untuned": [
+    {
+      "id": "M6a",
+      "rationale": "设计推定值（首挂载 + 至多 1 次修正）；无历史数据，首次采集定档"
+    },
+    {
+      "id": "M6b",
+      "rationale": "设计推定值；基线取同档 plain 无表格场景的 LayoutCount/秒"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "scroll-smooth",
+      "title": "平滑滚动跳动检测（M2a 相对脱节 / M2b 滚动条一致性 / M1 帧内分布）",
+      "tier": "ci",
+      "elapsedMs": 5008,
+      "status": "PASS",
+      "checks": [
+        {
+          "metric": "M2a",
+          "name": "relDetachCount（相对脱节帧数，0 容忍）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "maxJumpErrPx（最大绝对突变，报告项）",
+          "actual": 0,
+          "budget": 8,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "jumpCount（绝对突变帧数，报告项）",
+          "actual": 0,
+          "budget": 0,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "freezeFrames（停顿帧数，报告项）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1a",
+          "name": "jsP95Ms（帧内 JS 段 P95）",
+          "actual": 0.2,
+          "budget": 4,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1b",
+          "name": "layoutPaintPerFrameMs（L1 CDP 窗口增量/帧）",
+          "actual": 0,
+          "budget": 20,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1b",
+          "name": "layoutPaintP95Ms（L2 trace，nightly）",
+          "actual": null,
+          "budget": 20,
+          "pass": null,
+          "reportOnly": false,
+          "tuned": true,
+          "na": true
+        },
+        {
+          "metric": "M1b",
+          "name": "jsP95Ms（L2 trace，nightly）",
+          "actual": null,
+          "budget": 4,
+          "pass": null,
+          "reportOnly": false,
+          "tuned": true,
+          "na": true
+        },
+        {
+          "metric": "M1c",
+          "name": "longTaskCount（≥2 判 FAIL，0-1 warn）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-fps",
+          "name": "frameP95Ms（帧率硬门槛）",
+          "actual": 17.8,
+          "budget": 33.3,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2b",
+          "name": "anchorRowErrorP95（锚点行误差 P95 ≤1 行）",
+          "actual": 1,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2b",
+          "name": "scrollHeightErrorPct（滚动条总高误差 ≤1%）",
+          "actual": 0.44,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2b",
+          "name": "scrollHeightSpreadPx（20 位置滚动条总高一致，报告项）",
+          "actual": 0,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        }
+      ],
+      "notes": [
+        "文档加载 30000 行 424ms，实测行高 28px"
+      ],
+      "ok": true,
+      "metrics": {
+        "build": {
+          "ms": 424,
+          "syncMs": 2.4,
+          "loadedLines": 30000,
+          "ok": true,
+          "rowHeight": 28
+        },
+        "ramp": {
+          "durationMs": 3000,
+          "rampPx": 120,
+          "frames": {
+            "count": 180,
+            "p50": 16.700000001117587,
+            "p95": 17.799999998882413,
+            "p99": 18.199999999254942,
+            "mean": 16.663888888888888,
+            "over16_7": 90,
+            "over33_3": 0
+          },
+          "ramp": {
+            "anchorSamples": 0,
+            "anchorSwitchFrames": 181,
+            "relDetachCount": 0,
+            "maxRelErrPx": 0,
+            "jumpCount": 0,
+            "maxJumpErrPx": 0,
+            "freezeFrames": 0,
+            "freezeTimestampsMs": []
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0
+          },
+          "error": null
+        },
+        "m2b": {
+          "docLines": 30000,
+          "rowHeight": 28,
+          "mixed": 0,
+          "samples": [
+            {
+              "pos": 5,
+              "scrollTop": 42151,
+              "firstIdx": 1376,
+              "predicted": null,
+              "errorRows": null
+            },
+            {
+              "pos": 10,
+              "scrollTop": 84302,
+              "firstIdx": 2882,
+              "predicted": 2881,
+              "errorRows": 1
+            },
+            {
+              "pos": 15,
+              "scrollTop": 126454,
+              "firstIdx": 4387,
+              "predicted": 4387,
+              "errorRows": 0
+            },
+            {
+              "pos": 20,
+              "scrollTop": 168605,
+              "firstIdx": 5893,
+              "predicted": 5892,
+              "errorRows": 1
+            },
+            {
+              "pos": 25,
+              "scrollTop": 210756,
+              "firstIdx": 7398,
+              "predicted": 7398,
+              "errorRows": 0
+            },
+            {
+              "pos": 30,
+              "scrollTop": 252907,
+              "firstIdx": 8903,
+              "predicted": 8903,
+              "errorRows": 0
+            },
+            {
+              "pos": 35,
+              "scrollTop": 295058,
+              "firstIdx": 10409,
+              "predicted": 10408,
+              "errorRows": 1
+            },
+            {
+              "pos": 40,
+              "scrollTop": 337210,
+              "firstIdx": 11914,
+              "predicted": 11914,
+              "errorRows": 0
+            },
+            {
+              "pos": 45,
+              "scrollTop": 379361,
+              "firstIdx": 13420,
+              "predicted": 13419,
+              "errorRows": 1
+            },
+            {
+              "pos": 50,
+              "scrollTop": 421512,
+              "firstIdx": 14925,
+              "predicted": 14925,
+              "errorRows": 0
+            },
+            {
+              "pos": 55,
+              "scrollTop": 463663,
+              "firstIdx": 16430,
+              "predicted": 16430,
+              "errorRows": 0
+            },
+            {
+              "pos": 60,
+              "scrollTop": 505814,
+              "firstIdx": 17936,
+              "predicted": 17935,
+              "errorRows": 1
+            },
+            {
+              "pos": 65,
+              "scrollTop": 547966,
+              "firstIdx": 19441,
+              "predicted": 19441,
+              "errorRows": 0
+            },
+            {
+              "pos": 70,
+              "scrollTop": 590117,
+              "firstIdx": 20947,
+              "predicted": 20946,
+              "errorRows": 1
+            },
+            {
+              "pos": 75,
+              "scrollTop": 632268,
+              "firstIdx": 22452,
+              "predicted": 22452,
+              "errorRows": 0
+            },
+            {
+              "pos": 80,
+              "scrollTop": 674419,
+              "firstIdx": 23957,
+              "predicted": 23957,
+              "errorRows": 0
+            },
+            {
+              "pos": 85,
+              "scrollTop": 716570,
+              "firstIdx": 25463,
+              "predicted": 25462,
+              "errorRows": 1
+            },
+            {
+              "pos": 90,
+              "scrollTop": 758722,
+              "firstIdx": 26968,
+              "predicted": 26968,
+              "errorRows": 0
+            },
+            {
+              "pos": 95,
+              "scrollTop": 800873,
+              "firstIdx": 28474,
+              "predicted": 28473,
+              "errorRows": 1
+            }
+          ],
+          "scrollHeightSpreadPx": 0,
+          "scrollHeightErrorPct": 0.44,
+          "anchorRowErrorP95": 1,
+          "anchorRowErrorMax": 1,
+          "monotonic": true,
+          "error": null
+        },
+        "layoutPaintPerFrame": 0.0005727277777777778,
+        "layoutPerSec": 179,
+        "l2": null,
+        "jsPhaseMs": {
+          "count": 181,
+          "rejected": 0,
+          "medianMs": 0.1,
+          "p95Ms": 0.2,
+          "p99Ms": 0.3,
+          "meanMs": 0.114,
+          "minMs": 0,
+          "maxMs": 0.3,
+          "rawP95Ms": 0.2,
+          "rawMedianMs": 0.1
+        },
+        "frameStats": {
+          "p50": 16.700000001117587,
+          "p95": 17.799999998882413,
+          "over16_7": 90,
+          "over33_3": 0,
+          "count": 180
+        }
+      },
+      "extra": null,
+      "summary": {
+        "hardFails": [],
+        "untunedFails": []
+      }
+    },
+    {
+      "id": "matrix-std-plain-none",
+      "title": "矩阵：标准行高 28px × 纯文本 × 无滚动注入",
+      "tier": "ci",
+      "elapsedMs": 4959,
+      "status": "PASS",
+      "checks": [
+        {
+          "metric": "M1a",
+          "name": "jsP95Ms（帧内 JS 段 P95）",
+          "actual": 0.2,
+          "budget": 4,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1b",
+          "name": "layoutPaintPerFrameMs（L1 CDP）",
+          "actual": 0,
+          "budget": 20,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-fps",
+          "name": "frameP95Ms（帧率硬门槛）",
+          "actual": 18.2,
+          "budget": 33.3,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1c",
+          "name": "longTaskCount（≥2 判 FAIL）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "relDetachCount（平滑滚动相对脱节，0 容忍）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "maxRelErrPx（最大脱节，报告项）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "maxJumpErrPx（最大绝对突变，报告项）",
+          "actual": 0,
+          "budget": 8,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "jumpCount（绝对突变帧数，报告项）",
+          "actual": 0,
+          "budget": 0,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "freezeFrames（停顿帧数，报告项）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2b",
+          "name": "anchorRowErrorP95（锚点行误差 ≤1 行）",
+          "actual": 1,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2b",
+          "name": "scrollHeightErrorPct（滚动条总高误差 ≤1%）",
+          "actual": 0.35,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        }
+      ],
+      "notes": [],
+      "ok": true,
+      "metrics": {
+        "id": "matrix-std-plain-none",
+        "build": {
+          "ms": 392.2000000011176,
+          "syncMs": 2.2,
+          "loadedLines": 30000,
+          "ok": true,
+          "rowHeight": 28
+        },
+        "detach": 0,
+        "jsP95Ms": 0.2,
+        "frameP95": 18.199999999254942,
+        "layoutPaintPerFrame": 0.0005311222222222222,
+        "layoutPerSec": 179,
+        "longTasks": {
+          "count": 0,
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "inject": null,
+        "m2b": {
+          "docLines": 30000,
+          "rowHeight": 28,
+          "mixed": 0,
+          "samples": [
+            {
+              "pos": 5,
+              "scrollTop": 42117,
+              "firstIdx": 1399,
+              "predicted": null,
+              "errorRows": null
+            },
+            {
+              "pos": 10,
+              "scrollTop": 84234,
+              "firstIdx": 2903,
+              "predicted": 2903,
+              "errorRows": 0
+            },
+            {
+              "pos": 15,
+              "scrollTop": 126351,
+              "firstIdx": 4407,
+              "predicted": 4407,
+              "errorRows": 0
+            },
+            {
+              "pos": 20,
+              "scrollTop": 168468,
+              "firstIdx": 5911,
+              "predicted": 5911,
+              "errorRows": 0
+            },
+            {
+              "pos": 25,
+              "scrollTop": 210586,
+              "firstIdx": 7415,
+              "predicted": 7415,
+              "errorRows": 0
+            },
+            {
+              "pos": 30,
+              "scrollTop": 252703,
+              "firstIdx": 8920,
+              "predicted": 8919,
+              "errorRows": 1
+            },
+            {
+              "pos": 35,
+              "scrollTop": 294820,
+              "firstIdx": 10424,
+              "predicted": 10424,
+              "errorRows": 0
+            },
+            {
+              "pos": 40,
+              "scrollTop": 336937,
+              "firstIdx": 11928,
+              "predicted": 11928,
+              "errorRows": 0
+            },
+            {
+              "pos": 45,
+              "scrollTop": 379054,
+              "firstIdx": 13432,
+              "predicted": 13432,
+              "errorRows": 0
+            },
+            {
+              "pos": 50,
+              "scrollTop": 421171,
+              "firstIdx": 14936,
+              "predicted": 14936,
+              "errorRows": 0
+            },
+            {
+              "pos": 55,
+              "scrollTop": 463288,
+              "firstIdx": 16441,
+              "predicted": 16440,
+              "errorRows": 1
+            },
+            {
+              "pos": 60,
+              "scrollTop": 505405,
+              "firstIdx": 17945,
+              "predicted": 17945,
+              "errorRows": 0
+            },
+            {
+              "pos": 65,
+              "scrollTop": 547522,
+              "firstIdx": 19449,
+              "predicted": 19449,
+              "errorRows": 0
+            },
+            {
+              "pos": 70,
+              "scrollTop": 589639,
+              "firstIdx": 20953,
+              "predicted": 20953,
+              "errorRows": 0
+            },
+            {
+              "pos": 75,
+              "scrollTop": 631757,
+              "firstIdx": 22457,
+              "predicted": 22457,
+              "errorRows": 0
+            },
+            {
+              "pos": 80,
+              "scrollTop": 673874,
+              "firstIdx": 23961,
+              "predicted": 23961,
+              "errorRows": 0
+            },
+            {
+              "pos": 85,
+              "scrollTop": 715991,
+              "firstIdx": 25466,
+              "predicted": 25465,
+              "errorRows": 1
+            },
+            {
+              "pos": 90,
+              "scrollTop": 758108,
+              "firstIdx": 26970,
+              "predicted": 26970,
+              "errorRows": 0
+            },
+            {
+              "pos": 95,
+              "scrollTop": 800225,
+              "firstIdx": 28474,
+              "predicted": 28474,
+              "errorRows": 0
+            }
+          ],
+          "scrollHeightSpreadPx": 0,
+          "scrollHeightErrorPct": 0.35,
+          "anchorRowErrorP95": 1,
+          "anchorRowErrorMax": 1,
+          "monotonic": true,
+          "error": null
+        }
+      },
+      "extra": null,
+      "summary": {
+        "hardFails": [],
+        "untunedFails": []
+      }
+    },
+    {
+      "id": "matrix-std-plain-inject",
+      "title": "矩阵：标准行高 28px × 纯文本 × 滚动中注入（500tps 流式 + 匀速滚动并发）",
+      "tier": "ci",
+      "elapsedMs": 11353,
+      "status": "PASS",
+      "checks": [
+        {
+          "metric": "M1a",
+          "name": "jsP95Ms（帧内 JS 段 P95）",
+          "actual": 0.1,
+          "budget": 4,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1b",
+          "name": "layoutPaintPerFrameMs（L1 CDP）",
+          "actual": 0,
+          "budget": 20,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-fps",
+          "name": "frameP95Ms（帧率硬门槛）",
+          "actual": 18.1,
+          "budget": 33.3,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1c",
+          "name": "longTaskCount（≥2 判 FAIL）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "relDetachCount（流式+滚动并发相对脱节，0 容忍）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "maxRelErrPx（最大脱节，报告项）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "jumpCount（绝对突变帧数，报告项）",
+          "actual": 597,
+          "budget": 0,
+          "pass": false,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "freezeFrames（停顿帧数，报告项）",
+          "actual": 597,
+          "budget": 2,
+          "pass": false,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-stream",
+          "name": "chunkP95Ms（chunk 成本 ≤1ms）",
+          "actual": 0.2,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-stream",
+          "name": "textMatch（文本模型一致）",
+          "actual": 1,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M5-报告",
+          "name": "heapGrowthMB（60s 注入堆增长，报告项）",
+          "actual": 0,
+          "budget": 60,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        }
+      ],
+      "notes": [],
+      "ok": true,
+      "metrics": {
+        "id": "matrix-std-plain-inject",
+        "build": {
+          "ms": 324.69999999925494,
+          "syncMs": 2,
+          "loadedLines": 30000,
+          "ok": true,
+          "rowHeight": 28
+        },
+        "detach": 0,
+        "jsP95Ms": 0.1,
+        "frameP95": 18.09999999962747,
+        "layoutPaintPerFrame": 0.00018703166666666663,
+        "layoutPerSec": 61.5,
+        "longTasks": {
+          "count": 0,
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "inject": {
+          "injectedTokens": 5002,
+          "chunkP95Ms": 0.2000000011175871,
+          "textMatch": true,
+          "consistency": true,
+          "heap": {
+            "startMB": 42.6,
+            "peakMB": 42.6,
+            "endMB": 42.6
+          },
+          "ramp": {
+            "anchorSamples": 597,
+            "anchorSwitchFrames": 4,
+            "relDetachCount": 0,
+            "maxRelErrPx": 0,
+            "jumpCount": 597,
+            "maxJumpErrPx": 250089,
+            "freezeFrames": 597
+          }
+        },
+        "m2b": null
+      },
+      "extra": null,
+      "summary": {
+        "hardFails": [],
+        "untunedFails": []
+      }
+    },
+    {
+      "id": "matrix-std-math5-inject",
+      "title": "矩阵：标准行高 28px × 公式 5% × 滚动中注入（500tps 流式 + 匀速滚动并发）",
+      "tier": "ci",
+      "elapsedMs": 11349,
+      "status": "PASS",
+      "checks": [
+        {
+          "metric": "M1a",
+          "name": "jsP95Ms（帧内 JS 段 P95）",
+          "actual": 0.1,
+          "budget": 4,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1b",
+          "name": "layoutPaintPerFrameMs（L1 CDP）",
+          "actual": 0,
+          "budget": 20,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-fps",
+          "name": "frameP95Ms（帧率硬门槛）",
+          "actual": 18,
+          "budget": 33.3,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1c",
+          "name": "longTaskCount（≥2 判 FAIL）",
+          "actual": 1,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "relDetachCount（流式+滚动并发相对脱节，0 容忍）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "maxRelErrPx（最大脱节，报告项）",
+          "actual": 0.02,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "jumpCount（绝对突变帧数，报告项）",
+          "actual": 594,
+          "budget": 0,
+          "pass": false,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "freezeFrames（停顿帧数，报告项）",
+          "actual": 594,
+          "budget": 2,
+          "pass": false,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-stream",
+          "name": "chunkP95Ms（chunk 成本 ≤1ms）",
+          "actual": 0.2,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-stream",
+          "name": "textMatch（文本模型一致）",
+          "actual": 1,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M5-报告",
+          "name": "heapGrowthMB（60s 注入堆增长，报告项）",
+          "actual": 0,
+          "budget": 60,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        }
+      ],
+      "notes": [],
+      "ok": true,
+      "metrics": {
+        "id": "matrix-std-math5-inject",
+        "build": {
+          "ms": 288.3999999985099,
+          "syncMs": 1.9,
+          "loadedLines": 31000,
+          "ok": true,
+          "rowHeight": 28
+        },
+        "detach": 0,
+        "jsP95Ms": 0.1,
+        "frameP95": 18,
+        "layoutPaintPerFrame": 0.0001820854271356785,
+        "layoutPerSec": 63.7,
+        "longTasks": {
+          "count": 1,
+          "totalMs": 65,
+          "maxMs": 65
+        },
+        "inject": {
+          "injectedTokens": 5002,
+          "chunkP95Ms": 0.2000000011175871,
+          "textMatch": true,
+          "consistency": true,
+          "heap": {
+            "startMB": 42.6,
+            "peakMB": 42.6,
+            "endMB": 42.6
+          },
+          "ramp": {
+            "anchorSamples": 594,
+            "anchorSwitchFrames": 4,
+            "relDetachCount": 0,
+            "maxRelErrPx": 0.02,
+            "jumpCount": 594,
+            "maxJumpErrPx": 262770,
+            "freezeFrames": 594
+          }
+        },
+        "m2b": null
+      },
+      "extra": null,
+      "summary": {
+        "hardFails": [],
+        "untunedFails": []
+      }
+    },
+    {
+      "id": "matrix-mixed-fence30-none",
+      "title": "矩阵：混合行高（标题 40px + 正文 28px） × fence 30% × 无滚动注入",
+      "tier": "ci",
+      "elapsedMs": 5961,
+      "status": "FAIL",
+      "checks": [
+        {
+          "metric": "M1a",
+          "name": "jsP95Ms（帧内 JS 段 P95）",
+          "actual": 0.2,
+          "budget": 4,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1b",
+          "name": "layoutPaintPerFrameMs（L1 CDP）",
+          "actual": 0,
+          "budget": 20,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-fps",
+          "name": "frameP95Ms（帧率硬门槛）",
+          "actual": 32.4,
+          "budget": 33.3,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1c",
+          "name": "longTaskCount（≥2 判 FAIL）",
+          "actual": 3,
+          "budget": 2,
+          "pass": false,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "relDetachCount（平滑滚动相对脱节，0 容忍）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "maxRelErrPx（最大脱节，报告项）",
+          "actual": 2,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "maxJumpErrPx（最大绝对突变，报告项）",
+          "actual": 121,
+          "budget": 8,
+          "pass": false,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "jumpCount（绝对突变帧数，报告项）",
+          "actual": 1,
+          "budget": 0,
+          "pass": false,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2a",
+          "name": "freezeFrames（停顿帧数，报告项）",
+          "actual": 1,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2b",
+          "name": "anchorRowErrorP95（混合行高 na）",
+          "actual": null,
+          "budget": 1,
+          "pass": null,
+          "reportOnly": false,
+          "tuned": true,
+          "na": true
+        }
+      ],
+      "notes": [
+        "混合行高：线性模型不适用，锚点误差标记 na；判首行索引单调性（单调=true）"
+      ],
+      "ok": true,
+      "metrics": {
+        "id": "matrix-mixed-fence30-none",
+        "build": {
+          "ms": 640.1999999992549,
+          "syncMs": 3.1,
+          "loadedLines": 31000,
+          "ok": true,
+          "rowHeight": 28
+        },
+        "detach": 0,
+        "jsP95Ms": 0.2,
+        "frameP95": 32.40000000037253,
+        "layoutPaintPerFrame": 0.0006953272727272728,
+        "layoutPerSec": 134,
+        "longTasks": {
+          "count": 3,
+          "totalMs": 213,
+          "maxMs": 75
+        },
+        "inject": null,
+        "m2b": {
+          "docLines": 38000,
+          "rowHeight": 28,
+          "mixed": 1,
+          "samples": [
+            {
+              "pos": 5,
+              "scrollTop": 53538,
+              "firstIdx": 1813,
+              "predicted": null,
+              "errorRows": null
+            },
+            {
+              "pos": 10,
+              "scrollTop": 107105,
+              "firstIdx": 3704,
+              "predicted": 3704,
+              "errorRows": 0
+            },
+            {
+              "pos": 15,
+              "scrollTop": 160659,
+              "firstIdx": 5602,
+              "predicted": 5602,
+              "errorRows": 0
+            },
+            {
+              "pos": 20,
+              "scrollTop": 214214,
+              "firstIdx": 7501,
+              "predicted": 7501,
+              "errorRows": 0
+            },
+            {
+              "pos": 25,
+              "scrollTop": 267766,
+              "firstIdx": 9400,
+              "predicted": 9400,
+              "errorRows": 0
+            },
+            {
+              "pos": 30,
+              "scrollTop": 321325,
+              "firstIdx": 11294,
+              "predicted": 11294,
+              "errorRows": 0
+            },
+            {
+              "pos": 35,
+              "scrollTop": 374874,
+              "firstIdx": 13194,
+              "predicted": 13194,
+              "errorRows": 0
+            },
+            {
+              "pos": 40,
+              "scrollTop": 428428,
+              "firstIdx": 15093,
+              "predicted": 15093,
+              "errorRows": 0
+            },
+            {
+              "pos": 45,
+              "scrollTop": 481983,
+              "firstIdx": 16992,
+              "predicted": 16992,
+              "errorRows": 0
+            },
+            {
+              "pos": 50,
+              "scrollTop": 535539,
+              "firstIdx": 18891,
+              "predicted": 18891,
+              "errorRows": 0
+            },
+            {
+              "pos": 55,
+              "scrollTop": 589092,
+              "firstIdx": 20789,
+              "predicted": 20789,
+              "errorRows": 0
+            },
+            {
+              "pos": 60,
+              "scrollTop": 642647,
+              "firstIdx": 22688,
+              "predicted": 22688,
+              "errorRows": 0
+            },
+            {
+              "pos": 65,
+              "scrollTop": 696201,
+              "firstIdx": 24587,
+              "predicted": 24587,
+              "errorRows": 0
+            },
+            {
+              "pos": 70,
+              "scrollTop": 749755,
+              "firstIdx": 26486,
+              "predicted": 26486,
+              "errorRows": 0
+            },
+            {
+              "pos": 75,
+              "scrollTop": 803309,
+              "firstIdx": 28384,
+              "predicted": 28384,
+              "errorRows": 0
+            },
+            {
+              "pos": 80,
+              "scrollTop": 856863,
+              "firstIdx": 30283,
+              "predicted": 30283,
+              "errorRows": 0
+            },
+            {
+              "pos": 85,
+              "scrollTop": 910418,
+              "firstIdx": 32182,
+              "predicted": 32182,
+              "errorRows": 0
+            },
+            {
+              "pos": 90,
+              "scrollTop": 963979,
+              "firstIdx": 34089,
+              "predicted": 34089,
+              "errorRows": 0
+            },
+            {
+              "pos": 95,
+              "scrollTop": 1017531,
+              "firstIdx": 36001,
+              "predicted": 36001,
+              "errorRows": 0
+            }
+          ],
+          "scrollHeightSpreadPx": 33,
+          "scrollHeightErrorPct": 0.72,
+          "anchorRowErrorP95": 0,
+          "anchorRowErrorMax": 0,
+          "monotonic": true,
+          "error": null
+        }
+      },
+      "extra": null,
+      "summary": {
+        "hardFails": [
+          "longTaskCount（≥2 判 FAIL）"
+        ],
+        "untunedFails": []
+      }
+    },
+    {
+      "id": "selection-direct",
+      "title": "直刷期间选区完整性（M3，0 容忍）",
+      "tier": "ci",
+      "elapsedMs": 11413,
+      "status": "FAIL",
+      "checks": [
+        {
+          "metric": "M3",
+          "name": "selectionLostCount（选区中断数，0 容忍）",
+          "actual": 1,
+          "budget": 0,
+          "pass": false,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M3",
+          "name": "lossRate（丢失率 = 中断数/直刷 chunk 数，报告项）",
+          "actual": 0.3333,
+          "budget": 0,
+          "pass": false,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        }
+      ],
+      "notes": [
+        "引擎登记点 recordSelectionLost 未接线（pending）；本轮以页面探针口径判定",
+        "参考选区文本「直刷选区基准第97行：稳定文本内…」，直刷 chunk 近似 3 次，文本一致性=true"
+      ],
+      "ok": true,
+      "metrics": {
+        "refText": "直刷选区基准第97行：稳定文本内容，用于选区中断检测。",
+        "selectionLostCount": 1,
+        "lostDiagnostics": [
+          {
+            "flushIndex": 3,
+            "rangeCount": 1,
+            "anchorInDoc": true,
+            "textMatch": false,
+            "txtLen": 0,
+            "refLen": 27
+          }
+        ],
+        "engineSelectionLost": null,
+        "engineProbe": "pending",
+        "directFlushChunkCount": 3,
+        "mountedRows": 8,
+        "lossRate": 0.3333,
+        "textMatch": true,
+        "error": null
+      },
+      "extra": null,
+      "summary": {
+        "hardFails": [
+          "selectionLostCount（选区中断数，0 容忍）"
+        ],
+        "untunedFails": []
+      }
+    },
+    {
+      "id": "completion",
+      "title": "补全闪烁（M4，完成态切换存量行节点身份，0 容忍）",
+      "tier": "ci",
+      "elapsedMs": 9344,
+      "status": "PASS",
+      "checks": [
+        {
+          "metric": "M4",
+          "name": "remountedCount（存量行节点身份变化数，0 容忍）",
+          "actual": 0,
+          "budget": 0,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M4",
+          "name": "addedNodesVsRows（完成帧新增节点 - 实际新增行数）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        }
+      ],
+      "notes": [
+        "收口窗口新增节点 0（流式新行 0），文本一致性=true"
+      ],
+      "ok": true,
+      "metrics": {
+        "remountedCount": 0,
+        "remountedIndexes": [],
+        "addedNodesTotal": 0,
+        "addedRows": 0,
+        "addedNodesWithinBudget": true,
+        "injectedTokens": 2001,
+        "textMatch": true,
+        "error": null
+      },
+      "extra": null,
+      "summary": {
+        "hardFails": [],
+        "untunedFails": []
+      }
+    }
+  ],
+  "summary": {
+    "PASS": 5,
+    "WARN": 0,
+    "FAIL": 2,
+    "ERROR": 0,
+    "total": 7,
+    "exitCode": 1
+  }
+}
