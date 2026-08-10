@@ -19,6 +19,10 @@ import {
 } from '../core/TableOperations';
 import { buildPasteText } from '../core/htmlToMarkdown';
 import type { LineOffsetTree } from '../core/SegmentTree';
+// B2 词级跳选（05 高频项 / P2 项 3）：词边界函数与搜索的全词判定
+// 共用同一词类模型（wordClassAt / wordBoundary——字母数字段/中文段/
+// 符号段），词边界语义单源（src/core/search.ts 文件头注释）
+import { wordBoundary, wordClassAt } from '../core/search';
 
 interface HiddenInputProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -174,6 +178,66 @@ export interface IndexDataLayer {
   getLine: (i: number) => string;
   getLineCount: () => number;
   lineOffsets: LineOffsetTree;
+}
+
+/**
+ * 越视口目标 scrollTop 纯计算（几何外推公式，供单测）：
+ * - 目标行在视口上方：以首行几何向上外推（留 SCROLL_EDGE_MARGIN 边距）；
+ * - 目标行在视口下方：以末行几何向下外推，目标行对齐视口底部；
+ * - 目标行已在视口区间内 → null（无需滚动，交由精确测量分支越界滚动）。
+ * 返回钳制到 [0, maxScrollTop] 的 scrollTop。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function estimateScrollTopForLine(
+  first: MountedLineGeom,
+  last: MountedLineGeom,
+  lineIdx: number,
+  clientHeight: number,
+  scrollHeight: number
+): number | null {
+  if (lineIdx >= first.index && lineIdx <= last.index) return null;
+  let targetTop: number;
+  if (lineIdx < first.index) {
+    // 目标行在视口上方：以首行几何向上外推（留 40px 上边距）
+    targetTop = first.top - (first.index - lineIdx) * first.height - 40;
+  } else {
+    // 目标行在视口下方：以末行几何向下外推，目标行对齐视口底部
+    targetTop =
+      last.bottom + (lineIdx - last.index) * last.height - clientHeight + 40;
+  }
+  const maxTop = Math.max(0, scrollHeight - clientHeight);
+  return Math.min(maxTop, Math.max(0, targetTop));
+}
+
+/**
+ * 光标行滚入视口（B2 发现并修复的越视口导航缺陷）：光标测量失败且
+ * 目标行未挂载（虚拟化视口外跳转——Ctrl+End/PageDown/搜索跳转到长
+ * 文档首尾）时，用已挂载行几何外推目标 scrollTop（O(1)：首/末行
+ * 几何 ± 行高 × 行距），滚动后下一帧行挂载即被精确测量接管——与
+ * 拖选视口外估算（estimateLineIndexFromContentY）同一「几何近似 →
+ * 挂载后精确」架构思路。修复前：测量 10 帧失败 → HiddenInput 卸载
+ * textarea → 键盘输入/词级导航整体失效（长文档 Ctrl+End 后无法输入）。
+ * 行已在视口内（lineIdx 落在挂载区间）时为空操作（滚动由精确测量
+ * 分支的越界滚动接管，避免双写）。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function scrollLineIntoViewByGeometry(
+  container: HTMLElement,
+  lineIdx: number
+): void {
+  const mounted = collectMountedLines(container, container.getBoundingClientRect());
+  if (mounted.length === 0) return;
+  const first = mounted[0];
+  const last = mounted[mounted.length - 1];
+  const targetTop = estimateScrollTopForLine(
+    first,
+    last,
+    lineIdx,
+    container.clientHeight,
+    container.scrollHeight
+  );
+  if (targetTop === null) return;
+  container.scrollTop = targetTop;
 }
 
 // 已挂载行几何收集（视口内行元素 → 几何快照；仅几何回退路径调用，
@@ -401,6 +465,69 @@ export function pageNavigationTarget(
   return Math.min(lineCount - 1, lastIdx + pageLines);
 }
 
+/**
+ * 词级导航目标位置（B2 项 3：Ctrl+Arrow，R6-P1 行文本模式同款架构）：
+ * 定位光标所在行（LineOffsetTree O(log n)）+ 行内词边界
+ * （wordBoundary——字母数字段/中文段/符号段）+ 行边界显式跨行：
+ * - 行首向左 → 上一行行尾（= 本行行首 - 1，跨过换行符）；
+ * - 行尾向右 → 下一行行首（= 行尾 + 1）；
+ * - 文档首行行首 / 末行行尾 → 原地不动。
+ * 与 moveGrapheme（EditorStore）的跨行语义同构——词级粒度版本。
+ * 返回新全局位置（恒为词边界）。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function wordNavigation(
+  pos: number,
+  dir: 'left' | 'right',
+  getLine: (i: number) => string,
+  lineOffsets: LineOffsetTree,
+  textLength: number
+): number {
+  const p = Math.max(0, Math.min(pos, textLength));
+  const lineIdx = lineOffsets.findLineIndex(p);
+  const lineStart = lineOffsets.getOffset(lineIdx);
+  const lineText = getLine(lineIdx) ?? '';
+  const inLine = p - lineStart;
+  if (dir === 'left') {
+    // 行内向左：词段首（行内词边界；不跨 \n——行文本不含换行符）
+    if (inLine > 0) return lineStart + wordBoundary(lineText, inLine, 'left');
+    // 行首向左：跨到上一行行尾；文档首行行首原地不动
+    return lineIdx > 0 ? lineStart - 1 : 0;
+  }
+  // 行内向右：词段尾
+  if (inLine < lineText.length) {
+    return lineStart + wordBoundary(lineText, inLine, 'right');
+  }
+  // 行尾向右：跨到下一行行首；文档末尾行尾原地不动
+  if (p >= textLength) return p;
+  return lineStart + lineText.length + 1;
+}
+
+/**
+ * 双击选词的词区间（B2 项 3：双击词选——独立处理，不并入拖选
+ * 状态机——双击是「两次 click 已定位光标后的独立动作」，纯函数
+ * 供 HiddenInput dblclick 接线与单测）：
+ * - inLine 处字符为词字符（字母数字/中文段）→ 返回该词段
+ *   [start, end)（行内偏移；wordBoundary 双向扩展）；
+ * - 空白/符号段双击 → null（与主流编辑器一致：双击空白/符号
+ *   不选词，保持光标定位语义）。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function doubleClickWordSelection(
+  lineText: string,
+  inLine: number
+): { start: number; end: number } | null {
+  if (inLine < 0 || inLine >= lineText.length) return null;
+  const cls = wordClassAt(lineText[inLine]);
+  if (cls !== 'word' && cls !== 'cjk') return null;
+  // 左边界：从 inLine + 1 向左（wordBoundary 的 pos 是「光标位于
+  // 字符间」的语义——左侧字符 text[inLine] 必属该词段，段首正确）；
+  // 右边界：从 inLine 向右越出词段
+  const start = wordBoundary(lineText, inLine + 1, 'left');
+  const end = wordBoundary(lineText, inLine, 'right');
+  return { start, end };
+}
+
 export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store }) => {
   // R5：绑定实例 store（缺省回退全局单例）；组件内所有 store 读写
   // （订阅 / getState / setState）统一经本变量，多实例输入互不串台
@@ -503,6 +630,16 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
         }
       } else if (retries < 10) {
         retries++;
+        // 光标行未挂载（越视口跳转——Ctrl+End/PageDown/搜索跳转后行在
+        // 虚拟化视口外）：几何外推滚动到光标行，下一帧行挂载后精确
+        // 测量接管（scrollLineIntoViewByGeometry 注释见模块级定义；
+        // B2 词级跳选实测发现并修复：长文档 Ctrl+End 后测量持续失败 →
+        // textarea 卸载 → 输入/词级导航失效）
+        const st = editorStore.getState();
+        scrollLineIntoViewByGeometry(
+          containerRef.current!,
+          st.lineOffsets.findLineIndex(cursorPos)
+        );
         rAF = requestAnimationFrame(updateCoords);
       } else {
         setCoords(null);
@@ -790,9 +927,43 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       dragSelectRef.current = null;
     };
 
+    // —— B2 双击选词（词级，04 §3.3 状态机独立分支）——
+    // 双击 = 两次 click 已定位光标后的独立动作，不并入拖选状态机；
+    // 引擎按「源码词段边界」自选（doubleClickWordSelection 纯函数）：
+    // - preventDefault 阻止浏览器原生双击选词——token 化 DOM 的词
+    //   边界与源码词段可能不一致（行内 span 切分），且原生选区会
+    //   触发 selectionchange 同步与引擎选区双写打架；
+    // - 双击落在空白/符号段 → 不选词（保持光标定位语义，与主流
+    //   编辑器一致——点击定位已由两次 click 完成）。
+    const handleContainerDblClick = (e: MouseEvent) => {
+      const container = containerRef.current;
+      if (!container || e.button !== 0) return;
+      // 组合中不干预（R4-C IME 状态机：composition 期间鼠标交互跳过）
+      if (isComposingRef.current) return;
+      // 表格 Excel 交互区不接管（单元格双击有自身语义）
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.closest('.line-table-row') ||
+          target.closest('.token-table-cell'))
+      ) {
+        return;
+      }
+      e.preventDefault();
+      const s = editorStore.getState();
+      const pos = indexFromClientPoint(e.clientX, e.clientY, container, s);
+      const lineIdx = s.lineOffsets.findLineIndex(pos);
+      const lineStart = s.lineOffsets.getOffset(lineIdx);
+      const lineText = s.getLine(lineIdx) ?? '';
+      const sel = doubleClickWordSelection(lineText, pos - lineStart);
+      if (!sel) return;
+      s.setSelection(lineStart + sel.start, lineStart + sel.end);
+    };
+
     const containerEl = containerRef.current;
     if (containerEl) {
       containerEl.addEventListener('mousedown', handleDragMouseDown);
+      containerEl.addEventListener('dblclick', handleContainerDblClick);
     }
     window.addEventListener('mousemove', handleDragMouseMove);
     window.addEventListener('mouseup', handleDragMouseUp);
@@ -810,6 +981,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       window.removeEventListener('keydown', handleGlobalKeyDown);
       if (containerEl) {
         containerEl.removeEventListener('mousedown', handleDragMouseDown);
+        containerEl.removeEventListener('dblclick', handleContainerDblClick);
         // 异常卸载兜底：恢复 userSelect（拖选中卸载时防样式残留）
         containerEl.style.userSelect = '';
       }
@@ -991,6 +1163,46 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
 
     // --- 表格单元格交互状态机 (Excel Mode) ---
     if (handleTableInteraction(e)) {
+      return;
+    }
+
+    // —— B2 词级跳选（Ctrl/Cmd+Arrow）——
+    // 行文本模式词级导航（wordNavigation：行内词边界 + 行边界显式
+    // 跨行，与 ArrowLeft/Right 的 moveGrapheme 同架构——不全文
+    // getText() join）；Shift 扩展 = anchor 不动、head 移到词边界
+    // （R4-B moveHead 语义，词级粒度版本）。
+    if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const s = editorStore.getState();
+      const target = wordNavigation(
+        s.cursorPos,
+        'left',
+        (i) => s.getLine(i) ?? '',
+        s.lineOffsets,
+        s.textLength
+      );
+      if (e.shiftKey) {
+        s.moveHead(target);
+      } else {
+        fastCursorMove(target);
+      }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowRight') {
+      e.preventDefault();
+      const s = editorStore.getState();
+      const target = wordNavigation(
+        s.cursorPos,
+        'right',
+        (i) => s.getLine(i) ?? '',
+        s.lineOffsets,
+        s.textLength
+      );
+      if (e.shiftKey) {
+        s.moveHead(target);
+      } else {
+        fastCursorMove(target);
+      }
       return;
     }
 

@@ -537,21 +537,48 @@ function renderTableRow(line: LineNode): string {
   );
 }
 
-/** 围栏代码块：从 code_fence_start 消费到 code_fence_end，返回下一条行号 */
+/**
+ * 围栏代码块：从 code_fence_start 消费到 code_fence_end（或围栏被迫终止），
+ * 返回下一条行号。B8b 配合项（Block quotes 例 237/128 语义）：
+ * - 遇非 code 行（body / empty / heading 等）即终止并交还主循环——
+ *   引用容器边界或段落打断会结束围栏（例 237 的 `foo`、例 128 的空行），
+ *   不得吞并这些行；
+ * - 内容行仅在「行的引用层级与围栏一致」时才剥离引用前缀——围栏内
+ *   ` >` 之类文本行的引用前缀是内容（引擎前缀正则的层级误判，
+ *   例 119/120 的 ` >` 行按内容原样保留）；
+ * - 未闭合围栏（扫到文档尾仍无 code_fence_end）：引擎会在末行输出一条
+ *   幻影空 code 行（最终换行符的切分产物），不属于内容，剔除
+ *   （例 126/127/137/237 的第二个围栏）。
+ */
 function renderFencedBlock(
   lines: LineNode[],
   start: number,
   out: string[]
 ): number {
+  const fenceBq = lines[start].blockquoteLevel ?? 0;
   const info = fenceInfo(lines[start].raw);
   const lang = info ? info.split(/\s+/)[0] : '';
   const contentLines: string[] = [];
   let j = start + 1;
-  while (j < lines.length && lines[j].type !== 'code_fence_end') {
-    if (lines[j].type === 'code') {
-      contentLines.push(stripBlockquotePrefix(lines[j].raw));
+  let closed = false; // 是否遇到 code_fence_end（围栏正常闭合）
+  while (j < lines.length) {
+    const ln = lines[j];
+    if (ln.type === 'code_fence_end') {
+      closed = true;
+      break;
     }
+    // 非 code 行：围栏在此终止（引用容器边界 / 段落打断），交还主循环
+    if (ln.type !== 'code') break;
+    const raw =
+      (ln.blockquoteLevel ?? 0) === fenceBq
+        ? stripBlockquotePrefix(ln.raw)
+        : ln.raw;
+    contentLines.push(raw);
     j++;
+  }
+  if (!closed && contentLines.length > 0 && contentLines[contentLines.length - 1] === '') {
+    // 未闭合围栏的幻影尾行：剔除（见函数注释）
+    contentLines.pop();
   }
   // CommonMark 序列化惯例：内容行以 \n 连接且以 \n 结尾（空块除外）
   const content =
@@ -563,7 +590,8 @@ function renderFencedBlock(
       escapeText(content) +
       '</code></pre>'
   );
-  return j + 1; // 跳过 code_fence_end
+  // 正常闭合跳过 code_fence_end；提前终止返回未消费的行号（主循环续处理）
+  return closed ? j + 1 : j;
 }
 
 /**
@@ -573,15 +601,23 @@ function renderFencedBlock(
  * （spec 例 117），块内空白行保留（剥缩进后可能残留空白，spec 例 112）。
  * stripCols：文档级缩进代码块为 4；li 内代码块为「内容缩进 + 4」
  * （spec 例 264/271 语义，内容列由 listContentIndent 给出）。
+ * B8b 配合项（Block quotes 例 236 语义）：合并只在同 blockquoteLevel 的
+ * 连续行内进行——跨容器 / 跨引用层级的 code 行不得合并（例 236 的
+ * `>     foo` 与 `    bar` 分属引用内外两个缩进代码块）。
  */
 function collectIndentCode(
   lines: LineNode[],
   start: number,
   stripCols: number
 ): { content: string; end: number } {
+  const bq = lines[start].blockquoteLevel ?? 0;
   const contentLines: string[] = [];
   let j = start;
-  while (j < lines.length && lines[j].type === 'code') {
+  while (
+    j < lines.length &&
+    lines[j].type === 'code' &&
+    (lines[j].blockquoteLevel ?? 0) === bq
+  ) {
     contentLines.push(stripIndentColumns(stripBlockquotePrefix(lines[j].raw), stripCols));
     j++;
   }

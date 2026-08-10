@@ -18,6 +18,11 @@ import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
 import { DecorationSet, applyCursorSelectionDecorations } from '../core/DecorationSet';
 
 import { type CodeState } from '../core/parser';
+// B4 N9：只读复制为 Markdown——DOM 选区 → 源码偏移映射 + getText 切片
+import { selectionToMarkdown } from '../core/renderToHtml';
+// B2 查找替换（05 高频项 N6）：查找替换面板（搜索/高亮/跳转/替换/
+// 计数）挂载于引擎根容器内，快捷键 Ctrl+F/Ctrl+H 自监听
+import { FindReplacePanel } from './FindReplacePanel';
 
 /**
  * 行状态惰性访问器（R3-B1 访问器切换）：store 目前只暴露了
@@ -62,6 +67,11 @@ interface SearchRange {
 // 无搜索区间共享引用（不可变约定：只在 set 时整体替换，绝不就地修改）
 const EMPTY_SEARCH_RANGES: readonly SearchRange[] = [];
 
+// B2 搜索命中行内联背景（index.css 为引擎样式域外，is-search-line
+// class 已打（宿主可自定义），此处用主题色系内联兜底保证开箱可见；
+// 与 --yellow-tint-2 同族淡黄，护眼对比度约束内）
+const SEARCH_LINE_BG = 'hsl(45 100% 50% / 0.10)';
+
 /**
  * 纯文本行保守判定（C3 限定版：直刷前置条件之一）：
  * - 非空行（空行/纯空白行渲染为 <br/> 结构，无 text token 可直写）；
@@ -104,6 +114,14 @@ export interface MarkdownEngineHandle {
   addSearchRange: (from: number, to: number) => void;
   /** 清空全部搜索高亮（宿主搜索词清空/切换场景）。幂等。 */
   clearSearch: () => void;
+  /** 批量设置搜索高亮（B2 查找替换）：一次性整体替换搜索区间集合——
+   *  大批命中（十万级）场景避免逐条 addSearchRange 的 N 次 setState
+   *  重建，单次提交驱动装饰层增量重建。R5-D 单条 API 保留兼容。 */
+  setSearchRanges: (ranges: readonly { from: number; to: number }[]) => void;
+  /** 跳转到命中（B2 查找替换）：滚动到 from 所在行（virtualizer.
+   *  scrollToIndex 定位）并在编辑模式选中命中区间 [from, to)——
+   *  替换的落点前提（选中即光标落点，applyChange 直接作用）。 */
+  scrollToMatch: (from: number, to: number) => void;
 }
 
 // 行渲染单元（09 §4 C1 滚动契约）：
@@ -227,6 +245,20 @@ const LineItem = React.memo(({
     ? (frozenContentRef.current ?? freshContent)
     : freshContent;
 
+  // B2 搜索行内联背景：仅命中行附加淡黄底色（useMemo 保持引用
+  // 稳定——依赖只有行类型与搜索标记，变化时才换新对象，不影响
+  // React.memo 命中）；class is-search-line 同时保留供宿主自定义
+  const rowStyle = React.useMemo(
+    () => ({
+      position: 'absolute' as const,
+      left: 0,
+      width: '100%',
+      minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
+      ...(hasSearchDecoration ? { backgroundColor: SEARCH_LINE_BG } : null),
+    }),
+    [lineNode.type, hasSearchDecoration]
+  );
+
   return (
     <div
       data-index={index}
@@ -235,12 +267,7 @@ const LineItem = React.memo(({
       data-streaming-dirty={streamingDirty ? 'true' : undefined}
       ref={rowRef}
       className={`virtual-row ${activeState ? 'is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}`.trim()}
-      style={{
-        position: 'absolute',
-        left: 0,
-        width: '100%',
-        minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
-      }}
+      style={rowStyle}
     >
       {rowContent}
     </div>
@@ -260,10 +287,13 @@ const LineItem = React.memo(({
 export interface MarkdownEngineProps {
   store?: EditorStore;
   readOnly?: boolean;
+  /** 查找替换面板（B2）：缺省 true——引擎自带交互组件；宿主可
+   *  显式关闭（只读消息历史场景由宿主自备搜索 UI）。 */
+  findReplace?: boolean;
 }
 
 export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEngineProps>(
-  function MarkdownEngine({ store, readOnly }, ref) {
+  function MarkdownEngine({ store, readOnly, findReplace = true }, ref) {
   const parentRef = useRef<HTMLDivElement>(null);
   // R5 实例绑定：所有订阅/命令式读取统一经 engineStore（缺省回退全局
   // 单例）；zustand 的 useStore 在 store 引用变化时自动切换订阅。
@@ -305,9 +335,10 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   // 全窗口失效（R6-C 回归修复）。
   const [decorationVersion, setDecorationVersion] = React.useState(0);
   // 宿主搜索区间（addSearchRange 接入）：与光标/选区同一维护链路
-  const [searchRanges, setSearchRanges] = React.useState<readonly SearchRange[]>(
-    EMPTY_SEARCH_RANGES
-  );
+  // （B2：批量版 setSearchRanges 整体替换——大批命中一次提交）
+  const [searchRanges, setSearchRangesState] = React.useState<
+    readonly SearchRange[]
+  >(EMPTY_SEARCH_RANGES);
   // 光标/选区订阅：触发信号（LineItem 不再各自订阅——消费方改经
   // decorationVersion 驱动，派生收敛到本组件单一维护点）
   const cursorPos = engineStore(state => state.cursorPos);
@@ -483,15 +514,44 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     if (s.streamTail.length > 0 || s.streamOp) s.flushStreamTail();
   }, [flushStreamInternal]);
 
-  // 搜索高亮接入（R5-D）：宿主经 handle.addSearchRange/clearSearch 维护
-  // searchRanges 状态 → 派生 effect 增量重建 search 装饰 → 版本递增驱动
-  // 行级 is-search-line 刷新（见上方装饰维护 effect）
+  // 搜索高亮接入（R5-D）：宿主经 handle.addSearchRange/clearSearch
+  // 维护 searchRanges 状态 → 派生 effect 增量重建 search 装饰 → 版本
+  // 递增驱动行级 is-search-line 刷新（见上方装饰维护 effect）。
+  // B2 批量版 setSearchRanges：单次整体替换（大批命中场景的 N 次
+  // setState → 1 次），保留单条 API 向后兼容。
   const addSearchRange = useCallback((from: number, to: number) => {
-    setSearchRanges((rs) => [...rs, { from, to }]);
+    setSearchRangesState((rs) => [...rs, { from, to }]);
   }, []);
   const clearSearch = useCallback(() => {
-    setSearchRanges(EMPTY_SEARCH_RANGES);
+    setSearchRangesState(EMPTY_SEARCH_RANGES);
   }, []);
+  const setSearchRanges = useCallback(
+    (ranges: readonly SearchRange[]) => {
+      setSearchRangesState(ranges.length ? [...ranges] : EMPTY_SEARCH_RANGES);
+    },
+    []
+  );
+
+  // 跳转到命中（B2）：滚动到 from 所在行 + 编辑模式选中命中区间。
+  // 滚动走 virtualizer.scrollToIndex（既有定位设施，行高模型回填后
+  // 精确对齐）；选中命中 = 替换的落点前提 + 当前命中的视觉呈现
+  // （readOnly 下不动 store 选区——原生 DOM 选区不受干扰，只滚动）。
+  const scrollToMatch = useCallback(
+    (from: number, to: number) => {
+      const s = engineStore.getState();
+      const lineIdx = s.lineOffsets.findLineIndex(
+        Math.max(0, Math.min(from, Math.max(0, s.textLength - 1)))
+      );
+      if (lineIdx >= 0) virtualizer.scrollToIndex(lineIdx, { align: 'center' });
+      if (!readOnly) {
+        engineStore.getState().setSelection(
+          Math.min(from, to),
+          Math.max(from, to)
+        );
+      }
+    },
+    [virtualizer, readOnly]
+  );
 
   // 命令式接口暴露（R5 宿主：engineRef.current.streamAppend / streamEnd）
   useImperativeHandle(
@@ -502,8 +562,18 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       flushStream: flushStreamInternal,
       addSearchRange,
       clearSearch,
+      setSearchRanges,
+      scrollToMatch,
     }),
-    [streamAppend, streamEnd, flushStreamInternal, addSearchRange, clearSearch]
+    [
+      streamAppend,
+      streamEnd,
+      flushStreamInternal,
+      addSearchRange,
+      clearSearch,
+      setSearchRanges,
+      scrollToMatch,
+    ]
   );
 
   // 用户操作监听（C3 flush 时机 2）：keydown/pointerdown/mousedown/
@@ -640,8 +710,40 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey, flushStreamInternal]);
 
-  const handleContainerClick = (e: React.MouseEvent) => {
-    // R5 readOnly：只读模式点击不移动光标（光标定位链路整体短路）——
+  // B4 N9：复制处理器统一入口（编辑态/只读态分支）。
+  // - 编辑态：既有语义不变——store 选区 → getText 切片（源码复制）；
+  // - readOnly：原生 DOM 选区复制的是渲染文本——拦截默认通道，经
+  //   DOM 选区 → 源码偏移无损映射（data-token-start/data-sub-offset，
+  //   与光标定位 handleContainerClick 同源）→ getText 切片，剪贴板
+  //   写入 Markdown 源码；映射失败（null，如折叠选区/容器外选区）
+  //   放行浏览器默认复制（渲染文本兜底）。
+  const handleCopy = useCallback(
+    (e: React.ClipboardEvent<HTMLDivElement>) => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) return;
+      if (readOnly) {
+        const md = selectionToMarkdown(
+          selection,
+          engineStore.getState().getText
+        );
+        if (md !== null) {
+          e.clipboardData.setData('text/plain', md);
+          e.preventDefault();
+        }
+        return;
+      }
+      const state = engineStore.getState();
+      const start = Math.min(state.selectionStart, state.selectionEnd);
+      const end = Math.max(state.selectionStart, state.selectionEnd);
+      if (start !== end) {
+        e.clipboardData.setData('text/plain', state.getText().substring(start, end));
+        e.preventDefault();
+      }
+    },
+    [readOnly, engineStore]
+  );
+
+  const handleContainerClick = (e: React.MouseEvent) => {    // R5 readOnly：只读模式点击不移动光标（光标定位链路整体短路）——
     // 原生 DOM 文本选区/选择复制不受影响（浏览器默认行为，不 preventDefault）。
     if (readOnly) return;
     // R3-B1：事件处理器统一取一次最新 store 快照，行内容/偏移经访问器
@@ -882,31 +984,23 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       className="engine-container"
       style={{ width: '100%', height: '100%', position: 'relative' }}
     >
+      {/* B2 查找替换面板：挂载于根容器内、滚动容器外（不干扰虚拟
+          滚动/行高测量）；store 绑定本实例、跳转/高亮接 handle 链路。
+          宿主可用 findReplace prop 显式关闭（只读消息历史场景） */}
+      {findReplace && (
+        <FindReplacePanel
+          store={engineStore}
+          onGoToMatch={scrollToMatch}
+          onSetHighlights={setSearchRanges}
+          readOnly={readOnly}
+        />
+      )}
       <div
         ref={parentRef}
         className="editor-container editor-scroll-container"
         onClick={handleContainerClick}
         onScroll={handleScrollFlush}
-        onCopy={
-          // R5 readOnly：不拦截复制——浏览器默认通道复制原生选区
-          // （渲染文本），不依赖 store 选区同步；编辑态保持既有源码复制。
-          readOnly
-            ? undefined
-            : (e) => {
-                const selection = window.getSelection();
-                if (!selection || selection.isCollapsed) return;
-
-                const state = engineStore.getState();
-                const start = Math.min(state.selectionStart, state.selectionEnd);
-                const end = Math.max(state.selectionStart, state.selectionEnd);
-
-                if (start !== end) {
-                  const rawText = state.getText().substring(start, end);
-                  e.clipboardData.setData('text/plain', rawText);
-                  e.preventDefault();
-                }
-              }
-        }
+        onCopy={handleCopy}
         onCut={
           // R5 readOnly：只读模式无剪切（禁用删除语义）——不绑定处理器，
           // 交给浏览器默认（只读容器下用户无可编辑内容，无副作用）。

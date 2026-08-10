@@ -138,6 +138,37 @@ const EXTRA: { name: string; markdown: string; html: string }[] = [
       '<pre><code>const a = 1;\n</code></pre>' +
       '<pre><code>indented\n</code></pre>',
   },
+  {
+    // B8b 配合项（spec 例 236 形态）：引用内缩进代码与文档级缩进代码
+    // 分属两个容器——collectIndentCode 按 blockquoteLevel 分组合并，
+    // 引用容器在两组之间闭合重开。
+    name: '引用内缩进代码跨容器不合并（spec 例 236）',
+    markdown: '>     foo\n    bar\n',
+    html:
+      '<blockquote><pre><code>foo\n</code></pre></blockquote>' +
+      '<pre><code>bar\n</code></pre>',
+  },
+  {
+    // B8b 配合项（spec 例 237 形态）：引用内围栏遇非 code 行（body）
+    // 终止并交还主循环——`foo` 投影为引用外段落；未闭合围栏的幻影
+    // 尾行空 code 不产生内容（第二个围栏为空块）。
+    name: '引用内围栏遇非 code 行终止交还主循环（spec 例 237）',
+    markdown: '> ```\nfoo\n```\n',
+    html:
+      '<blockquote><pre><code></code></pre></blockquote>' +
+      '<p>foo</p><pre><code></code></pre>',
+  },
+  {
+    // B8b 配合项（spec 例 252 形态）：引用内缩进代码块与空行后的
+    // 新引用段落分属两个 blockquote 容器（3 空格前缀不足 4 列缩进，
+    // 为段落非代码；段落内前导空白由引擎 text token 保留，
+    // normalizeHtml 折叠后与官方期望等价）。
+    name: '引用内缩进代码与后续段落分容器（spec 例 252）',
+    markdown: '>     code\n\n>    not code\n',
+    html:
+      '<blockquote><pre><code>code\n</code></pre></blockquote>' +
+      '<blockquote><p>   not code</p></blockquote>',
+  },
 ];
 
 describe('CommonMark 投影器黄金判定对（10 例，人工验证）', () => {

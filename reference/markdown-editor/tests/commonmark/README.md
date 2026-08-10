@@ -10,7 +10,7 @@
 | 文件 | 职责 |
 | --- | --- |
 | `astToHtml.ts` | 投影器：`MarkdownDocument` → 近似 HTML 字符串（含 `normalizeHtml` 归一化） |
-| `projector.test.ts` | vitest 自测：10 个黄金判定对（人工验证投影输出）+ 补充断言 + 归一化测试 |
+| `projector.test.ts` | vitest 自测：10 个黄金判定对（人工验证投影输出）+ 补充断言（13 例，含 B8b 三形态）+ 归一化测试 |
 | `run-compliance.mjs` | 跑分脚本：用例 → 引擎 parse → 投影 → 归一化对比 → 分章节统计 JSON |
 | `spec.txt` | 官方 CommonMark 0.31.2 spec（examples.json 未就绪时的回退数据源） |
 | `compliance-report.json` | 跑分报告（脚本生成物，不入库；`--out` 可指定路径） |
@@ -31,13 +31,14 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 1. **零语义修复**：投影器不补语法、不改语义，只做结构映射。所有映射均为
    AST 字段 → HTML 的确定性翻译，不参考期望 HTML 调整输出。
 2. **不支持语法不补偿**：引擎不支持的 CommonMark 语法——引用链接、
-   自动链接、实体引用、`~~~` 围栏、HTML 块、下划线强调（`_x_`）、
+   自动链接、实体引用、HTML 块、下划线强调（`_x_`）、
    `3)` 列表序号等——在 AST 中已退化为普通 text 节点，投影器按文本规则
    原样转义输出。期望 `<h2>` 而投影 `<p>title</p>` 即记 FAIL。
    **这是符合度统计的正确行为**，任何补偿都视为作弊。
-   （注：Setext 标题与缩进代码块原属该列举，R1 轮引擎已原生支持——
-   缩进代码产出 `code` 类型行，投影器按 CommonMark 块语义合并投影，
-   见「投影规则表」与「偏差点登记」。）
+   （注：Setext 标题、缩进代码块与 `~~~` 围栏原属该列举，R1 轮起引擎
+   已原生支持——缩进代码产出 `code` 类型行，投影器按 CommonMark 块语义
+   合并投影；`~~~` 围栏与反引号围栏同规投影，见「投影规则表」与
+   「偏差点登记」。）
 3. **扩展语法显式暴露**：引擎扩展语法（行内数学 `$x$`、`==mark==`、
    `||spoiler||`、`[^footnote]`、任务复选框）在 CommonMark 中无对应 HTML，
    投影为占位标签（`<span class="math">` / `<mark>` / `<span class="spoiler">`
@@ -60,8 +61,8 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 | `heading` | `<h{n}>内联</h{n}>`（n = headingLevel） |
 | `hr` | `<hr />` |
 | `blockquote`（行级 blockquoteLevel） | 按层级连续行合并开合 `<blockquote>` 容器 |
-| `code`（围栏内） | `<pre><code>内容\n</code></pre>`；围栏信息串取首个词 → `class="language-…"`；内容行按行原文投影（剥离引用前缀），`\n` 连接并以 `\n` 结尾（空块除外） |
-| `code`（缩进代码块，R1-A2d） | 连续 `code` 行合并为单个 `<pre><code>内容\n</code></pre>`；每行剥离引用前缀后剥 up to 4 列缩进（tab 按停靠 4 展开），`\n` 连接并以 `\n` 结尾；块尾空白行（trim 后为空）剔除，块内空白行保留（剥缩进后可能残留空白，如 spec 例 112） |
+| `code`（围栏内，B8b 配合项） | `<pre><code>内容\n</code></pre>`；围栏信息串取首个词 → `class="language-…"`；内容行按行原文投影、`\n` 连接并以 `\n` 结尾（空块除外）。剥引用前缀仅限「行引用层级与围栏一致」的内容行（围栏内 ` >` 是内容，spec 例 119/120）；遇非 code 行（body/empty 等）即终止交还主循环（spec 例 237/128：引用容器边界/段落打断结束围栏，不吞行）；未闭合围栏剔除引擎文档尾幻影空 code 行（spec 例 126/127/137/237） |
+| `code`（缩进代码块，R1-A2d / B8b 配合项） | 连续 `code` 行合并为单个 `<pre><code>内容\n</code></pre>`；每行剥离引用前缀后剥 up to 4 列缩进（tab 按停靠 4 展开），`\n` 连接并以 `\n` 结尾；块尾空白行（trim 后为空）剔除，块内空白行保留（剥缩进后可能残留空白，如 spec 例 112）。**合并仅限同 blockquoteLevel 的连续行**——跨容器/跨引用层级不合并（spec 例 236：引用内与文档级各成一块） |
 | `table_row` | `<tr><td>…</td></tr>`（table_separator 跳过；CommonMark 无表格语义，仅为完整映射） |
 | `empty` | 无输出 |
 | `math_fence_*` / `math_block` | `<span class="math">…</span>`（扩展语法占位） |
@@ -100,7 +101,7 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 其余投影均为确定性结构映射，无第二处偏差点。ordered 列表 `listPrefix`
 序号 > 1 时投影 `start="N"` 属性（AST 存储的序号，非补造）。
 
-### 偏差点二：缩进代码块合并投影（`astToHtml.ts` 的 `renderIndentCodeBlock`，R1-A2d）
+### 偏差点二：缩进代码块合并投影（`astToHtml.ts` 的 `renderIndentCodeBlock`，R1-A2d / B8b）
 
 引擎 R1-A2b 起缩进代码产出 `type === 'code'` 行（`codeBlockState='indent_code'`，
 raw 保留完整原文含缩进），但 **AST 的 LineNode 不携带 codeBlockState 字段**，
@@ -115,7 +116,10 @@ raw 保留完整原文含缩进），但 **AST 的 LineNode 不携带 codeBlockS
   `leadingIndentColumns` 一致），不足 4 列或超过部分原样保留（spec 例 112：
   6 空格空白行剥 4 列后残留 2 空格进入内容）；
 - 块尾空白行（trim 后为空）不属于块内容，剔除（spec 例 117）——块首不会
-  出现空白行（引擎仅在 ≥4 空格非空行处进入代码块）。
+  出现空白行（引擎仅在 ≥4 空格非空行处进入代码块）；
+- **B8b 配合项：合并仅限同 blockquoteLevel 的连续行**（`collectIndentCode`
+  以起始行引用层级分组）——引用内缩进代码与引用外的文档级缩进代码是
+  两个块，容器在两组之间闭合重开（spec 例 236）。
 
 投影器把 R1-A2b 语义层已确定的 code 行按 CommonMark 块语义**忠实合并**为
 单个 `<pre><code>`（合并 + 剥缩进是 CommonMark 期望输出的结构映射，非
@@ -128,7 +132,37 @@ raw 保留完整原文含缩进），但 **AST 的 LineNode 不携带 codeBlockS
   `<p>` 而非段落内折行；
 - 块外空白行：引擎解析为 body 行（含缩进），投影 `<p>    </p>` 而非忽略。
 
-其余投影均为确定性结构映射，无第三处偏差点。
+### 偏差点三：围栏投影的容器边界与引擎层级误判处理（`renderFencedBlock`，B8b 配合项）
+
+B8b 起 `renderFencedBlock` 按 CommonMark 围栏语义投影，三处行为登记：
+
+1. **非 code 行终止围栏**：扫描中遇 body / empty / heading 等非 code 行即
+   终止并交还主循环（引用容器边界或段落打断会结束围栏，spec 例 237 的
+   `foo`、例 128 的空行），不再吞并后续行——同时保证 blockquote 容器在
+   syncQuotes 处按行级 blockquoteLevel 正确闭合重开。
+2. **引用前缀剥离仅限层级一致行**：引擎前缀正则 `\s*>\s?` 会把围栏内的
+   ` >` 文本行误判为引用层级（spec 例 119/120），投影器仅在「行引用层级
+   与围栏一致」时剥离前缀，误判行按内容原样保留（引擎 AST 语义层的
+   识别偏差，如实投影；根因登记见下文 spec-231 项）。
+3. **未闭合围栏的幻影尾行**：围栏扫到文档尾仍无 `code_fence_end` 时，
+   引擎会在末行输出一条幻影空 code 行（最终换行符的切分产物，不属于
+   内容），投影器剔除该行（spec 例 126/127/137/237 形态）。
+
+连带修复（同属 B8b 变更的自然结果）：spec 例 119/120/126/127/128/137
+从 FAIL 转 PASS；Fenced code 章节 15/29 → 21/29。
+
+### 偏差点四：spec-231 三方协同项登记（引擎域，超出投影器域，待引擎轮）
+
+spec 例 231（`    > # Foo`，4 空格缩进的 `>` 行）应为缩进代码块
+（`<pre><code>&gt; # Foo…`），引擎当前按引用解析（前缀正则 `^\s*>\s?`
+允许任意前导空白，应收紧为 `^ {0,3}>\s?`）。**根因在引擎 parser 与
+fuzz 测试更新，超出投影器文件域（`src/` 禁碰），B8b 登记待调度者
+派发引擎轮处理**；投影器不得补偿（补偿即作弊）。同类引擎域问题一并登记：
+spec 例 121（`` 2 反引号按围栏解析，应为行内 code span）、例 134
+（4 空格缩进 ``` 按围栏解析，应为缩进代码块）、例 131/132/133
+（围栏开括行 1-3 空格缩进未从内容行剥除，投影器无开括行缩进信息）。
+
+其余投影均为确定性结构映射，无第五处偏差点。
 
 ## 归一化说明（对比前的渲染等价化）
 
