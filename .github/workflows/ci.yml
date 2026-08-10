@@ -76,6 +76,7 @@ jobs:
       # 吞错门禁本体 = eslint 本地规则 local/no-silent-catch（上方 npx eslint . 自动生效，
       # 零新增 job）；报告模式便于 diff 观察趋势，非门禁本体。
       - run: npm run check:swallowed-errors-frontend
+      - run: npm run check:css-encoding
 
   vitest-fast:
     runs-on: ubuntu-latest

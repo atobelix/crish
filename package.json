@@ -42,6 +42,7 @@
     "check:ui-layer": "node scripts/check-ui-layer.mjs",
     "check:line-counts": "node scripts/check-line-counts.mjs --all",
     "check:swallowed-errors-frontend": "node scripts/check-swallowed-errors-frontend.mjs --report",
+    "check:css-encoding": "node scripts/check-css-encoding.mjs --whitelist-dirty-check",
     "check:store-types": "node scripts/check-no-as-any-store.mjs",
     "check:store-writes": "node scripts/check-no-raw-setstate.mjs",
     "check:store-facade": "node scripts/check-store-facade.mjs",
