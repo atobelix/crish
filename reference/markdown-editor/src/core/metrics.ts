@@ -15,6 +15,13 @@
 //   本模块只提供登记 API（登记或注入口径），接线留后续轮次；
 // - 布局抖动计数：main.tsx 的 getBoundingClientRect 哨兵迁移
 //   （incrementLayoutThrash，行为与旧 __CRISH_METRICS__ 兼容）。
+// - 流式专项（W3-4 / S-EL-10）：append 耗时采样（recordAppendTime，
+//   注入式计时——接线方负责 performance.now 差值）、提交计数
+//   （recordAppendCommit / recordDirectCommit 双通道）、直刷占比
+//   （派生 = 直刷提交 / 总提交）、帧间隙（复用 FPS 采样窗口的帧间隔
+//   均值/最近值，零新增采样循环）。本批只做定义与单元测试；采集
+//   接线（streamAppend / appendText 调用点）归 W3-4 后续批次
+//   （涉及 MarkdownEngine / EditorStore 域）。
 // 兼容面：__CRISH_METRICS__ 现有 3 API（getCacheStats / getLineCount /
 // layoutThrashCount）形状保持不变，main.tsx 改走本模块（见 main.tsx）。
 
@@ -40,6 +47,34 @@ export interface CacheStatsShape {
   size: number;
 }
 
+/** append 耗时采样统计（W3-4；appendText 单次耗时，注入式计时） */
+export interface AppendTimeStats {
+  /** 采样次数（recordAppendTime 登记次数） */
+  count: number;
+  /** 平均耗时（ms；无采样时为 0） */
+  averageMs: number;
+  /** 最近一次耗时（ms；无采样时为 0） */
+  lastMs: number;
+}
+
+/** 流式提交通道计数（W3-4；appendText 提交 + 直刷通道提交） */
+export interface CommitStats {
+  /** appendText 提交次数（recordAppendCommit 登记） */
+  appendCommits: number;
+  /** 直刷通道提交次数（recordDirectCommit 登记；W1-1 flush 出口/直写点） */
+  directCommits: number;
+}
+
+/** 帧间隙统计（W3-4；复用 FPS 采样窗口的帧间隔数据，零新增采样） */
+export interface FrameGapStats {
+  /** 样本数（与 fps.samples 同源，同一 rAF 滚动窗口） */
+  samples: number;
+  /** 最近一次帧间隔（ms；无样本时为 0） */
+  lastMs: number;
+  /** 平均帧间隔（ms；无样本时为 0） */
+  averageMs: number;
+}
+
 /** 指标快照（getSnapshot 一次性取全量读数） */
 export interface MetricsSnapshot {
   /** FPS 分位统计（rAF 采样） */
@@ -52,6 +87,14 @@ export interface MetricsSnapshot {
   searchBatches: number;
   /** 布局抖动计数（getBoundingClientRect 哨兵） */
   layoutThrashCount: number;
+  /** append 耗时采样（recordAppendTime 登记；W3-4 流式专项） */
+  appendTime: AppendTimeStats;
+  /** 提交通道计数（appendText 提交 + 直刷通道提交；W3-4 流式专项） */
+  commits: CommitStats;
+  /** 直刷占比（直刷提交 / 总提交，0-1；无提交时为 0；派生值） */
+  directRatio: number;
+  /** 帧间隙统计（复用 FPS 采样窗口；W3-4 流式专项） */
+  frameGaps: FrameGapStats;
 }
 
 /**
@@ -82,6 +125,14 @@ export interface Metrics {
   recordSearchBatch(): void;
   /** 布局抖动计数自增（main.tsx 哨兵接线） */
   incrementLayoutThrash(): void;
+  /** 记录一次 append 耗时（ms；接线方在 appendText 调用点计时后注入） */
+  recordAppendTime(ms: number): void;
+  /** 记录一次 appendText 提交（appendText 调用点接线；+1） */
+  recordAppendCommit(): void;
+  /** 记录一次直刷通道提交（W1-1 flush 出口/直写点接线；+1） */
+  recordDirectCommit(): void;
+  /** 清零流式专项指标（append 耗时采样与提交计数；帧间隙窗口保留） */
+  resetStreamMetrics(): void;
   /** 覆盖缓存统计源（默认 MarkdownParser.getCacheStats） */
   setCacheStatsSource(source: () => CacheStatsShape): void;
   /** 注册行数源（main.tsx 接线 getLineCount 访问器，避免循环依赖） */
@@ -110,6 +161,17 @@ export function createMetrics(): Metrics {
   let searchBatches = 0;
   let layoutThrash = 0;
 
+  // —— 流式专项指标状态（W3-4；清零见 resetStreamMetrics）——
+  let appendCount = 0;
+  let appendTotalMs = 0;
+  let appendLastMs = 0;
+  let appendCommits = 0;
+  let directCommits = 0;
+  // 帧间隙：lastFrameGap 记录最近样本；frameGapSum 为窗口内帧间隔累计
+  // 和（一进一出与 frameIntervals 同步维护，O(1) 均值派生）
+  let lastFrameGap = 0;
+  let frameGapSum = 0;
+
   // —— FPS 采样循环（rAF 驱动，滚动窗口记录帧间隔）——
   let rafId: number | null = null;
   let lastTs = 0;
@@ -126,9 +188,12 @@ export function createMetrics(): Metrics {
       const dt = ts - lastTs;
       if (dt > 0) {
         frameIntervals.push(dt);
+        frameGapSum += dt;
+        lastFrameGap = dt;
         // 滚动窗口：超限丢最旧（每帧至多 1 次出队，摊销 O(1)）
         if (frameIntervals.length > FPS_WINDOW_FRAMES) {
-          frameIntervals.shift();
+          const evicted = frameIntervals.shift();
+          frameGapSum -= evicted ?? 0;
         }
       }
     }
@@ -166,6 +231,13 @@ export function createMetrics(): Metrics {
     };
   };
 
+  /** 现算帧间隙：窗口内帧间隔均值 + 最近值（复用 FPS 采样窗口） */
+  const computeFrameGaps = (): FrameGapStats => {
+    const n = frameIntervals.length;
+    if (n === 0) return { samples: 0, lastMs: 0, averageMs: 0 };
+    return { samples: n, lastMs: lastFrameGap, averageMs: frameGapSum / n };
+  };
+
   // —— 注入面（默认源：parser 静态缓存；行数源由接线方注册）——
   const defaultCacheSource = (): CacheStatsShape =>
     MarkdownParser.getCacheStats();
@@ -179,6 +251,20 @@ export function createMetrics(): Metrics {
       materializations,
       searchBatches,
       layoutThrashCount: layoutThrash,
+      appendTime: {
+        count: appendCount,
+        averageMs: appendCount > 0 ? appendTotalMs / appendCount : 0,
+        lastMs: appendLastMs,
+      },
+      commits: {
+        appendCommits,
+        directCommits,
+      },
+      directRatio:
+        appendCommits + directCommits > 0
+          ? directCommits / (appendCommits + directCommits)
+          : 0,
+      frameGaps: computeFrameGaps(),
     }),
 
     getCacheStats: () => cacheSource(),
@@ -202,6 +288,30 @@ export function createMetrics(): Metrics {
 
     incrementLayoutThrash: () => {
       layoutThrash++;
+    },
+
+    recordAppendTime: (ms) => {
+      appendCount++;
+      appendTotalMs += ms;
+      appendLastMs = ms;
+    },
+
+    recordAppendCommit: () => {
+      appendCommits++;
+    },
+
+    recordDirectCommit: () => {
+      directCommits++;
+    },
+
+    resetStreamMetrics: () => {
+      appendCount = 0;
+      appendTotalMs = 0;
+      appendLastMs = 0;
+      appendCommits = 0;
+      directCommits = 0;
+      // 帧间隙与 FPS 共用 rAF 采样窗口：清零会破坏既有 FPS 滚动窗口
+      // 语义（stop/start 保留窗口数据是既有契约），故不清窗口
     },
 
     setCacheStatsSource: (source) => {
