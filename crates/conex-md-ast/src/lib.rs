@@ -1,4 +1,4 @@
-//! Conex-MD 契约层：parse / serialize / apply 片段（W2-A / W2-B）。
+//! Conex-MD 契约层：parse / serialize / apply 片段（W2-A / **W2-B**）。
 //!
 //! - 类型 **re-export** 自 `conex-doc-collab`（T3 单归属，不平行定义 BlockId）
 //! - 机器主编码：`<!--c:UUID-->` 独占行（W0-B / 15）
@@ -9,14 +9,16 @@
 //! # 公共 API
 //! - [`document_to_md`] / [`serialize_tree`]：Agent **`get_md` 读路径 = 即时 S(树)**（禁止陈旧 mirror）
 //! - [`parse_document`] / [`parse_document_detailed`]（含 [`LossyReport`]）
-//! - [`apply_md_fragment`]（MD 片段 → Op 列表；失败零半树）
+//! - [`apply_md_fragment`] → [`ApplyReport`]（ops + lossy + new_ids；W2-B：lossy 可观测；失败零半树）
 //! - [`strip_conex_id_comments`]（pure-gfm 辅助）
 //! - [`encode_block_id_line`] / [`decode_block_id_line`]
 //! - 退役：[`parse_document_handwritten`]（非默认）
 //!
-//! # 诚实边界（W2-A）
-//! - **已接线** markdown-rs 为 GFM P 主路径
-//! - **未关闭** A-MD 全表 / EL-06 / normalize 一等 API / pure-gfm mode 一等面
+//! # 诚实边界（W2-A / W2-B）
+//! - **已接线** markdown-rs 为 GFM P 主路径（W2-A）
+//! - **已交付** ApplyReport 透出 lossy（W2-B）；失败整批 Err、不 mutate target
+//! - **未关闭**：**≠ A-MD 全表** / **≠ EL-06** / normalize 一等 API / pure-gfm mode 一等面
+//! - **≠ A-MD-04**：零半树 ≠ merge 后 P∘S≡ 联测全集
 //!
 //! # 权威
 //! `docs/block-workspace-architecture/plans/03-MD契约.md`；A-MD / RT-1…；禁止 HTML 反推块树。
@@ -35,7 +37,7 @@ mod parse_handwritten;
 mod parse_mdast;
 mod serialize;
 
-pub use apply::apply_md_fragment;
+pub use apply::{ApplyReport, apply_md_fragment};
 pub use parse::{PARSE_BACKEND, ParseOutput, parse_document, parse_document_detailed};
 #[allow(deprecated)]
 pub use parse_handwritten::{parse_document_detailed_handwritten, parse_document_handwritten};

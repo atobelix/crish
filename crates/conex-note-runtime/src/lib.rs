@@ -5,7 +5,7 @@
 //! apply_md_fragment(req)
 //!   → NoteBatchTokens 校验（可选 batch_id）
 //!   → intent_id 幂等表
-//!   → conex_md_ast::apply_md_fragment(session.tree(), parent, md) → Ops
+//!   → conex_md_ast::apply_md_fragment(session.tree(), parent, md) → ApplyReport{ops,lossy,..}
 //!   → commit_ops(session, store, origin, &ops)  // apply + projection 索引
 //!   → NoteApplyMdResult { block_ids, inserted, idempotent }
 //! ```

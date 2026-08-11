@@ -1,27 +1,69 @@
-//! MD 片段 → Op 列表（W2-B）。
+//! MD 片段 → Op 列表 + 有损报告（**W2-B Strict**）。
 //!
 //! # 不变量
-//! - **只产出 `Vec<Op>`，不 mutate `target`**（零半树；写树由调用方 `DocSession::apply`）
+//! - **只产出 [`ApplyReport`]，不 mutate `target`**（零半树；写树由调用方 `DocSession::apply`）
 //! - 失败返回 `Err`，不泄漏部分 Op（`Result` 语义：`Ok` 才持有完整列表）
+//! - **lossy 透出**：parse 侧有损项进入 `ApplyReport.lossy`，**禁止**默默丢弃（Agent 可审计）
 //!
 //! # ID 策略（钉死）
 //! - 片段内合法 `<!--c:UUID-->` **复用**该 ID
 //! - **文档（target）内已存在的 ID → 整批失败**（`MdError::IdConflict`）
-//! - 缺 ID / 片段内重复 ID：交给 `parse`（生成新 ID 并记 lossy；本函数不透出 lossy）
+//! - 缺 ID / 片段内重复 ID：交给 `parse_document_detailed`（生成新 ID 并记 lossy；**本函数透出**）
+//!
+//! # 诚实边界（W2-B）
+//! - **已交付**：`ApplyReport { ops, lossy, new_ids }`；失败零半树；不 mutate target
+//! - **未关闭**：**≠ EL-06**；**≠ A-MD 全表**（尤 **≠ A-MD-04** merge 联测全集；零半树 ⊆ 写安全，≠ RT-7）
+//! - **不含** opts 模式面 / pure-gfm apply 一等（后续包）
 
-use crate::{BlockId, BlockTree, MdError, Op, parse_document};
+use crate::{
+    BlockId, BlockTree, LossyReport, MdError, Op, parse_document_detailed,
+};
 use std::collections::HashSet;
 
-/// 将 MD 片段解析为可挂到 `parent` 下的 Op 列表。
+/// `apply_md_fragment` 成功结果：ops + 有损报告 + 本批新块 ID。
+///
+/// - `ops`：可交给 `DocSession::apply` 的完整批（失败路径不构造本结构）
+/// - `lossy`：片段 parse 侧有损项（`missing_block_id` / `duplicate_block_id` / `structure_note` 等）
+/// - `new_ids`：本批 `Op::Insert` 的块 ID（顺序与 Insert 出现序一致）
+///
+/// **≠ EL-06 / ≠ A-MD 全表**；本类型仅使 Agent/调用方**可观测** lossy。
+#[derive(Debug, Clone)]
+pub struct ApplyReport {
+    pub ops: Vec<Op>,
+    pub lossy: LossyReport,
+    pub new_ids: Vec<BlockId>,
+}
+
+impl ApplyReport {
+    /// 空片段 / 零 Op 合法结果。
+    pub fn empty() -> Self {
+        Self {
+            ops: Vec::new(),
+            lossy: LossyReport::default(),
+            new_ids: Vec::new(),
+        }
+    }
+
+    /// 仅取 ops（兼容只关心写批的调用方；lossy 已被调用方读过或刻意忽略）。
+    pub fn into_ops(self) -> Vec<Op> {
+        self.ops
+    }
+}
+
+/// 将 MD 片段解析为可挂到 `parent` 下的 [`ApplyReport`]。
 ///
 /// - `parent = None`：挂到文档根
 /// - `parent = Some(id)`：id 必须已在 `target` 中，否则 `UnknownParent`
 /// - 不修改 `target`
+/// - `Ok` 时 `lossy` 可被调用方读取（W2-B 核心；**禁止**默默丢弃 parse 有损）
+///
+/// # 诚实
+/// **≠ EL-06**；**≠ A-MD-04**（merge 后 P∘S≡ 联测属跨 crate；本 API 只保证库内零半树 + lossy 透出）。
 pub fn apply_md_fragment(
     target: &BlockTree,
     parent: Option<BlockId>,
     md: &str,
-) -> Result<Vec<Op>, MdError> {
+) -> Result<ApplyReport, MdError> {
     // 1. 未知父：整批失败（在解析前即可判定，避免无意义工作）
     if let Some(pid) = parent {
         if target.get(&pid).is_none() {
@@ -29,15 +71,21 @@ pub fn apply_md_fragment(
         }
     }
 
-    // 2. 结构子集解析（复用 parse）
-    let frag = parse_document(md)?;
+    // 2. 结构子集解析（复用 detailed：保留 lossy）
+    let parsed = parse_document_detailed(md)?;
+    let frag = parsed.tree;
+    let lossy = parsed.lossy;
 
-    // 空片段：合法，零 Op
+    // 空片段：合法，零 Op（仍透出 parse 可能产生的 lossy——通常为空）
     if frag.root_children.is_empty() {
-        return Ok(Vec::new());
+        return Ok(ApplyReport {
+            ops: Vec::new(),
+            lossy,
+            new_ids: Vec::new(),
+        });
     }
 
-    // 3. ID 冲突：片段内任一 ID 已在 target → 整批失败
+    // 3. ID 冲突：片段内任一 ID 已在 target → 整批失败（不泄漏 ops）
     for id in frag.nodes.keys() {
         if target.nodes.contains_key(id) {
             return Err(MdError::IdConflict(id.to_string()));
@@ -55,7 +103,19 @@ pub fn apply_md_fragment(
     // 防御：Op 列表内 ID 不得重复（parse 已保证；再钉一次）
     assert_ops_ids_unique(&ops);
 
-    Ok(ops)
+    let new_ids: Vec<BlockId> = ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::Insert { id, .. } => Some(*id),
+            _ => None,
+        })
+        .collect();
+
+    Ok(ApplyReport {
+        ops,
+        lossy,
+        new_ids,
+    })
 }
 
 /// 目标父下已有兄弟数量，作为新 order 序号起点。
@@ -146,12 +206,15 @@ alpha
 <!--c:22222222-2222-4222-a222-222222222222-->
 beta
 ";
-        let ops = apply_md_fragment(&empty_tree(), None, md).unwrap();
+        let report = apply_md_fragment(&empty_tree(), None, md).unwrap();
+        let ops = &report.ops;
         let inserts: Vec<_> = ops
             .iter()
             .filter(|o| matches!(o, Op::Insert { .. }))
             .collect();
         assert_eq!(inserts.len(), 2);
+        assert_eq!(report.new_ids.len(), 2);
+        assert!(report.lossy.is_empty(), "well-formed 片段 lossy 应空");
 
         let a = bid("11111111-1111-4111-a111-111111111111");
         let b = bid("22222222-2222-4222-a222-222222222222");
@@ -226,7 +289,8 @@ beta
             nodes,
         };
 
-        let ops = apply_md_fragment(&target, Some(hang), md).unwrap();
+        let report = apply_md_fragment(&target, Some(hang), md).unwrap();
+        let ops = &report.ops;
         let h = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
         let p = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
 
@@ -312,10 +376,11 @@ x
     /// 空 md → 空 Op。
     #[test]
     fn empty_md_zero_ops() {
-        let ops = apply_md_fragment(&empty_tree(), None, "").unwrap();
-        assert!(ops.is_empty());
-        let ops = apply_md_fragment(&empty_tree(), None, "\n\n").unwrap();
-        assert!(ops.is_empty());
+        let report = apply_md_fragment(&empty_tree(), None, "").unwrap();
+        assert!(report.ops.is_empty());
+        assert!(report.new_ids.is_empty());
+        let report = apply_md_fragment(&empty_tree(), None, "\n\n").unwrap();
+        assert!(report.ops.is_empty());
     }
 
     /// 不 mutate：调用前后 structure 指纹不变。
@@ -345,7 +410,7 @@ x
 <!--c:22222222-2222-4222-a222-222222222222-->
 new
 ";
-        let _ops = apply_md_fragment(&target, None, md).unwrap();
+        let _report = apply_md_fragment(&target, None, md).unwrap();
         assert!(structure_eq(&before, &target));
     }
 
@@ -359,8 +424,9 @@ new
 <!--c:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb-->
 子段落
 ";
-        let expected = parse_document(md).unwrap();
-        let ops = apply_md_fragment(&empty_tree(), None, md).unwrap();
+        let expected = crate::parse_document(md).unwrap();
+        let report = apply_md_fragment(&empty_tree(), None, md).unwrap();
+        let ops = report.ops;
 
         let mut session = DocSession::new("test-md-frag");
         session
@@ -423,8 +489,8 @@ new
 <!--c:cccccccc-cccc-4ccc-8ccc-cccccccccccc-->
 新段
 ";
-        let ops = apply_md_fragment(&target, Some(parent), md).unwrap();
-        match &ops[0] {
+        let report = apply_md_fragment(&target, Some(parent), md).unwrap();
+        match &report.ops[0] {
             Op::Insert { order, parent: p, .. } => {
                 assert_eq!(*p, Some(parent));
                 // 已有 1 个兄弟 → 新 order a0001
@@ -432,5 +498,80 @@ new
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    /// W2-B：缺 ID 片段 → lossy 可被调用方读取（非默默丢弃）。
+    ///
+    /// **≠ A-MD-04 全集**；仅证 ApplyReport.lossy 可观测。
+    #[test]
+    fn apply_report_lossy_missing_block_id_readable() {
+        let md = "无ID段落应补生成\n";
+        let report = apply_md_fragment(&empty_tree(), None, md).unwrap();
+
+        // 调用方能读到 lossy 项
+        assert!(
+            !report.lossy.is_empty(),
+            "缺 ID 必须透出 lossy，got empty"
+        );
+        assert!(
+            report
+                .lossy
+                .items
+                .iter()
+                .any(|i| i.code == "missing_block_id"),
+            "期望 missing_block_id，got {:?}",
+            report.lossy
+        );
+
+        // 仍产出可 apply 的 ops（零半树路径完整）
+        assert!(
+            !report.ops.is_empty(),
+            "缺 ID 仍应生成 Insert（新 ID）"
+        );
+        assert_eq!(report.new_ids.len(), 1);
+        assert!(
+            matches!(report.ops[0], Op::Insert { .. }),
+            "首 Op 应为 Insert"
+        );
+    }
+
+    /// W2-B：重复 ID → lossy.duplicate_block_id 可读取；ops 仍整批 Ok（片段内重分配）。
+    #[test]
+    fn apply_report_lossy_duplicate_block_id_readable() {
+        let md = "\
+<!--c:11111111-1111-4111-a111-111111111111-->
+A
+
+<!--c:11111111-1111-4111-a111-111111111111-->
+B
+";
+        let report = apply_md_fragment(&empty_tree(), None, md).unwrap();
+        assert!(
+            report
+                .lossy
+                .items
+                .iter()
+                .any(|i| i.code == "duplicate_block_id"),
+            "期望 duplicate_block_id，got {:?}",
+            report.lossy
+        );
+        // 两个根 Insert（后者重分配 ID）
+        let inserts: Vec<_> = report
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::Insert { .. }))
+            .collect();
+        assert_eq!(inserts.len(), 2);
+        assert_eq!(report.new_ids.len(), 2);
+        // 两个 Insert ID 必须不同
+        let id0 = match inserts[0] {
+            Op::Insert { id, .. } => *id,
+            _ => unreachable!(),
+        };
+        let id1 = match inserts[1] {
+            Op::Insert { id, .. } => *id,
+            _ => unreachable!(),
+        };
+        assert_ne!(id0, id1, "重复 ID 应重分配");
     }
 }

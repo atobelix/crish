@@ -1,11 +1,15 @@
 /**
- * W3-F 结构 Intent 通路单测：
- * - slash 选中 → slash_insert → mock sink
+ * W3-F-S / 形状轨 · 结构 Intent + mock sink：
+ * - slash 选中 → slash_insert → mock sink（**仅形状**）
  * - composing 拒绝打开 / 拒绝提交
  * - 多选删除 Intent 形状 + silent L0 守卫
  * - mock sink 成功 / 拒绝
  *
- * **W3-F ≠ EL-01 关闭**（通路绿 ≠ 产品全表验收）。
+ * ## 轨声明（诚实 · G-INV-3）
+ *
+ * - 本文件 = **W3-F-S** 形状 / IME 守卫；`mock.calls` **不得**作 **W3-F Strict** 关闭证据
+ * - **W3-F Strict** 见 `chrome.w3f_apply.test.ts`（`createCollabApplySink`）+ RS `w3_f_*` / `w3_d_*`
+ * - **≠ EL-01**；**≠** A-BLK-02/04/05 全关；DOM 落点/拖拽 **未交付**
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { ImeMachine } from '@crish/editor-kit';

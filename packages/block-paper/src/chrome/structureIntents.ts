@@ -22,8 +22,11 @@
  *
  * - 本模块提供 wire 半桥；**生产 sink** 用 `createCollabApplySink`
  * - 真 PM 叶见 `leaves/pm`（W3-D-PM）；与本 wire + RS 真 apply 合 = **W3-D**
+ * - **W3-F Strict 子集**：chrome `slash_insert` / `delete_blocks` → `submitIntent` →
+ *   `createCollabApplySink` → wire → RS apply（测：`chrome.w3f_apply.test.ts` + `w3_f_*`）
+ * - **W3-F-S**：StructureIntent + wire + mock（`chrome.w3f.test.ts`）；**不得**关 Strict
  * - **≠ EL-01**；**≠ A-BLK 全表**；禁止 mock sink 冒充 Strict 关闭
- * - **W3-F ≠ EL-01 关闭**：不关闭 A-BLK 全表、不 serialize(DOM)
+ * - **未交付（W3-F DOM）**：把手/slash 浮层/落点线/拖拽 DOM；A-BLK e2e
  */
 
 import type {

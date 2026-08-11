@@ -490,12 +490,13 @@ impl NoteBackend for StoreNoteBackend {
                     _ => None,
                 };
 
-                let mut ops = apply_md_fragment(session.tree(), parent, &req.markdown)
+                // W2-B：ApplyReport.lossy 可观测；本后端暂取 ops 写入（lossy 进工具 result 属后续 W4）
+                let mut report = apply_md_fragment(session.tree(), parent, &req.markdown)
                     .map_err(Self::map_md_err)?;
                 if let Some(aid) = after_id {
-                    Self::rewrite_orders_after(&mut ops, &aid, session.tree());
+                    Self::rewrite_orders_after(&mut report.ops, &aid, session.tree());
                 }
-                ops
+                report.ops
             }
         };
 

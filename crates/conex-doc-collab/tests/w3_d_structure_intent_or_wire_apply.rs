@@ -163,3 +163,110 @@ fn w3_d_strict_text_and_structure_intent_true_apply() {
 fn w3_d_structure_intent_or_wire_applys_to_session() {
     run_w3_d_strict_true_apply();
 }
+
+/// W3-F Strict 子集 · chrome 路径 wire 真 apply（交叉 TS `chrome.w3f_apply.test.ts`）。
+///
+/// # 轨（诚实）
+///
+/// | 可宣称 | 禁止宣称 |
+/// | ------ | -------- |
+/// | slash_insert 等价 **insert** wire + delete_blocks wire → 真 `DocSession::apply` | **EL-01** / A-BLK-02/04/05 全关 |
+/// | 与 chrome `createCollabApplySink` 产出 JSON 键互通 | chrome DOM / 落点线 / 拖拽 e2e（未交付） |
+///
+/// wire 形状对齐 TS：
+/// - slash `heading-1` → insert + `kind: { heading: { level: 1 } }`
+/// - 多选删除 → `[{ "op":"delete", "id": ... }, ...]`
+fn run_w3_f_slash_or_delete_true_apply() {
+    let id_slash = bid("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    let id_keep = bid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    let id_del = bid("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+    let mut session = DocSession::new("w3-f-strict-apply");
+
+    // 先落锚点块（模拟 slash 前已有段落）
+    let seed = r#"[
+      {
+        "op": "insert",
+        "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "parent": null,
+        "order": "a0",
+        "kind": "paragraph",
+        "props": { "attrs": {} }
+      },
+      {
+        "op": "insert",
+        "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "parent": null,
+        "order": "a1",
+        "kind": "paragraph",
+        "props": { "attrs": {} }
+      }
+    ]"#;
+    let seed_ops = ops_from_json_str(seed).expect("seed");
+    session
+        .apply(Origin::User, &seed_ops)
+        .expect("seed apply");
+
+    // ── slash_insert 等价 insert（TS chrome.w3f_apply：heading-1 + allocateId=cccccccc…）──
+    let slash_json = r#"[
+      {
+        "op": "insert",
+        "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "parent": null,
+        "order": "a0",
+        "kind": { "heading": { "level": 1 } },
+        "props": { "attrs": {} }
+      }
+    ]"#;
+    let slash_ops = ops_from_json_str(slash_json).expect("parse slash_insert wire");
+    let event = session
+        .apply(Origin::User, &slash_ops)
+        .expect("真 apply slash_insert→insert（禁止 mock）");
+    let DocEvent::Projection { diff } = event else {
+        panic!("expect Projection after slash insert, got {event:?}");
+    };
+    assert!(
+        session.tree().nodes.contains_key(&id_slash),
+        "slash_insert wire 须进树"
+    );
+    let node = session.tree().get(&id_slash).expect("slash block");
+    assert_eq!(node.kind, BlockKind::Heading { level: 1 });
+    assert!(
+        diff.upserts.iter().any(|u| u.id == id_slash),
+        "slash insert 须进 ProjectionDiff.upserts"
+    );
+
+    // ── delete_blocks wire（TS chrome 多选删除）──
+    let delete_json = r#"[
+      { "op": "delete", "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" }
+    ]"#;
+    let delete_ops = ops_from_json_str(delete_json).expect("parse delete_blocks wire");
+    let event2 = session
+        .apply(Origin::User, &delete_ops)
+        .expect("真 apply delete_blocks");
+    let DocEvent::Projection { diff: diff2 } = event2 else {
+        panic!("expect Projection after delete");
+    };
+    assert!(diff2.removes.contains(&id_del), "delete 须进 removes");
+    assert!(
+        !session.tree().nodes.contains_key(&id_del),
+        "树须移除被删块"
+    );
+    assert!(
+        session.tree().nodes.contains_key(&id_keep),
+        "未删锚点保持"
+    );
+    assert!(
+        session.tree().nodes.contains_key(&id_slash),
+        "slash 新块保持"
+    );
+}
+
+/// W3-F Strict 子集 · slash_insert / delete_blocks 对应 op 真 apply。
+///
+/// 交叉：`packages/block-paper/src/chrome/chrome.w3f_apply.test.ts`
+/// （createCollabApplySink 形状；本测钉 **真** DocSession）。
+#[test]
+fn w3_f_slash_insert_or_delete_blocks_true_apply() {
+    run_w3_f_slash_or_delete_true_apply();
+}

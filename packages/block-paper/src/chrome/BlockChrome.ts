@@ -9,9 +9,12 @@
  * - **W3-F**：多选删除 / 折叠 → 批量结构 Intent（经 submitIntent → sink）
  *
  * **不**接真实 DOM；UI 后接时以本 store 为呈现源。
- * **禁止** DOM 当真相；写路径必须 Intent → RS apply。
+ * **禁止** DOM 当真相；写路径必须 Intent → **`createCollabApplySink`** → RS apply。
  *
- * **W3-F ≠ EL-01 关闭**：结构 Intent 通路绿 ≠ Notion 级 chrome 全表验收关闭。
+ * ## 轨
+ * - **W3-F Strict 子集**：`requestDeleteSelected` → `delete_blocks` → collab sink（见 `chrome.w3f_apply.test.ts`）
+ * - mock sink **仅**形状（`chrome.w3f.test.ts`）；**≠** Strict 关闭证据
+ * - **≠ EL-01**；**≠** A-BLK 全表；chrome **DOM / 拖拽落点线未交付**
  */
 
 import type { BlockId, IntentId } from '@crish/block-paper-contract';

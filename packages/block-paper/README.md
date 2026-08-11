@@ -7,6 +7,7 @@
 > `createMockIntentSink` **仅**形状测（G-INV-3）。  
 > **禁止** 把 DOM / ProseMirror doc / 本包假数据当作真相源持久化。  
 > **W3-D Strict** = 真 PM + TextEdit/Structure → 真 apply（本包工厂 + RS 集成）；**≠ EL-01**；**≠ A-BLK 全表**。  
+> **W3-F Strict 子集** = chrome `slash_insert` / `delete_blocks` → `createCollabApplySink`（`chrome.w3f_apply.test.ts` + RS `w3_f_*`）；**mock 不得关闭**；**DOM / 拖拽落点线未交付**；**≠ EL-01**；**≠ A-BLK-02/04/05 全关**。  
 > **W3-E ≠ 全语言高亮完成**。
 
 ## 边界

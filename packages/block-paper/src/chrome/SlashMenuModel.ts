@@ -4,13 +4,17 @@
  * - 打开 / 过滤 / 关闭
  * - **composing 时不可开**（A-IME-02 / editor-kit structureKeyGuard 思想）
  * - **composing 时不可确认提交**（W3-F 加固）
- * - 选中 catalog 项 → 产出 `slash_insert` StructureIntent（经 submitIntent → sink）
+ * - 选中 catalog 项 → 产出 `slash_insert` StructureIntent
+ *   （经 `submitIntent` → **生产** `createCollabApplySink`；形状测可用 mock）
  * - 可注入 `isComposing` 回调（对接 ImeMachine.isComposing 或宿主）
  *
- * 写路径：StructureIntent → submitIntent → sink →（未来）RS apply；
- * 禁止 DOM 旁路写盘。
+ * 写路径：StructureIntent → `submitIntent` → **`createCollabApplySink`** → wire → RS `DocSession::apply`；
+ * 形状测可用 `createMockIntentSink`；禁止 DOM 旁路写盘。
  *
- * **W3-F ≠ EL-01 关闭**：slash → Intent 通路绿 ≠ 产品级 slash 体验验收关闭。
+ * ## 轨
+ * - **W3-F Strict 子集**：`selectItem` → `slash_insert` → collab sink（见 `chrome.w3f_apply.test.ts`）
+ * - mock 形状见 `chrome.w3f.test.ts`；**不得** mock.calls 关 Strict
+ * - **≠ EL-01**；slash **DOM 浮层 / A-BLK-02 e2e 未交付**
  */
 
 import type { BlockId, IntentId } from '@crish/block-paper-contract';

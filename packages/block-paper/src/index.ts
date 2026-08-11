@@ -21,8 +21,11 @@
  *   - **W3-D-S** = plain TextLeaf + mock（形状）
  *   - **W3-D-PM** = 真 PM 适配器入库；单独 **≠** W3-D 终局
  *   - **W3-D** = 真 PM + TextEdit/Structure Intent → 真 apply（本包工厂 + RS 集成）
+ *   - **W3-F-S** = StructureIntent + wire + mock（`chrome.w3f.test.ts`）
+ *   - **W3-F Strict 子集** = chrome slash_insert / delete_blocks → `createCollabApplySink`
+ *     （`chrome.w3f_apply.test.ts` + RS `w3_f_*`）；**DOM/拖拽落点未交付**
  *   - **≠ EL-01**；**≠ A-BLK 全表 e2e**；**≠** 块工作区完成
- * - W3-E 完成 = 代码叶可聚焦 + Intent 通路绿；W3-F-S = 结构 Intent+wire
+ * - W3-E 完成 = 代码叶可聚焦 + Intent 通路绿
  */
 
 // Block chrome 状态
