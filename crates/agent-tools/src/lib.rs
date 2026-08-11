@@ -36,6 +36,8 @@ pub mod compression_store;
 // document_apply_md / send_to_note 消费本契约，生产代码保持叶子依赖
 // （不引入 doc-collab/store）
 pub mod note_backend;
+// W4-B：笔记工具审批矩阵方向（safe / write × plan|ask|full；≠ A-AGT-06 满表）
+pub mod note_permission;
 pub mod definition;
 pub mod explore_quota;
 pub mod executor;
@@ -131,6 +133,10 @@ pub use note_backend::{
     NoteBackend, NoteBackendError, NoteBackendHandle, NoteBatchTokens, NoteLossyItem,
     NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
     NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
+};
+pub use note_permission::{
+    decide_note_tool, is_note_safe_tool, is_note_tool, is_note_write_tool, plan_denies_note_tool,
+    NOTE_SAFE_TOOLS, NOTE_WRITE_TOOLS,
 };
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,

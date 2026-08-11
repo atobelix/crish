@@ -1,5 +1,5 @@
 /**
- * note-paper 目录边界静态扫描（W5-B · B-03 / A-SURF-02）
+ * note-paper 目录边界静态扫描（**W5-B-S Skeleton** · B-03 / A-SURF-02）
  *
  * 禁止本目录源码 import：
  * - EditorStore / useEditorStore
@@ -7,6 +7,7 @@
  * - lines[] 写 API 当局
  *
  * 本测只扫 note-paper 目录；bridges 是允许「知两边」的薄层，不在此扫禁 import。
+ * 本包 ≠ W5-B Strict；边界绿 ≠ EL 关闭。
  */
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';

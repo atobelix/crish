@@ -151,10 +151,23 @@ impl AskChannel for ApprovalChannel {
                         };
                         Ok(AskDecision::Denied { reason })
                     }
-                    ApprovalDecision::Expired => Err(ToolError::new(
-                        "tool.approval_expired",
-                        "approval expired",
-                    )),
+                    ApprovalDecision::Expired => {
+                        // G-9：超时 → Expired 权威语义落库——通道侧把超时
+                        // 决策记为 approval-resolved(expired) 事件（随
+                        // recorded 并入批事件流；approve/deny 由壳层命令
+                        // 路径落事件，避免双发）
+                        self.recorded
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .push(ToolEvent::ApprovalResolved {
+                                call_id: self.call_id.clone(),
+                                decision: ApprovalDecision::Expired,
+                            });
+                        Err(ToolError::new(
+                            "tool.approval_expired",
+                            "approval expired",
+                        ))
+                    }
                 }
             }
         }
@@ -383,6 +396,23 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.approval_expired");
+        // G-9：超时 → Expired 权威语义落库——recorded 含
+        // approval-requested → approval-resolved(expired)（approve/deny
+        // 由壳层命令路径落事件，通道侧仅超时补记）
+        let recorded = ch.take_recorded();
+        assert_eq!(recorded.len(), 2, "应记录请求 + 超时结果两事件");
+        assert!(
+            matches!(&recorded[0], ToolEvent::ApprovalRequested { .. }),
+            "首位应为 approval-requested，实际 {:?}",
+            recorded[0]
+        );
+        match &recorded[1] {
+            ToolEvent::ApprovalResolved { call_id, decision } => {
+                assert_eq!(call_id, "c1");
+                assert_eq!(decision, &ApprovalDecision::Expired);
+            }
+            other => panic!("应记录 ApprovalResolved(Expired)，实际 {other:?}"),
+        }
     }
 
     /// abort_token 取消：等待裁决期间令牌触发 → 立即返回取消错误

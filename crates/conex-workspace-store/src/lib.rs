@@ -37,6 +37,10 @@
 //! # W2-C 派生索引（可丢、可重建；损坏不得导致文档不可开）
 //! - `blocks` 投影表：块元数据 + `plain_text` + `props_json`
 //! - `blocks_fts`：FTS5 全文（unicode61 英文；**CJK 走 `instr` 子串回退**，见 `search_fulltext` / A-FTS-ZH-01）
+//! - **结构门**（A-PERF-10 / A-INV-06 索引侧）：英文走 FTS5 MATCH 计划；CJK 走 `instr`（非默认全表 `LIKE`）；
+//!   投影与 FTS 行一致可测；`rebuild_fts` 可重建。测：`tests/w2c_structure_gate.rs`、`tests/fts_chinese.rs`。
+//! - **诚实边界**：**≠ A-PERF-10 数值满关**（数值仅 W6-C）；**≠ EL-03**（EL-03 结构主责 W3-A / 数值 W6-C）；
+//!   **≠ Wave 2「存储完成」**（杀进程权威恢复 / mirror 三路仍分属他包）。
 //!
 //! # W2-D CAS 附件骨架
 //! - [`WorkspaceStore::put_blob`] / [`WorkspaceStore::get_blob`] / [`WorkspaceStore::link_block_attachment`]
@@ -665,6 +669,36 @@ impl WorkspaceStore {
             |r| r.get(0),
         )?;
         Ok(n as usize)
+    }
+
+    /// 该 doc 在 `blocks_fts` 中的行数（W2-C 投影↔FTS 一致性诊断）。
+    ///
+    /// 正常路径下应与 [`Self::count_blocks`] 相等；不等 → 索引损坏或半写，走 [`Self::rebuild_fts`]。
+    pub fn count_fts_blocks(&self, doc_id: &str) -> Result<usize, StoreError> {
+        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let n: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM blocks_fts WHERE doc_id=?1",
+            params![doc_id],
+            |r| r.get(0),
+        )?;
+        Ok(n as usize)
+    }
+
+    /// 读单块投影 `plain_text`（缺行 → `None`；诊断 / 一致性断言用）。
+    pub fn get_block_plain_text(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<Option<String>, StoreError> {
+        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let t: Option<String> = conn
+            .query_row(
+                "SELECT plain_text FROM blocks WHERE doc_id=?1 AND block_id=?2",
+                params![doc_id, block_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(t)
     }
 
     // ── W2-E：MD mirror 导出 + 延迟水位 ───────────────────────────────────

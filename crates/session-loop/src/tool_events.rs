@@ -1,9 +1,15 @@
 //! 工具批处理事件与审批门（任务书 B3.5 的 tool_events 部分）
 //!
 //! - 事件序列：tool-batch-start → (tool-start → approval-requested →
-//!   tool-update* → tool-end)* → tool-batch-end（S1 起 tool-update* 为流式
-//!   进度增量，零或多条，恒位于 tool-start 与 tool-end 之间——TOOLS-01 §3.1.5）
+//!   approval-resolved? → tool-update* → tool-end)* → tool-batch-end
+//!   （S1 起 tool-update* 为流式进度增量，零或多条，恒位于 tool-start 与
+//!   tool-end 之间——TOOLS-01 §3.1.5；approval-resolved 仅引擎侧超时路径
+//!   记录，approve/deny 由壳层命令路径落事件，见下方 G-9 说明）
 //! - 审批防死锁：approval-requested 必须先于挂起等待发出（01 §五.8）
+//! - G-9 审批超时权威语义：超时（APPROVAL_TIMEOUT）→ Expired 时引擎把
+//!   转移记为 approval-resolved(expired) 事件（复用既有 41 变体协议，
+//!   协议不变），随会话事件流持久化/广播/多端同步，手机端过期状态
+//!   无需各自本地计时兜底
 //! - 事件为轻量结构，后续由 orchestrator 转成 AgentEvent（03 §1 清单）
 //!
 //! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；TOOLS-01 §3.1.5
@@ -40,6 +46,16 @@ pub enum ToolEvent {
         /// 请求方身份（T-D-14 权限传递层；None = 主 agent run，裁决者 = 用户；
         /// Some = 子代理 run，裁决者默认 = 主 agent）
         requester: Option<ApprovalRequester>,
+    },
+    /// 审批结果（G-9 引擎侧超时权威语义落库）：恒位于本工具
+    /// approval-requested 之后、tool-end 之前。引擎当前仅对**超时 →
+    /// Expired** 记录本事件（approve/deny 由壳层命令路径落
+    /// approval-resolved，避免双发）；翻译层映射为
+    /// AgentEvent::ApprovalResolved（复用既有变体，协议不变）。
+    ApprovalResolved {
+        call_id: String,
+        /// 引擎侧审批决策（当前恒 Expired；保留全量枚举供映射层对齐）
+        decision: ApprovalDecision,
     },
     /// 单工具结束（携带完整分类结果：成功输出 / 错误码+文案）
     ToolEnd {

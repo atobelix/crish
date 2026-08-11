@@ -14,9 +14,11 @@
 //! - **W4-A**：`NoteApplyMdResult.lossy` 进入工具 result（[`apply_result_json`]）；
 //!   Store 路径须映射 `ApplyReport.lossy`；**禁止**默默丢弃。
 //!
-//! # 诚实边界（W4-A Strict 子集）
-//! - **已交付方向**：既有 5 工具 schema/registry + lossy 结果面形状
-//! - **≠ EL-05**；**≠ A-AGT-01…08 满表**（满表主责 W4-F + W4-B + W6-E）
+//! # 诚实边界（W4-A/B Strict 子集）
+//! - **已交付方向**：既有 5 工具 schema/registry + lossy 结果面形状（W4-A）
+//!   + batch token 占用/校验/过期 + 审批矩阵方向（W4-B，见 `note_permission`）
+//! - **≠ EL-05**；**≠ A-AGT-01…08 满表**（满表主责 **W4-F** + **W6-E**）
+//! - **≠ W4-F**：无 `block_batch`/表驱动 Effects×Source / execution_unknown
 //! - **MemoryNoteBackend 禁关生产项**（仅 test/dev）
 
 use async_trait::async_trait;
@@ -921,6 +923,11 @@ fn try_insert_child(nodes: &mut [NoteOutlineNode], node: &NoteOutlineNode) -> bo
 // ==================== 工具辅助：错误 → JSON / ToolError ====================
 
 /// 将后端错误映射为工具执行失败（写工具）；读工具更常返回 ok=false
+///
+/// # W4-B batch token
+/// - `BatchTokenInvalid` → `tool.invalid_input`（未占用 / 空 id）
+/// - `BatchTokenExpired` → `tool.invalid_input`，message 含 `note.batch_token_expired`
+///   （与 invalid 同属调用方契约错误，不进 execution_failed 软失败面）
 pub fn backend_err_to_tool_err(
     tool_name: &str,
     err: NoteBackendError,
@@ -930,8 +937,13 @@ pub fn backend_err_to_tool_err(
         NoteBackendError::Invalid(m) | NoteBackendError::BatchTokenInvalid(m) => {
             ToolError::invalid_input(m.clone())
         }
+        NoteBackendError::BatchTokenExpired(m) => {
+            ToolError::invalid_input(format!("note.batch_token_expired: {m}"))
+        }
         NoteBackendError::Unwired => ToolError::execution_failed(tool_name, err.message()),
-        other => ToolError::execution_failed(tool_name, format!("{}: {}", other.code(), other.message())),
+        other => {
+            ToolError::execution_failed(tool_name, format!("{}: {}", other.code(), other.message()))
+        }
     }
 }
 

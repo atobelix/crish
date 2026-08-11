@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 /**
- * NotePaperPanel 挂载壳单测（W5-B · B-01/B-02/A-SURF-08 · Round6 transport）
+ * NotePaperPanel 挂载壳单测（**W5-B-S Skeleton** · B-01/B-02/A-SURF-08 · 半 transport）
+ *
+ * 轨：Skeleton；**≠** W5-B Strict；**≠** EL 关闭。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';
@@ -9,14 +11,17 @@ import { BlockChromeModel, createSilentFixture } from '@crish/block-paper';
 import { createMemoryNoteTransport } from '../../api/noteApi';
 import { NotePaperPanel } from './NotePaperPanel';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
+import { W5B_SKELETON_PACKAGE_ID, W5B_SKELETON_TRACK } from './w5bSkeleton';
 
-describe('NotePaperPanel', () => {
-  it('渲染 surface=note-paper 与静默块列表', () => {
+describe('NotePaperPanel · W5-B-S Skeleton', () => {
+  it('渲染 surface=note-paper 与静默块列表 + Skeleton 包锚', () => {
     const { container } = render(
       <NotePaperPanel docId="doc-test" blockCount={4} />
     );
     const panel = screen.getByTestId('note-paper-panel');
     expect(panel).toHaveAttribute('data-surface', EDITOR_SURFACE_NOTE_PAPER);
+    expect(panel).toHaveAttribute('data-package-id', W5B_SKELETON_PACKAGE_ID);
+    expect(panel).toHaveAttribute('data-track', W5B_SKELETON_TRACK);
     expect(panel).toHaveAttribute('data-doc-id', 'doc-test');
     expect(panel).toHaveAttribute('data-block-count', '4');
     expect(panel).toHaveAttribute('data-silent-level', 'L0');
@@ -70,14 +75,17 @@ describe('NotePaperPanel', () => {
     expect(panel).toHaveAttribute('data-surface', 'note-paper');
   });
 
-  it('footer 声明挂载≠交付', () => {
+  it('footer 声明 W5-B-S Skeleton 与挂载≠交付', () => {
     render(<NotePaperPanel blockCount={1} />);
     const footer = screen.getByTestId('note-paper-footer');
+    expect(footer.textContent).toMatch(/W5-B-S/);
+    expect(footer.textContent).toMatch(/Skeleton/i);
     expect(footer.textContent).toMatch(/挂载≠EL-01/);
     expect(footer.textContent).toMatch(/note-paper/);
+    expect(footer.textContent).toMatch(/静默假数据/);
   });
 
-  it('transport：apply 后 refreshToken 刷新块列表', async () => {
+  it('半 transport（Memory）：apply 后 refreshToken 刷新块列表', async () => {
     const mem = createMemoryNoteTransport();
     const { rerender } = render(
       <NotePaperPanel
@@ -125,7 +133,7 @@ describe('NotePaperPanel', () => {
     ).not.toBeNull();
   });
 
-  it('transport：点击刷新按钮可加载写后块', async () => {
+  it('半 transport：点击刷新按钮可加载写后块', async () => {
     const mem = createMemoryNoteTransport();
     render(
       <NotePaperPanel

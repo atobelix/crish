@@ -1,16 +1,22 @@
 /**
- * NotePaperPanel — Workbench 笔记纸面挂载壳（W5-B · B-01/B-02 · Round6/8）
+ * NotePaperPanel — Workbench 笔记纸面挂载壳
+ *
+ * ## 包轨（强制）
+ * - **包 ID：W5-B-S**（Skeleton，必须带 `-S`）
+ * - **合法交付**：预览壳 + 静默假数据 / Memory 半 transport 投影
+ * - **≠ W5-B Strict**（真数据默认路径依赖 W1-H；本组件默认不走真 hydrate）
+ * - **≠ 任何 EL 关闭**（挂载冒充交付 = S5 事故 · 08 §0.2）
+ * - **禁止** 假数据 chrome 关 EL-01；**禁止** 无 W1-H 写「打开完成」
  *
  * surface = note-paper
  *
  * - 使用 `@crish/block-paper` 的 createSilentFixture / BlockChromeModel / SlashMenuModel
  * - **可测** 预览壳：列表块 id、静默把手状态、data-surface="note-paper"
- * - 可选 `transport`：从 Memory/IPC 加载块列表（写后 refresh 可测）
- *   - 产品接线可传 `createDefaultNoteTransport()`（Tauri 真 `note_query_blocks`）
- *   - 单测仍 inject `createMemoryNoteTransport()`，不依赖壳
- * - 未传 `transport` 时保持静默假数据投影（不隐式拉真后端）
+ * - 可选 `transport`：半 transport（Memory/IPC 形状）加载块列表（写后 refresh 可测）
+ *   - Skeleton 默认可 inject `createMemoryNoteTransport()`
+ *   - 未传 `transport` 时保持静默假数据投影（不隐式拉真后端 / 不宣称打开完成）
  * - **禁止** import 行级 EditorStore / markdown-editor store
- * - 挂载 ≠ EL-01/EL-08 关闭；假数据投影 ≠ 文档权威
+ * - 假数据投影 ≠ 文档权威；DOM 锚 `data-package-id="W5-B-S"` / `data-track="skeleton"`
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -24,6 +30,11 @@ import {
 } from '@crish/block-paper';
 import type { NoteQueryBlockHit, NoteTransport } from '../../api/noteApi';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
+import {
+  W5B_SKELETON_BOUNDARY,
+  W5B_SKELETON_PACKAGE_ID,
+  W5B_SKELETON_TRACK,
+} from './w5bSkeleton';
 import styles from './NotePaperPanel.module.css';
 
 // ---------------------------------------------------------------------------
@@ -89,7 +100,7 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   refreshToken = 0,
   onClose,
   className,
-  title = '笔记纸面（预览壳）',
+  title = '笔记纸面（W5-B-S 预览壳）',
 }) => {
   const useTransport = transport !== undefined;
 
@@ -190,6 +201,8 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
       className={rootClass}
       data-surface={EDITOR_SURFACE_NOTE_PAPER}
       data-testid="note-paper-panel"
+      data-package-id={W5B_SKELETON_PACKAGE_ID}
+      data-track={W5B_SKELETON_TRACK}
       data-doc-id={resolvedDocId}
       data-rev={String(resolvedRev)}
       data-silent-level={snapshot.silentLevel}
@@ -295,9 +308,8 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
       </div>
 
       <footer className={styles.footer} data-testid="note-paper-footer">
-        surface={EDITOR_SURFACE_NOTE_PAPER} · 预览壳 · 非行级引擎 ·
-        挂载≠EL-01/EL-08 关闭
-        {useTransport ? ' · transport 投影' : ''}
+        surface={EDITOR_SURFACE_NOTE_PAPER} · {W5B_SKELETON_BOUNDARY}
+        {useTransport ? ' · 半 transport 投影' : ' · 静默假数据'}
       </footer>
     </section>
   );

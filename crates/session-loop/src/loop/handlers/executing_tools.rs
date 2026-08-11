@@ -23,7 +23,9 @@ use conex_types::tool::{
 };
 
 use crate::safe_point::AbortSignal;
-use crate::tool_events::{ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent};
+use crate::tool_events::{
+    ApprovalDecision, ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent,
+};
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
 use std::sync::Arc;
 
@@ -84,7 +86,8 @@ pub(crate) async fn handle(
         .await;
 
     // 2c. 工具事件 → AgentEvent（tool-batch-start/end、tool-start/end、
-    //     approval-requested，01 §五.6 契约）
+    //     approval-requested、approval-resolved（超时 Expired），01 §五.6
+    //     契约 + G-9 审批超时权威语义落库）
     emit_tool_events(state, &outcome.events);
 
     // 3. 工具结果消息 recordMessage（tool 角色；结果落盘后才进 turn-complete，
@@ -262,6 +265,32 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         // run id + 理由；主 agent run = None）
                         requester_run_id: requester.as_ref().map(|r| r.run_id.clone()),
                         reason: requester.as_ref().and_then(|r| r.reason.clone()),
+                    },
+                    timestamp: crate::steering::now_iso_utc(),
+                });
+            }
+            ToolEvent::ApprovalResolved { call_id, decision } => {
+                // G-9：审批超时权威语义——引擎把超时转移落为
+                // approval-resolved(expired) 事件（复用既有
+                // AgentEvent::ApprovalResolved 变体与 decision=expired
+                // 规范值，协议不变；载荷与壳层 approve/deny 路径对齐：
+                // request_id 缺省 None）。随会话事件流持久化，经同步面
+                // 白名单（SYNC_ELIGIBLE_TYPES 含 approval-resolved）
+                // 多端透传，手机端过期状态无需本地计时兜底。
+                state.events.push(AgentEvent::ApprovalResolved {
+                    session_id: session_id.clone(),
+                    tool_call_id: call_id.clone(),
+                    request_id: None,
+                    decision: match decision {
+                        ApprovalDecision::Approved => {
+                            conex_types::events::ApprovalDecision::Approved
+                        }
+                        ApprovalDecision::Denied { .. } => {
+                            conex_types::events::ApprovalDecision::Denied
+                        }
+                        ApprovalDecision::Expired => {
+                            conex_types::events::ApprovalDecision::Expired
+                        }
                     },
                     timestamp: crate::steering::now_iso_utc(),
                 });
@@ -505,6 +534,63 @@ mod tests {
                 );
             }
             _ => panic!("ToolProgress 应映射为 AgentEvent::ToolUpdate"),
+        }
+    }
+
+    /// G-9：审批超时权威语义落库——引擎记录 ApprovalResolved(Expired)
+    /// 翻译为 AgentEvent::approval-resolved（复用既有变体与
+    /// decision=expired 规范值，协议不变；载荷与壳层 approve/deny 路径
+    /// 对齐：request_id 缺省 None）
+    #[test]
+    fn approval_resolved_expired_maps_to_agent_event() {
+        let mut s = state();
+        let events = vec![
+            ToolEvent::BatchStart {
+                batch_id: "batch-1".into(),
+                count: 1,
+            },
+            ToolEvent::ApprovalRequested {
+                call_id: "c1".into(),
+                tool_name: "shell_command".into(),
+                args: serde_json::json!({ "command": "git push" }),
+                requester: None,
+            },
+            ToolEvent::ApprovalResolved {
+                call_id: "c1".into(),
+                decision: ApprovalDecision::Expired,
+            },
+            ToolEvent::ToolEnd {
+                call_id: "c1".into(),
+                tool_name: "shell_command".into(),
+                is_error: true,
+                duration_ms: 0,
+                output: serde_json::Value::Null,
+                error_code: Some("tool.approval_expired".into()),
+                error_message: Some("approval expired".into()),
+            },
+            ToolEvent::BatchEnd {
+                batch_id: "batch-1".into(),
+            },
+        ];
+        emit_tool_events(&mut s, &events);
+        match &s.events[2] {
+            AgentEvent::ApprovalResolved {
+                session_id,
+                tool_call_id,
+                request_id,
+                decision,
+                timestamp,
+            } => {
+                assert_eq!(session_id, "sess-1");
+                assert_eq!(tool_call_id, "c1");
+                assert_eq!(request_id, &None);
+                assert_eq!(
+                    decision,
+                    &conex_types::events::ApprovalDecision::Expired
+                );
+                assert!(!timestamp.is_empty());
+            }
+            other => panic!("应映射为 AgentEvent::ApprovalResolved，实际 {other:?}"),
         }
     }
 

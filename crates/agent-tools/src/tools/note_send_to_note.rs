@@ -5,6 +5,14 @@
 //! - 内部走同一 `apply_md_fragment` 后端路径。
 //! - 重复 `intent_id`：幂等 no-op / 返回首次结果（Memory 用 HashMap）。
 //!
+//! # 审批 / batch（W4-B）
+//! 同 `document_apply_md`：dangerous=true；[`maybe_ask_note_write`] 拒绝 →
+//! `tool.user_denied`；可选 `batch_id` 占用/过期校验。矩阵见
+//! [`crate::note_permission`]。
+//!
+//! # 诚实边界
+//! - **≠ EL-05**；**≠ W4-F 满表**；**≠ W6-E**
+//!
 //! 入参对齐 Intent：intent_id, message_id?, markdown, doc_id, parent_id?,
 //! after_block_id?, mode, origin。
 

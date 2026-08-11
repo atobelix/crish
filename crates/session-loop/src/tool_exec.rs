@@ -1,4 +1,4 @@
-﻿//! 工具批处理执行器（任务书 B3.5：executeToolBatch 等价）
+//! 工具批处理执行器（任务书 B3.5：executeToolBatch 等价）
 //!
 //! 行为要点（01 §2.8 / §五.8，05 §2.3）：
 //! - 并行/顺序：concurrency=Parallel 的工具并行执行，Sequential/Exclusive 顺序执行；
@@ -3470,6 +3470,134 @@ mod tests {
             Some(ToolErrorKind::ApprovalRequired),
             "无审批基础设施时不应静默执行危险工具"
         );
+    }
+
+    // ── W4-B：笔记写工具经 session-loop 审批矩阵接线 ──────────────────
+
+    /// W4-B：plan 模式拒绝真实 `document_apply_md`（不弹窗、不执行 backend）
+    #[tokio::test]
+    async fn w4b_plan_mode_denies_document_apply_md() {
+        use agent_tools::register_builtin_tools;
+        let mut reg = ToolRegistry::new();
+        register_builtin_tools(&mut reg).expect("register builtins");
+        let exec = ToolExecutor::new(Arc::new(reg));
+        let calls = vec![ToolBatchCall {
+            id: "c-note-write".into(),
+            tool_name: "document_apply_md".into(),
+            summary: "note write".into(),
+            input: serde_json::json!({ "doc_id": "d", "markdown": "x" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+        }];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Plan),
+            ..Default::default()
+        };
+        let order = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let gate = Arc::new(RecordingApproval {
+            order: Arc::clone(&order),
+        });
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
+            .await;
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::UserDenied),
+            "plan 必须拒绝笔记写：{:?}",
+            out.results[0]
+        );
+        assert!(out.results[0]
+            .error_message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("permission denied"));
+        assert!(
+            order.lock().unwrap().is_empty(),
+            "plan 不得弹审批窗"
+        );
+        assert!(out.fatal.is_none());
+    }
+
+    /// W4-B：plan 模式放行笔记只读 `query_blocks`（safe 边界）
+    #[tokio::test]
+    async fn w4b_plan_mode_allows_query_blocks_safe() {
+        use agent_tools::register_builtin_tools;
+        let mut reg = ToolRegistry::new();
+        register_builtin_tools(&mut reg).expect("register builtins");
+        let exec = ToolExecutor::new(Arc::new(reg));
+        let calls = vec![ToolBatchCall {
+            id: "c-note-read".into(),
+            tool_name: "query_blocks".into(),
+            summary: "note read".into(),
+            input: serde_json::json!({ "doc_id": "d" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+        }];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Plan),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        // plan 下只读应执行（未接线 backend → ok=false unwired，非 user_denied）
+        assert!(
+            out.results[0].error_kind.is_none(),
+            "plan 不得拒 safe 读：{:?}",
+            out.results[0]
+        );
+        let out_val = &out.results[0].output;
+        assert_eq!(out_val["ok"], false);
+        assert_eq!(out_val["reason"], "note_backend_unwired");
+    }
+
+    /// W4-B：ask 模式 + 用户拒绝 → document_apply_md 得 user_denied
+    #[tokio::test]
+    async fn w4b_ask_mode_denied_document_apply_md_user_denied() {
+        use agent_tools::register_builtin_tools;
+        let mut reg = ToolRegistry::new();
+        register_builtin_tools(&mut reg).expect("register builtins");
+        let exec = ToolExecutor::new(Arc::new(reg));
+        let calls = vec![ToolBatchCall {
+            id: "c-note-deny".into(),
+            tool_name: "document_apply_md".into(),
+            summary: "note write denied".into(),
+            input: serde_json::json!({ "doc_id": "d", "markdown": "blocked" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+        }];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let gate = MockApproval {
+            decision: ApprovalDecision::Denied {
+                reason: "user said no notes".into(),
+            },
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::UserDenied),
+            "ask 拒绝 → user_denied：{:?}",
+            out.results[0]
+        );
+        assert!(out.results[0]
+            .error_message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("user said no notes")
+            || out.results[0]
+                .error_message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("user denied"));
+        assert!(out.fatal.is_none());
     }
 
     /// T10 集成：dangerous shell 工具经权限判定进入审批（Approved 后执行），
