@@ -43,7 +43,10 @@ pub const WRITE_TOOL_NAMES: [&str; 5] = [
 /// search/decompress 只读视图经 ToolContext.compression_store trait 注入
 /// （引擎侧实现，不携带会话外数据）；decompress 落文件面仅主 agent
 /// 生效，子代理上下文（write_claim_holder 注入）恒回退 inline。
-pub const READONLY_TOOL_NAMES: [&str; 9] = [
+///
+/// W4-A：query_blocks / document_outline 笔记读工具入列（dangerous=false；
+/// 未接 DocSession 时 stub 返回 note_backend_unwired，不写盘）。
+pub const READONLY_TOOL_NAMES: [&str; 11] = [
     "read_file",
     "list_dir",
     "file_stat",
@@ -53,6 +56,8 @@ pub const READONLY_TOOL_NAMES: [&str; 9] = [
     "project_tree",
     "search_context",
     "decompress_context",
+    "query_blocks",
+    "document_outline",
 ];
 
 /// commit 类型默认工具集（仅 shell_command；命令前缀过滤 git 见命令策略）
@@ -267,7 +272,8 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 20);
+        // 注册面 20→22（W4-A query_blocks / document_outline）
+        assert_eq!(reg.len(), 22);
         assert!(reg.has("run_subagent"));
     }
 
@@ -287,8 +293,8 @@ mod tests {
         // 假谓词 → 空注册表（fail-closed 底线）
         let empty = filter_registry(&reg, |_| false).unwrap();
         assert!(empty.is_empty());
-        // 原注册表不受影响
-        assert_eq!(reg.len(), 20);
+        // 原注册表不受影响（注册面 22 = W4-A 后）
+        assert_eq!(reg.len(), 22);
     }
 
     /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
@@ -346,8 +352,8 @@ mod tests {
             );
             assert!(!out.has("write_file"));
         }
-        // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 20);
+        // 原注册表不受影响（非破坏性裁剪；注册面 22 = W4-A 后）
+        assert_eq!(reg.len(), 22);
         assert!(reg.has("write_file"));
     }
 
@@ -399,7 +405,8 @@ mod tests {
         assert!(impl_reg.has("shell_command"));
         assert!(impl_reg.has("run_subagent"));
         // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 24);
+        // 22 内置（含 W4-A 笔记工具）+ 4 browser_* 假工具
+        assert_eq!(reg.len(), 26);
         assert!(reg.has("browser_navigate"));
     }
 

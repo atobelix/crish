@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "块纸面呈现 chrome：静默假数据骨架 / 把手·折叠·多选·slash 状态模型（W3-C，不接真实后端）",
+  "description": "块纸面呈现：chrome（W3-C）+ 叶子 Intent 通路骨架（W3-D mock apply，不接真实后端）",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

@@ -31,19 +31,23 @@
 //!
 //! # 后续扩展点
 //! - CAS `blobs/` 附件引用与 GC
-//! - refs 物化 + 受限 query（W2-F / M5；组合查询见 [`query_blocks`]）
 //! - 外部改 mirror watcher + 三路合并（P6）
 //!
-//! # W2-F
-//! `WorkspaceStore::query_blocks` — FTS ∩ kind ∩ attrs 交集查询（agent-tools 接线见 W4）。
+//! # W2-F / W2-F+
+//! - `WorkspaceStore::query_blocks` — FTS ∩ kind ∩ attrs ∩ refs 交集查询（agent-tools 接线见 W4）
+//! - [`refs`]：`block_refs` 物化表 + upsert/query 骨架
 
 #![allow(missing_docs)]
 
 mod query_blocks;
+mod refs;
 
 pub use query_blocks::{
     QUERY_BLOCKS_LIMIT_DEFAULT, QUERY_BLOCKS_LIMIT_MAX, QueryBlocksHit, QueryBlocksParams,
     QueryBlocksResult, query_blocks_conn,
+};
+pub use refs::{
+    BlockRef, refs_from_conn, refs_to_conn, remove_refs_from_conn, upsert_ref_conn,
 };
 
 use conex_doc_collab::{
@@ -62,7 +66,8 @@ pub const SNAPSHOT_UPDATE_THRESHOLD: usize = 100;
 /// - v1/v2：doc_meta / snapshots / updates / clocks
 /// - v3：blocks 投影 + blocks_fts（W2-C）
 /// - v4：mirror_meta（W2-E MD mirror 导出水位）
-pub const SCHEMA_VERSION: i64 = 4;
+/// - v5：block_refs 物化（W2-F+ 块引用 / 反向链接）
+pub const SCHEMA_VERSION: i64 = 5;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -84,10 +89,10 @@ impl From<StoreError> for PersistError {
 
 /// 最小可用 schema 迁移（幂等；CREATE IF NOT EXISTS + 版本抬升）。
 ///
-/// 已建：doc_meta / doc_snapshots / doc_updates / doc_clocks / **blocks** / **blocks_fts** / **mirror_meta**。
+/// 已建：doc_meta / doc_snapshots / doc_updates / doc_clocks / **blocks** / **blocks_fts** /
+/// **mirror_meta** / **block_refs**。
 /// 后续扩展点（本函数暂不建）：
 /// - CAS：`blob_refs` + 工作区 `blobs/` 目录
-/// - refs 物化表（W2-F 后续；`query_blocks` 的 ref_to/ref_from 暂忽略）
 pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
     conn.execute_batch(
         r#"
@@ -154,9 +159,18 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
             pending_lag INTEGER NOT NULL DEFAULT 0
         );
 
+        -- W2-F+：块引用物化（派生；可丢可重建）
+        -- kind 参与 PK：同 from→to 可有多种引用类型
+        CREATE TABLE IF NOT EXISTS block_refs (
+            doc_id TEXT NOT NULL,
+            from_id TEXT NOT NULL,
+            to_id TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (doc_id, from_id, to_id, kind)
+        );
+
         -- W2 后续（勿在此 CREATE）：
         --   CREATE TABLE blob_refs (...);
-        --   CREATE TABLE refs (...);
         "#,
     )?;
 
@@ -170,7 +184,7 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
         "INTEGER NOT NULL DEFAULT 0",
     )?;
 
-    // 有序加载 / 投影辅助索引
+    // 有序加载 / 投影 / refs 辅助索引
     conn.execute_batch(
         r#"
         CREATE INDEX IF NOT EXISTS idx_doc_updates_doc_seq
@@ -181,6 +195,10 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
             ON blocks(doc_id);
         CREATE INDEX IF NOT EXISTS idx_blocks_doc_parent
             ON blocks(doc_id, parent_id);
+        CREATE INDEX IF NOT EXISTS idx_block_refs_to
+            ON block_refs(doc_id, to_id);
+        CREATE INDEX IF NOT EXISTS idx_block_refs_from
+            ON block_refs(doc_id, from_id);
         "#,
     )?;
 
@@ -468,7 +486,7 @@ impl WorkspaceStore {
     /// M5 方向 stub：按 `props_json` 顶层键等值过滤（无 attrs 时返回空）。
     ///
     /// 使用 `json_extract`；键名仅允许 `[A-Za-z0-9_]`，防止路径注入。
-    /// 完整受限 query（kind_in / ref_to 等）见 W2-F。
+    /// 完整受限 query（kind_in / ref_to 等）见 W2-F / [`Self::query_blocks`]。
     pub fn query_blocks_by_attr(
         &self,
         doc_id: &str,
@@ -1362,17 +1380,17 @@ mod tests {
         let store3 = WorkspaceStore::open(&db).unwrap();
         assert_eq!(store3.schema_version().unwrap(), SCHEMA_VERSION);
 
-        // v4 mirror_meta 表存在
+        // v4 mirror_meta + v5 block_refs 表存在
         {
             let conn = Connection::open(&db).unwrap();
             let n: i64 = conn
                 .query_row(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE name='mirror_meta'",
+                    "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('mirror_meta','block_refs')",
                     [],
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert_eq!(n, 1);
+            assert_eq!(n, 2);
         }
     }
 

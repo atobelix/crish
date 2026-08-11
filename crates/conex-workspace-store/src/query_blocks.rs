@@ -5,7 +5,8 @@
 //! - `packages/block-paper-contract/src/query-blocks.ts`
 //!
 //! # 语义
-//! - 过滤条件取**交集**（AND）：`text_match` → FTS 候选；`kind_in` / `attrs_eq` → SQL 过滤。
+//! - 过滤条件取**交集**（AND）：`text_match` → FTS 候选；`kind_in` / `attrs_eq` /
+//!   `ref_to` / `ref_from` → SQL 过滤（refs 走 `block_refs` EXISTS 半连接）。
 //! - **禁止**任意 SQL 字符串入参；属性键仅 `[A-Za-z0-9_]`。
 //! - `limit` 默认 50、硬上限 200；`truncated` 表示是否还有更多命中。
 //!
@@ -34,9 +35,9 @@ pub struct QueryBlocksParams {
     pub attrs_eq: Option<BTreeMap<String, JsonValue>>,
     /// FTS 子串 / 短语。
     pub text_match: Option<String>,
-    /// 引用目标 block_id（谁引用了该块）。**refs 物化未落地时忽略**。
+    /// 引用目标 block_id：返回**引用了**该块的块（`block_refs.from_id`）。
     pub ref_to: Option<String>,
-    /// 引用源 block_id（该块引用了谁）。**refs 物化未落地时忽略**。
+    /// 引用源 block_id：返回该块**引用的**块（`block_refs.to_id`）。
     pub ref_from: Option<String>,
     /// 结果上限；`None` → 50；实现强制 cap 200。
     pub limit: Option<usize>,
@@ -62,12 +63,14 @@ pub struct QueryBlocksResult {
 }
 
 impl WorkspaceStore {
-    /// 组合查询块投影（FTS ∩ kind ∩ attrs）。
+    /// 组合查询块投影（FTS ∩ kind ∩ attrs ∩ refs）。
     ///
-    /// 无任何有效过滤（且无 text_match）时，在 `doc_id` 索引下返回有序前缀（`LIMIT` 有界，
-    /// 走 `idx_blocks_doc`，非默认全表扫）。
+    /// 无任何有效过滤（且无 text_match / ref_*）时，在 `doc_id` 索引下返回有序前缀
+    ///（`LIMIT` 有界，走 `idx_blocks_doc`，非默认全表扫）。
     ///
-    /// `ref_to` / `ref_from`：refs 表未物化前**忽略**（不报错、不假命中扩展）。
+    /// - `ref_to`：命中块 = 引用了该 id 的 `from_id`（入边反查）
+    /// - `ref_from`：命中块 = 该 id 引用的 `to_id`（出边）
+    /// - 空串与 `None` 均视为不过滤；与其它条件 **AND**。
     pub fn query_blocks(
         &self,
         params: &QueryBlocksParams,
@@ -125,13 +128,22 @@ pub fn query_blocks_conn(
         }
     };
 
-    // ref_*：物化未落地，显式忽略（避免假命中）
-    let _ = (&params.ref_to, &params.ref_from);
+    // ref_*：空串视为不过滤
+    let ref_to = params
+        .ref_to
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let ref_from = params
+        .ref_from
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
 
     let mut hits = if let Some(ref fq) = fts_q {
-        query_with_fts(conn, doc_id, fq, kinds, &attrs, fetch_n)?
+        query_with_fts(conn, doc_id, fq, kinds, &attrs, ref_to, ref_from, fetch_n)?
     } else {
-        query_sql_only(conn, doc_id, kinds, &attrs, fetch_n)?
+        query_sql_only(conn, doc_id, kinds, &attrs, ref_to, ref_from, fetch_n)?
     };
 
     let truncated = hits.len() > limit;
@@ -151,13 +163,16 @@ fn normalize_limit(limit: Option<usize>) -> usize {
         .clamp(1, QUERY_BLOCKS_LIMIT_MAX)
 }
 
-/// FTS 候选 + SQL 侧 kind/attrs 过滤（交集）。
+/// FTS 候选 + SQL 侧 kind/attrs/refs 过滤（交集）。
+#[allow(clippy::too_many_arguments)]
 fn query_with_fts(
     conn: &Connection,
     doc_id: &str,
     fts_q: &str,
     kinds: Option<&[String]>,
     attrs: &[(&str, &JsonValue)],
+    ref_to: Option<&str>,
+    ref_from: Option<&str>,
     fetch_n: i64,
 ) -> Result<Vec<QueryBlocksHit>, StoreError> {
     let mut sql = String::from(
@@ -186,18 +201,28 @@ fn query_with_fts(
         /*next_idx=*/ 3,
         /*col_prefix=*/ "b.",
     )?;
+    append_ref_filters(
+        &mut sql,
+        &mut bind,
+        doc_id,
+        ref_to,
+        ref_from,
+        /*block_id_col=*/ "b.block_id",
+    );
     sql.push_str(" ORDER BY bm25(blocks_fts)");
     push_limit(&mut sql, &mut bind, fetch_n);
 
     run_hit_query(conn, &sql, bind)
 }
 
-/// 无 text_match：仅 blocks 表 + kind/attrs。
+/// 无 text_match：仅 blocks 表 + kind/attrs/refs。
 fn query_sql_only(
     conn: &Connection,
     doc_id: &str,
     kinds: Option<&[String]>,
     attrs: &[(&str, &JsonValue)],
+    ref_to: Option<&str>,
+    ref_from: Option<&str>,
     fetch_n: i64,
 ) -> Result<Vec<QueryBlocksHit>, StoreError> {
     let mut sql = String::from(
@@ -221,6 +246,14 @@ fn query_sql_only(
         /*next_idx=*/ 2,
         /*col_prefix=*/ "",
     )?;
+    append_ref_filters(
+        &mut sql,
+        &mut bind,
+        doc_id,
+        ref_to,
+        ref_from,
+        /*block_id_col=*/ "block_id",
+    );
     // 稳定序：order_key 再 block_id
     sql.push_str(" ORDER BY order_key ASC, block_id ASC");
     push_limit(&mut sql, &mut bind, fetch_n);
@@ -247,6 +280,42 @@ fn query_sql_only(
         });
     }
     Ok(out)
+}
+
+/// `ref_to` / `ref_from` → EXISTS 半连接（避免多 kind 边导致行膨胀）。
+///
+/// - `ref_to=T`：命中块是引用 T 的 from_id
+/// - `ref_from=F`：命中块是 F 引用的 to_id
+fn append_ref_filters(
+    sql: &mut String,
+    bind: &mut Vec<rusqlite::types::Value>,
+    doc_id: &str,
+    ref_to: Option<&str>,
+    ref_from: Option<&str>,
+    block_id_col: &str,
+) {
+    if let Some(to) = ref_to {
+        let idx_doc = bind.len() + 1;
+        let idx_to = bind.len() + 2;
+        sql.push_str(&format!(
+            " AND EXISTS (SELECT 1 FROM block_refs r \
+             WHERE r.doc_id = ?{idx_doc} AND r.to_id = ?{idx_to} \
+             AND r.from_id = {block_id_col})"
+        ));
+        bind.push(rusqlite::types::Value::Text(doc_id.to_string()));
+        bind.push(rusqlite::types::Value::Text(to.to_string()));
+    }
+    if let Some(from) = ref_from {
+        let idx_doc = bind.len() + 1;
+        let idx_from = bind.len() + 2;
+        sql.push_str(&format!(
+            " AND EXISTS (SELECT 1 FROM block_refs r \
+             WHERE r.doc_id = ?{idx_doc} AND r.from_id = ?{idx_from} \
+             AND r.to_id = {block_id_col})"
+        ));
+        bind.push(rusqlite::types::Value::Text(doc_id.to_string()));
+        bind.push(rusqlite::types::Value::Text(from.to_string()));
+    }
 }
 
 /// `col_prefix`：FTS JOIN 时用 `"b."` 限定 `blocks` 别名；纯 SQL 路径用 `""`。
