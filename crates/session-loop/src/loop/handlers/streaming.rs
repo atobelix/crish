@@ -118,10 +118,13 @@ pub(crate) async fn handle(
                             stream_error = Some(classified);
                         } else {
                             // 已产出内容 → 以 error-stop 收尾，consume 侧按
-                            // Message 处理（内容保留，providerError 标注）
+                            // Message 处理（内容保留，providerError 标注；
+                            // D7 §3.7：透传 classified.kind → metadata 结构化
+                            // 标注 providerErrorKind/providerErrorRetryable）
                             builder.push(ProviderStreamEvent::Stop {
                                 reason: StopReason::Error,
                                 error: Some(classified.message),
+                                error_kind: Some(classified.kind),
                                 usage: None,
                             });
                         }

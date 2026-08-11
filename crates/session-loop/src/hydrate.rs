@@ -5,15 +5,18 @@
 //! （T-29/T-30）经 `with_initial_conversation_arc` 预置进 `state.conversation`
 //! （接线点说明见本文件末尾「衔接说明」一节）。
 //!
-//! 水合规则（对齐 P4 §3.2.3 规则表）：
-//! 1. 完成态过滤：`status` 为 `completed` 或旧数据无 `status` 字段才进；
-//!    queued/processing/streaming/pending/error/空串 一律跳过；
+//! 水合规则（对齐 P4 §3.2.3 规则表 + D7 §3.6 扩展）：
+//! 1. 完成态过滤：`status` 为 `completed`、旧数据无 `status` 字段或 `error`
+//!    才进；error 终态带 metadata `{kind:"failed-turn"}` 标记（D7 §3.6 裁决
+//!    #13：失败回合信息保留供模型参考，污染与否交模型判断，不再由引擎过滤）；
+//!    queued/processing/streaming/pending/空串 一律跳过；
 //! 2. 角色映射：`sender` ∈ {user, assistant} 一一对应，其余角色跳过
 //!    （System/Tool 是 run 内瞬态角色，跨 run 不应回传，有意为之）；
 //! 3. 块保真优先：`blocks_json` 可解析为 `AgentMessageBlock` 序列时直接用；
 //!    否则（含前端 timeline 形状与老数据无块）用 text/thinking/
 //!    tool_calls_json/tool_call_results_json 合成兜底；
-//! 4. metadata 裁剪：水合消息 `metadata = None`（usage 等不进 LLM 上下文）；
+//! 4. metadata 裁剪：水合消息 `metadata = None`（usage 等不进 LLM 上下文），
+//!    唯一例外是规则 1 的 error 终态 failed-turn 标记（D7 §3.6 扩展）；
 //! 5. 尾部约束：序列必须以 user 消息收尾，最后一条非 user 时截断到
 //!    最后一个 user 消息；无 user 消息 → 空序列；
 //! 6. 排序：按入参数组顺序原样保留，timestamp 乱序不重排。
@@ -48,11 +51,12 @@ pub fn hydrate_history(history: Vec<HistoryMessage>) -> Vec<Arc<AgentMessage>> {
 /// 单条 `HistoryMessage` → `AgentMessage` 映射（返回 None = 该条跳过）。
 ///
 /// 跳过情形（宽容水合）：
-/// 1. 完成态过滤未通过（规则 1）；
+/// 1. 完成态过滤未通过（规则 1：queued/processing/streaming/pending/空串）；
 /// 2. `sender` 非 user/assistant（规则 2）；
 /// 3. 块解析与合成后仍无任何内容（无可映射正文，进上下文无意义）。
 fn hydrate_one(entry: &HistoryMessage) -> Option<AgentMessage> {
-    if !is_completed(entry) {
+    let status = status_kind(entry);
+    if status == StatusKind::Skipped {
         return None;
     }
     let role = match entry.sender.as_str() {
@@ -65,14 +69,19 @@ fn hydrate_one(entry: &HistoryMessage) -> Option<AgentMessage> {
         return None;
     }
     let text = joined_text(&blocks);
+    // 规则 4：metadata 裁剪（usage 等运行期数据不进 LLM 上下文；
+    // wire 层 to_chat_messages 也不读 metadata，双保险）；D7 §3.6 例外：
+    // error 终态带 failed-turn 标记（失败回合保留供模型参考，不污染正文）
+    let metadata = match status {
+        StatusKind::Failed => Some(serde_json::json!({ "kind": "failed-turn" })),
+        StatusKind::Completed | StatusKind::Skipped => None,
+    };
     Some(AgentMessage {
         id: entry.id.clone(),
         role,
         created_at: iso8601_from_epoch_millis(entry.timestamp),
         blocks,
-        // 规则 4：metadata 裁剪（usage 等运行期数据不进 LLM 上下文；
-        // wire 层 to_chat_messages 也不读 metadata，双保险）
-        metadata: None,
+        metadata,
         // client_message_id 对齐前端水合 rekey 的稳定幂等键：若水合消息
         // 经 RunOutcome 回传壳层/前端，前端 upsert 按 id 幂等，不产生重复
         client_message_id: Some(entry.id.clone()),
@@ -80,15 +89,24 @@ fn hydrate_one(entry: &HistoryMessage) -> Option<AgentMessage> {
     })
 }
 
-/// 完成态过滤（规则 1）：`completed` 或旧数据无 status 字段才进上下文。
-///
-/// error 终态按方案保守跳过（§3.2.3 只列 completed 与无 status 两种放行），
-/// 失败回合进上下文会污染后续模型判断，列为后续演进项。
-fn is_completed(entry: &HistoryMessage) -> bool {
+/// 完成态三分类（规则 1，D7 §3.6 扩展）：
+/// - [StatusKind::Completed]：`completed` 或旧数据无 `status` 字段（放行，
+///   无标记，规则 4 保持）；
+/// - [StatusKind::Failed]：`error` 终态（放行，带 `{kind:"failed-turn"}` 标记
+///   ——D7 裁决 #13：失败回合不再由引擎替模型过滤，保留供模型参考）；
+/// - [StatusKind::Skipped]：其余（queued/processing/streaming/pending/空串）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StatusKind {
+    Completed,
+    Failed,
+    Skipped,
+}
+
+fn status_kind(entry: &HistoryMessage) -> StatusKind {
     match entry.status.as_deref() {
-        None => true,
-        Some("completed") => true,
-        Some(_) => false,
+        None | Some("completed") => StatusKind::Completed,
+        Some("error") => StatusKind::Failed,
+        Some(_) => StatusKind::Skipped,
     }
 }
 
@@ -372,18 +390,41 @@ mod tests {
         assert_eq!(hydrated[0].created_at, "2023-11-14T22:13:20.000Z");
     }
 
+    /// D7 §3.6（改写，02-定夺 C7）：error 终态不再跳过（裁决 #13 放行），
+    /// 过滤语义其余不变——queued/processing/streaming/空串 仍跳过
     #[test]
-    fn incomplete_and_error_status_entries_skipped() {
+    fn incomplete_status_entries_skipped() {
         let history = vec![
             msg("a", "user", Some("进"), Some("completed")),
             msg("b", "user", Some("跳过"), Some("processing")),
             msg("c", "user", Some("跳过"), Some("streaming")),
             msg("d", "user", Some("跳过"), Some("queued")),
-            msg("e", "user", Some("跳过"), Some("error")),
+            msg("e", "user", Some("进"), Some("error")),
             msg("f", "user", Some("跳过"), Some("")),
             msg("g", "user", Some("旧数据兼容"), None),
         ];
-        assert_eq!(ids(&hydrate_history(history)), ["a", "g"]);
+        assert_eq!(ids(&hydrate_history(history)), ["a", "e", "g"]);
+    }
+
+    /// D7 §3.6 新用例（A3/T5）：error 终态放行 + metadata {kind:"failed-turn"}；
+    /// completed/无 status 放行且 metadata 仍为 None（规则 4 保持）
+    #[test]
+    fn error_status_hydrates_with_failed_turn_marker() {
+        let history = vec![
+            msg("u1", "user", Some("开始"), None),
+            msg("f1", "assistant", Some("失败轮的部分产出"), Some("error")),
+            msg("u2", "user", Some("继续"), Some("completed")),
+        ];
+        let hydrated = hydrate_history(history);
+        assert_eq!(ids(&hydrated), ["u1", "f1", "u2"]);
+        // failed-turn 标记：metadata == {"kind":"failed-turn"}
+        assert_eq!(
+            hydrated[1].metadata.as_ref(),
+            Some(&serde_json::json!({ "kind": "failed-turn" }))
+        );
+        // completed/无 status 仍无标记（规则 4 保持）
+        assert!(hydrated[0].metadata.is_none());
+        assert!(hydrated[2].metadata.is_none());
     }
 
     #[test]

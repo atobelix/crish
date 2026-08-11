@@ -351,6 +351,7 @@ async fn d5_text_with_error_stop_ends_as_message_not_error() {
         ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: Some("服务端流异常（已产出部分内容）".into()),
+            error_kind: None,
             usage: None,
         },
     ]);

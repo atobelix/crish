@@ -14,6 +14,8 @@
 //!   重试一次是真实恢复）；仍失败才 fatal（诊断含压缩后 token 数）；
 //! - 其余（不可重试）：PROVIDER_ERROR + endReason=error（01 §1.6 四事件）。
 
+use std::time::Duration;
+
 use conex_compaction::CompactionEngine;
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::AgentEvent;
@@ -24,13 +26,71 @@ use conex_types::tool::{
     ProviderDiagnosticPhase,
 };
 
-use super::super::end::EndDecision;
+use super::super::end::{EndDecision, ProviderErrorSummary};
 use super::super::handlers::{
     apply_compaction, compaction_shape_ok, dispatch, CompactionTriggerInfo, HandlerOutcome,
     LoopState,
 };
-use super::super::LoopError;
+use super::super::{LoopError, RetryBackoffConfig};
 use super::streaming::streaming_aborted;
+
+/// 首次退避基数（D1 §3.1.1，镜像 agent-provider retry.rs:48 /
+/// orchestrator recovery.rs:116；测试锁定防漂移）
+pub(crate) const RETRY_BACKOFF_BASE_MS: u64 = 750;
+/// 单次等待上限（5xx/Timeout/Network 类，镜像 retry.rs:49 / recovery.rs:118）
+pub(crate) const RETRY_MAX_DELAY_MS: u64 = 8_000;
+/// 429 Retry-After 放行上限（= MAX_RETRY_AFTER_MS，retry.rs:29：5 分钟；
+/// 裁决 #3：429 突破 8s 封顶，由预算闸兜底）
+pub(crate) const RETRY_RATE_LIMIT_MAX_DELAY_MS: u64 = 5 * 60_000;
+/// 总重试预算（镜像 retry.rs:50 / recovery.rs:120；elapsed >= 预算停止，
+/// 严格小于——对齐 retry.rs:163-166 withinRetryBudget）
+pub(crate) const RETRY_TOTAL_BUDGET_MS: u64 = 60_000;
+/// 熔断阈值（D1 §3.2 规则 C1：provider_fail_streak >= 6 即熔断触发，
+/// 跳过 run 内重试直接 fatal；01 敲定 裁决 #6）
+pub(crate) const PROVIDER_FAIL_THRESHOLD: u32 = 6;
+
+/// 计算本次重试等待（D1 §3.1.2，纯函数可单测；镜像 retry.rs
+/// choose_retry_delay_ms + withinRetryBudget）
+///
+/// 规则（裁决 #3 + 04 §2.2）：
+/// - 预算闸：`elapsed >= total_budget` → 返回 None（不再等待，直接 fatal，
+///   不消耗重试次数——对齐 retry.rs:163-166 严格小于）；
+/// - 指数退避：`base * 2^(attempt-1)`（指数上限 62 防溢出，saturating）；
+/// - 429（RateLimit）必须消费 Retry-After：`wait = max(退避, retry_after)`，
+///   钳到 `min(5min, 剩余预算)`——突破 8s 封顶（裁决 #3）；
+/// - 其余（5xx/Timeout/Network）纯退避，钳到 `min(8s, 剩余预算)`
+///   （分类器只对 429 解析 Retry-After，error.rs:248-251 只 429，
+///   故非 429 携带 retry_after 时经 8s 上限自然等价于不消费）；
+/// - 最终再钳剩余预算（60s 总预算 - 已用墙钟）。
+fn retry_delay_ms(
+    cfg: &RetryBackoffConfig,
+    kind: ProviderErrorKind,
+    attempt: u32,
+    retry_after_ms: Option<u64>,
+    elapsed_ms: u64,
+) -> Option<Duration> {
+    let base = cfg.base_ms.unwrap_or(RETRY_BACKOFF_BASE_MS);
+    let total_budget = cfg.total_budget_ms.unwrap_or(RETRY_TOTAL_BUDGET_MS);
+    // 预算闸：elapsed >= 预算 → 不再等待（严格小于，对齐 withinRetryBudget）
+    if elapsed_ms >= total_budget {
+        return None;
+    }
+    let remaining = total_budget - elapsed_ms;
+    // 指数退避（镜像 retry.rs:107-112：min(max_delay, base * 2^(attempt-1))，
+    // 指数上限 62 防溢出）
+    let exponent = (attempt.max(1) - 1).min(62);
+    let backoff = base.saturating_mul(1u64 << exponent);
+    let cap = match kind {
+        // 429 放行到 5 分钟（裁决 #3，突破 8s 封顶）
+        ProviderErrorKind::RateLimit => RETRY_RATE_LIMIT_MAX_DELAY_MS,
+        _ => cfg.max_ms.unwrap_or(RETRY_MAX_DELAY_MS),
+    };
+    let wait = match retry_after_ms {
+        Some(after) => backoff.max(after), // Retry-After 与退避取大（镜像 retry.rs:124-127）
+        None => backoff,
+    };
+    Some(Duration::from_millis(wait.min(cap).min(remaining)))
+}
 
 /// 溢出压缩阶梯重试上限（P4 §3.5：压缩 + 重试一次；上限 1 防
 /// 「压缩→仍超→再压缩」死循环，对齐 pi `_overflowRecoveryAttempted`，
@@ -60,11 +120,12 @@ pub(crate) async fn handle(
         "provider 流错误"
     );
     match classified.kind {
-        // 瞬态 provider 错误：重试阶梯（01 §2.5 步骤 2）
+        // 瞬态 provider 错误：重试阶梯（01 §2.5 步骤 2；D1：退避 + 预算 +
+        // Retry-After + 熔断闸）
         ProviderErrorKind::RateLimit
         | ProviderErrorKind::ServerError
         | ProviderErrorKind::Timeout
-        | ProviderErrorKind::Network => transient_retry(state, &classified),
+        | ProviderErrorKind::Network => transient_retry(state, &classified).await,
         // 长度/上下文超限：length 恢复阶梯（8192→16384→32768，上限 2 次）；
         // 用尽后接压缩阶梯（P4 §3.5，输入超限维度——只放大输出预算对
         // 输入超限无效，comparison.md:24）
@@ -77,17 +138,83 @@ pub(crate) async fn handle(
     }
 }
 
-/// 瞬态重试：上限内 NO_PROGRESS_CONTINUE 重进 provider 循环
-fn transient_retry(state: &mut LoopState, classified: &ClassifiedStreamError) -> Result<HandlerOutcome, LoopError> {
+/// 瞬态重试（D1 §3.1：async 退避 + Retry-After + 60s 预算 + abort 竞速 +
+/// 熔断闸；01 §2.5 步骤 2 的 NO_PROGRESS_CONTINUE 重进 provider 循环）
+///
+/// 决策顺序（Q40 + D1 规则汇总 R1-R6）：
+/// 1. abort 复查（Q40，每级决策前）；
+/// 2. 熔断闸（规则 C1）：`provider_fail_streak >= 阈值` → 跳过 run 内重试
+///    直接 fatal（熔断期不烧 run 内配额，selection-01 分歧 9 采纳 04 闸面）；
+/// 3. 次数上限内：预算起点惰性初始化 → 计算等待 → abort 竞速 sleep
+///    （biased，abort 优先）→ sleep 后复查 abort → 计数 +1 → 发诊断 →
+///    NO_PROGRESS_CONTINUE；
+/// 4. 预算耗尽 / 次数用尽 → fatal_provider_error（不消耗次数）。
+async fn transient_retry(
+    state: &mut LoopState,
+    classified: &ClassifiedStreamError,
+) -> Result<HandlerOutcome, LoopError> {
     // Q40（T09.9）：每级决策前查 abort——重试间隙用户取消则跳过剩余阶梯
     if state.abort_signal.is_aborted() {
         return streaming_aborted(state);
     }
+    // ── 熔断闸（D1 §3.2 规则 C1）：streak ≥ 阈值 → 跳过 run 内重试直接 fatal ──
+    // （壳层读 session_meta 键 provider_fail_streak 注入；None = 未配置熔断
+    // 不启用，向后兼容现状）
+    if state
+        .options
+        .provider_fail_streak
+        .is_some_and(|s| s >= PROVIDER_FAIL_THRESHOLD)
+    {
+        tracing::warn!(
+            session_id = %state.machine.context().session_id,
+            streak = ?state.options.provider_fail_streak,
+            threshold = PROVIDER_FAIL_THRESHOLD,
+            "熔断触发：跳过 run 内重试直接 fatal（观测面 runtime-error，熔断计数由壳层收口维护）"
+        );
+        return fatal_provider_error(state, classified);
+    }
     let limit = state.options.transient_retry_limit;
     if state.transient_retries < limit {
+        // 预算起点惰性初始化（规则 R1：首次瞬态错误时；fresh run 归零，
+        // loop/mod.rs run 起始同批）
+        let started_at = *state
+            .transient_retry_started_at
+            .get_or_insert_with(tokio::time::Instant::now);
+        let elapsed_ms = started_at.elapsed().as_millis() as u64;
+        let attempt = state.transient_retries + 1;
+        // 等待计算：注入延迟面（测试专用）→ 退避配置（生产）→ None 配置 =
+        // 现状立即重试（规则 R6，向后兼容）
+        let delay = match &state.retry_delay {
+            Some(f) => f(attempt, classified.retry_after_ms),
+            None => match state.options.retry_backoff {
+                Some(cfg) => match retry_delay_ms(&cfg, classified.kind, attempt, classified.retry_after_ms, elapsed_ms) {
+                    Some(d) => d,
+                    // 预算耗尽（规则 R3/R4）：不进重试直接 fatal，不消耗次数
+                    None => return fatal_provider_error(state, classified),
+                },
+                // retry_backoff = None：现状立即重试（无退避、无预算、无 sleep）
+                None => Duration::ZERO,
+            },
+        };
+        if !delay.is_zero() {
+            // abort 竞速 sleep（规则 R5：abort 优先，biased；语义对齐
+            // retry.rs TokioSleeper retry.rs:316-323）——abort 不消耗计数、
+            // 不发诊断（零通知零噪声）
+            tokio::select! {
+                biased;
+                _ = state.abort_signal.wait_aborted() => return streaming_aborted(state),
+                _ = tokio::time::sleep(delay) => {}
+            }
+            // sleep 后复查 abort（竞速窗口收口）
+            if state.abort_signal.is_aborted() {
+                return streaming_aborted(state);
+            }
+        }
         state.transient_retries += 1;
-        tracing::info!(attempt = state.transient_retries, limit, "瞬态错误重试");
-        emit_retry_diagnostic(state, classified, state.transient_retries, limit);
+        tracing::info!(attempt = state.transient_retries, limit, delay_ms = delay.as_millis(), "瞬态错误重试");
+        // 重试诊断（D1 §3.1.5，用户约束 A/C）：phase=Retry 事件兼作临时
+        // 通知数据源（前端老虎机滚动 1/N→N/N）；不进对话上下文、AI 不可见
+        emit_retry_diagnostic(state, classified, state.transient_retries, limit, delay, classified.retry_after_ms);
         dispatch(state, E::NoProgressContinue)?;
         return Ok(HandlerOutcome::continue_run());
     }
@@ -110,7 +237,8 @@ async fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError
         state.max_tokens = state.max_tokens.saturating_mul(2);
         // 01 §3.3 ②：length 升级时重置 steering 计数
         state.steering.reset();
-        emit_retry_diagnostic(state, classified, state.length_upgrades, limit);
+        // length 阶梯无退避等待（立即升级重进 provider 循环，delay=0）
+        emit_retry_diagnostic(state, classified, state.length_upgrades, limit, Duration::ZERO, None);
         dispatch(state, E::NoProgressContinue)?;
         return Ok(HandlerOutcome::continue_run());
     }
@@ -210,12 +338,21 @@ async fn compression_ladder(
 // 压缩阶梯**恢复：压缩对话（请求体真实变化）后重试一次，受
 // [MAX_OVERFLOW_COMPRESSION_RETRIES] 约束——不恢复旧的计数式假恢复。
 
-/// 重试诊断事件（provider-diagnostic，phase=retry）
+/// 重试诊断事件（provider-diagnostic，phase=Retry；D1 §3.1.5 扩展：
+/// 载荷附本次实际等待与 Retry-After 透传——临时通知数据源，前端老虎机
+/// 滚动展示重连进度（如 1/6→2/6）；不进对话上下文、AI 不可见，约束 A/C）
+///
+/// 字段承载（D1 D8 动态决策）：ProviderDiagnostic 无 delay_ms 字段且
+/// 文件域冻结（不扩 conex-types），经既有 `elapsed_ms` 字段承载本次实际
+/// 等待时长（phase=Retry 语义下为 delay_ms；全仓无既有消费方冲突）；
+/// `retry_after_ms` 直接透传（既有字段）。
 fn emit_retry_diagnostic(
     state: &mut LoopState,
     classified: &ClassifiedStreamError,
     attempt: u32,
     max_attempts: u32,
+    delay: Duration,
+    retry_after_ms: Option<u64>,
 ) {
     let session_id = state.machine.context().session_id.clone();
     state.events.push(AgentEvent::ProviderDiagnostic {
@@ -228,12 +365,17 @@ fn emit_retry_diagnostic(
             reason: Some(format!("{:?}", classified.kind)),
             error_kind: Some(classified.kind),
             retryable: Some(classified.retryable),
+            // D1：本次实际等待时长（delay_ms 语义，经既有 elapsed_ms 承载）
+            elapsed_ms: Some(delay.as_millis() as u64),
+            retry_after_ms,
             ..ProviderDiagnostic::default()
         },
     });
 }
 
-/// 重试/恢复均失败 → PROVIDER_ERROR + endReason=error（01 §1.6 四事件）
+/// 重试/恢复均失败 → PROVIDER_ERROR + endReason=error（01 §1.6 四事件）；
+/// D1 §3.4：填充 terminal_provider_error（converge 移交 RunOutcome.provider_error，
+/// D2/D3 恢复面消费）
 fn fatal_provider_error(
     state: &mut LoopState,
     classified: &ClassifiedStreamError,
@@ -250,6 +392,15 @@ fn fatal_provider_error(
         "provider 错误收场（重试/恢复均失败）"
     );
     state.terminal_error = Some(format!("provider 错误（{}）：{}", kind_str(classified.kind), classified.message));
+    // D1 §3.4：fatal 摘要填充（kind/retryable/retry_after_ms/retries 四元组；
+    // retries = run 内实际重试次数——瞬态耗尽时 = 已重试数，熔断闸 fatal 时
+    // = 0，非瞬态直接 fatal 时 = 0）
+    state.terminal_provider_error = Some(ProviderErrorSummary {
+        kind: classified.kind,
+        retryable: classified.retryable,
+        retry_after_ms: classified.retry_after_ms,
+        retries: state.transient_retries,
+    });
     // runtime-error 观测事件（retryable 只表「可重试」，与收场 reason 正交，01 §五.10）；
     // payload/上下文超限附注压缩阶梯诊断（P4 §3.5：压缩后仍超 = 单条消息
     // 过大或窗口过小；无压缩恢复路径时保留原说明）
@@ -327,16 +478,19 @@ mod tests {
     use crate::steering::{
         RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
     };
-    use crate::r#loop::{DEFAULT_MAX_TOKENS, SessionLoopOptions};
+    use crate::r#loop::{DEFAULT_MAX_TOKENS, RetryBackoffConfig, SessionLoopOptions};
     use agent_tools::registry::ToolRegistry;
     use conex_compaction::CompactionPolicy;
+    use conex_test_utils::clock::TimePauseGuard;
     use conex_types::context::ContextBudget;
     use conex_types::error::ProviderErrorKind;
     use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
     use conex_types::response::ClassifiedStreamError;
     use conex_types::session::{AgentEndReason as R, AgentSessionEvent as E, AgentSessionState as S};
     use conex_types::tool::{ContextCompressionReason, ContextCompressionTrigger};
+    use futures::poll;
     use std::sync::Arc;
+    use std::time::Duration;
 
     /// 构造处于 streaming 状态的 LoopState（供重试阶梯单测驱动）
     fn streaming_state() -> LoopState {
@@ -425,6 +579,541 @@ mod tests {
         assert_eq!(state.machine.state(), S::Streaming);
     }
 
+    /// D1：开启默认退避配置（750/8000/60000）的 streaming 状态
+    /// （[SessionLoopOptions::retry_backoff] = Some(默认)——生产退避语义的
+    /// 单测驱动面；None = 现状立即重试由既有测试覆盖）
+    fn backoff_state() -> LoopState {
+        let mut state = streaming_state();
+        state.options.retry_backoff = Some(RetryBackoffConfig::default());
+        state
+    }
+
+    /// D1：429 + Retry-After 的已分类错误（裁决 #3 主场景）
+    fn rate_limit_error(retry_after_ms: u64) -> ClassifiedStreamError {
+        ClassifiedStreamError {
+            kind: ProviderErrorKind::RateLimit,
+            message: "429 限流".to_string(),
+            retryable: true,
+            retry_after_ms: Some(retry_after_ms),
+        }
+    }
+
+    /// 从事件列表取最近一次重试诊断（断言辅助）
+    fn retry_diagnostic(state: &LoopState) -> Option<conex_types::tool::ProviderDiagnostic> {
+        state.events.iter().rev().find_map(|e| match e {
+            AgentEvent::ProviderDiagnostic { diagnostic, .. } => Some(diagnostic.clone()),
+            _ => None,
+        })
+    }
+
+    // ── D1 退避/预算/Retry-After/abort 竞速/熔断闸（维度 D1 §5.1 T1-T8）──
+
+    /// D1 T6：retry_delay_ms 纯函数决策表——退避序列 750/1500/3000、
+    /// 429 放行 5min、5xx 钳 8s、Retry-After 取大、预算耗尽 None、
+    /// 指数上限 62 防溢出（镜像 retry.rs:503-514 期望值防漂移）
+    #[test]
+    fn retry_delay_ms_decision_table() {
+        let cfg = RetryBackoffConfig::default();
+        // 退避序列：ServerError 无 Retry-After → 750/1500/3000/6000/8000（8s 封顶）
+        let expected = [750u64, 1500, 3000, 6000, 8000, 8000];
+        for (index, expected_ms) in expected.iter().enumerate() {
+            let attempt = index as u32 + 1;
+            let delay = retry_delay_ms(
+                &cfg,
+                ProviderErrorKind::ServerError,
+                attempt,
+                None,
+                0,
+            )
+            .expect("预算充足必须返回等待");
+            assert_eq!(
+                delay,
+                Duration::from_millis(*expected_ms),
+                "attempt {attempt} 退避序列"
+            );
+        }
+        // 429：Retry-After 30s → 等待 = max(750, 30000) = 30s（不被 8s 钳制，裁决 #3）
+        let delay = retry_delay_ms(&cfg, ProviderErrorKind::RateLimit, 1, Some(30_000), 0)
+            .expect("预算充足必须返回等待");
+        assert_eq!(delay, Duration::from_millis(30_000), "429+Retry-After 取大");
+        // 429 无 Retry-After：纯退避 750
+        let delay = retry_delay_ms(&cfg, ProviderErrorKind::RateLimit, 1, None, 0)
+            .expect("预算充足必须返回等待");
+        assert_eq!(delay, Duration::from_millis(750));
+        // 429 上限 5min：大退避指数下被钳制——60s 总预算下剩余钳制
+        // （min(5min, 60s 剩余) = 60s，预算闸兜底）
+        let delay = retry_delay_ms(&cfg, ProviderErrorKind::RateLimit, 13, None, 0)
+            .expect("预算充足必须返回等待");
+        assert_eq!(
+            delay,
+            Duration::from_millis(60_000),
+            "60s 总预算下 429 被剩余预算钳制（预算闸兜底 5min 放行）"
+        );
+        // 5xx 上限 8s：大指数下被 8s 钳制
+        let delay = retry_delay_ms(&cfg, ProviderErrorKind::ServerError, 13, None, 0)
+            .expect("预算充足必须返回等待");
+        assert_eq!(delay, Duration::from_millis(8_000), "5xx 钳到 8s 上限");
+        // Retry-After 超 5min：钳到 min(5min, 剩余预算)（60s 预算下 = 60s）
+        let delay = retry_delay_ms(&cfg, ProviderErrorKind::RateLimit, 1, Some(10 * 60_000), 0)
+            .expect("预算充足必须返回等待");
+        assert_eq!(
+            delay,
+            Duration::from_millis(60_000),
+            "Retry-After 不得突破 5min 上限（预算闸下先钳 60s）"
+        );
+        // 429 5min 上限可观测面：放大预算（>5min）后 429 钳到 5min 而非
+        // 继续放大（裁决 #3 字面：429 突破 8s 封顶放行到 5min）
+        let big_budget = RetryBackoffConfig {
+            base_ms: None,
+            max_ms: None,
+            total_budget_ms: Some(400_000),
+        };
+        let delay = retry_delay_ms(&big_budget, ProviderErrorKind::RateLimit, 13, None, 0)
+            .expect("预算充足必须返回等待");
+        assert_eq!(
+            delay,
+            Duration::from_millis(5 * 60_000),
+            "429 钳到 5min 上限（预算放大后可观测）"
+        );
+        // 预算钳制：elapsed 40s（剩余 20s）+ Retry-After 30s → 钳到 20s
+        let delay = retry_delay_ms(&cfg, ProviderErrorKind::RateLimit, 1, Some(30_000), 40_000)
+            .expect("预算未耗尽必须返回等待");
+        assert_eq!(delay, Duration::from_millis(20_000), "剩余预算钳制");
+        // 预算耗尽：elapsed >= 60s → None（严格小于，对齐 retry.rs:163-166）
+        assert!(retry_delay_ms(&cfg, ProviderErrorKind::ServerError, 1, None, 60_000).is_none());
+        assert!(retry_delay_ms(&cfg, ProviderErrorKind::RateLimit, 1, Some(30_000), 60_000).is_none());
+        // 指数上限 62 防溢出：attempt 63 → exponent 62 → saturating 不 panic
+        let delay = retry_delay_ms(&cfg, ProviderErrorKind::ServerError, 63, None, 0)
+            .expect("预算充足必须返回等待");
+        assert_eq!(delay, Duration::from_millis(8_000), "指数上限 62 后仍钳 8s");
+        // 自定义配置生效：base=100 → 退避 100/200/400；budget=1000 → 预算钳制
+        let custom = RetryBackoffConfig {
+            base_ms: Some(100),
+            max_ms: Some(500),
+            total_budget_ms: Some(1_000),
+        };
+        assert_eq!(
+            retry_delay_ms(&custom, ProviderErrorKind::ServerError, 1, None, 0).unwrap(),
+            Duration::from_millis(100)
+        );
+        assert_eq!(
+            retry_delay_ms(&custom, ProviderErrorKind::ServerError, 4, None, 0).unwrap(),
+            Duration::from_millis(500),
+            "自定义 max 钳制"
+        );
+        assert_eq!(
+            retry_delay_ms(&custom, ProviderErrorKind::ServerError, 1, None, 950).unwrap(),
+            Duration::from_millis(50),
+            "自定义预算剩余钳制"
+        );
+        assert!(retry_delay_ms(&custom, ProviderErrorKind::ServerError, 1, None, 1_000).is_none());
+    }
+
+    /// D1 T1（A1）：退避序列 750/1500/3000（虚拟时钟驱动，零真实等待）——
+    /// ServerError 无 Retry-After；每次 handle 间的墙钟推进 = 750/1500/3000；
+    /// 诊断事件 elapsed_ms 与等待一致（镜像 retry.rs:503-514 期望值）
+    #[tokio::test]
+    async fn backoff_sequence_750_1500_3000_virtual_clock() {
+        let _time = TimePauseGuard::new();
+        let mut state = backoff_state();
+        // 第 1 次：等待 750ms（推进 749ms 不完成，第 750ms 完成）
+        let mut fut = Box::pin(handle(&mut state, transient_error(ProviderErrorKind::ServerError)));
+        assert!(poll!(fut.as_mut()).is_pending(), "首 poll 后应进入退避 sleep");
+        tokio::time::advance(Duration::from_millis(749)).await;
+        assert!(poll!(fut.as_mut()).is_pending(), "749ms 未到 750ms 不得重试");
+        tokio::time::advance(Duration::from_millis(1)).await;
+        let o1 = fut.await.unwrap();
+        assert!(o1.end.is_none());
+        assert_eq!(state.transient_retries, 1);
+        assert_eq!(
+            retry_diagnostic(&state).map(|d| d.elapsed_ms),
+            Some(Some(750)),
+            "第 1 次诊断等待 = 750ms"
+        );
+        re_enter_streaming(&mut state);
+        // 第 2 次：等待 1500ms
+        let mut fut = Box::pin(handle(&mut state, transient_error(ProviderErrorKind::ServerError)));
+        assert!(poll!(fut.as_mut()).is_pending());
+        tokio::time::advance(Duration::from_millis(1_499)).await;
+        assert!(poll!(fut.as_mut()).is_pending(), "1499ms 未到 1500ms 不得重试");
+        tokio::time::advance(Duration::from_millis(1)).await;
+        let o2 = fut.await.unwrap();
+        assert!(o2.end.is_none());
+        assert_eq!(state.transient_retries, 2);
+        assert_eq!(retry_diagnostic(&state).map(|d| d.elapsed_ms), Some(Some(1_500)));
+        re_enter_streaming(&mut state);
+        // 第 3 次：等待 3000ms
+        let mut fut = Box::pin(handle(&mut state, transient_error(ProviderErrorKind::ServerError)));
+        assert!(poll!(fut.as_mut()).is_pending());
+        tokio::time::advance(Duration::from_millis(2_999)).await;
+        assert!(poll!(fut.as_mut()).is_pending(), "2999ms 未到 3000ms 不得重试");
+        tokio::time::advance(Duration::from_millis(1)).await;
+        let o3 = fut.await.unwrap();
+        assert!(o3.end.is_none());
+        assert_eq!(state.transient_retries, 3);
+        assert_eq!(retry_diagnostic(&state).map(|d| d.elapsed_ms), Some(Some(3_000)));
+        re_enter_streaming(&mut state);
+        // 第 4 次：次数用尽（limit=3）→ fatal，不进入退避
+        let o4 = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
+            .await
+            .unwrap();
+        assert!(o4.end.is_some());
+        assert_eq!(state.machine.context().end_reason, R::Error);
+        assert_eq!(state.transient_retries, 3);
+        // provider_error 摘要：retries = 3
+        let p = state.terminal_provider_error.as_ref().expect("fatal 必须填充摘要");
+        assert_eq!(p.kind, ProviderErrorKind::ServerError);
+        assert!(p.retryable);
+        assert_eq!(p.retries, 3);
+    }
+
+    /// D1 T2（A2）：mock 429 + Retry-After=30s → 等待 ≥30s（不被 8s 钳制）——
+    /// advance(29s) 断言不重试（无 NO_PROGRESS_CONTINUE），advance(1s) 后重试；
+    /// 等待 = max(750, 30000) = 30s（裁决 #3）
+    #[tokio::test]
+    async fn rate_limit_retry_after_waits_at_least_30s() {
+        let _time = TimePauseGuard::new();
+        let mut state = backoff_state();
+        let mut fut = Box::pin(handle(&mut state, rate_limit_error(30_000)));
+        assert!(poll!(fut.as_mut()).is_pending(), "首 poll 后应进入 Retry-After sleep");
+        // 29s：不得重试（30s 未到；若被 8s 钳制此处已完成，红）
+        tokio::time::advance(Duration::from_millis(29_000)).await;
+        assert!(
+            poll!(fut.as_mut()).is_pending(),
+            "429+Retry-After=30s 不得被 8s 钳制（29s 时不得重试）"
+        );
+        // 第 30s：重试发生
+        tokio::time::advance(Duration::from_millis(1_000)).await;
+        let o = fut.await.unwrap();
+        assert!(o.end.is_none(), "30s 后必须重试而非 fatal");
+        assert_eq!(state.transient_retries, 1);
+        assert_eq!(
+            retry_diagnostic(&state).map(|d| d.elapsed_ms),
+            Some(Some(30_000)),
+            "诊断等待 = 30s"
+        );
+        assert_eq!(
+            retry_diagnostic(&state).and_then(|d| d.retry_after_ms),
+            Some(30_000),
+            "诊断透传 Retry-After"
+        );
+    }
+
+    /// D1 T3（A3）：429 重试的等待被预算钳制——第一次等 30s、第二次钳到
+    /// 剩余 30s、第三次前预算耗尽（elapsed >= 60s）→ 不进重试直接 fatal
+    /// （endReason=Error，不消耗次数；04 §4.1「不无限尊重服务端再来一次」）
+    #[tokio::test]
+    async fn rate_limit_budget_clamp_exhausts_before_third_retry() {
+        let _time = TimePauseGuard::new();
+        let mut state = backoff_state();
+        // 第一次：等 30s（累计 0→30s）
+        let mut fut = Box::pin(handle(&mut state, rate_limit_error(30_000)));
+        assert!(poll!(fut.as_mut()).is_pending());
+        tokio::time::advance(Duration::from_millis(30_000)).await;
+        let o1 = fut.await.unwrap();
+        assert!(o1.end.is_none());
+        assert_eq!(state.transient_retries, 1);
+        re_enter_streaming(&mut state);
+        // 第二次：elapsed=30s → 剩余 30s → 等待钳到 min(30000, 30000)=30s
+        let mut fut = Box::pin(handle(&mut state, rate_limit_error(30_000)));
+        assert!(poll!(fut.as_mut()).is_pending());
+        tokio::time::advance(Duration::from_millis(30_000)).await;
+        let o2 = fut.await.unwrap();
+        assert!(o2.end.is_none(), "剩余预算 30s 内第二次重试必须发生");
+        assert_eq!(state.transient_retries, 2);
+        re_enter_streaming(&mut state);
+        // 第三次：elapsed=60s >= 预算 → retry_delay_ms 返回 None → 直接 fatal
+        // （不消耗次数，严格小于对齐 retry.rs:163-166）
+        let o3 = handle(&mut state, rate_limit_error(30_000)).await.unwrap();
+        assert!(o3.end.is_some(), "预算耗尽必须 fatal");
+        assert_eq!(state.machine.context().end_reason, R::Error);
+        assert_eq!(state.transient_retries, 2, "预算耗尽不消耗重试次数");
+    }
+
+    /// D1 T4（A4）：abort 竞速——sleep 中 abort → 立即 aborted 收场、
+    /// 不消耗重试计数、无 retry 诊断（规则 R5，零通知零噪声；biased 优先）
+    #[tokio::test]
+    async fn abort_during_backoff_sleep_closes_aborted_without_consuming_retry() {
+        let _time = TimePauseGuard::new();
+        let mut state = backoff_state();
+        // 预克隆信号（未来持有 &mut state 期间经共享句柄触发 abort）
+        let signal = state.abort_signal.clone();
+        let mut fut = Box::pin(handle(&mut state, transient_error(ProviderErrorKind::ServerError)));
+        assert!(poll!(fut.as_mut()).is_pending(), "必须已进入退避 sleep");
+        // sleep 中 abort（竞速窗口）
+        signal.abort();
+        tokio::time::advance(Duration::from_millis(1)).await;
+        let o = fut.await.unwrap();
+        assert!(o.end.is_some(), "abort 必须立即收场");
+        assert_eq!(state.machine.context().end_reason, R::Aborted);
+        assert_eq!(state.transient_retries, 0, "abort 不消耗重试计数");
+        assert!(
+            !state
+                .events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::ProviderDiagnostic { .. })),
+            "abort 竞速收场不发诊断"
+        );
+    }
+
+    /// D1 规则 R5 补充：sleep 完成后 abort 竞速窗口收口——sleep 结束瞬间
+    /// abort 已触发 → 复查后仍 aborted 收场（不重试）
+    #[tokio::test]
+    async fn abort_after_sleep_completion_race_window_closes_aborted() {
+        let _time = TimePauseGuard::new();
+        let mut state = backoff_state();
+        let signal = state.abort_signal.clone();
+        let mut fut = Box::pin(handle(&mut state, transient_error(ProviderErrorKind::ServerError)));
+        assert!(poll!(fut.as_mut()).is_pending());
+        // 推进到 sleep 完成点同时 abort：biased select 以 sleep 分支返回 →
+        // sleep 后复查 abort 兜住竞速窗口（Q40 纪律）
+        tokio::time::advance(Duration::from_millis(750)).await;
+        signal.abort();
+        tokio::time::advance(Duration::from_millis(1)).await;
+        let o = fut.await.unwrap();
+        assert!(o.end.is_some());
+        assert_eq!(state.machine.context().end_reason, R::Aborted);
+        assert_eq!(state.transient_retries, 0, "竞速窗口收口不消耗计数");
+    }
+
+    /// D1 注入面：可注入延迟函数驱动序列（attempt 1/2/3 + Retry-After 透传），
+    /// 零真实等待不依赖 tokio pause——测试直接驱动（任务书注入点要求）
+    // G2 允许理由（clippy::type_complexity）：测试局部记录类型
+    // Arc<Mutex<Vec<(u32, Option<u64>)>>>，由注入面签名自然形成
+    #[tokio::test]
+    #[allow(clippy::type_complexity)]
+    async fn injected_delay_drives_retry_sequence_without_clock_pause() {
+        use std::sync::Mutex;
+        let mut state = backoff_state();
+        let calls: Arc<Mutex<Vec<(u32, Option<u64>)>>> = Arc::new(Mutex::new(Vec::new()));
+        let calls_handle = calls.clone();
+        state.retry_delay = Some(Box::new(move |attempt, retry_after| {
+            calls_handle.lock().unwrap().push((attempt, retry_after));
+            Duration::ZERO
+        }));
+        for i in 0..3 {
+            let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
+                .await
+                .unwrap();
+            assert!(o.end.is_none(), "第 {} 次重试应继续 run", i + 1);
+            re_enter_streaming(&mut state);
+        }
+        let recorded = calls.lock().unwrap().clone();
+        assert_eq!(recorded, vec![(1, None), (2, None), (3, None)], "注入面收到 attempt 序列");
+        // 第 4 次：次数用尽 → fatal
+        let o4 = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
+            .await
+            .unwrap();
+        assert!(o4.end.is_some());
+        assert_eq!(state.machine.context().end_reason, R::Error);
+        assert_eq!(calls.lock().unwrap().len(), 3, "fatal 不再查询延迟");
+    }
+
+    /// D1 注入面（429）：注入函数收到 Retry-After 透传（test-only 注入面
+    /// 不经预算钳制——注入值即最终等待）
+    // G2 允许理由（clippy::type_complexity）：同 injected_delay_drives 记录类型
+    #[tokio::test]
+    #[allow(clippy::type_complexity)]
+    async fn injected_delay_receives_retry_after_passthrough() {
+        use std::sync::Mutex;
+        let mut state = backoff_state();
+        let calls: Arc<Mutex<Vec<(u32, Option<u64>)>>> = Arc::new(Mutex::new(Vec::new()));
+        let calls_handle = calls.clone();
+        state.retry_delay = Some(Box::new(move |attempt, retry_after| {
+            calls_handle.lock().unwrap().push((attempt, retry_after));
+            Duration::from_millis(30_000)
+        }));
+        let o = handle(&mut state, rate_limit_error(30_000)).await.unwrap();
+        assert!(o.end.is_none());
+        assert_eq!(
+            calls.lock().unwrap().clone(),
+            vec![(1, Some(30_000))],
+            "注入面收到 attempt=1 与 Retry-After 透传"
+        );
+        assert_eq!(
+            retry_diagnostic(&state).map(|d| d.elapsed_ms),
+            Some(Some(30_000)),
+            "诊断等待 = 注入值 30s"
+        );
+    }
+
+    /// D1 R6：retry_backoff=None（缺省）→ 现状立即重试（无退避、无 sleep、
+    /// 无预算闸——向后兼容；诊断 elapsed_ms=0）
+    #[tokio::test]
+    async fn default_no_backoff_retries_immediately() {
+        let mut state = streaming_state(); // retry_backoff = None（缺省）
+        let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
+            .await
+            .unwrap();
+        assert!(o.end.is_none());
+        assert_eq!(state.transient_retries, 1);
+        assert_eq!(
+            retry_diagnostic(&state).map(|d| d.elapsed_ms),
+            Some(Some(0)),
+            "无退避配置等待 = 0"
+        );
+        assert!(
+            state.transient_retry_started_at.is_some(),
+            "预算起点照常惰性初始化"
+        );
+    }
+
+    /// D1 T5（A5）：熔断闸——streak=Some(6) ≥ 阈值 → 注入瞬态错误直接 fatal
+    /// （endReason=Error、transient_retries=0、发 runtime-error 事件、
+    /// 无 retry 诊断；熔断期不烧 run 内配额）
+    #[tokio::test]
+    async fn circuit_breaker_trips_at_six_streak_fatals_without_retry() {
+        let mut state = backoff_state();
+        state.options.provider_fail_streak = Some(6);
+        let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
+            .await
+            .unwrap();
+        assert!(o.end.is_some(), "熔断命中必须直接 fatal");
+        assert_eq!(state.machine.context().end_reason, R::Error);
+        assert_eq!(state.transient_retries, 0, "熔断期不消耗 run 内重试配额");
+        assert!(
+            state
+                .events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::RuntimeError { .. })),
+            "熔断 fatal 必须发 runtime-error 观测事件"
+        );
+        assert!(
+            !state
+                .events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::ProviderDiagnostic { .. })),
+            "熔断 fatal 不发重试诊断"
+        );
+        // provider_error 摘要照常填充（retries=0）
+        let p = state.terminal_provider_error.as_ref().expect("fatal 必须填充摘要");
+        assert_eq!(p.kind, ProviderErrorKind::ServerError);
+        assert_eq!(p.retries, 0);
+    }
+
+    /// D1 T5（A5）：streak=Some(5) < 阈值 → 正常重试（闸只卡 ≥ 阈值）
+    #[tokio::test]
+    async fn circuit_breaker_below_threshold_still_retries() {
+        let mut state = backoff_state();
+        state.options.provider_fail_streak = Some(5);
+        let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
+            .await
+            .unwrap();
+        assert!(o.end.is_none(), "streak=5 未达阈值必须正常重试");
+        assert_eq!(state.transient_retries, 1);
+    }
+
+    /// D1 T5（A5）：streak=None（缺省）→ 现状行为（熔断不启用，向后兼容）
+    #[tokio::test]
+    async fn circuit_breaker_disabled_by_default_still_retries() {
+        let mut state = backoff_state();
+        assert!(state.options.provider_fail_streak.is_none());
+        let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
+            .await
+            .unwrap();
+        assert!(o.end.is_none());
+        assert_eq!(state.transient_retries, 1);
+    }
+
+    /// D1 Q40 顺序保持：abort 检查先于熔断闸——熔断命中且已 abort → aborted
+    /// 收场（非 fatal；既有 abort 优先级不被熔断覆盖）
+    #[tokio::test]
+    async fn abort_check_precedes_circuit_breaker_gate() {
+        let mut state = streaming_state();
+        state.options.provider_fail_streak = Some(6);
+        state.abort_signal.abort();
+        let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
+            .await
+            .unwrap();
+        assert!(o.end.is_some());
+        assert_eq!(state.machine.context().end_reason, R::Aborted, "abort 优先于熔断");
+        assert_eq!(state.transient_retries, 0);
+    }
+
+    /// D1 T7（A7）：3 次瞬态重试耗尽 → terminal_provider_error =
+    /// Some{kind: Network, retryable: true, retries: 3}（fatal 填充面）
+    #[tokio::test]
+    async fn provider_error_summary_filled_after_transient_exhaustion() {
+        let mut state = backoff_state();
+        state.retry_delay = Some(Box::new(|_, _| Duration::ZERO));
+        for _ in 0..3 {
+            let o = handle(&mut state, transient_error(ProviderErrorKind::Network))
+                .await
+                .unwrap();
+            assert!(o.end.is_none());
+            re_enter_streaming(&mut state);
+        }
+        let o4 = handle(&mut state, transient_error(ProviderErrorKind::Network))
+            .await
+            .unwrap();
+        assert!(o4.end.is_some());
+        let p = state.terminal_provider_error.as_ref().expect("fatal 必须填充摘要");
+        assert_eq!(p.kind, ProviderErrorKind::Network);
+        assert!(p.retryable);
+        assert_eq!(p.retry_after_ms, None);
+        assert_eq!(p.retries, 3, "retries = run 内实际重试次数");
+    }
+
+    /// D1 T7（A7）：非瞬态 fatal（Auth）→ Some{kind: Auth, retryable: false,
+    /// retries: 0}（02 W1 验收②）
+    #[tokio::test]
+    async fn provider_error_summary_filled_on_auth_fatal() {
+        let mut state = streaming_state();
+        let o = handle(&mut state, transient_error(ProviderErrorKind::Auth))
+            .await
+            .unwrap();
+        assert!(o.end.is_some());
+        let p = state.terminal_provider_error.as_ref().expect("fatal 必须填充摘要");
+        assert_eq!(p.kind, ProviderErrorKind::Auth);
+        assert!(!p.retryable);
+        assert_eq!(p.retries, 0, "非瞬态直接 fatal 无重试");
+    }
+
+    /// D1 A9（R7/R9 前缀不变性）：退避 sleep 期间与重试后对话零改动——
+    /// 无消息产出、无 commit、无 message-start/end 事件（前缀不变性是
+    /// provider 前缀缓存命中的前提，约束 B；sleep 期间未来暂停轮询，
+    /// 无代码路径可写对话——结构保证，测试锁定重试全程零对话改动）
+    #[tokio::test]
+    async fn backoff_sleep_keeps_conversation_prefix_untouched() {
+        let _time = TimePauseGuard::new();
+        let mut state = backoff_state();
+        // 预置已 commit 消息（前缀基线快照）
+        state.conversation.push(Arc::new(AgentMessage {
+            id: "m0".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T10:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text { text: "已提交前缀".to_string() }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        }));
+        let snapshot: Vec<Arc<AgentMessage>> = state.conversation.clone();
+        let mut fut = Box::pin(handle(&mut state, transient_error(ProviderErrorKind::ServerError)));
+        assert!(poll!(fut.as_mut()).is_pending(), "必须已进入退避 sleep");
+        // 推进退避：sleep 期间未来不被轮询（结构上零对话改动）
+        tokio::time::advance(Duration::from_millis(750)).await;
+        let o = fut.await.unwrap();
+        assert!(o.end.is_none());
+        // 重试全程（含退避 sleep 期间）：对话零改动（长度不变 + Arc 身份
+        // 一致 = 零 commit）、除重试诊断外无任何事件（无 message-start/end）
+        assert_eq!(state.conversation.len(), snapshot.len(), "重试路径不得产生消息");
+        assert!(
+            state
+                .conversation
+                .iter()
+                .zip(&snapshot)
+                .all(|(a, b)| Arc::ptr_eq(a, b)),
+            "重试路径消息 Arc 身份不得变化（零 commit，前缀字节级一致 R7）"
+        );
+        assert!(
+            state.events.iter().all(|e| matches!(
+                e,
+                AgentEvent::ProviderDiagnostic { .. }
+            )),
+            "重试路径只允许重试诊断事件（不得注入对话/消息事件）"
+        );
+    }
+
     /// 从事件列表取最近一次压缩记录（断言辅助）
     fn compression_record(state: &LoopState) -> Option<conex_types::tool::ContextCompressionRecord> {
         state.events.iter().rev().find_map(|e| match e {
@@ -459,12 +1148,14 @@ mod tests {
     }
 
     /// Q40（T09.9）：瞬态重试每级决策前查 abort——梯级内 abort 同样直接收场
+    /// （D1 §3.1.6：transient_retry 改 async，调用点加 .await）
     #[tokio::test]
     async fn abort_at_transient_level_skips_remaining_ladder() {
         let mut state = streaming_state();
         state.abort_signal.abort();
         let outcome = transient_retry(&mut state, &transient_error(ProviderErrorKind::ServerError))
-            .expect("瞬态重试为同步决策");
+            .await
+            .expect("瞬态重试决策");
         assert_eq!(state.transient_retries, 0, "梯级内 abort 不消耗计数");
         assert!(outcome.end.is_some());
         assert_eq!(state.machine.context().end_reason, R::Aborted);

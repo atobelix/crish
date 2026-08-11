@@ -152,6 +152,11 @@ pub enum ProviderStreamEvent {
         reason: StopReason,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        /// 错误分类（reason=error 时携带；D7 §3.7：流中断结构化标注的
+        /// providerErrorKind/retryable 数据源——streaming handler 注入
+        /// Stop 时透传 classified.kind）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error_kind: Option<ProviderErrorKind>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         usage: Option<ProviderUsage>,
     },
@@ -185,6 +190,7 @@ impl ProviderStreamEvent {
         ProviderStreamEvent::Stop {
             reason,
             error: None,
+            error_kind: None,
             usage: None,
         }
     }
@@ -221,7 +227,8 @@ impl ConsumeStopReason {
 /// - `response`：分类产物（Message / Empty / StreamError，01 §五.3）；
 /// - `diagnostics`：流期间收集的诊断（01 §2.4 步骤 4：provider-diagnostic 事件源）；
 /// - `metadata`：消息元数据标注（stopReason / thought / usage / providerError /
-///   aborted，对齐 agent-provider buildMessageMetadata）。
+///   providerErrorKind / providerErrorRetryable / aborted，对齐
+///   agent-provider buildMessageMetadata；D7 §3.7 结构化分类字段）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsumeResult {
@@ -261,6 +268,9 @@ struct Aggregate {
     tool_calls: Vec<ToolCallBlock>,
     diagnostics: Vec<ProviderDiagnostic>,
     error: Option<String>,
+    /// 错误分类（D7 §3.7：Stop 事件透传的 classified.kind，
+    /// metadata.providerErrorKind/retryable 数据源）
+    error_kind: Option<ProviderErrorKind>,
     usage: Option<ProviderUsage>,
     finish_reason: Option<StopReason>,
 }
@@ -283,10 +293,11 @@ impl Aggregate {
             ProviderStreamEvent::ProviderDiagnostic { diagnostic } => {
                 self.diagnostics.push(diagnostic);
             }
-            ProviderStreamEvent::Stop { reason, error, usage } => {
+            ProviderStreamEvent::Stop { reason, error, error_kind, usage } => {
                 self.finish_reason = Some(reason);
                 if reason == StopReason::Error {
                     self.error = Some(error.unwrap_or_else(|| "provider 流异常终止".to_string()));
+                    self.error_kind = error_kind;
                 }
                 if let Some(usage) = usage {
                     self.usage = Some(usage);
@@ -473,6 +484,21 @@ fn build_message_metadata(
     }
     if let Some(error) = &aggregate.error {
         metadata.insert("providerError".to_string(), Value::String(error.clone()));
+        // D7 §3.7 流中断结构化标注：providerError 之外新增分类字段——
+        // providerErrorKind（kebab-case 13 类）+ providerErrorRetryable（bool），
+        // 供水合后模型/熔断感知中断原因（E1 续写触发信号数据源）。分类来自
+        // Stop 事件透传的 classified.kind；未携带时只标 providerError 不伪造
+        if let Some(kind) = aggregate.error_kind {
+            metadata.insert(
+                "providerErrorKind".to_string(),
+                serde_json::to_value(kind)
+                    .unwrap_or_else(|_| Value::String("unknown".to_string())),
+            );
+            metadata.insert(
+                "providerErrorRetryable".to_string(),
+                Value::Bool(kind.default_retryable()),
+            );
+        }
     }
     if aborted {
         metadata.insert("aborted".to_string(), Value::Bool(true));
@@ -541,18 +567,60 @@ fn classify_stream_error(message: &str) -> ClassifiedStreamError {
 mod tests {
     use super::*;
 
-    /// 文字 + error stop → Message（不失败）；错误降级为 metadata 标注（01 D6）
+    /// 文字 + error stop → Message（不失败）；错误降级为 metadata 标注（01 D6）。
+    /// D7 §3.7（T9）：标注含结构化分类 providerErrorKind/providerErrorRetryable
     #[test]
     fn text_then_error_stop_yields_message() {
         let result = consume(
             vec![
                 ProviderStreamEvent::text("你好"),
-                ProviderStreamEvent::stop(StopReason::Error),
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Error,
+                    error: Some("上游超时".to_string()),
+                    error_kind: Some(ProviderErrorKind::Timeout),
+                    usage: None,
+                },
             ],
             false,
         );
         assert_eq!(result.response, ProviderOutput::message("你好", vec![]));
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
+        // providerError 字符串保持 + 结构化字段（kebab-case kind / retryable）
+        assert_eq!(result.metadata["providerError"], "上游超时");
+        assert_eq!(result.metadata["providerErrorKind"], "timeout");
+        assert_eq!(result.metadata["providerErrorRetryable"], true);
+    }
+
+    /// D7 §3.7：不可重试分类（Unknown）→ providerErrorRetryable=false
+    #[test]
+    fn error_stop_unknown_kind_marks_not_retryable() {
+        let result = consume(
+            vec![
+                ProviderStreamEvent::text("部分内容"),
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Error,
+                    error: Some("未知错误".to_string()),
+                    error_kind: Some(ProviderErrorKind::Unknown),
+                    usage: None,
+                },
+            ],
+            false,
+        );
+        assert_eq!(result.metadata["providerErrorKind"], "unknown");
+        assert_eq!(result.metadata["providerErrorRetryable"], false);
+    }
+
+    /// D7 §3.7 向后兼容：Stop 未携带 error_kind（老注入方）→ 只标
+    /// providerError，不写 kind/retryable 字段（标注增量、不伪造分类）
+    #[test]
+    fn error_stop_without_kind_omits_classification_fields() {
+        let result = consume(
+            vec![ProviderStreamEvent::text("部分内容"), ProviderStreamEvent::stop(StopReason::Error)],
+            false,
+        );
+        assert_eq!(result.metadata["providerError"], "provider 流异常终止");
+        assert!(result.metadata.get("providerErrorKind").is_none());
+        assert!(result.metadata.get("providerErrorRetryable").is_none());
     }
 
     /// 纯 error 无内容 → StreamError（Unknown，不可重试）
@@ -686,6 +754,7 @@ mod tests {
         ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: Some(ProviderUsage {
                 prompt_tokens: Some(100),
                 completion_tokens: Some(20),
@@ -757,6 +826,7 @@ mod tests {
                 ProviderStreamEvent::Stop {
                     reason: StopReason::Stop,
                     error: None,
+                    error_kind: None,
                     usage: Some(ProviderUsage {
                         completion_tokens: Some(20),
                         ..ProviderUsage::default()

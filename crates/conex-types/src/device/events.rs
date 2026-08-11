@@ -10,7 +10,10 @@
 //! - 双面策略映射：M6 §5.1 把 41 变体按「实时面 / 同步面」登记跨端策略
 //!   （T 透明透传 13 / R 摘要化 18 / U 元组下发 10）；本模块的
 //!   [event_cross_strategy] / [event_is_sync_eligible] 以 `AgentEvent` 变体
-//!   匹配实现，编译期锁定 41 变体（与 events.rs `event_backpressure` 同范式）。
+//!   匹配实现，编译期锁定 41 变体（与 events.rs `event_backpressure` 同范式）；
+//!   2026-08-11 任务连续性方案恢复域 + goal 域兼容新增 8 变体（41 → 49，
+//!   D8 事件登记）——跨端策略分组随之扩展为 T 14 / R 24 / U 11（recovery-* 与
+//!   goal-* 事件为桌面观测面，移动端不消费，策略按数据面保守分配）。
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -32,15 +35,17 @@ pub enum EventRedactStrategy {
     Tuple,
 }
 
-/// 事件 → 跨端裁剪策略（M6 §5.1 映射表；41 变体分组计数 13/18/10）
+/// 事件 → 跨端裁剪策略（M6 §5.1 映射表；41 变体分组计数 13/18/10，
+/// 2026-08-11 D8 登记恢复域 + goal 域 8 变体后为 49 变体分组 14/24/11）
 ///
 /// 与 `AgentEvent` 变体逐一匹配（缺 arm 编译报错），未登记的未来变体在
-/// 网关层按 fail-closed 元组兜底（本函数只覆盖既有 41 变体）。
+/// 网关层按 fail-closed 元组兜底（本函数只覆盖既有 49 变体）。
 pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
     match event {
-        // T 透明透传（13）：agent-start/end、turn-start/end、压缩 start/end、
+        // T 透明透传（14）：agent-start/end、turn-start/end、压缩 start/end、
         // run-terminal、subagent-started/ended、task-started/suspicious/
-        // completed/killed
+        // completed/killed、recovery-fork（fork 拓扑与 subagent-started
+        // 同性质：run 关联信息，无敏感正文，D8 登记）
         AgentEvent::AgentStart { .. }
         | AgentEvent::AgentEnd { .. }
         | AgentEvent::TurnStart { .. }
@@ -53,12 +58,15 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
         | AgentEvent::TaskStarted { .. }
         | AgentEvent::TaskSuspicious { .. }
         | AgentEvent::TaskCompleted { .. }
-        | AgentEvent::TaskKilled { .. } => EventRedactStrategy::Transparent,
+        | AgentEvent::TaskKilled { .. }
+        | AgentEvent::RecoveryFork { .. } => EventRedactStrategy::Transparent,
 
-        // R 摘要化（18）：message-delta/end、tool-start/update/end、
+        // R 摘要化（24）：message-delta/end、tool-start/update/end、
         // runtime-error/intervention-required、approval-requested/resolved、
         // cache 三件、security-audit、subagent-event、task-output/failed、
-        // timer-fired、cron-fired
+        // timer-fired、cron-fired、recovery-escalated/steering/report/
+        // budget-denied、goal-round-started/completed（恢复与 goal 数据面
+        // 事件：无正文内容，观测字段保留；D8 登记）
         AgentEvent::MessageDelta { .. }
         | AgentEvent::MessageEnd { .. }
         | AgentEvent::ToolStart { .. }
@@ -76,11 +84,19 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
         | AgentEvent::TaskOutput { .. }
         | AgentEvent::TaskFailed { .. }
         | AgentEvent::TimerFired { .. }
-        | AgentEvent::CronFired { .. } => EventRedactStrategy::Redacted,
+        | AgentEvent::CronFired { .. }
+        | AgentEvent::RecoveryEscalated { .. }
+        | AgentEvent::RecoverySteering { .. }
+        | AgentEvent::RecoveryReport { .. }
+        | AgentEvent::RecoveryBudgetDenied { .. }
+        | AgentEvent::GoalRoundStarted { .. }
+        | AgentEvent::GoalRoundCompleted { .. } => EventRedactStrategy::Redacted,
 
-        // U 元组下发（10）：message-start、tool-batch-start/end、
+        // U 元组下发（11）：message-start、tool-batch-start/end、
         // tool-input-repaired、provider-diagnostic、runtime-steering、
-        // checkpoint-created/restored、task-heartbeat、timer-cancelled
+        // checkpoint-created/restored、task-heartbeat、timer-cancelled、
+        // goal-continuation-decided（prompt 为续轮注入文本，任务级内容——
+        // fail-closed 元组兜底，对齐 runtime-steering；D8 登记）
         AgentEvent::MessageStart { .. }
         | AgentEvent::ToolBatchStart { .. }
         | AgentEvent::ToolBatchEnd { .. }
@@ -90,12 +106,14 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
         | AgentEvent::CheckpointCreated { .. }
         | AgentEvent::CheckpointRestored { .. }
         | AgentEvent::TaskHeartbeat { .. }
-        | AgentEvent::TimerCancelled { .. } => EventRedactStrategy::Tuple,
+        | AgentEvent::TimerCancelled { .. }
+        | AgentEvent::GoalContinuationDecided { .. } => EventRedactStrategy::Tuple,
     }
 }
 
-/// 同步面白名单（M6 §5.0：41 变体中 20 类参与 `events.resume` / C03 续传；
-/// 21 类不同步——delta/诊断/定时器数据面等由实时面或补取命令覆盖）
+/// 同步面白名单（M6 §5.0：49 变体中 20 类参与 `events.resume` / C03 续传；
+/// 29 类不同步——delta/诊断/定时器数据面、恢复域与 goal 域观测事件等由
+/// 实时面或补取命令覆盖；D8 登记新增 8 事件均不入白名单）
 pub const SYNC_ELIGIBLE_TYPES: [&str; 20] = [
     "agent-start",
     "agent-end",

@@ -37,7 +37,7 @@ use crate::safe_point::{apply_safe_point_control, AbortSignal};
 use crate::state::AgentSessionMachine;
 use crate::steering::{SteeringContext, SteeringCoordinator};
 
-use super::end::EndDecision;
+use super::end::{EndDecision, ProviderErrorSummary};
 use super::{LoopError, SessionLoopOptions};
 
 pub(crate) mod awaiting_input;
@@ -57,6 +57,11 @@ pub(crate) fn new_message_id(prefix: &str) -> String {
     let n = MESSAGE_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{prefix}-{}-{n}", crate::steering::unix_millis())
 }
+
+/// 重试等待延迟注入函数（D1 §3.1.2 注入面签名：本次尝试序号、Retry-After
+/// 毫秒 → 等待时长；测试注入确定性延迟，零真实等待不依赖 tokio pause）
+pub(crate) type RetryDelayFn =
+    Box<dyn Fn(u32, Option<u64>) -> std::time::Duration + Send + Sync>;
 
 /// 主循环可变状态（各 handler 的共享载体）
 pub(crate) struct LoopState {
@@ -89,6 +94,23 @@ pub(crate) struct LoopState {
     pub(crate) length_upgrades: u32,
     /// 瞬态错误已重试次数（上限 3，01 §2.5 步骤 2）
     pub(crate) transient_retries: u32,
+    /// 瞬态重试预算起点（D1 §3.1.4 R1）：首次瞬态错误时惰性初始化
+    /// （[std::option::Option::get_or_insert]）；fresh run 归零（loop/mod.rs
+    /// run 起始同批）；预算 = 起点以来墙钟，超 [crate::r#loop::stream_error::RETRY_TOTAL_BUDGET_MS]
+    /// 即停止重试（与 [Self::retry_delay] 注入面配合，测试零真实等待）。
+    pub(crate) transient_retry_started_at: Option<tokio::time::Instant>,
+    /// 重试等待延迟注入点（D1 §3.1.2，测试专用注入面）：Some = 完全替代
+    /// 退避计算（签名：本次尝试序号、Retry-After 毫秒 → 等待时长；不做
+    /// 预算钳制——注入值即最终等待）；None = 生产路径（[SessionLoopOptions::retry_backoff]
+    /// 配置 + [crate::r#loop::stream_error::retry_delay_ms] 纯函数）。
+    /// 注入返回 Duration::ZERO 即立即重试（测试驱动零真实等待，不依赖
+    /// tokio pause）。生产永远 None。
+    pub(crate) retry_delay: Option<RetryDelayFn>,
+    /// fatal 收场的 provider 错误摘要（D1 §3.4）：[stream_error::fatal_provider_error]
+    /// 填充（kind/retryable/retry_after_ms/retries 四元组），converge 时
+    /// `mem::take` 零拷贝移交 [crate::r#loop::RunOutcome::provider_error]；
+    /// fresh run 归零。None = 无 provider fatal（正常 stop / 非 provider 错误）。
+    pub(crate) terminal_provider_error: Option<ProviderErrorSummary>,
     /// continue nudge 已用次数（上限 1，01 §2.6 步骤 1）
     pub(crate) continue_nudges: u32,
     /// error 收场时的错误文案（turn-complete 收敛读取）
@@ -173,6 +195,11 @@ impl LoopState {
             max_tokens: crate::r#loop::DEFAULT_MAX_TOKENS,
             length_upgrades: 0,
             transient_retries: 0,
+            // D1：预算起点空（首次瞬态错误惰性初始化）、延迟注入面空
+            //（生产走 retry_backoff 配置）、fatal 摘要空（无 provider fatal）
+            transient_retry_started_at: None,
+            retry_delay: None,
+            terminal_provider_error: None,
             continue_nudges: 0,
             terminal_error: None,
             budget,

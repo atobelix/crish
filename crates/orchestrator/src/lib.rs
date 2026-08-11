@@ -30,7 +30,13 @@
 //! - [`task_events`]：任务域事件唤醒消费面（T-AB-18）——唤醒摘要批量
 //!   注入（[task_events::TaskWakeBatch]）、security-audit 审计留痕
 //!   （[task_events::TaskAuditAccumulator]）、C7 衔接
-//!   （[task_events::steer_for_task_failed]）、ownerRunId 来源过滤。
+//!   （[task_events::steer_for_task_failed]）、ownerRunId 来源过滤；
+//! - [`goal_state`]：D5 goal 引擎化纯函数侧——[goal_state::GoalState]
+//!   （session_meta `goal_state` 键形状，fail-open JSON 解析）、
+//!   [goal_state::assess_round] 收口评估纯函数（L0+L1 完成门禁 /
+//!   stalled 工具批指纹 / 轮数上限）、[goal_state::tool_batch_fingerprint]
+//!   （工具批 FNV-1a 签名）；[normalize::allows_auto_continue] 的首个
+//!   生产调用点（[goal_state::GoalState::goal_pending]）。
 //!
 //! 语义来源：05-test-mapping.md §2.8 / §5.4（run::drive / run::cancel /
 //! run::approval / run::fail / run::restore / session::tree / store::pending /
@@ -45,6 +51,7 @@
 pub mod blocks;
 pub mod events;
 pub mod flow_graph;
+pub mod goal_state;
 pub mod lifecycle;
 pub mod normalize;
 pub mod persist;
@@ -56,6 +63,10 @@ pub mod steering_queue;
 pub mod subagent_events;
 pub mod task_events;
 
+pub use goal_state::{
+    assess_round, GoalDecision, GoalState, RoundAssessment, RoundInput, ToolCallStamp,
+    DEFAULT_GOAL_MAX_ROUNDS, DEFAULT_GOAL_MAX_STALLED_ROUNDS, GOAL_STATE_KEY,
+};
 pub use normalize::{allows_auto_continue, is_terminal_event, normalize_envelope, terminal_status_for_end_reason};
 pub use steering_queue::PendingMessageQueue;
 

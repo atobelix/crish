@@ -18,58 +18,72 @@
 use conex_types::events::{AgentEvent, AgentEventEnvelope, RunTerminalStatus};
 use conex_types::session::AgentEndReason;
 
-/// 事件体 `sessionId` 字段的可变引用（全部 27 种事件均携带该字段）
-fn event_session_id_mut(event: &mut AgentEvent) -> &mut String {
+/// 事件体 `sessionId` 字段的可变引用（除 goal-* 三事件外全部事件均携带
+/// 该字段；goal-* 为 envelope 事件不列 sessionId 变体字段——会话归属在
+/// 事件行 session_id 列，读侧信封已含，02-定夺 B2/S9 约定，返回 None）
+fn event_session_id_mut(event: &mut AgentEvent) -> Option<&mut String> {
     match event {
-        AgentEvent::AgentStart { session_id, .. } => session_id,
-        AgentEvent::AgentEnd { session_id, .. } => session_id,
-        AgentEvent::TurnStart { session_id, .. } => session_id,
-        AgentEvent::TurnEnd { session_id, .. } => session_id,
-        AgentEvent::MessageStart { session_id, .. } => session_id,
-        AgentEvent::MessageDelta { session_id, .. } => session_id,
-        AgentEvent::MessageEnd { session_id, .. } => session_id,
-        AgentEvent::ToolStart { session_id, .. } => session_id,
-        AgentEvent::ToolUpdate { session_id, .. } => session_id,
-        AgentEvent::ToolEnd { session_id, .. } => session_id,
-        AgentEvent::ToolBatchStart { session_id, .. } => session_id,
-        AgentEvent::ToolBatchEnd { session_id, .. } => session_id,
-        AgentEvent::ToolInputRepaired { session_id, .. } => session_id,
-        AgentEvent::ContextCompressionStart { session_id, .. } => session_id,
-        AgentEvent::ContextCompressionEnd { session_id, .. } => session_id,
-        AgentEvent::ProviderDiagnostic { session_id, .. } => session_id,
-        AgentEvent::RuntimeError { session_id, .. } => session_id,
-        AgentEvent::RuntimeSteering { session_id, .. } => session_id,
-        AgentEvent::RuntimeInterventionRequired { session_id, .. } => session_id,
-        AgentEvent::ApprovalRequested { session_id, .. } => session_id,
-        AgentEvent::ApprovalResolved { session_id, .. } => session_id,
-        AgentEvent::CheckpointCreated { session_id, .. } => session_id,
-        AgentEvent::CheckpointRestored { session_id, .. } => session_id,
-        AgentEvent::RunTerminal { session_id, .. } => session_id,
-        AgentEvent::CacheStatsUpdated { session_id, .. } => session_id,
-        AgentEvent::CacheWasteAlert { session_id, .. } => session_id,
-        AgentEvent::ColdCacheWarning { session_id, .. } => session_id,
-        AgentEvent::SecurityAudit { session_id, .. } => session_id,
+        AgentEvent::AgentStart { session_id, .. } => Some(session_id),
+        AgentEvent::AgentEnd { session_id, .. } => Some(session_id),
+        AgentEvent::TurnStart { session_id, .. } => Some(session_id),
+        AgentEvent::TurnEnd { session_id, .. } => Some(session_id),
+        AgentEvent::MessageStart { session_id, .. } => Some(session_id),
+        AgentEvent::MessageDelta { session_id, .. } => Some(session_id),
+        AgentEvent::MessageEnd { session_id, .. } => Some(session_id),
+        AgentEvent::ToolStart { session_id, .. } => Some(session_id),
+        AgentEvent::ToolUpdate { session_id, .. } => Some(session_id),
+        AgentEvent::ToolEnd { session_id, .. } => Some(session_id),
+        AgentEvent::ToolBatchStart { session_id, .. } => Some(session_id),
+        AgentEvent::ToolBatchEnd { session_id, .. } => Some(session_id),
+        AgentEvent::ToolInputRepaired { session_id, .. } => Some(session_id),
+        AgentEvent::ContextCompressionStart { session_id, .. } => Some(session_id),
+        AgentEvent::ContextCompressionEnd { session_id, .. } => Some(session_id),
+        AgentEvent::ProviderDiagnostic { session_id, .. } => Some(session_id),
+        AgentEvent::RuntimeError { session_id, .. } => Some(session_id),
+        AgentEvent::RuntimeSteering { session_id, .. } => Some(session_id),
+        AgentEvent::RuntimeInterventionRequired { session_id, .. } => Some(session_id),
+        AgentEvent::ApprovalRequested { session_id, .. } => Some(session_id),
+        AgentEvent::ApprovalResolved { session_id, .. } => Some(session_id),
+        AgentEvent::CheckpointCreated { session_id, .. } => Some(session_id),
+        AgentEvent::CheckpointRestored { session_id, .. } => Some(session_id),
+        AgentEvent::RunTerminal { session_id, .. } => Some(session_id),
+        AgentEvent::CacheStatsUpdated { session_id, .. } => Some(session_id),
+        AgentEvent::CacheWasteAlert { session_id, .. } => Some(session_id),
+        AgentEvent::ColdCacheWarning { session_id, .. } => Some(session_id),
+        AgentEvent::SecurityAudit { session_id, .. } => Some(session_id),
         // I5-M7 事件契约新增三事件（subagent-started/event/ended，均携带
         // sessionId；M6 域补齐归一化位，emit 出口统一注入语义不变）
-        AgentEvent::SubagentStarted { session_id, .. } => session_id,
-        AgentEvent::SubagentEvent { session_id, .. } => session_id,
-        AgentEvent::SubagentEnded { session_id, .. } => session_id,
+        AgentEvent::SubagentStarted { session_id, .. } => Some(session_id),
+        AgentEvent::SubagentEvent { session_id, .. } => Some(session_id),
+        AgentEvent::SubagentEnded { session_id, .. } => Some(session_id),
         // T-AB-17 任务域七事件（均携带 sessionId；M6 域补齐归一化位，
         // emit 出口统一注入语义不变——C1 验证补丁由 C2 正式落位）
-        AgentEvent::TaskStarted { session_id, .. } => session_id,
-        AgentEvent::TaskOutput { session_id, .. } => session_id,
-        AgentEvent::TaskHeartbeat { session_id, .. } => session_id,
-        AgentEvent::TaskSuspicious { session_id, .. } => session_id,
-        AgentEvent::TaskCompleted { session_id, .. } => session_id,
-        AgentEvent::TaskFailed { session_id, .. } => session_id,
-        AgentEvent::TaskKilled { session_id, .. } => session_id,
+        AgentEvent::TaskStarted { session_id, .. } => Some(session_id),
+        AgentEvent::TaskOutput { session_id, .. } => Some(session_id),
+        AgentEvent::TaskHeartbeat { session_id, .. } => Some(session_id),
+        AgentEvent::TaskSuspicious { session_id, .. } => Some(session_id),
+        AgentEvent::TaskCompleted { session_id, .. } => Some(session_id),
+        AgentEvent::TaskFailed { session_id, .. } => Some(session_id),
+        AgentEvent::TaskKilled { session_id, .. } => Some(session_id),
         // T-CF-04 定时器域两事件（均携带 sessionId；M6 域补齐归一化位，
         // 定时器事件无 run 归属时 sessionId 可空串，由本归一化补会话）
-        AgentEvent::TimerFired { session_id, .. } => session_id,
-        AgentEvent::TimerCancelled { session_id, .. } => session_id,
+        AgentEvent::TimerFired { session_id, .. } => Some(session_id),
+        AgentEvent::TimerCancelled { session_id, .. } => Some(session_id),
         // T-CF-08 cron 域事件（均携带 sessionId；M6 域补齐归一化位，
         // cron 事件无 run 归属时 sessionId 可空串，由本归一化补会话）
-        AgentEvent::CronFired { session_id, .. } => session_id,
+        AgentEvent::CronFired { session_id, .. } => Some(session_id),
+        // D8 恢复域五事件（均携带 sessionId；append_event 直写 body-only
+        // payload，事件行 session_id 列承载会话归属，读侧合成信封注入）
+        AgentEvent::RecoveryEscalated { session_id, .. } => Some(session_id),
+        AgentEvent::RecoverySteering { session_id, .. } => Some(session_id),
+        AgentEvent::RecoveryFork { session_id, .. } => Some(session_id),
+        AgentEvent::RecoveryReport { session_id, .. } => Some(session_id),
+        AgentEvent::RecoveryBudgetDenied { session_id, .. } => Some(session_id),
+        // D8 goal 域三事件（envelope 事件不列 sessionId 变体字段，
+        // 02-定夺 B2/S9 约定；归一化不注入事件体）
+        AgentEvent::GoalRoundStarted { .. }
+        | AgentEvent::GoalRoundCompleted { .. }
+        | AgentEvent::GoalContinuationDecided { .. } => None,
     }
 }
 
@@ -96,9 +110,12 @@ pub fn normalize_envelope(
         .clone()
         .or_else(|| run_id.map(str::to_string));
 
-    // 事件体 sessionId：缺失（空串）时补，已有不覆盖
-    if event_session_id_mut(&mut envelope.event).is_empty() {
-        *event_session_id_mut(&mut envelope.event) = session_id.to_string();
+    // 事件体 sessionId：缺失（空串）时补，已有不覆盖；goal-* 三事件为
+    // envelope 事件不列 sessionId 变体字段（02-定夺 B2/S9 约定），跳过
+    if let Some(sid) = event_session_id_mut(&mut envelope.event) {
+        if sid.is_empty() {
+            *sid = session_id.to_string();
+        }
     }
 
     // run-terminal 事件体 runId：缺失时补（与信封注入值一致）

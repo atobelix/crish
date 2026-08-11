@@ -304,7 +304,9 @@ fn finish_after_abort(aggregate: Aggregate) -> ConsumeResult {
 /// provider-response-consumer.ts:195-203）
 ///
 /// 键名：stopReason / text / thought / thoughtBlocks / usage / providerFinishReason /
-/// providerError / aborted。error 在此作为标注出现，不参与 stopReason 判定（01 D6）。
+/// providerError / providerErrorKind / providerErrorRetryable / aborted。
+/// error 在此作为标注出现，不参与 stopReason 判定（01 D6）；D7 §3.7 结构化
+/// 分类字段（kind kebab-case 13 类 + retryable bool）由统一分类管线派生。
 fn build_message_metadata(
     aggregate: &Aggregate,
     stop_reason: ConsumeStopReason,
@@ -339,6 +341,21 @@ fn build_message_metadata(
     }
     if let Some(error) = &aggregate.error {
         metadata.insert("providerError".to_string(), Value::String(error.clone()));
+        // D7 §3.7 流中断结构化标注（镜像 session-loop stream.rs）：providerError
+        // 之外新增 providerErrorKind（kebab-case 13 类）+ providerErrorRetryable
+        // （bool），供水合后模型/熔断感知中断原因（E1 续写触发信号数据源）。
+        // 分类走统一管线 classify_provider_error（与 classify_stream_error 同源，
+        // 流内 error 帧文案 → 13 类判定），保持两处镜像分类一致
+        let classified = classify_provider_error(None, Some(error.as_str()), None, None);
+        metadata.insert(
+            "providerErrorKind".to_string(),
+            serde_json::to_value(classified.kind())
+                .unwrap_or_else(|_| Value::String("unknown".to_string())),
+        );
+        metadata.insert(
+            "providerErrorRetryable".to_string(),
+            Value::Bool(classified.is_retryable()),
+        );
     }
     if aborted {
         metadata.insert("aborted".to_string(), Value::Bool(true));
@@ -420,7 +437,8 @@ mod tests {
 
     // ── D5/D6 裁决路径 ──
 
-    /// 文字 + error stop → Message（不失败）；error 降级为 metadata 标注，stopReason 不为 error
+    /// 文字 + error stop → Message（不失败）；error 降级为 metadata 标注，stopReason 不为 error。
+    /// D7 §3.7（T9）：标注含结构化分类 providerErrorKind/providerErrorRetryable
     #[test]
     fn text_then_error_stop_yields_message() {
         let result = consume(
@@ -431,6 +449,45 @@ mod tests {
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
         assert_eq!(result.metadata["providerError"], "boom");
         assert_eq!(result.metadata["providerFinishReason"], "error");
+        // D7 §3.7：不可分类文案兜底 Unknown（kebab-case "unknown"）+ 不可重试
+        assert_eq!(result.metadata["providerErrorKind"], "unknown");
+        assert_eq!(result.metadata["providerErrorRetryable"], false);
+    }
+
+    /// D7 §3.7：瞬态文案（限流）+ 已产出内容 → providerErrorKind=rate-limit、
+    /// providerErrorRetryable=true（E1 续写触发信号数据源，D7 §3.7 消费方扩展）
+    #[test]
+    fn in_stream_rate_limit_with_content_marks_transient_kind() {
+        let result = consume(
+            vec![
+                text_delta("部分输出"),
+                stop_with(
+                    StopReason::Error,
+                    Some("Rate limit exceeded: please retry after 5 seconds"),
+                    None,
+                ),
+            ],
+            false,
+        );
+        assert!(result.response.is_message());
+        assert_eq!(result.metadata["providerErrorKind"], "rate-limit");
+        assert_eq!(result.metadata["providerErrorRetryable"], true);
+    }
+
+    /// D7 §3.7：不可重试文案（鉴权失败）+ 已产出内容 → providerErrorKind=auth、
+    /// providerErrorRetryable=false（分类管线全量生效，不只放行重试类）
+    #[test]
+    fn in_stream_auth_with_content_marks_not_retryable() {
+        let result = consume(
+            vec![
+                text_delta("部分输出"),
+                stop_with(StopReason::Error, Some("invalid api key: authentication failed"), None),
+            ],
+            false,
+        );
+        assert!(result.response.is_message());
+        assert_eq!(result.metadata["providerErrorKind"], "auth");
+        assert_eq!(result.metadata["providerErrorRetryable"], false);
     }
 
     /// tool-call + error stop → Message；stopReason=tool-call，错误仅标注

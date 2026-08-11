@@ -77,6 +77,7 @@ fn consume_delta(count: usize) {
     builder.push(ProviderStreamEvent::Stop {
         reason: StopReason::Stop,
         error: None,
+        error_kind: None,
         usage: None,
     });
     let consumed = builder.finish(false);

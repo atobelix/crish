@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 41 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 49 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
 //! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
 //! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
@@ -303,13 +303,15 @@ pub enum MissAttribution {
     Unknown,
 }
 
-/// 41 种域事件（tagged enum，双端契约唯一事实源）
+/// 49 种域事件（tagged enum，双端契约唯一事实源）
 ///
 /// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
 /// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
 /// 前端 TS 由生成脚本产出（见模块文档）。
 /// 2026-08-05 T-CF-04 定时器域兼容新增 2 变体（timer-fired/timer-cancelled），
-/// 38 → 40；同日 T-CF-08 cron 域兼容新增 1 变体（cron-fired），40 → 41。
+/// 38 → 40；同日 T-CF-08 cron 域兼容新增 1 变体（cron-fired），40 → 41；
+/// 2026-08-11 任务连续性方案恢复域 + goal 域兼容新增 8 变体
+/// （recovery-* ×5 + goal-* ×3），41 → 49（D8 事件登记，编号 42-49）。
 ///
 /// 跨进程序列化是主用途，事件按值短暂传递，变体间内存差异非热点，
 /// 故不装箱（装箱会破坏调用方 API 形态），显式允许 large_enum_variant。
@@ -795,6 +797,156 @@ pub enum AgentEvent {
         /// 触发时刻（epoch 毫秒）
         fired_at_ms: u64,
     },
+
+    // ── 恢复域（任务连续性方案：recovery-* ×5；载荷 = orchestrator
+    //     recovery.rs append_event 实际 payload 的基元镜像（契约镜像模式，
+    //     不引入 payload struct——registry_drift 可达性护栏）；sessionId 为
+    //     事件行级列，读侧合成信封（D8 §3.2）；runId 由 emit 层信封注入；
+    //     背压全 Critical（append_event 落库必达，数据面））──
+
+    /// 恢复阶梯升级留痕（阶梯 1 → 阶梯 2 的边界证据；双发射方（02-定夺
+    /// W1）：子代理侧 subagentRunId=Some、detail=None；熔断侧（D1）
+    /// subagentRunId=None、detail=Some("circuit-trip")）
+    #[serde(rename = "recovery-escalated", rename_all = "camelCase")]
+    RecoveryEscalated {
+        session_id: String,
+        /// 子代理 run id（熔断侧 None）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent_run_id: Option<String>,
+        /// 升级原因（如 Timeout 的 Debug 形态）
+        kind: String,
+        /// 阶梯 1 已重试次数
+        retries: u32,
+        /// 重试耗时（epoch 毫秒）
+        elapsed_ms: u64,
+        /// 附加详情（熔断侧 Some("circuit-trip")）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
+    /// 阶梯 2 steering 通知留痕（RecoveryNotification serde camelCase 镜像）
+    #[serde(rename = "recovery-steering", rename_all = "camelCase")]
+    RecoverySteering {
+        session_id: String,
+        /// 子代理 id
+        subagent_id: String,
+        /// 子代理 run id
+        subagent_run_id: String,
+        /// 操作指纹（报表聚合依据）
+        fingerprint: String,
+        /// 阶梯 1 已重试次数
+        retries: u32,
+        /// 剩余状态（上行时的 run 状态摘要）
+        remaining_status: String,
+        /// 是否仍未处理（acknowledge 置 false；重启只重排 pending 条目）
+        pending: bool,
+        /// 创建时间（epoch 毫秒）
+        created_at_ms: u64,
+    },
+    /// 阶梯 3 fork 重分配留痕（ForkRecord 字段镜像；contextMode 为
+    /// ForkContextMode wire 值 verbatim/summarized/new，String 承载）
+    #[serde(rename = "recovery-fork", rename_all = "camelCase")]
+    RecoveryFork {
+        session_id: String,
+        /// 操作指纹
+        fingerprint: String,
+        /// 子代理 id
+        subagent_id: String,
+        /// 原 run id（置 failed 的 run）
+        from_run_id: String,
+        /// 原 run 的会话树叶子 id（fork 起点）
+        from_leaf_id: String,
+        /// 新 run id（fork 分支承接同一目标）
+        new_run_id: String,
+        /// 新 run 的会话树叶子 id
+        new_leaf_id: String,
+        /// fork 三态上下文继承模式（verbatim/summarized/new）
+        context_mode: String,
+    },
+    /// 阶梯 4 上报用户留痕（UserReport 基元字段镜像；attempts 尝试明细
+    /// 不在事件面，前端失败卡片经 recovery-escalated/run 终态取数）
+    #[serde(rename = "recovery-report", rename_all = "camelCase")]
+    RecoveryReport {
+        session_id: String,
+        /// 子代理 id
+        subagent_id: String,
+        /// 当前 run id
+        subagent_run_id: String,
+        /// 停摆时间（epoch 毫秒）
+        stuck_at_ms: u64,
+        /// 建议怎么办（固定指引文案）
+        suggestion: String,
+    },
+    /// 恢复预算拒绝留痕（双发射方（02-定夺 W6）：D2 主 run 侧
+    /// subagentRunId=None；D3 子代理侧预算拒绝 subagentRunId=Some）
+    #[serde(rename = "recovery-budget-denied", rename_all = "camelCase")]
+    RecoveryBudgetDenied {
+        session_id: String,
+        /// 子代理 run id（D2 主 run 侧 None）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent_run_id: Option<String>,
+        /// 操作指纹
+        fingerprint: String,
+        /// 已消费次数
+        count: u32,
+        /// 预算上限
+        max: u32,
+    },
+
+    // ── goal 域（任务连续性方案：goal-* ×3；D5 RoundAssessment 发射；
+    //     envelope 事件不列 sessionId 变体字段——会话归属在事件行
+    //     session_id 列，读侧信封已含，02-定夺 B2/S9 约定；
+    //     runId 由 emit 层信封注入）──
+
+    /// goal 新一轮开始（round 从 1 计）
+    #[serde(rename = "goal-round-started", rename_all = "camelCase")]
+    GoalRoundStarted {
+        /// 轮次（从 1 计）
+        round: u32,
+        /// 最大轮数
+        max_rounds: u32,
+        /// 目标文本
+        goal: String,
+    },
+    /// goal 一轮完成（02-定夺 B2 统一单一字段集；decision 为 D5
+    /// GoalDecision wire 值 Continue/Completed/NoProgress/Blocked/NoGoal，
+    /// String 承载；stalledDelta 表达本轮增量，stalled 总数在 goal_state 键）
+    #[serde(rename = "goal-round-completed", rename_all = "camelCase")]
+    GoalRoundCompleted {
+        /// 轮次（从 1 计）
+        round: u32,
+        /// 本轮工具调用次数
+        tool_call_count: u32,
+        /// 本轮工具成功次数
+        tool_success_count: u32,
+        /// 本轮消息数
+        message_count: u32,
+        /// 本轮判定（Continue/Completed/NoProgress/Blocked/NoGoal）
+        decision: String,
+        /// 判定依据明细
+        reason_detail: String,
+        /// 本轮 stalled 增量
+        stalled_delta: u32,
+        /// 证据（工具批指纹等）
+        evidence: String,
+    },
+    /// goal 续轮决策（载荷对齐 TS GoalContinuationDecision：
+    /// orchestration.ts:38-44；prompt 为续轮注入文本）
+    #[serde(rename = "goal-continuation-decided", rename_all = "camelCase")]
+    GoalContinuationDecided {
+        /// 决策动作（continue/complete/stop 等）
+        action: String,
+        /// 决策原因
+        reason: String,
+        /// 续轮注入提示（可选）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
+        /// 进度签名（可选）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        progress_signature: Option<String>,
+        /// 附加详情（可选）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
 }
 
 /// 事件类型名宏：由同一份变体名 → wire 名清单展开出
@@ -817,7 +969,7 @@ macro_rules! engine_event_type_names {
         }
 
         impl AgentEvent {
-            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-41 一一对应）
+            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-49 一一对应）
             pub const ALL_TYPE_NAMES: &'static [&'static str] = &[$($name),+];
         }
     };
@@ -865,6 +1017,14 @@ engine_event_type_names! {
     TimerFired => "timer-fired",
     TimerCancelled => "timer-cancelled",
     CronFired => "cron-fired",
+    RecoveryEscalated => "recovery-escalated",
+    RecoverySteering => "recovery-steering",
+    RecoveryFork => "recovery-fork",
+    RecoveryReport => "recovery-report",
+    RecoveryBudgetDenied => "recovery-budget-denied",
+    GoalRoundStarted => "goal-round-started",
+    GoalRoundCompleted => "goal-round-completed",
+    GoalContinuationDecided => "goal-continuation-decided",
 }
 
 /// 事件 → 背压级别（静态可判定，04 报告 1e；与事件注册表 backpressure 字段
@@ -904,6 +1064,17 @@ pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
         // cron 域（02-CF 方案 §4.7 表：cron-fired=Critical 必达落库——
         // 数据面，唤醒走 steering 面；由 T-CF-08 登记）
         AgentEvent::CronFired { .. } => BackpressureLevel::Critical,
+        // 恢复域（任务连续性方案 D8：recovery-* ×5 全 Critical——append_event
+        // 落库必达，数据面）与 goal 域（goal-* ×3 全 Critical——对齐
+        // timer-fired 先例：必达落库，数据面，唤醒走 steering 面）
+        AgentEvent::RecoveryEscalated { .. }
+        | AgentEvent::RecoverySteering { .. }
+        | AgentEvent::RecoveryFork { .. }
+        | AgentEvent::RecoveryReport { .. }
+        | AgentEvent::RecoveryBudgetDenied { .. }
+        | AgentEvent::GoalRoundStarted { .. }
+        | AgentEvent::GoalRoundCompleted { .. }
+        | AgentEvent::GoalContinuationDecided { .. } => BackpressureLevel::Critical,
         _ => BackpressureLevel::Critical,
     }
 }

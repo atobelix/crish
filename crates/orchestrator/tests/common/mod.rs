@@ -207,6 +207,8 @@ pub fn outcome(reason: AgentEndReason, error: Option<&str>, events: Vec<AgentEve
         steering_count: 0,
         // T-36：缓存统计字段（本构造点无样本 → None，缺省向后兼容）
         cache_stats: None,
+        // D1：provider 错误摘要（本构造点非 fatal 收场 → None，缺省向后兼容）
+        provider_error: None,
     }
 }
 

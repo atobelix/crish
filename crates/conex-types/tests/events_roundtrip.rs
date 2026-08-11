@@ -1,4 +1,4 @@
-//! B1.5 序列化契约测试：41 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
+//! B1.5 序列化契约测试：49 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
 //!
 //! 穷举清单与 [AgentEvent::ALL_TYPE_NAMES]（引擎事件名宏同源生成）动态对照，
 //! 新增事件变体在两处登记后本测试自动纳入，不再硬编码事件数。
@@ -236,10 +236,11 @@ fn run_cache_stats_fixture() -> RunCacheStats {
     }
 }
 
-/// 41 种域事件各构造一个实例，顺序与 [AgentEvent::ALL_TYPE_NAMES] 一一对应
+/// 49 种域事件各构造一个实例，顺序与 [AgentEvent::ALL_TYPE_NAMES] 一一对应
 /// （03 §1.1-1.6 全清单 + P5 S3 缓存测量域三事件 + I2-S8 安全审计域 +
 /// I5-M7 子代理域三事件 + T-AB-17 任务域七事件 + T-CF-04 定时器域两事件 +
-/// T-CF-08 cron 域一事件；全量穷举不再按域豁免）
+/// T-CF-08 cron 域一事件 + D8 恢复域五事件 + goal 域三事件；
+/// 全量穷举不再按域豁免）
 fn all_events() -> Vec<AgentEvent> {
     let s = "s1".to_string();
     vec![
@@ -521,6 +522,74 @@ fn all_events() -> Vec<AgentEvent> {
             iteration: 2,
             fired_at_ms: 1_785_456_000_000,
         },
+        // D8：恢复域五事件（任务连续性方案；载荷 = recovery.rs append_event
+        // payload 基元镜像）
+        AgentEvent::RecoveryEscalated {
+            session_id: "s1".to_string(),
+            subagent_run_id: Some("sr-1".to_string()),
+            kind: "Timeout".to_string(),
+            retries: 2,
+            elapsed_ms: 45_000,
+            detail: None,
+        },
+        AgentEvent::RecoverySteering {
+            session_id: "s1".to_string(),
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            fingerprint: "sa-1:调研".to_string(),
+            retries: 3,
+            remaining_status: "running".to_string(),
+            pending: true,
+            created_at_ms: 1_785_456_000_000,
+        },
+        AgentEvent::RecoveryFork {
+            session_id: "s1".to_string(),
+            fingerprint: "sa-1:调研".to_string(),
+            subagent_id: "sa-1".to_string(),
+            from_run_id: "sr-1".to_string(),
+            from_leaf_id: "leaf-1".to_string(),
+            new_run_id: "sr-2".to_string(),
+            new_leaf_id: "leaf-2".to_string(),
+            context_mode: "verbatim".to_string(),
+        },
+        AgentEvent::RecoveryReport {
+            session_id: "s1".to_string(),
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            stuck_at_ms: 1_785_456_000_000,
+            suggestion: "请检查 provider 网络与配额后人工决策".to_string(),
+        },
+        AgentEvent::RecoveryBudgetDenied {
+            session_id: "s1".to_string(),
+            subagent_run_id: None,
+            fingerprint: "sa-1:调研".to_string(),
+            count: 3,
+            max: 3,
+        },
+        // D8：goal 域三事件（envelope 事件不列 sessionId 变体字段，
+        // 02-定夺 B2/S9 约定）
+        AgentEvent::GoalRoundStarted {
+            round: 1,
+            max_rounds: 12,
+            goal: "修复登录页 bug".to_string(),
+        },
+        AgentEvent::GoalRoundCompleted {
+            round: 1,
+            tool_call_count: 5,
+            tool_success_count: 4,
+            message_count: 3,
+            decision: "Continue".to_string(),
+            reason_detail: "目标未达成，继续执行".to_string(),
+            stalled_delta: 0,
+            evidence: "fp-1".to_string(),
+        },
+        AgentEvent::GoalContinuationDecided {
+            action: "continue".to_string(),
+            reason: "goal-pending".to_string(),
+            prompt: Some("继续完成目标：修复登录页 bug".to_string()),
+            progress_signature: Some("sig-1".to_string()),
+            detail: None,
+        },
     ]
 }
 
@@ -555,8 +624,12 @@ fn all_event_types_have_expected_wire_type_name() {
     for (event, name) in events.iter().zip(AgentEvent::ALL_TYPE_NAMES.iter().copied()) {
         let json = serde_json::to_value(event).unwrap();
         assert_eq!(json["type"], name, "顶层 type 字段（03 §5.1-1）");
-        // 每个事件都携带 sessionId
-        assert!(json.get("sessionId").is_some(), "{name} 缺 sessionId");
+        // 每个事件都携带 sessionId；例外：goal-* 三事件为 envelope 事件
+        // 不列 sessionId 变体字段（会话归属在事件行，读侧信封已含，
+        // 02-定夺 B2/S9 约定）
+        if !matches!(name, "goal-round-started" | "goal-round-completed" | "goal-continuation-decided") {
+            assert!(json.get("sessionId").is_some(), "{name} 缺 sessionId");
+        }
     }
 }
 

@@ -5,10 +5,11 @@
 //! contracts/engine-events.json 是给生成脚本（scripts/generate-engine-bindings.mjs）
 //! 的机器可读导出，本测试把注册表与 Rust 侧真实 serde 行为双向锁定：
 //!
-//! - 事件清单：注册表 41 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
-//!   （enum 声明顺序，编号 1-41 连续；2026-08-05 T-CF-04 定时器域兼容新增
+//! - 事件清单：注册表 49 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
+//!   （enum 声明顺序，编号 1-49 连续；2026-08-05 T-CF-04 定时器域兼容新增
 //!   timer-fired/timer-cancelled，38 → 40；同日 T-CF-08 cron 域兼容新增
-//!   cron-fired，40 → 41）；
+//!   cron-fired，40 → 41；2026-08-11 任务连续性方案恢复域 + goal 域兼容
+//!   新增 8 变体（recovery-* ×5 + goal-* ×3），41 → 49）；
 //! - 事件字段：按注册表必填字段构造样本 → 反序列化为 [AgentEvent] →
 //!   回序列化，断言必填字段全部在场、且无注册表外字段（字段名漂移即失败）；
 //! - 载荷结构：同一模式逐类型回环（struct + tagged enum 全变体）；
@@ -205,12 +206,12 @@ fn registry_event_types_match_enum_declaration_order() {
     let reg = registry();
     assert_eq!(reg.contract, "engine-events", "注册表契约名必须为 engine-events");
     assert_eq!(reg.schema_version, 1);
-    assert_eq!(reg.event_count, 41);
-    assert_eq!(reg.events.len(), 41, "事件注册表必须是 41 条");
+    assert_eq!(reg.event_count, 49);
+    assert_eq!(reg.events.len(), 49, "事件注册表必须是 49 条");
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        41,
-        "AgentEvent enum 必须是 41 种域事件"
+        49,
+        "AgentEvent enum 必须是 49 种域事件"
     );
     for (i, ev) in reg.events.iter().enumerate() {
         assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
@@ -224,13 +225,23 @@ fn registry_event_types_match_enum_declaration_order() {
         assert_eq!(ev.rust_variant, type_name_guess(&ev.wire), "rustVariant 与 wire 不一致：{}", ev.wire);
         // 每个事件都必须登记 domain（域归属，供生成器与前端路由使用）
         assert!(!ev.domain.is_empty(), "事件 {} 缺 domain 字段", ev.wire);
-        // 每个事件都必须携带 sessionId 且必填（协议硬约束，03 §5.1）
-        let session = ev
-            .fields
-            .iter()
-            .find(|f| f.name == "sessionId")
-            .unwrap_or_else(|| panic!("事件 {} 缺 sessionId 字段", ev.wire));
-        assert!(session.required, "事件 {} 的 sessionId 必须必填", ev.wire);
+        // 每个事件都必须携带 sessionId 且必填（协议硬约束，03 §5.1）；
+        // 例外：goal-* 三事件（envelope 事件不列 sessionId 变体字段——
+        // 会话归属在事件行 session_id 列，读侧信封已含，02-定夺 B2/S9 约定）
+        if matches!(ev.wire.as_str(), "goal-round-started" | "goal-round-completed" | "goal-continuation-decided") {
+            assert!(
+                ev.fields.iter().all(|f| f.name != "sessionId"),
+                "goal-* 事件 {} 不得登记 sessionId 变体字段（B2/S9 约定）",
+                ev.wire
+            );
+        } else {
+            let session = ev
+                .fields
+                .iter()
+                .find(|f| f.name == "sessionId")
+                .unwrap_or_else(|| panic!("事件 {} 缺 sessionId 字段", ev.wire));
+            assert!(session.required, "事件 {} 的 sessionId 必须必填", ev.wire);
+        }
         // 每个事件都必须标注背压级别（I5-M7：静态可判定，04 报告 1e）
         assert!(
             matches!(ev.backpressure.as_str(), "delta" | "soft" | "critical"),
@@ -488,18 +499,19 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "SubagentEndStatus", SubagentEndStatus, 3);
 }
 
-/// 事件总数仍为 41：`operation` 是 security-audit 载荷内的字段值
+/// 事件总数仍为 49：`operation` 是 security-audit 载荷内的字段值
 /// （SecurityAuditOperation 枚举），不是独立事件类型——新增 operation
 /// 值不改变事件清单；本测试锚定「注册表值 ↔ serde 行为」双向不漂移。
 #[test]
 fn security_audit_undeclared_write_operation_stays_in_sync() {
     let reg = registry();
-    // 事件总数保持 41（operation 值是载荷内字段，非独立事件类型；
+    // 事件总数保持 49（operation 值是载荷内字段，非独立事件类型；
     // 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38；
     // 2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40；
-    // 同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41）
-    assert_eq!(reg.event_count, 41, "新增 operation 值不得改变事件总数");
-    assert_eq!(reg.events.len(), 41);
+    // 同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41；
+    // 2026-08-11 D8 恢复域 + goal 域兼容新增 8 事件，41 → 49）
+    assert_eq!(reg.event_count, 49, "新增 operation 值不得改变事件总数");
+    assert_eq!(reg.events.len(), 49);
 
     // 注册表必须登记 undeclared-write（T-ESC-02 新值）
     let spec = &reg.enums["SecurityAuditOperation"];
@@ -526,7 +538,7 @@ fn security_audit_undeclared_write_operation_stays_in_sync() {
 #[test]
 fn registry_entries_are_reachable_from_events() {
     let reg = registry();
-    // 从 41 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
+    // 从 49 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
     let mut reachable: std::collections::BTreeSet<String> =
         reg.events.iter().flat_map(|e| e.fields.iter()).map(|f| f.ts_type.clone()).collect();
     let mut queue: Vec<String> = reachable.iter().cloned().collect();
@@ -822,19 +834,21 @@ fn timer_cancelled_backpressure_is_soft() {
     assert_eq!(event_backpressure(&event), BackpressureLevel::Soft);
 }
 
-/// 累计基线 40 → 41（00 总方案 §3.16 / 02-CF §4.7 登记流程）：两枚定时器事件
+/// 累计基线 41 → 49（任务连续性方案 D8 事件登记）：两枚定时器事件
 /// 按 enum 声明序登记为 39/40（timer-fired=critical、timer-cancelled=soft），
-/// cron-fired 由 T-CF-08（F9 轮）登记为 41（见 [registry_drift_cron_fired_registered]）。
+/// cron-fired 由 T-CF-08（F9 轮）登记为 41，恢复域 + goal 域 8 事件由
+/// D8（2026-08-11）登记为 42-49（见 [registry_drift_cron_fired_registered]
+/// 与 [registry_drift_recovery_and_goal_events_registered]）。
 #[test]
 fn registry_drift_timer_events_registered() {
     let reg = registry();
-    // 累计基线：38 → 40 → 41（cron-fired 已由 T-CF-08 登记）
-    assert_eq!(reg.event_count, 41, "累计基线必须为 41");
-    assert_eq!(reg.events.len(), 41);
+    // 累计基线：38 → 40 → 41 → 49（D8 恢复域 + goal 域 8 事件已登记）
+    assert_eq!(reg.event_count, 49, "累计基线必须为 49");
+    assert_eq!(reg.events.len(), 49);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        41,
-        "AgentEvent enum 变体数必须为 41"
+        49,
+        "AgentEvent enum 变体数必须为 49"
     );
 
     // timer-fired（39）：Critical 必达落库，字段 sessionId/timerId/prompt/firedAtMs
@@ -885,7 +899,8 @@ fn registry_drift_timer_events_registered() {
         );
     }
 
-    // cron-fired 由 T-CF-08 登记为 41（见 [registry_drift_cron_fired_registered]）
+    // cron-fired 由 T-CF-08 登记为 41；D8 新事件追加在 42-49，cron-fired
+    // 编号恒 41 保留（见 [registry_drift_cron_fired_registered]）
     let cron = reg
         .events
         .iter()
@@ -923,19 +938,22 @@ fn cron_fired_backpressure_is_critical() {
     assert_eq!(event_backpressure(&event), BackpressureLevel::Critical);
 }
 
-/// cron-fired 登记终态断言（累计 41）：编号 41、Critical、字段形状
+/// cron-fired 登记终态断言（累计 41 → 49）：编号 41、Critical、字段形状
 /// sessionId/cronId/prompt/expression/iteration/firedAtMs 全量必填，
-/// 与 serde 行为双向一致（T-CF-08，02-CF §4.7 冻结契约）
+/// 与 serde 行为双向一致（T-CF-08，02-CF §4.7 冻结契约）；
+/// D8 恢复域 + goal 域 8 事件追加在 42-49（见
+/// [registry_drift_recovery_and_goal_events_registered]），cron-fired 编号
+/// 恒 41 保留（cron-fired 仍为 41，新事件追加 42-49）。
 #[test]
 fn registry_drift_cron_fired_registered() {
     let reg = registry();
-    // 累计基线终态：40 → 41（F9 轮末，00 总方案 §3.16）
-    assert_eq!(reg.event_count, 41);
-    assert_eq!(reg.events.len(), 41);
+    // 累计基线终态：40 → 41 → 49（D8 恢复域 + goal 域 8 事件已登记）
+    assert_eq!(reg.event_count, 49);
+    assert_eq!(reg.events.len(), 49);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        41,
-        "AgentEvent enum 变体数必须为 41"
+        49,
+        "AgentEvent enum 变体数必须为 49"
     );
 
     // cron-fired（41）：Critical 必达落库，字段 sessionId/cronId/prompt/
@@ -990,6 +1008,122 @@ fn registry_drift_cron_fired_registered() {
     );
 }
 
+// ── 8.5 恢复域 + goal 域登记（任务连续性方案 D8：41 → 49）──
+
+/// 恢复域五事件 + goal 域三事件登记终态断言（累计 49）：编号 42-49 与
+/// enum 声明序一一对应、rustVariant/domain/backpressure 全量锁定、
+/// 字段形状与 D8 §4.1 冻结契约一致、与 serde 行为双向一致
+/// （2026-08-11 事件登记，载荷 = orchestrator recovery.rs append_event
+/// payload 的基元镜像；goal-* 为 envelope 事件不列 sessionId，B2/S9 约定）
+#[test]
+fn registry_drift_recovery_and_goal_events_registered() {
+    let reg = registry();
+    // 编号与 domain/backpressure 断言表（声明序 = 注册表序 = 42-49）
+    let expected: &[(&str, &str, &str)] = &[
+        ("recovery-escalated", "RecoveryEscalated", "recovery"),
+        ("recovery-steering", "RecoverySteering", "recovery"),
+        ("recovery-fork", "RecoveryFork", "recovery"),
+        ("recovery-report", "RecoveryReport", "recovery"),
+        ("recovery-budget-denied", "RecoveryBudgetDenied", "recovery"),
+        ("goal-round-started", "GoalRoundStarted", "goal"),
+        ("goal-round-completed", "GoalRoundCompleted", "goal"),
+        ("goal-continuation-decided", "GoalContinuationDecided", "goal"),
+    ];
+    for (offset, (wire, variant, domain)) in expected.iter().enumerate() {
+        let id = 42 + offset as u32;
+        let ev = reg
+            .events
+            .iter()
+            .find(|e| e.wire == *wire)
+            .unwrap_or_else(|| panic!("注册表必须登记 {wire}"));
+        assert_eq!(ev.id, id, "{wire} 编号必须为 {id}（声明序）");
+        assert_eq!(ev.rust_variant, *variant, "{wire} rustVariant 不符");
+        assert_eq!(ev.domain, *domain, "{wire} 必须归属 {domain} 域");
+        assert_eq!(ev.backpressure, "critical", "{wire} 必须为 Critical（落库必达）");
+        assert!(
+            ev.kind_backpressure.is_none(),
+            "{wire} 不得登记 kindBackpressure（仅 subagent-event 允许）"
+        );
+        // 注册表样本 ↔ serde 行为双向一致
+        let sample = build_event_sample(&reg, ev);
+        let parsed: AgentEvent = serde_json::from_value(sample)
+            .unwrap_or_else(|e| panic!("事件 {wire} 按注册表样本反序列化失败：{e}"));
+        assert_eq!(parsed.type_name(), *wire, "事件 {wire} 的 type_name 不符");
+        // 全部字段形状与 D8 §4.1 冻结契约一致（含必填/可选标记）
+        let wire_fields: Vec<&str> = ev.fields.iter().map(|f| f.name.as_str()).collect();
+        match *wire {
+            "recovery-escalated" => {
+                assert_eq!(
+                    wire_fields,
+                    vec!["sessionId", "subagentRunId", "kind", "retries", "elapsedMs", "detail"],
+                    "recovery-escalated 字段形状与 D8 §4.1 不符"
+                );
+                assert!(!ev.fields[1].required, "subagentRunId 必须可选（W1 熔断侧 None）");
+                assert!(!ev.fields[5].required, "detail 必须可选（W1 熔断侧 Some）");
+            }
+            "recovery-steering" => {
+                assert_eq!(
+                    wire_fields,
+                    vec!["sessionId", "subagentId", "subagentRunId", "fingerprint", "retries", "remainingStatus", "pending", "createdAtMs"],
+                    "recovery-steering 字段形状与 D8 §4.1 不符"
+                );
+                assert!(ev.fields.iter().all(|f| f.required), "recovery-steering 字段必须全必填");
+            }
+            "recovery-fork" => {
+                assert_eq!(
+                    wire_fields,
+                    vec!["sessionId", "fingerprint", "subagentId", "fromRunId", "fromLeafId", "newRunId", "newLeafId", "contextMode"],
+                    "recovery-fork 字段形状与 D8 §4.1 不符"
+                );
+                assert!(ev.fields.iter().all(|f| f.required), "recovery-fork 字段必须全必填");
+            }
+            "recovery-report" => {
+                assert_eq!(
+                    wire_fields,
+                    vec!["sessionId", "subagentId", "subagentRunId", "stuckAtMs", "suggestion"],
+                    "recovery-report 字段形状与 D8 §4.1 不符"
+                );
+                assert!(ev.fields.iter().all(|f| f.required), "recovery-report 字段必须全必填");
+            }
+            "recovery-budget-denied" => {
+                assert_eq!(
+                    wire_fields,
+                    vec!["sessionId", "subagentRunId", "fingerprint", "count", "max"],
+                    "recovery-budget-denied 字段形状与 D8 §4.1 不符"
+                );
+                assert!(!ev.fields[1].required, "subagentRunId 必须可选（W6 D2 主 run 侧 None）");
+            }
+            "goal-round-started" => {
+                assert_eq!(wire_fields, vec!["round", "maxRounds", "goal"], "goal-round-started 字段形状与 D8 §4.1 不符");
+                assert!(ev.fields.iter().all(|f| f.required), "goal-round-started 字段必须全必填");
+            }
+            "goal-round-completed" => {
+                assert_eq!(
+                    wire_fields,
+                    vec!["round", "toolCallCount", "toolSuccessCount", "messageCount", "decision", "reasonDetail", "stalledDelta", "evidence"],
+                    "goal-round-completed 字段形状与 D8 §4.1（B2 统一字段集）不符"
+                );
+                assert!(ev.fields.iter().all(|f| f.required), "goal-round-completed 字段必须全必填");
+            }
+            "goal-continuation-decided" => {
+                assert_eq!(
+                    wire_fields,
+                    vec!["action", "reason", "prompt", "progressSignature", "detail"],
+                    "goal-continuation-decided 字段形状与 D8 §4.1 不符"
+                );
+                assert!(!ev.fields[2].required, "prompt 必须可选");
+                assert!(!ev.fields[3].required, "progressSignature 必须可选");
+                assert!(!ev.fields[4].required, "detail 必须可选");
+            }
+            other => panic!("断言表未覆盖新事件 {other}"),
+        }
+    }
+    // 与 ALL_TYPE_NAMES 声明序对齐（42-49 为追加在 CronFired 之后的后 8 位）
+    let tail: Vec<&str> = AgentEvent::ALL_TYPE_NAMES[41..].to_vec();
+    let expected_wires: Vec<&str> = expected.iter().map(|(w, _, _)| *w).collect();
+    assert_eq!(tail, expected_wires, "enum 声明序尾部（42-49）必须为 8 新事件");
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 9. 设备协议注册表护栏（R0-03：device-protocol.json ↔
 //    crates/conex-types/src/device/** 双向锁定）
@@ -1007,7 +1141,7 @@ fn registry_drift_cron_fired_registered() {
 //   protocol|business（防分段漂移）；
 // - 能力位全量：注册表 capabilities 段 17 位 ==
 //   [conex_types::device::ALL_CAPABILITIES] 的 wire 名（serde camelCase）；
-// - 事件双面策略：注册表 events 段 41 条与 engine-events.json / 
+// - 事件双面策略：注册表 events 段 49 条与 engine-events.json /
 //   [AgentEvent::ALL_TYPE_NAMES] 同名同序；sync 标志 == [SYNC_ELIGIBLE_TYPES]
 //   白名单；strategy 与 [event_cross_strategy] 逐一锁定（13/18/10 分组）；
 // - 消息体字段：29 条静态消息（内联 fields）按注册表必填字段构造样本 →
@@ -1468,13 +1602,15 @@ fn device_registry_capabilities_match_rust_all_capabilities() {
     }
 }
 
-// ── 9.4 事件双面策略：41 条同名同序 + sync 白名单 + strategy 逐一锁定 ──
+// ── 9.4 事件双面策略：49 条同名同序 + sync 白名单 + strategy 逐一锁定 ──
 
 #[test]
 fn device_registry_events_match_engine_and_sync_whitelist() {
     let reg = device_registry();
     let engine = registry();
-    assert_eq!(reg.events.len(), 41, "事件段必须为 41 条（41 变体冻结，P-3 裁决）");
+    // 事件段 49 条（41 变体 + D8 恢复域 + goal 域 8 变体；2026-08-11 登记，
+    // 原「41 变体冻结」口径随 D8 事件登记扩展为 49）
+    assert_eq!(reg.events.len(), 49, "事件段必须为 49 条（D8 登记后 49 变体）");
     let mut strategy_counts: std::collections::BTreeMap<&str, usize> =
         std::collections::BTreeMap::new();
     for (i, ev) in reg.events.iter().enumerate() {
@@ -1493,7 +1629,7 @@ fn device_registry_events_match_engine_and_sync_whitelist() {
         assert!(matches!(ev.strategy.as_str(), "transparent" | "redacted" | "tuple"));
         assert!(matches!(ev.realtime.backpressure.as_str(), "delta" | "soft" | "critical"));
         assert!(matches!(ev.push_level.as_str(), "p0" | "p1" | "p2" | "none"));
-        // 41 变体全部可经实时面 events.push 下发（P-3 冻结，无 push=false 事件）
+        // 49 变体全部可经实时面 events.push 下发（P-3 冻结，无 push=false 事件）
         assert!(ev.realtime.push, "事件 {} 必须可实时推送（events.push）", ev.wire);
         // sync 标志 ↔ 同步面白名单
         assert_eq!(
@@ -1520,20 +1656,24 @@ fn device_registry_events_match_engine_and_sync_whitelist() {
         );
         *strategy_counts.entry(ev.strategy.as_str()).or_insert(0) += 1;
     }
+    // strategy 分组计数（M6 §5.1 13/18/10 基线 + D8 登记 8 变体扩展：
+    // recovery-fork=transparent → T 14；recovery-escalated/steering/report/
+    // budget-denied + goal-round-started/completed=redacted → R 24；
+    // goal-continuation-decided=tuple（prompt 任务级内容 fail-closed）→ U 11）
     assert_eq!(
         strategy_counts.get("transparent").copied().unwrap_or(0),
-        13,
-        "透明透传必须为 13 类（M6 §5.1）"
+        14,
+        "透明透传必须为 14 类（M6 §5.1 13 + D8 recovery-fork）"
     );
     assert_eq!(
         strategy_counts.get("redacted").copied().unwrap_or(0),
-        18,
-        "摘要化必须为 18 类（M6 §5.1）"
+        24,
+        "摘要化必须为 24 类（M6 §5.1 18 + D8 六事件）"
     );
     assert_eq!(
         strategy_counts.get("tuple").copied().unwrap_or(0),
-        10,
-        "元组下发必须为 10 类（M6 §5.1）"
+        11,
+        "元组下发必须为 11 类（M6 §5.1 10 + D8 goal-continuation-decided）"
     );
 }
 

@@ -11,12 +11,29 @@
 //! D1（cooperative_stop）：协作停止收敛为独立 reason `Stopped`，既不是
 //! 错误也不是取消（safe_point 的 [crate::safe_point::ControlAction] 语义）。
 
+use conex_types::error::ProviderErrorKind;
 use conex_types::events::RunCacheStats;
 use conex_types::message::AgentMessage;
 use conex_types::session::AgentEndReason;
 use std::sync::Arc;
 
 use super::handlers::LoopState;
+
+/// provider 错误摘要（D1 §3.4：fatal 收场时由 [super::handlers::stream_error::fatal_provider_error]
+/// 填充 [super::handlers::LoopState::terminal_provider_error]，converge 时零拷贝移交
+/// [RunOutcome::provider_error]；D2 续 run / D3 RunFailureContext 消费，
+/// 00 总纲 §6 契约表 D1→D2/D3）
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ProviderErrorSummary {
+    /// 分类 13 类（kebab-case，conex-types/error.rs:866-895）
+    pub kind: ProviderErrorKind,
+    /// 是否可重试（default_retryable 真源，error.rs:899-908）
+    pub retryable: bool,
+    /// 429 Retry-After（透传；其余分类恒 None）
+    pub retry_after_ms: Option<u64>,
+    /// run 内实际重试次数（= LoopState.transient_retries，02 D8 双语义中的 run 内面）
+    pub retries: u32,
+}
 
 /// 单一收口决策（01 §五.2：`{reason, error?}` + 诊断字段）
 #[derive(Debug, Clone, PartialEq)]
@@ -122,4 +139,8 @@ pub struct RunOutcome {
     /// 未配置缓存测量或无可测 usage 时为 None（缺省 None，向后兼容；
     /// T-40 消费本字段发 cache-stats-updated 事件与落库 runs 表）
     pub cache_stats: Option<RunCacheStats>,
+    /// provider 错误摘要（D1 §3.4：fatal 收场时填充；正常 stop / 非
+    /// provider 错误收场为 None——熔断计数判定（S2 收口）与 D2/D3 恢复面
+    /// 消费，00 总纲 §6 契约表）
+    pub provider_error: Option<ProviderErrorSummary>,
 }

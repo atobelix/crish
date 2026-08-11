@@ -156,6 +156,17 @@ pub trait RecoveryHook: Send + Sync {
 pub struct SessionLoopOptions {
     /// 瞬态 provider 错误重试上限（默认 3，01 §2.5 步骤 2）
     pub transient_retry_limit: u32,
+    /// 瞬态重试退避配置（D1 §3.1.4 R6）：None = 现状立即重试（向后兼容）；
+    /// Some = 退避 + Retry-After + 60s 总预算生效（None 字段回落常量
+    /// 750/8000/60000）。壳层经 session_meta 键 `provider_retry_backoff_ms`
+    /// 装配（仿 summary_dispatch META_KEY_SUMMARY_BACKOFF_MS 先例）。
+    pub retry_backoff: Option<RetryBackoffConfig>,
+    /// 会话级熔断计数当前值（D1 §3.2：壳层装配时读 `provider_fail_streak`
+    /// 键 count 字段注入；None = 未配置熔断闸（默认，向后兼容）；
+    /// Some(n) = transient_retry 入口闸——n ≥ [PROVIDER_FAIL_THRESHOLD]
+    /// 时跳过 run 内重试直接 fatal（规则 C1）。计数与清零由壳层收口
+    /// （S2 收口判定 + spawn_blocking 写键），内核只读注入值（02 §2-E）。
+    pub provider_fail_streak: Option<u32>,
     /// length 阶梯升级上限（默认 2：8192→16384→32768）
     pub length_upgrade_limit: u32,
     /// continue nudge 上限（默认 1，01 §2.6 步骤 1）
@@ -285,6 +296,10 @@ impl Default for SessionLoopOptions {
     fn default() -> Self {
         Self {
             transient_retry_limit: 3,
+            // D1：退避与熔断配置位缺省 None = 现状立即重试 / 熔断不启用
+            //（向后兼容；壳层装配时经 session_meta 键注入）
+            retry_backoff: None,
+            provider_fail_streak: None,
             length_upgrade_limit: 2,
             continue_nudge_limit: 1,
             steering_enabled: true,
@@ -337,6 +352,25 @@ impl Default for SessionLoopOptions {
             note_backend: None,
         }
     }
+}
+
+/// 瞬态重试退避配置（D1 §3.1.4，镜像 agent-provider retry.rs RetryPolicy /
+/// orchestrator recovery.rs RecoveryRetryPolicy 常量：750/8000/60000）
+///
+/// None 字段回落常量：base_ms → [RETRY_BACKOFF_BASE_MS]（750）、
+/// max_ms → [RETRY_MAX_DELAY_MS]（8000）、total_budget_ms →
+/// [RETRY_TOTAL_BUDGET_MS]（60000）。[SessionLoopOptions::retry_backoff]
+/// 为 None 时不生效（现状立即重试）；Some(RetryBackoffConfig::default())
+/// 即启用默认 750/8000/60000 全量语义（Default = 全 None = 常量回落）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RetryBackoffConfig {
+    /// 首次退避基数（默认 750ms；None 回落常量）
+    pub base_ms: Option<u64>,
+    /// 单次等待上限（5xx/Timeout/Network 类默认 8s；429 分支不受本上限
+    /// 约束——放行到 5min，由预算闸兜底；None 回落常量）
+    pub max_ms: Option<u64>,
+    /// 总重试预算（默认 60s；elapsed >= 预算停止重试，严格小于；None 回落常量）
+    pub total_budget_ms: Option<u64>,
 }
 
 /// 会话运行循环（B3.4 主循环）
@@ -683,6 +717,13 @@ impl AgentSessionLoop {
         // 恢复阶梯计数归零（fresh run）
         self.state.length_upgrades = 0;
         self.state.transient_retries = 0;
+        // D1 R1（预算起点归零）：预算起点随 run 重建——fresh run 从零预算
+        // 计时（跨 run 持续故障由会话级熔断 provider_fail_streak 承担，
+        // 04 文档 G9 的跨 run 计数重置问题由壳层收口计数解决）
+        self.state.transient_retry_started_at = None;
+        // D1 §3.4：fatal 摘要随 run 归零（converge 时 mem::take 移交后
+        // 本处复位，防跨 run 残留脏数据）
+        self.state.terminal_provider_error = None;
         self.state.continue_nudges = 0;
         self.state.terminal_error = None;
         self.state.events.clear();
@@ -922,6 +963,9 @@ impl AgentSessionLoop {
                 .cache_tracker
                 .take()
                 .map(CacheStatsTracker::finish),
+            // provider 错误摘要（D1 §3.4）：fatal 填充 → 收口零拷贝移交
+            // （与 messages/events 同批 mem::take；D2/D3 消费，00 §6 契约）
+            provider_error: std::mem::take(&mut self.state.terminal_provider_error),
         }
     }
 }
@@ -1362,6 +1406,7 @@ mod tests {
         crate::stream::ProviderStreamEvent::Stop {
             reason: crate::stream::StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: Some(crate::stream::ProviderUsage {
                 prompt_tokens: Some(prompt),
                 completion_tokens: Some(completion),
@@ -1615,5 +1660,90 @@ mod tests {
         assert!(detector.is_declared(&event), "已声明路径必须命中判定器");
         drop(guard);
         assert!(!detector.is_declared(&event), "声明释放后不得命中判定器");
+    }
+
+    // ── D1 A7：RunOutcome.provider_error 数据面（01 敲定 §2.3，验收断言）──
+
+    /// D1 T7（A7）：3 次瞬态重试耗尽 → RunOutcome.provider_error =
+    /// Some{kind: Network, retryable: true, retries: 3}（02 W1 验收①）；
+    /// 退避走生产路径（1ms 级自定义配置，零注入，真实时钟可跑）
+    #[tokio::test]
+    async fn run_outcome_provider_error_filled_after_transient_exhaustion() {
+        use conex_types::error::ProviderErrorKind;
+        use conex_types::response::ClassifiedStreamError;
+        use conex_types::session::AgentEndReason;
+        let err = ClassifiedStreamError {
+            kind: ProviderErrorKind::Network,
+            message: "模拟断网".to_string(),
+            retryable: true,
+            retry_after_ms: None,
+        };
+        let provider = TestProvider::new(vec![crate::stream::ProviderStreamEvent::text("x")])
+            .with_error(err);
+        let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
+        loop_ = loop_.with_options(SessionLoopOptions {
+            // 退避开启但 1ms 级（生产计算路径，预算 60s 充足）
+            retry_backoff: Some(RetryBackoffConfig {
+                base_ms: Some(1),
+                max_ms: Some(1),
+                total_budget_ms: None,
+            }),
+            ..Default::default()
+        });
+        let outcome = loop_.run(user_input("你好")).await;
+        assert_eq!(outcome.reason, AgentEndReason::Error);
+        let p = outcome.provider_error.expect("瞬态耗尽必须填充 provider_error");
+        assert_eq!(p.kind, ProviderErrorKind::Network);
+        assert!(p.retryable, "瞬态类 retryable=true");
+        assert_eq!(p.retries, 3, "retries = run 内实际重试次数");
+        // 观测面：fatal 发 runtime-error 事件（retryable 透传）
+        assert!(
+            outcome
+                .events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::RuntimeError { .. })),
+            "fatal 必须发 runtime-error 事件"
+        );
+    }
+
+    /// D1 T7（A7）：非瞬态 fatal（Auth）→ provider_error = Some{kind: Auth,
+    /// retryable: false, retries: 0}（02 W1 验收②）
+    #[tokio::test]
+    async fn run_outcome_provider_error_auth_fatal_not_retryable() {
+        use conex_types::error::ProviderErrorKind;
+        use conex_types::response::ClassifiedStreamError;
+        use conex_types::session::AgentEndReason;
+        let err = ClassifiedStreamError {
+            kind: ProviderErrorKind::Auth,
+            message: "认证失败".to_string(),
+            retryable: false,
+            retry_after_ms: None,
+        };
+        let provider = Arc::new(
+            TestProvider::new(vec![crate::stream::ProviderStreamEvent::text("x")])
+                .with_error(err),
+        );
+        let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider.clone()), registry());
+        let outcome = loop_.run(user_input("你好")).await;
+        assert_eq!(outcome.reason, AgentEndReason::Error);
+        let p = outcome.provider_error.expect("Auth fatal 必须填充 provider_error");
+        assert_eq!(p.kind, ProviderErrorKind::Auth);
+        assert!(!p.retryable, "非瞬态 retryable=false");
+        assert_eq!(p.retries, 0, "非瞬态直接 fatal 无重试");
+        assert_eq!(provider.call_count(), 1, "非瞬态错误不重试（单次调用）");
+    }
+
+    /// D1 T7（A7）：正常 stop 收场 → provider_error = None（02 W1 验收③）
+    #[tokio::test]
+    async fn run_outcome_provider_error_none_on_normal_stop() {
+        use conex_types::session::AgentEndReason;
+        let provider = TestProvider::text_reply("hi");
+        let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
+        let outcome = loop_.run(user_input("你好")).await;
+        assert_eq!(outcome.reason, AgentEndReason::Stop);
+        assert!(
+            outcome.provider_error.is_none(),
+            "正常 stop 收场不得携带 provider_error"
+        );
     }
 }
