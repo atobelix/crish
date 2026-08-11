@@ -1,4 +1,4 @@
-//! W2-A 后续 · gfm-core 结构 golden 加深（A-MD-01 方向）。
+//! W2-A 后续 · gfm-core 结构 golden 加深（A-MD-01 方向 · **Table/TaskItem kind 加深**）。
 //!
 //! 输入：`tests/golden/gfm-core/**`
 //!
@@ -7,7 +7,9 @@
 //! - **≠ A-MD-01 全集关账**（§3.6 仍有未覆盖类；本包非全表）
 //! - **≠ EL-06**（见 `plans/08` / `acceptance/EL-dashboard`）
 //! - **≠ A-MD-03**（wiki 未建模，仅 plain 诚实）
-//! - 表格无 Table kind → Paragraph + `structure_note`；任务列表无 TaskItem kind → 勾选编入 plain
+//! - **kind 未入 collab**：`conex-doc-collab::BlockKind` **无** `Table` / `TaskItem`
+//!   - 表 → Paragraph + `structure_note`（行列/对齐进 plain）
+//!   - 任务 → BulletItem/OrderedItem + 勾选 plain + 列表级 `structure_note`
 //! - 叶子 inline 全文 RT（强调边界 / 链接 URL 结构）**未**关闭（§2.2 分期）
 
 use conex_md_ast::{
@@ -42,6 +44,17 @@ fn golden_gfm_core_table_structure_note_and_cells() {
         "detail={:?}",
         note.detail
     );
+    // W2-A 加深：note 诚实声明 kind 未入 collab + 可点名规模
+    assert!(
+        note.detail.contains("未入 collab") || note.detail.contains("Table"),
+        "须诚实 kind 未入 collab: {:?}",
+        note.detail
+    );
+    assert!(
+        note.detail.contains("3×3") || note.detail.contains("3x3"),
+        "3 行(含表头)×3 列可点名: {:?}",
+        note.detail
+    );
 
     let n_table = out.tree.get(&table_id).unwrap();
     assert_eq!(
@@ -55,6 +68,11 @@ fn golden_gfm_core_table_structure_note_and_cells() {
     assert!(snap.contains("a1") && snap.contains("b1") && snap.contains("c1"), "row1: {snap}");
     assert!(snap.contains("a2") && snap.contains("b2") && snap.contains("c2"), "row2: {snap}");
     assert!(snap.contains('|'), "须保留表格可读形态: {snap}");
+    // W2-A 加深：对齐分隔行进 plain（左/中/右）
+    assert!(
+        snap.contains(":---") && snap.contains(":---:") && snap.contains("---:"),
+        "对齐标记须进 plain: {snap}"
+    );
     assert!(n_table.children.is_empty());
     assert_eq!(n_table.parent, None);
 
@@ -76,7 +94,8 @@ fn golden_gfm_core_table_structure_note_and_cells() {
 #[test]
 fn golden_gfm_core_task_list_checkbox_in_plain() {
     let md = include_str!("golden/gfm-core/task_list.md");
-    let tree = parse_document(md).expect("parse gfm-core task_list");
+    let out = parse_document_detailed(md).expect("parse gfm-core task_list");
+    let tree = &out.tree;
 
     let done = bid("11111111-1111-4111-a111-111111111111");
     let todo = bid("22222222-2222-4222-a222-222222222222");
@@ -110,8 +129,21 @@ fn golden_gfm_core_task_list_checkbox_in_plain() {
         "非任务项不得误加 checkbox 前缀"
     );
 
+    // W2-A 加深：列表级 structure_note 诚实 TaskItem 未入 collab
+    let task_note = out
+        .lossy
+        .items
+        .iter()
+        .find(|i| i.code == "structure_note" && i.detail.contains("TaskItem"))
+        .expect("task list must emit TaskItem-absent structure_note");
+    assert!(
+        task_note.detail.contains("未入 collab"),
+        "detail={:?}",
+        task_note.detail
+    );
+
     // S 须产出 GFM 任务列表语法，便于再 parse
-    let md2 = serialize_tree(&tree);
+    let md2 = serialize_tree(tree);
     assert!(
         md2.contains("- [x] 已完成任务"),
         "S 任务完成项: {md2}"
@@ -123,10 +155,10 @@ fn golden_gfm_core_task_list_checkbox_in_plain() {
     assert!(md2.contains("- 普通无序项"), "S 普通 bullet: {md2}");
 
     let tree2 = parse_document(&md2).unwrap();
-    assert!(structure_eq(&tree, &tree2), "task list RT md2=\n{md2}");
+    assert!(structure_eq(tree, &tree2), "task list RT md2=\n{md2}");
 
     // RT-3 双次稳定（任务列表子集）
-    let s1 = serialize_tree(&tree);
+    let s1 = serialize_tree(tree);
     let s2 = serialize_tree(&parse_document(&s1).unwrap());
     assert_eq!(s1, s2, "RT-3 task list");
 }
@@ -253,4 +285,191 @@ fn gfm_core_ordered_task_item_checkbox_plain() {
     );
     let again = parse_document(&document_to_md(&tree)).unwrap();
     assert!(structure_eq(&tree, &again));
+}
+
+// ── W2-A 加深：Table / TaskItem kind 方向（collab 无变体 → structure_note + 可点名） ──
+// 本段绿 ≠ EL-06 / ≠ A-MD-01 全集；仅证 kind 未入 collab 时的诚实加深可测。
+
+/// 新测 1) 表对齐：左/中/右分隔符进 plain；structure_note 含规模与 collab 诚实句。
+#[test]
+fn gfm_core_table_align_markers_and_kind_absent_note() {
+    let md = "\
+<!--c:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa-->
+| L | C | R |
+| :-- | :-: | --: |
+| 1 | 2 | 3 |
+";
+    let out = parse_document_detailed(md).expect("parse align table");
+    let id = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    let n = out.tree.get(&id).unwrap();
+    assert_eq!(n.kind, BlockKind::Paragraph, "Table kind 未入 collab");
+    // exhaustiveness 诚实：当前 BlockKind 仅有这些变体，无 Table
+    match &n.kind {
+        BlockKind::Paragraph
+        | BlockKind::Heading { .. }
+        | BlockKind::BulletItem
+        | BlockKind::OrderedItem
+        | BlockKind::Code
+        | BlockKind::Quote
+        | BlockKind::Divider
+        | BlockKind::Unknown { .. } => {}
+    }
+    let snap = n.text_snapshot.as_deref().unwrap_or("");
+    assert!(snap.contains("| L |") || snap.contains("| L | C | R |") || snap.contains("L"), "header: {snap}");
+    assert!(
+        snap.contains(":---") && snap.contains(":---:") && snap.contains("---:"),
+        "左/中/右对齐须进 plain: {snap}"
+    );
+    assert!(snap.contains("1") && snap.contains("2") && snap.contains("3"), "body: {snap}");
+
+    let note = out
+        .lossy
+        .items
+        .iter()
+        .find(|i| i.code == "structure_note")
+        .expect("structure_note");
+    assert!(
+        note.detail.contains("未入 collab"),
+        "须声明 Table kind 未入 collab: {:?}",
+        note.detail
+    );
+    assert!(
+        note.detail.contains("2×3") || note.detail.contains("2x3"),
+        "2 行×3 列: {:?}",
+        note.detail
+    );
+
+    let tree2 = parse_document(&serialize_tree(&out.tree)).unwrap();
+    assert!(structure_eq(&out.tree, &tree2));
+}
+
+/// 新测 2) 空单元格可点名 + 旁路段不吞；表仍 Paragraph。
+#[test]
+fn gfm_core_table_empty_cell_nameable_and_bypass_para() {
+    let md = include_str!("golden/gfm-core/table_empty_cell.md");
+    let out = parse_document_detailed(md).expect("parse empty-cell table");
+    let table_id = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    let after_id = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    assert_eq!(out.tree.root_children, vec![table_id, after_id]);
+
+    let n = out.tree.get(&table_id).unwrap();
+    assert_eq!(n.kind, BlockKind::Paragraph);
+    let snap = n.text_snapshot.as_deref().unwrap_or("");
+    assert!(snap.contains("有") && snap.contains("空中"), "cells: {snap}");
+    // 空单元格：中间列 body 为空，仍保留管道分隔形态
+    assert!(
+        snap.lines().any(|l| {
+            let parts: Vec<_> = l.split('|').map(str::trim).collect();
+            // | 有 |  | 空中 |  → 中间 cell 空
+            parts.iter().filter(|p| !p.is_empty()).count() >= 2
+                && l.matches('|').count() >= 3
+        }),
+        "空单元格须保留 | 形态: {snap}"
+    );
+    assert!(
+        out.lossy
+            .items
+            .iter()
+            .any(|i| i.code == "structure_note" && i.detail.contains("表格")),
+        "empty-cell 表仍须 structure_note: {:?}",
+        out.lossy
+    );
+    assert_eq!(
+        out.tree.get(&after_id).unwrap().text_snapshot.as_deref(),
+        Some("空格表后旁路")
+    );
+    let again = parse_document(&document_to_md(&out.tree)).unwrap();
+    assert!(structure_eq(&out.tree, &again));
+}
+
+/// 新测 3) TaskItem kind 未入 collab：仅 BulletItem/OrderedItem；列表级 structure_note 可点名。
+#[test]
+fn gfm_core_taskitem_kind_absent_structure_note() {
+    let md = include_str!("golden/gfm-core/task_list.md");
+    let out = parse_document_detailed(md).unwrap();
+
+    // 所有节点 kind ∈ 已有 collab 变体；无 TaskItem（编译期亦无此变体可匹配）
+    for n in out.tree.nodes.values() {
+        match &n.kind {
+            BlockKind::BulletItem | BlockKind::OrderedItem | BlockKind::Paragraph => {}
+            other => panic!("task_list 意外 kind: {other:?}"),
+        }
+        // 不得伪装 Unknown{flavour: task…}
+        if let BlockKind::Unknown { flavour } = &n.kind {
+            assert!(
+                !flavour.to_lowercase().contains("task"),
+                "不得用 Unknown 冒充 TaskItem: {flavour}"
+            );
+        }
+    }
+
+    let notes: Vec<_> = out
+        .lossy
+        .items
+        .iter()
+        .filter(|i| i.code == "structure_note" && i.detail.contains("TaskItem"))
+        .collect();
+    assert!(
+        !notes.is_empty(),
+        "须至少一条 TaskItem 未入 collab 的 structure_note: {:?}",
+        out.lossy
+    );
+    assert!(
+        notes.iter().any(|n| n.detail.contains("BulletItem") || n.detail.contains("plain")),
+        "note 须点名降级目标: {:?}",
+        notes
+    );
+
+    // 勾选仍可点名（kind 加深不破坏既有 plain 契约）
+    let done = bid("11111111-1111-4111-a111-111111111111");
+    assert_eq!(
+        out.tree.get(&done).unwrap().text_snapshot.as_deref(),
+        Some("[x] 已完成任务")
+    );
+}
+
+/// 新测 4) 有序任务列表：OrderedItem + TaskItem 缺席 note + 勾选 plain + RT-3。
+#[test]
+fn gfm_core_ordered_task_kind_absent_note_and_rt3() {
+    let md = "\
+<!--c:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa-->
+1. [x] 有序完成
+
+<!--c:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb-->
+1. [ ] 有序待办
+";
+    let out = parse_document_detailed(md).unwrap();
+    let a = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    let b = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    assert_eq!(out.tree.get(&a).unwrap().kind, BlockKind::OrderedItem);
+    assert_eq!(out.tree.get(&b).unwrap().kind, BlockKind::OrderedItem);
+    assert_eq!(
+        out.tree.get(&a).unwrap().text_snapshot.as_deref(),
+        Some("[x] 有序完成")
+    );
+    assert_eq!(
+        out.tree.get(&b).unwrap().text_snapshot.as_deref(),
+        Some("[ ] 有序待办")
+    );
+
+    let note = out
+        .lossy
+        .items
+        .iter()
+        .find(|i| {
+            i.code == "structure_note"
+                && i.detail.contains("TaskItem")
+                && i.detail.contains("OrderedItem")
+        })
+        .expect("ordered task list structure_note");
+    assert!(
+        note.detail.contains("未入 collab"),
+        "detail={:?}",
+        note.detail
+    );
+
+    let s1 = serialize_tree(&out.tree);
+    assert!(s1.contains("1. [x] 有序完成") && s1.contains("1. [ ] 有序待办"), "{s1}");
+    let s2 = serialize_tree(&parse_document(&s1).unwrap());
+    assert_eq!(s1, s2, "RT-3 ordered task");
 }

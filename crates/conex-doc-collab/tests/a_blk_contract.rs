@@ -1,14 +1,15 @@
-//! A-BLK 契约/属性抽样（Round9 · W6-A）。
+//! A-BLK 契约/属性抽样（**W6-A-S** · Skeleton）。
 //!
-//! **本文件 ≠ 关闭 EL-01 / A-BLK 全表**：只钉 create/move/delete 后 `block_id` 稳定、
-//! 单次 `Op::Move` 重排 order、以及 indent/nest 的 Move 半覆盖。
+//! **本文件 ≠ 关闭 EL-01 / A-BLK 全表 / 块工作区完成**：只钉抽样契约：
+//! create/move/delete/**undo** 后 `block_id` 稳定、单次 `Op::Move` 重排、
+//! indent/nest Move 半覆盖、跨文档导入重生 id 策略、未知 flavour 占位可恢复。
 //!
 //! 权威：`docs/block-workspace-architecture/round-D-stack/07-技术栈矩阵裁决.md` §5.1
 //! 进度：`docs/block-workspace-architecture/plans/acceptance/A-BLK-progress.md`
+//! 调度：`plans/09` **W6-A-S**（禁止用本文件关 **W6-A** / **EL-01**）
 
-use conex_doc_collab::{
-    BlockId, BlockKind, BlockProps, DocSession, Op, Origin,
-};
+use conex_doc_collab::structure_codec::{decode_structure_payload, encode_structure_payload};
+use conex_doc_collab::{BlockId, BlockKind, BlockProps, DocSession, Op, Origin};
 
 fn insert_root(s: &mut DocSession, id: BlockId, order: &str) {
     s.apply(
@@ -273,4 +274,163 @@ fn a_blk_01_same_batch_insert_then_move_keeps_id() {
     assert_eq!(s.tree().get(&leaf).unwrap().id, leaf);
     assert_eq!(s.tree().get(&leaf).unwrap().parent, Some(host));
     assert!(s.tree().get(&host).unwrap().children.contains(&leaf));
+}
+
+/// A-BLK-01 补强：结构 **undo** 后 `block_id` 仍可解析（W1-U 暴露面）。
+///
+/// 钉：delete 后 undo → 被删 id 回树且与预分配 id 同一值；未删块 id 全程不变。
+/// **≠** 产品 undo 快捷键 / redo / 跨文档撤销 UI（W6-A e2e 余量）。
+#[test]
+fn a_blk_01_undo_restores_block_id_after_delete() {
+    let mut s = DocSession::new("a-blk-01-undo");
+    let keep = BlockId::new();
+    let gone = BlockId::new();
+    insert_root(&mut s, keep, "a0");
+    insert_root(&mut s, gone, "a1");
+    assert_eq!(s.tree().get(&gone).unwrap().id, gone);
+
+    s.apply(Origin::User, &[Op::Delete { id: gone }])
+        .expect("delete gone");
+    assert!(!s.tree().nodes.contains_key(&gone));
+    assert_eq!(s.tree().get(&keep).unwrap().id, keep);
+
+    s.undo(Some(Origin::User)).expect("undo delete");
+    assert!(
+        s.tree().nodes.contains_key(&gone),
+        "undo 后被删块须以原 block_id 回树"
+    );
+    assert_eq!(
+        s.tree().get(&gone).unwrap().id,
+        gone,
+        "undo 不得重生 id；引用必须可解析为原 id"
+    );
+    assert_eq!(s.tree().get(&keep).unwrap().id, keep);
+    assert!(s.tree().root_children.contains(&gone));
+    assert!(s.tree().root_children.contains(&keep));
+}
+
+/// A-BLK-07 半：跨文档拖入 **必须重生 id**（策略契约；无拖放 UI）。
+///
+/// 模拟：源文档块 → 导入目标文档时分配新 `BlockId`，**禁止**复用源 id。
+/// 跨块拖放预览 / 产品 e2e → **W6-A-S 余量（W6-A 未关）**。
+#[test]
+fn a_blk_07_cross_doc_import_must_regen_block_ids() {
+    let mut src = DocSession::new("a-blk-07-src");
+    let mut dst = DocSession::new("a-blk-07-dst");
+    let src_id = BlockId::new();
+    insert_root(&mut src, src_id, "a0");
+    src.apply(
+        Origin::User,
+        &[Op::TextEdit {
+            id: src_id,
+            start: 0,
+            end: 0,
+            insert: "import-me".into(),
+        }],
+    )
+    .expect("seed src text");
+    let plain = src.read_text(&src_id);
+    assert_eq!(plain, "import-me");
+
+    // 跨文档导入策略：目标侧预分配 **新** id，再 Insert（不得以 src_id 写入 dst）
+    let dst_id = BlockId::new();
+    assert_ne!(
+        dst_id, src_id,
+        "导入预分配 id 必须与源 id 不同（重生契约）"
+    );
+    dst.apply(
+        Origin::User,
+        &[Op::Insert {
+            id: dst_id,
+            parent: None,
+            order: "a0".into(),
+            kind: BlockKind::Paragraph,
+            props: BlockProps::default(),
+        }],
+    )
+    .expect("import insert with regen id");
+    dst.apply(
+        Origin::User,
+        &[Op::TextEdit {
+            id: dst_id,
+            start: 0,
+            end: 0,
+            insert: plain.clone(),
+        }],
+    )
+    .expect("copy plain");
+
+    // 源 id 不得出现在目标树
+    assert!(
+        !dst.tree().nodes.contains_key(&src_id),
+        "跨文档导入禁止把源 block_id 写入目标文档"
+    );
+    assert_eq!(dst.tree().get(&dst_id).unwrap().id, dst_id);
+    assert_eq!(dst.read_text(&dst_id), "import-me");
+    // 源文档原 id 仍稳定（导入不改写源）
+    assert_eq!(src.tree().get(&src_id).unwrap().id, src_id);
+    assert_eq!(src.read_text(&src_id), "import-me");
+}
+
+/// A-BLK-11 半：未知 flavour → `BlockKind::Unknown` 占位；文本与 id 可恢复。
+///
+/// 钉：Insert Unknown + TextEdit 后 kind/flavour/id/text 仍在；结构 encode/decode 不丢。
+/// 产品占位 View / turn-into 恢复 UI → **W6-A-S 余量（W6-A 未关）**。
+#[test]
+fn a_blk_11_unknown_flavour_placeholder_preserves_text_and_id() {
+    let mut s = DocSession::new("a-blk-11");
+    let id = BlockId::new();
+    let flavour = "callout-ext".to_string();
+
+    s.apply(
+        Origin::User,
+        &[Op::Insert {
+            id,
+            parent: None,
+            order: "a0".into(),
+            kind: BlockKind::Unknown {
+                flavour: flavour.clone(),
+            },
+            props: BlockProps::default(),
+        }],
+    )
+    .expect("insert unknown flavour");
+
+    match &s.tree().get(&id).unwrap().kind {
+        BlockKind::Unknown { flavour: f } => assert_eq!(f, &flavour),
+        other => panic!("expected Unknown, got {other:?}"),
+    }
+    assert_eq!(s.tree().get(&id).unwrap().id, id);
+
+    s.apply(
+        Origin::User,
+        &[Op::TextEdit {
+            id,
+            start: 0,
+            end: 0,
+            insert: "payload-safe".into(),
+        }],
+    )
+    .expect("text on unknown block");
+    assert_eq!(s.read_text(&id), "payload-safe");
+    // 写文本后 kind 不得被抹成 Paragraph 等已知类型
+    match &s.tree().get(&id).unwrap().kind {
+        BlockKind::Unknown { flavour: f } => assert_eq!(f, &flavour),
+        other => panic!("text edit 后仍须 Unknown, got {other:?}"),
+    }
+
+    // 结构 snapshot 往返：Unknown + text_snapshot 可恢复（不丢数据）
+    let bytes = encode_structure_payload(s.rev(), s.tree());
+    let snap = decode_structure_payload(&bytes).expect("decode structure");
+    let node = snap.tree.get(&id).expect("id 在 snapshot 可解析");
+    assert_eq!(node.id, id);
+    match &node.kind {
+        BlockKind::Unknown { flavour: f } => assert_eq!(f, &flavour),
+        other => panic!("snapshot kind 须 Unknown, got {other:?}"),
+    }
+    assert_eq!(
+        node.text_snapshot.as_deref(),
+        Some("payload-safe"),
+        "占位块文本须随结构 snapshot 可恢复"
+    );
 }

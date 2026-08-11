@@ -23,10 +23,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BlockChromeModel,
   SlashMenuModel,
+  type BlockChromeDomHost,
   type HandleVisibility,
 } from '@crish/block-paper';
 /** DomHost chrome 皮（与 Skeleton 同源）；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
+import { BlockChromeDomMount } from './BlockChromeDomMount';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import type {
   DocHydrateProjection,
@@ -58,6 +60,16 @@ export type NotePaperStrictPanelProps = {
   refreshToken?: number | string;
   /** 可选：外部 chrome（测试用） */
   chrome?: BlockChromeModel;
+  /**
+   * 可选：外部 slash 模型（测试打开 slash 宿主）。
+   * 未传时内部 new SlashMenuModel()。
+   */
+  slashMenu?: SlashMenuModel;
+  /**
+   * DomHost 就绪回调（W3-F DOM 桌面挂载子集）。
+   * **≠ EL-01**；真 Pointer 拖拽全链后置。
+   */
+  onChromeDomHost?: (host: BlockChromeDomHost | null) => void;
   /** 可选：关闭回调 */
   onClose?: () => void;
   /** 额外 className */
@@ -81,6 +93,8 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   hydrateTransport,
   refreshToken = 0,
   chrome: chromeProp,
+  slashMenu: slashMenuProp,
+  onChromeDomHost,
   onClose,
   className,
   title = '笔记纸面（W5-B Strict · hydrate 投影）',
@@ -89,7 +103,10 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     () => chromeProp ?? new BlockChromeModel(),
     [chromeProp]
   );
-  const slashMenu = useMemo(() => new SlashMenuModel(), []);
+  const slashMenu = useMemo(
+    () => slashMenuProp ?? new SlashMenuModel(),
+    [slashMenuProp]
+  );
 
   const [status, setStatus] = useState<HydrateUiStatus>('loading');
   const [projection, setProjection] = useState<DocHydrateProjection | null>(
@@ -263,6 +280,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
                     key={block.id}
                     className={styles.blockRow}
                     data-block-id={block.id}
+                    data-content-row="1"
                     data-block-index={String(block.index)}
                     data-handle={visibility}
                     data-flavour={block.flavour}
@@ -292,6 +310,25 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
                 );
               })
             : null}
+          {/*
+            W3-F DOM 桌面挂载：BlockChromeDomHost → data-bp-* 契约
+            （把手/落点线/slash 宿主）；ready 时按 hydrate 块挂载。≠ EL-01。
+          */}
+          <BlockChromeDomMount
+            blocks={
+              status === 'ready'
+                ? blocks.map((b) => ({
+                    blockId: b.id,
+                    flavour: b.flavour,
+                  }))
+                : []
+            }
+            chrome={chrome}
+            slash={slashMenu}
+            syncToken={chromeTick}
+            onHostReady={onChromeDomHost}
+            testId="note-paper-strict-chrome-dom"
+          />
         </div>
       </div>
 

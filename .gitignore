@@ -434,6 +434,10 @@ orchestrator-snapshot.json.prev
 !apps/crish-mobile/**/tsconfig*.json
 !**/package.json
 !**/tsconfig*.json
+# Expo 图标/启动图（根 assets/ 全局忽略的例外：app.json 引用缺图则工程不可运行；
+# 父目录被排除时子文件无法 re-include，故先放行目录本身再放行文件）
+!apps/crish-mobile/assets/
+!apps/crish-mobile/assets/**
 !crates/conex-types/contracts/*.json
 !packages/protocol-core/contracts/*.json
 !scripts/generate-protocol-bindings.mjs

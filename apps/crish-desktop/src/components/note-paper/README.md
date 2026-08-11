@@ -48,16 +48,18 @@
 
 ### W5-B Strict（本包方向 · 与 Skeleton 并存）
 
-| 有                                                                                     | 无（诚实未做）                                          |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `NotePaperStrictPanel` + `data-package-id=W5-B` / `data-track=strict`                  | 真 `DocSession::hydrate` 产品 IPC 默认路径（依赖 W1-H） |
-| `NoteHydrateTransport` + fixture / `adaptNoteTransportAsHydrate`                       | e2e / EL-01 / EL-08 关闭                                |
-| **产品空态默认入口**：`WorkspaceEmptyState` → `open-note-paper-strict`（fixture 演示） | 宣称「打开完成 / 块工作区完成」                         |
-| `W5B_PRODUCT_DEFAULT_EMPTY_TRACK='strict'` + `preferredNotePaperTrack` 可切            | 气泡默认挂按钮 / stream 产品链（W5-B′）                 |
-| 加载 / 空 / 错误 / 成功三态 UI + vitest（`w5b_strict_*` / `w5b_product_empty_*`）      | 把 fixture 伪装成 `tauri-ipc`                           |
-| 边界句钉死可演示≠EL · ≠W5-C · S5                                                       | —                                                       |
+| 有                                                                                     | 无（诚实未做）                                         |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `NotePaperStrictPanel` + `data-package-id=W5-B` / `data-track=strict`                  | 真 `DocSession::hydrate` 产品 IPC **默认路径**（W1-H） |
+| `NoteHydrateTransport` + fixture / `adaptNoteTransportAsHydrate`                       | e2e / EL-01 / EL-08 关闭                               |
+| **`NoteHydrateIpc` + `note_document_hydrate` 命令形状**（可注入；mock/Tauri 契约测）   | **产品空态默认仍 fixture**（未切 tauri-ipc 为默认）    |
+| **产品空态默认入口**：`WorkspaceEmptyState` → `open-note-paper-strict`（fixture 演示） | 宣称「打开完成 / 块工作区完成」                        |
+| `W5B_PRODUCT_DEFAULT_EMPTY_TRACK='strict'` + `preferredNotePaperTrack` 可切            | 气泡默认挂按钮 / stream 产品链（W5-B′）                |
+| 加载 / 空 / 错误 / 成功三态 UI + vitest（`w5b_strict_*` / `w5b_product_empty_*`）      | 把 fixture 伪装成 `tauri-ipc`                          |
+| 边界句钉死可演示≠EL · ≠W5-C · S5                                                       | —                                                      |
 
-> **可演示 ≠ EL**；空态 Strict 挂载 **≠ 打开完成**；默认 hydrate 为 **fixture**，**≠** 真 DocSession IPC 已挂。
+> **可演示 ≠ EL**；空态 Strict 挂载 **≠ 打开完成**；默认 hydrate 为 **fixture**。  
+> 真 IPC 方向已交付命令形状 + adapter（`source=tauri-ipc`），**须显式注入**才走；**≠** 产品默认已挂 DocSession hydrate。
 
 ## 可运行 / 可测入口
 
@@ -92,17 +94,32 @@
      hydrateTransport={adaptNoteTransportAsHydrate(createMemoryNoteTransport())}
    />
    ```
-8. **测名**：
+8. **Strict 经专用 hydrate IPC**（`source=tauri-ipc`；**须注入**，非产品默认）：
+   ```tsx
+   import {
+     createMockNoteHydrateIpc,
+     // 或 createTauriNoteHydrateIpc()
+   } from '../../api/noteHydrateIpc';
+   import { adaptNoteHydrateIpcAsTransport } from './hydrateProjection';
+
+   <NotePaperStrictPanel
+     docId="doc-1"
+     hydrateTransport={adaptNoteHydrateIpcAsTransport(createMockNoteHydrateIpc({...}))}
+   />
+   ```
+9. **测名**：
    - Skeleton：`NotePaperPanel.test.tsx` / `w5bSkeleton.test.ts` / `WorkspaceEmptyState.w5bs.test.tsx`
    - Strict：`NotePaperStrictPanel.test.tsx` / `hydrateProjection.test.ts` / `w5bStrict.test.ts`（`w5b_strict_*`）
    - **产品入口**：`WorkspaceEmptyState.w5b.test.tsx`（`w5b_product_empty_*`）
+   - **hydrate IPC**：`noteHydrateIpc.test.ts`（`note_hydrate_ipc_*`）
    - 边界：`note-paper.boundary.test.ts`（禁 EditorStore；两轨共用）
 
 ## 半 transport / hydrate 形状
 
 - Skeleton API：`noteApi.ts` → `createMemoryNoteTransport` / `createTauriNoteTransport`
-- Strict API：`hydrateProjection.ts` → `NoteHydrateTransport` / fixture / adapt
-- 禁止：静默 onStreamEnd 写笔记；假数据关 EL-01；Skeleton 常量冒充 Strict
+- Strict API：`hydrateProjection.ts` → `NoteHydrateTransport` / fixture / adapt / `adaptNoteHydrateIpcAsTransport`
+- 真 hydrate IPC：`noteHydrateIpc.ts` → `NoteHydrateIpc` / mock / Tauri；wire=`note_document_hydrate`
+- 禁止：静默 onStreamEnd 写笔记；假数据关 EL-01；Skeleton 常量冒充 Strict；fixture 伪装 `tauri-ipc`
 
 ## 视觉语言（tokens 对齐 · ≠ EL 关）
 

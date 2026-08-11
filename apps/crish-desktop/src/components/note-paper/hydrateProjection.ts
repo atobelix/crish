@@ -13,12 +13,18 @@
  * - `createFixtureHydrateTransport` = 可测 Strict 方向子集；`source: 'fixture'`
  * - `adaptNoteTransportAsHydrate` = 把已有 `note_query_blocks` 形状映射为投影
  *   （Tauri / Memory 皆可注入）；**不等于** DocSession::hydrate 产品全链路完成
+ * - `adaptNoteHydrateIpcAsTransport` = 专用 `note_document_hydrate` IPC →
+ *   source=`tauri-ipc`；**产品空态默认仍 fixture**（≠ 打开完成 / ≠ EL）
  *
  * ## 禁止
  * - import 行级 EditorStore / lines[] 权威
  * - 用静默假段落冒充 hydrate 投影
  */
 
+import type {
+  NoteHydrateIpc,
+  NoteHydrateIpcSuccess,
+} from '../../api/noteHydrateIpc';
 import type { NoteQueryBlockHit, NoteTransport } from '../../api/noteApi';
 
 // ---------------------------------------------------------------------------
@@ -51,9 +57,10 @@ export type DocHydrateProjection = {
   blocks: HydratedBlockProjection[];
   /**
    * 来源：
-   * - `fixture`：测试 / 演示注入的 hydrate 形状
+   * - `fixture`：测试 / 演示注入的 hydrate 形状（**产品空态默认**）
    * - `note-transport`：经 NoteTransport.queryBlocks 映射
-   * - `tauri-ipc`：预留给未来专用 hydrate 命令（当前适配层不默认声称）
+   * - `tauri-ipc`：专用 `note_document_hydrate`（`adaptNoteHydrateIpcAsTransport`）；
+   *     **不**等于产品默认已挂 / 打开完成
    */
   source: 'fixture' | 'note-transport' | 'tauri-ipc';
 };
@@ -234,6 +241,54 @@ export function adaptNoteTransportAsHydrate(
   };
 }
 
+// ---------------------------------------------------------------------------
+// NoteHydrateIpc → hydrate 投影（专用 note_document_hydrate · source=tauri-ipc）
+// ---------------------------------------------------------------------------
+
+/**
+ * 适配专用 hydrate IPC → NoteHydrateTransport。
+ *
+ * 诚实边界：
+ * - 成功投影 source 固定 `tauri-ipc`（与 query 适配的 `note-transport` 分轨）
+ * - **产品空态默认仍 fixture**；本 adapter 仅在调用方显式注入时生效
+ * - **不**宣称「打开文档完成」/ W1-H / EL 关闭
+ */
+export function adaptNoteHydrateIpcAsTransport(
+  ipc: NoteHydrateIpc
+): NoteHydrateTransport {
+  return {
+    async hydrate(docId) {
+      const out = await ipc.hydrateDocument({ docId });
+      if (!out.ok) {
+        return { ok: false, code: out.code, reason: out.reason };
+      }
+      return {
+        ok: true,
+        projection: mapHydrateIpcSuccessToProjection(out),
+      };
+    },
+  };
+}
+
+/** IPC 成功载荷 → DocHydrateProjection（source 钉死 tauri-ipc） */
+export function mapHydrateIpcSuccessToProjection(
+  ok: NoteHydrateIpcSuccess
+): DocHydrateProjection {
+  return {
+    docId: ok.docId,
+    rev: ok.rev,
+    blocks: ok.blocks.map((b, i) => ({
+      id: b.id,
+      flavour: b.flavour || 'paragraph',
+      parentId: b.parentId,
+      index: typeof b.index === 'number' ? b.index : i,
+      props: b.props,
+      text: b.text,
+    })),
+    source: 'tauri-ipc',
+  };
+}
+
 /**
  * 构造一条合法的 hydrate 投影块（测试夹具辅助）。
  * 保证带 index / flavour，避免静默假段落形状漂移。
@@ -261,7 +316,8 @@ export function makeHydratedBlock(
  * 诚实边界（钉死）：
  * - **可演示 ≠ EL-01 / EL-08**；挂载冒充交付 = S5
  * - **≠ 打开完成**：本 fixture **不是** `DocSession::hydrate` 产品 IPC 默认路径
- * - 产品侧可注入真 transport / `adaptNoteTransportAsHydrate` 替换本工厂
+ * - 产品侧可注入真 transport / `adaptNoteTransportAsHydrate` /
+ *   `adaptNoteHydrateIpcAsTransport` 替换本工厂；**未注入时默认仍 fixture**
  * - DOM / 投影 `source` 必须为 `fixture`，禁止伪装 `tauri-ipc`
  */
 export function createEmptyStateStrictDemoTransport(

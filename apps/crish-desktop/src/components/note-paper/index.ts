@@ -19,6 +19,12 @@ export {
   type NotePaperStrictPanelProps,
 } from './NotePaperStrictPanel';
 
+/** W3-F DOM 桌面挂载：BlockChromeDomHost → React（≠ EL-01） */
+export {
+  BlockChromeDomMount,
+  type BlockChromeDomMountProps,
+} from './BlockChromeDomMount';
+
 export {
   SendToNoteButton,
   type SendToNoteButtonProps,
@@ -50,10 +56,12 @@ export {
 } from './w5bStrict';
 
 export {
+  adaptNoteHydrateIpcAsTransport,
   adaptNoteTransportAsHydrate,
   createEmptyStateStrictDemoTransport,
   createFixtureHydrateTransport,
   makeHydratedBlock,
+  mapHydrateIpcSuccessToProjection,
   mapQueryHitToProjection,
   type DocHydrateProjection,
   type FixtureHydrateDoc,

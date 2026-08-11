@@ -8,6 +8,7 @@
   "workspaces": [
     "apps/crish-desktop",
     "apps/agent-workbench",
+    "apps/crish-mobile",
     "packages/plugin-import-claude-codex",
     "packages/plugin-sdk",
     "packages/shared-types",

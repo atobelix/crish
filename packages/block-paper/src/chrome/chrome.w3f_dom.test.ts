@@ -8,7 +8,7 @@
  * | 把手可见性 DOM 属性同步 model | **EL-01** / A-BLK 全表 / Notion chrome 完成 |
  * | 多选框 DOM ↔ multiSelectedIds | A-BLK-05 框选 e2e 全关 |
  * | 落点线 DOM 显隐 / side / target | A-BLK-04 拖拽产品 e2e 全关 |
- * | slash 宿主容器显隐 | A-BLK-02 slash 浮层产品 e2e 全关 |
+ * | slash 宿主容器显隐 + catalog 最小投影 | A-BLK-02 slash 浮层产品 e2e 全关 |
  *
  * **DOM 交付 ≠ EL-01**。A-BLK-02/04/05 **产品 e2e 仍开**。
  *
@@ -27,7 +27,10 @@ import {
   BP_DROP_TARGET,
   BP_HANDLE_VISIBILITY,
   BP_MULTI_CHECK,
+  BP_SLASH_EMPTY,
+  BP_SLASH_GROUP,
   BP_SLASH_HOST,
+  BP_SLASH_ITEM,
   BP_SLASH_OPEN,
   isBlockChromeDomHost,
 } from './BlockChromeDomHost';
@@ -345,6 +348,59 @@ describe('W3-F DOM · slash 宿主', () => {
     host.sync();
     expect(host.isSlashHostVisible()).toBe(false);
     expect(el.getAttribute(BP_SLASH_OPEN)).toBe('0');
+  });
+
+  it('w3f_dom_slash_catalog: open → group/item 投影；active 对齐；close 清空', () => {
+    const el = host.getSlashHostElement();
+    expect(slash.open(ID_A, 0).ok).toBe(true);
+    host.sync();
+
+    // 默认 catalog 有分组（基础 / 列表 / 高级）
+    const groups = el.querySelectorAll(`[${BP_SLASH_GROUP}]`);
+    expect(groups.length).toBeGreaterThanOrEqual(1);
+    expect(groups[0]?.getAttribute(BP_SLASH_GROUP)).toBeTruthy();
+
+    const items = el.querySelectorAll(`[${BP_SLASH_ITEM}]`);
+    expect(items.length).toBeGreaterThanOrEqual(3);
+    // activeIndex 0 → 首项 data-active=1
+    expect(items[0]?.getAttribute('data-active')).toBe('1');
+    expect(items[0]?.getAttribute('aria-selected')).toBe('true');
+    expect(items[1]?.getAttribute('data-active')).toBe('0');
+
+    // 标题 / 描述结构
+    expect(
+      items[0]?.querySelector('.bp-slash-item-title')?.textContent
+    ).toBeTruthy();
+    expect(items[0]?.querySelector('.bp-slash-item-icon')).toBeTruthy();
+
+    // 键盘高亮移动
+    slash.moveActive(1);
+    host.sync();
+    const items2 = el.querySelectorAll(`[${BP_SLASH_ITEM}]`);
+    expect(items2[0]?.getAttribute('data-active')).toBe('0');
+    expect(items2[1]?.getAttribute('data-active')).toBe('1');
+    expect(el.getAttribute('aria-activedescendant')).toBe(
+      items2[1]?.id ?? null
+    );
+
+    // close → 子节点清空 + hidden
+    slash.close();
+    host.sync();
+    expect(host.isSlashHostVisible()).toBe(false);
+    expect(el.children.length).toBe(0);
+  });
+
+  it('w3f_dom_slash_empty: 过滤无结果 → 空态节点', () => {
+    const el = host.getSlashHostElement();
+    expect(slash.open(ID_A, 0).ok).toBe(true);
+    slash.setQuery('___no_match_zzz___');
+    host.sync();
+
+    expect(host.isSlashHostVisible()).toBe(true);
+    const empty = el.querySelector(`[${BP_SLASH_EMPTY}]`);
+    expect(empty).toBeTruthy();
+    expect(empty?.textContent).toContain('无匹配');
+    expect(el.querySelectorAll(`[${BP_SLASH_ITEM}]`).length).toBe(0);
   });
 });
 

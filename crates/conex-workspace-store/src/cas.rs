@@ -1,9 +1,20 @@
-//! W2-D：CAS 附件骨架（content-addressed blob）。
+//! # W2-D-S · CAS 附件骨架（Skeleton）
 //!
-//! **不变量**：
-//! - 附件 **不是** 第二文档权威；权威仍为 snapshot+updates。
+//! Content-addressed blob：`put` / `get` / `link` 最小 API 面。
+//!
+//! ## 不变量
+//! - 附件 **不是** 第二文档权威；权威仍为 `doc_snapshots` ⊕ `doc_updates`。
 //! - `blob_cas` 仅存字节/路径；块关联走 `block_attachments` 引用表。
 //! - hash = SHA-256 hex（小写）；同内容 put 幂等。
+//! - **默认不把附件字节写入 snapshot 热路径**（结构方向 A-PERF-11；见骨架测）。
+//!
+//! ## 诚实边界（-S · 强制）
+//! - **≠ 生产就绪**：仅 put/get/link 骨架，**禁止**宣称 CAS「生产就绪」。
+//! - **≠ GC 满关**：无未引用回收、无 `unlink` 产品路径、无外置 `blobs/` 阈值策略。
+//! - **≠ EL** / **≠ A-PERF-11 数值满关** / **≠ Wave 2 存储完成**。
+//! - Strict 包 **W2-D** 才扩：GC 最小 + 外置 path + 不进 snapshot 结构门满关。
+//!
+//! 文件域：`crates/conex-workspace-store/**`（02 钉死；不写 sessions / conex-db）。
 
 use super::{StoreError, WorkspaceStore};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -17,7 +28,9 @@ pub fn content_hash(bytes: &[u8]) -> String {
 }
 
 impl WorkspaceStore {
-    /// 写入 CAS：返回 content hash。同内容重复 put 幂等（不复制字节）。
+    /// W2-D-S：写入 CAS，返回 content hash。同内容重复 put 幂等（不复制字节）。
+    ///
+    /// **≠** 生产就绪 / **≠** GC / **≠** 外置 `blobs/` 阈值。
     pub fn put_blob(&self, bytes: &[u8]) -> Result<String, StoreError> {
         let hash = content_hash(bytes);
         let size = bytes.len() as i64;
@@ -29,7 +42,7 @@ impl WorkspaceStore {
         Ok(hash)
     }
 
-    /// 按 hash 读取 blob 字节；不存在返回 `None`。
+    /// W2-D-S：按 hash 读取 blob 字节；不存在返回 `None`。
     pub fn get_blob(&self, hash: &str) -> Result<Option<Vec<u8>>, StoreError> {
         let conn = self
             .conn
@@ -38,7 +51,10 @@ impl WorkspaceStore {
         get_blob_conn(&conn, hash)
     }
 
-    /// 将块与 CAS hash 关联（幂等）。**不**把附件塞进 snapshot。
+    /// W2-D-S：将块与 CAS hash 关联（幂等）。**不**把附件塞进 snapshot。
+    ///
+    /// 缺 hash 行 → `StoreError::Persist`（须先 [`Self::put_blob`]）。
+    /// **≠** 未引用 GC；unlink/GC 属 W2-D Strict。
     pub fn link_block_attachment(
         &self,
         doc_id: &str,
@@ -74,7 +90,7 @@ impl WorkspaceStore {
         Ok(())
     }
 
-    /// 列出块上关联的 attachment hash。
+    /// W2-D-S：列出块上关联的 attachment hash（诊断 / 测）。
     pub fn list_block_attachments(
         &self,
         doc_id: &str,
@@ -95,7 +111,7 @@ impl WorkspaceStore {
         Ok(out)
     }
 
-    /// 诊断：blob_cas 行数。
+    /// 诊断：blob_cas 行数（-S；非 GC 水位）。
     pub fn count_blobs(&self) -> Result<usize, StoreError> {
         let conn = self
             .conn
@@ -106,7 +122,7 @@ impl WorkspaceStore {
     }
 }
 
-/// 连接级 put（幂等）。
+/// 连接级 put（幂等）。W2-D-S：默认内联 `bytes`；`path` 空串（外置属 W2-D）。
 pub fn put_blob_conn(
     conn: &Connection,
     hash: &str,
@@ -136,7 +152,9 @@ pub fn get_blob_conn(conn: &Connection, hash: &str) -> Result<Option<Vec<u8>>, S
     Ok(blob)
 }
 
-/// 事务内：删除某块的全部 attachment 链接（投影 remove 时用）。
+/// 事务内：删除某块的全部 attachment **链接**（投影 remove 时用）。
+///
+/// **≠ GC**：只清 `block_attachments` 行，**不**删 `blob_cas` 字节（孤儿留给 W2-D GC）。
 pub(crate) fn remove_block_attachments_conn(
     conn: &Connection,
     doc_id: &str,
@@ -151,7 +169,10 @@ pub(crate) fn remove_block_attachments_conn(
 
 #[cfg(test)]
 mod tests {
+    //! W2-D-S 骨架测：put/get/link + 不进 snapshot 结构烟雾。
+    //! **≠** 生产就绪 / **≠** GC 满关 / **≠** EL / **≠** A-PERF-11 数值。
     use super::*;
+    use rusqlite::params;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -174,6 +195,7 @@ mod tests {
         (dir, db)
     }
 
+    /// put/get 往返 + 同内容幂等（单行 blob_cas）。
     #[test]
     fn put_get_blob_roundtrip_and_idempotent() {
         let (dir, db) = temp_db();
@@ -196,6 +218,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// link 须先有 hash；重复 link 幂等。
     #[test]
     fn link_block_attachment_requires_existing_hash() {
         let (dir, db) = temp_db();
@@ -212,6 +235,47 @@ mod tests {
         store.link_block_attachment("d1", "b1", &h).unwrap(); // 幂等
         let links = store.list_block_attachments("d1", "b1").unwrap();
         assert_eq!(links, vec![h]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A-PERF-11 结构烟雾（-S）：put/link 不写 `doc_snapshots` / `doc_updates`。
+    ///
+    /// **≠** A-PERF-11 数值满关；**≠** 生产就绪；仅断言附件不落权威表。
+    #[test]
+    fn put_link_does_not_touch_doc_snapshots_or_updates() {
+        let (dir, db) = temp_db();
+        let store = WorkspaceStore::open(&db).unwrap();
+
+        let payload = b"attachment-must-not-enter-snapshot-hot-path";
+        let h = store.put_blob(payload).unwrap();
+        store
+            .link_block_attachment("doc-cas", "block-img", &h)
+            .unwrap();
+
+        let conn = store.conn.lock().unwrap();
+        let snap_n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM doc_snapshots", [], |r| r.get(0))
+            .unwrap();
+        let upd_n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM doc_updates", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(snap_n, 0, "put/link 不得写入 doc_snapshots");
+        assert_eq!(upd_n, 0, "put/link 不得写入 doc_updates");
+
+        // 附件只在 CAS 表；snapshot 行内亦不得含 payload（双保险）
+        let cas_n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM blob_cas WHERE hash = ?1",
+                params![h],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(cas_n, 1);
+        drop(conn);
+
+        let got = store.get_blob(&h).unwrap().expect("cas row");
+        assert_eq!(got, payload);
+
         let _ = std::fs::remove_dir_all(dir);
     }
 }

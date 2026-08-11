@@ -30,8 +30,8 @@ describe('NotePaperPanel · W5-B-S Skeleton', () => {
     expect(screen.getByTestId('note-paper-silent').textContent).toMatch(/L0/);
     expect(screen.getByTestId('note-paper-count').textContent).toMatch(/4/);
 
-    // 块 id 列表可测
-    const rows = container.querySelectorAll('[data-block-id]');
+    // 内容行块 id 列表可测（排除 DomHost chrome 行 data-bp-block-row）
+    const rows = container.querySelectorAll('[data-content-row="1"]');
     expect(rows.length).toBe(4);
     expect(rows[0]).toHaveAttribute('data-block-id', 'b-0001');
     expect(rows[3]).toHaveAttribute('data-block-id', 'b-0004');
@@ -70,7 +70,8 @@ describe('NotePaperPanel · W5-B-S Skeleton', () => {
     // 无行级权威相关 data 属性
     expect(panel.querySelector('[data-lines]')).toBeNull();
     expect(panel.querySelector('[data-editor-store]')).toBeNull();
-    expect(container.querySelectorAll('[data-block-id]').length).toBe(3);
+    // 内容行 3 块（DomHost chrome 行另计，不混入）
+    expect(container.querySelectorAll('[data-content-row="1"]').length).toBe(3);
     // surface 正确
     expect(panel).toHaveAttribute('data-surface', 'note-paper');
   });

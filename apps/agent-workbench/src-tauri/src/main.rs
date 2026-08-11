@@ -84,6 +84,16 @@ mod workflow_commands;
 mod wakeup_summary;
 
 mod watchdog;
+// D6-②：无人值守唤醒 watcher（wake_watcher.rs 模块本体，任务连续性
+// 维度 D6）。装配点（壳层面批次接线，本批次只落模块声明）：
+// - 每会话 spawn：run_restore 成功路径 / run_task_impl 会话首次出现处
+//   惰性 spawn（CoreRunState 新增 wake_watchers 幂等持有表，与
+//   watchdog 每会话任务同生命周期语义——run 收口不销毁）；
+// - 注入件：queue = engine.timer_steering_queue() 同实例；
+//   has_active_run = active_runs 锁内同会话扫描；empty_streak =
+//   resume_empty_streak 只读；launcher = spawn_idle_resume_run 包装；
+// - user_stopped：run_control L2/L3 路径 set、用户新 run 装配 clear。
+mod wake_watcher;
 mod workspace;
 mod outputs_config;
 
@@ -254,11 +264,161 @@ command_registry![
     ("browser_import_history", browser_commands::browser_import_history),
     ("browser_list_bookmarks", browser_commands::browser_list_bookmarks),
     ("browser_list_history", browser_commands::browser_list_history),
-    // ── Round7：笔记双引擎 IPC（noteApi.ts；同一 NoteRuntime 句柄）──
+    // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc；同一 NoteRuntime）──
     ("note_document_apply_md", note_commands::note_document_apply_md),
     ("note_query_blocks", note_commands::note_query_blocks),
     ("note_send_to_note", note_commands::note_send_to_note),
+    ("note_document_hydrate", note_commands::note_document_hydrate),
+    // ── D4a 命令面：子代理显式恢复与关闭（D4 §3.1/§3.2/§3.5）。
+    //    Tauri 宏约束：命令函数须以模块限定路径注册（裸标识符路径触发
+    //    generate_handler! 的 `__cmd__<name>` 宏命名冲突），故命令壳定义
+    //    于 [lifecycle_commands] 子模块 ──
+    ("resume_subagent", lifecycle_commands::resume_subagent),
+    ("kill_all", lifecycle_commands::kill_all),
+    ("kill_subagent", lifecycle_commands::kill_subagent),
 ];
+
+// ── D4a：子代理显式恢复与关闭命令壳（D4 §3.1 双端登记第 ① 步）──────
+
+/// D4a 命令壳模块：子代理显式恢复与关闭（resume_subagent / kill_all /
+/// kill_subagent）。命令体 = 同步准备（spawn_blocking，F2-27）+ 引擎侧
+/// [orchestrator::lifecycle::SubagentLifecycleService] 调用。
+pub(crate) mod lifecycle_commands {
+    use super::*;
+
+    /// 生命周期错误 → CoreError（命令面唯一错误协议，PE-03 T03.3）。
+    ///
+    /// - NotFound → `CoreError::NotFound`（目标子代理/run 不存在）；
+    /// - InvalidState → `CoreError::InvalidInput`（参数或状态非法）；
+    /// - PersistFailed → `CoreError::Io`（落库失败，detail 保留操作语义）；
+    /// - Recovery → 按恢复域错误分类映射（预算耗尽等保持可观测）。
+    fn map_lifecycle_err(
+        err: orchestrator::lifecycle::LifecycleError,
+    ) -> core_error::CoreError {
+        use orchestrator::lifecycle::LifecycleError;
+        match err {
+            LifecycleError::NotFound { message } => core_error::CoreError::NotFound(message),
+            LifecycleError::InvalidState { message } => {
+                core_error::CoreError::InvalidInput(message)
+            }
+            LifecycleError::PersistFailed { message } => {
+                core_error::CoreError::Io(format!("store.lifecycle: {message}"))
+            }
+            LifecycleError::Recovery(err) => match err {
+                orchestrator::recovery::RecoveryError::NotFound { message } => {
+                    core_error::CoreError::NotFound(message)
+                }
+                orchestrator::recovery::RecoveryError::PersistFailed { message } => {
+                    core_error::CoreError::Io(format!("store.recovery: {message}"))
+                }
+                other => core_error::CoreError::InvalidInput(format!("恢复域失败：{other}")),
+            },
+        }
+    }
+
+    /// D4 §3.2：kill_subagent 命令壳——单目标终止子代理（同步 SQLite 面经
+    /// spawn_blocking，F2-27；tokio worker 不执行同步 SQLite）。
+    #[tauri::command]
+    pub(crate) async fn kill_subagent(
+        state: tauri::State<'_, Arc<core_run_commands::CoreRunState>>,
+        session_id: String,
+        subagent_id: String,
+        reason: Option<String>,
+    ) -> Result<orchestrator::lifecycle::KillSubagentResult, core_error::CoreError> {
+        let service = state.lifecycle_service().ok_or_else(|| {
+            core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
+        })?;
+        let reason = reason.unwrap_or_default();
+        tokio::task::spawn_blocking(move || {
+            service.kill_subagent(&session_id, &subagent_id, &reason)
+        })
+        .await
+        .map_err(|e| {
+            core_error::CoreError::internal(format!("kill_subagent 阻塞任务失败：{e}"))
+        })?
+        .map_err(map_lifecycle_err)
+    }
+
+    /// D4 §3.1：kill_all 命令壳——批量终止主会话全部 running 子代理（同步
+    /// SQLite 面经 spawn_blocking，F2-27；批量语义保持 lifecycle 引擎侧）。
+    #[tauri::command]
+    pub(crate) async fn kill_all(
+        state: tauri::State<'_, Arc<core_run_commands::CoreRunState>>,
+        session_id: String,
+        reason: Option<String>,
+    ) -> Result<orchestrator::lifecycle::KillAllOutcome, core_error::CoreError> {
+        let service = state.lifecycle_service().ok_or_else(|| {
+            core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
+        })?;
+        let reason = reason.unwrap_or_default();
+        tokio::task::spawn_blocking(move || service.kill_all(&session_id, &reason))
+            .await
+            .map_err(|e| core_error::CoreError::internal(format!("kill_all 阻塞任务失败：{e}")))?
+            .map_err(map_lifecycle_err)
+    }
+
+    /// D4 §3.5：resume_subagent 命令壳——fork 新 run 承接同一目标。
+    ///
+    /// 两段式：
+    /// - ① 同步准备段 [orchestrator::lifecycle::SubagentLifecycleService::
+    ///   prepare_resume]（取行 + 定位 + kill-for-resume + 任务/叶子推导，
+    ///   纯 DB + 内存）经 spawn_blocking（F2-27）；
+    /// - ② fork 段 [orchestrator::lifecycle::SubagentLifecycleService::
+    ///   resume_with_prepared] 经调用方持有的 RecoveryCoordinator 权威
+    ///   实例（D3 装配；未装配 → 结构化错误「恢复协调器未装配」——D3
+    ///   完成前 resume 命令不可用，D4 §3.5）。
+    ///
+    /// **协调器锁与真异步调用的兼容**：coordinator_for 返回
+    /// `Arc<std::sync::Mutex<RecoveryCoordinator>>`，而 fork_and_reassign
+    /// 含真实 await（spawner.spawn，recovery.rs:1136-1142）——std
+    /// MutexGuard 跨 await 不 Send、Tauri 命令 future 要求 Send，故 fork
+    /// 段在 spawn_blocking 内持锁并以 `Handle::block_on` 驱动（D3
+    /// `blocking_coordinator_call` + `block_on_coordinator_failure` 模式
+    /// 扩展，core_run_commands.rs:3628-3654；block_on 不阻塞 tokio worker
+    /// 池，fork 链串行执行于 blocking 线程，同步 SQLite 面仍不落 tokio
+    /// worker，符合 F2-27 纪律）。
+    #[tauri::command]
+    pub(crate) async fn resume_subagent(
+        state: tauri::State<'_, Arc<core_run_commands::CoreRunState>>,
+        session_id: String,
+        subagent_id: String,
+        prompt: Option<String>,
+    ) -> Result<orchestrator::lifecycle::ResumeOutcome, core_error::CoreError> {
+        let service = state.lifecycle_service().ok_or_else(|| {
+            core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
+        })?;
+        // ① 同步准备段（F2-27：同步 SQLite 面经 spawn_blocking）
+        let prepared = {
+            let service = service.clone();
+            let sid = session_id.clone();
+            let aid = subagent_id.clone();
+            tokio::task::spawn_blocking(move || {
+                service.prepare_resume(&sid, &aid, prompt.as_deref())
+            })
+            .await
+            .map_err(|e| {
+                core_error::CoreError::internal(format!("resume 准备段阻塞任务失败：{e}"))
+            })?
+            .map_err(map_lifecycle_err)?
+        };
+        // ② fork 段：coordinator 权威实例（D3 装配；未装配 → 结构化错误）
+        let coord = state.coordinator_for(&session_id).ok_or_else(|| {
+            core_error::CoreError::internal("恢复协调器未装配（D3 未接线，resume 暂不可用）")
+        })?;
+        tokio::task::spawn_blocking(move || {
+            let mut coordinator = coord.lock().unwrap_or_else(|e| e.into_inner());
+            // 锁内 block_on（D3 模式扩展；block_on 线程持有 runtime context，
+            // fork 链 await 的任务由 worker 池执行，无死锁面）
+            tokio::runtime::Handle::current()
+                .block_on(service.resume_with_prepared(&mut coordinator, &session_id, prepared))
+        })
+        .await
+        .map_err(|e| {
+            core_error::CoreError::internal(format!("resume fork 段阻塞任务失败：{e}"))
+        })?
+        .map_err(map_lifecycle_err)
+    }
+}
 
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info
 /// （PE-04 T04.1-1：非法值由 conex-telemetry 内部回退 info）。
@@ -797,14 +957,20 @@ impl MultiDeviceService {
 ///    时关停旧实例后**不 bind 任何端口**（Loopback 也不监听），记录诊断
 ///    并返回——「enabled=false 无任何端口监听」的 netstat 断言由本门控
 ///    保证（D5:948「服务关闭（不监听任何端口）」）；
-/// 2. 取走旧句柄与旧 serve task，shutdown 旧句柄并 await 旧 task——serve
+/// 2. wss 强制（D5 D-02a「远程网关只提供 wss」/ D2 §12.8 裁决修正 11
+///    「wss 强制 R1 即生效」）：红线 1 放行（服务开启）后**只提供 wss**
+///    ——装配面置 tls_enabled=true（证书目录 None → 默认
+///    config_dir()/multi-device/，tls.rs cert_dir 语义，无需显式设置；
+///    明文 ws:// 握手在 TLS 层拒绝，无明文端点）；服务关闭（enabled=false）
+///    时早返回不 bind，无明文/密文差异；
+/// 3. 取走旧句柄与旧 serve task，shutdown 旧句柄并 await 旧 task——serve
 ///    收尾即 listener 释放，随后按同端口重建（8765 优先，占用探测兜底
 ///    语义不变，R1-02）；
-/// 3. bind 新实例（绑定模式按 config：Loopback / Lan）→ 实际端口注入
+/// 4. bind 新实例（绑定模式按 config：Loopback / Lan）→ 实际端口注入
 ///    配对协调器（set_port，二维码数据同源）→ 注入 CoreStateBackend 与
 ///    FanOutEmitter 构建 Router → 更新生命周期槽 → serve（新 task 入槽）。
 ///    失败仅记录诊断，不阻断应用（D1 §3.4 铁律）。
-async fn restart_server(config: server::ServerConfig, service: &MultiDeviceService) {
+async fn restart_server(mut config: server::ServerConfig, service: &MultiDeviceService) {
     // ① 关停旧实例（先取走，避免退出钩子重复 shutdown——幂等无害）
     let (old_handle, old_task) = {
         let mut slot = service.lifecycle.lock().unwrap_or_else(|e| e.into_inner());
@@ -833,6 +999,13 @@ async fn restart_server(config: server::ServerConfig, service: &MultiDeviceServi
         );
         return;
     }
+    // ②b wss 强制（D5 D-02a / D2 §12.8 裁决修正 11「wss 强制 R1 即生效」）：
+    // 红线 1 放行（multi_device_enabled=true）后服务**只提供 wss**——置
+    // tls_enabled=true；证书目录 None → 默认 config_dir()/multi-device/
+    // （multi_device/tls.rs cert_dir 语义），无需显式设置。明文 ws:// 握手
+    // 在 TLS 层拒绝（server/mod.rs TlsListener，fail-closed：材料失败即
+    // bind 报错，绝不以明文降级），不存在明文端点（T-04 降级保护）。
+    config.tls_enabled = true;
     // ③ 重建并 serve（注入真实后端与扇出器；端口同步配对协调器）
     match server::ServerInstance::bind(config).await {
         Ok(instance) => {
@@ -955,6 +1128,12 @@ mod tests {
         let pairing = Arc::new(server::pairing::PairingCoordinator::new(tokens, ws_registry));
         let mut base = server::config::ServerConfig::new(std::env::temp_dir());
         base.port = port;
+        // wss 强制（装配层语义）：restart_server 在 enabled=true 时置
+        // tls_enabled=true——测试注入唯一临时证书目录，隔离真实配置目录
+        // （默认 config_dir()/multi-device/ 不得被测试污染）
+        base.tls_cert_dir = Some(
+            std::env::temp_dir().join(format!("md-switch-{}-{seq}-certs", std::process::id())),
+        );
         Arc::new(MultiDeviceService {
             lifecycle: Arc::new(std::sync::Mutex::new(ServerLifecycle::default())),
             diagnostics: Arc::new(status_diagnostics::StatusDiagnostics::new()),
@@ -1099,5 +1278,36 @@ mod tests {
             port_is_free(19083).await,
             "开关关闭时配对重绑不得产生监听（红线 1）"
         );
+    }
+
+    /// 服务开启即 wss-only（D5 D-02a / D2 §12.8 裁决修正 11）：restart_server
+    /// 在 multi_device_enabled=true 时强制置 tls_enabled=true——TLS 材料
+    /// 生成（bind 内 load_or_generate_in 落盘 CA/叶子）即强制置位的落点
+    /// 证据；明文 ws 端点不存在（TLS 层拒绝，mod.rs TlsListener 语义）。
+    #[tokio::test]
+    async fn enabled_service_forces_tls_wss_only() {
+        let service = test_md_service(true, 19084);
+        // 基线断言：测试构造的服务 config.tls_enabled=false——TLS 材料
+        // 生成只能来自 restart_server 的强制置位，而非结构默认值
+        assert!(
+            !service.base.tls_enabled,
+            "测试基线必须为明文构造（验证强制语义）"
+        );
+        restart_server(service.current_config(), &service).await;
+        // 服务已监听（enabled=true）
+        assert!(!port_is_free(19084).await, "enabled=true 必须监听端口");
+        // TLS 材料已生成：证书目录出现 CA 与叶子文件（load_or_generate_in
+        // 仅在 tls_enabled=true 时被 bind 调用——wss 强制的直接证据）
+        let cert_dir = service
+            .base
+            .tls_cert_dir
+            .clone()
+            .expect("测试必须注入证书目录");
+        for file in ["ca_cert.pem", "server_cert.pem"] {
+            assert!(
+                cert_dir.join(file).exists(),
+                "wss 强制：证书材料 {file} 必须已生成（TLS 装配被触发）"
+            );
+        }
     }
 }

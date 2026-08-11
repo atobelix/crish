@@ -42,9 +42,11 @@
 //! - **诚实边界**：**≠ A-PERF-10 数值满关**（数值仅 W6-C）；**≠ EL-03**（EL-03 结构主责 W3-A / 数值 W6-C）；
 //!   **≠ Wave 2「存储完成」**（杀进程权威恢复分属他包；mirror detect/三路见 W2-E 节，≠ 产品 watcher 满关）。
 //!
-//! # W2-D CAS 附件骨架
+//! # W2-D-S CAS 附件骨架（Skeleton）
 //! - [`WorkspaceStore::put_blob`] / [`WorkspaceStore::get_blob`] / [`WorkspaceStore::link_block_attachment`]
-//! - 表 `blob_cas` + `block_attachments`；**附件不是第二文档权威**
+//! - 表 `blob_cas` + `block_attachments`；**附件不是第二文档权威**；默认 **不**进 snapshot 热路径
+//! - **诚实（-S）**：**≠ 生产就绪**；**≠ GC 满关**（无未引用回收 / 无产品 unlink）；
+//!   **≠ EL** / **≠ A-PERF-11 数值**；Strict **W2-D** 才扩 GC+外置+结构门满关
 //!
 //! # W2-E MD mirror（人/git 契约视图，非权威）
 //! ## W2-E-S 地基（已有）
@@ -65,7 +67,7 @@
 //! - **不变量**：工具默认 **禁止** 读 mirror 当权威；本 API 仅人/git 契约视图。
 //!
 //! # 后续扩展点
-//! - CAS GC / 外置 `blobs/` 大文件 path
+//! - **W2-D Strict**：CAS GC / 外置 `blobs/` 大文件 path / A-PERF-11 结构门满关（W2-D-S 仅骨架）
 //! - OS 级 mirror watcher（inotify/FSEvents）产品接线（本 crate 已交轮询/回调入口，未绑内核 FS 事件）
 //!
 //! # W2-F Strict（refs 自动物化 + 受限 query）
@@ -120,7 +122,7 @@ pub const SNAPSHOT_UPDATE_THRESHOLD: usize = 100;
 /// - v3：blocks 投影 + blocks_fts（W2-C）
 /// - v4：mirror_meta（W2-E MD mirror 导出水位）
 /// - v5：block_refs 物化（W2-F+ 块引用 / 反向链接）
-/// - v6：blob_cas + block_attachments（W2-D CAS 附件骨架）
+/// - v6：blob_cas + block_attachments（**W2-D-S** CAS 附件骨架；≠ 生产 / ≠ GC）
 /// - v7：mirror_meta.content_hash + file_mtime_ms（W2-E P6 detect 指纹）
 pub const SCHEMA_VERSION: i64 = 7;
 
@@ -146,7 +148,7 @@ impl From<StoreError> for PersistError {
 ///
 /// 已建：doc_meta / doc_snapshots / doc_updates / doc_clocks / **blocks** / **blocks_fts** /
 /// **mirror_meta** / **block_refs** / **blob_cas** / **block_attachments**。
-/// 后续扩展点：CAS GC、外置 `blobs/` 大文件 path 策略。
+/// 后续扩展点（W2-D Strict，非本 -S）：CAS GC、外置 `blobs/` 大文件 path 策略。
 pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
     conn.execute_batch(
         r#"
@@ -226,8 +228,8 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
             PRIMARY KEY (doc_id, from_id, to_id, kind)
         );
 
-        -- W2-D：CAS 附件（内容寻址；**非**文档权威）
-        -- hash = SHA-256 hex；bytes 可空时 path 指向外置文件（本波次默认内联 bytes）
+        -- W2-D-S：CAS 附件骨架（内容寻址；**非**文档权威；≠ 生产 / ≠ GC 满关）
+        -- hash = SHA-256 hex；bytes 可空时 path 指向外置文件（-S 默认内联 bytes）
         CREATE TABLE IF NOT EXISTS blob_cas (
             hash TEXT PRIMARY KEY,
             size INTEGER NOT NULL DEFAULT 0,
@@ -236,7 +238,7 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
             created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
         );
 
-        -- 块 → blob 引用（多对多；删块时清链接，blob 行留给 GC）
+        -- 块 → blob 引用（多对多；删块时清链接，blob 行留给 W2-D GC）
         CREATE TABLE IF NOT EXISTS block_attachments (
             doc_id TEXT NOT NULL,
             block_id TEXT NOT NULL,

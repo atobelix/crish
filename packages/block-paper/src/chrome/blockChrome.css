@@ -165,12 +165,15 @@
   opacity: 1;
 }
 
-/* ---------- slash 宿主：elevated 浮层最小皮（catalog 后置） ---------- */
+/* ---------- slash 宿主：elevated 浮层 + group/item 可见皮 ---------- */
 
 .bp-slash-host {
   box-sizing: border-box;
   position: absolute;
   z-index: var(--z-popover, 200);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dropdown-gap, var(--space-0_5, 2px));
   width: min(var(--bp-slash-width), 100%);
   min-width: min(200px, 100%);
   max-height: min(360px, 70vh);
@@ -180,11 +183,18 @@
   border: var(--hairline-width, 1px) solid
     var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
   border-radius: var(--radius-lg, 8px);
+  /* token：elevated 表面 + 大阴影（与设置下拉同族） */
   background: var(--bg-elevated, hsl(35, 8%, 100%));
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(
+    --shadow-lg,
+    0 10px 25px -5px rgba(0, 0, 0, 0.08),
+    0 8px 10px -6px rgba(0, 0, 0, 0.04)
+  );
   color: var(--text-primary, #111111);
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-ui, 1.35);
+  /* 浮层滚动条：细、不抢纸面 */
+  scrollbar-gutter: stable;
 }
 
 .bp-slash-host[hidden],
@@ -192,20 +202,38 @@
   display: none !important;
 }
 
-/* catalog 项皮（宿主内后续挂载时可直接用 class） */
+/* 分组标签：xs + tertiary；段首略上边距拉开视觉段 */
 .bp-slash-host .bp-slash-group-label {
-  padding: var(--space-0_5, 2px) var(--space-2, 8px);
+  box-sizing: border-box;
+  padding: var(--space-1, 4px) var(--space-2, 8px) var(--space-0_5, 2px);
+  margin: 0;
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-tertiary, #696969);
   line-height: var(--line-height-ui, 1.35);
+  letter-spacing: var(--letter-spacing-wide, 0.02em);
+  text-transform: none;
+  user-select: none;
+  pointer-events: none;
 }
 
+/* 第二段起：轻分隔（顶 hairline 间距） */
+.bp-slash-host .bp-slash-group-label:not(:first-child) {
+  margin-top: var(--space-1, 4px);
+  padding-top: var(--space-1_5, 6px);
+  border-top: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
+}
+
+/* catalog 项：icon + 标题/描述列；hover/active 中性 tint，禁止 accent-blue 整行 */
 .bp-slash-host .bp-slash-item {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: var(--space-2, 8px);
   width: 100%;
+  min-height: var(--control-height-sm, 28px);
+  margin: 0;
   padding: var(--item-padding, 8px 12px);
   border: none;
   border-radius: var(--item-radius, var(--radius-sm, 5px));
@@ -217,9 +245,7 @@
   transition: background var(--transition-micro, 100ms ease-out);
 }
 
-.bp-slash-host .bp-slash-item:hover,
-.bp-slash-host .bp-slash-item[data-active='1'],
-.bp-slash-host .bp-slash-item[aria-selected='true'] {
+.bp-slash-host .bp-slash-item:hover {
   background: var(
     --bg-hover,
     var(
@@ -229,7 +255,44 @@
   );
 }
 
+/* 键盘高亮 / 当前项：略强于 hover（tint-active），仍中性 */
+.bp-slash-host .bp-slash-item[data-active='1'],
+.bp-slash-host .bp-slash-item[aria-selected='true'] {
+  background: var(
+    --bg-active,
+    var(
+      --tint-active,
+      color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
+    )
+  );
+}
+
+/* active + hover 同档：保持 active 色，避免闪回更浅 hover */
+.bp-slash-host .bp-slash-item[data-active='1']:hover,
+.bp-slash-host .bp-slash-item[aria-selected='true']:hover {
+  background: var(
+    --bg-active,
+    var(
+      --tint-active,
+      color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
+    )
+  );
+}
+
+.bp-slash-host .bp-slash-item:focus {
+  outline: none;
+}
+
+.bp-slash-host .bp-slash-item:focus-visible {
+  box-shadow: var(
+    --focus-ring,
+    0 0 0 2px
+      color-mix(in srgb, var(--control-mix-color, #4a4035) 8%, transparent)
+  );
+}
+
 .bp-slash-host .bp-slash-item-icon {
+  box-sizing: border-box;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -239,8 +302,65 @@
   border: var(--hairline-width, 1px) solid
     var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
   border-radius: var(--radius-xs, 4px);
+  background: var(
+    --bg-secondary,
+    color-mix(in srgb, var(--text-primary, #111) 3%, transparent)
+  );
   color: var(--text-secondary, #555555);
   font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  line-height: 1;
+}
+
+/* active 项图标：略抬一层，仍中性 */
+.bp-slash-host .bp-slash-item[data-active='1'] .bp-slash-item-icon,
+.bp-slash-host .bp-slash-item[aria-selected='true'] .bp-slash-item-icon {
+  border-color: var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+  color: var(--text-primary, #111111);
+}
+
+.bp-slash-host .bp-slash-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: flex-start;
+}
+
+.bp-slash-host .bp-slash-item-title {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-base, 14px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary, #111111);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.bp-slash-host .bp-slash-item-desc {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-secondary, #555555);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+/* 过滤无结果：居中次级提示 */
+.bp-slash-host .bp-slash-empty {
+  box-sizing: border-box;
+  padding: var(--space-4, 16px) var(--space-2, 8px);
+  text-align: center;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-tertiary, #696969);
+  line-height: var(--line-height-ui, 1.35);
+  user-select: none;
 }
 
 /* ---------- flavour 轻量（DomHost 若写 data-flavour 时生效） ---------- */
@@ -261,6 +381,7 @@
 html[data-perf-tier='eco'] .bp-chrome-root .bp-block-row,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-block-handle,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-drop-line,
-html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item {
+html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item,
+html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item-icon {
   transition: none;
 }

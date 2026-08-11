@@ -60,11 +60,12 @@ const fn entry(
     }
 }
 
-/// 命令清单（111 条 = 注册面 107 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（116 条 = 注册面 110 + 登记先行 6；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
-/// workbench_open_workspace / workbench_list_workspaces / workbench_dev_mcp_enabled。
+/// workbench_open_workspace / workbench_list_workspaces / workbench_dev_mcp_enabled /
+/// core_resume_run（P2）/ core_compact_now（E2 实现轮翻 true）。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -201,15 +202,32 @@ entry("browser_import_bookmarks", "browser", "engine", true),
 entry("browser_import_history", "browser", "engine", true),
 entry("browser_list_bookmarks", "browser", "engine", true),
 entry("browser_list_history", "browser", "engine", true),
-        // ── Round7：笔记双引擎 IPC（noteApi.ts；family=note）──
+        // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc；family=note）──
         entry("note_document_apply_md", "note", "engine", true),
         entry("note_query_blocks", "note", "engine", true),
         entry("note_send_to_note", "note", "engine", true),
+        // 真 hydrate / open 投影形状（B-09 延伸；≠ 打开完成 / ≠ EL）
+        entry("note_document_hydrate", "note", "engine", true),
+        // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；
+        //    实现体 = main.rs lifecycle_commands 命令壳 + lifecycle 引擎侧）──
+        entry("resume_subagent", "core", "engine", true),
+        entry("kill_all", "core", "engine", true),
+        entry("kill_subagent", "core", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),
         entry("workbench_list_workspaces", "workbench", "gui", false),
         entry("workbench_dev_mcp_enabled", "workbench", "gui", false),
+        // D4 §3.7：core_resume_run（P2）登记先行——主 run 重启续跑命令，
+        // 本轮不排期，实现随排期翻 true（与 resume_subagent 同一命令登记轮，
+        // 裁决 #17）
+        entry("core_resume_run", "core", "engine", false),
+        // E2 扩展：core_compact_now 同批登记（D4 §3.1 步骤 2；实现体与
+        // make_handlers! 注册随 E2 实现轮落，翻 true）。registered=false =
+        // 登记先行（无实现体不得 registered=true——registered 子集 =
+        // make_handlers! 注册面不变量，红线 6 禁止假接线；E0 裁决 4 的
+        // 「5→6」口径与本实现一致）
+        entry("core_compact_now", "core", "engine", false),
     ],
 };
 
@@ -226,16 +244,17 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 94 = 注册面 90 + 登记先行 4；变更时双端同步——T-F 06 退役 5 条
-    /// （core_read_run_events / delete_session / touch_session /
-    /// core_md_render_stream / core_md_clear_cache）后 95 → 90，浏览器域
-    /// 追加 browser_input / browser_start_frames / browser_stop_frames /
+    /// 变更时双端同步——T-F 06 退役 5 条后 95 → 90，浏览器域追加
+    /// browser_input / browser_start_frames / browser_stop_frames /
     /// browser_frame_status 后 90 → 94；R1-07 多端互通四件套 + R1-08
     /// 撤销/改名两件套后 94 → 100；browser_export/import_storage_state
     /// 追加后 100 → 102；R1-09 multi_device_network_info 追加后 102 → 103；
     /// R1-11 multi_device_set_enabled 追加后 103 → 104；G-4 书签/历史
     /// 四命令（browser_import/list_bookmarks/history）追加后 104 → 108；
-    /// Round7 note_* 三命令追加后 108 → 111）。
+    /// Round7 note_* 三命令追加后 108 → 111；D4a 五命令
+    /// （resume_subagent/kill_all/kill_subagent + core_resume_run/
+    /// core_compact_now 登记先行）追加后 111 → 116；
+    /// note_document_hydrate 追加后 116 → 117）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -246,9 +265,9 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 111, "总数 111（Round7 note_* 三命令，与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 107, "注册面 107");
-        assert_eq!(pending, 4, "登记先行 4");
+        assert_eq!(total, 117, "总数 117（note_document_hydrate + D4a，与前端同步）");
+        assert_eq!(registered, 111, "注册面 111");
+        assert_eq!(pending, 6, "登记先行 6");
     }
 
     /// 命令名唯一（重复名会破坏前端清单校验）。
@@ -394,11 +413,11 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 111);
+        assert_eq!(manifest.commands.len(), 117);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
-    /// Round7：笔记 IPC 三命令登记且 registered=true。
+    /// Round7+：笔记 IPC 四命令登记且 registered=true（含 hydrate）。
     #[test]
     fn manifest_registers_note_commands() {
         let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
@@ -410,10 +429,11 @@ mod tests {
             "note_document_apply_md",
             "note_query_blocks",
             "note_send_to_note",
+            "note_document_hydrate",
         ] {
             let entry = by_name
                 .get(name)
-                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（Round7）"));
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（Round7+）"));
             assert_eq!(entry.family, "note", "{name} 属 note 族");
             assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
             assert!(entry.registered, "{name} 已接线应 registered=true");
@@ -435,5 +455,31 @@ mod tests {
         assert_eq!(entry.family, "session", "get_flow_snapshot 属 session 族");
         assert_eq!(entry.surface, "engine", "get_flow_snapshot 属引擎契约面");
         assert!(entry.registered, "get_flow_snapshot 已接线应 registered=true");
+    }
+
+    /// D4a：子代理显式恢复与关闭命令双端登记（D4 §1.2 A5）——三条命令
+    /// registered=true（与 main.rs 注册面一致）；core_resume_run / 
+    /// core_compact_now 登记先行 registered=false。
+    #[test]
+    fn manifest_registers_d4a_subagent_commands() {
+        let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .map(|c| (c.name, c))
+            .collect();
+        for name in ["resume_subagent", "kill_all", "kill_subagent"] {
+            let entry = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（D4 §3.1）"));
+            assert_eq!(entry.family, "core", "{name} 属 core 族");
+            assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
+            assert!(entry.registered, "{name} 已接线应 registered=true");
+        }
+        for name in ["core_resume_run", "core_compact_now"] {
+            let entry = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（登记先行）"));
+            assert!(!entry.registered, "{name} 登记先行应 registered=false");
+        }
     }
 }

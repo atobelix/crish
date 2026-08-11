@@ -28,12 +28,14 @@ import {
   createSilentFixture,
   listSilentBlocks,
   SlashMenuModel,
+  type BlockChromeDomHost,
   type HandleVisibility,
   type SilentFixture,
 } from '@crish/block-paper';
 /** DomHost chrome 皮（落点线/slash/把手热区）；与 module 块行皮并存；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
 import type { NoteQueryBlockHit, NoteTransport } from '../../api/noteApi';
+import { BlockChromeDomMount } from './BlockChromeDomMount';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import {
   W5B_SKELETON_BOUNDARY,
@@ -55,6 +57,16 @@ export type NotePaperPanelProps = {
   fixture?: SilentFixture;
   /** 可选：外部 chrome（测试用） */
   chrome?: BlockChromeModel;
+  /**
+   * 可选：外部 slash 模型（测试打开 slash 宿主 / 契约同步）。
+   * 未传时内部 new SlashMenuModel()，预览壳默认关闭。
+   */
+  slashMenu?: SlashMenuModel;
+  /**
+   * DomHost 就绪回调（W3-F DOM 桌面挂载子集；测试拿 setDropTarget 等）。
+   * **≠ EL-01**；真 Pointer 拖拽全链后置。
+   */
+  onChromeDomHost?: (host: BlockChromeDomHost | null) => void;
   /**
    * 笔记通路。提供时从 transport.queryBlocks 加载只读投影
    * （写后可调用 refresh / 外部改 refreshToken 触发重载）。
@@ -101,6 +113,8 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   blockCount = 8,
   fixture: fixtureProp,
   chrome: chromeProp,
+  slashMenu: slashMenuProp,
+  onChromeDomHost,
   transport,
   refreshToken = 0,
   onClose,
@@ -123,7 +137,10 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   );
 
   // slash 模型挂载可测（预览壳默认关闭；composing 守卫在包内单测）
-  const slashMenu = useMemo(() => new SlashMenuModel(), []);
+  const slashMenu = useMemo(
+    () => slashMenuProp ?? new SlashMenuModel(),
+    [slashMenuProp]
+  );
 
   const silentBlocks = useMemo(() => listSilentBlocks(fixture), [fixture]);
 
@@ -299,6 +316,7 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
                   key={block.id}
                   className={styles.blockRow}
                   data-block-id={block.id}
+                  data-content-row="1"
                   data-handle={visibility}
                   data-flavour={block.flavour}
                   data-heading-level={
@@ -329,6 +347,21 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
               );
             })
           )}
+          {/*
+            W3-F DOM 桌面挂载：BlockChromeDomHost → data-bp-* 契约
+            （把手/落点线/slash 宿主）；与上列内容行并存。≠ EL-01。
+          */}
+          <BlockChromeDomMount
+            blocks={displayBlocks.map((b) => ({
+              blockId: b.id,
+              flavour: b.flavour,
+            }))}
+            chrome={chrome}
+            slash={slashMenu}
+            syncToken={chromeTick}
+            onHostReady={onChromeDomHost}
+            testId="note-paper-chrome-dom"
+          />
         </div>
       </div>
 

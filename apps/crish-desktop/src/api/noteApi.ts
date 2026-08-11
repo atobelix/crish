@@ -61,6 +61,11 @@ export const NOTE_CMD_DOCUMENT_APPLY_MD = 'note_document_apply_md' as const;
 export const NOTE_CMD_QUERY_BLOCKS = 'note_query_blocks' as const;
 /** Tauri / 前端 IPC：显式 send_to_note Intent 写路径 */
 export const NOTE_CMD_SEND_TO_NOTE = 'note_send_to_note' as const;
+/**
+ * Tauri / 前端 IPC：文档 hydrate 投影（open/load 形状）。
+ * 契约实现见 `noteHydrateIpc.ts`；**产品空态默认仍 fixture**（≠ 打开完成）。
+ */
+export const NOTE_CMD_DOCUMENT_HYDRATE = 'note_document_hydrate' as const;
 
 /** agent-tools 工具名（对照，非 IPC 命令） */
 export const NOTE_TOOL_DOCUMENT_APPLY_MD = 'document_apply_md' as const;
@@ -71,6 +76,7 @@ export const NOTE_COMMANDS = {
   documentApplyMd: NOTE_CMD_DOCUMENT_APPLY_MD,
   queryBlocks: NOTE_CMD_QUERY_BLOCKS,
   sendToNote: NOTE_CMD_SEND_TO_NOTE,
+  documentHydrate: NOTE_CMD_DOCUMENT_HYDRATE,
 } as const;
 
 // ---------------------------------------------------------------------------

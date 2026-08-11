@@ -10,13 +10,15 @@
  * - 把手可见性：`data-handle-visibility` 同步 model（hidden/hover/focus/multi）
  * - 多选框：`input[type=checkbox][data-bp-multi-check]` 勾选态 ↔ multiSelectedIds
  * - 落点线：`data-bp-drop-line` 节点按 `setDropTarget` 显隐与 side
- * - slash 宿主：`data-bp-slash-host` 按 SlashMenuModel.open 显隐
+ * - slash 宿主：`data-bp-slash-host` 按 SlashMenuModel.open 显隐 + **catalog 最小投影**
+ *   （group / item / empty；`data-active` 对齐 activeIndex；**不**提交 Intent）
  * - **拖拽预览子集**：`data-bp-drag-preview` + 源行 `data-dragging`；指针形状 mock 可驱动落点
  *
  * ## 视觉皮（≠ 本文件职责）
- * - 类名：`bp-chrome-root` / `bp-block-row` / `bp-block-handle` / `bp-drop-line` / `bp-slash-host` / `bp-drag-preview`
+ * - 类名：`bp-chrome-root` / `bp-block-row` / `bp-block-handle` / `bp-drop-line` /
+ *   `bp-slash-host` / `bp-slash-item` / `bp-slash-group-label` / `bp-drag-preview`
  * - 产品 CSS：`@crish/block-paper/chrome.css`（token 化落点线 / slash / 把手热区）
- * - **DOM 契约测不依赖像素色**；**视觉皮 ≠ EL-01**
+ * - **DOM 契约测不依赖像素色**；**视觉皮 ≠ EL-01**；**≠** A-BLK-02 slash 产品 e2e 全关
  *
  * ## 诚实边界（强制）
  * - **DOM 交付 ≠ EL-01**；**≠** A-BLK-02/04/05 产品 e2e 全关
@@ -110,6 +112,12 @@ export const BP_DROP_SIDE = 'data-drop-side';
 export const BP_DROP_TARGET = 'data-drop-target';
 export const BP_SLASH_HOST = 'data-bp-slash-host';
 export const BP_SLASH_OPEN = 'data-slash-open';
+/** slash catalog 项（可见皮 DOM 契约） */
+export const BP_SLASH_ITEM = 'data-bp-slash-item';
+/** slash 分组标签 */
+export const BP_SLASH_GROUP = 'data-bp-slash-group';
+/** slash 无结果空态 */
+export const BP_SLASH_EMPTY = 'data-bp-slash-empty';
 /** 拖拽预览指示器（ghost 节点） */
 export const BP_DRAG_PREVIEW = 'data-bp-drag-preview';
 /** 预览 / 源行上的源块 id */
@@ -213,7 +221,7 @@ export class BlockChromeDomHost {
     root.appendChild(dragPreview);
     this.dragPreview = dragPreview;
 
-    // slash 浮层宿主（仅容器；catalog 渲染后置）
+    // slash 浮层宿主（open 时投影 group/item catalog；关时清空）
     const slashHost = doc.createElement('div');
     slashHost.className = 'bp-slash-host';
     slashHost.setAttribute(BP_SLASH_HOST, '1');
@@ -517,13 +525,134 @@ export class BlockChromeDomHost {
     const open = this.slash?.isOpen() === true;
     this.slashHost.hidden = !open;
     this.slashHost.setAttribute(BP_SLASH_OPEN, open ? '1' : '0');
-    if (open && this.slash) {
-      const snap = this.slash.getSnapshot();
-      if (snap.blockId) {
-        this.slashHost.setAttribute(BP_BLOCK_ID, snap.blockId);
-      }
+
+    if (!open || !this.slash) {
+      this.slashHost.removeAttribute(BP_BLOCK_ID);
+      this.slashHost.removeAttribute('data-slash-query');
+      this.slashHost.removeAttribute('aria-activedescendant');
+      this.slashHost.replaceChildren();
+      return;
+    }
+
+    const snap = this.slash.getSnapshot();
+    if (snap.blockId) {
+      this.slashHost.setAttribute(BP_BLOCK_ID, snap.blockId);
     } else {
       this.slashHost.removeAttribute(BP_BLOCK_ID);
+    }
+    this.slashHost.setAttribute('data-slash-query', snap.query);
+    this.slashHost.setAttribute('role', 'listbox');
+    this.slashHost.setAttribute('aria-label', '斜杠命令');
+
+    // catalog 最小投影：group 标签 + item 行（纯呈现；点击不产 Intent）
+    this.renderSlashCatalog(snap.items, snap.activeIndex);
+  }
+
+  /**
+   * 将 SlashMenuModel 过滤后的 items 投影为 group/item DOM。
+   * - 按 `group` 字段分段；无 group 归入空标签段（不渲染 label）
+   * - `data-active` / `aria-selected` 对齐 activeIndex（键盘高亮皮）
+   * - 空 items → 空态节点（过滤无结果）
+   */
+  private renderSlashCatalog(
+    items: readonly {
+      id: string;
+      title: string;
+      description?: string;
+      group?: string;
+    }[],
+    activeIndex: number
+  ): void {
+    const doc = this.slashHost.ownerDocument;
+    this.slashHost.replaceChildren();
+
+    if (items.length === 0) {
+      const empty = doc.createElement('div');
+      empty.className = 'bp-slash-empty';
+      empty.setAttribute(BP_SLASH_EMPTY, '1');
+      empty.setAttribute('role', 'status');
+      empty.textContent = '无匹配项';
+      this.slashHost.appendChild(empty);
+      this.slashHost.removeAttribute('aria-activedescendant');
+      return;
+    }
+
+    // 保序分组：相邻同 group 合并；不重排 catalog 顺序
+    type Item = (typeof items)[number];
+    type Seg = { group: string | undefined; items: Item[] };
+    const segs: Seg[] = [];
+    for (const it of items) {
+      const g = it.group;
+      const last = segs[segs.length - 1];
+      if (last && last.group === g) {
+        last.items.push(it);
+      } else {
+        segs.push({ group: g, items: [it] });
+      }
+    }
+
+    let flatIndex = 0;
+    let activeDomId: string | null = null;
+
+    for (const seg of segs) {
+      if (seg.group) {
+        const label = doc.createElement('div');
+        label.className = 'bp-slash-group-label';
+        label.setAttribute(BP_SLASH_GROUP, seg.group);
+        label.setAttribute('role', 'presentation');
+        label.textContent = seg.group;
+        this.slashHost.appendChild(label);
+      }
+
+      for (const it of seg.items) {
+        const btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bp-slash-item';
+        btn.setAttribute(BP_SLASH_ITEM, '1');
+        btn.setAttribute('data-item-id', it.id);
+        btn.setAttribute('role', 'option');
+        btn.id = `bp-slash-opt-${it.id}`;
+        btn.tabIndex = -1;
+
+        const isActive = flatIndex === activeIndex;
+        btn.setAttribute('data-active', isActive ? '1' : '0');
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        if (isActive) {
+          activeDomId = btn.id;
+        }
+
+        // 图标占位（字母首字；产品可后置真实 icon）
+        const icon = doc.createElement('span');
+        icon.className = 'bp-slash-item-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = (it.title.trim().charAt(0) || '?').toUpperCase();
+
+        const body = doc.createElement('span');
+        body.className = 'bp-slash-item-body';
+
+        const title = doc.createElement('span');
+        title.className = 'bp-slash-item-title';
+        title.textContent = it.title;
+
+        body.appendChild(title);
+        if (it.description) {
+          const desc = doc.createElement('span');
+          desc.className = 'bp-slash-item-desc';
+          desc.textContent = it.description;
+          body.appendChild(desc);
+        }
+
+        btn.appendChild(icon);
+        btn.appendChild(body);
+        this.slashHost.appendChild(btn);
+        flatIndex += 1;
+      }
+    }
+
+    if (activeDomId) {
+      this.slashHost.setAttribute('aria-activedescendant', activeDomId);
+    } else {
+      this.slashHost.removeAttribute('aria-activedescendant');
     }
   }
 

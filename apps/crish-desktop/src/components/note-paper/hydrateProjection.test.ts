@@ -155,4 +155,31 @@ describe('hydrateProjection · w5b_strict_shape', () => {
       out.projection.blocks.every((b) => typeof b.index === 'number')
     ).toBe(true);
   });
+
+  it('w5b_strict_adapt_note_hydrate_ipc_source_tauri_ipc', async () => {
+    const { createMockNoteHydrateIpc } =
+      await import('../../api/noteHydrateIpc');
+    const { adaptNoteHydrateIpcAsTransport } =
+      await import('./hydrateProjection');
+    const ipc = createMockNoteHydrateIpc({
+      'doc-ipc': {
+        rev: 5,
+        blocks: [
+          {
+            id: 'i1',
+            flavour: 'paragraph',
+            index: 0,
+            text: 'via NoteHydrateIpc',
+          },
+        ],
+      },
+    });
+    const t = adaptNoteHydrateIpcAsTransport(ipc);
+    const out = await t.hydrate('doc-ipc');
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.projection.source).toBe('tauri-ipc');
+    expect(out.projection.rev).toBe(5);
+    expect(out.projection.blocks[0]?.text).toMatch(/NoteHydrateIpc/);
+  });
 });

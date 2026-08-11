@@ -5,10 +5,11 @@
 //!
 //! # 诚实边界
 //! - **已接线**：GFM P 主路径走 `markdown::to_mdast` + 本 lowering
-//! - **未关**：**≠ A-MD-01 全集** / **≠ EL-06** / 表格专用 kind / inline 富文本 yrs RT
+//! - **未关**：**≠ A-MD-01 全集** / **≠ EL-06** / inline 富文本 yrs RT
 //! - HTML **不升格**为 Unknown 结构块；进 plain `text_snapshot`（可记 `raw_html_as_text`）
-//! - 表格无 BlockKind::Table：降级为 Paragraph + `structure_note`（有损诚实）
-//! - 任务列表无 TaskItem kind：勾选编入 plain 前缀 `[x]`/`[ ]`（结构-only 可往返）
+//! - **Table / TaskItem kind 未入 collab IR**（`conex-doc-collab::BlockKind` 无变体；本 crate **禁止平行 IR**）
+//!   - 表 → `Paragraph` + `structure_note`（行列/对齐进 plain；W2-A 加深）
+//!   - 任务项 → `BulletItem`/`OrderedItem` + 勾选 plain 前缀 + 列表级 `structure_note`
 //! - 删除线 / 链接 / autolink：inline 剥为 plain（**≠** 叶子 inline RT 关账）
 //! - wiki `[[…]]`：**未**建模；作 plain 文本保留（**≠** A-MD-03 / EL-06）
 
@@ -255,11 +256,14 @@ fn lower_flow_node(
             lower_list(list, blocks, seen_ids, pending, lossy)?;
         }
         Node::Table(table) => {
-            // 无 Table kind：段落降级 + structure_note（A-MD 表全量未关）
+            // BlockKind::Table **未入 collab IR**：段落降级 + structure_note（≠ A-MD-01 表 kind 关账）
             let text = table_plain(table);
+            let (nrows, ncols) = table_dims(table);
             lossy.push(
                 "structure_note",
-                format!("line {line}: GFM 表格经 markdown-rs 识别后按段落保留（无专用 Table kind）"),
+                format!(
+                    "line {line}: GFM 表格 {nrows}×{ncols} 经 markdown-rs 识别后按 Paragraph 保留（BlockKind::Table 未入 collab IR；行列/对齐进 plain）"
+                ),
                 Some(line),
             );
             push_block(
@@ -342,6 +346,31 @@ fn lower_list(
     lossy: &mut LossyReport,
 ) -> Result<(), MdError> {
     let ordered = list.ordered;
+    // 列表级诚实 note：任意项带 GFM checked → TaskItem kind 未入 collab
+    let list_has_task = list.children.iter().any(|item| {
+        matches!(item, Node::ListItem(li) if li.checked.is_some())
+    });
+    if list_has_task {
+        // 优先首项行号（List 自身 position 偶发缺失时更稳）
+        let line = list
+            .children
+            .first()
+            .map(node_line)
+            .unwrap_or(1);
+        lossy.push(
+            "structure_note",
+            format!(
+                "line {line}: GFM 任务列表勾选编入 {} plain 前缀（BlockKind::TaskItem 未入 collab IR；无独立 TaskItem kind）",
+                if ordered {
+                    "OrderedItem"
+                } else {
+                    "BulletItem"
+                }
+            ),
+            Some(line),
+        );
+    }
+
     for item in &list.children {
         let Node::ListItem(li) = item else {
             continue;
@@ -457,7 +486,39 @@ fn phrasing_plain(children: &[Node]) -> String {
     out
 }
 
-/// 表格 → 可读 plain（含 `|`），供 structure_note 段落快照；**非**字节级源还原。
+/// 表格行列规模（行=TableRow 数；列=align 长或首行单元格数）。
+fn table_dims(table: &markdown::mdast::Table) -> (usize, usize) {
+    let nrows = table
+        .children
+        .iter()
+        .filter(|n| matches!(n, Node::TableRow(_)))
+        .count();
+    let ncols_from_header = table
+        .children
+        .iter()
+        .find_map(|n| match n {
+            Node::TableRow(row) => Some(row.children.len()),
+            _ => None,
+        })
+        .unwrap_or(0);
+    let ncols = table.align.len().max(ncols_from_header);
+    (nrows, ncols)
+}
+
+/// GFM 列对齐 → 分隔格文本（W2-A 加深：对齐进 plain，非丢弃为统一 `---`）。
+fn align_sep(kind: markdown::mdast::AlignKind) -> &'static str {
+    use markdown::mdast::AlignKind;
+    match kind {
+        AlignKind::Left => ":---",
+        AlignKind::Center => ":---:",
+        AlignKind::Right => "---:",
+        AlignKind::None => "---",
+    }
+}
+
+/// 表格 → 可读 plain（含 `|` 与对齐分隔行）；**非**字节级源还原。
+///
+/// 单元格内容 + 对齐可点名；`BlockKind::Table` **未入 collab**，故挂在 Paragraph 快照。
 fn table_plain(table: &markdown::mdast::Table) -> String {
     let mut rows: Vec<String> = Vec::new();
     for (ri, row_node) in table.children.iter().enumerate() {
@@ -473,10 +534,23 @@ fn table_plain(table: &markdown::mdast::Table) -> String {
             })
             .collect();
         rows.push(format!("| {} |", cells.join(" | ")));
-        // 在首行后插入对齐分隔行，保持「像表格」的文本形态
+        // 首行后插入对齐分隔行（优先 mdast.align；缺省 `---`）
         if ri == 0 {
-            let sep: Vec<&str> = cells.iter().map(|_| "---").collect();
-            rows.push(format!("| {} |", sep.join(" | ")));
+            let seps: Vec<&str> = if table.align.is_empty() {
+                cells.iter().map(|_| "---").collect()
+            } else {
+                (0..cells.len())
+                    .map(|i| {
+                        table
+                            .align
+                            .get(i)
+                            .copied()
+                            .map(align_sep)
+                            .unwrap_or("---")
+                    })
+                    .collect()
+            };
+            rows.push(format!("| {} |", seps.join(" | ")));
         }
     }
     rows.join("\n")

@@ -119,6 +119,23 @@ jobs:
       - run: npm run build:desktop
       - run: node scripts/check-dist.mjs --max-app-kb 500 --csp-enforce
 
+  # 移动端快层门禁（R2-01，D8 §5.2/§5.5）：Expo 工程 typecheck + jest-expo 单测。
+  # Node 22：Expo SDK 57 要求 Node ≥ 22.13.x（D4 §2.3），与桌面端 node 20 不同。
+  # jest 独立于根 vitest（jsdom/RN 双环境互不污染，D8 §5.2）；覆盖率阈值
+  # 60/75/70/60 在 apps/crish-mobile/jest.config.js 内（D8 第 9 章）。
+  mobile-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck -w @crish/crish-mobile
+      - run: npm test -w @crish/crish-mobile -- --ci
+
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 20

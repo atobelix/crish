@@ -1,21 +1,24 @@
-//! Round7 · Tauri 笔记命令面（前端 `noteApi.ts` IPC）
+//! Round7+ · Tauri 笔记命令面（前端 `noteApi.ts` / `noteHydrateIpc.ts` IPC）
 //!
 //! 命令名（wire = 函数名）：
 //! - `note_document_apply_md`
 //! - `note_query_blocks`
 //! - `note_send_to_note`
+//! - `note_document_hydrate`（打开/加载投影形状 · 真 hydrate IPC 方向）
 //!
-//! 入参/出参 snake_case 线格式，对齐 `apps/crish-desktop/src/api/noteApi.ts`
-//! 与 `agent_tools::note_backend` 契约。
+//! 入参/出参 snake_case 线格式，对齐 `apps/crish-desktop/src/api/noteApi.ts`、
+//! `noteHydrateIpc.ts` 与 `agent_tools::note_backend` 契约。
 //!
 //! 成功/业务失败均以 `{ ok: true|false, ... }` JSON 返回（Ok 包装），
-//! 便于前端 `parseApplyOutcome` / `parseQueryOutcome`；仅 IPC 级故障走
-//! `CoreError` reject。
+//! 便于前端 `parseApplyOutcome` / `parseQueryOutcome` / `parseHydrateIpcOutcome`；
+//! 仅 IPC 级故障走 `CoreError` reject。
 //!
 //! 纪律：
 //! - 写路径仅 `apply_md_fragment` / send_to_note（intent 幂等）
 //! - **不**静默流式写笔记
 //! - 读路径走 store 投影；**不**默认读 MD mirror
+//! - hydrate 命令返回 **投影形状**（source=`tauri-ipc`）；**≠** 宣称
+//!   `DocSession::hydrate` 产品全链路 / 打开完成 / EL 关闭
 
 use agent_tools::note_backend::{
     apply_result_json, NoteApplyMdRequest, NoteApplyMode, NoteBackendError, NoteQueryBlocksParams,
@@ -24,7 +27,7 @@ use agent_tools::note_backend::{
 use agent_tools::note_backend::{NoteApplyMdResult, NoteBackend as _};
 use conex_types::CoreError;
 use serde::Deserialize;
-use serde_json::{json, Value as JsonValue};
+use serde_json::{json, Map, Value as JsonValue};
 
 use crate::note_runtime;
 
@@ -63,6 +66,15 @@ pub struct NoteSendToNoteArgs {
     pub origin: Option<String>,
     #[serde(default)]
     pub batch_id: Option<String>,
+}
+
+/// 文档 hydrate / open 投影入参（对齐前端 `NoteHydrateDocumentRequest`）。
+#[derive(Debug, Clone, Deserialize)]
+pub struct NoteHydrateDocumentArgs {
+    pub doc_id: String,
+    /// 块投影条数上限；缺省 200，硬夹到 1..=200
+    #[serde(default)]
+    pub limit: Option<u32>,
 }
 
 /// 事务化 apply MD 片段 → 块树（权威路径）。
@@ -125,6 +137,68 @@ pub async fn note_send_to_note(req: NoteSendToNoteArgs) -> Result<JsonValue, Cor
     };
     match backend.apply_md_fragment(apply_req).await {
         Ok(result) => Ok(apply_result_json(&result)),
+        Err(e) => Ok(err_outcome(e)),
+    }
+}
+
+/// 文档 hydrate / open 投影（真 hydrate IPC 方向）。
+///
+/// wire 名 = `note_document_hydrate`（前端 `NOTE_CMD_DOCUMENT_HYDRATE`）。
+///
+/// 返回块投影形状（flavour / index / text），`source` 固定 `"tauri-ipc"`。
+/// 实现上经 store `query_blocks` 映射为 hydrate 投影——**读路径派生索引**，
+/// **不是** 把 `blocks` 表当 hydrate 权威主路径的产品关账；也 **≠**
+/// `DocSession::hydrate` 全链路 / 打开完成 / EL。
+#[tauri::command]
+pub async fn note_document_hydrate(req: NoteHydrateDocumentArgs) -> Result<JsonValue, CoreError> {
+    let doc_id = req.doc_id.trim().to_string();
+    if doc_id.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "doc_id must be non-empty",
+        }));
+    }
+    let Some(backend) = note_runtime::try_backend() else {
+        return Ok(unwired_failure());
+    };
+    let limit = req.limit.unwrap_or(200).clamp(1, 200);
+    let params = NoteQueryBlocksParams {
+        doc_id: doc_id.clone(),
+        limit: Some(limit),
+        ..Default::default()
+    };
+    match backend.query_blocks(params).await {
+        Ok(result) => {
+            let blocks: Vec<JsonValue> = result
+                .blocks
+                .iter()
+                .enumerate()
+                .map(|(i, hit)| {
+                    let mut props = Map::new();
+                    for (k, v) in &hit.attrs {
+                        props.insert(k.clone(), v.clone());
+                    }
+                    json!({
+                        "id": hit.id,
+                        "flavour": if hit.kind.is_empty() { "paragraph" } else { &hit.kind },
+                        "index": i,
+                        "props": props,
+                        "text": hit.snippet,
+                    })
+                })
+                .collect();
+            // rev：投影版本占位（块数启发式）；非产品 DocSession rev 关账
+            let rev = if blocks.is_empty() { 0u64 } else { 1u64 };
+            Ok(json!({
+                "ok": true,
+                "doc_id": doc_id,
+                "rev": rev,
+                "blocks": blocks,
+                "source": "tauri-ipc",
+                "truncated": result.truncated,
+            }))
+        }
         Err(e) => Ok(err_outcome(e)),
     }
 }
@@ -239,6 +313,62 @@ mod tests {
         .unwrap();
         assert_eq!(out["ok"], false);
         assert_eq!(out["code"], "note.invalid");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// 真 hydrate IPC：apply → hydrate 投影 shape（source=tauri-ipc）。
+    #[tokio::test]
+    async fn note_document_hydrate_projection_shape() {
+        let dir = temp_install();
+        let apply = note_document_apply_md(NoteApplyMdRequest {
+            doc_id: "hyd-doc".into(),
+            markdown: "## Hydrate IPC\n\nbody for open shape".into(),
+            parent_id: None,
+            after_block_id: None,
+            mode: NoteApplyMode::ApplyMdFragment,
+            intent_id: None,
+            batch_id: None,
+            message_id: None,
+            origin: Some("user".into()),
+        })
+        .await
+        .unwrap();
+        assert_eq!(apply["ok"], true);
+
+        let h = note_document_hydrate(NoteHydrateDocumentArgs {
+            doc_id: "hyd-doc".into(),
+            limit: Some(50),
+        })
+        .await
+        .unwrap();
+        assert_eq!(h["ok"], true);
+        assert_eq!(h["source"], "tauri-ipc");
+        assert_eq!(h["doc_id"], "hyd-doc");
+        let blocks = h["blocks"].as_array().expect("blocks array");
+        assert!(!blocks.is_empty(), "hydrate 投影应有块: {h}");
+        assert!(blocks[0].get("flavour").is_some());
+        assert!(blocks[0].get("index").is_some());
+        assert!(blocks[0].get("id").is_some());
+
+        let empty_doc = note_document_hydrate(NoteHydrateDocumentArgs {
+            doc_id: "never-written".into(),
+            limit: None,
+        })
+        .await
+        .unwrap();
+        assert_eq!(empty_doc["ok"], true);
+        assert_eq!(empty_doc["source"], "tauri-ipc");
+        assert_eq!(empty_doc["blocks"].as_array().map(|a| a.len()).unwrap_or(1), 0);
+
+        let bad = note_document_hydrate(NoteHydrateDocumentArgs {
+            doc_id: "  ".into(),
+            limit: None,
+        })
+        .await
+        .unwrap();
+        assert_eq!(bad["ok"], false);
+        assert_eq!(bad["code"], "note.invalid");
+
         let _ = std::fs::remove_dir_all(dir);
     }
 }
