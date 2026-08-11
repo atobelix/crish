@@ -289,8 +289,9 @@ pub struct ImportPlan {
 
 impl ImportPlan {
     /// 转换为 CDP `Storage.setCookies` / `Network.setCookies` 类型化参数
-    /// （会话 cookie `expires: None` 原样透传——CDP 对可选参数 null/缺省
-    /// 等价视为未设置；类型化参数面由 cdp/domains.rs 提供）。
+    /// （会话 cookie `expires: None` 原样透传——类型面由 cdp/domains.rs 提供，
+    /// `Option` 字段 None 一律省略而非输出 null：Chrome 151 拒绝 null 字段，
+    /// N2 缺陷）。
     pub fn to_cdp_params(&self) -> Vec<SetCookieParam> {
         self.cookies
             .iter()
@@ -916,6 +917,32 @@ mod tests {
         );
         assert_eq!(cdp[1].expires, Some(1_750_000_000.0));
         assert_eq!(cdp[1].same_site.as_deref(), Some("None"));
+        // wire 回归（N2：None 字段必须省略而非 null，Chrome 151 拒绝 null）：
+        // 会话 cookie 的 expires 为 None → 键省略；to_cdp_params 恒置 url=None
+        // → url 键不得出现；Some 字段（domain/path/httpOnly/secure/sameSite）
+        // 正常输出
+        let wire = serde_json::to_string(&cdp).expect("类型化参数序列化");
+        assert!(
+            !wire.contains("null"),
+            "to_cdp_params 的 wire JSON 不得含 null：{wire}"
+        );
+        let v: serde_json::Value = serde_json::from_str(&wire).expect("回读");
+        let session = &v[0];
+        assert_eq!(session["name"], "sessionid");
+        assert_eq!(session["domain"], ".example.com");
+        assert_eq!(session["path"], "/");
+        assert_eq!(session["httpOnly"], true, "httpOnly Some(true) 显式输出");
+        assert_eq!(session["secure"], true);
+        assert_eq!(session["sameSite"], "Lax", "归一化 sameSite 显式输出");
+        for key in ["url", "expires"] {
+            assert!(
+                session.get(key).is_none(),
+                "会话 cookie wire 不得含 `{key}` 键（None 省略）：{session}"
+            );
+        }
+        assert_eq!(v[1]["expires"], 1_750_000_000.0);
+        assert_eq!(v[1]["sameSite"], "None");
+        assert!(v[1].get("url").is_none(), "url 恒 None 须省略");
         assert_eq!(plan.stats.cookies, 2);
         assert_eq!(plan.stats.origins, 0);
     }

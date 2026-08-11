@@ -1103,17 +1103,29 @@ pub struct GetCookiesResult {
     pub cookies: Vec<Cookie>,
 }
 
+/// `Network.setCookies` / `Storage.setCookies` 的 cookie 参数（CDP CookieParam）：
+/// 协议面除 name/value 外全部可选——可选字段 `None` 时**必须省略而非输出 null**
+/// （Chrome 151 实测拒绝 null 字段，N2 缺陷：`url:null` 等导致命令失败；
+/// 对照实验证实 null 字段需省略）。`expires` 省略即会话 cookie 语义
+/// （协议不要求显式发 0/负数）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetCookieParam {
     pub name: String,
     pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expires: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub http_only: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub secure: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub same_site: Option<String>,
 }
 
@@ -1463,6 +1475,115 @@ mod tests {
         };
         let v = serde_json::to_value(&p).expect("序列化失败");
         assert_eq!(v["sessionId"], Value::from(1), "数字形态保持数字（Chrome 151 校验类型）");
+    }
+
+    /// SetCookieParam wire 序列化回归（N2 缺陷：可选字段 None 曾输出 null，
+    /// 被 Chrome 151 拒绝）：None 字段必须省略（逐字段断言），
+    /// Some 字段正常输出；SetCookiesParams / StorageSetCookiesParams 外层
+    /// 容器同样不得携带 null 键。
+    #[test]
+    fn set_cookie_param_omits_none_fields() {
+        // 全部可选字段 None：wire 只含 name/value 两键
+        let p = SetCookieParam {
+            name: "n".to_string(),
+            value: "v".to_string(),
+            domain: None,
+            url: None,
+            path: None,
+            expires: None,
+            http_only: None,
+            secure: None,
+            same_site: None,
+        };
+        let v = serde_json::to_value(&p).expect("序列化失败");
+        let obj = v.as_object().expect("应为对象");
+        for key in [
+            "domain", "url", "path", "expires", "httpOnly", "secure", "sameSite",
+        ] {
+            assert!(
+                !obj.contains_key(key),
+                "可选字段 `{key}` 为 None 时必须省略而非输出 null（Chrome 151 拒绝）"
+            );
+        }
+        assert_eq!(obj.len(), 2, "仅 name/value 两键");
+        assert_eq!(v["name"], "n");
+        assert_eq!(v["value"], "v");
+
+        // 部分可选字段 Some：对应键存在且值正确，其余仍省略
+        let p = SetCookieParam {
+            name: "sid".to_string(),
+            value: "abc".to_string(),
+            domain: Some(".example.com".to_string()),
+            url: None,
+            path: Some("/".to_string()),
+            expires: Some(1_750_000_000.0),
+            http_only: Some(true),
+            secure: Some(false),
+            same_site: Some("Lax".to_string()),
+        };
+        let v = serde_json::to_value(&p).expect("序列化失败");
+        assert_eq!(v["domain"], ".example.com");
+        assert_eq!(v["path"], "/");
+        assert_eq!(v["expires"], 1_750_000_000.0);
+        assert_eq!(v["httpOnly"], true);
+        assert_eq!(v["secure"], false);
+        assert_eq!(v["sameSite"], "Lax");
+        assert!(v.get("url").is_none(), "None 的 url 必须省略");
+
+        // url 形态（domain 为 None）：url 键存在，domain 省略
+        let p = SetCookieParam {
+            name: "sid".to_string(),
+            value: "abc".to_string(),
+            domain: None,
+            url: Some("https://example.com/".to_string()),
+            path: None,
+            expires: None,
+            http_only: None,
+            secure: None,
+            same_site: None,
+        };
+        let v = serde_json::to_value(&p).expect("序列化失败");
+        assert_eq!(v["url"], "https://example.com/");
+        assert_eq!(v.as_object().unwrap().len(), 3, "name/value/url 三键");
+        assert!(v.get("domain").is_none());
+
+        // 外层容器：SetCookiesParams / StorageSetCookiesParams 的 cookies 数组
+        // 内不得出现 null 键（N2 缺陷的完整 wire 面）
+        let cookie = SetCookieParam {
+            name: "sid".to_string(),
+            value: "abc".to_string(),
+            domain: Some("example.com".to_string()),
+            url: None,
+            path: None,
+            expires: None,
+            http_only: None,
+            secure: None,
+            same_site: None,
+        };
+        let set = SetCookiesParams {
+            cookies: vec![cookie.clone()],
+        };
+        let v = serde_json::to_value(&set).expect("序列化失败");
+        let wire = serde_json::to_string(&set).expect("序列化失败");
+        assert!(
+            !wire.contains("null"),
+            "Network.setCookies wire 不得含 null：{wire}"
+        );
+        assert_eq!(v["cookies"][0]["domain"], "example.com");
+        assert_eq!(v["cookies"][0].as_object().unwrap().len(), 3);
+
+        let storage = StorageSetCookiesParams {
+            cookies: vec![cookie],
+            browser_context_id: None,
+        };
+        let wire = serde_json::to_string(&storage).expect("序列化失败");
+        assert!(
+            !wire.contains("null"),
+            "Storage.setCookies wire 不得含 null：{wire}"
+        );
+        let v = serde_json::to_value(&storage).expect("序列化失败");
+        assert_eq!(v["cookies"][0]["domain"], "example.com");
+        assert!(v.get("browserContextId").is_none());
     }
 
     /// 结果反序列化冒烟（含容错字段）。
