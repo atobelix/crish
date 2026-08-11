@@ -16,10 +16,11 @@
 //! - [`encode_block_id_line`] / [`decode_block_id_line`]
 //! - 退役：[`parse_document_handwritten`]（非默认）
 //!
-//! # 诚实边界（W2-A / W2-B / W2-A 扩表）
+//! # 诚实边界（W2-A / W2-B / W2-A 扩表 / gfm-core 加深）
 //! - **已接线** markdown-rs 为 GFM P 主路径（W2-A）
 //! - **已交付** ApplyReport 透出 lossy（W2-B）；失败整批 Err、不 mutate target
 //! - **已交付** mode 一等 + normalize 最低集 + 码/列表 golden 加深（W2-A 扩表）
+//! - **已加深** gfm-core 可点名结构：表 structure_note、任务列表勾选 plain、删除线/autolink plain、Divider + wiki plain 诚实
 //! - **未关闭**：**≠ A-MD 全表** / **≠ A-MD-01 全集** / **≠ EL-06**
 //! - **≠ A-MD-04**：零半树 ≠ merge 后 P∘S≡ 联测全集
 //!

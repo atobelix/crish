@@ -18,7 +18,7 @@
 //! - **可选 MD mirror**：`commit_ops_with_mirror` 在 `mirror_lag >= threshold` 时 export
 
 use crate::cas::remove_block_attachments_conn;
-use crate::refs::remove_refs_from_conn;
+use crate::refs::{materialize_block_refs_conn, remove_refs_from_conn};
 use crate::{
     StoreError, WorkspaceStore, note_authority_advanced_conn, reindex_block_conn,
     remove_block_index_conn, ReindexBlockOpts,
@@ -74,12 +74,16 @@ impl CommitMirrorOpts {
 impl WorkspaceStore {
     /// 将 `ProjectionDiff` 投影到 blocks / FTS / refs / mirror lag（**同事务原子**）。
     ///
-    /// - `upserts` → `reindex_block`（`plain_text` 取自 [`conex_doc_collab::BlockUpsert::plain_text`]，缺则空）
-    /// - `removes` → 删 blocks 行 + FTS + 相关 refs + attachment 链接
+    /// - `upserts` → `reindex_block` + **refs 自动物化**（从 `plain_text` 抽 `((id))` / `[[page]]`，见 [`crate::refs`]）
+    /// - `removes` → 删 blocks 行 + FTS + 出边/入边 refs + attachment 链接
     /// - 末尾 [`crate::WorkspaceStore::note_authority_advanced`] 抬升 mirror lag
-    /// - `full_rebuild == true`：先清空该 doc 全部投影再 upsert
+    /// - `full_rebuild == true`：先清空该 doc 全部投影再 upsert（refs 随 clear 清空后由 upsert 重建）
     ///
     /// 失败整批回滚。索引必须以 diff/树为准，**不** decode CRDT 结构占位字节。
+    ///
+    /// # W2-F
+    /// refs 与 blocks/FTS **同事务**；**禁止**依赖手工 `upsert_ref` 作为产品唯一灌边路径。
+    /// **≠ Wave 2 存储完成**；**≠ EL-03**。
     pub fn apply_projection_diff(
         &self,
         doc_id: &str,
@@ -125,6 +129,8 @@ impl WorkspaceStore {
                 props_json: serde_json::to_string(&u.props).unwrap_or_else(|_| "{}".into()),
             };
             reindex_block_conn(&tx, doc_id, &bid, plain, &opts)?;
+            // W2-F：同事务重建出边（plain 无引用语法 → 出边清空）
+            materialize_block_refs_conn(&tx, doc_id, &bid, plain)?;
         }
 
         // 权威 rev 前进 → mirror lag 抬升（同事务）

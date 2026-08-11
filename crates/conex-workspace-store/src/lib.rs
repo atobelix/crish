@@ -65,9 +65,12 @@
 //! - CAS GC / 外置 `blobs/` 大文件 path
 //! - OS 级 mirror watcher（inotify/FSEvents）产品接线（本 crate 仅轮询/API detect）
 //!
-//! # W2-F / W2-F+
+//! # W2-F Strict（refs 自动物化 + 受限 query）
 //! - `WorkspaceStore::query_blocks` — FTS ∩ kind ∩ attrs ∩ refs 交集查询（agent-tools 接线见 W4）
-//! - [`refs`]：`block_refs` 物化表 + upsert/query 骨架
+//! - [`refs`]：`block_refs` 表 + **投影同事务**从 plain_text 抽 `((id))`/`[[page]]` 自动物化
+//!   （`apply_projection_diff` → [`materialize_block_refs_conn`]）；手工 `upsert_ref` 仅测/抢救
+//! - 验收方向：A-QRY-01 **无手工 seed**（`a_qry_01_query_blocks_ref_without_manual_seed`）
+//! - **诚实**：**≠ Wave 2 存储完成**；**≠ EL-03**；**≠** 完整 MD AST wiki 节点解析
 
 #![allow(missing_docs)]
 
@@ -92,7 +95,8 @@ pub use query_blocks::{
     QueryBlocksResult, query_blocks_conn,
 };
 pub use refs::{
-    BlockRef, refs_from_conn, refs_to_conn, remove_refs_from_conn, upsert_ref_conn,
+    extract_refs_from_plain, materialize_block_refs_conn, refs_from_conn, refs_to_conn,
+    remove_refs_from_conn, upsert_ref_conn, BlockRef, ExtractedRef, KIND_BLOCK_REF, KIND_WIKILINK,
 };
 
 use conex_doc_collab::{

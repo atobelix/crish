@@ -2,8 +2,14 @@
  * A-SURF 架构隔离（editor-kit 侧）
  *
  * - A-SURF-09：package.json 不得依赖 markdown-editor / block-paper 业务 store
- * - A-SURF-03（包级）：src 禁止 DocSession / yrs / YText 类型导入
+ * - A-SURF-09（包级源扫）：src 禁止 DocSession / yrs / YText 类型导入与导出
  * - surface re-export 烟测
+ *
+ * 会计纠偏（plans/07 §6 · W5-C）：
+ * - 本文件 **全部** 归属 **A-SURF-09**（editor-kit 包边界）
+ * - **≠ A-SURF-03**：03 须真扫 chat / markdown-editor / 行级热路径禁 DocSession 写
+ *   （见 apps/crish-desktop `dual-engine-surface.isolation.test.ts`）
+ * - **≠ EL-08 关闭**（最低集见 plans/07 §3）
  *
  * 对齐 dual-engine-surface.md §3 / §4.1 / §7
  */
@@ -171,10 +177,10 @@ describe('A-SURF-09 editor-kit 包依赖边界', () => {
 });
 
 // ---------------------------------------------------------------------------
-// A-SURF-03（editor-kit 包级静态守卫）
+// A-SURF-09（editor-kit 包级源扫 · 原错位名 A-SURF-03 已废）
 // ---------------------------------------------------------------------------
 
-describe('A-SURF-03 editor-kit 源码禁止 DocSession/yrs/YText 导入', () => {
+describe('A-SURF-09 editor-kit 源码禁止 DocSession/yrs/YText 导入', () => {
   it('packages/editor-kit/src 产品源码无 DocSession / YText / yrs import', () => {
     const files = walkTsFiles(SRC_ROOT);
     expect(files.length).toBeGreaterThan(0);
@@ -183,6 +189,29 @@ describe('A-SURF-03 editor-kit 源码禁止 DocSession/yrs/YText 导入', () => 
       hits,
       hits.map((h) => `${h.rule} @ ${h.file}:${h.line}: ${h.text}`).join('\n')
     ).toEqual([]);
+  });
+
+  it('会计：本测为 A-SURF-09，不得再挂 A-SURF-03 关闭勾', () => {
+    // 错位会计不得复活：可执行 describe 标题不得再以 A-SURF-03 冒充
+    const self = readFileSync(
+      join(SRC_ROOT, 'surface.isolation.test.ts'),
+      'utf8'
+    );
+    expect(self).toMatch(/A-SURF-09 editor-kit 源码禁止/);
+    // 只扫「行首 describe(」可执行语句；注释里可写纠偏说明
+    const describeTitles = self
+      .split(/\r?\n/)
+      .filter((line) => /^\s*describe\s*\(/.test(line))
+      .map((line) => line.trim());
+    const mislabeled = describeTitles.filter((line) =>
+      /describe\s*\(\s*['"]A-SURF-03\b/.test(line)
+    );
+    expect(mislabeled, mislabeled.join('\n')).toEqual([]);
+    // 至少有一个 A-SURF-09 describe
+    expect(
+      describeTitles.some((line) => /A-SURF-09/.test(line)),
+      '须保留 A-SURF-09 describe'
+    ).toBe(true);
   });
 });
 

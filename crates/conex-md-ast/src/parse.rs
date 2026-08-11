@@ -8,7 +8,8 @@
 //! # 诚实边界
 //! - **已交付**：GFM P 主路径接线 + 结构 golden 子集 + ID 注释 lowering
 //! - **mode / N**：见 [`crate::parse_md`] / [`crate::normalize_md`]（W2-A 扩表）
-//! - **未关闭**：A-MD-01 全表 / EL-06 / 表格专用 kind / gfm-core 目录全集
+//! - **gfm-core 加深**：`tests/golden/gfm-core/**`（表/任务列表/删除线·autolink/Divider·wiki plain）
+//! - **未关闭**：**≠ A-MD-01 全集** / **≠ EL-06** / 表格专用 kind / gfm-core 目录全集
 //!
 //! # 嵌套规则（容器栈 · 与 S DFS 对齐）
 //! - **容器**：`Heading{level}`（秩=level）、`BulletItem` / `OrderedItem` / `Quote`（秩=10）

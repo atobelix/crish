@@ -1,0 +1,256 @@
+//! W2-A 后续 · gfm-core 结构 golden 加深（A-MD-01 方向）。
+//!
+//! 输入：`tests/golden/gfm-core/**`
+//!
+//! # 诚实边界（强制）
+//! - 本文件绿 = gfm-core **可点名结构类**加深可测（表 / 任务列表 / 删除线·autolink / 分割线·wiki plain）
+//! - **≠ A-MD-01 全集关账**（§3.6 仍有未覆盖类；本包非全表）
+//! - **≠ EL-06**（见 `plans/08` / `acceptance/EL-dashboard`）
+//! - **≠ A-MD-03**（wiki 未建模，仅 plain 诚实）
+//! - 表格无 Table kind → Paragraph + `structure_note`；任务列表无 TaskItem kind → 勾选编入 plain
+//! - 叶子 inline 全文 RT（强调边界 / 链接 URL 结构）**未**关闭（§2.2 分期）
+
+use conex_md_ast::{
+    BlockId, BlockKind, document_to_md, parse_document, parse_document_detailed, serialize_tree,
+    structure_eq,
+};
+use std::str::FromStr;
+
+fn bid(s: &str) -> BlockId {
+    BlockId::from_str(s).expect("uuid")
+}
+
+/// 1) GFM 表格：识别 → 无 Table kind 时 Paragraph + structure_note；单元格 plain 可点名；旁路段落；P→S→P。
+#[test]
+fn golden_gfm_core_table_structure_note_and_cells() {
+    let md = include_str!("golden/gfm-core/table.md");
+    let out = parse_document_detailed(md).expect("parse gfm-core table");
+
+    let table_id = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    let after_id = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+
+    assert_eq!(out.tree.root_children, vec![table_id, after_id]);
+
+    let note = out
+        .lossy
+        .items
+        .iter()
+        .find(|i| i.code == "structure_note")
+        .expect("table must emit structure_note");
+    assert!(
+        note.detail.contains("表格") || note.detail.contains("Table"),
+        "detail={:?}",
+        note.detail
+    );
+
+    let n_table = out.tree.get(&table_id).unwrap();
+    assert_eq!(
+        n_table.kind,
+        BlockKind::Paragraph,
+        "无 Table kind：表按段落保留（有损诚实）"
+    );
+    let snap = n_table.text_snapshot.as_deref().unwrap_or("");
+    // 单元格内容可点名（lowering table_plain）
+    assert!(snap.contains("左") && snap.contains("中") && snap.contains("右"), "header: {snap}");
+    assert!(snap.contains("a1") && snap.contains("b1") && snap.contains("c1"), "row1: {snap}");
+    assert!(snap.contains("a2") && snap.contains("b2") && snap.contains("c2"), "row2: {snap}");
+    assert!(snap.contains('|'), "须保留表格可读形态: {snap}");
+    assert!(n_table.children.is_empty());
+    assert_eq!(n_table.parent, None);
+
+    let n_after = out.tree.get(&after_id).unwrap();
+    assert_eq!(n_after.kind, BlockKind::Paragraph);
+    assert_eq!(
+        n_after.text_snapshot.as_deref(),
+        Some("表后段落：结构旁路")
+    );
+
+    // 结构往返：表仍为 Paragraph + 旁路段（ID/父子/文本）
+    let md2 = serialize_tree(&out.tree);
+    let tree2 = parse_document(&md2).unwrap();
+    assert!(structure_eq(&out.tree, &tree2), "table RT md2=\n{md2}");
+    assert_eq!(document_to_md(&out.tree), md2);
+}
+
+/// 2) GFM 任务列表：勾选编入 plain（无 TaskItem kind）；与普通 bullet 并存；P→S→P 守恒。
+#[test]
+fn golden_gfm_core_task_list_checkbox_in_plain() {
+    let md = include_str!("golden/gfm-core/task_list.md");
+    let tree = parse_document(md).expect("parse gfm-core task_list");
+
+    let done = bid("11111111-1111-4111-a111-111111111111");
+    let todo = bid("22222222-2222-4222-a222-222222222222");
+    let plain = bid("33333333-3333-4333-a333-333333333333");
+
+    assert_eq!(tree.root_children, vec![done, todo, plain]);
+
+    let n_done = tree.get(&done).unwrap();
+    assert_eq!(n_done.kind, BlockKind::BulletItem);
+    assert_eq!(
+        n_done.text_snapshot.as_deref(),
+        Some("[x] 已完成任务"),
+        "checked=true 须编入 [x] 前缀"
+    );
+    assert!(n_done.children.is_empty());
+    assert_eq!(n_done.parent, None);
+
+    let n_todo = tree.get(&todo).unwrap();
+    assert_eq!(n_todo.kind, BlockKind::BulletItem);
+    assert_eq!(
+        n_todo.text_snapshot.as_deref(),
+        Some("[ ] 未完成任务"),
+        "checked=false 须编入 [ ] 前缀"
+    );
+
+    let n_plain = tree.get(&plain).unwrap();
+    assert_eq!(n_plain.kind, BlockKind::BulletItem);
+    assert_eq!(
+        n_plain.text_snapshot.as_deref(),
+        Some("普通无序项"),
+        "非任务项不得误加 checkbox 前缀"
+    );
+
+    // S 须产出 GFM 任务列表语法，便于再 parse
+    let md2 = serialize_tree(&tree);
+    assert!(
+        md2.contains("- [x] 已完成任务"),
+        "S 任务完成项: {md2}"
+    );
+    assert!(
+        md2.contains("- [ ] 未完成任务"),
+        "S 任务未完成项: {md2}"
+    );
+    assert!(md2.contains("- 普通无序项"), "S 普通 bullet: {md2}");
+
+    let tree2 = parse_document(&md2).unwrap();
+    assert!(structure_eq(&tree, &tree2), "task list RT md2=\n{md2}");
+
+    // RT-3 双次稳定（任务列表子集）
+    let s1 = serialize_tree(&tree);
+    let s2 = serialize_tree(&parse_document(&s1).unwrap());
+    assert_eq!(s1, s2, "RT-3 task list");
+}
+
+/// 3) GFM 删除线 + autolink：inline 剥为 plain；URL 文本可点名；结构 P→S→P。
+///
+/// 叶子 inline 富文本 yrs / 链接目标结构 RT **未**关闭（plans/03 §2.2）。
+#[test]
+fn golden_gfm_core_strikethrough_and_autolink_plain() {
+    let md = include_str!("golden/gfm-core/strikethrough_autolink.md");
+    let tree = parse_document(md).expect("parse gfm-core strikethrough_autolink");
+
+    let strike_id = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    let link_id = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+
+    assert_eq!(tree.root_children, vec![strike_id, link_id]);
+
+    let n_strike = tree.get(&strike_id).unwrap();
+    assert_eq!(n_strike.kind, BlockKind::Paragraph);
+    assert_eq!(
+        n_strike.text_snapshot.as_deref(),
+        Some("before deleted after"),
+        "删除线 ~~ 须被 markdown-rs GFM 剥除进 plain"
+    );
+    // 不得把标记字面保留（接线可证伪）
+    assert!(
+        !n_strike
+            .text_snapshot
+            .as_deref()
+            .unwrap_or("")
+            .contains("~~"),
+        "不得保留 ~~ 字面"
+    );
+
+    let n_link = tree.get(&link_id).unwrap();
+    assert_eq!(n_link.kind, BlockKind::Paragraph);
+    let link_text = n_link.text_snapshot.as_deref().unwrap_or("");
+    // autolink / bare URL：结构-only 下 URL 串进 plain（children 文本）
+    assert!(
+        link_text.contains("https://example.com/gfm")
+            || link_text.contains("example.com"),
+        "bare/autolink URL 应出现在 plain: {link_text}"
+    );
+    assert!(
+        link_text.contains("https://example.org") || link_text.contains("example.org"),
+        "尖括号 autolink 应出现在 plain: {link_text}"
+    );
+    // 尖括号语法本身通常不进 plain
+    assert!(
+        !link_text.contains('<') && !link_text.contains('>'),
+        "autolink 尖括号不应残留: {link_text}"
+    );
+
+    let md2 = document_to_md(&tree);
+    let tree2 = parse_document(&md2).unwrap();
+    assert!(structure_eq(&tree, &tree2), "strike/autolink RT md2=\n{md2}");
+}
+
+/// 4) 分割线 kind=Divider + wiki 语法作 plain（无 Wiki kind）诚实占位。
+///
+/// **≠ A-MD-03** / **≠ EL-06**；wiki 结构化解析属 W2-A-ext。
+#[test]
+fn golden_gfm_core_divider_and_wiki_plain_honesty() {
+    let md = include_str!("golden/gfm-core/divider_and_wiki_plain.md");
+    let out = parse_document_detailed(md).expect("parse gfm-core divider_and_wiki_plain");
+
+    let div_id = bid("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+    let wiki_id = bid("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+
+    assert_eq!(out.tree.root_children, vec![div_id, wiki_id]);
+
+    let n_div = out.tree.get(&div_id).unwrap();
+    assert_eq!(n_div.kind, BlockKind::Divider);
+    assert_eq!(n_div.text_snapshot.as_deref(), Some(""));
+    assert!(n_div.children.is_empty());
+
+    let n_wiki = out.tree.get(&wiki_id).unwrap();
+    assert_eq!(n_wiki.kind, BlockKind::Paragraph);
+    assert_eq!(
+        n_wiki.text_snapshot.as_deref(),
+        Some("[[wiki-page|别名]] 仍为 plain，无 Wiki kind")
+    );
+    // 不得升格 Unknown{flavour: wiki…}
+    assert!(!matches!(n_wiki.kind, BlockKind::Unknown { .. }));
+    // 本路径不伪报 wiki_or_ref_lossy（扩展未接线）；差集属 A-MD-03
+    assert!(
+        !out.lossy
+            .items
+            .iter()
+            .any(|i| i.code == "wiki_or_ref_lossy"),
+        "wiki 未建模时不应假装已做 pure-gfm 引用降级码: {:?}",
+        out.lossy
+    );
+
+    let md2 = serialize_tree(&out.tree);
+    assert!(md2.contains("---"), "Divider S: {md2}");
+    assert!(md2.contains("[[wiki-page|别名]]"), "wiki plain S: {md2}");
+    let tree2 = parse_document(&md2).unwrap();
+    assert!(structure_eq(&out.tree, &tree2), "divider/wiki RT md2=\n{md2}");
+}
+
+/// 任务列表 + 有序任务项：ordered + checked 编入 plain 前缀（等价结构测）。
+#[test]
+fn gfm_core_ordered_task_item_checkbox_plain() {
+    let md = "\
+<!--c:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa-->
+1. [x] 有序已完成
+
+<!--c:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb-->
+1. [ ] 有序未完成
+";
+    let tree = parse_document(md).unwrap();
+    let a = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    let b = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    assert_eq!(tree.get(&a).unwrap().kind, BlockKind::OrderedItem);
+    assert_eq!(
+        tree.get(&a).unwrap().text_snapshot.as_deref(),
+        Some("[x] 有序已完成")
+    );
+    assert_eq!(tree.get(&b).unwrap().kind, BlockKind::OrderedItem);
+    assert_eq!(
+        tree.get(&b).unwrap().text_snapshot.as_deref(),
+        Some("[ ] 有序未完成")
+    );
+    let again = parse_document(&document_to_md(&tree)).unwrap();
+    assert!(structure_eq(&tree, &again));
+}

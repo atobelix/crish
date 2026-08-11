@@ -5,9 +5,12 @@
 //!
 //! # 诚实边界
 //! - **已接线**：GFM P 主路径走 `markdown::to_mdast` + 本 lowering
-//! - **未关**：A-MD 全表 / EL-06 / 表格专用 kind / inline 富文本 yrs RT
+//! - **未关**：**≠ A-MD-01 全集** / **≠ EL-06** / 表格专用 kind / inline 富文本 yrs RT
 //! - HTML **不升格**为 Unknown 结构块；进 plain `text_snapshot`（可记 `raw_html_as_text`）
-//! - 表格无 BlockKind::Table：降级为 Paragraph + `structure_note`
+//! - 表格无 BlockKind::Table：降级为 Paragraph + `structure_note`（有损诚实）
+//! - 任务列表无 TaskItem kind：勾选编入 plain 前缀 `[x]`/`[ ]`（结构-only 可往返）
+//! - 删除线 / 链接 / autolink：inline 剥为 plain（**≠** 叶子 inline RT 关账）
+//! - wiki `[[…]]`：**未**建模；作 plain 文本保留（**≠** A-MD-03 / EL-06）
 
 use crate::assemble::RawBlock;
 use crate::{
@@ -344,7 +347,14 @@ fn lower_list(
             continue;
         };
         let line = node_line(item);
-        let (item_text, trailing) = split_list_item_contents(li);
+        let (mut item_text, trailing) = split_list_item_contents(li);
+
+        // GFM 任务列表：无 TaskItem kind（IR 未建模）；勾选编入 plain 前缀，
+        // 使 S 产出 `- [x] …` / `- [ ] …`，P→S→P 结构+勾选可守恒（结构-only）。
+        // **≠** A-MD-01 任务列表专用 kind 关账。
+        if let Some(checked) = li.checked {
+            item_text = encode_task_checkbox(checked, &item_text);
+        }
 
         let kind = if ordered {
             BlockKind::OrderedItem
@@ -368,6 +378,16 @@ fn lower_list(
         }
     }
     Ok(())
+}
+
+/// 将 GFM 任务勾选编入列表项 plain（无独立 TaskItem kind）。
+fn encode_task_checkbox(checked: bool, body: &str) -> String {
+    let mark = if checked { "[x]" } else { "[ ]" };
+    if body.is_empty() {
+        mark.to_string()
+    } else {
+        format!("{mark} {body}")
+    }
 }
 
 /// 首段 → 项文本；其余 flow 子节点原样返回供后续 lowering。
