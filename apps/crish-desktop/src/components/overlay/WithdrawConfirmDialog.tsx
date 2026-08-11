@@ -11,7 +11,7 @@
  */
 import React from 'react';
 import styles from './WithdrawConfirmDialog.module.css';
-import { Dialog } from '../ui';
+import { Button, Dialog } from '../ui';
 import type { RewindScopeSummary } from '../../api/collectRewindScope';
 
 export interface WithdrawConfirmDialogProps {
@@ -41,17 +41,25 @@ export const WithdrawConfirmDialog: React.FC<WithdrawConfirmDialogProps> = ({
       showCloseButton={false}
       footer={
         <div className={styles.actions}>
-          <button type="button" className={styles.cancelBtn} onClick={onCancel}>
-            取消
-          </button>
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
+            className={styles.cancelBtn}
+            onClick={onCancel}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
             className={styles.confirmBtn}
             onClick={onConfirm}
             data-testid="withdraw-confirm-btn"
           >
             确认撤回
-          </button>
+          </Button>
         </div>
       }
     >

@@ -76,7 +76,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
     const root = bodyRef.current;
     if (!root) return;
     const focusable = root.querySelector<HTMLElement>(
-      'input:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      'input:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
     );
     focusable?.focus();
   }, [step]);
@@ -107,11 +107,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
       overlayClassName={styles.firstRunOverlay}
     >
       <div className={styles.firstRunCard}>
-        <div
-          className={styles.firstRunSteps}
-          role="list"
-          aria-label="设置步骤"
-        >
+        <div className={styles.firstRunSteps} role="list" aria-label="设置步骤">
           {WIZARD_STEP_META.map((s) => {
             const isActive = step === s.id;
             const isDone = step > s.id;
@@ -232,7 +228,10 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 aria-hidden="true"
               />
               <div style={{ fontWeight: 600, fontSize: 15 }}>可以开始了</div>
-              <p className={styles.firstRunHint} style={{ textAlign: 'center' }}>
+              <p
+                className={styles.firstRunHint}
+                style={{ textAlign: 'center' }}
+              >
                 在主界面输入问题即可。随时可在设置中改模型、项目与权限。
               </p>
             </div>
@@ -240,28 +239,34 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
         </div>
 
         <div className={styles.firstRunFooter}>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.firstRunLink}
             disabled={busy}
             onClick={finish}
           >
             跳过向导
-          </button>
+          </Button>
           <div style={{ display: 'flex', gap: 8 }}>
             {step > 0 && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="md"
                 className={`${styles.firstRunBtn} ${styles.ghost}`}
                 disabled={busy}
                 onClick={goPrev}
               >
                 上一步
-              </button>
+              </Button>
             )}
             {step < 4 ? (
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="md"
                 className={`${styles.firstRunBtn} ${styles.primary}`}
                 disabled={busy || (step === 0 && !hasProfiles)}
                 aria-busy={busy || undefined}
@@ -270,32 +275,42 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 }}
               >
                 {wizardPrimaryCtaLabel(step, busy)}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="md"
                 className={`${styles.firstRunBtn} ${styles.primary}`}
                 onClick={finish}
               >
                 {wizardPrimaryCtaLabel(4, false)}
-              </button>
+              </Button>
             )}
           </div>
         </div>
 
         {step === 1 ? (
-          <div className={styles.firstRunModelAlt} role="group" aria-label="模型其它方式">
-            <button
+          <div
+            className={styles.firstRunModelAlt}
+            role="group"
+            aria-label="模型其它方式"
+          >
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
               disabled={busy}
               onClick={skipModelStep}
             >
               稍后在底栏手填模型
-            </button>
+            </Button>
             {onOpenSettings ? (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
                 disabled={busy}
                 onClick={() => {
@@ -305,21 +320,27 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 }}
               >
                 打开设置获取模型列表
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : null}
 
         {step === 2 ? (
-          <div className={styles.firstRunModelAlt} role="group" aria-label="导入其它方式">
-            <button
+          <div
+            className={styles.firstRunModelAlt}
+            role="group"
+            aria-label="导入其它方式"
+          >
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
               disabled={busy}
               onClick={skipImportStep}
             >
               跳过，稍后在设置中导入
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>

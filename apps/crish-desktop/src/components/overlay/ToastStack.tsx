@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { AppToast } from '../../hooks/useToastQueue';
+import { Button } from '../ui';
 import styles from './ToastStack.module.css';
 
 type Props = {
@@ -9,23 +10,28 @@ type Props = {
 
 /** Bottom-stacked toast notifications (Chinese UI). */
 export const ToastStack = ({ toasts, onDismiss }: Props) => {
-  const [exitingToasts, setExitingToasts] = useState<Map<string, AppToast>>(new Map());
+  const [exitingToasts, setExitingToasts] = useState<Map<string, AppToast>>(
+    new Map()
+  );
 
-  const handleDismiss = useCallback((toast: AppToast) => {
-    setExitingToasts((prev) => {
-      const next = new Map(prev);
-      next.set(toast.id, toast);
-      return next;
-    });
-    setTimeout(() => {
+  const handleDismiss = useCallback(
+    (toast: AppToast) => {
       setExitingToasts((prev) => {
         const next = new Map(prev);
-        next.delete(toast.id);
+        next.set(toast.id, toast);
         return next;
       });
-      onDismiss(toast.id);
-    }, 250);
-  }, [onDismiss]);
+      setTimeout(() => {
+        setExitingToasts((prev) => {
+          const next = new Map(prev);
+          next.delete(toast.id);
+          return next;
+        });
+        onDismiss(toast.id);
+      }, 250);
+    },
+    [onDismiss]
+  );
 
   const allToasts = toasts.slice();
   for (const [id, toast] of exitingToasts) {
@@ -47,8 +53,10 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
         >
           <span>{toast.message}</span>
           {toast.onUndo ? (
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className={styles.toastUndoBtn}
               onClick={() => {
                 toast.onUndo?.();
@@ -56,16 +64,17 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
               }}
             >
               撤销
-            </button>
+            </Button>
           ) : null}
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.toastDismissBtn}
             aria-label="关闭通知"
             onClick={() => handleDismiss(toast)}
-          >
-            <span aria-hidden="true">×</span>
-          </button>
+            icon={<span aria-hidden="true">×</span>}
+          />
         </div>
       ))}
     </div>
