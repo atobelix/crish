@@ -399,6 +399,7 @@ export const FileActions = React.memo(function FileActions({
               <button
                 type="button"
                 className={styles.filesMoreItem}
+                role="menuitem"
                 onClick={() => {
                   onEdit();
                   setMoreOpen(false);

@@ -17,13 +17,20 @@
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(--font-size-base, 14px) !important; /* locked explicitly to 14px */
+  font-size: var(
+    --font-size-base,
+    14px
+  ) !important; /* locked explicitly to 14px */
   font-weight: var(--font-weight-medium);
   padding: 0 8px; /* Internal padding set to 8px so icons start exactly at 10px + 8px = 18px from left */
   border-radius: var(--radius-xl);
   cursor: pointer;
   text-align: left;
-  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro), box-shadow var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    border-color var(--transition-micro),
+    color var(--transition-micro),
+    box-shadow var(--transition-micro);
   box-sizing: border-box;
 }
 
@@ -56,11 +63,11 @@
 }
 
 /* Specific to search input */
-.navItem[role="search"] {
+.navItem[role='search'] {
   cursor: text;
 }
 
-.navItem input[type="search"] {
+.navItem input[type='search'] {
   flex: 1 1 auto;
   min-width: 0;
   border: none !important;
@@ -72,15 +79,34 @@
   padding: 0 !important;
 }
 
-.navItem input[type="search"]::placeholder {
+.navItem input[type='search']::placeholder {
   color: var(--text-secondary) !important;
   opacity: 0.9;
 }
 
-.navItem input[type="search"]::-webkit-search-cancel-button,
-.navItem input[type="search"]::-webkit-search-results-button,
-.navItem input[type="search"]::-webkit-search-results-decoration {
+.navItem input[type='search']::-webkit-search-cancel-button,
+.navItem input[type='search']::-webkit-search-results-button,
+.navItem input[type='search']::-webkit-search-results-decoration {
   -webkit-appearance: none;
   appearance: none;
   display: none !important;
+}
+
+/* R2-6：navItem 迁移 ui/Button 后回补侧栏导航行观感
+ * （Button 默认 inline-flex center / ghost 收窄 / ghost 色板，特异度提升以压过原子层规则） */
+.navItem:not(.isActive) {
+  justify-content: flex-start;
+  width: 100%;
+  gap: var(--space-2);
+  border-radius: var(--radius-xl);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.navItem:not(.isActive):hover {
+  background: var(--sidebar-hover);
+}
+
+.navItem.isActive:hover {
+  background: var(--sidebar-active);
 }
