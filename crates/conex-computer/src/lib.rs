@@ -12,12 +12,19 @@
 //! 会话生命周期(S3 互斥状态机 / S4 安全门槛)属后续阶段,本层不持有。
 
 pub mod action;
+pub mod activation;
 pub mod coord;
 pub mod screen;
+pub mod security;
 
 pub use action::{Action, ActionError, ClickCount, MouseButton, ScrollDirection};
+pub use activation::{ActivationError, ActivationGate, CleanupAction, SessionMode};
 pub use coord::{CoordError, Point, ScaleSpec};
 pub use screen::{CapturedFrame, DesktopLayout, MonitorInfo};
+pub use security::{
+    Approval, ApprovalGate, ApprovalRequest, EmergencyStop, EnableSource, EnablementError,
+    IdleTimeout, SessionEnablement, StopSource, StopRecord,
+};
 
 /// 会话级错误(动作校验 / 注入 / 截屏 / 初始化四类)。
 ///

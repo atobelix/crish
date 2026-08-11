@@ -1,0 +1,22 @@
+[package]
+name = "conex-shared"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# 共享抽象层（05 文档 §7 依赖方向结论：叶子 crate，纯抽象面）。
+# 约束（05 文档 §3/§7.2）：仅 async-trait/thiserror/serde（+ serde_json 测试面），
+# 无 tokio 运行时依赖（traits 由实现侧提供运行时）、无设备代码；
+# 浏览器线（conex-browser）与桌面线（conex-computer）各自依赖本 crate 提供适配器。
+[dependencies]
+# async-trait：对象安全 trait 的 async 方法展开（05 文档 §3.1 设计原则 1）
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

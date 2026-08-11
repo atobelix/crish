@@ -4,7 +4,8 @@
 //! ## 采集方案（§1.1）
 //! - 主采集：`DOMSnapshot.captureSnapshot`（computedStyles 白名单 10 项 +
 //!   includePaintOrder + includeDOMRects）
-//! - 结构通道：`DOM.getDocument(depth=-1, pierce=true)`（父子关系/backendNodeId/属性）
+//! - 结构通道：`DOM.getDocument(depth=15, pierce=true)`（父子关系/backendNodeId/属性；
+//!   depth 有限值防全深度序列化载荷爆炸，合计超 150KB 预算时降级跳过——仅用主通道）
 //! - 辅助通道：`Accessibility.getFullAXTree`（逐帧并行；失败降级为空 AX）
 //! - 布局：`Page.getLayoutMetrics`（CSS 视口 + devicePixelRatio）
 //! - 四路并行（`tokio::join!`），首轮 10s 超时，未完成取消重发再等 2s（§1.2）
@@ -49,6 +50,12 @@ pub const COMPUTED_STYLES_WHITELIST: &[&str] = &[
 pub const MAX_IFRAMES: usize = 64;
 /// iframe 嵌套深度上限（§1.5：防恶意深嵌递归爆炸）。
 pub const MAX_IFRAME_DEPTH: usize = 4;
+/// DOM.getDocument 结构通道深度（性能护栏：`depth=-1` 全深度递归序列化是
+/// raw payload 超限主因——bench 实测中页面 getDocument 215KB vs DOMSnapshot
+/// 85KB ≈ 2.5 倍；该通道仅作 backendNodeId 兜底校验输入，骨架深度 15 已
+/// 覆盖典型 DOM 结构，超深子树由 DOMSnapshot 主通道承担；配合 150KB 预算
+/// 联动降级（合计超限时丢弃结构通道仅用主通道），T-2）。
+pub const GET_DOCUMENT_DEPTH: i64 = 15;
 /// 采集遍历元素护栏（§3.4 防呆上限：遍历元素 10000）。
 pub const MAX_TRAVERSE_ELEMENTS: usize = 10_000;
 /// 首轮采集超时（10s）+ 重发窗口（2s），合计 12s 硬超时（§1.2/T-1）。
@@ -618,7 +625,7 @@ impl SnapshotCollector for CdpCollector {
             let dom_fut = self.session.send_page::<Value>(
                 session,
                 crate::cdp::domains::names::DOM_GET_DOCUMENT,
-                json!({ "depth": -1, "pierce": true }),
+                json!({ "depth": GET_DOCUMENT_DEPTH, "pierce": true }),
             );
             let metrics_fut = self.session.send_page::<Value>(
                 session,
@@ -655,7 +662,7 @@ impl SnapshotCollector for CdpCollector {
                         .await;
                     let d = self
                         .session
-                        .send_page::<Value>(session, DOM_GET_DOCUMENT, json!({ "depth": -1, "pierce": true }))
+                        .send_page::<Value>(session, DOM_GET_DOCUMENT, json!({ "depth": GET_DOCUMENT_DEPTH, "pierce": true }))
                         .await;
                     (s, d)
                 })
@@ -689,19 +696,44 @@ impl SnapshotCollector for CdpCollector {
         };
 
         // —— 反序列化 + 载荷护栏（150KB 采集层上限，T-2）——
-        let payload_bytes = snapshot_value.to_string().len() + dom_value.to_string().len();
-        if payload_bytes > MAX_RAW_PAYLOAD_BYTES {
+        // 分层语义：主通道 DOMSnapshot 超预算 = 硬错误（主数据缺失无法降级）；
+        // 结构通道 DOM.getDocument 为兜底校验输入（build_enhanced_tree 实际
+        // 以 DOMSnapshot 重建，getDocument 仅预留校验面），合计超预算时**降级
+        // 跳过结构通道**——仅用 DOMSnapshot 继续，快照不失败（性能修复：中页
+        // getDocument 全深度 215KB vs DOMSnapshot 85KB，曾致合计 ≈300KB 直接
+        // 报 PayloadOverflow 使采集整体失败）。
+        let snapshot_bytes = snapshot_value.to_string().len();
+        if snapshot_bytes > MAX_RAW_PAYLOAD_BYTES {
             return Err(SnapshotError::PayloadOverflow {
-                bytes: payload_bytes,
+                bytes: snapshot_bytes,
                 max: MAX_RAW_PAYLOAD_BYTES,
             });
         }
+        let dom_bytes = dom_value.to_string().len();
+        let dom_degraded = snapshot_bytes + dom_bytes > MAX_RAW_PAYLOAD_BYTES;
+        if dom_degraded {
+            tracing::warn!(
+                "DOM.getDocument 结构通道载荷超预算（快照 {snapshot_bytes}B + 结构 {dom_bytes}B > {}B），降级仅用 DOMSnapshot 主通道",
+                MAX_RAW_PAYLOAD_BYTES
+            );
+        }
+        // 降级后 payload 仅计主通道（被丢弃的结构通道不计入原始载荷估算）
+        let payload_bytes = if dom_degraded {
+            snapshot_bytes
+        } else {
+            snapshot_bytes + dom_bytes
+        };
 
         let capture: CaptureSnapshotResult = serde_json::from_value(snapshot_value).map_err(
             |e| SnapshotError::Collect(format!("DOMSnapshot 响应解析失败：{e}")),
         )?;
-        let document: GetDocumentResult = serde_json::from_value(dom_value)
-            .map_err(|e| SnapshotError::Collect(format!("DOM.getDocument 响应解析失败：{e}")))?;
+        // 降级时结构通道以空占位（build_enhanced_tree 不使用该输入，仅签名占位）
+        let document: GetDocumentResult = if dom_degraded {
+            GetDocumentResult::default()
+        } else {
+            serde_json::from_value(dom_value)
+                .map_err(|e| SnapshotError::Collect(format!("DOM.getDocument 响应解析失败：{e}")))?
+        };
 
         let metrics: crate::cdp::domains::GetLayoutMetricsResult =
             serde_json::from_value(metrics_value).unwrap_or(crate::cdp::domains::GetLayoutMetricsResult {
@@ -1172,7 +1204,7 @@ impl CdpCollector {
             let d = self.session.send_page::<Value>(
                 session,
                 DOM_GET_DOCUMENT,
-                json!({ "depth": -1, "pierce": true }),
+                json!({ "depth": GET_DOCUMENT_DEPTH, "pierce": true }),
             );
             let ax = self
                 .session
@@ -1184,11 +1216,24 @@ impl CdpCollector {
             .map_err(|_| "子帧采集超时".to_string())?;
         let snapshot_value = s.map_err(|e| format!("子帧 DOMSnapshot 失败：{e}"))?;
         let dom_value = d.map_err(|e| format!("子帧 DOM.getDocument 失败：{e}"))?;
-        let payload = snapshot_value.to_string().len() + dom_value.to_string().len();
+        // 载荷估算同主通道分层：结构通道超预算 → 降级丢弃（payload 仅计主通道）
+        let snapshot_bytes = snapshot_value.to_string().len();
+        let dom_bytes = dom_value.to_string().len();
+        let dom_degraded = snapshot_bytes + dom_bytes > MAX_RAW_PAYLOAD_BYTES;
+        if dom_degraded {
+            tracing::warn!(
+                "子帧 DOM.getDocument 结构通道载荷超预算（快照 {snapshot_bytes}B + 结构 {dom_bytes}B），降级仅用 DOMSnapshot"
+            );
+        }
+        let payload = if dom_degraded { snapshot_bytes } else { snapshot_bytes + dom_bytes };
         let capture: CaptureSnapshotResult = serde_json::from_value(snapshot_value)
             .map_err(|e| format!("子帧 DOMSnapshot 响应解析失败：{e}"))?;
-        let document: GetDocumentResult = serde_json::from_value(dom_value)
-            .map_err(|e| format!("子帧 DOM.getDocument 响应解析失败：{e}"))?;
+        let document: GetDocumentResult = if dom_degraded {
+            GetDocumentResult::default()
+        } else {
+            serde_json::from_value(dom_value)
+                .map_err(|e| format!("子帧 DOM.getDocument 响应解析失败：{e}"))?
+        };
         let ax: Vec<AXNode> = match ax {
             Ok(v) => serde_json::from_value(v).unwrap_or_default(),
             Err(e) => {
@@ -1241,7 +1286,8 @@ const NODE_TYPE_DOCUMENT: i64 = 9;
 /// 同源 iframe 子树（pierce 后 DOMSnapshot 给出 contentDocument）以独立根树
 /// 呈现并标注 `|IFRAME|` 占位（跨文档挂接所需 contentDocumentIndex 字段在
 /// 现有 domains 类型面未暴露，挂接细节留 e2e 实证；U-4 跨域递归为二期）。
-/// DOM.getDocument 结构通道在本实现中作 backendNodeId 兜底校验输入。
+/// DOM.getDocument 结构通道在本实现中作 backendNodeId 兜底校验输入（当前
+/// 重建不消费该参数；结构通道载荷超预算时由采集层降级为默认占位传入）。
 pub fn build_enhanced_tree(
     capture: &CaptureSnapshotResult,
     _document: &GetDocumentResult,
@@ -1362,6 +1408,14 @@ fn build_node(
                     let v = str_at(strings, *vi).to_string();
                     e.attributes.push((n, v));
                 }
+            }
+            // iframe 元素恒打 |IFRAME| 标记（13 §1.5/§3.2：iframe 元素本身在
+            // 序列化中以 |IFRAME| 占位呈现，一期即生效）。真实 Chrome 主采集
+            // DOMSnapshot 已含跨域帧文档（2026-08-12 双本地服务器实测：关闭态
+            // 根树即含跨域子文档），跨域递归仅是 frameId 不在文档集的防御路径
+            // ——标记不能只依赖递归路径的 mark_owner_iframe。
+            if e.tag.as_deref() == Some("iframe") {
+                e.frame_marker = Some(FrameMarker::Iframe);
             }
             // 计算样式（styles 池未在现有 domains 类型面暴露时跳过；e2e 实证）
             e
@@ -2274,14 +2328,245 @@ mod tests {
             .expect("采集应成功");
         session.shutdown().await;
 
-        // 一期行为：仅主文档根；子帧内容不进入；统计全零
+        // 一期行为：仅主文档根树；子帧内容不进入；统计全零；但 iframe 元素
+        // 恒打 |IFRAME| 占位标记（13 §1.5/§3.2——占位是一期语义，与递归开关
+        // 无关；关闭态不打标记的旧断言与文档冲突，2026-08-12 修正）
         assert_eq!(collected.roots.len(), 1, "关闭态仅主文档根树");
         assert!(find_node_by_id(&collected.roots, 1001).is_none(), "子帧内容不得入树");
         let owner = find_node_by_id(&collected.roots, 101).expect("iframe 元素仍在树中");
         assert_eq!(
-            owner.frame_marker, None,
-            "关闭态不打 |IFRAME| 标记（一期占位逻辑不启用）"
+            owner.frame_marker,
+            Some(FrameMarker::Iframe),
+            "iframe 元素恒打 |IFRAME| 占位标记（一期占位语义，不依赖递归开关）"
+        );
+        // 序列化面闭环：占位标记行（src 属性经白名单呈现）
+        let out = build_and_serialize(
+            &collected.roots,
+            &SerializeOptions::new(&BudgetConfig::active(), "S1", &HashSet::new()),
+        );
+        assert!(
+            out.text.contains("|IFRAME|<iframe src=https://b.example/embed"),
+            "关闭态也应呈现 |IFRAME| 占位：{}",
+            out.text
         );
         assert_eq!(collected.cross_origin, CrossOriginStats::default());
+    }
+
+    // =======================================================================
+    // DOM.getDocument 性能护栏（depth 受限 + 预算联动降级，T-2 复核轮）
+    // =======================================================================
+
+    /// 巨大结构通道应答：attributes 塞入 12000 条长属性（模拟全深度序列化
+    /// 响应，单通道体积 > 150KB 预算余量）。
+    fn huge_document_fixture() -> Value {
+        let attrs: Vec<String> = (0..12000)
+            .map(|i| format!("data-attr-{i}={}", "x".repeat(20)))
+            .collect();
+        json!({ "root": { "nodeId": 1, "attributes": attrs } })
+    }
+
+    /// 大载荷快照应答：字符串池塞入 count 条 fill 字符串（膨胀主通道体积）。
+    fn big_snapshot_fixture(count: usize, fill: &str) -> Value {
+        let mut strings = vec![String::new()];
+        for i in 0..count {
+            strings.push(format!("{fill}-{i}"));
+        }
+        json!({
+            "strings": strings,
+            "documents": [{
+                "documentURL": 1,
+                "title": 0,
+                "nodes": {
+                    "parentIndex": [-1],
+                    "nodeType": [9],
+                    "nodeName": [0],
+                    "nodeValue": [-1],
+                    "backendDOMNodeId": [1],
+                    "attributes": [[]],
+                    "childNodeIndexes": [-1]
+                },
+                "layout": { "nodeIndex": [], "bounds": [] }
+            }]
+        })
+    }
+
+    /// 主采集四路并行非关键通道的自动应答（布局/AX）。
+    fn fill_noncritical_auto_replies(mock: &MockServer) {
+        mock.set_auto_reply(
+            crate::cdp::domains::names::PAGE_GET_LAYOUT_METRICS,
+            MockReply::Ok(json!({
+                "layoutViewport": { "pageX": 0.0, "pageY": 0.0, "clientWidth": 1280.0, "clientHeight": 800.0, "scale": 1.0 },
+                "visualViewport": { "offsetX": 0.0, "offsetY": 0.0, "pageX": 0.0, "pageY": 0.0, "clientWidth": 1280.0, "clientHeight": 800.0, "scale": 1.0 }
+            })),
+        );
+        mock.set_auto_reply(
+            crate::cdp::domains::names::ACCESSIBILITY_GET_FULL_AX_TREE,
+            MockReply::Ok(json!({ "nodes": [] })),
+        );
+    }
+
+    /// 性能修复：DOM.getDocument 深度受限（GET_DOCUMENT_DEPTH=15 而非 -1
+    /// 全深度）——捕获实际发出的命令参数断言（防回归为全深度序列化，
+    /// bench 实测中页面全深度 getDocument 215KB ≈ DOMSnapshot 85KB 的 2.5 倍）。
+    #[tokio::test]
+    async fn get_document_depth_bounded_not_full() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        fill_noncritical_auto_replies(&mock);
+        let session = connect_mock(&mock, "/devtools/browser/depth-bounded").await;
+        let collector = CdpCollector::new(session.clone(), BudgetConfig::active());
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        drive_capture_snapshot(&mut mock, main_capture_fixture()).await;
+        // 捕获实际发出的 getDocument 命令（restore 流程命令已被自动应答跳过）
+        let cmd = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            mock.expect_command(crate::cdp::domains::names::DOM_GET_DOCUMENT),
+        )
+        .await
+        .expect("等待 DOM.getDocument 命令超时");
+        assert_eq!(
+            cmd["params"]["depth"], GET_DOCUMENT_DEPTH,
+            "结构通道深度应受限而非全深度：{cmd}"
+        );
+        assert_eq!(cmd["params"]["pierce"], true, "pierce 语义保持：{cmd}");
+        mock.reply(cmd["id"].as_u64().expect("命令 id"), json!({ "root": { "nodeId": 1 } }));
+        let collected = collect_task
+            .await
+            .expect("采集任务应完成")
+            .expect("采集应成功");
+        session.shutdown().await;
+        assert_eq!(collected.roots.len(), 1, "主文档根树不受深度限制影响");
+    }
+
+    /// payload 分解（任务书断言面）：中页面场景——主通道小、结构通道巨大
+    /// （合计 >150KB）→ **采集成功不失败**，结构通道降级丢弃，raw_payload_bytes
+    /// 仅计主通道（预算内）；主树结构完整不丢。
+    #[tokio::test]
+    async fn payload_decomposition_degrades_get_document_only() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        fill_noncritical_auto_replies(&mock);
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_DOCUMENT,
+            MockReply::Ok(huge_document_fixture()),
+        );
+        let session = connect_mock(&mock, "/devtools/browser/payload-degrade").await;
+        let collector = CdpCollector::new(session.clone(), BudgetConfig::active());
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        drive_capture_snapshot(&mut mock, main_capture_fixture()).await;
+        let collected = collect_task
+            .await
+            .expect("采集任务应完成")
+            .expect("结构通道超预算应降级而非失败");
+        session.shutdown().await;
+
+        // 分解断言：payload = 主通道字节（结构通道丢弃），≤ 150KB 预算
+        let snapshot_bytes = main_capture_fixture().to_string().len();
+        assert_eq!(
+            collected.raw_payload_bytes, snapshot_bytes,
+            "降级后 payload 应仅计 DOMSnapshot 主通道"
+        );
+        assert!(
+            collected.raw_payload_bytes <= MAX_RAW_PAYLOAD_BYTES,
+            "降级后总载荷应受控：{}B",
+            collected.raw_payload_bytes
+        );
+        // 主树完整（降级不丢结构）：iframe owner 与按钮均在
+        assert_eq!(collected.roots.len(), 1, "降级不产生额外根树");
+        let main_root = &collected.roots[0];
+        assert!(find_node_by_id(std::slice::from_ref(main_root), 101).is_some());
+        assert!(find_node_by_id(std::slice::from_ref(main_root), 202).is_some());
+    }
+
+    /// 主通道硬错误语义保持：DOMSnapshot 自身超预算 → PayloadOverflow（主数据
+    /// 缺失无法降级，与结构通道降级严格区分）。
+    #[tokio::test]
+    async fn snapshot_over_budget_remains_hard_error() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        fill_noncritical_auto_replies(&mock);
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_DOCUMENT,
+            MockReply::Ok(json!({ "root": { "nodeId": 1 } })),
+        );
+        let session = connect_mock(&mock, "/devtools/browser/snapshot-overflow").await;
+        let collector = CdpCollector::new(session.clone(), BudgetConfig::active());
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        // 主通道 3000 条长字符串 ≈ 330KB > 150KB
+        drive_capture_snapshot(&mut mock, big_snapshot_fixture(3000, &"y".repeat(100))).await;
+        let res = collect_task.await.expect("采集任务应完成");
+        session.shutdown().await;
+        assert!(
+            matches!(res, Err(SnapshotError::PayloadOverflow { .. })),
+            "主通道超预算应为硬错误：{res:?}"
+        );
+    }
+
+    /// 跨域子帧结构通道超预算：帧级 getDocument 降级（仅 DOMSnapshot 入树），
+    /// 子帧根树仍并入 + 统计正常——递归采集不被结构通道体积拖垮。
+    #[tokio::test]
+    async fn cross_frame_get_document_degrades_keeps_frame() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        fill_noncritical_auto_replies(&mock);
+        mock.set_auto_reply(
+            crate::cdp::domains::names::PAGE_GET_FRAME_TREE,
+            MockReply::Ok(json!({
+                "frameTree": {
+                    "frame": { "id": "MAIN", "url": "https://a.example", "mimeType": "text/html" },
+                    "childFrames": [{
+                        "frame": { "id": "F1", "url": "https://b.example/embed", "parentId": "MAIN", "mimeType": "text/html" },
+                        "childFrames": []
+                    }]
+                }
+            })),
+        );
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_FRAME_OWNER,
+            MockReply::Ok(json!({ "backendNodeId": 101, "nodeId": 3 })),
+        );
+        // 结构通道巨大应答（主/帧会话共用 auto_reply 表 → 两级均降级）
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_DOCUMENT,
+            MockReply::Ok(huge_document_fixture()),
+        );
+        let session = connect_mock(&mock, "/devtools/browser/xframe-degrade").await;
+        let collector = CdpCollector::new(
+            session.clone(),
+            BudgetConfig::active().with_cross_origin_iframes(true),
+        );
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        drive_capture_snapshot(&mut mock, main_capture_fixture()).await;
+        drive_capture_snapshot(&mut mock, frame_capture_fixture()).await;
+        let collected = collect_task
+            .await
+            .expect("采集任务应完成")
+            .expect("子帧结构通道超预算应降级而非失败");
+        session.shutdown().await;
+
+        // 子帧内容仍入树（DOMSnapshot 主通道保留）
+        assert_eq!(
+            collected.cross_origin.frames_collected, 1,
+            "子帧采集不应被结构通道体积拖垮：{:#?}",
+            collected.cross_origin
+        );
+        assert!(
+            collected.roots.iter().any(|r| r.backend_node_id == 1001),
+            "子帧根树应并入（降级仅丢结构通道）"
+        );
+        // payload = 主通道字节，预算内
+        assert_eq!(
+            collected.raw_payload_bytes,
+            main_capture_fixture().to_string().len()
+        );
+        assert!(collected.raw_payload_bytes <= MAX_RAW_PAYLOAD_BYTES);
     }
 }

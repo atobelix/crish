@@ -690,7 +690,7 @@ pub struct GetDocumentParams {
     pub pierce: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDocumentResult {
     pub root: DomNode,
@@ -706,7 +706,7 @@ pub struct GetFrameOwnerResult {
     pub node_id: i64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DomNode {
     pub node_id: i64,

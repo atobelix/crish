@@ -45,9 +45,13 @@ use conex_browser::browser::discover::{resolve_backend, BackendOverride, Resolve
 use conex_browser::browser::{BrowserManager, LaunchConfig, ProcessError, StopReason};
 use conex_browser::frames::{ScreencastConfig, ScreencastSession, ScreencastStatus};
 use conex_browser::input::{InputCmd, InputPipeline};
+use conex_browser::snapshot::budget::MAX_RAW_PAYLOAD_BYTES;
+use conex_browser::snapshot::collect::{CdpCollector, SnapshotCollector};
+use conex_browser::snapshot::serialize::{SerializeOptions, build_and_serialize};
 use conex_browser::snapshot::{BudgetConfig, SnapshotDocument, SnapshotError, SnapshotManager};
 use conex_browser::{BrowserSession, BrowserState, CdpError};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -1286,6 +1290,63 @@ async fn e2e_ascii_no_double_write() {
 
     println!(
         "[E13] type={type_ms}ms value=demo 事件 keydown/keypress/input=4/4/4（无双写）"
+    );
+    env.shutdown().await;
+}
+
+// ---------------------------------------------------------------------------
+// E14 大页面 payload 预算（性能修复回归面）：400 单元格表格（40 行 × 10 列，
+// 与 bench「约 80 行表格」同量级——DOMSnapshot 主通道 ~85KB 预算内，超限
+// 主因是 DOM.getDocument 全深度序列化）→ CdpCollector 直接采集 → 断言成功
+// 且 raw_payload_bytes ≤ 150KB：DOM.getDocument 深度受限（GET_DOCUMENT_DEPTH）
+// 从源头降载荷，预算联动兜底（合计超限降级仅用 DOMSnapshot 主通道），
+// 快照不再整体失败。注：页面再大至 DOMSnapshot 单通道超限时 PayloadOverflow
+// 为设计语义（主数据缺失不可降级）。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_large_table_payload_budget() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch().await;
+    // 大表格页：40 行 × 10 列 = 400 个单元格元素（bench 中页面量级）
+    let mut rows = String::new();
+    for r in 0..40 {
+        rows.push_str("<tr>");
+        for c in 0..10 {
+            rows.push_str(&format!("<td data-r=\"{r}\" data-c=\"{c}\">v{r}-{c}</td>"));
+        }
+        rows.push_str("</tr>");
+    }
+    let html = format!(
+        "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>大表格页</title></head><body><h1>大表格页</h1><table>{rows}</table></body></html>"
+    );
+    navigate_and_wait(&env, &data_url(&html)).await;
+
+    // 直接走 CdpCollector（SnapshotMeta 不带 raw_payload_bytes，需采集层原值）
+    let t0 = Instant::now();
+    let collected = CdpCollector::new(env.session.clone(), BudgetConfig::active())
+        .collect(&env.tab_id, &env.session_id)
+        .await
+        .expect("中页面采集应成功（getDocument 深度受限 + 预算降级兜底）");
+    let collect_ms = t0.elapsed().as_millis() as u64;
+    assert!(
+        collected.raw_payload_bytes <= MAX_RAW_PAYLOAD_BYTES,
+        "中页面总载荷应 ≤150KB：{}B",
+        collected.raw_payload_bytes
+    );
+    // 大表内容完整（主通道未丢）
+    let out = build_and_serialize(
+        &collected.roots,
+        &SerializeOptions::new(&BudgetConfig::active(), &env.session_id, &HashSet::new()),
+    );
+    assert!(out.text.contains("v39-9"), "大表格尾行应入树");
+    println!(
+        "[E14] 大页面（400 单元格）采集成功 collect={collect_ms}ms payload={}B（≤150KB 预算内）",
+        collected.raw_payload_bytes
     );
     env.shutdown().await;
 }
