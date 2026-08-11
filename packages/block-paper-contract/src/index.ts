@@ -8,6 +8,7 @@
  * - `plans/specs/query-blocks-tool-schema.md`
  * - `plans/specs/register-flavour-roadmap.md`
  * - `plans/interfaces/00-W0接口冻结.md`
+ * - `plans/specs/dual-engine-surface.md`（EditorSurface / SendToNote / A-SURF）
  */
 
 // 标识
@@ -50,3 +51,17 @@ export type {
   OpIntent,
   Intent,
 } from './projection';
+
+// EditorSurface / SendToNote（dual-engine-surface · A-SURF）
+export type {
+  EditorSurface,
+  EditorSurfaceId,
+  SendToNoteIntent,
+  SendToNoteMode,
+} from './surface';
+export {
+  EDITOR_SURFACES,
+  SURFACE_CHAT,
+  SURFACE_NOTE_PAPER,
+  isSendToNoteIntent,
+} from './surface';

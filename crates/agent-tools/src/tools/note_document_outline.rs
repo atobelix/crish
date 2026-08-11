@@ -1,4 +1,4 @@
-//! 笔记域工具：`document_outline`（W4-A 最小骨架）
+//! 笔记域工具：`document_outline`（W4-A 接线）
 //!
 //! # 契约
 //! - 逻辑工具对应扩展面 `outline.get`（见 round-D `06-扩展宿主与Agent工具面.md` §6.1）：
@@ -6,17 +6,16 @@
 //! - 工具名选用 verb 拆分 `document_outline`（与 `query_blocks` 并列注册；
 //!   避免与 MCP 前缀冲突）。
 //!
-//! # 不变量（读 / 写路径纪律，W4 接线须守）
+//! # 不变量
 //! - **读 md / 大纲**：即时 S(树) 投影，**禁止**默认走 disk mirror 文件。
-//! - **写路径**（本工具只读；未来 `document_*` 写类）：仅允许
-//!   `Transaction.apply` / 事务化 `apply_md`，禁止 `fs.write` 后当权威。
 //!
-//! # 执行面（本波）
-//! DocSession 未注入——校验 `doc_id` 后返回稳定占位
-//! `{"ok":false,"reason":"note_backend_unwired"}`，不 panic。
+//! # 执行面
+//! - `ctx.note_backend` 已注入 → 调 trait
+//! - 未注入 → `{"ok":false,"reason":"note_backend_unwired"}`
 
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
+use crate::note_backend::NoteBackendError;
 use crate::tools::{optional_u64, require_string};
 use async_trait::async_trait;
 
@@ -35,7 +34,7 @@ impl DocumentOutlineTool {
                 name: "document_outline".to_string(),
                 description: "获取笔记文档的标题大纲树（heading 层级结构）。\
 返回 outline 节点列表（id/level/title/children），不回传块全文。\
-读路径走块树权威，不默认 mirror 文件。当前后端未接线时返回 ok=false 占位。"
+读路径走块树权威，不默认 mirror 文件。后端未接线时返回 ok=false 占位。"
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
@@ -74,24 +73,38 @@ impl Tool for DocumentOutlineTool {
 
     async fn execute(
         &self,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, ToolError> {
         let doc_id = require_string(&args, "doc_id")?;
-        let _max_depth = optional_u64(&args, "max_depth")
+        let max_depth = optional_u64(&args, "max_depth")
             .unwrap_or(6)
-            .clamp(1, 16);
+            .clamp(1, 16) as u32;
 
-        // W4-A 最小：DocSession 未注入 → 稳定占位
-        // 将来接线：ctx.note_backend.document_outline(doc_id, max_depth)
-        //   → { outline: [...], truncated: bool }
-        let _ = doc_id;
-        Ok(serde_json::json!({
-            "ok": false,
-            "reason": NOTE_BACKEND_UNWIRED,
-            "outline": [],
-            "truncated": false,
-        }))
+        let Some(backend) = ctx.note_backend.as_ref() else {
+            return Ok(serde_json::json!({
+                "ok": false,
+                "reason": NOTE_BACKEND_UNWIRED,
+                "outline": [],
+                "truncated": false,
+            }));
+        };
+
+        match backend.document_outline(&doc_id, Some(max_depth)).await {
+            Ok(outline) => Ok(serde_json::json!({
+                "ok": true,
+                "outline": outline.outline,
+                "truncated": outline.truncated,
+            })),
+            Err(NoteBackendError::Invalid(m)) => Err(ToolError::invalid_input(m)),
+            Err(e) => Ok(serde_json::json!({
+                "ok": false,
+                "reason": e.code(),
+                "message": e.message(),
+                "outline": [],
+                "truncated": false,
+            })),
+        }
     }
 }
 
@@ -99,6 +112,8 @@ impl Tool for DocumentOutlineTool {
 mod tests {
     use super::*;
     use crate::context::create_mock_tool_context;
+    use crate::note_backend::MemoryNoteBackend;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn document_outline_stub_returns_unwired_placeholder() {
@@ -133,5 +148,43 @@ mod tests {
         let schema = &tool.definition().input_schema;
         let required = schema["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v.as_str() == Some("doc_id")));
+    }
+
+    #[tokio::test]
+    async fn document_outline_with_memory_backend() {
+        let backend = Arc::new(MemoryNoteBackend::new());
+        backend.seed_doc(
+            "doc-1",
+            vec![("h1".into(), "heading".into(), "Root".into())],
+        );
+        // apply 再插二级标题
+        use crate::note_backend::{NoteApplyMdRequest, NoteApplyMode, NoteBackend};
+        backend
+            .apply_md_fragment(NoteApplyMdRequest {
+                doc_id: "doc-1".into(),
+                markdown: "## Child".into(),
+                parent_id: None,
+                after_block_id: None,
+                mode: NoteApplyMode::ApplyMdFragment,
+                intent_id: None,
+                batch_id: None,
+                message_id: None,
+                origin: None,
+            })
+            .await
+            .unwrap();
+
+        let tool = DocumentOutlineTool::new();
+        let ctx = ToolContext {
+            note_backend: Some(backend),
+            ..create_mock_tool_context()
+        };
+        let out = tool
+            .execute(&ctx, serde_json::json!({ "doc_id": "doc-1" }))
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], true);
+        let outline = out["outline"].as_array().unwrap();
+        assert!(!outline.is_empty());
     }
 }

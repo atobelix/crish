@@ -284,6 +284,8 @@ mod tests {
             log_root: None,
             // T-40（记忆韧性轮次 5）：中间件执行路径不接线压缩块服务
             compression_store: None,
+            // W4-A/B：中间件执行路径不接线笔记后端
+            note_backend: None,
         };
         let mut current = input;
         for m in chain {

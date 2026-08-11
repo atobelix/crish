@@ -12,6 +12,10 @@ pub struct BlockUpsert {
     pub children: Vec<BlockId>,
     pub order: String,
     pub parent: Option<BlockId>,
+    /// 叶子 plain text 投影（来自 `text_snapshot` / TextEngine 读）。
+    /// 缺省空串：旧事件 / 结构-only upsert 仍可反序列化；索引侧「缺则空」。
+    #[serde(default)]
+    pub plain_text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

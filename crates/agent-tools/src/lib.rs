@@ -31,6 +31,10 @@ pub mod backup;
 // orchestrator）实现注入；search_context / decompress_context 消费本契约，
 // 生产代码保持叶子依赖（不引入 conex-db）
 pub mod compression_store;
+// W4-A/B：笔记后端契约（NoteBackend trait + MemoryNoteBackend）——引擎侧
+// 实现注入；query_blocks / document_outline / document_apply_md /
+// send_to_note 消费本契约，生产代码保持叶子依赖（不引入 doc-collab/store）
+pub mod note_backend;
 pub mod definition;
 pub mod explore_quota;
 pub mod executor;
@@ -120,6 +124,11 @@ pub use subagent_inject::{
     ref_older_than_threshold, resolve_started_at, started_at_section, subagent_session_injections,
     COMMENT_PRESERVATION_TITLE, DEFAULT_REF_AGE_THRESHOLD_HOURS, DYNAMIC_MARKER,
     REVERT_CAUTION_TITLE, STARTED_AT_SECTION_TITLE,
+};
+pub use note_backend::{
+    MemoryNoteBackend, NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode, NoteBackend,
+    NoteBackendError, NoteBackendHandle, NoteBatchTokens, NoteOutline, NoteOutlineNode,
+    NoteQueryBlockHit, NoteQueryBlocksParams, NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,

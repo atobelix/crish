@@ -15,6 +15,33 @@
 
 **禁止** 与 `reference/markdown-editor` 共享行级文档模型；可共享的是 IME/虚拟化 **纪律**，不是 store。
 
+## 双 surface / 禁止共享（A-SURF）
+
+> **两个 surface、两套数据模型、零共享权威。**  
+> 规格：`docs/block-workspace-architecture/plans/specs/dual-engine-surface.md`
+
+| Surface          | 真相形状                    | 与本包关系                                    |
+| ---------------- | --------------------------- | --------------------------------------------- |
+| **`chat`**       | `lines[]` + 行级引擎        | **不得**依赖本包产品 store；可选复用 IME 纪律 |
+| **`note-paper`** | RS `BlockTree` + 块窗口投影 | 本包服务块投影控制面（Viewport/HeightMap/…）  |
+
+本包 **可共享**：IME 守卫思想、虚拟列表工具类型、HeightMap 算法、无状态工具。  
+本包 **禁止**：依赖 `markdown-editor`、持有/导出 `DocSession` / `yrs` / `YText`、以 `lines[]` 为文档权威。
+
+```ts
+import {
+  EDITOR_SURFACES,
+  SURFACE_CHAT,
+  SURFACE_NOTE_PAPER,
+  type EditorSurface,
+} from '@crish/editor-kit';
+// A-SURF-01：['chat', 'note-paper'] —— re-export 自 block-paper-contract
+```
+
+chat 完成态写入笔记须显式 `send_to_note` Intent（契约在 `@crish/block-paper-contract`），**禁止**静默缝合。
+
+架构隔离测：`src/surface.isolation.test.ts`（A-SURF-03 / A-SURF-09）。
+
 ## 导出一览
 
 ```ts
@@ -31,10 +58,13 @@ import {
   ImeMachine,
   guardStructureIntent,
   filterStructureIntents,
+  // A-SURF surface 标注
+  EDITOR_SURFACES,
+  type EditorSurface,
 } from '@crish/editor-kit';
 ```
 
-类型契约（`ProjectionDiff` / `MountSpec` / `BlockId` / `Intent`）依赖 `@crish/block-paper-contract`。
+类型契约（`ProjectionDiff` / `MountSpec` / `BlockId` / `Intent` / `EditorSurface`）依赖 `@crish/block-paper-contract`。
 
 ## SelectionStore（逻辑选区）
 

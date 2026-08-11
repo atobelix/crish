@@ -14,6 +14,8 @@ import {
 import type { FlavourRegistration, RegisterFlavour } from './flavour';
 import { asFlavourRegistration } from './flavour';
 import type { DocEvent, Intent, MountSpec, ProjectionDiff } from './projection';
+import type { EditorSurface, SendToNoteIntent } from './surface';
+import { EDITOR_SURFACES, SURFACE_CHAT, SURFACE_NOTE_PAPER } from './surface';
 
 // ---------------------------------------------------------------------------
 // query_blocks
@@ -122,3 +124,31 @@ export const sampleIntents: Intent[] = [
     intentId: 'intent-op-1',
   },
 ];
+
+// ---------------------------------------------------------------------------
+// EditorSurface / SendToNoteIntent（W5-C / A-SURF）
+// ---------------------------------------------------------------------------
+
+export const sampleSurfaces: readonly EditorSurface[] = EDITOR_SURFACES;
+
+export const sampleSurfaceAnnotations = {
+  chat: SURFACE_CHAT,
+  notePaper: SURFACE_NOTE_PAPER,
+} as const;
+
+/** 合法 send_to_note 字面量；禁止携带 lines[] 引用 */
+export const sampleSendToNoteIntent: SendToNoteIntent = {
+  type: 'send_to_note',
+  intentId: 'intent-send-smoke-1',
+  source: {
+    surface: 'chat',
+    messageId: 'msg-smoke-1',
+    markdown: '# smoke\n\nfrom chat snapshot',
+  },
+  target: {
+    surface: 'note-paper',
+    docId: 'doc-smoke-1',
+    mode: 'apply_md_fragment',
+  },
+  origin: 'user',
+};

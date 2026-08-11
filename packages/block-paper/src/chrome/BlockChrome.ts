@@ -6,12 +6,23 @@
  * - 把手悬停 / 焦点显隐（按需 chrome，A-SIL-02）
  * - 折叠（collapsed）本地呈现态
  * - 多选高亮 set / clear（逻辑 blockId，禁止像素测距）
+ * - **W3-F**：多选删除 / 折叠 → 批量结构 Intent（经 submitIntent → sink）
  *
  * **不**接真实 DOM；UI 后接时以本 store 为呈现源。
  * **禁止** DOM 当真相；写路径必须 Intent → RS apply。
+ *
+ * **W3-F ≠ EL-01 关闭**：结构 Intent 通路绿 ≠ Notion 级 chrome 全表验收关闭。
  */
 
-import type { BlockId } from '@crish/block-paper-contract';
+import type { BlockId, IntentId } from '@crish/block-paper-contract';
+import { nextIntentId } from '../leaves/TextLeafModel';
+import {
+  buildDeleteBlocksIntent,
+  buildToggleCollapseIntent,
+  type DeleteBlocksIntent,
+  type StructureIntentOrigin,
+  type ToggleCollapseIntent,
+} from './structureIntents';
 
 // ---------------------------------------------------------------------------
 // 静默层级 / 把手可见性
@@ -46,13 +57,42 @@ export type BlockChromeSnapshot = {
 };
 
 // ---------------------------------------------------------------------------
+// 结构操作结果（W3-F）
+// ---------------------------------------------------------------------------
+
+/** 危险/批量结构操作拒绝码 */
+export type ChromeStructureRejectCode =
+  'empty_selection' | 'silent_l0_guard' | 'invalid_target';
+
+export type ChromeStructureResult<T> =
+  | { ok: true; intent: T; snapshot: BlockChromeSnapshot }
+  | {
+      ok: false;
+      code: ChromeStructureRejectCode;
+      reason: string;
+    };
+
+export type ChromeStructureOptions = {
+  /** intentId 工厂；缺省 nextIntentId('chrome') */
+  createIntentId?: () => IntentId;
+  /** 覆盖 origin；缺省 chrome / batch */
+  origin?: StructureIntentOrigin;
+  /**
+   * 显式 blockIds；缺省用 multiSelectedIds。
+   * 在 L0 且无多选/命令态时，显式传入仍受 silent_l0_guard（危险操作）。
+   */
+  blockIds?: readonly BlockId[];
+};
+
+// ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
 
 /**
- * 块 chrome 状态机（stub）。
+ * 块 chrome 状态机。
  *
  * 默认 L0 静默：无 hover/focus/多选/命令时，所有把手 hidden。
+ * 危险批量操作（删除）在纯 L0 且无多选/命令抬升时拒绝（A-SIL）。
  */
 export class BlockChromeModel {
   private silentLevel: SilentLevel = 'L0';
@@ -61,6 +101,12 @@ export class BlockChromeModel {
   private multiSelectedIds: BlockId[] = [];
   private collapsed = new Set<BlockId>();
   private commandActive = false;
+  private readonly createIntentId: () => IntentId;
+
+  constructor(options: { createIntentId?: () => IntentId } = {}) {
+    this.createIntentId =
+      options.createIntentId ?? (() => nextIntentId('chrome'));
+  }
 
   // -----------------------------------------------------------------------
   // 静默层级
@@ -176,6 +222,114 @@ export class BlockChromeModel {
   }
 
   // -----------------------------------------------------------------------
+  // W3-F：多选 → 批量结构 Intent
+  // -----------------------------------------------------------------------
+
+  /**
+   * 是否允许危险结构操作（删除等）。
+   *
+   * 对齐 A-SIL：纯 L0 静默纸面、无多选高亮、无命令态 → 拒绝危险批量。
+   * 抬升条件（任一）：
+   * - silentLevel === 'L1'
+   * - commandActive
+   * - multiSelectedIds 非空（用户已显式多选）
+   */
+  canPerformDangerousStructure(): boolean {
+    if (this.silentLevel === 'L1') return true;
+    if (this.commandActive) return true;
+    if (this.multiSelectedIds.length > 0) return true;
+    return false;
+  }
+
+  /**
+   * 多选（或显式 ids）→ `delete_blocks` Intent。
+   *
+   * - 空选区 → `empty_selection`
+   * - 纯 L0 无多选/命令 → `silent_l0_guard`（危险操作守卫）
+   * - 成功时**本地**清多选高亮（呈现层收敛；权威删除仍靠 sink/RS）
+   * - **不**直接改文档树
+   */
+  requestDeleteSelected(
+    options: ChromeStructureOptions = {}
+  ): ChromeStructureResult<DeleteBlocksIntent> {
+    const ids = this.resolveTargetIds(options.blockIds);
+    if (ids.length === 0) {
+      return {
+        ok: false,
+        code: 'empty_selection',
+        reason: 'BlockChromeModel.requestDeleteSelected：无选中块可删',
+      };
+    }
+    if (!this.canPerformDangerousStructure()) {
+      return {
+        ok: false,
+        code: 'silent_l0_guard',
+        reason:
+          '静默 L0：禁止无多选/命令态的危险批量删除（A-SIL）；请先多选或进入命令态/L1',
+      };
+    }
+
+    const intent = buildDeleteBlocksIntent({
+      blockIds: ids,
+      origin: options.origin ?? (ids.length > 1 ? 'batch' : 'chrome'),
+      createIntentId: options.createIntentId ?? this.createIntentId,
+    });
+
+    // 本地呈现：清多选噪声（A-SIL-02）；折叠/焦点保留
+    this.multiSelectedIds = [];
+    return { ok: true, intent, snapshot: this.getSnapshot() };
+  }
+
+  /**
+   * 多选 / 焦点 / 显式 ids → `toggle_collapse` Intent，并同步本地 collapsed 集。
+   *
+   * 折叠属呈现态，危险性低于删除：
+   * - 允许单焦点块折叠（无需多选抬升）
+   * - 仍拒绝完全无目标（empty_selection）
+   *
+   * @param collapsed 强制目标态；缺省 = 逐块 toggle
+   */
+  requestToggleCollapse(
+    collapsed?: boolean,
+    options: ChromeStructureOptions = {}
+  ): ChromeStructureResult<ToggleCollapseIntent> {
+    let ids = this.resolveTargetIds(options.blockIds);
+    // 无多选时回落焦点块（单块折叠）
+    if (ids.length === 0 && this.focusedBlockId) {
+      ids = [this.focusedBlockId];
+    }
+    if (ids.length === 0) {
+      return {
+        ok: false,
+        code: 'empty_selection',
+        reason: 'BlockChromeModel.requestToggleCollapse：无目标块',
+      };
+    }
+
+    const intent = buildToggleCollapseIntent({
+      blockIds: ids,
+      origin: options.origin ?? 'chrome',
+      createIntentId: options.createIntentId ?? this.createIntentId,
+      ...(collapsed !== undefined ? { collapsed } : {}),
+    });
+
+    // 本地呈现同步（乐观）；权威以 sink/投影为准
+    for (const id of ids) {
+      if (collapsed === true) {
+        this.collapsed.add(id);
+      } else if (collapsed === false) {
+        this.collapsed.delete(id);
+      } else if (this.collapsed.has(id)) {
+        this.collapsed.delete(id);
+      } else {
+        this.collapsed.add(id);
+      }
+    }
+
+    return { ok: true, intent, snapshot: this.getSnapshot() };
+  }
+
+  // -----------------------------------------------------------------------
   // 重置 / 快照
   // -----------------------------------------------------------------------
 
@@ -200,5 +354,24 @@ export class BlockChromeModel {
       collapsedIds: [...this.collapsed],
       commandActive: this.commandActive,
     };
+  }
+
+  // -----------------------------------------------------------------------
+  // 内部
+  // -----------------------------------------------------------------------
+
+  private resolveTargetIds(explicit?: readonly BlockId[]): BlockId[] {
+    if (explicit !== undefined) {
+      const seen = new Set<BlockId>();
+      const ids: BlockId[] = [];
+      for (const id of explicit) {
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          ids.push(id);
+        }
+      }
+      return ids;
+    }
+    return [...this.multiSelectedIds];
   }
 }

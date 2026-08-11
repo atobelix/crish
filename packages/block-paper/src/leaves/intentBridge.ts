@@ -1,14 +1,18 @@
 /**
- * Intent 下发桥（W3-D 骨架）：Intent → sink →（未来）RS apply。
+ * Intent 下发桥（W3-D + W3-F）：Intent → sink →（未来）RS apply。
  *
  * - `submitIntent`：经 IME 结构守卫后调用 sink
- * - composing 时 **结构 Intent**（`op` / slash / structure_key）拒绝
+ * - composing 时 **结构 Intent**（`op` / slash / structure_key / StructureIntent）拒绝
  * - `text_edit` 在 composing 期守卫放行，但 TextLeafModel 默认不在合成中产出
+ * - W3-F：`StructureIntent`（insert/delete/move/collapse/slash_insert）可直接进 sink
  * - 默认 mock sink 记录调用，不接真实后端
  *
  * 对齐：
  * - W0 Intent 形状（`@crish/block-paper-contract`）
  * - editor-kit `ImeMachine.tryAcceptIntent` / `structureKeyGuard`
+ * - 纸面 `PaperIntent`（见 `chrome/structureIntents`）
+ *
+ * **W3-F ≠ EL-01 关闭**：通路绿 ≠ A-BLK 全表 / 静默产品验收关闭。
  */
 
 import type { Intent } from '@crish/block-paper-contract';
@@ -18,6 +22,11 @@ import {
   type ImeMachine,
   type StructureGuardRejectCode,
 } from '@crish/editor-kit';
+import {
+  isStructureIntent,
+  type PaperIntent,
+  type StructureIntent,
+} from '../chrome/structureIntents';
 
 // ---------------------------------------------------------------------------
 // Sink 契约
@@ -31,9 +40,9 @@ export type IntentSinkResult = {
 
 /**
  * Intent 接收端（mock 或未来 RS IPC 适配）。
- * 仅接受 W0 `Intent`（text_edit | op）。
+ * 接受 `PaperIntent`：W0 text_edit/op + W3-F StructureIntent。
  */
-export type IntentSink = (intent: Intent) => Promise<IntentSinkResult>;
+export type IntentSink = (intent: PaperIntent) => Promise<IntentSinkResult>;
 
 // ---------------------------------------------------------------------------
 // submit
@@ -42,6 +51,7 @@ export type IntentSink = (intent: Intent) => Promise<IntentSinkResult>;
 export type SubmitIntentOptions = {
   /**
    * ImeMachine：优先用其 `tryAcceptIntent`（与 pin/合成态一致）。
+   * 注意：StructureIntent 不在 editor-kit GuardableIntent 内，composing 时本地拒绝。
    */
   ime?: ImeMachine;
   /**
@@ -53,13 +63,16 @@ export type SubmitIntentOptions = {
 export type SubmitIntentRejectCode =
   StructureGuardRejectCode | 'not_w0_intent' | 'sink_reject';
 
+/** submit 入参：W0/UI 守卫联合 ∪ 纸面结构 Intent */
+export type SubmittableIntent = GuardableIntent | StructureIntent;
+
 export type SubmitIntentResult =
-  | { ok: true; intent: Intent }
+  | { ok: true; intent: PaperIntent }
   | {
       ok: false;
       reason: string;
       code: SubmitIntentRejectCode;
-      intent: GuardableIntent;
+      intent: SubmittableIntent;
     };
 
 function resolveComposing(options: SubmitIntentOptions): boolean {
@@ -78,15 +91,39 @@ function isW0Intent(intent: GuardableIntent): intent is Intent {
 /**
  * 提交意图：IME 守卫 → sink。
  *
- * @param intent W0 Intent 或 UI 扩展（slash / structure_key）；扩展类型不会进 sink
- * @param sink 异步接收端
+ * @param intent W0 Intent、UI 扩展（slash / structure_key）或 W3-F StructureIntent
+ * @param sink 异步接收端（PaperIntent）
  * @param options ime / isComposing
  */
 export async function submitIntent(
-  intent: GuardableIntent,
+  intent: SubmittableIntent,
   sink: IntentSink,
   options: SubmitIntentOptions = {}
 ): Promise<SubmitIntentResult> {
+  // ── W3-F 结构 Intent：composing 禁；通过后直接进 sink ──
+  if (isStructureIntent(intent)) {
+    const composing = resolveComposing(options);
+    if (composing) {
+      return {
+        ok: false,
+        reason: 'IME composing：禁止结构 Op 意图（A-IME-02）',
+        code: 'composing_structure_op',
+        intent,
+      };
+    }
+    const sinkResult = await sink(intent);
+    if (!sinkResult.ok) {
+      return {
+        ok: false,
+        reason: sinkResult.reason ?? 'sink rejected',
+        code: 'sink_reject',
+        intent,
+      };
+    }
+    return { ok: true, intent };
+  }
+
+  // ── W3-D：GuardableIntent（W0 + request_slash / structure_key）──
   // 1) 结构守卫（composing 禁结构）
   if (options.ime) {
     const g = options.ime.tryAcceptIntent(intent);
@@ -111,11 +148,11 @@ export async function submitIntent(
     }
   }
 
-  // 2) 仅 W0 Intent 可下发 sink（UI 扩展由宿主另行处理）
+  // 2) 仅 W0 Intent 可下发 sink（UI 扩展由宿主另行映射为 StructureIntent / op）
   if (!isW0Intent(intent)) {
     return {
       ok: false,
-      reason: `intentBridge：${intent.type} 非 W0 Intent，不可下发 sink（须先映射为 text_edit/op）`,
+      reason: `intentBridge：${intent.type} 非 W0/Structure Intent，不可下发 sink（须先映射为 text_edit/op/StructureIntent）`,
       code: 'not_w0_intent',
       intent,
     };
@@ -143,8 +180,8 @@ export async function submitIntent(
 export type MockIntentSink = {
   /** 供 submitIntent 使用的 sink 函数 */
   sink: IntentSink;
-  /** 按调用顺序记录的 Intent */
-  calls: Intent[];
+  /** 按调用顺序记录的 Intent（含 StructureIntent） */
+  calls: PaperIntent[];
   /** 每次调用时返回的结果快照 */
   results: IntentSinkResult[];
   /** 设置下一次（及之后）sink 返回值 */
@@ -159,7 +196,7 @@ export type MockIntentSink = {
 export function createMockIntentSink(
   initialResult: IntentSinkResult = { ok: true }
 ): MockIntentSink {
-  const calls: Intent[] = [];
+  const calls: PaperIntent[] = [];
   const results: IntentSinkResult[] = [];
   let current: IntentSinkResult = { ...initialResult };
 

@@ -3,14 +3,23 @@
  *
  * - 打开 / 过滤 / 关闭
  * - **composing 时不可开**（A-IME-02 / editor-kit structureKeyGuard 思想）
+ * - **composing 时不可确认提交**（W3-F 加固）
+ * - 选中 catalog 项 → 产出 `slash_insert` StructureIntent（经 submitIntent → sink）
  * - 可注入 `isComposing` 回调（对接 ImeMachine.isComposing 或宿主）
  *
- * 本模型 **不** 下发 Intent；选中项后由宿主构造 `op` / `request_slash` 经守卫下发。
- * 写路径必须 Intent → RS apply；禁止 DOM 旁路写盘。
+ * 写路径：StructureIntent → submitIntent → sink →（未来）RS apply；
+ * 禁止 DOM 旁路写盘。
+ *
+ * **W3-F ≠ EL-01 关闭**：slash → Intent 通路绿 ≠ 产品级 slash 体验验收关闭。
  */
 
-import type { BlockId } from '@crish/block-paper-contract';
+import type { BlockId, IntentId } from '@crish/block-paper-contract';
 import type { SlashContribution } from '@crish/block-paper-contract';
+import { nextIntentId } from '../leaves/TextLeafModel';
+import {
+  buildSlashInsertIntent,
+  type SlashInsertIntent,
+} from './structureIntents';
 
 // ---------------------------------------------------------------------------
 // 类型
@@ -25,6 +34,20 @@ export type SlashOpenResult =
   | {
       ok: false;
       code: 'composing' | 'already_open' | 'invalid_anchor';
+      reason: string;
+    };
+
+/** 选中 catalog 项 → Intent 结果 */
+export type SlashSelectResult =
+  | { ok: true; intent: SlashInsertIntent; snapshot: SlashMenuSnapshot }
+  | {
+      ok: false;
+      code:
+        | 'composing'
+        | 'not_open'
+        | 'no_active_item'
+        | 'item_not_found'
+        | 'invalid_anchor';
       reason: string;
     };
 
@@ -57,6 +80,15 @@ export type SlashMenuModelOptions = {
   isComposing?: IsComposingFn;
   /** 初始菜单项目录；缺省用内置静默样例 */
   catalog?: readonly SlashContribution[];
+  /**
+   * intentId 工厂；缺省 `nextIntentId('slash')`。
+   * 便于宿主对接全局 id 空间 / 单测可预测。
+   */
+  createIntentId?: () => IntentId;
+  /**
+   * catalog item id → flavour 映射；缺省 identity（id 即 flavour）。
+   */
+  resolveFlavour?: (catalogItemId: string) => string;
 };
 
 // ---------------------------------------------------------------------------
@@ -127,11 +159,14 @@ export function filterSlashCatalog(
  * Slash 菜单状态机。
  *
  * 不变量：
- * 1. `isComposing() === true` 时 `open()` 拒绝（A-IME-02）
+ * 1. `isComposing() === true` 时 `open()` / `select*` 拒绝（A-IME-02）
  * 2. 关闭后 snapshot.open === false；焦点/选区由宿主 SelectionStore 保持（A-SIL-02）
+ * 3. 选中项产出 `slash_insert`，**不**直接改文档；须 `submitIntent` → sink
  */
 export class SlashMenuModel {
   private readonly isComposing: IsComposingFn;
+  private readonly createIntentId: () => IntentId;
+  private readonly resolveFlavour: (catalogItemId: string) => string;
   private catalog: SlashContribution[];
   private openState = false;
   private blockId: BlockId | null = null;
@@ -142,6 +177,9 @@ export class SlashMenuModel {
 
   constructor(options: SlashMenuModelOptions = {}) {
     this.isComposing = options.isComposing ?? (() => false);
+    this.createIntentId =
+      options.createIntentId ?? (() => nextIntentId('slash'));
+    this.resolveFlavour = options.resolveFlavour ?? ((id) => id);
     this.catalog = [...(options.catalog ?? DEFAULT_SLASH_CATALOG)];
   }
 
@@ -220,6 +258,82 @@ export class SlashMenuModel {
     return this.getSnapshot();
   }
 
+  /**
+   * 确认当前高亮项 → `slash_insert` Intent，并关闭菜单。
+   *
+   * - composing → 拒绝（加固；不关闭菜单，宿主可再试）
+   * - 未打开 / 无可见项 → 拒绝
+   */
+  selectActive(): SlashSelectResult {
+    if (this.isComposing()) {
+      return {
+        ok: false,
+        code: 'composing',
+        reason: 'IME composing：禁止提交 slash 插入（A-IME-02）',
+      };
+    }
+    if (!this.openState) {
+      return {
+        ok: false,
+        code: 'not_open',
+        reason: 'SlashMenuModel.selectActive：菜单未打开',
+      };
+    }
+    if (this.items.length === 0) {
+      return {
+        ok: false,
+        code: 'no_active_item',
+        reason: 'SlashMenuModel.selectActive：无可见 catalog 项',
+      };
+    }
+    const item = this.items[this.activeIndex] ?? this.items[0];
+    if (!item) {
+      return {
+        ok: false,
+        code: 'no_active_item',
+        reason: 'SlashMenuModel.selectActive：activeIndex 越界',
+      };
+    }
+    return this.commitItem(item.id);
+  }
+
+  /**
+   * 按 catalog 项 id 确认 → `slash_insert` Intent，并关闭菜单。
+   * id 须在**当前过滤可见** items 中（或完整 catalog；此处查完整 catalog，便于点击非高亮项）。
+   */
+  selectItem(catalogItemId: string): SlashSelectResult {
+    if (this.isComposing()) {
+      return {
+        ok: false,
+        code: 'composing',
+        reason: 'IME composing：禁止提交 slash 插入（A-IME-02）',
+      };
+    }
+    if (!this.openState) {
+      return {
+        ok: false,
+        code: 'not_open',
+        reason: 'SlashMenuModel.selectItem：菜单未打开',
+      };
+    }
+    if (!catalogItemId) {
+      return {
+        ok: false,
+        code: 'item_not_found',
+        reason: 'SlashMenuModel.selectItem：catalogItemId 不可为空',
+      };
+    }
+    const inCatalog = this.catalog.some((c) => c.id === catalogItemId);
+    if (!inCatalog) {
+      return {
+        ok: false,
+        code: 'item_not_found',
+        reason: `SlashMenuModel.selectItem：目录中无 id=${catalogItemId}`,
+      };
+    }
+    return this.commitItem(catalogItemId);
+  }
+
   /** 关闭菜单；清空锚点与 query。 */
   close(): SlashMenuSnapshot {
     this.openState = false;
@@ -245,6 +359,34 @@ export class SlashMenuModel {
       items: this.items.map((it) => ({ ...it })),
       activeIndex: this.activeIndex,
     };
+  }
+
+  // -----------------------------------------------------------------------
+  // 内部
+  // -----------------------------------------------------------------------
+
+  private commitItem(catalogItemId: string): SlashSelectResult {
+    const blockId = this.blockId;
+    if (!blockId) {
+      return {
+        ok: false,
+        code: 'invalid_anchor',
+        reason: 'SlashMenuModel：锚点 blockId 丢失',
+      };
+    }
+    const offset = this.offset;
+    const flavour = this.resolveFlavour(catalogItemId);
+    const intent = buildSlashInsertIntent({
+      blockId,
+      offset,
+      flavour,
+      catalogItemId,
+      origin: 'slash',
+      createIntentId: this.createIntentId,
+    });
+    // 成功产出 Intent 后关闭（A-SIL-02：面板噪声消失；选区由宿主保持）
+    const snapshot = this.close();
+    return { ok: true, intent, snapshot };
   }
 
   private refilter(): void {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "块纸面 W0 接口草稿：query_blocks / registerFlavour / ProjectionDiff / MountSpec / Intent（仅类型，不接线业务）",
+  "description": "块纸面 W0 接口草稿：query_blocks / registerFlavour / ProjectionDiff / MountSpec / Intent / EditorSurface（仅类型，不接线业务）",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

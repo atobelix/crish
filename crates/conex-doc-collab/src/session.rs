@@ -817,6 +817,8 @@ fn block_to_upsert(n: &BlockNode) -> BlockUpsert {
         children: n.children.clone(),
         order: n.order.clone(),
         parent: n.parent,
+        // 投影索引 / FTS 依赖此字段；冷热路径均以 text_snapshot 为准
+        plain_text: n.text_snapshot.clone().unwrap_or_default(),
     }
 }
 

@@ -1,4 +1,4 @@
-//! 笔记域工具：`query_blocks`（W4-A 最小骨架）
+//! 笔记域工具：`query_blocks`（W4-A 接线）
 //!
 //! # 契约
 //! - Schema 对齐 `docs/block-workspace-architecture/plans/specs/query-blocks-tool-schema.md`
@@ -6,20 +6,20 @@
 //!   `conex-workspace-store::query_blocks::QueryBlocksParams`。
 //! - **禁止**任意 SQL 字符串入参；全表扫不得作为默认路径。
 //!
-//! # 不变量（读 / 写路径纪律，W4 接线须守）
+//! # 不变量（读 / 写路径纪律）
 //! - **读 md**：即时 S(树)，**禁止**默认走 disk mirror 文件。
-//! - **写路径**（本工具只读，未来写类工具）：仅允许 `Transaction.apply`，
-//!   禁止 `fs.write` 后当权威。
+//! - **写路径**（本工具只读）：仅允许 `Transaction.apply`。
 //!
-//! # 执行面（本波）
-//! DocSession / WorkspaceStore 尚未注入 ToolContext——execute 校验入参后
-//! 返回稳定占位 JSON `{"ok":false,"reason":"note_backend_unwired"}`，
-//! 不 panic、不假命中。真实查询留待后续接线 store.query_blocks。
+//! # 执行面
+//! - `ctx.note_backend` 已注入 → 调 [`crate::note_backend::NoteBackend::query_blocks`]
+//! - 未注入 → 稳定占位 `{"ok":false,"reason":"note_backend_unwired"}`
 
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
+use crate::note_backend::{NoteBackendError, NoteQueryBlocksParams};
 use crate::tools::{optional_string, optional_u64, require_string};
 use async_trait::async_trait;
+use serde_json::{Map, Value as JsonValue};
 
 /// limit 默认值（与 TS `QUERY_BLOCKS_LIMIT_DEFAULT` / store 对齐）
 const LIMIT_DEFAULT: u64 = 50;
@@ -41,7 +41,7 @@ impl QueryBlocksTool {
                 name: "query_blocks".to_string(),
                 description: "在笔记文档内组合查询块（kind ∩ 属性等值 ∩ FTS 文本 ∩ refs）。\
 入参禁止任意 SQL；结果为块摘要列表（id/kind/snippet/attrs），非全文。\
-读路径走块树权威，不默认 mirror 文件。当前后端未接线时返回 ok=false 占位。"
+读路径走块树权威，不默认 mirror 文件。后端未接线时返回 ok=false 占位。"
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
@@ -89,6 +89,37 @@ impl QueryBlocksTool {
     }
 }
 
+fn parse_kind_in(args: &JsonValue) -> Result<Option<Vec<String>>, ToolError> {
+    match args.get("kind_in") {
+        None | Some(JsonValue::Null) => Ok(None),
+        Some(v) => {
+            let arr = v.as_array().ok_or_else(|| {
+                ToolError::invalid_input("kind_in must be an array of strings")
+            })?;
+            let mut out = Vec::with_capacity(arr.len());
+            for item in arr {
+                let s = item.as_str().ok_or_else(|| {
+                    ToolError::invalid_input("kind_in items must be strings")
+                })?;
+                out.push(s.to_string());
+            }
+            Ok(Some(out))
+        }
+    }
+}
+
+fn parse_attrs_eq(args: &JsonValue) -> Result<Option<Map<String, JsonValue>>, ToolError> {
+    match args.get("attrs_eq") {
+        None | Some(JsonValue::Null) => Ok(None),
+        Some(v) => {
+            let obj = v.as_object().ok_or_else(|| {
+                ToolError::invalid_input("attrs_eq must be an object")
+            })?;
+            Ok(Some(obj.clone()))
+        }
+    }
+}
+
 #[async_trait]
 impl Tool for QueryBlocksTool {
     fn name(&self) -> &str {
@@ -101,51 +132,54 @@ impl Tool for QueryBlocksTool {
 
     async fn execute(
         &self,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, ToolError> {
-        // 入参形状校验（与 schema / store 对齐）；真实查询未接线前仍 fail-fast 非法入参
         let doc_id = require_string(&args, "doc_id")?;
-        // kind_in：可选字符串数组（非法类型 → invalid_input）
-        if let Some(v) = args.get("kind_in") {
-            if !v.is_null() {
-                let arr = v.as_array().ok_or_else(|| {
-                    ToolError::invalid_input("kind_in must be an array of strings")
-                })?;
-                for item in arr {
-                    if !item.is_string() {
-                        return Err(ToolError::invalid_input(
-                            "kind_in items must be strings",
-                        ));
-                    }
-                }
-            }
-        }
-        // attrs_eq：可选 object
-        if let Some(v) = args.get("attrs_eq") {
-            if !v.is_null() && !v.is_object() {
-                return Err(ToolError::invalid_input(
-                    "attrs_eq must be an object",
-                ));
-            }
-        }
-        let _text_match = optional_string(&args, "text_match");
-        let _ref_to = optional_string(&args, "ref_to");
-        let _ref_from = optional_string(&args, "ref_from");
-        let _limit = optional_u64(&args, "limit")
+        let kind_in = parse_kind_in(&args)?;
+        let attrs_eq = parse_attrs_eq(&args)?;
+        let text_match = optional_string(&args, "text_match");
+        let ref_to = optional_string(&args, "ref_to");
+        let ref_from = optional_string(&args, "ref_from");
+        let limit = optional_u64(&args, "limit")
             .unwrap_or(LIMIT_DEFAULT)
             .min(LIMIT_MAX)
             .max(1);
 
-        // W4-A 最小：DocSession / WorkspaceStore 未注入 → 稳定占位，不 panic
-        // 将来接线：ctx.note_backend.query_blocks(...) → { blocks, truncated }
-        let _ = doc_id;
-        Ok(serde_json::json!({
-            "ok": false,
-            "reason": NOTE_BACKEND_UNWIRED,
-            "blocks": [],
-            "truncated": false,
-        }))
+        let Some(backend) = ctx.note_backend.as_ref() else {
+            return Ok(serde_json::json!({
+                "ok": false,
+                "reason": NOTE_BACKEND_UNWIRED,
+                "blocks": [],
+                "truncated": false,
+            }));
+        };
+
+        let params = NoteQueryBlocksParams {
+            doc_id,
+            kind_in,
+            attrs_eq,
+            text_match,
+            ref_to,
+            ref_from,
+            limit: Some(limit as u32),
+        };
+
+        match backend.query_blocks(params).await {
+            Ok(result) => Ok(serde_json::json!({
+                "ok": true,
+                "blocks": result.blocks,
+                "truncated": result.truncated,
+            })),
+            Err(NoteBackendError::Invalid(m)) => Err(ToolError::invalid_input(m)),
+            Err(e) => Ok(serde_json::json!({
+                "ok": false,
+                "reason": e.code(),
+                "message": e.message(),
+                "blocks": [],
+                "truncated": false,
+            })),
+        }
     }
 }
 
@@ -153,6 +187,8 @@ impl Tool for QueryBlocksTool {
 mod tests {
     use super::*;
     use crate::context::create_mock_tool_context;
+    use crate::note_backend::MemoryNoteBackend;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn query_blocks_stub_returns_unwired_placeholder() {
@@ -203,5 +239,37 @@ mod tests {
         assert!(required.iter().any(|v| v.as_str() == Some("doc_id")));
         assert_eq!(schema["properties"]["limit"]["maximum"], 200);
         assert_eq!(schema["properties"]["limit"]["default"], 50);
+    }
+
+    #[tokio::test]
+    async fn query_blocks_with_memory_backend_hits() {
+        let backend = Arc::new(MemoryNoteBackend::new());
+        backend.seed_doc(
+            "doc-1",
+            vec![
+                ("b1".into(), "paragraph".into(), "alpha beta".into()),
+                ("b2".into(), "paragraph".into(), "gamma".into()),
+            ],
+        );
+        let tool = QueryBlocksTool::new();
+        let ctx = ToolContext {
+            note_backend: Some(backend),
+            ..create_mock_tool_context()
+        };
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "doc_id": "doc-1",
+                    "text_match": "alpha",
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], true);
+        let blocks = out["blocks"].as_array().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["id"], "b1");
+        assert_eq!(out["truncated"], false);
     }
 }

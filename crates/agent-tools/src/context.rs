@@ -136,6 +136,11 @@ pub struct ToolContext {
     pub compression_store: Option<
         Arc<dyn crate::compression_store::CompressionContextStore>,
     >,
+    /// 笔记后端（W4-A/B：None = 未接线，query_blocks / document_outline /
+    /// document_apply_md / send_to_note 返回 `note_backend_unwired` 占位；
+    /// 引擎侧实现 [crate::note_backend::NoteBackend] 后注入——**禁止**
+    /// agent-tools 硬依赖 conex-doc-collab / workspace-store，保持叶子依赖）
+    pub note_backend: Option<Arc<dyn crate::note_backend::NoteBackend>>,
 }
 
 /// 探索类文档配额检查上下文（C5，I6-M11）
@@ -173,6 +178,7 @@ impl ToolContext {
             output_dir: None,
             log_root: None,
             compression_store: None,
+            note_backend: None,
         }
     }
 }
@@ -197,6 +203,7 @@ pub fn create_mock_tool_context() -> ToolContext {
         output_dir: None,
         log_root: None,
         compression_store: None,
+        note_backend: None,
     }
 }
 

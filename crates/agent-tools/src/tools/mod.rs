@@ -23,9 +23,10 @@
 //! - `output_dir`：resolve_output_dir（T-EG-08 / REQ-G01）——会话文档产出
 //!   目录解析（显式 folder 优先 / 默认 .agent-outputs/<YYYY-MM-DD>-<会话标识>/
 //!   惰性与幂等 / 只读子代理不自选；注册面 16→17）
-//! - `note_*`：W4-A 笔记域工具骨架——`query_blocks` / `document_outline`
-//!   （schema + registry；execute stub 返回 note_backend_unwired 占位，
-//!   未接 DocSession；注册面 20→22；只读进子 agent 只读集）
+//! - `note_*`：W4-A/B 笔记域工具——读 `query_blocks` / `document_outline`；
+//!   写 `document_apply_md` / `send_to_note`（经 `ToolContext.note_backend`
+//!   dyn trait 注入；None → note_backend_unwired；注册面 22→24；
+//!   读工具进只读集，写工具 dangerous=true 不进只读集）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
@@ -39,10 +40,12 @@ pub mod decompress_context;
 pub mod delete;
 pub mod diff;
 pub mod fs;
-// W4-A：笔记域工具骨架（document_outline / query_blocks）
-// 注册面 20→22；execute 占位，DocSession 未注入
+// W4-A/B：笔记域工具（读 outline/query + 写 apply_md/send_to_note）
+// 注册面 22→24；后端经 ctx.note_backend 注入
+pub mod note_document_apply_md;
 pub mod note_document_outline;
 pub mod note_query_blocks;
+pub mod note_send_to_note;
 // T-EG-08：resolve_output_dir 工具模块声明（注册面 16→17 由本文件下方
 // register_builtin_tools_with_config 负责；会话数据经 ctx.output_dir 注入）
 pub mod output_dir;
@@ -188,12 +191,15 @@ pub fn register_builtin_tools_with_config(
     // decompress_context（T-41）：压缩块原文取回（读操作，原始字节），
     // 只读进子 agent 只读集；落文件仅主 agent + output_dir 注入面
     registry.register(Arc::new(decompress_context::DecompressContextTool::new()))?;
-    // query_blocks / document_outline（W4-A 最小）：笔记读工具骨架，
-    // schema 与契约对齐；execute 无 DocSession 时返回 note_backend_unwired
-    // 稳定占位（不 panic）。读 md 禁止默认 mirror；写路径将来仅
-    // Transaction.apply（本二工具只读，不入 WRITE_TOOL_NAMES）
+    // query_blocks / document_outline（W4-A）：笔记读工具，schema 与契约对齐；
+    // execute 无 note_backend 时返回 note_backend_unwired 稳定占位。
+    // 读 md 禁止默认 mirror；只读不入 WRITE_TOOL_NAMES
     registry.register(Arc::new(note_query_blocks::QueryBlocksTool::new()))?;
     registry.register(Arc::new(note_document_outline::DocumentOutlineTool::new()))?;
+    // document_apply_md / send_to_note（W4-B）：笔记写工具，dangerous=true；
+    // 经同一 apply_md_fragment 后端路径；禁止 fs.write 当权威；不进只读集
+    registry.register(Arc::new(note_document_apply_md::DocumentApplyMdTool::new()))?;
+    registry.register(Arc::new(note_send_to_note::SendToNoteTool::new()))?;
     Ok(())
 }
 
@@ -733,7 +739,8 @@ mod tests {
         register_builtin_tools(&mut registry).unwrap();
         // 注册面 17→18（project_tree）→20（search_context/decompress_context）
         // →22（W4-A query_blocks / document_outline）
-        assert_eq!(registry.len(), 22);
+        // →24（W4-B document_apply_md / send_to_note）
+        assert_eq!(registry.len(), 24);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -748,6 +755,7 @@ mod tests {
                 "delete_dir",
                 "delete_file",
                 "diff_text",
+                "document_apply_md",
                 "document_outline",
                 "file_stat",
                 "fuzzy_find",
@@ -760,6 +768,7 @@ mod tests {
                 "resolve_output_dir",
                 "run_subagent",
                 "search_context",
+                "send_to_note",
                 "set_timer",
                 "shell_command",
                 "wait_subagents",
@@ -773,11 +782,13 @@ mod tests {
 
     #[tokio::test]
     async fn note_tools_registered_and_stub_execute() {
-        // W4-A：registry 能找到笔记工具；execute stub 不炸
+        // W4-A/B：registry 能找到笔记工具；无 backend 时 stub 不炸
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
         assert!(registry.has("query_blocks"));
         assert!(registry.has("document_outline"));
+        assert!(registry.has("document_apply_md"));
+        assert!(registry.has("send_to_note"));
         let ctx = crate::context::create_mock_tool_context();
         for name in ["query_blocks", "document_outline"] {
             let tool = registry.get(name).unwrap();
@@ -788,6 +799,31 @@ mod tests {
             assert_eq!(out["ok"], false, "{name}");
             assert_eq!(out["reason"], "note_backend_unwired", "{name}");
         }
+        // 写工具：unwired 占位（需完整入参）
+        let apply = registry.get("document_apply_md").unwrap();
+        let out = apply
+            .execute(
+                &ctx,
+                serde_json::json!({ "doc_id": "doc-stub", "markdown": "x" }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["reason"], "note_backend_unwired");
+        let send = registry.get("send_to_note").unwrap();
+        let out = send
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "intent_id": "i",
+                    "doc_id": "doc-stub",
+                    "markdown": "x",
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["reason"], "note_backend_unwired");
     }
 
     #[test]

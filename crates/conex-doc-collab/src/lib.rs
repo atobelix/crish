@@ -22,7 +22,7 @@ mod text_engine;
 mod tx;
 
 pub use block_id::{BlockId, block_id_from_comment, block_id_to_comment};
-pub use events::{DocEvent, ProjectionDiff};
+pub use events::{BlockUpsert, DocEvent, ProjectionDiff};
 pub use harness::{DualSessionHarness, PeerSide, SimplifiedEncodedOps};
 pub use ir::{BlockKind, BlockNode, BlockProps, BlockTree, cmp_order};
 pub use op::{Op, Origin};

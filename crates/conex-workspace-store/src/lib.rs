@@ -1,5 +1,5 @@
-//! 工作区笔记库（独立 workspace.db）。W1-C / W1-D1 / W2-C / W2-E：
-//! schema + snapshot/updates + blocks 投影 + FTS5 + MD mirror 导出与延迟水位。
+//! 工作区笔记库（独立 workspace.db）。W1-C / W1-D1 / W2-C / W2-D / W2-E / Round5：
+//! schema + snapshot/updates + blocks 投影 + FTS5 + CAS + MD mirror + **store↔collab 投影管线**。
 //!
 //! # S1 落盘五条
 //! 1. 权威 = SQLite snapshot + updates（+ RS 内存树）
@@ -18,19 +18,38 @@
 //! - `load_doc`：返回 snapshot ⊕ 剩余 pending（compact 后 pending 为空）
 //! - framing：`[u32_le chunk_len][chunk_bytes]...`；首段为旧 snapshot（若无则跳过），随后按 seq 追加每条 update.bytes
 //!
+//! # 推荐提交管线（Round5 · store↔collab 投影索引自动接线）
+//! ```ignore
+//! use conex_workspace_store::{SharedWorkspaceStore, commit_ops};
+//! use conex_doc_collab::{DocSession, Origin};
+//!
+//! let store = SharedWorkspaceStore::open("workspace.db")?;
+//! let mut session = DocSession::new("doc-1")
+//!     .with_persistence(Box::new(store.clone())); // on_committed 写权威
+//! let ev = commit_ops(&mut session, &store, Origin::User, &ops)?;
+//! // 等价分步：session.apply → store.apply_projection_diff / index_after_apply
+//! ```
+//! - **权威落盘**：`DocSession::apply` 内 `PersistencePlugin::on_committed`（[`SharedWorkspaceStore`] 可 clone 共享）
+//! - **派生索引**：[`WorkspaceStore::apply_projection_diff`]（以 `ProjectionDiff` 为准；
+//!   结构 update 现为 rev 占位字节，**禁止**指望 decode CRDT 重建索引）
+//! - 底层仍可测用 [`WorkspaceStore::reindex_block`]；生产路径应走管线
+//!
 //! # W2-C 派生索引（可丢、可重建；损坏不得导致文档不可开）
 //! - `blocks` 投影表：块元数据 + `plain_text` + `props_json`
 //! - `blocks_fts`：FTS5 全文（unicode61；**中文召回基准后置 / 可换 tantivy**）
-//! - 本波次：测用直接 `reindex_block`；**不**接 DocSession 事件总线
+//!
+//! # W2-D CAS 附件骨架
+//! - [`WorkspaceStore::put_blob`] / [`WorkspaceStore::get_blob`] / [`WorkspaceStore::link_block_attachment`]
+//! - 表 `blob_cas` + `block_attachments`；**附件不是第二文档权威**
 //!
 //! # W2-E MD mirror（人/git 契约视图，非权威）
 //! - [`WorkspaceStore::export_md_mirror`]：`serialize_tree` → 原子写 `.md` + 更新 `mirror_meta`
-//! - [`WorkspaceStore::note_authority_advanced`] / [`WorkspaceStore::mirror_lag`]：延迟水位骨架
+//! - [`WorkspaceStore::note_authority_advanced`] / [`WorkspaceStore::mirror_lag`]：延迟水位
+//! - 管线可选：[`commit_ops_with_mirror`] 在 lag ≥ threshold 时自动 export
 //! - **不变量**：工具默认 **禁止** 读 mirror 当权威；本 API 仅人/git 契约视图。
-//!   工具默认读 = 即时 S(树) / 编码态导出（S1 第 3 条）。
 //!
 //! # 后续扩展点
-//! - CAS `blobs/` 附件引用与 GC
+//! - CAS GC / 外置 `blobs/` 大文件 path
 //! - 外部改 mirror watcher + 三路合并（P6）
 //!
 //! # W2-F / W2-F+
@@ -39,9 +58,17 @@
 
 #![allow(missing_docs)]
 
+mod cas;
+mod projection;
 mod query_blocks;
 mod refs;
 
+pub use cas::{content_hash, get_blob_conn, put_blob_conn};
+pub use projection::{
+    block_kind_to_store_str, commit_ops, commit_ops_with_mirror, export_mirror_now,
+    index_after_apply, maybe_export_mirror, CommitMirrorOpts, CommitPipelineError,
+    DEFAULT_MIRROR_EXPORT_LAG_THRESHOLD,
+};
 pub use query_blocks::{
     QUERY_BLOCKS_LIMIT_DEFAULT, QUERY_BLOCKS_LIMIT_MAX, QueryBlocksHit, QueryBlocksParams,
     QueryBlocksResult, query_blocks_conn,
@@ -56,7 +83,7 @@ use conex_doc_collab::{
 use conex_md_ast::serialize_tree;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 /// pending updates 达到该条数时自动触发 snapshot 合并（与 snapshot_tick 并列）。
@@ -67,7 +94,8 @@ pub const SNAPSHOT_UPDATE_THRESHOLD: usize = 100;
 /// - v3：blocks 投影 + blocks_fts（W2-C）
 /// - v4：mirror_meta（W2-E MD mirror 导出水位）
 /// - v5：block_refs 物化（W2-F+ 块引用 / 反向链接）
-pub const SCHEMA_VERSION: i64 = 5;
+/// - v6：blob_cas + block_attachments（W2-D CAS 附件骨架）
+pub const SCHEMA_VERSION: i64 = 6;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -90,9 +118,8 @@ impl From<StoreError> for PersistError {
 /// 最小可用 schema 迁移（幂等；CREATE IF NOT EXISTS + 版本抬升）。
 ///
 /// 已建：doc_meta / doc_snapshots / doc_updates / doc_clocks / **blocks** / **blocks_fts** /
-/// **mirror_meta** / **block_refs**。
-/// 后续扩展点（本函数暂不建）：
-/// - CAS：`blob_refs` + 工作区 `blobs/` 目录
+/// **mirror_meta** / **block_refs** / **blob_cas** / **block_attachments**。
+/// 后续扩展点：CAS GC、外置 `blobs/` 大文件 path 策略。
 pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
     conn.execute_batch(
         r#"
@@ -169,8 +196,23 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
             PRIMARY KEY (doc_id, from_id, to_id, kind)
         );
 
-        -- W2 后续（勿在此 CREATE）：
-        --   CREATE TABLE blob_refs (...);
+        -- W2-D：CAS 附件（内容寻址；**非**文档权威）
+        -- hash = SHA-256 hex；bytes 可空时 path 指向外置文件（本波次默认内联 bytes）
+        CREATE TABLE IF NOT EXISTS blob_cas (
+            hash TEXT PRIMARY KEY,
+            size INTEGER NOT NULL DEFAULT 0,
+            bytes BLOB,
+            path TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+
+        -- 块 → blob 引用（多对多；删块时清链接，blob 行留给 GC）
+        CREATE TABLE IF NOT EXISTS block_attachments (
+            doc_id TEXT NOT NULL,
+            block_id TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            PRIMARY KEY (doc_id, block_id, hash)
+        );
         "#,
     )?;
 
@@ -199,6 +241,10 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
             ON block_refs(doc_id, to_id);
         CREATE INDEX IF NOT EXISTS idx_block_refs_from
             ON block_refs(doc_id, from_id);
+        CREATE INDEX IF NOT EXISTS idx_block_attachments_hash
+            ON block_attachments(hash);
+        CREATE INDEX IF NOT EXISTS idx_block_attachments_block
+            ON block_attachments(doc_id, block_id);
         "#,
     )?;
 
@@ -394,7 +440,8 @@ impl WorkspaceStore {
 
     /// 写入/更新单块投影并同步 FTS（幂等 UPSERT）。
     ///
-    /// 本波次由测试/上层直接调用；**不**挂 DocSession 事件总线（下波接线）。
+    /// 生产路径请走 [`Self::apply_projection_diff`] / [`commit_ops`]；
+    /// 本方法仍供测试、重建与细粒度修补。
     pub fn reindex_block(
         &self,
         doc_id: &str,
@@ -626,33 +673,7 @@ impl WorkspaceStore {
     /// `last_export_rev=0`、`path=''`、`pending_lag = new_rev`。
     pub fn note_authority_advanced(&self, doc_id: &str, new_rev: u64) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
-        let new_rev_i = new_rev as i64;
-        let existing: Option<i64> = conn
-            .query_row(
-                "SELECT last_export_rev FROM mirror_meta WHERE doc_id=?1",
-                params![doc_id],
-                |r| r.get(0),
-            )
-            .optional()?;
-        match existing {
-            Some(last) => {
-                let lag = (new_rev_i - last).abs();
-                conn.execute(
-                    "UPDATE mirror_meta SET pending_lag = ?1 WHERE doc_id = ?2",
-                    params![lag, doc_id],
-                )?;
-            }
-            None => {
-                conn.execute(
-                    r#"
-                    INSERT INTO mirror_meta(doc_id, path, last_export_rev, last_export_at, pending_lag)
-                    VALUES (?1, '', 0, 0, ?2)
-                    "#,
-                    params![doc_id, new_rev_i],
-                )?;
-            }
-        }
-        Ok(())
+        note_authority_advanced_conn(&conn, doc_id, new_rev)
     }
 
     /// 可观测 mirror 延迟水位（`pending_lag`）。
@@ -715,8 +736,43 @@ pub(crate) fn build_fts_query(query: &str) -> String {
         .join(" ")
 }
 
+/// 事务内：权威 rev 前进 → 更新 `mirror_meta.pending_lag`（投影管线同事务调用）。
+pub(crate) fn note_authority_advanced_conn(
+    conn: &Connection,
+    doc_id: &str,
+    new_rev: u64,
+) -> Result<(), StoreError> {
+    let new_rev_i = new_rev as i64;
+    let existing: Option<i64> = conn
+        .query_row(
+            "SELECT last_export_rev FROM mirror_meta WHERE doc_id=?1",
+            params![doc_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    match existing {
+        Some(last) => {
+            let lag = (new_rev_i - last).abs();
+            conn.execute(
+                "UPDATE mirror_meta SET pending_lag = ?1 WHERE doc_id = ?2",
+                params![lag, doc_id],
+            )?;
+        }
+        None => {
+            conn.execute(
+                r#"
+                INSERT INTO mirror_meta(doc_id, path, last_export_rev, last_export_at, pending_lag)
+                VALUES (?1, '', 0, 0, ?2)
+                "#,
+                params![doc_id, new_rev_i],
+            )?;
+        }
+    }
+    Ok(())
+}
+
 /// 事务内：UPSERT blocks + 同步 FTS。
-fn reindex_block_conn(
+pub(crate) fn reindex_block_conn(
     conn: &Connection,
     doc_id: &str,
     block_id: &str,
@@ -763,7 +819,7 @@ fn reindex_block_conn(
 }
 
 /// 事务内：删 blocks 行 + FTS 行。
-fn remove_block_index_conn(
+pub(crate) fn remove_block_index_conn(
     conn: &Connection,
     doc_id: &str,
     block_id: &str,
@@ -931,6 +987,57 @@ impl PersistencePlugin for WorkspaceStore {
         // checkpoint 失败不视为致命（磁盘满等由上层感知）
         let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
         Ok(())
+    }
+}
+
+/// 可共享的 `WorkspaceStore` 句柄：同时充当 `PersistencePlugin` 与投影索引入口。
+///
+/// 因 orphan rule 不能直接 `impl PersistencePlugin for Arc<WorkspaceStore>`，
+/// 用本地 newtype 包装。推荐：
+/// ```ignore
+/// let shared = SharedWorkspaceStore::open("workspace.db")?;
+/// let mut session = DocSession::new("d").with_persistence(Box::new(shared.clone()));
+/// commit_ops(&mut session, &shared, Origin::User, &ops)?;
+/// ```
+#[derive(Clone)]
+pub struct SharedWorkspaceStore(pub Arc<WorkspaceStore>);
+
+impl SharedWorkspaceStore {
+    pub fn new(store: WorkspaceStore) -> Self {
+        Self(Arc::new(store))
+    }
+
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        Ok(Self::new(WorkspaceStore::open(path)?))
+    }
+
+    pub fn store(&self) -> &WorkspaceStore {
+        &self.0
+    }
+
+    pub fn arc(&self) -> Arc<WorkspaceStore> {
+        Arc::clone(&self.0)
+    }
+}
+
+impl std::ops::Deref for SharedWorkspaceStore {
+    type Target = WorkspaceStore;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PersistencePlugin for SharedWorkspaceStore {
+    fn load_doc(&self, doc_id: &str) -> Result<HydrateBlob, PersistError> {
+        self.0.load_doc(doc_id)
+    }
+
+    fn on_committed(&self, doc_id: &str, commit: &CommitBatch) -> Result<(), PersistError> {
+        self.0.on_committed(doc_id, commit)
+    }
+
+    fn flush_hint(&self, doc_id: &str) -> Result<(), PersistError> {
+        self.0.flush_hint(doc_id)
     }
 }
 
@@ -1380,17 +1487,17 @@ mod tests {
         let store3 = WorkspaceStore::open(&db).unwrap();
         assert_eq!(store3.schema_version().unwrap(), SCHEMA_VERSION);
 
-        // v4 mirror_meta + v5 block_refs 表存在
+        // v4 mirror_meta + v5 block_refs + v6 blob_cas / block_attachments
         {
             let conn = Connection::open(&db).unwrap();
             let n: i64 = conn
                 .query_row(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('mirror_meta','block_refs')",
+                    "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('mirror_meta','block_refs','blob_cas','block_attachments')",
                     [],
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert_eq!(n, 2);
+            assert_eq!(n, 4);
         }
     }
 

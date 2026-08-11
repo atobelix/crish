@@ -8,6 +8,8 @@ import {
   QUERY_BLOCKS_LIMIT_MAX,
   QUERY_BLOCKS_TOOL_NAME,
   asFlavourRegistration,
+  EDITOR_SURFACES,
+  isSendToNoteIntent,
 } from './index';
 import {
   queryToolMeta,
@@ -18,6 +20,8 @@ import {
   sampleQueryParams,
   sampleQueryResult,
   sampleRegisterFlavour,
+  sampleSendToNoteIntent,
+  sampleSurfaces,
 } from './contract.smoke';
 
 describe('@crish/block-paper-contract', () => {
@@ -51,5 +55,16 @@ describe('@crish/block-paper-contract', () => {
       'op',
       'text_edit',
     ]);
+  });
+
+  it('A-SURF-01：EditorSurface 仅 chat | note-paper', () => {
+    expect(EDITOR_SURFACES).toEqual(['chat', 'note-paper']);
+    expect(sampleSurfaces).toEqual(EDITOR_SURFACES);
+  });
+
+  it('SendToNoteIntent 冒烟样本可守卫通过且无 lines 字段', () => {
+    expect(isSendToNoteIntent(sampleSendToNoteIntent)).toBe(true);
+    expect(sampleSendToNoteIntent.source).not.toHaveProperty('lines');
+    expect(sampleSendToNoteIntent.source.markdown).toContain('smoke');
   });
 });
