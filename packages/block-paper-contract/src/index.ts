@@ -27,6 +27,13 @@ export {
   QUERY_BLOCKS_LIMIT_DEFAULT,
 } from './query-blocks';
 
+// document_get_md（Agent 读 = 即时 S(树)；RS: document_to_md）
+export type {
+  DocumentGetMdParams,
+  DocumentGetMdResult,
+} from './document-get-md';
+export { DOCUMENT_GET_MD_TOOL_NAME } from './document-get-md';
+
 // registerFlavour
 export type {
   FlavourSchema,

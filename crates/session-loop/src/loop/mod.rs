@@ -28,6 +28,7 @@ use agent_tools::backup::BackupMiddleware;
 use agent_tools::context::ExploreDocsQuotaContext;
 use agent_tools::idempotency::ToolIdempotencyGuard;
 use agent_tools::middleware::ToolMiddleware;
+use agent_tools::note_backend::NoteBackendHandle;
 use agent_tools::registry::ToolRegistry;
 use agent_tools::write_paths::WritePathRegistry;
 use async_trait::async_trait;
@@ -273,6 +274,11 @@ pub struct SessionLoopOptions {
     /// AgentMessage 面 L1 改为 stub（R-E），运行时双态切换需引擎支持；
     /// 本字段 V1 只透传文档化、不改变行为，预留给 V2（见 T-44 决策注释）。
     pub compact_l1_placeholder: Option<bool>,
+    /// 笔记后端（Round6 / W4-E）：经 `with_options` 注入 `tool_ctx.note_backend`，
+    /// 再在 `tool_exec` 组装 `ToolContext` 时透传。None = 未接线（工具
+    /// `note_backend_unwired`）；Some = `conex-note-runtime::NoteRuntime::open`
+    /// 等实现。允许 Option 透传 None，字段必须存在且可注入。
+    pub note_backend: Option<NoteBackendHandle>,
 }
 
 impl Default for SessionLoopOptions {
@@ -326,6 +332,9 @@ impl Default for SessionLoopOptions {
             // T-44：L1 回退开关缺省 None = 新中性 stub（默认；V1 启动级
             // 配置，引擎不支持动态双态 → 仅文档化预留 V2）
             compact_l1_placeholder: None,
+            // Round6 / W4-E：笔记后端缺省 None = 未接线（工具 note_backend_unwired）；
+            // 壳层 / engine 经 options 注入 StoreNoteBackend
+            note_backend: None,
         }
     }
 }
@@ -402,6 +411,8 @@ impl AgentSessionLoop {
             parent_run_id: None,
             // T-EG-08：产出目录解析器随 with_options 装配（构造期 None）
             output_dir: None,
+            // Round6 / W4-E：笔记后端随 with_options 装配（构造期 None）
+            note_backend: None,
         },
             tool_options: ToolBatchOptions::default(),
             approval: None,
@@ -474,6 +485,8 @@ impl AgentSessionLoop {
         // T-D-14 权限传递层：父 run 归属经 tool_ctx 透传执行器（审批请求
         // 来源判定与裁决者路由依据；None = 主 agent run）
         self.tool_ctx.parent_run_id = options.parent_run_id.clone();
+        // Round6 / W4-E：笔记后端经 tool_ctx 透传工具执行面（None = unwired）
+        self.tool_ctx.note_backend = options.note_backend.clone();
 
         self.state.options = options.clone();
         // 预算/压缩派生状态同步（P4 阶段 2-2/3-2）：LoopState 的

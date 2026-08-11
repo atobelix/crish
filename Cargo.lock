@@ -1180,6 +1180,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "conex-note-runtime"
+version = "0.1.0"
+dependencies = [
+ "agent-tools",
+ "async-trait",
+ "conex-doc-collab",
+ "conex-md-ast",
+ "conex-workspace-store",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
 name = "conex-sandbox"
 version = "0.1.0"
 dependencies = [

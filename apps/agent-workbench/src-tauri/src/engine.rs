@@ -2488,6 +2488,15 @@ impl SessionLoopProducer {
         session_loop = session_loop
             .with_options(self.options.clone())
             .with_tool_options(self.tool_options.clone());
+        // ── Round6 / W4-E 挂点（笔记真管线）────────────────────────────────
+        // 将 `conex_note_runtime::NoteRuntime::open(workspace.db)` 得到的
+        // `Arc<dyn NoteBackend>` 写入 `SessionLoopOptions.note_backend`，
+        // `with_options` 会注入 `ToolExecCtx.note_backend` → `ToolContext.note_backend`。
+        // 当前默认 None = 工具返回 `note_backend_unwired`；装配后
+        // query_blocks / document_outline / document_apply_md / send_to_note
+        // 走 DocSession + store 投影管线（禁止 mirror 文件默认读）。
+        // 工厂：`conex_note_runtime::NoteRuntime::open` / `StoreNoteBackend`。
+        // ────────────────────────────────────────────────────────────────
         // 30-P1：run 控制面装配（with_options 之后、run() 之前——builder
         // 顺序契约）——壳层与 loop 同源：同一控制总线 + 同一 abort 信号
         // 实例（A4-H2 断头路消除：check_control 安全点真实消费外部意图）

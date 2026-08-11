@@ -3,7 +3,7 @@
 //
 // 覆盖范围：
 // - validateManifest 的有效/无效 manifest 路径
-// - 权限枚举校验（11 项 PluginPermission）
+// - 权限枚举校验（14 项 PluginPermission，含 D6 ui:contribute/note:read|write）
 // - 能力清单校验（declaredHooks/declaredTools/declaredMcpServers）
 // - engineVersion semver range 校验
 // - trustLevel 信任级别校验（禁令 18）
@@ -35,7 +35,7 @@ import type {
 
 /** 构造一个最小可用的 manifest（testify 工厂）。 */
 function makeValidManifest(
-  overrides: Partial<PluginManifest> = {},
+  overrides: Partial<PluginManifest> = {}
 ): PluginManifest {
   return {
     id: '@crish/test-plugin',
@@ -69,7 +69,7 @@ describe('validateManifest - 有效 manifest', () => {
         trustLevel: 'full',
         origin: 'user-dir',
         permissions: [],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
@@ -81,7 +81,7 @@ describe('validateManifest - 有效 manifest', () => {
         declaredTools: [],
         declaredMcpServers: [],
         permissions: [],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
@@ -91,16 +91,16 @@ describe('validateManifest - 有效 manifest', () => {
       makeValidManifest({
         declaredHooks: [...HOOK_EVENT_NAMES] as readonly HookEventName[],
         permissions: ['hook:observe', 'hook:intercept'],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
 
-  it('全部 11 项权限枚举通过校验', () => {
+  it('全部 14 项权限枚举通过校验', () => {
     const result = validateManifest(
       makeValidManifest({
         permissions: [...PLUGIN_PERMISSIONS] as readonly PluginPermission[],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
@@ -117,118 +117,110 @@ describe('validateManifest - 有效 manifest', () => {
 describe('validateManifest - 必填字段缺失', () => {
   it('id 缺失 → missing-required-field', () => {
     const result = validateManifest(
-      makeValidManifest({ id: '' } as PluginManifest),
+      makeValidManifest({ id: '' } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.code === 'missing-required-field' && e.field === 'id')).toBe(true);
+    expect(
+      result.errors.some(
+        (e) => e.code === 'missing-required-field' && e.field === 'id'
+      )
+    ).toBe(true);
   });
 
   it('name 缺失 → missing-required-field', () => {
     const result = validateManifest(
-      makeValidManifest({ name: '' } as PluginManifest),
+      makeValidManifest({ name: '' } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.field === 'name'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.field === 'name')).toBe(true);
   });
 
   it('version 缺失 → missing-required-field', () => {
     const result = validateManifest(
-      makeValidManifest({ version: '' } as PluginManifest),
+      makeValidManifest({ version: '' } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.field === 'version'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.field === 'version')).toBe(true);
   });
 
   it('entrypoints.main 缺失 → missing-required-field', () => {
     const result = validateManifest(
-      makeValidManifest({ entrypoints: { main: '' } } as PluginManifest),
+      makeValidManifest({ entrypoints: { main: '' } } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.field === 'entrypoints.main'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.field === 'entrypoints.main')).toBe(
+      true
+    );
   });
 
   it('engineVersion 缺失 → missing-required-field', () => {
     const result = validateManifest(
-      makeValidManifest({ engineVersion: '' } as PluginManifest),
+      makeValidManifest({ engineVersion: '' } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.field === 'engineVersion'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.field === 'engineVersion')).toBe(true);
   });
 
   it('空白字符串视为缺失（trim 后非空校验）', () => {
     const result = validateManifest(
-      makeValidManifest({ id: '   ' } as PluginManifest),
+      makeValidManifest({ id: '   ' } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.field === 'id'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.field === 'id')).toBe(true);
   });
 });
 
 describe('validateManifest - semver 校验', () => {
   it('非法 version 格式 → invalid-semver', () => {
     const result = validateManifest(
-      makeValidManifest({ version: 'not-a-version' } as PluginManifest),
+      makeValidManifest({ version: 'not-a-version' } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'invalid-semver'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'invalid-semver')).toBe(true);
   });
 
   it('version "1.2" 缺少 patch 段 → invalid-semver', () => {
     const result = validateManifest(
-      makeValidManifest({ version: '1.2' } as PluginManifest),
+      makeValidManifest({ version: '1.2' } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'invalid-semver'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'invalid-semver')).toBe(true);
   });
 
   it('带 pre-release 的 version 通过', () => {
     const result = validateManifest(
-      makeValidManifest({ version: '1.0.0-beta.1' } as PluginManifest),
+      makeValidManifest({ version: '1.0.0-beta.1' } as PluginManifest)
     );
     expect(result.valid).toBe(true);
   });
 
   it('非法 engineVersion range → invalid-engine-version', () => {
     const result = validateManifest(
-      makeValidManifest({ engineVersion: 'invalid-range' } as PluginManifest),
+      makeValidManifest({ engineVersion: 'invalid-range' } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'invalid-engine-version'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'invalid-engine-version')).toBe(
+      true
+    );
   });
 
   it('engineVersion ">=0.2.0 <0.3.0" 通过', () => {
     const result = validateManifest(
-      makeValidManifest({ engineVersion: '>=0.2.0 <0.3.0' } as PluginManifest),
+      makeValidManifest({ engineVersion: '>=0.2.0 <0.3.0' } as PluginManifest)
     );
     expect(result.valid).toBe(true);
   });
 
   it('engineVersion "^0.2.0" 通过', () => {
     const result = validateManifest(
-      makeValidManifest({ engineVersion: '^0.2.0' } as PluginManifest),
+      makeValidManifest({ engineVersion: '^0.2.0' } as PluginManifest)
     );
     expect(result.valid).toBe(true);
   });
 
   it('engineVersion "~0.2.5" 通过', () => {
     const result = validateManifest(
-      makeValidManifest({ engineVersion: '~0.2.5' } as PluginManifest),
+      makeValidManifest({ engineVersion: '~0.2.5' } as PluginManifest)
     );
     expect(result.valid).toBe(true);
   });
@@ -237,12 +229,14 @@ describe('validateManifest - semver 校验', () => {
 describe('validateManifest - trustLevel 校验（禁令 18）', () => {
   it('非法 trustLevel → invalid-trust-level', () => {
     const result = validateManifest(
-      makeValidManifest({ trustLevel: 'sandboxed' as PluginTrustLevel } as PluginManifest),
+      makeValidManifest({
+        trustLevel: 'sandboxed' as PluginTrustLevel,
+      } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'invalid-trust-level'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'invalid-trust-level')).toBe(
+      true
+    );
   });
 
   it('full + project-dir → full-trust-forbidden-origin（禁令 18 防仓库投毒）', () => {
@@ -251,11 +245,11 @@ describe('validateManifest - trustLevel 校验（禁令 18）', () => {
         trustLevel: 'full',
         origin: 'project-dir',
         permissions: [],
-      }),
+      })
     );
     expect(result.valid).toBe(false);
     expect(
-      result.errors.some((e) => e.code === 'full-trust-forbidden-origin'),
+      result.errors.some((e) => e.code === 'full-trust-forbidden-origin')
     ).toBe(true);
   });
 
@@ -265,14 +259,16 @@ describe('validateManifest - trustLevel 校验（禁令 18）', () => {
         trustLevel: 'full',
         origin: 'user-dir',
         permissions: [],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
 
   it('sandboxed 信任级别被拒绝（禁令 18 禁止 sandboxed）', () => {
     const result = validateManifest(
-      makeValidManifest({ trustLevel: 'sandboxed' as PluginTrustLevel } as PluginManifest),
+      makeValidManifest({
+        trustLevel: 'sandboxed' as PluginTrustLevel,
+      } as PluginManifest)
     );
     expect(result.valid).toBe(false);
   });
@@ -282,20 +278,24 @@ describe('validateManifest - 权限枚举校验（禁令 18）', () => {
   it('非法权限值 → invalid-permission', () => {
     const result = validateManifest(
       makeValidManifest({
-        permissions: ['file:read' as PluginPermission] as readonly PluginPermission[],
-      }),
+        permissions: [
+          'file:read' as PluginPermission,
+        ] as readonly PluginPermission[],
+      })
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'invalid-permission'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'invalid-permission')).toBe(
+      true
+    );
   });
 
   it('合并前的旧权限名 file:read 被拒绝（已合并为 file:access）', () => {
     const result = validateManifest(
       makeValidManifest({
-        permissions: ['file:read' as PluginPermission] as readonly PluginPermission[],
-      }),
+        permissions: [
+          'file:read' as PluginPermission,
+        ] as readonly PluginPermission[],
+      })
     );
     expect(result.valid).toBe(false);
   });
@@ -303,13 +303,15 @@ describe('validateManifest - 权限枚举校验（禁令 18）', () => {
   it('合并前的旧权限名 shell:execute 被拒绝（已合并为 tool:execute）', () => {
     const result = validateManifest(
       makeValidManifest({
-        permissions: ['shell:execute' as PluginPermission] as readonly PluginPermission[],
-      }),
+        permissions: [
+          'shell:execute' as PluginPermission,
+        ] as readonly PluginPermission[],
+      })
     );
     expect(result.valid).toBe(false);
   });
 
-  it('合法的 11 项权限全部通过', () => {
+  it('合法的 14 项权限全部通过', () => {
     const allPerms = [
       'file:access',
       'tool:execute',
@@ -322,9 +324,12 @@ describe('validateManifest - 权限枚举校验（禁令 18）', () => {
       'hook:observe',
       'hook:intercept',
       'plugin:manage',
+      'ui:contribute',
+      'note:read',
+      'note:write',
     ] as readonly PluginPermission[];
     const result = validateManifest(
-      makeValidManifest({ permissions: allPerms }),
+      makeValidManifest({ permissions: allPerms })
     );
     expect(result.valid).toBe(true);
   });
@@ -334,13 +339,15 @@ describe('validateManifest - 钩子事件名校验', () => {
   it('非法钩子事件名 → invalid-hook-event', () => {
     const result = validateManifest(
       makeValidManifest({
-        declaredHooks: ['invalid.event' as HookEventName] as readonly HookEventName[],
-      }),
+        declaredHooks: [
+          'invalid.event' as HookEventName,
+        ] as readonly HookEventName[],
+      })
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'invalid-hook-event'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'invalid-hook-event')).toBe(
+      true
+    );
   });
 
   it('全部 14 个合法事件名通过', () => {
@@ -348,7 +355,7 @@ describe('validateManifest - 钩子事件名校验', () => {
       makeValidManifest({
         declaredHooks: [...HOOK_EVENT_NAMES] as readonly HookEventName[],
         permissions: ['hook:observe', 'hook:intercept'],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
@@ -358,7 +365,7 @@ describe('validateManifest - 钩子事件名校验', () => {
       makeValidManifest({
         declaredHooks: ['tool.error'] as readonly HookEventName[],
         permissions: ['hook:intercept'],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
@@ -370,12 +377,12 @@ describe('validateManifest - 能力清单校验', () => {
       makeValidManifest({
         declaredTools: [''] as readonly string[],
         permissions: ['tool:register'],
-      }),
+      })
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'empty-capability-list'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'empty-capability-list')).toBe(
+      true
+    );
   });
 
   it('declaredMcpServers 含空字符串 → empty-capability-list', () => {
@@ -383,12 +390,12 @@ describe('validateManifest - 能力清单校验', () => {
       makeValidManifest({
         declaredMcpServers: [''] as readonly string[],
         permissions: ['mcp:connect'],
-      }),
+      })
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'empty-capability-list'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'empty-capability-list')).toBe(
+      true
+    );
   });
 
   it('declaredTools 含合法工具名通过', () => {
@@ -396,7 +403,7 @@ describe('validateManifest - 能力清单校验', () => {
       makeValidManifest({
         declaredTools: ['my-tool', 'another-tool'] as readonly string[],
         permissions: ['tool:register'],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
@@ -405,38 +412,34 @@ describe('validateManifest - 能力清单校验', () => {
 describe('validateManifest - origin 枚举校验（禁令 15/16/17）', () => {
   it('非法 origin → invalid-origin', () => {
     const result = validateManifest(
-      makeValidManifest({ origin: 'npm' as PluginOrigin } as PluginManifest),
+      makeValidManifest({ origin: 'npm' as PluginOrigin } as PluginManifest)
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'invalid-origin'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'invalid-origin')).toBe(true);
   });
 
   it('禁令来源 mcp 被拒绝', () => {
     const result = validateManifest(
-      makeValidManifest({ origin: 'mcp' as PluginOrigin } as PluginManifest),
+      makeValidManifest({ origin: 'mcp' as PluginOrigin } as PluginManifest)
     );
     expect(result.valid).toBe(false);
   });
 
   it('禁令来源 github 被拒绝', () => {
     const result = validateManifest(
-      makeValidManifest({ origin: 'github' as PluginOrigin } as PluginManifest),
+      makeValidManifest({ origin: 'github' as PluginOrigin } as PluginManifest)
     );
     expect(result.valid).toBe(false);
   });
 
   it('合法 origin user-dir 通过', () => {
-    const result = validateManifest(
-      makeValidManifest({ origin: 'user-dir' }),
-    );
+    const result = validateManifest(makeValidManifest({ origin: 'user-dir' }));
     expect(result.valid).toBe(true);
   });
 
   it('合法 origin project-dir 通过', () => {
     const result = validateManifest(
-      makeValidManifest({ origin: 'project-dir' }),
+      makeValidManifest({ origin: 'project-dir' })
     );
     expect(result.valid).toBe(true);
   });
@@ -579,8 +582,11 @@ describe('常量导出', () => {
     }
   });
 
-  it('PLUGIN_PERMISSIONS 含 11 项权限', () => {
-    expect(PLUGIN_PERMISSIONS).toHaveLength(11);
+  it('PLUGIN_PERMISSIONS 含 14 项权限（含 D6 ui:contribute/note:read|write）', () => {
+    expect(PLUGIN_PERMISSIONS).toHaveLength(14);
+    expect(PLUGIN_PERMISSIONS).toContain('ui:contribute');
+    expect(PLUGIN_PERMISSIONS).toContain('note:read');
+    expect(PLUGIN_PERMISSIONS).toContain('note:write');
   });
 
   it('PLUGIN_TRUST_LEVELS 仅含 restricted + full（禁令 18 禁止 sandboxed）', () => {

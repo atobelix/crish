@@ -1,15 +1,17 @@
 /**
- * SendToNoteButton — 「发送到笔记」UI 钩子（W5-B · B-05/B-08）
+ * SendToNoteButton — 「发送到笔记」UI 钩子（W5-B · B-05/B-08 · Round6）
  *
  * - 仅 status === 'completed' 可点
  * - 点击调用 bridges/send-to-note 薄桥
  * - 展示错误态；失败不假装已写树
  * - 禁止流式 onStreamEnd 默认写笔记
+ * - 写路径：sink 优先；否则 NoteTransport / 模块默认
  */
 
 import React, { useCallback, useState } from 'react';
 import { NotebookPen } from 'lucide-react';
 import { Button } from '../ui';
+import type { NoteTransport } from '../../api/noteApi';
 import {
   dispatchSendToNote,
   type BuildSendToNoteInput,
@@ -29,8 +31,14 @@ export type SendToNoteButtonProps = {
   markdown: string;
   /** 目标笔记 docId */
   docId: string;
-  /** 写路径 sink（产品注入 mock 或未来 RS IPC） */
-  sink: SendToNoteSink;
+  /**
+   * 写路径 sink（mock / 测试）。
+   * 与 `transport` 同时存在时 **sink 优先**。
+   * 皆缺省 → 桥走模块默认 NoteTransport。
+   */
+  sink?: SendToNoteSink;
+  /** 笔记通路（Round6 Memory / 未来 Tauri） */
+  transport?: NoteTransport;
   /** 幂等键；缺省由桥生成 */
   intentId?: string;
   origin?: 'user' | 'agent';
@@ -53,6 +61,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
   markdown,
   docId,
   sink,
+  transport,
   intentId,
   origin = 'user',
   onSuccess,
@@ -93,9 +102,15 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
         input.intentId = intentId;
       }
 
-      const result = await dispatchSendToNote(input, sink, {
-        streamStatus: status,
-      });
+      const result = sink
+        ? await dispatchSendToNote(input, sink, {
+            streamStatus: status,
+            transport,
+          })
+        : await dispatchSendToNote(input, {
+            streamStatus: status,
+            transport,
+          });
 
       if (result.ok) {
         setLastOk(true);
@@ -115,6 +130,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
     markdown,
     docId,
     sink,
+    transport,
     intentId,
     origin,
     status,

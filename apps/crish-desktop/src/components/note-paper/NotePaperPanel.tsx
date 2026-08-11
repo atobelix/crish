@@ -1,15 +1,16 @@
 /**
- * NotePaperPanel — Workbench 笔记纸面挂载壳（W5-B · B-01/B-02）
+ * NotePaperPanel — Workbench 笔记纸面挂载壳（W5-B · B-01/B-02 · Round6）
  *
  * surface = note-paper
  *
  * - 使用 `@crish/block-paper` 的 createSilentFixture / BlockChromeModel / SlashMenuModel
  * - **可测** 预览壳：列表块 id、静默把手状态、data-surface="note-paper"
+ * - 可选 `transport`：从 Memory/IPC 加载块列表（写后 refresh 可测）
  * - **禁止** import 行级 EditorStore / markdown-editor store
  * - 挂载 ≠ EL-01/EL-08 关闭；假数据投影 ≠ 文档权威
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BlockChromeModel,
   createSilentFixture,
@@ -18,6 +19,7 @@ import {
   type HandleVisibility,
   type SilentFixture,
 } from '@crish/block-paper';
+import type { NoteQueryBlockHit, NoteTransport } from '../../api/noteApi';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import styles from './NotePaperPanel.module.css';
 
@@ -28,12 +30,22 @@ import styles from './NotePaperPanel.module.css';
 export type NotePaperPanelProps = {
   /** 文档 id（投影 / 假数据）；默认 silent-doc */
   docId?: string;
-  /** 静默假数据块数；默认 8 */
+  /** 静默假数据块数；默认 8（transport 模式忽略） */
   blockCount?: number;
   /** 可选：外部注入 fixture（测试用） */
   fixture?: SilentFixture;
   /** 可选：外部 chrome（测试用） */
   chrome?: BlockChromeModel;
+  /**
+   * Round6：笔记通路。提供时从 transport.queryBlocks 加载只读投影
+   * （写后可调用 refresh / 外部改 refreshToken 触发重载）。
+   */
+  transport?: NoteTransport;
+  /**
+   * 变更时触发从 transport 重新 query（演示 apply → 刷新）。
+   * 仅 transport 模式有效。
+   */
+  refreshToken?: number | string;
   /** 可选：关闭 / 收起回调 */
   onClose?: () => void;
   /** 额外 className */
@@ -45,6 +57,13 @@ export type NotePaperPanelProps = {
 type BlockPropsView = {
   flavour?: string;
   text?: string;
+  level?: number;
+};
+
+type DisplayBlock = {
+  id: string;
+  flavour: string;
+  text: string;
   level?: number;
 };
 
@@ -61,10 +80,14 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   blockCount = 8,
   fixture: fixtureProp,
   chrome: chromeProp,
+  transport,
+  refreshToken = 0,
   onClose,
   className,
   title = '笔记纸面（预览壳）',
 }) => {
+  const useTransport = transport !== undefined;
+
   // 假数据投影：不创建 lines[] 权威 store（A-SURF-08）
   const fixture = useMemo(
     () =>
@@ -81,7 +104,53 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   // slash 模型挂载可测（预览壳默认关闭；composing 守卫在包内单测）
   const slashMenu = useMemo(() => new SlashMenuModel(), []);
 
-  const blocks = useMemo(() => listSilentBlocks(fixture), [fixture]);
+  const silentBlocks = useMemo(() => listSilentBlocks(fixture), [fixture]);
+
+  const [transportBlocks, setTransportBlocks] = useState<DisplayBlock[]>([]);
+  const [transportLoading, setTransportLoading] = useState(false);
+  const [transportError, setTransportError] = useState<string | null>(null);
+  const [transportRev, setTransportRev] = useState(0);
+
+  const loadFromTransport = useCallback(async () => {
+    if (!transport) return;
+    setTransportLoading(true);
+    setTransportError(null);
+    try {
+      const res = await transport.queryBlocks({ docId, limit: 200 });
+      if (!res.ok) {
+        setTransportBlocks([]);
+        setTransportError(res.reason);
+        return;
+      }
+      const mapped: DisplayBlock[] = res.blocks.map((b: NoteQueryBlockHit) => ({
+        id: b.id,
+        flavour: b.kind,
+        text: b.snippet,
+      }));
+      setTransportBlocks(mapped);
+      setTransportRev((n) => n + 1);
+    } finally {
+      setTransportLoading(false);
+    }
+  }, [transport, docId]);
+
+  useEffect(() => {
+    if (!useTransport) return;
+    void loadFromTransport();
+  }, [useTransport, loadFromTransport, refreshToken]);
+
+  const displayBlocks: DisplayBlock[] = useMemo(() => {
+    if (useTransport) return transportBlocks;
+    return silentBlocks.map((block) => {
+      const props = (block.props ?? {}) as BlockPropsView;
+      return {
+        id: block.id,
+        flavour: props.flavour ?? 'block',
+        text: props.text ?? '',
+        level: props.level,
+      };
+    });
+  }, [useTransport, transportBlocks, silentBlocks]);
 
   const [chromeTick, setChromeTick] = useState(0);
   const bump = useCallback(() => setChromeTick((n) => n + 1), []);
@@ -108,17 +177,23 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   );
 
   const rootClass = [styles.panel, className].filter(Boolean).join(' ');
+  const resolvedDocId = useTransport ? docId : fixture.docId;
+  const resolvedRev = useTransport ? transportRev : fixture.rev;
 
   return (
     <section
       className={rootClass}
       data-surface={EDITOR_SURFACE_NOTE_PAPER}
       data-testid="note-paper-panel"
-      data-doc-id={fixture.docId}
-      data-rev={String(fixture.rev)}
+      data-doc-id={resolvedDocId}
+      data-rev={String(resolvedRev)}
       data-silent-level={snapshot.silentLevel}
-      data-block-count={String(blocks.length)}
+      data-block-count={String(displayBlocks.length)}
       data-slash-open={slashMenu.isOpen() ? 'true' : 'false'}
+      data-source={useTransport ? 'transport' : 'silent'}
+      data-transport-loading={
+        useTransport && transportLoading ? 'true' : 'false'
+      }
       role="region"
       aria-label={title}
       tabIndex={-1}
@@ -130,11 +205,24 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
             silent={snapshot.silentLevel}
           </span>
           <span className={styles.badge} data-testid="note-paper-rev">
-            rev={fixture.rev}
+            rev={resolvedRev}
           </span>
           <span className={styles.badge} data-testid="note-paper-count">
-            {blocks.length} 块
+            {displayBlocks.length} 块
           </span>
+          {useTransport ? (
+            <button
+              type="button"
+              className={styles.badge}
+              onClick={() => {
+                void loadFromTransport();
+              }}
+              aria-label="从 transport 刷新块列表"
+              data-testid="note-paper-refresh"
+            >
+              刷新
+            </button>
+          ) : null}
           {onClose ? (
             <button
               type="button"
@@ -150,13 +238,23 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
       </header>
 
       <div className={styles.body} data-testid="note-paper-body">
-        {blocks.length === 0 ? (
+        {transportError ? (
+          <div
+            className={styles.empty}
+            role="alert"
+            data-testid="note-paper-transport-error"
+          >
+            {transportError}
+          </div>
+        ) : null}
+        {displayBlocks.length === 0 && !transportError ? (
           <div className={styles.empty} data-testid="note-paper-empty">
-            空文档投影（静默假数据 n=0）
+            {useTransport
+              ? '空文档投影（transport 无块）'
+              : '空文档投影（静默假数据 n=0）'}
           </div>
         ) : (
-          blocks.map((block) => {
-            const props = (block.props ?? {}) as BlockPropsView;
+          displayBlocks.map((block) => {
             const visibility: HandleVisibility = chrome.getHandleVisibility(
               block.id
             );
@@ -180,10 +278,10 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
                 />
                 <div className={styles.blockContent}>
                   <span className={styles.flavour}>
-                    {props.flavour ?? 'block'}
-                    {props.level !== undefined ? ` h${props.level}` : ''}
+                    {block.flavour}
+                    {block.level !== undefined ? ` h${block.level}` : ''}
                   </span>
-                  <div className={styles.text}>{props.text ?? ''}</div>
+                  <div className={styles.text}>{block.text}</div>
                 </div>
               </div>
             );
@@ -194,6 +292,7 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
       <footer className={styles.footer} data-testid="note-paper-footer">
         surface={EDITOR_SURFACE_NOTE_PAPER} · 预览壳 · 非行级引擎 ·
         挂载≠EL-01/EL-08 关闭
+        {useTransport ? ' · transport 投影' : ''}
       </footer>
     </section>
   );

@@ -13,6 +13,7 @@ members = [
     "crates/conex-markdown",
     "crates/conex-md-ast",
     "crates/conex-workspace-store",
+    "crates/conex-note-runtime",
     "crates/conex-sandbox",
     "crates/conex-search",
     "crates/conex-telemetry",

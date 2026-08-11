@@ -1,12 +1,17 @@
 /**
- * send_to_note 薄桥单测（W5-B · B-06/B-07/B-08）
+ * send_to_note 薄桥单测（W5-B · B-06/B-07/B-08 · Round6 NoteTransport）
  */
 import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  createMemoryNoteTransport,
+  setDefaultNoteTransport,
+} from '../api/noteApi';
 import {
   assertStreamCompleted,
   buildSendToNoteIntent,
   clearSendToNoteIdempotencyForTests,
   createMockSendToNoteSink,
+  createSinkFromNoteTransport,
   dispatchSendToNote,
   EDITOR_SURFACE_CHAT,
   EDITOR_SURFACE_NOTE_PAPER,
@@ -17,6 +22,7 @@ import {
 beforeEach(() => {
   resetSendToNoteIntentSeqForTests();
   clearSendToNoteIdempotencyForTests();
+  setDefaultNoteTransport(null);
 });
 
 // ---------------------------------------------------------------------------
@@ -234,5 +240,141 @@ describe('dispatchSendToNote + mock sink', () => {
     expect(r.ok).toBe(true);
     expect(mock.calls[0]!.origin).toBe('agent');
     expect(mock.calls[0]!.target.mode).toBe('insert_blocks');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round6：NoteTransport 通路
+// ---------------------------------------------------------------------------
+
+describe('dispatchSendToNote + NoteTransport', () => {
+  it('options.transport：apply 写入后可 query 命中', async () => {
+    const mem = createMemoryNoteTransport();
+    const result = await dispatchSendToNote(
+      {
+        messageId: 'msg-tr',
+        markdown: '# Bridge\n\nbody via transport',
+        docId: 'doc-tr',
+        intentId: 'tr-1',
+      },
+      {
+        streamStatus: 'completed',
+        transport: mem,
+      }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.applied).toBe(true);
+    expect(result.blockIds?.length).toBeGreaterThan(0);
+
+    const q = await mem.queryBlocks({ docId: 'doc-tr' });
+    expect(q.ok).toBe(true);
+    if (!q.ok) return;
+    expect(q.blocks.some((b) => b.snippet === 'Bridge')).toBe(true);
+    expect(q.blocks.some((b) => b.snippet.includes('body via transport'))).toBe(
+      true
+    );
+  });
+
+  it('幂等 intent：transport 不双插；桥 applied=false', async () => {
+    const mem = createMemoryNoteTransport();
+    const cache = new Map();
+    const input = {
+      messageId: 'msg-tr-idemp',
+      markdown: 'idempotent body',
+      docId: 'doc-tr-idemp',
+      intentId: 'tr-idemp-1',
+    };
+    const first = await dispatchSendToNote(input, {
+      streamStatus: 'completed',
+      transport: mem,
+      idempotencyCache: cache,
+    });
+    const second = await dispatchSendToNote(input, {
+      streamStatus: 'completed',
+      transport: mem,
+      idempotencyCache: cache,
+    });
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(first.applied).toBe(true);
+    expect(second.applied).toBe(false);
+    expect(mem.blockCount('doc-tr-idemp')).toBe(1);
+  });
+
+  it('流未完成：拒绝且 transport 零写入', async () => {
+    const mem = createMemoryNoteTransport();
+    const result = await dispatchSendToNote(
+      {
+        messageId: 'msg-tr-stream',
+        markdown: 'no write',
+        docId: 'doc-tr-stream',
+        intentId: 'tr-stream',
+      },
+      {
+        streamStatus: 'streaming',
+        transport: mem,
+      }
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('stream_not_completed');
+    }
+    expect(mem.blockCount('doc-tr-stream')).toBe(0);
+  });
+
+  it('模块默认 transport：无 sink 时生效', async () => {
+    const mem = createMemoryNoteTransport();
+    setDefaultNoteTransport(mem);
+    const r = await dispatchSendToNote(
+      {
+        messageId: 'msg-def',
+        markdown: 'default transport path',
+        docId: 'doc-def',
+        intentId: 'def-1',
+      },
+      { streamStatus: 'completed' }
+    );
+    expect(r.ok).toBe(true);
+    expect(mem.blockCount('doc-def')).toBe(1);
+  });
+
+  it('sink 优先于 transport（兼容 mock）', async () => {
+    const mem = createMemoryNoteTransport();
+    const mock = createMockSendToNoteSink({
+      ok: true,
+      blockIds: ['mock-only'],
+    });
+    const r = await dispatchSendToNote(
+      {
+        messageId: 'msg-prio',
+        markdown: 'should hit mock',
+        docId: 'doc-prio',
+        intentId: 'prio-1',
+      },
+      mock.sink,
+      { streamStatus: 'completed', transport: mem }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.blockIds).toEqual(['mock-only']);
+    expect(mock.calls).toHaveLength(1);
+    expect(mem.blockCount('doc-prio')).toBe(0);
+  });
+
+  it('createSinkFromNoteTransport 可直接当 sink 用', async () => {
+    const mem = createMemoryNoteTransport();
+    const sink = createSinkFromNoteTransport(mem);
+    const r = await dispatchSendToNote(
+      {
+        messageId: 'msg-cs',
+        markdown: 'via createSink',
+        docId: 'doc-cs',
+        intentId: 'cs-1',
+      },
+      sink,
+      { streamStatus: 'completed' }
+    );
+    expect(r.ok).toBe(true);
+    expect(mem.blockCount('doc-cs')).toBe(1);
   });
 });

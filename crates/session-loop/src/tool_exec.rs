@@ -1,4 +1,4 @@
-//! 工具批处理执行器（任务书 B3.5：executeToolBatch 等价）
+﻿//! 工具批处理执行器（任务书 B3.5：executeToolBatch 等价）
 //!
 //! 行为要点（01 §2.8 / §五.8，05 §2.3）：
 //! - 并行/顺序：concurrency=Parallel 的工具并行执行，Sequential/Exclusive 顺序执行；
@@ -56,6 +56,7 @@ use crate::tool_events::{
 use agent_tools::context::{
     AbortToken, AskCallback, ExploreDocsQuotaContext, NoopAskChannel, ToolContext,
 };
+use agent_tools::note_backend::NoteBackendHandle;
 use agent_tools::definition::ToolError;
 use agent_tools::executor::{execute_stream_with_output_policy, ExecutorContext, ToolExecutionPolicy};
 use agent_tools::idempotency::ToolIdempotencyGuard;
@@ -101,6 +102,11 @@ pub struct ToolExecCtx {
     /// 工具返回 common.unsupported——与 subagent_spawner 接线模式同款）
     pub output_dir:
         Option<Arc<dyn agent_tools::tools::output_dir::OutputDirResolver>>,
+    /// 笔记后端（Round6 / W4-E：`query_blocks` / `document_outline` /
+    /// `document_apply_md` / `send_to_note` 真管线；None = 未接线，工具
+    /// 返回 `note_backend_unwired` 占位——允许 Option 透传，结构字段须存在
+    /// 且可注入；真实实现见 `conex-note-runtime::StoreNoteBackend`）
+    pub note_backend: Option<NoteBackendHandle>,
 }
 
 /// 批处理产出：结果 + 事件序列 + 致命错误
@@ -500,12 +506,21 @@ impl ToolExecutor {
                                         denied_message(requesters[pos].is_some(), &reason),
                                     )
                                 }
-                                Some(ApprovalDecision::Expired) => ClassifiedToolResult::error(
-                                    &call.id,
-                                    &call.tool_name,
-                                    ToolErrorKind::ApprovalExpired,
-                                    "approval expired",
-                                ),
+                                Some(ApprovalDecision::Expired) => {
+                                    // G-9：超时 → Expired 权威语义落库（并行组
+                                    // 路径同顺序路径；approval-resolved 位于
+                                    // 本项 approval-requested 与 tool-end 之间）
+                                    events.push(ToolEvent::ApprovalResolved {
+                                        call_id: call.id.clone(),
+                                        decision: ApprovalDecision::Expired,
+                                    });
+                                    ClassifiedToolResult::error(
+                                        &call.id,
+                                        &call.tool_name,
+                                        ToolErrorKind::ApprovalExpired,
+                                        "approval expired",
+                                    )
+                                }
                                 // 无决策 = abort 中断，与顺序路径 abort 收场一致
                                 _ => ClassifiedToolResult::error(
                                     &call.id,
@@ -718,6 +733,16 @@ impl ToolExecutor {
                             )
                         }
                         ApprovalWaitOutcome::Decision(ApprovalDecision::Expired) => {
+                            // G-9：超时 → Expired 权威语义落库——审批超时
+                            //（APPROVAL_TIMEOUT）在引擎侧收敛为
+                            // approval-resolved(expired) 事件进批事件流
+                            //（翻译层映射 AgentEvent 随会话流持久化/广播，
+                            // 多端过期状态统一；approve/deny 由壳层命令
+                            // 路径落事件，避免双发）
+                            events.push(ToolEvent::ApprovalResolved {
+                                call_id: call.id.clone(),
+                                decision: ApprovalDecision::Expired,
+                            });
                             ClassifiedToolResult::error(
                                 &call.id,
                                 &call.tool_name,
@@ -861,6 +886,9 @@ impl ToolExecutor {
             // common.unsupported）；轮次 6 由引擎侧注入
             // CompressionContextStore 实现（conex-db compression_blocks）
             compression_store: None,
+            // Round6 / W4-E：笔记后端经 ToolExecCtx 透传（None = unwired 占位；
+            // 引擎 / SessionLoopOptions 可注入 conex-note-runtime::StoreNoteBackend）
+            note_backend: ctx.note_backend.clone(),
         };
         // ── 中间件链 + 插件钩子（审批已通过，进入执行面；优先级语义
         //    见模块头注：审批优先于中间件，中间件 Block 不绕过审批）──
@@ -1314,15 +1342,23 @@ impl ToolExecutor {
                             ),
                             extra,
                         ),
-                        ApprovalWaitOutcome::Decision(ApprovalDecision::Expired) => (
-                            ClassifiedToolResult::error(
-                                &call.id,
-                                &call.tool_name,
-                                ToolErrorKind::ApprovalExpired,
-                                "approval expired",
-                            ),
-                            extra,
-                        ),
+                        ApprovalWaitOutcome::Decision(ApprovalDecision::Expired) => {
+                            // G-9：超时 → Expired 权威语义落库（requires_approval
+                            // 重试路径同顺序路径；事件并入 extra 进批事件流）
+                            extra.push(ToolEvent::ApprovalResolved {
+                                call_id: call.id.clone(),
+                                decision: ApprovalDecision::Expired,
+                            });
+                            (
+                                ClassifiedToolResult::error(
+                                    &call.id,
+                                    &call.tool_name,
+                                    ToolErrorKind::ApprovalExpired,
+                                    "approval expired",
+                                ),
+                                extra,
+                            )
+                        }
                     }
                 }
                 // 无审批门：透传需审批状态（不再 SoftDeny 折叠）
@@ -3002,6 +3038,31 @@ mod tests {
         );
         // 非致命：喂回模型继续
         assert!(out.fatal.is_none());
+        // G-9：超时 → Expired 权威语义落库——approval-resolved(expired)
+        // 事件进批事件流，顺序契约：
+        // approval-requested → approval-resolved → tool-end
+        let req = out
+            .events
+            .iter()
+            .position(|e| matches!(e, ToolEvent::ApprovalRequested { call_id, .. } if call_id == "c1"))
+            .expect("应有 approval-requested");
+        let resolved = out
+            .events
+            .iter()
+            .position(|e| {
+                matches!(e, ToolEvent::ApprovalResolved { call_id, decision }
+                    if call_id == "c1" && *decision == ApprovalDecision::Expired)
+            })
+            .expect("超时应收敛为 approval-resolved(expired) 落库");
+        let end = out
+            .events
+            .iter()
+            .position(|e| matches!(e, ToolEvent::ToolEnd { call_id, .. } if call_id == "c1"))
+            .expect("应有 tool-end");
+        assert!(
+            req < resolved && resolved < end,
+            "approval-resolved(expired) 应位于 approval-requested 与 tool-end 之间"
+        );
     }
 
     /// T4.2-R2（绿，并行组超时）：审批门挂起 + 短超时 → 全组收敛为
@@ -3038,6 +3099,46 @@ mod tests {
             .count();
         assert_eq!(approvals, 2, "全组审批请求应先于等待发出");
         assert!(out.fatal.is_none());
+        // G-9：超时 → Expired 权威语义落库——每项一条
+        // approval-resolved(expired)，位于本项 approval-requested 与
+        // tool-end 之间
+        let resolved = out
+            .events
+            .iter()
+            .filter(|e| {
+                matches!(e, ToolEvent::ApprovalResolved { decision: ApprovalDecision::Expired, .. })
+            })
+            .count();
+        assert_eq!(
+            resolved, 2,
+            "并行组超时每项都应落一条 approval-resolved(expired)"
+        );
+        for id in ["p0", "p1"] {
+            let req = out
+                .events
+                .iter()
+                .position(|e| {
+                    matches!(e, ToolEvent::ApprovalRequested { call_id, .. } if call_id == id)
+                })
+                .unwrap_or_else(|| panic!("{id} 应有 approval-requested"));
+            let res = out
+                .events
+                .iter()
+                .position(|e| {
+                    matches!(e, ToolEvent::ApprovalResolved { call_id, decision }
+                        if call_id == id && *decision == ApprovalDecision::Expired)
+                })
+                .unwrap_or_else(|| panic!("{id} 应有 approval-resolved(expired)"));
+            let end = out
+                .events
+                .iter()
+                .position(|e| matches!(e, ToolEvent::ToolEnd { call_id, .. } if call_id == id))
+                .unwrap_or_else(|| panic!("{id} 应有 tool-end"));
+            assert!(
+                req < res && res < end,
+                "{id} 的 approval-resolved(expired) 应位于 approval-requested 与 tool-end 之间"
+            );
+        }
     }
 
     /// T4.2-R4（绿，requires_approval 重试路径超时）：批级审批通过 →
@@ -3068,6 +3169,20 @@ mod tests {
             out.results[0]
         );
         assert!(out.fatal.is_none());
+        // G-9：超时 → Expired 权威语义落库——requires_approval 重试路径
+        // 同样落 approval-resolved(expired)（首次问询通过不落 resolved，
+        // 只有超时决策落；本路径事件仅一条）
+        let resolved = out
+            .events
+            .iter()
+            .filter(|e| {
+                matches!(e, ToolEvent::ApprovalResolved { decision: ApprovalDecision::Expired, .. })
+            })
+            .count();
+        assert_eq!(
+            resolved, 1,
+            "重试审批超时应落一条 approval-resolved(expired)"
+        );
     }
 
     // ── R4 T10：真实审批事件（requires_approval / dangerous / permissionMode）──

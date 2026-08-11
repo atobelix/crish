@@ -1,20 +1,22 @@
 /**
  * @crish/block-paper
  *
- * 块纸面呈现层（W3-C chrome + W3-D 叶子 Intent + W3-F 结构 Intent）：
+ * 块纸面呈现层（W3-C chrome + W3-D 叶子 Intent + W3-E 代码叶 + W3-F 结构 Intent）：
  * - BlockChromeModel：把手 / 折叠 / 多选高亮 / 静默 L0 / 批量结构 Intent
  * - SlashMenuModel：slash 打开·过滤·关闭·选中 → slash_insert；composing 禁开/禁交
  * - structureIntents：insert/delete/move/collapse/slash_insert + PaperIntent 联合
  * - silentFixture：N 块假文档投影（ProjectionDiff / MemoryBlock）
  * - TextLeafModel / intentBridge / lineWindow：叶子写路径 Intent 通路（mock apply）
+ * - CodeLeafModel / mountCodeLeaf：CM6 代码叶骨架（可聚焦 + text_edit Intent）
  *
  * **包边界**：
  * - 本包是呈现 chrome / 叶子与结构写路径骨架，**不接真实后端**
  * - 写路径必须走 **Intent → sink → RS apply**；禁止 serialize(DOM) 持久化
  * - **禁止** DOM 当真相；选区权威在 editor-kit SelectionStore 逻辑坐标
  * - UI（React）可后接；本波优先纯 TS 可测
- * - W3-D 完成 = 文本 Intent 通路绿；W3-F 完成 = 结构 Intent 通路绿
- * - **W3-F ≠ EL-01 关闭**；**≠** A-BLK 全表关闭
+ * - W3-D 完成 = 文本 Intent 通路绿；W3-E 完成 = 代码叶可聚焦 + Intent 通路绿
+ * - W3-F 完成 = 结构 Intent 通路绿
+ * - **W3-E ≠ 全语言高亮完成**；**W3-F ≠ EL-01 关闭**；**≠** A-BLK 全表关闭
  */
 
 // Block chrome 状态
@@ -117,3 +119,24 @@ export {
   type LineWindowConfig,
   type LineWindowResult,
 } from './leaves/lineWindow';
+
+// ---------------------------------------------------------------------------
+// W3-E：CM6 代码叶骨架（可聚焦 + text_edit；不接真实 RS / 不全语言高亮）
+// ---------------------------------------------------------------------------
+
+export {
+  CodeLeafModel,
+  createMockCodeLeafHost,
+  DomCodeLeafHost,
+  mountCodeLeaf,
+  type CodeLanguage,
+  type CodeLeafSnapshot,
+  type CodeLeafModelOptions,
+  type CodeEditRejectCode,
+  type CodeEditAttempt,
+  type CodeLeafHost,
+  type MockCodeLeafHost,
+  type MockCodeLeafHostOptions,
+  type MountCodeLeafOptions,
+  type CodeLeafMount,
+} from './leaves/code';

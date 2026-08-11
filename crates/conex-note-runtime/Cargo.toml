@@ -1,0 +1,24 @@
+[package]
+name = "conex-note-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real NoteBackend: DocSession + WorkspaceStore + apply_md_fragment + projection index"
+authors.workspace = true
+
+[dependencies]
+agent-tools = { path = "../agent-tools" }
+conex-doc-collab = { path = "../conex-doc-collab" }
+conex-workspace-store = { path = "../conex-workspace-store" }
+conex-md-ast = { path = "../conex-md-ast" }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

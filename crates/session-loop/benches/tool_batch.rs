@@ -117,6 +117,7 @@ fn bench_tool_batch(c: &mut Criterion) {
                     write_claims: None,
                     explore_docs_quota: None,
                     output_dir: None,
+                    note_backend: None,
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),
@@ -145,6 +146,7 @@ fn bench_tool_batch(c: &mut Criterion) {
                     write_claims: None,
                     explore_docs_quota: None,
                     output_dir: None,
+                    note_backend: None,
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),

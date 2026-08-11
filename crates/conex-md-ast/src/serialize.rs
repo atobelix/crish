@@ -4,11 +4,28 @@
 //! - 每个块：独占行 `<!--c:UUID-->` + 内容行；子块紧随父内容之后（DFS）。
 //! - 文本取自 `text_snapshot`（plain）；**不含** yrs 富文本往返。
 //! - 完整 GFM / markdown-rs 路径留待后续波次（见 parse 模块注释）。
+//!
+//! # Agent 读路径
+//! [`document_to_md`] / [`serialize_tree`] 即契约 **S(树)**：`get_md` / Agent 读必须走
+//! **即时序列化**，禁止默认读陈旧 exports / mirror（见 `plans/03-MD契约.md` §S1 / §2）。
 
 use crate::{BlockId, BlockKind, BlockTree};
 
 /// 将整棵块树序列化为 Conex-MD 文本（含块 ID 注释）。
+///
+/// 与 [`document_to_md`] 语义相同；保留此名以对齐 P/S 记号 `S(t)`。
 pub fn serialize_tree(tree: &BlockTree) -> String {
+    document_to_md(tree)
+}
+
+/// Agent / 工具 **`get_md` / `document_get_md` 读路径**：对当前权威块树做 **即时 S**。
+///
+/// - 输出 = Conex-MD 契约字符串（`<!--c:UUID-->` 独占行 + 内容 DFS）
+/// - **不是** 读磁盘 mirror / `exports/**` 陈旧快照
+/// - 实现上与 [`serialize_tree`] 为同一路径（别名封装，便于工具面命名对齐）
+///
+/// 对应不变量：A-MD 读侧；`plans/03-MD契约.md`「Agent `get_md` = 即时 S(树)」。
+pub fn document_to_md(tree: &BlockTree) -> String {
     let mut out = String::new();
     let mut roots = tree.root_children.clone();
     tree.sort_sibling_ids(&mut roots);
@@ -177,5 +194,21 @@ mod tests {
 子段落
 ";
         assert_eq!(md, expect);
+    }
+
+    #[test]
+    fn document_to_md_aliases_serialize_tree() {
+        let a = id("11111111-1111-4111-a111-111111111111");
+        let mut nodes = HashMap::new();
+        nodes.insert(
+            a,
+            node(a, None, "a0", BlockKind::Paragraph, "即时S", vec![]),
+        );
+        let tree = BlockTree {
+            root_children: vec![a],
+            nodes,
+        };
+        assert_eq!(document_to_md(&tree), serialize_tree(&tree));
+        assert!(document_to_md(&tree).contains("即时S"));
     }
 }

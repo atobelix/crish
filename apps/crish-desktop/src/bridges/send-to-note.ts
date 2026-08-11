@@ -1,7 +1,8 @@
 /**
- * send_to_note 薄桥（W5-B · B-06/B-07）
+ * send_to_note 薄桥（W5-B · B-06/B-07 · Round6 NoteTransport）
  *
- * surface=chat 完成态 → 显式 Intent → note-paper 写路径（mock sink 可测）。
+ * surface=chat 完成态 → 显式 Intent → note-paper 写路径
+ * （默认 NoteTransport；mock sink 仍兼容）。
  *
  * 纪律（dual-engine-surface §5 / §8.1）：
  * - 唯一允许「知两边」的薄适配；业务组件不得直接互相 import store
@@ -12,6 +13,8 @@
  *
  * surface 标注：本模块是跨界桥，非第三权威面。
  */
+
+import { resolveNoteTransport, type NoteTransport } from '../api/noteApi';
 
 // ---------------------------------------------------------------------------
 // Surface 常量（本地；若 contract 后续导出 EditorSurface 可对齐替换）
@@ -235,6 +238,11 @@ export type DispatchSendToNoteOptions = {
    * 缺省使用模块内默认 Map（单测可注入独立 Map）。
    */
   idempotencyCache?: Map<string, SendToNoteResult>;
+  /**
+   * 笔记通路（Round6）。优先于模块默认 transport；
+   * 与 `sink` 同时存在时 **sink 优先**（兼容既有 mock）。
+   */
+  transport?: NoteTransport;
 };
 
 const defaultIdempotency = new Map<string, SendToNoteResult>();
@@ -244,15 +252,67 @@ export function clearSendToNoteIdempotencyForTests(): void {
   defaultIdempotency.clear();
 }
 
+function isSendToNoteSink(value: unknown): value is SendToNoteSink {
+  return typeof value === 'function';
+}
+
 /**
- * 校验流状态 → 构造 Intent（若未给）或使用已构造 Intent → sink。
- * 幂等：同 intentId 第二次返回首次结果，不二次 sink。
+ * 将 NoteTransport 适配为 SendToNoteSink（内部复用；也供 UI 显式注入）。
+ */
+export function createSinkFromNoteTransport(
+  transport: NoteTransport
+): SendToNoteSink {
+  return async (intent) => {
+    const outcome = await transport.sendToNote({
+      intentId: intent.intentId,
+      markdown: intent.source.markdown,
+      docId: intent.target.docId,
+      messageId: intent.source.messageId,
+      parentId: intent.target.parentId,
+      afterBlockId: intent.target.afterBlockId,
+      mode: intent.target.mode,
+      origin: intent.origin,
+    });
+    if (!outcome.ok) {
+      return { ok: false, reason: outcome.reason };
+    }
+    // 幂等 hit：仍 ok，但 blockIds 来自首次；桥层用 applied 区分
+    return { ok: true, blockIds: [...outcome.blockIds] };
+  };
+}
+
+/**
+ * 校验流状态 → 构造 Intent（若未给）或使用已构造 Intent → sink / transport。
+ *
+ * 调用形态（兼容）：
+ * - `dispatchSendToNote(input, sink, options?)` — 既有 mock sink
+ * - `dispatchSendToNote(input, options)` — 走 options.transport / 默认 NoteTransport
+ * - `dispatchSendToNote(input)` — 走模块默认 / Tauri NoteTransport
+ *
+ * 幂等：同 intentId 第二次返回首次结果，不二次写。
  */
 export async function dispatchSendToNote(
   intentOrInput: SendToNoteIntent | BuildSendToNoteInput,
-  sink: SendToNoteSink,
-  options: DispatchSendToNoteOptions = {}
+  sinkOrOptions?: SendToNoteSink | DispatchSendToNoteOptions,
+  maybeOptions?: DispatchSendToNoteOptions
 ): Promise<SendToNoteResult> {
+  let sink: SendToNoteSink | undefined;
+  let options: DispatchSendToNoteOptions = {};
+
+  if (isSendToNoteSink(sinkOrOptions)) {
+    sink = sinkOrOptions;
+    options = maybeOptions ?? {};
+  } else if (sinkOrOptions && typeof sinkOrOptions === 'object') {
+    options = sinkOrOptions;
+  }
+
+  // sink 优先；否则 transport → 模块默认 / Tauri
+  const resolvedSink: SendToNoteSink =
+    sink ??
+    createSinkFromNoteTransport(
+      resolveNoteTransport(options.transport ?? null)
+    );
+
   const cache = options.idempotencyCache ?? defaultIdempotency;
 
   // 先解析 intentId，便于流未完成时仍返回稳定 id
@@ -315,7 +375,7 @@ export async function dispatchSendToNote(
 
   const cached = cache.get(intent.intentId);
   if (cached) {
-    // 幂等重放：不二次 sink
+    // 幂等重放：不二次 sink / transport
     if (cached.ok) {
       return { ...cached, applied: false };
     }
@@ -323,7 +383,7 @@ export async function dispatchSendToNote(
   }
 
   try {
-    const sinkResult = await sink(intent);
+    const sinkResult = await resolvedSink(intent);
     if (!sinkResult.ok) {
       const fail: SendToNoteFailure = {
         ok: false,
@@ -331,8 +391,7 @@ export async function dispatchSendToNote(
         code: 'sink_reject',
         reason: sinkResult.reason ?? 'send_to_note：sink 拒绝（块树应零半写）',
       };
-      // 失败不缓存为成功；可选缓存失败以便同 id 重放同一错误——此处缓存失败，
-      // 避免 sink 侧副作用重试；调用方可 clear 后换 id 重试
+      // 失败缓存：避免 sink 侧副作用重试；调用方可 clear 后换 id 重试
       cache.set(intent.intentId, fail);
       return fail;
     }

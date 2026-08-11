@@ -7,7 +7,7 @@
 // - restricted 信任级别强制权限白名单校验
 // - full + project-dir 自动降级为 restricted（防仓库投毒 禁令 18）
 // - PluginAPI 权限校验路径：assertPermission 委托 TrustGate
-// - 完整权限矩阵：11 项 PluginPermission × 2 信任级别
+// - 完整权限矩阵：14 项 PluginPermission × 2 信任级别
 // - registerPlugin / unregisterPlugin 生命周期
 //
 // 约束：禁令 18（2 级信任 + TrustGate 归 agent-permissions + 权限粒度合并）
@@ -35,10 +35,15 @@ import { tmpdir } from 'node:os';
 // ─── Mock TrustGate 实现（基于 manifest.permissions 白名单） ────
 
 interface TrustGateState {
-  registered: Map<string, { trustLevel: PluginTrustLevel; permissions: readonly PluginPermission[] }>;
+  registered: Map<
+    string,
+    { trustLevel: PluginTrustLevel; permissions: readonly PluginPermission[] }
+  >;
 }
 
-function createMockTrustGate(state: TrustGateState = { registered: new Map() }): TrustGateLike & {
+function createMockTrustGate(
+  state: TrustGateState = { registered: new Map() }
+): TrustGateLike & {
   state: TrustGateState;
 } {
   return {
@@ -52,7 +57,7 @@ function createMockTrustGate(state: TrustGateState = { registered: new Map() }):
       // restricted 级别检查白名单
       if (!entry.permissions.includes(permission)) {
         throw new Error(
-          `Plugin ${pluginId} lacks permission '${permission}' (declared: [${entry.permissions.join(', ')}])`,
+          `Plugin ${pluginId} lacks permission '${permission}' (declared: [${entry.permissions.join(', ')}])`
         );
       }
     },
@@ -63,7 +68,10 @@ function createMockTrustGate(state: TrustGateState = { registered: new Map() }):
       return entry.permissions.includes(permission) ? 'allow' : 'deny';
     },
     registerPlugin(pluginId, trustLevel, permissions) {
-      state.registered.set(pluginId, { trustLevel, permissions: [...permissions] });
+      state.registered.set(pluginId, {
+        trustLevel,
+        permissions: [...permissions],
+      });
     },
     unregisterPlugin(pluginId) {
       state.registered.delete(pluginId);
@@ -78,7 +86,12 @@ function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
     name: 'Test Plugin',
     version: '1.0.0',
     entrypoints: { main: './dist/index.js' },
-    permissions: ['hook:observe', 'tool:register', 'mcp:connect', 'session:read'],
+    permissions: [
+      'hook:observe',
+      'tool:register',
+      'mcp:connect',
+      'session:read',
+    ],
     trustLevel: 'restricted',
     engineVersion: '>=0.2.0 <0.3.0',
     declaredHooks: ['turn.start'],
@@ -123,31 +136,27 @@ describe('TrustGateLike - 接口契约', () => {
   it('full 级别：assertPermission 不抛错', () => {
     const trustGate = createMockTrustGate();
     trustGate.registerPlugin('p1', 'full', []);
-    expect(() =>
-      trustGate.assertPermission('p1', 'file:access'),
-    ).not.toThrow();
+    expect(() => trustGate.assertPermission('p1', 'file:access')).not.toThrow();
   });
 
   it('restricted 级别 + 权限在白名单 → assertPermission 通过', () => {
     const trustGate = createMockTrustGate();
     trustGate.registerPlugin('p1', 'restricted', ['file:access']);
-    expect(() =>
-      trustGate.assertPermission('p1', 'file:access'),
-    ).not.toThrow();
+    expect(() => trustGate.assertPermission('p1', 'file:access')).not.toThrow();
   });
 
   it('restricted 级别 + 权限不在白名单 → assertPermission 抛错', () => {
     const trustGate = createMockTrustGate();
     trustGate.registerPlugin('p1', 'restricted', ['file:access']);
-    expect(() =>
-      trustGate.assertPermission('p1', 'tool:execute'),
-    ).toThrowError(/lacks permission/);
+    expect(() => trustGate.assertPermission('p1', 'tool:execute')).toThrowError(
+      /lacks permission/
+    );
   });
 
   it('未注册插件 → assertPermission 抛错', () => {
     const trustGate = createMockTrustGate();
     expect(() =>
-      trustGate.assertPermission('unknown', 'file:access'),
+      trustGate.assertPermission('unknown', 'file:access')
     ).toThrowError(/not registered/);
   });
 
@@ -190,7 +199,7 @@ describe('TrustGateLike - 接口契约', () => {
     trustGate.unregisterPlugin('p1');
     expect(trustGate.decide('p1', 'file:access')).toBe('deny');
     expect(() =>
-      trustGate.assertPermission('p1', 'file:access'),
+      trustGate.assertPermission('p1', 'file:access')
     ).toThrowError();
   });
 });
@@ -203,11 +212,11 @@ describe('PluginAPI - 权限校验路径', () => {
     trustGate.registerPlugin('p1', 'restricted', ['tool:register']);
     const api = new PluginAPI(
       makeManifest({ id: 'p1', permissions: ['tool:register'] }),
-      makeDeps(trustGate),
+      makeDeps(trustGate)
     );
 
     expect(() => api.observe('turn.start', () => {})).toThrowError(
-      /lacks permission/,
+      /lacks permission/
     );
   });
 
@@ -216,7 +225,7 @@ describe('PluginAPI - 权限校验路径', () => {
     trustGate.registerPlugin('p1', 'restricted', ['hook:observe']);
     const api = new PluginAPI(
       makeManifest({ id: 'p1', permissions: ['hook:observe'] }),
-      makeDeps(trustGate),
+      makeDeps(trustGate)
     );
 
     expect(() => api.observe('turn.start', () => {})).not.toThrow();
@@ -227,7 +236,7 @@ describe('PluginAPI - 权限校验路径', () => {
     trustGate.registerPlugin('p1', 'restricted', ['hook:observe']);
     const api = new PluginAPI(
       makeManifest({ id: 'p1', permissions: ['hook:observe'] }),
-      makeDeps(trustGate),
+      makeDeps(trustGate)
     );
 
     expect(() =>
@@ -237,7 +246,7 @@ describe('PluginAPI - 权限校验路径', () => {
         async execute() {
           return {};
         },
-      }),
+      })
     ).toThrowError(/lacks permission/);
   });
 
@@ -246,7 +255,7 @@ describe('PluginAPI - 权限校验路径', () => {
     trustGate.registerPlugin('p1', 'restricted', ['hook:observe']);
     const api = new PluginAPI(
       makeManifest({ id: 'p1', permissions: ['hook:observe'] }),
-      makeDeps(trustGate),
+      makeDeps(trustGate)
     );
 
     expect(() =>
@@ -254,7 +263,7 @@ describe('PluginAPI - 权限校验路径', () => {
         name: 'my-mcp',
         transport: 'stdio',
         command: 'npx',
-      }),
+      })
     ).toThrowError(/lacks permission/);
   });
 
@@ -263,7 +272,7 @@ describe('PluginAPI - 权限校验路径', () => {
     trustGate.registerPlugin('p1', 'restricted', ['hook:observe']);
     const api = new PluginAPI(
       makeManifest({ id: 'p1', permissions: ['hook:observe'] }),
-      makeDeps(trustGate),
+      makeDeps(trustGate)
     );
 
     expect(() => api.getSessionContext()).toThrowError(/lacks permission/);
@@ -274,7 +283,7 @@ describe('PluginAPI - 权限校验路径', () => {
     trustGate.registerPlugin('p1', 'full', []);
     const api = new PluginAPI(
       makeManifest({ id: 'p1', trustLevel: 'full', permissions: [] }),
-      makeDeps(trustGate),
+      makeDeps(trustGate)
     );
 
     expect(() => api.observe('turn.start', () => {})).not.toThrow();
@@ -285,7 +294,7 @@ describe('PluginAPI - 权限校验路径', () => {
         async execute() {
           return {};
         },
-      }),
+      })
     ).not.toThrow();
     expect(() => api.getSessionContext()).not.toThrow();
   });
@@ -300,11 +309,11 @@ describe('full + project-dir 降级（禁令 18 防仓库投毒）', () => {
         trustLevel: 'full',
         origin: 'project-dir',
         permissions: [],
-      }),
+      })
     );
     expect(result.valid).toBe(false);
     expect(
-      result.errors.some((e) => e.code === 'full-trust-forbidden-origin'),
+      result.errors.some((e) => e.code === 'full-trust-forbidden-origin')
     ).toBe(true);
   });
 
@@ -314,7 +323,7 @@ describe('full + project-dir 降级（禁令 18 防仓库投毒）', () => {
         trustLevel: 'full',
         origin: 'user-dir',
         permissions: [],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
@@ -325,7 +334,7 @@ describe('full + project-dir 降级（禁令 18 防仓库投毒）', () => {
         trustLevel: 'restricted',
         origin: 'project-dir',
         permissions: ['hook:observe'],
-      }),
+      })
     );
     expect(result.valid).toBe(true);
   });
@@ -366,7 +375,7 @@ describe('PluginDiscoverer - full + project-dir 自动降级', () => {
           declaredTools: [],
           declaredMcpServers: [],
         }),
-        'utf8',
+        'utf8'
       );
 
       const discoverer = new PluginDiscoverer(tmpUserDir, tmpProjectDir);
@@ -398,7 +407,7 @@ describe('PluginDiscoverer - full + project-dir 自动降级', () => {
           declaredTools: [],
           declaredMcpServers: [],
         }),
-        'utf8',
+        'utf8'
       );
 
       const discoverer = new PluginDiscoverer(tmpUserDir, tmpProjectDir);
@@ -431,7 +440,7 @@ describe('PluginDiscoverer - full + project-dir 自动降级', () => {
           declaredTools: [],
           declaredMcpServers: [],
         }),
-        'utf8',
+        'utf8'
       );
 
       const projectPluginDir = join(tmpProjectDir, 'shared');
@@ -450,7 +459,7 @@ describe('PluginDiscoverer - full + project-dir 自动降级', () => {
           declaredTools: [],
           declaredMcpServers: [],
         }),
-        'utf8',
+        'utf8'
       );
 
       const discoverer = new PluginDiscoverer(tmpUserDir, tmpProjectDir);
@@ -467,18 +476,21 @@ describe('PluginDiscoverer - full + project-dir 自动降级', () => {
   it('目录不存在时静默返回空数组', async () => {
     const discoverer = new PluginDiscoverer(
       '/non-existent-user-dir',
-      '/non-existent-project-dir',
+      '/non-existent-project-dir'
     );
     const discovered = await discoverer.discover();
     expect(discovered).toEqual([]);
   });
 });
 
-// ─── 11 项权限 × 2 信任级别 完整矩阵 ──────────────────────────
+// ─── 14 项权限 × 2 信任级别 完整矩阵 ──────────────────────────
 
-describe('权限矩阵 - 11 项 PluginPermission × 2 信任级别', () => {
-  it('PLUGIN_PERMISSIONS 含 11 项权限', () => {
-    expect(PLUGIN_PERMISSIONS).toHaveLength(11);
+describe('权限矩阵 - 14 项 PluginPermission × 2 信任级别', () => {
+  it('PLUGIN_PERMISSIONS 含 14 项权限', () => {
+    expect(PLUGIN_PERMISSIONS).toHaveLength(14);
+    expect(PLUGIN_PERMISSIONS).toContain('ui:contribute');
+    expect(PLUGIN_PERMISSIONS).toContain('note:read');
+    expect(PLUGIN_PERMISSIONS).toContain('note:write');
   });
 
   it('PLUGIN_TRUST_LEVELS 含 restricted + full（禁令 18）', () => {
@@ -489,7 +501,7 @@ describe('权限矩阵 - 11 项 PluginPermission × 2 信任级别', () => {
     expect(PLUGIN_ORIGINS).toEqual(['user-dir', 'project-dir']);
   });
 
-  it('full 级别全部 11 项权限都允许', () => {
+  it('full 级别全部 14 项权限都允许', () => {
     const trustGate = createMockTrustGate();
     trustGate.registerPlugin('full-plugin', 'full', []);
     for (const perm of PLUGIN_PERMISSIONS) {
@@ -511,13 +523,11 @@ describe('权限矩阵 - 11 项 PluginPermission × 2 信任级别', () => {
     }
   });
 
-  it('restricted 级别声明全部 11 项权限 → 全部允许', () => {
+  it('restricted 级别声明全部 14 项权限 → 全部允许', () => {
     const trustGate = createMockTrustGate();
-    trustGate.registerPlugin(
-      'all-perms-plugin',
-      'restricted',
-      [...PLUGIN_PERMISSIONS],
-    );
+    trustGate.registerPlugin('all-perms-plugin', 'restricted', [
+      ...PLUGIN_PERMISSIONS,
+    ]);
 
     for (const perm of PLUGIN_PERMISSIONS) {
       expect(trustGate.decide('all-perms-plugin', perm)).toBe('allow');
@@ -541,19 +551,19 @@ describe('权限合并规则 - 旧权限名被拒绝', () => {
     const result = validateManifest(
       makeManifest({
         permissions: ['file:read' as PluginPermission],
-      }),
+      })
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === 'invalid-permission'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === 'invalid-permission')).toBe(
+      true
+    );
   });
 
   it('file:write 被拒绝（已合并为 file:access）', () => {
     const result = validateManifest(
       makeManifest({
         permissions: ['file:write' as PluginPermission],
-      }),
+      })
     );
     expect(result.valid).toBe(false);
   });
@@ -562,7 +572,7 @@ describe('权限合并规则 - 旧权限名被拒绝', () => {
     const result = validateManifest(
       makeManifest({
         permissions: ['shell:execute' as PluginPermission],
-      }),
+      })
     );
     expect(result.valid).toBe(false);
   });
@@ -571,21 +581,21 @@ describe('权限合并规则 - 旧权限名被拒绝', () => {
     const result = validateManifest(
       makeManifest({
         permissions: ['subprocess.spawn' as PluginPermission],
-      }),
+      })
     );
     expect(result.valid).toBe(false);
   });
 
   it('合并后的权限名 file:access 通过', () => {
     const result = validateManifest(
-      makeManifest({ permissions: ['file:access'] }),
+      makeManifest({ permissions: ['file:access'] })
     );
     expect(result.valid).toBe(true);
   });
 
   it('合并后的权限名 tool:execute 通过', () => {
     const result = validateManifest(
-      makeManifest({ permissions: ['tool:execute'] }),
+      makeManifest({ permissions: ['tool:execute'] })
     );
     expect(result.valid).toBe(true);
   });

@@ -1,11 +1,12 @@
 # `@crish/block-paper`
 
-块纸面 **呈现层**：W3-C chrome（静默假数据 / 把手 / slash）+ W3-D 叶子写路径 Intent 骨架（mock apply）。
+块纸面 **呈现层**：W3-C chrome（静默假数据 / 把手 / slash）+ W3-D 叶子写路径 Intent 骨架 + W3-E CM6 代码叶骨架 + W3-F 结构 Intent（mock apply）。
 
 > **本包是呈现层，不是文档权威。**  
 > 写路径必须走 **Intent → sink → RS apply**。  
 > **禁止** 把 DOM / ProseMirror doc / 本包假数据当作真相源持久化。  
-> **W3-D 完成 = Intent 通路绿**；≠ EL-01 / A-BLK 全表关闭。
+> **W3-D 完成 = Intent 通路绿**；**W3-E 完成 = 代码叶可聚焦 + Intent 通路绿**；≠ EL-01 / A-BLK 全表关闭。  
+> **W3-E ≠ 全语言高亮完成**（language 字段与 host 钩子就位即可）。
 
 ## 边界
 
@@ -13,8 +14,9 @@
 | ---------------------------------------------- | ------------------------------------ |
 | 静默 L0 chrome 状态（把手/折叠/多选高亮）      | 真实 DocSession / RS / 协同接线      |
 | Slash 打开/过滤/关闭（composing 禁开）         | 完整 PM/CM6 编辑器（仅 Intent 接口） |
-| N 块假投影（`ProjectionDiff` / `MemoryBlock`） | 结构 Op 真正落地（W3-F）             |
+| N 块假投影（`ProjectionDiff` / `MemoryBlock`） | 结构 Op 真正落地到真实 collab        |
 | 叶子 `TextEditIntent` 产出 + mock sink         | 接 `apps/crish-desktop` 业务         |
+| 代码叶可聚焦 + `text_edit` Intent（W3-E）      | 全语言 SyntaxHighlight / 主题完成    |
 | V6 行/字符窗口计算（A-HUGE-03 呈现侧）         | 数据层超长分段（W1-B）               |
 
 依赖：
@@ -36,6 +38,10 @@ import {
   submitIntent,
   createMockIntentSink,
   computeLineWindow,
+  // W3-E
+  CodeLeafModel,
+  createMockCodeLeafHost,
+  mountCodeLeaf,
 } from '@crish/block-paper';
 ```
 
@@ -151,6 +157,59 @@ await submitIntent(flushed!, mock.sink, { ime });
 | `computeLineWindow(text, focus, cfg?)`   | 多行按行窗口；无换行按 char 窗口    |
 | `getOffsetWindow` / `getLineWindowSlice` | HugeLeafEditorHost 纯函数形态       |
 
+## 代码叶：CM6 骨架（W3-E）
+
+> **W3-E ≠ 全语言高亮完成。**  
+> 本波钉死：可聚焦、`language` / `readOnly` / content snapshot、变更 → `text_edit` → `submitIntent`。  
+> 真实 `@codemirror/view` EditorView 挂点见 `src/leaves/code/CodeLeafHost.ts` 文件头注释；  
+> 默认用 `createMockCodeLeafHost`（单测）或 `DomCodeLeafHost`（textarea 焦点通路），**不接真实 RS**。
+
+```text
+focus()
+   │
+   ▼
+CodeLeafModel.applyLocalEdit / tryApplyLocalEdit
+   │  产出 TextEditIntent（W0 形状，与文本叶共用 sink）
+   ▼
+submitIntent(intent, sink, { ime })
+   │
+   ▼
+IntentSink（mock 或未来 RS IPC）
+```
+
+| API                                        | 语义                                                          |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| `focus()` / `blur()`                       | 可聚焦；同步 `CodeLeafHost`                                   |
+| `getSnapshot()`                            | `content` / `language` / `readOnly` / `focused` / `composing` |
+| `applyLocalEdit(start, end, insert)`       | 只读 → null；composing → 仅本地；否则 `text_edit`             |
+| `tryApplyLocalEdit(..., { requireFocus })` | 带 `read_only` / `not_focused` 拒绝码                         |
+| `setLanguage` / `setReadOnly`              | 元数据 + host 钩子（高亮 reconfigure 挂点）                   |
+| `mountCodeLeaf(el, opts)`                  | DOM 挂载入口；`getEditorView()` 现为 null（CM6 后填）         |
+
+```ts
+import {
+  CodeLeafModel,
+  createMockCodeLeafHost,
+  submitIntent,
+  createMockIntentSink,
+} from '@crish/block-paper';
+
+const host = createMockCodeLeafHost();
+const leaf = new CodeLeafModel('block-code', 'const x = 1;', {
+  language: 'javascript',
+  host,
+});
+const mock = createMockIntentSink();
+
+leaf.focus();
+const intent = leaf.applyLocalEdit(12, 12, '0');
+await submitIntent(intent!, mock.sink);
+// mock.calls[0].type === 'text_edit'
+
+leaf.setReadOnly(true);
+expect(leaf.applyLocalEdit(0, 0, 'x')).toBeNull(); // 只读拒绝
+```
+
 ## 不变量速查
 
 1. **DOM 不是真相** — 投影与选区逻辑坐标才是呈现源；写必须 Intent→sink→RS
@@ -159,6 +218,8 @@ await submitIntent(flushed!, mock.sink, { ime });
 4. **假数据可加载不抛** — `createSilentFixture(n)` 对任意有限 n≥0 安全
 5. **多选是逻辑 id 列表** — 禁止像素测距选块（A-SEL-01）
 6. **超长叶必须窗口** — `≥ T_PM_NODE_SOFT` 禁止无窗口整段挂载（A-HUGE-03 骨架）
+7. **代码叶可聚焦才走严格编辑** — `tryApplyLocalEdit` 默认 `requireFocus`；只读硬拒绝
+8. **W3-E ≠ 高亮完成** — language 字符串 + host 钩子就绪；lang 包按需后接
 
 ## 脚本
 
@@ -175,4 +236,4 @@ npm test -w @crish/block-paper
 - W0 Intent：`plans/interfaces/00-W0接口冻结.md`、`@crish/block-paper-contract`
 - 超长：`plans/specs/huge-block-policy.md`（V6 呈现侧）
 - IME/投影：`plans/04-投影虚拟化与IME.md`、`@crish/editor-kit`
-- 验收：A-SIL 子集（W3-C）+ Intent 通路绿（W3-D）；**≠ EL-01 / A-BLK 全表关闭**
+- 验收：A-SIL 子集（W3-C）+ Intent 通路绿（W3-D）+ 代码叶可聚焦（W3-E）；**≠ EL-01 / A-BLK 全表关闭**；**W3-E ≠ 全语言高亮完成**

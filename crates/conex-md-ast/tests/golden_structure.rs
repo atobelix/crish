@@ -1,8 +1,10 @@
-//! W2-A golden：结构往返（ID / kind / 父子 / plain 文本）。
+//! W2-A / Round6 golden：结构往返（ID / kind / 父子 / plain 文本）。
 //! 输入：`tests/golden/*.md`
+//!
+//! 列表/有序/引用深化见 `golden_lists_quote.rs`；plain text RT 见 `roundtrip_text.rs`。
 
 use conex_md_ast::{
-    BlockId, BlockKind, BlockTree, parse_document, serialize_tree, structure_eq,
+    BlockId, BlockKind, BlockTree, document_to_md, parse_document, serialize_tree, structure_eq,
 };
 use std::str::FromStr;
 
@@ -97,6 +99,8 @@ fn golden_serialize_matches_canonical_shape() {
     let tree = parse_document(md).unwrap();
     let out = serialize_tree(&tree);
     assert_eq!(out, md);
+    // document_to_md ≡ serialize_tree（Agent get_md 即时 S）
+    assert_eq!(document_to_md(&tree), out);
 }
 
 /// 结构指纹辅助（调试失败时用）

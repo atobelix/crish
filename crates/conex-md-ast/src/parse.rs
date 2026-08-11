@@ -482,4 +482,127 @@ beta
             );
         }
     }
+
+    #[test]
+    fn lossy_missing_block_id() {
+        let out = parse_document_detailed("裸段落无 ID\n").unwrap();
+        assert_eq!(out.tree.root_children.len(), 1);
+        let item = out
+            .lossy
+            .items
+            .iter()
+            .find(|i| i.code == "missing_block_id")
+            .expect("missing_block_id");
+        assert_eq!(item.line, Some(1));
+        assert_eq!(
+            out.tree
+                .get(&out.tree.root_children[0])
+                .unwrap()
+                .text_snapshot
+                .as_deref(),
+            Some("裸段落无 ID")
+        );
+    }
+
+    #[test]
+    fn lossy_duplicate_block_id() {
+        let md = "\
+<!--c:11111111-1111-4111-a111-111111111111-->
+第一
+
+<!--c:11111111-1111-4111-a111-111111111111-->
+重复ID块
+";
+        let out = parse_document_detailed(md).unwrap();
+        assert_eq!(out.tree.root_children.len(), 2);
+        let dup = out
+            .lossy
+            .items
+            .iter()
+            .find(|i| i.code == "duplicate_block_id")
+            .expect("duplicate_block_id");
+        assert!(dup.detail.contains("重分配"));
+        // 第一个保留原 ID，第二个被重分配
+        let first = bid("11111111-1111-4111-a111-111111111111");
+        assert_eq!(out.tree.root_children[0], first);
+        assert_ne!(out.tree.root_children[1], first);
+        assert_eq!(
+            out.tree.get(&first).unwrap().text_snapshot.as_deref(),
+            Some("第一")
+        );
+    }
+
+    #[test]
+    fn lossy_structure_note_table_like() {
+        let md = "\
+<!--c:11111111-1111-4111-a111-111111111111-->
+| a | b |
+| --- | --- |
+| 1 | 2 |
+";
+        let out = parse_document_detailed(md).unwrap();
+        let note = out
+            .lossy
+            .items
+            .iter()
+            .find(|i| i.code == "structure_note")
+            .expect("structure_note for table-like");
+        assert!(note.detail.contains("表格"));
+        // 结构-only：仍按段落保留原文，不裂表为专用 kind
+        let id = &out.tree.root_children[0];
+        assert_eq!(out.tree.get(id).unwrap().kind, BlockKind::Paragraph);
+        assert!(
+            out.tree
+                .get(id)
+                .unwrap()
+                .text_snapshot
+                .as_deref()
+                .unwrap()
+                .contains('|')
+        );
+    }
+
+    #[test]
+    fn lossy_raw_html_kept_as_paragraph_not_tree() {
+        // 禁止 HTML 反推块树：原始 HTML 行按段落吞入，不升格为 Unknown 块结构
+        let md = "\
+<!--c:11111111-1111-4111-a111-111111111111-->
+<div class=\"x\">inner</div>
+";
+        let out = parse_document_detailed(md).unwrap();
+        assert_eq!(out.tree.root_children.len(), 1);
+        let n = out.tree.get(&out.tree.root_children[0]).unwrap();
+        assert_eq!(n.kind, BlockKind::Paragraph);
+        assert_eq!(
+            n.text_snapshot.as_deref(),
+            Some("<div class=\"x\">inner</div>")
+        );
+        // 不得出现 Unknown flavour 块
+        for node in out.tree.nodes.values() {
+            assert!(!matches!(node.kind, BlockKind::Unknown { .. }));
+        }
+    }
+
+    #[test]
+    fn parse_ordered_and_quote_kinds() {
+        let md = "\
+<!--c:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa-->
+1. 有序甲
+
+<!--c:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb-->
+> 引用正文
+";
+        let tree = parse_document(md).unwrap();
+        let o = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+        let q = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+        assert_eq!(tree.get(&o).unwrap().kind, BlockKind::OrderedItem);
+        assert_eq!(tree.get(&o).unwrap().text_snapshot.as_deref(), Some("有序甲"));
+        assert_eq!(tree.get(&q).unwrap().kind, BlockKind::Quote);
+        assert_eq!(
+            tree.get(&q).unwrap().text_snapshot.as_deref(),
+            Some("引用正文")
+        );
+        let again = parse_document(&serialize_tree(&tree)).unwrap();
+        assert_structure_eq(&tree, &again);
+    }
 }

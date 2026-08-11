@@ -143,6 +143,8 @@ fn exec_ctx(
                 Arc::new(agent_tools::tools::output_dir::InMemoryOutputDirStore::new()),
             ),
         )),
+        // Round6：笔记后端（g02 不消费，None = unwired）
+        note_backend: None,
     }
 }
 

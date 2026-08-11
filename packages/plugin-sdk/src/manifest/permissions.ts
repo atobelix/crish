@@ -2,7 +2,7 @@
 // 约束来源：ROUND-08-plugin-sdk.md 禁令 18（信任模型 + 权限合并规则）
 
 /**
- * 插件权限粒度联合类型（禁令 18 合并规则，共 11 项）。
+ * 插件权限粒度联合类型（禁令 18 合并规则 + D6 笔记/View 轨增量，共 14 项）。
  *
  * 合并规则（原始能力 → 合并后权限）：
  * - file:read + file:write            → file:access      （文件读写通常成对出现）
@@ -16,6 +16,11 @@
  * - system.info                        → session:read      （系统信息归入会话只读）
  * - hook observe/on 独立两权限（observe 只读容错，intercept 可返回控制信号）
  * - tool:register                      → tool:register     （注册新工具，独立权限）
+ *
+ * D6 增量（plans/06 · contribute points / 笔记域）：
+ * - ui:contribute  → slash/widget/blockView/keymap View 轨贡献
+ * - note:read      → 读块/文档/搜索（只读投影/查询）
+ * - note:write     → 注册或调用笔记写工具（仍进审批矩阵；非 View 写入口）
  */
 export type PluginPermission =
   | 'file:access' // 文件读写（合并 file:read + file:write）
@@ -28,7 +33,10 @@ export type PluginPermission =
   | 'env:read' // 读取环境变量
   | 'hook:observe' // 注册 observe 处理器（只读容错，禁令 14）
   | 'hook:intercept' // 注册 on 处理器（可返回控制信号，禁令 14）
-  | 'plugin:manage'; // 管理其他插件（启用/禁用/卸载，合并 plugin.load）
+  | 'plugin:manage' // 管理其他插件（启用/禁用/卸载，合并 plugin.load）
+  | 'ui:contribute' // View 轨 contribute points（slash/widget/blockView/keymap）
+  | 'note:read' // 笔记只读（投影/查询；无写权威）
+  | 'note:write'; // 笔记写工具（仍走 RS 事务 + 审批；禁止 DOM/盘旁路）
 
 /** 全部合法权限字面量（供 validateManifest 枚举校验）。 */
 export const PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
@@ -43,6 +51,9 @@ export const PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
   'hook:observe',
   'hook:intercept',
   'plugin:manage',
+  'ui:contribute',
+  'note:read',
+  'note:write',
 ] as const;
 
 /**

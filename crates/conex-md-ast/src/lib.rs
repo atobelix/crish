@@ -5,10 +5,14 @@
 //! - **不含** inline 富文本 yrs 往返；文本走 `text_snapshot` plain
 //!
 //! # 公共 API
-//! - [`serialize_tree`] / [`parse_document`] / [`parse_document_detailed`]
+//! - [`document_to_md`] / [`serialize_tree`]：Agent **`get_md` 读路径 = 即时 S(树)**（禁止陈旧 mirror）
+//! - [`parse_document`] / [`parse_document_detailed`]（含 [`LossyReport`]）
 //! - [`apply_md_fragment`]（MD 片段 → Op 列表；失败零半树）
 //! - [`strip_conex_id_comments`]（pure-gfm）
 //! - [`encode_block_id_line`] / [`decode_block_id_line`]
+//!
+//! # 权威
+//! `docs/block-workspace-architecture/plans/03-MD契约.md`；A-MD / RT-1…；禁止 HTML 反推块树。
 
 #![allow(missing_docs)]
 
@@ -23,7 +27,7 @@ mod serialize;
 
 pub use apply::apply_md_fragment;
 pub use parse::{ParseOutput, parse_document, parse_document_detailed};
-pub use serialize::serialize_tree;
+pub use serialize::{document_to_md, serialize_tree};
 
 use thiserror::Error;
 
@@ -227,5 +231,69 @@ mod tests {
         }
         let again = parse_document(&serialize_tree(&tree)).unwrap();
         assert!(structure_eq(&tree, &again));
+    }
+
+    #[test]
+    fn document_to_md_is_agent_read_path_s() {
+        // get_md / document_get_md = 即时 S(树)，与 serialize_tree 同源
+        let p = BlockId::from_str("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb").unwrap();
+        let mut nodes = HashMap::new();
+        nodes.insert(
+            p,
+            BlockNode {
+                id: p,
+                parent: None,
+                order: "a0000".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+                text_snapshot: Some("Agent读路径".into()),
+                children: vec![],
+            },
+        );
+        let tree = BlockTree {
+            root_children: vec![p],
+            nodes,
+        };
+        let via_get = document_to_md(&tree);
+        let via_s = serialize_tree(&tree);
+        assert_eq!(via_get, via_s);
+        let tree2 = parse_document(&via_get).unwrap();
+        assert!(structure_eq(&tree, &tree2));
+        assert_eq!(
+            tree2.get(&p).unwrap().text_snapshot.as_deref(),
+            Some("Agent读路径")
+        );
+    }
+
+    #[test]
+    fn strip_detailed_reports_count_and_per_line() {
+        let id1 = BlockId::from_str("11111111-1111-4111-a111-111111111111").unwrap();
+        let id2 = BlockId::from_str("22222222-2222-4222-a222-222222222222").unwrap();
+        let md = format!(
+            "{}\n第一段\n\n{}\n第二段\n",
+            encode_block_id_line(&id1),
+            encode_block_id_line(&id2)
+        );
+        let (out, report) = strip_conex_id_comments_detailed(&md);
+        assert!(!out.contains("<!--c:"));
+        assert!(out.contains("第一段"));
+        assert!(out.contains("第二段"));
+        let codes: Vec<_> = report.items.iter().map(|i| i.code.as_str()).collect();
+        assert!(codes.contains(&"stripped_block_ids"));
+        assert!(codes.contains(&"stripped_block_ids_count"));
+        let count_item = report
+            .items
+            .iter()
+            .find(|i| i.code == "stripped_block_ids_count")
+            .unwrap();
+        assert!(count_item.detail.contains('2'));
+        assert_eq!(
+            report
+                .items
+                .iter()
+                .filter(|i| i.code == "stripped_block_ids")
+                .count(),
+            2
+        );
     }
 }

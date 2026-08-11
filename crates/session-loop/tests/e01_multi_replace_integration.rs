@@ -131,6 +131,8 @@ fn exec_ctx_wired(
         explore_docs_quota,
         // T-EG-08：产出目录解析器（G01；e01 域用例不消费，None 即可）
         output_dir: None,
+        // Round6：笔记后端（e01 不消费，None = unwired）
+        note_backend: None,
     }
 }
 
