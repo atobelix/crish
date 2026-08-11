@@ -1,11 +1,14 @@
 /**
- * NotePaperPanel — Workbench 笔记纸面挂载壳（W5-B · B-01/B-02 · Round6）
+ * NotePaperPanel — Workbench 笔记纸面挂载壳（W5-B · B-01/B-02 · Round6/8）
  *
  * surface = note-paper
  *
  * - 使用 `@crish/block-paper` 的 createSilentFixture / BlockChromeModel / SlashMenuModel
  * - **可测** 预览壳：列表块 id、静默把手状态、data-surface="note-paper"
  * - 可选 `transport`：从 Memory/IPC 加载块列表（写后 refresh 可测）
+ *   - 产品接线可传 `createDefaultNoteTransport()`（Tauri 真 `note_query_blocks`）
+ *   - 单测仍 inject `createMemoryNoteTransport()`，不依赖壳
+ * - 未传 `transport` 时保持静默假数据投影（不隐式拉真后端）
  * - **禁止** import 行级 EditorStore / markdown-editor store
  * - 挂载 ≠ EL-01/EL-08 关闭；假数据投影 ≠ 文档权威
  */
@@ -37,8 +40,10 @@ export type NotePaperPanelProps = {
   /** 可选：外部 chrome（测试用） */
   chrome?: BlockChromeModel;
   /**
-   * Round6：笔记通路。提供时从 transport.queryBlocks 加载只读投影
+   * 笔记通路。提供时从 transport.queryBlocks 加载只读投影
    * （写后可调用 refresh / 外部改 refreshToken 触发重载）。
+   * 产品：`createDefaultNoteTransport()` 或 `createTauriNoteTransport()`；
+   * 单测：`createMemoryNoteTransport()`。省略则静默 fixture。
    */
   transport?: NoteTransport;
   /**

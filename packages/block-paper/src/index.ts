@@ -7,7 +7,7 @@
  * - structureIntents：insert/delete/move/collapse/slash_insert + PaperIntent 联合
  * - silentFixture：N 块假文档投影（ProjectionDiff / MemoryBlock）
  * - TextLeafModel / intentBridge / lineWindow：叶子写路径 Intent 通路（mock apply）
- * - CodeLeafModel / mountCodeLeaf：CM6 代码叶骨架（可聚焦 + text_edit Intent）
+ * - CodeLeafModel / mountCodeLeaf / Cm6CodeLeafHost：代码叶（可聚焦 + text_edit + 真 CM6 host）
  *
  * **包边界**：
  * - 本包是呈现 chrome / 叶子与结构写路径骨架，**不接真实后端**
@@ -16,7 +16,8 @@
  * - UI（React）可后接；本波优先纯 TS 可测
  * - W3-D 完成 = 文本 Intent 通路绿；W3-E 完成 = 代码叶可聚焦 + Intent 通路绿
  * - W3-F 完成 = 结构 Intent 通路绿
- * - **W3-E ≠ 全语言高亮完成**；**W3-F ≠ EL-01 关闭**；**≠** A-BLK 全表关闭
+ * - **W3-E ≠ 全语言高亮完成**（plain + javascript 已接线；其余 lang 后接）
+ * - **W3-F ≠ EL-01 关闭**；**≠** A-BLK 全表关闭
  */
 
 // Block chrome 状态
@@ -121,7 +122,7 @@ export {
 } from './leaves/lineWindow';
 
 // ---------------------------------------------------------------------------
-// W3-E：CM6 代码叶骨架（可聚焦 + text_edit；不接真实 RS / 不全语言高亮）
+// W3-E：CM6 代码叶（可聚焦 + text_edit + 真 CM6 host；不接 RS / 不全语言高亮）
 // ---------------------------------------------------------------------------
 
 export {
@@ -129,6 +130,11 @@ export {
   createMockCodeLeafHost,
   DomCodeLeafHost,
   mountCodeLeaf,
+  Cm6CodeLeafHost,
+  createCm6EditorState,
+  resolveCm6LanguageExtension,
+  isCm6HighlightedLanguage,
+  isCm6CodeLeafHost,
   type CodeLanguage,
   type CodeLeafSnapshot,
   type CodeLeafModelOptions,
@@ -139,4 +145,7 @@ export {
   type MockCodeLeafHostOptions,
   type MountCodeLeafOptions,
   type CodeLeafMount,
+  type Cm6CodeLeafHostOptions,
+  type CreateCm6EditorStateOptions,
+  type Cm6EditorStateBundle,
 } from './leaves/code';

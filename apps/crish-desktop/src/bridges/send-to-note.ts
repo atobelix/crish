@@ -287,9 +287,11 @@ export function createSinkFromNoteTransport(
  * 调用形态（兼容）：
  * - `dispatchSendToNote(input, sink, options?)` — 既有 mock sink
  * - `dispatchSendToNote(input, options)` — 走 options.transport / 默认 NoteTransport
- * - `dispatchSendToNote(input)` — 走模块默认 / Tauri NoteTransport
+ * - `dispatchSendToNote(input)` — `resolveNoteTransport` → 模块默认 /
+ *   `createDefaultNoteTransport()`（Tauri 真 note_* / 无 Tauri → Memory）
  *
  * 幂等：同 intentId 第二次返回首次结果，不二次写。
+ * 单测请 inject sink 或 Memory transport，勿依赖隐式 Tauri。
  */
 export async function dispatchSendToNote(
   intentOrInput: SendToNoteIntent | BuildSendToNoteInput,
@@ -306,7 +308,7 @@ export async function dispatchSendToNote(
     options = sinkOrOptions;
   }
 
-  // sink 优先；否则 transport → 模块默认 / Tauri
+  // sink 优先；否则 transport → 模块默认 → createDefaultNoteTransport
   const resolvedSink: SendToNoteSink =
     sink ??
     createSinkFromNoteTransport(

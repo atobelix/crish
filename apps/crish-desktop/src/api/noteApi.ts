@@ -1,9 +1,47 @@
 /**
- * 前端笔记 API 契约（Round6 · dual-engine-surface §5 / §8 B-05…B-09）
+ * 前端笔记 API 契约（Round6–8 · dual-engine-surface §5 / §8 B-05…B-09）
  *
- * - 命令名常量：与未来 Tauri 面 / 工具名对齐（前缀 note_ 为前端 IPC 约定）
- * - `NoteTransport`：可注入写/读通路；有 `@tauri-apps/api/core` 时尝试 invoke
- * - `createMemoryNoteTransport()`：进程内 apply/query/send_to_note，供单测与预览壳
+ * - 命令名常量：与 Tauri 面 / agent-tools 工具名对齐（前缀 `note_` 为 IPC wire）
+ * - `NoteTransport`：可注入写/读通路
+ * - `createMemoryNoteTransport()`：进程内 apply/query/send_to_note（单测 / 无 Tauri）
+ * - `createTauriNoteTransport()`：经 `invokeTyped` 调 workbench note_* 命令
+ * - `createDefaultNoteTransport()`：**默认策略**（见下）
+ *
+ * ## 默认 transport 策略（W5-D）
+ *
+ * | 环境 | 默认通路 | 说明 |
+ * |------|----------|------|
+ * | 生产 / Tauri（`window.__TAURI__` / `__TAURI_INTERNALS__`） | `createTauriNoteTransport()` | 真命令面；missing/业务失败 → `ok:false`，**不**静默 Memory |
+ * | 单测 / 纯浏览器（无 Tauri 全局） | `createMemoryNoteTransport()` | 可测闭环；产品壳仍可 `setDefaultNoteTransport` 注入 |
+ * | 调用方显式 `transport` / `setDefaultNoteTransport` | 注入优先 | 覆盖环境默认 |
+ *
+ * `resolveNoteTransport(override?)` = override → 模块默认 → `createDefaultNoteTransport()`。
+ *
+ * ## invoke snake_case 映射（前端 camelCase → 后端 wire）
+ *
+ * Tauri 参数名对齐 `note_commands.rs`：`req` / `params`；字段 snake_case 对齐
+ * `agent_tools::note_backend::{NoteApplyMdRequest, NoteQueryBlocksParams}` 与
+ * `NoteSendToNoteArgs`。
+ *
+ * | 前端字段 (camelCase) | wire 字段 (snake_case) | 命令 |
+ * |----------------------|------------------------|------|
+ * | docId | doc_id | apply / query / send |
+ * | markdown | markdown | apply / send |
+ * | parentId | parent_id | apply / send |
+ * | afterBlockId | after_block_id | apply / send |
+ * | mode | mode | apply / send |
+ * | intentId | intent_id | apply / send |
+ * | batchId | batch_id | apply / send |
+ * | messageId | message_id | apply / send |
+ * | origin | origin | apply / send |
+ * | kindIn | kind_in | query |
+ * | attrsEq | attrs_eq | query |
+ * | textMatch | text_match | query |
+ * | refTo | ref_to | query |
+ * | refFrom | ref_from | query |
+ * | limit | limit | query |
+ *
+ * 响应解析兼容 snake_case / camelCase（`block_ids` ↔ `blockIds`）。
  *
  * 纪律：
  * - 写路径仅经 apply_md / send_to_note；禁止 fs.write 当权威
@@ -142,10 +180,16 @@ export type NoteTransport = {
 };
 
 // ---------------------------------------------------------------------------
-// snake_case 投影（未来 Tauri 线格式）
+// snake_case 投影（对齐 note_commands.rs / note_backend 线格式）
 // ---------------------------------------------------------------------------
 
-function applyReqToWire(req: NoteApplyMdRequest): Record<string, unknown> {
+/**
+ * apply_md 请求 → wire 字段（snake_case）。
+ * Tauri 外层参数名见 `wrapApplyInvokeArgs`（`req`）。
+ */
+export function applyReqToWire(
+  req: NoteApplyMdRequest
+): Record<string, unknown> {
   const wire: Record<string, unknown> = {
     doc_id: req.docId,
     markdown: req.markdown,
@@ -160,7 +204,11 @@ function applyReqToWire(req: NoteApplyMdRequest): Record<string, unknown> {
   return wire;
 }
 
-function queryParamsToWire(
+/**
+ * query_blocks 入参 → wire 字段（snake_case）。
+ * Tauri 外层参数名见 `wrapQueryInvokeArgs`（`params`）。
+ */
+export function queryParamsToWire(
   params: NoteQueryBlocksParams
 ): Record<string, unknown> {
   const wire: Record<string, unknown> = { doc_id: params.docId };
@@ -173,7 +221,13 @@ function queryParamsToWire(
   return wire;
 }
 
-function sendReqToWire(req: NoteSendToNoteRequest): Record<string, unknown> {
+/**
+ * send_to_note 请求 → wire 字段（snake_case）。
+ * Tauri 外层参数名见 `wrapSendInvokeArgs`（`req`）。
+ */
+export function sendReqToWire(
+  req: NoteSendToNoteRequest
+): Record<string, unknown> {
   const wire: Record<string, unknown> = {
     intent_id: req.intentId,
     markdown: req.markdown,
@@ -186,6 +240,27 @@ function sendReqToWire(req: NoteSendToNoteRequest): Record<string, unknown> {
   if (req.origin !== undefined) wire.origin = req.origin;
   if (req.batchId !== undefined) wire.batch_id = req.batchId;
   return wire;
+}
+
+/** Tauri invoke 参数：对齐 `note_document_apply_md(req: NoteApplyMdRequest)` */
+export function wrapApplyInvokeArgs(
+  req: NoteApplyMdRequest
+): Record<string, unknown> {
+  return { req: applyReqToWire(req) };
+}
+
+/** Tauri invoke 参数：对齐 `note_query_blocks(params: NoteQueryBlocksParams)` */
+export function wrapQueryInvokeArgs(
+  params: NoteQueryBlocksParams
+): Record<string, unknown> {
+  return { params: queryParamsToWire(params) };
+}
+
+/** Tauri invoke 参数：对齐 `note_send_to_note(req: NoteSendToNoteArgs)` */
+export function wrapSendInvokeArgs(
+  req: NoteSendToNoteRequest
+): Record<string, unknown> {
+  return { req: sendReqToWire(req) };
 }
 
 function asRec(v: unknown): Record<string, unknown> | null {
@@ -627,19 +702,40 @@ export function createMemoryNoteTransport(): MemoryNoteTransport {
 }
 
 // ---------------------------------------------------------------------------
-// Tauri transport（命令未注册 → missing 结构化失败，不抛）
+// Tauri runtime 探测 + transport（命令未注册 → missing 结构化失败，不抛）
 // ---------------------------------------------------------------------------
 
 /**
- * 经 `invokeTyped` 调用未来 Tauri 笔记命令。
- * 非 Tauri / 命令缺失 → ok:false + code note.command_missing。
+ * 是否存在 Tauri 运行时全局（生产桌面壳）。
+ * 单测 / Vite 纯浏览器无此全局 → 走 Memory 默认。
+ */
+export function isNoteTauriRuntime(): boolean {
+  try {
+    if (typeof window === 'undefined') return false;
+    const w = window as unknown as {
+      __TAURI_INTERNALS__?: unknown;
+      __TAURI__?: unknown;
+      isTauri?: boolean;
+    };
+    return Boolean(w.__TAURI_INTERNALS__ || w.__TAURI__ || w.isTauri);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 经 `invokeTyped` 调用 workbench 已注册的 note_* 命令。
+ * 非 Tauri / 命令缺失 → ok:false + code note.command_missing（不抛）。
+ * 业务失败（后端 `{ ok:false, code, reason }`）同样不抛。
+ *
+ * invoke 参数：外层 `req`/`params` + 内层 snake_case 字段（见 wrap*InvokeArgs）。
  */
 export function createTauriNoteTransport(): NoteTransport {
   return {
     async applyMd(req) {
       const res = await invokeTyped<unknown>(
         NOTE_CMD_DOCUMENT_APPLY_MD,
-        applyReqToWire(req)
+        wrapApplyInvokeArgs(req)
       );
       if (res.status !== 'ok') {
         return mapInvokeFailure(res, NOTE_CMD_DOCUMENT_APPLY_MD);
@@ -649,7 +745,7 @@ export function createTauriNoteTransport(): NoteTransport {
     async queryBlocks(params) {
       const res = await invokeTyped<unknown>(
         NOTE_CMD_QUERY_BLOCKS,
-        queryParamsToWire(params)
+        wrapQueryInvokeArgs(params)
       );
       if (res.status !== 'ok') {
         if (res.status === 'missing') {
@@ -670,7 +766,7 @@ export function createTauriNoteTransport(): NoteTransport {
     async sendToNote(req) {
       const res = await invokeTyped<unknown>(
         NOTE_CMD_SEND_TO_NOTE,
-        sendReqToWire(req)
+        wrapSendInvokeArgs(req)
       );
       if (res.status !== 'ok') {
         return mapInvokeFailure(res, NOTE_CMD_SEND_TO_NOTE);
@@ -681,15 +777,16 @@ export function createTauriNoteTransport(): NoteTransport {
 }
 
 // ---------------------------------------------------------------------------
-// 工厂：注入优先 → 否则 Tauri；可选 memory fallback
+// 工厂：注入优先 → 环境默认；可选「Tauri missing → Memory」显式 fallback
 // ---------------------------------------------------------------------------
 
 export type CreateNoteTransportOptions = {
   /** 显式注入（单测 / 预览壳）；优先使用 */
   transport?: NoteTransport;
   /**
-   * 当未注入且 Tauri 命令 missing 时，是否回退到进程内 Memory。
-   * 默认 false（产品路径应显式注入或等 RS 接线）。
+   * 当未注入且选用 Tauri 通路、命令 missing 时，是否回退到进程内 Memory。
+   * 默认 false：Tauri 环境内命令缺失应暴露失败，禁止静默假写。
+   * （非 Tauri 环境请用 `createDefaultNoteTransport()`，直接 Memory。）
    */
   fallbackMemory?: boolean;
 };
@@ -697,16 +794,19 @@ export type CreateNoteTransportOptions = {
 /**
  * 构造笔记 transport：
  * 1. 注入 `transport` → 直接用
- * 2. 否则 Tauri invoke；若 `fallbackMemory` 且命令 missing → Memory
+ * 2. 否则 `createDefaultNoteTransport()`；若 `fallbackMemory` 且当前为 Tauri
+ *    且命令 missing → Memory（仅显式开启时）
  */
 export function createNoteTransport(
   options: CreateNoteTransportOptions = {}
 ): NoteTransport {
   if (options.transport) return options.transport;
 
-  const tauri = createTauriNoteTransport();
-  if (!options.fallbackMemory) return tauri;
+  const base = createDefaultNoteTransport();
+  if (!options.fallbackMemory || !isNoteTauriRuntime()) return base;
 
+  // 仅 Tauri 默认 + 显式 fallback：命令 missing 时落 Memory
+  const tauri = base;
   const memory = createMemoryNoteTransport();
   return {
     async applyMd(req) {
@@ -733,6 +833,22 @@ export function createNoteTransport(
   };
 }
 
+/**
+ * **默认 transport 策略**（W5-D 明确入口）：
+ *
+ * - 生产 / Tauri 环境（`isNoteTauriRuntime()`）→ `createTauriNoteTransport()`
+ * - 单测 / 无 `window.__TAURI__` → `createMemoryNoteTransport()`
+ *
+ * Tauri 内命令 missing **不会**在此函数内回退 Memory（避免假写）；
+ * 需要 missing→Memory 时用 `createNoteTransport({ fallbackMemory: true })`。
+ */
+export function createDefaultNoteTransport(): NoteTransport {
+  if (isNoteTauriRuntime()) {
+    return createTauriNoteTransport();
+  }
+  return createMemoryNoteTransport();
+}
+
 // ---------------------------------------------------------------------------
 // 模块默认 transport（桥接 dispatch 可省略注入）
 // ---------------------------------------------------------------------------
@@ -750,14 +866,17 @@ export function getDefaultNoteTransport(): NoteTransport | null {
 }
 
 /**
- * 解析生效 transport：options > 模块默认 > Tauri（无 memory 静默回退，避免假写）
+ * 解析生效 transport：
+ * 1. 调用方 `override`
+ * 2. 模块 `setDefaultNoteTransport`
+ * 3. `createDefaultNoteTransport()`（Tauri 真通路 / 非 Tauri Memory）
  */
 export function resolveNoteTransport(
   override?: NoteTransport | null
 ): NoteTransport {
   if (override) return override;
   if (defaultNoteTransport) return defaultNoteTransport;
-  return createTauriNoteTransport();
+  return createDefaultNoteTransport();
 }
 
 // ---------------------------------------------------------------------------

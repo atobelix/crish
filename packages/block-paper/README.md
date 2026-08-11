@@ -10,14 +10,14 @@
 
 ## 边界
 
-| 本包 **做**                                    | 本包 **不做**                        |
-| ---------------------------------------------- | ------------------------------------ |
-| 静默 L0 chrome 状态（把手/折叠/多选高亮）      | 真实 DocSession / RS / 协同接线      |
-| Slash 打开/过滤/关闭（composing 禁开）         | 完整 PM/CM6 编辑器（仅 Intent 接口） |
-| N 块假投影（`ProjectionDiff` / `MemoryBlock`） | 结构 Op 真正落地到真实 collab        |
-| 叶子 `TextEditIntent` 产出 + mock sink         | 接 `apps/crish-desktop` 业务         |
-| 代码叶可聚焦 + `text_edit` Intent（W3-E）      | 全语言 SyntaxHighlight / 主题完成    |
-| V6 行/字符窗口计算（A-HUGE-03 呈现侧）         | 数据层超长分段（W1-B）               |
+| 本包 **做**                                      | 本包 **不做**                        |
+| ------------------------------------------------ | ------------------------------------ |
+| 静默 L0 chrome 状态（把手/折叠/多选高亮）        | 真实 DocSession / RS / 协同接线      |
+| Slash 打开/过滤/关闭（composing 禁开）           | 完整 PM/CM6 编辑器（仅 Intent 接口） |
+| N 块假投影（`ProjectionDiff` / `MemoryBlock`）   | 结构 Op 真正落地到真实 collab        |
+| 叶子 `TextEditIntent` 产出 + mock sink           | 接 `apps/crish-desktop` 业务         |
+| 代码叶可聚焦 + `text_edit` + 真 CM6 host（W3-E） | 全语言 SyntaxHighlight / 主题完成    |
+| V6 行/字符窗口计算（A-HUGE-03 呈现侧）           | 数据层超长分段（W1-B）               |
 
 依赖：
 
@@ -41,6 +41,7 @@ import {
   // W3-E
   CodeLeafModel,
   createMockCodeLeafHost,
+  Cm6CodeLeafHost,
   mountCodeLeaf,
 } from '@crish/block-paper';
 ```
@@ -157,12 +158,13 @@ await submitIntent(flushed!, mock.sink, { ime });
 | `computeLineWindow(text, focus, cfg?)`   | 多行按行窗口；无换行按 char 窗口    |
 | `getOffsetWindow` / `getLineWindowSlice` | HugeLeafEditorHost 纯函数形态       |
 
-## 代码叶：CM6 骨架（W3-E）
+## 代码叶：CM6 host 接线（W3-E / Round8）
 
 > **W3-E ≠ 全语言高亮完成。**  
-> 本波钉死：可聚焦、`language` / `readOnly` / content snapshot、变更 → `text_edit` → `submitIntent`。  
-> 真实 `@codemirror/view` EditorView 挂点见 `src/leaves/code/CodeLeafHost.ts` 文件头注释；  
-> 默认用 `createMockCodeLeafHost`（单测）或 `DomCodeLeafHost`（textarea 焦点通路），**不接真实 RS**。
+> 已接线：可聚焦、`language` / `readOnly` / content snapshot、变更 → `text_edit` → `submitIntent`、**真 `Cm6CodeLeafHost`（`@codemirror/view` EditorView）**。  
+> 语言：`plaintext` + **`javascript`（`@codemirror/lang-javascript`）** Compartment 可换；其余 id 回落 plain。  
+> 默认 mount 仍用 `DomCodeLeafHost`（textarea）；真 CM6 经 `createHost: (el) => new Cm6CodeLeafHost(el, …)`。  
+> 单测：`createCm6EditorState` + 真实 `EditorState` 证明依赖接线；**不接真实 RS**。
 
 ```text
 focus()
@@ -183,17 +185,22 @@ IntentSink（mock 或未来 RS IPC）
 | `getSnapshot()`                            | `content` / `language` / `readOnly` / `focused` / `composing` |
 | `applyLocalEdit(start, end, insert)`       | 只读 → null；composing → 仅本地；否则 `text_edit`             |
 | `tryApplyLocalEdit(..., { requireFocus })` | 带 `read_only` / `not_focused` 拒绝码                         |
-| `setLanguage` / `setReadOnly`              | 元数据 + host 钩子（高亮 reconfigure 挂点）                   |
-| `mountCodeLeaf(el, opts)`                  | DOM 挂载入口；`getEditorView()` 现为 null（CM6 后填）         |
+| `setLanguage` / `setReadOnly`              | 元数据 + host 钩子（CM6：`Compartment.reconfigure`）          |
+| `Cm6CodeLeafHost`                          | 真 EditorView；`getEditorView()` / `onDocChanged`             |
+| `createCm6EditorState`                     | 无 DOM 可构造 `EditorState`（语言/只读 Compartment）          |
+| `mountCodeLeaf(el, opts)`                  | DOM 挂载；CM6 host 时 `getEditorView()` 返回真实 View         |
 
 ```ts
 import {
   CodeLeafModel,
   createMockCodeLeafHost,
+  Cm6CodeLeafHost,
+  mountCodeLeaf,
   submitIntent,
   createMockIntentSink,
 } from '@crish/block-paper';
 
+// —— 单测 / 无 DOM：mock host ——
 const host = createMockCodeLeafHost();
 const leaf = new CodeLeafModel('block-code', 'const x = 1;', {
   language: 'javascript',
@@ -208,6 +215,24 @@ await submitIntent(intent!, mock.sink);
 
 leaf.setReadOnly(true);
 expect(leaf.applyLocalEdit(0, 0, 'x')).toBeNull(); // 只读拒绝
+
+// —— 浏览器：真 CM6 host ——
+// const { model, getEditorView, unmount } = mountCodeLeaf(el, {
+//   blockId: 'b-code',
+//   language: 'javascript',
+//   initialContent: 'const x = 1;',
+//   createHost: (parent) =>
+//     new Cm6CodeLeafHost(parent, {
+//       language: 'javascript',
+//       initialContent: 'const x = 1;',
+//       onDocChanged: (content) => {
+//         const old = model.getContent();
+//         if (old !== content) model.applyLocalEdit(0, old.length, content);
+//       },
+//     }),
+// });
+// getEditorView(); // → EditorView
+// unmount();
 ```
 
 ## 不变量速查
@@ -219,7 +244,7 @@ expect(leaf.applyLocalEdit(0, 0, 'x')).toBeNull(); // 只读拒绝
 5. **多选是逻辑 id 列表** — 禁止像素测距选块（A-SEL-01）
 6. **超长叶必须窗口** — `≥ T_PM_NODE_SOFT` 禁止无窗口整段挂载（A-HUGE-03 骨架）
 7. **代码叶可聚焦才走严格编辑** — `tryApplyLocalEdit` 默认 `requireFocus`；只读硬拒绝
-8. **W3-E ≠ 高亮完成** — language 字符串 + host 钩子就绪；lang 包按需后接
+8. **W3-E ≠ 高亮完成** — 真 CM6 host 已接线；当前仅 plain + javascript；其余 lang 包按需后接
 
 ## 脚本
 

@@ -9,11 +9,11 @@
  * - A-IME：可注入 `isComposing`；合成期缓冲，end 时 flush（与 TextLeafModel 同构）
  * - 写路径：Intent → submitIntent → sink →（未来）RS apply；**禁止** serialize(DOM)
  *
- * **本模块不接真实后端 / 不接真实 CM6 View**。
- * Host 通过 `CodeLeafHost` 接口注入；真实 CM6 挂点见 `CodeLeafHost.ts` / `mountCodeLeaf`。
+ * **本模块不接真实后端**。Host 经 `CodeLeafHost` 注入；
+ * 真 CM6 见 `Cm6CodeLeafHost` / `mountCodeLeaf({ createHost })`。
  *
- * **W3-E ≠ 全语言高亮完成**：language 字段与 host 同步钩子就位即可，
- * 不要求本波落地全部 @codemirror/lang-*。
+ * **W3-E ≠ 全语言高亮完成**：language 字段 + Compartment 钩子就位；
+ * 当前 lang 包仅 javascript，其余按需后接。
  */
 
 import type {

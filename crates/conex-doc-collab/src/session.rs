@@ -1245,6 +1245,24 @@ mod tests {
         assert!(s.tree.nodes.is_empty());
     }
 
+    /// A-MEM-01 / W6-C：默认热集上界常量导出为 512，且 DocSession 默认采用该值。
+    #[test]
+    fn a_mem_01_default_max_hot_constant_is_512() {
+        use crate::a_mem;
+        use crate::DEFAULT_MAX_HOT;
+        assert_eq!(DEFAULT_MAX_HOT, 512, "H1 默认热集上界须为 512");
+        assert_eq!(a_mem::DEFAULT_MAX_HOT, DEFAULT_MAX_HOT);
+        assert_eq!(a_mem::A_MEM_01, "A-MEM-01");
+        let s = DocSession::new("d1");
+        assert_eq!(
+            s.text_max_hot(),
+            DEFAULT_MAX_HOT,
+            "DocSession::new 默认 text_max_hot 须等于 DEFAULT_MAX_HOT"
+        );
+        // 退化治理 ID 可引用（数值比较见 perf-baseline.md）
+        assert_eq!(crate::a_perf::A_PERF_DEG_01, "A-PERF-DEG-01");
+    }
+
     /// A-MEM-01（会话层）：max_hot=8，编辑超限后 hot_count 受界。
     #[test]
     fn a_mem_01_session_hot_bounded() {

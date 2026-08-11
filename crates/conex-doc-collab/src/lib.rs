@@ -31,6 +31,8 @@ pub use session::{
     partition_utf8, ApplyError, DocSession, TextUpdatePayload, DEFAULT_T_HUGE, DEFAULT_T_SEGMENT,
     MAX_T_HUGE, MIN_T_HUGE,
 };
+/// H1 / A-MEM-01：默认热集上界（活动 YText 实例数）；见 `plans/acceptance/perf-baseline.md`。
+pub use text_engine::DEFAULT_MAX_HOT;
 pub use tx::{TxGuard, TxId};
 
 /// A-INV-09 文档锚点（测试与门禁引用此模块路径）。
@@ -46,4 +48,22 @@ pub mod a_huge {
     //! 01: 亚阈保持单叶 · 02: 超阈同事务分段或整批失败（零半树）
     pub const A_HUGE_01: &str = "A-HUGE-01";
     pub const A_HUGE_02: &str = "A-HUGE-02";
+}
+
+/// A-MEM 文档锚点（H1 热集/冷藏；结构门可执行常量见 [`DEFAULT_MAX_HOT`]）。
+pub mod a_mem {
+    //! 01: 活动 YText ≤ max_hot（默认 512）· 02: 冷可读 · 03: 远端不丢 · 04: 跨冷 undo 契约
+    pub const A_MEM_01: &str = "A-MEM-01";
+    pub const A_MEM_02: &str = "A-MEM-02";
+    pub const A_MEM_03: &str = "A-MEM-03";
+    pub const A_MEM_04: &str = "A-MEM-04";
+
+    /// 与 crate 根 [`super::DEFAULT_MAX_HOT`] 同值（门禁/文档引用本路径亦可）。
+    pub const DEFAULT_MAX_HOT: usize = super::DEFAULT_MAX_HOT;
+}
+
+/// A-PERF-DEG 文档锚点（H3 退化治理；数值比较见 `plans/acceptance/perf-baseline.md`）。
+pub mod a_perf {
+    //! DEG-01: p95≥2× 或 p50≥1.5× 连续 3 次 → A-SWAP 评估
+    pub const A_PERF_DEG_01: &str = "A-PERF-DEG-01";
 }

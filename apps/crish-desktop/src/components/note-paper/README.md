@@ -30,14 +30,19 @@
 | 边界静态扫描（禁 EditorStore）     | A-SURF 全表关闭（W5-C）                 |
 | Workspace 空态「打开预览壳」入口   | 宣称块工作区已完成                      |
 
-## Round6 通路
+## Round6–8 通路（W5-D 默认真 Tauri）
 
 - API：`apps/crish-desktop/src/api/noteApi.ts`
   - 命令常量：`note_document_apply_md` / `note_query_blocks` / `note_send_to_note`
+  - `createDefaultNoteTransport()`：**默认策略**
+    - 生产/Tauri（`window.__TAURI__`）→ 真 `createTauriNoteTransport()`
+    - 单测/无 Tauri → Memory
   - `createMemoryNoteTransport()`：单测与预览壳写后 query
-  - `createTauriNoteTransport()`：有 core 时 invoke；missing → 结构化失败
-- 桥：`dispatchSendToNote(input, { transport })` 或 `setDefaultNoteTransport(mem)`
-- 面板：`<NotePaperPanel transport={mem} refreshToken={n} />` 演示 apply → 刷新
+  - `createTauriNoteTransport()`：invokeTyped；业务 `ok:false` / missing 均不抛
+  - 入参 camelCase → wire snake_case（外层 `req`/`params` 对齐 note_commands.rs）
+- 桥：`dispatchSendToNote` → `resolveNoteTransport`（override → 模块默认 → createDefault）
+- 面板：`<NotePaperPanel transport={…} refreshToken={n} />`；单测 inject Memory
+- 禁止：静默 onStreamEnd 写笔记；边界测禁止 EditorStore
 
 ## 相关
 

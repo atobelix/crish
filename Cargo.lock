@@ -1415,6 +1415,7 @@ dependencies = [
  "portable-pty",
  "rcgen",
  "reqwest",
+ "rusqlite",
  "rustls",
  "rustls-pemfile",
  "serde",

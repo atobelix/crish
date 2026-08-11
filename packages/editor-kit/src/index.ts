@@ -27,6 +27,16 @@ export {
   type ViewportQueryResult,
 } from './viewport/ViewportQuery';
 
+// A-PERF 结构门常量（W6-C / H3）
+export {
+  DEFAULT_OVERSCAN_BLOCKS,
+  OVERSCAN_BLOCKS_MIN,
+  OVERSCAN_BLOCKS_MAX,
+  MAX_MOUNTED_DOM_BLOCKS,
+  DEFAULT_MAX_HOT_YTEXT,
+  isWithinDomMountBound,
+} from './viewport/bounds';
+
 // HeightMap
 export {
   HeightMap,
@@ -89,6 +99,23 @@ export {
   type StructureGuardRejectCode,
   type StructureGuardResult,
 } from './ime/structureKeyGuard';
+
+// IME 矩阵常量（M3 / Round8 · 文档表程序可读真相）
+export {
+  IME_MATRIX_CELLS,
+  IME_MATRIX_ASSERTS,
+  IME_MATRIX_STATUS_GLYPH,
+  imeMatrixStatusGlyph,
+  imeMatrixCellsFor,
+  imeMatrixOpenRequiredCells,
+  imeMatrixL1Ready,
+  type ImeMatrixAssertId,
+  type ImeMatrixPlatform,
+  type ImeMatrixRequirement,
+  type ImeMatrixCellStatus,
+  type ImeMatrixStatusGlyph,
+  type ImeMatrixCell,
+} from './ime/imeMatrix';
 
 // Surface 常量 / 类型（契约 re-export；A-SURF-01 / A-SURF-09）
 // 本包不持有产品 store；仅转发枚举供两侧标注

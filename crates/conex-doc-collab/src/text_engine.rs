@@ -386,6 +386,15 @@ mod tests {
         (0..n).map(|_| BlockId::new()).collect()
     }
 
+    /// A-MEM-01 / W6-C：默认配置 max_hot == DEFAULT_MAX_HOT == 512。
+    #[test]
+    fn a_mem_01_default_max_hot_is_512() {
+        assert_eq!(DEFAULT_MAX_HOT, 512);
+        let eng = TextEngine::default();
+        assert_eq!(eng.max_hot(), DEFAULT_MAX_HOT);
+        assert_eq!(TextEngineConfig::default().max_hot, DEFAULT_MAX_HOT);
+    }
+
     /// A-MEM-01：插入远超 max_hot 的块并 touch 子集后，hot_count ≤ max_hot。
     #[test]
     fn a_mem_01_hot_count_bounded() {

@@ -1,11 +1,17 @@
 /**
- * SendToNoteButton — 「发送到笔记」UI 钩子（W5-B · B-05/B-08 · Round6）
+ * SendToNoteButton — 「发送到笔记」UI 钩子（W5-B · B-05/B-08 · Round6/8）
  *
  * - 仅 status === 'completed' 可点
  * - 点击调用 bridges/send-to-note 薄桥
  * - 展示错误态；失败不假装已写树
  * - 禁止流式 onStreamEnd 默认写笔记
- * - 写路径：sink 优先；否则 NoteTransport / 模块默认
+ * - 写路径优先级：
+ *   1. 显式 `sink`（单测 mock）
+ *   2. 显式 `transport` prop
+ *   3. 模块 `setDefaultNoteTransport` / 桥 `resolveNoteTransport`
+ *   4. `createDefaultNoteTransport()`：Tauri 壳 → 真 `note_*` 命令；无 Tauri → Memory
+ *
+ * 产品桌面默认走真 Tauri note 通路；单测仍应 inject Memory / sink，避免依赖壳。
  */
 
 import React, { useCallback, useState } from 'react';
@@ -34,10 +40,13 @@ export type SendToNoteButtonProps = {
   /**
    * 写路径 sink（mock / 测试）。
    * 与 `transport` 同时存在时 **sink 优先**。
-   * 皆缺省 → 桥走模块默认 NoteTransport。
+   * 皆缺省 → 桥走 `resolveNoteTransport`（模块默认 / `createDefaultNoteTransport`）。
    */
   sink?: SendToNoteSink;
-  /** 笔记通路（Round6 Memory / 未来 Tauri） */
+  /**
+   * 笔记通路。产品可省略（默认 Tauri note 命令）；
+   * 单测请 inject `createMemoryNoteTransport()`。
+   */
   transport?: NoteTransport;
   /** 幂等键；缺省由桥生成 */
   intentId?: string;

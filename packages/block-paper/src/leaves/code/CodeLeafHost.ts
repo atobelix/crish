@@ -5,43 +5,34 @@
  * - `CodeLeafModel`：纯逻辑（content / focus / Intent）—— vitest 主路径
  * - `CodeLeafHost`：编辑面适配器（焦点与 doc 显示）
  * - `createMockCodeLeafHost`：无 DOM 可测 host
- * - `mountCodeLeaf`：挂到 HTMLElement；真实 CM6 挂点在此标注
+ * - `DomCodeLeafHost`：textarea 轻量 DOM host
+ * - `Cm6CodeLeafHost`（`./Cm6CodeLeafHost`）：**真 CM6** EditorView 接线
+ * - `mountCodeLeaf`：挂到 HTMLElement；`createHost: (el) => new Cm6CodeLeafHost(el, …)` 启用 CM6
  *
- * ## 真实 CM6 host 挂点（后续波）
+ * ## 真 CM6 host（Round8 · CM6 接线）
  *
  * ```ts
- * // 可选依赖：@codemirror/state @codemirror/view @codemirror/lang-javascript …
- * import { EditorState, Compartment } from '@codemirror/state';
- * import { EditorView, keymap, placeholder } from '@codemirror/view';
- * import { defaultKeymap, history } from '@codemirror/commands';
+ * import { Cm6CodeLeafHost, mountCodeLeaf } from '@crish/block-paper';
  *
- * const langComp = new Compartment();
- * const roComp = new Compartment();
- * const state = EditorState.create({
- *   doc: opts.initialContent,
- *   extensions: [
- *     keymap.of(defaultKeymap),
- *     history(),
- *     langComp.of(languageExtensions[opts.language] ?? []),
- *     roComp.of(EditorState.readOnly.of(opts.readOnly)),
- *     EditorView.updateListener.of((u) => {
- *       if (u.docChanged) opts.onDocChanged?.(u.state.doc.toString(), u);
+ * const { model, getEditorView, unmount } = mountCodeLeaf(el, {
+ *   blockId: 'b-code',
+ *   language: 'javascript',
+ *   createHost: (parent) =>
+ *     new Cm6CodeLeafHost(parent, {
+ *       language: 'javascript',
+ *       onDocChanged: (content) => {
+ *         // 用户键入 → 与 Model 同步（见 Cm6CodeLeafHost 文档）
+ *         const old = model.getContent();
+ *         if (old !== content) model.applyLocalEdit(0, old.length, content);
+ *       },
  *     }),
- *   ],
  * });
- * const view = new EditorView({ state, parent: el });
- * // host.focus  → view.focus()
- * // host.blur   → view.contentDOM.blur()
- * // host.setContent → view.dispatch({ changes: { from:0, to:view.state.doc.length, insert } })
- * // host.setLanguage → view.dispatch({ effects: langComp.reconfigure(...) })
- * // host.setReadOnly → view.dispatch({ effects: roComp.reconfigure(EditorState.readOnly.of(ro)) })
- * // host.destroy → view.destroy()
+ * // getEditorView() → 真实 EditorView
+ * unmount();
  * ```
  *
- * 本波 **不** 引入完整 CM6 DOM 依赖：mock host 已满足「可聚焦」+ Intent 通路；
- * 上表为真实 host 的接线契约，保持 Model API 稳定。
- *
- * **W3-E ≠ 全语言高亮完成**。
+ * 默认仍为 `DomCodeLeafHost`（textarea），避免无 CM6 场景强依赖 DOM View。
+ * **不接 RS**。**W3-E ≠ 全语言高亮完成**（当前 plain + javascript）。
  */
 
 import type { CodeLanguage } from './CodeLeafModel';
@@ -205,8 +196,9 @@ export type CodeLeafMount = {
   /** 卸载 host 并从 model 解绑 */
   unmount: () => void;
   /**
-   * 真实 CM6 EditorView 挂点占位。
-   * 本波 mock/dom host 均为 null；接入 CM6 后返回 View 实例。
+   * 真实 CM6 EditorView。
+   * - `Cm6CodeLeafHost`：返回 `EditorView`
+   * - mock / Dom host：null
    */
   getEditorView: () => unknown | null;
 };
@@ -328,7 +320,7 @@ export class DomCodeLeafHost implements CodeLeafHost {
  * unmount();
  * ```
  *
- * 真实 CM6：传入 `createHost: (el) => new Cm6CodeLeafHost(el, …)`（见文件头挂点）。
+ * 真实 CM6：传入 `createHost: (el) => new Cm6CodeLeafHost(el, …)`。
  */
 export function mountCodeLeaf(
   el: HTMLElement,
@@ -359,10 +351,14 @@ export function mountCodeLeaf(
     unmount: () => {
       model.detachHost();
     },
-    /**
-     * CM6 挂点：接入 EditorView 后在此返回 view。
-     * 当前 Dom/Mock host 无 View → null。
-     */
-    getEditorView: () => null,
+    getEditorView: () => {
+      // 鸭子类型：Cm6CodeLeafHost 暴露 getEditorView；避免循环 import
+      const withView = host as CodeLeafHost & {
+        getEditorView?: () => unknown | null;
+      };
+      return typeof withView.getEditorView === 'function'
+        ? withView.getEditorView()
+        : null;
+    },
   };
 }

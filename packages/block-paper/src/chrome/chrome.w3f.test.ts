@@ -210,7 +210,8 @@ describe('SlashMenuModel → slash_insert → sink', () => {
     });
   });
 
-  it('composing 时 open 与 select 均拒绝，不进 sink', async () => {
+  // 矩阵映射：A-IME-02（ime-matrix.md · 🟨自动化；slash 在 composing 拒绝）
+  it('A-IME-02: composing 时 open 与 select 均拒绝，不进 sink', async () => {
     let composing = true;
     const menu = new SlashMenuModel({
       isComposing: () => composing,
@@ -249,7 +250,7 @@ describe('SlashMenuModel → slash_insert → sink', () => {
     expect(mock.calls).toHaveLength(0);
   });
 
-  it('composing + ImeMachine 同样拒绝 slash_insert', async () => {
+  it('A-IME-02: composing + ImeMachine 同样拒绝 slash_insert', async () => {
     const mock = createMockIntentSink();
     const ime = new ImeMachine();
     ime.startComposition('b-1');

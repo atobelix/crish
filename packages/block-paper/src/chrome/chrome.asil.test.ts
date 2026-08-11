@@ -78,11 +78,12 @@ describe('silentFixture 假数据加载不抛', () => {
 });
 
 // ---------------------------------------------------------------------------
-// slash：composing 时拒绝打开（A-IME-02）
+// slash：composing 时拒绝打开
+// 矩阵映射：A-IME-02（ime-matrix.md / IME_MATRIX_CELLS · 🟨自动化）
 // ---------------------------------------------------------------------------
 
-describe('SlashMenuModel composing 守卫', () => {
-  it('composing=true 时 open 拒绝', () => {
+describe('IME · A-IME-02 SlashMenuModel composing 守卫', () => {
+  it('A-IME-02: composing=true 时 open 拒绝', () => {
     const composing = true;
     const menu = new SlashMenuModel({ isComposing: () => composing });
 
@@ -90,7 +91,7 @@ describe('SlashMenuModel composing 守卫', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.code).toBe('composing');
-      expect(r.reason).toMatch(/composing|IME/i);
+      expect(r.reason).toMatch(/composing|IME|A-IME-02/i);
     }
     expect(menu.isOpen()).toBe(false);
   });

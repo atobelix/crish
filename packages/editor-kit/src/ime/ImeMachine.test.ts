@@ -3,6 +3,8 @@
  * - composition 中 reject 结构 op / slash
  * - composition 中 unmount focus → 违规
  * - end composition 后允许
+ *
+ * 矩阵契约子集见 ime-matrix.contract.test.ts（A-IME-01 / A-IME-02）。
  */
 import { describe, expect, it } from 'vitest';
 import { PinViolationError } from '../viewport/pin';
@@ -14,7 +16,7 @@ import {
   type GuardableIntent,
 } from './structureKeyGuard';
 
-describe('ImeMachine 生命周期', () => {
+describe('IME ImeMachine 生命周期', () => {
   it('start → update → end 回到 idle', () => {
     const ime = new ImeMachine();
     expect(ime.isComposing()).toBe(false);
@@ -50,7 +52,7 @@ describe('ImeMachine 生命周期', () => {
   });
 });
 
-describe('composing 中 reject 结构 op / slash', () => {
+describe('IME composing 中 reject 结构 op / slash（A-IME-02）', () => {
   const structureOp: GuardableIntent = {
     type: 'op',
     ops: [{ kind: 'split_block' }],
@@ -124,7 +126,7 @@ describe('composing 中 reject 结构 op / slash', () => {
   });
 });
 
-describe('composing 中 unmount focus → 违规', () => {
+describe('IME composing 中 unmount focus → 违规', () => {
   it('assertUnmount 焦点块抛 PinViolationError', () => {
     const ime = new ImeMachine();
     ime.startComposition('focus-1');
@@ -163,7 +165,7 @@ describe('composing 中 unmount focus → 违规', () => {
   });
 });
 
-describe('end composition 后允许结构 op 与 unmount', () => {
+describe('IME end composition 后允许结构 op 与 unmount', () => {
   it('end 后结构 op 放行', () => {
     const ime = new ImeMachine();
     ime.startComposition('b1');
