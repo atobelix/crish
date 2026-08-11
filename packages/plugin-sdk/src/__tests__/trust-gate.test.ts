@@ -7,7 +7,7 @@
 // - restricted 信任级别强制权限白名单校验
 // - full + project-dir 自动降级为 restricted（防仓库投毒 禁令 18）
 // - PluginAPI 权限校验路径：assertPermission 委托 TrustGate
-// - 完整权限矩阵：14 项 PluginPermission × 2 信任级别
+// - 完整权限矩阵：15 项 PluginPermission × 2 信任级别
 // - registerPlugin / unregisterPlugin 生命周期
 //
 // 约束：禁令 18（2 级信任 + TrustGate 归 agent-permissions + 权限粒度合并）
@@ -483,14 +483,15 @@ describe('PluginDiscoverer - full + project-dir 自动降级', () => {
   });
 });
 
-// ─── 14 项权限 × 2 信任级别 完整矩阵 ──────────────────────────
+// ─── 15 项权限 × 2 信任级别 完整矩阵 ──────────────────────────
 
-describe('权限矩阵 - 14 项 PluginPermission × 2 信任级别', () => {
-  it('PLUGIN_PERMISSIONS 含 14 项权限', () => {
-    expect(PLUGIN_PERMISSIONS).toHaveLength(14);
+describe('权限矩阵 - 15 项 PluginPermission × 2 信任级别', () => {
+  it('PLUGIN_PERMISSIONS 含 15 项权限', () => {
+    expect(PLUGIN_PERMISSIONS).toHaveLength(15);
     expect(PLUGIN_PERMISSIONS).toContain('ui:contribute');
     expect(PLUGIN_PERMISSIONS).toContain('note:read');
     expect(PLUGIN_PERMISSIONS).toContain('note:write');
+    expect(PLUGIN_PERMISSIONS).toContain('note:extend');
   });
 
   it('PLUGIN_TRUST_LEVELS 含 restricted + full（禁令 18）', () => {
@@ -501,7 +502,7 @@ describe('权限矩阵 - 14 项 PluginPermission × 2 信任级别', () => {
     expect(PLUGIN_ORIGINS).toEqual(['user-dir', 'project-dir']);
   });
 
-  it('full 级别全部 14 项权限都允许', () => {
+  it('full 级别全部 15 项权限都允许', () => {
     const trustGate = createMockTrustGate();
     trustGate.registerPlugin('full-plugin', 'full', []);
     for (const perm of PLUGIN_PERMISSIONS) {
@@ -523,7 +524,7 @@ describe('权限矩阵 - 14 项 PluginPermission × 2 信任级别', () => {
     }
   });
 
-  it('restricted 级别声明全部 14 项权限 → 全部允许', () => {
+  it('restricted 级别声明全部 15 项权限 → 全部允许', () => {
     const trustGate = createMockTrustGate();
     trustGate.registerPlugin('all-perms-plugin', 'restricted', [
       ...PLUGIN_PERMISSIONS,

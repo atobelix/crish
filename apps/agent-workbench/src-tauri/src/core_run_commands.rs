@@ -3589,6 +3589,9 @@ pub(crate) async fn run_task_impl(
         summarizer: state.summarizer_for(&session_id),
         summary_dispatch: state.summary_dispatch_config(&session_id),
         summary_coordinator: Some(state.summary_coordinator_for(&session_id)),
+        // Round7：笔记后端真注入（与 engine produce 双保险；同源
+        // note_runtime 进程句柄 / app_dir()/workspace.db）
+        note_backend: crate::note_runtime::try_backend(),
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {

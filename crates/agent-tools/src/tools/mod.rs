@@ -23,10 +23,11 @@
 //! - `output_dir`：resolve_output_dir（T-EG-08 / REQ-G01）——会话文档产出
 //!   目录解析（显式 folder 优先 / 默认 .agent-outputs/<YYYY-MM-DD>-<会话标识>/
 //!   惰性与幂等 / 只读子代理不自选；注册面 16→17）
-//! - `note_*`：W4-A/B 笔记域工具——读 `query_blocks` / `document_outline`；
-//!   写 `document_apply_md` / `send_to_note`（经 `ToolContext.note_backend`
-//!   dyn trait 注入；None → note_backend_unwired；注册面 22→24；
-//!   读工具进只读集，写工具 dangerous=true 不进只读集）
+//! - `note_*`：W4-A/B + Round7 笔记域工具——读 `query_blocks` /
+//!   `document_outline` / `document_get_md`；写 `document_apply_md` /
+//!   `send_to_note`（经 `ToolContext.note_backend` dyn trait 注入；
+//!   None → note_backend_unwired；注册面 24→25；读工具进只读集，
+//!   写工具 dangerous=true 不进只读集）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
@@ -40,9 +41,10 @@ pub mod decompress_context;
 pub mod delete;
 pub mod diff;
 pub mod fs;
-// W4-A/B：笔记域工具（读 outline/query + 写 apply_md/send_to_note）
-// 注册面 22→24；后端经 ctx.note_backend 注入
+// W4-A/B + Round7：笔记域工具（读 outline/query/get_md + 写 apply_md/send_to_note）
+// 注册面 24→25；后端经 ctx.note_backend 注入
 pub mod note_document_apply_md;
+pub mod note_document_get_md;
 pub mod note_document_outline;
 pub mod note_query_blocks;
 pub mod note_send_to_note;
@@ -191,11 +193,12 @@ pub fn register_builtin_tools_with_config(
     // decompress_context（T-41）：压缩块原文取回（读操作，原始字节），
     // 只读进子 agent 只读集；落文件仅主 agent + output_dir 注入面
     registry.register(Arc::new(decompress_context::DecompressContextTool::new()))?;
-    // query_blocks / document_outline（W4-A）：笔记读工具，schema 与契约对齐；
-    // execute 无 note_backend 时返回 note_backend_unwired 稳定占位。
-    // 读 md 禁止默认 mirror；只读不入 WRITE_TOOL_NAMES
+    // query_blocks / document_outline / document_get_md（W4-A + Round7）：
+    // 笔记读工具，schema 与契约对齐；execute 无 note_backend 时返回
+    // note_backend_unwired 稳定占位。读 md 禁止默认 mirror；只读不入 WRITE_TOOL_NAMES
     registry.register(Arc::new(note_query_blocks::QueryBlocksTool::new()))?;
     registry.register(Arc::new(note_document_outline::DocumentOutlineTool::new()))?;
+    registry.register(Arc::new(note_document_get_md::DocumentGetMdTool::new()))?;
     // document_apply_md / send_to_note（W4-B）：笔记写工具，dangerous=true；
     // 经同一 apply_md_fragment 后端路径；禁止 fs.write 当权威；不进只读集
     registry.register(Arc::new(note_document_apply_md::DocumentApplyMdTool::new()))?;
@@ -740,7 +743,8 @@ mod tests {
         // 注册面 17→18（project_tree）→20（search_context/decompress_context）
         // →22（W4-A query_blocks / document_outline）
         // →24（W4-B document_apply_md / send_to_note）
-        assert_eq!(registry.len(), 24);
+        // →25（Round7 document_get_md）
+        assert_eq!(registry.len(), 25);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -756,6 +760,7 @@ mod tests {
                 "delete_file",
                 "diff_text",
                 "document_apply_md",
+                "document_get_md",
                 "document_outline",
                 "file_stat",
                 "fuzzy_find",
@@ -787,10 +792,11 @@ mod tests {
         register_builtin_tools(&mut registry).unwrap();
         assert!(registry.has("query_blocks"));
         assert!(registry.has("document_outline"));
+        assert!(registry.has("document_get_md"));
         assert!(registry.has("document_apply_md"));
         assert!(registry.has("send_to_note"));
         let ctx = crate::context::create_mock_tool_context();
-        for name in ["query_blocks", "document_outline"] {
+        for name in ["query_blocks", "document_outline", "document_get_md"] {
             let tool = registry.get(name).unwrap();
             let out = tool
                 .execute(&ctx, serde_json::json!({ "doc_id": "doc-stub" }))

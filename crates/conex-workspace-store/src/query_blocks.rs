@@ -5,15 +5,18 @@
 //! - `packages/block-paper-contract/src/query-blocks.ts`
 //!
 //! # 语义
-//! - 过滤条件取**交集**（AND）：`text_match` → FTS 候选；`kind_in` / `attrs_eq` /
-//!   `ref_to` / `ref_from` → SQL 过滤（refs 走 `block_refs` EXISTS 半连接）。
+//! - 过滤条件取**交集**（AND）：`text_match` → 非 CJK 走 FTS；含 CJK 走 `instr` 子串
+//!   （A-FTS-ZH-01）；`kind_in` / `attrs_eq` / `ref_to` / `ref_from` → SQL 过滤
+//!   （refs 走 `block_refs` EXISTS 半连接）。
 //! - **禁止**任意 SQL 字符串入参；属性键仅 `[A-Za-z0-9_]`。
 //! - `limit` 默认 50、硬上限 200；`truncated` 表示是否还有更多命中。
 //!
 //! # W4 接线
 //! agent-tools 侧执行器接线留待 W4-A；本模块仅提供 store 查询实现。
 
-use super::{StoreError, WorkspaceStore, build_fts_query, is_safe_attr_key};
+use super::{
+    StoreError, WorkspaceStore, build_fts_query, contains_cjk, is_safe_attr_key,
+};
 use rusqlite::Connection;
 use serde_json::{Map, Value as JsonValue};
 use std::collections::BTreeMap;
@@ -99,11 +102,12 @@ pub fn query_blocks_conn(
     // 多取 1 条用于 truncated 判定
     let fetch_n = (limit + 1) as i64;
 
-    let fts_q = params
+    // text_match：trim 后空视为无文本条件；含 CJK → instr 子串（unicode61 known gap）
+    let text_raw = params
         .text_match
         .as_deref()
-        .map(build_fts_query)
-        .filter(|q| !q.is_empty());
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
 
     // kind_in：Some(空) 与 None 均视为「不过滤 kind」；非空则 IN
     let kinds: Option<&[String]> = params
@@ -140,10 +144,19 @@ pub fn query_blocks_conn(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
-    let mut hits = if let Some(ref fq) = fts_q {
-        query_with_fts(conn, doc_id, fq, kinds, &attrs, ref_to, ref_from, fetch_n)?
-    } else {
-        query_sql_only(conn, doc_id, kinds, &attrs, ref_to, ref_from, fetch_n)?
+    let mut hits = match text_raw {
+        Some(raw) if contains_cjk(raw) => {
+            query_with_cjk_instr(conn, doc_id, raw, kinds, &attrs, ref_to, ref_from, fetch_n)?
+        }
+        Some(raw) => {
+            let fq = build_fts_query(raw);
+            if fq.is_empty() {
+                query_sql_only(conn, doc_id, kinds, &attrs, ref_to, ref_from, fetch_n)?
+            } else {
+                query_with_fts(conn, doc_id, &fq, kinds, &attrs, ref_to, ref_from, fetch_n)?
+            }
+        }
+        None => query_sql_only(conn, doc_id, kinds, &attrs, ref_to, ref_from, fetch_n)?,
     };
 
     let truncated = hits.len() > limit;
@@ -213,6 +226,89 @@ fn query_with_fts(
     push_limit(&mut sql, &mut bind, fetch_n);
 
     run_hit_query(conn, &sql, bind)
+}
+
+/// CJK 子串路径：`instr(plain_text, token)` AND 各空白分词 + kind/attrs/refs。
+///
+/// 与 [`crate::WorkspaceStore::search_fulltext`] 同源策略（A-FTS-ZH-01）。
+#[allow(clippy::too_many_arguments)]
+fn query_with_cjk_instr(
+    conn: &Connection,
+    doc_id: &str,
+    query: &str,
+    kinds: Option<&[String]>,
+    attrs: &[(&str, &JsonValue)],
+    ref_to: Option<&str>,
+    ref_from: Option<&str>,
+    fetch_n: i64,
+) -> Result<Vec<QueryBlocksHit>, StoreError> {
+    let tokens: Vec<&str> = query
+        .split_whitespace()
+        .filter(|t| !t.is_empty())
+        .collect();
+    if tokens.is_empty() {
+        return query_sql_only(conn, doc_id, kinds, attrs, ref_to, ref_from, fetch_n);
+    }
+
+    let mut sql = String::from(
+        r#"
+        SELECT
+            block_id,
+            kind,
+            plain_text,
+            props_json
+        FROM blocks
+        WHERE doc_id = ?1
+        "#,
+    );
+    let mut bind: Vec<rusqlite::types::Value> =
+        vec![rusqlite::types::Value::Text(doc_id.to_string())];
+    for t in &tokens {
+        let idx = bind.len() + 1;
+        sql.push_str(&format!(" AND instr(plain_text, ?{idx}) > 0"));
+        bind.push(rusqlite::types::Value::Text((*t).to_string()));
+    }
+    let next_idx = bind.len() + 1;
+    append_kind_attrs_filters(
+        &mut sql,
+        &mut bind,
+        kinds,
+        attrs,
+        /*next_idx=*/ next_idx,
+        /*col_prefix=*/ "",
+    )?;
+    append_ref_filters(
+        &mut sql,
+        &mut bind,
+        doc_id,
+        ref_to,
+        ref_from,
+        /*block_id_col=*/ "block_id",
+    );
+    sql.push_str(" ORDER BY order_key ASC, block_id ASC");
+    push_limit(&mut sql, &mut bind, fetch_n);
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(bind), |r| {
+        let plain: String = r.get(2)?;
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            truncate_snippet(&plain),
+            r.get::<_, String>(3)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, kind, snippet, props_json) = row?;
+        out.push(QueryBlocksHit {
+            id,
+            kind,
+            snippet,
+            attrs: parse_attrs(&props_json),
+        });
+    }
+    Ok(out)
 }
 
 /// 无 text_match：仅 blocks 表 + kind/attrs/refs。

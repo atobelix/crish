@@ -1,5 +1,5 @@
 // packages/plugin-sdk/src/__tests__/contribute.test.ts
-// W4-C · ContributePoint 注册表 View 轨
+// W4-C · ContributePoint 注册表 View 轨 + M4 registerFlavour
 //
 // 覆盖：
 // - kinds: slash_item | block_view | widget | keymap
@@ -8,7 +8,8 @@
 // - block_view 未知 flavour → reject 或 warn
 // - 恶意扩展：写句柄拒绝；list 仅 ViewDescriptor（无 store）
 // - DEFAULT_KNOWN_FLAVOURS / setKnownFlavours
-// - PLUGIN_PERMISSIONS 含 ui:contribute / note:read / note:write
+// - registerFlavour：权限 / 幂等 / known 写入 / allowedContribute
+// - PLUGIN_PERMISSIONS 含 ui:contribute / note:read|write|extend
 
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -18,6 +19,7 @@ import {
   CONTRIBUTE_KINDS,
   CONTRIBUTE_PERMISSIONS,
   REQUIRED_CONTRIBUTE_PERMISSION,
+  FLAVOUR_REGISTER_PERMISSIONS,
   DEFAULT_KNOWN_FLAVOURS,
   createKnownFlavourSet,
   isKnownFlavour,
@@ -27,6 +29,7 @@ import {
   type WidgetContribution,
   type KeymapContribution,
   type ViewDescriptor,
+  type FlavourDefinition,
 } from '../contribute';
 import {
   PLUGIN_PERMISSIONS,
@@ -132,22 +135,32 @@ describe('Contribute kinds & permissions surface', () => {
     expect(CONTRIBUTE_PERMISSIONS).toContain('ui:contribute');
     expect(CONTRIBUTE_PERMISSIONS).toContain('note:read');
     expect(CONTRIBUTE_PERMISSIONS).toContain('note:write');
+    expect(CONTRIBUTE_PERMISSIONS).toContain('note:extend');
   });
 
-  it('PLUGIN_PERMISSIONS 含 D6 三项增量', () => {
+  it('FLAVOUR_REGISTER_PERMISSIONS 为 ui:contribute | note:extend', () => {
+    expect(FLAVOUR_REGISTER_PERMISSIONS).toEqual([
+      'ui:contribute',
+      'note:extend',
+    ]);
+  });
+
+  it('PLUGIN_PERMISSIONS 含 D6 + M4 note:extend（15 项）', () => {
     expect(PLUGIN_PERMISSIONS).toContain('ui:contribute');
     expect(PLUGIN_PERMISSIONS).toContain('note:read');
     expect(PLUGIN_PERMISSIONS).toContain('note:write');
-    expect(PLUGIN_PERMISSIONS).toHaveLength(14);
+    expect(PLUGIN_PERMISSIONS).toContain('note:extend');
+    expect(PLUGIN_PERMISSIONS).toHaveLength(15);
   });
 
-  it('manifest 声明 ui:contribute / note:read|write 通过 validateManifest', () => {
+  it('manifest 声明 ui:contribute / note:read|write|extend 通过 validateManifest', () => {
     const result = validateManifest(
       makeManifest({
         permissions: [
           'ui:contribute',
           'note:read',
           'note:write',
+          'note:extend',
         ] as readonly PluginPermission[],
       })
     );
@@ -389,6 +402,237 @@ describe('ContributePointRegistry - block_view flavour 守卫', () => {
     expect(isKnownFlavour(set, 'paragraph')).toBe(true);
     expect(isKnownFlavour(set, 'x')).toBe(true);
     expect(isKnownFlavour(set, 'nope')).toBe(false);
+  });
+});
+
+// ─── M4 registerFlavour ──────────────────────────────────────
+
+function flavourDef(
+  overrides: Partial<FlavourDefinition> = {}
+): FlavourDefinition {
+  return {
+    id: 'vendor.callout',
+    displayName: 'Callout',
+    category: 'basic',
+    allowedContribute: ['block_view'],
+    permissions: ['note:extend'],
+    pluginId: PLUGIN,
+    ...overrides,
+  };
+}
+
+describe('ContributePointRegistry - registerFlavour (M4)', () => {
+  it('registerFlavour 写入 known 后 block_view 可装饰', () => {
+    const reg = createContributePointRegistry();
+    expect(
+      reg.register(blockView({ flavour: 'vendor.callout', component: 'c' })).ok
+    ).toBe(false);
+
+    const fr = reg.registerFlavour(flavourDef());
+    expect(fr.ok).toBe(true);
+    if (fr.ok) {
+      expect(fr.registrationKey).toBe('vendor.callout');
+      expect(fr.idempotent).toBe(false);
+    }
+    expect(reg.getKnownFlavours().has('vendor.callout')).toBe(true);
+    expect(reg.flavourCount).toBe(1);
+
+    expect(
+      reg.register(blockView({ flavour: 'vendor.callout', component: 'c' })).ok
+    ).toBe(true);
+  });
+
+  it('幂等：同 id 重复 registerFlavour → ok + idempotent:true', () => {
+    const reg = createContributePointRegistry();
+    expect(reg.registerFlavour(flavourDef()).ok).toBe(true);
+    const r2 = reg.registerFlavour(
+      flavourDef({ displayName: 'Callout v2', category: 'media' })
+    );
+    expect(r2.ok).toBe(true);
+    if (r2.ok) expect(r2.idempotent).toBe(true);
+    expect(reg.flavourCount).toBe(1);
+    expect(reg.getFlavour('vendor.callout')?.displayName).toBe('Callout v2');
+    expect(reg.getFlavour('vendor.callout')?.category).toBe('media');
+  });
+
+  it('权限：ui:contribute 或 note:extend 任一即可', () => {
+    const reg = createContributePointRegistry();
+    expect(
+      reg.registerFlavour(
+        flavourDef({
+          id: 'a.f',
+          permissions: ['ui:contribute'],
+        })
+      ).ok
+    ).toBe(true);
+    expect(
+      reg.registerFlavour(
+        flavourDef({
+          id: 'b.f',
+          permissions: ['note:extend'],
+        })
+      ).ok
+    ).toBe(true);
+    expect(
+      reg.registerFlavour(
+        flavourDef({
+          id: 'c.f',
+          permissions: ['ui:contribute', 'note:extend', 'note:read'],
+        })
+      ).ok
+    ).toBe(true);
+  });
+
+  it('权限：仅 note:read / 空 / 缺门槛 → missing_permission', () => {
+    const reg = createContributePointRegistry();
+    const r1 = reg.registerFlavour(
+      flavourDef({
+        permissions: [
+          'note:read',
+        ] as unknown as FlavourDefinition['permissions'],
+      })
+    );
+    expect(r1.ok).toBe(false);
+    if (!r1.ok) expect(r1.code).toBe('missing_permission');
+
+    const r2 = reg.registerFlavour(
+      flavourDef({
+        permissions: [] as unknown as FlavourDefinition['permissions'],
+      })
+    );
+    expect(r2.ok).toBe(false);
+    if (!r2.ok) expect(r2.code).toBe('missing_permission');
+  });
+
+  it('缺 id / displayName / category / pluginId → invalid_payload', () => {
+    const reg = createContributePointRegistry();
+    expect(reg.registerFlavour(flavourDef({ id: '' })).ok).toBe(false);
+    expect(reg.registerFlavour(flavourDef({ displayName: '' })).ok).toBe(false);
+    expect(reg.registerFlavour(flavourDef({ category: '' })).ok).toBe(false);
+    expect(reg.registerFlavour(flavourDef({ pluginId: '' })).ok).toBe(false);
+  });
+
+  it('allowedContribute 默认 block_view；非法 kind → invalid_payload', () => {
+    const reg = createContributePointRegistry();
+    const r = reg.registerFlavour(
+      flavourDef({
+        id: 'def.allowed',
+        allowedContribute: undefined,
+      })
+    );
+    expect(r.ok).toBe(true);
+    expect(reg.getFlavour('def.allowed')?.allowedContribute).toEqual([
+      'block_view',
+    ]);
+
+    const bad = reg.registerFlavour(
+      flavourDef({
+        id: 'bad.kind',
+        allowedContribute: ['renderer' as 'block_view'],
+      })
+    );
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.code).toBe('invalid_payload');
+  });
+
+  it('allowedContribute 不含 block_view → contribute_not_allowed', () => {
+    const reg = createContributePointRegistry();
+    expect(
+      reg.registerFlavour(
+        flavourDef({
+          id: 'slash-only',
+          allowedContribute: ['slash_item'],
+        })
+      ).ok
+    ).toBe(true);
+    // known 已写入，但 block_view 不在允许列表
+    expect(reg.getKnownFlavours().has('slash-only')).toBe(true);
+    const r = reg.register(
+      blockView({ flavour: 'slash-only', component: 'x' })
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('contribute_not_allowed');
+  });
+
+  it('未知 flavour 在 registerFlavour 前仍拒；register 后放行', () => {
+    const reg = createContributePointRegistry();
+    const unknown = reg.register(
+      blockView({ flavour: 'vendor.never', component: 'n' })
+    );
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) expect(unknown.code).toBe('unknown_flavour');
+
+    reg.registerFlavour(flavourDef({ id: 'vendor.never' }));
+    expect(
+      reg.register(blockView({ flavour: 'vendor.never', component: 'n' })).ok
+    ).toBe(true);
+  });
+
+  it('listFlavours / getFlavour 投影-only 无 store', () => {
+    const reg = createContributePointRegistry();
+    reg.registerFlavour(
+      flavourDef({
+        id: 'z.f',
+        schema: { hasText: true },
+      })
+    );
+    reg.registerFlavour(flavourDef({ id: 'a.f' }));
+
+    const list = reg.listFlavours();
+    expect(list.map((f) => f.id)).toEqual(['a.f', 'z.f']);
+    for (const d of list) {
+      expect(Object.isFrozen(d)).toBe(true);
+      expect((d as Record<string, unknown>).store).toBeUndefined();
+      expect((d as Record<string, unknown>).applyOp).toBeUndefined();
+      expect((d as Record<string, unknown>).write).toBeUndefined();
+    }
+    expect(reg.getFlavour('z.f')?.schema).toEqual({ hasText: true });
+    expect(reg.getFlavour('nope')).toBeUndefined();
+  });
+
+  it('registerFlavour 夹带 store / applyOp → forbidden_write_handle', () => {
+    const reg = createContributePointRegistry();
+    const withStore = {
+      ...flavourDef(),
+      store: { apply: () => undefined },
+    } as unknown as FlavourDefinition;
+    const r1 = reg.registerFlavour(withStore);
+    expect(r1.ok).toBe(false);
+    if (!r1.ok) expect(r1.code).toBe('forbidden_write_handle');
+
+    const withSchemaWrite = flavourDef({
+      id: 'evil.schema',
+      schema: { applyOp: true },
+    });
+    const r2 = reg.registerFlavour(withSchemaWrite);
+    expect(r2.ok).toBe(false);
+    if (!r2.ok) expect(r2.code).toBe('forbidden_write_handle');
+  });
+
+  it('unregisterFlavour / unregisterFlavoursByPlugin', () => {
+    const reg = createContributePointRegistry();
+    reg.registerFlavour(flavourDef({ id: 'v.a' }));
+    reg.registerFlavour(flavourDef({ id: 'v.b', pluginId: '@other/p' }));
+    expect(reg.unregisterFlavour('v.a')).toBe(true);
+    expect(reg.getKnownFlavours().has('v.a')).toBe(false);
+    expect(reg.unregisterFlavoursByPlugin('@other/p')).toBe(1);
+    expect(reg.flavourCount).toBe(0);
+  });
+
+  it('note:extend 不授予 contribute register（仍需 ui:contribute）', () => {
+    const reg = createContributePointRegistry();
+    reg.registerFlavour(flavourDef({ id: 'vendor.x' }));
+    // 仅 note:extend 不能 register block_view
+    const r = reg.register(
+      blockView({
+        flavour: 'vendor.x',
+        permissions: [
+          'note:extend',
+        ] as unknown as BlockViewContribution['permissions'],
+      })
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('missing_permission');
   });
 });
 

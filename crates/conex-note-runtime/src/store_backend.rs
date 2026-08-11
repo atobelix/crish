@@ -21,7 +21,7 @@ use std::time::Duration;
 ///
 /// # 不变量
 /// - 写路径仅 `apply_md_fragment` → Ops → `commit_ops`（权威 updates + 投影索引）
-/// - 读路径即时投影 / session 树；**不**读 MD mirror 文件
+/// - 读路径即时投影 / session 树 / `document_to_md`；**不**读 MD mirror 文件
 /// - 同 `intent_id` 二次调用返回首次结果（`idempotent=true`, `inserted=0`）
 /// - batch token：内嵌 [`NoteBatchTokens`]（与 Memory 后端同语义）
 pub struct StoreNoteBackend {
@@ -83,6 +83,27 @@ impl StoreNoteBackend {
     /// 底层 store 句柄。
     pub fn store(&self) -> &SharedWorkspaceStore {
         &self.store
+    }
+
+    /// 同步版即时 S（测试 / 进程内）；语义同 [`NoteBackend::get_md`]。
+    ///
+    /// - 有 session：`document_to_md`（含 `<!--c:UUID-->`）
+    /// - 无 session / 空树：`Ok("")`（对齐 trait 探测语义，**不**读 mirror）
+    pub fn document_to_md(&self, doc_id: &str) -> Result<String, NoteBackendError> {
+        if doc_id.trim().is_empty() {
+            return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
+        }
+        let sessions = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        match sessions.get(doc_id) {
+            Some(session) if !session.tree.root_children.is_empty() => {
+                Ok(conex_md_ast::document_to_md(&session.tree))
+            }
+            // 无 session 或空树：与 NoteBackend::get_md 契约一致
+            _ => Ok(String::new()),
+        }
     }
 
     /// 确保 doc 会话存在：`load_doc` 触达 + 建 session + with_persistence。
@@ -370,6 +391,11 @@ impl NoteBackend for StoreNoteBackend {
             }
         }
         self.build_outline_from_store(doc_id, max_depth)
+    }
+
+    async fn get_md(&self, doc_id: &str) -> Result<String, NoteBackendError> {
+        // 即时 S：委托同步 `document_to_md`（禁止 mirror）
+        self.document_to_md(doc_id)
     }
 
     async fn apply_md_fragment(
@@ -750,6 +776,43 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(r.inserted, 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn apply_md_then_get_md_contains_content_and_c_comment() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+
+        backend
+            .apply_md_fragment(NoteApplyMdRequest {
+                doc_id: "doc-get-md".into(),
+                markdown: "# Store GetMd\n\nruntime body for get_md".into(),
+                parent_id: None,
+                after_block_id: None,
+                mode: NoteApplyMode::ApplyMdFragment,
+                intent_id: None,
+                batch_id: None,
+                message_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+
+        let md = backend.get_md("doc-get-md").await.unwrap();
+        assert!(
+            md.contains("Store GetMd") || md.contains("runtime body"),
+            "get_md must contain applied text (instant S), got: {md:?}"
+        );
+        assert!(
+            md.contains("<!--c:"),
+            "get_md via document_to_md must emit <!--c:UUID-->, got: {md:?}"
+        );
+        // 未知文档 / 无 session → 空串；禁止 mirror
+        assert_eq!(backend.get_md("no-such-doc").await.unwrap(), "");
+        let err = backend.get_md("").await.unwrap_err();
+        assert!(matches!(err, NoteBackendError::Invalid(_)));
+
         let _ = std::fs::remove_dir_all(dir);
     }
 }

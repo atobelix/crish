@@ -1,11 +1,13 @@
 // packages/plugin-sdk/src/contribute/registry.ts
-// W4-C · ContributePoint 注册表（View 轨）
+// W4-C · ContributePoint 注册表（View 轨）+ M4 registerFlavour
 //
 // 不变量：
-// 1. 无 ui:contribute 声明 → 拒绝注册
+// 1. 无 ui:contribute 声明 → 拒绝 contribute 注册
 // 2. block_view 只能装饰 known flavour（未知 → reject 或 warn）
 // 3. list() 仅返回 ViewDescriptor；永不暴露 write store / applyOp
-// 4. 不实现完整插件沙箱 VM；投影-only 守卫靠类型 + 运行时剥离
+// 4. registerFlavour 写入 known 集；权限需 ui:contribute | note:extend；幂等
+// 5. 不实现完整插件沙箱 VM；投影-only 守卫靠类型 + 运行时剥离
+// 6. 扩展绕过写路径禁止：载荷禁止 store/applyOp 等写句柄
 
 import { createKnownFlavourSet, isKnownFlavour } from './flavours';
 import type {
@@ -15,8 +17,11 @@ import type {
   ContributePermission,
   ContributePointRegistryOptions,
   Contribution,
+  FlavourDefinition,
+  FlavourDescriptor,
   KeymapContribution,
   KeymapViewDescriptor,
+  RegisterFlavourResult,
   RegisterResult,
   SlashItemContribution,
   SlashItemViewDescriptor,
@@ -25,7 +30,11 @@ import type {
   WidgetContribution,
   WidgetViewDescriptor,
 } from './types';
-import { CONTRIBUTE_KINDS, REQUIRED_CONTRIBUTE_PERMISSION } from './types';
+import {
+  CONTRIBUTE_KINDS,
+  FLAVOUR_REGISTER_PERMISSIONS,
+  REQUIRED_CONTRIBUTE_PERMISSION,
+} from './types';
 
 /**
  * 禁止出现在注册载荷 / 描述符上的写路径键名。
@@ -60,11 +69,13 @@ export function makeRegistrationKey(
 /**
  * ContributePoint 注册表。
  *
- * 宿主单例持有；插件 activate 时 register，deactivate 时 unregisterByPlugin。
- * 与 PluginRegistry / ToolRegistry **分轨**：本表只服务 View 投影。
+ * 宿主单例持有；插件 activate 时 register / registerFlavour，deactivate 时 unregisterByPlugin。
+ * 与 PluginRegistry / ToolRegistry **分轨**：本表只服务 View 投影 + known flavour 元数据。
  */
 export class ContributePointRegistry {
   private readonly entries = new Map<string, ViewDescriptor>();
+  /** registerFlavour 登记的 flavour 元数据（id → 描述符） */
+  private readonly flavourDefs = new Map<string, FlavourDescriptor>();
   private knownFlavours: Set<string>;
   private readonly unknownFlavourPolicy: UnknownFlavourPolicy;
   private readonly onWarning: ((message: string) => void) | undefined;
@@ -164,7 +175,11 @@ export class ContributePointRegistry {
     return removed;
   }
 
-  /** 停用插件时清理其全部贡献。 */
+  /**
+   * 停用插件时清理其全部 contribute 贡献。
+   * 注意：不自动清理 registerFlavour；请同步调用 unregisterFlavoursByPlugin，
+   * 或由宿主 deactivate 钩子两者都调。
+   */
   unregisterByPlugin(pluginId: string): number {
     let n = 0;
     for (const [key, desc] of this.entries) {
@@ -182,7 +197,7 @@ export class ContributePointRegistry {
   }
 
   /**
-   * 扩展/替换已知 flavour 集（F1 registerFlavour 接线用）。
+   * 扩展/替换已知 flavour 集（宿主批量接线；插件优先走 registerFlavour）。
    * @param mode 'replace' 全量替换；'merge'（默认）并入
    */
   setKnownFlavours(
@@ -191,6 +206,7 @@ export class ContributePointRegistry {
   ): void {
     if (mode === 'replace') {
       this.knownFlavours = createKnownFlavourSet(flavours);
+      // replace 不自动清 flavourDefs；仅 id 集变更。宿主需自行对齐。
     } else {
       for (const f of flavours) {
         if (typeof f === 'string' && f.length > 0) {
@@ -200,13 +216,100 @@ export class ContributePointRegistry {
     }
   }
 
-  /** 条目数（测试 / 诊断）。 */
+  /**
+   * M4 · 正式 API：注册/扩展 known flavour。
+   *
+   * - 写入 known flavours，使第三方 block_view 可装饰该 flavour
+   * - 幂等：同 id 重复注册 → ok + idempotent:true（覆盖元数据快照）
+   * - 权限：permissions 须含 `ui:contribute` **或** `note:extend`
+   * - 投影-only：拒绝 store / applyOp 等写句柄；不返回写路径
+   */
+  registerFlavour(def: FlavourDefinition): RegisterFlavourResult {
+    const base = this.validateFlavourDefBase(def);
+    if (!base.ok) return base;
+
+    const perm = this.validateFlavourPermissions(def);
+    if (!perm.ok) return perm;
+
+    const write = this.rejectWriteHandlesOnBag(
+      def as unknown as Record<string, unknown>
+    );
+    if (!write.ok) return write;
+
+    const allowed = normalizeAllowedContribute(def.allowedContribute);
+    if (!allowed.ok) return allowed;
+
+    const existing = this.flavourDefs.has(def.id);
+    const descriptor = toFlavourDescriptor(def, allowed.kinds);
+    this.flavourDefs.set(
+      def.id,
+      Object.freeze(descriptor) as FlavourDescriptor
+    );
+    this.knownFlavours.add(def.id);
+
+    return {
+      ok: true,
+      registrationKey: def.id,
+      idempotent: existing,
+    };
+  }
+
+  /** 已 registerFlavour 的 flavour 描述符列表（稳定按 id 排序）。 */
+  listFlavours(): readonly FlavourDescriptor[] {
+    const out = [...this.flavourDefs.values()];
+    out.sort((a, b) => a.id.localeCompare(b.id));
+    return out;
+  }
+
+  /** 按 id 取 flavour 描述符；未 registerFlavour 则 undefined（内置 DEFAULT 不在此表）。 */
+  getFlavour(id: string): FlavourDescriptor | undefined {
+    return this.flavourDefs.get(id);
+  }
+
+  /**
+   * 注销 registerFlavour 登记项；可选是否从 known 集移除。
+   * @param removeFromKnown 默认 true；false 时仅删元数据，id 仍可被 block_view 装饰
+   */
+  unregisterFlavour(id: string, removeFromKnown = true): boolean {
+    const had = this.flavourDefs.delete(id);
+    if (had && removeFromKnown) {
+      this.knownFlavours.delete(id);
+    }
+    return had;
+  }
+
+  /** 停用插件时清理其 registerFlavour 登记（并从 known 移除对应 id）。 */
+  unregisterFlavoursByPlugin(pluginId: string): number {
+    let n = 0;
+    for (const [id, desc] of this.flavourDefs) {
+      if (desc.pluginId === pluginId) {
+        this.flavourDefs.delete(id);
+        this.knownFlavours.delete(id);
+        n += 1;
+      }
+    }
+    return n;
+  }
+
+  /** contribute 条目数（测试 / 诊断）。 */
   get size(): number {
     return this.entries.size;
   }
 
+  /** registerFlavour 条目数。 */
+  get flavourCount(): number {
+    return this.flavourDefs.size;
+  }
+
   clear(): void {
     this.entries.clear();
+  }
+
+  /** 清空 contribute + flavour 登记（known 回到 DEFAULT + 构造注入）。 */
+  clearAll(options?: ContributePointRegistryOptions): void {
+    this.entries.clear();
+    this.flavourDefs.clear();
+    this.knownFlavours = createKnownFlavourSet(options?.knownFlavours);
   }
 
   // ─── 校验 ──────────────────────────────────────────────────
@@ -250,7 +353,7 @@ export class ContributePointRegistry {
         ok: false,
         code: 'missing_permission',
         message:
-          'contribution.permissions is required; must declare ui:contribute (and optionally note:read|note:write)',
+          'contribution.permissions is required; must declare ui:contribute (and optionally note:read|note:write|note:extend)',
       };
     }
     if (!perms.includes(REQUIRED_CONTRIBUTE_PERMISSION)) {
@@ -261,11 +364,16 @@ export class ContributePointRegistry {
       };
     }
     for (const p of perms) {
-      if (p !== 'ui:contribute' && p !== 'note:read' && p !== 'note:write') {
+      if (
+        p !== 'ui:contribute' &&
+        p !== 'note:read' &&
+        p !== 'note:write' &&
+        p !== 'note:extend'
+      ) {
         return {
           ok: false,
           code: 'missing_permission',
-          message: `unknown contribute permission '${String(p)}'; allowed: ui:contribute | note:read | note:write`,
+          message: `unknown contribute permission '${String(p)}'; allowed: ui:contribute | note:read | note:write | note:extend`,
         };
       }
     }
@@ -321,14 +429,130 @@ export class ContributePointRegistry {
       };
     }
     if (isKnownFlavour(this.knownFlavours, contrib.flavour)) {
+      // 若经 registerFlavour 登记，校验 allowedContribute 含 block_view
+      const def = this.flavourDefs.get(contrib.flavour);
+      if (def && !def.allowedContribute.includes('block_view')) {
+        return {
+          ok: false,
+          code: 'contribute_not_allowed',
+          message: `block_view not allowed on flavour '${contrib.flavour}' (allowedContribute: [${def.allowedContribute.join(', ')}])`,
+        };
+      }
       return { ok: true, registrationKey: '' };
     }
-    const msg = `block_view flavour '${contrib.flavour}' is not in known flavours (W4-C: decorate existing flavour only; use setKnownFlavours / registerFlavour F1+)`;
+    const msg = `block_view flavour '${contrib.flavour}' is not in known flavours (W4-C/M4: decorate known flavour only; use registerFlavour or setKnownFlavours)`;
     if (this.unknownFlavourPolicy === 'warn') {
       this.onWarning?.(msg);
       return { ok: true, registrationKey: '' };
     }
     return { ok: false, code: 'unknown_flavour', message: msg };
+  }
+
+  // ─── registerFlavour 校验 ──────────────────────────────────
+
+  private validateFlavourDefBase(
+    def: FlavourDefinition
+  ): RegisterFlavourResult {
+    if (!def || typeof def !== 'object') {
+      return {
+        ok: false,
+        code: 'invalid_payload',
+        message: 'flavour definition must be a non-null object',
+      };
+    }
+    if (!isNonEmptyString(def.id)) {
+      return {
+        ok: false,
+        code: 'invalid_payload',
+        message: 'flavour.id is required (non-empty string)',
+      };
+    }
+    if (!isNonEmptyString(def.displayName)) {
+      return {
+        ok: false,
+        code: 'invalid_payload',
+        message: 'flavour.displayName is required (non-empty string)',
+      };
+    }
+    if (!isNonEmptyString(def.category)) {
+      return {
+        ok: false,
+        code: 'invalid_payload',
+        message: 'flavour.category is required (non-empty string)',
+      };
+    }
+    if (!isNonEmptyString(def.pluginId)) {
+      return {
+        ok: false,
+        code: 'invalid_payload',
+        message: 'flavour.pluginId is required (non-empty string)',
+      };
+    }
+    return { ok: true, registrationKey: '', idempotent: false };
+  }
+
+  private validateFlavourPermissions(
+    def: FlavourDefinition
+  ): RegisterFlavourResult {
+    const perms = def.permissions;
+    if (!Array.isArray(perms) || perms.length === 0) {
+      return {
+        ok: false,
+        code: 'missing_permission',
+        message:
+          'flavour.permissions is required; must declare ui:contribute or note:extend (registerFlavour 门槛)',
+      };
+    }
+    const hasGate = FLAVOUR_REGISTER_PERMISSIONS.some((p) => perms.includes(p));
+    if (!hasGate) {
+      return {
+        ok: false,
+        code: 'missing_permission',
+        message: `flavour.permissions must include 'ui:contribute' or 'note:extend' (declared: [${perms.join(', ')}])`,
+      };
+    }
+    for (const p of perms) {
+      if (
+        p !== 'ui:contribute' &&
+        p !== 'note:read' &&
+        p !== 'note:write' &&
+        p !== 'note:extend'
+      ) {
+        return {
+          ok: false,
+          code: 'missing_permission',
+          message: `unknown flavour permission '${String(p)}'; allowed: ui:contribute | note:extend | note:read | note:write`,
+        };
+      }
+    }
+    return { ok: true, registrationKey: '', idempotent: false };
+  }
+
+  private rejectWriteHandlesOnBag(
+    bag: Record<string, unknown>
+  ): RegisterFlavourResult {
+    for (const key of FORBIDDEN_WRITE_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(bag, key) && bag[key] != null) {
+        return {
+          ok: false,
+          code: 'forbidden_write_handle',
+          message: `flavour definition must not carry write handle '${key}' (EL-07 投影-only；registerFlavour 不授予写路径)`,
+        };
+      }
+    }
+    // schema 内亦不得夹带写键
+    const schema = bag.schema;
+    if (schema && typeof schema === 'object' && schema !== null) {
+      if (hasForbiddenNested(schema as Record<string, unknown>)) {
+        return {
+          ok: false,
+          code: 'forbidden_write_handle',
+          message:
+            'flavour.schema carries forbidden write-related key (store/applyOp/…)',
+        };
+      }
+    }
+    return { ok: true, registrationKey: '', idempotent: false };
   }
 
   private validateKindPayload(contrib: Contribution): RegisterResult {
@@ -411,6 +635,61 @@ function validateKeymap(c: KeymapContribution): RegisterResult {
     };
   }
   return { ok: true, registrationKey: '' };
+}
+
+// ─── flavour 描述符投影 ──────────────────────────────────────
+
+function normalizeAllowedContribute(
+  kinds: readonly ContributeKind[] | undefined
+):
+  | { ok: true; kinds: readonly ContributeKind[] }
+  | { ok: false; code: 'invalid_payload'; message: string } {
+  if (kinds === undefined) {
+    return { ok: true, kinds: ['block_view'] };
+  }
+  if (!Array.isArray(kinds) || kinds.length === 0) {
+    return {
+      ok: false,
+      code: 'invalid_payload',
+      message:
+        'flavour.allowedContribute must be a non-empty array of ContributeKind (or omit for default [block_view])',
+    };
+  }
+  const out: ContributeKind[] = [];
+  for (const k of kinds) {
+    if (!CONTRIBUTE_KINDS.includes(k)) {
+      return {
+        ok: false,
+        code: 'invalid_payload',
+        message: `flavour.allowedContribute contains invalid kind '${String(k)}'; allowed: ${CONTRIBUTE_KINDS.join(', ')}`,
+      };
+    }
+    if (!out.includes(k)) out.push(k);
+  }
+  return { ok: true, kinds: out };
+}
+
+function toFlavourDescriptor(
+  def: FlavourDefinition,
+  allowedContribute: readonly ContributeKind[]
+): FlavourDescriptor {
+  const d: FlavourDescriptor = {
+    id: def.id,
+    displayName: def.displayName,
+    category: def.category,
+    allowedContribute: Object.freeze([
+      ...allowedContribute,
+    ]) as readonly ContributeKind[],
+    permissions: freezePerms(def.permissions),
+    pluginId: def.pluginId,
+  };
+  if (def.schema !== undefined) {
+    (d as { schema?: Readonly<Record<string, unknown>> }).schema =
+      Object.freeze({
+        ...def.schema,
+      });
+  }
+  return d;
 }
 
 // ─── 描述符投影（剥离一切非 View 字段）──────────────────────

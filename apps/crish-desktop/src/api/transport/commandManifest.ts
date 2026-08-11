@@ -181,14 +181,18 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('browser_start_frames', 'browser', 'engine'),
     entry('browser_stop_frames', 'browser', 'engine'),
     entry('browser_frame_status', 'browser', 'engine'),
-entry('browser_export_storage_state', 'browser', 'engine'),
-entry('browser_import_storage_state', 'browser', 'engine'),
-// ── G-4 收尾：书签/历史导入（03-方案 §4.2 U4；conex-db 目标表
-//    imported_bookmarks/imported_history，落库编排见 browser_import_sinks）──
-entry('browser_import_bookmarks', 'browser', 'engine'),
-entry('browser_import_history', 'browser', 'engine'),
-entry('browser_list_bookmarks', 'browser', 'engine'),
-entry('browser_list_history', 'browser', 'engine'),
+    entry('browser_export_storage_state', 'browser', 'engine'),
+    entry('browser_import_storage_state', 'browser', 'engine'),
+    // ── G-4 收尾：书签/历史导入（03-方案 §4.2 U4；conex-db 目标表
+    //    imported_bookmarks/imported_history，落库编排见 browser_import_sinks）──
+    entry('browser_import_bookmarks', 'browser', 'engine'),
+    entry('browser_import_history', 'browser', 'engine'),
+    entry('browser_list_bookmarks', 'browser', 'engine'),
+    entry('browser_list_history', 'browser', 'engine'),
+    // ── Round7：笔记双引擎 IPC（noteApi.ts；与 Rust command_manifest 同步）──
+    entry('note_document_apply_md', 'note', 'engine'),
+    entry('note_query_blocks', 'note', 'engine'),
+    entry('note_send_to_note', 'note', 'engine'),
     // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
     // PE-07 T07.4：config_profile_apply / config_secret_reveal 已接线（registered=true）
     entry('append_session_messages', 'session', 'engine', false),

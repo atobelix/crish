@@ -46,8 +46,9 @@ pub const WRITE_TOOL_NAMES: [&str; 5] = [
 ///
 /// W4-A：query_blocks / document_outline 笔记读工具入列（dangerous=false；
 /// 未接 note_backend 时 stub 返回 note_backend_unwired，不写盘）。
+/// Round7：document_get_md 即时 S(树) 读全文，只读入列。
 /// W4-B 写工具 document_apply_md / send_to_note **不**入只读集（dangerous=true）。
-pub const READONLY_TOOL_NAMES: [&str; 11] = [
+pub const READONLY_TOOL_NAMES: [&str; 12] = [
     "read_file",
     "list_dir",
     "file_stat",
@@ -59,6 +60,7 @@ pub const READONLY_TOOL_NAMES: [&str; 11] = [
     "decompress_context",
     "query_blocks",
     "document_outline",
+    "document_get_md",
 ];
 
 /// commit 类型默认工具集（仅 shell_command；命令前缀过滤 git 见命令策略）
@@ -273,8 +275,8 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        // 注册面 22→24（W4-B document_apply_md / send_to_note）
-        assert_eq!(reg.len(), 24);
+        // 注册面 24→25（Round7 document_get_md）
+        assert_eq!(reg.len(), 25);
         assert!(reg.has("run_subagent"));
     }
 
@@ -294,8 +296,8 @@ mod tests {
         // 假谓词 → 空注册表（fail-closed 底线）
         let empty = filter_registry(&reg, |_| false).unwrap();
         assert!(empty.is_empty());
-        // 原注册表不受影响（注册面 24 = W4-B 后）
-        assert_eq!(reg.len(), 24);
+        // 原注册表不受影响（注册面 25 = Round7 document_get_md 后）
+        assert_eq!(reg.len(), 25);
     }
 
     /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
@@ -353,14 +355,15 @@ mod tests {
             );
             assert!(!out.has("write_file"));
         }
-        // 原注册表不受影响（非破坏性裁剪；注册面 24 = W4-B 后）
-        assert_eq!(reg.len(), 24);
+        // 原注册表不受影响（非破坏性裁剪；注册面 25 = Round7 后）
+        assert_eq!(reg.len(), 25);
         assert!(reg.has("write_file"));
         // W4-B 写工具不得进只读 / design 面（design 仅 + write_file）
         for tt in ["analysis", "design"] {
             let out = filter_registry_for_task_type(&reg, tt).unwrap();
             assert!(!out.has("document_apply_md"), "{tt} 不得含 document_apply_md");
             assert!(!out.has("send_to_note"), "{tt} 不得含 send_to_note");
+            assert!(out.has("document_get_md"), "{tt} 必须保留 document_get_md");
         }
     }
 
@@ -412,8 +415,8 @@ mod tests {
         assert!(impl_reg.has("shell_command"));
         assert!(impl_reg.has("run_subagent"));
         // 原注册表不受影响（非破坏性裁剪）
-        // 24 内置（含 W4-B 笔记写工具）+ 4 browser_* 假工具
-        assert_eq!(reg.len(), 28);
+        // 25 内置（含 Round7 document_get_md）+ 4 browser_* 假工具
+        assert_eq!(reg.len(), 29);
         assert!(reg.has("browser_navigate"));
     }
 

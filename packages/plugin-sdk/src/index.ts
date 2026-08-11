@@ -18,7 +18,7 @@ export function definePlugin(plugin: Plugin): Plugin {
   return plugin;
 }
 
-// ─── W4-C contribute points（View 轨）────────────────────────
+// ─── W4-C contribute points（View 轨）+ M4 registerFlavour ───
 export type {
   ContributeKind,
   ContributePermission,
@@ -38,12 +38,16 @@ export type {
   RegisterResult,
   UnknownFlavourPolicy,
   ContributePointRegistryOptions,
+  FlavourDefinition,
+  FlavourDescriptor,
+  RegisterFlavourResult,
 } from './contribute';
 
 export {
   CONTRIBUTE_KINDS,
   CONTRIBUTE_PERMISSIONS,
   REQUIRED_CONTRIBUTE_PERMISSION,
+  FLAVOUR_REGISTER_PERMISSIONS,
   DEFAULT_KNOWN_FLAVOURS,
   createKnownFlavourSet,
   isKnownFlavour,
@@ -52,7 +56,7 @@ export {
   makeRegistrationKey,
 } from './contribute';
 
-// ─── 权限面（含 ui:contribute / note:read|write）────────────
+// ─── 权限面（含 ui:contribute / note:read|write|extend）────
 export type {
   PluginPermission,
   PluginTrustLevel,

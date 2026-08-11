@@ -326,6 +326,15 @@ pub trait NoteBackend: Send + Sync + Debug {
         req: NoteApplyMdRequest,
     ) -> Result<NoteApplyMdResult, NoteBackendError>;
 
+    /// 即时 S(树)：将当前权威块树序列化为 Conex-MD 全文（`document_get_md`）
+    ///
+    /// # 不变量
+    /// - **禁止**读 disk mirror / exports 陈旧快照
+    /// - 输出宜含块 ID 注释 `<!--c:…-->`（Memory 伪实现可用非 UUID id；
+    ///   Store 走 `document_to_md` / UUID）
+    /// - 文档不存在或空树 → `Ok("")`（非 NotFound，便于 Agent 探测）
+    async fn get_md(&self, doc_id: &str) -> Result<String, NoteBackendError>;
+
     /// 可选 batch token 校验钩子（默认：无 batch_id 则放行；有则 Invalid——
     /// 生产实现可覆写；[`MemoryNoteBackend`] 走真实 [`NoteBatchTokens`]）
     async fn validate_batch_token(&self, batch_id: Option<&str>) -> Result<(), NoteBackendError> {
@@ -364,8 +373,8 @@ struct MemDoc {
 
 /// 进程内笔记后端（dev/test + 可注入 ToolContext）
 ///
-/// - `query_blocks` / `document_outline`：内存过滤
-/// - `apply_md_fragment`：极简 MD 按行插段落 / 识别 AT 标题；支持 intent 幂等
+/// - `query_blocks` / `document_outline` / `get_md`：内存过滤 / 即时序列化
+/// - `apply_md_fragment`：极简 MD 按行插段落 / 识别 ATX 标题；支持 intent 幂等
 /// - batch token：内嵌 [`NoteBatchTokens`]
 #[derive(Debug)]
 pub struct MemoryNoteBackend {
@@ -651,6 +660,18 @@ impl NoteBackend for MemoryNoteBackend {
         })
     }
 
+    async fn get_md(&self, doc_id: &str) -> Result<String, NoteBackendError> {
+        if doc_id.trim().is_empty() {
+            return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
+        }
+        let docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(doc) = docs.get(doc_id) else {
+            // 无文档 = 空树即时 S；禁止 mirror 回退
+            return Ok(String::new());
+        };
+        Ok(serialize_mem_doc_to_md(doc))
+    }
+
     async fn apply_md_fragment(
         &self,
         req: NoteApplyMdRequest,
@@ -791,6 +812,32 @@ impl NoteBackend for MemoryNoteBackend {
             Some(id) => self.batch_tokens.validate(id),
         }
     }
+}
+
+/// Memory 文档 → 即时 Conex-MD 风格串（含 `<!--c:id-->`；id 可为非 UUID）
+fn serialize_mem_doc_to_md(doc: &MemDoc) -> String {
+    let mut out = String::new();
+    for (i, b) in doc.blocks.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        // 与生产 `<!--c:UUID-->` 同形；Memory 伪 id 仍写出，便于 Agent 定位块
+        out.push_str(&format!("<!--c:{}-->\n", b.id));
+        match b.kind.as_str() {
+            "heading" => {
+                let level = b.level.clamp(1, 6) as usize;
+                let hashes: String = std::iter::repeat('#').take(level.max(1)).collect();
+                if b.text.is_empty() {
+                    out.push_str(&hashes);
+                } else {
+                    out.push_str(&format!("{hashes} {}", b.text));
+                }
+            }
+            _ => out.push_str(&b.text),
+        }
+        out.push('\n');
+    }
+    out
 }
 
 /// 将节点插入大纲树（按 level 嵌套）
@@ -980,5 +1027,39 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(r.inserted, 1);
+    }
+
+    #[tokio::test]
+    async fn memory_get_md_after_apply_contains_content_and_c_comment() {
+        let backend = MemoryNoteBackend::new();
+        backend
+            .apply_md_fragment(NoteApplyMdRequest {
+                doc_id: "doc-md".into(),
+                markdown: "# Hello GetMd\n\nbody of get_md test".into(),
+                parent_id: None,
+                after_block_id: None,
+                mode: NoteApplyMode::ApplyMdFragment,
+                intent_id: None,
+                batch_id: None,
+                message_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+
+        let md = backend.get_md("doc-md").await.unwrap();
+        assert!(
+            md.contains("Hello GetMd") || md.contains("body of get_md"),
+            "get_md must contain applied text, got: {md:?}"
+        );
+        assert!(
+            md.contains("<!--c:"),
+            "get_md should emit block id comments, got: {md:?}"
+        );
+        // 空 doc_id 非法
+        let err = backend.get_md("").await.unwrap_err();
+        assert!(matches!(err, NoteBackendError::Invalid(_)));
+        // 未知文档 → 空串（非 mirror）
+        assert_eq!(backend.get_md("ghost").await.unwrap(), "");
     }
 }

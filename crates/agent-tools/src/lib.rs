@@ -31,9 +31,10 @@ pub mod backup;
 // orchestrator）实现注入；search_context / decompress_context 消费本契约，
 // 生产代码保持叶子依赖（不引入 conex-db）
 pub mod compression_store;
-// W4-A/B：笔记后端契约（NoteBackend trait + MemoryNoteBackend）——引擎侧
-// 实现注入；query_blocks / document_outline / document_apply_md /
-// send_to_note 消费本契约，生产代码保持叶子依赖（不引入 doc-collab/store）
+// W4-A/B + Round7：笔记后端契约（NoteBackend trait + MemoryNoteBackend）——
+// 引擎侧实现注入；query_blocks / document_outline / document_get_md /
+// document_apply_md / send_to_note 消费本契约，生产代码保持叶子依赖
+// （不引入 doc-collab/store）
 pub mod note_backend;
 pub mod definition;
 pub mod explore_quota;

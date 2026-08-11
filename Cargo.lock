@@ -1399,6 +1399,7 @@ dependencies = [
  "conex-diff",
  "conex-fs",
  "conex-markdown",
+ "conex-note-runtime",
  "conex-sandbox",
  "conex-search",
  "conex-telemetry",

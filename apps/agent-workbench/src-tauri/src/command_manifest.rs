@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（108 条 = 注册面 104 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（111 条 = 注册面 107 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -201,6 +201,10 @@ entry("browser_import_bookmarks", "browser", "engine", true),
 entry("browser_import_history", "browser", "engine", true),
 entry("browser_list_bookmarks", "browser", "engine", true),
 entry("browser_list_history", "browser", "engine", true),
+        // ── Round7：笔记双引擎 IPC（noteApi.ts；family=note）──
+        entry("note_document_apply_md", "note", "engine", true),
+        entry("note_query_blocks", "note", "engine", true),
+        entry("note_send_to_note", "note", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),
@@ -230,7 +234,8 @@ mod tests {
     /// 撤销/改名两件套后 94 → 100；browser_export/import_storage_state
     /// 追加后 100 → 102；R1-09 multi_device_network_info 追加后 102 → 103；
     /// R1-11 multi_device_set_enabled 追加后 103 → 104；G-4 书签/历史
-    /// 四命令（browser_import/list_bookmarks/history）追加后 104 → 108）。
+    /// 四命令（browser_import/list_bookmarks/history）追加后 104 → 108；
+    /// Round7 note_* 三命令追加后 108 → 111）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -241,8 +246,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 108, "总数 108（G-4 书签/历史四命令，与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 104, "注册面 104");
+        assert_eq!(total, 111, "总数 111（Round7 note_* 三命令，与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 107, "注册面 107");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -389,8 +394,30 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 108);
+        assert_eq!(manifest.commands.len(), 111);
         assert_eq!(manifest.contract_version, "1.0.0");
+    }
+
+    /// Round7：笔记 IPC 三命令登记且 registered=true。
+    #[test]
+    fn manifest_registers_note_commands() {
+        let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .map(|c| (c.name, c))
+            .collect();
+        for name in [
+            "note_document_apply_md",
+            "note_query_blocks",
+            "note_send_to_note",
+        ] {
+            let entry = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（Round7）"));
+            assert_eq!(entry.family, "note", "{name} 属 note 族");
+            assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
+            assert!(entry.registered, "{name} 已接线应 registered=true");
+        }
     }
 
     /// get_flow_snapshot 登记断言（F11b T-D-12 联动）：会话族只读查询命令

@@ -1,5 +1,5 @@
 // packages/plugin-sdk/src/contribute/index.ts
-// Barrel：W4-C contribute points View 轨（slash / block_view / widget / keymap）
+// Barrel：W4-C contribute points View 轨 + M4 registerFlavour
 
 export type {
   ContributeKind,
@@ -20,12 +20,16 @@ export type {
   RegisterResult,
   UnknownFlavourPolicy,
   ContributePointRegistryOptions,
+  FlavourDefinition,
+  FlavourDescriptor,
+  RegisterFlavourResult,
 } from './types';
 
 export {
   CONTRIBUTE_KINDS,
   CONTRIBUTE_PERMISSIONS,
   REQUIRED_CONTRIBUTE_PERMISSION,
+  FLAVOUR_REGISTER_PERMISSIONS,
 } from './types';
 
 export {

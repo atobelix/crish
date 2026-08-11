@@ -36,7 +36,7 @@
 //!
 //! # W2-C 派生索引（可丢、可重建；损坏不得导致文档不可开）
 //! - `blocks` 投影表：块元数据 + `plain_text` + `props_json`
-//! - `blocks_fts`：FTS5 全文（unicode61；**中文召回基准后置 / 可换 tantivy**）
+//! - `blocks_fts`：FTS5 全文（unicode61 英文；**CJK 走 `instr` 子串回退**，见 `search_fulltext` / A-FTS-ZH-01）
 //!
 //! # W2-D CAS 附件骨架
 //! - [`WorkspaceStore::put_blob`] / [`WorkspaceStore::get_blob`] / [`WorkspaceStore::link_block_attachment`]
@@ -249,7 +249,8 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
     )?;
 
     // FTS5 全文虚表（bundled SQLite 已 SQLITE_ENABLE_FTS5）。
-    // tokenize=unicode61：英文/数字可用；**中文召回基准后置 / 可换 tantivy**。
+    // tokenize=unicode61：英文/数字 token 可用；连续 CJK 整段成一词，子串 MATCH 为 known gap
+    // （A-FTS-ZH-01：search_fulltext / query_blocks 对含 CJK 查询走 plain_text instr 回退）。
     // 与 blocks 手动同步（非 content= 外部表）：reindex/remove 维护；损坏走 rebuild_fts。
     ensure_blocks_fts(conn)?;
 
@@ -465,10 +466,74 @@ impl WorkspaceStore {
         Ok(())
     }
 
-    /// 文档内 FTS 全文检索。
+    /// 文档内全文检索。
     ///
-    /// `query` 为空时返回空 vec。特殊字符会做短语转义，避免 MATCH 语法错误。
+    /// - **英文 / 非 CJK**：FTS5 `unicode61` + bm25（`build_fts_query` 短语转义）。
+    /// - **含 CJK**（汉字/假名/韩文）：`blocks.plain_text` 上 `instr` 子串 AND
+    ///   （unicode61 对无空格连续汉字整段成 token，子串 MATCH 为 known gap，见 A-FTS-ZH-01）。
+    ///
+    /// `query` 为空时返回空 vec。
     pub fn search_fulltext(
+        &self,
+        doc_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<BlockHit>, StoreError> {
+        let q = query.trim();
+        if q.is_empty() {
+            return Ok(Vec::new());
+        }
+        let limit = limit.max(1).min(500) as i64;
+        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+
+        if contains_cjk(q) {
+            return search_fulltext_cjk_instr(&conn, doc_id, q, limit);
+        }
+
+        let fts_q = build_fts_query(q);
+        if fts_q.is_empty() {
+            return Ok(Vec::new());
+        }
+        // MATCH 与 snippet/bm25 均直接用表名（FTS5 对别名支持因版本而异）
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT
+                blocks_fts.doc_id,
+                blocks_fts.block_id,
+                COALESCE(b.kind, ''),
+                snippet(blocks_fts, 0, '', '', '…', 32),
+                bm25(blocks_fts),
+                COALESCE(b.props_json, '{}')
+            FROM blocks_fts
+            LEFT JOIN blocks b
+                ON b.doc_id = blocks_fts.doc_id AND b.block_id = blocks_fts.block_id
+            WHERE blocks_fts.doc_id = ?1 AND blocks_fts MATCH ?2
+            ORDER BY bm25(blocks_fts)
+            LIMIT ?3
+            "#,
+        )?;
+        let rows = stmt.query_map(params![doc_id, fts_q, limit], |r| {
+            Ok(BlockHit {
+                doc_id: r.get(0)?,
+                block_id: r.get(1)?,
+                kind: r.get(2)?,
+                snippet: r.get(3)?,
+                rank: r.get(4)?,
+                props_json: r.get(5)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// **仅** FTS5 `MATCH`（unicode61），不做 CJK `instr` 回退。
+    ///
+    /// 供基准测试与诊断：连续汉字子串在 unicode61 下通常 **0 命中**（known gap）。
+    /// 产品路径请用 [`Self::search_fulltext`]。
+    pub fn search_fulltext_fts_only(
         &self,
         doc_id: &str,
         query: &str,
@@ -480,7 +545,6 @@ impl WorkspaceStore {
         }
         let limit = limit.max(1).min(500) as i64;
         let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
-        // MATCH 与 snippet/bm25 均直接用表名（FTS5 对别名支持因版本而异）
         let mut stmt = conn.prepare(
             r#"
             SELECT
@@ -734,6 +798,98 @@ pub(crate) fn build_fts_query(query: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// 是否含 CJK 脚本字符（统一汉字 / 兼容汉字 / 假名 / 韩文音节）。
+///
+/// unicode61 将这些字归为 Letter，**无空格连续汉字整段成一个 FTS token**，
+/// 子串 `"工作区"` MATCH 无法命中整段 token → 产品路径改走 `instr` 回退。
+pub(crate) fn contains_cjk(s: &str) -> bool {
+    s.chars().any(is_cjk_char)
+}
+
+fn is_cjk_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{3400}'..='\u{4DBF}' // CJK Ext A
+            | '\u{4E00}'..='\u{9FFF}' // CJK Unified
+            | '\u{F900}'..='\u{FAFF}' // CJK Compatibility Ideographs
+            | '\u{3040}'..='\u{309F}' // Hiragana
+            | '\u{30A0}'..='\u{30FF}' // Katakana
+            | '\u{AC00}'..='\u{D7AF}' // Hangul Syllables
+    )
+}
+
+/// 含 CJK 时的子串检索：对每个空白分词要求 `instr(plain_text, token) > 0`（AND）。
+///
+/// 使用 `instr` 而非 `LIKE %q%`，避免 `%`/`_` 转义问题；不依赖 FTS tokenizer。
+fn search_fulltext_cjk_instr(
+    conn: &Connection,
+    doc_id: &str,
+    query: &str,
+    limit: i64,
+) -> Result<Vec<BlockHit>, StoreError> {
+    let tokens: Vec<&str> = query
+        .split_whitespace()
+        .filter(|t| !t.is_empty())
+        .collect();
+    if tokens.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut sql = String::from(
+        r#"
+        SELECT
+            doc_id,
+            block_id,
+            kind,
+            plain_text,
+            props_json
+        FROM blocks
+        WHERE doc_id = ?1
+        "#,
+    );
+    let mut bind: Vec<rusqlite::types::Value> =
+        vec![rusqlite::types::Value::Text(doc_id.to_string())];
+    for t in &tokens {
+        let idx = bind.len() + 1;
+        sql.push_str(&format!(" AND instr(plain_text, ?{idx}) > 0"));
+        bind.push(rusqlite::types::Value::Text((*t).to_string()));
+    }
+    // 稳定序；rank 固定 0（非 bm25）
+    sql.push_str(" ORDER BY order_key ASC, block_id ASC");
+    let lim_idx = bind.len() + 1;
+    sql.push_str(&format!(" LIMIT ?{lim_idx}"));
+    bind.push(rusqlite::types::Value::Integer(limit));
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(bind), |r| {
+        let plain: String = r.get(3)?;
+        Ok(BlockHit {
+            doc_id: r.get(0)?,
+            block_id: r.get(1)?,
+            kind: r.get(2)?,
+            snippet: truncate_plain_snippet(&plain),
+            rank: 0.0,
+            props_json: r.get(4)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+/// plain_text 截断作 snippet（CJK 路径 / 无 FTS snippet 时）。
+fn truncate_plain_snippet(plain: &str) -> String {
+    const MAX: usize = 64;
+    if plain.chars().count() > MAX {
+        let s: String = plain.chars().take(MAX).collect();
+        format!("{s}…")
+    } else {
+        plain.to_string()
+    }
 }
 
 /// 事务内：权威 rev 前进 → 更新 `mirror_meta.pending_lag`（投影管线同事务调用）。

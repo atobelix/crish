@@ -51,8 +51,9 @@ describe('commandManifest', () => {
       // R1-09（G-4）：multi_device_network_info 已接线（102 → 103）
       // R1-11（G-1）：multi_device_set_enabled 已接线（103 → 104）
       // G-4 收尾：browser_import/list_bookmarks/history 四命令已接线（104 → 108）
-      expect(registered).toBe(104);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(108);
+      // Round7：note_document_apply_md / note_query_blocks / note_send_to_note（108 → 111）
+      expect(registered).toBe(107);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(111);
     });
 
     it('命令名唯一', () => {
@@ -201,7 +202,8 @@ describe('commandManifest', () => {
   // - 断言三式：registered 子集逐名带差异清单 + 总数一致 + 登记先行双向一致。
 
   /** Rust 真源相对仓库根的路径（路径耦合由 existsSync fail 兜底） */
-  const RUST_MANIFEST_REL = 'apps/agent-workbench/src-tauri/src/command_manifest.rs';
+  const RUST_MANIFEST_REL =
+    'apps/agent-workbench/src-tauri/src/command_manifest.rs';
 
   function locateRepoRoot(): string {
     let dir = dirname(fileURLToPath(import.meta.url));
@@ -276,10 +278,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（108；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（111；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(108);
+      expect(total).toBe(111);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

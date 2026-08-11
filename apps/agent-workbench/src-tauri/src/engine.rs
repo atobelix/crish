@@ -2466,6 +2466,20 @@ impl SessionLoopProducer {
         // run 起始 build_tracker 重建 tracker——fresh run 语义）
         self.options.cache_tracking = self.cache_tracking.clone();
 
+        // ── Round7：笔记真管线装配（原 R6 挂点 → 真注入）────────────────
+        // `note_runtime::try_backend()` = 进程级
+        // `NoteRuntime::open(app_dir()/workspace.db)` 的 `Arc<dyn NoteBackend>`。
+        // 写入 `SessionLoopOptions.note_backend` → `with_options` 注入
+        // `ToolExecCtx.note_backend` → `ToolContext.note_backend`。
+        // 工具 query_blocks / document_outline / document_apply_md /
+        // send_to_note 走 DocSession + store 投影（禁止 mirror 默认读）。
+        // None = 打开失败 / 测试未 install → 工具 `note_backend_unwired`。
+        if self.options.note_backend.is_none() {
+            if let Some(handle) = crate::note_runtime::try_backend() {
+                self.options.note_backend = Some(handle);
+            }
+        }
+
         // ── M1：上下文注入通道（C10 地基；build_context 立通道）────
         // 注入段渲染进 system_prompt 面（wire 归类 system 角色）——独立于
         // 压缩预算：压缩只作用于会话对话（conex-compaction system 保留
@@ -2488,15 +2502,6 @@ impl SessionLoopProducer {
         session_loop = session_loop
             .with_options(self.options.clone())
             .with_tool_options(self.tool_options.clone());
-        // ── Round6 / W4-E 挂点（笔记真管线）────────────────────────────────
-        // 将 `conex_note_runtime::NoteRuntime::open(workspace.db)` 得到的
-        // `Arc<dyn NoteBackend>` 写入 `SessionLoopOptions.note_backend`，
-        // `with_options` 会注入 `ToolExecCtx.note_backend` → `ToolContext.note_backend`。
-        // 当前默认 None = 工具返回 `note_backend_unwired`；装配后
-        // query_blocks / document_outline / document_apply_md / send_to_note
-        // 走 DocSession + store 投影管线（禁止 mirror 文件默认读）。
-        // 工厂：`conex_note_runtime::NoteRuntime::open` / `StoreNoteBackend`。
-        // ────────────────────────────────────────────────────────────────
         // 30-P1：run 控制面装配（with_options 之后、run() 之前——builder
         // 顺序契约）——壳层与 loop 同源：同一控制总线 + 同一 abort 信号
         // 实例（A4-H2 断头路消除：check_control 安全点真实消费外部意图）

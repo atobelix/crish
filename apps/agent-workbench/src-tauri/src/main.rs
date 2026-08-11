@@ -62,6 +62,8 @@ mod multi_device_commands;
 // R1-09 G-4：网络环境检测（multi_device_network.rs：注册表网络配置文件
 // 类别 + 可直连 IP 枚举 + 防火墙/AP 隔离引导文案）
 mod multi_device_network;
+mod note_commands;
+mod note_runtime;
 mod perf;
 mod power;
 mod process;
@@ -252,6 +254,10 @@ command_registry![
     ("browser_import_history", browser_commands::browser_import_history),
     ("browser_list_bookmarks", browser_commands::browser_list_bookmarks),
     ("browser_list_history", browser_commands::browser_list_history),
+    // ── Round7：笔记双引擎 IPC（noteApi.ts；同一 NoteRuntime 句柄）──
+    ("note_document_apply_md", note_commands::note_document_apply_md),
+    ("note_query_blocks", note_commands::note_query_blocks),
+    ("note_send_to_note", note_commands::note_send_to_note),
 ];
 
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info
@@ -360,6 +366,30 @@ fn main() {
             let shared_db = open_session_db(diagnostics);
             let store: Arc<dyn orchestrator::persist::Store> =
                 Arc::new(orchestrator::persist::LocalDbStore::new(shared_db.local_db()));
+
+            // ②b Round7：笔记权威库（独立 workspace.db，与 sessions.db 分离）
+            // NoteRuntime::open → 进程级 SharedNoteRuntime；失败不阻断启动
+            // （工具 / IPC 返回 note.unwired，与 R6 未接线语义一致）
+            match note_runtime::init_default() {
+                Ok(path) => {
+                    diagnostics.record(
+                        "note_runtime",
+                        true,
+                        Some(path.display().to_string()),
+                    );
+                    if let Some(shared) = note_runtime::try_shared() {
+                        app.manage(shared);
+                    }
+                }
+                Err(error) => {
+                    tracing::error!(
+                        target: "note_runtime",
+                        error = %error,
+                        "NoteRuntime 打开失败（笔记工具/命令保持 unwired）"
+                    );
+                    diagnostics.record("note_runtime", false, Some(error));
+                }
+            }
 
             // ③ 配置静态存储初始化（ApiConfigStore + 密钥槽）
             config::init_api_config_store();
@@ -918,6 +948,7 @@ mod tests {
             diagnostics: Arc::new(status_diagnostics::StatusDiagnostics::new()),
             backend: None,
             fanout: None,
+            audit_bridge: None,
             pairing,
             base,
             enabled: Arc::new(std::sync::atomic::AtomicBool::new(enabled)),

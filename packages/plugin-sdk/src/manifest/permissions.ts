@@ -2,7 +2,7 @@
 // 约束来源：ROUND-08-plugin-sdk.md 禁令 18（信任模型 + 权限合并规则）
 
 /**
- * 插件权限粒度联合类型（禁令 18 合并规则 + D6 笔记/View 轨增量，共 14 项）。
+ * 插件权限粒度联合类型（禁令 18 合并规则 + D6 笔记/View 轨增量 + M4 note:extend，共 15 项）。
  *
  * 合并规则（原始能力 → 合并后权限）：
  * - file:read + file:write            → file:access      （文件读写通常成对出现）
@@ -21,6 +21,9 @@
  * - ui:contribute  → slash/widget/blockView/keymap View 轨贡献
  * - note:read      → 读块/文档/搜索（只读投影/查询）
  * - note:write     → 注册或调用笔记写工具（仍进审批矩阵；非 View 写入口）
+ *
+ * M4 增量（registerFlavour 路线图主项）：
+ * - note:extend    → 扩展已知 flavour 集（registerFlavour）；**不**授予 write store
  */
 export type PluginPermission =
   | 'file:access' // 文件读写（合并 file:read + file:write）
@@ -36,7 +39,8 @@ export type PluginPermission =
   | 'plugin:manage' // 管理其他插件（启用/禁用/卸载，合并 plugin.load）
   | 'ui:contribute' // View 轨 contribute points（slash/widget/blockView/keymap）
   | 'note:read' // 笔记只读（投影/查询；无写权威）
-  | 'note:write'; // 笔记写工具（仍走 RS 事务 + 审批；禁止 DOM/盘旁路）
+  | 'note:write' // 笔记写工具（仍走 RS 事务 + 审批；禁止 DOM/盘旁路）
+  | 'note:extend'; // 扩展 known flavour（registerFlavour；投影-only，无写权威）
 
 /** 全部合法权限字面量（供 validateManifest 枚举校验）。 */
 export const PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
@@ -54,6 +58,7 @@ export const PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
   'ui:contribute',
   'note:read',
   'note:write',
+  'note:extend',
 ] as const;
 
 /**

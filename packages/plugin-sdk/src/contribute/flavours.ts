@@ -2,8 +2,8 @@
 // W4-C：block_view 仅装饰「现有」flavour 的默认白名单
 //
 // 对齐 SlashMenuModel DEFAULT_SLASH_CATALOG 与 block-paper-contract 常见 kind。
-// 非永久锁死：registerFlavour(F1+) 落地后宿主通过 setKnownFlavours 扩展本集合。
-// 见 plans/specs/register-flavour-roadmap.md（F0→F3）。
+// M4：插件/宿主经 ContributePointRegistry.registerFlavour(def) 扩展 known 集
+//（或 setKnownFlavours 批量注入）。见 register-flavour-roadmap.md（F0→F3）。
 
 /**
  * 内置 / 当前产品已支持的 flavour id。

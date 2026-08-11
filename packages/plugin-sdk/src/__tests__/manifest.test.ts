@@ -3,7 +3,7 @@
 //
 // 覆盖范围：
 // - validateManifest 的有效/无效 manifest 路径
-// - 权限枚举校验（14 项 PluginPermission，含 D6 ui:contribute/note:read|write）
+// - 权限枚举校验（15 项 PluginPermission，含 D6 + M4 note:extend）
 // - 能力清单校验（declaredHooks/declaredTools/declaredMcpServers）
 // - engineVersion semver range 校验
 // - trustLevel 信任级别校验（禁令 18）
@@ -96,7 +96,7 @@ describe('validateManifest - 有效 manifest', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('全部 14 项权限枚举通过校验', () => {
+  it('全部 15 项权限枚举通过校验', () => {
     const result = validateManifest(
       makeValidManifest({
         permissions: [...PLUGIN_PERMISSIONS] as readonly PluginPermission[],
@@ -311,7 +311,7 @@ describe('validateManifest - 权限枚举校验（禁令 18）', () => {
     expect(result.valid).toBe(false);
   });
 
-  it('合法的 14 项权限全部通过', () => {
+  it('合法的 15 项权限全部通过', () => {
     const allPerms = [
       'file:access',
       'tool:execute',
@@ -327,6 +327,7 @@ describe('validateManifest - 权限枚举校验（禁令 18）', () => {
       'ui:contribute',
       'note:read',
       'note:write',
+      'note:extend',
     ] as readonly PluginPermission[];
     const result = validateManifest(
       makeValidManifest({ permissions: allPerms })
@@ -582,11 +583,12 @@ describe('常量导出', () => {
     }
   });
 
-  it('PLUGIN_PERMISSIONS 含 14 项权限（含 D6 ui:contribute/note:read|write）', () => {
-    expect(PLUGIN_PERMISSIONS).toHaveLength(14);
+  it('PLUGIN_PERMISSIONS 含 15 项权限（含 D6 + M4 note:extend）', () => {
+    expect(PLUGIN_PERMISSIONS).toHaveLength(15);
     expect(PLUGIN_PERMISSIONS).toContain('ui:contribute');
     expect(PLUGIN_PERMISSIONS).toContain('note:read');
     expect(PLUGIN_PERMISSIONS).toContain('note:write');
+    expect(PLUGIN_PERMISSIONS).toContain('note:extend');
   });
 
   it('PLUGIN_TRUST_LEVELS 仅含 restricted + full（禁令 18 禁止 sandboxed）', () => {
