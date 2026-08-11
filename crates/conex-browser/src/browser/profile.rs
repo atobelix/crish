@@ -470,16 +470,41 @@ mod platform_lock {
 
 #[cfg(unix)]
 mod platform_lock {
-    /// kill(pid, 0) 语义：`kill -0` 探测（无 libc 依赖的 MVP 形态；
-    /// 遗留：接入 libc 直调以消除 shell 依赖）。
-    /// 豁免 clippy 子进程禁令：固定参数系统工具探测（进程管理原语豁免面）。
-    #[allow(clippy::disallowed_methods)]
+    /// kill(pid, 0) 直调（libc，无 shell 依赖；G-10 收尾）：
+    /// - 0：进程存在 → 存活；
+    /// - ESRCH：进程不存在 → 已死；
+    /// - EPERM：进程存在但无权限探测（信号 0 亦被拒）→ 保守存活
+    ///   （探测失败不误判已死，避免误删活跃 SingletonLock 造成双开冲突）；
+    /// - 其余 errno（如 EINVAL）：未知错误 → 保守存活（与 unix.rs killpg_result
+    ///   的「非 ESRCH 即存在」errno 语义同源收敛）。
+    /// libc 调用为 unsafe：错误经 errno 面（last_os_error）转出，
+    /// 无内存不安全面，unsafe 局部化（workspace 逐处评审惯例）。
+    #[allow(unsafe_code)]
     pub fn pid_alive(pid: u32) -> bool {
-        std::process::Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        // u32 → pid_t 溢出防护：超范围 PID 不可能存在，直接判死不进入 libc
+        // （as 回绕会得到负 PID，探测语义错误）
+        let Ok(pid) = libc::pid_t::try_from(pid) else {
+            return false;
+        };
+        let ret = unsafe { libc::kill(pid, 0) };
+        if ret == 0 {
+            return true;
+        }
+        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        pid_alive_result(ret, errno)
+    }
+
+    /// kill(pid, 0) 返回码 → 存活判定（纯函数，可脱离 libc 单测）：
+    /// 与 unix.rs killpg_result 的 errno 语义同源——ESRCH（目标不存在）
+    /// 为唯一「已死」判定，其余（EPERM 等）保守存活。
+    fn pid_alive_result(ret: i32, errno: i32) -> bool {
+        if ret == 0 {
+            return true;
+        }
+        match errno {
+            libc::ESRCH => false,
+            _ => true,
+        }
     }
 }
 
@@ -871,5 +896,76 @@ mod tests {
             .await
             .expect_err("应失败");
         assert!(matches!(err, ProcessError::ImportFailed(_)));
+    }
+}
+
+/// Unix 专用测试：本机为 Windows 不编译，由 CI ubuntu（Linux/macOS）覆盖。
+#[cfg(all(test, unix))]
+mod unix_pid_alive_tests {
+    use super::platform_lock;
+
+    /// kill(pid, 0) 返回码 → 存活判定映射（纯函数）：
+    /// 0 → 存活；ESRCH → 已死；EPERM/未知 errno → 保守存活。
+    #[test]
+    fn pid_alive_result_mapping() {
+        assert!(platform_lock::pid_alive_result(0, 0), "0（进程存在）应存活");
+        assert!(
+            !platform_lock::pid_alive_result(-1, libc::ESRCH),
+            "ESRCH（进程不存在）应已死"
+        );
+        assert!(
+            platform_lock::pid_alive_result(-1, libc::EPERM),
+            "EPERM（进程存在但无权探测）应保守存活"
+        );
+        assert!(
+            platform_lock::pid_alive_result(-1, 9_999),
+            "未知 errno 应保守存活"
+        );
+    }
+
+    /// 真实场景：fork 子进程 → 就绪态存活（true）→ SIGKILL + waitpid 回收
+    /// → 已死（false）。管道同步消除 fork 与探测之间的竞态（无 sleep）。
+    #[test]
+    #[allow(unsafe_code)]
+    fn pid_alive_real_process_two_states() {
+        // 同步管道：子进程写就绪字节，父进程阻塞等待，消除竞态
+        let mut fds = [0i32; 2];
+        let pipe_ret = unsafe { libc::pipe(fds.as_mut_ptr()) };
+        assert_eq!(pipe_ret, 0, "pipe 创建失败");
+
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0, "fork 失败");
+        if child == 0 {
+            // 子进程：写就绪字节后挂起等待信号（失败直接退出，父进程读到 EOF 即暴露）
+            let _ = unsafe { libc::write(fds[1], b"x".as_ptr() as *const libc::c_void, 1) };
+            unsafe { libc::pause() };
+            unsafe { libc::_exit(3) };
+        }
+
+        // 父进程：等子进程就绪字节（EOF 即子进程提前退出 → 直接失败）
+        let mut buf = [0u8; 1];
+        let n = unsafe { libc::read(fds[0], buf.as_mut_ptr() as *mut libc::c_void, 1) };
+        assert_eq!(n, 1, "子进程未就绪（写字节前退出）");
+
+        // 存活态：运行中的子进程应判定为存活
+        assert!(
+            platform_lock::pid_alive(child as u32),
+            "运行中的子进程应存活"
+        );
+
+        // 终止态：SIGKILL → waitpid 回收（不产生僵尸）→ 探测为已死
+        let killed = unsafe { libc::kill(child, libc::SIGKILL) };
+        assert_eq!(killed, 0, "SIGKILL 子进程失败");
+        let mut status = 0;
+        let waited = unsafe { libc::waitpid(child, &mut status, 0) };
+        assert_eq!(waited, child, "waitpid 回收失败");
+        assert!(libc::WIFSIGNALED(status) && libc::WTERMSIG(status) == libc::SIGKILL);
+        assert!(
+            !platform_lock::pid_alive(child as u32),
+            "已回收的进程应判定为已死"
+        );
+
+        unsafe { libc::close(fds[0]) };
+        unsafe { libc::close(fds[1]) };
     }
 }

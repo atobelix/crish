@@ -24,6 +24,14 @@
 //!   （screenshot 面）、`Runtime.enable`（console 面——consoleAPICalled 事件流
 //!   订阅的必需 enable 命令，事件订阅面非执行/写入面）、`Network.enable`
 //!   （network 面——同上，Network 事件流订阅必需）；
+//! - **会话建立面**（39-E3 实测补充，只读面可达性必需）：外部 MCP 必须经 Target
+//!   域建立页面会话（flatten 路由）后，只读命令才能命中页面 target——否则快照/
+//!   console/network 四类只读面不可达。该类别与 enable 序列同性质（会话面路由
+//!   命令，**无页面写入副作用**，非页面操作面）：
+//!   `Target.getTargets`（目标枚举）、`Target.attachToTarget`（会话建立，flatten
+//!   路由）、`Target.setAutoAttach`（自动附加路由）、`Target.detachFromTarget`
+//!   （会话拆除）；**`Target.createTarget`（新建标签 = 写入面）与其余 Target
+//!   方法不授予**（fail-closed 精确匹配收窄）；
 //! - 事件（"Domain.event" 精确匹配，或 "Domain.\*" 域级通配——事件为被动
 //!   观察数据、无副作用，域级通配仅事件面开放）：
 //!   `Runtime.consoleAPICalled`（console 面）、`Network.*`（network 面全事件）、
@@ -61,7 +69,7 @@ impl ReadonlyCaps {
     }
 
     /// 标准只读能力集（34 §5.2 E-3 / 17 §5.3）：snapshot / screenshot /
-    /// console / network 四类只读面。
+    /// console / network 四类只读面 + 会话建立面（只读面可达性必需）。
     pub fn mcp_attach_default() -> Self {
         Self::new(
             [
@@ -74,6 +82,14 @@ impl ReadonlyCaps {
                 "Runtime.enable",
                 // network 面：Network 事件流订阅的必需 enable 命令（同上）
                 "Network.enable",
+                // —— 会话建立面（39-E3 实测补充）：Target 域会话路由子集 ——
+                // 只读命令必须命中页面 target 才可达——外部 MCP 先经本组命令
+                // 枚举目标/建立 flatten 会话/拆除会话；无页面写入副作用（与
+                // enable 序列同类别）。createTarget（新建标签=写入面）不授予。
+                "Target.getTargets",
+                "Target.attachToTarget",
+                "Target.setAutoAttach",
+                "Target.detachFromTarget",
             ],
             [
                 // console 面：控制台消息事件（只读观察）
@@ -169,6 +185,28 @@ mod tests {
                 "只读命令 {method} 应在白名单内"
             );
         }
+    }
+
+    /// 会话建立面（39-E3 实测补充）：Target 域会话路由子集放行——外部 MCP
+    /// 枚举目标/建立 flatten 会话/拆除会话的必需命令（无页面写入副作用）。
+    #[test]
+    fn mcp_attach_default_allows_session_establishment_commands() {
+        let caps = ReadonlyCaps::mcp_attach_default();
+        for method in [
+            "Target.getTargets",       // 目标枚举（只读发现）
+            "Target.attachToTarget",   // 会话建立（flatten 路由）
+            "Target.setAutoAttach",    // 自动附加路由
+            "Target.detachFromTarget", // 会话拆除
+        ] {
+            assert!(
+                caps.allows_command(method),
+                "会话建立命令 {method} 应放行（只读面可达性必需）"
+            );
+        }
+        // createTarget（新建标签 = 写入面）与未列出的 Target 方法不授予
+        assert!(!caps.allows_command("Target.createTarget"), "新建标签必须拒绝");
+        assert!(!caps.allows_command("Target.closeTarget"), "关闭目标必须拒绝");
+        assert!(!caps.allows_command("Target.activateTarget"), "激活目标必须拒绝");
     }
 
     /// 典型拒绝面（17 §2 矩阵 / 34 §4.3 实测工具→CDP 映射）：交互注入、

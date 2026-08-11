@@ -1014,11 +1014,13 @@ mod tests {
             request_id: "r1".to_string(),
             url: "https://e.com".to_string(),
             method: "GET".to_string(),
+            status: None,
         });
         bus.publish(BrowserEvent::NetworkRequest {
             request_id: "r2".to_string(),
             url: "https://e.com".to_string(),
             method: "GET".to_string(),
+            status: None,
         });
         // 订阅任务异步消费
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -1026,6 +1028,7 @@ mod tests {
         bus.publish(BrowserEvent::NetworkDone {
             request_id: "r1".to_string(),
             ok: true,
+            size: None,
         });
         tokio::time::sleep(Duration::from_millis(20)).await;
         assert_eq!(counter.in_flight(), 1, "loadingFinished 应减一");
@@ -1041,6 +1044,7 @@ mod tests {
             request_id: "r1".to_string(),
             url: "https://e.com".to_string(),
             method: "GET".to_string(),
+            status: None,
         });
         tokio::time::sleep(Duration::from_millis(20)).await;
         assert_eq!(counter.in_flight(), 1, "Drop 前计数正常");

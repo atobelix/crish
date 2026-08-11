@@ -726,10 +726,11 @@ impl NetworkBuffer {
                         request_id,
                         url,
                         method,
+                        ..
                     }) => buffer.push_request(&request_id, &url, &method),
-                    Ok(BrowserEvent::NetworkDone { request_id, ok }) => {
-                        buffer.mark_done(&request_id, ok)
-                    }
+                    Ok(BrowserEvent::NetworkDone {
+                        request_id, ok, ..
+                    }) => buffer.mark_done(&request_id, ok),
                     Ok(_) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -869,11 +870,14 @@ mod tests {
             session: "S1".to_string(),
             level: ConsoleLevel::Log,
             text: "x".to_string(),
+            url: None,
+            line: None,
         });
         bus.publish(BrowserEvent::NetworkRequest {
             request_id: "r1".to_string(),
             url: "https://e.com".to_string(),
             method: "GET".to_string(),
+            status: None,
         });
         tokio::task::yield_now().await;
         assert_eq!(clears.load(Ordering::SeqCst), 0, "非断线事件不得触发清理");

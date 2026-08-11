@@ -1,0 +1,50 @@
+[package]
+name = "conex-computer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# 电脑操作二期(S1/S2 范围):Windows 首发。
+# feature 面:
+# - capture-wgc(默认开):xcap 走 Windows Graphics Capture 截屏通道;
+#   关闭时 xcap 回落 GDI BitBlt 兜底(37 报告实测两条路径同质同量级,
+#   远程桌面/老显卡环境以 --no-default-features 部署)。
+[features]
+default = ["capture-wgc"]
+capture-wgc = ["xcap/wgc"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+# xcap:锁内 0.9.7(tauri 链既有,零 lock 变更;wgc feature 面与 37 报告实测的
+# 0.9.8 一致)。因 capture-wgc 需要转发 xcap/wgc,置于通用依赖面。
+xcap = { version = "0.9", features = ["image"] }
+
+[target.'cfg(windows)'.dependencies]
+# enigo 0.6.1:37 报告 Gate-B 实测(记事本/输入框/浏览器 0 丢字);锁内无此包,
+# 本次新增唯一 lock 条目,其传递依赖 windows 0.61.3 为锁内既有版本。
+# default-features = false:去掉 Linux x11rb 面,Windows 编译无关。
+enigo = { version = "0.6.1", default-features = false }
+# windows-sys 0.61:workspace 既有声明(锁内 0.61.2);直连面用于
+# SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)与 GetCursorPos/SetCursorPos
+# (enigo 0.6.1 绝对鼠标移动仅支持主屏 0,0 原点,多显示器负坐标必须直连)。
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_UI_HiDpi",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+# image:仅测试面(解码合成缩放产物做像素断言);版本对齐锁内 0.25.10(xcap 传递面),
+# 零 lock 变更。
+image = { version = "0.25" }

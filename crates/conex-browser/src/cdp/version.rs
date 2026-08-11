@@ -427,6 +427,8 @@ mod tests {
             session: "s1".to_string(),
             level: ConsoleLevel::Log,
             text: "hello".to_string(),
+            url: None,
+            line: None,
         }
     }
 
@@ -540,15 +542,19 @@ mod tests {
         tracker.on_event(&BrowserEvent::PageError {
             session: "s1".to_string(),
             text: "err".to_string(),
+            url: None,
+            line: None,
         });
         tracker.on_event(&BrowserEvent::NetworkRequest {
             request_id: "r1".to_string(),
             url: "https://e.com".to_string(),
             method: "GET".to_string(),
+            status: None,
         });
         tracker.on_event(&BrowserEvent::NetworkDone {
             request_id: "r1".to_string(),
             ok: true,
+            size: None,
         });
         tracker.on_event(&BrowserEvent::Lifecycle {
             session: "s1".to_string(),
