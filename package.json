@@ -12,7 +12,10 @@
     "packages/plugin-sdk",
     "packages/shared-types",
     "packages/shared-utils",
-    "packages/test-utils"
+    "packages/test-utils",
+    "packages/block-paper-contract",
+    "packages/editor-kit",
+    "packages/block-paper"
   ],
   "scripts": {
     "build": "turbo run build",

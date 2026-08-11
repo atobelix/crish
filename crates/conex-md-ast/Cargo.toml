@@ -1,0 +1,15 @@
+[package]
+name = "conex-md-ast"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Conex-MD parse/serialize contract (re-exports BlockIR from conex-doc-collab)"
+authors.workspace = true
+
+[dependencies]
+conex-doc-collab = { path = "../conex-doc-collab" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

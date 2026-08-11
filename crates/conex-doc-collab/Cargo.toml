@@ -1,0 +1,24 @@
+[package]
+name = "conex-doc-collab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rust document heart: block tree ops, text engine boundary, single apply"
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { version = "1", features = ["v4", "serde"] }
+# 叶子文本 CRDT（crate 私有封装；禁止经公共 API 外泄 yrs 类型，A-INV-05）
+# 0.27 使用 if-let guard 需 nightly；0.21 与 AppFlowy 同代、稳定编译
+yrs = "0.21"
+
+[dev-dependencies]
+# Loro 对照 oracle（仅测试路径 / W0-L；生产 DocSession 不得依赖）
+# crates.io 1.x 可用（实测 1.13.9：movable tree + CyclicMoveError）
+loro = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,18 @@
+[package]
+name = "conex-workspace-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Workspace SQLite authority store (snapshot+updates); separate from sessions DB"
+authors.workspace = true
+
+[dependencies]
+conex-doc-collab = { path = "../conex-doc-collab" }
+conex-md-ast = { path = "../conex-md-ast" }
+rusqlite = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
