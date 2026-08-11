@@ -10,7 +10,6 @@
   border-radius: 0;
 }
 
-
 /* 濠㈠墎顥愰、鎴︽晬濮橆厼顫戦柛娆戝█閹?+ 闁稿绮嶉?濞撴皜鍕焿闁告柣鍔嬬紞鏃堟晬閸喎顫戦柛娆戝У閳ь兛妞掔弧鍐嚄閽樺绮?/ 濞撴皜鍕焿 only闁?*/
 .inlineAgentHeadRow {
   display: flex;
@@ -64,7 +63,9 @@
 /* Hover reveal chevron on head row hover */
 .inlineAgentHead :global(.tool-row-chevron) {
   opacity: 0; /* Hidden by default */
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .inlineAgentHeadRow:hover .inlineAgentHead :global(.tool-row-chevron) {
@@ -84,7 +85,11 @@
   color: var(--text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background var(--transition-micro), color var(--transition-micro), border-color var(--transition-micro), opacity var(--transition-fast);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro),
+    border-color var(--transition-micro),
+    opacity var(--transition-fast);
 }
 .agentHeadBtn:hover:not(:disabled) {
   background: var(--bg-hover);
@@ -144,13 +149,21 @@
 }
 
 .inlineAgentBadgeRunning {
-  border-color: color-mix(in srgb, var(--accent-green) 40%, var(--hairline, var(--border-subtle)));
+  border-color: color-mix(
+    in srgb,
+    var(--accent-green) 40%,
+    var(--hairline, var(--border-subtle))
+  );
   color: var(--text-secondary);
   background: transparent;
 }
 
 .inlineAgentBadgeFailed {
-  border-color: color-mix(in srgb, var(--accent-red) 40%, var(--hairline, var(--border-subtle)));
+  border-color: color-mix(
+    in srgb,
+    var(--accent-red) 40%,
+    var(--hairline, var(--border-subtle))
+  );
   color: var(--accent-red);
   background: transparent;
 }
@@ -162,7 +175,11 @@
 }
 
 .inlineAgentBadgePending {
-  border-color: color-mix(in srgb, var(--accent-orange) 50%, var(--hairline, var(--border-subtle)));
+  border-color: color-mix(
+    in srgb,
+    var(--accent-orange) 50%,
+    var(--hairline, var(--border-subtle))
+  );
   color: var(--accent-orange, var(--text-secondary));
 }
 
@@ -190,10 +207,11 @@
 .accordionWrapper {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-accordion, 220ms cubic-bezier(0.16, 1, 0.3, 1));
+  transition: grid-template-rows
+    var(--transition-accordion, 220ms cubic-bezier(0.16, 1, 0.3, 1));
 }
 
-.accordionWrapper[data-expanded="true"] {
+.accordionWrapper[data-expanded='true'] {
   grid-template-rows: 1fr;
 }
 
@@ -203,7 +221,7 @@
   transition: opacity var(--transition-fast, 150ms ease);
 }
 
-.accordionWrapper[data-expanded="true"] .accordionInner {
+.accordionWrapper[data-expanded='true'] .accordionInner {
   opacity: 1;
 }
 
@@ -263,6 +281,56 @@
   color: var(--text-tertiary);
   padding: 8px 2px;
   text-align: center;
+}
+
+/* D8 §3.7.1 失败态卡片增强：失败摘要行 + 恢复按钮组（failed 态专属） */
+.inlineAgentFailSummary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1_5, 6px);
+  margin-top: var(--space-1, 4px);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.inlineAgentFailKind,
+.inlineAgentFailRetries {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline, var(--border-subtle));
+  background: var(--bg-hover, transparent);
+}
+
+.inlineAgentFailNeedsUser {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-orange, var(--border-subtle));
+  color: var(--accent-orange, var(--text-secondary));
+}
+
+.inlineAgentRecovery {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-1_5, 6px);
+}
+
+.inlineAgentLinkResume {
+  color: var(--accent-green, var(--text-secondary));
+}
+
+.inlineAgentLinkKill,
+.inlineAgentLinkKillAll {
+  color: var(--accent-red, var(--text-tertiary));
+}
+
+.inlineAgentRecoveryError {
+  flex-basis: 100%;
+  font-size: var(--font-size-xxs);
+  color: var(--accent-red, var(--text-tertiary));
+  word-break: break-word;
 }
 
 .inlineAgentMsg {
@@ -417,4 +485,3 @@
 .thinkingFold.isOpen .thinkingFoldBody {
   max-height: calc(var(--font-size-sm) * 1.5 * 24);
 }
-

@@ -42,7 +42,16 @@ import { ChatToolStack } from '../chat-tool-call/ChatToolCallBlock';
 import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
 import { useAgentPanel } from '../../hooks/useAgentStream';
 import { useAgentToolApproval } from '../../hooks/useAgentToolApproval';
-import { Tooltip } from '../ui';
+import { getCompositionRoot } from '../../app/compositionRoot';
+import { Button, Tooltip } from '../ui';
+import {
+  isAnyRecoveryCommandReady,
+  isRecoveryCommandReady,
+  killAllSubagents,
+  killSubagent,
+  resumeSubagent,
+} from '../../api/subagentRecoveryApi';
+import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
 
 /** 内联 denser：比主列 / 侧栏默认 4 行再收一行，避免时间线被撑爆 */
 const INLINE_COMPOSER_MAX_LINES = 3;
@@ -205,6 +214,54 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
     return '暂无消息。可在下方继续对话。';
   }, [running, live.status, live.summary]);
 
+  // D8 §3.7.1 失败态卡片增强：错误 kind（kebab-case→中文映射）/重试次数 +
+  // resume/kill/kill_all 恢复按钮。数据源 = recovery-escalated 事件投影
+  // （subagentRunId 匹配）+ run 终态 error + subagent-ended summary 三级回退；
+  // 命令面未注册期（D4 未落地）按钮隐藏（能力降级，不渲染幽灵按钮）。
+  const isFailed = live.status === 'failed';
+  const errorKindLabel = isFailed ? resolveErrorKindLabel(live.errorKind) : '';
+  const retries = isFailed ? live.retries : undefined;
+  const recoveryReady = isFailed && isAnyRecoveryCommandReady();
+  const resumeReady = isFailed && isRecoveryCommandReady('resume');
+  const killReady = isFailed && isRecoveryCommandReady('kill');
+  const killAllReady = isFailed && isRecoveryCommandReady('kill_all');
+
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+
+  const runRecoveryAction = useCallback(
+    async (action: 'resume' | 'kill' | 'kill_all', errorMsg: string) => {
+      if (recoveryBusy) return;
+      setRecoveryBusy(true);
+      setRecoveryError('');
+      try {
+        if (action === 'resume') {
+          // resume = fork 新 run（D4 resume_subagent，三态上下文继承，
+          // 16/16/1 守卫由引擎执行）；卡片回 running 由 subagent-started
+          // 事件面刷新，不在此写死
+          await resumeSubagent(parentSessionId, live.id, live.summary);
+        } else if (action === 'kill') {
+          await killSubagent(parentSessionId, live.id, 'ui-kill');
+          getCompositionRoot()
+            .layout.getState()
+            .patchSessionAgent(parentSessionId, live.id, {
+              status: 'stopped',
+              summary: '已关闭',
+              endedAt: Date.now(),
+            });
+        } else {
+          await killAllSubagents(parentSessionId, 'ui-kill-all');
+        }
+      } catch (e) {
+        setRecoveryError(e instanceof Error ? e.message : String(e));
+        console.error(errorMsg, e);
+      } finally {
+        setRecoveryBusy(false);
+      }
+    },
+    [parentSessionId, live.id, live.summary, recoveryBusy]
+  );
+
   const sideOpenTitle = sideFocused ? '重聚焦子智能体' : '在侧栏打开子智能体';
   const sideOpenAria = sideFocused
     ? `重聚焦子智能体「${displayTitle}」`
@@ -293,8 +350,10 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         <div className={styles.inlineAgentHeadActions}>
           {running ? (
             <Tooltip content={stopping ? '停止中…' : '停止子智能体'}>
-              <button
+              <Button
                 type="button"
+                variant="danger"
+                size="sm"
                 className={`${styles.agentHeadBtn} ${styles.inlineAgentStopBtn}`}
                 aria-label={stopping ? '正在停止子智能体' : '停止子智能体'}
                 aria-busy={stopping || undefined}
@@ -304,22 +363,24 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                   e.preventDefault();
                   handleStopGeneration(live.summary);
                 }}
-              >
-                <Lucide.Square size={11} fill="currentColor" aria-hidden />
-              </button>
+                icon={
+                  <Lucide.Square size={11} fill="currentColor" aria-hidden />
+                }
+              />
             </Tooltip>
           ) : null}
           <Tooltip content={sideOpenTitle}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={`${styles.agentHeadBtn} ${sideFocused ? styles.isActive : ''}`}
               aria-label={sideOpenAria}
               aria-pressed={sideFocused}
               disabled={!agentIdNorm}
               onClick={openInSideOnly}
-            >
-              <Lucide.PanelRight size={13} aria-hidden />
-            </button>
+              icon={<Lucide.PanelRight size={13} aria-hidden />}
+            />
           </Tooltip>
         </div>
       </div>
@@ -365,6 +426,92 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                 <p className={styles.inlineAgentEmptyP} style={{ margin: 0 }}>
                   {emptyStreamCopy}
                 </p>
+                {/* D8 §3.7.1 失败摘要行：错误 kind + 重试次数（recovery-escalated
+                    投影；数据源缺位时回退「需人工介入」提示，不假装有数据） */}
+                {isFailed &&
+                (errorKindLabel || retries !== undefined || live.needsUser) ? (
+                  <div
+                    className={`${styles.inlineAgentFailSummary} is-failed-summary`}
+                    data-testid="inline-agent-fail-summary"
+                  >
+                    {errorKindLabel ? (
+                      <span className={styles.inlineAgentFailKind}>
+                        错误：{errorKindLabel}
+                      </span>
+                    ) : null}
+                    {retries !== undefined && retries > 0 ? (
+                      <span className={styles.inlineAgentFailRetries}>
+                        已重试 {retries} 次
+                      </span>
+                    ) : null}
+                    {live.needsUser ? (
+                      <span className={styles.inlineAgentFailNeedsUser}>
+                        需人工介入
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {/* D8 §3.7.1 操作按钮组（failed 态专属；命令面未注册期隐藏） */}
+                {isFailed && recoveryReady ? (
+                  <div
+                    className={`${styles.inlineAgentRecovery} is-recovery-actions`}
+                    data-testid="inline-agent-recovery-actions"
+                  >
+                    {resumeReady ? (
+                      <Tooltip content="关闭并重新派发（fork 新 run）">
+                        <button
+                          type="button"
+                          className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkResume}`}
+                          aria-label="恢复运行该子智能体"
+                          disabled={recoveryBusy}
+                          onClick={() =>
+                            void runRecoveryAction('resume', 'resume 失败')
+                          }
+                        >
+                          {recoveryBusy ? '处理中…' : '恢复运行'}
+                        </button>
+                      </Tooltip>
+                    ) : null}
+                    {killReady ? (
+                      <Tooltip content="终止该子智能体">
+                        <button
+                          type="button"
+                          className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkKill}`}
+                          aria-label="终止该子智能体"
+                          disabled={recoveryBusy}
+                          onClick={() =>
+                            void runRecoveryAction('kill', 'kill 失败')
+                          }
+                        >
+                          关闭
+                        </button>
+                      </Tooltip>
+                    ) : null}
+                    {killAllReady ? (
+                      <Tooltip content="批量终止全部运行中子智能体">
+                        <button
+                          type="button"
+                          className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkKillAll}`}
+                          aria-label="批量终止全部运行中子智能体"
+                          disabled={recoveryBusy}
+                          onClick={() =>
+                            void runRecoveryAction('kill_all', 'kill_all 失败')
+                          }
+                        >
+                          全部关闭
+                        </button>
+                      </Tooltip>
+                    ) : null}
+                    {recoveryError ? (
+                      <span
+                        className={styles.inlineAgentRecoveryError}
+                        role="alert"
+                      >
+                        {recoveryError}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ) : (
               messages.map((msg) => (
