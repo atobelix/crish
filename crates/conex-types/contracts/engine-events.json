@@ -2728,41 +2728,22 @@
     "AgentMessageRole": {
       "wire": "lowercase",
       "description": "消息角色",
-      "values": [
-        "system",
-        "user",
-        "assistant",
-        "tool"
-      ]
+      "values": ["system", "user", "assistant", "tool"]
     },
     "AgentEndReason": {
       "wire": "kebab-case",
       "description": "run 结束原因",
-      "values": [
-        "stop",
-        "max-turns",
-        "aborted",
-        "error",
-        "stopped"
-      ]
+      "values": ["stop", "max-turns", "aborted", "error", "stopped"]
     },
     "RunTerminalStatus": {
       "wire": "lowercase",
       "description": "run 终态",
-      "values": [
-        "completed",
-        "cancelled",
-        "failed"
-      ]
+      "values": ["completed", "cancelled", "failed"]
     },
     "ApprovalDecision": {
       "wire": "lowercase",
       "description": "审批决策（Rust 只发规范值）",
-      "values": [
-        "approved",
-        "denied",
-        "expired"
-      ]
+      "values": ["approved", "denied", "expired"]
     },
     "ToolCategory": {
       "wire": "kebab-case",
@@ -2780,22 +2761,12 @@
     "ToolConcurrency": {
       "wire": "lowercase",
       "description": "工具并发模式",
-      "values": [
-        "parallel",
-        "sequential",
-        "exclusive"
-      ]
+      "values": ["parallel", "sequential", "exclusive"]
     },
     "ToolArtifactKind": {
       "wire": "lowercase",
       "description": "工具输出产物类别",
-      "values": [
-        "file",
-        "diff",
-        "image",
-        "link",
-        "log"
-      ]
+      "values": ["file", "diff", "image", "link", "log"]
     },
     "ProviderDiagnosticPhase": {
       "wire": "kebab-case",
@@ -2817,10 +2788,7 @@
     "SystemPromptWireMode": {
       "wire": "kebab-case",
       "description": "system 提示词接线方式",
-      "values": [
-        "native-system-role",
-        "user-prefix"
-      ]
+      "values": ["native-system-role", "user-prefix"]
     },
     "ProviderErrorKind": {
       "wire": "kebab-case",
@@ -2844,11 +2812,7 @@
     "RuntimeCheckpointKind": {
       "wire": "kebab-case",
       "description": "检查点类别",
-      "values": [
-        "workspace-checkpoint",
-        "git-checkpoint",
-        "file-snapshot"
-      ]
+      "values": ["workspace-checkpoint", "git-checkpoint", "file-snapshot"]
     },
     "ContextCompressionTrigger": {
       "wire": "lowercase",
@@ -2879,21 +2843,12 @@
     "ContextCompressionPolicyTier": {
       "wire": "lowercase",
       "description": "压缩策略层级",
-      "values": [
-        "manual",
-        "proactive",
-        "recovery",
-        "background",
-        "handoff"
-      ]
+      "values": ["manual", "proactive", "recovery", "background", "handoff"]
     },
     "ContextCompressionPolicyAction": {
       "wire": "kebab-case",
       "description": "压缩策略动作",
-      "values": [
-        "compact",
-        "promote-handoff"
-      ]
+      "values": ["compact", "promote-handoff"]
     },
     "CompressionCacheInvalidation": {
       "wire": "kebab-case",
@@ -2921,14 +2876,17 @@
     },
     "SecurityAuditOperation": {
       "wire": "kebab-case",
-      "description": "审计操作类别（I2-S8 安全审计域；T-ESC-02 增 undeclared-write——脚本逃逸监视判定的工具外写入）",
+      "description": "审计操作类别（I2-S8 安全审计域；T-ESC-02 增 undeclared-write——脚本逃逸监视判定的工具外写入；R1-11 D-5 收口增 remote-source-attempt/remote-mode-downgrade/remote-only——远程动作事件级审计，D5 §6.2/§4.4）",
       "values": [
         "delete",
         "trash-restore",
         "trash-purge",
         "git-revert",
         "command-exec",
-        "undeclared-write"
+        "undeclared-write",
+        "remote-source-attempt",
+        "remote-mode-downgrade",
+        "remote-only"
       ]
     },
     "SecurityAuditDecision": {
@@ -2946,20 +2904,12 @@
     "SubagentEventKind": {
       "wire": "kebab-case",
       "description": "子代理事件类别（I5-M7 subagent 域；progress 可丢、message/tool 尽力）",
-      "values": [
-        "progress",
-        "message",
-        "tool"
-      ]
+      "values": ["progress", "message", "tool"]
     },
     "SubagentEndStatus": {
       "wire": "lowercase",
       "description": "子代理终态（I5-M7 subagent 域；completed/failed/cancelled——cancelled 前端映射 stopped 展示）",
-      "values": [
-        "completed",
-        "failed",
-        "cancelled"
-      ]
+      "values": ["completed", "failed", "cancelled"]
     }
   }
 }

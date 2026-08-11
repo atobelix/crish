@@ -2021,6 +2021,14 @@ impl CoreRunState {
         Arc::clone(&self.store)
     }
 
+    /// 全局事件桥（R1-11 remote-* 审计事件发射通道：CoreStateBackend
+    /// 经此拿到与 run 上下文同一 [EventBridge] 实例——远程模式降级等
+    /// run 创建前动作的 security-audit 事件直发，与 emit_trash_audit
+    /// 先例同通道；消费方 = server/core_backend.rs）
+    pub(crate) fn event_bridge(&self) -> EventBridge {
+        self.bridge.clone()
+    }
+
     /// 30 方案 P3/P6：共享 steering 队列（与引擎
     /// [EngineHandle::timer_steering_queue] 同一实例；P6（批 3 装配轮）
     /// 经此注入 workflow 队列——消除队列双实例，对齐 [Self::store]

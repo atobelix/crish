@@ -602,6 +602,7 @@ fn main() {
                     diagnostics: Arc::clone(diagnostics),
                     backend,
                     fanout: Some(fanout),
+                    audit_bridge: Some(bridge),
                     pairing: Arc::clone(&pairing),
                     base: server::config::ServerConfig::default(),
                     // D5 D-01：服务默认关闭（enabled=false 时 restart_server
@@ -745,6 +746,10 @@ pub(crate) struct MultiDeviceService {
     backend: Option<Arc<dyn server::backend::ApiBackend>>,
     /// 事件扇出器（已挂 EventBridge 汇聚点；注入 ServerState.event_stream）
     fanout: Option<Arc<server::fanout::FanOutEmitter>>,
+    /// 远程审计事件桥（R1-11：与引擎 run 上下文同一 EventBridge 实例——
+    /// CoreStateBackend 经 core 透传；注入 ServerState.audit_bridge，
+    /// remote-source-attempt 事件发射通道）
+    audit_bridge: Option<core_event_bridge::EventBridge>,
     /// 配对协调器（实际端口经 set_port 注入；重绑钩子已装配）
     pairing: Arc<server::pairing::PairingCoordinator>,
     /// 服务配置模板（端口 / 令牌路径；enabled 与 bind_mode 按当前态派生）
@@ -844,7 +849,11 @@ async fn restart_server(config: server::ServerConfig, service: &MultiDeviceServi
                 .diagnostics
                 .record("server", true, Some(addr.to_string()));
             tracing::info!(target: "server", addr = %addr, "本地服务已重建（重绑完成）");
-            let router = instance.router(service.backend.clone(), service.fanout.clone());
+            let router = instance.router(
+                service.backend.clone(),
+                service.fanout.clone(),
+                service.audit_bridge.clone(),
+            );
             let serve_task = tauri::async_runtime::spawn(async move {
                 if let Err(error) = instance.serve(router).await {
                     tracing::error!(target: "server", error = %error, "本地服务异常退出");

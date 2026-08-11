@@ -23,6 +23,10 @@ use conex_types::device::{
     RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
     RunTaskResult, SearchIndexResult,
 };
+use conex_types::events::{AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation};
+use conex_types::impact::ImpactAssessment;
+
+use crate::core_event_bridge::EventBridge;
 
 use crate::core_run_commands::{
     approval_history_impl, approve_tool_impl, cancel_run_impl, deny_tool_impl,
@@ -74,6 +78,15 @@ impl CoreStateBackend {
         self
     }
 
+    /// 全局事件桥（R1-11：remote-* 审计事件发射通道；main.rs 装配面经此
+    /// 挂接 ServerState.audit_bridge——router 白名单拒绝分支（remote-source-
+    /// attempt）与 run 装配面（remote-mode-downgrade）共用同一桥实例）
+    // R1-11 备注：main.rs 装配消费——dead_code 静音
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn event_bridge(&self) -> EventBridge {
+        self.core.event_bridge()
+    }
+
     /// CoreError → ServerError（单一真源映射，M6 §6.2.3）
     fn map_core(error: conex_types::CoreError) -> ServerError {
         ServerError::from_core_error(&error)
@@ -99,21 +112,82 @@ pub(crate) fn apply_remote_mode(requested: Option<PermissionMode>) -> (Option<Pe
 }
 
 /// remote-mode-downgrade 审计标记常量（D5 §8.2：降级动作发该审计；
-/// SecurityAuditOperation 尚无 remote-* 变体（R1-10 确认），结构化审计
-/// 日志先行，§8.5 事件面扩展就绪后升级为 AgentEvent::SecurityAudit）
+/// R1-10 结构化日志先行，R1-11 D-5 收口后经
+/// [emit_remote_mode_downgrade_audit] 双写升级为 AgentEvent::SecurityAudit
+/// 事件发射——标记载荷形状不变，测试锁定）
 pub(crate) const REMOTE_MODE_DOWNGRADE_AUDIT_MARKER: &str = "remote-mode-downgrade";
 
-/// 远程 run 权限模式降级审计发射（R1-10 T-08：full-access → ask 降级动作；
-/// target: "security.audit" 对齐 emit_trash_audit 先例（core_run_commands）
-/// ——无 run 上下文（run 尚未创建）时以结构化审计日志承载审计事件）
-fn emit_remote_mode_downgrade_audit() {
+/// remote-* 审计事件构造（R1-11 D-5 收口：D5 §6.2 载荷形状——operation +
+/// targets + decision + permission_mode；信封 runId/sequence 不注入，
+/// 对齐 emit_trash_audit 先例（core_run_commands.rs）——run 创建前 /
+/// 无会话上下文的远程动作，前端对缺失 runId 的信封放行不过滤）
+fn remote_audit_event(
+    session_id: &str,
+    operation: SecurityAuditOperation,
+    targets: Vec<String>,
+    decision: SecurityAuditDecision,
+    permission_mode: Option<String>,
+) -> AgentEvent {
+    AgentEvent::SecurityAudit {
+        session_id: session_id.to_string(),
+        timestamp: crate::engine::now_iso_utc(),
+        operation,
+        targets,
+        impact: ImpactAssessment::default(),
+        decision,
+        permission_mode,
+        tool_call_id: None,
+    }
+}
+
+/// 发射 remote-* 审计（双写：结构化审计日志 + SecurityAudit 事件——红线
+/// 7「全部远程动作 remote-* 审计打码」的端到端事件面；bridge 为 None
+/// （事件总线未接线）时降级为纯结构化日志，与 R1-10 行为一致）
+fn emit_remote_audit(
+    bridge: Option<&EventBridge>,
+    session_id: &str,
+    operation: SecurityAuditOperation,
+    targets: Vec<String>,
+    decision: SecurityAuditDecision,
+    permission_mode: Option<String>,
+) {
     tracing::info!(
         target: "security.audit",
-        kind = "remote-run",
-        operation = %REMOTE_MODE_DOWNGRADE_AUDIT_MARKER,
-        from = "full-access",
-        to = "ask",
-        "远程 run 权限模式降级（full-access → ask，审计标记）"
+        kind = "remote-action",
+        operation = ?operation,
+        decision = ?decision,
+        targets = ?targets,
+        session_id,
+        "远程动作审计（结构化日志 + SecurityAudit 事件双写）"
+    );
+    let Some(bridge) = bridge else {
+        return;
+    };
+    let envelope = AgentEventEnvelope::new(
+        remote_audit_event(session_id, operation, targets, decision, permission_mode),
+        None,
+        None,
+    );
+    bridge.emit_envelope(&envelope);
+}
+
+/// 远程 run 权限模式降级审计发射（R1-10 T-08 → R1-11 事件级：full-access
+/// → ask 降级动作；双写：结构化日志 + SecurityAudit(remote-mode-downgrade)，
+/// targets 承载 runId（run 创建前为空串）、permission_mode 记录降级前
+/// 申请值 full-access——D5 §6.2 载荷形状 / §6.2「permission_mode 如实
+/// 记录（记录降级前申请值）」；decision 取 blocked 语义：降级动作已记录）
+pub(crate) fn emit_remote_mode_downgrade_audit(
+    bridge: Option<&EventBridge>,
+    run_id: &str,
+    session_id: &str,
+) {
+    emit_remote_audit(
+        bridge,
+        session_id,
+        SecurityAuditOperation::RemoteModeDowngrade,
+        vec![run_id.to_string()],
+        SecurityAuditDecision::Blocked,
+        Some("full-access".to_string()),
     );
 }
 
@@ -159,18 +233,53 @@ pub(crate) fn remote_source_attempt_marker(command: &str) -> String {
     )
 }
 
-/// 发射 remote-source-attempt 审计（R1-10 T-07：远程来源触达被禁命令面；
-/// 结构化审计日志 target: "security.audit"——SecurityAuditOperation 尚无
-/// remote-* 变体（R1-10 确认），§8.5 事件面扩展就绪后升级为
-/// AgentEvent::SecurityAudit 发射）
-pub(crate) fn emit_remote_source_attempt_audit(command: &str) {
+/// 发射 remote-source-attempt 审计（R1-10 T-07 → R1-11 事件级：远程来源
+/// 触达被禁命令面；双写：结构化日志 + SecurityAudit(remote-source-attempt)，
+/// targets 承载命令名、decision 恒 blocked——D5 §6.2 载荷形状；命令串
+/// 中的敏感形态（令牌 / 配对码 / provider key）经
+/// [conex_telemetry::redact::redact_text] 打码后再入事件与日志——红线 7
+/// 「remote-* 审计打码」断言锚（T-06 零明文口径同源））
+pub(crate) fn emit_remote_source_attempt_audit(bridge: Option<&EventBridge>, command: &str) {
+    let redacted = conex_telemetry::redact::redact_text(command);
+    emit_remote_audit(
+        bridge,
+        "",
+        SecurityAuditOperation::RemoteSourceAttempt,
+        vec![redacted.clone()],
+        SecurityAuditDecision::Blocked,
+        None,
+    );
     tracing::info!(
         target: "security.audit",
         kind = "remote-command",
         operation = "remote-source-attempt",
-        command = command,
+        command = %redacted,
         decision = "blocked",
-        "远程来源触达被禁命令面（白名单拒绝 + 审计标记）"
+        "远程来源触达被禁命令面（白名单拒绝 + 审计标记，敏感形态已打码）"
+    );
+}
+
+/// 发射 remote-only 审计（D5 §4.4：桌面不在场时移动端单方批准——审计
+/// 标记使事后追责可区分单方批准与双轨批准；双写：结构化日志 +
+/// SecurityAudit(remote-only)，decision 取 approved 语义：单方批准已
+/// 放行。装配点 = R2 远程网关双轨裁决落地面（当前无生产调用，测试直
+/// 接覆盖事件形状））
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn emit_remote_only_audit(bridge: Option<&EventBridge>, session_id: &str) {
+    emit_remote_audit(
+        bridge,
+        session_id,
+        SecurityAuditOperation::RemoteOnly,
+        vec![],
+        SecurityAuditDecision::Approved,
+        None,
+    );
+    tracing::info!(
+        target: "security.audit",
+        kind = "remote-approval",
+        operation = %REMOTE_ONLY_AUDIT_MARKER,
+        session_id,
+        "远程单一确认（无人值守 remote-only 审计标记）"
     );
 }
 
@@ -426,7 +535,7 @@ impl ApiBackend for CoreStateBackend {
             PermissionMode::FullAccess => "full-access".to_string(),
         });
         if mode_downgraded {
-            emit_remote_mode_downgrade_audit();
+            emit_remote_mode_downgrade_audit(Some(&self.core.event_bridge()), "", &session_id);
         }
         let history = params
             .history
@@ -708,5 +817,154 @@ mod tests {
         assert!(marker.contains("operation=remote-source-attempt"));
         assert!(marker.contains("command=config_secret_reveal"));
         assert!(marker.contains("decision=blocked"));
+    }
+
+    // ── R1-11 D-5 收口：remote-* 事件级审计发射（红线 7 端到端可验）──
+
+    /// 记录型发射器（事件桥测试替身，对齐 core_run_commands 测试先例）
+    #[derive(Default)]
+    struct RecordingEmitter(std::sync::Mutex<Vec<String>>);
+
+    impl crate::core_event_bridge::Emitter for RecordingEmitter {
+        fn emit(&self, _channel: &str, payload: &str) {
+            self.0.lock().unwrap().push(payload.to_string());
+        }
+    }
+
+    fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let bridge = EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
+        );
+        (bridge, emitter)
+    }
+
+    /// 从记录载荷解析 security-audit 信封（恰一条；runId 不注入——
+    /// 远程动作 run 创建前 / 无会话上下文）
+    fn recorded_security_audit(emitter: &RecordingEmitter) -> AgentEvent {
+        let recorded = emitter.0.lock().unwrap();
+        assert_eq!(recorded.len(), 1, "必须恰好发射一条 security-audit");
+        let envelope: AgentEventEnvelope =
+            serde_json::from_str(&recorded[0]).expect("信封 JSON 可解析");
+        assert_eq!(envelope.run_id, None, "runId 不注入（run 创建前/无会话）");
+        envelope.event
+    }
+
+    /// remote-mode-downgrade 事件载荷（D5 §6.2：operation +
+    /// blocked 决策 + 降级前模式 + targets 承载 runId）
+    #[test]
+    fn t08_remote_mode_downgrade_emits_security_audit_event() {
+        let (bridge, emitter) = recording_bridge();
+        emit_remote_mode_downgrade_audit(Some(&bridge), "run-42", "s1");
+        let AgentEvent::SecurityAudit {
+            operation,
+            targets,
+            decision,
+            permission_mode,
+            session_id,
+            ..
+        } = recorded_security_audit(&emitter)
+        else {
+            panic!("应为 SecurityAudit 事件");
+        };
+        assert_eq!(operation, SecurityAuditOperation::RemoteModeDowngrade);
+        assert_eq!(decision, SecurityAuditDecision::Blocked, "降级动作决策 = blocked（记录降级）");
+        assert_eq!(permission_mode.as_deref(), Some("full-access"), "permission_mode 记录降级前申请值");
+        assert_eq!(targets, vec!["run-42".to_string()], "targets 承载 runId");
+        assert_eq!(session_id, "s1");
+    }
+
+    /// remote-mode-downgrade 事件 wire 形状（kebab-case operation 序列化）
+    #[test]
+    fn t08_remote_mode_downgrade_event_wire_shape() {
+        let (bridge, emitter) = recording_bridge();
+        emit_remote_mode_downgrade_audit(Some(&bridge), "", "s1");
+        let recorded = emitter.0.lock().unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&recorded[0]).expect("信封 JSON 可解析");
+        // 信封 flatten 序列化：type/事件体字段在顶层（AgentEventEnvelope
+        // serialize 把事件体字段并入顶层 map——对齐既有信封契约）
+        assert_eq!(json["type"], "security-audit");
+        assert_eq!(json["operation"], "remote-mode-downgrade");
+        assert_eq!(json["decision"], "blocked");
+        assert_eq!(json["permissionMode"], "full-access");
+    }
+
+    /// remote-source-attempt 事件载荷（D5 §6.2：operation + 命令名 +
+    /// blocked 决策；命令含令牌形态时事件载荷打码——红线 7 断言锚）
+    #[test]
+    fn t07_remote_source_attempt_emits_redacted_audit_event() {
+        let (bridge, emitter) = recording_bridge();
+        emit_remote_source_attempt_audit(Some(&bridge), "config_secret_reveal");
+        let AgentEvent::SecurityAudit {
+            operation,
+            targets,
+            decision,
+            ..
+        } = recorded_security_audit(&emitter)
+        else {
+            panic!("应为 SecurityAudit 事件");
+        };
+        assert_eq!(operation, SecurityAuditOperation::RemoteSourceAttempt);
+        assert_eq!(decision, SecurityAuditDecision::Blocked);
+        assert_eq!(targets, vec!["config_secret_reveal".to_string()]);
+    }
+
+    /// 打码断言：命令串携带 43 字符 base64url 令牌形态时，事件载荷与
+    /// 标记载荷均无明文形态（redact_text 打码——红线 7 / T-06 零明文
+    /// 口径同源；scan_sensitive 扫描事件载荷零命中）
+    #[test]
+    fn t07_remote_source_attempt_redacts_token_in_payload() {
+        let token = "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE";
+        assert_eq!(token.chars().count(), 43, "测试令牌须为 43 字符 base64url 形态");
+        let command = format!("config_secret_get token={token}");
+        let (bridge, emitter) = recording_bridge();
+        emit_remote_source_attempt_audit(Some(&bridge), &command);
+        // 事件载荷（信封 + 事件体全量文本）零敏感形态
+        let recorded = emitter.0.lock().unwrap();
+        assert!(
+            conex_telemetry::redact::scan_sensitive(&recorded[0]).is_empty(),
+            "事件载荷不得含令牌/配对码明文形态：{}",
+            recorded[0]
+        );
+        assert!(
+            !recorded[0].contains(&token),
+            "事件载荷不得含令牌原文"
+        );
+        // 标记载荷同源打码（发射侧与标记共用同一 redact 输入）
+        let marker = remote_source_attempt_marker(&conex_telemetry::redact::redact_text(&command));
+        assert!(
+            !marker.contains(&token),
+            "标记载荷不得含令牌原文"
+        );
+    }
+
+    /// remote-only 事件载荷（D5 §4.4：无人值守移动端单方批准标记）
+    #[test]
+    fn t14_remote_only_emits_security_audit_event() {
+        let (bridge, emitter) = recording_bridge();
+        emit_remote_only_audit(Some(&bridge), "s1");
+        let AgentEvent::SecurityAudit {
+            operation,
+            decision,
+            session_id,
+            ..
+        } = recorded_security_audit(&emitter)
+        else {
+            panic!("应为 SecurityAudit 事件");
+        };
+        assert_eq!(operation, SecurityAuditOperation::RemoteOnly);
+        assert_eq!(decision, SecurityAuditDecision::Approved, "单方批准已放行 → approved");
+        assert_eq!(session_id, "s1");
+    }
+
+    /// 事件总线未接线（None）时降级纯结构化日志：不发事件不 panic
+    /// （与 R1-10 行为一致，router 未装配桥的场景）
+    #[test]
+    fn t07_remote_audit_none_bridge_degrades_to_log_only() {
+        emit_remote_source_attempt_audit(None, "config_secret_reveal");
+        emit_remote_mode_downgrade_audit(None, "", "s1");
+        emit_remote_only_audit(None, "s1");
     }
 }

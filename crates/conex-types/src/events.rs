@@ -80,6 +80,22 @@ pub enum SecurityAuditOperation {
     /// 聚合数，见 REQ-逃逸追踪分析 §3.2）
     #[serde(rename = "undeclared-write")]
     UndeclaredWrite,
+    /// 远程来源触达被禁命令面（D5 §6.2 remote-source-attempt：
+    /// 白名单拒绝 + 命令级 Forbidden 的审计可见性，TH-11；targets
+    /// 承载打码后的命令名，decision 恒 blocked）
+    #[serde(rename = "remote-source-attempt")]
+    RemoteSourceAttempt,
+    /// 远程 run 权限模式降级（D5 §6.2 remote-mode-downgrade：
+    /// full-access 申请被降级为 ask，TH-12 直接缓解；targets 承载
+    /// runId（run 创建前为空）、permission_mode 记录降级前申请值，
+    /// decision 取 blocked 语义——降级动作已记录）
+    #[serde(rename = "remote-mode-downgrade")]
+    RemoteModeDowngrade,
+    /// 远程单一确认（D5 §4.4 remote-only 审计标记：桌面不在场时
+    /// 移动端单方批准，事后追责可区分单方批准与双轨批准；
+    /// decision 取 approved 语义——单方批准已放行）
+    #[serde(rename = "remote-only")]
+    RemoteOnly,
 }
 
 /// 审计处置决策（`security-audit.decision`，wire lowercase）

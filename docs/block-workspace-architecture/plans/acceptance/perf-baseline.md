@@ -1,7 +1,7 @@
 # A-PERF 性能基线（W6-C · 结构门 + 数值占位骨架）
 
-> **权威**：`plans/specs/perf-governance.md` · `18-实现波前待决锁定-H1H2H3M1.md` §H3  
-> **断言索引**：`acceptance/A-assert-index.md`（`A-PERF-*` / `A-PERF-DEG-01` / `A-MEM-01`）  
+> **权威**：`plans/specs/perf-governance.md` · `18-实现波前待决锁定-H1H2H3M1.md` §H3
+> **断言索引**：`acceptance/A-assert-index.md`（`A-PERF-*` / `A-PERF-DEG-01` / `A-MEM-01`）
 > **禁止**：「先标低标准再宣称通过」。数值列为 **TBD（未标定）** 时，**不得** 以数值门绿灯合入宣称 PERF 通过；结构门可独立验收。
 
 | 元数据                | 值                                                                 |
@@ -62,7 +62,7 @@
 
 ## 3. 数值门表格（初值 **TBD · 未标定**）
 
-> 维度对齐 D7 §5.9 `A-PERF-01…11`；**维度不可删**。  
+> 维度对齐 D7 §5.9 `A-PERF-01…11`；**维度不可删**。
 > 单位：时间 ms；jank 代理见下表注释。全部 **TBD** 直至本机标定写入并 bump rev。
 
 ### 3.1 打开文档（可交互时间）
@@ -145,6 +145,87 @@ verdict: ok | watch | A-PERF-DEG-01
 
 ## 6. 修订历史
 
-| rev   | 日期       | 说明                                                          |
-| ----- | ---------- | ------------------------------------------------------------- |
-| **0** | 2026-08-11 | W6-C：结构门骨架 + 数值 TBD 占位 + A-PERF-DEG-01 退化规则入库 |
+| rev   | 日期       | 说明                                                                             |
+| ----- | ---------- | -------------------------------------------------------------------------------- |
+| **0** | 2026-08-11 | W6-C：结构门骨架 + 数值 TBD 占位 + A-PERF-DEG-01 退化规则入库                    |
+| **0** | 2026-08-11 | Round9：数值门测量脚手架（`#[ignore]` + `perf:block-workspace`）；数值仍 **TBD** |
+
+---
+
+## 7. 测量脚手架 · 如何跑 · 如何 **人工** 回填
+
+> **铁律**：脚手架 **只打印** JSON 行；**禁止** 任何脚本自动把本文件的 `TBD（未标定）` 改成数字或宣称「数值门通过」。
+> 标定 = 人在基准机上跑数 → 核对机器指纹 → 手写填表 → bump `perf_baseline_rev`（若指纹/阈值变更）。
+
+### 7.1 入口（CI **默认不跑**）
+
+| 路径                                          | 命令                                              | 默认是否进 CI                          |
+| --------------------------------------------- | ------------------------------------------------- | -------------------------------------- |
+| **HeightMap 查询**（轻量）                    | `npm run perf:block-workspace`                    | **否**（单独 npm script，未挂 ci.yml） |
+| **DocSession 打开 N 块**（Rust，`#[ignore]`） | 见下；或 `npm run perf:block-workspace -- --rust` | **否**（`#[ignore]` + release 本机）   |
+
+```bash
+# A) HeightMap 1k 查询（默认 n=1000）
+npm run perf:block-workspace
+
+# B) HeightMap 10k
+npm run perf:block-workspace -- --n 10000
+
+# C) 同时跑 Rust open_nk_blocks（需本机 cargo；--release）
+npm run perf:block-workspace -- --rust
+# 或仅 Rust：
+npm run perf:block-workspace -- --rust-only --n 1000
+
+# D) 直接 cargo（等价于 C 的 Rust 段）
+cargo test -p conex-doc-collab --test perf_open_nk_blocks --release -- --ignored --nocapture
+# 10k（PowerShell）：
+$env:PERF_N=10000; cargo test -p conex-doc-collab --test perf_open_nk_blocks --release -- --ignored --nocapture
+```
+
+| 环境变量 / CLI             | 默认    | 含义                     |
+| -------------------------- | ------- | ------------------------ |
+| `PERF_N` / `--n`           | `1000`  | 块数 / HeightMap 槽数    |
+| `PERF_ITERS` / `--iters`   | `7`     | 计时样本数（算 p50/p95） |
+| `PERF_WARMUP` / `--warmup` | `1`     | 热身轮（不计时）         |
+| `--queries`                | `10000` | HeightMap 每轮查询次数   |
+
+### 7.2 输出格式（JSON 行）
+
+每指标 **一行** JSON（stdout），字段对齐 H3 / §4.1：
+
+```json
+{
+  "metric": "open_nk_blocks",
+  "n": 1000,
+  "p50_ms": 12.345,
+  "p95_ms": 15.678,
+  "os": "windows",
+  "arch": "x86_64",
+  "cpu_logical": 16,
+  "note": "manual backfill only; do not auto-rewrite TBD in perf-baseline.md"
+}
+```
+
+| `metric`          | 含义                                                                       | 建议回填位置                                 |
+| ----------------- | -------------------------------------------------------------------------- | -------------------------------------------- |
+| `open_nk_blocks`  | DocSession 批量 insert N 根块 wall time（A-PERF-01 **数据层代理**，无 UI） | §3.1 打开 1k/10k                             |
+| `heightmap_query` | HeightMap `offsetOf`+`indexAt` 查询墙钟（虚拟化路径代理）                  | §3.3 / 结构伴随备忘；**不是** 滚动 jank 终值 |
+
+### 7.3 人工回填清单（数值门生效前必做）
+
+1. 在 **基准机** 上用 **release** 跑 §7.1（至少 1k；自愿 10k）。
+2. 把输出中的 `os` / CPU / RAM / WebView 写入 **§1 机器指纹**（未填齐则数值门不生效）。
+3. 将 `p50_ms` / `p95_ms` **手写** 进 §3.x 对应单元格；标定状态改为「已标定」；登记 `标定日期` / `标定提交`（git SHA）。
+4. 指纹或阈值变更 → **bump** `perf_baseline_rev` 并在 §6 写 diff 原因。
+5. **禁止**：为「好看」压低预算；禁止未标定就勾选「数值门通过」；禁止脚本 PR 只改 TBD→假数字。
+6. 标定后的退化比较走 **A-PERF-DEG-01**（§4）：p95≥2× 或 p50≥1.5× 连续 3 次 → 强制 A-SWAP 评估。
+
+### 7.4 代码锚点
+
+| 资产           | 路径                                                                            |
+| -------------- | ------------------------------------------------------------------------------- |
+| Rust ignore 测 | `crates/conex-doc-collab/tests/perf_open_nk_blocks.rs`（`perf_open_nk_blocks`） |
+| Node/tsx 编排  | `scripts/block-workspace-perf.mjs`                                              |
+| npm script     | `package.json` → `perf:block-workspace`                                         |
+| HeightMap      | `packages/editor-kit/src/viewport/HeightMap.ts`                                 |
+| 退化 ID        | `conex_doc_collab::a_perf::A_PERF_DEG_01`                                       |

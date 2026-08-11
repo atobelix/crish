@@ -534,10 +534,15 @@ fn secret_command_hit(uri: &Uri) -> Option<&'static str> {
 /// 触达 → 403 Forbidden（cmd.denied 白名单拒绝）+ remote-source-attempt
 /// 审计标记——REST 面即远程面（桌面本地操作走 Tauri IPC），入站请求一律
 /// 视为远程来源（D5 §4.5 / §9.1 T-07：矩阵外命令 = 白名单拒绝 + Forbidden
-/// 错误 + remote-source-attempt 审计）
-async fn handle_not_found(uri: Uri) -> Response {
+/// 错误 + remote-source-attempt 审计）；R1-11 D-5 收口：审计双写升级为
+/// SecurityAudit 事件发射（事件桥经 ServerState.audit_bridge 注入，命令名
+/// 敏感形态打码；未接线时降级纯结构化日志）
+async fn handle_not_found(State(state): State<ServerState>, uri: Uri) -> Response {
     if let Some(command) = secret_command_hit(&uri) {
-        crate::server::core_backend::emit_remote_source_attempt_audit(command);
+        crate::server::core_backend::emit_remote_source_attempt_audit(
+            state.audit_bridge().as_ref(),
+            command,
+        );
         let body = ErrorBody::new(
             DeviceErrorCode::CmdDenied,
             format!("命令不在远程白名单：{command}"),

@@ -482,7 +482,7 @@ fn enum_values_match_serde_wire() {
         4
     );
     check_enum!(reg, "MissAttribution", MissAttribution, 8);
-    check_enum!(reg, "SecurityAuditOperation", SecurityAuditOperation, 6);
+    check_enum!(reg, "SecurityAuditOperation", SecurityAuditOperation, 9);
     check_enum!(reg, "SecurityAuditDecision", SecurityAuditDecision, 6);
     check_enum!(reg, "SubagentEventKind", SubagentEventKind, 3);
     check_enum!(reg, "SubagentEndStatus", SubagentEndStatus, 3);

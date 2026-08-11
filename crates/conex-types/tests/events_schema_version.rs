@@ -449,6 +449,9 @@ fn security_audit_decision_wire_values() {
         ("trash-purge", SecurityAuditOperation::TrashPurge),
         ("git-revert", SecurityAuditOperation::GitRevert),
         ("command-exec", SecurityAuditOperation::CommandExec),
+        ("remote-source-attempt", SecurityAuditOperation::RemoteSourceAttempt),
+        ("remote-mode-downgrade", SecurityAuditOperation::RemoteModeDowngrade),
+        ("remote-only", SecurityAuditOperation::RemoteOnly),
     ] {
         let parsed: SecurityAuditOperation =
             serde_json::from_value(serde_json::json!(value)).unwrap();
