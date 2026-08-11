@@ -3,6 +3,8 @@
 //! - **type**（§4.1）：50 字符/块（TYPE_CHUNK_SIZE）、块间 12ms 节流、分块间 abort
 //!   检查与回读校验（§4.4）；可打印 ASCII 走三事件序列（keyDown → char → keyUp，
 //!   isTrusted=true），非 ASCII（CJK 等）整块走 `Input.insertText`（IME 安全路径）；
+//!   **keyDown 绝不携带 text/unmodified_text**——文本由独立 char 事件唯一承载
+//!   （F1 实测：keyDown 带 text 又发独立 char → Chrome 对两者都插入 → "d" 变 "dd"）；
 //! - **key**（§4.3）：`"Control+A"` 组合格式——修饰键按下 → 主键 down/up →
 //!   修饰键逆序释放，释放用 try/finally 语义兜底（主键事件抛错也必须释放，防逻辑卡键）；
 //! - 键映射表 `KEY_MAP`（§4.3 表：Enter/Tab/Escape/Space/Backspace/Delete/Insert/Home/
@@ -239,20 +241,17 @@ fn is_ascii_typeable(c: char) -> bool {
 
 // —— 事件参数构造（§4.2 三事件序列 + 组合键）——
 
-fn key_down(
-    key: &str,
-    code: &str,
-    text: Option<&str>,
-    unmodified: Option<&str>,
-    modifiers: i32,
-    vk: i32,
-) -> DispatchKeyEventParams {
+/// keyDown 参数（§4.2/§4.3）：**不携带 text/unmodified_text**——文本插入由
+/// 独立 char 事件唯一承载。F1 实测：keyDown 带 text 时 Chrome 立即插入文本，
+/// 再加独立 char 事件将双写（`keyDown(text)+char` → "d"→"dd"；组合键
+/// `Control+A` 亦双写 → "AA"）。key/code 保留（页面 keydown 处理器读 e.key/e.code）。
+fn key_down(key: &str, code: &str, modifiers: i32, vk: i32) -> DispatchKeyEventParams {
     DispatchKeyEventParams {
         event_type: "keyDown".to_string(),
         key: Some(key.to_string()),
         code: Some(code.to_string()),
-        text: text.map(str::to_string),
-        unmodified_text: unmodified.map(str::to_string),
+        text: None,
+        unmodified_text: None,
         windows_virtual_key_code: Some(vk),
         native_virtual_key_code: None,
         modifiers: Some(modifiers),
@@ -300,26 +299,18 @@ pub async fn dispatch_key(exec: &ActionExecutor, keys: &str) -> Result<(), Actio
         for modifier in &sequence.modifiers {
             mask |= modifier.modifier_mask;
             exec.ops
-                .key_event(key_down(
-                    &modifier.name,
-                    &modifier.code,
-                    None,
-                    None,
-                    mask,
-                    modifier.vk,
-                ))
+                .key_event(key_down(&modifier.name, &modifier.code, mask, modifier.vk))
                 .await?;
         }
-        // 主键 down/up（可打印单字符补 char 事件；text 字段承载实际字符，
-        // §4.2「按字符值注入，布局无关」——不额外叠加 Shift 位，对齐 Puppeteer 语义）
+        // 主键 down/up（可打印单字符补 char 事件；text 由 char 事件唯一承载，
+        // keyDown 不携带 text（F1：Chrome 对两者都插入 → 双写）；§4.2
+        // 「按字符值注入，布局无关」——不额外叠加 Shift 位，对齐 Puppeteer 语义）
         let main_mask = mask;
         let printable = sequence.main.name.chars().count() == 1;
         exec.ops
             .key_event(key_down(
                 &sequence.main.name,
                 &sequence.main.code,
-                if printable { Some(&sequence.main.name) } else { None },
-                if printable { Some(&sequence.main.name) } else { None },
                 main_mask,
                 sequence.main.vk,
             ))
@@ -416,8 +407,9 @@ pub async fn dispatch_type(
     Ok(())
 }
 
-/// 单字符三事件序列（§4.2：keyDown → char → keyUp，key/text 传实际字符；
-/// 布局无关注入——不叠加 Shift 位，text 字段承载实际字符）。
+/// 单字符三事件序列（§4.2：keyDown → char → keyUp，key 传实际字符；
+/// 布局无关注入——不叠加 Shift 位，text 由 char 事件唯一承载——
+/// keyDown 不带 text，防 Chrome 双写（F1 实测））。
 async fn dispatch_char(exec: &ActionExecutor, c: char) -> Result<(), ActionError> {
     let (name, code, vk, _shift) = ascii_key_info(c).ok_or_else(|| {
         ActionError::new(
@@ -426,7 +418,7 @@ async fn dispatch_char(exec: &ActionExecutor, c: char) -> Result<(), ActionError
         )
     })?;
     exec.ops
-        .key_event(key_down(&name, &code, Some(&name), Some(&name), 0, vk))
+        .key_event(key_down(&name, &code, 0, vk))
         .await?;
     exec.ops.key_event(char_event(&name)).await?;
     exec.ops.key_event(key_up(&name, &code, 0, vk)).await?;
@@ -724,6 +716,73 @@ mod tests {
         assert_eq!(ops.count(MockOp::KeyEvent), (49 + 50 + 51) * 3);
         assert_eq!(delay.durations().len(), 1, "恰 1 次块间节流");
         assert_eq!(delay.durations()[0], Duration::from_millis(TYPE_CHUNK_DELAY_MS));
+    }
+
+    /// F1 回归：ASCII 输入插入载体唯一——keyDown 不得携带 text（text 只能由
+    /// char 事件承载，且同一字符恰一个载体）。Chrome 实测（K6）：keyDown(text)
+    /// 又发独立 char → 双写（"d"→"dd"；组合键 Control+A → "AA"）；mock 层
+    /// 参数面锁住该不变量：所有 text 非空的 KeyEvent 必须是 char 事件。
+    #[tokio::test]
+    async fn type_ascii_insert_carrier_unique() {
+        let (exec, ops, _delay) = executor(
+            MockOps::new(),
+            MockSnapshotStore::with_elements(1, &[ElementMeta {
+                backend_node_id: 11,
+                is_password: false,
+            }]),
+        );
+        exec.type_text(
+            &"t1".to_string(),
+            1,
+            ElementRef { index: 0, backend_node_id: 11 },
+            "demo",
+            None,
+        )
+        .await
+        .expect("ASCII 输入应成功");
+        let events = ops.calls_of(MockOp::KeyEvent);
+        assert_eq!(events.len(), 12, "4 字符 × 三事件");
+        let mut carriers: Vec<String> = Vec::new();
+        for call in &events {
+            let text_field = call.detail.split("text=").nth(1).unwrap_or_default().to_string();
+            if !text_field.starts_with("\"\"") {
+                assert!(
+                    call.detail.starts_with("char"),
+                    "text 只能由 char 事件携带（keyDown 携 text 即双写面）：{}",
+                    call.detail
+                );
+                carriers.push(text_field);
+            }
+        }
+        assert_eq!(carriers.len(), 4, "每个字符恰一个插入载体：{carriers:?}");
+        for c in ['d', 'e', 'm', 'o'] {
+            assert!(
+                carriers.iter().any(|t| t == &format!("\"{c}\"")),
+                "缺字符 {c} 的插入载体：{carriers:?}"
+            );
+        }
+
+        // 组合键路径同规则（§4.3）：keyDown A 不携 text，char 唯一承载
+        let base = ops.calls_of(MockOp::KeyEvent).len();
+        exec.key(&"t1".to_string(), 1, "Control+A")
+            .await
+            .expect("组合键应成功");
+        let combo_events = &ops.calls_of(MockOp::KeyEvent)[base..];
+        let keydown_a = combo_events
+            .iter()
+            .find(|c| c.detail.contains("keyDown key=\"A\""))
+            .expect("组合键应含 keyDown A");
+        assert!(
+            !keydown_a.detail.contains("text=\"A\""),
+            "组合键 keyDown A 不得携带 text：{}",
+            keydown_a.detail
+        );
+        let char_carriers: Vec<&MockCall> = combo_events
+            .iter()
+            .filter(|c| c.detail.starts_with("char") && !c.detail.contains("text=\"\""))
+            .collect();
+        assert_eq!(char_carriers.len(), 1, "组合键 char 恰一个插入载体");
+        assert!(char_carriers[0].detail.contains("text=\"A\""));
     }
 
     /// type 节流时长（注入时钟断言 12ms 定值）。

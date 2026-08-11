@@ -4,9 +4,12 @@
 //! 1. **静态词法**（执行前）：token 扫描——赋值类操作符（`=`/`+=`/`--`/`++`/`delete`）、
 //!    白名单对象之外全局访问、禁用关键字/API 名；脚本长度上限 8KB；命中即拒绝
 //!    （`tool.browser.eval_forbidden` 语义），不经执行。
-//! 2. **运行时隔离**（执行中）：`Runtime.createIsolatedWorld` 独立 world 执行，
-//!    仅暴露白名单代理对象 `__crish_read`（方法白名单 attr/text/rect/formValue/all/state，
-//!    17 §3.1）；`userGesture:false`、`timeout:2000`、`returnByValue:true`、
+//! 2. **运行时隔离**（执行中）：`Page.createIsolatedWorld` 建独立 world 执行
+//!    （Chrome 151 已移除 Runtime.createIsolatedWorld，缺陷 A 修复；主 frameId 经
+//!    Page.getFrameTree 获取），建世界后**注入只读白名单代理 `__crish_read`**
+//!    （方法白名单 attr/text/rect/formValue/all/state，17 §3.1；缺陷 B 修复——注入
+//!    脚本在**同一 world** 执行，用户表达式经同 world 的 Runtime.evaluate 即可见）；
+//!    `userGesture:false`、`timeout:2000`、`returnByValue:true`、
 //!    `generatePreview:false`；返回值纯 JSON 拷贝（结构化克隆语义，节点引用不出世界）。
 //! 3. **结果校验**（执行后）：仅 JSON 标量/数组/纯对象；深度 ≤ 4、序列化 ≤ 64KB；
 //!    超限拒绝。

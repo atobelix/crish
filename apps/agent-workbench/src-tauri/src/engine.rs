@@ -1090,6 +1090,32 @@ impl EngineHandle {
         background_manager: Option<Arc<dyn BackgroundTaskManager>>,
         subagent_spawner: Option<Arc<dyn agent_tools::tools::subagent::SubagentSpawner>>,
     ) -> Self {
+        // 34 §5.2 E-1（R-12）：attach 会话级开关值源 = BrowserToolsConfig
+        // .mcp_attach_allowed（默认 false = 端点信息零暴露）；面板开关 →
+        // 会话设置的写入面为 TODO（前端浏览器面板开关落盘后经配置读取，
+        // 接线点登记见 34-MCPattach验证.md §5.2 E-1），现状 = 配置默认
+        // （安全兜底）
+        let mcp_attach_allowed =
+            conex_browser_tools::BrowserToolsConfig::default().mcp_attach_allowed;
+        Self::build(background_manager, subagent_spawner, mcp_attach_allowed)
+    }
+
+    /// 测试面：指定 attach 会话级开关的完整装配（34 §5.2 E-1 装配注入
+    /// 断言——mock 配置值直接注入装配路径，验证引擎将开关经
+    /// `BrowserSlot::with_mcp_attach_allowed` 注入槽并由消费 seam 命中）。
+    #[cfg(test)]
+    pub(crate) fn new_with_mcp_attach_allowed(mcp_attach_allowed: bool) -> Self {
+        Self::build(None, None, mcp_attach_allowed)
+    }
+
+    /// 引擎装配主路径（new / new_with_spawner / 测试注入构造共用；
+    /// `mcp_attach_allowed` 由生产入口从 [BrowserToolsConfig] 读取、
+    /// 测试入口直接注入）。
+    fn build(
+        background_manager: Option<Arc<dyn BackgroundTaskManager>>,
+        subagent_spawner: Option<Arc<dyn agent_tools::tools::subagent::SubagentSpawner>>,
+        mcp_attach_allowed: bool,
+    ) -> Self {
         let client = Arc::new(reqwest::Client::new());
 
         // G5 T-CF-06/07：TimerRegistry 装配（pending sink = 真实
@@ -1232,7 +1258,14 @@ impl EngineHandle {
         // 单点真源）。数据根解析失败 → 降级槽（全操作 not_ready），注册
         // 照常进行；注册失败仅 warn 降级（对齐内置工具先例，27 §5 风险
         // 预案：仅缺 browser_*，模型侧 tool.not_found / not_ready 兜底）。
-        let browser_slot = Arc::new(crate::browser::BrowserSlot::new());
+        // 34 §5.2 E-1（R-12）：attach 会话级开关装配——将
+        // mcp_attach_allowed（来自 BrowserToolsConfig 会话级配置，默认
+        // false = 端点信息零暴露）注入 BrowserSlot
+        // （with_mcp_attach_allowed）；面板开关 → 会话设置的写入面 TODO
+        // 见 [Self::new_with_spawner] 值源注释（现状 = 配置默认，安全兜底）。
+        let browser_slot = Arc::new(
+            crate::browser::BrowserSlot::new().with_mcp_attach_allowed(mcp_attach_allowed),
+        );
         let browser_ops: Arc<dyn conex_browser_tools::session::SessionOps> =
             Arc::new(crate::browser::LazySessionOps::new(Arc::clone(&browser_slot)));
         if let Err(error) = conex_browser_tools::register_browser_tools(
@@ -1240,6 +1273,9 @@ impl EngineHandle {
             conex_browser_tools::BrowserToolsConfig {
                 session_ops: Some(browser_ops),
                 gate: Some(browser_slot.gate()),
+                // 与槽同一值源（register 不消费该字段，仅随会话级配置携带，
+                // 34 §5.1：引擎侧会话装配是消费面）
+                mcp_attach_allowed,
                 ..conex_browser_tools::BrowserToolsConfig::default()
             },
         ) {
@@ -1479,6 +1515,39 @@ impl EngineHandle {
         config: McpServerConfig,
     ) -> Result<Vec<ToolDefinition>, ToolError> {
         register_plugin_server(&self.mcp_bridge, &self.tool_registry, &config).await
+    }
+
+    /// 34 §5.2 E-1/E-4（R-12）：attach 型浏览器类 MCP server 的启动配置
+    /// 注入（`--browserUrl` 附加受管实例 CDP 端点）。
+    ///
+    /// 消费路径（E-1/E-2 守卫 + 平台分派，实现见
+    /// [crate::browser::mcp_attach]）：
+    /// - `browser_slot.mcp_attach_endpoint()` 守卫取端点——开关关闭
+    ///   （默认）→ `tool.browser.capability_disabled`（端点信息零暴露，
+    ///   任何进程状态下不返回）；开关开启但受管实例未就绪 →
+    ///   `tool.browser.not_ready`；开关开启且就绪 → 注入形态载荷
+    ///   `http://127.0.0.1:<port>`；
+    /// - 就绪时经 `mcp_attach::mcp_attach_server_config` 构建
+    ///   `McpServerConfig`（Windows `cmd /c npx` 分派 + 官方包名
+    ///   `chrome-devtools-mcp` + `--browserUrl`，34 §4.1/§4.2）。
+    ///
+    /// 接线点登记（TODO E-4，并行域）：插件 mcpServers 装配点
+    /// （core_run_commands 装配用户声明 server 处，本批不存在）识别
+    /// chrome-devtools-mcp 族 server 后调用本方法，把返回值经
+    /// [Self::register_plugin_mcp_server] 注册；E-3 只读能力集
+    /// （R-12 核心拦截面，MCP 自身不拒绝求值）为引擎侧 CDP 会话面
+    /// 独立接线项，登记见 34-MCPattach验证.md §5.2。
+    #[allow(dead_code)] // E-4 接线登记：插件 mcpServers 装配点（并行域 TODO）消费，接线后移除
+    pub(crate) fn browser_attach_mcp_server_config(
+        &self,
+        server_id: &str,
+    ) -> Result<McpServerConfig, ToolError> {
+        let endpoint = self.browser_slot.mcp_attach_endpoint()?;
+        Ok(crate::browser::mcp_attach::mcp_attach_server_config(
+            server_id,
+            &endpoint.browser_url,
+            cfg!(windows),
+        ))
     }
 
     // ── E5 内容 3：C10 注入读取面（skills.rs RustSkill → 注入段）──────
@@ -4709,6 +4778,37 @@ mod tests {
         assert_eq!(count, 4, "重复注册不得重复并入");
         // 生命周期收口
         engine.mcp_bridge().stop_all().await;
+    }
+
+    /// 34 §5.2 E-1 装配注入断言 + E-4 消费路径（拒绝态，R-12 安全默认）：
+    /// 默认装配（开关 false）经引擎 seam `browser_attach_mcp_server_config`
+    /// 消费守卫 → 结构化 `tool.browser.capability_disabled`（端点零暴露；
+    /// 若装配未把开关注入 BrowserSlot，守卫无法命中开关先行判定——装配
+    /// 注入由错误码互斥背书）。
+    #[tokio::test]
+    async fn mcp_attach_assembly_default_denies_zero_exposure() {
+        use conex_browser_tools::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
+        let engine = EngineHandle::new(None);
+        let err = engine
+            .browser_attach_mcp_server_config("browser-mcp")
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_BROWSER_CAPABILITY_DISABLED);
+    }
+
+    /// 34 §5.2 E-1 装配注入断言（允许态，mock 配置）：经
+    /// [EngineHandle::new_with_mcp_attach_allowed](true) 注入开关 →
+    /// 引擎 seam 消费守卫 → `tool.browser.not_ready`（受管实例未启动；
+    /// 若装配未注入开关会命中 capability_disabled——两态互斥区分装配
+    /// 注入生效；就绪放行面由 browser 域单测以样例端点覆盖，引擎级不
+    /// 触发真实浏览器启动）。
+    #[tokio::test]
+    async fn mcp_attach_assembly_enabled_requires_running_endpoint() {
+        use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
+        let engine = EngineHandle::new_with_mcp_attach_allowed(true);
+        let err = engine
+            .browser_attach_mcp_server_config("browser-mcp")
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_BROWSER_NOT_READY);
     }
 }
 

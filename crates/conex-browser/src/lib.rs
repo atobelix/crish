@@ -220,7 +220,9 @@ async fn restore_session(
 
 /// 逐会话 enable 序列（§3.2 顺序：Page/Runtime/DOM/Network + lifecycle +
 /// runIfWaitingForDebugger 恢复）。
-async fn enable_domains(client: &CdpClient, session: &str) -> Result<(), CdpError> {
+/// 通道抽象 `&dyn CommandChannel`：恢复流程传 `&CdpClient`（直连），
+/// new_tab 显式 attach 传 `&Transport`（重连透明）——顺序与超时单一来源。
+async fn enable_domains(channel: &dyn CommandChannel, session: &str) -> Result<(), CdpError> {
     for (method, params) in [
         (PAGE_ENABLE, None),
         (
@@ -231,12 +233,12 @@ async fn enable_domains(client: &CdpClient, session: &str) -> Result<(), CdpErro
         (DOM_ENABLE, None),
         (NETWORK_ENABLE, None),
     ] {
-        client
-            .send_command_with_timeout(method, params, Some(session), ENABLE_TIMEOUT)
+        channel
+            .send_command(method, params, Some(session), ENABLE_TIMEOUT)
             .await?;
     }
     // attach 后恢复（Chrome 144+ 目标暂停，runIfWaitingForDebugger 恢复；no-op 兜底）
-    let _ = client
+    let _ = channel
         .send_command_no_wait(RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, None, Some(session))
         .await;
     Ok(())
@@ -485,6 +487,55 @@ impl BrowserSession {
         *self.active.lock().unwrap_or_else(|p| p.into_inner()) =
             Some((session.target_id, session.session));
         Ok(())
+    }
+
+    // —— P1 缺陷 F2（K6 实测修复面）：new_tab 会话接线 ——
+
+    /// 显式建立标签会话（createTarget 后的 attach + enable 接线，P1 缺陷 F2）。
+    ///
+    /// Chrome 151 实测：`Target.createTarget` 创建新标签后**不触发
+    /// attachedToTarget 事件** → 新标签无 CDP 会话 → per-tab 快照/动作
+    /// 全部 node_gone。本方法在 createTarget 后显式
+    /// `Target.attachToTarget(targetId, flatten:true)` + 域 enable（对齐
+    /// 恢复路径 [enable_domains] 的顺序与超时），并**确定性登记** per-tab
+    /// 路由表与活动槽——不依赖事件到达时序；attachedToTarget 事件随后到达时，
+    /// 事件驱动面的「首次附着者胜」语义对同一会话幂等，双路一致。
+    ///
+    /// 活动标签语义（工具面选择，对齐事件驱动面）：新标签**成为活动标签**——
+    /// createTarget 默认聚焦新标签（background=false，工具忽略该参数），
+    /// SessionAttached 驱动面亦为「最新附着者即活动」，显式登记保持一致；
+    /// 因此 new_tab 后无需 switch 即可直接操作新标签。
+    pub async fn attach_tab(&self, target_id: &str) -> Result<SessionRef, BrowserError> {
+        let value = self
+            .transport
+            .send_command(
+                TARGET_ATTACH_TO_TARGET,
+                Some(json!({ "targetId": target_id, "flatten": true })),
+                None,
+                ENABLE_TIMEOUT,
+            )
+            .await?;
+        let attach: AttachToTargetResult = serde_json::from_value(value).map_err(|e| {
+            BrowserError::Internal(format!("attachToTarget 结果解析失败：{e}"))
+        })?;
+        enable_domains(self.transport.as_ref(), &attach.session_id)
+            .await
+            .map_err(|e| {
+                BrowserError::Restore(format!("新标签 enable 序列失败（{target_id}）：{e}"))
+            })?;
+        // 确定性登记（不等事件）：路由表「首次附着者胜」+ 活动槽更新
+        {
+            let mut table = self.tabs.lock().unwrap_or_else(|p| p.into_inner());
+            table
+                .entry(target_id.to_string())
+                .or_insert_with(|| attach.session_id.clone());
+        }
+        *self.active.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some((target_id.to_string(), attach.session_id.clone()));
+        Ok(SessionRef {
+            target_id: target_id.to_string(),
+            session: attach.session_id,
+        })
     }
 
     // —— 事件面（§8）——
@@ -932,6 +983,95 @@ mod tests {
         assert!(
             session.current_session().is_err(),
             "活动标签销毁后 current_session 应无会话"
+        );
+
+        session.shutdown().await;
+    }
+
+    /// P1 缺陷 F2（K6 实测修复面）：attach_tab（createTarget 后的显式
+    /// attach + enable 接线）——attachToTarget(flatten) 响应解析、enable 序列
+    /// 顺序与恢复路径一致（Page/Runtime/DOM/Network + runIfWaitingForDebugger）、
+    /// 确定性登记路由表与活动槽（不等 attachedToTarget 事件）、返回 SessionRef
+    /// 立即可路由。
+    #[tokio::test]
+    async fn session_attach_tab_registers_routing_and_active() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        let endpoint = CdpEndpoint {
+            port: mock.addr.port(),
+            ws_path: "/devtools/browser/attach-tab".to_string(),
+        };
+        let session = BrowserSession::connect(
+            endpoint,
+            ExpectedBrowser::default(),
+            Arc::new(AllowHooks::new()),
+        )
+        .await
+        .expect("建连失败");
+
+        // 新标签专用会话（区别于恢复路径 attach 的 S1）
+        mock.set_auto_reply("Target.attachToTarget", MockReply::Ok(json!({ "sessionId": "S9" })));
+        let attached = session
+            .attach_tab("T9")
+            .await
+            .expect("attach_tab 应成功");
+        assert_eq!(attached.target_id, "T9");
+        assert_eq!(attached.session, "S9");
+
+        // 命令序列（wire FIFO）：跳过恢复流程命令（getVersion/重扫/恢复 attach/
+        // enable 等），定位 attach_tab 的 attachToTarget(T9) → 5 域 enable →
+        // resume（enable 均绑定新标签会话 S9，顺序对齐恢复路径）
+        let attach_cmd = loop {
+            let cmd = mock.next_command().await;
+            if cmd["method"] == "Target.attachToTarget"
+                && cmd["params"]["targetId"] == "T9"
+            {
+                break cmd;
+            }
+        };
+        assert_eq!(attach_cmd["params"]["flatten"], true);
+        for expected in [
+            "Page.enable",
+            "Page.setLifecycleEventsEnabled",
+            "Runtime.enable",
+            "DOM.enable",
+            "Network.enable",
+        ] {
+            let cmd = mock.next_command().await;
+            assert_eq!(cmd["method"], expected, "enable 序列顺序应恢复路径一致");
+            assert_eq!(cmd["sessionId"], "S9", "{expected} 应绑定新标签会话");
+        }
+        let cmd = mock.next_command().await;
+        assert_eq!(cmd["method"], "Runtime.runIfWaitingForDebugger");
+
+        // 确定性登记（未注入 attachedToTarget 事件即可路由 + 活动）
+        let routed = session.tab_session("T9").expect("T9 应可路由");
+        assert_eq!(routed.session, "S9");
+        let current = session.current_session().expect("新标签应为活动标签");
+        assert_eq!(current.target_id, "T9");
+        assert_eq!(current.session, "S9");
+
+        // 事件随后到达时幂等（首次附着者胜语义：路由表不被顶替）
+        mock.send_event(
+            "Target.attachedToTarget",
+            json!({
+                "sessionId": "S9",
+                "targetInfo": { "targetId": "T9", "type": "page", "title": "", "url": "about:blank" },
+                "waitingForDebugger": false,
+            }),
+            None,
+        );
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        while session.current_session().is_err() {
+            assert!(tokio::time::Instant::now() < deadline, "活动标签应保持");
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            session.tab_session("T9").map(|r| r.session).as_deref(),
+            Some("S9"),
+            "事件驱动登记与显式登记必须同会话（首次附着者胜幂等）"
         );
 
         session.shutdown().await;

@@ -1,5 +1,5 @@
-//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v7，PE-08 T08.7 + P5 §3.1.4
-//! 及 T-D-07 v6 新列 + T-15 v7 compression_blocks 单表）。逐版本独立事务、
+//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v8，PE-08 T08.7 + P5 §3.1.4
+//! 及 T-D-07 v6 新列 + T-15 v7 compression_blocks 单表 + v8 浏览器导入目标表）。逐版本独立事务、
 //! 幂等可重试；DROP 前备份采用
 //! 「事务前 checkpoint + 备份」时序（[backup_before_drop]，见 [migrate]）：
 //! 版本升级事务 commit 之前先 `PRAGMA wal_checkpoint(TRUNCATE)` 固化旧库到
@@ -149,12 +149,12 @@ impl LocalDb {
             // 备份时序（11-T2 确定化）：版本事务 commit 之前执行
             // 「checkpoint(TRUNCATE) → 拷贝备份」。TRUNCATE 后 WAL 清空、
             // 主文件 = 完整旧库态，拷贝内容确定（与 autocheckpoint 偶然时机无关）。
-            // v5/v6 纯 ADD COLUMN、v7 纯新建表（均无 DROP）：跳过备份，
+            // v5/v6 纯 ADD COLUMN、v7/v8 纯新建表（均无 DROP）：跳过备份，
             // 保持「DROP 前备份」语义。
             // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
-            // 锚定 v3→v4 只产 .bak-v4，v5/v6/v7 不额外产生备份）
+            // 锚定 v3→v4 只产 .bak-v4，v5/v6/v7/v8 不额外产生备份）
             if let Some(p) = &path {
-                if !(5..=7).contains(&version) {
+                if !(5..=8).contains(&version) {
                     // checkpoint 失败 → 备份内容不确定，按备份失败处理：
                     // 告警 + 跳过本次备份，不阻断迁移（裁定案）
                     if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
@@ -179,6 +179,7 @@ impl LocalDb {
                 5 => migrate_v4_to_v5(&tx),
                 6 => migrate_v5_to_v6(&tx),
                 7 => migrate_v6_to_v7(&tx),
+                8 => migrate_v7_to_v8(&tx),
                 _ => unreachable!(),
             };
             if let Err(e) = step_result {
@@ -559,5 +560,48 @@ fn migrate_v6_to_v7(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Erro
         );
         CREATE INDEX IF NOT EXISTS idx_compression_blocks_session_gen
             ON compression_blocks (session_id, generation DESC);",
+    )
+}
+
+/// v7 → v8：新增 imported_bookmarks / imported_history 两张浏览器导入目标表
+/// （浏览器协同 G-4 收尾，03-方案-书签历史入conex-db目标表 §2.1/§2.2）。
+///
+/// 零既有列改动（只建新表 + 索引），不触发全表重写；`CREATE TABLE IF NOT EXISTS`
+/// / `CREATE INDEX IF NOT EXISTS` 天然幂等（崩溃中间态重跑自愈，对齐「每版本
+/// 独立事务」约定）。create_v5_schema 不包含新表——缺表兜底走读写面
+/// sqlite_master 探测降级（imported.rs，对齐 compression_blocks 先例）。
+///
+/// 列语义（03-方案 §2）：
+/// - imported_bookmarks 主键 (url, name)——与解析层去重键（bookmarks.rs）
+///   逐字节对齐，INSERT OR IGNORE 天然幂等；folder_path_json 为 JSON 数组
+///   字符串（对齐 *_json 惯例）；guid 首版恒 NULL 预留；source 信息列不入
+///   主键（跨来源同键合并）；
+/// - imported_history 主键 (url, visited_at)——(url, visit_time) 去重口径
+///   （维度 16 §6.2）：同 URL 不同秒的访问各保留一条；title NULL 兼容。
+fn migrate_v7_to_v8(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS imported_bookmarks (
+            url              TEXT NOT NULL,
+            name             TEXT NOT NULL,
+            folder_path_json TEXT NOT NULL,
+            guid             TEXT,
+            source           TEXT NOT NULL DEFAULT 'default',
+            imported_at      INTEGER NOT NULL,
+            PRIMARY KEY (url, name)
+        ) WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS idx_imported_bookmarks_imported_at
+            ON imported_bookmarks (imported_at DESC);
+        CREATE TABLE IF NOT EXISTS imported_history (
+            url         TEXT NOT NULL,
+            visited_at  INTEGER NOT NULL,
+            title       TEXT,
+            source      TEXT NOT NULL DEFAULT 'default',
+            imported_at INTEGER NOT NULL,
+            PRIMARY KEY (url, visited_at)
+        ) WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS idx_imported_history_visited_at
+            ON imported_history (visited_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_imported_history_url
+            ON imported_history (url);",
     )
 }

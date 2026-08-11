@@ -35,12 +35,16 @@ use conex_browser::action::{
 };
 use conex_browser::browser::BrowserManager;
 use conex_browser::cdp::bus::{BrowserEvent, ConsoleLevel, VersionReason};
+use conex_browser::cdp::domains::names::{
+    DOM_ENABLE, NETWORK_ENABLE, PAGE_ENABLE, PAGE_SET_LIFECYCLE_EVENTS_ENABLED, RUNTIME_ENABLE,
+    RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, TARGET_ATTACH_TO_TARGET,
+};
 use conex_browser::cdp::sender::CancellationToken;
 use conex_browser::cdp::version::{Stale, TabId};
 use conex_browser::snapshot::budget::BudgetConfig;
 use conex_browser::snapshot::{SnapshotDocument, SnapshotError, SnapshotManager};
 use conex_browser::{BrowserSession, BrowserState, SessionRef};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -109,6 +113,48 @@ pub trait SessionOps: Send + Sync {
     /// 默认实现：空操作（引擎侧未接线时的兼容降级，活动标签仍随事件流）。
     fn activate_tab(&self, _tab_id: &str) -> Result<(), ToolError> {
         Ok(())
+    }
+    /// 新标签会话建立（P1 缺陷 F2，K6 实测修复面）：`Target.createTarget`
+    /// 创建新标签后**不触发 attachedToTarget 事件**（Chrome 151）→ 新标签
+    /// 无 CDP 会话 → per-tab 快照/动作 node_gone。本方法在 createTarget 后
+    /// 显式 `Target.attachToTarget(targetId, flatten:true)` + 域 enable
+    /// （对齐恢复路径 enable_domains 顺序：Page/Runtime/DOM/Network +
+    /// runIfWaitingForDebugger），会话路由/活动标签登记由 attachedToTarget
+    /// 事件驱动（事件面与恢复路径一致）。
+    /// 默认实现：驱动侧原语（send_browser/send_page）完成 attach + enable，
+    /// **引擎侧适配器与旧 mock 零改动即获得修复**；RealSession 显式覆盖为
+    /// `BrowserSession::attach_tab`（确定性登记路由 + 活动槽，无事件竞态）。
+    async fn attach_tab(&self, target_id: &str) -> Result<SessionRef, ToolError> {
+        let value = self
+            .send_browser(
+                TARGET_ATTACH_TO_TARGET,
+                json!({ "targetId": target_id, "flatten": true }),
+            )
+            .await?;
+        let session = value
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ToolError::execution_failed("browser_new_tab", "attachToTarget 未返回 sessionId")
+            })?
+            .to_string();
+        for (method, params) in [
+            (PAGE_ENABLE, json!({})),
+            (PAGE_SET_LIFECYCLE_EVENTS_ENABLED, json!({ "enabled": true })),
+            (RUNTIME_ENABLE, json!({})),
+            (DOM_ENABLE, json!({})),
+            (NETWORK_ENABLE, json!({})),
+        ] {
+            self.send_page(&session, method, params).await?;
+        }
+        // attach 后恢复（Chrome 144+ 目标暂停时恢复；no-op 兜底，与恢复路径同语义）
+        let _ = self
+            .send_page(&session, RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, json!({}))
+            .await;
+        Ok(SessionRef {
+            target_id: target_id.to_string(),
+            session,
+        })
     }
     /// AI 动作成功即时推进目标标签版本（R-1，15 文档 §5.1：ActionDone 即时 +1；
     /// switch_tab 切换后旧快照随之失效 → 强制重快照）。
@@ -286,6 +332,15 @@ impl SessionOps for RealSession {
         self.session
             .activate_tab(tab_id)
             .map_err(|e| error::map_cdp_error("activate_tab", e))
+    }
+
+    async fn attach_tab(&self, target_id: &str) -> Result<SessionRef, ToolError> {
+        // 确定性路径：BrowserSession::attach_tab 完成 attach + enable + 路由/
+        // 活动槽登记（不等 attachedToTarget 事件，无事件竞态）
+        self.session.attach_tab(target_id).await.map_err(|e| match e {
+            conex_browser::BrowserError::Cdp(inner) => error::map_cdp_error("attach_tab", inner),
+            other => ToolError::execution_failed("browser_new_tab", format!("新标签 attach 失败：{other}")),
+        })
     }
 
     fn note_action_done(&self, tab_id: &str) {

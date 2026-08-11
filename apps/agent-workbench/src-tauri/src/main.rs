@@ -22,13 +22,21 @@
 //!   catalog_get / catalog_refresh 消费）；
 //!   ⑩ MCP 插件：debug 下 `dev_mcp::register_if_enabled(builder)`（默认关闭，
 //!   `CRISH_MCP_SOCKET=1` 开启）；
-//! - **退出钩子**：`RunEvent::Exit` 时 PTY 清理 +
-//!   [CoreRunState::save_snapshot_blocking]（独立线程）。
+//!   ⑪ 多端本地服务生产装配（R1-11 G-1）：CoreStateBackend（真实
+//!   `*_impl` 直调面）+ FanOutEmitter（挂 EventBridge 汇聚点，注入
+//!   ServerState.event_stream）+ PairingCoordinator（set_port / rebind
+//!   钩子接 restart_server）+ 服务开关（D5 D-01 红线 1：默认关闭 =
+//!   不 bind 任何端口；multi_device_set_enabled 命令启停）；
+//! - **退出钩子**：`RunEvent::Exit` 时 PTY 清理 + 多端服务优雅关停
+//!   （ServerLifecycle 槽）+ [CoreRunState::save_snapshot_blocking]（独立线程）。
 
 mod background;
 mod buffer;
 mod browser;
 mod browser_commands;
+// 浏览器书签/历史落库适配（3 方案 U4：browser_import_sinks.rs 由浏览器
+// 阵营交付，main.rs mod 声明缺失导致 crate 编译中断——R1-11 装配面顺手补齐）
+mod browser_import_sinks;
 mod catalog_commands;
 mod command_manifest;
 mod commands;
@@ -174,7 +182,10 @@ command_registry![
     ("multi_device_rename_device", multi_device_commands::multi_device_rename_device),
     // R1-09 G-4：网络环境检测（注册表网络配置文件 + 可直连 IP + 引导文案）
     ("multi_device_network_info", multi_device_commands::multi_device_network_info),
-    // ── 会话持久化（B，�?.2；含 F3 冻结�?upsert_session_entry）──
+    // R1-11 G-1：多端服务总开关（D5 D-01 红线 1——enabled=false 时
+    // 不 bind 任何端口；状态衔接 multi_device_pair_status）
+    ("multi_device_set_enabled", multi_device_commands::multi_device_set_enabled),
+    // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),
     ("save_session_body", session_commands::save_session_body),
@@ -235,6 +246,12 @@ command_registry![
     ("browser_frame_status", browser_commands::browser_frame_status),
     ("browser_export_storage_state", browser_commands::browser_export_storage_state),
     ("browser_import_storage_state", browser_commands::browser_import_storage_state),
+    // ── G-4 收尾：书签/历史导入（03-方案 §4.2 U4；落库编排经
+    //    browser_import_sinks 适配，SharedDb 目标表面）──
+    ("browser_import_bookmarks", browser_commands::browser_import_bookmarks),
+    ("browser_import_history", browser_commands::browser_import_history),
+    ("browser_list_bookmarks", browser_commands::browser_list_bookmarks),
+    ("browser_list_history", browser_commands::browser_list_history),
 ];
 
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info
@@ -375,14 +392,26 @@ fn main() {
 
             // ⑤ 共享状态：命令闸门 / 搜索索引 / 压缩能力标记
             app.manage(core_commands::SharedGatekeeper::new());
-            app.manage(core_commands::SharedSearchState::new());
+            // 只读面就绪事实快照（CoreStateBackend 注入消费；启动时索引
+            // 为空 → false 诚实降级，重建后由命令面更新——核心状态查询
+            // 与命令面共享同一事实源）
+            let search_state = core_commands::SharedSearchState::new();
+            let search_index_ready = !search_state
+                .files
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            app.manage(search_state);
             let compaction = core_commands::SharedCompactionState::new();
-            // 压缩为纯内存能力（conex-compaction），core_compact_messages 已接�?
+            // 压缩为纯内存能力（conex-compaction），core_compact_messages 已接线）
             compaction.set_ready(true);
+            let compaction_ready = compaction.is_ready();
             app.manage(compaction);
 
-            // �?多端互通配对协调器（R1-07：令牌库 + WS 注册表；重绑钩子与
-            // 端口由服务装配面（R1-11）注入；命令面先独立可用）
+            // ⑤b 多端互通配对协调器（R1-07：令牌库 + WS 注册表；重绑钩子与
+            // 端口由服务装配面（R1-11 G-1）注入；命令面先独立可用）。
+            // Arc 形态托管：命令面（State<Arc<PairingCoordinator>>）与服务
+            // 装配（restart_server 注入 set_port / rebind 钩子）共用同一实例。
             let pairing_tokens = crate::server::auth::TokenStore::load(
                 &app.path()
                     .app_config_dir()
@@ -392,11 +421,11 @@ fn main() {
             // G-1：WS 注册表保留 Arc 副本（唤醒恢复「已有 WS 踢重连」消费；
             // 与协调器内部持有的是同一实例）
             let ws_registry = Arc::new(crate::server::ws::WsRegistry::new());
-            let pairing = crate::server::pairing::PairingCoordinator::new(
+            let pairing = Arc::new(crate::server::pairing::PairingCoordinator::new(
                 std::sync::Arc::new(std::sync::Mutex::new(pairing_tokens)),
                 Arc::clone(&ws_registry),
-            );
-            app.manage(pairing);
+            ));
+            app.manage(Arc::clone(&pairing));
 
             // ⑥ 状态诊断 manage（与 CoreRunState 共享同一实例）
             app.manage(Arc::clone(diagnostics));
@@ -515,17 +544,42 @@ fn main() {
             // setup 完成标记（PE-01 T01.2：initialized 如实反映）
             core_state.mark_initialized();
 
-            // ⑪ 本地服务（D2 §5 / R1-02）：loopback 恒监听（8765，占用
-            // 时探测兜底）；配对模式（0.0.0.0 重绑 + 令牌签发）归 R1-07。
-            // G-1（R1-09）：重绑钩子与电源监视在此装配——睡眠唤醒后 lan
-            // 态经 system_power::run_resume_recovery 触发重建 + WS 踢重连。
-            // 启动失败 = 仅关多端服务，不阻断应用（D1 §3.4 铁律；诊断
-            // 经 StatusDiagnostics 环形缓冲如实上报，core_get_status
-            // 可见）
+            // ⑪ 本地服务生产装配（R1-11 G-1：真实后端 + 事件扇出 + 配对
+            // 协调器端口/钩子 + D5 红线 1 服务开关；G-1（R1-09）重绑钩子
+            // 与电源监视同址装配）。启动失败 = 仅关多端服务，不阻断应用
+            // （D1 §3.4 铁律；诊断经 StatusDiagnostics 环形缓冲如实上报，
+            // core_get_status 可见）
             {
-                let server_config = server::config::ServerConfig::default();
-                let server_diagnostics = Arc::clone(diagnostics);
-                let lifecycle = Arc::clone(&setup_lifecycle);
+                // ⑪a 核心装配依赖（仅构造一次，重启/重绑复用同一实例）：
+                // - CoreStateBackend：直调既有 *_impl 契约体（R1-04），
+                //   注入 ServerState.backend（router 非 None 路径）；
+                // - FanOutEmitter：挂 EventBridge 汇聚点（attach_fanout）
+                //   ——引擎全事件流自动双通道（webview + 跨端广播）；
+                //   并注入 ServerState.event_stream（WS drain task 消费，
+                //   L4-4/6/7 实时推送与续传数据源）
+                let backend: Option<Arc<dyn server::backend::ApiBackend>> = Some(Arc::new(
+                    server::core_backend::CoreStateBackend::new(Arc::clone(&core_state))
+                        .with_search_index_ready(search_index_ready)
+                        .with_compaction_ready(compaction_ready),
+                ));
+                let fanout = Arc::new(server::fanout::FanOutEmitter::new(vec![]));
+                bridge.attach_fanout(Arc::clone(&fanout) as Arc<dyn core_event_bridge::Emitter>);
+
+                // ⑪b 多端服务装配状态（单一真源：重启 / 开关命令 / 退出
+                // 钩子共用同一生命周期槽与依赖实例——重建后句柄自动更新）
+                let md_service = Arc::new(MultiDeviceService {
+                    lifecycle: Arc::clone(&setup_lifecycle),
+                    diagnostics: Arc::clone(diagnostics),
+                    backend,
+                    fanout: Some(fanout),
+                    pairing: Arc::clone(&pairing),
+                    base: server::config::ServerConfig::default(),
+                    // D5 D-01：服务默认关闭（enabled=false 时 restart_server
+                    // 不 bind 任何端口——红线 1「无任何端口监听」可验证）
+                    enabled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                });
+                app.manage(Arc::clone(&md_service));
+
                 // rebind 防抖：重建进行中忽略重复触发（低频事件：配对
                 // 切换 / 睡眠唤醒，重建通常 1s 内完成）
                 let rebinding = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -533,38 +587,36 @@ fn main() {
                 // 重绑钩子（R1-07 配对模式切换 fire_rebind 与 G-1 唤醒
                 // 恢复共用）：目标模式（Lan/Loopback）→ 关停旧实例 → 等
                 // 端口释放 → 重建；真实重建经 tauri::async_runtime 派发。
+                // 服务开关关闭（enabled=false）时 restart_server 直接停服
+                // 不 bind（红线 1）——配对切换与唤醒重绑均受开关门控。
                 let rebind_hook: crate::server::pairing::RebindHook = {
                     let rebinding = Arc::clone(&rebinding);
-                    let lifecycle = Arc::clone(&lifecycle);
-                    let server_diagnostics = Arc::clone(&server_diagnostics);
-                    let base = server_config.clone();
+                    let md_service = Arc::clone(&md_service);
                     Arc::new(move |lan: bool| {
                         if rebinding.swap(true, std::sync::atomic::Ordering::SeqCst) {
                             tracing::info!(target: "server", lan, "重绑进行中，跳过重复触发");
                             return;
                         }
-                        let mut config = base.clone();
+                        let mut config = md_service.base.clone();
                         config.bind_mode = if lan {
                             server::config::BindMode::Lan
                         } else {
                             server::config::BindMode::Loopback
                         };
                         config.pairing_enabled = lan;
+                        config.multi_device_enabled = md_service.enabled();
                         // Fn 闭包可被多次调用：每次调用内 clone 一份所有权
                         // 供 async 任务消费（捕获变量不可整体 move）
                         let rebinding = Arc::clone(&rebinding);
-                        let lifecycle = Arc::clone(&lifecycle);
-                        let server_diagnostics = Arc::clone(&server_diagnostics);
+                        let md_service = Arc::clone(&md_service);
                         tauri::async_runtime::spawn(async move {
-                            restart_server(config, lifecycle, server_diagnostics).await;
+                            restart_server(config, &md_service).await;
                             rebinding.store(false, std::sync::atomic::Ordering::SeqCst);
                         });
                     })
                 };
-                // 装配进配对协调器（R1-11 服务装配面正式版落地前的
-                // G-1 最小装配：配对切换与唤醒恢复共用同一钩子）
-                app.state::<crate::server::pairing::PairingCoordinator>()
-                    .set_rebind_hook(Arc::clone(&rebind_hook));
+                // 装配进配对协调器（配对切换与唤醒恢复共用同一钩子）
+                pairing.set_rebind_hook(Arc::clone(&rebind_hook));
 
                 // G-1 电源监视：唤醒事件 → lan 态判定 → rebind(true) +
                 // WS 全量踢重连（Windows 注册 Suspend/Resume 回调；
@@ -575,7 +627,7 @@ fn main() {
                     let ws_registry = Arc::clone(&ws_registry);
                     Arc::new(move || {
                         let pairing =
-                            wake_app.state::<crate::server::pairing::PairingCoordinator>();
+                            wake_app.state::<Arc<crate::server::pairing::PairingCoordinator>>();
                         let recovered = crate::system_power::run_resume_recovery(
                             pairing.pairing_enabled(),
                             &*rebind_hook,
@@ -587,10 +639,14 @@ fn main() {
                     })
                 });
 
-                // 初始启动（loopback 恒监听；与重绑共用同一重建路径）
-                tauri::async_runtime::spawn(async move {
-                    restart_server(server_config, lifecycle, server_diagnostics).await;
-                });
+                // 初始启动（服务开关默认关闭 → 记录诊断不监听；与重绑
+                // 共用同一重建路径——红线 1 语义由 restart_server 门控）
+                {
+                    let md_service = Arc::clone(&md_service);
+                    tauri::async_runtime::spawn(async move {
+                        restart_server(md_service.current_config(), &md_service).await;
+                    });
+                }
             }
 
             tracing::info!(
@@ -636,6 +692,7 @@ fn main() {
 /// 退出钩子经 handle 优雅关停；重绑（rebind 钩子）先取走旧 task 并 await
 /// （serve 收尾 = listener 释放，端口立即可重绑）再重建——保证睡眠唤醒 /
 /// 配对切换后端口不漂移（移动端重连沿用旧地址与二维码内嵌端口）。
+/// 槽由 [MultiDeviceService] 持有（重绑 / 开关命令 / 退出钩子共用同一实例）。
 #[derive(Default)]
 struct ServerLifecycle {
     /// 当前生效服务句柄（退出钩子关停用）
@@ -644,25 +701,82 @@ struct ServerLifecycle {
     task: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
-/// 本地服务重建（G-1 重绑钩子与初始启动共用）：
+/// 多端服务装配状态（R1-11 G-1 生产装配）：本地服务依赖与开关的单一真源。
 ///
-/// 1. 取走旧句柄与旧 serve task，shutdown 旧句柄并 await 旧 task——serve
+/// setup 装配一次并 manage（`multi_device_set_enabled` 命令消费）；重绑钩子 /
+/// 电源唤醒 / 开关命令 / 退出钩子共用同一生命周期槽与依赖实例——重建后
+/// 句柄自动更新，退出关停无需再依赖 Tauri state 注入。
+pub(crate) struct MultiDeviceService {
+    /// 生命周期槽（当前句柄 + serve task；与退出钩子共用）
+    lifecycle: Arc<std::sync::Mutex<ServerLifecycle>>,
+    /// 诊断（环形缓冲，core_get_status 可见）
+    diagnostics: Arc<status_diagnostics::StatusDiagnostics>,
+    /// 命令后端（CoreStateBackend 直调既有 *_impl 契约体；注入 router）
+    backend: Option<Arc<dyn server::backend::ApiBackend>>,
+    /// 事件扇出器（已挂 EventBridge 汇聚点；注入 ServerState.event_stream）
+    fanout: Option<Arc<server::fanout::FanOutEmitter>>,
+    /// 配对协调器（实际端口经 set_port 注入；重绑钩子已装配）
+    pairing: Arc<server::pairing::PairingCoordinator>,
+    /// 服务配置模板（端口 / 令牌路径；enabled 与 bind_mode 按当前态派生）
+    base: server::config::ServerConfig,
+    /// 服务总开关（D5 D-01 红线 1：enabled=false 时不 bind 任何端口）
+    enabled: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl MultiDeviceService {
+    /// 服务开关当前值（false = 不监听任何端口，红线 1）
+    pub(crate) fn enabled(&self) -> bool {
+        self.enabled.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// 当前生效配置（重绑钩子 / 开关命令 / 初始启动共用）：
+    /// enabled 取开关当前值；bind_mode 跟随配对协调器状态（配对中 =
+    /// Lan，否则 Loopback）——配对态由协调器持有，重启后保持正确绑定面。
+    pub(crate) fn current_config(&self) -> server::config::ServerConfig {
+        let mut config = self.base.clone();
+        config.multi_device_enabled = self.enabled();
+        config.pairing_enabled = self.pairing.pairing_enabled();
+        config.bind_mode = if config.pairing_enabled {
+            server::config::BindMode::Lan
+        } else {
+            server::config::BindMode::Loopback
+        };
+        config
+    }
+
+    /// 服务开关命令（`multi_device_set_enabled`）：开启 → 按当前配对态
+    /// 绑定监听；关闭 → 停服（关停旧实例后不 bind——红线 1）。与重绑
+    /// 共用 [restart_server] 单一路径。
+    pub(crate) async fn set_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.enabled
+            .store(enabled, std::sync::atomic::Ordering::SeqCst);
+        let config = self.current_config();
+        restart_server(config, self).await;
+        Ok(())
+    }
+}
+
+/// 本地服务重建（R1-11 G-1 生产装配版：重绑钩子 / 开关命令 / 初始启动共用）：
+///
+/// 1. 服务开关门控（D5 §10.3 红线 1）：config.multi_device_enabled=false
+///    时关停旧实例后**不 bind 任何端口**（Loopback 也不监听），记录诊断
+///    并返回——「enabled=false 无任何端口监听」的 netstat 断言由本门控
+///    保证（D5:948「服务关闭（不监听任何端口）」）；
+/// 2. 取走旧句柄与旧 serve task，shutdown 旧句柄并 await 旧 task——serve
 ///    收尾即 listener 释放，随后按同端口重建（8765 优先，占用探测兜底
 ///    语义不变，R1-02）；
-/// 2. bind 新实例（绑定模式按 config：Loopback / Lan）→ 更新生命周期槽 →
-///    serve（新 task 入槽）。失败仅记录诊断，不阻断应用（D1 §3.4 铁律）。
-async fn restart_server(
-    config: server::ServerConfig,
-    lifecycle: Arc<std::sync::Mutex<ServerLifecycle>>,
-    diagnostics: Arc<status_diagnostics::StatusDiagnostics>,
-) {
+/// 3. bind 新实例（绑定模式按 config：Loopback / Lan）→ 实际端口注入
+///    配对协调器（set_port，二维码数据同源）→ 注入 CoreStateBackend 与
+///    FanOutEmitter 构建 Router → 更新生命周期槽 → serve（新 task 入槽）。
+///    失败仅记录诊断，不阻断应用（D1 §3.4 铁律）。
+async fn restart_server(config: server::ServerConfig, service: &MultiDeviceService) {
     // ① 关停旧实例（先取走，避免退出钩子重复 shutdown——幂等无害）
     let (old_handle, old_task) = {
-        let mut slot = lifecycle.lock().unwrap_or_else(|e| e.into_inner());
+        let mut slot = service.lifecycle.lock().unwrap_or_else(|e| e.into_inner());
         (slot.handle.take(), slot.task.take())
     };
     if let Some(old) = old_handle {
-        tracing::info!(target: "server", "关闭旧服务实例（重绑重建）");
+        tracing::info!(target: "server", "关闭旧服务实例（重绑重建 / 停服）");
         old.shutdown();
     }
     if let Some(old_task) = old_task {
@@ -670,24 +784,44 @@ async fn restart_server(
         // 新连接后返回；已升级的 WS 连接由各自 task 继续收尾）
         let _ = old_task.await;
     }
-    // ② 重建并 serve
+    // ② 红线 1（D5 §10.3）：服务开关关闭 → 完全不 bind（Loopback 也不
+    // 监听）——netstat 断言 876[5-9] 无监听由本门控保证
+    if !config.multi_device_enabled {
+        service.diagnostics.record(
+            "server",
+            false,
+            Some("multi_device.enabled=false：服务未启动，无端口监听".to_string()),
+        );
+        tracing::info!(
+            target: "server",
+            "多端服务未开启（multi_device.enabled=false），不监听端口"
+        );
+        return;
+    }
+    // ③ 重建并 serve（注入真实后端与扇出器；端口同步配对协调器）
     match server::ServerInstance::bind(config).await {
         Ok(instance) => {
             let addr = instance.addr();
             let handle = instance.handle().clone();
             {
-                let mut slot = lifecycle.lock().unwrap_or_else(|e| e.into_inner());
+                let mut slot = service.lifecycle.lock().unwrap_or_else(|e| e.into_inner());
                 slot.handle = Some(handle);
             }
-            diagnostics.record("server", true, Some(addr.to_string()));
+            // 实际端口注入配对协调器（二维码 / qr_data 内嵌端口同源；
+            // 8765 探测兜底后二维码反映真实端口）
+            service.pairing.set_port(addr.port());
+            service
+                .diagnostics
+                .record("server", true, Some(addr.to_string()));
             tracing::info!(target: "server", addr = %addr, "本地服务已重建（重绑完成）");
-            let router = instance.router(None);
+            let router = instance.router(service.backend.clone(), service.fanout.clone());
             let serve_task = tauri::async_runtime::spawn(async move {
                 if let Err(error) = instance.serve(router).await {
                     tracing::error!(target: "server", error = %error, "本地服务异常退出");
                 }
             });
-            lifecycle
+            service
+                .lifecycle
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .task = Some(serve_task);
@@ -698,7 +832,9 @@ async fn restart_server(
                 error = %error,
                 "本地服务重建失败（多端能力降级，GUI 不受影响）"
             );
-            diagnostics.record("server", false, Some(error.to_string()));
+            service
+                .diagnostics
+                .record("server", false, Some(error.to_string()));
         }
     }
 }
@@ -758,5 +894,167 @@ mod tests {
         } else {
             std::env::remove_var("CRISH_LOG_LEVEL");
         }
+    }
+
+    // ── 多端服务开关状态机（R1-11 G-1：enabled 切换 → bind/stop 语义；
+    //    D5 D-01 红线 1「enabled=false 无任何端口监听」）──
+
+    /// 测试服务装配（无 Tauri 依赖；固定高位端口避免与并行测试抢占）
+    fn test_md_service(enabled: bool, port: u16) -> Arc<MultiDeviceService> {
+        static MD_TEST_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = MD_TEST_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let tokens = Arc::new(std::sync::Mutex::new(server::auth::TokenStore::new(
+            std::env::temp_dir().join(format!(
+                "md-switch-{}-{seq}-pairing.json",
+                std::process::id()
+            )),
+        )));
+        let ws_registry = Arc::new(server::ws::WsRegistry::new());
+        let pairing = Arc::new(server::pairing::PairingCoordinator::new(tokens, ws_registry));
+        let mut base = server::config::ServerConfig::new(std::env::temp_dir());
+        base.port = port;
+        Arc::new(MultiDeviceService {
+            lifecycle: Arc::new(std::sync::Mutex::new(ServerLifecycle::default())),
+            diagnostics: Arc::new(status_diagnostics::StatusDiagnostics::new()),
+            backend: None,
+            fanout: None,
+            pairing,
+            base,
+            enabled: Arc::new(std::sync::atomic::AtomicBool::new(enabled)),
+        })
+    }
+
+    /// 尝试独占绑定指定端口（成功 = 端口当前空闲 / 无监听）
+    async fn port_is_free(port: u16) -> bool {
+        tokio::net::TcpListener::bind(("127.0.0.1", port))
+            .await
+            .is_ok()
+    }
+
+    /// 红线 1 语义：enabled=false 时 restart_server 完全不 bind（Loopback
+    /// 也不监听）——生命周期槽无句柄，端口可被独立绑定。
+    #[tokio::test]
+    async fn disabled_service_never_binds_any_port() {
+        let service = test_md_service(false, 19081);
+        restart_server(service.current_config(), &service).await;
+
+        assert!(
+            service
+                .lifecycle
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .handle
+                .is_none(),
+            "enabled=false 不得持有服务句柄"
+        );
+        assert!(
+            port_is_free(19081).await,
+            "enabled=false 时端口必须无监听（红线 1：netstat 876[5-9] 亦同）"
+        );
+        // 诊断如实上报（core_get_status 可见「服务未启动」）
+        assert!(
+            service
+                .diagnostics
+                .entries()
+                .iter()
+                .any(|entry| entry.subsystem == "server" && !entry.ready),
+            "禁用态必须记录 server=false 诊断"
+        );
+    }
+
+    /// 开关状态机：enabled=true → 绑定监听（端口被占）；关闭 → 停服
+    /// （句柄取走 + 端口释放）。enabled 切换 → bind/stop 语义闭环。
+    #[tokio::test]
+    async fn switch_enables_bind_then_disable_stops_listening() {
+        let service = test_md_service(false, 19082);
+        assert!(!service.enabled(), "初始必须为关闭态（D-01）");
+
+        // 开启 → 绑定监听（端口被占 = 有监听）
+        service.set_enabled(true).await.expect("开启必须成功");
+        assert!(service.enabled());
+        assert!(
+            !port_is_free(19082).await,
+            "enabled=true 时端口必须被监听（绑定占用）"
+        );
+        // 实际端口已注入配对协调器（二维码数据同源：restart_server 的
+        // set_port 生效，QR 内嵌 19082 而非默认 8765）
+        let now = server::now_ms();
+        let result = service
+            .pairing
+            .start_pairing(now)
+            .expect("激活配对必须成功");
+        assert!(
+            result.qr.contains(":19082"),
+            "二维码必须内嵌实际监听端口（set_port 注入）：{}",
+            result.qr
+        );
+
+        // 关闭 → 停服：句柄取走 + serve 收尾 → 端口释放
+        service.set_enabled(false).await.expect("关闭必须成功");
+        assert!(!service.enabled());
+        assert!(
+            port_is_free(19082).await,
+            "关闭后端口必须释放（无监听）"
+        );
+        assert!(
+            service
+                .lifecycle
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .handle
+                .is_none(),
+            "关闭后生命周期槽不得残留句柄"
+        );
+    }
+
+    /// 装配辅助纯逻辑：current_config 派生——enabled 取开关当前值；
+    /// bind_mode 跟随配对协调器状态（配对中 = Lan，否则 Loopback）。
+    #[test]
+    fn current_config_follows_switch_and_pairing_state() {
+        let service = test_md_service(false, 0);
+        // 关闭态：Loopback + enabled=false
+        let config = service.current_config();
+        assert!(!config.multi_device_enabled);
+        assert_eq!(config.bind_mode, server::config::BindMode::Loopback);
+        assert!(!config.pairing_enabled);
+
+        // 配对开启 → Lan（协调器状态驱动）
+        let now = server::now_ms();
+        service
+            .pairing
+            .start_pairing(now)
+            .expect("激活配对必须成功");
+        let config = service.current_config();
+        assert_eq!(config.bind_mode, server::config::BindMode::Lan);
+        assert!(config.pairing_enabled);
+        // 开关仍关闭 → enabled 不被配对态带起（红线 1 门控不变）
+        assert!(!config.multi_device_enabled);
+
+        // 开关开启 → 派生配置带 enabled=true（同步写入开关位；set_enabled
+        // 的异步重启路径由 switch_enables_bind_then_disable_stops_listening
+        // 覆盖）
+        service
+            .enabled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let config = service.current_config();
+        assert!(config.multi_device_enabled);
+        assert_eq!(config.bind_mode, server::config::BindMode::Lan);
+    }
+
+    /// 重绑钩子语义：服务关闭时 rebind 触发 → restart_server 停服不 bind
+    /// （配对切换在开关关闭下不得产生监听）。
+    #[tokio::test]
+    async fn rebind_while_disabled_is_noop() {
+        let service = test_md_service(false, 19083);
+        // 模拟配对切换触发重绑（enabled=false 门控）
+        let mut config = service.base.clone();
+        config.bind_mode = server::config::BindMode::Lan;
+        config.pairing_enabled = true;
+        config.multi_device_enabled = false;
+        restart_server(config, &service).await;
+        assert!(
+            port_is_free(19083).await,
+            "开关关闭时配对重绑不得产生监听（红线 1）"
+        );
     }
 }

@@ -499,6 +499,22 @@ impl Tool for NewTabTool {
             .ok_or_else(|| {
                 ToolError::execution_failed("browser_new_tab", "createTarget 未返回 targetId")
             })?;
+        // P1 缺陷 F2（K6 实测，2026-08）：Chrome 151 的 createTarget **不触发
+        // attachedToTarget 事件** → 新标签无 CDP 会话 → per-tab 快照/动作
+        // node_gone。修复：createTarget 后显式 attach_tab（attachToTarget
+        // flatten:true + 域 enable，对齐恢复路径 enable_domains 顺序）——
+        // 会话经 BrowserSession 确定性登记（RealSession）或 attachedToTarget
+        // 事件落地（驱动侧默认实现），随后 H4 复核与用户操作即可路由。
+        // 活动标签语义：新标签**成为活动标签**（createTarget 默认聚焦新标签，
+        // background 参数 MVP 忽略；与 SessionAttached「最新附着者即活动」一致），
+        // 无需 switch 即可直接操作。attach 失败（目标已关闭等）→ 关闭已创建
+        // 标签回滚（不遗留无会话标签）并返回错误。
+        if let Err(e) = ops.attach_tab(tab_id).await {
+            let _ = ops
+                .send_browser(CDP_TARGET_CLOSE_TARGET, json!({ "targetId": tab_id }))
+                .await;
+            return Err(e);
+        }
         // H4 动作后门禁复核：createTarget 返回时新页导航仍在途，302 重定向
         // 可能把白名单内 URL 带往内网/保留段——轮询收敛最终 URL 后复核，
         // 违例关闭新标签并返回 gate_blocked
@@ -699,10 +715,15 @@ mod tests {
 
     /// 记录型会话替身：记录全部命令 + 可配 Target.getTargetInfo 最终 URL
     /// （模拟 302 重定向后的落地 URL）+ 可配 page 目标列表（MAX_TABS 计数面）。
+    /// F2 面：attachToTarget 应答会话并模拟事件驱动登记（created 活动标签
+    /// 语义——attach 后 current_tab/tab_session 命中新标签）。
     struct NavigateOps {
         log: Mutex<Vec<String>>,
         info_url: String,
         tab_ids: Mutex<Vec<String>>,
+        created: Mutex<Option<String>>,
+        /// F2 回滚面开关：attachToTarget 应答缺失 sessionId（模拟 attach 失败）
+        attach_broken: Mutex<bool>,
     }
 
     impl NavigateOps {
@@ -711,6 +732,8 @@ mod tests {
                 log: Mutex::new(Vec::new()),
                 info_url: info_url.to_string(),
                 tab_ids: Mutex::new(Vec::new()),
+                created: Mutex::new(None),
+                attach_broken: Mutex::new(false),
             })
         }
         fn with_tabs(info_url: &str, tab_ids: &[&str]) -> Arc<Self> {
@@ -744,10 +767,28 @@ mod tests {
             Ok(())
         }
         fn current_tab(&self) -> Result<SessionRef, ToolError> {
+            // F2：attach 后新标签成为活动标签（模拟事件驱动面 SessionAttached
+            // 登记——createTarget 聚焦新标签 + 「最新附着者即活动」语义）
+            if let Some(tid) = self.created.lock().unwrap_or_else(|p| p.into_inner()).clone() {
+                return Ok(SessionRef {
+                    target_id: tid.clone(),
+                    session: format!("S-{tid}"),
+                });
+            }
             Ok(SessionRef {
                 target_id: "T1".to_string(),
                 session: "S1".to_string(),
             })
+        }
+        fn tab_session(&self, tab_id: &str) -> Option<SessionRef> {
+            // F2：新标签经 attach 后可路由（模拟事件登记落表；其余标签无路由）
+            if self.created.lock().unwrap_or_else(|p| p.into_inner()).as_deref() == Some(tab_id) {
+                return Some(SessionRef {
+                    target_id: tab_id.to_string(),
+                    session: format!("S-{tab_id}"),
+                });
+            }
+            None
         }
         fn activate_tab(&self, tab_id: &str) -> Result<(), ToolError> {
             self.log
@@ -781,6 +822,21 @@ mod tests {
                 .push(format!("browser:{method} {params}"));
             match method {
                 "Target.createTarget" => Ok(json!({ "targetId": "T9" })),
+                "Target.attachToTarget" => {
+                    // F2：应答会话 + 模拟 attachedToTarget 事件驱动的登记
+                    // （created 活动标签 + tab_session 路由命中）；
+                    // attach_broken 时应答缺失 sessionId（回滚面）
+                    let tid = params
+                        .get("targetId")
+                        .and_then(Value::as_str)
+                        .unwrap_or("T9")
+                        .to_string();
+                    if *self.attach_broken.lock().unwrap_or_else(|p| p.into_inner()) {
+                        return Ok(json!({}));
+                    }
+                    *self.created.lock().unwrap_or_else(|p| p.into_inner()) = Some(tid);
+                    Ok(json!({ "sessionId": "S-T9" }))
+                }
                 "Target.getTargets" => {
                     let ids = self.tab_ids.lock().unwrap_or_else(|p| p.into_inner());
                     Ok(json!({
@@ -976,6 +1032,95 @@ mod tests {
             .filter(|c| c.contains("Target.createTarget"))
             .count();
         assert_eq!(injected, 0, "超限时 createTarget 零注入");
+    }
+
+    /// P1 缺陷 F2（K6 实测修复）：new_tab 后显式 attach 接线——命令序列
+    /// createTarget → attachToTarget(flatten) → 域 enable（对齐恢复路径
+    /// enable_domains 顺序：Page/setLifecycle/Runtime/DOM/Network）→
+    /// runIfWaitingForDebugger；新标签会话可路由（tab_session 命中）且
+    /// 成为活动标签（current_tab 命中，createTarget 聚焦语义）。
+    #[tokio::test]
+    async fn new_tab_attaches_session_and_routes() {
+        let ops = NavigateOps::new("https://a.example/after");
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        let out = NewTabTool::new(ctx)
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "url": "https://x.example/" }),
+            )
+            .await
+            .expect("新建标签应成功");
+        assert_eq!(out["tabId"], "T9");
+
+        // 命令序列顺序：createTarget → attachToTarget → enable 序列
+        let calls = ops.calls();
+        let pos = |needle: &str| {
+            calls
+                .iter()
+                .position(|c| c.contains(needle))
+                .unwrap_or_else(|| panic!("应派发 {needle}：{calls:?}"))
+        };
+        let p_create = pos("Target.createTarget");
+        let p_attach = pos("Target.attachToTarget");
+        let p_page = pos("page:S-T9:Page.enable");
+        let p_life = pos("page:S-T9:Page.setLifecycleEventsEnabled");
+        let p_runtime = pos("page:S-T9:Runtime.enable");
+        let p_dom = pos("page:S-T9:DOM.enable");
+        let p_net = pos("page:S-T9:Network.enable");
+        let p_resume = pos("page:S-T9:Runtime.runIfWaitingForDebugger");
+        assert!(
+            p_create < p_attach
+                && p_attach < p_page
+                && p_page < p_life
+                && p_life < p_runtime
+                && p_runtime < p_dom
+                && p_dom < p_net
+                && p_net < p_resume,
+            "attach/enable 序列顺序错误：{calls:?}"
+        );
+        // attachToTarget 参数面（flatten:true + 目标 targetId；JSON 键序与
+        // serde Value 序列化一致，逐字段断言防键序耦合）
+        let attach_call = calls
+            .iter()
+            .find(|c| c.contains("browser:Target.attachToTarget"))
+            .expect("应派发 attachToTarget")
+            .clone();
+        assert!(
+            attach_call.contains("\"targetId\":\"T9\"") && attach_call.contains("\"flatten\":true"),
+            "attachToTarget 参数错误：{attach_call}"
+        );
+
+        // 新标签会话可路由 + 成为活动标签（F2 修复面：不再 node_gone）
+        let routed = ops.tab_session("T9").expect("新标签应可路由");
+        assert_eq!(routed.session, "S-T9");
+        let current = ops.current_tab().expect("应有活动标签");
+        assert_eq!(current.target_id, "T9", "新标签应为活动标签（createTarget 聚焦语义）");
+
+        // H4 复核面不受 attach 影响：最终 URL 收敛返回
+        assert_eq!(out["finalUrl"], "https://a.example/after");
+    }
+
+    /// F2 回滚面：attach 失败（attachToTarget 未返回 sessionId）→ 关闭已创建
+    /// 标签（不遗留无会话标签）+ 返回错误；createTarget 已注入。
+    #[tokio::test]
+    async fn new_tab_closes_tab_when_attach_fails() {
+        // attachToTarget 应答缺失 sessionId：驱动侧默认实现判定失败
+        let ops = NavigateOps::new("https://a.example/after");
+        *ops
+            .attach_broken
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = true;
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        let err = NewTabTool::new(ctx)
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "url": "https://x.example/" }),
+            )
+            .await
+            .expect_err("attach 失败应报错");
+        assert_eq!(err.code(), "tool.execution_failed", "错误码：{err}");
+        ops.assert_called("Target.createTarget");
+        ops.assert_called("browser:Target.closeTarget {\"targetId\":\"T9\"}");
     }
 
     /// close_tab 按 targetId（字符串语义，P1）：命中目标 → closeTarget 派发；

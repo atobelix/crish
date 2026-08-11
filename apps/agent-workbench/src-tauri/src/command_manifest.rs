@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（102 条 = 注册面 98 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（108 条 = 注册面 104 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -104,6 +104,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("multi_device_rename_device", "multi_device", "engine", true),
         // R1-09 G-4：网络环境检测（注册表网络配置文件类别 + 可直连 IP + 引导文案）
         entry("multi_device_network_info", "multi_device", "engine", true),
+        // R1-11 G-1：多端服务总开关（D5 D-01 红线 1——enabled=false 时
+        // 不 bind 任何端口；状态衔接 multi_device_pair_status）
+        entry("multi_device_set_enabled", "multi_device", "engine", true),
         // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
         // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
         entry("config_get", "config", "engine", true),
@@ -192,6 +195,12 @@ entry("browser_stop_frames", "browser", "engine", true),
 entry("browser_frame_status", "browser", "engine", true),
 entry("browser_export_storage_state", "browser", "engine", true),
 entry("browser_import_storage_state", "browser", "engine", true),
+// ── G-4 收尾：书签/历史导入（03-方案 §4.2 U4；conex-db 目标表
+//    imported_bookmarks/imported_history，落库编排见 browser_import_sinks）──
+entry("browser_import_bookmarks", "browser", "engine", true),
+entry("browser_import_history", "browser", "engine", true),
+entry("browser_list_bookmarks", "browser", "engine", true),
+entry("browser_list_history", "browser", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),
@@ -219,7 +228,9 @@ mod tests {
     /// 追加 browser_input / browser_start_frames / browser_stop_frames /
     /// browser_frame_status 后 90 → 94；R1-07 多端互通四件套 + R1-08
     /// 撤销/改名两件套后 94 → 100；browser_export/import_storage_state
-    /// 追加后 100 → 102；R1-09 multi_device_network_info 追加后 102 → 103）。
+    /// 追加后 100 → 102；R1-09 multi_device_network_info 追加后 102 → 103；
+    /// R1-11 multi_device_set_enabled 追加后 103 → 104；G-4 书签/历史
+    /// 四命令（browser_import/list_bookmarks/history）追加后 104 → 108）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -230,8 +241,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 103, "总数 103（+multi_device_network_info，与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 99, "注册面 99");
+        assert_eq!(total, 108, "总数 108（G-4 书签/历史四命令，与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 104, "注册面 104");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -378,7 +389,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 103);
+        assert_eq!(manifest.commands.len(), 108);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

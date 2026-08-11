@@ -2,8 +2,13 @@
 //!
 //! - 默认端口 8765（CSP 已预留，`tauri.conf.json:29`）；8765 占用时顺序
 //!   探测 8766..8775（[PORT_PROBE_COUNT] 个），首个可用端口生效；
-//! - 默认绑定 `127.0.0.1`（loopback 恒监听，无暴露面）；配对模式显式
-//!   开启时绑定 `0.0.0.0`（仅 R1-07 配对流程接线后开放局域网）；
+//! - 默认绑定 `127.0.0.1`（loopback，无暴露面）；配对模式显式开启时
+//!   绑定 `0.0.0.0`（仅 R1-07 配对流程接线后开放局域网）；
+//! - 服务开关 [ServerConfig::multi_device_enabled]：默认关闭（D5 §2 D-01
+//!   与 §10.3 红线 1——「multi_device.enabled=false 时无任何端口监听」），
+//!   enabled=false 时**完全不 bind**（Loopback 也不监听，D5:948「服务关闭
+//!   （不监听任何端口）」）；显式开启（multi_device_set_enabled 命令或
+//!   配置面）后才启动监听；
 //! - 令牌文件 `config_dir()/pairing.json`；config_dir 解析语义复用
 //!   `config/persistence.rs:39-51`（CRISH_WORKBENCH_CONFIG_DIR 优先 →
 //!   APPDATA/Crish/AgentWorkbench → 临时目录兜底）；
@@ -50,6 +55,10 @@ pub struct ServerConfig {
     pub bind_mode: BindMode,
     /// 配对模式是否开启（真实开关接线归 R1-07）
     pub pairing_enabled: bool,
+    /// 多端服务总开关（D5 D-01 / 红线 1）：默认 false = 服务关闭，
+    /// **完全不 bind**（Loopback 也不监听，netstat 无 876[5-9]）；显式
+    /// 开启后按 bind_mode 监听（D5 §2 第 1 层服务开关）
+    pub multi_device_enabled: bool,
     /// 令牌文件路径（SHA-256 哈希落盘；D2 §7.3）
     pub pairing_file_path: PathBuf,
 }
@@ -61,6 +70,9 @@ impl ServerConfig {
             port: DEFAULT_PORT,
             bind_mode: BindMode::Loopback,
             pairing_enabled: false,
+            // D-01：多端互通服务默认关闭，零默认暴露面——enabled=false
+            // 时装配面不 bind 任何端口（红线 1「无任何端口监听」）
+            multi_device_enabled: false,
             pairing_file_path: config_dir.into().join(PAIRING_FILE_NAME),
         }
     }
@@ -135,6 +147,8 @@ mod tests {
         assert_eq!(config.port, DEFAULT_PORT);
         assert_eq!(config.bind_mode, BindMode::Loopback);
         assert!(!config.pairing_enabled);
+        // D5 D-01 / 红线 1：服务默认关闭（enabled=false 时不 bind 任何端口）
+        assert!(!config.multi_device_enabled, "多端服务默认必须关闭（零默认暴露面）");
         assert_eq!(config.bind_host(), LOOPBACK_HOST);
         assert_eq!(
             config.pairing_file_path.file_name().and_then(|n| n.to_str()),

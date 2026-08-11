@@ -201,10 +201,17 @@ impl ServerInstance {
     }
 
     /// 构建 axum Router（令牌库从 pairing.json 加载；backend 由 R1-03 的
-    /// CoreStateBackend 注入，骨架期传 None）
-    pub fn router(&self, backend: Option<Arc<dyn backend::ApiBackend>>) -> Router {
+    /// CoreStateBackend 注入，骨架期传 None；fanout 为 R1-01 事件扇出源
+    /// （None = 未装配，WS 广播推送不可用，订阅/续传/心跳仍可用）——
+    /// 生产装配（main.rs）注入真实后端与扇出器）
+    pub fn router(
+        &self,
+        backend: Option<Arc<dyn backend::ApiBackend>>,
+        fanout: Option<Arc<fanout::FanOutEmitter>>,
+    ) -> Router {
         let tokens = auth::TokenStore::load(&self.handle.config.pairing_file_path);
-        let state = ServerState::new(&self.handle, tokens, backend);
+        let mut state = ServerState::new(&self.handle, tokens, backend);
+        state.set_event_stream(fanout);
         router::build_router(state)
     }
 
@@ -421,7 +428,7 @@ mod tests {
         let instance = ServerInstance::bind(temp_config(0)).await.expect("绑定失败");
         let addr = instance.addr();
         let handle = instance.handle().clone();
-        let router = instance.router(None);
+        let router = instance.router(None, None);
         let task = tokio::spawn(async move { instance.serve(router).await });
 
         // 轮询等待服务就绪并请求 /v1/info（真实监听 + HTTP 往返）
@@ -450,6 +457,253 @@ mod tests {
         assert_eq!(caps.len(), ALL_CAPABILITIES.len());
 
         // 优雅关停：serve future 应正常返回（而非挂死）
+        handle.shutdown();
+        let result = task.await.expect("serve 任务不应 panic");
+        assert!(result.is_ok(), "serve 应正常退出：{result:?}");
+    }
+
+    // ── 装配级集成测试（R1-11 G-1：router 注入真实后端 + 扇出器）──
+
+    /// 测试事件发射器（记录通道与载荷；不依赖 Tauri runtime）
+    #[derive(Default)]
+    struct RecordingEmitter {
+        calls: std::sync::Mutex<Vec<(String, String)>>,
+    }
+
+    impl crate::core_event_bridge::Emitter for RecordingEmitter {
+        fn emit(&self, channel: &str, payload: &str) {
+            self.calls
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((channel.to_string(), payload.to_string()));
+        }
+    }
+
+    /// 装配级测试最小真实面（G-1）：CoreRunState（内存库 + 临时快照 +
+    /// 记录桥 + 独立诊断）→ CoreStateBackend 注入 ApiBackend 槽
+    fn assembled_backend() -> (Arc<dyn backend::ApiBackend>, Arc<RecordingEmitter>) {
+        static ASM_TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = ASM_TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let db = conex_db::LocalDb::open_in_memory().expect("内存库必须可打开");
+        let store: Arc<dyn orchestrator::persist::Store> =
+            Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let snapshots: Arc<dyn orchestrator::restore::SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "server-asm-{}-{seq}-snapshot.json",
+                std::process::id()
+            ))),
+        );
+        let webview = Arc::new(RecordingEmitter::default());
+        let bridge = crate::core_event_bridge::EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&webview) as Arc<dyn crate::core_event_bridge::Emitter>,
+        );
+        let core = Arc::new(crate::core_run_commands::CoreRunState::new(
+            store,
+            snapshots,
+            bridge,
+            Arc::new(crate::status_diagnostics::StatusDiagnostics::new()),
+            None,
+        ));
+        // 生产装配形态（main.rs）：真实 CoreStateBackend（只读面就绪标记
+        // 按当前事实注入；此处压缩能力视为已接线）
+        let backend: Arc<dyn backend::ApiBackend> = Arc::new(
+            crate::server::core_backend::CoreStateBackend::new(core).with_compaction_ready(true),
+        );
+        (backend, webview)
+    }
+
+    /// WS 订阅 + 扇出 → events.push（实时推送链路最小闭环：订阅注册 →
+    /// fanout 发布 → drain 推送）。返回推送帧 body。
+    async fn subscribe_and_receive_push(
+        addr: SocketAddr,
+        token: &str,
+        fanout: &fanout::FanOutEmitter,
+    ) -> serde_json::Value {
+        use crate::core_event_bridge::Emitter;
+        use futures_util::{SinkExt, StreamExt};
+        let ws_url = format!("ws://{addr}/v1/events?token={token}");
+        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)
+            .await
+            .expect("WS 升级必须成功");
+        // 订阅 s-1（DeviceEnvelope 信封：v/kind/msgId/ts/from/to/auth/body；
+        // auth 为空占位——测试态免签名，对齐 DeviceEnvelope::unsigned）
+        let subscribe = serde_json::json!({
+            "v": 1,
+            "kind": "events.subscribe",
+            "msgId": "asm-subscribe-1",
+            "ts": now_ms(),
+            "from": "mobile",
+            "to": "desktop",
+            "auth": { "deviceId": "", "nonce": "", "sig": "", "ts": 0 },
+            "body": { "sessions": ["s-1"], "lastSequences": {} },
+        });
+        ws.send(tokio_tungstenite::tungstenite::Message::Text(
+            subscribe.to_string().into(),
+        ))
+        .await
+        .expect("订阅帧发送必须成功");
+        // 等待 subscribe.ok（服务端已处理订阅并重建 fanout 过滤器）
+        let (kind, _) = {
+            let text = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                ws.next(),
+            )
+            .await
+            .expect("等待订阅回执超时")
+            .expect("订阅回执帧必须存在")
+            .expect("帧读取成功");
+            let frame: serde_json::Value =
+                serde_json::from_str(&text.to_string()).expect("订阅回执必须为合法信封");
+            assert_eq!(
+                frame["kind"].as_str().unwrap_or_default(),
+                "events.subscribe.ok",
+                "订阅回执：{frame}"
+            );
+            (
+                frame["kind"].as_str().unwrap_or_default().to_string(),
+                frame["body"].clone(),
+            )
+        };
+        assert_eq!(kind, "events.subscribe.ok");
+        // 引擎事件 → 扇出（与生产同源：EventBridge 汇聚点挂接 FanOutEmitter）
+        let payload = serde_json::json!({
+            "type": "agent-start",
+            "sessionId": "s-1",
+            "schemaVersion": 1,
+            "runId": "r-asm",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "sequence": 1,
+        });
+        fanout.emit("workbench-run-event", &payload.to_string());
+        // 等待 events.push
+        let text = tokio::time::timeout(std::time::Duration::from_secs(3), ws.next())
+            .await
+            .expect("等待推送超时")
+            .expect("推送帧必须存在")
+            .expect("帧读取成功");
+        let frame: serde_json::Value =
+            serde_json::from_str(&text.to_string()).expect("推送帧必须为合法信封");
+        assert_eq!(
+            frame["kind"].as_str().unwrap_or_default(),
+            "events.push",
+            "扇出事件必须经 WS 推送"
+        );
+        let _ = ws.close(None).await;
+        frame["body"].clone()
+    }
+
+    /// 装配链路总验证（R1-11 G-1 核心验收）：
+    /// ① /v1/info 免鉴权可达；② 无令牌 /v1/status → 401；
+    /// ③ 持令牌 /v1/status → 200 + 真实 CoreStatus（后端注入证明——
+    ///    router(None) 时该端点运行期 500「服务命令后端未接线」）；
+    /// ④ WS 订阅 + 扇出发布 → events.push 实时送达（event_stream 注入）；
+    /// ⑤ 优雅关停。
+    #[tokio::test]
+    async fn assembled_router_serves_real_backend_fanout_and_401() {
+        use axum::http::StatusCode;
+
+        let (backend, _webview) = assembled_backend();
+        let fanout = Arc::new(fanout::FanOutEmitter::new(vec![]));
+
+        // 临时令牌库（pairing.json 预签发，鉴权面走真实 TokenStore 文件）
+        let dir = tempfile::tempdir().expect("临时目录必须可创建");
+        let mut config = ServerConfig::new(dir.path());
+        config.port = 0;
+        let token = {
+            let mut store = auth::TokenStore::new(config.pairing_file_path.clone());
+            store.issue("asm-device", now_ms()).expect("签发必须成功")
+        };
+
+        let instance = ServerInstance::bind(config).await.expect("绑定失败");
+        let addr = instance.addr();
+        let handle = instance.handle().clone();
+        let router = instance.router(Some(backend), Some(Arc::clone(&fanout)));
+        let task = tokio::spawn(async move { instance.serve(router).await });
+
+        // 就绪轮询
+        let info_url = format!("http://{addr}/v1/info");
+        for _ in 0..50 {
+            if reqwest::get(&info_url).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+
+        // ① /v1/info 免鉴权可达
+        let info: serde_json::Value = reqwest::get(&info_url)
+            .await
+            .expect("请求必须可达")
+            .json()
+            .await
+            .expect("info 必须为合法 JSON");
+        assert_eq!(info["service"].as_str(), Some("crish-agent-workbench"));
+        assert_eq!(info["port"].as_u64(), Some(addr.port() as u64));
+
+        // ② 无令牌 /v1/status → 401（鉴权中间件不受后端注入影响）
+        let response = reqwest::get(format!("http://{addr}/v1/status"))
+            .await
+            .expect("请求必须可达");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // ③ 持令牌 → 200 + 真实 CoreStatus（后端已注入：非 500 未接线）
+        let client = reqwest::Client::new();
+        let response = client
+            .get(format!("http://{addr}/v1/status"))
+            .header("Authorization", format!("Bearer {token}"))
+            .send()
+            .await
+            .expect("请求必须可达");
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "后端注入后 /v1/status 必须 200（router(None) 时为 500 未接线）"
+        );
+        let status: serde_json::Value = response.json().await.expect("status 必须为合法 JSON");
+        assert_eq!(
+            status["initialized"].as_bool(),
+            Some(false),
+            "CoreStatus 载荷：{status}"
+        );
+        assert!(
+            status["version"]
+                .as_str()
+                .is_some_and(|version| !version.is_empty()),
+            "CoreStatus 必须携带真实版本"
+        );
+
+        // ④ WS 订阅 + 扇出 → events.push（事件流订阅链路闭环）
+        let push = subscribe_and_receive_push(addr, &token, &fanout).await;
+        assert_eq!(push["sessionId"].as_str(), Some("s-1"));
+        assert_eq!(push["event"]["type"].as_str(), Some("agent-start"));
+        // preview=false 时字段省略（skip_serializing_if）——带 sequence 的
+        // 实时帧不得标记预览
+        assert_ne!(push["preview"].as_bool(), Some(true), "带 sequence 的帧不得为 preview");
+
+        // ⑤ 优雅关停
+        handle.shutdown();
+        let result = task.await.expect("serve 任务不应 panic");
+        assert!(result.is_ok(), "serve 应正常退出：{result:?}");
+    }
+
+    /// 装配面互斥验证：fanout 注入路由后，服务关闭仍可正常收尾
+    /// （set_event_stream 注入路径不破坏优雅关停语义）。
+    #[tokio::test]
+    async fn router_with_fanout_shuts_down_gracefully() {
+        let fanout = Arc::new(fanout::FanOutEmitter::new(vec![]));
+        let instance = ServerInstance::bind(temp_config(0)).await.expect("绑定失败");
+        let addr = instance.addr();
+        let handle = instance.handle().clone();
+        let router = instance.router(None, Some(fanout));
+        let task = tokio::spawn(async move { instance.serve(router).await });
+        // 等服务就绪
+        let url = format!("http://{addr}/v1/info");
+        for _ in 0..50 {
+            if reqwest::get(&url).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
         handle.shutdown();
         let result = task.await.expect("serve 任务不应 panic");
         assert!(result.is_ok(), "serve 应正常退出：{result:?}");

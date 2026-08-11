@@ -52,11 +52,15 @@
 //!   `mcp_attach::mcp_attach_server_config`（桥自身不改动）；
 //! - **E-4 工具注册**：既有桥 `register_plugin_server` 零改动承接
 //!   browserUrl 型 server（参数注入面已确认，验证方法见 `mcp_attach` 模块头）。
-//! - **接线点登记（engine.rs 并行域，本任务不触碰）**：会话装配读
-//!   `BrowserToolsConfig.mcp_attach_allowed` → `with_mcp_attach_allowed`
-//!   注入（engine.rs 装配 `BrowserSlot::new()` 处）；MCP spawn 前
-//!   `mcp_attach_endpoint` 守卫取端点 → `mcp_attach::mcp_attach_server_config`
-//!   构建配置 → `register_plugin_mcp_server`（engine.rs，E-4 承载面）。
+//! - **接线完成（E-1 装配 + 消费 seam，engine.rs）**：会话装配读取
+//!   `BrowserToolsConfig.mcp_attach_allowed`（默认 false = 零暴露）→
+//!   [BrowserSlot::with_mcp_attach_allowed] 注入（engine.rs 装配
+//!   [BrowserSlot::new] 处）；MCP spawn 前的配置注入面为
+//!   `Engine::browser_attach_mcp_server_config`——经 [BrowserSlot::mcp_attach_endpoint]
+//!   守卫取端点 → `mcp_attach::mcp_attach_server_config` 构建配置；
+//!   插件 mcpServers 装配点（用户声明 server 的注册处，core_run_commands
+//!   并行域）为 TODO 登记，落地后调该 seam 并经
+//!   `Engine::register_plugin_mcp_server` 注册。
 //!
 //! ## storage_state 命令发送面（J1b，维度 16 §5 CDP 实读/注入接线）
 //! [BrowserSlot::storage_ops] 返回 [StorageStateOps]（`Storage.getCookies`
@@ -83,6 +87,7 @@ use conex_browser::cdp::domains::{
 use conex_browser::cdp::sender::CancellationToken;
 use conex_browser::cdp::transport::ExpectedBrowser;
 use conex_browser::snapshot::budget::BudgetConfig;
+use conex_browser::import::storage_state::{LocalStorageChannel, SessionLocalStorageChannel};
 use conex_browser::{
     BrowserManager, BrowserSession, CrashReason, LaunchConfig, ProcessEvent, SessionRef, StopReason,
 };
@@ -213,6 +218,11 @@ pub(crate) struct BrowserSlot {
     /// （命令返回 not_ready，不触发惰性启动）；测试经
     /// [BrowserSlot::inject_storage_ops] 注入 mock。
     storage_ops: Mutex<Arc<dyn StorageStateOps>>,
+    /// localStorage 注入通道（J1b 扩展面，维度 16 §5.3 注入执行）：生产
+    /// 恒 None——访问器按需经底层会话惰性构造
+    /// [SessionLocalStorageChannel]；测试经
+    /// [BrowserSlot::inject_local_storage_channel] 注入 mock。
+    local_storage_channel: Mutex<Option<Arc<dyn LocalStorageChannel>>>,
 }
 
 impl BrowserSlot {
@@ -275,6 +285,8 @@ impl BrowserSlot {
             mcp_attach_allowed: false,
             // J1b：会话连接前恒为未连接面（storage 命令 not_ready）
             storage_ops: Mutex::new(Arc::new(UnwiredStorageOps)),
+            // J1b 扩展面：localStorage 通道生产惰性构造（None = 按需建）
+            local_storage_channel: Mutex::new(None),
         }
     }
 
@@ -603,6 +615,39 @@ impl BrowserSlot {
         *self.storage_ops.lock().unwrap_or_else(|p| p.into_inner()) = ops;
     }
 
+    /// localStorage 注入通道（J1b 扩展面访问器，维度 16 §5.3 注入执行）：
+    /// 测试注入优先；生产按需经底层会话构造 [SessionLocalStorageChannel]
+    /// （绑定活动标签会话——`Page.addScriptToEvaluateOnNewDocument` 注册
+    /// origin 守卫脚本 + `DOMStorage.setDOMStorageItem` 直写）。未连接 /
+    /// 无活动标签 → Err（命令映射 not_ready，storage 命令不触发惰性启动）。
+    pub(crate) fn local_storage_channel(&self) -> Result<Arc<dyn LocalStorageChannel>, String> {
+        if let Some(injected) = self
+            .local_storage_channel
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .cloned()
+        {
+            return Ok(injected);
+        }
+        let session = self.raw_session_sync().ok_or_else(|| {
+            "浏览器未连接（请先 browser_start 后再导入登录态）".to_string()
+        })?;
+        let channel = SessionLocalStorageChannel::for_active(session)
+            .map_err(|e| format!("localStorage 注入通道不可用：{e}"))?;
+        Ok(Arc::new(channel))
+    }
+
+    /// 注入 localStorage 通道（J1b 测试替身注入点；生产路径不调用——访问器
+    /// 按需惰性构造，见 [Self::local_storage_channel]）。
+    #[cfg(test)]
+    pub(crate) fn inject_local_storage_channel(&self, channel: Arc<dyn LocalStorageChannel>) {
+        *self
+            .local_storage_channel
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(channel);
+    }
+
     /// 底层会话同步取用（帧订阅/输入管线装配的原始句柄）。
     fn raw_session_sync(&self) -> Option<Arc<BrowserSession>> {
         self.raw_session
@@ -612,9 +657,8 @@ impl BrowserSlot {
     }
 
     /// 注入 attach 会话级开关（E-1 消费面：`BrowserToolsConfig.mcp_attach_allowed`
-    /// 由引擎侧会话装配读取后经本方法装配；接线点见模块头登记——engine.rs
-    /// 装配 [BrowserSlot::new] 处为并行域 TODO，接线前保持默认 false）。
-    #[allow(dead_code)] // E-1 接线登记：engine.rs 会话装配消费（34 §5.2 E-1），接线后移除
+    /// 由引擎侧会话装配读取后经本方法装配，34 §5.2 E-1；已接线——engine.rs
+    /// 装配 [BrowserSlot::new] 处，值源默认 false，面板开关写入面 TODO）。
     pub(crate) fn with_mcp_attach_allowed(mut self, allowed: bool) -> Self {
         self.mcp_attach_allowed = allowed;
         self
@@ -631,10 +675,11 @@ impl BrowserSlot {
     ///   `tool.browser.not_ready`；
     /// - 开关开启且就绪 → [McpAttachEndpoint]（browserUrl + ws 串）。
     ///
-    /// 引擎侧接线（TODO E-1，engine.rs 并行域）：`register_plugin_mcp_server`
-    /// spawn 前先经本守卫取端点，再 `mcp_attach::mcp_attach_server_config`
-    /// 构建配置注入 `--browserUrl`（E-4 桥零改动，见 mcp_attach 模块头）。
-    #[allow(dead_code)] // E-1 接线登记：engine.rs 会话装配消费（34 §5.2 E-1），接线后移除
+    /// 引擎侧接线（已接线 E-1，engine.rs）：`register_plugin_mcp_server`
+    /// spawn 前的配置注入面为 `Engine::browser_attach_mcp_server_config`
+    /// ——先经本守卫取端点，再 `mcp_attach::mcp_attach_server_config`
+    /// 构建配置注入 `--browserUrl`（E-4 桥零改动；插件 mcpServers 装配
+    /// 点为并行域 TODO 登记，见 engine.rs 该 seam 注释）。
     pub(crate) fn mcp_attach_endpoint(&self) -> Result<McpAttachEndpoint, ToolError> {
         let endpoint = self.manager.as_ref().and_then(|m| m.endpoint());
         mcp_attach::attach_exposure_decision(self.mcp_attach_allowed, endpoint.as_ref())

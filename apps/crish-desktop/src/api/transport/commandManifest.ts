@@ -93,6 +93,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('multi_device_rename_device', 'multi_device', 'engine'),
     // R1-09（G-4）：网络环境检测（注册表网络配置文件 + 可直连 IP + 引导文案）
     entry('multi_device_network_info', 'multi_device', 'engine'),
+    // R1-11（G-1）：多端服务总开关（Rust 侧已登记，镜像同步）
+    entry('multi_device_set_enabled', 'multi_device', 'engine'),
     // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
     // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
     entry('config_get', 'config', 'engine'),
@@ -181,6 +183,12 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('browser_frame_status', 'browser', 'engine'),
 entry('browser_export_storage_state', 'browser', 'engine'),
 entry('browser_import_storage_state', 'browser', 'engine'),
+// ── G-4 收尾：书签/历史导入（03-方案 §4.2 U4；conex-db 目标表
+//    imported_bookmarks/imported_history，落库编排见 browser_import_sinks）──
+entry('browser_import_bookmarks', 'browser', 'engine'),
+entry('browser_import_history', 'browser', 'engine'),
+entry('browser_list_bookmarks', 'browser', 'engine'),
+entry('browser_list_history', 'browser', 'engine'),
     // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
     // PE-07 T07.4：config_profile_apply / config_secret_reveal 已接线（registered=true）
     entry('append_session_messages', 'session', 'engine', false),

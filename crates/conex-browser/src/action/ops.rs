@@ -47,10 +47,112 @@ const CDP_DOM_RESOLVE_NODE: &str = "DOM.resolveNode";
 const CDP_DOM_SET_FILE_INPUT_FILES: &str = "DOM.setFileInputFiles";
 const CDP_RUNTIME_CALL_FUNCTION_ON: &str = "Runtime.callFunctionOn";
 const CDP_RUNTIME_EVALUATE: &str = "Runtime.evaluate";
-const CDP_RUNTIME_CREATE_ISOLATED_WORLD: &str = "Runtime.createIsolatedWorld";
+// Chrome 151 已移除 Runtime.createIsolatedWorld（-32601 not found，K7 e2e 实测）；
+// 隔离世界创建改走 Page 域（缺陷 A 修复）：getFrameTree 取主 frameId → createIsolatedWorld
+const CDP_PAGE_GET_FRAME_TREE: &str = "Page.getFrameTree";
+const CDP_PAGE_CREATE_ISOLATED_WORLD: &str = "Page.createIsolatedWorld";
 const CDP_INPUT_DISPATCH_MOUSE: &str = "Input.dispatchMouseEvent";
 const CDP_INPUT_DISPATCH_KEY: &str = "Input.dispatchKeyEvent";
 const CDP_INPUT_INSERT_TEXT: &str = "Input.insertText";
+
+/// 隔离世界命名（Page.createIsolatedWorld worldName；同名世界按帧复用）。
+const ISOLATED_WORLD_NAME: &str = "crish-read-only";
+
+/// `__crish_read` 只读白名单代理注入脚本（17 §3.1/§3.2；缺陷 B 修复面）：
+/// 建世界成功后经**同一 world 的** Runtime.evaluate 执行，随后用户表达式在同一
+/// world 执行时全局 `__crish_read` 可见（挂载于世界全局 globalThis）。
+///
+/// 语义（17 §3.1 白名单面）：
+/// - 6 个只读方法：attr(sel,name) / text(sel) / rect(sel) / formValue(sel) /
+///   all(sel) / state()——DOM 访问一律经代理，不经用户表达式直触 window/document；
+/// - 返回值纯 JSON 深拷贝（deepJSON：对象/数组递归、节点/函数引用不出世界）；
+/// - 只读代理面：不可写/不可配置/不可枚举（赋值/删除/改写即抛错）；
+/// - constructor 链检查（17 §3.2 ②）：代理 get/has 拦截 constructor/prototype/
+///   __proto__/then 访问（`[].filter.constructor` 类方法链逃逸在运行时层拒绝，
+///   词法层已先拒 `constructor` 标识符）；
+/// - 幂等：world 按名复用（Chrome 对同名 world 返回既有上下文）时可重入，不重复覆盖。
+pub const CRISH_READ_INJECTION: &str = r#"(function () {
+  'use strict';
+  // __crish_read 只读白名单代理（17 §3.1）：6 个只读方法 + 纯 JSON 深拷贝返回
+  if (typeof globalThis.__crish_read === 'object') return true; // 幂等：同名 world 复用
+  function deepJSON(v, depth) {
+    // 纯 JSON 拷贝（结构化克隆语义）：对象/数组递归、原始值透传，函数/节点不产出
+    if (v === null || typeof v !== 'object') return v;
+    if (depth > 12) return null; // 防御深层对象（结果层另有深度 4 预算兜底）
+    if (Array.isArray(v)) return v.map(function (i) { return deepJSON(i, depth + 1); });
+    var out = {};
+    for (var k in v) {
+      if (Object.prototype.hasOwnProperty.call(v, k)) out[k] = deepJSON(v[k], depth + 1);
+    }
+    return out;
+  }
+  function first(sel) { return document.querySelector(sel); }
+  function attr(sel, name) {
+    // 读取元素属性（只读查询；写入面由词法层 + 代理只读面双重拒绝）
+    var n = first(sel);
+    return n ? n.getAttribute(name) : null;
+  }
+  function text(sel) {
+    // 读取元素文本（DOM 只读查询）
+    var n = first(sel);
+    return n ? n.textContent : null;
+  }
+  function rect(sel) {
+    // 几何信息（纯 JSON：x/y/width/height，单位 px）
+    var n = first(sel);
+    if (!n) return null;
+    var r = n.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  }
+  function formValue(sel) {
+    // 表单值读取（只读；密码字段脱敏属工具层 redact 面，17 §6.2）
+    var n = first(sel);
+    return n ? (n.value !== undefined ? n.value : null) : null;
+  }
+  function all(sel) {
+    // 集合查询：纯 JSON 数组（标签/文本/值；节点引用不外泄）
+    var list = document.querySelectorAll(sel);
+    var out = [];
+    for (var i = 0; i < list.length; i += 1) {
+      out.push({
+        tag: list[i].tagName,
+        id: list[i].id || null,
+        text: list[i].textContent,
+        value: list[i].value !== undefined ? list[i].value : null
+      });
+    }
+    return out;
+  }
+  function state() {
+    // 页面状态（纯 JSON）
+    return { url: location.href, title: document.title };
+  }
+  var api = { attr: attr, text: text, rect: rect, formValue: formValue, all: all, state: state };
+  var handler = {
+    get: function (target, prop) {
+      // constructor 链检查（17 §3.2）：取构造器/原型/__proto__ 即拒绝
+      if (prop === 'constructor' || prop === 'prototype' || prop === '__proto__' || prop === 'then') {
+        throw new Error('__crish_read: forbidden member access');
+      }
+      return Object.prototype.hasOwnProperty.call(target, prop) ? target[prop] : undefined;
+    },
+    has: function (target, prop) {
+      // in 探询同样遮蔽构造面成员
+      if (prop === 'constructor' || prop === 'prototype' || prop === '__proto__') return false;
+      return Object.prototype.hasOwnProperty.call(target, prop);
+    },
+    set: function () { throw new Error('__crish_read is read-only'); },
+    deleteProperty: function () { throw new Error('__crish_read is read-only'); }
+  };
+  // 全局挂载（世界全局）：不可写/不可配置/不可枚举——表达式可读不可改
+  Object.defineProperty(globalThis, '__crish_read', {
+    value: new Proxy(api, handler),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
+  return true;
+})()"#;
 
 /// 延迟注入抽象（重试延迟/type 节流/轮询间隔共用；测试注入记录型不真实等待）。
 #[async_trait]
@@ -103,10 +205,14 @@ pub trait PageOps: Send + Sync {
     async fn insert_text(&self, text: &str) -> Result<(), ActionError>;
     /// Runtime.evaluate（固定模板只读求值；wait_for 文本轮询/回读校验）。
     async fn evaluate(&self, expression: &str) -> Result<Value, ActionError>;
-    /// Runtime.createIsolatedWorld（17 §3.2：evaluate 受限求值的隔离世界）。
+    /// 创建隔离世界（17 §3.2：evaluate 受限求值的隔离世界；缺陷 A 修复——
+    /// Chrome 151 已移除 Runtime.createIsolatedWorld，改走 Page.getFrameTree（取主
+    /// frameId）+ Page.createIsolatedWorld；返回 executionContextId 字符串）。
+    /// 建世界成功后即注入 `__crish_read` 只读白名单代理（缺陷 B 修复）——
+    /// 返回的世界保证代理已可见，注入失败视同世界创建失败。
     async fn create_isolated_world(&self) -> Result<String, ActionError>;
     /// Runtime.evaluate 于隔离世界执行（17 §3.2：awaitPromise/2s 超时/userGesture=false/
-    /// returnByValue=true；返回纯 JSON 拷贝）。
+    /// returnByValue=true；返回纯 JSON 拷贝；`__crish_read` 代理由建世界时注入）。
     async fn evaluate_isolated(&self, world_id: &str, expression: &str) -> Result<Value, ActionError>;
     /// 在途请求数（wait_for NetworkIdle 条件）。
     async fn network_in_flight(&self) -> Result<usize, ActionError>;
@@ -474,10 +580,25 @@ impl PageOps for BrowserPageOps {
     }
 
     async fn create_isolated_world(&self) -> Result<String, ActionError> {
+        // 缺陷 A（K7 e2e，Chrome 151）：Runtime.createIsolatedWorld 已移除（-32601）；
+        // Page.createIsolatedWorld 需要 frameId——先经 Page.getFrameTree 取主 frame。
+        let tree_value = self
+            .send(CDP_PAGE_GET_FRAME_TREE, json!({}), CMD_TIMEOUT)
+            .await?;
+        let tree: crate::cdp::domains::GetFrameTreeResult =
+            serde_json::from_value(tree_value).map_err(|e| {
+                ActionError::new(
+                    ActionErrorKind::Unsupported,
+                    format!("getFrameTree 结果解析失败：{e}"),
+                )
+            })?;
+        let frame_id = tree.frame_tree.frame.id;
+        // grantUniversalAccess 缺省（协议键名为 grantUniveralAccess 错拼形态，Chrome
+        // 对未知参数回 -32602——直接省略，缺省 false 即「不授予 universal access」）
         let value = self
             .send(
-                CDP_RUNTIME_CREATE_ISOLATED_WORLD,
-                json!({ "worldName": "crish-read-only", "grantUniversalAccess": false }),
+                CDP_PAGE_CREATE_ISOLATED_WORLD,
+                json!({ "frameId": frame_id, "worldName": ISOLATED_WORLD_NAME }),
                 CMD_TIMEOUT,
             )
             .await?;
@@ -488,7 +609,40 @@ impl PageOps for BrowserPageOps {
                     format!("createIsolatedWorld 结果解析失败：{e}"),
                 )
             })?;
-        Ok(world.execution_context_id.to_string())
+        let context_id = world.execution_context_id;
+
+        // 缺陷 B（17 §3.2 与 §3.1 断裂面）：建世界后先注入只读白名单代理——
+        // 注入脚本在**同一 world**（contextId）执行，用户表达式随后在同一 world
+        // 的 Runtime.evaluate 中即可见全局 `__crish_read`；注入失败视同世界不可用。
+        let injected = self
+            .send(
+                CDP_RUNTIME_EVALUATE,
+                json!({
+                    "expression": CRISH_READ_INJECTION,
+                    "contextId": context_id,
+                    "returnByValue": true,
+                    "awaitPromise": true,
+                    "userGesture": false,
+                    "timeout": 2000,
+                    "generatePreview": false,
+                }),
+                CMD_TIMEOUT,
+            )
+            .await?;
+        let evaluated: crate::cdp::domains::EvaluateResult =
+            serde_json::from_value(injected).map_err(|e| {
+                ActionError::new(
+                    ActionErrorKind::Unsupported,
+                    format!("代理注入结果解析失败：{e}"),
+                )
+            })?;
+        if evaluated.exception_details.is_some() {
+            return Err(ActionError::new(
+                ActionErrorKind::Unsupported,
+                "隔离世界代理注入失败",
+            ));
+        }
+        Ok(context_id.to_string())
     }
 
     async fn evaluate_isolated(&self, world_id: &str, expression: &str) -> Result<Value, ActionError> {
@@ -1143,6 +1297,182 @@ mod tests {
             .expect("按钮索引解析");
         assert_eq!(btn.backend_node_id, 6);
         assert!(!btn.is_password, "普通按钮不得误标为密码输入");
+    }
+
+    /// 缺陷 B 注入脚本契约（17 §3.1）：6 个白名单方法必须与词法层 READ_API
+    /// 同步（api 字面量 `attr: attr` 形态逐个断言，防缺方法/改名漂移）；
+    /// 只读/深拷贝/constructor 链拦截语义存在（代理面运行时保险）。
+    #[test]
+    fn injection_script_covers_read_api_and_readonly() {
+        for method in crate::action::evaluate::READ_API {
+            assert!(
+                CRISH_READ_INJECTION.contains(&format!("{method}: {method}")),
+                "注入脚本应暴露白名单方法 {method}"
+            );
+        }
+        assert!(CRISH_READ_INJECTION.contains("Object.defineProperty"), "应经 defineProperty 挂载");
+        assert!(CRISH_READ_INJECTION.contains("globalThis"), "应挂载世界全局");
+        assert!(CRISH_READ_INJECTION.contains("writable: false"), "代理应不可写");
+        assert!(CRISH_READ_INJECTION.contains("configurable: false"), "代理应不可配置");
+        assert!(CRISH_READ_INJECTION.contains("constructor"), "应含 constructor 链检查语义");
+        assert!(CRISH_READ_INJECTION.contains("__proto__"), "应含 __proto__ 检查语义");
+        assert!(CRISH_READ_INJECTION.contains("deepJSON"), "应含纯 JSON 深拷贝");
+        assert!(CRISH_READ_INJECTION.contains("is read-only"), "应含只读拒绝语义");
+    }
+
+    /// 缺陷 A+B 回归（K7 e2e，Chrome 151）：建世界命令序列与参数——
+    /// Page.getFrameTree（取主 frame）→ Page.createIsolatedWorld（frameId +
+    /// worldName）→ 同一 world 的 Runtime.evaluate（注入 __crish_read 代理，
+    /// contextId 为 createIsolatedWorld 返回值）；命令顺序硬断言。
+    #[tokio::test]
+    async fn create_isolated_world_uses_page_domain_and_injects_proxy() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        mock.set_auto_reply(
+            "Page.getFrameTree",
+            MockReply::Ok(json!({
+                "frameTree": {
+                    "frame": { "id": "FRAME-MAIN", "url": "https://a.example", "mimeType": "text/html" },
+                    "childFrames": []
+                }
+            })),
+        );
+        mock.set_auto_reply(
+            "Page.createIsolatedWorld",
+            MockReply::Ok(json!({ "executionContextId": 42 })),
+        );
+        // 注入 evaluate 应答（带 type 字段；连接期探针 "1" 同享该应答）
+        mock.set_auto_reply(
+            "Runtime.evaluate",
+            MockReply::Ok(json!({ "result": { "type": "boolean", "value": true } })),
+        );
+        let session = Arc::new(
+            crate::BrowserSession::connect(
+                CdpEndpoint {
+                    port: mock.addr.port(),
+                    ws_path: "/devtools/browser/isolated-world".to_string(),
+                },
+                crate::cdp::transport::ExpectedBrowser::default(),
+                Arc::new(AllowHooks),
+            )
+            .await
+            .expect("会话建连失败"),
+        );
+        // 注入活动标签（T1/S1），等待路由就绪
+        mock.send_event(
+            "Target.attachedToTarget",
+            json!({
+                "sessionId": "S1",
+                "targetInfo": { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" },
+                "waitingForDebugger": false,
+            }),
+            None,
+        );
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while session.current_session().is_err() {
+            assert!(tokio::time::Instant::now() < deadline, "活动标签未就绪");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let ops = BrowserPageOps::new(session.clone());
+        let world = ops.create_isolated_world().await.expect("建世界失败");
+        assert_eq!(world, "42", "应返回 createIsolatedWorld 的 executionContextId");
+
+        // 命令序列收集：仅关注建世界三连（跳过连接期其余命令；
+        // 注入 evaluate 以表达式含 __crish_read 与连接期探针 "1" 区分）
+        let mut seq: Vec<(String, Value)> = Vec::new();
+        let collect = tokio::time::Instant::now() + Duration::from_secs(3);
+        while seq.len() < 3 {
+            assert!(tokio::time::Instant::now() < collect, "建世界命令序列未收齐：{seq:?}");
+            let cmd = tokio::time::timeout(Duration::from_millis(1000), mock.next_command())
+                .await
+                .expect("等待命令超时");
+            let method = cmd["method"].as_str().unwrap_or("").to_string();
+            let is_injection = method == "Runtime.evaluate"
+                && cmd["params"]["expression"]
+                    .as_str()
+                    .is_some_and(|e| e.contains("__crish_read"));
+            if matches!(method.as_str(), "Page.getFrameTree" | "Page.createIsolatedWorld") || is_injection
+            {
+                seq.push((method, cmd));
+            }
+        }
+
+        // 顺序：getFrameTree → createIsolatedWorld → 注入 evaluate（缺陷 A/B 硬断言）
+        assert_eq!(seq[0].0, "Page.getFrameTree", "应先取主 frame：{seq:?}");
+        assert_eq!(seq[1].0, "Page.createIsolatedWorld", "再建隔离世界：{seq:?}");
+        assert_eq!(seq[2].0, "Runtime.evaluate", "建世界后注入代理：{seq:?}");
+        // 建世界参数：Page 域 + frameId（主 frame）+ worldName 保留
+        let create = &seq[1].1;
+        assert_eq!(create["params"]["frameId"], "FRAME-MAIN", "frameId 应为主 frame");
+        assert_eq!(create["params"]["worldName"], ISOLATED_WORLD_NAME, "worldName 应保留");
+        // 注入参数：同一 world（contextId 与建世界返回值一致）
+        let inject = &seq[2].1;
+        assert_eq!(inject["params"]["contextId"], 42, "注入应在新建世界执行");
+        assert_eq!(inject["params"]["userGesture"], false);
+        assert_eq!(inject["params"]["returnByValue"], true);
+        assert_eq!(inject["params"]["timeout"], 2000);
+        // 注入脚本本体断言（代理定义存在性）
+        let expr = inject["params"]["expression"].as_str().expect("注入表达式缺失");
+        assert!(expr.contains("__crish_read"), "注入脚本应定义 __crish_read");
+        assert!(expr.contains("attr"), "注入脚本应含 attr 方法");
+        assert!(expr.contains("rect"), "注入脚本应含 rect 方法");
+    }
+
+    /// 缺陷 A 错误映射保持：Page.createIsolatedWorld 失败 → Unsupported
+    /// （dispatch 层映射「隔离世界创建失败」；不重试类，与旧 Runtime 域语义一致）。
+    #[tokio::test]
+    async fn create_isolated_world_page_domain_error_maps_unsupported() {
+        let mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        mock.set_auto_reply(
+            "Page.getFrameTree",
+            MockReply::Ok(json!({
+                "frameTree": {
+                    "frame": { "id": "FRAME-MAIN", "url": "https://a.example", "mimeType": "text/html" },
+                    "childFrames": []
+                }
+            })),
+        );
+        mock.set_auto_reply(
+            "Page.createIsolatedWorld",
+            MockReply::Error { code: -32601, message: "Method not found".to_string() },
+        );
+        let session = Arc::new(
+            crate::BrowserSession::connect(
+                CdpEndpoint {
+                    port: mock.addr.port(),
+                    ws_path: "/devtools/browser/isolated-world-err".to_string(),
+                },
+                crate::cdp::transport::ExpectedBrowser::default(),
+                Arc::new(AllowHooks),
+            )
+            .await
+            .expect("会话建连失败"),
+        );
+        mock.send_event(
+            "Target.attachedToTarget",
+            json!({
+                "sessionId": "S1",
+                "targetInfo": { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" },
+                "waitingForDebugger": false,
+            }),
+            None,
+        );
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while session.current_session().is_err() {
+            assert!(tokio::time::Instant::now() < deadline, "活动标签未就绪");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let ops = BrowserPageOps::new(session.clone());
+        let err = ops.create_isolated_world().await.expect_err("应返回错误");
+        assert_eq!(err.kind, ActionErrorKind::Unsupported, "建世界失败应归 Unsupported");
+        assert!(err.cdp_raw.is_some(), "应携带 CDP 错误原文");
     }
 }
 

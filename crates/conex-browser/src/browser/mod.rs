@@ -55,6 +55,7 @@ use crate::browser::state::{
     BrowserState, CrashBudget, CrashReason, StateEvent, StateMachine, Transition,
 };
 use crate::cdp::transport::ExpectedBrowser;
+use async_trait::async_trait;
 use futures_util::FutureExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -64,10 +65,14 @@ use tokio::sync::{broadcast, oneshot, watch};
 /// 孤儿清扫阈值（§4.4：sessions/ 下 mtime 超 24h）。
 const ORPHAN_AGE: Duration = Duration::from_secs(24 * 3600);
 
+/// G-9：Browser.close 发送超时上界（浏览器关闭 WS/响应缺失时不等待命令默认
+/// 超时；超时即视为发送失败，走既有 wait_or_kill → 杀树兜底）。
+const BROWSER_CLOSE_SEND_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// 停止原因。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopReason {
-    /// 优雅停止：Browser.close → wait_or_kill(5s) → 杀树兜底（§6.3）。
+    /// 优雅停止：先发 Browser.close（若有会话）→ wait_or_kill(5s) → 杀树兜底（§6.3）。
     Graceful,
     /// 强制停止：直接杀树（§6.2 第 7 行）。
     Force,
@@ -274,6 +279,10 @@ struct Inner {
     last_error: Option<String>,
     force_killed: bool,
     stop_elapsed_ms: u64,
+    /// G-9：优雅停止先发 Browser.close 的发送面（引擎建连后登记；停止路径
+    /// 持锁仅取 Arc、锁外 await 发送，B8 纪律不变）。会话断连/结束后由
+    /// `clear_session_state` 清空，避免向已死会话重复发送。
+    close_sender: Option<Arc<dyn BrowserCloseSender>>,
 }
 
 impl Inner {
@@ -299,7 +308,29 @@ impl Inner {
             last_error: None,
             force_killed: false,
             stop_elapsed_ms: 0,
+            close_sender: None,
         }
+    }
+}
+
+/// G-9：优雅停止先发 `Browser.close` 的发送面抽象（浏览器级命令，无 session_id）。
+/// 生产实现 = `BrowserSession`（引擎建连后经 `register_session` 登记）；
+/// 测试注入记录/可控假发送器。发送失败一律不 panic，直接走既有兜底。
+#[async_trait]
+pub trait BrowserCloseSender: Send + Sync {
+    /// 发送 `Browser.close`（等待有界：发送阶段自带超时兜底，返回错误不阻断）。
+    async fn send_browser_close(&self) -> Result<(), crate::cdp::error::CdpError>;
+}
+
+#[async_trait]
+impl BrowserCloseSender for crate::BrowserSession {
+    async fn send_browser_close(&self) -> Result<(), crate::cdp::error::CdpError> {
+        self.send_browser::<serde_json::Value>(
+            crate::cdp::domains::names::BROWSER_CLOSE,
+            serde_json::Value::Null,
+        )
+        .await
+        .map(|_| ())
     }
 }
 
@@ -608,6 +639,24 @@ impl BrowserManager {
         policy: Arc<dyn crate::cdp::sender::CommandPolicyHooks>,
     ) -> Result<crate::BrowserSession, crate::cdp::error::BrowserError> {
         crate::BrowserSession::connect(endpoint, expected, policy).await
+    }
+
+    /// 登记真实会话（G-9 便捷入口）：`Arc<BrowserSession>` → 内部关闭发送面。
+    /// 引擎建连成功后调用；优雅停止将先经它发 `Browser.close`（浏览器级，
+    /// 无 session_id）。会话结束/断连后由停止收尾自动清空，无需手动清理。
+    pub fn register_session(&self, session: Arc<crate::BrowserSession>) {
+        self.register_close_sender(session);
+    }
+
+    /// 登记关闭发送面（G-9）：自定义发送实现注入点（生产用 `register_session`，
+    /// 测试注入记录/可控假发送器）。
+    pub fn register_close_sender(&self, sender: Arc<dyn BrowserCloseSender>) {
+        self.lock().close_sender = Some(sender);
+    }
+
+    /// 清空关闭发送面（会话断连/结束后显式清理；停止收尾亦会自动清空）。
+    pub fn clear_close_sender(&self) {
+        self.lock().close_sender = None;
     }
 
     // ---------- 内部 ----------
@@ -1022,7 +1071,32 @@ impl BrowserManager {
         self.clear_session_state();
     }
 
-    /// 停止收尾（§6.3：优雅 → wait_or_kill；超时/强制 → 杀树）+ 清理 profile。
+    /// G-9 发送面：优雅停止先经登记的会话发 `Browser.close`（浏览器级命令，
+    /// 无 session_id）。发送有界（`BROWSER_CLOSE_SEND_TIMEOUT`）——Browser.close
+    /// 发出后浏览器随时关闭 WS，响应未必回；发送失败/超时/无会话一律静默
+    /// 降级为既有 wait_or_kill → 杀树兜底，不 panic、不阻塞停止收敛。
+    async fn send_browser_close_gracefully(&self) {
+        let sender = {
+            let g = self.lock();
+            g.close_sender.clone()
+        };
+        if let Some(sender) = sender {
+            let sent = tokio::time::timeout(
+                BROWSER_CLOSE_SEND_TIMEOUT,
+                sender.send_browser_close(),
+            )
+            .await;
+            match sent {
+                Ok(Ok(())) => tracing::debug!("优雅停止：Browser.close 已发送"),
+                Ok(Err(e)) => {
+                    tracing::warn!("优雅停止：Browser.close 发送失败（走既有兜底）：{e}")
+                }
+                Err(_) => tracing::warn!("优雅停止：Browser.close 发送超时（走既有兜底）"),
+            }
+        }
+    }
+
+    /// 停止收尾（§6.3：优雅 → 先 Browser.close 再 wait_or_kill；超时/强制 → 杀树）+ 清理 profile。
     async fn stop_path(
         &self,
         wait_task: &mut tokio::task::JoinHandle<Option<std::process::ExitStatus>>,
@@ -1050,8 +1124,10 @@ impl BrowserManager {
                 if already_exited {
                     // 进程已自行退出（如 Browser.close 生效）
                 } else if graceful {
-                    // 优雅路径（§6.3）：MVP 不连 CDP 发 Browser.close（遗留：M1 会话
-                    // 接入后在此先 Browser.close 再等退出）；wait_or_kill(5s)
+                    // 优雅路径（§6.3，G-9）：先经会话发 Browser.close（浏览器级，
+                    // 无 session_id）→ 等自然退出；发送失败/无会话 → 既有
+                    // wait_or_kill(5s) → 杀树兜底语义不变
+                    self.send_browser_close_gracefully().await;
                     exited = tokio::select! {
                         _ = &mut *wait_task => true,
                         _ = tokio::time::sleep(self.tuning.wait_or_kill) => false,
@@ -1230,6 +1306,8 @@ impl BrowserManager {
         g.driver = None;
         g.last_pid = None;
         g.intentional = false;
+        // G-9：会话句柄随会话结束清空（避免向已死会话重复发 Browser.close）
+        g.close_sender = None;
     }
 
     /// 当前报告快照。
@@ -1327,6 +1405,95 @@ mod tests {
             nav_tabs: 1,
         };
         assert!(!format!("{status:?}").contains("ws://"));
+    }
+
+    // —— G-9：优雅停止先发 Browser.close（发送面单元测试，跨平台可跑）——
+
+    /// G-9 测试假发送器：记录调用序列 + 可控副作用——`exit_flag` 写入 close
+    /// 标志文件（触发假浏览器脚本自然退出）、`fail` 注入发送失败。
+    #[derive(Clone, Default)]
+    struct RecordingClose {
+        calls: Arc<Mutex<Vec<&'static str>>>,
+        exit_flag: Option<PathBuf>,
+        fail: bool,
+    }
+
+    impl RecordingClose {
+        fn recorded(&self) -> Vec<&'static str> {
+            self.calls.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        }
+    }
+
+    #[async_trait]
+    impl BrowserCloseSender for RecordingClose {
+        async fn send_browser_close(&self) -> Result<(), crate::cdp::error::CdpError> {
+            self.calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(crate::cdp::domains::names::BROWSER_CLOSE);
+            if let Some(flag) = &self.exit_flag {
+                let _ = tokio::fs::write(flag, "close").await;
+            }
+            if self.fail {
+                return Err(crate::cdp::error::CdpError::Internal {
+                    method: Some(crate::cdp::domains::names::BROWSER_CLOSE.to_string()),
+                    message: "测试注入：发送失败".to_string(),
+                });
+            }
+            Ok(())
+        }
+    }
+
+    /// G-9：登记发送面后，优雅停止的发送步骤发出 `Browser.close`（命令序列）。
+    #[tokio::test]
+    async fn graceful_close_sender_emits_browser_close() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let mgr = BrowserManager::new(dir.path());
+        let recorder = Arc::new(RecordingClose::default());
+        mgr.register_close_sender(recorder.clone());
+        mgr.send_browser_close_gracefully().await;
+        assert_eq!(
+            recorder.recorded(),
+            vec![crate::cdp::domains::names::BROWSER_CLOSE],
+            "优雅停止必须先发 Browser.close"
+        );
+    }
+
+    /// G-9：无会话登记 → 发送步骤直接返回（既有兜底语义，不 panic）。
+    #[tokio::test]
+    async fn graceful_close_sender_absent_is_noop() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let mgr = BrowserManager::new(dir.path());
+        mgr.send_browser_close_gracefully().await;
+    }
+
+    /// G-9：发送失败（无连接/拒绝）→ 静默容忍，不 panic、不阻塞停止收敛。
+    #[tokio::test]
+    async fn graceful_close_sender_failure_tolerated() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let mgr = BrowserManager::new(dir.path());
+        let recorder = Arc::new(RecordingClose {
+            fail: true,
+            ..Default::default()
+        });
+        mgr.register_close_sender(recorder.clone());
+        mgr.send_browser_close_gracefully().await;
+        assert_eq!(
+            recorder.recorded(),
+            vec![crate::cdp::domains::names::BROWSER_CLOSE]
+        );
+    }
+
+    /// G-9：登记 → 清空 → 不再发送（会话结束路径不向已死会话重复发送）。
+    #[tokio::test]
+    async fn close_sender_register_clear_cycle() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let mgr = BrowserManager::new(dir.path());
+        let recorder = Arc::new(RecordingClose::default());
+        mgr.register_close_sender(recorder.clone());
+        mgr.clear_close_sender();
+        mgr.send_browser_close_gracefully().await;
+        assert!(recorder.recorded().is_empty(), "清空后不得再发 Browser.close");
     }
 
     /// 假浏览器 .bat harness 生命周期测试（32 评审 P1-1 修复）：
@@ -1613,6 +1780,33 @@ mod tests {
             .to_string()
     }
 
+    /// 假浏览器脚本：写 DevToolsActivePort 后循环检查 close 标志文件，出现
+    /// 即退出（退出码 0）。G-9 回归：Browser.close 发送后进程自然退出的
+    /// 可观测路径（.bat 轮询粒度 ~1s，等待窗口须大于一轮轮询）。
+    fn script_close_exit() -> String {
+        "@echo off\r\n\
+         setlocal enabledelayedexpansion\r\n\
+         set PROFILE=\r\n\
+         set NEXT=0\r\n\
+         for %%a in (%*) do (\r\n\
+         \x20 set \"A=%%~a\"\r\n\
+         \x20 if \"!NEXT!\"==\"1\" (\r\n\
+         \x20\x20 if not \"!A!\"==\"--user-data-dir\" set \"PROFILE=!A!\"\r\n\
+         \x20\x20 set \"NEXT=0\"\r\n\
+         \x20 )\r\n\
+         \x20 if \"!A:~0,16!\"==\"--user-data-dir=\" set \"PROFILE=!A:~16!\"\r\n\
+         \x20 if \"!A!\"==\"--user-data-dir\" set \"NEXT=1\"\r\n\
+         )\r\n\
+         if not defined PROFILE exit /b 9\r\n\
+         > \"!PROFILE!\\DevToolsActivePort\" echo 38689\r\n\
+         >> \"!PROFILE!\\DevToolsActivePort\" echo /devtools/browser/fake-session-uuid\r\n\
+         :loop\r\n\
+         if exist \"!PROFILE!\\close-flag\" exit /b 0\r\n\
+         ping -n 2 127.0.0.1 >nul\r\n\
+         goto loop\r\n"
+            .to_string()
+    }
+
     /// 回归（联调 E5 根因）：优雅停止窗口内进程**自行退出**（wait_task 分支先到）
     /// 时不得二次 poll 已完成的 JoinHandle——tokio 对已完成句柄的再次 poll 直接
     /// panic「JoinHandle polled after completion」，旧实现导致驱动任务崩溃、
@@ -1662,6 +1856,131 @@ mod tests {
         assert!(matches!(stop.state, BrowserState::Stopped));
         assert!(stop.profile_removed);
         assert!(!report.profile_dir.exists(), "停止后直删");
+    }
+
+    // —— G-9：优雅停止先发 Browser.close 的完整停止路径（.bat harness）——
+
+    /// G-9：Graceful 停止先发 `Browser.close` → 假浏览器收到标志后自然退出 →
+    /// 不杀树。wait_or_kill 放大到 5s：.bat 轮询粒度 ~1s，等待窗口须覆盖
+    /// 一轮以上轮询。
+    #[tokio::test]
+    async fn graceful_stop_sends_close_then_natural_exit() {
+        let Some(h) = Harness::new() else { return };
+        let root = tempfile::tempdir().expect("临时目录");
+        // CfT 缓存假二进制（discover 命中，root 与管理器同源）
+        let cache_dir = root.path().join("browsers").join("chrome-151.0.7922.77");
+        std::fs::create_dir_all(&cache_dir).expect("缓存目录");
+        let rel = crate::browser::cft::binary_rel_path().expect("平台路径");
+        let bin = cache_dir.join(rel);
+        std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
+        std::fs::write(bin, b"placeholder").expect("写入占位");
+        let tuning = LaunchTuning {
+            wait_or_kill: Duration::from_secs(5),
+            ..fast_tuning()
+        };
+        let mgr = BrowserManager::with_tuning(root.path().to_path_buf(), tuning);
+        let cfg = LaunchConfig {
+            binary_override: Some(h.fake_browser(&script_close_exit())),
+            ..Default::default()
+        };
+        let report = mgr.start(cfg).await.expect("启动");
+        // 登记发送面：发送 Browser.close 时写 close 标志（触发假浏览器自然退出）
+        let recorder = Arc::new(RecordingClose {
+            exit_flag: Some(report.profile_dir.join("close-flag")),
+            ..Default::default()
+        });
+        mgr.register_close_sender(recorder.clone());
+        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+        assert_eq!(
+            recorder.recorded(),
+            vec![crate::cdp::domains::names::BROWSER_CLOSE],
+            "Graceful 停止必须先发 Browser.close"
+        );
+        assert!(
+            matches!(stop.state, BrowserState::Stopped),
+            "自然退出后应收敛 Stopped：{:?}",
+            stop.state
+        );
+        assert!(!stop.force_killed, "Browser.close 后自然退出不应杀树");
+        assert!(!report.profile_dir.exists(), "停止后直删");
+    }
+
+    /// G-9：`Browser.close` 发出后进程不退出 → wait_or_kill 超时仍杀树兜底。
+    #[tokio::test]
+    async fn graceful_stop_close_timeout_still_force_kills() {
+        let Some(h) = Harness::new() else { return };
+        let cfg = h.config(&script_close_exit());
+        let mgr = h.manager.clone();
+        let report = mgr.start(cfg).await.expect("启动");
+        // 只记录不写标志：close 发出后假浏览器仍常驻 → 超时杀树
+        let recorder = Arc::new(RecordingClose::default());
+        mgr.register_close_sender(recorder.clone());
+        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+        assert_eq!(
+            recorder.recorded(),
+            vec![crate::cdp::domains::names::BROWSER_CLOSE],
+            "必须先发 Browser.close 再进入等待窗口"
+        );
+        assert!(stop.force_killed, "close 后超时仍须杀树兜底：{stop:?}");
+        assert!(matches!(stop.state, BrowserState::Stopped));
+        assert!(!report.profile_dir.exists(), "停止后直删");
+    }
+
+    /// G-9：无会话登记 → 保持既有语义——不发 Browser.close，wait_or_kill
+    /// 超时杀树（graceful_stop_timeout_force_kills 的无会话显式化）。
+    #[tokio::test]
+    async fn graceful_stop_no_session_falls_back_to_kill() {
+        let Some(h) = Harness::new() else { return };
+        let cfg = h.config(&script_ok());
+        let mgr = h.manager.clone();
+        let report = mgr.start(cfg).await.expect("启动");
+        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+        assert!(stop.force_killed, "无会话：wait_or_kill 超时杀树：{stop:?}");
+        assert!(matches!(stop.state, BrowserState::Stopped));
+        assert!(!report.profile_dir.exists(), "停止后直删");
+    }
+
+    /// G-9：`Browser.close` 发送失败（无连接/拒绝）→ 不 panic，直接走既有
+    /// wait_or_kill 超时杀树兜底。
+    #[tokio::test]
+    async fn graceful_stop_close_send_failure_falls_back() {
+        let Some(h) = Harness::new() else { return };
+        let cfg = h.config(&script_ok());
+        let mgr = h.manager.clone();
+        let report = mgr.start(cfg).await.expect("启动");
+        let recorder = Arc::new(RecordingClose {
+            fail: true,
+            ..Default::default()
+        });
+        mgr.register_close_sender(recorder.clone());
+        let stop = mgr
+            .stop(StopReason::Graceful)
+            .await
+            .expect("发送失败不得 panic/挂死");
+        assert_eq!(
+            recorder.recorded(),
+            vec![crate::cdp::domains::names::BROWSER_CLOSE]
+        );
+        assert!(stop.force_killed, "发送失败走既有超时杀树兜底：{stop:?}");
+        assert!(matches!(stop.state, BrowserState::Stopped));
+        assert!(!report.profile_dir.exists(), "停止后直删");
+    }
+
+    /// G-9：强制停止不发 `Browser.close`（直接杀树语义不变）。
+    #[tokio::test]
+    async fn force_stop_does_not_send_browser_close() {
+        let Some(h) = Harness::new() else { return };
+        let cfg = h.config(&script_ok());
+        let mgr = h.manager.clone();
+        let _ = mgr.start(cfg).await.expect("启动");
+        let recorder = Arc::new(RecordingClose::default());
+        mgr.register_close_sender(recorder.clone());
+        let stop = mgr.stop(StopReason::Force).await.expect("停止");
+        assert!(stop.force_killed);
+        assert!(
+            recorder.recorded().is_empty(),
+            "强制停止不得发 Browser.close"
+        );
     }
 
     /// start 幂等（§4.5）：Running 中重复 start 返回当前快照，不重复 spawn。

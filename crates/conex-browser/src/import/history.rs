@@ -60,6 +60,74 @@ pub struct HistoryOptions {
     pub limit: usize,
 }
 
+/// 落库分批条数（对齐 conex-db 的 IMPORT_BATCH_SIZE 分批事务语义；
+/// 03-方案 §2.3）。
+pub const PERSIST_BATCH_SIZE: usize = 1000;
+
+/// 历史落库行（解析结果 → 存储层适配：来源标识与导入时刻由调用方注入，
+/// 对应 conex-db imported_history 表行——03-方案 §2.2）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedHistory {
+    /// 访问 URL（落库主键一半）。
+    pub url: String,
+    /// 访问时刻（unix 秒；落库主键一半——同 URL 不同秒的访问各保留一条）。
+    pub visited_at: i64,
+    /// 页面标题（来源 NULL → None）。
+    pub title: Option<String>,
+    /// 来源标识（信息列不入主键）。
+    pub source: String,
+    /// 导入时刻（unix 秒）。
+    pub imported_at: i64,
+}
+
+/// 历史落库统计（新增 / 同 (url, visited_at) 去重跳过，供 UI 明示）。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HistoryPersistStats {
+    /// 新增落库条数。
+    pub inserted: u64,
+    /// 同主键去重跳过条数（重复导入）。
+    pub skipped_dupes: u64,
+}
+
+/// 历史落库接收器（存储面抽象）。
+///
+/// 架构约束（03-方案 §4.1）：本 crate（conex-browser）不依赖 conex-db——
+/// 落库编排在 Tauri 壳层；壳层以 conex-db `LocalDb` 适配本 trait（行映射 +
+/// `LocalDb::import_history`）。本 trait 使接线面可替换（测试用 mock
+/// 模拟 INSERT OR IGNORE 语义）。
+pub trait HistorySink {
+    /// 批量写入行；返回 (新增条数, 同键去重跳过条数)。实现方须保证
+    /// 同 (url, visited_at) 幂等（INSERT OR IGNORE 语义）。
+    fn write_history(&mut self, rows: &[PersistedHistory]) -> Result<(u64, u64), String>;
+}
+
+/// 历史落库接线（读取结果 → 存储层）：注入来源标识与导入时刻，按批
+/// （[PERSIST_BATCH_SIZE]）写入接收器并聚合统计；接收器错误透传。
+pub fn persist_history(
+    items: &[HistoryItem],
+    sink: &mut dyn HistorySink,
+    source: &str,
+    imported_at: i64,
+) -> Result<HistoryPersistStats, String> {
+    let mut stats = HistoryPersistStats::default();
+    for chunk in items.chunks(PERSIST_BATCH_SIZE) {
+        let rows: Vec<PersistedHistory> = chunk
+            .iter()
+            .map(|item| PersistedHistory {
+                url: item.url.clone(),
+                visited_at: item.visited_at,
+                title: item.title.clone(),
+                source: source.to_string(),
+                imported_at,
+            })
+            .collect();
+        let (inserted, skipped) = sink.write_history(&rows)?;
+        stats.inserted += inserted;
+        stats.skipped_dupes += skipped;
+    }
+    Ok(stats)
+}
+
 impl Default for HistoryOptions {
     fn default() -> Self {
         HistoryOptions {
@@ -405,5 +473,120 @@ mod tests {
         let report = read_history(&db, &HistoryOptions::default()).expect("读取");
         assert_eq!(report.items.len(), 1, "默认范围仅含最近 90 天内的访问");
         assert_eq!(report.items[0].url, "https://recent.example.com");
+    }
+
+    /// mock 存储面：模拟 conex-db INSERT OR IGNORE 幂等语义
+    /// （同 (url, visited_at) 仅首写保留，跨批次状态持续）。
+    #[derive(Debug, Default)]
+    struct MockHistorySink {
+        rows: std::collections::HashMap<(String, i64), PersistedHistory>,
+    }
+
+    impl HistorySink for MockHistorySink {
+        fn write_history(&mut self, rows: &[PersistedHistory]) -> Result<(u64, u64), String> {
+            let mut inserted = 0u64;
+            let mut skipped = 0u64;
+            for row in rows {
+                let key = (row.url.clone(), row.visited_at);
+                match self.rows.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(_) => skipped += 1,
+                    std::collections::hash_map::Entry::Vacant(vacant) => {
+                        vacant.insert(row.clone());
+                        inserted += 1;
+                    }
+                }
+            }
+            Ok((inserted, skipped))
+        }
+    }
+
+    /// 写入失败的接收器（错误透传面）。
+    struct FailingHistorySink;
+
+    impl HistorySink for FailingHistorySink {
+        fn write_history(&mut self, _rows: &[PersistedHistory]) -> Result<(u64, u64), String> {
+            Err("写入失败".to_string())
+        }
+    }
+
+    /// 落库接线：注入 source/imported_at、title None/Some 原样保留、
+    /// 统计聚合正确（mock 数据库入库断言）。
+    #[test]
+    fn persist_writes_rows_with_injected_meta() {
+        let items = vec![
+            HistoryItem {
+                url: "https://a.example.com".to_string(),
+                title: Some("A".to_string()),
+                visited_at: 100,
+            },
+            HistoryItem {
+                url: "https://b.example.com".to_string(),
+                title: None,
+                visited_at: 200,
+            },
+        ];
+        let mut sink = MockHistorySink::default();
+        let stats = persist_history(&items, &mut sink, "chrome/Default", 42).expect("落库");
+        assert_eq!(stats.inserted, 2);
+        assert_eq!(stats.skipped_dupes, 0);
+        assert_eq!(sink.rows.len(), 2);
+        let a = sink
+            .rows
+            .get(&("https://a.example.com".to_string(), 100))
+            .expect("A 行");
+        assert_eq!(a.title.as_deref(), Some("A"), "title Some 原样保留");
+        assert_eq!(a.source, "chrome/Default");
+        assert_eq!(a.imported_at, 42);
+        let b = sink
+            .rows
+            .get(&("https://b.example.com".to_string(), 200))
+            .expect("B 行");
+        assert_eq!(b.title, None, "title None 原样保留");
+    }
+
+    /// 幂等：同批再导 → inserted 0、skipped_dupes 全量、mock 行数不变；
+    /// 同 URL 不同 visited_at → 各自成行（历史语义，对接 conex-db 主键
+    /// (url, visited_at) 的 INSERT OR IGNORE）。
+    #[test]
+    fn persist_reimport_is_idempotent_multi_visits() {
+        let items = vec![
+            HistoryItem {
+                url: "https://a.example.com".to_string(),
+                title: None,
+                visited_at: 100,
+            },
+            HistoryItem {
+                url: "https://a.example.com".to_string(),
+                title: None,
+                visited_at: 200,
+            },
+        ];
+        let mut sink = MockHistorySink::default();
+        persist_history(&items, &mut sink, "chrome/Default", 42).expect("首次落库");
+        // 重导同批 + 追加同 URL 新秒数
+        let again = vec![
+            items[0].clone(),
+            items[1].clone(),
+            HistoryItem {
+                url: "https://a.example.com".to_string(),
+                title: Some("新标题".to_string()),
+                visited_at: 300,
+            },
+        ];
+        let stats = persist_history(&again, &mut sink, "edge/Profile 1", 43).expect("重导");
+        assert_eq!(stats.inserted, 1, "仅新秒数新增");
+        assert_eq!(stats.skipped_dupes, 2);
+        assert_eq!(sink.rows.len(), 3);
+    }
+
+    /// 错误透传：接收器失败 → persist 返回 Err（不吞错、无部分统计）。
+    #[test]
+    fn persist_propagates_sink_error() {
+        let items = vec![HistoryItem {
+            url: "https://a.example.com".to_string(),
+            title: None,
+            visited_at: 100,
+        }];
+        assert!(persist_history(&items, &mut FailingHistorySink, "chrome/Default", 1).is_err());
     }
 }

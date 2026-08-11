@@ -10,6 +10,14 @@
 //!   [`ImportPlan`]：`Network.setCookies` 批量注入参数 + localStorage
 //!   **origin 守卫**恢复脚本（脚本内先校验 `window.location.origin` 再
 //!   `setItem`，防跨站污染，对照 storage_state_watchdog.py:270-308）。
+//! - **注入执行**（§5.3）：[`inject_origin_scripts`]——origin 守卫恢复脚本经
+//!   `Page.addScriptToEvaluateOnNewDocument` 注册（未来文档，页面脚本执行前
+//!   恢复）+ `DOMStorage.setDOMStorageItem` 直写当前页（立即生效；storageId
+//!   securityOrigin 按 origin 守卫校验，拒绝非法 origin）；发送层经
+//!   [`LocalStorageChannel`] 抽象（真实实现 [`SessionLocalStorageChannel`]，
+//!   测试 mock 断言 wire 参数）。
+//! - **导出聚合**（§5.2 可选）：[`collect_local_storage`]——`DOMStorage.getDOMStorageItems`
+//!   按 origin 读取（带守卫），经 [`export_storage_state_with_origins`] 并入导出面。
 //! - **幂等**：同 (domain, name, path) 去重（**覆盖语义**，最后一次出现者胜）；
 //!   会话 cookie（expires ≤ 0）导入时**移除 expires 字段**（§5.1 归一化，
 //!   对照 storage_state_watchdog.py:252-264 的归一化处理）。
@@ -20,9 +28,20 @@
 //!
 //! 锁纪律（31-security-baseline B8）：本模块无锁、无文件 IO（纯内存转换）。
 
-use crate::cdp::domains::{Cookie as CdpCookie, SetCookieParam};
+use crate::cdp::domains::names::{
+    DOM_STORAGE_ENABLE, DOM_STORAGE_GET_DOM_STORAGE_ITEMS, DOM_STORAGE_SET_DOM_STORAGE_ITEM,
+    PAGE_ADD_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT,
+};
+use crate::cdp::domains::{
+    AddScriptToEvaluateOnNewDocumentParams, Cookie as CdpCookie, GetDOMStorageItemsParams,
+    GetDOMStorageItemsResult, SetCookieParam, SetDOMStorageItemParams, StorageId,
+};
+use crate::BrowserSession;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 /// storage_state JSON 大小上限（§5.3：10MB）。
 pub const STORAGE_STATE_MAX_BYTES: usize = 10 * 1024 * 1024;
@@ -231,10 +250,14 @@ pub fn origin_guard_script(origin: &str, items: &[StorageItem]) -> String {
 /// 单个 origin 恢复脚本（注入面元素）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OriginScript {
-    /// 目标 origin（`Page.addScriptToEvaluateOnNewDocument` 关联文档校验用）。
+    /// 目标 origin（`Page.addScriptToEvaluateOnNewDocument` 关联文档校验用；
+    /// `DOMStorage` 直写 storageId.securityOrigin 同源）。
     pub origin: String,
     /// 已含 origin 守卫的注入脚本源码。
     pub source: String,
+    /// 直写条目（与守卫脚本同源同序；重复导入为覆盖语义——`setItem` 直写
+    /// 天然覆盖，同键多次写入最终值胜，见 [`ImportPlan`] 幂等说明）。
+    pub items: Vec<StorageItem>,
 }
 
 /// 导入统计（审计面：数量脱敏，不含 cookie value）。
@@ -359,6 +382,7 @@ pub fn build_import_plan(state: &StorageState) -> ImportPlan {
         .map(|o| OriginScript {
             origin: normalize_origin(&o.origin).to_string(),
             source: origin_guard_script(&o.origin, &o.local_storage),
+            items: o.local_storage.clone(),
         })
         .collect();
     let stats = ImportStats {
@@ -384,6 +408,253 @@ pub fn export_storage_state(
         return Err(StorageStateError::NotAuthorized);
     }
     Ok(StorageState::from_cdp_cookies(cookies))
+}
+
+// ---------------------------------------------------------------------------
+// localStorage 注入/导出执行面（§5.3 注入 + §5.2 导出聚合；J1b 接线点）
+// ---------------------------------------------------------------------------
+
+/// DOMStorage/Page 注入执行面抽象（发送层解耦——测试经 mock 断言 wire 参数，
+/// 真实实现见 [`SessionLocalStorageChannel`]）。
+#[async_trait]
+pub trait LocalStorageChannel: Send + Sync {
+    /// 注册 origin 守卫恢复脚本（`Page.addScriptToEvaluateOnNewDocument`；
+    /// 作用于后续新文档——页面脚本执行前恢复；重复导入按注册序叠加，旧脚本
+    /// 先执行、新脚本后执行，最终值胜——覆盖语义由注册序保证）。
+    async fn add_init_script(&self, source: &str) -> Result<(), StorageStateError>;
+    /// 直写某 origin 的 localStorage（`DOMStorage.setDOMStorageItem`；
+    /// storageId.securityOrigin 由调用方按 origin 守卫校验后构造）。
+    async fn set_dom_storage_item(
+        &self,
+        security_origin: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), StorageStateError>;
+    /// 读取某 origin 的 localStorage（`DOMStorage.getDOMStorageItems`；
+    /// 导出侧聚合输入，返回 (name, value) 对）。
+    async fn get_dom_storage_items(
+        &self,
+        security_origin: &str,
+    ) -> Result<Vec<(String, String)>, StorageStateError>;
+}
+
+/// 真实注入执行通道（经 `BrowserSession` 统一发送层；绑定目标标签会话——
+/// `Page.addScriptToEvaluateOnNewDocument` 与 DOMStorage 命令均按会话路由）。
+pub struct SessionLocalStorageChannel {
+    session: Arc<BrowserSession>,
+    session_id: String,
+    /// `DOMStorage.enable` 一次性惰性发送（幂等；命令面本身不依赖 enable，
+    /// 但协议惯例在直写/读取前使域就绪，防事件面缺失）。
+    enabled: AtomicBool,
+}
+
+impl SessionLocalStorageChannel {
+    /// 绑定活动标签会话（无活动标签 → `Inject` 错误）。
+    pub fn for_active(session: Arc<BrowserSession>) -> Result<Self, StorageStateError> {
+        let current = session
+            .current_session()
+            .map_err(|e| map_inject_error("current_session", e))?;
+        Ok(SessionLocalStorageChannel {
+            session,
+            session_id: current.session,
+            enabled: AtomicBool::new(false),
+        })
+    }
+
+    /// 绑定具体标签会话（P1 多标签：per-tab 注入路由）。
+    pub fn with_session(session: Arc<BrowserSession>, session_id: String) -> Self {
+        SessionLocalStorageChannel {
+            session,
+            session_id,
+            enabled: AtomicBool::new(false),
+        }
+    }
+
+    /// `DOMStorage.enable` 惰性发送（每通道一次性，幂等）。
+    async fn ensure_enabled(&self) -> Result<(), StorageStateError> {
+        if self.enabled.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let _: serde_json::Value = self
+            .session
+            .send_page(&self.session_id, DOM_STORAGE_ENABLE, serde_json::json!({}))
+            .await
+            .map_err(|e| map_inject_error("DOMStorage.enable", e))?;
+        self.enabled.store(true, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl LocalStorageChannel for SessionLocalStorageChannel {
+    async fn add_init_script(&self, source: &str) -> Result<(), StorageStateError> {
+        let _: serde_json::Value = self
+            .session
+            .send_page(
+                &self.session_id,
+                PAGE_ADD_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT,
+                AddScriptToEvaluateOnNewDocumentParams {
+                    source: source.to_string(),
+                    world_name: None,
+                },
+            )
+            .await
+            .map_err(|e| map_inject_error("Page.addScriptToEvaluateOnNewDocument", e))?;
+        Ok(())
+    }
+
+    async fn set_dom_storage_item(
+        &self,
+        security_origin: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), StorageStateError> {
+        self.ensure_enabled().await?;
+        let _: serde_json::Value = self
+            .session
+            .send_page(
+                &self.session_id,
+                DOM_STORAGE_SET_DOM_STORAGE_ITEM,
+                SetDOMStorageItemParams {
+                    storage_id: StorageId {
+                        security_origin: security_origin.to_string(),
+                        is_local_storage: true,
+                    },
+                    key: key.to_string(),
+                    value: value.to_string(),
+                },
+            )
+            .await
+            .map_err(|e| map_inject_error("DOMStorage.setDOMStorageItem", e))?;
+        Ok(())
+    }
+
+    async fn get_dom_storage_items(
+        &self,
+        security_origin: &str,
+    ) -> Result<Vec<(String, String)>, StorageStateError> {
+        self.ensure_enabled().await?;
+        let result: GetDOMStorageItemsResult = self
+            .session
+            .send_page(
+                &self.session_id,
+                DOM_STORAGE_GET_DOM_STORAGE_ITEMS,
+                GetDOMStorageItemsParams {
+                    storage_id: StorageId {
+                        security_origin: security_origin.to_string(),
+                        is_local_storage: true,
+                    },
+                },
+            )
+            .await
+            .map_err(|e| map_inject_error("DOMStorage.getDOMStorageItems", e))?;
+        Ok(result
+            .entries
+            .into_iter()
+            .filter_map(|pair| {
+                if pair.len() == 2 {
+                    Some((pair[0].clone(), pair[1].clone()))
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+}
+
+/// CdpError → StorageStateError 映射（注入/读取命令面）。
+fn map_inject_error(method: &str, err: crate::cdp::error::CdpError) -> StorageStateError {
+    StorageStateError::Inject {
+        method: method.to_string(),
+        message: err.to_string(),
+    }
+}
+
+/// 注入执行统计（审计面：数量脱敏，不含任何值）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct InjectStats {
+    /// 已注册 origin 守卫恢复脚本数。
+    pub scripts: usize,
+    /// 已直写 localStorage 条目数。
+    pub items: usize,
+}
+
+/// localStorage 注入执行（§5.3）：两机制互补——
+///
+/// ① `Page.addScriptToEvaluateOnNewDocument` 注册 origin 守卫恢复脚本：作用于
+///    未来文档，页面脚本执行前恢复（主题/首屏状态无闪变），脚本内校验
+///    `window.location.origin` 防跨站污染；
+/// ② `DOMStorage.setDOMStorageItem` 直写当前页：立即生效，无需重载；storageId
+///    securityOrigin 按 origin 守卫校验（防御性再检，拒绝非法 origin——
+///    不在任何 CDP 命令前放行）。
+///
+/// 取舍说明：仅 ① → 已加载页面缺失恢复值（须重载才生效）；仅 ② → 页面自身
+/// 初始化逻辑先于注入执行（恢复语义后置，主题/首屏闪变）。两机制互补覆盖
+/// 「当前页立即生效 + 后续导航依旧保持」。重复导入为覆盖语义（直写同键覆盖；
+/// 脚本按注册序后执行者胜），无错误累积。
+pub async fn inject_origin_scripts(
+    channel: &dyn LocalStorageChannel,
+    plan: &ImportPlan,
+) -> Result<InjectStats, StorageStateError> {
+    let mut scripts = 0usize;
+    let mut items = 0usize;
+    for script in &plan.origin_scripts {
+        validate_origin(&script.origin).map_err(|reason| StorageStateError::InvalidOrigin {
+            origin: script.origin.clone(),
+            reason,
+        })?;
+        channel.add_init_script(&script.source).await?;
+        scripts += 1;
+        for item in &script.items {
+            channel
+                .set_dom_storage_item(&script.origin, &item.name, &item.value)
+                .await?;
+            items += 1;
+        }
+    }
+    Ok(InjectStats { scripts, items })
+}
+
+/// 导出侧 origins 聚合（§5.2 可选通道）：`DOMStorage.getDOMStorageItems` 按
+/// origin 读取 localStorage → `origins[]`；origin 守卫：非法 origin 在发出
+/// 读取命令前拒绝（`InvalidOrigin`）。
+pub async fn collect_local_storage(
+    channel: &dyn LocalStorageChannel,
+    origins: &[String],
+) -> Result<Vec<StorageOrigin>, StorageStateError> {
+    let mut out = Vec::new();
+    for origin in origins {
+        validate_origin(origin).map_err(|reason| StorageStateError::InvalidOrigin {
+            origin: origin.clone(),
+            reason,
+        })?;
+        let entries = channel.get_dom_storage_items(origin).await?;
+        out.push(StorageOrigin {
+            origin: normalize_origin(origin).to_string(),
+            local_storage: entries
+                .into_iter()
+                .map(|(name, value)| StorageItem { name, value })
+                .collect(),
+        });
+    }
+    Ok(out)
+}
+
+/// 导出（§5.2 扩展面）：cookie 面同 [`export_storage_state`]（显式授权 +
+/// 内存传递）；origins 面经 `DOMStorage.getDOMStorageItems` 聚合（带守卫）。
+/// 授权拒绝发生在任何 CDP 命令之前。
+pub async fn export_storage_state_with_origins(
+    cookies: &[CdpCookie],
+    origins: &[String],
+    auth: ExportAuthorization,
+    channel: &dyn LocalStorageChannel,
+) -> Result<StorageState, StorageStateError> {
+    if auth == ExportAuthorization::Denied {
+        return Err(StorageStateError::NotAuthorized);
+    }
+    let mut state = StorageState::from_cdp_cookies(cookies);
+    state.origins = collect_local_storage(channel, origins).await?;
+    Ok(state)
 }
 
 /// sameSite 归一化：`Strict`/`Lax`/`None`（大小写容错）；
@@ -432,12 +703,18 @@ pub enum StorageStateError {
     /// 导出未获显式授权（§5.2）。
     #[error("导出未获显式授权（storage_state 属敏感动作，须授权对话框确认）")]
     NotAuthorized,
+    /// CDP 注入/读取命令失败（写入与导出聚合共用）。
+    #[error("localStorage CDP 命令失败[{method}]：{message}")]
+    Inject { method: String, message: String },
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::cdp::domains::Cookie;
+    use crate::cdp::mock::{MockReply, MockServer};
+    use crate::cdp::transport::CdpEndpoint;
+    use serde_json::json;
 
     fn cdp_cookie(overrides: impl Fn(&mut Cookie)) -> Cookie {
         let mut c = Cookie {
@@ -805,5 +1082,417 @@ mod tests {
         let json = state.to_json();
         let reparsed = parse_storage_state(&json).expect("重解析");
         assert_eq!(state, reparsed, "导出 → 序列化 → 解析往返一致");
+    }
+
+    // -------------------------------------------------------------------
+    // localStorage 注入/导出执行面（§5.3 / J1b 接线点）
+    // -------------------------------------------------------------------
+
+    /// 记录型 mock 通道（注入执行面断言：调用序与参数）。
+    #[derive(Default)]
+    struct RecordingChannel {
+        calls: std::sync::Mutex<Vec<ChannelCall>>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum ChannelCall {
+        InitScript(String),
+        SetItem {
+            origin: String,
+            key: String,
+            value: String,
+        },
+        GetItems(String),
+    }
+
+    #[async_trait]
+    impl LocalStorageChannel for RecordingChannel {
+        async fn add_init_script(&self, source: &str) -> Result<(), StorageStateError> {
+            self.calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(ChannelCall::InitScript(source.to_string()));
+            Ok(())
+        }
+
+        async fn set_dom_storage_item(
+            &self,
+            security_origin: &str,
+            key: &str,
+            value: &str,
+        ) -> Result<(), StorageStateError> {
+            self.calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(ChannelCall::SetItem {
+                    origin: security_origin.to_string(),
+                    key: key.to_string(),
+                    value: value.to_string(),
+                });
+            Ok(())
+        }
+
+        async fn get_dom_storage_items(
+            &self,
+            security_origin: &str,
+        ) -> Result<Vec<(String, String)>, StorageStateError> {
+            self.calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(ChannelCall::GetItems(security_origin.to_string()));
+            Ok(vec![("theme".to_string(), "dark".to_string())])
+        }
+    }
+
+    /// 双 origin 注入计划 fixture（每 origin 含守卫脚本与直写条目）。
+    fn example_plan() -> ImportPlan {
+        let json = r#"{
+            "cookies": [],
+            "origins": [
+                {
+                    "origin": "https://example.com",
+                    "localStorage": [
+                        { "name": "theme", "value": "dark" },
+                        { "name": "token", "value": "abc" }
+                    ]
+                },
+                {
+                    "origin": "https://sub.example.org",
+                    "localStorage": [ { "name": "k", "value": "v" } ]
+                }
+            ]
+        }"#;
+        build_import_plan(&parse_storage_state(json).expect("解析"))
+    }
+
+    /// 注入执行（§5.3）：脚本注册 + 直写调用序与参数断言（mock 通道）。
+    #[tokio::test]
+    async fn inject_origin_scripts_executes_channel() {
+        let channel = RecordingChannel::default();
+        let plan = example_plan();
+        let stats = inject_origin_scripts(&channel, &plan).await.expect("注入");
+        assert_eq!(stats.scripts, 2, "每 origin 一条守卫脚本");
+        assert_eq!(stats.items, 3, "直写条目总数");
+        let calls = channel.calls.lock().unwrap_or_else(|p| p.into_inner());
+        assert_eq!(calls.len(), 5);
+        // 调用序：每 origin 先注册守卫脚本，再逐条直写
+        assert!(
+            matches!(&calls[0], ChannelCall::InitScript(s)
+                if s.contains(r#"window.location.origin !== "https://example.com""#)),
+            "脚本须含 origin 守卫且指向目标 origin"
+        );
+        assert!(
+            matches!(&calls[1], ChannelCall::SetItem { origin, key, value }
+                if origin == "https://example.com" && key == "theme" && value == "dark")
+        );
+        assert!(
+            matches!(&calls[2], ChannelCall::SetItem { origin, key, .. }
+                if origin == "https://example.com" && key == "token")
+        );
+        assert!(
+            matches!(&calls[3], ChannelCall::InitScript(s) if s.contains("sub.example.org"))
+        );
+        assert!(
+            matches!(&calls[4], ChannelCall::SetItem { origin, key, value }
+                if origin == "https://sub.example.org" && key == "k" && value == "v")
+        );
+    }
+
+    /// origin 守卫（storageId securityOrigin）：非法 origin 拒绝——任何 CDP
+    /// 命令均不发出（防御性再检，正常 parse 已拦截非法 origin）。
+    #[tokio::test]
+    async fn inject_origin_scripts_rejects_illegal_origin() {
+        let channel = RecordingChannel::default();
+        // 手工构造带非法 origin 的计划（验证执行面防御性再检）
+        let plan = ImportPlan {
+            cookies: vec![],
+            origin_scripts: vec![OriginScript {
+                origin: "javascript:alert(1)".to_string(),
+                source: "(() => {})();".to_string(),
+                items: vec![StorageItem {
+                    name: "k".to_string(),
+                    value: "v".to_string(),
+                }],
+            }],
+            stats: ImportStats::default(),
+        };
+        assert!(matches!(
+            inject_origin_scripts(&channel, &plan).await,
+            Err(StorageStateError::InvalidOrigin { .. })
+        ));
+        assert!(
+            channel
+                .calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_empty(),
+            "非法 origin 不得发出任何 CDP 命令"
+        );
+    }
+
+    /// 幂等（重复导入覆盖语义）：同 (origin, key) 二次注入值一致、无错误；
+    /// 变更值重导 → 最后一次值胜（直写 setItem 覆盖语义）。
+    #[tokio::test]
+    async fn inject_origin_scripts_idempotent_overwrite() {
+        let channel = RecordingChannel::default();
+        let json = r#"{"cookies":[],"origins":[{"origin":"https://example.com","localStorage":[{"name":"theme","value":"dark"}]}]}"#;
+        let plan = build_import_plan(&parse_storage_state(json).expect("解析"));
+        inject_origin_scripts(&channel, &plan).await.expect("首次导入");
+        inject_origin_scripts(&channel, &plan).await.expect("重复导入（同值）");
+        let set_values = |channel: &RecordingChannel| -> Vec<String> {
+            channel
+                .calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .iter()
+                .filter_map(|c| match c {
+                    ChannelCall::SetItem { key, value, .. } if key == "theme" => {
+                        Some(value.clone())
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(
+            set_values(&channel),
+            vec!["dark", "dark"],
+            "同值重复导入稳定无错"
+        );
+        // 变更值重导 → 覆盖语义（最后一次值胜）
+        let json2 = r#"{"cookies":[],"origins":[{"origin":"https://example.com","localStorage":[{"name":"theme","value":"light"}]}]}"#;
+        let plan2 = build_import_plan(&parse_storage_state(json2).expect("解析"));
+        inject_origin_scripts(&channel, &plan2).await.expect("覆盖导入");
+        assert_eq!(
+            set_values(&channel),
+            vec!["dark", "dark", "light"],
+            "覆盖语义：最后一次值胜"
+        );
+    }
+
+    /// 导出聚合读取（§5.2 可选）：getDOMStorageItems 按 origin 读取（含尾部
+    /// 斜杠归一化）+ origin 守卫（非法 origin 不发命令）。
+    #[tokio::test]
+    async fn collect_local_storage_reads_with_guard() {
+        let channel = RecordingChannel::default();
+        let origins = collect_local_storage(
+            &channel,
+            &[
+                "https://example.com".to_string(),
+                "https://example.com/".to_string(),
+            ],
+        )
+        .await
+        .expect("读取");
+        assert_eq!(origins.len(), 2);
+        assert_eq!(origins[0].origin, "https://example.com");
+        assert_eq!(origins[1].origin, "https://example.com", "尾部斜杠归一化");
+        assert_eq!(origins[0].local_storage[0].name, "theme");
+        {
+            let calls = channel.calls.lock().unwrap_or_else(|p| p.into_inner());
+            assert_eq!(calls.len(), 2);
+            assert_eq!(
+                calls[0],
+                ChannelCall::GetItems("https://example.com".to_string())
+            );
+        }
+
+        // 非法 origin 拒绝：不发出任何读取命令
+        let channel2 = RecordingChannel::default();
+        assert!(matches!(
+            collect_local_storage(&channel2, &["file:///etc/passwd".to_string()]).await,
+            Err(StorageStateError::InvalidOrigin { .. })
+        ));
+        assert!(
+            channel2
+                .calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_empty(),
+            "非法 origin 不得发出读取命令"
+        );
+    }
+
+    /// 导出扩展面（§5.2）：授权拒绝先于任何 CDP 命令；确认后 cookie + origins
+    /// 合并。
+    #[tokio::test]
+    async fn export_with_origins_auth_and_merge() {
+        let channel = RecordingChannel::default();
+        let cookies = vec![cdp_cookie(|c| {
+            c.name = "sid".to_string();
+        })];
+        // 授权拒绝：通道零调用
+        assert!(matches!(
+            export_storage_state_with_origins(
+                &cookies,
+                &["https://example.com".to_string()],
+                ExportAuthorization::Denied,
+                &channel,
+            )
+            .await,
+            Err(StorageStateError::NotAuthorized)
+        ));
+        assert!(
+            channel
+                .calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_empty(),
+            "授权拒绝不得发出任何 CDP 命令"
+        );
+        // 确认后：cookie + origins 聚合
+        let state = export_storage_state_with_origins(
+            &cookies,
+            &["https://example.com".to_string()],
+            ExportAuthorization::Confirmed,
+            &channel,
+        )
+        .await
+        .expect("导出");
+        assert_eq!(state.cookies.len(), 1);
+        assert_eq!(state.origins.len(), 1);
+        assert_eq!(state.origins[0].local_storage[0].name, "theme");
+    }
+
+    /// 真实通道 wire 参数（mock 发送面）：addInitScript 源、DOMStorage.enable
+    /// 惰性一次、setDOMStorageItem/getDOMStorageItems 的 storageId
+    /// （securityOrigin + isLocalStorage=true）与 key/value。
+    #[tokio::test]
+    async fn session_channel_wire_params() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        mock.set_auto_reply(
+            "Page.addScriptToEvaluateOnNewDocument",
+            MockReply::Ok(json!({ "identifier": "I1" })),
+        );
+        mock.set_auto_reply("DOMStorage.enable", MockReply::Ok(json!({})));
+        mock.set_auto_reply("DOMStorage.setDOMStorageItem", MockReply::Ok(json!({})));
+        mock.set_auto_reply(
+            "DOMStorage.getDOMStorageItems",
+            MockReply::Ok(json!({ "entries": [["k", "v"]] })),
+        );
+        let session = Arc::new(
+            crate::BrowserSession::connect(
+                CdpEndpoint {
+                    port: mock.addr.port(),
+                    ws_path: "/devtools/browser/storage-state".to_string(),
+                },
+                crate::cdp::transport::ExpectedBrowser::default(),
+                Arc::new(AllowHooks),
+            )
+            .await
+            .expect("会话建连失败"),
+        );
+        mock.send_event(
+            "Target.attachedToTarget",
+            json!({
+                "sessionId": "S1",
+                "targetInfo": { "targetId": "T1", "type": "page", "title": "A", "url": "https://example.com" },
+                "waitingForDebugger": false,
+            }),
+            None,
+        );
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        while session.current_session().is_err() {
+            assert!(tokio::time::Instant::now() < deadline, "活动标签未就绪");
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let channel = SessionLocalStorageChannel::for_active(session.clone()).expect("通道");
+
+        // 注入面（单 origin 双条目，便于按序消费断言）
+        let json = r#"{"cookies":[],"origins":[{"origin":"https://example.com","localStorage":[{"name":"theme","value":"dark"},{"name":"token","value":"abc"}]}]}"#;
+        let plan = build_import_plan(&parse_storage_state(json).expect("解析"));
+        inject_origin_scripts(&channel, &plan).await.expect("注入");
+        let cmd = mock.expect_command("Page.addScriptToEvaluateOnNewDocument").await;
+        assert_eq!(cmd["sessionId"], "S1");
+        assert!(
+            cmd["params"]["source"].as_str().unwrap().contains("window.location.origin"),
+            "脚本须含 origin 守卫"
+        );
+        let cmd = mock.expect_command("DOMStorage.enable").await;
+        assert_eq!(cmd["sessionId"], "S1");
+        let cmd = mock.expect_command("DOMStorage.setDOMStorageItem").await;
+        assert_eq!(cmd["params"]["storageId"]["securityOrigin"], "https://example.com");
+        assert_eq!(cmd["params"]["storageId"]["isLocalStorage"], true);
+        assert_eq!(cmd["params"]["key"], "theme");
+        assert_eq!(cmd["params"]["value"], "dark");
+        let cmd = mock.expect_command("DOMStorage.setDOMStorageItem").await;
+        assert_eq!(cmd["params"]["key"], "token");
+
+        // 读取面
+        let origins = collect_local_storage(&channel, &["https://example.com".to_string()])
+            .await
+            .expect("读取");
+        assert_eq!(origins[0].local_storage[0].name, "k");
+        let cmd = mock.expect_command("DOMStorage.getDOMStorageItems").await;
+        assert_eq!(cmd["params"]["storageId"]["securityOrigin"], "https://example.com");
+        assert_eq!(cmd["params"]["storageId"]["isLocalStorage"], true);
+
+        // enable 惰性一次：全部预期命令已消费，队列无残留（不得重复 enable）
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(300),
+                mock.next_command(),
+            )
+            .await
+            .is_err(),
+            "命令队列应已消费完毕（DOMStorage.enable 惰性一次）"
+        );
+        session.shutdown().await;
+    }
+
+    /// 放行策略钩子（会话面集成测试用，与 ops.rs 测试同源）。
+    struct AllowHooks;
+
+    #[async_trait::async_trait]
+    impl crate::cdp::sender::CommandPolicyHooks for AllowHooks {
+        async fn idempotent(
+            &self,
+            _key: &crate::cdp::sender::IdKey,
+        ) -> Option<Result<serde_json::Value, crate::cdp::error::CdpError>> {
+            None
+        }
+        async fn approve(
+            &self,
+            _cmd: &crate::cdp::sender::CdpCommandView,
+        ) -> Result<(), crate::cdp::sender::ApprovalDenied> {
+            Ok(())
+        }
+        fn audit(&self, _event: crate::cdp::sender::BrowserAuditEvent) {}
+        fn emergency_stop(&self) -> Arc<std::sync::atomic::AtomicBool> {
+            Arc::new(std::sync::atomic::AtomicBool::new(false))
+        }
+        fn abort_token(&self) -> crate::cdp::sender::CancellationToken {
+            crate::cdp::sender::CancellationToken::new()
+        }
+    }
+
+    /// 会话恢复所需 mock 自动应答全表（与 ops.rs 测试同源）。
+    fn restore_reply_map() -> Vec<(&'static str, MockReply)> {
+        vec![
+            ("Browser.getVersion", MockReply::Ok(json!({
+                "protocolVersion": "1.3",
+                "product": "Chrome/151.0.7922.72",
+                "revision": "@abc",
+                "userAgent": "ua",
+                "jsVersion": "13.1.71"
+            }))),
+            ("Target.setDiscoverTargets", MockReply::Ok(json!({}))),
+            ("Target.getTargets", MockReply::Ok(json!({
+                "targetInfos": [
+                    { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
+                ]
+            }))),
+            ("Target.attachToTarget", MockReply::Ok(json!({ "sessionId": "S1" }))),
+            ("Page.enable", MockReply::Ok(json!({}))),
+            ("Page.setLifecycleEventsEnabled", MockReply::Ok(json!({}))),
+            ("Runtime.enable", MockReply::Ok(json!({}))),
+            ("DOM.enable", MockReply::Ok(json!({}))),
+            ("Network.enable", MockReply::Ok(json!({}))),
+            ("Runtime.runIfWaitingForDebugger", MockReply::Ok(json!({}))),
+            ("Runtime.evaluate", MockReply::Ok(json!({ "result": { "value": 1 } }))),
+            ("Page.setWindowOpenHandler", MockReply::Ok(json!({}))),
+        ]
     }
 }

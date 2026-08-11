@@ -2,8 +2,8 @@
 //!
 //! 本模块是「外部浏览器类 MCP（chrome-devtools-mcp 族）经 `--browserUrl`
 //! 附加受管实例 CDP 端点」的 **browser 域消费面**（引擎侧 MCP 桥所在
-//! 的 agent-tools 与会话装配所在 engine.rs 均为并行域，本任务只登记接线点，
-//! 消费代码落在本模块与 [super::BrowserSlot]）。
+//! 的 agent-tools 为并行域；引擎侧消费 seam 已接线——engine.rs
+//! `Engine::browser_attach_mcp_server_config`，见下方 E-4 注记）。
 //!
 //! ## E-1 端点暴露守卫（消费 `BrowserToolsConfig.mcp_attach_allowed`）
 //! - 会话级开关默认关闭（R-12 安全默认，34 §5.1）；关闭时**端点信息零暴露**
@@ -28,8 +28,11 @@
 //! （servers.rs）与 `register_plugin_server`（mcp/mod.rs）→ 桥 `start`
 //! （bridge.rs spawn 处 `Command::new(command).args(&args).envs(&env)`）
 //! ——browserUrl 型 server 是纯 `--browserUrl` 参数注入，桥无需改动；
-//! 引擎侧消费入口 `Engine::register_plugin_mcp_server(config)`
-//! （engine.rs，并行域）即该注入面的承载。
+//! 引擎侧消费入口为 `Engine::browser_attach_mcp_server_config`
+//! （engine.rs，已接线：守卫取端点 → 本模块构建配置 → 装配点注册）。
+//! 插件 mcpServers 装配点（用户声明 server 的注册处，core_run_commands
+//! 并行域）为 TODO 登记：识别 chrome-devtools-mcp 族 server 后调该 seam
+//! 并经 `Engine::register_plugin_mcp_server` 注册。
 //! 验证方法（34 §3.3 实测背书）：`cargo test -p conex-browser-tools --test
 //! mcp_attach -- --ignored`——需本机 Chrome + npx + 网络；断言受管实例
 //! attach 握手、29 工具枚举、`mcp_<server>__*` 命名空间隔离、只读工具
@@ -97,7 +100,6 @@ pub(crate) fn attach_exposure_decision(
 /// `Command::new("npx")` spawn → NotFound）；非 Windows：`<program> <args…>`
 /// 直连。`windows` 为平台注入面——调用方传 `cfg!(windows)`；测试注入假平台
 /// 与假 program（fake-npx）验证 `cmd /c` 分派形态，不依赖本机 npx。
-#[allow(dead_code)] // E-2 接线登记：engine.rs spawn 配置面消费（34 §5.2 E-2），接线后移除
 pub(crate) fn mcp_npx_spawn(windows: bool, program: &str, args: &[&str]) -> (String, Vec<String>) {
     if windows {
         let mut all = Vec::with_capacity(args.len() + 2);
@@ -120,7 +122,6 @@ pub(crate) fn mcp_npx_spawn(windows: bool, program: &str, args: &[&str]) -> (Str
 ///
 /// 包名：**`chrome-devtools-mcp`**（34 §2 包名发现：官方现包名，旧
 /// `@google/chrome-devtools-mcp` 在 npm registry 已 404，勿用）。
-#[allow(dead_code)] // E-1/E-2 接线登记：engine.rs MCP spawn 面消费（34 §5.2 E-1/E-2），接线后移除
 pub(crate) fn mcp_attach_server_config(
     server_id: &str,
     browser_url: &str,

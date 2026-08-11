@@ -180,6 +180,27 @@ impl SessionOps for MockSession {
                     .insert(new_id.clone(), "S9".to_string());
                 Ok(json!({ "targetId": new_id }))
             }
+            // F2（P1 缺陷修复面）：new_tab 后显式 attach——应答会话 + 登记路由
+            // 与活动槽（模拟 BrowserSession::attach_tab 的确定性登记语义；
+            // 真实链路：createTarget 不触发 attachedToTarget 事件，显式 attach
+            // 后新标签才获得会话并成为活动标签）
+            "Target.attachToTarget" => {
+                let id = params
+                    .get("targetId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("T9")
+                    .to_string();
+                let session = "S9".to_string();
+                self.tabs
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(id.clone(), session.clone());
+                *self.active.lock().unwrap_or_else(|p| p.into_inner()) = SessionRef {
+                    target_id: id,
+                    session: session.clone(),
+                };
+                Ok(json!({ "sessionId": session }))
+            }
             "Target.closeTarget" => {
                 if let Some(id) = params.get("targetId").and_then(Value::as_str) {
                     self.tabs

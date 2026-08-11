@@ -1,7 +1,9 @@
-//! 域子集类型化命令/事件包装（维度 11 §3.3 清单，R-3 补齐后 13 域）
+//! 域子集类型化命令/事件包装（维度 11 §3.3 清单，R-3 补齐后 13 域；
+//! 维度 16 storage_state 注入/导出聚合增补 DOMStorage 域）
 //!
 //! 覆盖清单：Browser / Target / Page / Runtime / DOM / DOMSnapshot /
-//! Accessibility / Network / Input / Emulation / Storage / SystemInfo / Log。
+//! Accessibility / Network / Input / Emulation / Storage / DOMStorage /
+//! SystemInfo / Log。
 //! Console 无独立域：控制台面由 Runtime.consoleAPICalled / exceptionThrown /
 //! Page.pageError 组合承载（§3.3 Console 能力说明）。
 //!
@@ -31,10 +33,14 @@ pub mod names {
     pub const PAGE_STOP_SCREENCAST: &str = "Page.stopScreencast";
     pub const PAGE_SCREENCAST_FRAME_ACK: &str = "Page.screencastFrameAck";
     pub const PAGE_GET_LAYOUT_METRICS: &str = "Page.getLayoutMetrics";
+    // Chrome 151 已移除 Runtime.createIsolatedWorld（-32601 not found）；
+    // 隔离世界创建改走 Page 域：getFrameTree 取主 frameId + createIsolatedWorld
+    //（缺陷 A 修复，K7 e2e 实测面）
+    pub const PAGE_GET_FRAME_TREE: &str = "Page.getFrameTree";
+    pub const PAGE_CREATE_ISOLATED_WORLD: &str = "Page.createIsolatedWorld";
     pub const RUNTIME_ENABLE: &str = "Runtime.enable";
     pub const RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER: &str = "Runtime.runIfWaitingForDebugger";
     pub const RUNTIME_EVALUATE: &str = "Runtime.evaluate";
-    pub const RUNTIME_CREATE_ISOLATED_WORLD: &str = "Runtime.createIsolatedWorld";
     pub const DOM_ENABLE: &str = "DOM.enable";
     pub const DOM_GET_DOCUMENT: &str = "DOM.getDocument";
     pub const NETWORK_ENABLE: &str = "Network.enable";
@@ -43,6 +49,12 @@ pub mod names {
     pub const ACCESSIBILITY_GET_FULL_AX_TREE: &str = "Accessibility.getFullAXTree";
     pub const DOM_SNAPSHOT_CAPTURE_SNAPSHOT: &str = "DOMSnapshot.captureSnapshot";
     pub const LOG_ENABLE: &str = "Log.enable";
+    pub const DOM_STORAGE_ENABLE: &str = "DOMStorage.enable";
+    pub const DOM_STORAGE_GET_DOM_STORAGE_ITEMS: &str = "DOMStorage.getDOMStorageItems";
+    pub const DOM_STORAGE_SET_DOM_STORAGE_ITEM: &str = "DOMStorage.setDOMStorageItem";
+    pub const DOM_STORAGE_REMOVE_DOM_STORAGE_ITEM: &str = "DOMStorage.removeDOMStorageItem";
+    pub const PAGE_ADD_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT: &str =
+        "Page.addScriptToEvaluateOnNewDocument";
 }
 
 // ---------------------------------------------------------------------------
@@ -1299,6 +1311,48 @@ pub struct StorageSetCookiesParams {
 }
 
 // ---------------------------------------------------------------------------
+// DOMStorage 域（会话级，维度 16 storage_state localStorage 注入/导出聚合）
+// ---------------------------------------------------------------------------
+
+/// DOMStorage 存储区标识（storageId：securityOrigin + 存储类型；
+/// `isLocalStorage=true` 即 localStorage，false 为 sessionStorage）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageId {
+    pub security_origin: String,
+    pub is_local_storage: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDOMStorageItemsParams {
+    pub storage_id: StorageId,
+}
+
+/// getDOMStorageItems 结果：entries 为 `[name, value]` 字符串对
+/// （畸形单元素对由消费方跳过）。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDOMStorageItemsResult {
+    pub entries: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetDOMStorageItemParams {
+    pub storage_id: StorageId,
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveDOMStorageItemParams {
+    pub storage_id: StorageId,
+    pub key: String,
+}
+
+// ---------------------------------------------------------------------------
 // SystemInfo 域（browser 级，能力探测与诊断）
 // ---------------------------------------------------------------------------
 
@@ -1412,5 +1466,62 @@ mod tests {
         let ax: AXNode = serde_json::from_str(r#"{"nodeId":7,"childIds":[1,"2"]}"#).unwrap();
         assert_eq!(ax.node_id, "7");
         assert_eq!(ax.child_ids.unwrap(), vec!["1", "2"]);
+    }
+
+    /// DOMStorage 域类型面（维度 16 storage_state 注入/导出聚合）：
+    /// storageId 双字段（securityOrigin + isLocalStorage）与
+    /// set/get/remove 参数序列化 + get 结果反序列化。
+    #[test]
+    fn dom_storage_domain_serialization() {
+        let storage_id = StorageId {
+            security_origin: "https://example.com".to_string(),
+            is_local_storage: true,
+        };
+        let v = serde_json::to_value(&storage_id).expect("序列化失败");
+        assert_eq!(v["securityOrigin"], "https://example.com");
+        assert_eq!(v["isLocalStorage"], true);
+        assert_eq!(v.as_object().unwrap().len(), 2, "storageId 只含两字段");
+
+        let p = SetDOMStorageItemParams {
+            storage_id: storage_id.clone(),
+            key: "theme".to_string(),
+            value: "dark".to_string(),
+        };
+        let v = serde_json::to_value(&p).expect("序列化失败");
+        assert_eq!(v["storageId"]["securityOrigin"], "https://example.com");
+        assert_eq!(v["storageId"]["isLocalStorage"], true);
+        assert_eq!(v["key"], "theme");
+        assert_eq!(v["value"], "dark");
+
+        let p = GetDOMStorageItemsParams {
+            storage_id: storage_id.clone(),
+        };
+        let v = serde_json::to_value(&p).expect("序列化失败");
+        assert_eq!(v["storageId"]["securityOrigin"], "https://example.com");
+        assert_eq!(v.as_object().unwrap().len(), 1, "只含 storageId 一个字段");
+
+        let p = RemoveDOMStorageItemParams {
+            storage_id: storage_id.clone(),
+            key: "k".to_string(),
+        };
+        let v = serde_json::to_value(&p).expect("序列化失败");
+        assert_eq!(v["storageId"]["securityOrigin"], "https://example.com");
+        assert_eq!(v["key"], "k");
+
+        let r: GetDOMStorageItemsResult = serde_json::from_str(
+            r#"{"entries":[["theme","dark"],["k","v1"],["odd"]]}"#,
+        )
+        .expect("结果解析失败");
+        assert_eq!(r.entries.len(), 3);
+        assert_eq!(
+            r.entries[0],
+            vec!["theme".to_string(), "dark".to_string()],
+            "entries 为 [name, value] 对"
+        );
+        // 往返：StorageId 反序列化与序列化一致
+        let round: StorageId =
+            serde_json::from_value(serde_json::to_value(&storage_id).expect("序列化失败"))
+                .expect("反序列化失败");
+        assert_eq!(round, storage_id);
     }
 }

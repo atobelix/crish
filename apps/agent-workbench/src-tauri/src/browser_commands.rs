@@ -1,7 +1,10 @@
-//! 浏览器面板命令面（27 接线方案 S6 + P1-B1 帧流/输入命令 + J1b storage_state）
+//! 浏览器面板命令面（27 接线方案 S6 + P1-B1 帧流/输入命令 + J1b storage_state
+//! + G-4 收尾书签/历史导入）
 //! browser_start / browser_stop / browser_status / browser_start_frames /
 //! browser_stop_frames / browser_frame_status / browser_input /
-//! browser_export_storage_state / browser_import_storage_state
+//! browser_export_storage_state / browser_import_storage_state /
+//! browser_import_bookmarks / browser_import_history /
+//! browser_list_bookmarks / browser_list_history
 //!
 //! ## 接口契约（契约定死，前端消费面）
 //! - `browser_start` → `{ state: "running"|"starting"|"error", reason?: string }`；
@@ -16,8 +19,26 @@
 //!   JSON（字符串，Playwright 兼容 `{ cookies, origins }`，§5.1；**内存传递
 //!   不落盘**，§5.4 强制面——写盘仅走前端显式「另存为」路径）；
 //! - `browser_import_storage_state(json: string)` → 脱敏统计载荷
-//!   `{ cookies, origins, localStorageItems, droppedDupes, skippedEmptyName }`
+//!   `{ cookies, origins, localStorageItems, injectedScripts, injectedItems,
+//!   droppedDupes, skippedEmptyName }`
 //!   （不含任何 cookie value，§5.4 脱敏纪律）。
+//!
+//! ## G-4 收尾书签/历史导入命令（03-方案 §4.2 U4，conex-db 目标表接线）
+//! - `browser_import_bookmarks(json: string)` → 书签导入统计
+//!   `{ inserted, skippedDupes, parsedItems, skippedInvalid, depthCutoff,
+//!   droppedDupes, truncated }`——Chrome Bookmarks JSON 解析（§6.1）→
+//!   落库 conex-db imported_bookmarks（(url, name) 主键幂等）；
+//! - `browser_import_history(path: string)` → 历史导入统计
+//!   `{ inserted, skippedDupes, readTotal, skippedInvalidUrl }`——Chrome
+//!   History SQLite **只读**读取（§6.2，默认最近 90 天 / 上限 1000 条）→
+//!   落库 conex-db imported_history（(url, visited_at) 主键幂等）；
+//! - `browser_list_bookmarks()` → imported_bookmarks 全量行（导入时间倒序）；
+//! - `browser_list_history(since?, limit?)` → imported_history 行
+//!   （visited_at 倒序 + since 过滤 + limit 截断）。
+//!
+//! 落库编排经 [crate::browser_import_sinks] 适配（BookmarkSink/HistorySink
+//! → LocalDb，03-方案 §4.1 壳层编排约束）；来源标识固定
+//! `manual/bookmarks` / `manual/history`（信息列，不入主键）。
 //!
 //! 错误面（结构化码前缀，前端按码路由提示）：未连接/恢复期 →
 //! `tool.browser.not_ready:<原因>`（storage 命令**不触发惰性启动**——辅助
@@ -46,20 +67,25 @@
 //! 错误面：start 失败按契约返回 `state: "error"` + reason（不 reject）；
 //! stop 失败返回 Err（Tauri reject，无契约错误态）；帧流/输入命令失败返回 Err。
 //!
-//! ## 注册待办（P1-B1/J1b 收尾，主控接线）
-//! 本文件命令需在 `main.rs` command_registry! 与 `command_manifest.rs`（registered=true）
-//! 登记后方可经 invoke 路由（含前端 commandManifest.ts 快照）；接线前命令面
-//! 未注册（前端按 missing 静默降级，帧流显示「帧流未激活」；storage_state
-//! 入口按 missing 降级）。
+//! ## 登记面（已接线）
+//! 本文件命令已全部登记：`main.rs` command_registry! + `command_manifest.rs`
+//! （registered=true）+ 前端 commandManifest.ts 快照（全量 107 条镜像同步，
+//! 见 command_manifest.rs 条数注释）。
 
 use crate::browser::frame_stream::FrameStreamState;
 use crate::browser::panel_input::BrowserInputEvent;
 use crate::browser::{BrowserSlot, StartPayload, StatusPayload};
 use crate::core_run_commands::CoreRunState;
+use conex_browser::import::bookmarks::{
+    parse_bookmarks, persist_bookmarks, BookmarksOptions,
+};
+use conex_browser::import::history::{read_history, persist_history, HistoryOptions};
 use conex_browser::import::storage_state::{
-    build_import_plan, export_storage_state, parse_storage_state, ExportAuthorization,
+    build_import_plan, export_storage_state, inject_origin_scripts, parse_storage_state,
+    ExportAuthorization, StorageStateError,
 };
 use serde::Serialize;
+use std::path::Path;
 use std::sync::Arc;
 use tauri::ipc::Channel;
 
@@ -191,8 +217,12 @@ pub(crate) struct StorageImportPayload {
     pub cookies: usize,
     /// 含 localStorage 的 origin 数。
     pub origins: usize,
-    /// localStorage 条目总数（本次接线不注入脚本，供前端明示覆盖面）。
+    /// localStorage 条目总数（注入计划面）。
     pub local_storage_items: usize,
+    /// 已注册 origin 守卫恢复脚本数（§5.3 注入执行实际值）。
+    pub injected_scripts: usize,
+    /// 已直写 localStorage 条目数（§5.3 注入执行实际值）。
+    pub injected_items: usize,
     /// 同键去重丢弃数（覆盖语义：最后一次出现者胜）。
     pub dropped_dupes: usize,
     /// 空 name 非法 cookie 跳过数（CDP setCookies 拒绝空 name）。
@@ -216,7 +246,6 @@ pub(crate) struct StorageImportPayload {
 /// - `origins[].localStorage` 采集未接线（DOMStorage 域按 origin 聚合为
 ///   接线点，导出结果 origins 恒空——见 import/storage_state.rs
 ///   `from_cdp_cookies` 注记）；本命令只实读 cookie 面。
-#[allow(dead_code)] // 注册待办：main.rs command_registry! 与 command_manifest.rs 登记（主控接线，见模块头）后移除
 #[tauri::command]
 pub(crate) async fn browser_export_storage_state(
     authorized: bool,
@@ -240,22 +269,24 @@ pub(crate) async fn browser_export_storage_state(
 /// ## 契约
 /// - 入参 `json`：标准 storage_state JSON（§5.1；大小 ≤10MB、cookie ≤5000，
 ///   超限/非法 → `tool.invalid_input`）；
-/// - 返回：脱敏统计载荷 `{ cookies, origins, localStorageItems, droppedDupes,
-///   skippedEmptyName }`（§5.4：不含任何 cookie value）；
+/// - 返回：脱敏统计载荷 `{ cookies, origins, localStorageItems, injectedScripts,
+///   injectedItems, droppedDupes, skippedEmptyName }`（§5.4：不含任何
+///   cookie value）；
 /// - 错误：未连接/恢复期 → `tool.browser.not_ready:<原因>`；解析失败/超限/
 ///   domain/origin 守卫拒绝 → `tool.invalid_input:<原因>`；CDP 注入失败 → 透传。
 ///
-/// ## 注入面
-/// cookie 走 browser 级 `Storage.setCookies`（`to_cdp_params` 类型化参数：
-/// 会话 cookie 移除 expires 字段、sameSite 归一化、同键幂等去重覆盖语义）。
+/// ## 注入面（cookie + localStorage 两机制合并执行）
+/// ① cookie 走 browser 级 `Storage.setCookies`（`to_cdp_params` 类型化参数：
+/// 会话 cookie 移除 expires 字段、sameSite 归一化、同键幂等去重覆盖语义）；
+/// ② localStorage 经 [inject_origin_scripts]（§5.3 注入执行）：每 origin
+/// `Page.addScriptToEvaluateOnNewDocument` 注册**origin 守卫恢复脚本**
+/// （脚本内先校验 `window.location.origin` 再 `setItem`，防跨站污染——守卫
+/// 由解析层生成，K3 接线面）→ `DOMStorage.setDOMStorageItem` 直写当前页。
 ///
-/// ## localStorage 注入接线点（遗留登记，§5.3）
-/// `origins[].localStorage` 的恢复脚本（`build_import_plan().origin_scripts`，
-/// origin 守卫已生成——脚本内先校验 `window.location.origin` 再 `setItem`，
-/// 防跨站污染）应经 `Page.addScriptToEvaluateOnNewDocument` 按 origin 注入；
-/// 本次接线**不注入脚本**（DOMStorage 域可选采集/回验一并遗留），统计仍返回
-/// origins/localStorageItems 供前端明示覆盖面。
-#[allow(dead_code)] // 注册待办：main.rs command_registry! 与 command_manifest.rs 登记（主控接线，见模块头）后移除
+/// ## 执行序与回滚
+/// cookie 先于 localStorage 注入；localStorage 注入失败 → 返回错误（cookie
+/// 已注入不回滚——回验回滚面（注入后 `Storage.getCookies` 回读比对 + 还原）
+/// 为可选遗留，见 K3 任务注记；重导覆盖语义下幂等，无错误累积）。
 #[tauri::command]
 pub(crate) async fn browser_import_storage_state(
     json: String,
@@ -269,13 +300,192 @@ pub(crate) async fn browser_import_storage_state(
         .set_cookies(params)
         .await
         .map_err(not_ready)?;
+    // localStorage 注入（§5.3）：origin 守卫脚本注册 + DOMStorage 直写，
+    // 经会话通道（BrowserSlot::local_storage_channel，未连接 → not_ready）
+    let mut injected_scripts = 0usize;
+    let mut injected_items = 0usize;
+    if !plan.origin_scripts.is_empty() {
+        let channel = slot(core.inner()).local_storage_channel().map_err(not_ready)?;
+        let stats = inject_origin_scripts(channel.as_ref(), &plan).await.map_err(|e| {
+            match e {
+                // 防御性再检失败（非法 origin）：输入面错误
+                StorageStateError::InvalidOrigin { .. } => invalid_input(e.to_string()),
+                other => format!("localStorage 注入失败：{other}"),
+            }
+        })?;
+        injected_scripts = stats.scripts;
+        injected_items = stats.items;
+    }
     Ok(StorageImportPayload {
         cookies: plan.stats.cookies,
         origins: plan.stats.origins,
         local_storage_items: plan.stats.local_storage_items,
+        injected_scripts,
+        injected_items,
         dropped_dupes: plan.stats.dropped_dupes,
         skipped_empty_name: plan.stats.skipped_empty_name,
     })
+}
+
+// ---------------------------------------------------------------------------
+// G-4 收尾：书签/历史导入命令（03-方案 §4.2 U4；落库编排见
+// crate::browser_import_sinks——BookmarkSink/HistorySink → LocalDb 适配）
+// ---------------------------------------------------------------------------
+
+/// 来源标识：手工导入的书签（信息列不入主键，跨来源同键合并）。
+const BOOKMARK_SOURCE: &str = "manual/bookmarks";
+/// 来源标识：手工导入的历史（信息列不入主键）。
+const HISTORY_SOURCE: &str = "manual/history";
+
+/// 书签导入统计载荷（03-方案 §2.5：落库统计 + 解析侧报告原样透传）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BookmarksImportPayload {
+    /// 新增落库条数（INSERT OR IGNORE 影响行数）。
+    pub inserted: u64,
+    /// 同 (url, name) 去重跳过条数（重复导入）。
+    pub skipped_dupes: u64,
+    /// 解析层扁平化条数（落库前，§6.1）。
+    pub parsed_items: usize,
+    /// 无效节点跳过数（缺 name/url、type 异常）。
+    pub skipped_invalid: usize,
+    /// 深度超限跳过的子树数（> BOOKMARKS_MAX_DEPTH）。
+    pub depth_cutoff: usize,
+    /// 解析层 (url, name) 去重丢弃数。
+    pub dropped_dupes: usize,
+    /// 数量上限截断数（items 达 limit 后未纳入节点数）。
+    pub truncated: usize,
+}
+
+/// 历史导入统计载荷（03-方案 §2.5：落库统计 + 读取侧报告原样透传）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct HistoryImportPayload {
+    /// 新增落库条数（INSERT OR IGNORE 影响行数）。
+    pub inserted: u64,
+    /// 同 (url, visited_at) 去重跳过条数（重复导入）。
+    pub skipped_dupes: u64,
+    /// 来源库查询读取行数（含被 URL 过滤丢弃前的行）。
+    pub read_total: usize,
+    /// 无效 URL 丢弃数（§6.2：非 http/https 或不可解析）。
+    pub skipped_invalid_url: usize,
+}
+
+/// 当前 unix 秒（导入时刻注入面；时钟异常回退 0）。
+fn unix_now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// 导入书签（G-4 收尾，03-方案 §4.2 U4）：Chrome Bookmarks JSON（§6.1
+/// 四树解析，幂等去重 + 数量上限 + 深度守卫）→ 落库 conex-db
+/// imported_bookmarks（(url, name) 主键 INSERT OR IGNORE 幂等）。
+///
+/// ## 契约
+/// - 入参 `json`：Chrome Bookmarks 文件内容（`{"roots": {...}}`）；
+/// - 返回：[BookmarksImportPayload]（新增/跳过 + 解析侧报告透传）；
+/// - 错误：非法 JSON → `tool.invalid_input:<原因>`；落库失败 → 透传
+///   （conex-db 缺表降级返回 Ok(空统计)，不报错——R12/P2-1 纪律）。
+#[tauri::command]
+pub(crate) async fn browser_import_bookmarks(
+    json: String,
+    db_state: tauri::State<'_, crate::session_commands::SharedDb>,
+) -> Result<BookmarksImportPayload, String> {
+    let report = parse_bookmarks(&json, &BookmarksOptions::default())
+        .map_err(|e| invalid_input(e.to_string()))?;
+    let db = db_state.inner().local_db();
+    let now = unix_now_secs();
+    let parsed_items = report.items.len();
+    let persist_stats = tokio::task::spawn_blocking(move || {
+        let mut sink = crate::browser_import_sinks::LocalDbBookmarkSink::new(db);
+        persist_bookmarks(&report.items, &mut sink, BOOKMARK_SOURCE, now)
+            .map_err(|e| format!("书签落库失败：{e}"))
+    })
+    .await
+    .map_err(|e| format!("书签落库任务异常：{e}"))??;
+    Ok(BookmarksImportPayload {
+        inserted: persist_stats.inserted,
+        skipped_dupes: persist_stats.skipped_dupes,
+        parsed_items,
+        skipped_invalid: report.skipped_invalid,
+        depth_cutoff: report.depth_cutoff,
+        dropped_dupes: report.dropped_dupes,
+        truncated: report.truncated,
+    })
+}
+
+/// 导入历史（G-4 收尾，03-方案 §4.2 U4）：Chrome History SQLite **只读**
+/// 读取（§6.2：WebKit 时间换算、默认最近 90 天 / 上限 1000 条）→ 落库
+/// conex-db imported_history（(url, visited_at) 主键幂等——同 URL 不同秒
+/// 访问各保留一条）。
+///
+/// ## 契约
+/// - 入参 `path`：Chrome History 库路径（来源浏览器须已关闭，锁检测由
+///   上层向导承担，§3.2 复用）；
+/// - 返回：[HistoryImportPayload]（新增/跳过 + 读取侧报告透传）；
+/// - 错误：库缺失/不可只读读取 → `tool.invalid_input:<原因>`；落库失败 →
+///   透传。
+#[tauri::command]
+pub(crate) async fn browser_import_history(
+    path: String,
+    db_state: tauri::State<'_, crate::session_commands::SharedDb>,
+) -> Result<HistoryImportPayload, String> {
+    let db = db_state.inner().local_db();
+    let now = unix_now_secs();
+    let (report, persist_stats) = tokio::task::spawn_blocking(move || {
+        let report = read_history(Path::new(&path), &HistoryOptions::default())
+            .map_err(|e| invalid_input(e.to_string()))?;
+        let mut sink = crate::browser_import_sinks::LocalDbHistorySink::new(db);
+        let stats = persist_history(&report.items, &mut sink, HISTORY_SOURCE, now)
+            .map_err(|e| format!("历史落库失败：{e}"))?;
+        Ok::<_, String>((report, stats))
+    })
+    .await
+    .map_err(|e| format!("历史导入任务异常：{e}"))??;
+    Ok(HistoryImportPayload {
+        inserted: persist_stats.inserted,
+        skipped_dupes: persist_stats.skipped_dupes,
+        read_total: report.total,
+        skipped_invalid_url: report.skipped_invalid_url,
+    })
+}
+
+/// 书签列表（G-4 收尾查询面）：imported_bookmarks 全量行（导入时间倒序，
+/// 面板书签侧栏展示面）。缺表降级返回空集（R12/P2-1）。
+///
+/// 返回行字段为 conex-db [conex_db::ImportedBookmarkRow] 原样序列化
+/// （snake_case：url/name/folder_path/guid/source/imported_at）。
+#[tauri::command]
+pub(crate) async fn browser_list_bookmarks(
+    db_state: tauri::State<'_, crate::session_commands::SharedDb>,
+) -> Result<Vec<conex_db::ImportedBookmarkRow>, String> {
+    let db = db_state.inner().local_db();
+    tokio::task::spawn_blocking(move || db.list_bookmarks())
+        .await
+        .map_err(|e| format!("书签列表任务异常：{e}"))?
+        .map_err(|e| format!("书签列表失败：{}: {}", e.kind, e.message))
+}
+
+/// 历史列表（G-4 收尾查询面）：imported_history 行（visited_at 倒序 +
+/// `since` 严格大于过滤 + `limit` 截断；limit 缺省 = 全量——表为导入数据，
+/// 规模受导入上限约束）。
+///
+/// 返回行字段为 conex-db [conex_db::ImportedHistoryRow] 原样序列化
+/// （snake_case：url/visited_at/title/source/imported_at）。
+#[tauri::command]
+pub(crate) async fn browser_list_history(
+    since: Option<i64>,
+    limit: Option<usize>,
+    db_state: tauri::State<'_, crate::session_commands::SharedDb>,
+) -> Result<Vec<conex_db::ImportedHistoryRow>, String> {
+    let db = db_state.inner().local_db();
+    let limit = limit.unwrap_or(usize::MAX);
+    tokio::task::spawn_blocking(move || db.list_history(since, limit))
+        .await
+        .map_err(|e| format!("历史列表任务异常：{e}"))?
+        .map_err(|e| format!("历史列表失败：{}: {}", e.kind, e.message))
 }
 
 #[cfg(test)]
@@ -384,6 +594,79 @@ mod tests {
         state.engine().browser_slot().inject_storage_ops(Arc::new(mock));
     }
 
+    /// localStorage 注入通道调用记录（§5.3 注入执行面断言：调用序与参数）。
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum ChannelCall {
+        InitScript(String),
+        SetItem {
+            origin: String,
+            key: String,
+            value: String,
+        },
+        GetItems(String),
+    }
+
+    /// J1b 扩展面 mock 通道：记录调用（命令层断言 wire 参数透传，
+    /// 不依赖真实浏览器会话；对齐 import/storage_state.rs 测试面）。
+    #[derive(Default)]
+    struct MockLocalStorageChannel {
+        calls: Arc<std::sync::Mutex<Vec<ChannelCall>>>,
+    }
+
+    #[async_trait]
+    impl conex_browser::import::storage_state::LocalStorageChannel
+        for MockLocalStorageChannel
+    {
+        async fn add_init_script(
+            &self,
+            source: &str,
+        ) -> Result<(), conex_browser::import::storage_state::StorageStateError> {
+            self.calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(ChannelCall::InitScript(source.to_string()));
+            Ok(())
+        }
+
+        async fn set_dom_storage_item(
+            &self,
+            security_origin: &str,
+            key: &str,
+            value: &str,
+        ) -> Result<(), conex_browser::import::storage_state::StorageStateError> {
+            self.calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(ChannelCall::SetItem {
+                    origin: security_origin.to_string(),
+                    key: key.to_string(),
+                    value: value.to_string(),
+                });
+            Ok(())
+        }
+
+        async fn get_dom_storage_items(
+            &self,
+            security_origin: &str,
+        ) -> Result<Vec<(String, String)>, conex_browser::import::storage_state::StorageStateError>
+        {
+            self.calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(ChannelCall::GetItems(security_origin.to_string()));
+            Ok(Vec::new())
+        }
+    }
+
+    /// 注入 mock localStorage 通道（命令层断言面；未注入时访问器走
+    /// 未连接路径 → not_ready）。
+    fn inject_local_storage_mock(state: &Arc<CoreRunState>, mock: MockLocalStorageChannel) {
+        state
+            .engine()
+            .browser_slot()
+            .inject_local_storage_channel(Arc::new(mock));
+    }
+
     /// J1b：导出返回形状——授权 + mock 实读 → 标准 storage_state JSON
     /// （`{ cookies, origins }`，§5.1 字段面：会话 cookie expires=-1、
     /// 持久 cookie 原值、sameSite/标志位透传）；内存传递不落盘。
@@ -484,6 +767,8 @@ mod tests {
 
     /// J1b：导入注入参数断言——返回脱敏统计载荷（§5.3/§5.4：不含 value）；
     /// wire 参数形状由 [import_wire_params_reach_sender] 断言 mock 记录面。
+    /// localStorage 注入已接线（K3 面）：注入 mock 通道 → injectedScripts/
+    /// injectedItems 反映实际执行。
     #[tokio::test]
     async fn import_injects_cdp_params_and_stats() {
         use tauri::Manager as _;
@@ -496,6 +781,8 @@ mod tests {
         let state_ref = app.state::<Arc<CoreRunState>>();
 
         inject_mock(&state, MockStorageOps::new(Vec::new()));
+        // localStorage 注入通道 mock（§5.3 注入执行面）
+        inject_local_storage_mock(&state, MockLocalStorageChannel::default());
 
         let json = r#"{
             "cookies": [
@@ -536,10 +823,12 @@ mod tests {
                 "cookies": 3,
                 "origins": 1,
                 "localStorageItems": 2,
+                "injectedScripts": 1,
+                "injectedItems": 2,
                 "droppedDupes": 1,
                 "skippedEmptyName": 1
             }),
-            "统计：同键去重 + 空名过滤后 3 条"
+            "统计：同键去重 + 空名过滤后 3 条；localStorage 注入执行 1 脚本 + 2 直写"
         );
     }
 
@@ -802,5 +1091,293 @@ mod tests {
 
         let stopped = browser_stop_frames(state_ref).await.expect("退订不应失败");
         assert_eq!(serde_json::to_value(&stopped).unwrap(), json!("stopped"));
+    }
+
+    /// J1b 扩展面：localStorage 注入执行（§5.3）——mock 通道断言调用序
+    /// （每 origin 先注册守卫脚本，再逐条直写）+ 载荷 injectedScripts/
+    /// injectedItems 反映实际执行。
+    #[tokio::test]
+    async fn import_storage_state_injects_local_storage_channel() {
+        use tauri::Manager as _;
+        let temp = tempfile::tempdir().expect("临时目录");
+        let state = mock_core_state(&temp);
+        let app = tauri::test::mock_builder()
+            .manage(Arc::clone(&state))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let state_ref = app.state::<Arc<CoreRunState>>();
+
+        inject_mock(&state, MockStorageOps::new(Vec::new()));
+        let channel = MockLocalStorageChannel::default();
+        let calls = Arc::clone(&channel.calls);
+        inject_local_storage_mock(&state, channel);
+
+        let json = r#"{
+            "cookies": [],
+            "origins": [
+                { "origin": "https://example.com", "localStorage": [
+                    { "name": "theme", "value": "dark" },
+                    { "name": "token", "value": "abc" }
+                ] },
+                { "origin": "https://sub.example.org", "localStorage": [
+                    { "name": "k", "value": "v" }
+                ] }
+            ]
+        }"#;
+        let payload = browser_import_storage_state(json.to_string(), state_ref)
+            .await
+            .expect("导入不应失败");
+        assert_eq!(payload.origins, 2);
+        assert_eq!(payload.local_storage_items, 3);
+        assert_eq!(payload.injected_scripts, 2, "每 origin 一条守卫脚本");
+        assert_eq!(payload.injected_items, 3, "直写条目总数");
+        // 调用序：每 origin 先注册守卫脚本，再逐条直写（§5.3 两机制互补）
+        let calls = calls.lock().unwrap_or_else(|p| p.into_inner());
+        assert_eq!(calls.len(), 5);
+        assert!(
+            matches!(&calls[0], ChannelCall::InitScript(s)
+                if s.contains(r#"window.location.origin !== "https://example.com""#)),
+            "脚本须含 origin 守卫（防跨站污染）且指向目标 origin"
+        );
+        assert!(
+            matches!(&calls[1], ChannelCall::SetItem { origin, key, value }
+                if origin == "https://example.com" && key == "theme" && value == "dark")
+        );
+        assert!(
+            matches!(&calls[2], ChannelCall::SetItem { origin, key, .. }
+                if origin == "https://example.com" && key == "token")
+        );
+        assert!(
+            matches!(&calls[3], ChannelCall::InitScript(s) if s.contains("sub.example.org"))
+        );
+        assert!(
+            matches!(&calls[4], ChannelCall::SetItem { origin, key, value }
+                if origin == "https://sub.example.org" && key == "k" && value == "v")
+        );
+    }
+
+    /// J1b 扩展面：localStorage 注入前置——cookie 注入通过但未注入通道
+    /// （无会话）→ `tool.browser.not_ready`（辅助通道须先 browser_start）。
+    #[tokio::test]
+    async fn import_storage_state_local_storage_not_ready_without_channel() {
+        use tauri::Manager as _;
+        let temp = tempfile::tempdir().expect("临时目录");
+        let state = mock_core_state(&temp);
+        let app = tauri::test::mock_builder()
+            .manage(Arc::clone(&state))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let state_ref = app.state::<Arc<CoreRunState>>();
+
+        // cookie 面注入 mock（通过），localStorage 通道未注入（未连接面）
+        inject_mock(&state, MockStorageOps::new(Vec::new()));
+
+        let json = r#"{
+            "cookies": [],
+            "origins": [
+                { "origin": "https://example.com", "localStorage": [
+                    { "name": "theme", "value": "dark" }
+                ] }
+            ]
+        }"#;
+        let err = browser_import_storage_state(json.to_string(), state_ref)
+            .await
+            .expect_err("无通道必须失败");
+        assert!(
+            err.starts_with("tool.browser.not_ready:"),
+            "not_ready 结构化码前缀：{err}"
+        );
+    }
+
+    /// G-4：书签导入落库（03-方案 §4.2 U4）——解析 → 落库统计聚合；
+    /// 重导幂等（(url, name) 主键跳过全量）；list_bookmarks 回读行数一致。
+    #[tokio::test]
+    async fn import_bookmarks_persists_idempotent_and_lists() {
+        use tauri::Manager as _;
+        let db = conex_db::LocalDb::open_in_memory().expect("内存库");
+        let shared = crate::session_commands::SharedDb::new(db);
+        let app = tauri::test::mock_builder()
+            .manage(shared)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let db_state = app.state::<crate::session_commands::SharedDb>();
+
+        let json = r#"{
+            "roots": {
+                "bookmark_bar": {
+                    "type": "folder", "name": "书签栏",
+                    "children": [
+                        { "type": "url", "name": "A", "url": "https://a.example.com" },
+                        { "type": "url", "name": "A", "url": "https://a.example.com" },
+                        { "type": "url", "name": "B", "url": "https://b.example.com" }
+                    ]
+                },
+                "other": {
+                    "type": "folder", "name": "其他书签",
+                    "children": [
+                        { "type": "url", "name": "C", "url": "https://c.example.com" }
+                    ]
+                }
+            }
+        }"#;
+        let payload = browser_import_bookmarks(json.to_string(), db_state.clone())
+            .await
+            .expect("导入不应失败");
+        assert_eq!(payload.parsed_items, 3, "解析层 (url, name) 去重后 3 条");
+        assert_eq!(payload.dropped_dupes, 1, "解析层同键去重 1 条");
+        assert_eq!(payload.inserted, 3, "落库新增 3 条");
+        assert_eq!(payload.skipped_dupes, 0);
+        assert_eq!(payload.skipped_invalid, 0);
+        assert_eq!(payload.depth_cutoff, 0);
+        assert_eq!(payload.truncated, 0);
+
+        // 重导幂等（03-方案 §2.4：INSERT OR IGNORE 主键跳过）
+        let payload = browser_import_bookmarks(json.to_string(), db_state.clone())
+            .await
+            .expect("重导不应失败");
+        assert_eq!(payload.inserted, 0, "同键全部跳过");
+        assert_eq!(payload.skipped_dupes, 3);
+
+        // 查询面：3 行 + 字段完整（folder_path 反序列化逐元素）
+        let rows = browser_list_bookmarks(db_state.clone())
+            .await
+            .expect("列表不应失败");
+        assert_eq!(rows.len(), 3);
+        let a = rows
+            .iter()
+            .find(|r| r.url == "https://a.example.com")
+            .expect("A 行存在");
+        assert_eq!(a.name, "A");
+        assert_eq!(a.folder_path, vec!["书签栏"], "路径链逐元素保留");
+        assert_eq!(a.source, "manual/bookmarks", "来源标识固定");
+        assert_eq!(a.guid, None, "guid 首版恒 None");
+        assert!(a.imported_at > 0, "导入时刻注入");
+    }
+
+    /// G-4：书签导入非法 JSON → `tool.invalid_input` 结构化错误。
+    #[tokio::test]
+    async fn import_bookmarks_rejects_bad_json() {
+        use tauri::Manager as _;
+        let db = conex_db::LocalDb::open_in_memory().expect("内存库");
+        let shared = crate::session_commands::SharedDb::new(db);
+        let app = tauri::test::mock_builder()
+            .manage(shared)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let db_state = app.state::<crate::session_commands::SharedDb>();
+
+        let err = browser_import_bookmarks("{ not json !!".to_string(), db_state)
+            .await
+            .expect_err("非法 JSON 必须失败");
+        assert!(
+            err.starts_with("tool.invalid_input:"),
+            "invalid_input 结构化码前缀：{err}"
+        );
+    }
+
+    /// G-4：历史导入落库（03-方案 §4.2 U4）——真实 Chrome History 形态
+    /// fixture 只读读取 → 落库统计聚合；list_history 回读（visited_at
+    /// 倒序 + since/limit 过滤面）。
+    #[tokio::test]
+    async fn import_history_persists_and_lists() {
+        use tauri::Manager as _;
+        let dir = tempfile::tempdir().expect("临时目录");
+        let db = conex_db::LocalDb::open_in_memory().expect("内存库");
+        let shared = crate::session_commands::SharedDb::new(db);
+        let app = tauri::test::mock_builder()
+            .manage(shared)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let db_state = app.state::<crate::session_commands::SharedDb>();
+
+        // 构造真实 History 库 fixture（urls + visits，WebKit 微秒时间戳）
+        let hist = dir.path().join("History");
+        {
+            let conn = rusqlite::Connection::open(&hist).expect("建库");
+            conn.execute_batch(
+                "CREATE TABLE urls (id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT NOT NULL, title TEXT);
+                 CREATE TABLE visits (id INTEGER PRIMARY KEY AUTOINCREMENT, url INTEGER NOT NULL, visit_time INTEGER NOT NULL);",
+            )
+            .expect("建表");
+            let now_secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("时钟")
+                .as_secs() as i64;
+            for (i, days_ago) in [1i64, 2, 3].iter().enumerate() {
+                conn.execute(
+                    "INSERT INTO urls (url, title) VALUES (?1, ?2)",
+                    rusqlite::params![format!("https://h{i}.example.com"), format!("H{i}")],
+                )
+                .expect("插 urls 行");
+                let id = conn.last_insert_rowid();
+                conn.execute(
+                    "INSERT INTO visits (url, visit_time) VALUES (?1, ?2)",
+                    rusqlite::params![
+                        id,
+                        (now_secs - days_ago * 86_400 + 11_644_473_600) * 1_000_000
+                    ],
+                )
+                .expect("插 visits 行");
+            }
+        }
+        let payload = browser_import_history(hist.display().to_string(), db_state.clone())
+            .await
+            .expect("导入不应失败");
+        assert_eq!(payload.read_total, 3);
+        assert_eq!(payload.skipped_invalid_url, 0);
+        assert_eq!(payload.inserted, 3);
+        assert_eq!(payload.skipped_dupes, 0);
+
+        // 重导幂等：(url, visited_at) 主键跳过全量
+        let payload = browser_import_history(hist.display().to_string(), db_state.clone())
+            .await
+            .expect("重导不应失败");
+        assert_eq!(payload.inserted, 0);
+        assert_eq!(payload.skipped_dupes, 3);
+
+        // 查询面：3 行倒序 + 字段完整（title Some/visited_at Unix 秒）
+        let rows = browser_list_history(None, None, db_state.clone())
+            .await
+            .expect("列表不应失败");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].url, "https://h0.example.com", "visited_at 倒序（最近在前）");
+        assert_eq!(rows[0].title.as_deref(), Some("H0"));
+        assert_eq!(rows[0].source, "manual/history", "来源标识固定");
+        // since 过滤（严格大于）+ limit 截断
+        let since = rows[2].visited_at;
+        let filtered = browser_list_history(Some(since), None, db_state.clone())
+            .await
+            .expect("列表不应失败");
+        assert_eq!(filtered.len(), 2, "since 严格大于");
+        let limited = browser_list_history(None, Some(1), db_state.clone())
+            .await
+            .expect("列表不应失败");
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].url, "https://h0.example.com");
+    }
+
+    /// G-4：历史导入库缺失 → `tool.invalid_input`（输入路径不可用）。
+    #[tokio::test]
+    async fn import_history_rejects_missing_file() {
+        use tauri::Manager as _;
+        let dir = tempfile::tempdir().expect("临时目录");
+        let db = conex_db::LocalDb::open_in_memory().expect("内存库");
+        let shared = crate::session_commands::SharedDb::new(db);
+        let app = tauri::test::mock_builder()
+            .manage(shared)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let db_state = app.state::<crate::session_commands::SharedDb>();
+
+        let err = browser_import_history(
+            dir.path().join("Missing-History").display().to_string(),
+            db_state,
+        )
+        .await
+        .expect_err("库缺失必须失败");
+        assert!(
+            err.starts_with("tool.invalid_input:"),
+            "invalid_input 结构化码前缀：{err}"
+        );
     }
 }

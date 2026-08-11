@@ -12,7 +12,10 @@ workspace = true
 
 [dependencies]
 rusqlite = { workspace = true }
-# G5 清理（2026-08-03）：serde 本体无引用（仅 serde_json 使用，cargo machete 实证）
+# G5 清理（2026-08-03）后新增引用（浏览器协同 G-4 收尾）：serde 本体原无引用
+# （仅 serde_json 使用，cargo machete 实证）；imported.rs 行类型需直通 Tauri IPC
+# （03-方案 §2.3），新增真实引用，属合理新增（workspace 既有声明，零新增版本面）
+serde = { workspace = true }
 serde_json = { workspace = true }
 # T-16：blocks 模块缺表降级告警（R12/P2-1，tracing::warn!；workspace 既有依赖）
 tracing = { workspace = true }

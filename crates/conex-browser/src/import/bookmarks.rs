@@ -80,6 +80,74 @@ pub struct BookmarksOptions {
     pub limit: usize,
 }
 
+/// 落库分批条数（对齐 conex-db 的 IMPORT_BATCH_SIZE 分批事务语义；
+/// 03-方案 §2.3）。
+pub const PERSIST_BATCH_SIZE: usize = 1000;
+
+/// 书签落库行（解析结果 → 存储层适配：来源标识与导入时刻由调用方注入，
+/// 对应 conex-db imported_bookmarks 表行——03-方案 §2.1）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedBookmark {
+    /// 书签 URL（落库主键一半）。
+    pub url: String,
+    /// 书签名（落库主键一半；与解析层 (url, name) 去重键对齐）。
+    pub name: String,
+    /// 父文件夹路径链（落库时序列化为 JSON 数组）。
+    pub folder_path: Vec<String>,
+    /// 来源标识（如 `chrome/Default`；信息列不入主键，跨来源同键合并）。
+    pub source: String,
+    /// 导入时刻（unix 秒）。
+    pub imported_at: i64,
+}
+
+/// 书签落库统计（新增 / 同 (url, name) 去重跳过，供 UI 明示）。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BookmarkPersistStats {
+    /// 新增落库条数。
+    pub inserted: u64,
+    /// 同主键去重跳过条数（重复导入）。
+    pub skipped_dupes: u64,
+}
+
+/// 书签落库接收器（存储面抽象）。
+///
+/// 架构约束（03-方案 §4.1）：本 crate（conex-browser）不依赖 conex-db——
+/// 落库编排在 Tauri 壳层；壳层以 conex-db `LocalDb` 适配本 trait（行映射 +
+/// `LocalDb::import_bookmarks`）。本 trait 使接线面可替换（测试用 mock
+/// 模拟 INSERT OR IGNORE 语义）。
+pub trait BookmarkSink {
+    /// 批量写入行；返回 (新增条数, 同键去重跳过条数)。实现方须保证
+    /// 同 (url, name) 幂等（INSERT OR IGNORE 语义）。
+    fn write_bookmarks(&mut self, rows: &[PersistedBookmark]) -> Result<(u64, u64), String>;
+}
+
+/// 书签落库接线（解析结果 → 存储层）：注入来源标识与导入时刻，按批
+/// （[PERSIST_BATCH_SIZE]）写入接收器并聚合统计；接收器错误透传。
+pub fn persist_bookmarks(
+    items: &[BookmarkItem],
+    sink: &mut dyn BookmarkSink,
+    source: &str,
+    imported_at: i64,
+) -> Result<BookmarkPersistStats, String> {
+    let mut stats = BookmarkPersistStats::default();
+    for chunk in items.chunks(PERSIST_BATCH_SIZE) {
+        let rows: Vec<PersistedBookmark> = chunk
+            .iter()
+            .map(|item| PersistedBookmark {
+                url: item.url.clone(),
+                name: item.name.clone(),
+                folder_path: item.folder_path.clone(),
+                source: source.to_string(),
+                imported_at,
+            })
+            .collect();
+        let (inserted, skipped) = sink.write_bookmarks(&rows)?;
+        stats.inserted += inserted;
+        stats.skipped_dupes += skipped;
+    }
+    Ok(stats)
+}
+
 impl Default for BookmarksOptions {
     fn default() -> Self {
         BookmarksOptions {
@@ -497,5 +565,116 @@ mod tests {
         let report = parse_bookmarks(json, &opts(100)).expect("解析");
         assert_eq!(report.items.len(), 1);
         assert_eq!(report.items[0].folder_path, vec!["future_root"]);
+    }
+
+    /// mock 存储面：模拟 conex-db INSERT OR IGNORE 幂等语义
+    /// （同 (url, name) 仅首写保留，跨批次状态持续）。
+    #[derive(Debug, Default)]
+    struct MockBookmarkSink {
+        rows: std::collections::HashMap<(String, String), PersistedBookmark>,
+    }
+
+    impl BookmarkSink for MockBookmarkSink {
+        fn write_bookmarks(
+            &mut self,
+            rows: &[PersistedBookmark],
+        ) -> Result<(u64, u64), String> {
+            let mut inserted = 0u64;
+            let mut skipped = 0u64;
+            for row in rows {
+                let key = (row.url.clone(), row.name.clone());
+                match self.rows.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(_) => skipped += 1,
+                    std::collections::hash_map::Entry::Vacant(vacant) => {
+                        vacant.insert(row.clone());
+                        inserted += 1;
+                    }
+                }
+            }
+            Ok((inserted, skipped))
+        }
+    }
+
+    /// 写入失败的接收器（错误透传面）。
+    struct FailingBookmarkSink;
+
+    impl BookmarkSink for FailingBookmarkSink {
+        fn write_bookmarks(
+            &mut self,
+            _rows: &[PersistedBookmark],
+        ) -> Result<(u64, u64), String> {
+            Err("写入失败".to_string())
+        }
+    }
+
+    /// 落库接线：注入 source/imported_at、folder_path 逐元素保留、
+    /// 统计聚合正确（mock 数据库入库断言）。
+    #[test]
+    fn persist_writes_rows_with_injected_meta() {
+        let json = r#"{
+            "roots": {
+                "bookmark_bar": {
+                    "type": "folder", "name": "书签栏",
+                    "children": [
+                        { "type": "url", "name": "A", "url": "https://a.example.com" },
+                        { "type": "url", "name": "B", "url": "https://b.example.com" }
+                    ]
+                },
+                "other": {
+                    "type": "folder", "name": "其他书签",
+                    "children": [
+                        { "type": "url", "name": "C", "url": "https://c.example.com" }
+                    ]
+                }
+            }
+        }"#;
+        let report = parse_bookmarks(json, &opts(100)).expect("解析");
+        let mut sink = MockBookmarkSink::default();
+        let stats = persist_bookmarks(&report.items, &mut sink, "chrome/Default", 42).expect("落库");
+        assert_eq!(stats.inserted, 3);
+        assert_eq!(stats.skipped_dupes, 0);
+        assert_eq!(sink.rows.len(), 3);
+        // 注入元数据 + 路径链逐元素保留
+        let a = sink.rows.get(&("https://a.example.com".to_string(), "A".to_string())).expect("A 行");
+        assert_eq!(a.folder_path, vec![ROOT_NAME_BOOKMARK_BAR]);
+        assert_eq!(a.source, "chrome/Default");
+        assert_eq!(a.imported_at, 42);
+        let c = sink.rows.get(&("https://c.example.com".to_string(), "C".to_string())).expect("C 行");
+        assert_eq!(c.folder_path, vec![ROOT_NAME_OTHER]);
+    }
+
+    /// 幂等：同批再导 → inserted 0、skipped_dupes 全量、mock 行数不变
+    /// （对接 conex-db 主键 (url, name) 的 INSERT OR IGNORE 语义）。
+    #[test]
+    fn persist_reimport_is_idempotent() {
+        let json = r#"{
+            "roots": {
+                "bookmark_bar": {
+                    "type": "folder", "name": "书签栏",
+                    "children": [
+                        { "type": "url", "name": "A", "url": "https://a.example.com" },
+                        { "type": "url", "name": "B", "url": "https://b.example.com" }
+                    ]
+                }
+            }
+        }"#;
+        let report = parse_bookmarks(json, &opts(100)).expect("解析");
+        let mut sink = MockBookmarkSink::default();
+        persist_bookmarks(&report.items, &mut sink, "chrome/Default", 42).expect("首次落库");
+        let stats = persist_bookmarks(&report.items, &mut sink, "edge/Profile 1", 43).expect("重导");
+        assert_eq!(stats.inserted, 0, "同键全部跳过");
+        assert_eq!(stats.skipped_dupes, 2);
+        assert_eq!(sink.rows.len(), 2, "mock 行数不变");
+    }
+
+    /// 错误透传：接收器失败 → persist 返回 Err（不吞错、无部分统计）。
+    #[test]
+    fn persist_propagates_sink_error() {
+        let items = vec![BookmarkItem {
+            folder_path: vec![ROOT_NAME_BOOKMARK_BAR.to_string()],
+            name: "A".to_string(),
+            url: "https://a.example.com".to_string(),
+        }];
+        assert!(persist_bookmarks(&items, &mut FailingBookmarkSink, "chrome/Default", 1).is_err());
     }
 }

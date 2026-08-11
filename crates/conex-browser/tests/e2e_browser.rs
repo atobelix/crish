@@ -3,7 +3,11 @@
 //! 覆盖（对齐 10/11 文档 e2e 口径）：E1 启动+连接 → E2 导航+快照 →
 //! E3 动作（click/type_text）→ E4 版本推进 → E5 关闭；
 //! G-3 帧流/输入链路扩展：E6 帧流端到端（pacing/延迟）→ E7 输入注入后帧变化
-//! → E8 IME insertText 中文端到端 → E9 快照-动作-帧联动。
+//! → E8 IME insertText 中文端到端 → E9 快照-动作-帧联动；
+//! 17 §3 受限求值链路扩展：E10 白名单成功路径+词法拒绝 → E11 隔离与结果预算
+//! （深度/大小超限拒绝 + 死循环 2s 超时）→ E12 快照-受限求值-动作联动；
+//! F1 回归补测（L1 修复面）：E13 ASCII 输入无双写（keydown/keypress/input
+//! 事件计数各 = 字符数 + value 精确落位，L1 探针用例 1 形态的 e2e 面）。
 //!
 //! 运行（`#[ignore]` + 串行，10 文档 §10.2 / 11 文档 §9.2 约定）：
 //!
@@ -28,8 +32,11 @@ use conex_browser::cdp::sender::{
     ApprovalDenied, BrowserAuditEvent, CancellationToken, CdpCommandView, CommandPolicyHooks,
     IdKey,
 };
-use conex_browser::action::{ActionExecutor, ElementRef, MouseButton};
+use conex_browser::action::evaluate::EVAL_TIMEOUT_MS;
 use conex_browser::action::gate::{DomainGate, GateDenial};
+use conex_browser::action::{
+    ActionError, ActionErrorKind, ActionExecutor, ElementRef, EvaluateRequest, MouseButton,
+};
 use conex_browser::action::ops::{
     BrowserPageOps, BrowserSnapshotStore, session_for_active,
 };
@@ -124,6 +131,44 @@ const TEST_HTML_IME: &str = r#"<!DOCTYPE html>
   (function () {
     var el = document.getElementById('ime');
     ['beforeinput', 'input', 'compositionstart', 'compositionend', 'keydown'].forEach(function (t) {
+      el.addEventListener(t, function () { window.__evt[t] += 1; });
+    });
+  })();
+</script>
+</body>
+</html>"#;
+
+/// 受限求值测试页（E10/E11）：已知结构（中文按钮/中文属性/定位盒/输入框）+
+/// 主世界机密 `window.__secret`（隔离断言对照面）。
+const TEST_HTML_EVAL: &str = r#"<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>受限求值测试页</title></head>
+<body>
+<h1>受限求值测试页</h1>
+<button id="go" data-id="btn-1">中文按钮</button>
+<a id="link" href="https://example.com/x" data-tag="链接标签">链接文字</a>
+<div id="box" style="position:absolute;left:12px;top:24px;width:120px;height:40px">盒子</div>
+<input id="name" value="表单值">
+<ul id="list"><li>一</li><li>二</li><li>三</li></ul>
+<script>
+  window.__secret = 42;
+</script>
+</body>
+</html>"#;
+
+/// ASCII 输入测试页（E13）：输入框 + keydown/keypress/input 事件计数
+/// （F1 无双写实测面：keyDown 不携 text 时，事件数与插入字符数一一对应）。
+const TEST_HTML_ASCII: &str = r#"<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>ASCII 输入页</title></head>
+<body>
+<h1>ASCII 输入页</h1>
+<input id="ascii">
+<script>
+  window.__evt = { keydown: 0, keypress: 0, input: 0 };
+  (function () {
+    var el = document.getElementById('ascii');
+    ['keydown', 'keypress', 'input'].forEach(function (t) {
       el.addEventListener(t, function () { window.__evt[t] += 1; });
     });
   })();
@@ -389,6 +434,21 @@ async fn eval_dom(env: &E2eEnv, expression: &str) -> Value {
         "页面求值异常：{result}"
     );
     result["result"]["value"].clone()
+}
+
+/// 受限求值辅助（E10-E12）：以最新快照版本经 ActionExecutor.evaluate 派发，
+/// 成功返回 payload（纯 JSON），失败返回原错误（词法/执行/结果预算三层校验面）。
+async fn eval_req(env: &E2eEnv, expression: &str) -> Result<Value, ActionError> {
+    let version = env.session.snapshot_version(&env.tab_id);
+    let request = EvaluateRequest {
+        expression: expression.to_string(),
+        element: None,
+        timeout_ms: EVAL_TIMEOUT_MS,
+    };
+    match env.exec.evaluate(&env.tab_id, version, request).await {
+        Ok(success) => Ok(success.payload.unwrap_or(Value::Null)),
+        Err(err) => Err(err),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -943,5 +1003,289 @@ async fn e2e_snapshot_action_frame_linkage() {
         f.seq, doc2.meta.snapshot_version
     );
     frames.shutdown().await;
+    env.shutdown().await;
+}
+
+// ---------------------------------------------------------------------------
+// E10 evaluate 白名单成功路径 + 词法拒绝（17 §3.1/§3.2 受限求值三层校验的
+// 真实浏览器面）：白名单 API text/attr/rect 经隔离世界执行返回纯 JSON；
+// 词法层拒绝路径（document.title 等）不经执行、毫秒级快速失败。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_evaluate_whitelist_and_lexical_reject() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch().await;
+    let url = data_url(TEST_HTML_EVAL);
+    navigate_and_wait(&env, &url).await;
+    capture_snapshot(&env).await;
+
+    // —— 词法层拒绝路径：document.title → 词法拒绝（不经执行：毫秒级、无世界创建）——
+    let l0 = Instant::now();
+    let err = eval_req(&env, "document.title").await.unwrap_err();
+    let lex_ms = l0.elapsed().as_millis() as u64;
+    assert_eq!(err.kind, ActionErrorKind::InvalidInput, "词法拒绝应为 InvalidInput");
+    assert!(
+        err.message.contains("词法拒绝"),
+        "消息应含「词法拒绝」：{}",
+        err.message
+    );
+    assert!(
+        err.message.contains("document"),
+        "消息应指明违规标识符：{}",
+        err.message
+    );
+    assert!(lex_ms < 1000, "词法拒绝应不经执行（快速面）：{lex_ms}ms");
+
+    // 赋值类操作符同样在词法层拒绝
+    let err2 = eval_req(&env, "__crish_read.text('#go') = 1")
+        .await
+        .unwrap_err();
+    assert!(
+        err2.message.contains("词法拒绝"),
+        "赋值形态应词法拒绝：{}",
+        err2.message
+    );
+    assert!(
+        err2.message.contains("="),
+        "消息应指明违规操作符：{}",
+        err2.message
+    );
+
+    // —— 隔离世界现状探针（诊断用，不设断言）：__crish_read 是否已注入 ——
+    let probe = eval_req(&env, "typeof __crish_read").await.ok();
+    println!("[E10] 隔离世界 __crish_read 类型探针：{probe:?}（设计应为 \"object\"）");
+
+    // —— 白名单成功路径（17 §3.1 设计契约：text/attr/rect 返回纯 JSON）——
+    let t0 = Instant::now();
+    let text = match eval_req(&env, "__crish_read.text('#go')").await {
+        Ok(v) => v,
+        Err(e) => panic!("白名单 text 读取失败：{:?} {}", e.kind, e.message),
+    };
+    let text_ms = t0.elapsed().as_millis() as u64;
+    assert_eq!(text, "中文按钮", "text('#go') 应返回按钮中文文本");
+    let attr = match eval_req(&env, "__crish_read.attr('#link', 'data-tag')").await {
+        Ok(v) => v,
+        Err(e) => panic!("白名单 attr 读取失败：{:?} {}", e.kind, e.message),
+    };
+    assert_eq!(attr, "链接标签", "attr('#link','data-tag') 应返回中文属性值");
+    let rect = match eval_req(&env, "__crish_read.rect('#box')").await {
+        Ok(v) => v,
+        Err(e) => panic!("白名单 rect 读取失败：{:?} {}", e.kind, e.message),
+    };
+    let rect_obj = rect
+        .as_object()
+        .unwrap_or_else(|| panic!("rect 应为纯 JSON 对象：{rect:?}"));
+    assert_eq!(
+        rect_obj.get("width").and_then(Value::as_f64),
+        Some(120.0),
+        "rect.width 应等于 CSS 宽度：{rect:?}"
+    );
+    assert_eq!(
+        rect_obj.get("height").and_then(Value::as_f64),
+        Some(40.0),
+        "rect.height 应等于 CSS 高度：{rect:?}"
+    );
+    assert!(
+        rect_obj.get("x").and_then(Value::as_f64).is_some()
+            && rect_obj.get("y").and_then(Value::as_f64).is_some(),
+        "rect 应含 x/y 坐标：{rect:?}"
+    );
+    println!(
+        "[E10] 词法拒绝={lex_ms}ms text={text_ms}ms 白名单 text={text:?} attr={attr:?} rect={rect:?}"
+    );
+    env.shutdown().await;
+}
+
+// ---------------------------------------------------------------------------
+// E11 evaluate 隔离与预算（17 §3.2 ②③）：主世界全局在隔离世界不可见（隔离断言）；
+// 结果深度 > 4 / 序列化 > 64KB 拒绝；死循环表达式 2s 超时终止（宽松断言防 flaky）。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_evaluate_isolation_and_budget() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch().await;
+    let url = data_url(TEST_HTML_EVAL);
+    navigate_and_wait(&env, &url).await;
+    capture_snapshot(&env).await;
+
+    // 主世界对照面：页面确实持有机密（后续隔离断言的前提）
+    let seen = eval_dom(&env, "typeof window.__secret").await;
+    assert_eq!(seen, "number", "主世界应可见 window.__secret");
+
+    // —— 隔离断言：隔离世界看不到主世界全局（typeof 探询为 undefined）——
+    let i0 = Instant::now();
+    let v = eval_req(&env, "typeof __secret === 'undefined'")
+        .await
+        .expect("隔离求值应成功");
+    let iso_ms = i0.elapsed().as_millis() as u64;
+    assert_eq!(v, json!(true), "隔离世界不应看到主世界全局 __secret");
+
+    // 裸读主世界全局 → 执行期 ReferenceError；带 window 前缀 → 词法拒绝
+    let bare = eval_req(&env, "__secret").await.unwrap_err();
+    assert!(
+        bare.message.contains("受限求值执行"),
+        "裸读主世界全局应执行期失败：{}",
+        bare.message
+    );
+    let wpre = eval_req(&env, "window.__secret").await.unwrap_err();
+    assert!(
+        wpre.message.contains("词法拒绝"),
+        "window 前缀访问应词法拒绝：{}",
+        wpre.message
+    );
+
+    // —— 结果预算 ①：深度 ≤ 4 放行（正例对照），深度 5 拒绝 ——
+    // 夹具 JSON 必须开闭平衡（每层一开一闭；K7 初版深度 4/5 夹具各少 1 个
+    // 尾 `}` → SyntaxError，被引擎 fail-closed 映射为「受限求值执行异常」
+    // 而误红——引擎行为正确，夹具补齐闭合后按设计契约放行/拒绝）
+    let ok4 = eval_req(&env, "JSON.parse('{\"a\":{\"b\":{\"c\":{\"d\":1}}}}')")
+        .await
+        .expect("深度 4 应放行");
+    assert_eq!(ok4["a"]["b"]["c"]["d"], 1, "深度 4 正例应返回原值");
+    let d0 = Instant::now();
+    let deep = eval_req(&env, "JSON.parse('{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":1}}}}}')")
+        .await
+        .unwrap_err();
+    let deep_ms = d0.elapsed().as_millis() as u64;
+    assert!(deep.message.contains("结果超限"), "深度 5 应拒绝：{}", deep.message);
+
+    // —— 结果预算 ②：序列化 > 64KB 拒绝 ——
+    let s0 = Instant::now();
+    let big = eval_req(&env, "'x'.repeat(70000)").await.unwrap_err();
+    let size_ms = s0.elapsed().as_millis() as u64;
+    assert!(big.message.contains("结果超限"), "70KB 结果应拒绝：{}", big.message);
+
+    // —— 执行硬限：死循环 ~2s 超时终止（宽松窗口防 flaky）——
+    let u0 = Instant::now();
+    let timed = eval_req(&env, "while(true){}").await.unwrap_err();
+    let timeout_ms = u0.elapsed().as_millis() as u64;
+    assert!(
+        timed.message.contains("受限求值"),
+        "死循环应返回受限求值错误：{}",
+        timed.message
+    );
+    assert!(
+        (1500..=10000).contains(&timeout_ms),
+        "死循环应在 ~2s 超时终止（实际 {timeout_ms}ms）"
+    );
+
+    println!(
+        "[E11] 隔离={iso_ms}ms 深度拒绝={deep_ms}ms 大小拒绝={size_ms}ms 超时={timeout_ms}ms"
+    );
+    env.shutdown().await;
+}
+
+// ---------------------------------------------------------------------------
+// E12 快照-受限求值-动作联动：capture → evaluate 按选择器读元素（白名单 API）
+// → 按快照索引 click（版本推进）→ 重快照断言页面状态变化（R-1 契约全链路）。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_evaluate_snapshot_action_linkage() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch().await;
+    let url = data_url(TEST_HTML);
+    navigate_and_wait(&env, &url).await;
+    let doc = capture_snapshot(&env).await;
+    let v0 = doc.meta.snapshot_version;
+    let btn = element_ref_by_tag(&doc, "button");
+
+    // ① 受限求值按选择器读元素（evaluate 联动入口；17 §3.1）
+    let e0 = Instant::now();
+    let text = eval_req(&env, "__crish_read.text('#go')")
+        .await
+        .expect("evaluate 按选择器读元素失败（快照→evaluate→动作联动第 ① 步）");
+    let eval_ms = e0.elapsed().as_millis() as u64;
+    assert_eq!(text, "中文按钮", "evaluate 应读到按钮文本");
+
+    // ② 动作：按快照索引点击（evaluate 成功已推进版本，用最新版本继续消费）
+    let v1 = env.session.snapshot_version(&env.tab_id);
+    assert!(v1 > v0, "evaluate 后版本应推进：v{v0} → v{v1}");
+    let c0 = Instant::now();
+    env.exec
+        .click(&env.tab_id, v1, btn, MouseButton::Left, 1)
+        .await
+        .expect("click 失败");
+    let click_ms = c0.elapsed().as_millis() as u64;
+
+    // ③ 重快照断言变化（版本不回退 + 页面状态反映点击）
+    let doc2 = capture_snapshot(&env).await;
+    assert!(doc2.meta.snapshot_version > v1, "重拍版本应推进");
+    let out = eval_dom(&env, "document.getElementById('out').textContent").await;
+    assert_eq!(out, "点击成功：", "重快照后页面状态应反映点击");
+    println!(
+        "[E12] evaluate 读元素={eval_ms}ms click={click_ms}ms v{v0}→v{v1}→重拍 v{}",
+        doc2.meta.snapshot_version
+    );
+    env.shutdown().await;
+}
+
+// ---------------------------------------------------------------------------
+// E13 F1 回归补测（L1 修复面）：ASCII 输入无双写——纯 ASCII "demo" 经三事件
+// 序列（keyDown 不带 text → char → keyUp）注入，页面侧 keydown/keypress/input
+// 事件计数各 = 字符数（无双写：4 而非 8/12），value 精确落位 "demo"
+// （非双写 "ddeemmoo"）。L1 探针用例 1 形态的 e2e 面。
+// ---------------------------------------------------------------------------
+
+#[ignore]
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_ascii_no_double_write() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
+    let env = E2eEnv::launch().await;
+    let url = data_url(TEST_HTML_ASCII);
+    navigate_and_wait(&env, &url).await;
+    let doc = capture_snapshot(&env).await;
+    let version = doc.meta.snapshot_version;
+    let input = element_ref_by_tag(&doc, "input");
+
+    // 聚焦输入框 + 事件计数基线（导航后应全 0）
+    eval_dom(&env, "document.getElementById('ascii').focus()").await;
+    let before = eval_dom(&env, "JSON.stringify(window.__evt)").await;
+    let before: Value = serde_json::from_str(before.as_str().expect("事件计数应为 JSON 串"))
+        .expect("事件计数 JSON 解析失败");
+    assert_eq!(before["keydown"], 0, "基线 keydown 应为 0");
+    assert_eq!(before["keypress"], 0, "基线 keypress 应为 0");
+    assert_eq!(before["input"], 0, "基线 input 应为 0");
+
+    // 纯 ASCII 输入（L1 探针用例 1 形态）
+    let t0 = Instant::now();
+    env.exec
+        .type_text(&env.tab_id, version, input, "demo", None)
+        .await
+        .expect("ASCII 输入失败");
+    let type_ms = t0.elapsed().as_millis() as u64;
+
+    // 无双写：value 精确落位（修复前 keyDown 携 text → "ddeemmoo"）
+    let value = eval_dom(&env, "document.getElementById('ascii').value").await;
+    assert_eq!(value, "demo", "ASCII 输入无双写，value 应精确落位");
+
+    // 事件计数：keydown/keypress/input 各 = 字符数 4（F1：文本由 char 唯一承载）
+    let evt_json = eval_dom(&env, "JSON.stringify(window.__evt)").await;
+    let evt_json = evt_json.as_str().expect("事件计数应为 JSON 串");
+    let evt: Value = serde_json::from_str(evt_json).expect("事件计数 JSON 解析失败");
+    assert_eq!(evt["keydown"], 4, "keydown 应恰 4 条（每字符 1）");
+    assert_eq!(evt["keypress"], 4, "keypress 应恰 4 条（char 事件承载）");
+    assert_eq!(evt["input"], 4, "input 应恰 4 条（每字符插入 1，无双写）");
+
+    println!(
+        "[E13] type={type_ms}ms value=demo 事件 keydown/keypress/input=4/4/4（无双写）"
+    );
     env.shutdown().await;
 }
