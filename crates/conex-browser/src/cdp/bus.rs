@@ -150,11 +150,30 @@ pub enum BrowserEvent {
     /// window.open 收口请求（§7.2，域名门禁裁决后 allow/deny）
     WindowOpenRequested { url: String, session: String },
     // —— 脚本/控制台面 ——
-    Console { session: String, level: ConsoleLevel, text: String },
-    PageError { session: String, text: String },
+    /// url/line：来源脚本 URL 与行号（G-11 补齐；consoleAPICalled 取
+    /// stackTrace.callFrames[0]、pageError 取 entry，缺省 None）
+    Console {
+        session: String,
+        level: ConsoleLevel,
+        text: String,
+        url: Option<String>,
+        line: Option<u64>,
+    },
+    /// url/line：来源脚本 URL 与行号（G-11 补齐；exceptionThrown 取
+    /// exceptionDetails、pageError 取 entry，缺省 None）
+    PageError { session: String, text: String, url: Option<String>, line: Option<u64> },
     // —— 网络面（维度 17 门禁/审计消费）——
-    NetworkRequest { request_id: String, url: String, method: String },
-    NetworkDone { request_id: String, ok: bool },
+    /// status：HTTP 状态码（G-11 补齐；requestWillBeSent 时为 None，由
+    /// responseReceived 转译提供）
+    NetworkRequest {
+        request_id: String,
+        url: String,
+        method: String,
+        status: Option<u16>,
+    },
+    /// size：响应体编码后字节数（G-11 补齐；loadingFinished 取
+    /// encodedDataLength，失败类终止事件为 None）
+    NetworkDone { request_id: String, ok: bool, size: Option<u64> },
     // —— 版本面（R-1 per-tab）——
     VersionAdvanced { tab_id: String, from: u64, to: u64, reason: VersionReason },
     /// 重连/崩溃重启：global_epoch+1，全部标签版本失效
@@ -383,22 +402,48 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
+            // G-11：stackTrace.callFrames[0] 为栈顶帧（最近调用点）；行号为
+            // CDP 0-based 原值透传（负值/缺失 → None，eval 与浏览器内建无脚本来源）
+            let call_frame = event.params["stackTrace"]["callFrames"]
+                .as_array()
+                .and_then(|frames| frames.first());
+            let url = call_frame
+                .and_then(|f| f["url"].as_str())
+                .map(String::from);
+            let line = call_frame
+                .and_then(|f| f["lineNumber"].as_i64())
+                .filter(|v| *v >= 0)
+                .map(|v| v as u64);
             BrowserEvent::Console {
                 session: session(),
                 level,
                 text,
+                url,
+                line,
             }
         }),
         "Runtime.exceptionThrown" => typed::<ExceptionThrownEvent>(&event.params, |e| {
+            // G-11：exceptionDetails.url/lineNumber（CDP 0-based，负值/缺失 → None）
+            let details = &event.params["exceptionDetails"];
+            let url = details["url"].as_str().map(String::from);
+            let line = details["lineNumber"]
+                .as_i64()
+                .filter(|v| *v >= 0)
+                .map(|v| v as u64);
             BrowserEvent::PageError {
                 session: session(),
                 text: e.exception_details.text,
+                url,
+                line,
             }
         }),
         "Page.pageError" => typed::<PageErrorEvent>(&event.params, |e| {
+            // G-11：entry.url/lineNumber（LogEntry 已解析，0-based 原值透传）
             BrowserEvent::PageError {
                 session: session(),
                 text: e.entry.text,
+                url: e.entry.url,
+                line: e.entry.line_number.filter(|v| *v >= 0).map(|v| v as u64),
             }
         }),
         // —— 网络面 ——
@@ -407,14 +452,40 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
                 request_id: e.request_id,
                 url: e.request.url,
                 method: e.request.method,
+                // G-11：请求发出时响应未到，status 由 responseReceived 转译提供
+                status: None,
             })
         }
+        // G-11 补齐：responseReceived 携带 HTTP 状态码（response.status）。
+        // 与 requestWillBeSent 共用 NetworkRequest 变体（同 requestId 的
+        // 补充转译）：url 取 response.url（同源完整 URL），method 协议不
+        // 携带 → 空串（以 requestWillBeSent 转译为准）
+        "Network.responseReceived" => Ok(BrowserEvent::NetworkRequest {
+            request_id: event.params["requestId"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
+            url: event.params["response"]["url"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
+            method: String::new(),
+            status: event.params["response"]["status"]
+                .as_i64()
+                .and_then(|s| u16::try_from(s).ok()),
+        }),
         "Network.loadingFinished" => Ok(BrowserEvent::NetworkDone {
             request_id: event.params["requestId"]
                 .as_str()
                 .unwrap_or_default()
                 .to_string(),
             ok: true,
+            // G-11：encodedDataLength = 响应体编码后字节数（CDP 为 number，
+            // 整数/浮点形态均有，as_f64 统一兜底；负值/缺失 → None）
+            size: event.params["encodedDataLength"]
+                .as_f64()
+                .filter(|v| *v >= 0.0)
+                .map(|v| v as u64),
         }),
         "Network.loadingFailed" => Ok(BrowserEvent::NetworkDone {
             request_id: event.params["requestId"]
@@ -422,6 +493,7 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
                 .unwrap_or_default()
                 .to_string(),
             ok: false,
+            size: None,
         }),
         "Network.requestFailed" => Ok(BrowserEvent::NetworkDone {
             request_id: event.params["requestId"]
@@ -429,6 +501,7 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
                 .unwrap_or_default()
                 .to_string(),
             ok: false,
+            size: None,
         }),
         // —— R-3 补齐：上传触发 ——
         "Page.fileChooserOpened" => typed::<FileChooserOpenedEvent>(&event.params, |e| {
@@ -553,15 +626,20 @@ mod tests {
                 session: "s".to_string(),
                 level: ConsoleLevel::Log,
                 text: "一".to_string(),
+                url: None,
+                line: None,
             },
             BrowserEvent::NetworkRequest {
                 request_id: "r1".to_string(),
                 url: "https://e.com".to_string(),
                 method: "GET".to_string(),
+                status: None,
             },
             BrowserEvent::PageError {
                 session: "s".to_string(),
                 text: "错误".to_string(),
+                url: None,
+                line: None,
             },
             BrowserEvent::DomChanged {
                 session: "s".to_string(),
@@ -570,6 +648,7 @@ mod tests {
             BrowserEvent::NetworkDone {
                 request_id: "r1".to_string(),
                 ok: true,
+                size: None,
             },
         ];
         for e in &events {
@@ -592,6 +671,7 @@ mod tests {
             bus.publish(BrowserEvent::NetworkDone {
                 request_id: format!("r{i}"),
                 ok: true,
+                size: None,
             });
         }
         // 慢消费者首个 recv 必为 Lagged（丢了 2 个）
@@ -601,9 +681,9 @@ mod tests {
         }
         // 后续事件仍按序可得（自愈：不丢后续）
         let got = slow.recv().await.expect("重对齐后应能继续消费");
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r2".to_string(), ok: true });
+        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r2".to_string(), ok: true, size: None });
         let got = slow.recv().await.expect("重对齐后应能继续消费");
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r3".to_string(), ok: true });
+        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r3".to_string(), ok: true, size: None });
 
         // 版本跟踪器自愈（U-2）：Lagged 检测 → 全标签 +1000 + epoch+1 + VersionReset
         let bus2 = BusHandle::new(64, 4);
@@ -665,6 +745,8 @@ mod tests {
             session: "s".to_string(),
             level: ConsoleLevel::Log,
             text: "x".to_string(),
+            url: None,
+            line: None,
         });
         let got = rx.recv().await.expect("typed 订阅者应有事件");
         assert!(
@@ -1061,7 +1143,13 @@ mod tests {
             // value 经 Value::to_string() 序列化 → 字符串带 JSON 引号
             assert_eq!(
                 got,
-                BrowserEvent::Console { session: "S1".to_string(), level, text: "\"你好\"".to_string() },
+                BrowserEvent::Console {
+                    session: "S1".to_string(),
+                    level,
+                    text: "\"你好\"".to_string(),
+                    url: None,
+                    line: None,
+                },
                 "type={call_type}"
             );
         }
@@ -1083,27 +1171,89 @@ mod tests {
         .unwrap();
         assert_eq!(
             got,
-            BrowserEvent::Console { session: "S1".to_string(), level: ConsoleLevel::Log, text: "\"a\" 42 Object{len:2}".to_string() }
+            BrowserEvent::Console {
+                session: "S1".to_string(),
+                level: ConsoleLevel::Log,
+                text: "\"a\" 42 Object{len:2}".to_string(),
+                url: None,
+                line: None,
+            }
         );
-        // exceptionThrown → PageError（exception_details.text）
-        let got = classify(
-            &raw("Runtime.exceptionThrown", json!({ "timestamp": 1.0, "exceptionDetails": { "text": "ReferenceError: x is not defined" } }), Some("S1")),
-        )
-        .unwrap();
-        assert_eq!(got, BrowserEvent::PageError { session: "S1".to_string(), text: "ReferenceError: x is not defined".to_string() });
-        // pageError → PageError（entry.text）
+        // G-11：consoleAPICalled 带 stackTrace → 取 callFrames[0] 的 url/lineNumber
         let got = classify(
             &raw(
-                "Page.pageError",
-                json!({ "entry": { "source": "javascript", "level": "error", "text": "TypeError: y", "timestamp": 1.0 } }),
+                "Runtime.consoleAPICalled",
+                json!({
+                    "type": "log",
+                    "args": [ { "type": "string", "value": "带栈" } ],
+                    "stackTrace": {
+                        "callFrames": [
+                            { "functionName": "inner", "url": "https://e.com/app.js", "lineNumber": 12, "columnNumber": 3, "scriptId": "1" },
+                            { "functionName": "outer", "url": "https://e.com/app.js", "lineNumber": 20, "columnNumber": 1, "scriptId": "1" }
+                        ]
+                    }
+                }),
                 Some("S1"),
             ),
         )
         .unwrap();
-        assert_eq!(got, BrowserEvent::PageError { session: "S1".to_string(), text: "TypeError: y".to_string() });
+        match got {
+            BrowserEvent::Console { url, line, .. } => {
+                assert_eq!(url.as_deref(), Some("https://e.com/app.js"), "取栈顶帧 url");
+                assert_eq!(line, Some(12), "取栈顶帧 lineNumber（0-based 原值）");
+            }
+            other => panic!("应为 Console，实际 {other:?}"),
+        }
+        // G-11：stackTrace 缺失/空 callFrames → url/line 均 None
+        for params in [
+            json!({ "type": "log", "args": [ { "type": "string", "value": "x" } ] }),
+            json!({ "type": "log", "args": [ { "type": "string", "value": "x" } ], "stackTrace": { "callFrames": [] } }),
+        ] {
+            let got = classify(&raw("Runtime.consoleAPICalled", params, Some("S1"))).unwrap();
+            assert!(matches!(got, BrowserEvent::Console { url: None, line: None, .. }), "缺省路径必须 None");
+        }
+        // G-11：exceptionThrown → exceptionDetails.url/lineNumber 提取（0-based 原值）
+        let got = classify(
+            &raw(
+                "Runtime.exceptionThrown",
+                json!({ "timestamp": 1.0, "exceptionDetails": { "text": "ReferenceError: x", "url": "https://e.com/app.js", "lineNumber": 7, "columnNumber": 0 } }),
+                Some("S1"),
+            ),
+        )
+        .unwrap();
+        match got {
+            BrowserEvent::PageError { url, line, .. } => {
+                assert_eq!(url.as_deref(), Some("https://e.com/app.js"), "exceptionDetails.url");
+                assert_eq!(line, Some(7), "exceptionDetails.lineNumber");
+            }
+            other => panic!("应为 PageError，实际 {other:?}"),
+        }
+        // G-11：exceptionDetails 无 url/lineNumber（eval/内建）→ None
+        let got = classify(
+            &raw("Runtime.exceptionThrown", json!({ "timestamp": 1.0, "exceptionDetails": { "text": "TypeError: y" } }), Some("S1")),
+        )
+        .unwrap();
+        assert!(matches!(got, BrowserEvent::PageError { url: None, line: None, .. }), "缺省路径必须 None");
+        // G-11：pageError → entry.url/lineNumber 提取
+        let got = classify(
+            &raw(
+                "Page.pageError",
+                json!({ "entry": { "source": "javascript", "level": "error", "text": "TypeError: z", "url": "https://e.com/other.js", "lineNumber": 3, "timestamp": 1.0 } }),
+                Some("S1"),
+            ),
+        )
+        .unwrap();
+        match got {
+            BrowserEvent::PageError { url, line, .. } => {
+                assert_eq!(url.as_deref(), Some("https://e.com/other.js"), "entry.url");
+                assert_eq!(line, Some(3), "entry.lineNumber");
+            }
+            other => panic!("应为 PageError，实际 {other:?}"),
+        }
     }
 
-    /// 网络面：requestWillBeSent / loadingFinished / loadingFailed / requestFailed。
+    /// 网络面：requestWillBeSent / responseReceived / loadingFinished /
+    /// loadingFailed / requestFailed。
     #[test]
     fn bus_table_network_domain() {
         let got = classify(
@@ -1114,17 +1264,52 @@ mod tests {
             ),
         )
         .unwrap();
-        assert_eq!(got, BrowserEvent::NetworkRequest { request_id: "r1".to_string(), url: "https://cdn.example/x.js".to_string(), method: "GET".to_string() });
+        assert_eq!(got, BrowserEvent::NetworkRequest { request_id: "r1".to_string(), url: "https://cdn.example/x.js".to_string(), method: "GET".to_string(), status: None });
+        // G-11：responseReceived → NetworkRequest 补 status（response.status）
+        let got = classify(
+            &raw(
+                "Network.responseReceived",
+                json!({
+                    "requestId": "r1",
+                    "type": "Script",
+                    "response": { "url": "https://cdn.example/x.js", "status": 200, "statusText": "OK", "mimeType": "application/javascript" }
+                }),
+                None,
+            ),
+        )
+        .unwrap();
+        assert_eq!(got, BrowserEvent::NetworkRequest { request_id: "r1".to_string(), url: "https://cdn.example/x.js".to_string(), method: String::new(), status: Some(200) });
+        // G-11：responseReceived 缺 status/url → None/空串（宽容解析）
+        let got = classify(
+            &raw("Network.responseReceived", json!({ "requestId": "r3", "response": {} }), None),
+        )
+        .unwrap();
+        assert!(matches!(got, BrowserEvent::NetworkRequest { request_id: ref id, url: ref u, status: None, .. } if id == "r3" && u.is_empty()), "缺省路径必须 None/空串");
         // 三终止事件 → NetworkDone（ok 语义：仅 loadingFinished 为 true）
         let got = classify(&raw("Network.loadingFinished", json!({ "requestId": "r1" }), None)).unwrap();
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true });
+        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true, size: None });
+        // G-11：loadingFinished → size = encodedDataLength（整数形态）
+        let got = classify(
+            &raw("Network.loadingFinished", json!({ "requestId": "r1", "encodedDataLength": 12345 }), None),
+        )
+        .unwrap();
+        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true, size: Some(12345) });
+        // G-11：encodedDataLength 浮点形态（CDP number 实际形态）也提取
+        let got = classify(
+            &raw("Network.loadingFinished", json!({ "requestId": "r1", "encodedDataLength": 12345.0 }), None),
+        )
+        .unwrap();
+        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true, size: Some(12345) });
+        // G-11：encodedDataLength 缺失 → size None
+        let got = classify(&raw("Network.loadingFinished", json!({ "requestId": "r1" }), None)).unwrap();
+        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true, size: None });
         for method in ["Network.loadingFailed", "Network.requestFailed"] {
             let got = classify(&raw(method, json!({ "requestId": "r2" }), None)).unwrap();
-            assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r2".to_string(), ok: false }, "{method}");
+            assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r2".to_string(), ok: false, size: None }, "{method}");
         }
         // requestId 缺省 → 空串兜底（宽容解析）
         let got = classify(&raw("Network.loadingFailed", json!({ "errorText": "net::ERR_ABORTED" }), None)).unwrap();
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: String::new(), ok: false });
+        assert_eq!(got, BrowserEvent::NetworkDone { request_id: String::new(), ok: false, size: None });
     }
 
     /// R-3 补齐面：fileChooserOpened → FileChooserOpened（上传触发）。
