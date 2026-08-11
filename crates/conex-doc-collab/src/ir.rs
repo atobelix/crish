@@ -23,13 +23,13 @@ pub enum BlockKind {
     Unknown { flavour: String },
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BlockProps {
     #[serde(default)]
     pub attrs: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockNode {
     pub id: BlockId,
     pub parent: Option<BlockId>,
@@ -43,7 +43,7 @@ pub struct BlockNode {
 }
 
 /// 内存块树（权威结构侧）。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BlockTree {
     pub root_children: Vec<BlockId>,
     pub nodes: HashMap<BlockId, BlockNode>,

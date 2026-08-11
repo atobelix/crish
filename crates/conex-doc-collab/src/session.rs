@@ -1,10 +1,13 @@
-//! DocSession：唯一 apply 入口。
+//! DocSession：唯一 apply / hydrate 入口（写锥闭合 · G-INV / G-HYD）。
 //!
 //! - 结构：自研块树 Op（MV-01…04 / 环检测 / 删胜）
 //! - 文本：私有 [`crate::text_engine::TextEngine`]（yrs + 热集/冷藏，H1）
 //! - 同批原子：预校验失败整批零改树/零改文本（A-INV-09a）
 //! - 删块同步释放文本引擎（A-INV-09c）
 //! - 超长单块（M2 / A-HUGE）：`T_HUGE` 亚阈保持单叶；超阈同事务分段叶子（`split_of`）
+//! - **结构 encode**：整树可逆 CDCS snapshot（G-HYD-1），**禁止** `rev.to_le_bytes()` 占位
+//! - **hydrate**：`load_doc` blob → 重建树 + 冷文本登记（G-HYD-2）
+//! - **写锥**：`tree` / `rev` 非 `pub` 可写；远端文本合入走同源 `on_committed`
 //!
 //! 并发 move 规则见 `docs/block-workspace-architecture/plans/specs/concurrent-move-rules.md`
 //! 与 18 §M1。超长策略见 `docs/.../specs/huge-block-policy.md`。
@@ -13,7 +16,13 @@ use crate::block_id::BlockId;
 use crate::events::{BlockUpsert, DocEvent, ProjectionDiff};
 use crate::ir::{BlockNode, BlockProps, BlockTree};
 use crate::op::{Op, Origin};
-use crate::persistence::{CommitBatch, EncodedUpdate, PersistencePlugin, UpdateKind};
+use crate::persistence::{
+    CommitBatch, EncodedUpdate, HydrateBlob, PersistencePlugin, UpdateKind,
+};
+use crate::structure_codec::{
+    decode_structure_from_snapshot, decode_structure_payload, encode_structure_payload,
+    is_structure_payload, StructureCodecError,
+};
 use crate::text_engine::{simulate_char_edit, TextEngine, TextEngineError};
 use crate::tx::{TxGuard, TxId};
 use std::collections::{HashMap, HashSet};
@@ -102,6 +111,19 @@ pub enum ApplyError {
     Invariant(String),
 }
 
+/// `DocSession::hydrate` 失败（G-HYD-2）：载荷不可解码时**禁止**静默空会话当成功。
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum HydrateError {
+    #[error("corrupt hydrate blob: {0}")]
+    Corrupt(String),
+}
+
+impl From<StructureCodecError> for HydrateError {
+    fn from(e: StructureCodecError) -> Self {
+        HydrateError::Corrupt(e.to_string())
+    }
+}
+
 impl From<TextEngineError> for ApplyError {
     fn from(e: TextEngineError) -> Self {
         match e {
@@ -114,10 +136,15 @@ impl From<TextEngineError> for ApplyError {
     }
 }
 
+/// 文档会话：权威树 + rev **仅**经 `apply` / `hydrate` / 统一 commit 面写入（A-INV-01）。
+///
+/// 写锥：`tree` / `rev` **非** `pub` 可写字段；外部只能 `tree()` / `rev()` 只读访问。
 pub struct DocSession {
     pub doc_id: String,
-    pub tree: BlockTree,
-    pub rev: u64,
+    /// 权威块树（写锥封闭：非 pub 可写）。
+    tree: BlockTree,
+    /// 单调修订号（写锥封闭：非 pub 可写）。
+    rev: u64,
     persistence: Option<Box<dyn PersistencePlugin>>,
     /// 叶子文本引擎（crate 内私有字段；不暴露 yrs 类型）。
     text_engine: TextEngine,
@@ -141,6 +168,95 @@ impl DocSession {
             last_text_updates: Vec::new(),
             huge_threshold: DEFAULT_T_HUGE,
         }
+    }
+
+    /// 只读块树（写锥：禁止外部赋值 `session.tree = …`）。
+    #[inline]
+    pub fn tree(&self) -> &BlockTree {
+        &self.tree
+    }
+
+    /// 只读修订号（写锥：禁止外部赋值 `session.rev = …`）。
+    #[inline]
+    pub fn rev(&self) -> u64 {
+        self.rev
+    }
+
+    /// 从 `PersistencePlugin::load_doc` 的 blob 重建会话（G-HYD-2）。
+    ///
+    /// 成功不变量：树无环语义由载荷保证；各叶 `text_snapshot` 登记为冷文本；
+    /// `rev` 取自最后一帧结构 snapshot。空 blob → 空会话（新文档合法）。
+    ///
+    /// 载荷不可解码 → [`HydrateError::Corrupt`]，**禁止**静默 `new` 空树当成功。
+    pub fn hydrate(doc_id: impl Into<String>, blob: HydrateBlob) -> Result<Self, HydrateError> {
+        let mut session = Self::new(doc_id);
+        session.ingest_hydrate_blob(blob)?;
+        Ok(session)
+    }
+
+    /// 消费 hydrate blob（可在已有 session 上替换权威态；通常仅 `hydrate` 构造路径调用）。
+    fn ingest_hydrate_blob(&mut self, blob: HydrateBlob) -> Result<(), HydrateError> {
+        let has_snap = blob.snapshot.as_ref().is_some_and(|s| !s.is_empty());
+        let has_pending = !blob.pending.is_empty();
+        if !has_snap && !has_pending {
+            return Ok(());
+        }
+
+        let mut tree = BlockTree::default();
+        let mut rev = 0u64;
+        let mut got_structure = false;
+
+        if let Some(snap) = &blob.snapshot {
+            if !snap.is_empty() {
+                match decode_structure_from_snapshot(snap) {
+                    Ok(s) => {
+                        rev = s.rev;
+                        tree = s.tree;
+                        got_structure = true;
+                    }
+                    Err(StructureCodecError::Empty) if has_pending => {
+                        // snapshot 帧无结构（仅历史文本帧）→ 交给 pending
+                    }
+                    Err(e) => return Err(e.into()),
+                }
+            }
+        }
+
+        for u in &blob.pending {
+            match u.kind {
+                UpdateKind::Structure | UpdateKind::Combined => {
+                    if !is_structure_payload(&u.bytes) {
+                        return Err(HydrateError::Corrupt(
+                            "pending structure bytes are not CDCS payload".into(),
+                        ));
+                    }
+                    let s = decode_structure_payload(&u.bytes)?;
+                    rev = s.rev;
+                    tree = s.tree;
+                    got_structure = true;
+                }
+                UpdateKind::Text => {
+                    // 文本权威以结构内 text_snapshot 为准；yrs pending 不强制热合入
+                    // （A-MEM-02 冷可读；热集按需 rehydrate）
+                }
+            }
+        }
+
+        if !got_structure {
+            return Err(HydrateError::Corrupt(
+                "hydrate blob has data but no recoverable structure snapshot".into(),
+            ));
+        }
+
+        self.tree = tree;
+        self.rev = rev;
+        // 按节点 text_snapshot 登记 TextEngine 冷文本（不强制全热，G-HYD-2 / A-MEM-02）
+        self.text_engine = TextEngine::with_max_hot(self.text_engine.max_hot());
+        for (id, node) in &self.tree.nodes {
+            let text = node.text_snapshot.clone().unwrap_or_default();
+            self.text_engine.init_block_with_text(*id, text);
+        }
+        Ok(())
     }
 
     /// 上次成功 `apply` 的 [`TxId`]（失败 apply 不更新）。
@@ -230,7 +346,8 @@ impl DocSession {
 
     /// 远端文本 update 合入指定块（冷块先 rehydrate，A-MEM-03）。
     ///
-    /// 不经结构 Op；成功后 bump rev 并同步 `text_snapshot`。
+    /// 写锥：成功后与 `apply` **同源** `on_committed`（结构可逆 snapshot + Text 字节），
+    /// 禁止静默涨 rev 不落盘（A-INV-01 / W1-A）。
     pub fn apply_remote_text_update(
         &mut self,
         id: BlockId,
@@ -244,6 +361,56 @@ impl DocSession {
             n.text_snapshot = Some(new_text);
         }
         self.rev += 1;
+        let rev = self.rev;
+        let tx_id = TxId::new();
+        self.last_tx_id = Some(tx_id);
+        self.last_text_updates = vec![TextUpdatePayload {
+            block_id: id,
+            bytes: bytes.to_vec(),
+        }];
+
+        // 统一 commit 面：结构可逆 + 文本 update
+        self.emit_commit(
+            Origin::Remote,
+            tx_id,
+            rev,
+            &[TextUpdatePayload {
+                block_id: id,
+                bytes: bytes.to_vec(),
+            }],
+        )?;
+        Ok(())
+    }
+
+    /// 同源 commit：写 Structure（整树 CDCS）+ 可选 Text updates，并调 `on_committed`。
+    fn emit_commit(
+        &self,
+        origin: Origin,
+        tx_id: TxId,
+        rev: u64,
+        text_payloads: &[TextUpdatePayload],
+    ) -> Result<(), ApplyError> {
+        let Some(p) = &self.persistence else {
+            return Ok(());
+        };
+        let mut updates = vec![EncodedUpdate {
+            bytes: encode_structure_payload(rev, &self.tree),
+            kind: UpdateKind::Structure,
+        }];
+        for pld in text_payloads {
+            updates.push(EncodedUpdate {
+                bytes: pld.bytes.clone(),
+                kind: UpdateKind::Text,
+            });
+        }
+        let batch = CommitBatch {
+            tx_id,
+            origin,
+            updates,
+            snapshot_tick: false,
+        };
+        p.on_committed(&self.doc_id, &batch)
+            .map_err(|e| ApplyError::Persist(e.to_string()))?;
         Ok(())
     }
 
@@ -434,31 +601,8 @@ impl DocSession {
         self.last_tx_id = Some(tx_id);
         self.last_text_updates = text_payloads.clone();
 
-        if let Some(p) = &self.persistence {
-            let mut updates = vec![EncodedUpdate {
-                // 结构侧尚无独立 CRDT encode；占位标记 + tx 同源（A-INV-09b）
-                bytes: rev.to_le_bytes().to_vec(),
-                kind: UpdateKind::Structure,
-            }];
-            for pld in &text_payloads {
-                updates.push(EncodedUpdate {
-                    bytes: pld.bytes.clone(),
-                    kind: UpdateKind::Text,
-                });
-            }
-            if updates.len() == 1 && !text_touches.is_empty() {
-                // 文本变了但未能 encode（极端冷）时仍记 Combined 标记
-                updates[0].kind = UpdateKind::Combined;
-            }
-            let batch = CommitBatch {
-                tx_id,
-                origin,
-                updates,
-                snapshot_tick: false,
-            };
-            p.on_committed(&self.doc_id, &batch)
-                .map_err(|e| ApplyError::Persist(e.to_string()))?;
-        }
+        // G-HYD-1：结构 bytes = 整树可逆 CDCS snapshot（非 rev LE 占位）
+        self.emit_commit(origin, tx_id, rev, &text_payloads)?;
 
         tx.commit();
 
@@ -1289,9 +1433,11 @@ mod tests {
         assert!(s.text_is_hot(ids.last().unwrap()));
     }
 
-    /// A-MEM-02/04（会话层）：冷块可读 + 再编辑。
+    /// A-MEM-02（会话层）：冷块可读 + 再编辑变热。
+    ///
+    /// **≠ A-MEM-04**：本测无 undo；跨冷 undo 契约见 W1-U / `pseudo-assert-register.md`。
     #[test]
-    fn a_mem_02_04_session_cold_read_and_reheat() {
+    fn a_mem_02_session_cold_read_and_reheat() {
         let mut s = DocSession::new("d1").with_text_max_hot(1);
         let a = BlockId::new();
         let b = BlockId::new();
@@ -1788,5 +1934,325 @@ mod tests {
         .unwrap();
         assert!(count_split_segments(&s, id) > 1);
         assert_eq!(join_split_chain(&s, id), payload);
+    }
+
+    // ─── G-HYD / W1-H：结构可逆 encode + hydrate ───────────────────
+
+    /// G-HYD-1：结构 EncodedUpdate **不是** `rev.to_le_bytes()` 占位，且可解码。
+    #[test]
+    fn g_hyd_01_structure_encode_not_rev_placeholder() {
+        use crate::structure_codec::{decode_structure_payload, is_structure_payload};
+        let last = std::sync::Arc::new(std::sync::Mutex::new(None::<CommitBatch>));
+        struct Cap(std::sync::Arc<std::sync::Mutex<Option<CommitBatch>>>);
+        impl PersistencePlugin for Cap {
+            fn load_doc(
+                &self,
+                _: &str,
+            ) -> Result<crate::persistence::HydrateBlob, crate::persistence::PersistError>
+            {
+                Ok(Default::default())
+            }
+            fn on_committed(
+                &self,
+                _: &str,
+                c: &CommitBatch,
+            ) -> Result<(), crate::persistence::PersistError> {
+                *self.0.lock().unwrap() = Some(c.clone());
+                Ok(())
+            }
+            fn flush_hint(&self, _: &str) -> Result<(), crate::persistence::PersistError> {
+                Ok(())
+            }
+        }
+        let mut s = DocSession::new("g-hyd-1").with_persistence(Box::new(Cap(last.clone())));
+        let id = BlockId::new();
+        s.apply(
+            Origin::User,
+            &[Op::Insert {
+                id,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .unwrap();
+        let batch = last.lock().unwrap().clone().expect("commit");
+        let structure = batch
+            .updates
+            .iter()
+            .find(|u| matches!(u.kind, UpdateKind::Structure))
+            .expect("须含 Structure update");
+        let rev = s.rev;
+        assert_ne!(
+            structure.bytes,
+            rev.to_le_bytes().to_vec(),
+            "禁止结构 bytes = rev LE 占位"
+        );
+        assert!(
+            structure.bytes.len() > 8,
+            "结构载荷须长于 8 字节 rev 占位"
+        );
+        assert!(
+            is_structure_payload(&structure.bytes),
+            "须为 CDCS 结构 magic"
+        );
+        let snap = decode_structure_payload(&structure.bytes).expect("可解码");
+        assert_eq!(snap.rev, rev);
+        assert!(snap.tree.nodes.contains_key(&id));
+        assert_eq!(snap.tree.root_children, vec![id]);
+    }
+
+    /// G-HYD-2：apply → persist → hydrate → 树同构。
+    #[test]
+    fn g_hyd_02_apply_persist_hydrate_tree_isomorphic() {
+        use crate::structure_codec::structure_eq;
+        let mem = MemoryPersistence::default();
+        // 用 Arc 共享同一 MemoryPersistence 状态：Box 会移走所有权，故直接用闭包插件
+        let blob_slot = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::persistence::HydrateBlob::default(),
+        ));
+        let last = std::sync::Arc::new(std::sync::Mutex::new(None::<CommitBatch>));
+        struct MemP {
+            blob: std::sync::Arc<std::sync::Mutex<crate::persistence::HydrateBlob>>,
+            last: std::sync::Arc<std::sync::Mutex<Option<CommitBatch>>>,
+        }
+        impl PersistencePlugin for MemP {
+            fn load_doc(
+                &self,
+                _: &str,
+            ) -> Result<crate::persistence::HydrateBlob, crate::persistence::PersistError>
+            {
+                Ok(self.blob.lock().unwrap().clone())
+            }
+            fn on_committed(
+                &self,
+                _: &str,
+                c: &CommitBatch,
+            ) -> Result<(), crate::persistence::PersistError> {
+                *self.last.lock().unwrap() = Some(c.clone());
+                let mut blob = self.blob.lock().unwrap();
+                for u in &c.updates {
+                    if matches!(u.kind, UpdateKind::Structure | UpdateKind::Combined) {
+                        blob.snapshot = Some(u.bytes.clone());
+                        blob.pending.clear();
+                    }
+                }
+                Ok(())
+            }
+            fn flush_hint(&self, _: &str) -> Result<(), crate::persistence::PersistError> {
+                Ok(())
+            }
+        }
+        let mut s = DocSession::new("g-hyd-2").with_persistence(Box::new(MemP {
+            blob: blob_slot.clone(),
+            last: last.clone(),
+        }));
+        let a = BlockId::new();
+        let b = BlockId::new();
+        s.apply(
+            Origin::User,
+            &[
+                Op::Insert {
+                    id: a,
+                    parent: None,
+                    order: "a0".into(),
+                    kind: BlockKind::Paragraph,
+                    props: BlockProps::default(),
+                },
+                Op::Insert {
+                    id: b,
+                    parent: Some(a),
+                    order: "a0".into(),
+                    kind: BlockKind::Heading { level: 2 },
+                    props: BlockProps::default(),
+                },
+                Op::TextEdit {
+                    id: a,
+                    start: 0,
+                    end: 0,
+                    insert: "parent-text".into(),
+                },
+            ],
+        )
+        .unwrap();
+        let expected_tree = s.tree.clone();
+        let expected_rev = s.rev;
+        assert_eq!(expected_rev, 1);
+        assert!(last.lock().unwrap().is_some());
+
+        let blob = blob_slot.lock().unwrap().clone();
+        assert!(blob.snapshot.is_some());
+        let restored = DocSession::hydrate("g-hyd-2", blob).expect("hydrate");
+        assert!(
+            structure_eq(restored.tree(), &expected_tree),
+            "hydrate 后树须同构（id/parent/order/kind/props/children/text_snapshot）"
+        );
+        assert_eq!(restored.rev(), expected_rev);
+        assert_eq!(restored.tree().get(&a).unwrap().parent, None);
+        assert_eq!(restored.tree().get(&b).unwrap().parent, Some(a));
+        assert_eq!(
+            restored.tree().get(&a).unwrap().kind,
+            BlockKind::Paragraph
+        );
+        // 避免 unused 告警
+        let _ = mem;
+    }
+
+    /// G-HYD-3 / A-MEM-02 方向：hydrate 后冷 `text_snapshot` 可读。
+    #[test]
+    fn g_hyd_03_text_snapshot_readable_after_hydrate() {
+        let blob_slot = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::persistence::HydrateBlob::default(),
+        ));
+        struct MemP(std::sync::Arc<std::sync::Mutex<crate::persistence::HydrateBlob>>);
+        impl PersistencePlugin for MemP {
+            fn load_doc(
+                &self,
+                _: &str,
+            ) -> Result<crate::persistence::HydrateBlob, crate::persistence::PersistError>
+            {
+                Ok(self.0.lock().unwrap().clone())
+            }
+            fn on_committed(
+                &self,
+                _: &str,
+                c: &CommitBatch,
+            ) -> Result<(), crate::persistence::PersistError> {
+                let mut blob = self.0.lock().unwrap();
+                for u in &c.updates {
+                    if matches!(u.kind, UpdateKind::Structure | UpdateKind::Combined) {
+                        blob.snapshot = Some(u.bytes.clone());
+                        blob.pending.clear();
+                    }
+                }
+                Ok(())
+            }
+            fn flush_hint(&self, _: &str) -> Result<(), crate::persistence::PersistError> {
+                Ok(())
+            }
+        }
+        let mut s = DocSession::new("g-hyd-3").with_persistence(Box::new(MemP(blob_slot.clone())));
+        let id = BlockId::new();
+        s.apply(
+            Origin::User,
+            &[
+                Op::Insert {
+                    id,
+                    parent: None,
+                    order: "a0".into(),
+                    kind: BlockKind::Paragraph,
+                    props: BlockProps::default(),
+                },
+                Op::TextEdit {
+                    id,
+                    start: 0,
+                    end: 0,
+                    insert: "cold-readable-after-hydrate".into(),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(s.read_text(&id), "cold-readable-after-hydrate");
+
+        let blob = blob_slot.lock().unwrap().clone();
+        let restored = DocSession::hydrate("g-hyd-3", blob).unwrap();
+        // 冷登记：默认不热，但可读（A-MEM-02）
+        assert!(
+            !restored.text_is_hot(&id),
+            "hydrate 后默认冷，不强制全热"
+        );
+        assert_eq!(
+            restored.read_text(&id),
+            "cold-readable-after-hydrate",
+            "冷 text_snapshot 须可读"
+        );
+        assert_eq!(
+            restored.tree().get(&id).unwrap().text_snapshot.as_deref(),
+            Some("cold-readable-after-hydrate")
+        );
+        assert!(restored.text_is_registered(&id));
+    }
+
+    /// 空 blob hydrate → 空会话（新文档合法）；非空不可解码 → Corrupt。
+    #[test]
+    fn g_hyd_empty_and_corrupt_blob() {
+        let empty = DocSession::hydrate("e", crate::persistence::HydrateBlob::default()).unwrap();
+        assert!(empty.tree().nodes.is_empty());
+        assert_eq!(empty.rev(), 0);
+
+        let bad = crate::persistence::HydrateBlob {
+            snapshot: Some(42u64.to_le_bytes().to_vec()),
+            pending: vec![],
+        };
+        match DocSession::hydrate("bad", bad) {
+            Ok(_) => panic!("rev LE 占位不得 hydrate 成功"),
+            Err(err) => assert!(matches!(err, HydrateError::Corrupt(_))),
+        }
+    }
+
+    /// 远端文本合入须走 on_committed（写锥 / 统一 commit 面）。
+    #[test]
+    fn apply_remote_text_update_emits_on_committed() {
+        let last = std::sync::Arc::new(std::sync::Mutex::new(None::<CommitBatch>));
+        struct Cap(std::sync::Arc<std::sync::Mutex<Option<CommitBatch>>>);
+        impl PersistencePlugin for Cap {
+            fn load_doc(
+                &self,
+                _: &str,
+            ) -> Result<crate::persistence::HydrateBlob, crate::persistence::PersistError>
+            {
+                Ok(Default::default())
+            }
+            fn on_committed(
+                &self,
+                _: &str,
+                c: &CommitBatch,
+            ) -> Result<(), crate::persistence::PersistError> {
+                *self.0.lock().unwrap() = Some(c.clone());
+                Ok(())
+            }
+            fn flush_hint(&self, _: &str) -> Result<(), crate::persistence::PersistError> {
+                Ok(())
+            }
+        }
+        let mut s = DocSession::new("remote-commit").with_persistence(Box::new(Cap(last.clone())));
+        let id = BlockId::new();
+        s.apply(
+            Origin::User,
+            &[Op::Insert {
+                id,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .unwrap();
+        // 造一份 text update：先本地写再取 encode
+        s.apply(
+            Origin::User,
+            &[Op::TextEdit {
+                id,
+                start: 0,
+                end: 0,
+                insert: "local".into(),
+            }],
+        )
+        .unwrap();
+        let bytes = s.last_commit_text_updates()[0].bytes.clone();
+        *last.lock().unwrap() = None;
+        s.apply_remote_text_update(id, &bytes).unwrap();
+        let batch = last.lock().unwrap().clone().expect("remote 须 on_committed");
+        assert!(matches!(batch.origin, Origin::Remote));
+        assert!(batch
+            .updates
+            .iter()
+            .any(|u| matches!(u.kind, UpdateKind::Structure)
+                && crate::structure_codec::is_structure_payload(&u.bytes)));
+        assert!(batch
+            .updates
+            .iter()
+            .any(|u| matches!(u.kind, UpdateKind::Text) && !u.bytes.is_empty()));
     }
 }

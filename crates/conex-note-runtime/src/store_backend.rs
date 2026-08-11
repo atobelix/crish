@@ -98,18 +98,17 @@ impl StoreNoteBackend {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         match sessions.get(doc_id) {
-            Some(session) if !session.tree.root_children.is_empty() => {
-                Ok(conex_md_ast::document_to_md(&session.tree))
+            Some(session) if !session.tree().root_children.is_empty() => {
+                Ok(conex_md_ast::document_to_md(session.tree()))
             }
             // 无 session 或空树：与 NoteBackend::get_md 契约一致
             _ => Ok(String::new()),
         }
     }
 
-    /// 确保 doc 会话存在：`load_doc` 触达 + 建 session + with_persistence。
+    /// 确保 doc 会话存在：`load_doc` → `DocSession::hydrate` → with_persistence（G-HYD-2）。
     ///
-    /// 结构 CRDT 字节现为 rev 占位，**不能**从 blob 重建树；会话树在进程内
-    /// 累积。`load_doc` 仍调用以校验 store 可达并预热 pending 路径。
+    /// 结构 encode 为可逆 CDCS 整树 snapshot；空 blob（新文档）→ 空会话合法。
     fn ensure_session(
         sessions: &mut HashMap<String, DocSession>,
         store: &SharedWorkspaceStore,
@@ -118,11 +117,11 @@ impl StoreNoteBackend {
         if sessions.contains_key(doc_id) {
             return Ok(());
         }
-        // 触达权威 blob（hydrate 入口；失败映射为 ApplyFailed）
-        let _blob = store.load_doc(doc_id).map_err(|e| {
-            NoteBackendError::ApplyFailed(format!("load_doc hydrate: {e}"))
+        let blob = store.load_doc(doc_id).map_err(|e| {
+            NoteBackendError::ApplyFailed(format!("load_doc: {e}"))
         })?;
-        let session = DocSession::new(doc_id.to_string())
+        let session = DocSession::hydrate(doc_id.to_string(), blob)
+            .map_err(|e| NoteBackendError::ApplyFailed(format!("hydrate: {e}")))?
             .with_persistence(Box::new(store.clone()));
         sessions.insert(doc_id.to_string(), session);
         Ok(())
@@ -221,7 +220,7 @@ impl StoreNoteBackend {
             saw_deeper: &mut bool,
         ) {
             for id in ids {
-                let Some(n) = session.tree.get(id) else {
+                let Some(n) = session.tree().get(id) else {
                     continue;
                 };
                 if let BlockKind::Heading { level } = &n.kind {
@@ -243,7 +242,7 @@ impl StoreNoteBackend {
         }
         walk(
             session,
-            &session.tree.root_children,
+            &session.tree().root_children,
             max_depth,
             &mut flat,
             &mut saw_deeper,
@@ -440,14 +439,14 @@ impl NoteBackend for StoreNoteBackend {
             NoteApplyMode::AppendToBlock => {
                 let target_id = if let Some(ref after) = req.after_block_id {
                     Self::parse_block_id(after, "after_block_id")?
-                } else if let Some(last) = session.tree.root_children.last() {
+                } else if let Some(last) = session.tree().root_children.last() {
                     *last
                 } else {
                     return Err(NoteBackendError::NotFound(
                         "append_to_block: no target block".into(),
                     ));
                 };
-                if session.tree.get(&target_id).is_none() {
+                if session.tree().get(&target_id).is_none() {
                     return Err(NoteBackendError::NotFound(format!(
                         "block not found: {target_id}"
                     )));
@@ -478,7 +477,7 @@ impl NoteBackend for StoreNoteBackend {
                 let after_id = match req.after_block_id.as_deref() {
                     Some(a) if !a.trim().is_empty() => {
                         let aid = Self::parse_block_id(a, "after_block_id")?;
-                        let node = session.tree.get(&aid).ok_or_else(|| {
+                        let node = session.tree().get(&aid).ok_or_else(|| {
                             NoteBackendError::NotFound(format!(
                                 "after_block_id not found: {aid}"
                             ))
@@ -491,10 +490,10 @@ impl NoteBackend for StoreNoteBackend {
                     _ => None,
                 };
 
-                let mut ops = apply_md_fragment(&session.tree, parent, &req.markdown)
+                let mut ops = apply_md_fragment(session.tree(), parent, &req.markdown)
                     .map_err(Self::map_md_err)?;
                 if let Some(aid) = after_id {
-                    Self::rewrite_orders_after(&mut ops, &aid, &session.tree);
+                    Self::rewrite_orders_after(&mut ops, &aid, session.tree());
                 }
                 ops
             }

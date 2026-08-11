@@ -33,11 +33,11 @@
 
 ## 表 B · 断言族覆盖（骨架 · 实现波填）
 
-| 断言 ID                        | 测路径::测名 | 层  | 语义状态           | 备注                       |
-| ------------------------------ | ------------ | --- | ------------------ | -------------------------- |
-| （按族展开 A-BLK / A-IME / …） | —            | —   | **缺测**           | 缺测 = 未交付（`08` §0.1） |
-| A-MEM-04                       | —            | —   | **🚨 伪** 或已改名 | 见 `08` §0.3 / 表 I        |
-| A-COL-04                       | —            | —   | **🚨 伪** 或已改名 | 无 undo 过滤不得关         |
+| 断言 ID                        | 测路径::测名    | 层  | 语义状态              | 备注                                                                          |
+| ------------------------------ | --------------- | --- | --------------------- | ----------------------------------------------------------------------------- |
+| （按族展开 A-BLK / A-IME / …） | —               | —   | **缺测**              | 缺测 = 未交付（`08` §0.1）                                                    |
+| A-MEM-04                       | —（伪锚已撤）   | —   | **未交付**（至 W1-U） | 曾 reheat 冒充；见 [`pseudo-assert-register.md`](./pseudo-assert-register.md) |
+| A-COL-04                       | —（无 undo 测） | —   | **未交付**（至 W1-U） | Origin 枚举 ≠ 过滤；见同上                                                    |
 
 > 关闭 EL 时本表对应族须有 **真绿** 行；半绿 / mock / Skeleton 支撑 **不得** 标关闭。
 
@@ -45,34 +45,34 @@
 
 ## 表 C · 包轨台账（关键包 · 完成≠可关 EL）
 
-| 包 ID         | 轨         | 完成定义（摘要）                      | 完成 ≠ 可关的 EL              |
-| ------------- | ---------- | ------------------------------------- | ----------------------------- |
-| W0-\*         | Strict/S   | 契约与类型                            | 全部 EL                       |
-| W1-H          | Strict     | 可逆 encode + hydrate                 | 解锁叙事；≠ 单独关 EL-04 满表 |
-| W1-U          | Strict     | Undo v1                               | ≠ 伪 A-MEM-04/A-COL-04 未处置 |
-| W3-A          | Strict     | 视口/HeightMap/pin 结构门             | ≠ EL-03 数值；≠ EL-01         |
-| W3-B / W3-B-S | Strict/S   | Selection + IME L1                    | ≠ W6-B L2                     |
-| W3-C          | Strict     | chrome 模型/假数据                    | ≠ EL-01                       |
-| W3-D-S        | Skeleton   | plain + mock sink                     | ≠ PM；≠ 真 apply；≠ EL-01     |
-| W3-D-PM       | Strict     | 真 PM；sink 可 mock                   | ≠ W3-D；≠ EL-01               |
-| W3-D          | Strict     | 真 PM + Intent→真 apply               | ≠ A-BLK 全表；≠ EL-01         |
-| W3-F-S        | Skeleton   | StructureIntent + mock                | ≠ 真 apply                    |
-| W3-F          | Strict     | slash/拖拽/chrome DOM + 真 apply 子集 | ≠ EL-01                       |
-| W3-G          | Strict     | PaperList 仅窗口 DOM                  | ≠ EL-01                       |
-| W3-H          | Strict     | MD 前缀 / turn-into UI                | ≠ 全表 e2e                    |
-| W3-P          | Strict     | WindowManager + 真 Diff + awareness   | ≠ W6-B；≠ A-PERF 数值         |
-| W4-A/B/C/D    | Strict     | 工具/审批/扩展/MCP                    | ≠ EL-05/07 满关（须 W6-E 等） |
-| W4-F          | Strict     | 工具满表补齐                          | ≠ W6-E 千次+恶意              |
-| W5-B          | Strict     | 真挂载路径（依赖 W1-H）               | **可演示 ≠ 任何 EL**          |
-| W5-B-S        | Skeleton   | 预览壳/假数据                         | **挂载冒充交付 = S5**         |
-| W5-C          | Strict     | 架构隔离                              | EL-08 主门槛（仍须测真绿）    |
-| W5-D / W5-D-S | Strict/S   | X-01…06                               | S 轨 ≠ 全族                   |
-| **W6-A**      | **Strict** | A-BLK 全表 e2e                        | **EL-01**                     |
-| **W6-A-S**    | Skeleton   | A-BLK 抽样                            | **禁止 EL-01**                |
-| W6-B / W6-B-S | Strict/S   | IME L2 / L0–L1                        | S ≠ 叶子核锁定                |
-| W6-C / W6-C-S | Strict/S   | PERF 数值 / 结构骨架                  | S ≠ 数值门                    |
-| W6-D / W6-D-S | Strict/S   | A-COL 满 / 子集                       | S ≠ EL-04 满                  |
-| W6-E / W6-E-S | Strict/S   | 千次批+恶意 / 骨架                    | S ≠ EL-05/07 满               |
+| 包 ID         | 轨         | 完成定义（摘要）                      | 轨进度（非 EL）                       | 完成 ≠ 可关的 EL              |
+| ------------- | ---------- | ------------------------------------- | ------------------------------------- | ----------------------------- |
+| W0-\*         | Strict/S   | 契约与类型                            | 历史库存                              | 全部 EL                       |
+| W1-H          | Strict     | 可逆 encode + hydrate                 | **心侧 G-HYD-1/2 测绿**（2026-08-11） | 解锁叙事；≠ 单独关 EL-04 满表 |
+| W1-U          | Strict     | Undo v1                               | ≠ 伪 A-MEM-04/A-COL-04 未处置         |
+| W3-A          | Strict     | 视口/HeightMap/pin 结构门             | ≠ EL-03 数值；≠ EL-01                 |
+| W3-B / W3-B-S | Strict/S   | Selection + IME L1                    | ≠ W6-B L2                             |
+| W3-C          | Strict     | chrome 模型/假数据                    | ≠ EL-01                               |
+| W3-D-S        | Skeleton   | plain + mock sink                     | ≠ PM；≠ 真 apply；≠ EL-01             |
+| W3-D-PM       | Strict     | 真 PM；sink 可 mock                   | ≠ W3-D；≠ EL-01                       |
+| W3-D          | Strict     | 真 PM + Intent→真 apply               | ≠ A-BLK 全表；≠ EL-01                 |
+| W3-F-S        | Skeleton   | StructureIntent + mock                | ≠ 真 apply                            |
+| W3-F          | Strict     | slash/拖拽/chrome DOM + 真 apply 子集 | ≠ EL-01                               |
+| W3-G          | Strict     | PaperList 仅窗口 DOM                  | ≠ EL-01                               |
+| W3-H          | Strict     | MD 前缀 / turn-into UI                | ≠ 全表 e2e                            |
+| W3-P          | Strict     | WindowManager + 真 Diff + awareness   | ≠ W6-B；≠ A-PERF 数值                 |
+| W4-A/B/C/D    | Strict     | 工具/审批/扩展/MCP                    | ≠ EL-05/07 满关（须 W6-E 等）         |
+| W4-F          | Strict     | 工具满表补齐                          | ≠ W6-E 千次+恶意                      |
+| W5-B          | Strict     | 真挂载路径（依赖 W1-H）               | **可演示 ≠ 任何 EL**                  |
+| W5-B-S        | Skeleton   | 预览壳/假数据                         | **挂载冒充交付 = S5**                 |
+| W5-C          | Strict     | 架构隔离                              | EL-08 主门槛（仍须测真绿）            |
+| W5-D / W5-D-S | Strict/S   | X-01…06                               | S 轨 ≠ 全族                           |
+| **W6-A**      | **Strict** | A-BLK 全表 e2e                        | **EL-01**                             |
+| **W6-A-S**    | Skeleton   | A-BLK 抽样                            | **禁止 EL-01**                        |
+| W6-B / W6-B-S | Strict/S   | IME L2 / L0–L1                        | S ≠ 叶子核锁定                        |
+| W6-C / W6-C-S | Strict/S   | PERF 数值 / 结构骨架                  | S ≠ 数值门                            |
+| W6-D / W6-D-S | Strict/S   | A-COL 满 / 子集                       | S ≠ EL-04 满                          |
+| W6-E / W6-E-S | Strict/S   | 千次批+恶意 / 骨架                    | S ≠ EL-05/07 满                       |
 
 > 实现波更新本表「是否完成」时须附轨声明；**完成包 ID 不得偷换 Strict 定义**。
 
@@ -103,13 +103,25 @@
 
 ## 表 E / G / H / I（后挂占位）
 
-| 表  | 名称       | 落点 / 状态                                     |
-| --- | ---------- | ----------------------------------------------- |
-| E   | IME 矩阵   | `specs/ime-matrix.md`；W6-B-S vs W6-B           |
-| G   | X-01…X-06  | `08` §2；分场景状态；**未建分状态表前全族未关** |
-| H   | 挂载入口   | 可演示 vs **可关 EL=否**（除非表 A 已关）       |
-| I   | 伪完成事故 | S1–S7；预登 A-MEM-04 / A-COL-04 / 占位 encode   |
+| 表  | 名称       | 落点 / 状态                                                                                                              |
+| --- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
+| E   | IME 矩阵   | `specs/ime-matrix.md`；W6-B-S vs W6-B                                                                                    |
+| G   | X-01…X-06  | `08` §2；分场景状态；**未建分状态表前全族未关**                                                                          |
+| H   | 挂载入口   | 可演示 vs **可关 EL=否**（除非表 A 已关）                                                                                |
+| I   | 伪完成事故 | S1–S7；**权威登记** [`pseudo-assert-register.md`](./pseudo-assert-register.md)（A-MEM-04 / A-COL-04 已撤伪锚、仍未交付） |
 
 ---
 
-_2026-08-11 改进落盘：空表骨架（A+B+C+D+F）；全「未关闭」。填证据后方可宣称 EL 关闭。_
+## 表 I · 伪完成事故（指针）
+
+| 项           | 值                                                                            |
+| ------------ | ----------------------------------------------------------------------------- |
+| **权威文件** | [`pseudo-assert-register.md`](./pseudo-assert-register.md)                    |
+| **A-MEM-04** | 伪锚已删（`A_MEM_04` 常量 + `a_mem_04_*` 测名）；**语义未交付** 直至 **W1-U** |
+| **A-COL-04** | 注释已去「便于后续 undo」关 ID 叙事；**语义未交付** 直至 **W1-U**             |
+| **EL 关闭**  | 本两 ID 红时 **不得** 关 EL-04 中依赖 undo 的子集；亦不得宣称「undo 已交付」  |
+
+---
+
+_2026-08-11 改进落盘：空表骨架（A+B+C+D+F）；全「未关闭」。_  
+_2026-08-11 伪完成清理：A-MEM-04 / A-COL-04 撤伪锚并登记未交付（W1-U）。_

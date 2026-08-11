@@ -50,9 +50,12 @@ pub trait PersistencePlugin: Send + Sync {
     fn flush_hint(&self, doc_id: &str) -> Result<(), PersistError>;
 }
 
-/// 内存 mock：契约测用。
+/// 内存 mock：契约测 / G-HYD 往返用。
+///
+/// `on_committed` 会把 **Structure** 更新写入 `blob.snapshot`（整树可逆载荷），
+/// 并清空 pending（结构 snapshot 已含 `text_snapshot`，足够 hydrate）。
 #[derive(Default)]
-#[allow(dead_code)]
+#[allow(dead_code)] // 公共 mock；生产路径用 WorkspaceStore，单测直接构造
 pub struct MemoryPersistence {
     pub last_commit: std::sync::Mutex<Option<CommitBatch>>,
     pub blob: std::sync::Mutex<HydrateBlob>,
@@ -65,6 +68,21 @@ impl PersistencePlugin for MemoryPersistence {
 
     fn on_committed(&self, _doc_id: &str, commit: &CommitBatch) -> Result<(), PersistError> {
         *self.last_commit.lock().expect("lock") = Some(commit.clone());
+        let mut blob = self.blob.lock().expect("lock");
+        for u in &commit.updates {
+            match u.kind {
+                // 整树 snapshot：最新结构即完整权威（G-HYD-1）
+                UpdateKind::Structure | UpdateKind::Combined => {
+                    blob.snapshot = Some(u.bytes.clone());
+                    // 文本已嵌在 tree.text_snapshot；清空 pending 避免无限增长
+                    blob.pending.clear();
+                }
+                UpdateKind::Text => {
+                    // 无结构帧时仍可累积文本 pending（稀有路径）
+                    blob.pending.push(u.clone());
+                }
+            }
+        }
         Ok(())
     }
 

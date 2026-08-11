@@ -8,9 +8,11 @@
 //! 结构侧仍无真 CRDT encode；文本侧已走真实 yrs state update。
 //! 不依赖网络：两 peer 同进程内存互推。
 
+use crate::block_id::BlockId;
 use crate::events::DocEvent;
 use crate::op::{Op, Origin};
 use crate::session::{ApplyError, DocSession, TextUpdatePayload};
+use std::collections::HashSet;
 
 /// 简化编码的 op 列表（JSON）。
 ///
@@ -104,7 +106,8 @@ impl DualSessionHarness {
 
     /// 将简化编码 ops 应用到目标 peer（**op 日志重放**；W1-B 后换 update 二进制）。
     ///
-    /// 远端以 [`Origin::Remote`] 写入，便于后续 undo 按 origin 过滤（A-COL-04）。
+    /// 远端以 [`Origin::Remote`] 写入（origin 标签进 batch）。
+    /// **≠ A-COL-04**：按 origin 过滤的 undo 未交付，直至 W1-U。
     pub fn push(
         &mut self,
         to: PeerSide,
@@ -119,7 +122,7 @@ impl DualSessionHarness {
     /// 本侧 apply 后立刻推到对端（A→B 或 B→A 的便捷路径）。
     ///
     /// **仅**结构 op 日志重放；文本细粒度请用 [`Self::push_text_updates`] /
-    /// [`Self::apply_and_push_text`]。
+    /// [`Self::apply_text_and_push`]。
     pub fn apply_and_push(
         &mut self,
         from: PeerSide,
@@ -129,6 +132,36 @@ impl DualSessionHarness {
         let (local_ev, encoded) = self.apply(from, origin, ops)?;
         let remote_ev = self.push(from.other(), &encoded)?;
         Ok((local_ev, remote_ev))
+    }
+
+    /// 当前侧块树全部 structure id（A-COL-01 并集/收敛断言）。
+    pub fn structure_ids(&self, side: PeerSide) -> HashSet<BlockId> {
+        self.session(side).tree().nodes.keys().copied().collect()
+    }
+
+    /// 两侧 structure id 集合是否相等（最终一致观测）。
+    pub fn structure_ids_equal(&self) -> bool {
+        self.structure_ids(PeerSide::A) == self.structure_ids(PeerSide::B)
+    }
+
+    /// 并发离线后互推两份结构编码：`left`→对端、`right`→对端（顺序固定 A-first 语义：
+    /// 先把 `from_left` 的 encoded 推到对端，再把 `from_right` 的 encoded 推到对端）。
+    ///
+    /// 用于「双 peer 各自 insert 后再交换」而不依赖真实网络。
+    pub fn exchange_encoded(
+        &mut self,
+        from_left: PeerSide,
+        encoded_left: &SimplifiedEncodedOps,
+        from_right: PeerSide,
+        encoded_right: &SimplifiedEncodedOps,
+    ) -> Result<(DocEvent, DocEvent), ApplyError> {
+        debug_assert_ne!(
+            from_left, from_right,
+            "exchange_encoded: 两侧须为不同 peer"
+        );
+        let ev_to_right = self.push(from_left.other(), encoded_left)?;
+        let ev_to_left = self.push(from_right.other(), encoded_right)?;
+        Ok((ev_to_right, ev_to_left))
     }
 
     /// 将文本 update 载荷应用到目标 peer（真实 yrs 路径；无 yrs 类型外泄）。
@@ -154,6 +187,46 @@ impl DualSessionHarness {
     ) -> Result<(), ApplyError> {
         let updates = self.session(from).last_commit_text_updates().to_vec();
         self.push_text_updates(to, &updates)
+    }
+
+    /// 结构推送：对端因块已删返回 [`ApplyError::NotFound`] 时视为 **删胜 no-op**（M1），
+    /// 返回 `Ok(None)`；其它错误上浮。
+    ///
+    /// 用于 delete ∥ remote update 并发交换：滞后的 TextEdit/UpdateProps/Move 不得复活已删块。
+    pub fn push_delete_wins(
+        &mut self,
+        to: PeerSide,
+        encoded: &SimplifiedEncodedOps,
+    ) -> Result<Option<DocEvent>, ApplyError> {
+        match self.push(to, encoded) {
+            Ok(ev) => Ok(Some(ev)),
+            Err(ApplyError::NotFound(_)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// 文本推送：块已删（删胜）时跳过该 payload（`NotFound` → 计为 skipped），不复活节点。
+    ///
+    /// 返回成功合入的条数。
+    pub fn push_text_updates_delete_wins(
+        &mut self,
+        to: PeerSide,
+        updates: &[TextUpdatePayload],
+    ) -> Result<usize, ApplyError> {
+        let mut applied = 0usize;
+        for u in updates {
+            match self
+                .session_mut(to)
+                .apply_remote_text_update(u.block_id, &u.bytes)
+            {
+                Ok(()) => applied += 1,
+                Err(ApplyError::NotFound(_)) => {
+                    // M1 删胜：远端文本 update 不得使已删块回魂
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(applied)
     }
 
     /// 混合互推：结构用简化 JSON ops；文本用 yrs update bytes（W1-F）。
@@ -220,15 +293,15 @@ mod tests {
         h.push(PeerSide::B, &encoded).unwrap();
 
         // A / B 均含同 id 节点
-        let node_a = h.peer_a.tree.get(&id).expect("A 应有插入块");
-        let node_b = h.peer_b.tree.get(&id).expect("B 应有同 id 块");
+        let node_a = h.peer_a.tree().get(&id).expect("A 应有插入块");
+        let node_b = h.peer_b.tree().get(&id).expect("B 应有同 id 块");
         assert_eq!(node_a.kind, BlockKind::Paragraph);
         assert_eq!(node_b.kind, BlockKind::Paragraph);
         assert_eq!(node_a.order, node_b.order);
         assert_eq!(node_a.parent, node_b.parent);
         // 根子列表结构一致
-        assert_eq!(h.peer_a.tree.root_children, h.peer_b.tree.root_children);
-        assert_eq!(h.peer_b.tree.root_children, vec![id]);
+        assert_eq!(h.peer_a.tree().root_children, h.peer_b.tree().root_children);
+        assert_eq!(h.peer_b.tree().root_children, vec![id]);
     }
 
     #[test]
@@ -247,8 +320,8 @@ mod tests {
             }],
         )
         .unwrap();
-        assert!(h.peer_a.tree.get(&id).is_some());
-        assert!(h.peer_b.tree.get(&id).is_some());
+        assert!(h.peer_a.tree().get(&id).is_some());
+        assert!(h.peer_b.tree().get(&id).is_some());
     }
 
     #[test]
@@ -289,7 +362,7 @@ mod tests {
             }],
         )
         .unwrap();
-        assert!(h.peer_b.tree.get(&id).is_some());
+        assert!(h.peer_b.tree().get(&id).is_some());
 
         // 2) 文本：仅 A TextEdit，yrs bytes → B apply_remote_text_update
         h.apply_text_and_push(
@@ -307,7 +380,7 @@ mod tests {
         assert_eq!(h.peer_a.read_text(&id), "hello-w1f");
         assert_eq!(h.peer_b.read_text(&id), "hello-w1f");
         assert_eq!(
-            h.peer_b.tree.get(&id).unwrap().text_snapshot.as_deref(),
+            h.peer_b.tree().get(&id).unwrap().text_snapshot.as_deref(),
             Some("hello-w1f")
         );
         // last_commit_text_updates 有载荷且无空 bytes
@@ -380,10 +453,10 @@ mod tests {
         assert_eq!(h.peer_b.read_text(&id_a), "from-A");
         assert_eq!(h.peer_a.read_text(&id_b), "from-B");
         assert_eq!(h.peer_b.read_text(&id_b), "from-B");
-        assert_eq!(h.peer_a.tree.nodes.len(), h.peer_b.tree.nodes.len());
-        assert!(h.peer_a.tree.nodes.contains_key(&id_a));
-        assert!(h.peer_a.tree.nodes.contains_key(&id_b));
-        assert!(h.peer_b.tree.nodes.contains_key(&id_a));
-        assert!(h.peer_b.tree.nodes.contains_key(&id_b));
+        assert_eq!(h.peer_a.tree().nodes.len(), h.peer_b.tree().nodes.len());
+        assert!(h.peer_a.tree().nodes.contains_key(&id_a));
+        assert!(h.peer_a.tree().nodes.contains_key(&id_b));
+        assert!(h.peer_b.tree().nodes.contains_key(&id_a));
+        assert!(h.peer_b.tree().nodes.contains_key(&id_b));
     }
 }

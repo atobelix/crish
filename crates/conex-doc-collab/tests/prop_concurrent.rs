@@ -99,7 +99,7 @@ fn assert_tree_invariants(tree: &BlockTree) {
 }
 
 fn assert_session_invariants(s: &DocSession) {
-    assert_tree_invariants(&s.tree);
+    assert_tree_invariants(&s.tree());
 }
 
 // ---------------------------------------------------------------------------
@@ -184,8 +184,8 @@ fn a_col_06_det_delete_ancestor_no_dangling() {
 
     // 删祖先 a → 子树全清
     s.apply(Origin::User, &[Op::Delete { id: a }]).unwrap();
-    assert!(s.tree.nodes.is_empty());
-    assert!(s.tree.root_children.is_empty());
+    assert!(s.tree().nodes.is_empty());
+    assert!(s.tree().root_children.is_empty());
     assert_session_invariants(&s);
 }
 
@@ -223,7 +223,7 @@ fn a_col_06_det_move_and_reject_cycle() {
         }],
     )
     .unwrap();
-    assert_eq!(s.tree.get(&c).unwrap().parent, Some(b));
+    assert_eq!(s.tree().get(&c).unwrap().parent, Some(b));
     assert_session_invariants(&s);
 
     // a → c 会成环，拒
@@ -292,10 +292,10 @@ fn a_col_06_det_dual_session_push_invariants() {
 
     assert_session_invariants(&h.peer_a);
     assert_session_invariants(&h.peer_b);
-    assert!(!h.peer_a.tree.nodes.contains_key(&b));
-    assert!(!h.peer_b.tree.nodes.contains_key(&b));
-    assert!(h.peer_a.tree.nodes.contains_key(&c));
-    assert!(h.peer_b.tree.nodes.contains_key(&c));
+    assert!(!h.peer_a.tree().nodes.contains_key(&b));
+    assert!(!h.peer_b.tree().nodes.contains_key(&b));
+    assert!(h.peer_a.tree().nodes.contains_key(&c));
+    assert!(h.peer_b.tree().nodes.contains_key(&c));
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +360,7 @@ fn gen_struct_op(rng: &mut Lcg, live: &[BlockId]) -> Op {
 }
 
 fn live_ids(s: &DocSession) -> Vec<BlockId> {
-    s.tree.nodes.keys().copied().collect()
+    s.tree().nodes.keys().copied().collect()
 }
 
 /// A-COL-06：50 个固定种子，每种子最多 12 步双端交替结构 op；成功 apply 后互推并检不变量。
@@ -444,11 +444,11 @@ fn a_col_06_single_tree_two_replay_orders_acyclic() {
         assert_session_invariants(&s2);
     }
 
-    assert_eq!(s1.tree.nodes.len(), 3);
-    assert_eq!(s2.tree.nodes.len(), 3);
+    assert_eq!(s1.tree().nodes.len(), 3);
+    assert_eq!(s2.tree().nodes.len(), 3);
     // 兄弟全序由 order 决定，两序终态 children 一致
     assert_eq!(
-        s1.tree.get(&p).unwrap().children,
-        s2.tree.get(&p).unwrap().children
+        s1.tree().get(&p).unwrap().children,
+        s2.tree().get(&p).unwrap().children
     );
 }

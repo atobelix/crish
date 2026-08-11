@@ -368,9 +368,9 @@ new
             .expect("apply ops");
 
         // 结构：ID / kind / 父子
-        assert_eq!(session.tree.root_children, expected.root_children);
+        assert_eq!(session.tree().root_children, expected.root_children);
         for (id, en) in &expected.nodes {
-            let sn = session.tree.get(id).expect("id present after apply");
+            let sn = session.tree().get(id).expect("id present after apply");
             assert_eq!(sn.parent, en.parent, "parent of {id}");
             assert_eq!(sn.kind, en.kind, "kind of {id}");
             assert_eq!(sn.children, en.children, "children of {id}");

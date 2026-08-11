@@ -109,8 +109,7 @@ impl TextEngine {
         self.snapshots.entry(id).or_insert_with(|| Arc::from(""));
     }
 
-    /// 带初始快照登记（hydrate / 恢复用）。
-    #[allow(dead_code)] // W1 后续 hydrate 路径
+    /// 带初始快照登记（hydrate / 恢复用，G-HYD-2 冷文本）。
     pub fn init_block_with_text(&mut self, id: BlockId, text: impl Into<String>) {
         let s: String = text.into();
         self.snapshots.insert(id, Arc::from(s.as_str()));
@@ -326,7 +325,7 @@ impl TextEngine {
         let Some(snap) = self.snapshots.get(&id).cloned() else {
             return;
         };
-        // 丢弃旧 Doc，用快照重建（冷边界后细粒度历史可截断，A-MEM-04 契约）
+        // 丢弃旧 Doc，用快照重建：冷后细粒度 yrs 击键史可截断（实现细节，≠ A-MEM-04 契约关闭）
         self.hot.remove(&id);
         let doc = Doc::new();
         {
@@ -523,9 +522,12 @@ mod tests {
         assert_eq!(eng.read_text(id), "from-remote");
     }
 
-    /// A-MEM-04：冷块 text 可读 + 再编辑可热（细粒度 undo 历史允许截断，仅契约）。
+    /// 冷块 text 可读 + 再编辑可热（reheat 烟雾）。
+    ///
+    /// **≠ A-MEM-04**：A-MEM-04 = undo 跨冷边界（结构正确 + 细粒度可截断契约），
+    /// 须 W1-U 真 Undo v1 后方可挂 ID；本测仅 A-MEM-02 延伸的 reheat 行为。
     #[test]
-    fn a_mem_04_cold_readable_then_reheat_on_edit() {
+    fn a_mem_reheat_cold_readable_then_reheat_on_edit() {
         let mut eng = TextEngine::with_max_hot(1);
         let id = BlockId::new();
         let other = BlockId::new();

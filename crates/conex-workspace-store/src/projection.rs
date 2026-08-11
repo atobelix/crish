@@ -205,7 +205,7 @@ pub fn commit_ops(
 ///
 /// - `mirror = None`：与 `commit_ops` 等价
 /// - `lag_threshold = 0`：关闭自动 export（仍会 advance lag）
-/// - export 使用 `session.tree` 与 diff.rev；成功后 lag → 0
+/// - export 使用 `session.tree()` 与 diff.rev；成功后 lag → 0
 pub fn commit_ops_with_mirror(
     session: &mut DocSession,
     store: &WorkspaceStore,
@@ -237,7 +237,7 @@ pub fn maybe_export_mirror(
     if lag >= opts.lag_threshold {
         store.export_md_mirror(
             &diff.doc_id,
-            &session.tree,
+            session.tree(),
             diff.rev,
             opts.mirror_root.as_path(),
         )?;
@@ -356,6 +356,67 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// G-HYD-2 联测：apply → on_committed → load_doc → hydrate → 树同构（含 compact）。
+    #[test]
+    fn g_hyd_02_workspace_store_apply_persist_hydrate_isomorphic() {
+        use conex_doc_collab::{structure_codec, BlockProps, Origin as O, PersistencePlugin};
+        let (dir, db) = temp_db();
+        let store = SharedWorkspaceStore::open(&db).unwrap();
+        let mut session =
+            DocSession::new("doc-hyd").with_persistence(Box::new(store.clone()));
+
+        let id_a = BlockId::new();
+        let id_b = BlockId::new();
+        commit_ops(
+            &mut session,
+            &store,
+            O::User,
+            &[
+                Op::Insert {
+                    id: id_a,
+                    parent: None,
+                    order: "a0".into(),
+                    kind: BlockKind::Paragraph,
+                    props: BlockProps::default(),
+                },
+                Op::Insert {
+                    id: id_b,
+                    parent: Some(id_a),
+                    order: "a0".into(),
+                    kind: BlockKind::BulletItem,
+                    props: BlockProps::default(),
+                },
+                Op::TextEdit {
+                    id: id_a,
+                    start: 0,
+                    end: 0,
+                    insert: "store-hydrate-alpha".into(),
+                },
+            ],
+        )
+        .unwrap();
+
+        let expected = session.tree().clone();
+        let expected_rev = session.rev();
+
+        // compact：强制 snapshot 路径（flush_doc）
+        store.flush_doc("doc-hyd").unwrap();
+        let blob = PersistencePlugin::load_doc(&store, "doc-hyd").unwrap();
+        assert!(blob.snapshot.is_some());
+        assert!(blob.pending.is_empty(), "compact 后 pending 应空");
+
+        let restored = DocSession::hydrate("doc-hyd", blob).expect("hydrate after compact");
+        assert!(
+            structure_codec::structure_eq(restored.tree(), &expected),
+            "杀进程模拟：compact snapshot 须可 hydrate 出同构树"
+        );
+        assert_eq!(restored.rev(), expected_rev);
+        assert_eq!(restored.read_text(&id_a), "store-hydrate-alpha");
+        assert_eq!(restored.tree().get(&id_b).unwrap().parent, Some(id_a));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn commit_ops_session_shared_store_end_to_end() {
         let (dir, db) = temp_db();
@@ -444,7 +505,7 @@ mod tests {
         // export 清 lag
         let mirror_root = dir.join("mirrors");
         store
-            .export_md_mirror("doc-e2e", &session.tree, session.rev, &mirror_root)
+            .export_md_mirror("doc-e2e", session.tree(), session.rev(), &mirror_root)
             .unwrap();
         assert_eq!(store.mirror_lag("doc-e2e").unwrap(), Some(0));
 
