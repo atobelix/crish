@@ -338,6 +338,52 @@ impl TextEngine {
         self.hot.insert(id, doc);
         self.touch_lru(id);
     }
+
+    // ─── P-H2 内存快照（方案 A：apply 前 Structure+Text 可恢复）──────────
+
+    /// 捕获当前文本引擎可恢复检查点（纯文本权威 + pin/热集合）。
+    ///
+    /// `yrs::Doc` 非 Clone：回滚后按 plain text rehydrate 热块；
+    /// **read_text / 登记集合 ≡ 检查点时刻**（P-H2 / A-INV-09a）。
+    pub(crate) fn checkpoint(&self) -> TextEngineCheckpoint {
+        let mut texts = HashMap::with_capacity(self.snapshots.len());
+        for &id in self.snapshots.keys() {
+            // 热块以 Doc 实读为准（与 snapshots 同步，防御漂移）
+            texts.insert(id, self.read_text(id));
+        }
+        TextEngineCheckpoint {
+            max_hot: self.max_hot,
+            texts,
+            pinned: self.pinned.clone(),
+            was_hot: self.hot.keys().copied().collect(),
+        }
+    }
+
+    /// 从检查点整表替换引擎状态（P-H2 回滚）。
+    pub(crate) fn restore(&mut self, cp: TextEngineCheckpoint) {
+        *self = TextEngine::with_max_hot(cp.max_hot);
+        for (id, text) in cp.texts {
+            self.init_block_with_text(id, text);
+        }
+        for id in &cp.pinned {
+            self.pin(*id);
+        }
+        for id in cp.was_hot {
+            // 热集重建失败不阻断回滚（登记与 plain text 已恢复）
+            let _ = self.ensure_hot(id);
+        }
+    }
+}
+
+/// P-H2：文本引擎可恢复检查点（crate 内；不外泄 yrs 类型）。
+#[derive(Debug, Clone)]
+pub(crate) struct TextEngineCheckpoint {
+    max_hot: usize,
+    /// 全部已登记块的 plain text（冷热均可读权威）。
+    texts: HashMap<BlockId, String>,
+    pinned: HashSet<BlockId>,
+    /// 检查点时刻处于热态的块 id（恢复后 rehydrate）。
+    was_hot: HashSet<BlockId>,
 }
 
 /// char 闭开区间 → UTF-8 字节起点与删除字节长度。

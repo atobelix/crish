@@ -3,6 +3,8 @@
 //! - 结构：自研块树 Op（MV-01…04 / 环检测 / 删胜）
 //! - 文本：私有 [`crate::text_engine::TextEngine`]（yrs + 热集/冷藏，H1）
 //! - 同批原子：预校验失败整批零改树/零改文本（A-INV-09a）
+//! - **P-H2（18 补丁 / 01 §2.4.1 方案 A）**：`on_committed` / 同批突变失败 →
+//!   树 + 文本引擎 + rev + last_tx 回滚到 apply 前快照，零半提交
 //! - 删块同步释放文本引擎（A-INV-09c）
 //! - 超长单块（M2 / A-HUGE）：`T_HUGE` 亚阈保持单叶；超阈同事务分段叶子（`split_of`）
 //! - **结构 encode**：整树可逆 CDCS snapshot（G-HYD-1），**禁止** `rev.to_le_bytes()` 占位
@@ -23,10 +25,26 @@ use crate::structure_codec::{
     decode_structure_from_snapshot, decode_structure_payload, encode_structure_payload,
     is_structure_payload, StructureCodecError,
 };
-use crate::text_engine::{simulate_char_edit, TextEngine, TextEngineError};
+use crate::text_engine::{
+    simulate_char_edit, TextEngine, TextEngineCheckpoint, TextEngineError,
+};
 use crate::tx::{TxGuard, TxId};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
+
+// ─── P-H2 内存快照（方案 A：clone 树 + TextEngine 检查点）────────────────
+
+/// apply / apply_remote 突变前的可恢复内存态（P-H2 · 18 补丁默认路径）。
+///
+/// 含：Structure（`BlockTree`）、rev、TextEngine 检查点、成功观测字段。
+/// **不**含 persistence 插件句柄（插件外部状态由调用方/store 负责）。
+struct MemorySnapshot {
+    tree: BlockTree,
+    rev: u64,
+    text: TextEngineCheckpoint,
+    last_tx_id: Option<TxId>,
+    last_text_updates: Vec<TextUpdatePayload>,
+}
 
 // ─── M2 / A-HUGE 阈值 ───────────────────────────────────────────────
 
@@ -348,6 +366,8 @@ impl DocSession {
     ///
     /// 写锥：成功后与 `apply` **同源** `on_committed`（结构可逆 snapshot + Text 字节），
     /// 禁止静默涨 rev 不落盘（A-INV-01 / W1-A）。
+    ///
+    /// **P-H2**：`on_committed` 失败 → 树/文本/rev/last_tx 回滚到合入前（方案 A 快照）。
     pub fn apply_remote_text_update(
         &mut self,
         id: BlockId,
@@ -356,6 +376,22 @@ impl DocSession {
         if !self.tree.nodes.contains_key(&id) {
             return Err(ApplyError::NotFound(id.to_string()));
         }
+        // P-H2：突变前快照
+        let pre = self.capture_memory_snapshot();
+        match self.apply_remote_text_update_inner(id, bytes) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                self.restore_memory_snapshot(pre);
+                Err(e)
+            }
+        }
+    }
+
+    fn apply_remote_text_update_inner(
+        &mut self,
+        id: BlockId,
+        bytes: &[u8],
+    ) -> Result<(), ApplyError> {
         let new_text = self.text_engine.apply_remote_update(id, bytes)?;
         if let Some(n) = self.tree.nodes.get_mut(&id) {
             n.text_snapshot = Some(new_text);
@@ -380,6 +416,26 @@ impl DocSession {
             }],
         )?;
         Ok(())
+    }
+
+    /// P-H2：捕获 apply 前可恢复内存态（树 clone + 文本引擎检查点 + rev/观测）。
+    fn capture_memory_snapshot(&self) -> MemorySnapshot {
+        MemorySnapshot {
+            tree: self.tree.clone(),
+            rev: self.rev,
+            text: self.text_engine.checkpoint(),
+            last_tx_id: self.last_tx_id,
+            last_text_updates: self.last_text_updates.clone(),
+        }
+    }
+
+    /// P-H2：整域回滚到快照（零半提交）。
+    fn restore_memory_snapshot(&mut self, snap: MemorySnapshot) {
+        self.tree = snap.tree;
+        self.rev = snap.rev;
+        self.text_engine.restore(snap.text);
+        self.last_tx_id = snap.last_tx_id;
+        self.last_text_updates = snap.last_text_updates;
     }
 
     /// 同源 commit：写 Structure（整树 CDCS）+ 可选 Text updates，并调 `on_committed`。
@@ -477,6 +533,10 @@ impl DocSession {
     }
 
     /// 唯一权威写入口。
+    ///
+    /// **P-H2（18 补丁 · 方案 A 快照回滚）**：预校验通过后、突变前捕获
+    /// Structure+Text+rev；`on_committed` / 同批 huge split / 突变中途 **任一失败**
+    /// → 整域回滚到 apply 前，返回错误且 **零半提交**（树/文本/rev ≡ apply 前）。
     pub fn apply(&mut self, origin: Origin, ops: &[Op]) -> Result<DocEvent, ApplyError> {
         let tx = TxGuard::begin();
         let tx_id = tx.id();
@@ -484,6 +544,27 @@ impl DocSession {
         // 预校验（结构 + 文本偏移模拟）：失败则整批不改树/不改文本（A-INV-09a）
         self.validate_batch(ops)?;
 
+        // P-H2：apply 前可恢复快照（默认主路径；与两阶段 prepare 等价「失败见旧态」）
+        let pre = self.capture_memory_snapshot();
+        match self.apply_after_validate(origin, ops, tx_id) {
+            Ok(event) => {
+                tx.commit();
+                Ok(event)
+            }
+            Err(e) => {
+                self.restore_memory_snapshot(pre);
+                Err(e)
+            }
+        }
+    }
+
+    /// 预校验已通过后的突变 + persist（失败由 [`Self::apply`] 统一回滚）。
+    fn apply_after_validate(
+        &mut self,
+        origin: Origin,
+        ops: &[Op],
+        tx_id: TxId,
+    ) -> Result<DocEvent, ApplyError> {
         let mut upserts = Vec::new();
         let mut removes = Vec::new();
         let mut text_touches = Vec::new();
@@ -580,8 +661,8 @@ impl DocSession {
             }
         }
 
-        // M2 / A-HUGE-02：同事务尾部对超阈文本叶自动分段（主路径）；失败则整批已无法回滚用户
-        // Op——分段本身设计为确定性/不失败。预校验已保证用户 Op 可成功。
+        // M2 / A-HUGE-02：同事务尾部对超阈文本叶自动分段；失败 → 外层 P-H2 整批回滚
+        // （原子域 = 用户 Op + 自动 split + on_committed，18 P-H2）
         let mut split_candidates: Vec<BlockId> = text_touches.clone();
         split_candidates.sort_by_key(|id| id.as_uuid());
         split_candidates.dedup();
@@ -598,13 +679,13 @@ impl DocSession {
         let rev = self.rev;
 
         // 无论是否挂 persistence，都记录同源 tx + 文本 update（A-INV-09b / W1-F）
+        // 若随后 on_committed 失败，外层 restore 会抹掉这些观测字段
         self.last_tx_id = Some(tx_id);
         self.last_text_updates = text_payloads.clone();
 
         // G-HYD-1：结构 bytes = 整树可逆 CDCS snapshot（非 rev LE 占位）
+        // P-H2：此处 Err → 外层回滚树/文本/rev
         self.emit_commit(origin, tx_id, rev, &text_payloads)?;
-
-        tx.commit();
 
         Ok(DocEvent::Projection {
             diff: ProjectionDiff {
@@ -2254,5 +2335,120 @@ mod tests {
             .updates
             .iter()
             .any(|u| matches!(u.kind, UpdateKind::Text) && !u.bytes.is_empty()));
+    }
+
+    /// P-H2 / A-INV-09a：`on_committed` 第二次失败 → 树/文本/rev 与失败前 ≡，零半提交。
+    ///
+    /// MockPersistence：第 1 次成功（Insert 落盘），第 2 次 TextEdit 返回 Persist 错；
+    /// 断言内存权威未前进（方案 A 快照回滚，非逆 op）。
+    #[test]
+    fn p_h2_persist_fail_rolls_back_tree_and_text() {
+        use crate::a_inv_09::A_INV_09A;
+        use crate::persistence::PersistError;
+        use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+        let _ = A_INV_09A; // 验收锚：A-INV-09a + 18 补丁 P-H2
+
+        /// MockPersistence：第 N 次 `on_committed` 起失败（计数从 1；P-H2 第二次失败）。
+        struct FailAfterN {
+            n: usize,
+            calls: AtomicUsize,
+        }
+        impl PersistencePlugin for FailAfterN {
+            fn load_doc(
+                &self,
+                _: &str,
+            ) -> Result<crate::persistence::HydrateBlob, PersistError> {
+                Ok(Default::default())
+            }
+            fn on_committed(
+                &self,
+                _: &str,
+                _: &CommitBatch,
+            ) -> Result<(), PersistError> {
+                let c = self.calls.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+                if c >= self.n {
+                    Err(PersistError::Io("p_h2 mock persist fail".into()))
+                } else {
+                    Ok(())
+                }
+            }
+            fn flush_hint(&self, _: &str) -> Result<(), PersistError> {
+                Ok(())
+            }
+        }
+
+        // n=2：第二次 on_committed 失败
+        let mut s = DocSession::new("p-h2").with_persistence(Box::new(FailAfterN {
+            n: 2,
+            calls: AtomicUsize::new(0),
+        }));
+        let id = BlockId::new();
+
+        // 第一次 apply（Insert）→ on_committed 成功
+        s.apply(
+            Origin::User,
+            &[Op::Insert {
+                id,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .expect("first apply (insert) must succeed");
+
+        // 基线：apply 前快照（第二次失败后须 ≡）
+        let rev_before = s.rev();
+        let tree_before = s.tree().clone();
+        let text_before = s.read_text(&id);
+        let tx_before = s.last_tx_id();
+        let text_upd_before = s.last_commit_text_updates().to_vec();
+        assert_eq!(rev_before, 1);
+        assert_eq!(text_before, "");
+        assert!(s.tree().nodes.contains_key(&id));
+
+        // 第二次 apply（TextEdit）→ on_committed 失败 → 须整域回滚
+        let err = s
+            .apply(
+                Origin::User,
+                &[Op::TextEdit {
+                    id,
+                    start: 0,
+                    end: 0,
+                    insert: "should-not-stick".into(),
+                }],
+            )
+            .expect_err("second apply must fail on persist");
+        assert!(
+            matches!(err, ApplyError::Persist(_)),
+            "须为 Persist 错，got: {err:?}"
+        );
+
+        // 树 / 文本 / rev / 观测字段 ≡ 第二次 apply 前
+        assert_eq!(s.rev(), rev_before, "rev 不得半前进");
+        assert_eq!(
+            s.tree(),
+            &tree_before,
+            "树结构须与 persist 失败前同构"
+        );
+        assert_eq!(
+            s.read_text(&id),
+            text_before,
+            "文本引擎 plain text 须回滚"
+        );
+        assert_eq!(
+            s.tree().get(&id).and_then(|n| n.text_snapshot.as_deref()),
+            tree_before.get(&id).and_then(|n| n.text_snapshot.as_deref()),
+            "树内 text_snapshot 须回滚"
+        );
+        assert_eq!(s.last_tx_id(), tx_before, "失败批不得污染 last_tx_id");
+        assert_eq!(
+            s.last_commit_text_updates(),
+            text_upd_before.as_slice(),
+            "失败批不得污染 last_text_updates"
+        );
+        // 半提交禁令：不得残留失败批写入的文本
+        assert_ne!(s.read_text(&id), "should-not-stick");
     }
 }
