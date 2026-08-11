@@ -31,6 +31,8 @@ import {
   type HandleVisibility,
   type SilentFixture,
 } from '@crish/block-paper';
+/** DomHost chrome 皮（落点线/slash/把手热区）；与 module 块行皮并存；≠ EL-01 */
+import '@crish/block-paper/chrome.css';
 import type { NoteQueryBlockHit, NoteTransport } from '../../api/noteApi';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import {

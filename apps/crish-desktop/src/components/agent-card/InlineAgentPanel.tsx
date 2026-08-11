@@ -8,7 +8,14 @@
  * - 运行中可停止：折叠头 / 工具条 / Composer 默认 Stop=L2；Composer Force=L3 onForceStop
  * - 卸载安全：取消 follow-up 流，迟到 setState 不写回
  */
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ChevronRight } from 'lucide-react';
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../../store/types';
@@ -40,7 +47,10 @@ import { Tooltip } from '../ui';
 /** 内联 denser：比主列 / 侧栏默认 4 行再收一行，避免时间线被撑爆 */
 const INLINE_COMPOSER_MAX_LINES = 3;
 
-const SubagentThinkingFold: React.FC<{ thinkingText: string; isLive?: boolean }> = ({ thinkingText, isLive = false }) => {
+const SubagentThinkingFold: React.FC<{
+  thinkingText: string;
+  isLive?: boolean;
+}> = ({ thinkingText, isLive = false }) => {
   const [open, setOpen] = useState(false);
   const isExpanded = open || isLive;
   return (
@@ -54,13 +64,9 @@ const SubagentThinkingFold: React.FC<{ thinkingText: string; isLive?: boolean }>
           size={14}
           className={`${styles.thinkingChevron} ${isExpanded ? styles.isOpen : ''}`}
         />
-        <span className={styles.thinkingFoldLabel}>
-          思考
-        </span>
+        <span className={styles.thinkingFoldLabel}>思考</span>
       </summary>
-      <div className={styles.thinkingFoldBody}>
-        {thinkingText.trim()}
-      </div>
+      <div className={styles.thinkingFoldBody}>{thinkingText.trim()}</div>
     </details>
   );
 };
@@ -77,7 +83,9 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   parentSessionId,
   defaultOpen,
 }) => {
-  const [open, setOpen] = useState(Boolean(defaultOpen ?? agent.status === 'running'));
+  const [open, setOpen] = useState(
+    Boolean(defaultOpen ?? agent.status === 'running')
+  );
   const [input, setInput] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -92,8 +100,8 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 
   // 实时 agent 数据（O(1) sessionsById）
   const live =
-    useSessionField(
-      (s) => s.sessionsById[parentSessionId]?.agents?.find((a) => a.id === agent.id),
+    useSessionField((s) =>
+      s.sessionsById[parentSessionId]?.agents?.find((a) => a.id === agent.id)
     ) || agent;
 
   const agentIdNorm = normalizeAgentPanelAgentId(live.id) ?? '';
@@ -101,8 +109,8 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 
   const {
     handleSend,
-    handleStop,
-    handleForceStop,
+    handleStopGeneration,
+    handleForceCancelGeneration,
     sending,
     stopping,
     expandedTools,
@@ -115,14 +123,8 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   });
 
   /** 标题 / 短标签 / 状态：与 openAgentPanel 纯函数同轨（中文） */
-  const displayTitle = useMemo(
-    () => resolveAgentPanelTitle(live),
-    [live],
-  );
-  const displayLabel = useMemo(
-    () => resolveAgentPanelLabel(live),
-    [live],
-  );
+  const displayTitle = useMemo(() => resolveAgentPanelTitle(live), [live]);
+  const displayLabel = useMemo(() => resolveAgentPanelLabel(live), [live]);
   const statusLabel = resolveAgentPanelStatusLabel(live.status);
 
   /**
@@ -132,14 +134,12 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   const sideFocused = shouldReuseAgentPanelFocus(
     panelAgentId,
     agentIdNorm,
-    activeAgentId,
+    activeAgentId
   );
 
   // 审批：与主对话同路径（ApprovalAskCard 二次确认 + remember）
-  const { approvalBusy, onApprovalAllow, onApprovalDeny } = useAgentToolApproval(
-    parentSessionId,
-    live.id,
-  );
+  const { approvalBusy, onApprovalAllow, onApprovalDeny } =
+    useAgentToolApproval(parentSessionId, live.id);
 
   useEffect(() => {
     if (running) setOpen(true);
@@ -178,22 +178,27 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 
       openAgentInSidePanel(id, { sessionId: parentSessionId });
     },
-    [live, parentSessionId, panelAgentId, activeAgentId],
+    [live, parentSessionId, panelAgentId, activeAgentId]
   );
 
   const messages = live.messages || [];
   const msgCount = messages.length;
   const pendingTools = messages.reduce((n, m) => {
-    return n + (m.toolCalls || []).filter((t) => t.status === 'pending_approval').length;
+    return (
+      n +
+      (m.toolCalls || []).filter((t) => t.status === 'pending_approval').length
+    );
   }, 0);
 
-  const canSend = Boolean(input.trim()) && !sending && !stopping && Boolean(agentIdNorm);
+  const canSend =
+    Boolean(input.trim()) && !sending && !stopping && Boolean(agentIdNorm);
 
   /** 空消息列表：按状态中文文案 */
   const emptyStreamCopy = useMemo(() => {
     if (running) return '子智能体执行中，产出将显示在此…';
     if (live.status === 'failed') return '暂无消息（运行失败）。可在下方重试。';
-    if (live.status === 'stopped') return '暂无消息（已停止）。可继续发送以开启新一轮。';
+    if (live.status === 'stopped')
+      return '暂无消息（已停止）。可继续发送以开启新一轮。';
     if (live.summary?.trim()) {
       return `暂无消息记录。摘要：${live.summary.trim().slice(0, 80)}`;
     }
@@ -212,10 +217,10 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         live.status === 'running'
           ? `${styles.inlineAgentRunning} is-running`
           : live.status === 'failed'
-          ? `${styles.inlineAgentFailed} is-failed`
-          : live.status === 'stopped'
-          ? `${styles.inlineAgentStopped} is-stopped`
-          : ''
+            ? `${styles.inlineAgentFailed} is-failed`
+            : live.status === 'stopped'
+              ? `${styles.inlineAgentStopped} is-stopped`
+              : ''
       }${sideFocused ? ` ${styles.sideFocused} side-focused` : ''} inline-agent inline-agent-dense inline-agent-panel`}
       role="region"
       aria-label={regionAria}
@@ -237,14 +242,15 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         >
           {running ? (
             <span className="tool-row-live" aria-hidden>
-              <span className="loading-spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />
+              <span
+                className="loading-spinner"
+                style={{ width: 8, height: 8, borderWidth: 1.5 }}
+              />
             </span>
           ) : (
             <Lucide.Bot size={13} className="inline-agent-ico" aria-hidden />
           )}
-          <span className={styles.inlineAgentLabel}>
-            {displayLabel}
-          </span>
+          <span className={styles.inlineAgentLabel}>{displayLabel}</span>
           <span
             className={`${styles.inlineAgentBadge} ${
               live.status === 'running'
@@ -271,14 +277,11 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           ) : null}
           {live.mode ? (
             <Tooltip content={live.mode}>
-              <span className={styles.inlineAgentMode}>
-                {live.mode}
-              </span>
+              <span className={styles.inlineAgentMode}>{live.mode}</span>
             </Tooltip>
           ) : null}
           <span className={styles.inlineAgentMeta}>
-            {msgCount} 条
-            {live.summary ? ` · ${live.summary.slice(0, 36)}` : ''}
+            {msgCount} 条{live.summary ? ` · ${live.summary.slice(0, 36)}` : ''}
           </span>
           <Lucide.ChevronRight
             size={13}
@@ -296,7 +299,11 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                 aria-label={stopping ? '正在停止子智能体' : '停止子智能体'}
                 aria-busy={stopping || undefined}
                 disabled={stopping}
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleStop(live.summary); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleStopGeneration(live.summary);
+                }}
               >
                 <Lucide.Square size={11} fill="currentColor" aria-hidden />
               </button>
@@ -318,7 +325,12 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
       </div>
 
       {open ? (
-        <div className={styles.inlineAgentBody} id={bodyDomId} role="group" aria-label={`${displayTitle} 详情`}>
+        <div
+          className={styles.inlineAgentBody}
+          id={bodyDomId}
+          role="group"
+          aria-label={`${displayTitle} 详情`}
+        >
           <div className={styles.inlineAgentToolbar}>
             {running ? (
               <Tooltip content="停止生成">
@@ -328,7 +340,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                   aria-label="停止生成"
                   aria-busy={stopping || undefined}
                   disabled={stopping}
-                  onClick={() => handleStop(live.summary)}
+                  onClick={() => handleStopGeneration(live.summary)}
                 >
                   {stopping ? '停止中…' : '停止'}
                 </button>
@@ -356,27 +368,38 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
               </div>
             ) : (
               messages.map((msg) => (
-                <div key={msg.id} className={`${styles.inlineAgentMsg} inline-agent-msg--${msg.sender}`}>
+                <div
+                  key={msg.id}
+                  className={`${styles.inlineAgentMsg} inline-agent-msg--${msg.sender}`}
+                >
                   {msg.sender === 'user' ? (
-                    <div className={styles.inlineAgentUserPrompt}>{msg.text}</div>
+                    <div className={styles.inlineAgentUserPrompt}>
+                      {msg.text}
+                    </div>
                   ) : (
                     <>
                       {msg.thinking &&
                       msg.thinking.trim() &&
                       msg.thinking !== '正在处理…' &&
                       !looksLikeShellDump(msg.thinking) ? (
-                        <SubagentThinkingFold thinkingText={msg.thinking} isLive={running} />
+                        <SubagentThinkingFold
+                          thinkingText={msg.thinking}
+                          isLive={running}
+                        />
                       ) : null}
                       {(() => {
                         // Stream = plain text (no per-token HTML). Completed = Rust async.
                         const isStreamingMsg =
-                          msg.status === 'processing' || msg.status === 'queued';
+                          msg.status === 'processing' ||
+                          msg.status === 'queued';
                         const mdPriority = isStreamingMsg
                           ? Priority.Normal
                           : Priority.High;
                         const timeline = buildAssistantTimeline(msg);
                         if (!timeline.length && (msg.text || '').trim()) {
-                          const fallback = stripThoughtPlaceholders(msg.text || '');
+                          const fallback = stripThoughtPlaceholders(
+                            msg.text || ''
+                          );
                           if (!fallback.trim()) return null;
                           return (
                             <div className="msg-assistant-text">
@@ -388,13 +411,17 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                             </div>
                           );
                         }
-                        const textItems = timeline.filter((i) => i.kind === 'text');
+                        const textItems = timeline.filter(
+                          (i) => i.kind === 'text'
+                        );
                         const lastTextKey = textItems.length
                           ? textItems[textItems.length - 1]!.key
                           : null;
                         return timeline.map((item) => {
                           if (item.kind === 'text') {
-                            const body = stripThoughtPlaceholders(item.content || '');
+                            const body = stripThoughtPlaceholders(
+                              item.content || ''
+                            );
                             if (!body.trim()) return null;
                             const streaming =
                               isStreamingMsg && item.key === lastTextKey;
@@ -409,7 +436,10 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                             );
                           }
                           return (
-                            <div key={item.key} className="msg-timeline-tools agent-tool-stack">
+                            <div
+                              key={item.key}
+                              className="msg-timeline-tools agent-tool-stack"
+                            >
                               <ChatToolStack
                                 items={item.items}
                                 msgId={msg.id}
@@ -456,8 +486,8 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
               isComposing={isComposing}
               setIsComposing={setIsComposing}
               isProcessing={running}
-              onStop={() => handleStop(live.summary)}
-              onForceStop={() => handleForceStop(live.summary)}
+              onStop={() => handleStopGeneration(live.summary)}
+              onForceStop={() => handleForceCancelGeneration(live.summary)}
               processingSendLabel="发送"
               maxLines={INLINE_COMPOSER_MAX_LINES}
               placeholder={
@@ -488,6 +518,8 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
 function looksLikeShellDump(s: string): boolean {
   return (
     /FullName|LastWriteTime|Mode\s+Length|----/.test(s) ||
-    (/^[A-Za-z]:\\/.test(s.trim()) && s.includes('\n') && s.split('\n').length > 4)
+    (/^[A-Za-z]:\\/.test(s.trim()) &&
+      s.includes('\n') &&
+      s.split('\n').length > 4)
   );
 }

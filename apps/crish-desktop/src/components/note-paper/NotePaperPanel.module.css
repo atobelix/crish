@@ -226,30 +226,44 @@ button.badge:focus-visible {
     var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
 }
 
-/* 拖拽把手：默认 invisible；hover/focus/multi 才显（L0 静默） */
+/* 拖拽把手：默认 invisible；hover/focus/multi 才显（L0 静默）
+ * 二期：热区略放大（min 高 = control-height-xs），仍非 hover 零 chrome */
 .handle {
-  flex: 0 0 var(--icon-size, 16px);
-  width: var(--icon-size, 16px);
-  height: var(--icon-size-lg, 18px);
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  /* 视觉点阵宽 ≈ icon；横向 padding 扩 hover 热区 */
+  width: calc(var(--icon-size, 16px) + 2 * var(--space-1, 4px));
+  min-width: calc(var(--icon-size, 16px) + 2 * var(--space-1, 4px));
+  height: var(--control-height-xs, 24px);
+  min-height: var(--control-height-xs, 24px);
   margin-top: var(--space-0_5, 2px);
+  padding: 0 var(--space-1, 4px);
   border-radius: var(--radius-xs, 4px);
   opacity: 0;
   /* 六点把手暗示：竖向虚点条 */
-  background:
+  background-image:
     radial-gradient(
-        circle,
-        var(--text-tertiary, #696969) 1.1px,
-        transparent 1.2px
-      )
-      0 0 / 6px 6px,
+      circle,
+      var(--text-tertiary, #696969) 1.1px,
+      transparent 1.2px
+    ),
     radial-gradient(
-        circle,
-        var(--text-tertiary, #696969) 1.1px,
-        transparent 1.2px
-      )
-      6px 0 / 6px 6px;
+      circle,
+      var(--text-tertiary, #696969) 1.1px,
+      transparent 1.2px
+    );
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-position:
+    center 4px,
+    calc(50% + 6px) 4px;
+  background-repeat: repeat-y;
   background-color: transparent;
-  transition: opacity var(--transition-micro, 100ms ease-out);
+  transition:
+    opacity var(--transition-micro, 100ms ease-out),
+    background-color var(--transition-micro, 100ms ease-out);
+  /* 壳仍装饰向；真拖归 W3-F / A-BLK。热区随尺寸放大，父行 hover 接管 */
   pointer-events: none;
   cursor: grab;
 }
@@ -263,6 +277,13 @@ button.badge:focus-visible {
 
 .blockRow[data-handle='multi'] .handle {
   opacity: 0.7;
+}
+
+.blockRow:hover .handle {
+  background-color: var(
+    --tint-hover,
+    color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
+  );
 }
 
 .blockContent {
@@ -326,6 +347,51 @@ button.badge:focus-visible {
   font-size: var(--font-size-md, 15px);
   font-weight: var(--font-weight-medium, 500);
   margin-top: var(--space-1, 4px);
+}
+
+/* ---------- 块种 flavour 轻量区分（二期 · 仅 note-paper 块行） ---------- */
+
+/* 代码块：md-code 表面 + mono，与 chat-markdown 同族 token */
+.blockRow[data-flavour='code'] .text,
+.blockRow[data-flavour='Code'] .text {
+  font-family: var(--font-mono, ui-monospace, 'Cascadia Code', monospace);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: var(--line-height-body, 1.55);
+  color: var(--md-code-fg, var(--text-primary, #111111));
+  background: var(
+    --md-code-bg,
+    color-mix(
+      in srgb,
+      var(--control-mix-color, #4a4035) 1.5%,
+      var(--bg-primary, #f0ebe6)
+    )
+  );
+  border: var(--hairline-width, 1px) solid
+    var(--md-code-border, var(--border-color, hsl(35, 10%, 86%)));
+  border-radius: var(--radius-sm, 5px);
+  padding: var(--space-3, 12px);
+  margin-top: var(--space-1, 4px);
+  margin-bottom: var(--space-1, 4px);
+}
+
+/* 引用：左边条 + 次级字色（blockquote / quote 均认） */
+.blockRow[data-flavour='quote'] .text,
+.blockRow[data-flavour='blockquote'] .text,
+.blockRow[data-flavour='Quote'] .text {
+  border-left: 2px solid
+    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+  padding-left: var(--space-3, 12px);
+  color: var(--text-secondary, #555555);
+  margin-top: var(--space-1, 4px);
+  margin-bottom: var(--space-1, 4px);
+}
+
+/* 列表：轻 indent（真列表叶标记后置；仅投影节奏） */
+.blockRow[data-flavour='list'] .text,
+.blockRow[data-flavour='bullet'] .text,
+.blockRow[data-flavour='numbered'] .text {
+  padding-left: var(--space-4, 16px);
 }
 
 /* ---------- 底栏 ---------- */

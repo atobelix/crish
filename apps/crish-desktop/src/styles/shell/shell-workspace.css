@@ -40,8 +40,8 @@
 
 /* [MIGRATED] ws-chrome styles migrated to WorkspaceChromeBars.module.css */
 /* [MIGRATED] ws-chrome styles migrated to WorkspaceChromeBars.module.css */
-.app-container[data-shell-chrome="classic"],
-.app-container[data-shell-chrome="inset"] {
+.app-container[data-shell-chrome='classic'],
+.app-container[data-shell-chrome='inset'] {
   /* 应用骨架背景色：inset 皮肤用二级底 */
   --shell-chrome-bg: var(--bg-secondary);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
@@ -50,73 +50,93 @@
   --shell-inset-gap: 0;
   /* inset 皮肤：顶部留白收缩，tab 区贴顶 */
   --shell-content-pad-x: 14px;
-  --ws-chrome-strip: color-mix(in srgb, var(--shell-chrome-bg) 40%, var(--shell-inset-bg));
+  --ws-chrome-strip: color-mix(
+    in srgb,
+    var(--shell-chrome-bg) 40%,
+    var(--shell-inset-bg)
+  );
   --ws-chrome-surface: var(--shell-inset-bg);
-  --ws-chrome-pill: color-mix(in srgb, var(--shell-chrome-bg) 42%, var(--shell-inset-bg));
+  --ws-chrome-pill: color-mix(
+    in srgb,
+    var(--shell-chrome-bg) 42%,
+    var(--shell-inset-bg)
+  );
   background: var(--shell-chrome-bg);
 }
 /* 暗色下 classic/inset 双皮肤适配 */
-html[data-theme="dark"] .app-container[data-shell-chrome="classic"],
-html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
-.app-container[data-theme="dark"][data-shell-chrome="classic"],
-.app-container[data-theme="dark"][data-shell-chrome="inset"] {
-  --shell-chrome-bg: color-mix(in srgb, var(--bg-secondary) 88%, var(--shadow-color) 12%);
+html[data-theme='dark'] .app-container[data-shell-chrome='classic'],
+html[data-theme='dark'] .app-container[data-shell-chrome='inset'],
+.app-container[data-theme='dark'][data-shell-chrome='classic'],
+.app-container[data-theme='dark'][data-shell-chrome='inset'] {
+  --shell-chrome-bg: color-mix(
+    in srgb,
+    var(--bg-secondary) 88%,
+    var(--shadow-color) 12%
+  );
   --shell-inset-bg: var(--bg-primary);
-  --ws-chrome-strip: color-mix(in srgb, var(--shell-chrome-bg) 55%, var(--shell-inset-bg));
-  --ws-chrome-pill: color-mix(in srgb, var(--shell-chrome-bg) 50%, var(--shell-inset-bg));
+  --ws-chrome-strip: color-mix(
+    in srgb,
+    var(--shell-chrome-bg) 55%,
+    var(--shell-inset-bg)
+  );
+  --ws-chrome-pill: color-mix(
+    in srgb,
+    var(--shell-chrome-bg) 50%,
+    var(--shell-inset-bg)
+  );
 }
 
 /* classic 布局：内容右留白 */
-.app-container[data-shell-chrome="classic"] .sidebar-wrapper,
-.app-container[data-shell-chrome="classic"] .crish-sidebar,
-.app-container[data-shell-chrome="classic"] .sidebar,
-.app-container[data-shell-chrome="inset"] .sidebar-wrapper,
-.app-container[data-shell-chrome="inset"] .crish-sidebar,
-.app-container[data-shell-chrome="inset"] .sidebar {
+.app-container[data-shell-chrome='classic'] .sidebar-wrapper,
+.app-container[data-shell-chrome='classic'] .crish-sidebar,
+.app-container[data-shell-chrome='classic'] .sidebar,
+.app-container[data-shell-chrome='inset'] .sidebar-wrapper,
+.app-container[data-shell-chrome='inset'] .crish-sidebar,
+.app-container[data-shell-chrome='inset'] .sidebar {
   background: var(--shell-chrome-bg) !important;
 }
-.app-container[data-shell-chrome="inset"] .sidebar-wrapper {
+.app-container[data-shell-chrome='inset'] .sidebar-wrapper {
   display: flex;
   flex-direction: column;
   padding-top: 0;
 }
-.app-container[data-shell-chrome="inset"] .crish-sidebar,
-.app-container[data-shell-chrome="inset"] .sidebar {
+.app-container[data-shell-chrome='inset'] .crish-sidebar,
+.app-container[data-shell-chrome='inset'] .sidebar {
   background: transparent !important;
   flex: 1 1 auto;
   min-height: 0;
 }
 
 /* 工作区头部高度与局部滚动区 */
-.app-container[data-shell-chrome="classic"] .main-layout,
-.app-container[data-shell-chrome="inset"] .main-layout {
+.app-container[data-shell-chrome='classic'] .main-layout,
+.app-container[data-shell-chrome='inset'] .main-layout {
   background: var(--shell-chrome-bg);
   box-sizing: border-box;
   gap: 0;
 }
 /* classic 主布局：右 padding 收缩 */
-.app-container[data-shell-chrome="classic"] .main-layout {
+.app-container[data-shell-chrome='classic'] .main-layout {
   padding: 0 0 var(--shell-inset-pad) 0;
 }
 
 /* inset 皮肤布局说明：rail（= sidebar-width）+ main（= 内容区） */
-.app-container[data-shell-chrome="inset"] {
+.app-container[data-shell-chrome='inset'] {
   --shell-content-pad-x: 14px;
 }
-.app-container[data-shell-chrome="inset"] .main-layout {
+.app-container[data-shell-chrome='inset'] .main-layout {
   /* padding 归零：由 --shell-inset-pad 控制 */
   padding: 0 0 var(--shell-inset-pad) 0;
 }
 
-.app-container[data-shell-chrome="classic"] .workspaces-column,
-.app-container[data-shell-chrome="inset"] .workspaces-column {
+.app-container[data-shell-chrome='classic'] .workspaces-column,
+.app-container[data-shell-chrome='inset'] .workspaces-column {
   background: transparent !important;
   border-radius: 0;
   /* 子级 stack 允许溢出可见（浮层不被裁剪） */
   overflow: visible;
 }
-.app-container[data-shell-chrome="classic"] .workspaces-stack,
-.app-container[data-shell-chrome="inset"] .workspaces-stack {
+.app-container[data-shell-chrome='classic'] .workspaces-stack,
+.app-container[data-shell-chrome='inset'] .workspaces-stack {
   --shell-card-r: var(--shell-inset-radius);
   background-color: var(--shell-inset-bg);
   border-radius: var(--shell-card-r);
@@ -133,71 +153,84 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
-.app-container[data-shell-chrome="classic"] .workspaces-stack > .workspaces-container,
-.app-container[data-shell-chrome="inset"] .workspaces-stack > .workspaces-container {
+.app-container[data-shell-chrome='classic']
+  .workspaces-stack
+  > .workspaces-container,
+.app-container[data-shell-chrome='inset']
+  .workspaces-stack
+  > .workspaces-container {
   border-radius: 0;
   overflow: hidden;
   min-height: 0;
   flex: 1 1 auto;
 }
-.app-container[data-shell-chrome="inset"] .workspaces-column--inset {
+.app-container[data-shell-chrome='inset'] .workspaces-column--inset {
   margin-top: 0;
   gap: 0;
   background: transparent !important;
 }
 /* classic 容器底色：bg-secondary + border 分界 */
-.app-container[data-shell-chrome="classic"] .workspaces-container,
-.app-container[data-shell-chrome="inset"] .workspaces-container {
+.app-container[data-shell-chrome='classic'] .workspaces-container,
+.app-container[data-shell-chrome='inset'] .workspaces-container {
   background: transparent !important;
   min-width: 0;
   overflow: hidden;
 }
-.app-container[data-shell-chrome="classic"] .workspace-section,
-.app-container[data-shell-chrome="inset"] .workspace-section,
-.app-container[data-shell-chrome="classic"] .workspace-canvas,
-.app-container[data-shell-chrome="inset"] .workspace-canvas,
-.app-container[data-shell-chrome="classic"] .workspace-column,
-.app-container[data-shell-chrome="inset"] .workspace-column {
+.app-container[data-shell-chrome='classic'] .workspace-section,
+.app-container[data-shell-chrome='inset'] .workspace-section,
+.app-container[data-shell-chrome='classic'] .workspace-canvas,
+.app-container[data-shell-chrome='inset'] .workspace-canvas,
+.app-container[data-shell-chrome='classic'] .workspace-column,
+.app-container[data-shell-chrome='inset'] .workspace-column {
   background: transparent !important;
   border-radius: 0;
 }
 /* section/canvas 布局：多列场景自适应 */
-.app-container[data-shell-chrome="classic"] .workspace-section,
-.app-container[data-shell-chrome="inset"] .workspace-section,
-.app-container[data-shell-chrome="classic"] .workspace-canvas,
-.app-container[data-shell-chrome="inset"] .workspace-canvas {
+.app-container[data-shell-chrome='classic'] .workspace-section,
+.app-container[data-shell-chrome='inset'] .workspace-section,
+.app-container[data-shell-chrome='classic'] .workspace-canvas,
+.app-container[data-shell-chrome='inset'] .workspace-canvas {
   overflow: hidden;
 }
 /* classic 工作区卡片：统一圆角与底色 */
-.app-container[data-shell-chrome="classic"] .workspace-card,
-.app-container[data-shell-chrome="inset"] .workspace-card {
+.app-container[data-shell-chrome='classic'] .workspace-card,
+.app-container[data-shell-chrome='inset'] .workspace-card {
   background: transparent !important;
   border-radius: 0 !important;
   border-bottom: none !important;
 }
-.app-container[data-shell-chrome="classic"] .workspace-column:last-child .workspace-card,
-.app-container[data-shell-chrome="inset"] .workspace-column:last-child .workspace-card {
+.app-container[data-shell-chrome='classic']
+  .workspace-column:last-child
+  .workspace-card,
+.app-container[data-shell-chrome='inset']
+  .workspace-column:last-child
+  .workspace-card {
   border-right: none !important;
 }
-.app-container[data-shell-chrome="classic"] .workspace-card .card-header,
-.app-container[data-shell-chrome="classic"] .workspace-card .tabs-bar {
+.app-container[data-shell-chrome='classic'] .workspace-card .card-header,
+.app-container[data-shell-chrome='classic'] .workspace-card .tabs-bar {
   background: var(--shell-inset-bg);
 }
-.app-container[data-shell-chrome="classic"] .workspace-card .card-header {
+.app-container[data-shell-chrome='classic'] .workspace-card .card-header {
   padding-left: var(--space-3);
   padding-right: var(--space-3);
 }
 /* inset 皮肤工作区卡片：header 收敛 + 圆角统一 */
 /* classic 标签形态 + 圆角收缩 */
-.app-container[data-shell-chrome="classic"] .workspace-card .card-header {
+.app-container[data-shell-chrome='classic'] .workspace-card .card-header {
   align-items: flex-end;
   padding-top: var(--space-1_5);
   padding-bottom: 0;
   min-height: 36px;
-  background: color-mix(in srgb, var(--shell-chrome-bg, var(--bg-secondary)) 22%, var(--shell-inset-bg, var(--bg-primary)));
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--shell-chrome-bg, var(--bg-secondary)) 22%,
+    var(--shell-inset-bg, var(--bg-primary))
+  );
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-subtle) 50%, transparent);
 }
-.app-container[data-shell-chrome="classic"] .workspace-card .card-tab {
+.app-container[data-shell-chrome='classic'] .workspace-card .card-tab {
   color: var(--text-tertiary);
   background: transparent;
   border: 1px solid transparent;
@@ -212,11 +245,11 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   font-size: var(--font-size-sm);
   gap: var(--space-1_5);
 }
-.app-container[data-shell-chrome="classic"] .workspace-card .card-tab:hover {
+.app-container[data-shell-chrome='classic'] .workspace-card .card-tab:hover {
   color: var(--text-secondary);
   background: var(--tint-hover);
 }
-.app-container[data-shell-chrome="classic"] .workspace-card .card-tab.active {
+.app-container[data-shell-chrome='classic'] .workspace-card .card-tab.active {
   background: var(--shell-inset-bg, var(--bg-primary));
   color: var(--text-primary);
   border-color: color-mix(in srgb, var(--border-subtle) 55%, transparent);
@@ -227,7 +260,9 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   z-index: var(--z-sticky-bar);
   overflow: visible;
 }
-.app-container[data-shell-chrome="classic"] .workspace-card .card-tab.active::after {
+.app-container[data-shell-chrome='classic']
+  .workspace-card
+  .card-tab.active::after {
   content: '';
   position: absolute;
   left: -1px;
@@ -237,46 +272,54 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   background: var(--shell-inset-bg, var(--bg-primary));
   pointer-events: none;
 }
-.app-container[data-shell-chrome="classic"] .workspace-card.flat-layout .card-body,
-.app-container[data-shell-chrome="classic"] .workspace-card .card-body,
-.app-container[data-shell-chrome="inset"] .workspace-card.flat-layout .card-body,
-.app-container[data-shell-chrome="inset"] .workspace-card .card-body {
+.app-container[data-shell-chrome='classic']
+  .workspace-card.flat-layout
+  .card-body,
+.app-container[data-shell-chrome='classic'] .workspace-card .card-body,
+.app-container[data-shell-chrome='inset']
+  .workspace-card.flat-layout
+  .card-body,
+.app-container[data-shell-chrome='inset'] .workspace-card .card-body {
   background: var(--shell-inset-bg);
 }
-.app-container[data-shell-chrome="classic"] .workspace-card.flat-layout,
-.app-container[data-shell-chrome="inset"] .workspace-card.flat-layout {
-  border-right-color: color-mix(in srgb, var(--border-subtle) 70%, transparent) !important;
+.app-container[data-shell-chrome='classic'] .workspace-card.flat-layout,
+.app-container[data-shell-chrome='inset'] .workspace-card.flat-layout {
+  border-right-color: color-mix(
+    in srgb,
+    var(--border-subtle) 70%,
+    transparent
+  ) !important;
 }
-.app-container[data-shell-chrome="classic"] .app-boot-banner,
-.app-container[data-shell-chrome="inset"] .app-boot-banner {
+.app-container[data-shell-chrome='classic'] .app-boot-banner,
+.app-container[data-shell-chrome='inset'] .app-boot-banner {
   background: var(--shell-chrome-bg);
   border-bottom-color: transparent;
 }
 
 /* inset 皮肤 app-header 底部内收 */
-.app-container[data-shell-chrome="classic"] .app-header {
+.app-container[data-shell-chrome='classic'] .app-header {
   background-color: var(--shell-chrome-bg);
   border-bottom-color: transparent;
 }
-.app-container[data-shell-chrome="classic"] .search-bar {
+.app-container[data-shell-chrome='classic'] .search-bar {
   background: color-mix(in srgb, var(--shell-inset-bg) 48%, transparent);
   border-color: color-mix(in srgb, var(--border-subtle) 70%, transparent);
 }
 
 /* inset 皮肤：app-header 固定与高度 */
-.app-container[data-shell-chrome="inset"] .app-header {
+.app-container[data-shell-chrome='inset'] .app-header {
   display: none !important;
 }
-.app-container[data-shell-chrome="inset"] .ws-chrome-trail--win {
+.app-container[data-shell-chrome='inset'] .ws-chrome-trail--win {
   gap: 0;
   margin-left: var(--space-2);
   padding-left: var(--space-1);
 }
-.app-container[data-shell-chrome="inset"] .ws-chrome-trail-btn--close:hover {
+.app-container[data-shell-chrome='inset'] .ws-chrome-trail-btn--close:hover {
   background: color-mix(in srgb, var(--window-close-bg) 18%, transparent);
   color: var(--window-close-fg);
 }
-.sb-nav-item input[type="search"] {
+.sb-nav-item input[type='search'] {
   flex: 1 1 auto;
   min-width: 0;
   border: none !important;
@@ -287,13 +330,13 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   color: var(--text-primary) !important;
   padding: 0 !important;
 }
-.sb-nav-item input[type="search"]::placeholder {
+.sb-nav-item input[type='search']::placeholder {
   color: var(--text-secondary) !important;
   opacity: 0.9;
 }
-.sb-nav-item input[type="search"]::-webkit-search-cancel-button,
-.sb-nav-item input[type="search"]::-webkit-search-results-button,
-.sb-nav-item input[type="search"]::-webkit-search-results-decoration {
+.sb-nav-item input[type='search']::-webkit-search-cancel-button,
+.sb-nav-item input[type='search']::-webkit-search-results-button,
+.sb-nav-item input[type='search']::-webkit-search-results-decoration {
   -webkit-appearance: none;
   appearance: none;
   display: none !important;
@@ -302,7 +345,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   display: none !important;
 }
 /* inset 皮肤变量覆盖（padding/header 档位） */
-.app-container[data-shell-chrome="inset"] {
+.app-container[data-shell-chrome='inset'] {
   --ws-chrome-merge: var(--shell-inset-bg);
   --ws-session-strip: var(--card-header-bg);
   --ws-session-line: var(--border-subtle);
@@ -315,9 +358,15 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 /* sessions / card-header 复用工作区 token */
-.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .ws-chrome-row--sessions,
-.app-container[data-shell-chrome="inset"] .workspaces-stack .ws-chrome-row--sessions,
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header {
+.app-container[data-shell-chrome='inset']
+  .workspace-card--no-chat-chrome
+  .ws-chrome-row--sessions,
+.app-container[data-shell-chrome='inset']
+  .workspaces-stack
+  .ws-chrome-row--sessions,
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-header {
   --ws-chrome-merge: var(--shell-inset-bg);
   position: relative;
   display: flex;
@@ -339,9 +388,15 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   user-select: none;
 }
 /* inset 卡片分隔装饰（::after 高光） */
-.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .ws-chrome-row--sessions::after,
-.app-container[data-shell-chrome="inset"] .workspaces-stack .ws-chrome-row--sessions::after,
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header::after {
+.app-container[data-shell-chrome='inset']
+  .workspace-card--no-chat-chrome
+  .ws-chrome-row--sessions::after,
+.app-container[data-shell-chrome='inset']
+  .workspaces-stack
+  .ws-chrome-row--sessions::after,
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-header::after {
   content: '';
   position: absolute;
   left: 0;
@@ -354,7 +409,10 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 /* 滚动区：tabs-bar ws-chrome-scroll */
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header .tabs-bar {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-header
+  .tabs-bar {
   display: flex;
   align-items: flex-end;
   align-self: stretch;
@@ -371,15 +429,15 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   overflow-y: hidden;
   scrollbar-width: none;
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header .tabs-bar::-webkit-scrollbar {
-  display: none;
-  height: 0;
-}
 
 /* session tab card-tab 复用工作区 token */
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab,
-.app-container[data-shell-chrome="inset"] .ws-chrome-tab--session,
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--sessions
+  .ws-chrome-tab,
+.app-container[data-shell-chrome='inset'] .ws-chrome-tab--session,
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab {
   height: var(--ws-row2-tab-h) !important;
   min-height: var(--ws-row2-tab-h) !important;
   max-height: var(--ws-row2-tab-h);
@@ -400,34 +458,55 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   z-index: var(--z-decorative);
   overflow: visible;
   box-sizing: border-box;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 /* inset 会话 tab：hover/active 收敛 */
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab,
-.app-container[data-shell-chrome="inset"] .ws-chrome-tab--session {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--sessions
+  .ws-chrome-tab,
+.app-container[data-shell-chrome='inset'] .ws-chrome-tab--session {
   padding: 0 4px 0 12px !important;
 }
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab:hover,
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab:hover {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--sessions
+  .ws-chrome-tab:hover,
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab:hover {
   background: var(--tint-hover) !important;
   color: var(--text-secondary) !important;
   border-color: transparent !important;
 }
 /* inset 会话 tab 激活态：浅强调底 */
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab.is-active,
-.app-container[data-shell-chrome="inset"] .ws-chrome-tab--session.is-active,
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--sessions
+  .ws-chrome-tab.is-active,
+.app-container[data-shell-chrome='inset'] .ws-chrome-tab--session.is-active,
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab.active {
   background: var(--ws-chrome-merge, var(--shell-inset-bg)) !important;
   color: var(--text-primary) !important;
-  border-color: color-mix(in srgb, var(--border-subtle) 35%, transparent) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 35%,
+    transparent
+  ) !important;
   border-bottom-color: transparent !important;
   box-shadow: none !important;
   font-weight: var(--font-weight-normal) !important;
   z-index: var(--z-sticky-bar);
 }
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab.is-active::after,
-.app-container[data-shell-chrome="inset"] .ws-chrome-tab--session.is-active::after,
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active::after {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--sessions
+  .ws-chrome-tab.is-active::after,
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-tab--session.is-active::after,
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab.active::after {
   content: '';
   position: absolute;
   left: 0;
@@ -440,7 +519,10 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 /* tab 关闭按钮 hover 色收敛 */
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab .tab-icon-container {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab
+  .tab-icon-container {
   width: 14px;
   height: 14px;
   display: inline-flex;
@@ -450,21 +532,34 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   opacity: 0.55;
   color: inherit;
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab .tab-icon-container svg {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab
+  .tab-icon-container
+  svg {
   width: 14px;
   height: 14px;
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active .tab-icon-container {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab.active
+  .tab-icon-container {
   opacity: 0.9;
   color: var(--text-primary);
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab .tab-label {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab
+  .tab-label {
   font-size: var(--ws-row2-tab-font);
   font-weight: var(--font-weight-normal);
   line-height: var(--line-height-none);
   color: inherit;
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab .tab-close-btn {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab
+  .tab-close-btn {
   width: 18px;
   height: 18px;
   margin-left: var(--space-0_5);
@@ -475,21 +570,31 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   pointer-events: none;
   transition: opacity var(--transition-micro);
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab:hover .tab-close-btn,
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-tab.active .tab-close-btn {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab:hover
+  .tab-close-btn,
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-tab.active
+  .tab-close-btn {
   opacity: 0.85;
   pointer-events: auto;
 }
 
 /* inset 皮肤：标题栏区域 */
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-wrap {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .tabs-add-wrap {
   align-self: flex-end;
   margin: 0 0 2px;
   flex-shrink: 0;
   position: relative;
   z-index: var(--z-sticky-bar);
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-btn {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .tabs-add-btn {
   width: 28px;
   height: 28px;
   min-width: 28px;
@@ -504,14 +609,20 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   align-items: center;
   justify-content: center;
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-btn:hover,
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .tabs-add-btn[aria-expanded='true'] {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .tabs-add-btn:hover,
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .tabs-add-btn[aria-expanded='true'] {
   color: var(--text-primary);
   background: var(--tint-active);
 }
 
 /* inset 皮肤细节 */
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header-right {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-header-right {
   display: flex;
   align-items: flex-end;
   align-self: flex-end;
@@ -522,7 +633,10 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   flex-shrink: 0;
   z-index: var(--z-sticky-bar);
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header-right .card-action-btn {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-header-right
+  .card-action-btn {
   width: 26px;
   height: 26px;
   min-width: 26px;
@@ -533,30 +647,45 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   color: var(--text-tertiary);
   box-shadow: none;
 }
-.app-container[data-shell-chrome="inset"] .workspace-card:not(.workspace-card--no-chat-chrome) .card-header-right .card-action-btn:hover {
+.app-container[data-shell-chrome='inset']
+  .workspace-card:not(.workspace-card--no-chat-chrome)
+  .card-header-right
+  .card-action-btn:hover {
   background: var(--tint-active);
   color: var(--text-primary);
 }
 /* inset 无聊天 chrome 卡片：布局收敛 */
-.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome {
+.app-container[data-shell-chrome='inset'] .workspace-card--no-chat-chrome {
   border-right-color: var(--ws-session-line) !important;
 }
 /* inset 标题栏 tab：圆角与间距 */
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab,
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--titlebar
+  .ws-chrome-tab,
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--workspace
+  .ws-chrome-tab {
   background: transparent;
   color: var(--text-tertiary);
   border-color: transparent;
   border-radius: var(--radius-lg) 8px 0 0;
   box-shadow: none;
 }
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab:hover,
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab:hover {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--titlebar
+  .ws-chrome-tab:hover,
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--workspace
+  .ws-chrome-tab:hover {
   background: color-mix(in srgb, var(--shell-inset-bg) 28%, transparent);
   color: var(--text-secondary);
 }
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab.is-active,
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab.is-active {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--titlebar
+  .ws-chrome-tab.is-active,
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--workspace
+  .ws-chrome-tab.is-active {
   background: var(--ws-chrome-merge);
   color: var(--text-primary);
   border-color: color-mix(in srgb, var(--border-subtle) 50%, transparent);
@@ -565,8 +694,12 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   margin-bottom: 0;
   z-index: var(--z-sticky-bar);
 }
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab.is-active::after,
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab.is-active::after {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--titlebar
+  .ws-chrome-tab.is-active::after,
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--workspace
+  .ws-chrome-tab.is-active::after {
   content: '';
   position: absolute;
   left: -1px;
@@ -577,32 +710,46 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   pointer-events: none;
   z-index: var(--z-card-footer);
 }
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--titlebar .ws-chrome-tab--add,
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--workspace .ws-chrome-tab--add,
-.app-container[data-shell-chrome="inset"] .ws-chrome-row--sessions .ws-chrome-tab--add {
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--titlebar
+  .ws-chrome-tab--add,
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--workspace
+  .ws-chrome-tab--add,
+.app-container[data-shell-chrome='inset']
+  .ws-chrome-row--sessions
+  .ws-chrome-tab--add {
   background: transparent;
   box-shadow: none;
   border-color: transparent;
 }
 /* inset 皮肤：卡片体 */
-.app-container[data-shell-chrome="inset"] .workspaces-container,
-.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .card-body,
-.app-container[data-shell-chrome="inset"] .workspace-card.flat-layout .card-body,
-.app-container[data-shell-chrome="inset"] .workspace-card .card-body {
+.app-container[data-shell-chrome='inset'] .workspaces-container,
+.app-container[data-shell-chrome='inset']
+  .workspace-card--no-chat-chrome
+  .card-body,
+.app-container[data-shell-chrome='inset']
+  .workspace-card.flat-layout
+  .card-body,
+.app-container[data-shell-chrome='inset'] .workspace-card .card-body {
   background: var(--ws-chrome-merge, var(--shell-inset-bg)) !important;
   border-top: none !important;
   box-shadow: none;
 }
-.app-container[data-shell-chrome="inset"] .workspace-card.flat-layout {
+.app-container[data-shell-chrome='inset'] .workspace-card.flat-layout {
   border-top: none !important;
 }
 
 /* inset 卡片体：tab 区布局 */
-.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .card-body {
+.app-container[data-shell-chrome='inset']
+  .workspace-card--no-chat-chrome
+  .card-body {
   border-top: none !important;
   background: var(--ws-chrome-merge, var(--shell-inset-bg)) !important;
 }
-.app-container[data-shell-chrome="inset"] .workspace-card--no-chat-chrome .card-header {
+.app-container[data-shell-chrome='inset']
+  .workspace-card--no-chat-chrome
+  .card-header {
   display: none !important;
 }
 
@@ -748,22 +895,12 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   overflow-x: auto;
   overflow-y: hidden;
   height: 100%;
-  /* 滚动条隐藏（JS 接管滚动） */
+  /* 滚动条隐藏档位：归入 shell-scrollbar.css 全局契约（--scrollbar-thumb-width: 0px） */
   scrollbar-width: none;
   scrollbar-color: transparent transparent;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
-}
-
-.tabs-bar::-webkit-scrollbar {
-  display: none;
-  height: 0;
-}
-.tabs-bar::-webkit-scrollbar-thumb {
-  display: none;
-}
-.tabs-bar::-webkit-scrollbar-track {
-  background: transparent;
+  --scrollbar-thumb-width: 0px;
 }
 
 .card-tab {
@@ -777,7 +914,9 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   color: var(--text-secondary);
   background-color: transparent;
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
   user-select: none;
   white-space: nowrap;
   border: none;
@@ -845,7 +984,11 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 
 .card-tab.dragging-tab-hidden {
   opacity: 0.35 !important;
-  background: color-mix(in srgb, var(--accent-color) 6%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--accent-color) 6%,
+    transparent
+  ) !important;
   border: 1.2px dashed color-mix(in srgb, var(--accent-color) 50%, transparent) !important;
   box-shadow: none !important;
   pointer-events: none !important;
@@ -895,7 +1038,10 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--transition-micro), background var(--transition-micro), color var(--transition-micro);
+  transition:
+    opacity var(--transition-micro),
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .card-tab:hover .tab-close-btn,
@@ -962,7 +1108,9 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .card-action-btn:hover {
@@ -1012,7 +1160,9 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .sub-btn:hover {
@@ -1070,7 +1220,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 .card-body {
   flex: 1;
   min-height: 0;
-/* 占位卡片：整体区块 */
+  /* 占位卡片：整体区块 */
   overflow: auto;
   position: relative;
   background-color: var(--shell-inset-bg, var(--bg-primary));
@@ -1095,7 +1245,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   background: var(--shell-inset-bg, var(--bg-secondary)) !important;
   border: none !important;
   border-radius: var(--radius-lg) !important;
-/* 占位卡片组 */
+  /* 占位卡片组 */
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
@@ -1109,7 +1259,11 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 /* 占位卡片组：间距与底色收敛 */
 .app-container .workspace-card.placeholder-card-group,
 .placeholder-card-group {
-  background: color-mix(in srgb, var(--border-color) 10%, var(--bg-secondary)) !important;
+  background: color-mix(
+    in srgb,
+    var(--border-color) 10%,
+    var(--bg-secondary)
+  ) !important;
   border: none !important;
   border-radius: var(--radius-lg) !important;
   box-shadow: none !important;
@@ -1136,7 +1290,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 
 /* 占位装饰线（::before/::after 双线） */
 .placeholder-card-group::before {
-  content: "" !important;
+  content: '' !important;
   position: absolute !important;
   top: 10px !important;
   left: 10px !important;
@@ -1151,7 +1305,7 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
 }
 
 .placeholder-card-group::after {
-  content: "" !important;
+  content: '' !important;
   position: absolute !important;
   top: 52px !important; /* 10px top + 32px height + 10px gap */
   bottom: 10px !important;
@@ -1178,11 +1332,14 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   opacity: 0.65 !important;
 }
 
-
 /* 2. inline 子元素布局修正 */
 .tabs-bar .tab-placeholder-indicator,
 .tab-placeholder-indicator {
-  background: color-mix(in srgb, var(--accent-color) 6%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--accent-color) 6%,
+    transparent
+  ) !important;
   border: 1.2px dashed color-mix(in srgb, var(--accent-color) 50%, transparent) !important;
   border-radius: var(--ws-row2-tab-radius, 6px) !important;
   min-width: 96px !important;
@@ -1206,7 +1363,6 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   animation: tab-indicator-pulse var(--transition-pulse) infinite !important;
 }
 
-
 @keyframes tab-indicator-pulse {
   0% {
     opacity: 0.6;
@@ -1222,16 +1378,14 @@ html[data-theme="dark"] .app-container[data-shell-chrome="inset"],
   }
 }
 
-
-
 @keyframes pulse-merge-highlight {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.7;
     background-color: color-mix(in srgb, var(--accent-color) 10%, transparent);
   }
   50% {
-    opacity: 1.0;
+    opacity: 1;
     background-color: color-mix(in srgb, var(--accent-color) 20%, transparent);
   }
 }
-

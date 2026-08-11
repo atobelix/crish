@@ -5,7 +5,7 @@
  * | 表面 | 模块 | Stop API |
  * |------|------|----------|
  * | **主对话** | 本门面 → `./chat-stream/*` | `handleStopGeneration` (L2) / `handleForceCancelGeneration` (L3) |
- * | **子 Agent 面板** | `hooks/useAgentStream.ts` → `useAgentPanel` | `handleStop` / `handleForceStop` |
+ * | **子 Agent 面板** | `hooks/useAgentStream.ts` → `useAgentPanel` | `handleStopGeneration` / `handleForceCancelGeneration` |
  *
  * 实现目录 `./chat-stream/`；本文件只 re-export。
  * 协议终止统一经 SessionStreamManager.cancel → createStreamCancel → compositionRoot.runControl。

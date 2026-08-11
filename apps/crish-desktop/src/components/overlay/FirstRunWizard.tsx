@@ -15,7 +15,7 @@
 import React, { useEffect, useId, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './FirstRunWizard.module.css';
-import { Dialog } from '../ui';
+import { Button, Dialog } from '../ui';
 import { useFirstRunWizard } from '../useFirstRunWizard';
 import { WizardKeyStep } from '../WizardKeyStep';
 import { WizardModelStep } from '../WizardModelStep';

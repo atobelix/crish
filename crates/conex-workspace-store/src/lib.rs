@@ -52,18 +52,21 @@
 //! - [`WorkspaceStore::note_authority_advanced`] / [`WorkspaceStore::mirror_lag`]：延迟水位
 //! - 管线可选：[`commit_ops_with_mirror`] 在 lag ≥ threshold 时自动 export
 //!
-//! ## W2-E Strict 子集（本波 · P6 detect/三路 API）
+//! ## W2-E Strict 子集（P6 detect/三路 + watcher 方向）
 //! - [`WorkspaceStore::detect_mirror_drift`]：hash/mtime vs `mirror_meta` → 三路分类
 //! - [`WorkspaceStore::import_mirror_proposal`]：Op 批 **或** 冲突报告；禁静默盖 unpushed（X-05）
 //! - [`ThreeWayStrategy`]：`RetainLocalAndReimport` | `DropUnacked` | `ConflictBlocks`
-//! - **诚实**：**≠ A-INV-02 产品 watcher 满关**（OS inotify 未交；API/可测 detect 已交）；
+//! - **watcher 方向子集**（进程内/可轮询，**≠ OS inotify 生产满关**）：
+//!   - [`MirrorWatchHandle`] / [`poll_mirror_once`]：指纹基线 + 单次 poll → 可观测分类
+//!   - [`MirrorWatcher`] / [`MirrorWatcher::on_mirror_change`]：回调注册（上层 timer 驱动）
+//! - **诚实**：**≠ A-INV-02 产品 UI 满关**（无三路对话框）；**≠ OS inotify/FSEvents**；
 //!   **≠ EL-03**；**≠ Wave 2 存储完成**。详见 [`mirror`] 模块头注释。
 //!
 //! - **不变量**：工具默认 **禁止** 读 mirror 当权威；本 API 仅人/git 契约视图。
 //!
 //! # 后续扩展点
 //! - CAS GC / 外置 `blobs/` 大文件 path
-//! - OS 级 mirror watcher（inotify/FSEvents）产品接线（本 crate 仅轮询/API detect）
+//! - OS 级 mirror watcher（inotify/FSEvents）产品接线（本 crate 已交轮询/回调入口，未绑内核 FS 事件）
 //!
 //! # W2-F Strict（refs 自动物化 + 受限 query）
 //! - `WorkspaceStore::query_blocks` — FTS ∩ kind ∩ attrs ∩ refs 交集查询（agent-tools 接线见 W4）
@@ -82,8 +85,9 @@ mod refs;
 
 pub use cas::{content_hash, get_blob_conn, put_blob_conn};
 pub use mirror::{
-    ConflictBlockInfo, ImportMirrorOpts, ImportMirrorResult, MirrorDriftClass, MirrorDriftReport,
-    ThreeWayStrategy,
+    poll_mirror_once, ConflictBlockInfo, ImportMirrorOpts, ImportMirrorResult,
+    MirrorDriftClass, MirrorDriftReport, MirrorFileFingerprint, MirrorWatchHandle,
+    MirrorWatchPollResult, MirrorWatcher, ThreeWayStrategy,
 };
 pub use projection::{
     block_kind_to_store_str, commit_ops, commit_ops_with_mirror, export_mirror_now,

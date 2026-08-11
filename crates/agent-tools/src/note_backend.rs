@@ -14,18 +14,17 @@
 //! - **W4-A**：`NoteApplyMdResult.lossy` 进入工具 result（[`apply_result_json`]）；
 //!   Store 路径须映射 `ApplyReport.lossy`；**禁止**默默丢弃。
 //! - **W4-F**：`block_batch`（ops + dryRun）+ 细粒度 `block_insert` /
-//!   `block_update` / `block_delete` 形状；dryRun **零写**权威树；
+//!   `block_update` / `block_delete` / `block_move` 形状；dryRun **零写**权威树；
 //!   写中断 → [`NoteBackendError::ExecutionUnknown`]。
 //!
 //! # 诚实边界
 //! - **已交付方向**：读/写工具 + lossy（W4-A）+ batch token/审批方向（W4-B）
-//!   + **W4-F**：`block_batch`+dryRun、细粒度 insert/update/delete、表驱动
+//!   + **W4-F**：`block_batch`+dryRun、细粒度 insert/update/delete/move、表驱动
 //!   矩阵、`execution_unknown`（见 `note_action_matrix` / 工具）；
 //!   Store 真路径见 `conex-note-runtime::StoreNoteBackend`
 //! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**（须 Store 持久 + **W6-E** 等）
 //! - **≠ W6-E**：无千次批 + 恶意扩展闭环
 //! - **≠ A-AGT 全表关闭**；Memory 测绿 **禁关**生产 A-AGT / EL-05
-//! - `block_move` 独立工具 **未注册 = 未交付**（move 可作为 batch op）
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -425,6 +424,30 @@ pub struct NoteBlockDeleteResult {
     pub id: String,
 }
 
+/// 细粒度 `block_move` 请求
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockMoveRequest {
+    pub doc_id: String,
+    /// 被移动的块 id
+    pub id: String,
+    /// 新位置前序兄弟（缺省 → 父级末尾）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_id: Option<String>,
+    /// 新父块（可选；Memory 扁平树可忽略）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
+/// 细粒度 move 结果
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockMoveResult {
+    pub id: String,
+}
+
 // ==================== batch token ====================
 
 /// 默认 batch token TTL（会话内轻量过期）
@@ -698,6 +721,40 @@ pub trait NoteBackend: Send + Sync + Debug {
             .next()
             .unwrap_or(fallback_id);
         Ok(NoteBlockDeleteResult { id })
+    }
+
+    /// 细粒度移动/重排块（W4-F · `block_move`；可委托 apply_block_ops）
+    ///
+    /// **≠ EL-05**；**≠ W6-E**。
+    async fn block_move(
+        &self,
+        req: NoteBlockMoveRequest,
+    ) -> Result<NoteBlockMoveResult, NoteBackendError> {
+        let fallback_id = req.id.clone();
+        let batch = self
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: req.doc_id,
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Move,
+                    id: Some(req.id),
+                    parent_id: req.parent_id,
+                    previous_id: req.previous_id,
+                    content: None,
+                    kind: None,
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: req.batch_id,
+                origin: req.origin,
+                force_execution_unknown: false,
+            })
+            .await?;
+        let id = batch
+            .block_ids
+            .into_iter()
+            .next()
+            .unwrap_or(fallback_id);
+        Ok(NoteBlockMoveResult { id })
     }
 }
 
@@ -1985,6 +2042,41 @@ mod tests {
             .unwrap();
         assert!(!r.block_id.is_empty());
         assert_eq!(r.kind, "paragraph");
+    }
+
+    /// 细粒度 block_move：b1 移到 b2 之后（Memory）
+    #[tokio::test]
+    async fn w4f_memory_block_move_reorders() {
+        let backend = MemoryNoteBackend::new();
+        backend.seed_doc(
+            "doc-mv",
+            vec![
+                ("b1".into(), "paragraph".into(), "one".into()),
+                ("b2".into(), "paragraph".into(), "two".into()),
+                ("b3".into(), "paragraph".into(), "three".into()),
+            ],
+        );
+        let r = backend
+            .block_move(NoteBlockMoveRequest {
+                doc_id: "doc-mv".into(),
+                id: "b1".into(),
+                previous_id: Some("b2".into()),
+                parent_id: None,
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(r.id, "b1");
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-mv".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let ids: Vec<&str> = q.blocks.iter().map(|b| b.id.as_str()).collect();
+        assert_eq!(ids, vec!["b2", "b1", "b3"]);
     }
 
     #[test]

@@ -26,11 +26,10 @@
 //! - `note_*`：W4-A/B/F + Round7 笔记域工具——读 `query_blocks` /
 //!   `document_outline` / `document_get_md`；写 `document_apply_md` /
 //!   `send_to_note` / **`block_batch`** / **`block_insert`** /
-//!   **`block_update`** / **`block_delete`**
+//!   **`block_update`** / **`block_delete`** / **`block_move`**
 //!   （经 `ToolContext.note_backend` dyn trait 注入；
-//!   None → note_backend_unwired；注册面 27→29；读工具进只读集，
+//!   None → note_backend_unwired；注册面 29→32；读工具进只读集，
 //!   写工具 dangerous=true 不进只读集）
-//!   **未交付**：`block_move` 独立工具（未注册；batch op 可用）
 //!   **≠ EL-05**；**≠ W6-E**；**≠ A-AGT 全表关闭**
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
@@ -45,12 +44,16 @@ pub mod decompress_context;
 pub mod delete;
 pub mod diff;
 pub mod fs;
+// D4 §3.3：kill_subagent 工具模块声明（仅主 agent 工具集；终止通道经
+// BuiltinToolConfig.subagent_kill_channel 注入，None = common.unsupported）
+pub mod kill_subagent;
 // W4-A/B/F + Round7：笔记域工具（读 outline/query/get_md + 写 apply_md/
-// send_to_note / block_batch / block_insert / block_update / block_delete）；
-// 注册面 27→29；后端经 ctx.note_backend 注入；≠ EL-05 / ≠ W6-E
+// send_to_note / block_batch / block_insert / block_update / block_delete /
+// block_move）；注册面 29→32；后端经 ctx.note_backend 注入；≠ EL-05 / ≠ W6-E
 pub mod note_block_batch;
 pub mod note_block_delete;
 pub mod note_block_insert;
+pub mod note_block_move;
 pub mod note_block_update;
 pub mod note_document_apply_md;
 pub mod note_document_get_md;
@@ -70,6 +73,10 @@ pub mod search;
 // T-40：search_context 工具模块声明（注册面 18→19；压缩块检索服务经
 // ctx.compression_store 注入，None = common.unsupported）
 pub mod search_context;
+// D4 §3.10 / E3：send_message 工具模块声明（仅主 agent 工具集；子代理注入
+// 通道经 BuiltinToolConfig.subagent_inject_channel、主 agent 消息通道经
+// main_agent_message_channel 注入，None = common.unsupported）
+pub mod send_message;
 pub mod set_timer;
 pub mod shell;
 pub mod subagent;
@@ -114,6 +121,18 @@ pub struct BuiltinToolConfig {
     /// 结构化不可用错误；引擎侧实现 TimerRegistry 适配后经此通道注入——
     /// agent-tools 只定义契约，早退/冲突判定与到期注入在引擎侧）
     pub timer_channel: Option<Arc<dyn set_timer::TimerChannel>>,
+    /// kill_subagent 终止通道（D4 §3.3：None = 未接线，kill_subagent 返回
+    /// 结构化不可用错误；引擎侧经 SubagentLifecycleService + spawn_blocking
+    /// 实现后注入——agent-tools 只定义契约）
+    pub subagent_kill_channel: Option<Arc<dyn kill_subagent::SubagentKillChannel>>,
+    /// send_message 子代理注入通道（D4 §3.10 / E3 §1.2：None = 未接线，
+    /// target=subagent 返回结构化不可用错误；引擎侧复用 L1 steer 注入
+    /// 通道实现后注入——agent-tools 只定义契约）
+    pub subagent_inject_channel: Option<Arc<dyn send_message::SubagentInjectChannel>>,
+    /// send_message 主 agent 消息通道（D4 §3.10 / E3 §1.2：None = 未接线，
+    /// target=self 返回结构化不可用错误；引擎侧实现会话留档 + followUp 环
+    /// 入队后注入——agent-tools 只定义契约）
+    pub main_agent_message_channel: Option<Arc<dyn send_message::MainAgentMessageChannel>>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -127,6 +146,9 @@ impl Default for BuiltinToolConfig {
             subagent_wait_channel: None,
             background_manager: None,
             timer_channel: None,
+            subagent_kill_channel: None,
+            subagent_inject_channel: None,
+            main_agent_message_channel: None,
         }
     }
 }
@@ -179,6 +201,17 @@ pub fn register_builtin_tools_with_config(
     registry.register(Arc::new(wait_subagents::WaitSubagentsTool::with_channel(
         config.subagent_wait_channel.clone(),
     )))?;
+    // kill_subagent（D4 §3.3）：主 agent 单目标关闭子代理（仅主 agent 工具
+    // 集——子代理注册表剔除面扩展，剔除决策权威位在引擎装配点）
+    registry.register(Arc::new(kill_subagent::KillSubagentTool::with_channel(
+        config.subagent_kill_channel.clone(),
+    )))?;
+    // send_message（D4 §3.10 / E3 §1.2）：主 agent 主动消息注入（仅主 agent
+    // 工具集，同剔除面；两通道独立注入，None = common.unsupported）
+    registry.register(Arc::new(send_message::SendMessageTool::with_channels(
+        config.subagent_inject_channel.clone(),
+        config.main_agent_message_channel.clone(),
+    )))?;
     // set_timer / cancel_timer（T-CF-05）：一次性后台定时器注册与取消，
     // timer_channel 字段透传（None = 未接线，工具返回 common.unsupported）
     registry.register(Arc::new(set_timer::SetTimerTool::with_channel(
@@ -212,13 +245,14 @@ pub fn register_builtin_tools_with_config(
     // 经同一 apply_md_fragment 后端路径；禁止 fs.write 当权威；不进只读集
     registry.register(Arc::new(note_document_apply_md::DocumentApplyMdTool::new()))?;
     registry.register(Arc::new(note_send_to_note::SendToNoteTool::new()))?;
-    // block_batch / block_insert / block_update / block_delete（W4-F）：
+    // block_batch / block_insert / block_update / block_delete / block_move（W4-F）：
     // 批 ops+dryRun + 细粒度 mutate；dangerous=true；plan Deny；
-    // ≠ EL-05 / ≠ W6-E；block_move 独立工具未注册
+    // ≠ EL-05 / ≠ W6-E
     registry.register(Arc::new(note_block_batch::BlockBatchTool::new()))?;
     registry.register(Arc::new(note_block_insert::BlockInsertTool::new()))?;
     registry.register(Arc::new(note_block_update::BlockUpdateTool::new()))?;
     registry.register(Arc::new(note_block_delete::BlockDeleteTool::new()))?;
+    registry.register(Arc::new(note_block_move::BlockMoveTool::new()))?;
     Ok(())
 }
 
@@ -762,7 +796,9 @@ mod tests {
         // →25（Round7 document_get_md）
         // →27（W4-F block_batch / block_insert）
         // →29（W4-F 余量 block_update / block_delete）
-        assert_eq!(registry.len(), 29);
+        // →31（D4：kill_subagent / send_message 两工具并入）
+        // →32（W4-F 余量 block_move）
+        assert_eq!(registry.len(), 32);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -775,6 +811,7 @@ mod tests {
                 "block_batch",
                 "block_delete",
                 "block_insert",
+                "block_move",
                 "block_update",
                 "cancel_timer",
                 "decompress_context",
@@ -787,6 +824,7 @@ mod tests {
                 "file_stat",
                 "fuzzy_find",
                 "grep_search",
+                "kill_subagent",
                 "list_dir",
                 "multi_replace_file_content",
                 "project_tree",
@@ -795,6 +833,7 @@ mod tests {
                 "resolve_output_dir",
                 "run_subagent",
                 "search_context",
+                "send_message",
                 "send_to_note",
                 "set_timer",
                 "shell_command",
@@ -821,8 +860,7 @@ mod tests {
         assert!(registry.has("block_insert"));
         assert!(registry.has("block_update"));
         assert!(registry.has("block_delete"));
-        // block_move 独立工具仍未交付
-        assert!(!registry.has("block_move"));
+        assert!(registry.has("block_move"));
         let ctx = crate::context::create_mock_tool_context();
         for name in ["query_blocks", "document_outline", "document_get_md"] {
             let tool = registry.get(name).unwrap();
@@ -897,6 +935,16 @@ mod tests {
             .execute(
                 &ctx,
                 serde_json::json!({ "doc_id": "doc-stub", "id": "b1" }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["reason"], "note_backend_unwired");
+        let mv = registry.get("block_move").unwrap();
+        let out = mv
+            .execute(
+                &ctx,
+                serde_json::json!({ "doc_id": "doc-stub", "id": "b1", "previous_id": "b0" }),
             )
             .await
             .unwrap();

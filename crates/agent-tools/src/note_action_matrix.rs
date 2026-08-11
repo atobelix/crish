@@ -20,7 +20,6 @@
 //! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**
 //! - **≠ W6-E**：无千次批 + 恶意扩展闭环
 //! - **≠ A-AGT 全表关闭**（Memory 禁关生产）
-//! - `block_move` 独立工具 **未注册 = 未交付**（表内不挂行）
 
 use crate::permission::{PermissionMode, PermissionVerdict};
 
@@ -62,9 +61,6 @@ pub struct NoteActionRow {
 }
 
 /// 权威表（W4-F；新增写工具必须挂行 + 注册，否则未交付）
-///
-/// 未交付（**故意不入表**）：
-/// - `block_move` — 独立工具未注册（batch op 可用）
 pub static NOTE_ACTION_MATRIX: &[NoteActionRow] = &[
     // ── safe / LocalRead ──────────────────────────────────────────
     NoteActionRow {
@@ -120,6 +116,12 @@ pub static NOTE_ACTION_MATRIX: &[NoteActionRow] = &[
     NoteActionRow {
         tool_name: "block_delete",
         action: "delete",
+        safe: false,
+        effects: &[ActionEffect::LocalWrite],
+    },
+    NoteActionRow {
+        tool_name: "block_move",
+        action: "move",
         safe: false,
         effects: &[ActionEffect::LocalWrite],
     },
@@ -243,20 +245,20 @@ pub fn plan_denies_matrix_tool(tool_name: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// A-AGT-06：表存在且含 W4-F 写工具行（含 update/delete 余量）
+    /// A-AGT-06：表存在且含 W4-F 写工具行（含 update/delete/move）
     #[test]
     fn w4f_matrix_contains_block_batch_and_insert() {
         assert!(lookup_action("block_batch").is_some());
         assert!(lookup_action("block_insert").is_some());
         assert!(lookup_action("block_update").is_some());
         assert!(lookup_action("block_delete").is_some());
+        assert!(lookup_action("block_move").is_some());
         assert!(!lookup_action("block_batch").unwrap().safe);
         assert!(has_local_write("block_batch"));
         assert!(has_local_write("block_insert"));
         assert!(has_local_write("block_update"));
         assert!(has_local_write("block_delete"));
-        // block_move 独立工具仍不在表
-        assert!(lookup_action("block_move").is_none());
+        assert!(has_local_write("block_move"));
     }
 
     /// safe × LocalRead × 任意 mode → Allow
@@ -328,7 +330,7 @@ mod tests {
         );
     }
 
-    /// 诚实钉：≠ EL-05 / ≠ A-AGT 全表（move 独立工具仍缺）
+    /// 诚实钉：≠ EL-05 / ≠ A-AGT 全表（注册满表 ≠ 生产关项）
     #[test]
     fn w4f_matrix_honest_not_el05_or_full_block_star() {
         let writes = write_tool_names();
@@ -336,9 +338,9 @@ mod tests {
         assert!(writes.contains(&"block_insert"));
         assert!(writes.contains(&"block_update"));
         assert!(writes.contains(&"block_delete"));
-        assert!(!writes.contains(&"block_move"));
-        // 表驱动痕迹：行数 ≥ 9（3 读 + 2 旧写 + 4 block_*）
-        assert!(NOTE_ACTION_MATRIX.len() >= 9);
+        assert!(writes.contains(&"block_move"));
+        // 表驱动痕迹：行数 ≥ 10（3 读 + 2 旧写 + 5 block_*）
+        assert!(NOTE_ACTION_MATRIX.len() >= 10);
         let _ = "≠ EL-05 / ≠ W6-E / ≠ A-AGT 全表关闭";
     }
 }

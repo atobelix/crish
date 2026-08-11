@@ -21,30 +21,6 @@
   justify-content: flex-end;
 }
 
-.btn {
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  border: none;
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-.btnPrimary {
-  background: var(--accent-blue);
-  color: var(--text-on-accent);
-}
-
-.btnDanger {
-  background: var(--color-error-bg);
-  color: var(--color-error);
-}
-
-.btnSecondary {
-  background: var(--tint-active);
-  color: var(--text-primary);
-}
-
 .badge {
   display: inline-block;
   padding: var(--space-0_5) var(--space-2);

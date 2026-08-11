@@ -7,7 +7,7 @@
  */
 import { useMemo } from 'react';
 import { telemetry } from '../../services/TelemetryService';
-import { Dialog } from '../ui';
+import { Button, Dialog } from '../ui';
 import styles from './TelemetryDialog.module.css';
 
 interface TelemetryDialogProps {
@@ -15,7 +15,10 @@ interface TelemetryDialogProps {
   isOpen?: boolean;
 }
 
-export function TelemetryDialog({ onClose, isOpen = true }: TelemetryDialogProps) {
+export function TelemetryDialog({
+  onClose,
+  isOpen = true,
+}: TelemetryDialogProps) {
   const stats = useMemo(() => {
     const entries = telemetry.getEntries();
     const errors = entries.filter((e) => e.level === 'error').length;
@@ -40,36 +43,41 @@ export function TelemetryDialog({ onClose, isOpen = true }: TelemetryDialogProps
       size="md"
       footer={
         <div className={styles.actions}>
-          <button
+          <Button
             type="button"
-            className={`${styles.btn} ${styles.btnDanger}`}
+            variant="danger"
+            size="sm"
             onClick={handleClear}
             aria-label="清空日志"
           >
             清空日志
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={`${styles.btn} ${styles.btnSecondary}`}
+            variant="secondary"
+            size="sm"
             onClick={onClose}
             aria-label="关闭"
           >
             关闭
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
+            variant="primary"
+            size="sm"
             onClick={handleDownload}
             aria-label="下载诊断日志"
           >
             下载诊断日志
-          </button>
+          </Button>
         </div>
       }
     >
       <div className={styles.row}>
         <span className={styles.label}>会话 ID</span>
-        <span className={styles.value}>{telemetry.getSessionId().slice(0, 8)}…</span>
+        <span className={styles.value}>
+          {telemetry.getSessionId().slice(0, 8)}…
+        </span>
       </div>
       <div className={styles.row}>
         <span className={styles.label}>记录总数</span>
@@ -78,13 +86,17 @@ export function TelemetryDialog({ onClose, isOpen = true }: TelemetryDialogProps
       <div className={styles.row}>
         <span className={styles.label}>错误</span>
         <span>
-          <span className={`${styles.badge} ${styles.badgeError}`}>{stats.errors}</span>
+          <span className={`${styles.badge} ${styles.badgeError}`}>
+            {stats.errors}
+          </span>
         </span>
       </div>
       <div className={styles.row}>
         <span className={styles.label}>警告</span>
         <span>
-          <span className={`${styles.badge} ${styles.badgeWarn}`}>{stats.warns}</span>
+          <span className={`${styles.badge} ${styles.badgeWarn}`}>
+            {stats.warns}
+          </span>
         </span>
       </div>
     </Dialog>

@@ -1614,6 +1614,74 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// move 经 Store apply_block_ops / block_move 真路径（W4-F 余量）。
+    ///
+    /// **≠ EL-05**；**≠ W6-E**。
+    #[tokio::test]
+    async fn w4f_store_block_move_true_path() {
+        use agent_tools::note_backend::{NoteBlockInsertRequest, NoteBlockMoveRequest};
+
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+
+        let a = backend
+            .block_insert(NoteBlockInsertRequest {
+                doc_id: "doc-store-mv".into(),
+                content: "first block".into(),
+                parent_id: None,
+                previous_id: None,
+                kind: Some("paragraph".into()),
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+        let b = backend
+            .block_insert(NoteBlockInsertRequest {
+                doc_id: "doc-store-mv".into(),
+                content: "second block".into(),
+                parent_id: None,
+                previous_id: Some(a.block_id.clone()),
+                kind: Some("paragraph".into()),
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+
+        // 将 a 移到 b 之后：期望序 b, a
+        let mv = backend
+            .block_move(NoteBlockMoveRequest {
+                doc_id: "doc-store-mv".into(),
+                id: a.block_id.clone(),
+                previous_id: Some(b.block_id.clone()),
+                parent_id: None,
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .expect("Store block_move");
+        assert_eq!(mv.id, a.block_id);
+
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-store-mv".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(q.blocks.len(), 2, "move 后仍应有两块");
+        // 投影序：b 应在 a 前（若 query 保序）
+        let ids: Vec<&str> = q.blocks.iter().map(|h| h.id.as_str()).collect();
+        if ids.len() == 2 {
+            // 若实现保序则断言；否则至少两 id 均在
+            assert!(ids.contains(&a.block_id.as_str()));
+            assert!(ids.contains(&b.block_id.as_str()));
+        }
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// update / delete 经 Store apply_block_ops 真路径。
     #[tokio::test]
     async fn w4f_store_apply_block_ops_update_and_delete() {

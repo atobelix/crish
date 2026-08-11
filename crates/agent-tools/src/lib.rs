@@ -34,7 +34,7 @@ pub mod compression_store;
 // W4-A/B/F + Round7：笔记后端契约（NoteBackend trait + MemoryNoteBackend）——
 // 引擎侧实现注入；query_blocks / document_outline / document_get_md /
 // document_apply_md / send_to_note / block_batch / block_insert /
-// block_update / block_delete 消费本契约，
+// block_update / block_delete / block_move 消费本契约，
 // 生产代码保持叶子依赖（不引入 doc-collab/store）
 pub mod note_backend;
 // W4-B/F：笔记工具审批名单（safe / write × plan|ask|full）
@@ -136,8 +136,9 @@ pub use note_backend::{
     apply_result_json, block_batch_result_json, MemoryNoteBackend, NoteApplyMdRequest,
     NoteApplyMdResult, NoteApplyMode, NoteBackend, NoteBackendError, NoteBackendHandle,
     NoteBatchTokens, NoteBlockBatchRequest, NoteBlockBatchResult, NoteBlockDeleteRequest,
-    NoteBlockDeleteResult, NoteBlockInsertRequest, NoteBlockInsertResult, NoteBlockOp,
-    NoteBlockOpKind, NoteBlockOpPreview, NoteBlockUpdateRequest, NoteBlockUpdateResult,
+    NoteBlockDeleteResult, NoteBlockInsertRequest, NoteBlockInsertResult, NoteBlockMoveRequest,
+    NoteBlockMoveResult, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview, NoteBlockUpdateRequest,
+    NoteBlockUpdateResult,
     NoteLossyItem, NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit,
     NoteQueryBlocksParams, NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };

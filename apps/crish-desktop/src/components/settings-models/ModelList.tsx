@@ -11,7 +11,7 @@ import {
   getModelMeta,
   setModelEnabled,
 } from '../../api/modelCatalog';
-import { Button, Tooltip } from '../ui';
+import { Button, Switch, Tooltip } from '../ui';
 import { ModelConfigPanel } from './ModelConfigPanel';
 import type { CfgDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
@@ -21,7 +21,7 @@ const CONFIGURE_LABEL = '配置';
 const DELETE_LABEL = '删除';
 
 /**
- * 模型条目列表：行内启用开关（私有 toggleThumb，T11 ui/Switch 合入后随替换消亡）、
+ * 模型条目列表：行内启用开关（ui/Switch，T11 基座合入后已替换私有自绘开关）、
  * 配置 / 删除、展开配置子面板与空态。
  */
 export const ModelList: React.FC<{
@@ -60,8 +60,7 @@ export const ModelList: React.FC<{
         const off = meta.enabled === false;
         const tKey = `${providerId}::${m}`;
         const isLive =
-          getActiveProfileId() === providerId &&
-          getActiveModelId() === m;
+          getActiveProfileId() === providerId && getActiveModelId() === m;
         const expanded = configOpenId === m && !!cfgDraft;
         const display =
           expanded && cfgDraft?.displayName?.trim()
@@ -74,9 +73,7 @@ export const ModelList: React.FC<{
                   cfgDraft.contextLength.replace(/[^\d]/g, ''),
                   10
                 );
-                return Number.isFinite(n) && n > 0
-                  ? n
-                  : meta.contextLength;
+                return Number.isFinite(n) && n > 0 ? n : meta.contextLength;
               })()
             : meta.contextLength;
         const liveCtxLabel = formatContextLabel(liveCtxVal);
@@ -89,7 +86,7 @@ export const ModelList: React.FC<{
             onClick={(e) => {
               const target = e.target as HTMLElement;
               if (
-                target.closest('.models-switch') ||
+                target.closest('.mrd-model-toggle') ||
                 target.closest('.mrd-delete-btn')
               ) {
                 return;
@@ -135,22 +132,18 @@ export const ModelList: React.FC<{
                 )}
               </div>
             </div>
-            <div
-              className={`${styles.mrdModelActions} mrd-model-actions`}
-            >
+            <div className={`${styles.mrdModelActions} mrd-model-actions`}>
               <Tooltip content={off ? '已停用，点击启用' : '点击停用'}>
-                <button
-                  type="button"
-                  className={`${styles.modelRowToggle} ${!off ? styles.active : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setModelEnabled(providerId, m, off);
+                <Switch
+                  size="sm"
+                  className="mrd-model-toggle"
+                  checked={!off}
+                  aria-label={off ? '启用模型' : '停用模型'}
+                  onCheckedChange={(checked) => {
+                    setModelEnabled(providerId, m, checked);
                     refresh();
                   }}
-                  aria-label={off ? '启用模型' : '停用模型'}
-                >
-                  <span className={styles.toggleThumb} />
-                </button>
+                />
               </Tooltip>
               <Tooltip content={CONFIGURE_LABEL}>
                 <Button

@@ -25,8 +25,10 @@ vi.mock('../chat-message-row/AsyncMarkdownBlock', () => ({
 }));
 
 vi.mock('../../store/sessionStore', () => ({
-  selectActiveAgentId: (s: { activeAgentId?: string | null }) => s.activeAgentId ?? null,
-  selectPanelAgentId: (s: { panelAgentId?: string | null }) => s.panelAgentId ?? null,
+  selectActiveAgentId: (s: { activeAgentId?: string | null }) =>
+    s.activeAgentId ?? null,
+  selectPanelAgentId: (s: { panelAgentId?: string | null }) =>
+    s.panelAgentId ?? null,
   useSessionField: (sel: (s: Record<string, unknown>) => unknown) =>
     sel({
       activeAgentId: null,
@@ -38,8 +40,8 @@ vi.mock('../../store/sessionStore', () => ({
 vi.mock('../../hooks/useAgentStream', () => ({
   useAgentPanel: () => ({
     handleSend: vi.fn(),
-    handleStop: vi.fn(),
-    handleForceStop: vi.fn(),
+    handleStopGeneration: vi.fn(),
+    handleForceCancelGeneration: vi.fn(),
     sending: false,
     stopping: false,
     expandedTools: {},
@@ -80,7 +82,7 @@ import { InlineAgentPanel } from './InlineAgentPanel';
 function makeAgent(
   overrides: Partial<SessionAgent> & {
     messages?: SessionAgent['messages'];
-  },
+  }
 ): SessionAgent {
   return {
     id: 'agent-1',
@@ -112,7 +114,7 @@ describe('InlineAgentPanel markdown path (dedup #5)', () => {
     });
 
     render(
-      <InlineAgentPanel agent={agent} parentSessionId="sess-1" defaultOpen />,
+      <InlineAgentPanel agent={agent} parentSessionId="sess-1" defaultOpen />
     );
 
     const blocks = screen.getAllByTestId('async-md');
@@ -137,7 +139,7 @@ describe('InlineAgentPanel markdown path (dedup #5)', () => {
     });
 
     render(
-      <InlineAgentPanel agent={agent} parentSessionId="sess-1" defaultOpen />,
+      <InlineAgentPanel agent={agent} parentSessionId="sess-1" defaultOpen />
     );
 
     const blocks = screen.getAllByTestId('async-md');

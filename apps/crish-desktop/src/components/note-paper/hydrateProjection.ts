@@ -250,3 +250,47 @@ export function makeHydratedBlock(
     text: partial.text,
   };
 }
+
+// ---------------------------------------------------------------------------
+// 产品空态 Strict 演示 fixture（≠ DocSession IPC 默认挂载完成）
+// ---------------------------------------------------------------------------
+
+/**
+ * 工作区空态打开 Strict 面板时的默认 hydrate 通路（source=`fixture`）。
+ *
+ * 诚实边界（钉死）：
+ * - **可演示 ≠ EL-01 / EL-08**；挂载冒充交付 = S5
+ * - **≠ 打开完成**：本 fixture **不是** `DocSession::hydrate` 产品 IPC 默认路径
+ * - 产品侧可注入真 transport / `adaptNoteTransportAsHydrate` 替换本工厂
+ * - DOM / 投影 `source` 必须为 `fixture`，禁止伪装 `tauri-ipc`
+ */
+export function createEmptyStateStrictDemoTransport(
+  docId: string
+): NoteHydrateTransport {
+  return createFixtureHydrateTransport({
+    [docId]: {
+      rev: 1,
+      blocks: [
+        makeHydratedBlock({
+          id: 'empty-strict-h1',
+          flavour: 'heading',
+          text: '笔记纸面 Strict 演示',
+          index: 0,
+          props: { level: 1 },
+        }),
+        makeHydratedBlock({
+          id: 'empty-strict-p1',
+          flavour: 'paragraph',
+          text: '可演示 ≠ EL-01/EL-08 · ≠ 打开完成 · fixture ≠ DocSession IPC',
+          index: 1,
+        }),
+        makeHydratedBlock({
+          id: 'empty-strict-p2',
+          flavour: 'paragraph',
+          text: '与 W5-B-S Skeleton 预览壳分轨并存；本投影为 hydrate 形状。',
+          index: 2,
+        }),
+      ],
+    },
+  });
+}

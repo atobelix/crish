@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * W7-8 / OPT-B7 / OPT-G3: Agent stop UX — handleStop = L2；handleForceStop = L3。
+ * W7-8 / OPT-B7 / OPT-G3: Agent stop UX — handleStopGeneration = L2；handleForceCancelGeneration = L3。
  * - 无 live StreamCancelFn：fallback compositionRoot.runControl
  * - 有 live cancel：仅 cancel({ mode })，不双发 root
  * - runId / agent status 命令式读：compositionRoot.session.getState（非散落 getState）
@@ -16,10 +16,12 @@ const requestCooperativeStop = vi.fn(async () => true);
 const requestForceCancel = vi.fn(async () => true);
 
 vi.mock('../api/runControlClient', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/runControlClient')>();
+  const actual =
+    await importOriginal<typeof import('../api/runControlClient')>();
   return {
     ...actual,
-    requestCooperativeStop: (...args: unknown[]) => requestCooperativeStop(...args),
+    requestCooperativeStop: (...args: unknown[]) =>
+      requestCooperativeStop(...args),
     requestForceCancel: (...args: unknown[]) => requestForceCancel(...args),
   };
 });
@@ -59,7 +61,9 @@ function seedRunningAgent() {
       ...(st as any).sessionsById,
       [PARENT]: sess,
     };
-    const list = Array.isArray((st as any).sessions) ? [...(st as any).sessions] : [];
+    const list = Array.isArray((st as any).sessions)
+      ? [...(st as any).sessions]
+      : [];
     const idx = list.findIndex((s: { id: string }) => s.id === PARENT);
     if (idx >= 0) list[idx] = sess;
     else list.push(sess);
@@ -80,26 +84,27 @@ describe('useAgentPanel stop L2/L3', () => {
     resetCompositionRoot();
   });
 
-  it('exposes handleStop and handleForceStop', () => {
+  it('exposes handleStopGeneration and handleForceCancelGeneration', () => {
     const { result } = renderHook(() =>
       useAgentPanel({
         parentSessionId: PARENT,
         agentId: AGENT,
         isRunning: true,
         useDaemonSync: false,
-      }),
+      })
     );
-    expect(typeof result.current.handleStop).toBe('function');
-    expect(typeof result.current.handleForceStop).toBe('function');
+    expect(typeof result.current.handleStopGeneration).toBe('function');
+    expect(typeof result.current.handleForceCancelGeneration).toBe('function');
   });
 
-  it('handleStop (no live stream) → L2 cooperativeStop via root only', async () => {
+  it('handleStopGeneration (no live stream) → L2 cooperativeStop via root only', async () => {
     const { getCompositionRoot } = await import('../app/compositionRoot');
     // OPT-G3: session facade sees same subagentRunId as seed
     const seededRun = getCompositionRoot()
       .session.getState()
-      .sessionsById?.[PARENT]?.agents?.find((a: { id: string }) => a.id === AGENT)
-      ?.subagentRunId;
+      .sessionsById?.[PARENT]?.agents?.find(
+        (a: { id: string }) => a.id === AGENT
+      )?.subagentRunId;
     expect(seededRun).toBe(RUN);
 
     const { result } = renderHook(() =>
@@ -108,11 +113,11 @@ describe('useAgentPanel stop L2/L3', () => {
         agentId: AGENT,
         isRunning: true,
         useDaemonSync: false,
-      }),
+      })
     );
 
     act(() => {
-      result.current.handleStop('working');
+      result.current.handleStopGeneration('working');
     });
 
     await vi.waitFor(() => {
@@ -124,16 +129,18 @@ describe('useAgentPanel stop L2/L3', () => {
         runId: RUN,
         sessionId: PARENT,
         reason: 'ui-agent-stop',
-      }),
+      })
     );
 
-    const live = useLayoutStore.getState().sessionsById?.[PARENT]?.agents?.find(
-      (a: { id: string }) => a.id === AGENT,
-    );
+    const live = useLayoutStore
+      .getState()
+      .sessionsById?.[PARENT]?.agents?.find(
+        (a: { id: string }) => a.id === AGENT
+      );
     expect(live?.status).toBe('stopped');
   });
 
-  it('handleForceStop (no live stream) → L3 forceCancel via root only', async () => {
+  it('handleForceCancelGeneration (no live stream) → L3 forceCancel via root only', async () => {
     seedRunningAgent();
     const { result } = renderHook(() =>
       useAgentPanel({
@@ -141,11 +148,11 @@ describe('useAgentPanel stop L2/L3', () => {
         agentId: AGENT,
         isRunning: true,
         useDaemonSync: false,
-      }),
+      })
     );
 
     act(() => {
-      result.current.handleForceStop('working');
+      result.current.handleForceCancelGeneration('working');
     });
 
     await vi.waitFor(() => {
@@ -157,19 +164,23 @@ describe('useAgentPanel stop L2/L3', () => {
         runId: RUN,
         sessionId: PARENT,
         reason: 'ui-agent-force-cancel',
-      }),
+      })
     );
 
-    const live = useLayoutStore.getState().sessionsById?.[PARENT]?.agents?.find(
-      (a: { id: string }) => a.id === AGENT,
-    );
+    const live = useLayoutStore
+      .getState()
+      .sessionsById?.[PARENT]?.agents?.find(
+        (a: { id: string }) => a.id === AGENT
+      );
     expect(live?.status).toBe('stopped');
     expect(live?.summary).toBe('working');
   });
 
-  it('handleStop with live StreamCancelFn does not double-dispatch root', async () => {
+  it('handleStopGeneration with live StreamCancelFn does not double-dispatch root', async () => {
     const liveCancel = vi.fn();
-    vi.mocked(streamCollaboratorRun).mockReturnValueOnce(liveCancel as unknown as () => void);
+    vi.mocked(streamCollaboratorRun).mockReturnValueOnce(
+      liveCancel as unknown as () => void
+    );
 
     const { result } = renderHook(() =>
       useAgentPanel({
@@ -177,7 +188,7 @@ describe('useAgentPanel stop L2/L3', () => {
         agentId: AGENT,
         isRunning: false,
         useDaemonSync: false,
-      }),
+      })
     );
 
     // startFollowUp path: no running subagent → streamCollaboratorRun
@@ -190,7 +201,7 @@ describe('useAgentPanel stop L2/L3', () => {
     liveCancel.mockClear();
 
     act(() => {
-      result.current.handleStop();
+      result.current.handleStopGeneration();
     });
 
     expect(liveCancel).toHaveBeenCalledWith({ mode: 'cooperative' });

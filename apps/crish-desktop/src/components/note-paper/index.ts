@@ -41,6 +41,7 @@ export {
 } from './w5bSkeleton';
 
 export {
+  W5B_PRODUCT_DEFAULT_EMPTY_TRACK,
   W5B_STRICT_BOUNDARY,
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
@@ -50,6 +51,7 @@ export {
 
 export {
   adaptNoteTransportAsHydrate,
+  createEmptyStateStrictDemoTransport,
   createFixtureHydrateTransport,
   makeHydratedBlock,
   mapQueryHitToProjection,

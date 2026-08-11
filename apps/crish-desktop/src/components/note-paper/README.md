@@ -6,15 +6,15 @@
 
 ## 双轨声明
 
-| 项           | Skeleton（W5-B-S）                    | Strict（W5-B）                                                       |
-| ------------ | ------------------------------------- | -------------------------------------------------------------------- |
-| **包 ID**    | `W5-B-S`（`W5B_SKELETON_PACKAGE_ID`） | `W5-B`（`W5B_STRICT_PACKAGE_ID`）                                    |
-| **轨**       | `data-track="skeleton"`               | `data-track="strict"`                                                |
-| **入口**     | `NotePaperPanel`                      | `NotePaperStrictPanel`                                               |
-| **数据**     | 静默假数据 / Memory 半 transport      | **hydrate 后投影**（fixture 或 `adaptNoteTransportAsHydrate`）       |
-| **合法交付** | 预览壳 + 假数据可点                   | 可注入 hydrate + 加载/空/错误三态；**方向**子集可证伪                |
-| **禁止**     | 去 `-S` 冒充 Strict                   | 把 Skeleton 常量改成 W5-B；假数据 chrome 关 EL                       |
-| **≠**        | 任何 EL；打开完成                     | 同上 + **≠** 产品 IPC 默认真路径已挂（诚实：默认仍需注入 transport） |
+| 项           | Skeleton（W5-B-S）                    | Strict（W5-B）                                                     |
+| ------------ | ------------------------------------- | ------------------------------------------------------------------ |
+| **包 ID**    | `W5-B-S`（`W5B_SKELETON_PACKAGE_ID`） | `W5-B`（`W5B_STRICT_PACKAGE_ID`）                                  |
+| **轨**       | `data-track="skeleton"`               | `data-track="strict"`                                              |
+| **入口**     | `NotePaperPanel`                      | `NotePaperStrictPanel`                                             |
+| **数据**     | 静默假数据 / Memory 半 transport      | **hydrate 后投影**（fixture 或 `adaptNoteTransportAsHydrate`）     |
+| **合法交付** | 预览壳 + 假数据可点                   | 可注入 hydrate + 加载/空/错误三态；**方向**子集可证伪              |
+| **禁止**     | 去 `-S` 冒充 Strict                   | 把 Skeleton 常量改成 W5-B；假数据 chrome 关 EL                     |
+| **≠**        | 任何 EL；打开完成                     | 同上 + **≠** 真 DocSession IPC 默认已挂（空态默认 fixture 可演示） |
 
 ## 双 surface
 
@@ -48,18 +48,25 @@
 
 ### W5-B Strict（本包方向 · 与 Skeleton 并存）
 
-| 有                                                                    | 无（诚实未做）                                       |
-| --------------------------------------------------------------------- | ---------------------------------------------------- |
-| `NotePaperStrictPanel` + `data-package-id=W5-B` / `data-track=strict` | Workbench 产品默认强制 Strict hydrate 挂载           |
-| `NoteHydrateTransport` + fixture / `adaptNoteTransportAsHydrate`      | `DocSession::hydrate` 产品 IPC 专用命令（依赖 W1-H） |
-| 加载 / 空 / 错误 / 成功三态 UI + vitest（`w5b_strict_*`）             | e2e / EL-01 / EL-08 关闭                             |
-| 边界句钉死可演示≠EL · ≠W5-C · S5                                      | 宣称「打开完成 / 块工作区完成」                      |
+| 有                                                                                     | 无（诚实未做）                                          |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `NotePaperStrictPanel` + `data-package-id=W5-B` / `data-track=strict`                  | 真 `DocSession::hydrate` 产品 IPC 默认路径（依赖 W1-H） |
+| `NoteHydrateTransport` + fixture / `adaptNoteTransportAsHydrate`                       | e2e / EL-01 / EL-08 关闭                                |
+| **产品空态默认入口**：`WorkspaceEmptyState` → `open-note-paper-strict`（fixture 演示） | 宣称「打开完成 / 块工作区完成」                         |
+| `W5B_PRODUCT_DEFAULT_EMPTY_TRACK='strict'` + `preferredNotePaperTrack` 可切            | 气泡默认挂按钮 / stream 产品链（W5-B′）                 |
+| 加载 / 空 / 错误 / 成功三态 UI + vitest（`w5b_strict_*` / `w5b_product_empty_*`）      | 把 fixture 伪装成 `tauri-ipc`                           |
+| 边界句钉死可演示≠EL · ≠W5-C · S5                                                       | —                                                       |
+
+> **可演示 ≠ EL**；空态 Strict 挂载 **≠ 打开完成**；默认 hydrate 为 **fixture**，**≠** 真 DocSession IPC 已挂。
 
 ## 可运行 / 可测入口
 
-1. **Skeleton 空态按钮**：`WorkspaceEmptyState` → `open-note-paper-preview` → 静默假数据壳
-2. **Skeleton 半 transport**：`<NotePaperPanel transport={createMemoryNoteTransport()} />`
-3. **Strict hydrate fixture**：
+1. **Strict 产品空态（默认）**：`WorkspaceEmptyState` → `open-note-paper-strict` → `NotePaperStrictPanel` + `createEmptyStateStrictDemoTransport`（`source=fixture`）
+2. **Skeleton 空态按钮（保留）**：`WorkspaceEmptyState` → `open-note-paper-preview` → 静默假数据壳
+3. **可切默认倾向**：`<WorkspaceEmptyState preferredNotePaperTrack="skeleton" />`（两轨入口均保留）
+4. **可注入 Strict transport**：`<WorkspaceEmptyState strictHydrateTransport={adaptNoteTransportAsHydrate(...)} />`
+5. **Skeleton 半 transport**：`<NotePaperPanel transport={createMemoryNoteTransport()} />`
+6. **Strict hydrate fixture（直接挂面板）**：
    ```tsx
    <NotePaperStrictPanel
      docId="doc-1"
@@ -78,16 +85,17 @@
      })}
    />
    ```
-4. _\*Strict 经已有 note_* 形状_*：
+7. **Strict 经已有 note 形状**：
    ```tsx
    <NotePaperStrictPanel
      docId="doc-1"
      hydrateTransport={adaptNoteTransportAsHydrate(createMemoryNoteTransport())}
    />
    ```
-5. **测名**：
+8. **测名**：
    - Skeleton：`NotePaperPanel.test.tsx` / `w5bSkeleton.test.ts` / `WorkspaceEmptyState.w5bs.test.tsx`
    - Strict：`NotePaperStrictPanel.test.tsx` / `hydrateProjection.test.ts` / `w5bStrict.test.ts`（`w5b_strict_*`）
+   - **产品入口**：`WorkspaceEmptyState.w5b.test.tsx`（`w5b_product_empty_*`）
    - 边界：`note-paper.boundary.test.ts`（禁 EditorStore；两轨共用）
 
 ## 半 transport / hydrate 形状

@@ -24,8 +24,10 @@
  *   - **W3-F-S** = StructureIntent + wire + mock（`chrome.w3f.test.ts`）
  *   - **W3-F Strict 子集** = chrome slash_insert / delete_blocks → `createCollabApplySink`
  *     （`chrome.w3f_apply.test.ts` + RS `w3_f_*`）
- *   - **W3-F DOM 余量** = `BlockChromeDomHost`（把手/多选框/落点线/slash 宿主 jsdom 契约）；
- *     测 `chrome.w3f_dom.test.ts`；**DOM 交付 ≠ EL-01**；A-BLK e2e 仍开
+ *   - **W3-F DOM 余量** = `BlockChromeDomHost`（把手/多选框/落点线/slash 宿主/拖拽预览子集）；
+ *     测 `chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`；**DOM 交付 ≠ EL-01**；A-BLK e2e 仍开
+ *   - **chrome 视觉皮** = `@crish/block-paper/chrome.css`（落点线/slash/把手热区 token 化）；
+ *     **视觉皮 ≠ EL-01**
  *   - **≠ EL-01**；**≠ A-BLK 全表 e2e**；**≠** 块工作区完成
  * - W3-E 完成 = 代码叶可聚焦 + Intent 通路绿
  */
@@ -54,7 +56,7 @@ export {
   type SlashMenuModelOptions,
 } from './chrome/SlashMenuModel';
 
-// W3-F DOM 余量：chrome 最小 DOM 宿主（≠ EL-01 / ≠ A-BLK e2e 全关）
+// W3-F DOM 余量：chrome 最小 DOM 宿主 + 拖拽预览子集（≠ EL-01 / ≠ A-BLK e2e 全关）
 export {
   BlockChromeDomHost,
   isBlockChromeDomHost,
@@ -69,8 +71,13 @@ export {
   BP_DROP_TARGET,
   BP_SLASH_HOST,
   BP_SLASH_OPEN,
+  BP_DRAG_PREVIEW,
+  BP_DRAG_SOURCE,
+  BP_DRAGGING,
   type DropLineSide,
   type DropLineTarget,
+  type DragPreviewState,
+  type DragPointerShape,
   type ChromeDomBlockSpec,
   type BlockChromeDomHostOptions,
 } from './chrome/BlockChromeDomHost';

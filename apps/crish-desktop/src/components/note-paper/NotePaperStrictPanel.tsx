@@ -25,6 +25,8 @@ import {
   SlashMenuModel,
   type HandleVisibility,
 } from '@crish/block-paper';
+/** DomHost chrome 皮（与 Skeleton 同源）；≠ EL-01 */
+import '@crish/block-paper/chrome.css';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import type {
   DocHydrateProjection,

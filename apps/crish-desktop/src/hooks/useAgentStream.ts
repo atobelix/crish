@@ -11,11 +11,11 @@
  * 共享点：`api/streamStop`（L2/L3 wire + markStreamingActive）、`StreamCancelFn`、
  * store actions。两 UI hook 保留各自 finalize partials。
  *
- * ## Stop 语义（与主对话同轨，不同 handler 名）
- * - `handleStop` = L2 cooperative_stop
- * - `handleForceStop` = L3 force_cancel
+ * ## Stop 语义（与主对话同轨同名，R9 命名对齐）
+ * - `handleStopGeneration` = L2 cooperative_stop
+ * - `handleForceCancelGeneration` = L3 force_cancel
  * - wire：`dispatchStreamStopCancel` → live StreamCancelFn XOR runId→root（勿双发）
- * - 主对话对应名：`handleStopGeneration` / `handleForceCancelGeneration`
+ * - 与主对话 `chat-stream/` 同名同语义；两 UI hook 保留各自 finalize partials（见上）
  *
  * ## 覆盖
  * - streamCollaboratorRun（thinking → chunks → toolCalls）
@@ -26,13 +26,27 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
-import type { SessionMessage, FileDiff, MessageToolCall } from '../store/layoutStore';
+import type {
+  SessionMessage,
+  FileDiff,
+  MessageToolCall,
+} from '../store/layoutStore';
 import type { MessageToolApprovalMeta } from '../store/types';
-import { sendToSubagent, streamCollaboratorRun, getSubagentStatus } from '../api/subagentApi';
-import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
+import {
+  sendToSubagent,
+  streamCollaboratorRun,
+  getSubagentStatus,
+} from '../api/subagentApi';
+import {
+  resolveToolDiffs,
+  sanitizeToolDisplayOutput,
+} from '../api/toolFeedback';
 import { publishToolDiffs } from '../api/publishToolDiffs';
 import type { StreamCancelFn } from '../api/chatBridge';
-import { dispatchStreamStopCancel, markStreamingActive } from '../api/streamStop';
+import {
+  dispatchStreamStopCancel,
+  markStreamingActive,
+} from '../api/streamStop';
 import { getCompositionRoot } from '../app/compositionRoot';
 
 export interface UseAgentPanelOptions {
@@ -45,9 +59,9 @@ export interface UseAgentPanelOptions {
 
 export interface UseAgentPanelReturn {
   /** 默认 Stop = L2 cooperative_stop（单击） */
-  handleStop: (summary?: string) => void;
+  handleStopGeneration: (summary?: string) => void;
   /** 强制取消 = L3 force_cancel（Shift+点击 / 长按，二次确认后） */
-  handleForceStop: (summary?: string) => void;
+  handleForceCancelGeneration: (summary?: string) => void;
   handleSend: (text: string) => Promise<void>;
   incrementEpoch: () => void;
   sending: boolean;
@@ -62,7 +76,9 @@ export interface UseAgentPanelReturn {
   onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
 }
 
-export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelReturn {
+export function useAgentPanel(
+  options: UseAgentPanelOptions
+): UseAgentPanelReturn {
   const { parentSessionId, agentId, useDaemonSync } = options;
 
   const isRunningRef = useRef(options.isRunning);
@@ -71,7 +87,9 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [sendError, setSendError] = useState('');
-  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>(
+    {}
+  );
   const onToggleTool = useCallback((toolId: string, currentlyOpen: boolean) => {
     setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
   }, []);
@@ -84,8 +102,12 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
   const mountedRef = useRef(true);
 
   const patchSessionAgent = useLayoutStore((s) => s.patchSessionAgent);
-  const appendSessionAgentMessage = useLayoutStore((s) => s.appendSessionAgentMessage);
-  const patchSessionAgentMessage = useLayoutStore((s) => s.patchSessionAgentMessage);
+  const appendSessionAgentMessage = useLayoutStore(
+    (s) => s.appendSessionAgentMessage
+  );
+  const patchSessionAgentMessage = useLayoutStore(
+    (s) => s.patchSessionAgentMessage
+  );
   const finalizeAgentMessages = useLayoutStore((s) => s.finalizeAgentMessages);
 
   useEffect(() => {
@@ -128,12 +150,11 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
 
   // T-E 步骤 3（A1）：流式 patch 走 patchSessionAgentMessage action（raw setState 清零）
   const buildPatchAsst = useCallback(
-    (asstId: string) =>
-      (fn: (m: SessionMessage) => void) => {
-        if (!guard()) return;
-        patchSessionAgentMessage(parentSessionId, agentId, asstId, fn);
-      },
-    [parentSessionId, agentId, patchSessionAgentMessage, guard],
+    (asstId: string) => (fn: (m: SessionMessage) => void) => {
+      if (!guard()) return;
+      patchSessionAgentMessage(parentSessionId, agentId, asstId, fn);
+    },
+    [parentSessionId, agentId, patchSessionAgentMessage, guard]
   );
 
   const buildStreamCallbacks = useCallback(
@@ -160,7 +181,12 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
             m.text = c;
             if (m.thinking === '正在处理…') m.thinking = '';
           }),
-        onToolStart: (toolId: string, name: string, args: string, explanation?: string) =>
+        onToolStart: (
+          toolId: string,
+          name: string,
+          args: string,
+          explanation?: string
+        ) =>
           pa((m) => {
             if (!m.toolCalls) m.toolCalls = [];
             if (!m.blocks) m.blocks = [];
@@ -175,7 +201,11 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
               m.blocks.push({ type: 'tool_call', id: toolId });
             }
           }),
-        onToolSuccess: (toolId: string, output?: string | null, diffs?: FileDiff[]) => {
+        onToolSuccess: (
+          toolId: string,
+          output?: string | null,
+          diffs?: FileDiff[]
+        ) => {
           let resolved: FileDiff[] = [];
           pa((m) => {
             const tc = m.toolCalls?.find((t) => t.id === toolId);
@@ -206,7 +236,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
           name: string,
           args: string,
           explanation: string,
-          approvalMeta?: MessageToolApprovalMeta,
+          approvalMeta?: MessageToolApprovalMeta
         ) =>
           pa((m) => {
             if (!m.toolCalls) m.toolCalls = [];
@@ -227,7 +257,9 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
               };
               if (approvalMeta) entry.approvalMeta = approvalMeta;
               m.toolCalls.push(entry);
-              if (!m.blocks.some((b) => b.type === 'tool_call' && b.id === toolId)) {
+              if (
+                !m.blocks.some((b) => b.type === 'tool_call' && b.id === toolId)
+              ) {
                 m.blocks.push({ type: 'tool_call', id: toolId });
               }
             }
@@ -258,14 +290,16 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
           patchSessionAgent(parentSessionId, agentId, {
             status: 'completed',
             endedAt: Date.now(),
-            ...(localRunIdRef.current ? { subagentRunId: localRunIdRef.current } : {}),
+            ...(localRunIdRef.current
+              ? { subagentRunId: localRunIdRef.current }
+              : {}),
           });
           cancelRef.current = null;
           onComplete?.();
         },
       } as const;
     },
-    [parentSessionId, agentId, patchSessionAgent, buildPatchAsst, guard],
+    [parentSessionId, agentId, patchSessionAgent, buildPatchAsst, guard]
   );
 
   const finalizeInFlight = useCallback(() => {
@@ -292,10 +326,16 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
       cancelRef.current = streamCollaboratorRun(
         text,
         agentId,
-        buildStreamCallbacks(asstId, onStreamDone),
+        buildStreamCallbacks(asstId, onStreamDone)
       ) as StreamCancelFn;
     },
-    [parentSessionId, agentId, patchSessionAgent, appendSessionAgentMessage, buildStreamCallbacks],
+    [
+      parentSessionId,
+      agentId,
+      patchSessionAgent,
+      appendSessionAgentMessage,
+      buildStreamCallbacks,
+    ]
   );
 
   const handleSend = useCallback(
@@ -330,12 +370,20 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
         if (capturedEpoch === epochRef.current) setSending(false);
       }
     },
-    [parentSessionId, agentId, sending, stopping, appendSessionAgentMessage, startFollowUp, getSubagentRunId],
+    [
+      parentSessionId,
+      agentId,
+      sending,
+      stopping,
+      appendSessionAgentMessage,
+      startFollowUp,
+      getSubagentRunId,
+    ]
   );
 
   /**
    * 停止子 agent：默认 L2 cooperative；force=true 时 L3。
-   * UI 默认 Stop → handleStop()；强制取消 → handleForceStop()（ComposerField 二次确认）。
+   * UI 默认 Stop → handleStopGeneration()；强制取消 → handleForceCancelGeneration()（ComposerField 二次确认）。
    *
    * Wire：shared `dispatchStreamStopCancel`（live StreamCancelFn XOR runId→root）。
    * Agent partials：epoch / stopping / patchSessionAgent / cooldown。
@@ -371,23 +419,30 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
         if (mountedRef.current) setStopping(false);
       }, 200);
     },
-    [parentSessionId, agentId, stopping, finalizeInFlight, patchSessionAgent, getSubagentRunId],
+    [
+      parentSessionId,
+      agentId,
+      stopping,
+      finalizeInFlight,
+      patchSessionAgent,
+      getSubagentRunId,
+    ]
   );
 
   /** 默认 Stop = L2 cooperative_stop */
-  const handleStop = useCallback(
+  const handleStopGeneration = useCallback(
     (summary?: string) => {
       finalizeAgentStop(false, summary);
     },
-    [finalizeAgentStop],
+    [finalizeAgentStop]
   );
 
   /** 强制取消 = L3 force_cancel（UI 应二次确认） */
-  const handleForceStop = useCallback(
+  const handleForceCancelGeneration = useCallback(
     (summary?: string) => {
       finalizeAgentStop(true, summary);
     },
-    [finalizeAgentStop],
+    [finalizeAgentStop]
   );
 
   const startStatusSync = useCallback(() => {
@@ -407,14 +462,23 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
           if (!sess) return;
           const live = sess.agents?.find((a) => a.id === agentId);
           if (!live || live.status !== 'running') return;
-          if (/complete|success|failed|cancel|error|stopp?ed|abort/i.test(st.status)) {
+          if (
+            /complete|success|failed|cancel|error|stopp?ed|abort/i.test(
+              st.status
+            )
+          ) {
             const raw = String(st.status);
-            const nextStatus: 'completed' | 'failed' | 'stopped' = /cancel|stopp?ed|abort/i.test(raw)
-              ? 'stopped'
-              : /fail|error/i.test(raw)
-                ? 'failed'
-                : 'completed';
-            const summaryText = live.summary || st.latestError || st.progress || '上次会话中断，协作 agent 未完成';
+            const nextStatus: 'completed' | 'failed' | 'stopped' =
+              /cancel|stopp?ed|abort/i.test(raw)
+                ? 'stopped'
+                : /fail|error/i.test(raw)
+                  ? 'failed'
+                  : 'completed';
+            const summaryText =
+              live.summary ||
+              st.latestError ||
+              st.progress ||
+              '上次会话中断，协作 agent 未完成';
             patchSessionAgent(sess.id, agentId, {
               status: nextStatus,
               endedAt: Date.now(),
@@ -422,7 +486,9 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
             });
           }
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
     void poll();
     const intervalId = setInterval(() => void poll(), 4000);
@@ -442,8 +508,8 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
 
   return {
     handleSend,
-    handleStop,
-    handleForceStop,
+    handleStopGeneration,
+    handleForceCancelGeneration,
     incrementEpoch,
     sending,
     stopping,

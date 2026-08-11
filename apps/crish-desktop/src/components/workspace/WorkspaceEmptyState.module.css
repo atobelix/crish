@@ -16,7 +16,9 @@
   color: var(--text-tertiary);
   opacity: 0.6;
   margin-bottom: var(--space-2);
-  transition: transform var(--transition-spring), opacity var(--transition-smooth);
+  transition:
+    transform var(--transition-spring),
+    opacity var(--transition-smooth);
 }
 
 .workspaceEmptyState:hover .emptyStateIconWrapper {
@@ -40,7 +42,15 @@
   line-height: var(--line-height-body);
 }
 
-
+/* 双轨入口：Strict 产品默认 + Skeleton 预览壳 */
+.workspaceEmptyState .emptyStateActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2, 8px);
+  max-width: 360px;
+}
 
 .workspaceEmptyStateExit {
   animation: cds-fade-out var(--transition-smooth) forwards;

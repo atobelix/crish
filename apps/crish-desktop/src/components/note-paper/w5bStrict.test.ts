@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  W5B_PRODUCT_DEFAULT_EMPTY_TRACK,
   W5B_STRICT_BOUNDARY,
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
@@ -22,6 +23,13 @@ describe('W5-B Strict 包标识 · w5b_strict_constants', () => {
   it('w5b_strict_track_is_strict', () => {
     expect(W5B_STRICT_TRACK).toBe('strict');
     expect(W5B_STRICT_TRACK).not.toBe(W5B_SKELETON_TRACK);
+  });
+
+  it('w5b_strict_product_default_empty_track_is_strict', () => {
+    // 产品空态默认倾向 Strict；≠ 打开完成 / ≠ DocSession IPC 默认已挂
+    expect(W5B_PRODUCT_DEFAULT_EMPTY_TRACK).toBe(W5B_STRICT_TRACK);
+    expect(W5B_PRODUCT_DEFAULT_EMPTY_TRACK).toBe('strict');
+    expect(W5B_PRODUCT_DEFAULT_EMPTY_TRACK).not.toBe(W5B_SKELETON_TRACK);
   });
 
   it('w5b_strict_boundary_declares_demo_neq_EL_and_S5', () => {

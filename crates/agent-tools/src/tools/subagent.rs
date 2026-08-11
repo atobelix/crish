@@ -659,6 +659,26 @@ pub fn filter_out_subagent_spawner<'a>(tool_names: &[&'a str]) -> Vec<&'a str> {
         .collect()
 }
 
+/// 「仅主 agent 工具集」全量剔除（D4 §3.3/§3.10，扩展面）：子代理注册表
+/// 一次剔除全部主 agent 专属工具——`run_subagent`（派发，T-D-02）+
+/// `kill_subagent`（单目标关闭，D4）+ `send_message`（消息注入，E3：
+/// 防「子代理伪装主 agent 发消息」）。
+///
+/// 剔除决策权威位 = 引擎装配点（发起者身份判定在引擎，D4 §8 D-4）；
+/// 引擎侧 filter 闭包可整段替换为对本函数的调用（agent-tools 侧提供
+/// 权威剔除清单，避免引擎侧重复维护工具名字面量）。
+pub fn filter_out_subagent_tools<'a>(tool_names: &[&'a str]) -> Vec<&'a str> {
+    tool_names
+        .iter()
+        .copied()
+        .filter(|name| {
+            *name != SUBAGENT_SPAWNER_TOOL_NAME
+                && *name != crate::tools::kill_subagent::SUBAGENT_KILL_TOOL_NAME
+                && *name != crate::tools::send_message::SEND_MESSAGE_TOOL_NAME
+        })
+        .collect()
+}
+
 // ── spawn 契约（引擎侧接线面）────────────────────────────────────
 
 /// 子代理 spawn 请求（工具解析入参后装配；parent 关系字段由引擎侧补齐）
@@ -2383,6 +2403,77 @@ mod tests {
         assert_eq!(out.len(), 12, "全量 13 工具剔除 run_subagent 后剩 12");
         assert!(!out.contains(&"run_subagent"));
         assert!(out.contains(&"wait_subagents"), "wait 原语保留");
+    }
+
+    // ── 仅主 agent 工具集全量剔除（D4 §3.3/§3.10：filter_out_subagent_tools）──
+
+    #[test]
+    fn subagent_tools_filter_removes_main_agent_only_tools() {
+        let names: Vec<&str> = vec![
+            "read_file",
+            "run_subagent",
+            "kill_subagent",
+            "send_message",
+            "wait_subagents",
+            "shell_command",
+        ];
+        let out = filter_out_subagent_tools(&names);
+        assert_eq!(
+            out,
+            vec!["read_file", "wait_subagents", "shell_command"],
+            "派发/关闭/消息三工具全剔除，其余保留"
+        );
+        assert!(!out.contains(&"run_subagent"));
+        assert!(!out.contains(&"kill_subagent"));
+        assert!(!out.contains(&"send_message"));
+    }
+
+    #[test]
+    fn subagent_tools_filter_identity_when_no_main_agent_tools() {
+        let names: Vec<&str> = vec!["read_file", "wait_subagents", "grep_search"];
+        assert_eq!(filter_out_subagent_tools(&names), names);
+    }
+
+    #[test]
+    fn subagent_tools_filter_empty_input_returns_empty() {
+        assert!(filter_out_subagent_tools(&[]).is_empty());
+    }
+
+    #[test]
+    fn subagent_tools_filter_superset_of_spawner_filter() {
+        // 全量剔除 ⊇ 派发剔除：filter_out_subagent_tools 是
+        // filter_out_subagent_spawner 的超集剔除（多剔 kill_subagent /
+        // send_message，其余行为一致）——派发剔除保留的工具中，除新增
+        // 两工具外必须全部保留
+        let all: Vec<&str> = vec![
+            "read_file",
+            "run_subagent",
+            "kill_subagent",
+            "send_message",
+            "wait_subagents",
+            "shell_command",
+            "write_file",
+        ];
+        let spawner_only = filter_out_subagent_spawner(&all);
+        let all_out = filter_out_subagent_tools(&all);
+        for name in &spawner_only {
+            if *name == "kill_subagent" || *name == "send_message" {
+                assert!(
+                    !all_out.contains(name),
+                    "主 agent 专属工具必须被全量剔除：{name}"
+                );
+            } else {
+                assert!(
+                    all_out.contains(name),
+                    "全量剔除后不得丢失派发剔除保留的工具：{name}"
+                );
+            }
+        }
+        assert_eq!(
+            all_out.len() + 2,
+            spawner_only.len(),
+            "多剔 kill_subagent / send_message 两条"
+        );
     }
 
     // ── 三方状态映射 ──────────────────────────────────────────────

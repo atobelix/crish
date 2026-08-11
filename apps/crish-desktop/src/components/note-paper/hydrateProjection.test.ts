@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { createMemoryNoteTransport } from '../../api/noteApi';
 import {
   adaptNoteTransportAsHydrate,
+  createEmptyStateStrictDemoTransport,
   createFixtureHydrateTransport,
   makeHydratedBlock,
   mapQueryHitToProjection,
@@ -139,5 +140,19 @@ describe('hydrateProjection · w5b_strict_shape', () => {
     expect(out.ok).toBe(false);
     if (out.ok) return;
     expect(out.code).toBe('note.command_missing');
+  });
+
+  it('w5b_strict_empty_state_demo_transport_is_fixture_not_ipc', async () => {
+    // 产品空态演示 fixture：可演示 ≠ 打开完成；source 必须为 fixture
+    const t = createEmptyStateStrictDemoTransport('strict-ws-demo');
+    const out = await t.hydrate('strict-ws-demo');
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.projection.source).toBe('fixture');
+    expect(out.projection.source).not.toBe('tauri-ipc');
+    expect(out.projection.blocks.length).toBeGreaterThanOrEqual(1);
+    expect(
+      out.projection.blocks.every((b) => typeof b.index === 'number')
+    ).toBe(true);
   });
 });

@@ -1,0 +1,266 @@
+/**
+ * block-paper chrome 最小产品皮（对齐 DomHost 类名 / data-*）
+ *
+ * 覆盖：块行 · 把手 · 多选框 · 落点线 · slash 宿主。
+ * 标尺：主壳 tokens（暖中性灰 / tint / hairline / elevated 浮层）。
+ * 惯例：AFFiNE 式静默 L0——默认无 chrome 噪声；hover/focus/multi 才抬。
+ *
+ * **≠ EL-01**；**≠** A-BLK 产品 e2e 全关；**≠** Notion chrome 完成。
+ * 消费方：`import '@crish/block-paper/chrome.css'`（或挂载 DomHost 的壳）。
+ */
+
+/* ---------- 作用域别名（值全部指向全局 token） ---------- */
+
+.bp-chrome-root {
+  --bp-handle-w: var(--icon-size, 16px);
+  /* 热区略大于视觉点阵：min 高对齐 xs 控件 */
+  --bp-handle-hit-h: var(--control-height-xs, 24px);
+  --bp-handle-hit-pad-x: var(--space-1, 4px);
+  --bp-handle-opacity: 0.45;
+  --bp-handle-opacity-multi: 0.7;
+  --bp-drop-line-h: 2px;
+  /* 清晰但不刺眼：正文色 ~28% 混合，勿亮蓝品牌 */
+  --bp-drop-line-color: color-mix(
+    in srgb,
+    var(--text-primary, #111111) 28%,
+    transparent
+  );
+  --bp-slash-width: 280px;
+  --bp-row-radius: var(--radius-md, 6px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5, 2px);
+  min-width: 0;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  color: var(--text-primary, #111111);
+}
+
+/* ---------- 块行 ---------- */
+
+.bp-block-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 8px);
+  padding: var(--space-1_5, 6px) var(--space-2, 8px);
+  border-radius: var(--bp-row-radius);
+  min-height: var(--row-height-sm, 28px);
+  background: transparent;
+  transition:
+    background var(--transition-micro, 100ms ease-out),
+    box-shadow var(--transition-micro, 100ms ease-out);
+}
+
+.bp-block-row:hover {
+  background: var(
+    --bg-hover,
+    var(
+      --tint-hover,
+      color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
+    )
+  );
+}
+
+/* ---------- 把手：L0 默认 hidden；热区略放大 ---------- */
+
+.bp-block-handle {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  /* 视觉宽仍贴近 icon；横向 padding 扩热区 */
+  width: calc(var(--bp-handle-w) + 2 * var(--bp-handle-hit-pad-x));
+  min-width: calc(var(--bp-handle-w) + 2 * var(--bp-handle-hit-pad-x));
+  min-height: var(--bp-handle-hit-h);
+  height: var(--bp-handle-hit-h);
+  margin-top: var(--space-0_5, 2px);
+  padding: 0 var(--bp-handle-hit-pad-x);
+  border: none;
+  border-radius: var(--radius-xs, 4px);
+  background-color: transparent;
+  /* 六点暗示 */
+  background-image:
+    radial-gradient(
+      circle,
+      var(--text-tertiary, #696969) 1.1px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle,
+      var(--text-tertiary, #696969) 1.1px,
+      transparent 1.2px
+    );
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-position:
+    center 4px,
+    calc(50% + 6px) 4px;
+  background-repeat: repeat-y;
+  opacity: 0;
+  cursor: grab;
+  color: inherit;
+  transition:
+    opacity var(--transition-micro, 100ms ease-out),
+    background-color var(--transition-micro, 100ms ease-out);
+}
+
+.bp-block-handle:hover {
+  background-color: var(
+    --tint-hover,
+    color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
+  );
+}
+
+.bp-block-handle[data-handle-visibility='hover'],
+.bp-block-handle[data-handle-visibility='focus'] {
+  opacity: var(--bp-handle-opacity);
+}
+
+.bp-block-handle[data-handle-visibility='multi'] {
+  opacity: var(--bp-handle-opacity-multi);
+}
+
+/* DomHost 同步 hidden 属性；CSS 再保险 L0 静默 */
+.bp-block-handle[data-handle-visibility='hidden'],
+.bp-block-handle[hidden] {
+  opacity: 0;
+}
+
+/* ---------- 多选框：低噪；靠 checked 与父级控显 ---------- */
+
+.bp-multi-check {
+  flex: 0 0 auto;
+  width: var(--icon-size-sm, 14px);
+  height: var(--icon-size-sm, 14px);
+  margin-top: var(--space-1, 4px);
+  accent-color: var(--text-secondary, #555555);
+  cursor: pointer;
+}
+
+/* ---------- 落点线：2px 中性强调，清晰不刺眼 ---------- */
+
+.bp-drop-line {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 100%;
+  height: var(--bp-drop-line-h);
+  margin: var(--space-0_5, 2px) 0;
+  padding: 0;
+  border: none;
+  border-radius: 1px;
+  background: var(--bp-drop-line-color);
+  /* 轻微外扩，避免 1px 亚像素发虚 */
+  box-shadow: 0 0 0 0.5px
+    color-mix(in srgb, var(--text-primary, #111111) 8%, transparent);
+  pointer-events: none;
+  transition: opacity var(--transition-micro, 100ms ease-out);
+}
+
+.bp-drop-line[hidden] {
+  display: none !important;
+}
+
+.bp-drop-line[data-drop-side='before'],
+.bp-drop-line[data-drop-side='after'] {
+  /* side 仅 DOM 契约；视觉同线，后续可分 before/after 微偏移 */
+  opacity: 1;
+}
+
+/* ---------- slash 宿主：elevated 浮层最小皮（catalog 后置） ---------- */
+
+.bp-slash-host {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: var(--z-popover, 200);
+  width: min(var(--bp-slash-width), 100%);
+  min-width: min(200px, 100%);
+  max-height: min(360px, 70vh);
+  overflow: auto;
+  margin: 0;
+  padding: var(--dropdown-padding, var(--space-1_5, 6px));
+  border: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
+  border-radius: var(--radius-lg, 8px);
+  background: var(--bg-elevated, hsl(35, 8%, 100%));
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary, #111111);
+  font-size: var(--font-size-base, 14px);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.bp-slash-host[hidden],
+.bp-slash-host[data-slash-open='0'] {
+  display: none !important;
+}
+
+/* catalog 项皮（宿主内后续挂载时可直接用 class） */
+.bp-slash-host .bp-slash-group-label {
+  padding: var(--space-0_5, 2px) var(--space-2, 8px);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-tertiary, #696969);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.bp-slash-host .bp-slash-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  padding: var(--item-padding, 8px 12px);
+  border: none;
+  border-radius: var(--item-radius, var(--radius-sm, 5px));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-micro, 100ms ease-out);
+}
+
+.bp-slash-host .bp-slash-item:hover,
+.bp-slash-host .bp-slash-item[data-active='1'],
+.bp-slash-host .bp-slash-item[aria-selected='true'] {
+  background: var(
+    --bg-hover,
+    var(
+      --tint-hover,
+      color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
+    )
+  );
+}
+
+.bp-slash-host .bp-slash-item-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-sm, 28px);
+  height: var(--control-height-sm, 28px);
+  border: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
+  border-radius: var(--radius-xs, 4px);
+  color: var(--text-secondary, #555555);
+  font-size: var(--font-size-sm, 13px);
+}
+
+/* ---------- flavour 轻量（DomHost 若写 data-flavour 时生效） ---------- */
+
+.bp-block-row[data-flavour='code'] {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.bp-block-row[data-flavour='quote'],
+.bp-block-row[data-flavour='blockquote'] {
+  border-left: 2px solid
+    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+  padding-left: var(--space-3, 12px);
+  color: var(--text-secondary, #555555);
+}
+
+/* eco：去掉过渡抖动 */
+html[data-perf-tier='eco'] .bp-chrome-root .bp-block-row,
+html[data-perf-tier='eco'] .bp-chrome-root .bp-block-handle,
+html[data-perf-tier='eco'] .bp-chrome-root .bp-drop-line,
+html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item {
+  transition: none;
+}

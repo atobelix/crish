@@ -5,7 +5,11 @@
   --ws-chrome-sess-h: 32px;
   --ws-chrome-strip: var(--bg-secondary);
   --ws-chrome-surface: var(--bg-primary);
-  --ws-chrome-pill: color-mix(in srgb, var(--bg-secondary) 82%, var(--text-primary) 18%);
+  --ws-chrome-pill: color-mix(
+    in srgb,
+    var(--bg-secondary) 82%,
+    var(--text-primary) 18%
+  );
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -92,6 +96,8 @@
   flex: 1 1 auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  /* 滚动条隐藏档位：归入 shell-scrollbar.css 全局契约（--scrollbar-thumb-width: 0px） */
+  --scrollbar-thumb-width: 0px;
 }
 
 .wsChromeRowWorkspace .wsChromeScroll,
@@ -105,10 +111,6 @@
   gap: var(--space-0_5);
   height: auto;
   min-height: var(--ws-chrome-sess-h);
-}
-
-.wsChromeScroll::-webkit-scrollbar {
-  display: none;
 }
 
 .wsChromeTrail {
@@ -179,7 +181,9 @@
   cursor: pointer;
   flex-shrink: 0;
   line-height: var(--line-height-dense);
-  transition: background var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .wsChromeTab:hover {
@@ -472,7 +476,10 @@
   pointer-events: none;
   margin-right: var(--space-1_5);
   margin-left: var(--space-1);
-  transition: opacity var(--transition-micro), background var(--transition-micro), color var(--transition-micro);
+  transition:
+    opacity var(--transition-micro),
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .wsChromeTabSession .wsChromeTabClose,

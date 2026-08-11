@@ -83,6 +83,36 @@ describe('W3-F DOM · BlockChromeDomHost 挂载', () => {
       host.getRootElement().querySelector(`[${BP_DROP_LINE}]`)
     ).toBeTruthy();
   });
+
+  it('w3f_dom_host_flavour_attr: 可选 flavour → data-flavour（呈现皮锚定）', () => {
+    host.destroy();
+    mount.remove();
+    const doc = requireDocument();
+    mount = doc.createElement('div');
+    doc.body.appendChild(mount);
+    chrome = new BlockChromeModel();
+    host = new BlockChromeDomHost(mount, {
+      blocks: [
+        { blockId: ID_A, flavour: 'code' },
+        { blockId: ID_B, flavour: 'quote' },
+      ],
+      chrome,
+    });
+    expect(host.getRowElement(ID_A)?.getAttribute('data-flavour')).toBe('code');
+    expect(host.getRowElement(ID_B)?.getAttribute('data-flavour')).toBe(
+      'quote'
+    );
+    // 未传 flavour 的行不强制属性（另挂一宿主验证）
+    host.destroy();
+    mount.remove();
+    mount = doc.createElement('div');
+    doc.body.appendChild(mount);
+    host = new BlockChromeDomHost(mount, {
+      blocks: [{ blockId: ID_C }],
+      chrome: new BlockChromeModel(),
+    });
+    expect(host.getRowElement(ID_C)?.hasAttribute('data-flavour')).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

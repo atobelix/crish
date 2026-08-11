@@ -65,7 +65,12 @@ const DEF_LINE_RE = /^\s*--[\w-]+\s*:/;
 
 /** 双层同源扫描排除文件（tokens.css 定义面 / theme-dark.css 补丁面 / themeStore 注入面；
  *  design-system.css：批次 9.1 S7-3 迁入的 ::selection 全局规则（原 tokens.css 内，非消费点）） */
-const MIX_SKIP_FILE_NAMES = ['tokens.css', 'theme-dark.css', 'themeStore.ts', 'design-system.css'];
+const MIX_SKIP_FILE_NAMES = [
+  'tokens.css',
+  'theme-dark.css',
+  'themeStore.ts',
+  'design-system.css',
+];
 
 const LIGHT_BLOCK_RE = /:root,[\s\S]*?\n\}/;
 const DARK_BLOCK_RE = /html\[data-theme="dark"\]\s*\{[\s\S]*?\n\}/;
@@ -93,7 +98,9 @@ describe('z-index token 契约（F7-F14）', () => {
   });
 
   it('LeafToolTabStrip.addDropdownMenu 走 --z-floating-panel 档位', () => {
-    const src = readFile('src/components/binary-tree/LeafToolTabStrip.module.css');
+    const src = readFile(
+      'src/components/binary-tree/LeafToolTabStrip.module.css'
+    );
     const block = src.match(/\.addDropdownMenu\s*\{[\s\S]*?\}/);
     expect(block?.[0]).toContain('z-index: var(--z-floating-panel)');
   });
@@ -102,7 +109,9 @@ describe('z-index token 契约（F7-F14）', () => {
     const src = readFile('src/components/files/FileViewerCard.module.css');
     for (const sel of ['.filesOpenMenu', '.filesMoreMenu']) {
       const block = src.match(new RegExp(`${sel}\\s*\\{[\\s\\S]*?\\}`));
-      expect(block?.[0], `${sel} 应 token 化`).toContain('z-index: var(--z-sidebar)');
+      expect(block?.[0], `${sel} 应 token 化`).toContain(
+        'z-index: var(--z-sidebar)'
+      );
     }
   });
 });
@@ -178,9 +187,10 @@ describe('批次 2 · ② 禁新裸混色（text-primary 基底，ratchet）', (
         total += (line.match(mixRe) ?? []).length;
       }
     }
-    expect(total, `裸混色消费点 ${total} 处超过基线 ${BARE_MIX_BASELINE}`).toBeLessThanOrEqual(
-      BARE_MIX_BASELINE
-    );
+    expect(
+      total,
+      `裸混色消费点 ${total} 处超过基线 ${BARE_MIX_BASELINE}`
+    ).toBeLessThanOrEqual(BARE_MIX_BASELINE);
   });
 });
 
@@ -192,10 +202,13 @@ describe('批次 2 · ③ 禁裸 999px / 裸 99999', () => {
     const files = walkSrc().filter((p) => /\.(?:css|tsx|ts)$/.test(p));
     let total = 0;
     for (const p of files) {
-      total += (readFileSync(p, 'utf8').match(/border-radius:\s*999(?!\d)/g) ?? [])
-        .length;
+      total += (
+        readFileSync(p, 'utf8').match(/border-radius:\s*999(?!\d)/g) ?? []
+      ).length;
     }
-    expect(total, `裸 999px 计数 ${total} 超过基线`).toBeLessThanOrEqual(RADIUS_999_BASELINE);
+    expect(total, `裸 999px 计数 ${total} 超过基线`).toBeLessThanOrEqual(
+      RADIUS_999_BASELINE
+    );
   });
 
   it('裸 99999 仅允许 token 定义行与白名单文件（autofill hack）', () => {
@@ -214,15 +227,21 @@ describe('批次 2 · ③ 禁裸 999px / 裸 99999', () => {
 });
 
 describe('批次 2 · ④ scrollbar 块 ratchet', () => {
-  const SCROLLBAR_BASELINE = 31; // 当前基线（S5 收敛为全局契约后递减）
+  // 基线 5 = R2-7 契约化后唯一出口（shell-scrollbar.css：本体/track/thumb/hover/active 五处）；
+  // 各 module.css 滚动条块已删除，尺寸档位（0px 隐藏 / 3px 紧凑）通过
+  // --scrollbar-thumb-width 变量按域覆盖，不再出现伪元素规则。
+  const SCROLLBAR_BASELINE = 5; // 当前基线（S5 收敛为全局契约后递减）
 
   it(`::-webkit-scrollbar 块计数 ≤ ${SCROLLBAR_BASELINE}`, () => {
     const files = walkSrc().filter((p) => p.endsWith('.css'));
     let total = 0;
     for (const p of files) {
-      total += (readFileSync(p, 'utf8').match(/::-webkit-scrollbar/g) ?? []).length;
+      total += (readFileSync(p, 'utf8').match(/::-webkit-scrollbar/g) ?? [])
+        .length;
     }
-    expect(total, `scrollbar 块 ${total} 超过基线`).toBeLessThanOrEqual(SCROLLBAR_BASELINE);
+    expect(total, `scrollbar 块 ${total} 超过基线`).toBeLessThanOrEqual(
+      SCROLLBAR_BASELINE
+    );
   });
 });
 
@@ -241,7 +260,9 @@ describe('批次 2 · ⑤ !important ratchet', () => {
       if (IMPORTANT_SKIP_FILE_NAMES.includes(base)) continue;
       total += (readFileSync(p, 'utf8').match(/!important/g) ?? []).length;
     }
-    expect(total, `!important 总数 ${total} 超过基线`).toBeLessThanOrEqual(IMPORTANT_BASELINE);
+    expect(total, `!important 总数 ${total} 超过基线`).toBeLessThanOrEqual(
+      IMPORTANT_BASELINE
+    );
   });
 });
 
@@ -272,9 +293,15 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
 
   it('themeStore control-soft 注入百分比与静态定义对齐（light 4/4/8、dark 5/6.5/9.5）', () => {
     const ts = readFile('src/api/themeStore.ts');
-    const softBg = ts.match(/softBgPct = isDarkPreset \? '([^']+)' : '([^']+)'/);
-    const softHover = ts.match(/softHoverPct = isDarkPreset \? '([^']+)' : '([^']+)'/);
-    const softActive = ts.match(/softActivePct = isDarkPreset \? '([^']+)' : '([^']+)'/);
+    const softBg = ts.match(
+      /softBgPct = isDarkPreset \? '([^']+)' : '([^']+)'/
+    );
+    const softHover = ts.match(
+      /softHoverPct = isDarkPreset \? '([^']+)' : '([^']+)'/
+    );
+    const softActive = ts.match(
+      /softActivePct = isDarkPreset \? '([^']+)' : '([^']+)'/
+    );
     expect(softBg?.[1]).toBe('5%');
     expect(softBg?.[2]).toBe('4%');
     expect(softHover?.[1]).toBe('6.5%');
@@ -287,7 +314,9 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
     const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
     const pctOf = (block: string, token: string): string | null => {
       const m = block.match(
-        new RegExp(`${token}:\\s*color-mix\\(in srgb,\\s*var\\(--[\\w-]+\\)\\s*(\\d+(?:\\.\\d+)?)%`)
+        new RegExp(
+          `${token}:\\s*color-mix\\(in srgb,\\s*var\\(--[\\w-]+\\)\\s*(\\d+(?:\\.\\d+)?)%`
+        )
       );
       return m?.[1] ?? null;
     };
@@ -305,7 +334,9 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       ['--control-soft-bg-hover', '6.5'],
       ['--control-soft-bg-active', '9.5'],
     ] as const) {
-      expect(pctOf(darkBlock, token), `dark ${token} 静态百分比`).toBe(expectPct);
+      expect(pctOf(darkBlock, token), `dark ${token} 静态百分比`).toBe(
+        expectPct
+      );
     }
   });
 
@@ -331,7 +362,9 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
     const files = walkSrc().filter((p) => /\.(?:css|tsx|ts)$/.test(p));
     for (const p of files) {
       const src = readFileSync(p, 'utf8');
-      const hits = src.match(/var\(--(?:hover-bg|active-bg|chart-color)[\w-]*\)/g);
+      const hits = src.match(
+        /var\(--(?:hover-bg|active-bg|chart-color)[\w-]*\)/g
+      );
       if (hits) {
         expect.fail(`${p} 存在悬空引用：${hits.join(', ')}`);
       }
@@ -396,7 +429,9 @@ describe('批次 6 · T4 hover-only 键盘闭环契约（08-步5）', () => {
 
   it('DiffCardFileList 列表语义已降级为 role="list"（无 listbox/option 滥用）', () => {
     const src = readFile('src/components/diff/DiffCardFileList.tsx');
-    expect(src).toContain('role="list" aria-label="变更文件列表"');
+    // 属性可能被 prettier 换行拆开，按语义分别断言（R2-7 修正连续串误报）
+    expect(src).toContain('role="list"');
+    expect(src).toContain('aria-label="变更文件列表"');
     expect(src).not.toContain('role="listbox"');
     expect(src).not.toContain('role="option"');
     expect(src).not.toContain('aria-selected={active}');

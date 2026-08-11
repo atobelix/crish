@@ -14,7 +14,8 @@
 .modelsRail {
   width: 220px;
   flex-shrink: 0;
-  border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  border-right: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle));
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
@@ -45,7 +46,10 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .mrlAddBtn:hover {
@@ -77,7 +81,9 @@
   border-radius: var(--radius-xl);
   cursor: pointer;
   font-family: inherit;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
   box-sizing: border-box;
 }
 
@@ -290,12 +296,19 @@
   outline: none;
   box-sizing: border-box;
   box-shadow: none;
-  transition: border-color var(--transition-micro), background var(--transition-micro), box-shadow var(--transition-micro);
+  transition:
+    border-color var(--transition-micro),
+    background var(--transition-micro),
+    box-shadow var(--transition-micro);
   width: 100%;
 }
 
 .mrdFieldInput:focus {
-  border-color: color-mix(in srgb, var(--border-color) 96%, var(--text-primary) 4%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 96%,
+    var(--text-primary) 4%
+  );
   background: var(--bg-primary);
   box-shadow: none;
   outline: none;
@@ -344,7 +357,11 @@
 }
 
 .mrdSearch:focus {
-  border-color: color-mix(in srgb, var(--border-color) 96%, var(--text-primary) 4%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 96%,
+    var(--text-primary) 4%
+  );
   outline: none;
 }
 
@@ -364,7 +381,9 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--tint-hover);
   background: var(--bg-primary);
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
   flex-wrap: wrap;
 }
 
@@ -424,43 +443,6 @@
   color: var(--text-tertiary);
   padding: 40px 0;
   text-align: center;
-}
-
-/* New Switch UI */
-.modelRowToggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: 32px;
-  height: 18px;
-  border-radius: 999px;
-  border: none;
-  background-color: var(--tint-divider);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-  transition: background-color var(--transition-fast);
-  outline: none;
-}
-
-.modelRowToggle.active {
-  background-color: var(--accent-primary);
-}
-
-.toggleThumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background-color: var(--text-on-accent);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
-  transition: left var(--transition-fast);
-}
-
-.modelRowToggle.active .toggleThumb {
-  left: 16px;
 }
 
 .modelsBtn.dangerText:hover:not(:disabled) {
@@ -590,7 +572,10 @@
   cursor: pointer;
   opacity: 0.72;
   pointer-events: auto;
-  transition: opacity var(--transition-micro), background var(--transition-micro), color var(--transition-micro);
+  transition:
+    opacity var(--transition-micro),
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .modelsMainRow .modelsIconBtn {
@@ -845,40 +830,6 @@
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
-.mrdCapPill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 12px;
-  border-radius: var(--radius-sm, 6px);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-primary, transparent);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-normal, 400);
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.mrdCapPill:hover {
-  background: var(--tint-hover);
-  border-color: var(--tint-divider);
-  color: var(--text-primary);
-}
-
-.mrdCapPill.isOn {
-  background: color-mix(in srgb, var(--accent-primary) 10%, transparent) !important;
-  border-color: color-mix(in srgb, var(--accent-primary) 25%, transparent) !important;
-  color: var(--accent-primary) !important;
-  font-weight: var(--font-weight-medium);
-}
-
-.mrdCapPill.isOn:hover {
-  background: color-mix(in srgb, var(--accent-primary) 14%, transparent) !important;
-  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent) !important;
-}
 
 /* Expanded config sub-panel */
 .modelConfigPanel {
@@ -941,7 +892,10 @@
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 .mrdAddModelBtn:hover {
   background: var(--tint-hover);
@@ -958,8 +912,12 @@
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .loadingSpinner {

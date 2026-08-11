@@ -12,7 +12,8 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
-    }
+    },
+    "./chrome.css": "./src/chrome/blockChrome.css"
   },
   "files": [
     "src",

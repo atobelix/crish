@@ -8,7 +8,7 @@
 //! # 诚实边界
 //! - **≠ EL-05**；**≠ A-AGT 全表关闭**；**≠ W6-E**
 //! - Memory 禁关生产 A-AGT；Store 真路径见 `conex-note-runtime`
-//! - 姊妹工具：`block_update` / `block_delete` 已注册；`block_move` 独立工具未注册
+//! - 姊妹工具：`block_update` / `block_delete` / `block_move` 已注册
 
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};

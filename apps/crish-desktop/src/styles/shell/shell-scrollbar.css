@@ -28,10 +28,13 @@
   height: 10px !important;
 }
 
-/* --- PREMIUM SLEEK SCROLLBARS --- */
+/* --- PREMIUM SLEEK SCROLLBARS（滚动条全局契约，唯一出口） --- */
+/* 尺寸档位变量 --scrollbar-thumb-width 按域覆盖：默认 4px；0px = 隐藏
+   （横向 tab 条等 JS 接管滚动场景）；紧凑条按域收敛（如 LeafToolTabStrip 3px）。
+   各 module.css 禁止再写滚动条伪元素规则，一律继承本契约。 */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: var(--scrollbar-thumb-width, 4px);
+  height: var(--scrollbar-thumb-width, 4px);
 }
 ::-webkit-scrollbar-track {
   background: transparent;

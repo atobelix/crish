@@ -26,9 +26,9 @@
  *   `createCollabApplySink` → wire → RS apply（测：`chrome.w3f_apply.test.ts` + `w3_f_*`）
  * - **W3-F-S**：StructureIntent + wire + mock（`chrome.w3f.test.ts`）；**不得**关 Strict
  * - **≠ EL-01**；**≠ A-BLK 全表**；禁止 mock sink 冒充 Strict 关闭
- * - **W3-F DOM 余量**：`BlockChromeDomHost` 把手/多选框/落点线/slash 宿主 jsdom 契约已交付
- *   （`chrome.w3f_dom.test.ts`）；**DOM ≠ EL-01**；A-BLK-02/04/05 产品 e2e 仍开
- * - **仍未交付**：拖拽预览全链路、桌面 React chrome 挂载、A-BLK 全表 e2e
+ * - **W3-F DOM 余量**：`BlockChromeDomHost` 把手/多选框/落点线/slash 宿主/拖拽预览子集
+ *   jsdom 契约（`chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`）；**DOM ≠ EL-01**
+ * - **仍未交付**：桌面 React chrome 挂载、A-BLK 全表 e2e、拖拽产品 e2e
  */
 
 import type {
