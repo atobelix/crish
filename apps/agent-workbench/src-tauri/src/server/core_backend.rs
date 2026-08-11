@@ -19,9 +19,9 @@ use conex_types::device::{
     CancelRunResult, DenyParams, EventPageParams, EventPageResult, FlowSnapshotParams,
     FlowSnapshotResult, GetSettingsParams, GetSettingsResult, ListCommandsResult,
     ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult,
-    ListTasksParams, ListTasksResult, RunControlLevel, RunControlParams, RunControlResult,
-    RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
-    SearchIndexResult,
+    ListTasksParams, ListTasksResult, PermissionMode, RunControlLevel, RunControlParams,
+    RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
+    RunTaskResult, SearchIndexResult,
 };
 
 use crate::core_run_commands::{
@@ -78,6 +78,100 @@ impl CoreStateBackend {
     fn map_core(error: conex_types::CoreError) -> ServerError {
         ServerError::from_core_error(&error)
     }
+}
+
+// ── R1-10 安全测试面：远程装配与双轨路由纯函数（T-07 / T-08 / T-14）──
+//
+// 远程来源判定机制（R1-10 确认）：REST/WS 服务面即远程面——桌面本地操作
+// 走 Tauri IPC，入站网络请求一律视为远程来源（D2 §8 / D5 §4.3「远程网关
+// 不暴露 Tauri IPC」）；deviceId 身份注入（source=deviceId）留 §8.2
+// 装配层扩展，本面先落地远程/本地的行为边界。
+
+/// 远程权限模式上限装配（R1-10 T-08 / D5 §4.6.1）：min(requested, Ask)——
+/// 远程不存在 full-access（TH-12 直接缓解）；ask / plan 原样；None 原样。
+/// 返回（生效模式, 是否降级）——降级时调用方必须发 remote-mode-downgrade
+/// 审计标记（D5 §8.2 / §9.2 矩阵：approve/operate × full-access → ask 降级）。
+pub(crate) fn apply_remote_mode(requested: Option<PermissionMode>) -> (Option<PermissionMode>, bool) {
+    match requested {
+        Some(PermissionMode::FullAccess) => (Some(PermissionMode::Ask), true),
+        other => (other, false),
+    }
+}
+
+/// remote-mode-downgrade 审计标记常量（D5 §8.2：降级动作发该审计；
+/// SecurityAuditOperation 尚无 remote-* 变体（R1-10 确认），结构化审计
+/// 日志先行，§8.5 事件面扩展就绪后升级为 AgentEvent::SecurityAudit）
+pub(crate) const REMOTE_MODE_DOWNGRADE_AUDIT_MARKER: &str = "remote-mode-downgrade";
+
+/// 远程 run 权限模式降级审计发射（R1-10 T-08：full-access → ask 降级动作；
+/// target: "security.audit" 对齐 emit_trash_audit 先例（core_run_commands）
+/// ——无 run 上下文（run 尚未创建）时以结构化审计日志承载审计事件）
+fn emit_remote_mode_downgrade_audit() {
+    tracing::info!(
+        target: "security.audit",
+        kind = "remote-run",
+        operation = %REMOTE_MODE_DOWNGRADE_AUDIT_MARKER,
+        from = "full-access",
+        to = "ask",
+        "远程 run 权限模式降级（full-access → ask，审计标记）"
+    );
+}
+
+/// 远程审批双轨路由（R1-10 T-14 / D5 §4.4 纯函数）：
+/// - 桌面端本地用户在场 → 双轨确认（[RemoteApprovalRoute::Dual]）：移动端
+///   确认 + 桌面端弹窗确认，任一方拒绝即拒绝（防手机离身/被他人持有时
+///   桌面端无人察觉地批准）；
+/// - 桌面不在场（无人值守）→ 移动端单一确认（[RemoteApprovalRoute::RemoteOnly]），
+///   审计标记 remote-only（事后追责可区分单方批准与双轨批准）。
+/// 「桌面在场」判定由引擎侧装配注入，缺省 false = 保守模式（D5 §4.4）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteApprovalRoute {
+    /// 双轨确认：移动端 + 桌面端弹窗（任一方拒绝即拒绝）
+    Dual,
+    /// 移动端单一确认（无人值守；审计标记 remote-only）
+    RemoteOnly,
+}
+
+/// remote-only 审计标记（D5 §4.4：区分「手机端单方批准」与「双轨批准」）
+pub(crate) const REMOTE_ONLY_AUDIT_MARKER: &str = "remote-only";
+
+/// 双轨裁决路由纯函数（R1-10 T-14：desktop_user_present 由装配面注入，
+/// 缺省 false = 无人值守按 remote-only 处理）
+pub(crate) fn route_remote_approval(desktop_user_present: bool) -> RemoteApprovalRoute {
+    if desktop_user_present {
+        RemoteApprovalRoute::Dual
+    } else {
+        RemoteApprovalRoute::RemoteOnly
+    }
+}
+
+/// 双轨裁决合成（R1-10 T-14：任一方拒绝即拒绝——仅双方均批准才放行）
+pub(crate) fn combine_dual_decisions(mobile_approved: bool, desktop_approved: bool) -> bool {
+    mobile_approved && desktop_approved
+}
+
+/// remote-source-attempt 审计标记载荷（R1-10 T-07 / D5 §4.5 第三层：
+/// 密钥命令面触达；规范载荷 = operation + 命令名 + blocked 决策——测试
+/// 锁定标记形状，发射侧（router 白名单拒绝分支）携带同一内容）
+pub(crate) fn remote_source_attempt_marker(command: &str) -> String {
+    format!(
+        "operation=remote-source-attempt;command={command};decision=blocked"
+    )
+}
+
+/// 发射 remote-source-attempt 审计（R1-10 T-07：远程来源触达被禁命令面；
+/// 结构化审计日志 target: "security.audit"——SecurityAuditOperation 尚无
+/// remote-* 变体（R1-10 确认），§8.5 事件面扩展就绪后升级为
+/// AgentEvent::SecurityAudit 发射）
+pub(crate) fn emit_remote_source_attempt_audit(command: &str) {
+    tracing::info!(
+        target: "security.audit",
+        kind = "remote-command",
+        operation = "remote-source-attempt",
+        command = command,
+        decision = "blocked",
+        "远程来源触达被禁命令面（白名单拒绝 + 审计标记）"
+    );
 }
 
 #[async_trait::async_trait]
@@ -321,14 +415,19 @@ impl ApiBackend for CoreStateBackend {
                 id
             }
         };
-        // 权限模式 wire 映射（full-access 移动端不可改——协议面不提供
-        // 该选项，M6 C24）；history 为既有 HistoryMessage 镜像（移动端
-        // 一般省略，桌面 SessionHistoryCache 兜底）
-        let permission_mode = params.permission_mode.map(|mode| match mode {
-            conex_types::device::PermissionMode::Ask => "ask".to_string(),
-            conex_types::device::PermissionMode::Plan => "plan".to_string(),
-            conex_types::device::PermissionMode::FullAccess => "full-access".to_string(),
+        // R1-10 T-08：远程 run 权限模式装配——full-access 恒降级 ask
+        // （远程不存在 full-access，D5 §4.6.1 / TH-12 直接缓解）；降级发
+        // remote-mode-downgrade 审计标记。history 为既有 HistoryMessage
+        // 镜像（移动端一般省略，桌面 SessionHistoryCache 兜底）
+        let (mode_clamped, mode_downgraded) = apply_remote_mode(params.permission_mode);
+        let permission_mode = mode_clamped.map(|mode| match mode {
+            PermissionMode::Ask => "ask".to_string(),
+            PermissionMode::Plan => "plan".to_string(),
+            PermissionMode::FullAccess => "full-access".to_string(),
         });
+        if mode_downgraded {
+            emit_remote_mode_downgrade_audit();
+        }
         let history = params
             .history
             .map(|values| {
@@ -530,5 +629,84 @@ fn resolve_deny_run_id(core: &CoreRunState, params: &DenyParams) -> Result<Strin
                 format!("tool_call_id 不在待审批集合：{}", params.tool_call_id),
             )
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── R1-10 T-08：远程权限模式上限（D5 §4.6.1 / §9.2 矩阵）──
+
+    /// full-access 申报 → 恒降级 ask（min(requested, Ask) 截断）并返回
+    /// 降级标记（驱动 remote-mode-downgrade 审计）；ask / plan / None 原样
+    #[test]
+    fn t08_apply_remote_mode_clamps_full_access_to_ask() {
+        assert_eq!(
+            apply_remote_mode(Some(PermissionMode::FullAccess)),
+            (Some(PermissionMode::Ask), true),
+            "full-access 必须降级 ask + 降级标记"
+        );
+        assert_eq!(
+            apply_remote_mode(Some(PermissionMode::Ask)),
+            (Some(PermissionMode::Ask), false)
+        );
+        assert_eq!(
+            apply_remote_mode(Some(PermissionMode::Plan)),
+            (Some(PermissionMode::Plan), false),
+            "plan 不降级（D5 §4.6.1：Plan 不变）"
+        );
+        assert_eq!(apply_remote_mode(None), (None, false));
+    }
+
+    /// 降级审计标记常量形状（remote-mode-downgrade；§8.2 命名冻结）
+    #[test]
+    fn t08_remote_mode_downgrade_audit_marker_shape() {
+        assert_eq!(REMOTE_MODE_DOWNGRADE_AUDIT_MARKER, "remote-mode-downgrade");
+    }
+
+    // ── R1-10 T-14：双轨确认路由纯函数（D5 §4.4）──
+
+    /// 桌面在线 → 双轨（移动端 + 桌面端弹窗）
+    #[test]
+    fn t14_dual_track_route_when_desktop_present() {
+        assert_eq!(route_remote_approval(true), RemoteApprovalRoute::Dual);
+    }
+
+    /// 无人值守（缺省 false = 保守模式）→ RemoteOnly + remote-only 审计标记
+    #[test]
+    fn t14_unattended_routes_to_remote_only_marker() {
+        assert_eq!(route_remote_approval(false), RemoteApprovalRoute::RemoteOnly);
+        assert_eq!(REMOTE_ONLY_AUDIT_MARKER, "remote-only");
+    }
+
+    /// 双轨裁决合成：任一方拒绝即拒绝——仅双方均批准才放行
+    #[test]
+    fn t14_dual_decision_either_party_denies_rejects() {
+        assert!(
+            combine_dual_decisions(true, true),
+            "移动端 + 桌面端均批准 → 放行"
+        );
+        assert!(
+            !combine_dual_decisions(true, false),
+            "桌面端拒绝 → 双轨拒绝"
+        );
+        assert!(
+            !combine_dual_decisions(false, true),
+            "移动端拒绝 → 双轨拒绝"
+        );
+        assert!(!combine_dual_decisions(false, false));
+    }
+
+    // ── R1-10 T-07：remote-source-attempt 审计标记（D5 §4.5 第三层）──
+
+    /// 标记载荷形状：operation=remote-source-attempt + 命令名 + blocked 决策
+    /// （发射侧结构化审计日志携带同一内容——审计断言锚）
+    #[test]
+    fn t07_remote_source_attempt_marker_shape() {
+        let marker = remote_source_attempt_marker("config_secret_reveal");
+        assert!(marker.contains("operation=remote-source-attempt"));
+        assert!(marker.contains("command=config_secret_reveal"));
+        assert!(marker.contains("decision=blocked"));
     }
 }

@@ -5023,6 +5023,146 @@ mod tests {
         assert_eq!(envelope["request"]["metadata"]["arbiter"], "main-agent");
     }
 
+    // ── R1-10 T-10：审批伪造（对不存在 tool_call_id 发批准）──
+
+    /// 组装 T-10 活动 run：记录型发射桥 + 审批门（与 build_active_run 同
+    /// 装配面，仅事件桥替换为可捕获发射器——断言「无 approval-resolved 落地」）
+    async fn t10_active_run(
+        state: &CoreRunState,
+        session_id: &str,
+        run_id: &str,
+    ) -> (Arc<ActiveRun>, Arc<RecordingEmitter>) {
+        let handle = Arc::new(tokio::sync::Mutex::new(
+            state
+                .run_manager
+                .start_run(session_id, run_id)
+                .await
+                .expect("start_run"),
+        ));
+        let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
+            state.store.clone(),
+            0,
+        )));
+        let (bridge, emitter) = recording_bridge();
+        let bridge = Arc::new(BufferedRunEventBridge::new(bridge, run_id.to_string()));
+        let broadcast_bridge = Arc::clone(&bridge);
+        let broadcast_run_id = run_id.to_string();
+        let broadcast = Box::new(move |event: AgentEvent| {
+            let envelope = AgentEventEnvelope::new(event, Some(broadcast_run_id.clone()), None);
+            broadcast_bridge.emit(&envelope);
+            broadcast_bridge.flush();
+        });
+        let approval = Arc::new(ApprovalGateImpl::new(
+            run_id.to_string(),
+            session_id.to_string(),
+            None,
+            broadcast,
+            Arc::clone(&handle),
+            state.store.clone(),
+            None,
+        ));
+        let active = Arc::new(ActiveRun {
+            session_id: session_id.to_string(),
+            run_id: run_id.to_string(),
+            handle,
+            queue,
+            control_bus: Arc::new(Mutex::new(ControlBus::new())),
+            abort_signal: AbortSignal::new(),
+            approval,
+            bridge,
+            delta_sink_active: true,
+            escape_watch: Mutex::new(None),
+            driver: Mutex::new(None),
+            user_touched: AtomicBool::new(false),
+            subagent: None,
+            audit_persist: Mutex::new(None),
+        });
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(run_id.to_string(), Arc::clone(&active));
+        (active, emitter)
+    }
+
+    /// 等待审批请求进入待审批集合（request_approval 先广播后注册，轮询
+    /// 而非固定 sleep——T-10 伪造审批时序确定性）
+    async fn wait_pending(gate: &ApprovalGateImpl, tool_call_id: &str, timeout_ms: u64) {
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+        while !gate.contains_pending(tool_call_id) {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "审批请求未在窗口内进入待审批集合"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    /// T-10 审批伪造：对不存在 tool_call_id 的审批（D-2 攻击场景——伪造端
+    /// 企图批准不存在的审批）→ resolve NotFound + 无 approval-resolved 落地；
+    /// 真实待审批请求不受影响（仍 pending、仍可正常裁决）
+    #[tokio::test]
+    async fn t10_approve_forged_tool_call_id_returns_not_found_no_event() {
+        let (state, _registry) = state_with_background();
+        let (active, emitter) = t10_active_run(&state, "sess-t10", "run-t10").await;
+        let gate = Arc::clone(&active.approval);
+
+        // 真实审批请求（tc-real）进入待审批集合
+        let gate_owner = Arc::clone(&gate);
+        let wait = tokio::spawn(async move {
+            gate_owner
+                .request_approval("tc-real", "write_file", &serde_json::json!({ "path": "x.md" }), None)
+                .await
+        });
+        wait_pending(&gate, "tc-real", 3_000).await;
+
+        // 伪造审批（不存在的 tool_call_id）：approve 必须 NotFound
+        let err = approve_tool_impl(&state, "run-t10", "tc-fake", Some("approved".to_string()))
+            .await
+            .expect_err("伪造审批必须被拒");
+        assert!(
+            matches!(&err, CoreError::NotFound(_)),
+            "伪造审批必须 NotFound，实际：{err:?}"
+        );
+        assert!(
+            err.to_string().contains("not in pending approvals"),
+            "NotFound 文案必须含 pending 关键字（移动端据此收敛冲突）：{err}"
+        );
+        // 无 approval-resolved 落地（事件桥零条——杜绝伪造审计事件）
+        let payloads = emitter.0.lock().unwrap().clone();
+        assert!(
+            !payloads.iter().any(|p| p.contains("approval-resolved")),
+            "伪造审批不得落地 approval-resolved 审计事件"
+        );
+        // 真实请求仍 pending；伪造 id 不在集合
+        assert!(gate.contains_pending("tc-real"), "真实审批必须仍 pending");
+        assert!(!gate.contains_pending("tc-fake"), "伪造 id 不得进入待审批集合");
+
+        // 拒绝路径对称：deny 伪造 id 同样 NotFound
+        let err = deny_tool_impl(&state, "run-t10", "tc-fake", Some("风险过高"))
+            .await
+            .expect_err("伪造 deny 必须被拒");
+        assert!(matches!(err, CoreError::NotFound(_)));
+        assert!(gate.contains_pending("tc-real"), "伪造 deny 后真实审批仍 pending");
+
+        // 收尾：真实审批仍可正常裁决（伪造审批不破坏审批链路）——经命令面
+        // approve_tool_impl 裁决（与 T-10 场景同一入口，落 approval-resolved）
+        approve_tool_impl(&state, "run-t10", "tc-real", Some("approved".to_string()))
+            .await
+            .expect("真实审批必须可裁决");
+        let decision = tokio::time::timeout(Duration::from_secs(2), wait)
+            .await
+            .expect("审批应在时限内返回")
+            .expect("request_approval 不应 panic");
+        assert_eq!(decision, ApprovalDecision::Approved);
+        // 裁决后落地 approval-resolved（真实验证：事件只在真实裁决后出现）
+        let payloads = emitter.0.lock().unwrap().clone();
+        assert!(
+            payloads.iter().any(|p| p.contains("approval-resolved")),
+            "真实裁决后必须落地 approval-resolved"
+        );
+    }
+
     /// 死锁防护（开放问题 6.4）：裁决者（主 agent）正在 wait 该子代理 →
     /// 路由转用户（metadata 不标注 main-agent，载荷仍携带请求方身份）；
     /// 未检测到 wait → 保持主 agent 裁决（metadata.arbiter=main-agent）
@@ -8827,6 +8967,144 @@ mod tests {
         );
         wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
         wait_agent_rows_terminal(&db, "sess-main", 2, Duration::from_secs(20)).await;
+    }
+
+    // ── R1-10 T-08：远程 run 权限模式（full-access 降级 ask + 危险工具
+    // 仍 NeedsApproval；D5 §9.1 / §9.2 矩阵）────────────────────────
+
+    /// 危险工具脚本（主 agent 单发 write_file 尝试 + 收口 + 兜底；
+    /// 越界路径不写盘——审批触发与写盘成败解耦）
+    fn dangerous_write_scripts() -> Vec<Vec<ProviderStreamEvent>> {
+        vec![
+            vec![
+                ProviderStreamEvent::text("写文件。"),
+                ProviderStreamEvent::tool_call(
+                    Some("c1".to_string()),
+                    "write_file",
+                    serde_json::json!({ "path": "../escape-r110.md", "content": "x" }),
+                ),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("写文件结果已收到。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            // 兜底（越界调用）：安全收口
+            vec![
+                ProviderStreamEvent::text("兜底。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]
+    }
+
+    /// ask 模式的 run 选项（远程降级后的生效模式；对齐 test_options 其余
+    /// 字段——主 agent run，无子代理配置）
+    fn ask_mode_options(run_id: &str, session_id: &str, prompt: &str) -> RunTaskOptions {
+        let mut options = test_options(run_id, session_id, prompt);
+        options.permission_mode = Some("ask".to_string());
+        options
+    }
+
+    /// 轮询等待指定工具的 approval-requested 广播（R1-10 T-08 断言锚；
+    /// 返回触发次数——≥1；窗口内未触发则 panic——审批门缺失即红）
+    async fn wait_approval_requested(
+        emitter: &Arc<RecordingEmitter>,
+        tool_name: &str,
+        window: Duration,
+    ) -> usize {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            let payloads = emitter.0.lock().unwrap().clone();
+            let hits = payloads
+                .iter()
+                .filter(|p| p.contains("approval-requested"))
+                .filter_map(|p| {
+                    let value: serde_json::Value = serde_json::from_str(p).ok()?;
+                    let name = value.get("request")?.get("toolName")?.as_str()?;
+                    (name == tool_name).then_some(())
+                })
+                .count();
+            if hits > 0 {
+                return hits;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "approval-requested（{tool_name}）未在窗口内触发——危险工具未走审批门即红"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+    }
+
+    /// T-08 基线：ask 模式（远程降级后的生效模式）run 内危险工具仍
+    /// NeedsApproval——approval-requested 触发 → 裁决放行 → 工具执行 →
+    /// run 收口（复用 I-02 审批链测试基建）
+    #[tokio::test]
+    async fn t08_ask_mode_dangerous_tool_needs_approval() {
+        let main = Arc::new(TestProvider::with_scripts(dangerous_write_scripts()));
+        let sub = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("无子代理。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, _db, _main, _sub, emitter) =
+            subagent_state_with_providers(main, sub, "deepseek-v4-flash");
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            ask_mode_options("run-ask", "sess-main", "写文件（ask 模式）"),
+        )
+        .await
+        .expect("ask 模式 run 发起成功");
+
+        // 危险工具（write_file）必须弹审批（NeedsApproval）；未触发即红
+        let hits = wait_approval_requested(&emitter, "write_file", Duration::from_secs(15)).await;
+        assert!(hits >= 1, "write_file 必须至少触发一次审批");
+        // 用户裁决（I-02 resolve 入口）→ 工具执行 → 收口
+        resolve_all_pending_approvals(&state, Duration::from_secs(20)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
+    }
+
+    /// T-08 核心：远程 run 装配——REST 面（CoreStateBackend::run_task）
+    /// 申报 full-access → 装配面降级 ask（apply_remote_mode）→ run 内
+    /// 危险工具仍 NeedsApproval。降级失效（approval_enabled=false）则
+    /// 审批不触发——本测试在等待窗口内直接红
+    #[tokio::test]
+    async fn t08_remote_run_full_access_downgraded_dangerous_tool_gated() {
+        let main = Arc::new(TestProvider::with_scripts(dangerous_write_scripts()));
+        let sub = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("无子代理。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, _db, _main, _sub, emitter) =
+            subagent_state_with_providers(main, sub, "deepseek-v4-flash");
+        state.run_restore().await;
+
+        // 远程装配点：CoreStateBackend（REST 写面直调体）——wire 载荷
+        // permissionMode=full-access（移动端申报）→ 装配面降级 ask +
+        // remote-mode-downgrade 审计标记
+        use crate::server::backend::ApiBackend;
+        let backend = crate::server::core_backend::CoreStateBackend::new(Arc::clone(&state));
+        backend
+            .run_task(conex_types::device::RunTaskParams {
+                session_id: Some("sess-main".to_string()),
+                prompt: "远程 run（申报 full-access）".to_string(),
+                prompt_ref: None,
+                mode: Some("task".to_string()),
+                cwd: None,
+                permission_mode: Some(conex_types::device::PermissionMode::FullAccess),
+                history: None,
+                client_message_id: None,
+            })
+            .await
+            .expect("远程 run 发起成功");
+
+        // 降级失效即红：full-access 直通 → approval_enabled=false → 危险
+        // 工具不弹审批 → 本断言超时失败
+        let hits = wait_approval_requested(&emitter, "write_file", Duration::from_secs(15)).await;
+        assert!(hits >= 1, "降级后 ask 模式：write_file 必须仍 NeedsApproval");
+        // 裁决 → 执行 → 收口（与本地 ask run 同一审批链，无远程例外分支）
+        resolve_all_pending_approvals(&state, Duration::from_secs(20)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
     }
     /// 验收 5：kill_all 引擎侧实现（T-D-09/T-D-13 ForceCancelSink 接线）——
     /// 按 subagent_run_id 定位活动 run 的 ControlBus 投递 L3 强停 + 行归一

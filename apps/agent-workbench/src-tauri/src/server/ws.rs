@@ -513,7 +513,10 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         .iter()
         .find(|record| record.hash == token_hash)
         .map(|record| record.label.clone())
-        .unwrap_or_else(|| token_hash[..8.min(token_hash.len())].to_string());
+        // M-REDACT（D5 §6.3）：兜底标签只允许 sha256 前缀 12 hex——
+        // 旧实现 8 hex 截断，对齐铁律 12 hex 口径（脱敏单一真源在
+        // conex-telemetry::redact，避免各处自造截断口径漂移）
+        .unwrap_or_else(|| conex_telemetry::redact::redact_token(&token));
     ws.on_upgrade(move |socket| handle_socket(socket, state, token_hash, label))
 }
 
@@ -2295,6 +2298,52 @@ mod tests {
             .await
             .expect("旧连接必须收到踢出信号");
         assert_eq!(kill_rx.borrow().as_deref(), Some(KICK_DUPLICATE));
+    }
+
+    // ── R1-10 T-02：同令牌多端并发（窃听重放）──
+
+    /// T-02 窃听重放令牌 → 同令牌多端并发。按现有实现语义（P0-3 裁决
+    /// 「每设备一主连接」）断言：第二连接被接受、旧连接被踢出（携带
+    /// duplicate-connection 告警信号）、注册表恒 1 条、令牌槽迁移到新
+    /// 连接（撤销全链命中新连接）；新连接注销后令牌槽释放可再注册。
+    #[tokio::test]
+    async fn t02_same_token_concurrent_second_connection_evicts_first() {
+        let registry = WsRegistry::new();
+        // 第一连接（合法设备）
+        let (kill_tx_old, mut kill_rx_old) = watch::channel::<Option<String>>(None);
+        let old_id = match registry.register("hash-t02", "dev-a", kill_tx_old, 1000) {
+            RegisterOutcome::Registered(id) => id,
+            _ => panic!("第一连接注册必须成功"),
+        };
+        // 第二连接（同一令牌——窃听重放 / 双端并发）
+        let (kill_tx_new, _) = watch::channel::<Option<String>>(None);
+        let new_id = match registry.register("hash-t02", "dev-b", kill_tx_new, 2000) {
+            RegisterOutcome::Registered(id) => id,
+            _ => panic!("第二连接注册必须成功"),
+        };
+        assert_ne!(old_id, new_id, "第二连接分配新 id");
+        // 每令牌并发语义：注册表恒 1 条（旧连接被踢出）
+        assert_eq!(registry.count(), 1, "同令牌只保留最新连接");
+        // 告警信号：旧连接收到 duplicate-connection 踢出原因
+        let _ = tokio::time::timeout(Duration::from_secs(1), kill_rx_old.changed())
+            .await
+            .expect("旧连接必须收到踢出信号");
+        assert_eq!(
+            kill_rx_old.borrow().as_deref(),
+            Some(KICK_DUPLICATE),
+            "踢出原因必须携带 duplicate-connection（告警信号）"
+        );
+        // 令牌槽已迁移：撤销全链（kick_by_token_hash）命中新连接而非旧连接
+        let kicked = registry.kick_by_token_hash("hash-t02", "token-revoked");
+        assert_eq!(kicked, vec![new_id], "撤销必须命中当前活跃连接（新连接）");
+        // 新连接注销后令牌槽释放：第三次注册可成功
+        registry.unregister(new_id);
+        let (kill_tx3, _) = watch::channel::<Option<String>>(None);
+        match registry.register("hash-t02", "dev-c", kill_tx3, 3000) {
+            RegisterOutcome::Registered(id) => assert_ne!(id, old_id, "第三次注册分配新 id"),
+            _ => panic!("注销后同令牌应可重新注册"),
+        }
+        assert_eq!(registry.count(), 1, "并发连接数恒为 1");
     }
 
     #[test]

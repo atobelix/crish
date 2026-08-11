@@ -219,6 +219,12 @@ impl PairingCoordinator {
                 "失败次数过多，请稍后再试",
             )),
             VerifyOutcome::Used => Err(ServerError::protocol(DeviceErrorCode::PairUsed, "配对码已被使用")),
+            // R1-10 T-05：5 次爆破失败 → 配对会话销毁；冷却结束后正确码
+            // 也永久失效，客户端必须重新开启配对
+            VerifyOutcome::Destroyed => Err(ServerError::protocol(
+                DeviceErrorCode::PairInvalidCode,
+                "配对码已失效（失败次数过多会话销毁），请重新开启配对",
+            )),
             VerifyOutcome::NotAwaiting => Err(ServerError::protocol(
                 DeviceErrorCode::PairInvalidCode,
                 "当前未处于配对状态",
@@ -376,7 +382,10 @@ fn pick_recommended_ip(ips: &[String]) -> Option<String> {
     }
     for s in ips {
         if let Some(ip) = parse(s) {
-            if ip.is_ipv4() && !ip.is_loopback() {
+            // R1-10 修复：非回环 IPv4 兜底必须排除未指定占位（0.0.0.0）——
+            // 否则「无可选地址」兜底会把占位符当推荐 IP 下发（QR 码/手动
+            // 输入均不可用），与函数 doc「返回 None 表示无可选地址」相悖
+            if ip.is_ipv4() && !ip.is_loopback() && !ip.is_unspecified() {
                 return Some(s.clone());
             }
         }
@@ -408,7 +417,16 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
 /// 判定 IP 是否可被手机直连：排除回环/未指定/链路本地/组播。
 /// 服务监听为 IPv4（0.0.0.0），IPv6 地址不可直连，不在集合内。
 fn is_usable_lan_ip(ip: &std::net::IpAddr) -> bool {
-    ip.is_ipv4() && !ip.is_loopback() && !ip.is_unspecified() && !ip.is_link_local()
+    fn is_link_local(ip: &std::net::IpAddr) -> bool {
+        match ip {
+            std::net::IpAddr::V4(v4) => {
+                let o = v4.octets();
+                o[0] == 169 && o[1] == 254
+            }
+            std::net::IpAddr::V6(v6) => (v6.segments()[0] & 0xffc0) == 0xfe80,
+        }
+    }
+    ip.is_ipv4() && !ip.is_loopback() && !ip.is_unspecified() && !is_link_local(ip)
         && !ip.is_multicast()
 }
 
@@ -440,6 +458,7 @@ fn firewall_hint() -> String {
 mod windows_ip_enum {
     #![allow(unsafe_code)] // 受控 FFI：仅指针遍历 + 明确的结构体读取，已评审
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    use windows_sys::Win32::NetworkManagement::IpHelper::IP_ADAPTER_ADDRESSES_LH;
     use windows_sys::Win32::Networking::WinSock::{
         AF_INET, SOCKADDR_IN, SOCKADDR_IN6, SOCKET_ADDRESS,
     };
@@ -450,9 +469,7 @@ mod windows_ip_enum {
 
     /// 遍历适配器单播地址链表，仅取 IPv4（服务监听 0.0.0.0，v6 不可直连）。
     pub fn local_unicast_ips() -> Vec<IpAddr> {
-        use windows_sys::Win32::NetworkManagement::IpHelper::{
-            GetAdaptersAddresses, IP_ADAPTER_ADDRESSES_LH,
-        };
+        use windows_sys::Win32::NetworkManagement::IpHelper::GetAdaptersAddresses;
         let mut out = Vec::new();
         let mut buf = Box::new(Align8Buf([0u8; 65536]));
         let mut size = std::mem::size_of::<Align8Buf>() as u32;
@@ -693,6 +710,66 @@ mod tests {
             .expect_err("错误码必须拒绝");
         assert_eq!(err.device_code().as_str(), "pair.invalid_code");
         assert_eq!(coordinator.status(now).failed_attempts, 1);
+    }
+
+    // ── R1-10 T-05：配对码爆破 → 5 次失败销毁会话 + 锁定（协调器全链）──
+
+    /// T-05 协调器全链：4 次失败计数 → 第 5 次销毁会话进入冷却 →
+    /// 冷却期内正确码被拒（pair.too_many_attempts）→ 冷却结束后正确码
+    /// 永久失效（pair.invalid_code）→ 重新开启配对签发新码可成功
+    #[test]
+    fn t05_bruteforce_destroys_pair_session_via_coordinator() {
+        let (coordinator, _) = test_coordinator();
+        let now = crate::server::now_ms();
+        let code = valid_code(&coordinator);
+
+        // 4 次错误：仅计数
+        for i in 1..=4 {
+            let err = coordinator
+                .complete_pairing("7K4PQ2MB9XRT", "evil", now + i)
+                .expect_err("错误码必须拒绝");
+            assert_eq!(err.device_code().as_str(), "pair.invalid_code");
+            // R1-10 并行阵营 in-flight 修复（协调标记）：failed_attempts 为
+            // u32 而循环变量 i 为 u64——断言对齐（与 pair.rs:432 同模式）
+            assert_eq!(coordinator.status(now + i).failed_attempts, i as u32);
+        }
+        // 第 5 次错误：锁定 + 销毁（冷却期 5 分钟；正确码冷却期内也被拒）
+        let err = coordinator
+            .complete_pairing("7K4PQ2MB9XRT", "evil", now + 5)
+            .expect_err("第 5 次错误必须拒绝");
+        assert_eq!(err.device_code().as_str(), "pair.invalid_code");
+        let err = coordinator
+            .complete_pairing(&code, "evil", now + 6)
+            .expect_err("冷却期内正确码必须被拒");
+        assert_eq!(
+            err.device_code().as_str(),
+            "pair.too_many_attempts",
+            "冷却期内正确码 → too_many_attempts"
+        );
+        // 状态面：会话已销毁 → 无活跃码、失败计数归零（重新配对语义）
+        let status = coordinator.status(now + 6);
+        assert_eq!(status.state, "waiting-input");
+        assert!(status.code_remaining_ms.is_none(), "销毁后无活跃码");
+        assert_eq!(status.failed_attempts, 0, "销毁后失败计数归零");
+
+        // 冷却结束后：正确码永久失效（pair.invalid_code，Destroyed 映射）
+        let after_cooldown = now + 5 + crate::server::pair::PAIR_LOCK_COOLDOWN_MS + 1;
+        let err = coordinator
+            .complete_pairing(&code, "evil", after_cooldown)
+            .expect_err("冷却结束后销毁的会话必须仍拒绝正确码");
+        assert_eq!(
+            err.device_code().as_str(),
+            "pair.invalid_code",
+            "冷却结束后正确码 → 失效（会话销毁）"
+        );
+
+        // 重新开启配对：新码签发成功，且能完成配对
+        let restart = coordinator.start_pairing(after_cooldown + 1).expect("重新开启配对必须成功");
+        assert_ne!(restart.code, code, "重新配对必须换新码");
+        let raw = coordinator
+            .complete_pairing(&restart.code, "fresh-device", after_cooldown + 2)
+            .expect("新配对码必须可完成配对");
+        assert_eq!(raw.len(), 64);
     }
 
     #[test]

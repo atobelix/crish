@@ -56,6 +56,9 @@ pub enum VerifyOutcome {
     Locked,
     /// 码已被使用（一次性）
     Used,
+    /// R1-10 T-05：失败达上限后配对会话已销毁（冷却结束后正确码也永久
+    /// 失效——5 次爆破即销毁会话，D5 T-05「5 次失败销毁会话 + 锁定」）
+    Destroyed,
     /// 状态机不在等待输入态
     NotAwaiting,
     /// 输入无法标准化（对应 `pair.invalid_code`）
@@ -79,6 +82,10 @@ pub struct PairCodeRecord {
     pub locked_until_ms: u64,
     /// 已使用（一次性；成功后立即作废）
     pub consumed: bool,
+    /// R1-10 T-05：失败达上限后会话销毁（正确码此后永久失效；与
+    /// [Self::locked_until_ms] 同时置位——冷却期内 Locked、冷却后
+    /// Destroyed）
+    pub destroyed: bool,
 }
 
 impl PairCodeRecord {
@@ -105,10 +112,13 @@ impl PairCodeRecord {
 }
 
 /// 记录一次失败尝试；达上限进入冷却窗口
+/// R1-10 T-05：达上限同时销毁配对会话（destroyed）——冷却只是第一道闸，
+/// 冷却结束后该码也永久失效（D5 T-05「5 次失败销毁会话 + 锁定」）
 fn record_failure(record: &mut PairCodeRecord, now_ms: u64) {
     record.failed_attempts = record.failed_attempts.saturating_add(1);
     if record.failed_attempts >= PAIR_MAX_ATTEMPTS {
         record.locked_until_ms = now_ms + PAIR_LOCK_COOLDOWN_MS;
+        record.destroyed = true;
     }
 }
 
@@ -159,7 +169,7 @@ impl PairStateMachine {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn start(&mut self, now_ms: u64) -> Result<PairCode, ServerError> {
         self.codes
-            .retain(|record| !record.is_expired(now_ms) && !record.consumed);
+            .retain(|record| !record.is_expired(now_ms) && !record.consumed && !record.destroyed);
         if self.codes.len() >= PAIR_MAX_ACTIVE as usize {
             return Err(ServerError::internal(
                 "并发配对码已达上限（≤3），请先关闭当前配对",
@@ -173,6 +183,7 @@ impl PairStateMachine {
             failed_attempts: 0,
             locked_until_ms: 0,
             consumed: false,
+            destroyed: false,
         });
         self.state = PairState::WaitingInput;
         Ok(code)
@@ -189,7 +200,7 @@ impl PairStateMachine {
         };
         let Some(record) = self.codes.iter_mut().find(|record| record.code == code) else {
             // 无匹配码：不在等待输入态 → NotAwaiting；否则记为「主待验码」
-            // （最新一个未消耗未过期）的一次失败尝试（单码失败计数语义）
+            // （最新一个未消耗未过期未销毁）的一次失败尝试（单码失败计数语义）
             if self.state != PairState::WaitingInput {
                 return VerifyOutcome::NotAwaiting;
             }
@@ -197,7 +208,7 @@ impl PairStateMachine {
                 .codes
                 .iter_mut()
                 .rev()
-                .find(|r| !r.consumed && !r.is_expired(now_ms))
+                .find(|r| !r.consumed && !r.destroyed && !r.is_expired(now_ms))
             {
                 record_failure(primary, now_ms);
             }
@@ -215,6 +226,10 @@ impl PairStateMachine {
         if record.is_locked(now_ms) {
             return VerifyOutcome::Locked;
         }
+        // R1-10 T-05：冷却结束后销毁态仍拒绝（会话已销毁，正确码永久失效）
+        if record.destroyed {
+            return VerifyOutcome::Destroyed;
+        }
         record.consumed = true;
         // 一次性作废；进入密钥交换阶段（完整配对链 R1-07）
         self.state = PairState::KeyVerify;
@@ -229,12 +244,12 @@ impl PairStateMachine {
         self.state = PairState::Idle;
     }
 
-    /// 最新活跃码（未消耗未过期；无 → None）。R1-07 配对协调器消费。
+    /// 最新活跃码（未消耗未过期未销毁；无 → None）。R1-07 配对协调器消费。
     pub fn active_code(&self, now_ms: u64) -> Option<PairCode> {
         self.codes
             .iter()
             .rev()
-            .find(|record| !record.consumed && !record.is_expired(now_ms))
+            .find(|record| !record.consumed && !record.destroyed && !record.is_expired(now_ms))
             .map(|record| record.code.clone())
     }
 
@@ -243,16 +258,17 @@ impl PairStateMachine {
         self.codes
             .iter()
             .rev()
-            .find(|record| !record.consumed && !record.is_expired(now_ms))
+            .find(|record| !record.consumed && !record.destroyed && !record.is_expired(now_ms))
             .map(|record| record.expires_at_ms.saturating_sub(now_ms))
     }
 
     /// 最新活跃码的失败尝试次数（无活跃码 → 0）。R1-07 状态面消费。
+    /// R1-10 T-05：销毁的会话不计入活跃（销毁后 → 0，状态面提示重新配对）。
     pub fn failed_attempts(&self) -> u32 {
         self.codes
             .iter()
             .rev()
-            .find(|record| !record.consumed)
+            .find(|record| !record.consumed && !record.destroyed)
             .map(|record| record.failed_attempts)
             .unwrap_or(0)
     }
@@ -398,6 +414,66 @@ mod tests {
         assert_eq!(
             machine.verify(code.as_str(), 1_000 + PAIR_CODE_TTL_MS),
             VerifyOutcome::Expired
+        );
+    }
+
+    // ── R1-10 T-05：配对码爆破 → 5 次失败销毁会话 + 锁定 ──
+
+    /// T-05 爆破防线全链：5 次失败 → 冷却期内正确码被拒（Locked）；
+    /// 冷却结束后正确码永久失效（Destroyed，会话销毁）→ 只能重新开启
+    /// 配对（新码）；销毁后状态面不再暴露失效码（active/failed 均归零）
+    #[test]
+    fn t05_bruteforce_five_failures_destroy_session_and_lock() {
+        let mut machine = PairStateMachine::new();
+        let code = machine.start(1_000).unwrap();
+        // 4 次错误：仅计数，不销毁
+        for i in 1..=4 {
+            assert_eq!(machine.verify("AAAAAAAAAAAA", 1_000 + i), VerifyOutcome::WrongCode);
+            assert_eq!(machine.failed_attempts(), i as u32, "第 {i} 次失败后计数应为 {i}");
+        }
+        // 第 5 次错误：锁定 + 销毁（冷却 5 分钟）
+        assert_eq!(machine.verify("AAAAAAAAAAAA", 1_005), VerifyOutcome::WrongCode);
+        {
+            let record = machine.codes().iter().find(|r| r.code == code).unwrap();
+            assert!(record.destroyed, "第 5 次失败必须销毁配对会话");
+            assert!(record.is_locked(1_005));
+            assert_eq!(record.failed_attempts, PAIR_MAX_ATTEMPTS);
+        }
+
+        // 冷却期内：正确码 → Locked（第一道闸）
+        assert_eq!(
+            machine.verify(code.as_str(), 1_006),
+            VerifyOutcome::Locked,
+            "冷却期内正确码必须被拒"
+        );
+        // 冷却结束后：正确码 → Destroyed（会话已销毁，永久失效）
+        // 第 5 次失败发生在 1_005 → 冷却截止 = 1_005 + PAIR_LOCK_COOLDOWN_MS
+        let after_cooldown = 1_005 + PAIR_LOCK_COOLDOWN_MS + 1;
+        {
+            let record = machine.codes().iter().find(|r| r.code == code).unwrap();
+            assert!(!record.is_locked(after_cooldown), "冷却应已结束");
+        }
+        assert_eq!(
+            machine.verify(code.as_str(), after_cooldown),
+            VerifyOutcome::Destroyed,
+            "冷却结束后销毁的会话仍必须拒绝正确码"
+        );
+        // 销毁后状态面：无活跃码（code_remaining_ms None / failed_attempts 0）
+        assert_eq!(machine.active_code(after_cooldown), None, "销毁后无活跃码");
+        assert_eq!(machine.active_code_remaining_ms(after_cooldown), None);
+        assert_eq!(machine.failed_attempts(), 0, "销毁后失败计数归零（重新配对语义）");
+
+        // 重新开启配对：新码可签发；销毁的旧记录被 purge 出表（永不复活）
+        let new_code = machine.start(after_cooldown + 1).expect("新配对码必须可签发");
+        assert_ne!(new_code, code, "重新配对必须换新码");
+        assert!(
+            !machine.codes().iter().any(|r| r.code == code),
+            "销毁的旧码必须被 purge（不再存在于码表）"
+        );
+        assert_eq!(
+            machine.verify(new_code.as_str(), after_cooldown + 2),
+            VerifyOutcome::Success,
+            "新码可正常完成配对"
         );
     }
 

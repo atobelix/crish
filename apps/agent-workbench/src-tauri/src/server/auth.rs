@@ -8,6 +8,7 @@
 //! - **持久化**：原子写（tmp + rename，对齐 `config/persistence.rs` 先例）；
 //!   权限位（Unix 0600 / Windows ACL 收紧）与撤销全链归 R1-07。
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -80,6 +81,9 @@ pub struct TokenStore {
     #[cfg_attr(not(test), allow(dead_code))]
     file: PathBuf,
     tokens: Vec<TokenRecord>,
+    // R1-10 T-01：认证失败计数表（attempted 令牌哈希 → 失败次数；纯计数，
+    // 不联动锁定——锁定/审计归 limiter 域，D5 §7.3 计数锚先行可测）
+    auth_failures: HashMap<String, u32>,
 }
 
 impl TokenStore {
@@ -88,6 +92,7 @@ impl TokenStore {
         Self {
             file,
             tokens: Vec::new(),
+            auth_failures: HashMap::new(),
         }
     }
 
@@ -106,6 +111,7 @@ impl TokenStore {
                     Self {
                         file: path.to_path_buf(),
                         tokens: file.tokens,
+                        auth_failures: HashMap::new(),
                     }
                 }
                 Err(error) => {
@@ -163,6 +169,22 @@ impl TokenStore {
             }
         }
         TokenVerdict::Invalid
+    }
+
+    // R1-10 T-01：认证失败计数（D5 §7.3「令牌认证失败（每设备）5 次累计」/
+    // T-01「失败计数」的计数锚；纯计数不联动锁定——锁定与审计归 limiter 域）
+    /// 记录一次认证失败（按尝试令牌的哈希计键；Revoked/Invalid 均计入）
+    pub fn record_failed_attempt(&mut self, raw: &str) {
+        let hash = sha256_hex(raw.as_bytes());
+        let entry = self.auth_failures.entry(hash).or_insert(0);
+        *entry = entry.saturating_add(1);
+    }
+
+    /// 指定尝试哈希的认证失败次数（无记录 → 0）
+    // R1-10 备注：路由鉴权面测试消费——dead_code 静音（测试构建保持检查）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn auth_failure_count(&self, hash: &str) -> u32 {
+        self.auth_failures.get(hash).copied().unwrap_or(0)
     }
 
     /// 撤销单个令牌（按哈希匹配；仅未撤销记录可撤销——重复撤销返回
@@ -319,11 +341,17 @@ pub async fn require_bearer_token(
             "缺少 Authorization: Bearer <token>",
         );
     };
-    let verdict = state
-        .tokens()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .verify(token, now_ms());
+    let verdict = {
+        let tokens = state.tokens();
+        let mut guard = tokens.lock().unwrap_or_else(|e| e.into_inner());
+        let verdict = guard.verify(token, now_ms());
+        if verdict != TokenVerdict::Valid {
+            // R1-10 T-01：认证失败计数（伪造端/失窃令牌重放均计入；
+            // 纯计数不联动锁定——锁定/审计归 limiter 域）
+            guard.record_failed_attempt(token);
+        }
+        verdict
+    };
     match verdict {
         TokenVerdict::Valid => next.run(request).await,
         TokenVerdict::Revoked => unauthorized(
@@ -486,5 +514,109 @@ mod tests {
         let store = TokenStore::load(&corrupt);
         assert!(store.is_empty(), "损坏文件应降级为空库");
         let _ = fs::remove_file(corrupt);
+    }
+
+    // ── R1-10 T-01：认证失败计数 ──
+
+    /// T-01 失败计数：伪造令牌（哈希不匹配）每次认证失败按尝试哈希累计；
+    /// 合法令牌校验成功不产生计数（计数器只对失败路径开火）
+    #[test]
+    fn t01_failed_attempts_counted_per_forged_token() {
+        let path = temp_file("t01-fail-count");
+        let mut store = TokenStore::new(path.clone());
+        store.issue("d1", 1000).expect("签发必须成功");
+
+        let forged = "f".repeat(64);
+        let forged_hash = sha256_hex(forged.as_bytes());
+        // 伪造令牌三连失败：计数必须递增（防爆破的计数锚）
+        for expected in 1..=3 {
+            assert_eq!(
+                store.verify(&forged, 2000),
+                TokenVerdict::Invalid,
+                "伪造令牌必须认证失败"
+            );
+            store.record_failed_attempt(&forged);
+            assert_eq!(
+                store.auth_failure_count(&forged_hash),
+                expected,
+                "第 {expected} 次失败后计数应为 {expected}"
+            );
+        }
+        // 合法令牌校验成功：不产生失败计数
+        let legit = store.issue("d2", 2500).expect("签发必须成功");
+        assert_eq!(store.verify(&legit, 3000), TokenVerdict::Valid);
+        assert_eq!(
+            store.auth_failure_count(&forged_hash),
+            3,
+            "合法校验不得改写伪造令牌的失败计数"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    // ── R1-10 T-11：撤销即时性 ──
+
+    /// T-11 撤销即时性：撤销立即生效（verify → Revoked）；重启加载后旧令牌
+    /// 重放/重连仍被拒（撤销持久化，注册表删除 ≠ 只杀活动会话）
+    #[test]
+    fn t11_revoked_token_never_valid_again_across_reload() {
+        let path = temp_file("t11-reload");
+        let mut store = TokenStore::new(path.clone());
+        let raw = store.issue("d1", 1000).expect("签发必须成功");
+        let hash = sha256_hex(raw.as_bytes());
+        assert_eq!(store.verify(&raw, 1500), TokenVerdict::Valid);
+
+        // 撤销 → 立即可见 Revoked
+        assert!(store.revoke(&hash), "撤销应命中");
+        assert_eq!(store.verify(&raw, 2000), TokenVerdict::Revoked);
+
+        // 重启加载（模拟服务重启后的重连请求）：旧令牌仍被拒
+        let mut reloaded = TokenStore::load(&path);
+        assert_eq!(reloaded.verify(&raw, 2500), TokenVerdict::Revoked);
+
+        // 撤销后新签发令牌不影响旧令牌状态（旧令牌不会被复活）
+        let new_raw = reloaded.issue("d2", 3000).expect("签发必须成功");
+        assert_eq!(reloaded.verify(&new_raw, 3100), TokenVerdict::Valid);
+        assert_eq!(reloaded.verify(&raw, 3200), TokenVerdict::Revoked);
+        let _ = fs::remove_file(path);
+    }
+
+    /// T-11 撤销即时性：撤销后校验失败（Revoked）不刷新 last_seen——撤销
+    /// 设备的「活性」随时间冻结，设备列表/审计不再把它当活跃设备
+    #[test]
+    fn t11_revoked_verification_does_not_touch_last_seen() {
+        let path = temp_file("t11-last-seen");
+        let mut store = TokenStore::new(path.clone());
+        let raw = store.issue("d1", 1000).expect("签发必须成功");
+        assert_eq!(store.verify(&raw, 2000), TokenVerdict::Valid);
+        assert_eq!(store.records()[0].last_seen_at_ms, 2000);
+
+        let hash = sha256_hex(raw.as_bytes());
+        assert!(store.revoke(&hash));
+        assert_eq!(store.verify(&raw, 3000), TokenVerdict::Revoked);
+        assert_eq!(
+            store.records()[0].last_seen_at_ms,
+            2000,
+            "撤销后的校验失败不得刷新 last_seen（活性冻结）"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    /// T-11 撤销即时性：改名（rename）不得复活已撤销令牌——撤销状态与
+    /// 设备标签变更相互独立，重连校验仍走 Revoked 分支
+    #[test]
+    fn t11_rename_after_revoke_keeps_revoked() {
+        let path = temp_file("t11-rename");
+        let mut store = TokenStore::new(path.clone());
+        let raw = store.issue("d1", 1000).expect("签发必须成功");
+        let hash = sha256_hex(raw.as_bytes());
+        assert!(store.revoke(&hash));
+        assert!(store.rename(&hash, "新名字"), "改名应命中");
+        assert_eq!(
+            store.verify(&raw, 2000),
+            TokenVerdict::Revoked,
+            "改名不得复活已撤销令牌"
+        );
+        assert_eq!(store.records()[0].label, "新名字");
+        let _ = fs::remove_file(path);
     }
 }
