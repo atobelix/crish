@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { ChatMsgFilterBar } from './ChatMsgFilterBar';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import {
   EMPTY_SESSION_TITLE,
   sessionListDisplayTitle,
@@ -10,8 +10,6 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { resolveUnitChromeLabel } from './unitChromeLabel';
 import { UnitChromeActions } from './UnitChromeActions';
 import styles from './ChatHeader.module.css';
-
-
 
 export interface ChatHeaderProps {
   mainSurface: string;
@@ -35,103 +33,111 @@ export interface ChatHeaderProps {
  * 本行：项目名 + 消息搜索 + 本 session 右坞工具 + 坞折叠。
  * 功能区只作用于 activeSessionId 对应 unit，不跨对话共享。
  */
-export const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
-  mainSurface,
-  showMsgFilter,
-  localMsgFilter,
-  setLocalMsgFilter,
-  setShowMsgFilter,
-  displayCount,
-  totalCount,
-  inputRef,
-  activeSessionId,
-  onExportMarkdown,
-  onClearHistory,
-}) => {
-  const session = activeSessionId
-    ? getCompositionRoot().session.getState().sessionsById[activeSessionId]
-    : undefined;
+export const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
+  ({
+    mainSurface,
+    showMsgFilter,
+    localMsgFilter,
+    setLocalMsgFilter,
+    setShowMsgFilter,
+    displayCount,
+    totalCount,
+    inputRef,
+    activeSessionId,
+    onExportMarkdown,
+    onClearHistory,
+  }) => {
+    const session = activeSessionId
+      ? getCompositionRoot().session.getState().sessionsById[activeSessionId]
+      : undefined;
 
-  const unitChromeLabel = useMemo(
-    () => resolveUnitChromeLabel(session),
-    [session],
-  );
+    const unitChromeLabel = useMemo(
+      () => resolveUnitChromeLabel(session),
+      [session]
+    );
 
-  const sessionTitleHint = useMemo(() => {
-    if (!session) return null;
-    const t = sessionListDisplayTitle(session).trim();
-    if (!t || t === EMPTY_SESSION_TITLE) return null;
-    return t;
-  }, [session]);
+    const sessionTitleHint = useMemo(() => {
+      if (!session) return null;
+      const t = sessionListDisplayTitle(session).trim();
+      if (!t || t === EMPTY_SESSION_TITLE) return null;
+      return t;
+    }, [session]);
 
-  const toggleSearch = useCallback(() => {
-    setShowMsgFilter((v) => {
-      const next = !v;
-      if (!next) setLocalMsgFilter('');
-      return next;
-    });
-  }, [setShowMsgFilter, setLocalMsgFilter]);
+    const toggleSearch = useCallback(() => {
+      setShowMsgFilter((v) => {
+        const next = !v;
+        if (!next) setLocalMsgFilter('');
+        return next;
+      });
+    }, [setShowMsgFilter, setLocalMsgFilter]);
 
-  if (mainSurface !== 'chat' || !session || !session.messages || session.messages.length === 0) {
-    return null;
-  }
+    if (
+      mainSurface !== 'chat' ||
+      !session ||
+      !session.messages ||
+      session.messages.length === 0
+    ) {
+      return null;
+    }
 
-  return (
-    <div
-      className={styles.toolbar}
-      data-testid="chat-toolbar"
-      data-unit-chrome="true"
-      data-session-id={activeSessionId || undefined}
-      role="toolbar"
-      aria-label="对话工具栏"
-    >
-      <div className={styles.toolbarLeft}>
-        {showMsgFilter ? (
-          <ChatMsgFilterBar
-            localMsgFilter={localMsgFilter}
-            setLocalMsgFilter={setLocalMsgFilter}
-            setShowMsgFilter={setShowMsgFilter}
-            displayCount={displayCount}
-            totalCount={totalCount}
-            inputRef={inputRef}
-          />
-        ) : (
-          <div
-            className={styles.unitLabel}
-            data-testid="chat-unit-label"
-            title={sessionTitleHint || unitChromeLabel}
-            aria-label={
-              sessionTitleHint
-                ? `${unitChromeLabel} · ${sessionTitleHint}`
-                : unitChromeLabel
-            }
-          >
-            <span className={styles.unitType}>{unitChromeLabel}</span>
-          </div>
-        )}
-      </div>
-
-      <UnitChromeActions
-        activeSessionId={activeSessionId}
-        onExportMarkdown={onExportMarkdown}
-        onClearHistory={onClearHistory}
-        leading={
-          <Tooltip content={showMsgFilter ? '关闭消息搜索' : '搜索消息'}>
-            <button
-              type="button"
-              className={styles.toolBtn}
-              data-testid="chat-toggle-search"
-              data-active={showMsgFilter ? 'true' : 'false'}
-              aria-label={showMsgFilter ? '关闭消息搜索' : '搜索消息'}
-              onClick={toggleSearch}
+    return (
+      <div
+        className={styles.toolbar}
+        data-testid="chat-toolbar"
+        data-unit-chrome="true"
+        data-session-id={activeSessionId || undefined}
+        role="toolbar"
+        aria-label="对话工具栏"
+      >
+        <div className={styles.toolbarLeft}>
+          {showMsgFilter ? (
+            <ChatMsgFilterBar
+              localMsgFilter={localMsgFilter}
+              setLocalMsgFilter={setLocalMsgFilter}
+              setShowMsgFilter={setShowMsgFilter}
+              displayCount={displayCount}
+              totalCount={totalCount}
+              inputRef={inputRef}
+            />
+          ) : (
+            <div
+              className={styles.unitLabel}
+              data-testid="chat-unit-label"
+              title={sessionTitleHint || unitChromeLabel}
+              aria-label={
+                sessionTitleHint
+                  ? `${unitChromeLabel} · ${sessionTitleHint}`
+                  : unitChromeLabel
+              }
             >
-              <Search size={15} strokeWidth={1.75} aria-hidden />
-            </button>
-          </Tooltip>
-        }
-      />
-    </div>
-  );
-});
+              <span className={styles.unitType}>{unitChromeLabel}</span>
+            </div>
+          )}
+        </div>
+
+        <UnitChromeActions
+          activeSessionId={activeSessionId}
+          onExportMarkdown={onExportMarkdown}
+          onClearHistory={onClearHistory}
+          leading={
+            <Tooltip content={showMsgFilter ? '关闭消息搜索' : '搜索消息'}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={styles.toolBtn}
+                data-testid="chat-toggle-search"
+                data-active={showMsgFilter ? 'true' : 'false'}
+                aria-label={showMsgFilter ? '关闭消息搜索' : '搜索消息'}
+                onClick={toggleSearch}
+                icon={<Search size={15} strokeWidth={1.75} aria-hidden />}
+              />
+            </Tooltip>
+          }
+        />
+      </div>
+    );
+  }
+);
 
 ChatHeader.displayName = 'ChatHeader';

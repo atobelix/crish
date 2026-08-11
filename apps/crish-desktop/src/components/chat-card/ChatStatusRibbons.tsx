@@ -26,7 +26,7 @@ import {
   resolveNeedsModelSoftHintText,
 } from '../../api/chatEmptyState';
 import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { SetupHintBanner, type SetupHintState } from './SetupHintBanner';
 import {
   PlanGoalRibbons,
@@ -115,7 +115,9 @@ export type ChatStatusRibbonsProps = {
 
 /** setup 动作派发：去模型设置 vs 去模型下拉（与抽出前一致）。 */
 function resolveSetupAction(kind: SetupHintKind): 'settings' | 'dropdown' {
-  return kind === 'needs-key' || kind === 'engine-down' ? 'settings' : 'dropdown';
+  return kind === 'needs-key' || kind === 'engine-down'
+    ? 'settings'
+    : 'dropdown';
 }
 
 export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
@@ -180,17 +182,19 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   const bgTasks = useBackgroundTaskPolling();
   const activeBgTasks = useMemo(
     () => filterActiveBackgroundTasks(bgTasks),
-    [bgTasks],
+    [bgTasks]
   );
 
-  const currentSession = activeSessionId ? getSessionById(activeSessionId) : null;
+  const currentSession = activeSessionId
+    ? getSessionById(activeSessionId)
+    : null;
   const progressItems = useMemo(
     () => resolveSessionProgressItems(currentSession),
-    [currentSession],
+    [currentSession]
   );
   const checklistProgress = useMemo(
     () => computeChecklistProgress(progressItems),
-    [progressItems],
+    [progressItems]
   );
 
   const hasActivePlan =
@@ -228,7 +232,13 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       actionLabel: action.label,
       actionAriaLabel: action.ariaLabel,
     };
-  }, [setupHint, engineDownText, keySoftHintText, modelSoftHintText, syncEngineText]);
+  }, [
+    setupHint,
+    engineDownText,
+    keySoftHintText,
+    modelSoftHintText,
+    syncEngineText,
+  ]);
 
   const handleSetupAction = (kind: SetupHintKind) => {
     const target = resolveSetupAction(kind);
@@ -253,10 +263,18 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   return (
     <AppErrorBoundary variant="minimal" title="状态栏出错">
       {/* 动态快捷状态浮条：仅在有活跃状态（后台运行/活动计划/差异）时呈现 */}
-      {(activeBgTasks.length > 0 || hasActivePlan || (diffCount > 0 && Boolean(onOpenDiff))) ? (
-        <div className={styles.dynamicChipBar} role="region" aria-label="快捷状态">
+      {activeBgTasks.length > 0 ||
+      hasActivePlan ||
+      (diffCount > 0 && Boolean(onOpenDiff)) ? (
+        <div
+          className={styles.dynamicChipBar}
+          role="region"
+          aria-label="快捷状态"
+        >
           {activeBgTasks.length > 0 && onOpenTerminal ? (
-            <Tooltip content={`点击在终端查看 ${activeBgTasks.length} 个后台运行任务`}>
+            <Tooltip
+              content={`点击在终端查看 ${activeBgTasks.length} 个后台运行任务`}
+            >
               <button
                 type="button"
                 className={`${styles.dynamicChip} ${styles.dynamicChipActive}`}
@@ -306,26 +324,48 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       ) : null}
 
       {showPlanDrawer && hasActivePlan ? (
-        <div ref={planDrawerRef} className={styles.dynamicPlanDrawer} role="dialog" aria-label="计划与进度详情">
+        <div
+          ref={planDrawerRef}
+          className={styles.dynamicPlanDrawer}
+          role="dialog"
+          aria-label="计划与进度详情"
+        >
           <div className={styles.dynamicPlanHeader}>
-            <span>{goalModeActive ? (goalText || '目标推进中') : '计划清单'}</span>
-            <button
+            <span>
+              {goalModeActive ? goalText || '目标推进中' : '计划清单'}
+            </span>
+            <Button
               type="button"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}
+              variant="ghost"
+              size="sm"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-tertiary)',
+              }}
               aria-label="关闭计划详情"
               onClick={() => setShowPlanDrawer(false)}
-            >
-              <Lucide.X size={14} />
-            </button>
+              icon={<Lucide.X size={14} />}
+            />
           </div>
           {progressItems.length > 0 ? (
             <ul className={styles.dynamicPlanList}>
               {progressItems.map((item) => (
-                <li key={item.id} className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}>
+                <li
+                  key={item.id}
+                  className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}
+                >
                   {item.done ? (
-                    <Lucide.CheckCircle2 size={13} style={{ color: 'var(--accent-green)' }} />
+                    <Lucide.CheckCircle2
+                      size={13}
+                      style={{ color: 'var(--accent-green)' }}
+                    />
                   ) : (
-                    <Lucide.Circle size={13} style={{ color: 'var(--text-tertiary)' }} />
+                    <Lucide.Circle
+                      size={13}
+                      style={{ color: 'var(--text-tertiary)' }}
+                    />
                   )}
                   <span>{item.text}</span>
                 </li>
@@ -333,7 +373,9 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
             </ul>
           ) : (
             <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-              {inPlanMode ? '计划模式生效中，AI 将集中思考规划' : '暂无清单步数'}
+              {inPlanMode
+                ? '计划模式生效中，AI 将集中思考规划'
+                : '暂无清单步数'}
             </div>
           )}
         </div>

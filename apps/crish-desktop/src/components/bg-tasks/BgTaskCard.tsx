@@ -9,6 +9,7 @@
 import React, { useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './BgTaskCard.module.css';
+import { Button } from '../ui';
 import {
   backgroundTaskStateLabel,
   getBackgroundTaskOutput,
@@ -50,7 +51,7 @@ export type BgTaskCardProps = {
   onSendInput?: (
     taskId: string,
     text: string,
-    appendNewline: boolean,
+    appendNewline: boolean
   ) => Promise<SendBackgroundTaskInputResult>;
   /** kill 成功后通知父组件（本地状态翻转 / 列表刷新） */
   onKillApplied?: (result: KillBackgroundTaskResult) => void;
@@ -58,8 +59,11 @@ export type BgTaskCardProps = {
 
 const defaultGetOutput = (taskId: string) => getBackgroundTaskOutput(taskId);
 const defaultKill = (taskId: string) => killBackgroundTask(taskId);
-const defaultSendInput = (taskId: string, text: string, appendNewline: boolean) =>
-  sendBackgroundTaskInput(taskId, text, appendNewline);
+const defaultSendInput = (
+  taskId: string,
+  text: string,
+  appendNewline: boolean
+) => sendBackgroundTaskInput(taskId, text, appendNewline);
 
 export const BgTaskCard: React.FC<BgTaskCardProps> = ({
   task,
@@ -189,7 +193,10 @@ export const BgTaskCard: React.FC<BgTaskCardProps> = ({
       ) : null}
 
       {prompt && (
-        <div className={styles.promptBanner} data-testid="bg-task-prompt-banner">
+        <div
+          className={styles.promptBanner}
+          data-testid="bg-task-prompt-banner"
+        >
           <span className={styles.promptLabel}>{TASK_AWAITING_INPUT_TEXT}</span>
           <span className={styles.promptText} title={prompt}>
             {prompt}
@@ -220,8 +227,10 @@ export const BgTaskCard: React.FC<BgTaskCardProps> = ({
         </div>
       )}
 
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         className={styles.expandToggle}
         onClick={toggleLogTail}
         aria-expanded={expanded}
@@ -238,7 +247,7 @@ export const BgTaskCard: React.FC<BgTaskCardProps> = ({
             日志尾部（{BGTASK_CARD_LOG_TAIL_LINES} 行）
           </>
         )}
-      </button>
+      </Button>
 
       <BgTaskActions
         task={task}

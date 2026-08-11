@@ -1,6 +1,7 @@
 import React from 'react';
 import styles from '../CardPanel.module.css';
 import { LayoutPanelLeft } from 'lucide-react';
+import { Button } from '../ui';
 
 export function PanelBodyEmpty({
   title,
@@ -25,14 +26,16 @@ export function PanelBodyEmpty({
       />
       <div className={styles.emptyTitle}>{title}</div>
       <div className={styles.emptyHint}>{hint}</div>
-      <button
+      <Button
         type="button"
-        className={`${styles.emptyBtn} card-action-btn`}
+        variant="secondary"
+        size="sm"
+        className={styles.emptyBtn}
         onClick={onOpenOverview}
         aria-label="打开总览侧栏"
       >
         打开总览
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { FileDiff, MessageToolCall } from '../../store/types';
+import { Button } from '../ui';
 import {
   extractImageRefs,
   fullToolOutput,
@@ -177,8 +178,10 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
       ) : null}
       {budget.truncated ? (
         <div className={styles.toolResultLongHint}>
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             className={styles.toolResultHintBtn}
             onClick={(e) => {
               e.stopPropagation();
@@ -186,13 +189,15 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
             }}
           >
             显示全部输出（{budget.originalLength.toLocaleString()} 字符）
-          </button>
+          </Button>
         </div>
       ) : null}
       {longShell ? (
         <div className={styles.toolResultLongHint}>
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             className={styles.toolResultHintBtn}
             onClick={(e) => {
               e.stopPropagation();
@@ -200,7 +205,7 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
             }}
           >
             在终端查看
-          </button>
+          </Button>
         </div>
       ) : null}
       {images.length > 0 && (
@@ -217,7 +222,11 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
         </div>
       )}
       {tc.diffs?.map((d) => (
-        <ToolCallDiffPreview key={d.filePath} diff={d} onOpenDiff={onOpenDiff} />
+        <ToolCallDiffPreview
+          key={d.filePath}
+          diff={d}
+          onOpenDiff={onOpenDiff}
+        />
       ))}
     </div>
   );

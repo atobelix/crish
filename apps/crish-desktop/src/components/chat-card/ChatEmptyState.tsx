@@ -15,7 +15,7 @@
 import React, { useCallback, useEffect, useId, useRef } from 'react';
 import styles from './ChatEmptyState.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import {
   CHAT_EMPTY_QUICK_PROMPTS,
   chatEmptyKindAriaLabel,
@@ -135,9 +135,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   onClearFilter,
 }) => {
   const reactId = useId();
-  const projectPickerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
+  const projectPickerCloseTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   const cancelProjectPickerClose = useCallback(() => {
     if (projectPickerCloseTimerRef.current != null) {
@@ -334,20 +334,24 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         ) : null}
 
         {showAction && actionLabel && actionFn ? (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="md"
             className={styles.chatEmptyAction}
             data-empty-action={primaryAction}
             aria-label={actionLabel}
             onClick={actionFn}
+            icon={
+              primaryAction === 'create-session' ? (
+                <Plus size={14} strokeWidth={2} aria-hidden />
+              ) : (
+                <Eraser size={14} strokeWidth={1.75} aria-hidden />
+              )
+            }
           >
-            {primaryAction === 'create-session' ? (
-              <Plus size={14} strokeWidth={2} aria-hidden />
-            ) : (
-              <Eraser size={14} strokeWidth={1.75} aria-hidden />
-            )}
             {actionLabel}
-          </button>
+          </Button>
         ) : null}
 
         {showPrompts && onSetChatInput ? (

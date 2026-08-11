@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Copy, PinOff, RefreshCw, Send, Undo2, X } from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import type { SessionMessage } from '../../store/types';
 import type { PermissionMode } from '../../api/permissionModes';
 import {
@@ -41,38 +41,41 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
     <div className={styles.userMeta}>
       <span className={styles.time}>{formatMsgTime(timestamp)}</span>
       <Tooltip content={copied ? '已复制' : '复制消息'}>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={`${styles.iconBtn}${copied ? ` ${styles.isCopied}` : ''}`}
           aria-label={copied ? '已复制' : '复制消息'}
           onClick={onCopy}
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-        </button>
+          icon={copied ? <Check size={14} /> : <Copy size={14} />}
+        />
       </Tooltip>
       {onWithdraw ? (
         <Tooltip content="撤回到此处">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.iconBtn}
             aria-label="撤回到此处"
             onClick={onWithdraw}
-          >
-            <Undo2 size={14} />
-          </button>
+            icon={<Undo2 size={14} />}
+          />
         </Tooltip>
       ) : null}
       {isPinned ? (
         <Tooltip content={pinLabels.title}>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={`${styles.iconBtn} ${styles.isPinnedActive}`}
             aria-label={pinLabels.ariaLabel}
             aria-pressed
             onClick={onTogglePin}
-          >
-            <PinOff size={14} />
-          </button>
+            icon={<PinOff size={14} />}
+          />
         </Tooltip>
       ) : null}
     </div>
@@ -98,19 +101,16 @@ export const PlanApprovalRow: React.FC<PlanApprovalRowProps> = ({
   setPermissionMode,
   setPlanApproved,
 }) => {
-  if (
-    !inPlanMode ||
-    planApproved ||
-    !isLastAssistant ||
-    !looksLikePlan(text)
-  ) {
+  if (!inPlanMode || planApproved || !isLastAssistant || !looksLikePlan(text)) {
     return null;
   }
 
   return (
     <div className={styles.planApproveRow}>
-      <button
+      <Button
         type="button"
+        variant="primary"
+        size="sm"
         className={styles.planApproveChip}
         onClick={() => {
           setPermissionMode('ask');
@@ -118,7 +118,7 @@ export const PlanApprovalRow: React.FC<PlanApprovalRowProps> = ({
         }}
       >
         批准此计划
-      </button>
+      </Button>
     </div>
   );
 };
@@ -151,38 +151,41 @@ export const AssistantMessageActionsBar: React.FC<
     <div className={styles.assistantMeta}>
       <span className={styles.time}>{formatMsgTime(timestamp)}</span>
       <Tooltip content={copied ? '已复制' : '复制正文'}>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={`${styles.iconBtn}${copied ? ` ${styles.isCopied}` : ''}`}
           aria-label={copied ? '已复制' : '复制正文'}
           onClick={onCopy}
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-        </button>
+          icon={copied ? <Check size={14} /> : <Copy size={14} />}
+        />
       </Tooltip>
       {isLastAssistant ? (
         <Tooltip content="重新生成">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.iconBtn}
             aria-label="重新生成"
             onClick={onRegenerate}
-          >
-            <RefreshCw size={14} />
-          </button>
+            icon={<RefreshCw size={14} />}
+          />
         </Tooltip>
       ) : null}
       {isPinned ? (
         <Tooltip content={pinLabels.title}>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={`${styles.iconBtn} ${styles.isPinnedActive}`}
             aria-label={pinLabels.ariaLabel}
             aria-pressed
             onClick={onTogglePin}
-          >
-            <PinOff size={14} />
-          </button>
+            icon={<PinOff size={14} />}
+          />
         </Tooltip>
       ) : null}
     </div>
@@ -273,14 +276,15 @@ export const FollowUpSuggestionsSection: React.FC<
       </div>
       {onDismissFollowUp ? (
         <Tooltip content="关闭建议">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={`${styles.followupDismiss} ${styles.iconBtn}`}
             aria-label="关闭后续建议"
             onClick={() => onDismissFollowUp(msg.id)}
-          >
-            <X size={14} aria-hidden />
-          </button>
+            icon={<X size={14} aria-hidden />}
+          />
         </Tooltip>
       ) : null}
     </div>

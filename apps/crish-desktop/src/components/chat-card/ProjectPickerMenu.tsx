@@ -13,8 +13,15 @@ import {
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
 import { getSessionStoreState, setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../api/store-access/componentAccess';
-import { Check, ChevronRight, Folder, Plus, Search, Trash2 } from 'lucide-react';
-import { ConfirmDialog, Menu, Tooltip } from '../ui';
+import {
+  Check,
+  ChevronRight,
+  Folder,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
+import { Button, ConfirmDialog, Menu, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 
 /** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
@@ -126,167 +133,172 @@ export const ProjectPickerMenu: React.FC<Props> = ({
       {/* 移除项目确认（Promise 桥渲染点） */}
       {renderConfirmGate(<ConfirmDialog />)}
       <Menu
-      open={open}
-      onOpenChange={handleOpenChange}
-      trigger={children}
-      side="bottom"
-      align="center"
-      sideOffset={6}
-      contentClassName="sort-filter-menu open no-drag"
-      contentStyle={{ width: '230px', overflow: 'visible' }}
-    >
-      <div
-        onMouseEnter={onContentMouseEnter}
-        onMouseLeave={onContentMouseLeave}
+        open={open}
+        onOpenChange={handleOpenChange}
+        trigger={children}
+        side="bottom"
+        align="center"
+        sideOffset={6}
+        contentClassName="sort-filter-menu open no-drag"
+        contentStyle={{ width: '230px', overflow: 'visible' }}
       >
-        {/* Header Search Box */}
         <div
-          className={styles.searchWrapper}
-          onMouseEnter={() => setShowAddCascade(false)}
+          onMouseEnter={onContentMouseEnter}
+          onMouseLeave={onContentMouseLeave}
         >
-          <div className={styles.searchBox}>
-            <Search size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
-            <input
-              className={styles.searchInput}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="搜索项目"
-              autoFocus={open}
-            />
+          {/* Header Search Box */}
+          <div
+            className={styles.searchWrapper}
+            onMouseEnter={() => setShowAddCascade(false)}
+          >
+            <div className={styles.searchBox}>
+              <Search size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
+              <input
+                className={styles.searchInput}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="搜索项目"
+                autoFocus={open}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Projects List Scroll Area */}
-        <div
-          className={styles.scrollArea}
-          onMouseEnter={() => setShowAddCascade(false)}
-        >
-          {filtered.map((p) => {
-            const selected = p.id === activeId;
-            return (
-              <div key={p.id} className={styles.projectRow}>
-                <button
-                  type="button"
-                  className={`sort-filter-option ${selected ? 'is-on' : ''}`}
-                  style={{ paddingRight: '28px' }}
-                  onClick={() => {
-                    openProject(p.id);
-                    syncDraftFolderOnProjectChange(p.id);
-                    onChanged?.();
-                    handleOpenChange(false);
-                  }}
-                >
-                  <Folder
-                    size={14}
-                    style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7 }}
-                  />
-                  <span
-                    style={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+          {/* Projects List Scroll Area */}
+          <div
+            className={styles.scrollArea}
+            onMouseEnter={() => setShowAddCascade(false)}
+          >
+            {filtered.map((p) => {
+              const selected = p.id === activeId;
+              return (
+                <div key={p.id} className={styles.projectRow}>
+                  <button
+                    type="button"
+                    className={`sort-filter-option ${selected ? 'is-on' : ''}`}
+                    style={{ paddingRight: '28px' }}
+                    onClick={() => {
+                      openProject(p.id);
+                      syncDraftFolderOnProjectChange(p.id);
+                      onChanged?.();
+                      handleOpenChange(false);
                     }}
                   >
-                    {p.name}
-                  </span>
-                  {selected && (
-                    <Check
-                      size={13}
-                      className={styles.rowCheck}
+                    <Folder
+                      size={14}
                       style={{
-                        position: 'absolute',
-                        right: '8px',
-                        color: 'var(--text-primary)',
+                        marginRight: '6px',
+                        flexShrink: 0,
+                        opacity: 0.7,
                       }}
                     />
-                  )}
-                </button>
-                {p.id !== GENERAL_FOLDER && (
-                  <Tooltip content="从列表移除项目">
-                    <button
-                      type="button"
-                      className={styles.rowDeleteBtn}
-                      aria-label={`从列表移除项目 ${p.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleRemoveProject(p);
+                    <span
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      <Trash2 size={12} />
-                    </button>
-                  </Tooltip>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                      {p.name}
+                    </span>
+                    {selected && (
+                      <Check
+                        size={13}
+                        className={styles.rowCheck}
+                        style={{
+                          position: 'absolute',
+                          right: '8px',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                    )}
+                  </button>
+                  {p.id !== GENERAL_FOLDER && (
+                    <Tooltip content="从列表移除项目">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        className={styles.rowDeleteBtn}
+                        aria-label={`从列表移除项目 ${p.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleRemoveProject(p);
+                        }}
+                        icon={<Trash2 size={12} />}
+                      />
+                    </Tooltip>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
-        <div className={styles.divider} />
+          <div className={styles.divider} />
 
-        {/* General Folder Option */}
-        <button
-          type="button"
-          className={`sort-filter-option ${!activeId ? 'is-on' : ''}`}
-          onMouseEnter={() => setShowAddCascade(false)}
-          onClick={() => {
-            setNoProject();
-            syncDraftFolderOnProjectChange(GENERAL_FOLDER);
-            onChanged?.();
-            handleOpenChange(false);
-          }}
-        >
-          <Folder
-            size={14}
-            style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7 }}
-          />
-          <span style={{ flex: 1 }}>通用项目</span>
-          {!activeId && <Check size={13} />}
-        </button>
-
-        {/* Add Project Cascade — 子菜单向右浮出，不扁平化进主列表 */}
-        <div
-          className={styles.addCascadeWrapper}
-          onMouseEnter={() => setShowAddCascade(true)}
-          onMouseLeave={() => setShowAddCascade(false)}
-        >
+          {/* General Folder Option */}
           <button
             type="button"
-            className={`sort-filter-option ${styles.addBtn}`}
-            aria-haspopup="menu"
-            aria-expanded={showAddCascade}
+            className={`sort-filter-option ${!activeId ? 'is-on' : ''}`}
+            onMouseEnter={() => setShowAddCascade(false)}
+            onClick={() => {
+              setNoProject();
+              syncDraftFolderOnProjectChange(GENERAL_FOLDER);
+              onChanged?.();
+              handleOpenChange(false);
+            }}
           >
-            <Plus size={14} style={{ marginRight: '6px', flexShrink: 0 }} />
-            <span style={{ flex: 1 }}>添加项目</span>
-            <ChevronRight size={13} style={{ opacity: 0.5 }} />
+            <Folder
+              size={14}
+              style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7 }}
+            />
+            <span style={{ flex: 1 }}>通用项目</span>
+            {!activeId && <Check size={13} />}
           </button>
 
-          {showAddCascade && (
-            <div
-              className={styles.cascadeSubmenu}
-              role="menu"
-              aria-label="添加项目"
+          {/* Add Project Cascade — 子菜单向右浮出，不扁平化进主列表 */}
+          <div
+            className={styles.addCascadeWrapper}
+            onMouseEnter={() => setShowAddCascade(true)}
+            onMouseLeave={() => setShowAddCascade(false)}
+          >
+            <button
+              type="button"
+              className={`sort-filter-option ${styles.addBtn}`}
+              aria-haspopup="menu"
+              aria-expanded={showAddCascade}
             >
-              <button
-                type="button"
-                className="sort-filter-option"
-                role="menuitem"
-                disabled={busy}
-                onClick={handlePickFolder}
+              <Plus size={14} style={{ marginRight: '6px', flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>添加项目</span>
+              <ChevronRight size={13} style={{ opacity: 0.5 }} />
+            </button>
+
+            {showAddCascade && (
+              <div
+                className={styles.cascadeSubmenu}
+                role="menu"
+                aria-label="添加项目"
               >
-                打开本地项目...
-              </button>
-              <button
-                type="button"
-                className="sort-filter-option"
-                role="menuitem"
-                disabled={busy}
-                onClick={handleCreateEmptyProject}
-              >
-                新建空白项目...
-              </button>
-            </div>
-          )}
+                <button
+                  type="button"
+                  className="sort-filter-option"
+                  role="menuitem"
+                  disabled={busy}
+                  onClick={handlePickFolder}
+                >
+                  打开本地项目...
+                </button>
+                <button
+                  type="button"
+                  className="sort-filter-option"
+                  role="menuitem"
+                  disabled={busy}
+                  onClick={handleCreateEmptyProject}
+                >
+                  新建空白项目...
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </Menu>

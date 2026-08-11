@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './BgTaskCard.module.css';
+import { Button } from '../ui';
 import {
   canCancelBackgroundTask,
   type BackgroundTaskInfo,
@@ -31,7 +32,7 @@ export type BgTaskActionsProps = {
   onSendInput?: (
     taskId: string,
     text: string,
-    appendNewline: boolean,
+    appendNewline: boolean
   ) => Promise<SendBackgroundTaskInputResult>;
   /** kill 成功后通知父组件（如本地状态翻转 / 列表刷新） */
   onKillApplied?: (result: KillBackgroundTaskResult) => void;
@@ -56,7 +57,9 @@ export const BgTaskActions: React.FC<BgTaskActionsProps> = ({
   // ── kill 状态：二次确认 / 忙碌 / 三态反馈 ─────────────────────────
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState<'kill' | 'send' | null>(null);
-  const [killResult, setKillResult] = useState<KillBackgroundTaskResult | null>(null);
+  const [killResult, setKillResult] = useState<KillBackgroundTaskResult | null>(
+    null
+  );
   const [killAttempted, setKillAttempted] = useState(false);
 
   // ── send_input 状态：文本 / 追加换行开关 / 反馈 ──────────────────
@@ -120,22 +123,30 @@ export const BgTaskActions: React.FC<BgTaskActionsProps> = ({
   // 非活跃任务不渲染操作面（终态展示在卡片主体：状态 / 退出码 / 日志）
   if (!active) return null;
 
-  const killFeedback = killAttempted ? formatKillResultFeedback(killResult) : null;
+  const killFeedback = killAttempted
+    ? formatKillResultFeedback(killResult)
+    : null;
   const busyAny = busy !== null;
 
   return (
-    <div className={styles.actions} role="group" aria-label={`任务 ${task.id} 操作`}>
+    <div
+      className={styles.actions}
+      role="group"
+      aria-label={`任务 ${task.id} 操作`}
+    >
       <div className={styles.actionRow}>
-        <button
+        <Button
           type="button"
+          variant="danger"
+          size="sm"
           className={styles.killBtn}
           disabled={busyAny}
           onClick={startKill}
           aria-haspopup="dialog"
+          icon={<Lucide.Square size={12} aria-hidden />}
         >
-          <Lucide.Square size={12} aria-hidden />
           终止任务
-        </button>
+        </Button>
 
         <div className={styles.inputRow}>
           <input
@@ -149,7 +160,9 @@ export const BgTaskActions: React.FC<BgTaskActionsProps> = ({
               }
             }}
             placeholder={
-              recommendedInput ? '输入回应（已预填推荐答案）' : '向任务 stdin 发送输入'
+              recommendedInput
+                ? '输入回应（已预填推荐答案）'
+                : '向任务 stdin 发送输入'
             }
             aria-label={`向任务 ${task.id} 发送输入`}
             disabled={busyAny}
@@ -163,38 +176,50 @@ export const BgTaskActions: React.FC<BgTaskActionsProps> = ({
             />
             追加换行
           </label>
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
             className={styles.sendBtn}
             disabled={busyAny || !inputText.trim()}
             onClick={() => void handleSend()}
+            icon={<Lucide.Send size={12} aria-hidden />}
           >
-            <Lucide.Send size={12} aria-hidden />
             发送
-          </button>
+          </Button>
         </div>
       </div>
 
       {confirming && (
-        <div className={styles.confirmRow} role="alertdialog" aria-label="确认终止任务">
-          <span className={styles.confirmText}>{buildKillConfirmPrompt(task)}</span>
+        <div
+          className={styles.confirmRow}
+          role="alertdialog"
+          aria-label="确认终止任务"
+        >
+          <span className={styles.confirmText}>
+            {buildKillConfirmPrompt(task)}
+          </span>
           <span className={styles.confirmBtns}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={styles.btnGhost}
               disabled={busyAny}
               onClick={cancelKill}
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="danger"
+              size="sm"
               className={styles.btnDanger}
               disabled={busyAny}
               onClick={() => void confirmKill()}
             >
               确认终止
-            </button>
+            </Button>
           </span>
         </div>
       )}

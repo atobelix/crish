@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 
 export type PreviewToolbarProps = {
   canBack: boolean;
@@ -61,46 +61,47 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
 }) => {
   const iconSz = 14;
   return (
-    <div
-      className={styles.bar}
-      role="toolbar"
-      aria-label="预览浏览器工具栏"
-    >
+    <div className={styles.bar} role="toolbar" aria-label="预览浏览器工具栏">
       <Tooltip content="后退">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={styles.navBtn}
           disabled={!canBack}
           onClick={onBack}
           aria-label="后退"
-        >
-          <Lucide.ChevronLeft size={iconSz} strokeWidth={1.75} />
-        </button>
+          icon={<Lucide.ChevronLeft size={iconSz} strokeWidth={1.75} />}
+        />
       </Tooltip>
       <Tooltip content="前进">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={styles.navBtn}
           disabled={!canForward}
           onClick={onForward}
           aria-label="前进"
-        >
-          <Lucide.ChevronRight size={iconSz} strokeWidth={1.75} />
-        </button>
+          icon={<Lucide.ChevronRight size={iconSz} strokeWidth={1.75} />}
+        />
       </Tooltip>
       <Tooltip content="主页（空白预览）">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={`${styles.navBtn} ${styles.hideNarrow}`}
           onClick={onHome}
           aria-label="主页"
-        >
-          <Lucide.Home size={iconSz} strokeWidth={1.75} />
-        </button>
+          icon={<Lucide.Home size={iconSz} strokeWidth={1.75} />}
+        />
       </Tooltip>
       <Tooltip content="刷新">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={styles.navBtn}
           disabled={blank || !frameSrc}
           onClick={onReload}
@@ -116,7 +117,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           ) : (
             <Lucide.RotateCw size={iconSz} strokeWidth={1.75} />
           )}
-        </button>
+        </Button>
       </Tooltip>
       <form
         className={styles.urlForm}
@@ -146,14 +147,15 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         />
         {urlInput ? (
           <Tooltip content="清空">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={styles.urlClear}
               onClick={onClearUrl}
               aria-label="清空地址"
-            >
-              <Lucide.X size={12} strokeWidth={1.75} />
-            </button>
+              icon={<Lucide.X size={12} strokeWidth={1.75} />}
+            />
           </Tooltip>
         ) : null}
       </form>
@@ -166,24 +168,29 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
               : '加入书签'
         }
       >
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={`${styles.navBtn} ${bookmarked ? styles.isOn : ''}`}
           onClick={onBookmark}
           disabled={!canBookmark}
           aria-label={bookmarked ? '取消书签' : '加入书签'}
           aria-pressed={bookmarked}
-        >
-          <Lucide.Star
-            size={iconSz}
-            strokeWidth={1.75}
-            fill={bookmarked ? 'currentColor' : 'none'}
-          />
-        </button>
+          icon={
+            <Lucide.Star
+              size={iconSz}
+              strokeWidth={1.75}
+              fill={bookmarked ? 'currentColor' : 'none'}
+            />
+          }
+        />
       </Tooltip>
       <Tooltip content="历史与书签">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={`${styles.navBtn} ${showHist ? styles.isOn : ''}`}
           data-hist-toggle=""
           onClick={onToggleHist}
@@ -191,34 +198,35 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           aria-expanded={showHist}
           aria-controls="preview-hist-panel"
           aria-haspopup="dialog"
-        >
-          <Lucide.History size={iconSz} strokeWidth={1.75} />
-        </button>
+          icon={<Lucide.History size={iconSz} strokeWidth={1.75} />}
+        />
       </Tooltip>
-      <Tooltip
-        content={aiBrowser ? '返回内嵌预览' : 'AI 浏览器（受管窗口）'}
-      >
-        <button
+      <Tooltip content={aiBrowser ? '返回内嵌预览' : 'AI 浏览器（受管窗口）'}>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={`${styles.navBtn} ${aiBrowser ? styles.isOn : ''}`}
           data-ai-browser-toggle=""
           onClick={onToggleAiBrowser}
           aria-label={aiBrowser ? '返回内嵌预览' : 'AI 浏览器（受管窗口）'}
           aria-pressed={aiBrowser}
-        >
-          <Lucide.Monitor size={iconSz} strokeWidth={1.75} />
-        </button>
+          icon={<Lucide.Monitor size={iconSz} strokeWidth={1.75} />}
+        />
       </Tooltip>
-      <Tooltip content={canExternal ? '系统浏览器打开' : '当前地址无法外部打开'}>
-        <button
+      <Tooltip
+        content={canExternal ? '系统浏览器打开' : '当前地址无法外部打开'}
+      >
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={`${styles.navBtn} ${styles.hideXNarrow}`}
           onClick={onOpenExternal}
           disabled={!canExternal}
           aria-label="系统浏览器打开"
-        >
-          <Lucide.ExternalLink size={iconSz} strokeWidth={1.75} />
-        </button>
+          icon={<Lucide.ExternalLink size={iconSz} strokeWidth={1.75} />}
+        />
       </Tooltip>
     </div>
   );

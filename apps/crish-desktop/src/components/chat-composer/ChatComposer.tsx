@@ -15,7 +15,7 @@ import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment, QueuedMessage } from '../../hooks/useChatStream';
 import { TiptapComposerField } from './TiptapComposerField';
@@ -23,10 +23,7 @@ import { ComposerAttachmentBar } from './ComposerAttachmentBar';
 import { ChatQueuePanel } from './ChatQueuePanel';
 
 export type { ComposerFieldProps } from './ComposerField';
-export {
-  ComposerField,
-  STOP_TOOLTIP,
-} from './ComposerField';
+export { ComposerField, STOP_TOOLTIP } from './ComposerField';
 
 export type ChatComposerProps = {
   chatInput: string;
@@ -122,7 +119,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     read();
     const observed = root.closest('[data-main-surface]') ?? root;
     const mo = new MutationObserver(read);
-    mo.observe(observed, { attributes: true, attributeFilter: ['data-empty-kind'] });
+    mo.observe(observed, {
+      attributes: true,
+      attributeFilter: ['data-empty-kind'],
+    });
     return () => mo.disconnect();
   }, [emptyKindProp]);
 
@@ -216,9 +216,11 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         <div className={styles.footerActions} data-composer-footer="1">
           <div className={styles.leftActions} style={{ position: 'relative' }}>
             <Tooltip content="添加文件、技能、扩展…">
-              <button
+              <Button
                 ref={plusBtnRef}
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={`${styles.plusBtn} ${showPlusMenu ? styles.isOpen : ''}`}
                 aria-label="打开添加菜单"
                 aria-haspopup="menu"
@@ -233,9 +235,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                     onCloseSiblingMenus?.();
                   }
                 }}
-              >
-                <Lucide.Plus size={16} aria-hidden />
-              </button>
+                icon={<Lucide.Plus size={16} aria-hidden />}
+              />
             </Tooltip>
             <ComposePlusMenu
               id={plusMenuId}

@@ -2,7 +2,7 @@ import React from 'react';
 import styles from './WorkspaceChromeBars.module.css';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
-import { TabStrip, Tooltip } from '../ui';
+import { TabStrip, Button, Tooltip } from '../ui';
 import {
   Folder,
   FolderPlus,
@@ -150,62 +150,71 @@ export const WorkspaceStrip: React.FC<WorkspaceChromeProps> = ({
             <Tooltip
               content={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
             >
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={`${styles.wsChromeTrailBtn} no-drag ${!isRightSidebarCollapsed ? 'is-active' : ''} ws-chrome-trail-btn`}
-                aria-label={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
+                aria-label={
+                  isRightSidebarCollapsed ? '展开右面板' : '收起右面板'
+                }
                 onClick={toggleRightSidebar}
-              >
-                <IconSidebarRight size={15} aria-hidden />
-              </button>
+                icon={<IconSidebarRight size={15} aria-hidden />}
+              />
             </Tooltip>
 
             {onOpenHelp ? (
               <Tooltip content="快捷键与帮助">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
                   aria-label="快捷键与帮助"
                   onClick={onOpenHelp}
-                >
-                  <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
-                </button>
+                  icon={
+                    <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
+                  }
+                />
               </Tooltip>
             ) : null}
             {onWinMinimize ? (
               <Tooltip content="最小化">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
                   aria-label="最小化窗口"
                   onClick={onWinMinimize}
-                >
-                  <Minus size={14} strokeWidth={1.75} aria-hidden />
-                </button>
+                  icon={<Minus size={14} strokeWidth={1.75} aria-hidden />}
+                />
               </Tooltip>
             ) : null}
             {onWinMaximize ? (
               <Tooltip content="最大化">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={`${styles.wsChromeTrailBtn} no-drag ws-chrome-trail-btn`}
                   aria-label="最大化或还原窗口"
                   onClick={onWinMaximize}
-                >
-                  <Square size={12} strokeWidth={1.75} aria-hidden />
-                </button>
+                  icon={<Square size={12} strokeWidth={1.75} aria-hidden />}
+                />
               </Tooltip>
             ) : null}
             {onWinClose ? (
               <Tooltip content="关闭">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={`${styles.wsChromeTrailBtn} ws-chrome-trail-btn--close no-drag ws-chrome-trail-btn`}
                   aria-label="关闭窗口"
                   onClick={onWinClose}
-                >
-                  <X size={14} strokeWidth={1.75} aria-hidden />
-                </button>
+                  icon={<X size={14} strokeWidth={1.75} aria-hidden />}
+                />
               </Tooltip>
             ) : null}
           </div>

@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatQueuePanel.module.css';
 import type { QueuedMessage } from '../../hooks/useChatStream';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 
 export interface ChatQueuePanelProps {
   queue: QueuedMessage[];
@@ -58,34 +58,37 @@ export const ChatQueuePanel: React.FC<ChatQueuePanelProps> = ({
           </span>
           <div className={styles.actions}>
             <Tooltip content="发送">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={styles.actionBtn}
                 aria-label="立即发送"
                 onClick={handleSendNow(msg.id)}
-              >
-                <Lucide.Send size={14} aria-hidden />
-              </button>
+                icon={<Lucide.Send size={14} aria-hidden />}
+              />
             </Tooltip>
             <Tooltip content="编辑">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={styles.actionBtn}
                 aria-label="编辑排队消息"
                 onClick={handleEdit(msg.id)}
-              >
-                <Lucide.Pencil size={14} aria-hidden />
-              </button>
+                icon={<Lucide.Pencil size={14} aria-hidden />}
+              />
             </Tooltip>
             <Tooltip content="删除">
-              <button
+              <Button
                 type="button"
+                variant="danger"
+                size="sm"
                 className={`${styles.actionBtn} ${styles.danger}`}
                 aria-label="删除排队消息"
                 onClick={handleDelete(msg.id)}
-              >
-                <Lucide.Trash2 size={14} aria-hidden />
-              </button>
+                icon={<Lucide.Trash2 size={14} aria-hidden />}
+              />
             </Tooltip>
           </div>
         </div>

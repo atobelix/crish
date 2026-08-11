@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './RunNoticeBar.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import type { RunNotice } from '../../hooks/useChatStream';
 import {
   resolveRunNoticeAriaLabel,
@@ -42,20 +42,19 @@ export const RunNoticeBar: React.FC<RunNoticeBarProps> = ({
         </span>
         {runNotice?.detail ? (
           <Tooltip content={runNotice.detail}>
-            <span className={styles.runNoticeDetail}>
-              {runNotice.detail}
-            </span>
+            <span className={styles.runNoticeDetail}>{runNotice.detail}</span>
           </Tooltip>
         ) : null}
       </div>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         className={styles.runNoticeDismiss}
         aria-label="关闭提示"
         onClick={onDismiss}
-      >
-        <Lucide.X size={14} aria-hidden />
-      </button>
+        icon={<Lucide.X size={14} aria-hidden />}
+      />
     </div>
   );
 };

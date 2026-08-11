@@ -1,12 +1,9 @@
 import React, { useRef } from 'react';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
-import type {
-  LayoutStore,
-  WorkspaceState,
-} from '../../store/types';
+import type { LayoutStore, WorkspaceState } from '../../store/types';
 import styles from './Workspace.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { Columns, X } from 'lucide-react';
@@ -25,7 +22,7 @@ interface WorkspaceProps {
 }
 
 // re-export：WorkspaceCanvas 等消费方经壳层取渲染类型
-export type {  RenderedColumn } from './workspaceLayoutLib';
+export type { RenderedColumn } from './workspaceLayoutLib';
 
 /**
  * 工作区壳组件：容器 + 拆分 chrome + 读屏 live region + 画布/空态编排。
@@ -46,14 +43,14 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
     const wsSelector = React.useMemo(
       () => (s: LayoutStore) =>
         s.workspaces.find((w: WorkspaceState) => w.id === wsId),
-      [wsId],
+      [wsId]
     );
     const ws = useLayoutStore(wsSelector);
 
     const wsIndexSelector = React.useMemo(
       () => (s: LayoutStore) =>
         s.workspaces.findIndex((w: WorkspaceState) => w.id === wsId),
-      [wsId],
+      [wsId]
     );
     const wsIndex = useLayoutStore(wsIndexSelector);
 
@@ -72,13 +69,13 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
 
     const renderedColumns = React.useMemo(
       () => computeRenderedColumns(ws, draggedTab, dropPreview),
-      [ws, draggedTab, dropPreview],
+      [ws, draggedTab, dropPreview]
     );
 
     /** 拖标签时的读屏播报（与占位中文同步） */
     const dropLiveMessage = React.useMemo(
       () => resolveDropLiveMessage(ws, draggedTab, dropPreview),
-      [draggedTab, dropPreview, ws],
+      [draggedTab, dropPreview, ws]
     );
 
     if (!ws) return null;
@@ -141,14 +138,15 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
               </span>
             </div>
             <Tooltip content={`关闭拆分工作区 ${ordinal}`}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className="workspace-close-btn card-action-btn"
                 onClick={() => closeWorkspace(ws.id)}
                 aria-label={`关闭拆分工作区 ${ordinal}`}
-              >
-                <X size={14} strokeWidth={1.75} aria-hidden />
-              </button>
+                icon={<X size={14} strokeWidth={1.75} aria-hidden />}
+              />
             </Tooltip>
           </div>
         )}
@@ -181,5 +179,5 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
         </AppErrorBoundary>
       </div>
     );
-  },
+  }
 );

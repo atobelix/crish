@@ -2,7 +2,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './OverviewCard.module.css';
 import { emitUiEvent } from '../../api/uiEvents';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 
 export interface QuickPromptItem {
   id: string;
@@ -49,18 +49,22 @@ export const OverviewQuickActions: React.FC<OverviewQuickActionsProps> = ({
   return (
     <div className={styles.quickPromptsList} aria-label="快捷提示卡片列表">
       {prompts.map((item) => {
-        const IconComp = (Lucide[item.icon] as React.ComponentType<Lucide.LucideProps>) || Lucide.Zap;
+        const IconComp =
+          (Lucide[item.icon] as React.ComponentType<Lucide.LucideProps>) ||
+          Lucide.Zap;
         return (
           <Tooltip key={item.id} content={item.description}>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className={styles.quickPromptCard}
               onClick={item.action}
               aria-label={`${item.title}：${item.description}`}
+              icon={<IconComp size={14} className={styles.ico} aria-hidden />}
             >
-              <IconComp size={14} className={styles.ico} aria-hidden />
               <span className={styles.quickPromptTitle}>{item.title}</span>
-            </button>
+            </Button>
           </Tooltip>
         );
       })}

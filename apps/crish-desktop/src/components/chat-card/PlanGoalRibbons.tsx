@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PlanGoalRibbons.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import {
   formatGoalRibbonLabel,
   formatPlanModeRibbonLabel,
@@ -46,7 +46,7 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
   const showPlanApprove = shouldShowPlanApproveAction(plan.planApproved);
   const goalProgressPct = goalRibbonProgressPercent(
     goal.goalTasksDone,
-    goal.goalTasksTotal,
+    goal.goalTasksTotal
   );
 
   return (
@@ -66,14 +66,15 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
           </Tooltip>
           {showPlanApprove ? (
             <Tooltip content="批准执行">
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="sm"
                 className={styles.planModeRibbonIconBtn}
                 aria-label="批准计划执行"
                 onClick={plan.onApprovePlan}
-              >
-                <Lucide.Check size={14} strokeWidth={2} aria-hidden />
-              </button>
+                icon={<Lucide.Check size={14} strokeWidth={2} aria-hidden />}
+              />
             </Tooltip>
           ) : null}
         </div>
@@ -116,14 +117,15 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
             </Tooltip>
           ) : null}
           <Tooltip content="停止目标">
-            <button
+            <Button
               type="button"
+              variant="danger"
+              size="sm"
               className={`${styles.planModeRibbonIconBtn} ${styles.isDanger}`}
               aria-label="停止目标"
               onClick={goal.onStopGoal}
-            >
-              <Lucide.Square size={12} fill="currentColor" aria-hidden />
-            </button>
+              icon={<Lucide.Square size={12} fill="currentColor" aria-hidden />}
+            />
           </Tooltip>
         </div>
       ) : null}

@@ -1,17 +1,13 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-} from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../ui';
-import type {
-  FileDiff,
-  SessionMessage,
-} from '../../store/types';
+import { Button, Tooltip } from '../ui';
+import type { FileDiff, SessionMessage } from '../../store/types';
 import { messageMatchesSearch } from '../../api/sessionSearch';
-import { ChatAssistantMessageRow, ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
+import {
+  ChatAssistantMessageRow,
+  ChatUserMessageRow,
+} from '../chat-message-row/ChatMessageRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/messageWindow';
 import { ChevronDown, Pin, PinOff } from 'lucide-react';
@@ -214,8 +210,10 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
           >
             <div className="chat-msg-window-older-actions">
               <Tooltip content={olderAria}>
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   className="chat-msg-window-older-btn"
                   onClick={expandOlderStep}
                   aria-label={olderAria}
@@ -227,12 +225,14 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                   >
                     （另有 {messageWindow.hiddenCount} 条未显示）
                   </span>
-                </button>
+                </Button>
               </Tooltip>
               {offerShowAllOlder ? (
                 <Tooltip content={showAllAria}>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
                     className="chat-msg-window-older-btn chat-msg-window-older-btn--all"
                     onClick={expandOlderAll}
                     aria-label={showAllAria}
@@ -244,7 +244,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                     >
                       （{messageWindow.hiddenCount} 条）
                     </span>
-                  </button>
+                  </Button>
                 </Tooltip>
               ) : null}
             </div>
@@ -295,14 +295,15 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                       </button>
                     </Tooltip>
                     <Tooltip content="取消固定">
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         className={styles.pinnedUnpin}
                         aria-label={`取消固定：${item.snippet}`}
                         onClick={() => togglePin(item.id)}
-                      >
-                        <PinOff size={14} aria-hidden />
-                      </button>
+                        icon={<PinOff size={14} aria-hidden />}
+                      />
                     </Tooltip>
                   </li>
                 ))}
@@ -445,12 +446,13 @@ export const MEMO_COMPARE_FIELDS = [
 ] as const satisfies readonly (keyof MessageVirtualizerProps)[];
 
 /** 新增 prop 忘收录 → 编译红（类型级穷尽检查） */
-type _Exhausted = Exclude<
-  keyof MessageVirtualizerProps,
-  typeof MEMO_COMPARE_FIELDS[number]
-> extends never
-  ? true
-  : false;
+type _Exhausted =
+  Exclude<
+    keyof MessageVirtualizerProps,
+    (typeof MEMO_COMPARE_FIELDS)[number]
+  > extends never
+    ? true
+    : false;
 const _exhaustedCheck: _Exhausted = true;
 
 /** 仅在可见消息身份/长度、思考中消息、窗口与关键 UI 状态变化时放行重渲染 */

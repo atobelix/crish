@@ -9,7 +9,7 @@
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatMsgFilterBar.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 
 export type ChatMsgFilterBarProps = {
   localMsgFilter: string;
@@ -123,27 +123,29 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
       </Tooltip>
       {hasDraft ? (
         <Tooltip content="清除筛选（Esc）">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.clear}
             aria-label="清除筛选"
             aria-keyshortcuts="Escape"
             tabIndex={-1}
             onClick={clearQuery}
-          >
-            <Lucide.X size={13} strokeWidth={1.75} aria-hidden />
-          </button>
+            icon={<Lucide.X size={13} strokeWidth={1.75} aria-hidden />}
+          />
         </Tooltip>
       ) : null}
       <Tooltip content={hasDraft ? '关闭并清除筛选' : '关闭筛选（Esc）'}>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={`${styles.clear} ${styles.close}`}
           aria-label="关闭筛选"
           onClick={closeBar}
-        >
-          <Lucide.ChevronUp size={13} strokeWidth={1.75} aria-hidden />
-        </button>
+          icon={<Lucide.ChevronUp size={13} strokeWidth={1.75} aria-hidden />}
+        />
       </Tooltip>
     </div>
   );

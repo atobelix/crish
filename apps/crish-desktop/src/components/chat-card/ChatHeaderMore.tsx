@@ -1,7 +1,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatHeaderMore.module.css';
-import { Menu } from '../ui';
+import { Button, Menu } from '../ui';
 import type { SelectOptionItem } from '../ui';
 
 interface Props {
@@ -61,13 +61,14 @@ export const ChatHeaderMore: React.FC<Props> = ({
   return (
     <Menu
       trigger={
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={styles.moreBtn}
           aria-label="更多选项"
-        >
-          <Lucide.MoreHorizontal size={15} />
-        </button>
+          icon={<Lucide.MoreHorizontal size={15} />}
+        />
       }
       options={options}
       align="end"

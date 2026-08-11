@@ -18,6 +18,7 @@
  */
 import React from 'react';
 import styles from '../BrowserPanel.module.css';
+import { Button } from '../../ui';
 import type { PanelStatus } from './browserPanelTypes';
 
 export interface IndicatorBarProps {
@@ -45,7 +46,9 @@ function indicatorStatusText(status: PanelStatus): string {
 
 /** 暂停按钮可见性：仅在 AI 在途/挂起/接管态（idle 无动作可暂停）。 */
 function showToggle(status: PanelStatus): boolean {
-  return status === 'ai-busy' || status === 'paused' || status === 'user-taking-over';
+  return (
+    status === 'ai-busy' || status === 'paused' || status === 'user-taking-over'
+  );
 }
 
 export const IndicatorBar: React.FC<IndicatorBarProps> = ({
@@ -68,14 +71,16 @@ export const IndicatorBar: React.FC<IndicatorBarProps> = ({
         {actionText}
       </span>
       {showToggle(status) ? (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={styles.indicatorToggle}
           onClick={onTogglePause}
           aria-label={status === 'paused' ? '恢复 AI 队列' : '暂停 AI 队列'}
         >
           {status === 'paused' ? '恢复' : '暂停'}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

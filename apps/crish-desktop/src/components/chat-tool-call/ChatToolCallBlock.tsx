@@ -13,6 +13,7 @@ import type {
   SessionAgent,
 } from '../../store/types';
 import type { ToolRenderItem } from '../../api/toolPresentation';
+import { Button } from '../ui';
 import { CompactToolRow } from './CompactToolRow';
 
 export interface ChatToolStackProps {
@@ -27,18 +28,21 @@ export interface ChatToolStackProps {
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
   onOpenPath?: ((filePath: string) => void) | undefined;
   onOpenTerminal?: (() => void) | undefined;
-  onApprovalAllow?: ((toolId: string, msgId: string, remember?: boolean) => void) | undefined;
+  onApprovalAllow?:
+    ((toolId: string, msgId: string, remember?: boolean) => void) | undefined;
   onApprovalDeny?: ((toolId: string, msgId: string) => void) | undefined;
   onRetryTool?: ((toolId: string) => void) | undefined;
   /** 批量批准：msgIds 与 toolIds 等长，按 bar 内相邻 pending 组 */
   onBatchApprove?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
   onBatchDeny?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
   /** 关联子 agent 面板渲染器（组合根注入；切断 chat-tool-call → agent-card 依赖） */
-  renderLinkedAgentPanel?: ((
-    agent: SessionAgent,
-    parentSessionId: string,
-    tc: MessageToolCall
-  ) => React.ReactNode) | undefined;
+  renderLinkedAgentPanel?:
+    | ((
+        agent: SessionAgent,
+        parentSessionId: string,
+        tc: MessageToolCall
+      ) => React.ReactNode)
+    | undefined;
 }
 
 /**
@@ -82,24 +86,28 @@ function BatchApprovalBar({
         待确认工具（{toolIds.length}）
       </span>
       {onApprove ? (
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           className={`${styles.batchBarBtn} ${styles.batchBarApprove}`}
           onClick={() => onApprove(msgIds, toolIds)}
+          icon={<Check size={12} />}
         >
-          <Check size={12} />
           全部批准
-        </button>
+        </Button>
       ) : null}
       {onDeny ? (
-        <button
+        <Button
           type="button"
+          variant="danger"
+          size="sm"
           className={`${styles.batchBarBtn} ${styles.batchBarDeny}`}
           onClick={() => onDeny(msgIds, toolIds)}
+          icon={<X size={12} />}
         >
-          <X size={12} />
           全部拒绝
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -181,7 +189,12 @@ function renderToolStackItems(
       let j = i + 1;
       while (j < tools.length) {
         const tj = tools[j]!;
-        if (tj.turnId !== cur.turnId || tj.startedAt == null || Math.abs(tj.startedAt - cur.startedAt) > 200) break;
+        if (
+          tj.turnId !== cur.turnId ||
+          tj.startedAt == null ||
+          Math.abs(tj.startedAt - cur.startedAt) > 200
+        )
+          break;
         group.push(tj);
         j++;
       }

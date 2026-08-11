@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { usePreviewNavigation } from './usePreviewNavigation';
 import { PreviewToolbar } from './PreviewToolbar';
 import { PreviewHistoryPanel } from './PreviewHistoryPanel';
@@ -137,30 +137,38 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                     部分站点禁止嵌入；可用外部打开。
                   </span>
                 </div>
-                <div className={styles.quickRow} role="group" aria-label="快捷本地地址">
+                <div
+                  className={styles.quickRow}
+                  role="group"
+                  aria-label="快捷本地地址"
+                >
                   {QUICK_LOCAL.map((u) => (
                     <Tooltip key={u} content={u}>
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
+                        size="sm"
                         className={styles.quickChip}
                         onClick={() => navigate(u)}
                       >
                         {u.replace(/^https?:\/\//, '')}
-                      </button>
+                      </Button>
                     </Tooltip>
                   ))}
                 </div>
                 {!canEmbed && !blank ? (
                   <div className={styles.localPath}>
                     <code className={styles.localCode}>{activeUrl}</code>
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
                       className={styles.quickChip}
                       onClick={openExternal}
                       disabled={!canExternal}
                     >
                       外部打开
-                    </button>
+                    </Button>
                   </div>
                 ) : null}
               </div>
@@ -182,23 +190,27 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                 </div>
                 <div className={styles.quickRow}>
                   {loadError ? (
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
                       className={styles.quickChip}
                       onClick={reload}
                     >
                       重试
-                    </button>
+                    </Button>
                   ) : null}
                   {!blank ? (
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
                       className={styles.quickChip}
                       onClick={openExternal}
                       disabled={!canExternal}
                     >
                       系统浏览器打开
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               </div>

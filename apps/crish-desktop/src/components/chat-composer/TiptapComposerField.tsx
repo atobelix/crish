@@ -10,13 +10,23 @@
  * - 附件/权限/队列/IME：宿主链路不变（onPaste 转发原事件、composition 同步宿主）。
  * CI Guardrail: UI Component (Max 500 lines of effective code, Max 12 useState)
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
-import { ConfirmDialog, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { TiptapEditorField } from './TiptapEditorField';
-import type { SlashCommandItem, TiptapEditorFieldHandle, MentionCandidate } from './composerTypes';
+import type {
+  SlashCommandItem,
+  TiptapEditorFieldHandle,
+  MentionCandidate,
+} from './composerTypes';
 import { slashMenuPick } from '../../api/resolveSlashCommand';
 import {
   COMPOSER_DENSE_LINE_HEIGHT,
@@ -120,10 +130,14 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     typeof maxLines === 'number' && Number.isFinite(maxLines)
       ? maxLines
       : COMPOSER_MAX_LINES;
-  const lineHeightToken = dense ? COMPOSER_DENSE_LINE_HEIGHT : COMPOSER_LINE_HEIGHT;
+  const lineHeightToken = dense
+    ? COMPOSER_DENSE_LINE_HEIGHT
+    : COMPOSER_LINE_HEIGHT;
 
   // ── 发送偏好（ctrlEnter/enter，随 storage 事件同步）─────────────────────────
-  const [sendShortcut, setSendShortcut] = useState<'enter' | 'ctrlEnter'>(readSendShortcut);
+  const [sendShortcut, setSendShortcut] = useState<'enter' | 'ctrlEnter'>(
+    readSendShortcut
+  );
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'crish_send_shortcut') setSendShortcut(readSendShortcut());
@@ -214,24 +228,26 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
 
   const slashExtraItems = useMemo(() => {
     const base = baseSlashCommands ?? HOST_SYSTEM_SLASH;
-    return [...base, ...(skillSlashCommands ?? [])].map<SlashCommandItem>((c) => ({
-      id: `host-${c.cmd}`,
-      title: c.cmd,
-      description: c.desc,
-      iconName: HOST_SLASH_ICONS[c.cmd] ?? HOST_SLASH_ICONS['/skill'],
-      keywords: [c.cmd.replace(/^\/+/, '')],
-      command: ({ editor, range }) => {
-        const pick = slashMenuPick(c.cmd);
-        if (pick.action === 'open-schedule') {
-          // 定时任务：转交宿主开面板，不落输入
-          slashPickRef.current?.(c.cmd);
-          return;
-        }
-        const chain = editor.chain().focus();
-        if (range) chain.deleteRange(range);
-        chain.insertContent(pick.text).run();
-      },
-    }));
+    return [...base, ...(skillSlashCommands ?? [])].map<SlashCommandItem>(
+      (c) => ({
+        id: `host-${c.cmd}`,
+        title: c.cmd,
+        description: c.desc,
+        iconName: HOST_SLASH_ICONS[c.cmd] ?? HOST_SLASH_ICONS['/skill'],
+        keywords: [c.cmd.replace(/^\/+/, '')],
+        command: ({ editor, range }) => {
+          const pick = slashMenuPick(c.cmd);
+          if (pick.action === 'open-schedule') {
+            // 定时任务：转交宿主开面板，不落输入
+            slashPickRef.current?.(c.cmd);
+            return;
+          }
+          const chain = editor.chain().focus();
+          if (range) chain.deleteRange(range);
+          chain.insertContent(pick.text).run();
+        },
+      })
+    );
   }, [baseSlashCommands, skillSlashCommands]);
 
   // ── Stop L2/L3 UX（与 ComposerField 同源：Shift+点击 / 长按 550ms + 二次确认）──
@@ -365,21 +381,23 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         {isProcessing ? (
           <>
             <Tooltip content={sendTitle}>
-              <button
+              <Button
                 type="button"
-                className={`${styles.sendBtn} ${styles.queue}`}
+                variant="secondary"
+                size="sm"
                 aria-label={sendAria}
                 onClick={trySend}
                 disabled={sendDisabled}
               >
                 {processingSendLabel}
-              </button>
+              </Button>
             </Tooltip>
             {onStop ? (
               <Tooltip content={STOP_TOOLTIP}>
-                <button
+                <Button
                   type="button"
-                  className={`${styles.sendBtn} ${styles.stop}`}
+                  variant="ghost"
+                  size="sm"
                   data-testid="composer-stop"
                   data-stop-level="l2"
                   aria-label={STOP_ARIA_LABEL}
@@ -388,27 +406,25 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
                   onPointerUp={clearLongPress}
                   onPointerLeave={clearLongPress}
                   onPointerCancel={clearLongPress}
-                >
-                  <Lucide.Square size={16} fill="currentColor" aria-hidden />
-                </button>
+                  icon={
+                    <Lucide.Square size={16} fill="currentColor" aria-hidden />
+                  }
+                />
               </Tooltip>
             ) : null}
           </>
         ) : (
           <Tooltip content={sendTitle}>
-            <button
+            <Button
               type="button"
-              className={styles.sendBtn}
+              variant="primary"
+              size="sm"
               aria-label={sendAria}
               onClick={trySend}
               disabled={sendDisabled}
-            >
-              {disabled ? (
-                <span className="loading-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
-              ) : (
-                <Lucide.CornerDownLeft size={16} />
-              )}
-            </button>
+              loading={Boolean(disabled)}
+              icon={<Lucide.CornerDownLeft size={16} />}
+            />
           </Tooltip>
         )}
       </div>

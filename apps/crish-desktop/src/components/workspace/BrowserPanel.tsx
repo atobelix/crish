@@ -26,7 +26,7 @@ import {
   Square,
 } from 'lucide-react';
 import styles from './BrowserPanel.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { useBrowserSession } from './useBrowserSession';
 import {
   BROWSER_AI_READY_TEXT,
@@ -40,7 +40,10 @@ import {
 import { FrameCanvas } from './browser-panel/FrameCanvas';
 import { IndicatorBar } from './browser-panel/IndicatorBar';
 import { InputLayer } from './browser-panel/InputLayer';
-import { useFrameStream, type UseFrameStreamOptions } from './browser-panel/useFrameStream';
+import {
+  useFrameStream,
+  type UseFrameStreamOptions,
+} from './browser-panel/useFrameStream';
 import { usePanelStatus } from './browser-panel/usePanelStatus';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 
@@ -117,9 +120,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
           {renderStateIcon(state, styles.spin)}
         </div>
         <div className={styles.statusText}>
-          <div className={styles.statusTitle}>
-            {BROWSER_STATE_LABEL[state]}
-          </div>
+          <div className={styles.statusTitle}>{BROWSER_STATE_LABEL[state]}</div>
           <div className={styles.statusDesc}>
             {BROWSER_STATE_DESC[state]}
             {state === 'running' && url ? (
@@ -165,8 +166,10 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
 
       <div className={styles.actions} role="group" aria-label="浏览器控制">
         <Tooltip content="启动受管浏览器窗口">
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
             className={`${styles.btn} ${styles.btnPrimary}`}
             disabled={busy || !startReady}
             onClick={start}
@@ -183,11 +186,13 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
               <Play size={14} strokeWidth={1.75} aria-hidden />
             )}
             <span>启动</span>
-          </button>
+          </Button>
         </Tooltip>
         <Tooltip content="正常停止浏览器">
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             className={styles.btn}
             disabled={busy || !stopReady}
             onClick={stop}
@@ -195,11 +200,13 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
           >
             <Square size={14} strokeWidth={1.75} aria-hidden />
             <span>停止</span>
-          </button>
+          </Button>
         </Tooltip>
         <Tooltip content="强制终止（与停止同一命令，用于启动/运行异常时）">
-          <button
+          <Button
             type="button"
+            variant="danger"
+            size="sm"
             className={`${styles.btn} ${styles.btnDanger}`}
             disabled={busy || !killReady}
             onClick={kill}
@@ -207,7 +214,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
           >
             <OctagonX size={14} strokeWidth={1.75} aria-hidden />
             <span>急停（强制）</span>
-          </button>
+          </Button>
         </Tooltip>
       </div>
     </div>

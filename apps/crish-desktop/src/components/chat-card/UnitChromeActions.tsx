@@ -4,14 +4,9 @@
  * 避免「标签行 + 工具行」叠成三行顶栏。
  */
 import React, { useCallback, useMemo } from 'react';
-import {
-  FolderTree,
-  GitBranch,
-  Terminal,
-  LayoutDashboard,
-} from 'lucide-react';
+import { FolderTree, GitBranch, Terminal, LayoutDashboard } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
   openToolInSession,
@@ -108,7 +103,8 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       const shell = getCompositionRoot().shell.getState();
       const sid = (activeSessionId || '').trim();
       const tab = sid
-        ? shell.openTabs.find((t) => t.sessionId === sid) ?? shell.getActiveTab()
+        ? (shell.openTabs.find((t) => t.sessionId === sid) ??
+          shell.getActiveTab())
         : shell.getActiveTab();
       if (!tab) return;
 
@@ -141,8 +137,10 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             const isActive = !rightDockCollapsed && activePanelId === id;
             return (
               <Tooltip key={id} content={label}>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={styles.toolBtn}
                   data-testid={testId}
                   data-panel={id}
@@ -151,9 +149,8 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
                   aria-label={label}
                   aria-pressed={isActive}
                   onClick={() => handleOpenTool(id)}
-                >
-                  <Icon size={15} strokeWidth={1.75} aria-hidden />
-                </button>
+                  icon={<Icon size={15} strokeWidth={1.75} aria-hidden />}
+                />
               </Tooltip>
             );
           })}
@@ -174,11 +171,11 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
           <>
             <span className={styles.toolbarDivider} aria-hidden="true" />
             <div className={styles.dockGroup}>
-              <Tooltip
-                content="展开右侧工具栏"
-              >
-                <button
+              <Tooltip content="展开右侧工具栏">
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={styles.toolBtn}
                   data-testid="right-dock-toggle"
                   data-active="false"
@@ -186,9 +183,8 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
                   aria-expanded={false}
                   aria-pressed={false}
                   onClick={handleToggleRightDock}
-                >
-                  <IconSidebarRight size={15} aria-hidden />
-                </button>
+                  icon={<IconSidebarRight size={15} aria-hidden />}
+                />
               </Tooltip>
             </div>
           </>
