@@ -10,6 +10,8 @@
 //! - **结构 encode**：整树可逆 CDCS snapshot（G-HYD-1），**禁止** `rev.to_le_bytes()` 占位
 //! - **hydrate**：`load_doc` blob → 重建树 + 冷文本登记（G-HYD-2）
 //! - **写锥**：`tree` / `rev` 非 `pub` 可写；远端文本合入走同源 `on_committed`
+//! - **Undo v1（W1-U）**：一次成功 `apply` 批 = 一步；`undo(filter)` 可按 origin 过滤；
+//!   栈仅 `User`/`Agent`；跨冷 undo 结构正确（A-MEM-04）；删块 undo 恢复文本（A-INV-09c）
 //!
 //! 并发 move 规则见 `docs/block-workspace-architecture/plans/specs/concurrent-move-rules.md`
 //! 与 18 §M1。超长策略见 `docs/.../specs/huge-block-policy.md`。
@@ -38,12 +40,23 @@ use thiserror::Error;
 ///
 /// 含：Structure（`BlockTree`）、rev、TextEngine 检查点、成功观测字段。
 /// **不**含 persistence 插件句柄（插件外部状态由调用方/store 负责）。
+///
+/// 亦作为 Undo v1 栈条目的「apply 前」快照（W1-U）。
+#[derive(Clone)]
 struct MemorySnapshot {
     tree: BlockTree,
     rev: u64,
     text: TextEngineCheckpoint,
     last_tx_id: Option<TxId>,
     last_text_updates: Vec<TextUpdatePayload>,
+}
+
+/// Undo 栈一步：对应一次成功的本地 `apply` 批（W1-U / 01 §1.6）。
+#[derive(Clone)]
+struct UndoEntry {
+    origin: Origin,
+    /// 该批 apply **之前**的可恢复态。
+    pre: MemorySnapshot,
 }
 
 // ─── M2 / A-HUGE 阈值 ───────────────────────────────────────────────
@@ -129,6 +142,19 @@ pub enum ApplyError {
     Invariant(String),
 }
 
+/// `DocSession::undo` 失败（W1-U）。
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum UndoError {
+    /// 栈空，或 filter 导致无可撤步。
+    #[error("undo stack empty")]
+    Empty,
+    /// 栈顶 origin 与 filter 不匹配（A-COL-04：不偷偷撤错源）。
+    #[error("undo origin mismatch: expected {expected:?}, top is {actual:?}")]
+    OriginMismatch { expected: Origin, actual: Origin },
+    #[error("undo persist: {0}")]
+    Persist(String),
+}
+
 /// `DocSession::hydrate` 失败（G-HYD-2）：载荷不可解码时**禁止**静默空会话当成功。
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum HydrateError {
@@ -157,6 +183,7 @@ impl From<TextEngineError> for ApplyError {
 /// 文档会话：权威树 + rev **仅**经 `apply` / `hydrate` / 统一 commit 面写入（A-INV-01）。
 ///
 /// 写锥：`tree` / `rev` **非** `pub` 可写字段；外部只能 `tree()` / `rev()` 只读访问。
+/// Undo v1：[`Self::undo`] 只撤本地 `User`/`Agent` 成功批（`Remote`/`System` 不入栈）。
 pub struct DocSession {
     pub doc_id: String,
     /// 权威块树（写锥封闭：非 pub 可写）。
@@ -172,6 +199,8 @@ pub struct DocSession {
     last_text_updates: Vec<TextUpdatePayload>,
     /// 单叶 UTF-8 字节超长阈（`T_HUGE`）；默认 256 KiB，钳制 64KiB..=16MiB。
     huge_threshold: usize,
+    /// Undo v1 栈（W1-U）：仅 `User`/`Agent` 成功 apply 入栈。
+    undo_stack: Vec<UndoEntry>,
 }
 
 impl DocSession {
@@ -185,6 +214,7 @@ impl DocSession {
             last_tx_id: None,
             last_text_updates: Vec::new(),
             huge_threshold: DEFAULT_T_HUGE,
+            undo_stack: Vec::new(),
         }
     }
 
@@ -274,7 +304,15 @@ impl DocSession {
             let text = node.text_snapshot.clone().unwrap_or_default();
             self.text_engine.init_block_with_text(*id, text);
         }
+        // hydrate 重建权威后清空内存 undo（跨进程无栈；进程内冷边界 undo 见 W1-U 热集测）
+        self.undo_stack.clear();
         Ok(())
+    }
+
+    /// Undo 栈深度（W1-U 观测 / 测试）。
+    #[inline]
+    pub fn undo_len(&self) -> usize {
+        self.undo_stack.len()
     }
 
     /// 上次成功 `apply` 的 [`TxId`]（失败 apply 不更新）。
@@ -537,6 +575,9 @@ impl DocSession {
     /// **P-H2（18 补丁 · 方案 A 快照回滚）**：预校验通过后、突变前捕获
     /// Structure+Text+rev；`on_committed` / 同批 huge split / 突变中途 **任一失败**
     /// → 整域回滚到 apply 前，返回错误且 **零半提交**（树/文本/rev ≡ apply 前）。
+    ///
+    /// **Undo v1**：成功且 `origin ∈ {User, Agent}` 时，将 apply 前快照压入 undo 栈
+    ///（一次 apply 批 = 一步；Agent 千次 Op 同批仍一步）。`Remote`/`System` 不入栈。
     pub fn apply(&mut self, origin: Origin, ops: &[Op]) -> Result<DocEvent, ApplyError> {
         let tx = TxGuard::begin();
         let tx_id = tx.id();
@@ -548,6 +589,10 @@ impl DocSession {
         let pre = self.capture_memory_snapshot();
         match self.apply_after_validate(origin, ops, tx_id) {
             Ok(event) => {
+                // W1-U：仅本地 User/Agent 入栈；失败路径不入栈
+                if matches!(origin, Origin::User | Origin::Agent) {
+                    self.undo_stack.push(UndoEntry { origin, pre });
+                }
                 tx.commit();
                 Ok(event)
             }
@@ -556,6 +601,70 @@ impl DocSession {
                 Err(e)
             }
         }
+    }
+
+    /// Undo v1：撤销栈顶一步（一次 apply 批）。
+    ///
+    /// - `filter = None`：撤栈顶（无论 User/Agent）
+    /// - `filter = Some(o)`：仅当栈顶 origin == o 时撤，否则 [`UndoError::OriginMismatch`]
+    ///   （A-COL-04：可按 origin 过滤，不误撤）
+    /// - 恢复结构 + 文本 plain 权威；**rev 单调 +1** 并走同源 `on_committed`
+    /// - 跨热集冷藏：结构正确；文本以栈内 plain 快照为准（细粒度 yrs 史允许截断，A-MEM-04）
+    /// - 删块步被撤 → 块与文本按快照恢复（A-INV-09c 后半）
+    /// - `on_committed` 失败 → 内存态与栈深度回滚到 undo 前（P-H2 同向）
+    ///
+    /// **redo 本波未交付**。
+    pub fn undo(&mut self, filter: Option<Origin>) -> Result<DocEvent, UndoError> {
+        let top = self.undo_stack.last().ok_or(UndoError::Empty)?;
+        if let Some(expected) = filter {
+            if top.origin != expected {
+                return Err(UndoError::OriginMismatch {
+                    expected,
+                    actual: top.origin,
+                });
+            }
+        }
+        let entry = self
+            .undo_stack
+            .pop()
+            .expect("undo_stack 非空（已 last 检查）");
+
+        // persist 失败时回滚到 undo 前内存态，并把 entry 压回栈
+        let pre_undo = self.capture_memory_snapshot();
+        let rev_before = self.rev;
+
+        // 恢复树与文本 plain；不回退 rev 历史值（协同单调）
+        self.tree = entry.pre.tree.clone();
+        self.text_engine.restore(entry.pre.text.clone());
+        self.rev = rev_before.saturating_add(1);
+        let rev = self.rev;
+
+        let tx = TxGuard::begin();
+        let tx_id = tx.id();
+        self.last_tx_id = Some(tx_id);
+        self.last_text_updates = Vec::new();
+
+        // 结构 snapshot 已含 text_snapshot；文本 update 可空
+        if let Err(e) = self.emit_commit(Origin::System, tx_id, rev, &[]) {
+            self.restore_memory_snapshot(pre_undo);
+            self.undo_stack.push(entry);
+            return Err(UndoError::Persist(e.to_string()));
+        }
+        tx.commit();
+
+        let upserts: Vec<BlockUpsert> = self.tree.nodes.values().map(block_to_upsert).collect();
+        let text_touches: Vec<BlockId> = upserts.iter().map(|u| u.id).collect();
+
+        Ok(DocEvent::Projection {
+            diff: ProjectionDiff {
+                doc_id: self.doc_id.clone(),
+                rev,
+                upserts,
+                removes: vec![],
+                text_touches,
+                full_rebuild: true,
+            },
+        })
     }
 
     /// 预校验已通过后的突变 + persist（失败由 [`Self::apply`] 统一回滚）。
@@ -2450,5 +2559,341 @@ mod tests {
         );
         // 半提交禁令：不得残留失败批写入的文本
         assert_ne!(s.read_text(&id), "should-not-stick");
+    }
+
+    // ─── W1-U · Undo v1（A-COL-04 / A-MEM-04 / A-INV-09c 后半）────────
+
+    /// A-COL-04：`undo(filter)` 按 origin 过滤；栈顶不匹配不误撤。
+    ///
+    /// 场景：User 批 + Agent 批 → `undo(Some(User))` 在栈顶为 Agent 时
+    /// `OriginMismatch` → `undo(None)` 撤 Agent → `undo(Some(User))` 撤 User。
+    /// Remote/System 不入栈。
+    #[test]
+    fn a_col_04_undo_origin_filter() {
+        use crate::a_col::A_COL_04;
+        assert_eq!(A_COL_04, "A-COL-04");
+
+        let mut s = DocSession::new("a-col-04");
+        let user_id = BlockId::new();
+        let agent_id = BlockId::new();
+
+        // User 批：插入 user_id
+        s.apply(
+            Origin::User,
+            &[Op::Insert {
+                id: user_id,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(s.undo_len(), 1);
+        assert!(s.tree().nodes.contains_key(&user_id));
+
+        // Agent 批：插入 agent_id（栈顶变为 Agent）
+        s.apply(
+            Origin::Agent,
+            &[Op::Insert {
+                id: agent_id,
+                parent: None,
+                order: "a1".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(s.undo_len(), 2);
+        assert!(s.tree().nodes.contains_key(&agent_id));
+
+        // Remote 不入栈
+        let remote_id = BlockId::new();
+        s.apply(
+            Origin::Remote,
+            &[Op::Insert {
+                id: remote_id,
+                parent: None,
+                order: "a2".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(s.undo_len(), 2, "Remote 不得入 undo 栈");
+        assert!(s.tree().nodes.contains_key(&remote_id));
+
+        // System 不入栈
+        let sys_id = BlockId::new();
+        s.apply(
+            Origin::System,
+            &[Op::Insert {
+                id: sys_id,
+                parent: None,
+                order: "a3".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(s.undo_len(), 2, "System 不得入 undo 栈");
+
+        // 栈顶为 Agent：undo(Some(User)) → OriginMismatch，不误撤
+        let err = s.undo(Some(Origin::User)).expect_err("须 OriginMismatch");
+        assert_eq!(
+            err,
+            UndoError::OriginMismatch {
+                expected: Origin::User,
+                actual: Origin::Agent,
+            }
+        );
+        assert_eq!(s.undo_len(), 2, "OriginMismatch 不得弹栈");
+        assert!(
+            s.tree().nodes.contains_key(&agent_id),
+            "不得误撤 Agent 批"
+        );
+        assert!(s.tree().nodes.contains_key(&user_id));
+
+        // undo(None) 撤栈顶 Agent
+        let rev_before = s.rev();
+        s.undo(None).expect("undo(None) 撤栈顶");
+        assert_eq!(s.undo_len(), 1);
+        assert!(!s.tree().nodes.contains_key(&agent_id), "Agent 批已撤");
+        assert!(s.tree().nodes.contains_key(&user_id));
+        // Remote/System 节点仍在（未入栈，undo 不碰它们；但 undo 恢复的是 Agent apply 前快照
+        // → 快照时刻 remote/sys 尚不存在，故一并消失——符合「整批 pre 快照」语义）
+        assert_eq!(s.rev(), rev_before + 1, "undo 后 rev 单调 +1");
+
+        // undo(Some(User)) 撤 User
+        s.undo(Some(Origin::User)).expect("撤 User 批");
+        assert_eq!(s.undo_len(), 0);
+        assert!(!s.tree().nodes.contains_key(&user_id));
+
+        // 空栈
+        assert_eq!(s.undo(None).unwrap_err(), UndoError::Empty);
+    }
+
+    /// A-MEM-04：跨冷 undo——小 max_hot 逼冷后 undo；结构正确；文本 plain 恢复。
+    ///
+    /// **禁止**用 reheat 测冒充：本测断言 undo 后结构 + plain，而非冷→热编辑路径。
+    /// 细粒度 yrs 击键史在冷藏后允许截断；undo 以栈内 plain 快照为准。
+    #[test]
+    fn a_mem_04_undo_across_cold_restores_structure_and_plain_text() {
+        use crate::a_mem::A_MEM_04;
+        assert_eq!(A_MEM_04, "A-MEM-04");
+
+        // max_hot=1：第二块热编辑会把第一块冷藏
+        let mut s = DocSession::new("a-mem-04").with_text_max_hot(1);
+        let a = BlockId::new();
+        let b = BlockId::new();
+
+        // 批1：插入 A + 文本 "alpha-v1"
+        s.apply(
+            Origin::User,
+            &[
+                Op::Insert {
+                    id: a,
+                    parent: None,
+                    order: "a0".into(),
+                    kind: BlockKind::Paragraph,
+                    props: BlockProps::default(),
+                },
+                Op::TextEdit {
+                    id: a,
+                    start: 0,
+                    end: 0,
+                    insert: "alpha-v1".into(),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(s.read_text(&a), "alpha-v1");
+
+        // 批2：编辑 A → "alpha-v2"
+        s.apply(
+            Origin::User,
+            &[Op::TextEdit {
+                id: a,
+                start: 0,
+                end: 8,
+                insert: "alpha-v2".into(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(s.read_text(&a), "alpha-v2");
+        let rev_after_v2 = s.rev();
+
+        // 批3：插入 B + 文本，逼 A 冷藏（跨冷边界）
+        s.apply(
+            Origin::User,
+            &[
+                Op::Insert {
+                    id: b,
+                    parent: None,
+                    order: "a1".into(),
+                    kind: BlockKind::Paragraph,
+                    props: BlockProps::default(),
+                },
+                Op::TextEdit {
+                    id: b,
+                    start: 0,
+                    end: 0,
+                    insert: "beta".into(),
+                },
+            ],
+        )
+        .unwrap();
+        assert!(
+            !s.text_is_hot(&a),
+            "A 须已冷藏（max_hot=1，B 占热槽）"
+        );
+        assert_eq!(s.read_text(&a), "alpha-v2", "冷块仍可读 plain");
+        assert!(s.text_is_hot(&b));
+        assert_eq!(s.undo_len(), 3);
+
+        // 在 A 仍冷时 undo 栈顶（撤 B）——跨冷后的第一步
+        let rev_before = s.rev();
+        s.undo(None).unwrap();
+        assert!(!s.tree().nodes.contains_key(&b), "结构：B 已撤");
+        assert!(s.tree().nodes.contains_key(&a), "结构：A 仍在");
+        assert_eq!(s.read_text(&a), "alpha-v2", "plain 仍为 v2");
+        assert_eq!(s.rev(), rev_before + 1);
+
+        // 再 undo 批2（v1→v2）：文本以 plain 快照恢复为 v1
+        s.undo(None).unwrap();
+        assert!(s.tree().nodes.contains_key(&a), "跨冷 undo 后结构仍含 A");
+        assert_eq!(
+            s.read_text(&a),
+            "alpha-v1",
+            "文本以 plain 快照恢复（yrs 击键史可截断）"
+        );
+        assert_eq!(
+            s.tree().get(&a).and_then(|n| n.text_snapshot.as_deref()),
+            Some("alpha-v1")
+        );
+        assert!(s.rev() > rev_after_v2, "undo 路径 rev 单调前进");
+    }
+
+    /// A-INV-09c 后半：Insert+TextEdit → Delete → undo → 块与文本恢复。
+    #[test]
+    fn a_inv_09c_undo_restores_deleted_block_and_text() {
+        use crate::a_inv_09::A_INV_09C;
+        let _ = A_INV_09C;
+
+        let mut s = DocSession::new("a-inv-09c-undo");
+        let id = BlockId::new();
+
+        // 同批 Insert + TextEdit
+        s.apply(
+            Origin::User,
+            &[
+                Op::Insert {
+                    id,
+                    parent: None,
+                    order: "a0".into(),
+                    kind: BlockKind::Paragraph,
+                    props: BlockProps::default(),
+                },
+                Op::TextEdit {
+                    id,
+                    start: 0,
+                    end: 0,
+                    insert: "keep-me".into(),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(s.read_text(&id), "keep-me");
+        assert!(s.text_is_registered(&id));
+        assert_eq!(s.undo_len(), 1);
+
+        // Delete 释放文本槽（09c 前半）
+        s.apply(Origin::User, &[Op::Delete { id }]).unwrap();
+        assert!(!s.tree().nodes.contains_key(&id));
+        assert!(!s.text_is_registered(&id));
+        assert_eq!(s.undo_len(), 2);
+
+        // undo Delete → 块与文本恢复（09c 后半）
+        let rev_before = s.rev();
+        s.undo(None).unwrap();
+        assert!(s.tree().nodes.contains_key(&id), "块须恢复");
+        assert!(s.text_is_registered(&id), "文本槽须恢复");
+        assert_eq!(s.read_text(&id), "keep-me", "文本 plain 须恢复");
+        assert_eq!(
+            s.tree().get(&id).and_then(|n| n.text_snapshot.as_deref()),
+            Some("keep-me")
+        );
+        assert_eq!(s.rev(), rev_before + 1);
+        assert_eq!(s.undo_len(), 1);
+
+        // 再 undo 创建批 → 空树
+        s.undo(None).unwrap();
+        assert!(!s.tree().nodes.contains_key(&id));
+        assert!(!s.text_is_registered(&id));
+        assert_eq!(s.undo_len(), 0);
+    }
+
+    /// W1-U 辅：undo persist 失败时内存态与栈深度回滚。
+    #[test]
+    fn undo_persist_fail_rolls_back_stack_and_state() {
+        use crate::persistence::PersistError;
+        use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+        struct FailUndoCommit {
+            /// 允许成功的 on_committed 次数；之后失败。
+            allow: usize,
+            calls: AtomicUsize,
+        }
+        impl PersistencePlugin for FailUndoCommit {
+            fn load_doc(
+                &self,
+                _: &str,
+            ) -> Result<crate::persistence::HydrateBlob, PersistError> {
+                Ok(Default::default())
+            }
+            fn on_committed(
+                &self,
+                _: &str,
+                _: &CommitBatch,
+            ) -> Result<(), PersistError> {
+                let n = self.calls.fetch_add(1, AtomicOrdering::SeqCst);
+                if n >= self.allow {
+                    Err(PersistError::Io("undo persist fail".into()))
+                } else {
+                    Ok(())
+                }
+            }
+            fn flush_hint(&self, _: &str) -> Result<(), PersistError> {
+                Ok(())
+            }
+        }
+
+        // allow=1：仅第一次 apply 的 commit 成功；undo 的 emit_commit 失败
+        let mut s = DocSession::new("undo-persist").with_persistence(Box::new(FailUndoCommit {
+            allow: 1,
+            calls: AtomicUsize::new(0),
+        }));
+        let id = BlockId::new();
+        s.apply(
+            Origin::User,
+            &[Op::Insert {
+                id,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(s.undo_len(), 1);
+        let rev = s.rev();
+        let nodes = s.tree().nodes.len();
+
+        let err = s.undo(None).expect_err("undo persist must fail");
+        assert!(matches!(err, UndoError::Persist(_)));
+        assert_eq!(s.undo_len(), 1, "失败须压回栈");
+        assert_eq!(s.rev(), rev, "rev 不得半前进");
+        assert_eq!(s.tree().nodes.len(), nodes);
+        assert!(s.tree().nodes.contains_key(&id));
     }
 }

@@ -6,19 +6,22 @@
  * - SlashMenuModel：slash 打开·过滤·关闭·选中 → slash_insert；composing 禁开/禁交
  * - structureIntents：insert/delete/move/collapse/slash_insert + PaperIntent 联合
  * - silentFixture：N 块假文档投影（ProjectionDiff / MemoryBlock）
- * - TextLeafModel / intentBridge / lineWindow：叶子写路径 Intent 通路（默认 mock sink）
+ * - TextLeafModel / intentBridge / lineWindow：plain 叶子 Intent（W3-D-S；默认 mock sink）
+ * - **PmTextLeaf / PmTextLeafHost**：真 prosemirror 叶 → TextEditIntent（**W3-D-PM**；sink 可仍 mock）
  * - CodeLeafModel / mountCodeLeaf / Cm6CodeLeafHost：代码叶（可聚焦 + text_edit + 真 CM6 host）
  * - `submitStructureToCollabWire`：plain Intent → collab wire JSON（真 apply 的 TS 半桥）
  *
  * **包边界**：
- * - 呈现层默认 **mock sink**（W3-D-S）；真 `DocSession::apply` 在 RS（conex-doc-collab）
- * - 写路径必须走 **Intent → wire → sink/IPC → RS apply**；禁止 serialize(DOM) 持久化
+ * - 呈现层默认 **mock sink**；真 `DocSession::apply` 在 RS（conex-doc-collab）—— **W3-D 终局**另包
+ * - 写路径必须走 **Intent → wire → sink/IPC → RS apply**；禁止 serialize(DOM/pmDoc) 持久化
  * - **禁止** DOM 当真相；选区权威在 editor-kit SelectionStore 逻辑坐标
  * - UI（React）可后接；本波优先纯 TS 可测
- * - **轨**：W3-D-S 升级面 / W3-D plain Intent 真 apply **子集**；**≠ W3-D-PM**；**≠** W3-D Strict 终局 / EL-01
+ * - **轨**：
+ *   - **W3-D-S** = plain TextLeaf + mock
+ *   - **W3-D-PM** = 真 PM 适配器入库（本导出 `leaves/pm`）；**≠** 真 apply；**≠** EL-01
+ *   - **W3-D** = 真 PM + Intent→真 apply（**本包未宣称**）
  * - W3-E 完成 = 代码叶可聚焦 + Intent 通路绿；W3-F-S = 结构 Intent+wire
- * - **W3-E ≠ 全语言高亮完成**（plain + javascript 已接线；其余 lang 后接）
- * - **W3-F ≠ EL-01 关闭**；**≠** A-BLK 全表关闭
+ * - **W3-E ≠ 全语言高亮完成**；**W3-F ≠ EL-01 关闭**
  */
 
 // Block chrome 状态
@@ -126,6 +129,28 @@ export {
   type LineWindowConfig,
   type LineWindowResult,
 } from './leaves/lineWindow';
+
+// ---------------------------------------------------------------------------
+// W3-D-PM：真 ProseMirror 叶（sink 可仍 mock；≠ W3-D 真 apply；≠ EL-01）
+// ---------------------------------------------------------------------------
+
+export {
+  leafInlineSchema,
+  pmLeafSchema,
+  textToLeafDoc,
+  leafDocToText,
+  textOffsetToPmPos,
+  pmPosToTextOffset,
+  PmTextLeaf,
+  diffToReplace,
+  isPmTextLeaf,
+  PmTextLeafHost,
+  createPmLeafEditorState,
+  isPmTextLeafHost,
+  type PmTextLeafSnapshot,
+  type PmTextLeafOptions,
+  type PmTextLeafHostOptions,
+} from './leaves/pm';
 
 // ---------------------------------------------------------------------------
 // W3-E：CM6 代码叶（可聚焦 + text_edit + 真 CM6 host；不接 RS / 不全语言高亮）

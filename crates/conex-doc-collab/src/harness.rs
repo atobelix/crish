@@ -107,7 +107,7 @@ impl DualSessionHarness {
     /// 将简化编码 ops 应用到目标 peer（**op 日志重放**；W1-B 后换 update 二进制）。
     ///
     /// 远端以 [`Origin::Remote`] 写入（origin 标签进 batch）。
-    /// **≠ A-COL-04**：按 origin 过滤的 undo 未交付，直至 W1-U。
+    /// `Remote` 不入 undo 栈；按 origin 过滤见 [`crate::DocSession::undo`]（A-COL-04）。
     pub fn push(
         &mut self,
         to: PeerSide,

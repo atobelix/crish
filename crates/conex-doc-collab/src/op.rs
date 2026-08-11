@@ -2,9 +2,10 @@ use crate::block_id::BlockId;
 use crate::ir::{BlockKind, BlockProps};
 use serde::{Deserialize, Serialize};
 
-/// 变更来源标签（写入 `CommitBatch`）。
+/// 变更来源标签（写入 `CommitBatch`；Undo 栈仅 `User`/`Agent`）。
 ///
-/// **≠ A-COL-04**：枚举存在 ≠ undo 可按 origin 过滤已交付；过滤语义待 W1-U。
+/// 按 origin **过滤 undo** 见 [`crate::DocSession::undo`]（A-COL-04 / W1-U）。
+/// 本枚举本身只是标签；过滤语义由会话 undo 栈实现。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Origin {

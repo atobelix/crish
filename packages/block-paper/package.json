@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "块纸面呈现：chrome（W3-C）+ 叶子 Intent（W3-D）+ CM6 代码叶（W3-E 真 host 接线，plain+js）+ 结构 Intent slash/多选（W3-F mock apply，不接真实后端）",
+  "description": "块纸面呈现：chrome（W3-C）+ 叶子 Intent（W3-D-S plain / W3-D-PM 真 PM，sink 默认可 mock）+ CM6 代码叶（W3-E）+ 结构 Intent（W3-F）；≠ W3-D 真 apply 终局",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -30,6 +30,10 @@
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.1",
     "@crish/block-paper-contract": "*",
-    "@crish/editor-kit": "*"
+    "@crish/editor-kit": "*",
+    "prosemirror-model": "^1.25.11",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-transform": "^1.12.0",
+    "prosemirror-view": "^1.42.2"
   }
 }

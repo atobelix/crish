@@ -33,6 +33,7 @@
     "bench:ci": "npm run bench && npm run bench:mem && npx tsx scripts/compare-benchmarks.ts",
     "bench:acceptance": "npx tsx scripts/acceptance-criteria.ts",
     "bench:report": "npx tsx scripts/generate-perf-report.ts",
+    "perf:block-workspace": "npx tsx scripts/block-workspace-perf.mjs",
     "stress": "npx tsx tests/stress/run-all-stress.ts",
     "stress:ai": "npx tsx tests/stress/stress-ai-stream.ts",
     "stress:diff": "npx tsx tests/stress/stress-diff-load.ts",

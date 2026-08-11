@@ -12,7 +12,8 @@
  * - 真 apply 路径：**`submitStructureToCollabWire`**（structureIntents）→ wire JSON →
  *   RS `ops_from_json` → `DocSession::apply`（库侧测：`w3_d_structure_intent_or_wire_applys_to_session`）
  * - **禁止**仅以 mock sink 宣称 **W3-D Strict** 完成
- * - **≠ W3-D-PM**（本桥无 ProseMirror）；plain Intent 真 apply 子集 ≠ 09 终局 W3-D
+ * - 真 PM 叶见 `leaves/pm`（**W3-D-PM**）；本桥无 PM 实现，只收 Intent
+ * - plain / PM Intent + mock sink **≠** 09 终局 **W3-D**（须真 apply）
  *
  * 对齐：
  * - W0 Intent 形状（`@crish/block-paper-contract`）

@@ -6,7 +6,9 @@
  * - A-IME：composing 期本地缓冲可更新，**不**立刻下发 Intent；end 时 flush
  * - 写路径：Intent → sink → RS apply；**禁止** serialize(DOM) 持久化
  *
- * 本模块 **不** 接真实 ProseMirror；接口钉死供后续 PM 适配器接线。
+ * 本模块 **不** 接真实 ProseMirror（**W3-D-S** plain 保留）。
+ * 真 PM 叶见 `leaves/pm`（**W3-D-PM**）；两者 Intent 形状一致，默认可走 mock sink。
+ * **≠ W3-D** 真 apply 终局。
  */
 
 import type {
