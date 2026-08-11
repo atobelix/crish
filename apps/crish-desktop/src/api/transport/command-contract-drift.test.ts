@@ -73,8 +73,7 @@ function extractManifestRegisteredNames(): string[] {
   const src = readFileSync(file, 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
-  const re =
-    /entry\(\s*"([^"]+)",\s*"[^"]+",\s*"[^"]+",\s*true\s*\)/g;
+  const re = /entry\(\s*"([^"]+)",\s*"[^"]+",\s*"[^"]+",\s*true\s*\)/g;
   const names: string[] = [];
   for (const m of src.matchAll(re)) {
     if (m[1] !== undefined) names.push(m[1]);
@@ -123,7 +122,10 @@ function readdirSorted(dir: string): string[] {
  * 如 BROWSER_START_CMD / FLOW_SNAPSHOT_CMD，04 ⑥-7 动态拼接白名单的同类）。
  * 动态拼接模板串（`invoke(` 后跟 ` 或 ${）单独计数。
  */
-function extractFrontendInvokeNames(): { names: string[]; dynamicTemplates: number } {
+function extractFrontendInvokeNames(): {
+  names: string[];
+  dynamicTemplates: number;
+} {
   const names = new Set<string>();
   let dynamicTemplates = 0;
   const callRe =
@@ -132,9 +134,8 @@ function extractFrontendInvokeNames(): { names: string[]; dynamicTemplates: numb
   // 命令形态前缀：抽取到的字面量必须是命令名形态（tauriInvoke.ts 内部
   // `invoke(cmd, args)` 变量参数调用、`status: 'ok'` 等通用字符串不是命令）
   const COMMAND_PREFIX_RE =
-    /^(core_|workbench_|config_|multi_device_|browser_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-)/;
-  const constRe =
-    /\bconst\s+[A-Z][A-Z0-9_]*\s*=\s*'([a-z][a-z0-9_-]*)'/g;
+    /^(core_|workbench_|config_|multi_device_|browser_|note_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-)/;
+  const constRe = /\bconst\s+[A-Z][A-Z0-9_]*\s*=\s*'([a-z][a-z0-9_-]*)'/g;
   const templateRe =
     /\b(invoke|invokeTyped|invokeResult|invokeCmd|transport\.request|transport\.send)\s*\(\s*`/g;
   for (const file of collectFrontendFiles(
@@ -176,7 +177,8 @@ function extractFrontendInvokeNames(): { names: string[]; dynamicTemplates: numb
     // 常量间接调用面（`const BROWSER_START_CMD = 'browser_start'`）
     let cm: RegExpExecArray | null;
     while ((cm = constRe.exec(src)) !== null) {
-      if (cm[1] !== undefined && COMMAND_PREFIX_RE.test(cm[1])) names.add(cm[1]);
+      if (cm[1] !== undefined && COMMAND_PREFIX_RE.test(cm[1]))
+        names.add(cm[1]);
     }
     dynamicTemplates += src.match(templateRe)?.length ?? 0;
   }
