@@ -137,16 +137,17 @@ describe("Tauri command registry", () => {
       .sort();
 
     expect([...registered]).toEqual(wired);
-    // 批次 9.1 校准：T-F 06 退役 5 条（88 → 83）后浏览器域追加 7 条（83 → 90）
-    expect(registered.size).toBe(90);
+    // 批次 9.1 校准：T-F 06 退役 5 条（88 → 83）后浏览器域追加 7 条（83 → 90）；
+    // R1-07/08/09 多端互通 7 条 + browser storage_state 2 条（90 → 99，R1-10 收口）
+    expect(registered.size).toBe(99);
   });
 
-  it("keeps the B6.4 surface: 90 registered commands plus 4 registered-first entries", () => {
+  it("keeps the B6.4 surface: 99 registered commands plus 4 registered-first entries", () => {
     const wired = REGISTERED_TAURI_COMMANDS.filter(shouldHaveTauriRegistration);
     const pending = REGISTERED_TAURI_COMMANDS.filter((entry) => !shouldHaveTauriRegistration(entry));
 
-    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(94);
-    expect(wired).toHaveLength(90);
+    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(103);
+    expect(wired).toHaveLength(99);
     expect(pending).toHaveLength(4);
     expect(pending.map((entry) => entry.command).sort()).toEqual([
       "append_session_messages",
@@ -247,8 +248,9 @@ describe("Tauri command registry", () => {
   it("does not expose unsupported or not-wired entries as fully wired product capabilities", () => {
     const productCommands = REGISTERED_TAURI_COMMANDS.filter(isProductCapabilityCommand);
 
-    // 批次 9.1 校准：退役 5 条 + 浏览器域 7 条（88 → 90）
-    expect(productCommands).toHaveLength(90);
+    // 批次 9.1 校准：退役 5 条 + 浏览器域 7 条（88 → 90）；
+    // R1-10 收口：多端互通 7 条 + browser storage_state 2 条（90 → 99）
+    expect(productCommands).toHaveLength(99);
     expect(productCommands.every((entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE)).toBe(true);
     expect(productCommands.every((entry) => entry.status === "implemented")).toBe(true);
     expect(productCommands.every(shouldHaveTauriRegistration)).toBe(true);

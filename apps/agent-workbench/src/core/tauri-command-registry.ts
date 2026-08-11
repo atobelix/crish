@@ -53,6 +53,16 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   { command: "browser_start_frames", status: "implemented", feature: "browser frame stream start" },
   { command: "browser_stop_frames", status: "implemented", feature: "browser frame stream stop" },
   { command: "browser_frame_status", status: "implemented", feature: "browser frame stream status" },
+  { command: "browser_export_storage_state", status: "implemented", feature: "browser storage state export" },
+  { command: "browser_import_storage_state", status: "implemented", feature: "browser storage state import" },
+  // ── 多端互通（R1-07/R1-08 配对 + 设备管理 + R1-09 网络环境）──
+  { command: "multi_device_pair_start", status: "implemented", feature: "pairing mode start" },
+  { command: "multi_device_pair_status", status: "implemented", feature: "pairing state snapshot" },
+  { command: "multi_device_pair_cancel", status: "implemented", feature: "pairing mode cancel" },
+  { command: "multi_device_list_devices", status: "implemented", feature: "paired device list" },
+  { command: "multi_device_revoke_device", status: "implemented", feature: "device revoke" },
+  { command: "multi_device_rename_device", status: "implemented", feature: "device rename" },
+  { command: "multi_device_network_info", status: "implemented", feature: "network environment detection" },
   // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
   { command: "config_get", status: "implemented", feature: "provider config read" },
   { command: "config_update", status: "implemented", feature: "provider config update" },

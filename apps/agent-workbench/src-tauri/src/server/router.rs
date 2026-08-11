@@ -86,6 +86,23 @@ pub const COMMANDS_PATH: &str = "/v1/commands";
 /// 路由，对齐 M6 C10 getSearchIndex 命令名）
 pub const SEARCH_INDEX_PATH: &str = "/v1/search/index";
 
+/// 密钥/高危险命令面（R1-10 T-07 / D5 §4.5：显式不进远程白名单——矩阵外
+/// 命令）。REST 路由表即远程白名单：本清单条目一律不注册路由，触达时经
+/// [handle_not_found] 返回 403 Forbidden（cmd.denied）+ remote-source-attempt
+/// 审计标记（纵深防御第三层：即使白名单被绕过仍有拒绝分支与可见性）。
+pub const SECRET_COMMAND_SURFACE: &[&str] = &[
+    "config_secret_reveal",
+    "config_secret_get",
+    "config_secret_set",
+    "config_secret_clear",
+    "config_secret_has",
+    "workbench_fs_delete_file",
+    "workbench_git_run",
+    "workbench_run_shell",
+    "workbench_pty",
+    "host_openers",
+];
+
 // ── R1-04 写面路径（M6 §4：F5 会话域 + F2 审批域 + F6 设置域 REST 形态）──
 
 /// C24 发起 run（POST /v1/runs；body = RunTaskParams）
@@ -504,9 +521,33 @@ where
     }
 }
 
-/// 兜底 404（统一 ErrorBody JSON；cmd.not_found）
+/// 识别被禁命令面触达（R1-10 T-07 纯函数；URI 路径含清单命令名 → 命中，
+/// 返回命中的命令名供审计携带）
+fn secret_command_hit(uri: &Uri) -> Option<&'static str> {
+    let path = uri.path();
+    SECRET_COMMAND_SURFACE
+        .iter()
+        .find_map(|name| path.contains(*name).then_some(*name))
+}
+
+/// 兜底 404（统一 ErrorBody JSON；cmd.not_found）。R1-10 T-07：密钥命令面
+/// 触达 → 403 Forbidden（cmd.denied 白名单拒绝）+ remote-source-attempt
+/// 审计标记——REST 面即远程面（桌面本地操作走 Tauri IPC），入站请求一律
+/// 视为远程来源（D5 §4.5 / §9.1 T-07：矩阵外命令 = 白名单拒绝 + Forbidden
+/// 错误 + remote-source-attempt 审计）
 async fn handle_not_found(uri: Uri) -> Response {
-    let body = ErrorBody::new(DeviceErrorCode::CmdNotFound, format!("路径不存在：{uri}"));
+    if let Some(command) = secret_command_hit(&uri) {
+        crate::server::core_backend::emit_remote_source_attempt_audit(command);
+        let body = ErrorBody::new(
+            DeviceErrorCode::CmdDenied,
+            format!("命令不在远程白名单：{command}"),
+        );
+        return (StatusCode::FORBIDDEN, Json(body)).into_response();
+    }
+    let body = ErrorBody::new(
+        DeviceErrorCode::CmdNotFound,
+        format!("路径不存在：{}", uri.path()),
+    );
     (StatusCode::NOT_FOUND, Json(body)).into_response()
 }
 
@@ -793,6 +834,9 @@ mod tests {
         last_deny_reason: std::sync::Mutex<Option<String>>,
         /// 最近一次 settings_get 收到的 keys（keys 透传断言）
         last_settings_keys: std::sync::Mutex<Option<Vec<String>>>,
+        /// 最近一次 run_task 收到的权限模式申报（R1-10 T-08：远程申报
+        /// 原样抵达后端装配面——降级由 apply_remote_mode 在装配面执行）
+        last_run_permission_mode: std::sync::Mutex<Option<conex_types::device::PermissionMode>>,
     }
 
     impl MockBackend {
@@ -807,6 +851,7 @@ mod tests {
                 last_run_control: std::sync::Mutex::new(None),
                 last_deny_reason: std::sync::Mutex::new(None),
                 last_settings_keys: std::sync::Mutex::new(None),
+                last_run_permission_mode: std::sync::Mutex::new(None),
             }
         }
 
@@ -821,6 +866,7 @@ mod tests {
                 last_run_control: std::sync::Mutex::new(None),
                 last_deny_reason: std::sync::Mutex::new(None),
                 last_settings_keys: std::sync::Mutex::new(None),
+                last_run_permission_mode: std::sync::Mutex::new(None),
             }
         }
 
@@ -835,6 +881,7 @@ mod tests {
                 last_run_control: std::sync::Mutex::new(None),
                 last_deny_reason: std::sync::Mutex::new(None),
                 last_settings_keys: std::sync::Mutex::new(None),
+                last_run_permission_mode: std::sync::Mutex::new(None),
             }
         }
 
@@ -1101,6 +1148,8 @@ mod tests {
             params: RunTaskParams,
         ) -> Result<RunTaskResult, ServerError> {
             self.fail()?;
+            // R1-10 T-08：记录远程申报的权限模式（装配面降级断言用）
+            *self.last_run_permission_mode.lock().unwrap() = params.permission_mode;
             if params.prompt.trim().is_empty() {
                 return Err(Self::invalid("prompt 不能为空（mock）"));
             }
@@ -1453,6 +1502,99 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ── R1-10 T-01：伪造端无令牌直连 ──
+
+    /// T-01 伪造端直连（无令牌）：握手 / 只读 / 审批写面代表性端点一律
+    /// 401 + AuthBadSignature（D2 §7.1 零信任：认证先于一切业务面）
+    #[tokio::test]
+    async fn t01_no_token_direct_connection_rejected() {
+        let app = build_router(test_state());
+        let cases = [
+            ("握手", "GET", HELLO_PATH),
+            ("只读面", "GET", STATUS_PATH),
+            ("审批写面", "POST", "/v1/approval/tc-fake/approve"),
+        ];
+        for (label, method, uri) in cases {
+            let request = axum::http::Request::builder()
+                .uri(uri)
+                .method(method)
+                .body(Body::empty())
+                .unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::UNAUTHORIZED,
+                "{label} {uri} 无令牌直连必须 401"
+            );
+            let body: ErrorBody = serde_json::from_value(json_body(response).await)
+                .expect("401 载荷必须可反序列化为 ErrorBody");
+            assert_eq!(
+                body.code,
+                DeviceErrorCode::AuthBadSignature,
+                "{label} 无令牌错误码必须为 auth.bad_signature"
+            );
+            assert!(!body.retryable, "{label} 认证失败不可重试");
+        }
+    }
+
+    /// T-01 伪造令牌（错误令牌）直连：认证失败 + 失败计数（R1-10 T-01
+    /// 计数锚——伪造端每次失败按尝试令牌哈希累计）；合法令牌不受影响
+    #[tokio::test]
+    async fn t01_forged_token_rejected_and_counts_failure() {
+        let state = test_state();
+        let app = build_router(state.clone());
+        let forged = "f".repeat(64);
+        let forged_hash = sha256_hex(forged.as_bytes());
+        for expected in 1..=3 {
+            let response = app.clone().oneshot(authed_get(HELLO_PATH, &forged)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            let body: ErrorBody = serde_json::from_value(json_body(response).await)
+                .expect("401 载荷必须可反序列化为 ErrorBody");
+            assert_eq!(body.code, DeviceErrorCode::AuthBadSignature);
+            let count = state.tokens().lock().unwrap().auth_failure_count(&forged_hash);
+            assert_eq!(count, expected, "第 {expected} 次伪造直连后失败计数应为 {expected}");
+        }
+        // 合法令牌随后可正常通过（伪造尝试不影响合法路径）
+        let raw = issue_token(&state);
+        let response = app.clone().oneshot(authed_get(HELLO_PATH, &raw)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    // ── R1-10 T-11：撤销即时性（重连被拒） ──
+
+    /// T-11 撤销即时性：撤销前旧令牌可连（200）→ 撤销后同一令牌重连请求
+    /// 立即被拒（401 + AuthDeviceRevoked）；Revoked 失败计入认证失败计数
+    #[tokio::test]
+    async fn t11_reconnect_with_revoked_token_rejected() {
+        let state = test_state();
+        let raw = issue_token(&state);
+        let hash = sha256_hex(raw.as_bytes());
+        let app = build_router(state.clone());
+
+        // 撤销前：旧令牌连接成功
+        let before = app.clone().oneshot(authed_get(HELLO_PATH, &raw)).await.unwrap();
+        assert_eq!(before.status(), StatusCode::OK, "撤销前旧令牌应可连");
+
+        // 撤销（注册表删除）→ 旧令牌重连请求被拒
+        assert!(state.tokens().lock().unwrap().revoke(&hash));
+        let after = app.clone().oneshot(authed_get(HELLO_PATH, &raw)).await.unwrap();
+        assert_eq!(
+            after.status(),
+            StatusCode::UNAUTHORIZED,
+            "撤销后旧令牌重连必须被拒"
+        );
+        let body: ErrorBody = serde_json::from_value(json_body(after).await)
+            .expect("401 载荷必须可反序列化为 ErrorBody");
+        assert_eq!(
+            body.code,
+            DeviceErrorCode::AuthDeviceRevoked,
+            "撤销后重连错误码必须为 auth.device_revoked"
+        );
+        // Revoked 计入认证失败计数（T-01 计数锚与 T-11 联动）
+        let count = state.tokens().lock().unwrap().auth_failure_count(&hash);
+        assert_eq!(count, 1, "撤销后重放一次 = 一次认证失败");
     }
 
     #[tokio::test]
@@ -2414,5 +2556,108 @@ mod tests {
             let body = json_body(response).await;
             assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
         }
+    }
+
+    // ── R1-10 T-07：远程面白名单拒绝（密钥命令面触达；D5 §9.1）──
+
+    /// 白名单拒绝：密钥命令面（config_secret_reveal 等）在 REST 面（=
+    /// 远程面）无路由 → 403 Forbidden（cmd.denied「命令被安全策略拒绝」）
+    /// + remote-source-attempt 审计标记发射（handle_not_found 拒绝分支）
+    #[tokio::test]
+    async fn t07_secret_command_surface_rejected_forbidden() {
+        let app = build_router(test_state());
+        for (name, label) in [
+            ("config_secret_reveal", "密钥 reveal 命令"),
+            ("config_secret_get", "密钥 get 命令"),
+            ("config_secret_set", "密钥 set 命令"),
+            ("config_secret_clear", "密钥 clear 命令"),
+            ("config_secret_has", "密钥 has 命令"),
+            ("workbench_run_shell", "shell 执行面"),
+            ("workbench_fs_delete_file", "文件删除面"),
+            ("workbench_git_run", "git 执行面"),
+            ("host_openers", "宿主打开器面"),
+        ] {
+            let uri = format!("/v1/commands/{name}");
+            let response = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(&uri)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::FORBIDDEN,
+                "{label}（{uri}）必须 403 Forbidden"
+            );
+            let body = json_body(response).await;
+            assert_eq!(body["code"], "cmd.denied", "{label} 错误码应为 cmd.denied");
+            assert_eq!(body["retryable"], false);
+        }
+        // 非密钥未知路径仍 404（白名单拒绝不扩大化——未知普通命令不泄露
+        // 被禁面信息）
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/v1/commands/unknown_tool_xyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.not_found");
+    }
+
+    /// 审计标记：secret_command_hit 命中/未命中纯函数 + 发射载荷形状
+    /// （remote-source-attempt 标记载荷与 core_backend 同源——审计断言锚）
+    #[test]
+    fn t07_secret_surface_detection_and_audit_marker() {
+        for name in SECRET_COMMAND_SURFACE {
+            let uri = format!("/v1/commands/{name}").parse::<Uri>().unwrap();
+            assert_eq!(secret_command_hit(&uri), Some(*name), "{name} 必须命中");
+        }
+        let clean: Uri = "/v1/status".parse().unwrap();
+        assert_eq!(secret_command_hit(&clean), None, "非密钥路径不得命中");
+        let marker =
+            crate::server::core_backend::remote_source_attempt_marker("config_secret_reveal");
+        assert!(marker.contains("operation=remote-source-attempt"));
+        assert!(marker.contains("command=config_secret_reveal"));
+        assert!(marker.contains("decision=blocked"));
+    }
+
+    // ── R1-10 T-08：远程 run 权限模式申报（装配面降级前置）──
+
+    /// 远程申报 full-access 原样抵达后端装配面（路由层不拦截申报——
+    /// 降级语义由装配面 apply_remote_mode 保证：D5 §9.2 operate ×
+    /// full-access → ask 降级 + 审计）
+    #[tokio::test]
+    async fn t08_run_task_passes_permission_mode_wire() {
+        let mock = Arc::new(MockBackend::new());
+        let state = test_state_from_backend(Some(Arc::clone(&mock) as Arc<dyn ApiBackend>));
+        let token = issue_token(&state);
+        let app = build_router(state);
+        let response = app
+            .oneshot(authed_body(
+                "POST",
+                RUNS_PATH,
+                &token,
+                serde_json::json!({
+                    "prompt": "远程 run（full-access 申报）",
+                    "permissionMode": "full-access",
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            *mock.last_run_permission_mode.lock().unwrap(),
+            Some(conex_types::device::PermissionMode::FullAccess),
+            "远程申报 full-access 必须原样透传到后端装配面"
+        );
     }
 }
