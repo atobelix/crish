@@ -6,16 +6,17 @@
  * - SlashMenuModel：slash 打开·过滤·关闭·选中 → slash_insert；composing 禁开/禁交
  * - structureIntents：insert/delete/move/collapse/slash_insert + PaperIntent 联合
  * - silentFixture：N 块假文档投影（ProjectionDiff / MemoryBlock）
- * - TextLeafModel / intentBridge / lineWindow：叶子写路径 Intent 通路（mock apply）
+ * - TextLeafModel / intentBridge / lineWindow：叶子写路径 Intent 通路（默认 mock sink）
  * - CodeLeafModel / mountCodeLeaf / Cm6CodeLeafHost：代码叶（可聚焦 + text_edit + 真 CM6 host）
+ * - `submitStructureToCollabWire`：plain Intent → collab wire JSON（真 apply 的 TS 半桥）
  *
  * **包边界**：
- * - 本包是呈现 chrome / 叶子与结构写路径骨架，**不接真实后端**
- * - 写路径必须走 **Intent → sink → RS apply**；禁止 serialize(DOM) 持久化
+ * - 呈现层默认 **mock sink**（W3-D-S）；真 `DocSession::apply` 在 RS（conex-doc-collab）
+ * - 写路径必须走 **Intent → wire → sink/IPC → RS apply**；禁止 serialize(DOM) 持久化
  * - **禁止** DOM 当真相；选区权威在 editor-kit SelectionStore 逻辑坐标
  * - UI（React）可后接；本波优先纯 TS 可测
- * - W3-D 完成 = 文本 Intent 通路绿；W3-E 完成 = 代码叶可聚焦 + Intent 通路绿
- * - W3-F 完成 = 结构 Intent 通路绿
+ * - **轨**：W3-D-S 升级面 / W3-D plain Intent 真 apply **子集**；**≠ W3-D-PM**；**≠** W3-D Strict 终局 / EL-01
+ * - W3-E 完成 = 代码叶可聚焦 + Intent 通路绿；W3-F-S = 结构 Intent+wire
  * - **W3-E ≠ 全语言高亮完成**（plain + javascript 已接线；其余 lang 后接）
  * - **W3-F ≠ EL-01 关闭**；**≠** A-BLK 全表关闭
  */
@@ -53,9 +54,14 @@ export {
   buildMoveBlocksIntent,
   buildToggleCollapseIntent,
   buildSlashInsertIntent,
+  structureIntentToOps,
   structureIntentToOp,
+  paperIntentToOps,
+  submitStructureToCollabWire,
   type StructureIntentOrigin,
   type StructureIntentType,
+  type StructureToOpsOptions,
+  type StructureCollabWirePayload,
   type InsertBlockIntent,
   type DeleteBlocksIntent,
   type MoveBlocksIntent,

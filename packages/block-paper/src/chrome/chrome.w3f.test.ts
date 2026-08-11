@@ -107,7 +107,7 @@ describe('structureIntents 类型与工厂', () => {
     });
   });
 
-  it('structureIntentToOp 压成 W0 op', () => {
+  it('structureIntentToOp 压成 W0 op（collab wire delete）', () => {
     const s = buildDeleteBlocksIntent({
       blockIds: ['a'],
       createIntentId: () => 'i-1',
@@ -116,7 +116,8 @@ describe('structureIntents 类型与工厂', () => {
     expect(op.type).toBe('op');
     expect(op.intentId).toBe('i-1');
     expect(op.ops).toHaveLength(1);
-    expect(op.ops[0]).toMatchObject({ type: 'delete_blocks', blockIds: ['a'] });
+    // Round9：ops 为 conex-doc-collab snake_case wire，非 UI 镜像
+    expect(op.ops[0]).toMatchObject({ op: 'delete', id: 'a' });
     expect(isStructureIntent(op)).toBe(false);
     expect(isPaperIntent(op)).toBe(true);
   });

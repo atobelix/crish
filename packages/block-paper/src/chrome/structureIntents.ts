@@ -1,5 +1,5 @@
 /**
- * 结构 Intent 类型（W3-F 骨架）。
+ * 结构 Intent 类型（W3-F 骨架 + W3-D 真 apply 半桥）。
  *
  * 与 `TextLeafModel` 产出的 `text_edit`（文本 Intent）区分：
  * - 文本 Intent：叶子局部替换（W0 `TextEditIntent`）
@@ -8,15 +8,39 @@
  * 联合：`PaperIntent = TextIntent | StructureIntent | OpIntent(W0)`
  * （见下方；`OpIntent` 仍可直接下发 sink，结构 Intent 亦可经 `structureIntentToOp` 映射）。
  *
- * **W3-F ≠ EL-01 关闭**：本模块只接通 chrome → Intent → sink 通路（mock apply）；
- * 不接真实 RS、不关闭 A-BLK 全表、不 serialize(DOM)。
+ * ## 写路径纪律（强制 · Round9 / W3-D 子集）
+ *
+ * - **UI StructureIntent 不得直接写盘 / 旁路 mutate 树**
+ * - 必须：`StructureIntent` → `structureIntentToOps` / `paperIntentToOps` /
+ *   `submitStructureToCollabWire`（collab wire JSON）
+ *   → sink / IPC → RS `ops_from_json` → `DocSession::apply`
+ * - wire 形状对齐 `conex-doc-collab::Op`（snake_case、tag=`op`）
+ * - 默认 UI 仍可 mock sink（W3-D-S）；真 apply 库侧见
+ *   `w3_d_structure_intent_or_wire_applys_to_session`（Rust）
+ *
+ * ## 轨声明（诚实）
+ *
+ * - **W3-D-S 升级面 / W3-D 子集**：plain Intent → wire →（RS）真 apply
+ * - **≠ W3-D-PM**（无真 ProseMirror）
+ * - **≠ W3-D Strict 终局**（09：真 PM + 双 Intent 路径集成）；禁止 mock sink 冒充
+ * - **W3-F ≠ EL-01 关闭**：不关闭 A-BLK 全表、不 serialize(DOM)
  */
 
 import type {
   BlockId,
+  CollabOpWire,
   IntentId,
   OpIntent,
   TextEditIntent,
+} from '@crish/block-paper-contract';
+import {
+  assertCollabOpsWire,
+  collabOpsToJson,
+  collabPropsWithAttrs,
+  emptyCollabProps,
+  flavourToCollabKind,
+  isCollabOpWire,
+  orderFromIndex,
 } from '@crish/block-paper-contract';
 import { nextIntentId } from '../leaves/TextLeafModel';
 
@@ -330,19 +354,263 @@ export function buildSlashInsertIntent(
 }
 
 // ---------------------------------------------------------------------------
-// → W0 OpIntent 映射（未来 RS；W3-F 默认 sink 可直接收 StructureIntent）
+// → collab Op wire / W0 OpIntent 映射（Round9 · 可测桥）
+//
+// UI Intent **不得**直接写盘；须 wire → apply。
+// mock sink 仍可直接收 StructureIntent；接 RS 时走本段映射。
+// ---------------------------------------------------------------------------
+
+/** Intent → wire 映射选项（占位 id / order / collapse 解析） */
+export type StructureToOpsOptions = {
+  /**
+   * 插入时分配块 id（当 Intent 未带 `blockIds`）。
+   * 未提供且缺 id 时抛错——避免静默伪造权威 id。
+   */
+  allocateId?: () => BlockId;
+  /**
+   * 解析 fractional order；缺省 `orderFromIndex(index)`。
+   * `@param index` 为同批内序号或 move 的目标 index。
+   */
+  resolveOrder?: (ctx: {
+    index: number;
+    blockId: BlockId;
+    parentId: BlockId | null;
+  }) => string;
+  /**
+   * toggle_collapse 且 Intent.collapsed 缺省时，解析每块目标态。
+   * 仍缺省则 **collapse=true**（桥占位；宿主应注入真实态）。
+   */
+  resolveCollapsed?: (blockId: BlockId) => boolean;
+};
+
+function resolveInsertId(
+  intent: InsertBlockIntent | SlashInsertIntent,
+  options: StructureToOpsOptions,
+  slot: number
+): BlockId {
+  const fromIntent =
+    'blockIds' in intent && intent.blockIds && intent.blockIds[slot];
+  if (fromIntent) return fromIntent;
+  if (options.allocateId) return options.allocateId();
+  throw new Error(
+    `structureIntentToOps：insert 缺 block id（slot=${slot}）；请在 Intent.blockIds 预分配或提供 options.allocateId`
+  );
+}
+
+function resolveOrderKey(
+  options: StructureToOpsOptions,
+  ctx: { index: number; blockId: BlockId; parentId: BlockId | null }
+): string {
+  if (options.resolveOrder) return options.resolveOrder(ctx);
+  return orderFromIndex(ctx.index);
+}
+
+/**
+ * 结构 Intent → collab `Op` wire 列表（snake_case、tag=`op`）。
+ *
+ * | Intent            | wire                                      |
+ * |-------------------|-------------------------------------------|
+ * | insert_block      | insert（1+；多 id 则多条）                |
+ * | slash_insert      | insert（1；id 来自 blockIds/allocateId）  |
+ * | delete_blocks     | delete × N                                |
+ * | move_blocks       | move × N（order 来自 index 或序号）       |
+ * | toggle_collapse   | update_props × N（attrs.collapsed）       |
+ *
+ * **不**直接 apply；调用方须下发 sink / RS。
+ */
+export function structureIntentToOps(
+  intent: StructureIntent,
+  options: StructureToOpsOptions = {}
+): CollabOpWire[] {
+  switch (intent.type) {
+    case 'insert_block': {
+      const ids =
+        intent.blockIds && intent.blockIds.length > 0
+          ? intent.blockIds
+          : [resolveInsertId(intent, options, 0)];
+      const kind = flavourToCollabKind(intent.flavour);
+      const baseIndex =
+        intent.afterBlockId != null ? 1 : 0; /* 仅占位；真 fractional 由 RS */
+      return ids.map((id, i) => ({
+        op: 'insert' as const,
+        id,
+        parent: intent.parentId,
+        order: resolveOrderKey(options, {
+          index: baseIndex + i,
+          blockId: id,
+          parentId: intent.parentId,
+        }),
+        kind,
+        props: emptyCollabProps(),
+      }));
+    }
+    case 'slash_insert': {
+      const id = resolveInsertId(intent, options, 0);
+      const parent = intent.parentId !== undefined ? intent.parentId : null;
+      return [
+        {
+          op: 'insert',
+          id,
+          parent,
+          order: resolveOrderKey(options, {
+            index: 0,
+            blockId: id,
+            parentId: parent,
+          }),
+          kind: flavourToCollabKind(intent.flavour),
+          props: emptyCollabProps(),
+        },
+      ];
+    }
+    case 'delete_blocks':
+      return intent.blockIds.map((id) => ({
+        op: 'delete' as const,
+        id,
+      }));
+    case 'move_blocks': {
+      const startIndex =
+        intent.index !== undefined && Number.isFinite(intent.index)
+          ? Math.max(0, Math.floor(intent.index))
+          : 0;
+      return intent.blockIds.map((id, i) => ({
+        op: 'move' as const,
+        id,
+        new_parent: intent.parentId,
+        order: resolveOrderKey(options, {
+          index: startIndex + i,
+          blockId: id,
+          parentId: intent.parentId,
+        }),
+      }));
+    }
+    case 'toggle_collapse': {
+      return intent.blockIds.map((id) => {
+        let collapsed: boolean;
+        if (intent.collapsed !== undefined) {
+          collapsed = intent.collapsed;
+        } else if (options.resolveCollapsed) {
+          collapsed = options.resolveCollapsed(id);
+        } else {
+          collapsed = true;
+        }
+        return {
+          op: 'update_props' as const,
+          id,
+          props: collabPropsWithAttrs({ collapsed }),
+        };
+      });
+    }
+    default: {
+      const _exhaustive: never = intent;
+      throw new Error(
+        `structureIntentToOps：未知 StructureIntent ${JSON.stringify(_exhaustive)}`
+      );
+    }
+  }
+}
+
+/**
+ * 将结构 Intent 压成 W0 `op` Intent；`ops` 为 collab wire 数组。
+ *
+ * mock sink 默认可直接收 StructureIntent；接 RS / 序列化通道时调用本函数。
+ * **UI 不得跳过 apply 写盘。**
+ */
+export function structureIntentToOp(
+  intent: StructureIntent,
+  options: StructureToOpsOptions = {}
+): OpIntent {
+  return {
+    type: 'op',
+    intentId: intent.intentId,
+    ops: structureIntentToOps(intent, options),
+  };
+}
+
+/**
+ * PaperIntent → collab wire 列表。
+ *
+ * - StructureIntent → `structureIntentToOps`
+ * - OpIntent：若 ops 已是 wire 则原样校验返回；否则抛错（禁止把 UI 旧形状当 collab）
+ * - TextEditIntent → 单条 `text_edit` wire
+ *
+ * 产出仅供 sink → RS apply；**禁止** UI 直接落盘。
+ */
+export function paperIntentToOps(
+  intent: PaperIntent,
+  options: StructureToOpsOptions = {}
+): CollabOpWire[] {
+  if (intent.type === 'text_edit') {
+    const [start, end] = intent.range;
+    return [
+      {
+        op: 'text_edit',
+        id: intent.blockId,
+        start,
+        end,
+        insert: intent.insert,
+      },
+    ];
+  }
+  if (intent.type === 'op') {
+    // 已是 wire 则通过；混入旧 UI 形状则拒绝（逼宿主走 structureIntentToOps）
+    if (intent.ops.every(isCollabOpWire)) {
+      return assertCollabOpsWire(intent.ops);
+    }
+    throw new Error(
+      'paperIntentToOps：OpIntent.ops 含非 collab wire 条目；请用 structureIntentToOps 映射 StructureIntent，或直接填 collab Op wire'
+    );
+  }
+  return structureIntentToOps(intent, options);
+}
+
+// ---------------------------------------------------------------------------
+// W3-D 子集 · TS 半桥：Intent → collab wire JSON（供 RS ops_from_json）
 // ---------------------------------------------------------------------------
 
 /**
- * 将结构 Intent 压成 W0 `op`（ops 载荷为单条结构描述）。
- * mock sink 默认直接收 StructureIntent；需要 W0 形状时调用本函数。
+ * `submitStructureToCollabWire` 返回值。
+ *
+ * - `ops`：已校验 collab wire 列表
+ * - `json`：可直接喂给 Rust `ops_from_json` / `ops_from_json_str` 的 JSON 字符串
+ *
+ * **本函数不调用 DocSession::apply**——真 apply 在 RS 侧
+ *（测名 `w3_d_structure_intent_or_wire_applys_to_session`）。
  */
-export function structureIntentToOp(intent: StructureIntent): OpIntent {
-  // ops 载荷形状由 conex-doc-collab 最终钉死；此处保留 type + 字段镜像
-  const { intentId, ...rest } = intent;
+export type StructureCollabWirePayload = {
+  ops: CollabOpWire[];
+  json: string;
+  /** 来源 intentId（审计；不进 wire） */
+  intentId: IntentId;
+};
+
+/**
+ * StructureIntent / PaperIntent → collab wire JSON（IPC / 真 apply 入口）。
+ *
+ * ### 轨（W3-D-S 升级面 · plain Intent 真 apply 子集）
+ * ```
+ * PaperIntent
+ *   → paperIntentToOps / structureIntentToOps
+ *   → collabOpsToJson
+ *   → [宿主 IPC]
+ *   → RS ops_from_json → DocSession::apply → ProjectionDiff
+ * ```
+ *
+ * - **≠ W3-D-PM**（无 PM）
+ * - **≠** 用 mock sink 宣称 W3-D Strict 完成
+ * - 默认 UI 仍可用 `createMockIntentSink`；接写锥时宿主应优先本函数 → IPC → apply
+ *
+ * @param intent 结构 / 文本 / 已是 wire 的 OpIntent
+ * @param options allocateId / resolveOrder 等（同 structureIntentToOps）
+ */
+export function submitStructureToCollabWire(
+  intent: PaperIntent,
+  options: StructureToOpsOptions = {}
+): StructureCollabWirePayload {
+  // fail-closed：字段齐全 + tag=op snake_case（对齐 RS ops_from_json）
+  const ops = assertCollabOpsWire(paperIntentToOps(intent, options));
   return {
-    type: 'op',
-    intentId,
-    ops: [rest],
+    ops,
+    json: collabOpsToJson(ops),
+    intentId: intent.intentId,
   };
 }

@@ -72,3 +72,28 @@ export {
   SURFACE_NOTE_PAPER,
   isSendToNoteIntent,
 } from './surface';
+
+// collab Op wire（conex-doc-collab snake_case JSON；Intent→apply 桥）
+export type {
+  CollabBlockKindWire,
+  CollabBlockPropsWire,
+  CollabInsertOpWire,
+  CollabUpdatePropsOpWire,
+  CollabMoveOpWire,
+  CollabDeleteOpWire,
+  CollabTextEditOpWire,
+  CollabOpWire,
+  CollabOpTag,
+} from './opsWire';
+export {
+  flavourToCollabKind,
+  emptyCollabProps,
+  collabPropsWithAttrs,
+  orderFromIndex,
+  isCollabOpWire,
+  assertCollabOpsWire,
+  collabOpsFromJson,
+  collabOpsToJson,
+  requiredWireFields,
+  assertWireFieldsPresent,
+} from './opsWire';

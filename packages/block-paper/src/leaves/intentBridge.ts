@@ -1,16 +1,23 @@
 /**
- * Intent 下发桥（W3-D + W3-F）：Intent → sink →（未来）RS apply。
+ * Intent 下发桥（W3-D + W3-F）：Intent → sink →（可选）RS apply。
  *
  * - `submitIntent`：经 IME 结构守卫后调用 sink
  * - composing 时 **结构 Intent**（`op` / slash / structure_key / StructureIntent）拒绝
  * - `text_edit` 在 composing 期守卫放行，但 TextLeafModel 默认不在合成中产出
  * - W3-F：`StructureIntent`（insert/delete/move/collapse/slash_insert）可直接进 sink
- * - 默认 mock sink 记录调用，不接真实后端
+ * - **默认 mock sink** 记录调用，不接真实后端（W3-D-S 合法）
+ *
+ * ## 轨声明（诚实 · W3-D 子集）
+ *
+ * - 真 apply 路径：**`submitStructureToCollabWire`**（structureIntents）→ wire JSON →
+ *   RS `ops_from_json` → `DocSession::apply`（库侧测：`w3_d_structure_intent_or_wire_applys_to_session`）
+ * - **禁止**仅以 mock sink 宣称 **W3-D Strict** 完成
+ * - **≠ W3-D-PM**（本桥无 ProseMirror）；plain Intent 真 apply 子集 ≠ 09 终局 W3-D
  *
  * 对齐：
  * - W0 Intent 形状（`@crish/block-paper-contract`）
  * - editor-kit `ImeMachine.tryAcceptIntent` / `structureKeyGuard`
- * - 纸面 `PaperIntent`（见 `chrome/structureIntents`）
+ * - 纸面 `PaperIntent` / `submitStructureToCollabWire`（见 `chrome/structureIntents`）
  *
  * **W3-F ≠ EL-01 关闭**：通路绿 ≠ A-BLK 全表 / 静默产品验收关闭。
  */

@@ -59,7 +59,11 @@ pub enum Op {
 
 /// 从 JSON 字节解析 `Vec<Op>`（wire：tag=`op`、snake_case）。
 ///
-/// 供 TS bridge / 测试 / IPC 入口；权威变更仍须 [`crate::DocSession::apply`]。
+/// 供 TS bridge（`submitStructureToCollabWire`）/ 测试 / IPC 入口；
+/// 权威变更仍须 [`crate::DocSession::apply`]。
+///
+/// W3-D 子集可测路径（真 apply，非 mock）：
+/// `tests/w3_d_structure_intent_or_wire_apply.rs` · `w3_d_structure_intent_or_wire_applys_to_session`。
 pub fn ops_from_json(bytes: &[u8]) -> Result<Vec<Op>, serde_json::Error> {
     serde_json::from_slice(bytes)
 }
