@@ -10,13 +10,15 @@
 
 import React, { lazy, Suspense } from 'react';
 import { MoreHorizontal, Minus, Square, X } from 'lucide-react';
-import { Tooltip } from './ui';
+import { Button, Tooltip } from './ui';
 import { winCtl } from '../app/AppBootstrap';
 import { GlobalSessionTabBar } from './shell/GlobalSessionTabBar';
 import { useSessionTabDrag } from './shell/SessionTabDragContext';
 
 const IconSidebarLeft = lazy(() =>
-  import('./sidebar/SidebarToggleIcons').then((m) => ({ default: m.IconSidebarLeft }))
+  import('./sidebar/SidebarToggleIcons').then((m) => ({
+    default: m.IconSidebarLeft,
+  }))
 );
 
 export interface AppTopBarProps {
@@ -27,7 +29,6 @@ export interface AppTopBarProps {
 
 export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
   ({ sidebarCollapsed, onToggleSidebar, onShowCheatsheet }) => {
-
     const openCheatsheet = React.useCallback(() => {
       onShowCheatsheet();
       window.dispatchEvent(new CustomEvent('open-cheatsheet'));
@@ -46,23 +47,28 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
       >
         <div className="app-top-bar__rail" data-tauri-drag-region>
           <Tooltip content={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className="app-top-bar__sidebar-btn no-drag"
               data-testid="sidebar-toggle"
               aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
               aria-expanded={!sidebarCollapsed}
               aria-controls="crish-sidebar"
               onClick={onToggleSidebar}
-            >
-              <Suspense
-                fallback={
-                  <span style={{ width: 18, height: 18, display: 'inline-block' }} />
-                }
-              >
-                <IconSidebarLeft size={18} aria-hidden="true" />
-              </Suspense>
-            </button>
+              icon={
+                <Suspense
+                  fallback={
+                    <span
+                      style={{ width: 18, height: 18, display: 'inline-block' }}
+                    />
+                  }
+                >
+                  <IconSidebarLeft size={18} aria-hidden="true" />
+                </Suspense>
+              }
+            />
           </Tooltip>
         </div>
 
@@ -84,48 +90,57 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
           role="group"
           aria-label="窗口控制"
         >
-
           <span className="app-top-bar__divider" aria-hidden="true" />
           <Tooltip content="快捷键与帮助">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className="header-btn no-drag"
               aria-label="快捷键与帮助"
               onClick={openCheatsheet}
-            >
-              <MoreHorizontal size={18} strokeWidth={1.75} aria-hidden="true" />
-            </button>
+              icon={
+                <MoreHorizontal
+                  size={18}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
+              }
+            />
           </Tooltip>
           <span className="app-top-bar__divider" aria-hidden="true" />
           <Tooltip content="最小化">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className="header-btn no-drag"
               aria-label="最小化"
               onClick={() => void winCtl('minimize')}
-            >
-              <Minus size={17} strokeWidth={1.75} aria-hidden="true" />
-            </button>
+              icon={<Minus size={17} strokeWidth={1.75} aria-hidden="true" />}
+            />
           </Tooltip>
           <Tooltip content="最大化">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className="header-btn no-drag"
               aria-label="最大化"
               onClick={() => void winCtl('toggleMaximize')}
-            >
-              <Square size={15} strokeWidth={1.75} aria-hidden="true" />
-            </button>
+              icon={<Square size={15} strokeWidth={1.75} aria-hidden="true" />}
+            />
           </Tooltip>
           <Tooltip content="关闭">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className="header-btn no-drag app-top-bar__close"
               aria-label="关闭"
               onClick={() => void winCtl('close')}
-            >
-              <X size={18} strokeWidth={1.75} aria-hidden="true" />
-            </button>
+              icon={<X size={18} strokeWidth={1.75} aria-hidden="true" />}
+            />
           </Tooltip>
         </div>
       </div>

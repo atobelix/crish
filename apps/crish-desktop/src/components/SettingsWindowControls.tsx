@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import { Tooltip } from './ui';
+import { Button, Tooltip } from './ui';
 
 export type SettingsWindowControlsProps = {
   onClose?: () => void;
@@ -21,8 +21,10 @@ export const SettingsWindowControls: React.FC<SettingsWindowControlsProps> = ({
       data-tauri-drag-region="false"
     >
       <Tooltip content="最小化">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className="win-btn no-drag"
           aria-label="最小化窗口"
           data-tauri-drag-region="false"
@@ -36,13 +38,14 @@ export const SettingsWindowControls: React.FC<SettingsWindowControlsProps> = ({
               }
             })();
           }}
-        >
-          <Lucide.Minus size={16} aria-hidden />
-        </button>
+          icon={<Lucide.Minus size={16} aria-hidden />}
+        />
       </Tooltip>
       <Tooltip content="最大化">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className="win-btn no-drag"
           aria-label="最大化或还原窗口"
           data-tauri-drag-region="false"
@@ -58,23 +61,23 @@ export const SettingsWindowControls: React.FC<SettingsWindowControlsProps> = ({
               }
             })();
           }}
-        >
-          <Lucide.Square size={14} aria-hidden />
-        </button>
+          icon={<Lucide.Square size={14} aria-hidden />}
+        />
       </Tooltip>
       {onClose ? (
         <Tooltip content="关闭设置 (Esc)">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className="win-btn close no-drag"
             data-testid="settings-close-button"
             data-tauri-drag-region="false"
             onClick={onClose}
             aria-label="关闭设置"
             aria-keyshortcuts="Escape"
-          >
-            <Lucide.X size={16} strokeWidth={1.75} aria-hidden />
-          </button>
+            icon={<Lucide.X size={16} strokeWidth={1.75} aria-hidden />}
+          />
         </Tooltip>
       ) : null}
     </div>

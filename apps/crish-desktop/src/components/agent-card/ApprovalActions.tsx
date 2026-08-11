@@ -1,6 +1,6 @@
 import React from 'react';
 import { allowButtonLabel } from '../../api/chatApprovalUi';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import styles from './ApprovalAskCard.module.css';
 
 /** 同意/拒绝按钮组（ConfirmButton 组：取消准备 / 记住并允许 / 拒绝 / 允许） */
@@ -31,22 +31,26 @@ export const ApprovalActions: React.FC<{
     >
       {confirmArmed ? (
         <Tooltip content="取消二次确认准备 (Esc)">
-          <button
+          <Button
             type="button"
-            className={`${styles.approvalCardBtn} ${styles.ghost} ${styles.disarm}`}
+            variant="ghost"
+            size="sm"
+            className={styles.approvalCardBtn}
             disabled={busy}
             onClick={onDisarm}
             aria-label="取消二次确认准备"
             aria-keyshortcuts="Escape"
           >
             取消准备
-          </button>
+          </Button>
         </Tooltip>
       ) : (
         <Tooltip content="允许，并将命令前缀加入白名单">
-          <button
+          <Button
             type="button"
-            className={`${styles.approvalCardBtn} ${styles.ghost}`}
+            variant="ghost"
+            size="sm"
+            className={styles.approvalCardBtn}
             disabled={busy}
             onClick={() => onAllow(true)}
             aria-label={
@@ -57,23 +61,27 @@ export const ApprovalActions: React.FC<{
             aria-busy={busy ? true : undefined}
           >
             {allowButtonLabel(needsDouble, confirmArmed, true)}
-          </button>
+          </Button>
         </Tooltip>
       )}
-      <button
+      <Button
         type="button"
-        className={`${styles.approvalCardBtn} ${styles.deny}`}
+        variant="danger"
+        size="sm"
+        className={styles.approvalCardBtn}
         disabled={busy}
         onClick={onDeny}
         aria-label="拒绝此操作"
         aria-busy={busy ? true : undefined}
       >
         拒绝
-      </button>
-      <button
+      </Button>
+      <Button
         ref={allowBtnRef}
         type="button"
-        className={`${styles.approvalCardBtn} ${styles.allow}${confirmArmed ? ` ${styles.isArmed}` : ''}`}
+        variant="primary"
+        size="sm"
+        className={styles.approvalCardBtn}
         disabled={busy}
         onClick={() => onAllow(false)}
         aria-label={
@@ -90,7 +98,7 @@ export const ApprovalActions: React.FC<{
         data-armed={confirmArmed ? 'true' : undefined}
       >
         {allowButtonLabel(needsDouble, confirmArmed, rememberIntent)}
-      </button>
+      </Button>
     </div>
   );
 };

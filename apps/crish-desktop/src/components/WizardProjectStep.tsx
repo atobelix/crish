@@ -6,6 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './overlay/FirstRunWizard.module.css';
+import { Button } from './ui';
 
 /** 本步用到的可访问 id（useId 生成，壳层透传） */
 export type WizardProjectStepIds = {
@@ -51,18 +52,21 @@ export const WizardProjectStep: React.FC<WizardProjectStepProps> = ({
         </div>
       ) : (
         <>
-          <button
+          <Button
             type="button"
-            className={`${styles.firstRunBtn} ${styles.secondary}`}
+            variant="secondary"
+            size="md"
+            block
+            className={styles.firstRunBtn}
             disabled={busy}
             aria-busy={busy || undefined}
             onClick={() => {
               void onPickFolder();
             }}
+            icon={<Lucide.FolderInput size={16} aria-hidden="true" />}
           >
-            <Lucide.FolderInput size={16} aria-hidden="true" />
             选择文件夹
-          </button>
+          </Button>
           <label className={styles.firstRunLabel} htmlFor={ids.pathId}>
             或输入路径
           </label>

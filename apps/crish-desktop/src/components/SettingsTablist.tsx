@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './settings/SettingsPanel.module.css';
-import { Tooltip } from './ui';
+import { Button, Tooltip } from './ui';
 import type { TabMeta, TabType } from './settingsTabsMeta';
 
 export type SettingsTablistProps = {
@@ -29,7 +29,10 @@ export type SettingsTablistProps = {
   onSearchChange: (q: string) => void;
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onTablistKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
-  onSelect: (tab: TabType, opts?: { focusTab?: boolean; focusPanel?: boolean }) => void;
+  onSelect: (
+    tab: TabType,
+    opts?: { focusTab?: boolean; focusPanel?: boolean }
+  ) => void;
   onFocusTab: (tab: TabType) => void;
 };
 
@@ -54,18 +57,24 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
   onFocusTab,
 }) => {
   return (
-    <nav className={styles.coverNav} aria-label="设置导航" data-density="compact">
+    <nav
+      className={styles.coverNav}
+      aria-label="设置导航"
+      data-density="compact"
+    >
       {onBack ? (
         <Tooltip content="返回应用 (Esc)">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={`${styles.navBack} no-drag`}
             onClick={onBack}
             aria-label="返回应用，关闭设置"
+            icon={<Lucide.ArrowLeft size={16} strokeWidth={1.75} aria-hidden />}
           >
-            <Lucide.ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
-            <span>返回应用</span>
-          </button>
+            返回应用
+          </Button>
         </Tooltip>
       ) : null}
 
@@ -113,7 +122,11 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
           return (
             <React.Fragment key={tab.id}>
               {showGroup ? (
-                <div className={styles.navGroup} role="presentation" aria-hidden="true">
+                <div
+                  className={styles.navGroup}
+                  role="presentation"
+                  aria-hidden="true"
+                >
                   {tab.group}
                 </div>
               ) : null}

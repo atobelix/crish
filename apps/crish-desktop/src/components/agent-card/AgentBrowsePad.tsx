@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import styles from './AgentCard.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import * as Lucide from 'lucide-react';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import {
@@ -39,11 +39,11 @@ export function AgentBrowsePad({
   const sorted = useMemo(() => sortAgentsForBrowse(agents), [agents]);
   const runningCount = useMemo(
     () => agents.filter((a) => a.status === 'running').length,
-    [agents],
+    [agents]
   );
   const pendingTotal = useMemo(
     () => agents.reduce((n, a) => n + countPendingApprovals(a), 0),
-    [agents],
+    [agents]
   );
 
   return (
@@ -54,7 +54,9 @@ export function AgentBrowsePad({
       role="region"
       aria-label="协作体聊天列表"
     >
-      <header className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim}`}>
+      <header
+        className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim}`}
+      >
         <div className={styles.agentCardTitleRow}>
           <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
           <span className={styles.agentCardTitle}>聊天</span>
@@ -93,14 +95,21 @@ export function AgentBrowsePad({
         </div>
         {onClose ? (
           <Tooltip content={embedded ? '返回' : '关闭侧栏'}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={styles.agentCardBtn}
               aria-label={embedded ? '返回' : '关闭侧栏'}
               onClick={onClose}
-            >
-              {embedded ? <Lucide.ChevronLeft size={14} aria-hidden /> : <Lucide.X size={14} aria-hidden />}
-            </button>
+              icon={
+                embedded ? (
+                  <Lucide.ChevronLeft size={14} aria-hidden />
+                ) : (
+                  <Lucide.X size={14} aria-hidden />
+                )
+              }
+            />
           </Tooltip>
         ) : null}
       </header>
@@ -113,7 +122,11 @@ export function AgentBrowsePad({
             aria-live="polite"
           >
             <div className={styles.skeletonTitleRow}>
-              <Lucide.Bot size={13} className={styles.skeletonBotIcon} aria-hidden />
+              <Lucide.Bot
+                size={13}
+                className={styles.skeletonBotIcon}
+                aria-hidden
+              />
               <span>暂无活跃协作</span>
             </div>
             <div className={styles.skeletonGrid}>
@@ -130,8 +143,15 @@ export function AgentBrowsePad({
             </div>
           </div>
         ) : (
-          <div className={styles.agentLaunchList} role="list" aria-label="本会话子智能体">
-            <div className={styles.agentLaunchListH} id="agent-launch-list-heading">
+          <div
+            className={styles.agentLaunchList}
+            role="list"
+            aria-label="本会话子智能体"
+          >
+            <div
+              className={styles.agentLaunchListH}
+              id="agent-launch-list-heading"
+            >
               本会话 · AI 已拉起
             </div>
             {sorted.map((a) => {
@@ -168,10 +188,7 @@ export function AgentBrowsePad({
                     <span className={styles.agentLaunchItemT}>{name}</span>
                     {pending > 0 ? (
                       <Tooltip content={`${pending} 项待批`}>
-                        <span
-                          className={styles.agentCardBadge}
-                          aria-hidden
-                        >
+                        <span className={styles.agentCardBadge} aria-hidden>
                           待批
                         </span>
                       </Tooltip>

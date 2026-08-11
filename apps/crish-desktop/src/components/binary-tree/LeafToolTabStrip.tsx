@@ -24,7 +24,7 @@ import {
   openToolInSession,
   openToolInActiveTab,
 } from '../../api/store-access/componentAccess';
-import { TabStrip, Tooltip } from '../ui';
+import { Button, TabStrip, Tooltip } from '../ui';
 import styles from './LeafToolTabStrip.module.css';
 
 const PANEL_LABELS: Record<string, string> = {
@@ -74,9 +74,10 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     // 打开后焦点移入菜单首项（键盘漫游起点）
     useEffect(() => {
       if (showAddMenu) {
-        const first = addMenuRef.current?.querySelector<HTMLButtonElement>(
-          '[role="menuitem"]'
-        );
+        const first =
+          addMenuRef.current?.querySelector<HTMLButtonElement>(
+            '[role="menuitem"]'
+          );
         first?.focus();
       }
     }, [showAddMenu]);
@@ -98,18 +99,30 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     const handleAddMenuKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
         const items = Array.from(
-          e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
+          e.currentTarget.querySelectorAll<HTMLButtonElement>(
+            '[role="menuitem"]'
+          )
         );
         if (items.length === 0) return;
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+        if (
+          e.key === 'ArrowDown' ||
+          e.key === 'ArrowUp' ||
+          e.key === 'Home' ||
+          e.key === 'End'
+        ) {
           e.preventDefault();
           e.stopPropagation();
           const active = document.activeElement;
-          const cur = active instanceof HTMLButtonElement ? items.indexOf(active) : -1;
+          const cur =
+            active instanceof HTMLButtonElement ? items.indexOf(active) : -1;
           let next: number;
-          if (e.key === 'ArrowDown') next = cur < 0 ? 0 : (cur + 1) % items.length;
+          if (e.key === 'ArrowDown')
+            next = cur < 0 ? 0 : (cur + 1) % items.length;
           else if (e.key === 'ArrowUp')
-            next = cur < 0 ? items.length - 1 : (cur - 1 + items.length) % items.length;
+            next =
+              cur < 0
+                ? items.length - 1
+                : (cur - 1 + items.length) % items.length;
           else if (e.key === 'Home') next = 0;
           else next = items.length - 1;
           items[next]?.focus();
@@ -256,16 +269,17 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
               }}
             >
               <Tooltip content="收起右侧面板">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={styles.addTabBtn}
                   onClick={() => {
                     collapseActiveTabRightDock(true);
                   }}
                   aria-label="收起右侧面板"
-                >
-                  <IconSidebarRight size={14} />
-                </button>
+                  icon={<IconSidebarRight size={14} />}
+                />
               </Tooltip>
             </div>
           </>

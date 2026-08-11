@@ -40,7 +40,7 @@ import {
 import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
-import { TabStrip, Tooltip } from '../ui';
+import { Button, TabStrip, Tooltip } from '../ui';
 import { UnitChromeActions } from '../chat-card/UnitChromeActions';
 import styles from './UnitSessionTabStrip.module.css';
 
@@ -133,8 +133,8 @@ export function chatUnitsEqual(
   return true;
 }
 
-export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> = React.memo(
-  ({ leafId, leafSessionId, startSessionDrag }) => {
+export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> =
+  React.memo(({ leafId, leafSessionId, startSessionDrag }) => {
     // 窄订阅：仅 tabId/sessionId/title/workspaceKey/kind；rightDock 变化被 equality 吞掉
     const openTabs = useStoreWithEqualityFn(
       useWorkspaceShellStore,
@@ -154,9 +154,7 @@ export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> = React.mem
     const unitRef = useMemo(() => {
       const hit = units.find((u) => u.leafId === leafId);
       if (hit) return hit;
-      return leafSessionId
-        ? { leafId, sessionId: leafSessionId }
-        : { leafId };
+      return leafSessionId ? { leafId, sessionId: leafSessionId } : { leafId };
     }, [units, leafId, leafSessionId]);
 
     const sessionTabs = useMemo(() => {
@@ -293,19 +291,22 @@ export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> = React.mem
         trailing={
           <div className={styles.addWrap}>
             <Tooltip content="新建对话">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={styles.tabAdd}
                 data-testid="unit-strip-new-session"
                 aria-label="新建对话"
                 onClick={onNewSession}
-              >
-                <MessageSquarePlus
-                  size={ICON_SIZE}
-                  strokeWidth={TAB_ICON_STROKE}
-                  aria-hidden
-                />
-              </button>
+                icon={
+                  <MessageSquarePlus
+                    size={ICON_SIZE}
+                    strokeWidth={TAB_ICON_STROKE}
+                    aria-hidden
+                  />
+                }
+              />
             </Tooltip>
           </div>
         }
@@ -326,7 +327,6 @@ export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> = React.mem
         }
       />
     );
-  }
-);
+  });
 
 UnitSessionTabStrip.displayName = 'UnitSessionTabStrip';
