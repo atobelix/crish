@@ -57,9 +57,15 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
     <div className={styles.commitPanel}>
       <div className={styles.commitHeader}>
         <span className={styles.commitTitle}>提交与推送 (Commit & Push)</span>
-        <button type="button" className={styles.commitCloseBtn} aria-label="关闭提交面板" onClick={onToggle}>
-          <Lucide.X size={13} />
-        </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={styles.commitCloseBtn}
+          aria-label="关闭提交面板"
+          onClick={onToggle}
+          icon={<Lucide.X size={13} />}
+        />
       </div>
       <textarea
         className={styles.commitInput}
@@ -88,7 +94,11 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
           onClick={onCommit}
           icon={<Lucide.GitCommit size={14} style={{ marginRight: 4 }} />}
         >
-          {commitLoading ? '提交中…' : stagedCount > 0 ? '提交已暂存' : '暂存并提交'}
+          {commitLoading
+            ? '提交中…'
+            : stagedCount > 0
+              ? '提交已暂存'
+              : '暂存并提交'}
         </Button>
         <Tooltip content="将本地提交推送至远程仓库">
           <Button

@@ -69,6 +69,12 @@ windows-sys = { workspace = true, features = [
     "Win32_System_Threading",
 ] }
 
+[target.'cfg(unix)'.dependencies]
+# Unix 平台侧（10 文档 §8 差异表）：killpg(2) 直调杀进程组（G-10 收尾，
+# 消除 shell kill 依赖）；libc 0.2 已在锁内（tauri 链传递，agent-workbench
+# 同款声明），target cfg 门控不影响 Windows 构建面
+libc = "0.2"
+
 [dev-dependencies]
 # rt-multi-thread：mock WS 服务端并发 accept 与部分并发单测（orchestrator 同款用法）
 tokio = { workspace = true, features = ["rt-multi-thread"] }

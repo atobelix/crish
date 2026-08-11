@@ -59,6 +59,19 @@ pub struct ServerConfig {
     /// **完全不 bind**（Loopback 也不监听，netstat 无 876[5-9]）；显式
     /// 开启后按 bind_mode 监听（D5 §2 第 1 层服务开关）
     pub multi_device_enabled: bool,
+    /// TLS 开关（D5 D-02a「远程网关只提供 wss」的配置面）：true = 监听
+    /// **仅提供 wss**（自签证书 TLS 1.3/1.2，明文 ws:// 握手在 TLS 层拒绝，
+    /// 不存在明文 ws 端点，D5 §2.1 降级保护）；false = 明文 HTTP/WS。
+    ///
+    /// 默认 false 的依据：既有测试与 loopback 联调面均为明文直连（D2
+    /// L4-1 `curl http://127.0.0.1:8765`、D2 L2 `ws://127.0.0.1:0` 测试
+    /// 口径），结构默认值保持兼容；**生产装配（main.rs restart_server）
+    /// 按 D5 语义显式置 true**——「wss 强制 R1 即生效」（D2 §12.8 裁决修正
+    /// 11）由装配层承担，而非结构默认值。
+    pub tls_enabled: bool,
+    /// TLS 证书目录（None = 默认 `config_dir()/multi-device/`，目录语义
+    /// 见 multi_device/tls.rs；测试注入临时目录隔离真实配置目录）
+    pub tls_cert_dir: Option<PathBuf>,
     /// 令牌文件路径（SHA-256 哈希落盘；D2 §7.3）
     pub pairing_file_path: PathBuf,
 }
@@ -73,6 +86,10 @@ impl ServerConfig {
             // D-01：多端互通服务默认关闭，零默认暴露面——enabled=false
             // 时装配面不 bind 任何端口（红线 1「无任何端口监听」）
             multi_device_enabled: false,
+            // TLS 默认关闭：既有明文测试与 loopback 联调面保持兼容；生产
+            // 装配层显式开启（wss 强制，D5 D-02a / D2 §12.8 裁决修正 11）
+            tls_enabled: false,
+            tls_cert_dir: None,
             pairing_file_path: config_dir.into().join(PAIRING_FILE_NAME),
         }
     }
@@ -149,6 +166,10 @@ mod tests {
         assert!(!config.pairing_enabled);
         // D5 D-01 / 红线 1：服务默认关闭（enabled=false 时不 bind 任何端口）
         assert!(!config.multi_device_enabled, "多端服务默认必须关闭（零默认暴露面）");
+        // TLS 默认关闭（既有明文测试与 loopback 联调面兼容；生产装配层
+        // 按 D5 D-02a 显式开启 wss 强制）
+        assert!(!config.tls_enabled, "TLS 默认必须关闭");
+        assert!(config.tls_cert_dir.is_none(), "证书目录默认跟随 config_dir()/multi-device/");
         assert_eq!(config.bind_host(), LOOPBACK_HOST);
         assert_eq!(
             config.pairing_file_path.file_name().and_then(|n| n.to_str()),

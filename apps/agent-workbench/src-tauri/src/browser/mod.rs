@@ -69,6 +69,16 @@
 //! 命令）；停止/断开/重连换回 [UnwiredStorageOps]（命令返回 not_ready
 //! 结构化错误，不触发惰性启动——storage_state 是辅助通道，须先显式
 //! `browser_start`）；测试经 [BrowserSlot::inject_storage_ops] 注入 mock。
+//!
+//! ## G-9 优雅停止 Browser.close 发送面（N6 接线，遗留登记清零）
+//! [BrowserSlot::connect] 建连成功后调 `BrowserManager::register_session`
+//! ——管理器持 `Arc<BrowserSession>` 保活会话作优雅停止的发送面
+//! （stop_inner 丢弃会话槽后、`manager.stop(Graceful)` 前仍存活，
+//! Browser.close 得以先发）。清除由管理器停止收尾自动完成（M3
+//! `clear_session_state` 自动清空语义），重连/重启路径经 connect 重新
+//! 登记覆盖旧发送面——**`drop_raw_session` 不触碰发送面**（顺序契约：
+//! 它在 manager.stop 之前执行，若清空将使 G-9 失效，见
+//! [Self::drop_raw_session] 注记）。
 
 pub(crate) mod frame_stream;
 pub(crate) mod mcp_attach;
@@ -789,6 +799,15 @@ impl BrowserSlot {
         *self.connected_endpoint.lock().unwrap_or_else(|p| p.into_inner()) =
             Some(endpoint.url());
         *self.raw_session.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&session));
+        // N6（G-9 遗留接线落地）：会话建立 → register_session——管理器持
+        // Arc<BrowserSession> 作为优雅停止的 Browser.close 发送面（G-9）。
+        // 顺序契约（关键）：stop_inner 先丢弃会话槽、再 manager.stop
+        // (Graceful)——close_sender 持有的 Arc 使 CDP 传输在停止期间存活，
+        // Browser.close 得以先发；发送面清除由 M3 自动清空承担（停止收尾
+        // finish_stop → clear_session_state），重连/重启路径经本方法重新
+        // 登记覆盖旧发送面。**drop_raw_session 不得主动清空**（它在
+        // manager.stop 之前执行，清空将使 G-9 失效，见其注记）。
+        manager.register_session(Arc::clone(&session));
         // J1b：storage_state 命令发送面随会话装配（Storage 域 browser 级命令）
         *self.storage_ops.lock().unwrap_or_else(|p| p.into_inner()) =
             Arc::new(SessionBackedStorage::new(Arc::clone(&session)));
@@ -812,6 +831,11 @@ impl BrowserSlot {
 
     /// 丢弃底层会话句柄（停止/重连/重建前调用）：释放帧流会话（shutdown，
     /// 转发任务随 sink 关闭退出）+ 清除输入管线（旧管线 Drop 终止消费任务）。
+    ///
+    /// **不触碰 G-9 关闭发送面**（N6 顺序契约）：stop_inner 在本方法之后
+    /// 才调 `manager.stop(Graceful)`——发送面须存活至 Browser.close 发出；
+    /// 清除由管理器停止收尾自动完成（M3 `clear_session_state` 自动清空），
+    /// 重连/重启路径由 [Self::connect] 重新登记覆盖旧发送面。
     fn drop_raw_session(&self) {
         *self.raw_session.lock().unwrap_or_else(|p| p.into_inner()) = None;
         // J1b：会话失效 → storage 发送面换回未连接（陈旧会话不得滞留）
@@ -1586,5 +1610,217 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("未连接"), "换回未连接：{err}");
+    }
+
+    // —— N6（G-9 遗留接线）集成：真实建连链路上的优雅停止先发 Browser.close ——
+
+    /// 假浏览器 .bat + 迷你 CDP WS 服务端（Windows-only，.bat 语义）：
+    /// 覆盖「会话建立 → register_session 接线 → Graceful 停止先发
+    /// Browser.close → 自然退出不杀树 → 发送面随停止收尾清空」全链路。
+    /// ubuntu 中层 CI 不编译（对齐 conex-browser harness 的 cfg(windows)
+    /// 门控；.bat 脚本参数解析不兼容含空格路径，含空格时显式跳过）。
+    #[cfg(windows)]
+    mod graceful_close_integration {
+        use super::*;
+        use conex_browser::browser::cft::binary_rel_path;
+        use conex_browser::browser::profile::browser_root;
+        use conex_browser::LaunchTuning;
+        use futures_util::{SinkExt, StreamExt};
+        use serde_json::Value;
+        use std::net::SocketAddr;
+        use std::path::PathBuf;
+        use tokio::net::TcpListener;
+        use tokio_tungstenite::tungstenite::Message;
+
+        /// 迷你 CDP WS 服务端：应答全部命令（getVersion 真实载荷、
+        /// getTargets 空表、其余 Ok）并记录方法；收到 Browser.close 时写
+        /// close 标志文件（模拟浏览器收到关闭命令后退出）。
+        struct MiniCdpServer {
+            addr: SocketAddr,
+            received: Arc<Mutex<Vec<String>>>,
+            flag_written: Arc<AtomicBool>,
+        }
+
+        impl MiniCdpServer {
+            async fn spawn(profile_dir: PathBuf) -> Self {
+                let listener = TcpListener::bind("127.0.0.1:0")
+                    .await
+                    .expect("迷你 CDP 服务端绑定失败");
+                let addr = listener.local_addr().expect("地址获取失败");
+                let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+                let flag_written = Arc::new(AtomicBool::new(false));
+                let (rx, fx) = (Arc::clone(&received), Arc::clone(&flag_written));
+                tokio::spawn(async move {
+                    loop {
+                        let (stream, _) = match listener.accept().await {
+                            Ok(v) => v,
+                            Err(_) => break,
+                        };
+                        let (rx, fx) = (Arc::clone(&rx), Arc::clone(&fx));
+                        let profile = profile_dir.clone();
+                        tokio::spawn(async move {
+                            let ws = match tokio_tungstenite::accept_async(stream).await {
+                                Ok(w) => w,
+                                Err(_) => return,
+                            };
+                            let (mut sink, mut reader) = ws.split();
+                            while let Some(Ok(Message::Text(text))) = reader.next().await {
+                                let v: Value = match serde_json::from_str(&text) {
+                                    Ok(v) => v,
+                                    Err(_) => continue,
+                                };
+                                let method = v["method"].as_str().unwrap_or_default().to_string();
+                                rx.lock()
+                                    .unwrap_or_else(|p| p.into_inner())
+                                    .push(method.clone());
+                                if method == "Browser.close" {
+                                    // 模拟浏览器收到 Browser.close 后退出
+                                    let _ =
+                                        tokio::fs::write(profile.join("close-flag"), "close").await;
+                                    fx.store(true, Ordering::SeqCst);
+                                }
+                                if let Some(id) = v["id"].as_u64() {
+                                    let result = match method.as_str() {
+                                        "Browser.getVersion" => json!({
+                                            "protocolVersion": "1.3",
+                                            "product": "Chrome/151.0.0.0"
+                                        }),
+                                        "Target.getTargets" => json!({ "targetInfos": [] }),
+                                        _ => json!({}),
+                                    };
+                                    let mut msg = json!({ "id": id, "result": result });
+                                    if let Some(s) = v["sessionId"].as_str() {
+                                        msg["sessionId"] = Value::String(s.to_string());
+                                    }
+                                    if sink
+                                        .send(Message::Text(msg.to_string().into()))
+                                        .await
+                                        .is_err()
+                                    {
+                                        break;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+                MiniCdpServer {
+                    addr,
+                    received,
+                    flag_written,
+                }
+            }
+
+            fn close_count(&self) -> usize {
+                self.received
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .iter()
+                    .filter(|m| m.as_str() == "Browser.close")
+                    .count()
+            }
+        }
+
+        /// 假浏览器 .bat：解析 --user-data-dir → 写 DevToolsActivePort（指向
+        /// 迷你 CDP 服务端端口）→ 轮询 close 标志文件（服务端收到
+        /// Browser.close 后写入）→ 自然退出（exit 0）。
+        fn fake_browser_script(port: u16) -> String {
+            format!(
+                "@echo off\r\n\
+                 setlocal enabledelayedexpansion\r\n\
+                 set PROFILE=\r\n\
+                 set NEXT=0\r\n\
+                 for %%a in (%*) do (\r\n\
+                 \x20 set \"A=%%~a\"\r\n\
+                 \x20 if \"!NEXT!\"==\"1\" (\r\n\
+                 \x20\x20 if not \"!A!\"==\"--user-data-dir\" set \"PROFILE=!A!\"\r\n\
+                 \x20\x20 set \"NEXT=0\"\r\n\
+                 \x20 )\r\n\
+                 \x20 if \"!A:~0,16!\"==\"--user-data-dir=\" set \"PROFILE=!A:~16!\"\r\n\
+                 \x20 if \"!A!\"==\"--user-data-dir\" set \"NEXT=1\"\r\n\
+                 )\r\n\
+                 if not defined PROFILE exit /b 9\r\n\
+                 > \"!PROFILE!\\DevToolsActivePort\" echo {port}\r\n\
+                 >> \"!PROFILE!\\DevToolsActivePort\" echo /devtools/browser/fake-session-uuid\r\n\
+                 :loop\r\n\
+                 if exist \"!PROFILE!\\close-flag\" exit /b 0\r\n\
+                 ping -n 2 127.0.0.1 >nul\r\n\
+                 goto loop\r\n"
+            )
+        }
+
+        /// N6 验收：会话建立（connect → register_session 接线）后 Graceful
+        /// 停止先发 Browser.close → 假浏览器自然退出（不杀树）→ 停止收尾
+        /// 清空发送面（M3 自动清空，二次停止不再向已死会话重复发送）。
+        #[tokio::test]
+        async fn graceful_stop_sends_browser_close_after_session_registered() {
+            let dir = tempfile::tempdir().expect("临时目录");
+            if dir.path().to_string_lossy().contains(' ') {
+                // 路径含空格：.bat 假浏览器参数解析不兼容（显式跳过并说明）
+                eprintln!(
+                    "跳过 .bat harness 测试：临时目录路径含空格（{}）",
+                    dir.path().display()
+                );
+                return;
+            }
+            // CfT 缓存占位（discover 命中；实际 spawn 走 binary_override）
+            let cache =
+                browser_root(dir.path()).join("browsers").join("chrome-151.0.7922.77");
+            std::fs::create_dir_all(&cache).expect("缓存目录");
+            let rel = binary_rel_path().expect("平台路径");
+            let bin = cache.join(rel);
+            std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
+            std::fs::write(bin, b"placeholder").expect("写入占位");
+            // 迷你 CDP 服务端（先于假浏览器绑定端口，端口写入 .bat）
+            let server = MiniCdpServer::spawn(dir.path().to_path_buf()).await;
+            let bat = dir.path().join("fake-browser.bat");
+            std::fs::write(&bat, fake_browser_script(server.addr.port()))
+                .expect("写入假浏览器脚本");
+            let tuning = LaunchTuning {
+                poll_interval: Duration::from_millis(20),
+                poll_timeout: Duration::from_secs(3),
+                launch_retry_delay: Duration::from_millis(30),
+                crash_backoff: Duration::from_millis(60),
+                crash_window: Duration::from_secs(30),
+                crash_max_restarts: 3,
+                // .bat 轮询粒度 ~1s：等待窗口须覆盖一轮以上轮询（对齐
+                // conex-browser G-9 用例的 5s 放大，保证自然退出不杀树）
+                wait_or_kill: Duration::from_secs(5),
+            };
+            let manager = Arc::new(BrowserManager::with_tuning(
+                dir.path().to_path_buf(),
+                tuning,
+            ));
+            let slot = Arc::new(BrowserSlot::from_parts(
+                Some(manager),
+                LaunchConfig {
+                    binary_override: Some(bat),
+                    ..Default::default()
+                },
+            ));
+            // 会话建立：启动 + connect + register_session（N6 接线点）
+            let started = slot.start().await.expect("启动+连接应成功");
+            assert_eq!(started, "running");
+            // Graceful 停止：先发 Browser.close（N6 断言点）
+            slot.stop(false).await.expect("优雅停止应收敛");
+            assert_eq!(
+                server.close_count(),
+                1,
+                "优雅停止必须先发 Browser.close（经登记会话的发送面）"
+            );
+            assert!(
+                server.flag_written.load(Ordering::SeqCst),
+                "服务端应收到 Browser.close 并写退出标志"
+            );
+            assert_eq!(slot.status().state, "stopped");
+            // 会话销毁 → 发送面已自动清空（M3 clear_session_state）：二次
+            // 优雅停止幂等，不再向已死会话重复发送 Browser.close
+            slot.stop(false).await.expect("二次停止幂等");
+            assert_eq!(
+                server.close_count(),
+                1,
+                "停止收尾必须清空发送面：不得向已死会话重复发送"
+            );
+        }
     }
 }

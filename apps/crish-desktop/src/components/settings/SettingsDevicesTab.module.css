@@ -197,3 +197,42 @@
   color: var(--color-text-dim);
   line-height: 1.5;
 }
+
+/* ── R1-11 多端服务开关 ── */
+.serviceOff {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.serviceOffTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-warn-text, #b8860b);
+}
+
+.serviceOffDesc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-dim);
+  line-height: 1.6;
+  max-width: 440px;
+}
+
+.serviceControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--color-border-subtle, rgba(128, 128, 128, 0.15));
+}
+
+.serviceDisableHint {
+  font-size: 12px;
+  color: var(--color-warn-text, #b8860b);
+  line-height: 1.5;
+}

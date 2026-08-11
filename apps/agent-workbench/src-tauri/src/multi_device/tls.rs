@@ -160,6 +160,14 @@ pub fn load_or_generate() -> Result<TlsMaterial, TlsError> {
     load_or_generate_with(&cert_dir(), &CertOptions::default())
 }
 
+/// 指定证书目录的加载/生成（目录不存在时自动创建）。
+///
+/// 生产默认目录走 [`load_or_generate`]；本函数供 server 装配注入自定义
+/// 目录（测试隔离真实配置目录；多实例/多证书目录场景显式指定）。
+pub fn load_or_generate_in(dir: &Path) -> Result<TlsMaterial, TlsError> {
+    load_or_generate_with(dir, &CertOptions::default())
+}
+
 /// 指定目录的加载（测试注入临时目录与短有效期）。
 fn load_or_generate_with(dir: &Path, opts: &CertOptions) -> Result<TlsMaterial, TlsError> {
     fs::create_dir_all(dir).map_err(|e| TlsError::Io {

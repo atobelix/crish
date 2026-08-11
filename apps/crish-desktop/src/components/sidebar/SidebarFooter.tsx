@@ -1,7 +1,12 @@
 import React from 'react';
 import styles from './Sidebar.module.css';
-import { Tooltip } from '../ui';
-import { canUseDemoMode, getAppMode, isDemoMode, switchAppMode } from '../../api/appMode';
+import { Button, Tooltip } from '../ui';
+import {
+  canUseDemoMode,
+  getAppMode,
+  isDemoMode,
+  switchAppMode,
+} from '../../api/appMode';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
 import { RefreshCw } from 'lucide-react';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
@@ -10,16 +15,12 @@ export interface SidebarFooterProps {
   chromeHidden?: boolean | undefined;
   updateAvailable?: boolean | undefined;
   onShowToast: ShowToastFn;
-  setUpdateAvailableState?: React.Dispatch<React.SetStateAction<boolean>> | undefined;
+  setUpdateAvailableState?:
+    React.Dispatch<React.SetStateAction<boolean>> | undefined;
 }
 
 export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
-  ({
-    chromeHidden,
-    updateAvailable,
-    onShowToast,
-    setUpdateAvailableState,
-  }) => {
+  ({ chromeHidden, updateAvailable, onShowToast, setUpdateAvailableState }) => {
     return (
       <div
         className={styles.sidebarFooter}
@@ -52,8 +53,10 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
           <SettingsQuickMenu onShowToast={onShowToast} />
           {updateAvailable ? (
             <Tooltip content="有新版本，点击安装更新">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={`${styles.footerUpdate} ${styles.isVisible}`}
                 aria-label="安装更新"
                 onClick={() => {
@@ -65,10 +68,10 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
                     if (r.ok) setUpdateAvailableState?.(false);
                   })();
                 }}
+                icon={<RefreshCw size={14} strokeWidth={1.75} aria-hidden />}
               >
-                <RefreshCw size={14} strokeWidth={1.75} aria-hidden />
                 <span className={styles.footerUpdateLabel}>更新</span>
-              </button>
+              </Button>
             </Tooltip>
           ) : null}
         </div>

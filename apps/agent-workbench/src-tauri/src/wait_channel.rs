@@ -44,9 +44,11 @@ use agent_tools::tools::subagent::SubagentState;
 use agent_tools::tools::wait_subagents::{
     dispatch_outputs_value, parse_dispatch_outputs, wait_for_terminal_events, DispatchDeclaration,
     SubagentOutput, SubagentTerminalEvent, SubagentWaitChannel, SubagentWaitError,
-    SubagentWaitResult, SubagentWaitStatus,
+    SubagentWaitResult, SubagentWaitStatus, DISPATCH_META_KEY_AGENTS, DISPATCH_META_KEY_DISPATCHED_AT,
+    DISPATCH_META_KEY_MODE, DISPATCH_META_KEY_OUTPUTS, DISPATCH_META_KEY_WAIT_MS,
 };
 use async_trait::async_trait;
+use conex_db::LocalDb;
 use conex_types::events::{AgentEvent, SubagentEndStatus};
 use conex_types::SessionAgent;
 use session_loop::control::ControlBus;
@@ -158,6 +160,69 @@ impl WaitStore for MemoryWaitStore {
 
     fn load_outputs(&self) -> HashMap<String, Vec<SubagentOutput>> {
         self.outputs.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+}
+
+/// LocalDb session_meta 真适配（`dispatch_*` 五键 + `dispatch_outputs`
+/// 键；单声明槽语义——键不可枚举且不引入索引键，DECLARATION_CAP 多槽
+/// 语义退化为最新覆盖，见 D4 §8 D-2 / 02 定夺 W9；两个消费面
+/// （wait_for_terminal 的 max(dispatched_at) 基准 wait_channel.rs:434-441、
+/// watchdog 最近分发时刻扫描 watchdog.rs:112-150）均取最大值，单槽
+/// 语义等价）
+#[derive(Clone)]
+pub struct LocalDbWaitStore {
+    db: LocalDb,
+}
+
+impl LocalDbWaitStore {
+    /// 新建真适配（db 由装配点提供；轮 2 装配替换时注入）
+    pub fn new(db: LocalDb) -> Self {
+        Self { db }
+    }
+}
+
+impl WaitStore for LocalDbWaitStore {
+    fn load_all(&self) -> Vec<DispatchDeclaration> {
+        // 逐键读 dispatch_* 四键 → from_meta_pairs 宽容解析（缺键 / 坏值
+        // → None，fail-open 与内存版 load_all 语义对齐）
+        let pairs: Vec<(&str, String)> = [
+            DISPATCH_META_KEY_MODE,
+            DISPATCH_META_KEY_WAIT_MS,
+            DISPATCH_META_KEY_AGENTS,
+            DISPATCH_META_KEY_DISPATCHED_AT,
+        ]
+        .into_iter()
+        .filter_map(|k| self.db.get_session_meta(k).ok().flatten().map(|v| (k, v)))
+        .collect();
+        DispatchDeclaration::from_meta_pairs(pairs).into_iter().collect()
+    }
+
+    fn save(&self, declaration: &DispatchDeclaration) {
+        // 单声明槽：最新覆盖（upsert 幂等；不引入多槽/索引新键）
+        for (key, value) in declaration.to_meta_pairs() {
+            let _ = self.db.set_session_meta(key, &value);
+        }
+    }
+
+    fn save_outputs(
+        &self,
+        outputs: &HashMap<String, Vec<SubagentOutput>>,
+    ) -> Result<(), SubagentWaitError> {
+        // 整表覆盖语义（单键 upsert，天然有界；与内存版一致）
+        self.db
+            .set_session_meta(DISPATCH_META_KEY_OUTPUTS, &dispatch_outputs_value(outputs))
+            .map_err(|e| SubagentWaitError::PersistFailed(e.to_string()))
+    }
+
+    fn load_outputs(&self) -> HashMap<String, Vec<SubagentOutput>> {
+        // 缺失 / 损坏键 → 空表（parse 容错，fail-open）
+        parse_dispatch_outputs(
+            self.db
+                .get_session_meta(DISPATCH_META_KEY_OUTPUTS)
+                .ok()
+                .flatten()
+                .as_deref(),
+        )
     }
 }
 
@@ -479,8 +544,8 @@ impl SubagentWaitChannel for WaitChannel {
 mod tests {
     use super::*;
     use agent_tools::tools::wait_subagents::{
-        dispatch_outputs_value, parse_dispatch_outputs, WaitMode, DISPATCH_META_KEY_OUTPUTS,
-        SubagentOutput,
+        dispatch_outputs_value, parse_dispatch_outputs, WaitMode, DISPATCH_META_KEY_MODE,
+        DISPATCH_META_KEY_OUTPUTS, SubagentOutput,
     };
     use conex_types::events::AgentEvent;
     use session_loop::control::ControlKind;
@@ -856,6 +921,81 @@ mod tests {
         drop(rx);
         stream.feed(&subagent_ended("sa-2", SubagentEndStatus::Completed));
         assert_eq!(stream.subscriber_count(), 0, "断流订阅者应被修剪");
+    }
+
+    // ── LocalDb 真适配（D4 §3.8 ①）────────────────────────────────
+
+    /// 单声明槽往返：save → load_all 一致；重复 save（不同分发时刻）
+    /// 最新覆盖不新增（dispatch_* 单值键语义，W9）；产出清单往返 +
+    /// 整表覆盖；新 store 实例读同一 db → 声明与产出清单完全恢复
+    /// （模拟重启，D4 §3.8 ③）。
+    #[test]
+    fn local_db_wait_store_roundtrip_and_recovery() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let first = DispatchDeclaration {
+            mode: WaitMode::AwaitAll,
+            wait_ms: Some(30_000),
+            subagent_ids: vec!["sa-1".to_string(), "sa-2".to_string()],
+            dispatched_at_ms: 1_000_000,
+        };
+        {
+            let store = LocalDbWaitStore::new(db.clone());
+            store.save(&first);
+            let loaded = store.load_all();
+            assert_eq!(loaded.len(), 1, "单声明槽：至多一条");
+            assert_eq!(loaded[0], first, "读回应与写入一致");
+            // 最新覆盖：新分发（不同 dispatched_at）→ 仍单槽不新增
+            let second = DispatchDeclaration {
+                mode: WaitMode::Timer,
+                wait_ms: Some(5_000),
+                subagent_ids: vec!["sa-9".to_string()],
+                dispatched_at_ms: 2_000_000,
+            };
+            store.save(&second);
+            let loaded = store.load_all();
+            assert_eq!(loaded.len(), 1, "单声明槽：重复 save 覆盖不新增");
+            assert_eq!(loaded[0], second, "最新声明应覆盖旧声明");
+            // 产出清单往返 + 整表覆盖
+            let mut outputs = HashMap::new();
+            outputs.insert(
+                "sa-1".to_string(),
+                vec![SubagentOutput {
+                    path: "01-kernel-analysis.md".to_string(),
+                    summary: "内核分析完成".to_string(),
+                    bytes: 1_024,
+                }],
+            );
+            store.save_outputs(&outputs).expect("产出清单落库应成功");
+            assert_eq!(store.load_outputs(), outputs, "产出清单读回应与写入一致");
+            let second_outputs = HashMap::new();
+            store
+                .save_outputs(&second_outputs)
+                .expect("空清单覆盖落库应成功");
+            assert!(store.load_outputs().is_empty(), "整表覆盖语义（旧条目清除）");
+            store.save_outputs(&outputs).expect("重新落库应成功");
+            // 模拟重启：新实例读同一 db → 完全恢复（D4 §3.8 ③）
+            let recovered = LocalDbWaitStore::new(db.clone());
+            let loaded = recovered.load_all();
+            assert_eq!(loaded.len(), 1, "重启后声明应恢复（单槽）");
+            assert_eq!(loaded[0].dispatched_at_ms, 2_000_000, "重启后基准时刻正确");
+            assert_eq!(recovered.load_outputs(), outputs, "重启后产出清单应恢复");
+        }
+    }
+
+    /// fail-open：空库 → 空声明集 / 空产出表；部分键缺失 → 空声明集；
+    /// 损坏键值 → 空（不 panic）。
+    #[test]
+    fn local_db_wait_store_fail_open() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let store = LocalDbWaitStore::new(db.clone());
+        assert!(store.load_all().is_empty(), "空库 → 空声明集（fail-open）");
+        assert!(store.load_outputs().is_empty(), "空库 → 空产出表（fail-open）");
+        // 仅 mode 键存在（其余关键键缺失）→ 解析失败返回空
+        let _ = db.set_session_meta(DISPATCH_META_KEY_MODE, "await-all");
+        assert!(store.load_all().is_empty(), "关键键缺失 → 空声明集");
+        // 损坏产出键值 → 空表
+        let _ = db.set_session_meta(DISPATCH_META_KEY_OUTPUTS, "not-json");
+        assert!(store.load_outputs().is_empty(), "损坏产出键 → 空表");
     }
 
     /// 通道 Debug 形状（trait 要求 Debug；不 panic）

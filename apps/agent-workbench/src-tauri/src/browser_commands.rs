@@ -1,10 +1,10 @@
 //! 浏览器面板命令面（27 接线方案 S6 + P1-B1 帧流/输入命令 + J1b storage_state
 //! + G-4 收尾书签/历史导入）
-//! browser_start / browser_stop / browser_status / browser_start_frames /
-//! browser_stop_frames / browser_frame_status / browser_input /
-//! browser_export_storage_state / browser_import_storage_state /
-//! browser_import_bookmarks / browser_import_history /
-//! browser_list_bookmarks / browser_list_history
+//!   browser_start / browser_stop / browser_status / browser_start_frames /
+//!   browser_stop_frames / browser_frame_status / browser_input /
+//!   browser_export_storage_state / browser_import_storage_state /
+//!   browser_import_bookmarks / browser_import_history /
+//!   browser_list_bookmarks / browser_list_history
 //!
 //! ## 接口契约（契约定死，前端消费面）
 //! - `browser_start` → `{ state: "running"|"starting"|"error", reason?: string }`；
@@ -76,13 +76,14 @@ use crate::browser::frame_stream::FrameStreamState;
 use crate::browser::panel_input::BrowserInputEvent;
 use crate::browser::{BrowserSlot, StartPayload, StatusPayload};
 use crate::core_run_commands::CoreRunState;
+use conex_browser::cdp::domains::Cookie as CdpCookie;
 use conex_browser::import::bookmarks::{
     parse_bookmarks, persist_bookmarks, BookmarksOptions,
 };
 use conex_browser::import::history::{read_history, persist_history, HistoryOptions};
 use conex_browser::import::storage_state::{
     build_import_plan, export_storage_state, inject_origin_scripts, parse_storage_state,
-    ExportAuthorization, StorageStateError,
+    ExportAuthorization, ImportPlan, StorageStateError,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -283,10 +284,11 @@ pub(crate) async fn browser_export_storage_state(
 /// （脚本内先校验 `window.location.origin` 再 `setItem`，防跨站污染——守卫
 /// 由解析层生成，K3 接线面）→ `DOMStorage.setDOMStorageItem` 直写当前页。
 ///
-/// ## 执行序与回滚
-/// cookie 先于 localStorage 注入；localStorage 注入失败 → 返回错误（cookie
-/// 已注入不回滚——回验回滚面（注入后 `Storage.getCookies` 回读比对 + 还原）
-/// 为可选遗留，见 K3 任务注记；重导覆盖语义下幂等，无错误累积）。
+/// ## 执行序与回验（N8，M4 遗留 2 落地）
+/// cookie 先于 localStorage 注入；注入后回读比对（`Storage.getCookies`
+/// 回读，按注入计划逐键核对，见 [verify_cookie_injection]）——差异**仅记录
+/// 日志不回滚**（取舍与理由见实现处注释）；localStorage 注入失败 → 返回
+/// 错误（cookie 已注入不回滚——重导覆盖语义下幂等，无错误累积）。
 #[tauri::command]
 pub(crate) async fn browser_import_storage_state(
     json: String,
@@ -295,11 +297,39 @@ pub(crate) async fn browser_import_storage_state(
     let state = parse_storage_state(&json).map_err(|e| invalid_input(e.to_string()))?;
     let plan = build_import_plan(&state);
     let params = plan.to_cdp_params();
-    slot(core.inner())
-        .storage_ops()
-        .set_cookies(params)
-        .await
-        .map_err(not_ready)?;
+    let ops = slot(core.inner()).storage_ops();
+    ops.set_cookies(params).await.map_err(not_ready)?;
+    // N8 回验（M4 遗留 2 落地）：注入后 `Storage.getCookies` 回读比对——
+    // 以注入计划为基准逐键核对（域去点容差 + value 严格相等，见
+    // verify_cookie_injection）。差异**只记录不回滚**，取舍与理由：
+    // - 回滚需注入前快照（每次导入多一次实读、CDP 往返翻倍）且重注入会
+    //   覆盖回读窗口内的并发变更（用户/页面在回验期间写入的 cookie）；
+    // - 差异多为浏览器拒绝面（SameSite=None 未配 Secure、过期 cookie 等）
+    //   或 CDP 域归一化差异，属可诊断信息而非注入失败——命令已尽力注入，
+    //   回读失败（会话断连）时注入面同样可能已部分生效，报错反而掩盖；
+    // - 重导覆盖语义幂等，下次导入自愈；诊断面经 warn 日志留痕。
+    match ops.get_all_cookies().await {
+        Ok(read_back) => {
+            let missing = verify_cookie_injection(&plan, &read_back);
+            if !missing.is_empty() {
+                tracing::warn!(
+                    target: "browser",
+                    expected = plan.stats.cookies,
+                    missing = missing.len(),
+                    missing_keys = missing.join(","),
+                    "storage_state 注入后回验差异（N8：记录不回滚）"
+                );
+            }
+        }
+        Err(error) => {
+            // 回读失败（会话断连等）：注入已尽力生效，回验是增强面，跳过不阻断
+            tracing::warn!(
+                target: "browser",
+                error = %error,
+                "storage_state 注入后回验读回失败（跳过回验）"
+            );
+        }
+    }
     // localStorage 注入（§5.3）：origin 守卫脚本注册 + DOMStorage 直写，
     // 经会话通道（BrowserSlot::local_storage_channel，未连接 → not_ready）
     let mut injected_scripts = 0usize;
@@ -325,6 +355,34 @@ pub(crate) async fn browser_import_storage_state(
         dropped_dupes: plan.stats.dropped_dupes,
         skipped_empty_name: plan.stats.skipped_empty_name,
     })
+}
+
+/// N8 回验比对纯函数（M4 遗留 2 落地）：以注入计划为基准，回读 cookie
+/// 逐键核对。
+///
+/// 键 = `(domain 去前导点, name, path)`——CDP 对 host-only cookie 存无点域、
+/// 域 cookie 存有点域，去点容差避免归一化误报；value 严格相等（注入效果
+/// 的最终判据）。仅比对键+value，不比 expires/sameSite 等浏览器可归一化
+/// 字段（避免二次归一化差异误报）。
+///
+/// 返回缺失键清单（`domain:name:path`；空 = 回验通过）。纯函数便于单测，
+/// 命令层仅消费结果（记录日志，见 [browser_import_storage_state]）。
+fn verify_cookie_injection(plan: &ImportPlan, read_back: &[CdpCookie]) -> Vec<String> {
+    let mut missing = Vec::new();
+    for c in &plan.cookies {
+        let domain = c.domain.as_deref().unwrap_or_default().trim_start_matches('.');
+        let path = c.path.as_deref().unwrap_or_default();
+        let matched = read_back.iter().any(|rc| {
+            rc.domain.trim_start_matches('.') == domain
+                && rc.name == c.name
+                && rc.path == path
+                && rc.value == c.value
+        });
+        if !matched {
+            missing.push(format!("{domain}:{}:{path}", c.name));
+        }
+    }
+    missing
 }
 
 // ---------------------------------------------------------------------------
@@ -565,7 +623,25 @@ mod tests {
             self.injected
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
-                .extend(cookies);
+                .extend(cookies.clone());
+            // N8：模拟浏览器落库——注入参数转 CdpCookie 并入回读面（命令的
+            // 注入后回验路径对一致面断言；不一致面由 PartialWriteOps 覆盖）
+            let mut stored = self.cookies.lock().unwrap_or_else(|p| p.into_inner());
+            for c in cookies {
+                stored.push(CdpCookie {
+                    name: c.name,
+                    value: c.value,
+                    domain: c.domain.unwrap_or_default(),
+                    path: c.path.unwrap_or_default(),
+                    expires: c.expires.unwrap_or(-1.0),
+                    size: 0,
+                    http_only: c.http_only.unwrap_or(false),
+                    secure: c.secure.unwrap_or(false),
+                    session: c.expires.is_none(),
+                    same_site: c.same_site,
+                    priority: None,
+                });
+            }
             Ok(())
         }
     }
@@ -848,6 +924,7 @@ mod tests {
         let mock = MockStorageOps::new(Vec::new());
         // 保持句柄以读取注入记录
         let injected = Arc::clone(&mock.injected);
+        let get_calls = Arc::clone(&mock.get_calls);
         inject_mock(&state, mock);
 
         let json = r#"{
@@ -867,6 +944,11 @@ mod tests {
         browser_import_storage_state(json.to_string(), state_ref)
             .await
             .expect("导入不应失败");
+        assert_eq!(
+            get_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "N8：注入后必须发生一次回读比对"
+        );
         {
             // 持锁断言注入记录（SetCookieParam 无 Clone，锁内读取字段）
             let params = injected.lock().unwrap_or_else(|p| p.into_inner());
@@ -882,6 +964,109 @@ mod tests {
             assert_eq!(params[1].expires, Some(1_750_000_000.0));
             assert_eq!(params[1].same_site.as_deref(), Some("None"));
         }
+    }
+
+    /// N8：回验比对纯函数——一致面（含域去点容差）→ 空缺失；不一致面
+    /// （value 被改写 / 整体缺失）→ 缺失键清单（`domain:name:path`）。
+    #[test]
+    fn verify_cookie_injection_matches_and_reports_missing() {
+        let json = r#"{
+            "cookies": [
+                { "name": "a", "value": "1", "domain": ".example.com", "path": "/" },
+                { "name": "b", "value": "2", "domain": "example.org", "path": "/x" }
+            ]
+        }"#;
+        let plan = build_import_plan(&parse_storage_state(json).expect("解析"));
+        // 一致面：回读含全部计划键（域有点/无点均匹配）+ value 相等
+        let read_back = vec![
+            cdp_cookie(|c| {
+                c.name = "a".to_string();
+                c.value = "1".to_string();
+                c.domain = "example.com".to_string();
+                c.path = "/".to_string();
+            }),
+            cdp_cookie(|c| {
+                c.name = "b".to_string();
+                c.value = "2".to_string();
+                c.domain = ".example.org".to_string();
+                c.path = "/x".to_string();
+            }),
+        ];
+        assert!(
+            verify_cookie_injection(&plan, &read_back).is_empty(),
+            "全量命中（含去点容差）必须通过"
+        );
+        // 不一致面：a 的 value 被改写（浏览器拒绝/归一化）+ b 整体缺失
+        let read_back = vec![cdp_cookie(|c| {
+            c.name = "a".to_string();
+            c.value = "9".to_string();
+            c.domain = "example.com".to_string();
+        })];
+        let missing = verify_cookie_injection(&plan, &read_back);
+        assert_eq!(missing.len(), 2, "value 改写 + 缺失均须报告：{missing:?}");
+        assert!(
+            missing.iter().any(|k| k.contains("a") && k.contains("example.com")),
+            "a 键须在缺失清单：{missing:?}"
+        );
+        assert!(
+            missing.iter().any(|k| k.contains("b") && k.contains("example.org")),
+            "b 键须在缺失清单：{missing:?}"
+        );
+    }
+
+    /// N8：注入后回读不一致——差异**仅记录不失败**（取舍注释见实现处）：
+    /// 命令仍返回脱敏统计载荷（cookie 已尽力注入，重导覆盖语义幂等自愈）。
+    #[tokio::test]
+    async fn import_verification_records_mismatch_without_failure() {
+        use tauri::Manager as _;
+        let temp = tempfile::tempdir().expect("临时目录");
+        let state = mock_core_state(&temp);
+        let app = tauri::test::mock_builder()
+            .manage(Arc::clone(&state))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let state_ref = app.state::<Arc<CoreRunState>>();
+
+        // 模拟浏览器拒绝面：注入成功但回读恒空（cookie 被浏览器拒绝，
+        // 如 SameSite=None 未配 Secure）——回验应检测到全部缺失
+        struct PartialWriteOps {
+            read_calls: Arc<std::sync::atomic::AtomicUsize>,
+        }
+        #[async_trait]
+        impl StorageStateOps for PartialWriteOps {
+            async fn get_all_cookies(&self) -> Result<Vec<CdpCookie>, String> {
+                self.read_calls
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok(Vec::new())
+            }
+            async fn set_cookies(&self, _cookies: Vec<SetCookieParam>) -> Result<(), String> {
+                Ok(())
+            }
+        }
+
+        let ops = PartialWriteOps {
+            read_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        };
+        let read_calls = Arc::clone(&ops.read_calls);
+        state
+            .engine()
+            .browser_slot()
+            .inject_storage_ops(Arc::new(ops));
+
+        let json = r#"{
+            "cookies": [
+                { "name": "a", "value": "1", "domain": "example.com", "path": "/" }
+            ]
+        }"#;
+        let payload = browser_import_storage_state(json.to_string(), state_ref)
+            .await
+            .expect("回验差异仅记录，命令不失败");
+        assert_eq!(payload.cookies, 1, "统计载荷仍反映注入计划");
+        assert_eq!(
+            read_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "N8：注入后必须发生一次回读比对"
+        );
     }
 
     /// J1b：导入解析失败路径——非法 JSON → `tool.invalid_input` 结构化错误。

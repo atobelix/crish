@@ -39,6 +39,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use agent_tools::tools::set_timer::{TimerChannel, TimerError};
 use async_trait::async_trait;
+use conex_db::LocalDb;
 use conex_types::events::AgentEvent;
 use conex_types::timer::{TimerCondition, TimerDeclaration, TimerHandle};
 use orchestrator::steering_queue::SteeringInputEntry;
@@ -50,6 +51,9 @@ const TIMER_ID_PREFIX: &str = "timer-";
 const MAX_DURATION_SECONDS: u64 = 86400;
 /// session_meta 持久化键前缀（`timer_<id>` 键）
 const SESSION_META_TIMER_KEY_PREFIX: &str = "timer_";
+/// 索引键（timer id 列表；conex-db 暂无 session_meta 键扫描 API，
+/// 索引键保证可枚举——对齐 workflow_commands.rs:403-406 先例注记）
+const SESSION_META_TIMER_INDEX_KEY: &str = "timer_ids";
 
 /// 当前 epoch 毫秒（定时器全域时间基准）
 fn now_ms() -> u64 {
@@ -265,6 +269,69 @@ impl TimerStore for MemoryTimerStore {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .insert(store_key(&declaration.timer_id), json);
+        }
+    }
+}
+
+/// LocalDb session_meta 真适配（键 `timer_<id>` + 索引 `timer_ids`；
+/// 照抄 workflow_commands.rs:400-478 先例）。
+///
+/// 注：conex-db 当前仅有 get/set_session_meta（无键扫描 / 删除 API），
+/// 故以 `timer_ids` 索引键承载可枚举性；本域无 remove 面——fire 后标
+/// fired=true 落库即终态（timers.rs:704-707），索引只增不摘（D6 §3.1）。
+#[derive(Clone)]
+pub(crate) struct LocalDbTimerStore {
+    db: LocalDb,
+}
+
+impl LocalDbTimerStore {
+    /// 新建真适配（db 由装配点提供；轮 2 装配替换时注入）
+    pub(crate) fn new(db: LocalDb) -> Self {
+        Self { db }
+    }
+}
+
+impl TimerStore for LocalDbTimerStore {
+    fn load_all(&self) -> Vec<TimerDeclaration> {
+        // 读 timer_ids 索引 → 逐键 get_session_meta(store_key(id))
+        // → serde_json 宽容解析（坏 JSON 跳过，fail-open 对齐
+        // MemoryTimerStore::load_all 的 filter_map 语义 timers.rs:253-260）
+        let index: Vec<String> = self
+            .db
+            .get_session_meta(SESSION_META_TIMER_INDEX_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        index
+            .into_iter()
+            .filter_map(|timer_id| {
+                self.db
+                    .get_session_meta(&store_key(&timer_id))
+                    .ok()
+                    .flatten()
+                    .and_then(|json| serde_json::from_str(&json).ok())
+            })
+            .collect()
+    }
+
+    fn save(&self, declaration: &TimerDeclaration) {
+        // upsert 键值 + 索引幂等追加（对齐 workflow_commands.rs:439-457）
+        if let Ok(json) = serde_json::to_string(declaration) {
+            let _ = self.db.set_session_meta(&store_key(&declaration.timer_id), &json);
+        }
+        let mut index: Vec<String> = self
+            .db
+            .get_session_meta(SESSION_META_TIMER_INDEX_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        if !index.iter().any(|id| id == &declaration.timer_id) {
+            index.push(declaration.timer_id.clone());
+            if let Ok(json) = serde_json::to_string(&index) {
+                let _ = self.db.set_session_meta(SESSION_META_TIMER_INDEX_KEY, &json);
+            }
         }
     }
 }
@@ -1275,5 +1342,79 @@ mod tests {
             emitted.iter().all(|e| matches!(e, TimerEvent::Fired { .. })),
             "不应发射早退取消事件：{emitted:?}"
         );
+    }
+
+    // ── LocalDb 真适配（D6 §3.1 ①）────────────────────────────────
+
+    /// 测试声明构造（各测试独立字段，避免跨测试共享状态）
+    fn declaration(timer_id: &str) -> TimerDeclaration {
+        TimerDeclaration {
+            timer_id: timer_id.to_string(),
+            created_at_ms: 1_000_000,
+            expires_at_ms: 1_001_000,
+            prompt: "检查编译结果".to_string(),
+            condition: TimerCondition::Never,
+            fired: false,
+            cancelled: false,
+        }
+    }
+
+    /// 声明往返：save → load_all 一致；同 id 重复 save 幂等覆盖
+    /// （索引不重复追加）；多 id 经 timer_ids 索引枚举齐全。
+    #[test]
+    fn local_db_timer_store_roundtrip() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let store = LocalDbTimerStore::new(db);
+        let first = declaration("timer-0");
+        store.save(&first);
+        let loaded = store.load_all();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0], first, "读回应与写入一致");
+        // 同 id 重复保存 → 覆盖不新增（索引幂等追加）
+        store.save(&first);
+        assert_eq!(store.load_all().len(), 1, "同 id 重复保存不得新增");
+        // 多 id → 索引枚举齐全
+        let second = declaration("timer-1");
+        store.save(&second);
+        let all = store.load_all();
+        assert_eq!(all.len(), 2, "多 id 经 timer_ids 索引枚举齐全");
+        assert!(all.iter().any(|d| d.timer_id == "timer-1"));
+    }
+
+    /// 重启恢复：新 store 实例读同一 db → 声明完全恢复（模拟引擎
+    /// 重启，D6 §3.1 段 3 restore 重建衔接的数据面）。
+    #[test]
+    fn local_db_timer_store_recovers_across_instances() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        {
+            let store = LocalDbTimerStore::new(db.clone());
+            store.save(&declaration("timer-0"));
+            store.save(&declaration("timer-1"));
+        }
+        // 模拟重启：新实例读回（store 消亡，session_meta 残留）
+        let store = LocalDbTimerStore::new(db);
+        let loaded = store.load_all();
+        assert_eq!(loaded.len(), 2, "重启后声明应完全恢复");
+        assert!(loaded.iter().any(|d| d.timer_id == "timer-0"));
+        assert!(loaded.iter().any(|d| d.timer_id == "timer-1"));
+    }
+
+    /// fail-open：无索引键 → 空集；索引指向坏 JSON 键值 → 跳过不
+    /// panic；索引孤儿 id（键缺失）→ 跳过；索引键本身坏 JSON → 空集。
+    #[test]
+    fn local_db_timer_store_fail_open() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let store = LocalDbTimerStore::new(db.clone());
+        assert!(store.load_all().is_empty(), "空库 → 空集（fail-open）");
+        // 索引指向坏 JSON 键值 → 跳过（对齐内存版 filter_map 语义）
+        let _ = db.set_session_meta(SESSION_META_TIMER_INDEX_KEY, r#"["timer-0"]"#);
+        let _ = db.set_session_meta(&store_key("timer-0"), "not-json");
+        assert!(store.load_all().is_empty(), "坏 JSON 键值 → 跳过不 panic");
+        // 索引孤儿 id（键值缺失）→ 跳过
+        let _ = db.set_session_meta(SESSION_META_TIMER_INDEX_KEY, r#"["timer-9"]"#);
+        assert!(store.load_all().is_empty(), "孤儿 id（键缺失）→ 跳过");
+        // 索引键本身坏 JSON → 空集
+        let _ = db.set_session_meta(SESSION_META_TIMER_INDEX_KEY, "not-json");
+        assert!(store.load_all().is_empty(), "索引坏 JSON → 空集");
     }
 }

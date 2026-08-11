@@ -1,0 +1,233 @@
+/* 浏览器数据导入区（G-4 收尾 U6）：对齐 BrowserPanel.module.css 的 token 体系 */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1_5);
+  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
+  font-size: var(--font-size-xs);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.hint {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1_5);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-secondary);
+}
+
+.blockTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.hiddenFileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.dropZone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--space-1) var(--space-1_5);
+  border: var(--hairline-width, 1px) dashed var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs);
+  text-align: center;
+  cursor: pointer;
+}
+
+.dropZone:hover,
+.dropZone:focus-visible {
+  outline: none;
+  border-color: var(--accent-color);
+  color: var(--text-secondary);
+}
+
+.fileLoaded {
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.fileLoaded code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-primary);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--color-error);
+  overflow-wrap: anywhere;
+}
+
+.stats {
+  margin: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-success);
+  overflow-wrap: anywhere;
+}
+
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-xxs);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-1) var(--space-1_5);
+}
+
+.textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  border-color: var(--border-color);
+}
+
+.listWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  min-width: 0;
+}
+
+.listCaption {
+  margin: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.listEmpty {
+  margin: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.listItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'name name'
+    'path url';
+  gap: 1px var(--space-1);
+  padding: var(--space-0_5) var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  font-size: var(--font-size-xxs);
+  min-width: 0;
+}
+
+.itemName {
+  grid-area: name;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTime {
+  grid-area: name;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: nowrap;
+}
+
+.itemPath {
+  grid-area: path;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemUrl {
+  grid-area: url;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemUrl code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.domainList {
+  display: block;
+  margin-top: var(--space-0_5);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-xxs);
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.spin {
+  animation: importSpinKeyframe var(--transition-spin) infinite;
+}
+@keyframes importSpinKeyframe {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

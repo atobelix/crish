@@ -49,7 +49,10 @@ export interface NetworkEnvInfo {
 export async function pairStart(): Promise<PairStartResult | null> {
   const res = await invokeTyped<PairStartResult>('multi_device_pair_start', {});
   if (res.status === 'ok') return res.data;
-  logInternalError('pairStart', `multi_device_pair_start ${res.status === 'missing' ? 'missing' : res.message}`);
+  logInternalError(
+    'pairStart',
+    `multi_device_pair_start ${res.status === 'missing' ? 'missing' : res.message}`
+  );
   return null;
 }
 
@@ -57,7 +60,10 @@ export async function pairStart(): Promise<PairStartResult | null> {
 export async function pairStatus(): Promise<PairStatus | null> {
   const res = await invokeTyped<PairStatus>('multi_device_pair_status', {});
   if (res.status === 'ok') return res.data;
-  logInternalError('pairStatus', `multi_device_pair_status ${res.status === 'missing' ? 'missing' : res.message}`);
+  logInternalError(
+    'pairStatus',
+    `multi_device_pair_status ${res.status === 'missing' ? 'missing' : res.message}`
+  );
   return null;
 }
 
@@ -65,7 +71,10 @@ export async function pairStatus(): Promise<PairStatus | null> {
 export async function pairCancel(): Promise<boolean> {
   const res = await invokeTyped<void>('multi_device_pair_cancel', {});
   if (res.status === 'ok') return true;
-  logInternalError('pairCancel', `multi_device_pair_cancel ${res.status === 'missing' ? 'missing' : res.message}`);
+  logInternalError(
+    'pairCancel',
+    `multi_device_pair_cancel ${res.status === 'missing' ? 'missing' : res.message}`
+  );
   return false;
 }
 
@@ -73,33 +82,70 @@ export async function pairCancel(): Promise<boolean> {
 export async function listDevices(): Promise<DeviceInfo[]> {
   const res = await invokeTyped<DeviceInfo[]>('multi_device_list_devices', {});
   if (res.status === 'ok') return res.data;
-  logInternalError('listDevices', `multi_device_list_devices ${res.status === 'missing' ? 'missing' : res.message}`);
+  logInternalError(
+    'listDevices',
+    `multi_device_list_devices ${res.status === 'missing' ? 'missing' : res.message}`
+  );
   return [];
 }
 
 /** 撤销指定设备（令牌失效 + 落盘 + WS 踢出；返回是否命中） */
 export async function revokeDevice(hash: string): Promise<boolean> {
-  const res = await invokeTyped<boolean>('multi_device_revoke_device', { hash });
+  const res = await invokeTyped<boolean>('multi_device_revoke_device', {
+    hash,
+  });
   if (res.status === 'ok') return res.data;
-  logInternalError('revokeDevice', `multi_device_revoke_device ${res.status === 'missing' ? 'missing' : res.message}`);
+  logInternalError(
+    'revokeDevice',
+    `multi_device_revoke_device ${res.status === 'missing' ? 'missing' : res.message}`
+  );
   return false;
 }
 
 /** 重命名设备标签（返回是否命中） */
-export async function renameDevice(hash: string, newLabel: string): Promise<boolean> {
+export async function renameDevice(
+  hash: string,
+  newLabel: string
+): Promise<boolean> {
   const res = await invokeTyped<boolean>('multi_device_rename_device', {
     hash,
     newLabel,
   });
   if (res.status === 'ok') return res.data;
-  logInternalError('renameDevice', `multi_device_rename_device ${res.status === 'missing' ? 'missing' : res.message}`);
+  logInternalError(
+    'renameDevice',
+    `multi_device_rename_device ${res.status === 'missing' ? 'missing' : res.message}`
+  );
   return false;
 }
 
 /** 网络环境检测（配对页消费：公用网络切换提示 / AP 隔离引导手动输 IP） */
 export async function networkEnvInfo(): Promise<NetworkEnvInfo | null> {
-  const res = await invokeTyped<NetworkEnvInfo>('multi_device_network_info', {});
+  const res = await invokeTyped<NetworkEnvInfo>(
+    'multi_device_network_info',
+    {}
+  );
   if (res.status === 'ok') return res.data;
-  logInternalError('networkEnvInfo', `multi_device_network_info ${res.status === 'missing' ? 'missing' : res.message}`);
+  logInternalError(
+    'networkEnvInfo',
+    `multi_device_network_info ${res.status === 'missing' ? 'missing' : res.message}`
+  );
   return null;
+}
+
+/**
+ * 多端服务总开关（R1-11 G-1）：true = 服务开启（按当前配对态绑定监听）；
+ * false = 停服（不 bind 任何端口，红线 1 零监听）。
+ * 服务关闭时 multi_device_pair_start 会被守卫拒绝——配对页必须先开启服务。
+ */
+export async function setMultiDeviceEnabled(
+  enabled: boolean
+): Promise<boolean> {
+  const res = await invokeTyped<void>('multi_device_set_enabled', { enabled });
+  if (res.status === 'ok') return true;
+  logInternalError(
+    'setMultiDeviceEnabled',
+    `multi_device_set_enabled ${res.status === 'missing' ? 'missing' : res.message}`
+  );
+  return false;
 }

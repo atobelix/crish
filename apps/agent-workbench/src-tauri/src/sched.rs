@@ -43,6 +43,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
+use conex_db::LocalDb;
 use conex_types::cron::{parse_cron, CronSchedule};
 use conex_types::error::codes;
 use conex_types::events::AgentEvent;
@@ -54,6 +55,9 @@ use tokio::time::Instant;
 const CRON_ID_PREFIX: &str = "cron-";
 /// session_meta 持久化键前缀（`sched_<cron_id>` 键）
 const SESSION_META_SCHED_KEY_PREFIX: &str = "sched_";
+/// 索引键（cron id 列表；conex-db 暂无 session_meta 键扫描 API，
+/// 索引键保证可枚举——对齐 workflow_commands.rs:403-406 先例注记）
+const SESSION_META_SCHED_INDEX_KEY: &str = "sched_ids";
 
 /// 当前 epoch 毫秒（cron 全域时间基准）
 fn now_ms() -> u64 {
@@ -329,6 +333,70 @@ impl SchedStore for MemorySchedStore {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .insert(store_key(&task.cron_id), json);
+        }
+    }
+}
+
+/// LocalDb session_meta 真适配（键 `sched_<cron_id>` + 索引 `sched_ids`；
+/// 照抄 workflow_commands.rs:400-478 先例，与 timers.rs LocalDbTimerStore
+/// 同构）。
+///
+/// 注：conex-db 当前仅有 get/set_session_meta（无键扫描 / 删除 API），
+/// 故以 `sched_ids` 索引键承载可枚举性；本域无 remove 面——enabled=false
+/// 落库即终态（cancel / 达上限停止），索引只增不摘（D6 §3.1）。
+#[derive(Clone)]
+pub(crate) struct LocalDbSchedStore {
+    db: LocalDb,
+}
+
+impl LocalDbSchedStore {
+    /// 新建真适配（db 由装配点提供；轮 2 装配替换时注入）
+    pub(crate) fn new(db: LocalDb) -> Self {
+        Self { db }
+    }
+}
+
+impl SchedStore for LocalDbSchedStore {
+    fn load_all(&self) -> Vec<CronTask> {
+        // 读 sched_ids 索引 → 逐键 get_session_meta(store_key(cron_id))
+        // → serde_json 宽容解析（坏 JSON 跳过，fail-open 对齐
+        // MemorySchedStore::load_all 的 filter_map 语义 sched.rs:317-324）
+        let index: Vec<String> = self
+            .db
+            .get_session_meta(SESSION_META_SCHED_INDEX_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        index
+            .into_iter()
+            .filter_map(|cron_id| {
+                self.db
+                    .get_session_meta(&store_key(&cron_id))
+                    .ok()
+                    .flatten()
+                    .and_then(|json| serde_json::from_str(&json).ok())
+            })
+            .collect()
+    }
+
+    fn save(&self, task: &CronTask) {
+        // upsert 键值 + 索引幂等追加（对齐 workflow_commands.rs:439-457）
+        if let Ok(json) = serde_json::to_string(task) {
+            let _ = self.db.set_session_meta(&store_key(&task.cron_id), &json);
+        }
+        let mut index: Vec<String> = self
+            .db
+            .get_session_meta(SESSION_META_SCHED_INDEX_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        if !index.iter().any(|id| id == &task.cron_id) {
+            index.push(task.cron_id.clone());
+            if let Ok(json) = serde_json::to_string(&index) {
+                let _ = self.db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, &json);
+            }
         }
     }
 }
@@ -1395,5 +1463,80 @@ mod tests {
     #[test]
     fn steering_group_id_shape() {
         assert_eq!(steering_group_id("cron-0"), "cron-cron-0");
+    }
+
+    // ── LocalDb 真适配（D6 §3.1 ①）────────────────────────────────
+
+    /// 测试任务构造（各测试独立字段，避免跨测试共享状态）
+    fn task(cron_id: &str) -> CronTask {
+        CronTask {
+            cron_id: cron_id.to_string(),
+            expression: "0 9 * * *".to_string(),
+            prompt: "日报".to_string(),
+            max_iterations: Some(2),
+            is_daemon: false,
+            next_fire_at_ms: 1_000_000,
+            fired_count: 0,
+            enabled: true,
+        }
+    }
+
+    /// 声明往返：save → load_all 一致；同 id 重复 save 幂等覆盖
+    /// （索引不重复追加）；多 id 经 sched_ids 索引枚举齐全。
+    #[test]
+    fn local_db_sched_store_roundtrip() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let store = LocalDbSchedStore::new(db);
+        let first = task("cron-0");
+        store.save(&first);
+        let loaded = store.load_all();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0], first, "读回应与写入一致");
+        // 同 id 重复保存 → 覆盖不新增（索引幂等追加）
+        store.save(&first);
+        assert_eq!(store.load_all().len(), 1, "同 id 重复保存不得新增");
+        // 多 id → 索引枚举齐全
+        let second = task("cron-1");
+        store.save(&second);
+        let all = store.load_all();
+        assert_eq!(all.len(), 2, "多 id 经 sched_ids 索引枚举齐全");
+        assert!(all.iter().any(|t| t.cron_id == "cron-1"));
+    }
+
+    /// 重启恢复：新 store 实例读同一 db → 声明完全恢复（模拟引擎
+    /// 重启，D6 §3.1 段 3 restore 重建衔接的数据面）。
+    #[test]
+    fn local_db_sched_store_recovers_across_instances() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        {
+            let store = LocalDbSchedStore::new(db.clone());
+            store.save(&task("cron-0"));
+            store.save(&task("cron-1"));
+        }
+        // 模拟重启：新实例读回（store 消亡，session_meta 残留）
+        let store = LocalDbSchedStore::new(db);
+        let loaded = store.load_all();
+        assert_eq!(loaded.len(), 2, "重启后声明应完全恢复");
+        assert!(loaded.iter().any(|t| t.cron_id == "cron-0"));
+        assert!(loaded.iter().any(|t| t.cron_id == "cron-1"));
+    }
+
+    /// fail-open：无索引键 → 空集；索引指向坏 JSON 键值 → 跳过不
+    /// panic；索引孤儿 id（键缺失）→ 跳过；索引键本身坏 JSON → 空集。
+    #[test]
+    fn local_db_sched_store_fail_open() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let store = LocalDbSchedStore::new(db.clone());
+        assert!(store.load_all().is_empty(), "空库 → 空集（fail-open）");
+        // 索引指向坏 JSON 键值 → 跳过（对齐内存版 filter_map 语义）
+        let _ = db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, r#"["cron-0"]"#);
+        let _ = db.set_session_meta(&store_key("cron-0"), "not-json");
+        assert!(store.load_all().is_empty(), "坏 JSON 键值 → 跳过不 panic");
+        // 索引孤儿 id（键值缺失）→ 跳过
+        let _ = db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, r#"["cron-9"]"#);
+        assert!(store.load_all().is_empty(), "孤儿 id（键缺失）→ 跳过");
+        // 索引键本身坏 JSON → 空集
+        let _ = db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, "not-json");
+        assert!(store.load_all().is_empty(), "索引坏 JSON → 空集");
     }
 }

@@ -5447,6 +5447,9 @@ mod tests {
         let outcome = RunOutcome {
             reason: AgentEndReason::Stop,
             error: None,
+            // D1 §3.4 兼容：正常 stop 收场 provider_error=None（D7 迁移缺口
+            // 收口：session-loop 新增必填字段后本构造点补齐）
+            provider_error: None,
             diagnostic: None,
             messages: vec![
                 Arc::new(amsg("u1", AgentMessageRole::User, vec![text_block("你好")])),
@@ -5511,6 +5514,9 @@ mod tests {
         let outcome = RunOutcome {
             reason: AgentEndReason::Stop,
             error: None,
+            // D1 §3.4 兼容：正常 stop 收场 provider_error=None（D7 迁移
+            // 缺口收口：session-loop 新增必填字段后本构造点补齐）
+            provider_error: None,
             diagnostic: None,
             messages: vec![
                 Arc::new(amsg("u1", AgentMessageRole::User, vec![text_block("q")])),
@@ -7510,6 +7516,9 @@ mod tests {
         RunOutcome {
             reason: AgentEndReason::Stop,
             error: None,
+            // D1 §3.4 兼容：正常 stop 收场 provider_error=None（D7 迁移
+            // 缺口收口：session-loop 新增必填字段后本构造点补齐）
+            provider_error: None,
             diagnostic: None,
             messages: vec![Arc::new(amsg(
                 "u1",

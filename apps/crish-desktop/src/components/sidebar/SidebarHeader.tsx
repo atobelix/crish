@@ -1,6 +1,7 @@
 import React from 'react';
 import styles from './Sidebar.module.css';
 import { Menu } from 'lucide-react';
+import { Button } from '../ui';
 import { SidebarNav } from './SidebarNav';
 
 export interface SidebarHeaderProps {
@@ -44,15 +45,16 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
     return (
       <>
         {sidebarBehavior === 'overlay' && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={`${styles.hamburger} ${isOverlayActive ? styles.hamburgerActive : ''}`}
             aria-label={isOverlayActive ? '关闭侧栏菜单' : '打开侧栏菜单'}
             aria-expanded={isOverlayActive}
             onClick={onHamburgerClick}
-          >
-            <Menu size={18} strokeWidth={1.75} aria-hidden />
-          </button>
+            icon={<Menu size={18} strokeWidth={1.75} aria-hidden />}
+          />
         )}
 
         {isOverlayActive && (

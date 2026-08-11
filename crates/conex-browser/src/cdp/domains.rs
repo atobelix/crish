@@ -22,6 +22,7 @@ pub mod names {
     pub const TARGET_SET_DISCOVER_TARGETS: &str = "Target.setDiscoverTargets";
     pub const TARGET_GET_TARGETS: &str = "Target.getTargets";
     pub const TARGET_ATTACH_TO_TARGET: &str = "Target.attachToTarget";
+    pub const TARGET_DETACH_FROM_TARGET: &str = "Target.detachFromTarget";
     pub const TARGET_CREATE_TARGET: &str = "Target.createTarget";
     pub const TARGET_ACTIVATE_TARGET: &str = "Target.activateTarget";
     pub const TARGET_SET_AUTO_ATTACH: &str = "Target.setAutoAttach";
@@ -43,6 +44,7 @@ pub mod names {
     pub const RUNTIME_EVALUATE: &str = "Runtime.evaluate";
     pub const DOM_ENABLE: &str = "DOM.enable";
     pub const DOM_GET_DOCUMENT: &str = "DOM.getDocument";
+    pub const DOM_GET_FRAME_OWNER: &str = "DOM.getFrameOwner";
     pub const NETWORK_ENABLE: &str = "Network.enable";
     pub const NETWORK_SET_BLOCKED_URLS: &str = "Network.setBlockedURLs";
     pub const SYSTEM_INFO_GET_INFO: &str = "SystemInfo.getInfo";
@@ -694,6 +696,16 @@ pub struct GetDocumentResult {
     pub root: DomNode,
 }
 
+/// DOM.getFrameOwner 结果（维度 13 §1.5 跨域 iframe 递归：frameId →
+/// 父文档中的 iframe owner 元素 backendNodeId，作尺寸门限与 `|IFRAME|`
+/// 标记定位；`backendNodeId` 在 Chrome 151 实测中存在）。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetFrameOwnerResult {
+    pub backend_node_id: Option<i64>,
+    pub node_id: i64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DomNode {
@@ -958,6 +970,12 @@ pub struct SnapshotDocument {
     #[serde(rename = "documentURL")]
     pub document_url: Option<SnapshotString>,
     pub title: Option<SnapshotString>,
+    /// 文档所属 frameId（Chrome 151 实测为**字符串池下标**形态，与 documentURL/
+    /// title 同漂移——双形态兼容 + 池解析入口；跨域帧不在主会话 DOMSnapshot
+    /// 文档集内——文档集的 frameId 集合 = 已 pierce 帧集合，维度 13 §1.5
+    /// 跨域递归据此筛选未覆盖帧）。
+    #[serde(rename = "frameId")]
+    pub frame_id: Option<SnapshotString>,
     /// Chrome 151 实测不发送该字段（协议文档要求但响应省略），缺失按 0。
     #[serde(default)]
     pub node_count: i64,
@@ -1085,7 +1103,7 @@ pub struct GetCookiesResult {
     pub cookies: Vec<Cookie>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetCookieParam {
     pub name: String,
@@ -1466,6 +1484,47 @@ mod tests {
         let ax: AXNode = serde_json::from_str(r#"{"nodeId":7,"childIds":[1,"2"]}"#).unwrap();
         assert_eq!(ax.node_id, "7");
         assert_eq!(ax.child_ids.unwrap(), vec!["1", "2"]);
+    }
+
+    /// DOM.getFrameOwner / SnapshotDocument.frameId 类型面（维度 13 §1.5
+    /// 跨域递归依赖：owner 定位 + pierce 帧集合筛选）。
+    #[test]
+    fn frame_owner_and_document_frame_id_parse() {
+        let owner: GetFrameOwnerResult = serde_json::from_str(
+            r#"{"backendNodeId":101,"nodeId":3}"#,
+        )
+        .expect("getFrameOwner 结果解析失败");
+        assert_eq!(owner.backend_node_id, Some(101));
+        assert_eq!(owner.node_id, 3);
+        // backendNodeId 缺失形态（协议宽松面）
+        let owner: GetFrameOwnerResult =
+            serde_json::from_str(r#"{"nodeId":3}"#).expect("缺 backendNodeId 应可解析");
+        assert!(owner.backend_node_id.is_none());
+
+        // frameId 字段：池下标（Chrome 151 实测形态）/直出字符串/缺失
+        let nodes_json = r#"{"parentIndex":[-1],"nodeType":[9],"nodeName":[0],"nodeValue":[-1]}"#;
+        let doc: SnapshotDocument = serde_json::from_str(
+            &format!(r#"{{"documentURL":0,"title":1,"frameId":2,"nodes":{nodes_json},"layout":{{"nodeIndex":[],"bounds":[]}}}}"#),
+        )
+        .expect("含 frameId 文档解析失败");
+        let strings = vec!["".to_string(), "".to_string(), "F1".to_string()];
+        assert_eq!(
+            doc.frame_id.as_ref().unwrap().resolve(&strings),
+            "F1",
+            "frameId 池下标应经字符串池解析（Chrome 151 实测形态）"
+        );
+        // 直出字符串形态（宽容面）
+        let doc: SnapshotDocument = serde_json::from_str(
+            &format!(r#"{{"documentURL":0,"title":1,"frameId":"F2","nodes":{nodes_json},"layout":{{"nodeIndex":[],"bounds":[]}}}}"#),
+        )
+        .expect("直出 frameId 文档解析失败");
+        assert_eq!(doc.frame_id.as_ref().unwrap().resolve(&strings), "F2");
+        // 缺失 frameId（旧协议）→ None（向后兼容）
+        let doc: SnapshotDocument = serde_json::from_str(
+            &format!(r#"{{"documentURL":0,"title":1,"nodes":{nodes_json},"layout":{{"nodeIndex":[],"bounds":[]}}}}"#),
+        )
+        .expect("无 frameId 文档解析失败");
+        assert!(doc.frame_id.is_none(), "缺失 frameId 按 None（向后兼容）");
     }
 
     /// DOMStorage 域类型面（维度 16 storage_state 注入/导出聚合）：

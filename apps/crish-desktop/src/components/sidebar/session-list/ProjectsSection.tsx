@@ -4,9 +4,15 @@ import type { ProjectEntry } from '../../../api/projectStore';
 import { openProject } from '../../../api/projectStore';
 import { emitUiEvent } from '../../../api/uiEvents';
 import { getCompositionRoot } from '../../../app/compositionRoot';
-import { Tooltip } from '../../ui';
+import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
-import { ChevronDown, FilePlus2, Folder, FolderOpen, FolderPlus } from 'lucide-react';
+import {
+  ChevronDown,
+  FilePlus2,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+} from 'lucide-react';
 
 export interface ProjectsSectionProps {
   projects: ProjectEntry[];
@@ -25,7 +31,10 @@ export interface ProjectsSectionProps {
     isPinned: boolean
   ) => void;
   onToggleExpandedProjectFolder: (id: string) => void;
-  renderSessionItem: (s: SessionState, isDraggable?: boolean) => React.ReactNode;
+  renderSessionItem: (
+    s: SessionState,
+    isDraggable?: boolean
+  ) => React.ReactNode;
 }
 
 export function ProjectsSection({
@@ -62,26 +71,25 @@ export function ProjectsSection({
             <span>项目</span>
             <ChevronDown
               size={14}
-              className={
-                projectsSectionCollapsed ? styles.chevCollapsed : ''
-              }
+              className={projectsSectionCollapsed ? styles.chevCollapsed : ''}
               aria-hidden
             />
           </button>
         </div>
         <div className={styles.sectionLabelRight}>
           <Tooltip content="管理与选择项目">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={styles.sectionNew}
               aria-label="管理与选择项目"
               onClick={(e) => {
                 e.stopPropagation();
                 emitUiEvent('open-project-picker');
               }}
-            >
-              <FolderPlus size={14} strokeWidth={1.75} aria-hidden />
-            </button>
+              icon={<FolderPlus size={14} strokeWidth={1.75} aria-hidden />}
+            />
           </Tooltip>
         </div>
       </div>
@@ -111,35 +119,30 @@ export function ProjectsSection({
                     }}
                   >
                     {open ? (
-                      <FolderOpen
-                        size={16}
-                        strokeWidth={1.75}
-                        aria-hidden
-                      />
+                      <FolderOpen size={16} strokeWidth={1.75} aria-hidden />
                     ) : (
                       <Folder size={16} strokeWidth={1.75} aria-hidden />
                     )}
                     <span className={styles.folderName}>{p.name}</span>
                   </button>
                   <Tooltip content="在此项目新建对话">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       className={styles.folderNewSession}
                       aria-label={`在 ${p.name} 新建对话`}
                       onClick={(e) => {
-                          e.stopPropagation();
-                          openProject(p.id);
-                          onOpenProject(p.id);
-                          getCompositionRoot().shell.openNewDraftTab(p.id);
-                          emitUiEvent('open-chat');
-                        }}
-                    >
-                      <FilePlus2
-                        size={14}
-                        strokeWidth={1.75}
-                        aria-hidden
-                      />
-                    </button>
+                        e.stopPropagation();
+                        openProject(p.id);
+                        onOpenProject(p.id);
+                        getCompositionRoot().shell.openNewDraftTab(p.id);
+                        emitUiEvent('open-chat');
+                      }}
+                      icon={
+                        <FilePlus2 size={14} strokeWidth={1.75} aria-hidden />
+                      }
+                    />
                   </Tooltip>
                 </div>
                 <div
@@ -178,16 +181,16 @@ export function ProjectsSection({
                                   >
                                     {sess
                                       .slice(6)
-                                      .map((s) =>
-                                        renderSessionItem(s, true)
-                                      )}
+                                      .map((s) => renderSessionItem(s, true))}
                                   </ul>
                                 </div>
                               </div>
                             ) : null}
                             <li className={styles.sessionItemWrap}>
-                              <button
+                              <Button
                                 type="button"
+                                variant="ghost"
+                                size="sm"
                                 className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
                                 style={{ color: 'var(--text-tertiary)' }}
                                 onClick={() => {
@@ -197,7 +200,7 @@ export function ProjectsSection({
                                 {isExpanded
                                   ? '收起'
                                   : `查看全部 (${sess.length})`}
-                              </button>
+                              </Button>
                             </li>
                           </>
                         )}

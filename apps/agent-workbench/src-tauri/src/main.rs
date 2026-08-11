@@ -853,6 +853,9 @@ async fn restart_server(config: server::ServerConfig, service: &MultiDeviceServi
                 service.backend.clone(),
                 service.fanout.clone(),
                 service.audit_bridge.clone(),
+                // R1-11 G-2：配对协调器接入路由层（REST /v1/pair + WS pair
+                // 消息链；与命令面同一 Arc 实例）
+                Some(Arc::clone(&service.pairing)),
             );
             let serve_task = tauri::async_runtime::spawn(async move {
                 if let Err(error) = instance.serve(router).await {

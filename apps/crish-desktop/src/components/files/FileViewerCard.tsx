@@ -1,13 +1,25 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff } from '../../store/types';
-import { useLayoutTreeStore, fileViewerInitialModeMap } from '../../api/store-access/componentAccess';
+import {
+  useLayoutTreeStore,
+  fileViewerInitialModeMap,
+} from '../../api/store-access/componentAccess';
 import { useTerminalField, selectDiffFiles } from '../../store/storeAccess';
-import { openPathDefault, openWithHostOpener, listOpenOptionsForFile, type HostOpener } from '../../api/hostOpenersApi';
+import {
+  openPathDefault,
+  openWithHostOpener,
+  listOpenOptionsForFile,
+  type HostOpener,
+} from '../../api/hostOpenersApi';
 import { logInternalError } from '../../api/userFacingErrors';
-import { pathDirname, readTextFile, getWorkspacePath } from '../../api/workspaceFsApi';
+import {
+  pathDirname,
+  readTextFile,
+  getWorkspacePath,
+} from '../../api/workspaceFsApi';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import styles from './FileViewerCard.module.css';
 
 export interface FileViewerCardProps {
@@ -26,9 +38,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 
     // 匹配当前文件的 git 变更（如果有）
     const f = useMemo(() => {
-      return diffFiles.find(
-        (x) => x.filePath === filePath || filePath.endsWith(x.filePath)
-      ) || null;
+      return (
+        diffFiles.find(
+          (x) => x.filePath === filePath || filePath.endsWith(x.filePath)
+        ) || null
+      );
     }, [diffFiles, filePath]);
 
     // 模式切换状态
@@ -66,7 +80,8 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     }, [filePath]);
 
     // 打开方式（HostOpeners）与“更多操作”下拉状态
-    const [openDefaultLabel, setOpenDefaultLabel] = useState('在系统默认应用打开');
+    const [openDefaultLabel, setOpenDefaultLabel] =
+      useState('在系统默认应用打开');
     const [fileOpeners, setFileOpeners] = useState<HostOpener[]>([]);
     const [openMenuOpen, setOpenMenuOpen] = useState(false);
     const [openMenuMore, setOpenMenuMore] = useState(false);
@@ -81,12 +96,15 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       let active = true;
       async function loadOpeners() {
         try {
-          const { defaultLabel, openers } = await listOpenOptionsForFile(filePath);
+          const { defaultLabel, openers } =
+            await listOpenOptionsForFile(filePath);
           if (active) {
             setOpenDefaultLabel(defaultLabel || '在系统默认应用打开');
             setFileOpeners(openers || []);
           }
-        } catch { /* 打开方式列表失败时静默降级 */ }
+        } catch {
+          /* 打开方式列表失败时静默降级 */
+        }
       }
       void loadOpeners();
       return () => {
@@ -99,7 +117,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       if (!openMenuOpen && !moreOpen) return;
       const onDoc = (e: MouseEvent) => {
         const t = e.target as Node;
-        if (openMenuOpen && openMenuRef.current && !openMenuRef.current.contains(t)) {
+        if (
+          openMenuOpen &&
+          openMenuRef.current &&
+          !openMenuRef.current.contains(t)
+        ) {
           setOpenMenuOpen(false);
         }
         if (moreOpen && moreRef.current && !moreRef.current.contains(t)) {
@@ -112,11 +134,15 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 
     const isAbsolute = filePath.startsWith('/') || filePath.includes(':');
     // 相对路径接到工作区根下（SessionState 无 workspacePath，统一走 getWorkspacePath）
-    const absolutePath = isAbsolute ? filePath : `${getWorkspacePath() || ''}/${filePath}`;
+    const absolutePath = isAbsolute
+      ? filePath
+      : `${getWorkspacePath() || ''}/${filePath}`;
     const baseName = filePath.replace(/^.*[\\/]/, '') || filePath;
 
     const handleOpenDefault = () => {
-      void openPathDefault(absolutePath).catch((e) => logInternalError('components/files/FileViewerCard/openDefault', e));
+      void openPathDefault(absolutePath).catch((e) =>
+        logInternalError('components/files/FileViewerCard/openDefault', e)
+      );
     };
 
     const handleCopyCode = async () => {
@@ -245,16 +271,24 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             {/* 打开方式（在...中编辑）胶囊下拉组件 */}
             <div className={styles.filesOpenCapsule} ref={openMenuRef}>
               <Tooltip content={`${openDefaultLabel}（系统默认）`}>
-                <button type="button" className={styles.filesOpenMain} onClick={handleOpenDefault}>
-                  <Lucide.AppWindow size={13} aria-hidden />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className={styles.filesOpenMain}
+                  onClick={handleOpenDefault}
+                  icon={<Lucide.AppWindow size={13} aria-hidden />}
+                >
                   <span>{openDefaultLabel}</span>
-                </button>
+                </Button>
               </Tooltip>
 
               <Tooltip content={OPEN_WITH_LABEL}>
-                <button
+                <Button
                   ref={openMenuTriggerRef}
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={styles.filesOpenChev}
                   aria-label={OPEN_WITH_LABEL}
                   aria-haspopup="menu"
@@ -264,30 +298,50 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                     setOpenMenuMore(false);
                     setMoreOpen(false); // 互斥
                   }}
-                >
-                  <Lucide.ChevronDown size={14} aria-hidden />
-                </button>
+                  icon={<Lucide.ChevronDown size={14} aria-hidden />}
+                />
               </Tooltip>
 
               {openMenuOpen && (
                 <div className={styles.filesOpenMenu} role="menu">
                   {fileOpeners.length > 0 && (
                     <>
-                      {(openMenuMore ? fileOpeners : fileOpeners.slice(0, 6)).map((op) => (
+                      {(openMenuMore
+                        ? fileOpeners
+                        : fileOpeners.slice(0, 6)
+                      ).map((op) => (
                         <button
                           key={op.id}
                           type="button"
                           className={styles.filesOpenItem}
                           role="menuitem"
                           onClick={() => {
-                            void openWithHostOpener(op.id, absolutePath).catch((e) => logInternalError('components/files/FileViewerCard/openWith', e));
+                            void openWithHostOpener(op.id, absolutePath).catch(
+                              (e) =>
+                                logInternalError(
+                                  'components/files/FileViewerCard/openWith',
+                                  e
+                                )
+                            );
                             setOpenMenuOpen(false);
                           }}
                         >
                           {op.iconDataUrl ? (
-                            <img src={op.iconDataUrl} width={14} height={14} alt="" style={{ flexShrink: 0, objectFit: 'contain' }} />
+                            <img
+                              src={op.iconDataUrl}
+                              width={14}
+                              height={14}
+                              alt=""
+                              style={{ flexShrink: 0, objectFit: 'contain' }}
+                            />
                           ) : (
-                            <Lucide.AppWindow size={14} style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
+                            <Lucide.AppWindow
+                              size={14}
+                              style={{
+                                flexShrink: 0,
+                                color: 'var(--text-secondary)',
+                              }}
+                            />
                           )}
                           <span>{op.displayName}</span>
                         </button>
@@ -300,7 +354,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                           onClick={() => setOpenMenuMore((v) => !v)}
                         >
                           <Lucide.ChevronsUpDown size={14} aria-hidden />
-                          <span>{openMenuMore ? '收起' : `更多应用（${fileOpeners.length - 6}）`}</span>
+                          <span>
+                            {openMenuMore
+                              ? '收起'
+                              : `更多应用（${fileOpeners.length - 6}）`}
+                          </span>
                         </button>
                       )}
                     </>
@@ -311,22 +369,25 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 
             {/* 常驻复制源码按钮 */}
             <Tooltip content={COPY_SOURCE_LABEL}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={styles.actBtn}
                 aria-label={COPY_SOURCE_LABEL}
                 onClick={handleCopyCode}
-              >
-                <Lucide.Copy size={14} />
-              </button>
+                icon={<Lucide.Copy size={14} />}
+              />
             </Tooltip>
 
             {/* 智能 More 面板收纳其余所有辅助动作 */}
             <div className={styles.filesMoreWrap} ref={moreRef}>
               <Tooltip content={MORE_ACTIONS_LABEL}>
-                <button
+                <Button
                   ref={moreTriggerRef}
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={styles.actBtn}
                   aria-label={MORE_ACTIONS_LABEL}
                   aria-haspopup="menu"
@@ -335,9 +396,8 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                     setMoreOpen((v) => !v);
                     setOpenMenuOpen(false); // 互斥
                   }}
-                >
-                  <Lucide.MoreHorizontal size={14} />
-                </button>
+                  icon={<Lucide.MoreHorizontal size={14} />}
+                />
               </Tooltip>
 
               {moreOpen && (
@@ -395,10 +455,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                 <span>正在加载源码...</span>
               </div>
             ) : (
-              <VirtualPlainCodeViewer
-                content={plainCode}
-                filePath={filePath}
-              />
+              <VirtualPlainCodeViewer content={plainCode} filePath={filePath} />
             )
           ) : (
             renderSimpleDiff()

@@ -77,6 +77,10 @@ pub struct BudgetConfig {
     pub max_text_len: usize,
     pub inactive_budget_factor: f64,
     pub max_output_bytes: usize,
+    /// 跨域 iframe 递归采集开关（U-4 二期：默认 false 保持一期「同源 pierce +
+    /// `|IFRAME|` 占位」行为；true 启用 §1.5 跨域递归——Page.getFrameTree 取
+    /// 帧树 → frame 级 attach → 逐帧 DOMSnapshot）。
+    pub cross_origin_iframes: bool,
 }
 
 impl BudgetConfig {
@@ -89,6 +93,7 @@ impl BudgetConfig {
             max_text_len: MAX_TEXT_LEN,
             inactive_budget_factor: INACTIVE_BUDGET_FACTOR,
             max_output_bytes: MAX_OUTPUT_BYTES,
+            cross_origin_iframes: false,
         }
     }
 
@@ -103,6 +108,7 @@ impl BudgetConfig {
             max_text_len: self.max_text_len,
             inactive_budget_factor: self.inactive_budget_factor,
             max_output_bytes: self.max_output_bytes,
+            cross_origin_iframes: self.cross_origin_iframes,
         }
     }
 
@@ -113,6 +119,12 @@ impl BudgetConfig {
             max_selector_indices: selectors,
             ..*self
         }
+    }
+
+    /// 开启/关闭跨域 iframe 递归采集（U-4 二期；默认关闭保持一期行为）。
+    pub fn with_cross_origin_iframes(mut self, on: bool) -> Self {
+        self.cross_origin_iframes = on;
+        self
     }
 }
 
@@ -147,6 +159,34 @@ mod tests {
         assert_eq!(b.max_depth, 10, "深度预算不随系数缩放");
         assert_eq!(b.max_text_len, 100, "文本预算不随系数缩放");
         assert_eq!(b.max_output_bytes, 32 * 1024);
+    }
+
+    /// U-4 二期配置位两态：默认 false（保持一期「同源 pierce + |IFRAME| 占位」
+    /// 行为，不建帧会话不递归）；builder 开启 true；非活跃/缩放派生保持原值。
+    #[test]
+    fn budget_cross_origin_iframes_two_state() {
+        let b = BudgetConfig::active();
+        assert!(!b.cross_origin_iframes, "默认关闭（一期行为）");
+        let on = BudgetConfig::active().with_cross_origin_iframes(true);
+        assert!(on.cross_origin_iframes, "builder 开启后为 true");
+        let off = BudgetConfig::active().with_cross_origin_iframes(false);
+        assert!(!off.cross_origin_iframes, "显式关闭保持 false");
+        // 派生预算不改变采集开关（活跃/非活跃是输出面预算，跨域采集配置独立）
+        assert!(
+            BudgetConfig::active().with_cross_origin_iframes(true).inactive().cross_origin_iframes,
+            "非活跃派生应保留开启状态"
+        );
+        assert!(
+            !BudgetConfig::active().inactive().cross_origin_iframes,
+            "默认关闭派生保持关闭"
+        );
+        // scaled（测试构造辅助）经 ..*self 继承
+        assert!(
+            BudgetConfig::active().with_cross_origin_iframes(true).scaled(10, 10).cross_origin_iframes,
+            "scaled 派生应保留开启状态"
+        );
+        // Default 实现同 active
+        assert!(!BudgetConfig::default().cross_origin_iframes);
     }
 
     /// 双层体积上界常量（T-2）。

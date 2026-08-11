@@ -120,6 +120,9 @@ struct ConnInfo {
     token_hash: String,
     /// 设备名（配对签发时登记）
     label: String,
+    /// 已认证标志（R1-11 G-2：false = 配对升级连接，完成 pair.hello 前
+    /// 仅允许 pair.* 消息——配对期相位门控，D3 §5.2）
+    authenticated: bool,
     /// 建立时刻（虚拟时钟 ms，心跳超时判定基准）
     connected_at_ms: u64,
     /// 最近收到客户端帧时刻（虚拟时钟 ms）
@@ -192,6 +195,7 @@ impl WsRegistry {
                 conn_id,
                 token_hash: token_hash.to_string(),
                 label: label.to_string(),
+                authenticated: false,
                 connected_at_ms: now,
                 last_frame_at_ms: now,
                 sessions: HashSet::new(),
@@ -354,6 +358,38 @@ impl WsRegistry {
         }
     }
 
+    /// 标记连接已认证（R1-11 G-2 两条路径）：
+    /// - 正常升级连接：注册后立即调用（令牌已校验）；
+    /// - 配对升级连接：pair.hello 成功签发令牌后调用——同时把占位令牌哈希
+    ///   迁移为真实令牌哈希（撤销全链 kick_by_token_hash 从此可命中）并
+    ///   更新设备标签。返回是否命中该连接。
+    pub fn mark_authenticated(&self, conn_id: u64, token_hash: &str, label: &str) -> bool {
+        let mut inner = lock(&self.inner);
+        let Some(conn) = inner.conns.get_mut(&conn_id) else {
+            return false;
+        };
+        // 先克隆旧哈希并完成 conn 字段更新（NLL 在最后一次使用后结束借用），
+        // 再操作 by_token 表——两把借用不交错（borrow 冲突收口）
+        let old_hash = conn.token_hash.clone();
+        conn.token_hash = token_hash.to_string();
+        conn.label = label.to_string();
+        conn.authenticated = true;
+        if inner.by_token.get(&old_hash) == Some(&conn_id) {
+            inner.by_token.remove(&old_hash);
+        }
+        inner.by_token.insert(token_hash.to_string(), conn_id);
+        true
+    }
+
+    /// 连接是否已认证（配对升级连接完成 pair.hello 前 = false；相位门控
+    /// 消费：未认证连接仅放行 pair.hello，其余 kind → auth.unknown_device）
+    pub fn is_authenticated(&self, conn_id: u64) -> bool {
+        lock(&self.inner)
+            .conns
+            .get(&conn_id)
+            .is_some_and(|conn| conn.authenticated)
+    }
+
     /// 当前连接数
     // R1-02 备注同款：R1-08 管理页 / 测试消费——dead_code 静音
     #[cfg_attr(not(test), allow(dead_code))]
@@ -459,6 +495,11 @@ struct ConnCtx {
 /// 拒绝）。校验失败 → 401（101 前拒绝）；撤销令牌 → 401 +
 /// auth.device_revoked。鉴权先于 upgrade 提取——非 WS 请求同样按鉴权
 /// 语义响应（不泄露「端点存在」之外的升级信息）。
+///
+/// 配对升级例外（R1-11 G-2）：存在活跃配对码（协调器 WaitingInput）时，
+/// 无令牌/无效令牌连接允许升级进入**配对态**（D3 §5.2「配对期帧无 auth」）
+/// ——连接注册为未认证，仅 pair.hello 可入，配对完成（签发令牌）后转入
+/// 会话态；无配对活动时保持零信任 401（D2 §7.1 不因本例外放宽）。
 pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Request) -> Response {
     // Origin 双保险（D2 §10.1：非预期 Origin 拒绝；原生客户端无 Origin
     // 头 → 放行）
@@ -469,8 +510,13 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         )
             .into_response();
     }
+    // 配对升级例外判定（无令牌/无效令牌时是否放行配对态连接）
+    let pair_pending = crate::server::pair_endpoint::pair_upgrade_allowed(&state);
     // 令牌提取（query 优先，Bearer 头兜底）
     let Some(token) = token_from_request(request.uri(), request.headers()) else {
+        if pair_pending {
+            return upgrade_pairing(request, state).await;
+        }
         return (
             StatusCode::UNAUTHORIZED,
             Json(ErrorBody::new(
@@ -494,6 +540,9 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
                 .into_response();
         }
         auth::TokenVerdict::Invalid => {
+            if pair_pending {
+                return upgrade_pairing(request, state).await;
+            }
             return (
                 StatusCode::UNAUTHORIZED,
                 Json(ErrorBody::new(DeviceErrorCode::AuthBadSignature, "令牌校验失败")),
@@ -517,7 +566,27 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         // 旧实现 8 hex 截断，对齐铁律 12 hex 口径（脱敏单一真源在
         // conex-telemetry::redact，避免各处自造截断口径漂移）
         .unwrap_or_else(|| conex_telemetry::redact::redact_token(&token));
-    ws.on_upgrade(move |socket| handle_socket(socket, state, token_hash, label))
+    ws.on_upgrade(move |socket| {
+        handle_socket(socket, state, token_hash, label, false)
+    })
+}
+
+/// 配对升级路径（R1-11 G-2）：配对激活期无令牌/无效令牌连接放行进入
+/// 配对态（pair_pending=true——完成 pair.hello 前仅允许 pair.* 消息）。
+/// 占位令牌哈希唯一化（register 的「每令牌一主连接」语义防同占位互踢）；
+/// 配对完成时经 [WsRegistry::mark_authenticated] 迁移为真实令牌哈希
+/// （撤销全链从此可命中）。
+async fn upgrade_pairing(request: Request, state: ServerState) -> Response {
+    let (mut parts, _body) = request.into_parts();
+    let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
+        Ok(ws) => ws,
+        Err(rejection) => return rejection.into_response(),
+    };
+    let pairing_id = MSG_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let token_hash = auth::sha256_hex(format!("pairing-pending:{pairing_id}").as_bytes());
+    ws.on_upgrade(move |socket| {
+        handle_socket(socket, state, token_hash, "pairing".to_string(), true)
+    })
 }
 
 /// 连接生命周期（升级成功后执行）
@@ -530,6 +599,7 @@ async fn handle_socket(
     state: ServerState,
     token_hash: String,
     label: String,
+    pair_pending: bool,
 ) {
     let registry = state.ws_registry();
     let (kill_tx, kill_rx) = watch::channel::<Option<String>>(None);
@@ -551,6 +621,11 @@ async fn handle_socket(
             return;
         }
     };
+    // 正常升级连接（令牌已校验）立即标记已认证；配对升级连接保持未认证
+    //（相位门控：仅 pair.hello 可入，R1-11 G-2）
+    if !pair_pending {
+        registry.mark_authenticated(conn_id, &token_hash, &label);
+    }
     let (ws_sender, mut ws_receiver) = socket.split();
     let (out_tx, out_rx) = mpsc::channel::<Outbound>(CONN_BUFFER_CAPACITY);
 
@@ -828,7 +903,22 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
         );
         return send_then_close(ctx, frame).await;
     }
+    // 配对态相位门控（R1-11 G-2）：未认证连接（配对升级进入）仅放行
+    // pair.hello——其余 kind → auth.unknown_device（对齐 mock-daemon
+    // 相位语义；D3 §5.2 配对期只走 pair.*）
+    if !ctx.state.ws_registry().is_authenticated(ctx.conn_id)
+        && envelope.kind != MessageKind::PairHello
+    {
+        let frame = error_frame(
+            ctx.conn_id,
+            DeviceErrorCode::AuthUnknownDevice,
+            "设备未配对，请先完成配对流程".to_string(),
+            Some(envelope.msg_id.as_str()),
+        );
+        return send_frame(ctx, frame).await;
+    }
     match &envelope.kind {
+        MessageKind::PairHello => handle_pair_hello_frame(envelope.body, envelope.msg_id.as_str(), ctx).await,
         MessageKind::EventsSubscribe => handle_subscribe(envelope.body, ctx).await,
         MessageKind::EventsSubscribeAll => handle_subscribe_all(envelope.body, ctx).await,
         MessageKind::EventsResume => handle_resume(envelope.body, ctx).await,
@@ -843,7 +933,8 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
             tracing::debug!(target: "ws", conn_id = ctx.conn_id, "收到对端 error 帧");
             Action::Continue
         }
-        // R1-05 范围外消息（命令 / 配对 / 认证 / 流 / 设备 / 会话索引）：
+        // R1-05 范围外消息（命令 / 认证 / 流 / 设备 / 会话索引；pair.verify
+        // 属密钥交换链——简化链不实现，hello 已直接完成配对）：
         // 宽容忽略 + 记录（D3 §10.3「未知 kind 丢弃 + 记日志，不报错」）
         _ => {
             tracing::debug!(
@@ -855,6 +946,61 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
             Action::Continue
         }
     }
+}
+
+/// pair.hello：配对简化链（hello → pair.ok + device.ready；任务书「或直接
+/// verify/ok」授权，D3 §4.8 消息名/字段对齐——challenge/verify 密钥链在
+/// 无 X25519/HMAC 实现下为占位，mock 亦不验签）。
+///
+/// 成功：回 pair.ok（D3 PairOk desktopId/ttl + token 明文扩展，仅此一次）
+/// + device.ready，连接经 [WsRegistry::mark_authenticated] 转入已认证
+/// （占位哈希迁移为真实令牌哈希——撤销全链与「令牌可订阅」随即可用）；
+/// 失败：error 帧（D3 §6.2 设备错误码，关联请求 msgId）。
+async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Action {
+    let registry = ctx.state.ws_registry();
+    // 已认证连接重复 pair.hello → cmd.invalid（配对仅发生在配对态连接；
+    // 码一次性语义下重复 hello 也会被状态机拒绝，此处防呆提示）
+    if registry.is_authenticated(ctx.conn_id) {
+        let frame = error_frame(
+            ctx.conn_id,
+            DeviceErrorCode::CmdInvalid,
+            "连接已完成认证，pair.hello 无意义".to_string(),
+            Some(msg_id),
+        );
+        return send_frame(ctx, frame).await;
+    }
+    let reply = crate::server::pair_endpoint::handle_pair_hello(
+        &body,
+        ctx.state.pairing().as_deref(),
+        now_ms(),
+    );
+    let (token, label, device_id) = match reply {
+        Ok(ok) => ok,
+        Err((code, message)) => {
+            let frame = error_frame(ctx.conn_id, code, message, Some(msg_id));
+            return send_frame(ctx, frame).await;
+        }
+    };
+    // D3 §4.8 step 5/6：pair.ok + device.ready
+    let ok = crate::server::pair_endpoint::pair_ok_body(
+        crate::server::pair_endpoint::DESKTOP_ID,
+        &token,
+    );
+    if send_envelope(ctx, MessageKind::PairOk, ok).await == Action::Close {
+        return Action::Close;
+    }
+    let ready = crate::server::pair_endpoint::device_ready_body(&device_id);
+    if send_envelope(ctx, MessageKind::DeviceReady, ready).await == Action::Close {
+        return Action::Close;
+    }
+    // 令牌哈希迁移：配对完成 → 连接转已认证（本连接后续消息放行，
+    // 撤销全链 kick_by_token_hash 从此可命中）
+    let token_hash = auth::sha256_hex(token.as_bytes());
+    // 新令牌落盘后重载路由层令牌库（协调器 store 与本路由 store 各自
+    // 独立——R1-07 装配断裂收口：新令牌立即被路由层鉴权接受）
+    ctx.state.reload_tokens();
+    registry.mark_authenticated(ctx.conn_id, &token_hash, &label);
+    Action::Continue
 }
 
 /// events.subscribe：按会话订阅（≤ MAX_SUBSCRIPTIONS）+ 回执 subscribe.ok
@@ -2473,5 +2619,227 @@ mod tests {
         // 跨站 → 拒绝
         headers.insert(header::ORIGIN, HeaderValue::from_static("https://evil.example.com"));
         assert!(!origin_allowed(&headers));
+    }
+
+    // ── R1-11 G-2：WS pair.hello 消息链（配对升级 + 简化链）──
+
+    /// 配对服务测试装配：服务开关开启 + 配对协调器注入（协调器令牌库与
+    /// 路由层令牌库同文件——reload_tokens 收口；码经协调器激活）。返回
+    /// (地址, 句柄, 协调器)。
+    async fn spawn_pairing_server(
+    ) -> (SocketAddr, ServerHandle, Arc<crate::server::pairing::PairingCoordinator>) {
+        let dir = tempfile::tempdir().expect("临时目录必须可创建");
+        let file = dir.path().join("pairing.json");
+        let mut config = ServerConfig::new(dir.path());
+        config.port = 0;
+        config.multi_device_enabled = true;
+        config.pairing_file_path = file.clone();
+        let tokens = Arc::new(Mutex::new(TokenStore::new(file)));
+        let ws_registry = Arc::new(WsRegistry::new());
+        let coordinator =
+            Arc::new(crate::server::pairing::PairingCoordinator::new(tokens, ws_registry));
+        let instance = ServerInstance::bind(config).await.expect("测试绑定失败");
+        let addr = instance.addr();
+        let handle = instance.handle().clone();
+        let state = ServerState::new(
+            instance.handle(),
+            TokenStore::load(&handle.config().pairing_file_path),
+            None,
+        )
+        .with_pairing(Arc::clone(&coordinator));
+        let router = router::build_router(state);
+        tokio::spawn(async move {
+            let _ = instance.serve(router).await;
+        });
+        let url = format!("http://{addr}/v1/info");
+        for _ in 0..100 {
+            if reqwest::get(&url).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        (addr, handle, coordinator)
+    }
+
+    /// 无令牌 WS 连接（配对升级路径）
+    async fn ws_connect_anonymous(
+        addr: SocketAddr,
+    ) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>
+    {
+        let url = format!("ws://{addr}/v1/events");
+        let (ws, _) = tokio_tungstenite::connect_async(&url)
+            .await
+            .expect("配对升级必须成功（激活码存在）");
+        ws
+    }
+
+    /// pair.hello 帧（D3 §4.8 字段：code/deviceId/mobilePub/mobileLongPub/
+    /// deviceName）
+    async fn send_pair_hello(
+        ws: &mut tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        code: &str,
+    ) {
+        send_envelope_text(
+            ws,
+            "pair.hello",
+            serde_json::json!({
+                "code": code,
+                "deviceId": "dev-pair-test-0001",
+                "mobilePub": "mock-mobile-pub",
+                "mobileLongPub": "mock-mobile-long-pub",
+                "deviceName": "配对测试手机",
+                "platform": "android",
+            }),
+        )
+        .await;
+    }
+
+    /// 无活跃配对码时：无令牌升级被拒（401）——配对例外只在配对激活期
+    /// 开放（D5 零信任不因本例外放宽；R1-05 既有拒绝语义保持）
+    #[tokio::test]
+    async fn pair_upgrade_rejected_without_active_code() {
+        let (addr, _handle, coordinator) = spawn_pairing_server().await;
+        let _ = coordinator; // 未激活配对（无码）
+        let response = reqwest::get(format!("http://{addr}/v1/events"))
+            .await
+            .expect("请求必须可达");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// WS pair 消息链全路径（任务书验收：hello→ok 拿令牌→令牌可订阅）：
+    /// ① 配对激活期无令牌连接升级成功；② 未配对连接发会话消息被拒
+    /// （相位门控 auth.unknown_device）；③ pair.hello 正确码 → pair.ok
+    /// （desktopId/ttl/token 64hex 明文）+ device.ready；④ 同连接订阅会话
+    /// → subscribe.ok（配对完成令牌即生效）；⑤ 新令牌开新连接 → 心跳
+    /// 往返成功（令牌被路由层鉴权接受）
+    #[tokio::test]
+    async fn pair_hello_chain_ok_and_token_subscribes() {
+        let (addr, _handle, coordinator) = spawn_pairing_server().await;
+        let code = coordinator
+            .start_pairing(now_ms())
+            .expect("激活配对必须成功")
+            .code;
+        let mut ws = ws_connect_anonymous(addr).await;
+
+        // ② 相位门控：未配对连接发 events.subscribe → auth.unknown_device
+        send_envelope_text(
+            &mut ws,
+            "events.subscribe",
+            serde_json::json!({ "sessions": ["s-1"], "lastSequences": {} }),
+        )
+        .await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "error");
+        let error: ErrorBody = serde_json::from_value(body).unwrap();
+        assert_eq!(error.code, DeviceErrorCode::AuthUnknownDevice);
+
+        // ③ pair.hello 正确码 → pair.ok（含 token 明文）+ device.ready
+        send_pair_hello(&mut ws, &code).await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "pair.ok", "配对成功必须回 pair.ok");
+        let token = {
+            let ok = body.as_object().expect("pair.ok 必须为对象");
+            assert_eq!(ok["desktopId"].as_str(), Some(crate::server::pair_endpoint::DESKTOP_ID));
+            assert_eq!(ok["ttl"].as_u64(), Some(crate::server::pair_endpoint::PAIR_TTL_SECONDS));
+            let token = ok["token"].as_str().expect("pair.ok 必须携带令牌明文");
+            assert_eq!(token.len(), 64, "32B hex 令牌");
+            token.to_string()
+        };
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "device.ready");
+        assert_eq!(body["deviceId"].as_str(), Some("dev-pair-test-0001"));
+
+        // ④ 同连接配对完成后订阅会话 → subscribe.ok（令牌即生效）
+        send_envelope_text(
+            &mut ws,
+            "events.subscribe",
+            serde_json::json!({ "sessions": ["s-1"], "lastSequences": {} }),
+        )
+        .await;
+        let (kind, _) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "events.subscribe.ok", "配对完成后会话消息必须放行");
+
+        // ⑤ 新令牌开新连接（升级鉴权走 TokenStore——reload_tokens 收口
+        // 后路由层接受配对签发的新令牌）
+        let mut ws2 = ws_connect(addr, &token).await;
+        send_envelope_text(
+            &mut ws2,
+            "heartbeat",
+            serde_json::json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
+        )
+        .await;
+        let (kind, _) = parse_frame(&next_text(&mut ws2).await.unwrap());
+        assert_eq!(kind, "heartbeat.ok", "新令牌必须通过 WS 升级鉴权");
+        let _ = ws2.close(None).await;
+        let _ = ws.close(None).await;
+    }
+
+    /// 错误配对码 → error 帧 + pair.invalid_code（D3 §6.2 错误码对齐 mock）
+    #[tokio::test]
+    async fn pair_hello_wrong_code_returns_error_frame() {
+        let (addr, _handle, coordinator) = spawn_pairing_server().await;
+        coordinator
+            .start_pairing(now_ms())
+            .expect("激活配对必须成功");
+        let mut ws = ws_connect_anonymous(addr).await;
+        send_pair_hello(&mut ws, "CXN-AAAA-BBBB-CCCC").await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "error");
+        let error: ErrorBody = serde_json::from_value(body).unwrap();
+        assert_eq!(error.code, DeviceErrorCode::PairInvalidCode);
+        let _ = ws.close(None).await;
+    }
+
+    /// 载荷缺字段 → error 帧 + cmd.invalid（对齐 mock-daemon：pair.hello
+    /// 缺必需字段拒绝）
+    #[tokio::test]
+    async fn pair_hello_malformed_body_returns_error_frame() {
+        let (addr, _handle, coordinator) = spawn_pairing_server().await;
+        coordinator
+            .start_pairing(now_ms())
+            .expect("激活配对必须成功");
+        let mut ws = ws_connect_anonymous(addr).await;
+        send_envelope_text(
+            &mut ws,
+            "pair.hello",
+            serde_json::json!({ "code": "CXN-7K4P-Q2MB-9XRT" }),
+        )
+        .await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "error");
+        let error: ErrorBody = serde_json::from_value(body).unwrap();
+        assert_eq!(error.code, DeviceErrorCode::CmdInvalid);
+        let _ = ws.close(None).await;
+    }
+
+    /// 注册表单元语义：mark_authenticated 迁移占位哈希 → 真实令牌哈希
+    /// （撤销全链 kick_by_token_hash 命中迁移后的连接）
+    #[test]
+    fn registry_mark_authenticated_migrates_token_hash() {
+        let registry = WsRegistry::new();
+        let (kill_tx, _) = watch::channel::<Option<String>>(None);
+        let conn_id = match registry.register("pairing-pending:1", "pairing", kill_tx, 1000) {
+            RegisterOutcome::Registered(id) => id,
+            _ => panic!("注册必须成功"),
+        };
+        assert!(!registry.is_authenticated(conn_id), "配对升级连接默认未认证");
+        assert!(
+            registry.mark_authenticated(conn_id, "real-token-hash", "配对测试手机"),
+            "迁移必须命中"
+        );
+        assert!(registry.is_authenticated(conn_id));
+        // 撤销全链（kick_by_token_hash）命中迁移后的真实哈希
+        assert_eq!(
+            registry.kick_by_token_hash("real-token-hash", KICK_REVOKED),
+            vec![conn_id],
+            "迁移后按真实令牌哈希踢出必须命中"
+        );
+        // 占位哈希不再占用令牌槽
+        assert!(
+            registry.kick_by_token_hash("pairing-pending:1", KICK_REVOKED).is_empty(),
+            "占位哈希应已释放"
+        );
     }
 }

@@ -85,6 +85,9 @@ pub const COMMANDS_PATH: &str = "/v1/commands";
 /// C10 搜索索引就绪状态（GET /v1/search/index；D2 §8.2 未列，R1-03 新增
 /// 路由，对齐 M6 C10 getSearchIndex 命令名）
 pub const SEARCH_INDEX_PATH: &str = "/v1/search/index";
+/// 移动端配对入口（POST /v1/pair；R1-11 G-2：body {code, label?} →
+/// {token, label?}，令牌仅此一次明文返回；免鉴权——配对端点无令牌可入）
+pub const PAIR_PATH: &str = "/v1/pair";
 
 /// 密钥/高危险命令面（R1-10 T-07 / D5 §4.5：显式不进远程白名单——矩阵外
 /// 命令）。REST 路由表即远程白名单：本清单条目一律不注册路由，触达时经
@@ -139,8 +142,12 @@ pub struct HelloInfo {
 /// 构建服务路由（R1-03：info/hello + F1 监控域 10 条只读端点；
 /// R1-05：WS /v1/events 挂载）
 pub fn build_router(state: ServerState) -> Router {
-    // 免鉴权面（/v1/info；/v1/pair 归 R1-07）
-    let info = Router::new().route(INFO_PATH, get(handle_info));
+    // 免鉴权面（/v1/info 服务自报；/v1/pair 配对入口——R1-11 G-2：
+    // 配对端点无令牌可入，否则「先有令牌才能拿令牌」；handler 内自行
+    // 校验服务开关与配对协调器装配态）
+    let info = Router::new()
+        .route(INFO_PATH, get(handle_info))
+        .route(PAIR_PATH, post(crate::server::pair_endpoint::handle_rest_pair));
     // WS 事件端点（R1-05）：handler 内自鉴权（Bearer 头或 ?token= 双通道，
     // D2 §10.1）——不进 require_bearer_token 中间件组（浏览器 WS 无法携带
     // 自定义头，且 401 响应会破坏升级握手语义）
@@ -2664,5 +2671,224 @@ mod tests {
             Some(conex_types::device::PermissionMode::FullAccess),
             "远程申报 full-access 必须原样透传到后端装配面"
         );
+    }
+
+    // ── R1-11 G-2：POST /v1/pair 移动端配对入口 ──
+
+    /// 配对测试状态：服务开关开启 + 配对协调器注入（协调器令牌库与路由
+    /// 层令牌库同文件——reload_tokens 收口断言「令牌立即生效」）。
+    /// 返回 (state, coordinator)；码经 coordinator.start_pairing 激活。
+    fn test_pair_state() -> (ServerState, Arc<crate::server::pairing::PairingCoordinator>) {
+        let seq = TOKEN_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let file = std::env::temp_dir().join(format!("pairing-pair-{seq}.json"));
+        let mut config = ServerConfig::new(std::env::temp_dir());
+        config.multi_device_enabled = true;
+        config.pairing_file_path = file.clone();
+        let handle = ServerHandle::new(config, "127.0.0.1:0".parse().expect("固定测试地址"));
+        let tokens = Arc::new(std::sync::Mutex::new(TokenStore::new(file)));
+        let ws_registry = Arc::new(crate::server::ws::WsRegistry::new());
+        let coordinator =
+            Arc::new(crate::server::pairing::PairingCoordinator::new(tokens, ws_registry));
+        let state = ServerState::new(
+            &handle,
+            TokenStore::new(handle.config().pairing_file_path.clone()),
+            None,
+        )
+        .with_pairing(Arc::clone(&coordinator));
+        (state, coordinator)
+    }
+
+    /// 激活配对并返回展示码（CXN-XXXX-XXXX-XXXX）
+    fn activate_pairing(coordinator: &crate::server::pairing::PairingCoordinator) -> String {
+        coordinator
+            .start_pairing(now_ms())
+            .expect("激活配对必须成功")
+            .code
+    }
+
+    /// 无鉴权 JSON POST（/v1/pair 免鉴权端点测试用）
+    fn plain_post(uri: &str, body: serde_json::Value) -> axum::http::Request<Body> {
+        axum::http::Request::builder()
+            .uri(uri)
+            .method("POST")
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    /// 免鉴权 POST /v1/pair：正确码 → 200 {token, label?}，且令牌**无
+    /// Authorization 头**即可拿到（配对端点豁免鉴权——否则先有令牌才能
+    /// 拿令牌）；令牌立即可用于后续鉴权请求（GET /v1/hello 200）
+    #[tokio::test]
+    async fn pair_endpoint_issues_token_usable_immediately() {
+        let (state, coordinator) = test_pair_state();
+        let code = activate_pairing(&coordinator);
+        let app = build_router(state);
+
+        // 无令牌 POST → 200（免鉴权入口）
+        let response = app
+            .clone()
+            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": code })))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        let token = body["token"].as_str().expect("必须返回令牌明文");
+        assert_eq!(token.len(), 64, "32B hex 令牌");
+        assert!(body.get("label").is_none(), "未提供 label 时省略");
+
+        // 令牌立即可用于后续请求（reload_tokens 收口：协调器 store 与
+        // 路由 store 分离的 R1-07 装配断裂修复点）
+        let response = app
+            .clone()
+            .oneshot(authed_get(HELLO_PATH, token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "新令牌必须立即通过鉴权");
+    }
+
+    /// 免鉴权 POST /v1/pair：label 回显；错误码 → 401 + pair.invalid_code
+    #[tokio::test]
+    async fn pair_endpoint_wrong_code_is_401_with_label_echo() {
+        let (state, coordinator) = test_pair_state();
+        activate_pairing(&coordinator);
+        let app = build_router(state);
+        let response = app
+            .oneshot(plain_post(
+                PAIR_PATH,
+                serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC", "label": "我的手机" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "pair.invalid_code");
+    }
+
+    /// 格式非法码 → 401 + pair.invalid_code（标准化失败，不计数）
+    #[tokio::test]
+    async fn pair_endpoint_invalid_format_is_401() {
+        let (state, coordinator) = test_pair_state();
+        activate_pairing(&coordinator);
+        let app = build_router(state);
+        let response = app
+            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": "BAD" })))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "pair.invalid_code");
+    }
+
+    /// 5 次失败 → 锁定语义（R1-10 T-05 的 REST 形态）：4 次错误仅计数
+    /// 401；第 5 次失败后正确码 → 409 + pair.too_many_attempts（对齐
+    /// complete_pairing 的 Locked 映射；Destroyed 冷却后的永久失效已由
+    /// pairing.rs T-05 状态机测试覆盖——REST 层时钟不可控）
+    #[tokio::test]
+    async fn pair_endpoint_five_failures_lock_with_409() {
+        let (state, coordinator) = test_pair_state();
+        let code = activate_pairing(&coordinator);
+        let app = build_router(state);
+        for _ in 0..4 {
+            let response = app
+                .clone()
+                .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" })))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+        // 第 5 次错误：计数达上限（仍 401，计数语义）
+        let response = app
+            .clone()
+            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" })))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        // 锁定期内正确码 → 409 + pair.too_many_attempts
+        let response = app
+            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": code })))
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::CONFLICT,
+            "锁定期间正确码必须 409"
+        );
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "pair.too_many_attempts");
+    }
+
+    /// 服务开关关闭（multi_device.enabled=false）→ 503（服务未开启；
+    /// 生产装配面此时根本不 bind，本断言兜住路由层直测语义）
+    #[tokio::test]
+    async fn pair_endpoint_service_disabled_is_503() {
+        let seq = TOKEN_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let file = std::env::temp_dir().join(format!("pairing-pair-disabled-{seq}.json"));
+        let mut config = ServerConfig::new(std::env::temp_dir());
+        config.multi_device_enabled = false; // 服务开关默认关闭
+        config.pairing_file_path = file.clone();
+        let handle = ServerHandle::new(config, "127.0.0.1:0".parse().expect("固定测试地址"));
+        let tokens = Arc::new(std::sync::Mutex::new(TokenStore::new(file)));
+        let coordinator = Arc::new(crate::server::pairing::PairingCoordinator::new(
+            tokens,
+            Arc::new(crate::server::ws::WsRegistry::new()),
+        ));
+        let state = ServerState::new(
+            &handle,
+            TokenStore::new(handle.config().pairing_file_path.clone()),
+            None,
+        )
+        .with_pairing(Arc::clone(&coordinator));
+        activate_pairing(&coordinator); // 即使有活跃码也拒绝（开关优先）
+        let app = build_router(state);
+        let response = app
+            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": "CXN-7K4P-Q2MB-9XRT" })))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.denied");
+    }
+
+    /// 请求体非法（缺 code / 非 JSON）→ 400 + cmd.invalid
+    #[tokio::test]
+    async fn pair_endpoint_malformed_body_is_400() {
+        let (state, coordinator) = test_pair_state();
+        activate_pairing(&coordinator);
+        let app = build_router(state);
+        for body in [
+            serde_json::json!({}),
+            serde_json::json!({ "code": 42 }),
+            serde_json::json!("not-an-object"),
+        ] {
+            let body_label = body.to_string();
+            let response = app
+                .clone()
+                .oneshot(plain_post(PAIR_PATH, body))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "body={body_label}");
+        }
+    }
+
+    /// 令牌仅此一次明文返回：重复使用同一码 → 401 + pair.used（一次性）
+    #[tokio::test]
+    async fn pair_endpoint_code_is_single_use() {
+        let (state, coordinator) = test_pair_state();
+        let code = activate_pairing(&coordinator);
+        let app = build_router(state);
+        let response = app
+            .clone()
+            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": code })))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = app
+            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": code })))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "pair.used");
     }
 }

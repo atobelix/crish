@@ -14,11 +14,21 @@
 //! （测试/引擎侧从内部数据结构直接构建 `EnhancedNode` 树）。单元测试一律基于
 //! 构造输入（确定性）；真实采集路径由 e2e 验证（§7.2 T8）。
 
-use crate::cdp::domains::{AXNode, CaptureSnapshotResult, GetDocumentResult, SnapshotNode};
-use crate::snapshot::budget::MAX_RAW_PAYLOAD_BYTES;
+use crate::cdp::domains::names::{
+    ACCESSIBILITY_GET_FULL_AX_TREE, DOM_GET_DOCUMENT, DOM_GET_FRAME_OWNER,
+    DOM_SNAPSHOT_CAPTURE_SNAPSHOT, PAGE_GET_FRAME_TREE, PAGE_GET_LAYOUT_METRICS,
+    TARGET_GET_TARGETS,
+};
+use crate::cdp::domains::{
+    AXNode, CaptureSnapshotResult, FrameTree, GetDocumentResult, GetFrameOwnerResult,
+    GetFrameTreeResult, GetTargetsResult, SnapshotNode,
+};
+use crate::snapshot::budget::{BudgetConfig, MAX_RAW_PAYLOAD_BYTES};
 use crate::snapshot::SnapshotError;
+use crate::SessionRef;
 use async_trait::async_trait;
-use std::collections::HashMap;
+use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 
 /// 计算样式采样白名单（§1.3：仅采样以下 10 项，白名单外每加一项都线性增大
 /// 快照体积并在重型站点触发崩溃，参考实现已踩坑）。
@@ -48,6 +58,9 @@ pub const RETRY_WINDOW: std::time::Duration = std::time::Duration::from_secs(2);
 pub const MIN_IFRAME_SIZE: f64 = 10.0;
 /// 视口缓冲（可见性 = 与布局视口相交，上下各放宽 1000px，§1.5）。
 pub const VIEWPORT_THRESHOLD: f64 = 1000.0;
+/// 子帧采集超时护栏（§1.5：跨域帧为增强信息，超时降级 `|IFRAME|` 占位
+/// 不阻塞主快照；主采集 12s 硬超时由管理器兜底，子帧单次 2s 足够）。
+pub const FRAME_COLLECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// 布局 bounds（坐标 + 尺寸，CSS 像素；设备像素 ÷ DPR 换算）。
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -419,18 +432,57 @@ pub struct LayoutMetrics {
     pub device_pixel_ratio: f64,
 }
 
+/// 跨域 iframe 递归统计（§1.5 二期：超预算截断 + 采集统计面）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CrossOriginStats {
+    /// 成功递归采集的帧数
+    pub frames_collected: usize,
+    /// 尺寸 < 10px×10px 或无法定位 owner 的帧数（不递归，`|IFRAME|` 占位）
+    pub skipped_small: usize,
+    /// 预算截断帧数（max_iframes=64 / max_iframe_depth=4 / 150KB 载荷，13 §1.5/T-2）
+    pub skipped_budget: usize,
+    /// attach/采集失败的帧数（降级 `|IFRAME|` 占位，不阻塞主树）
+    pub failed: usize,
+    /// 建立的帧级 CDP 会话数
+    pub sessions_attached: usize,
+    /// 关闭的帧级 CDP 会话数（采集后即 detach，防泄漏）
+    pub sessions_detached: usize,
+}
+
 /// 采集产物（采集阶段输出，进入序列化流水线）。
 #[derive(Debug, Clone)]
 pub struct CollectedData {
-    /// 增强树根森林（真实路径每文档一棵根树；构造输入通常一棵）
+    /// 增强树根森林（真实路径每文档一棵根树；跨域 iframe 子文档以独立根树
+    /// 追加于主树之后并带 `|IFRAME|` 标记，13 §1.5 二期）
     pub roots: Vec<EnhancedNode>,
     pub url: String,
     pub title: String,
     pub layout: LayoutMetrics,
-    /// CDP 原始载荷估算字节（150KB 采集层护栏，T-2）
+    /// CDP 原始载荷估算字节（150KB 采集层护栏，T-2；含跨域帧累计）
     pub raw_payload_bytes: usize,
     /// 阶段耗时明细（自测/观测）
     pub collect_ms: u64,
+    /// 跨域 iframe 递归统计（二期启用时非零）
+    pub cross_origin: CrossOriginStats,
+}
+
+/// 跨域帧预算（§1.5：max_iframes=64 与主 DOMSnapshot 文档数**共用**同一上限，
+/// 跨域递归帧数并入；150KB 原始载荷上限跨帧累计，T-2）。
+#[derive(Debug, Clone, Copy)]
+struct FrameBudget {
+    /// 剩余可处理的跨域帧数（主文档数已从 64 中扣除）
+    frames_left: usize,
+    /// 剩余可用原始载荷字节
+    payload_left: usize,
+}
+
+impl FrameBudget {
+    fn new(frames_left: usize, payload_left: usize) -> Self {
+        FrameBudget {
+            frames_left,
+            payload_left,
+        }
+    }
 }
 
 /// 采集错误（AX 降级语义：AX 失败不致命，主结构不丢）。
@@ -521,6 +573,7 @@ impl SnapshotCollector for FixtureCollector {
             layout: LayoutMetrics::default(),
             raw_payload_bytes: self.payload_bytes,
             collect_ms: 0,
+            cross_origin: CrossOriginStats::default(),
         })
     }
 }
@@ -528,11 +581,16 @@ impl SnapshotCollector for FixtureCollector {
 /// 真实 CDP 采集器（需要浏览器会话；e2e 验证路径）。
 pub struct CdpCollector {
     session: std::sync::Arc<crate::BrowserSession>,
+    /// 跨域 iframe 递归采集开关（U-4 二期，取自 BudgetConfig；默认 false 一期行为）
+    cross_origin_iframes: bool,
 }
 
 impl CdpCollector {
-    pub fn new(session: std::sync::Arc<crate::BrowserSession>) -> Self {
-        CdpCollector { session }
+    pub fn new(session: std::sync::Arc<crate::BrowserSession>, budgets: BudgetConfig) -> Self {
+        CdpCollector {
+            session,
+            cross_origin_iframes: budgets.cross_origin_iframes,
+        }
     }
 }
 
@@ -544,9 +602,6 @@ impl SnapshotCollector for CdpCollector {
         _tab_id: &str,
         session: &str,
     ) -> Result<CollectedData, SnapshotError> {
-        use crate::cdp::domains::names::*;
-        use serde_json::{json, Value};
-
         let started = std::time::Instant::now();
 
         // —— 首轮并行（10s 超时；AX 失败降级为空，其余失败进重发）——
@@ -683,7 +738,59 @@ impl SnapshotCollector for CdpCollector {
             device_pixel_ratio: metrics.layout_viewport.scale.unwrap_or(1.0),
         };
 
-        let roots = build_enhanced_tree(&capture, &document, &ax);
+        let mut roots = build_enhanced_tree(&capture, &document, &ax);
+        let mut cross_origin = CrossOriginStats::default();
+
+        // —— 跨域 iframe 递归（U-4 二期；`cross_origin_iframes` 配置位开启时）——
+        // §1.5：Page.getFrameTree 取主 frame 树 → 对「未 pierce 的 frame」
+        // （其 frameId 不在 DOMSnapshot 文档集内）帧级 attach → 递归采集。
+        if self.cross_origin_iframes {
+            match tokio::time::timeout(
+                FRAME_COLLECT_TIMEOUT,
+                self.session
+                    .send_page::<GetFrameTreeResult>(session, PAGE_GET_FRAME_TREE, json!({})),
+            )
+            .await
+            {
+                Ok(Ok(frame_tree)) => {
+                    // 已 pierce 帧集合 = DOMSnapshot 文档集的 frameId（同源帧
+                    // 已在主采集文档内；frameId 为字符串池下标形态（Chrome 151
+                    // 实测），经池解析；缺失时集合为空 → 全部帧按未覆盖处理）
+                    let pierced: HashSet<String> = capture
+                        .documents
+                        .iter()
+                        .filter_map(|d| d.frame_id.as_ref().map(|f| f.resolve(&capture.strings)))
+                        .collect();
+                    // 去重集合（防环/重复子树防御；主帧自身先行占位）
+                    let mut visited: HashSet<String> = HashSet::new();
+                    visited.insert(frame_tree.frame_tree.frame.id.clone());
+                    // 预算：max_iframes=64 与主文档数共用；150KB 载荷跨帧累计
+                    let mut budget = FrameBudget::new(
+                        MAX_IFRAMES.saturating_sub(capture.documents.len()),
+                        MAX_RAW_PAYLOAD_BYTES.saturating_sub(payload_bytes),
+                    );
+                    self.recurse_frames(
+                        session,
+                        &mut roots,
+                        &frame_tree.frame_tree,
+                        &pierced,
+                        &mut visited,
+                        0,
+                        &mut budget,
+                        &mut cross_origin,
+                    )
+                    .await;
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("Page.getFrameTree 失败，跳过跨域 iframe 递归：{e}");
+                }
+                Err(_) => {
+                    tracing::warn!("Page.getFrameTree 超时，跳过跨域 iframe 递归");
+                }
+            }
+            tracing::info!("跨域 iframe 快照统计：{cross_origin:?}");
+        }
+
         let title = capture
             .documents
             .first()
@@ -704,7 +811,411 @@ impl SnapshotCollector for CdpCollector {
             layout,
             raw_payload_bytes: payload_bytes,
             collect_ms: started.elapsed().as_millis() as u64,
+            cross_origin,
         })
+    }
+}
+
+// ===========================================================================
+// 跨域 iframe 递归采集（维度 13 §1.5 二期语义，U-4）
+// ===========================================================================
+//
+// ## 索引协调选择（backendNodeId 碰撞处理）
+// 采用**全局唯一（合成索引兜底）**而非帧内索引空间隔离：
+// - 各帧会话的 DOMSnapshot.backendNodeId 在其**会话内**全局唯一，但跨会话
+//   会复用（CDP 不保证跨会话唯一）；
+// - 子帧根树与主树同入 `roots` 根森林，序列化侧（serialize.rs §3.3）以
+//   「默认索引 = backendNodeId，冲突时从树中全部 id 的 max+1 起分配合成
+//   索引」保证最终模型索引全局唯一——本层不做二次分配，碰撞由既有机制
+//   消解（测试断言索引唯一性）。
+// - 遗留交接：`NodeRef`（selector_map）的 `session_id`/`frame_target_id`
+//   目前由序列化侧统一填写（一期接口）；跨帧元素的会话归属注入执行面
+//   （维度 14 动作跨 iframe 执行）为执行侧接线项，登记交接。
+//
+// ## 跨域帧会话生命周期选择：采集后立即 detach（不缓存）
+// 理由：① 快照是只读一次性读取，下一轮快照重新 attach 的单轮往返成本
+// 可忽略；② 帧导航/替换会使缓存会话失效，缓存需失效管理与错误重试面；
+// ③ 不 detach 会在长会话中累积至多 64 个附加会话（泄漏面）。若后续实测
+// attach 开销显著，可升级为会话级 LRU 缓存（登记为演进项）。
+
+/// 帧级采集中间产物（子帧 DOMSnapshot 解析 + AX + 载荷 + 已 pierce 帧集合）。
+struct FrameDocument {
+    capture: CaptureSnapshotResult,
+    document: GetDocumentResult,
+    ax: Vec<AXNode>,
+    /// 原始载荷估算字节（DOMSnapshot + DOM.getDocument 文本长）
+    payload: usize,
+    /// 该帧会话 DOMSnapshot 文档集的 frameId（子帧递归的 pierce 集合）
+    pierced: HashSet<String>,
+}
+
+/// 帧候选筛选（纯函数，单测面）：同源 pierce 排除 → 去重 → 深度预算 →
+/// 帧数/载荷预算。返回 true = 值得继续（尺寸门限需 owner 树定位，留在
+/// 调用方异步判定）。
+///
+/// 预算语义：**尺寸/定位不过门的帧不计入 64 上限**（§1.5「小 iframe 不
+/// 进入」），帧数预算在通过全部前置判定后才由调用方扣减。
+fn frame_candidate_eligible(
+    frame_id: &str,
+    pierced: &HashSet<String>,
+    visited: &mut HashSet<String>,
+    depth: usize,
+    budget: &FrameBudget,
+    stats: &mut CrossOriginStats,
+) -> bool {
+    // 同源 pierce 已覆盖（DOMSnapshot 文档集内）→ 跳过
+    if pierced.contains(frame_id) {
+        return false;
+    }
+    // 已访问去重（防环/重复子树防御）
+    if !visited.insert(frame_id.to_string()) {
+        return false;
+    }
+    // 深度预算（max_iframe_depth=4：主文档深度 0，递归至多 4 层）
+    if depth + 1 > MAX_IFRAME_DEPTH {
+        stats.skipped_budget += 1;
+        return false;
+    }
+    // 帧数预算（max_iframes=64 共用）与载荷预算（150KB，T-2）
+    if budget.frames_left == 0 || budget.payload_left == 0 {
+        stats.skipped_budget += 1;
+        return false;
+    }
+    true
+}
+
+/// 尺寸门限（§1.5：尺寸 ≥ 10px×10px 才进入递归；无法确认尺寸 → 不进入，
+/// 保守语义——无 bounds 的帧按占位呈现）。
+fn iframe_size_qualified(bounds: Option<Bounds>) -> bool {
+    match bounds {
+        Some(b) => b.width >= MIN_IFRAME_SIZE && b.height >= MIN_IFRAME_SIZE,
+        None => false,
+    }
+}
+
+/// src URL 匹配兜底（§1.5：getFrameOwner 失败/frameId 不在树时按 src 定位
+/// iframe owner；精确匹配，重定向场景由 getFrameOwner 主路径覆盖）。
+fn find_owner_by_src(roots: &[EnhancedNode], url: &str) -> Option<i64> {
+    for root in roots {
+        let mut hit = None;
+        root.walk(&mut |n| {
+            if hit.is_none()
+                && n.tag.as_deref() == Some("iframe")
+                && n.get_attr("src") == Some(url)
+            {
+                hit = Some(n.backend_node_id);
+            }
+        });
+        if hit.is_some() {
+            return hit;
+        }
+    }
+    None
+}
+
+/// 按 backendNodeId 查找节点（owner 存在性/尺寸定位；显式递归，避免
+/// 闭包借用逃逸——walk 回调的生命周期约束）。
+fn find_node_by_id(roots: &[EnhancedNode], backend_id: i64) -> Option<&EnhancedNode> {
+    for root in roots {
+        if let Some(hit) = find_node_rec(root, backend_id) {
+            return Some(hit);
+        }
+    }
+    None
+}
+
+fn find_node_rec(node: &EnhancedNode, backend_id: i64) -> Option<&EnhancedNode> {
+    if node.backend_node_id == backend_id {
+        return Some(node);
+    }
+    node.children
+        .iter()
+        .find_map(|c| find_node_rec(c, backend_id))
+}
+
+/// 节点布局 bounds 查找（尺寸门限输入）。
+fn find_node_bounds(roots: &[EnhancedNode], backend_id: i64) -> Option<Bounds> {
+    find_node_by_id(roots, backend_id).and_then(|n| n.bounds)
+}
+
+/// 给 owner 元素打 `|IFRAME|` 标记（无论递归成功还是占位，标记恒打——
+/// 序列化面呈现 iframe 语义，§3.2）。
+fn mark_owner_iframe(roots: &mut [EnhancedNode], backend_id: i64) -> bool {
+    for root in roots {
+        if let Some(found) = find_mut_node(root, backend_id) {
+            found.frame_marker = Some(FrameMarker::Iframe);
+            return true;
+        }
+    }
+    false
+}
+
+/// 可变查找（mark_owner_iframe 用；独立于只读 walk 的借用）。
+fn find_mut_node(node: &mut EnhancedNode, backend_id: i64) -> Option<&mut EnhancedNode> {
+    if node.backend_node_id == backend_id {
+        return Some(node);
+    }
+    for child in &mut node.children {
+        if let Some(hit) = find_mut_node(child, backend_id) {
+            return Some(hit);
+        }
+    }
+    None
+}
+
+impl CdpCollector {
+    /// 跨域帧递归（§1.5）：对父树未覆盖的帧逐帧「定位 owner → 尺寸门限 →
+    /// attach → 采集 → 子树递归 → detach」，子文档根树追加进父树。
+    ///
+    /// `roots`：父会话增强树（owner 打 `|IFRAME|` 标记 + 接收子根）；
+    /// `pierced`：父会话 DOMSnapshot 文档集 frameId（同源已覆盖集合）；
+    /// `visited`：全递归共享去重集合；`depth`：相对主文档嵌套深度。
+    ///
+    /// 实现注记：递归 async 调用需引入间接层避免无限尺寸 future
+    /// （E0733）——整体返回 `Pin<Box<dyn Future>>`，与深度预算 4 联动
+    /// （盒装指针摊平尺寸，递归深度由 `max_iframe_depth` 钳制）。
+    #[allow(clippy::too_many_arguments)]
+    fn recurse_frames<'a>(
+        &'a self,
+        parent_session: &'a str,
+        roots: &'a mut Vec<EnhancedNode>,
+        tree: &'a FrameTree,
+        pierced: &'a HashSet<String>,
+        visited: &'a mut HashSet<String>,
+        depth: usize,
+        budget: &'a mut FrameBudget,
+        stats: &'a mut CrossOriginStats,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+        Box::pin(async move {
+        let children = tree.child_frames.as_deref().unwrap_or_default();
+        for child in children {
+            let frame_id = &child.frame.id;
+            let frame_url = child.frame.url.as_str();
+            // 前置判定（pierce/去重/深度/帧数/载荷预算；纯函数）
+            if !frame_candidate_eligible(frame_id, pierced, visited, depth, budget, stats) {
+                continue;
+            }
+            // 定位 owner（getFrameOwner 主路径 + src URL 兜底）并打 |IFRAME| 标记
+            let owner = match self.locate_frame_owner(roots, parent_session, frame_id, frame_url).await {
+                Some(owner) => owner,
+                None => {
+                    // 无法定位 owner：按小/未知帧处理（占位已尽力标记，见 locate）
+                    stats.skipped_small += 1;
+                    continue;
+                }
+            };
+            // 尺寸门限（10px×10px，§1.5）
+            if !iframe_size_qualified(owner.1) {
+                stats.skipped_small += 1;
+                continue;
+            }
+            // 预算扣减（至此才占额：尺寸/定位不过门的帧不计入 64）
+            budget.frames_left -= 1;
+            // 帧级会话建立（frameId 即 OOPIF targetId 主路径；getTargets URL 兜底）
+            let frame_session = match self.attach_frame_session(frame_id, frame_url).await {
+                Ok(s) => s,
+                Err(e) => {
+                    stats.failed += 1;
+                    tracing::warn!("跨域帧 attach 失败（{frame_id}）：{e}");
+                    continue;
+                }
+            };
+            stats.sessions_attached += 1;
+            // 子文档采集（DOMSnapshot + DOM.getDocument + AX；失败降级占位）
+            let frame_doc = match self.collect_frame_document(&frame_session.session).await {
+                Ok(d) => d,
+                Err(e) => {
+                    stats.failed += 1;
+                    tracing::warn!("跨域帧采集失败（{frame_id}）：{e}");
+                    self.detach_frame_session(&frame_session.session, stats).await;
+                    continue;
+                }
+            };
+            // 载荷预算（150KB 采集层护栏，T-2）：超限该帧不入树并停止递归
+            if frame_doc.payload > budget.payload_left {
+                stats.skipped_budget += 1;
+                tracing::warn!("跨域帧载荷超剩余预算（{frame_id}：{}B），截断", frame_doc.payload);
+                budget.payload_left = 0;
+                self.detach_frame_session(&frame_session.session, stats).await;
+                continue;
+            }
+            budget.payload_left -= frame_doc.payload;
+
+            // 子文档增强树（独立根树，与主树同入根森林；索引碰撞由序列化
+            // 合成索引消解——见模块注释「索引协调选择」）
+            let mut frame_roots =
+                build_enhanced_tree(&frame_doc.capture, &frame_doc.document, &frame_doc.ax);
+
+            // 子帧自身的跨域子帧递归（其 getFrameTree 失败则跳过嵌套递归，
+            // 已采内容保留——best-effort 语义）
+            match tokio::time::timeout(
+                FRAME_COLLECT_TIMEOUT,
+                self.session.send_page::<GetFrameTreeResult>(
+                    &frame_session.session,
+                    PAGE_GET_FRAME_TREE,
+                    json!({}),
+                ),
+            )
+            .await
+            {
+                Ok(Ok(sub_tree)) => {
+                    self.recurse_frames(
+                        &frame_session.session,
+                        &mut frame_roots,
+                        &sub_tree.frame_tree,
+                        &frame_doc.pierced,
+                        visited,
+                        depth + 1,
+                        budget,
+                        stats,
+                    )
+                    .await;
+                }
+                Ok(Err(e)) => tracing::warn!("子帧帧树采集失败（{frame_id}）：{e}"),
+                Err(_) => tracing::warn!("子帧帧树采集超时（{frame_id}）"),
+            }
+
+            // 合并：子文档根树追加进父树根森林
+            roots.append(&mut frame_roots);
+            stats.frames_collected += 1;
+
+            // 会话生命周期：采集后立即 detach（见模块注释「会话生命周期选择」）
+            self.detach_frame_session(&frame_session.session, stats).await;
+        }
+        })
+    }
+
+    /// 定位 iframe owner（主路径 `DOM.getFrameOwner(frameId)` → backendNodeId；
+    /// 失败/结果不在树中时按 src URL 匹配兜底，§1.5）；返回 (backend_id, bounds)。
+    /// 标记打点：主路径与兜底路径命中后均给 owner 打 `|IFRAME|` 标记（占位语义）。
+    async fn locate_frame_owner(
+        &self,
+        roots: &mut [EnhancedNode],
+        parent_session: &str,
+        frame_id: &str,
+        frame_url: &str,
+    ) -> Option<(i64, Option<Bounds>)> {
+        let by_frame = async {
+            let res = tokio::time::timeout(
+                FRAME_COLLECT_TIMEOUT,
+                self.session.send_page::<GetFrameOwnerResult>(
+                    parent_session,
+                    DOM_GET_FRAME_OWNER,
+                    json!({ "frameId": frame_id }),
+                ),
+            )
+            .await
+            .ok()?
+            .ok()?;
+            let backend = res.backend_node_id?;
+            // 结果须落在父树中（防御：协议异常/帧漂移时回退 src 匹配）
+            if find_node_by_id(roots, backend).is_some() {
+                Some(backend)
+            } else {
+                None
+            }
+        };
+        let owner_id = by_frame.await.or_else(|| find_owner_by_src(roots, frame_url))?;
+        let bounds = find_node_bounds(roots, owner_id);
+        mark_owner_iframe(roots, owner_id);
+        Some((owner_id, bounds))
+    }
+
+    /// 建立帧级会话（主路径：OOPIF 的 targetId 即其 frameId，直接
+    /// `Target.attachToTarget`；兜底：`Target.getTargets` 按 type=iframe +
+    /// URL 匹配目标再 attach——13 §1.5「src URL 匹配兜底」）。
+    async fn attach_frame_session(
+        &self,
+        frame_id: &str,
+        frame_url: &str,
+    ) -> Result<SessionRef, String> {
+        match self.session.attach_frame(frame_id).await {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                tracing::warn!("iframe attach 主路径失败（{frame_id}：{e}），尝试 getTargets URL 兜底");
+                self.attach_by_target_url(frame_url).await
+            }
+        }
+    }
+
+    /// getTargets URL 兜底（attach 主路径失败时按 iframe 目标 URL 精确匹配）。
+    async fn attach_by_target_url(&self, url: &str) -> Result<SessionRef, String> {
+        let targets: GetTargetsResult = self
+            .session
+            .send_browser(TARGET_GET_TARGETS, json!({}))
+            .await
+            .map_err(|e| e.to_string())?;
+        let hit = targets
+            .target_infos
+            .iter()
+            .find(|t| t.target_type == "iframe" && t.url == url)
+            .map(|t| t.target_id.clone());
+        match hit {
+            Some(target_id) => self.session.attach_frame(&target_id).await.map_err(|e| e.to_string()),
+            None => Err("getTargets 未找到匹配 URL 的 iframe 目标".to_string()),
+        }
+    }
+
+    /// 子帧文档采集（DOMSnapshot + DOM.getDocument + AX 三路并行；
+    /// 2s 子帧超时护栏；AX 失败降级为空——子帧挂断不得拖垮主快照，§1.5）。
+    async fn collect_frame_document(&self, session: &str) -> Result<FrameDocument, String> {
+        let fut = async {
+            let s = self.session.send_page::<Value>(
+                session,
+                DOM_SNAPSHOT_CAPTURE_SNAPSHOT,
+                json!({
+                    "computedStyles": COMPUTED_STYLES_WHITELIST,
+                    "includePaintOrder": true,
+                    "includeDOMRects": true,
+                }),
+            );
+            let d = self.session.send_page::<Value>(
+                session,
+                DOM_GET_DOCUMENT,
+                json!({ "depth": -1, "pierce": true }),
+            );
+            let ax = self
+                .session
+                .send_page::<Value>(session, ACCESSIBILITY_GET_FULL_AX_TREE, json!({}));
+            (s.await, d.await, ax.await)
+        };
+        let (s, d, ax) = tokio::time::timeout(FRAME_COLLECT_TIMEOUT, fut)
+            .await
+            .map_err(|_| "子帧采集超时".to_string())?;
+        let snapshot_value = s.map_err(|e| format!("子帧 DOMSnapshot 失败：{e}"))?;
+        let dom_value = d.map_err(|e| format!("子帧 DOM.getDocument 失败：{e}"))?;
+        let payload = snapshot_value.to_string().len() + dom_value.to_string().len();
+        let capture: CaptureSnapshotResult = serde_json::from_value(snapshot_value)
+            .map_err(|e| format!("子帧 DOMSnapshot 响应解析失败：{e}"))?;
+        let document: GetDocumentResult = serde_json::from_value(dom_value)
+            .map_err(|e| format!("子帧 DOM.getDocument 响应解析失败：{e}"))?;
+        let ax: Vec<AXNode> = match ax {
+            Ok(v) => serde_json::from_value(v).unwrap_or_default(),
+            Err(e) => {
+                tracing::warn!("子帧 AX 采集失败，降级为空 AX：{e}");
+                Vec::new()
+            }
+        };
+        let pierced: HashSet<String> = capture
+            .documents
+            .iter()
+            .filter_map(|d| d.frame_id.as_ref().map(|f| f.resolve(&capture.strings)))
+            .collect();
+        Ok(FrameDocument {
+            capture,
+            document,
+            ax,
+            payload,
+            pierced,
+        })
+    }
+
+    /// 帧会话关闭（best-effort：失败仅告警——目标销毁时 Chrome 自行清理）。
+    async fn detach_frame_session(&self, session: &str, stats: &mut CrossOriginStats) {
+        match self.session.detach_frame(session).await {
+            Ok(()) => stats.sessions_detached += 1,
+            Err(e) => tracing::warn!("iframe 会话 detach 失败（{session}）：{e}"),
+        }
     }
 }
 
@@ -936,6 +1447,173 @@ fn str_at(strings: &[String], idx: i64) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cdp::mock::{MockReply, MockServer};
+    use crate::cdp::sender::{
+        ApprovalDenied, BrowserAuditEvent, CancellationToken, CdpCommandView,
+        CommandPolicyHooks, IdKey,
+    };
+    use crate::cdp::transport::{CdpEndpoint, ExpectedBrowser};
+    use crate::snapshot::serialize::{SerializeOptions, build_and_serialize};
+    use crate::{BrowserSession, CdpError};
+    use std::sync::{Arc, atomic::AtomicBool};
+
+    /// 放行钩子（mock CDP 集成测试用；对齐 lib.rs 测试面）。
+    struct AllowHooks {
+        stop: Arc<AtomicBool>,
+        token: CancellationToken,
+    }
+
+    impl AllowHooks {
+        fn new() -> Self {
+            AllowHooks {
+                stop: Arc::new(AtomicBool::new(false)),
+                token: CancellationToken::new(),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl CommandPolicyHooks for AllowHooks {
+        async fn idempotent(&self, _key: &IdKey) -> Option<Result<Value, CdpError>> {
+            None
+        }
+        async fn approve(&self, _cmd: &CdpCommandView) -> Result<(), ApprovalDenied> {
+            Ok(())
+        }
+        fn audit(&self, _event: BrowserAuditEvent) {}
+        fn emergency_stop(&self) -> Arc<AtomicBool> {
+            self.stop.clone()
+        }
+        fn abort_token(&self) -> CancellationToken {
+            self.token.clone()
+        }
+    }
+
+    /// 恢复流程所需的 mock 自动应答全表（对齐 lib.rs 测试面）。
+    fn restore_reply_map() -> Vec<(&'static str, MockReply)> {
+        use crate::cdp::domains::names::*;
+        vec![
+            (BROWSER_GET_VERSION, MockReply::Ok(json!({
+                "protocolVersion": "1.3",
+                "product": "Chrome/131.0.6778.204",
+                "revision": "@abc",
+                "userAgent": "ua",
+                "jsVersion": "13.1.71"
+            }))),
+            (TARGET_SET_DISCOVER_TARGETS, MockReply::Ok(json!({}))),
+            (TARGET_GET_TARGETS, MockReply::Ok(json!({
+                "targetInfos": [
+                    { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
+                ]
+            }))),
+            (TARGET_ATTACH_TO_TARGET, MockReply::Ok(json!({ "sessionId": "FRAME_S1" }))),
+            (TARGET_DETACH_FROM_TARGET, MockReply::Ok(json!({ "success": true }))),
+            (PAGE_ENABLE, MockReply::Ok(json!({}))),
+            (PAGE_SET_LIFECYCLE_EVENTS_ENABLED, MockReply::Ok(json!({}))),
+            (RUNTIME_ENABLE, MockReply::Ok(json!({}))),
+            (DOM_ENABLE, MockReply::Ok(json!({}))),
+            (NETWORK_ENABLE, MockReply::Ok(json!({}))),
+            (RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, MockReply::Ok(json!({}))),
+            (RUNTIME_EVALUATE, MockReply::Ok(json!({ "result": { "value": 1 } }))),
+            (PAGE_SET_WINDOW_OPEN_HANDLER, MockReply::Ok(json!({}))),
+            (PAGE_HANDLE_JAVASCRIPT_DIALOG, MockReply::Ok(json!({}))),
+        ]
+    }
+
+    /// 主会话快照应答：主文档（frameId=MAIN）+ iframe owner(101) + 按钮(202)。
+    /// iframe owner 布局 320×240 ≥ 10px 门限；按钮 bounds 正常。
+    fn main_capture_fixture() -> Value {
+        json!({
+            "strings": ["", "#document", "IFRAME", "BUTTON", "src",
+                        "https://b.example/embed", "https://a.example", "跨域测试页"],
+            "documents": [{
+                "documentURL": 6,
+                "title": 7,
+                "frameId": "MAIN",
+                "nodes": {
+                    "parentIndex": [-1, 0, 0],
+                    "nodeType": [9, 1, 1],
+                    "nodeName": [1, 2, 3],
+                    "nodeValue": [-1, -1, -1],
+                    "backendNodeId": [1, 101, 202],
+                    "attributes": [[], [4, 5], []],
+                    "childNodeIndexes": [1, 2, -1]
+                },
+                "layout": {
+                    "nodeIndex": [0, 1, 2],
+                    "bounds": [
+                        [0, 0, 800, 600],
+                        [0, 0, 320, 240],
+                        [10, 10, 120, 36]
+                    ]
+                }
+            }]
+        })
+    }
+
+    /// 子帧会话快照应答：子文档（frameId=F1）+ 按钮(202)——与主树 backendNodeId
+    /// **复用**（跨会话 id 空间独立），验证索引碰撞由合成索引消解。
+    fn frame_capture_fixture() -> Value {
+        json!({
+            "strings": ["", "#document", "BUTTON", "https://b.example/embed"],
+            "documents": [{
+                "documentURL": 3,
+                "title": 0,
+                "frameId": "F1",
+                "nodes": {
+                    "parentIndex": [-1, 0],
+                    "nodeType": [9, 1],
+                    "nodeName": [1, 2],
+                    "nodeValue": [-1, -1],
+                    "backendNodeId": [1001, 202],
+                    "attributes": [[], []],
+                    "childNodeIndexes": [1, -1]
+                },
+                "layout": {
+                    "nodeIndex": [0, 1],
+                    "bounds": [
+                        [0, 0, 640, 480],
+                        [0, 0, 100, 30]
+                    ]
+                }
+            }]
+        })
+    }
+
+    /// mock CDP 会话面辅助：建连（恢复流程自动应答见 restore_reply_map）。
+    async fn connect_mock(mock: &MockServer, ws_path: &str) -> Arc<BrowserSession> {
+        let endpoint = CdpEndpoint {
+            port: mock.addr.port(),
+            ws_path: ws_path.to_string(),
+        };
+        Arc::new(
+            BrowserSession::connect(
+                endpoint,
+                ExpectedBrowser {
+                    product_prefix: Some("Chrome/".to_string()),
+                    min_major: None,
+                },
+                Arc::new(AllowHooks::new()),
+            )
+            .await
+            .expect("建连失败"),
+        )
+    }
+
+    /// 两态之一的主采集驱动：等待主 captureSnapshot 并应答（递归开启时再答一帧）。
+    async fn drive_capture_snapshot(
+        mock: &mut MockServer,
+        reply_value: Value,
+    ) {
+        let cmd = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            mock.expect_command("DOMSnapshot.captureSnapshot"),
+        )
+        .await
+        .expect("等待 captureSnapshot 超时");
+        let id = cmd["id"].as_u64().expect("命令 id 缺失");
+        mock.reply(id, reply_value);
+    }
 
     /// 构造输入：元素/文本/属性/样式/bounds/AX 链式构造冒烟。
     #[test]
@@ -1279,5 +1957,331 @@ mod tests {
                 .any(|r| r.subtree_has(8, &|n| n.backend_node_id == 1)),
             "增强树应携带 backendNodeId（新字段名解析）"
         );
+    }
+
+    // =======================================================================
+    // 跨域 iframe 递归（维度 13 §1.5 二期，U-4）
+    // =======================================================================
+
+    /// 帧候选筛选（纯函数）：pierce 排除 / 去重 / 深度预算 / 帧数预算 / 载荷预算。
+    #[test]
+    fn frame_candidate_eligible_filters() {
+        let pierced: HashSet<String> = ["MAIN"].iter().map(|s| s.to_string()).collect();
+        let mut visited: HashSet<String> = HashSet::new();
+        let mut stats = CrossOriginStats::default();
+        let budget = FrameBudget::new(64, MAX_RAW_PAYLOAD_BYTES);
+
+        // 同源 pierce 已覆盖 → 排除（不占统计）
+        assert!(!frame_candidate_eligible("MAIN", &pierced, &mut visited, 0, &budget, &mut stats));
+        // 合格帧 → 通过并入 visited
+        assert!(frame_candidate_eligible("F1", &pierced, &mut visited, 0, &budget, &mut stats));
+        // 去重：已访问帧 → 排除（防环/重复子树防御）
+        assert!(!frame_candidate_eligible("F1", &pierced, &mut visited, 0, &budget, &mut stats));
+        assert_eq!(stats.skipped_budget, 0, "pierce/去重不占预算统计");
+
+        // 深度预算：父深度 4 → 子帧深度 5 > max_iframe_depth=4 → 截断
+        assert!(!frame_candidate_eligible("D5", &pierced, &mut visited, 4, &budget, &mut stats));
+        assert_eq!(stats.skipped_budget, 1);
+        // 父深度 3 → 子帧深度 4 = 上限内
+        assert!(frame_candidate_eligible("D4", &pierced, &mut visited, 3, &budget, &mut stats));
+
+        // 帧数预算耗尽（max_iframes=64 共用）→ 截断
+        let exhausted = FrameBudget::new(0, MAX_RAW_PAYLOAD_BYTES);
+        assert!(!frame_candidate_eligible("B0", &pierced, &mut visited, 0, &exhausted, &mut stats));
+        // 载荷预算耗尽（150KB，T-2）→ 截断
+        let no_payload = FrameBudget::new(64, 0);
+        assert!(!frame_candidate_eligible("P0", &pierced, &mut visited, 0, &no_payload, &mut stats));
+        assert_eq!(stats.skipped_budget, 3);
+    }
+
+    /// 尺寸门限（§1.5：≥ 10px×10px 才进入；无法确认尺寸不进入——保守）。
+    #[test]
+    fn iframe_size_gate() {
+        let min = Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 };
+        assert!(iframe_size_qualified(Some(min)), "恰好 10px 应通过");
+        let big = Bounds { x: 0.0, y: 0.0, width: 320.0, height: 240.0 };
+        assert!(iframe_size_qualified(Some(big)));
+        let narrow = Bounds { x: 0.0, y: 0.0, width: 9.0, height: 300.0 };
+        assert!(!iframe_size_qualified(Some(narrow)), "宽 < 10px 不进入");
+        let thin = Bounds { x: 0.0, y: 0.0, width: 300.0, height: 5.0 };
+        assert!(!iframe_size_qualified(Some(thin)), "高 < 10px 不进入");
+        assert!(!iframe_size_qualified(None), "无法确认尺寸 → 不进入（保守占位）");
+    }
+
+    /// owner 定位辅助：src URL 兜底匹配 / bounds 查找 / `|IFRAME|` 标记。
+    #[test]
+    fn owner_locators_and_marker() {
+        let root = EnhancedNode::element("div", 1)
+            .push(
+                EnhancedNode::element("iframe", 2)
+                    .attr("src", "https://b.example/x")
+                    .bounds(0.0, 0.0, 320.0, 240.0),
+            )
+            .push(EnhancedNode::element("button", 3));
+        let mut roots = vec![root];
+
+        // src URL 兜底（§1.5：getFrameOwner 失败时按 src 精确匹配）
+        assert_eq!(find_owner_by_src(&roots, "https://b.example/x"), Some(2));
+        assert_eq!(find_owner_by_src(&roots, "https://other.example"), None);
+        // bounds 查找（尺寸门限输入）
+        let b = find_node_bounds(&roots, 2).expect("owner bounds 应可查");
+        assert!(b.width > 300.0 && b.height > 200.0);
+        assert!(find_node_bounds(&roots, 999).is_none());
+        // 标记（递归成功与占位两路共用；打点后序列化呈现 |IFRAME|）
+        assert!(mark_owner_iframe(&mut roots, 2), "命中 owner 应打标记");
+        assert_eq!(roots[0].children[0].frame_marker, Some(FrameMarker::Iframe));
+        assert!(!mark_owner_iframe(&mut roots, 999), "未命中不误标");
+        // 标记不影响子树结构
+        assert_eq!(roots[0].children.len(), 2);
+    }
+
+    /// 跨域合并的序列化面：子帧根树独立呈现 + `|IFRAME|` 标记 + 索引不碰撞
+    /// （跨会话 backendNodeId 复用 → 合成索引兜底，模块注释「索引协调选择」）。
+    #[test]
+    fn cross_frame_merge_serialization_indices_unique() {
+        // 主树：iframe owner(101) + 按钮(202)；子帧树：按钮(202)——跨会话 id 复用
+        let main_root = EnhancedNode::element("#document", 1)
+            .push(
+                EnhancedNode::element("iframe", 101)
+                    .attr("src", "https://b.example/embed")
+                    .bounds(0.0, 0.0, 320.0, 240.0),
+            )
+            .push(
+                EnhancedNode::element("button", 202)
+                    .push(EnhancedNode::text_node("主按钮", 203))
+                    .bounds(10.0, 10.0, 120.0, 36.0),
+            );
+        let frame_root = EnhancedNode::element("#document", 1001).push(
+            EnhancedNode::element("button", 202)
+                .push(EnhancedNode::text_node("帧按钮", 1002))
+                .bounds(0.0, 0.0, 100.0, 30.0),
+        );
+        let mut roots = vec![main_root];
+        // 模拟递归路径：owner 定位后打标记 + 子帧根树并入根森林
+        assert!(mark_owner_iframe(&mut roots, 101));
+        roots.push(frame_root);
+
+        let budgets = BudgetConfig::active().with_cross_origin_iframes(true);
+        let out = build_and_serialize(
+            &roots,
+            &SerializeOptions::new(&budgets, "S1", &HashSet::new()),
+        );
+        // |IFRAME| 标记行（src 属性经白名单序列化）
+        assert!(
+            out.text.contains("|IFRAME|<iframe src=https://b.example/embed"),
+            "iframe 占位/标记行应呈现：{}",
+            out.text
+        );
+        // 两个按钮均入树且索引互不相同（碰撞 → 合成索引）
+        assert!(out.text.contains("<button>主按钮</button>"), "主树按钮应入树");
+        assert!(out.text.contains("<button>帧按钮</button>"), "子帧按钮应入树（独立根树）");
+        let mut indices: Vec<u32> = Vec::new();
+        for line in out.text.lines() {
+            if let Some(rest) = line.split('[').nth(1) {
+                if let Some(close) = rest.find(']') {
+                    if let Ok(n) = rest[..close].parse::<u32>() {
+                        indices.push(n);
+                    }
+                }
+            }
+        }
+        assert_eq!(indices.len(), 2, "两个按钮共 2 个索引：{indices:?}");
+        let unique: HashSet<u32> = indices.iter().copied().collect();
+        assert_eq!(unique.len(), indices.len(), "跨会话 id 复用不得产生索引碰撞：{indices:?}");
+        assert!(unique.contains(&202), "默认索引 = backendNodeId：{indices:?}");
+        // 合成索引：从简化树内全部 backendNodeId 的 max+1 起——文本节点被元素
+        // 行吸收（inline_text）不进简化树，树内 id 集 = {1,101,202,1001} →
+        // max=1001 → 子帧按钮（跨会话复用 202）合成索引 = 1002
+        assert!(
+            indices.contains(&1002),
+            "跨会话 id 复用应分配合成索引：{indices:?}"
+        );
+        // selector_map 两条目（执行面跨帧会话归属为遗留交接项，此处仅断言映射存在）
+        assert_eq!(out.selector_map.len(), 2);
+        assert!(out.selector_map.values().all(|r| r.backend_node_id == 202));
+    }
+
+    /// 跨域递归开启（配置位 true）：mock CDP 全链路——帧树 → owner 定位 →
+    /// 尺寸门限 → attach → 子帧采集 → 子根树并入 → detach；断言 iframe
+    /// 标记、子文档根、预算/会话统计与索引不碰撞。
+    #[tokio::test]
+    async fn collect_cross_origin_recursion_enabled() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        // 帧树（MAIN 嵌跨域 F1，无孙帧——深度预算/去重路径由纯函数测试覆盖）
+        mock.set_auto_reply(
+            crate::cdp::domains::names::PAGE_GET_FRAME_TREE,
+            MockReply::Ok(json!({
+                "frameTree": {
+                    "frame": { "id": "MAIN", "url": "https://a.example", "mimeType": "text/html" },
+                    "childFrames": [{
+                        "frame": { "id": "F1", "url": "https://b.example/embed", "parentId": "MAIN", "mimeType": "text/html" },
+                        "childFrames": []
+                    }]
+                }
+            })),
+        );
+        // owner 定位：DOM.getFrameOwner(F1) → 主树 iframe(101)
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_FRAME_OWNER,
+            MockReply::Ok(json!({ "backendNodeId": 101, "nodeId": 3 })),
+        );
+        // 其余采集通道自动应答
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_DOCUMENT,
+            MockReply::Ok(json!({ "root": { "nodeId": 1, "backendNodeId": 1, "nodeType": 9, "nodeName": "#document", "attributes": [], "children": [] } })),
+        );
+        mock.set_auto_reply(
+            crate::cdp::domains::names::PAGE_GET_LAYOUT_METRICS,
+            MockReply::Ok(json!({
+                "layoutViewport": { "pageX": 0.0, "pageY": 0.0, "clientWidth": 1280.0, "clientHeight": 800.0, "scale": 1.0 },
+                "visualViewport": { "offsetX": 0.0, "offsetY": 0.0, "pageX": 0.0, "pageY": 0.0, "clientWidth": 1280.0, "clientHeight": 800.0, "scale": 1.0 }
+            })),
+        );
+        mock.set_auto_reply(
+            crate::cdp::domains::names::ACCESSIBILITY_GET_FULL_AX_TREE,
+            MockReply::Ok(json!({ "nodes": [] })),
+        );
+        // captureSnapshot 手工应答（主/帧会话内容不同，按到达顺序两阶段应答）
+        let session = connect_mock(&mock, "/devtools/browser/xframe-on").await;
+        let collector = CdpCollector::new(
+            session.clone(),
+            BudgetConfig::active().with_cross_origin_iframes(true),
+        );
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        drive_capture_snapshot(&mut mock, main_capture_fixture()).await;
+        drive_capture_snapshot(&mut mock, frame_capture_fixture()).await;
+        let collected = collect_task
+            .await
+            .expect("采集任务应完成")
+            .expect("采集应成功");
+        session.shutdown().await;
+
+        // —— 统计：1 帧递归 + 1 attach + 1 detach，无截断无失败 ——
+        assert_eq!(
+            collected.cross_origin,
+            CrossOriginStats {
+                frames_collected: 1,
+                sessions_attached: 1,
+                sessions_detached: 1,
+                ..CrossOriginStats::default()
+            },
+            "跨域递归统计：{:#?}",
+            collected.cross_origin
+        );
+
+        // —— 主树：iframe owner 打 |IFRAME| 标记（src 属性白名单呈现）——
+        let main_root = collected
+            .roots
+            .iter()
+            .find(|r| r.backend_node_id == 1)
+            .expect("主文档根应存在");
+        let owner = find_node_by_id(std::slice::from_ref(main_root), 101)
+            .expect("iframe owner 应保留在树中");
+        assert_eq!(owner.frame_marker, Some(FrameMarker::Iframe));
+        assert_eq!(owner.get_attr("src"), Some("https://b.example/embed"));
+
+        // —— 子文档独立根树（frameId=F1 内容并入根森林）——
+        let frame_root = collected
+            .roots
+            .iter()
+            .find(|r| r.backend_node_id == 1001)
+            .expect("子帧文档根应并入");
+        assert!(
+            find_node_by_id(std::slice::from_ref(frame_root), 202).is_some(),
+            "子帧按钮应入树"
+        );
+
+        // —— 序列化面：|IFRAME| 标记 + 索引唯一（跨会话 backendNodeId 复用
+        //    ——主/帧按钮同 202——由合成索引消解，模块注释「索引协调选择」）——
+        let budgets = BudgetConfig::active().with_cross_origin_iframes(true);
+        let out = build_and_serialize(
+            &collected.roots,
+            &SerializeOptions::new(&budgets, "S1", &HashSet::new()),
+        );
+        assert!(
+            out.text.contains("|IFRAME|<iframe src=https://b.example/embed"),
+            "序列化应呈现 iframe 占位/标记：{}",
+            out.text
+        );
+        let mut indices: Vec<u32> = Vec::new();
+        for line in out.text.lines() {
+            if let Some(rest) = line.split('[').nth(1) {
+                if let Some(close) = rest.find(']') {
+                    if let Ok(n) = rest[..close].parse::<u32>() {
+                        indices.push(n);
+                    }
+                }
+            }
+        }
+        assert_eq!(indices.len(), 2, "主/帧两个按钮各一个索引：{indices:?}");
+        let unique: HashSet<u32> = indices.iter().copied().collect();
+        assert_eq!(unique.len(), indices.len(), "索引不得碰撞：{indices:?}");
+    }
+
+    /// 跨域递归关闭（配置位默认 false——一期行为）：不取帧树、不建帧会话、
+    /// 子帧内容不进树、iframe 不打标记；统计全零。
+    #[tokio::test]
+    async fn collect_cross_origin_recursion_disabled_default() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_DOCUMENT,
+            MockReply::Ok(json!({ "root": { "nodeId": 1, "backendNodeId": 1, "nodeType": 9, "nodeName": "#document", "attributes": [], "children": [] } })),
+        );
+        mock.set_auto_reply(
+            crate::cdp::domains::names::PAGE_GET_LAYOUT_METRICS,
+            MockReply::Ok(json!({
+                "layoutViewport": { "pageX": 0.0, "pageY": 0.0, "clientWidth": 1280.0, "clientHeight": 800.0, "scale": 1.0 },
+                "visualViewport": { "offsetX": 0.0, "offsetY": 0.0, "pageX": 0.0, "pageY": 0.0, "clientWidth": 1280.0, "clientHeight": 800.0, "scale": 1.0 }
+            })),
+        );
+        mock.set_auto_reply(
+            crate::cdp::domains::names::ACCESSIBILITY_GET_FULL_AX_TREE,
+            MockReply::Ok(json!({ "nodes": [] })),
+        );
+        // 帧树/owner 应答**故意注册**（负向对照）：若配置位被破坏为恒开启，
+        // 递归路径将真实执行 → 下述「无标记/无子帧/统计全零」断言即失败；
+        // 配置位正确时这些命令根本不会发出（无触网、无挂起）。
+        mock.set_auto_reply(
+            crate::cdp::domains::names::PAGE_GET_FRAME_TREE,
+            MockReply::Ok(json!({
+                "frameTree": {
+                    "frame": { "id": "MAIN", "url": "https://a.example", "mimeType": "text/html" },
+                    "childFrames": [{
+                        "frame": { "id": "F1", "url": "https://b.example/embed", "parentId": "MAIN", "mimeType": "text/html" },
+                        "childFrames": []
+                    }]
+                }
+            })),
+        );
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_FRAME_OWNER,
+            MockReply::Ok(json!({ "backendNodeId": 101, "nodeId": 3 })),
+        );
+
+        let session = connect_mock(&mock, "/devtools/browser/xframe-off").await;
+        let collector = CdpCollector::new(session.clone(), BudgetConfig::active());
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        drive_capture_snapshot(&mut mock, main_capture_fixture()).await;
+        let collected = collect_task
+            .await
+            .expect("采集任务应完成")
+            .expect("采集应成功");
+        session.shutdown().await;
+
+        // 一期行为：仅主文档根；子帧内容不进入；统计全零
+        assert_eq!(collected.roots.len(), 1, "关闭态仅主文档根树");
+        assert!(find_node_by_id(&collected.roots, 1001).is_none(), "子帧内容不得入树");
+        let owner = find_node_by_id(&collected.roots, 101).expect("iframe 元素仍在树中");
+        assert_eq!(
+            owner.frame_marker, None,
+            "关闭态不打 |IFRAME| 标记（一期占位逻辑不启用）"
+        );
+        assert_eq!(collected.cross_origin, CrossOriginStats::default());
     }
 }

@@ -4,7 +4,14 @@
  * 反馈：成功静默（条目消失）；失败行内 + toast；无成功 toast。
  * 不做成彩色胶囊堆叠，避免喧宾夺主。
  */
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './ChangeOverviewCard.module.css';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, SessionMessage } from '../../store/types';
@@ -15,9 +22,12 @@ import {
   classifyFileDiff,
   formatApplyFailureToast,
 } from '../../api/applyFileDiff';
-import { filterPublishableDiffs, publishToolDiffs } from '../../api/publishToolDiffs';
+import {
+  filterPublishableDiffs,
+  publishToolDiffs,
+} from '../../api/publishToolDiffs';
 import { resolveToolDiffs } from '../../api/toolFeedback';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 
 export type ChangeOverviewCardProps = {
   message: SessionMessage;
@@ -102,7 +112,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
   const allFiles = useMemo(() => collectMessageDiffs(message), [message]);
   const files = useMemo(
     () => allFiles.filter((f) => f.filePath && !resolved.has(f.filePath)),
-    [allFiles, resolved],
+    [allFiles, resolved]
   );
 
   const clearErrTimer = useCallback(() => {
@@ -150,7 +160,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
         errTimerRef.current = null;
       }, 6000);
     },
-    [clearErrTimer, onShowToast],
+    [clearErrTimer, onShowToast]
   );
 
   const markResolved = useCallback((filePath: string) => {
@@ -201,7 +211,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
           fail(
             formatApplyFailureToast(1, [{ filePath: f.filePath, result }]) ||
               result.message ||
-              `无法安全自动应用 · ${name}`,
+              `无法安全自动应用 · ${name}`
           );
         }
       } catch (err) {
@@ -211,7 +221,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
         setBusy(false);
       }
     },
-    [busy, dismissErr, fail, markResolved, removeDiffFile],
+    [busy, dismissErr, fail, markResolved, removeDiffFile]
   );
 
   const acceptAll = useCallback(
@@ -245,7 +255,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
         setBusy(false);
       }
     },
-    [busy, dismissErr, fail, files, markResolvedMany, removeDiffFile],
+    [busy, dismissErr, fail, files, markResolvedMany, removeDiffFile]
   );
 
   const rejectOne = useCallback(
@@ -257,7 +267,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
       markResolved(f.filePath);
       // 列表移除即反馈，不 toast
     },
-    [busy, markResolved, removeDiffFile],
+    [busy, markResolved, removeDiffFile]
   );
 
   const rejectAll = useCallback(
@@ -268,7 +278,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
       for (const p of paths) removeDiffFile(p);
       markResolvedMany(paths);
     },
-    [busy, files, markResolvedMany, removeDiffFile],
+    [busy, files, markResolvedMany, removeDiffFile]
   );
 
   // 无改动 / 已全部处理：不占位（空态由父级消息流承担，不刷 toast）
@@ -276,7 +286,10 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
 
   const additions = files.reduce((n, f) => n + (f.additions || 0), 0);
   const deletions = files.reduce((n, f) => n + (f.deletions || 0), 0);
-  const safeCount = files.reduce((n, f) => n + (classifyFileDiff(f).ok ? 1 : 0), 0);
+  const safeCount = files.reduce(
+    (n, f) => n + (classifyFileDiff(f).ok ? 1 : 0),
+    0
+  );
   const titleAria = `改动总览，${files.length} 个文件，+${additions} −${deletions}${
     busy ? '，应用中' : ''
   }`;
@@ -317,7 +330,11 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
             <span className="del">−{deletions}</span>
           </span>
           {busy ? (
-            <span className={styles.changeOverviewTitle} role="status" aria-live="polite">
+            <span
+              className={styles.changeOverviewTitle}
+              role="status"
+              aria-live="polite"
+            >
               应用中…
             </span>
           ) : null}
@@ -327,16 +344,24 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
             aria-hidden
           />
         </button>
-        <div className={styles.changeOverviewActions} role="toolbar" aria-label="改动操作">
-          <Tooltip content={
-            safeCount === 0
-              ? '无可安全自动应用的文件'
-              : safeCount < files.length
-                ? `全部接受（${safeCount}/${files.length} 可应用）`
-                : '全部接受可安全应用的文件'
-          }>
-            <button
+        <div
+          className={styles.changeOverviewActions}
+          role="toolbar"
+          aria-label="改动操作"
+        >
+          <Tooltip
+            content={
+              safeCount === 0
+                ? '无可安全自动应用的文件'
+                : safeCount < files.length
+                  ? `全部接受（${safeCount}/${files.length} 可应用）`
+                  : '全部接受可安全应用的文件'
+            }
+          >
+            <Button
               type="button"
+              variant="primary"
+              size="sm"
               className={styles.changeOverviewReview}
               disabled={busy || safeCount === 0}
               aria-label={
@@ -347,24 +372,28 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
               onClick={(e) => void acceptAll(e)}
             >
               全部接受
-            </button>
+            </Button>
           </Tooltip>
           {files.length > 1 ? (
             <Tooltip content="拒绝全部并从列表移除">
-              <button
+              <Button
                 type="button"
+                variant="danger"
+                size="sm"
                 className={styles.changeOverviewReview}
                 disabled={busy}
                 aria-label={`拒绝全部 ${files.length} 个文件`}
                 onClick={(e) => rejectAll(e)}
               >
                 全部拒绝
-              </button>
+              </Button>
             </Tooltip>
           ) : null}
           <Tooltip content="打开变更面板">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className={styles.changeOverviewReview}
               disabled={busy}
               aria-label="查看变更"
@@ -374,25 +403,28 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
               }}
             >
               查看变更
-            </button>
+            </Button>
           </Tooltip>
         </div>
       </div>
 
       {inlineErr ? (
-        <div className={styles.filesActionHint} role="alert" aria-live="assertive">
-          <span className={styles.filesActionHintText}>
-            {inlineErr}
-          </span>
+        <div
+          className={styles.filesActionHint}
+          role="alert"
+          aria-live="assertive"
+        >
+          <span className={styles.filesActionHintText}>{inlineErr}</span>
           <Tooltip content="关闭">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={styles.filesActionHintDismiss}
               aria-label="关闭错误"
               onClick={dismissErr}
-            >
-              <Lucide.X size={12} aria-hidden />
-            </button>
+              icon={<Lucide.X size={12} aria-hidden />}
+            />
           </Tooltip>
         </div>
       ) : null}
@@ -423,12 +455,21 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
                     }
                     onClick={() => onOpenDiff(f)}
                   >
-                    <Lucide.FileCode2 size={14} strokeWidth={1.75} aria-hidden />
+                    <Lucide.FileCode2
+                      size={14}
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
                     <span className={styles.changeOverviewName}>{name}</span>
                     {parent ? (
-                      <span className={styles.changeOverviewPath}>{parent}</span>
+                      <span className={styles.changeOverviewPath}>
+                        {parent}
+                      </span>
                     ) : null}
-                    <span className={`${styles.changeOverviewStat} ${styles.changeOverviewStatGlobalSm}`} aria-hidden>
+                    <span
+                      className={`${styles.changeOverviewStat} ${styles.changeOverviewStatGlobalSm}`}
+                      aria-hidden
+                    >
                       {emptyLine ? (
                         <span className="del">无行级</span>
                       ) : (
@@ -441,9 +482,13 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
                   </button>
                 </Tooltip>
                 <div className={styles.changeOverviewFileActions}>
-                  <Tooltip content={canApply ? '接受并写入磁盘' : '无法安全自动应用'}>
-                    <button
+                  <Tooltip
+                    content={canApply ? '接受并写入磁盘' : '无法安全自动应用'}
+                  >
+                    <Button
                       type="button"
+                      variant="primary"
+                      size="sm"
                       className={`${styles.changeOverviewMiniBtn} ${styles.accept}`}
                       aria-label={
                         canApply ? `接受 ${name}` : `无法自动应用 ${name}`
@@ -452,18 +497,20 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
                       onClick={(e) => void acceptOne(f, e)}
                     >
                       接受
-                    </button>
+                    </Button>
                   </Tooltip>
                   <Tooltip content="从变更列表移除">
-                    <button
+                    <Button
                       type="button"
+                      variant="danger"
+                      size="sm"
                       className={styles.changeOverviewMiniBtn}
                       aria-label={`拒绝 ${name}`}
                       disabled={busy}
                       onClick={(e) => rejectOne(f, e)}
                     >
                       拒绝
-                    </button>
+                    </Button>
                   </Tooltip>
                 </div>
               </li>

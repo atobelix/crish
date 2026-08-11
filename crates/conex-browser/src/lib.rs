@@ -538,6 +538,45 @@ impl BrowserSession {
         })
     }
 
+    // —— 维度 13 §1.5 跨域 iframe 递归：帧级会话（U-4 二期，纯加法）——
+
+    /// 帧级会话建立（跨域 iframe 快照采集用；OOPIF 的 targetId 即其
+    /// frameId，直接 `Target.attachToTarget(flatten:true)` + enable 序列）。
+    ///
+    /// 与 `attach_tab` 的差异：**不登记** per-tab 路由表与活动槽——iframe
+    /// 会话仅采集期使用（采集后 `detach_frame` 关闭），执行面跨 iframe 定位
+    /// 由快照 `NodeRef.frame_target_id` 承载（13 §3.3；执行侧接线为遗留交接）。
+    pub async fn attach_frame(&self, frame_id: &str) -> Result<SessionRef, BrowserError> {
+        let value = self
+            .transport
+            .send_command(
+                TARGET_ATTACH_TO_TARGET,
+                Some(json!({ "targetId": frame_id, "flatten": true })),
+                None,
+                ENABLE_TIMEOUT,
+            )
+            .await?;
+        let attach: AttachToTargetResult = serde_json::from_value(value).map_err(|e| {
+            BrowserError::Internal(format!("attachToTarget(frame) 结果解析失败：{e}"))
+        })?;
+        enable_domains(self.transport.as_ref(), &attach.session_id)
+            .await
+            .map_err(|e| {
+                BrowserError::Restore(format!("iframe 会话 enable 序列失败（{frame_id}）：{e}"))
+            })?;
+        Ok(SessionRef {
+            target_id: frame_id.to_string(),
+            session: attach.session_id,
+        })
+    }
+
+    /// 帧级会话关闭（跨域 iframe 采集后立即 detach，避免会话泄漏；best-effort）。
+    pub async fn detach_frame(&self, session: &str) -> Result<(), CdpError> {
+        self.send_browser::<Value>(TARGET_DETACH_FROM_TARGET, json!({ "sessionId": session }))
+            .await
+            .map(|_| ())
+    }
+
     // —— 事件面（§8）——
 
     /// 订阅 typed 事件（先订阅后发送可能产生事件的命令，订阅时序铁律）。
@@ -571,11 +610,15 @@ impl BrowserSession {
     }
 
     /// 构建真实采集快照管理器（维度 13：CdpCollector + 版本源绑定；
-    /// 引擎侧 `Arc<BrowserSession>` 后调用；预算可按 T-6 定制）。
+    /// 引擎侧 `Arc<BrowserSession>` 后调用；预算可按 T-6 定制，
+    /// `budgets.cross_origin_iframes`（U-4 二期开关）随构造传入采集器）。
     pub fn snapshot_manager(self: &Arc<Self>, budgets: crate::snapshot::BudgetConfig) -> SnapshotManager {
         SnapshotManager::new(
             self.version.clone(),
-            Arc::new(crate::snapshot::collect::CdpCollector::new(self.clone())),
+            Arc::new(crate::snapshot::collect::CdpCollector::new(
+                self.clone(),
+                budgets,
+            )),
             budgets,
         )
     }

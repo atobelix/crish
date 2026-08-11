@@ -660,6 +660,10 @@ fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
                 agent_provider::events::StopReason::Error => LoopStopReason::Error,
             },
             error,
+            // D7 §3.7 兼容：WireEvent::Stop 无分类字段（agent-provider 未
+            // 升级）→ error_kind=None，只标 providerError 不伪造（与
+            // session-loop stream.rs 的向后兼容语义一致）
+            error_kind: None,
             usage: usage.map(|usage| ProviderUsage {
                 prompt_tokens: usage.prompt_tokens,
                 completion_tokens: usage.completion_tokens,
@@ -2667,9 +2671,12 @@ mod tests {
                 reason,
                 usage,
                 error,
+                // D7 §3.7 兼容：老注入方（WireEvent::Stop 无分类字段）→ None
+                error_kind,
             } => {
                 assert_eq!(reason, LoopStopReason::Length);
                 assert!(error.is_none());
+                assert!(error_kind.is_none(), "老注入方不携带分类字段");
                 let usage = usage.expect("usage 透传");
                 assert_eq!(usage.total_tokens, Some(3));
                 // P2：cacheMissTokens 逐字段透传（E0063 补齐）
@@ -3894,6 +3901,7 @@ mod tests {
         ProviderStreamEvent::Stop {
             reason: LoopStopReason::Stop,
             error: None,
+            error_kind: None,
             usage: Some(ProviderUsage {
                 prompt_tokens: Some(prompt),
                 completion_tokens: Some(completion),

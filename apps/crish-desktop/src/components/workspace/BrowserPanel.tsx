@@ -37,6 +37,7 @@ import {
   canStopBrowserSession,
   type BrowserSessionState,
 } from './browserSessionLib';
+import { BrowserImportSection } from './browser-panel/BrowserImportSection';
 import { FrameCanvas } from './browser-panel/FrameCanvas';
 import { IndicatorBar } from './browser-panel/IndicatorBar';
 import { InputLayer } from './browser-panel/InputLayer';
@@ -217,6 +218,11 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
           </Button>
         </Tooltip>
       </div>
+
+      <BrowserImportSection
+        onShowToast={onShowToast}
+        browserRunning={running}
+      />
     </div>
   );
 };

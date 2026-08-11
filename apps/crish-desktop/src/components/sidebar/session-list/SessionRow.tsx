@@ -17,7 +17,7 @@ import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../../api/sessionSearch';
-import { Tooltip } from '../../ui';
+import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { MoreHorizontal } from 'lucide-react';
 
@@ -130,7 +130,8 @@ export type SessionRowProps = {
   /** 列表内 ↑↓ 导航（跨置顶/项目/对话，由父级按可见顺序解析） */
   onNavigateSession?: ((fromId: string, delta: number) => void) | undefined;
   /** 键盘重排（Alt+↑/↓） */
-  onReorderKeyboard?: ((sessionId: string, direction: -1 | 1) => void) | undefined;
+  onReorderKeyboard?:
+    ((sessionId: string, direction: -1 | 1) => void) | undefined;
   /** Live drop line: insert before/after this row */
   dropPlace?: SessionRowDropPlace | null | undefined;
 };
@@ -178,7 +179,11 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
 
   const openRowMenu = useCallback(
     (base?: React.MouseEvent | React.KeyboardEvent) => {
-      const isMoreButton = Boolean(base?.currentTarget && (base.currentTarget as HTMLElement).dataset?.testid === 'session-more-button');
+      const isMoreButton = Boolean(
+        base?.currentTarget &&
+        (base.currentTarget as HTMLElement).dataset?.testid ===
+          'session-more-button'
+      );
       const ev = syntheticContextMenuEvent(rowRef.current, base, {
         anchor: isMoreButton ? 'right-center' : 'bottom-left',
       });
@@ -316,8 +321,10 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                 <>
                   <SessionRowTime s={s} className={styles.sessionTime ?? ''} />
                   <Tooltip content="更多操作">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       className={styles.sessionActionsBtn}
                       data-testid="session-more-button"
                       aria-label="更多操作"
@@ -331,13 +338,14 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                    >
-                      <MoreHorizontal
-                        size={16}
-                        strokeWidth={1.75}
-                        aria-hidden
-                      />
-                    </button>
+                      icon={
+                        <MoreHorizontal
+                          size={16}
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
+                      }
+                    />
                   </Tooltip>
                 </>
               )}

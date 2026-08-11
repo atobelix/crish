@@ -30,10 +30,10 @@ pub mod serialize;
 
 pub use budget::{BudgetConfig, TruncationInfo, TruncationKind};
 pub use collect::{
-    AxInfo, AxProperties, Bounds, CdpCollector, CollectedData, CollectError, EnhancedNode,
-    FixtureCollector, FrameMarker, LayoutMetrics, StyleInfo, SnapshotCollector,
-    COMPUTED_STYLES_WHITELIST, FIRST_ROUND_TIMEOUT, MAX_IFRAMES, MIN_IFRAME_SIZE,
-    RETRY_WINDOW, VIEWPORT_THRESHOLD,
+    AxInfo, AxProperties, Bounds, CdpCollector, CollectedData, CollectError, CrossOriginStats,
+    EnhancedNode, FixtureCollector, FrameMarker, LayoutMetrics, StyleInfo, SnapshotCollector,
+    COMPUTED_STYLES_WHITELIST, FIRST_ROUND_TIMEOUT, FRAME_COLLECT_TIMEOUT, MAX_IFRAMES,
+    MIN_IFRAME_SIZE, RETRY_WINDOW, VIEWPORT_THRESHOLD,
 };
 pub use serialize::{BlindZoneKind, NodeRef, SerializeOptions, SerializeOutput, SimplifiedNode};
 
@@ -657,6 +657,7 @@ mod tests {
                 layout: LayoutMetrics::default(),
                 raw_payload_bytes: 0,
                 collect_ms: 0,
+                cross_origin: CrossOriginStats::default(),
             })
         }
     }
@@ -795,6 +796,7 @@ mod tests {
                 layout: LayoutMetrics::default(),
                 raw_payload_bytes: 0,
                 collect_ms: 0,
+                cross_origin: CrossOriginStats::default(),
             })
         }
     }

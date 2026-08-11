@@ -22,8 +22,12 @@
 //!   （browser_snapshot 的 max_depth/max_elements/max_text）走独立临时管理器，
 //!   其快照不进入共享缓存（遗留注记：P1 统一缓存键）；
 //! - **console/network 缓冲**：自首次调用起订阅事件总线（广播通道 tail 语义，
-//!   此前事件不追溯；11 事件面无持久环形缓冲，P1 补 since_seq 语义与 url/line/
-//!   status/size 字段）。
+//!   此前事件不追溯）。G-11：条目结构补齐 11 文档事件面字段（console 的
+//!   url/line、network 的 status/size）——事件层（bus.rs typed 事件）暂未携带
+//!   该数据，MVP 置空串/None，接线点登记于各缓冲注释（事件层补字段后映射）；
+//! - **G-12 执行器清理**：executors 缓存键 = tab_id、值携带绑定会话号（O(1)
+//!   精确守卫），事件面 ConnectionLost/ConnectionRestored 经惰性订阅任务
+//!   整体清除（触发链见 [RealSession::ensure_executor_cleaner]）。
 
 use crate::error;
 use agent_tools::definition::ToolError;
@@ -59,15 +63,29 @@ pub struct SnapshotView {
     pub warnings: Vec<String>,
 }
 
-/// 控制台条目（11 事件面字段；url/line 未携带，MVP 置空）。
+/// 控制台条目（11 事件面语义；url/line 事件层未携带，MVP 空串/None）。
+///
+/// 接线点登记：bus.rs `Runtime.consoleAPICalled`（stackTrace.callFrames 的
+/// url/lineNumber）与 `Runtime.exceptionThrown`/`Page.pageError`
+/// （exceptionDetails/entry 的 url/lineNumber）转译进 `BrowserEvent` 后，
+/// 此处随 [ConsoleBuffer::push] 映射入库。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsoleEntry {
     pub seq: u64,
     pub level: String,
     pub text: String,
+    /// 来源脚本 URL（事件层未携带，MVP 空串）
+    pub url: String,
+    /// 来源行号（事件层未携带，MVP None）
+    pub line: Option<u64>,
 }
 
-/// 网络请求条目（11 事件面字段；status/size 未携带，MVP 置空）。
+/// 网络请求条目（11 事件面语义；status/size 事件层未携带，MVP None）。
+///
+/// url 已由 `Network.requestWillBeSent` 映射并经 17 §6.2 脱敏入库；
+/// 接线点登记：bus.rs `Network.responseReceived`（status）与
+/// `Network.loadingFinished`（encodedDataLength = size）转译进
+/// `BrowserEvent` 后，此处随 [NetworkBuffer] 映射入库。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkEntry {
     pub seq: u64,
@@ -75,6 +93,10 @@ pub struct NetworkEntry {
     pub url: String,
     pub method: String,
     pub done: bool,
+    /// HTTP 状态码（事件层未携带，MVP None）
+    pub status: Option<u16>,
+    /// 响应体大小（事件层未携带，MVP None）
+    pub size: Option<u64>,
 }
 
 /// 会话操作抽象（MVP 工具面与浏览器会话的唯一交互面；测试注入 mock 替身）。
@@ -204,6 +226,9 @@ pub trait SessionOps: Send + Sync {
     async fn network_entries(&self, since_seq: u64) -> Vec<NetworkEntry>;
 }
 
+/// 执行器缓存槽（tab_id → (绑定 CDP 会话号, 执行器)；G-12 绑定比对用）。
+type ExecutorSlot = (String, Arc<ActionExecutor>);
+
 /// 真实会话适配（BrowserSession 包装；仅消费 pub 接口）。
 ///
 /// pub 暴露（27 接线方案 S3）：引擎侧 `LazySessionOps`（agent-workbench
@@ -216,12 +241,14 @@ pub struct RealSession {
     budgets: BudgetConfig,
     /// 共享快照管理器（采集 + 索引解析同实例，缓存一致性）
     snapshots: Arc<SnapshotManager>,
-    /// 动作执行器缓存（P1 多标签：键 = **CDP 会话号**——每会话唯一绑定一个
-    /// 标签；断线重连后新会话自然换键，陈旧执行器由 ConnectionLost 清理任务
-    /// 整体清除，杜绝绑定死会话的陈旧路由）
-    executors: Mutex<std::collections::HashMap<String, Arc<ActionExecutor>>>,
-    // 执行器清理任务（P1 遗留：ConnectionLost 时按会话键整体清除）
-    // 暂未实现；字段随实现加回
+    /// 动作执行器缓存（P1 多标签：键 = **tab_id**；值 = (绑定 CDP 会话号,
+    /// 执行器)）。G-12：断线重连后同标签换新会话——绑定比对不中即丢弃重建
+    /// （O(1) 精确守卫），ConnectionLost/ConnectionRestored 时经事件订阅
+    /// 整体清除（惰性挂载，见 [Self::ensure_executor_cleaner]），杜绝绑定
+    /// 死会话的陈旧路由
+    executors: Arc<Mutex<std::collections::HashMap<String, ExecutorSlot>>>,
+    /// G-12 执行器清理任务挂载旗（惰性：首次构建执行器时订阅事件总线）
+    executor_cleaner_spawned: AtomicBool,
     console: Arc<ConsoleBuffer>,
     network: Arc<NetworkBuffer>,
 }
@@ -240,7 +267,8 @@ impl RealSession {
             gate,
             budgets,
             snapshots,
-            executors: Mutex::new(std::collections::HashMap::new()),
+            executors: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            executor_cleaner_spawned: AtomicBool::new(false),
             console: Arc::new(ConsoleBuffer::default()),
             network: Arc::new(NetworkBuffer::default()),
         }
@@ -258,11 +286,20 @@ impl RealSession {
     }
 
     /// 惰性构建目标标签的动作执行器（复用共享快照管理器与注入门禁；
-    /// 按 tab_id 缓存，各绑定目标标签会话——per-tab 动作路由）。
+    /// 按 tab_id 缓存、值携带绑定会话号——per-tab 动作路由）。
+    ///
+    /// G-12：断线重连后同标签换新会话，缓存中旧执行器绑定死会话——
+    /// 绑定比对不中即丢弃重建（O(1) 精确守卫，事件清理之外的兜底）。
     fn executor_for(&self, tab_id: &str, session: &str) -> Result<Arc<ActionExecutor>, ActionError> {
+        // G-12：首次构建前挂载断线清理任务（惰性；断线前无执行器则无需清理）
+        self.ensure_executor_cleaner();
         let mut guard = self.executors.lock().unwrap_or_else(|p| p.into_inner());
-        if let Some(ex) = guard.get(tab_id) {
-            return Ok(ex.clone());
+        if let Some((bound, ex)) = guard.get(tab_id) {
+            if bound == session {
+                return Ok(ex.clone());
+            }
+            // 绑定会话已变（重连/换绑）→ 陈旧执行器丢弃，按新会话重建
+            guard.remove(tab_id);
         }
         let ops: Arc<dyn PageOps> = Arc::new(
             BrowserPageOps::new(self.session.clone()).with_session(session.to_string()),
@@ -278,8 +315,52 @@ impl RealSession {
                 .with_gate(self.gate.clone())
                 .with_delay(Arc::new(TokioDelay)),
         );
-        guard.insert(tab_id.to_string(), executor.clone());
+        guard.insert(tab_id.to_string(), (session.to_string(), executor.clone()));
         Ok(executor)
+    }
+
+    /// G-12 执行器清理任务挂载（惰性，幂等）。
+    ///
+    /// 触发链：浏览器断线 → transport 发布 `BrowserEvent::ConnectionLost`
+    /// （conex-browser transport.rs §2.4 第 1 步）→ 本任务清空执行器缓存；
+    /// 重连恢复 `ConnectionRestored`（同前事件面）再次清除兜底——覆盖
+    /// broadcast Lagged 挤出 ConnectionLost 的罕见窗口。BrowserSession
+    /// 内部 per-tab 路由表在 ConnectionLost 分支同步清空（conex-browser
+    /// lib.rs 同源事件），恢复流程 SessionAttached 重新登记后，本类
+    /// [Self::executor_for] 按新会话惰性重建——陈旧执行器（绑定死会话）
+    /// 绝不复用。
+    fn ensure_executor_cleaner(&self) {
+        if self.executor_cleaner_spawned.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let executors = self.executors.clone();
+        tokio::spawn(executor_cleaner_loop(
+            self.session.subscribe(),
+            Arc::new(move || {
+                executors.lock().unwrap_or_else(|p| p.into_inner()).clear();
+            }),
+        ));
+    }
+}
+
+/// G-12 执行器清理循环：事件面断线/恢复信号 → 调用清理回调（整体清空）。
+///
+/// 触发面：`ConnectionLost`（断线主信号）与 `ConnectionRestored`（恢复信号，
+/// 兜底——broadcast Lagged 挤出 ConnectionLost 的罕见窗口下仍必达一次）；
+/// 其余事件忽略；Lagged 自愈继续消费；广播关闭（会话销毁）即退出。
+/// 清理回调幂等（空缓存清空无副作用），重复信号安全。
+async fn executor_cleaner_loop(
+    mut rx: tokio::sync::broadcast::Receiver<BrowserEvent>,
+    clear: Arc<dyn Fn() + Send + Sync>,
+) {
+    loop {
+        match rx.recv().await {
+            Ok(BrowserEvent::ConnectionLost { .. })
+            | Ok(BrowserEvent::ConnectionRestored { .. }) => clear(),
+            Ok(_) => {}
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        }
     }
 }
 
@@ -287,19 +368,13 @@ impl RealSession {
 #[async_trait]
 impl SessionOps for RealSession {
     fn executor(&self, session: &str) -> Option<Arc<conex_browser::action::ActionExecutor>> {
-        // 按标签路由：session 参数为 CDP 会话号；查 executors 缓存（键 = tab_id，
-        // 遍历取匹配会话——executors 惰性按 tab 构建，逐项比对代价小）
+        // 按标签路由：缓存值携带绑定会话号（G-12），与请求会话直接比对——
+        // 断线清理/重建后旧会话请求零命中（不再回溯 tab_session 开销）
         let guard = self.executors.lock().unwrap_or_else(|p| p.into_inner());
-        for (tab_id, ex) in guard.iter() {
-            if self
-                .session
-                .tab_session(tab_id)
-                .is_some_and(|r| r.session == session)
-            {
-                return Some(ex.clone());
-            }
-        }
-        None
+        guard
+            .values()
+            .find(|(bound, _)| bound == session)
+            .map(|(_, ex)| ex.clone())
     }
 
     fn readiness(&self) -> Result<(), String> {
@@ -605,6 +680,12 @@ impl ConsoleBuffer {
             seq,
             level: level.to_string(),
             text: text.to_string(),
+            // G-11：事件层未携带 url/line（bus.rs Console/PageError 无此字段）；
+            // 接线点——consoleAPICalled stackTrace.callFrames.url/lineNumber、
+            // exceptionThrown/pageError exceptionDetails/entry.url/lineNumber
+            // 转译进 BrowserEvent 后经本函数入参映射（P1 补）
+            url: String::new(),
+            line: None,
         });
     }
 
@@ -670,6 +751,11 @@ impl NetworkBuffer {
             url: crate::helpers::redact_url_query(url),
             method: method.to_string(),
             done: false,
+            // G-11：事件层未携带 status/size（bus.rs NetworkRequest 无此字段）；
+            // 接线点——responseReceived.status、loadingFinished.encodedDataLength
+            // 转译进 BrowserEvent 后经本函数入参映射（P1 补）
+            status: None,
+            size: None,
         });
     }
 
@@ -749,5 +835,125 @@ mod tests {
         assert!(is_password_element(&doc, 7), "集合成员必须判定为密码输入目标");
         assert!(!is_password_element(&doc, 8), "非集合成员不得误判");
         assert!(!is_password_element(&doc, 0), "backend=0（不存在）不得误判");
+    }
+
+    /// G-12：ConnectionLost/ConnectionRestored → 执行器缓存整体清除。
+    /// 经 BusHandle 直连事件面注入信号（真实链路：BrowserSession 事件总线，
+    /// RealSession::ensure_executor_cleaner 订阅同一总线）；断言清理回调
+    /// 触发次数与信号一一对应、缓存整体清空（旧执行器查找不再命中）、
+    /// 无关事件不触发。
+    #[tokio::test]
+    async fn executor_cleaner_clears_on_connection_lost() {
+        let bus = conex_browser::BusHandle::new(16, 4);
+        // 模拟执行器缓存（tab_id → 绑定会话；清理语义 = 整体清空）
+        let registry: Arc<Mutex<std::collections::HashMap<String, String>>> =
+            Arc::new(Mutex::new(std::collections::HashMap::from([
+                ("T1".to_string(), "S1".to_string()),
+                ("T2".to_string(), "S2".to_string()),
+            ])));
+        let clears = Arc::new(AtomicU64::new(0));
+        let task = {
+            let registry = registry.clone();
+            let clears = clears.clone();
+            tokio::spawn(executor_cleaner_loop(
+                bus.subscribe(),
+                Arc::new(move || {
+                    clears.fetch_add(1, Ordering::SeqCst);
+                    registry.lock().unwrap_or_else(|p| p.into_inner()).clear();
+                }),
+            ))
+        };
+
+        // 无关事件不触发清理（缓存保持双标签）
+        bus.publish(BrowserEvent::Console {
+            session: "S1".to_string(),
+            level: ConsoleLevel::Log,
+            text: "x".to_string(),
+        });
+        bus.publish(BrowserEvent::NetworkRequest {
+            request_id: "r1".to_string(),
+            url: "https://e.com".to_string(),
+            method: "GET".to_string(),
+        });
+        tokio::task::yield_now().await;
+        assert_eq!(clears.load(Ordering::SeqCst), 0, "非断线事件不得触发清理");
+        assert_eq!(
+            registry.lock().unwrap_or_else(|p| p.into_inner()).len(),
+            2,
+            "非断线事件不得清除缓存"
+        );
+
+        // 注入 ConnectionLost → 整体清除（旧执行器不再命中）
+        bus.publish(BrowserEvent::ConnectionLost { attempt: 0 });
+        wait_for_clears(&clears, 1).await;
+        // 注意：锁必须作用域化，不得跨 await 持有——std Mutex 在 current_thread
+        // runtime 上跨 await 持锁会让清理任务阻塞同一线程 → 死锁
+        {
+            let guard = registry.lock().unwrap_or_else(|p| p.into_inner());
+            assert!(guard.is_empty(), "断线后执行器缓存必须整体清空");
+            assert!(guard.get("T1").is_none(), "旧执行器（绑定死会话）查找不得命中");
+        }
+
+        // 重连期重复 ConnectionLost 信号 → 幂等再清
+        bus.publish(BrowserEvent::ConnectionLost { attempt: 3 });
+        wait_for_clears(&clears, 2).await;
+
+        // ConnectionRestored 兜底触发（Lagged 挤出 ConnectionLost 的窗口）
+        bus.publish(BrowserEvent::ConnectionRestored {
+            elapsed_ms: 100,
+            epoch: 1,
+        });
+        wait_for_clears(&clears, 3).await;
+        task.abort();
+    }
+
+    /// 等待清理回调计数达到目标（broadcast 投递为异步，轮询收尾）。
+    async fn wait_for_clears(clears: &AtomicU64, target: u64) {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while clears.load(Ordering::SeqCst) < target {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("清理回调应在超时内触发");
+    }
+
+    /// G-11：console 条目字段结构——url/line 事件层未携带（MVP 空串/None），
+    /// 既有 level/text 映射与增量语义不受影响。
+    #[test]
+    fn console_entry_fields_structure() {
+        let buffer = ConsoleBuffer::default();
+        buffer.push("info", "a");
+        buffer.push("error", "b");
+        let entries = buffer.entries_since(0);
+        assert_eq!(entries.len(), 2);
+        for e in &entries {
+            assert_eq!(e.url, "", "事件层未携带 url（MVP 空串）");
+            assert_eq!(e.line, None, "事件层未携带 line（MVP None）");
+        }
+        assert_eq!(entries[0].level, "info");
+        assert_eq!(entries[0].text, "a");
+        assert_eq!(entries[1].level, "error");
+        assert_eq!(entries[1].text, "b");
+    }
+
+    /// G-11：network 条目字段结构——url 由事件映射并经 17 §6.2 脱敏入库；
+    /// status/size 事件层未携带（MVP None）；done 由终止事件映射。
+    #[test]
+    fn network_entry_fields_structure() {
+        let buffer = NetworkBuffer::default();
+        buffer.push_request("r1", "https://e.com/search?token=secret&q=a", "GET");
+        buffer.mark_done("r1", true);
+        let entries = buffer.entries_since(0);
+        assert_eq!(entries.len(), 1);
+        let e = &entries[0];
+        assert_eq!(
+            e.url, "https://e.com/search?token=%3Credacted%3E&q=a",
+            "url 映射 + 敏感参数脱敏入库（17 §6.2，值百分比编码形态）"
+        );
+        assert_eq!(e.status, None, "事件层未携带 status（MVP None）");
+        assert_eq!(e.size, None, "事件层未携带 size（MVP None）");
+        assert!(e.done, "NetworkDone 映射 done");
+        assert_eq!(e.method, "GET");
     }
 }

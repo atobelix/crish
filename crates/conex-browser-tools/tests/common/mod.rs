@@ -282,11 +282,16 @@ impl SessionOps for MockSession {
                 seq: 1,
                 level: "info".to_string(),
                 text: "hello".to_string(),
+                // G-11 字段面：事件层未携带（MVP 空串/None），与 RealSession 同口径
+                url: String::new(),
+                line: None,
             },
             ConsoleEntry {
                 seq: 2,
                 level: "error".to_string(),
                 text: "boom".to_string(),
+                url: String::new(),
+                line: None,
             },
         ]
         .into_iter()
@@ -301,6 +306,9 @@ impl SessionOps for MockSession {
             url: "https://a.example/x?token=abc".to_string(),
             method: "GET".to_string(),
             done: true,
+            // G-11 字段面：事件层未携带（MVP None），与 RealSession 同口径
+            status: None,
+            size: None,
         }]
         .into_iter()
         .filter(|e| e.seq > since_seq)

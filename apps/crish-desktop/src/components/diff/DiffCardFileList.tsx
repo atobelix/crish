@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
-import { Select, Tooltip } from '../ui';
+import { Button, Select, Tooltip } from '../ui';
 import { classifyFileDiff } from '../../api/applyFileDiff';
 import { openPathDefault } from '../../api/hostOpenersApi';
 import { getWorkspacePath } from '../../api/projectStore';
@@ -16,7 +16,12 @@ function basename(p: string): string {
 }
 
 function isCompareMode(val: string): val is CompareMode {
-  return val === 'git' || val === 'session-merged' || val === 'plain' || val.startsWith('turn-');
+  return (
+    val === 'git' ||
+    val === 'session-merged' ||
+    val === 'plain' ||
+    val.startsWith('turn-')
+  );
 }
 
 // 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
@@ -31,7 +36,11 @@ interface DiffCardFileListProps {
   current: FileDiff | null;
   applyBusy: boolean;
   stagingPaths: Record<string, boolean>;
-  aiTurns: Array<{ msg: { id: string; timestamp: number }; index: number; files: FileDiff[] }>;
+  aiTurns: Array<{
+    msg: { id: string; timestamp: number };
+    index: number;
+    files: FileDiff[];
+  }>;
   getFileCompareMode: (filePath: string) => CompareMode;
   onChangeCompareMode: (filePath: string, mode: CompareMode) => void;
   onSetActiveDiffSource: (diff: FileDiff | null) => void;
@@ -90,12 +99,17 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
     const cwd = getWorkspacePath();
     const isAbsolute = f.filePath.startsWith('/') || f.filePath.includes(':');
     const absolutePath = isAbsolute ? f.filePath : `${cwd}/${f.filePath}`;
-    const fileAiTurns = aiTurns.filter((t) => t.files.some((m) => m.filePath === f.filePath));
+    const fileAiTurns = aiTurns.filter((t) =>
+      t.files.some((m) => m.filePath === f.filePath)
+    );
 
     // 接受按钮文案随可应用性动态变化（同源约定：Tooltip content 与 aria-label 同引用）
-    const acceptLabel = classifyFileDiff(f).ok ? '接受并写入磁盘' : '此 diff 无法安全自动应用';
+    const acceptLabel = classifyFileDiff(f).ok
+      ? '接受并写入磁盘'
+      : '此 diff 无法安全自动应用';
 
-    const compareOptions: { value: string; label: string; hint?: string }[] = [];
+    const compareOptions: { value: string; label: string; hint?: string }[] =
+      [];
     if (sourceMode === 'git') {
       compareOptions.push({ value: 'git', label: 'Git 工作区改动' });
     } else {
@@ -113,7 +127,10 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
     compareOptions.push({ value: 'plain', label: '当前源码全文 (无 Diff)' });
 
     return (
-      <div key={f.filePath} className={`${styles.accordionItem} ${active ? styles.accordionActive : ''}`}>
+      <div
+        key={f.filePath}
+        className={`${styles.accordionItem} ${active ? styles.accordionActive : ''}`}
+      >
         <div className={styles.accordionHeaderRow}>
           <Tooltip content={f.filePath}>
             <button
@@ -155,45 +172,48 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                 <Lucide.Loader2 size={13} className={styles.spinner} />
               ) : f.staged ? (
                 <Tooltip content={UNSTAGE_LABEL}>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
                     className={styles.hoverActBtn}
                     aria-label={UNSTAGE_LABEL}
                     onClick={(e) => {
                       e.stopPropagation();
                       void onUnstageFile(f.filePath);
                     }}
-                  >
-                    <Lucide.Minus size={13} />
-                  </button>
+                    icon={<Lucide.Minus size={13} />}
+                  />
                 </Tooltip>
               ) : (
                 <>
                   <Tooltip content={STAGE_LABEL}>
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
                       className={styles.hoverActBtn}
                       aria-label={STAGE_LABEL}
                       onClick={(e) => {
                         e.stopPropagation();
                         void onStageFile(f.filePath);
                       }}
-                    >
-                      <Lucide.Plus size={13} />
-                    </button>
+                      icon={<Lucide.Plus size={13} />}
+                    />
                   </Tooltip>
                   <Tooltip content={DISCARD_LABEL}>
-                    <button
+                    <Button
                       type="button"
+                      variant="danger"
+                      size="sm"
                       className={`${styles.hoverActBtn} ${styles.danger}`}
                       aria-label={DISCARD_LABEL}
                       onClick={(e) => {
                         e.stopPropagation();
                         void onDiscardChanges(f.filePath);
                       }}
-                    >
-                      <Lucide.Undo2 size={13} />
-                    </button>
+                      icon={<Lucide.Undo2 size={13} />}
+                    />
                   </Tooltip>
                 </>
               )}
@@ -230,46 +250,51 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
 
               <div className={styles.inlineActions}>
                 <Tooltip content="在默认编辑器中打开该文件">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     className={styles.inlineIconBtn}
                     onClick={() => void openPathDefault(absolutePath)}
                     aria-label="在编辑器打开"
-                  >
-                    <Lucide.ExternalLink size={13} />
-                  </button>
+                    icon={<Lucide.ExternalLink size={13} />}
+                  />
                 </Tooltip>
 
                 <Tooltip content="复制最新文件源码">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     className={styles.inlineIconBtn}
                     onClick={() => void onCopyCode(f.filePath)}
                     aria-label="复制代码"
-                  >
-                    <Lucide.Copy size={13} />
-                  </button>
+                    icon={<Lucide.Copy size={13} />}
+                  />
                 </Tooltip>
 
                 <Tooltip content="复制完整绝对路径">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     className={styles.inlineIconBtn}
                     onClick={() => {
                       navigator.clipboard.writeText(absolutePath);
                       onShowToast('绝对路径已复制到剪贴板');
                     }}
                     aria-label="复制路径"
-                  >
-                    <Lucide.FileCode size={13} />
-                  </button>
+                    icon={<Lucide.FileCode size={13} />}
+                  />
                 </Tooltip>
 
                 <div className={styles.actionDivider} />
 
                 <Tooltip content={acceptLabel}>
-                  <button
+                  <Button
                     type="button"
+                    variant="primary"
+                    size="sm"
                     className={`${styles.inlineActionBtn} ${styles.inlineActionAccept}`}
                     aria-label={acceptLabel}
                     disabled={applyBusy || !classifyFileDiff(f).ok}
@@ -277,14 +302,15 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                       e.stopPropagation();
                       void onAcceptFile(f);
                     }}
-                  >
-                    <Lucide.Check size={14} aria-hidden />
-                  </button>
+                    icon={<Lucide.Check size={14} aria-hidden />}
+                  />
                 </Tooltip>
 
                 <Tooltip content={REJECT_LABEL}>
-                  <button
+                  <Button
                     type="button"
+                    variant="danger"
+                    size="sm"
                     className={styles.inlineActionBtn}
                     aria-label={REJECT_LABEL}
                     disabled={applyBusy}
@@ -292,9 +318,8 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                       e.stopPropagation();
                       onRejectFile(f);
                     }}
-                  >
-                    <Lucide.X size={14} aria-hidden />
-                  </button>
+                    icon={<Lucide.X size={14} aria-hidden />}
+                  />
                 </Tooltip>
               </div>
             </div>
@@ -307,17 +332,31 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
   };
 
   return (
-    <div className={`${styles.fileList} ${styles.isFullWidth}`} role="list" aria-label="变更文件列表">
+    <div
+      className={`${styles.fileList} ${styles.isFullWidth}`}
+      role="list"
+      aria-label="变更文件列表"
+    >
       {sourceMode === 'git' ? (
         <div className={styles.gitGroupList}>
           <div className={styles.gitGroupSection}>
             <div className={styles.gitGroupHeader}>
-              <span className={styles.groupTitle}>已暂存的更改 ({stagedCount})</span>
+              <span className={styles.groupTitle}>
+                已暂存的更改 ({stagedCount})
+              </span>
               {stagedCount > 0 && (
-                <button type="button" className={styles.groupActionBtn} onClick={onUnstageAll}>
-                  <Lucide.MinusCircle size={13} style={{ marginRight: 3 }} />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className={styles.groupActionBtn}
+                  onClick={onUnstageAll}
+                  icon={
+                    <Lucide.MinusCircle size={13} style={{ marginRight: 3 }} />
+                  }
+                >
                   全部取消暂存
-                </button>
+                </Button>
               )}
             </div>
             {stagedCount === 0 ? (
@@ -330,12 +369,22 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
           </div>
           <div className={styles.gitGroupSection}>
             <div className={styles.gitGroupHeader}>
-              <span className={styles.groupTitle}>未暂存的更改 ({unstagedCount})</span>
+              <span className={styles.groupTitle}>
+                未暂存的更改 ({unstagedCount})
+              </span>
               {unstagedCount > 0 && (
-                <button type="button" className={styles.groupActionBtn} onClick={onStageAll}>
-                  <Lucide.PlusCircle size={13} style={{ marginRight: 3 }} />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className={styles.groupActionBtn}
+                  onClick={onStageAll}
+                  icon={
+                    <Lucide.PlusCircle size={13} style={{ marginRight: 3 }} />
+                  }
+                >
                   全部暂存
-                </button>
+                </Button>
               )}
             </div>
             {unstagedCount === 0 ? (

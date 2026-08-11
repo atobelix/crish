@@ -2,7 +2,8 @@
 /**
  * 设置 · 多端互通面板渲染测试（R1-08 验收锚点：配对开关 → 二维码出现 →
  * 设备列表/撤销闭环；R1-09 网络环境卡片：配置文件类别 + 可直连 IP +
- * 公用网络切换提示 / AP 隔离引导）。mock multiDevice API 层，断言四区与操作路径。
+ * 公用网络切换提示 / AP 隔离引导；R1-11 多端服务开关：默认关闭提示 +
+ * 开启/关闭服务路径）。mock multiDevice API 层，断言四区与操作路径。
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -16,6 +17,7 @@ const listDevices = vi.fn();
 const revokeDevice = vi.fn();
 const renameDevice = vi.fn();
 const networkEnvInfo = vi.fn();
+const setMultiDeviceEnabled = vi.fn();
 
 vi.mock('../../api/multiDevice', () => ({
   pairStart: (...args: unknown[]) => pairStart(...args),
@@ -25,6 +27,7 @@ vi.mock('../../api/multiDevice', () => ({
   revokeDevice: (...args: unknown[]) => revokeDevice(...args),
   renameDevice: (...args: unknown[]) => renameDevice(...args),
   networkEnvInfo: (...args: unknown[]) => networkEnvInfo(...args),
+  setMultiDeviceEnabled: (...args: unknown[]) => setMultiDeviceEnabled(...args),
 }));
 
 const IDLE_STATUS = {
@@ -52,8 +55,18 @@ const PAIR_RESULT = {
 };
 
 const DEVICES = [
-  { id: 'a'.repeat(64), label: 'Pixel-9', issued_at_ms: 1700000000000, revoked: false },
-  { id: 'b'.repeat(64), label: '旧平板', issued_at_ms: 1700000100000, revoked: true },
+  {
+    id: 'a'.repeat(64),
+    label: 'Pixel-9',
+    issued_at_ms: 1700000000000,
+    revoked: false,
+  },
+  {
+    id: 'b'.repeat(64),
+    label: '旧平板',
+    issued_at_ms: 1700000100000,
+    revoked: true,
+  },
 ];
 
 const PRIVATE_NET_ENV = {
@@ -71,22 +84,70 @@ beforeEach(() => {
   revokeDevice.mockResolvedValue(true);
   renameDevice.mockResolvedValue(true);
   networkEnvInfo.mockResolvedValue(PRIVATE_NET_ENV);
+  setMultiDeviceEnabled.mockResolvedValue(true);
 });
 
 function renderTab() {
   return render(<SettingsDevicesTab onShowToast={() => {}} />);
 }
 
+/** R1-11：点击「开启服务」并等待配对开关出现（服务开关前置步骤） */
+async function enableService() {
+  const button = await screen.findByRole('button', { name: '开启服务' });
+  fireEvent.click(button);
+  await waitFor(() => expect(setMultiDeviceEnabled).toHaveBeenCalledWith(true));
+  await screen.findByRole('switch', { name: '配对模式开关' });
+}
+
 describe('SettingsDevicesTab', () => {
-  it('默认空态：开关关闭 + 无设备提示', async () => {
+  it('默认空态（R1-11）：服务关闭提示 + 无配对开关 + 无设备提示', async () => {
     renderTab();
     expect(await screen.findByTestId('devices-empty')).toBeTruthy();
-    const toggle = screen.getByRole('switch', { name: '配对模式开关' });
+    // 服务默认关闭（红线 1 零监听）：显示「未开启」提示与开启按钮，
+    // 配对模式开关不渲染
+    const off = await screen.findByTestId('service-off');
+    expect(off.textContent).toContain('多端互通服务未开启');
+    expect(screen.getByRole('button', { name: '开启服务' })).toBeTruthy();
+    expect(screen.queryByRole('switch', { name: '配对模式开关' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '关闭服务' })).toBeNull();
+  });
+
+  it('开启服务（R1-11）：setMultiDeviceEnabled(true) 调用 + 配对开关出现', async () => {
+    renderTab();
+    const button = await screen.findByRole('button', { name: '开启服务' });
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(setMultiDeviceEnabled).toHaveBeenCalledWith(true)
+    );
+    const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByTestId('service-off')).toBeNull();
+  });
+
+  it('服务开启态（R1-11）：显示关闭服务按钮与断开提示', async () => {
+    renderTab();
+    await enableService();
+    const close = screen.getByRole('button', { name: '关闭服务' });
+    expect(close).toBeTruthy();
+    expect(screen.getByTestId('service-disable-hint').textContent).toContain(
+      '关闭服务将断开所有已配对设备'
+    );
+  });
+
+  it('关闭服务（R1-11）：setMultiDeviceEnabled(false) 调用 + 回到服务关闭提示', async () => {
+    renderTab();
+    await enableService();
+    fireEvent.click(screen.getByRole('button', { name: '关闭服务' }));
+    await waitFor(() =>
+      expect(setMultiDeviceEnabled).toHaveBeenCalledWith(false)
+    );
+    expect(await screen.findByTestId('service-off')).toBeTruthy();
+    expect(screen.queryByRole('switch', { name: '配对模式开关' })).toBeNull();
   });
 
   it('开启配对：二维码卡片与配对码出现（R1-08 锚点：开关 → 二维码）', async () => {
     renderTab();
+    await enableService();
     const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
     fireEvent.click(toggle);
     expect(await screen.findByTestId('pair-qr-card')).toBeTruthy();
@@ -102,6 +163,7 @@ describe('SettingsDevicesTab', () => {
       firewall_hint: '请允许 crish 在专用网络上的访问权限',
     });
     renderTab();
+    await enableService();
     const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
     fireEvent.click(toggle);
     expect(await screen.findByTestId('firewall-hint')).toBeTruthy();
@@ -113,13 +175,18 @@ describe('SettingsDevicesTab', () => {
       return PAIR_RESULT;
     });
     renderTab();
+    await enableService();
     const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
     fireEvent.click(toggle);
     expect(await screen.findByTestId('pair-qr-card')).toBeTruthy();
-    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
+    await waitFor(() =>
+      expect(toggle.getAttribute('aria-checked')).toBe('true')
+    );
     fireEvent.click(toggle);
     await waitFor(() => expect(pairCancel).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByTestId('pair-qr-card')).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByTestId('pair-qr-card')).toBeNull()
+    );
   });
 
   it('设备列表：展示标签/哈希截断/时间/已撤销徽标', async () => {
@@ -141,7 +208,9 @@ describe('SettingsDevicesTab', () => {
     fireEvent.click(buttons[0]);
     expect(await screen.findByText('撤销设备')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '撤销' }));
-    await waitFor(() => expect(revokeDevice).toHaveBeenCalledWith('a'.repeat(64)));
+    await waitFor(() =>
+      expect(revokeDevice).toHaveBeenCalledWith('a'.repeat(64))
+    );
     await waitFor(() => expect(listDevices).toHaveBeenCalledTimes(2));
   });
 
@@ -155,13 +224,14 @@ describe('SettingsDevicesTab', () => {
     fireEvent.change(input, { target: { value: 'Pixel-9 Pro' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(() =>
-      expect(renameDevice).toHaveBeenCalledWith('a'.repeat(64), 'Pixel-9 Pro'),
+      expect(renameDevice).toHaveBeenCalledWith('a'.repeat(64), 'Pixel-9 Pro')
     );
   });
 
   it('配对开启时显示网络环境卡片：配置文件类别 + IP 列表 + AP 隔离提示（R1-09 G-4）', async () => {
     pairStatus.mockResolvedValue(ACTIVE_STATUS);
     renderTab();
+    await enableService();
     const card = await screen.findByTestId('network-env');
     expect(card.textContent).toContain('专用网络');
     expect(card.textContent).toContain('192.168.1.5');
@@ -180,9 +250,10 @@ describe('SettingsDevicesTab', () => {
       hint: '当前为公用网络，请切换到专用网络后重试；若手机仍无法连接，请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。',
     });
     renderTab();
+    await enableService();
     expect(await screen.findByTestId('network-public-hint')).toBeTruthy();
     expect(screen.getByTestId('network-public-hint').textContent).toContain(
-      '请切换到专用网络',
+      '请切换到专用网络'
     );
     expect(screen.getByTestId('network-env').textContent).toContain('公用网络');
   });
@@ -195,6 +266,7 @@ describe('SettingsDevicesTab', () => {
       hint: '未能识别当前网络类型。若手机无法连接，请检查 Windows 防火墙放行与路由器客户端隔离设置。',
     });
     renderTab();
+    await enableService();
     const card = await screen.findByTestId('network-env');
     expect(card.textContent).toContain('未知');
     expect(card.textContent).toContain('未检测到可直连地址');
@@ -205,6 +277,14 @@ describe('SettingsDevicesTab', () => {
   it('配对未开启时不显示网络环境卡片', async () => {
     renderTab();
     await waitFor(() => expect(networkEnvInfo).toHaveBeenCalled());
+    expect(screen.queryByTestId('network-env')).toBeNull();
+  });
+
+  it('服务未开启时即使服务端配对态为真也不显示配对面（R1-11 守卫兜底）', async () => {
+    pairStatus.mockResolvedValue(ACTIVE_STATUS);
+    renderTab();
+    await waitFor(() => expect(pairStatus).toHaveBeenCalled());
+    expect(screen.queryByRole('switch', { name: '配对模式开关' })).toBeNull();
     expect(screen.queryByTestId('network-env')).toBeNull();
   });
 });
