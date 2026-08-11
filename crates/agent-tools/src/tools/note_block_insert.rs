@@ -1,18 +1,14 @@
-//! 笔记写工具：`block_insert`（W4-F 细粒度至少 1 个 · A-AGT-01…03 形状）
+//! 笔记写工具：`block_insert`（W4-F 细粒度 · A-AGT-01…03 形状）
 //!
 //! # 契约
 //! - 入参：`doc_id` + `content`；可选 `parent_id` / `previous_id` / `kind` / `batch_id`
 //! - 经 [`NoteBackend::block_insert`]（默认委托 `apply_block_ops` 单 insert）
 //! - `dangerous=true`；plan **Deny**
 //!
-//! # 未交付（注释钉死）
-//! - `block_update` — **未注册**
-//! - `block_delete` — **未注册**
-//! - `block_move` — **未注册**
-//!
 //! # 诚实边界
 //! - **≠ EL-05**；**≠ A-AGT 全表关闭**；**≠ W6-E**
-//! - Memory 禁关生产 A-AGT
+//! - Memory 禁关生产 A-AGT；Store 真路径见 `conex-note-runtime`
+//! - 姊妹工具：`block_update` / `block_delete` 已注册；`block_move` 独立工具未注册
 
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
@@ -35,7 +31,7 @@ impl BlockInsertTool {
                 description: "向笔记文档插入单个块（细粒度 mutate）。\
 入参 doc_id + content；可选 parent_id / previous_id / kind / batch_id。\
 走 NoteBackend 事务化路径，禁止 fs.write 当权威。\
-未交付：block_update / block_delete / block_move（未注册）。≠ EL-05 / ≠ W6-E。"
+≠ EL-05 / ≠ W6-E / ≠ A-AGT 全表。"
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",

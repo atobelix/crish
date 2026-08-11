@@ -20,8 +20,7 @@
 //! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**
 //! - **≠ W6-E**：无千次批 + 恶意扩展闭环
 //! - **≠ A-AGT 全表关闭**（Memory 禁关生产）
-//! - 细粒度 `block_update` / `block_delete` / `block_move` **未注册 = 未交付**
-//!   （表内不挂行；见注释）
+//! - `block_move` 独立工具 **未注册 = 未交付**（表内不挂行）
 
 use crate::permission::{PermissionMode, PermissionVerdict};
 
@@ -62,10 +61,10 @@ pub struct NoteActionRow {
     pub effects: &'static [ActionEffect],
 }
 
-/// 权威表（W4-F 起点；新增写工具必须挂行 + 注册，否则未交付）
+/// 权威表（W4-F；新增写工具必须挂行 + 注册，否则未交付）
 ///
-/// 未交付细粒度（**故意不入表**）：
-/// - `block_update` / `block_delete` / `block_move` — 未注册
+/// 未交付（**故意不入表**）：
+/// - `block_move` — 独立工具未注册（batch op 可用）
 pub static NOTE_ACTION_MATRIX: &[NoteActionRow] = &[
     // ── safe / LocalRead ──────────────────────────────────────────
     NoteActionRow {
@@ -99,7 +98,7 @@ pub static NOTE_ACTION_MATRIX: &[NoteActionRow] = &[
         safe: false,
         effects: &[ActionEffect::LocalWrite],
     },
-    // ── W4-F 新写工具 ─────────────────────────────────────────────
+    // ── W4-F 写工具 ───────────────────────────────────────────────
     NoteActionRow {
         tool_name: "block_batch",
         action: "apply_ops",
@@ -109,6 +108,18 @@ pub static NOTE_ACTION_MATRIX: &[NoteActionRow] = &[
     NoteActionRow {
         tool_name: "block_insert",
         action: "insert",
+        safe: false,
+        effects: &[ActionEffect::LocalWrite],
+    },
+    NoteActionRow {
+        tool_name: "block_update",
+        action: "update",
+        safe: false,
+        effects: &[ActionEffect::LocalWrite],
+    },
+    NoteActionRow {
+        tool_name: "block_delete",
+        action: "delete",
         safe: false,
         effects: &[ActionEffect::LocalWrite],
     },
@@ -232,17 +243,19 @@ pub fn plan_denies_matrix_tool(tool_name: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// A-AGT-06：表存在且含 W4-F 写工具行
+    /// A-AGT-06：表存在且含 W4-F 写工具行（含 update/delete 余量）
     #[test]
     fn w4f_matrix_contains_block_batch_and_insert() {
         assert!(lookup_action("block_batch").is_some());
         assert!(lookup_action("block_insert").is_some());
+        assert!(lookup_action("block_update").is_some());
+        assert!(lookup_action("block_delete").is_some());
         assert!(!lookup_action("block_batch").unwrap().safe);
         assert!(has_local_write("block_batch"));
         assert!(has_local_write("block_insert"));
-        // 未交付细粒度不在表
-        assert!(lookup_action("block_update").is_none());
-        assert!(lookup_action("block_delete").is_none());
+        assert!(has_local_write("block_update"));
+        assert!(has_local_write("block_delete"));
+        // block_move 独立工具仍不在表
         assert!(lookup_action("block_move").is_none());
     }
 
@@ -315,15 +328,17 @@ mod tests {
         );
     }
 
-    /// 诚实钉：≠ EL-05 / ≠ 细粒度满表
+    /// 诚实钉：≠ EL-05 / ≠ A-AGT 全表（move 独立工具仍缺）
     #[test]
     fn w4f_matrix_honest_not_el05_or_full_block_star() {
         let writes = write_tool_names();
         assert!(writes.contains(&"block_batch"));
         assert!(writes.contains(&"block_insert"));
-        assert!(!writes.contains(&"block_update"));
-        // 表驱动痕迹：行数 ≥ 7（3 读 + 2 旧写 + 2 新写）
-        assert!(NOTE_ACTION_MATRIX.len() >= 7);
+        assert!(writes.contains(&"block_update"));
+        assert!(writes.contains(&"block_delete"));
+        assert!(!writes.contains(&"block_move"));
+        // 表驱动痕迹：行数 ≥ 9（3 读 + 2 旧写 + 4 block_*）
+        assert!(NOTE_ACTION_MATRIX.len() >= 9);
         let _ = "≠ EL-05 / ≠ W6-E / ≠ A-AGT 全表关闭";
     }
 }

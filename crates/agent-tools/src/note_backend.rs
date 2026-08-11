@@ -13,17 +13,19 @@
 //! - batch token：会话内 `batch_id` 占用/释放；非法/过期拒绝写。
 //! - **W4-A**：`NoteApplyMdResult.lossy` 进入工具 result（[`apply_result_json`]）；
 //!   Store 路径须映射 `ApplyReport.lossy`；**禁止**默默丢弃。
-//! - **W4-F**：`block_batch`（ops + dryRun）+ 细粒度 `block_insert` 形状；
-//!   dryRun **零写**权威树；写中断 → [`NoteBackendError::ExecutionUnknown`]。
+//! - **W4-F**：`block_batch`（ops + dryRun）+ 细粒度 `block_insert` /
+//!   `block_update` / `block_delete` 形状；dryRun **零写**权威树；
+//!   写中断 → [`NoteBackendError::ExecutionUnknown`]。
 //!
 //! # 诚实边界
-//! - **已交付方向**：5 工具 + lossy（W4-A）+ batch token/审批方向（W4-B）
-//!   + **W4-F Strict 子集**：`block_batch`+dryRun、`block_insert`、表驱动
-//!   矩阵起点、`execution_unknown` 中断码（见 `note_action_matrix` / 工具）
+//! - **已交付方向**：读/写工具 + lossy（W4-A）+ batch token/审批方向（W4-B）
+//!   + **W4-F**：`block_batch`+dryRun、细粒度 insert/update/delete、表驱动
+//!   矩阵、`execution_unknown`（见 `note_action_matrix` / 工具）；
+//!   Store 真路径见 `conex-note-runtime::StoreNoteBackend`
 //! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**（须 Store 持久 + **W6-E** 等）
 //! - **≠ W6-E**：无千次批 + 恶意扩展闭环
 //! - **≠ A-AGT 全表关闭**；Memory 测绿 **禁关**生产 A-AGT / EL-05
-//! - 细粒度 `block_update` / `block_delete` / `block_move` **未注册 = 未交付**
+//! - `block_move` 独立工具 **未注册 = 未交付**（move 可作为 batch op）
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -387,6 +389,42 @@ pub struct NoteBlockInsertResult {
     pub kind: String,
 }
 
+/// 细粒度 `block_update` 请求
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockUpdateRequest {
+    pub doc_id: String,
+    /// 目标块 id
+    pub id: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
+/// 细粒度 update 结果
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockUpdateResult {
+    pub id: String,
+}
+
+/// 细粒度 `block_delete` 请求
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockDeleteRequest {
+    pub doc_id: String,
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
+/// 细粒度 delete 结果
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockDeleteResult {
+    pub id: String,
+}
+
 // ==================== batch token ====================
 
 /// 默认 batch token TTL（会话内轻量过期）
@@ -592,6 +630,74 @@ pub trait NoteBackend: Send + Sync + Debug {
                 NoteBackendError::ApplyFailed("block_insert produced no block_id".into())
             })?;
         Ok(NoteBlockInsertResult { block_id, kind })
+    }
+
+    /// 细粒度更新块文本（W4-F · `block_update`；可委托 apply_block_ops）
+    ///
+    /// **≠ EL-05**；**≠ W6-E**。
+    async fn block_update(
+        &self,
+        req: NoteBlockUpdateRequest,
+    ) -> Result<NoteBlockUpdateResult, NoteBackendError> {
+        let fallback_id = req.id.clone();
+        let batch = self
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: req.doc_id,
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Update,
+                    id: Some(req.id),
+                    parent_id: None,
+                    previous_id: None,
+                    content: Some(req.content),
+                    kind: None,
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: req.batch_id,
+                origin: req.origin,
+                force_execution_unknown: false,
+            })
+            .await?;
+        let id = batch
+            .block_ids
+            .into_iter()
+            .next()
+            .unwrap_or(fallback_id);
+        Ok(NoteBlockUpdateResult { id })
+    }
+
+    /// 细粒度删除块（W4-F · `block_delete`；可委托 apply_block_ops）
+    ///
+    /// **≠ EL-05**；**≠ W6-E**。
+    async fn block_delete(
+        &self,
+        req: NoteBlockDeleteRequest,
+    ) -> Result<NoteBlockDeleteResult, NoteBackendError> {
+        let fallback_id = req.id.clone();
+        let batch = self
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: req.doc_id,
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Delete,
+                    id: Some(req.id),
+                    parent_id: None,
+                    previous_id: None,
+                    content: None,
+                    kind: None,
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: req.batch_id,
+                origin: req.origin,
+                force_execution_unknown: false,
+            })
+            .await?;
+        let id = batch
+            .block_ids
+            .into_iter()
+            .next()
+            .unwrap_or(fallback_id);
+        Ok(NoteBlockDeleteResult { id })
     }
 }
 

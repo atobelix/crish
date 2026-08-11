@@ -8,11 +8,16 @@
 //!   → conex_md_ast::apply_md_fragment(session.tree(), parent, md) → ApplyReport{ops,lossy,..}
 //!   → commit_ops(session, store, origin, &ops)  // apply + projection 索引
 //!   → NoteApplyMdResult { block_ids, inserted, idempotent, lossy }  // W4-A：lossy 进工具 result
+//!
+//! apply_block_ops(req)  // W4-F 余量：块级 ops 真路径
+//!   → plan NoteBlockOp → collab Op
+//!   → dryRun? preview 零写 : commit_ops 原子批
 //! ```
 //!
-//! # 诚实边界（W4-A）
+//! # 诚实边界（W4-A / W4-F）
 //! - **已交付**：Store 路径映射 `ApplyReport.lossy` → 工具契约 `NoteLossyReport`
-//! - **≠ EL-05**；**≠ A-AGT 满表**（工具形状 / lossy 可观测 ≠ Agent 块 mutate 一等满关）
+//! - **已交付**：`StoreNoteBackend::apply_block_ops` 真写入（非默认 trait 拒写）
+//! - **≠ EL-05**；**≠ A-AGT 满表**；**≠ W6-E**
 //!
 //! # 会话策略
 //! 进程内 `Mutex<HashMap<doc_id, DocSession>>`：

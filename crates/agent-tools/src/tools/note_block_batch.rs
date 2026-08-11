@@ -13,7 +13,7 @@
 //! # 诚实边界
 //! - **≠ EL-05**；**≠ A-AGT 全表关闭**；**≠ W6-E** 千次+恶意闭环
 //! - Memory 测绿 **禁关**生产 A-AGT
-//! - `block_update`/`block_delete`/`block_move` 可作为 ops 种类，但**独立工具未注册**
+//! - `block_update`/`block_delete` 已有独立工具；`block_move` 仅 batch op（独立工具未注册）
 
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};

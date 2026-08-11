@@ -78,7 +78,7 @@
      })}
    />
    ```
-4. _*Strict 经已有 note_* 形状_*：
+4. _\*Strict 经已有 note_* 形状_*：
    ```tsx
    <NotePaperStrictPanel
      docId="doc-1"
@@ -96,9 +96,19 @@
 - Strict API：`hydrateProjection.ts` → `NoteHydrateTransport` / fixture / adapt
 - 禁止：静默 onStreamEnd 写笔记；假数据关 EL-01；Skeleton 常量冒充 Strict
 
+## 视觉语言（tokens 对齐 · ≠ EL 关）
+
+- **样式单源**：`NotePaperPanel.module.css`（Skeleton + Strict **共用**）
+- **主壳 token**：`--bg-card` / `--hairline*` / `--tint-*` / `--space-*` / `--line-height-body` / `--radius-*` / `--color-error*` 等（见 `styles/tokens.css`）
+- **纸面感**：card 暖白底 + 静默块行（非 hover 无 chrome）+ 舒适行距；focus 中性 inset，不抢高饱和蓝描边
+- **状态面统一**：`.state` + `.stateLoading` / `.stateEmpty` / `.stateError`（Strict 三态与 Skeleton 空/错同语言）
+- **落地记录**：`docs/block-workspace-architecture/analysis/visual-align/03-落地记录.md`
+- **硬句**：**视觉对齐 ≠ EL-01/EL-08 关闭**；**≠** 换肤成 AFFiNE/AppFlowy；双轨 `data-package-id` / `data-track` 不变
+
 ## 相关
 
 - 规格：`docs/block-workspace-architecture/plans/specs/dual-engine-surface.md` §5 / §8（B-09）
 - 索引：`plans/09` W5-B / W5-B-S；`plans/08` §0.2
 - 呈现内核：`packages/block-paper`（chrome + silentFixture + leaves）
 - 契约：`packages/block-paper-contract`
+- 视觉：`analysis/visual-align/03-落地记录.md`

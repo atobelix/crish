@@ -4,8 +4,8 @@
 //! - 打通 spawn 入口：注册 run_subagent 工具（agent-tools 注册面 10→11）；
 //! - 子代理 = 独立会话 + run（parent_id 链），session_agents 行落库；
 //! - 三方状态机映射（TS SubagentState ↔ DB status CHECK 集，I0 已裁决）；
-//! - 递归守卫（maxDepth=1（仅主 Agent 可派发，用户裁决）/ maxSiblings=5 /
-//!   maxConcurrent=12（T-D-06 上限 12 对齐），DEFAULT_RECURSION_GUARD）——
+//! - 递归守卫（maxDepth=1（仅主 Agent 可派发，用户裁决）/ maxSiblings=16 /
+//!   maxConcurrent=16（2026-08-11 用户裁决 12→16），DEFAULT_RECURSION_GUARD）——
 //!   子 Agent 无派发能力，
 //!   嵌套发起（新会话深度 > 1）返回 NestingDenied（subagent.nesting_denied，
 //!   T-D-02 结构化错误，文案带「所有子 Agent 由主 Agent 分配」指引）；
@@ -491,13 +491,14 @@ pub struct RecursionGuardConfig {
 /// maxDepth=1 是「仅主 Agent 可派发」的最终防线（用户裁决，REQ-D08 kill 项）：
 /// 主 Agent（深度 0）可派发直接子代理（新会话深度 1）；子 Agent 内再派发
 /// （新会话深度 ≥ 2）由守卫层返回 [RecursionGuardRejection::NestingDenied]。
-/// maxSiblings=5 保持（兄弟并发应小于全局并发，现状分析 §1.4-3）；
-/// maxConcurrent=12 为 T-D-06 上限 12 对齐终态（6→12，flow_graph 预算判定
-/// 引用本默认值自动跟随）。
+/// maxSiblings=16 与 maxConcurrent=16 相等（2026-08-11 用户裁决 12→16：
+/// 所有子代理同父=主 agent，maxSiblings=5 时「同时跑 16 个」在第 6 个即被
+/// 拒，必须同步扩额——同父上限 = 全局上限，原「兄弟并发应小于全局并发」
+/// 注释口径相应废止；flow_graph 预算判定引用本默认值自动跟随）。
 pub const DEFAULT_RECURSION_GUARD: RecursionGuardConfig = RecursionGuardConfig {
     max_depth: 1,
-    max_siblings: 5,
-    max_concurrent: 12,
+    max_siblings: 16,
+    max_concurrent: 16,
 };
 
 /// 守卫判定输入快照（由引擎侧采集：深度沿 parent_id 链数、
@@ -2054,8 +2055,8 @@ mod tests {
         // 界限仍按 DepthExceeded 拒绝（max=2：深度 3 拒绝、深度 2 通过）
         let config = RecursionGuardConfig {
             max_depth: 2,
-            max_siblings: 5,
-            max_concurrent: 12,
+            max_siblings: 16,
+            max_concurrent: 16,
         };
         let err = check_recursion_guard(
             RecursionGuardSnapshot {
@@ -2130,7 +2131,7 @@ mod tests {
         let config = DEFAULT_RECURSION_GUARD;
         let snapshot = RecursionGuardSnapshot {
             depth: 1,
-            active_siblings: 6,
+            active_siblings: 17,
             active_concurrent: 1,
         };
         let err = check_recursion_guard(snapshot, config).unwrap_err();
@@ -2143,8 +2144,8 @@ mod tests {
         assert_eq!(
             err,
             RecursionGuardRejection::SiblingsExceeded {
-                current: 6,
-                max: 5
+                current: 17,
+                max: 16
             }
         );
     }
@@ -2155,7 +2156,7 @@ mod tests {
         let snapshot = RecursionGuardSnapshot {
             depth: 1,
             active_siblings: 0,
-            active_concurrent: 13,
+            active_concurrent: 17,
         };
         let err = check_recursion_guard(snapshot, config).unwrap_err();
         assert_eq!(
@@ -2167,37 +2168,39 @@ mod tests {
         assert_eq!(
             err,
             RecursionGuardRejection::ConcurrentExceeded {
-                current: 13,
-                max: 12
+                current: 17,
+                max: 16
             },
-            "T-D-06 边界：maxConcurrent=12 时第 13 个并发被拒"
+            "2026-08-11 用户裁决边界：maxConcurrent=16 时第 17 个并发被拒"
         );
     }
 
     #[test]
     fn default_guard_limits_terminal_values() {
-        // T-D-06 终态断言（上限 12 对齐）：maxConcurrent=12（6→12）/
-        // maxSiblings=5（保持，兄弟并发应小于全局并发）/ maxDepth=1
-        // （嵌套禁止，仅主 Agent 可派发）
+        // 2026-08-11 用户裁决终态断言（上限 12→16）：maxConcurrent=16 /
+        // maxSiblings=16（必须同步 16，否则「同时跑 16 个」在第 6 个同父
+        // 子代理即被拒；同父上限 = 全局上限）/ maxDepth=1（嵌套禁止，
+        // 仅主 Agent 可派发）
         let guard = DEFAULT_RECURSION_GUARD;
         assert_eq!(guard.max_depth, 1, "maxDepth=1（仅主 Agent 可派发）");
-        assert_eq!(guard.max_siblings, 5, "maxSiblings=5 保持");
-        assert_eq!(guard.max_concurrent, 12, "maxConcurrent=12 终态（6→12）");
+        assert_eq!(guard.max_siblings, 16, "maxSiblings=16（同父上限 = 全局上限）");
+        assert_eq!(guard.max_concurrent, 16, "maxConcurrent=16（用户裁决 12→16）");
     }
 
     #[test]
     fn guard_within_limits_allowed() {
         let config = DEFAULT_RECURSION_GUARD;
         // T-D-01 验收：depth=1 通过、depth=2 拒绝。边界值语义
-        // （maxDepth=1 / maxSiblings=5 / maxConcurrent=12）：
+        // （maxDepth=1 / maxSiblings=16 / maxConcurrent=16，2026-08-11
+        // 用户裁决 12→16）：
         // - depth=1（主 Agent 派发直接子代理，含 flow_graph 流程节点快照
         //   depth 恒为 1）在嵌套判定界限内，通过；
         // - depth=0（主 Agent 自身上下文）同样通过（主 Agent spawn 回归）；
-        // - 兄弟/并发取边界值 5/12 通过（第 13 个并发才被拒）。
+        // - 兄弟/并发取边界值 16/16 通过（第 17 个并发才被拒）。
         let snapshot = RecursionGuardSnapshot {
             depth: 1,
-            active_siblings: 5,
-            active_concurrent: 12,
+            active_siblings: 16,
+            active_concurrent: 16,
         };
         assert!(check_recursion_guard(snapshot, config).is_ok());
         let snapshot = RecursionGuardSnapshot {
@@ -2859,32 +2862,32 @@ mod tests {
         db.insert_session("sess-main", "主会话").expect("插入会话失败");
         let spawner = DbSpawner::new(db);
 
-        // 顶满并发后第 7 次 spawn 必须被拒（同父 run 下 6 兄弟已超
-        // maxSiblings=5，判定序：深度 → 兄弟 → 并发，兄弟先命中）
-        for i in 0..6 {
+        // 顶满并发后第 18 次 spawn 必须被拒（同父 run 下 17 兄弟已超
+        // maxSiblings=16，判定序：深度 → 兄弟 → 并发，兄弟先命中）
+        for i in 0..17 {
             spawner
                 .spawn(&request(&format!("任务 {i}"), "sess-main", Some("run-main")))
                 .await
                 .expect("并发预算内 spawn 应成功");
         }
         let rejected = spawner
-            .spawn(&request("任务 7", "sess-main", Some("run-main")))
+            .spawn(&request("任务 17", "sess-main", Some("run-main")))
             .await
             .unwrap_err();
         assert_eq!(
             rejected,
             SubagentSpawnError::GuardRejected(RecursionGuardRejection::SiblingsExceeded {
-                current: 6,
-                max: 5
+                current: 17,
+                max: 16
             }),
-            "同父 6 兄弟超 maxSiblings=5，兄弟并发判定先于全局并发命中"
+            "同父 17 兄弟超 maxSiblings=16，兄弟并发判定先于全局并发命中"
         );
-        // 零 run 语义：被拒后落库行数不变（6 行，无第 7 行）
+        // 零 run 语义：被拒后落库行数不变（17 行，无第 18 行）
         let agents = spawner
             .db
             .load_session_agents("sess-main")
             .expect("读取落库行失败");
-        assert_eq!(agents.len(), 6, "超限拒绝不得产生任何 run 行");
+        assert_eq!(agents.len(), 17, "超限拒绝不得产生任何 run 行");
     }
 
     #[tokio::test]
@@ -2976,15 +2979,15 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_many_guard_rejection_concurrent_zero_run() {
-        // N 个任务任一触发守卫拒绝 → 整体失败零 run：并发已顶满 12
-        //（A:5 + B:5 + C:2，各父兄弟 ≤ maxSiblings=5），再批量派发 1 个 →
-        // 前瞻预加 12+1=13 > maxConcurrent=12 → ConcurrentExceeded，
+        // N 个任务任一触发守卫拒绝 → 整体失败零 run：并发已顶满 16
+        //（A:5 + B:5 + C:6，各父兄弟 ≤ maxSiblings=16），再批量派发 1 个 →
+        // 前瞻预加 16+1=17 > maxConcurrent=16 → ConcurrentExceeded，
         // session_agents 无新增行（T-D-06 验收 2）
         let ws = TempWorkspace::new("subagent_many_conc");
         let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
         db.insert_session("sess-main", "主会话").expect("插入会话失败");
         let spawner = DbSpawner::new(db.clone());
-        for (parent_run, count) in [("run-a", 5), ("run-b", 5), ("run-c", 2)] {
+        for (parent_run, count) in [("run-a", 5), ("run-b", 5), ("run-c", 6)] {
             for i in 0..count {
                 spawner
                     .spawn(&request(
@@ -2996,37 +2999,37 @@ mod tests {
                     .expect("并发预算内 spawn 应成功");
             }
         }
-        assert_eq!(spawner.active_concurrent.load(Ordering::SeqCst), 12);
+        assert_eq!(spawner.active_concurrent.load(Ordering::SeqCst), 16);
         let err = spawner
-            .spawn_many(&[request("任务 13", "sess-main", Some("run-d"))])
+            .spawn_many(&[request("任务 17", "sess-main", Some("run-d"))])
             .await
             .unwrap_err();
         assert_eq!(
             err,
             SubagentSpawnError::GuardRejected(RecursionGuardRejection::ConcurrentExceeded {
-                current: 13,
-                max: 12
+                current: 17,
+                max: 16
             }),
-            "前瞻预加 12+1=13 超 maxConcurrent=12，整体拒绝"
+            "前瞻预加 16+1=17 超 maxConcurrent=16，整体拒绝"
         );
-        // 零 run：落库行数不变（12 行，无第 13 行）
+        // 零 run：落库行数不变（16 行，无第 17 行）
         let agents = spawner
             .db
             .load_session_agents("sess-main")
             .expect("读取落库行失败");
-        assert_eq!(agents.len(), 12, "批量守卫拒绝不得产生任何 run 行");
+        assert_eq!(agents.len(), 16, "批量守卫拒绝不得产生任何 run 行");
     }
 
     #[tokio::test]
     async fn spawn_many_guard_rejection_siblings_zero_run() {
-        // 批量前瞻预加命中兄弟并发：同父已有 4 兄弟，批量 2 个 →
-        // 4+2=6 > maxSiblings=5 → SiblingsExceeded（判定序先于全局并发），
+        // 批量前瞻预加命中兄弟并发：同父已有 16 兄弟，批量 2 个 →
+        // 16+2=18 > maxSiblings=16 → SiblingsExceeded（判定序先于全局并发），
         // 整体失败零 run
         let ws = TempWorkspace::new("subagent_many_sib");
         let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
         db.insert_session("sess-main", "主会话").expect("插入会话失败");
         let spawner = DbSpawner::new(db.clone());
-        for i in 0..4 {
+        for i in 0..16 {
             spawner
                 .spawn(&request(&format!("任务 {i}"), "sess-main", Some("run-main")))
                 .await
@@ -3042,28 +3045,28 @@ mod tests {
         assert_eq!(
             err,
             SubagentSpawnError::GuardRejected(RecursionGuardRejection::SiblingsExceeded {
-                current: 6,
-                max: 5
+                current: 18,
+                max: 16
             }),
-            "前瞻预加 4+2=6 超 maxSiblings=5，整体拒绝"
+            "前瞻预加 16+2=18 超 maxSiblings=16，整体拒绝"
         );
         let agents = spawner
             .db
             .load_session_agents("sess-main")
             .expect("读取落库行失败");
-        assert_eq!(agents.len(), 4, "批量拒绝不得产生任何 run 行");
+        assert_eq!(agents.len(), 16, "批量拒绝不得产生任何 run 行");
     }
 
     #[tokio::test]
-    async fn spawn_many_boundary_concurrent_12_allowed() {
-        // 边界允许侧：并发 9（A:5 + B:4）时批量 3 个 → 前瞻 9+3=12 =
-        // maxConcurrent=12 → 全部成功落库；第 13 个并发才被拒（拒绝侧
+    async fn spawn_many_boundary_concurrent_16_allowed() {
+        // 边界允许侧：并发 13（A:5 + B:8）时批量 3 个 → 前瞻 13+3=16 =
+        // maxConcurrent=16 → 全部成功落库；第 17 个并发才被拒（拒绝侧
         // 见 spawn_many_guard_rejection_concurrent_zero_run）
         let ws = TempWorkspace::new("subagent_many_bound");
         let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
         db.insert_session("sess-main", "主会话").expect("插入会话失败");
         let spawner = DbSpawner::new(db.clone());
-        for (parent_run, count) in [("run-a", 5), ("run-b", 4)] {
+        for (parent_run, count) in [("run-a", 5), ("run-b", 8)] {
             for i in 0..count {
                 spawner
                     .spawn(&request(
@@ -3082,14 +3085,14 @@ mod tests {
                 request("批量 C", "sess-main", Some("run-c")),
             ])
             .await
-            .expect("前瞻 9+3=12 恰在上限内应成功");
+            .expect("前瞻 13+3=16 恰在上限内应成功");
         assert_eq!(results.len(), 3);
-        assert_eq!(spawner.active_concurrent.load(Ordering::SeqCst), 12);
+        assert_eq!(spawner.active_concurrent.load(Ordering::SeqCst), 16);
         let agents = spawner
             .db
             .load_session_agents("sess-main")
             .expect("读取落库行失败");
-        assert_eq!(agents.len(), 12, "边界 12 个并发全部落库");
+        assert_eq!(agents.len(), 16, "边界 16 个并发全部落库");
     }
 
     #[tokio::test]

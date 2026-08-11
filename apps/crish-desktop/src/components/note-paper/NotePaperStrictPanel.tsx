@@ -215,73 +215,82 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       </header>
 
       <div className={styles.body} data-testid="note-paper-strict-body">
-        {status === 'loading' ? (
-          <div
-            className={styles.empty}
-            data-testid="note-paper-strict-loading"
-            role="status"
-            aria-live="polite"
-          >
-            正在 hydrate 投影…
-          </div>
-        ) : null}
+        <div className={styles.readingColumn}>
+          {status === 'loading' ? (
+            <div
+              className={`${styles.state} ${styles.stateLoading}`}
+              data-testid="note-paper-strict-loading"
+              role="status"
+              aria-live="polite"
+            >
+              正在 hydrate 投影…
+            </div>
+          ) : null}
 
-        {status === 'error' ? (
-          <div
-            className={styles.empty}
-            role="alert"
-            data-testid="note-paper-strict-error"
-            data-error-code={errorCode ?? ''}
-          >
-            {errorReason ?? 'hydrate 失败'}
-          </div>
-        ) : null}
+          {status === 'error' ? (
+            <div
+              className={`${styles.state} ${styles.stateError}`}
+              role="alert"
+              data-testid="note-paper-strict-error"
+              data-error-code={errorCode ?? ''}
+            >
+              {errorReason ?? 'hydrate 失败'}
+            </div>
+          ) : null}
 
-        {status === 'empty' ? (
-          <div className={styles.empty} data-testid="note-paper-strict-empty">
-            空文档投影（hydrate 成功 · 0 块）
-          </div>
-        ) : null}
+          {status === 'empty' ? (
+            <div
+              className={`${styles.state} ${styles.stateEmpty}`}
+              data-testid="note-paper-strict-empty"
+            >
+              空文档投影（hydrate 成功 · 0 块）
+            </div>
+          ) : null}
 
-        {status === 'ready'
-          ? blocks.map((block) => {
-              const visibility: HandleVisibility = chrome.getHandleVisibility(
-                block.id
-              );
-              const level =
-                typeof block.props?.level === 'number'
-                  ? block.props.level
-                  : undefined;
-              return (
-                <div
-                  key={block.id}
-                  className={styles.blockRow}
-                  data-block-id={block.id}
-                  data-block-index={String(block.index)}
-                  data-handle={visibility}
-                  data-testid={`note-strict-block-${block.id}`}
-                  tabIndex={0}
-                  onMouseEnter={() => handleHover(block.id)}
-                  onMouseLeave={() => handleHover(null)}
-                  onFocus={() => handleFocus(block.id)}
-                  onBlur={() => handleFocus(null)}
-                >
-                  <span
-                    className={styles.handle}
-                    data-testid={`note-strict-handle-${block.id}`}
-                    aria-hidden
-                  />
-                  <div className={styles.blockContent}>
-                    <span className={styles.flavour}>
-                      {block.flavour}
-                      {level !== undefined ? ` h${level}` : ''}
-                    </span>
-                    <div className={styles.text}>{block.text ?? ''}</div>
+          {status === 'ready'
+            ? blocks.map((block) => {
+                const visibility: HandleVisibility = chrome.getHandleVisibility(
+                  block.id
+                );
+                const level =
+                  typeof block.props?.level === 'number'
+                    ? block.props.level
+                    : undefined;
+                return (
+                  <div
+                    key={block.id}
+                    className={styles.blockRow}
+                    data-block-id={block.id}
+                    data-block-index={String(block.index)}
+                    data-handle={visibility}
+                    data-flavour={block.flavour}
+                    data-heading-level={
+                      level !== undefined ? String(level) : undefined
+                    }
+                    data-testid={`note-strict-block-${block.id}`}
+                    tabIndex={0}
+                    onMouseEnter={() => handleHover(block.id)}
+                    onMouseLeave={() => handleHover(null)}
+                    onFocus={() => handleFocus(block.id)}
+                    onBlur={() => handleFocus(null)}
+                  >
+                    <span
+                      className={styles.handle}
+                      data-testid={`note-strict-handle-${block.id}`}
+                      aria-hidden
+                    />
+                    <div className={styles.blockContent}>
+                      <span className={styles.flavour}>
+                        {block.flavour}
+                        {level !== undefined ? ` h${level}` : ''}
+                      </span>
+                      <div className={styles.text}>{block.text ?? ''}</div>
+                    </div>
                   </div>
-                </div>
-              );
-            })
-          : null}
+                );
+              })
+            : null}
+        </div>
       </div>
 
       <footer className={styles.footer} data-testid="note-paper-strict-footer">

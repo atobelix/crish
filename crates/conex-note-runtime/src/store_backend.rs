@@ -2,11 +2,14 @@
 
 use agent_tools::note_backend::{
     NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode, NoteBackend, NoteBackendError,
-    NoteBatchTokens, NoteLossyItem, NoteLossyReport, NoteOutline, NoteOutlineNode,
-    NoteQueryBlockHit, NoteQueryBlocksParams, NoteQueryBlocksResult,
+    NoteBatchTokens, NoteBlockBatchRequest, NoteBlockBatchResult, NoteBlockOp,
+    NoteBlockOpKind, NoteBlockOpPreview, NoteLossyItem, NoteLossyReport, NoteOutline,
+    NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams, NoteQueryBlocksResult,
 };
 use async_trait::async_trait;
-use conex_doc_collab::{BlockId, BlockKind, DocSession, Op, Origin, PersistencePlugin};
+use conex_doc_collab::{
+    BlockId, BlockKind, BlockProps, BlockTree, DocSession, Op, Origin, PersistencePlugin,
+};
 use conex_md_ast::{apply_md_fragment, LossyReport, MdError};
 use conex_workspace_store::{
     commit_ops, QueryBlocksParams, SharedWorkspaceStore, StoreError,
@@ -20,12 +23,15 @@ use std::time::Duration;
 /// 真实笔记后端：SharedWorkspaceStore + 进程内 DocSession 表 + intent 幂等。
 ///
 /// # 不变量
-/// - 写路径仅 `apply_md_fragment` → Ops → `commit_ops`（权威 updates + 投影索引）
+/// - 写路径仅 `apply_md_fragment` / [`Self::apply_block_ops`] → Ops → `commit_ops`
+///   （权威 updates + 投影索引）；**禁止** fs.write 当权威
 /// - 读路径即时投影 / session 树 / `document_to_md`；**不**读 MD mirror 文件
 /// - 同 `intent_id` 二次调用返回首次结果（`idempotent=true`, `inserted=0`）
 /// - batch token：内嵌 [`NoteBatchTokens`]（与 Memory 后端同语义）
 /// - **W4-A**：`ApplyReport.lossy` → [`NoteApplyMdResult::lossy`]（工具 result 可观测；
 ///   **禁止**只写 ops 丢 lossy）。**≠ EL-05 / ≠ A-AGT 满表**。
+/// - **W4-F 余量**：`apply_block_ops` 真路径（dryRun 零写 / 原子 commit /
+///   `force_execution_unknown` 不半写）。**≠ EL-05**；**≠ W6-E**；**≠ A-AGT 全表**。
 pub struct StoreNoteBackend {
     store: SharedWorkspaceStore,
     /// 进程内打开的文档会话（唯一写入口持有者）。
@@ -167,7 +173,11 @@ impl StoreNoteBackend {
     }
 
     fn origin_from_req(req: &NoteApplyMdRequest) -> Origin {
-        match req.origin.as_deref().map(str::trim) {
+        Self::origin_from_str(req.origin.as_deref())
+    }
+
+    fn origin_from_str(origin: Option<&str>) -> Origin {
+        match origin.map(str::trim) {
             Some("agent") | Some("Agent") => Origin::Agent,
             Some("remote") | Some("Remote") => Origin::Remote,
             Some("system") | Some("System") => Origin::System,
@@ -175,6 +185,431 @@ impl StoreNoteBackend {
         }
     }
 
+    /// 工具 kind 字符串 → collab [`BlockKind`]。
+    fn parse_block_kind(kind: &str) -> BlockKind {
+        let k = kind.trim();
+        if k.is_empty() || k == "paragraph" {
+            return BlockKind::Paragraph;
+        }
+        if let Some(rest) = k.strip_prefix("heading:") {
+            let level = rest.parse::<u8>().unwrap_or(1).clamp(1, 6);
+            return BlockKind::Heading { level };
+        }
+        match k {
+            "heading" => BlockKind::Heading { level: 1 },
+            "bullet" | "bullet_item" | "list_item" => BlockKind::BulletItem,
+            "ordered" | "ordered_item" => BlockKind::OrderedItem,
+            "code" | "code_block" => BlockKind::Code,
+            "quote" | "blockquote" => BlockKind::Quote,
+            "divider" | "hr" => BlockKind::Divider,
+            other => BlockKind::Unknown {
+                flavour: other.to_string(),
+            },
+        }
+    }
+
+    fn kind_label(kind: &BlockKind) -> String {
+        match kind {
+            BlockKind::Paragraph => "paragraph".into(),
+            BlockKind::Heading { level } => format!("heading:{level}"),
+            BlockKind::BulletItem => "bullet_item".into(),
+            BlockKind::OrderedItem => "ordered_item".into(),
+            BlockKind::Code => "code".into(),
+            BlockKind::Quote => "quote".into(),
+            BlockKind::Divider => "divider".into(),
+            BlockKind::Unknown { flavour } => flavour.clone(),
+        }
+    }
+
+    /// 父下兄弟 order 序号起点（对齐 md-ast sibling_base_seq）。
+    fn sibling_base_seq(tree: &BlockTree, parent: Option<BlockId>) -> u32 {
+        match parent {
+            Some(pid) => tree
+                .get(&pid)
+                .map(|n| n.children.len() as u32)
+                .unwrap_or(0),
+            None => tree.root_children.len() as u32,
+        }
+    }
+
+    /// 将工具层 [`NoteBlockOp`] 规划为 collab [`Op`] 批（不修改 session）。
+    ///
+    /// 批内可引用本批新 insert 的 id；失败整批不返回 ops（调用方不 commit）。
+    fn plan_block_ops_to_collab(
+        session: &DocSession,
+        ops: &[NoteBlockOp],
+    ) -> Result<StoreBlockOpPlan, NoteBackendError> {
+        let tree = session.tree();
+        // 规划期工作态：id 存在性 + 临时文本长度（TextEdit 全量替换用）
+        let mut known: HashMap<BlockId, PlanNodeMeta> = tree
+            .nodes
+            .iter()
+            .map(|(id, n)| {
+                let text = session.read_text(id);
+                (
+                    *id,
+                    PlanNodeMeta {
+                        parent: n.parent,
+                        order: n.order.clone(),
+                        kind: n.kind.clone(),
+                        text_len: text.chars().count() as u32,
+                        text,
+                    },
+                )
+            })
+            .collect();
+        // 父 → 子 order 列表（仅规划期；insert 后追加）
+        let mut children_of: HashMap<Option<BlockId>, Vec<(BlockId, String)>> = HashMap::new();
+        for (id, meta) in &known {
+            children_of
+                .entry(meta.parent)
+                .or_default()
+                .push((*id, meta.order.clone()));
+        }
+
+        let mut collab_ops: Vec<Op> = Vec::new();
+        let mut previews: Vec<NoteBlockOpPreview> = Vec::new();
+        let mut block_ids: Vec<String> = Vec::new();
+        // 同批 append order 去重计数
+        let mut order_seq_by_parent: HashMap<Option<BlockId>, u32> = HashMap::new();
+
+        for op in ops {
+            match op.op {
+                NoteBlockOpKind::Insert => {
+                    let content = op.content.clone().unwrap_or_default();
+                    let kind_s = op
+                        .kind
+                        .clone()
+                        .unwrap_or_else(|| "paragraph".to_string());
+                    let kind = Self::parse_block_kind(&kind_s);
+                    let kind_label = Self::kind_label(&kind);
+
+                    let id = match &op.id {
+                        Some(s) if !s.trim().is_empty() => {
+                            let bid = Self::parse_block_id(s, "id")?;
+                            if known.contains_key(&bid) {
+                                return Err(NoteBackendError::IdConflict(format!(
+                                    "block id already exists: {bid}"
+                                )));
+                            }
+                            bid
+                        }
+                        _ => BlockId::new(),
+                    };
+
+                    let previous = match &op.previous_id {
+                        Some(s) if !s.trim().is_empty() => {
+                            Some(Self::parse_block_id(s, "previous_id")?)
+                        }
+                        _ => None,
+                    };
+                    let explicit_parent = match &op.parent_id {
+                        Some(s) if !s.trim().is_empty() => {
+                            Some(Self::parse_block_id(s, "parent_id")?)
+                        }
+                        _ => None,
+                    };
+
+                    let parent = if let Some(pid) = explicit_parent {
+                        if !known.contains_key(&pid) {
+                            return Err(NoteBackendError::NotFound(format!(
+                                "parent_id not found: {pid}"
+                            )));
+                        }
+                        Some(pid)
+                    } else if let Some(prev) = previous {
+                        let meta = known.get(&prev).ok_or_else(|| {
+                            NoteBackendError::NotFound(format!("previous_id not found: {prev}"))
+                        })?;
+                        meta.parent
+                    } else {
+                        None
+                    };
+
+                    if let Some(prev) = previous {
+                        if !known.contains_key(&prev) {
+                            return Err(NoteBackendError::NotFound(format!(
+                                "previous_id not found: {prev}"
+                            )));
+                        }
+                    }
+
+                    let order = if let Some(prev) = previous {
+                        let prev_order = known
+                            .get(&prev)
+                            .map(|m| m.order.clone())
+                            .unwrap_or_else(|| "a0".into());
+                        let seq = order_seq_by_parent.entry(parent).or_insert(0);
+                        let o = format!("{prev_order}~{seq:04}");
+                        *seq += 1;
+                        o
+                    } else {
+                        let base = Self::sibling_base_seq(tree, parent)
+                            + children_of
+                                .get(&parent)
+                                .map(|v| {
+                                    // 仅计本批追加到该父的（tree 内已有由 base 覆盖）
+                                    v.iter()
+                                        .filter(|(cid, _)| {
+                                            // 已在原 tree 的不计二次
+                                            !tree.nodes.contains_key(cid)
+                                        })
+                                        .count() as u32
+                                })
+                                .unwrap_or(0);
+                        let seq = order_seq_by_parent.entry(parent).or_insert(0);
+                        let o = format!("a{:04}", base + *seq);
+                        *seq += 1;
+                        o
+                    };
+
+                    let mut props = BlockProps::default();
+                    if let Some(ref attrs) = op.attrs {
+                        props.attrs = attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    }
+
+                    collab_ops.push(Op::Insert {
+                        id,
+                        parent,
+                        order: order.clone(),
+                        kind: kind.clone(),
+                        props,
+                    });
+                    if !content.is_empty() {
+                        collab_ops.push(Op::TextEdit {
+                            id,
+                            start: 0,
+                            end: 0,
+                            insert: content.clone(),
+                        });
+                    }
+
+                    known.insert(
+                        id,
+                        PlanNodeMeta {
+                            parent,
+                            order: order.clone(),
+                            kind: kind.clone(),
+                            text_len: content.chars().count() as u32,
+                            text: content.clone(),
+                        },
+                    );
+                    children_of
+                        .entry(parent)
+                        .or_default()
+                        .push((id, order));
+
+                    let summary = Some(content.chars().take(80).collect::<String>());
+                    previews.push(NoteBlockOpPreview {
+                        op: "insert".into(),
+                        id: Some(id.to_string()),
+                        kind: Some(kind_label),
+                        summary,
+                    });
+                    block_ids.push(id.to_string());
+                }
+                NoteBlockOpKind::Update => {
+                    let id_s = op
+                        .id
+                        .clone()
+                        .filter(|s| !s.trim().is_empty())
+                        .ok_or_else(|| {
+                            NoteBackendError::Invalid("update requires non-empty id".into())
+                        })?;
+                    let id = Self::parse_block_id(&id_s, "id")?;
+                    let meta = known.get(&id).ok_or_else(|| {
+                        NoteBackendError::NotFound(format!("block not found: {id}"))
+                    })?;
+                    let content = op.content.clone().ok_or_else(|| {
+                        NoteBackendError::Invalid("update requires content".into())
+                    })?;
+                    let end = meta.text_len;
+                    let kind_label = Self::kind_label(&meta.kind);
+                    collab_ops.push(Op::TextEdit {
+                        id,
+                        start: 0,
+                        end,
+                        insert: content.clone(),
+                    });
+                    if let Some(ref attrs) = op.attrs {
+                        let mut props = BlockProps::default();
+                        props.attrs =
+                            attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                        collab_ops.push(Op::UpdateProps { id, props });
+                    }
+                    if let Some(m) = known.get_mut(&id) {
+                        m.text_len = content.chars().count() as u32;
+                        m.text = content.clone();
+                    }
+                    previews.push(NoteBlockOpPreview {
+                        op: "update".into(),
+                        id: Some(id.to_string()),
+                        kind: Some(kind_label),
+                        summary: Some(content.chars().take(80).collect()),
+                    });
+                    block_ids.push(id.to_string());
+                }
+                NoteBlockOpKind::Delete => {
+                    let id_s = op
+                        .id
+                        .clone()
+                        .filter(|s| !s.trim().is_empty())
+                        .ok_or_else(|| {
+                            NoteBackendError::Invalid("delete requires non-empty id".into())
+                        })?;
+                    let id = Self::parse_block_id(&id_s, "id")?;
+                    let meta = known.get(&id).ok_or_else(|| {
+                        NoteBackendError::NotFound(format!("block not found: {id}"))
+                    })?;
+                    let kind_label = Self::kind_label(&meta.kind);
+                    let parent = meta.parent;
+                    collab_ops.push(Op::Delete { id });
+                    known.remove(&id);
+                    if let Some(list) = children_of.get_mut(&parent) {
+                        list.retain(|(cid, _)| *cid != id);
+                    }
+                    previews.push(NoteBlockOpPreview {
+                        op: "delete".into(),
+                        id: Some(id.to_string()),
+                        kind: Some(kind_label),
+                        summary: None,
+                    });
+                    block_ids.push(id.to_string());
+                }
+                NoteBlockOpKind::Move => {
+                    let id_s = op
+                        .id
+                        .clone()
+                        .filter(|s| !s.trim().is_empty())
+                        .ok_or_else(|| {
+                            NoteBackendError::Invalid("move requires non-empty id".into())
+                        })?;
+                    let id = Self::parse_block_id(&id_s, "id")?;
+                    let meta = known.get(&id).ok_or_else(|| {
+                        NoteBackendError::NotFound(format!("block not found: {id}"))
+                    })?;
+                    let kind_label = Self::kind_label(&meta.kind);
+                    let old_parent = meta.parent;
+
+                    let new_parent = match &op.parent_id {
+                        Some(s) if !s.trim().is_empty() => {
+                            let pid = Self::parse_block_id(s, "parent_id")?;
+                            if !known.contains_key(&pid) {
+                                return Err(NoteBackendError::NotFound(format!(
+                                    "parent_id not found: {pid}"
+                                )));
+                            }
+                            Some(pid)
+                        }
+                        _ => old_parent,
+                    };
+
+                    let previous = match &op.previous_id {
+                        Some(s) if !s.trim().is_empty() => {
+                            let prev = Self::parse_block_id(s, "previous_id")?;
+                            if !known.contains_key(&prev) {
+                                return Err(NoteBackendError::NotFound(format!(
+                                    "previous_id not found: {prev}"
+                                )));
+                            }
+                            Some(prev)
+                        }
+                        _ => None,
+                    };
+
+                    let order = if let Some(prev) = previous {
+                        let prev_order = known
+                            .get(&prev)
+                            .map(|m| m.order.clone())
+                            .unwrap_or_else(|| "a0".into());
+                        format!("{prev_order}~m")
+                    } else {
+                        let base = children_of
+                            .get(&new_parent)
+                            .map(|v| v.len() as u32)
+                            .unwrap_or(0);
+                        format!("a{base:04}")
+                    };
+
+                    collab_ops.push(Op::Move {
+                        id,
+                        new_parent,
+                        order: order.clone(),
+                    });
+                    if let Some(m) = known.get_mut(&id) {
+                        m.parent = new_parent;
+                        m.order = order.clone();
+                    }
+                    if let Some(list) = children_of.get_mut(&old_parent) {
+                        list.retain(|(cid, _)| *cid != id);
+                    }
+                    children_of
+                        .entry(new_parent)
+                        .or_default()
+                        .push((id, order));
+
+                    previews.push(NoteBlockOpPreview {
+                        op: "move".into(),
+                        id: Some(id.to_string()),
+                        kind: Some(kind_label),
+                        summary: None,
+                    });
+                    block_ids.push(id.to_string());
+                }
+                NoteBlockOpKind::SetAttr => {
+                    let id_s = op
+                        .id
+                        .clone()
+                        .filter(|s| !s.trim().is_empty())
+                        .ok_or_else(|| {
+                            NoteBackendError::Invalid("set_attr requires non-empty id".into())
+                        })?;
+                    let id = Self::parse_block_id(&id_s, "id")?;
+                    let meta = known.get(&id).ok_or_else(|| {
+                        NoteBackendError::NotFound(format!("block not found: {id}"))
+                    })?;
+                    let kind_label = Self::kind_label(&meta.kind);
+                    let attrs = op.attrs.clone().unwrap_or_default();
+                    let mut props = BlockProps::default();
+                    props.attrs = attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    collab_ops.push(Op::UpdateProps { id, props });
+                    previews.push(NoteBlockOpPreview {
+                        op: "set_attr".into(),
+                        id: Some(id.to_string()),
+                        kind: Some(kind_label),
+                        summary: Some(format!("{} attrs", attrs.len())),
+                    });
+                    block_ids.push(id.to_string());
+                }
+            }
+        }
+
+        Ok(StoreBlockOpPlan {
+            collab_ops,
+            previews,
+            block_ids,
+        })
+    }
+}
+
+/// 规划期节点元数据（Store block ops）
+struct PlanNodeMeta {
+    parent: Option<BlockId>,
+    order: String,
+    kind: BlockKind,
+    text_len: u32,
+    #[allow(dead_code)]
+    text: String,
+}
+
+/// Store `apply_block_ops` 规划结果
+struct StoreBlockOpPlan {
+    collab_ops: Vec<Op>,
+    previews: Vec<NoteBlockOpPreview>,
+    block_ids: Vec<String>,
+}
+
+impl StoreNoteBackend {
     /// 从 ops 收集新 Insert 的 block id（字符串）。
     fn collect_insert_ids(ops: &[Op]) -> Vec<String> {
         ops.iter()
@@ -577,12 +1012,83 @@ impl NoteBackend for StoreNoteBackend {
             Some(id) => self.batch_tokens.validate(id),
         }
     }
+
+    /// W4-F 余量：Store 真路径批 apply 块 ops（非默认 trait 拒写）。
+    ///
+    /// - dryRun：规划 preview，**零写**（不 `commit_ops`）
+    /// - 实写：`plan` → 单次 `commit_ops`（原子；失败零半树）
+    /// - `force_execution_unknown`：commit 前失败 → `note.execution_unknown`
+    ///
+    /// **≠ EL-05**；**≠ W6-E**；**≠ A-AGT 全表关闭**。
+    async fn apply_block_ops(
+        &self,
+        req: NoteBlockBatchRequest,
+    ) -> Result<NoteBlockBatchResult, NoteBackendError> {
+        if req.doc_id.trim().is_empty() {
+            return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
+        }
+        self.validate_batch_token(req.batch_id.as_deref()).await?;
+
+        // A-AGT-07：写中断协议——在任何变异前失败，保证零半写
+        if req.force_execution_unknown && !req.dry_run {
+            return Err(NoteBackendError::ExecutionUnknown(
+                "write interrupted before commit; execution state unknown — do not auto-retry write"
+                    .into(),
+            ));
+        }
+
+        let origin = Self::origin_from_str(req.origin.as_deref());
+        let mut sessions = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        Self::ensure_session(&mut sessions, &self.store, &req.doc_id)?;
+        let session = sessions
+            .get_mut(&req.doc_id)
+            .expect("ensure_session just inserted");
+
+        let plan = Self::plan_block_ops_to_collab(session, &req.ops)?;
+        let applied = plan.previews.len() as u32;
+        let preview = plan.previews;
+        let block_ids = plan.block_ids;
+
+        if req.dry_run {
+            return Ok(NoteBlockBatchResult {
+                dry_run: true,
+                applied,
+                block_ids,
+                preview,
+            });
+        }
+
+        // 空 ops：合法，零写
+        if plan.collab_ops.is_empty() {
+            return Ok(NoteBlockBatchResult {
+                dry_run: false,
+                applied: 0,
+                block_ids,
+                preview,
+            });
+        }
+
+        commit_ops(session, &self.store, origin, &plan.collab_ops)
+            .map_err(Self::map_commit_err)?;
+
+        Ok(NoteBlockBatchResult {
+            dry_run: false,
+            applied,
+            block_ids,
+            preview,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_tools::note_backend::NoteBackend;
+    use agent_tools::note_backend::{
+        NoteBackend, NoteBlockInsertRequest, NoteBlockOp, NoteBlockOpKind,
+    };
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -926,6 +1432,267 @@ mod tests {
         let j = agent_tools::apply_result_json(&applied);
         assert!(j.get("lossy").is_some());
         assert!(j["lossy"]["items"].as_array().is_some());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    // ── W4-F 余量：StoreNoteBackend::apply_block_ops 真路径 ──────────
+
+    /// Store 真写入：apply_block_ops insert → query_blocks 可命中（非 Memory）。
+    ///
+    /// **≠ EL-05**；**≠ W6-E**；**≠ A-AGT 全表**。
+    #[tokio::test]
+    async fn w4f_store_apply_block_ops_insert_writes_and_query_hits() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+
+        let r = backend
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "doc-store-batch".into(),
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Insert,
+                    id: None,
+                    parent_id: None,
+                    previous_id: None,
+                    content: Some("store block ops body".into()),
+                    kind: Some("paragraph".into()),
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: None,
+                origin: Some("agent".into()),
+                force_execution_unknown: false,
+            })
+            .await
+            .expect("Store apply_block_ops must succeed");
+        assert!(!r.dry_run);
+        assert_eq!(r.applied, 1);
+        assert_eq!(r.block_ids.len(), 1);
+        assert!(!r.preview.is_empty());
+
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-store-batch".into(),
+                text_match: Some("store block ops".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(
+            !q.blocks.is_empty(),
+            "Store 投影/FTS 须命中 apply_block_ops 写入: {:?}",
+            q
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Store block_insert 经 apply_block_ops 默认委托真写入。
+    #[tokio::test]
+    async fn w4f_store_block_insert_true_path() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+
+        let r = backend
+            .block_insert(NoteBlockInsertRequest {
+                doc_id: "doc-store-ins".into(),
+                content: "store insert leaf".into(),
+                parent_id: None,
+                previous_id: None,
+                kind: Some("paragraph".into()),
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .expect("Store block_insert");
+        assert!(!r.block_id.is_empty());
+        assert_eq!(r.kind, "paragraph");
+
+        let md = backend.get_md("doc-store-ins").await.unwrap();
+        assert!(
+            md.contains("store insert leaf"),
+            "get_md 须含 insert 文本: {md:?}"
+        );
+        assert!(md.contains("<!--c:"), "须含块 ID 注释");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// dryRun=true：零写 + preview（Store 路径）。
+    #[tokio::test]
+    async fn w4f_store_apply_block_ops_dry_run_zero_write() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+
+        // 先实写一块作基线
+        let base = backend
+            .block_insert(NoteBlockInsertRequest {
+                doc_id: "doc-store-dr".into(),
+                content: "baseline only".into(),
+                parent_id: None,
+                previous_id: None,
+                kind: None,
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+
+        let r = backend
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "doc-store-dr".into(),
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Insert,
+                    id: None,
+                    parent_id: None,
+                    previous_id: Some(base.block_id.clone()),
+                    content: Some("must not land".into()),
+                    kind: Some("paragraph".into()),
+                    attrs: None,
+                }],
+                dry_run: true,
+                batch_id: None,
+                origin: Some("agent".into()),
+                force_execution_unknown: false,
+            })
+            .await
+            .unwrap();
+        assert!(r.dry_run);
+        assert_eq!(r.applied, 1);
+        assert!(!r.preview.is_empty());
+
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-store-dr".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(q.blocks.len(), 1, "dryRun 不得写第二块");
+        assert_eq!(q.blocks[0].id, base.block_id);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// force_execution_unknown：中断码 + 零半写（Store）。
+    #[tokio::test]
+    async fn w4f_store_apply_block_ops_execution_unknown_no_half_write() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+
+        let err = backend
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "doc-store-eu".into(),
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Insert,
+                    id: None,
+                    parent_id: None,
+                    previous_id: None,
+                    content: Some("should not commit".into()),
+                    kind: None,
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: None,
+                origin: Some("agent".into()),
+                force_execution_unknown: true,
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "note.execution_unknown");
+        assert!(matches!(err, NoteBackendError::ExecutionUnknown(_)));
+
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-store-eu".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(q.blocks.is_empty(), "中断不得半写");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// update / delete 经 Store apply_block_ops 真路径。
+    #[tokio::test]
+    async fn w4f_store_apply_block_ops_update_and_delete() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+
+        let ins = backend
+            .block_insert(NoteBlockInsertRequest {
+                doc_id: "doc-store-ud".into(),
+                content: "before update".into(),
+                parent_id: None,
+                previous_id: None,
+                kind: Some("paragraph".into()),
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+
+        let upd = backend
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "doc-store-ud".into(),
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Update,
+                    id: Some(ins.block_id.clone()),
+                    parent_id: None,
+                    previous_id: None,
+                    content: Some("after update store".into()),
+                    kind: None,
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: None,
+                origin: Some("agent".into()),
+                force_execution_unknown: false,
+            })
+            .await
+            .unwrap();
+        assert_eq!(upd.applied, 1);
+
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-store-ud".into(),
+                text_match: Some("after update".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(!q.blocks.is_empty(), "update 后 FTS 应命中");
+
+        let del = backend
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "doc-store-ud".into(),
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Delete,
+                    id: Some(ins.block_id.clone()),
+                    parent_id: None,
+                    previous_id: None,
+                    content: None,
+                    kind: None,
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: None,
+                origin: Some("agent".into()),
+                force_execution_unknown: false,
+            })
+            .await
+            .unwrap();
+        assert_eq!(del.applied, 1);
+
+        let q2 = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-store-ud".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(q2.blocks.is_empty(), "delete 后投影应无块");
 
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -259,55 +259,75 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
       </header>
 
       <div className={styles.body} data-testid="note-paper-body">
-        {transportError ? (
-          <div
-            className={styles.empty}
-            role="alert"
-            data-testid="note-paper-transport-error"
-          >
-            {transportError}
-          </div>
-        ) : null}
-        {displayBlocks.length === 0 && !transportError ? (
-          <div className={styles.empty} data-testid="note-paper-empty">
-            {useTransport
-              ? '空文档投影（transport 无块）'
-              : '空文档投影（静默假数据 n=0）'}
-          </div>
-        ) : (
-          displayBlocks.map((block) => {
-            const visibility: HandleVisibility = chrome.getHandleVisibility(
-              block.id
-            );
-            return (
-              <div
-                key={block.id}
-                className={styles.blockRow}
-                data-block-id={block.id}
-                data-handle={visibility}
-                data-testid={`note-block-${block.id}`}
-                tabIndex={0}
-                onMouseEnter={() => handleHover(block.id)}
-                onMouseLeave={() => handleHover(null)}
-                onFocus={() => handleFocus(block.id)}
-                onBlur={() => handleFocus(null)}
-              >
-                <span
-                  className={styles.handle}
-                  data-testid={`note-handle-${block.id}`}
-                  aria-hidden
-                />
-                <div className={styles.blockContent}>
-                  <span className={styles.flavour}>
-                    {block.flavour}
-                    {block.level !== undefined ? ` h${block.level}` : ''}
-                  </span>
-                  <div className={styles.text}>{block.text}</div>
+        <div className={styles.readingColumn}>
+          {transportError ? (
+            <div
+              className={`${styles.state} ${styles.stateError}`}
+              role="alert"
+              data-testid="note-paper-transport-error"
+            >
+              {transportError}
+            </div>
+          ) : null}
+          {displayBlocks.length === 0 && !transportError ? (
+            <div
+              className={`${styles.state} ${styles.stateEmpty}`}
+              data-testid="note-paper-empty"
+            >
+              {useTransport
+                ? '空文档投影（transport 无块）'
+                : '空文档投影（静默假数据 n=0）'}
+            </div>
+          ) : (
+            displayBlocks.map((block) => {
+              const visibility: HandleVisibility = chrome.getHandleVisibility(
+                block.id
+              );
+              const headingLevel =
+                block.level !== undefined
+                  ? block.level
+                  : block.flavour?.toLowerCase().startsWith('h') &&
+                      /^h[1-6]$/i.test(block.flavour)
+                    ? Number(block.flavour.slice(1))
+                    : block.flavour === 'heading' || block.flavour === 'Heading'
+                      ? 2
+                      : undefined;
+              return (
+                <div
+                  key={block.id}
+                  className={styles.blockRow}
+                  data-block-id={block.id}
+                  data-handle={visibility}
+                  data-flavour={block.flavour}
+                  data-heading-level={
+                    headingLevel !== undefined
+                      ? String(headingLevel)
+                      : undefined
+                  }
+                  data-testid={`note-block-${block.id}`}
+                  tabIndex={0}
+                  onMouseEnter={() => handleHover(block.id)}
+                  onMouseLeave={() => handleHover(null)}
+                  onFocus={() => handleFocus(block.id)}
+                  onBlur={() => handleFocus(null)}
+                >
+                  <span
+                    className={styles.handle}
+                    data-testid={`note-handle-${block.id}`}
+                    aria-hidden
+                  />
+                  <div className={styles.blockContent}>
+                    <span className={styles.flavour}>
+                      {block.flavour}
+                      {block.level !== undefined ? ` h${block.level}` : ''}
+                    </span>
+                    <div className={styles.text}>{block.text}</div>
+                  </div>
                 </div>
-              </div>
-            );
-          })
-        )}
+              );
+            })
+          )}
+        </div>
       </div>
 
       <footer className={styles.footer} data-testid="note-paper-footer">

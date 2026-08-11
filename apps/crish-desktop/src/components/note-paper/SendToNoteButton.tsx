@@ -24,6 +24,7 @@ import {
   type SendToNoteResult,
   type SendToNoteSink,
 } from '../../bridges/send-to-note';
+import styles from './NotePaperPanel.module.css';
 
 export type SendToNoteButtonProps = {
   /** 消息 id */
@@ -173,11 +174,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
         <div
           role="alert"
           data-testid="send-to-note-error"
-          style={{
-            marginTop: 4,
-            fontSize: 12,
-            color: 'var(--danger, #f07178)',
-          }}
+          className={styles.feedbackError}
         >
           {errorText}
         </div>
@@ -186,11 +183,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
         <div
           role="status"
           data-testid="send-to-note-success"
-          style={{
-            marginTop: 4,
-            fontSize: 12,
-            color: 'var(--text-secondary, #9aa0a6)',
-          }}
+          className={styles.feedbackOk}
         >
           已发送到笔记
         </div>

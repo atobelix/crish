@@ -10,7 +10,7 @@
 //! | 工具 | 角色 | plan | ask | full-access |
 //! | ---- | ---- | ---- | --- | ----------- |
 //! | `query_blocks` / `document_outline` / `document_get_md` | **safe** | Allow | Allow | Allow |
-//! | `document_apply_md` / `send_to_note` / **`block_batch`** / **`block_insert`** | **write** | **Deny** | NeedsApproval | Allow |
+//! | `document_apply_md` / `send_to_note` / **`block_batch`** / **`block_insert`** / **`block_update`** / **`block_delete`** | **write** | **Deny** | NeedsApproval | Allow |
 //!
 //! 判定入口：[`decide_note_tool`]；写名单与
 //! [`crate::note_action_matrix`] 表行同步（W4-F 表驱动痕迹；本模块保留
@@ -27,7 +27,7 @@
 //! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**
 //! - **≠ W6-E**：无千次批 + 恶意扩展闭环
 //! - **≠ A-AGT 全表关闭**；Memory 禁关生产
-//! - 细粒度 `block_update` / `block_delete` / `block_move` **未注册 = 未交付**
+//! - `block_move` 独立工具 **未注册 = 未交付**
 
 use crate::permission::{PermissionMode, PermissionVerdict};
 
@@ -40,13 +40,15 @@ pub const NOTE_SAFE_TOOLS: &[&str] = &[
 
 /// 笔记写工具（dangerous：plan Deny / ask NeedsApproval / full Allow）
 ///
-/// W4-F：含 `block_batch` / `block_insert`。
-/// 未交付：`block_update` / `block_delete` / `block_move`（勿加入直至注册）。
+/// W4-F：含 `block_batch` / `block_insert` / `block_update` / `block_delete`。
+/// 未交付：`block_move` 独立工具（勿加入直至注册）。
 pub const NOTE_WRITE_TOOLS: &[&str] = &[
     "document_apply_md",
     "send_to_note",
     "block_batch",
     "block_insert",
+    "block_update",
+    "block_delete",
 ];
 
 /// 是否为笔记只读工具名
@@ -177,11 +179,14 @@ mod tests {
     fn w4f_block_batch_and_insert_in_write_list_plan_deny() {
         assert!(NOTE_WRITE_TOOLS.contains(&"block_batch"));
         assert!(NOTE_WRITE_TOOLS.contains(&"block_insert"));
+        assert!(NOTE_WRITE_TOOLS.contains(&"block_update"));
+        assert!(NOTE_WRITE_TOOLS.contains(&"block_delete"));
         assert!(plan_denies_note_tool("block_batch"));
         assert!(plan_denies_note_tool("block_insert"));
-        // 未交付细粒度不得混入写名单冒充已注册
-        assert!(!NOTE_WRITE_TOOLS.contains(&"block_update"));
-        assert!(!NOTE_WRITE_TOOLS.contains(&"block_delete"));
+        assert!(plan_denies_note_tool("block_update"));
+        assert!(plan_denies_note_tool("block_delete"));
+        // block_move 独立工具仍未交付
+        assert!(!NOTE_WRITE_TOOLS.contains(&"block_move"));
         assert!(!is_note_tool("block_move"));
     }
 
@@ -212,11 +217,11 @@ mod tests {
         }
     }
 
-    /// 诚实钉：≠ EL-05 / ≠ W6-E / ≠ 细粒度满表
+    /// 诚实钉：≠ EL-05 / ≠ W6-E / ≠ A-AGT 全表（move 独立工具仍缺）
     #[test]
     fn w4f_note_permission_honest_not_el05() {
         assert_eq!(NOTE_SAFE_TOOLS.len(), 3);
-        assert_eq!(NOTE_WRITE_TOOLS.len(), 4); // + block_batch + block_insert
+        assert_eq!(NOTE_WRITE_TOOLS.len(), 6); // + batch/insert/update/delete
         let _ = "≠ EL-05 / ≠ W6-E / ≠ A-AGT 全表关闭";
     }
 }
