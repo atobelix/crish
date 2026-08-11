@@ -1,5 +1,5 @@
 /**
- * 结构 Intent 类型（W3-F 骨架 + W3-D 真 apply 半桥）。
+ * 结构 Intent 类型（W3-F + W3-D 真 apply 写锥半桥）。
  *
  * 与 `TextLeafModel` 产出的 `text_edit`（文本 Intent）区分：
  * - 文本 Intent：叶子局部替换（W0 `TextEditIntent`）
@@ -8,21 +8,21 @@
  * 联合：`PaperIntent = TextIntent | StructureIntent | OpIntent(W0)`
  * （见下方；`OpIntent` 仍可直接下发 sink，结构 Intent 亦可经 `structureIntentToOp` 映射）。
  *
- * ## 写路径纪律（强制 · Round9 / W3-D 子集）
+ * ## 写路径纪律（强制 · W3-D Strict / G-INV-3）
  *
  * - **UI StructureIntent 不得直接写盘 / 旁路 mutate 树**
  * - 必须：`StructureIntent` → `structureIntentToOps` / `paperIntentToOps` /
  *   `submitStructureToCollabWire`（collab wire JSON）
- *   → sink / IPC → RS `ops_from_json` → `DocSession::apply`
+ *   → **`createCollabApplySink`（生产默认）** / IPC → RS `ops_from_json` → `DocSession::apply`
  * - wire 形状对齐 `conex-doc-collab::Op`（snake_case、tag=`op`）
- * - 默认 UI 仍可 mock sink（W3-D-S）；真 apply 库侧见
- *   `w3_d_structure_intent_or_wire_applys_to_session`（Rust）
+ * - `createMockIntentSink` **仅**形状测；真 apply 库侧见
+ *   `w3_d_structure_intent_or_wire_applys_to_session` / `w3_d_strict_text_and_structure_intent_true_apply`
  *
- * ## 轨声明（诚实）
+ * ## 轨声明（诚实 · 09 §0.4）
  *
- * - **W3-D-S 升级面 / W3-D 子集**：plain Intent → wire →（RS）真 apply
- * - **≠ W3-D-PM**（无真 ProseMirror）
- * - **≠ W3-D Strict 终局**（09：真 PM + 双 Intent 路径集成）；禁止 mock sink 冒充
+ * - 本模块提供 wire 半桥；**生产 sink** 用 `createCollabApplySink`
+ * - 真 PM 叶见 `leaves/pm`（W3-D-PM）；与本 wire + RS 真 apply 合 = **W3-D**
+ * - **≠ EL-01**；**≠ A-BLK 全表**；禁止 mock sink 冒充 Strict 关闭
  * - **W3-F ≠ EL-01 关闭**：不关闭 A-BLK 全表、不 serialize(DOM)
  */
 
@@ -586,18 +586,18 @@ export type StructureCollabWirePayload = {
 /**
  * StructureIntent / PaperIntent → collab wire JSON（IPC / 真 apply 入口）。
  *
- * ### 轨（W3-D-S 升级面 · plain Intent 真 apply 子集）
+ * ### 轨（W3-D 写锥 · 被 `createCollabApplySink` 调用）
  * ```
  * PaperIntent
  *   → paperIntentToOps / structureIntentToOps
  *   → collabOpsToJson
- *   → [宿主 IPC]
+ *   → applyOps / 宿主 IPC
  *   → RS ops_from_json → DocSession::apply → ProjectionDiff
  * ```
  *
- * - **≠ W3-D-PM**（无 PM）
- * - **≠** 用 mock sink 宣称 W3-D Strict 完成
- * - 默认 UI 仍可用 `createMockIntentSink`；接写锥时宿主应优先本函数 → IPC → apply
+ * - 生产宿主：优先 `createCollabApplySink({ applyOps })`（内部调本函数）
+ * - 形状测仍可用 `createMockIntentSink`；**禁止** mock 冒充 W3-D Strict 关闭
+ * - **≠ EL-01**
  *
  * @param intent 结构 / 文本 / 已是 wire 的 OpIntent
  * @param options allocateId / resolveOrder 等（同 structureIntentToOps）

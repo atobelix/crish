@@ -78,6 +78,8 @@ futures-util = "0.3"
 regex = "1"
 similar = "2"
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+# markdown-rs：Conex-MD 契约层 GFM P 基座（conex-md-ast 唯一权威 parse；S 仍自研）
+markdown = "1.0.0"
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
 ammonia = "4"
 moka = { version = "0.12", features = ["sync"] }

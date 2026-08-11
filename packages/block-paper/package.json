@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "块纸面呈现：chrome（W3-C）+ 叶子 Intent（W3-D-S plain / W3-D-PM 真 PM，sink 默认可 mock）+ CM6 代码叶（W3-E）+ 结构 Intent（W3-F）；≠ W3-D 真 apply 终局",
+  "description": "块纸面呈现：chrome（W3-C）+ 叶子 Intent（W3-D-S plain / W3-D-PM 真 PM）+ createCollabApplySink 真 apply 工厂（W3-D）+ CM6 代码叶（W3-E）+ 结构 Intent（W3-F）；≠ EL-01 / A-BLK 全表",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

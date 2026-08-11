@@ -1,19 +1,20 @@
-//! W3-D 方向 · plain Intent / CollabOpWire → **真** `DocSession::apply` 子集。
+//! W3-D Strict · TextEditIntent + StructureIntent wire → **真** `DocSession::apply`。
 //!
 //! # 轨声明（诚实 · 禁止偷换）
 //!
 //! | 可宣称 | 禁止宣称 |
 //! | ------ | -------- |
-//! | **W3-D-S 升级面** / **W3-D 子集**：wire JSON → `ops_from_json` → 真 apply → ProjectionDiff/树变化 | **W3-D Strict 终局**（09：真 PM + TextEditIntent + StructureIntent 双路径） |
-//! | plain StructureIntent 形状的 collab wire 可进写锥 | **W3-D-PM**（本测无 ProseMirror） |
-//! | mock sink **不得**冒充本测语义 | EL-01 / A-BLK 全表关闭 |
+//! | **W3-D Strict 库侧关闭面**：至少一条 StructureIntent wire + 一条 TextEditIntent wire → 真 apply → 树 / `read_text` 可观测 | **EL-01** / A-BLK **全表** e2e |
+//! | 与 TS `createCollabApplySink` + `submitStructureToCollabWire` wire 形状互通 | 桌面 IPC `note_apply_ops` 全链路已接线（可选；未做则本测 + TS 工厂形状为最低关闭面） |
+//! | mock sink **不得**冒充本测语义 | 仅 W3-D-PM（真 PM、sink 仍 mock）冒充 **W3-D** |
+//! | 真 PM 适配器在 TS `packages/block-paper/src/leaves/pm/**`（W3-D-PM，已入库） | 「块工作区完成」 |
 //!
 //! 对齐：
-//! - `plans/05` §2 W3-D 三阶段；`plans/09` §0.4 W3-D / W3-D-S / W3-D-PM
-//! - TS `@crish/block-paper-contract` `CollabOpWire` / `structureIntentToOps` 产出形状
-//! - `conex-doc-collab::ops_from_json` → [`DocSession::apply`]
+//! - `plans/05` §2 W3-D 三阶段 D2；`plans/09` §0.4 一字定义
+//! - TS `@crish/block-paper-contract` `CollabOpWire` / `structureIntentToOps` / `createCollabApplySink`
+//! - `conex-doc-collab::ops_from_json` → [`DocSession::apply`] → [`DocSession::read_text`]
 //!
-//! UI 默认 mock sink 仍合法（W3-D-S）；本文件只钉 **真 apply** 库侧路径。
+//! **生产默认写路径**：TS `createCollabApplySink`（非 `createMockIntentSink`）。
 
 use conex_doc_collab::{
     ops_from_json_str, BlockId, BlockKind, DocEvent, DocSession, Origin,
@@ -24,24 +25,14 @@ fn bid(s: &str) -> BlockId {
     BlockId::from_str(s).expect("uuid")
 }
 
-/// 可测路径：StructureIntent/CollabOpWire JSON → `ops_from_json` → `DocSession::apply`
-/// → ProjectionDiff / 树变化。
-///
-/// 覆盖：
-/// 1. 结构 insert（slash_insert / insert_block 的 wire 形态）
-/// 2. 文本 text_edit（plain TextEditIntent 的 wire 形态）
-/// 3. 结构 delete（delete_blocks 的 wire 形态）
-///
-/// **≠ mock sink**；**≠ W3-D-PM**；plain Intent 真 apply 子集。
-#[test]
-fn w3_d_structure_intent_or_wire_applys_to_session() {
+/// 结构 insert + text_edit + delete → 真 apply → 树 / `read_text`。
+fn run_w3_d_strict_true_apply() {
     let id_a = bid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     let id_b = bid("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
-    let mut session = DocSession::new("w3-d-wire-apply");
+    let mut session = DocSession::new("w3-d-strict-apply");
 
-    // ── 1) Structure insert wire（对齐 TS structureIntentToOps insert_block / slash_insert）──
-    // 形状与 packages/block-paper structureIntents + opsWire 一致（tag=op snake_case）
+    // ── 1) Structure insert wire（对齐 TS structureIntentToOps / createCollabApplySink）──
     let insert_json = r#"[
       {
         "op": "insert",
@@ -72,13 +63,13 @@ fn w3_d_structure_intent_or_wire_applys_to_session() {
         panic!("expect ProjectionDiff after structure insert, got {event:?}");
     };
 
-    assert_eq!(diff.doc_id, "w3-d-wire-apply");
+    assert_eq!(diff.doc_id, "w3-d-strict-apply");
     assert_eq!(diff.rev, 1);
     assert_eq!(diff.upserts.len(), 2, "insert 须进 ProjectionDiff.upserts");
     assert!(diff.removes.is_empty());
     assert!(!diff.full_rebuild);
 
-    // 树权威变化
+    // 树权威变化（StructureIntent 可观测）
     assert_eq!(session.tree().root_children, vec![id_a, id_b]);
     let node_a = session.tree().get(&id_a).expect("block A after apply");
     assert_eq!(node_a.kind, BlockKind::Paragraph);
@@ -86,7 +77,7 @@ fn w3_d_structure_intent_or_wire_applys_to_session() {
     let node_b = session.tree().get(&id_b).expect("block B after apply");
     assert_eq!(node_b.kind, BlockKind::Heading { level: 1 });
 
-    // ── 2) TextEditIntent wire → 真 apply → text_touches + 快照 ──
+    // ── 2) TextEditIntent wire → 真 apply → read_text 匹配 ──
     let text_json = r#"[
       {
         "op": "text_edit",
@@ -109,12 +100,21 @@ fn w3_d_structure_intent_or_wire_applys_to_session() {
         diff2.text_touches.contains(&id_a),
         "text_edit 须标记 text_touches"
     );
-    let plain = session
-        .tree()
-        .get(&id_a)
-        .and_then(|n| n.text_snapshot.as_deref())
-        .unwrap_or("");
-    assert_eq!(plain, "hello-w3d", "叶子文本须经 TextEngine 真写入");
+    // 关闭断言：read_text（非仅 mock / 非仅旁路叙事）
+    assert_eq!(
+        session.read_text(&id_a),
+        "hello-w3d",
+        "TextEditIntent → apply → read_text 须匹配"
+    );
+    assert_eq!(
+        session
+            .tree()
+            .get(&id_a)
+            .and_then(|n| n.text_snapshot.as_deref())
+            .unwrap_or(""),
+        "hello-w3d",
+        "叶子 text_snapshot 与 read_text 一致"
+    );
 
     // ── 3) Structure delete_blocks wire → 真 apply → removes ──
     let delete_json = r#"[
@@ -142,4 +142,24 @@ fn w3_d_structure_intent_or_wire_applys_to_session() {
         session.tree().nodes.contains_key(&id_a),
         "未删块保持"
     );
+    assert_eq!(
+        session.read_text(&id_a),
+        "hello-w3d",
+        "删他块后文本叶 plain 保持"
+    );
+}
+
+/// W3-D Strict · 结构 + 文本双路径真 apply（关闭证据 · 禁止 mock.calls）。
+///
+/// 覆盖：Structure insert / TextEdit → `read_text` / Structure delete。
+/// 交叉：TS `intentBridge.w3d_apply.test.ts` 钉工厂形状；本测钉 **真** DocSession。
+#[test]
+fn w3_d_strict_text_and_structure_intent_true_apply() {
+    run_w3_d_strict_true_apply();
+}
+
+/// 历史测名锚点（TS wire 半桥等交叉引用）；语义同 strict 测。
+#[test]
+fn w3_d_structure_intent_or_wire_applys_to_session() {
+    run_w3_d_strict_true_apply();
 }

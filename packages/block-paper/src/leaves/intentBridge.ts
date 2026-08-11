@@ -1,19 +1,27 @@
 /**
- * Intent 下发桥（W3-D + W3-F）：Intent → sink →（可选）RS apply。
+ * Intent 下发桥（W3-D + W3-F）：Intent → sink → 真 apply（或测形状 mock）。
  *
  * - `submitIntent`：经 IME 结构守卫后调用 sink
  * - composing 时 **结构 Intent**（`op` / slash / structure_key / StructureIntent）拒绝
  * - `text_edit` 在 composing 期守卫放行，但 TextLeafModel 默认不在合成中产出
  * - W3-F：`StructureIntent`（insert/delete/move/collapse/slash_insert）可直接进 sink
- * - **默认 mock sink** 记录调用，不接真实后端（W3-D-S 合法）
  *
- * ## 轨声明（诚实 · W3-D 子集）
+ * ## 写路径工厂（W3-D Strict 终局 · G-INV-3）
  *
- * - 真 apply 路径：**`submitStructureToCollabWire`**（structureIntents）→ wire JSON →
- *   RS `ops_from_json` → `DocSession::apply`（库侧测：`w3_d_structure_intent_or_wire_applys_to_session`）
- * - **禁止**仅以 mock sink 宣称 **W3-D Strict** 完成
- * - 真 PM 叶见 `leaves/pm`（**W3-D-PM**）；本桥无 PM 实现，只收 Intent
- * - plain / PM Intent + mock sink **≠** 09 终局 **W3-D**（须真 apply）
+ * | 工厂 | 用途 | 可否作生产默认 |
+ * | ---- | ---- | -------------- |
+ * | **`createCollabApplySink`** | Intent → collab wire → 注入 `applyOps`（`DocSession::apply` / IPC 等价） | **是 · 生产默认应使用** |
+ * | `createMockIntentSink` | 仅记录 `calls[]`，不接后端 | **否**；仅 W3-D-S / W3-D-PM 形状测 |
+ *
+ * 真 apply 库侧集成（TextEdit + Structure → 树/`read_text`）：
+ * `crates/conex-doc-collab/tests/w3_d_structure_intent_or_wire_apply.rs`
+ *
+ * ## 轨声明（诚实 · 09 §0.4）
+ *
+ * - **W3-D** = 真 PM（`leaves/pm`，W3-D-PM）+ 至少一条 TextEditIntent + 一条 StructureIntent
+ *   → 真 `DocSession::apply` 集成绿 + 本工厂作生产写路径形状
+ * - **≠ EL-01**；**≠ A-BLK 全表 e2e**；**≠** 块工作区完成
+ * - **禁止**仅以 mock sink / mock.calls 宣称 W3-D Strict 完成
  *
  * 对齐：
  * - W0 Intent 形状（`@crish/block-paper-contract`）
@@ -32,8 +40,10 @@ import {
 } from '@crish/editor-kit';
 import {
   isStructureIntent,
+  submitStructureToCollabWire,
   type PaperIntent,
   type StructureIntent,
+  type StructureToOpsOptions,
 } from '../chrome/structureIntents';
 
 // ---------------------------------------------------------------------------
@@ -47,7 +57,7 @@ export type IntentSinkResult = {
 };
 
 /**
- * Intent 接收端（mock 或未来 RS IPC 适配）。
+ * Intent 接收端（生产：`createCollabApplySink`；测形状：`createMockIntentSink`）。
  * 接受 `PaperIntent`：W0 text_edit/op + W3-F StructureIntent。
  */
 export type IntentSink = (intent: PaperIntent) => Promise<IntentSinkResult>;
@@ -181,10 +191,135 @@ export async function submitIntent(
 }
 
 // ---------------------------------------------------------------------------
-// Mock sink
+// 真 apply sink（W3-D 生产默认形状 · G-INV-3）
 // ---------------------------------------------------------------------------
 
-/** 可审计的 mock sink */
+/**
+ * 注入的 apply 面：collab wire JSON → 真 `DocSession::apply`（或 Tauri IPC 等价）。
+ *
+ * 集成测 / 宿主装配时：
+ * - RS 库内：`ops_from_json_str(json)` → `session.apply(Origin::User, &ops)`
+ * - 桌面：IPC `note_apply_ops` / 等价 command（若尚未接线，仍用本 adapter 形状，库内 RS 测证真 apply）
+ *
+ * **禁止**用空实现 + mock.calls 冒充本接口的「真 apply」关闭证据。
+ */
+export type ApplyOpsAdapter = (
+  opsJson: string,
+  meta: { intentId: string }
+) => Promise<IntentSinkResult>;
+
+/** `createCollabApplySink` 选项：wire 映射 + 强制注入 applyOps */
+export type CollabApplySinkOptions = StructureToOpsOptions & {
+  /**
+   * 必填：wire JSON → 真写锥。
+   * 生产/默认写路径 **必须** 注入真实后端；单测可注入内存 adapter（仍须产出可解析 wire）。
+   */
+  applyOps: ApplyOpsAdapter;
+};
+
+/** 可审计的 collab apply sink（生产形状） */
+export type CollabApplySink = {
+  /** 供 `submitIntent` 使用 */
+  sink: IntentSink;
+  /** 按调用顺序记录的 wire JSON（审计 / 测形状；≠ mock.calls 关 W3-D） */
+  wireCalls: string[];
+  /** 每次 applyOps 返回快照 */
+  results: IntentSinkResult[];
+  /** 清空审计缓冲 */
+  clear: () => void;
+};
+
+/**
+ * 创建 **真 apply** Intent sink（**生产默认应使用本工厂**）。
+ *
+ * ```
+ * PaperIntent
+ *   → submitStructureToCollabWire（paperIntentToOps + collabOpsToJson）
+ *   → applyOps(opsJson)   // DocSession::apply / IPC 等价
+ *   → IntentSinkResult
+ * ```
+ *
+ * - TextEditIntent → `text_edit` wire → apply → 文本权威变化（RS：`read_text`）
+ * - StructureIntent → insert/delete/… wire → apply → 树变化
+ * - `createMockIntentSink` **仅**测形状，**不得**再当生产默认写路径
+ *
+ * ## 轨
+ * - 本工厂 + W3-D-PM + RS `w3_d_*_true_apply` 集成绿 ⇔ **W3-D Strict** 关闭面
+ * - **≠ EL-01**；**≠ A-BLK 全表**
+ */
+export function createCollabApplySink(
+  options: CollabApplySinkOptions
+): CollabApplySink {
+  if (typeof options.applyOps !== 'function') {
+    throw new Error(
+      'createCollabApplySink：必须注入 applyOps（DocSession::apply / IPC 等价）；禁止无后端空 sink 冒充生产写路径'
+    );
+  }
+
+  const wireCalls: string[] = [];
+  const results: IntentSinkResult[] = [];
+  const { applyOps, ...wireOpts } = options;
+
+  const sink: IntentSink = async (intent) => {
+    let payload: ReturnType<typeof submitStructureToCollabWire>;
+    try {
+      payload = submitStructureToCollabWire(intent, wireOpts);
+    } catch (e) {
+      const reason =
+        e instanceof Error
+          ? e.message
+          : `createCollabApplySink：wire 映射失败：${String(e)}`;
+      const r: IntentSinkResult = { ok: false, reason };
+      results.push(r);
+      return r;
+    }
+
+    wireCalls.push(payload.json);
+
+    try {
+      const applied = await applyOps(payload.json, {
+        intentId: payload.intentId,
+      });
+      const r: IntentSinkResult = { ok: applied.ok };
+      if (applied.reason !== undefined) {
+        r.reason = applied.reason;
+      }
+      results.push(r);
+      return r;
+    } catch (e) {
+      const reason =
+        e instanceof Error
+          ? e.message
+          : `createCollabApplySink：applyOps 抛错：${String(e)}`;
+      const r: IntentSinkResult = { ok: false, reason };
+      results.push(r);
+      return r;
+    }
+  };
+
+  return {
+    sink,
+    wireCalls,
+    results,
+    clear() {
+      wireCalls.length = 0;
+      results.length = 0;
+    },
+  };
+}
+
+/**
+ * @deprecated 命名别名：与 `createCollabApplySink` 同义（DocSession 面语义）。
+ * @see createCollabApplySink 生产默认真 apply 工厂（本导仅为历史/文档别名）
+ * @removeWhen 无外部调用方引用本别名后删除
+ */
+export const createDocSessionApplySink = createCollabApplySink;
+
+// ---------------------------------------------------------------------------
+// Mock sink（仅测形状 · 禁止作生产默认）
+// ---------------------------------------------------------------------------
+
+/** 可审计的 mock sink（**仅** W3-D-S / W3-D-PM 形状测） */
 export type MockIntentSink = {
   /** 供 submitIntent 使用的 sink 函数 */
   sink: IntentSink;
@@ -199,7 +334,11 @@ export type MockIntentSink = {
 };
 
 /**
- * 创建默认 mock sink：记录全部调用，默认 `{ ok: true }`。
+ * 创建 mock sink：记录全部调用，默认 `{ ok: true }`。
+ *
+ * **仅测形状**（W3-D-S / W3-D-PM）。  
+ * **生产默认写路径请用 `createCollabApplySink`**——mock **不得**再当默认生产路径（G-INV-3 / plans/05 §2.2）。  
+ * **禁止**以 `mock.calls` 计 A-BLK / W3-D Strict 关闭。
  */
 export function createMockIntentSink(
   initialResult: IntentSinkResult = { ok: true }

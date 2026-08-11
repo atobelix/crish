@@ -8,6 +8,8 @@ authors.workspace = true
 
 [dependencies]
 conex-doc-collab = { path = "../conex-doc-collab" }
+# GFM P 主路径：markdown-rs（crate 名 `markdown`）；lowering → BlockIR；S 自研不走库 to_md
+markdown = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 

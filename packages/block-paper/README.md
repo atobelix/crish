@@ -1,23 +1,25 @@
 # `@crish/block-paper`
 
-块纸面 **呈现层**：W3-C chrome（静默假数据 / 把手 / slash）+ W3-D 叶子写路径 Intent 骨架 + W3-E CM6 代码叶骨架 + W3-F 结构 Intent（mock apply）。
+块纸面 **呈现层**：W3-C chrome + W3-D 叶子 Intent（plain / **真 PM** / **`createCollabApplySink`**）+ W3-E CM6 代码叶 + W3-F 结构 Intent。
 
 > **本包是呈现层，不是文档权威。**  
-> 写路径必须走 **Intent → sink → RS apply**。  
+> **生产写路径**：`Intent → createCollabApplySink → applyOps → RS DocSession::apply`。  
+> `createMockIntentSink` **仅**形状测（G-INV-3）。  
 > **禁止** 把 DOM / ProseMirror doc / 本包假数据当作真相源持久化。  
-> **W3-D 完成 = Intent 通路绿**；**W3-E 完成 = 代码叶可聚焦 + Intent 通路绿**；≠ EL-01 / A-BLK 全表关闭。  
-> **W3-E ≠ 全语言高亮完成**（language 字段与 host 钩子就位即可）。
+> **W3-D Strict** = 真 PM + TextEdit/Structure → 真 apply（本包工厂 + RS 集成）；**≠ EL-01**；**≠ A-BLK 全表**。  
+> **W3-E ≠ 全语言高亮完成**。
 
 ## 边界
 
-| 本包 **做**                                      | 本包 **不做**                        |
-| ------------------------------------------------ | ------------------------------------ |
-| 静默 L0 chrome 状态（把手/折叠/多选高亮）        | 真实 DocSession / RS / 协同接线      |
-| Slash 打开/过滤/关闭（composing 禁开）           | 完整 PM/CM6 编辑器（仅 Intent 接口） |
-| N 块假投影（`ProjectionDiff` / `MemoryBlock`）   | 结构 Op 真正落地到真实 collab        |
-| 叶子 `TextEditIntent` 产出 + mock sink           | 接 `apps/crish-desktop` 业务         |
-| 代码叶可聚焦 + `text_edit` + 真 CM6 host（W3-E） | 全语言 SyntaxHighlight / 主题完成    |
-| V6 行/字符窗口计算（A-HUGE-03 呈现侧）           | 数据层超长分段（W1-B）               |
+| 本包 **做**                                       | 本包 **不做**                               |
+| ------------------------------------------------- | ------------------------------------------- |
+| 静默 L0 chrome 状态（把手/折叠/多选高亮）         | 桌面 IPC 产品全链路挂载（adapter 形状已备） |
+| Slash 打开/过滤/关闭（composing 禁开）            | A-BLK 全表 e2e / EL-01                      |
+| N 块假投影（`ProjectionDiff` / `MemoryBlock`）    | 数据层超长分段（W1-B）                      |
+| 叶子 Intent + **`createCollabApplySink`**（生产） | —                                           |
+| 真 PM 叶（W3-D-PM）+ plain 叶（W3-D-S）           | —                                           |
+| 代码叶可聚焦 + `text_edit` + 真 CM6 host（W3-E）  | 全语言 SyntaxHighlight / 主题完成           |
+| V6 行/字符窗口计算（A-HUGE-03 呈现侧）            | —                                           |
 
 依赖：
 
@@ -36,8 +38,10 @@ import {
   // W3-D
   TextLeafModel,
   submitIntent,
-  createMockIntentSink,
+  createCollabApplySink, // 生产默认
+  createMockIntentSink, // 仅形状测
   computeLineWindow,
+  PmTextLeaf,
   // W3-E
   CodeLeafModel,
   createMockCodeLeafHost,
@@ -88,22 +92,33 @@ slash.close(); // A-SIL-02：关闭后宿主保持选区
 
 对齐 editor-kit `structureKeyGuard` / A-IME-02：**composing 时禁止打开 slash**。
 
-## 叶子写路径：Intent → sink → RS（W3-D）
+## 叶子写路径：Intent → collab apply sink → RS（W3-D）
 
 ```text
-键入 / IME
+键入 / IME / slash / chrome
    │
    ▼
-TextLeafModel.applyLocalEdit / flushOnCompositionEnd
-   │  产出 TextEditIntent（W0 形状）
+TextLeaf | PmTextLeaf | StructureIntent
+   │  产出 PaperIntent
    ▼
 submitIntent(intent, sink, { ime })
    │  composing 时结构 op / slash 拒绝
    ▼
-IntentSink（mock 记录 或 未来 RS IPC）
-   │
+createCollabApplySink（生产默认）
+   │  paperIntentToOps → wire JSON → applyOps
    ▼
-RS apply → DocEvent.projection / reject
+RS ops_from_json → DocSession::apply → ProjectionDiff / read_text
+```
+
+```ts
+// 生产形状（applyOps 注入 IPC 或库绑定）
+const collab = createCollabApplySink({
+  applyOps: async (opsJson, meta) => {
+    // 例：await invoke('note_apply_ops', { opsJson, intentId: meta.intentId })
+    return { ok: true };
+  },
+});
+await submitIntent(textIntent, collab.sink, { ime });
 ```
 
 ### TextLeafModel
@@ -146,8 +161,9 @@ await submitIntent(flushed!, mock.sink, { ime });
 
 - `submitIntent`：经 `ImeMachine.tryAcceptIntent` / `structureKeyGuard` 后调用 sink
 - composing 时 **结构 Intent**（`op` / `structure_key` / `request_slash`）拒绝
-- `createMockIntentSink()`：默认 `{ ok: true }`，`calls` 数组可审计
-- **尚未**接真实 RS；W0 冻结禁止 W3-D 接真实 apply 前本 sink 即为契约桩
+- **`createCollabApplySink({ applyOps })`**：**生产默认**；Intent → wire → 真 apply 面
+- `createMockIntentSink()`：**仅**形状测；`calls` 可审计；**禁止**作生产默认 / 关 A-BLK
+- 真 apply 库侧：`conex-doc-collab` 测 `w3_d_strict_text_and_structure_intent_true_apply`
 
 ### lineWindow（V6 / A-HUGE-03）
 

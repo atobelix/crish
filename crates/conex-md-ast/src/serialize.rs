@@ -1,9 +1,9 @@
 //! Conex-MD 序列化：`BlockTree` → 契约字符串。
 //!
-//! # 结构-only（W2-A）
+//! # 结构-only S（自研 raising）
 //! - 每个块：独占行 `<!--c:UUID-->` + 内容行；子块紧随父内容之后（DFS）。
 //! - 文本取自 `text_snapshot`（plain）；**不含** yrs 富文本往返。
-//! - 完整 GFM / markdown-rs 路径留待后续波次（见 parse 模块注释）。
+//! - **P** 已接线 markdown-rs（见 [`crate::parse`]）；**S 不走库 to_md**（plans/03 §3.2）。
 //!
 //! # Agent 读路径
 //! [`document_to_md`] / [`serialize_tree`] 即契约 **S(树)**：`get_md` / Agent 读必须走

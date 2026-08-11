@@ -1,13 +1,11 @@
 /**
- * W3-D 子集 · TS 半桥测：StructureIntent / PaperIntent → collab wire JSON。
+ * W3-D · TS wire 半桥测：StructureIntent / PaperIntent → collab wire JSON。
  *
  * ## 轨声明（诚实）
- * - **W3-D-S 升级面 / plain Intent 真 apply 子集** 的 TS 侧：
- *   `submitStructureToCollabWire` 产出可被 Rust `ops_from_json` 解析的 JSON
- * - **≠ W3-D-PM**（无 PM）
- * - **≠** mock sink 冒充 W3-D Strict；真 apply 在 RS
- *   `w3_d_structure_intent_or_wire_applys_to_session`
- * - 默认 UI 仍 mock；本测只钉 wire 形状与 fixture 对齐
+ * - `submitStructureToCollabWire` 产出可被 Rust `ops_from_json` 解析的 JSON
+ * - 真 apply + `read_text`：RS `w3_d_strict_text_and_structure_intent_true_apply`
+ * - 生产 sink：`createCollabApplySink`（见 `intentBridge.w3d_apply.test.ts`）
+ * - **≠ EL-01**；**≠** mock sink 冒充 Strict 关闭
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import {

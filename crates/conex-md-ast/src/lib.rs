@@ -1,15 +1,22 @@
-//! Conex-MD 契约层：结构-only parse / serialize / apply 片段（W2-A / W2-B）。
+//! Conex-MD 契约层：parse / serialize / apply 片段（W2-A / W2-B）。
 //!
 //! - 类型 **re-export** 自 `conex-doc-collab`（T3 单归属，不平行定义 BlockId）
 //! - 机器主编码：`<!--c:UUID-->` 独占行（W0-B / 15）
+//! - **P 主路径**：`markdown`（markdown-rs）GFM mdast → lowering → BlockIR（见 [`PARSE_BACKEND`]）
+//! - **S**：自研即时序列化（不信任库 to_md）；Agent `get_md` = [`document_to_md`]
 //! - **不含** inline 富文本 yrs 往返；文本走 `text_snapshot` plain
 //!
 //! # 公共 API
 //! - [`document_to_md`] / [`serialize_tree`]：Agent **`get_md` 读路径 = 即时 S(树)**（禁止陈旧 mirror）
 //! - [`parse_document`] / [`parse_document_detailed`]（含 [`LossyReport`]）
 //! - [`apply_md_fragment`]（MD 片段 → Op 列表；失败零半树）
-//! - [`strip_conex_id_comments`]（pure-gfm）
+//! - [`strip_conex_id_comments`]（pure-gfm 辅助）
 //! - [`encode_block_id_line`] / [`decode_block_id_line`]
+//! - 退役：[`parse_document_handwritten`]（非默认）
+//!
+//! # 诚实边界（W2-A）
+//! - **已接线** markdown-rs 为 GFM P 主路径
+//! - **未关闭** A-MD 全表 / EL-06 / normalize 一等 API / pure-gfm mode 一等面
 //!
 //! # 权威
 //! `docs/block-workspace-architecture/plans/03-MD契约.md`；A-MD / RT-1…；禁止 HTML 反推块树。
@@ -22,11 +29,16 @@ pub use conex_doc_collab::{
 };
 
 mod apply;
+mod assemble;
 mod parse;
+mod parse_handwritten;
+mod parse_mdast;
 mod serialize;
 
 pub use apply::apply_md_fragment;
-pub use parse::{ParseOutput, parse_document, parse_document_detailed};
+pub use parse::{PARSE_BACKEND, ParseOutput, parse_document, parse_document_detailed};
+#[allow(deprecated)]
+pub use parse_handwritten::{parse_document_detailed_handwritten, parse_document_handwritten};
 pub use serialize::{document_to_md, serialize_tree};
 
 use thiserror::Error;
@@ -110,14 +122,12 @@ pub fn strip_conex_id_comments_detailed(md: &str) -> (String, LossyReport) {
         }
     }
     if stripped > 0 {
-        // 汇总一条，便于 tool result 声明
         report.push(
             "stripped_block_ids_count",
             format!("共剥离 {stripped} 条 <!--c:…--> 行"),
             None,
         );
     }
-    // 保持与 lines().join 一致：无末尾换行（若原串以 \n 结尾，join 后不自动补）
     let body = kept.join("\n");
     (body, report)
 }
@@ -235,7 +245,6 @@ mod tests {
 
     #[test]
     fn document_to_md_is_agent_read_path_s() {
-        // get_md / document_get_md = 即时 S(树)，与 serialize_tree 同源
         let p = BlockId::from_str("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb").unwrap();
         let mut nodes = HashMap::new();
         nodes.insert(
@@ -295,5 +304,10 @@ mod tests {
                 .count(),
             2
         );
+    }
+
+    #[test]
+    fn parse_backend_constant_wired() {
+        assert_eq!(PARSE_BACKEND, "markdown-rs");
     }
 }

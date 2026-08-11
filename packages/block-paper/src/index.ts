@@ -6,22 +6,23 @@
  * - SlashMenuModel：slash 打开·过滤·关闭·选中 → slash_insert；composing 禁开/禁交
  * - structureIntents：insert/delete/move/collapse/slash_insert + PaperIntent 联合
  * - silentFixture：N 块假文档投影（ProjectionDiff / MemoryBlock）
- * - TextLeafModel / intentBridge / lineWindow：plain 叶子 Intent（W3-D-S；默认 mock sink）
- * - **PmTextLeaf / PmTextLeafHost**：真 prosemirror 叶 → TextEditIntent（**W3-D-PM**；sink 可仍 mock）
+ * - TextLeafModel / intentBridge / lineWindow：plain 叶子 Intent（W3-D-S 形状测可用 mock）
+ * - **PmTextLeaf / PmTextLeafHost**：真 prosemirror 叶 → TextEditIntent（**W3-D-PM**）
+ * - **`createCollabApplySink`**：**生产默认** Intent → wire → 注入 `applyOps`（真 apply 形状）
  * - CodeLeafModel / mountCodeLeaf / Cm6CodeLeafHost：代码叶（可聚焦 + text_edit + 真 CM6 host）
- * - `submitStructureToCollabWire`：plain Intent → collab wire JSON（真 apply 的 TS 半桥）
+ * - `submitStructureToCollabWire`：PaperIntent → collab wire JSON（喂 RS `ops_from_json`）
  *
- * **包边界**：
- * - 呈现层默认 **mock sink**；真 `DocSession::apply` 在 RS（conex-doc-collab）—— **W3-D 终局**另包
- * - 写路径必须走 **Intent → wire → sink/IPC → RS apply**；禁止 serialize(DOM/pmDoc) 持久化
- * - **禁止** DOM 当真相；选区权威在 editor-kit SelectionStore 逻辑坐标
- * - UI（React）可后接；本波优先纯 TS 可测
+ * **包边界 / 写锥（G-INV-3）**：
+ * - **生产写路径**：`createCollabApplySink({ applyOps })` → IPC/库 → `DocSession::apply`
+ * - `createMockIntentSink` **仅**形状测；**不得**再当生产默认
+ * - 真 apply 库侧绿：`conex-doc-collab` 集成测 `w3_d_*`（TextEdit + Structure → 树/`read_text`）
+ * - 禁止 serialize(DOM/pmDoc) 持久化；禁止 DOM 当真相
  * - **轨**：
- *   - **W3-D-S** = plain TextLeaf + mock
- *   - **W3-D-PM** = 真 PM 适配器入库（本导出 `leaves/pm`）；**≠** 真 apply；**≠** EL-01
- *   - **W3-D** = 真 PM + Intent→真 apply（**本包未宣称**）
+ *   - **W3-D-S** = plain TextLeaf + mock（形状）
+ *   - **W3-D-PM** = 真 PM 适配器入库；单独 **≠** W3-D 终局
+ *   - **W3-D** = 真 PM + TextEdit/Structure Intent → 真 apply（本包工厂 + RS 集成）
+ *   - **≠ EL-01**；**≠ A-BLK 全表 e2e**；**≠** 块工作区完成
  * - W3-E 完成 = 代码叶可聚焦 + Intent 通路绿；W3-F-S = 结构 Intent+wire
- * - **W3-E ≠ 全语言高亮完成**；**W3-F ≠ EL-01 关闭**
  */
 
 // Block chrome 状态
@@ -92,7 +93,7 @@ export {
 } from './chrome/silentFixture';
 
 // ---------------------------------------------------------------------------
-// W3-D：叶子文本 Intent 通路（mock apply）
+// W3-D：叶子文本 Intent + 真 apply sink 工厂
 // ---------------------------------------------------------------------------
 
 export {
@@ -105,6 +106,10 @@ export {
 
 export {
   submitIntent,
+  /** 生产默认：Intent → wire → applyOps（DocSession::apply 等价） */
+  createCollabApplySink,
+  createDocSessionApplySink,
+  /** 仅测形状；禁止作生产默认写路径 */
   createMockIntentSink,
   type IntentSink,
   type IntentSinkResult,
@@ -113,6 +118,9 @@ export {
   type SubmitIntentRejectCode,
   type SubmittableIntent,
   type MockIntentSink,
+  type ApplyOpsAdapter,
+  type CollabApplySinkOptions,
+  type CollabApplySink,
 } from './leaves/intentBridge';
 
 export {
