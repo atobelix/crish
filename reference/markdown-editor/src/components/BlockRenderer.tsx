@@ -17,10 +17,17 @@ import type { LineNode, InlineNode, LineType } from '../core/ast';
 import type { CodeState } from '../core/parser';
 import { checkIsActive, type ActiveState } from '../core/measure';
 import { InlineRenderer } from './InlineRenderer';
-import { useEditorStore, type EditorStore, type EditorState } from '../core/EditorStore';
+import {
+  useEditorStore,
+  type EditorStore,
+  type EditorState,
+} from '../core/EditorStore';
 import { renderMathToHtml } from '../core/renderTheme';
 // B4 N5：复制按钮剪贴板工具 + 引用前缀剥离（与导出投影器共享单源）
-import { copyTextToClipboard, stripBlockquotePrefix } from '../core/renderToHtml';
+import {
+  copyTextToClipboard,
+  stripBlockquotePrefix,
+} from '../core/renderToHtml';
 // B5 bidi 接线：行级 RTL 检测（isRtlLine——弱类型扫描，LTR 行快速
 // 路径返回 false，零开销；渲染时调用，memo 保证行不变不重算）
 import { isRtlLine } from '../core/Bidi';
@@ -109,7 +116,10 @@ function isInUnclosedFenceParts(
       ? boundary + tailFenceLines[tailFenceCount - 1]
       : mainFenceLines[mainFenceLines.length - 1];
   const lastFenceState = getState(lastFence);
-  if (lastFenceState !== 'fence_start' && lastFenceState !== 'math_fence_start') {
+  if (
+    lastFenceState !== 'fence_start' &&
+    lastFenceState !== 'math_fence_start'
+  ) {
     return false;
   }
   return lineIndex > lastFence;
@@ -137,10 +147,14 @@ export interface BlockRendererComponentProps {
 }
 
 /** 块渲染器组件类型：Map 值（06 §5：自定义块渲染 + 渲染注册） */
-export type BlockRendererComponent = React.ComponentType<BlockRendererComponentProps>;
+export type BlockRendererComponent =
+  React.ComponentType<BlockRendererComponentProps>;
 
 /** 渲染注册表：LineType → 渲染器组件（核心 12 类型默认注册） */
-export const BlockRendererRegistry = new Map<LineType, BlockRendererComponent>();
+export const BlockRendererRegistry = new Map<
+  LineType,
+  BlockRendererComponent
+>();
 
 /**
  * 默认注册项快照：核心 12 类型的出厂渲染器。unregisterBlockRenderer
@@ -180,9 +194,7 @@ export function unregisterBlockRenderer(type: LineType): boolean {
  * 兜底默认渲染器（即原 switch 的 default 分支：body 行语义，
  * 对 html_block 等未显式分支类型保持行为零变化）。
  */
-export function resolveBlockRenderer(
-  type: LineType
-): BlockRendererComponent {
+export function resolveBlockRenderer(type: LineType): BlockRendererComponent {
   return BlockRendererRegistry.get(type) ?? DefaultBlockRenderer;
 }
 
@@ -198,10 +210,7 @@ export function resolveBlockRenderer(
  * 注意：R5-A 登记「softRender 仍订阅全局单例」——MarkdownEngine 的
  * LineItem 尚未透传 store prop（MarkdownEngine.tsx 禁碰登记），实例化
  * 接线待宿主侧接入。 */
-function useSoftRender(
-  index: number,
-  store?: EditorStore
-): boolean {
+function useSoftRender(index: number, store?: EditorStore): boolean {
   const editorStore = store ?? useEditorStore;
   return editorStore((state) =>
     isInUnclosedFenceParts(
@@ -278,7 +287,9 @@ export function unregisterFenceLangRenderer(lang: string): boolean {
 }
 
 /** 解析 lang 渲染器：未注册返回 null（BlockRenderer 走默认代码渲染） */
-export function resolveFenceLangRenderer(lang: string): FenceLangRenderer | null {
+export function resolveFenceLangRenderer(
+  lang: string
+): FenceLangRenderer | null {
   return FenceLangRendererRegistry.get(lang) ?? null;
 }
 
@@ -298,9 +309,12 @@ function extractFenceLang(raw: string): string {
  * （正则单趟扫描；工具产物 JSON 输出逐行可读化）。
  */
 function JsonFenceLangRenderer({ lineText }: FenceLangRendererProps) {
-  // 令牌顺序：键名（后随冒号）→ 布尔/null → 字符串 → 数值 → 标点
+  // 令牌顺序：键名（后随冒号）→ 布尔/null → 字符串 → 数值 → 标点。
+  // 键名判定注意：lookahead (?=\s*:) 是零宽断言，m[0] 不含冒号——对孤立
+  // token 再 test 相同 lookahead 恒 false（键名会全落字符串分支）；键名组
+  // 捕获（m[1] 存在）即「原文上 token 后紧跟冒号」，判定与匹配同一位置。
   const TOKEN_RE =
-    /"(?:\\.|[^"\\])*"(?=\s*:)|\b(?:true|false|null)\b|"(?:\\.|[^"\\])*"|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|[{}[\],:]/g;
+    /("(?:\\.|[^"\\])*")(?=\s*:)|\b(?:true|false|null)\b|"(?:\\.|[^"\\])*"|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|[{}[\],:]/g;
   const parts: { text: string; color: string }[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
@@ -310,9 +324,16 @@ function JsonFenceLangRenderer({ lineText }: FenceLangRendererProps) {
     }
     const tok = m[0];
     let color = '';
-    if (/^"[\s\S]*"(?=\s*:)/.test(tok)) {
+    if (m[1] !== undefined) {
       color = 'hsl(200 60% 55%)'; // 键名（蓝）
-    } else if (tok === '{' || tok === '}' || tok === '[' || tok === ']' || tok === ',' || tok === ':') {
+    } else if (
+      tok === '{' ||
+      tok === '}' ||
+      tok === '[' ||
+      tok === ']' ||
+      tok === ',' ||
+      tok === ':'
+    ) {
       color = 'hsl(0 0% 55%)'; // 标点（灰）
     } else if (tok.startsWith('"')) {
       color = 'hsl(120 35% 50%)'; // 字符串（绿）
@@ -389,8 +410,9 @@ function LogFenceLangRenderer({ lineText }: FenceLangRendererProps) {
     levelColor = 'hsl(0 0% 55%)';
     levelCls = 'debug';
   }
-  const tsMatch =
-    /^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s*/.exec(lineText);
+  const tsMatch = /^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s*/.exec(
+    lineText
+  );
   if (tsMatch) {
     return (
       <span
@@ -417,7 +439,10 @@ function LogFenceLangRenderer({ lineText }: FenceLangRendererProps) {
 }
 
 /** 出厂注册：json / diff / log 三个内置工具产物渲染器 */
-function registerDefaultFenceLang(lang: string, renderer: FenceLangRenderer): void {
+function registerDefaultFenceLang(
+  lang: string,
+  renderer: FenceLangRenderer
+): void {
   FenceLangRendererRegistry.set(lang, renderer);
   defaultFenceLangRenderers.set(lang, renderer);
 }
@@ -427,11 +452,81 @@ registerDefaultFenceLang('diff', DiffFenceLangRenderer);
 registerDefaultFenceLang('log', LogFenceLangRenderer);
 
 // ============================================================
+// 围栏整块 lines 惰性缓存（W2-3 / C2：LangRenderer O(块) 重建惰性化）
+// ============================================================
+
+/**
+ * 整块 lines 惰性缓存条目（W2-3：LangRenderer 每行渲染重建整块数组
+ * O(块大小)——json/diff/log 出厂渲染器只消费 lineText，千行代码块滚动
+ * 入窗每行重建 1000 项纯浪费；mermaid 类未来渲染器需要整块 lines，
+ * 公开 API（FenceLangRendererProps.lines）保留，仅把构建改为惰性缓存）。
+ * 失效语义 = 内容不变性三元组（mainLines/streamTail 数组引用 + 双段
+ * 边界 boundary，区间 contentStart/contentEnd 进缓存键）：zustand 不可变
+ * 更新下「区间内容变化 ⇒ 引用变化」严格成立——appendText/applyChange/
+ * undo/redo/setText/flushStreamTail 全部产出新数组（无原地变异），且
+ * 字符串不可变；两段引用与边界、区间逐项相等 ⇒ 区间内各行文本必然
+ * 逐位相等，命中即可安全复用（滚动入窗 O(1) 零重建）。覆盖的失效场景：
+ * - 区间内内容编辑（引用变化 → 重建；含 undo/redo 恢复——version 不
+ *   递增但数组引用必变，本键不受 version 盲区影响）；
+ * - 区间边界变化（contentStart/contentEnd 进键，fence 位移即换键）；
+ * - 流式 flush（尾段并入主数组 → 双段引用变化）。
+ */
+interface FenceLinesCacheEntry {
+  mainLines: string[];
+  streamTail: string[];
+  boundary: number;
+  lines: string[];
+}
+
+/** 按 store 实例隔离的惰性缓存（WeakMap 弱引用：多实例互不干扰、store
+ *  回收即释放，无泄漏）。 */
+const fenceLinesCache = new WeakMap<
+  EditorStore,
+  Map<string, FenceLinesCacheEntry>
+>();
+
+/** 取围栏内容行数组（已剥引用前缀）：缓存命中返回既有数组（O(1)，
+ *  滚动入窗/重复渲染零重建）；未命中才 O(块) 重建并落缓存。与旧内联
+ *  循环逐行同源（stripBlockquotePrefix + state.getLine 双段访问器），
+ *  输出逐位一致。 */
+function getFenceBlockLines(
+  store: EditorStore,
+  contentStart: number,
+  contentEnd: number
+): string[] {
+  const state = store.getState();
+  const { mainLines, streamTail } = state;
+  const boundary = mainLines.length - 1;
+  let cache = fenceLinesCache.get(store);
+  if (!cache) {
+    cache = new Map();
+    fenceLinesCache.set(store, cache);
+  }
+  const key = `${contentStart}:${contentEnd}`;
+  const entry = cache.get(key);
+  if (
+    entry &&
+    entry.mainLines === mainLines &&
+    entry.streamTail === streamTail &&
+    entry.boundary === boundary
+  ) {
+    return entry.lines;
+  }
+  const lines: string[] = [];
+  for (let i = contentStart; i < contentEnd; i++) {
+    lines.push(stripBlockquotePrefix(state.getLine(i)));
+  }
+  cache.set(key, { mainLines, streamTail, boundary, lines });
+  return lines;
+}
+
+// ============================================================
 // fence 上下文（B4 N5：内容行定位 → 复制/分发）
 // ============================================================
 
-/** 围栏上下文（fence 内容行渲染/复制所需） */
-interface FenceContext {
+/** 围栏上下文（fence 内容行渲染/复制所需；导出供 W2-4 语义/性能测试
+ *  直接断言，测试见 tests/unit/stream-fence-bisect.test.ts） */
+export interface FenceContext {
   /** 围栏语言（fence_start 行提取；未识别为 'code'） */
   lang: string;
   /** 内容区间 [contentStart, contentEnd)（contentEnd = fence_end 行号） */
@@ -445,12 +540,22 @@ interface FenceContext {
  * 计算围栏上下文（双段存储版，零物化——镜像 isInUnclosedFenceParts 的
  * 双段访问器语义）：仅对「位于已闭合围栏区间内」的 code 行返回上下文；
  * 缩进代码（indent_code）/围栏外行/未闭合围栏（软渲染域）返回 null。
- * 围栏边界定位：主数组二分 + 尾段反向扫描（EditorStore:2051-2062 同款
- * 范式）；「最后一个 < index 的围栏边界」为 fence_start 且其后紧跟
- * fence_end 即闭合区间（严格交替不变量保证）。
+ * 围栏边界定位：主数组二分 + 尾段二分（W2-4：尾段 fence 相对行号升序、
+ * 平移 boundary 后全局有序，与主数组二分同型；旧实现为 O(N) 线性扫描，
+ * 流式多代码块交替时尾段 fence 数增长 → 每行每帧订阅求值线性退化）；
+ * 「最后一个 < index 的围栏边界」为 fence_start 且其后紧跟 fence_end
+ * 即闭合区间（严格交替不变量保证）。
  */
-function computeFenceContext(state: EditorState, index: number): FenceContext | null {
-  const { mainCodeState, streamTailCodeState, mainFenceLines, streamTailFenceLines } = state;
+export function computeFenceContext(
+  state: EditorState,
+  index: number
+): FenceContext | null {
+  const {
+    mainCodeState,
+    streamTailCodeState,
+    mainFenceLines,
+    streamTailFenceLines,
+  } = state;
   const boundary = state.mainLines.length - 1;
   // 双段访问器与 lineAt 逐点一致：尾段为空 → 直接读主数组（缺省短路会令
   // 文档末行（如 fence_end）状态读到 undefined，围栏上下文判定失效）
@@ -471,13 +576,21 @@ function computeFenceContext(state: EditorState, index: number): FenceContext | 
     else hi = mid;
   }
   let start = lo > 0 ? mainFenceLines[lo - 1] : -1;
-  // 尾段反向扫描（尾段 fence 相对行号平移 boundary 后全局有序）
-  for (let k = streamTailFenceLines.length - 1; k >= 0; k--) {
-    const abs = boundary + streamTailFenceLines[k];
-    if (abs < index) {
-      if (abs > start) start = abs;
-      break;
-    }
+  // 尾段二分（W2-4）：找「最大 rel < index - boundary」= 最大 abs < index
+  // （rel < index - boundary ⇔ boundary + rel < index，整数精确等价）。
+  // 旧实现从尾反向线性扫描并在首个命中处 break——命中项恰为最大
+  // abs < index，与二分结果逐位一致（升序数组二分下界定位）。
+  const tailLimit = index - boundary;
+  lo = 0;
+  hi = streamTailFenceLines.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (streamTailFenceLines[mid] < tailLimit) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0) {
+    const abs = boundary + streamTailFenceLines[lo - 1];
+    if (abs > start) start = abs;
   }
   if (start === -1 || stateAt(start) !== 'fence_start') return null;
 
@@ -490,9 +603,20 @@ function computeFenceContext(state: EditorState, index: number): FenceContext | 
     else lo = mid + 1;
   }
   let end = lo < mainFenceLines.length ? mainFenceLines[lo] : -1;
-  for (const rel of streamTailFenceLines) {
-    const abs = boundary + rel;
-    if (abs > start && (end === -1 || abs < end)) end = abs;
+  // 尾段二分（W2-4）：找「最小 rel > start - boundary」= 最小 abs > start
+  // （旧实现正向线性扫描取全部 > start 中的最小值；升序数组二分上界
+  // 定位命中同一元素，且 abs 大小序 = rel 大小序，取首个即最小）。
+  const tailFloor = start - boundary;
+  lo = 0;
+  hi = streamTailFenceLines.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (streamTailFenceLines[mid] > tailFloor) hi = mid;
+    else lo = mid + 1;
+  }
+  if (lo < streamTailFenceLines.length) {
+    const abs = boundary + streamTailFenceLines[lo];
+    if (end === -1 || abs < end) end = abs;
   }
   // 未闭合（end 缺失或非 fence_end）→ 软渲染域，无上下文
   if (end === -1 || stateAt(end) !== 'fence_end') return null;
@@ -508,7 +632,10 @@ function computeFenceContext(state: EditorState, index: number): FenceContext | 
 /** 订阅「本行围栏上下文」：选择器返回稳定字符串键——仅上下文变化时
  *  触发重渲染（zustand Object.is 比较；与 useSoftRender 同款订阅模式，
  *  store 缺省 = 全局单例）。渲染期重算最新上下文（同同步 tick 一致）。 */
-function useFenceContext(index: number, store?: EditorStore): FenceContext | null {
+function useFenceContext(
+  index: number,
+  store?: EditorStore
+): FenceContext | null {
   const editorStore = store ?? useEditorStore;
   const key = editorStore((state) => {
     const ctx = computeFenceContext(state, index);
@@ -731,11 +858,13 @@ function CodeBlock({
   activeState,
   store,
 }: BlockRendererComponentProps) {
-  // R3-C 流式软渲染：fence 未闭合期间代码行不跑启发式 token 高亮
-  //（parseCodeLine 的 keyword/comment/string），渲染等宽原文 + 轻
-  // 高亮（line-code 等宽样式），避免「半块突然变色」的视觉跳变；
-  // 闭合后 fence_end 出现，本分支自然走常规路径（无需显式切换，
-  // 状态由 codeBlockState 驱动）。
+  // R3-C 流式软渲染 + C5 三色 token 复用：fence 未闭合期间代码行渲染
+  // parseCodeLine 已产出的 keyword/comment/string token（MarkdownEngine
+  // 行级 parseLine 每次均已生成，软渲染仅消费，零额外成本）——软/硬渲染
+  // 同源同色（同一行文本 token 逐位一致），闭合切换 = 容器类微调
+  // （is-soft-render 移除）而非内容重建，零视觉跳变。容器保留
+  // line-code 等宽样式与 is-soft-render 未闭合标记（滚动/性能优化
+  // 依赖区分），行级 data-token-start/length 保留（测量/选区依赖）。
   const softRender = useSoftRender(index, store);
   // B4：围栏上下文（lang/内容区间/首行锚点）——未闭合或缩进代码为 null
   const fenceCtx = useFenceContext(index, store);
@@ -747,7 +876,15 @@ function CodeBlock({
           data-token-start={lineOffset}
           data-token-length={block.length}
         >
-          {block.raw}
+          {block.inlineTokens && block.inlineTokens.length > 0 ? (
+            <InlineRenderer
+              tokens={block.inlineTokens}
+              lineOffset={lineOffset}
+              activeState={activeState}
+            />
+          ) : (
+            block.raw
+          )}
         </span>
       </div>
     );
@@ -760,11 +897,13 @@ function CodeBlock({
         dataAttr="code"
         label={`复制代码块（${fenceCtx.lang}）`}
         onClick={() => {
-          const s = (store ?? useEditorStore).getState();
-          const lines: string[] = [];
-          for (let i = fenceCtx.contentStart; i < fenceCtx.contentEnd; i++) {
-            lines.push(stripBlockquotePrefix(s.getLine(i)));
-          }
+          // W2-3：整块 lines 走惰性缓存（与 LangRenderer 渲染同源同缓存，
+          // 点击时零重建——渲染已构建或缓存失效时按需重建）
+          const lines = getFenceBlockLines(
+            store ?? useEditorStore,
+            fenceCtx.contentStart,
+            fenceCtx.contentEnd
+          );
           void copyTextToClipboard(lines.join('\n'));
         }}
       />
@@ -772,18 +911,19 @@ function CodeBlock({
 
   // B4 N4：fence lang 分发——注册的 lang 走专用渲染器（工具产物渲染），
   // 未注册 lang 走默认代码渲染（InlineRenderer token 高亮）
-  const LangRenderer = fenceCtx ? resolveFenceLangRenderer(fenceCtx.lang) : null;
+  const LangRenderer = fenceCtx
+    ? resolveFenceLangRenderer(fenceCtx.lang)
+    : null;
   if (LangRenderer && fenceCtx) {
-    const s = (store ?? useEditorStore).getState();
-    const lines: string[] = [];
-    for (let i = fenceCtx.contentStart; i < fenceCtx.contentEnd; i++) {
-      lines.push(stripBlockquotePrefix(s.getLine(i)));
-    }
+    // W2-3：整块 lines 惰性构建（首次 O(块) 落缓存，滚动入窗/重复渲染
+    // 缓存命中 O(1)；内容或区间变化自动失效重建，语义与旧内联循环一致）
+    const lines = getFenceBlockLines(
+      store ?? useEditorStore,
+      fenceCtx.contentStart,
+      fenceCtx.contentEnd
+    );
     return (
-      <div
-        className="line-block line-code"
-        data-fence-lang={fenceCtx.lang}
-      >
+      <div className="line-block line-code" data-fence-lang={fenceCtx.lang}>
         <LangRenderer
           lang={fenceCtx.lang}
           lines={lines}
@@ -835,7 +975,11 @@ function HeadingBlock({
   );
 }
 
-function HrBlock({ block, lineOffset, activeState }: BlockRendererComponentProps) {
+function HrBlock({
+  block,
+  lineOffset,
+  activeState,
+}: BlockRendererComponentProps) {
   return (
     <div className="line-block line-hr">
       <hr
@@ -971,17 +1115,18 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
   if (block.raw.length > MAX_VISIBLE_LINE_CHARS) {
     isTruncated = true;
     truncatedLength = block.raw.length - MAX_VISIBLE_LINE_CHARS;
-    tokensToRender = truncateTokens(
-      tokensToRender,
-      MAX_VISIBLE_LINE_CHARS
-    );
+    tokensToRender = truncateTokens(tokensToRender, MAX_VISIBLE_LINE_CHARS);
   }
 
   return (
     // B5 bidi：整行级 RTL（body/列表/未知类型行统一落点——行级
     // dir 使 InlineRenderer 全部 token 继承 RTL 排版；LTR 行不设
     // dir 属性，行为零变化）
-    <div className="line-block" style={indentStyle} dir={rtl ? 'rtl' : undefined}>
+    <div
+      className="line-block"
+      style={indentStyle}
+      dir={rtl ? 'rtl' : undefined}
+    >
       {tokensToRender && tokensToRender.length > 0 ? (
         <>
           <InlineRenderer
@@ -1004,7 +1149,10 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
 
 // —— 默认注册表：核心 12 类型（原 switch 全部显式分支）——
 // 同步写入 defaultRenderers 快照（unregister 恢复出厂依据）
-function registerDefault(type: LineType, renderer: BlockRendererComponent): void {
+function registerDefault(
+  type: LineType,
+  renderer: BlockRendererComponent
+): void {
   BlockRendererRegistry.set(type, renderer);
   defaultRenderers.set(type, renderer);
 }
@@ -1038,7 +1186,14 @@ interface BlockRendererProps {
  * 其余（body/html_block/自定义未注册类型）走 DefaultBlockRenderer。
  */
 export const BlockRenderer = memo(
-  ({ block, index, lineOffset, activeState, tableId, store }: BlockRendererProps) => {
+  ({
+    block,
+    index,
+    lineOffset,
+    activeState,
+    tableId,
+    store,
+  }: BlockRendererProps) => {
     const Renderer = resolveBlockRenderer(block.type);
     // B5 bidi：memo 顶层计算一次行级 RTL（行文本不变 → memo 命中 →
     // 不重算；结果并入行渲染 props 供各渲染器消费）

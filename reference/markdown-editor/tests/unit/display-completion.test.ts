@@ -39,12 +39,16 @@ import { decorateIncompleteInline } from '../../src/core/decorateIncompleteInlin
 // measure 模块部分 mock（jsdom 无布局）：固定测量结果——render-layer
 // 同款模式（BlockRenderer 依赖的渲染热路径保留真实实现）
 vi.mock('../../src/core/measure', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('../../src/core/measure')
-  >();
+  const actual =
+    await importOriginal<typeof import('../../src/core/measure')>();
   return {
     ...actual,
-    getCoordinatesFromIndex: () => ({ top: 0, left: 0, height: 20, bottom: 20 }),
+    getCoordinatesFromIndex: () => ({
+      top: 0,
+      left: 0,
+      height: 20,
+      bottom: 20,
+    }),
     toContainerCoords: (rect: {
       top: number;
       left: number;
@@ -156,10 +160,7 @@ function rowEl(container: HTMLElement, index: number): HTMLElement {
 }
 
 /** 当前文档末行（流式追加目标行） */
-function lastRow(
-  container: HTMLElement,
-  store: EditorStore
-): HTMLElement {
+function lastRow(container: HTMLElement, store: EditorStore): HTMLElement {
   return rowEl(container, store.getState().getLineCount() - 1);
 }
 
@@ -177,6 +178,10 @@ function mountStreaming(
   const { container, getHandle } = mountEngine(store);
   act(() => {
     getHandle().streamAppend(chunk);
+    // W1-1（D-4）：降级 chunk 入帧聚合缓冲（rAF 帧边界提交）——预演
+    // 断言前显式 flush（提交时点适配：store/DOM 收敛不等待 rAF，预演
+    // 语义不变——appendText 保持 streamOp 非空，流式会话仍在进行）
+    getHandle().flushStream();
   });
   return { container, getHandle, store };
 }
@@ -190,12 +195,42 @@ const PREVIEW_CASES: Array<{
   closed: string;
   real: string;
 }> = [
-  { chunk: '\n**bold', cls: 'is-preview-bold', closed: '**bold**', real: 'style-bold' },
-  { chunk: '\n*em', cls: 'is-preview-italic', closed: '*em*', real: 'style-italic' },
-  { chunk: '\n_under', cls: 'is-preview-italic', closed: '_under_', real: 'style-italic' },
-  { chunk: '\n~~del', cls: 'is-preview-strike', closed: '~~del~~', real: 'style-strike' },
-  { chunk: '\n`code', cls: 'is-preview-code', closed: '`code`', real: 'style-inline-code' },
-  { chunk: '\n$eq', cls: 'is-preview-math', closed: '$eq$', real: 'style-math' },
+  {
+    chunk: '\n**bold',
+    cls: 'is-preview-bold',
+    closed: '**bold**',
+    real: 'style-bold',
+  },
+  {
+    chunk: '\n*em',
+    cls: 'is-preview-italic',
+    closed: '*em*',
+    real: 'style-italic',
+  },
+  {
+    chunk: '\n_under',
+    cls: 'is-preview-italic',
+    closed: '_under_',
+    real: 'style-italic',
+  },
+  {
+    chunk: '\n~~del',
+    cls: 'is-preview-strike',
+    closed: '~~del~~',
+    real: 'style-strike',
+  },
+  {
+    chunk: '\n`code',
+    cls: 'is-preview-code',
+    closed: '`code`',
+    real: 'style-inline-code',
+  },
+  {
+    chunk: '\n$eq',
+    cls: 'is-preview-math',
+    closed: '$eq$',
+    real: 'style-math',
+  },
 ];
 
 describe('P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）', () => {
@@ -205,17 +240,12 @@ describe('P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）', () =>
       const row = lastRow(container, store);
       // 预演类存在（样式即时生效）
       const previewSpan = row.querySelector<HTMLElement>(`.${c.cls}`);
-      expect(
-        previewSpan,
-        `${c.chunk} 应命中 ${c.cls}`
-      ).not.toBeNull();
+      expect(previewSpan, `${c.chunk} 应命中 ${c.cls}`).not.toBeNull();
       // 数据层零篡改：标记字符原文仍在 DOM（未闭合行按 text token
       // 渲染，预演只是类叠加——无 syntax-hidden 结构、无假偏移）
       expect(previewSpan!.textContent).toBe(c.chunk.slice(1));
       // 预演样式定义随预演挂载（`<style>` 块与真实 style-* 族同参数）
-      expect(row.querySelector('style')?.textContent).toContain(
-        c.cls
-      );
+      expect(row.querySelector('style')?.textContent).toContain(c.cls);
       act(() => {
         getHandle().streamEnd();
       });
@@ -233,6 +263,10 @@ describe('P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）', () =>
       // 闭合：追加闭标记（同一次流式会话内）
       act(() => {
         getHandle().streamAppend(c.closed.slice(c.chunk.length - 1));
+      });
+      // W1-1（D-4）：闭合 chunk 同样入帧聚合缓冲——断言前显式 flush
+      act(() => {
+        getHandle().flushStream();
       });
       const rowAfter = lastRow(container, store);
       const closedEl = rowAfter.querySelector<HTMLElement>(`.${c.real}`);
@@ -257,18 +291,22 @@ describe('P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）', () =>
     }
   });
 
-  it('1c 预演期间 store 原文精确（数据层零篡改）：' + '`**bold` 流式进行中 getText 与原文本逐字一致', () => {
-    const { container, store } = mountStreaming('hello', '\n**bold');
-    const row = lastRow(container, store);
-    expect(row.querySelector('.is-preview-bold')).not.toBeNull();
-    // 数据层未动：预演只是渲染期派生，store 原文含未闭合标记
-    expect(store.getState().getText()).toBe('hello\n**bold');
-    // 渲染文本 = 原文（无 syntax-hidden 结构——未闭合行按 text 渲染；
-    // 取 token span 文本，<style> 预演样式块不计入）
-    expect(
-      row.querySelector('[data-token-start]')?.textContent
-    ).toBe('**bold');
-  });
+  it(
+    '1c 预演期间 store 原文精确（数据层零篡改）：' +
+      '`**bold` 流式进行中 getText 与原文本逐字一致',
+    () => {
+      const { container, store } = mountStreaming('hello', '\n**bold');
+      const row = lastRow(container, store);
+      expect(row.querySelector('.is-preview-bold')).not.toBeNull();
+      // 数据层未动：预演只是渲染期派生，store 原文含未闭合标记
+      expect(store.getState().getText()).toBe('hello\n**bold');
+      // 渲染文本 = 原文（无 syntax-hidden 结构——未闭合行按 text 渲染；
+      // 取 token span 文本，<style> 预演样式块不计入）
+      expect(row.querySelector('[data-token-start]')?.textContent).toBe(
+        '**bold'
+      );
+    }
+  );
 
   it('2a streamEnd 收口：预演类消失、`<style>` 预演样式块卸载（流式结束 → 常规渲染）', () => {
     const { container, getHandle, store } = mountStreaming('hello', '\n**bold');
@@ -292,6 +330,10 @@ describe('P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）', () =>
     // 流式追加到代码行（codeState = 'code' → decorate 短路）
     act(() => {
       getHandle().streamAppend('x');
+    });
+    // W1-1（D-4）：代码行降级 chunk 入帧聚合缓冲——断言前显式 flush
+    act(() => {
+      getHandle().flushStream();
     });
     const row = rowEl(container, 1);
     expect(row.querySelector('[class*="is-preview-"]')).toBeNull();
@@ -338,7 +380,9 @@ describe('P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）', () =>
 
   it('5a undo 零影响：streamEnd 后单步 undo 精确回到流式前（预演不动数据层）', () => {
     const { container, getHandle, store } = mountStreaming('hello', '\n**bold');
-    expect(lastRow(container, store).querySelector('.is-preview-bold')).not.toBeNull();
+    expect(
+      lastRow(container, store).querySelector('.is-preview-bold')
+    ).not.toBeNull();
     act(() => {
       getHandle().streamEnd();
     });

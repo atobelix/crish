@@ -1,0 +1,222 @@
+{
+  "schema": "conex-perf-suite/v1",
+  "collectedAt": "2026-08-11T17:04:30.356Z",
+  "tier": "ci",
+  "mode": "browser",
+  "params": {
+    "matrixLines": 30000,
+    "matrixInjectMs": 10000,
+    "rampDurationMs": 3000,
+    "memoryRounds": 1,
+    "memoryInjectMs": 20000,
+    "tableDurationMs": 15000,
+    "label": "headless 快档（中位数 + 长任务 + 0 容忍结构指标）"
+  },
+  "commandLine": ["--scenario", "matrix-std-plain-inject"],
+  "environment": {
+    "platform": "win32",
+    "nodeVersion": "v24.11.0",
+    "serverBase": "http://localhost:5175",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+    "hardwareConcurrency": 12,
+    "deviceMemory": 32,
+    "language": "zh-CN",
+    "gpu": {
+      "vendorId": 65535,
+      "deviceId": 65535,
+      "renderer": null,
+      "available": false,
+      "gpuActive": false
+    },
+    "cdp": {
+      "model": ""
+    }
+  },
+  "untuned": [
+    {
+      "id": "M6a",
+      "rationale": "设计推定值（首挂载 + 至多 1 次修正）；无历史数据，首次采集定档"
+    },
+    {
+      "id": "M6b",
+      "rationale": "设计推定值；基线取同档 plain 无表格场景的 LayoutCount/秒"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "matrix-std-plain-inject",
+      "title": "矩阵：标准行高 28px × 纯文本 × 滚动中注入（500tps 流式 + 匀速滚动并发）",
+      "tier": "ci",
+      "elapsedMs": 11529,
+      "status": "PASS",
+      "checks": [
+        {
+          "metric": "M1a",
+          "name": "jsP95Ms（帧内 JS 段 P95）",
+          "actual": 0.2,
+          "budget": 4,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1b",
+          "name": "layoutPaintPerFrameMs（L1 CDP）",
+          "actual": 0,
+          "budget": 20,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-fps",
+          "name": "frameP95Ms（帧率硬门槛）",
+          "actual": 18.2,
+          "budget": 33.3,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1c",
+          "name": "longTaskCount（≥2 判 FAIL）",
+          "actual": 1,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "relDetachCount（流式+滚动并发相对脱节，0 容忍）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "maxRelErrPx（最大脱节，报告项）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "jumpCount（绝对突变帧数，报告项）",
+          "actual": 0,
+          "budget": 0,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M2c",
+          "name": "freezeFrames（停顿帧数，报告项）",
+          "actual": 0,
+          "budget": 2,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-stream",
+          "name": "chunkP95Ms（chunk 成本 ≤1ms）",
+          "actual": 0.3,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M1-stream",
+          "name": "textMatch（文本模型一致）",
+          "actual": 1,
+          "budget": 1,
+          "pass": true,
+          "reportOnly": false,
+          "tuned": true,
+          "na": false
+        },
+        {
+          "metric": "M5-报告",
+          "name": "heapGrowthMB（60s 注入堆增长，报告项）",
+          "actual": 0,
+          "budget": 60,
+          "pass": true,
+          "reportOnly": true,
+          "tuned": true,
+          "na": false
+        }
+      ],
+      "notes": [],
+      "ok": true,
+      "metrics": {
+        "id": "matrix-std-plain-inject",
+        "build": {
+          "ms": 439.5,
+          "syncMs": 2.8,
+          "loadedLines": 30000,
+          "ok": true,
+          "rowHeight": 28
+        },
+        "detach": 0,
+        "jsP95Ms": 0.2,
+        "frameP95": 18.19999998807907,
+        "layoutPaintPerFrame": 0.0008312333333333334,
+        "layoutPerSec": 248.5,
+        "longTasks": {
+          "count": 1,
+          "totalMs": 96,
+          "maxMs": 96
+        },
+        "inject": {
+          "injectedTokens": 5001,
+          "chunkP95Ms": 0.29999999701976776,
+          "textMatch": true,
+          "consistency": true,
+          "heap": {
+            "startMB": 61,
+            "peakMB": 61,
+            "endMB": 61
+          },
+          "ramp": {
+            "anchorSamples": 400,
+            "anchorSwitchFrames": 201,
+            "relDetachCount": 0,
+            "maxRelErrPx": 0,
+            "jumpCount": 0,
+            "maxJumpErrPx": 0,
+            "freezeFrames": 0
+          }
+        },
+        "m2b": null
+      },
+      "extra": null,
+      "summary": {
+        "hardFails": [],
+        "untunedFails": []
+      }
+    }
+  ],
+  "summary": {
+    "PASS": 1,
+    "WARN": 0,
+    "FAIL": 0,
+    "ERROR": 0,
+    "total": 1,
+    "exitCode": 0
+  }
+}

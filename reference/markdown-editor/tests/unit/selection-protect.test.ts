@@ -39,12 +39,16 @@ import {
 // CursorLayer / SelectionHighlight 只消费几何函数；BlockRenderer 依赖的
 // checkIsActive 等渲染热路径保留真实实现——render-export 同款模式）
 vi.mock('../../src/core/measure', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('../../src/core/measure')
-  >();
+  const actual =
+    await importOriginal<typeof import('../../src/core/measure')>();
   return {
     ...actual,
-    getCoordinatesFromIndex: () => ({ top: 0, left: 0, height: 20, bottom: 20 }),
+    getCoordinatesFromIndex: () => ({
+      top: 0,
+      left: 0,
+      height: 20,
+      bottom: 20,
+    }),
     toContainerCoords: (rect: {
       top: number;
       left: number;
@@ -265,6 +269,11 @@ describe('P3 B3 canDirect 集成：选区/光标在末行 → 降级常规路径
     act(() => {
       getHandle().streamAppend(' world');
     });
+    // W1-1（D-4）：降级 chunk 入帧聚合缓冲（rAF 帧边界提交）——断言前
+    // 显式 flush（提交时点适配：帧聚合不改变「降级无直刷标记」语义）
+    act(() => {
+      getHandle().flushStream();
+    });
     // 降级 = 常规 append 路径：无直刷标记，store 已提交
     expect(container.querySelector('[data-streaming-dirty]')).toBeNull();
     expect(store.getState().getText()).toBe('hello world');
@@ -283,6 +292,9 @@ describe('P3 B3 canDirect 集成：选区/光标在末行 → 降级常规路径
 
     act(() => {
       getHandle().streamAppend(' world');
+    });
+    act(() => {
+      getHandle().flushStream();
     });
     expect(container.querySelector('[data-streaming-dirty]')).toBeNull();
     expect(store.getState().getText()).toBe('hello world');
@@ -431,8 +443,12 @@ describe('P3 B3 flush 后选区越界钳制（plan-A3 方案 A 兜底）', () =>
     });
 
     // 越界光标 > 末行行首 → shouldDirectStream 降级 → 常规 append 提交
+    //（W1-1：入帧聚合缓冲，flush 后提交——断言前显式 flush）
     act(() => {
       getHandle().streamAppend(' world');
+    });
+    act(() => {
+      getHandle().flushStream();
     });
     expect(container.querySelector('[data-streaming-dirty]')).toBeNull();
     const s = store.getState();

@@ -10,19 +10,33 @@ import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
 import { SelectionHighlight } from './SelectionHighlight';
-import { useEditorStore, type EditorState, type EditorStore } from '../core/EditorStore';
+import {
+  useEditorStore,
+  type EditorState,
+  type EditorStore,
+} from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
+// W1-1（D-4）：不可直刷 chunk 的 rAF 帧批缓冲（500 token/s → ≤60 提交/s）
+import { StreamBuffer } from '../core/StreamBuffer';
 // R5-D 装饰层统一（06 §2）：active/选区/搜索统一进 DecorationSet——
 // 行级 query 派生 activeState，不再经 props 链逐层传裸选区数据
-import { DecorationSet, applyCursorSelectionDecorations } from '../core/DecorationSet';
+import {
+  DecorationSet,
+  applyCursorSelectionDecorations,
+} from '../core/DecorationSet';
 
 import { type CodeState } from '../core/parser';
 // P3 B1 scroll factor：逻辑↔物理滚动高度分段映射（超长文档防浏览器高度触顶）
 import { ScrollMap } from '../core/scrollMap';
 // B4 N9：只读复制为 Markdown——DOM 选区 → 源码偏移映射 + getText 切片
-import { selectionToMarkdown } from '../core/renderToHtml';
+// W3-1（D-8）：导出聚合（exportHtml）复用 renderToHtml 纯函数
+import { renderToHtml, selectionToMarkdown } from '../core/renderToHtml';
+// W3-4（S-EL-10）：流式专项指标接线（append 耗时/提交计数/直刷占比）
+import { metrics } from '../core/metrics';
+// W3-3（S-EL-11）：M6 表格列宽定型登记点（perf suite 表格流式场景读判）
+import { recordTableWidthSettle } from '../core/tableSettle';
 // B2 查找替换（05 高频项 N6）：查找替换面板（搜索/高亮/跳转/替换/
 // 计数）挂载于引擎根容器内，快捷键 Ctrl+F/Ctrl+H 自监听
 import { FindReplacePanel } from './FindReplacePanel';
@@ -34,10 +48,7 @@ import {
   type HeadingExtractor,
   extractHeading,
 } from '../core/headingIndex';
-import {
-  FoldState,
-  FOLD_PLACEHOLDER_HEIGHT,
-} from '../core/foldState';
+import { FoldState, FOLD_PLACEHOLDER_HEIGHT } from '../core/foldState';
 // P3 B5（A5 渲染分层 L3 接缝）：Canvas 只读层预留——渲染模式判定
 // （触发条件登记：readOnly && 行数阈值 && 注册表存在），本轮不实现
 import { resolveRenderMode, type RenderMode } from '../core/rowSurface';
@@ -65,19 +76,31 @@ import { InlinePreviewContext } from './InlineRenderer';
 function getLineState(s: EditorState, i: number): CodeState {
   if (s.streamTailCodeState.length === 0) return s.mainCodeState[i];
   const boundary = s.mainLines.length - 1;
-  return i < boundary ? s.mainCodeState[i] : s.streamTailCodeState[i - boundary];
+  return i < boundary
+    ? s.mainCodeState[i]
+    : s.streamTailCodeState[i - boundary];
 }
 
 // ── C3 流式直刷 DOM（08 方案优化补充 §1 招 1 限定版 / 09 方案修订终版 §4 C3）──
 // 直刷仅限「纯文本末行」：行内无任何可构成 CommonMark 语法的字符，
-// 渲染结果必然是单个 text token 的正文行。判定字符集刻意保守——
-// `* # ` [ $ | > - _ ~ < \ = + . 0-9 ! ^ ) ( { }`（外加与 [ 配对的 ]）全部
-// 列为禁入字符，宁可少直刷不可误刷：任何禁入字符出现即拒绝直刷，该行走
-// store.appendText 常规路径，渲染结果由解析器权威决定（直刷只碰「无论怎么
-// 解析都必然是纯文本」的行，从根上杜绝「直刷内容与解析渲染分叉」）。
-const DIRECT_STREAM_FORBIDDEN_CHARS = new Set(
-  "*#`[$|>-_~<\\=+.0123456789!^)({}]"
-);
+// 渲染结果必然是单个 text token 的正文行。W2-2（02 分析 §1.2 P2 结构改法，
+// S-T-2-02/S-T-2-05）把判定从「全字符黑名单」拆为三段——
+// 1) 行首模式黑名单（LINE_START_SYNTAX_RE）：行首形态本身不含禁入字符，
+//    但 parseLine 会把整行改形（有序/无序列表、分隔线、Setext 下划线候选），
+//    直刷写字面文本将与 flush 后渲染形态分叉，必须拒绝；
+// 2) 行中白名单扫描（DIRECT_STREAM_FORBIDDEN_CHARS）：仅禁真正会触发
+//    行内解析的成对语法字符（`$ * _ ~ ` [ ] < > \ # & |`），数字/`.`/
+//    `=`/`+`/`(`/`)`/`!`/`^`/`-`/`{`/`}` 等纯文本安全字符放开（逐字符
+//    经 parseLine 语义验证，矩阵见 stream-direct-consistency.test.ts）；
+// 3) 配对模式检查（SUP_PAIR_RE/MARK_PAIR_RE）：`^`/`=` 单字符本身安全
+//    （`a^2`/`x=1` 不触发行内解析），但成对形态会触发 sup/mark 规则，
+//    按 parseLine 实际语义拒绝；
+// 4) 行尾硬换行后缀拒绝（HARD_BREAK_SUFFIX_RE）：行尾 2+ 空格/tab 在
+//    parseLine 产出 hard_break token（S-EL-01 红线补洞）。
+// `&` 必禁（W0-1 红线，禁止放开）：text token 的 content 会做 CommonMark
+// 实体解码（parser.ts:3115-3119），含 `&amp;`/`&quot;`/`&nbsp;` 的行若直刷
+// 会写入字面文本、flush 后跳变为解码值（直刷/解析分叉，S-EL-01 红线修复）。
+const DIRECT_STREAM_FORBIDDEN_CHARS = new Set('*#`[$|>_~<\\]&');
 
 // 直刷行文本长度上限：镜像 BlockRenderer.MAX_VISIBLE_LINE_CHARS（5000）——
 // 渲染层对超长行执行截断折叠（⋯ 已折叠 N 字符），直刷若越过该阈值，DOM
@@ -100,6 +123,12 @@ const SEARCH_LINE_BG = 'hsl(45 100% 50% / 0.10)';
 // B3 折叠占位行摘要截断长度（占位行文本仅作视觉提示，超长截断防撑行）
 const FOLD_SUMMARY_MAX_CHARS = 48;
 
+// W1-2（D-3）滚动跟随边缘阈值（px）：scroll 事件判定「用户是否在尾部」——
+// 距底部 ≤ FOLLOW_EDGE_PX 视为贴底（follow），超过即离开（paused）。
+// 提交后评估复用同一阈值：视口距底部超过该值且为 follow 态 → 贴底跟随
+// （新内容把尾部推出视口即滚回，增量 ≤ 阈值的小提交不滚，计数受控）。
+const FOLLOW_EDGE_PX = 20;
+
 // P3 B5（A5 渲染分层 L2 GPU 合成）：档位常量——GPU 层（方案 B+C+D）
 // 的单点回退开关（A5 §5.3 整体回退：改动收敛于本常量 + directDomUpdatesMode
 // 一行 + 行级两属性）。改此处为 false 即整档回退：virtualizer 回 position
@@ -118,24 +147,73 @@ const RENDER_LAYER_GPU_OPTS = {
 // B3 空标题共享引用（不可变约定：只在 set 时整体替换，绝不就地修改）
 const EMPTY_HEADINGS: readonly HeadingEntry[] = [];
 
+// W2-2 行首模式黑名单（02 分析 §1.2 P2 结构改法第 1 段）：行首形态不含
+// 禁入字符但 parseLine 会改变整行形态（parser.ts:2185-2291 块级判定）：
+// - `^\d+[.)](\s|$)`：有序列表（`^(\s*)(\d+\.)\s+`，parser.ts:2273）——
+//   `1. 文本`/`123. 文本` 渲染为列表项（marker 前移、形态改形）；`(\s|$)`
+//   覆盖流式边界 `1.`（chunk 尚未带空格时若直刷，下一 chunk 成列表形态
+//   后 flush 即分叉）；`1)` 为 CommonMark 兼容的有序列表另式，一并拒绝；
+// - `^[-+]\s`：无序列表（`^(\s*)([-*+])\s+`，parser.ts:2256）——`- 文本`/
+//   `+ 文本` 渲染为 `•` 项目符号，直刷显示字面连字符（分叉）；
+// - `^[-+]{3,}\s*$`：分隔线（`^(\s*[-*+_]){3,}\s*$`，parser.ts:2185）——
+//   `---`/`+++` 渲染为 <hr/> 零文本（分叉）；
+// - `^=+\s*$`：Setext 下划线候选（全量 parse 的 computeSetextContexts 把
+//   上一段落升格为标题，parser.ts:1123）——直刷与文档终态分叉。
+// 行首空白行已在下方拒绝（缩进代码块/列表缩进），故此处正则均以 `^` 锚定。
+const LINE_START_SYNTAX_RE: ReadonlyArray<RegExp> = [
+  /^\d+[.)](\s|$)/,
+  /^[-+]\s/,
+  /^[-+]{3,}\s*$/,
+  /^=+\s*$/,
+];
+
+// W2-2 行中配对语法检查（第 3 段）：`^`/`=` 单字符本身是纯文本（`a^2`/
+// `x=1` 经 parseLine 验证不触发行内解析），但成对形态会触发行内规则，
+// 必须按 parseLine 实际语义拒绝：
+// - sup 上标（parser.ts:2953 `^([^\s^]{1,500})^`）：`x^2^` 渲染为
+//   <sup>2</sup>，content 不含定界符——直刷显示字面 `^2^`（分叉）；
+//   上限 500 与解析规则一致（超长形态 parseLine 按文本渲染，放行安全）；
+// - mark 高亮（parser.ts:2916 `==...==`）：`a==b==c`/`x == y == z` 渲染
+//   为 mark token，直刷显示字面（分叉）。`==[\s\S]*?==` 覆盖「两处 `==`」
+//   的配对形态；单处 `==`（`a==b`）parseLine 无闭合即按文本渲染，可直刷。
+const SUP_PAIR_RE = /\^[^\s^]{1,500}\^/;
+const MARK_PAIR_RE = /==[\s\S]*?==/;
+
+// W2-2 行尾硬换行后缀（S-EL-01 红线补洞）：行尾 2+ 空格/tab 在 parseLine
+// 产出 hard_break token（parser.ts:2605 `[ \t]{2,}$`），直刷写字面尾随
+// 空白将与渲染分叉（行尾反斜杠同理，但 `\` 已在禁集内）。
+const HARD_BREAK_SUFFIX_RE = /[ \t]{2,}$/;
+
 /**
- * 纯文本行保守判定（C3 限定版：直刷前置条件之一）：
+ * 纯文本行判定（C3 限定版 + W2-2 判定精细化：直刷前置条件之一）：
  * - 非空行（空行/纯空白行渲染为 <br/> 结构，无 text token 可直写）；
  * - 不以空白开头（≥4 空格缩进 = 缩进代码块，1-3 空格缩进也一并回避）；
- * - 全文不含 DIRECT_STREAM_FORBIDDEN_CHARS 中任一字符（含行首语法
- *   标记：标题/列表/引用/表格/围栏/数学/分隔线/HTML 块，以及行中
- *   行内语法：强调/链接/脚注/行内代码/转义等）。
+ * - 行首不命中 LINE_START_SYNTAX_RE（列表/分隔线/Setext 候选——parseLine
+ *   会改形的行首形态）；
+ * - 全文不含 DIRECT_STREAM_FORBIDDEN_CHARS 中任一字符（行内成对语法：
+ *   强调/链接/脚注/行内代码/转义/数学/表格/实体解码等）；
+ * - 不含 sup/mark 配对形态（`^...^`/`==...==`）；
+ * - 行尾无 2+ 空格/tab（hard_break 分叉）。
  * 判定对象是「末行 + 待追加 chunk」的合并结果（调用方负责拼接）——
  * 直刷过程中 DOM 文本逐 chunk 增长，只有合并后仍为纯文本行才直写。
+ * 放开项（数字/`.`/`=`/`+`/`(`/`)`/`!`/`^`/`-`/`{`/`}`）逐一经 parseLine
+ * 语义验证并以一致性矩阵锁死（stream-direct-consistency.test.ts，S-T-2-05）；
+ * `&` 与全部「parseLine 会解码/改形/成 token」的字符保持禁入（S-EL-01）。
  */
 // oxlint-disable-next-line react/only-export-components -- 任务规定导出纯函数供 R5/测试复用
 export function isPlainTextLine(lineText: string): boolean {
   if (lineText.length === 0) return false;
   const first = lineText[0];
   if (first === ' ' || first === '\t') return false;
+  for (let i = 0; i < LINE_START_SYNTAX_RE.length; i++) {
+    if (LINE_START_SYNTAX_RE[i].test(lineText)) return false;
+  }
   for (let i = 0; i < lineText.length; i++) {
     if (DIRECT_STREAM_FORBIDDEN_CHARS.has(lineText[i])) return false;
   }
+  if (SUP_PAIR_RE.test(lineText)) return false;
+  if (MARK_PAIR_RE.test(lineText)) return false;
+  if (HARD_BREAK_SUFFIX_RE.test(lineText)) return false;
   return true;
 }
 
@@ -165,20 +243,86 @@ export function shouldDirectStream(
 }
 
 /**
+ * W3-1（S-EL-09）流式会话状态快照（getStreamState 返回值）：
+ * - active：store.streamActive——「流式会话进行中」信号（W2-1 D-1 换源后
+ *   的权威判定；直刷仅写 DOM 期间 store 滞后，active 仍为 false，宿主
+ *   应结合 directPendingChars 判断「有未提交直刷内容」）；
+ * - bufferedChars：帧聚合缓冲（StreamBuffer）内未提交字符数（W1-1：
+ *   不可直刷 chunk 在 rAF 帧边界批量提交）；
+ * - directPendingChars：已直写 DOM、尚未提交 store 的直刷累积字符数
+ *   （pendingStreamRef 长度；flushStream/streamEnd/任何 flush 时机后归零）；
+ * - followState：滚动跟随状态（W1-2 D-3 三态）——'follow' = 贴底自动
+ *   跟随，'paused' = 用户上滚离开尾部（阅读态，不主动滚）。
+ */
+export interface StreamState {
+  active: boolean;
+  bufferedChars: number;
+  directPendingChars: number;
+  followState: 'follow' | 'paused';
+}
+
+/**
+ * W3-1（S-EL-09）流式会话结束信号（onStreamEnd 回调入参）：
+ * - flushed：会话文本已提交 store（恒 true——正常收口与 discard 都会
+ *   flush 直刷累积与帧聚合缓冲后才宣告结束）；
+ * - discarded：本次结束是否为「丢弃」（discardStream 触发为 true；
+ *   streamEnd 正常收口为 false）。
+ */
+export interface StreamEndInfo {
+  flushed: boolean;
+  discarded: boolean;
+}
+
+/**
  * MarkdownEngine 命令式流式接口（R5 集成轮宿主接线）：
  * 宿主流式路径 = streamAppend(chunk)（直刷优先）→ streamEnd()（flush 收口）。
  * 直刷的 flush 提交走 store.appendText（R3-A stop-flush 语义自动生效：
  * 光标平移/流式合并 undo meta:'stream' 均由 store 统一处理）。
+ * W3-1 扩展（S-EL-09）：状态查询 / 完成信号 / 中断丢弃 / 取文导出聚合。
  */
 export interface MarkdownEngineHandle {
-  /** 流式追加：纯文本末行且 chunk 无换行 → 命令式直写 DOM（store 延迟提交）；
-   *  否则（含换行/末行非纯文本/超长/行未挂载）→ 先 flush 累积再走 appendText。 */
+  /** 流式追加：纯文本末行且 chunk 无换行 → 命令式直写 DOM（store 延迟提交，
+   *  同步零提交，W1-1 后直刷路径不变）；否则（含换行/末行非纯文本/超长/
+   *  行未挂载）→ 先 flush 直刷累积，chunk 入 rAF 帧聚合缓冲（W1-1/D-4：
+   *  每帧一次 appendText，500 token/s → ≤60 提交/s）。 */
   streamAppend: (chunk: string) => void;
-  /** 流式结束：flush 直刷累积（appendText 一次提交）并 stop-flush 尾段
-   *  （合并为单个 meta:'stream' undo 步）。幂等。 */
+  /** 流式结束：flush 直刷累积与帧聚合缓冲（直刷先、buffer 后，顺序不变量）
+   *  并 stop-flush 尾段（合并为单个 meta:'stream' undo 步）。幂等。 */
   streamEnd: () => void;
-  /** 主动 flush（宿主可提前提交直刷累积；无累积时为空操作，幂等）。 */
+  /** 主动 flush（宿主可提前提交直刷累积 + 帧聚合缓冲；无累积为空操作，
+   *  幂等）。W1-1 语义扩展：帧聚合缓冲同步吐出，不等 rAF。 */
   flushStream: () => void;
+  /** 流式会话状态查询（W3-1，S-EL-09）：active/bufferedChars/
+   *  directPendingChars/followState 全量 O(1) 读引擎 ref 与 store——
+   *  宿主「停止/继续」按钮、状态灯、指标面板的数据源。 */
+  getStreamState: () => StreamState;
+  /** 流式会话结束信号注册（W3-1，S-EL-09）：streamEnd() 正常收口 →
+   *  { flushed: true, discarded: false }；discardStream() 丢弃 →
+   *  { flushed: true, discarded: true }。仅在「会话真正结束」触发一次
+   *  （streamEnd 幂等重复调用不重复触发；无会话的 streamEnd 不触发）。
+   *  支持多次注册；返回解绑函数（幂等，可重复调用）。 */
+  onStreamEnd: (cb: (info: StreamEndInfo) => void) => () => void;
+  /** 中断并丢弃当前流式会话（W3-1，D-7，S-EL-06）：
+   *  1) flush 直刷累积 + 帧聚合缓冲（顺序不变量 R-2：内容先提交再回滚）；
+   *  2) 可编辑会话：stop-flush 收口（未 streamEnd 时生成 meta:'stream'
+   *     op）后撤销该 op——单步精确回到流式前（undo 组语义覆盖流式期间
+   *     的用户编辑；撤销产物留在 redo 栈，redo 可恢复被丢弃内容）；
+   *  3) 只读快路径（W2-1：streamOp 恒 null 无记账）：截断到会话起点
+   *     （appendText 首次调用前的 textLength 快照，引擎 ref 记录）——
+   *     setText 整档重置，不污染 undo/redo/changeLog/lastUserEditTime
+   *     （后续会话快路径门禁不被破坏）；
+   *  4) 触发 onStreamEnd { flushed: true, discarded: true }（实际丢弃时）。
+   *  幂等：无进行中会话时为空操作（不触发回调）。 */
+  discardStream: () => void;
+  /** 取当前文档全文（W3-1，D-8）：先 flush 直刷累积与帧聚合缓冲（直刷
+   *  滞后语义透明化——未 flush 的 getText 不含直刷累积，聚合 API 必须
+   *  先收敛），再读 store.getText()。任意时机可调（幂等，无累积空转）。 */
+  getContent: () => string;
+  /** 导出当前文档 HTML（W3-1，D-8）：先 flush（同 getContent 语义），
+   *  再经 MarkdownParser.parse + renderToHtml 聚合（与既有 core 导出
+   *  投影器同源，render-export.test.ts 锁定一致性）。完成态权威渲染
+   *  （EL-08「发送到笔记」落点）；大文档渲染成本由宿主节流调用。 */
+  exportHtml: () => string;
   /** 搜索高亮接入点（R5-D，05 高频项）：向统一装饰层添加一个搜索命中
    *  区间 [from, to)（全局字符偏移）——命中行打 is-search-line class，
    *  token 级高亮渲染属后续增强（宿主搜索接入本轮为 API + 行级标记）。 */
@@ -213,186 +357,193 @@ export interface MarkdownEngineHandle {
 // - props 只传 index（数字）+ 内容字段（lineText/offset/isCode）+ 稳定 rowRef，
 //   virtualRow 新对象字面量引发的 memo 失效被根治：滚动/光标变化帧行内容不变时
 //   全部 memo 命中，React 仅挂载/卸载窗口边界行（01 问题 6 §6.2-C）。
-const LineItem = React.memo(({
-  index,
-  lineText,
-  offset,
-  isCode,
-  rowRef,
-  streamingDirty,
-  store,
-  // R5-D：共享装饰集 + 版本号——active/选区/搜索统一数据源（LineItem
-  // 不再订阅 cursorPos/selection*，改经装饰集行级 query 派生；光标/
-  // 选区/搜索变化 → 行版本递增 → 本行查询刷新；无变化帧（滚动/内容
-  // 未变）props 全等 → memo 命中，零重渲染）。
-  // R6-C 粒度修正：memo 依赖从「全局 decorationVersion」降为「本行
-  // 行版本 rowDecorationVersion」（decorationVersion 每帧递增的回归
-  // 根因：append 平移光标 → 全窗口 memo 失效 → 可见 math 块每帧重跑
-  // KaTeX）。行版本只在「该行装饰内容变化」时递增（DecorationSet
-  // add/remove 影响行 bump）——光标平移只 bump 光标行，其他行版本
-  // 不变 → memo 命中。
-  decorations,
-  rowDecorationVersion,
-  useGpuLayer,
-}: {
-  index: number;
-  lineText: string;
-  offset: number;
-  isCode: CodeState;
-  rowRef: (el: HTMLElement | null) => void;
-  // R5：行渲染单元的 store 绑定（内容/activeState 经实例读取；多实例
-  // 场景缺省传全局单例——LineItem 是模块级 memo 组件，store 引用稳定）。
-  store: EditorStore;
-  // R5-D：共享装饰集（由引擎维护并注入，见 MarkdownEngine 接线）；
-  // R6-C：行级装饰版本（引擎渲染时读 decorations.getRowVersion(index)
-  // 注入——本行装饰内容变化的单调版本，非全局版本）
-  decorations: DecorationSet;
-  rowDecorationVersion: number;
-  // C3 dirty 协议：直刷期间本行 props 行文本滞后于 DOM（直刷文本尚未
-  // 提交 store）。为 true 时本行进入冻结渲染（见 frozenContentRef），
-  // 并打上 data-streaming-dirty 标记（调试/巡检可见）。
-  streamingDirty?: boolean;
-  // P3 B5（A5 渲染分层 L2）：GPU 合成开关——true 时行容器附加
-  // virtual-row-gpu（contain: paint，方案 C）；dirty 行附加
-  // virtual-row-gpu-dirty（will-change: transform 独立层，方案 D）。
-  // 布尔 prop 引用稳定，不破坏 React.memo 命中。
-  useGpuLayer?: boolean;
-}) => {
-  // C3 直刷冻结快照（dirty 覆盖渲染路径，09 §4 C3 代码级落实）：
-  // 干净渲染时把「本次 BlockRenderer 元素」存入 ref；dirty 渲染时返回
-  // 该同引用元素——React 对同一元素引用（props 对象 Object.is 相等）
-  // 直接跳过子树协调，BlockRenderer/InlineRenderer 不再重跑，DOM 上
-  // 已直刷的文本原样保留，杜绝「React 用旧 lineText 覆盖直刷文本」。
-  // flush 后 dirty 清除 → 按最新 lineText 全新渲染，DOM 与 store 收敛。
-  const frozenContentRef = useRef<React.ReactElement | null>(null);
+const LineItem = React.memo(
+  ({
+    index,
+    lineText,
+    offset,
+    isCode,
+    rowRef,
+    streamingDirty,
+    store,
+    // R5-D：共享装饰集 + 版本号——active/选区/搜索统一数据源（LineItem
+    // 不再订阅 cursorPos/selection*，改经装饰集行级 query 派生；光标/
+    // 选区/搜索变化 → 行版本递增 → 本行查询刷新；无变化帧（滚动/内容
+    // 未变）props 全等 → memo 命中，零重渲染）。
+    // R6-C 粒度修正：memo 依赖从「全局 decorationVersion」降为「本行
+    // 行版本 rowDecorationVersion」（decorationVersion 每帧递增的回归
+    // 根因：append 平移光标 → 全窗口 memo 失效 → 可见 math 块每帧重跑
+    // KaTeX）。行版本只在「该行装饰内容变化」时递增（DecorationSet
+    // add/remove 影响行 bump）——光标平移只 bump 光标行，其他行版本
+    // 不变 → memo 命中。
+    decorations,
+    rowDecorationVersion,
+    useGpuLayer,
+  }: {
+    index: number;
+    lineText: string;
+    offset: number;
+    isCode: CodeState;
+    rowRef: (el: HTMLElement | null) => void;
+    // R5：行渲染单元的 store 绑定（内容/activeState 经实例读取；多实例
+    // 场景缺省传全局单例——LineItem 是模块级 memo 组件，store 引用稳定）。
+    store: EditorStore;
+    // R5-D：共享装饰集（由引擎维护并注入，见 MarkdownEngine 接线）；
+    // R6-C：行级装饰版本（引擎渲染时读 decorations.getRowVersion(index)
+    // 注入——本行装饰内容变化的单调版本，非全局版本）
+    decorations: DecorationSet;
+    rowDecorationVersion: number;
+    // C3 dirty 协议：直刷期间本行 props 行文本滞后于 DOM（直刷文本尚未
+    // 提交 store）。为 true 时本行进入冻结渲染（见 frozenContentRef），
+    // 并打上 data-streaming-dirty 标记（调试/巡检可见）。
+    streamingDirty?: boolean;
+    // P3 B5（A5 渲染分层 L2）：GPU 合成开关——true 时行容器附加
+    // virtual-row-gpu（contain: paint，方案 C）；dirty 行附加
+    // virtual-row-gpu-dirty（will-change: transform 独立层，方案 D）。
+    // 布尔 prop 引用稳定，不破坏 React.memo 命中。
+    useGpuLayer?: boolean;
+  }) => {
+    // C3 直刷冻结快照（dirty 覆盖渲染路径，09 §4 C3 代码级落实）：
+    // 干净渲染时把「本次 BlockRenderer 元素」存入 ref；dirty 渲染时返回
+    // 该同引用元素——React 对同一元素引用（props 对象 Object.is 相等）
+    // 直接跳过子树协调，BlockRenderer/InlineRenderer 不再重跑，DOM 上
+    // 已直刷的文本原样保留，杜绝「React 用旧 lineText 覆盖直刷文本」。
+    // flush 后 dirty 清除 → 按最新 lineText 全新渲染，DOM 与 store 收敛。
+    const frozenContentRef = useRef<React.ReactElement | null>(null);
 
-  // R5-D：行级装饰查询（行范围 = 本行字符区间 [offset, offset + 行长)；
-  // 闭区间相交谓词在 DecorationSet.query 内实现——旧 selector 的
-  // active/选区判定逐分支等价迁移，行为零变化）
-  const lineDecorations = React.useMemo(
-    () => decorations.query(offset, offset + lineText.length),
-    // R6-C：依赖从全局 decorationVersion 降为本行行版本——本行装饰
-    // 内容变化（行版本递增）时重查，其他行装饰变化不触发本行重查；
-    // decorations 为可变结构，行内变更不可见，必须经行版本驱动重查
-    // （与下方批量测量 effect 的语义依赖注释同款）
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [decorations, rowDecorationVersion, offset, lineText.length]);
+    // R5-D：行级装饰查询（行范围 = 本行字符区间 [offset, offset + 行长)；
+    // 闭区间相交谓词在 DecorationSet.query 内实现——旧 selector 的
+    // active/选区判定逐分支等价迁移，行为零变化）
+    const lineDecorations = React.useMemo(
+      () => decorations.query(offset, offset + lineText.length),
+      // R6-C：依赖从全局 decorationVersion 降为本行行版本——本行装饰
+      // 内容变化（行版本递增）时重查，其他行装饰变化不触发本行重查；
+      // decorations 为可变结构，行内变更不可见，必须经行版本驱动重查
+      // （与下方批量测量 effect 的语义依赖注释同款）
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
+      [decorations, rowDecorationVersion, offset, lineText.length]
+    );
 
-  // R5-D：activeState 派生（props 结构兼容旧 selector 输出）：
-  // - selection 装饰 → { cursor, selStart, selEnd }——cursor 取选区
-  //   末端（占位：有选区分支的消费方 InlineRenderer / checkIsActive
-  //   不读 cursor，与旧语义一致，值仅保持结构完整）；
-  // - active 装饰（选区折叠的光标）→ { cursor }（selStart/selEnd 缺省）；
-  // - 无装饰 → null（非活动行）。
-  const activeState = React.useMemo(() => {
-    const sel = lineDecorations.find((d) => d.kind === 'selection');
-    if (sel) {
-      return { cursor: sel.to, selStart: sel.from, selEnd: sel.to };
-    }
-    const active = lineDecorations.find((d) => d.kind === 'active');
-    return active ? { cursor: active.from } : null;
-  }, [lineDecorations]);
-
-  // 搜索高亮（05 高频项预留）：命中 search 装饰的行打 is-search-line
-  // class——宿主可经 CSS 定制行级标记；token 级高亮渲染属 R5-C 渲染域，
-  // 本轮为「API + 简单高亮 class」接入点
-  const hasSearchDecoration = lineDecorations.some((d) => d.kind === 'search');
-
-  const tableId = store(state => {
-    if (!lineText.trim().startsWith('|')) return undefined;
-    let firstTableIndex = index;
-    while (firstTableIndex > 0) {
-      // 经访问器读上一行（R3-B1：不读物化 state.lines——尾段非空时
-      // 物化会执行 concat；getLine 是双段惰性视图，语义与物化视图一致）
-      const prevLine = state.getLine(firstTableIndex - 1);
-      if (prevLine && prevLine.trim().startsWith('|')) {
-        firstTableIndex--;
-      } else {
-        break;
+    // R5-D：activeState 派生（props 结构兼容旧 selector 输出）：
+    // - selection 装饰 → { cursor, selStart, selEnd }——cursor 取选区
+    //   末端（占位：有选区分支的消费方 InlineRenderer / checkIsActive
+    //   不读 cursor，与旧语义一致，值仅保持结构完整）；
+    // - active 装饰（选区折叠的光标）→ { cursor }（selStart/selEnd 缺省）；
+    // - 无装饰 → null（非活动行）。
+    const activeState = React.useMemo(() => {
+      const sel = lineDecorations.find((d) => d.kind === 'selection');
+      if (sel) {
+        return { cursor: sel.to, selStart: sel.from, selEnd: sel.to };
       }
+      const active = lineDecorations.find((d) => d.kind === 'active');
+      return active ? { cursor: active.from } : null;
+    }, [lineDecorations]);
+
+    // 搜索高亮（05 高频项预留）：命中 search 装饰的行打 is-search-line
+    // class——宿主可经 CSS 定制行级标记；token 级高亮渲染属 R5-C 渲染域，
+    // 本轮为「API + 简单高亮 class」接入点
+    const hasSearchDecoration = lineDecorations.some(
+      (d) => d.kind === 'search'
+    );
+
+    const tableId = store((state) => {
+      if (!lineText.trim().startsWith('|')) return undefined;
+      let firstTableIndex = index;
+      while (firstTableIndex > 0) {
+        // 经访问器读上一行（R3-B1：不读物化 state.lines——尾段非空时
+        // 物化会执行 concat；getLine 是双段惰性视图，语义与物化视图一致）
+        const prevLine = state.getLine(firstTableIndex - 1);
+        if (prevLine && prevLine.trim().startsWith('|')) {
+          firstTableIndex--;
+        } else {
+          break;
+        }
+      }
+      return `table-${firstTableIndex}`;
+    });
+
+    const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
+
+    // P3 B2 流式末行判定（plan-A2 §3 作用范围）：预演仅作用于「流式会话
+    // 进行中的文档末行」——编辑态/非末行/代码行一律不预演。
+    // - 末行判定 = streamingDirty（直刷协议扩展：直刷行并入，纯文本行
+    //   无预演候选标记，decorateIncompleteInline 自然短路）∪ store.
+    //   streamActive 为 true（流式会话进行中，stop-flush 前，W2-1 D-1 换源
+    //   ——旧判定 streamOp !== null；只读快路径 streamOp 恒 null 但
+    //   streamActive 照常置位，预演对只读流式会话同样生效）且本行为
+    //   文档末行（append 逐 chunk 增长，末行即流式写入目标行）；
+    // - 纯派生：只读行文本与行状态，不写 store、不产新 token——undo/
+    //   编辑/序列化/光标测量（data-token 映射）零影响。
+    // 流式会话进行中的末行订阅（无条件 hook——与 streamingDirty 的并集
+    // 在订阅结果之上合并，不得短路 hook 调用：直刷期间 streamingDirty 为
+    // true，若直接 `!!streamingDirty || store(...)` 会跳过订阅 → flush 后
+    // hook 数变化 → React 报「rendered fewer hooks」）
+    const streamTailFlag = store(
+      (s) => s.streamActive === true && index === s.getLineCount() - 1
+    );
+    const isStreamingTail = !!streamingDirty || streamTailFlag;
+    // 单趟 O(行长) 扫描（流式末行才执行；编辑态/代码行短路零开销）
+    const previewDecoration = React.useMemo(
+      () => decorateIncompleteInline(lineText, isStreamingTail, isCode),
+      [lineText, isCode, isStreamingTail]
+    );
+    // 上下文值稳定化：非预演恒为 null（引用稳定——memo 命中不受影响）；
+    // 预演期间逐 chunk 更新（预演段随流式文本增长）
+    const previewContextValue =
+      previewDecoration.hint !== undefined ? previewDecoration : null;
+
+    const freshContent = (
+      // P3 B2：预演提示经 React context 注入（Provider 不产生 DOM 节点，
+      // 零 DOM 结构变化；BlockRenderer 各渲染器共享同一提示——text token
+      // 命中预演段时追加 is-preview-* 类，闭合切换即同一节点的类微调）
+      <InlinePreviewContext.Provider value={previewContextValue}>
+        <BlockRenderer
+          block={lineNode}
+          index={index}
+          lineOffset={offset}
+          activeState={activeState}
+          tableId={tableId}
+        />
+      </InlinePreviewContext.Provider>
+    );
+    if (!streamingDirty) {
+      frozenContentRef.current = freshContent;
     }
-    return `table-${firstTableIndex}`;
-  });
+    const rowContent = streamingDirty
+      ? (frozenContentRef.current ?? freshContent)
+      : freshContent;
 
-  const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
+    // B2 搜索行内联背景：仅命中行附加淡黄底色（useMemo 保持引用
+    // 稳定——依赖只有行类型与搜索标记，变化时才换新对象，不影响
+    // React.memo 命中）；class is-search-line 同时保留供宿主自定义
+    const rowStyle = React.useMemo(
+      () => ({
+        position: 'absolute' as const,
+        left: 0,
+        width: '100%',
+        minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
+        ...(hasSearchDecoration ? { backgroundColor: SEARCH_LINE_BG } : null),
+      }),
+      [lineNode.type, hasSearchDecoration]
+    );
 
-  // P3 B2 流式末行判定（plan-A2 §3 作用范围）：预演仅作用于「流式会话
-  // 进行中的文档末行」——编辑态/非末行/代码行一律不预演。
-  // - 末行判定 = streamingDirty（直刷协议扩展：直刷行并入，纯文本行
-  //   无预演候选标记，decorateIncompleteInline 自然短路）∪ store.
-  //   streamOp 非空（流式会话进行中，stop-flush 前）且本行为文档末行
-  //   （append 逐 chunk 增长，末行即流式写入目标行）；
-  // - 纯派生：只读行文本与行状态，不写 store、不产新 token——undo/
-  //   编辑/序列化/光标测量（data-token 映射）零影响。
-  // 流式会话进行中的末行订阅（无条件 hook——与 streamingDirty 的并集
-  // 在订阅结果之上合并，不得短路 hook 调用：直刷期间 streamingDirty 为
-  // true，若直接 `!!streamingDirty || store(...)` 会跳过订阅 → flush 后
-  // hook 数变化 → React 报「rendered fewer hooks」）
-  const streamTailFlag = store(
-    (s) => s.streamOp !== null && index === s.getLineCount() - 1
-  );
-  const isStreamingTail = !!streamingDirty || streamTailFlag;
-  // 单趟 O(行长) 扫描（流式末行才执行；编辑态/代码行短路零开销）
-  const previewDecoration = React.useMemo(
-    () => decorateIncompleteInline(lineText, isStreamingTail, isCode),
-    [lineText, isCode, isStreamingTail]
-  );
-  // 上下文值稳定化：非预演恒为 null（引用稳定——memo 命中不受影响）；
-  // 预演期间逐 chunk 更新（预演段随流式文本增长）
-  const previewContextValue =
-    previewDecoration.hint !== undefined ? previewDecoration : null;
-
-  const freshContent = (
-    // P3 B2：预演提示经 React context 注入（Provider 不产生 DOM 节点，
-    // 零 DOM 结构变化；BlockRenderer 各渲染器共享同一提示——text token
-    // 命中预演段时追加 is-preview-* 类，闭合切换即同一节点的类微调）
-    <InlinePreviewContext.Provider value={previewContextValue}>
-      <BlockRenderer
-        block={lineNode}
-        index={index}
-        lineOffset={offset}
-        activeState={activeState}
-        tableId={tableId}
-      />
-    </InlinePreviewContext.Provider>
-  );
-  if (!streamingDirty) {
-    frozenContentRef.current = freshContent;
+    return (
+      <div
+        data-index={index}
+        data-line-start={offset}
+        data-line-length={lineText.length}
+        data-streaming-dirty={streamingDirty ? 'true' : undefined}
+        ref={rowRef}
+        // P3 B5 GPU 类拼接：useGpuLayer=false 时退化为原 virtual-row 单类
+        // （contain/will-change 全部移除，一行回退到纯 position 定位通道）
+        className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}${streamingDirty && useGpuLayer ? ' virtual-row-gpu-dirty' : ''}${activeState ? ' is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}`.trim()}
+        style={rowStyle}
+      >
+        {rowContent}
+      </div>
+    );
   }
-  const rowContent = streamingDirty
-    ? (frozenContentRef.current ?? freshContent)
-    : freshContent;
-
-  // B2 搜索行内联背景：仅命中行附加淡黄底色（useMemo 保持引用
-  // 稳定——依赖只有行类型与搜索标记，变化时才换新对象，不影响
-  // React.memo 命中）；class is-search-line 同时保留供宿主自定义
-  const rowStyle = React.useMemo(
-    () => ({
-      position: 'absolute' as const,
-      left: 0,
-      width: '100%',
-      minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
-      ...(hasSearchDecoration ? { backgroundColor: SEARCH_LINE_BG } : null),
-    }),
-    [lineNode.type, hasSearchDecoration]
-  );
-
-  return (
-    <div
-      data-index={index}
-      data-line-start={offset}
-      data-line-length={lineText.length}
-      data-streaming-dirty={streamingDirty ? 'true' : undefined}
-      ref={rowRef}
-      // P3 B5 GPU 类拼接：useGpuLayer=false 时退化为原 virtual-row 单类
-      // （contain/will-change 全部移除，一行回退到纯 position 定位通道）
-      className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}${streamingDirty && useGpuLayer ? ' virtual-row-gpu-dirty' : ''}${activeState ? ' is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}`.trim()}
-      style={rowStyle}
-    >
-      {rowContent}
-    </div>
-  );
-});
+);
 
 /**
  * B3 折叠占位行（N3 折叠区间，方案 B：保留行 + 渲染跳过）：
@@ -406,80 +557,90 @@ const LineItem = React.memo(({
  * - 样式全内联（主题变量联动），仅复用既有 virtual-row 类（css-contract
  *   豁免清单登记）；占位标记走 data-fold-placeholder 属性（禁新增 className）。
  */
-const FoldPlaceholderRow = React.memo(({
-  index,
-  foldedCount,
-  summary,
-  rowRef,
-  onUnfold,
-  // P3 B5：GPU 合成开关（与 LineItem 同款——占位行同为 transform 定位
-  // 的行容器，contain: paint 隔离折叠条重绘不外溢）
-  useGpuLayer,
-}: {
-  index: number;
-  foldedCount: number;
-  summary: string;
-  rowRef: (el: HTMLElement | null) => void;
-  onUnfold: (line: number) => void;
-  useGpuLayer?: boolean;
-}) => {
-  const rowStyle = React.useMemo(
-    () => ({
-      position: 'absolute' as const,
-      left: 0,
-      width: '100%',
-      height: FOLD_PLACEHOLDER_HEIGHT,
-      minHeight: FOLD_PLACEHOLDER_HEIGHT,
-      overflow: 'hidden',
-    }),
-    []
-  );
-  return (
-    <div
-      data-index={index}
-      data-fold-placeholder="true"
-      ref={rowRef}
-      className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}`.trim()}
-      style={rowStyle}
-    >
-      <button
-        type="button"
-        title="展开折叠区间"
-        aria-label={`展开已折叠的 ${foldedCount} 行`}
-        onClick={(e) => {
-          // 展开按钮独立命中：阻断容器点击定位（编辑态光标不移动）
-          e.stopPropagation();
-          onUnfold(index);
-        }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          width: '100%',
-          height: FOLD_PLACEHOLDER_HEIGHT,
-          border: '1px dashed var(--border-medium)',
-          borderRadius: 4,
-          padding: '0 8px',
-          background: 'var(--yellow-tint-2)',
-          color: 'var(--text-primary)',
-          fontSize: 12,
-          cursor: 'pointer',
-          fontFamily: 'var(--font-mono)',
-          textAlign: 'left',
-        }}
+const FoldPlaceholderRow = React.memo(
+  ({
+    index,
+    foldedCount,
+    summary,
+    rowRef,
+    onUnfold,
+    // P3 B5：GPU 合成开关（与 LineItem 同款——占位行同为 transform 定位
+    // 的行容器，contain: paint 隔离折叠条重绘不外溢）
+    useGpuLayer,
+  }: {
+    index: number;
+    foldedCount: number;
+    summary: string;
+    rowRef: (el: HTMLElement | null) => void;
+    onUnfold: (line: number) => void;
+    useGpuLayer?: boolean;
+  }) => {
+    const rowStyle = React.useMemo(
+      () => ({
+        position: 'absolute' as const,
+        left: 0,
+        width: '100%',
+        height: FOLD_PLACEHOLDER_HEIGHT,
+        minHeight: FOLD_PLACEHOLDER_HEIGHT,
+        overflow: 'hidden',
+      }),
+      []
+    );
+    return (
+      <div
+        data-index={index}
+        data-fold-placeholder="true"
+        ref={rowRef}
+        className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}`.trim()}
+        style={rowStyle}
       >
-        <span style={{ color: 'var(--text-muted)', fontSize: 11, flexShrink: 0 }}>
-          ▸ 已折叠 {foldedCount} 行
-        </span>
-        {summary && (
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {summary}
+        <button
+          type="button"
+          title="展开折叠区间"
+          aria-label={`展开已折叠的 ${foldedCount} 行`}
+          onClick={(e) => {
+            // 展开按钮独立命中：阻断容器点击定位（编辑态光标不移动）
+            e.stopPropagation();
+            onUnfold(index);
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            width: '100%',
+            height: FOLD_PLACEHOLDER_HEIGHT,
+            border: '1px dashed var(--border-medium)',
+            borderRadius: 4,
+            padding: '0 8px',
+            background: 'var(--yellow-tint-2)',
+            color: 'var(--text-primary)',
+            fontSize: 12,
+            cursor: 'pointer',
+            fontFamily: 'var(--font-mono)',
+            textAlign: 'left',
+          }}
+        >
+          <span
+            style={{ color: 'var(--text-muted)', fontSize: 11, flexShrink: 0 }}
+          >
+            ▸ 已折叠 {foldedCount} 行
           </span>
-        )}
-      </button>
-    </div>
-  );
-});
+          {summary && (
+            <span
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {summary}
+            </span>
+          )}
+        </button>
+      </div>
+    );
+  }
+);
 
 /**
  * B3 双段行视图 diff：定位编辑区间（大纲索引增量 / 折叠平移的前置）。
@@ -563,10 +724,29 @@ export interface MarkdownEngineProps {
    *  触发条件登记 = readOnly && 行数 ≥ 5 万 && registerRowSurface('canvas')
    *  已注册；模式经 data-render-mode 属性暴露（测试可测落点）。 */
   renderMode?: RenderMode;
+  /** 流式滚动跟随开关（W1-2 / S-EL-05）：缺省 true——流式会话中
+   *  贴底自动跟随、用户上滚暂停、回底部恢复（D-3 三态）；宿主可显式
+   *  关闭（自备跟随/无跟随场景）。仅作用于流式会话（store.streamActive
+   *  为 true，W2-1 D-1 换源——旧判定 streamOp 非空），编辑路径滚动
+   *  语义零影响。 */
+  scrollFollow?: boolean;
 }
 
-export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEngineProps>(
-  function MarkdownEngine({ store, readOnly, findReplace = true, outline = true, renderMode: requestedRenderMode = 'dom', useGpuLayer = RENDER_LAYER_GPU_OPTS.useGpuLayer }, ref) {
+export const MarkdownEngine = React.forwardRef<
+  MarkdownEngineHandle,
+  MarkdownEngineProps
+>(function MarkdownEngine(
+  {
+    store,
+    readOnly,
+    findReplace = true,
+    outline = true,
+    renderMode: requestedRenderMode = 'dom',
+    useGpuLayer = RENDER_LAYER_GPU_OPTS.useGpuLayer,
+    scrollFollow = true,
+  },
+  ref
+) {
   const parentRef = useRef<HTMLDivElement>(null);
   // R5 实例绑定：所有订阅/命令式读取统一经 engineStore（缺省回退全局
   // 单例）；zustand 的 useStore 在 store 引用变化时自动切换订阅。
@@ -577,14 +757,14 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   // 双段存储引用（main* + streamTail*）：任何内容变更（编辑/append/undo/
   // flush 等）都至少换其一新引用，作为主组件重渲染的触发信号；
   // 行内容/行状态在渲染时经 store.getState().getLine(i)/getLineState 惰性读取。
-  const mainLines = engineStore(state => state.mainLines);
-  const streamTail = engineStore(state => state.streamTail);
-  const mainCodeState = engineStore(state => state.mainCodeState);
-  const streamTailCodeState = engineStore(state => state.streamTailCodeState);
+  const mainLines = engineStore((state) => state.mainLines);
+  const streamTail = engineStore((state) => state.streamTail);
+  const mainCodeState = engineStore((state) => state.mainCodeState);
+  const streamTailCodeState = engineStore((state) => state.streamTailCodeState);
   // 行数信号：count 变化触发重渲染是必要行为（virtualizer count 同步）；
   // 选择器每次 set 都执行（O(1)，纯 length 读取），返回值按值比较。
-  const lineCount = engineStore(state => state.getLineCount());
-  const setCursorPos = engineStore(state => state.setCursorPos);
+  const lineCount = engineStore((state) => state.getLineCount());
+  const setCursorPos = engineStore((state) => state.setCursorPos);
 
   // ── R5-D 装饰层统一（06 §2）：active/选区/搜索统一进 DecorationSet ──
   // 共享装饰集实例：行边界经权威 LineOffsetTree 解析（store 实例切换时
@@ -594,7 +774,8 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const decorations = React.useMemo(
     () =>
       new DecorationSet({
-        findLineIndex: (pos) => engineStore.getState().lineOffsets.findLineIndex(pos),
+        findLineIndex: (pos) =>
+          engineStore.getState().lineOffsets.findLineIndex(pos),
       }),
     [engineStore]
   );
@@ -609,14 +790,13 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const [decorationVersion, setDecorationVersion] = React.useState(0);
   // 宿主搜索区间（addSearchRange 接入）：与光标/选区同一维护链路
   // （B2：批量版 setSearchRanges 整体替换——大批命中一次提交）
-  const [searchRanges, setSearchRangesState] = React.useState<
-    readonly SearchRange[]
-  >(EMPTY_SEARCH_RANGES);
+  const [searchRanges, setSearchRangesState] =
+    React.useState<readonly SearchRange[]>(EMPTY_SEARCH_RANGES);
   // 光标/选区订阅：触发信号（LineItem 不再各自订阅——消费方改经
   // decorationVersion 驱动，派生收敛到本组件单一维护点）
-  const cursorPos = engineStore(state => state.cursorPos);
-  const selectionStart = engineStore(state => state.selectionStart);
-  const selectionEnd = engineStore(state => state.selectionEnd);
+  const cursorPos = engineStore((state) => state.cursorPos);
+  const selectionStart = engineStore((state) => state.selectionStart);
+  const selectionEnd = engineStore((state) => state.selectionEnd);
 
   useLayoutEffect(() => {
     // 增量维护：remove 只清受影响行 bucket、add 只写新区间跨行 bucket
@@ -626,10 +806,15 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     // LineItem memo 命中（R6-C 回归修复的核心）。
     // 行结构变化不直接触发本 effect：store 全编辑路径必伴随光标/选区
     // 落点变化；append 例外（只追加文末，既有装饰字符区间保持有效）。
-    applyCursorSelectionDecorations(decorations, cursorPos, selectionStart, selectionEnd);
+    applyCursorSelectionDecorations(
+      decorations,
+      cursorPos,
+      selectionStart,
+      selectionEnd
+    );
     decorations.remove('search');
     for (const r of searchRanges) decorations.add(r.from, r.to, 'search');
-    setDecorationVersion(v => v + 1);
+    setDecorationVersion((v) => v + 1);
   }, [decorations, cursorPos, selectionStart, selectionEnd, searchRanges]);
 
   // ── 行高模型（R2-B 定位层）：HeightOracle 预测 + HeightMap 回填（01 问题 1/8，09 §4 C2）──
@@ -660,9 +845,11 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     tail: readonly string[];
     count: number;
   } | null>(null);
-  if (headingIndexRef.current === null) headingIndexRef.current = new HeadingIndex();
+  if (headingIndexRef.current === null)
+    headingIndexRef.current = new HeadingIndex();
   // 条目数组 state（增量维护后整体替换引用；快速路径同引用 → setState 跳过渲染）
-  const [headings, setHeadings] = useState<readonly HeadingEntry[]>(EMPTY_HEADINGS);
+  const [headings, setHeadings] =
+    useState<readonly HeadingEntry[]>(EMPTY_HEADINGS);
 
   // ── B3 折叠状态（N3）：FoldState（区间 + 行高备份 + HeightMap 批量联动）──
   // 实例切换（宿主换 store）：随 decorations 同款重建（foldStoreRef 记录
@@ -691,7 +878,8 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   // 容器可用宽度 → oracle 的 wrap 模型基准（左右 padding 16×2 + 滚动条 8 ≈ 40）
   useLayoutEffect(() => {
     const el = parentRef.current;
-    if (el && oracleRef.current) oracleRef.current.setContainerWidth(el.clientWidth - 40);
+    if (el && oracleRef.current)
+      oracleRef.current.setContainerWidth(el.clientWidth - 40);
   }, []);
 
   // Virtualization setup: fixed size = 28px perfectly aligns with grid paper CSS
@@ -722,7 +910,8 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       // A5 防跳动清单①（review-P3 §3.5 取整点钉死）：oracle 预测输出
       // Math.round——未回填的预测行（oracle 输出 rows × 28 × 倍率 ×
       // correction 可能非整数）经取整后写 transform，杜绝亚像素抖动
-      if (oracle) return Math.round(oracle.predict(classifyLine(raw, st), raw, st));
+      if (oracle)
+        return Math.round(oracle.predict(classifyLine(raw, st), raw, st));
       return 28;
     },
     overscan: 40, // Buffer for smooth scrolling
@@ -748,12 +937,22 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
         if (!isUpdating) {
           isUpdating = true;
           rafId = requestAnimationFrame(() => {
-            cb(scrollMapRef.current ? scrollMapRef.current.inverse(latest) : latest, false);
+            cb(
+              scrollMapRef.current
+                ? scrollMapRef.current.inverse(latest)
+                : latest,
+              false
+            );
             isUpdating = false;
           });
         }
       };
-      cb(scrollMapRef.current ? scrollMapRef.current.inverse(el.scrollTop) : el.scrollTop, false);
+      cb(
+        scrollMapRef.current
+          ? scrollMapRef.current.inverse(el.scrollTop)
+          : el.scrollTop,
+        false
+      );
       el.addEventListener('scroll', onScroll, { passive: true });
       return () => {
         el.removeEventListener('scroll', onScroll);
@@ -763,7 +962,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     scrollToFn: (offset, opts, instance) => {
       const el = instance.scrollElement;
       if (!el) return;
-      const physical = scrollMapRef.current ? scrollMapRef.current.apply(offset) : offset;
+      const physical = scrollMapRef.current
+        ? scrollMapRef.current.apply(offset)
+        : offset;
       if (opts.behavior === 'smooth') {
         el.scrollTo({ top: physical, behavior: 'smooth' });
       } else {
@@ -809,6 +1010,51 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const pendingStreamRef = useRef('');
   const dirtyRowOutOfViewRef = useRef(false);
 
+  // ── W3-1（S-EL-09）流式会话引擎侧追踪（ref 级，不触发渲染）──
+  // streamSessionActiveRef：引擎侧「宿主已开启流式会话」标志——store 的
+  // streamActive 在直刷路径下滞后（直刷仅写 DOM，appendText 到 flush 才
+  // 置位），引擎以「streamAppend 首次调用」为会话起点探测（streamEnd /
+  // discardStream 复位）。仅用于会话起点记录与 discard 截断，渲染零引用。
+  // streamSessionStartLenRef：会话起点文本长度快照（= 会话首次 streamAppend
+  // 时 store.textLength，此时 store 权威——直刷 pending 尚未产生）。只读
+  // 快路径会话的 discardStream 截断目标（W2-1：streamOp 恒 null 无
+  // meta:'stream' op 可撤销，只能按长度截断）。
+  // streamEndCallbacksRef：onStreamEnd 注册的回调集合（多次注册，解绑 =
+  // 从集合移除；回调只在会话真正结束时触发一次）。
+  const streamSessionActiveRef = useRef(false);
+  const streamSessionStartLenRef = useRef(-1);
+  const streamEndCallbacksRef = useRef<Set<(info: StreamEndInfo) => void>>(
+    new Set()
+  );
+
+  // ── W1-3（D-2）流式表格段追踪（ref 级，不触发渲染）──
+  // 结构定型锁宽的增量状态：headerIdx = 表头行、lastRowIdx = 段内最后行
+  // （含）、measuredThrough = 已测量行（含，初始为 headerIdx - 1）。
+  // 仅流式会话（store.streamActive 为 true，W2-1 D-1 换源——旧判定
+  // streamOp !== null）的表格定型分支使用；非流式零引用；
+  // streamEnd 时重置（会话边界，防陈旧段跨会话污染）。
+  const streamTableTrackRef = useRef<{
+    headerIdx: number;
+    lastRowIdx: number;
+    measuredThrough: number;
+  } | null>(null);
+
+  // ── W1-2（D-3）滚动跟随三态（ref 级，不触发渲染）──
+  // followStateRef：'follow' = 用户贴底/未滚动（新内容提交后主动贴底）；
+  // 'paused' = 用户上滚离开尾部（不主动滚，阅读态）。判据 = scroll 事件
+  // 监听（距底部 ≤ FOLLOW_EDGE_PX → follow；超过 → paused，handleScrollFlush
+  // 内更新）+ 提交后评估（批量测量 effect 尾部，每帧至多一次，R-13 计数
+  // 受控）。初始 'follow'：流式场景默认贴底（首次提交即评估是否需要贴底）。
+  // followPendingRef：流式提交（flushStreamBuffer/streamEnd）后置位——
+  // 渲染提交 + 行高回填完成后（批量测量 effect）统一评估，避免在 flush
+  // 同步栈内以未回填行高计算定位。
+  // scrollFollowRef：prop 的 ref 镜像（评估/事件处理闭包引用，避免依赖
+  // 展开进 useCallback 依赖链）。
+  const followStateRef = useRef<'follow' | 'paused'>('follow');
+  const followPendingRef = useRef(false);
+  const scrollFollowRef = useRef(scrollFollow);
+  scrollFollowRef.current = scrollFollow;
+
   // P3 B3 选区保护（plan-A3 方案 A 兜底，O(1)）：直刷提交前的越界
   // 钳制——原生 DOM 选区轨（HiddenInput handleSelectionChange 无钳制
   // setState 写入，HiddenInput.tsx:878-882）在直刷期间可越过 store
@@ -840,7 +1086,13 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const appendTextWithClamp = useCallback(
     (text: string) => {
       clampSelectionOOB();
+      // W3-4（S-EL-10）：append 耗时采样——flush 出口计时（本函数是
+      // flushStreamInternal 与帧回调两条提交通道的公共出口，一次
+      // performance.now 差值 O(1) 零侵入）。提交通道计数（append/
+      // direct 分类）由各调用点登记（见 flushStreamInternal 与帧回调）。
+      const t0 = performance.now();
       engineStore.getState().appendText(text);
+      metrics.recordAppendTime(performance.now() - t0);
     },
     [clampSelectionOOB]
   );
@@ -861,7 +1113,49 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     // P3 B3：提交通道统一走 appendTextWithClamp——flush 是原生轨越界
     // 选区的主要修复点（直刷期间用户选中了 DOM 上的直刷字符）。
     appendTextWithClamp(pending);
+    // W3-4（S-EL-10）：直刷通道提交登记——每次「直刷累积经统一出口提交
+    // store」计 1（直写点不单独计数，避免与出口重复计量：同一段直刷
+    // 文本只算一次提交）。直刷占比 = directCommits / 总提交（metrics
+    // 派生，S-T-3-04）。
+    metrics.recordDirectCommit();
   }, [appendTextWithClamp]);
+
+  // ── W1-1（D-4）帧聚合缓冲：不可直刷 chunk 的 rAF 批处理──
+  // 跨 render 复用的 StreamBuffer 实例（useRef lazy init，组件生命周期
+  // 内单实例）。帧回调闭包捕获 flushStreamInternal / appendTextWithClamp
+  // ——两 useCallback 的依赖链均收敛于 clampSelectionOOB（空依赖），
+  // 引用稳定，捕获即最新，无需 ref 中转。
+  const streamBufferRef = useRef<StreamBuffer | null>(null);
+  if (streamBufferRef.current === null) {
+    const flushPendingFirst = flushStreamInternal;
+    const appendWithClamp = appendTextWithClamp;
+    streamBufferRef.current = new StreamBuffer((batch) => {
+      // 帧回调（D-4 + R-2 顺序不变量）：flushStreamInternal 先行——
+      // 防御性保证「直刷累积（先到达）→ buffer 内容（后到达）」的提交
+      // 顺序；正常路径下 push 前已提交 P（见 streamAppend 降级分支），
+      // 此处为空转（pending 空即 return，零开销）。
+      flushPendingFirst();
+      appendWithClamp(batch);
+      // W3-4（S-EL-10）：常规（append）通道提交登记——帧聚合缓冲批量
+      // 提交计 1（与 flushStreamInternal 的直刷通道登记同粒度：一次
+      // store 提交 = 一次通道计数，直刷占比 = 直刷提交 / 总提交）。
+      metrics.recordAppendCommit();
+    });
+  }
+
+  // W1-1（D-4）统一 flush 出口（capture/滚动/streamEnd/卸载四类时机共用）：
+  // 提交顺序恒为「直刷累积 P（先到达）→ buffer 累积 B（后到达）」——
+  // 顺序不变量 R-2（store 文本顺序 = 到达顺序）。任一侧为空即空转，
+  // 幂等，事件期间任意触发安全。
+  const flushStreamBuffer = useCallback(() => {
+    flushStreamInternal();
+    streamBufferRef.current?.flush();
+    // W1-2（D-3）：流式提交后置位跟随评估（批量测量 effect 尾部消费，
+    // 每帧至多一次）。编辑路径的 capture flush 也会经过这里——评估侧
+    // 以 streamActive 为门禁（W2-1 D-1 换源——旧判定 streamOp 非空），
+    // 编辑提交（streamActive 为 false）零副作用。
+    followPendingRef.current = true;
+  }, [flushStreamInternal]);
 
   // 直刷行可见性判定（O(1)：HeightMap.indexAt 二分像素→行）：
   // 用于「滚动到尾部触达 dirty 行 → flush」与直刷会话起点初值。
@@ -872,7 +1166,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     if (!el || !hm) return true;
     // P3 B1：物理 scrollTop → 逻辑（超长文档压缩区换算；恒等短路零开销）
     const physTop = el.scrollTop;
-    const logicTop = scrollMapRef.current ? scrollMapRef.current.inverse(physTop) : physTop;
+    const logicTop = scrollMapRef.current
+      ? scrollMapRef.current.inverse(physTop)
+      : physTop;
     const first = hm.indexAt(logicTop, 0);
     const last = hm.indexAt(logicTop + el.clientHeight, 0);
     if (first < 0 || last < 0) return true;
@@ -884,72 +1180,219 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   // 时命令式直写 DOM（textContent += chunk），store 延迟提交；否则先
   // flush 累积直刷文本（保证提交顺序），再走 store.appendText 常规路径
   // （含换行的 chunk 由 store 完成行边界切分）。
-  const streamAppend = useCallback((chunk: string) => {
-    if (!chunk) return;
-    const s = engineStore.getState();
-    const lastIdx = s.getLineCount() - 1;
+  const streamAppend = useCallback(
+    (chunk: string) => {
+      if (!chunk) return;
+      // W3-1（S-EL-09）：会话起点探测（引擎侧）——本 chunk 是会话首次
+      // 调用时记录 store.textLength 快照（discardStream 只读截断目标；
+      // 此刻 store 权威——直刷 pending 尚未产生）。streamActive 在直刷
+      // 路径下滞后（flush 才置位）不可用作起点判定，以引擎自身标志界定
+      // 会话边界（streamEnd / discardStream 复位，此后首次 streamAppend
+      // 即新会话起点）。
+      if (!streamSessionActiveRef.current) {
+        streamSessionActiveRef.current = true;
+        streamSessionStartLenRef.current = engineStore.getState().textLength;
+      }
+      const s = engineStore.getState();
+      const lastIdx = s.getLineCount() - 1;
 
-    // DOM 视角末行 = store 末行 + 未提交直刷累积（直刷会话中 store 滞后）
-    const domLast = lastIdx >= 0 ? (s.getLine(lastIdx) ?? '') + pendingStreamRef.current : '';
-    const merged = domLast + chunk;
+      // DOM 视角末行 = store 末行 + 未提交直刷累积（直刷会话中 store 滞后）
+      const domLast =
+        lastIdx >= 0
+          ? (s.getLine(lastIdx) ?? '') + pendingStreamRef.current
+          : '';
+      const merged = domLast + chunk;
 
-    // 末行 row 与纯文本 token span：直刷只写「渲染为单个 text token span」
-    // 的行——空行/无 token 结构（<br/> 行块）直接 textContent 追加会落到
-    // 行块之外形成独立视觉行，绝不允许（宁可少直刷不可误刷）。
-    let tokenEl: HTMLElement | null = null;
-    if (lastIdx >= 0) {
-      const rowEl = rowRefs.current.get(lastIdx);
-      tokenEl = rowEl && rowEl.isConnected
-        ? rowEl.querySelector<HTMLElement>('[data-token-start]')
-        : null;
+      // 末行 row 与纯文本 token span：直刷只写「渲染为单个 text token span」
+      // 的行——空行/无 token 结构（<br/> 行块）直接 textContent 追加会落到
+      // 行块之外形成独立视觉行，绝不允许（宁可少直刷不可误刷）。
+      let tokenEl: HTMLElement | null = null;
+      if (lastIdx >= 0) {
+        const rowEl = rowRefs.current.get(lastIdx);
+        tokenEl =
+          rowEl && rowEl.isConnected
+            ? rowEl.querySelector<HTMLElement>('[data-token-start]')
+            : null;
+      }
+
+      const canDirect =
+        lastIdx >= 0 &&
+        !chunk.includes('\n') &&
+        merged.length <= DIRECT_STREAM_MAX_LINE_CHARS &&
+        isPlainTextLine(merged) &&
+        // 「LineNode �?text token」的块级保证：围栏内/缩进代码/数学�?
+        // HTML 块内�?看似纯文�?行不算纯文本行（CodeState 权威判定�?
+        getLineState(s, lastIdx) === 'none' &&
+        tokenEl !== null &&
+        // P3 B3 选区保护（plan-A3 方案 B 主）：引擎选区与末行相交、或
+        // 光标位于末行行中（用户正在编辑/选中末尾区域）→ 降级走常规
+        // append 路径——直刷写 DOM 会与用户选区/光标错位（B6 M3 已实测
+        // 证实真实缺陷：直刷写后相邻行用户选区被折叠）。无选区/光标在
+        // 行尾时判定 O(1) 数字比较，零开销。
+        shouldDirectStream(
+          s.selectionStart,
+          s.selectionEnd,
+          s.cursorPos,
+          lastIdx,
+          s.lineOffsets
+        );
+
+      if (canDirect) {
+        // W1-1（D-4 顺序不变量，交叉场景）：buffer 非空说明其内容早于
+        // 本 chunk 到达（帧回调未到）——先 flushStreamBuffer()（直刷累积
+        // P 先提交、buffer 累积 B 后提交）再直写本 chunk（成为新 P），
+        // store 提交顺序 = 到达顺序（R-2）。buffer 空时直接直刷，
+        // 同步零提交红利完全保留（无 flush 开销）。
+        if (streamBufferRef.current!.pending > 0) flushStreamBuffer();
+        // 直写 DOM（命令式，绕过 React）：向纯文本 token span 追加；
+        // 光标跟随节流（08 §1 招 1 风险修正）属 R5 宿主侧，本层不越权。
+        tokenEl!.textContent = (tokenEl!.textContent ?? '') + chunk;
+        pendingStreamRef.current += chunk;
+        dirtyRefs.current.add(lastIdx);
+        // 会话起点记录直刷行可见性：用户本就在尾部（可见）时，滚动事件
+        // 不触发「触达 flush」；用户远离尾部（不可见）时，滚动回尾部
+        // 即 flush（保证 DOM 直刷文本先行提交，测量/选区/复制语义正确）。
+        dirtyRowOutOfViewRef.current = !isRowInVisibleViewport(lastIdx);
+        return;
+      }
+
+      // 常规路径（含 \n / 合并后非纯文本 / 超长 / 行未挂载 / dirty 行卸载）：
+      // W1-1（D-4）帧聚合——先 flushStreamInternal 提交直刷累积（顺序不
+      // 变量：直刷文本永远先于后续内容提交），chunk 入 StreamBuffer 等
+      // rAF 帧边界一次性 appendText（500 token/s → ≤60 提交/s，S-EL-02）。
+      // 帧回调 = flushStreamInternal + appendTextWithClamp（含 P3 B3 越界
+      // 钳制，与直刷 flush 同通道）。
+      flushStreamInternal();
+      streamBufferRef.current!.push(chunk);
+    },
+    [
+      flushStreamInternal,
+      isRowInVisibleViewport,
+      appendTextWithClamp,
+      flushStreamBuffer,
+    ]
+  );
+
+  // ── W3-1（S-EL-09）流式会话结束信号 ──
+  // notifyStreamEnd 分发（streamEnd 与 discardStream 收口点调用）——
+  // 宿主回调异常用 try/catch 隔离（监听器惯例：单个回调抛错不打断
+  // 引擎收口与其余回调）。onStreamEnd 注册/解绑（多次注册分别触发，
+  // 解绑函数幂等可重复调用）。
+  const notifyStreamEnd = useCallback((info: StreamEndInfo) => {
+    const cbs = streamEndCallbacksRef.current;
+    if (cbs.size === 0) return;
+    for (const cb of cbs) {
+      try {
+        cb(info);
+      } catch {
+        // 宿主回调异常不向上传播（引擎流式收口完整性优先）
+      }
     }
+  }, []);
 
-    const canDirect =
-      lastIdx >= 0 &&
-      !chunk.includes('\n') &&
-      merged.length <= DIRECT_STREAM_MAX_LINE_CHARS &&
-      isPlainTextLine(merged) &&
-      // 「LineNode �?text token」的块级保证：围栏内/缩进代码/数学�?
-      // HTML 块内�?看似纯文�?行不算纯文本行（CodeState 权威判定�?
-      getLineState(s, lastIdx) === 'none' &&
-      tokenEl !== null &&
-      // P3 B3 选区保护（plan-A3 方案 B 主）：引擎选区与末行相交、或
-      // 光标位于末行行中（用户正在编辑/选中末尾区域）→ 降级走常规
-      // append 路径——直刷写 DOM 会与用户选区/光标错位（B6 M3 已实测
-      // 证实真实缺陷：直刷写后相邻行用户选区被折叠）。无选区/光标在
-      // 行尾时判定 O(1) 数字比较，零开销。
-      shouldDirectStream(s.selectionStart, s.selectionEnd, s.cursorPos, lastIdx, s.lineOffsets);
+  const onStreamEnd = useCallback((cb: (info: StreamEndInfo) => void) => {
+    streamEndCallbacksRef.current.add(cb);
+    return () => {
+      streamEndCallbacksRef.current.delete(cb);
+    };
+  }, []);
 
-    if (canDirect) {
-      // 直写 DOM（命令式，绕过 React）：向纯文本 token span 追加；
-      // 光标跟随节流（08 §1 招 1 风险修正）属 R5 宿主侧，本层不越权。
-      tokenEl!.textContent = (tokenEl!.textContent ?? '') + chunk;
-      pendingStreamRef.current += chunk;
-      dirtyRefs.current.add(lastIdx);
-      // 会话起点记录直刷行可见性：用户本就在尾部（可见）时，滚动事件
-      // 不触发「触达 flush」；用户远离尾部（不可见）时，滚动回尾部
-      // 即 flush（保证 DOM 直刷文本先行提交，测量/选区/复制语义正确）。
-      dirtyRowOutOfViewRef.current = !isRowInVisibleViewport(lastIdx);
+  // 流式结束（宿主调用）：flush 直刷累积与帧聚合缓冲（直刷先、buffer
+  // 后，顺序不变量 R-2），并 stop-flush 尾段——R3-A 将本次流式会话
+  // 合并为单个 meta:'stream' undo 步（09 归一表 §5「append 不进 undo
+  // 栈；流式结束后合并单步」）。W1-1：streamEnd 即显式 flush 时机——
+  // buffer 内累积同步提交（尾段延迟 ≤1 帧，无残留）。
+  const streamEnd = useCallback(() => {
+    flushStreamBuffer();
+    const s = engineStore.getState();
+    // W3-1（S-EL-09）完成信号判定：「会话真正结束」= flush 直刷累积后
+    // store 视角存在会话痕迹（streamActive 置位 / streamOp 记账 / 尾段
+    // 非空——纯直刷会话在 flush 后才激活 store，必须在此后判定）。无
+    // 会话的幂等 streamEnd 不触发回调；重复调用第二次无痕迹 → 不重复触发。
+    const hadSession =
+      s.streamActive || s.streamOp !== null || s.streamTail.length > 0;
+    // W2-1（D-1）换源：会话进行中判定改经 streamActive（只读快路径
+    // streamOp 恒 null 但仍需 stop-flush——flushStreamTail 负责合并尾段
+    // 并熄灭 streamActive）；可编辑会话语义与旧 `|| s.streamOp` 完全一致
+    if (s.streamTail.length > 0 || s.streamActive) s.flushStreamTail();
+    // W1-3：会话结束重置流式表格段追踪（下次会话重新探测；文档可能已随
+    // 编辑/新会话变化，陈旧段跨会话复用会锁错表头）
+    streamTableTrackRef.current = null;
+    // W3-1：引擎侧会话标志复位（下次 streamAppend 即新会话起点；
+    // streamSessionStartLenRef 保留至下一会话覆盖——discardStream 在
+    // 会话结束后仍可按原起点截断，即「后悔键」语义）
+    streamSessionActiveRef.current = false;
+    if (hadSession) notifyStreamEnd({ flushed: true, discarded: false });
+  }, [flushStreamBuffer, notifyStreamEnd]);
+
+  // ── W3-1（D-7）中断丢弃（S-EL-06）：flush → 回滚会话内容 → 清信号 ──
+  // 幂等：无进行中会话/无可撤销内容时为空操作（不触发回调）。
+  const discardStream = useCallback(() => {
+    flushStreamBuffer();
+    const st = engineStore.getState();
+    // 分支一：只读快路径会话（W2-1：readOnly && 从未用户编辑 &&
+    // streamOp 恒 null——与 appendText 的 fastPath 门禁同构）——无
+    // meta:'stream' op 可撤销，截断到会话起点文本长度。setText 整档
+    // 重置（≤1000 行同步一次提交；超大文档走分块加载，截断在 idle
+    // 回调内收敛，DOM 一致性经 React 重渲染保证）：清 streamActive/
+    // streamOp/undo/redo/changeLog/lastUserEditTime 全零污染——后续
+    // 会话的只读快路径门禁（readOnly && lastUserEditTime === 0）不被
+    // 破坏（S-EL-08；若走 applyChange 截断会写记账并置 lastUserEditTime，
+    // 永久失去快路径，故不采用）。
+    if (st.readOnly && st.lastUserEditTime === 0 && st.streamOp === null) {
+      const startLen = streamSessionStartLenRef.current;
+      if (startLen >= 0 && startLen < st.textLength) {
+        st.setText(st.getText().substring(0, startLen));
+        streamSessionStartLenRef.current = -1;
+        streamSessionActiveRef.current = false;
+        streamTableTrackRef.current = null;
+        notifyStreamEnd({ flushed: true, discarded: true });
+      }
       return;
     }
+    // 分支二：可编辑会话（含只读但有编辑历史/记账的完整路径）——未
+    // streamEnd 时先 stop-flush 收口（生成 meta:'stream' op），随后
+    // 仅当 undo 栈顶为该 op（会话内容是「最新一步」）时撤销（undo 组
+    // 语义覆盖流式期间重叠的用户编辑，一次精确回到流式前）。栈顶为
+    // 普通用户编辑（streamEnd 后用户继续编辑）时不撤销——避免误伤
+    // 用户工作；撤销产物留在 redo 栈（redo 可恢复被丢弃内容）。
+    const s2 = engineStore.getState();
+    if (s2.streamActive || s2.streamOp) s2.flushStreamTail();
+    const stack = engineStore.getState().undoStack;
+    const top = stack[stack.length - 1];
+    let discarded = false;
+    if (top && top.meta === 'stream') {
+      engineStore.getState().undo();
+      discarded = true;
+    }
+    streamSessionActiveRef.current = false;
+    streamTableTrackRef.current = null;
+    if (discarded) notifyStreamEnd({ flushed: true, discarded: true });
+  }, [flushStreamBuffer, notifyStreamEnd]);
 
-    // 常规路径（含 \n / 合并后非纯文本 / 超长 / 行未挂载 / dirty 行卸载）：
-    // 先 flush 累积（"若含 \n 先 flush"推广到一切回落情形——保证直刷文本
-    // 永远先于后续内容提交，顺序不颠倒），再 appendText 交给 store。
-    // P3 B3：降级路径的提交同样走 appendTextWithClamp——原生轨越界选区
-    // （DOM 坐标）在降级帧的 appendText 平移后仍可能越界，一并钳制兜底。
-    flushStreamInternal();
-    appendTextWithClamp(chunk);
-  }, [flushStreamInternal, isRowInVisibleViewport, appendTextWithClamp]);
-
-  // 流式结束（宿主调用）：flush 直刷累积（appendText 一次提交），并
-  // stop-flush 尾段——R3-A 将本次流式会话合并为单个 meta:'stream'
-  // undo 步（09 归一表 §5「append 不进 undo 栈；流式结束后合并单步」）。
-  const streamEnd = useCallback(() => {
-    flushStreamInternal();
+  // ── W3-1（S-EL-09）流式会话状态查询：全量 O(1) 读引擎 ref/store ──
+  const getStreamState = useCallback((): StreamState => {
     const s = engineStore.getState();
-    if (s.streamTail.length > 0 || s.streamOp) s.flushStreamTail();
-  }, [flushStreamInternal]);
+    return {
+      active: s.streamActive,
+      bufferedChars: streamBufferRef.current?.pending ?? 0,
+      directPendingChars: pendingStreamRef.current.length,
+      followState: followStateRef.current,
+    };
+  }, []);
+
+  // ── W3-1（D-8）取文/导出聚合：先 flush 再取数（直刷滞后语义透明化）
+  // ——flushStreamBuffer 无累积空转幂等，任意时机调用安全。
+  const getContent = useCallback(() => {
+    flushStreamBuffer();
+    return engineStore.getState().getText();
+  }, [flushStreamBuffer]);
+
+  const exportHtml = useCallback(() => {
+    flushStreamBuffer();
+    const text = engineStore.getState().getText();
+    return renderToHtml(MarkdownParser.parse(text));
+  }, [flushStreamBuffer]);
 
   // 搜索高亮接入（R5-D）：宿主经 handle.addSearchRange/clearSearch
   // 维护 searchRanges 状态 → 派生 effect 增量重建 search 装饰 → 版本
@@ -962,12 +1405,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const clearSearch = useCallback(() => {
     setSearchRangesState(EMPTY_SEARCH_RANGES);
   }, []);
-  const setSearchRanges = useCallback(
-    (ranges: readonly SearchRange[]) => {
-      setSearchRangesState(ranges.length ? [...ranges] : EMPTY_SEARCH_RANGES);
-    },
-    []
-  );
+  const setSearchRanges = useCallback((ranges: readonly SearchRange[]) => {
+    setSearchRangesState(ranges.length ? [...ranges] : EMPTY_SEARCH_RANGES);
+  }, []);
 
   // 跳转到命中（B2）：滚动到 from 所在行 + 编辑模式选中命中区间。
   // 滚动走 virtualizer.scrollToIndex（既有定位设施，行高模型回填后
@@ -981,10 +1421,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       );
       if (lineIdx >= 0) virtualizer.scrollToIndex(lineIdx, { align: 'center' });
       if (!readOnly) {
-        engineStore.getState().setSelection(
-          Math.min(from, to),
-          Math.max(from, to)
-        );
+        engineStore
+          .getState()
+          .setSelection(Math.min(from, to), Math.max(from, to));
       }
     },
     [virtualizer, readOnly]
@@ -1007,7 +1446,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   const resolveScrollLine = useCallback((scrollTop: number) => {
     const hm = heightMapRef.current;
     // P3 B1：OutlinePanel 传入的是物理 scrollTop——先逆映射为逻辑
-    const logicTop = scrollMapRef.current ? scrollMapRef.current.inverse(scrollTop) : scrollTop;
+    const logicTop = scrollMapRef.current
+      ? scrollMapRef.current.inverse(scrollTop)
+      : scrollTop;
     return hm ? hm.indexAt(logicTop, 28) : 0;
   }, []);
 
@@ -1081,13 +1522,20 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     []
   );
 
-  // 命令式接口暴露（R5 宿主：engineRef.current.streamAppend / streamEnd）
+  // 命令式接口暴露（R5 宿主：engineRef.current.streamAppend / streamEnd；
+  // W3-1 扩展：getStreamState/onStreamEnd/discardStream/getContent/
+  // exportHtml 接入宿主驾驶舱）
   useImperativeHandle(
     ref,
     () => ({
       streamAppend,
       streamEnd,
-      flushStream: flushStreamInternal,
+      flushStream: flushStreamBuffer,
+      getStreamState,
+      onStreamEnd,
+      discardStream,
+      getContent,
+      exportHtml,
       addSearchRange,
       clearSearch,
       setSearchRanges,
@@ -1099,7 +1547,12 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     [
       streamAppend,
       streamEnd,
-      flushStreamInternal,
+      flushStreamBuffer,
+      getStreamState,
+      onStreamEnd,
+      discardStream,
+      getContent,
+      exportHtml,
       addSearchRange,
       clearSearch,
       setSearchRanges,
@@ -1111,15 +1564,16 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   );
 
   // 用户操作监听（C3 flush 时机 2）：keydown/pointerdown/mousedown/
-  // compositionstart 到达 → 直刷累积先 flush——08 §1 招 1「测量/选区/复制
-  // 操作触达时先 flush」：保证用户编辑/选区/点击测量作用在 store 与 DOM
-  // 一致的状态上。关键：capture 相位监听（先于容器内子组件冒泡处理，如
+  // compositionstart 到达 → 直刷累积与帧聚合缓冲先 flush（W1-1 扩展：
+  // buffer 内累积一并提交）——08 §1 招 1「测量/选区/复制操作触达时先
+  // flush」：保证用户编辑/选区/点击测量作用在 store 与 DOM 一致的
+  // 状态上。关键：capture 相位监听（先于容器内子组件冒泡处理，如
   // HiddenInput 的 keydown→insertText），否则用户击键会先落到滞后 store。
-  // flushStreamInternal 空转无开销（无累积即返回），事件期间任意触发安全。
+  // flushStreamBuffer 空转无开销（无累积即返回），事件期间任意触发安全。
   useLayoutEffect(() => {
     const el = parentRef.current;
     if (!el) return;
-    const flush = () => flushStreamInternal();
+    const flush = () => flushStreamBuffer();
     el.addEventListener('keydown', flush, true);
     el.addEventListener('compositionstart', flush, true);
     el.addEventListener('pointerdown', flush, true);
@@ -1130,7 +1584,22 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       el.removeEventListener('pointerdown', flush, true);
       el.removeEventListener('mousedown', flush, true);
     };
-  }, [flushStreamInternal]);
+  }, [flushStreamBuffer]);
+
+  // C3 卸载兜底（W0-4，S-EL-06）：宿主未调 streamEnd 即销毁组件（切换
+  // 会话/路由卸载）时，pendingStreamRef 的直刷累积随组件 ref 一起消失、
+  // store 缺失该段文本。cleanup 调幂等 flushStreamBuffer——W1-1 扩展：
+  // 直刷累积（appendText 一次提交）与帧聚合缓冲（同步吐出，不等 rAF）
+  // 一并提交，随后 dispose 取消挂起 rAF 防止卸载后回调再触达（store 的
+  // 流式尾段合并/收口是宿主职责；卸载时 streamTail 留待宿主自行处理或
+  // 下次 append 合并）。引擎内其余 rAF 在 observeElementOffset 的
+  // tanstack 清理函数内，由 virtualizer 卸载时取消，无需额外清理。
+  useLayoutEffect(() => {
+    return () => {
+      flushStreamBuffer();
+      streamBufferRef.current?.dispose();
+    };
+  }, [flushStreamBuffer]);
 
   // 滚动监听（C3 flush 时机 4：滚动到尾部/离开窗口）：
   // - dirty 行离开虚拟窗口范围（超出 overscan，DOM 即将随窗口变化卸载）
@@ -1138,8 +1607,22 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   // - dirty 行从视口外回到可见视口（用户滚动到尾部触达直刷行）→ flush，
   //   保证随后可见行的测量/交互基于已提交状态。
   const handleScrollFlush = useCallback(() => {
+    // W1-2（D-3）：跟随状态随滚动事件更新（引擎自身贴底写触发的滚动
+    // 事件同样收敛到 follow，自洽；scrollFollow 关闭时跳过零开销）——
+    // 距底部 ≤ FOLLOW_EDGE_PX → follow；离开 → paused（用户阅读）。
+    const followEl = parentRef.current;
+    if (followEl && scrollFollowRef.current) {
+      followStateRef.current =
+        followEl.scrollHeight - followEl.scrollTop - followEl.clientHeight <=
+        FOLLOW_EDGE_PX
+          ? 'follow'
+          : 'paused';
+    }
     if (dirtyRefs.current.size === 0) {
       dirtyRowOutOfViewRef.current = false;
+      // W1-1（滚动为四类 flush 时机之一）：无直刷 dirty 时 buffer 仍可能
+      // 有帧聚合累积（rAF 未到）——一并提交，防滚动测量作用在滞后 store。
+      flushStreamBuffer();
       return;
     }
     const items = virtualizer.getVirtualItems();
@@ -1148,31 +1631,33 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     const last = items[items.length - 1].index;
     for (const idx of dirtyRefs.current) {
       if (idx < first || idx > last) {
-        flushStreamInternal();
+        flushStreamBuffer();
         return;
       }
     }
     const dirtyIdx = dirtyRefs.current.values().next().value as number;
     const nowVisible = isRowInVisibleViewport(dirtyIdx);
     if (nowVisible && dirtyRowOutOfViewRef.current) {
-      flushStreamInternal();
+      flushStreamBuffer();
       return;
     }
     dirtyRowOutOfViewRef.current = !nowVisible;
-  }, [virtualizer, flushStreamInternal, isRowInVisibleViewport]);
-
+  }, [virtualizer, flushStreamBuffer, isRowInVisibleViewport]);
 
   // 行 ref 注册表（稳定回调，空依赖不破坏 LineItem memo）：
   // 挂载时登记到 rowRefs（index 从 data-index 属性读，不依赖闭包），同时调用
   // virtualizer.measureElement 注册 elementsCache（directDomUpdates 位置写入通道）；
   // 卸载条目不即时清理——批量测量循环按 isConnected 过滤，天然清除已卸载行，
   // 防 stale 条目污染测量（行卸载即 DOM 断开，detached 元素 offsetHeight 不可信）。
-  const registerRowRef = useCallback((el: HTMLElement | null) => {
-    virtualizer.measureElement(el);
-    if (!el) return;
-    const idx = parseInt(el.getAttribute('data-index') || '-1', 10);
-    if (idx >= 0) rowRefs.current.set(idx, el);
-  }, [virtualizer]);
+  const registerRowRef = useCallback(
+    (el: HTMLElement | null) => {
+      virtualizer.measureElement(el);
+      if (!el) return;
+      const idx = parseInt(el.getAttribute('data-index') || '-1', 10);
+      if (idx >= 0) rowRefs.current.set(idx, el);
+    },
+    [virtualizer]
+  );
 
   // 渲染窗口签名（首尾 index）：directDomUpdates 模式下 React 渲染仅发生在
   // 窗口变化帧（range 首尾 index 变化 / isScrolling 翻转），此处读到的窗口
@@ -1212,10 +1697,43 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     const hm = heightMapRef.current;
     const oracle = oracleRef.current;
     if (!hm || !oracle) return;
+    // W1-2（D-3）滚动跟随评估（声明序在 effect 开头：流式会话中表格
+    // 定型门禁（streamActive 为 false → 早退）位于本 effect 中段，评估
+    // 必须在此之前执行；贴底写 scrollTop = scrollHeight 为物理直写，
+    // 不依赖行高模型回填，故无需等待测量循环）：
+    // - 仅流式会话（store.streamActive 为 true，W2-1 D-1 换源——旧判定
+    //   streamOp 非空）评估——编辑提交（streamActive 为 false）零影响
+    //   （编辑路径滚动语义不变）；
+    // - follow 态且视口距底部 > FOLLOW_EDGE_PX（新内容把尾部推出视口，
+    //   或初始化时视口未贴底）→ 贴底跟随：el.scrollTop = el.scrollHeight
+    //   物理直写（浏览器 clamp 到 maxTop），经既有滚动通道（observer
+    //   同步 scrollOffset），零 tanstack scrollState/reconcile 状态污染；
+    // - 增量 ≤ 阈值（小提交）不滚 → 主动修改计数受控（R-13：60s 内
+    //   ≤2 = 初始化贴底 + 恢复贴底）。
+    // 每帧至多一次：本 effect 每帧至多跑一遍，且仅提交后（flush 置位
+    // followPendingRef）才评估。
+    if (followPendingRef.current) {
+      followPendingRef.current = false;
+      const followSt = engineStore.getState();
+      if (
+        scrollFollowRef.current &&
+        followSt.streamActive === true &&
+        followStateRef.current === 'follow'
+      ) {
+        const followEl = parentRef.current;
+        if (
+          followEl &&
+          followEl.scrollHeight - followEl.scrollTop - followEl.clientHeight >
+            FOLLOW_EDGE_PX
+        ) {
+          followEl.scrollTop = followEl.scrollHeight;
+        }
+      }
+    }
     // C3 直刷安全网（dirty 协议兜底）：dirty 行 DOM 已断开（窗口/布局
     // 变化导致卸载，如 resize 触发的窗口重排、异常路径提前卸载）→ 立即
-    // flush 提交累积文本，防直刷文本随 DOM 丢失（store 权威，随窗口重挂载
-    // 即恢复完整内容）。
+    // flush 提交累积文本（W1-1：直刷累积 + 帧聚合缓冲一并提交），防直刷
+    // 文本随 DOM 丢失（store 权威，随窗口重挂载即恢复完整内容）。
     if (dirtyRefs.current.size > 0) {
       let dirtyDisconnected = false;
       for (const idx of dirtyRefs.current) {
@@ -1225,7 +1743,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
           break;
         }
       }
-      if (dirtyDisconnected) flushStreamInternal();
+      if (dirtyDisconnected) flushStreamBuffer();
     }
     // R3-B1：快照经 store.getState() 取一次，后续行/状态读取走访问器
     // （getLine / getLineState），不读物化视图；effect 由双段引用触发
@@ -1274,17 +1792,160 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     // 最后一个 table_separator → 表头行 + 连续 table_row 段 → 段后紧邻行
     // 非 table_row（表格已闭合）且该表未定型 → 测量 cell 内容宽
     // （scrollWidth 逐列 max）→ setTableWidths 一次（M6 计数随页面探针）。
-    // 流式中（表格未闭合）不触发——无跳动。行类型经 parseLine（AST 缓存
-    // 命中，O(可见) 可忽略）。核实修正（plan-A4）：parser 独立判定
-    // table_row，表头高亮（isHeaderRow）流式中即时生效——无需候选态/回溯。
+    // 行类型经 parseLine（AST 缓存命中，O(可见) 可忽略）。核实修正
+    // （plan-A4）：parser 独立判定 table_row，表头高亮（isHeaderRow）流式中
+    // 即时生效——无需候选态/回溯。
+    // W0-2 / W1-3（docs/streaming-render/00 总方案 D-2 三态协议）：
+    // 流式会话中（store.streamActive 为 true，W2-1 D-1 换源——旧判定
+    // streamOp !== null）→ 结构定型锁宽（分隔行到达即锁 + grow-only
+    // 修正，见下方流式分支）；W0-2 修复的「流式尾表提前锁宽」bug 在此
+    // 分支以「锁宽时机 = 分隔行落库（结构证据），非表格闭合」替代——
+    // 不再把流式尾段 nextLn === null 当闭合信号锁死表头宽。
+    // 非流式（streamActive 为 false）→ 既有闭合定型路径（零变化，非流式
+    // + 表格为文档尾的 nextLn === null 闭合语义保持）。
     try {
       const st = engineStore.getState();
+      // W0-2 / W1-3 门禁分流（W2-1 D-1 换源，streamActive 消费先例同
+      // 本文件 356-357 行）：流式会话中（streamActive === true）走 W1-3
+      // 结构定型锁宽分支；非流式（streamActive === false）走既有闭合
+      // 定型路径（下方，零变化）。
+      if (st.streamActive === true) {
+        // ── W1-3（D-2）流式结构定型锁宽 ──
+        // 表格段定位不依赖虚拟窗口（P2 长表：分隔行滚出窗口仍可锁）：
+        // - 段追踪 ref（streamTableTrackRef）：段不存在时从 store 行视图
+        //   尾部向上探测「尾部连续表格段」（不穿越非表格行——已闭合段
+        //   流式期间不再处理，其锁宽早已在结构定型时完成；整表 + 闭合行
+        //   单 chunk 一次到达的极端粒度由 streamEnd 后闭合定型兜底）；
+        // - 段存在时从段尾向后逐行增量扩展（O(新增行)，parseLine AST
+        //   缓存命中），遇非表格行 = 段闭合 → 本帧修正后停止追踪；
+        // - 测宽仍依赖已挂载行（scrollWidth 需 DOM；与既有闭合定型同款
+        //   约束）：从 measuredThrough + 1 起测「连续已挂载」的新增行，
+        //   未挂载行停住不推进（挂载后下个 effect 帧补测——跟随滚动
+        //   场景下新增尾部行始终挂载，进度紧贴段尾，无缺口）；
+        // - 应用：未锁宽 → 按已见行测宽锁定一次（结构定型即锁）；
+        //   已锁宽 → 逐列 grow-only（新测宽 > 现宽才写入，零变化零写入）。
+        // 效率：每帧成本 = 新增行 parseLine + 未挂载行 O(1) 跳行 +
+        // 已挂载新增行的 scrollWidth 测量，不整表重扫（已测行不重测）。
+        const track = streamTableTrackRef.current;
+        if (!track) {
+          // 尾部探测：从文档尾向上走连续表格行（table_row/table_separator），
+          // 遇非表格行停——找到的段即「尾部活跃表格段」（段内含分隔行
+          // 则结构成立，无分隔行 = 孤立表格行，不建段）
+          let tailStart = st.getLineCount() - 1;
+          let sepIdx = -1;
+          while (tailStart >= 0) {
+            const rawL = st.getLine(tailStart);
+            if (rawL === undefined) break;
+            const lnL = MarkdownParser.parseLine(
+              rawL,
+              tailStart,
+              getLineState(st, tailStart)
+            );
+            if (lnL.type === 'table_separator') sepIdx = tailStart;
+            else if (lnL.type !== 'table_row') break;
+            tailStart--;
+          }
+          if (sepIdx !== -1) {
+            // 段头回退：分隔行向上走连续 table_row（与下方闭合定型
+            // headerIdx 回退同款），tableId 以首个 | 行 index 计
+            let headerIdx = sepIdx - 1;
+            while (headerIdx >= 0) {
+              const rawH = st.getLine(headerIdx);
+              if (rawH === undefined) break;
+              const lnH = MarkdownParser.parseLine(
+                rawH,
+                headerIdx,
+                getLineState(st, headerIdx)
+              );
+              if (lnH.type !== 'table_row') break;
+              headerIdx--;
+            }
+            headerIdx++;
+            streamTableTrackRef.current = {
+              headerIdx,
+              lastRowIdx: st.getLineCount() - 1,
+              measuredThrough: headerIdx - 1,
+            };
+          }
+        } else {
+          // 增量扩展：段尾向后走连续 table_row（O(新增行)）；遇非表格行
+          // → 段闭合（下方修正后置空追踪）；段尾即文档尾 → 继续增长
+          let idx = track.lastRowIdx + 1;
+          while (idx < st.getLineCount()) {
+            const rawL = st.getLine(idx);
+            if (rawL === undefined) break;
+            const lnL = MarkdownParser.parseLine(
+              rawL,
+              idx,
+              getLineState(st, idx)
+            );
+            if (lnL.type !== 'table_row') break;
+            track.lastRowIdx = idx;
+            idx++;
+          }
+        }
+        const active = streamTableTrackRef.current;
+        if (active) {
+          const colMax: number[] = [];
+          let measured = active.measuredThrough;
+          for (let r = measured + 1; r <= active.lastRowIdx; r++) {
+            const rowEl = rowRefs.current.get(r);
+            if (!rowEl || !rowEl.isConnected) break; // 未挂载 → 停住，挂载后补测
+            rowEl
+              .querySelectorAll<HTMLElement>('.token-table-cell')
+              .forEach((cell, ci) => {
+                const w = cell.scrollWidth;
+                if (w > 0) colMax[ci] = Math.max(colMax[ci] ?? 0, w);
+              });
+            measured = r;
+          }
+          active.measuredThrough = measured;
+          const tableId = `table-${active.headerIdx}`;
+          const tableStore = useTableStore.getState();
+          const current = tableStore.tableWidths[tableId];
+          if (colMax.length > 0) {
+            if (!current) {
+              // 结构定型锁宽：分隔行已落库（track 建立的先决条件），
+              // 按已见行测宽锁定；锁窄风险由 grow-only 兜底
+              useTableStore.getState().setTableWidths(tableId, colMax);
+              // W3-3（S-EL-11）M6 登记点：每次定型（首次锁宽 / 修正）
+              // 经引擎登记点计数（perf suite 表格流式场景读取判定）
+              recordTableWidthSettle(tableId);
+            } else {
+              // grow-only 修正：逐列只增不减；无超宽列零写入
+              let changed = false;
+              const next = [...current];
+              for (let ci = 0; ci < colMax.length; ci++) {
+                if (colMax[ci] > (current[ci] ?? 0)) {
+                  next[ci] = colMax[ci];
+                  changed = true;
+                }
+              }
+              if (changed) {
+                useTableStore.getState().setTableWidths(tableId, next);
+                // W3-3（S-EL-11）M6 登记点（grow-only 修正同样登记）
+                recordTableWidthSettle(tableId);
+              }
+            }
+          }
+          // 段闭合：段尾之后已存在非表格行 → 本表不再变化，停止追踪
+          // （闭合段锁宽早已完成；后续到达的表格段由尾部探测重新发现）
+          if (active.lastRowIdx < st.getLineCount() - 1) {
+            streamTableTrackRef.current = null;
+          }
+        }
+        return;
+      }
       const items = virtualizer.getVirtualItems();
       let sepIdx = -1;
       for (const item of items) {
         const rawL = st.getLine(item.index);
         if (rawL === undefined) continue;
-        const ln = MarkdownParser.parseLine(rawL, item.index, getLineState(st, item.index));
+        const ln = MarkdownParser.parseLine(
+          rawL,
+          item.index,
+          getLineState(st, item.index)
+        );
         if (ln.type === 'table_separator') sepIdx = item.index;
       }
       if (sepIdx !== -1) {
@@ -1292,7 +1953,11 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
         while (headerIdx >= 0) {
           const rawH = st.getLine(headerIdx);
           if (rawH === undefined) break;
-          const lnH = MarkdownParser.parseLine(rawH, headerIdx, getLineState(st, headerIdx));
+          const lnH = MarkdownParser.parseLine(
+            rawH,
+            headerIdx,
+            getLineState(st, headerIdx)
+          );
           if (lnH.type !== 'table_row') break;
           headerIdx--;
         }
@@ -1301,29 +1966,47 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
         while (segEnd < st.getLineCount()) {
           const rawE = st.getLine(segEnd);
           if (rawE === undefined) break;
-          const lnE = MarkdownParser.parseLine(rawE, segEnd, getLineState(st, segEnd));
+          const lnE = MarkdownParser.parseLine(
+            rawE,
+            segEnd,
+            getLineState(st, segEnd)
+          );
           if (lnE.type !== 'table_row') break;
           segEnd++;
         }
-        const nextLn = segEnd < st.getLineCount() ? (() => {
-          const rawN = st.getLine(segEnd);
-          if (rawN === undefined) return null;
-          return MarkdownParser.parseLine(rawN, segEnd, getLineState(st, segEnd));
-        })() : null;
+        const nextLn =
+          segEnd < st.getLineCount()
+            ? (() => {
+                const rawN = st.getLine(segEnd);
+                if (rawN === undefined) return null;
+                return MarkdownParser.parseLine(
+                  rawN,
+                  segEnd,
+                  getLineState(st, segEnd)
+                );
+              })()
+            : null;
         const tableId = `table-${headerIdx}`;
         const tableStore = useTableStore.getState();
-        if ((nextLn === null || nextLn.type !== 'table_row') && !tableStore.tableWidths[tableId]) {
+        if (
+          (nextLn === null || nextLn.type !== 'table_row') &&
+          !tableStore.tableWidths[tableId]
+        ) {
           const colWidths: number[] = [];
           for (let r = headerIdx; r < segEnd; r++) {
             const rowEl = rowRefs.current.get(r);
             if (!rowEl || !rowEl.isConnected) continue;
-            rowEl.querySelectorAll<HTMLElement>('.token-table-cell').forEach((cell, ci) => {
-              const w = cell.scrollWidth;
-              if (w > 0) colWidths[ci] = Math.max(colWidths[ci] ?? 0, w);
-            });
+            rowEl
+              .querySelectorAll<HTMLElement>('.token-table-cell')
+              .forEach((cell, ci) => {
+                const w = cell.scrollWidth;
+                if (w > 0) colWidths[ci] = Math.max(colWidths[ci] ?? 0, w);
+              });
           }
           if (colWidths.length > 0) {
             useTableStore.getState().setTableWidths(tableId, colWidths);
+            // W3-3（S-EL-11）M6 登记点（非流式闭合定型路径同规登记）
+            recordTableWidthSettle(tableId);
           }
         }
       }
@@ -1331,7 +2014,15 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       // 定型失败静默（渲染路径不因测量异常中断）
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey, flushStreamInternal]);
+  }, [
+    mainLines,
+    streamTail,
+    mainCodeState,
+    streamTailCodeState,
+    lineCount,
+    windowKey,
+    flushStreamBuffer,
+  ]);
 
   // ── B3 内容变更增量维护：大纲索引平移/重建 + 折叠区间平移/行高批量修正 ──
   // 声明序在批量测量 effect 之后（foldState 的行高修正依赖 syncTo 已把新增
@@ -1436,14 +2127,18 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       const start = Math.min(state.selectionStart, state.selectionEnd);
       const end = Math.max(state.selectionStart, state.selectionEnd);
       if (start !== end) {
-        e.clipboardData.setData('text/plain', state.getText().substring(start, end));
+        e.clipboardData.setData(
+          'text/plain',
+          state.getText().substring(start, end)
+        );
         e.preventDefault();
       }
     },
     [readOnly, engineStore]
   );
 
-  const handleContainerClick = (e: React.MouseEvent) => {    // R5 readOnly：只读模式点击不移动光标（光标定位链路整体短路）——
+  const handleContainerClick = (e: React.MouseEvent) => {
+    // R5 readOnly：只读模式点击不移动光标（光标定位链路整体短路）——
     // 原生 DOM 文本选区/选择复制不受影响（浏览器默认行为，不 preventDefault）。
     if (readOnly) return;
     // R3-B1：事件处理器统一取一次最新 store 快照，行内容/偏移经访问器
@@ -1452,7 +2147,8 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     const st = engineStore.getState();
 
     // If we just finished a drag selection, ignore the synthetic click
-    if (Date.now() - ((window as any).__CRISH_LAST_DRAG_END_TIME || 0) < 50) return;
+    if (Date.now() - ((window as any).__CRISH_LAST_DRAG_END_TIME || 0) < 50)
+      return;
 
     const target = e.target as HTMLElement;
     if (!target.closest('.line-table-row')) {
@@ -1482,7 +2178,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       const containerRect = parentRef.current.getBoundingClientRect();
       // P3 B1：物理 scrollTop → 逻辑（点击定位在逻辑坐标系——HeightMap 行 top）
       const physTop = parentRef.current.scrollTop;
-      const logicTop = scrollMapRef.current ? scrollMapRef.current.inverse(physTop) : physTop;
+      const logicTop = scrollMapRef.current
+        ? scrollMapRef.current.inverse(physTop)
+        : physTop;
       const contentY = e.clientY - containerRect.top + logicTop;
 
       const hm = heightMapRef.current;
@@ -1497,7 +2195,13 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     }
 
     // Prevent table separator from being clicked. Redirect to previous row (table header)
-    if (clickedLineIndex !== -1 && st.getLine(clickedLineIndex)?.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) {
+    if (
+      clickedLineIndex !== -1 &&
+      st
+        .getLine(clickedLineIndex)
+        ?.trim()
+        .match(/^\|?[\s:-]*[-]+[\s:-]*\|/)
+    ) {
       if (clickedLineIndex > 0) {
         const prevLineStart = st.lineOffsets.getOffset(clickedLineIndex - 1);
         const prevLineLen = st.getLine(clickedLineIndex - 1).length;
@@ -1507,18 +2211,18 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     }
 
     if (clickedPadding && clickedLineIndex !== -1 && parentRef.current) {
-       const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
-       const lineLen = st.getLine(clickedLineIndex).length;
-       const containerRect = parentRef.current.getBoundingClientRect();
-       
-       if (e.clientX < containerRect.left + 50) {
-         // Clicked left padding/margin
-         setCursorPos(lineStart);
-       } else {
-         // Clicked right padding/margin
-         setCursorPos(lineStart + lineLen);
-       }
-       return;
+      const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
+      const lineLen = st.getLine(clickedLineIndex).length;
+      const containerRect = parentRef.current.getBoundingClientRect();
+
+      if (e.clientX < containerRect.left + 50) {
+        // Clicked left padding/margin
+        setCursorPos(lineStart);
+      } else {
+        // Clicked right padding/margin
+        setCursorPos(lineStart + lineLen);
+      }
+      return;
     }
 
     let range: Range | null = null;
@@ -1539,14 +2243,21 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     // Clamp the range to the cell we actually clicked on (to prevent clicking padding and jumping to next cell)
     const clickedCell = target.closest('.token-table-cell') as HTMLElement;
     if (clickedCell && range && range.startContainer) {
-      const resolvedNode = range.startContainer.nodeType === Node.TEXT_NODE
+      const resolvedNode =
+        range.startContainer.nodeType === Node.TEXT_NODE
           ? range.startContainer.parentElement
           : (range.startContainer as HTMLElement);
-      
+
       const resolvedCell = resolvedNode?.closest('.token-table-cell');
       if (resolvedCell !== clickedCell) {
-        const cellStart = parseInt(clickedCell.getAttribute('data-token-start') || '-1', 10);
-        const cellLen = parseInt(clickedCell.getAttribute('data-token-length') || '0', 10);
+        const cellStart = parseInt(
+          clickedCell.getAttribute('data-token-start') || '-1',
+          10
+        );
+        const cellLen = parseInt(
+          clickedCell.getAttribute('data-token-length') || '0',
+          10
+        );
         if (cellStart !== -1) {
           const rect = clickedCell.getBoundingClientRect();
           // If we clicked left half, go to start of cell. Otherwise go to end.
@@ -1622,8 +2333,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
             currentEl = currentEl.parentElement;
           }
 
-          const rawPos =
-            foundTokenStart + subOffset + (range.startOffset || 0);
+          const rawPos = foundTokenStart + subOffset + (range.startOffset || 0);
           const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
           const lineLen = st.getLine(clickedLineIndex).length;
           setCursorPos(Math.min(lineStart + lineLen, rawPos));
@@ -1642,7 +2352,12 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
     // 4. Fallback: User clicked an empty line, or empty space far away from text, or a preview element (HR, Math)
     if (clickedLineIndex !== -1) {
       // If user clicked the table separator empty space, redirect to the header row above it
-      if (st.getLine(clickedLineIndex)?.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) {
+      if (
+        st
+          .getLine(clickedLineIndex)
+          ?.trim()
+          .match(/^\|?[\s:-]*[-]+[\s:-]*\|/)
+      ) {
         if (clickedLineIndex > 0) {
           const prevLineStart = st.lineOffsets.getOffset(clickedLineIndex - 1);
           const prevLineLen = st.getLine(clickedLineIndex - 1).length;
@@ -1703,14 +2418,15 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
            P3 B3（plan-A3 §3 顺带修复）：onBeforeReplace 接 flush——
            面板在滚动容器外，容器 capture flush 监听不触达面板 keydown，
            替换动作先提交直刷 pending（命中在末行时 B 判定已保证无
-           pending，空转零开销）。宿主可用 findReplace prop 显式关闭
-           （只读消息历史场景） */}
+           pending，空转零开销）。W1-1 扩展：flushStreamBuffer 同时提交
+           帧聚合缓冲——替换作用在最新 store（含帧内未提交文本）。
+           宿主可用 findReplace prop 显式关闭（只读消息历史场景） */}
       {findReplace && (
         <FindReplacePanel
           store={engineStore}
           onGoToMatch={scrollToMatch}
           onSetHighlights={setSearchRanges}
-          onBeforeReplace={flushStreamInternal}
+          onBeforeReplace={flushStreamBuffer}
           readOnly={readOnly}
         />
       )}
@@ -1730,7 +2446,10 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
                 if (!selection || selection.isCollapsed) return;
 
                 const state = engineStore.getState();
-                const start = Math.min(state.selectionStart, state.selectionEnd);
+                const start = Math.min(
+                  state.selectionStart,
+                  state.selectionEnd
+                );
                 const end = Math.max(state.selectionStart, state.selectionEnd);
 
                 if (start !== end) {
@@ -1828,7 +2547,6 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
             });
           })()}
         </div>
-
 
         {/* R5 readOnly：只读渲染模式不渲染输入层（光标/选区高亮/隐藏
             输入框）——原生 DOM 选区替代引擎自绘选区，点击/键盘/拖选/

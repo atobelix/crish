@@ -134,7 +134,8 @@ async function pageBuildDoc(args) {
 // 口径（review-P3 维度 4 修订落地）：
 // - 每帧 scrollTop += rampPx（默认 120px @60Hz ≈ 7200px/s 匀速）；
 // - actualDelta = 滚动容器真实位移（滚动条侧）；
-// - anchorDelta = 锚点行（首可见 [data-index] 行）视口内位移（内容侧）；
+// - anchorDelta = 锚点行（视口垂直中部 [data-index] 行，切换见采样循环）
+//   视口内位移（内容侧）；
 // - 稳态期望两者均 ≈ rampPx；**跳动 = 内容与滚动条脱节**（相对脱节）：
 //   relErr = |anchorDelta - actualDelta| > REL_TOL 即脱节（0 容忍判定主指标）；
 //   掉帧（双峰 120/240）时两侧同步放大，relErr 仍 ≈ 0 → 不误报
@@ -189,22 +190,32 @@ async function pageRampScroll(args) {
       var actualDelta = scroller.scrollTop - prev;
       prevTop = scroller.scrollTop;
       // 锚点行跟踪：优先沿用上一帧锚点行（按 data-index 定位），其滚出
-      // 视口（rect.bottom ≤ 0）或已卸载时才切换新首可见行——避免「每帧
-      // 首可见行都不同 → 锚点恒切换 → 零采样」的陷阱。
+      // 视口（rect.bottom ≤ 0 / rect.top ≥ 视口高）或已卸载时才切换。
+      // 锚点选「视口垂直中部行」而非首可见行——ramp 120px/帧 下行高 28px
+      // 的首可见行 1 帧即滚出视口 → 恒切换 → 零采样（首跑实测
+      // anchorSamples=0 / 181 帧，suite/README.md 异常登记 ②）；中部行需
+      // 约半视口高度 ÷ rampPx 帧才滚出，期间连续采样，样本量显著 > 0。
       var anchorEl = null;
       if (anchorIdx >= 0) {
         anchorEl = scroller.querySelector('[data-index="' + anchorIdx + '"]');
         if (anchorEl) {
           var rKeep = anchorEl.getBoundingClientRect();
-          if (rKeep.bottom <= 0) anchorEl = null;
+          if (rKeep.bottom <= 0 || rKeep.top >= scroller.clientHeight) anchorEl = null;
         }
       }
       if (!anchorEl) {
         var els = scroller.querySelectorAll('[data-index]');
+        var midY = scroller.clientHeight / 2;
+        var bestEl = null;
+        var bestDist = Infinity;
         for (var i = 0; i < els.length; i++) {
           var r = els[i].getBoundingClientRect();
-          if (r.bottom > 0) { anchorEl = els[i]; break; }
+          if (r.bottom <= 0 || r.top >= scroller.clientHeight) continue;
+          var c = (r.top + r.bottom) / 2;
+          var d = c >= midY ? c - midY : midY - c;
+          if (d < bestDist) { bestDist = d; bestEl = els[i]; }
         }
+        anchorEl = bestEl;
         if (anchorEl) anchorSwitchFrames++;
       }
       if (anchorEl) {
@@ -793,10 +804,13 @@ async function pageMemoryCycle(args) {
 `;
 
 // ---- M6 表格流式探针源码（列宽定型计数，首采定档）--------------------------
-// 口径（A6 §2.6）：
-// - 包装 window.__CRISH_TABLE_STORE__ 的 setColumnWidth/setTableWidths
-//   （zustand setState 替换 action，原闭包行为不变——纯页面侧计数，零源码
-//   改动；引擎登记点 recordTableWidthSettle 落地后可切换引擎侧）；
+// 口径（A6 §2.6，W3-3 更新）：
+// - 计数来源优先引擎侧登记点 window.__CRISH_TABLE_SETTLE__（W3-3 接线：
+//   src/core/tableSettle.ts，MarkdownEngine 三处 setTableWidths 调用点
+//   recordTableWidthSettle）——引擎权威计数，无需页面侧包装；旧构建
+//   （无该钩子）回退包装 window.__CRISH_TABLE_STORE__ 的
+//   setColumnWidth/setTableWidths（zustand setState 替换 action，原闭包
+//   行为不变——纯页面侧计数）；
 // - perTableSettles = 每表调用次数 - 1（首次定型 = 首挂载，之后每次修正
 //   计一次「定型修正」）；
 // - 表格 DOM 宽度变化 >1px 次数（MutationObserver attribute style）；
@@ -916,11 +930,22 @@ async function pageTableStream(args) {
   });
   get().flushStreamTail();
   if (mo) { try { mo.disconnect(); } catch (e) {} }
+  // W3-3：计数来源优先引擎登记点（window.__CRISH_TABLE_SETTLE__ 只读钩子，
+  // 见 src/core/tableSettle.ts）——引擎侧三处 setTableWidths 调用点登记，
+  // 无需页面包装；旧构建（钩子缺失）回退包装计数 settleCounts。
+  var engineSettles = null;
+  if (typeof window.__CRISH_TABLE_SETTLE__ !== 'undefined' &&
+      window.__CRISH_TABLE_SETTLE__ &&
+      window.__CRISH_TABLE_SETTLE__.perTable) {
+    engineSettles = window.__CRISH_TABLE_SETTLE__.perTable;
+  }
   var perTable = {};
   var maxCorrections = 0;
   var tableCount = 0;
-  for (var tid in settleCounts) {
-    var calls = settleCounts[tid].calls;
+  var source = engineSettles || settleCounts;
+  for (var tid in source) {
+    // 引擎登记值为原始计数（数字）；包装计数形状为 { calls: n }
+    var calls = engineSettles ? source[tid] : source[tid].calls;
     var corrections = Math.max(0, calls - 1);
     perTable[tid] = { calls: calls, settles: corrections };
     if (corrections > maxCorrections) maxCorrections = corrections;
@@ -935,6 +960,7 @@ async function pageTableStream(args) {
     injectedTableRows: injectedRows,
     textMatch: get().verifyConsistency(),
     tableWidthKeys: Object.keys(tableStore.getState().tableWidths || {}).length,
+    settleSource: engineSettles ? 'engine' : 'wrapper',
     error: null,
   };
 }
@@ -1080,22 +1106,32 @@ async function pageStream(args) {
         var actualDelta = scroller.scrollTop - prev;
         prevTop = scroller.scrollTop;
         // 锚点行跟踪：优先沿用上一帧锚点行（按 data-index 定位），其滚出
-        // 视口（rect.bottom ≤ 0）或已卸载时才切换新首可见行（与
-        // PAGE_RAMP_SCROLL_SRC 同口径，防「每帧切换 → 零采样」）。
+        // 视口（rect.bottom ≤ 0 / rect.top ≥ 视口高）或已卸载时才切换。
+        // 锚点选「视口垂直中部行」而非首可见行——ramp 120px/帧 下行高
+        // 28px 的首可见行 1 帧即滚出视口 → 恒切换 → 零采样（首跑实测
+        // anchorSamples=0，suite/README.md 异常登记 ②，与
+        // PAGE_RAMP_SCROLL_SRC 同口径修复）。
         var anchorEl = null;
         if (anchorIdx >= 0) {
           anchorEl = scroller.querySelector('[data-index="' + anchorIdx + '"]');
           if (anchorEl) {
             var rKeep = anchorEl.getBoundingClientRect();
-            if (rKeep.bottom <= 0) anchorEl = null;
+            if (rKeep.bottom <= 0 || rKeep.top >= scroller.clientHeight) anchorEl = null;
           }
         }
         if (!anchorEl) {
           var els = scroller.querySelectorAll('[data-index]');
+          var midY = scroller.clientHeight / 2;
+          var bestEl = null;
+          var bestDist = Infinity;
           for (var i = 0; i < els.length; i++) {
             var r = els[i].getBoundingClientRect();
-            if (r.bottom > 0) { anchorEl = els[i]; break; }
+            if (r.bottom <= 0 || r.top >= scroller.clientHeight) continue;
+            var c = (r.top + r.bottom) / 2;
+            var d = c >= midY ? c - midY : midY - c;
+            if (d < bestDist) { bestDist = d; bestEl = els[i]; }
           }
+          anchorEl = bestEl;
           if (anchorEl) anchorSwitchFrames++;
         }
         if (anchorEl) {

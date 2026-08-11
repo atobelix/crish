@@ -2,9 +2,11 @@
 // 场景：表格流式列宽定型（M6——A6 §2.6；首跑采集定档）。
 //
 // 口径：
-// - 页面内包装 window.__CRISH_TABLE_STORE__ 的 setColumnWidth /
-//   setTableWidths（zustand setState 替换 action，原闭包行为不变——纯页面
-//   侧计数，零源码改动；引擎登记点 recordTableWidthSettle 落地后可切换）；
+// - 计数来源 = 引擎登记点（W3-3 接线：window.__CRISH_TABLE_SETTLE__，
+//   MarkdownEngine 三处 setTableWidths 调用点 recordTableWidthSettle）；
+//   旧构建（无钩子）回退页面内包装 window.__CRISH_TABLE_STORE__ 的
+//   setColumnWidth / setTableWidths（zustand setState 替换 action，原
+//   闭包行为不变——纯页面侧计数兜底）；
 // - perTableSettles = 每表调用次数 - 1（首次定型 = 首挂载，之后每次修正
 //   计一次「定型修正」）；
 // - 表格 DOM 宽度变化次数（MutationObserver attribute style）；
@@ -81,10 +83,9 @@ export default {
     const layoutPerSec = delta && elapsedSec > 0 ? delta.LayoutCount / elapsedSec : null;
 
     if (r.tableCount === 0) {
-      // 引擎侧零调用（B4 列宽定型未落地）：M6a 首采登记为未接线——
-      // 表格 DOM 渲染正常（line-table 结构存在），只是 TableStore
-      // setColumnWidth/setTableWidths 无调用方，定型登记点无处触发。
-      // 诚实标注：na 不判 FAIL，等 B4 落地后回填定档。
+      // 无表格锁宽登记（流式注入未产出结构定型的表格段，或引擎登记点/
+      // 包装计数均未触发）——按「未采集」登记 na 不判 FAIL（诚实标注，
+      // 复跑定位是注入形态问题还是引擎登记缺失）。
       checks.push(
         {
           metric: 'M6a',
@@ -108,7 +109,7 @@ export default {
         },
         check('M6b', 'layoutCountPerSec（流式表格 LayoutCount/秒）', layoutPerSec, { value: 1, reportOnly: true, tuned: false })
       );
-      notes.push('setColumnWidth/setTableWidths 引擎侧零调用（B4 列宽定型未落地）——M6a 首采登记为未接线，无法定档；表格行已被解析渲染（line-table DOM 结构存在），探针链路自检正常');
+      notes.push('未采集到表格列宽定型登记（计数来源：引擎登记点 __CRISH_TABLE_SETTLE__ / 旧构建包装兜底）——表格行可能未被解析为表格段，或锁宽登记未触发；na 不判 FAIL');
     } else {
       checks.push(
         // ---- M6a：单表定型修正 ≤ 2（首采定档：tuned=false 失败仅告警）----

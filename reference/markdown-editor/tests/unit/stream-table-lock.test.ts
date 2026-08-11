@@ -9,12 +9,20 @@
 // 尾段」当成「表格已闭合」：分隔行+表头落库后的下一次 effect 运行即锁宽，
 // 列宽锁死在表头一行的宽度，且 !tableWidths 守卫使真闭合后永不重定型。
 //
+// R-1 断言演进（00 总方案 §4.3，W1-3 落地后）：
+// - S-T-0-03 语义限定为「分隔行**到达前**」计数 = 0（W0-2 修复核心保留：
+//   无结构证据不锁宽、不锁死表头宽）；分隔行落库后锁宽计数 = 1 属
+//   S-T-1-05（结构定型即锁，stream-table-structure-lock.test.ts）；
+// - S-T-0-03b（streamEnd 后真闭合定型一次）在 W1-3 下流式期间若已提交
+//   则锁宽已发生（分隔行落库帧），streamEnd 后因已锁不重测，计数保持。
+//
 // 覆盖（W0-2 验收断言 S-T-0-03 / S-T-0-06，R-1 断言演进表）：
-// 1. S-T-0-03：流式会话中（streamAppend 驱动，streamOp 非空）表格为
-//    尾段时，setTableWidths 不被调用（计数 0）——分隔行+表头落库、
-//    数据行到达、表格仍为尾段期间全程 0（修复前 = 1，锁死表头宽）；
-//    streamEnd（streamOp 置 null）后真闭合定型一次（计数 1）。
-// 2. S-T-0-06：非流式（streamOp === null）闭合表格路径不变——普通
+// 1. S-T-0-03：流式会话中（streamAppend 驱动，streamOp 非空）分隔行
+//    到达前 setTableWidths 计数 0（修复前 = 1，锁死表头宽）；分隔行
+//    落库后计数 1（S-T-1-05 同语义的演进过渡验证）。
+// 2. S-T-0-03b：非流式闭合路径不变——streamEnd（streamOp 置 null）后
+//    表格闭合定型一次（计数 1），测得全量行宽。
+// 3. S-T-0-06：非流式（streamOp === null）闭合表格路径不变——普通
 //    setText 后 effect 照常锁宽（含表格为文档尾的 nextLn === null 情形，
 //    行为保持）。
 //
@@ -37,6 +45,7 @@ import {
   type EditorStore,
 } from '../../src/core/EditorStore';
 import { useTableStore } from '../../src/core/TableStore';
+import { stubScrollWidth } from './helpers/test-env';
 
 // measure 模块部分 mock（jsdom 无布局）：固定测量结果——display-completion
 // 同款模式（BlockRenderer 依赖的渲染热路径保留真实实现）
@@ -108,12 +117,10 @@ const origOffsetHeight = Object.getOwnPropertyDescriptor(
 );
 // jsdom 无布局：scrollWidth 恒 0 → 锁宽测宽循环 colWidths 恒空 →
 // setTableWidths 永不触发，无法断言定型行为；stub 固定列宽，使测宽循环
-// 确定性产出 [CELL_WIDTH, ...]（R-10 scrollWidth stub 协议方向）
+// 确定性产出 [CELL_WIDTH, ...]（R-10 scrollWidth stub 协议，统一走
+// helpers/test-env 的 stubScrollWidth——beforeEach 安装、afterEach 恢复）
 const CELL_WIDTH = 100;
-const origScrollWidth = Object.getOwnPropertyDescriptor(
-  HTMLElement.prototype,
-  'scrollWidth'
-);
+let restoreScrollWidth: () => void = () => {};
 
 // 真实 setTableWidths（模块加载时捕获；spy 委托它写入锁宽状态，
 // afterEach 恢复原 action 防止跨文件污染）
@@ -127,12 +134,7 @@ beforeEach(() => {
       return REAL_ROW_HEIGHT;
     },
   });
-  Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
-    configurable: true,
-    get() {
-      return CELL_WIDTH;
-    },
-  });
+  restoreScrollWidth = stubScrollWidth(() => CELL_WIDTH);
   // 表格锁宽状态复位（用例间隔离）
   useTableStore.setState({ ...useTableStore.getState(), tableWidths: {} });
 });
@@ -173,16 +175,7 @@ afterEach(() => {
     delete (HTMLElement.prototype as unknown as Record<string, unknown>)
       .offsetHeight;
   }
-  if (origScrollWidth) {
-    Object.defineProperty(
-      HTMLElement.prototype,
-      'scrollWidth',
-      origScrollWidth
-    );
-  } else {
-    delete (HTMLElement.prototype as unknown as Record<string, unknown>)
-      .scrollWidth;
-  }
+  restoreScrollWidth();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   // 恢复真实 setTableWidths + 清空锁宽状态
@@ -203,32 +196,44 @@ function installLockSpy() {
 }
 
 describe('W0-2 流式尾表提前锁宽修复（S-T-0-03 / S-T-0-06）', () => {
-  it('S-T-0-03 流式会话中表格为尾段：全程 setTableWidths 计数 0（不提前锁宽、不锁死表头宽）', () => {
+  it('S-T-0-03 流式会话中分隔行到达前：setTableWidths 计数 0（R-1 演进语义限定）', () => {
     const spy = installLockSpy();
     const store = createEditorStore();
     store.getState().setText('seed');
     const { getHandle } = mountEngine(store);
-    // 流式会话：表头 → 分隔行 → 数据行，全程表格为文档尾段
-    // （chunk 含 \n 或 | → 常规 append 路径，streamOp 落账）
+    // 流式会话：表头行落库（分隔行未到达——无表格结构证据，不得锁宽；
+    // W0-2 修复核心保留：流式尾段 nextLn === null 不触发提前锁宽）
     act(() => {
       getHandle().streamAppend('\n| a | b |');
     });
+    // W1-1（D-4）：降级 chunk 入帧聚合缓冲——断言前显式 flush 提交
     act(() => {
-      getHandle().streamAppend('\n| --- | --- |');
-    });
-    act(() => {
-      getHandle().streamAppend('\n| 1 | 2 |');
+      getHandle().flushStream();
     });
     const s = store.getState();
     // 前置条件：流式会话进行中 + 表格确为文档尾段（nextLn === null 场景）
     expect(s.streamOp).not.toBeNull();
-    expect(s.getLineCount()).toBe(4);
-    expect(s.getLine(3)).toBe('| 1 | 2 |');
-    expect(s.getLine(4)).toBeUndefined();
-    // 修复断言：分隔行+表头落库、数据行到达后均未锁宽
-    // （修复前：分隔行落库后下一次 effect 运行即锁 1 次，锁死在表头宽）
+    expect(s.getLineCount()).toBe(2);
+    expect(s.getLine(1)).toBe('| a | b |');
+    expect(s.getLine(2)).toBeUndefined();
+    // R-1 断言演进（docs/streaming-render/00 §4.3）：W1-3 落地后 S-T-0-03
+    // 语义限定为「分隔行到达前」计数 0（修复前 = 1——旧实现把流式尾段
+    // 当闭合即锁，锁死在表头宽）
     expect(spy).toHaveBeenCalledTimes(0);
     expect(useTableStore.getState().tableWidths).toEqual({});
+    // 分隔行落库（结构定型证据）→ 结构定型锁宽 1 次（与 S-T-1-05 同
+    // 语义；此处验证 W0-2「全程 0」向 W1-3「分隔行到达即锁」的演进
+    // 过渡——§4.3 演进表两包断言按 Wave 时序各自有效）
+    act(() => {
+      getHandle().streamAppend('\n| --- | --- |');
+    });
+    act(() => {
+      getHandle().flushStream();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    // tableId = 首个 | 行 index（seed 占第 0 行，表头第 1 行 → table-1）
+    expect(spy.mock.calls[0][0]).toBe('table-1');
+    expect(spy.mock.calls[0][1]).toEqual([CELL_WIDTH, CELL_WIDTH]);
   });
 
   it('S-T-0-03b 流式会话结束（streamEnd → streamOp 置 null）后真闭合定型一次，测得全量行宽', () => {
@@ -245,7 +250,9 @@ describe('W0-2 流式尾表提前锁宽修复（S-T-0-03 / S-T-0-06）', () => {
     act(() => {
       getHandle().streamAppend('\n| 1 | 2 |');
     });
-    // 流式期间不锁宽（S-T-0-03 语义）
+    // W1-3 演进说明：append 仅入帧聚合缓冲（未 flush 提交），此时间点
+    // store 无表格结构 → 计数 0（W1-3 的「分隔行到达即锁」需提交后
+    // effect 运行才触发；缓冲内累积在 streamEnd 一并提交）
     expect(spy).toHaveBeenCalledTimes(0);
     // streamEnd：flushStreamTail 合并尾段 + streamOp 置 null → deps 变化
     // → effect 重跑 → 表格为文档尾（nextLn === null）且非流式 → 正常定型

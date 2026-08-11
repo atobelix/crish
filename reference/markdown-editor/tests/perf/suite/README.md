@@ -48,32 +48,32 @@ node tests/perf/suite/runner.mjs --node-only            # 数据层降级（stor
 
 ## 三档（A6 §3.3）
 
-| 档位 | 渲染后端 | 场景范围 | 判定口径 | 预估时长 |
-|---|---|---|---|---|
-| `ci` | headless | scroll-smooth + 矩阵 ci 子集 4 组合 + 选区/补全专项（7 场景） | 中位数 + 长任务计数 + 0 容忍结构指标（M2a/M2b/M2c/M3/M4）；帧率降档为 ≥30fps 硬门槛（p95<33ms） | ~3-5 分钟 |
-| `nightly` | GPU 有头 | 全矩阵 16 组合 + 内存循环 3 轮 + 表格流式 + L2 trace（21 场景） | 全档（60fps p95<16.6ms）+ 0 容忍指标 + M5c 泄漏门禁 | ~25-30 分钟 |
-| `local` | 本机自动 | 同 nightly 可裁剪（--scenario / --quick 走 ci 子集） | 全档 | 开发者自定 |
+| 档位      | 渲染后端 | 场景范围                                                        | 判定口径                                                                                        | 预估时长    |
+| --------- | -------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------- |
+| `ci`      | headless | scroll-smooth + 矩阵 ci 子集 4 组合 + 选区/补全专项（7 场景）   | 中位数 + 长任务计数 + 0 容忍结构指标（M2a/M2b/M2c/M3/M4）；帧率降档为 ≥30fps 硬门槛（p95<33ms） | ~3-5 分钟   |
+| `nightly` | GPU 有头 | 全矩阵 16 组合 + 内存循环 3 轮 + 表格流式 + L2 trace（21 场景） | 全档（60fps p95<16.6ms）+ 0 容忍指标 + M5c 泄漏门禁                                             | ~25-30 分钟 |
+| `local`   | 本机自动 | 同 nightly 可裁剪（--scenario / --quick 走 ci 子集）            | 全档                                                                                            | 开发者自定  |
 
 退出码：0 = 全部通过（含首采定档告警）；1 = 存在 FAIL/ERROR。
 报告：`reports/suite-report-<date>.json`（阈值命中明细，报告即「失败归属证据」）。
 
 ## 指标清单（M1-M6）
 
-| ID | 指标 | 定义 | 采集方法 | 阈值（ci / nightly） | 定档状态 |
-|---|---|---|---|---|---|
-| M1a | 帧内 JS P95 | 单帧 JS 段（含 React 提交）P95 | rAF 打点近似（L1）；CDP trace（L2 nightly） | ≤4ms / ≤4ms | 已定档（R2/R6 校准） |
-| M1b | 帧内 layout+paint P95 | 单帧 layout+paint 段 | CDP 计数器窗口增量 ÷ 帧数（L1）；trace（L2） | ≤20ms（headless）/ ≤12ms（GPU） | 已定档（渲染后端分档） |
-| M1c | 长任务计数 | >50ms 任务次数（滚动 3s） | PerformanceObserver | 0 warn / ≥2 fail | 已定档（R6 实测 1×99ms） |
-| M2a | 帧间位移突变 | **相对脱节**：anchorDelta vs actualDelta 偏差；绝对突变/freeze 为报告项 | 匀速 ramp 探针（120px/帧 @60Hz） | 脱节 0 次（0 容忍） | 0 容忍硬门槛 |
-| M2b | 滚动条/内容一致性 | 锚点行误差 + scrollHeight 误差 | 20 位置采样（5%→95%） | P95 ≤1 行 / ≤1% | 已定档（01 §5.2 P1） |
-| M2c | 直刷期间滚动 | 流式+滚动并发脱节 | M2a 探针叠加场景 D2 变体 | 脱节 0 次（0 容忍） | 0 容忍硬门槛 |
-| M3 | 选区丢失率 | 丢失数 / 直刷 chunk 数 | 页面探针 + 引擎登记点双通道 | 0 次/会话（0 容忍） | 0 容忍硬门槛 |
-| M4 | 补全闪烁 | 完成态切换存量行重建数 | 节点身份比对 + MutationObserver | 0 行（0 容忍） | 0 容忍硬门槛 |
-| M5a | 堆增长（60s 注入） | 起止差 | performance.memory 1s 采样 | ≤60MB | 已定档（R6 +26.9~+43.1） |
-| M5b | 堆峰值 | 采样最大值 | 同上 | ≤256MB | 已定档（R6 ≤163.9） |
-| M5c | 循环泄漏 | 3 轮 GC 后稳态增量 | 3 轮注入+空闲+强制 GC | ≤5%（nightly） | 已定档（G9 口径） |
-| M6a | 表格列宽定型修正 | 单表修正次数 | 页面包装 setColumnWidth/setTableWidths | ≤2 次 | **首采定档** |
-| M6b | 表格 reflow | LayoutCount/秒 | CDP 计数器 | ≤无表格基线×2 | **首采定档** |
+| ID  | 指标                  | 定义                                                                    | 采集方法                                                                  | 阈值（ci / nightly）            | 定档状态                 |
+| --- | --------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------- | ------------------------ |
+| M1a | 帧内 JS P95           | 单帧 JS 段（含 React 提交）P95                                          | rAF 打点近似（L1）；CDP trace（L2 nightly）                               | ≤4ms / ≤4ms                     | 已定档（R2/R6 校准）     |
+| M1b | 帧内 layout+paint P95 | 单帧 layout+paint 段                                                    | CDP 计数器窗口增量 ÷ 帧数（L1）；trace（L2）                              | ≤20ms（headless）/ ≤12ms（GPU） | 已定档（渲染后端分档）   |
+| M1c | 长任务计数            | >50ms 任务次数（滚动 3s）                                               | PerformanceObserver                                                       | 0 warn / ≥2 fail                | 已定档（R6 实测 1×99ms） |
+| M2a | 帧间位移突变          | **相对脱节**：anchorDelta vs actualDelta 偏差；绝对突变/freeze 为报告项 | 匀速 ramp 探针（120px/帧 @60Hz）                                          | 脱节 0 次（0 容忍）             | 0 容忍硬门槛             |
+| M2b | 滚动条/内容一致性     | 锚点行误差 + scrollHeight 误差                                          | 20 位置采样（5%→95%）                                                     | P95 ≤1 行 / ≤1%                 | 已定档（01 §5.2 P1）     |
+| M2c | 直刷期间滚动          | 流式+滚动并发脱节                                                       | M2a 探针叠加场景 D2 变体                                                  | 脱节 0 次（0 容忍）             | 0 容忍硬门槛             |
+| M3  | 选区丢失率            | 丢失数 / 直刷 chunk 数                                                  | 页面探针 + 引擎登记点双通道                                               | 0 次/会话（0 容忍）             | 0 容忍硬门槛             |
+| M4  | 补全闪烁              | 完成态切换存量行重建数                                                  | 节点身份比对 + MutationObserver                                           | 0 行（0 容忍）                  | 0 容忍硬门槛             |
+| M5a | 堆增长（60s 注入）    | 起止差                                                                  | performance.memory 1s 采样                                                | ≤60MB                           | 已定档（R6 +26.9~+43.1） |
+| M5b | 堆峰值                | 采样最大值                                                              | 同上                                                                      | ≤256MB                          | 已定档（R6 ≤163.9）      |
+| M5c | 循环泄漏              | 3 轮 GC 后稳态增量                                                      | 3 轮注入+空闲+强制 GC                                                     | ≤5%（nightly）                  | 已定档（G9 口径）        |
+| M6a | 表格列宽定型修正      | 单表修正次数                                                            | 引擎登记点 `__CRISH_TABLE_SETTLE__`（tableSettle.ts，旧构建回退页面包装） | ≤2 次                           | **首采定档**             |
+| M6b | 表格 reflow           | LayoutCount/秒                                                          | CDP 计数器                                                                | ≤无表格基线×2                   | **首采定档**             |
 
 ## 定档说明（诚实标注，A6 §5.2 定档协议）
 
@@ -87,10 +87,16 @@ node tests/perf/suite/runner.mjs --node-only            # 数据层降级（stor
   内容高度接管引入，本机实测 ~3686px），线性绝对模型不适用——改用
   **相邻位置差分预测**（ΔscrollTop/行高推进，系统偏移在差分中抵消），
   误差 P95 ≤ 1 行（本机首跑实测 0-1 行）；混合行高组合判首行索引单调性。
-- **M6a/M6b 首跑采集定档**：无历史数据，当前阈值为设计推定值。**首跑实测
-  发现**：`setColumnWidth/setTableWidths` 引擎侧零调用方（B4 列宽定型未
-  落地）——表格行已解析渲染（line-table DOM 结构存在），但定型登记点无
-  处触发，M6a 首采登记为「未接线」（na 不判 FAIL）。B4 落地后回填定档。
+- **M6a/M6b 首跑采集定档**：无历史数据，当前阈值为设计推定值。**首跑发现**
+  （W3-3 落地前）：`setColumnWidth/setTableWidths` 引擎侧零调用方（B4 列宽
+  定型未落地）——表格行已解析渲染（line-table DOM 结构存在），但定型登记点
+  无处触发，M6a 首采登记为「未接线」（na 不判 FAIL）。**W3-3/S-EL-11 已
+  闭合**：MarkdownEngine 三处 setTableWidths 调用点已接线
+  `recordTableWidthSettle`（src/core/tableSettle.ts，window
+  `__CRISH_TABLE_SETTLE__` 只读钩子，pagesrc.mjs 优先读引擎登记值，
+  `settleSource='engine'`，旧构建回退页面包装）——M6a 现为可判定项，
+  仍保持 `tuned=false` 首采定档，实测稳定后按实测回写 `budgets.mjs` 并附
+  更新理由（**禁止静默放宽**）。
   首跑产物即 `reports/suite-report-<date>.json` 入库；实测稳定后按实测回写
   `budgets.mjs` 并附更新理由（**禁止静默放宽**）。
 - **M3 首跑发现（上报主 Agent）**：直刷写后相邻行用户选区被折叠
@@ -113,30 +119,30 @@ node tests/perf/suite/runner.mjs --node-only            # 数据层降级（stor
 
 ### 运行环境（环境指纹，A6 §3.4）
 
-| 项 | 值 |
-|---|---|
-| 档位 / 模式 | ci / browser（headless） |
-| 平台 / Node | win32 / v24.11.0 |
-| 渲染后端 | **SwiftShader 软件渲染**（CDP GPU vendorId=65535，GPU 不可用）——M1b 阈值取 headless 档 20ms |
-| 文档规模 | 3 万行（矩阵/滚动场景）；选区/补全专项小文档 |
-| 运行日期 | 2026-08-11（本地）05:16/05:33 两轮全量 |
-| 时长 | 约 60s/轮（7 场景） |
+| 项          | 值                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| 档位 / 模式 | ci / browser（headless）                                                                    |
+| 平台 / Node | win32 / v24.11.0                                                                            |
+| 渲染后端    | **SwiftShader 软件渲染**（CDP GPU vendorId=65535，GPU 不可用）——M1b 阈值取 headless 档 20ms |
+| 文档规模    | 3 万行（矩阵/滚动场景）；选区/补全专项小文档                                                |
+| 运行日期    | 2026-08-11（本地）05:16/05:33 两轮全量                                                      |
+| 时长        | 约 60s/轮（7 场景）                                                                         |
 
 ### M1-M6 首跑值 + 达标判定
 
-| 指标 | 定义 | 首跑值（ci/headless） | 预算 | 判定 |
-|---|---|---|---|---|
-| M1a | 帧内 JS 段 P95 | 0.1-0.4ms（各场景 jsP95） | ≤4ms | **PASS**（余量 ×10） |
-| M1b | 帧内 layout+paint P95（L1 CDP 窗口增量/帧） | ≈0ms（0.0002-0.0006） | ≤20ms（headless 档） | **PASS** |
-| M1c | 长任务计数（滚动 3s / 流式 10s） | scroll-smooth 0、plain 0、plain-inject 0、math5-inject 1、**fence30 3** | ≥2 FAIL | **fence30 组合 FAIL**（已知语义，见异常登记 ①） |
-| M1-fps | 帧率硬门槛（ci 降档 30fps） | frameP95：17.8 / 18.2 / 18.1 / 18.0 / 32.4ms | <33.3ms | **PASS**（fence30 边缘抖动：首轮 33.5 FAIL、次轮 32.4 PASS） |
-| M2a | 帧间位移突变（相对脱节，0 容忍） | relDetach=0（scroll-smooth + std-plain-none） | 0 次 | **PASS 但采样失效**（见异常登记 ②） |
-| M2b | 滚动条/内容一致性 | anchorRowErrorP95=1 行；scrollHeightError 0.35-0.44%；monotonic=true | ≤1 行 / ≤1% | **PASS** |
-| M2c | 直刷期间滚动（流式+滚动并发，0 容忍） | relDetach=0（std-plain-inject / std-math5-inject） | 0 次 | **PASS 但场景失真**（见异常登记 ③） |
-| M3 | 选区丢失率（0 容忍） | **selectionLost=1**（两轮全量均现）；单场景复跑 lost=0 | 0 次 | **FAIL（偶发）**（见异常登记 ④） |
-| M4 | 补全闪烁（存量行重建，0 容忍） | remounted=0、addedNodes=0、textMatch=true | 0 行 | **PASS** |
-| M5a/M5b | 堆增长/峰值 | ci 档注入 10s：start=end=45.2MB（报告项）；M5a/M5b 判定为 nightly 口径 | ≤60MB / ≤256MB | **ci 不判**（M5c 仅 nightly） |
-| M6a/M6b | 表格列宽定型 / reflow | ci 档不执行（nightly/local 专属）；`tuned=false` 首采定档保持 | ≤2 次 / ≤×2 | **未采集**（M6a 引擎零调用方，未接线，README §定档说明已登记） |
+| 指标    | 定义                                        | 首跑值（ci/headless）                                                   | 预算                 | 判定                                                           |
+| ------- | ------------------------------------------- | ----------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------- |
+| M1a     | 帧内 JS 段 P95                              | 0.1-0.4ms（各场景 jsP95）                                               | ≤4ms                 | **PASS**（余量 ×10）                                           |
+| M1b     | 帧内 layout+paint P95（L1 CDP 窗口增量/帧） | ≈0ms（0.0002-0.0006）                                                   | ≤20ms（headless 档） | **PASS**                                                       |
+| M1c     | 长任务计数（滚动 3s / 流式 10s）            | scroll-smooth 0、plain 0、plain-inject 0、math5-inject 1、**fence30 3** | ≥2 FAIL              | **fence30 组合 FAIL**（已知语义，见异常登记 ①）                |
+| M1-fps  | 帧率硬门槛（ci 降档 30fps）                 | frameP95：17.8 / 18.2 / 18.1 / 18.0 / 32.4ms                            | <33.3ms              | **PASS**（fence30 边缘抖动：首轮 33.5 FAIL、次轮 32.4 PASS）   |
+| M2a     | 帧间位移突变（相对脱节，0 容忍）            | relDetach=0（scroll-smooth + std-plain-none）                           | 0 次                 | **PASS 但采样失效**（见异常登记 ②）                            |
+| M2b     | 滚动条/内容一致性                           | anchorRowErrorP95=1 行；scrollHeightError 0.35-0.44%；monotonic=true    | ≤1 行 / ≤1%          | **PASS**                                                       |
+| M2c     | 直刷期间滚动（流式+滚动并发，0 容忍）       | relDetach=0（std-plain-inject / std-math5-inject）                      | 0 次                 | **PASS 但场景失真**（见异常登记 ③）                            |
+| M3      | 选区丢失率（0 容忍）                        | **selectionLost=1**（两轮全量均现）；单场景复跑 lost=0                  | 0 次                 | **FAIL（偶发）**（见异常登记 ④）                               |
+| M4      | 补全闪烁（存量行重建，0 容忍）              | remounted=0、addedNodes=0、textMatch=true                               | 0 行                 | **PASS**                                                       |
+| M5a/M5b | 堆增长/峰值                                 | ci 档注入 10s：start=end=45.2MB（报告项）；M5a/M5b 判定为 nightly 口径  | ≤60MB / ≤256MB       | **ci 不判**（M5c 仅 nightly）                                  |
+| M6a/M6b | 表格列宽定型 / reflow                       | ci 档不执行（nightly/local 专属）；`tuned=false` 首采定档保持           | ≤2 次 / ≤×2          | **未采集**（M6a 引擎零调用方，未接线，README §定档说明已登记） |
 
 首跑定档结论：**7 场景 PASS=5 / FAIL=2，退出码 1**。硬门槛类 PASS 项
 （M2b/M4）与数值类（M1a/M1b/M1-fps）全绿；FAIL 与有效性缺陷全部如实
@@ -180,11 +186,11 @@ selectionLost=1（首轮 chunk=2 / 次轮 chunk=3，lossRate=33.3%）；单场�
 
 ### 全量门禁确认（同次验证，P3 波 4）
 
-| 门禁 | 结果 |
-|---|---|
-| `npx tsc -b` | **0 错误**（exit 0） |
+| 门禁                | 结果                               |
+| ------------------- | ---------------------------------- |
+| `npx tsc -b`        | **0 错误**（exit 0）               |
 | `npm run test:gate` | **73 文件 / 959 测试全绿**（5.6s） |
-| 编码校验 | 新增报告 UTF-8 无 BOM ✓ |
+| 编码校验            | 新增报告 UTF-8 无 BOM ✓            |
 
 ## 防抖（环境噪声治理，A6 §3.4）
 

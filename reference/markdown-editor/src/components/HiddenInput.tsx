@@ -233,7 +233,10 @@ export function scrollLineIntoViewByGeometry(
   container: HTMLElement,
   lineIdx: number
 ): void {
-  const mounted = collectMountedLines(container, container.getBoundingClientRect());
+  const mounted = collectMountedLines(
+    container,
+    container.getBoundingClientRect()
+  );
   if (mounted.length === 0) return;
   const first = mounted[0];
   const last = mounted[mounted.length - 1];
@@ -282,9 +285,10 @@ function contentLeftOf(container: HTMLElement, cr: DOMRect): number {
 
 // 字符宽度 Oracle 回退（无布局环境/未挂载时）：0.6 × 字号等宽 + 2 倍全角
 // （与 measure.ts:794-796 回退同口径；等宽栈下与实测误差 ≤ 1 字符）
-function fallbackCharWidths(
-  container: HTMLElement
-): { ascii: number; cjk: number } {
+function fallbackCharWidths(container: HTMLElement): {
+  ascii: number;
+  cjk: number;
+} {
   const fs = parseFloat(window.getComputedStyle(container).fontSize) || 14;
   const ascii = fs * 0.6;
   return { ascii, cjk: ascii * 2 };
@@ -584,7 +588,10 @@ export function planDropInsert(
   types: readonly string[],
   files: readonly File[],
   plainText: string
-): { kind: 'file'; file: File } | { kind: 'text'; text: string } | { kind: 'none' } {
+):
+  | { kind: 'file'; file: File }
+  | { kind: 'text'; text: string }
+  | { kind: 'none' } {
   const hasFiles = Array.from(types ?? []).some(
     (t) => t.toLowerCase() === 'files'
   );
@@ -627,9 +634,7 @@ export function readDroppedFile(file: File): Promise<string> {
  */
 // oxlint-disable-next-line react/only-export-components
 export async function applyDroppedContent(
-  plan:
-    | { kind: 'file'; file: File }
-    | { kind: 'text'; text: string },
+  plan: { kind: 'file'; file: File } | { kind: 'text'; text: string },
   store: Pick<EditorState, 'applyChange'>,
   from: number,
   to: number
@@ -641,8 +646,10 @@ export async function applyDroppedContent(
   return true;
 }
 
-export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store }) => {
-
+export const HiddenInput: React.FC<HiddenInputProps> = ({
+  containerRef,
+  store,
+}) => {
   // R5：绑定实例 store（缺省回退全局单例）；组件内所有 store 读写
   // （订阅 / getState / setState）统一经本变量，多实例输入互不串台
   const editorStore = store ?? useEditorStore;
@@ -718,6 +725,17 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
     let rAF: number;
     let retries = 0;
     const updateCoords = () => {
+      // W1-2（M2c 根因修复，docs/streaming-render/00 总方案 S-EL-11）：
+      // 流式会话（store.streamActive 为 true = 流式追加进行中，W2-1 D-1
+      // 换源——旧判定 streamOp !== null；只读快路径 streamOp 恒 null 但
+      // 信号照常置位，门禁语义一致）期间短路光标滚动跟随——注入的每帧
+      // 提交都触发本 effect 重跑，而光标行（用户未动时停在文档首部/旧
+      // 位置）在虚拟视口外 → 越界滚动分支会把用户 scrollTop 抢拉到光标
+      // 行（perf M2c 实测 253027→3513 复位锁死，suite README 异常登记③；
+      // 随后 tanstack resizeItem 的纠滚又逐帧递减拉到 0）。流式期间光标
+      // 移动是 appendText 的记账平移（非用户意图），滚动跟随语义无意义；
+      // 编辑路径（streamActive 为 false）行为完全不变。
+      if (editorStore.getState().streamActive === true) return;
       const rect = getCoordinatesFromIndex(cursorPos, containerRef.current);
       if (rect) {
         // 视口坐标 → 容器内容坐标（与 CursorLayer 共用换算；测量结果由
@@ -731,11 +749,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
 
         const cTop = containerRef.current!.scrollTop;
         const cHeight = containerRef.current!.clientHeight;
-        
+
         // Fix for "反反复复刷屏" (Repeated bouncing during native mouse drag)
-        // If the user is physically dragging the mouse outside the viewport, 
+        // If the user is physically dragging the mouse outside the viewport,
         // the browser natively triggers an OS-level drag-scroll loop.
-        // We MUST NOT fight the browser by setting scrollTop manually here, 
+        // We MUST NOT fight the browser by setting scrollTop manually here,
         // otherwise react-virtual and the browser scroll will fight each other causing a bounce loop.
         if (!(window as any).__CRISH_IS_MOUSE_DOWN) {
           if (top < cTop) {
@@ -766,7 +784,15 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
     return () => {
       if (rAF) cancelAnimationFrame(rAF);
     };
-  }, [cursorPos, selectionStart, selectionEnd, containerRef, mainLines, streamTail, lineCount]);
+  }, [
+    cursorPos,
+    selectionStart,
+    selectionEnd,
+    containerRef,
+    mainLines,
+    streamTail,
+    lineCount,
+  ]);
 
   // —— a11y 光标行 value 同步 + aria-live 播报（R4-H，04 §6.3 短程）——
   // prevLinesRef：本次渲染「行视图是否变化」判据（导航 = 行未变光标动；
@@ -831,7 +857,15 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
     // 是新对象（光标移动重测），若直接依赖会导致本 effect 在坐标重渲染时
     // 重复执行、linesChanged 判据失效（编辑提交后被误同步）；布尔切换只在
     // textarea 挂载/卸载时变化（首帧 coords null → 挂载后补一次同步）
-  }, [cursorPos, selectionStart, selectionEnd, mainLines, streamTail, lineCount, textareaMounted]);
+  }, [
+    cursorPos,
+    selectionStart,
+    selectionEnd,
+    mainLines,
+    streamTail,
+    lineCount,
+    textareaMounted,
+  ]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -894,7 +928,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       }
       textareaRef.current?.focus();
     };
-    
+
     const handleGlobalMouseDown = () => {
       (window as any).__CRISH_IS_MOUSE_DOWN = true;
       // B5 自动补全：点击定位/拖选开始 → 关闭候选菜单（光标将移动）
@@ -1221,11 +1255,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
           editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore.getState().enterCellSelection(
-              selectedCell.tableId,
-              newTable.absoluteLineIndex ?? newTable.activeLineIndex,
-              newTable.activeCellIndex
-            );
+            useTableStore
+              .getState()
+              .enterCellSelection(
+                selectedCell.tableId,
+                newTable.absoluteLineIndex ?? newTable.activeLineIndex,
+                newTable.activeCellIndex
+              );
           }
         }
         return true;
@@ -1251,7 +1287,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       }
       if (e.key === 'Tab') {
         e.preventDefault();
-        const res = navigateTable(text, cursorPos, e.shiftKey ? 'shift-tab' : 'tab');
+        const res = navigateTable(
+          text,
+          cursorPos,
+          e.shiftKey ? 'shift-tab' : 'tab'
+        );
         if (res) {
           if (res.newText !== text) {
             editorStore.setState({ lines: res.newText.split('\n') });
@@ -1259,11 +1299,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
           editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore.getState().enterCellSelection(
-              selectedCell.tableId,
-              newTable.absoluteLineIndex ?? newTable.activeLineIndex,
-              newTable.activeCellIndex
-            );
+            useTableStore
+              .getState()
+              .enterCellSelection(
+                selectedCell.tableId,
+                newTable.absoluteLineIndex ?? newTable.activeLineIndex,
+                newTable.activeCellIndex
+              );
           }
         }
         return true;
@@ -1278,11 +1320,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
           editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore.getState().enterCellSelection(
-              selectedCell.tableId,
-              newTable.absoluteLineIndex ?? newTable.activeLineIndex,
-              newTable.activeCellIndex
-            );
+            useTableStore
+              .getState()
+              .enterCellSelection(
+                selectedCell.tableId,
+                newTable.absoluteLineIndex ?? newTable.activeLineIndex,
+                newTable.activeCellIndex
+              );
           }
         }
         return true;
@@ -1299,7 +1343,6 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
     // We don't need manual dom manipulation here anymore, since useEffect handles it on cursorPos change
   };
 
-  
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const { selectionStart, selectionEnd } = editorStore.getState();
     const cursorPos = editorStore.getState().cursorPos;
@@ -1457,10 +1500,15 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
 
         const textBeforeCursor = text.substring(lineStart, pos);
         const textAfterCursor = text.substring(pos, lineEnd);
-        const listMatch = textBeforeCursor.match(/^(\s*)([-*+]|\d+\.)\s+(\[[ xX]\]\s+)?/);
+        const listMatch = textBeforeCursor.match(
+          /^(\s*)([-*+]|\d+\.)\s+(\[[ xX]\]\s+)?/
+        );
 
         if (listMatch) {
-          if (textBeforeCursor === listMatch[0] && textAfterCursor.trim() === '') {
+          if (
+            textBeforeCursor === listMatch[0] &&
+            textAfterCursor.trim() === ''
+          ) {
             // Empty list item: break out of the list
             state.deleteSelection(lineStart, lineEnd);
           } else {
@@ -1473,7 +1521,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
             }
             // Reset task list to unchecked
             newPrefix = newPrefix.replace(/\[[xX]\]/, '[ ]');
-            
+
             insertText('\n' + newPrefix);
           }
         } else {
@@ -1493,7 +1541,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       const text = state.getText();
       const cursorPos = state.cursorPos;
 
-      const res = navigateTable(text, cursorPos, e.shiftKey ? 'shift-tab' : 'tab');
+      const res = navigateTable(
+        text,
+        cursorPos,
+        e.shiftKey ? 'shift-tab' : 'tab'
+      );
       if (res) {
         if (res.newText !== text) {
           editorStore.setState({ lines: res.newText.split('\n') });
@@ -1502,8 +1554,12 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
       } else {
         const selStart = state.selectionStart;
         const selEnd = state.selectionEnd;
-        const startLineIdx = state.lineOffsets.findLineIndex(Math.min(selStart, selEnd));
-        const endLineIdx = state.lineOffsets.findLineIndex(Math.max(selStart, selEnd));
+        const startLineIdx = state.lineOffsets.findLineIndex(
+          Math.min(selStart, selEnd)
+        );
+        const endLineIdx = state.lineOffsets.findLineIndex(
+          Math.max(selStart, selEnd)
+        );
 
         const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
         const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
@@ -1518,24 +1574,30 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
         let newBlockText = '';
 
         if (e.shiftKey) {
-          newBlockText = blockText.split('\n').map(line => {
-            const match = line.match(/^ {1,2}/);
-            if (match && selStart === selEnd) cursorDelta = -match[0].length;
-            return line.replace(/^ {1,2}/, '');
-          }).join('\n');
+          newBlockText = blockText
+            .split('\n')
+            .map((line) => {
+              const match = line.match(/^ {1,2}/);
+              if (match && selStart === selEnd) cursorDelta = -match[0].length;
+              return line.replace(/^ {1,2}/, '');
+            })
+            .join('\n');
         } else {
           if (selStart !== selEnd) {
-             newBlockText = blockText.split('\n').map(line => '  ' + line).join('\n');
+            newBlockText = blockText
+              .split('\n')
+              .map((line) => '  ' + line)
+              .join('\n');
           } else {
-             // R6-P1：行内容经访问器读取（不再读物化视图 state.lines）
-             const currentLine = state.getLine(startLineIdx) ?? '';
-             if (/^(\s*)([-*+]|\d+\.)\s+/.test(currentLine)) {
-               newBlockText = '  ' + currentLine;
-               cursorDelta = 2;
-             } else {
-               state.insertText('  ');
-               return;
-             }
+            // R6-P1：行内容经访问器读取（不再读物化视图 state.lines）
+            const currentLine = state.getLine(startLineIdx) ?? '';
+            if (/^(\s*)([-*+]|\d+\.)\s+/.test(currentLine)) {
+              newBlockText = '  ' + currentLine;
+              cursorDelta = 2;
+            } else {
+              state.insertText('  ');
+              return;
+            }
           }
         }
 
@@ -1543,7 +1605,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
           state.setSelection(blockStart, blockEnd);
           state.insertText(newBlockText);
           if (selStart !== selEnd) {
-            editorStore.getState().setSelection(blockStart, blockStart + newBlockText.length);
+            editorStore
+              .getState()
+              .setSelection(blockStart, blockStart + newBlockText.length);
           } else {
             const newPos = Math.max(blockStart, selStart + cursorDelta);
             editorStore.getState().setSelection(newPos, newPos);
@@ -1637,7 +1701,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
         newPos = targetStart + Math.min(col, targetText.length);
       }
       // grapheme 吸附（列预测可能劈开组合序列，与 ArrowUp/Down 同款）
-      newPos = targetStart + snapToGraphemeBoundary(targetText, newPos - targetStart);
+      newPos =
+        targetStart + snapToGraphemeBoundary(targetText, newPos - targetStart);
       if (e.shiftKey) {
         // Shift+PageUp/Down：选区扩展——head 移到目标行，anchor 保持不动
         editorStore.getState().moveHead(newPos);
@@ -1849,10 +1914,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
     const s = editorStore.getState();
     const plain = cd.getData('text/plain') ?? '';
     const html = cd.getData('text/html') ?? '';
-    const selectionText = s.getText().substring(
-      s.selectionStart,
-      s.selectionEnd
-    );
+    const selectionText = s
+      .getText()
+      .substring(s.selectionStart, s.selectionEnd);
     const transformed = buildPasteText(plain, html, selectionText);
     // 无内容：放行浏览器默认（空粘贴无操作）
     if (transformed == null) return;
@@ -2048,48 +2112,48 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store })
         role="textbox"
         aria-multiline="true"
         onKeyDown={handleKeyDown}
-      onCompositionStart={handleCompositionStart}
-      onCompositionEnd={handleCompositionEnd}
-      onBlur={() => {
-        setIsComposing(false);
-        isComposingRef.current = false;
-        editorStore.getState().setIsComposing(false);
-        // 失焦 = 组合被浏览器强制结束：立即 flush 防丢字（组合取消时
-        // value 为空，flush 为空操作），并清掉延迟定时器防双写
-        if (pendingFlushTimer.current !== null) {
-          clearTimeout(pendingFlushTimer.current);
-          pendingFlushTimer.current = null;
-        }
-        if (activeCompositionGroup.current) {
-          flushComposition();
-        }
-      }}
-      style={{
-        position: 'absolute',
-        top: `${coords.top}px`,
-        left: `${coords.left}px`,
-        width: isComposing ? '300px' : '1px',
-        height: `${coords.height + 15}px`,
-        opacity: isComposing ? 1 : 0,
-        color: 'var(--text-primary)',
-        caretColor: 'var(--black)',
-        background: 'transparent',
-        padding: 0,
-        border: 'none',
-        overflow: 'hidden',
-        resize: 'none',
-        outline: 'none',
-        pointerEvents: 'none',
-        fontFamily: 'inherit',
-        fontSize: 'inherit',
-        lineHeight: 'inherit',
-        whiteSpace: 'nowrap',
-        zIndex: 100,
-      }}
-      spellCheck="false"
-      autoCapitalize="off"
-      autoComplete="off"
-      autoCorrect="off"
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
+        onBlur={() => {
+          setIsComposing(false);
+          isComposingRef.current = false;
+          editorStore.getState().setIsComposing(false);
+          // 失焦 = 组合被浏览器强制结束：立即 flush 防丢字（组合取消时
+          // value 为空，flush 为空操作），并清掉延迟定时器防双写
+          if (pendingFlushTimer.current !== null) {
+            clearTimeout(pendingFlushTimer.current);
+            pendingFlushTimer.current = null;
+          }
+          if (activeCompositionGroup.current) {
+            flushComposition();
+          }
+        }}
+        style={{
+          position: 'absolute',
+          top: `${coords.top}px`,
+          left: `${coords.left}px`,
+          width: isComposing ? '300px' : '1px',
+          height: `${coords.height + 15}px`,
+          opacity: isComposing ? 1 : 0,
+          color: 'var(--text-primary)',
+          caretColor: 'var(--black)',
+          background: 'transparent',
+          padding: 0,
+          border: 'none',
+          overflow: 'hidden',
+          resize: 'none',
+          outline: 'none',
+          pointerEvents: 'none',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+          lineHeight: 'inherit',
+          whiteSpace: 'nowrap',
+          zIndex: 100,
+        }}
+        spellCheck="false"
+        autoCapitalize="off"
+        autoComplete="off"
+        autoCorrect="off"
       />
     </>
   );

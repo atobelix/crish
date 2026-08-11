@@ -197,14 +197,7 @@ function inferAnchorHead(
  * 的私有辅助逻辑镜像到本文件，与 parser 保持逐分支一致。
  */
 type BlockKind =
-  | 'blank'
-  | 'body'
-  | 'list'
-  | 'table'
-  | 'heading'
-  | 'hr'
-  | 'code'
-  | 'other';
+  'blank' | 'body' | 'list' | 'table' | 'heading' | 'hr' | 'code' | 'other';
 
 /** 剥离块引用前缀（与 parser.stripBlockquoteContext 同一正则 `^ {0,3}>\s?`——
  * B8c 配合收紧：marker 前至多 3 空格缩进，4 空格缩进的 `>` 行不是引用
@@ -666,12 +659,41 @@ export interface EditorState {
 
   /**
    * 流式会话合并记账（R3-A）：append 期间非 null，stop-flush 时置 null
-   * 并生成单个 meta:'stream' op 入 undo 栈。
+   * 并生成单个 meta:'stream' op 入 undo 栈。仅记账——渲染层「流式会话
+   * 进行中」信号已拆分为 streamActive（W2-1，D-1）。
    */
   streamOp: StreamOp | null;
+  /**
+   * —— W2-1（docs/streaming-render/00 总方案 D-1）：流式会话「进行中」信号——
+   * streamActive 是渲染层「流式会话进行中」的独立布尔信号，与 undo 记账
+   * streamOp 解耦。时序契约：
+   * - appendText 首次调用置 true（可编辑会话与只读快路径均置位）；
+   * - stop-flush（flushStreamTail）置 false——与 streamOp 置 null 同一事务；
+   * - setText / setState({lines}) 整档重置置 false；
+   * - 编辑路径（applyChange/undo/redo）对 streamOp 记账作废
+   *   （adjustStreamOpForEdit 返回 null）时同步置 false——可编辑会话保持
+   *   「streamOp 非空 ⇔ streamActive 为 true」的严格对齐（换源门禁行为
+   *   完全一致）；stop-flush 前两者恒同真。
+   * - 只读快路径（readOnly && 无用户编辑）是唯一例外：streamOp 恒 null
+   *   （跳记账），streamActive 照常置位——A2 软渲染预演（MarkdownEngine
+   *   LineItem）/表格结构定型（W1-3）/滚动跟随（W1-2）/HiddenInput M2c
+   *   门禁全部改经 streamActive 判定，只读流式会话功能完整。
+   */
+  streamActive: boolean;
   /** 最近一次用户编辑时间戳（insertText/deleteText 等更新）；0 = 从未编辑。
    *  appendText 用它判定「用户活跃编辑末尾行」→ 追加点前移（01 问题 5）。 */
   lastUserEditTime: number;
+  /**
+   * —— W2-1（D-5）：store 层只读标记（评审 P1 缺口补齐）——
+   * readOnly && lastUserEditTime === 0（无用户编辑）时 appendText 走只读
+   * 快路径：追加点锚定恒为末尾（跳 findLineIndex 双查询）、LineOffsetTree
+   * 免 clone 原地更新、跳过 streamOp 记账（stop-flush 不生成 meta:'stream'
+   * op / 不写 changeLog / 不 bump version）。可编辑流式会话行为零变化。
+   * 与 MarkdownEngine 的 readOnly 渲染 prop 是两回事：本标记是 store 层
+   * 数据语义（宿主经 createEditorStore({ readOnly }) 或 setReadOnly 声明），
+   * 渲染 prop 只管输入层隐藏。
+   */
+  readOnly: boolean;
 
   getText: () => string;
   getLine: (i: number) => string;
@@ -702,6 +724,9 @@ export interface EditorState {
   appendText: (text: string) => void;
   isComposing: boolean;
   setIsComposing: (isComposing: boolean) => void;
+  /** W2-1（D-5）：声明 store 只读标记（只读流式会话快路径门禁，见
+   *  readOnly 字段注释）。可编辑会话不受影响；切换可热更新。 */
+  setReadOnly: (readOnly: boolean) => void;
   deleteText: (backward: boolean) => void;
   deleteSelection: (start: number, end: number) => void;
 
@@ -751,7 +776,6 @@ export interface ApplyChangeOptions {
   merge?: 'typing' | 'delete' | 'none';
 }
 
-
 // Actually, mutating arrays in Zustand is okay if we copy the array first.
 // 注意：`[...lines]` / `[...codeBlockState]` 两个浅拷贝保留（zustand 订阅
 // 语义需要新数组引用触发渲染，不得移除）；R2-A 消的是 clone 的 O(全文)
@@ -771,7 +795,11 @@ function updateLinesIncremental(
   newLinesArr.splice(startLineIdx, deleteCount, ...newLines);
 
   const newOffsets = lineOffsets.clone();
-  newOffsets.updateLines(startLineIdx, deleteCount, newLines.map(l => l.length + 1));
+  newOffsets.updateLines(
+    startLineIdx,
+    deleteCount,
+    newLines.map((l) => l.length + 1)
+  );
 
   const newCodeState = [...codeBlockState];
   const lineDelta = newLines.length - deleteCount;
@@ -924,7 +952,10 @@ function updateLinesIncremental(
           marker: fenceOpen![1] !== undefined ? '`' : '~',
           length: (fenceOpen![1] ?? fenceOpen![3]).length,
         };
-      } else if (fenceState && isFenceClose(trimmed, fenceState.marker, fenceState.length)) {
+      } else if (
+        fenceState &&
+        isFenceClose(trimmed, fenceState.marker, fenceState.length)
+      ) {
         newState = 'fence_end';
         inCodeBlock = false;
         fenceState = null;
@@ -1073,7 +1104,11 @@ function updateLinesIncremental(
     ) {
       oldFenceStartIdx++;
     }
-    if (lineDelta === 0 && !scannedFencePushed && oldFenceStartIdx === splitIdx) {
+    if (
+      lineDelta === 0 &&
+      !scannedFencePushed &&
+      oldFenceStartIdx === splitIdx
+    ) {
       // —— 零拷贝快速路径（R2-E，每击键主路径）——
       // 三个条件逐项对应「fence 内容不变」的证明：
       // 1) lineDelta === 0：行数未变，新旧行号一一对齐；
@@ -1107,7 +1142,10 @@ function updateLinesIncremental(
 
   // Current text length calculation from LineOffsetTree
   const lastLineIdx = newLinesArr.length - 1;
-  const newTextLength = lastLineIdx >= 0 ? newOffsets.getOffset(lastLineIdx) + newLinesArr[lastLineIdx].length : 0;
+  const newTextLength =
+    lastLineIdx >= 0
+      ? newOffsets.getOffset(lastLineIdx) + newLinesArr[lastLineIdx].length
+      : 0;
 
   // 返回主数组形态（调用方 spread 进 set 的 partial，不含视图键）
   return {
@@ -1402,9 +1440,11 @@ function findContentDiffRange(
   for (let i = 0; i < linePrefix; i++) prefixOffset += getOldLine(i).length + 1;
   // —— 差异区终点 = 后缀起点行行首（旧/新）——
   let oldDiffEnd = prefixOffset;
-  for (let i = linePrefix; i < lastOld; i++) oldDiffEnd += getOldLine(i).length + 1;
+  for (let i = linePrefix; i < lastOld; i++)
+    oldDiffEnd += getOldLine(i).length + 1;
   let newDiffEnd = prefixOffset;
-  for (let i = linePrefix; i < lastNew; i++) newDiffEnd += newLines[i].length + 1;
+  for (let i = linePrefix; i < lastNew; i++)
+    newDiffEnd += newLines[i].length + 1;
 
   // —— 差异形态细分：行数相同 + 单行差异 → 行内字符级公共前缀/后缀 ——
   let from = prefixOffset;
@@ -1500,9 +1540,7 @@ function adjustStreamOpForEdit(
  * 字段并清空尾段；视图字段由 lazyViewProto 惰性 getter 生成（R6-P1）。
  * store 内部 set 一律使用 main* / streamTail* 字段，视图键由惰性物化生成。
  */
-function normalizeSetStatePartial(
-  partial: unknown
-): unknown {
+function normalizeSetStatePartial(partial: unknown): unknown {
   if (!partial || typeof partial !== 'object' || Array.isArray(partial)) {
     return partial;
   }
@@ -1531,6 +1569,8 @@ function normalizeSetStatePartial(
     // 防止 setState({lines}) 重置后的残留状态影响后续 append 语义
     // （append-cursor 测试与既有测试的 resetStore 均走此路径）。
     out.streamOp = null;
+    // W2-1（D-1）：整档重置 = 流式会话终止信号（与 streamOp 同步熄灭）
+    out.streamActive = false;
     out.lastUserEditTime = 0;
     // 整文档重置（B6）：变更日志清空 + 版本号归零——整档重置与
     // setText 同语义（新文档版本序列），日志条目不再对应当前文档。
@@ -1548,13 +1588,12 @@ function normalizeSetStatePartial(
     !('anchorPos' in out) &&
     !('headPos' in out)
   ) {
-    const selStart = 'selectionStart' in out
-      ? (out.selectionStart as number)
-      : (out.cursorPos as number);
+    const selStart =
+      'selectionStart' in out
+        ? (out.selectionStart as number)
+        : (out.cursorPos as number);
     out.anchorPos = selStart;
-    out.headPos = 'cursorPos' in out
-      ? (out.cursorPos as number)
-      : selStart;
+    out.headPos = 'cursorPos' in out ? (out.cursorPos as number) : selStart;
     if (!('assoc' in out)) out.assoc = 'before';
   }
   return out;
@@ -1580,8 +1619,11 @@ function normalizeSetStatePartial(
  *   命中 getter 按需物化——若作为数据字段会被 zustand Object.assign
  *   固化 stale，旧 getter 方案的历史坑已由原型链方案规避）。
  * 全局单例 useEditorStore = buildEditorStore() 的一次实例化（向后兼容）。
+ * W2-1（D-5）：opts.readOnly 指定初始只读标记（只读流式会话快路径门禁）。
  */
-function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
+function buildEditorStore(
+  opts: EditorStoreOptions = {}
+): UseBoundStore<StoreApi<EditorState>> {
   // 分块加载代际计数（实例内局部，见上方注释）
   let currentLoadGeneration = 0;
 
@@ -1592,1173 +1634,1301 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
     // （数据字段会遮蔽原型 getter，且会被 zustand Object.assign 固化
     // 成 stale 数据属性，见 lazyViewProto 注释）
     const state: EditorState = {
-  mainLines: [''],
-  streamTail: EMPTY_TAIL,
-  mainCodeState: ['none'],
-  streamTailCodeState: EMPTY_STATE_TAIL,
-  mainFenceLines: [],
-  streamTailFenceLines: EMPTY_FENCE_TAIL,
+      mainLines: [''],
+      streamTail: EMPTY_TAIL,
+      mainCodeState: ['none'],
+      streamTailCodeState: EMPTY_STATE_TAIL,
+      mainFenceLines: [],
+      streamTailFenceLines: EMPTY_FENCE_TAIL,
 
-  lineOffsets: new LineOffsetTree([1]),
+      lineOffsets: new LineOffsetTree([1]),
 
-  // 视图字段占位（初始与主数组一致；随后删除，改由 lazyViewProto
-  // 惰性 getter 提供——见本函数尾部的 delete + setPrototypeOf）
-  lines: [''],
-  codeBlockState: ['none'],
-  fenceLines: [],
+      // 视图字段占位（初始与主数组一致；随后删除，改由 lazyViewProto
+      // 惰性 getter 提供——见本函数尾部的 delete + setPrototypeOf）
+      lines: [''],
+      codeBlockState: ['none'],
+      fenceLines: [],
 
-  undoStack: [],
-  redoStack: [],
-  changeLog: [],
-  version: 0,
-  streamOp: null,
-  lastUserEditTime: 0,
-  textLength: 0,
+      undoStack: [],
+      redoStack: [],
+      changeLog: [],
+      version: 0,
+      streamOp: null,
+      // W2-1（D-1）：初始无流式会话（与 streamOp 同步为假）
+      streamActive: false,
+      lastUserEditTime: 0,
+      // W2-1（D-5）：store 层只读标记（只读流式会话快路径门禁）——默认
+      // 可编辑（向后兼容：既有测试/宿主零改动）；createEditorStore 可经
+      // opts.readOnly 构造时声明，运行中经 setReadOnly 热切换
+      readOnly: opts.readOnly ?? false,
+      textLength: 0,
 
-  cursorPos: 0,
-  selectionStart: 0,
-  selectionEnd: 0,
-  // R4-B 方向层初始值：锚点 = 活动端 = 0（无选区），assoc 默认 'before'
-  anchorPos: 0,
-  headPos: 0,
-  assoc: 'before',
-  isComposing: false,
-  setIsComposing: (isComposing) => dispatchSet({ isComposing }),
+      cursorPos: 0,
+      selectionStart: 0,
+      selectionEnd: 0,
+      // R4-B 方向层初始值：锚点 = 活动端 = 0（无选区），assoc 默认 'before'
+      anchorPos: 0,
+      headPos: 0,
+      assoc: 'before',
+      isComposing: false,
+      setIsComposing: (isComposing) => dispatchSet({ isComposing }),
+      // W2-1（D-5）：只读标记 setter（热切换；只影响 appendText 快路径门禁）
+      setReadOnly: (readOnly) => dispatchSet({ readOnly }),
 
-  getText: () => {
-    const s = get();
-    // 双段合并经共享原语（P2-A1 回修 2）：尾段空时零拷贝主数组引用、
-    // join 零物化；非空时一次性拼接——本方法本就是全文序列化 O(n) 语义，
-    // 方向键热路径已改行文本模式不调用它（R6-P1）
-    return concatDual(s.mainLines, s.streamTail).join('\n');
-  },
+      getText: () => {
+        const s = get();
+        // 双段合并经共享原语（P2-A1 回修 2）：尾段空时零拷贝主数组引用、
+        // join 零物化；非空时一次性拼接——本方法本就是全文序列化 O(n) 语义，
+        // 方向键热路径已改行文本模式不调用它（R6-P1）
+        return concatDual(s.mainLines, s.streamTail).join('\n');
+      },
 
-  // —— 统一行访问器（C4 访问器先行；渲染/virtualizer count 切换点登记）——
-  // 逻辑行视图：i < 主数组边界 → 主数组行；否则 → 尾段行（被接管行由
-  // 尾段首行替代——append 把文本拼在全文末尾，被接管行并入尾段首行）。
-  // 双段换算经共享原语 lineAt/lineCountOf（P2-A1 回修 2 去重）。
-  getLine: (i) => {
-    const s = get();
-    return lineAt(s.mainLines, s.streamTail, i);
-  },
-  getLineCount: () => {
-    const s = get();
-    return lineCountOf(s.mainLines.length, s.streamTail.length);
-  },
-  getLineIndex: (pos) => get().lineOffsets.findLineIndex(pos),
+      // —— 统一行访问器（C4 访问器先行；渲染/virtualizer count 切换点登记）——
+      // 逻辑行视图：i < 主数组边界 → 主数组行；否则 → 尾段行（被接管行由
+      // 尾段首行替代——append 把文本拼在全文末尾，被接管行并入尾段首行）。
+      // 双段换算经共享原语 lineAt/lineCountOf（P2-A1 回修 2 去重）。
+      getLine: (i) => {
+        const s = get();
+        return lineAt(s.mainLines, s.streamTail, i);
+      },
+      getLineCount: () => {
+        const s = get();
+        return lineCountOf(s.mainLines.length, s.streamTail.length);
+      },
+      getLineIndex: (pos) => get().lineOffsets.findLineIndex(pos),
 
-  flushStreamTail: () => {
-    // stop-flush（R3-A）：宿主在流式结束时调用——强制合并尾段，并把本次
-    // 流式会话合并为单个 meta:'stream' op 入 undo 栈（09 归一表 §5：
-    // append 不进 undo 栈；流式结束后合并为单 undo 步）。
-    // 无尾段且无流式会话记账时为空操作（幂等）。
-    const s = get();
-    if (s.streamTail.length === 0 && !s.streamOp) return;
-    dispatchSet((state) => {
-      const patch = flushStreamTail(state);
-      const base = patch ? { ...state, ...patch } : state;
-      // 无记账（异常残留尾段）：仅合并，不登记 op、不动 undo/redo 栈
-      if (!base.streamOp) return patch ? { ...patch, streamOp: null } : state;
-      // 合并 op 独立一步入栈（若栈中已有流式期间的用户编辑 op，流式 op
-      // 直接追加、不折叠不排序——「流式 op 作为独立一步」登记约定）；
-      // redo 栈清空（新一步产生后不可重做）。
-      // —— B6 位置级字段（追加区间，stop-flush 后文档坐标）——
-      // 追加区间 = [startLineIdx, +insertedLineCount) 行（流式内容行）；
-      // from = 区间起始行行首、to = 区间末行行尾、insert = 流式前末行
-      // （undo 恢复内容）、removedText = 流式内容（undo 删除内容）。
-      const streamStartLineIdx = base.streamOp.startLineIdx;
-      const streamStartOff = base.lineOffsets.getOffset(streamStartLineIdx);
-      const streamRemovedText = base.mainLines
-        .slice(streamStartLineIdx, streamStartLineIdx + base.streamOp.insertedLineCount)
-        .join('\n');
-      const op: EditorOperation = {
-        startLineIdx: streamStartLineIdx,
-        removedLines: base.streamOp.removedLines,
-        insertedLineCount: base.streamOp.insertedLineCount,
-        cursorBefore: base.streamOp.cursorBefore,
-        selectionStartBefore: base.streamOp.selectionStartBefore,
-        selectionEndBefore: base.streamOp.selectionEndBefore,
-        // 合并前后光标/选区不变（合并只并入尾段行，不改变任何内容与顺序）
-        cursorAfter: base.cursorPos,
-        selectionStartAfter: base.selectionStart,
-        selectionEndAfter: base.selectionEnd,
-        timestamp: Date.now(),
-        meta: 'stream',
-        from: streamStartOff,
-        to: streamStartOff + streamRemovedText.length,
-        insert: base.streamOp.removedLines.join('\n'),
-        removedText: streamRemovedText,
-      };
-      // —— B6 变更日志 + 版本号（meta:'stream' op 也在日志中，N8 口径）——
-      const streamVersion = state.version + 1;
-      const streamLog = [...state.changeLog, { seq: streamVersion, op }];
-      if (streamLog.length > CHANGE_LOG_LIMIT) {
-        streamLog.splice(0, streamLog.length - CHANGE_LOG_LIMIT);
-      }
-      return {
-        ...(patch ?? {}),
-        streamOp: null,
-        undoStack: [...base.undoStack, op],
-        redoStack: [],
-        changeLog: streamLog,
-        version: streamVersion,
-      };
-    });
-  },
+      flushStreamTail: () => {
+        // stop-flush（R3-A）：宿主在流式结束时调用——强制合并尾段，并把本次
+        // 流式会话合并为单个 meta:'stream' op 入 undo 栈（09 归一表 §5：
+        // append 不进 undo 栈；流式结束后合并为单 undo 步）。
+        // 无尾段且无流式会话记账/进行中信号时为空操作（幂等）。
+        const s = get();
+        if (s.streamTail.length === 0 && !s.streamOp && !s.streamActive) return;
+        dispatchSet((state) => {
+          const patch = flushStreamTail(state);
+          const base = patch ? { ...state, ...patch } : state;
+          // 无记账（只读快路径会话 / 异常残留尾段）：仅合并、清信号，不登记
+          // op、不动 undo/redo 栈——W2-1 只读快路径语义：streamActive 照常
+          // 熄灭（stop-flush 契约），meta:'stream' op 生成跳过（无 undo 需求）。
+          if (!base.streamOp) {
+            return { ...(patch ?? {}), streamOp: null, streamActive: false };
+          }
+          // 合并 op 独立一步入栈（若栈中已有流式期间的用户编辑 op，流式 op
+          // 直接追加、不折叠不排序——「流式 op 作为独立一步」登记约定）；
+          // redo 栈清空（新一步产生后不可重做）。
+          // —— B6 位置级字段（追加区间，stop-flush 后文档坐标）——
+          // 追加区间 = [startLineIdx, +insertedLineCount) 行（流式内容行）；
+          // from = 区间起始行行首、to = 区间末行行尾、insert = 流式前末行
+          // （undo 恢复内容）、removedText = 流式内容（undo 删除内容）。
+          const streamStartLineIdx = base.streamOp.startLineIdx;
+          const streamStartOff = base.lineOffsets.getOffset(streamStartLineIdx);
+          const streamRemovedText = base.mainLines
+            .slice(
+              streamStartLineIdx,
+              streamStartLineIdx + base.streamOp.insertedLineCount
+            )
+            .join('\n');
+          const op: EditorOperation = {
+            startLineIdx: streamStartLineIdx,
+            removedLines: base.streamOp.removedLines,
+            insertedLineCount: base.streamOp.insertedLineCount,
+            cursorBefore: base.streamOp.cursorBefore,
+            selectionStartBefore: base.streamOp.selectionStartBefore,
+            selectionEndBefore: base.streamOp.selectionEndBefore,
+            // 合并前后光标/选区不变（合并只并入尾段行，不改变任何内容与顺序）
+            cursorAfter: base.cursorPos,
+            selectionStartAfter: base.selectionStart,
+            selectionEndAfter: base.selectionEnd,
+            timestamp: Date.now(),
+            meta: 'stream',
+            from: streamStartOff,
+            to: streamStartOff + streamRemovedText.length,
+            insert: base.streamOp.removedLines.join('\n'),
+            removedText: streamRemovedText,
+          };
+          // —— B6 变更日志 + 版本号（meta:'stream' op 也在日志中，N8 口径）——
+          const streamVersion = state.version + 1;
+          const streamLog = [...state.changeLog, { seq: streamVersion, op }];
+          if (streamLog.length > CHANGE_LOG_LIMIT) {
+            streamLog.splice(0, streamLog.length - CHANGE_LOG_LIMIT);
+          }
+          return {
+            ...(patch ?? {}),
+            // W2-1（D-1）：stop-flush 即「流式会话进行中」信号熄灭点——
+            // streamActive 置 false 与 streamOp 置 null 同一事务（渲染门禁
+            // 换源后在此处精确对齐旧 streamOp 时序）。
+            streamOp: null,
+            streamActive: false,
+            undoStack: [...base.undoStack, op],
+            redoStack: [],
+            changeLog: streamLog,
+            version: streamVersion,
+          };
+        });
+      },
 
-  setText: (text) => {
-    const generation = ++currentLoadGeneration;
-    dispatchSet(() => {
-      const lines = text.split('\n');
+      setText: (text) => {
+        const generation = ++currentLoadGeneration;
+        dispatchSet(() => {
+          const lines = text.split('\n');
 
-      if (lines.length <= FIRST_CHUNK_LINES) {
-        const res = updateLinesIncremental([], new LineOffsetTree([]), [], 0, 0, lines, []);
-        return {
-          ...res,
-          // 整文档重置：清空流式尾段
-          streamTail: EMPTY_TAIL,
-          streamTailCodeState: EMPTY_STATE_TAIL,
-          streamTailFenceLines: EMPTY_FENCE_TAIL,
-          // 整文档重置（R3-A）：流式会话记账与用户活跃标记清零
-          streamOp: null,
-          lastUserEditTime: 0,
-          cursorPos: 0,
-          selectionStart: 0,
-          selectionEnd: 0,
-          // 整文档重置：方向层一并复位（锚点 = 活动端 = 0，assoc 默认）
-          anchorPos: 0,
-          headPos: 0,
-          assoc: 'before',
-          undoStack: [],
-          redoStack: [],
-          // 整文档重置（B6）：变更日志清空 + 版本号归零（新文档版本序列）
-          changeLog: [],
-          version: 0,
-        };
-      }
+          if (lines.length <= FIRST_CHUNK_LINES) {
+            const res = updateLinesIncremental(
+              [],
+              new LineOffsetTree([]),
+              [],
+              0,
+              0,
+              lines,
+              []
+            );
+            return {
+              ...res,
+              // 整文档重置：清空流式尾段
+              streamTail: EMPTY_TAIL,
+              streamTailCodeState: EMPTY_STATE_TAIL,
+              streamTailFenceLines: EMPTY_FENCE_TAIL,
+              // 整文档重置（R3-A）：流式会话记账与用户活跃标记清零
+              streamOp: null,
+              // W2-1（D-1）：整档重置 = 流式会话终止信号（与 streamOp 同步熄灭）
+              streamActive: false,
+              lastUserEditTime: 0,
+              cursorPos: 0,
+              selectionStart: 0,
+              selectionEnd: 0,
+              // 整文档重置：方向层一并复位（锚点 = 活动端 = 0，assoc 默认）
+              anchorPos: 0,
+              headPos: 0,
+              assoc: 'before',
+              undoStack: [],
+              redoStack: [],
+              // 整文档重置（B6）：变更日志清空 + 版本号归零（新文档版本序列）
+              changeLog: [],
+              version: 0,
+            };
+          }
 
-      // Chunked loading for large files
-      const firstChunk = lines.slice(0, FIRST_CHUNK_LINES);
-      const res = updateLinesIncremental([], new LineOffsetTree([]), [], 0, 0, firstChunk, []);
+          // Chunked loading for large files
+          const firstChunk = lines.slice(0, FIRST_CHUNK_LINES);
+          const res = updateLinesIncremental(
+            [],
+            new LineOffsetTree([]),
+            [],
+            0,
+            0,
+            firstChunk,
+            []
+          );
 
-      let currentIdx = FIRST_CHUNK_LINES;
-      const chunkSize = CHUNK_SIZE;
+          let currentIdx = FIRST_CHUNK_LINES;
+          const chunkSize = CHUNK_SIZE;
 
-      const processNextChunk = () => {
-        if (generation !== currentLoadGeneration) return;
-        if (currentIdx >= lines.length) return;
-        const endIdx = Math.min(currentIdx + chunkSize, lines.length);
-        const chunk = lines.slice(currentIdx, endIdx);
+          const processNextChunk = () => {
+            if (generation !== currentLoadGeneration) return;
+            if (currentIdx >= lines.length) return;
+            const endIdx = Math.min(currentIdx + chunkSize, lines.length);
+            const chunk = lines.slice(currentIdx, endIdx);
 
-        dispatchSet((s) => {
-          if (generation !== currentLoadGeneration) return s;
-          // 大文件分块加载路径：主数组形态（setText 期间尾段恒为空）
-          const updated = updateLinesIncremental(
+            dispatchSet((s) => {
+              if (generation !== currentLoadGeneration) return s;
+              // 大文件分块加载路径：主数组形态（setText 期间尾段恒为空）
+              const updated = updateLinesIncremental(
+                s.mainLines,
+                s.lineOffsets,
+                s.mainCodeState,
+                s.mainLines.length,
+                0,
+                chunk,
+                s.mainFenceLines
+              );
+              return { ...updated };
+            });
+
+            currentIdx = endIdx;
+            if (generation !== currentLoadGeneration) return;
+            if (typeof window !== 'undefined' && window.requestIdleCallback) {
+              window.requestIdleCallback(processNextChunk);
+            } else {
+              setTimeout(processNextChunk, CHUNK_FALLBACK_DELAY_MS);
+            }
+          };
+
+          if (typeof window !== 'undefined' && window.requestIdleCallback) {
+            window.requestIdleCallback(processNextChunk);
+          } else {
+            setTimeout(processNextChunk, CHUNK_FALLBACK_DELAY_MS);
+          }
+
+          return {
+            ...res,
+            streamTail: EMPTY_TAIL,
+            streamTailCodeState: EMPTY_STATE_TAIL,
+            streamTailFenceLines: EMPTY_FENCE_TAIL,
+            // 整文档重置（R3-A）：流式会话记账与用户活跃标记清零
+            streamOp: null,
+            // W2-1（D-1）：整档重置 = 流式会话终止信号（与 streamOp 同步熄灭）
+            streamActive: false,
+            lastUserEditTime: 0,
+            cursorPos: 0,
+            selectionStart: 0,
+            selectionEnd: 0,
+            // 整文档重置：方向层一并复位（锚点 = 活动端 = 0，assoc 默认）
+            anchorPos: 0,
+            headPos: 0,
+            assoc: 'before',
+            undoStack: [],
+            redoStack: [],
+            // 整文档重置（B6）：变更日志清空 + 版本号归零（新文档版本序列）
+            changeLog: [],
+            version: 0,
+          };
+        });
+      },
+
+      setCursorPos: (pos) =>
+        dispatchSet((state) => {
+          const bounded = Math.max(0, Math.min(pos, state.textLength));
+          return {
+            cursorPos: bounded,
+            selectionStart: bounded,
+            selectionEnd: bounded,
+            // 纯移动：锚点 = 活动端 = 新位置（无选区；assoc 按行尾判定刷新）
+            anchorPos: bounded,
+            headPos: bounded,
+            assoc: computeAssocForLines(
+              state.lineOffsets,
+              (i) => state.getLine(i),
+              bounded
+            ),
+          };
+        }),
+
+      setSelection: (start, end) =>
+        dispatchSet((state) => {
+          const min = Math.max(0, Math.min(start, state.textLength));
+          const max = Math.max(0, Math.min(end, state.textLength));
+          const cursorPos = Math.max(0, Math.min(end, state.textLength));
+          return {
+            // —— 兼容层（336 门禁零回归）：归一化 min/max、cursorPos 恒等于 end ——
+            selectionStart: Math.min(min, max),
+            selectionEnd: Math.max(min, max),
+            cursorPos,
+            // —— R4-B 方向层：无 anchor 时 start 即 anchor、head = end ——
+            // 与兼容层解耦存储：start > end（反向选区）时 anchor 保留在 start，
+            // 归一化字段仍为 [end, start]，Shift 扩展方向性不再丢失。
+            anchorPos: Math.max(0, Math.min(start, state.textLength)),
+            headPos: cursorPos,
+            assoc: computeAssocForLines(
+              state.lineOffsets,
+              (i) => state.getLine(i),
+              cursorPos
+            ),
+          };
+        }),
+
+      // —— R6-P1 行文本模式 grapheme 移动（方向键根治）——
+      // ArrowLeft/Right 14.5ms/键根因：HiddenInput 方向键分支对全文调
+      // getText()（O(全文) join）+ 全文 grapheme 边界。本方法改为行文本模式：
+      // 定位光标所在行（LineOffsetTree O(log n) + getLine O(1)）→ 行内偏移 →
+      // 行内 grapheme 边界（O(行)）→ 换算全局位置。行边界显式跨行：
+      // - 行首向左 → 上一行行尾（跨过换行符）；文档首行行首 → 0（不动）；
+      // - 行尾向右 → 下一行行首（跨过换行符）；文档末尾 → 自身（不动）。
+      // 与全文模式语义等价：全文模式下 \n 是普通字符，行首向左跨过 \n 落在
+      // 上一行行尾（行尾 = 换行符前一格），行尾向右落在下一行行首。空行
+      // （行首 = 行尾）同样覆盖。返回新全局位置（恒为 grapheme 边界）。
+      moveGrapheme: (pos, dir) => {
+        const s = get();
+        const p = Math.max(0, Math.min(pos, s.textLength));
+        const lineIdx = s.lineOffsets.findLineIndex(p);
+        const lineStart = s.lineOffsets.getOffset(lineIdx);
+        const lineText = s.getLine(lineIdx) ?? '';
+        const inLine = p - lineStart;
+        if (dir === 'left') {
+          // 行内向左：行内 grapheme 边界（不跨 \n——行文本不含换行符）
+          if (inLine > 0)
+            return lineStart + findPrevGraphemeBoundary(lineText, inLine);
+          // 行首向左：跨到上一行行尾（= 本行行首 - 1，即换行符前一格）；
+          // 文档首行行首 = 文档开头（原地不动）
+          return lineIdx > 0 ? lineStart - 1 : 0;
+        }
+        // 行内向右：行内 grapheme 边界
+        if (inLine < lineText.length) {
+          return lineStart + findNextGraphemeBoundary(lineText, inLine);
+        }
+        // 行尾向右：跨到下一行行首（= 本行行尾 + 1，即跨过换行符）；
+        // 文档末尾行尾 = 文档末尾（原地不动）
+        if (p >= s.textLength) return p;
+        return lineStart + lineText.length + 1;
+      },
+
+      // —— R4-B 选区方向性核心（04 §3.3 方案 1）——
+      // Shift+方向键扩展 = 只动 head 不动 anchor；反向移动时 head 越过 anchor，
+      // 选区区间翻转但方向保持——「Shift+Left 后 Shift+Right 第二次方向正确」。
+      // 纯方向键（无 Shift）移动 = setSelection(newPos, newPos)（anchor=head=新位置），
+      // 由调用方（HiddenInput R4-E 接线）走 setCursorPos / setSelection 即可。
+      moveHead: (newHead) =>
+        dispatchSet((state) => {
+          const head = Math.max(0, Math.min(newHead, state.textLength));
+          const anchor = Math.max(
+            0,
+            Math.min(state.anchorPos, state.textLength)
+          );
+          return {
+            anchorPos: anchor,
+            headPos: head,
+            // 兼容层视图：选区区间恒为 [min(anchor,head), max(anchor,head)]
+            selectionStart: Math.min(anchor, head),
+            selectionEnd: Math.max(anchor, head),
+            cursorPos: head,
+            assoc: computeAssocForLines(
+              state.lineOffsets,
+              (i) => state.getLine(i),
+              head
+            ),
+          };
+        }),
+
+      extendSelectionByDirection: (dir) =>
+        dispatchSet((state) => {
+          // 以当前 head 为基点按 grapheme 边界移动（与既有方向键粒度一致）；
+          // 已到文档边界时 next === head，返回原状态（幂等空操作）。
+          // R6-P1：改用行文本模式 moveGrapheme（不再全文 getText() join——
+          // Shift+方向键与普通方向键同根因的 O(全文) 热路径一并根治）。
+          const head = Math.max(0, Math.min(state.headPos, state.textLength));
+          const next = state.moveGrapheme(head, dir);
+          if (next === head) return state;
+          const anchor = Math.max(
+            0,
+            Math.min(state.anchorPos, state.textLength)
+          );
+          return {
+            anchorPos: anchor,
+            headPos: next,
+            selectionStart: Math.min(anchor, next),
+            selectionEnd: Math.max(anchor, next),
+            cursorPos: next,
+            assoc: computeAssocForLines(
+              state.lineOffsets,
+              (i) => state.getLine(i),
+              next
+            ),
+          };
+        }),
+
+      // —— 事务统一入口（R4，04 §4.3 方案 1 / 09 归一表）——
+      // 位置级变更唯一入口：mergeTailInto（编辑触达合并尾段）→ planChange
+      // 行区间计划 → updateLinesIncremental → EditorOperation 记录（含 meta
+      // 与光标落点）→ undo/redo 互推 → 用户编辑标记 + 流式记账修正。
+      // insertText/deleteText/deleteSelection 均为本入口的薄封装（行为零
+      // 变化，289 门禁验证）；表格操作（diff 事务分支 / applyTableChange）
+      // 同样收敛于此。空操作（from===to 且 insert===''）不记录事务。
+      applyChange: (from, to, insert, opts) =>
+        dispatchSet((state) => {
+          const fromB = Math.max(0, Math.min(from, state.textLength));
+          const toB = Math.max(0, Math.min(to, state.textLength));
+          if (fromB === toB && insert === '') return state;
+
+          // 用户编辑触达 → 尾段先并入主数组（C4 合并时机；坐标在合并前后不变）
+          const s = mergeTailInto(state);
+
+          const plan = planChange(s, fromB, toB, insert);
+
+          // —— B6 位置级字段推导（从行级计划还原字符级区间）——
+          // removedText = [fromB, toB) 区间原文本：removedLines.join('\n')
+          // 即「startLineIdx 行首 → endLineIdx 行尾」全文（行间换行符在
+          // join 分隔符中），截取 fromB/toB 对应子区间（行内偏移换算）。
+          // 行级 splice 区间 [startLineIdx, +deleteCount) 与字符级区间
+          // [fromB, toB) 严格对应（planChange 由 findLineIndex 定位端点
+          // 行），推导 O(deleteCount)，与事务本身同量级。
+          const posStartLineOff = s.lineOffsets.getOffset(plan.startLineIdx);
+          const posEndLineOff = s.lineOffsets.getOffset(
+            plan.startLineIdx + plan.deleteCount - 1
+          );
+          const posJoinedRemoved = plan.removedLines.join('\n');
+          const removedText = posJoinedRemoved.slice(
+            fromB - posStartLineOff,
+            posJoinedRemoved.length -
+              (posEndLineOff +
+                plan.removedLines[plan.removedLines.length - 1].length -
+                toB)
+          );
+
+          const res = updateLinesIncremental(
             s.mainLines,
             s.lineOffsets,
             s.mainCodeState,
-            s.mainLines.length,
-            0,
-            chunk,
+            plan.startLineIdx,
+            plan.deleteCount,
+            plan.insertedLines,
             s.mainFenceLines
           );
-          return { ...updated };
-        });
 
-        currentIdx = endIdx;
-        if (generation !== currentLoadGeneration) return;
-        if (typeof window !== 'undefined' && window.requestIdleCallback) {
-          window.requestIdleCallback(processNextChunk);
-        } else {
-          setTimeout(processNextChunk, CHUNK_FALLBACK_DELAY_MS);
-        }
-      };
+          const newPos = opts?.cursorAfter ?? plan.newCursor;
 
-      if (typeof window !== 'undefined' && window.requestIdleCallback) {
-        window.requestIdleCallback(processNextChunk);
-      } else {
-        setTimeout(processNextChunk, CHUNK_FALLBACK_DELAY_MS);
-      }
+          const newOp: EditorOperation = {
+            startLineIdx: plan.startLineIdx,
+            removedLines: plan.removedLines,
+            insertedLineCount: plan.insertedLines.length,
+            cursorBefore: s.cursorPos,
+            selectionStartBefore: s.selectionStart,
+            selectionEndBefore: s.selectionEnd,
+            cursorAfter: newPos,
+            selectionStartAfter: newPos,
+            selectionEndAfter: newPos,
+            timestamp: Date.now(),
+            meta: opts?.meta,
+            // B6 位置级字段（只增不改：undo/redo 兼容层不读，供日志/同步）
+            from: fromB,
+            to: toB,
+            insert,
+            removedText,
+          };
 
-      return {
-        ...res,
-        streamTail: EMPTY_TAIL,
-        streamTailCodeState: EMPTY_STATE_TAIL,
-        streamTailFenceLines: EMPTY_FENCE_TAIL,
-        // 整文档重置（R3-A）：流式会话记账与用户活跃标记清零
-        streamOp: null,
-        lastUserEditTime: 0,
-        cursorPos: 0,
-        selectionStart: 0,
-        selectionEnd: 0,
-        // 整文档重置：方向层一并复位（锚点 = 活动端 = 0，assoc 默认）
-        anchorPos: 0,
-        headPos: 0,
-        assoc: 'before',
-        undoStack: [],
-        redoStack: [],
-        // 整文档重置（B6）：变更日志清空 + 版本号归零（新文档版本序列）
-        changeLog: [],
-        version: 0,
-      };
-    });
-  },
-
-  setCursorPos: (pos) =>
-    dispatchSet((state) => {
-      const bounded = Math.max(0, Math.min(pos, state.textLength));
-      return {
-        cursorPos: bounded,
-        selectionStart: bounded,
-        selectionEnd: bounded,
-        // 纯移动：锚点 = 活动端 = 新位置（无选区；assoc 按行尾判定刷新）
-        anchorPos: bounded,
-        headPos: bounded,
-        assoc: computeAssocForLines(
-          state.lineOffsets,
-          (i) => state.getLine(i),
-          bounded
-        ),
-      };
-    }),
-
-  setSelection: (start, end) =>
-    dispatchSet((state) => {
-      const min = Math.max(0, Math.min(start, state.textLength));
-      const max = Math.max(0, Math.min(end, state.textLength));
-      const cursorPos = Math.max(0, Math.min(end, state.textLength));
-      return {
-        // —— 兼容层（336 门禁零回归）：归一化 min/max、cursorPos 恒等于 end ——
-        selectionStart: Math.min(min, max),
-        selectionEnd: Math.max(min, max),
-        cursorPos,
-        // —— R4-B 方向层：无 anchor 时 start 即 anchor、head = end ——
-        // 与兼容层解耦存储：start > end（反向选区）时 anchor 保留在 start，
-        // 归一化字段仍为 [end, start]，Shift 扩展方向性不再丢失。
-        anchorPos: Math.max(0, Math.min(start, state.textLength)),
-        headPos: cursorPos,
-        assoc: computeAssocForLines(
-          state.lineOffsets,
-          (i) => state.getLine(i),
-          cursorPos
-        ),
-      };
-    }),
-
-  // —— R6-P1 行文本模式 grapheme 移动（方向键根治）——
-  // ArrowLeft/Right 14.5ms/键根因：HiddenInput 方向键分支对全文调
-  // getText()（O(全文) join）+ 全文 grapheme 边界。本方法改为行文本模式：
-  // 定位光标所在行（LineOffsetTree O(log n) + getLine O(1)）→ 行内偏移 →
-  // 行内 grapheme 边界（O(行)）→ 换算全局位置。行边界显式跨行：
-  // - 行首向左 → 上一行行尾（跨过换行符）；文档首行行首 → 0（不动）；
-  // - 行尾向右 → 下一行行首（跨过换行符）；文档末尾 → 自身（不动）。
-  // 与全文模式语义等价：全文模式下 \n 是普通字符，行首向左跨过 \n 落在
-  // 上一行行尾（行尾 = 换行符前一格），行尾向右落在下一行行首。空行
-  // （行首 = 行尾）同样覆盖。返回新全局位置（恒为 grapheme 边界）。
-  moveGrapheme: (pos, dir) => {
-    const s = get();
-    const p = Math.max(0, Math.min(pos, s.textLength));
-    const lineIdx = s.lineOffsets.findLineIndex(p);
-    const lineStart = s.lineOffsets.getOffset(lineIdx);
-    const lineText = s.getLine(lineIdx) ?? '';
-    const inLine = p - lineStart;
-    if (dir === 'left') {
-      // 行内向左：行内 grapheme 边界（不跨 \n——行文本不含换行符）
-      if (inLine > 0) return lineStart + findPrevGraphemeBoundary(lineText, inLine);
-      // 行首向左：跨到上一行行尾（= 本行行首 - 1，即换行符前一格）；
-      // 文档首行行首 = 文档开头（原地不动）
-      return lineIdx > 0 ? lineStart - 1 : 0;
-    }
-    // 行内向右：行内 grapheme 边界
-    if (inLine < lineText.length) {
-      return lineStart + findNextGraphemeBoundary(lineText, inLine);
-    }
-    // 行尾向右：跨到下一行行首（= 本行行尾 + 1，即跨过换行符）；
-    // 文档末尾行尾 = 文档末尾（原地不动）
-    if (p >= s.textLength) return p;
-    return lineStart + lineText.length + 1;
-  },
-
-  // —— R4-B 选区方向性核心（04 §3.3 方案 1）——
-  // Shift+方向键扩展 = 只动 head 不动 anchor；反向移动时 head 越过 anchor，
-  // 选区区间翻转但方向保持——「Shift+Left 后 Shift+Right 第二次方向正确」。
-  // 纯方向键（无 Shift）移动 = setSelection(newPos, newPos)（anchor=head=新位置），
-  // 由调用方（HiddenInput R4-E 接线）走 setCursorPos / setSelection 即可。
-  moveHead: (newHead) =>
-    dispatchSet((state) => {
-      const head = Math.max(0, Math.min(newHead, state.textLength));
-      const anchor = Math.max(0, Math.min(state.anchorPos, state.textLength));
-      return {
-        anchorPos: anchor,
-        headPos: head,
-        // 兼容层视图：选区区间恒为 [min(anchor,head), max(anchor,head)]
-        selectionStart: Math.min(anchor, head),
-        selectionEnd: Math.max(anchor, head),
-        cursorPos: head,
-        assoc: computeAssocForLines(
-          state.lineOffsets,
-          (i) => state.getLine(i),
-          head
-        ),
-      };
-    }),
-
-  extendSelectionByDirection: (dir) =>
-    dispatchSet((state) => {
-      // 以当前 head 为基点按 grapheme 边界移动（与既有方向键粒度一致）；
-      // 已到文档边界时 next === head，返回原状态（幂等空操作）。
-      // R6-P1：改用行文本模式 moveGrapheme（不再全文 getText() join——
-      // Shift+方向键与普通方向键同根因的 O(全文) 热路径一并根治）。
-      const head = Math.max(0, Math.min(state.headPos, state.textLength));
-      const next = state.moveGrapheme(head, dir);
-      if (next === head) return state;
-      const anchor = Math.max(0, Math.min(state.anchorPos, state.textLength));
-      return {
-        anchorPos: anchor,
-        headPos: next,
-        selectionStart: Math.min(anchor, next),
-        selectionEnd: Math.max(anchor, next),
-        cursorPos: next,
-        assoc: computeAssocForLines(
-          state.lineOffsets,
-          (i) => state.getLine(i),
-          next
-        ),
-      };
-    }),
-
-  // —— 事务统一入口（R4，04 §4.3 方案 1 / 09 归一表）——
-  // 位置级变更唯一入口：mergeTailInto（编辑触达合并尾段）→ planChange
-  // 行区间计划 → updateLinesIncremental → EditorOperation 记录（含 meta
-  // 与光标落点）→ undo/redo 互推 → 用户编辑标记 + 流式记账修正。
-  // insertText/deleteText/deleteSelection 均为本入口的薄封装（行为零
-  // 变化，289 门禁验证）；表格操作（diff 事务分支 / applyTableChange）
-  // 同样收敛于此。空操作（from===to 且 insert===''）不记录事务。
-  applyChange: (from, to, insert, opts) =>
-    dispatchSet((state) => {
-      const fromB = Math.max(0, Math.min(from, state.textLength));
-      const toB = Math.max(0, Math.min(to, state.textLength));
-      if (fromB === toB && insert === '') return state;
-
-      // 用户编辑触达 → 尾段先并入主数组（C4 合并时机；坐标在合并前后不变）
-      const s = mergeTailInto(state);
-
-      const plan = planChange(s, fromB, toB, insert);
-
-      // —— B6 位置级字段推导（从行级计划还原字符级区间）——
-      // removedText = [fromB, toB) 区间原文本：removedLines.join('\n')
-      // 即「startLineIdx 行首 → endLineIdx 行尾」全文（行间换行符在
-      // join 分隔符中），截取 fromB/toB 对应子区间（行内偏移换算）。
-      // 行级 splice 区间 [startLineIdx, +deleteCount) 与字符级区间
-      // [fromB, toB) 严格对应（planChange 由 findLineIndex 定位端点
-      // 行），推导 O(deleteCount)，与事务本身同量级。
-      const posStartLineOff = s.lineOffsets.getOffset(plan.startLineIdx);
-      const posEndLineOff = s.lineOffsets.getOffset(
-        plan.startLineIdx + plan.deleteCount - 1
-      );
-      const posJoinedRemoved = plan.removedLines.join('\n');
-      const removedText = posJoinedRemoved.slice(
-        fromB - posStartLineOff,
-        posJoinedRemoved.length -
-          (posEndLineOff + plan.removedLines[plan.removedLines.length - 1].length - toB)
-      );
-
-      const res = updateLinesIncremental(
-        s.mainLines,
-        s.lineOffsets,
-        s.mainCodeState,
-        plan.startLineIdx,
-        plan.deleteCount,
-        plan.insertedLines,
-        s.mainFenceLines
-      );
-
-      const newPos = opts?.cursorAfter ?? plan.newCursor;
-
-      const newOp: EditorOperation = {
-        startLineIdx: plan.startLineIdx,
-        removedLines: plan.removedLines,
-        insertedLineCount: plan.insertedLines.length,
-        cursorBefore: s.cursorPos,
-        selectionStartBefore: s.selectionStart,
-        selectionEndBefore: s.selectionEnd,
-        cursorAfter: newPos,
-        selectionStartAfter: newPos,
-        selectionEndAfter: newPos,
-        timestamp: Date.now(),
-        meta: opts?.meta,
-        // B6 位置级字段（只增不改：undo/redo 兼容层不读，供日志/同步）
-        from: fromB,
-        to: toB,
-        insert,
-        removedText,
-      };
-
-      let newUndoStack = [...s.undoStack];
-      const mergeMode = opts?.merge ?? 'none';
-      if (mergeMode === 'typing') {
-        // 连续打字合并（原 insertText 合并条件，行为零变化）：
-        // 500ms + 同行 + cursorAfter === from + 单字符 + 非换行。
-        // R4 顺序语义：!last.meta——流式合并 op 是独立一步，不与用户
-        // 击键合并（否则用户击键并进流式 op，undo 时 removedLines 不含
-        // 击键内容 → 丢字；R3 遗留 2）。
-        if (
-          newUndoStack.length > 0 &&
-          fromB === toB &&
-          insert.length === 1 &&
-          insert !== '\n'
-        ) {
-          const last = newUndoStack[newUndoStack.length - 1];
-          if (
-            !last.meta &&
-            Date.now() - last.timestamp < 500 &&
-            last.startLineIdx === plan.startLineIdx &&
-            last.cursorAfter === fromB &&
-            last.insertedLineCount === 1
-          ) {
-            last.insertedLineCount = plan.insertedLines.length;
-            last.cursorAfter = newPos;
-            last.timestamp = Date.now();
-          } else {
-            newUndoStack.push(newOp);
-          }
-        } else {
-          newUndoStack.push(newOp);
-        }
-      } else if (mergeMode === 'delete') {
-        // 连续单字符删除合并（原 deleteText 合并条件，行为零变化）；
-        // 同样排除 meta:'stream' 栈顶（R3 遗留 2）。
-        if (
-          newUndoStack.length > 0 &&
-          s.selectionStart === s.selectionEnd // 单字符删除（非选择范围）
-        ) {
-          const last = newUndoStack[newUndoStack.length - 1];
-          if (
-            !last.meta &&
-            Date.now() - last.timestamp < 500 &&
-            last.startLineIdx === plan.startLineIdx &&
-            last.insertedLineCount === 1 &&
-            plan.insertedLines.length === 1
-          ) {
-            last.insertedLineCount = plan.insertedLines.length;
-            last.cursorAfter = newPos;
-            last.selectionStartAfter = newPos;
-            last.selectionEndAfter = newPos;
-            last.timestamp = Date.now();
-          } else {
-            newUndoStack.push(newOp);
-          }
-        } else {
-          newUndoStack.push(newOp);
-        }
-      } else {
-        newUndoStack.push(newOp);
-      }
-
-      // —— B6 变更日志 + 版本号（append-only，有界环形）——
-      // 每次实际变更（非空事务）追加 {seq, op}；seq = 递增后的 version
-      // （版本号每事务 +1，与日志条目一一对应）。500ms 合并击键同样记
-      // 条目（每次击键是一次独立变更事件，与 undo 栈折叠解耦——同步
-      // 消费端按事件粒度拉取）；超限丢弃最旧条目（环形语义）。
-      const nextVersion = state.version + 1;
-      const nextLog = [...state.changeLog, { seq: nextVersion, op: newOp }];
-      if (nextLog.length > CHANGE_LOG_LIMIT) {
-        nextLog.splice(0, nextLog.length - CHANGE_LOG_LIMIT);
-      }
-
-      return {
-        ...res,
-        // 编辑触达 → 尾段已并入主数组（mergeTailInto），返回 partial 必须
-        // 显式清空三个尾段键：zustand 合并语义只覆盖 partial 中出现的键，
-        // 缺失时旧 streamTail 残留 → 物化视图把已并入主数组的尾段再拼一遍，
-        // 视图与主数组分叉（R2-G KNOWN-DEFECT：appendText + insertText 丢字）。
-        streamTail: EMPTY_TAIL,
-        streamTailCodeState: EMPTY_STATE_TAIL,
-        streamTailFenceLines: EMPTY_FENCE_TAIL,
-        // 用户编辑标记 + 流式合并记账修正（编辑点 ≤ 追加区间起点 → 区间
-        // 行号整体平移；深入区间内 → 作废重记账）
-        lastUserEditTime: Date.now(),
-        streamOp: adjustStreamOpForEdit(
-          s.streamOp,
-          plan.startLineIdx,
-          plan.insertedLines.length - plan.deleteCount
-        ),
-        cursorPos: newPos,
-        selectionStart: newPos,
-        selectionEnd: newPos,
-        // R4-B：事务后选区收敛——锚点 = 活动端 = 落点。覆盖输入 / 删除选区
-        // 后光标落点语义统一：head/anchor 任意顺序的选区（反向选区同样）在
-        // 编辑后坍缩为单点，后续 Shift 扩展从落点重新建立方向。
-        anchorPos: newPos,
-        headPos: newPos,
-        assoc: computeAssocForLines(
-          res.lineOffsets,
-          (i) => res.mainLines[i],
-          newPos
-        ),
-        undoStack: newUndoStack,
-        redoStack: [],
-        changeLog: nextLog,
-        version: nextVersion,
-      };
-    }),
-
-  // 表格专用事务入口（R4：表格操作收敛）：替换 [from, to) 并精确落点
-  // 光标（表格 API 计算的结果位置，而非默认的 from + insert.length），
-  // 单步进 undo——恢复 undo/redo/lineOffsets/textLength 一致性。
-  // R5 实例化：改经本实例 get() 委托（旧实现引用全局单例，多实例会串台）。
-  applyTableChange: (from, to, insert, cursorAfter) => {
-    get().applyChange(from, to, insert, { cursorAfter });
-  },
-
-  insertText: (inserted) => {
-    // 薄封装：以当前选区为区间，委托 applyChange（合并模式 = 连续打字）
-    const s = get();
-    s.applyChange(s.selectionStart, s.selectionEnd, inserted, {
-      merge: 'typing',
-    });
-  },
-
-  // 流式尾部追加快速通道（R2-A 尾段零拷贝 / 08 招 2 / 09 §4 C4 契约）：
-  // - 追加文本落在独立 streamTail，主数组不重建（零拷贝，O(尾段)）；
-  // - LineOffsetTree 以 COW 增量更新触及块（clone 浅拷贝 + 末块 O(256)），
-  //   树始终与逻辑全量一致（既有测试断言 lineOffsets.toArray 全量）；
-  // - textLength O(1) 增量（append 即在末尾插入 text.length 个字符，
-  //   与换行分割无关，经与树重算口径交叉验证一致）；
-  // - 不进 undo 栈（流式语义）；stop-flush（flushStreamTail）时生成单个
-  //   合并 op（meta:'stream'），undo 一次回退整段流式（R3-A / 09 归一表）；
-  // - 尾段超上界强制合并（C4：STREAM_TAIL_MAX_LINES，防长流式退化）。
-  //
-  // append 光标冲突语义（R3-A / 01 问题 5 / 09 归一表）：
-  // - 追加点锚定：默认全文末尾（anchor = textLength）；用户「活跃编辑末尾
-  //   行」（光标在逻辑末行内、且最近一次用户编辑在 1s 窗口内）时追加点
-  //   前移至光标处——流内容插入到光标前，用户打字区不被流「塞字符」；
-  // - 光标平移：光标/选区位于追加点之后（≥ anchor）则整体 +text.length
-  //   （wasAtEnd 语义保留：光标恰在全文末尾时随追加推进；追加点前移时
-  //   光标恰在锚点处 → 不移动，后续击键仍插在流内容之前）；
-  // - 流式合并记账（streamOp）：会话首次 append 快照追加前末行与光标，
-  //   逐 chunk 累计追加区间行数，stop-flush 据此生成单步合并 op。
-  appendText: (text: string) =>
-    dispatchSet((state) => {
-      if (!text) return state;
-
-      let s = state;
-      // 尾段超限强制合并（C4 契约：streamTail 上界 4096 行）
-      if (s.streamTail.length >= STREAM_TAIL_MAX_LINES) {
-        s = mergeTailInto(s);
-      }
-
-      const mainLines = s.mainLines;
-      const streamTail = s.streamTail;
-      // 尾段「接管」了主数组最后一行（append 语义：追加到全文末尾，被接管
-      // 行并入尾段首行）；尾段为空时逻辑末行 = 主数组末行，否则 = 尾段末行。
-      const tailLen = streamTail.length;
-      const boundary = mainLines.length - 1;
-      const lastLineIdx = tailLen === 0 ? boundary : boundary + tailLen - 1;
-
-      // 逻辑行/状态访问器（infer* 的尾段双段视图，无需物化全量数组）：
-      // 尾段为空时 = 主数组全量；非空时尾段「接管」主数组末行（tail[0]
-      // 替代 main[boundary]），i ≥ boundary 从尾段取。
-      // 双段换算经共享原语 lineAt（P2-A1 回修 2 去重）。
-      const getLineAt: LineAccessor = (i) =>
-        lineAt(mainLines, streamTail, i);
-      const getStateAt: StateAccessor = (i) =>
-        lineAt(s.mainCodeState, s.streamTailCodeState, i);
-
-      // —— 追加点锚定（01 问题 5 方案 5.2 / R3-A）——
-      // userEditingTail：光标落在逻辑末行内（非全文末尾）+ 用户有活跃编辑。
-      // 满足时追加点前移至光标处；否则锚定全文末尾（保持现状语义）。
-      // 追加点 = 光标 + 会话内前移累计流长（shiftedLen）：用户击键后光标
-      // 右移，追加点同步右移，流内容始终按到达顺序接在已插入流段末尾。
-      const userActive =
-        s.lastUserEditTime > 0 &&
-        Date.now() - s.lastUserEditTime < STREAM_USER_EDIT_WINDOW_MS;
-      const cursorInLastLine =
-        s.cursorPos < s.textLength &&
-        s.lineOffsets.findLineIndex(s.cursorPos) === lastLineIdx;
-      const shiftAnchorToCursor = cursorInLastLine && userActive;
-      const anchor = shiftAnchorToCursor
-        ? s.cursorPos + (s.streamOp?.shiftedLen ?? 0)
-        : s.textLength;
-
-      // 拼接逻辑末行 + 追加文本：追加点前移时在光标处拆行插入
-      // （prefix + text + suffix；插入到光标前，光标位置不变）；
-      // 追加点平移后的整行拆分与旧路径一致（combined 后 split）。
-      const lastLine = getLineAt(lastLineIdx);
-      let combined: string;
-      if (shiftAnchorToCursor) {
-        const lineOffset = s.lineOffsets.getOffset(lastLineIdx);
-        const inLine = Math.max(0, Math.min(anchor - lineOffset, lastLine.length));
-        combined = lastLine.slice(0, inLine) + text + lastLine.slice(inLine);
-      } else {
-        combined = lastLine + text;
-      }
-      const newSegmentLines = combined.split('\n');
-
-      // —— 状态机基线（与旧 appendText 一致，访问器化后兼容尾段视图）——
-      // 「进入合并行的状态」由旧行 [0, lastLineIdx) 决定（末行本身将被
-      // 合并内容替换——若末行是结束块的空行，该空行在合并后可能消失，
-      // 不能把它当作块已退出的依据）；块类型由连续 html_block 运行段
-      // 仿真得出（CodeState 不记录类型，见 inferHtmlBlockState）。
-      // P2-A1 fence 单源化：fence/math 基线改为经 fence 行集合二分回推
-      // （旧实现按 lastLineIdx 自身状态推断：若旧行是 fence_start/math 开栏
-      // 行，合并后行仍为开栏形态时应由段循环重新判定开栏，而非沿用旧行
-      // 的块内状态——旧推断在该场景把合并行误判为 code/fence_end，与全量
-      // 重扫分歧；本次与 updateLinesIncremental 同源修正）。
-      let inCodeBlock = false;
-      let inMathBlock = false;
-      // 开栏状态（marker/length）：从最近 fence_start 行原文提取（该行未
-      // 被本次追加触及，内容权威）；块内行（fenceIdx 为 fence_start 且
-      // lastLineIdx 其后）无法从单行回推时保持 null——仅影响「块内 fence
-      // 形态行」的关闭判定，与 parser 的防御分支同向（fenceState 为 null
-      // 时块内 fence 形态行按 code 处理，见段循环）。
-      let fenceState: { marker: string; length: number } | null = null;
-      {
-        // 双段 fence 行集合（mainFenceLines + 尾段相对行号平移 boundary，
-        // 各自升序、拼接后整体升序）二分定位 < lastLineIdx 的最近 fence 行。
-        let lo = 0;
-        let hi = s.mainFenceLines.length;
-        while (lo < hi) {
-          const mid = (lo + hi) >> 1;
-          if (s.mainFenceLines[mid] < lastLineIdx) lo = mid + 1;
-          else hi = mid;
-        }
-        let fenceIdx = lo > 0 ? s.mainFenceLines[lo - 1] : -1;
-        for (let k = s.streamTailFenceLines.length - 1; k >= 0; k--) {
-          const abs = boundary + s.streamTailFenceLines[k];
-          if (abs < lastLineIdx) {
-            if (abs > fenceIdx) fenceIdx = abs;
-            break;
-          }
-        }
-        if (fenceIdx >= 0) {
-          const st = getStateAt(fenceIdx);
-          if (st === 'fence_start') {
-            inCodeBlock = true;
-            const fenceOpen = FENCE_OPEN_RE.exec(
-              stripBlockquoteContext(getLineAt(fenceIdx)).trim()
-            );
-            if (fenceOpen) {
-              fenceState = {
-                marker: fenceOpen[1] !== undefined ? '`' : '~',
-                length: (fenceOpen[1] ?? fenceOpen[3]).length,
-              };
-            }
-          } else if (st === 'fence_end') {
-            inCodeBlock = false;
-          } else if (st === 'math_fence_start') {
-            inMathBlock = true;
-          } else if (st === 'math_fence_end') {
-            inMathBlock = false;
-          }
-        }
-      }
-      // 缩进代码块状态：末行状态为 'indent_code' 时视为块内（块内空行保持）
-      let inIndentCode = false;
-      // HTML 块状态：从旧行回推——增量语义与 updateLinesIncremental 一致
-      const inferredHtml = inferHtmlBlockState(getLineAt, getStateAt, lastLineIdx);
-      let inHtmlBlock = inferredHtml.inHtmlBlock;
-      let htmlType = inferredHtml.htmlType;
-      // HTML 块 start（type 7 段落保护）所需的「上一非空白行形态」记忆
-      let prevBlockKind = inferPrevBlockKind(getLineAt, getStateAt, lastLineIdx);
-      const currentState = getStateAt(lastLineIdx);
-      if (currentState === 'indent_code') inIndentCode = true;
-
-      const segmentCodeStates = new Array(newSegmentLines.length);
-      for (let i = 0; i < newSegmentLines.length; i++) {
-        const trimmed = newSegmentLines[i].trim();
-        // HTML 块判定使用块引用剥离后的内容（与 parser 一致）
-        const htmlContent = stripBlockquoteContext(newSegmentLines[i]);
-        if (inHtmlBlock) {
-          // —— HTML 块内（优先级最高：fence/math/缩进代码判定全部让路）——
-          if (htmlBlockEndCondition(htmlType, htmlContent)) {
-            inHtmlBlock = false;
-            htmlType = 0;
-            if (htmlContent.trim() === '') {
-              // type 6/7 空行结束块：空行本身不是块内容
-              segmentCodeStates[i] = 'none';
-              if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-            } else {
-              // type 1-5 结束行（行内含闭合标记）：该行仍是块的最后一行
-              segmentCodeStates[i] = 'html_block';
-              prevBlockKind = 'code';
-            }
-          } else {
-            segmentCodeStates[i] = 'html_block';
-            prevBlockKind = 'code';
-          }
-        } else if (
-          !inMathBlock &&
-          // B8c 配合：围栏形态行补「开栏缩进 ≤3 列」门槛（与
-          // updateLinesIncremental 同规，镜像 parser 的 indentCols <= 3——
-          // 4 空格缩进的 ``` 行是缩进代码候选而非围栏，spec 例 134）。
-          leadingIndentColumns(htmlContent) <= 3 &&
-          FENCE_OPEN_RE.test(htmlContent.trim())
-        ) {
-          // P2-A1 fence 单源化（镜像 parser / updateLinesIncremental）：
-          // 判定输入 = 块引用剥离后 trim（htmlContent 与 parser 的
-          // bqContent 同源；旧实现用未剥离的 trimmed，`> ``` ` 块引用
-          // 围栏行在段状态机内不被识别，与重扫分歧——一并修正）。
-          // 开栏记录 marker/length；块内 fence 形态行仅当 isFenceClose
-          // 才关闭（` ```INS` / ` ``` js` 保持 code）——根治 appendText
-          // 路径的 KNOWN-DEFECT（旧布尔翻转在 fence_end 行尾追加时把
-          // 合并行误判为 fence_end，与全量重扫分歧）。
-          if (!inCodeBlock) {
-            segmentCodeStates[i] = 'fence_start';
-            inCodeBlock = true;
-            const fenceOpen = FENCE_OPEN_RE.exec(htmlContent.trim());
-            fenceState = {
-              marker: fenceOpen![1] !== undefined ? '`' : '~',
-              length: (fenceOpen![1] ?? fenceOpen![3]).length,
-            };
-          } else if (
-            fenceState &&
-            isFenceClose(trimmed, fenceState.marker, fenceState.length)
-          ) {
-            segmentCodeStates[i] = 'fence_end';
-            inCodeBlock = false;
-            fenceState = null;
-          } else {
-            segmentCodeStates[i] = 'code';
-          }
-          inIndentCode = false;
-          prevBlockKind = 'code';
-        } else if (!inCodeBlock && trimmed === '$$') {
-          segmentCodeStates[i] = inMathBlock
-            ? 'math_fence_end'
-            : 'math_fence_start';
-          inMathBlock = !inMathBlock;
-          inIndentCode = false;
-          prevBlockKind = 'code';
-        } else if (inCodeBlock) {
-          segmentCodeStates[i] = 'code';
-          inIndentCode = false;
-          prevBlockKind = 'code';
-        } else if (inMathBlock) {
-          segmentCodeStates[i] = 'math_block';
-          inIndentCode = false;
-          prevBlockKind = 'code';
-        } else {
-          // —— 缩进代码块判定（与 updateLinesIncremental 同规则）——
-          const indent = leadingIndentColumns(newSegmentLines[i]);
-          if (inIndentCode) {
-            // 块内：空行与 ≥4 列缩进行保持；非缩进行结束代码块
-            if (trimmed === '' || indent >= 4) {
-              segmentCodeStates[i] = 'indent_code';
-            } else {
-              // 非缩进行结束代码块：该行可能开启 HTML 块
-              inIndentCode = false;
-              const htmlStart = matchHtmlBlockStart(htmlContent, prevBlockKind);
-              if (htmlStart) {
-                segmentCodeStates[i] = 'html_block';
-                inHtmlBlock = true;
-                htmlType = htmlStart.type;
-                if (htmlBlockEndCondition(htmlType, htmlContent)) {
-                  inHtmlBlock = false;
-                  htmlType = 0;
-                }
-                prevBlockKind = 'code';
+          let newUndoStack = [...s.undoStack];
+          const mergeMode = opts?.merge ?? 'none';
+          if (mergeMode === 'typing') {
+            // 连续打字合并（原 insertText 合并条件，行为零变化）：
+            // 500ms + 同行 + cursorAfter === from + 单字符 + 非换行。
+            // R4 顺序语义：!last.meta——流式合并 op 是独立一步，不与用户
+            // 击键合并（否则用户击键并进流式 op，undo 时 removedLines 不含
+            // 击键内容 → 丢字；R3 遗留 2）。
+            if (
+              newUndoStack.length > 0 &&
+              fromB === toB &&
+              insert.length === 1 &&
+              insert !== '\n'
+            ) {
+              const last = newUndoStack[newUndoStack.length - 1];
+              if (
+                !last.meta &&
+                Date.now() - last.timestamp < 500 &&
+                last.startLineIdx === plan.startLineIdx &&
+                last.cursorAfter === fromB &&
+                last.insertedLineCount === 1
+              ) {
+                last.insertedLineCount = plan.insertedLines.length;
+                last.cursorAfter = newPos;
+                last.timestamp = Date.now();
               } else {
-                segmentCodeStates[i] = 'none';
-                prevBlockKind = guessBlockKind(htmlContent, prevBlockKind);
+                newUndoStack.push(newOp);
+              }
+            } else {
+              newUndoStack.push(newOp);
+            }
+          } else if (mergeMode === 'delete') {
+            // 连续单字符删除合并（原 deleteText 合并条件，行为零变化）；
+            // 同样排除 meta:'stream' 栈顶（R3 遗留 2）。
+            if (
+              newUndoStack.length > 0 &&
+              s.selectionStart === s.selectionEnd // 单字符删除（非选择范围）
+            ) {
+              const last = newUndoStack[newUndoStack.length - 1];
+              if (
+                !last.meta &&
+                Date.now() - last.timestamp < 500 &&
+                last.startLineIdx === plan.startLineIdx &&
+                last.insertedLineCount === 1 &&
+                plan.insertedLines.length === 1
+              ) {
+                last.insertedLineCount = plan.insertedLines.length;
+                last.cursorAfter = newPos;
+                last.selectionStartAfter = newPos;
+                last.selectionEndAfter = newPos;
+                last.timestamp = Date.now();
+              } else {
+                newUndoStack.push(newOp);
+              }
+            } else {
+              newUndoStack.push(newOp);
+            }
+          } else {
+            newUndoStack.push(newOp);
+          }
+
+          // —— B6 变更日志 + 版本号（append-only，有界环形）——
+          // 每次实际变更（非空事务）追加 {seq, op}；seq = 递增后的 version
+          // （版本号每事务 +1，与日志条目一一对应）。500ms 合并击键同样记
+          // 条目（每次击键是一次独立变更事件，与 undo 栈折叠解耦——同步
+          // 消费端按事件粒度拉取）；超限丢弃最旧条目（环形语义）。
+          const nextVersion = state.version + 1;
+          const nextLog = [...state.changeLog, { seq: nextVersion, op: newOp }];
+          if (nextLog.length > CHANGE_LOG_LIMIT) {
+            nextLog.splice(0, nextLog.length - CHANGE_LOG_LIMIT);
+          }
+          // 用户编辑标记 + 流式合并记账修正（编辑点 ≤ 追加区间起点 → 区间
+          // 行号整体平移；深入区间内 → 作废重记账）
+          const adjustedStreamOp = adjustStreamOpForEdit(
+            s.streamOp,
+            plan.startLineIdx,
+            plan.insertedLines.length - plan.deleteCount
+          );
+
+          return {
+            ...res,
+            // 编辑触达 → 尾段已并入主数组（mergeTailInto），返回 partial 必须
+            // 显式清空三个尾段键：zustand 合并语义只覆盖 partial 中出现的键，
+            // 缺失时旧 streamTail 残留 → 物化视图把已并入主数组的尾段再拼一遍，
+            // 视图与主数组分叉（R2-G KNOWN-DEFECT：appendText + insertText 丢字）。
+            streamTail: EMPTY_TAIL,
+            streamTailCodeState: EMPTY_STATE_TAIL,
+            streamTailFenceLines: EMPTY_FENCE_TAIL,
+            lastUserEditTime: Date.now(),
+            streamOp: adjustedStreamOp,
+            // W2-1（D-1）时序契约：记账作废（编辑深入追加区间，adjust 返回
+            // null）时「流式进行中」信号同步熄灭——可编辑会话 streamActive
+            // ⇔ streamOp 非空严格对齐，换源门禁行为完全一致（下次 append
+            // 重新记账并复置信号）。
+            streamActive: adjustedStreamOp !== null,
+            cursorPos: newPos,
+            selectionStart: newPos,
+            selectionEnd: newPos,
+            // R4-B：事务后选区收敛——锚点 = 活动端 = 落点。覆盖输入 / 删除选区
+            // 后光标落点语义统一：head/anchor 任意顺序的选区（反向选区同样）在
+            // 编辑后坍缩为单点，后续 Shift 扩展从落点重新建立方向。
+            anchorPos: newPos,
+            headPos: newPos,
+            assoc: computeAssocForLines(
+              res.lineOffsets,
+              (i) => res.mainLines[i],
+              newPos
+            ),
+            undoStack: newUndoStack,
+            redoStack: [],
+            changeLog: nextLog,
+            version: nextVersion,
+          };
+        }),
+
+      // 表格专用事务入口（R4：表格操作收敛）：替换 [from, to) 并精确落点
+      // 光标（表格 API 计算的结果位置，而非默认的 from + insert.length），
+      // 单步进 undo——恢复 undo/redo/lineOffsets/textLength 一致性。
+      // R5 实例化：改经本实例 get() 委托（旧实现引用全局单例，多实例会串台）。
+      applyTableChange: (from, to, insert, cursorAfter) => {
+        get().applyChange(from, to, insert, { cursorAfter });
+      },
+
+      insertText: (inserted) => {
+        // 薄封装：以当前选区为区间，委托 applyChange（合并模式 = 连续打字）
+        const s = get();
+        s.applyChange(s.selectionStart, s.selectionEnd, inserted, {
+          merge: 'typing',
+        });
+      },
+
+      // 流式尾部追加快速通道（R2-A 尾段零拷贝 / 08 招 2 / 09 §4 C4 契约）：
+      // - 追加文本落在独立 streamTail，主数组不重建（零拷贝，O(尾段)）；
+      // - LineOffsetTree 以 COW 增量更新触及块（clone 浅拷贝 + 末块 O(256)），
+      //   树始终与逻辑全量一致（既有测试断言 lineOffsets.toArray 全量）；
+      // - textLength O(1) 增量（append 即在末尾插入 text.length 个字符，
+      //   与换行分割无关，经与树重算口径交叉验证一致）；
+      // - 不进 undo 栈（流式语义）；stop-flush（flushStreamTail）时生成单个
+      //   合并 op（meta:'stream'），undo 一次回退整段流式（R3-A / 09 归一表）；
+      // - 尾段超上界强制合并（C4：STREAM_TAIL_MAX_LINES，防长流式退化）。
+      //
+      // append 光标冲突语义（R3-A / 01 问题 5 / 09 归一表）：
+      // - 追加点锚定：默认全文末尾（anchor = textLength）；用户「活跃编辑末尾
+      //   行」（光标在逻辑末行内、且最近一次用户编辑在 1s 窗口内）时追加点
+      //   前移至光标处——流内容插入到光标前，用户打字区不被流「塞字符」；
+      // - 光标平移：光标/选区位于追加点之后（≥ anchor）则整体 +text.length
+      //   （wasAtEnd 语义保留：光标恰在全文末尾时随追加推进；追加点前移时
+      //   光标恰在锚点处 → 不移动，后续击键仍插在流内容之前）；
+      // - 流式合并记账（streamOp）：会话首次 append 快照追加前末行与光标，
+      //   逐 chunk 累计追加区间行数，stop-flush 据此生成单步合并 op。
+      appendText: (text: string) =>
+        dispatchSet((state) => {
+          if (!text) return state;
+
+          let s = state;
+          // —— W2-1（D-5）只读快路径判定 ——
+          // readOnly && 从未用户编辑 → 追加点锚定恒为末尾（userActive 恒
+          // false）、免树 clone（无 undo 语义）、跳 streamOp 记账（stop-flush
+          // 不生成 meta:'stream' op）。可编辑会话（readOnly=false）与只读但
+          // 有程序化编辑历史（lastUserEditTime > 0）的会话一律走完整路径，
+          // 行为零变化。额外要求 streamOp === null：会话中途才 setReadOnly
+          // 切换的存量记账不得被快路径静默丢弃（该会话继续完整记账，直到
+          // stop-flush 收口；此后新会话自然进入快路径）。
+          const fastPath =
+            s.readOnly && s.lastUserEditTime === 0 && s.streamOp === null;
+          // 尾段超限强制合并（C4 契约：streamTail 上界 4096 行）
+          if (s.streamTail.length >= STREAM_TAIL_MAX_LINES) {
+            s = mergeTailInto(s);
+          }
+
+          const mainLines = s.mainLines;
+          const streamTail = s.streamTail;
+          // 尾段「接管」了主数组最后一行（append 语义：追加到全文末尾，被接管
+          // 行并入尾段首行）；尾段为空时逻辑末行 = 主数组末行，否则 = 尾段末行。
+          const tailLen = streamTail.length;
+          const boundary = mainLines.length - 1;
+          const lastLineIdx = tailLen === 0 ? boundary : boundary + tailLen - 1;
+
+          // 逻辑行/状态访问器（infer* 的尾段双段视图，无需物化全量数组）：
+          // 尾段为空时 = 主数组全量；非空时尾段「接管」主数组末行（tail[0]
+          // 替代 main[boundary]），i ≥ boundary 从尾段取。
+          // 双段换算经共享原语 lineAt（P2-A1 回修 2 去重）。
+          const getLineAt: LineAccessor = (i) =>
+            lineAt(mainLines, streamTail, i);
+          const getStateAt: StateAccessor = (i) =>
+            lineAt(s.mainCodeState, s.streamTailCodeState, i);
+
+          // —— 追加点锚定（01 问题 5 方案 5.2 / R3-A）——
+          // userEditingTail：光标落在逻辑末行内（非全文末尾）+ 用户有活跃编辑。
+          // 满足时追加点前移至光标处；否则锚定全文末尾（保持现状语义）。
+          // 追加点 = 光标 + 会话内前移累计流长（shiftedLen）：用户击键后光标
+          // 右移，追加点同步右移，流内容始终按到达顺序接在已插入流段末尾。
+          // W2-1 只读快路径：无用户编辑（lastUserEditTime === 0）时 userActive
+          // 恒 false → anchor 恒 = textLength——findLineIndex 双查询整段短路
+          // （O(#blocks) → O(1)），语义与完整判定逐位一致。
+          const userActive =
+            s.lastUserEditTime > 0 &&
+            Date.now() - s.lastUserEditTime < STREAM_USER_EDIT_WINDOW_MS;
+          const cursorInLastLine =
+            !fastPath &&
+            s.cursorPos < s.textLength &&
+            s.lineOffsets.findLineIndex(s.cursorPos) === lastLineIdx;
+          const shiftAnchorToCursor = cursorInLastLine && userActive;
+          const anchor = shiftAnchorToCursor
+            ? s.cursorPos + (s.streamOp?.shiftedLen ?? 0)
+            : s.textLength;
+
+          // 拼接逻辑末行 + 追加文本：追加点前移时在光标处拆行插入
+          // （prefix + text + suffix；插入到光标前，光标位置不变）；
+          // 追加点平移后的整行拆分与旧路径一致（combined 后 split）。
+          const lastLine = getLineAt(lastLineIdx);
+          let combined: string;
+          if (shiftAnchorToCursor) {
+            const lineOffset = s.lineOffsets.getOffset(lastLineIdx);
+            const inLine = Math.max(
+              0,
+              Math.min(anchor - lineOffset, lastLine.length)
+            );
+            combined =
+              lastLine.slice(0, inLine) + text + lastLine.slice(inLine);
+          } else {
+            combined = lastLine + text;
+          }
+          const newSegmentLines = combined.split('\n');
+
+          // —— 状态机基线（与旧 appendText 一致，访问器化后兼容尾段视图）——
+          // 「进入合并行的状态」由旧行 [0, lastLineIdx) 决定（末行本身将被
+          // 合并内容替换——若末行是结束块的空行，该空行在合并后可能消失，
+          // 不能把它当作块已退出的依据）；块类型由连续 html_block 运行段
+          // 仿真得出（CodeState 不记录类型，见 inferHtmlBlockState）。
+          // P2-A1 fence 单源化：fence/math 基线改为经 fence 行集合二分回推
+          // （旧实现按 lastLineIdx 自身状态推断：若旧行是 fence_start/math 开栏
+          // 行，合并后行仍为开栏形态时应由段循环重新判定开栏，而非沿用旧行
+          // 的块内状态——旧推断在该场景把合并行误判为 code/fence_end，与全量
+          // 重扫分歧；本次与 updateLinesIncremental 同源修正）。
+          let inCodeBlock = false;
+          let inMathBlock = false;
+          // 开栏状态（marker/length）：从最近 fence_start 行原文提取（该行未
+          // 被本次追加触及，内容权威）；块内行（fenceIdx 为 fence_start 且
+          // lastLineIdx 其后）无法从单行回推时保持 null——仅影响「块内 fence
+          // 形态行」的关闭判定，与 parser 的防御分支同向（fenceState 为 null
+          // 时块内 fence 形态行按 code 处理，见段循环）。
+          let fenceState: { marker: string; length: number } | null = null;
+          {
+            // 双段 fence 行集合（mainFenceLines + 尾段相对行号平移 boundary，
+            // 各自升序、拼接后整体升序）二分定位 < lastLineIdx 的最近 fence 行。
+            let lo = 0;
+            let hi = s.mainFenceLines.length;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              if (s.mainFenceLines[mid] < lastLineIdx) lo = mid + 1;
+              else hi = mid;
+            }
+            let fenceIdx = lo > 0 ? s.mainFenceLines[lo - 1] : -1;
+            for (let k = s.streamTailFenceLines.length - 1; k >= 0; k--) {
+              const abs = boundary + s.streamTailFenceLines[k];
+              if (abs < lastLineIdx) {
+                if (abs > fenceIdx) fenceIdx = abs;
+                break;
               }
             }
-          } else if (trimmed !== '' && indent >= 4) {
-            segmentCodeStates[i] = 'indent_code';
-            inIndentCode = true;
-            prevBlockKind = 'code';
-          } else if (trimmed === '') {
-            // 空行：不进入缩进代码；段落/表格上下文重置，列表上下文保持
-            segmentCodeStates[i] = 'none';
-            if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-          } else {
-            // —— HTML 块 start 判定（缩进 <4、非空行，镜像 parser）——
-            const htmlStart = matchHtmlBlockStart(htmlContent, prevBlockKind);
-            if (htmlStart) {
-              segmentCodeStates[i] = 'html_block';
-              inHtmlBlock = true;
-              htmlType = htmlStart.type;
+            if (fenceIdx >= 0) {
+              const st = getStateAt(fenceIdx);
+              if (st === 'fence_start') {
+                inCodeBlock = true;
+                const fenceOpen = FENCE_OPEN_RE.exec(
+                  stripBlockquoteContext(getLineAt(fenceIdx)).trim()
+                );
+                if (fenceOpen) {
+                  fenceState = {
+                    marker: fenceOpen[1] !== undefined ? '`' : '~',
+                    length: (fenceOpen[1] ?? fenceOpen[3]).length,
+                  };
+                }
+              } else if (st === 'fence_end') {
+                inCodeBlock = false;
+              } else if (st === 'math_fence_start') {
+                inMathBlock = true;
+              } else if (st === 'math_fence_end') {
+                inMathBlock = false;
+              }
+            }
+          }
+          // 缩进代码块状态：末行状态为 'indent_code' 时视为块内（块内空行保持）
+          let inIndentCode = false;
+          // HTML 块状态：从旧行回推——增量语义与 updateLinesIncremental 一致
+          const inferredHtml = inferHtmlBlockState(
+            getLineAt,
+            getStateAt,
+            lastLineIdx
+          );
+          let inHtmlBlock = inferredHtml.inHtmlBlock;
+          let htmlType = inferredHtml.htmlType;
+          // HTML 块 start（type 7 段落保护）所需的「上一非空白行形态」记忆
+          let prevBlockKind = inferPrevBlockKind(
+            getLineAt,
+            getStateAt,
+            lastLineIdx
+          );
+          const currentState = getStateAt(lastLineIdx);
+          if (currentState === 'indent_code') inIndentCode = true;
+
+          const segmentCodeStates = new Array(newSegmentLines.length);
+          for (let i = 0; i < newSegmentLines.length; i++) {
+            const trimmed = newSegmentLines[i].trim();
+            // HTML 块判定使用块引用剥离后的内容（与 parser 一致）
+            const htmlContent = stripBlockquoteContext(newSegmentLines[i]);
+            if (inHtmlBlock) {
+              // —— HTML 块内（优先级最高：fence/math/缩进代码判定全部让路）——
               if (htmlBlockEndCondition(htmlType, htmlContent)) {
                 inHtmlBlock = false;
                 htmlType = 0;
+                if (htmlContent.trim() === '') {
+                  // type 6/7 空行结束块：空行本身不是块内容
+                  segmentCodeStates[i] = 'none';
+                  if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+                } else {
+                  // type 1-5 结束行（行内含闭合标记）：该行仍是块的最后一行
+                  segmentCodeStates[i] = 'html_block';
+                  prevBlockKind = 'code';
+                }
+              } else {
+                segmentCodeStates[i] = 'html_block';
+                prevBlockKind = 'code';
               }
+            } else if (
+              !inMathBlock &&
+              // B8c 配合：围栏形态行补「开栏缩进 ≤3 列」门槛（与
+              // updateLinesIncremental 同规，镜像 parser 的 indentCols <= 3——
+              // 4 空格缩进的 ``` 行是缩进代码候选而非围栏，spec 例 134）。
+              leadingIndentColumns(htmlContent) <= 3 &&
+              FENCE_OPEN_RE.test(htmlContent.trim())
+            ) {
+              // P2-A1 fence 单源化（镜像 parser / updateLinesIncremental）：
+              // 判定输入 = 块引用剥离后 trim（htmlContent 与 parser 的
+              // bqContent 同源；旧实现用未剥离的 trimmed，`> ``` ` 块引用
+              // 围栏行在段状态机内不被识别，与重扫分歧——一并修正）。
+              // 开栏记录 marker/length；块内 fence 形态行仅当 isFenceClose
+              // 才关闭（` ```INS` / ` ``` js` 保持 code）——根治 appendText
+              // 路径的 KNOWN-DEFECT（旧布尔翻转在 fence_end 行尾追加时把
+              // 合并行误判为 fence_end，与全量重扫分歧）。
+              if (!inCodeBlock) {
+                segmentCodeStates[i] = 'fence_start';
+                inCodeBlock = true;
+                const fenceOpen = FENCE_OPEN_RE.exec(htmlContent.trim());
+                fenceState = {
+                  marker: fenceOpen![1] !== undefined ? '`' : '~',
+                  length: (fenceOpen![1] ?? fenceOpen![3]).length,
+                };
+              } else if (
+                fenceState &&
+                isFenceClose(trimmed, fenceState.marker, fenceState.length)
+              ) {
+                segmentCodeStates[i] = 'fence_end';
+                inCodeBlock = false;
+                fenceState = null;
+              } else {
+                segmentCodeStates[i] = 'code';
+              }
+              inIndentCode = false;
+              prevBlockKind = 'code';
+            } else if (!inCodeBlock && trimmed === '$$') {
+              segmentCodeStates[i] = inMathBlock
+                ? 'math_fence_end'
+                : 'math_fence_start';
+              inMathBlock = !inMathBlock;
+              inIndentCode = false;
+              prevBlockKind = 'code';
+            } else if (inCodeBlock) {
+              segmentCodeStates[i] = 'code';
+              inIndentCode = false;
+              prevBlockKind = 'code';
+            } else if (inMathBlock) {
+              segmentCodeStates[i] = 'math_block';
+              inIndentCode = false;
               prevBlockKind = 'code';
             } else {
-              segmentCodeStates[i] = 'none';
-              prevBlockKind = guessBlockKind(htmlContent, prevBlockKind);
+              // —— 缩进代码块判定（与 updateLinesIncremental 同规则）——
+              const indent = leadingIndentColumns(newSegmentLines[i]);
+              if (inIndentCode) {
+                // 块内：空行与 ≥4 列缩进行保持；非缩进行结束代码块
+                if (trimmed === '' || indent >= 4) {
+                  segmentCodeStates[i] = 'indent_code';
+                } else {
+                  // 非缩进行结束代码块：该行可能开启 HTML 块
+                  inIndentCode = false;
+                  const htmlStart = matchHtmlBlockStart(
+                    htmlContent,
+                    prevBlockKind
+                  );
+                  if (htmlStart) {
+                    segmentCodeStates[i] = 'html_block';
+                    inHtmlBlock = true;
+                    htmlType = htmlStart.type;
+                    if (htmlBlockEndCondition(htmlType, htmlContent)) {
+                      inHtmlBlock = false;
+                      htmlType = 0;
+                    }
+                    prevBlockKind = 'code';
+                  } else {
+                    segmentCodeStates[i] = 'none';
+                    prevBlockKind = guessBlockKind(htmlContent, prevBlockKind);
+                  }
+                }
+              } else if (trimmed !== '' && indent >= 4) {
+                segmentCodeStates[i] = 'indent_code';
+                inIndentCode = true;
+                prevBlockKind = 'code';
+              } else if (trimmed === '') {
+                // 空行：不进入缩进代码；段落/表格上下文重置，列表上下文保持
+                segmentCodeStates[i] = 'none';
+                if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+              } else {
+                // —— HTML 块 start 判定（缩进 <4、非空行，镜像 parser）——
+                const htmlStart = matchHtmlBlockStart(
+                  htmlContent,
+                  prevBlockKind
+                );
+                if (htmlStart) {
+                  segmentCodeStates[i] = 'html_block';
+                  inHtmlBlock = true;
+                  htmlType = htmlStart.type;
+                  if (htmlBlockEndCondition(htmlType, htmlContent)) {
+                    inHtmlBlock = false;
+                    htmlType = 0;
+                  }
+                  prevBlockKind = 'code';
+                } else {
+                  segmentCodeStates[i] = 'none';
+                  prevBlockKind = guessBlockKind(htmlContent, prevBlockKind);
+                }
+              }
             }
           }
+
+          // —— 新尾段（主数组不动，零拷贝）——
+          // 尾段为空：新尾段 = 拼接段；非空：替换尾段末行（旧尾段末行已被
+          // 拼接进 newSegmentLines[0]，前 tailLen-1 行原样保留）。
+          const newTail =
+            tailLen === 0
+              ? newSegmentLines
+              : streamTail.slice(0, -1).concat(newSegmentLines);
+          const newTailCode =
+            tailLen === 0
+              ? segmentCodeStates
+              : s.streamTailCodeState.slice(0, -1).concat(segmentCodeStates);
+
+          // 尾段内 fence 相对行号：旧相对行号不变（尾段起点仍为 boundary），
+          // 新段行相对行号 = (tailLen - 1) + i（尾段非空）/ i（尾段为空）。
+          const newTailFence = s.streamTailFenceLines.slice();
+          for (let i = 0; i < newSegmentLines.length; i++) {
+            const st = segmentCodeStates[i];
+            if (
+              st === 'fence_start' ||
+              st === 'fence_end' ||
+              st === 'math_fence_start' ||
+              st === 'math_fence_end'
+            ) {
+              newTailFence.push(tailLen === 0 ? i : tailLen - 1 + i);
+            }
+          }
+
+          // —— 树更新（COW：clone 浅拷贝 + 触及末块；树始终与逻辑全量一致，
+          // 既有测试断言 lineOffsets.toArray 全量）——
+          // W2-1 只读快路径免 clone 原地更新：updateLines 内部块级 COW
+          // （SegmentTree.ts 触及块先克隆再修改、共享块对象绝不就地变更），
+          // 原地调用不破坏任何历史树快照；只读会话无 undo 语义，不存在其它
+          // 树实例持有共享块引用，树一致性由「原地更新 + 状态替换」保持
+          // （verifyConsistency 全绿）。可编辑会话保持 clone（COW 持久化语义）。
+          const newOffsets = fastPath ? s.lineOffsets : s.lineOffsets.clone();
+          newOffsets.updateLines(
+            lastLineIdx,
+            1,
+            newSegmentLines.map((l) => l.length + 1)
+          );
+
+          // textLength O(1) 增量（append 即在末尾插入 text.length 个字符；
+          // 追加点前移同样 +delta——插入发生在光标处，全文长度增量不变）
+          const textLength = state.textLength + text.length;
+
+          // —— 光标/选区平移（01 问题 5 方案 5.2：位于追加点之后 → +delta）——
+          // 普通路径（追加点 = 全文末尾）：光标/选区 ≥ 锚点 → +delta——光标恰在
+          // 末尾（wasAtEnd）随追加推进（Requirement 6 保留），选区尾跨末尾平移；
+          // 前移路径（追加点 = 光标 + 累计流长）：光标恒不动（光标在追加点
+          // 之前），选区 > 锚点 → +delta（选区尾跨流段末尾平移）；选区 == 锚点
+          // 不动——插入发生在锚点处，锚点左边界的内容与选区不受影响，
+          // 光标与选区不产生无谓分叉（后续击键仍落在流内容之前）。
+          const delta = text.length;
+          const shiftGE = (p: number) => (p >= anchor ? p + delta : p);
+          const shiftGT = (p: number) => (p > anchor ? p + delta : p);
+
+          // —— 流式合并记账（R3-A：append 不进 undo 栈；stop-flush 合并单步）——
+          // 会话首次 append（streamOp 为空）时快照追加前状态；此时尾段必为空
+          // （stop-flush 已清空记账），lastLineIdx = 主数组末行、lastLine 即
+          // 追加前末行全文。insertedLineCount 记账 = 追加区间总行数：
+          // 会话起始 1（末行本身）+ 各 chunk 行增量累计（替换 1 行 → 净增 len-1），
+          // undo 时从 startLineIdx 起删除该数量的行即恢复流式前文档。
+          // W2-1 只读快路径整体跳过（无 undo 需求）：streamOp 恒 null 且不生成
+          // meta:'stream' op——stop-flush 走 flushStreamTail 无记账分支（仅合并
+          // 尾段 + 清 streamActive，不登记 op / 不写 changeLog / 不 bump version）。
+          // 可编辑会话记账逻辑零变化。
+          let nextStreamOp: StreamOp | null = null;
+          if (!fastPath) {
+            const streamOp = s.streamOp ?? {
+              startLineIdx: lastLineIdx,
+              removedLines: [lastLine],
+              insertedLineCount: 1,
+              cursorBefore: state.cursorPos,
+              selectionStartBefore: state.selectionStart,
+              selectionEndBefore: state.selectionEnd,
+              timestamp: Date.now(),
+              shiftedLen: 0,
+            };
+            nextStreamOp = {
+              ...streamOp,
+              insertedLineCount:
+                streamOp.insertedLineCount + newSegmentLines.length - 1,
+              // 前移路径插入的流内容字符数累计（追加点随之前移的里程）；
+              // 普通路径（追加点 = 全文末尾）不累计
+              shiftedLen: shiftAnchorToCursor
+                ? streamOp.shiftedLen + text.length
+                : streamOp.shiftedLen,
+            };
+          }
+
+          // —— R4-B：方向层平移 + assoc 刷新 ——
+          // 追加后光标最终位置（普通路径随追加推进 / 前移路径不动）；
+          // anchor/head 与兼容层选区同规则平移（≥ 追加点 +delta）。
+          const finalCursorPos = shiftAnchorToCursor
+            ? s.cursorPos
+            : shiftGE(s.cursorPos);
+          // 追加后的逻辑行访问器（主数组 + 新尾段，boundary 见上：主数组末行索引）
+          const appendLineAt: LineAccessor = (i) =>
+            i < boundary ? mainLines[i] : newTail[i - boundary];
+
+          return {
+            mainLines,
+            streamTail: newTail,
+            mainCodeState: s.mainCodeState,
+            streamTailCodeState: newTailCode,
+            mainFenceLines: s.mainFenceLines,
+            streamTailFenceLines: newTailFence,
+            lineOffsets: newOffsets,
+            textLength,
+            streamOp: nextStreamOp,
+            // W2-1（D-1）：首次 append 置 true = 「流式会话进行中」信号起点
+            // （可编辑与只读快路径一致；stop-flush 由 flushStreamTail 置 false）
+            streamActive: true,
+            cursorPos: finalCursorPos,
+            selectionStart: shiftAnchorToCursor
+              ? shiftGT(s.selectionStart)
+              : shiftGE(s.selectionStart),
+            selectionEnd: shiftAnchorToCursor
+              ? shiftGT(s.selectionEnd)
+              : shiftGE(s.selectionEnd),
+            // 方向层与兼容层选区同步平移；assoc 按新行布局判定（光标通常在
+            // 行尾/全文末尾 → 'after'，关联上一字符）
+            anchorPos: shiftAnchorToCursor
+              ? shiftGT(s.anchorPos)
+              : shiftGE(s.anchorPos),
+            headPos: shiftAnchorToCursor
+              ? shiftGT(s.headPos)
+              : shiftGE(s.headPos),
+            assoc: computeAssocForLines(
+              newOffsets,
+              appendLineAt,
+              finalCursorPos
+            ),
+          };
+        }),
+
+      deleteText: (backward) => {
+        // 薄封装：先按 grapheme 边界扩展删除区间（原逻辑），再委托
+        // applyChange——无选区（单字符删除）走 'delete' 合并模式（原合并
+        // 条件），有选区（整选区删除）不合并（与旧行为一致）。
+        // R5 实例化：改经本实例 get()（旧实现引用全局单例）。
+        const base = mergeTailInto(get());
+        let s = base.selectionStart;
+        let e = base.selectionEnd;
+        const hadSelection = s !== e;
+
+        if (!hadSelection) {
+          const text = base.mainLines.join('\n');
+          if (backward && s > 0) {
+            s = findPrevGraphemeBoundary(text, s);
+          } else if (!backward && e < base.textLength) {
+            e = findNextGraphemeBoundary(text, e);
+          } else {
+            return;
+          }
         }
-      }
 
-      // —— 新尾段（主数组不动，零拷贝）——
-      // 尾段为空：新尾段 = 拼接段；非空：替换尾段末行（旧尾段末行已被
-      // 拼接进 newSegmentLines[0]，前 tailLen-1 行原样保留）。
-      const newTail =
-        tailLen === 0
-          ? newSegmentLines
-          : streamTail.slice(0, -1).concat(newSegmentLines);
-      const newTailCode =
-        tailLen === 0
-          ? segmentCodeStates
-          : s.streamTailCodeState.slice(0, -1).concat(segmentCodeStates);
+        get().applyChange(s, e, '', {
+          merge: hadSelection ? 'none' : 'delete',
+        });
+      },
 
-      // 尾段内 fence 相对行号：旧相对行号不变（尾段起点仍为 boundary），
-      // 新段行相对行号 = (tailLen - 1) + i（尾段非空）/ i（尾段为空）。
-      const newTailFence = s.streamTailFenceLines.slice();
-      for (let i = 0; i < newSegmentLines.length; i++) {
-        const st = segmentCodeStates[i];
-        if (
-          st === 'fence_start' ||
-          st === 'fence_end' ||
-          st === 'math_fence_start' ||
-          st === 'math_fence_end'
-        ) {
-          newTailFence.push(tailLen === 0 ? i : tailLen - 1 + i);
+      deleteSelection: (start, end) => {
+        // 薄封装：归一化区间后委托 applyChange（单步事务，不参与 500ms 合并）
+        const base = get();
+        const s = Math.max(0, Math.min(start, end));
+        const e = Math.min(base.textLength, Math.max(start, end));
+        if (s === e) return;
+        base.applyChange(s, e, '', { merge: 'none' });
+      },
+
+      undo: () =>
+        dispatchSet((state) => {
+          if (state.undoStack.length === 0) return state;
+          // 用户操作触达 → 尾段先并入主数组（C4 合并时机；undo 针对的
+          // 是主数组编辑 op，行号坐标在合并前后不变）
+          const base = mergeTailInto(state);
+          const stack = base.undoStack;
+          const top = stack[stack.length - 1];
+
+          // —— 撤销组收集（R4 / R3 遗留 2：流式 op + 用户 op 同栈交替 undo 精确）——
+          // 行级 splice 模型下，meta:'stream' 合并 op 的快照取自流式会话开始
+          // （早于其后入栈的同区间用户 op）。若独立撤销流式 op，整行恢复会
+          // 吞掉区间内的用户击键内容，用户 op 快照随即失效（undo 流式后再
+          // undo 用户 → 恢复到含流式内容行的错误状态）。修复：撤销流式 op
+          // 时，把「区间与之重叠」的更早 op 一并组成撤销组，按生效序（最早
+          // 先撤）逐 op 撤销——链条每步都精确恢复到该 op 生效前，最终回到
+          // 组前状态（3d/3f 场景：一次 undo 精确回到流式会话开始）。普通 op
+          // （组内无流式 op）保持单步撤销（行为零变化）。
+          let groupStart = stack.length - 1;
+          if (top.meta === 'stream') {
+            const topStart = top.startLineIdx;
+            const topEnd = top.startLineIdx + top.insertedLineCount;
+            let i = stack.length - 2;
+            while (i >= 0) {
+              const op = stack[i];
+              const opStart = op.startLineIdx;
+              const opEnd = op.startLineIdx + op.insertedLineCount;
+              if (opStart >= topEnd || opEnd <= topStart) break;
+              groupStart = i;
+              i--;
+            }
+          }
+
+          // —— 撤销组执行（生效序：最早先撤，链式精确）——
+          // 逐 op：Reverse splice——remove `insertedLineCount` lines at
+          // `startLineIdx` and insert `removedLines`；逆 op 推入 redo 栈。
+          let cur = base;
+          const newRedo: EditorOperation[] = [...base.redoStack];
+          for (let gi = groupStart; gi < stack.length; gi++) {
+            const op = stack[gi];
+            const res = updateLinesIncremental(
+              cur.mainLines,
+              cur.lineOffsets,
+              cur.mainCodeState,
+              op.startLineIdx,
+              op.insertedLineCount,
+              op.removedLines,
+              cur.mainFenceLines
+            );
+
+            // Forward op to redo stack（以「撤销时刻的当前状态」为基准重建
+            // 逆 op，不依赖快照——组撤销下每步当前状态就是链式精确的中间态）
+            const invRemovedLines = cur.mainLines.slice(
+              op.startLineIdx,
+              op.startLineIdx + op.insertedLineCount
+            );
+            // —— B6 位置级字段（整行区间，undo 后 = cur 文档坐标）——
+            // 逆操作（redo）删除 = undo 恢复的 op.removedLines 行（行数 =
+            // op.removedLines.length，与 op.insertedLineCount 不同时按
+            // 「逆操作删除的行」定区间）；insert = redo 插入内容（undo 前
+            // 区间行）；removedText = redo 删除内容（undo 恢复行）。
+            const invFrom = cur.lineOffsets.getOffset(op.startLineIdx);
+            const invRemovedText = op.removedLines.join('\n');
+            const inverseOp: EditorOperation = {
+              startLineIdx: op.startLineIdx,
+              removedLines: invRemovedLines,
+              insertedLineCount: op.removedLines.length,
+              cursorBefore: op.cursorAfter,
+              selectionStartBefore: op.selectionStartAfter,
+              selectionEndBefore: op.selectionEndAfter,
+              cursorAfter: op.cursorBefore,
+              selectionStartAfter: op.selectionStartBefore,
+              selectionEndAfter: op.selectionEndBefore,
+              timestamp: Date.now(),
+              // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
+              meta: op.meta,
+              from: invFrom,
+              to: invFrom + invRemovedText.length,
+              insert: invRemovedLines.join('\n'),
+              removedText: invRemovedText,
+            };
+
+            newRedo.push(inverseOp);
+            cur = { ...cur, ...res };
+          }
+
+          // 光标/选区回退到组内最早 op 的 before（组前状态的光标快照）
+          const firstOp = stack[groupStart];
+          // R4-B：从 before 快照（兼容层三元组）推断方向层 anchor/head——
+          // 光标恰在选区一端时另一端即 anchor（反向选区方向随撤销精确恢复）；
+          // assoc 按撤销后文本（cur 已链式重建）的行布局判定。
+          const undoSel = inferAnchorHead(
+            firstOp.cursorBefore,
+            firstOp.selectionStartBefore,
+            firstOp.selectionEndBefore
+          );
+          // 用户操作标记 + 流式合并记账修正（同 insertText；undo 的编辑点
+          // = 组内最早 op 的 startLineIdx，行数净变化 = 组撤销总行差）
+          const adjustedStreamOp = adjustStreamOpForEdit(
+            base.streamOp,
+            firstOp.startLineIdx,
+            cur.mainLines.length - base.mainLines.length
+          );
+
+          return {
+            mainLines: cur.mainLines,
+            lineOffsets: cur.lineOffsets,
+            mainCodeState: cur.mainCodeState,
+            mainFenceLines: cur.mainFenceLines,
+            textLength: cur.textLength,
+            // 操作触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
+            streamTail: EMPTY_TAIL,
+            streamTailCodeState: EMPTY_STATE_TAIL,
+            streamTailFenceLines: EMPTY_FENCE_TAIL,
+            lastUserEditTime: Date.now(),
+            streamOp: adjustedStreamOp,
+            // W2-1（D-1）时序契约：与 applyChange 同规——记账作废时
+            // 「流式进行中」信号同步熄灭（streamActive ⇔ streamOp 非空对齐）
+            streamActive: adjustedStreamOp !== null,
+            cursorPos: firstOp.cursorBefore,
+            selectionStart: firstOp.selectionStartBefore,
+            selectionEnd: firstOp.selectionEndBefore,
+            anchorPos: undoSel.anchorPos,
+            headPos: undoSel.headPos,
+            assoc: computeAssocForLines(
+              cur.lineOffsets,
+              (i) => cur.mainLines[i],
+              undoSel.headPos
+            ),
+            undoStack: stack.slice(0, groupStart),
+            redoStack: newRedo,
+          };
+        }),
+
+      redo: () =>
+        dispatchSet((state) => {
+          if (state.redoStack.length === 0) return state;
+          // 用户操作触达 → 尾段先并入主数组（C4 合并时机）
+          const base = mergeTailInto(state);
+          const op = base.redoStack[base.redoStack.length - 1];
+
+          const res = updateLinesIncremental(
+            base.mainLines,
+            base.lineOffsets,
+            base.mainCodeState,
+            op.startLineIdx,
+            op.insertedLineCount,
+            op.removedLines,
+            base.mainFenceLines
+          );
+
+          // —— B6 位置级字段（整行区间，redo 后文档坐标）——
+          // 逆操作（undo）删除 = redo 插入的 op.removedLines 行（行数 =
+          // op.removedLines.length）；insert = undo 恢复内容（redo 前区间
+          // 行）；removedText = undo 删除内容（redo 插入行）。redo 前后
+          // startLineIdx 行首偏移不变（行级 splice 不动前缀行）。
+          const redoInvFrom = base.lineOffsets.getOffset(op.startLineIdx);
+          const redoInvRemovedText = op.removedLines.join('\n');
+          const redoInvRemovedLines = base.mainLines.slice(
+            op.startLineIdx,
+            op.startLineIdx + op.insertedLineCount
+          );
+          const inverseOp: EditorOperation = {
+            startLineIdx: op.startLineIdx,
+            removedLines: redoInvRemovedLines,
+            insertedLineCount: op.removedLines.length,
+            cursorBefore: op.cursorAfter,
+            selectionStartBefore: op.selectionStartAfter,
+            selectionEndBefore: op.selectionEndAfter,
+            cursorAfter: op.cursorBefore,
+            selectionStartAfter: op.selectionStartBefore,
+            selectionEndAfter: op.selectionEndBefore,
+            timestamp: Date.now(),
+            // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
+            meta: op.meta,
+            from: redoInvFrom,
+            to: redoInvFrom + redoInvRemovedText.length,
+            insert: redoInvRemovedLines.join('\n'),
+            removedText: redoInvRemovedText,
+          };
+
+          // R4-B：从被重做 op 的 before 快照推断方向层（anchor/head），
+          // assoc 按重做后文本（base + res）的行布局判定。
+          const redoSel = inferAnchorHead(
+            op.cursorBefore,
+            op.selectionStartBefore,
+            op.selectionEndBefore
+          );
+          // 用户操作标记 + 流式合并记账修正（同 insertText；redo 的编辑点
+          // = 被重做 op 的 startLineIdx，行数净变化 = inserted - removed）
+          const adjustedStreamOp = adjustStreamOpForEdit(
+            base.streamOp,
+            op.startLineIdx,
+            op.insertedLineCount - op.removedLines.length
+          );
+
+          return {
+            ...res,
+            // 操作触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
+            streamTail: EMPTY_TAIL,
+            streamTailCodeState: EMPTY_STATE_TAIL,
+            streamTailFenceLines: EMPTY_FENCE_TAIL,
+            lastUserEditTime: Date.now(),
+            streamOp: adjustedStreamOp,
+            // W2-1（D-1）时序契约：与 applyChange 同规——记账作废时
+            // 「流式进行中」信号同步熄灭（streamActive ⇔ streamOp 非空对齐）
+            streamActive: adjustedStreamOp !== null,
+            cursorPos: op.cursorBefore,
+            selectionStart: op.selectionStartBefore,
+            selectionEnd: op.selectionEndBefore,
+            anchorPos: redoSel.anchorPos,
+            headPos: redoSel.headPos,
+            assoc: computeAssocForLines(
+              res.lineOffsets,
+              (i) => res.mainLines[i],
+              redoSel.headPos
+            ),
+            redoStack: base.redoStack.slice(0, -1),
+            undoStack: [...base.undoStack, inverseOp],
+          };
+        }),
+
+      verifyConsistency: () => {
+        // 逻辑视图一致性校验：树偏移 vs 逻辑行（主数组 + 尾段）逐行对齐
+        const s = get();
+        let runningOffset = 0;
+        const count = s.getLineCount();
+        for (let i = 0; i < count; i++) {
+          if (s.lineOffsets.getOffset(i) !== runningOffset) {
+            console.error(
+              `Offset drift detected at line ${i}! Expected ${runningOffset}, got ${s.lineOffsets.getOffset(i)}`
+            );
+            return false;
+          }
+          runningOffset += s.getLine(i).length + 1; // +1 for newline
         }
-      }
-
-      // —— 树更新（COW：clone 浅拷贝 + 触及末块；树始终与逻辑全量一致，
-      // 既有测试断言 lineOffsets.toArray 全量）——
-      const newOffsets = s.lineOffsets.clone();
-      newOffsets.updateLines(lastLineIdx, 1, newSegmentLines.map(l => l.length + 1));
-
-      // textLength O(1) 增量（append 即在末尾插入 text.length 个字符；
-      // 追加点前移同样 +delta——插入发生在光标处，全文长度增量不变）
-      const textLength = state.textLength + text.length;
-
-      // —— 光标/选区平移（01 问题 5 方案 5.2：位于追加点之后 → +delta）——
-      // 普通路径（追加点 = 全文末尾）：光标/选区 ≥ 锚点 → +delta——光标恰在
-      // 末尾（wasAtEnd）随追加推进（Requirement 6 保留），选区尾跨末尾平移；
-      // 前移路径（追加点 = 光标 + 累计流长）：光标恒不动（光标在追加点
-      // 之前），选区 > 锚点 → +delta（选区尾跨流段末尾平移）；选区 == 锚点
-      // 不动——插入发生在锚点处，锚点左边界的内容与选区不受影响，
-      // 光标与选区不产生无谓分叉（后续击键仍落在流内容之前）。
-      const delta = text.length;
-      const shiftGE = (p: number) => (p >= anchor ? p + delta : p);
-      const shiftGT = (p: number) => (p > anchor ? p + delta : p);
-
-      // —— 流式合并记账（R3-A：append 不进 undo 栈；stop-flush 合并单步）——
-      // 会话首次 append（streamOp 为空）时快照追加前状态；此时尾段必为空
-      // （stop-flush 已清空记账），lastLineIdx = 主数组末行、lastLine 即
-      // 追加前末行全文。insertedLineCount 记账 = 追加区间总行数：
-      // 会话起始 1（末行本身）+ 各 chunk 行增量累计（替换 1 行 → 净增 len-1），
-      // undo 时从 startLineIdx 起删除该数量的行即恢复流式前文档。
-      const streamOp = s.streamOp ?? {
-        startLineIdx: lastLineIdx,
-        removedLines: [lastLine],
-        insertedLineCount: 1,
-        cursorBefore: state.cursorPos,
-        selectionStartBefore: state.selectionStart,
-        selectionEndBefore: state.selectionEnd,
-        timestamp: Date.now(),
-        shiftedLen: 0,
-      };
-      const nextStreamOp: StreamOp = {
-        ...streamOp,
-        insertedLineCount: streamOp.insertedLineCount + newSegmentLines.length - 1,
-        // 前移路径插入的流内容字符数累计（追加点随之前移的里程）；
-        // 普通路径（追加点 = 全文末尾）不累计
-        shiftedLen: shiftAnchorToCursor
-          ? streamOp.shiftedLen + text.length
-          : streamOp.shiftedLen,
-      };
-
-      // —— R4-B：方向层平移 + assoc 刷新 ——
-      // 追加后光标最终位置（普通路径随追加推进 / 前移路径不动）；
-      // anchor/head 与兼容层选区同规则平移（≥ 追加点 +delta）。
-      const finalCursorPos = shiftAnchorToCursor ? s.cursorPos : shiftGE(s.cursorPos);
-      // 追加后的逻辑行访问器（主数组 + 新尾段，boundary 见上：主数组末行索引）
-      const appendLineAt: LineAccessor = (i) =>
-        i < boundary ? mainLines[i] : newTail[i - boundary];
-
-      return {
-        mainLines,
-        streamTail: newTail,
-        mainCodeState: s.mainCodeState,
-        streamTailCodeState: newTailCode,
-        mainFenceLines: s.mainFenceLines,
-        streamTailFenceLines: newTailFence,
-        lineOffsets: newOffsets,
-        textLength,
-        streamOp: nextStreamOp,
-        cursorPos: finalCursorPos,
-        selectionStart: shiftAnchorToCursor ? shiftGT(s.selectionStart) : shiftGE(s.selectionStart),
-        selectionEnd: shiftAnchorToCursor ? shiftGT(s.selectionEnd) : shiftGE(s.selectionEnd),
-        // 方向层与兼容层选区同步平移；assoc 按新行布局判定（光标通常在
-        // 行尾/全文末尾 → 'after'，关联上一字符）
-        anchorPos: shiftAnchorToCursor ? shiftGT(s.anchorPos) : shiftGE(s.anchorPos),
-        headPos: shiftAnchorToCursor ? shiftGT(s.headPos) : shiftGE(s.headPos),
-        assoc: computeAssocForLines(newOffsets, appendLineAt, finalCursorPos),
-      };
-    }),
-
-  deleteText: (backward) => {
-    // 薄封装：先按 grapheme 边界扩展删除区间（原逻辑），再委托
-    // applyChange——无选区（单字符删除）走 'delete' 合并模式（原合并
-    // 条件），有选区（整选区删除）不合并（与旧行为一致）。
-    // R5 实例化：改经本实例 get()（旧实现引用全局单例）。
-    const base = mergeTailInto(get());
-    let s = base.selectionStart;
-    let e = base.selectionEnd;
-    const hadSelection = s !== e;
-
-    if (!hadSelection) {
-      const text = base.mainLines.join('\n');
-      if (backward && s > 0) {
-        s = findPrevGraphemeBoundary(text, s);
-      } else if (!backward && e < base.textLength) {
-        e = findNextGraphemeBoundary(text, e);
-      } else {
-        return;
-      }
-    }
-
-    get().applyChange(s, e, '', {
-      merge: hadSelection ? 'none' : 'delete',
-    });
-  },
-
-  deleteSelection: (start, end) => {
-    // 薄封装：归一化区间后委托 applyChange（单步事务，不参与 500ms 合并）
-    const base = get();
-    const s = Math.max(0, Math.min(start, end));
-    const e = Math.min(base.textLength, Math.max(start, end));
-    if (s === e) return;
-    base.applyChange(s, e, '', { merge: 'none' });
-  },
-
-  undo: () =>
-    dispatchSet((state) => {
-      if (state.undoStack.length === 0) return state;
-      // 用户操作触达 → 尾段先并入主数组（C4 合并时机；undo 针对的
-      // 是主数组编辑 op，行号坐标在合并前后不变）
-      const base = mergeTailInto(state);
-      const stack = base.undoStack;
-      const top = stack[stack.length - 1];
-
-      // —— 撤销组收集（R4 / R3 遗留 2：流式 op + 用户 op 同栈交替 undo 精确）——
-      // 行级 splice 模型下，meta:'stream' 合并 op 的快照取自流式会话开始
-      // （早于其后入栈的同区间用户 op）。若独立撤销流式 op，整行恢复会
-      // 吞掉区间内的用户击键内容，用户 op 快照随即失效（undo 流式后再
-      // undo 用户 → 恢复到含流式内容行的错误状态）。修复：撤销流式 op
-      // 时，把「区间与之重叠」的更早 op 一并组成撤销组，按生效序（最早
-      // 先撤）逐 op 撤销——链条每步都精确恢复到该 op 生效前，最终回到
-      // 组前状态（3d/3f 场景：一次 undo 精确回到流式会话开始）。普通 op
-      // （组内无流式 op）保持单步撤销（行为零变化）。
-      let groupStart = stack.length - 1;
-      if (top.meta === 'stream') {
-        const topStart = top.startLineIdx;
-        const topEnd = top.startLineIdx + top.insertedLineCount;
-        let i = stack.length - 2;
-        while (i >= 0) {
-          const op = stack[i];
-          const opStart = op.startLineIdx;
-          const opEnd = op.startLineIdx + op.insertedLineCount;
-          if (opStart >= topEnd || opEnd <= topStart) break;
-          groupStart = i;
-          i--;
-        }
-      }
-
-      // —— 撤销组执行（生效序：最早先撤，链式精确）——
-      // 逐 op：Reverse splice——remove `insertedLineCount` lines at
-      // `startLineIdx` and insert `removedLines`；逆 op 推入 redo 栈。
-      let cur = base;
-      const newRedo: EditorOperation[] = [...base.redoStack];
-      for (let gi = groupStart; gi < stack.length; gi++) {
-        const op = stack[gi];
-        const res = updateLinesIncremental(
-          cur.mainLines,
-          cur.lineOffsets,
-          cur.mainCodeState,
-          op.startLineIdx,
-          op.insertedLineCount,
-          op.removedLines,
-          cur.mainFenceLines
-        );
-
-        // Forward op to redo stack（以「撤销时刻的当前状态」为基准重建
-        // 逆 op，不依赖快照——组撤销下每步当前状态就是链式精确的中间态）
-        const invRemovedLines = cur.mainLines.slice(
-          op.startLineIdx,
-          op.startLineIdx + op.insertedLineCount
-        );
-        // —— B6 位置级字段（整行区间，undo 后 = cur 文档坐标）——
-        // 逆操作（redo）删除 = undo 恢复的 op.removedLines 行（行数 =
-        // op.removedLines.length，与 op.insertedLineCount 不同时按
-        // 「逆操作删除的行」定区间）；insert = redo 插入内容（undo 前
-        // 区间行）；removedText = redo 删除内容（undo 恢复行）。
-        const invFrom = cur.lineOffsets.getOffset(op.startLineIdx);
-        const invRemovedText = op.removedLines.join('\n');
-        const inverseOp: EditorOperation = {
-          startLineIdx: op.startLineIdx,
-          removedLines: invRemovedLines,
-          insertedLineCount: op.removedLines.length,
-          cursorBefore: op.cursorAfter,
-          selectionStartBefore: op.selectionStartAfter,
-          selectionEndBefore: op.selectionEndAfter,
-          cursorAfter: op.cursorBefore,
-          selectionStartAfter: op.selectionStartBefore,
-          selectionEndAfter: op.selectionEndBefore,
-          timestamp: Date.now(),
-          // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
-          meta: op.meta,
-          from: invFrom,
-          to: invFrom + invRemovedText.length,
-          insert: invRemovedLines.join('\n'),
-          removedText: invRemovedText,
-        };
-
-        newRedo.push(inverseOp);
-        cur = { ...cur, ...res };
-      }
-
-      // 光标/选区回退到组内最早 op 的 before（组前状态的光标快照）
-      const firstOp = stack[groupStart];
-      // R4-B：从 before 快照（兼容层三元组）推断方向层 anchor/head——
-      // 光标恰在选区一端时另一端即 anchor（反向选区方向随撤销精确恢复）；
-      // assoc 按撤销后文本（cur 已链式重建）的行布局判定。
-      const undoSel = inferAnchorHead(
-        firstOp.cursorBefore,
-        firstOp.selectionStartBefore,
-        firstOp.selectionEndBefore
-      );
-
-      return {
-        mainLines: cur.mainLines,
-        lineOffsets: cur.lineOffsets,
-        mainCodeState: cur.mainCodeState,
-        mainFenceLines: cur.mainFenceLines,
-        textLength: cur.textLength,
-        // 操作触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
-        streamTail: EMPTY_TAIL,
-        streamTailCodeState: EMPTY_STATE_TAIL,
-        streamTailFenceLines: EMPTY_FENCE_TAIL,
-        // 用户操作标记 + 流式合并记账修正（同 insertText；undo 的编辑点
-        // = 组内最早 op 的 startLineIdx，行数净变化 = 组撤销总行差）
-        lastUserEditTime: Date.now(),
-        streamOp: adjustStreamOpForEdit(
-          base.streamOp,
-          firstOp.startLineIdx,
-          cur.mainLines.length - base.mainLines.length
-        ),
-        cursorPos: firstOp.cursorBefore,
-        selectionStart: firstOp.selectionStartBefore,
-        selectionEnd: firstOp.selectionEndBefore,
-        anchorPos: undoSel.anchorPos,
-        headPos: undoSel.headPos,
-        assoc: computeAssocForLines(
-          cur.lineOffsets,
-          (i) => cur.mainLines[i],
-          undoSel.headPos
-        ),
-        undoStack: stack.slice(0, groupStart),
-        redoStack: newRedo,
-      };
-    }),
-
-  redo: () =>
-    dispatchSet((state) => {
-      if (state.redoStack.length === 0) return state;
-      // 用户操作触达 → 尾段先并入主数组（C4 合并时机）
-      const base = mergeTailInto(state);
-      const op = base.redoStack[base.redoStack.length - 1];
-
-      const res = updateLinesIncremental(
-        base.mainLines,
-        base.lineOffsets,
-        base.mainCodeState,
-        op.startLineIdx,
-        op.insertedLineCount,
-        op.removedLines,
-        base.mainFenceLines
-      );
-
-      // —— B6 位置级字段（整行区间，redo 后文档坐标）——
-      // 逆操作（undo）删除 = redo 插入的 op.removedLines 行（行数 =
-      // op.removedLines.length）；insert = undo 恢复内容（redo 前区间
-      // 行）；removedText = undo 删除内容（redo 插入行）。redo 前后
-      // startLineIdx 行首偏移不变（行级 splice 不动前缀行）。
-      const redoInvFrom = base.lineOffsets.getOffset(op.startLineIdx);
-      const redoInvRemovedText = op.removedLines.join('\n');
-      const redoInvRemovedLines = base.mainLines.slice(
-        op.startLineIdx,
-        op.startLineIdx + op.insertedLineCount
-      );
-      const inverseOp: EditorOperation = {
-        startLineIdx: op.startLineIdx,
-        removedLines: redoInvRemovedLines,
-        insertedLineCount: op.removedLines.length,
-        cursorBefore: op.cursorAfter,
-        selectionStartBefore: op.selectionStartAfter,
-        selectionEndBefore: op.selectionEndAfter,
-        cursorAfter: op.cursorBefore,
-        selectionStartAfter: op.selectionStartBefore,
-        selectionEndAfter: op.selectionEndBefore,
-        timestamp: Date.now(),
-        // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
-        meta: op.meta,
-        from: redoInvFrom,
-        to: redoInvFrom + redoInvRemovedText.length,
-        insert: redoInvRemovedLines.join('\n'),
-        removedText: redoInvRemovedText,
-      };
-
-      // R4-B：从被重做 op 的 before 快照推断方向层（anchor/head），
-      // assoc 按重做后文本（base + res）的行布局判定。
-      const redoSel = inferAnchorHead(
-        op.cursorBefore,
-        op.selectionStartBefore,
-        op.selectionEndBefore
-      );
-
-      return {
-        ...res,
-        // 操作触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
-        streamTail: EMPTY_TAIL,
-        streamTailCodeState: EMPTY_STATE_TAIL,
-        streamTailFenceLines: EMPTY_FENCE_TAIL,
-        // 用户操作标记 + 流式合并记账修正（同 insertText；redo 的编辑点
-        // = 被重做 op 的 startLineIdx，行数净变化 = inserted - removed）
-        lastUserEditTime: Date.now(),
-        streamOp: adjustStreamOpForEdit(
-          base.streamOp,
-          op.startLineIdx,
-          op.insertedLineCount - op.removedLines.length
-        ),
-        cursorPos: op.cursorBefore,
-        selectionStart: op.selectionStartBefore,
-        selectionEnd: op.selectionEndBefore,
-        anchorPos: redoSel.anchorPos,
-        headPos: redoSel.headPos,
-        assoc: computeAssocForLines(
-          res.lineOffsets,
-          (i) => res.mainLines[i],
-          redoSel.headPos
-        ),
-        redoStack: base.redoStack.slice(0, -1),
-        undoStack: [...base.undoStack, inverseOp],
-      };
-    }),
-
-  verifyConsistency: () => {
-    // 逻辑视图一致性校验：树偏移 vs 逻辑行（主数组 + 尾段）逐行对齐
-    const s = get();
-    let runningOffset = 0;
-    const count = s.getLineCount();
-    for (let i = 0; i < count; i++) {
-      if (s.lineOffsets.getOffset(i) !== runningOffset) {
-        console.error(
-          `Offset drift detected at line ${i}! Expected ${runningOffset}, got ${s.lineOffsets.getOffset(i)}`
-        );
-        return false;
-      }
-      runningOffset += s.getLine(i).length + 1; // +1 for newline
-    }
-    return true;
-  },
-};
+        return true;
+      },
+    };
     // 删除视图数据字段（防遮蔽原型 getter；删除后视图读取经原型链
     // 命中 lazyViewProto 的惰性 getter，语义 = 物化视图）
     delete (state as unknown as Record<string, unknown>).lines;
@@ -2785,8 +2955,7 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
   const rawSetState = store.setState.bind(store);
   const dispatchSet = ((partial: unknown, replace?: boolean) => {
     const current = store.getState();
-    const resolved =
-      typeof partial === 'function' ? partial(current) : partial;
+    const resolved = typeof partial === 'function' ? partial(current) : partial;
     // —— 纯内容替换声明 → diff 事务（R4：表格操作收敛，04 §4.3 方案 1）——
     // 外部消费方只传 { lines } 整行数组（表格操作旧路径直改 setState 的点）
     // 时，旧路径整档重置会绕过 updateLinesIncremental：不进 undo、不更新
@@ -2822,7 +2991,11 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
     // R6-P1：恢复惰性视图原型（zustand 合并产物是普通对象——若使用
     // replace 路径同理；空操作时 state 未替换，原型未变，判断后跳过）
     const s = store.getState();
-    if (s !== null && typeof s === 'object' && Object.getPrototypeOf(s) !== lazyViewProto) {
+    if (
+      s !== null &&
+      typeof s === 'object' &&
+      Object.getPrototypeOf(s) !== lazyViewProto
+    ) {
       Object.setPrototypeOf(s, lazyViewProto);
     }
   }) as typeof store.setState;
@@ -2842,13 +3015,27 @@ function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
 export const useEditorStore = buildEditorStore();
 
 /**
+ * —— W2-1（D-5）：store 创建选项 ——
+ * readOnly：初始只读标记——true 时「只读流式会话」的 appendText 走快路径
+ * （锚定恒末尾 / 免树 clone / 跳 streamOp 记账，S-EL-08）；缺省 false
+ * （可编辑会话，行为零变化）。运行中可经 setReadOnly 热切换。
+ */
+export interface EditorStoreOptions {
+  readOnly?: boolean;
+}
+
+/**
  * 创建独立编辑器 store 实例（R5 实例工厂）：
  * 与全局单例完全同构（同一套方法/访问器/增量状态机），但 state 独立——
  * setText/appendText/光标/选区/undo 等全链互不干扰，可多实例并行。
  * 典型用法：`const store = createEditorStore(); <MarkdownEngine store={store} />`。
+ * W2-1（D-5）：可传 `createEditorStore({ readOnly: true })` 创建只读流式会话
+ * 实例（appendText 走只读快路径，S-EL-08 / S-T-2-04）。
  */
-export function createEditorStore(): UseBoundStore<StoreApi<EditorState>> {
-  return buildEditorStore();
+export function createEditorStore(
+  opts: EditorStoreOptions = {}
+): UseBoundStore<StoreApi<EditorState>> {
+  return buildEditorStore(opts);
 }
 
 /** 编辑器 store 实例类型（MarkdownEngine 的 store prop / 工厂返回值的类型面） */

@@ -26,14 +26,7 @@ export type CodeState =
  * - 其余（blank/heading/hr/code/other）→ 允许缩进代码块开始。
  */
 type BlockKind =
-  | 'blank'
-  | 'body'
-  | 'list'
-  | 'table'
-  | 'heading'
-  | 'hr'
-  | 'code'
-  | 'other';
+  'blank' | 'body' | 'list' | 'table' | 'heading' | 'hr' | 'code' | 'other';
 
 /**
  * 列表上下文（R1.5-B 正确性回补）：computeLineOffsets 在列表标记行记忆的
@@ -56,8 +49,7 @@ export interface ListContext {
 
 /** scanTokens 返回：ok 携带 token 列表与消费长度；失败时由调用方按失败签名记忆 */
 type ScanOutcome =
-  | { ok: true; tokens: InlineNode[]; length: number }
-  | { ok: false };
+  { ok: true; tokens: InlineNode[]; length: number } | { ok: false };
 
 /** scanTokens 递归帧的起止符规则形态：ruler 内起止符规则经 ctx.recurse 进入递归 */
 interface InlineCloseRule {
@@ -329,9 +321,7 @@ export function isFenceClose(
 ): boolean {
   const close = /^(`+|~+)[ \t]*$/.exec(trimmed);
   return (
-    close !== null &&
-    close[1][0] === openMarker &&
-    close[1].length >= openLen
+    close !== null && close[1][0] === openMarker && close[1].length >= openLen
   );
 }
 
@@ -348,6 +338,7 @@ export class MarkdownParser {
       setextLevels,
       listContexts,
       lazyContinuation,
+      fenceLangs,
     } = this.computeLineOffsets(text);
     const lines = text.split('\n');
     const lineNodes: LineNode[] = new Array(lines.length);
@@ -385,7 +376,10 @@ export class MarkdownParser {
         // 为空白行）：硬换行不发生在块末尾（spec 例 644/645），块末行尾的
         // 尾随空白/反斜杠保持文本语义。近似判定（列表项/标题后紧邻行的
         // 精确块边界超出行级模型，登记偏差）。
-        i === lines.length - 1 || lines[i + 1].trim() === ''
+        i === lines.length - 1 || lines[i + 1].trim() === '',
+        // W2-5：围栏代码行的高亮语言键（computeLineOffsets 扫描产出；
+        // 非代码行/无语言围栏为 null）
+        fenceLangs[i]
       );
     }
     return {
@@ -627,10 +621,7 @@ export class MarkdownParser {
     if (/^(\d+\.)\s+/.test(s)) return false;
     if (/^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(s)) return false;
     const pipeCount = (s.match(/\|/g) || []).length;
-    if (
-      (pipeCount >= 1 && s.trim().startsWith('|')) ||
-      pipeCount >= 2
-    ) {
+    if ((pipeCount >= 1 && s.trim().startsWith('|')) || pipeCount >= 2) {
       return false;
     }
     return true;
@@ -642,7 +633,9 @@ export class MarkdownParser {
    * `[foo\!]` 不匹配 `[foo!]` 定义）。
    */
   private static normalizeRefLabel(s: string): string {
-    return this.decodeEntitiesInString(s.replace(/\s+/g, ' ').trim().toLowerCase());
+    return this.decodeEntitiesInString(
+      s.replace(/\s+/g, ' ').trim().toLowerCase()
+    );
   }
 
   public static computeLineOffsets(text: string): {
@@ -654,6 +647,11 @@ export class MarkdownParser {
     // （或标记层数不足）的段落延续行按 spec 5.2 Laziness 规则继承前一
     // 非空白块引用段落行的容器层级，供 parseLine 覆盖文本前缀计算值。
     lazyContinuation: (number | null)[];
+    // W2-5：围栏代码行的高亮语言键（python/sql/bash，null = 无语言回退
+    // JS 关键字集）——围栏扫描在 fence_start 行从 info 串提取，块内
+    // code 行继承（含空行），fence_end 归 null。供 parseLine 按语言
+    // 分发关键字表（S-T-2-08）。
+    fenceLangs: (string | null)[];
   } {
     const lines = text.split('\n');
     const offsets = new Array(lines.length);
@@ -666,6 +664,8 @@ export class MarkdownParser {
     const lazyContinuation: (number | null)[] = new Array(lines.length).fill(
       null
     );
+    // W2-5：逐行围栏语言键（默认无语言；仅围栏代码内容行非 null）
+    const fenceLangs: (string | null)[] = new Array(lines.length).fill(null);
 
     let currentOffset = 0;
     let inCodeBlock = false;
@@ -682,6 +682,9 @@ export class MarkdownParser {
       length: number;
       level: number;
     } | null = null;
+    // W2-5：当前打开的围栏的（规范化）语言键——fence_start 行从 info 串
+    // 提取，块内 code 行（含空行）继承；fence 关闭/强制终止时归 null。
+    let fenceLang: string | null = null;
     // 数学块起始行的块引用层级（B8a：与围栏同一致性语义）
     let mathFenceLevel = 0;
     // 缩进代码块状态（02 §2.2）：连续 ≥4 空格缩进行合并为一个代码块，
@@ -748,9 +751,7 @@ export class MarkdownParser {
       // 前缀后的内容行上计算（`> ``` 为 0 列、`>   ``` 为 2 列）。
       const indentCols = this.leadingIndentColumns(bqContent);
       const fenceOpen =
-        indentCols <= 3
-          ? /^(```+)([^`]*)$|^(~~~+).*$/.exec(trimmed)
-          : null;
+        indentCols <= 3 ? /^(```+)([^`]*)$|^(~~~+).*$/.exec(trimmed) : null;
       // HTML 块内行：优先级最高——fence/math/缩进代码判定全部让路
       // （spec 4.6：「HTML 块内的 HTML 若可被识别为 start condition 将
       // 原样透传、不改变解析器状态」——`<div>` 块内的 ``` 围栏行、`<pre>`
@@ -793,6 +794,7 @@ export class MarkdownParser {
         // 空行也不属于 fence 内容——关闭时回写 fence 内尾随空行为 none。
         inCodeBlock = false;
         fenceState = null;
+        fenceLang = null;
         this.closeBlockTrailingBlanks(lines, codeBlockState, i);
         if (!inMathBlock && fenceOpen) {
           codeBlockState[i] = 'fence_start';
@@ -801,6 +803,14 @@ export class MarkdownParser {
             length: (fenceOpen[1] ?? fenceOpen[3]).length,
             level: bqSelfLevel,
           };
+          // W2-5：从 info 串提取语言（反引号 info 在 [2]；波浪线开栏的
+          // info 无捕获组——原正则 `^(~~~+).*$` 未捕获，从 trimmed 剥 run）
+          fenceLang = this.normalizeFenceLang(
+            fenceOpen[1] !== undefined
+              ? fenceOpen[2]
+              : trimmed.replace(/^~+/, '')
+          );
+          fenceLangs[i] = fenceLang;
           inCodeBlock = true;
         } else {
           // 非围栏形态行：落到下方的普通行判定链
@@ -842,6 +852,14 @@ export class MarkdownParser {
             length: (fenceOpen[1] ?? fenceOpen[3]).length,
             level: bqSelfLevel,
           };
+          // W2-5：从 info 串提取语言（反引号 info 在 [2]；波浪线开栏的
+          // info 无捕获组——原正则 `^(~~~+).*$` 未捕获，从 trimmed 剥 run）
+          fenceLang = this.normalizeFenceLang(
+            fenceOpen[1] !== undefined
+              ? fenceOpen[2]
+              : trimmed.replace(/^~+/, '')
+          );
+          fenceLangs[i] = fenceLang;
           inCodeBlock = true;
         } else if (fenceState) {
           // 代码块内：仅「同字符 + run 长度 ≥ 开栏长度 + 行内除尾随空白
@@ -853,13 +871,17 @@ export class MarkdownParser {
           if (isFenceClose(trimmed, fenceState.marker, fenceState.length)) {
             codeBlockState[i] = 'fence_end';
             fenceState = null;
+            fenceLang = null;
+            fenceLangs[i] = null;
             inCodeBlock = false;
           } else {
             codeBlockState[i] = 'code';
+            fenceLangs[i] = fenceLang;
           }
         } else {
           // 防御：理论上不会出现「inCodeBlock 但无状态」的中间态
           codeBlockState[i] = 'code';
+          fenceLangs[i] = fenceLang;
         }
         // 围栏代码块内缩进不生效（CommonMark）；fence 判定先于缩进代码，
         // 且 `    ```（4 空格）已由 B8c 围栏缩进门挡在围栏形态之外——
@@ -880,6 +902,8 @@ export class MarkdownParser {
         prevBlockKind = 'code';
       } else if (inCodeBlock) {
         codeBlockState[i] = 'code';
+        // W2-5：围栏内行（含空行）继承当前围栏语言键
+        fenceLangs[i] = fenceLang;
         inIndentCode = false;
         prevBlockKind = 'code';
       } else if (inMathBlock) {
@@ -908,7 +932,10 @@ export class MarkdownParser {
             // CommonMark 中缩进代码块后的 `</div>` 行是 type 6 块）。
             inIndentCode = false;
             indentCodeLevel = 0;
-            const htmlStart = this.matchHtmlBlockStart(bqContent, prevBlockKind);
+            const htmlStart = this.matchHtmlBlockStart(
+              bqContent,
+              prevBlockKind
+            );
             if (htmlStart) {
               codeBlockState[i] = 'html_block';
               inHtmlBlock = true;
@@ -958,11 +985,7 @@ export class MarkdownParser {
                 markerWidth: ctxIndent + nestedInfo.markerWidth,
               };
             }
-          } else if (
-            prevBlockKind === 'list' &&
-            justBlank &&
-            listCtx
-          ) {
+          } else if (prevBlockKind === 'list' && justBlank && listCtx) {
             // —— R1.5-B：空行后的列表上下文（spec 例 255-258/264 语义）——
             if (indent >= listCtx.markerWidth + 4) {
               // 缩进 ≥ 内容缩进 + 4：li 内缩进代码块（例 264：`- Foo\n\n
@@ -1086,10 +1109,8 @@ export class MarkdownParser {
       // 也是 body 段落（例 233 三行链由此逐行传递）。
       if (trimmed !== '') {
         justBlank = false;
-        prevBqLevel =
-          lazyInherit !== null ? lazyInherit : bqSelfLevel;
-        prevParagraphOpen =
-          prevBlockKind === 'body' && prevBqLevel >= 1;
+        prevBqLevel = lazyInherit !== null ? lazyInherit : bqSelfLevel;
+        prevParagraphOpen = prevBlockKind === 'body' && prevBqLevel >= 1;
       } else {
         prevParagraphOpen = false;
         prevBqLevel = 0;
@@ -1114,7 +1135,47 @@ export class MarkdownParser {
       setextLevels,
       listContexts,
       lazyContinuation,
+      fenceLangs,
     };
+  }
+
+  /**
+   * 围栏 info 串 → 高亮语言键（W2-5）：取首个空白分隔 token 并小写化；
+   * python/sql/bash（含常见别名）返回规范化键，其余（含 js 系别名与
+   * 未识别语言）一律归 null——null 回退 JS 关键字集（与语言无关的
+   * 既有高亮行为完全一致），且与行级渲染路径（LineItem 不传 lang）
+   * 共享同一缓存键，无重复缓存条目。
+   */
+  private static normalizeFenceLang(info: string): string | null {
+    const first = info.trim().split(/\s+/)[0]?.toLowerCase();
+    if (!first) return null;
+    if (first === 'python' || first === 'py') return 'python';
+    if (first === 'sql') return 'sql';
+    if (first === 'bash' || first === 'sh' || first === 'shell') return 'bash';
+    return null;
+  }
+
+  /**
+   * W2-5：围栏语言 → 关键字表（S-T-2-08）。基础关键字集（启发式定位，
+   * 跨语言正确性不追求完美——总方案 §4.6）。JS 集为 W2-5 之前的既有
+   * 行为基线（无语言/未识别语言围栏与行级渲染路径共用），不得削减。
+   */
+  private static readonly CODE_KEYWORD_JS =
+    'function|const|let|var|if|else|for|while|return|class|import|export|from|yield|await|async|switch|case|break|continue|default|typeof|instanceof|new|delete|try|catch|finally|throw|void|with';
+
+  private static readonly CODE_KEYWORD_SETS: Record<string, string> = {
+    python:
+      'def|import|class|if|elif|else|for|while|return|self|None|True|False|and|or|not|in|is|lambda|try|except|finally|with|as|pass|break|continue|global|nonlocal|yield|assert|del|from|raise|async|await',
+    // SQL 关键字经 'i' 标志大小写不敏感匹配（SELECT/from 同样命中）
+    sql: 'select|from|where|insert|update|delete|create|alter|drop|table|join|left|right|inner|outer|on|group|by|order|having|limit|into|values|set|and|or|not|null|as|distinct|union|index|primary|key',
+    bash: 'if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|echo|return|export|local|read|cd|source',
+  };
+
+  /** 语言键 → 关键字表源串；未知/空键一律回退 JS 集（null 语义） */
+  private static getCodeKeywordSource(codeLang: string | null): string {
+    return codeLang
+      ? (this.CODE_KEYWORD_SETS[codeLang] ?? this.CODE_KEYWORD_JS)
+      : this.CODE_KEYWORD_JS;
   }
 
   /**
@@ -1131,10 +1192,7 @@ export class MarkdownParser {
     i: number
   ): void {
     for (let j = i - 1; j >= 0; j--) {
-      if (
-        codeBlockState[j] !== 'code' &&
-        codeBlockState[j] !== 'math_block'
-      ) {
+      if (codeBlockState[j] !== 'code' && codeBlockState[j] !== 'math_block') {
         break;
       }
       if (lines[j].trim() !== '') break;
@@ -1154,9 +1212,10 @@ export class MarkdownParser {
    * （测试断言更新登记，tests/ 域禁碰）；投影器 stripBlockquotePrefix
    * 同步收紧属 B8c 登记配合项（tests/commonmark/ 只读域）。
    */
-  private static stripBlockquoteContext(
-    line: string
-  ): { level: number; content: string } {
+  private static stripBlockquoteContext(line: string): {
+    level: number;
+    content: string;
+  } {
     let level = 0;
     let content = line;
     let m: RegExpMatchArray | null;
@@ -1445,17 +1504,13 @@ export class MarkdownParser {
    * 返回值含开标签的 attr 原文（供 html_element 属性解析）与自闭合
    * 标志；匹配失败返回 null（按普通文本转义输出，不猜测性透传）。
    */
-  private static matchRawHtmlTag(
-    sub: string
-  ):
-    | {
-        raw: string;
-        kind: 'comment' | 'pi' | 'declaration' | 'cdata' | 'open' | 'close';
-        tagName?: string;
-        attrStr?: string;
-        isSelfClosing?: boolean;
-      }
-    | null {
+  private static matchRawHtmlTag(sub: string): {
+    raw: string;
+    kind: 'comment' | 'pi' | 'declaration' | 'cdata' | 'open' | 'close';
+    tagName?: string;
+    attrStr?: string;
+    isSelfClosing?: boolean;
+  } | null {
     // 注释（`<!-->` 与 `<!--->` 为 spec 特例形态，先于一般形态）
     let m: RegExpExecArray | null;
     if (sub.startsWith('<!-->')) {
@@ -1524,10 +1579,7 @@ export class MarkdownParser {
     // 表格（行级启发式：表格分隔行 / 含管道行）——表格上下文不受 Setext 影响
     if (/^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(content)) return false;
     const pipeCount = (content.match(/\|/g) || []).length;
-    if (
-      (pipeCount >= 1 && content.trim().startsWith('|')) ||
-      pipeCount >= 2
-    ) {
+    if ((pipeCount >= 1 && content.trim().startsWith('|')) || pipeCount >= 2) {
       return false;
     }
     // 列表项（任务 / 项目符号 / 有序）是独立容器，不允许被 Setext 下划线升级
@@ -1618,10 +1670,17 @@ export class MarkdownParser {
     // 硬换行标记仅在全量 parse 携带上下文时启用，行尾尾随空白语义不变）。
     // 必须进缓存键——同文本行在「块中段」与「块末尾」产出不同 token
     // （`foo  ` 块中段是 hard_break、块末尾保持文本，spec 例 644/645）。
-    blockEnd: boolean = false
+    blockEnd: boolean = false,
+    // W2-5：围栏代码行的高亮语言键（python/sql/bash，null = 无语言回退
+    // JS 关键字集）。全量 parse 路径由 computeLineOffsets 注入；行级渲染
+    // 路径（LineItem 无围栏上下文）不传按 null——与现状行为一致。
+    // 必须进缓存键——同文本行在不同语言的围栏内产出不同 keyword/comment
+    // token（`def` 在 python 是关键字、在 js 是普通文本），不进键会导致
+    // 跨文档/跨路径缓存串扰。
+    codeLang: string | null = null
   ): LineNode {
     // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 列表上下文
-    // + 懒延续层级 + 块结束标志 + 全局规则版本 + 完整行文本：
+    // + 懒延续层级 + 块结束标志 + 围栏语言键 + 全局规则版本 + 完整行文本：
     // blockquote 前缀、fence/math 跨行状态、Setext 上下文均已编码在键内
     // （review-02 §7.1/§7.3：上下文必须进键，禁止回写缓存行），
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
@@ -1638,11 +1697,15 @@ export class MarkdownParser {
       ':' +
       InlineRuler.getGlobalVersion() +
       ':' +
-      (listContext ? 'L' + listContext.indent + ',' + listContext.markerWidth : 'Lx') +
+      (listContext
+        ? 'L' + listContext.indent + ',' + listContext.markerWidth
+        : 'Lx') +
       ':' +
       (lazyInherit !== null ? 'B' + lazyInherit : 'Bx') +
       ':' +
       (blockEnd ? 'E1' : 'E0') +
+      ':' +
+      (codeLang ? 'K' + codeLang : 'Kx') +
       ':' +
       lineText;
     const cached = this.astCache.get(cacheKey);
@@ -1795,8 +1858,10 @@ export class MarkdownParser {
 
     // 缩进代码块内容行：与围栏代码行同类型 'code'，行内不解析 markdown
     // （parseCodeLine 复用；raw 保留完整原文含缩进，覆盖守恒与编辑回写不受影响）。
+    // W2-5：缩进代码无语言上下文（computeLineOffsets 的 fenceLangs 恒 null），
+    // 传入 codeLang 走 JS 回退集，行为与 W2-5 之前一致。
     if (codeState === 'indent_code') {
-      const node = this.parseCodeLine(lineText, localOffset);
+      const node = this.parseCodeLine(lineText, localOffset, codeLang);
       node.blockquoteLevel = bqLevelVal;
       this.astCache.set(cacheKey, node);
       return node;
@@ -1813,7 +1878,10 @@ export class MarkdownParser {
     }
 
     if (codeState === 'code' || codeState === true) {
-      const node = this.parseCodeLine(lineText, localOffset);
+      // W2-5：围栏代码行按语言分发关键字表（S-T-2-08）——computeLineOffsets
+      // 从 fence_start info 串提取的语言键在此生效；null（无语言围栏/行级
+      // 渲染路径）回退 JS 关键字集（现状行为）。
+      const node = this.parseCodeLine(lineText, localOffset, codeLang);
       node.blockquoteLevel = bqLevelVal;
       this.astCache.set(cacheKey, node);
       return node;
@@ -1865,7 +1933,11 @@ export class MarkdownParser {
 
   private static parseCodeLine(
     lineText: string,
-    localOffset: number
+    localOffset: number,
+    // W2-5：围栏高亮语言键（python/sql/bash；null = 无语言回退 JS 关键字集）。
+    // 由 parseLine 从 computeLineOffsets 的 fenceLangs 注入——同文本行在不同
+    // 语言围栏内产出不同 keyword/comment token（S-T-2-08）。
+    codeLang: string | null = null
   ): LineNode {
     const tokens: InlineNode[] = [];
     let pos = 0;
@@ -1876,7 +1948,9 @@ export class MarkdownParser {
     // spec 例 231——见 stripBlockquoteContext 注释）
     while ((blockquoteMatch = remainingTextForPrefix.match(/^ {0,3}>\s?/))) {
       pos += blockquoteMatch[0].length;
-      remainingTextForPrefix = remainingTextForPrefix.substring(blockquoteMatch[0].length);
+      remainingTextForPrefix = remainingTextForPrefix.substring(
+        blockquoteMatch[0].length
+      );
     }
 
     if (pos > 0) {
@@ -1891,9 +1965,27 @@ export class MarkdownParser {
 
     const codeText = lineText.substring(pos);
 
-    // Simple heuristic tokenizer for code
-    const regex =
-      /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(["'`])(?:(?=(\\?))\3.)*?\2|\b(function|const|let|var|if|else|for|while|return|class|import|export|from|yield|await|async|switch|case|break|continue|default|typeof|instanceof|new|delete|try|catch|finally|throw|void|with)\b/g;
+    // W2-5：围栏语言 → 关键字表分发（S-T-2-08）。启发式定位不变——注释/
+    // 字符串/关键字交替匹配，未命中段为 text；组序保持（1 注释/2 引号/
+    // 3 反斜杠）以复用下方 match[1]/match[2] 分支。无语言/未识别语言
+    // （normalizeFenceLang 已归 null）回退 JS 关键字集，与 W2-5 之前的
+    // 高亮行为完全一致（js 围栏与无语言围栏 token 结构相同）。
+    const keywordSource = this.getCodeKeywordSource(codeLang);
+    const commentPattern =
+      codeLang === 'python' || codeLang === 'bash'
+        ? '#[^\\n]*'
+        : codeLang === 'sql'
+          ? '--[^\\n]*'
+          : '//[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/';
+    // SQL 关键字大小写不敏感（SELECT/from 同样命中），其余语言敏感
+    const regex = new RegExp(
+      '(' +
+        commentPattern +
+        ')|(["\u0060])(?:(?=(\\\\?))\\3.)*?\\2|\\b(?:' +
+        keywordSource +
+        ')\\b',
+      codeLang === 'sql' ? 'gi' : 'g'
+    );
     let match;
     let currentPos = 0;
 
@@ -2038,7 +2130,9 @@ export class MarkdownParser {
     while ((blockquoteMatch = remainingTextForPrefix.match(/^ {0,3}>\s?/))) {
       blockquoteLevel++;
       pos += blockquoteMatch[0].length;
-      remainingTextForPrefix = remainingTextForPrefix.substring(blockquoteMatch[0].length);
+      remainingTextForPrefix = remainingTextForPrefix.substring(
+        blockquoteMatch[0].length
+      );
     }
     // B8a：懒延续行以继承层级覆盖文本前缀计算值（spec 5.2 Laziness——
     // 例 251：`> bar` 自身 1 层，懒延续到 `>>> foo` 的 3 层容器）
@@ -2083,9 +2177,9 @@ export class MarkdownParser {
     // 普通行维持原有判定顺序：hr → ATX → 表格 → 列表（02 §2.1 第 3 点）。
     // B8a：懒延续行同理跳过块级判定（段落延续文本语义，spec 5.2 Laziness）。
     if (!isSetextHeading && lazyInherit === null) {
-        let isHr = false;
-        const nestedText = lineText.slice(pos);
-        const nestedLocalOffset = pos;
+      let isHr = false;
+      const nestedText = lineText.slice(pos);
+      const nestedLocalOffset = pos;
 
       if (nestedText.length <= 10000) {
         const hrMatch = nestedText.match(/^(\s*[-*+_]){3,}\s*$/);
@@ -2138,50 +2232,51 @@ export class MarkdownParser {
           }
 
           if (lineType !== 'table_row' && lineType !== 'table_separator') {
-              const taskMatch = nestedText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
-              if (taskMatch) {
-                const prefixLen = taskMatch[0].length;
-                const indent = taskMatch[1];
-                const checkRaw = taskMatch[2];
-                const isChecked = checkRaw.includes('x') || checkRaw.includes('X');
+            const taskMatch = nestedText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
+            if (taskMatch) {
+              const prefixLen = taskMatch[0].length;
+              const indent = taskMatch[1];
+              const checkRaw = taskMatch[2];
+              const isChecked =
+                checkRaw.includes('x') || checkRaw.includes('X');
+              listIndent = indent.length;
+              listPrefix = checkRaw;
+              tokens.push({
+                type: 'list_task',
+                raw: taskMatch[0],
+                content: isChecked ? '☑' : '☐',
+                indent: indent,
+                marker: checkRaw + ' ',
+                isChecked,
+                localOffset: nestedLocalOffset,
+                length: prefixLen,
+              });
+              pos += prefixLen;
+            } else {
+              const bulletMatch = nestedText.match(/^(\s*)([-*+])\s+/);
+              if (bulletMatch) {
+                const prefixLen = bulletMatch[0].length;
+                const indent = bulletMatch[1];
                 listIndent = indent.length;
-                listPrefix = checkRaw;
+                listPrefix = bulletMatch[2];
                 tokens.push({
-                  type: 'list_task',
-                  raw: taskMatch[0],
-                  content: isChecked ? '☑' : '☐',
+                  type: 'list_bullet',
+                  raw: bulletMatch[0],
+                  content: '•',
                   indent: indent,
-                  marker: checkRaw + ' ',
-                  isChecked,
+                  marker: bulletMatch[2] + ' ',
                   localOffset: nestedLocalOffset,
                   length: prefixLen,
                 });
                 pos += prefixLen;
               } else {
-                const bulletMatch = nestedText.match(/^(\s*)([-*+])\s+/);
-                if (bulletMatch) {
-                  const prefixLen = bulletMatch[0].length;
-                  const indent = bulletMatch[1];
+                const numberMatch = nestedText.match(/^(\s*)(\d+\.)\s+/);
+                if (numberMatch) {
+                  const prefixLen = numberMatch[0].length;
+                  const indent = numberMatch[1];
                   listIndent = indent.length;
-                  listPrefix = bulletMatch[2];
+                  listPrefix = numberMatch[2];
                   tokens.push({
-                    type: 'list_bullet',
-                    raw: bulletMatch[0],
-                    content: '•',
-                    indent: indent,
-                    marker: bulletMatch[2] + ' ',
-                    localOffset: nestedLocalOffset,
-                    length: prefixLen,
-                  });
-                  pos += prefixLen;
-                } else {
-                  const numberMatch = nestedText.match(/^(\s*)(\d+\.)\s+/);
-                  if (numberMatch) {
-                    const prefixLen = numberMatch[0].length;
-                    const indent = numberMatch[1];
-                    listIndent = indent.length;
-                    listPrefix = numberMatch[2];
-                    tokens.push({
                     type: 'list_number',
                     raw: numberMatch[0],
                     content: numberMatch[2] + ' ',
@@ -2220,13 +2315,19 @@ export class MarkdownParser {
         length: unparsed.length,
       });
     } else {
-      const parsedTokens = this.parseInlineTokens(remainingText, pos, true, refDefs);
+      const parsedTokens = this.parseInlineTokens(
+        remainingText,
+        pos,
+        true,
+        refDefs
+      );
       tokens.push(...parsedTokens);
     }
 
-    const finalTokens = (lineType === 'table_row' || lineType === 'table_separator')
-      ? this.groupTableCells(tokens)
-      : tokens;
+    const finalTokens =
+      lineType === 'table_row' || lineType === 'table_separator'
+        ? this.groupTableCells(tokens)
+        : tokens;
 
     // —— B8c：硬换行标记（CommonMark 6.13）——
     // 行尾 2+ 空格/tab（或行尾反斜杠）后的换行是硬换行（`foo  \nbaz` →
@@ -2240,7 +2341,12 @@ export class MarkdownParser {
     // 按段落上下文收敛。仅作用于 body 段落行——ATX/Setext 标题行尾
     // 空白由标题语义剥除（spec 例 647），不产生硬换行；块末尾
     // （blockEnd）行尾空白/反斜杠保持文本语义（spec 例 644/645）。
-    if (lineType === 'body' && !isSetextHeading && !blockEnd && finalTokens.length > 0) {
+    if (
+      lineType === 'body' &&
+      !isSetextHeading &&
+      !blockEnd &&
+      finalTokens.length > 0
+    ) {
       const hbSuffix = this.matchHardBreakSuffix(lineText);
       if (hbSuffix) {
         const last = finalTokens[finalTokens.length - 1];
@@ -2253,7 +2359,10 @@ export class MarkdownParser {
           const head: InlineNode = {
             ...last,
             raw: last.raw.slice(0, textLen),
-            content: last.content.slice(0, last.content.length - hbSuffix.length),
+            content: last.content.slice(
+              0,
+              last.content.length - hbSuffix.length
+            ),
             length: textLen,
           };
           const hardBreak: InlineNode = {
@@ -2297,16 +2406,24 @@ export class MarkdownParser {
   private static groupTableCells(tokens: InlineNode[]): InlineNode[] {
     const result: InlineNode[] = [];
     let currentCellTokens: InlineNode[] = [];
-    
+
     const flushCell = (pipeToken?: InlineNode) => {
-      const startOffset = currentCellTokens.length > 0 ? currentCellTokens[0].localOffset : (pipeToken ? pipeToken.localOffset + pipeToken.length : 0);
-      const length = currentCellTokens.length > 0 
-        ? currentCellTokens[currentCellTokens.length - 1].localOffset + currentCellTokens[currentCellTokens.length - 1].length - startOffset
-        : 0;
+      const startOffset =
+        currentCellTokens.length > 0
+          ? currentCellTokens[0].localOffset
+          : pipeToken
+            ? pipeToken.localOffset + pipeToken.length
+            : 0;
+      const length =
+        currentCellTokens.length > 0
+          ? currentCellTokens[currentCellTokens.length - 1].localOffset +
+            currentCellTokens[currentCellTokens.length - 1].length -
+            startOffset
+          : 0;
 
       result.push({
         type: 'table_cell',
-        raw: currentCellTokens.map(t => t.raw).join(''),
+        raw: currentCellTokens.map((t) => t.raw).join(''),
         content: '',
         children: currentCellTokens,
         localOffset: startOffset,
@@ -2332,7 +2449,10 @@ export class MarkdownParser {
     }
 
     if (currentCellTokens.length > 0) {
-      const isJustEmptySpace = currentCellTokens.length === 1 && currentCellTokens[0].type === 'text' && currentCellTokens[0].raw.trim() === '';
+      const isJustEmptySpace =
+        currentCellTokens.length === 1 &&
+        currentCellTokens[0].type === 'text' &&
+        currentCellTokens[0].raw.trim() === '';
       if (!isJustEmptySpace) flushCell();
     }
 
@@ -2442,7 +2562,9 @@ export class MarkdownParser {
           const raw = text.substring(pos, j + run);
           return {
             raw,
-            content: this.normalizeCodeSpanContent(text.substring(pos + openLen, j)),
+            content: this.normalizeCodeSpanContent(
+              text.substring(pos + openLen, j)
+            ),
             length: j + run - pos,
           };
         }
@@ -3027,11 +3149,7 @@ export class MarkdownParser {
     let ri = 0;
     let ci = 0;
     while (ci < content.length) {
-      if (
-        ri < raw.length &&
-        raw[ri] === '\\' &&
-        raw[ri + 1] === '&'
-      ) {
+      if (ri < raw.length && raw[ri] === '\\' && raw[ri + 1] === '&') {
         // 转义 &：content 对应字符原样保留（不解码）
         out += content[ci];
         ri += 2;
@@ -3222,10 +3340,7 @@ export class MarkdownParser {
           const prevChar = i > 0 ? text[i - 1] : ' ';
           const nextChar =
             i + close.length < text.length ? text[i + close.length] : ' ';
-          const { left, right } = this.underscoreFlanking(
-            prevChar,
-            nextChar
-          );
+          const { left, right } = this.underscoreFlanking(prevChar, nextChar);
           if (!right || (left && !this.IS_UNICODE_PUNCT.test(nextChar))) {
             validClose = false;
           }
@@ -3282,9 +3397,7 @@ export class MarkdownParser {
           // isSpecialTag 豁免名单：这些标签由 ruler 内置起止规则接管语义
           // （sub/sup/kbd/ins 是编辑器扩展语义）。`<u>` 已移出名单与规则表
           // （02 §4.3 修复）——CommonMark raw HTML 语义，走 html_element 分支。
-          const isSpecialTag = ['ins', 'sub', 'sup', 'kbd'].includes(
-            tagName
-          );
+          const isSpecialTag = ['ins', 'sub', 'sup', 'kbd'].includes(tagName);
 
           if (tag.kind === 'open' && !tag.isSelfClosing && !isSpecialTag) {
             // 失败签名键：与 ruler 内置同名起止规则（如 '<b>'）共用同一键——
