@@ -5,7 +5,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import { activateProfileModel } from '../../api/providerProfiles';
 import styles from './ModelsSettingsTab.module.css';
-import { Menu } from '../ui';
+import { Button, Menu } from '../ui';
 import type { SelectOptionItem } from '../ui';
 import { SettingsCard, SettingsPage, SettingsRow, SettingsSection } from '../settings/SettingsUI';
 import {
@@ -55,14 +55,16 @@ export const AddProviderMenu: React.FC<{
       options={menuOptions}
       contentClassName={styles.addProviderMenu}
       trigger={
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           className={styles.addServiceBtn}
           aria-label="添加服务商"
+          icon={<Lucide.Plus size={13} style={{ opacity: 0.75 }} aria-hidden />}
         >
-          <Lucide.Plus size={13} style={{ opacity: 0.75 }} aria-hidden />
-          <span>添加服务商</span>
-        </button>
+          添加服务商
+        </Button>
       }
     >
       <div role="menu" aria-label="添加服务商">
