@@ -14,7 +14,8 @@
  * ## 轨
  * - **W3-F Strict 子集**：`selectItem` → `slash_insert` → collab sink（见 `chrome.w3f_apply.test.ts`）
  * - mock 形状见 `chrome.w3f.test.ts`；**不得** mock.calls 关 Strict
- * - **≠ EL-01**；slash **DOM 浮层 / A-BLK-02 e2e 未交付**
+ * - **W3-F DOM 余量**：`BlockChromeDomHost` 可挂 slash 宿主容器显隐（`w3f_dom_slash_host`）
+ * - **≠ EL-01**；slash **完整浮层 catalog UI / A-BLK-02 产品 e2e 仍开**
  */
 
 import type { BlockId, IntentId } from '@crish/block-paper-contract';

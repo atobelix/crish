@@ -127,9 +127,10 @@ pub use subagent_inject::{
     REVERT_CAUTION_TITLE, STARTED_AT_SECTION_TITLE,
 };
 pub use note_backend::{
-    MemoryNoteBackend, NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode, NoteBackend,
-    NoteBackendError, NoteBackendHandle, NoteBatchTokens, NoteOutline, NoteOutlineNode,
-    NoteQueryBlockHit, NoteQueryBlocksParams, NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
+    apply_result_json, MemoryNoteBackend, NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode,
+    NoteBackend, NoteBackendError, NoteBackendHandle, NoteBatchTokens, NoteLossyItem,
+    NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
+    NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,

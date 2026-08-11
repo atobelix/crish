@@ -11,6 +11,13 @@
 //! - 读路径即时 S(树)；**禁止**默认 disk mirror。
 //! - `send_to_note` 幂等：同一 `intent_id` 不双插。
 //! - batch token：会话内 `batch_id` 占用/释放；非法/过期拒绝写。
+//! - **W4-A**：`NoteApplyMdResult.lossy` 进入工具 result（[`apply_result_json`]）；
+//!   Store 路径须映射 `ApplyReport.lossy`；**禁止**默默丢弃。
+//!
+//! # 诚实边界（W4-A Strict 子集）
+//! - **已交付方向**：既有 5 工具 schema/registry + lossy 结果面形状
+//! - **≠ EL-05**；**≠ A-AGT-01…08 满表**（满表主责 W4-F + W4-B + W6-E）
+//! - **MemoryNoteBackend 禁关生产项**（仅 test/dev）
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -188,7 +195,44 @@ pub struct NoteApplyMdRequest {
     pub origin: Option<String>,
 }
 
+/// 单条有损/诊断项（对齐 `conex-md-ast::LossyItem` 线格式，叶子 crate 不硬绑 md-ast）
+///
+/// 机器码常见值：`missing_block_id` / `duplicate_block_id` / `structure_note` 等。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NoteLossyItem {
+    /// 机器可读码
+    pub code: String,
+    /// 人读细节
+    pub detail: String,
+    /// 源行号（若有）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+}
+
+/// apply 有损汇总（对齐 `conex-md-ast::LossyReport`；工具 result 面可观测）
+///
+/// # W4-A
+/// Store 路径须把 `ApplyReport.lossy` 映射到本结构；Memory 伪实现可返回空
+/// （不走真实 P 路径）。**≠ EL-05 / ≠ A-AGT 满表**。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NoteLossyReport {
+    #[serde(default)]
+    pub items: Vec<NoteLossyItem>,
+}
+
+impl NoteLossyReport {
+    /// 无有损项
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+}
+
 /// apply 结果
+///
+/// # W4-A 结果面
+/// - `lossy`：parse/apply 有损项进入工具 JSON（`apply_result_json`），
+///   **禁止** Store 路径默默丢弃（审计 S1）。
+/// - **≠ EL-05**：本字段可观测 ≠ A-AGT-01…08 满关；Memory 全绿禁关生产项。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NoteApplyMdResult {
     /// 新插入（或幂等返回）的块 id 列表
@@ -197,6 +241,9 @@ pub struct NoteApplyMdResult {
     pub inserted: u32,
     /// 是否命中幂等缓存（同 intent_id 重复调用）
     pub idempotent: bool,
+    /// 有损报告（W4-A：进入工具 result；空 = 无有损或后端未透出）
+    #[serde(default)]
+    pub lossy: NoteLossyReport,
 }
 
 // ==================== batch token ====================
@@ -730,6 +777,8 @@ impl NoteBackend for MemoryNoteBackend {
                 block_ids: vec![tid],
                 inserted: 0,
                 idempotent: false,
+                // Memory 不走真实 P：无 lossy 透出（Store 路径才有 W4-A 真 lossy）
+                lossy: NoteLossyReport::default(),
             };
             drop(docs);
             if let Some(ref intent) = req.intent_id {
@@ -796,6 +845,8 @@ impl NoteBackend for MemoryNoteBackend {
             block_ids,
             inserted,
             idempotent: false,
+            // Memory 行解析伪实现：不产生 md-ast LossyReport（≠ Store 真路径）
+            lossy: NoteLossyReport::default(),
         };
 
         drop(docs);
@@ -885,12 +936,24 @@ pub fn backend_err_to_tool_err(
 }
 
 /// 成功 apply 结果 → 工具 JSON
+///
+/// W4-A：`lossy.items[]` 进入结果面，调用方（Agent / 审计）可观测有损；
+/// 空数组 = 无有损项。**≠ EL-05**。
 pub fn apply_result_json(result: &NoteApplyMdResult) -> JsonValue {
     serde_json::json!({
         "ok": true,
         "block_ids": result.block_ids,
         "inserted": result.inserted,
         "idempotent": result.idempotent,
+        "lossy": {
+            "items": result.lossy.items.iter().map(|i| {
+                serde_json::json!({
+                    "code": i.code,
+                    "detail": i.detail,
+                    "line": i.line,
+                })
+            }).collect::<Vec<_>>(),
+        },
     })
 }
 
@@ -1027,6 +1090,58 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(r.inserted, 1);
+    }
+
+    /// W4-A：工具 result JSON 必须含 `lossy.items`（可观测；空数组亦合法）。
+    /// **≠ EL-05**；仅证形状，不关 A-AGT。
+    #[test]
+    fn apply_result_json_exposes_lossy_items() {
+        let result = NoteApplyMdResult {
+            block_ids: vec!["b1".into()],
+            inserted: 1,
+            idempotent: false,
+            lossy: NoteLossyReport {
+                items: vec![NoteLossyItem {
+                    code: "missing_block_id".into(),
+                    detail: "paragraph without <!--c:UUID-->".into(),
+                    line: Some(1),
+                }],
+            },
+        };
+        let j = apply_result_json(&result);
+        assert_eq!(j["ok"], true);
+        assert_eq!(j["inserted"], 1);
+        assert_eq!(j["block_ids"][0], "b1");
+        let items = j["lossy"]["items"]
+            .as_array()
+            .expect("lossy.items must be array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["code"], "missing_block_id");
+        assert_eq!(items[0]["line"], 1);
+        assert!(
+            items[0]["detail"]
+                .as_str()
+                .unwrap_or("")
+                .contains("paragraph"),
+            "detail should be human-readable"
+        );
+    }
+
+    /// W4-A：空 lossy 亦进入结果面（items=[]），禁止缺字段冒充「未定义」。
+    #[test]
+    fn apply_result_json_empty_lossy_still_present() {
+        let result = NoteApplyMdResult {
+            block_ids: vec![],
+            inserted: 0,
+            idempotent: false,
+            lossy: NoteLossyReport::default(),
+        };
+        let j = apply_result_json(&result);
+        assert!(j.get("lossy").is_some(), "lossy key required");
+        assert!(
+            j["lossy"]["items"].as_array().unwrap().is_empty(),
+            "empty items when no lossy"
+        );
     }
 
     #[tokio::test]

@@ -6,19 +6,19 @@
  * | 可宣称 | 禁止宣称 |
  * | ------ | -------- |
  * | slash_insert / delete_blocks：`submitIntent` → **`createCollabApplySink`** → 合法 collab wire → 注入 `applyOps` | **EL-01** / A-BLK-02/04/05 **全关** / A-BLK 全表 e2e |
- * | 关闭证据 = wire 形状合法 + applyOps 被调用且 ok；**不得**用 mock.calls | 桌面 chrome DOM / 落点线 / 拖拽 e2e（**本波未交付**） |
+ * | 关闭证据 = wire 形状合法 + applyOps 被调用且 ok；**不得**用 mock.calls | A-BLK-02/04/05 **产品 e2e 全关** / EL-01 |
  * | 交叉 RS：`w3_f_*` / `w3_d_*` 证明对应 op 真 `DocSession::apply` | 「Notion chrome 完成」「块工作区完成」 |
  *
- * ## 与 W3-F-S / mock 分轨
+ * ## 与 W3-F-S / mock / DOM 分轨
  *
  * - `chrome.w3f.test.ts` 仍用 `createMockIntentSink`：**仅**形状 / IME 守卫；**不得**作本 Strict 关闭证据
- * - 本文件 **禁止** 断言 `mock.calls` 关闭 W3-F
+ * - `chrome.w3f_dom.test.ts` = DOM 余量（把手/多选框/落点线/slash 宿主）；**DOM ≠ EL-01**
+ * - 本文件 **禁止** 断言 `mock.calls` 关闭 W3-F；**不得**回退 mock 默认
  *
  * ## 未交付（诚实边界）
  *
- * - chrome **DOM**（把手可见性、slash 浮层宿主、多选框 UI）
- * - 拖拽落点线 DOM / 拖拽预览
- * - A-BLK-02/04/05 **产品 e2e**
+ * - 拖拽预览全链路 / 桌面 React chrome 挂载
+ * - A-BLK-02/04/05 **产品 e2e**（jsdom 契约 ≠ e2e）
  * - 桌面 Tauri `note_apply_ops` IPC 产品挂载（adapter 形状已备；挂载属 W5-B 方向）
  */
 import { describe, expect, it, beforeEach } from 'vitest';

@@ -9,7 +9,8 @@
  *
  * - 本文件 = **W3-F-S** 形状 / IME 守卫；`mock.calls` **不得**作 **W3-F Strict** 关闭证据
  * - **W3-F Strict** 见 `chrome.w3f_apply.test.ts`（`createCollabApplySink`）+ RS `w3_f_*` / `w3_d_*`
- * - **≠ EL-01**；**≠** A-BLK-02/04/05 全关；DOM 落点/拖拽 **未交付**
+ * - **≠ EL-01**；**≠** A-BLK-02/04/05 全关
+ * - DOM 余量见 `chrome.w3f_dom.test.ts`（**DOM ≠ EL-01**）；本文件仍是 mock 形状轨
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { ImeMachine } from '@crish/editor-kit';

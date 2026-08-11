@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "块纸面呈现：chrome（W3-C）+ 叶子 Intent（W3-D-S/PM + createCollabApplySink W3-D）+ CM6（W3-E）+ 结构 Intent（W3-F-S mock / W3-F Strict 子集 collab sink）；DOM/落点线未交付；≠ EL-01 / A-BLK 全表",
+  "description": "块纸面呈现：chrome（W3-C）+ 叶子 Intent（W3-D-S/PM + createCollabApplySink W3-D）+ CM6（W3-E）+ 结构 Intent（W3-F-S mock / W3-F Strict 子集 collab sink）+ W3-F DOM 余量（BlockChromeDomHost 把手/多选框/落点线/slash 宿主）；DOM≠EL-01；A-BLK e2e 仍开",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

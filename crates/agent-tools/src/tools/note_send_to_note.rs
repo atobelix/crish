@@ -127,6 +127,7 @@ impl Tool for SendToNoteTool {
                 "block_ids": [],
                 "inserted": 0,
                 "idempotent": false,
+                "lossy": { "items": [] },
             }));
         };
 

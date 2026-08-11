@@ -8,13 +8,14 @@
  * - 多选高亮 set / clear（逻辑 blockId，禁止像素测距）
  * - **W3-F**：多选删除 / 折叠 → 批量结构 Intent（经 submitIntent → sink）
  *
- * **不**接真实 DOM；UI 后接时以本 store 为呈现源。
+ * 呈现源：UI / **`BlockChromeDomHost`** 以本 store 为投影输入。
  * **禁止** DOM 当真相；写路径必须 Intent → **`createCollabApplySink`** → RS apply。
  *
  * ## 轨
  * - **W3-F Strict 子集**：`requestDeleteSelected` → `delete_blocks` → collab sink（见 `chrome.w3f_apply.test.ts`）
  * - mock sink **仅**形状（`chrome.w3f.test.ts`）；**≠** Strict 关闭证据
- * - **≠ EL-01**；**≠** A-BLK 全表；chrome **DOM / 拖拽落点线未交付**
+ * - **W3-F DOM 余量**：`BlockChromeDomHost` 把手/多选框 DOM（`chrome.w3f_dom.test.ts`）
+ * - **≠ EL-01**；**≠** A-BLK 全表 e2e；**DOM 交付 ≠ EL-01**；产品拖拽预览 / 桌面 React 挂载仍未交付
  */
 
 import type { BlockId, IntentId } from '@crish/block-paper-contract';

@@ -2,12 +2,12 @@
 
 use agent_tools::note_backend::{
     NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode, NoteBackend, NoteBackendError,
-    NoteBatchTokens, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
-    NoteQueryBlocksResult,
+    NoteBatchTokens, NoteLossyItem, NoteLossyReport, NoteOutline, NoteOutlineNode,
+    NoteQueryBlockHit, NoteQueryBlocksParams, NoteQueryBlocksResult,
 };
 use async_trait::async_trait;
 use conex_doc_collab::{BlockId, BlockKind, DocSession, Op, Origin, PersistencePlugin};
-use conex_md_ast::{apply_md_fragment, MdError};
+use conex_md_ast::{apply_md_fragment, LossyReport, MdError};
 use conex_workspace_store::{
     commit_ops, QueryBlocksParams, SharedWorkspaceStore, StoreError,
 };
@@ -24,6 +24,8 @@ use std::time::Duration;
 /// - 读路径即时投影 / session 树 / `document_to_md`；**不**读 MD mirror 文件
 /// - 同 `intent_id` 二次调用返回首次结果（`idempotent=true`, `inserted=0`）
 /// - batch token：内嵌 [`NoteBatchTokens`]（与 Memory 后端同语义）
+/// - **W4-A**：`ApplyReport.lossy` → [`NoteApplyMdResult::lossy`]（工具 result 可观测；
+///   **禁止**只写 ops 丢 lossy）。**≠ EL-05 / ≠ A-AGT 满表**。
 pub struct StoreNoteBackend {
     store: SharedWorkspaceStore,
     /// 进程内打开的文档会话（唯一写入口持有者）。
@@ -181,6 +183,21 @@ impl StoreNoteBackend {
                 _ => None,
             })
             .collect()
+    }
+
+    /// W4-A：`conex_md_ast::LossyReport` → 工具契约 [`NoteLossyReport`]（叶子形状，无 md-ast 依赖）。
+    fn map_lossy(report: &LossyReport) -> NoteLossyReport {
+        NoteLossyReport {
+            items: report
+                .items
+                .iter()
+                .map(|i| NoteLossyItem {
+                    code: i.code.clone(),
+                    detail: i.detail.clone(),
+                    line: i.line,
+                })
+                .collect(),
+        }
     }
 
     /// 若指定 after_block_id：把挂到同一父下的根级 Insert 的 order 改写到 after 之后。
@@ -434,8 +451,8 @@ impl NoteBackend for StoreNoteBackend {
             .get_mut(&req.doc_id)
             .expect("ensure_session just inserted");
 
-        // 3. 按 mode 生成 Ops
-        let ops: Vec<Op> = match req.mode {
+        // 3. 按 mode 生成 Ops + 保留 lossy（W4-A：进 NoteApplyMdResult）
+        let (ops, lossy): (Vec<Op>, NoteLossyReport) = match req.mode {
             NoteApplyMode::AppendToBlock => {
                 let target_id = if let Some(ref after) = req.after_block_id {
                     Self::parse_block_id(after, "after_block_id")?
@@ -458,12 +475,16 @@ impl NoteBackend for StoreNoteBackend {
                     insert.push('\n');
                 }
                 insert.push_str(req.markdown.trim_end());
-                vec![Op::TextEdit {
-                    id: target_id,
-                    start,
-                    end: start,
-                    insert,
-                }]
+                // append 不经 MD parse，无 lossy
+                (
+                    vec![Op::TextEdit {
+                        id: target_id,
+                        start,
+                        end: start,
+                        insert,
+                    }],
+                    NoteLossyReport::default(),
+                )
             }
             NoteApplyMode::ApplyMdFragment | NoteApplyMode::InsertBlocks => {
                 let parent = match req.parent_id.as_deref() {
@@ -490,22 +511,24 @@ impl NoteBackend for StoreNoteBackend {
                     _ => None,
                 };
 
-                // W2-B：ApplyReport.lossy 可观测；本后端暂取 ops 写入（lossy 进工具 result 属后续 W4）
+                // W2-B + W4-A：ApplyReport 取 ops 并透出 lossy → 工具 result
                 let mut report = apply_md_fragment(session.tree(), parent, &req.markdown)
                     .map_err(Self::map_md_err)?;
                 if let Some(aid) = after_id {
                     Self::rewrite_orders_after(&mut report.ops, &aid, session.tree());
                 }
-                report.ops
+                let lossy = Self::map_lossy(&report.lossy);
+                (report.ops, lossy)
             }
         };
 
-        // 空 ops（空 markdown）合法
+        // 空 ops（空 markdown）合法；仍返回 lossy（通常为空）
         if ops.is_empty() {
             let result = NoteApplyMdResult {
                 block_ids: vec![],
                 inserted: 0,
                 idempotent: false,
+                lossy,
             };
             if let Some(ref intent) = req.intent_id {
                 let mut intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
@@ -538,6 +561,7 @@ impl NoteBackend for StoreNoteBackend {
             block_ids,
             inserted,
             idempotent: false,
+            lossy,
         };
 
         if let Some(ref intent) = req.intent_id {
@@ -812,6 +836,96 @@ mod tests {
         assert_eq!(backend.get_md("no-such-doc").await.unwrap(), "");
         let err = backend.get_md("").await.unwrap_err();
         assert!(matches!(err, NoteBackendError::Invalid(_)));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// W4-A：Store 路径 `ApplyReport.lossy` 进入 `NoteApplyMdResult` 且
+    /// `apply_result_json` 工具结果面可观测 `missing_block_id`。
+    ///
+    /// **≠ EL-05**；**≠ A-AGT 满表**；仅证 lossy 结果面（审计 S1）。
+    #[tokio::test]
+    async fn w4a_store_apply_md_exposes_lossy_on_result_and_tool_json() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+
+        // 与 md-ast `apply_report_lossy_missing_block_id_readable` 同形输入
+        let applied = backend
+            .apply_md_fragment(NoteApplyMdRequest {
+                doc_id: "doc-w4a-lossy".into(),
+                markdown: "无ID段落应补生成\n".into(),
+                parent_id: None,
+                after_block_id: None,
+                mode: NoteApplyMode::ApplyMdFragment,
+                intent_id: None,
+                batch_id: None,
+                message_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .expect("apply without block id still Ok (new id)");
+
+        assert!(
+            applied.inserted >= 1,
+            "should insert at least one block: {:?}",
+            applied
+        );
+        assert!(
+            !applied.lossy.is_empty(),
+            "Store 路径不得丢弃 lossy，got empty"
+        );
+        assert!(
+            applied
+                .lossy
+                .items
+                .iter()
+                .any(|i| i.code == "missing_block_id"),
+            "期望 missing_block_id，got {:?}",
+            applied.lossy
+        );
+
+        // 工具 result 面（document_apply_md / send_to_note 共用 apply_result_json）
+        let j = agent_tools::apply_result_json(&applied);
+        assert_eq!(j["ok"], true);
+        let items = j["lossy"]["items"]
+            .as_array()
+            .expect("tool JSON must have lossy.items");
+        assert!(
+            items.iter().any(|i| i["code"] == "missing_block_id"),
+            "tool JSON 须可观测 missing_block_id，got {items:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// W4-A：带合法 `<!--c:UUID-->` 且无有损时，lossy.items 为空数组但仍出现。
+    #[tokio::test]
+    async fn w4a_store_apply_md_empty_lossy_when_ids_present() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+        let md = "\
+<!--c:22222222-2222-4222-a222-222222222222-->
+带ID段落
+";
+        let applied = backend
+            .apply_md_fragment(NoteApplyMdRequest {
+                doc_id: "doc-w4a-clean".into(),
+                markdown: md.into(),
+                parent_id: None,
+                after_block_id: None,
+                mode: NoteApplyMode::ApplyMdFragment,
+                intent_id: None,
+                batch_id: None,
+                message_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+        assert!(applied.inserted >= 1);
+        // 可能仍有 structure_note 等；至少保证字段存在且 tool JSON 形状稳定
+        let j = agent_tools::apply_result_json(&applied);
+        assert!(j.get("lossy").is_some());
+        assert!(j["lossy"]["items"].as_array().is_some());
 
         let _ = std::fs::remove_dir_all(dir);
     }

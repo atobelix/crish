@@ -23,7 +23,9 @@
  *   - **W3-D** = 真 PM + TextEdit/Structure Intent → 真 apply（本包工厂 + RS 集成）
  *   - **W3-F-S** = StructureIntent + wire + mock（`chrome.w3f.test.ts`）
  *   - **W3-F Strict 子集** = chrome slash_insert / delete_blocks → `createCollabApplySink`
- *     （`chrome.w3f_apply.test.ts` + RS `w3_f_*`）；**DOM/拖拽落点未交付**
+ *     （`chrome.w3f_apply.test.ts` + RS `w3_f_*`）
+ *   - **W3-F DOM 余量** = `BlockChromeDomHost`（把手/多选框/落点线/slash 宿主 jsdom 契约）；
+ *     测 `chrome.w3f_dom.test.ts`；**DOM 交付 ≠ EL-01**；A-BLK e2e 仍开
  *   - **≠ EL-01**；**≠ A-BLK 全表 e2e**；**≠** 块工作区完成
  * - W3-E 完成 = 代码叶可聚焦 + Intent 通路绿
  */
@@ -51,6 +53,27 @@ export {
   type SlashMenuSnapshot,
   type SlashMenuModelOptions,
 } from './chrome/SlashMenuModel';
+
+// W3-F DOM 余量：chrome 最小 DOM 宿主（≠ EL-01 / ≠ A-BLK e2e 全关）
+export {
+  BlockChromeDomHost,
+  isBlockChromeDomHost,
+  BP_CHROME_ROOT,
+  BP_BLOCK_ROW,
+  BP_BLOCK_ID,
+  BP_HANDLE,
+  BP_HANDLE_VISIBILITY,
+  BP_MULTI_CHECK,
+  BP_DROP_LINE,
+  BP_DROP_SIDE,
+  BP_DROP_TARGET,
+  BP_SLASH_HOST,
+  BP_SLASH_OPEN,
+  type DropLineSide,
+  type DropLineTarget,
+  type ChromeDomBlockSpec,
+  type BlockChromeDomHostOptions,
+} from './chrome/BlockChromeDomHost';
 
 // W3-F：结构 Intent + PaperIntent 联合
 export {

@@ -7,7 +7,8 @@
 > `createMockIntentSink` **仅**形状测（G-INV-3）。  
 > **禁止** 把 DOM / ProseMirror doc / 本包假数据当作真相源持久化。  
 > **W3-D Strict** = 真 PM + TextEdit/Structure → 真 apply（本包工厂 + RS 集成）；**≠ EL-01**；**≠ A-BLK 全表**。  
-> **W3-F Strict 子集** = chrome `slash_insert` / `delete_blocks` → `createCollabApplySink`（`chrome.w3f_apply.test.ts` + RS `w3_f_*`）；**mock 不得关闭**；**DOM / 拖拽落点线未交付**；**≠ EL-01**；**≠ A-BLK-02/04/05 全关**。  
+> **W3-F Strict 子集** = chrome `slash_insert` / `delete_blocks` → `createCollabApplySink`（`chrome.w3f_apply.test.ts` + RS `w3_f_*`）；**mock 不得关闭**；**≠ EL-01**；**≠ A-BLK-02/04/05 全关**。  
+> **W3-F DOM 余量** = `BlockChromeDomHost`（把手可见性 / 多选框 / 落点线 / slash 宿主 jsdom 契约，`chrome.w3f_dom.test.ts`）；**DOM 交付 ≠ EL-01**；A-BLK 产品 e2e 仍开；拖拽预览 / 桌面 React 挂载未交付。  
 > **W3-E ≠ 全语言高亮完成**。
 
 ## 边界
@@ -15,7 +16,8 @@
 | 本包 **做**                                       | 本包 **不做**                               |
 | ------------------------------------------------- | ------------------------------------------- |
 | 静默 L0 chrome 状态（把手/折叠/多选高亮）         | 桌面 IPC 产品全链路挂载（adapter 形状已备） |
-| Slash 打开/过滤/关闭（composing 禁开）            | A-BLK 全表 e2e / EL-01                      |
+| chrome 最小 DOM 宿主（把手/多选框/落点线/slash）  | A-BLK 产品 e2e / EL-01（**DOM ≠ EL-01**）   |
+| Slash 打开/过滤/关闭（composing 禁开）            | 桌面 React chrome / 拖拽预览全链路          |
 | N 块假投影（`ProjectionDiff` / `MemoryBlock`）    | 数据层超长分段（W1-B）                      |
 | 叶子 Intent + **`createCollabApplySink`**（生产） | —                                           |
 | 真 PM 叶（W3-D-PM）+ plain 叶（W3-D-S）           | —                                           |
@@ -33,6 +35,7 @@
 import {
   BlockChromeModel,
   SlashMenuModel,
+  BlockChromeDomHost, // W3-F DOM 余量（≠ EL-01）
   createSilentFixture,
   listSilentBlocks,
   DEFAULT_SLASH_CATALOG,
@@ -73,6 +76,20 @@ const blocks = listSilentBlocks(fixture);
 | `resetToSilent`                           | 清 hover/focus/多选/命令 → L0 纸面        |
 
 默认 **L0**：无交互时所有把手 `hidden`（A-SIL-01：无常驻噪声）。
+
+## BlockChromeDomHost（W3-F DOM 余量）
+
+| API / 测名                   | 语义                                                    |
+| ---------------------------- | ------------------------------------------------------- |
+| `sync()`                     | model → DOM 投影（把手 / 多选框 / slash 宿主 / 落点线） |
+| `setDropTarget(id, side)`    | 落点线显隐（**不**产 Move Intent）                      |
+| `w3f_dom_handle_visibility`  | L0 hidden；hover/focus/multi → `data-handle-visibility` |
+| `w3f_dom_multi_checkbox*`    | 多选框 ↔ `multiSelectedIds`                             |
+| `w3f_dom_drop_line`          | `data-drop-side` / `data-drop-target`                   |
+| `w3f_dom_slash_host`         | slash 打开 → 宿主可见                                   |
+| `w3f_dom_collab_path_intact` | 多选删除仍 `createCollabApplySink`（非 mock）           |
+
+**诚实**：本宿主 = jsdom 可测 DOM 契约；**≠ EL-01**；**≠** A-BLK-02/04/05 产品 e2e。
 
 ## SlashMenuModel + IME
 

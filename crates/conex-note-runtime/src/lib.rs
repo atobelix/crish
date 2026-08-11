@@ -7,8 +7,12 @@
 //!   → intent_id 幂等表
 //!   → conex_md_ast::apply_md_fragment(session.tree(), parent, md) → ApplyReport{ops,lossy,..}
 //!   → commit_ops(session, store, origin, &ops)  // apply + projection 索引
-//!   → NoteApplyMdResult { block_ids, inserted, idempotent }
+//!   → NoteApplyMdResult { block_ids, inserted, idempotent, lossy }  // W4-A：lossy 进工具 result
 //! ```
+//!
+//! # 诚实边界（W4-A）
+//! - **已交付**：Store 路径映射 `ApplyReport.lossy` → 工具契约 `NoteLossyReport`
+//! - **≠ EL-05**；**≠ A-AGT 满表**（工具形状 / lossy 可观测 ≠ Agent 块 mutate 一等满关）
 //!
 //! # 会话策略
 //! 进程内 `Mutex<HashMap<doc_id, DocSession>>`：

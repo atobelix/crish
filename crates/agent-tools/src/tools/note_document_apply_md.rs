@@ -1,13 +1,19 @@
-//! 笔记写工具：`document_apply_md`（W4-B）
+//! 笔记写工具：`document_apply_md`（W4-A/B）
 //!
 //! # 契约
 //! - 事务化 `apply_md` / replace_via_tx 语义；**禁止** `fs.write` 后当权威。
 //! - 别名语义：`document_write_md` ≡ 本工具（注册名固定为 `document_apply_md`）。
 //! - 入参：doc_id, markdown, parent_id?, after_block_id?, mode?, batch_id?
+//! - **出参**（W4-A）：`ok / block_ids / inserted / idempotent / lossy.items[]`
+//!   —— Store 路径透出 `ApplyReport.lossy`；Memory 可为空 items。
 //!
 //! # 审批
 //! dangerous=true；若 `ctx.ask` 存在则走审批；无 ask 时按 write_file 惯例直接执行
 //! （权限层在 execute 前已判定）。
+//!
+//! # 诚实边界
+//! - **≠ EL-05**；**≠ A-AGT 满表**（本工具可调 ≠ 批/矩阵/execution_unknown 关闭）
+//! - Memory 测绿 **禁止**关生产 A-AGT
 
 use crate::context::{AskDecision, ToolContext};
 use crate::definition::{Tool, ToolDefinition, ToolError};
@@ -33,6 +39,7 @@ impl DocumentApplyMdTool {
                 description: "向笔记文档事务化写入 Markdown 片段（apply_md_fragment）。\
 等价 document_write_md：禁止 fs.write 当权威，仅经块树 Transaction.apply。\
 入参 doc_id + markdown；可选 parent_id / after_block_id / mode / batch_id（幂等 batch）。\
+成功出参含 block_ids / inserted / idempotent / lossy.items（有损码如 missing_block_id，Agent 可审计）。\
 后端未接线时返回 ok=false / note_backend_unwired。"
                     .to_string(),
                 input_schema: serde_json::json!({
@@ -158,6 +165,7 @@ impl Tool for DocumentApplyMdTool {
                 "block_ids": [],
                 "inserted": 0,
                 "idempotent": false,
+                "lossy": { "items": [] },
             }));
         };
 
@@ -295,5 +303,66 @@ mod tests {
         let required = schema["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v.as_str() == Some("doc_id")));
         assert!(required.iter().any(|v| v.as_str() == Some("markdown")));
+        // 属性键契约（query 向并列：apply 入参白名单）
+        let props = schema["properties"].as_object().unwrap();
+        for key in [
+            "doc_id",
+            "markdown",
+            "parent_id",
+            "after_block_id",
+            "mode",
+            "batch_id",
+            "intent_id",
+        ] {
+            assert!(props.contains_key(key), "schema missing property {key}");
+        }
+        assert_eq!(schema["additionalProperties"], false);
+        assert!(tool.definition().dangerous, "apply_md must be dangerous");
+    }
+
+    /// W4-A：工具成功路径 result 含 `lossy` 键（Memory 为空 items 亦必须出现）。
+    /// **≠ EL-05**；仅证调用契约形状。
+    #[tokio::test]
+    async fn document_apply_md_result_includes_lossy_field() {
+        let backend = Arc::new(MemoryNoteBackend::new());
+        let ctx = ToolContext {
+            note_backend: Some(backend),
+            ..create_mock_tool_context()
+        };
+        let tool = DocumentApplyMdTool::new();
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "doc_id": "doc-lossy",
+                    "markdown": "plain line without block id comment",
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], true);
+        assert!(out.get("lossy").is_some(), "lossy must be on tool result");
+        assert!(
+            out["lossy"]["items"].as_array().is_some(),
+            "lossy.items must be array"
+        );
+        // Memory 伪路径不产生真 lossy；真码可观测见 StoreNoteBackend 测
+        assert!(out["lossy"]["items"].as_array().unwrap().is_empty());
+    }
+
+    /// W4-A：unwired 占位亦带 lossy 形状（调用方解析稳定）。
+    #[tokio::test]
+    async fn document_apply_md_unwired_includes_lossy_shape() {
+        let tool = DocumentApplyMdTool::new();
+        let ctx = create_mock_tool_context();
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({ "doc_id": "d", "markdown": "hi" }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], false);
+        assert!(out["lossy"]["items"].as_array().unwrap().is_empty());
     }
 }
