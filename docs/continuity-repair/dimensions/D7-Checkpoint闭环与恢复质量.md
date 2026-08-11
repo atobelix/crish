@@ -140,6 +140,8 @@ let checkpoint_section = format!(
 - **素材继承链**:阶段总结是终结摘要的素材与继承链——每次阶段总结以最新阶段总结文本为 `existing` 迭代合并(compact_agent_messages T-07 链尾取数语义同构),终结摘要持续维护 goal/nextSteps → 贯通 05 文档 P1「nextSteps 续轮注入」(D5 goal 续轮数据源就绪);
 - 注入长度护栏沿用 §8 决策 4(摘要截断 ≤500 字符);阶段总结 token 成本 = 每阶梯 1 次 LLM 调用,与压缩摘要同预算/并发/墙钟护栏(C14 隔离,全局 ≤2)。
 
+**前缀不变性注记(用户约束 B)**:checkpoint 摘要注入位置在对话开头(prompt 文本前缀)会破坏 provider 前缀缓存——但注入仅发生在**中断恢复/新 run 拉起**场景(spawn_idle_resume_run):该场景 run 上下文本就是重建态、缓存必然失效(缓存命中价值为零),故**接受**,不为此牺牲恢复质量;正常续 run(无 checkpoint 注入,Absent 分支)对话前缀零改动,缓存命中不受影响。阶段总结载荷注入(上文)同此权衡:触发即超窗/重建,位置自由,但载荷文本需稳定化(同 E2 §6.5 ① 摘要块稳定化纪律),使重建后的新前缀可重复命中。
+
 ### 3.3 叶子 checkpoint 访问器的线程与快照安全
 
 - `state.sessions` 是 `std::sync::Mutex<Vec<SessionRecord>>`,读-改-写全程锁内完成(纯内存操作,无 await,符合 AA-02 锁不跨 await);与快照保存(同一 mutex,:2303)天然互斥,无并发写风险。
@@ -170,6 +172,8 @@ let checkpoint_section = format!(
 ```
 
 **注入条件**:仅 `context_mode == Verbatim`(decide_fork_context 判定,recovery.rs:425-442)且 history 非空时传递;Summarized/New → 保持 None(Summarized 摘要注入是后续项,不在此轮伪造)。history 经既有 `RunTaskOptions.history` → `resolve_history_source`(core_run_commands.rs:3615-3622)→ 前端路径 `hydrate_history`(含 D7 的 error 态放行改造,§3.6——原 run 的失败轮消息带 failed-turn 标记进上下文,与 ② 正链协同)→ `initial_conversation` 零拷贝水合(engine.rs:2361-2365)。
+
+**前缀不变性注记(用户约束 B)**:Verbatim history 传递保持原 run 消息**逐字节不变**——ctx.history → SubagentSpawnRequest.history → RunTaskOptions.history → resolve_history_source → hydrate_history 全链路零改写(不裁剪、不摘要、不回填 status);原 run 消息序列是 provider 已见过的前缀,逐字节继承使 fork 新 run 的 provider 前缀缓存直接命中。history 注入**不改写原消息**:hydrate 面仅对 error 态消息附加 failed-turn 标记(§3.6,metadata 增量字段),不修改消息正文/角色/顺序,其余消息零改动。
 
 **边界声明**:本项只覆盖子代理 fork/resume 路径(裁决 #19 原文「spawner 的 history: None 缺口」);主 run 侧的 history 续接已由 SessionHistoryCache 兜底(D2 验收「上下文完整 = 新 run history 参数回退缓存」,core_run_commands.rs:2718),不属本项。
 
