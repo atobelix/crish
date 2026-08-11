@@ -1,4 +1,4 @@
-//! 笔记后端契约（W4-A/B：NoteBackend trait + 引擎/测试注入）
+//! 笔记后端契约（W4-A/B/F：NoteBackend trait + 引擎/测试注入）
 //!
 //! agent-tools 保持叶子依赖哲学：**不**硬依赖 `conex-doc-collab` /
 //! `conex-workspace-store`。真实 store/DocSession 由引擎侧实现本 trait
@@ -6,20 +6,24 @@
 //! 契约、serde 线格式类型与进程内 [`MemoryNoteBackend`]（dev/test）。
 //!
 //! # 不变量
-//! - 写路径仅经 `apply_md_fragment`（事务化 apply 语义由实现方保证）；
-//!   **禁止**工具侧 `fs.write` 后当笔记权威。
+//! - 写路径经 `apply_md_fragment` / [`Self::apply_block_ops`]（事务化语义由
+//!   实现方保证）；**禁止**工具侧 `fs.write` 后当笔记权威。
 //! - 读路径即时 S(树)；**禁止**默认 disk mirror。
 //! - `send_to_note` 幂等：同一 `intent_id` 不双插。
 //! - batch token：会话内 `batch_id` 占用/释放；非法/过期拒绝写。
 //! - **W4-A**：`NoteApplyMdResult.lossy` 进入工具 result（[`apply_result_json`]）；
 //!   Store 路径须映射 `ApplyReport.lossy`；**禁止**默默丢弃。
+//! - **W4-F**：`block_batch`（ops + dryRun）+ 细粒度 `block_insert` 形状；
+//!   dryRun **零写**权威树；写中断 → [`NoteBackendError::ExecutionUnknown`]。
 //!
-//! # 诚实边界（W4-A/B Strict 子集）
-//! - **已交付方向**：既有 5 工具 schema/registry + lossy 结果面形状（W4-A）
-//!   + batch token 占用/校验/过期 + 审批矩阵方向（W4-B，见 `note_permission`）
-//! - **≠ EL-05**；**≠ A-AGT-01…08 满表**（满表主责 **W4-F** + **W6-E**）
-//! - **≠ W4-F**：无 `block_batch`/表驱动 Effects×Source / execution_unknown
-//! - **MemoryNoteBackend 禁关生产项**（仅 test/dev）
+//! # 诚实边界
+//! - **已交付方向**：5 工具 + lossy（W4-A）+ batch token/审批方向（W4-B）
+//!   + **W4-F Strict 子集**：`block_batch`+dryRun、`block_insert`、表驱动
+//!   矩阵起点、`execution_unknown` 中断码（见 `note_action_matrix` / 工具）
+//! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**（须 Store 持久 + **W6-E** 等）
+//! - **≠ W6-E**：无千次批 + 恶意扩展闭环
+//! - **≠ A-AGT 全表关闭**；Memory 测绿 **禁关**生产 A-AGT / EL-05
+//! - 细粒度 `block_update` / `block_delete` / `block_move` **未注册 = 未交付**
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -49,6 +53,10 @@ pub enum NoteBackendError {
     BatchTokenInvalid(String),
     /// batch token 已过期
     BatchTokenExpired(String),
+    /// 写中断 / 执行态未知（A-AGT-07 形状）：**禁止**半写；调用方**不得**盲目重试写
+    ///
+    /// 稳定码：`note.execution_unknown`（W4-F；**≠** W6-E 满关）。
+    ExecutionUnknown(String),
 }
 
 impl NoteBackendError {
@@ -62,6 +70,7 @@ impl NoteBackendError {
             Self::IdConflict(_) => "note.id_conflict",
             Self::BatchTokenInvalid(_) => "note.batch_token_invalid",
             Self::BatchTokenExpired(_) => "note.batch_token_expired",
+            Self::ExecutionUnknown(_) => "note.execution_unknown",
         }
     }
 
@@ -74,7 +83,8 @@ impl NoteBackendError {
             | Self::ApplyFailed(m)
             | Self::IdConflict(m)
             | Self::BatchTokenInvalid(m)
-            | Self::BatchTokenExpired(m) => m.clone(),
+            | Self::BatchTokenExpired(m)
+            | Self::ExecutionUnknown(m) => m.clone(),
         }
     }
 }
@@ -248,6 +258,135 @@ pub struct NoteApplyMdResult {
     pub lossy: NoteLossyReport,
 }
 
+// ==================== block_batch / 细粒度 block op（W4-F）====================
+
+/// 块级 op 种类（`block_batch.ops[].op`）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteBlockOpKind {
+    Insert,
+    Update,
+    Delete,
+    Move,
+    SetAttr,
+}
+
+impl NoteBlockOpKind {
+    /// 从工具入参字符串解析
+    pub fn parse(s: &str) -> Result<Self, NoteBackendError> {
+        match s {
+            "insert" => Ok(Self::Insert),
+            "update" => Ok(Self::Update),
+            "delete" => Ok(Self::Delete),
+            "move" => Ok(Self::Move),
+            "set_attr" | "set-attr" => Ok(Self::SetAttr),
+            other => Err(NoteBackendError::Invalid(format!(
+                "unknown block op: {other}"
+            ))),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Insert => "insert",
+            Self::Update => "update",
+            Self::Delete => "delete",
+            Self::Move => "move",
+            Self::SetAttr => "set_attr",
+        }
+    }
+}
+
+/// 单条块 op（批内原子单元）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockOp {
+    pub op: NoteBlockOpKind,
+    /// 目标块 id（update/delete/move/set_attr 必填；insert 可选预分配）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// 插入锚点：前序兄弟（≡ after_block_id）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_id: Option<String>,
+    /// insert/update 文本内容
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    /// insert 块 kind（默认 paragraph）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// set_attr 属性
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attrs: Option<Map<String, JsonValue>>,
+}
+
+/// `block_batch` / apply_block_ops 请求
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockBatchRequest {
+    pub doc_id: String,
+    pub ops: Vec<NoteBlockOp>,
+    /// dryRun=true → 校验并返回预览，**零写**权威树（A-AGT-05）
+    #[serde(default)]
+    pub dry_run: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    /// 测试/协议：强制触发 execution_unknown 中断（**不**半写）
+    #[serde(default)]
+    pub force_execution_unknown: bool,
+}
+
+/// 单条 op 预览（dryRun 或成功结果面）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockOpPreview {
+    pub op: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// 人读摘要（content 截断等）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
+/// `apply_block_ops` 结果
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockBatchResult {
+    /// 是否 dryRun（零写）
+    pub dry_run: bool,
+    /// 实际应用（或将应用）的 op 数
+    pub applied: u32,
+    /// 涉及/新生成的块 id
+    pub block_ids: Vec<String>,
+    /// ops 预览（dryRun 必填形状；实写亦回显）
+    pub preview: Vec<NoteBlockOpPreview>,
+}
+
+/// 细粒度 `block_insert` 请求
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockInsertRequest {
+    pub doc_id: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
+/// 细粒度 insert 结果
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockInsertResult {
+    pub block_id: String,
+    pub kind: String,
+}
+
 // ==================== batch token ====================
 
 /// 默认 batch token TTL（会话内轻量过期）
@@ -396,6 +535,63 @@ pub trait NoteBackend: Send + Sync + Debug {
                 "batch token validation not supported by this backend".into(),
             )),
         }
+    }
+
+    /// 批 apply 块 ops（W4-F · `block_batch`）
+    ///
+    /// # 契约
+    /// - `dry_run=true`：**零写**权威树；返回将应用的 preview
+    /// - 实写须原子（全有或全无）；失败/中断 **禁止半写**
+    /// - `force_execution_unknown` 或实现方检测到中断 →
+    ///   [`NoteBackendError::ExecutionUnknown`]（A-AGT-07 形状）
+    ///
+    /// 默认：未实现 → Invalid（Store 可后挂；Memory 真实现）。
+    async fn apply_block_ops(
+        &self,
+        _req: NoteBlockBatchRequest,
+    ) -> Result<NoteBlockBatchResult, NoteBackendError> {
+        Err(NoteBackendError::Invalid(
+            "apply_block_ops not supported by this backend".into(),
+        ))
+    }
+
+    /// 细粒度插入一块（W4-F · `block_insert`；可委托 apply_block_ops）
+    ///
+    /// 默认：转单条 insert op 走 [`Self::apply_block_ops`]。
+    async fn block_insert(
+        &self,
+        req: NoteBlockInsertRequest,
+    ) -> Result<NoteBlockInsertResult, NoteBackendError> {
+        let kind = req
+            .kind
+            .clone()
+            .unwrap_or_else(|| "paragraph".to_string());
+        let batch = self
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: req.doc_id,
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Insert,
+                    id: None,
+                    parent_id: req.parent_id,
+                    previous_id: req.previous_id,
+                    content: Some(req.content),
+                    kind: Some(kind.clone()),
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: req.batch_id,
+                origin: req.origin,
+                force_execution_unknown: false,
+            })
+            .await?;
+        let block_id = batch
+            .block_ids
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                NoteBackendError::ApplyFailed("block_insert produced no block_id".into())
+            })?;
+        Ok(NoteBlockInsertResult { block_id, kind })
     }
 }
 
@@ -865,6 +1061,334 @@ impl NoteBackend for MemoryNoteBackend {
             Some(id) => self.batch_tokens.validate(id),
         }
     }
+
+    /// W4-F：块级批 ops；dryRun 零写；force_execution_unknown 中断不半写
+    async fn apply_block_ops(
+        &self,
+        req: NoteBlockBatchRequest,
+    ) -> Result<NoteBlockBatchResult, NoteBackendError> {
+        if req.doc_id.trim().is_empty() {
+            return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
+        }
+        self.validate_batch_token(req.batch_id.as_deref()).await?;
+
+        // A-AGT-07：写中断协议——在任何变异前失败，保证零半写
+        if req.force_execution_unknown && !req.dry_run {
+            return Err(NoteBackendError::ExecutionUnknown(
+                "write interrupted before commit; execution state unknown — do not auto-retry write"
+                    .into(),
+            ));
+        }
+
+        // 在锁外规划（仅读当前树做校验）；成功后再一次提交
+        let plan = {
+            let docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+            let existing = docs.get(&req.doc_id).map(|d| d.blocks.as_slice());
+            plan_block_ops(existing, &req.ops, || self.next_id())?
+        };
+
+        let preview: Vec<NoteBlockOpPreview> = plan
+            .previews
+            .iter()
+            .cloned()
+            .collect();
+        let block_ids = plan.block_ids.clone();
+        let applied = plan.previews.len() as u32;
+
+        if req.dry_run {
+            return Ok(NoteBlockBatchResult {
+                dry_run: true,
+                applied,
+                block_ids,
+                preview,
+            });
+        }
+
+        // 原子提交：整批写入（Memory 扁平列表；≠ Store 真事务，仅测形状）
+        {
+            let mut docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+            let doc = Self::ensure_doc(&mut docs, &req.doc_id);
+            apply_planned_ops(doc, plan.mutations)?;
+        }
+
+        Ok(NoteBlockBatchResult {
+            dry_run: false,
+            applied,
+            block_ids,
+            preview,
+        })
+    }
+}
+
+// ── W4-F Memory 批规划 / 提交（内部）────────────────────────────────
+
+/// 规划结果：预览 + 待提交 mutation（与当前树校验后）
+struct BlockOpPlan {
+    previews: Vec<NoteBlockOpPreview>,
+    block_ids: Vec<String>,
+    mutations: Vec<PlannedMutation>,
+}
+
+enum PlannedMutation {
+    Insert {
+        at: usize,
+        block: MemBlock,
+    },
+    Update {
+        id: String,
+        content: String,
+    },
+    Delete {
+        id: String,
+    },
+    Move {
+        id: String,
+        to_index: usize,
+    },
+    SetAttr {
+        id: String,
+        attrs: Map<String, JsonValue>,
+    },
+}
+
+/// 对当前块列表规划 ops（不修改输入）
+fn plan_block_ops(
+    existing: Option<&[MemBlock]>,
+    ops: &[NoteBlockOp],
+    mut next_id: impl FnMut() -> String,
+) -> Result<BlockOpPlan, NoteBackendError> {
+    // 工作副本：仅用于规划期索引；实写另走 mutations
+    let mut work: Vec<MemBlock> = existing
+        .map(|s| s.to_vec())
+        .unwrap_or_default();
+    let mut previews = Vec::with_capacity(ops.len());
+    let mut block_ids = Vec::new();
+    let mut mutations = Vec::with_capacity(ops.len());
+
+    for op in ops {
+        match op.op {
+            NoteBlockOpKind::Insert => {
+                let content = op.content.clone().unwrap_or_default();
+                let kind = op
+                    .kind
+                    .clone()
+                    .unwrap_or_else(|| "paragraph".to_string());
+                let level = if kind == "heading" {
+                    parse_heading_level_from_text(&content).unwrap_or(1)
+                } else {
+                    0
+                };
+                let id = match &op.id {
+                    Some(id) if !id.trim().is_empty() => {
+                        if work.iter().any(|b| b.id == *id) {
+                            return Err(NoteBackendError::IdConflict(format!(
+                                "block id already exists: {id}"
+                            )));
+                        }
+                        id.clone()
+                    }
+                    _ => next_id(),
+                };
+                let mut insert_at = work.len();
+                if let Some(ref prev) = op.previous_id {
+                    match work.iter().position(|b| b.id == *prev) {
+                        Some(i) => insert_at = i + 1,
+                        None => {
+                            return Err(NoteBackendError::NotFound(format!(
+                                "previous_id not found: {prev}"
+                            )));
+                        }
+                    }
+                }
+                if let Some(ref parent) = op.parent_id {
+                    if !work.iter().any(|b| b.id == *parent) && !work.is_empty() {
+                        return Err(NoteBackendError::NotFound(format!(
+                            "parent_id not found: {parent}"
+                        )));
+                    }
+                }
+                let block = MemBlock {
+                    id: id.clone(),
+                    kind: kind.clone(),
+                    text: content.clone(),
+                    attrs: op.attrs.clone().unwrap_or_default(),
+                    refs_to: Vec::new(),
+                    level,
+                };
+                let summary = Some(content.chars().take(80).collect::<String>());
+                previews.push(NoteBlockOpPreview {
+                    op: "insert".into(),
+                    id: Some(id.clone()),
+                    kind: Some(kind),
+                    summary,
+                });
+                block_ids.push(id);
+                work.insert(insert_at, block.clone());
+                mutations.push(PlannedMutation::Insert {
+                    at: insert_at,
+                    block,
+                });
+            }
+            NoteBlockOpKind::Update => {
+                let id = op
+                    .id
+                    .clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .ok_or_else(|| {
+                        NoteBackendError::Invalid("update requires non-empty id".into())
+                    })?;
+                let content = op.content.clone().ok_or_else(|| {
+                    NoteBackendError::Invalid("update requires content".into())
+                })?;
+                let pos = work.iter().position(|b| b.id == id).ok_or_else(|| {
+                    NoteBackendError::NotFound(format!("block not found: {id}"))
+                })?;
+                work[pos].text = content.clone();
+                previews.push(NoteBlockOpPreview {
+                    op: "update".into(),
+                    id: Some(id.clone()),
+                    kind: Some(work[pos].kind.clone()),
+                    summary: Some(content.chars().take(80).collect()),
+                });
+                block_ids.push(id.clone());
+                mutations.push(PlannedMutation::Update { id, content });
+            }
+            NoteBlockOpKind::Delete => {
+                let id = op
+                    .id
+                    .clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .ok_or_else(|| {
+                        NoteBackendError::Invalid("delete requires non-empty id".into())
+                    })?;
+                let pos = work.iter().position(|b| b.id == id).ok_or_else(|| {
+                    NoteBackendError::NotFound(format!("block not found: {id}"))
+                })?;
+                let kind = work[pos].kind.clone();
+                work.remove(pos);
+                previews.push(NoteBlockOpPreview {
+                    op: "delete".into(),
+                    id: Some(id.clone()),
+                    kind: Some(kind),
+                    summary: None,
+                });
+                block_ids.push(id.clone());
+                mutations.push(PlannedMutation::Delete { id });
+            }
+            NoteBlockOpKind::Move => {
+                let id = op
+                    .id
+                    .clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .ok_or_else(|| {
+                        NoteBackendError::Invalid("move requires non-empty id".into())
+                    })?;
+                let from = work.iter().position(|b| b.id == id).ok_or_else(|| {
+                    NoteBackendError::NotFound(format!("block not found: {id}"))
+                })?;
+                let block = work.remove(from);
+                let mut to_index = work.len();
+                if let Some(ref prev) = op.previous_id {
+                    match work.iter().position(|b| b.id == *prev) {
+                        Some(i) => to_index = i + 1,
+                        None => {
+                            return Err(NoteBackendError::NotFound(format!(
+                                "previous_id not found: {prev}"
+                            )));
+                        }
+                    }
+                }
+                let kind = block.kind.clone();
+                work.insert(to_index, block);
+                previews.push(NoteBlockOpPreview {
+                    op: "move".into(),
+                    id: Some(id.clone()),
+                    kind: Some(kind),
+                    summary: None,
+                });
+                block_ids.push(id.clone());
+                mutations.push(PlannedMutation::Move { id, to_index });
+            }
+            NoteBlockOpKind::SetAttr => {
+                let id = op
+                    .id
+                    .clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .ok_or_else(|| {
+                        NoteBackendError::Invalid("set_attr requires non-empty id".into())
+                    })?;
+                let attrs = op.attrs.clone().unwrap_or_default();
+                let pos = work.iter().position(|b| b.id == id).ok_or_else(|| {
+                    NoteBackendError::NotFound(format!("block not found: {id}"))
+                })?;
+                work[pos].attrs = attrs.clone();
+                previews.push(NoteBlockOpPreview {
+                    op: "set_attr".into(),
+                    id: Some(id.clone()),
+                    kind: Some(work[pos].kind.clone()),
+                    summary: Some(format!("{} attrs", attrs.len())),
+                });
+                block_ids.push(id.clone());
+                mutations.push(PlannedMutation::SetAttr { id, attrs });
+            }
+        }
+    }
+
+    Ok(BlockOpPlan {
+        previews,
+        block_ids,
+        mutations,
+    })
+}
+
+/// 将规划好的 mutations 应用到文档（调用方持锁）
+fn apply_planned_ops(
+    doc: &mut MemDoc,
+    mutations: Vec<PlannedMutation>,
+) -> Result<(), NoteBackendError> {
+    for m in mutations {
+        match m {
+            PlannedMutation::Insert { at, block } => {
+                let at = at.min(doc.blocks.len());
+                doc.blocks.insert(at, block);
+            }
+            PlannedMutation::Update { id, content } => {
+                let b = doc
+                    .blocks
+                    .iter_mut()
+                    .find(|b| b.id == id)
+                    .ok_or_else(|| {
+                        NoteBackendError::NotFound(format!("block not found on commit: {id}"))
+                    })?;
+                b.text = content;
+            }
+            PlannedMutation::Delete { id } => {
+                let pos = doc.blocks.iter().position(|b| b.id == id).ok_or_else(|| {
+                    NoteBackendError::NotFound(format!("block not found on commit: {id}"))
+                })?;
+                doc.blocks.remove(pos);
+            }
+            PlannedMutation::Move { id, to_index } => {
+                let from = doc.blocks.iter().position(|b| b.id == id).ok_or_else(|| {
+                    NoteBackendError::NotFound(format!("block not found on commit: {id}"))
+                })?;
+                let block = doc.blocks.remove(from);
+                let to = to_index.min(doc.blocks.len());
+                doc.blocks.insert(to, block);
+            }
+            PlannedMutation::SetAttr { id, attrs } => {
+                let b = doc
+                    .blocks
+                    .iter_mut()
+                    .find(|b| b.id == id)
+                    .ok_or_else(|| {
+                        NoteBackendError::NotFound(format!("block not found on commit: {id}"))
+                    })?;
+                b.attrs = attrs;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Memory 文档 → 即时 Conex-MD 风格串（含 `<!--c:id-->`；id 可为非 UUID）
@@ -928,6 +1452,10 @@ fn try_insert_child(nodes: &mut [NoteOutlineNode], node: &NoteOutlineNode) -> bo
 /// - `BatchTokenInvalid` → `tool.invalid_input`（未占用 / 空 id）
 /// - `BatchTokenExpired` → `tool.invalid_input`，message 含 `note.batch_token_expired`
 ///   （与 invalid 同属调用方契约错误，不进 execution_failed 软失败面）
+///
+/// # W4-F execution_unknown
+/// - `ExecutionUnknown` → 稳定码 `note.execution_unknown`（**禁止**映射为
+///   普通 execution_failed 以免 Agent 盲目重试写）
 pub fn backend_err_to_tool_err(
     tool_name: &str,
     err: NoteBackendError,
@@ -940,11 +1468,33 @@ pub fn backend_err_to_tool_err(
         NoteBackendError::BatchTokenExpired(m) => {
             ToolError::invalid_input(format!("note.batch_token_expired: {m}"))
         }
+        NoteBackendError::ExecutionUnknown(m) => {
+            ToolError::new("note.execution_unknown", m.clone())
+        }
         NoteBackendError::Unwired => ToolError::execution_failed(tool_name, err.message()),
         other => {
             ToolError::execution_failed(tool_name, format!("{}: {}", other.code(), other.message()))
         }
     }
+}
+
+/// 成功 block_batch 结果 → 工具 JSON（A-AGT-05 形状）
+pub fn block_batch_result_json(result: &NoteBlockBatchResult) -> JsonValue {
+    serde_json::json!({
+        "ok": true,
+        "dry_run": result.dry_run,
+        "dryRun": result.dry_run,
+        "applied": result.applied,
+        "block_ids": result.block_ids,
+        "preview": result.preview.iter().map(|p| {
+            serde_json::json!({
+                "op": p.op,
+                "id": p.id,
+                "kind": p.kind,
+                "summary": p.summary,
+            })
+        }).collect::<Vec<_>>(),
+    })
 }
 
 /// 成功 apply 结果 → 工具 JSON
@@ -1188,5 +1738,176 @@ mod tests {
         assert!(matches!(err, NoteBackendError::Invalid(_)));
         // 未知文档 → 空串（非 mirror）
         assert_eq!(backend.get_md("ghost").await.unwrap(), "");
+    }
+
+    // ── W4-F：block_batch / dryRun / execution_unknown（Memory 形状）──
+
+    /// A-AGT-05 形状：dryRun=true 零写权威树，返回 preview
+    #[tokio::test]
+    async fn w4f_memory_block_batch_dry_run_zero_write() {
+        let backend = MemoryNoteBackend::new();
+        backend.seed_doc(
+            "doc-b",
+            vec![("p1".into(), "paragraph".into(), "keep".into())],
+        );
+        let r = backend
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "doc-b".into(),
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Insert,
+                    id: None,
+                    parent_id: None,
+                    previous_id: Some("p1".into()),
+                    content: Some("new line".into()),
+                    kind: Some("paragraph".into()),
+                    attrs: None,
+                }],
+                dry_run: true,
+                batch_id: None,
+                origin: Some("agent".into()),
+                force_execution_unknown: false,
+            })
+            .await
+            .unwrap();
+        assert!(r.dry_run);
+        assert_eq!(r.applied, 1);
+        assert!(!r.preview.is_empty());
+        // 权威树未变
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-b".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(q.blocks.len(), 1);
+        assert_eq!(q.blocks[0].id, "p1");
+    }
+
+    /// 实写 insert 进树
+    #[tokio::test]
+    async fn w4f_memory_block_batch_apply_insert() {
+        let backend = MemoryNoteBackend::new();
+        let r = backend
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "doc-w".into(),
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Insert,
+                    id: None,
+                    parent_id: None,
+                    previous_id: None,
+                    content: Some("hello batch".into()),
+                    kind: Some("paragraph".into()),
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: None,
+                origin: Some("agent".into()),
+                force_execution_unknown: false,
+            })
+            .await
+            .unwrap();
+        assert!(!r.dry_run);
+        assert_eq!(r.applied, 1);
+        assert_eq!(r.block_ids.len(), 1);
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-w".into(),
+                text_match: Some("hello batch".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(q.blocks.len(), 1);
+    }
+
+    /// A-AGT-07：execution_unknown 中断 → 可识别码 + 零半写
+    #[tokio::test]
+    async fn w4f_memory_block_batch_execution_unknown_no_half_write() {
+        let backend = MemoryNoteBackend::new();
+        backend.seed_doc(
+            "doc-x",
+            vec![("p1".into(), "paragraph".into(), "only".into())],
+        );
+        let err = backend
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "doc-x".into(),
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::Insert,
+                    id: None,
+                    parent_id: None,
+                    previous_id: None,
+                    content: Some("must not land".into()),
+                    kind: None,
+                    attrs: None,
+                }],
+                dry_run: false,
+                batch_id: None,
+                origin: Some("agent".into()),
+                force_execution_unknown: true,
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "note.execution_unknown");
+        assert!(matches!(err, NoteBackendError::ExecutionUnknown(_)));
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-x".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(q.blocks.len(), 1, "中断不得半写");
+        assert_eq!(q.blocks[0].id, "p1");
+    }
+
+    /// 细粒度 block_insert 默认路径
+    #[tokio::test]
+    async fn w4f_memory_block_insert() {
+        let backend = MemoryNoteBackend::new();
+        let r = backend
+            .block_insert(NoteBlockInsertRequest {
+                doc_id: "doc-i".into(),
+                content: "inserted".into(),
+                parent_id: None,
+                previous_id: None,
+                kind: Some("paragraph".into()),
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+        assert!(!r.block_id.is_empty());
+        assert_eq!(r.kind, "paragraph");
+    }
+
+    #[test]
+    fn w4f_block_batch_result_json_shape() {
+        let r = NoteBlockBatchResult {
+            dry_run: true,
+            applied: 1,
+            block_ids: vec!["b1".into()],
+            preview: vec![NoteBlockOpPreview {
+                op: "insert".into(),
+                id: Some("b1".into()),
+                kind: Some("paragraph".into()),
+                summary: Some("x".into()),
+            }],
+        };
+        let j = block_batch_result_json(&r);
+        assert_eq!(j["ok"], true);
+        assert_eq!(j["dry_run"], true);
+        assert_eq!(j["dryRun"], true);
+        assert_eq!(j["applied"], 1);
+        assert_eq!(j["preview"][0]["op"], "insert");
+    }
+
+    #[test]
+    fn w4f_backend_err_execution_unknown_maps_stable_code() {
+        let e = backend_err_to_tool_err(
+            "block_batch",
+            NoteBackendError::ExecutionUnknown("interrupted".into()),
+        );
+        assert_eq!(e.code(), "note.execution_unknown");
     }
 }

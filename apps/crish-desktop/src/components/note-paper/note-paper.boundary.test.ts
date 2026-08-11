@@ -11,10 +11,16 @@
  */
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { dirname, join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DIR = fileURLToPath(new URL('.', import.meta.url));
+/** vitest 下 import.meta.url 偶发非 file: 时回退到 cwd 相对路径（边界扫本目录） */
+const DIR =
+  typeof import.meta.dirname === 'string'
+    ? import.meta.dirname
+    : import.meta.url.startsWith('file:')
+      ? dirname(fileURLToPath(import.meta.url))
+      : resolve(process.cwd(), 'src/components/note-paper');
 
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.md']);
 

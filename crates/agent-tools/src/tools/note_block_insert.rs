@@ -1,0 +1,242 @@
+//! 笔记写工具：`block_insert`（W4-F 细粒度至少 1 个 · A-AGT-01…03 形状）
+//!
+//! # 契约
+//! - 入参：`doc_id` + `content`；可选 `parent_id` / `previous_id` / `kind` / `batch_id`
+//! - 经 [`NoteBackend::block_insert`]（默认委托 `apply_block_ops` 单 insert）
+//! - `dangerous=true`；plan **Deny**
+//!
+//! # 未交付（注释钉死）
+//! - `block_update` — **未注册**
+//! - `block_delete` — **未注册**
+//! - `block_move` — **未注册**
+//!
+//! # 诚实边界
+//! - **≠ EL-05**；**≠ A-AGT 全表关闭**；**≠ W6-E**
+//! - Memory 禁关生产 A-AGT
+
+use crate::context::ToolContext;
+use crate::definition::{Tool, ToolDefinition, ToolError};
+use crate::note_backend::{backend_err_to_tool_err, NoteBackendError, NoteBlockInsertRequest};
+use crate::tools::note_document_apply_md::{maybe_ask_note_write, require_markdown};
+use crate::tools::note_query_blocks::NOTE_BACKEND_UNWIRED;
+use crate::tools::{optional_string, require_string};
+use async_trait::async_trait;
+
+/// `block_insert`（dangerous=true）
+pub(crate) struct BlockInsertTool {
+    def: ToolDefinition,
+}
+
+impl BlockInsertTool {
+    pub(crate) fn new() -> Self {
+        Self {
+            def: ToolDefinition {
+                name: "block_insert".to_string(),
+                description: "向笔记文档插入单个块（细粒度 mutate）。\
+入参 doc_id + content；可选 parent_id / previous_id / kind / batch_id。\
+走 NoteBackend 事务化路径，禁止 fs.write 当权威。\
+未交付：block_update / block_delete / block_move（未注册）。≠ EL-05 / ≠ W6-E。"
+                    .to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "doc_id": {
+                            "type": "string",
+                            "description": "目标文档 ID（必填）"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "块文本内容（必填；可为空串）"
+                        },
+                        "parent_id": {
+                            "type": "string",
+                            "description": "父块 ID（可选）"
+                        },
+                        "previous_id": {
+                            "type": "string",
+                            "description": "前序兄弟锚点（可选）"
+                        },
+                        "kind": {
+                            "type": "string",
+                            "default": "paragraph",
+                            "description": "块 kind（默认 paragraph）"
+                        },
+                        "batch_id": {
+                            "type": "string",
+                            "description": "会话 batch token（可选）"
+                        }
+                    },
+                    "required": ["doc_id", "content"],
+                    "additionalProperties": false
+                }),
+                dangerous: true,
+                fatal_on_error: false,
+            },
+        }
+    }
+}
+
+/// content 允许空串（与 markdown 写工具一致）
+fn require_content(args: &serde_json::Value) -> Result<String, ToolError> {
+    // 复用 markdown 控制字符护栏：字段名不同
+    let mut aliased = args.clone();
+    if let Some(obj) = aliased.as_object_mut() {
+        if let Some(c) = obj.get("content").cloned() {
+            obj.insert("markdown".into(), c);
+        }
+    }
+    require_markdown(&aliased)
+}
+
+#[async_trait]
+impl Tool for BlockInsertTool {
+    fn name(&self) -> &str {
+        &self.def.name
+    }
+
+    fn definition(&self) -> &ToolDefinition {
+        &self.def
+    }
+
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
+        let doc_id = require_string(&args, "doc_id")?;
+        let content = require_content(&args)?;
+        let parent_id = optional_string(&args, "parent_id");
+        let previous_id = optional_string(&args, "previous_id");
+        let kind = optional_string(&args, "kind");
+        let batch_id = optional_string(&args, "batch_id");
+
+        if ctx.abort_token.is_aborted() {
+            return Err(ToolError::new(
+                "note.execution_unknown",
+                "write interrupted (abort) before block_insert; execution state unknown — do not auto-retry write",
+            ));
+        }
+
+        maybe_ask_note_write(ctx, self.name(), &args).await?;
+
+        if ctx.abort_token.is_aborted() {
+            return Err(ToolError::new(
+                "note.execution_unknown",
+                "write interrupted (abort) after approval; execution state unknown — do not auto-retry write",
+            ));
+        }
+
+        let Some(backend) = ctx.note_backend.as_ref() else {
+            return Ok(serde_json::json!({
+                "ok": false,
+                "reason": NOTE_BACKEND_UNWIRED,
+                "block_id": null,
+                "kind": kind.clone().unwrap_or_else(|| "paragraph".into()),
+            }));
+        };
+
+        let req = NoteBlockInsertRequest {
+            doc_id,
+            content,
+            parent_id,
+            previous_id,
+            kind,
+            batch_id,
+            origin: Some("agent".into()),
+        };
+
+        match backend.block_insert(req).await {
+            Ok(r) => Ok(serde_json::json!({
+                "ok": true,
+                "block_id": r.block_id,
+                "kind": r.kind,
+            })),
+            Err(e @ NoteBackendError::ExecutionUnknown(_)) => {
+                Err(backend_err_to_tool_err(self.name(), e))
+            }
+            Err(e) => Err(backend_err_to_tool_err(self.name(), e)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::create_mock_tool_context;
+    use crate::note_backend::{MemoryNoteBackend, NoteBackend};
+    use crate::note_permission::{decide_note_tool, plan_denies_note_tool};
+    use crate::permission::{PermissionMode, PermissionVerdict};
+    use std::sync::Arc;
+
+    #[test]
+    fn block_insert_schema_shape() {
+        let tool = BlockInsertTool::new();
+        assert_eq!(tool.name(), "block_insert");
+        assert!(tool.definition().dangerous);
+        let schema = &tool.definition().input_schema;
+        let required = schema["required"].as_array().unwrap();
+        assert!(required.iter().any(|v| v.as_str() == Some("doc_id")));
+        assert!(required.iter().any(|v| v.as_str() == Some("content")));
+        let props = schema["properties"].as_object().unwrap();
+        for key in ["doc_id", "content", "parent_id", "previous_id", "kind", "batch_id"] {
+            assert!(props.contains_key(key), "missing {key}");
+        }
+        assert_eq!(schema["additionalProperties"], false);
+    }
+
+    #[tokio::test]
+    async fn block_insert_unwired() {
+        let tool = BlockInsertTool::new();
+        let ctx = create_mock_tool_context();
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({ "doc_id": "d", "content": "x" }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["reason"], NOTE_BACKEND_UNWIRED);
+    }
+
+    #[tokio::test]
+    async fn block_insert_writes_one_block() {
+        let backend = Arc::new(MemoryNoteBackend::new());
+        let ctx = ToolContext {
+            note_backend: Some(backend.clone()),
+            ..create_mock_tool_context()
+        };
+        let tool = BlockInsertTool::new();
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "doc_id": "doc-ins",
+                    "content": "fine grain",
+                    "kind": "paragraph",
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], true);
+        assert!(out["block_id"].as_str().unwrap().len() > 0);
+        let q = backend
+            .query_blocks(crate::note_backend::NoteQueryBlocksParams {
+                doc_id: "doc-ins".into(),
+                text_match: Some("fine grain".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(q.blocks.len(), 1);
+    }
+
+    #[test]
+    fn block_insert_plan_denied() {
+        assert!(plan_denies_note_tool("block_insert"));
+        assert_eq!(
+            decide_note_tool("block_insert", PermissionMode::Plan),
+            Some(PermissionVerdict::Deny)
+        );
+    }
+}

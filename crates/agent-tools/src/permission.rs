@@ -419,6 +419,139 @@ mod tests {
         );
     }
 
+    // ===== G-9：红线 3 远程来源变体（D5 §10.3-3，复用既有红线矩阵）=====
+
+    /// 远程通道语义标注（D5 §10.3 红线 3 / §4.6.1 步骤 3）
+    ///
+    /// 「远程」= 入站网络通道（远程网关承载，D5 §8.6 远程网关模块）：移动端
+    /// 经配对令牌连接桌面端后发起的 run/命令调用。permission.rs 生产代码暂无
+    /// remote_source 类型（远程网关 G-5 未落地）——按 D5 契约，远程 run 与
+    /// 本地 run 共用同一判定链（decide_with_redline / decide_command_with_revert），
+    /// 远程不产生例外分支；本标注仅承载语义命名，调用即走既有判定函数，
+    /// 锁定「红线命令经远程通道一律 Deny 且无审批路径」的契约。
+    struct RemoteChannel;
+
+    impl RemoteChannel {
+        /// 语义判定：远程调用（远程 = 入站网络通道），走既有红线判定链
+        fn decide(
+            &self,
+            redline: bool,
+            dangerous: bool,
+            requires_approval: bool,
+            mode: PermissionMode,
+        ) -> PermissionVerdict {
+            // 远程与本地共用同一判定链：红线不可豁免（D5 §4.6.1 步骤 3）
+            decide_with_redline(redline, dangerous, requires_approval, mode)
+        }
+
+        /// 命令面判定：远程 run 内触发命令行文本（语义分析在既有链内完成）
+        fn decide_command(
+            &self,
+            command_line: &str,
+            dangerous: bool,
+            requires_approval: bool,
+            mode: PermissionMode,
+        ) -> PermissionVerdict {
+            // 同一代码路径，远程不产生例外分支（D5 §4.6.1 步骤 3）
+            decide_command(command_line, dangerous, requires_approval, mode)
+        }
+
+        /// 回退护栏判定：远程 run 经 C3 链判定（D5 §4.6.1 判定链复用）
+        fn decide_command_with_revert(
+            &self,
+            command_line: &str,
+            dangerous: bool,
+            requires_approval: bool,
+            mode: PermissionMode,
+            policy: &crate::revert::RevertPolicy,
+        ) -> PermissionVerdict {
+            decide_command_with_revert(command_line, dangerous, requires_approval, mode, policy)
+        }
+    }
+
+    /// 红线 3 远程变体矩阵：远程通道调红线命令 → 全部权限模式 × 全标记组合
+    /// 一律 Deny 且无审批路径（复用既有红线矩阵跑远程变体）
+    #[test]
+    fn redline_remote_source_denied_in_all_modes_without_approval() {
+        let remote = RemoteChannel;
+        for mode in [
+            PermissionMode::Ask,
+            PermissionMode::FullAccess,
+            PermissionMode::Plan,
+        ] {
+            for dangerous in [false, true] {
+                for requires_approval in [false, true] {
+                    let verdict = remote.decide(true, dangerous, requires_approval, mode);
+                    assert_eq!(
+                        verdict,
+                        PermissionVerdict::Deny,
+                        "远程通道 {mode:?} 下 redline=true, dangerous={dangerous}, requires_approval={requires_approval} 必须 Deny"
+                    );
+                    assert_ne!(
+                        verdict,
+                        PermissionVerdict::NeedsApproval,
+                        "远程通道红线命令无审批路径：{mode:?} 下不得升级为 NeedsApproval"
+                    );
+                }
+            }
+        }
+    }
+
+    /// 命令面远程变体：远程 run 内触发红线命令形态（rm 类 / 危险 shell 复合链）
+    /// → 全部权限模式 Deny 且无审批路径（对偶 decide_command_redline_denied_in_full_access）
+    #[test]
+    fn decide_command_remote_source_redline_denied_in_all_modes() {
+        let remote = RemoteChannel;
+        for mode in [
+            PermissionMode::Ask,
+            PermissionMode::FullAccess,
+            PermissionMode::Plan,
+        ] {
+            for cmd in [
+                "rm -rf /",
+                "rm -r -f /",
+                "echo hi && rm -rf /",
+                "sudo bash -c 'rm -rf /'",
+                "rd /s /q C:\\",
+            ] {
+                let verdict = remote.decide_command(cmd, true, false, mode);
+                assert_eq!(
+                    verdict,
+                    PermissionVerdict::Deny,
+                    "远程通道红线命令 {cmd:?} 在 {mode:?} 下必须 Deny"
+                );
+                assert_ne!(
+                    verdict,
+                    PermissionVerdict::NeedsApproval,
+                    "远程通道红线命令 {cmd:?} 在 {mode:?} 下无审批路径"
+                );
+            }
+        }
+    }
+
+    /// 远程通道非红线命令按既有三态矩阵判定：远程不引入例外分支、也不额外
+    /// 放行——dangerous 在 ask 下仍需审批（与本地一致），plan 下拒绝（observe
+    /// 能力上限，D5 §4.2 能力矩阵）
+    #[test]
+    fn remote_source_non_redline_follows_mode_matrix() {
+        let remote = RemoteChannel;
+        assert_eq!(
+            remote.decide(false, false, false, PermissionMode::FullAccess),
+            PermissionVerdict::Allow,
+            "远程通道非危险工具 full-access 放行（与本地同语义）"
+        );
+        assert_eq!(
+            remote.decide(false, true, false, PermissionMode::Ask),
+            PermissionVerdict::NeedsApproval,
+            "远程通道危险工具 ask 下仍需审批（双轨裁决前置，D5 §4.4）"
+        );
+        assert_eq!(
+            remote.decide(false, true, false, PermissionMode::Plan),
+            PermissionVerdict::Deny,
+            "远程通道危险工具 plan 下拒绝（不弹窗）"
+        );
+    }
+
     // ===== I3-S6：C3 大面积回退审批（decide_command_with_revert 链）=====
 
     use crate::revert::{RevertArea, RevertAssessor, RevertPolicy, RevertTarget};
@@ -603,5 +736,36 @@ mod tests {
             PermissionVerdict::Deny,
             "红线在任何模式下不可被回退护栏/审批豁免"
         );
+    }
+
+    /// 远程通道红线优先于回退护栏：远程 run 内复合链红线段在任意面积评估下
+    /// 仍 Deny 且无审批路径（对偶 redline_precedes_revert_gate，D5 §4.6.1
+    /// 判定链复用——远程不产生例外分支）
+    #[test]
+    fn redline_remote_source_precedes_revert_gate() {
+        let remote = RemoteChannel;
+        for mode in [
+            PermissionMode::Ask,
+            PermissionMode::FullAccess,
+            PermissionMode::Plan,
+        ] {
+            let verdict = remote.decide_command_with_revert(
+                "echo hi && rm -rf /",
+                true,
+                false,
+                mode,
+                &policy(large_area()),
+            );
+            assert_eq!(
+                verdict,
+                PermissionVerdict::Deny,
+                "远程通道 {mode:?} 下红线复合链必须 Deny，回退护栏/审批不得豁免"
+            );
+            assert_ne!(
+                verdict,
+                PermissionVerdict::NeedsApproval,
+                "远程通道红线复合链在 {mode:?} 下无审批路径"
+            );
+        }
     }
 }

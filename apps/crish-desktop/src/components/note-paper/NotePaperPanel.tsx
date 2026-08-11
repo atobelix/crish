@@ -1,10 +1,13 @@
 /**
- * NotePaperPanel — Workbench 笔记纸面挂载壳
+ * NotePaperPanel — Workbench 笔记纸面挂载壳（**W5-B-S Skeleton 轨**）
  *
  * ## 包轨（强制）
  * - **包 ID：W5-B-S**（Skeleton，必须带 `-S`）
  * - **合法交付**：预览壳 + 静默假数据 / Memory 半 transport 投影
- * - **≠ W5-B Strict**（真数据默认路径依赖 W1-H；本组件默认不走真 hydrate）
+ * - **≠ W5-B Strict**（真数据 / hydrate 投影见 `NotePaperStrictPanel` + `w5bStrict`；
+ *   真产品默认路径依赖 W1-H；本组件默认不走真 hydrate）
+ * - **双轨并存**：Strict 用 `data-package-id=W5-B` / `data-track=strict`；
+ *   **禁止** 把本文件 Skeleton 常量改成 W5-B 冒充 Strict
  * - **≠ 任何 EL 关闭**（挂载冒充交付 = S5 事故 · 08 §0.2）
  * - **禁止** 假数据 chrome 关 EL-01；**禁止** 无 W1-H 写「打开完成」
  *

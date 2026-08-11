@@ -18,8 +18,8 @@
 //! 可选 `batch_id`：已占用且未过期才允许写；非法 / 过期 → `tool.invalid_input`。
 //!
 //! # 诚实边界
-//! - **≠ EL-05**；**≠ A-AGT 满表**（本工具可调 ≠ 批/矩阵/execution_unknown 关闭）
-//! - **≠ W4-F**（无 block_batch / 表驱动满表）；**≠ W6-E**（无千次批）
+//! - **≠ EL-05**；**≠ A-AGT 满表关闭**（本工具可调 ≠ 关 EL-05）
+//! - 批/表驱动/execution_unknown 见 **W4-F**（`block_batch` 等）；**≠ W6-E**
 //! - Memory 测绿 **禁止**关生产 A-AGT
 
 use crate::context::{AskDecision, ToolContext};

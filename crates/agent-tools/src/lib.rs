@@ -31,13 +31,16 @@ pub mod backup;
 // orchestrator）实现注入；search_context / decompress_context 消费本契约，
 // 生产代码保持叶子依赖（不引入 conex-db）
 pub mod compression_store;
-// W4-A/B + Round7：笔记后端契约（NoteBackend trait + MemoryNoteBackend）——
+// W4-A/B/F + Round7：笔记后端契约（NoteBackend trait + MemoryNoteBackend）——
 // 引擎侧实现注入；query_blocks / document_outline / document_get_md /
-// document_apply_md / send_to_note 消费本契约，生产代码保持叶子依赖
-// （不引入 doc-collab/store）
+// document_apply_md / send_to_note / block_batch / block_insert 消费本契约，
+// 生产代码保持叶子依赖（不引入 doc-collab/store）
 pub mod note_backend;
-// W4-B：笔记工具审批矩阵方向（safe / write × plan|ask|full；≠ A-AGT-06 满表）
+// W4-B/F：笔记工具审批名单（safe / write × plan|ask|full）
 pub mod note_permission;
+// W4-F：safeActions × Effects × Source **表驱动**矩阵起点（A-AGT-06）
+// ≠ EL-05；≠ W6-E；≠ A-AGT 全表关闭
+pub mod note_action_matrix;
 pub mod definition;
 pub mod explore_quota;
 pub mod executor;
@@ -129,14 +132,21 @@ pub use subagent_inject::{
     REVERT_CAUTION_TITLE, STARTED_AT_SECTION_TITLE,
 };
 pub use note_backend::{
-    apply_result_json, MemoryNoteBackend, NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode,
-    NoteBackend, NoteBackendError, NoteBackendHandle, NoteBatchTokens, NoteLossyItem,
+    apply_result_json, block_batch_result_json, MemoryNoteBackend, NoteApplyMdRequest,
+    NoteApplyMdResult, NoteApplyMode, NoteBackend, NoteBackendError, NoteBackendHandle,
+    NoteBatchTokens, NoteBlockBatchRequest, NoteBlockBatchResult, NoteBlockInsertRequest,
+    NoteBlockInsertResult, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview, NoteLossyItem,
     NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
     NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };
 pub use note_permission::{
     decide_note_tool, is_note_safe_tool, is_note_tool, is_note_write_tool, plan_denies_note_tool,
     NOTE_SAFE_TOOLS, NOTE_WRITE_TOOLS,
+};
+pub use note_action_matrix::{
+    decide_from_matrix, has_local_write, is_matrix_safe, lookup_action, plan_denies_matrix_tool,
+    safe_tool_names, write_tool_names, ActionEffect, ActionSource, NoteActionRow,
+    NOTE_ACTION_MATRIX,
 };
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,

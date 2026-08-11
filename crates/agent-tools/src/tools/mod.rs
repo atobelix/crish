@@ -23,11 +23,14 @@
 //! - `output_dir`：resolve_output_dir（T-EG-08 / REQ-G01）——会话文档产出
 //!   目录解析（显式 folder 优先 / 默认 .agent-outputs/<YYYY-MM-DD>-<会话标识>/
 //!   惰性与幂等 / 只读子代理不自选；注册面 16→17）
-//! - `note_*`：W4-A/B + Round7 笔记域工具——读 `query_blocks` /
+//! - `note_*`：W4-A/B/F + Round7 笔记域工具——读 `query_blocks` /
 //!   `document_outline` / `document_get_md`；写 `document_apply_md` /
-//!   `send_to_note`（经 `ToolContext.note_backend` dyn trait 注入；
-//!   None → note_backend_unwired；注册面 24→25；读工具进只读集，
+//!   `send_to_note` / **`block_batch`** / **`block_insert`**
+//!   （经 `ToolContext.note_backend` dyn trait 注入；
+//!   None → note_backend_unwired；注册面 25→27；读工具进只读集，
 //!   写工具 dangerous=true 不进只读集）
+//!   **未交付**：`block_update` / `block_delete` / `block_move`（未注册）
+//!   **≠ EL-05**；**≠ W6-E**；**≠ A-AGT 全表关闭**
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
@@ -41,8 +44,11 @@ pub mod decompress_context;
 pub mod delete;
 pub mod diff;
 pub mod fs;
-// W4-A/B + Round7：笔记域工具（读 outline/query/get_md + 写 apply_md/send_to_note）
-// 注册面 24→25；后端经 ctx.note_backend 注入
+// W4-A/B/F + Round7：笔记域工具（读 outline/query/get_md + 写 apply_md/
+// send_to_note / block_batch / block_insert）；注册面 25→27
+// 后端经 ctx.note_backend 注入；≠ EL-05 / ≠ W6-E
+pub mod note_block_batch;
+pub mod note_block_insert;
 pub mod note_document_apply_md;
 pub mod note_document_get_md;
 pub mod note_document_outline;
@@ -203,6 +209,11 @@ pub fn register_builtin_tools_with_config(
     // 经同一 apply_md_fragment 后端路径；禁止 fs.write 当权威；不进只读集
     registry.register(Arc::new(note_document_apply_md::DocumentApplyMdTool::new()))?;
     registry.register(Arc::new(note_send_to_note::SendToNoteTool::new()))?;
+    // block_batch / block_insert（W4-F）：批 ops+dryRun + 细粒度 insert；
+    // dangerous=true；plan Deny；≠ EL-05 / ≠ W6-E
+    // 未交付：block_update / block_delete / block_move（未注册）
+    registry.register(Arc::new(note_block_batch::BlockBatchTool::new()))?;
+    registry.register(Arc::new(note_block_insert::BlockInsertTool::new()))?;
     Ok(())
 }
 
@@ -744,7 +755,8 @@ mod tests {
         // →22（W4-A query_blocks / document_outline）
         // →24（W4-B document_apply_md / send_to_note）
         // →25（Round7 document_get_md）
-        assert_eq!(registry.len(), 25);
+        // →27（W4-F block_batch / block_insert）
+        assert_eq!(registry.len(), 27);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -754,6 +766,8 @@ mod tests {
             names,
             [
                 "background_task",
+                "block_batch",
+                "block_insert",
                 "cancel_timer",
                 "decompress_context",
                 "delete_dir",
@@ -787,7 +801,7 @@ mod tests {
 
     #[tokio::test]
     async fn note_tools_registered_and_stub_execute() {
-        // W4-A/B：registry 能找到笔记工具；无 backend 时 stub 不炸
+        // W4-A/B/F：registry 能找到笔记工具；无 backend 时 stub 不炸
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
         assert!(registry.has("query_blocks"));
@@ -795,6 +809,12 @@ mod tests {
         assert!(registry.has("document_get_md"));
         assert!(registry.has("document_apply_md"));
         assert!(registry.has("send_to_note"));
+        assert!(registry.has("block_batch"));
+        assert!(registry.has("block_insert"));
+        // 未交付细粒度不得出现
+        assert!(!registry.has("block_update"));
+        assert!(!registry.has("block_delete"));
+        assert!(!registry.has("block_move"));
         let ctx = crate::context::create_mock_tool_context();
         for name in ["query_blocks", "document_outline", "document_get_md"] {
             let tool = registry.get(name).unwrap();
@@ -825,6 +845,30 @@ mod tests {
                     "doc_id": "doc-stub",
                     "markdown": "x",
                 }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["reason"], "note_backend_unwired");
+        let batch = registry.get("block_batch").unwrap();
+        let out = batch
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "doc_id": "doc-stub",
+                    "ops": [{ "op": "insert", "content": "x" }],
+                    "dryRun": true,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["reason"], "note_backend_unwired");
+        let ins = registry.get("block_insert").unwrap();
+        let out = ins
+            .execute(
+                &ctx,
+                serde_json::json!({ "doc_id": "doc-stub", "content": "x" }),
             )
             .await
             .unwrap();

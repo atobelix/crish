@@ -40,21 +40,30 @@
 //! - **结构门**（A-PERF-10 / A-INV-06 索引侧）：英文走 FTS5 MATCH 计划；CJK 走 `instr`（非默认全表 `LIKE`）；
 //!   投影与 FTS 行一致可测；`rebuild_fts` 可重建。测：`tests/w2c_structure_gate.rs`、`tests/fts_chinese.rs`。
 //! - **诚实边界**：**≠ A-PERF-10 数值满关**（数值仅 W6-C）；**≠ EL-03**（EL-03 结构主责 W3-A / 数值 W6-C）；
-//!   **≠ Wave 2「存储完成」**（杀进程权威恢复 / mirror 三路仍分属他包）。
+//!   **≠ Wave 2「存储完成」**（杀进程权威恢复分属他包；mirror detect/三路见 W2-E 节，≠ 产品 watcher 满关）。
 //!
 //! # W2-D CAS 附件骨架
 //! - [`WorkspaceStore::put_blob`] / [`WorkspaceStore::get_blob`] / [`WorkspaceStore::link_block_attachment`]
 //! - 表 `blob_cas` + `block_attachments`；**附件不是第二文档权威**
 //!
 //! # W2-E MD mirror（人/git 契约视图，非权威）
+//! ## W2-E-S 地基（已有）
 //! - [`WorkspaceStore::export_md_mirror`]：`serialize_tree` → 原子写 `.md` + 更新 `mirror_meta`
 //! - [`WorkspaceStore::note_authority_advanced`] / [`WorkspaceStore::mirror_lag`]：延迟水位
 //! - 管线可选：[`commit_ops_with_mirror`] 在 lag ≥ threshold 时自动 export
+//!
+//! ## W2-E Strict 子集（本波 · P6 detect/三路 API）
+//! - [`WorkspaceStore::detect_mirror_drift`]：hash/mtime vs `mirror_meta` → 三路分类
+//! - [`WorkspaceStore::import_mirror_proposal`]：Op 批 **或** 冲突报告；禁静默盖 unpushed（X-05）
+//! - [`ThreeWayStrategy`]：`RetainLocalAndReimport` | `DropUnacked` | `ConflictBlocks`
+//! - **诚实**：**≠ A-INV-02 产品 watcher 满关**（OS inotify 未交；API/可测 detect 已交）；
+//!   **≠ EL-03**；**≠ Wave 2 存储完成**。详见 [`mirror`] 模块头注释。
+//!
 //! - **不变量**：工具默认 **禁止** 读 mirror 当权威；本 API 仅人/git 契约视图。
 //!
 //! # 后续扩展点
 //! - CAS GC / 外置 `blobs/` 大文件 path
-//! - 外部改 mirror watcher + 三路合并（P6）
+//! - OS 级 mirror watcher（inotify/FSEvents）产品接线（本 crate 仅轮询/API detect）
 //!
 //! # W2-F / W2-F+
 //! - `WorkspaceStore::query_blocks` — FTS ∩ kind ∩ attrs ∩ refs 交集查询（agent-tools 接线见 W4）
@@ -63,11 +72,16 @@
 #![allow(missing_docs)]
 
 mod cas;
+mod mirror;
 mod projection;
 mod query_blocks;
 mod refs;
 
 pub use cas::{content_hash, get_blob_conn, put_blob_conn};
+pub use mirror::{
+    ConflictBlockInfo, ImportMirrorOpts, ImportMirrorResult, MirrorDriftClass, MirrorDriftReport,
+    ThreeWayStrategy,
+};
 pub use projection::{
     block_kind_to_store_str, commit_ops, commit_ops_with_mirror, export_mirror_now,
     index_after_apply, maybe_export_mirror, CommitMirrorOpts, CommitPipelineError,
@@ -99,7 +113,8 @@ pub const SNAPSHOT_UPDATE_THRESHOLD: usize = 100;
 /// - v4：mirror_meta（W2-E MD mirror 导出水位）
 /// - v5：block_refs 物化（W2-F+ 块引用 / 反向链接）
 /// - v6：blob_cas + block_attachments（W2-D CAS 附件骨架）
-pub const SCHEMA_VERSION: i64 = 6;
+/// - v7：mirror_meta.content_hash + file_mtime_ms（W2-E P6 detect 指纹）
+pub const SCHEMA_VERSION: i64 = 7;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -182,12 +197,15 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
 
         -- W2-E：MD mirror 元数据（人/git 契约视图水位；**非**权威）
         -- path：最近一次导出的绝对/相对路径；pending_lag：权威 rev − last_export_rev
+        -- content_hash / file_mtime_ms：P6 detect 指纹（v7；旧库 ensure_column 补齐）
         CREATE TABLE IF NOT EXISTS mirror_meta (
             doc_id TEXT PRIMARY KEY,
             path TEXT NOT NULL DEFAULT '',
             last_export_rev INTEGER NOT NULL DEFAULT 0,
             last_export_at INTEGER NOT NULL DEFAULT 0,
-            pending_lag INTEGER NOT NULL DEFAULT 0
+            pending_lag INTEGER NOT NULL DEFAULT 0,
+            content_hash TEXT NOT NULL DEFAULT '',
+            file_mtime_ms INTEGER NOT NULL DEFAULT 0
         );
 
         -- W2-F+：块引用物化（派生；可丢可重建）
@@ -227,6 +245,19 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
         conn,
         "doc_meta",
         "updated_at",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    // W2-E P6：detect 用 content_hash / file_mtime_ms（旧库幂等加列）
+    ensure_column(
+        conn,
+        "mirror_meta",
+        "content_hash",
+        "TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "mirror_meta",
+        "file_mtime_ms",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
 
@@ -712,7 +743,8 @@ impl WorkspaceStore {
     ///
     /// - 内容来自 [`serialize_tree`]（含 `<!--c:UUID-->` 块 ID 注释）
     /// - 原子写：tmp + rename（Windows 上若目标已存在先 remove）
-    /// - 更新 `mirror_meta`：`last_export_rev = rev`、`pending_lag = 0`
+    /// - 更新 `mirror_meta`：`last_export_rev = rev`、`pending_lag = 0`、
+    ///   `content_hash`（SHA-256）+ `file_mtime_ms`（供 [`Self::detect_mirror_drift`]）
     ///
     /// **勿**将写出路径作为工具默认读源（见模块不变量）。
     pub fn export_md_mirror(
@@ -727,6 +759,7 @@ impl WorkspaceStore {
         let safe = safe_doc_id(doc_id);
         let final_path = mirror_root.join(format!("{safe}.md"));
         let md = serialize_tree(tree);
+        let hash = content_hash(md.as_bytes());
 
         // 原子写：先写临时文件再 rename 到目标
         let tmp_name = format!(
@@ -745,20 +778,26 @@ impl WorkspaceStore {
         }
         std::fs::rename(&tmp_path, &final_path)?;
 
+        let mtime = mirror::file_mtime_ms(&final_path);
         let path_str = final_path.to_string_lossy().to_string();
         let rev_i = rev as i64;
         let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
         conn.execute(
             r#"
-            INSERT INTO mirror_meta(doc_id, path, last_export_rev, last_export_at, pending_lag)
-            VALUES (?1, ?2, ?3, strftime('%s','now'), 0)
+            INSERT INTO mirror_meta(
+                doc_id, path, last_export_rev, last_export_at, pending_lag,
+                content_hash, file_mtime_ms
+            )
+            VALUES (?1, ?2, ?3, strftime('%s','now'), 0, ?4, ?5)
             ON CONFLICT(doc_id) DO UPDATE SET
                 path = excluded.path,
                 last_export_rev = excluded.last_export_rev,
                 last_export_at = excluded.last_export_at,
-                pending_lag = 0
+                pending_lag = 0,
+                content_hash = excluded.content_hash,
+                file_mtime_ms = excluded.file_mtime_ms
             "#,
-            params![doc_id, path_str, rev_i],
+            params![doc_id, path_str, rev_i, hash, mtime],
         )?;
 
         Ok(final_path)
@@ -791,7 +830,7 @@ impl WorkspaceStore {
 }
 
 /// 将 doc_id 转为可作为文件名的安全片段（路径分隔符等替换为 `_`）。
-fn safe_doc_id(doc_id: &str) -> String {
+pub(crate) fn safe_doc_id(doc_id: &str) -> String {
     let s: String = doc_id
         .chars()
         .map(|c| {
