@@ -5,15 +5,15 @@
 //! 并经 [`crate::context::ToolContext::note_backend`] 注入；本 crate 仅定义
 //! 契约、serde 线格式类型与进程内 [`MemoryNoteBackend`]（dev/test）。
 //!
-//! # SD-01 纵向切开 / **SD-23** 测旁挂
+//! # SD-01 纵向切开 / **SD-23** 测旁挂 / **SD-47** 测按域拆
 //! 本文件为 **薄 facade**：trait 默认实现 + 子模块 re-export。
 //! - [`crate::note_types`]：请求/结果/错误/batch token
 //! - [`crate::note_memory`]：MemoryNoteBackend
 //! - [`crate::note_plan_ops`]：`plan_block_ops` / `apply_planned_ops`
 //! - [`crate::note_md_parse`]：MD 行解析
 //! - [`crate::note_backend_json`]：工具 JSON 辅助
-//! - 集成测外置 `note_backend_tests.rs`（`#[path]`；**≠ EL-05**；**≠ W6-E**；
-//!   Memory 测绿 **禁关**生产）
+//! - 集成测外置 `note_backend_tests.rs`（`#[path]`；**SD-47** 再拆 memory / w4；
+//!   **≠ EL-05**；**≠ W6-E**；Memory 测绿 **禁关**生产）
 //!
 //! # 不变量
 //! - 写路径经 `apply_md_fragment` / [`Self::apply_block_ops`]（事务化语义由
@@ -305,7 +305,7 @@ pub trait NoteBackend: Send + Sync + Debug {
 /// Arc 包装助手
 pub type NoteBackendHandle = Arc<dyn NoteBackend>;
 
-// ── 测试（SD-23 外置；≠ EL-05；≠ W6-E；Memory 禁关生产）──────────────
+// ── 测试（SD-23 外置；SD-47 按域拆 memory/w4；≠ EL-05；≠ W6-E）──
 
 #[cfg(test)]
 #[path = "note_backend_tests.rs"]
