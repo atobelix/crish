@@ -21,7 +21,7 @@
  *
  * ## SD-04-R 装配拆分
  * Props → `notePaperStrictProps`；Header / Body / ChromeSlot / slash·mdPrefix binding。
- * 本文件仅装配壳（目标 &lt;400）。
+ * 本文件仅装配壳（目标 &lt;400；SD-04-R-G 测钉防回涨）。
  */
 
 import React, {
