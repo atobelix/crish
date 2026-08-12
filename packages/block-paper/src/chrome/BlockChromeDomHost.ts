@@ -1,8 +1,12 @@
 /**
  * W3-F DOM 余量 · chrome 最小 DOM 宿主（把手 / 多选 / 落点 / slash / 拖拽预览）。
  *
+ * ## SD-48
+ * - 宿主壳装配 / 行投影胶水：`chromeHostAssembly`
+ * - slash / drag 细节仍在 `chromeSlashDom` / `chromeDragDom`
+ *
  * ## 角色
- * - **呈现投影编排**：model → DOM；细节在 `chromeSlashDom` / `chromeDragDom`
+ * - **呈现投影编排**：model → DOM
  * - **禁止** DOM 当文档真相 / 旁路写盘；写路径仍 Intent → collab sink
  *
  * ## slash 双浮层防护（SD-03）
@@ -11,6 +15,7 @@
  *
  * ## 诚实边界
  * - **≠ EL-01**；**≠** A-BLK e2e 全关；collab Strict apply 测不得回退 mock
+ * - **≠** 占 SD-03/08/40
  *
  * 测：`chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`
  */
@@ -19,13 +24,6 @@ import type { BlockId } from '@crish/block-paper-contract';
 import type { BlockChromeModel, HandleVisibility } from './BlockChrome';
 import type { SlashMenuModel } from './SlashMenuModel';
 import {
-  BP_DRAG_PREVIEW,
-  BP_DRAG_SOURCE,
-  BP_DRAGGING,
-  BP_DROP_LINE,
-  BP_DROP_SIDE,
-  BP_DROP_TARGET,
-  createDragChromeIndicators,
   reduceDragPointerShape,
   resolveDropTarget,
   syncDragPreviewDom,
@@ -36,24 +34,19 @@ import {
   type DropLineTarget,
 } from './chromeDragDom';
 import {
-  BP_SLASH_EMPTY,
-  BP_SLASH_GROUP,
-  BP_SLASH_HOST,
-  BP_SLASH_ITEM,
-  BP_SLASH_OPEN,
-  createSlashHostElement,
-  syncSlashHostDom,
-} from './chromeSlashDom';
+  applyMultiCheckChange,
+  assembleChromeHostShell,
+  projectChromeHostDom,
+  readHandleVisibilityAttr,
+  type ChromeDomBlockSpec,
+  type ChromeHostShell,
+} from './chromeHostAssembly';
 
 // ---------------------------------------------------------------------------
 // 类型 + 再导出（包入口兼容）
 // ---------------------------------------------------------------------------
 
-export type ChromeDomBlockSpec = {
-  blockId: BlockId;
-  /** 可选 flavour（仅 `data-flavour` 呈现，非文档权威） */
-  flavour?: string;
-};
+export type { ChromeDomBlockSpec };
 
 export type BlockChromeDomHostOptions = {
   blocks: readonly ChromeDomBlockSpec[];
@@ -80,19 +73,22 @@ export {
   BP_DRAG_PREVIEW,
   BP_DRAG_SOURCE,
   BP_DRAGGING,
+} from './chromeDragDom';
+export {
   BP_SLASH_HOST,
   BP_SLASH_OPEN,
   BP_SLASH_ITEM,
   BP_SLASH_GROUP,
   BP_SLASH_EMPTY,
-};
-
-export const BP_CHROME_ROOT = 'data-bp-chrome-root';
-export const BP_BLOCK_ROW = 'data-bp-block-row';
-export const BP_BLOCK_ID = 'data-block-id';
-export const BP_HANDLE = 'data-bp-handle';
-export const BP_HANDLE_VISIBILITY = 'data-handle-visibility';
-export const BP_MULTI_CHECK = 'data-bp-multi-check';
+} from './chromeSlashDom';
+export {
+  BP_CHROME_ROOT,
+  BP_BLOCK_ROW,
+  BP_BLOCK_ID,
+  BP_HANDLE,
+  BP_HANDLE_VISIBILITY,
+  BP_MULTI_CHECK,
+} from './chromeHostAssembly';
 
 // ---------------------------------------------------------------------------
 // Host
@@ -100,23 +96,16 @@ export const BP_MULTI_CHECK = 'data-bp-multi-check';
 
 /** 最小 chrome DOM 宿主：model 投影到 DOM，不持有文档权威。 */
 export class BlockChromeDomHost {
-  private readonly root: HTMLElement;
   private readonly chrome: BlockChromeModel;
   private readonly slash: SlashMenuModel | undefined;
   /** 默认 false；仅契约测 / 无 React Overlay 时显式 true */
   private readonly projectSlashCatalog: boolean;
   private readonly onMultiSelectionChange:
     ((blockIds: readonly BlockId[]) => void) | undefined;
-  private readonly rows = new Map<BlockId, HTMLElement>();
-  private readonly handles = new Map<BlockId, HTMLElement>();
-  private readonly checks = new Map<BlockId, HTMLInputElement>();
-  private readonly dropLine: HTMLElement;
-  private readonly slashHost: HTMLElement;
-  private readonly dragPreview: HTMLElement;
+  private readonly shell: ChromeHostShell;
   private dropTarget: DropLineTarget | null = null;
   private dragState: DragPreviewState | null = null;
   private destroyed = false;
-  private readonly blockOrder: BlockId[];
 
   constructor(parent: HTMLElement, options: BlockChromeDomHostOptions) {
     this.chrome = options.chrome;
@@ -124,65 +113,23 @@ export class BlockChromeDomHost {
     // SD-03：默认 false，防产品双浮层；契约测须显式 true
     this.projectSlashCatalog = options.projectSlashCatalog === true;
     this.onMultiSelectionChange = options.onMultiSelectionChange;
-
-    const doc = parent.ownerDocument;
-    const root = doc.createElement('div');
-    root.className = 'bp-chrome-root';
-    root.setAttribute(BP_CHROME_ROOT, '1');
-    parent.appendChild(root);
-    this.root = root;
-
-    this.blockOrder = [];
-    for (const spec of options.blocks) {
-      const id = spec.blockId;
-      if (!id || this.rows.has(id)) continue;
-      this.blockOrder.push(id);
-
-      const row = doc.createElement('div');
-      row.className = 'bp-block-row';
-      row.setAttribute(BP_BLOCK_ROW, '1');
-      row.setAttribute(BP_BLOCK_ID, id);
-      row.setAttribute(BP_DRAGGING, '0');
-      if (spec.flavour) row.setAttribute('data-flavour', spec.flavour);
-
-      const handle = doc.createElement('button');
-      handle.type = 'button';
-      handle.className = 'bp-block-handle';
-      handle.setAttribute(BP_HANDLE, '1');
-      handle.setAttribute(BP_HANDLE_VISIBILITY, 'hidden');
-      handle.setAttribute('aria-label', '块把手');
-      handle.tabIndex = -1;
-
-      const check = doc.createElement('input');
-      check.type = 'checkbox';
-      check.className = 'bp-multi-check';
-      check.setAttribute(BP_MULTI_CHECK, '1');
-      check.setAttribute(BP_BLOCK_ID, id);
-      check.setAttribute('aria-label', '多选块');
-      check.addEventListener('change', () => this.onCheckChange(id, check));
-
-      row.appendChild(handle);
-      row.appendChild(check);
-      root.appendChild(row);
-      this.rows.set(id, row);
-      this.handles.set(id, handle);
-      this.checks.set(id, check);
-    }
-
-    const indicators = createDragChromeIndicators(doc, root);
-    this.dropLine = indicators.dropLine;
-    this.dragPreview = indicators.dragPreview;
-    this.slashHost = createSlashHostElement(doc, root);
+    this.shell = assembleChromeHostShell(parent, options.blocks, (id, check) =>
+      this.onCheckChange(id, check)
+    );
     this.sync();
   }
 
   /** 从 model 重投影全部 chrome DOM */
   sync(): void {
     this.assertAlive();
-    for (const id of this.blockOrder) this.syncRow(id);
-    this.syncDropLine();
-    this.syncDragPreview();
-    this.syncSlashHost();
+    projectChromeHostDom({
+      shell: this.shell,
+      chrome: this.chrome,
+      slash: this.slash,
+      projectSlashCatalog: this.projectSlashCatalog,
+      dragState: this.dragState,
+      dropTarget: this.dropTarget,
+    });
   }
 
   /** 设置拖拽落点（纯呈现；**不**产 Move Intent） */
@@ -192,7 +139,7 @@ export class BlockChromeDomHost {
   ): void {
     this.assertAlive();
     this.dropTarget = resolveDropTarget(blockId, side, (id) =>
-      this.rows.has(id)
+      this.shell.rows.has(id)
     );
     this.syncDropLine();
   }
@@ -206,18 +153,19 @@ export class BlockChromeDomHost {
   }
 
   isDropLineVisible(): boolean {
-    return !this.dropLine.hidden;
+    return !this.shell.dropLine.hidden;
   }
 
   getDropLineElement(): HTMLElement {
-    return this.dropLine;
+    return this.shell.dropLine;
   }
 
   /** 开始拖拽预览；未知源块返回 false */
   startDragPreview(sourceBlockId: BlockId, label?: string): boolean {
     this.assertAlive();
-    if (!this.rows.has(sourceBlockId)) return false;
-    this.dragState = { sourceBlockId, label };
+    if (!this.shell.rows.has(sourceBlockId)) return false;
+    this.dragState =
+      label === undefined ? { sourceBlockId } : { sourceBlockId, label };
     this.syncDragPreview();
     return true;
   }
@@ -246,11 +194,11 @@ export class BlockChromeDomHost {
   }
 
   getDragPreviewElement(): HTMLElement {
-    return this.dragPreview;
+    return this.shell.dragPreview;
   }
 
   isDragPreviewVisible(): boolean {
-    return !this.dragPreview.hidden;
+    return !this.shell.dragPreview.hidden;
   }
 
   /** 指针形状 mock（jsdom）：down/move/up → 预览 + 落点 */
@@ -259,7 +207,7 @@ export class BlockChromeDomHost {
     const next = reduceDragPointerShape(
       { dragState: this.dragState, dropTarget: this.dropTarget },
       shape,
-      (id) => this.rows.has(id)
+      (id) => this.shell.rows.has(id)
     );
     this.dragState = next.dragState;
     this.dropTarget = next.dropTarget;
@@ -268,106 +216,71 @@ export class BlockChromeDomHost {
   }
 
   getHandleVisibilityAttr(blockId: BlockId): HandleVisibility | null {
-    const el = this.handles.get(blockId);
-    if (!el) return null;
-    const v = el.getAttribute(BP_HANDLE_VISIBILITY);
-    if (v === 'hidden' || v === 'hover' || v === 'focus' || v === 'multi') {
-      return v;
-    }
-    return null;
+    return readHandleVisibilityAttr(this.shell.handles.get(blockId));
   }
 
   isMultiCheckboxChecked(blockId: BlockId): boolean {
-    return this.checks.get(blockId)?.checked ?? false;
+    return this.shell.checks.get(blockId)?.checked ?? false;
   }
 
   isSlashHostVisible(): boolean {
-    return !this.slashHost.hidden;
+    return !this.shell.slashHost.hidden;
   }
 
   getSlashHostElement(): HTMLElement {
-    return this.slashHost;
+    return this.shell.slashHost;
   }
 
   getRootElement(): HTMLElement {
-    return this.root;
+    return this.shell.root;
   }
 
   getRowElement(blockId: BlockId): HTMLElement | null {
-    return this.rows.get(blockId) ?? null;
+    return this.shell.rows.get(blockId) ?? null;
   }
 
   getHandleElement(blockId: BlockId): HTMLElement | null {
-    return this.handles.get(blockId) ?? null;
+    return this.shell.handles.get(blockId) ?? null;
   }
 
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    this.rows.clear();
-    this.handles.clear();
-    this.checks.clear();
+    this.shell.rows.clear();
+    this.shell.handles.clear();
+    this.shell.checks.clear();
     this.dropTarget = null;
     this.dragState = null;
-    this.root.remove();
+    this.shell.root.remove();
   }
-
-  // -----------------------------------------------------------------------
-  // 内部
-  // -----------------------------------------------------------------------
 
   private onCheckChange(blockId: BlockId, check: HTMLInputElement): void {
     if (this.destroyed) return;
-    const selected = new Set(this.chrome.getSnapshot().multiSelectedIds);
-    if (check.checked) selected.add(blockId);
-    else selected.delete(blockId);
-    const next = this.blockOrder.filter((id) => selected.has(id));
-    this.chrome.setMultiSelected(next);
+    const next = applyMultiCheckChange({
+      blockId,
+      checked: check.checked,
+      chrome: this.chrome,
+      blockOrder: this.shell.blockOrder,
+    });
     this.sync();
     this.onMultiSelectionChange?.(next);
   }
 
-  private syncRow(blockId: BlockId): void {
-    const handle = this.handles.get(blockId);
-    const check = this.checks.get(blockId);
-    const row = this.rows.get(blockId);
-    if (!handle || !check || !row) return;
-
-    const vis = this.chrome.getHandleVisibility(blockId);
-    handle.setAttribute(BP_HANDLE_VISIBILITY, vis);
-    const showHandle = vis !== 'hidden';
-    handle.hidden = !showHandle;
-    handle.style.visibility = showHandle ? 'visible' : 'hidden';
-    check.checked = this.chrome.isMultiSelected(blockId);
-
-    const dragging =
-      this.dragState !== null && this.dragState.sourceBlockId === blockId;
-    row.setAttribute(BP_DRAGGING, dragging ? '1' : '0');
-  }
-
   private syncDragPreview(): void {
     syncDragPreviewDom({
-      dragPreview: this.dragPreview,
+      dragPreview: this.shell.dragPreview,
       dragState: this.dragState,
-      blockOrder: this.blockOrder,
-      rows: this.rows,
+      blockOrder: this.shell.blockOrder,
+      rows: this.shell.rows,
     });
   }
 
   private syncDropLine(): void {
     syncDropLineDom({
-      dropLine: this.dropLine,
-      root: this.root,
+      dropLine: this.shell.dropLine,
+      root: this.shell.root,
       dropTarget: this.dropTarget,
-      rows: this.rows,
-    });
-  }
-
-  private syncSlashHost(): void {
-    syncSlashHostDom({
-      slashHost: this.slashHost,
-      projectSlashCatalog: this.projectSlashCatalog,
-      slash: this.slash,
+      rows: this.shell.rows,
     });
   }
 
