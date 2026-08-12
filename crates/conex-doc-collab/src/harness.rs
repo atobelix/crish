@@ -1,4 +1,6 @@
-//! W1-F：双 [`DocSession`] in-process 互推 harness（A-COL-01 骨架）。
+//! W1-F / **W6-D-S**：双 [`DocSession`] in-process 互推 harness（A-COL-01 子集骨架）。
+//!
+//! **诚实**：本 harness 绿 ≠ **W6-D** Strict / ≠ **EL-04**；包锚见 [`crate::w6_d_s`]。
 //!
 //! # 语义说明
 //! - **结构路径（保留）**：[`SimplifiedEncodedOps`] — op 日志 JSON 重放；既有测保持绿。

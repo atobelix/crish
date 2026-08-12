@@ -1,4 +1,10 @@
-//! Round9 · W6-D · A-COL 双 peer 加深（in-process DualSessionHarness，无真实网络）。
+//! **W6-D-S** · A-COL-01 双 peer 加深（in-process [`DualSessionHarness`]，无真实网络）。
+//!
+//! # 轨与诚实边界
+//! - 包 ID：**W6-D-S**（Skeleton；常量 [`conex_doc_collab::W6_D_S_PACKAGE_ID`]）
+//! - **≠ W6-D** Strict（A-COL 全族满语义 + 脚手架退出）
+//! - **≠ EL-04**（须 W1-F + W6-D + G-HYD；禁止本文件绿关效果锁）
+//! - 结构侧可为 JSON 重放；文本侧 yrs update；**≠** 状态哈希终局叙事
 //!
 //! # 覆盖的 A-COL ID
 //! | ID | 场景 | 本文件用例 |
@@ -11,9 +17,11 @@
 //! - `docs/block-workspace-architecture/18-实现波前待决锁定-H1H2H3M1.md` §M1（删胜）
 //! - `docs/block-workspace-architecture/plans/specs/concurrent-move-rules.md` MV-03
 //! - W1-F harness：`DualSessionHarness`（结构 JSON 重放 + yrs 文本 update）
+//! - 包轨契约：`tests/w6_d_s_a_col_subset.rs` + `src/w6_d_s.rs`
 
 use conex_doc_collab::{
     ApplyError, BlockId, BlockKind, BlockProps, DualSessionHarness, Op, Origin, PeerSide,
+    W6_D_S_PACKAGE_ID,
 };
 use std::collections::HashSet;
 
@@ -37,6 +45,21 @@ fn seed_shared_paragraph(h: &mut DualSessionHarness, id: BlockId, order: &str) {
         .expect("seed shared paragraph");
     assert!(h.peer_a.tree().get(&id).is_some());
     assert!(h.peer_b.tree().get(&id).is_some());
+}
+
+// ---------------------------------------------------------------------------
+// 包轨钉（W6-D-S · 与子集文件互证；不关 EL-04）
+// ---------------------------------------------------------------------------
+
+/// 本 dual_peer 文件挂在 **W6-D-S** Skeleton 轨；**≠ W6-D** / **≠ EL-04**。
+#[test]
+fn a_col_dual_peer_package_track_is_w6_d_s_skeleton() {
+    assert_eq!(W6_D_S_PACKAGE_ID, "W6-D-S");
+    assert!(
+        W6_D_S_PACKAGE_ID.ends_with("-S"),
+        "必须保留 -S；禁止叙事为 W6-D Strict"
+    );
+    let _ = "W6-D-S ≠ W6-D / ≠ EL-04 满关";
 }
 
 // ---------------------------------------------------------------------------

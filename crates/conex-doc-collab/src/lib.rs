@@ -7,6 +7,11 @@
 //! - 热集/冷藏（H1）：活动 YText ≤ `max_hot`（默认 512）；冷块可读快照（A-MEM-01…04）
 //! - Undo v1：[`DocSession::undo`] 按 origin 过滤（A-COL-04）；跨冷 plain 恢复（A-MEM-04）
 //! - 跨引擎同批：[`a_inv_09`] 三连（树 Op + 文本 edit 同批提交/回滚；09c 含 undo 恢复）
+//!
+//! # W6-D-S（Skeleton · 协作子集）
+//! - 包 ID：[`w6_d_s::W6_D_S_PACKAGE_ID`] = `"W6-D-S"`（**必须**保留 `-S`）
+//! - 子集：in-process **A-COL-01**（[`DualSessionHarness`] + `tests/a_col_dual_peer`）
+//! - **诚实**：**≠ W6-D** Strict / **≠ EL-04** 满关（见 [`w6_d_s`] 模块文档）
 
 #![allow(missing_docs)]
 
@@ -23,6 +28,8 @@ pub mod structure_codec;
 /// 叶子文本引擎：yrs + 热集/冷藏（**非** `pub mod`，A-INV-05）。
 mod text_engine;
 mod tx;
+/// **W6-D-S** Skeleton：A-COL-01 子集轨锚（包 ID / 诚实边界 / 场景表）。
+pub mod w6_d_s;
 
 pub use block_id::{BlockId, block_id_from_comment, block_id_to_comment};
 pub use events::{BlockUpsert, DocEvent, ProjectionDiff};
@@ -42,6 +49,11 @@ pub use session::{
 /// H1 / A-MEM-01：默认热集上界（活动 YText 实例数）；见 `plans/acceptance/perf-baseline.md`。
 pub use text_engine::DEFAULT_MAX_HOT;
 pub use tx::{TxGuard, TxId};
+/// W6-D-S 包锚 re-export（调度 / 集成测可 `use conex_doc_collab::W6_D_S_PACKAGE_ID`）。
+pub use w6_d_s::{
+    W6_D_S_A_COL_01_SCENARIOS, W6_D_S_A_COL_SUBSET, W6_D_S_NOT_CLOSING, W6_D_S_PACKAGE_ID,
+    W6_D_S_TRACK,
+};
 
 /// A-INV-09 文档锚点（测试与门禁引用此模块路径）。
 pub mod a_inv_09 {
@@ -78,10 +90,16 @@ pub mod a_mem {
 
 /// A-COL 文档锚点（协同；本 crate 心侧子集）。
 ///
-/// **A-COL-04**（W1-U）：[`DocSession::undo`] 按 `Option<Origin>` 过滤；
-/// 测见 `session::tests::a_col_04_undo_origin_filter`。
+/// - **A-COL-01**（**W6-D-S** Skeleton）：in-process 双 peer 子集；
+///   测见 `tests/a_col_dual_peer.rs` / `tests/w6_d_s_a_col_subset.rs`；
+///   包锚 [`crate::w6_d_s`]；**≠ W6-D** / **≠ EL-04**。
+/// - **A-COL-04**（W1-U）：[`DocSession::undo`] 按 `Option<Origin>` 过滤；
+///   测见 `session::tests::a_col_04_undo_origin_filter`。
 pub mod a_col {
+    //! 01: 双 peer 最终一致方向（W6-D-S 子集；满语义属 W6-D / EL-04）
     //! 04: origin 可区分；undo 可按 origin 过滤（栈顶不匹配 → OriginMismatch，不误撤）
+    /// 双 peer 最终一致（结构 id + 文本）；**满语义**属 W6-D，本 crate Skeleton 见 [`crate::w6_d_s`]。
+    pub const A_COL_01: &str = "A-COL-01";
     pub const A_COL_04: &str = "A-COL-04";
 }
 
