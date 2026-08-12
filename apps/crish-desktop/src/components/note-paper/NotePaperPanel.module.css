@@ -2,7 +2,8 @@
  *
  * 对齐主壳 tokens.css：中性暖灰、radius/space/font/line-height、静默 chrome。
  * 吸收 AFFiNE/AppFlowy 式「可编辑纸面」完成度（舒适行距、块 hover、非 hover 少 chrome）。
- * **≠** 换肤成另一产品；**≠** 视觉完成关 EL-01/EL-08。
+ * 焦点皮：§13 软环（--border-color 94% + --text-primary 6%）；覆盖暗色 --focus-ring 30%。
+ * **≠** 关 EL；**≠** 视觉完成；**≠** 换肤成另一产品。
  *
  * fallback 取 light 档中性值（与 tokens 默认一致）；主题切换由 :root / data-theme 变量接管。
  */
@@ -24,6 +25,18 @@
   overflow: hidden;
   font-family: var(--font-sans, system-ui, sans-serif);
   box-shadow: var(--shadow-sm);
+  /* 常规 6%（§13 3–6，上限 10）；禁吃 token 暗色 30% / strong 12–22% */
+  --np-focus-edge: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+}
+
+/* 区域壳可程序聚焦（tabIndex=-1）；不画整卡硬环 */
+.panel:focus,
+.panel:focus-visible {
+  outline: none;
 }
 
 /* ---------- 顶栏：静默 chrome，密度对齐 card-header ---------- */
@@ -121,11 +134,26 @@ button.badge:active:not(:disabled) {
 
 button.badge:focus-visible {
   outline: none;
-  box-shadow: var(
-    --focus-ring,
-    0 0 0 2px
-      color-mix(in srgb, var(--control-mix-color, #4a4035) 8%, transparent)
-  );
+  box-shadow: 0 0 0 2px var(--np-focus-edge);
+}
+
+/* 覆盖 ui/Button + 全局 focus-visible.css 的 --focus-ring（暗色 30%） */
+.panel :global(button):focus-visible,
+.panel :global([role='button']):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--np-focus-edge);
+}
+
+/* 默认输入无厚影；焦点 6% 软环，无硬黑边 */
+.panel :global(input),
+.panel :global(textarea) {
+  box-shadow: none;
+}
+
+.panel :global(input):focus-visible,
+.panel :global(textarea):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--np-focus-edge);
 }
 
 /* 轨 / silent 标识：略强调但不抢纸面（信息色软底 + 次级字） */
@@ -287,9 +315,10 @@ button.badge:focus-visible {
   );
 }
 
-/* 焦点：中性淡染 + 极轻 inset 环（非高饱和蓝描边） */
-.blockRow[data-handle='focus'],
-.blockRow:focus-visible {
+/* 焦点：中性淡染 8% + 1px inset 6% 软环（非硬黑边 / 非暗色 30%） */
+.panel .blockRow[data-handle='focus'],
+.panel .blockRow:focus-visible,
+.panel .blockRow:focus-within {
   background: var(
     --bg-active,
     var(
@@ -297,8 +326,7 @@ button.badge:focus-visible {
       color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
     )
   );
-  box-shadow: inset 0 0 0 1px
-    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+  box-shadow: inset 0 0 0 1px var(--np-focus-edge);
 }
 
 .blockRow[data-handle='multi'] {
@@ -440,6 +468,7 @@ button.badge:focus-visible {
 /* CONN-D3：Strict content-row 叶（HiddenInput 方向）；≠ EL-01 */
 .text[data-strict-leaf-input='1'] {
   outline: none;
+  box-shadow: none;
   min-height: 1.25em;
   cursor: text;
   /* 空叶仍可点 */
@@ -447,8 +476,9 @@ button.badge:focus-visible {
 }
 
 .text[data-strict-leaf-input='1']:focus-visible {
-  /* 叶焦点由 blockRow 环表达；正文不抬第二层描边 */
+  /* 叶焦点由 blockRow :focus-within 环表达；正文不抬第二层描边 */
   outline: none;
+  box-shadow: none;
 }
 
 .text[data-md-prefix-leaf-mode='disabled'] {
