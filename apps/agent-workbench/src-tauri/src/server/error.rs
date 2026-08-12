@@ -118,6 +118,8 @@ impl ServerError {
                 | DeviceErrorCode::AuthStale
                 | DeviceErrorCode::AuthRotateConflict => 401,
                 DeviceErrorCode::CmdInvalid => 400,
+                // 白名单/门禁拒绝（R1-11 G-5 / D5 §4.5「403 cmd.denied」语义）
+                DeviceErrorCode::CmdDenied => 403,
                 DeviceErrorCode::CmdNotFound => 404,
                 // 审批冲突（F2 §11.2：重复决策 / 已被其他设备处理 / 已过期）
                 // → 409（与 session busy / engine 未就绪同档：请求方需收敛
@@ -180,6 +182,11 @@ mod tests {
         assert_eq!(
             ServerError::protocol(DeviceErrorCode::CmdInvalid, "x").http_status(),
             400
+        );
+        // R1-11 G-5：白名单拒绝 → 403（cmd.denied）
+        assert_eq!(
+            ServerError::protocol(DeviceErrorCode::CmdDenied, "x").http_status(),
+            403
         );
         assert_eq!(
             ServerError::protocol(DeviceErrorCode::CmdNotFound, "x").http_status(),

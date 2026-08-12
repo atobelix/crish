@@ -39,6 +39,7 @@ pub mod limiter;
 pub mod pair;
 pub mod pair_endpoint;
 pub mod pairing;
+pub mod remote_whitelist;
 pub mod router;
 pub mod ws;
 

@@ -562,6 +562,10 @@ impl ApiBackend for CoreStateBackend {
             context_window: None,
             parent_run_id: None,
             subagent_config: None,
+            // D5 §3.1：goal 三字段（远程 run 命令缺省 None，与旧命令面一致）
+            visible_goal: None,
+            max_rounds: None,
+            max_stalled_rounds: None,
         };
         let response = run_task_impl(Arc::clone(&self.core), options)
             .await
@@ -966,5 +970,170 @@ mod tests {
         emit_remote_source_attempt_audit(None, "config_secret_reveal");
         emit_remote_mode_downgrade_audit(None, "", "s1");
         emit_remote_only_audit(None, "s1");
+    }
+
+    // ── R1-11 G-5 红线 2 装配断言：远程 run 申报 full-access（真实装配链）──
+
+    /// 会话索引条目（测试会话；对齐 core_run_commands 测试先例）
+    fn g5_test_session_entry(id: &str) -> conex_types::SessionIndexEntry {
+        conex_types::SessionIndexEntry {
+            id: id.to_string(),
+            title: format!("会话 {id}"),
+            folder: String::new(),
+            is_pinned: false,
+            is_archived: false,
+            branch_parent_id: None,
+            timestamp: "2026-08-05T00:00:00.000Z".to_string(),
+            updated_at: 1,
+            message_count: 0,
+            pinned_message_ids: None,
+            engine_cursor: Some(0),
+            engine_last_run_id: None,
+            hydrated_from_engine: Some(true),
+        }
+    }
+
+    /// 轮询事件桥载荷出现指定 operation 的 security-audit（窗口内未到
+    /// 则 panic——不静默降级；对齐 core_run_commands wait_for_audit_operation
+    /// 先例）
+    async fn g5_wait_audit_operation(
+        emitter: &Arc<RecordingEmitter>,
+        operation: &str,
+        window: std::time::Duration,
+    ) {
+        let deadline = std::time::Instant::now() + window;
+        loop {
+            let payloads = emitter.0.lock().unwrap().clone();
+            if payloads
+                .iter()
+                .filter(|p| p.contains("security-audit"))
+                .any(|p| p.contains(operation))
+            {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "审计 {operation} 未在窗口内发射"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        }
+    }
+
+    /// 红线 2 装配断言（R1-11 §3 / D5 §10.3-2 / T-08 端到端）：远程 run
+    /// 申报 full-access → 经真实装配链（CoreStateBackend::run_task →
+    /// run_task_impl 完整 run loop，TestProvider 引擎注入）降级 ask +
+    /// RemoteModeDowngrade 审计事件发射。审计断言 = SecurityAudit
+    /// (remote-mode-downgrade) 事件载荷（blocked + permission_mode 记录
+    /// 降级前申请值 full-access）；装配断言 = 降级后的 run 正常发起并
+    /// 收口（agent-end 落库——生效 ask 进入 run 装配，D5 §4.6.1
+    /// min(requested, Ask) 截断不破坏 run 执行链）
+    #[tokio::test]
+    async fn t08_redline2_full_access_run_emits_downgrade_audit_end_to_end() {
+        use agent_provider::config::Endpoint;
+        use session_loop::provider::ProviderCall;
+        use session_loop::stream::{ProviderStreamEvent, StopReason};
+        use session_loop::testing::TestProvider;
+
+        let (bridge, emitter) = recording_bridge();
+        let db = conex_db::LocalDb::open_in_memory().expect("内存库");
+        db.upsert_session_entry(&g5_test_session_entry("s1"))
+            .expect("会话条目");
+        static G5_TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = G5_TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let snapshots: Arc<dyn orchestrator::restore::SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_redline2_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        let state = Arc::new(crate::core_run_commands::CoreRunState::new(
+            Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
+            snapshots,
+            bridge,
+            Arc::new(crate::status_diagnostics::StatusDiagnostics::new()),
+            None,
+        ));
+        // TestProvider 引擎注入（完整 run loop 装配；脚本 = 单轮文本收口）
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("远程 run 收口。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let routed: Arc<dyn ProviderCall> = provider;
+        let config = crate::engine::EngineProviderConfig {
+            base_url: "http://test.local/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+            extra: std::collections::BTreeMap::new(),
+        };
+        state.engine().inject_provider_for_test(routed, config);
+        state.run_restore().await;
+
+        // 远程 run 申报 full-access → 经装配面（REST 直调同构）
+        let backend = CoreStateBackend::new(Arc::clone(&state));
+        let result = backend
+            .run_task(RunTaskParams {
+                session_id: Some("s1".to_string()),
+                prompt: "远程 run（full-access 申报）".to_string(),
+                prompt_ref: None,
+                mode: None,
+                cwd: None,
+                permission_mode: Some(PermissionMode::FullAccess),
+                history: None,
+                client_message_id: None,
+            })
+            .await;
+        assert!(result.is_ok(), "降级后的 run 必须正常发起：{result:?}");
+
+        // 审计断言：RemoteModeDowngrade 事件发射（blocked + 降级前值）
+        g5_wait_audit_operation(
+            &emitter,
+            "remote-mode-downgrade",
+            std::time::Duration::from_secs(5),
+        )
+        .await;
+        let payloads = emitter.0.lock().unwrap().clone();
+        let downgrades = payloads
+            .iter()
+            .filter(|p| p.contains("remote-mode-downgrade"))
+            .collect::<Vec<_>>();
+        assert_eq!(downgrades.len(), 1, "降级审计必须恰发射一次");
+        let envelope: conex_types::events::AgentEventEnvelope =
+            serde_json::from_str(downgrades[0]).expect("信封 JSON 可解析");
+        let conex_types::events::AgentEvent::SecurityAudit {
+            operation,
+            decision,
+            permission_mode,
+            ..
+        } = envelope.event
+        else {
+            panic!("应为 SecurityAudit 事件");
+        };
+        assert_eq!(
+            operation,
+            conex_types::events::SecurityAuditOperation::RemoteModeDowngrade
+        );
+        assert_eq!(decision, conex_types::events::SecurityAuditDecision::Blocked);
+        assert_eq!(
+            permission_mode.as_deref(),
+            Some("full-access"),
+            "permission_mode 记录降级前申请值"
+        );
+
+        // 装配断言：生效 ask 下 run 正常收口（agent-end 事件落库——降级
+        // 不破坏 run 执行链，D5 §4.6.1）
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        loop {
+            let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
+            if events.iter().any(|event| event.event_type == "agent-end") {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "agent-end 未在窗口内落库——run 未正常收口"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        }
     }
 }

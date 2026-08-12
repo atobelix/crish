@@ -106,6 +106,34 @@ pub const SECRET_COMMAND_SURFACE: &[&str] = &[
     "host_openers",
 ];
 
+/// 命令执行面白名单守卫（R1-11 G-5 / D5 §4.5 M-REG 接线）：REST 命令
+/// 执行端点（run 发起 / 控制 / 取消）在 handler 入口显式经过
+/// [remote_whitelist] 判定——白名单是命令执行面的唯一真源（对偶
+/// command_manifest 的 registered 机制，D-11 远程面独立注册表）；命令名
+/// 不在白名单 → 403 cmd.denied + RemoteSourceAttempt 审计事件（复用
+/// core_backend 发射器，敏感形态打码）。
+///
+/// 审批端点（approve / deny / pending / history）不挂此守卫——审批决策
+/// 是移动端核心能力（D5 §4.2 能力分级 approve；§4.5 白名单表 C11-C14
+/// 显式登记），裁决语义由审批门 I-02 pending 校验（TH-13 伪造防护）
+/// 保障，白名单表本身仍完整声明其能力位（remote_whitelist 测试锁定）。
+fn ensure_command_execution_allowed(
+    state: &ServerState,
+    command: &'static str,
+) -> Result<(), ServerError> {
+    if crate::server::remote_whitelist::is_remote_command_whitelisted(command) {
+        return Ok(());
+    }
+    crate::server::core_backend::emit_remote_source_attempt_audit(
+        state.audit_bridge().as_ref(),
+        command,
+    );
+    Err(ServerError::protocol(
+        DeviceErrorCode::CmdDenied,
+        format!("命令不在远程白名单：{command}"),
+    ))
+}
+
 // ── R1-04 写面路径（M6 §4：F5 会话域 + F2 审批域 + F6 设置域 REST 形态）──
 
 /// C24 发起 run（POST /v1/runs；body = RunTaskParams）
@@ -354,34 +382,40 @@ async fn handle_search_index(
 // ── R1-04 写面：F5 会话域 / F2 审批域 / F6 设置域 handler ──
 
 /// POST /v1/runs：C24 发起 run（body = RunTaskParams；runId 桌面生成，
-/// sessionId 缺省 = 新建会话）
+/// sessionId 缺省 = 新建会话）。命令执行面白名单守卫：runTask 必须登记
+/// 于远程白名单（R1-11 G-5 / D5 §4.5 M-REG）
 async fn handle_run_task(
     State(state): State<ServerState>,
     JsonBody(params): JsonBody<RunTaskParams>,
 ) -> Result<Json<RunTaskResult>, ServerError> {
+    ensure_command_execution_allowed(&state, "runTask")?;
     let backend = require_backend(&state)?;
     Ok(Json(backend.run_task(params).await?))
 }
 
 /// POST /v1/runs/{id}/control：C25 run 控制（body = RunControlParams；
-/// 路径 runId 优先，覆盖 body 携带值——REST 资源地址即命令真键）
+/// 路径 runId 优先，覆盖 body 携带值——REST 资源地址即命令真键）。
+/// 命令执行面白名单守卫：runControl 必须登记于远程白名单
 async fn handle_run_control(
     State(state): State<ServerState>,
     Path(run_id): Path<String>,
     JsonBody(mut params): JsonBody<RunControlParams>,
 ) -> Result<Json<RunControlResult>, ServerError> {
+    ensure_command_execution_allowed(&state, "runControl")?;
     params.run_id = run_id;
     let backend = require_backend(&state)?;
     Ok(Json(backend.run_control(params).await?))
 }
 
 /// POST /v1/runs/{id}/cancel：C26 取消 run（body = {reason?}；路径 runId
-/// 为真键；重复取消无副作用）
+/// 为真键；重复取消无副作用）。命令执行面白名单守卫：cancelRun 必须
+/// 登记于远程白名单
 async fn handle_run_cancel(
     State(state): State<ServerState>,
     Path(run_id): Path<String>,
     JsonBody(body): JsonBody<serde_json::Value>,
 ) -> Result<Json<CancelRunResult>, ServerError> {
+    ensure_command_execution_allowed(&state, "cancelRun")?;
     let reason = body
         .get("reason")
         .and_then(serde_json::Value::as_str)
@@ -2640,6 +2674,172 @@ mod tests {
         assert!(marker.contains("operation=remote-source-attempt"));
         assert!(marker.contains("command=config_secret_reveal"));
         assert!(marker.contains("decision=blocked"));
+    }
+
+    // ── R1-11 G-5：远程命令白名单接线（D5 §4.5 M-REG 端到端）──
+
+    /// 审计事件桥测试替身（G-5：remote-source-attempt 事件发射端到端
+    /// 断言锚；对齐 core_backend 测试先例）
+    #[derive(Default)]
+    struct G5RecordingEmitter(std::sync::Mutex<Vec<String>>);
+
+    impl crate::core_event_bridge::Emitter for G5RecordingEmitter {
+        fn emit(&self, _channel: &str, payload: &str) {
+            self.0.lock().unwrap().push(payload.to_string());
+        }
+    }
+
+    fn g5_recording_bridge() -> (crate::core_event_bridge::EventBridge, Arc<G5RecordingEmitter>) {
+        let emitter = Arc::new(G5RecordingEmitter::default());
+        let bridge = crate::core_event_bridge::EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
+        );
+        (bridge, emitter)
+    }
+
+    /// 命令执行端点与白名单双源对账（防漂移）：REST 命令执行端点
+    /// （runTask / runControl / cancelRun）必须登记于远程白名单——未来
+    /// 移除白名单条目而保留端点即红（白名单是命令执行面唯一真源）
+    #[test]
+    fn g5_command_execution_endpoints_registered_in_whitelist() {
+        for command in ["runTask", "runControl", "cancelRun"] {
+            assert!(
+                crate::server::remote_whitelist::is_remote_command_whitelisted(command),
+                "命令执行端点 {command} 必须登记于远程白名单"
+            );
+        }
+        // 审批端点不挂执行守卫，但命令面注册表仍完整声明能力位（D5
+        // §4.2 审批决策是移动端核心能力）
+        for command in ["approve", "deny", "listPendingApprovals", "approvalHistory"] {
+            assert!(
+                crate::server::remote_whitelist::is_remote_command_whitelisted(command),
+                "审批命令 {command} 必须在白名单表内（能力声明）"
+            );
+        }
+    }
+
+    /// 守卫拒绝路径：非白名单命令名 → Err（403 cmd.denied 语义）+ 审计
+    /// 事件发射（事件桥注入形态；守卫把白名单拒绝与审计绑成一体——
+    /// D5 §4.5「命令名 ∉ 白名单 → 403 cmd.denied + RemoteSourceAttempt
+    /// 审计事件」）
+    #[test]
+    fn g5_whitelist_guard_rejects_off_whitelist_command() {
+        let (bridge, emitter) = g5_recording_bridge();
+        let state = test_state_with(Some(MockBackend::new())).with_audit_bridge(bridge);
+        let err = ensure_command_execution_allowed(&state, "config_secret_reveal")
+            .expect_err("非白名单命令名必须被守卫拒绝");
+        let response = error_response(&err);
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        // 审计事件：remote-source-attempt + blocked + 命令名 targets
+        let recorded = emitter.0.lock().unwrap();
+        assert_eq!(recorded.len(), 1, "守卫拒绝必须发射一条审计事件");
+        let envelope: conex_types::events::AgentEventEnvelope =
+            serde_json::from_str(&recorded[0]).expect("信封 JSON 可解析");
+        // 显式释放 guard——后续放行路径断言需再次锁同一 Mutex
+        // （std Mutex 不可重入，guard 存活期间重入即死锁）
+        drop(recorded);
+        let conex_types::events::AgentEvent::SecurityAudit {
+            operation,
+            targets,
+            decision,
+            ..
+        } = envelope.event
+        else {
+            panic!("守卫拒绝应发射 SecurityAudit 事件");
+        };
+        assert_eq!(
+            operation,
+            conex_types::events::SecurityAuditOperation::RemoteSourceAttempt
+        );
+        assert_eq!(targets, vec!["config_secret_reveal".to_string()]);
+        assert_eq!(decision, conex_types::events::SecurityAuditDecision::Blocked);
+        // 白名单内命令名放行（无 Err 无审计）
+        assert!(ensure_command_execution_allowed(&state, "runTask").is_ok());
+        assert_eq!(emitter.0.lock().unwrap().len(), 1, "放行路径不得发射审计");
+    }
+
+    /// 红线 5 / T-07 端到端（R1-11 §3「config_secret_* 远程来源 100%
+    /// Forbidden」）：REST 面无 config_secret_* 执行端点（白名单天然
+    /// 拦截）——带令牌请求未知路径 /v1/config_secret_reveal → 403
+    /// cmd.denied + RemoteSourceAttempt 审计事件（端到端：鉴权面 →
+    /// fallback 拒绝分支 → 事件桥发射）
+    #[tokio::test]
+    async fn t07_config_secret_forbidden_end_to_end_with_audit_event() {
+        let (bridge, emitter) = g5_recording_bridge();
+        let state = test_state_with(Some(MockBackend::new())).with_audit_bridge(bridge);
+        let token = issue_token(&state);
+        let app = build_router(state);
+        for name in [
+            "config_secret_reveal",
+            "config_secret_get",
+            "config_secret_set",
+            "config_secret_clear",
+            "config_secret_has",
+        ] {
+            let uri = format!("/v1/{name}");
+            let response = app.clone().oneshot(authed_get(&uri, &token)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{uri} 必须 403");
+            let body = json_body(response).await;
+            assert_eq!(body["code"], "cmd.denied", "{uri} 错误码应为 cmd.denied");
+            assert_eq!(body["retryable"], false);
+        }
+        // 审计事件：5 条触达 = 5 条 remote-source-attempt（逐条可对账）
+        let recorded = emitter.0.lock().unwrap();
+        assert_eq!(recorded.len(), 5, "每条被禁命令触达必须发射一条审计");
+        for payload in recorded.iter() {
+            let envelope: conex_types::events::AgentEventEnvelope =
+                serde_json::from_str(payload).expect("信封 JSON 可解析");
+            let conex_types::events::AgentEvent::SecurityAudit {
+                operation,
+                decision,
+                ..
+            } = envelope.event
+            else {
+                panic!("应为 SecurityAudit 事件");
+            };
+            assert_eq!(
+                operation,
+                conex_types::events::SecurityAuditOperation::RemoteSourceAttempt
+            );
+            assert_eq!(decision, conex_types::events::SecurityAuditDecision::Blocked);
+        }
+    }
+
+    /// REST 已注册端点与 SECRET_COMMAND_SURFACE 双源对账：被禁命令面
+    /// 不得注册任何路由（白名单天然拦截的静态面——无路由即 403；未来
+    /// 给被禁命令注册路由即红）
+    #[test]
+    fn g5_rest_routes_never_register_secret_surface() {
+        let registered = [
+            INFO_PATH,
+            HELLO_PATH,
+            STATUS_PATH,
+            RUN_SNAPSHOT_PATH,
+            SESSION_EVENTS_PATH,
+            RUN_EVENTS_PATH,
+            SESSIONS_PATH,
+            TASKS_PATH,
+            TASK_OUTPUT_PATH,
+            SESSION_FLOW_PATH,
+            COMMANDS_PATH,
+            SEARCH_INDEX_PATH,
+            PAIR_PATH,
+            RUNS_PATH,
+            RUN_CONTROL_PATH,
+            RUN_CANCEL_PATH,
+            APPROVAL_APPROVE_PATH,
+            APPROVAL_DENY_PATH,
+            APPROVALS_PENDING_PATH,
+            APPROVALS_HISTORY_PATH,
+            SETTINGS_PATH,
+        ];
+        for name in SECRET_COMMAND_SURFACE {
+            assert!(
+                !registered.iter().any(|path| path.contains(name)),
+                "被禁命令面 {name} 不得注册任何 REST 路由"
+            );
+        }
     }
 
     // ── R1-10 T-08：远程 run 权限模式申报（装配面降级前置）──

@@ -233,17 +233,16 @@ impl PairingCoordinator {
         }
     }
 
-    /// 取消配对：状态机重置 → 恢复 Loopback → 重绑
+    /// 取消配对（D2 §5.4 关闭动作，R1-11 验收缺口 G-4 修复）：
+    /// 关闭配对 = 撤销全部设备——清空全部已签发令牌（落盘）→
+    /// WS 全部踢出（token-revoked）→ 状态机重置 → 恢复 Loopback → 重绑。
+    /// 令牌全部失效后 REST 鉴权自然 401；重新开启配对签发全新令牌。
     pub fn cancel_pairing(&self) {
+        self.revoke_all();
         self.pair
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .cancel();
-        *self
-            .pairing_enabled
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = false;
-        self.fire_rebind(false);
     }
 
     /// 撤销指定设备：令牌失效 → 落盘 → WS 踢出；其余设备仍在则保持 Lan。
@@ -552,9 +551,16 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::server::auth::TokenVerdict;
+    use crate::server::ws::RegisterOutcome;
 
-    /// 测试协调器：注入记录重绑的钩子与临时令牌库
-    fn test_coordinator() -> (Arc<PairingCoordinator>, Arc<Mutex<Vec<bool>>>) {
+    /// 测试协调器（含 WS 注册表句柄，供踢出链断言）：注入记录重绑的
+    /// 钩子与临时令牌库
+    fn test_coordinator_with_ws() -> (
+        Arc<PairingCoordinator>,
+        Arc<WsRegistry>,
+        Arc<Mutex<Vec<bool>>>,
+    ) {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         let unique = NEXT_ID.fetch_add(1, Ordering::Relaxed);
@@ -565,13 +571,19 @@ mod tests {
             )),
         )));
         let ws = Arc::new(WsRegistry::new());
-        let coordinator = Arc::new(PairingCoordinator::new(tokens, ws));
+        let coordinator = Arc::new(PairingCoordinator::new(tokens, ws.clone()));
         let rebinds = Arc::new(Mutex::new(Vec::new()));
         let hook_rebinds = rebinds.clone();
         coordinator.set_rebind_hook(Arc::new(move |lan: bool| {
             hook_rebinds.lock().unwrap_or_else(|e| e.into_inner()).push(lan);
         }));
         coordinator.set_port(8765);
+        (coordinator, ws, rebinds)
+    }
+
+    /// 测试协调器：注入记录重绑的钩子与临时令牌库
+    fn test_coordinator() -> (Arc<PairingCoordinator>, Arc<Mutex<Vec<bool>>>) {
+        let (coordinator, _ws, rebinds) = test_coordinator_with_ws();
         (coordinator, rebinds)
     }
 
@@ -784,6 +796,59 @@ mod tests {
         assert_eq!(coordinator.status(now).state, "idle");
         assert_eq!(coordinator.status(now).bind_mode, "loopback");
         assert_eq!(*rebinds.lock().unwrap_or_else(|e| e.into_inner()), vec![true, false]);
+    }
+
+    /// G-4（R1-11 验收缺口修复）：关闭配对 = 撤销全部设备（D2 §5.4 关闭
+    /// 动作）——清空全部已签发令牌 + WS 踢出 + 状态机重置 + 回 Loopback。
+    #[test]
+    fn cancel_pairing_revokes_all_tokens_and_kicks_ws() {
+        let (coordinator, ws, rebinds) = test_coordinator_with_ws();
+        let now = crate::server::now_ms();
+        let code = valid_code(&coordinator);
+        let raw = coordinator
+            .complete_pairing(&code, "d1", now)
+            .expect("签发必须成功");
+        let hash = coordinator.token_hashes().pop().expect("应有令牌");
+
+        // 模拟手机已连接：以该令牌哈希注册 WS 连接
+        let (kill_tx, kill_rx) = tokio::sync::watch::channel::<Option<String>>(None);
+        let conn_id = match ws.register(&hash, "d1", kill_tx, now) {
+            RegisterOutcome::Registered(id) => id,
+            RegisterOutcome::LimitExceeded => panic!("连接上限不应触发"),
+        };
+        assert_eq!(ws.count(), 1, "连接必须已注册");
+
+        coordinator.cancel_pairing();
+
+        // ① 设备列表空（撤销 = 解除配对关系）
+        assert!(coordinator.list_devices().is_empty());
+        // ② 令牌 verify 全 Revoked（REST 鉴权自然 401）
+        assert_eq!(
+            coordinator
+                .tokens
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .verify(&raw, now),
+            TokenVerdict::Revoked,
+            "关闭配对后已签发令牌必须全部失效"
+        );
+        // ③ WS 踢出信号已下发（token-revoked）；sender task 收口注销后注册表为空
+        assert_eq!(
+            kill_rx.borrow().as_deref(),
+            Some("token-revoked"),
+            "关闭配对必须踢出全部在线连接"
+        );
+        ws.unregister(conn_id);
+        assert_eq!(ws.count(), 0, "踢出后注册表清空");
+        // ④ 状态机重置 + 回 Loopback + 重绑钩子（一次开启一次关闭）
+        assert!(!coordinator.pairing_enabled());
+        let status = coordinator.status(now);
+        assert_eq!(status.state, "idle");
+        assert_eq!(status.bind_mode, "loopback");
+        assert_eq!(
+            *rebinds.lock().unwrap_or_else(|e| e.into_inner()),
+            vec![true, false]
+        );
     }
 
     #[test]

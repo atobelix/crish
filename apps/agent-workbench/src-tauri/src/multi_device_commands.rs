@@ -44,7 +44,10 @@ pub fn multi_device_pair_status(coordinator: State<'_, Arc<PairingCoordinator>>)
     coordinator.status(now)
 }
 
-/// 取消配对：状态机重置 → 恢复回环监听。
+/// 关闭配对（D2 §5.4 关闭动作 / R1-11 G-4）：关闭配对 = 撤销全部设备——
+/// 清空全部已签发令牌 + WS 全部踢出 → 状态机重置 → 回 Loopback 重绑；
+/// 令牌全部失效后 REST 鉴权自然 401。无需独立 revoke_all 命令面，
+/// cancel 承载关闭语义（避免 manifest 膨胀）。
 #[tauri::command]
 pub fn multi_device_pair_cancel(coordinator: State<'_, Arc<PairingCoordinator>>) {
     coordinator.cancel_pairing();
