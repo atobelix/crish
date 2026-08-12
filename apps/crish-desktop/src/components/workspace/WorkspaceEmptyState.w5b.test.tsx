@@ -23,6 +23,11 @@
  * - **CONN-E3**：detect→report 调度默认关；`enableMirrorDetectSchedule` + `mirrorIpc`
  *   → mock/Tauri detect → report 喂 StatusBar；`data-mirror-detect-schedule=0|1`；
  *   关时无 detect 定时器；X-05 / import 不回退；**≠ EL-03**；**≠ inotify 满关**
+ * - **CONN-C2**：PaperList 产品默认 **关**（`enableProductPaperList` 默认 false →
+ *   `data-product-paper-list=0` / panel `data-paper-list=0` / `react-rows`）；
+ *   opt-in true → 挂 PaperList + `paper-list` 互斥 content-row；
+ *   测钉 `conn_c2_default_no_paper_list` / `conn_c2_opt_in_paper_list_mutex`；
+ *   **≠ EL-01**；**≠ W3-P 满窗**；禁默认真双内容
  * - **可演示 ≠ EL**；**≠ 打开完成**；fixture ≠ 生产权威；
  *   后端默认 `hydrate_path=doc-session` 仍 **≠ EL-01/04/08**
  * - **≠ EL-01**；**≠ A-BLK-02/08 e2e 满关**；桌面接线 ≠ 打开完成
@@ -115,8 +120,8 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     );
     expect(panel.querySelector('[data-lines]')).toBeNull();
 
-    // CONN-C · C-X2：空态产品默认 **不** 传 paperList → data-paper-list=0 钉死
-    // （防默默改默认 true 却无结构门测；库+opt-in 已挂 ≠ 空态默认挂）
+    // CONN-C · C-X2 / CONN-C2：空态产品默认 **不** 传 paperList → data-paper-list=0 钉死
+    // （enableProductPaperList 默认 false；防默默改默认 true；≠ EL-01 / ≠ W3-P）
     expect(panel).toHaveAttribute('data-paper-list', '0');
     expect(panel).toHaveAttribute('data-presentation-mode', 'react-rows');
     expect(screen.queryByTestId('note-paper-strict-paper-list')).toBeNull();
@@ -907,5 +912,84 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
       expect(ipc.importCalls.length).toBe(1);
     });
     expect(ipc.importCalls[0]?.strategy).toBe('drop_unacked');
+  });
+
+  // -------------------------------------------------------------------------
+  // CONN-C2：PaperList 产品默认策略可审计（默认关 + opt-in 互斥）
+  // - 默认：不传 paperList → data-paper-list=0 / react-rows
+  // - opt-in：enableProductPaperList → paper-list 挂载且 content-row 互斥
+  // - ≠ EL-01；≠ W3-P 满窗；presentationMode 互斥不回退
+  // -------------------------------------------------------------------------
+
+  it('conn_c2_default_no_paper_list', async () => {
+    render(<WorkspaceEmptyState wsId="ws-conn-c2-off" />);
+
+    const root = screen.getByRole('status');
+    expect(root).toHaveAttribute('data-product-paper-list', '0');
+    expect(root).toHaveAttribute('data-el01', 'not-claimed');
+    expect(root).toHaveAttribute('data-w3p-full', 'not-claimed');
+
+    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const host = screen.getByTestId('note-paper-strict-host');
+    expect(host).toHaveAttribute('data-product-paper-list', '0');
+    expect(host).toHaveAttribute('data-el01', 'not-claimed');
+    expect(host).toHaveAttribute('data-w3p-full', 'not-claimed');
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    // 产品默认会计钉：不挂 PaperList
+    expect(panel).toHaveAttribute('data-paper-list', '0');
+    expect(panel).toHaveAttribute('data-presentation-mode', 'react-rows');
+    expect(screen.queryByTestId('note-paper-strict-paper-list')).toBeNull();
+    expect(panel.querySelector('[data-bp-paper-list-mount]')).toBeNull();
+    // content-row 仍为默认内容宿主（非双内容）
+    expect(
+      panel.querySelectorAll('[data-content-row="1"]').length
+    ).toBeGreaterThan(0);
+  });
+
+  it('conn_c2_opt_in_paper_list_mutex', async () => {
+    render(<WorkspaceEmptyState wsId="ws-conn-c2-on" enableProductPaperList />);
+
+    const root = screen.getByRole('status');
+    expect(root).toHaveAttribute('data-product-paper-list', '1');
+    expect(root).toHaveAttribute('data-el01', 'not-claimed');
+    expect(root).toHaveAttribute('data-w3p-full', 'not-claimed');
+
+    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const host = screen.getByTestId('note-paper-strict-host');
+    expect(host).toHaveAttribute('data-product-paper-list', '1');
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    // opt-in：presentationMode 产品默认 paper-list（互斥 content-row）
+    expect(panel).toHaveAttribute('data-paper-list', '1');
+    expect(panel).toHaveAttribute('data-presentation-mode', 'paper-list');
+    expect(screen.getByTestId('note-paper-strict-paper-list')).toHaveAttribute(
+      'data-bp-paper-list-mount',
+      '1'
+    );
+    // 内容互斥：不得同屏全量 content-row（presentationMode 不回退 debug-dual）
+    expect(panel.querySelectorAll('[data-content-row="1"]').length).toBe(0);
+    // chrome 分槽仍可同屏（不计入内容互斥）
+    expect(screen.getByTestId('note-paper-strict-chrome-dom')).toHaveAttribute(
+      'data-bp-chrome-mount',
+      '1'
+    );
+    // 诚实：≠ EL-01 / ≠ W3-P
+    expect(host).toHaveAttribute('data-el01', 'not-claimed');
+    expect(host).toHaveAttribute('data-w3p-full', 'not-claimed');
   });
 });

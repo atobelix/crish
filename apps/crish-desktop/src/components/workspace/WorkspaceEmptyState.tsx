@@ -143,6 +143,16 @@ export type WorkspaceEmptyStateProps = {
    * >0 → 立即一次 + interval（仍须 opt-in；≠ 默认双开 poll+OS）。
    */
   mirrorDetectIntervalMs?: number;
+  /**
+   * CONN-C2：显式 opt-in 产品空态挂载 PaperList（默认 **关**）。
+   * - 省略 / `false` → 打开 Strict **不** 传 `paperList` → `data-paper-list=0` +
+   *   `presentationMode=react-rows`（仅 content-row；**防**默认真双内容）
+   * - `true` → 传 `paperList` → 产品默认 `presentationMode=paper-list`
+   *   （与 content-row **互斥**；chrome 分槽仍可同屏）
+   * - **≠ EL-01**；**≠ W3-P 满窗**；库层 PaperList 已挂 ≠ 空态默认挂
+   * - 测钉：`conn_c2_default_no_paper_list` / `conn_c2_opt_in_paper_list_mutex`
+   */
+  enableProductPaperList?: boolean;
 };
 
 /**
@@ -161,8 +171,11 @@ export type WorkspaceEmptyStateProps = {
  *   `showMirrorDriftBar` / `mirrorDriftReport` opt-in 才装配；无 report 不造假数据
  * - **CONN-E3 detect 调度**：默认 **不** 调 detect；
  *   `enableMirrorDetectSchedule` + `mirrorIpc` opt-in → detect→report
+ * - **CONN-C2 PaperList 产品默认**：默认 **不** 挂 PaperList（`enableProductPaperList`
+ *   默认 false → 不传 `paperList` → `data-paper-list=0` / `react-rows`）；
+ *   opt-in true → `paperList` + 产品 `paper-list` 模式（**互斥** content-row）
  *
- * ## 诚实边界（08 §0.2 / 20 L3–L4 · R10 · CONN-A1 · CONN-B3 · CONN-E2/E3）
+ * ## 诚实边界（08 §0.2 / 20 L3–L4 · R10 · CONN-A1 · CONN-B3 · CONN-E2/E3 · CONN-C2）
  * - **可演示 ≠ EL-01 / EL-08 关闭**
  * - **≠ 打开完成**；后端默认 `hydrate_path=doc-session`（真 `DocSession::hydrate` 投影）；
  *   对照轨 `prefer_query` → `query-blocks`；**path 字符串 ≠ G-HYD 打开完成 / ≠ EL-01/04/08**
@@ -173,6 +186,7 @@ export type WorkspaceEmptyStateProps = {
  * - 桌面 mdPrefix 接线 ≠ 打开完成
  * - mirror 条 **≠ EL-03**；**≠ inotify 满关**；X-05 不回退；**≠** 默认 poll+OS 双开
  * - detect 调度 **仅** opt-in；关时无 timer；**≠** 假关 EL-03
+ * - PaperList **仅** `enableProductPaperList` opt-in；默认不双内容；**≠ EL-01**；**≠ W3-P 满窗**
  */
 export function WorkspaceEmptyState({
   wsId,
@@ -192,6 +206,7 @@ export function WorkspaceEmptyState({
   mirrorIpc,
   enableMirrorDetectSchedule = false,
   mirrorDetectIntervalMs,
+  enableProductPaperList = false,
 }: WorkspaceEmptyStateProps) {
   const [openMode, setOpenMode] = useState<NotePaperEmptyOpenMode | null>(null);
 
@@ -321,6 +336,8 @@ export function WorkspaceEmptyState({
       : mirrorWatchSource;
 
   const scheduleAttr = detectSchedule.scheduleActive ? '1' : '0';
+  /** CONN-C2：产品空态 PaperList 会计钉（默认 0；opt-in 1） */
+  const productPaperListAttr = enableProductPaperList === true ? '1' : '0';
 
   if (openMode === 'strict') {
     return (
@@ -339,8 +356,11 @@ export function WorkspaceEmptyState({
         data-md-prefix-sink={mdPrefixBinding.sink ? '1' : '0'}
         data-mirror-drift-bar={mirrorBarEnabled ? '1' : '0'}
         data-mirror-detect-schedule={scheduleAttr}
+        data-product-paper-list={productPaperListAttr}
         data-el03="not-claimed"
         data-inotify-full="not-claimed"
+        data-el01="not-claimed"
+        data-w3p-full="not-claimed"
         data-testid="note-paper-strict-host"
         style={{
           alignItems: 'stretch',
@@ -358,6 +378,7 @@ export function WorkspaceEmptyState({
           turnIntoSink={mdPrefixBinding.sink}
           mdPrefixWriteMode={mdPrefixBinding.mode}
           mdPrefixSinkSource={mdPrefixBinding.source}
+          paperList={enableProductPaperList === true ? true : undefined}
           title="笔记纸面（W5-B Strict · 空态演示）"
           onClose={() => setOpenMode(null)}
           mirrorDriftReport={effectiveMirrorReport}
@@ -458,8 +479,11 @@ export function WorkspaceEmptyState({
       data-md-prefix-sink-source={mdPrefixBinding.source}
       data-mirror-drift-bar={mirrorBarEnabled ? '1' : '0'}
       data-mirror-detect-schedule={scheduleAttr}
+      data-product-paper-list={productPaperListAttr}
       data-el03="not-claimed"
       data-inotify-full="not-claimed"
+      data-el01="not-claimed"
+      data-w3p-full="not-claimed"
       onPointerDown={onActivate}
     >
       <div className={styles.emptyStateIconWrapper}>
@@ -479,6 +503,9 @@ export function WorkspaceEmptyState({
           无 report 不造假；≠ EL-03 / ≠ inotify 满关 / X-05 不回退。
         CONN-E3：detect 调度默认关；enableMirrorDetectSchedule + mirrorIpc
           → detectMirrorDrift → report → StatusBar；关时无 timer。
+        CONN-C2：PaperList 默认关（data-product-paper-list=0 / data-paper-list=0）；
+          enableProductPaperList opt-in → paper-list 互斥 content-row；
+          ≠ EL-01；≠ W3-P 满窗；禁默认真双内容。
         禁止 mock 生产默认；桌面接线 ≠ 打开完成 / ≠ A-BLK-08/09 e2e / ≠ EL-01。
       */}
       <div
