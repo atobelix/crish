@@ -4,7 +4,7 @@
 //! - `note_document_apply_md`
 //! - `note_query_blocks`
 //! - `note_send_to_note`
-//! - `note_document_hydrate`（打开/加载投影形状 · 真 hydrate IPC 方向）
+//! - `note_document_hydrate`（打开/加载投影 · 默认真 DocSession 路径）
 //!
 //! 入参/出参 snake_case 线格式，对齐 `apps/crish-desktop/src/api/noteApi.ts`、
 //! `noteHydrateIpc.ts` 与 `agent_tools::note_backend` 契约。
@@ -17,14 +17,18 @@
 //! - 写路径仅 `apply_md_fragment` / send_to_note（intent 幂等）
 //! - **不**静默流式写笔记
 //! - 读路径走 store 投影；**不**默认读 MD mirror
-//! - hydrate 命令返回 **投影形状**（source=`tauri-ipc`）；**≠** 宣称
-//!   `DocSession::hydrate` 产品全链路 / 打开完成 / EL 关闭
+//! - **hydrate 分轨**（禁止撒谎）：
+//!   - 默认：`hydrate_path=doc-session`（`load_doc` → `DocSession::hydrate` → CDCS 树）
+//!   - 旧：`hydrate_path=query-blocks`（`query_blocks` 派生索引；仅显式/回退）
+//!   - `source` 仍为 IPC 通道 `tauri-ipc`（与 fixture 分轨）
+//! - **≠** 产品「打开完成」（G-HYD 全条件）；**≠ EL-04 / EL-01**
 
 use agent_tools::note_backend::{
     apply_result_json, NoteApplyMdRequest, NoteApplyMode, NoteBackendError, NoteQueryBlocksParams,
 };
 #[cfg(test)]
 use agent_tools::note_backend::{NoteApplyMdResult, NoteBackend as _};
+use conex_note_runtime::{HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS};
 use conex_types::CoreError;
 use serde::Deserialize;
 use serde_json::{json, Map, Value as JsonValue};
@@ -75,6 +79,10 @@ pub struct NoteHydrateDocumentArgs {
     /// 块投影条数上限；缺省 200，硬夹到 1..=200
     #[serde(default)]
     pub limit: Option<u32>,
+    /// 强制走 query_blocks 派生路径（默认 false = 真 DocSession）。
+    /// 仅测试/对照；生产默认 `doc-session`。
+    #[serde(default)]
+    pub prefer_query: Option<bool>,
 }
 
 /// 事务化 apply MD 片段 → 块树（权威路径）。
@@ -141,14 +149,24 @@ pub async fn note_send_to_note(req: NoteSendToNoteArgs) -> Result<JsonValue, Cor
     }
 }
 
-/// 文档 hydrate / open 投影（真 hydrate IPC 方向）。
+/// 文档 hydrate / open 投影。
 ///
 /// wire 名 = `note_document_hydrate`（前端 `NOTE_CMD_DOCUMENT_HYDRATE`）。
 ///
-/// 返回块投影形状（flavour / index / text），`source` 固定 `"tauri-ipc"`。
-/// 实现上经 store `query_blocks` 映射为 hydrate 投影——**读路径派生索引**，
-/// **不是** 把 `blocks` 表当 hydrate 权威主路径的产品关账；也 **≠**
-/// `DocSession::hydrate` 全链路 / 打开完成 / EL。
+/// # 默认路径（`hydrate_path=doc-session`）
+/// `load_doc` → **`DocSession::hydrate`** → CDCS 树 DFS 投影；
+/// `rev` 为会话真 rev。
+///
+/// # 对照路径（`prefer_query=true` → `hydrate_path=query-blocks`）
+/// 经 `query_blocks` 派生索引映射；**禁止**标成 full hydrate。
+///
+/// # 字段
+/// - `source`：IPC 通道，固定 `"tauri-ipc"`（与 fixture 分轨）
+/// - `hydrate_path`：数据面分轨（`doc-session` | `query-blocks`）
+///
+/// # 诚实边界
+/// - **≠** 产品「打开完成」（G-HYD-1…5 全条件仍须满足）
+/// - **≠ EL-04 / EL-01**；本命令可测 **不**关产品叙事
 #[tauri::command]
 pub async fn note_document_hydrate(req: NoteHydrateDocumentArgs) -> Result<JsonValue, CoreError> {
     let doc_id = req.doc_id.trim().to_string();
@@ -159,12 +177,36 @@ pub async fn note_document_hydrate(req: NoteHydrateDocumentArgs) -> Result<JsonV
             "reason": "doc_id must be non-empty",
         }));
     }
+    let limit = req.limit.unwrap_or(200).clamp(1, 200);
+    let prefer_query = req.prefer_query.unwrap_or(false);
+
+    // ── 默认：真 DocSession / CDCS 投影 ──────────────────────────
+    if !prefer_query {
+        let Some(store) = note_runtime::try_store_backend() else {
+            return Ok(unwired_failure());
+        };
+        return match store.hydrate_document_from_session(&doc_id, limit) {
+            Ok(proj) => {
+                debug_assert_eq!(proj.hydrate_path, HYDRATE_PATH_DOC_SESSION);
+                Ok(proj.to_ipc_json("tauri-ipc"))
+            }
+            Err(e) => Ok(err_outcome(e)),
+        };
+    }
+
+    // ── 显式对照：query_blocks 派生（诚实标 query-blocks）────────
+    hydrate_via_query_blocks(&doc_id, limit).await
+}
+
+/// query_blocks → hydrate 投影形状（派生索引；`hydrate_path=query-blocks`）。
+///
+/// **不是** DocSession 权威主路径；仅对照 / 回归；禁止叙事为 full hydrate。
+async fn hydrate_via_query_blocks(doc_id: &str, limit: u32) -> Result<JsonValue, CoreError> {
     let Some(backend) = note_runtime::try_backend() else {
         return Ok(unwired_failure());
     };
-    let limit = req.limit.unwrap_or(200).clamp(1, 200);
     let params = NoteQueryBlocksParams {
-        doc_id: doc_id.clone(),
+        doc_id: doc_id.to_string(),
         limit: Some(limit),
         ..Default::default()
     };
@@ -188,7 +230,7 @@ pub async fn note_document_hydrate(req: NoteHydrateDocumentArgs) -> Result<JsonV
                     })
                 })
                 .collect();
-            // rev：投影版本占位（块数启发式）；非产品 DocSession rev 关账
+            // rev：投影版本占位（块数启发式）；非 DocSession rev
             let rev = if blocks.is_empty() { 0u64 } else { 1u64 };
             Ok(json!({
                 "ok": true,
@@ -196,6 +238,7 @@ pub async fn note_document_hydrate(req: NoteHydrateDocumentArgs) -> Result<JsonV
                 "rev": rev,
                 "blocks": blocks,
                 "source": "tauri-ipc",
+                "hydrate_path": HYDRATE_PATH_QUERY_BLOCKS,
                 "truncated": result.truncated,
             }))
         }
@@ -217,11 +260,17 @@ mod tests {
     use super::*;
     use agent_tools::note_backend::NoteApplyMode;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Mutex, MutexGuard};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
+    /// 全局 note_runtime 安装槽进程级共享；本模块测串行避免互踩。
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
-    fn temp_install() -> std::path::PathBuf {
+    fn temp_install() -> (MutexGuard<'static, ()>, std::path::PathBuf) {
+        let guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
         let dir = std::env::temp_dir().join(format!(
             "workbench-note-cmd-{}-{}-{}",
@@ -235,12 +284,12 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let db = dir.join("workspace.db");
         note_runtime::install_for_test(&db).expect("install note runtime");
-        dir
+        (guard, dir)
     }
 
     #[tokio::test]
     async fn command_apply_and_query_roundtrip() {
-        let dir = temp_install();
+        let (_guard, dir) = temp_install();
         let apply = note_document_apply_md(NoteApplyMdRequest {
             doc_id: "cmd-doc".into(),
             markdown: "## Cmd Test\n\nhello note command".into(),
@@ -272,7 +321,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_to_note_idempotent() {
-        let dir = temp_install();
+        let (_guard, dir) = temp_install();
         let req = NoteSendToNoteArgs {
             intent_id: "intent-cmd-1".into(),
             markdown: "send once".into(),
@@ -297,7 +346,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_rejects_empty_intent() {
-        let dir = temp_install();
+        let (_guard, dir) = temp_install();
         let out = note_send_to_note(NoteSendToNoteArgs {
             intent_id: "  ".into(),
             markdown: "x".into(),
@@ -316,10 +365,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    /// 真 hydrate IPC：apply → hydrate 投影 shape（source=tauri-ipc）。
+    /// 真 DocSession hydrate IPC：apply → hydrate_path=doc-session。
+    ///
+    /// **≠** 打开完成 / **≠ EL-04/01**；仅证命令默认走 CDCS 会话投影。
     #[tokio::test]
     async fn note_document_hydrate_projection_shape() {
-        let dir = temp_install();
+        let (_guard, dir) = temp_install();
         let apply = note_document_apply_md(NoteApplyMdRequest {
             doc_id: "hyd-doc".into(),
             markdown: "## Hydrate IPC\n\nbody for open shape".into(),
@@ -338,12 +389,19 @@ mod tests {
         let h = note_document_hydrate(NoteHydrateDocumentArgs {
             doc_id: "hyd-doc".into(),
             limit: Some(50),
+            prefer_query: None,
         })
         .await
         .unwrap();
         assert_eq!(h["ok"], true);
         assert_eq!(h["source"], "tauri-ipc");
+        assert_eq!(h["hydrate_path"], HYDRATE_PATH_DOC_SESSION);
+        assert_ne!(h["hydrate_path"], HYDRATE_PATH_QUERY_BLOCKS);
         assert_eq!(h["doc_id"], "hyd-doc");
+        assert!(
+            h["rev"].as_u64().unwrap_or(0) > 0,
+            "doc-session 路径须返回真 rev>0: {h}"
+        );
         let blocks = h["blocks"].as_array().expect("blocks array");
         assert!(!blocks.is_empty(), "hydrate 投影应有块: {h}");
         assert!(blocks[0].get("flavour").is_some());
@@ -353,21 +411,58 @@ mod tests {
         let empty_doc = note_document_hydrate(NoteHydrateDocumentArgs {
             doc_id: "never-written".into(),
             limit: None,
+            prefer_query: None,
         })
         .await
         .unwrap();
         assert_eq!(empty_doc["ok"], true);
         assert_eq!(empty_doc["source"], "tauri-ipc");
+        assert_eq!(empty_doc["hydrate_path"], HYDRATE_PATH_DOC_SESSION);
         assert_eq!(empty_doc["blocks"].as_array().map(|a| a.len()).unwrap_or(1), 0);
 
         let bad = note_document_hydrate(NoteHydrateDocumentArgs {
             doc_id: "  ".into(),
             limit: None,
+            prefer_query: None,
         })
         .await
         .unwrap();
         assert_eq!(bad["ok"], false);
         assert_eq!(bad["code"], "note.invalid");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// 分轨：prefer_query=true → hydrate_path=query-blocks（禁止标成 doc-session）。
+    #[tokio::test]
+    async fn note_document_hydrate_query_path_is_labeled() {
+        let (_guard, dir) = temp_install();
+        let apply = note_document_apply_md(NoteApplyMdRequest {
+            doc_id: "hyd-q".into(),
+            markdown: "query path body".into(),
+            parent_id: None,
+            after_block_id: None,
+            mode: NoteApplyMode::ApplyMdFragment,
+            intent_id: None,
+            batch_id: None,
+            message_id: None,
+            origin: Some("user".into()),
+        })
+        .await
+        .unwrap();
+        assert_eq!(apply["ok"], true);
+
+        let h = note_document_hydrate(NoteHydrateDocumentArgs {
+            doc_id: "hyd-q".into(),
+            limit: Some(50),
+            prefer_query: Some(true),
+        })
+        .await
+        .unwrap();
+        assert_eq!(h["ok"], true);
+        assert_eq!(h["source"], "tauri-ipc");
+        assert_eq!(h["hydrate_path"], HYDRATE_PATH_QUERY_BLOCKS);
+        assert_ne!(h["hydrate_path"], HYDRATE_PATH_DOC_SESSION);
 
         let _ = std::fs::remove_dir_all(dir);
     }

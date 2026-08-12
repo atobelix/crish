@@ -1133,9 +1133,12 @@ version = "0.1.0"
 dependencies = [
  "agent-tools",
  "async-trait",
+ "base64 0.22.1",
  "conex-browser-tools",
  "conex-computer",
  "conex-shared",
+ "conex-types",
+ "image",
  "serde_json",
  "tokio",
 ]

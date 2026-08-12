@@ -33,6 +33,7 @@
  *
  * 默认仍为 `DomCodeLeafHost`（textarea），避免无 CM6 场景强依赖 DOM View。
  * **不接 RS**。**W3-E ≠ 全语言高亮完成**（当前 plain + javascript）。
+ * **≠** 产品 e2e 满关；**≠** EL-01；**≠** A-BLK-14 产品 focus e2e。
  */
 
 import type { CodeLanguage } from './CodeLeafModel';

@@ -1,15 +1,36 @@
 /**
- * IME 端×断言矩阵常量（M3 / Round8）。
+ * IME 端×断言矩阵常量（M3 / Round8 / **W6-B-S** Skeleton）。
  *
  * 权威文档：`docs/block-workspace-architecture/plans/specs/ime-matrix.md`
+ *
+ * ## 包轨钉死（W6-B-S）
+ * - 本模块轨 = **W6-B-S**（必须带 `-S`）：L0 矩阵成型 + L1/L1+ 语义自动化可测加深
+ * - **≠ W6-B** Strict：WebView L2 必测格 e2e / 叶子核锁定门禁属 W6-B，本文件不得冒充
+ * - **≠ 叶子核锁定门禁**：L3「叶子核=PM」仅在 L2 必测全 `e2e` 后；`imeMatrixLeafCoreLockEligible` 在 Skeleton 下应恒 false
+ * - **≠ EL**：不关闭任何 EL（IME 锁定相关仅认 **W6-B** + 真 PM）；见 EL-dashboard 表 E
  *
  * 状态语义：
  * - `open` → 文档表 `☐`
  * - `automated` → `🟨自动化`（纯逻辑/契约；不替代 WebView e2e）
- * - `e2e` → `✅e2e`（目标端 WebView 已绿；W6-B）
+ * - `e2e` → `✅e2e`（目标端 WebView 已绿；**仅 W6-B** 可写）
  *
- * 关闭「叶子核=PM」仅认必测格 `e2e`，见矩阵 L2/L3。
+ * 关闭「叶子核=PM」仅认必测格 `e2e`，见矩阵 L2/L3——**W6-B-S 永不写 e2e**。
  */
+
+// ---------------------------------------------------------------------------
+// 包轨（W6-B-S Skeleton · 程序可读）
+// ---------------------------------------------------------------------------
+
+/**
+ * IME 矩阵当前交付包轨。
+ *
+ * - 值必须为 **`W6-B-S`**（带 `-S`），禁止去 `-S` 冒充 W6-B Strict
+ * - 本常量仅标识 L0/L1 自动化骨架轨，**不**表示 L2 e2e / L3 锁核 / EL 关闭
+ */
+export const IME_MATRIX_PACKAGE_TRACK = 'W6-B-S' as const;
+
+/** 包轨字面量类型（钉死 W6-B-S，拒绝无 `-S` 别名） */
+export type ImeMatrixPackageTrack = typeof IME_MATRIX_PACKAGE_TRACK;
 
 // ---------------------------------------------------------------------------
 // 类型
@@ -36,7 +57,7 @@ export type ImeMatrixRequirement = '必测' | '抽样';
  * 单元格覆盖状态。
  * - open：未覆盖
  * - automated：契约/单测语义子集已绿
- * - e2e：目标 WebView e2e 已绿
+ * - e2e：目标 WebView e2e 已绿（**仅 W6-B 可写**；W6-B-S 禁止）
  */
 export type ImeMatrixCellStatus = 'open' | 'automated' | 'e2e';
 
@@ -171,11 +192,29 @@ const PLATFORMS: readonly ImeMatrixPlatform[] = [
   'linux_webkit',
 ];
 
-/** Round8：仅 A-IME-01 / A-IME-02 标 automated（三端共享语义） */
+/**
+ * Round8：A-IME-01 / A-IME-02 automated。
+ * Round9 / **W6-B-S**：A-IME-03…05 语义自动化加深（仍非 WebView e2e）。
+ *
+ * 注意：`automated` **≠** L2 `e2e`；本集合不得被写成「W6-B 完成」。
+ */
 const AUTOMATED_IDS: ReadonlySet<ImeMatrixAssertId> = new Set([
   'A-IME-01',
   'A-IME-02',
+  'A-IME-03',
+  'A-IME-04',
+  'A-IME-05',
 ]);
+
+/** L1 核心：A-IME-01 / 02（04-S / W6-B-S 语义子集） */
+const L1_ASSERT_IDS: readonly ImeMatrixAssertId[] = ['A-IME-01', 'A-IME-02'];
+
+/** L1+ 加深：A-IME-03…05（仍为 🟨，**不计 L2**；W6-B-S 合法交付） */
+const L1_PLUS_ASSERT_IDS: readonly ImeMatrixAssertId[] = [
+  'A-IME-03',
+  'A-IME-04',
+  'A-IME-05',
+];
 
 const AUTOMATION_REFS: Partial<Record<ImeMatrixAssertId, readonly string[]>> = {
   'A-IME-01': [
@@ -187,6 +226,19 @@ const AUTOMATION_REFS: Partial<Record<ImeMatrixAssertId, readonly string[]>> = {
     'A-IME-02 合成中结构键与 slash 拒绝 / end 后放行',
     'packages/block-paper/src/chrome/chrome.asil.test.ts',
     'packages/block-paper/src/chrome/chrome.w3f.test.ts',
+  ],
+  'A-IME-03': [
+    'packages/editor-kit/src/ime/ime-matrix.contract.test.ts',
+    'A-IME-03 合成中滚动 pin / planScrollUnmount 不卸 composing',
+    'packages/editor-kit/src/viewport/pin.test.ts',
+  ],
+  'A-IME-04': [
+    'packages/editor-kit/src/ime/ime-matrix.contract.test.ts',
+    'A-IME-04 end_then_switch 点另一块先 end 再切',
+  ],
+  'A-IME-05': [
+    'packages/editor-kit/src/ime/ime-matrix.contract.test.ts',
+    'A-IME-05 多次 update 仅 end 产生一条 commit 边界',
   ],
 };
 
@@ -222,6 +274,26 @@ export function imeMatrixCellsFor(
   return IME_MATRIX_CELLS.filter((c) => c.id === id);
 }
 
+/**
+ * 矩阵格抽样：按端过滤（三端 e2e 必须分端勾选；自动化可同格并进）。
+ * W6-B-S 用途：契约侧断言「某端 必测/抽样」与文档表一致，**不**推进 L2。
+ */
+export function imeMatrixCellsForPlatform(
+  platform: ImeMatrixPlatform
+): readonly ImeMatrixCell[] {
+  return IME_MATRIX_CELLS.filter((c) => c.platform === platform);
+}
+
+/**
+ * 矩阵格抽样：按覆盖状态过滤。
+ * W6-B-S 预期：`automated` 含 01–05×3 端；`e2e` 为空；`open` 含 06–08。
+ */
+export function imeMatrixCellsByStatus(
+  status: ImeMatrixCellStatus
+): readonly ImeMatrixCell[] {
+  return IME_MATRIX_CELLS.filter((c) => c.status === status);
+}
+
 /** 必测且仍未 e2e 的格（L2 未关闭清单） */
 export function imeMatrixOpenRequiredCells(): readonly ImeMatrixCell[] {
   return IME_MATRIX_CELLS.filter(
@@ -229,10 +301,52 @@ export function imeMatrixOpenRequiredCells(): readonly ImeMatrixCell[] {
   );
 }
 
-/** L0/L1：矩阵成型 + 语义子集是否就绪 */
+/**
+ * 是否存在任一 `e2e` 格。
+ * **W6-B-S 预期恒 false**——出现 true 表示有人误把 L2 状态写进 Skeleton 矩阵。
+ */
+export function imeMatrixAnyE2e(): boolean {
+  return IME_MATRIX_CELLS.some((c) => c.status === 'e2e');
+}
+
+/**
+ * L3 叶子核锁定资格（程序可读）。
+ * 条件：全部「必测」格均为 `e2e`（openRequired 为空）。
+ *
+ * - **≠ W6-B-S 完成定义**：Skeleton 下应恒 `false`
+ * - **≠ EL 关闭**：本函数不触碰任何 EL 位
+ * - 仅当 **W6-B** 真把必测格刷成 e2e 后才可能 true
+ */
+export function imeMatrixLeafCoreLockEligible(): boolean {
+  return imeMatrixOpenRequiredCells().length === 0;
+}
+
+/** L0/L1：矩阵成型 + A-IME-01/02 语义子集是否就绪（仍 ≠ L2） */
 export function imeMatrixL1Ready(): boolean {
-  return (
-    imeMatrixCellsFor('A-IME-01').every((c) => c.status !== 'open') &&
-    imeMatrixCellsFor('A-IME-02').every((c) => c.status !== 'open')
+  return L1_ASSERT_IDS.every((id) =>
+    imeMatrixCellsFor(id).every((c) => c.status !== 'open')
   );
+}
+
+/**
+ * L1+：A-IME-03…05 语义子集是否均非 open（仍为 🟨 automated）。
+ *
+ * - W6-B-S 合法加深目标：本函数可为 true
+ * - **≠ L2**：不检查 e2e；true **不得**解释为 WebView 矩阵关闭
+ * - **≠ 叶子核锁定**；**≠ EL**
+ */
+export function imeMatrixL1PlusReady(): boolean {
+  return L1_PLUS_ASSERT_IDS.every((id) =>
+    imeMatrixCellsFor(id).every((c) => c.status !== 'open')
+  );
+}
+
+/** L1 断言 ID 列表（只读导出，供契约测抽样） */
+export function imeMatrixL1AssertIds(): readonly ImeMatrixAssertId[] {
+  return L1_ASSERT_IDS;
+}
+
+/** L1+ 断言 ID 列表（只读导出，供契约测抽样） */
+export function imeMatrixL1PlusAssertIds(): readonly ImeMatrixAssertId[] {
+  return L1_PLUS_ASSERT_IDS;
 }

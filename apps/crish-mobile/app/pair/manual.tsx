@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { pairWithHost } from '@/pairing/pairProtocol';
+import { buildPairHello } from '@/pairing/pairProtocol';
 
 // 手动配对页（D4 §5.1）：输入主机 IP + CXN 配对码
-// 骨架：仅 UI 骨架 + pairProtocol 占位调用；完整配对逻辑（verify/token 交换/
-// 证书固定）由 R2-03 落地
+// 骨架：UI 骨架 + R2-03 协议层本地校验占位；完整配对流程（状态机接线：
+// submitCode → hello 发送 → pair.ok 存 token）由接线层落地（未覆盖项）
 export default function PairManualScreen() {
   const [host, setHost] = useState('');
   const [pin, setPin] = useState('');
@@ -15,12 +15,17 @@ export default function PairManualScreen() {
     if (busy) return;
     setBusy(true);
     setError(null);
-    // R2-03 前 pairWithHost 恒返回未实现错误，此处仅验证占位链路
-    const result = await pairWithHost({ host, pin });
-    setBusy(false);
-    if (!result.ok && result.message) {
-      setError(result.message);
+    // R2-03 协议层本地校验：CXN 格式非法直接拒绝（不发起网络请求）
+    const hello = buildPairHello({ code: pin, deviceName: 'crish-mobile' });
+    if (!hello.ok) {
+      setBusy(false);
+      setError(hello.error);
+      return;
     }
+    // 校验通过：此处为接线占位——真实配对走状态机（pairMachine 深化后
+    // submitCode 事件 + WsGateway 发送 hello + pair.ok 提取 token 持久化），
+    // 网络发送属接线层未覆盖项，暂不发起请求
+    setBusy(false);
   };
 
   return (

@@ -15,15 +15,19 @@
  * - `adaptNoteTransportAsHydrate` = 把已有 `note_query_blocks` 形状映射为投影
  *   （Tauri / Memory 皆可注入）；**不等于** DocSession::hydrate 产品全链路完成
  * - `adaptNoteHydrateIpcAsTransport` = 专用 `note_document_hydrate` IPC →
- *   source=`tauri-ipc`
+ *   source=`tauri-ipc`（IPC 通道）
  * - **产品 Strict 默认**（`createProductStrictHydrateTransport`）：
  *   可检测 Tauri → `tauri-ipc`；无 Tauri → 仍 `fixture`
- *   —— **≠ 打开完成**；**≠ EL**；后端经 query 投影派生，**DocSession 全链未满**
+ *   —— **≠ 打开完成**；**≠ EL-04/01**
+ * - 后端默认 `hydrate_path=doc-session`（`DocSession::hydrate` + CDCS 树投影）；
+ *   旧 query 派生为 `hydrate_path=query-blocks`（对照轨，禁止抬成 full hydrate）
+ * - 产品「打开完成」仍依赖 **G-HYD 全条件**；本 adapter **不**关账
  *
  * ## 禁止
  * - import 行级 EditorStore / lines[] 权威
  * - 用静默假段落冒充 hydrate 投影
  * - fixture 响应写 `source:'tauri-ipc'` 骗测
+ * - 把 query 派生静默标成 doc-session / full hydrate
  */
 
 import {
@@ -69,10 +73,18 @@ export type DocHydrateProjection = {
    * 来源：
    * - `fixture`：测试 / 无 Tauri 演示注入（**≠ 生产权威**）
    * - `note-transport`：经 NoteTransport.queryBlocks 映射
-   * - `tauri-ipc`：专用 `note_document_hydrate`（可检测 Tauri 时产品默认）；
-   *     **≠** DocSession::hydrate 全链 / 打开完成 / EL
+   * - `tauri-ipc`：专用 `note_document_hydrate`（可检测 Tauri 时产品默认 IPC 通道）；
+   *     数据面见后端 `hydrate_path`（`doc-session` | `query-blocks`）
+   *     **≠** 产品「打开完成」（G-HYD 全条件）；**≠ EL-04/01**
    */
   source: 'fixture' | 'note-transport' | 'tauri-ipc';
+  /**
+   * 后端数据面分轨（仅 tauri-ipc 成功时可能有）：
+   * - `doc-session`：真 DocSession::hydrate + CDCS 树
+   * - `query-blocks`：query 派生索引（对照轨）
+   * 缺省 / 非 IPC：undefined
+   */
+  hydratePath?: 'doc-session' | 'query-blocks';
 };
 
 export type NoteHydrateSuccess = {
@@ -260,9 +272,9 @@ export function adaptNoteTransportAsHydrate(
  *
  * 诚实边界：
  * - 成功投影 source 固定 `tauri-ipc`（与 query 适配的 `note-transport` 分轨）
+ * - `hydratePath` 透传后端分轨（默认 `doc-session`；对照 `query-blocks`）
  * - 产品默认经 `createProductStrictHydrateTransport` 在 Tauri 环境选用本 adapter
- * - **不**宣称「打开文档完成」/ W1-H / EL 关闭
- * - 后端 `note_document_hydrate` 现为 query 投影派生，**≠ DocSession 全链**
+ * - **不**宣称「打开文档完成」/ G-HYD 全条件 / EL-04·01 关闭
  */
 export function adaptNoteHydrateIpcAsTransport(
   ipc: NoteHydrateIpc
@@ -281,7 +293,7 @@ export function adaptNoteHydrateIpcAsTransport(
   };
 }
 
-/** IPC 成功载荷 → DocHydrateProjection（source 钉死 tauri-ipc） */
+/** IPC 成功载荷 → DocHydrateProjection（source 钉死 tauri-ipc；hydratePath 透传） */
 export function mapHydrateIpcSuccessToProjection(
   ok: NoteHydrateIpcSuccess
 ): DocHydrateProjection {
@@ -297,6 +309,7 @@ export function mapHydrateIpcSuccessToProjection(
       text: b.text,
     })),
     source: 'tauri-ipc',
+    ...(ok.hydratePath ? { hydratePath: ok.hydratePath } : {}),
   };
 }
 
@@ -386,7 +399,7 @@ export type ResolveProductStrictHydrateSourceOptions = {
  * 纪律：
  * - **禁止** 无 Tauri 时返回 tauri-ipc（否则 fixture 伪装）
  * - **禁止** 用 fixture 响应字符串冒充 ipc source
- * - 选择 tauri-ipc **≠** 打开完成 / **≠** EL / **≠** DocSession 全链已满
+ * - 选择 tauri-ipc **≠** 打开完成（G-HYD 全条件）/ **≠** EL-04/01
  */
 export function resolveProductStrictHydrateSource(
   options: ResolveProductStrictHydrateSourceOptions = {}
@@ -418,8 +431,9 @@ export type CreateProductStrictHydrateTransportOptions =
  * 诚实边界（钉死 · R10）：
  * - **fixture ≠ 生产权威**；无 Tauri 回退 fixture **不是** 伪装 ipc
  * - 有 Tauri 时失败/空/成功走真 IPC 三态，**不**静默回退 fixture
- * - **≠ 打开完成**；**≠ EL-01/EL-08**；后端 hydrate 命令现为 query 投影派生，
- *   **DocSession::hydrate 全链若未满须诚实，本工厂不宣称已关**
+ * - **≠ 打开完成**（G-HYD 全条件）；**≠ EL-01/EL-04/EL-08**
+ * - 后端默认 `hydrate_path=doc-session`（真 DocSession 投影）；
+ *   产品「打开完成」叙事仍须 G-HYD 全条件，本工厂不关账
  * - 调用方可经 `WorkspaceEmptyState.strictHydrateTransport` 覆盖
  */
 export function createProductStrictHydrateTransport(

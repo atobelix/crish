@@ -1,0 +1,317 @@
+/**
+ * W3-G · PaperList 产品挂载皮（列表 / 滚动 / 块行）
+ *
+ * 配方：visual-align `08` §1 + `09` 双轨同温；主壳 tokens 100%。
+ * DOM 类名对齐 `PaperList.ts`：.bp-paper-list / spacer / block-host / block。
+ *
+ * 纪律：
+ * - 色/间距/字阶 **仅** token（禁第三套魔法色、禁裸 z-index:9999）
+ * - 滚动条：scrollbar-width:thin + gutter stable；**禁** ::-webkit-scrollbar 私有块
+ *   （主壳唯一出口 `shell-scrollbar.css`；本文件只消费 thin / --tint-strong）
+ * - **≠ EL-01**；**≠** A-PERF 数值门；**≠** 虚拟化完成宣称
+ * - 消费：`import '@crish/block-paper/paper-list.css'`
+ */
+
+/* ---------- 作用域别名（全部指向全局 token） ---------- */
+
+.bp-paper-list {
+  --bp-list-gap: var(--space-0_5, 2px);
+  --bp-list-row-pad-y: var(--space-1_5, 6px);
+  --bp-list-row-pad-x: var(--space-2, 8px);
+  --bp-list-gutter-start: var(--space-6, 24px);
+  --bp-list-gutter-end: var(--space-2, 8px);
+  --bp-list-row-radius: var(--radius-md, 6px);
+  --bp-list-drop-line-h: 2px;
+  --bp-list-drop-line-color: color-mix(
+    in srgb,
+    var(--text-primary, #111111) 28%,
+    transparent
+  );
+
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary, #111111);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: var(--font-size-base, 14px);
+  line-height: var(--line-height-body, 1.55);
+  /* 默认不自滚：由 note-paper .body 或外层 scrollport 接管 */
+  overflow: visible;
+}
+
+/*
+ * 列表自身作为滚动宿主（产品挂载写 data-scroll-host="1"）。
+ * 细滚动条 + stable gutter，与 .body / slash 同温；禁 webkit 伪元素块。
+ */
+.bp-paper-list[data-scroll-host='1'] {
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-strong, var(--tint-scrollbar-thumb, transparent))
+    transparent;
+}
+
+/*
+ * 自带阅读列（无 note-paper .readingColumn 父时可选 data-reading-column="1"）。
+ * 配方对齐 10 §2.1；有父阅读列时 **勿** 再开，避免双 gutter。
+ */
+.bp-paper-list[data-reading-column='1'] {
+  max-width: var(--note-paper-col-max, var(--chat-col-max, 720px));
+  margin-inline: auto;
+  padding-left: var(--bp-list-gutter-start);
+  padding-right: var(--bp-list-gutter-end);
+  box-sizing: border-box;
+}
+
+/* ---------- spacer：纯高度撑杆（PaperList 内联 height） ---------- */
+
+.bp-paper-spacer-before,
+.bp-paper-spacer-after {
+  box-sizing: border-box;
+  /* 10 §2.3：仅 height 撑杆；flex-shrink:0；零噪声 */
+  flex-shrink: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* ---------- 块宿主：连续纸 gap（2px 级） ---------- */
+
+.bp-paper-block-host {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bp-list-gap);
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---------- 块行：与 .bp-block-row / note-paper .blockRow 同公式 ---------- */
+
+.bp-paper-block {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 8px);
+  /* 08 §1.1：1_5 × 2；勿加大到「卡片堆」 */
+  padding: var(--bp-list-row-pad-y) var(--bp-list-row-pad-x);
+  border-radius: var(--bp-list-row-radius);
+  min-height: var(--row-height-sm, 28px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: var(--line-height-body, 1.55);
+  letter-spacing: var(--letter-spacing-normal, 0em);
+  white-space: pre-wrap;
+  word-break: break-word;
+  outline: none;
+  transition:
+    background var(--transition-micro, 100ms ease-out),
+    box-shadow var(--transition-micro, 100ms ease-out);
+}
+
+/* hover：仅 tint / bg-hover（禁高饱和蓝底） */
+.bp-paper-block:hover {
+  background: var(
+    --bg-hover,
+    var(
+      --tint-hover,
+      color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
+    )
+  );
+}
+
+/* focus：中性 active + hairline inset（禁 accent 描边） */
+.bp-paper-block[data-handle='focus'],
+.bp-paper-block[data-bp-focus='1'],
+.bp-paper-block:focus-visible {
+  background: var(
+    --bg-active,
+    var(
+      --tint-active,
+      color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
+    )
+  );
+  box-shadow: inset 0 0 0 1px
+    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+}
+
+/* multi：强 tint + 中性环 */
+.bp-paper-block[data-handle='multi'],
+.bp-paper-block[data-bp-multi='1'] {
+  background: var(
+    --tint-strong,
+    color-mix(in srgb, var(--text-primary, #111) 12%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px
+    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+}
+
+/* 拖中源行：轻抬，不抢落点 */
+.bp-paper-block[data-dragging='1'] {
+  opacity: 0.72;
+}
+
+/*
+ * 嵌套 DomHost 行时：外层退化为透明槽，pad/hover 交给 .bp-block-row，
+ * 避免双层 pad 与双 hover（双轨同温，非第三套）。
+ */
+.bp-paper-block:has(> .bp-block-row),
+.bp-paper-block:has(> .bp-chrome-root) {
+  padding: 0;
+  gap: 0;
+  min-height: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.bp-paper-block:has(> .bp-block-row):hover,
+.bp-paper-block:has(> .bp-chrome-root):hover,
+.bp-paper-block:has(> .bp-block-row):focus-visible,
+.bp-paper-block:has(> .bp-chrome-root):focus-visible {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ---------- 落点线投影（属性挂载另轨；皮就绪） ---------- */
+
+.bp-paper-block[data-drop-side='before']::before,
+.bp-paper-block[data-drop-side='after']::after {
+  content: '';
+  position: absolute;
+  left: var(--space-2, 8px);
+  right: var(--space-2, 8px);
+  height: var(--bp-list-drop-line-h);
+  border-radius: 1px;
+  background: var(--bp-list-drop-line-color);
+  box-shadow: 0 0 0 0.5px
+    color-mix(in srgb, var(--text-primary, #111111) 8%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.bp-paper-block[data-drop-side='before']::before {
+  top: 0;
+  transform: translateY(-50%);
+}
+
+.bp-paper-block[data-drop-side='after']::after {
+  bottom: 0;
+  transform: translateY(50%);
+}
+
+/* ---------- 标题级差（产品写 data-heading-level；同 09 / 08 §1.2） ---------- */
+
+.bp-paper-block[data-heading-level='1'] {
+  font-size: var(--font-size-2xl, 22px);
+  font-weight: var(--font-weight-heavy, var(--font-weight-content, 700));
+  line-height: var(--line-height-tight, 1.25);
+  letter-spacing: var(--letter-spacing-tighter, -0.02em);
+  margin-top: var(--space-5, 20px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.bp-paper-block[data-heading-level='2'] {
+  font-size: var(--font-size-xl, 19px);
+  font-weight: var(--font-weight-content, var(--font-weight-semibold, 600));
+  line-height: var(--line-height-tight, 1.25);
+  margin-top: var(--space-4, 16px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.bp-paper-block[data-heading-level='3'] {
+  font-size: var(--font-size-lg, 17px);
+  font-weight: var(--font-weight-content, var(--font-weight-semibold, 600));
+  line-height: var(--line-height-ui, 1.35);
+  margin-top: var(--space-3, 12px);
+  margin-bottom: var(--space-1_5, 6px);
+}
+
+.bp-paper-block[data-heading-level='4'] {
+  font-size: var(--font-size-md, 15px);
+  font-weight: var(--font-weight-content, var(--font-weight-medium, 500));
+  line-height: var(--line-height-ui, 1.35);
+  margin-top: var(--space-3, 12px);
+  margin-bottom: var(--space-1_5, 6px);
+}
+
+.bp-paper-block[data-heading-level='5'],
+.bp-paper-block[data-heading-level='6'] {
+  font-size: var(--font-size-base, 14px);
+  font-weight: var(--font-weight-medium, 500);
+  line-height: var(--line-height-ui, 1.35);
+  margin-top: var(--space-2, 8px);
+  margin-bottom: var(--space-1, 4px);
+}
+
+/* 首块标题不顶出大空白（host 内 first-child） */
+.bp-paper-block-host > .bp-paper-block:first-child[data-heading-level] {
+  margin-top: 0;
+}
+
+/* ---------- flavour 轻量（投影 data-flavour；同 chrome / module） ---------- */
+
+.bp-paper-block[data-flavour='code'],
+.bp-paper-block[data-flavour='Code'] {
+  font-family: var(--font-mono, ui-monospace, 'Cascadia Code', monospace);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--md-code-fg, var(--text-primary, #111111));
+  background: var(
+    --md-code-bg,
+    color-mix(
+      in srgb,
+      var(--control-mix-color, #4a4035) 1.5%,
+      var(--bg-primary, #f0ebe6)
+    )
+  );
+  border: var(--hairline-width, 1px) solid
+    var(--md-code-border, var(--border-color, hsl(35, 10%, 86%)));
+  border-radius: var(--radius-sm, 5px);
+  padding: var(--space-3, 12px);
+  margin-top: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.bp-paper-block[data-flavour='quote'],
+.bp-paper-block[data-flavour='blockquote'],
+.bp-paper-block[data-flavour='Quote'] {
+  border-left: 2px solid
+    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+  padding-left: var(--space-3, 12px);
+  color: var(--text-secondary, #555555);
+  margin-top: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.bp-paper-block[data-flavour='list'],
+.bp-paper-block[data-flavour='bullet'],
+.bp-paper-block[data-flavour='numbered'] {
+  padding-left: var(--space-4, 16px);
+}
+
+/* ---------- eco：压平过渡 ---------- */
+
+html[data-perf-tier='eco'] .bp-paper-list .bp-paper-block {
+  transition: none;
+}

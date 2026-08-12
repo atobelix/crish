@@ -4,7 +4,8 @@
  * - composition 中 unmount focus → 违规
  * - end composition 后允许
  *
- * 矩阵契约子集见 ime-matrix.contract.test.ts（A-IME-01 / A-IME-02）。
+ * 矩阵契约子集见 ime-matrix.contract.test.ts（A-IME-01…05 + W6-B-S 加深）。
+ * 本文件 = 机测基线；**≠ W6-B** L2 e2e；**≠ 叶子核锁定**；**≠ EL**。
  */
 import { describe, expect, it } from 'vitest';
 import { PinViolationError } from '../viewport/pin';

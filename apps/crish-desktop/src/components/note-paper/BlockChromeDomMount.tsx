@@ -11,6 +11,8 @@
  * - **真 Pointer 拖拽全链后置**（`applyDragPointerShape` mock 形状可测，非产品 Pointer 监听）
  * - 本宿主 **不** 旁路写盘 / 不持有文档权威；内容投影仍由 Panel 块行负责
  * - DomHost 自建 `data-bp-block-row` 行（与 Panel 内容行并存）；契约锚 `data-bp-*`
+ * - **与 PaperList 分槽共存**：本槽 `data-bp-chrome-mount`；列表槽
+ *   `data-bp-paper-list-mount`（见 `PaperListDomMount`）。同屏不互删。
  *
  * 测：`BlockChromeDomMount.test.tsx`
  */
@@ -24,6 +26,8 @@ import {
 } from '@crish/block-paper';
 /** DomHost chrome 皮（落点线/slash/把手热区） */
 import '@crish/block-paper/chrome.css';
+/** PaperList 块行/滚动皮（与 chrome 同温；挂载后列表可点） */
+import '@crish/block-paper/paper-list.css';
 
 // ---------------------------------------------------------------------------
 // Props

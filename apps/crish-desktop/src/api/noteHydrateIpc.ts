@@ -3,18 +3,20 @@
  *
  * ## 命令
  * - wire：`note_document_hydrate`（`NOTE_CMD_DOCUMENT_HYDRATE`）
- * - 入参：`{ req: { doc_id, limit? } }` snake_case
- * - 成功：`{ ok:true, doc_id, rev, blocks[], source:'tauri-ipc', truncated? }`
+ * - 入参：`{ req: { doc_id, limit?, prefer_query? } }` snake_case
+ * - 成功：`{ ok:true, doc_id, rev, blocks[], source:'tauri-ipc',
+ *           hydrate_path:'doc-session'|'query-blocks', truncated? }`
  * - 失败：`{ ok:false, code, reason }`（IPC missing / 业务失败均不抛半态）
  *
  * ## 与既有 note_* 的关系
  * - `note_query_blocks` = 组合检索摘要；`adaptNoteTransportAsHydrate` → source=`note-transport`
- * - **本命令** = 打开/加载文档后的 **hydrate 投影形状**；成功投影 source 固定 `tauri-ipc`
- * - **≠** `DocSession::hydrate` 产品全链路完成（W1-H）；**≠** 打开完成叙事关账
- * - **≠** EL-01 / EL-08
+ * - **本命令** = 打开/加载文档后的 **hydrate 投影形状**；`source` 固定 `tauri-ipc`（IPC 通道）
+ * - **数据面分轨** `hydrate_path`：
+ *   - 默认 `doc-session`：`load_doc` → `DocSession::hydrate` → CDCS 树投影
+ *   - `prefer_query` → `query-blocks`：派生索引对照轨（禁止抬 full hydrate）
+ * - **≠** 产品「打开完成」（G-HYD 全条件）；**≠ EL-04 / EL-01**
  * - 产品 Strict 默认见 `createProductStrictHydrateTransport`：
  *   可检测 Tauri → 本 IPC（`tauri-ipc`）；无 Tauri → fixture（**≠ 生产权威**）
- * - 后端现为 query 投影派生，**DocSession 全链若未满须诚实**
  *
  * ## 可注入面
  * - `NoteHydrateIpc`：命令契约（mock / Tauri）
@@ -35,11 +37,16 @@ export const NOTE_CMD_DOCUMENT_HYDRATE = 'note_document_hydrate' as const;
 // 请求 / 线格式
 // ---------------------------------------------------------------------------
 
+/** 后端数据面分轨（与 source=tauri-ipc IPC 通道正交） */
+export type NoteHydratePath = 'doc-session' | 'query-blocks';
+
 /** 前端 camelCase 请求 */
 export type NoteHydrateDocumentRequest = {
   docId: string;
   /** 块投影条数上限（默认 200，硬上限与 query 对齐） */
   limit?: number;
+  /** true → 强制 query 派生轨（对照）；默认 false = doc-session */
+  preferQuery?: boolean;
 };
 
 /** 线格式成功块（snake_case 兼容 camelCase 解析） */
@@ -57,8 +64,13 @@ export type NoteHydrateIpcSuccess = {
   docId: string;
   rev: number;
   blocks: NoteHydrateIpcBlockWire[];
-  /** 专用 hydrate 命令成功时恒为 tauri-ipc */
+  /** 专用 hydrate 命令成功时恒为 tauri-ipc（IPC 通道；≠ fixture） */
   source: 'tauri-ipc';
+  /**
+   * 数据面分轨：默认 doc-session；preferQuery → query-blocks。
+   * mock 未标时解析为 doc-session（与后端默认一致）。
+   */
+  hydratePath: NoteHydratePath;
   truncated?: boolean;
 };
 
@@ -91,6 +103,7 @@ export function hydrateReqToWire(
 ): Record<string, unknown> {
   const wire: Record<string, unknown> = { doc_id: req.docId };
   if (req.limit !== undefined) wire.limit = req.limit;
+  if (req.preferQuery !== undefined) wire.prefer_query = req.preferQuery;
   return wire;
 }
 
@@ -193,12 +206,17 @@ export function parseHydrateIpcOutcome(raw: unknown): NoteHydrateIpcOutcome {
     });
   }
 
+  const pathRaw = coerceString(rec.hydratePath ?? rec.hydrate_path);
+  const hydratePath: NoteHydratePath =
+    pathRaw === 'query-blocks' ? 'query-blocks' : 'doc-session';
+
   return {
     ok: true,
     docId,
     rev,
     blocks,
     source: 'tauri-ipc',
+    hydratePath,
     truncated: rec.truncated === true,
   };
 }
@@ -282,6 +300,7 @@ export function createMockNoteHydrateIpc(
           rev: 0,
           blocks: [],
           source: 'tauri-ipc',
+          hydratePath: 'doc-session',
           truncated: false,
         };
       }
@@ -290,12 +309,17 @@ export function createMockNoteHydrateIpc(
         ...b,
         index: b.index ?? i,
       }));
+      // mock 默认真路径标签；preferQuery 时标 query-blocks（对照轨可测）
+      const hydratePath: NoteHydratePath = req.preferQuery
+        ? 'query-blocks'
+        : 'doc-session';
       return {
         ok: true,
         docId,
         rev: doc.rev ?? 1,
         blocks: sliced,
         source: 'tauri-ipc',
+        hydratePath,
         truncated: doc.truncated === true || doc.blocks.length > limit,
       };
     },

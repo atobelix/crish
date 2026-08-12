@@ -15,8 +15,13 @@
  * - 本组件 **要求** 注入 `hydrateTransport`（禁止静默假段落）
  * - 产品空态默认由 `createProductStrictHydrateTransport` 选型：
  *   可检测 Tauri → `tauri-ipc`；无 Tauri → fixture（**fixture ≠ 生产权威**）
- * - **≠ 打开完成**；后端 hydrate 现为 query 投影派生，**DocSession 全链若未满须诚实**
+ * - **≠ 打开完成**（G-HYD 全条件）；**≠ EL-04/01**
+ * - 后端默认 `hydrate_path=doc-session`；产品关账仍依赖 G-HYD 全条件
  * - **禁止** import 行级 EditorStore；投影 ≠ 文档权威
+ * - **W3-G PaperList**（`paperList` 可点名挂载）：仅窗口 DOM；**≠ EL-01**；
+ *   **≠ W3-P WindowManager 全闭环**；与 chrome DomMount **分槽共存不互删**
+ * - **A-INV-02 UI 方向**：可选 `mirrorDriftReport` → 状态条 + 三路入口；
+ *   底层可能仍是 poll/OS 事件；**≠ inotify 满关**；**≠ EL-03**；**≠ A-INV-02 全关**
  *
  * surface = note-paper
  */
@@ -34,11 +39,17 @@ import {
   type BlockChromeDomHost,
   type HandleVisibility,
   type IntentSink,
+  type PaperList,
+  type PaperListScrollState,
+  type PaperListWindowState,
   type SlashInsertIntent,
 } from '@crish/block-paper';
 /** DomHost chrome 皮（与 Skeleton 同源）；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
+/** W3-G PaperList 挂载皮（与 Skeleton 同源）；≠ EL-01 */
+import '@crish/block-paper/paper-list.css';
 import { BlockChromeDomMount } from './BlockChromeDomMount';
+import { PaperListDomMount } from './PaperListDomMount';
 import { SlashMenuOverlay } from './SlashMenuOverlay';
 import { Button } from '../ui';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
@@ -52,11 +63,41 @@ import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
 } from './w5bStrict';
+import { MirrorDriftStatusBar } from './MirrorDriftStatusBar';
+import type {
+  MirrorDriftReportView,
+  MirrorWatchSource,
+  ThreeWayDecision,
+} from './mirrorDriftUi';
 import styles from './NotePaperPanel.module.css';
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
+
+/**
+ * Strict 上可点名挂载的 PaperList 配置（W3-G 产品挂载子集）。
+ * hydrate 成功后的 blocks 驱动 order/projections。
+ *
+ * **≠ EL-01**；**≠ W3-P WindowManager 全闭环**。
+ */
+export type NotePaperStrictPaperListConfig = {
+  /** 索引窗口（与 scroll 二选一） */
+  window?: PaperListWindowState;
+  /** 滚动态（优先于 window） */
+  scroll?: PaperListScrollState;
+  overscan?: number;
+  focusId?: string | null;
+  composingIds?: readonly string[];
+  defaultVisibleCount?: number;
+  defaultEstimatePx?: number;
+  /**
+   * 启用 PaperList 时是否仍渲染 React 全量块行。
+   * - `true`（默认）：小投影双轨呈现（内容行 + 列表槽）
+   * - `false`：仅 PaperList 窗口 DOM 承载内容（大文档 / 结构门测）
+   */
+  keepReactRows?: boolean;
+};
 
 export type NotePaperStrictPanelProps = {
   /** 文档 id（hydrate 入参） */
@@ -90,12 +131,48 @@ export type NotePaperStrictPanelProps = {
    * **≠ EL-01**；真 Pointer 拖拽全链后置。
    */
   onChromeDomHost?: (host: BlockChromeDomHost | null) => void;
+  /**
+   * **W3-G PaperList 可点名挂载**（产品路径）。
+   * - `false` / 省略：不挂列表槽（默认，现有 React 块行）
+   * - `true`：默认窗口可见块挂载
+   * - 对象：window / scroll / overscan 等可测参数
+   *
+   * 与 `BlockChromeDomMount` **分槽共存**（`data-bp-paper-list-mount` ∥
+   * `data-bp-chrome-mount`），同屏不互删。
+   * **≠ EL-01**；**≠ W3-P**。
+   */
+  paperList?: boolean | NotePaperStrictPaperListConfig;
+  /**
+   * PaperList 宿主就绪回调（测试拿 countDomBlocks / setScroll）。
+   */
+  onPaperListReady?: (list: PaperList | null) => void;
   /** 可选：关闭回调 */
   onClose?: () => void;
   /** 额外 className */
   className?: string;
   /** 面板标题 */
   title?: string;
+  /**
+   * A-INV-02 方向：注入镜像漂移报告（可选）。
+   * 有值时在 footer 上挂 `MirrorDriftStatusBar`；
+   * **不**在本面板实现 poll/OS watcher；底层来源见 `mirrorWatchSource`。
+   * **≠ EL-03**；**≠ inotify 产品满关**；**≠ A-INV-02 全关**。
+   */
+  mirrorDriftReport?: MirrorDriftReportView | null;
+  /**
+   * 镜像检测来源诚实标注（poll / os_event / injected）。
+   * 仅当展示镜像状态条时生效。
+   */
+  mirrorWatchSource?: MirrorWatchSource;
+  /** unpushed op 数（X-05 门禁；默认 0） */
+  mirrorUnpushedOpCount?: number;
+  /**
+   * 是否强制展示镜像状态条（即使无 report，展示 idle）。
+   * 默认：仅当 `mirrorDriftReport != null` 时展示。
+   */
+  showMirrorDriftBar?: boolean;
+  /** 三路决策回调（骨架；不直接 apply） */
+  onMirrorThreeWay?: (decision: ThreeWayDecision) => void;
 };
 
 type HydrateUiStatus = 'loading' | 'ready' | 'empty' | 'error';
@@ -117,10 +194,24 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   slashIntentSink,
   onSlashIntent,
   onChromeDomHost,
+  paperList: paperListProp,
+  onPaperListReady,
   onClose,
   className,
   title = '笔记纸面（W5-B Strict · hydrate 投影）',
+  mirrorDriftReport = null,
+  mirrorWatchSource = 'unknown',
+  mirrorUnpushedOpCount = 0,
+  showMirrorDriftBar,
+  onMirrorThreeWay,
 }) => {
+  const paperListEnabled =
+    paperListProp === true || typeof paperListProp === 'object';
+  const paperListConfig: NotePaperStrictPaperListConfig =
+    typeof paperListProp === 'object' && paperListProp !== null
+      ? paperListProp
+      : {};
+  const keepReactRows = paperListConfig.keepReactRows !== false;
   const chrome = useMemo(
     () => chromeProp ?? new BlockChromeModel(),
     [chromeProp]
@@ -217,6 +308,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       data-hydrate-source={hydrateSource}
       data-hydrate-status={status}
       data-transport-loading={status === 'loading' ? 'true' : 'false'}
+      data-paper-list={paperListEnabled ? '1' : '0'}
       role="region"
       aria-label={title}
       aria-busy={status === 'loading' ? true : undefined}
@@ -299,7 +391,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
             </div>
           ) : null}
 
-          {status === 'ready'
+          {status === 'ready' && keepReactRows
             ? blocks.map((block) => {
                 const visibility: HandleVisibility = chrome.getHandleVisibility(
                   block.id
@@ -344,6 +436,29 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
               })
             : null}
           {/*
+            W3-G PaperList 产品挂载（可点名）：hydrate 投影 → 仅窗口 DOM。
+            分槽：data-bp-paper-list-mount；与 chrome 槽同屏不互删。
+            ≠ EL-01；≠ W3-P WindowManager 全闭环。
+          */}
+          {paperListEnabled && status === 'ready' ? (
+            <PaperListDomMount
+              blocks={blocks.map((b) => ({
+                id: b.id,
+                flavour: b.flavour,
+                text: b.text,
+              }))}
+              window={paperListConfig.window}
+              scroll={paperListConfig.scroll}
+              overscan={paperListConfig.overscan}
+              focusId={paperListConfig.focusId}
+              composingIds={paperListConfig.composingIds}
+              defaultVisibleCount={paperListConfig.defaultVisibleCount}
+              defaultEstimatePx={paperListConfig.defaultEstimatePx}
+              onListReady={onPaperListReady}
+              testId="note-paper-strict-paper-list"
+            />
+          ) : null}
+          {/*
             真 React slash 浮层（catalog 可点 → Intent → sink）。
             DomHost 关 catalog 投影防双层。≠ EL-01；≠ A-BLK-02 e2e 满关。
           */}
@@ -358,6 +473,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           {/*
             W3-F DOM 桌面挂载：BlockChromeDomHost → data-bp-* 契约
             （把手/落点线；slash catalog 由 React 浮层接管）。≠ EL-01。
+            与 PaperList **分槽共存**（data-bp-chrome-mount ∥ data-bp-paper-list-mount）。
           */}
           <BlockChromeDomMount
             blocks={
@@ -377,6 +493,20 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           />
         </div>
       </div>
+
+      {/*
+        A-INV-02 方向子集：镜像漂移状态 + 三路入口骨架。
+        默认仅当注入 mirrorDriftReport 时展示；不实现 poll/OS watcher。
+        ≠ EL-03；≠ inotify 产品满关；X-05 由 MirrorDriftStatusBar 门禁。
+      */}
+      {showMirrorDriftBar === true || mirrorDriftReport != null ? (
+        <MirrorDriftStatusBar
+          report={mirrorDriftReport}
+          watchSource={mirrorWatchSource}
+          unpushedOpCount={mirrorUnpushedOpCount}
+          onAction={onMirrorThreeWay}
+        />
+      ) : null}
 
       <footer className={styles.footer} data-testid="note-paper-strict-footer">
         surface={EDITOR_SURFACE_NOTE_PAPER} · {W5B_STRICT_BOUNDARY}

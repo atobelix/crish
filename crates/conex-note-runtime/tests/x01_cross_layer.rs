@@ -1,10 +1,27 @@
-//! X-01 跨层联测骨架：send_to_note / apply_md → DocSession → projection index → query。
+//! # W5-D-S · X-01 跨层联测骨架（Skeleton · 单场景）
 //!
-//! 覆盖链：
-//! `StoreNoteBackend::open` → `apply_md_fragment`（含 intent 幂等）
-//! → store 投影/FTS `query_blocks` → `document_outline` → 即时 S(`document_to_md`)。
+//! | 元数据 | 值 |
+//! | ------ | -- |
+//! | **包 ID** | **W5-D-S**（必须保留 `-S`；**≠ W5-D** Strict 全族） |
+//! | **场景** | **仅 X-01**（`08` §2） |
+//! | **表 G** | `docs/block-workspace-architecture/plans/acceptance/X-cross-layer-G.md` |
+//! | **EL** | **禁止**关 EL-01 / EL-08 / 任何 EL |
 //!
-//! 可选：投影 `remove_block_index` 后 text_match 不再命中。
+//! ## 链覆盖（诚实）
+//!
+//! 目标链：`apply_md_fragment → apply → flush → Diff → 焦点 pin`
+//!
+//! **本文件已覆盖（可证伪）**：
+//! - `StoreNoteBackend::open` / `NoteRuntime::open`
+//! - `apply_md_fragment`（含 intent 幂等 = send_to_note 语义）
+//! - store 投影/FTS `query_blocks` → `document_outline` → 即时 S(`get_md` / `document_to_md` + `<!--c:`)
+//! - 可选：投影 `remove_block_index` 后 text_match 不再命中
+//!
+//! **本文件未覆盖（仍缺 · 属 W5-D Strict 加深）**：
+//! - UI `flush → ProjectionDiff → 焦点 pin` DOM（如 `data-block-id` pin）
+//! - X-02…X-06（见验收表 G；**禁止**本测绿暗示全族完成）
+//!
+//! 门禁：`cargo test -p conex-note-runtime --test x01_cross_layer`
 
 use agent_tools::note_backend::{
     NoteApplyMdRequest, NoteApplyMode, NoteBackend, NoteQueryBlocksParams,
@@ -52,7 +69,10 @@ fn apply_req(doc_id: &str, md: &str, intent: Option<&str>) -> NoteApplyMdRequest
     }
 }
 
-/// 主路径：apply_md → 投影 query 命中 → intent 幂等 → outline → get_md 含 `<!--c:`。
+/// W5-D-S / X-01 主路径：apply_md → 投影 query 命中 → intent 幂等 → outline → get_md 含 `<!--c:`。
+///
+/// **可证伪**：改 `MIXED_MD` token / 去掉投影 commit / 破坏幂等表 → 本测必红。
+/// **≠** X-02…06；**≠** UI Diff/焦点 pin；**≠** 任何 EL。
 #[tokio::test]
 async fn x01_apply_md_query_outline_idempotent_and_get_md() {
     let (dir, db) = temp_db();

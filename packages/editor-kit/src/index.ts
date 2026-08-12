@@ -53,6 +53,7 @@ export {
   checkUnmountAllowed,
   assertUnmountAllowed,
   filterUnmountCandidates,
+  planScrollUnmount,
   validatePinSnapshot,
   PinViolationError,
   type PinViolationCode,
@@ -81,13 +82,17 @@ export {
   type SelectionSnapshot,
 } from './selection/SelectionStore';
 
-// IME（W3-B）
+// IME（W3-B + Round9 A-IME-03…05 + **W6-B-S** Skeleton；≠ W6-B L2 / ≠ 叶子核 / ≠ EL）
 export {
   ImeMachine,
+  IME_FOCUS_SWITCH_STRATEGY,
   type ImePhase,
   type ImeSnapshot,
   type ImeStartResult,
   type ImeEndResult,
+  type ImeCommitBoundary,
+  type ImeFocusSwitchStrategy,
+  type ImeFocusSwitchResult,
 } from './ime/ImeMachine';
 
 export {
@@ -100,15 +105,24 @@ export {
   type StructureGuardResult,
 } from './ime/structureKeyGuard';
 
-// IME 矩阵常量（M3 / Round8 · 文档表程序可读真相）
+// IME 矩阵常量（M3 / Round8 / W6-B-S · 文档表程序可读真相；无 e2e 冒充）
 export {
   IME_MATRIX_CELLS,
   IME_MATRIX_ASSERTS,
   IME_MATRIX_STATUS_GLYPH,
+  IME_MATRIX_PACKAGE_TRACK,
   imeMatrixStatusGlyph,
   imeMatrixCellsFor,
+  imeMatrixCellsForPlatform,
+  imeMatrixCellsByStatus,
   imeMatrixOpenRequiredCells,
+  imeMatrixAnyE2e,
+  imeMatrixLeafCoreLockEligible,
   imeMatrixL1Ready,
+  imeMatrixL1PlusReady,
+  imeMatrixL1AssertIds,
+  imeMatrixL1PlusAssertIds,
+  type ImeMatrixPackageTrack,
   type ImeMatrixAssertId,
   type ImeMatrixPlatform,
   type ImeMatrixRequirement,

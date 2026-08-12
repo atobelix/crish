@@ -6,8 +6,8 @@
  * - **可演示 ≠ EL-01 / EL-08 关闭**（挂载冒充交付 = S5 · 08 §0.2）
  * - **≠ W5-C 隔离全关**（A-SURF 真扫主责在 W5-C）
  * - **≠「打开完成」**：产品 Strict 默认 hydrate 经 `createProductStrictHydrateTransport`
- *   （可检测 Tauri → tauri-ipc；无 Tauri → fixture）；后端现为 query 投影派生，
- *   **DocSession 全链若未满须诚实**；**≠ EL**
+ *   （可检测 Tauri → tauri-ipc；无 Tauri → fixture）；后端默认
+ *   `hydrate_path=doc-session`；产品关账仍依赖 **G-HYD 全条件**；**≠ EL-04/01**
  * - **禁止** 把 Skeleton 常量改成 `W5-B` 冒充；**禁止** 假数据 chrome 关 EL-01
  *
  * 本常量仅作会计与 DOM 可观测锚点；不构成产品交付 / EL 关闭声明。

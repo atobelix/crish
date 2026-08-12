@@ -13,19 +13,21 @@
 //!   失败不阻断启动（诊断 + 工具保持 `note_backend_unwired`）。
 //! - run 装配：[`try_backend`] → `SessionLoopOptions.note_backend`
 //!   （engine produce / core_run_task 同源）。
-//! - Tauri 命令：同一 `Arc` clone 注入 `note_commands`。
+//! - Tauri 命令：同一 `Arc` clone 注入 `note_commands`；
+//!   hydrate 投影经 [`try_store_backend`] 走真 `DocSession::hydrate`。
 //!
 //! 纪律：不静默流式写笔记；读路径禁止默认 MD mirror。
 
 use agent_tools::note_backend::NoteBackendHandle;
-use conex_note_runtime::NoteRuntime;
+use conex_note_runtime::StoreNoteBackend;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
 /// 进程级共享笔记运行时（可 clone 注入多 session / 命令面）。
 #[derive(Clone)]
 pub struct SharedNoteRuntime {
-    backend: NoteBackendHandle,
+    /// 具体 Store 后端（真 DocSession hydrate 投影入口）。
+    store_backend: Arc<StoreNoteBackend>,
     /// 打开时的 db 绝对/规范路径（诊断与测试断言）
     path: PathBuf,
 }
@@ -33,7 +35,12 @@ pub struct SharedNoteRuntime {
 impl SharedNoteRuntime {
     /// 底层 `Arc<dyn NoteBackend>`（clone 廉价）。
     pub fn backend(&self) -> NoteBackendHandle {
-        Arc::clone(&self.backend)
+        Arc::clone(&self.store_backend) as NoteBackendHandle
+    }
+
+    /// 具体 [`StoreNoteBackend`]（`hydrate_document_from_session` 等）。
+    pub fn store_backend(&self) -> Arc<StoreNoteBackend> {
+        Arc::clone(&self.store_backend)
     }
 
     /// workspace.db 路径。
@@ -71,10 +78,10 @@ pub fn open_at(path: impl AsRef<Path>) -> Result<SharedNoteRuntime, String> {
             })?;
         }
     }
-    let backend = NoteRuntime::open(&path).map_err(|e| {
+    let store_backend = Arc::new(StoreNoteBackend::open(&path).map_err(|e| {
         format!("打开 workspace.db 失败 ({}): {e}", path.display())
-    })?;
-    Ok(SharedNoteRuntime { backend, path })
+    })?);
+    Ok(SharedNoteRuntime { store_backend, path })
 }
 
 /// 全局安装槽：setup 一次；测试可经 [`install`] 覆盖。
@@ -103,6 +110,11 @@ pub fn try_shared() -> Option<SharedNoteRuntime> {
 /// 读取 `Arc<dyn NoteBackend>`（SessionLoopOptions / 命令面）。
 pub fn try_backend() -> Option<NoteBackendHandle> {
     try_shared().map(|s| s.backend())
+}
+
+/// 读取具体 [`StoreNoteBackend`]（真 DocSession hydrate 投影）。
+pub fn try_store_backend() -> Option<Arc<StoreNoteBackend>> {
+    try_shared().map(|s| s.store_backend())
 }
 
 /// setup：打开默认 `app_dir()/workspace.db` 并安装。

@@ -26,6 +26,13 @@
 //! - 同进程后续写走同一 session 树（零半树由 collab 原子 apply 保证）。
 //! - **读路径**（`query_blocks` / 大纲 / `get_md`）走 store 投影 / FTS /
 //!   session 树即时 `document_to_md`，**禁止**读 MD mirror 文件。
+//! - **打开投影**：[`StoreNoteBackend::hydrate_document_from_session`] 走真
+//!   `DocSession::hydrate` + CDCS 树投影（`hydrate_path=doc-session`）；
+//!   **≠** `query_blocks` 派生（`hydrate_path=query-blocks`）。
+//!
+//! # 诚实边界（hydrate 投影）
+//! - 真路径可测 **≠** 产品「打开完成」（G-HYD 全条件）
+//! - **≠ EL-04 / EL-01**；禁止静默把 query 结果标成 full hydrate
 //!
 //! # 工厂
 //! [`NoteRuntime::open`] / [`StoreNoteBackend::open`] 供 workbench engine 挂载
@@ -33,8 +40,13 @@
 
 #![allow(missing_docs)]
 
+mod hydrate_projection;
 mod store_backend;
 
+pub use hydrate_projection::{
+    project_session_tree, projection_from_session, DocSessionHydrateBlock,
+    DocSessionHydrateProjection, HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS,
+};
 pub use store_backend::StoreNoteBackend;
 
 use agent_tools::note_backend::NoteBackendHandle;

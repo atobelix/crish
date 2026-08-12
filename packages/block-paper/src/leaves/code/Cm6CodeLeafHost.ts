@@ -1,5 +1,5 @@
 /**
- * 真 CM6 代码叶 Host（W3-E / Round8 · CM6 host 接线）。
+ * 真 CM6 代码叶 Host（W3-E 方向子集 · CM6 host 接线）。
  *
  * 实现 `CodeLeafHost`：
  * - mount → `EditorView` 挂到 HTMLElement
@@ -10,8 +10,11 @@
  * - destroy → view.destroy()
  * - getEditorView() → 真实 EditorView
  *
- * **W3-E ≠ 全语言高亮完成**：仅 plain + javascript 一种 lang；其余 id 回落 plain。
- * **不接 RS**。
+ * ## 诚实边界
+ * - **≠** 产品 e2e 满关；**≠** EL-01；**≠** A-BLK-14 产品 focus e2e
+ * - **≠** 全语言高亮完成：仅 plain + javascript 一种 lang；其余 id 回落 plain
+ * - **不接 RS** 为关闭项；Intent 仍经 Model / sink
+ * - 活动叶编辑 **≠** `ReadonlyCodePresentation` 只读 DOM 件
  */
 
 import {
@@ -334,7 +337,8 @@ export class Cm6CodeLeafHost implements CodeLeafHost {
 
 /**
  * 类型守卫：host 是否暴露真实 CM6 EditorView。
+ * 参数为 `unknown`，便于契约测对 null / 普通对象做否定断言。
  */
-export function isCm6CodeLeafHost(host: CodeLeafHost): host is Cm6CodeLeafHost {
+export function isCm6CodeLeafHost(host: unknown): host is Cm6CodeLeafHost {
   return host instanceof Cm6CodeLeafHost;
 }

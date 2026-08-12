@@ -19,8 +19,9 @@
 //!   （TOOLS-01 §3.1，[Progress*, Terminal] 流形状与执行器流式消费路径）
 //! - `tools`：内置工具（fs / shell / search / diff，B5.2），
 //!   复用 conex-fs 路径安全、conex-sandbox 命令门禁、conex-search 模糊搜索、conex-diff
-//! - `mcp`：MCP 桥（B5.4）——server 配置管理（servers）与 stdio 客户端桥（bridge），
-//!   远端 MCP 工具经名称前缀适配为 Tool 进入统一执行器
+//! - `mcp`：MCP 桥与外壳（B5.4 + **W4-D**）——server 配置（servers）、stdio
+//!   客户端桥（bridge，外→内并入 registry）、**同一 registry 外壳**（shell，
+//!   内→外 tools/list|call；笔记工具同池可见）。**≠** 生产 MCP 全网关；**≠ EL**
 
 pub mod context;
 pub mod audit;
@@ -45,6 +46,9 @@ pub mod note_action_matrix;
 // W6-E-S Skeleton：千次批压测夹具 + 恶意扩展拒写/零持久化方向
 // ≠ EL-05；≠ A-AGT 满表；≠ W6-E Strict 闭环；Memory 禁关生产
 pub mod note_w6e_skeleton;
+// W4-C Strict 方向：扩展宿主 contribute View 轨 + 拒写句柄（投影-only）
+// ≠ EL-07 满关；≠ A-EXT 全表；Memory 禁关生产；不回退 W4-B/F / W6-E-S
+pub mod note_w4c_contribute;
 pub mod definition;
 pub mod explore_quota;
 pub mod executor;
@@ -93,8 +97,8 @@ pub use idempotency::{
     ToolIdempotencyGuard,
 };
 pub use mcp::{
-    McpClientBridge, McpServerConfig, McpServerRuntimeState, McpServerSession, McpServerStore,
-    McpToolAdapter, McpToolInfo, McpTransport,
+    McpClientBridge, McpRegistryShell, McpServerConfig, McpServerRuntimeState, McpServerSession,
+    McpServerStore, McpToolAdapter, McpToolInfo, McpTransport, W4D_MCP_SHELL_PACKAGE_ID,
 };
 pub use middleware::{
     AfterExecuteResult, BeforeExecuteResult, MiddlewareTimeoutConfig, ToolExecutionContext,
@@ -161,6 +165,14 @@ pub use note_w6e_skeleton::{
     reject_malicious_extension_payload, thousand_batch_apply_request, thousand_batch_dry_run_request,
     FORBIDDEN_WRITE_HANDLE_KEYS, MALICIOUS_EXTENSION_FORBIDDEN_WRITE, MaliciousExtensionGate,
     W6E_SKELETON_PACKAGE_ID, W6E_S_NOT_CLOSING, W6E_S_THOUSAND_BATCH_COUNT,
+};
+// W4-C Strict 方向导出（View 轨注册 + 拒写句柄；≠ EL-07 / ≠ A-EXT 全表）
+pub use note_w4c_contribute::{
+    contribute_err_to_backend_err, contribute_payload_has_write_handle, make_registration_key,
+    try_mutate_via_contribute, ContributeKind, ContributeRegisterError, ContributeRegisterOk,
+    ContributeRegistration, ContributeViewRegistry, ViewDescriptor, CONTRIBUTE_FORBIDDEN_WRITE,
+    CONTRIBUTE_KINDS, CONTRIBUTE_MUTATE_DENIED, REQUIRED_CONTRIBUTE_PERMISSION, W4C_NOT_CLOSING,
+    W4C_PACKAGE_ID,
 };
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,

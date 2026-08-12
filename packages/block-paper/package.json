@@ -13,7 +13,8 @@
       "import": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./chrome.css": "./src/chrome/blockChrome.css"
+    "./chrome.css": "./src/chrome/blockChrome.css",
+    "./paper-list.css": "./src/list/paperList.css"
   },
   "files": [
     "src",

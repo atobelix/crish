@@ -17,6 +17,7 @@ export { NotePaperPanel, type NotePaperPanelProps } from './NotePaperPanel';
 export {
   NotePaperStrictPanel,
   type NotePaperStrictPanelProps,
+  type NotePaperStrictPaperListConfig,
 } from './NotePaperStrictPanel';
 
 /** W3-F DOM 桌面挂载：BlockChromeDomHost → React（≠ EL-01） */
@@ -24,6 +25,16 @@ export {
   BlockChromeDomMount,
   type BlockChromeDomMountProps,
 } from './BlockChromeDomMount';
+
+/**
+ * W3-G PaperList 桌面挂载：仅窗口 DOM（≠ EL-01；≠ W3-P 全闭环）。
+ * 与 chrome DomMount 分槽共存（data-bp-paper-list-mount ∥ data-bp-chrome-mount）。
+ */
+export {
+  PaperListDomMount,
+  type PaperListDomMountProps,
+  type PaperListMountBlock,
+} from './PaperListDomMount';
 
 /** 真 React slash 浮层：catalog 可点 → Intent → sink（≠ EL-01 / ≠ A-BLK-02 e2e） */
 export {
@@ -82,3 +93,31 @@ export {
   type ProductStrictHydrateSource,
   type ResolveProductStrictHydrateSourceOptions,
 } from './hydrateProjection';
+
+/**
+ * A-INV-02 镜像漂移 UI 方向（状态条 + 三路入口骨架）。
+ * ≠ EL-03；≠ inotify 产品满关；≠ A-INV-02 全关。
+ */
+export {
+  MirrorDriftStatusBar,
+  type MirrorDriftStatusBarProps,
+} from './MirrorDriftStatusBar';
+
+export {
+  A_INV_02_UI_DIRECTION_ID,
+  isDriftAttention,
+  makeMirrorDriftReportView,
+  MIRROR_DRIFT_CLASS_LABEL,
+  MIRROR_DRIFT_UI_HONESTY,
+  MIRROR_WATCH_SOURCE_LABEL,
+  resolveThreeWayAction,
+  shouldShowThreeWayActions,
+  THREE_WAY_ACTION_LABEL,
+  type MirrorDriftClass,
+  type MirrorDriftReportView,
+  type MirrorThreeWayAction,
+  type MirrorWatchSource,
+  type ResolveThreeWayOpts,
+  type ThreeWayDecision,
+  type ThreeWayStrategy,
+} from './mirrorDriftUi';

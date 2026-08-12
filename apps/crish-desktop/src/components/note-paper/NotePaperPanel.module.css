@@ -158,7 +158,11 @@ button.badge:focus-visible {
   /* 块间距极小 → 连续纸面感；块内 padding 承担呼吸 */
   gap: var(--space-0_5, 2px);
   background: var(--bg-card, hsl(35, 10%, 98%));
+  /* 与 shell-scrollbar / PaperList 同温：thin + stable；禁私有 webkit 块 */
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-strong, var(--tint-scrollbar-thumb, transparent))
+    transparent;
 }
 
 /* 阅读列：主壳 chat 列宽意图 + 左 gutter 给把手（visual-align §02） */
@@ -181,6 +185,48 @@ button.badge:focus-visible {
   /* chrome.css .bp-slash-host 已 absolute + z-popover；此处仅偏移锚点 */
   top: var(--space-2, 8px);
   left: var(--space-6, 24px);
+}
+
+/*
+ * W3-G PaperList 产品挂载槽（② PaperListDomMount · class np-paper-list-mount）
+ * 行/ gap / spacer / 滚动皮 **全部** 归 `@crish/block-paper/paper-list.css`（见 visual-align 11）。
+ * 此处只做槽布局：勿在 list 根上加 gap（会在 spacer↔host 间撕开连续纸）。
+ * ≠ EL-01；≠ 第三套魔法色。
+ */
+:global(.np-paper-list-mount) {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 槽自滚：让出 scrollport 给子 .bp-paper-list[data-scroll-host] */
+:global(.np-paper-list-mount[data-scroll-host='1']) {
+  overflow: hidden;
+}
+
+/* 兼容 class 名 paperListHost（若挂载轨用 styles.paperListHost） */
+.paperListHost {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+}
+
+.paperListHost[data-scroll-host='1'] {
+  overflow: hidden;
+}
+
+/* 阅读列内：继承列 gutter，勿再开 list 的 data-reading-column */
+.readingColumn .paperListHost,
+.readingColumn :global(.np-paper-list-mount) {
+  max-width: none;
 }
 
 /* ---------- 块行：静默默认 / hover·focus 按需 chrome ---------- */
@@ -470,6 +516,103 @@ button.badge:focus-visible {
   line-height: var(--line-height-ui, 1.35);
   background: var(--bg-secondary, hsl(35, 12%, 91.5%));
   flex-shrink: 0;
+}
+
+/* ---------- A-INV-02 镜像漂移状态条（方向子集；≠ EL-03 / ≠ inotify 满关） ---------- */
+
+.mirrorDriftBar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+  padding: var(--space-1_5, 6px) var(--panel-pad-x, 12px);
+  border-top: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
+  background: var(--bg-secondary, hsl(35, 12%, 91.5%));
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary, #555555);
+  line-height: var(--line-height-ui, 1.35);
+  flex-shrink: 0;
+}
+
+.mirrorDriftBarAttention {
+  background: var(
+    --color-warning-bg,
+    color-mix(in srgb, hsl(38, 90%, 50%) 12%, var(--bg-secondary, #ebe6e0))
+  );
+}
+
+.mirrorDriftRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+}
+
+.mirrorDriftBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height-xs, 24px);
+  padding: var(--space-0_5, 2px) var(--space-2, 8px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(
+    --control-soft-bg,
+    color-mix(
+      in srgb,
+      var(--control-mix-color, #4a4035) 4%,
+      var(--bg-primary, #f0ebe6)
+    )
+  );
+  color: var(--text-primary, #111111);
+  font-variant-numeric: tabular-nums;
+}
+
+.mirrorDriftMeta {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary, #696969);
+  font-variant-numeric: tabular-nums;
+}
+
+.mirrorDriftUnpushed {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--color-warning, hsl(32, 90%, 36%));
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.mirrorDriftActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1, 4px);
+}
+
+.mirrorDriftActionBtn {
+  /* 复用 badge 密度；ghost Button 已有皮 */
+  min-height: var(--control-height-xs, 24px);
+  font-size: var(--font-size-xs, 12px);
+}
+
+.mirrorDriftConfirm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-secondary, #555555);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mirrorDriftGate {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--color-danger, hsl(0, 70%, 40%));
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.mirrorDriftHonesty {
+  margin: 0;
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary, #696969);
+  line-height: var(--line-height-ui, 1.35);
 }
 
 /* ---------- 统一状态面（Skeleton 空/错 · Strict 加载/空/错） ---------- */

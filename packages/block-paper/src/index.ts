@@ -10,6 +10,7 @@
  * - **PmTextLeaf / PmTextLeafHost**：真 prosemirror 叶 → TextEditIntent（**W3-D-PM**）
  * - **`createCollabApplySink`**：**生产默认** Intent → wire → 注入 `applyOps`（真 apply 形状）
  * - CodeLeafModel / mountCodeLeaf / Cm6CodeLeafHost：代码叶（可聚焦 + text_edit + 真 CM6 host）
+ * - codeFlavourMap / ReadonlyCodePresentation：flavour/fence↔collab kind + 只读呈现
  * - `submitStructureToCollabWire`：PaperIntent → collab wire JSON（喂 RS `ops_from_json`）
  * - **W3-H 方向**：`mdPrefix` / `turnInto` / `unknownFlavourPlaceholder`（A-BLK-08/09/11 方向）
  *
@@ -22,6 +23,8 @@
  *   - **W3-D-S** = plain TextLeaf + mock（形状）
  *   - **W3-D-PM** = 真 PM 适配器入库；单独 **≠** W3-D 终局
  *   - **W3-D** = 真 PM + TextEdit/Structure Intent → 真 apply（本包工厂 + RS 集成）
+ *   - **W3-E 方向子集** = 代码叶 Model + 真 CM6 host + flavour/fence→kind 映射 + 只读呈现；
+ *     测 `leaves/code/*.w3e.test.ts`；**≠** A-BLK-14 产品 e2e；**≠** EL-01
  *   - **W3-F-S** = StructureIntent + wire + mock（`chrome.w3f.test.ts`）
  *   - **W3-F Strict 子集** = chrome slash_insert / delete_blocks → `createCollabApplySink`
  *     （`chrome.w3f_apply.test.ts` + RS `w3_f_*`）
@@ -33,10 +36,15 @@
  *     测 `paperList.w3g.test.ts`；结构门 DOM 上界；假数据 **≠** 权威；**≠** EL-01 / A-PERF 数值
  *   - **W3-H 方向子集** = MD 前缀快路径 + turn-into Intent + 未知 flavour 占位；
  *     composing 禁前缀；测 `leaves/w3h.direction.test.ts`；**≠** A-BLK 全表 e2e；**≠** EL-01
+ *   - **W3-H 产品接线** = `mdPrefixHost`：叶输入 → `commitMdPrefixFromLeaf` /
+ *     `simulateMdPrefixSubmit` → 可注入 TurnInto sink（mock / provisional collab）；
+ *     与 slash_insert **双通道不互抹**；RS 真 turn_into Op **仍未做**；
+ *     测 `leaves/mdPrefixHost.test.ts`
  *   - **chrome 视觉皮** = `@crish/block-paper/chrome.css`（落点线/slash/把手热区 token 化）；
  *     **视觉皮 ≠ EL-01**
+ *   - **PaperList 视觉皮** = `@crish/block-paper/paper-list.css`（列表 gap/pad/gutter/滚动/块行）；
+ *     与 chrome / note-paper module 同温；**皮 ≠ EL-01 / ≠ A-PERF**
  *   - **≠ EL-01**；**≠ A-BLK 全表 e2e**；**≠** 块工作区完成
- * - W3-E 完成 = 代码叶可聚焦 + Intent 通路绿
  */
 
 // Block chrome 状态
@@ -240,7 +248,9 @@ export {
 } from './list';
 
 // ---------------------------------------------------------------------------
-// W3-E：CM6 代码叶（可聚焦 + text_edit + 真 CM6 host；不接 RS / 不全语言高亮）
+// W3-E：CM6 代码叶方向子集
+// 可聚焦 + text_edit + 真 CM6 host + flavour/fence→collab kind 映射 + 只读呈现
+// **≠** 产品 e2e 满关；**≠** EL-01；**≠** A-BLK-14 产品 focus e2e
 // ---------------------------------------------------------------------------
 
 export {
@@ -253,6 +263,21 @@ export {
   resolveCm6LanguageExtension,
   isCm6HighlightedLanguage,
   isCm6CodeLeafHost,
+  CODE_FLAVOUR_IDS,
+  CODE_COLLAB_KIND,
+  isCodeFlavour,
+  codeFlavourToCollabKind,
+  isCodeCollabKind,
+  parseFenceInfo,
+  fenceOpenToLanguage,
+  resolveCodeLeafLanguage,
+  codeLeafAttrsForLanguage,
+  resolveCodeLeafKindAndLanguage,
+  mountReadonlyCodePresentation,
+  createReadonlyCodeSnapshot,
+  createReadonlyCodeLeafModel,
+  BP_CODE_READONLY,
+  BP_CODE_READONLY_CODE,
   type CodeLanguage,
   type CodeLeafSnapshot,
   type CodeLeafModelOptions,
@@ -266,6 +291,13 @@ export {
   type Cm6CodeLeafHostOptions,
   type CreateCm6EditorStateOptions,
   type Cm6EditorStateBundle,
+  type CodeFlavourId,
+  type CodeCollabKind,
+  type ResolveCodeLeafLanguageInput,
+  type CodeLeafKindResolution,
+  type ReadonlyCodePresentationSnapshot,
+  type MountReadonlyCodePresentationOptions,
+  type ReadonlyCodePresentationMount,
 } from './leaves/code';
 
 // ---------------------------------------------------------------------------
@@ -314,3 +346,24 @@ export {
   type UnknownFlavourPlaceholderSnapshot,
   type CreateUnknownFlavourPlaceholderInput,
 } from './leaves/unknownFlavourPlaceholder';
+
+// W3-H 产品输入接线（叶 → turn_into sink；≠ RS 真 turn_into Op；≠ EL-01）
+export {
+  commitMdPrefixFromLeaf,
+  simulateMdPrefixSubmit,
+  tryMdPrefixAfterLeafEdit,
+  createMockTurnIntoSink,
+  createTurnIntoProvisionalCollabSink,
+  createProductIntentAuditSinks,
+  type MdPrefixLeafSnapshot,
+  type MdPrefixCommitOptions,
+  type MdPrefixCommitOk,
+  type MdPrefixCommitFail,
+  type MdPrefixCommitResult,
+  type SimulateMdPrefixSubmitInput,
+  type SimulateMdPrefixSubmitResult,
+  type MockTurnIntoSink,
+  type TurnIntoProvisionalCollabSink,
+  type ProductIntentAuditEntry,
+  type ProductIntentAuditSinks,
+} from './leaves/mdPrefixHost';

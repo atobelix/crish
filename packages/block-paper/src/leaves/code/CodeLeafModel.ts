@@ -1,5 +1,5 @@
 /**
- * CM6 代码叶本地模型（W3-E 骨架）。
+ * CM6 代码叶本地模型（W3-E 方向子集）。
  *
  * 对齐：
  * - W0 Intent：`text_edit`（blockId + range + insert + intentId）
@@ -8,12 +8,15 @@
  * - 只读：编辑拒绝，不产出 Intent、不改 content
  * - A-IME：可注入 `isComposing`；合成期缓冲，end 时 flush（与 TextLeafModel 同构）
  * - 写路径：Intent → submitIntent → sink →（未来）RS apply；**禁止** serialize(DOM)
+ * - flavour / fence → collab kind：见 `codeFlavourMap`（kind=`code`；lang 进 attrs）
  *
  * **本模块不接真实后端**。Host 经 `CodeLeafHost` 注入；
  * 真 CM6 见 `Cm6CodeLeafHost` / `mountCodeLeaf({ createHost })`。
  *
- * **W3-E ≠ 全语言高亮完成**：language 字段 + Compartment 钩子就位；
- * 当前 lang 包仅 javascript，其余按需后接。
+ * ## 诚实边界
+ * - **≠** 产品 e2e 满关；**≠** EL-01；**≠** A-BLK-14 产品 focus e2e
+ * - **≠** 全语言高亮完成：language 字段 + Compartment 钩子就位；
+ *   当前 CM6 lang 包仅 javascript，其余按需后接
  */
 
 import type {
