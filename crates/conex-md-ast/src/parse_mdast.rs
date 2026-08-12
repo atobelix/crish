@@ -13,6 +13,7 @@
 //! - **围栏 Code**：kind 已入 collab；**lang/meta 未进载荷** → 有 info 时 `structure_note` 可点名；S 空 lang
 //! - 嵌套 blockquote → 单 Quote 多行 plain（**无** 子 Quote 块）
 //! - 同秩列表嵌套 → 扁平兄弟（容器栈秩=10）；真嵌套列表语义 **未** 关
+//! - 任务项 trailing 表 → 表降 Paragraph 叶子挂容器（组合边；**≠** Table/TaskItem kind 关账 / **≠ EL-06**）
 //! - 删除线 / 链接 / autolink：inline 剥为 plain（**≠** 叶子 inline RT 关账）
 //! - wiki `[[…]]`：**未**建模；作 plain 文本保留（**≠** A-MD-03 / EL-06）
 
