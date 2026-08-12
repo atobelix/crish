@@ -219,7 +219,8 @@ async fn spawn_server(
     config.port = 0;
     config.multi_device_enabled = true;
 
-    // 预签发令牌（令牌库共享 Arc：协调器与路由层同一文件语义）
+    // 预签发令牌（先落盘 pairing.json，供下方 ServerState 从文件重载；
+    // 协调器随后改用路由层共享 Arc，撤销即时性全链真实可测）
     let token_store = Arc::new(Mutex::new(auth::TokenStore::new(
         config.pairing_file_path.clone(),
     )));
@@ -237,7 +238,7 @@ async fn spawn_server(
     let instance = ServerInstance::bind(config).await.expect("测试绑定失败");
     let addr = instance.addr();
     let handle = instance.handle().clone();
-    let fanout = Arc::new(fanout.unwrap_or_else(|| FanOutEmitter::new(vec![])));
+    let fanout = fanout.unwrap_or_else(|| Arc::new(FanOutEmitter::new(vec![])));
 
     // 手动装配 ServerState（非 instance.router()——需要把协调器的
     // WsRegistry 与路由层对齐，revoke 踢出才命中真实连接）。令牌库经
@@ -251,7 +252,12 @@ async fn spawn_server(
     state.set_event_stream(Some(Arc::clone(&fanout)));
     let registry = state.ws_registry();
     let pairing = if with_pairing {
-        let coordinator = Arc::new(PairingCoordinator::new(token_store, registry));
+        // 协调器与路由层共享同一 TokenStore Arc（state.tokens()）——
+        // 撤销即时性全链真实：revoke 落共享库 → 路由层鉴权立即可见
+        // revoked → 重连 401（与 main.rs 生产装配的「命令面与路由层
+        // 同 Arc」口径一致，ServerState::reload_tokens 的再入在此共享
+        // 下无副作用）
+        let coordinator = Arc::new(PairingCoordinator::new(state.tokens(), registry));
         state = state.with_pairing(Arc::clone(&coordinator));
         Some(coordinator)
     } else {
