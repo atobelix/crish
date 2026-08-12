@@ -34,6 +34,17 @@ xcap = { version = "0.9", features = ["image"] }
 # 本次新增唯一 lock 条目,其传递依赖 windows 0.61.3 为锁内既有版本。
 # default-features = false:去掉 Linux x11rb 面,Windows 编译无关。
 enigo = { version = "0.6.1", default-features = false }
+# windows 0.61.3:UIA 结构化感知直调面(37 报告 Gate-C 实测路径:IUIAutomation COM
+# 接口 + TreeWalker + ElementFromPoint + IsPassword/ValuePattern;NULL→Err(empty)
+# 语义按「无元素」处理,见 perception.rs)。锁内既有版本(tauri 链引入),零 lock 变更。
+# feature 面精确声明(PE-10 T10.10h):Accessibility(UIA 接口)/ System_Com(CoCreateInstance/
+# CoInitializeEx)/ Foundation(RECT/POINT/HWND)/ WindowsAndMessaging(探针 FindWindow)。
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_UI_Accessibility",
+    "Win32_UI_WindowsAndMessaging",
+] }
 # windows-sys 0.61:workspace 既有声明(锁内 0.61.2);直连面用于
 # SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)与 GetCursorPos/SetCursorPos
 # (enigo 0.6.1 绝对鼠标移动仅支持主屏 0,0 原点,多显示器负坐标必须直连)。

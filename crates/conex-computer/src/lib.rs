@@ -14,6 +14,7 @@
 pub mod action;
 pub mod activation;
 pub mod coord;
+pub mod perception;
 pub mod screen;
 pub mod security;
 
