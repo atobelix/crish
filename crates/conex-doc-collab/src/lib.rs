@@ -8,6 +8,11 @@
 //! - Undo v1：[`DocSession::undo`] 按 origin 过滤（A-COL-04）；跨冷 plain 恢复（A-MEM-04）
 //! - 跨引擎同批：[`a_inv_09`] 三连（树 Op + 文本 edit 同批提交/回滚；09c 含 undo 恢复）
 //!
+//! # W6-A-S（Skeleton · A-BLK 抽样）
+//! - 包 ID：[`w6_a_s::W6_A_S_PACKAGE_ID`] = `"W6-A-S"`（**必须**保留 `-S`）
+//! - 测：`tests/a_blk_contract.rs` + TS `chrome.a_blk.test.ts`
+//! - **诚实**：**≠ W6-A** Strict / **≠ EL-01** 满关（见 [`w6_a_s`] 模块文档）
+//!
 //! # W6-D-S（Skeleton · 协作子集）
 //! - 包 ID：[`w6_d_s::W6_D_S_PACKAGE_ID`] = `"W6-D-S"`（**必须**保留 `-S`）
 //! - 子集：in-process **A-COL-01**（[`DualSessionHarness`] + `tests/a_col_dual_peer`）
@@ -28,6 +33,8 @@ pub mod structure_codec;
 /// 叶子文本引擎：yrs + 热集/冷藏（**非** `pub mod`，A-INV-05）。
 mod text_engine;
 mod tx;
+/// **W6-A-S** Skeleton：A-BLK 抽样轨锚（包 ID / 诚实边界 / 场景表）。
+pub mod w6_a_s;
 /// **W6-D-S** Skeleton：A-COL-01 子集轨锚（包 ID / 诚实边界 / 场景表）。
 pub mod w6_d_s;
 
@@ -49,6 +56,11 @@ pub use session::{
 /// H1 / A-MEM-01：默认热集上界（活动 YText 实例数）；见 `plans/acceptance/perf-baseline.md`。
 pub use text_engine::DEFAULT_MAX_HOT;
 pub use tx::{TxGuard, TxId};
+/// W6-A-S 包锚 re-export（调度 / 集成测可 `use conex_doc_collab::W6_A_S_PACKAGE_ID`）。
+pub use w6_a_s::{
+    W6_A_S_A_BLK_FAMILY, W6_A_S_A_BLK_SCENARIOS, W6_A_S_NOT_CLOSING, W6_A_S_PACKAGE_ID,
+    W6_A_S_TRACK,
+};
 /// W6-D-S 包锚 re-export（调度 / 集成测可 `use conex_doc_collab::W6_D_S_PACKAGE_ID`）。
 pub use w6_d_s::{
     W6_D_S_A_COL_01_SCENARIOS, W6_D_S_A_COL_SUBSET, W6_D_S_NOT_CLOSING, W6_D_S_PACKAGE_ID,

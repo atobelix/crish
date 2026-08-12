@@ -2,14 +2,19 @@
 //!
 //! **本文件 ≠ 关闭 EL-01 / A-BLK 全表 / 块工作区完成**：只钉抽样契约：
 //! create/move/delete/**undo** 后 `block_id` 稳定、单次 `Op::Move` 重排、
-//! indent/nest Move 半覆盖、跨文档导入重生 id 策略、未知 flavour 占位可恢复。
+//! indent/nest Move 半覆盖、跨文档导入重生 id 策略、未知 flavour 占位可恢复、
+//! **A-BLK-08** `Op::TurnInto` 保 `block_id` + 文本（本波余量加深；≠ 选区 e2e）。
 //!
+//! 包锚：[`conex_doc_collab::W6_A_S_PACKAGE_ID`]（必须带 `-S`）。
 //! 权威：`docs/block-workspace-architecture/round-D-stack/07-技术栈矩阵裁决.md` §5.1
 //! 进度：`docs/block-workspace-architecture/plans/acceptance/A-BLK-progress.md`
 //! 调度：`plans/09` **W6-A-S**（禁止用本文件关 **W6-A** / **EL-01**）
 
 use conex_doc_collab::structure_codec::{decode_structure_payload, encode_structure_payload};
-use conex_doc_collab::{BlockId, BlockKind, BlockProps, DocSession, Op, Origin};
+use conex_doc_collab::{
+    BlockId, BlockKind, BlockProps, DocSession, Op, Origin, W6_A_S_A_BLK_SCENARIOS,
+    W6_A_S_NOT_CLOSING, W6_A_S_PACKAGE_ID, W6_A_S_TRACK,
+};
 
 fn insert_root(s: &mut DocSession, id: BlockId, order: &str) {
     s.apply(
@@ -23,6 +28,34 @@ fn insert_root(s: &mut DocSession, id: BlockId, order: &str) {
         }],
     )
     .expect("insert root");
+}
+
+/// 包轨钉（W6-A-S · 与 `w6_a_s` 模块互证；不关 EL-01 / W6-A）。
+#[test]
+fn w6_a_s_package_track_is_skeleton_not_el01() {
+    assert_eq!(W6_A_S_PACKAGE_ID, "W6-A-S");
+    assert!(
+        W6_A_S_PACKAGE_ID.ends_with("-S"),
+        "Skeleton 轨必须带 -S；禁止去 -S 冒充 W6-A Strict"
+    );
+    assert_eq!(W6_A_S_TRACK, "Skeleton");
+    assert!(
+        W6_A_S_NOT_CLOSING.iter().any(|s| s.contains("EL-01")),
+        "诚实钉：不得关闭 EL-01"
+    );
+    assert!(
+        W6_A_S_NOT_CLOSING
+            .iter()
+            .any(|s| s.contains("W6-A Strict")),
+        "诚实钉：不得关闭 W6-A Strict"
+    );
+    assert!(
+        W6_A_S_A_BLK_SCENARIOS
+            .iter()
+            .any(|s| s.contains("a_blk_08_turn_into")),
+        "本波余量加深场景须登记 A-BLK-08"
+    );
+    let _ = "W6-A-S ≠ W6-A / ≠ EL-01 满关";
 }
 
 /// A-BLK-01：create / move / delete 后 `block_id` 稳定可解析。
@@ -372,6 +405,112 @@ fn a_blk_07_cross_doc_import_must_regen_block_ids() {
     assert_eq!(src.read_text(&src_id), "import-me");
 }
 
+/// A-BLK-08 半：`Op::TurnInto` 改 kind **保** `block_id` + 文本 + parent/order。
+///
+/// 钉（心侧抽样，**≠** 选区 e2e / 产品 turn-into UI）：
+/// - paragraph → heading → quote 后 id 不变
+/// - 文本 plain 不因 kind 切换而清空
+/// - parent / order / 兄弟位置不变（turn-into ≠ move）
+/// - 文本长度不变 → 逻辑 offset 上界仍合法（选区保真的心侧前置；UI 钳制见 TS）
+///
+/// 产品菜单 / MD 前缀 / 选区投影 e2e → **W6-A-S 余量（W6-A 未关）**。
+#[test]
+fn a_blk_08_turn_into_preserves_block_id_and_text() {
+    let mut s = DocSession::new("a-blk-08-turn-into");
+    let host = BlockId::new();
+    let target = BlockId::new();
+    let sibling = BlockId::new();
+
+    insert_root(&mut s, host, "a0");
+    // target 嵌在 host 下，验证 turn_into 不破坏 parent
+    s.apply(
+        Origin::User,
+        &[Op::Insert {
+            id: target,
+            parent: Some(host),
+            order: "a0".into(),
+            kind: BlockKind::Paragraph,
+            props: BlockProps::default(),
+        }],
+    )
+    .expect("insert target under host");
+    insert_root(&mut s, sibling, "a1");
+
+    let body = "选区保真前缀_hello_世界";
+    s.apply(
+        Origin::User,
+        &[Op::TextEdit {
+            id: target,
+            start: 0,
+            end: 0,
+            insert: body.into(),
+        }],
+    )
+    .expect("seed text");
+    let len_before = s.read_text(&target).chars().count() as u32;
+    assert_eq!(s.read_text(&target), body);
+    assert_eq!(s.tree().get(&target).unwrap().parent, Some(host));
+    let order_before = s.tree().get(&target).unwrap().order.clone();
+
+    // turn_into：paragraph → heading-2；id/text/parent/order 须稳
+    s.apply(
+        Origin::User,
+        &[Op::TurnInto {
+            id: target,
+            kind: BlockKind::Heading { level: 2 },
+        }],
+    )
+    .expect("turn_into heading");
+    assert_eq!(
+        s.tree().get(&target).unwrap().id,
+        target,
+        "turn_into 不得重生 block_id"
+    );
+    assert_eq!(
+        s.tree().get(&target).unwrap().kind,
+        BlockKind::Heading { level: 2 }
+    );
+    assert_eq!(
+        s.read_text(&target),
+        body,
+        "turn_into 不得清空/改写文本（逻辑选区 offset 依赖）"
+    );
+    assert_eq!(s.tree().get(&target).unwrap().parent, Some(host));
+    assert_eq!(s.tree().get(&target).unwrap().order, order_before);
+    assert!(
+        s.tree().get(&host).unwrap().children.contains(&target),
+        "父 children 仍以原 block_id 引用"
+    );
+    let len_after = s.read_text(&target).chars().count() as u32;
+    assert_eq!(
+        len_after, len_before,
+        "文本标量长度不变 → 逻辑 offset 上界仍合法"
+    );
+    // 中部 offset 仍在 [0, len]（心侧前置；真投影 e2e 属 W6-A）
+    let mid = len_after / 2;
+    assert!(mid <= len_after);
+
+    // 再 turn_into → quote；兄弟 sibling 的 id 全程不受影响
+    s.apply(
+        Origin::User,
+        &[Op::TurnInto {
+            id: target,
+            kind: BlockKind::Quote,
+        }],
+    )
+    .expect("turn_into quote");
+    assert_eq!(s.tree().get(&target).unwrap().kind, BlockKind::Quote);
+    assert_eq!(s.tree().get(&target).unwrap().id, target);
+    assert_eq!(s.read_text(&target), body);
+    assert_eq!(s.tree().get(&sibling).unwrap().id, sibling);
+    assert_eq!(s.tree().get(&host).unwrap().id, host);
+    assert_eq!(
+        s.tree().get(&sibling).unwrap().kind,
+        BlockKind::Paragraph,
+        "未 turn 的兄弟 kind 不得被误改"
+    );
+}
+
 /// A-BLK-11 半：未知 flavour → `BlockKind::Unknown` 占位；文本与 id 可恢复。
 ///
 /// 钉：Insert Unknown + TextEdit 后 kind/flavour/id/text 仍在；结构 encode/decode 不丢。
@@ -433,4 +572,70 @@ fn a_blk_11_unknown_flavour_placeholder_preserves_text_and_id() {
         Some("payload-safe"),
         "占位块文本须随结构 snapshot 可恢复"
     );
+}
+
+/// A-BLK-11 余量加深：Unknown 占位 → `Op::TurnInto` 已知 kind **恢复**后 id/text 仍稳。
+///
+/// 对齐注释余量「turn-into 恢复」心侧前置；**≠** 产品占位 View / 恢复 UI e2e。
+#[test]
+fn a_blk_11_unknown_turn_into_recovery_keeps_id_and_text() {
+    let mut s = DocSession::new("a-blk-11-turn-into-recovery");
+    let id = BlockId::new();
+    let flavour = "legacy-callout".to_string();
+
+    s.apply(
+        Origin::User,
+        &[Op::Insert {
+            id,
+            parent: None,
+            order: "a0".into(),
+            kind: BlockKind::Unknown {
+                flavour: flavour.clone(),
+            },
+            props: BlockProps::default(),
+        }],
+    )
+    .expect("insert unknown");
+    s.apply(
+        Origin::User,
+        &[Op::TextEdit {
+            id,
+            start: 0,
+            end: 0,
+            insert: "recover-me".into(),
+        }],
+    )
+    .expect("seed unknown text");
+    assert_eq!(s.read_text(&id), "recover-me");
+    match &s.tree().get(&id).unwrap().kind {
+        BlockKind::Unknown { flavour: f } => assert_eq!(f, &flavour),
+        other => panic!("expected Unknown, got {other:?}"),
+    }
+
+    // 恢复路径：turn_into → 已知 Quote（模拟 registerFlavour / 用户转类型）
+    s.apply(
+        Origin::User,
+        &[Op::TurnInto {
+            id,
+            kind: BlockKind::Quote,
+        }],
+    )
+    .expect("turn_into recovery");
+    assert_eq!(
+        s.tree().get(&id).unwrap().id,
+        id,
+        "恢复转类型不得重生 block_id"
+    );
+    assert_eq!(s.tree().get(&id).unwrap().kind, BlockKind::Quote);
+    assert_eq!(
+        s.read_text(&id),
+        "recover-me",
+        "占位恢复后文本不得丢失"
+    );
+    // 结构 snapshot 往返仍可解析原 id
+    let bytes = encode_structure_payload(s.rev(), s.tree());
+    let snap = decode_structure_payload(&bytes).expect("decode");
+    let node = snap.tree.get(&id).expect("id 可解析");
+    assert_eq!(node.id, id);
+    assert_eq!(node.kind, BlockKind::Quote);
 }
