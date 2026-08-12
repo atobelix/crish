@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/types';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 
 export interface ToolCallHeaderProps {
   tc: MessageToolCall;
@@ -55,26 +55,28 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <Tooltip content="在文件面板打开">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.toolPathAction}
             aria-label="在文件面板打开"
             onClick={() => onOpenPath?.(filePath)}
-          >
-            <PanelRightOpen size={14} />
-          </button>
+            icon={<PanelRightOpen size={14} aria-hidden />}
+          />
         </Tooltip>
         <Tooltip content="复制路径">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.toolPathAction}
             aria-label="复制路径"
             onClick={() => {
               void navigator.clipboard.writeText(filePath);
             }}
-          >
-            <Copy size={14} />
-          </button>
+            icon={<Copy size={14} aria-hidden />}
+          />
         </Tooltip>
       </span>
     ) : null;
@@ -152,20 +154,10 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
       );
     } else if (tc.status === 'success') {
       inner = (
-        <CheckCircle2
-          size={sz}
-          strokeWidth={sw}
-          color="var(--accent-green)"
-        />
+        <CheckCircle2 size={sz} strokeWidth={sw} color="var(--accent-green)" />
       );
     } else if (tc.status === 'error') {
-      inner = (
-        <XCircle
-          size={sz}
-          strokeWidth={sw}
-          color="var(--accent-red)"
-        />
-      );
+      inner = <XCircle size={sz} strokeWidth={sw} color="var(--accent-red)" />;
     } else {
       inner = (
         <CircleDot size={sz} strokeWidth={sw} color="var(--text-tertiary)" />
@@ -219,17 +211,18 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         className={`${styles.toolRowChevronSlot} ${canToggle ? styles.isToggle : ''}`}
       >
         {tc.status === 'error' && onRetryTool ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.retryBtn}
             onClick={(e) => {
               e.stopPropagation();
               onRetryTool(tc.id);
             }}
             aria-label="重试"
-          >
-            <RotateCcw size={12} />
-          </button>
+            icon={<RotateCcw size={12} aria-hidden />}
+          />
         ) : null}
         {canToggle ? (
           <ChevronRight

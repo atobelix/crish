@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { Bot, ChevronDown } from 'lucide-react';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { agentOneLineLabel, agentStatusLabel } from './helpers';
@@ -15,7 +15,11 @@ interface AgentSectionProps {
 }
 
 export const AgentSection = React.memo(function AgentSection({
-  open, agents, runningAgentCount, activeSessionId, onToggle,
+  open,
+  agents,
+  runningAgentCount,
+  activeSessionId,
+  onToggle,
 }: AgentSectionProps) {
   const sortedAgents = React.useMemo(() => {
     return [...agents].sort((a, b) => {
@@ -28,41 +32,72 @@ export const AgentSection = React.memo(function AgentSection({
 
   return (
     <section className={styles.sec} aria-labelledby="overview-sec-agents">
-      <button type="button" id="overview-sec-agents" className={styles.secH}
-        aria-expanded={open} aria-controls="overview-sec-agents-b" onClick={onToggle}>
+      <button
+        type="button"
+        id="overview-sec-agents"
+        className={styles.secH}
+        aria-expanded={open}
+        aria-controls="overview-sec-agents-b"
+        onClick={onToggle}
+      >
         <Bot size={15} strokeWidth={1.75} aria-hidden />
         <span>协作体</span>
         {sortedAgents.length > 0 ? (
-          <span className={styles.pill}>{runningAgentCount > 0 ? `${runningAgentCount} 运行` : sortedAgents.length}</span>
+          <span className={styles.pill}>
+            {runningAgentCount > 0
+              ? `${runningAgentCount} 运行`
+              : sortedAgents.length}
+          </span>
         ) : null}
-        <ChevronDown size={14} className={`${styles.chev} ${open ? styles.open : ''}`} aria-hidden />
+        <ChevronDown
+          size={14}
+          className={`${styles.chev} ${open ? styles.open : ''}`}
+          aria-hidden
+        />
       </button>
       {open ? (
         <div className={styles.secB} id="overview-sec-agents-b">
           {sortedAgents.length > 0 ? (
-            <ul className={`${styles.list} ${styles['list--agents']}`} aria-label="协作体列表">
+            <ul
+              className={`${styles.list} ${styles['list--agents']}`}
+              aria-label="协作体列表"
+            >
               {sortedAgents.map((a) => {
                 const name = agentOneLineLabel(a.description, a.id);
                 const st = agentStatusLabel(a.status);
                 return (
                   <li key={a.id}>
                     <Tooltip content={name}>
-                      <button type="button" className={`${styles.itemBtn} ${styles['itemBtn--agent']}`}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={`${styles.itemBtn} ${styles['itemBtn--agent']}`}
                         aria-label={`${name}，${st}`}
-                        onClick={() => { openAgentInSidePanel(a.id, { sessionId: activeSessionId || undefined }); }}>
-                        <span className={`${styles.dot} ${a.status === 'running' ? styles.live : ''}`} aria-hidden="true" />
+                        onClick={() => {
+                          openAgentInSidePanel(a.id, {
+                            sessionId: activeSessionId || undefined,
+                          });
+                        }}
+                      >
+                        <span
+                          className={`${styles.dot} ${a.status === 'running' ? styles.live : ''}`}
+                          aria-hidden="true"
+                        />
                         <span className={styles.itemMain}>
                           <span className={styles.itemName}>{name}</span>
                           <em>{st}</em>
                         </span>
-                      </button>
+                      </Button>
                     </Tooltip>
                   </li>
                 );
               })}
             </ul>
           ) : (
-            <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">无</p>
+            <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
+              无
+            </p>
           )}
         </div>
       ) : null}

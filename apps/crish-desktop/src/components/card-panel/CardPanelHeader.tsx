@@ -21,12 +21,15 @@ import { getPanelTitle } from '../../api/store-access/componentAccess';
 import { ChatHeaderMore } from '../chat-card/ChatHeaderMore';
 import { WorkspaceChromeBars } from '../workspace/WorkspaceChromeBars';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import type { CardState, GroupState } from '../../store/types';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 
 const TABS_ADD_MENU_W = 188;
-export function placeTabsAddMenu(anchor: DOMRect): { top: number; left: number } {
+export function placeTabsAddMenu(anchor: DOMRect): {
+  top: number;
+  left: number;
+} {
   const gap = 4;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -142,7 +145,11 @@ export interface CardPanelHeaderProps {
   tabIdPrefix: string;
   panelBodyId: string;
   tabAddMenuId: string;
-  draggedTab: { sourceGroupId: string; cardId: string; isTabDrag?: boolean } | null;
+  draggedTab: {
+    sourceGroupId: string;
+    cardId: string;
+    isTabDrag?: boolean;
+  } | null;
   handleTabClick: (cardId: string) => void;
   handleTabPointerDown: (e: React.PointerEvent, cardId: string) => void;
   onTabKeyDown: (e: React.KeyboardEvent, cardId: string, index: number) => void;
@@ -152,7 +159,9 @@ export interface CardPanelHeaderProps {
   tabAddOpen: boolean;
   tabAddPos: { top: number; left: number } | null;
   setTabAddOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  setTabAddPos: React.Dispatch<React.SetStateAction<{ top: number; left: number } | null>>;
+  setTabAddPos: React.Dispatch<
+    React.SetStateAction<{ top: number; left: number } | null>
+  >;
   onAddMenuKeyDown: (e: React.KeyboardEvent) => void;
 }
 
@@ -305,8 +314,10 @@ export const CardPanelHeader: React.FC<CardPanelHeaderProps> = React.memo(
                 })}
                 <div className="tabs-add-wrap">
                   <Tooltip content="打开面板">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       className="tabs-add-btn"
                       data-testid="add-panel-button"
                       ref={tabAddBtnRef}
@@ -328,13 +339,14 @@ export const CardPanelHeader: React.FC<CardPanelHeaderProps> = React.memo(
                           setTabAddPos(null);
                         }
                       }}
-                    >
-                      <Plus
-                        size={TAB_ICON_SIZE}
-                        strokeWidth={TAB_ICON_STROKE}
-                        aria-hidden
-                      />
-                    </button>
+                      icon={
+                        <Plus
+                          size={TAB_ICON_SIZE}
+                          strokeWidth={TAB_ICON_STROKE}
+                          aria-hidden
+                        />
+                      }
+                    />
                   </Tooltip>
                 </div>
               </div>

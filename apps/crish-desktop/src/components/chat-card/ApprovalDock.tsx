@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ApprovalDock.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { getSessionById } from '../../api/store-access/componentAccess';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import {
@@ -45,12 +45,12 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
   const handleClick = () => {
     const byTool = toolId
       ? document.querySelector(
-          `.approval-card[data-tool-id="${CSS.escape(toolId)}"], [data-tool-id="${CSS.escape(toolId)}"]`,
+          `.approval-card[data-tool-id="${CSS.escape(toolId)}"], [data-tool-id="${CSS.escape(toolId)}"]`
         )
       : null;
     const byMsg = msgId
       ? document.querySelector(
-          `.approval-card[data-msg="${CSS.escape(msgId)}"]`,
+          `.approval-card[data-msg="${CSS.escape(msgId)}"]`
         )
       : null;
     const el = byTool || byMsg || document.querySelector('.approval-card');
@@ -68,8 +68,8 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
     const sess = activeSessionId ? getSessionById(activeSessionId) : undefined;
     const pendingAgent = (sess?.agents || []).find((ag) =>
       (ag.messages || []).some((m) =>
-        (m.toolCalls || []).some((tc) => tc.status === 'pending_approval'),
-      ),
+        (m.toolCalls || []).some((tc) => tc.status === 'pending_approval')
+      )
     );
     if (pendingAgent) {
       // 打开侧栏即反馈，不 toast「已打开…」
@@ -84,8 +84,10 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
 
   return (
     <Tooltip content={ariaLabel}>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         className={`${styles.approvalDock} ${styles.slim}`}
         aria-label={ariaLabel}
         data-pending-count={pendingCount}
@@ -98,7 +100,7 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
           className={styles.approvalDockGoIcon}
           aria-hidden
         />
-      </button>
+      </Button>
     </Tooltip>
   );
 };

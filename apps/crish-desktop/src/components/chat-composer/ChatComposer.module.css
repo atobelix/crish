@@ -27,14 +27,22 @@
 .container:focus-within {
   background: var(--composer-shell-bg-focus);
   background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  ) !important;
   box-shadow: none !important;
   outline: none;
 }
 
 /* RL-01 落地面特例（data-empty-kind="session-empty"）：焦点混色 ≤5% */
 .container[data-empty-kind='session-empty']:focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 95%,
+    var(--text-primary) 5%
+  ) !important;
   box-shadow: none !important;
   outline: none;
 }
@@ -52,7 +60,11 @@
 .containerDense:focus-within {
   background: var(--composer-shell-bg-focus);
   background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  ) !important;
 }
 
 .textarea {
@@ -72,8 +84,12 @@
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   resize: none;
-  min-height: calc(1em * var(--composer-line-height) * var(--composer-min-lines));
-  max-height: calc(1em * var(--composer-line-height) * var(--composer-max-lines));
+  min-height: calc(
+    1em * var(--composer-line-height) * var(--composer-min-lines)
+  );
+  max-height: calc(
+    1em * var(--composer-line-height) * var(--composer-max-lines)
+  );
   color: var(--text-primary);
   line-height: var(--composer-line-height);
   padding: 0;
@@ -114,17 +130,6 @@
   line-height: var(--composer-line-height);
 }
 
-.textarea::-webkit-scrollbar {
-  width: 4px;
-}
-.textarea::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-tertiary) 20%, transparent);
-  border-radius: 2px;
-}
-.textarea::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 .buttons {
   display: flex;
   align-items: center;
@@ -148,7 +153,8 @@
   max-width: 220px;
   padding: 4px 6px 4px 8px;
   border-radius: var(--radius-lg);
-  border: var(--hairline-width, 1px) solid var(--hairline-strong, var(--border-color));
+  border: var(--hairline-width, 1px) solid
+    var(--hairline-strong, var(--border-color));
   background: var(--bg-secondary);
   font-size: var(--font-size-micro);
   color: var(--text-secondary);
@@ -166,7 +172,8 @@
   border-radius: var(--radius-md);
   flex-shrink: 0;
   background: var(--bg-primary);
-  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
+  border: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, var(--border-color)));
 }
 
 .attachIcon {
@@ -208,7 +215,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color var(--transition-micro), background var(--transition-micro);
+  transition:
+    color var(--transition-micro),
+    background var(--transition-micro);
   flex-shrink: 0;
   padding: 0;
 }
@@ -317,7 +326,9 @@
   border: 1px solid var(--border-color);
   border-top: none; /* Open top to merge seamlessly with the bottom border of the white box */
   border-radius: 0 0 12px 12px; /* Rounded corners only at the bottom */
-  background: var(--composer-footer-bg); /* Adaptable, premium background token */
+  background: var(
+    --composer-footer-bg
+  ); /* Adaptable, premium background token */
   width: calc(100% - 32px); /* Narrower width, forming the smaller rectangle */
   margin: -1px auto 0 auto; /* Overlap by -1px to physically connect with absolutely no gap */
   padding: 4px 14px; /* Sleeker, tighter vertical padding */
@@ -345,7 +356,9 @@
   justify-content: center;
   flex-shrink: 0;
   align-self: center;
-  transition: background var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .plusBtn:hover {

@@ -197,9 +197,11 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
             {availablePanels.length > 0 && (
               <div className={styles.addTabContainer}>
                 <Tooltip content="添加功能面板">
-                  <button
+                  <Button
                     ref={addBtnRef}
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     className={styles.addTabBtn}
                     onClick={() => {
                       setShowAddMenu((v) => !v);
@@ -218,9 +220,8 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     aria-label="添加功能面板"
                     aria-haspopup="menu"
                     aria-expanded={showAddMenu}
-                  >
-                    <Plus size={14} />
-                  </button>
+                    icon={<Plus size={14} />}
+                  />
                 </Tooltip>
 
                 {showAddMenu && (

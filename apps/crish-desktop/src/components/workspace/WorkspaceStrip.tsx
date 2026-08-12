@@ -81,17 +81,18 @@ export const WorkspaceStrip: React.FC<WorkspaceChromeProps> = ({
           ref={add.wrapRef}
         >
           <Tooltip content="添加">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={`${styles.wsChromeTab} ${styles.wsChromeTabAdd} ws-chrome-tab ws-chrome-tab--add`}
               aria-label="添加工作区"
               aria-haspopup="menu"
               aria-expanded={add.open}
               aria-controls={add.menuId}
               onClick={() => add.setOpen((v) => !v)}
-            >
-              <Plus size={14} strokeWidth={2} aria-hidden />
-            </button>
+              icon={<Plus size={14} strokeWidth={2} aria-hidden />}
+            />
           </Tooltip>
           {add.open ? (
             <div

@@ -30,17 +30,6 @@
   scrollbar-width: thin;
 }
 
-.popoverContent::-webkit-scrollbar {
-  width: 4px;
-}
-.popoverContent::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-tertiary) 20%, transparent);
-  border-radius: 2px;
-}
-.popoverContent::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 .menuList {
   display: flex;
   flex-direction: column;
@@ -61,7 +50,9 @@
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-sm, 13px);
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
   outline: none;
 }
 

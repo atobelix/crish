@@ -261,14 +261,15 @@ export const FollowUpSuggestionsSection: React.FC<
             </Tooltip>
             {onSendFollowUp ? (
               <Tooltip content="直接发送">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={styles.followupChipSend}
                   aria-label={`直接发送：${s.label}`}
                   onClick={() => onSendFollowUp(s.prompt)}
-                >
-                  <Send size={12} strokeWidth={2} aria-hidden />
-                </button>
+                  icon={<Send size={12} strokeWidth={2} aria-hidden />}
+                />
               </Tooltip>
             ) : null}
           </div>

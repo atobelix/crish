@@ -88,9 +88,17 @@ export const McpServerList: React.FC<McpServerListProps> = ({
   const renderTools = (srv: McpServerInfo, panelId: string) => {
     const toolN = srv.toolCount ?? srv.tools.length;
     return (
-      <div className={`${styles.mcpTools} mcp-tools`} id={panelId} role="region" aria-label={`${srv.name} 的工具`}>
+      <div
+        className={`${styles.mcpTools} mcp-tools`}
+        id={panelId}
+        role="region"
+        aria-label={`${srv.name} 的工具`}
+      >
         {srv.tools.length === 0 ? (
-          <div className={`${styles.mcpToolsEmpty} mcp-tools-empty`} role="status">
+          <div
+            className={`${styles.mcpToolsEmpty} mcp-tools-empty`}
+            role="status"
+          >
             {toolN > 0 ? `工具 ${toolN}（未返回名称）` : '暂无工具'}
           </div>
         ) : (
@@ -99,14 +107,16 @@ export const McpServerList: React.FC<McpServerListProps> = ({
               <li key={t}>
                 <Lucide.Wrench size={12} aria-hidden />
                 <Tooltip content="复制工具名">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     className={`${styles.mcpInlineCopy} mcp-inline-copy`}
                     aria-label={`复制工具名 ${t}`}
                     onClick={() => onCopy(t)}
                   >
                     <code>{t}</code>
-                  </button>
+                  </Button>
                 </Tooltip>
               </li>
             ))}
@@ -115,14 +125,16 @@ export const McpServerList: React.FC<McpServerListProps> = ({
         <div className={`${styles.mcpCardId} mcp-card-id`}>
           标识{' '}
           <Tooltip content="复制标识">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={`${styles.mcpInlineCopy} mcp-inline-copy`}
               aria-label={`复制标识 ${srv.id}`}
               onClick={() => onCopy(srv.id)}
             >
               <code>{srv.id}</code>
-            </button>
+            </Button>
           </Tooltip>
         </div>
       </div>
@@ -132,7 +144,12 @@ export const McpServerList: React.FC<McpServerListProps> = ({
   const renderFilterEmpty = (hasAny: boolean) => {
     if (loading) {
       return (
-        <div className={`${styles.mcpEmptyLine} mcp-empty-line`} role="status" aria-live="polite" aria-busy="true">
+        <div
+          className={`${styles.mcpEmptyLine} mcp-empty-line`}
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
           <span>加载中…</span>
         </div>
       );
@@ -140,7 +157,11 @@ export const McpServerList: React.FC<McpServerListProps> = ({
     if (!hasAny) return null;
     if (!filterActive) return null;
     return (
-      <div className={`${styles.mcpEmptyLine} mcp-empty-line`} role="status" aria-live="polite">
+      <div
+        className={`${styles.mcpEmptyLine} mcp-empty-line`}
+        role="status"
+        aria-live="polite"
+      >
         <Tooltip content={EMPTY_FILTER_HINT}>
           <span>无匹配</span>
         </Tooltip>
@@ -160,7 +181,11 @@ export const McpServerList: React.FC<McpServerListProps> = ({
   };
 
   const renderSharedToolbar = () => (
-    <div className={`${styles.mcpToolbar} mcp-toolbar`} role="toolbar" aria-label="扩展服务工具栏">
+    <div
+      className={`${styles.mcpToolbar} mcp-toolbar`}
+      role="toolbar"
+      aria-label="扩展服务工具栏"
+    >
       <Tooltip content={loading ? '刷新中…' : '刷新列表'}>
         <Button
           type="button"
@@ -170,10 +195,20 @@ export const McpServerList: React.FC<McpServerListProps> = ({
           disabled={loading}
           aria-label={loading ? '刷新中' : '刷新列表'}
           aria-busy={loading || undefined}
-          icon={<Lucide.RefreshCw size={14} className={loading ? 'spin' : undefined} aria-hidden />}
+          icon={
+            <Lucide.RefreshCw
+              size={14}
+              className={loading ? 'spin' : undefined}
+              aria-hidden
+            />
+          }
         />
       </Tooltip>
-      <div className="ui-segment ui-segment--inline settings-segment-pill" role="group" aria-label="排序方式">
+      <div
+        className="ui-segment ui-segment--inline settings-segment-pill"
+        role="group"
+        aria-label="排序方式"
+      >
         <Tooltip content="按名称排序">
           <button
             type="button"
@@ -235,7 +270,13 @@ export const McpServerList: React.FC<McpServerListProps> = ({
     emptyContent: React.ReactNode;
     renderItem: (item: T, index: number) => React.ReactNode;
   }) => {
-    const { items, totalCount, loading: isBusy, emptyContent, renderItem } = opts;
+    const {
+      items,
+      totalCount,
+      loading: isBusy,
+      emptyContent,
+      renderItem,
+    } = opts;
     return (
       <div
         className={`${styles.mcpList} mcp-list`}
@@ -246,7 +287,11 @@ export const McpServerList: React.FC<McpServerListProps> = ({
       >
         {items.length > 0 ? items.map(renderItem) : null}
         {!isBusy && totalCount === 0 ? (
-          <div className={`${styles.mcpEmptyLine} mcp-empty-line`} role="status" aria-live="polite">
+          <div
+            className={`${styles.mcpEmptyLine} mcp-empty-line`}
+            role="status"
+            aria-live="polite"
+          >
             {emptyContent}
           </div>
         ) : null}
@@ -298,7 +343,11 @@ export const McpServerList: React.FC<McpServerListProps> = ({
             const on = demoEnabled[srv.id] !== false;
             const typeTitle = transportTitle(srv.type);
             return (
-              <div key={srv.id} className={`${styles.mcpRow} mcp-row`} role="listitem">
+              <div
+                key={srv.id}
+                className={`${styles.mcpRow} mcp-row`}
+                role="listitem"
+              >
                 <div className={`${styles.mcpRowMain} mcp-row-main`}>
                   <Tooltip content={on ? '已启用' : '已禁用'}>
                     <span
@@ -307,16 +356,20 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                     />
                   </Tooltip>
                   <Tooltip content={`复制标识 ${srv.id}`}>
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
                       aria-label={`复制标识 ${srv.name}`}
                       onClick={() => onCopy(srv.id)}
                     >
                       {srv.name}
-                    </button>
+                    </Button>
                   </Tooltip>
-                  <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${on ? 'ok' : 'idle'}`}>
+                  <span
+                    className={`${styles.mcpStateBadge} mcp-state-badge kind-${on ? 'ok' : 'idle'}`}
+                  >
                     {on ? '启用' : '禁用'}
                   </span>
                   <Tooltip content={typeTitle}>
@@ -330,7 +383,9 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                     <Tooltip content={on ? '禁用' : '启用'}>
                       <Switch
                         checked={on}
-                        aria-label={on ? `禁用 ${srv.name}` : `启用 ${srv.name}`}
+                        aria-label={
+                          on ? `禁用 ${srv.name}` : `启用 ${srv.name}`
+                        }
                         onCheckedChange={() => onToggleDemoEnabled(srv.id)}
                       />
                     </Tooltip>
@@ -398,7 +453,11 @@ export const McpServerList: React.FC<McpServerListProps> = ({
           const tpTitle = transportTitle(srv.transport);
 
           return (
-            <div key={srv.id} className={`${styles.mcpRow} mcp-row`} role="listitem">
+            <div
+              key={srv.id}
+              className={`${styles.mcpRow} mcp-row`}
+              role="listitem"
+            >
               <div className={`${styles.mcpRowMain} mcp-row-main`}>
                 <Tooltip content={mcpStateLabel(srv.state)}>
                   <span
@@ -407,17 +466,21 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                   />
                 </Tooltip>
                 <Tooltip content={`复制标识 ${srv.id}`}>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
                     aria-label={`复制标识 ${srv.name}`}
                     onClick={() => onCopy(srv.id)}
                   >
                     {srv.name}
-                  </button>
+                  </Button>
                 </Tooltip>
                 <Tooltip content={mcpStateLabel(srv.state)}>
-                  <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${kind}`}>
+                  <span
+                    className={`${styles.mcpStateBadge} mcp-state-badge kind-${kind}`}
+                  >
                     {mcpStateLabel(srv.state)}
                   </span>
                 </Tooltip>
@@ -436,12 +499,18 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                   </span>
                 </Tooltip>
                 <div className={`${styles.mcpRowActions} mcp-row-actions`}>
-                  <Tooltip content={isOpen ? '收起工具' : `展开工具（${toolN}）`}>
+                  <Tooltip
+                    content={isOpen ? '收起工具' : `展开工具（${toolN}）`}
+                  >
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label={isOpen ? `收起 ${srv.name} 的工具` : `展开 ${srv.name} 的工具 ${toolN}`}
+                      aria-label={
+                        isOpen
+                          ? `收起 ${srv.name} 的工具`
+                          : `展开 ${srv.name} 的工具 ${toolN}`
+                      }
                       aria-expanded={isOpen}
                       aria-controls={panelId}
                       onClick={() => onToggleExpanded(srv.id)}

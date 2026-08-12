@@ -31,11 +31,17 @@
   text-align: left;
   box-shadow: none;
   outline: none;
-  transition: background var(--transition-micro), border-color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    border-color var(--transition-micro);
 }
 
 .settingsSelectTrigger:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--border-color) 96%, var(--text-primary) 4%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 96%,
+    var(--text-primary) 4%
+  );
   background: var(--tint-hover);
 }
 
@@ -44,7 +50,11 @@
 .settingsSelectTrigger:focus-visible,
 .settingsSelectTrigger[aria-expanded='true'],
 .settingsSelect.isOpen .settingsSelectTrigger {
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
   background: var(--tint-hover);
   box-shadow: var(--focus-ring);
 }
@@ -119,19 +129,6 @@
   gap: 1px;
   min-height: 0;
   overscroll-behavior: contain;
-}
-
-.settingsSelectScroll::-webkit-scrollbar {
-  width: 4px;
-}
-
-.settingsSelectScroll::-webkit-scrollbar-thumb {
-  background: var(--tint-scrollbar-thumb);
-  border-radius: var(--radius-xs);
-}
-
-.settingsSelectScroll::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 .settingsSelectGroup {
@@ -228,7 +225,11 @@
 }
 
 .settingsSelectCustomInput:focus {
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
   outline: none;
   box-shadow: none;
 }
@@ -236,4 +237,3 @@
   flex-shrink: 0;
   color: var(--accent-green);
 }
-

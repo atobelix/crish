@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './WorkspaceChromeBars.module.css';
-import { TabStrip, Tooltip } from '../ui';
+import { Button, TabStrip, Tooltip } from '../ui';
 import { MessageSquarePlus, Pin, Plus, X } from 'lucide-react';
 import {
   useChromeAddMenu,
@@ -74,17 +74,18 @@ export const SessionStrip: React.FC<WorkspaceChromeProps> = ({ className }) => {
           ref={add.wrapRef}
         >
           <Tooltip content="新建">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={`${styles.wsChromeTab} ${styles.wsChromeTabAdd} ws-chrome-tab ws-chrome-tab--add`}
               aria-label="新建对话"
               aria-haspopup="menu"
               aria-expanded={add.open}
               aria-controls={add.menuId}
               onClick={() => add.setOpen((v) => !v)}
-            >
-              <Plus size={15} strokeWidth={2} aria-hidden />
-            </button>
+              icon={<Plus size={15} strokeWidth={2} aria-hidden />}
+            />
           </Tooltip>
           {add.open ? (
             <div

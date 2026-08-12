@@ -31,6 +31,7 @@ import { ComposerField } from '../chat-composer/ChatComposer';
 import { AgentTeamBoard } from './AgentTeamBoard';
 import { useAgentPanel } from '../../hooks/useAgentStream';
 import { AgentStatusChip } from './AgentStatusChip';
+import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
 import { AgentBrowsePad } from './AgentBrowsePad';
 import { AgentMessageRow } from './AgentMessageRow';
 import {
@@ -277,6 +278,31 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
               <span className={styles.agentCardTitle}>{titleName}</span>
             </Tooltip>
             <AgentStatusChip status={agent.status} mode={agent.mode} />
+            {/* D8 §3.7.1 失败态摘要徽标（与 InlineAgentPanel 失败卡片同源：
+                errorKind/retries 由 recovery-escalated 事件投影） */}
+            {agent.status === 'failed' &&
+            (resolveErrorKindLabel(agent.errorKind) ||
+              (agent.retries ?? 0) > 0) ? (
+              <Tooltip
+                content={[
+                  resolveErrorKindLabel(agent.errorKind),
+                  (agent.retries ?? 0) > 0 ? `已重试 ${agent.retries} 次` : '',
+                ]
+                  .filter(Boolean)
+                  .join('；')}
+              >
+                <span
+                  className={styles.agentCardBadge}
+                  role="status"
+                  aria-label={`失败原因：${
+                    resolveErrorKindLabel(agent.errorKind) || '未知'
+                  }`}
+                >
+                  {resolveErrorKindLabel(agent.errorKind)}
+                  {(agent.retries ?? 0) > 0 ? ` · ${agent.retries} 次重试` : ''}
+                </span>
+              </Tooltip>
+            ) : null}
             {pendingApproval > 0 ? (
               <Tooltip content="待审批">
                 <span

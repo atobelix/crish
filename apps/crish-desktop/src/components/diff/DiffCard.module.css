@@ -247,7 +247,10 @@
   font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: background-color var(--transition-micro), border-color var(--transition-micro), box-shadow var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    border-color var(--transition-micro),
+    box-shadow var(--transition-micro);
   box-sizing: border-box;
 }
 .fileItem:hover {
@@ -294,7 +297,9 @@
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color var(--transition-micro), background-color var(--transition-micro);
+  transition:
+    border-color var(--transition-micro),
+    background-color var(--transition-micro);
   flex-shrink: 0;
   margin-right: var(--space-1_5);
 }
@@ -409,7 +414,9 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: transparent;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .accordionItem:hover {
@@ -417,7 +424,11 @@
 }
 
 .accordionActive {
-  border-color: color-mix(in srgb, var(--border-color, var(--border-subtle)) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color, var(--border-subtle)) 90%,
+    var(--text-primary) 10%
+  );
 }
 
 /* Adjust .fileItem inside the accordion so it serves as the header button */
@@ -491,7 +502,9 @@
   gap: var(--space-1);
   width: 100%;
   color: var(--text-primary);
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .inlineCompareSelect :global(.settings-select-value) {
@@ -523,7 +536,10 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color var(--transition-micro), background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    border-color var(--transition-micro),
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .inlineIconBtn:hover {
@@ -550,7 +566,10 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color var(--transition-micro), background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    border-color var(--transition-micro),
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .inlineActionBtn:hover {
@@ -560,7 +579,10 @@
 }
 
 .inlineActionAccept:hover:not(:disabled) {
-  background: var(--accent-green-light-adaptive, color-mix(in srgb, var(--accent-green) 10%, var(--bg-primary)));
+  background: var(
+    --accent-green-light-adaptive,
+    color-mix(in srgb, var(--accent-green) 10%, var(--bg-primary))
+  );
   color: var(--accent-green);
   border-color: var(--accent-green);
 }
@@ -621,7 +643,11 @@
 
 .commitInput:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
 }
 
 .commitActions {
@@ -720,7 +746,10 @@
   background: var(--accent-green-light-adaptive, var(--accent-green-light));
 }
 .lineAddition .gutterNum {
-  background: var(--accent-green-light-adaptive, color-mix(in srgb, var(--accent-green) 10%, var(--bg-primary)));
+  background: var(
+    --accent-green-light-adaptive,
+    color-mix(in srgb, var(--accent-green) 10%, var(--bg-primary))
+  );
   color: color-mix(in srgb, var(--accent-green) 70%, var(--text-secondary));
 }
 .lineAddition .gutterMarker {
@@ -731,7 +760,10 @@
   background: var(--accent-red-light-adaptive, var(--accent-red-light));
 }
 .lineDeletion .gutterNum {
-  background: var(--accent-red-light-adaptive, color-mix(in srgb, var(--accent-red) 10%, var(--bg-primary)));
+  background: var(
+    --accent-red-light-adaptive,
+    color-mix(in srgb, var(--accent-red) 10%, var(--bg-primary))
+  );
   color: color-mix(in srgb, var(--accent-red) 70%, var(--text-secondary));
 }
 .lineDeletion .gutterMarker {
@@ -858,7 +890,10 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color var(--transition-micro), background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    border-color var(--transition-micro),
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .hoverActBtn:hover {
@@ -868,7 +903,10 @@
 }
 
 .hoverActBtn.danger:hover {
-  background: var(--accent-red-light-adaptive, color-mix(in srgb, var(--accent-red) 10%, var(--bg-primary)));
+  background: var(
+    --accent-red-light-adaptive,
+    color-mix(in srgb, var(--accent-red) 10%, var(--bg-primary))
+  );
   color: var(--accent-red);
   border-color: var(--accent-red);
 }
@@ -914,7 +952,10 @@
   padding: 2px 6px;
   border-radius: var(--radius-xs);
   cursor: pointer;
-  transition: border-color var(--transition-micro), background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    border-color var(--transition-micro),
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .groupActionBtn:hover {
@@ -972,7 +1013,9 @@
   font-size: var(--font-size-xs, 12px);
   cursor: pointer;
   font-weight: var(--font-weight-medium);
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .backBtn:hover {
@@ -990,11 +1033,9 @@
   padding-top: var(--space-1);
 }
 
-.tabScrollWrap::-webkit-scrollbar {
-  display: none;
-}
-
 .tabScrollWrap {
+  /* 滚动条隐藏档位：归入 shell-scrollbar.css 全局契约（--scrollbar-thumb-width: 0px） */
+  --scrollbar-thumb-width: 0px;
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
@@ -1013,7 +1054,9 @@
   user-select: none;
   border: 1px solid transparent;
   border-bottom: none;
-  transition: color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
   white-space: nowrap;
   position: relative;
 }
@@ -1045,7 +1088,9 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .tabClose:hover {
@@ -1109,7 +1154,10 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .detailIconBtn:hover {
@@ -1142,7 +1190,9 @@
   cursor: pointer;
   border-top: 1px solid var(--hairline, var(--border-subtle));
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
   user-select: none;
   font-family: var(--font-sans);
 }
@@ -1166,7 +1216,9 @@
   border: 1px solid var(--hairline, var(--border-subtle));
   background: var(--bg-secondary, rgba(0, 0, 0, 0.015));
   cursor: pointer;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
   margin-top: var(--space-2);
   gap: var(--space-2);
 }
@@ -1221,7 +1273,9 @@
   width: 18px;
   height: 18px;
   border-radius: var(--radius-xs);
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .commitCloseBtn:hover {
@@ -1231,8 +1285,12 @@
 
 /* --- Spinner Animation --- */
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .spinner {
@@ -1269,7 +1327,9 @@
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .backBtn:hover {

@@ -11,11 +11,7 @@
  * 数据属性：data-global-session-tab-bar / data-topbar-session-id
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-} from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { MessageSquarePlus, Pin, X } from 'lucide-react';
 import {
@@ -39,11 +35,8 @@ import {
 import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
-import { TabStrip, Tooltip } from '../ui';
-import {
-  openTabsStripRelevantEqual,
-  readStripOverflow,
-} from '../binary-tree/UnitSessionTabStrip';
+import { Button, TabStrip, Tooltip } from '../ui';
+import { openTabsStripRelevantEqual } from '../binary-tree/UnitSessionTabStrip';
 import styles from './GlobalSessionTabBar.module.css';
 
 const ICON_SIZE = 16;
@@ -227,70 +220,73 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
           'data-variant': variant,
           'data-tab-count': sessionTabs.length,
         }}
-          onActiveChange={selectSession}
-          onClose={(sessionId, e) => onCloseSession(sessionId, e)}
-          onTabPointerDown={
-            startSessionDrag
-              ? (sessionId, e) =>
-                  startSessionDrag(sessionId, titleOf(sessionId), e)
-              : undefined
-          }
-          renderTab={(tab) => {
-            const meta = sessionTabs.find((t) => t.sessionId === tab.id);
-            return (
-              <>
+        onActiveChange={selectSession}
+        onClose={(sessionId, e) => onCloseSession(sessionId, e)}
+        onTabPointerDown={
+          startSessionDrag
+            ? (sessionId, e) =>
+                startSessionDrag(sessionId, titleOf(sessionId), e)
+            : undefined
+        }
+        renderTab={(tab) => {
+          const meta = sessionTabs.find((t) => t.sessionId === tab.id);
+          return (
+            <>
+              <button
+                type="button"
+                className={styles.tabMain}
+                tabIndex={-1}
+                onClick={() => selectSession(tab.id)}
+                title={tab.label}
+              >
+                {meta?.pinned ? (
+                  <Pin
+                    size={12}
+                    strokeWidth={2}
+                    aria-hidden
+                    className={styles.pinIcon}
+                  />
+                ) : null}
+                <span className={styles.tabLabel}>{tab.label}</span>
+              </button>
+              <Tooltip content="关闭标签">
                 <button
                   type="button"
-                  className={styles.tabMain}
+                  className={styles.tabClose}
                   tabIndex={-1}
-                  onClick={() => selectSession(tab.id)}
-                  title={tab.label}
+                  aria-label={`关闭会话标签 ${tab.label}`}
+                  onClick={(e) => onCloseSession(tab.id, e)}
+                  onPointerDown={(e) => e.stopPropagation()}
                 >
-                  {meta?.pinned ? (
-                    <Pin
-                      size={12}
-                      strokeWidth={2}
-                      aria-hidden
-                      className={styles.pinIcon}
-                    />
-                  ) : null}
-                  <span className={styles.tabLabel}>{tab.label}</span>
+                  <X size={12} strokeWidth={2} aria-hidden />
                 </button>
-                <Tooltip content="关闭标签">
-                  <button
-                    type="button"
-                    className={styles.tabClose}
-                    tabIndex={-1}
-                    aria-label={`关闭会话标签 ${tab.label}`}
-                    onClick={(e) => onCloseSession(tab.id, e)}
-                    onPointerDown={(e) => e.stopPropagation()}
-                  >
-                    <X size={12} strokeWidth={2} aria-hidden />
-                  </button>
-                </Tooltip>
-              </>
-            );
-          }}
-          trailing={
-            <div className={styles.addWrap}>
-              <Tooltip content="新建对话">
-                <button
-                  type="button"
-                  className={styles.tabAdd}
-                  data-testid="global-strip-new-session"
-                  aria-label="新建对话"
-                  onClick={onNewSession}
-                >
+              </Tooltip>
+            </>
+          );
+        }}
+        trailing={
+          <div className={styles.addWrap}>
+            <Tooltip content="新建对话">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={styles.tabAdd}
+                data-testid="global-strip-new-session"
+                aria-label="新建对话"
+                onClick={onNewSession}
+                icon={
                   <MessageSquarePlus
                     size={ICON_SIZE}
                     strokeWidth={TAB_ICON_STROKE}
                     aria-hidden
                   />
-                </button>
-              </Tooltip>
-            </div>
-          }
-        />
+                }
+              />
+            </Tooltip>
+          </div>
+        }
+      />
     );
   });
 

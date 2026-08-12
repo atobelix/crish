@@ -283,8 +283,10 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                 {pinnedItems.map((item) => (
                   <li key={item.id} className={styles.pinnedItem}>
                     <Tooltip content="跳转到消息">
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         className={styles.pinnedJump}
                         aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
                         onClick={() => jumpToPinned(item.id)}
@@ -292,7 +294,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                         <span className={styles.pinnedSnippet}>
                           {item.snippet}
                         </span>
-                      </button>
+                      </Button>
                     </Tooltip>
                     <Tooltip content="取消固定">
                       <Button

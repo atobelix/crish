@@ -94,11 +94,8 @@
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-}
-
-.scroll::-webkit-scrollbar {
-  display: none;
-  height: 0;
+  /* 滚动条隐藏档位：归入 shell-scrollbar.css 全局契约（--scrollbar-thumb-width: 0px） */
+  --scrollbar-thumb-width: 0px;
 }
 
 /* Edge fade */
@@ -172,13 +169,8 @@
 .tab.isActive {
   background: var(--global-tab-active-bg);
   color: var(--text-primary);
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 55%,
-    transparent
-  );
-  box-shadow: 0 1px 2px
-    color-mix(in srgb, var(--shadow-color) 4%, transparent);
+  border-color: color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
   font-weight: var(--font-weight-medium);
   z-index: 1;
 }

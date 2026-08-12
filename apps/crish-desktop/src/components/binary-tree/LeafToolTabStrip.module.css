@@ -36,21 +36,9 @@
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb)
-    transparent;
-}
-
-.tabs::-webkit-scrollbar {
-  height: 3px;
-}
-
-.tabs::-webkit-scrollbar-thumb {
-  background: var(--tint-scrollbar-thumb);
-  border-radius: 999px;
-}
-
-.tabs::-webkit-scrollbar-track {
-  background: transparent;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
+  /* 紧凑档位：3px 横条，归入 shell-scrollbar.css 全局契约（--scrollbar-thumb-width） */
+  --scrollbar-thumb-width: 3px;
 }
 
 .tab {
@@ -98,7 +86,7 @@
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
   border-color: color-mix(in srgb, var(--border-subtle) 85%, transparent);
-  box-shadow: 
+  box-shadow:
     0 1px 3px color-mix(in srgb, var(--shadow-color) 4%, transparent),
     inset 0 1px 0 var(--tint-hover);
 }
@@ -119,7 +107,7 @@
   line-height: 0;
   cursor: pointer;
   touch-action: auto;
-  transition: 
+  transition:
     transform var(--transition-fast) cubic-bezier(0.4, 0, 0.2, 1),
     background-color var(--transition-fast),
     opacity var(--transition-fast);
@@ -153,7 +141,9 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
   margin-left: 6px;
 }
 
@@ -184,7 +174,7 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  box-shadow: 
+  box-shadow:
     0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent),
     inset 0 1px 0 var(--tint-hover);
   min-width: 100px;
@@ -204,7 +194,9 @@
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .menuItem:hover {
@@ -213,6 +205,12 @@
 }
 
 @keyframes menuFadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

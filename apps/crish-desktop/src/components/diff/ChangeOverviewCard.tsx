@@ -445,8 +445,10 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
             return (
               <li key={f.filePath} className={styles.changeOverviewRow}>
                 <Tooltip content={f.filePath}>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     className={styles.changeOverviewFile}
                     aria-label={
                       emptyLine
@@ -479,7 +481,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
                         </>
                       )}
                     </span>
-                  </button>
+                  </Button>
                 </Tooltip>
                 <div className={styles.changeOverviewFileActions}>
                   <Tooltip

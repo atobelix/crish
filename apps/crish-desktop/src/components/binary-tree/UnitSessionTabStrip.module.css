@@ -88,11 +88,8 @@
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-}
-
-.scroll::-webkit-scrollbar {
-  display: none;
-  height: 0;
+  /* 滚动条隐藏档位：归入 shell-scrollbar.css 全局契约（--scrollbar-thumb-width: 0px） */
+  --scrollbar-thumb-width: 0px;
 }
 
 /* Edge fade when overflow (optional data attrs set by component) */
@@ -168,13 +165,8 @@
 .tabActive {
   background: var(--unit-tab-active-bg);
   color: var(--text-primary);
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 55%,
-    transparent
-  );
-  box-shadow: 0 1px 2px
-    color-mix(in srgb, var(--shadow-color) 4%, transparent);
+  border-color: color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
   font-weight: var(--font-weight-medium);
   z-index: 1;
 }
@@ -330,7 +322,11 @@
 
 .tabAdd[aria-expanded='true'] {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, var(--unit-tab-active-bg));
+  background: color-mix(
+    in srgb,
+    var(--text-primary) 6%,
+    var(--unit-tab-active-bg)
+  );
 }
 
 /* ── Drag ghost (portal) ──────────────────────────────────────────── */
@@ -347,8 +343,7 @@
   border-radius: var(--unit-tab-radius);
   background: var(--unit-tab-active-bg);
   color: var(--text-primary);
-  border: 1px solid
-    color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
   box-shadow:
     0 4px 12px color-mix(in srgb, var(--shadow-color) 12%, transparent),
     0 0 0 1px color-mix(in srgb, var(--border-subtle) 40%, transparent);

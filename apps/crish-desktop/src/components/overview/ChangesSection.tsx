@@ -221,8 +221,10 @@ export const ChangesSection = React.memo(function ChangesSection({
                   );
                   return (
                     <li key={f.path}>
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         className={styles.itemBtn}
                         disabled={Boolean(openingPath)}
                         aria-busy={opening}
@@ -248,7 +250,7 @@ export const ChangesSection = React.memo(function ChangesSection({
                                 : `${stLabel}${f.conflicted ? ' · 冲突' : ''}`}
                           </em>
                         </span>
-                      </button>
+                      </Button>
                     </li>
                   );
                 })}
@@ -285,8 +287,10 @@ export const ChangesSection = React.memo(function ChangesSection({
                         : 'var(--text-warning-strong)';
                     return (
                       <li key={f.filePath}>
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="sm"
                           className={styles.itemBtn}
                           aria-label={`打开 ${basename(f.filePath)}`}
                           onClick={() => {
@@ -305,7 +309,7 @@ export const ChangesSection = React.memo(function ChangesSection({
                               +{f.additions} −{f.deletions}
                             </em>
                           </span>
-                        </button>
+                        </Button>
                       </li>
                     );
                   }

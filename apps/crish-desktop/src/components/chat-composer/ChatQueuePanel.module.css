@@ -12,19 +12,6 @@
   scrollbar-width: thin;
 }
 
-.panel::-webkit-scrollbar {
-  width: 4px;
-}
-
-.panel::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-tertiary) 20%, transparent);
-  border-radius: 2px;
-}
-
-.panel::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 .item {
   display: flex;
   align-items: center;
@@ -86,7 +73,9 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: color var(--transition-micro), background var(--transition-micro);
+  transition:
+    color var(--transition-micro),
+    background var(--transition-micro);
 }
 
 .actionBtn:hover:not(:disabled) {
