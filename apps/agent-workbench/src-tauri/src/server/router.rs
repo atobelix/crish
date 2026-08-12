@@ -767,8 +767,10 @@ mod tests {
     use crate::server::auth::{TokenStore, sha256_hex};
     use crate::server::{ServerConfig, ServerHandle};
     use axum::body::Body;
+    use axum::extract::ConnectInfo;
     use conex_types::device::{CommandSurface, ManifestEntry, RunTaskParams, RunTaskResult};
     use conex_types::SessionIndexEntry;
+    use std::net::SocketAddr;
     use tower::ServiceExt;
 
     /// 每测试独立令牌文件序号（并发测试共享同一 pairing.json 会竞态
@@ -2906,14 +2908,29 @@ mod tests {
             .code
     }
 
-    /// 无鉴权 JSON POST（/v1/pair 免鉴权端点测试用）
+    /// 无鉴权 JSON POST（/v1/pair 免鉴权端点测试用；注入 ConnectInfo——
+    /// 限速读取源 IP，路由经 serve 的 into_make_service_with_connect_info
+    /// 装配，测试侧以扩展手动注入对拍）
     fn plain_post(uri: &str, body: serde_json::Value) -> axum::http::Request<Body> {
-        axum::http::Request::builder()
+        plain_post_from_ip(uri, body, "127.0.0.1".parse().expect("固定测试地址"))
+    }
+
+    /// 指定源 IP 的无鉴权 JSON POST（每 IP 限速测试用）
+    fn plain_post_from_ip(
+        uri: &str,
+        body: serde_json::Value,
+        ip: std::net::IpAddr,
+    ) -> axum::http::Request<Body> {
+        let mut request = axum::http::Request::builder()
             .uri(uri)
             .method("POST")
             .header(axum::http::header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_string()))
-            .unwrap()
+            .unwrap();
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(ip, 40000)));
+        request
     }
 
     /// 免鉴权 POST /v1/pair：正确码 → 200 {token, label?}，且令牌**无
@@ -3090,5 +3107,186 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         let body = json_body(response).await;
         assert_eq!(body["code"], "pair.used");
+    }
+
+    // ── R1 收口：/v1/pair 每源 IP 限速（D2 §12.4「10 次/分钟」；
+    //    AU4 问题 #1 缺口销号）──
+
+    /// D2 §12.4 断言锚：同 IP 前 10 次请求（混合 200/401/409 业务面——
+    /// 成功与失败统一计）全部到达业务逻辑；第 11 次 → 429 +
+    /// cmd.too_many_requests（error.rs 既有 429 映射）+ 审计 1；拒绝不
+    /// 计数（count_for 恒 10，防拒绝路径被刷爆窗口）
+    #[tokio::test]
+    async fn pair_endpoint_rate_limits_11th_request_per_ip() {
+        let (state, coordinator) = test_pair_state();
+        let code = activate_pairing(&coordinator);
+        let app = build_router(state.clone());
+        let ip: std::net::IpAddr = "192.168.1.50".parse().expect("固定测试 IP");
+        for i in 0..10 {
+            // 混合业务面：第 5 次正确码（200 成功），其余错误码（401；
+            // 5 次失败锁定后可能 409）——限速口径「窗口内全部请求计数」
+            let body = if i == 4 {
+                serde_json::json!({ "code": code })
+            } else {
+                serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" })
+            };
+            let response = app
+                .clone()
+                .oneshot(plain_post_from_ip(PAIR_PATH, body, ip))
+                .await
+                .unwrap();
+            assert!(
+                matches!(
+                    response.status(),
+                    StatusCode::OK | StatusCode::UNAUTHORIZED | StatusCode::CONFLICT
+                ),
+                "第 {} 次应在限速前到达业务面：{:?}",
+                i + 1,
+                response.status()
+            );
+        }
+        assert_eq!(state.pair_limiter().count_for(ip), 10);
+        // 第 11 次 → 429 + cmd.too_many_requests
+        let response = app
+            .oneshot(plain_post_from_ip(
+                PAIR_PATH,
+                serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" }),
+                ip,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.too_many_requests");
+        assert_eq!(state.pair_limiter().audit_rejected(), 1, "超限必须审计 +1");
+        assert_eq!(
+            state.pair_limiter().count_for(ip),
+            10,
+            "拒绝不计数（防拒绝路径被刷爆窗口）"
+        );
+    }
+
+    /// 每源 IP 独立：IP-A 打满拒绝不影响 IP-B（IP-B 请求必须到达业务面，
+    /// 绝非 429）
+    #[tokio::test]
+    async fn pair_endpoint_rate_limit_per_ip_independent() {
+        let (state, coordinator) = test_pair_state();
+        let code = activate_pairing(&coordinator);
+        let app = build_router(state.clone());
+        let ip_a: std::net::IpAddr = "192.168.1.60".parse().expect("固定测试 IP");
+        let ip_b: std::net::IpAddr = "192.168.1.61".parse().expect("固定测试 IP");
+        for _ in 0..10 {
+            let response = app
+                .clone()
+                .oneshot(plain_post_from_ip(
+                    PAIR_PATH,
+                    serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" }),
+                    ip_a,
+                ))
+                .await
+                .unwrap();
+            assert!(response.status().is_client_error());
+        }
+        assert_eq!(
+            app.clone()
+                .oneshot(plain_post_from_ip(
+                    PAIR_PATH,
+                    serde_json::json!({ "code": "x" }),
+                    ip_a,
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "IP-A 第 11 次必须 429"
+        );
+        // IP-B 首次请求（正确码）：必须到达业务面（配对锁定语义下可能
+        // 409——只要不是 429 即证明 IP-B 独立桶未受影响）
+        let response = app
+            .oneshot(plain_post_from_ip(
+                PAIR_PATH,
+                serde_json::json!({ "code": code }),
+                ip_b,
+            ))
+            .await
+            .unwrap();
+        assert_ne!(
+            response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "IP-B 独立桶不受 IP-A 限速影响"
+        );
+        assert_eq!(state.pair_limiter().count_for(ip_b), 1);
+        assert_eq!(state.pair_limiter().audit_rejected(), 1);
+    }
+
+    /// 服务关闭（multi_device.enabled=false）→ 503 不消耗限速额度：
+    /// 连发 12 次后审计与窗口计数均为 0（限速在服务开关检查之后）
+    #[tokio::test]
+    async fn pair_endpoint_rate_limit_service_disabled_not_counted() {
+        let seq = TOKEN_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let file = std::env::temp_dir().join(format!("pairing-pair-ratelimit-{seq}.json"));
+        let mut config = ServerConfig::new(std::env::temp_dir());
+        config.multi_device_enabled = false;
+        config.pairing_file_path = file.clone();
+        let handle = ServerHandle::new(config, "127.0.0.1:0".parse().expect("固定测试地址"));
+        let tokens = Arc::new(std::sync::Mutex::new(TokenStore::new(file)));
+        let coordinator = Arc::new(crate::server::pairing::PairingCoordinator::new(
+            tokens,
+            Arc::new(crate::server::ws::WsRegistry::new()),
+        ));
+        let state = ServerState::new(
+            &handle,
+            TokenStore::new(handle.config().pairing_file_path.clone()),
+            None,
+        )
+        .with_pairing(Arc::clone(&coordinator));
+        let app = build_router(state.clone());
+        let ip: std::net::IpAddr = "192.168.1.70".parse().expect("固定测试 IP");
+        for _ in 0..12 {
+            let response = app
+                .clone()
+                .oneshot(plain_post_from_ip(
+                    PAIR_PATH,
+                    serde_json::json!({ "code": "CXN-7K4P-Q2MB-9XRT" }),
+                    ip,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "关闭态恒 503"
+            );
+        }
+        assert_eq!(
+            state.pair_limiter().count_for(ip),
+            0,
+            "关闭态不得消耗限速额度"
+        );
+        assert_eq!(state.pair_limiter().audit_rejected(), 0);
+    }
+
+    /// 成功也计入窗口：配对成功（200）后窗口计数 +1——防「成功换码绕过
+    /// 限速」的计数一致性断言
+    #[tokio::test]
+    async fn pair_endpoint_rate_limit_success_consumes_window() {
+        let (state, coordinator) = test_pair_state();
+        let code = activate_pairing(&coordinator);
+        let app = build_router(state.clone());
+        let ip: std::net::IpAddr = "192.168.1.80".parse().expect("固定测试 IP");
+        let response = app
+            .oneshot(plain_post_from_ip(
+                PAIR_PATH,
+                serde_json::json!({ "code": code }),
+                ip,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            state.pair_limiter().count_for(ip),
+            1,
+            "成功请求必须计入窗口（成功与失败统一计）"
+        );
     }
 }

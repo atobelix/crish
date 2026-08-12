@@ -18,12 +18,15 @@
 //! [ConnectionLimiter::release] / [ConnectionLimiter::reset]）：本模块不接触
 //! 网络与注册表，由调用方在连接建立/注销处驱动。
 //!
-//! ## 接线现状（R1-10）
+//! ## 接线现状（P0-3 裁决，D-1 归档后）
 //!
 //! 已挂载于 [crate::server::ServerState::conn_limiter]（装配就绪，测试可
-//! 直构）；与 ws.rs 注册表的「每设备一主连接踢旧」（P0-3 裁决）在每设备
-//! 上限语义上存在冲突（D5 每设备 2 vs P0-3 踢旧，同令牌第二次连接即踢旧，
-//! 每设备计数恒 ≤ 1），register 路径接线待主 Agent 裁决（详见 R1-10 汇报）。
+//! 直构）。D-1 裁决事实：每设备并发上限由 ws.rs 注册表「每设备一主连接
+//! 踢旧」承担（P0-3：同令牌第二次连接即踢旧，每设备计数恒 ≤ 1，D2
+//! §10.5），总量上限由 [crate::server::ws::MAX_WS_CONNECTIONS] 在注册表
+//! 层保证——本限流器**不参与生产 register 路径接线**，保留为纯逻辑状态
+//! 机（防回归测试面 + R2 装配预留：R2 移动端多连接场景落地时启用每设备
+//! 2 语义）。
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -36,8 +39,8 @@ pub const DEFAULT_TOTAL_LIMIT: usize = 8;
 
 /// 限流判定结果（结构化错误，D5 §7.2「新连接拒绝（too-many-connections
 /// 结构化错误 + 审计）」；T-12 断言映射目标）
-// R1-10 备注：register 接线待主 Agent 裁决（P0-3 踢旧 vs 每设备 2）——
-// dead_code 静音（测试构建保持检查）
+// 备注：D-1 裁决后生产接线由 ws.rs 踢旧承担，本限流器供测试面 + R2 装配
+// 预留——dead_code 静音（测试构建保持检查）
 #[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LimiterOutcome {
@@ -50,7 +53,8 @@ pub enum LimiterOutcome {
 }
 
 /// 记账内部态（单锁串行化）
-// R1-10 备注：字段由 acquire/release 读写，接线待裁决——dead_code 静音
+// 备注：字段由 acquire/release 读写，D-1 裁决后本限流器供测试面 + R2 装配
+// 预留——dead_code 静音（测试构建保持检查）
 #[cfg_attr(not(test), allow(dead_code))]
 struct LimiterInner {
     /// token_key（令牌哈希，每设备一个键）→ 当前并发连接数
@@ -68,8 +72,8 @@ struct LimiterInner {
 ///   重复释放不会把计数减到 0 以下）；
 /// - [ConnectionLimiter::reset]：整体清零占用与键表（审计计数保留——审计
 ///   是累计面，不随状态重置抹除）。
-// R1-10 备注：字段与多数方法由测试消费，register 接线待裁决——dead_code
-// 静音（测试构建保持检查）
+// 备注：D-1 裁决后生产接线由 ws.rs 踢旧承担，本限流器供测试面 + R2 装配
+// 预留——dead_code 静音（测试构建保持检查）
 #[cfg_attr(not(test), allow(dead_code))]
 pub struct ConnectionLimiter {
     /// 每设备并发上限
@@ -84,7 +88,8 @@ pub struct ConnectionLimiter {
     rejected_total: AtomicU64,
 }
 
-// R1-10 备注：接线待裁决，方法由测试消费——dead_code 静音（测试构建保持检查）
+// 备注：D-1 裁决后生产接线由 ws.rs 踢旧承担，本限流器供测试面 + R2 装配
+// 预留——dead_code 静音（测试构建保持检查）
 #[cfg_attr(not(test), allow(dead_code))]
 impl ConnectionLimiter {
     /// 默认限值（每设备 2 / 总量 8，D5 §7.2）
@@ -194,9 +199,123 @@ impl Default for ConnectionLimiter {
     }
 }
 
-/// Mutex 锁（中毒自愈，跟随 ws.rs 先例）
-// R1-10 备注：接线待裁决——dead_code 静音（测试构建保持检查）
-#[cfg_attr(not(test), allow(dead_code))]
+// ── 配对请求限速器（R1 收口：POST /v1/pair 每源 IP 限速，D2 §12.4）──
+
+/// 配对端点每源 IP 限速默认上限（D2 §12.4「/v1/pair 按连接源 IP 限速
+/// （10 次/分钟）」；AU4 问题 #1 缺口收口）
+pub const DEFAULT_PAIR_LIMIT: usize = 10;
+/// 配对端点限速窗口（1 分钟）
+pub const DEFAULT_PAIR_WINDOW_MS: u64 = 60_000;
+
+/// 配对请求限速判定结果
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairRateOutcome {
+    /// 窗口内额度充足（本请求计数入窗）
+    Allowed,
+    /// 窗口内已达上限（拒绝；拒绝不计数，仅审计 +1）
+    Rejected { limit: usize, current: usize },
+}
+
+/// 每源 IP 限速桶（固定窗口；窗口起点 + 窗口内计数）
+struct PairRateBucket {
+    /// 窗口起点（epoch ms；惰性推进——命中时过期即重置）
+    window_start_ms: u64,
+    /// 窗口内已计数请求数（成功与失败统一计）
+    count: usize,
+}
+
+/// 配对请求限速器（R1-11 收口：D2 §12.4「10 次/分钟/源 IP」防配对码爆破
+/// DoS——AU4 问题 #1）
+///
+/// 语义（与 [ConnectionLimiter] 同构的纯逻辑状态机）：
+/// - 固定窗口 + 惰性推进：每源 IP 独立桶（[PairRateBucket]），仅命中时
+///   检查 `now >= window_start + window` 过期重置，不主动清扫；
+/// - 窗口内**全部请求计数**（配对成功与失败统一计——防爆破口径，
+///   D2 §12.4「全部请求计数」）；超限拒绝（[PairRateOutcome::Rejected]）
+///   **不计数**（防拒绝路径被刷爆当前窗口）；
+/// - 超限时审计计数 +1（[PairRateLimiter::audit_rejected]），与
+///   [ConnectionLimiter] 的 AtomicU64 审计模式一致；
+/// - 时钟注入：`now_ms` 由调用方传入（[crate::server::now_ms]），单测
+///   可注入时间推进验证窗口重置；
+/// - 并发模型：记账一把 Mutex 串行化（毫秒级操作，不跨 await），审计
+///   计数 AtomicU64 独立累加。
+///
+/// 桶表无界性说明：桶仅在请求命中时创建、无主动回收——TCP 连接需完整
+/// 握手（源 IP 不可伪造），配对期客户端数量级 = 局域网设备数，桶常驻
+/// 开销可忽略；不引入清扫逻辑（反过度设计，R2 若开放公网再评估）。
+pub struct PairRateLimiter {
+    /// 窗口内请求上限（每源 IP）
+    limit: usize,
+    /// 固定窗口时长（ms）
+    window_ms: u64,
+    /// 每源 IP 独立桶（单锁串行化）
+    buckets: Mutex<std::collections::HashMap<std::net::IpAddr, PairRateBucket>>,
+    /// 审计计数：超限拒绝次数
+    rejected: AtomicU64,
+}
+
+impl PairRateLimiter {
+    /// 默认限速（10 次/分钟/源 IP，D2 §12.4）
+    pub fn new() -> Self {
+        Self::with_config(DEFAULT_PAIR_LIMIT, DEFAULT_PAIR_WINDOW_MS)
+    }
+
+    /// 自定义限速配置（测试 / 未来配置面入口）
+    pub fn with_config(limit: usize, window_ms: u64) -> Self {
+        Self {
+            limit,
+            window_ms,
+            buckets: Mutex::new(std::collections::HashMap::new()),
+            rejected: AtomicU64::new(0),
+        }
+    }
+
+    /// 判定并计数：窗口过期 → 重置（惰性推进）；未达上限 → 计数放行；
+    /// 已达上限 → 拒绝 + 审计计数 +1（拒绝不计数）。
+    pub fn check_and_count(&self, ip: std::net::IpAddr, now_ms: u64) -> PairRateOutcome {
+        let mut buckets = lock(&self.buckets);
+        let bucket = buckets.entry(ip).or_insert(PairRateBucket {
+            window_start_ms: now_ms,
+            count: 0,
+        });
+        // 惰性推进：窗口过期 → 从当前时刻重新开窗（旧桶的 window_start_ms
+        // 与 count 一并重置）
+        if now_ms >= bucket.window_start_ms + self.window_ms {
+            bucket.window_start_ms = now_ms;
+            bucket.count = 0;
+        }
+        if bucket.count >= self.limit {
+            self.rejected.fetch_add(1, Ordering::Relaxed);
+            return PairRateOutcome::Rejected {
+                limit: self.limit,
+                current: bucket.count,
+            };
+        }
+        bucket.count += 1;
+        PairRateOutcome::Allowed
+    }
+
+    /// 审计计数：超限拒绝次数（拒绝路径被刷也计入——可见性锚）
+    pub fn audit_rejected(&self) -> u64 {
+        self.rejected.load(Ordering::Relaxed)
+    }
+
+    /// 指定源 IP 当前窗口内计数（未命中过 → 0）
+    pub fn count_for(&self, ip: std::net::IpAddr) -> usize {
+        lock(&self.buckets)
+            .get(&ip)
+            .map_or(0, |bucket| bucket.count)
+    }
+}
+
+impl Default for PairRateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Mutex 锁（中毒自愈，跟随 ws.rs 先例；本模块内共享——连接限流器与
+/// 配对限速器均消费）
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -381,5 +500,162 @@ mod tests {
             LimiterOutcome::RejectedTotal { .. }
         ));
         assert_eq!(limiter.count(), 8, "拒绝路径不得产生占用");
+    }
+
+    // ── 配对请求限速器（D2 §12.4：10 次/分钟/源 IP；AU4 问题 #1 收口）──
+
+    /// D2 §12.4 断言锚：同 IP 前 10 次全部放行，窗口内计数递增至上限
+    #[test]
+    fn pair_limiter_allows_up_to_limit_per_ip() {
+        let limiter = PairRateLimiter::new();
+        let ip: std::net::IpAddr = "192.168.1.10".parse().expect("固定测试 IP");
+        let t0 = 1_000_000;
+        for i in 1..=DEFAULT_PAIR_LIMIT {
+            assert_eq!(
+                limiter.check_and_count(ip, t0),
+                PairRateOutcome::Allowed,
+                "第 {i} 次应在窗口内放行"
+            );
+            assert_eq!(limiter.count_for(ip), i, "放行后窗口计数必须递增");
+        }
+        assert_eq!(limiter.audit_rejected(), 0);
+    }
+
+    /// D2 §12.4 断言锚：第 11 次同 IP → 结构化拒绝（携带 limit/current）+
+    /// 审计计数 +1
+    #[test]
+    fn pair_limiter_11th_request_rejected_with_audit() {
+        let limiter = PairRateLimiter::new();
+        let ip: std::net::IpAddr = "192.168.1.10".parse().expect("固定测试 IP");
+        let t0 = 1_000_000;
+        for _ in 0..DEFAULT_PAIR_LIMIT {
+            assert_eq!(limiter.check_and_count(ip, t0), PairRateOutcome::Allowed);
+        }
+        assert_eq!(
+            limiter.check_and_count(ip, t0),
+            PairRateOutcome::Rejected {
+                limit: DEFAULT_PAIR_LIMIT,
+                current: DEFAULT_PAIR_LIMIT
+            }
+        );
+        assert_eq!(limiter.audit_rejected(), 1, "超限必须审计 +1");
+    }
+
+    /// 窗口重置（惰性推进，注入时间）：窗口内拒绝 → 推进满 60s → 重置
+    /// 放行；推进不足 60s → 仍拒绝（窗口边界精确）
+    #[test]
+    fn pair_limiter_window_resets_lazily_on_time_advance() {
+        let limiter = PairRateLimiter::new();
+        let ip: std::net::IpAddr = "192.168.1.10".parse().expect("固定测试 IP");
+        let t0 = 1_000_000;
+        for _ in 0..DEFAULT_PAIR_LIMIT {
+            assert_eq!(limiter.check_and_count(ip, t0), PairRateOutcome::Allowed);
+        }
+        // 窗口内（< 60s）：仍拒绝
+        assert!(
+            matches!(
+                limiter.check_and_count(ip, t0 + DEFAULT_PAIR_WINDOW_MS - 1),
+                PairRateOutcome::Rejected { .. }
+            ),
+            "窗口未满 60s 不得重置"
+        );
+        // 推进满 60s：惰性重置 → 放行，计数重新从 1 计
+        assert_eq!(
+            limiter.check_and_count(ip, t0 + DEFAULT_PAIR_WINDOW_MS),
+            PairRateOutcome::Allowed,
+            "窗口过期后必须重置放行"
+        );
+        assert_eq!(limiter.count_for(ip), 1, "重置后窗口计数应从新窗口起算");
+        // 新窗口再次放行至上限
+        for _ in 1..DEFAULT_PAIR_LIMIT {
+            assert_eq!(
+                limiter.check_and_count(ip, t0 + DEFAULT_PAIR_WINDOW_MS),
+                PairRateOutcome::Allowed
+            );
+        }
+        assert!(
+            matches!(
+                limiter.check_and_count(ip, t0 + DEFAULT_PAIR_WINDOW_MS),
+                PairRateOutcome::Rejected { .. }
+            ),
+            "新窗口打满后必须再次拒绝"
+        );
+        assert_eq!(limiter.audit_rejected(), 2, "两次窗口各自超限各审计一次");
+    }
+
+    /// 每源 IP 独立桶：IP-A 打满拒绝不影响 IP-B 的窗口额度
+    #[test]
+    fn pair_limiter_buckets_are_independent_per_ip() {
+        let limiter = PairRateLimiter::new();
+        let ip_a: std::net::IpAddr = "192.168.1.10".parse().expect("固定测试 IP");
+        let ip_b: std::net::IpAddr = "192.168.1.11".parse().expect("固定测试 IP");
+        let t0 = 1_000_000;
+        for _ in 0..DEFAULT_PAIR_LIMIT {
+            assert_eq!(limiter.check_and_count(ip_a, t0), PairRateOutcome::Allowed);
+        }
+        assert!(
+            matches!(
+                limiter.check_and_count(ip_a, t0),
+                PairRateOutcome::Rejected { .. }
+            ),
+            "IP-A 打满必须拒绝"
+        );
+        assert_eq!(
+            limiter.check_and_count(ip_b, t0),
+            PairRateOutcome::Allowed,
+            "IP-B 独立桶不受 IP-A 影响"
+        );
+        assert_eq!(limiter.count_for(ip_b), 1);
+        assert_eq!(limiter.audit_rejected(), 1, "IP-B 的放行不得产生审计");
+    }
+
+    /// 拒绝不计数（防拒绝路径被刷爆当前窗口）：连续拒绝后窗口计数恒为
+    /// 上限值，审计逐次递增
+    #[test]
+    fn pair_limiter_rejected_requests_do_not_count() {
+        let limiter = PairRateLimiter::new();
+        let ip: std::net::IpAddr = "192.168.1.10".parse().expect("固定测试 IP");
+        let t0 = 1_000_000;
+        for _ in 0..DEFAULT_PAIR_LIMIT {
+            assert_eq!(limiter.check_and_count(ip, t0), PairRateOutcome::Allowed);
+        }
+        for expected_audit in 1..=3 {
+            assert!(
+                matches!(
+                    limiter.check_and_count(ip, t0),
+                    PairRateOutcome::Rejected { .. }
+                ),
+                "第 {expected_audit} 次拒绝"
+            );
+            assert_eq!(limiter.audit_rejected(), expected_audit, "拒绝逐次审计");
+            assert_eq!(
+                limiter.count_for(ip),
+                DEFAULT_PAIR_LIMIT,
+                "拒绝不得改变窗口计数"
+            );
+        }
+    }
+
+    /// 自定义配置（测试 / 未来配置面入口）：with_config(2, 1000)
+    #[test]
+    fn pair_limiter_custom_config_respected() {
+        let limiter = PairRateLimiter::with_config(2, 1000);
+        let ip: std::net::IpAddr = "192.168.1.10".parse().expect("固定测试 IP");
+        assert_eq!(limiter.check_and_count(ip, 100), PairRateOutcome::Allowed);
+        assert_eq!(limiter.check_and_count(ip, 200), PairRateOutcome::Allowed);
+        assert_eq!(
+            limiter.check_and_count(ip, 300),
+            PairRateOutcome::Rejected {
+                limit: 2,
+                current: 2
+            }
+        );
+        // 自定义窗口 1000ms 后重置
+        assert_eq!(
+            limiter.check_and_count(ip, 1100),
+            PairRateOutcome::Allowed,
+            "自定义窗口过期后必须重置"
+        );
+        assert_eq!(limiter.audit_rejected(), 1);
     }
 }

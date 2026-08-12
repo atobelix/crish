@@ -47,6 +47,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
+use axum::serve::ListenerExt;
 use axum::Router;
 use conex_types::device::{ALL_CAPABILITIES, MIN_PROTOCOL_VERSION, PROTOCOL_VERSION};
 use serde::Serialize;
@@ -281,15 +282,30 @@ impl ServerInstance {
         }
         let result = match tls_acceptor {
             Some(acceptor) => {
-                let listener = TlsListener::new(listener, acceptor);
-                axum::serve(listener, router)
-                    .with_graceful_shutdown(wait_for_shutdown(shutdown_rx))
-                    .await
+                // no-op tap_io：仅借 axum 的
+                // `Connected<IncomingStream<TapIo<L, F>>> for L::Addr` blanket
+                // impl 获得 ConnectInfo 接线（自定义 Listener 无预置 impl，
+                // 见 TlsListener 处说明）；tap 闭包为空操作，不改变 accept
+                // 语义
+                let listener = TlsListener::new(listener, acceptor).tap_io(|_| {});
+                // R1 收口（/v1/pair 每源 IP 限速）：经
+                // into_make_service_with_connect_info 注入客户端 SocketAddr
+                //（pair_endpoint 的 ConnectInfo 提取依赖此接线——未注入时
+                // ConnectInfo 提取即 500）
+                axum::serve(
+                    listener,
+                    router.into_make_service_with_connect_info::<SocketAddr>(),
+                )
+                .with_graceful_shutdown(wait_for_shutdown(shutdown_rx))
+                .await
             }
             None => {
-                axum::serve(listener, router)
-                    .with_graceful_shutdown(wait_for_shutdown(shutdown_rx))
-                    .await
+                axum::serve(
+                    listener,
+                    router.into_make_service_with_connect_info::<SocketAddr>(),
+                )
+                .with_graceful_shutdown(wait_for_shutdown(shutdown_rx))
+                .await
             }
         };
         result.map_err(|e| ServerError::io(format!("axum serve 退出：{e}")))
@@ -308,6 +324,13 @@ async fn wait_for_shutdown(mut rx: watch::Receiver<bool>) {
 /// 握手——明文 ws:// 握手（无 ClientHello）或伪造证书客户端在**握手层**
 /// 被拒绝：记录诊断（TLS-08 握手失败日志，审计通道的最小落地）后继续
 /// 接受下一条连接，不终止 serve（垃圾连接不构成拒绝服务面）。
+///
+/// Connected / ConnectInfo 语义（R1 收口 /v1/pair 每源 IP 限速）：axum
+/// 0.8 仅对 `tokio::net::TcpListener` 预置
+/// `SocketAddr: Connected<IncomingStream<TcpListener>>`——自定义 Listener
+/// 必须显式实现 [axum::extract::connect_info::Connected]（见下），否则
+/// `into_make_service_with_connect_info::<SocketAddr>` 编译不通过；限速
+/// 仅挂 REST /v1/pair，ws.rs 配对升级路径不受影响。
 struct TlsListener {
     inner: tokio::net::TcpListener,
     acceptor: tokio_rustls::TlsAcceptor,
@@ -355,6 +378,18 @@ impl axum::serve::Listener for TlsListener {
     }
 }
 
+/// 客户端地址注入（R1 收口 /v1/pair 每源 IP 限速）说明：axum 0.8 的
+/// `into_make_service_with_connect_info::<SocketAddr>` 要求
+/// `SocketAddr: Connected<IncomingStream<'_, L>>`，但只对
+/// `tokio::net::TcpListener` 预置该实现——自定义 [TlsListener] 无法直接
+/// 满足（孤儿规则：本地类型被外部 `IncomingStream` 覆盖即不构成本地
+/// 实现）。axum 官方接线路 = 经 [axum::serve::ListenerExt::tap_io] 包装
+/// 为 `TapIo`（connect_info.rs 的 blanket impl
+/// `Connected<IncomingStream<TapIo<L, F>>> for L::Addr`）；serve 的 TLS
+/// 分支以 no-op tap 包装（见 [ServerInstance::serve]），源地址 = TLS
+/// accept 时从底层 `TcpListener::accept` 取得的客户端 SocketAddr
+/// （TLS 握手前后远端不变）。
+
 /// axum 路由共享状态（D2 §4.2「ServerState」：端口 / 绑定 / 令牌表 /
 /// 后端句柄 / WS 连接注册表 / 事件流源；服务状态自持，不进 app.manage——
 /// main.rs 仅注入 [ServerHandle] 供退出钩子关停）
@@ -369,8 +404,12 @@ pub struct ServerState {
     /// WS 连接注册表（R1-05：连接上限 / 踢出 / 订阅管理，D2 §10.5）
     ws_registry: Arc<ws::WsRegistry>,
     /// 连接限流器（R1-10：D5 §7.2 每设备 2 / 总量 8 并发上限状态机 +
-    /// 审计计数；装配就绪，register 接线待 P0-3 裁决）
+    /// 审计计数；D-1 裁决：生产并发面由 ws.rs 注册表踢旧承担，本限流器
+    /// 为测试面 + R2 装配预留）
     conn_limiter: Arc<limiter::ConnectionLimiter>,
+    /// 配对请求限速器（R1 收口：POST /v1/pair 每源 IP 10 次/分钟，
+    /// D2 §12.4 限速口径——AU4 问题 #1；pair_endpoint 消费）
+    pair_limiter: Arc<limiter::PairRateLimiter>,
     /// 事件扇出源（R1-01 FanOutEmitter；未装配 = 广播 drain 不启动，
     /// 订阅/续传/心跳仍可用）
     event_stream: Option<Arc<fanout::FanOutEmitter>>,
@@ -400,6 +439,7 @@ impl ServerState {
             backend,
             ws_registry: Arc::new(ws::WsRegistry::new()),
             conn_limiter: Arc::new(limiter::ConnectionLimiter::new()),
+            pair_limiter: Arc::new(limiter::PairRateLimiter::new()),
             event_stream: None,
             audit_bridge: None,
             pairing: None,
@@ -488,13 +528,20 @@ impl ServerState {
         Arc::clone(&self.ws_registry)
     }
 
-    /// 连接限流器（R1-10：D5 §7.2 每设备 2 / 总量 8 并发上限；装配就绪，
-    /// 连接建立/注销路径接线待主 Agent 裁决（P0-3 踢旧 vs 每设备 2），
-    /// 测试直接消费）
-    // R1-10 备注：register 接线待裁决——dead_code 静音（测试构建保持检查）
+    /// 连接限流器（R1-10：D5 §7.2 每设备 2 / 总量 8 并发上限；D-1 裁决：
+    /// 生产并发面由 ws.rs 注册表踢旧承担，本限流器为测试面 + R2 装配
+    /// 预留，测试直接消费）
+    // 备注：D-1 裁决后生产接线由 ws.rs 承担——dead_code 静音（测试构建
+    // 保持检查）
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn conn_limiter(&self) -> Arc<limiter::ConnectionLimiter> {
         Arc::clone(&self.conn_limiter)
+    }
+
+    /// 配对请求限速器（R1 收口：POST /v1/pair 每源 IP 10 次/分钟，
+    /// D2 §12.4；pair_endpoint 在服务开关检查后消费）
+    pub fn pair_limiter(&self) -> Arc<limiter::PairRateLimiter> {
+        Arc::clone(&self.pair_limiter)
     }
 
     /// 事件扇出源（R1-01 FanOutEmitter；None = 未装配，WS 广播推送不可用）
