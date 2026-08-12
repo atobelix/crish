@@ -5,3 +5,7 @@ export { default as ApprovalListScreen } from './approvalListScreen';
 export type { ApprovalListScreenProps } from './approvalListScreen';
 export { default as SessionsScreen } from './sessionsScreen';
 export type { SessionsScreenProps } from './sessionsScreen';
+export { default as SessionDetailScreen } from './sessionDetailScreen';
+export type { SessionDetailScreenProps } from './sessionDetailScreen';
+export { default as TerminalScreen } from './terminalScreen';
+export type { TerminalScreenProps } from './terminalScreen';

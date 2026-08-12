@@ -8,12 +8,27 @@
 //   kind 白名单）——三维度可组合，本地筛选不重拉数据（F3 §5.1 切换不丢已缓冲条目）；
 // - 只看当前 run 但无 run（currentRunId = null）→ 空态「当前无 run」；
 // - 空态（M4 §5.9 / F1 §4.7）：无事件条目 → 主文案 + 副文案（禁「0 误导」）。
-import { memo, useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+// - 自动滚底（R2UX-05-03 会话详情复用参数）：follow=true 时新条目到达滚到底；
+//   上翻超吸底阈值（40dp）暂停跟随（onFollowChange(false)），页面显示「回到底部」；
+//   listRef 转发给页面触发 scrollToEnd（缺省组件内部 ref，行为不变）。
+import { memo, useEffect, useMemo, useRef } from 'react';
+import type { RefObject } from 'react';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import type { FeedEntry } from '@/domain/store/eventReducers';
 import { deriveErrorLevel, filterFeed } from '@/domain/store/eventReducers';
 import { useTheme } from '@/adapters/platform/theme';
 import { EventRow, EVENT_ROW_HEIGHT, TOOL_KIND_WHITELIST } from './EventRow';
+
+/** 吸底跟随阈值（R2UX-05-03 / M4 §5.5：40dp，上翻超阈值暂停跟随） */
+export const AUTO_FOLLOW_THRESHOLD_DP = 40;
 
 export interface EventFeedProps {
   /** feed 条目（环形窗口原序；过滤在渲染层执行，数据不重拉） */
@@ -32,6 +47,12 @@ export interface EventFeedProps {
   /** 空态文案（缺省 F1 §4.7 口径） */
   emptyTitle?: string;
   emptyHint?: string;
+  /** 自动滚底跟随（R2UX-05-03；缺省 false 保持原行为） */
+  follow?: boolean;
+  /** 跟随状态变化回调（页面据此显示「回到底部」悬浮条） */
+  onFollowChange?: (following: boolean) => void;
+  /** FlatList 转发 ref（页面「回到底部」点击 scrollToEnd 用） */
+  listRef?: RefObject<FlatList<FeedEntry> | null>;
 }
 
 /** 过滤后条目 + 错误计数（纯派生，渲染层 memo；错误徽标数据面 F3 §3.3.3） */
@@ -70,8 +91,13 @@ export function EventFeed({
   onToggleTool,
   emptyTitle = '暂无事件',
   emptyHint = '桌面端 run 执行时，这里会实时更新事件流（F1 §4.7）',
+  follow = false,
+  onFollowChange,
+  listRef,
 }: EventFeedProps) {
   const theme = useTheme();
+  const internalRef = useRef<FlatList<FeedEntry> | null>(null);
+  const targetRef = listRef ?? internalRef;
   const { filtered, errorCount } = useMemo(
     () =>
       deriveFilteredFeed(entries, {
@@ -82,6 +108,22 @@ export function EventFeed({
       }),
     [entries, errorsOnly, runOnly, toolOnly, currentRunId]
   );
+
+  // 自动滚底（R2UX-05-03）：跟随态下新条目到达滚到底（getItemLayout 定位不抖动）
+  useEffect(() => {
+    if (follow && filtered.length > 0) {
+      targetRef.current?.scrollToEnd({ animated: false });
+    }
+  }, [follow, filtered.length, targetRef]);
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distanceFromEnd =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    const following = distanceFromEnd <= AUTO_FOLLOW_THRESHOLD_DP;
+    // 仅在状态翻转时通知（避免滚动事件风暴触发父级重渲染）
+    if (following !== follow) onFollowChange?.(following);
+  };
 
   return (
     <View style={styles.container}>
@@ -107,6 +149,7 @@ export function EventFeed({
       </View>
       <FlatList
         testID="event-feed-list"
+        ref={targetRef}
         data={filtered}
         keyExtractor={feedEntryKey}
         renderItem={({ item }) => <EventRow entry={item} />}
@@ -118,6 +161,8 @@ export function EventFeed({
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={7}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         ListEmptyComponent={
           <View testID="feed-empty" style={styles.emptyWrap}>
             <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>

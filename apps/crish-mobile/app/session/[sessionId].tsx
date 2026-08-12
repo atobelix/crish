@@ -1,13 +1,21 @@
-import { useLocalSearchParams } from 'expo-router';
-import ProtectedPlaceholder from '@/presentation/components/templates/ProtectedPlaceholder';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { useAuthStore } from '@/adapters/hooks/useAppStore';
+import { SessionDetailScreen } from '@/presentation/screens';
 
-// 会话详情（F3 主形态：消息流 / 事件流双视图）—— R2-05 落地
-export default function SessionDetailScreen() {
+// 会话详情（R2-05 部分 3：该会话事件流 + 未读清零；深链目标 app/session/[sessionId]）
+// 路由骨架：守卫（未配对 → 配对页）+ 深链参数落地；页面组件不感知路由
+export default function SessionDetailRoute() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
+  const pairState = useAuthStore((s) => s.pairState);
+
+  if (pairState !== 'paired') {
+    return <Redirect href="/pair/welcome" />;
+  }
+
   return (
-    <ProtectedPlaceholder
-      title="会话详情"
-      description={`消息流 / 事件流 feed（R2-05 落地）\nsessionId: ${sessionId ?? '-'}`}
+    <SessionDetailScreen
+      sessionId={sessionId ?? ''}
+      onBack={() => router.back()}
     />
   );
 }

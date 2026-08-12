@@ -1,13 +1,16 @@
-import { useLocalSearchParams } from 'expo-router';
-import ProtectedPlaceholder from '@/presentation/components/templates/ProtectedPlaceholder';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { useAuthStore } from '@/adapters/hooks/useAppStore';
+import { TerminalScreen } from '@/presentation/screens';
 
-// 终端流回放（F3 第 4 章 / 只读，深链目标）—— R2-05 落地
-export default function TerminalScreen() {
+// 终端只读回放（R2-05 部分 3：F3 §4 只读终端 / 深链目标 app/terminal/[runId]）
+// 路由骨架：守卫（未配对 → 配对页）+ 深链参数落地；页面组件不感知路由
+export default function TerminalRoute() {
   const { runId } = useLocalSearchParams<{ runId: string }>();
-  return (
-    <ProtectedPlaceholder
-      title="终端回放"
-      description={`只读终端流 / 行缓冲 / ANSI 白名单（R2-05 落地）\nrunId: ${runId ?? '-'}`}
-    />
-  );
+  const pairState = useAuthStore((s) => s.pairState);
+
+  if (pairState !== 'paired') {
+    return <Redirect href="/pair/welcome" />;
+  }
+
+  return <TerminalScreen runId={runId ?? ''} onBack={() => router.back()} />;
 }
