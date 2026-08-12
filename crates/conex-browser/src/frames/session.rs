@@ -10,6 +10,9 @@
 //!   重连成功后以原配置自动重启 startScreencast，旧 sessionId 序列作废
 //!   （泵代数重置：seq/去重表清零）；
 //! - **状态机**：idle/starting/active/stopping（watch 订阅 + 事件广播）；
+//! - **静态降级**（U-3）：screencast start 失败/能力缺失且启用降级 →
+//!   1fps `Page.captureScreenshot` 轮询接管（degrade.rs，状态机保持 Active
+//!   投影，经 `is_degraded` 感知）；
 //! - **背压**：帧输出槽满时丢弃旧帧保新帧（§2.4 丢帧策略，sink.rs）；
 //! - **去重**：已 ack 的 (session, frame) 重复事件直接丢弃（防 CDP 重放，§2.1）。
 //!
@@ -28,11 +31,14 @@ use crate::cdp::sender::Command;
 use crate::BrowserSession;
 use serde_json::json;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{broadcast, watch};
 
+use super::degrade::{
+    static_poll_loop, StaticPollCtx, STATIC_CAPTURE_TIMEOUT_DEFAULT, STATIC_POLL_INTERVAL_DEFAULT,
+};
 use super::fps::{FpsController, FpsLevel};
 use super::sink::{
     take_receiver, FrameOut, FrameReceiver, FrameReceiverSlot, FrameSink, FRAME_QUEUE_CAPACITY,
@@ -77,6 +83,8 @@ pub enum ScreencastEvent {
     Restarted { epoch: u64 },
     /// 启动/重启失败（含重试耗尽）。
     StartFailed { message: String },
+    /// 进入静态降级模式（U-3：screencast 不可用 → 1fps captureScreenshot 轮询）。
+    Degraded { reason: String },
     /// 停止完成。
     Stopped,
 }
@@ -98,6 +106,8 @@ pub struct ScreencastStats {
     pub ack_failures: u64,
     /// 重连自动重启次数。
     pub restarts: u64,
+    /// 静态降级轮询产出的帧数（U-3：captureScreenshot 轮询帧）。
+    pub static_frames: u64,
 }
 
 /// 帧流会话错误。
@@ -145,6 +155,14 @@ pub struct ScreencastConfig {
     pub max_acked: usize,
     /// 帧输出槽容量（默认 60，对齐帧通道容量）。
     pub frame_queue_capacity: usize,
+    /// 静态降级开关（U-3）：screencast start 失败/能力缺失 → 1fps
+    /// captureScreenshot 轮询接管（默认开启；关闭则保持旧口径——失败回
+    /// Idle + StartFailed）。
+    pub static_fallback_enabled: bool,
+    /// 降级轮询间隔（默认 1s = 1fps，可配）。
+    pub static_interval: Duration,
+    /// 降级单次截屏命令超时。
+    pub static_capture_timeout: Duration,
 }
 
 impl Default for ScreencastConfig {
@@ -164,7 +182,82 @@ impl Default for ScreencastConfig {
             start_max_attempts: START_MAX_ATTEMPTS,
             max_acked: MAX_ACKED_RECORDS,
             frame_queue_capacity: FRAME_QUEUE_CAPACITY,
+            static_fallback_enabled: true,
+            static_interval: STATIC_POLL_INTERVAL_DEFAULT,
+            static_capture_timeout: STATIC_CAPTURE_TIMEOUT_DEFAULT,
         }
+    }
+}
+
+/// 静态降级轮询控制器（U-3：screencast 不可用 → 1fps captureScreenshot 轮询）。
+/// 活动旗标幂等防重入（enter 已在轮询时直接返回）；任务句柄供退出时 abort。
+struct StaticController {
+    active: AtomicBool,
+    task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    session: Arc<BrowserSession>,
+    sink: Arc<FrameSink>,
+    stats: Arc<StatsInner>,
+    events: broadcast::Sender<ScreencastEvent>,
+    config: ScreencastConfig,
+}
+
+impl StaticController {
+    fn new(
+        session: Arc<BrowserSession>,
+        sink: Arc<FrameSink>,
+        stats: Arc<StatsInner>,
+        events: broadcast::Sender<ScreencastEvent>,
+        config: ScreencastConfig,
+    ) -> Arc<Self> {
+        Arc::new(StaticController {
+            active: AtomicBool::new(false),
+            task: Mutex::new(None),
+            session,
+            sink,
+            stats,
+            events,
+            config,
+        })
+    }
+
+    /// 进入降级轮询（幂等：已在轮询中直接返回，防重复进入）。状态机迁移
+    /// 由调用方负责（start/restart 路径各自置 Active）。进入点两侧（start
+    /// 失败/restart 失败）均保证帧泵 running=false，无需再触碰泵开关。
+    fn enter(&self, reason: &str) {
+        if self.active.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let ctx = StaticPollCtx {
+            session: self.session.clone(),
+            sink: self.sink.clone(),
+            stats: self.stats.clone(),
+            events: self.events.clone(),
+            interval: self.config.static_interval,
+            capture_timeout: self.config.static_capture_timeout,
+            quality: self.config.quality,
+            fallback_width: self.config.max_width.max(0) as u32,
+            fallback_height: self.config.max_height.max(0) as u32,
+        };
+        let task = tokio::spawn(static_poll_loop(ctx));
+        *self.task.lock().unwrap_or_else(|p| p.into_inner()) = Some(task);
+        let _ = self.events.send(ScreencastEvent::Degraded {
+            reason: reason.to_string(),
+        });
+        tracing::warn!("帧流进入静态降级模式（1fps captureScreenshot 轮询）：{reason}");
+    }
+
+    /// 退出降级轮询（幂等）：abort 轮询任务 + 清旗标。切回 screencast 泵前
+    /// 调用（防双源喂帧）。
+    fn exit(&self) {
+        self.active.store(false, Ordering::SeqCst);
+        if let Some(task) = self.task.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            task.abort();
+        }
+    }
+
+    /// 是否处于降级轮询中。
+    fn is_active(&self) -> bool {
+        self.active.load(Ordering::SeqCst)
     }
 }
 
@@ -181,15 +274,29 @@ struct PumpShared {
     acked: VecDeque<(String, u64)>,
 }
 
-/// 统计原子面（泵/监督任务与查询方共享）。
-struct StatsInner {
-    frames_received: AtomicU64,
-    frames_sent: AtomicU64,
-    frames_dropped: AtomicU64,
-    duplicates_skipped: AtomicU64,
-    acks_sent: AtomicU64,
-    ack_failures: AtomicU64,
-    restarts: AtomicU64,
+/// 统计原子面（泵/监督/降级轮询任务与查询方共享）。
+/// `pub(crate)`：degrade.rs 轮询循环消费计数（add_static_frame/add_dropped）。
+pub(crate) struct StatsInner {
+    pub(crate) frames_received: AtomicU64,
+    pub(crate) frames_sent: AtomicU64,
+    pub(crate) frames_dropped: AtomicU64,
+    pub(crate) duplicates_skipped: AtomicU64,
+    pub(crate) acks_sent: AtomicU64,
+    pub(crate) ack_failures: AtomicU64,
+    pub(crate) restarts: AtomicU64,
+    pub(crate) static_frames: AtomicU64,
+}
+
+impl StatsInner {
+    /// 静态降级帧计数（degrade.rs 轮询循环消费，U-3）。
+    pub(crate) fn add_static_frame(&self) {
+        self.static_frames.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// 背压丢帧计数（degrade.rs 轮询循环消费，语义同帧泵 §2.4）。
+    pub(crate) fn add_dropped(&self) {
+        self.frames_dropped.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 impl Default for StatsInner {
@@ -202,6 +309,7 @@ impl Default for StatsInner {
             acks_sent: AtomicU64::new(0),
             ack_failures: AtomicU64::new(0),
             restarts: AtomicU64::new(0),
+            static_frames: AtomicU64::new(0),
         }
     }
 }
@@ -221,14 +329,17 @@ pub struct ScreencastSession {
     frame_rx_slot: FrameReceiverSlot,
     pump: Arc<Mutex<PumpShared>>,
     stats: Arc<StatsInner>,
+    /// 静态降级轮询控制器（U-3；与监督任务共享，start/stop/restart 协作面）。
+    static_ctrl: Arc<StaticController>,
     pump_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
     supervisor_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl Drop for ScreencastSession {
-    /// 收尾（M3）：关闭输出槽 + abort 泵/监督任务——调用方遗漏 shutdown
+    /// 收尾（M3）：关闭输出槽 + abort 泵/监督/降级任务——调用方遗漏 shutdown
     /// 时不留常驻任务（任务不持有 Arc<Self> 自保活）。
     fn drop(&mut self) {
+        self.static_ctrl.exit(); // 降级轮询先停（防退出后仍喂帧）
         self.sink.close();
         if let Some(t) = self
             .pump_task
@@ -270,6 +381,13 @@ impl ScreencastSession {
             acked: VecDeque::new(),
         }));
         let stats = Arc::new(StatsInner::default());
+        let static_ctrl = StaticController::new(
+            session.clone(),
+            sink.clone(),
+            stats.clone(),
+            events.clone(),
+            config.clone(),
+        );
 
         // —— 泵任务（帧通道 → 输出槽 + ack pacing）——
         let pump_task = tokio::spawn(pump_loop(PumpContext {
@@ -292,6 +410,7 @@ impl ScreencastSession {
             events.clone(),
             pump.clone(),
             stats.clone(),
+            static_ctrl.clone(),
         ));
 
         ScreencastSession {
@@ -305,17 +424,33 @@ impl ScreencastSession {
             frame_rx_slot,
             pump,
             stats,
+            static_ctrl,
             pump_task: Mutex::new(Some(pump_task)),
             supervisor_task: Mutex::new(Some(supervisor_task)),
         }
     }
 
-    /// 启动帧流：状态 Starting → startScreencast → Active（失败回 Idle）。
+    /// 启动帧流：状态 Starting →（能力门）→ startScreencast → Active。
+    /// screencast 失败/不可用且启用静态降级（U-3）→ 1fps captureScreenshot
+    /// 轮询接管，返回 Ok（帧流保持运行，经 Degraded 事件/is_degraded 感知）；
+    /// 未启用降级 → 失败回 Idle + StartFailed。
     pub async fn start(&self) -> Result<(), ScreencastError> {
         if self.status() != ScreencastStatus::Idle {
             return Err(ScreencastError::AlreadyActive);
         }
         self.set_status(ScreencastStatus::Starting);
+        // 能力门（probe 面，U-3）：能力探测已运行且明确无 screencast 能力 →
+        // 直接进入降级轮询（不尝试 startScreencast）。未探测（None）按可用
+        // 处理：发 startScreencast 实测，失败再降级。
+        if self.config.static_fallback_enabled
+            && self.status() == ScreencastStatus::Starting
+            && !self.screencast_capable()
+        {
+            self.static_ctrl
+                .enter("能力探测无 screencast 能力（capability.screencast=false）");
+            self.set_status(ScreencastStatus::Active);
+            return Ok(());
+        }
         match send_start_screencast(&self.session, &self.config).await {
             Ok(()) => {
                 // 竞态防护：命令在途期间被 stop 抢断 → 不激活，回退已启动的 screencast
@@ -331,12 +466,30 @@ impl ScreencastSession {
                 Ok(())
             }
             Err(e) => {
+                // U-3 降级路径：startScreencast 失败 → 1fps 轮询接管。status
+                // 守卫对齐成功路径竞态防护（命令在途期间被 stop 抢断 → 不降级）
+                if self.config.static_fallback_enabled
+                    && self.status() == ScreencastStatus::Starting
+                {
+                    self.static_ctrl.enter(&format!("startScreencast 失败：{e}"));
+                    self.set_status(ScreencastStatus::Active);
+                    return Ok(());
+                }
                 self.set_status(ScreencastStatus::Idle);
                 let _ = self.events.send(ScreencastEvent::StartFailed {
                     message: e.to_string(),
                 });
                 Err(e)
             }
+        }
+    }
+
+    /// screencast 能力判定（probe 面）：能力报告已缓存时按 `features.screencast`；
+    /// 未探测（None）视为可用（走 startScreencast 实测，失败由降级路径接管）。
+    fn screencast_capable(&self) -> bool {
+        match self.session.capability() {
+            Some(report) => report.features.screencast,
+            None => true,
         }
     }
 
@@ -348,6 +501,7 @@ impl ScreencastSession {
         }
         self.set_status(ScreencastStatus::Stopping);
         send_stop_screencast(&self.session, &self.config).await;
+        self.static_ctrl.exit(); // 降级轮询先停（防 stop 期间续推帧）
         self.pump.lock().unwrap_or_else(|p| p.into_inner()).running = false;
         self.set_status(ScreencastStatus::Idle);
         let _ = self.events.send(ScreencastEvent::Stopped);
@@ -382,6 +536,13 @@ impl ScreencastSession {
         *self.status_tx.borrow()
     }
 
+    /// 是否处于静态降级模式（U-3：screencast 不可用 → 1fps captureScreenshot
+    /// 轮询）。状态机投影仍为 Active（帧流运行中），本旗标供诊断/接线感知
+    /// 降级（切回 screencast 或停止后为 false）。
+    pub fn is_degraded(&self) -> bool {
+        self.static_ctrl.is_active()
+    }
+
     /// 订阅状态变化（watch）。
     pub fn subscribe_status(&self) -> watch::Receiver<ScreencastStatus> {
         self.status_tx.subscribe()
@@ -407,6 +568,7 @@ impl ScreencastSession {
             acks_sent: self.stats.acks_sent.load(Ordering::Relaxed),
             ack_failures: self.stats.ack_failures.load(Ordering::Relaxed),
             restarts: self.stats.restarts.load(Ordering::Relaxed),
+            static_frames: self.stats.static_frames.load(Ordering::Relaxed),
         }
     }
 
@@ -559,19 +721,31 @@ async fn supervisor_loop(
     events: broadcast::Sender<ScreencastEvent>,
     pump: Arc<Mutex<PumpShared>>,
     stats: Arc<StatsInner>,
+    static_ctrl: Arc<StaticController>,
 ) {
     while let Ok(ev) = bus_rx.recv().await {
         if let BrowserEvent::ConnectionRestored { epoch, .. } = ev {
-            // 仅激活态需要重启（空闲/停止中不重启）
+            // 仅激活态需要重启（空闲/停止中不重启；降级模式投影 Active 同样覆盖）
             if *status_tx.borrow() != ScreencastStatus::Active {
                 continue;
             }
-            restart_screencast(&session, &config, &status_tx, &events, &pump, &stats, epoch).await;
+            restart_screencast(
+                &session,
+                &config,
+                &status_tx,
+                &events,
+                &pump,
+                &stats,
+                &static_ctrl,
+                epoch,
+            )
+            .await;
         }
     }
 }
 
-/// 重连自动重启：Starting → 重试 startScreencast → Active（失败回 Idle）。
+/// 重连自动重启：Starting → 重试 startScreencast → Active（失败回 Idle，
+/// 启用静态降级则保持 1fps 轮询——U-3）。
 async fn restart_screencast(
     session: &Arc<BrowserSession>,
     config: &ScreencastConfig,
@@ -579,6 +753,7 @@ async fn restart_screencast(
     events: &broadcast::Sender<ScreencastEvent>,
     pump: &Arc<Mutex<PumpShared>>,
     stats: &Arc<StatsInner>,
+    static_ctrl: &Arc<StaticController>,
     epoch: u64,
 ) {
     let _ = status_tx.send(ScreencastStatus::Starting);
@@ -608,6 +783,7 @@ async fn restart_screencast(
                 send_stop_screencast(session, config).await;
                 return;
             }
+            static_ctrl.exit(); // 切回 screencast 泵：先停降级轮询（防双源喂帧）
             let mut shared = pump.lock().unwrap_or_else(|p| p.into_inner());
             shared.running = true;
             shared.gen += 1; // 泵代数重置：旧 sessionId 序列作废
@@ -619,11 +795,21 @@ async fn restart_screencast(
         }
         Err(e) => {
             pump.lock().unwrap_or_else(|p| p.into_inner()).running = false;
-            let _ = status_tx.send(ScreencastStatus::Idle);
-            let _ = events.send(ScreencastEvent::StartFailed {
-                message: e.to_string(),
-            });
-            tracing::warn!("帧流重启失败（重试耗尽），转入 Idle：{e}");
+            // U-3 降级：重启失败且启用静态降级 → 保持 1fps 轮询（跨重连持续
+            // 供帧——恢复条件取舍：保持降级直到显式 stop/start 重试，或下一次
+            // 重连重启成功时切回；不自动反复探测 screencast 可用性）
+            if config.static_fallback_enabled
+                && *status_tx.borrow() == ScreencastStatus::Starting
+            {
+                static_ctrl.enter(&format!("startScreencast 重启失败：{e}"));
+                let _ = status_tx.send(ScreencastStatus::Active);
+            } else {
+                let _ = status_tx.send(ScreencastStatus::Idle);
+                let _ = events.send(ScreencastEvent::StartFailed {
+                    message: e.to_string(),
+                });
+            }
+            tracing::warn!("帧流重启失败（重试耗尽），转入降级/Idle：{e}");
         }
     }
 }
@@ -1076,7 +1262,8 @@ mod tests {
         session.shutdown().await;
     }
 
-    /// 状态机（§5 投影）：重复 start 拒绝；start 命令失败 → 回 Idle + StartFailed。
+    /// 状态机（§5 投影）：重复 start 拒绝；start 命令失败 → 回 Idle + StartFailed
+    /// （显式关闭静态降级保留旧口径——U-3 降级路径见下方静态降级测试组）。
     #[tokio::test]
     async fn frames_state_machine_start_failures() {
         let (mock, session) = setup().await;
@@ -1084,6 +1271,7 @@ mod tests {
             session.clone(),
             ScreencastConfig {
                 hold_override: Some(Duration::ZERO),
+                static_fallback_enabled: false,
                 ..Default::default()
             },
         );

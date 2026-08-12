@@ -113,9 +113,18 @@ pub struct SensitiveCapabilities {
 pub struct BrowserToolsConfig {
     pub session: Option<Arc<BrowserSession>>,
     pub manager: Option<Arc<BrowserManager>>,
+    /// 显式注入的门禁实现（引擎侧装配任意 `DomainGate` 实现，含
+    /// `MvpDomainGate`）；注入优先——未注入时由注册面按
+    /// [Self::domain_allowlist]/[Self::domain_blocklist] 构造正式实现
+    /// `conex_browser::gate::FormalDomainGate`（05 文档方案 A 注入优先语义）。
     pub gate: Option<Arc<dyn DomainGate>>,
-    pub gate_allowlist: Vec<String>,
-    pub gate_blocklist: Vec<String>,
+    /// 域名白名单（R-7 语义，17 §4.1）：空 = 默认全允许（限公共互联网，
+    /// 解析级 SSRF 校验）；非空 = 硬化模式（白名单外 Deny，显式信任跳过
+    /// 解析校验）。通配符语义见 17 §4.2；非法模式（TLD 通配等）注册期拒绝。
+    pub domain_allowlist: Vec<String>,
+    /// 域名黑名单（R-7 语义，17 §4.2）：命中不可豁免（优先于白名单，
+    /// 含 full-access `*`）。非法模式注册期拒绝。
+    pub domain_blocklist: Vec<String>,
     pub sensitive: SensitiveCapabilities,
     pub budgets: Option<BudgetConfig>,
     pub max_tabs: Option<usize>,
@@ -133,12 +142,20 @@ pub fn register_browser_tools(
     registry: &mut ToolRegistry,
     config: BrowserToolsConfig,
 ) -> Result<(), ToolError> {
-    // 门禁解析：显式注入优先；缺省用 MVP 实现（配置校验期拒绝非法模式）
+    // 门禁解析（05 文档方案 A：注入优先、兜底升级——P0-2 配置入口落地后
+    // 注入语义更新：FormalDomainGate 已成为正式实现，`config.gate` 未注入
+    // 时由本侧按 domain_allowlist/domain_blocklist 构造正式实现，缺省兜底
+    // 从 MvpDomainGate 升级为 FormalDomainGate）。显式注入（引擎侧装配
+    // 任意 DomainGate 实现，含 MvpDomainGate）仍优先，配置列表被忽略；
+    // 非法模式（TLD 通配等）注册期结构化拒绝（17 §4.2 配置校验）。
     let gate: Arc<dyn DomainGate> = match config.gate {
         Some(g) => g,
         None => Arc::new(
-            gate::MvpDomainGate::new(&config.gate_allowlist, &config.gate_blocklist)
-                .map_err(|e| ToolError::invalid_input(format!("门禁配置非法：{e}")))?,
+            conex_browser::gate::FormalDomainGate::new(
+                &config.domain_allowlist,
+                &config.domain_blocklist,
+            )
+            .map_err(|e| ToolError::invalid_input(format!("门禁配置非法：{e}")))?,
         ),
     };
     let budgets = config.budgets.unwrap_or_else(BudgetConfig::active);
@@ -174,6 +191,22 @@ pub fn register_browser_tools(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// P0-2 配置入口：domain_allowlist/domain_blocklist 默认空（R-7 语义：
+    /// 空白名单 = 默认全允许限公共互联网；非空 = 硬化模式白名单外 Deny；
+    /// 黑名单不可豁免）。
+    #[test]
+    fn domain_lists_default_empty() {
+        let config = BrowserToolsConfig::default();
+        assert!(
+            config.domain_allowlist.is_empty(),
+            "白名单默认空（R-7 全允许语义）"
+        );
+        assert!(
+            config.domain_blocklist.is_empty(),
+            "黑名单默认空（配置面存在即生效语义）"
+        );
+    }
 
     /// R-12 安全默认：attach 开关默认关闭（会话级，未显式授权不向外部 MCP
     /// 暴露受管端点信息）。

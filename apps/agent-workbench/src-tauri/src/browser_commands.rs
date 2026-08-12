@@ -16,8 +16,10 @@
 //!
 //! ## J1b storage_state 命令（维度 16 §5 辅助通道 CDP 实读/注入接线）
 //! - `browser_export_storage_state(authorized: bool)` → 标准 storage_state
-//!   JSON（字符串，Playwright 兼容 `{ cookies, origins }`，§5.1；**内存传递
-//!   不落盘**，§5.4 强制面——写盘仅走前端显式「另存为」路径）；
+//!   JSON（字符串，Playwright 兼容 `{ cookies, origins }`，§5.1；origins 面
+//!   经 DOMStorage 逐 origin 实读聚合（P1-3 接线，origin 清单由 cookie
+//!   domain 推导）；**内存传递不落盘**，§5.4 强制面——写盘仅走前端显式
+//!   「另存为」路径）；
 //! - `browser_import_storage_state(json: string)` → 脱敏统计载荷
 //!   `{ cookies, origins, localStorageItems, injectedScripts, injectedItems,
 //!   droppedDupes, skippedEmptyName }`
@@ -82,7 +84,8 @@ use conex_browser::import::bookmarks::{
 };
 use conex_browser::import::history::{read_history, persist_history, HistoryOptions};
 use conex_browser::import::storage_state::{
-    build_import_plan, export_storage_state, inject_origin_scripts, parse_storage_state,
+    build_import_plan, export_origins_from_cookies, export_storage_state,
+    export_storage_state_with_origins, inject_origin_scripts, parse_storage_state,
     ExportAuthorization, ImportPlan, StorageStateError,
 };
 use serde::Serialize;
@@ -230,7 +233,8 @@ pub(crate) struct StorageImportPayload {
     pub skipped_empty_name: usize,
 }
 
-/// 导出 storage_state（J1b 接线，维度 16 §5.2 实读面）。
+/// 导出 storage_state（J1b 接线 + P1-3 导出侧 origins 聚合，维度 16 §5.2
+/// 实读面）。
 ///
 /// ## 契约
 /// - 入参 `authorized: bool`：**导出需显式授权**（§5.2）——前端必须先展示
@@ -238,15 +242,13 @@ pub(crate) struct StorageImportPayload {
 ///   `true`；`false` → 命令拒绝（未授权，**不执行实读**，零副作用）；
 /// - 返回：标准 storage_state JSON（Playwright 兼容 `{ cookies, origins }`，
 ///   §5.1），**内存传递不落盘**（§5.4 强制面；写盘仅走前端显式「另存为」）；
+///   origins 面（P1-3 接线）：origin 清单由 cookie domain 推导（协议按
+///   secure 标志），经会话 LocalStorageChannel（`DOMStorage.getDOMStorageItems`）
+///   逐 origin 实读聚合，输出标准形态 `{ origin, localStorage: [{ name, value }] }`；
 ///   返回 JSON 含 cookie value 明文——前端须防日志/审计泄露（§5.4 脱敏纪律：
 ///   日志/事件负载一律不输出 value）；
 /// - 错误：未连接/恢复期 → `tool.browser.not_ready:<原因>`（不触发惰性启动，
 ///   须先 `browser_start`）；未授权 → 拒绝文案；CDP 实读失败 → 透传原因。
-///
-/// ## 接线遗留（登记）
-/// - `origins[].localStorage` 采集未接线（DOMStorage 域按 origin 聚合为
-///   接线点，导出结果 origins 恒空——见 import/storage_state.rs
-///   `from_cdp_cookies` 注记）；本命令只实读 cookie 面。
 #[tauri::command]
 pub(crate) async fn browser_export_storage_state(
     authorized: bool,
@@ -260,8 +262,31 @@ pub(crate) async fn browser_export_storage_state(
     }
     let ops = slot(core.inner()).storage_ops();
     let cookies = ops.get_all_cookies().await.map_err(not_ready)?;
-    let state = export_storage_state(&cookies, ExportAuthorization::Confirmed)
-        .map_err(|e| invalid_input(e.to_string()))?;
+    // 导出侧 origins 聚合（P1-3 接线）：origin 清单由 cookie domain 推导
+    // （协议按 secure 标志，非法 host 跳过），经会话 LocalStorageChannel
+    // 逐 origin 实读；无 cookie / 推导不出合法 origin 时无需通道，直接返回
+    // 空 origins（零 CDP 读取）
+    let origins = export_origins_from_cookies(&cookies);
+    let state = if origins.is_empty() {
+        export_storage_state(&cookies, ExportAuthorization::Confirmed)
+            .map_err(|e| invalid_input(e.to_string()))?
+    } else {
+        // 通道不可用（未连接/无活动标签）→ not_ready（storage 命令不触发惰性启动）
+        let channel = slot(core.inner()).local_storage_channel().map_err(not_ready)?;
+        export_storage_state_with_origins(
+            &cookies,
+            &origins,
+            ExportAuthorization::Confirmed,
+            channel.as_ref(),
+        )
+        .await
+        .map_err(|e| match e {
+            // 防御性再检失败（推导面已过滤，正常不可达）：输入面错误
+            StorageStateError::InvalidOrigin { .. } => invalid_input(e.to_string()),
+            // CDP 实读失败 → 透传原因（契约）
+            other => other.to_string(),
+        })?
+    };
     Ok(state.to_json())
 }
 
@@ -687,6 +712,26 @@ mod tests {
     #[derive(Default)]
     struct MockLocalStorageChannel {
         calls: Arc<std::sync::Mutex<Vec<ChannelCall>>>,
+        /// get_dom_storage_items 返回值（按 origin 预设；缺省空——
+        /// 导出聚合断言面，P1-3）。
+        items: Arc<std::sync::Mutex<std::collections::HashMap<String, Vec<(String, String)>>>>,
+    }
+
+    impl MockLocalStorageChannel {
+        /// 预设某 origin 的 localStorage 读取结果（导出聚合断言，P1-3）。
+        fn with_items(mut self, origin: &str, items: Vec<(&str, &str)>) -> Self {
+            self.items
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(
+                    origin.to_string(),
+                    items
+                        .into_iter()
+                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .collect(),
+                );
+            self
+        }
     }
 
     #[async_trait]
@@ -730,7 +775,13 @@ mod tests {
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .push(ChannelCall::GetItems(security_origin.to_string()));
-            Ok(Vec::new())
+            Ok(self
+                .items
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .get(security_origin)
+                .cloned()
+                .unwrap_or_default())
         }
     }
 
@@ -746,6 +797,8 @@ mod tests {
     /// J1b：导出返回形状——授权 + mock 实读 → 标准 storage_state JSON
     /// （`{ cookies, origins }`，§5.1 字段面：会话 cookie expires=-1、
     /// 持久 cookie 原值、sameSite/标志位透传）；内存传递不落盘。
+    /// origins 面（P1-3 接线）：cookie domain 推导 origin（通道预设空
+    /// localStorage → 标准形态空数组）。
     #[tokio::test]
     async fn export_returns_standard_json_with_authorization() {
         use tauri::Manager as _;
@@ -772,13 +825,30 @@ mod tests {
             }),
         ];
         inject_mock(&state, MockStorageOps::new(cookies));
+        // 导出聚合（P1-3）：localStorage 通道 mock（预设空条目——空
+        // localStorage 也须输出标准形态）
+        inject_local_storage_mock(&state, MockLocalStorageChannel::default());
 
         let out = browser_export_storage_state(true, state_ref.clone())
             .await
             .expect("导出不应失败");
         let v: serde_json::Value = serde_json::from_str(&out).expect("标准 JSON");
         assert_eq!(v["cookies"].as_array().map(Vec::len), Some(2));
-        assert_eq!(v["origins"].as_array().map(Vec::len), Some(0), "localStorage 采集未接线（origins 恒空）");
+        assert_eq!(
+            v["origins"].as_array().map(Vec::len),
+            Some(1),
+            "origins 面由 cookie domain 推导（同域去重）"
+        );
+        assert_eq!(
+            v["origins"][0]["origin"],
+            "https://example.com",
+            "任一 secure cookie → https + 去前导点"
+        );
+        assert_eq!(
+            v["origins"][0]["localStorage"].as_array().map(Vec::len),
+            Some(0),
+            "通道读取为空 → localStorage 空数组"
+        );
         assert_eq!(v["cookies"][0]["name"], "sessionid");
         assert_eq!(v["cookies"][0]["value"], "abc123");
         assert_eq!(v["cookies"][0]["domain"], ".example.com");
@@ -792,7 +862,7 @@ mod tests {
     }
 
     /// J1b：导出需显式授权——authorized=false 直接拒绝（**不执行实读**，
-    /// 零副作用，§5.2 显式授权语义）。
+    /// 零副作用，§5.2 显式授权语义）；cookies 与 localStorage 通道均零调用。
     #[tokio::test]
     async fn export_requires_authorization_no_cdp_read() {
         use tauri::Manager as _;
@@ -807,6 +877,10 @@ mod tests {
         let mock = MockStorageOps::new(vec![cdp_cookie(|_| {})]);
         let get_calls = Arc::clone(&mock.get_calls);
         inject_mock(&state, mock);
+        // localStorage 通道 mock（授权拒绝时不得有任何读取调用）
+        let channel = MockLocalStorageChannel::default();
+        let channel_calls = Arc::clone(&channel.calls);
+        inject_local_storage_mock(&state, channel);
 
         let err = browser_export_storage_state(false, state_ref)
             .await
@@ -816,6 +890,10 @@ mod tests {
             get_calls.load(std::sync::atomic::Ordering::SeqCst),
             0,
             "未授权不得执行实读（零副作用）"
+        );
+        assert!(
+            channel_calls.lock().unwrap_or_else(|p| p.into_inner()).is_empty(),
+            "未授权不得经 localStorage 通道执行任何读取（零副作用）"
         );
     }
 
@@ -839,6 +917,97 @@ mod tests {
             err.starts_with("tool.browser.not_ready:"),
             "not_ready 结构化码前缀：{err}"
         );
+    }
+
+    /// P1-3：localStorage 通道不可用（cookie 实读面已 mock 成功但未注入
+    /// 会话通道）→ `tool.browser.not_ready`（导出聚合不触发惰性启动）。
+    #[tokio::test]
+    async fn export_local_storage_channel_unavailable_not_ready() {
+        use tauri::Manager as _;
+        let temp = tempfile::tempdir().expect("临时目录");
+        let state = mock_core_state(&temp);
+        let app = tauri::test::mock_builder()
+            .manage(Arc::clone(&state))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let state_ref = app.state::<Arc<CoreRunState>>();
+
+        // cookie 实读面成功（会话存储面 mock），但 localStorage 通道未注入
+        inject_mock(&state, MockStorageOps::new(vec![cdp_cookie(|c| {
+            c.domain = "example.com".to_string();
+        })]));
+
+        let err = browser_export_storage_state(true, state_ref)
+            .await
+            .expect_err("通道不可用必须失败");
+        assert!(
+            err.starts_with("tool.browser.not_ready:"),
+            "not_ready 结构化码前缀：{err}"
+        );
+    }
+
+    /// P1-3：导出聚合——origin 清单由 cookie domain 推导（secure → https、
+    /// 非 secure → http、去前导点、字典序），经通道逐 origin 实读并入
+    /// origins（标准 Playwright 形态 `{ origin, localStorage: [{ name, value }] }`）。
+    #[tokio::test]
+    async fn export_aggregates_local_storage_origins() {
+        use tauri::Manager as _;
+        let temp = tempfile::tempdir().expect("临时目录");
+        let state = mock_core_state(&temp);
+        let app = tauri::test::mock_builder()
+            .manage(Arc::clone(&state))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let state_ref = app.state::<Arc<CoreRunState>>();
+
+        inject_mock(
+            &state,
+            MockStorageOps::new(vec![
+                cdp_cookie(|c| {
+                    c.domain = ".example.com".to_string();
+                    c.secure = true;
+                }),
+                cdp_cookie(|c| {
+                    c.domain = "example.org".to_string();
+                    c.secure = false;
+                }),
+            ]),
+        );
+        let channel = MockLocalStorageChannel::default()
+            .with_items("https://example.com", vec![("theme", "dark")])
+            .with_items("http://example.org", vec![("token", "abc")]);
+        let channel_calls = Arc::clone(&channel.calls);
+        inject_local_storage_mock(&state, channel);
+
+        let out = browser_export_storage_state(true, state_ref)
+            .await
+            .expect("导出不应失败");
+        let v: serde_json::Value = serde_json::from_str(&out).expect("标准 JSON");
+        assert_eq!(v["cookies"].as_array().map(Vec::len), Some(2));
+        let origins = v["origins"].as_array().expect("origins 数组");
+        assert_eq!(origins.len(), 2);
+        assert_eq!(origins[0]["origin"], "http://example.org", "字典序：http 在前");
+        assert_eq!(origins[0]["localStorage"][0]["name"], "token");
+        assert_eq!(origins[0]["localStorage"][0]["value"], "abc");
+        assert_eq!(
+            origins[1]["origin"],
+            "https://example.com",
+            "secure cookie → https（前导点去除）"
+        );
+        assert_eq!(origins[1]["localStorage"][0]["name"], "theme");
+        assert_eq!(origins[1]["localStorage"][0]["value"], "dark");
+        // 读取命令按推导清单逐 origin 发出（无注入面调用）
+        {
+            let calls = channel_calls.lock().unwrap_or_else(|p| p.into_inner());
+            assert_eq!(
+                calls,
+                vec![
+                    ChannelCall::GetItems("http://example.org".to_string()),
+                    ChannelCall::GetItems("https://example.com".to_string()),
+                ],
+                "导出仅经 get_dom_storage_items 实读（无注入面调用）"
+            );
+        }
     }
 
     /// J1b：导入注入参数断言——返回脱敏统计载荷（§5.3/§5.4：不含 value）；

@@ -455,11 +455,46 @@ mod tests {
         session.shutdown().await;
     }
 
-    /// start 失败映射（ScreencastError::Command → Failed）+ 状态回 Idle。
+    /// start 失败映射（U-3 新语义双断言）：
+    /// - 降级启用（static_fallback_enabled 默认 true）→ startScreencast 失败
+    ///   时 1fps 轮询接管，返回 Ok + 状态机投影 Active + is_degraded=true，
+    ///   停止后退出降级（is_degraded=false）；
+    /// - 降级禁用 → 旧语义保留：失败（ScreencastError::Command → Failed）
+    ///   + 状态回 Idle + 不进入降级轮询。
     #[tokio::test]
     async fn start_failure_maps_to_failed() {
+        // —— 降级启用（默认）：失败 → Ok + Active + 降级轮询接管 ——
         let (mock, session) = setup().await;
         let frames = ScreencastSession::new(session.clone(), ScreencastConfig::default());
+        let source = CdpScreencastSource::new(Arc::new(frames));
+        mock.set_auto_reply(
+            "Page.startScreencast",
+            MockReply::Error {
+                code: -32000,
+                message: "screencast not supported".to_string(),
+            },
+        );
+        source.start(default_policy()).await.expect("降级接管应返回 Ok");
+        assert_eq!(
+            source.status(),
+            FrameSourceStatus::Active,
+            "降级后状态机投影仍为 Active（帧流运行中）"
+        );
+        assert!(source.session().is_degraded(), "应处于静态降级轮询");
+        source.stop().await.expect("停止失败");
+        assert!(!source.session().is_degraded(), "停止后退出降级轮询");
+        source.session().shutdown().await;
+        session.shutdown().await;
+
+        // —— 降级禁用（旧语义保留）：失败 → Failed + 状态回 Idle ——
+        let (mock, session) = setup().await;
+        let frames = ScreencastSession::new(
+            session.clone(),
+            ScreencastConfig {
+                static_fallback_enabled: false,
+                ..Default::default()
+            },
+        );
         let source = CdpScreencastSource::new(Arc::new(frames));
         mock.set_auto_reply(
             "Page.startScreencast",
@@ -474,6 +509,7 @@ mod tests {
             "实际错误：{err:?}"
         );
         assert_eq!(source.status(), FrameSourceStatus::Idle, "失败回 Idle");
+        assert!(!source.session().is_degraded(), "降级禁用时不进入降级轮询");
         source.session().shutdown().await;
         session.shutdown().await;
     }
