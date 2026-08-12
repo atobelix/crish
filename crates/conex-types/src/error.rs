@@ -6,7 +6,7 @@
 //! - 03-ERROR-MIGRATION.md §2.2（码表）/ §6（IPC 序列化）
 //!
 //! 设计要点：
-//! - CrishError 用 struct 而非 enum（83 码跨 20 域，enum 不可维护）
+//! - CrishError 用 struct 而非 enum（102 码跨 20 域，enum 不可维护）
 //! - 错误码通过 codes 模块常量 + CRISH_ERROR_REGISTRY 静态注册表表达
 //! - CrishErrorPayload 是 IPC 序列化类型，字段与 TS 端 CrishErrorPayload 一一对应
 //! - cause 链递归深度上限 8（CRISH_ERROR_CAUSE_MAX_DEPTH）
@@ -46,7 +46,7 @@ pub struct CrishErrorInfo {
     pub action: &'static str,
 }
 
-/// 错误码常量集（TS 端 CrishErrorCode 同构，83 码 / 20 域）
+/// 错误码常量集（TS 端 CrishErrorCode 同构，102 码 / 20 域）
 ///
 /// 来源：packages/shared-types/src/errors/codes.ts
 /// 权威：03-ERROR-MIGRATION.md §2.2
@@ -55,13 +55,16 @@ pub mod codes {
     pub const CONFIG_INVALID: &str = "config.invalid";
     pub const CONFIG_MISSING: &str = "config.missing";
     pub const CONFIG_PARSE_FAILED: &str = "config.parse_failed";
-    // ── session 域（6 正式码）──
+    // ── session 域（6 正式码 + 1 跨线共享码）──
     pub const SESSION_NOT_FOUND: &str = "session.not_found";
     pub const SESSION_INVALID_SESSION: &str = "session.invalid_session";
     pub const SESSION_INVALID_ENTRY: &str = "session.invalid_entry";
     pub const SESSION_INVALID_STATE: &str = "session.invalid_state";
     pub const SESSION_STORAGE_FAILED: &str = "session.storage_failed";
     pub const SESSION_REWIND_FAILED: &str = "session.rewind_failed";
+    /// 会话互斥（S3 ActivationGate 跨线共享码：browser_* 与 computer_* 共用，
+    /// 06 文档 §5 码表；登记归属 session 域，守卫检查点在审批之前）
+    pub const TOOL_SESSION_EXCLUSIVE: &str = "tool.session.exclusive";
     // ── agent 域（3 reserved 码）──
     pub const AGENT_MAX_TURNS_REACHED: &str = "agent.max_turns_reached";
     pub const AGENT_NO_PROGRESS: &str = "agent.no_progress";
@@ -126,6 +129,23 @@ pub mod codes {
     pub const TOOL_BROWSER_TAB_LIMIT_EXCEEDED: &str = "tool.browser.tab_limit_exceeded";
     /// 浏览器能力未接线（引擎侧未注入会话，P1 接线后消除）
     pub const TOOL_BROWSER_UNWIRED: &str = "tool.browser.unwired";
+    // ── computer 域（8 正式码，06 文档 §5 码表 + 04/18 文档语义）──
+    /// 参数非法（04 §2.1 / 18 §2.1：枚举/取值/组合合法性校验失败）
+    pub const TOOL_COMPUTER_INVALID_PARAMS: &str = "tool.computer.invalid_params";
+    /// 坐标越界（18 §4.4 API 空间边界校验失败；含 zoom region 越界）
+    pub const TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS: &str = "tool.computer.coords_out_of_bounds";
+    /// 提权窗口拒绝（18 §9 R3 / 05 文档 gate：UI-PIA 会话隔离，注入受限，不静默失败）
+    pub const TOOL_COMPUTER_ELEVATED_WINDOW: &str = "tool.computer.elevated_window";
+    /// 会话未开启/已挂起（运行期动作准入拒绝，零副作用；挂载后禁用兜底）
+    pub const TOOL_COMPUTER_NOT_ENABLED: &str = "tool.computer.not_enabled";
+    /// 电脑操作会话未注入/恢复期（工具面 gating，对齐 browser 的 not_ready 语义）
+    pub const TOOL_COMPUTER_NOT_READY: &str = "tool.computer.not_ready";
+    /// 急停/取消（全局急停或会话级中止令牌触发，04 §4.3）
+    pub const TOOL_COMPUTER_CANCELLED: &str = "tool.computer.cancelled";
+    /// 能力缺失（UIA+视觉双通道皆无 → 拒绝启用，18 §3.4 降级矩阵第 4 格）
+    pub const TOOL_COMPUTER_CAPABILITY_UNAVAILABLE: &str = "tool.computer.capability_unavailable";
+    /// 未接线（骨架阶段占位；实施轮接线后消除，对齐 browser 的 unwired 先例）
+    pub const TOOL_COMPUTER_UNWIRED: &str = "tool.computer.unwired";
     // ── mcp 域（3 正式码）──
     pub const MCP_CONNECTION_FAILED: &str = "mcp.connection_failed";
     pub const MCP_PROTOCOL_VIOLATION: &str = "mcp.protocol_violation";
@@ -142,6 +162,9 @@ pub mod codes {
     /// 子 Agent 内调用 run_subagent 一律拒绝——新语义单独登记，不复用
     /// depth_exceeded 避免前端文案歧义）
     pub const SUBAGENT_NESTING_DENIED: &str = "subagent.nesting_denied";
+    /// 子代理不存在（D4 D-5：kill_subagent 等单目标操作的 NotFound 结构化
+    /// 错误码——会话内 (session_id, agent_id) 主键定位失败，工具层与命令层共用）
+    pub const SUBAGENT_NOT_FOUND: &str = "subagent.not_found";
     pub const SUBAGENT_TIMEOUT: &str = "subagent.timeout";
     // ── plugin 域（3 正式码）──
     pub const PLUGIN_NOT_FOUND: &str = "plugin.not_found";
@@ -185,9 +208,9 @@ pub mod codes {
     pub const GOAL_MAX_ROUNDS: &str = "goal.max_rounds";
 }
 
-/// 错误码元信息注册表（TS 端 CRISH_ERROR_REGISTRY 同构，83 条）
+/// 错误码元信息注册表（TS 端 CRISH_ERROR_REGISTRY 同构，102 条）
 static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy::new(|| {
-    let mut m = HashMap::with_capacity(92);
+    let mut m = HashMap::with_capacity(102);
     // ── config 域 ──
     m.insert(codes::CONFIG_INVALID, CrishErrorInfo {
         code: codes::CONFIG_INVALID, title: "配置项非法",
@@ -234,6 +257,13 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
         code: codes::SESSION_REWIND_FAILED, title: "会话回滚失败",
         category: CrishErrorCategory::Permanent, retryable: false,
         is_public: true, action: "action.session.check_rewind_target",
+    });
+    // 跨线共享码（S3 ActivationGate 互斥守卫，browser_* 与 computer_* 共用；
+    // 06 文档 §5 码表：登记归属 session 域，等待会话切换）
+    m.insert(codes::TOOL_SESSION_EXCLUSIVE, CrishErrorInfo {
+        code: codes::TOOL_SESSION_EXCLUSIVE, title: "会话互斥",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.session.wait_switch",
     });
     // ── agent 域 ──
     m.insert(codes::AGENT_MAX_TURNS_REACHED, CrishErrorInfo {
@@ -470,6 +500,55 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
         category: CrishErrorCategory::Permanent, retryable: false,
         is_public: true, action: "action.browser.check_supported",
     });
+    // ── computer 域（8 正式码：06 文档 §5 码表语义 + 任务分类裁决）──
+    // 参数非法——Permanent/不可重试（模型修参后重试，非自动重试）
+    m.insert(codes::TOOL_COMPUTER_INVALID_PARAMS, CrishErrorInfo {
+        code: codes::TOOL_COMPUTER_INVALID_PARAMS, title: "参数非法",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.computer.fix_input",
+    });
+    // 坐标越界——Permanent/不可重试（模型需取新感知）
+    m.insert(codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS, CrishErrorInfo {
+        code: codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS, title: "坐标越界",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.computer.refresh_perception",
+    });
+    // 提权窗口——Security/不可重试（UI-PIA 会话隔离，需用户手动操作）
+    m.insert(codes::TOOL_COMPUTER_ELEVATED_WINDOW, CrishErrorInfo {
+        code: codes::TOOL_COMPUTER_ELEVATED_WINDOW, title: "提权窗口拒绝",
+        category: CrishErrorCategory::Security, retryable: false,
+        is_public: true, action: "action.computer.manual_operation",
+    });
+    // 会话未开启——Permanent/不可重试（需用户重新显式开启）
+    m.insert(codes::TOOL_COMPUTER_NOT_ENABLED, CrishErrorInfo {
+        code: codes::TOOL_COMPUTER_NOT_ENABLED, title: "会话未开启",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.computer.enable_session",
+    });
+    // 会话未就绪——Transient/可重试（等待会话注入/恢复完成）
+    m.insert(codes::TOOL_COMPUTER_NOT_READY, CrishErrorInfo {
+        code: codes::TOOL_COMPUTER_NOT_READY, title: "电脑会话未就绪",
+        category: CrishErrorCategory::Transient, retryable: true,
+        is_public: true, action: "action.computer.wait_retry",
+    });
+    // 急停/取消——Permanent/不可重试（对齐 browser.cancelled，不计入重试额度）
+    m.insert(codes::TOOL_COMPUTER_CANCELLED, CrishErrorInfo {
+        code: codes::TOOL_COMPUTER_CANCELLED, title: "电脑操作已取消",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: false, action: "action.computer.none",
+    });
+    // 能力缺失——Security/不可重试（UIA+视觉双通道皆无，缺依赖）
+    m.insert(codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE, CrishErrorInfo {
+        code: codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE, title: "能力不可用",
+        category: CrishErrorCategory::Security, retryable: false,
+        is_public: true, action: "action.computer.check_capability",
+    });
+    // 未接线——Permanent/不可重试（骨架占位，实施轮接线后消除）
+    m.insert(codes::TOOL_COMPUTER_UNWIRED, CrishErrorInfo {
+        code: codes::TOOL_COMPUTER_UNWIRED, title: "电脑能力未接线",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.computer.check_supported",
+    });
     // ── mcp 域 ──
     m.insert(codes::MCP_CONNECTION_FAILED, CrishErrorInfo {
         code: codes::MCP_CONNECTION_FAILED, title: "MCP 连接失败",
@@ -527,6 +606,11 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
         code: codes::SUBAGENT_NESTING_DENIED, title: "子代理嵌套禁止",
         category: CrishErrorCategory::Permanent, retryable: false,
         is_public: true, action: "action.subagent.ask_main_agent",
+    });
+    m.insert(codes::SUBAGENT_NOT_FOUND, CrishErrorInfo {
+        code: codes::SUBAGENT_NOT_FOUND, title: "子代理不存在",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.subagent.verify_id",
     });
     m.insert(codes::SUBAGENT_TIMEOUT, CrishErrorInfo {
         code: codes::SUBAGENT_TIMEOUT, title: "子代理超时",
@@ -708,7 +792,7 @@ fn now_millis() -> i64 {
 /// Crish 错误类型（struct，非 enum）
 ///
 /// Crish 错误类型（struct，非 enum），与 TS 端 CrishError class 同构。
-/// 83 码通过 code: String 表达，
+/// 102 码通过 code: String 表达，
 /// category/retryable 由 info(code) 在构造时决定，可通过 with_* 覆盖。
 /// cause 链在 to_error_payload 时按 depth 截断。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1352,6 +1436,38 @@ mod tests {
         assert_eq!(err.code, codes::TOOL_WRITE_PATH_CONFLICT);
         assert_eq!(err.category, CrishErrorCategory::Permanent);
         assert!(!err.is_retryable());
+    }
+
+    // ── S5：tool.computer.* 8 码 + tool.session.exclusive 登记断言（06 文档 §5 码表）──
+
+    /// computer 域 8 码 + 跨线共享码 tool.session.exclusive 全部已登记，
+    /// category/retryable/is_public 按 06 文档 §5 码表语义与任务分类裁决派生。
+    #[test]
+    fn computer_codes_registered() {
+        let cases: [(&str, CrishErrorCategory, bool, bool); 9] = [
+            // (码, category, retryable, is_public)
+            (codes::TOOL_COMPUTER_INVALID_PARAMS, CrishErrorCategory::Permanent, false, true),
+            (codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS, CrishErrorCategory::Permanent, false, true),
+            (codes::TOOL_COMPUTER_ELEVATED_WINDOW, CrishErrorCategory::Security, false, true),
+            (codes::TOOL_COMPUTER_NOT_ENABLED, CrishErrorCategory::Permanent, false, true),
+            (codes::TOOL_COMPUTER_NOT_READY, CrishErrorCategory::Transient, true, true),
+            (codes::TOOL_COMPUTER_CANCELLED, CrishErrorCategory::Permanent, false, false),
+            (codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE, CrishErrorCategory::Security, false, true),
+            (codes::TOOL_COMPUTER_UNWIRED, CrishErrorCategory::Permanent, false, true),
+            (codes::TOOL_SESSION_EXCLUSIVE, CrishErrorCategory::Permanent, false, true),
+        ];
+        for (code, category, retryable, is_public) in cases {
+            let info_val = info(code);
+            assert_eq!(info_val.code, code, "{code} 必须已登记");
+            assert_eq!(info_val.category, category, "{code} category 不符");
+            assert_eq!(info_val.retryable, retryable, "{code} retryable 不符");
+            assert_eq!(info_val.is_public, is_public, "{code} is_public 不符");
+            // 构造错误：category/retryable 由注册表派生，payload 出站正确
+            let err = CrishError::new(code, "test");
+            assert_eq!(err.code, code);
+            assert_eq!(err.category, category);
+            assert_eq!(err.is_retryable(), retryable);
+        }
     }
 
     // ── PE-03 T03.3：core_error_code 显式映射（6 kind × 主码表 + 注册存在性）──    /// 6 个 kind 全部映射到 78 码体系主码（§2.4.2 映射表逐行断言）。

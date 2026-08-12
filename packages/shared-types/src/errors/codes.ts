@@ -1,24 +1,29 @@
 // packages/shared-types/src/errors/codes.ts
 // 错误码权威定义，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测码数：82 正式码 + 10 reserved 码 = 92 码 / 20 域
+// 实测码数：92 正式码 + 10 reserved 码 = 102 码 / 20 域
 // （R6 扩展：新增 goal 域 3 码，event_store.read_failed 已在 R1 注册；
 //  PE-03 T03.3 补 store.io / common.invalid_input / common.encoding；
 //  F8-02：tool.write_path_conflict 并入（写路径互斥，agent-tools 局部码注册）；
 //  R13/B3：tool.browser.* 9 码并入 tool 域（维度 17 §1.3 码表 + 22 裁决 U-12，
-//  三段式点分码，isCrishErrorCode 放宽为多段形态））
+//  三段式点分码，isCrishErrorCode 放宽为多段形态）；
+//  S5：tool.computer.* 8 码 + tool.session.exclusive + subagent.not_found 并入
+//  （06 文档 §5 码表，码表同步轮；tool.session.exclusive 为跨线共享码））
 
 export type CrishErrorCode =
   // ── config 域（3 正式码）──
   | 'config.invalid'
   | 'config.missing'
   | 'config.parse_failed'
-  // ── session 域（6 正式码）──
+  // ── session 域（6 正式码 + 1 跨线共享码）──
   | 'session.not_found'
   | 'session.invalid_session'
   | 'session.invalid_entry'
   | 'session.invalid_state'
   | 'session.storage_failed'
   | 'session.rewind_failed'
+  // S5：会话互斥（S3 ActivationGate 跨线共享码：browser_* 与 computer_* 共用；
+  // 登记归属 session 域，守卫检查点在审批之前）
+  | 'tool.session.exclusive'
   // ── agent 域（3 reserved 码，无真实 throw 场景）──
   | 'agent.max_turns_reached'
   | 'agent.no_progress'
@@ -71,6 +76,17 @@ export type CrishErrorCode =
   | 'tool.browser.eval_forbidden'
   | 'tool.browser.tab_limit_exceeded'
   | 'tool.browser.unwired'
+  // ── tool.computer 子域（8 正式码，06 文档 §5 码表 + 04/18 文档语义）──
+  // 电脑操作工具面：参数校验/坐标边界/提权窗口隔离/会话准入/恢复期 gating/
+  // 急停取消/能力通道缺失/未接线占位
+  | 'tool.computer.invalid_params'
+  | 'tool.computer.coords_out_of_bounds'
+  | 'tool.computer.elevated_window'
+  | 'tool.computer.not_enabled'
+  | 'tool.computer.not_ready'
+  | 'tool.computer.cancelled'
+  | 'tool.computer.capability_unavailable'
+  | 'tool.computer.unwired'
   // ── mcp 域（3 正式码）──
   | 'mcp.connection_failed'
   | 'mcp.protocol_violation'
@@ -82,10 +98,12 @@ export type CrishErrorCode =
   | 'store.capacity_exceeded'
   // PE-03 T03.3：存储/IO 失败（CoreError::Io 显式映射主码，与 store.write_failed 分流）
   | 'store.io'
-  // ── subagent 域（3 正式码 + 1 reserved）──
+  // ── subagent 域（4 正式码 + 1 reserved）──
   | 'subagent.depth_exceeded'
   | 'subagent.nesting_denied'
   | 'subagent.deadlock_detected'
+  // S5：子代理不存在（D4 D-5：kill_subagent 等单目标操作的 NotFound 结构化错误码）
+  | 'subagent.not_found'
   | 'subagent.timeout'
   // ── plugin 域（3 正式码）──
   | 'plugin.not_found'

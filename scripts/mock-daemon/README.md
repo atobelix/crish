@@ -34,18 +34,18 @@ npm run typecheck                 # tsc --noEmit（strict + exactOptionalPropert
 
 ## 启动参数（CLI）
 
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `--host <addr>` | `127.0.0.1` | 监听地址；真机联调（手机连同一局域网）用 `0.0.0.0` |
-| `--port <n>` | `8765` | 监听端口（对齐网关端口裁决 P-1） |
-| `--pair` / `--no-pair` | `--pair` | 配对模式开关。开：必须先走 pair.* 流程；关：跳过配对直接握手 |
-| `--pair-code <码>` | `CXN-7K4P-Q2MB-9XRT` | 配对码（格式 CXN-XXXX-XXXX-XXXX；`pair.hello` 校验） |
-| `--scenario <id>` | `idle` | 夹具场景：`idle` / `approval` / `run` / `cache`（`--list` 查看说明） |
-| `--loop` | 关 | 场景循环播放（仅 `run` / `cache` 可循环；交互式 `approval` 不循环） |
-| `--scenario-speed <倍率>` | `1` | 时间线速度倍率（≤1 加速，`0` = 立即发射；测试用） |
-| `-v` / `--verbose` | 关 | 调试日志 |
-| `-q` / `--quiet` | 关 | 只输出错误 |
-| `--list` / `-h` | — | 列出场景 / 帮助 |
+| 参数                      | 默认                 | 说明                                                                 |
+| ------------------------- | -------------------- | -------------------------------------------------------------------- |
+| `--host <addr>`           | `127.0.0.1`          | 监听地址；真机联调（手机连同一局域网）用 `0.0.0.0`                   |
+| `--port <n>`              | `8765`               | 监听端口（对齐网关端口裁决 P-1）                                     |
+| `--pair` / `--no-pair`    | `--pair`             | 配对模式开关。开：必须先走 pair.* 流程；关：跳过配对直接握手         |
+| `--pair-code <码>`        | `CXN-7K4P-Q2MB-9XRT` | 配对码（格式 CXN-XXXX-XXXX-XXXX；`pair.hello` 校验）                 |
+| `--scenario <id>`         | `idle`               | 夹具场景：`idle` / `approval` / `run` / `cache`（`--list` 查看说明） |
+| `--loop`                  | 关                   | 场景循环播放（仅 `run` / `cache` 可循环；交互式 `approval` 不循环）  |
+| `--scenario-speed <倍率>` | `1`                  | 时间线速度倍率（≤1 加速，`0` = 立即发射；测试用）                    |
+| `-v` / `--verbose`        | 关                   | 调试日志                                                             |
+| `-q` / `--quiet`          | 关                   | 只输出错误                                                           |
+| `--list` / `-h`           | —                    | 列出场景 / 帮助                                                      |
 
 示例：
 
@@ -60,27 +60,28 @@ npm run start -- --no-pair --scenario run --loop
 
 ### 入站（客户端 → mock）
 
-| kind | 说明 |
-|------|------|
-| `pair.hello` → `pair.verify` | 配对流程（校验配对码；挑战/签名不验签，仅要求非空） |
-| `auth.hello` | 握手（版本协商：必须包含协议版本 1；配对模式下要求已配对） |
-| `auth.refresh` | 重连刷新（不验签；成功静默，失败回 `error auth.expired`） |
-| `events.subscribe` | 会话订阅（≤32 会话；回 `events.subscribe.ok`，携带逐会话 nextSequence/stale） |
-| `events.subscribeAll` | 全局轻订阅（协议无 ack，静默登记） |
-| `events.resume` | 断线续传（开区间分页，复用 EventPage 契约；末页后补发 `events.resume.done`） |
-| `remote.approve` / `remote.deny` | 审批决策（I-02 冲突语义 + msgId 幂等回显；成功后广播 `approval-resolved`） |
-| `remote.listPendingApprovals` / `remote.approvalHistory` | 待办对账 / 决策历史 |
-| `remote.getStatus` / `getRunSnapshot` / `readSessionEvents` / `readRunEvents` / `listSessions` / `listCommands` / `getSearchIndex` | 监控/查询面夹具 |
-| `remote.checkCommand` / `runControl` / `cancelRun` | 审批预览 / run 控制（仅记录，不改状态） |
-| `remote.getSettings` / `queryPresence` / `listDevices` / `getPairState` / `renameDevice` / `writeFile` | 设置/设备/文件面夹具（writeFile 幂等回显，不落盘） |
-| 其余 `remote.*`（runTask/searchSessions/文件只读面等） | 回 `error {code: cmd.unknown, retryable: false}`（诚实未实现） |
-| `heartbeat` | 回 `heartbeat.ok`（serverTime 时钟校准） |
-| `device.unlink` | 解除配对（静默，README 约定无 ack） |
-| `error` | 记录日志（联调观察用） |
+| kind                                                                                                                               | 说明                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pair.hello` → `pair.verify`                                                                                                       | 配对流程（校验配对码——PairCode::normalize 容错前缀/分隔符/大小写，与 Rust pair.rs 对齐（对拍裁决 2026-08-11）；挑战/签名不验签，仅要求非空） |
+| `auth.hello`                                                                                                                       | 握手（版本协商：必须包含协议版本 1；配对模式下要求已配对）                                                                                   |
+| `auth.refresh`                                                                                                                     | 重连刷新（不验签；成功静默，失败回 `error auth.expired`）                                                                                    |
+| `events.subscribe`                                                                                                                 | 会话订阅（≤32 会话；回 `events.subscribe.ok`，携带逐会话 nextSequence/stale）                                                                |
+| `events.subscribeAll`                                                                                                              | 全局轻订阅（协议无 ack，静默登记）                                                                                                           |
+| `events.resume`                                                                                                                    | 断线续传（开区间分页，复用 EventPage 契约；末页后补发 `events.resume.done`）                                                                 |
+| `remote.approve` / `remote.deny`                                                                                                   | 审批决策（I-02 冲突语义 + msgId 幂等回显；成功后广播 `approval-resolved`）                                                                   |
+| `remote.listPendingApprovals` / `remote.approvalHistory`                                                                           | 待办对账 / 决策历史                                                                                                                          |
+| `remote.getStatus` / `getRunSnapshot` / `readSessionEvents` / `readRunEvents` / `listSessions` / `listCommands` / `getSearchIndex` | 监控/查询面夹具                                                                                                                              |
+| `remote.checkCommand` / `runControl` / `cancelRun`                                                                                 | 审批预览 / run 控制（仅记录，不改状态）                                                                                                      |
+| `remote.getSettings` / `queryPresence` / `listDevices` / `getPairState` / `renameDevice` / `writeFile`                             | 设置/设备/文件面夹具（writeFile 幂等回显，不落盘）                                                                                           |
+| 其余 `remote.*`（runTask/searchSessions/文件只读面等）                                                                             | 回 `error {code: cmd.unknown, retryable: false}`（诚实未实现）                                                                               |
+| `heartbeat`                                                                                                                        | 回 `heartbeat.ok`（serverTime 时钟校准）                                                                                                     |
+| `device.unlink`                                                                                                                    | 解除配对（静默，README 约定无 ack）                                                                                                          |
+| `error`                                                                                                                            | 记录日志（联调观察用）                                                                                                                       |
 
 ### 出站（mock → 客户端）
 
-`pair.challenge` / `pair.ok` / `device.ready` / `auth.hello.ok`（含 manifest）/ `events.subscribe.ok` /
+`pair.challenge` / `pair.ok`（desktopId + ttl + token 明文扩展，与 Rust pair_ok_body
+对齐，对拍裁决 2026-08-11）/ `device.ready` / `auth.hello.ok`（含 manifest）/ `events.subscribe.ok` /
 `events.push`（一帧一事件，载荷 = AgentEventEnvelope 扁平 JSON）/ `events.resume.page` /
 `events.resume.done` / `result.<name>`（reqMsgId 关联）/ `heartbeat.ok` / `error`。
 
@@ -97,12 +98,12 @@ npm run start -- --no-pair --scenario run --loop
 事件载荷与引擎事件信封逐字段同构（`crates/conex-types/src/events.rs` 序列化形态），
 出站前经 generated/device 解析器自检，测试中对 `parseEngineEvent` 断言——移动端解析不炸。
 
-| 场景 | 会话 id | 内容 | 交互 |
-|------|---------|------|------|
-| `idle` | （任意） | 不自动发射事件，仅回应用户消息 | 否 |
-| `approval` | `s-mock-approval` | run 启动 → 消息流 → **approval-requested（闸门，等待决策）** → 客户端 approve/deny → `approval-resolved` 广播 → 工具执行 → run 收口 | **是**（决策后继续时间线） |
-| `run` | `s-mock-run` | run 生命周期：agent-start → turn-start → 流式 message-delta → message-end → 两轮工具调用（shell:read/write）→ turn-end → agent-end → run-terminal | 否（可 `--loop`） |
-| `cache` | `s-mock-cache` | 缓存指标事件：cold-cache-warning（run 启动）→ 消息流 → cache-waste-alert（命中引擎阈值语义）→ run 收口 + cache-stats-updated | 否（可 `--loop`） |
+| 场景       | 会话 id           | 内容                                                                                                                                              | 交互                       |
+| ---------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `idle`     | （任意）          | 不自动发射事件，仅回应用户消息                                                                                                                    | 否                         |
+| `approval` | `s-mock-approval` | run 启动 → 消息流 → **approval-requested（闸门，等待决策）** → 客户端 approve/deny → `approval-resolved` 广播 → 工具执行 → run 收口               | **是**（决策后继续时间线） |
+| `run`      | `s-mock-run`      | run 生命周期：agent-start → turn-start → 流式 message-delta → message-end → 两轮工具调用（shell:read/write）→ turn-end → agent-end → run-terminal | 否（可 `--loop`）          |
+| `cache`    | `s-mock-cache`    | 缓存指标事件：cold-cache-warning（run 启动）→ 消息流 → cache-waste-alert（命中引擎阈值语义）→ run 收口 + cache-stats-updated                      | 否（可 `--loop`）          |
 
 **触发方式**：场景在**首个客户端订阅其会话**时自动启动（`idle` 除外）；`approval` 场景的
 待审批项在决策前一直挂起，`listPendingApprovals` / `getStatus` 均反映该待办。
@@ -112,6 +113,8 @@ npm run start -- --no-pair --scenario run --loop
 1. **连接 URL**：`ws://<桌面 IP>:8765`（桌面启动参数 `--host 0.0.0.0`；手机与桌面同一局域网）。
 2. **配对码**：默认 `CXN-7K4P-Q2MB-9XRT`（`--pair-code` 可改）；配对失败错误码
    `pair.invalid_code` / `pair.challenge_mismatch` / `pair.no_challenge`。
+   输入容错（前缀/分隔符/大小写/空白）与 Rust `PairCode::normalize` 一致
+   （对拍裁决 2026-08-11）：wire 形态（12 位无前缀）与展示形态均可配对。
 3. **推荐场景**：审批中心联调用 `--scenario approval`；会话/事件流联调用 `--scenario run`；
    缓存指标卡联调用 `--scenario cache`。
 4. **断线续传**：重连 = 新连接 + 同 deviceId → `auth.hello` → `events.subscribe`

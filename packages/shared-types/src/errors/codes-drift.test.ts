@@ -33,7 +33,8 @@ function rustCodesFromErrorRs(): string[] {
     REPO_ROOT + 'crates/conex-types/src/error.rs',
     'utf8'
   );
-  const re = /pub const [A-Z][A-Z0-9_]*: &str = "([a-z][a-z0-9_]*(\.[a-z_]+)+)";/g;
+  const re =
+    /pub const [A-Z][A-Z0-9_]*: &str = "([a-z][a-z0-9_]*(\.[a-z_]+)+)";/g;
   const codes: string[] = [];
   for (const m of src.matchAll(re)) {
     if (m[1] !== undefined) codes.push(m[1]);
@@ -95,6 +96,25 @@ describe('F8-42：TS↔Rust 错误码清单双向漂移', () => {
       'tool.browser.eval_forbidden',
       'tool.browser.tab_limit_exceeded',
       'tool.browser.unwired',
+    ]) {
+      expect(rustCodes).toContain(code);
+      expect(tsCodes).toContain(code);
+      expect(getErrorInfo(code as CrishErrorCode).code).toBe(code);
+    }
+  });
+
+  it('S5：tool.computer.* 8 码 + tool.session.exclusive + subagent.not_found 已进 Rust codes 模块与 TS 注册表', () => {
+    for (const code of [
+      'tool.computer.invalid_params',
+      'tool.computer.coords_out_of_bounds',
+      'tool.computer.elevated_window',
+      'tool.computer.not_enabled',
+      'tool.computer.not_ready',
+      'tool.computer.cancelled',
+      'tool.computer.capability_unavailable',
+      'tool.computer.unwired',
+      'tool.session.exclusive',
+      'subagent.not_found',
     ]) {
       expect(rustCodes).toContain(code);
       expect(tsCodes).toContain(code);

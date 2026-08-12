@@ -1,10 +1,12 @@
 // packages/shared-types/src/errors/info.ts
 // 错误码元信息注册表，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测条目数：82 正式码 + 10 reserved 码 = 92 条
+// 实测条目数：92 正式码 + 10 reserved 码 = 102 条
 // （R6 扩展：新增 goal 域 3 码；PE-03 T03.3 补 store.io / common.invalid_input / common.encoding；
 //  F8-02：tool.write_path_conflict 并入——写路径互斥，原 agent-tools 局部码；
 //  R13/B3：tool.browser.* 9 码并入 tool 域——浏览器工具面（维度 17 §1.3 + 22 裁决 U-12），
-//  语义与 conex-browser-tools/src/codes.rs 及 14 §5.1 分类映射对齐）
+//  语义与 conex-browser-tools/src/codes.rs 及 14 §5.1 分类映射对齐；
+//  S5：tool.computer.* 8 码 + tool.session.exclusive + subagent.not_found 并入
+//  （06 文档 §5 码表，码表同步轮；元信息与 Rust error.rs 注册表逐字一致））
 
 import type { CrishErrorCode, CrishErrorCategory } from './codes';
 
@@ -45,7 +47,7 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     public: true,
     action: 'action.config.verify_syntax',
   },
-  // ── session 域（6 正式码）──
+  // ── session 域（6 正式码 + 1 跨线共享码）──
   'session.not_found': {
     code: 'session.not_found',
     title: '会话未找到',
@@ -93,6 +95,16 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     retryable: false,
     public: true,
     action: 'action.session.check_rewind_target',
+  },
+  // S5：跨线共享码（S3 ActivationGate 互斥守卫，browser_* 与 computer_* 共用；
+  // 06 文档 §5 码表：登记归属 session 域，等待会话切换）
+  'tool.session.exclusive': {
+    code: 'tool.session.exclusive',
+    title: '会话互斥',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.session.wait_switch',
   },
   // ── agent 域（3 reserved 码）──
   'agent.max_turns_reached': {
@@ -450,6 +462,79 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     public: true,
     action: 'action.browser.check_version',
   },
+  // ── tool.computer 子域（8 正式码：06 文档 §5 码表语义 + 任务分类裁决）──
+  // 参数非法——Permanent/不可重试（模型修参后重试，非自动重试）
+  'tool.computer.invalid_params': {
+    code: 'tool.computer.invalid_params',
+    title: '参数非法',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.computer.fix_input',
+  },
+  // 坐标越界——Permanent/不可重试（模型需取新感知）
+  'tool.computer.coords_out_of_bounds': {
+    code: 'tool.computer.coords_out_of_bounds',
+    title: '坐标越界',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.computer.refresh_perception',
+  },
+  // 提权窗口——Security/不可重试（UI-PIA 会话隔离，需用户手动操作）
+  'tool.computer.elevated_window': {
+    code: 'tool.computer.elevated_window',
+    title: '提权窗口拒绝',
+    category: 'security',
+    retryable: false,
+    public: true,
+    action: 'action.computer.manual_operation',
+  },
+  // 会话未开启——Permanent/不可重试（需用户重新显式开启）
+  'tool.computer.not_enabled': {
+    code: 'tool.computer.not_enabled',
+    title: '会话未开启',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.computer.enable_session',
+  },
+  // 会话未就绪——Transient/可重试（等待会话注入/恢复完成）
+  'tool.computer.not_ready': {
+    code: 'tool.computer.not_ready',
+    title: '电脑会话未就绪',
+    category: 'transient',
+    retryable: true,
+    public: true,
+    action: 'action.computer.wait_retry',
+  },
+  // 急停/取消——Permanent/不可重试（对齐 browser.cancelled，不计入重试额度）
+  'tool.computer.cancelled': {
+    code: 'tool.computer.cancelled',
+    title: '电脑操作已取消',
+    category: 'permanent',
+    retryable: false,
+    public: false,
+    action: 'action.computer.none',
+  },
+  // 能力缺失——Security/不可重试（UIA+视觉双通道皆无，缺依赖）
+  'tool.computer.capability_unavailable': {
+    code: 'tool.computer.capability_unavailable',
+    title: '能力不可用',
+    category: 'security',
+    retryable: false,
+    public: true,
+    action: 'action.computer.check_capability',
+  },
+  // 未接线——Permanent/不可重试（骨架占位，实施轮接线后消除）
+  'tool.computer.unwired': {
+    code: 'tool.computer.unwired',
+    title: '电脑能力未接线',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.computer.check_supported',
+  },
   // ── mcp 域（3 正式码）──
   'mcp.connection_failed': {
     code: 'mcp.connection_failed',
@@ -516,7 +601,7 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     public: true,
     action: 'action.store.cleanup_or_expand',
   },
-  // ── subagent 域（3 正式码 + 1 reserved）──
+  // ── subagent 域（4 正式码 + 1 reserved）──
   'subagent.depth_exceeded': {
     code: 'subagent.depth_exceeded',
     title: '子代理递归深度超限',
@@ -532,6 +617,15 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     retryable: false,
     public: true,
     action: 'action.subagent.ask_main_agent',
+  },
+  // S5：子代理不存在（D4 D-5：kill_subagent 等单目标操作的 NotFound 结构化错误码）
+  'subagent.not_found': {
+    code: 'subagent.not_found',
+    title: '子代理不存在',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.subagent.verify_id',
   },
   'subagent.deadlock_detected': {
     code: 'subagent.deadlock_detected',

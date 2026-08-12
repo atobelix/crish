@@ -17,15 +17,27 @@ agent-tools = { path = "../agent-tools" }
 # 电脑操作会话面（Action/ActionResult/SessionError/ComputerSession/PerceptionSnapshot 等
 # pub 导出；S1/S2 已落盘，本 crate 只读消费）
 conex-computer = { path = "../conex-computer" }
-# 共享抽象面（FrameSource/InputBackend/ActionTargetGate，05 文档定稿）：本骨架声明依赖，
-# 实施轮接线（输入归一化 / 动作前检查器）消费
+# 共享抽象面（ActionTargetGate 动作前检查器，05 文档 §5.2）：工具层经
+# SessionError::Gate 映射 elevated_window（06 文档 §4.2 守卫⑥）
 conex-shared = { path = "../conex-shared" }
+# 错误码表（approval.rejected 审批拒绝码 + tool.execution_failed 通用码）：
+# 对齐浏览器线 error.rs 先例（conex-types codes 消费面）
+conex-types = { path = "../conex-types" }
 serde_json = { workspace = true }
 # 异步 trait（ComputerOps / Tool 实现面）：workspace 既有依赖
 async-trait = { workspace = true }
+# 异步运行时（wait 工具 sleep + RealComputerSession spawn_blocking 移出阻塞注入面）：
+# workspace 最小 feature 集（rt/macros/time 已含）
+tokio = { workspace = true }
+# base64：screenshot 返回形状 data 编码（06 文档 §2.2；对齐 conex-browser 先例
+# 0.22 直接版本引入，锁内既有，零 lock 变更）
+base64 = "0.22"
+# 图像编解码：screenshot 后处理纯函数（06 遗留⑧ zoom region 裁剪 + png/jpeg
+# 转换；版本对齐 conex-computer dev-deps 0.25，锁内既有 0.25.10，零 lock 变更）
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [dev-dependencies]
-# 异步单测（注册/执行契约）：workspace 最小集（rt + macros 已含）
+# 异步单测（守卫链/审批传输/急停接线契约）：workspace 最小集（rt + macros 已含）
 tokio = { workspace = true }
 # 命名空间共存测试（同注册表注册两族工具断言，06 文档 §3.4）：仅测试面依赖
 conex-browser-tools = { path = "../conex-browser-tools" }

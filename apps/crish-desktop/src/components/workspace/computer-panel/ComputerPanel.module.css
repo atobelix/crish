@@ -1,0 +1,156 @@
+/* 电脑操作面板（二期 P2，S5 遗留⑩）：对齐 BrowserPanel/BrowserImportSection 的 token 体系 */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1_5);
+  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
+  font-size: var(--font-size-xs);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.hint {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.unwiredBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  color: var(--color-warning);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1_5);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-secondary);
+}
+
+.blockTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.stats {
+  margin: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.unwiredText {
+  margin: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--color-warning);
+  overflow-wrap: anywhere;
+}
+
+.placeholderText {
+  margin: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+/* ── 三态会话指示（ActivationGate：Idle/BrowserActive/DesktopActive） ── */
+
+.activation {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.activationItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  padding: 3px 10px;
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs);
+}
+
+.activationDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.activationActive {
+  border-color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.activationActive .activationDot {
+  background: var(--color-success);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--color-success) 18%, transparent);
+}
+
+.activationMuted {
+  opacity: var(--opacity-disabled, 0.45);
+}
+
+/* ── 全局急停：大红色强化（对齐 04 §4.3 ③ 常驻显眼位置） ── */
+
+.estopButton {
+  border-width: 1px;
+  border-color: var(--color-error);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semi-bold, 600);
+  letter-spacing: 0.02em;
+}
+
+.estopButton:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error) 92%, var(--bg-primary));
+  color: #fff;
+}
+
+.estopButton:not(:disabled):hover {
+  background: var(--color-error);
+}
