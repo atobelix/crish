@@ -41,7 +41,7 @@ use agent_tools::background::{
 };
 use agent_tools::context::ExploreDocsQuotaContext;
 use agent_tools::definition::ToolError;
-use agent_tools::tools::subagent::SubagentState;
+use agent_tools::tools::subagent::{SubagentSpawner, SubagentState};
 use agent_tools::write_paths::{WritePathPolicy, WritePathRegistry};
 use conex_db::LocalDb;
 // DEEPCHECK-01 P0：历史 token 估算复用 conex-compaction count_tokens 启发式
@@ -54,17 +54,29 @@ use conex_types::device::{
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
     RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
+    SubagentEventKind,
 };
+use conex_types::error::ProviderErrorKind;
 use conex_types::impact::ImpactAssessment;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::session::AgentEndReason;
 use conex_types::{codes, ContextBudget, CrishError, CrishErrorPayload, HistoryMessage};
 use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
 use orchestrator::persist::{SessionSequencer, Store};
+use orchestrator::recovery::{
+    backoff_delay_ms, fingerprint, is_transient_kind, RecoveryAction, RecoveryBudget,
+    RecoveryCoordinator, RecoveryError, RecoveryOutcome, RecoveryRetryPolicy, RecoveryStore,
+    RECOVER_EPISODES_KEY, RECOVER_GROUP_PREFIX, RECOVER_MAX_EPISODES_KEY, RunFailureContext,
+};
 use orchestrator::restore::{RestoreManager, RestoreMode, RestoreOutcome, SnapshotStore, StateSnapshot};
 use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
-use orchestrator::session::SessionRecord;
-use orchestrator::PendingMessageQueue;
+use orchestrator::session::{SessionRecord, SessionTree};
+use orchestrator::subagent_events::{
+    SubagentEmitContext, SubagentEventEmitter, SubagentEventInfo,
+};
+use orchestrator::{
+    assess_round, GoalDecision, GoalState, PendingMessageQueue, RoundInput, ToolCallStamp,
+};
 use session_loop::hydrate::hydrate_history;
 use session_loop::approval_router::{
     classify_source, route_approval, route_approval_guarded, arbiter_metadata,
@@ -105,6 +117,425 @@ const SESSION_HISTORY_MESSAGE_TOKEN_OVERHEAD: usize = 8;
 /// T-29：SessionHistoryCache 会话数上限（防膨胀；超出时 FIFO 淘汰
 /// 最久未更新的会话）
 const SESSION_HISTORY_MAX_SESSIONS: usize = 32;
+
+// ── D3：C7 恢复阶梯生产接线（维度文档 D3-C7恢复阶梯生产接线.md）──────
+
+/// D3 §4.1：阶梯 1 跨 run 重试次数可配键（D3 自决键；装配时读，缺省 2；
+/// 与内核 3 次叠加共 5 次瞬态尝试/任务，敲定方案 §5 V3）
+const RECOVER_LADDER1_MAX_RETRIES_KEY: &str = "recover_ladder1_max_retries";
+/// D3 §4.1/V3：阶梯 1 跨 run 重试次数缺省（RecoveryRetryPolicy.max_retries）
+const RECOVER_LADDER1_MAX_RETRIES_DEFAULT: u32 = 2;
+/// E3-2（D3 §3.2.6）：子代理汇报文本截断长度（对齐 checkpoint 摘要
+/// 截断语义）
+const SUBAGENT_PROGRESS_TRUNCATE_CHARS: usize = 500;
+
+// ── D2/E1/D5/D1：壳层恢复面（任务连续性方案实施轮 2）──────────────
+
+/// D2 §3.3：唤醒源常量（预算指纹 source 段）。D2 建议 recovery.rs 集中
+/// 定义，本轮文件域限制定义于壳层（后续主控可统一迁移）。
+pub(crate) const WAKE_SOURCE_ERROR_RETRY: &str = "error-retry";
+/// E1 §3.4：续写指纹域（独立于 error-retry，同键 recover_episodes 互斥；
+/// 激活 D2 W8 前瞻设计）
+pub(crate) const WAKE_SOURCE_CONTENT_RESUME: &str = "content-resume";
+/// D2 §3.4：主 run error 续 run 注入文本（锁定模板；约束 C：最小化，
+/// 不含 kind/retries 等诊断细节——诊断走 provider-diagnostic 事件 +
+/// 临时通知，不给 AI）
+pub(crate) const MAIN_RESUME_INJECT_TEXT: &str = "继续任务";
+/// D1 §3.2.1：熔断计数键（session_meta；JSON 字段 snake_case，02-定夺 S1）
+pub(crate) const PROVIDER_FAIL_STREAK_KEY: &str = "provider_fail_streak";
+/// D1 §3.1.4：熔断阈值可配键（缺省 [PROVIDER_FAIL_THRESHOLD_DEFAULT]）
+pub(crate) const PROVIDER_FAIL_THRESHOLD_KEY: &str = "provider_fail_threshold";
+/// D1 §3.2.4：熔断阈值缺省（对齐 stream_error.rs PROVIDER_FAIL_THRESHOLD=6）
+pub(crate) const PROVIDER_FAIL_THRESHOLD_DEFAULT: u32 = 6;
+/// E1 §3.4：续写开关键（缺省 true = 默认开启）
+pub(crate) const CONTENT_RESUME_ENABLED_KEY: &str = "content_resume_enabled";
+/// E1 §3.4：续写预算上限键（缺省 [CONTENT_RESUME_MAX_DEFAULT]）
+pub(crate) const CONTENT_RESUME_MAX_KEY: &str = "content_resume_max";
+/// E1 §3.4：续写次数上限缺省（比 error-retry 的 3 更紧——续写是「质量
+/// 增强」而非「任务救急」，且每次续写都是完整请求）
+pub(crate) const CONTENT_RESUME_MAX_DEFAULT: u32 = 2;
+/// D1 §3.2.1：window_ms 缺省（0 = 无窗口；连续计数/成功归零是唯一语义，
+/// 字段保留 = 惰性过期支持）
+const PROVIDER_FAIL_WINDOW_MS_DEFAULT: u64 = 0;
+/// D1 §3.1.4：退避配置键（session_meta；JSON 数组 [base, max, budget]
+/// 或单值 base，仿 compact_summary_backoff_ms 宽容解析先例
+/// （summary_dispatch.rs:84-89）；缺键 → None = 现状立即重试向后兼容）
+const PROVIDER_RETRY_BACKOFF_MS_KEY: &str = "provider_retry_backoff_ms";
+
+// ── D6/D7：无人值守唤醒链路 + checkpoint 闭环（接续链 2 壳层面）──
+
+/// D6 §3.3：子代理独立会话 id 前缀（subagent_spawner.rs:289 生成路径；
+/// run_restore 恢复条目按此前缀分流主 run / 子代理——子代理只通知不
+/// 自动 fork，裁决 #20）
+const SUBAGENT_SESSION_PREFIX: &str = "sub-sess-";
+/// D6 §3.4：合并注入上限（评审 selection-03:220 建议 ≤16 条；超出保留
+/// 最新并注明省略 N 条——drain 是全部队列源的公共合并面，一次定界
+/// 覆盖全部源。注：该 16 为恢复/唤醒条目数，与 16/16/1 递归守卫的
+/// max_concurrent 16 无关联，final/00 §3.1 已加注）
+const RESTORE_MERGE_INJECT_LIMIT: usize = 16;
+/// D6 §3.3：恢复条目 group_id 前缀（键形状 `restore-<run_id>`，对齐
+/// recovery-/timer-/subagent-terminal- 前缀族，00-总纲-维度设计.md:136）
+const RESTORE_GROUP_PREFIX: &str = "restore-";
+/// D6 §3.3：主 run 恢复条目注入文本（任务书原文：重启恢复的续跑指令）
+const RESTORE_MAIN_INJECT_TEXT: &str = "上次被重启打断，请继续";
+/// D7 §8 决策 4：checkpoint 注入摘要截断护栏（summary ≤500 字符，
+/// 超长截断 + 省略号；completed/next 各 ≤5 项在拼接处限制）
+const CHECKPOINT_SUMMARY_TRUNCATE_CHARS: usize = 500;
+/// D7 §8 决策 4：checkpoint 注入清单项数上限（completed/next 各 ≤5 项）
+const CHECKPOINT_LIST_ITEMS_MAX: usize = 5;
+
+/// D1 §3.2.1：`provider_fail_streak` 键形状（05 形状冻结；字段 snake_case，
+/// 02-定夺 S1）。宽容解析 fail-open：坏 JSON / 缺字段 → count=0。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct ProviderFailStreak {
+    /// 当前连续失败计数（瞬态类）
+    pub count: u32,
+    /// 首次失败时刻（epoch ms）
+    pub first_fail_at_ms: i64,
+    /// 最近一次失败时刻（epoch ms）
+    pub last_fail_at_ms: i64,
+    /// 窗口配置（0 = 无窗口；>0 时读侧惰性过期判定，D1 §3.2.1）
+    pub window_ms: u64,
+}
+
+impl ProviderFailStreak {
+    /// 首次失败（count=1 起）
+    fn first_failure(now_ms: u64) -> Self {
+        Self {
+            count: 1,
+            first_fail_at_ms: now_ms as i64,
+            last_fail_at_ms: now_ms as i64,
+            window_ms: PROVIDER_FAIL_WINDOW_MS_DEFAULT,
+        }
+    }
+
+    /// 清零形态（成功面，C3）
+    fn cleared(now_ms: u64) -> Self {
+        Self {
+            count: 0,
+            first_fail_at_ms: 0,
+            last_fail_at_ms: now_ms as i64,
+            window_ms: PROVIDER_FAIL_WINDOW_MS_DEFAULT,
+        }
+    }
+
+    /// 宽容解析（fail-open：缺键 / 坏 JSON / 缺字段 → count=0）
+    fn from_json(raw: Option<&str>) -> Self {
+        raw.and_then(|raw| serde_json::from_str::<ProviderFailStreak>(raw).ok())
+            .unwrap_or_else(|| Self::cleared(0))
+    }
+
+    fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+    }
+
+    /// 连续失败 +1（首次失败填充 first_fail_at）
+    fn record_failure(&mut self, now_ms: u64) {
+        if self.count == 0 {
+            self.first_fail_at_ms = now_ms as i64;
+        }
+        self.count = self.count.saturating_add(1);
+        self.last_fail_at_ms = now_ms as i64;
+    }
+
+    /// 读取侧惰性过期（window_ms > 0 且超窗 → 视为清零，D1 §3.2.1）
+    fn effective_count(&self, now_ms: u64) -> u32 {
+        if self.window_ms > 0
+            && self.first_fail_at_ms > 0
+            && now_ms >= self.first_fail_at_ms as u64
+            && now_ms - self.first_fail_at_ms as u64 >= self.window_ms
+        {
+            0
+        } else {
+            self.count
+        }
+    }
+}
+
+/// D2 §3.2 + E1 §3.3：续 run 判定输入（drive_run_loop 在 outcome 移动消费
+/// 前提取的数据面；decide_idle_resume 消费）。
+///
+/// provider_error 为壳层自有镜像结构（session-loop 的 ProviderErrorSummary
+/// 所在 `mod end` 为私有模块，壳层无法命名该类型——字段访问无需类型名，
+/// 提取时逐字段映射；D2 §3.2 的 `Option<&ProviderErrorSummary>` 签名在本
+/// 壳层落地为等价字段镜像）。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct ResumeSignals {
+    /// D2 §3.3：任务文本（会话首条非 steering user 消息；指纹输入）
+    pub task_text: String,
+    /// D1 数据面：fatal 收场的 provider 错误摘要（正常 stop 收场 None）
+    pub provider_error: Option<ProviderErrorFields>,
+    /// E1 §2.1：最后一条 assistant 消息的流中断标注信号（D7 标注）
+    pub last_assistant: Option<LastAssistantSignal>,
+}
+
+/// D1 数据面摘要的壳层镜像（ProviderErrorSummary 字段子集：kind /
+/// retryable / retries）
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ProviderErrorFields {
+    /// 分类 13 类（kebab-case）
+    pub kind: ProviderErrorKind,
+    /// 是否可重试
+    pub retryable: bool,
+    /// run 内实际重试次数
+    pub retries: u32,
+}
+
+/// E1 §2.1：最后一条 assistant 消息的流中断标注（D7 §3.7；与 D1 熔断
+/// S2 计数同数据源）
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct LastAssistantSignal {
+    /// metadata.providerErrorKind（无标注 None）
+    pub kind: Option<ProviderErrorKind>,
+    /// metadata.providerErrorRetryable（无标注 None；!= false 语义）
+    pub retryable: Option<bool>,
+    /// 纯文本消息（无 tool_calls 且文本非空——工具调用已提交不续写）
+    pub is_plain_text: bool,
+}
+
+/// D5 §3.3：goal 收口评估输入（RoundInput 三要素 + 事件载荷计数的
+/// 预提取形态）
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct GoalRoundSignals {
+    /// 本轮助手终稿文本（消息尾）
+    pub assistant_text: String,
+    /// 本轮工具批（tool_name + 参数顶层 key 集）
+    pub tool_calls: Vec<ToolCallStamp>,
+    /// 本轮成功工具结果计数（L2 退化证据）
+    pub tool_success_count: u32,
+    /// 本轮工具调用次数（goal-round-completed 载荷）
+    pub tool_call_count: u32,
+    /// 本轮消息数（goal-round-completed 载荷）
+    pub message_count: u32,
+}
+
+/// D2 §3.3：带唤醒源类型的操作指纹（裁决 #8：同注入模板 = 同任务会
+/// 混淆不同唤醒源；source 参与哈希输入，与 task 字节间以 0x00 分隔）。
+///
+/// 复刻 recovery.rs fingerprint 的 FNV-1a 循环（同参数防漂移）；D2 §3.3
+/// 建议 recovery.rs 新增三参变体，本轮文件域限制实现于壳层。
+fn fingerprint_with_source(subagent_id: &str, task: &str, source: &str) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in subagent_id.as_bytes().iter().chain(&[0u8]) {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0001_0000_01b3);
+    }
+    for byte in task.as_bytes().iter().chain(&[0u8]) {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0001_0000_01b3);
+    }
+    for byte in source.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0001_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// E1 §3.2：续写注入模板的 kind 人读化（锁定模板测试断言绑定；
+/// 瞬态四类取变体名风格，非瞬态回退 kebab-case——模板仅瞬态类可达）
+fn resume_kind_label(kind: ProviderErrorKind) -> &'static str {
+    match kind {
+        ProviderErrorKind::RateLimit => "RateLimit",
+        ProviderErrorKind::ServerError => "ServerError",
+        ProviderErrorKind::Timeout => "Timeout",
+        ProviderErrorKind::Network => "Network",
+        ProviderErrorKind::Aborted => "aborted",
+        ProviderErrorKind::PayloadTooLarge => "payload-too-large",
+        ProviderErrorKind::GatewayChallenge => "gateway-challenge",
+        ProviderErrorKind::Auth => "auth",
+        ProviderErrorKind::Quota => "quota",
+        ProviderErrorKind::EndpointUnavailable => "endpoint-unavailable",
+        ProviderErrorKind::ContextLengthExceeded => "context-length-exceeded",
+        ProviderErrorKind::InvalidRequest => "invalid-request",
+        ProviderErrorKind::Unknown => "unknown",
+    }
+}
+
+/// D1 §3.1.4：`provider_retry_backoff_ms` 键纯解析（可单测；宽容
+/// fail-open）：
+/// - JSON 数组 [base, max, budget] → 三字段全量配置；
+/// - JSON 单数值 base → 仅 base 定制（max/budget None 回落内核常量）；
+/// - 其余形状 / 坏 JSON → None（不装配 = 现状立即重试向后兼容）。
+fn parse_retry_backoff_config(raw: &str) -> Option<session_loop::r#loop::RetryBackoffConfig> {
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    match value {
+        serde_json::Value::Number(n) => Some(session_loop::r#loop::RetryBackoffConfig {
+            base_ms: n.as_u64(),
+            max_ms: None,
+            total_budget_ms: None,
+        }),
+        serde_json::Value::Array(items) => {
+            let mut nums = items.iter().filter_map(|item| item.as_u64());
+            let base_ms = nums.next();
+            let max_ms = nums.next();
+            let total_budget_ms = nums.next();
+            base_ms.map(|base_ms| session_loop::r#loop::RetryBackoffConfig {
+                base_ms: Some(base_ms),
+                max_ms,
+                total_budget_ms,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// D2 §3.3：会话首条非 steering user 消息（任务文本提取）。steering
+/// 注入消息带 `{kind:"steering"}` 元数据——error 续 run 的注入文本
+/// 「继续任务」即 steering 形态，直取会让指纹从第二次起漂移到注入
+/// 模板上（selection-03 评审护栏 5 同款混淆）。
+fn main_task_text(messages: &[Arc<AgentMessage>]) -> String {
+    messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::User && !is_steering_message(m))
+        .map(|m| m.text().trim().to_string())
+        .unwrap_or_default()
+}
+
+/// steering 注入判定（消息 metadata.kind == "steering"）
+fn is_steering_message(message: &AgentMessage) -> bool {
+    message
+        .metadata
+        .as_ref()
+        .and_then(|meta| meta.get("kind"))
+        .and_then(|kind| kind.as_str())
+        == Some("steering")
+}
+
+/// E1 §2.1：最后一条 assistant 消息的信号提取（D7 流中断标注）
+fn last_assistant_provider_signal(
+    messages: &[Arc<AgentMessage>],
+) -> Option<LastAssistantSignal> {
+    let last = messages.iter().rev().find(|m| m.role == AgentMessageRole::Assistant)?;
+    let is_plain_text = last.tool_calls().next().is_none() && !last.text().is_empty();
+    let (kind, retryable) = provider_signal_metadata(last.metadata.as_ref());
+    Some(LastAssistantSignal {
+        kind,
+        retryable,
+        is_plain_text,
+    })
+}
+
+/// 从消息 metadata 提取 providerErrorKind / providerErrorRetryable
+/// （D7 §3.7 标注；kebab-case 字符串解析，坏值 None）
+fn provider_signal_metadata(
+    metadata: Option<&serde_json::Value>,
+) -> (Option<ProviderErrorKind>, Option<bool>) {
+    let Some(meta) = metadata else {
+        return (None, None);
+    };
+    let kind = meta
+        .get("providerErrorKind")
+        .and_then(|v| v.as_str())
+        .and_then(|s| serde_json::from_str::<ProviderErrorKind>(&format!("\"{s}\"")).ok());
+    let retryable = meta
+        .get("providerErrorRetryable")
+        .and_then(|v| v.as_bool());
+    (kind, retryable)
+}
+
+/// D5 §3.3：goal 收口评估输入预提取（消息面三要素 + 事件载荷计数）
+fn extract_goal_round_signals(messages: &[Arc<AgentMessage>]) -> GoalRoundSignals {
+    let mut assistant_text = String::new();
+    let mut tool_calls: Vec<ToolCallStamp> = Vec::new();
+    let mut tool_success_count: u32 = 0;
+    let mut tool_call_count: u32 = 0;
+    for message in messages {
+        if message.role == AgentMessageRole::Assistant {
+            let text = message.text();
+            if !text.is_empty() {
+                assistant_text = text;
+            }
+            for call in message.tool_calls() {
+                tool_call_count += 1;
+                let keys = call
+                    .input
+                    .as_object()
+                    .map(|object| object.keys().cloned().collect())
+                    .unwrap_or_default();
+                tool_calls.push(ToolCallStamp {
+                    tool_name: call.tool_name.clone(),
+                    param_keys: keys,
+                });
+            }
+        }
+        if message.role == AgentMessageRole::Tool {
+            for block in &message.blocks {
+                if let AgentMessageBlock::ToolResult { is_error, .. } = block {
+                    if !is_error {
+                        tool_success_count += 1;
+                    }
+                }
+            }
+        }
+    }
+    GoalRoundSignals {
+        assistant_text,
+        tool_calls,
+        tool_success_count,
+        tool_call_count,
+        message_count: messages.len() as u32,
+    }
+}
+
+/// D5 §3.7：续轮注入文本构造（主源 = goal 前缀，增强 = nextSteps；
+/// 模板对齐 buildGoalModePrefix，goalModeController.ts:74-95）
+fn build_goal_continuation_prompt(goal_state: &GoalState, next_steps: &[String]) -> String {
+    let round = goal_state.current_round + 1;
+    let mut text = format!(
+        "[目标模式 · 系统指令]\n\
+         你正在执行长期目标，请持续推进直至完成，并在每轮结束前自检进度。\n\
+         目标：{}\n\
+         当前第 {}/{} 轮（自动续写上限 {} 轮）。\n\
+         请工作直至目标实质完成；不要半途停下或只列计划而不执行。\n\
+         请在回复中维护 markdown 任务清单（`- [ ]` / `- [x]`），便于进度同步。\n\
+         若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。",
+        goal_state.goal,
+        round,
+        goal_state.max_rounds,
+        goal_state.max_rounds
+    );
+    if !next_steps.is_empty() {
+        text.push_str("\n上轮进度小结（供续接）：\n");
+        for step in next_steps {
+            text.push_str(&format!("- 下一步：{step}\n"));
+        }
+    }
+    text.push_str("---");
+    text
+}
+
+/// D5 §3.9：GoalDecision → wire 值（Continue/Completed/NoProgress/
+/// Blocked/NoGoal，events.rs 载荷注释约定）
+fn goal_decision_wire(decision: GoalDecision) -> String {
+    match decision {
+        GoalDecision::Continue => "Continue",
+        GoalDecision::Completed => "Completed",
+        GoalDecision::NoProgress => "NoProgress",
+        GoalDecision::Blocked => "Blocked",
+        GoalDecision::NoGoal => "NoGoal",
+    }
+    .to_string()
+}
+
+/// D2 §3.4（C4 锁死）：跨 run 续 run 退避延迟注入点类型（attempt =
+/// 本次消费后的预算计数；测试直接驱动，不依赖 tokio pause）
+pub(crate) type BackoffDelayFn = Arc<dyn Fn(u32) -> Duration + Send + Sync>;
+
+/// D3 §3.2.2：阶梯 1 恢复计划（C7 决策的壳层执行载体——AutoRetry 时
+/// 携带退避 delay、重入上下文与协调器引用，供收口后重派执行）
+enum RecoveryPlan {
+    /// 预算内自动重试（重试不计入 run 失败；delay 已钳到单次上限与
+    /// 剩余预算）
+    AutoRetry {
+        /// 重试前等待时长
+        delay: Duration,
+        /// run 失败上下文（重派请求与 escalate 重入共用）
+        ctx: RunFailureContext,
+        /// 会话恢复协调器（重入 escalate 用）
+        coord: Arc<Mutex<RecoveryCoordinator>>,
+    },
+}
 
 // ── 命令返回形状（03 §3.2 A 组契约）───────────────────────────────
 
@@ -1568,11 +1999,37 @@ pub struct CoreRunState {
     /// 预装配——经 run_task_impl 复用装配拉起新 run；测试经
     /// set_resume_launcher 注入替身断言判定与注入载荷）
     resume_launcher: Mutex<Option<ResumeLauncher>>,
+    /// D2 §3.4（C4 锁死）：跨 run 续 run 退避延迟注入点——测试直接驱动
+    /// （不依赖 tokio pause）；None = 生产镜像 recovery.rs 常量
+    /// （750→1500→3000，8s 封顶）。注入存在时 [Self::sleep_resume_backoff]
+    /// 跳过真实睡眠（测试驱动模式）。
+    resume_backoff: Mutex<Option<BackoffDelayFn>>,
     /// 子代理生产 spawner（T-D-13：SubagentSpawner 契约引擎侧实现；
     /// 同一实例经 EngineHandle 注入 run_subagent 工具 + 本状态持有——
     /// 注入面（launcher / db / wait 广播 / steering 队列）经
     /// [Self::finalize_subagent_spawner] 装配）
     subagent_spawner: Arc<crate::subagent_spawner::SubagentSpawnerImpl>,
+    /// D3 §3.1：每会话恢复协调器（C7 权威实例；五件套装配，惰性构造——
+    /// [Self::coordinator_for]；restore 后经 [Self::run_restore] 触发
+    /// 构造并自动从 session_meta 恢复预算/通知/forks/needs_user）
+    recovery_coordinators: Mutex<HashMap<String, Arc<Mutex<RecoveryCoordinator>>>>,
+    /// D3 §3.1/§3.3：每会话会话树（restore 后 from_session_record 重建；
+    /// 阶梯 3 fork 的源叶子载体；coordinator 惰性构造时缺省空树）
+    session_trees: Mutex<HashMap<String, Arc<Mutex<SessionTree>>>>,
+    /// D3 §3.5：跨 run 阶梯 1 重试计数（(session_id, fingerprint) → 已
+    /// 重派次数；进程内记账——重启清零是阶梯 1 既有语义，不持久化）
+    ladder1_retries: Mutex<HashMap<(String, String), u32>>,
+    /// D6 §4.2：会话级用户停止标记（会话 → 停止时刻；用户 L2/L3 停止
+    /// 写入、用户新 run 装配清除——「用户显式停止永不自动续」跨 run
+    /// 语义；watcher 判定与 decide_idle_resume 共享；**不落库**——重启
+    /// 后用户停止历史天然消失，watcher 恢复自动行为，重启本身不是
+    /// 用户停止）
+    user_stopped: Mutex<HashMap<String, u64>>,
+    /// D6 §3.2：每会话唤醒 watcher 幂等持有表（会话 → watcher 实例；
+    /// run_task_impl 会话首次出现 / run_restore 成功后惰性 spawn；run
+    /// 收口**不销毁**——否则 AI 休眠后 watcher 也跟着没了，回到断点 2；
+    /// 进程退出随 runtime 销毁，测试面经句柄 stop）
+    wake_watchers: Mutex<HashMap<String, Arc<crate::wake_watcher::WakeWatcher>>>,
     /// T-42：会话级摘要协调器注册表（00-plan §6.5 R-I / 评审 02 P0-2）——
     /// 与 [Self::session_history] 同生命周期（进程级单例）：摘要任务状态
     /// （JoinHandle/退避/attempts/last_outcome）挂会话级容器，run 收口不
@@ -1620,6 +2077,10 @@ impl CoreRunState {
             // run_subagent 返回 common.unsupported 降级）
             Some(Arc::clone(&subagent_spawner)
                 as Arc<dyn agent_tools::tools::subagent::SubagentSpawner>),
+            // D6 §3.1 段 2 + D4 §3.8 ②（W4 统一签名）：store 下转
+            // LocalDb 连接注入——Some → timer/sched/wait 三 store 真适配
+            // （重启恢复数据面）；None（InMemoryStore 测试替身）→ 内存版
+            store.as_local_db(),
         ));
         // COMPACTION-01 P0-3（生产闭环）：真实 LLM 摘要器工厂装配——会话级
         // SummarizerFactory = production_summarizer_factory（返回
@@ -1726,7 +2187,13 @@ impl CoreRunState {
             cron_has_enabled: Mutex::new(cron_has_enabled),
             resume_empty_streak: Mutex::new(HashMap::new()),
             resume_launcher: Mutex::new(Some(resume_launcher)),
+            resume_backoff: Mutex::new(None),
             subagent_spawner,
+            recovery_coordinators: Mutex::new(HashMap::new()),
+            session_trees: Mutex::new(HashMap::new()),
+            ladder1_retries: Mutex::new(HashMap::new()),
+            user_stopped: Mutex::new(HashMap::new()),
+            wake_watchers: Mutex::new(HashMap::new()),
             summary_coordinators,
             summarizer_factory: Mutex::new(summarizer_factory),
         }
@@ -1763,6 +2230,17 @@ impl CoreRunState {
             .resume_launcher
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = launcher;
+    }
+
+    /// D2 §3.4（C4 锁死）：注入跨 run 续 run 退避延迟函数（测试直接驱动，
+    /// 不依赖 tokio pause；注入存在时退避睡眠跳过——测试驱动模式；
+    /// None = 生产镜像 recovery.rs 常量）
+    #[cfg(test)]
+    pub(crate) fn set_resume_backoff(&self, backoff: Option<BackoffDelayFn>) {
+        *self
+            .resume_backoff
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = backoff;
     }
 
     /// setup 完成标记（PE-01 T01.2：setup 失败 = false，不假装成功）
@@ -2108,6 +2586,1088 @@ impl CoreRunState {
         self.subagent_spawner.on_subagent_terminal(cfg, state).await;
     }
 
+    // ── D3：C7 恢复协调器装配（维度文档 D3 §3.1/§3.5）──────────────
+
+    /// D3 §3.1：每会话恢复协调器惰性构造（幂等——同会话同实例）。
+    ///
+    /// 五件套（裁决 #4 完整装配一次到位，禁占位树）：
+    /// - store = LocalDb（[RecoveryStore] impl 现成，recovery.rs:622）；
+    /// - queue = [Self::pending_queue]（与引擎共享队列同一 Arc，
+    ///   engine.timer_steering_queue 同源）；
+    /// - tree = [Self::session_trees] 查 / 无则空树（fork 结构化拒绝兜底，
+    ///   recovery.rs:1066-1070）；
+    /// - spawner = 生产 SubagentSpawnerImpl（Arc 宽化为 trait object，
+    ///   与 fork_and_reassign 调用契约一致）；
+    /// - policy = 阶梯 1 跨 run 重试 max_retries=2（V3；session_meta
+    ///   `recover_ladder1_max_retries` 可配，宽容解析 fail-open）。
+    ///
+    /// F2-27：new 的同步读（4-5 键）经专用线程执行（std::thread::scope
+    /// 承接，SQLite 工作不落在 tokio worker 上）——惰性一次性构造，进程
+    /// 内每会话仅一次。local_db() 为 None（测试替身 store）→ None 降级
+    /// （协调器不可用，行为与接线前一致，仿 save_run_usage 先例
+    /// core_run_commands.rs:2962-2964）。
+    pub(crate) fn coordinator_for(
+        &self,
+        session_id: &str,
+    ) -> Option<Arc<Mutex<RecoveryCoordinator>>> {
+        // 1. 已构造 → 返回既有（幂等，同会话同实例）
+        {
+            let map = self
+                .recovery_coordinators
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if let Some(existing) = map.get(session_id) {
+                return Some(Arc::clone(existing));
+            }
+        }
+        // 2. local_db() 为 None（测试替身 store）→ None 降级
+        let Some(db) = self.local_db() else {
+            return None;
+        };
+        // 3. 五件套装配（tree 与 coordinator 同批插入，防并发双构造）
+        let tree = {
+            let mut trees = self.session_trees.lock().unwrap_or_else(|e| e.into_inner());
+            trees.get(session_id).cloned().unwrap_or_else(|| {
+                let arc = Arc::new(Mutex::new(SessionTree::new(session_id)));
+                trees.insert(session_id.to_string(), Arc::clone(&arc));
+                arc
+            })
+        };
+        let store: Arc<dyn RecoveryStore> = Arc::new(db);
+        let queue = Arc::clone(&self.pending_queue);
+        // Arc 宽化：生产 spawner → trait object（与 fork_and_reassign 调用
+        // 契约一致；显式两步断开——编译器对 Arc::clone 的 trait object
+        // 目标推断不收敛，先克隆具体类型再 as 宽化）
+        let concrete = Arc::clone(&self.subagent_spawner);
+        let spawner: Arc<dyn agent_tools::tools::subagent::SubagentSpawner> =
+            concrete as Arc<dyn agent_tools::tools::subagent::SubagentSpawner>;
+        // V3：阶梯 1 跨 run 重试次数可配键（D3 自决键；宽容解析 fail-open）
+        let ladder1_max_retries = store
+            .get_meta(RECOVER_LADDER1_MAX_RETRIES_KEY)
+            .ok()
+            .flatten()
+            .and_then(|raw| raw.parse::<u32>().ok())
+            .unwrap_or(RECOVER_LADDER1_MAX_RETRIES_DEFAULT);
+        let policy = RecoveryRetryPolicy {
+            max_retries: ladder1_max_retries,
+            ..Default::default()
+        };
+        let session_id_owned = session_id.to_string();
+        // 4. RecoveryCoordinator::new 经专用线程执行（F2-27：同步读 4-5
+        //    键的 SQLite 工作不落在 tokio worker 上；new 为纯同步函数，
+        //    std::thread::scope 承接——调用线程同步等待 join，一次性惰性
+        //    构造，进程内每会话仅一次。不用 Handle::block_on：coordinator_for
+        //    是同步 fn、被 async 上下文调用，async 上下文内 block_on 会
+        //    panic（EnterRuntime 守卫））
+        let constructed = std::thread::scope(|scope| {
+            scope
+                .spawn(move || {
+                    RecoveryCoordinator::new(session_id_owned, store, queue, tree, spawner, policy)
+                })
+                .join()
+        })
+        .unwrap_or_else(|join_error| {
+            Err(RecoveryError::PersistFailed {
+                message: format!("恢复协调器构造线程 join 失败：{join_error:?}"),
+            })
+        });
+        let coord = match constructed {
+            Ok(coordinator) => Arc::new(Mutex::new(coordinator)),
+            Err(error) => {
+                tracing::warn!(
+                    target: "run",
+                    session_id,
+                    error = %error,
+                    "恢复协调器构造失败（本会话恢复路径降级为接线前行为）"
+                );
+                return None;
+            }
+        };
+        // 5. double-check：锁内重查（并发双构造时丢弃后到者）
+        let mut map = self
+            .recovery_coordinators
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(existing) = map.get(session_id) {
+            return Some(Arc::clone(existing));
+        }
+        map.insert(session_id.to_string(), Arc::clone(&coord));
+        Some(coord)
+    }
+
+    /// D3 §3.5：跨 run 阶梯 1 已重派次数（(session_id, fingerprint) 键；
+    /// 进程内记账，重启清零——阶梯 1 不留痕是既有语义，recovery.rs:1801
+    /// -1803 测试锁定）。retries 语义 = 该任务跨 run 已重试次数，与 run
+    /// 内 provider_error.retries 是两套独立计数（D3 §8 决策 1）。
+    fn ladder1_retry_count(&self, session_id: &str, fp: &str) -> u32 {
+        self.ladder1_retries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&(session_id.to_string(), fp.to_string()))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// D3 §3.5：重派成功后计数 +1（AutoRetry 实际拉起）
+    fn bump_ladder1_retry(&self, session_id: &str, fp: &str) -> u32 {
+        let mut map = self.ladder1_retries.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = map
+            .entry((session_id.to_string(), fp.to_string()))
+            .or_insert(0);
+        *entry += 1;
+        *entry
+    }
+
+    /// D3 §3.5：spawn 失败（含 16/16/1 守卫拒绝）→ 计数推满（重入
+    /// [RecoveryCoordinator::on_subagent_run_failure] 必 Escalate 上阶梯 2，
+    /// 不静默、无假重试）
+    fn force_ladder1_retry_max(&self, session_id: &str, fp: &str) {
+        let max = self.ladder1_max_retries_config();
+        let mut map = self.ladder1_retries.lock().unwrap_or_else(|e| e.into_inner());
+        *map.entry((session_id.to_string(), fp.to_string())).or_insert(0) = max;
+    }
+
+    /// D3 §4.1：阶梯 1 跨 run 重试次数配置解析（可配键缺省 2；与
+    /// coordinator_for 装配口径同源，保证「推满 = 必然 Escalate」判定一致）
+    fn ladder1_max_retries_config(&self) -> u32 {
+        let Some(db) = self.local_db() else {
+            return RECOVER_LADDER1_MAX_RETRIES_DEFAULT;
+        };
+        db.get_session_meta(RECOVER_LADDER1_MAX_RETRIES_KEY)
+            .ok()
+            .flatten()
+            .and_then(|raw| raw.parse::<u32>().ok())
+            .unwrap_or(RECOVER_LADDER1_MAX_RETRIES_DEFAULT)
+    }
+
+    // ── D6：会话级 user_stopped + 每会话唤醒 watcher（无人值守最后一跳）──
+
+    /// D6 §8 决策 1：设置会话级用户停止标记（用户 L2/L3 停止路径调用；
+    /// 同步到该会话 watcher 实例——watcher 判定与 decide_idle_resume
+    /// 共享同一跨 run 语义；不落库，重启天然消失）
+    pub(crate) fn set_user_stopped(&self, session_id: &str) {
+        let now = now_ms_internal();
+        *self
+            .user_stopped
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(session_id.to_string())
+            .or_insert(0) = now;
+        if let Some(watcher) = self
+            .wake_watchers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(session_id)
+        {
+            watcher.set_user_stopped_at(now);
+        }
+    }
+
+    /// D6 §8 决策 1：清除会话级用户停止标记（用户新 run 装配成功后
+    /// 调用——用户新 run = 显式授权恢复自动行为；idle-resume/子代理
+    /// run 不写不清，停止语义跨 run 存活直到用户介入）
+    pub(crate) fn clear_user_stopped(&self, session_id: &str) {
+        self.user_stopped
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session_id);
+        if let Some(watcher) = self
+            .wake_watchers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(session_id)
+        {
+            watcher.clear_user_stopped();
+        }
+    }
+
+    /// D6 §4.2：会话级用户停止标记是否存在（decide_idle_resume 与
+    /// watcher 判定共享的读面）
+    pub(crate) fn is_user_stopped(&self, session_id: &str) -> bool {
+        self.user_stopped
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(session_id)
+    }
+
+    /// D6 §3.2 spawn 点 1/2：每会话唤醒 watcher 惰性 spawn（幂等持有——
+    /// 已存在返回 false 不重复 spawn）。注入件：
+    /// - queue = [Self::pending_queue]（与 TimerRegistry / watchdog 同一
+    ///   实例）；
+    /// - has_active_run = active_runs 锁内同会话扫描（拉起前检查；串行
+    ///   守卫由 run_task_impl 兜底拒绝并发双拉，验收 A5）；
+    /// - empty_streak = [Self::resume_empty_streak] 只读（计数由收口
+    ///   decide_idle_resume 维护，W2 按唤醒源区分，watcher 只读判停）；
+    /// - launcher = [spawn_idle_resume_run] 包装（空 Vec 注入——队列条目
+    ///   由新 run 收口时 decide_idle_resume drain，D6 §8 决策 2 路径①，
+    ///   wake_watcher.rs 装配注记）。
+    ///
+    /// 首轮延迟 5s + 最小拉 run 间隔 10s（WakeWatcherOptions 缺省）。
+    /// 无 tokio runtime（非 async 上下文）→ 跳过 spawn（对齐
+    /// engine.rs:1313-1320 watchdog 先例）。
+    pub(crate) fn ensure_wake_watcher(self: &Arc<Self>, session_id: &str) -> bool {
+        // 幂等：已存在 → false（不重复 spawn）
+        {
+            let map = self.wake_watchers.lock().unwrap_or_else(|e| e.into_inner());
+            if map.contains_key(session_id) {
+                return false;
+            }
+        }
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            tracing::debug!(
+                target: "wake_watcher",
+                session_id,
+                "唤醒 watcher 跳过 spawn：当前上下文无 tokio runtime"
+            );
+            return false;
+        };
+        let watcher = self.build_wake_watcher(session_id);
+        let started = watcher.start(&runtime);
+        // 同步 user_stopped（停止标记先于 watcher 创建的场景——watcher
+        // 幂等持有期间 L2/L3 停止经 set_user_stopped 同步；此处兜底
+        // watcher 晚于停止创建的情形）
+        if let Some(at) = self
+            .user_stopped
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(session_id)
+            .copied()
+        {
+            watcher.set_user_stopped_at(at);
+        }
+        // double-check（并发双构造丢弃后到者，对齐 coordinator_for 先例）
+        let mut map = self.wake_watchers.lock().unwrap_or_else(|e| e.into_inner());
+        if map.contains_key(session_id) {
+            watcher.stop();
+            return false;
+        }
+        map.insert(session_id.to_string(), watcher);
+        started
+    }
+
+    /// D6 §3.2：构造会话 watcher（注入件闭包全部经 Weak 引用——
+    /// CoreRunState ↔ watcher 互相持有会构成 Arc 强引用环泄漏）
+    fn build_wake_watcher(self: &Arc<Self>, session_id: &str) -> Arc<crate::wake_watcher::WakeWatcher> {
+        let queue = Arc::clone(&self.pending_queue);
+        let weak_active = Arc::downgrade(self);
+        let has_active_run: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |sid: &str| {
+            weak_active
+                .upgrade()
+                .map(|state| {
+                    state
+                        .active_runs
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .values()
+                        .any(|run| run.session_id == sid)
+                })
+                .unwrap_or(false)
+        });
+        let weak_streak = Arc::downgrade(self);
+        let empty_streak: Arc<dyn Fn(&str) -> u32 + Send + Sync> = Arc::new(move |sid: &str| {
+            weak_streak
+                .upgrade()
+                .map(|state| {
+                    state
+                        .resume_empty_streak
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .get(sid)
+                        .copied()
+                        .unwrap_or(0)
+                })
+                .unwrap_or(0)
+        });
+        let weak_launcher = Arc::downgrade(self);
+        let launcher: crate::wake_watcher::WakeLauncher = Arc::new(move |sid: String| {
+            let weak = weak_launcher.clone();
+            Box::pin(async move {
+                let Some(state) = weak.upgrade() else {
+                    return;
+                };
+                // D6 §8 决策 2 路径①：空 Vec 注入——队列条目由新 run 收口
+                // 时 decide_idle_resume drain（wake_watcher.rs 装配注记）；
+                // D7 摘要注入在 spawn_idle_resume_run 内统一拼接
+                idle_resume::spawn_idle_resume_run(state, sid, "idle-resume", Vec::new()).await;
+            })
+        });
+        Arc::new(crate::wake_watcher::WakeWatcher::new(
+            session_id.to_string(),
+            queue,
+            has_active_run,
+            empty_streak,
+            launcher,
+            crate::wake_watcher::WakeWatcherOptions::default(),
+        ))
+    }
+
+    /// D6 §3.3：重启恢复条目生成（断点 3 消费端；run_restore 成功路径
+    /// 调用）。对 [RestoreOutcome::interrupted] 逐条生成 steering 条目
+    /// （group_id = `restore-<run_id>`，is_steering 受保护——容量挤占时
+    /// 普通消息先被挤掉）：
+    /// - **主 run**（非 sub-sess-* 会话）→ 恢复条目入队（watcher 首轮
+    ///   延迟窗口后 / 下次收口消费），注入「上次被重启打断，请继续」
+    ///   自动续跑（A3）；
+    /// - **子代理 run**（sub-sess-* 前缀分流）→ 只通知主 agent 不自动
+    ///   fork（裁决 #20：自动重派违反「所有子 Agent 由主 Agent 分配」
+    ///   红线）；父归属经 session_agents 行 parent_session_id 解析
+    ///   （D6 §8 决策 3），查不到 → 跳过通知仅日志（run-interrupted
+    ///   事件已留痕）。
+    ///
+    /// 不消费 recover_episodes 预算（W8：唤醒源枚举为前瞻设计，预算仅
+    /// error-retry 域消费；风暴防制靠合并上限 + watcher 延迟）。
+    async fn enqueue_restore_entries(&self, outcome: &RestoreOutcome) {
+        let subagent_records: Vec<&orchestrator::restore::InterruptedRun> = outcome
+            .interrupted
+            .iter()
+            .filter(|record| record.session_id.starts_with(SUBAGENT_SESSION_PREFIX))
+            .collect();
+        let parents = if subagent_records.is_empty() {
+            HashMap::new()
+        } else {
+            let run_ids: Vec<String> = subagent_records
+                .iter()
+                .map(|record| record.run_id.clone())
+                .collect();
+            let candidate_sessions: Vec<String> =
+                outcome.sessions.iter().map(|session| session.session_id.clone()).collect();
+            self.resolve_subagent_parents(&run_ids, &candidate_sessions).await
+        };
+        let mut queue = self.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
+        for record in &outcome.interrupted {
+            let now = now_ms_internal();
+            // 目标会话为语义注记（队列为全局共享面，无会话字段——消费
+            // 方按 group_id/条目文本承载归属语义，T06.3 Q15）
+            let (_target_session, text) = if record.session_id.starts_with(SUBAGENT_SESSION_PREFIX) {
+                match parents.get(&record.run_id) {
+                    Some(parent) => (
+                        parent.clone(),
+                        format!(
+                            "子代理 run {} 在重启时被中断（{}），请决策：重派 / 接管 / 放弃",
+                            record.run_id,
+                            orchestrator::restore::INTERRUPTED_ERROR,
+                        ),
+                    ),
+                    None => {
+                        tracing::warn!(
+                            target: "restore",
+                            run_id = %record.run_id,
+                            session_id = %record.session_id,
+                            "子代理 interrupted 父归属查不到（跳过通知；run-interrupted 事件已留痕）"
+                        );
+                        continue;
+                    }
+                }
+            } else {
+                (record.session_id.clone(), RESTORE_MAIN_INJECT_TEXT.to_string())
+            };
+            // 分组去重（replace_or_enqueue：同 run 不重复堆积——重启
+            // 双恢复场景仅 1 条）；带时间戳 id 保证同组替换后仍唯一
+            queue.replace_or_enqueue(orchestrator::steering_queue::SteeringInputEntry {
+                id: format!("{RESTORE_GROUP_PREFIX}{}-{now}", record.run_id),
+                text,
+                attachments: Vec::new(),
+                enqueued_at: now,
+                group_id: Some(format!("{RESTORE_GROUP_PREFIX}{}", record.run_id)),
+                is_steering: true,
+            });
+        }
+    }
+
+    /// D6 §8 决策 3：子代理 run → 父会话解析（session_agents 行
+    /// subagent_run_id 反查——行按父会话 id 落库，subagent_spawner.rs:296
+    /// row_for；候选会话 = 恢复会话全集）。F2-27：同步 SQLite 读经
+    /// spawn_blocking 执行，tokio worker 不直调。
+    async fn resolve_subagent_parents(
+        &self,
+        run_ids: &[String],
+        candidate_sessions: &[String],
+    ) -> HashMap<String, String> {
+        let Some(db) = self.local_db() else {
+            return HashMap::new();
+        };
+        let targets: Vec<String> = run_ids.to_vec();
+        let sessions: Vec<String> = candidate_sessions.to_vec();
+        tokio::task::spawn_blocking(move || {
+            let mut parents = HashMap::new();
+            for session in &sessions {
+                match db.load_session_agents(session) {
+                    Ok(agents) => {
+                        for agent in agents {
+                            if targets.iter().any(|target| target == &agent.subagent_run_id) {
+                                parents.insert(agent.subagent_run_id, agent.parent_session_id);
+                            }
+                        }
+                    }
+                    Err(error) => tracing::warn!(
+                        target: "restore",
+                        session_id = %session,
+                        error = %error,
+                        "恢复条目父归属扫描读取失败（跳过该会话）"
+                    ),
+                }
+            }
+            parents
+        })
+        .await
+        .unwrap_or_default()
+    }
+
+    // ── D1/D2/D5：壳层恢复面（熔断计数 / goal_state / 退避注入）─────
+
+    /// D1 §3.2.4：熔断闸查询（读 `provider_fail_streak` 键 count 字段；
+    /// count >= 阈值 → true；fail-open：坏 JSON / 缺字段 → count=0）。
+    ///
+    /// 落点 ① transient_retry 入口（经 [Self::provider_fail_streak_count]
+    /// 装配进 SessionLoopOptions，D1 §3.2.3）；落点 ② decide_idle_resume
+    /// error 分支与 E1 续写分支（02-定夺 S2：两处共用同一查询面）。
+    pub(crate) async fn circuit_breaker_is_tripped(&self, _session_id: &str) -> bool {
+        let Some(db) = self.local_db() else {
+            return false;
+        };
+        let threshold = self.provider_fail_threshold_config(&db);
+        tokio::task::spawn_blocking(move || {
+            let raw = db
+                .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
+                .ok()
+                .flatten();
+            let streak = ProviderFailStreak::from_json(raw.as_deref());
+            streak.effective_count(now_ms_internal()) >= threshold
+        })
+        .await
+        .unwrap_or(false)
+    }
+
+    /// D1 §3.2.2（S2）：收口熔断计数更新（唯一写方；spawn_blocking 读-改-
+    /// 写键）。`transient_failure = true` → 连续失败 +1（部分保留断流计入）；
+    /// false → 清零（规则 C3：仅 run 以非瞬态错误收场或正常完成时执行）。
+    ///
+    /// 返回是否本次更新**跨过**阈值（熔断触发边沿；调用方负责发射
+    /// runtime-intervention-required + recovery-escalated 观测事件）。
+    pub(crate) async fn update_provider_fail_streak(
+        &self,
+        _session_id: &str,
+        transient_failure: bool,
+    ) -> bool {
+        let Some(db) = self.local_db() else {
+            return false;
+        };
+        let threshold = self.provider_fail_threshold_config(&db);
+        tokio::task::spawn_blocking(move || {
+            let raw = db
+                .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
+                .ok()
+                .flatten();
+            let mut streak = ProviderFailStreak::from_json(raw.as_deref());
+            let now = now_ms_internal();
+            let before = streak.effective_count(now);
+            if transient_failure {
+                streak.record_failure(now);
+            } else {
+                streak = ProviderFailStreak::cleared(now);
+            }
+            if db
+                .set_session_meta(PROVIDER_FAIL_STREAK_KEY, &streak.to_json())
+                .is_err()
+            {
+                return false;
+            }
+            before < threshold && streak.count >= threshold
+        })
+        .await
+        .unwrap_or(false)
+    }
+
+    /// D1 §3.1.4：熔断阈值配置解析（`provider_fail_threshold` 键，缺省 6；
+    /// 与 stream_error.rs PROVIDER_FAIL_THRESHOLD 同值防漂移）
+    fn provider_fail_threshold_config(&self, db: &LocalDb) -> u32 {
+        db.get_session_meta(PROVIDER_FAIL_THRESHOLD_KEY)
+            .ok()
+            .flatten()
+            .and_then(|raw| raw.parse::<u32>().ok())
+            .unwrap_or(PROVIDER_FAIL_THRESHOLD_DEFAULT)
+    }
+
+    /// D1 §3.2.3：熔断计数当前值（run 装配面注入 SessionLoopOptions
+    /// provider_fail_streak——transient_retry 入口闸 C1 输入；无键 → None
+    /// = 不启用闸，向后兼容）
+    pub(crate) async fn provider_fail_streak_count(&self, _session_id: &str) -> Option<u32> {
+        let db = self.local_db()?;
+        tokio::task::spawn_blocking(move || {
+            let raw = db
+                .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
+                .ok()
+                .flatten();
+            let streak = ProviderFailStreak::from_json(raw.as_deref());
+            let count = streak.effective_count(now_ms_internal());
+            (count > 0).then_some(count)
+        })
+        .await
+        .ok()
+        .flatten()
+    }
+
+    /// D1 §3.1.4（R6）：瞬态重试退避配置读取（run 装配面注入
+    /// SessionLoopOptions.retry_backoff——Some 时内核退避
+    /// 750ms×2^(n-1)/8s 封顶/60s 预算生产生效；None = 现状立即重试
+    /// 向后兼容）。键 = `provider_retry_backoff_ms`，形状 = JSON 数组
+    /// [base, max, budget] 或单值 base（宽容解析：坏值 → None fail-open，
+    /// 不阻断装配）。
+    pub(crate) fn retry_backoff_config(
+        &self,
+        _session_id: &str,
+    ) -> Option<session_loop::r#loop::RetryBackoffConfig> {
+        let db = self.local_db()?;
+        let raw = db
+            .get_session_meta(PROVIDER_RETRY_BACKOFF_MS_KEY)
+            .ok()
+            .flatten()?;
+        parse_retry_backoff_config(&raw)
+    }
+
+    /// D5 §3.2：读 `goal_state` 键（宽容解析 fail-open：缺键 / 坏 JSON →
+    /// None = 无 goal；字段级容忍由 [GoalState::from_json] 保证）
+    pub(crate) async fn load_goal_state(&self, _session_id: &str) -> Option<GoalState> {
+        let db = self.local_db()?;
+        tokio::task::spawn_blocking(move || {
+            let raw = db
+                .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+                .ok()
+                .flatten();
+            GoalState::from_json(raw.as_deref())
+        })
+        .await
+        .ok()
+        .flatten()
+    }
+
+    /// D5 §3.2：写 `goal_state` 键（唯一写方 = run 收口 RoundAssessment +
+    /// run_task_impl 装配覆盖；spawn_blocking 落键；失败仅告警不阻断）
+    pub(crate) async fn save_goal_state(&self, _session_id: &str, state: &GoalState) {
+        let Some(db) = self.local_db() else {
+            return;
+        };
+        let json = state.to_json();
+        let _ = tokio::task::spawn_blocking(move || {
+            db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &json)
+        })
+        .await;
+    }
+
+    /// D5 §3.7：最新 compression_block.summary_json 的 nextSteps 读取
+    /// （fail-open：无块 / 坏 JSON → None，不阻断注入——注入主源是 goal
+    /// 前缀；Schema V1 字段 nextSteps = 字符串数组）
+    pub(crate) async fn read_summary_next_steps(&self, session_id: &str) -> Vec<String> {
+        let Some(db) = self.local_db() else {
+            return Vec::new();
+        };
+        let session_id = session_id.to_string();
+        tokio::task::spawn_blocking(move || {
+            db.list_blocks(&session_id, Some(1))
+                .ok()
+                .and_then(|blocks| blocks.into_iter().next())
+                .and_then(|block| block.summary_json)
+                .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+                .and_then(|value| {
+                    value
+                        .get("nextSteps")
+                        .and_then(|steps| steps.as_array())
+                        .map(|steps| {
+                            steps
+                                .iter()
+                                .filter_map(|step| step.as_str().map(String::from))
+                                .collect()
+                        })
+                })
+                .unwrap_or_default()
+        })
+        .await
+        .unwrap_or_default()
+    }
+
+    /// E1 §3.4（T7）：续写开关键（`content_resume_enabled` 键，缺省 true
+    /// = 默认开启——与用户诉求「断网自动接续最好」一致）
+    async fn content_resume_enabled(&self, _session_id: &str) -> bool {
+        let Some(db) = self.local_db() else {
+            return true;
+        };
+        tokio::task::spawn_blocking(move || {
+            db.get_session_meta(CONTENT_RESUME_ENABLED_KEY)
+                .ok()
+                .flatten()
+                .and_then(|raw| raw.parse::<bool>().ok())
+                .unwrap_or(true)
+        })
+        .await
+        .unwrap_or(true)
+    }
+
+    /// D5 §3.3：收口 goal 轮次评估（唯一写方；子代理 run 不调用——守卫
+    /// 在调用点 `active.subagent.is_none()`，02-定夺 S10）。
+    ///
+    /// 流程：load goal_state（无 goal → 不评估不写）→ assess_round 纯函数
+    /// → advance 写回（spawn_blocking）→ goal-round-completed 事件发射
+    /// （envelope 通道，02-定夺 B2 统一字段集）。
+    pub(crate) async fn assess_goal_round(
+        &self,
+        active: &ActiveRun,
+        reason: AgentEndReason,
+        signals: &GoalRoundSignals,
+        runtime_error: Option<&str>,
+    ) {
+        let Some(current) = self.load_goal_state(&active.session_id).await else {
+            return;
+        };
+        let input = RoundInput {
+            end_reason: reason,
+            assistant_text: signals.assistant_text.clone(),
+            tool_calls: signals.tool_calls.clone(),
+            tool_success_count: signals.tool_success_count,
+            runtime_error: runtime_error.map(String::from),
+            current: current.clone(),
+        };
+        let assessment = assess_round(&input);
+        if assessment.decision == GoalDecision::NoGoal {
+            return;
+        }
+        let advanced = current.advance(&input, &assessment);
+        self.save_goal_state(&active.session_id, &advanced).await;
+        // goal-round-completed（round = 本轮序号 = 评估前 current_round + 1；
+        // error 轮不递增 current_round，但 round 序号仍按本轮计）
+        let event = AgentEvent::GoalRoundCompleted {
+            round: current.current_round + 1,
+            tool_call_count: signals.tool_call_count,
+            tool_success_count: signals.tool_success_count,
+            message_count: signals.message_count,
+            decision: goal_decision_wire(assessment.decision),
+            reason_detail: assessment.reason_detail.clone(),
+            stalled_delta: assessment.stalled_delta,
+            evidence: signals.tool_success_count.to_string(),
+        };
+        emit_envelope_event(&active.queue, &active.bridge, &active.run_id, &active.session_id, event)
+            .await;
+    }
+
+    /// D2 §3.4（C4 锁死）：跨 run 退避延迟（注入点存在 → 注入函数直取
+    /// 测试驱动；None → 镜像 recovery.rs 常量 750→1500→3000，8s 封顶）
+    pub(crate) fn backoff_delay_for(&self, attempt: u32) -> Duration {
+        if let Some(f) = self
+            .resume_backoff
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        {
+            return f(attempt);
+        }
+        backoff_delay_ms(&RecoveryRetryPolicy::default(), attempt)
+    }
+
+    /// D2 §3.4：退避睡眠（注入点存在 = 测试驱动模式，跳过真实睡眠；
+    /// 生产经 tokio::time::sleep 等待）
+    pub(crate) async fn sleep_resume_backoff(&self, delay: Duration) {
+        let injected = self
+            .resume_backoff
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some();
+        if injected {
+            return;
+        }
+        tokio::time::sleep(delay).await;
+    }
+
+    /// D2 §3.4 + E1 §3.4：恢复预算消费（RecoveryBudget 纯函数复用零改动；
+    /// 同键 `recover_episodes`、指纹域互斥；会话串行守卫下读-改-写安全，
+    /// F2-27 spawn_blocking）。
+    ///
+    /// 上限来源：error-retry 域 = `recover_max_episodes` 键（缺省
+    /// RecoveryBudget::default_limit()=3）；content-resume 域 =
+    /// `content_resume_max` 键（缺省 2）。判定时消费（拉起失败不重复
+    /// 消费，条目滞留由 watcher/下轮收口兜底）。
+    async fn consume_resume_episode(
+        &self,
+        _session_id: &str,
+        fp: &str,
+        limit_key: &'static str,
+        default_limit: u32,
+    ) -> EpisodeConsume {
+        let Some(db) = self.local_db() else {
+            return EpisodeConsume::Denied {
+                count: 0,
+                max: default_limit,
+            };
+        };
+        let fp = fp.to_string();
+        let limit_key = limit_key.to_string();
+        tokio::task::spawn_blocking(move || {
+            let raw = db
+                .get_session_meta(RECOVER_EPISODES_KEY)
+                .ok()
+                .flatten();
+            let limit = db
+                .get_session_meta(&limit_key)
+                .ok()
+                .flatten()
+                .and_then(|raw| raw.parse::<u32>().ok())
+                .unwrap_or(default_limit);
+            let mut budget = RecoveryBudget::from_json(raw.as_deref(), limit);
+            if !budget.can_recover(&fp) {
+                return EpisodeConsume::Denied {
+                    count: budget.count(&fp),
+                    max: limit,
+                };
+            }
+            let count = match budget.record_fork(&fp) {
+                Ok(count) => count,
+                Err(_) => {
+                    return EpisodeConsume::Denied {
+                        count: budget.count(&fp),
+                        max: limit,
+                    };
+                }
+            };
+            if db
+                .set_session_meta(RECOVER_EPISODES_KEY, &budget.to_json())
+                .is_err()
+            {
+                return EpisodeConsume::Denied {
+                    count,
+                    max: limit,
+                };
+            }
+            EpisodeConsume::Consumed(count)
+        })
+        .await
+        .unwrap_or(EpisodeConsume::Denied {
+            count: 0,
+            max: default_limit,
+        })
+    }
+
+    /// D3 §3.2.1/§3.2.4：任务文本还原（首条 user 消息文本；与
+    /// lifecycle.rs derive_task 同源——子代理 run 首条 user 消息即任务
+    /// prompt 的对话形态）。无 user 消息 → 空串（指纹退化但可运行）。
+    fn first_user_text(messages: &[Arc<AgentMessage>]) -> String {
+        messages
+            .iter()
+            .find(|m| m.role == AgentMessageRole::User)
+            .map(|m| m.text().trim().to_string())
+            .unwrap_or_default()
+    }
+
+    /// D3 §3.2.2：阶梯 1 收口后重派请求（裁决 #5：原 run failed
+    /// reason=recovery-retry + 预算内重派新 run mode=recovery-retry；
+    /// 不消费 Episode、无 steering 通知）。subagent_id 由 spawner 生成
+    /// （agent_id: None，与 fork 请求同构 recovery.rs:1115-1135）——预算
+    /// 指纹用原 subagent_id（D3 §8 决策 8），不受新 run id 影响。
+    fn retry_spawn_request(
+        cfg: &crate::subagent_spawner::SubagentRunConfig,
+        ctx: &RunFailureContext,
+    ) -> agent_tools::tools::subagent::SubagentSpawnRequest {
+        agent_tools::tools::subagent::SubagentSpawnRequest {
+            agent_id: None,
+            prompt: ctx.task.clone(),
+            role: None,
+            capability_mode: None,
+            allowed_tools: None,
+            timeout_ms: None,
+            description: Some("恢复阶梯 1 重派（C7，承接同一目标）".to_string()),
+            mode: Some("recovery-retry".to_string()),
+            parent_session_id: cfg.parent_session_id.clone(),
+            parent_run_id: None,
+            parent_tool_call_id: None,
+            flow_node_id: None,
+            is_composite: false,
+            task_type: None,
+            allowed_write_paths: None,
+            display_label: None,
+            model_override: None,
+        }
+    }
+
+    /// D3 §3.2.4：RunFailureContext 还原（11 字段装配表；retries = 跨 run
+    /// 阶梯 1 已重派次数——D3 §8 决策 1，**非** run 内 provider_error.retries；
+    /// retry_elapsed_ms = 0（决策 3：次数判定已覆盖预算语义）；from_leaf_id
+    /// = None（初始 run 无 subagent_path_json 落库，阶梯 3 结构化拒绝，
+    /// subagent_spawner.rs:703）；history 字段由 D7 维度在 recovery.rs 落地
+    /// 后接入（轮 2 A9 派单，数据源 = session_history.get(子代理会话)））。
+    ///
+    /// error_kind 取自 RunOutcome.provider_error.kind（D1 数据面；
+    /// ProviderErrorSummary 为 session-loop 私有模块类型，壳层只消费
+    /// 其 public 字段 kind，不命名类型）。
+    fn build_run_failure_context(
+        cfg: &crate::subagent_spawner::SubagentRunConfig,
+        error_kind: ProviderErrorKind,
+        first_user_text: &str,
+        has_assistant_output: bool,
+        ladder1_retries: u32,
+        inject_bytes: u64,
+        window_bytes: u64,
+    ) -> RunFailureContext {
+        RunFailureContext {
+            subagent_id: cfg.subagent_id.clone(),
+            subagent_run_id: cfg.subagent_run_id.clone(),
+            task: first_user_text.to_string(),
+            error_kind,
+            retries: ladder1_retries,
+            retry_elapsed_ms: 0,
+            produced_content: has_assistant_output,
+            from_leaf_id: None,
+            started_at_ms: cfg.started_at_ms,
+            inject_bytes,
+            window_bytes,
+        }
+    }
+
+    /// D3 §3.2.2：C7 恢复决策（子代理收口处、on_subagent_run_terminal
+    /// **之前**调用；决策先行——escalate 的 steering 条目先入队，与
+    /// subagent-terminal-<run_id> 终态通知共存，02 D2 裁定保留双条目）。
+    ///
+    /// 触发条件：active.subagent 为 Some 且终态 Failed 且
+    /// RunOutcome.provider_error 有数据（D1 面）且协调器可用（local_db
+    /// 装配）。返回 AutoRetry 计划（含退避 delay 与重入协调器引用）；
+    /// SteeringQueued / NeedsUser 由协调器内部完成（通知入队/标记），
+    /// 无需额外动作。
+    async fn decide_subagent_recovery(
+        &self,
+        session_id: &str,
+        cfg: &crate::subagent_spawner::SubagentRunConfig,
+        terminal_status: &conex_db::RunStatus,
+        error_kind: Option<ProviderErrorKind>,
+        first_user_text: &str,
+        has_assistant_output: bool,
+        run_message_bytes: u64,
+    ) -> Option<RecoveryPlan> {
+        if terminal_status != &conex_db::RunStatus::Failed {
+            return None;
+        }
+        let Some(error_kind) = error_kind else {
+            return None;
+        };
+        let Some(coord) = self.coordinator_for(session_id) else {
+            return None;
+        };
+        let fp = fingerprint(&cfg.subagent_id, first_user_text);
+        let ctx = Self::build_run_failure_context(
+            cfg,
+            error_kind,
+            first_user_text,
+            has_assistant_output,
+            self.ladder1_retry_count(session_id, &fp),
+            // inject_bytes：重派 run 无注入内容（新 run 以任务 prompt 起头，
+            // 与 fork 的「注入内容字节」语义不同源——fork 三态判定归
+            // resume 命令面（D4）装配，本触发点 only 决策不消费）
+            0,
+            // window_bytes：本 run 消息字节合计（content_bytes 语义同源，
+            // lifecycle.rs:451-458；会话窗口近似）
+            run_message_bytes,
+        );
+        // 决策闭包经 spawn_blocking 执行（F2-27）；ctx 克隆进闭包（决策
+        // 只读消费），原件随 AutoRetry 计划移交重派执行
+        let ctx_for_decision = ctx.clone();
+        let decision = blocking_coordinator_call(Arc::clone(&coord), move |c| {
+            // on_subagent_run_failure 为无 await 的 async 方法（函数体全
+            // 同步，recovery.rs:914-978），经 Handle::block_on 在 blocking
+            // 线程执行（D3 §3.4.1）
+            block_on_coordinator_failure(c, &ctx_for_decision)
+        })
+        .await;
+        match decision {
+            Ok(RecoveryOutcome {
+                action: RecoveryAction::AutoRetry { delay, .. },
+                ..
+            }) => Some(RecoveryPlan::AutoRetry {
+                delay,
+                ctx,
+                coord,
+            }),
+            Ok(_) => None,
+            Err(error) => {
+                tracing::warn!(
+                    target: "run",
+                    session_id,
+                    subagent_run_id = %cfg.subagent_run_id,
+                    error = %error,
+                    "恢复决策失败（协调器不可用，收口走接线前行为）"
+                );
+                None
+            }
+        }
+    }
+
+    /// D3 §3.2.2/§3.2.3：阶梯 1 收口后重派（裁决 #5 方案 Y）。在
+    /// on_subagent_run_terminal（旧 run 记账释放）**之后**执行——spawn
+    /// 守卫快照不含旧 run，无「被自己挡住」误拒（subagent_spawner.rs:
+    /// 506-526、743-764 时序保证）。
+    ///
+    /// 顺序：退避 sleep（async 不阻塞 worker）→ 原 run end_reason 覆写
+    /// recovery-retry（spawn_blocking）→ 预算内重派（mode=recovery-retry，
+    /// 不消费 Episode、无 steering）→ 计数 +1；spawn 失败（含 16/16/1
+    /// 守卫拒绝）→ 计数推满 + retries 推满重入 escalate（阶梯 2 通知，
+    /// 不静默、无假重试）。
+    async fn execute_subagent_recovery(
+        &self,
+        session_id: &str,
+        cfg: &crate::subagent_spawner::SubagentRunConfig,
+        plan: RecoveryPlan,
+    ) {
+        let RecoveryPlan::AutoRetry { delay, ctx, coord } = plan;
+        // 退避（async sleep 不阻塞 tokio worker）
+        tokio::time::sleep(delay).await;
+        // 原 run failed reason 覆写（RecoveryStore::update_run_status 同步
+        // → spawn_blocking 直连 LocalDb，F2-27 覆盖表新增点）
+        if let Some(db) = self.local_db() {
+            let run_id = ctx.subagent_run_id.clone();
+            match tokio::task::spawn_blocking(move || {
+                db.update_run_status(&run_id, conex_db::RunStatus::Failed, Some("recovery-retry"), None)
+            })
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    tracing::warn!(
+                        target: "run",
+                        session_id,
+                        subagent_run_id = %ctx.subagent_run_id,
+                        error = %error,
+                        "原 run end_reason 覆写 recovery-retry 失败（仅观测面）"
+                    );
+                }
+                Err(join_error) => {
+                    tracing::warn!(
+                        target: "run",
+                        session_id,
+                        error = %join_error,
+                        "原 run end_reason 覆写 spawn_blocking join 失败"
+                    );
+                }
+            }
+        }
+        // 预算内重派新 run（mode=recovery-retry；不消费 Episode、无 steering）
+        let request = Self::retry_spawn_request(cfg, &ctx);
+        let fp = fingerprint(&ctx.subagent_id, &ctx.task);
+        match self.subagent_spawner.spawn(&request).await {
+            Ok(spawned) => {
+                let retries = self.bump_ladder1_retry(session_id, &fp);
+                tracing::info!(
+                    target: "run",
+                    session_id,
+                    from_run_id = %ctx.subagent_run_id,
+                    new_subagent_run_id = %spawned.subagent_run_id,
+                    retries,
+                    "恢复阶梯 1 收口后重派成功（mode=recovery-retry，不消费 Episode）"
+                );
+            }
+            Err(error) => {
+                // spawn 失败（含 16/16/1 守卫拒绝）：计数推满 + retries
+                // 推满 → 重入 on_subagent_run_failure 必 Escalate（阶梯 2
+                // 通知主 agent，不静默、无假重试）
+                self.force_ladder1_retry_max(session_id, &fp);
+                let mut escalate_ctx = ctx;
+                escalate_ctx.retries = self.ladder1_retry_count(session_id, &fp);
+                let run_id_for_log = escalate_ctx.subagent_run_id.clone();
+                let outcome = blocking_coordinator_call(coord, move |c| {
+                    block_on_coordinator_failure(c, &escalate_ctx)
+                })
+                .await;
+                tracing::warn!(
+                    target: "run",
+                    session_id,
+                    subagent_run_id = %run_id_for_log,
+                    error = ?error,
+                    reentry = ?outcome.as_ref().map(|o| o.ladder.as_str()).ok(),
+                    "恢复阶梯 1 重派失败：计数推满重入 escalate（阶梯 2 通知主 agent）"
+                );
+            }
+        }
+    }
+
+    /// E3-2（D3 §3.2.6）：子代理运行中汇报接线——收口处把本轮新增消息
+    /// （assistant 文本截断 + 工具调用摘要）经 SubagentEventEmitter::emit_event
+    /// （subagent-event 通道，kind=progress）发射。
+    ///
+    /// 职责分离：**汇报 = 观测面，唤醒 = 终态面**——运行中汇报不写
+    /// steering 队列（防 16 并发唤醒风暴）；wait_for_terminal 只认
+    /// subagent-ended（名单外忽略，wait_subagents.rs:378-459），语义零
+    /// 改变。progress 为 Delta 背压（不落库不阻塞 drive loop，events.rs:
+    /// 51-55）——事件同时经本 run 事件桥广播（信封 runId = 本 run），
+    /// 前端全局消费者按信封 sessionId（父会话）路由（subagentHandlers.ts
+    /// :131-144）。失败仅告警（观测面不阻断收口）。
+    ///
+    /// 说明：引擎单次 produce 覆盖整个 run（轮级钩子需 session-loop 侧
+    /// 扩展，超出本轮文件域），逐条 assistant 消息按消息序发射近似
+    /// 「轮次递进」语义。
+    async fn emit_subagent_progress(
+        &self,
+        cfg: &crate::subagent_spawner::SubagentRunConfig,
+        bridge: &Arc<BufferedRunEventBridge>,
+        messages: &[Arc<AgentMessage>],
+    ) {
+        if messages.is_empty() {
+            return;
+        }
+        let Some(db) = self.local_db() else {
+            return;
+        };
+        let emitter = SubagentEventEmitter::new(Arc::new(
+            orchestrator::persist::LocalDbStore::new(db),
+        ));
+        let emit_ctx = SubagentEmitContext {
+            session_id: cfg.parent_session_id.clone(),
+            parent_run_id: String::new(),
+        };
+        let mut turn = 0u32;
+        for message in messages.iter().filter(|m| m.role == AgentMessageRole::Assistant) {
+            turn += 1;
+            let truncated: String = message
+                .text()
+                .chars()
+                .take(SUBAGENT_PROGRESS_TRUNCATE_CHARS)
+                .collect();
+            let tool_calls: Vec<&str> = message
+                .blocks
+                .iter()
+                .filter_map(|block| match block {
+                    AgentMessageBlock::ToolCall(call) => Some(call.tool_name.as_str()),
+                    _ => None,
+                })
+                .collect();
+            let info = SubagentEventInfo {
+                subagent_id: cfg.subagent_id.clone(),
+                subagent_run_id: cfg.subagent_run_id.clone(),
+                kind: SubagentEventKind::Progress,
+                payload: Some(serde_json::json!({
+                    // 载荷形状兼容前端 applySubagentEventToMessages 投影面
+                    // （message-delta + text 块），最小形态 = 透传文本块
+                    "type": "message-delta",
+                    "block": { "type": "text", "text": truncated },
+                    "turn": turn,
+                    "toolCalls": tool_calls,
+                })),
+            };
+            match emitter.emit_event(&emit_ctx, &info).await {
+                Ok(sequenced) => {
+                    let envelope = AgentEventEnvelope::new(
+                        sequenced.event,
+                        Some(cfg.subagent_run_id.clone()),
+                        Some(sequenced.sequence),
+                    );
+                    bridge.emit(&envelope);
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target: "subagent_spawner",
+                        event = "emit_progress_failed",
+                        subagent_run_id = %cfg.subagent_run_id,
+                        error = %error,
+                        "子代理运行中汇报发射失败（观测面，不阻断收口）"
+                    );
+                }
+            }
+        }
+        bridge.flush();
+    }
+
     /// 子代理生命周期服务（T-D-09：kill_all / resume_subagent 命令面
     /// 依赖；db 与 [orchestrator::lifecycle::ForceCancelSink]（本状态实现）
     /// 装配；LocalDb 不可用（测试替身 store）→ None）
@@ -2200,7 +3760,7 @@ impl CoreRunState {
     /// 失败路径：restore 返回 Err → tracing error + 诊断记录
     /// （restore.state=failed），**不阻塞启动**——run 命令照常可用
     /// （事件序列锚点由 [Self::base_sequence_for] 懒计算兜底）。
-    pub async fn run_restore(&self) -> Option<RestoreOutcome> {
+    pub async fn run_restore(self: &Arc<Self>) -> Option<RestoreOutcome> {
         self.restore_started.store(true, Ordering::SeqCst);
         match RestoreManager::new()
             .restore(self.store.as_ref(), self.snapshots.as_ref())
@@ -2233,6 +3793,65 @@ impl CoreRunState {
                     outcome.interrupted.len();
                 *self.restore_last_sequence.lock().unwrap_or_else(|e| e.into_inner()) =
                     Some(outcome.last_sequence);
+                // D3 §3.3：逐会话重建会话树 + 构造协调器 + 重排 pending
+                // 通知（树先于 coordinator 插入——coordinator_for 从
+                // session_trees 取树；from_session_record 失败 → 降级空树，
+                // fail-open：阶梯 1/2/4 照常、阶梯 3 fork 结构化拒绝，
+                // recovery.rs:1066-1070）
+                for record in &outcome.sessions {
+                    let tree = SessionTree::from_session_record(record.clone()).unwrap_or_else(|e| {
+                        tracing::warn!(
+                            target: "restore",
+                            session_id = %record.session_id,
+                            error = %e,
+                            "会话树重建失败（降级空树：阶梯 1/2/4 照常，fork 结构化拒绝）"
+                        );
+                        SessionTree::new(&record.session_id)
+                    });
+                    self.session_trees
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(record.session_id.clone(), Arc::new(Mutex::new(tree)));
+                    // coordinator 惰性构造（new 自动恢复预算/forks/通知/
+                    // needs_user，recovery.rs:855-863）
+                    if let Some(coord) = self.coordinator_for(&record.session_id) {
+                        // pending 通知重排入队（同步 → spawn_blocking，F2-27）
+                        match blocking_coordinator_call(
+                            coord,
+                            |c| c.restore_steering_notifications(),
+                        )
+                        .await
+                        {
+                            Ok(reinserted) => {
+                                tracing::info!(
+                                    target: "restore",
+                                    session_id = %record.session_id,
+                                    reinserted,
+                                    "恢复阶梯 2 通知重排完成（pending 条目重新入队）"
+                                );
+                            }
+                            Err(error) => {
+                                tracing::warn!(
+                                    target: "restore",
+                                    session_id = %record.session_id,
+                                    error = %error,
+                                    "恢复阶梯 2 通知重排失败（重启后该通知仅落库，主 agent 可见性降级）"
+                                );
+                            }
+                        }
+                    }
+                }
+                // D6-③：重启恢复条目生成（interrupted → restore-<run_id>
+                // steering 条目；主 run 自动续跑，子代理只通知不自动 fork）
+                self.enqueue_restore_entries(&outcome).await;
+                // D6 §3.2 spawn 点 1：恢复后对恢复会话 spawn watcher——
+                // 恢复条目 / 定时器补发 / 通知重排需要消费方（每会话
+                // 幂等持有；子代理会话不 spawn——无 watcher 拉起语义）
+                for record in &outcome.sessions {
+                    if !record.session_id.starts_with(SUBAGENT_SESSION_PREFIX) {
+                        self.ensure_wake_watcher(&record.session_id);
+                    }
+                }
                 tracing::info!(
                     target: "restore",
                     mode = ?outcome.mode,
@@ -2442,11 +4061,12 @@ impl orchestrator::lifecycle::ForceCancelSink for CoreRunState {
 /// 限制："fetching the hidden types of an opaque inside of the defining
 /// scope is not supported"）——trait object 断链后检查可终止。
 fn production_resume_launcher() -> ResumeLauncher {
-    let launcher: ResumeLauncher = Arc::new(|state, session_id, messages| {
+    let launcher: ResumeLauncher = Arc::new(|state, session_id, mode, messages| {
         let state = Arc::clone(state);
         let session_id = session_id.to_string();
+        let mode = mode.to_string();
         Box::pin(async move {
-            idle_resume::spawn_idle_resume_run(state, session_id, messages).await;
+            idle_resume::spawn_idle_resume_run(state, session_id, &mode, messages).await;
         })
     });
     launcher
@@ -2460,6 +4080,7 @@ fn production_resume_launcher() -> ResumeLauncher {
 // opaque inside of the defining scope"）——跨模块定义后检查可终止。
 mod idle_resume {
     use super::*;
+    use orchestrator::steering_queue::SteeringInputEntry;
 
     /// 续 run 连续空转护栏上限（连续 N 次续 run 均无 AI 产出 → 停止续 run，
     /// 防空转风暴；默认 3 次）
@@ -2477,16 +4098,30 @@ mod idle_resume {
         Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
 /// T-CF-11：idle 续 run 拉起器（async；生产 = 经 [spawn_idle_resume_run]
-/// 复用 run 装配拉起新 run；测试 = 注入替身断言判定与注入载荷）
+/// 复用 run 装配拉起新 run；测试 = 注入替身断言判定与注入载荷）。
+///
+/// mode：续 run 类型（idle-resume / recovery-retry / content-resume /
+/// goal-continue）——D2 §3.4 拉起器 mode 参数化（自动恢复类型可观测，
+/// G-6）。
 pub(crate) type ResumeLauncher = Arc<
     dyn Fn(
             &Arc<CoreRunState>,
+            &str,
             &str,
             Vec<AgentMessage>,
         ) -> Pin<Box<dyn Future<Output = ()> + Send>>
         + Send
         + Sync,
 >;
+
+/// 续 run 判定结果（mode + 注入消息；mode 供拉起器区分自动恢复类型）
+pub(crate) struct ResumeDecision {
+    /// 续 run 类型（idle-resume / recovery-retry / content-resume /
+    /// goal-continue）
+    pub mode: &'static str,
+    /// 注入消息（队列条目批量聚合 / goal 前缀 / 续写模板）
+    pub inject: Vec<AgentMessage>,
+}
 
 /// T-CF-11：idle 待命续 run 判定（drive_run_loop 收口处调用）
 ///
@@ -2498,106 +4133,424 @@ pub(crate) type ResumeLauncher = Arc<
 /// - enabled Cron 任务（cron_has_enabled 判定器非空）。
 ///
 /// 不续 run（硬条件与用户语义）：
-/// - run 非正常收场（reason != Stop：Aborted / Stopped = 用户取消，
-///   Error / MaxTurns = 异常边界，保守不续）；
-/// - 用户显式结束：force_cancel（abort_signal 触发，双保险）/ 用户消息
-///   到达后的正常收场（本 run 有用户 L1 交互，user_touched）；
-/// - 三源全空（队列空 + 定时器表空 + Cron 表空）→ run 正常收场，AI 休眠
-///   待用户（T-CF-11 第 3 点开放问题 4）；
-/// - 续 run 连续 N 次（默认 3 次）均无 AI 产出 → 停止续 run（防空转风暴）
-///   并记日志。
+/// - abort_signal 触发（force_cancel，双保险）/ 用户消息到达后的正常收场
+///   （本 run 有用户 L1 交互，user_touched）——对全部路径生效；
+/// - reason = Stopped / Aborted（用户停止）永不续；MaxTurns 保守不续；
+/// - error 收场（D2 分支）：非 retryable / 熔断触发 / 预算超限 → 不续；
+/// - Stop 分支四源全空（队列 / 定时器 / Cron / goal_pending）→ AI 休眠
+///   待用户；续 run 连续 N 次（默认 3 次）均无 AI 产出 → 停止续 run。
 ///
-/// 返回：None = 不续 run；Some(messages) = 续 run（messages = 队列条目
-/// 批量转出的注入消息；空 Vec = 仅定时器/Cron 源触发——无队列条目文本
-/// 可注入，仍续 run 保持待命，事件条目入队后经下一次收口送达）。
+/// 三路分派（D2 §3.1 判定顺序，00 总纲 §6:140 契约）：
+/// - Stop → ① E1 续写子分支（部分保留断流瞬态标注）→ ② 三源 + D5 第四源
+///   goal_pending 判定；
+/// - Error → retryable 分支（D2：熔断 / 预算 / 退避 / 恢复条目入队）；
+/// - Stopped / Aborted / MaxTurns → 永不续。
+///
+/// 返回：None = 不续 run；Some(decision) = 续 run（mode + 注入消息）。
 pub(crate) async fn decide_idle_resume(
     state: &CoreRunState,
     active: &ActiveRun,
     reason: AgentEndReason,
     had_ai_output: bool,
-) -> Option<Vec<AgentMessage>> {
-    // 1. 用户取消 / 异常收场不续（force_cancel → abort_signal + reason
-    //    Aborted/Stopped；判定双保险）
-    if active.abort_signal.is_aborted() || reason != AgentEndReason::Stop {
+    signals: &ResumeSignals,
+) -> Option<ResumeDecision> {
+    // 1. 硬条件（保持，扩语义）：abort 永不续（双保险）；对 Stop 与
+    //    Error 两路径均生效（01 敲定 §4 红线 2：user_touched 永不自动续）
+    if active.abort_signal.is_aborted() {
         return None;
     }
-    // 2. 用户消息到达后的正常收场不续（本 run 内经 L1 收到用户消息）
     if active.user_touched.load(Ordering::SeqCst) {
         return None;
     }
-    // 3. 唤醒源判定：队列（首要唤醒源）非空直接命中；否则查定时器 /
-    //    Cron 判定器（锁内取克隆，锁不跨 await 持有——AA-02 并发模型）
-    let queue_pending = {
-        let queue = state
-            .pending_queue
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        queue.has_pending()
-    };
-    let timer_check = state
-        .timer_has_active
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone();
-    let timer_active = if !queue_pending {
-        match timer_check {
-            Some(check) => check().await,
-            None => false,
-        }
-    } else {
-        false
-    };
-    let cron_check = state
-        .cron_has_enabled
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone();
-    let cron_enabled = if !queue_pending && !timer_active {
-        match cron_check {
-            Some(check) => check().await,
-            None => false,
-        }
-    } else {
-        false
-    };
-    if !(queue_pending || timer_active || cron_enabled) {
-        // 4. 三源全空：run 正常收场，AI 休眠待用户（硬条件）
+    // D6 §8 决策 1：会话级 user_stopped 标记（跨 run 语义——用户显式
+    // 停止后 watcher 与收口判定共享同一判停，直到用户新 run 清除；
+    // 兜底 L2 协作停止 + error 收场的竞态：run 级 user_touched 在 L2
+    // 路径不置位，会话级标记覆盖该窗口）
+    if state.is_user_stopped(&active.session_id) {
         return None;
     }
-    // 5. 空转护栏（仅续 run 路径计数）：本 run 有 AI 产出 → 清零；
-    //    否则 +1，连续 N 次（默认 3 次）无产出 → 停止续 run 并记日志
-    {
-        let mut streak = state
-            .resume_empty_streak
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let entry = streak.entry(active.session_id.clone()).or_insert(0);
-        if had_ai_output {
-            *entry = 0;
-        } else {
-            *entry += 1;
-            if *entry > IDLE_RESUME_MAX_EMPTY_ROUNDS {
-                tracing::info!(
-                    target: "run",
-                    session_id = %active.session_id,
-                    consecutive_empty = *entry,
-                    limit = IDLE_RESUME_MAX_EMPTY_ROUNDS,
-                    "idle 续 run 停止：连续 N 次无 AI 产出（防空转风暴）"
-                );
+    match reason {
+        // ── 正常收场：E1 续写子分支 + 三源 + D5 goal_pending 第四源 ──
+        AgentEndReason::Stop => {
+            // ── E1 续写子分支（内容级续接，扩展定夺 E0 R4）──
+            // 条件（E1 §2.2 全满足）：最后一条 assistant 消息为纯文本、
+            // metadata.providerErrorKind ∈ 瞬态四类且 providerErrorRetryable
+            // != false（D7 流中断标注，与 D1 熔断 S2 计数同数据源）、
+            // 熔断未触发、续写开关开启、content-resume 预算内（上限 2）。
+            if let Some(decision) = content_resume_decision(state, active, signals).await {
+                return Some(decision);
+            }
+            // ── 四源判定：队列（首要唤醒源）/ 定时器 / Cron / goal_pending ──
+            let queue_pending = {
+                let queue = state
+                    .pending_queue
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                queue.has_pending()
+            };
+            let timer_check = state
+                .timer_has_active
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            let timer_active = if !queue_pending {
+                match timer_check {
+                    Some(check) => check().await,
+                    None => false,
+                }
+            } else {
+                false
+            };
+            let cron_check = state
+                .cron_has_enabled
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            let cron_enabled = if !queue_pending && !timer_active {
+                match cron_check {
+                    Some(check) => check().await,
+                    None => false,
+                }
+            } else {
+                false
+            };
+            // D5 §3.6：goal_pending 第四源（与三源并存评估——队列条目 +
+            // goal_pending 并存时注入拼接；仅三源全空时 goal 独立命中）
+            let goal_state = state.load_goal_state(&active.session_id).await;
+            let goal_pending = goal_state
+                .as_ref()
+                .map(|goal| goal.goal_pending(reason))
+                .unwrap_or(false);
+            if !(queue_pending || timer_active || cron_enabled || goal_pending) {
+                // 四源全空：run 正常收场，AI 休眠待用户（硬条件）
                 return None;
             }
+            // D6-⑤（W2）：空注入轮判定 = 唤醒源 ∈ {timer, cron} && 无队列
+            // 条目 && 无 goal 注入（三者同时成立 → 注入文本为空）——定时器
+            // /Cron 待命是正常态，不计 streak（裁决 #21）；goal 续轮（D5
+            // 四源命中）与 error 续 run（D2 error 分支）不受本判定影响，
+            // 走各自独立计数路径
+            let empty_inject_round = (timer_active || cron_enabled) && !queue_pending && !goal_pending;
+            // 空转护栏（仅续 run 路径计数）：本 run 有 AI 产出 → 清零；
+            // 否则 +1，连续 N 次（默认 3 次）无产出 → 停止续 run 并记日志。
+            // W2：error 续 run 不计 streak（早退于本护栏）；goal 续轮计入
+            // 空转且按 stalled 独立计数（D5 §3.4 双路径并存）
+            {
+                let mut streak = state
+                    .resume_empty_streak
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let entry = streak.entry(active.session_id.clone()).or_insert(0);
+                if had_ai_output {
+                    *entry = 0;
+                } else if empty_inject_round {
+                    // 定时器/Cron 空注入轮不计 streak（不增不减，保持原值
+                    // ——有产出轮自会清零，空注入轮不为待命代劳清零或消耗
+                    // 计数，D6 §8 决策 7）
+                } else {
+                    *entry += 1;
+                    if *entry > IDLE_RESUME_MAX_EMPTY_ROUNDS {
+                        tracing::info!(
+                            target: "run",
+                            session_id = %active.session_id,
+                            consecutive_empty = *entry,
+                            limit = IDLE_RESUME_MAX_EMPTY_ROUNDS,
+                            "idle 续 run 停止：连续 N 次无 AI 产出（防空转风暴）"
+                        );
+                        return None;
+                    }
+                }
+            }
+            // 注入拼接（D5 §3.6：队列条目在前，goal 前缀拼接其后——一条
+            // 消息；仅 goal_pending → 纯前缀；仅三源 → 现状语义）
+            let goal_text: Option<String> = if goal_pending {
+                let next_steps = state.read_summary_next_steps(&active.session_id).await;
+                goal_state
+                    .as_ref()
+                    .map(|goal| build_goal_continuation_prompt(goal, &next_steps))
+            } else {
+                None
+            };
+            // D5 §3.9：goal-continuation-decided（命中 goal_pending、注入
+            // 拼接处发射；envelope 通道）
+            if goal_pending {
+                emit_goal_continuation_decided(active, &goal_state, goal_text.clone()).await;
+            }
+            let inject = if queue_pending {
+                let mut queue = state
+                    .pending_queue
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let drained = drain_pending_to_inject_messages(&mut queue, &active.session_id);
+                match (drained.into_iter().next(), goal_text) {
+                    (Some(mut message), Some(text)) => {
+                        message.blocks.push(AgentMessageBlock::Text { text });
+                        vec![message]
+                    }
+                    (Some(message), None) => vec![message],
+                    (None, Some(text)) => vec![goal_continue_message(&active.session_id, text)],
+                    (None, None) => Vec::new(),
+                }
+            } else if let Some(text) = goal_text {
+                vec![goal_continue_message(&active.session_id, text)]
+            } else {
+                Vec::new()
+            };
+            let mode = if goal_pending {
+                "goal-continue"
+            } else {
+                "idle-resume"
+            };
+            Some(ResumeDecision { mode, inject })
         }
+        // ── 主 run error 收场：D2 retryable 分支 ──
+        AgentEndReason::Error => {
+            // 3a. 数据面：无结构化错误 / 非 retryable → 不续
+            let Some(pe) = signals.provider_error.as_ref() else {
+                return None;
+            };
+            if !pe.retryable {
+                return None;
+            }
+            // 3b. 熔断（D1 is_tripped）→ 不续
+            if state.circuit_breaker_is_tripped(&active.session_id).await {
+                return None;
+            }
+            // 3c/3d. 任务文本 + 指纹（裁决 #8：source = "error-retry"）
+            let fp = fingerprint_with_source("main", &signals.task_text, WAKE_SOURCE_ERROR_RETRY);
+            // 3e. 预算消费（RecoveryBudget 纯函数复用；超限 → denied 事件
+            //     + 不续）
+            let attempt = match state
+                .consume_resume_episode(
+                    &active.session_id,
+                    &fp,
+                    RECOVER_MAX_EPISODES_KEY,
+                    RecoveryBudget::default_limit(),
+                )
+                .await
+            {
+                EpisodeConsume::Consumed(attempt) => attempt,
+                EpisodeConsume::Denied { count, max } => {
+                    emit_recovery_budget_denied(active, &fp, &active.session_id, count, max)
+                        .await;
+                    return None;
+                }
+            };
+            // 3f. 跨 run 退避（镜像 recovery.rs 常量；C4 注入点测试驱动）
+            //     + 退避期 abort 复查（醒来不续，对齐 D1 abort 竞速语义）
+            let delay = state.backoff_delay_for(attempt);
+            state.sleep_resume_backoff(delay).await;
+            if active.abort_signal.is_aborted() {
+                return None;
+            }
+            // 3g. 恢复条目入队 → drain 注入 → 拉起；注入文本最小化
+            //     「继续任务」（约束 C：kind/retries 走 provider-diagnostic
+            //     事件 + 临时通知，不进对话、不给 AI）
+            let now = now_ms_internal();
+            let entry = SteeringInputEntry {
+                id: format!("recovery-main-{}-{now}", active.run_id),
+                text: MAIN_RESUME_INJECT_TEXT.to_string(),
+                attachments: Vec::new(),
+                enqueued_at: now,
+                group_id: Some(format!("{RECOVER_GROUP_PREFIX}{}", active.run_id)),
+                is_steering: true,
+            };
+            let mut queue = state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            queue.replace_or_enqueue(entry);
+            let inject = drain_pending_to_inject_messages(&mut queue, &active.session_id);
+            Some(ResumeDecision {
+                mode: "recovery-retry",
+                inject,
+            })
+        }
+        // ── 用户停止 / 其它：永不续（Stopped/Aborted/MaxTurns）──
+        _ => None,
     }
-    // 6. 队列条目批量转出为注入消息（无队列条目 = 仅定时器/Cron 源，
-    //    空注入保持待命）
-    if queue_pending {
-        let mut queue = state
-            .pending_queue
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        return Some(drain_pending_to_inject_messages(&mut queue, &active.session_id));
+}
+
+/// E1 续写子分支判定（部分保留断流 → 内容级续写 run）。全部条件满足
+/// 才触发（E1 §2.2 T1-T8）；预算超限 / 条件不满足 → None（半截保留交
+/// 用户，不触发任何自动动作）。
+async fn content_resume_decision(
+    state: &CoreRunState,
+    active: &ActiveRun,
+    signals: &ResumeSignals,
+) -> Option<ResumeDecision> {
+    let last = signals.last_assistant.as_ref()?;
+    // T3：纯文本消息（无 tool_calls 且文本非空——工具调用已提交不续写）
+    if !last.is_plain_text {
+        return None;
     }
-    Some(Vec::new())
+    // T2：瞬态四类标注 + providerErrorRetryable != false（D7 标注；
+    // 与 D1 熔断 S2 计数同数据源）
+    let kind = last.kind?;
+    if !is_transient_kind(kind) {
+        return None;
+    }
+    if last.retryable == Some(false) {
+        return None;
+    }
+    // T7：续写开关键（默认开启）
+    if !state.content_resume_enabled(&active.session_id).await {
+        return None;
+    }
+    // T5：熔断闸（续写是自动动作，受熔断闸约束）
+    if state.circuit_breaker_is_tripped(&active.session_id).await {
+        return None;
+    }
+    // T6：续写预算（独立指纹域 content-resume，上限 content_resume_max
+    // 默认 2——比 error-retry 的 3 更紧；域互斥不挪用）
+    let fp = fingerprint_with_source("main", &signals.task_text, WAKE_SOURCE_CONTENT_RESUME);
+    let attempt = match state
+        .consume_resume_episode(
+            &active.session_id,
+            &fp,
+            CONTENT_RESUME_MAX_KEY,
+            CONTENT_RESUME_MAX_DEFAULT,
+        )
+        .await
+    {
+        EpisodeConsume::Consumed(attempt) => attempt,
+        EpisodeConsume::Denied { count, max } => {
+            emit_recovery_budget_denied(active, &fp, &active.session_id, count, max).await;
+            return None;
+        }
+    };
+    // 退避 + abort 复查（对齐 error 分支 3f：预算在退避前消费）
+    let delay = state.backoff_delay_for(attempt);
+    state.sleep_resume_backoff(delay).await;
+    if active.abort_signal.is_aborted() {
+        return None;
+    }
+    // 注入锁定模板（E1 §3.2：测试断言绑定）；history 经 SessionHistoryCache
+    // 天然含已产出前缀，不重复注入（前缀不变性，约束 B）
+    let now = now_ms_internal();
+    let text = format!(
+        "上一轮生成中断({}),请从断点继续完成,不要重复已输出的内容",
+        resume_kind_label(kind)
+    );
+    let entry = SteeringInputEntry {
+        id: format!("recovery-main-{}-{now}", active.run_id),
+        text,
+        attachments: Vec::new(),
+        enqueued_at: now,
+        group_id: Some(format!("{RECOVER_GROUP_PREFIX}{}", active.run_id)),
+        is_steering: true,
+    };
+    let mut queue = state
+        .pending_queue
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    queue.replace_or_enqueue(entry);
+    let inject = drain_pending_to_inject_messages(&mut queue, &active.session_id);
+    Some(ResumeDecision {
+        mode: "content-resume",
+        inject,
+    })
+}
+
+/// D5 §3.7：goal 续轮注入消息（user 角色，metadata {kind:"goal-continue"}）
+fn goal_continue_message(_session_id: &str, text: String) -> AgentMessage {
+    AgentMessage {
+        id: crate::engine::new_message_id("goal-continue"),
+        role: AgentMessageRole::User,
+        created_at: crate::engine::now_iso_utc(),
+        blocks: vec![AgentMessageBlock::Text { text }],
+        metadata: Some(serde_json::json!({ "kind": "goal-continue" })),
+        client_message_id: None,
+        content: None,
+    }
+}
+
+/// D5 §3.9：goal-continuation-decided 发射（命中 goal_pending、注入拼接
+/// 处；载荷对齐 TS GoalContinuationDecision：action/reason/prompt/
+/// progressSignature/detail）
+async fn emit_goal_continuation_decided(
+    active: &ActiveRun,
+    goal_state: &Option<GoalState>,
+    prompt: Option<String>,
+) {
+    let event = AgentEvent::GoalContinuationDecided {
+        action: "continue".to_string(),
+        reason: "needs-continuation".to_string(),
+        prompt,
+        progress_signature: goal_state
+            .as_ref()
+            .and_then(|goal| goal.progress_signature.clone()),
+        detail: None,
+    };
+    emit_envelope_event(&active.queue, &active.bridge, &active.run_id, &active.session_id, event)
+        .await;
+}
+
+/// D2 §3.4 + E1 §3.4：恢复预算消费结果
+pub(crate) enum EpisodeConsume {
+    /// 消费成功（本次消费后的预算计数；跨 run 退避 attempt 输入）
+    Consumed(u32),
+    /// 预算耗尽（recovery-budget-denied 留痕载荷）
+    Denied { count: u32, max: u32 },
+}
+
+/// D2 §3.4（W6 双发射方）：主 run 侧预算耗尽留痕（subagentRunId=None）
+/// + denied 月度统计（recovery.rs:972-973）
+async fn emit_recovery_budget_denied(
+    active: &ActiveRun,
+    fp: &str,
+    session_id: &str,
+    count: u32,
+    max: u32,
+) {
+    let event = AgentEvent::RecoveryBudgetDenied {
+        session_id: session_id.to_string(),
+        subagent_run_id: None,
+        fingerprint: fp.to_string(),
+        count,
+        max,
+    };
+    emit_envelope_event(&active.queue, &active.bridge, &active.run_id, session_id, event).await;
+    conex_types::denied_stats::global_denied_stats().record_recovery_budget_denied();
+}
+
+/// D1 §3.2.2（C5）：熔断触发边沿观测事件（[Self::update_provider_fail_
+/// streak] 返回 true = 本次更新跨过阈值时发射）。双事件仅观测面——
+/// 不注入对话、不给 AI，UI 横幅呈现（用户约束 C，final/00 §9.3）；
+/// detail=Some("circuit-trip") 语义对齐 02-定夺 W1（熔断侧 subagentRunId
+/// = None、detail=Some）。
+async fn emit_circuit_trip_events(active: &ActiveRun, session_id: &str) {
+    let now = crate::engine::now_iso_utc();
+    emit_envelope_event(
+        &active.queue,
+        &active.bridge,
+        &active.run_id,
+        session_id,
+        AgentEvent::RuntimeInterventionRequired {
+            session_id: session_id.to_string(),
+            timestamp: now,
+            reason: "circuit-trip".to_string(),
+            choices: Vec::new(),
+            message: "provider 连续失败已达熔断阈值，自动重试已暂停（观测面：请检查网络或配置后重试）"
+                .to_string(),
+        },
+    )
+    .await;
+    emit_envelope_event(
+        &active.queue,
+        &active.bridge,
+        &active.run_id,
+        session_id,
+        AgentEvent::RecoveryEscalated {
+            session_id: session_id.to_string(),
+            subagent_run_id: None,
+            kind: "CircuitTrip".to_string(),
+            retries: 0,
+            elapsed_ms: 0,
+            detail: Some("circuit-trip".to_string()),
+        },
+    )
+    .await;
 }
 
 /// T-CF-11：PendingMessageQueue 条目批量转出 → 注入消息（对齐 D07 批量
@@ -2608,20 +4561,37 @@ pub(crate) async fn decide_idle_resume(
 /// 消息——对齐 D8「条目作为下一条用户消息注入」语义（steering_queue.rs
 /// :86-106，注入消息带 `{kind:"steering"}` 元数据供下游识别）。
 /// 消息 id 沿用首条条目 id 保证幂等（对齐 transfer_follow_up 的 id 沿用）。
-fn drain_pending_to_inject_messages(
+pub(crate) fn drain_pending_to_inject_messages(
     queue: &mut PendingMessageQueue,
     _session_id: &str,
 ) -> Vec<AgentMessage> {
-    let entries = queue.dequeue_all();
+    let mut entries = queue.dequeue_all();
     if entries.is_empty() {
         return Vec::new();
     }
-    let text = entries
+    // D6 §3.4：合并注入上限（评审 selection-03:220 建议 ≤16 条）——保留
+    // 最新 ≤16 条（FIFO 尾部即最新；省略最旧——旧条目信息过时风险高，
+    // D6 §8 决策 4），超出在文本注明省略 N 条。省略轨迹不丢：恢复域
+    // 条目有 recover_notifications 落库冗余，定时器/子代理终态条目有
+    // 事件表留痕——队列只承载提醒，不承载全量。
+    let (kept, omitted) = if entries.len() > RESTORE_MERGE_INJECT_LIMIT {
+        let split = entries.len() - RESTORE_MERGE_INJECT_LIMIT;
+        let omitted = entries[..split].len();
+        (entries.split_off(split), omitted)
+    } else {
+        (entries, 0)
+    };
+    let mut text = kept
         .iter()
         .map(|entry| entry.text.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    let first = &entries[0];
+    if omitted > 0 {
+        text = format!("{text}\n（其余 {omitted} 条唤醒通知省略，详情见事件流）");
+    }
+    // 消息 id 沿用保留集首条条目 id 保证幂等（对齐 transfer_follow_up
+    // 的 id 沿用）
+    let first = &kept[0];
     vec![AgentMessage {
         id: first.id.clone(),
         role: AgentMessageRole::User,
@@ -2633,6 +4603,113 @@ fn drain_pending_to_inject_messages(
     }]
 }
 
+/// D7 §8 决策 1：会话树访问器（D3 session_trees 表优先——共享实例直读
+/// 直写；无记录回退 [CoreRunState::sessions] 快照注册表临时重建 +
+/// to_session_record 回写；无会话记录 → None 跳过——子代理会话
+/// （sub-sess-*）天然无树无叶子，采集语义只落在有树会话，R8）。
+/// 全程 std Mutex 锁内完成（纯内存，无 await，对齐 AA-02）。
+fn with_session_tree<R>(
+    state: &CoreRunState,
+    session_id: &str,
+    f: impl FnOnce(&mut SessionTree) -> R,
+) -> Option<R> {
+    {
+        let trees = state.session_trees.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(tree) = trees.get(session_id) {
+            return Some(f(&mut tree.lock().unwrap_or_else(|e| e.into_inner())));
+        }
+    }
+    let mut sessions = state.sessions.lock().unwrap_or_else(|e| e.into_inner());
+    let idx = sessions.iter().position(|record| record.session_id == session_id)?;
+    let mut tree = SessionTree::from_session_record(sessions[idx].clone()).ok()?;
+    let result = f(&mut tree);
+    sessions[idx] = tree.to_session_record();
+    Some(result)
+}
+
+/// D7 §3.1：收口采集接线（M5B；纯函数 collect_checkpoint_from_messages
+/// → 写面 set_leaf_checkpoint）。三态：
+/// - Ok(Some) → 写叶子（无叶子 / 写失败 → warn 不阻断）；
+/// - Ok(None) → 无标记行，现状；
+/// - Err → 对话内坏标记行：视为无 checkpoint，warn + 不写 + 不阻断
+///   （§3.5 采集侧降级——该标记行是模型输出噪音，不中止 run 生命周期）。
+pub(crate) fn collect_checkpoint_on_close(state: &CoreRunState, session_id: &str, outcome: &RunOutcome) {
+    // 采集 API 收具体消息（非引用）——收口处一次 clone，与
+    // to_history_messages 的收口克隆同频（每 run 一次，可接受）
+    let messages: Vec<AgentMessage> = outcome.messages.iter().map(|m| m.as_ref().clone()).collect();
+    match session_loop::safe_point::collect_checkpoint_from_messages(&messages) {
+        Ok(Some(payload)) => {
+            let written = with_session_tree(state, session_id, |tree| {
+                let Some(leaf_id) = tree.current_leaf_id().map(str::to_string) else {
+                    return false;
+                };
+                tree.set_leaf_checkpoint(&leaf_id, &payload).is_ok()
+            });
+            if !written.unwrap_or(false) {
+                tracing::warn!(
+                    target: "run",
+                    session_id,
+                    "checkpoint 采集命中但写面跳过/失败（无叶子或无会话记录；不阻断收口）"
+                );
+            }
+        }
+        Ok(None) => {}
+        Err(error) => tracing::warn!(
+            target: "run",
+            session_id,
+            error = %error,
+            "checkpoint 采集损坏降级（对话含坏标记行；不写叶子、不阻断收口）"
+        ),
+    }
+}
+
+/// D7 §3.2：checkpoint 摘要注入段（spawn_idle_resume_run 注入文本拼接；
+/// 三态分发——Present → 「上次检查点」摘要段（summary 截断 ≤500 字符，
+/// completed/next 各 ≤5 项，§8 决策 4）；Corrupt → 降级提示不阻断；
+/// Absent / 无树 → 空串（行为与现状一致，无 checkpoint 不注入）。
+pub(crate) fn checkpoint_injection_section(state: &CoreRunState, session_id: &str) -> String {
+    let checkpoint = with_session_tree(state, session_id, |tree| tree.read_leaf_checkpoint(None));
+    match checkpoint {
+        Some(conex_types::LeafCheckpointState::Present(payload)) => {
+            let completed = join_limited(&payload.completed, CHECKPOINT_LIST_ITEMS_MAX, "、");
+            let next = join_limited(&payload.next, CHECKPOINT_LIST_ITEMS_MAX, "、");
+            format!(
+                "[检查点摘要]\n上次检查点：目标「{}」。\n已完成：{}。\n摘要：{}\n下一步：{}",
+                payload.target,
+                if completed.is_empty() { "(无)".to_string() } else { completed },
+                truncate_chars(&payload.summary, CHECKPOINT_SUMMARY_TRUNCATE_CHARS),
+                if next.is_empty() { "(无)".to_string() } else { next },
+            )
+        }
+        Some(conex_types::LeafCheckpointState::Corrupt(message)) => {
+            tracing::warn!(
+                target: "run",
+                session_id,
+                message,
+                "检查点载荷损坏（降级提示，run 照常拉起）"
+            );
+            "(检查点损坏已忽略，按对话历史继续)".to_string()
+        }
+        _ => String::new(),
+    }
+}
+
+/// D7 §8 决策 4：清单项拼接（取前 max 项，其余省略——注入文本长度
+/// 护栏，防注意力稀释）
+fn join_limited(items: &[String], max: usize, sep: &str) -> String {
+    items.iter().take(max).cloned().collect::<Vec<_>>().join(sep)
+}
+
+/// D7 §8 决策 4：文本截断护栏（≤max 字符；超长截断 + 省略号「…」；
+/// 按字符（char）截断不按字节，中文安全）
+fn truncate_chars(text: &str, max: usize) -> String {
+    let mut result: String = text.chars().take(max).collect();
+    if text.chars().count() > max {
+        result.push('…');
+    }
+    result
+}
+
 /// T-CF-11：idle 续 run 拉起（收口处判定命中后调用）——复用
 /// [run_task_impl] 的 run 装配拉起新 run（新 run id / 新 producer /
 /// 新 ActiveRun / 新 drive_run_loop；history 回退 SessionHistoryCache，
@@ -2640,23 +4717,37 @@ fn drain_pending_to_inject_messages(
 ///
 /// prompt = 注入消息文本（队列条目批量聚合；仅定时器/Cron 源触发时为
 /// 空文本——AI 醒来保持待命态，等待事件条目入队后经下一次收口送达）；
-/// mode 标记 `idle-resume`（可观测：前端区分自动续 run 与用户发起的
-/// run）。失败仅告警不重试（下一收口再判定；空转护栏防风暴）。
+/// mode = 续 run 类型（D2 §3.4 mode 参数化：idle-resume / recovery-retry
+/// / content-resume / goal-continue，自动恢复类型可观测，G-6）。失败仅
+/// 告警不重试（下一收口再判定；空转护栏防风暴）。
 pub(crate) async fn spawn_idle_resume_run(
     state: Arc<CoreRunState>,
     session_id: String,
+    mode: &str,
     inject: Vec<AgentMessage>,
 ) {
-    let text = inject
+    let mut text = inject
         .iter()
         .map(|message| message.text())
         .collect::<Vec<_>>()
         .join("\n");
+    // D7 §3.2：checkpoint 摘要注入（read_leaf_checkpoint 三态分发——
+    // Present 追加「上次检查点」段（摘要 ≤500 字符截断）；Corrupt 追加
+    // 降级提示；Absent 不追加，行为与现状一致；不 panic、不阻断拉起。
+    // 注入仅发生在中断恢复/新 run 拉起场景：该场景 run 上下文本就是
+    // 重建态，前缀缓存必然失效，接受前缀变更（约束 B 权衡注记）
+    let checkpoint_section = checkpoint_injection_section(&state, &session_id);
+    if !checkpoint_section.is_empty() {
+        if !text.is_empty() {
+            text.push_str("\n\n");
+        }
+        text.push_str(&checkpoint_section);
+    }
     let options = RunTaskOptions {
         run_id: crate::engine::new_message_id("idle-resume"),
         session_id: session_id.clone(),
         prompt: Some(text),
-        mode: Some("idle-resume".to_string()),
+        mode: Some(mode.to_string()),
         cwd: None,
         permission_mode: None,
         client_message_id: None,
@@ -2667,6 +4758,12 @@ pub(crate) async fn spawn_idle_resume_run(
         parent_run_id: None,
         // T-D-13：续 run 为普通 run（子代理配置仅 spawner 构造）
         subagent_config: None,
+        // D5 §3.1：续轮 run 的 goal 三字段从 goal_state 重建（不依赖
+        // 前端再下发——引擎自主行为，goal_state 是权威，D5 §8 决策 7）；
+        // 此处缺省 None：装配面在 [run_task_impl] 内按 mode 判定
+        visible_goal: None,
+        max_rounds: None,
+        max_stalled_rounds: None,
     };
     if let Err(error) = run_task_impl(Arc::clone(&state), options).await {
         tracing::warn!(
@@ -2718,12 +4815,54 @@ pub(crate) async fn drive_run_loop(
     let resume_reason = outcome.reason;
     let resume_turn_index = outcome.turn_index;
     let resume_tool_calls = outcome.tool_call_count;
+    // D3：C7 恢复决策输入提前捕获（outcome 随后被 drive_outcome 移动消费
+    // ——selection-02 评审报告 §2.5：provider_error 必须在此同批提前提取
+    // clone；任务文本与产出判定来自 messages 快照）
+    let resume_provider_error = outcome.provider_error.clone();
+    let first_user_text = CoreRunState::first_user_text(&outcome.messages);
+    let has_assistant_output = outcome
+        .messages
+        .iter()
+        .any(|m| m.role == AgentMessageRole::Assistant);
+    // D2 §3.3 + E1 §3.3：续 run 判定数据面（与 provider_error 同批提前
+    // 提取——outcome 随后被 drive_outcome 移动消费）。task_text = 会话
+    // 首条非 steering user 消息（指纹输入，避免 error 续 run 的注入文本
+    // 使指纹从第二次起漂移）；last_assistant = 最后一条 assistant 消息的
+    // 流中断标注（E1 续写子分支触发信号，D7 §3.7）。
+    let resume_task_text = main_task_text(&outcome.messages);
+    let resume_last_assistant = last_assistant_provider_signal(&outcome.messages);
+    // D5 §3.3：goal 收口评估输入预提取（outcome 随后被 drive_outcome
+    // 移动消费——与 provider_error 同批提前提取；assess_goal_round 在
+    // :4957 收口区块调用，数据面必须在此备好）
+    let goal_signals = extract_goal_round_signals(&outcome.messages);
+    // E3-2：子代理 run 汇报素材（仅子代理 run 捕获——主 run 不产生
+    // subagent 汇报；Arc 克隆零拷贝共享同一份消息内存）
+    let subagent_messages = if active.subagent.is_some() {
+        outcome.messages.clone()
+    } else {
+        Vec::new()
+    };
+    // D3 §3.2.4：window_bytes（fork 三态判定的会话窗口字节；本触发点
+    // 以本 run 消息字节合计近似——content_bytes 语义同源，lifecycle.rs:
+    // 451-458；仅装配进 ctx，本决策不消费）
+    let run_message_bytes: u64 = outcome
+        .messages
+        .iter()
+        .map(|m| m.text().len() as u64)
+        .sum();
 
     // T-29 收口写入（P4 阶段 1-4）：run 引擎侧收口后，把对话消息收口为
     // HistoryMessage 原子替换 SessionHistoryCache——不落库、不改写会话语义
     // （混合路线核心）；缓存 = 下次 run 的 history 参数回退源；压缩后序列
     // 随收口自然携带（缓存基线重建，P4 §3.6 I5 / C13）
     state.session_history.store(&session_id, to_history_messages(&outcome));
+
+    // ── D7-① checkpoint 收口采集（M5B 接线：收口一次，produce 后 /
+    // drive_outcome 前——outcome.messages 仍在手，借用完成后即 move；
+    // finalize_failed 防御路径跳过并注释——drive 失败消息未消费属极
+    // 罕见，跳过可接受，D7 §8 决策 3）。采集侧损坏 warn + 不写 + 不
+    // 阻断（§3.5 降级）；子代理会话无树自动跳过（R8）──
+    collect_checkpoint_on_close(&state, &session_id, &outcome);
 
     // T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②）：
     // outcome.cache_stats 非空（tracker.finish 产物，T-36）→ 会话级状态
@@ -2788,10 +4927,10 @@ pub(crate) async fn drive_run_loop(
         );
         report.add(active.bridge.emit(&envelope));
     }
-    if let Some(error) = runtime_error {
+    if let Some(ref error) = runtime_error {
         state
             .diagnostics
-            .set_last_error(crish_payload_from_message(&error));
+            .set_last_error(crish_payload_from_message(error));
     }
     report.add(active.bridge.flush());
     tracing::info!(
@@ -2854,9 +4993,40 @@ pub(crate) async fn drive_run_loop(
             let run = active.handle.lock().await;
             run.status.clone()
         };
+        // ── D3：C7 恢复触发（决策先行于既有收口——裁决 #5 语义
+        //     「on_subagent_run_terminal 之前」：escalate 的 steering 条目
+        //     先入队，与 subagent-terminal-<run_id> 终态通知共存）──
+        // ── E3-2：子代理运行中汇报（subagent-event 通道 kind=progress；
+        //     观测面，不写 steering 队列；wait 语义零改变）──
+        let recovery_plan = state
+            .decide_subagent_recovery(
+                &session_id,
+                &cfg,
+                &terminal_status,
+                // D1 数据面：fatal 收场填充 kind（正常 stop 收场 None）
+                resume_provider_error.as_ref().map(|pe| pe.kind),
+                &first_user_text,
+                has_assistant_output,
+                run_message_bytes,
+            )
+            .await;
+        state
+            .emit_subagent_progress(&cfg, &active.bridge, &subagent_messages)
+            .await;
+        // 既有收口五步（记账释放 → 行更新 → subagent-ended → wait feed →
+        // steering 通知；子代理终态通知保留——C5 断言允许其存在）
         state
             .on_subagent_run_terminal(&cfg, terminal_status)
             .await;
+        // ── D3：阶梯 1 收口后重派（裁决 #5：旧 run 记账已释放 → spawn
+        //     守卫计数正确，无「被自己挡住」误拒；原 run failed
+        //     reason=recovery-retry；预算内重派 mode=recovery-retry；
+        //     不消费 Episode、无 steering）──
+        if let Some(plan) = recovery_plan {
+            state
+                .execute_subagent_recovery(&session_id, &cfg, plan)
+                .await;
+        }
     }
 
     state.save_snapshot_now().await;
@@ -2878,12 +5048,68 @@ pub(crate) async fn drive_run_loop(
     // 自续循环（靠空转护栏刹停，浪费模型调用）。steering 条目保留在队列，
     // 由主 agent 会话的收口消费（通知链路完整）。
     if active.subagent.is_none() {
-        if let Some(inject) = decide_idle_resume(
+        // ── D1 §3.2.2（S2）+ D5 §3.3：收口恢复面（熔断计数 + goal
+        //    轮次评估）──
+        // 熔断计数（唯一写方 [Self::update_provider_fail_streak]，
+        // spawn_blocking 落键）：判定顺序（D1 §3.2.2 S2 落点）——
+        // 1. RunOutcome.provider_error 存在：瞬态四类（RateLimit/
+        //    ServerError/Timeout/Network）→ +1；非瞬态 → 清零（C3）；
+        // 2. 无 provider_error 但最后一条 assistant 消息 metadata 标注
+        //    瞬态四类（部分保留断流，D7 流中断标注）→ +1（S2 补丁：
+        //    「产出一点再断流」无法绕开熔断）；
+        // 3. 其余（正常完成 / 无 provider 错误信号）→ 清零。
+        // 子代理 run 不参与（本区块守卫）：子代理失败走 D3 恢复阶梯，
+        // 熔断是主 run provider 健康信号（子代理会话键无消费方）。
+        let transient_failure = match &resume_provider_error {
+            Some(pe) => is_transient_kind(pe.kind),
+            None => resume_last_assistant
+                .as_ref()
+                .map(|last| {
+                    last.kind.is_some_and(is_transient_kind) && last.retryable != Some(false)
+                })
+                .unwrap_or(false),
+        };
+        if state
+            .update_provider_fail_streak(&session_id, transient_failure)
+            .await
+        {
+            // 熔断触发边沿（跨过阈值）：观测事件（D1 §3.2.2 C5——
+            // runtime-intervention-required + recovery-escalated
+            // detail="circuit-trip"；仅观测面，不注入对话、不给 AI）
+            emit_circuit_trip_events(&active, &session_id).await;
+        }
+        // D5 §3.3：收口 goal 轮次评估（唯一写方 [Self::assess_goal_round]；
+        // 无 goal_state 键 → 不评估不写；error 轮由 assess_round reason
+        // 门禁拦截——不递增 current_round/stalled_rounds（01 敲定 §3
+        // 第3条）。评估先于 decide_idle_resume：goal_pending 读面消费
+        // 本轮已推进的 goal_state（收口评估 → 续轮判定同区衔接）。
+        state
+            .assess_goal_round(
+                &active,
+                resume_reason,
+                &goal_signals,
+                runtime_error.as_deref(),
+            )
+            .await;
+
+        // D2 §3.2：判定输入组装（outcome 已移动消费，数据面在同批提取；
+        // ProviderErrorSummary 为 session-loop 私有模块类型，逐字段映射）
+        let resume_signals = ResumeSignals {
+            task_text: resume_task_text,
+            provider_error: resume_provider_error.as_ref().map(|pe| ProviderErrorFields {
+                kind: pe.kind,
+                retryable: pe.retryable,
+                retries: pe.retries,
+            }),
+            last_assistant: resume_last_assistant,
+        };
+        if let Some(decision) = decide_idle_resume(
             &state,
             &active,
             resume_reason,
             // 「有 AI 产出」= 完成过 turn 或执行过工具（空转 run 两者皆 0）
             resume_turn_index > 0 || resume_tool_calls > 0,
+            &resume_signals,
         )
         .await
         {
@@ -2891,8 +5117,8 @@ pub(crate) async fn drive_run_loop(
                 target: "run",
                 session_id = %session_id,
                 run_id = %run_id,
-                inject_messages = inject.len(),
-                "idle 待命命中：自动续开一轮 run（队列条目批量注入 / 定时器 / Cron 源）"
+                inject_messages = decision.inject.len(),
+                "idle 待命命中：自动续开一轮 run（队列条目批量注入 / 定时器 / Cron / goal / 恢复源）"
             );
             let launcher = state
                 .resume_launcher
@@ -2900,7 +5126,9 @@ pub(crate) async fn drive_run_loop(
                 .unwrap_or_else(|e| e.into_inner())
                 .clone();
             match launcher {
-                Some(launcher) => launcher(&state, &session_id, inject).await,
+                Some(launcher) => {
+                    launcher(&state, &session_id, decision.mode, decision.inject).await
+                }
                 None => {
                     // 防御分支：拉起器未注入（生产恒注入——CoreRunState::new
                     // 预装配生产拉起器，见 [production_resume_launcher]）。
@@ -2925,9 +5153,12 @@ pub(crate) async fn drive_run_loop(
 /// T-CF-11 / drive_run_loop 子模块 re-export（drive_run_loop 与
 /// run_task_impl 相互引用 opaque future，跨模块定义后 Send 检查可终止；
 /// 外层与测试经此引用）
-use idle_resume::{ResumeLauncher, WakeSourceCheck, drive_run_loop};
+use idle_resume::{EpisodeConsume, ResumeLauncher, WakeSourceCheck, drive_run_loop};
 #[cfg(test)]
-use idle_resume::decide_idle_resume;
+use idle_resume::{
+    checkpoint_injection_section, collect_checkpoint_on_close, decide_idle_resume,
+    drain_pending_to_inject_messages,
+};
 
 /// T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②；
 /// 拆分独立函数以便测试直测）：
@@ -2981,6 +5212,65 @@ async fn write_back_cache_stats(
                 "save_run_usage spawn_blocking join 失败（usage 查询回退前端估算）"
             );
         }
+    }
+}
+
+// ── D3：F2-27 spawn_blocking 覆盖（维度文档 D3 §3.4，仿 save_run_usage
+//    先例）──────────────────────────────────────────────────────────
+
+/// F2-27 内部：on_subagent_run_failure（声明 async、函数体无 await，
+/// recovery.rs:914-978）在 spawn_blocking 线程经 tokio Handle::block_on
+/// 执行（无 await future 立即完成，无阻塞；futures-util 未启用 executor
+/// feature，Handle::block_on 为 blocking 线程内的标准运行期模式——
+/// spawn_blocking 闭包携带运行期上下文）。
+fn block_on_coordinator_failure(
+    c: &mut RecoveryCoordinator,
+    ctx: &RunFailureContext,
+) -> Result<RecoveryOutcome, RecoveryError> {
+    tokio::runtime::Handle::current().block_on(c.on_subagent_run_failure(ctx))
+}
+
+/// F2-27：RecoveryStore 同步 SQLite 全走 spawn_blocking（tokio worker 不
+/// 执行同步 SQLite）。coordinator 变体：持锁在 blocking 线程执行同步方法
+/// ——[RecoveryCoordinator] 的纯同步方法（new / restore_steering_notifications
+/// / acknowledge / report_to_user / persist_*）闭包直调；
+/// on_subagent_run_failure（声明 async、函数体无 await，recovery.rs:914
+/// -978）闭包内 `futures_util::executor::block_on` 执行（无 await future
+/// 立即完成，无阻塞）。
+async fn blocking_coordinator_call<R: Send + 'static>(
+    coord: Arc<Mutex<RecoveryCoordinator>>,
+    f: impl FnOnce(&mut RecoveryCoordinator) -> Result<R, RecoveryError> + Send + 'static,
+) -> Result<R, RecoveryError> {
+    tokio::task::spawn_blocking(move || {
+        let mut c = coord.lock().unwrap_or_else(|e| e.into_inner());
+        f(&mut c)
+    })
+    .await
+    .map_err(|join| RecoveryError::PersistFailed {
+        message: format!("恢复协调器阻塞调用 join 失败：{join}"),
+    })?
+}
+
+/// D5 §3.9 / D1 §3.2.2：壳层事件发射统一入口（入队持久化 + 信封 emit；
+/// sequence 由 EventQueue 会话级原子分配）。goal-* 与熔断观测事件
+/// （runtime-intervention-required / recovery-escalated）共用本通道——
+/// envelope 带 runId + sequence（前端投影消费，02-定夺 B2）。
+async fn emit_envelope_event(
+    queue: &Arc<tokio::sync::Mutex<EventQueue>>,
+    bridge: &Arc<BufferedRunEventBridge>,
+    run_id: &str,
+    session_id: &str,
+    event: AgentEvent,
+) {
+    let mut queue = queue.lock().await;
+    if let Ok(sequenced) = queue.push(session_id, event).await {
+        let envelope = AgentEventEnvelope::new(
+            sequenced.event,
+            Some(run_id.to_string()),
+            Some(sequenced.sequence),
+        );
+        bridge.emit(&envelope);
+        bridge.flush();
     }
 }
 
@@ -3148,6 +5438,18 @@ pub struct RunTaskOptions {
     /// 不携带——serde 缺省 None = 普通 run，装配行为与现状一致）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent_config: Option<crate::subagent_spawner::SubagentRunConfig>,
+    /// D5 §3.1：goal 模式三字段（serde camelCase 由结构体级
+    /// rename_all 覆盖；缺省 None 向前兼容——旧前端未发字段行为与现状
+    /// 一致；serde 先例 = subagent_config）。激活装配在 run_task_impl
+    /// mode=="goal" 分支（缺省 max_rounds 12 / max_stalled_rounds 2）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible_goal: Option<String>,
+    /// D5 §3.1：goal 轮次上限（None → 引擎缺省 DEFAULT_GOAL_MAX_ROUNDS=12）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_rounds: Option<u32>,
+    /// D5 §3.1：goal 连续空转上限（None → 引擎缺省 2）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_stalled_rounds: Option<u32>,
 }
 
 #[tauri::command]
@@ -3169,6 +5471,17 @@ fn assemble_browser_estop(
     subagent_config: &Option<crate::subagent_spawner::SubagentRunConfig>,
 ) -> bool {
     subagent_config.is_none()
+}
+
+/// D6 决策 1：用户发起 run 判定（自动续 run 模式不写不清 user_stopped——
+/// idle-resume / recovery-retry / content-resume / goal-continue 为引擎
+/// 自主行为；其余（None / task / goal 等用户下发模式）视为用户新 run，
+/// 装配时清除停止标记恢复自动行为）
+fn is_user_initiated_mode(mode: Option<&str>) -> bool {
+    !matches!(
+        mode,
+        Some("idle-resume" | "recovery-retry" | "content-resume" | "goal-continue")
+    )
 }
 
 /// run 任务命令体（core_run_task 与 T-CF-11 idle 续 run 共用装配路径；
@@ -3196,6 +5509,11 @@ pub(crate) async fn run_task_impl(
     // T-D-14：父 run 归属（审批裁决者路由 + spawner 侧 run 注册表——先于
     // SessionLoopOptions 遮蔽取出，避免「options 已被 move」借用错误）
     let parent_run_id = options.parent_run_id.clone();
+    // D5 §3.1：goal 模式三字段（mode=="goal" 装配输入；None 缺省由
+    // [GoalState::with_defaults] 落引擎缺省 12/2，D5 §3.1 缺省规则）
+    let visible_goal = options.visible_goal;
+    let max_rounds = options.max_rounds;
+    let max_stalled_rounds = options.max_stalled_rounds;
 
     if run_id.is_empty() || session_id.is_empty() {
         return Err(CoreError::invalid_input("runId / sessionId 不能为空"));
@@ -3222,6 +5540,48 @@ pub(crate) async fn run_task_impl(
             )));
         }
     }
+    // D6 §3.2 spawn 点 2：会话首次出现惰性 spawn watcher（幂等——已
+    // 存在跳过；防重入靠本串行守卫兜底，验收 A5）。子代理 run 不
+    // spawn：子代理会话无 watcher 拉起语义（收口即终态），且共享队列
+    // 会让 sub-sess-* 会话 watcher 误消费主会话条目（D6 §6 风险 7）
+    if subagent_config.is_none() {
+        state.ensure_wake_watcher(&session_id);
+    }
+    // D6 决策 1：用户发起的普通 run 装配 → 清除会话级 user_stopped
+    // （用户新 run = 显式授权恢复自动行为；idle-resume / 恢复类 / 子
+    // 代理 run 不写不清——停止语义跨 run 存活直到用户介入）
+    if subagent_config.is_none() && is_user_initiated_mode(mode.as_deref()) {
+        state.clear_user_stopped(&session_id);
+    }
+    // D5 §3.1/§3.8：goal 模式装配分支（mode=="goal" 且 visible_goal
+    // 非空才装配）。写面 = 本装配点 + 收口 RoundAssessment（唯一写方）：
+    // - 新 /goal 覆盖旧 goal_state（round 计数归零、新
+    //   max_rounds/max_stalled_rounds，D5 §3.8 覆盖语义）；
+    // - 缺省规则：max_rounds None → 12、max_stalled_rounds None → 2
+    //   （[GoalState::with_defaults]，D5 §3.1）；
+    // - 其余 mode（含 goal-continue 续轮 run）不创建不清理——普通 run
+    //   保留挂起 goal_state（goal 是会话级长期意图），续轮由收口推进
+    //   不覆盖（D5 §3.8 模式切换）。
+    let goal_started: Option<(String, u32)> = if mode.as_deref() == Some("goal") {
+        if let Some(goal_text) = visible_goal.filter(|goal| !goal.trim().is_empty()) {
+            let goal_state = GoalState::with_defaults(goal_text, max_rounds, max_stalled_rounds);
+            let started = (goal_state.goal.clone(), goal_state.max_rounds);
+            state.save_goal_state(&session_id, &goal_state).await;
+            tracing::info!(
+                target: "run",
+                session_id = %session_id,
+                run_id = %run_id,
+                goal = %goal_state.goal,
+                max_rounds = goal_state.max_rounds,
+                "goal 模式装配：goal_state 键已初始化（新 /goal 覆盖语义）"
+            );
+            Some(started)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     // provider / 工具注册表（engine 生效配置）
     let Some(provider) = state.engine.provider() else {
         return Err(CoreError::internal("engine not ready（provider 配置缺失）"));
@@ -3552,11 +5912,28 @@ pub(crate) async fn run_task_impl(
             }
         };
 
+    // ── D1 §3.1.4/§3.2.3：退避与熔断配置装配（读 session_meta 键；
+    //    None = 向后兼容：立即重试 / 不启用熔断闸）──
+    // - retry_backoff：`provider_retry_backoff_ms` 键 → 内核退避
+    //   （750ms×2^(n-1)/8s 封顶/60s 预算/Retry-After 放行）生产生效；
+    // - provider_fail_streak：`provider_fail_streak` 键 count → 熔断闸
+    //   C1 输入（transient_retry 入口 >= 阈值直接 fatal）。熔断计数落
+    //   键在收口 [Self::update_provider_fail_streak]（唯一写方），本装配
+    //   点只读注入——天然跨 run（D1 §3.2.3 装配时序）。
+    let retry_backoff = state.retry_backoff_config(&session_id);
+    let provider_fail_streak = state.provider_fail_streak_count(&session_id).await;
+
     let options = SessionLoopOptions {
         cwd: cwd.clone(),
         assistant_client_message_id: assistant_client_message_id.clone(),
         system_prompt: build_system_prompt(system_prompt),
         context_budget,
+        // D1 §3.1.4（R6）：瞬态重试退避配置（session_meta 键注入；
+        // None = 现状立即重试向后兼容）
+        retry_backoff,
+        // D1 §3.2.3：会话级熔断计数当前值（transient_retry 入口闸 C1
+        // 输入；None = 不启用闸）
+        provider_fail_streak,
         // T-ESC-03：逃逸监视配置透传（装配上下文，LoopState 不消费）
         escape_watch: escape_config,
         // T-EG-05（F7）：写前自动备份中间件装配（S10b）——备份根经
@@ -3708,6 +6085,24 @@ pub(crate) async fn run_task_impl(
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .insert(run_id.clone(), Arc::clone(&active));
+    // D5 §3.9：goal-round-started（mode=goal 装配轮 run 启动时发射；
+    // round 从 1 计；载荷 goal/round/maxRounds 对齐 OrchestratorGoalRunState
+    // 子集；envelope 通道，run 串行上下文）
+    if let Some((goal, max_rounds)) = &goal_started {
+        emit_envelope_event(
+            &active.queue,
+            &active.bridge,
+            &active.run_id,
+            &session_id,
+            AgentEvent::GoalRoundStarted {
+                round: 1,
+                max_rounds: *max_rounds,
+                goal: goal.clone(),
+            },
+        )
+        .await;
+    }
+
     // 30-P1 改动点 4：JoinHandle 管理——spawn 句柄存入 ActiveRun（驱动
     // 任务持同一 active 实例）；收口不 await（JoinHandle drop 即 detach，
     // tokio 语义，防挂起）；句柄供可观测与未来 join（测试经
@@ -3805,6 +6200,10 @@ pub(crate) async fn run_control_impl(
         }
         // L2：协作停止（等安全点，不 hard abort）
         "cooperative_stop" => {
+            // D6 决策 1：用户显式停止 → 会话级 user_stopped 标记（跨 run
+            // 语义——watcher 与收口判定不再自动续，直到用户新 run 清除；
+            // L2 不置 run 级 user_touched，会话级标记兜底 error 收场竞态）
+            state.set_user_stopped(&active.session_id);
             let mut bus = active
                 .control_bus
                 .lock()
@@ -3819,6 +6218,9 @@ pub(crate) async fn run_control_impl(
         "force_cancel" => {
             // T-CF-11：用户显式取消 → 标记用户交互（收口不续 run 双保险）
             active.user_touched.store(true, Ordering::SeqCst);
+            // D6 决策 1：会话级 user_stopped 标记（跨 run 语义——残留
+            // 队列条目（已到期定时器等）不得自动拉起 run，直到用户新 run）
+            state.set_user_stopped(&active.session_id);
             active.abort_signal.abort();
             {
                 let mut bus = active
@@ -7991,11 +10393,13 @@ mod tests {
         calls: Arc<AtomicU64>,
         injected: Arc<Mutex<Vec<Vec<AgentMessage>>>>,
     ) -> ResumeLauncher {
-        let launcher: ResumeLauncher = Arc::new(move |state, session_id, messages| {
+        let launcher: ResumeLauncher = Arc::new(move |state, session_id, mode, messages| {
             let calls = Arc::clone(&calls);
             let injected = Arc::clone(&injected);
             let state = Arc::clone(state);
             let session_id = session_id.to_string();
+            // mode：续 run 类型（idle-resume 等）——替身不区分类型，忽略
+            let _ = mode;
             Box::pin(async move {
                 injected
                     .lock()
@@ -8021,7 +10425,7 @@ mod tests {
 
     /// 记录型拉起器替身（仅计数，不拉起新 run）
     fn counting_launcher(counter: Arc<AtomicU64>) -> ResumeLauncher {
-        let launcher: ResumeLauncher = Arc::new(move |_state, _session_id, _messages| {
+        let launcher: ResumeLauncher = Arc::new(move |_state, _session_id, _mode, _messages| {
             let counter = Arc::clone(&counter);
             Box::pin(async move {
                 counter.fetch_add(1, Ordering::SeqCst);
@@ -8123,28 +10527,65 @@ mod tests {
     }
 
     /// 验收：连续 3 次续 run 均无 AI 产出 → 停止续 run（防空转风暴；
-    /// 第 4 次判定返回 None）；有产出后护栏清零恢复
+    /// 第 4 次判定返回 None）；有产出后护栏清零恢复。
+    /// 唤醒源 = 队列条目（真实任务输入轮）——W2（02-定夺）后定时器/Cron
+    /// 空注入轮不计 streak（待命是正常态），护栏计数仅对真实输入轮生效
     #[tokio::test]
     async fn idle_resume_stops_after_consecutive_empty() {
         let (state, _registry) = state_with_background();
-        // 定时器判定器持续活跃（唤醒源保持——验证护栏独立于唤醒源）
-        state.set_timer_has_active(Some(Arc::new(|| Box::pin(async { true }))));
         let active = build_active_run(&state, "s1", "run-1").await;
 
-        // 连续空转（无 AI 产出）：前 3 次判定命中（续 run）
+        // 连续空转（无 AI 产出 + 真实队列输入）：前 3 次判定命中（续 run）
         for round in 1..=3u32 {
-            let verdict =
-                decide_idle_resume(&state, &active, AgentEndReason::Stop, false).await;
+            state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .enqueue(SteeringInputEntry::steering(
+                    format!("e{round}"),
+                    "子代理完成",
+                    1000 + u64::from(round),
+                ));
+            let verdict = decide_idle_resume(
+                &state,
+                &active,
+                AgentEndReason::Stop,
+                false,
+                &ResumeSignals::default(),
+            )
+            .await;
             assert!(verdict.is_some(), "第 {round} 次无产出续 run 应命中（护栏上限 3）");
         }
         // 第 4 次：连续 3 次无产出 → 停止续 run
-        let stopped = decide_idle_resume(&state, &active, AgentEndReason::Stop, false).await;
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering("e4", "子代理完成", 1004));
+        let stopped = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            false,
+            &ResumeSignals::default(),
+        )
+        .await;
         assert!(stopped.is_none(), "连续 3 次无产出后应停止续 run");
 
         // 有产出 → 计数清零，重新可续
-        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true).await;
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering("e5", "子代理完成", 1005));
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true, &ResumeSignals::default()).await;
         assert!(verdict.is_some(), "有产出后护栏清零，续 run 恢复");
-        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, false).await;
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering("e6", "子代理完成", 1006));
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, false, &ResumeSignals::default()).await;
         assert!(verdict.is_some(), "清零后空转计数从 1 重新开始");
     }
 
@@ -8241,10 +10682,10 @@ mod tests {
         state.set_cron_has_enabled(Some(Arc::new(|| Box::pin(async { true }))));
         let active = build_active_run(&state, "s1", "run-1").await;
 
-        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true).await;
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true, &ResumeSignals::default()).await;
         assert!(verdict.is_some(), "Cron enabled 应触发续 run");
         assert!(
-            verdict.unwrap().is_empty(),
+            verdict.unwrap().inject.is_empty(),
             "队列空时无注入文本（空注入保持待命）"
         );
     }
@@ -8268,13 +10709,13 @@ mod tests {
             .await
             .expect("cron 注册应成功");
         let active = build_active_run(&state, "s1", "run-1").await;
-        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true).await;
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true, &ResumeSignals::default()).await;
         assert!(
             verdict.is_some(),
             "注册 enabled cron 后队列空也应续 run 保持待命（Cron 源真实生效）"
         );
         assert!(
-            verdict.unwrap().is_empty(),
+            verdict.unwrap().inject.is_empty(),
             "队列空时无注入文本（空注入保持待命）"
         );
         // 清理：cancel 移除声明（防跨测试污染）
@@ -8288,10 +10729,1318 @@ mod tests {
         let (state, _registry) = state_with_background();
         state.set_cron_has_enabled(None);
         let active = build_active_run(&state, "s1", "run-1").await;
-        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true).await;
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true, &ResumeSignals::default()).await;
         assert!(
             verdict.is_none(),
             "Cron 判定器 None → Cron 源 false（与接线前行为一致，三源全空不续 run）"
+        );
+    }
+
+    // ======================================================================
+    // 接续链 2：D6 恢复条目 / 合并上限 / watcher 接线 / user_stopped /
+    // 空转计数按源 + D7 checkpoint 采集注入（A8/A9 壳层面）
+    // ======================================================================
+
+    /// 测试用 interrupted 记录（对齐 restore.rs:74-89 形状）
+    fn interrupted_run(run_id: &str, session_id: &str) -> orchestrator::restore::InterruptedRun {
+        orchestrator::restore::InterruptedRun {
+            run_id: run_id.to_string(),
+            session_id: session_id.to_string(),
+            previous_status: "running".to_string(),
+            status: "failed".to_string(),
+            reason: orchestrator::restore::INTERRUPTED_REASON.to_string(),
+            error: orchestrator::restore::INTERRUPTED_ERROR.to_string(),
+            timestamp: 1_000,
+        }
+    }
+
+    /// 测试用恢复结果（interrupted + 会话集）
+    fn restore_outcome_with(
+        interrupted: Vec<orchestrator::restore::InterruptedRun>,
+        sessions: Vec<SessionRecord>,
+    ) -> RestoreOutcome {
+        RestoreOutcome {
+            mode: RestoreMode::FullReplay,
+            sessions,
+            runs: Vec::new(),
+            pending_inputs: Vec::new(),
+            interrupted,
+            unknown_status_runs: Vec::new(),
+            last_sequence: 0,
+            snapshot_note: None,
+            snapshot_generation: 0,
+        }
+    }
+
+    /// D6-③ 恢复条目：主 run interrupted → 主会话队列恰 1 条，group_id =
+    /// `restore-<run_id>`，is_steering 受保护，文本含「请继续」（验收 A3
+    /// 判定面：主 run 自动续跑条目）
+    #[tokio::test]
+    async fn restore_enqueues_main_run_entry() {
+        let db = LocalDb::open_in_memory().unwrap();
+        let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        let outcome = restore_outcome_with(
+            vec![interrupted_run("run-main-1", "sess-main")],
+            Vec::new(),
+        );
+        state.enqueue_restore_entries(&outcome).await;
+        let mut queue = state.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
+        let entries = queue.dequeue_all();
+        assert_eq!(entries.len(), 1, "主 run interrupted 应生成恰 1 条恢复条目");
+        assert_eq!(
+            entries[0].group_id.as_deref(),
+            Some("restore-run-main-1"),
+            "group_id = restore-<run_id>"
+        );
+        assert!(entries[0].is_steering, "恢复条目 steering 受保护（容量挤占保留）");
+        assert!(entries[0].text.contains("请继续"), "注入文本含续跑指令");
+        assert!(entries[0].text.contains("被重启打断"), "注入文本含重启打断语义");
+        assert!(
+            entries[0].id.starts_with("restore-run-main-1-"),
+            "条目 id 带时间戳保唯一"
+        );
+    }
+
+    /// D6-③ 恢复条目：子代理 interrupted → 父会话收到通知（父归属经
+    /// session_agents 行解析），sub-sess-* 会话无自动续跑条目（验收 A3
+    /// 子代理分支：只通知不自动 fork，裁决 #20）
+    #[tokio::test]
+    async fn restore_notifies_parent_for_subagent() {
+        let db = LocalDb::open_in_memory().unwrap();
+        // 父会话行先落（session_agents 外键引用 sessions）
+        db.insert_session("sess-main", "sess-main").expect("父会话行");
+        // session_agents 行（父归属：主会话 sess-main 派发子代理 sub-run-1-1）
+        db.upsert_session_agent(&conex_types::SessionAgent {
+            id: "sub-1-1".to_string(),
+            subagent_run_id: "sub-run-1-1".to_string(),
+            parent_session_id: "sess-main".to_string(),
+            parent_run_id: "run-main-1".to_string(),
+            parent_tool_call_id: None,
+            description: String::new(),
+            mode: "analysis".to_string(),
+            status: "running".to_string(),
+            summary: None,
+            messages: Vec::new(),
+            started_at: 1_000,
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+        })
+        .expect("session_agents 行落库");
+        let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        let outcome = restore_outcome_with(
+            vec![interrupted_run("sub-run-1-1", "sub-sess-1-1")],
+            vec![SessionRecord {
+                session_id: "sess-main".to_string(),
+                current_leaf_id: None,
+                branches: Vec::new(),
+                context_meta: None,
+            }],
+        );
+        state.enqueue_restore_entries(&outcome).await;
+        let mut queue = state.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
+        let entries = queue.dequeue_all();
+        assert_eq!(entries.len(), 1, "子代理 interrupted 应生成恰 1 条通知（无自动续跑条目）");
+        assert!(
+            entries[0].text.contains("子代理 run sub-run-1-1"),
+            "通知携带子代理 run id"
+        );
+        assert!(
+            entries[0].text.contains("请决策"),
+            "通知含三决策指引（重派 / 接管 / 放弃）"
+        );
+        assert!(
+            !entries[0].text.contains("请继续"),
+            "子代理通知不是续跑指令（不自动 fork）"
+        );
+        assert_eq!(
+            entries[0].group_id.as_deref(),
+            Some("restore-sub-run-1-1"),
+            "子代理通知同样按 restore-<run_id> 分组"
+        );
+    }
+
+    /// D6-③ 恢复条目：子代理父归属查不到 → 跳过通知不 panic（run-
+    /// interrupted 事件已留痕，D6 §8 决策 3）
+    #[tokio::test]
+    async fn restore_skips_when_parent_unresolvable() {
+        let db = LocalDb::open_in_memory().unwrap();
+        let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        let outcome = restore_outcome_with(
+            vec![interrupted_run("sub-run-orphan", "sub-sess-9-9")],
+            Vec::new(),
+        );
+        state.enqueue_restore_entries(&outcome).await;
+        let queue = state.pending_queue.lock().unwrap();
+        assert!(
+            queue.is_empty(),
+            "父归属查不到 → 跳过通知（仅日志，不 panic、不产生条目）"
+        );
+    }
+
+    /// D6-③ 恢复条目：同 run 两次恢复 → replace_or_enqueue 分组去重仅 1 条
+    #[tokio::test]
+    async fn restore_entries_dedup_by_group() {
+        let db = LocalDb::open_in_memory().unwrap();
+        let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        let outcome = restore_outcome_with(
+            vec![interrupted_run("run-main-1", "sess-main")],
+            Vec::new(),
+        );
+        state.enqueue_restore_entries(&outcome).await;
+        state.enqueue_restore_entries(&outcome).await;
+        let queue = state.pending_queue.lock().unwrap();
+        assert_eq!(queue.len(), 1, "同 run 分组去重（不重复堆积）");
+    }
+
+    /// D6 §3.4 合并上限：18 条 → 注入文本 = 最新 16 条 + 省略注记（验收 A4）
+    #[test]
+    fn drain_merge_caps_at_16() {
+        let mut queue = PendingMessageQueue::new();
+        for i in 0..18 {
+            queue.enqueue(SteeringInputEntry::steering(
+                format!("e{i}"),
+                format!("条目 {i}"),
+                i,
+            ));
+        }
+        let messages = drain_pending_to_inject_messages(&mut queue, "s1");
+        assert_eq!(messages.len(), 1, "合并为单条注入消息");
+        let text = messages[0].text();
+        assert!(text.contains("条目 2"), "最新 16 条保留（省略最旧 2 条）");
+        assert!(text.contains("条目 17"), "最新条目保留");
+        assert!(!text.starts_with("条目 0"), "最旧条目省略");
+        assert!(!text.starts_with("条目 1"), "次旧条目省略");
+        assert!(!text.contains("\n条目 1\n"), "条目 1 不在保留集（条目 10-17 为合法子串，用分隔断言）");
+        assert!(text.contains("其余 2 条唤醒通知省略"), "省略注记入文本");
+        let metadata = messages[0].metadata.as_ref().expect("steering 元数据");
+        assert_eq!(
+            metadata.get("kind").and_then(|k: &serde_json::Value| k.as_str()),
+            Some("steering")
+        );
+    }
+
+    /// D6 §3.4 合并上限：≤16 条 → 全量拼接，无省略注记（现状语义保持）
+    #[test]
+    fn drain_merge_under_cap_unchanged() {
+        let mut queue = PendingMessageQueue::new();
+        for i in 0..5 {
+            queue.enqueue(SteeringInputEntry::steering(
+                format!("e{i}"),
+                format!("条目 {i}"),
+                i,
+            ));
+        }
+        let messages = drain_pending_to_inject_messages(&mut queue, "s1");
+        let text = messages[0].text();
+        assert!(text.contains("条目 0"), "未超限全量保留（FIFO 序）");
+        assert!(text.contains("条目 4"));
+        assert!(!text.contains("省略"), "无省略注记");
+        assert_eq!(text.matches("条目").count(), 5, "5 条全量拼接");
+    }
+
+    /// D6 §3.2 接线：ensure_wake_watcher 幂等持有 + start 生效（不重复 spawn）
+    #[tokio::test]
+    async fn wake_watcher_ensure_idempotent_and_running() {
+        let (state, _registry) = state_with_background();
+        assert!(state.ensure_wake_watcher("s1"), "首次创建返回 true");
+        assert!(!state.ensure_wake_watcher("s1"), "幂等：重复调用不重复 spawn");
+        let map = state.wake_watchers.lock().unwrap();
+        assert_eq!(map.len(), 1, "持有表恰 1 项");
+        let watcher = map.get("s1").expect("watcher 已持有");
+        assert!(watcher.is_running(), "周期任务运行中");
+        watcher.stop();
+    }
+
+    /// D6 决策 1：user_stopped 会话级标记同步到 watcher 实例（watcher
+    /// 判定与 decide_idle_resume 共享同一跨 run 语义）
+    #[tokio::test]
+    async fn wake_watcher_user_stopped_propagates() {
+        let (state, _registry) = state_with_background();
+        state.ensure_wake_watcher("s1");
+        state.set_user_stopped("s1");
+        assert!(state.is_user_stopped("s1"), "状态级标记已设置");
+        let watcher = state.wake_watchers.lock().unwrap().get("s1").unwrap().clone();
+        assert!(watcher.is_user_stopped(), "watcher 实例同步置位");
+        state.clear_user_stopped("s1");
+        assert!(!state.is_user_stopped("s1"), "清除后状态级标记消失");
+        assert!(!watcher.is_user_stopped(), "watcher 实例同步清除");
+        watcher.stop();
+    }
+
+    /// D6 决策 1 写入点：用户 L2/L3 停止 → 会话级 user_stopped 置位
+    #[tokio::test]
+    async fn run_control_stop_sets_user_stopped() {
+        let (state, _registry) = state_with_background();
+        state.ensure_wake_watcher("s1");
+        let active = build_active_run(&state, "s1", "run-1").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-1".to_string(), Arc::clone(&active));
+        // L2 协作停止
+        run_control_impl(&state, "run-1", "cooperative_stop", None, None, None)
+            .await
+            .expect("L2 应成功");
+        assert!(state.is_user_stopped("s1"), "L2 停止设置会话级标记");
+        // 新 run（模拟用户新 run 清除——run_task_impl 装配面）
+        state.clear_user_stopped("s1");
+        assert!(!state.is_user_stopped("s1"), "用户新 run 清除标记");
+        // L3 强停
+        run_control_impl(&state, "run-1", "force_cancel", None, None, None)
+            .await
+            .expect("L3 应成功");
+        assert!(state.is_user_stopped("s1"), "L3 停止设置会话级标记");
+        // 测试收尾：watcher 句柄先行取出（guard 语句内释放——if-let
+        // 尾语句临时值会越过函数末尾的 state drop，E0597）
+        let watcher = state
+            .wake_watchers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .cloned();
+        if let Some(watcher) = watcher {
+            watcher.stop();
+        }
+    }
+
+    /// D6 决策 1：user_stopped 后收口判定不续 run（watcher 与
+    /// decide_idle_resume 共享判停）；用户新 run 清除后恢复
+    #[tokio::test]
+    async fn decide_idle_resume_blocked_by_user_stopped() {
+        let (state, _registry) = state_with_background();
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        state.set_user_stopped("s1");
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            true,
+            &ResumeSignals::default(),
+        )
+        .await;
+        assert!(verdict.is_none(), "user_stopped 后队列非空也不续 run");
+        state.clear_user_stopped("s1");
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            true,
+            &ResumeSignals::default(),
+        )
+        .await;
+        assert!(verdict.is_some(), "用户新 run 清除后恢复自动续 run");
+    }
+
+    /// D6-⑤（W2）：仅定时器源空注入轮（无队列条目）无产出 → streak
+    /// 不增不减（裁决 #21：待命是正常态；验收 A6）
+    #[tokio::test]
+    async fn empty_inject_timer_round_not_counted() {
+        let (state, _registry) = state_with_background();
+        state.set_timer_has_active(Some(Arc::new(|| Box::pin(async { true }))));
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            false,
+            &ResumeSignals::default(),
+        )
+        .await;
+        assert!(verdict.is_some(), "定时器源应续 run（保持待命）");
+        assert!(verdict.unwrap().inject.is_empty(), "无队列条目 → 空注入");
+        let streak = state
+            .resume_empty_streak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(streak, 0, "定时器空注入轮不计 streak（不增不减）");
+    }
+
+    /// D6-⑤（W2）：仅 Cron 源空注入轮无产出 → streak 不增不减
+    #[tokio::test]
+    async fn empty_inject_cron_round_not_counted() {
+        let (state, _registry) = state_with_background();
+        state.set_cron_has_enabled(Some(Arc::new(|| Box::pin(async { true }))));
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            false,
+            &ResumeSignals::default(),
+        )
+        .await;
+        assert!(verdict.is_some(), "Cron 源应续 run（保持待命）");
+        let streak = state
+            .resume_empty_streak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(streak, 0, "Cron 空注入轮不计 streak");
+    }
+
+    /// D6-⑤（W2）：真实队列条目轮无产出 → 计入 streak（有真实任务输入，
+    /// 护栏照常计数）
+    #[tokio::test]
+    async fn queue_round_no_output_counts_streak() {
+        let (state, _registry) = state_with_background();
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            false,
+            &ResumeSignals::default(),
+        )
+        .await;
+        assert!(verdict.is_some(), "队列条目轮应续 run");
+        let streak = state
+            .resume_empty_streak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(streak, 1, "队列条目轮无产出计入 streak（现状语义保持）");
+    }
+
+    /// D6-⑤（W2）：有产出轮 → streak 清零（现状语义保持）
+    #[tokio::test]
+    async fn productive_round_resets_streak() {
+        let (state, _registry) = state_with_background();
+        state
+            .resume_empty_streak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), 3);
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            true,
+            &ResumeSignals::default(),
+        )
+        .await;
+        assert!(verdict.is_some(), "有产出轮应续 run");
+        let streak = state
+            .resume_empty_streak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(streak, 0, "有产出轮清零 streak");
+    }
+
+    /// D6-⑤（W2）：goal 续轮（D5 四源）无产出 → 计入空转 streak（裁决
+    /// #21 第二分支：goal 轮不享受空注入豁免；stalled 独立计数在 D5
+    /// goal_state 域）
+    #[tokio::test]
+    async fn goal_round_no_output_counts_streak() {
+        let db = LocalDb::open_in_memory().unwrap();
+        // runs 表外键引用 sessions——活动 run 装配前先落会话行
+        db.insert_session("s1", "s1").expect("会话行");
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &GoalState::new("测试目标", 12, 2).to_json(),
+        )
+        .expect("goal_state 落键");
+        let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            false,
+            &ResumeSignals::default(),
+        )
+        .await;
+        assert!(verdict.is_some(), "goal_pending 应续轮");
+        assert_eq!(
+            verdict.unwrap().mode,
+            "goal-continue",
+            "goal 续轮走 goal-continue 模式"
+        );
+        let streak = state
+            .resume_empty_streak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(streak, 1, "goal 续轮无产出计入空转 streak（不受空注入豁免）");
+    }
+
+    // ── D5/D1 轮 2 接线：goal_state 写面 / 熔断计数 / 退避注入 ──────
+
+    /// 轮询至熔断键 count 达期望值（收口写键在 agent-end 落库之后，
+    /// spawn_blocking 异步落键——轮询窗口内未达则 panic）
+    async fn wait_for_fail_streak(
+        db: &LocalDb,
+        expected: u32,
+        window: Duration,
+    ) -> ProviderFailStreak {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            if let Some(raw) = db
+                .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
+                .expect("熔断键读取")
+            {
+                let streak: ProviderFailStreak =
+                    serde_json::from_str(&raw).expect("熔断键合法 JSON");
+                if streak.count == expected {
+                    return streak;
+                }
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "熔断键未在窗口内达 count={expected}"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    /// goal 端到端（生产路径，D5 验收 A1/A5/A6 侧面）：mode=goal 装配 →
+    /// goal_state 键创建（缺省 12/2）→ 收口 RoundAssessment（current_round
+    /// +1、stopped_reason=stop）→ goal_pending 四源命中 → goal-continue
+    /// 续轮拉起。事件三件套（goal-round-started/completed/
+    /// continuation-decided）同链发射。
+    #[tokio::test]
+    async fn goal_mode_run_writes_state_and_continues_round() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("完成第一步，继续推进目标。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, emitter) = run_control_test_state(provider);
+        state.run_restore().await;
+        // 记录型拉起器替身（断言 goal-continue 续轮；拦截生产拉起器防
+        // 真拉起新 run 形成续 run 链）
+        let launched: Arc<std::sync::Mutex<Vec<(String, usize)>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let probe = Arc::clone(&launched);
+        let launcher: ResumeLauncher = Arc::new(move |_state, _sid, mode, messages| {
+            let probe = Arc::clone(&probe);
+            let mode = mode.to_string();
+            let count = messages.len();
+            Box::pin(async move {
+                probe.lock().unwrap().push((mode, count));
+            })
+        });
+        state.set_resume_launcher(Some(launcher));
+        let mut options = test_options("run-goal-1", "s1", "请完成目标");
+        options.mode = Some("goal".to_string());
+        options.visible_goal = Some("修复构建问题".to_string());
+        // max_rounds / max_stalled_rounds 缺省 None → 引擎缺省 12/2
+        run_task_impl(Arc::clone(&state), options)
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        // 轮询至续轮拉起（launcher push 在收口尾部，agent-end 落库后稍晚）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let launched = launched.lock().unwrap();
+            if !launched.is_empty() {
+                break;
+            }
+            drop(launched);
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "goal_pending 续轮未在窗口内拉起"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        // goal_state 键创建 + 收口评估
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("goal_state 键必须已创建");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        assert_eq!(goal["goal"], "修复构建问题", "目标文本落键");
+        assert_eq!(goal["max_rounds"], 12, "缺省 max_rounds=12（引擎权威）");
+        assert_eq!(goal["max_stalled_rounds"], 2, "缺省 max_stalled_rounds=2");
+        assert_eq!(goal["current_round"], 1, "Stop 收口轮 current_round+1");
+        assert_eq!(goal["stopped_reason"], "stop", "非终态收场 reason=stop");
+        // 续轮：goal-continue + 注入消息 1 条（goal 前缀，无队列条目）
+        let launched = launched.lock().unwrap();
+        assert_eq!(launched.len(), 1, "goal_pending 应触发续轮");
+        assert_eq!(launched[0].0, "goal-continue", "续轮 mode=goal-continue");
+        assert_eq!(launched[0].1, 1, "注入消息 1 条（goal 前缀）");
+        // 事件三件套（envelope 通道，emit 即 flush，emitter 立即可见）
+        let payloads = emitter.0.lock().unwrap().clone();
+        let types: Vec<String> = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .filter_map(|v| v["type"].as_str().map(String::from))
+            .collect();
+        assert!(
+            types.iter().any(|t| t == "goal-round-started"),
+            "goal-round-started 应发射"
+        );
+        assert!(
+            types.iter().any(|t| t == "goal-round-completed"),
+            "goal-round-completed 应发射"
+        );
+        assert!(
+            types.iter().any(|t| t == "goal-continuation-decided"),
+            "goal-continuation-decided 应发射"
+        );
+    }
+
+    /// D5 验收 A4：error 收场轮不评估不递增——current_round/stalled_rounds
+    /// 保持 0，stopped_reason=error（assess_round reason 门禁 Blocked）；
+    /// 无 goal_pending 续轮（error 收场由 D2 分支独占，非 retryable 不续）。
+    #[tokio::test]
+    async fn goal_run_error_close_does_not_advance_round() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &GoalState::new("修复目标", 12, 2).to_json(),
+        )
+        .expect("goal_state 预置");
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        // error 收场（provider_error=None → D2 分支 3a 拒绝续 run）
+        let outcome = RunOutcome {
+            reason: AgentEndReason::Error,
+            error: Some("provider 异常".to_string()),
+            provider_error: None,
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block("中断产出")],
+            ))],
+            ..canned_outcome()
+        };
+        let active = build_active_run(&state, "s1", "run-goal-err").await;
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::new(outcome)),
+        )
+        .await;
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("键存在");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        assert_eq!(goal["current_round"], 0, "error 轮不递增 current_round");
+        assert_eq!(goal["stalled_rounds"], 0, "error 轮不计 stalled");
+        assert_eq!(goal["stopped_reason"], "error", "reason 门禁落 error");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            0,
+            "error 收场无结构化错误 → 不自动续 run"
+        );
+    }
+
+    /// D5 验收 A6：checklist 全勾（L1）→ goal-completed 终态——stopped_
+    /// reason=goal-completed 落键，status 推断 Completed → goal_pending
+    /// 恒 false → 无第二次续轮。
+    #[tokio::test]
+    async fn goal_run_completed_round_terminates_goal() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &GoalState::new("修复目标", 12, 2).to_json(),
+        )
+        .expect("goal_state 预置");
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        let outcome = RunOutcome {
+            reason: AgentEndReason::Stop,
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block("- [x] 任务一\n- [x] 任务二\n目标已完成")],
+            ))],
+            ..canned_outcome()
+        };
+        let active = build_active_run(&state, "s1", "run-goal-done").await;
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::new(outcome)),
+        )
+        .await;
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("键存在");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        assert_eq!(
+            goal["stopped_reason"], "goal-completed",
+            "L1 全勾 → goal-completed 终态"
+        );
+        assert_eq!(goal["current_round"], 1, "完成轮正常 +1");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            0,
+            "goal-completed 终态 → goal_pending 恒 false，无续轮"
+        );
+    }
+
+    /// D5 验收 A9：子代理 run 不参与 goal 评估——收口守卫
+    /// active.subagent.is_none()，goal_state 键保持原样（不评估不写）。
+    #[tokio::test]
+    async fn goal_run_subagent_close_skips_assessment() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &GoalState::new("修复目标", 12, 2).to_json(),
+        )
+        .expect("goal_state 预置");
+        let mut active = build_active_run(&state, "s1", "run-sa-1").await;
+        let cfg = crate::subagent_spawner::SubagentRunConfig {
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "run-sa-1".to_string(),
+            parent_session_id: "s1".to_string(),
+            task_type: None,
+            allowed_write_paths: None,
+            output_dir: None,
+            started_at_ms: 1_000,
+        };
+        Arc::get_mut(&mut active)
+            .expect("唯一引用")
+            .subagent = Some(cfg);
+        let outcome = RunOutcome {
+            reason: AgentEndReason::Stop,
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block("子代理产出")],
+            ))],
+            ..canned_outcome()
+        };
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::new(outcome)),
+        )
+        .await;
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("键存在");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        assert_eq!(goal["current_round"], 0, "子代理 run 不评估 goal 轮");
+        assert_eq!(goal["stopped_reason"], serde_json::Value::Null, "子代理 run 不写键");
+    }
+
+    /// D1 规则 C2/C3 生产路径：provider 恒瞬态错误（Network）→ run 内 3
+    /// 次重试耗尽 → fatal 收口（provider_error=Some）→ 收口熔断计数 +1
+    /// 落键（count=1）。error 收场自动续 run 由 counting 替身拦截。
+    #[tokio::test]
+    async fn drive_run_loop_close_records_transient_failure() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("x"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_error(conex_types::response::ClassifiedStreamError {
+                kind: ProviderErrorKind::Network,
+                message: "网络中断".to_string(),
+                retryable: true,
+                retry_after_ms: None,
+            }),
+        );
+        let (state, db, _emitter) = run_control_test_state(provider);
+        state.run_restore().await;
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        run_task_impl(Arc::clone(&state), test_options("run-cb-1", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        let streak = wait_for_fail_streak(&db, 1, Duration::from_secs(10)).await;
+        assert_eq!(streak.count, 1, "瞬态 fatal 收口 → streak=1");
+        assert!(streak.first_fail_at_ms > 0, "首次失败时刻填充");
+    }
+
+    /// D1 规则 C3：正常完成收场（Stop、无 provider 错误信号）→ 熔断键清零。
+    #[tokio::test]
+    async fn drive_run_loop_close_clears_streak_on_normal_stop() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        db.set_session_meta(
+            PROVIDER_FAIL_STREAK_KEY,
+            &ProviderFailStreak {
+                count: 3,
+                first_fail_at_ms: 1_785_456_000_000,
+                last_fail_at_ms: 1_785_456_000_000,
+                window_ms: 0,
+            }
+            .to_json(),
+        )
+        .expect("熔断键预置 count=3");
+        let active = build_active_run(&state, "s1", "run-cb-2").await;
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::new(canned_outcome())),
+        )
+        .await;
+        let streak = wait_for_fail_streak(&db, 0, Duration::from_secs(10)).await;
+        assert_eq!(streak.count, 0, "正常完成收场 → 熔断清零（C3）");
+    }
+
+    /// D1 S2 补丁关键断言：部分保留断流（Stop 收场 + 最后 assistant 消息
+    /// metadata.providerErrorKind=network 瞬态类）→ 计入熔断计数（+1），
+    /// 成功清零不执行。
+    #[tokio::test]
+    async fn drive_run_loop_close_counts_partial_stream_failure() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        // 部分保留断流触发 E1 续写判定 → counting 替身拦截拉起
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        let mut last = amsg(
+            "m2",
+            AgentMessageRole::Assistant,
+            vec![text_block("半截输出")],
+        );
+        last.metadata = Some(serde_json::json!({
+            "providerErrorKind": "network",
+            "providerErrorRetryable": true,
+        }));
+        let outcome = RunOutcome {
+            reason: AgentEndReason::Stop,
+            messages: vec![Arc::new(last)],
+            ..canned_outcome()
+        };
+        let active = build_active_run(&state, "s1", "run-cb-3").await;
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::new(outcome)),
+        )
+        .await;
+        let streak = wait_for_fail_streak(&db, 1, Duration::from_secs(10)).await;
+        assert_eq!(streak.count, 1, "部分保留断流（瞬态类）计入熔断（S2）");
+        assert_eq!(counter.load(Ordering::SeqCst), 1, "E1 续写子分支拉起（拦截至替身）");
+    }
+
+    /// D1 规则 C5：熔断触发边沿（count 4→5 预置 + 本轮瞬态 +1 跨过阈值 6）→
+    /// 发射 runtime-intervention-required + recovery-escalated
+    /// detail="circuit-trip"（观测面事件流）。
+    #[tokio::test]
+    async fn fail_streak_cross_threshold_emits_circuit_trip() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("x"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_error(conex_types::response::ClassifiedStreamError {
+                kind: ProviderErrorKind::ServerError,
+                message: "5xx".to_string(),
+                retryable: true,
+                retry_after_ms: None,
+            }),
+        );
+        let (state, db, emitter) = run_control_test_state(provider);
+        state.run_restore().await;
+        db.set_session_meta(
+            PROVIDER_FAIL_STREAK_KEY,
+            &ProviderFailStreak {
+                count: 5,
+                first_fail_at_ms: 1_785_456_000_000,
+                last_fail_at_ms: 1_785_456_000_000,
+                window_ms: 0,
+            }
+            .to_json(),
+        )
+        .expect("熔断键预置 count=5");
+        // count=5 未达阈值 → run 内照常重试 → fatal → 收口 +1 → 边沿跨过
+        run_task_impl(Arc::clone(&state), test_options("run-cb-4", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        let streak = wait_for_fail_streak(&db, 6, Duration::from_secs(10)).await;
+        assert_eq!(streak.count, 6, "跨过阈值 6");
+        let payloads = emitter.0.lock().unwrap().clone();
+        let values: Vec<serde_json::Value> = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .collect();
+        assert!(
+            values
+                .iter()
+                .any(|v| v["type"] == "runtime-intervention-required"),
+            "熔断触发应发射 runtime-intervention-required"
+        );
+        assert!(
+            values.iter().any(|v| {
+                v["type"] == "recovery-escalated"
+                    && v["detail"] == "circuit-trip"
+            }),
+            "熔断触发应发射 recovery-escalated(detail=circuit-trip)"
+        );
+    }
+
+    /// D1 规则 C1 + 装配时序生产端到端：熔断键 count=6 预置 → 装配面注入
+    /// SessionLoopOptions.provider_fail_streak=Some(6) → transient_retry
+    /// 入口闸直接 fatal（不烧 run 内配额）——provider 只被调用 1 次；
+    /// 收口计数 +1 → 键 count=7。
+    #[tokio::test]
+    async fn circuit_breaker_gate_fatals_without_retry() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("x"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_error(conex_types::response::ClassifiedStreamError {
+                kind: ProviderErrorKind::Network,
+                message: "网络中断".to_string(),
+                retryable: true,
+                retry_after_ms: None,
+            }),
+        );
+        let (state, db, _emitter) = run_control_test_state(provider.clone());
+        state.run_restore().await;
+        db.set_session_meta(
+            PROVIDER_FAIL_STREAK_KEY,
+            &ProviderFailStreak {
+                count: 6,
+                first_fail_at_ms: 1_785_456_000_000,
+                last_fail_at_ms: 1_785_456_000_000,
+                window_ms: 0,
+            }
+            .to_json(),
+        )
+        .expect("熔断键预置 count=6");
+        run_task_impl(Arc::clone(&state), test_options("run-cb-5", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        assert_eq!(
+            provider.call_count(),
+            1,
+            "熔断闸生效：跳过 run 内重试直接 fatal（provider 仅 1 次调用）"
+        );
+        let streak = wait_for_fail_streak(&db, 7, Duration::from_secs(10)).await;
+        assert_eq!(streak.count, 7, "熔断 fatal 收口计数继续 +1");
+    }
+
+    /// D1 对照（无闸）：缺熔断键 → 闸不启用 → 瞬态错误走 3 次 run 内重试
+    /// （provider 共 4 次调用）后 fatal。
+    #[tokio::test]
+    async fn transient_retry_without_gate_retries_three() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("x"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_error(conex_types::response::ClassifiedStreamError {
+                kind: ProviderErrorKind::Network,
+                message: "网络中断".to_string(),
+                retryable: true,
+                retry_after_ms: None,
+            }),
+        );
+        let (state, db, _emitter) = run_control_test_state(provider.clone());
+        state.run_restore().await;
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        run_task_impl(Arc::clone(&state), test_options("run-cb-6", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        assert_eq!(
+            provider.call_count(),
+            4,
+            "无闸：1 次初始 + 3 次 run 内重试后 fatal"
+        );
+        let streak = wait_for_fail_streak(&db, 1, Duration::from_secs(10)).await;
+        assert_eq!(streak.count, 1, "收口熔断计数 +1");
+    }
+
+    /// D1 §3.1.4 纯解析：`provider_retry_backoff_ms` 键三形状（数组三值 /
+    /// 单值 base / 坏值 fail-open）。
+    #[test]
+    fn retry_backoff_config_parses_session_meta() {
+        let cfg = parse_retry_backoff_config("[750,8000,60000]").expect("数组解析");
+        assert_eq!(cfg.base_ms, Some(750));
+        assert_eq!(cfg.max_ms, Some(8000));
+        assert_eq!(cfg.total_budget_ms, Some(60000));
+        let single = parse_retry_backoff_config("1000").expect("单值解析");
+        assert_eq!(single.base_ms, Some(1000));
+        assert_eq!(single.max_ms, None, "单值只定制 base");
+        assert_eq!(single.total_budget_ms, None);
+        assert!(parse_retry_backoff_config("oops").is_none(), "坏值 fail-open");
+        assert!(parse_retry_backoff_config("{}").is_none(), "对象形状 → None");
+    }
+
+    /// D1 §3.1.4 键读取：缺键 → None（现状立即重试向后兼容）；有键 → Some。
+    #[test]
+    fn retry_backoff_config_reads_session_meta_key() {
+        let db = LocalDb::open_in_memory().unwrap();
+        let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+        assert!(
+            state.retry_backoff_config("s1").is_none(),
+            "缺键 → None = 现状立即重试"
+        );
+        db.set_session_meta(PROVIDER_RETRY_BACKOFF_MS_KEY, "[750,8000,60000]")
+            .expect("退避键落库");
+        let cfg = state.retry_backoff_config("s1").expect("键存在 → Some");
+        assert_eq!(cfg.base_ms, Some(750));
+        assert_eq!(cfg.max_ms, Some(8000));
+        assert_eq!(cfg.total_budget_ms, Some(60000));
+    }
+
+    /// D1 规则 R6 生产端到端：退避键 [750,8000,60000] 注入 → 重试间隔生效
+    /// ——首次重试等待 ≥750ms（墙钟下界断言，tokio sleep 不提前）→ 3 次
+    /// 重试后 fatal（provider 共 4 次调用）。
+    #[tokio::test]
+    async fn retry_backoff_injection_delays_retry() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("x"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_error(conex_types::response::ClassifiedStreamError {
+                kind: ProviderErrorKind::Network,
+                message: "网络中断".to_string(),
+                retryable: true,
+                retry_after_ms: None,
+            }),
+        );
+        let (state, db, _emitter) = run_control_test_state(provider.clone());
+        state.run_restore().await;
+        db.set_session_meta(PROVIDER_RETRY_BACKOFF_MS_KEY, "[750,8000,60000]")
+            .expect("退避键落库");
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        let started = tokio::time::Instant::now();
+        run_task_impl(Arc::clone(&state), test_options("run-bk-1", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        assert_eq!(
+            provider.call_count(),
+            4,
+            "退避注入下仍 3 次重试（预算内）"
+        );
+        assert!(
+            elapsed_ms >= 700,
+            "首次重试等待 ≥750ms（实际 {elapsed_ms}ms）——退避注入生产生效"
+        );
+    }
+
+    /// D1 规则 R6 对照：缺退避键 → None = 现状立即重试（无 run 内等待，
+    /// 总耗时 < 退避基数 750ms）。
+    #[tokio::test]
+    async fn retry_backoff_missing_config_retries_immediately() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("x"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_error(conex_types::response::ClassifiedStreamError {
+                kind: ProviderErrorKind::Network,
+                message: "网络中断".to_string(),
+                retryable: true,
+                retry_after_ms: None,
+            }),
+        );
+        let (state, db, _emitter) = run_control_test_state(provider.clone());
+        state.run_restore().await;
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        let started = tokio::time::Instant::now();
+        run_task_impl(Arc::clone(&state), test_options("run-bk-2", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        assert_eq!(
+            provider.call_count(),
+            4,
+            "无退避：3 次立即重试后 fatal"
+        );
+        assert!(
+            elapsed_ms < 700,
+            "无退避键 → 立即重试（实际 {elapsed_ms}ms，应 < 退避基数 750ms）"
+        );
+    }
+
+    /// D7 §3.1 采集接线：对话含 CHECKPOINT 标记行 → 收口后叶子 payload
+    /// 含 checkpoint 键（target/summary 保真，验收 A4 前半）
+    #[test]
+    fn checkpoint_collected_written_on_close() {
+        let (state, _registry) = state_with_background();
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let outcome = RunOutcome {
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block(
+                    "已完成首步。\nCHECKPOINT: {\"target\":\"T1\",\"summary\":\"S1\",\"completed\":[\"c1\"],\"next\":[\"n1\"]}",
+                )],
+            ))],
+            ..canned_outcome()
+        };
+        collect_checkpoint_on_close(&state, "s1", &outcome);
+        let trees = state.session_trees.lock().unwrap();
+        let tree = trees.get("s1").unwrap().lock().unwrap();
+        match tree.read_leaf_checkpoint(None) {
+            conex_types::LeafCheckpointState::Present(payload) => {
+                assert_eq!(payload.target, "T1", "目标保真");
+                assert_eq!(payload.summary, "S1", "摘要保真");
+                assert_eq!(payload.completed, vec!["c1".to_string()], "已完成保真");
+                assert_eq!(payload.next, vec!["n1".to_string()], "下一步保真");
+            }
+            other => panic!("期望 Present，实际 {other:?}"),
+        }
+    }
+
+    /// D7 §3.5 采集侧损坏降级：对话含坏标记行（命中前缀 + 坏 JSON）→
+    /// 收口不 panic、叶子不写入、不阻断（验收 A2）
+    #[test]
+    fn checkpoint_collect_corrupt_degrades() {
+        let (state, _registry) = state_with_background();
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let outcome = RunOutcome {
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block("CHECKPOINT: {坏 JSON 载荷")],
+            ))],
+            ..canned_outcome()
+        };
+        collect_checkpoint_on_close(&state, "s1", &outcome);
+        let trees = state.session_trees.lock().unwrap();
+        let tree = trees.get("s1").unwrap().lock().unwrap();
+        assert_eq!(
+            tree.read_leaf_checkpoint(None),
+            conex_types::LeafCheckpointState::Absent,
+            "采集侧损坏 → 不写叶子（降级现状）"
+        );
+    }
+
+    /// D7 §3.2 注入：Present 三态分发——有效载荷 → 注入文本含「上次检查点」
+    /// 与 target/summary/completed/next（验收 A1）
+    #[test]
+    fn checkpoint_injection_present_contains_summary() {
+        let (state, _registry) = state_with_background();
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
+        tree.set_leaf_checkpoint(
+            "leaf-1",
+            &conex_types::CheckpointPayload {
+                target: "目标A".to_string(),
+                summary: "摘要B".to_string(),
+                timestamp: None,
+                completed: vec!["步骤1".to_string(), "步骤2".to_string()],
+                files: Vec::new(),
+                next: vec!["下一步1".to_string()],
+            },
+        )
+        .expect("写入检查点");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let section = checkpoint_injection_section(&state, "s1");
+        assert!(section.contains("[检查点摘要]"), "摘要段标题");
+        assert!(section.contains("目标A"), "目标入注入");
+        assert!(section.contains("摘要B"), "摘要入注入");
+        assert!(section.contains("步骤1"), "已完成入注入");
+        assert!(section.contains("下一步1"), "下一步入注入");
+    }
+
+    /// D7 §3.2 注入：Absent（无检查点 / 无叶子）→ 空串（行为与现状一致）
+    #[test]
+    fn checkpoint_injection_absent_empty() {
+        let (state, _registry) = state_with_background();
+        let tree = SessionTree::new("s1");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        assert_eq!(
+            checkpoint_injection_section(&state, "s1"),
+            String::new(),
+            "无检查点 → 不注入"
+        );
+    }
+
+    /// D7 §3.2/§3.5 注入：Corrupt（载荷不可解析）→ 降级提示文本，run 照常
+    /// 拉起（不 panic、不阻断；验收 A2 读侧）
+    #[test]
+    fn checkpoint_injection_corrupt_hint() {
+        let (state, _registry) = state_with_background();
+        // 直接构造坏载荷叶子（绕过类型安全的 set_leaf_checkpoint）
+        let record = SessionRecord {
+            session_id: "s1".to_string(),
+            current_leaf_id: Some("leaf-1".to_string()),
+            branches: vec![orchestrator::session::SessionTreeEntry::node(
+                "leaf-1",
+                None,
+                serde_json::json!({ "checkpoint": "not-a-checkpoint-object" }),
+            )],
+            context_meta: None,
+        };
+        let tree = SessionTree::from_session_record(record).expect("坏载荷树重建");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let section = checkpoint_injection_section(&state, "s1");
+        assert!(
+            section.contains("检查点损坏已忽略"),
+            "损坏降级提示入注入（run 照常拉起）"
+        );
+    }
+
+    /// D7 §8 决策 4：摘要超长 → 截断 ≤500 字符 + 省略号（注入长度护栏）
+    #[test]
+    fn checkpoint_injection_summary_truncated() {
+        let (state, _registry) = state_with_background();
+        let long_summary = "x".repeat(600);
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
+        tree.set_leaf_checkpoint(
+            "leaf-1",
+            &conex_types::CheckpointPayload {
+                target: "目标A".to_string(),
+                summary: long_summary.clone(),
+                timestamp: None,
+                completed: Vec::new(),
+                files: Vec::new(),
+                next: Vec::new(),
+            },
+        )
+        .expect("写入检查点");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let section = checkpoint_injection_section(&state, "s1");
+        assert!(
+            section.contains(&"x".repeat(500)),
+            "摘要保留前 500 字符"
+        );
+        assert!(
+            !section.contains(&"x".repeat(501)),
+            "超长部分截断"
+        );
+        assert!(section.contains('…'), "省略号标注截断");
+        assert!(section.contains("(无)"), "空清单显示 (无)");
+    }
+
+    /// D7 §8 决策 4：completed/next 各 ≤5 项（清单项上限护栏）
+    #[test]
+    fn checkpoint_injection_list_items_limited() {
+        let (state, _registry) = state_with_background();
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
+        let completed: Vec<String> = (0..8).map(|i| format!("步骤{i}")).collect();
+        tree.set_leaf_checkpoint(
+            "leaf-1",
+            &conex_types::CheckpointPayload {
+                target: "目标A".to_string(),
+                summary: "摘要".to_string(),
+                timestamp: None,
+                completed: completed.clone(),
+                files: Vec::new(),
+                next: Vec::new(),
+            },
+        )
+        .expect("写入检查点");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let section = checkpoint_injection_section(&state, "s1");
+        assert!(section.contains("步骤0"), "前 5 项保留");
+        assert!(section.contains("步骤4"));
+        assert!(!section.contains("步骤5"), "第 6 项起省略");
+        assert!(!section.contains("步骤7"));
+    }
+
+    /// D7 采集写面：子代理会话（sub-sess-*）无树 → 采集自动跳过（R8：
+    /// 不建占位树）
+    #[test]
+    fn checkpoint_collect_skips_without_tree() {
+        let (state, _registry) = state_with_background();
+        let outcome = RunOutcome {
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block("CHECKPOINT: {\"target\":\"T1\",\"summary\":\"S1\"}")],
+            ))],
+            ..canned_outcome()
+        };
+        // 无 panic、无写面副作用
+        collect_checkpoint_on_close(&state, "sub-sess-1-1", &outcome);
+        assert!(
+            state.session_trees.lock().unwrap().is_empty(),
+            "无树会话不建占位树"
         );
     }
 
@@ -8475,6 +12224,11 @@ mod tests {
             context_window: None,
             parent_run_id: None,
             subagent_config: None,
+            // D5 §3.1 goal 模式三字段：测试非 goal run，全部缺省 None
+            //（缺省语义 = 引擎侧装配缺省，与生产命令面一致）
+            visible_goal: None,
+            max_rounds: None,
+            max_stalled_rounds: None,
         }
     }
 

@@ -92,10 +92,22 @@ fn retry_delay_ms(
     Some(Duration::from_millis(wait.min(cap).min(remaining)))
 }
 
-/// 溢出压缩阶梯重试上限（P4 §3.5：压缩 + 重试一次；上限 1 防
-/// 「压缩→仍超→再压缩」死循环，对齐 pi `_overflowRecoveryAttempted`，
-/// pi-cache-analysis.md:225）
-pub(crate) const MAX_OVERFLOW_COMPRESSION_RETRIES: u32 = 1;
+/// 溢出压缩阶梯重试上限（E2 F2 层 2 / D1 §3.5.1：1→2，替代 pi
+/// `_overflowRecoveryAttempted` 单次语义——压缩后仍超限时重试第二次是
+/// 真实恢复：第二次重试前 keep_recent_tokens 阶梯下调（20K→12K→8K，
+/// DEEPCHECK-11 §8 机制化），请求体真实变化，不再是对同一超限体的
+/// 无效重放）。**默认值**——运行时以
+/// [SessionLoopOptions::compact_overflow_retries] 为准（壳层经
+/// session_meta 键 `compact_overflow_retries` 装配覆盖；0 = 溢出不压缩
+/// 直接 fatal）
+pub(crate) const MAX_OVERFLOW_COMPRESSION_RETRIES: u32 = 2;
+
+/// 溢出重试时保留预算阶梯下调（D1 §3.5.1 / E2 §3.1，DEEPCHECK-11 §8
+/// 建议的机制化）：第一次压缩用配置 keep_recent_tokens（默认 20K），
+/// 第二次起逐级下调 12K→8K，优先尝试更小保留预算；对配置值取 min
+/// （阶梯是「下调」方向，永不放大配置预算）。数组长度 = 阶梯深度，
+/// 超出（配置上限 > 阶梯深度）按末档持续下调。
+pub(crate) const OVERFLOW_KEEP_RECENT_STAIRCASE: [usize; 3] = [20_000, 12_000, 8_000];
 
 /// length 阶梯升级次数上限（01 §2.6 步骤 1：8192→16384→32768，上限 2 次；
 /// 配置 [SessionLoopOptions::length_upgrade_limit] 超过本上限按上限计——
@@ -247,8 +259,10 @@ async fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError
     compression_ladder(state, classified).await
 }
 
-/// 溢出压缩阶梯（P4 §3.5，对齐 pi `_overflowRecoveryAttempted` 防死循环）：
-/// 压缩对话 + 重试一次（[MAX_OVERFLOW_COMPRESSION_RETRIES] 上限 1）。
+/// 溢出压缩阶梯（E2 F2 层 2 / D1 §3.5，对齐 pi `_overflowRecoveryAttempted`
+/// 防死循环 + DEEPCHECK-11 §7 建议①②的机制化）：
+/// 压缩对话 + 重试（[SessionLoopOptions::compact_overflow_retries] 上限，
+/// 默认 2）。
 ///
 /// 入口：
 /// - [ContextLengthExceeded]：length_ladder 用尽后进入（输入超限维度）；
@@ -258,10 +272,20 @@ async fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError
 /// 触发条件（全部满足才压缩，不满足直接 fatal）：
 /// 1. 预算与压缩策略均已配置（None = 向后兼容现状——T06.2.2 的
 ///    PayloadTooLarge 直接 fatal 语义即此缺省路径）；
-/// 2. `compression_retries < 1`（溢出只重试一次，防「压缩→仍超→再压缩」
-///    死循环）；
-/// 3. 本 run 压缩次数未达上限（[SessionLoopOptions::max_auto_compactions_per_run]，
-///    与预检触发共用单 run 护栏，P4 §3.4.6；0 = 禁用自动压缩）。
+/// 2. `compression_retries < compact_overflow_retries`（溢出自有计数防
+///    「压缩→仍超→再压缩」死循环——**绕开预检共享计数**，
+///    [SessionLoopOptions::max_auto_compactions_per_run] 仅约束预检/
+///    用户消息边界/分阶段触发，预检不再饿死溢出恢复，DEEPCHECK-11 §7
+///    冲突 1）；
+/// 3. 第二次重试前 keep_recent_tokens 阶梯下调（20K→12K→8K，min 配置值，
+///    优先更小保留预算）。
+///
+/// LLM 摘要强制（E2 F1 L3）：默认以 [StubPolicy::LlmRequired] 调用引擎——
+/// 无 Summarizer / 摘要失败（plan.llm_unavailable）→ **不落 stub 直接
+/// fatal**（显式失败不静默丢语义，fatal 文案含「LLM 不可用」）；
+/// [SessionLoopOptions::compact_allow_stub_fallback] = true 或
+/// [SessionLoopOptions::compact_require_llm] = false 时允许临时 stub
+/// 降级（豁免路径，stub 非永驻——后台补摘要成功自动替换）。
 ///
 /// 压缩动作复用 [apply_compaction]（trigger/reason=Overflow，事件广播 +
 /// 时间戳护栏 + 单 run 计数）；目标预算 = window - reserve（与预检同一
@@ -275,30 +299,54 @@ async fn compression_ladder(
     if state.abort_signal.is_aborted() {
         return streaming_aborted(state);
     }
-    // 条件 2：溢出只重试一次（防死循环）
-    if state.compression_retries >= MAX_OVERFLOW_COMPRESSION_RETRIES {
+    // 条件 2：溢出重试上限（可配；0 = 溢出不压缩直接 fatal）
+    let overflow_limit = state.options.compact_overflow_retries;
+    if state.compression_retries >= overflow_limit {
         return fatal_provider_error(state, classified);
     }
     // 条件 1：预算与压缩策略缺省（None，向后兼容现状）
     let Some(budget) = state.budget else {
         return fatal_provider_error(state, classified);
     };
-    let Some(policy) = state.compaction_policy.clone() else {
+    let Some(mut policy) = state.compaction_policy.clone() else {
         return fatal_provider_error(state, classified);
     };
-    // 条件 3：单 run 压缩上限（预检与溢出触发共用计数，§3.4.6）
-    if state.compactions_this_run >= state.options.max_auto_compactions_per_run {
-        return fatal_provider_error(state, classified);
+    // 条件 3：第二次起 keep_recent_tokens 阶梯下调（D1 §3.5.1 机制化；
+    // min(配置值, 阶梯值)——阶梯是下调方向，永不放大配置预算）
+    if let Some(stair) = OVERFLOW_KEEP_RECENT_STAIRCASE.get(state.compression_retries as usize) {
+        policy.keep_recent_tokens = policy.keep_recent_tokens.min(*stair);
     }
     // 目标预算 = window - reserve（与预检触发同一口径，P4 §3.4.1 触发点 2）
     let budget_tokens = budget.context_window.saturating_sub(budget.reserve_tokens);
     let engine = CompactionEngine::new(0);
-    let plan = engine.compact_agent_messages(
+    // E2 F1 L3：LLM 摘要强制——豁免（compact_allow_stub_fallback /
+    // !compact_require_llm 任一放行）→ StubAllowed 降级 stub；默认
+    // LlmRequired → 无 Summarizer/摘要失败不落 stub、标记 llm_unavailable
+    let stub_policy = if state.options.compact_allow_stub_fallback
+        || !state.options.compact_require_llm
+    {
+        conex_compaction::compaction::StubPolicy::StubAllowed
+    } else {
+        conex_compaction::compaction::StubPolicy::LlmRequired
+    };
+    let plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
         budget_tokens as usize,
         &policy,
         state.summarizer.as_deref(),
+        stub_policy,
     );
+    if plan.llm_unavailable {
+        // E2 F1 L3：LLM 摘要不可用（无 Summarizer / 同步失败）且无豁免 →
+        // 不落 stub、不重试（对话未变，重试必再超）→ 直接 fatal，
+        // 文案含「LLM 不可用」（compression_fatal_note 附注分支）
+        tracing::warn!(
+            session_id = %state.machine.context().session_id,
+            "溢出压缩因 LLM 摘要不可用而未压缩（默认 fatal；compact_allow_stub_fallback=true 可豁免为临时 stub）"
+        );
+        state.overflow_llm_unavailable = true;
+        return fatal_provider_error(state, classified);
+    }
     if plan.dropped_ids.is_empty() {
         // 无合法切割点 / 无可丢内容：不重试（请求体未变，重试必再超）
         return fatal_provider_error(state, classified);
@@ -326,7 +374,7 @@ async fn compression_ladder(
     // 重写点，链消息与保留区不得携带时间线注入（注入只允许在对话末尾
     // user 消息）
     crate::r#loop::handlers::assert_timeline_injection_hygiene(&state.conversation);
-    // 重试一次：NO_PROGRESS_CONTINUE 重进 provider 循环（对话已替换，
+    // 重试：NO_PROGRESS_CONTINUE 重进 provider 循环（对话已替换，
     // 下一次 build_request 携带压缩后序列 = 真实恢复）
     dispatch(state, E::NoProgressContinue)?;
     Ok(HandlerOutcome::continue_run())
@@ -391,7 +439,12 @@ fn fatal_provider_error(
         error = %classified.message,
         "provider 错误收场（重试/恢复均失败）"
     );
-    state.terminal_error = Some(format!("provider 错误（{}）：{}", kind_str(classified.kind), classified.message));
+    state.terminal_error = Some(format!(
+        "provider 错误（{}）：{}{}",
+        kind_str(classified.kind),
+        classified.message,
+        compression_fatal_note(state, classified.kind)
+    ));
     // D1 §3.4：fatal 摘要填充（kind/retryable/retry_after_ms/retries 四元组；
     // retries = run 内实际重试次数——瞬态耗尽时 = 已重试数，熔断闸 fatal 时
     // = 0，非瞬态直接 fatal 时 = 0）
@@ -403,7 +456,8 @@ fn fatal_provider_error(
     });
     // runtime-error 观测事件（retryable 只表「可重试」，与收场 reason 正交，01 §五.10）；
     // payload/上下文超限附注压缩阶梯诊断（P4 §3.5：压缩后仍超 = 单条消息
-    // 过大或窗口过小；无压缩恢复路径时保留原说明）
+    // 过大或窗口过小；E2 F1 L3：LLM 摘要不可用未压缩；无压缩恢复路径时
+    // 保留原说明）
     let compression_note = compression_fatal_note(state, classified.kind);
     state.events.push(AgentEvent::RuntimeError {
         session_id: state.machine.context().session_id.clone(),
@@ -419,10 +473,18 @@ fn fatal_provider_error(
     )))
 }
 
-/// fatal 诊断附注（P4 §3.5）：压缩阶梯用尽后仍超限时携带压缩后 token 数
-/// （压缩后仍超 = 单条消息过大或窗口过小）；未发生压缩时保留「无压缩恢复
-/// 路径」说明（T06.2.2 语义的缺省表述）。
+/// fatal 诊断附注（P4 §3.5 / E2 F1 L3）：压缩阶梯用尽后仍超限时携带压缩后
+/// token 数（压缩后仍超 = 单条消息过大或窗口过小）；LLM 摘要不可用未压缩
+/// 时携带「LLM 不可用」附注（[LoopState::overflow_llm_unavailable]，E2 F1
+/// L3 默认 fatal 的文案面）；未发生压缩时保留「无压缩恢复路径」说明
+/// （T06.2.2 语义的缺省表述）。
 fn compression_fatal_note(state: &LoopState, kind: ProviderErrorKind) -> String {
+    // E2 F1 L3：溢出压缩因 LLM 摘要不可用而未压缩（优先级最高——
+    // 未发生压缩，压缩后 token 附注无意义，无压缩恢复路径说明会让用户
+    // 误以为压缩路径缺省未配置）
+    if state.overflow_llm_unavailable {
+        return "；LLM 摘要不可用，溢出未压缩——直接终止（不再重试）".to_string();
+    }
     let tokens_after = last_compression_tokens_after(state);
     match kind {
         ProviderErrorKind::PayloadTooLarge => match tokens_after {
@@ -513,9 +575,16 @@ mod tests {
     }
 
     /// 带预算/压缩策略的溢出恢复状态（窗口 1 万、阈值 = window - reserve
-    /// = 8000；压缩策略 keep_recent_tokens 2000 / min_recent_turns 1，与
-    /// handlers/mod.rs 单测同构）；对话 = 10 条 × 5000 字（≈ 5 万 token），
-    /// 远超阈值且保留段之外有大量可丢内容
+    /// = 8000；压缩策略 keep_recent_tokens 20000 / min_recent_turns 1——
+    /// 对话 10 条 × 5000 字 ≈ 5 万 token：第一次压缩保留段 4 条
+    /// （cut=6），第二次压缩（上限 2）仍有可丢内容（cut=3），供新语义
+    /// 测试驱动两轮压缩；E2 F2 层 2 上限 2 需要保留段足够长才能二次压缩）。
+    ///
+    /// E2 F1（LLM 摘要强制）：默认注入成功 Summarizer（模拟生产已接线
+    /// ProviderSummarizer，COMPACTION-01 P0-3 闭环）——既有「压缩成功重试」
+    /// 语义测试以此为基座；无 Summarizer 默认 fatal 的语义由专项测试
+    /// （[Self::overflow_without_summarizer_fatals_with_llm_unavailable_note]）
+    /// 构造无注入状态覆盖。
     fn budgeted_state() -> LoopState {
         let mut state = streaming_state();
         let options = SessionLoopOptions {
@@ -525,11 +594,13 @@ mod tests {
                 safety_tokens: 100,
             }),
             compaction_policy: Some(CompactionPolicy {
-                keep_recent_tokens: 2_000,
+                keep_recent_tokens: 20_000,
                 min_recent_turns: 1,
                 ..Default::default()
             }),
             max_auto_compactions_per_run: 1,
+            // E2 F1：生产接线后的 Summarizer（成功返回合法 Schema V1 JSON）
+            summarizer: Some(Arc::new(OkSummarizer)),
             ..Default::default()
         };
         // LoopState 构造期从 options 派生 budget/policy——测试内直接改
@@ -537,8 +608,36 @@ mod tests {
         state.options = options.clone();
         state.budget = options.context_budget;
         state.compaction_policy = options.compaction_policy.clone();
+        state.summarizer = options.summarizer.clone();
         state.conversation = big_conversation();
         state
+    }
+
+    /// 成功 Summarizer（E2 F1 基座：LLM 摘要成功 → 压缩路径可完成）
+    /// ——合法 Schema V1 JSON 文档（R-G 契约）
+    struct OkSummarizer;
+    impl conex_compaction::Summarizer for OkSummarizer {
+        fn summarize(
+            &self,
+            _dropped: &[conex_types::message::AgentMessage],
+            _existing: Option<&str>,
+        ) -> Result<String, String> {
+            Ok(serde_json::json!({
+                "schemaVersion": 1,
+                "blockId": "compacted-summary-1-1",
+                "generation": 1,
+                "droppedIds": [],
+                "height": 1,
+                "tier": "chunk",
+                "goal": "溢出恢复",
+                "constraints": [],
+                "progress": ["已压缩上下文"],
+                "decisions": [],
+                "nextSteps": ["重试请求"],
+                "criticalContext": [],
+            })
+            .to_string())
+        }
     }
 
     /// 超阈值对话：10 条消息 × 5000 字（CJK 逐字符 ≈ 5000 token）≈ 5 万 token
@@ -1233,24 +1332,34 @@ mod tests {
         assert!(state.conversation.len() < 10, "压缩后消息数必须减少");
     }
 
-    /// PayloadTooLarge 压缩后重试仍超限 → fatal（压缩阶梯上限 1，
-    /// 防「压缩→仍超→再压缩」死循环）；fatal 诊断含压缩后 token 数
+    /// PayloadTooLarge 压缩后重试仍超限 → 第二次压缩（上限 2，E2 F2 层 2：
+    /// 第二次重试前 keep_recent_tokens 阶梯下调 20K→12K→8K 优先更小保留
+    /// 预算——请求体真实变化）→ 仍超限才 fatal（第三次）；
+    /// fatal 诊断含压缩后 token 数
     #[tokio::test]
     async fn payload_too_large_still_over_after_retry_goes_fatal() {
         let mut state = budgeted_state();
-        // 第一次：压缩 + 重试
-        handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+        // 第一次：压缩 + 重试（retries 0→1）
+        let o1 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
+        assert!(o1.end.is_none());
         assert_eq!(state.compression_retries, 1);
-        // 重试后循环重进 streaming（生产路径 prepare_turn TURN_PREPARED）
         re_enter_streaming(&mut state);
-        // 第二次（重试后仍 PayloadTooLarge）：fatal，不再压缩
+        // 第二次（压缩后仍 PayloadTooLarge）：再次压缩 + 重试（retries 1→2，
+        // 上限 2 未耗尽——E2 新语义）
+        let o2 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(o2.end.is_none(), "重试上限 2 内第二次压缩必须发生（E2 F2 层 2）");
+        assert_eq!(state.compression_retries, 2);
+        re_enter_streaming(&mut state);
+        // 第三次（仍超限）：上限耗尽 → fatal，不再压缩
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
         assert!(outcome.end.is_some(), "压缩后仍超限必须 fatal");
-        assert_eq!(state.compression_retries, 1, "重试上限 1 不可再超");
+        assert_eq!(state.compression_retries, 2, "重试上限 2 不可再超");
         assert_eq!(state.machine.context().end_reason, R::Error);
         assert_eq!(state.machine.state(), S::TurnComplete);
         // 诊断含压缩后 token 数（P4 §3.5：压缩后仍超 = 单条消息过大或窗口过小）
@@ -1266,11 +1375,18 @@ mod tests {
             runtime_error.contains("压缩后") && runtime_error.contains("仍超限"),
             "fatal 诊断应含压缩后 token 数：{runtime_error}"
         );
+        // terminal_error 同步携带附注（fatal 文案面，E2 一致性）
+        let terminal = state.terminal_error.as_deref().expect("fatal 必须填充文案");
+        assert!(
+            terminal.contains("仍超限"),
+            "terminal_error 应携带压缩阶梯附注：{terminal}"
+        );
     }
 
     /// ContextLengthExceeded：length 阶梯（8192→16384→32768，上限 2 次）
-    /// 用尽后接压缩阶梯——压缩 + 重试一次，仍超限才 fatal（P4 §3.5 验收：
-    /// 第三次直接 fatal 前，压缩只发生一次、compression_retries ≤ 1）
+    /// 用尽后接压缩阶梯——压缩 + 重试（上限 2，E2 F2 层 2），压缩两次后
+    /// 仍超限才 fatal（P4 §3.5 验收：第三次 length 升级后先压缩两次，
+    /// compression_retries ≤ 2）
     #[tokio::test]
     async fn context_length_uses_length_ladder_then_compresses_then_fatals() {
         let mut state = budgeted_state();
@@ -1291,7 +1407,7 @@ mod tests {
         assert_eq!(state.length_upgrades, 2);
         assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 4);
         re_enter_streaming(&mut state);
-        // 第三次：length 用尽 → 压缩阶梯（输入超限维度）→ 压缩 + 重试
+        // 第三次：length 用尽 → 压缩阶梯（输入超限维度）→ 压缩 #1 + 重试
         let o3 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
             .await
             .unwrap();
@@ -1302,14 +1418,23 @@ mod tests {
         assert_eq!(record.trigger, ContextCompressionTrigger::Overflow);
         // 压缩重试后循环重进 streaming
         re_enter_streaming(&mut state);
-        // 第四次：压缩后仍超限 → fatal（压缩阶梯上限 1，不再次压缩）
+        // 第四次：压缩后仍超限 → 压缩 #2（上限 2，E2 F2 层 2——第二次
+        // 重试前 keep_recent_tokens 阶梯下调，请求体真实变化）
         let o4 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
             .await
             .unwrap();
-        assert!(o4.end.is_some());
+        assert!(o4.end.is_none(), "压缩 #2 必须发生（上限 2 未耗尽）");
+        assert_eq!(state.compression_retries, 2);
+        assert_eq!(state.compactions_this_run, 2);
+        re_enter_streaming(&mut state);
+        // 第五次：压缩后仍超限 → fatal（上限 2 耗尽，不再次压缩）
+        let o5 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
+            .await
+            .unwrap();
+        assert!(o5.end.is_some());
         assert_eq!(state.machine.context().end_reason, R::Error);
-        assert_eq!(state.compression_retries, 1, "compression_retries ≤ 1");
-        assert_eq!(state.compactions_this_run, 1, "不得再次压缩");
+        assert_eq!(state.compression_retries, 2, "compression_retries ≤ 2");
+        assert_eq!(state.compactions_this_run, 2, "不得再次压缩");
     }
 
     /// 缺省配置（无预算 / 无压缩策略）：PayloadTooLarge 保持「直接 fatal」
@@ -1363,17 +1488,49 @@ mod tests {
         );
     }
 
-    /// 单 run 压缩上限护栏：预检已用掉本 run 唯一一次压缩 →
-    /// PayloadTooLarge 不再压缩，直接 fatal（预检与溢出触发共用计数，§3.4.6）
+    /// E2 F2 层 2（D1 §3.5.1，DEEPCHECK-11 §7 冲突 1 修复）：溢出阶梯
+    /// **绕开预检共享计数**——预检已用掉本 run 唯一一次压缩
+    /// （compactions_this_run = max_auto_compactions_per_run = 1）后，
+    /// PayloadTooLarge 仍走压缩阶梯恢复（不再被预检计数饿死）；
+    /// max_auto_compactions_per_run 仅约束预检/边界/分阶段触发
     #[tokio::test]
-    async fn overflow_compaction_respects_run_limit() {
+    async fn overflow_compaction_bypasses_preflight_run_limit() {
         let mut state = budgeted_state();
-        state.compactions_this_run = 1; // 模拟预检已压缩
+        state.compactions_this_run = 1; // 模拟预检已压缩（单 run 上限 1 已用尽）
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
-        assert!(outcome.end.is_some(), "单 run 上限用尽后溢出不再压缩");
-        assert_eq!(state.compression_retries, 0);
+        assert!(
+            outcome.end.is_none(),
+            "溢出阶梯必须绕开预检共享计数（预检不再饿死溢出恢复）"
+        );
+        assert_eq!(state.compression_retries, 1, "溢出压缩照常发生");
+        assert_eq!(
+            state.compactions_this_run, 2,
+            "溢出压缩也计入总计数（apply_compaction 统一口径），但不受其约束"
+        );
+        assert!(
+            state
+                .conversation
+                .iter()
+                .any(|m| m.id.starts_with("compacted-summary")),
+            "溢出压缩必须真实替换对话"
+        );
+    }
+
+    /// 对照回归：预检路径本身仍受 max_auto_compactions_per_run 约束
+    /// （E2 F2 层 2：计数解耦只放行溢出，预检护栏不变）
+    #[tokio::test]
+    async fn preflight_guard_still_blocks_second_preflight_compaction() {
+        let mut state = budgeted_state();
+        state.compactions_this_run = 1;
+        // 直接驱动预检触发（阈值估计：对话 10 条 × 5000 token 远超 8000）
+        let compacted = crate::r#loop::handlers::maybe_compact_preflight(&mut state).await;
+        assert!(
+            !compacted,
+            "预检路径必须仍受单 run 上限约束（计数解耦只针对溢出）"
+        );
+        assert_eq!(state.compactions_this_run, 1, "预检被挡下不得计数");
     }
 
     /// F2-01（红→绿）：length 阶梯配置放大溢出防护——length_upgrade_limit
@@ -1503,6 +1660,279 @@ mod tests {
         assert!(
             !summary.starts_with("[Compacted"),
             "同步成功路径不得降级 stub：{summary}"
+        );
+    }
+
+    // ── E2 上下文压缩增强（LLM 强制 / 溢出上限 2 / 绕开预检计数）──
+
+    /// E2 F1 L3：无 Summarizer（LLM 摘要不可用）+ 默认 LLM 强制 →
+    /// 溢出路径不落 stub、不压缩、直接 fatal——fatal 文案含「LLM 不可用」
+    /// （显式失败不静默丢语义，禁止纯丢弃式线性压缩）；对话原样、
+    /// 无压缩事件、compression_retries 不消耗
+    #[tokio::test]
+    async fn overflow_without_summarizer_fatals_with_llm_unavailable_note() {
+        let mut state = budgeted_state();
+        state.summarizer = None; // 无 Summarizer 注入（LLM 摘要不可用）
+        let snapshot = state.conversation.clone();
+        let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(outcome.end.is_some(), "无 Summarizer 且 LLM 强制必须直接 fatal");
+        assert_eq!(state.machine.context().end_reason, R::Error);
+        assert_eq!(state.compression_retries, 0, "未压缩不消耗重试计数");
+        assert_eq!(state.compactions_this_run, 0, "未压缩不消耗单 run 计数");
+        // 对话原样（无 stub 入对话——禁止纯丢弃式）
+        assert_eq!(state.conversation.len(), snapshot.len(), "对话必须保持原样");
+        assert!(
+            !state
+                .conversation
+                .iter()
+                .any(|m| m.id.starts_with("compacted-summary")),
+            "不得产出中性 stub（F1 禁止面）"
+        );
+        // 无压缩事件（未发生压缩）
+        assert!(
+            state
+                .events
+                .iter()
+                .all(|e| !matches!(e, AgentEvent::ContextCompressionEnd { .. })),
+            "未压缩不得广播压缩事件"
+        );
+        // fatal 文案含「LLM 不可用」（runtime-error 事件 + terminal_error 双面）
+        let runtime_error = state
+            .events
+            .iter()
+            .find_map(|e| match e {
+                AgentEvent::RuntimeError { error, .. } => Some(error.clone()),
+                _ => None,
+            })
+            .expect("fatal 必须发 runtime-error 事件");
+        assert!(
+            runtime_error.contains("LLM 不可用"),
+            "runtime-error 文案必须含「LLM 不可用」：{runtime_error}"
+        );
+        let terminal = state.terminal_error.as_deref().expect("fatal 必须填充文案");
+        assert!(
+            terminal.contains("LLM 不可用"),
+            "terminal_error 必须含「LLM 不可用」：{terminal}"
+        );
+        // provider_error 数据面照常填充（D1 §3.4）
+        let p = state.terminal_provider_error.as_ref().expect("fatal 必须填充摘要");
+        assert_eq!(p.kind, ProviderErrorKind::PayloadTooLarge);
+    }
+
+    /// E2 F1 L3 豁免：compact_allow_stub_fallback=true + 无 Summarizer →
+    /// 允许临时 stub 降级（唯一显式豁免路径，默认关）——压缩照常完成并
+    /// 重试（stub 非永驻：后台补摘要成功自动替换）
+    #[tokio::test]
+    async fn overflow_stub_fallback_exemption_allows_stub() {
+        let mut state = budgeted_state();
+        state.summarizer = None;
+        state.options.compact_allow_stub_fallback = true;
+        let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(outcome.end.is_none(), "豁免路径必须压缩并重试");
+        assert_eq!(state.compression_retries, 1);
+        // stub 入对话（降级路径语义）
+        let summary = compression_record(&state)
+            .map(|r| r.summary)
+            .expect("必须有压缩记录");
+        assert!(
+            summary.starts_with("[Compacted(") && summary.contains("摘要见块表"),
+            "豁免路径降级中性 stub：{summary}"
+        );
+    }
+
+    /// E2 F1 键面合一：compact_require_llm=false（门关闭）+ 无 Summarizer
+    /// → 显式允许 stub 降级（与 compact_allow_stub_fallback 键面合一，
+    /// E2 §7.1 / D1 §3.5.2）
+    #[tokio::test]
+    async fn overflow_require_llm_disabled_allows_stub() {
+        let mut state = budgeted_state();
+        state.summarizer = None;
+        state.options.compact_require_llm = false;
+        let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(outcome.end.is_none(), "compact_require_llm=false 必须放行 stub 压缩");
+        assert_eq!(state.compression_retries, 1);
+        let summary = compression_record(&state)
+            .map(|r| r.summary)
+            .expect("必须有压缩记录");
+        assert!(summary.starts_with("[Compacted("), "stub 降级：{summary}");
+    }
+
+    /// E2 F1 L2：Summarizer 注入但同步摘要失败（Err）+ 默认 LLM 强制 →
+    /// 不落 stub 先行（「压缩不成功不生效」而非「先丢后补」）→ 直接 fatal，
+    /// 文案含「LLM 不可用」；失败重试留给后台/后续触发（F2 层 1 语义）
+    #[tokio::test]
+    async fn overflow_summarizer_error_fatals_with_llm_unavailable() {
+        struct FailingSummarizer;
+        impl conex_compaction::Summarizer for FailingSummarizer {
+            fn summarize(
+                &self,
+                _dropped: &[conex_types::message::AgentMessage],
+                _existing: Option<&str>,
+            ) -> Result<String, String> {
+                Err("摘要请求失败（模拟 L2 降级）".to_string())
+            }
+        }
+        let mut state = budgeted_state();
+        state.summarizer = Some(Arc::new(FailingSummarizer));
+        let snapshot = state.conversation.clone();
+        let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(outcome.end.is_some(), "摘要失败且 LLM 强制必须直接 fatal");
+        assert_eq!(state.compression_retries, 0);
+        assert_eq!(state.conversation.len(), snapshot.len(), "对话保持原样");
+        let runtime_error = state
+            .events
+            .iter()
+            .find_map(|e| match e {
+                AgentEvent::RuntimeError { error, .. } => Some(error.clone()),
+                _ => None,
+            })
+            .expect("fatal 必须发 runtime-error 事件");
+        assert!(
+            runtime_error.contains("LLM 不可用"),
+            "摘要失败 fatal 文案必须含「LLM 不可用」：{runtime_error}"
+        );
+    }
+
+    /// E2 F2 层 2 可配：compact_overflow_retries=0 → 溢出不压缩直接 fatal
+    /// （等价禁用溢出压缩恢复）；=1 → 只压缩一次，第二次仍超限即 fatal
+    #[tokio::test]
+    async fn overflow_retry_limit_configurable() {
+        // 0 = 溢出不压缩直接 fatal
+        let mut state = budgeted_state();
+        state.options.compact_overflow_retries = 0;
+        let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(outcome.end.is_some(), "上限 0 必须直接 fatal");
+        assert_eq!(state.compression_retries, 0);
+        assert_eq!(state.compactions_this_run, 0, "未压缩不得计数");
+        // 1 = 只压缩一次，第二次仍超限直接 fatal（旧语义上限）
+        let mut state = budgeted_state();
+        state.options.compact_overflow_retries = 1;
+        let o1 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(o1.end.is_none());
+        assert_eq!(state.compression_retries, 1);
+        re_enter_streaming(&mut state);
+        let o2 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(o2.end.is_some(), "上限 1 耗尽后必须 fatal");
+        assert_eq!(state.compression_retries, 1);
+    }
+
+    /// E2 F2 层 2 阶梯下调（D1 §3.5.1 / DEEPCHECK-11 §8 机制化）：
+    /// 第二次压缩前 keep_recent_tokens 从 20000 下调到 12000（min 配置值）
+    /// ——构造 12 条 × 5000 token 对话 + keep=20000：
+    /// 第一次 cut=8（dropped 8 条）；第二次（对话 = 链 + m8..m11）若阶梯
+    /// 生效 keep=12000 → cut=3（dropped = m8,m9 共 2 条）；若阶梯未生效
+    /// keep=20000 → cut=2（dropped = m8 仅 1 条）——断言 dropped = [m8, m9]
+    /// 即锁定阶梯下调语义
+    #[tokio::test]
+    async fn overflow_retry_uses_smaller_keep_recent_staircase() {
+        // 12 条 × 5000 字（CJK 逐字符 ≈ 5000 token/条）≈ 6 万 token
+        let conversation: Vec<Arc<AgentMessage>> = (0..12)
+            .map(|i| {
+                Arc::new(AgentMessage {
+                    id: format!("m{i}"),
+                    role: if i % 2 == 0 {
+                        AgentMessageRole::User
+                    } else {
+                        AgentMessageRole::Assistant
+                    },
+                    created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                    blocks: vec![AgentMessageBlock::Text {
+                        text: "字".repeat(5_000),
+                    }],
+                    metadata: None,
+                    client_message_id: None,
+                    content: None,
+                })
+            })
+            .collect();
+        let mut state = streaming_state();
+        let options = SessionLoopOptions {
+            context_budget: Some(ContextBudget {
+                context_window: 100_000,
+                reserve_tokens: 1_000,
+                safety_tokens: 100,
+            }),
+            compaction_policy: Some(CompactionPolicy {
+                keep_recent_tokens: 20_000,
+                min_recent_turns: 1,
+                ..Default::default()
+            }),
+            max_auto_compactions_per_run: 1,
+            summarizer: Some(Arc::new(OkSummarizer)),
+            ..Default::default()
+        };
+        state.options = options.clone();
+        state.budget = options.context_budget;
+        state.compaction_policy = options.compaction_policy.clone();
+        state.summarizer = options.summarizer.clone();
+        state.conversation = conversation;
+        // 第一次压缩（keep=20000 → cut=8）
+        let o1 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(o1.end.is_none());
+        assert_eq!(state.compression_retries, 1);
+        // 压缩后对话 = 链 + m8..m11（5 条）
+        assert_eq!(state.conversation.len(), 5);
+        re_enter_streaming(&mut state);
+        // 第二次压缩：阶梯下调 keep=min(20000, 12000)=12000 → cut=3 → dropped=[m8, m9]
+        let o2 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert!(o2.end.is_none(), "阶梯下调后第二次压缩必须成功（非 noop fatal）");
+        assert_eq!(state.compression_retries, 2);
+        let record = compression_record(&state).expect("第二次压缩必须广播事件");
+        assert_eq!(
+            record.compressed_message_ids,
+            vec!["m8".to_string(), "m9".to_string()],
+            "keep 阶梯 12000 生效：cut=3（dropped m8,m9；若未下调则 cut=2 仅 dropped m8）"
+        );
+        // 阶梯常量语义：默认 20K→12K→8K（下调方向，min 配置值逻辑在实现内）
+        assert_eq!(OVERFLOW_KEEP_RECENT_STAIRCASE, [20_000, 12_000, 8_000]);
+    }
+
+    /// E2 信息分级（约束 C）：LLM 摘要不可用的等待/fatal 一律经事件面
+    /// （runtime-error / runtime-intervention-required）呈现，对话零注入
+    /// ——无 Summarizer 溢出 fatal 路径对话逐字节不变（无「重试中」/失败
+    /// 标记类注入消息）
+    #[tokio::test]
+    async fn llm_unavailable_overflow_never_injects_diagnostic_into_conversation() {
+        let mut state = budgeted_state();
+        state.summarizer = None;
+        let snapshot: Vec<Arc<AgentMessage>> = state.conversation.clone();
+        handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
+            .await
+            .unwrap();
+        assert_eq!(state.conversation.len(), snapshot.len(), "对话长度不变");
+        assert!(
+            state
+                .conversation
+                .iter()
+                .zip(&snapshot)
+                .all(|(a, b)| Arc::ptr_eq(a, b)),
+            "对话 Arc 身份不变（零注入、零改写——信息分级约束 C）"
+        );
+        // 事件面呈现：runtime-error 含「LLM 不可用」
+        assert!(
+            state.events.iter().any(|e| matches!(
+                e,
+                AgentEvent::RuntimeError { error, .. } if error.contains("LLM 不可用")
+            )),
+            "LLM 不可用必须经 runtime-error 事件呈现"
         );
     }
 }
