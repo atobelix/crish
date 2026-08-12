@@ -1,13 +1,16 @@
 //! 工作区笔记库（独立 workspace.db）。W1-C / W1-D1 / W2-C / W2-D / W2-E / Round5：
 //! schema + snapshot/updates + blocks 投影 + FTS5 + CAS + MD mirror + **store↔collab 投影管线**。
 //!
-//! # 模块拆分（SD-02 · 门面减负）
+//! # 模块拆分（SD-02 · 门面减负 / **SD-27** 测旁挂）
 //! - [`migrate`]：schema 迁移 / `ensure_*`
 //! - [`fts`]：blocks 投影 + FTS5 search/rebuild/CJK / reindex
 //! - [`persist_plugin`]：`PersistencePlugin` load/on_committed/flush + compact
 //! - [`mirror`]（薄门面）+ `mirror_detect` / `mirror_import` / `mirror_poll` / [`mirror_os_watch`]：
 //!   MD mirror detect/三路/轮询/OS watcher（**不回退**；SD-10 内聚）
 //! - 本文件：`WorkspaceStore` 薄门面（open/meta/clock/export 地基）+ `pub use`
+//! - [`tests`]（`lib_tests.rs`）：门面测外置（`#[path]`；无孤儿）
+//!
+//! **诚实（SD-27）**：**≠ EL-03**；**≠ Wave 2「存储完成」**。测旁挂 ≠ 假关恢复 / ≠ 存储完成。
 //!
 //! # S1 落盘五条
 //! 1. 权威 = SQLite snapshot + updates（+ RS 内存树）
@@ -17,88 +20,51 @@
 //! 5. mirror 延迟水位可观测
 //!
 //! # Snapshot 合并策略（W1 简单版，非真实 CRDT encode）
-//! - 触发：`CommitBatch.snapshot_tick == true` **或** 该 doc 的 pending 条数 ≥ [`SNAPSHOT_UPDATE_THRESHOLD`]
-//! - 步骤：
-//!   1. 读现有 snapshot（可空）
-//!   2. 读全部 pending updates（`ORDER BY seq ASC`）
-//!   3. 用 length-prefix framing 合并为新 snapshot blob 并 UPSERT `doc_snapshots`
-//!   4. `DELETE FROM doc_updates WHERE doc_id=?`（裁剪已并入的 updates）
-//! - `load_doc`：返回 snapshot ⊕ 剩余 pending（compact 后 pending 为空）
-//! - framing：`[u32_le chunk_len][chunk_bytes]...`；首段为旧 snapshot（若无则跳过），随后按 seq 追加每条 update.bytes
+//! - 触发：`CommitBatch.snapshot_tick == true` **或** pending ≥ [`SNAPSHOT_UPDATE_THRESHOLD`]
+//! - 步骤：读 snapshot → pending updates（`ORDER BY seq ASC`）→ length-prefix framing 合并
+//!   UPSERT `doc_snapshots` → `DELETE FROM doc_updates WHERE doc_id=?`
+//! - `load_doc`：snapshot ⊕ 剩余 pending（compact 后 pending 为空）
+//! - framing：`[u32_le chunk_len][chunk_bytes]...`；首段旧 snapshot（若无则跳过），随后按 seq 追加
 //!
-//! # 推荐提交管线（Round5 · store↔collab 投影索引自动接线）
+//! # 推荐提交管线（Round5）
 //! ```ignore
 //! use conex_workspace_store::{SharedWorkspaceStore, commit_ops};
 //! use conex_doc_collab::{DocSession, Origin};
-//!
 //! let store = SharedWorkspaceStore::open("workspace.db")?;
 //! let mut session = DocSession::new("doc-1")
-//!     .with_persistence(Box::new(store.clone())); // on_committed 写权威
+//!     .with_persistence(Box::new(store.clone()));
 //! let ev = commit_ops(&mut session, &store, Origin::User, &ops)?;
-//! // 等价分步：session.apply → store.apply_projection_diff / index_after_apply
 //! ```
-//! - **权威落盘**：`DocSession::apply` 内 `PersistencePlugin::on_committed`（[`SharedWorkspaceStore`] 可 clone 共享）
+//! - **权威落盘**：`DocSession::apply` 内 `PersistencePlugin::on_committed`（[`SharedWorkspaceStore`] 可 clone）
 //! - **派生索引**：[`WorkspaceStore::apply_projection_diff`]（以 `ProjectionDiff` 为准；
 //!   结构 update 现为 rev 占位字节，**禁止**指望 decode CRDT 重建索引）
 //! - 底层仍可测用 [`WorkspaceStore::reindex_block`]；生产路径应走管线
 //!
-//! # W2-C 派生索引（可丢、可重建；损坏不得导致文档不可开）
-//! - `blocks` 投影表：块元数据 + `plain_text` + `props_json`
-//! - `blocks_fts`：FTS5 全文（unicode61 英文；**CJK 走 `instr` 子串回退**，见 `search_fulltext` / A-FTS-ZH-01）
-//! - **结构门**（A-PERF-10 / A-INV-06 索引侧）：英文走 FTS5 MATCH 计划；CJK 走 `instr`（非默认全表 `LIKE`）；
-//!   投影与 FTS 行一致可测；`rebuild_fts` 可重建。测：`tests/w2c_structure_gate.rs`、`tests/fts_chinese.rs`。
-//! - **诚实边界**：**≠ A-PERF-10 数值满关**（数值仅 W6-C）；**≠ EL-03**（EL-03 结构主责 W3-A / 数值 W6-C）；
-//!   **≠ Wave 2「存储完成」**（杀进程权威恢复分属他包；mirror detect/三路见 W2-E 节，≠ 产品 watcher 满关）。
-//!
-//! # W2-D-S CAS 附件骨架（Skeleton）
-//! - [`WorkspaceStore::put_blob`] / [`WorkspaceStore::get_blob`] / [`WorkspaceStore::link_block_attachment`]
-//! - 表 `blob_cas` + `block_attachments`；**附件不是第二文档权威**；默认 **不**进 snapshot 热路径
-//! - **诚实（-S）**：**≠ 生产就绪**；**≠ GC 满关**（无未引用回收 / 无产品 unlink）；
-//!   **≠ EL** / **≠ A-PERF-11 数值**；Strict **W2-D** 才扩 GC+外置+结构门满关
-//!
-//! # W2-E MD mirror（人/git 契约视图，非权威）
-//! ## W2-E-S 地基（已有）
-//! - [`WorkspaceStore::export_md_mirror`]：`serialize_tree` → 原子写 `.md` + 更新 `mirror_meta`
-//! - [`WorkspaceStore::note_authority_advanced`] / [`WorkspaceStore::mirror_lag`]：延迟水位
-//! - 管线可选：[`commit_ops_with_mirror`] 在 lag ≥ threshold 时自动 export
-//!
-//! ## W2-E Strict 子集（P6 detect/三路 + watcher 方向）
-//! - [`WorkspaceStore::detect_mirror_drift`]：hash/mtime vs `mirror_meta` → 三路分类
-//! - [`WorkspaceStore::import_mirror_proposal`]：Op 批 **或** 冲突报告；禁静默盖 unpushed（X-05）
-//! - [`ThreeWayStrategy`]：`RetainLocalAndReimport` | `DropUnacked` | `ConflictBlocks`
-//! - **watcher 轮询子集**（进程内/可轮询；**≠** 用 poll 冒充 inotify 满关）：
-//!   - [`MirrorWatchHandle`] / [`poll_mirror_once`]：指纹基线 + 单次 poll → 可观测分类
-//!   - [`MirrorWatcher`] / [`MirrorWatcher::on_mirror_change`]：回调注册（上层 timer 驱动）
-//! - **OS 事件 watcher 封装**（`notify`；见 [`mirror_os_watch`]）：
-//!   - [`MirrorOsWatcher`] / [`MirrorOsEventSource`]：内核 FS 事件 → 通道
-//!   - [`detect_if_os_event_hits_mirror`] / [`poll_on_os_hint`]：事件 hint → detect/poll（**不** apply）
-//! - **诚实**：**≠ A-INV-02 产品 UI 满关**（无三路对话框）；**≠**「poll = inotify 满关」；
-//!   OS 封装 **≠** 桌面产品订阅/IPC 全链路；**≠ EL-03**；**≠ Wave 2 存储完成**。
-//!   详见 [`mirror`] / [`mirror_os_watch`] 模块头注释。
-//!
-//! - **不变量**：工具默认 **禁止** 读 mirror 当权威；本 API 仅人/git 契约视图。
+//! # W2-C / W2-D-S / W2-E / W2-F（诚实边界）
+//! - W2-C：`blocks` + `blocks_fts`；CJK `instr`（A-FTS-ZH-01）；**≠ A-PERF-10 数值满关**；
+//!   测 `tests/w2c_structure_gate.rs`、`tests/fts_chinese.rs`。损坏不得导致文档不可开。
+//! - W2-D-S：[`WorkspaceStore::put_blob`] / [`WorkspaceStore::get_blob`] / [`WorkspaceStore::link_block_attachment`]；
+//!   **≠ 生产 / ≠ GC 满关 / ≠ EL / ≠ A-PERF-11**（Strict **W2-D** 才扩）
+//! - W2-E：[`WorkspaceStore::export_md_mirror`] / [`WorkspaceStore::note_authority_advanced`] / [`WorkspaceStore::mirror_lag`] + detect/三路/poll/OS；
+//!   **≠ A-INV-02 产品 UI**；**≠ poll=inotify 满关**；工具默认**禁止**读 mirror 当权威
+//! - W2-F：[`query_blocks`] + [`refs`] 投影同事务物化；手工 `upsert_ref` 仅测/抢救；
+//!   A-QRY-01 **无手工 seed**；**≠** 完整 MD AST wiki 节点解析
+//! - 总钉：**≠ EL-03**（结构主责 W3-A / 数值 W6-C）；**≠ Wave 2「存储完成」**
 //!
 //! # 后续扩展点
-//! - **W2-D Strict**：CAS GC / 外置 `blobs/` 大文件 path / A-PERF-11 结构门满关（W2-D-S 仅骨架）
-//! - OS watcher **产品**接线（桌面 timer/IPC/三路 UI；本 crate 已交 notify 封装 + poll 入口）
-//!
-//! # W2-F Strict（refs 自动物化 + 受限 query）
-//! - `WorkspaceStore::query_blocks` — FTS ∩ kind ∩ attrs ∩ refs 交集查询（agent-tools 接线见 W4）
-//! - [`refs`]：`block_refs` 表 + **投影同事务**从 plain_text 抽 `((id))`/`[[page]]` 自动物化
-//!   （`apply_projection_diff` → [`materialize_block_refs_conn`]）；手工 `upsert_ref` 仅测/抢救
-//! - 验收方向：A-QRY-01 **无手工 seed**（`a_qry_01_query_blocks_ref_without_manual_seed`）
-//! - **诚实**：**≠ Wave 2 存储完成**；**≠ EL-03**；**≠** 完整 MD AST wiki 节点解析
+//! - **W2-D Strict**：CAS GC / 外置 `blobs/` / A-PERF-11 结构门满关（W2-D-S 仅骨架）
+//! - OS watcher **产品**接线（桌面 timer/IPC/三路 UI）
 
 #![allow(missing_docs)]
 
 mod cas;
 mod fts;
 mod migrate;
+mod mirror;
 mod mirror_detect;
 mod mirror_import;
-mod mirror_poll;
-mod mirror;
 mod mirror_os_watch;
+mod mirror_poll;
 mod persist_plugin;
 mod projection;
 mod query_blocks;
@@ -108,9 +74,9 @@ pub use cas::{content_hash, get_blob_conn, put_blob_conn};
 pub use fts::{BlockHit, ReindexBlockOpts};
 pub use migrate::migrate;
 pub use mirror::{
-    poll_mirror_once, ConflictBlockInfo, ImportMirrorOpts, ImportMirrorResult,
-    MirrorDriftClass, MirrorDriftReport, MirrorFileFingerprint, MirrorWatchHandle,
-    MirrorWatchPollResult, MirrorWatcher, ThreeWayStrategy,
+    poll_mirror_once, ConflictBlockInfo, ImportMirrorOpts, ImportMirrorResult, MirrorDriftClass,
+    MirrorDriftReport, MirrorFileFingerprint, MirrorWatchHandle, MirrorWatchPollResult,
+    MirrorWatcher, ThreeWayStrategy,
 };
 pub use mirror_os_watch::{
     detect_if_os_event_hits_mirror, poll_on_os_hint, FakeMirrorOsEventSource, MirrorOsEvent,
@@ -123,8 +89,8 @@ pub use projection::{
     DEFAULT_MIRROR_EXPORT_LAG_THRESHOLD,
 };
 pub use query_blocks::{
-    QUERY_BLOCKS_LIMIT_DEFAULT, QUERY_BLOCKS_LIMIT_MAX, QueryBlocksHit, QueryBlocksParams,
-    QueryBlocksResult, query_blocks_conn,
+    query_blocks_conn, QueryBlocksHit, QueryBlocksParams, QueryBlocksResult,
+    QUERY_BLOCKS_LIMIT_DEFAULT, QUERY_BLOCKS_LIMIT_MAX,
 };
 pub use refs::{
     extract_refs_from_plain, materialize_block_refs_conn, refs_from_conn, refs_to_conn,
@@ -138,7 +104,7 @@ pub(crate) use fts::{
 
 use conex_doc_collab::{BlockTree, PersistError};
 use conex_md_ast::serialize_tree;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use thiserror::Error;
@@ -425,143 +391,8 @@ pub(crate) fn note_authority_advanced_conn(
     Ok(())
 }
 
+// ── 测试（SD-27 外置） ─────────────────────────────────────────────────────
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use conex_doc_collab::{BlockId, BlockKind, BlockNode, BlockProps, BlockTree};
-    use std::collections::HashMap;
-    use std::str::FromStr;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    fn temp_db() -> (TempDir, PathBuf) {
-        let dir = TempDir::new();
-        let db = dir.path().join("workspace.db");
-        (dir, db)
-    }
-
-    /// 极简 tempfile 目录，避免额外依赖。
-    struct TempDir(PathBuf);
-    impl TempDir {
-        fn new() -> Self {
-            let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-            let p = std::env::temp_dir().join(format!(
-                "conex-ws-{}-{}-{}",
-                std::process::id(),
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos(),
-                n
-            ));
-            std::fs::create_dir_all(&p).unwrap();
-            Self(p)
-        }
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-
-    #[test]
-    fn open_migrate_schema_version() {
-        let (_dir, db) = temp_db();
-        // 路径必须是独立 workspace.db，绝不碰 sessions
-        assert!(db.ends_with("workspace.db"));
-        let store = WorkspaceStore::open(&db).unwrap();
-        assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
-        // 二次 open 幂等
-        let store2 = WorkspaceStore::open(&db).unwrap();
-        assert_eq!(store2.schema_version().unwrap(), SCHEMA_VERSION);
-        // 表存在：doc_clocks 可写
-        store.upsert_clock("d1", "peer-a", 3).unwrap();
-        assert_eq!(store.load_clock("d1", "peer-a").unwrap(), Some(3));
-    }
-
-    #[test]
-    fn separate_from_sessions_path() {
-        // 验收：用 tempfile 路径，文件名 workspace.db，不触碰 sessions.db
-        let (_dir, db) = temp_db();
-        assert!(
-            !db.to_string_lossy().contains("sessions"),
-            "不得使用 sessions 库路径"
-        );
-        let store = WorkspaceStore::open(&db).unwrap();
-        assert_eq!(store.path(), db.as_path());
-    }
-
-    fn sample_tree() -> BlockTree {
-        let id = BlockId::from_str("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa").unwrap();
-        let mut nodes = HashMap::new();
-        nodes.insert(
-            id,
-            BlockNode {
-                id,
-                parent: None,
-                order: "a0".into(),
-                kind: BlockKind::Paragraph,
-                props: BlockProps::default(),
-                text_snapshot: Some("mirror hello".into()),
-                children: vec![],
-            },
-        );
-        BlockTree {
-            root_children: vec![id],
-            nodes,
-        }
-    }
-
-    #[test]
-    fn export_md_mirror_writes_conex_comments_and_lag_cycle() {
-        let (dir, db) = temp_db();
-        let store = WorkspaceStore::open(&db).unwrap();
-        let mirror_root = dir.path().join("mirrors");
-        let tree = sample_tree();
-
-        // 尚未 export / advance → lag 不可观测
-        assert_eq!(store.mirror_lag("doc-m").unwrap(), None);
-
-        // 导出 rev=1：文件含 <!--c:，pending_lag=0
-        let out = store
-            .export_md_mirror("doc-m", &tree, 1, &mirror_root)
-            .unwrap();
-        assert!(out.ends_with("doc-m.md"));
-        assert!(out.exists());
-        let content = std::fs::read_to_string(&out).unwrap();
-        assert!(
-            content.contains("<!--c:"),
-            "Conex-MD 必须含块 ID 注释，got:\n{content}"
-        );
-        assert!(content.contains("mirror hello"));
-        assert_eq!(store.mirror_lag("doc-m").unwrap(), Some(0));
-
-        // 权威前进 → lag > 0
-        store.note_authority_advanced("doc-m", 5).unwrap();
-        let lag = store.mirror_lag("doc-m").unwrap().unwrap();
-        assert!(lag > 0, "advance 后 lag 应 > 0，got {lag}");
-        assert_eq!(lag, 4); // |5 - 1|
-
-        // 再 export 到最新 rev → lag 清零
-        let out2 = store
-            .export_md_mirror("doc-m", &tree, 5, &mirror_root)
-            .unwrap();
-        assert_eq!(out2, out);
-        assert_eq!(store.mirror_lag("doc-m").unwrap(), Some(0));
-
-        // 原子写可覆盖：二次内容仍可读
-        let content2 = std::fs::read_to_string(&out2).unwrap();
-        assert!(content2.contains("<!--c:"));
-    }
-
-    #[test]
-    fn safe_doc_id_sanitizes_path_chars() {
-        assert_eq!(safe_doc_id("a/b\\c:d"), "a_b_c_d");
-        assert_eq!(safe_doc_id("plain-id_1"), "plain-id_1");
-    }
-}
+#[path = "lib_tests.rs"]
+mod tests;
