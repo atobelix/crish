@@ -118,6 +118,9 @@ jobs:
       - run: npm run build:shared-types
       - run: npm run build:desktop
       - run: node scripts/check-dist.mjs --max-app-kb 500 --csp-enforce
+      # chunk 环检测（R2-4 C1）：依赖构建产物 dist/（脚本默认 apps/crish-desktop/dist），
+      # 必须在此构建后 job 执行——lint job 无 dist，接线过去会因「dist 目录不存在」直接红
+      - run: npm run check:chunk-cycles
 
   # 移动端快层门禁（R2-01，D8 §5.2/§5.5）：Expo 工程 typecheck + jest-expo 单测。
   # Node 22：Expo SDK 57 要求 Node ≥ 22.13.x（D4 §2.3），与桌面端 node 20 不同。
