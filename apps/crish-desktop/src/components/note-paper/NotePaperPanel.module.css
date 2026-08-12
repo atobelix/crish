@@ -156,18 +156,15 @@ button.badge:focus-visible {
   box-shadow: 0 0 0 2px var(--np-focus-edge);
 }
 
-/* 轨 / silent 标识：略强调但不抢纸面（信息色软底 + 次级字） */
+/* 轨 / silent 标识：次一级字色；禁 --color-info / --accent-blue */
 .badgeSilent {
   display: inline-flex;
   align-items: center;
   min-height: var(--control-height-xs, 24px);
   padding: var(--space-0_5, 2px) var(--space-2, 8px);
   border-radius: var(--radius-full, 9999px);
-  background: var(
-    --color-info-bg,
-    var(--accent-blue-light, hsl(217, 70%, 96%))
-  );
-  color: var(--color-info, var(--accent-blue, #1d4ed8));
+  background: var(--control-soft-bg);
+  color: var(--text-tertiary);
   font-size: var(--font-size-xs, 12px);
   font-variant-numeric: tabular-nums;
   line-height: var(--line-height-ui, 1.35);
@@ -223,11 +220,8 @@ button.badge:focus-visible {
 
 /* Strict / 产品顶栏：slash 写模式 chip（data-slash-write-mode on .badge） */
 .badge[data-slash-write-mode='readonly'] {
-  background: var(
-    --color-info-bg,
-    var(--accent-blue-light, hsl(217, 70%, 96%))
-  );
-  color: var(--color-info, var(--accent-blue, #1d4ed8));
+  background: var(--control-soft-bg);
+  color: var(--text-tertiary);
 }
 
 .badge[data-slash-write-mode='writable'] {
@@ -350,9 +344,8 @@ button.badge:focus-visible {
   right: var(--space-2, 8px);
   height: 2px;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--text-primary, #111111) 28%, transparent);
-  box-shadow: 0 0 0 0.5px
-    color-mix(in srgb, var(--text-primary, #111111) 8%, transparent);
+  background: var(--tint-highlight);
+  box-shadow: 0 0 0 0.5px var(--tint-focus-ring);
   pointer-events: none;
   z-index: 1;
 }
@@ -612,10 +605,7 @@ button.badge:focus-visible {
 }
 
 .mirrorDriftBarAttention {
-  background: var(
-    --color-warning-bg,
-    color-mix(in srgb, hsl(38, 90%, 50%) 12%, var(--bg-secondary, #ebe6e0))
-  );
+  background: var(--color-warning-bg);
 }
 
 .mirrorDriftRow {
@@ -651,7 +641,7 @@ button.badge:focus-visible {
 
 .mirrorDriftUnpushed {
   font-size: var(--font-size-xxs, 11px);
-  color: var(--color-warning, hsl(32, 90%, 36%));
+  color: var(--color-warning);
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-medium, 500);
 }
@@ -681,7 +671,7 @@ button.badge:focus-visible {
 
 .mirrorDriftGate {
   font-size: var(--font-size-xxs, 11px);
-  color: var(--color-danger, hsl(0, 70%, 40%));
+  color: var(--color-error);
   line-height: var(--line-height-ui, 1.35);
 }
 
@@ -731,16 +721,9 @@ button.badge:focus-visible {
 }
 
 .stateError {
-  color: var(--color-error, var(--accent-red, hsl(0, 55%, 55%)));
-  background: var(
-    --color-error-bg,
-    var(--accent-red-light, hsl(0, 55%, 97.5%))
-  );
-  border: var(--hairline-width, 1px) solid
-    var(
-      --color-error-border,
-      color-mix(in srgb, var(--accent-red, #c45) 25%, transparent)
-    );
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: var(--hairline-width, 1px) solid var(--color-error-border);
 }
 
 /* SendToNote 反馈条（与纸面同 token 语言） */
