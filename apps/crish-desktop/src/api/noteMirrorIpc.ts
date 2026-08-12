@@ -12,10 +12,13 @@
  *
  * ## 诚实边界
  * - **≠ EL-03**；**≠ inotify 产品满关**
- * - **未做**：timer poll 与 OS watcher 双开 debounce / 产品默认自动检测
- * - 空态默认 **不** 注入 report；须显式 detect 或 mock 注入
+ * - **未做**：timer poll 与 OS watcher **双开** debounce（E3 仅 opt-in 单路调度）
+ * - 空态默认 **不** 注入 report；须显式 detect / E3 调度 / mock 注入
  * - **CONN-E2 默认策略**：产品空态 **默认关** StatusBar（避免空态噪声）；
  *   仅 showMirrorDriftBar / mirrorDriftReport opt-in 才挂；detect/import 仍走本 IPC
+ * - **CONN-E3**：`enableMirrorDetectSchedule` + mirrorIpc → `detectMirrorDrift` →
+ *   report 喂 StatusBar；默认关时无 detect 定时器（见 mirrorDetectSchedule /
+ *   useMirrorDetectProduct）
  */
 
 import { invokeTyped, type InvokeTypedResult } from './tauriInvoke';

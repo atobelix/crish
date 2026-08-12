@@ -217,6 +217,11 @@ export {
   type MirrorThreeWaySubmitOpts,
   type MirrorThreeWaySubmitResult,
 } from './mirrorThreeWayBridge';
+export {
+  useMirrorDetectProduct,
+  type UseMirrorDetectProductOptions,
+  type UseMirrorDetectProductResult,
+} from './useMirrorDetectProduct';
 
 export {
   A_INV_02_UI_DIRECTION_ID,

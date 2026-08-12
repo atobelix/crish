@@ -21,6 +21,7 @@ import {
   type CreateProductStrictSlashBindingOptions,
 } from '../note-paper/productSlashSink';
 import { createMirrorThreeWayOnAction } from '../note-paper/mirrorThreeWayBridge';
+import { useMirrorDetectProduct } from '../note-paper/useMirrorDetectProduct';
 import type {
   MirrorDriftReportView,
   MirrorWatchSource,
@@ -104,11 +105,13 @@ export type WorkspaceEmptyStateProps = {
    * CONN-E2：可选注入镜像漂移报告（detect 成功体 / mock / 演示）。
    * 有值 → Strict 挂 StatusBar 且展示分类；无值且未 `showMirrorDriftBar` → 不挂条。
    * **禁止** 空态默认伪造 drift 报告。
+   * 与 CONN-E3：显式 prop **优先于** 调度产出的 report。
    */
   mirrorDriftReport?: MirrorDriftReportView | null;
   /**
    * 检测来源诚实标注（poll / os_event / injected / unknown）。
    * 默认 `unknown`；**禁止** 无 OS 时写 `os_event` 冒充满关。
+   * CONN-E3 调度激活且仍为 unknown 时产品侧记为 `poll`（opt-in 调度，非 OS）。
    */
   mirrorWatchSource?: MirrorWatchSource;
   /**
@@ -121,12 +124,25 @@ export type WorkspaceEmptyStateProps = {
    */
   onMirrorThreeWay?: (decision: ThreeWayDecision) => void;
   /**
-   * CONN-E2：可选注入 mirror IPC（detect/import）。
-   * 当 **未** 给 `onMirrorThreeWay` 时，自动 `createMirrorThreeWayOnAction`
-   * 绑定到 StatusBar；accept → `submitThreeWayViaMirrorIpc`（X-05 不回退）。
-   * 有 `onMirrorThreeWay` 时本 prop 仅作文档/宿主扩展位，不覆盖回调。
+   * CONN-E2 / E3：可选注入 mirror IPC（detect/import）。
+   * - 三路：当 **未** 给 `onMirrorThreeWay` 时，自动 `createMirrorThreeWayOnAction`
+   * - detect 调度（E3）：须与 `enableMirrorDetectSchedule` 同开才自动 detect
    */
   mirrorIpc?: NoteMirrorIpc;
+  /**
+   * CONN-E3：显式 opt-in 产品 detect→report 调度（默认 **关**）。
+   * - `true` + `mirrorIpc` → 调用 `detectMirrorDrift` → 注入 report → 可挂 StatusBar
+   * - `false` / 省略 → **无** detect 调用、**无** detect 定时器
+   * - **不** 默认强制开 StatusBar 噪声；有 report 后按 E2 规则挂条
+   * - 调度激活时挂条 idle 亦可（等待 detect）；**≠ EL-03**；**≠ inotify 满关**
+   */
+  enableMirrorDetectSchedule?: boolean;
+  /**
+   * CONN-E3：可选 detect 轮询间隔 ms。
+   * 省略 / ≤0 → enable 时 **仅一次** detect（无 setInterval）。
+   * >0 → 立即一次 + interval（仍须 opt-in；≠ 默认双开 poll+OS）。
+   */
+  mirrorDetectIntervalMs?: number;
 };
 
 /**
@@ -143,8 +159,10 @@ export type WorkspaceEmptyStateProps = {
  *   **≠ A-BLK-08/09 e2e**；provisional ≠ kind UI
  * - **CONN-E2 mirror 条**：默认 **不** 挂 `MirrorDriftStatusBar`；
  *   `showMirrorDriftBar` / `mirrorDriftReport` opt-in 才装配；无 report 不造假数据
+ * - **CONN-E3 detect 调度**：默认 **不** 调 detect；
+ *   `enableMirrorDetectSchedule` + `mirrorIpc` opt-in → detect→report
  *
- * ## 诚实边界（08 §0.2 / 20 L3–L4 · R10 · CONN-A1 · CONN-B3 · CONN-E2）
+ * ## 诚实边界（08 §0.2 / 20 L3–L4 · R10 · CONN-A1 · CONN-B3 · CONN-E2/E3）
  * - **可演示 ≠ EL-01 / EL-08 关闭**
  * - **≠ 打开完成**；后端默认 `hydrate_path=doc-session`（真 `DocSession::hydrate` 投影）；
  *   对照轨 `prefer_query` → `query-blocks`；**path 字符串 ≠ G-HYD 打开完成 / ≠ EL-01/04/08**
@@ -154,6 +172,7 @@ export type WorkspaceEmptyStateProps = {
  * - slash / mdPrefix 默认可写 **仅当** 有 apply 后端（IPC/注入）；**禁止** mock 生产默认
  * - 桌面 mdPrefix 接线 ≠ 打开完成
  * - mirror 条 **≠ EL-03**；**≠ inotify 满关**；X-05 不回退；**≠** 默认 poll+OS 双开
+ * - detect 调度 **仅** opt-in；关时无 timer；**≠** 假关 EL-03
  */
 export function WorkspaceEmptyState({
   wsId,
@@ -171,6 +190,8 @@ export function WorkspaceEmptyState({
   mirrorUnpushedOpCount = 0,
   onMirrorThreeWay,
   mirrorIpc,
+  enableMirrorDetectSchedule = false,
+  mirrorDetectIntervalMs,
 }: WorkspaceEmptyStateProps) {
   const [openMode, setOpenMode] = useState<NotePaperEmptyOpenMode | null>(null);
 
@@ -253,6 +274,22 @@ export function WorkspaceEmptyState({
   );
 
   /**
+   * CONN-E3：产品 detect→report 调度（opt-in）。
+   * - enableMirrorDetectSchedule + mirrorIpc → detectMirrorDrift → report
+   * - 默认关：无 detect、无 timer
+   */
+  const detectSchedule = useMirrorDetectProduct({
+    enabled: enableMirrorDetectSchedule === true,
+    docId: strictDocId,
+    ipc: mirrorIpc,
+    intervalMs: mirrorDetectIntervalMs,
+  });
+
+  /** 显式 prop report 优先；否则用调度产出 */
+  const effectiveMirrorReport =
+    mirrorDriftReport != null ? mirrorDriftReport : detectSchedule.report;
+
+  /**
    * CONN-E2：三路回调装配。
    * - 显式 `onMirrorThreeWay` 优先（测断言 / 宿主接管）
    * - 否则有 `mirrorIpc` → `createMirrorThreeWayOnAction`（accept → import；X-05）
@@ -268,9 +305,22 @@ export function WorkspaceEmptyState({
     });
   }, [onMirrorThreeWay, mirrorIpc, strictDocId, mirrorUnpushedOpCount]);
 
-  /** 是否应在 Strict 上装配 StatusBar（opt-in；默认关） */
+  /**
+   * 是否应在 Strict 上装配 StatusBar（opt-in；默认关）。
+   * E3 调度激活时也挂条（idle 或已有 report），便于产品路径可见。
+   */
   const mirrorBarEnabled =
-    showMirrorDriftBar === true || mirrorDriftReport != null;
+    showMirrorDriftBar === true ||
+    effectiveMirrorReport != null ||
+    detectSchedule.scheduleActive;
+
+  /** 调度激活且宿主未改 source 时诚实标 poll（非 os_event） */
+  const resolvedWatchSource: MirrorWatchSource =
+    detectSchedule.scheduleActive && mirrorWatchSource === 'unknown'
+      ? 'poll'
+      : mirrorWatchSource;
+
+  const scheduleAttr = detectSchedule.scheduleActive ? '1' : '0';
 
   if (openMode === 'strict') {
     return (
@@ -288,6 +338,7 @@ export function WorkspaceEmptyState({
         data-md-prefix-sink-source={mdPrefixBinding.source}
         data-md-prefix-sink={mdPrefixBinding.sink ? '1' : '0'}
         data-mirror-drift-bar={mirrorBarEnabled ? '1' : '0'}
+        data-mirror-detect-schedule={scheduleAttr}
         data-el03="not-claimed"
         data-inotify-full="not-claimed"
         data-testid="note-paper-strict-host"
@@ -309,10 +360,14 @@ export function WorkspaceEmptyState({
           mdPrefixSinkSource={mdPrefixBinding.source}
           title="笔记纸面（W5-B Strict · 空态演示）"
           onClose={() => setOpenMode(null)}
-          mirrorDriftReport={mirrorDriftReport}
-          mirrorWatchSource={mirrorWatchSource}
+          mirrorDriftReport={effectiveMirrorReport}
+          mirrorWatchSource={resolvedWatchSource}
           mirrorUnpushedOpCount={mirrorUnpushedOpCount}
-          showMirrorDriftBar={showMirrorDriftBar}
+          showMirrorDriftBar={
+            showMirrorDriftBar === true || detectSchedule.scheduleActive
+              ? true
+              : showMirrorDriftBar
+          }
           onMirrorThreeWay={resolvedOnMirrorThreeWay}
         />
       </div>
@@ -402,6 +457,7 @@ export function WorkspaceEmptyState({
       data-md-prefix-write-mode={mdPrefixBinding.mode}
       data-md-prefix-sink-source={mdPrefixBinding.source}
       data-mirror-drift-bar={mirrorBarEnabled ? '1' : '0'}
+      data-mirror-detect-schedule={scheduleAttr}
       data-el03="not-claimed"
       data-inotify-full="not-claimed"
       onPointerDown={onActivate}
@@ -421,6 +477,8 @@ export function WorkspaceEmptyState({
         CONN-D2：无 apply 默认 mdPrefix disabled；注入后 provisional turn_into 可写。
         CONN-E2：mirror 条默认关；showMirrorDriftBar / mirrorDriftReport opt-in；
           无 report 不造假；≠ EL-03 / ≠ inotify 满关 / X-05 不回退。
+        CONN-E3：detect 调度默认关；enableMirrorDetectSchedule + mirrorIpc
+          → detectMirrorDrift → report → StatusBar；关时无 timer。
         禁止 mock 生产默认；桌面接线 ≠ 打开完成 / ≠ A-BLK-08/09 e2e / ≠ EL-01。
       */}
       <div

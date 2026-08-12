@@ -124,7 +124,7 @@
         />
         ```
      2. **Strict 直接注入**：`mirrorDriftReport` / `showMirrorDriftBar` / `onMirrorThreeWay`
-     3. **detect 后注入**：
+     3. **detect 后注入**（手动）：
         ```tsx
         const ipc = createTauriNoteMirrorIpc(); // 或 createMockNoteMirrorIpc
         const det = await ipc.detectMirrorDrift({ docId });
@@ -136,17 +136,32 @@
           mirrorUnpushedOpCount={unpushed}
         />;
         ```
+     4. **CONN-E3 产品 detect 调度**（opt-in；默认关）：
+        ```tsx
+        <WorkspaceEmptyState
+          wsId={wsId}
+          mirrorIpc={ipc} // mock 或 createTauriNoteMirrorIpc()
+          enableMirrorDetectSchedule // → detectMirrorDrift → report → 条
+          // mirrorDetectIntervalMs={30_000} // 可选轮询；省略则仅一次
+          mirrorUnpushedOpCount={unpushed}
+        />
+        // DOM：data-mirror-detect-schedule=0|1
+        // 调用序：enable+ipc → useMirrorDetectProduct → runMirrorDetectOnce
+        //   → note_detect_mirror_drift → detectSuccessToReportView → StatusBar
+        ```
    - **X-05**：StatusBar 在 unpushed>0 时须勾选「显式丢弃」才映射 `drop_unacked`；
      bridge 对 `decision.ok===false` **不**调 import（禁静默盖 unpushed）
    - **诚实未做**：产品 timer poll 与 OS watcher **同时**装配 + 双开 debounce；
-     本包 **≠ EL-03**；**≠ inotify 产品满关**；import **不** apply
+     本包 **≠ EL-03**；**≠ inotify 产品满关**；import **不** apply；
+     E3 默认 **不** 启调度（关时无 detect timer）
 10. **测名**：
 
 - Skeleton：`NotePaperPanel.test.tsx` / `w5bSkeleton.test.ts` / `WorkspaceEmptyState.w5bs.test.tsx`
 - Strict：`NotePaperStrictPanel.test.tsx` / `hydrateProjection.test.ts` / `w5bStrict.test.ts`（`w5b_strict_*`）
-- **产品入口**：`WorkspaceEmptyState.w5b.test.tsx`（`w5b_product_empty_*` / `conn_e2_*`）
+- **产品入口**：`WorkspaceEmptyState.w5b.test.tsx`（`w5b_product_empty_*` / `conn_e2_*` / `conn_e3_*`）
 - **hydrate IPC**：`noteHydrateIpc.test.ts`（`note_hydrate_ipc_*`）
-- **mirror IPC / 三路桥**：`noteMirrorIpc.test.ts` / `mirrorThreeWayBridge.test.tsx` / `MirrorDriftStatusBar.test.tsx`
+- **mirror IPC / 三路桥 / E3 调度**：`noteMirrorIpc.test.ts` / `mirrorThreeWayBridge.test.tsx` /
+  `MirrorDriftStatusBar.test.tsx` / `mirrorDetectSchedule.test.ts`（`conn_e3_schedule_*`）
 - 边界：`note-paper.boundary.test.ts`（禁 EditorStore；两轨共用）
 
 ## 半 transport / hydrate 形状
