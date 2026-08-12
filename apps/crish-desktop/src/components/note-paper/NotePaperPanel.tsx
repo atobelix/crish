@@ -11,6 +11,12 @@
  * - **≠ 任何 EL 关闭**（挂载冒充交付 = S5 事故 · 08 §0.2）
  * - **禁止** 假数据 chrome 关 EL-01；**禁止** 无 W1-H 写「打开完成」
  *
+ * ## SD-25 切开（目标 <400）
+ * - hooks → `useNotePaperSkeleton`
+ * - 静默假数据接线 → `notePaperSilentFixture`
+ * - chrome 装配 → `NotePaperPanelChrome`
+ * 本文件仅装配壳：包锚 / section data-* / 编排。**≠ EL**。
+ *
  * surface = note-paper
  *
  * - 使用 `@crish/block-paper` 的 createSilentFixture / BlockChromeModel / SlashMenuModel
@@ -22,38 +28,24 @@
  * - 假数据投影 ≠ 文档权威；DOM 锚 `data-package-id="W5-B-S"` / `data-track="skeleton"`
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import React from 'react';
 import {
-  BlockChromeModel,
-  createSilentFixture,
-  listSilentBlocks,
-  SlashMenuModel,
   type BlockChromeDomHost,
-  type HandleVisibility,
+  type BlockChromeModel,
   type IntentSink,
   type SilentFixture,
   type SlashInsertIntent,
+  type SlashMenuModel,
 } from '@crish/block-paper';
 /** DomHost chrome 皮（落点线/slash/把手热区）；与 module 块行皮并存；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
 /** W3-G PaperList 挂载皮（gap/pad/gutter/滚动）；逻辑挂载归 ②；≠ EL-01 */
 import '@crish/block-paper/paper-list.css';
-import type { NoteQueryBlockHit, NoteTransport } from '../../api/noteApi';
-import { BlockChromeDomMount } from './BlockChromeDomMount';
-import { SlashMenuOverlay } from './SlashMenuOverlay';
-import { Button } from '../ui';
+import type { NoteTransport } from '../../api/noteApi';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
-import {
-  W5B_SKELETON_BOUNDARY,
-  W5B_SKELETON_PACKAGE_ID,
-  W5B_SKELETON_TRACK,
-} from './w5bSkeleton';
+import { NotePaperPanelChrome } from './NotePaperPanelChrome';
+import { useNotePaperSkeleton } from './useNotePaperSkeleton';
+import { W5B_SKELETON_PACKAGE_ID, W5B_SKELETON_TRACK } from './w5bSkeleton';
 import styles from './NotePaperPanel.module.css';
 
 // ---------------------------------------------------------------------------
@@ -107,19 +99,6 @@ export type NotePaperPanelProps = {
   title?: string;
 };
 
-type BlockPropsView = {
-  flavour?: string;
-  text?: string;
-  level?: number;
-};
-
-type DisplayBlock = {
-  id: string;
-  flavour: string;
-  text: string;
-  level?: number;
-};
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -143,109 +122,32 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   className,
   title = '笔记纸面（W5-B-S 预览壳）',
 }) => {
-  const useTransport = transport !== undefined;
-
-  // 假数据投影：不创建 lines[] 权威 store（A-SURF-08）
-  const fixture = useMemo(
-    () =>
-      fixtureProp ??
-      createSilentFixture(blockCount, { docId, rev: 1, idPrefix: 'b' }),
-    [fixtureProp, blockCount, docId]
-  );
-
-  const chrome = useMemo(
-    () => chromeProp ?? new BlockChromeModel(),
-    [chromeProp]
-  );
-
-  // slash 模型挂载可测（预览壳默认关闭；composing 守卫在包内单测）
-  const slashMenu = useMemo(
-    () => slashMenuProp ?? new SlashMenuModel(),
-    [slashMenuProp]
-  );
-
-  /** React slash 浮层：订阅 model 变更以同步 data-slash-open 等 */
-  const slashOpen = useSyncExternalStore(
-    (onStoreChange) => slashMenu.subscribe(onStoreChange),
-    () => (slashMenu.isOpen() ? '1' : '0'),
-    () => '0'
-  );
-
-  const silentBlocks = useMemo(() => listSilentBlocks(fixture), [fixture]);
-
-  const [transportBlocks, setTransportBlocks] = useState<DisplayBlock[]>([]);
-  const [transportLoading, setTransportLoading] = useState(false);
-  const [transportError, setTransportError] = useState<string | null>(null);
-  const [transportRev, setTransportRev] = useState(0);
-
-  const loadFromTransport = useCallback(async () => {
-    if (!transport) return;
-    setTransportLoading(true);
-    setTransportError(null);
-    try {
-      const res = await transport.queryBlocks({ docId, limit: 200 });
-      if (!res.ok) {
-        setTransportBlocks([]);
-        setTransportError(res.reason);
-        return;
-      }
-      const mapped: DisplayBlock[] = res.blocks.map((b: NoteQueryBlockHit) => ({
-        id: b.id,
-        flavour: b.kind,
-        text: b.snippet,
-      }));
-      setTransportBlocks(mapped);
-      setTransportRev((n) => n + 1);
-    } finally {
-      setTransportLoading(false);
-    }
-  }, [transport, docId]);
-
-  useEffect(() => {
-    if (!useTransport) return;
-    void loadFromTransport();
-  }, [useTransport, loadFromTransport, refreshToken]);
-
-  const displayBlocks: DisplayBlock[] = useMemo(() => {
-    if (useTransport) return transportBlocks;
-    return silentBlocks.map((block) => {
-      const props = (block.props ?? {}) as BlockPropsView;
-      return {
-        id: block.id,
-        flavour: props.flavour ?? 'block',
-        text: props.text ?? '',
-        level: props.level,
-      };
-    });
-  }, [useTransport, transportBlocks, silentBlocks]);
-
-  const [chromeTick, setChromeTick] = useState(0);
-  const bump = useCallback(() => setChromeTick((n) => n + 1), []);
-
-  const snapshot = useMemo(() => {
-    void chromeTick;
-    return chrome.getSnapshot();
-  }, [chrome, chromeTick]);
-
-  const handleHover = useCallback(
-    (blockId: string | null) => {
-      chrome.setHovered(blockId);
-      bump();
-    },
-    [chrome, bump]
-  );
-
-  const handleFocus = useCallback(
-    (blockId: string | null) => {
-      chrome.setFocused(blockId);
-      bump();
-    },
-    [chrome, bump]
-  );
+  const {
+    chrome,
+    slashMenu,
+    slashOpen,
+    useTransport,
+    displayBlocks,
+    transportLoading,
+    transportError,
+    loadFromTransport,
+    chromeTick,
+    snapshot,
+    handleHover,
+    handleFocus,
+    resolvedDocId,
+    resolvedRev,
+  } = useNotePaperSkeleton({
+    docId,
+    blockCount,
+    fixture: fixtureProp,
+    chrome: chromeProp,
+    slashMenu: slashMenuProp,
+    transport,
+    refreshToken,
+  });
 
   const rootClass = [styles.panel, className].filter(Boolean).join(' ');
-  const resolvedDocId = useTransport ? docId : fixture.docId;
-  const resolvedRev = useTransport ? transportRev : fixture.rev;
 
   return (
     <section
@@ -268,154 +170,27 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
       aria-label={title}
       tabIndex={-1}
     >
-      <header className={styles.header}>
-        <h2 className={styles.title}>{title}</h2>
-        <div className={styles.meta}>
-          <span className={styles.badgeSilent} data-testid="note-paper-silent">
-            silent={snapshot.silentLevel}
-          </span>
-          <span className={styles.badge} data-testid="note-paper-rev">
-            rev={resolvedRev}
-          </span>
-          <span className={styles.badge} data-testid="note-paper-count">
-            {displayBlocks.length} 块
-          </span>
-          {useTransport ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={styles.badge}
-              onClick={() => {
-                void loadFromTransport();
-              }}
-              aria-label="从 transport 刷新块列表"
-              data-testid="note-paper-refresh"
-            >
-              刷新
-            </Button>
-          ) : null}
-          {onClose ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={styles.badge}
-              onClick={onClose}
-              aria-label="关闭笔记纸面预览"
-              data-testid="note-paper-close"
-            >
-              关闭
-            </Button>
-          ) : null}
-        </div>
-      </header>
-
-      <div className={styles.body} data-testid="note-paper-body">
-        <div className={styles.readingColumn}>
-          {transportError ? (
-            <div
-              className={`${styles.state} ${styles.stateError}`}
-              role="alert"
-              data-testid="note-paper-transport-error"
-            >
-              {transportError}
-            </div>
-          ) : null}
-          {displayBlocks.length === 0 && !transportError ? (
-            <div
-              className={`${styles.state} ${styles.stateEmpty}`}
-              data-testid="note-paper-empty"
-            >
-              {useTransport
-                ? '空文档投影（transport 无块）'
-                : '空文档投影（静默假数据 n=0）'}
-            </div>
-          ) : (
-            displayBlocks.map((block) => {
-              const visibility: HandleVisibility = chrome.getHandleVisibility(
-                block.id
-              );
-              const headingLevel =
-                block.level !== undefined
-                  ? block.level
-                  : block.flavour?.toLowerCase().startsWith('h') &&
-                      /^h[1-6]$/i.test(block.flavour)
-                    ? Number(block.flavour.slice(1))
-                    : block.flavour === 'heading' || block.flavour === 'Heading'
-                      ? 2
-                      : undefined;
-              return (
-                <div
-                  key={block.id}
-                  className={styles.blockRow}
-                  data-block-id={block.id}
-                  data-content-row="1"
-                  data-handle={visibility}
-                  data-flavour={block.flavour}
-                  data-heading-level={
-                    headingLevel !== undefined
-                      ? String(headingLevel)
-                      : undefined
-                  }
-                  data-testid={`note-block-${block.id}`}
-                  tabIndex={0}
-                  onMouseEnter={() => handleHover(block.id)}
-                  onMouseLeave={() => handleHover(null)}
-                  onFocus={() => handleFocus(block.id)}
-                  onBlur={() => handleFocus(null)}
-                >
-                  <span
-                    className={styles.handle}
-                    data-testid={`note-handle-${block.id}`}
-                    aria-hidden
-                  />
-                  <div className={styles.blockContent}>
-                    <span className={styles.flavour}>
-                      {block.flavour}
-                      {block.level !== undefined ? ` h${block.level}` : ''}
-                    </span>
-                    <div className={styles.text}>{block.text}</div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-          {/*
-            真 React slash 浮层（catalog 可点 → Intent → sink）。
-            DomHost 关 catalog 投影防双层。≠ EL-01；≠ A-BLK-02 e2e 满关。
-          */}
-          <SlashMenuOverlay
-            menu={slashMenu}
-            sink={slashIntentSink}
-            syncToken={chromeTick}
-            className={styles.slashOverlay}
-            onSelectIntent={onSlashIntent}
-            testId="note-paper-slash-overlay"
-          />
-          {/*
-            W3-F DOM 桌面挂载：BlockChromeDomHost → data-bp-* 契约
-            （把手/落点线；slash catalog 由 React 浮层接管）。≠ EL-01。
-          */}
-          <BlockChromeDomMount
-            blocks={displayBlocks.map((b) => ({
-              blockId: b.id,
-              flavour: b.flavour,
-            }))}
-            chrome={chrome}
-            slash={slashMenu}
-            projectSlashCatalog={false}
-            syncToken={`${chromeTick}:${slashOpen}`}
-            onHostReady={onChromeDomHost}
-            testId="note-paper-chrome-dom"
-          />
-        </div>
-      </div>
-
-      <footer className={styles.footer} data-testid="note-paper-footer">
-        surface={EDITOR_SURFACE_NOTE_PAPER} · {W5B_SKELETON_BOUNDARY}
-        {useTransport ? ' · 半 transport 投影' : ' · 静默假数据'}
-      </footer>
+      <NotePaperPanelChrome
+        title={title}
+        silentLevel={snapshot.silentLevel}
+        resolvedRev={resolvedRev}
+        displayBlocks={displayBlocks}
+        useTransport={useTransport}
+        transportError={transportError}
+        chrome={chrome}
+        slashMenu={slashMenu}
+        slashIntentSink={slashIntentSink}
+        onSlashIntent={onSlashIntent}
+        onChromeDomHost={onChromeDomHost}
+        onRefresh={() => {
+          void loadFromTransport();
+        }}
+        onClose={onClose}
+        chromeTick={chromeTick}
+        slashOpen={slashOpen}
+        onHover={handleHover}
+        onFocus={handleFocus}
+      />
     </section>
   );
 };
