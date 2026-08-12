@@ -5,6 +5,7 @@
  * - A-BLK-02 半：slash → StructureIntent（slash_insert）形状
  * - A-BLK-05 半：多选删除 Intent 形状
  * - A-BLK-03 半：静默 L0 把手按需策略（映射 A-SIL chrome）
+ * - A-BLK-08 半：turn_into 保逻辑选区（Intent 字段 + clamp；≠ 选区 e2e）
  * - A-BLK-11 半：未知 flavour → collab Unknown wire
  * - A-BLK-13 半：toggle_collapse Intent 形状（≠ 高度图 e2e）
  * - A-BLK-14 半：CM6 代码叶可构造/可聚焦契约（≠ 产品 e2e）
@@ -12,6 +13,8 @@
  * 进度表：`docs/block-workspace-architecture/plans/acceptance/A-BLK-progress.md`
  * 权威：`docs/block-workspace-architecture/round-D-stack/07-技术栈矩阵裁决.md` §5.1
  * 调度：`plans/09` **W6-A-S**（禁止用本文件关 **W6-A** / **EL-01**）
+ *
+ * 包轨：**W6-A-S**（必须带 `-S`；**≠ W6-A** Strict / **≠ EL-01**）
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { flavourToCollabKind } from '@crish/block-paper-contract';
@@ -22,6 +25,12 @@ import {
   isCm6CodeLeafHost,
   Cm6CodeLeafHost,
 } from '../leaves/code/Cm6CodeLeafHost';
+import {
+  buildTurnIntoIntent,
+  clampLogicalSelection,
+  isTurnIntoIntent,
+  type TurnIntoIntent,
+} from '../leaves/turnInto';
 import { BlockChromeModel } from './BlockChrome';
 import { SlashMenuModel } from './SlashMenuModel';
 import {
@@ -33,8 +42,27 @@ import {
   type ToggleCollapseIntent,
 } from './structureIntents';
 
+/** W6-A-S 包锚（TS 侧；与 RS `W6_A_S_PACKAGE_ID` 同值） */
+const W6_A_S_PACKAGE_ID = 'W6-A-S' as const;
+
 beforeEach(() => {
   resetIntentIdSeqForTests();
+});
+
+// ---------------------------------------------------------------------------
+// 包轨钉：W6-A-S · Skeleton · ≠ EL-01 / ≠ W6-A
+// ---------------------------------------------------------------------------
+
+describe('w6_a_s 包轨钉', () => {
+  it('w6_a_s: package id 带 -S 且诚实 ≠ W6-A / ≠ EL-01', () => {
+    expect(W6_A_S_PACKAGE_ID).toBe('W6-A-S');
+    expect(W6_A_S_PACKAGE_ID.endsWith('-S')).toBe(true);
+    expect(W6_A_S_PACKAGE_ID).not.toBe('W6-A');
+    // 叙事钉：本文件不得被解释为关闭 EL-01 / W6-A Strict
+    const notClosing = ['EL-01', 'W6-A Strict', 'A-BLK full e2e'] as const;
+    expect(notClosing).toContain('EL-01');
+    expect(notClosing.some((s) => s.includes('W6-A'))).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -192,6 +220,58 @@ describe('a_blk_03 静默 L0 把手策略', () => {
     expect(chrome.getHandleVisibility('untouched')).toBe('hidden');
     chrome.setHovered('touched');
     expect(chrome.getHandleVisibility('touched')).toBe('hover');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A-BLK-08 半：turn_into 保逻辑选区（本波 W6-A-S 余量加深；≠ 选区 e2e）
+// ---------------------------------------------------------------------------
+
+describe('a_blk_08 turn_into 保逻辑选区', () => {
+  it('a_blk_08: buildTurnIntoIntent 携带 logicalSelection 且 isTurnIntoIntent', () => {
+    const intent = buildTurnIntoIntent({
+      blockIds: ['blk-a'],
+      flavour: 'heading-1',
+      trigger: 'menu',
+      logicalSelection: { blockId: 'blk-a', anchor: 3, head: 8 },
+      createIntentId: () => 'a-blk-08-turn',
+    });
+    expect(isTurnIntoIntent(intent)).toBe(true);
+    expect(intent).toEqual({
+      type: 'turn_into',
+      intentId: 'a-blk-08-turn',
+      origin: 'chrome',
+      blockIds: ['blk-a'],
+      flavour: 'heading-1',
+      trigger: 'menu',
+      logicalSelection: { blockId: 'blk-a', anchor: 3, head: 8 },
+    } satisfies TurnIntoIntent);
+    // blockId 与选区锚点同块（A-BLK-08 保逻辑选区前置）
+    expect(intent.logicalSelection?.blockId).toBe(intent.blockIds[0]);
+  });
+
+  it('a_blk_08: clampLogicalSelection 转类型后 offset 仍落在文本界内', () => {
+    // 模拟 turn_into 后文本长度不变（RS Op::TurnInto 不改文本）
+    const plainLen = 12;
+    const sel = clampLogicalSelection(
+      { blockId: 'blk-a', anchor: 3, head: 8 },
+      plainLen,
+      /* strip */ 0
+    );
+    expect(sel.blockId).toBe('blk-a');
+    expect(sel.anchor).toBe(3);
+    expect(sel.head).toBe(8);
+    expect(sel.anchor).toBeGreaterThanOrEqual(0);
+    expect(sel.head).toBeLessThanOrEqual(plainLen);
+
+    // 剥 MD 前缀后选区左移并钳制（A-BLK-08/09 交叉前置）
+    const stripped = clampLogicalSelection(
+      { blockId: 'blk-a', anchor: 4, head: 9 },
+      /* newTextLength */ 10,
+      /* strip */ 2
+    );
+    expect(stripped).toEqual({ blockId: 'blk-a', anchor: 2, head: 7 });
+    expect(stripped.head).toBeLessThanOrEqual(10);
   });
 });
 
