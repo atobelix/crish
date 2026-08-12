@@ -1417,4 +1417,95 @@ mod tests {
         let _ = db.set_session_meta(SESSION_META_TIMER_INDEX_KEY, "not-json");
         assert!(store.load_all().is_empty(), "索引坏 JSON → 空集");
     }
+
+    /// LocalDb 真 store 版跨重启端到端（D6 §5.1「换真 store 同断言」；
+    /// 审计 04 重要项：定时器跨重启持久化缺专项测试）：注册（LocalDb
+    /// 真 store 落库）→ 模拟引擎重启（新注册表 + 同 db）→ restore 重建
+    /// sleep → 推进注入时钟 → 到期注入**恰好一次** + TimerFired 恰好
+    /// 一条 + fired=true 落库 → 再次重启 → 不重复注入（fired 位幂等）。
+    #[tokio::test]
+    async fn local_db_timer_registry_persists_and_recovers() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        // 共享注入时钟：重启模拟下时间连续（残留 fire 任务只向自己的
+        // 探针发射，不污染后续阶段断言——对齐既有 Memory 版测试模式）
+        let clock = Arc::new(AtomicU64::new(1_000_000));
+        let shared = Arc::clone(&clock);
+        let now: Arc<dyn Fn() -> u64 + Send + Sync> =
+            Arc::new(move || shared.load(Ordering::Relaxed));
+        // 阶段 A：注册（LocalDb 真 store 落库；时钟冻结下不发射）
+        {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let events = Arc::new(ProbeEvents::default());
+            let registry = Arc::new(TimerRegistry::with_clock(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))),
+                Arc::clone(&events) as Arc<dyn EventSink>,
+                Arc::new(LocalDbTimerStore::new(db.clone())) as Arc<dyn TimerStore>,
+                Arc::clone(&now),
+            ));
+            let handle = registry
+                .register(1, "LocalDb 重启恢复".to_string(), TimerCondition::Never)
+                .await
+                .expect("注册应成功");
+            assert_eq!(handle.timer_id, "timer-0");
+            assert!(
+                queue_snapshot(&queue).is_empty(),
+                "阶段 A：未到期不得注入 steering 条目"
+            );
+            assert!(
+                events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+                "阶段 A：未到期不得发射 TimerFired"
+            );
+        }
+        // 阶段 B：模拟重启 → restore 重建 sleep → 推进时钟 → 恰好注入一次
+        {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let events = Arc::new(ProbeEvents::default());
+            let registry = Arc::new(TimerRegistry::with_clock(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))),
+                Arc::clone(&events) as Arc<dyn EventSink>,
+                Arc::new(LocalDbTimerStore::new(db.clone())) as Arc<dyn TimerStore>,
+                Arc::clone(&now),
+            ));
+            registry.restore().await;
+            clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
+            poll_until(|| queue_len(&queue) == 1).await;
+            let entries = queue_snapshot(&queue);
+            assert_eq!(entries.len(), 1, "恢复后到期应注入恰好一条");
+            assert_eq!(
+                entries[0].group_id.as_deref(),
+                Some(steering_group_id("timer-0").as_str())
+            );
+            let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
+            assert_eq!(emitted.len(), 1, "恢复侧应恰好发射一条 TimerFired");
+            assert!(matches!(
+                emitted[0],
+                TimerEvent::Fired { ref timer_id, .. } if timer_id == "timer-0"
+            ));
+            // fired=true 落库（重启后避免重复注入）
+            let persisted = LocalDbTimerStore::new(db.clone()).load_all();
+            assert_eq!(persisted.len(), 1);
+            assert!(persisted[0].fired, "到期声明应标 fired=true");
+        }
+        // 阶段 C：再次重启 → fired=true 跳过 → 不重复注入
+        {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let events = Arc::new(ProbeEvents::default());
+            let registry = Arc::new(TimerRegistry::with_clock(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))),
+                Arc::clone(&events) as Arc<dyn EventSink>,
+                Arc::new(LocalDbTimerStore::new(db.clone())) as Arc<dyn TimerStore>,
+                Arc::clone(&now),
+            ));
+            registry.restore().await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            assert!(
+                queue_snapshot(&queue).is_empty(),
+                "fired=true 的声明恢复后不得重复注入"
+            );
+            assert!(
+                events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+                "fired=true 的声明恢复后不得重复发射"
+            );
+        }
+    }
 }

@@ -58,6 +58,10 @@ pub mod summary_dispatch;
 /// 全局并发上限；注册表由壳层 CoreRunState 持有（与 SessionHistoryCache
 /// 同生命周期）。pub 导出——壳层装配面（T-43/T-44）消费。
 pub mod summary_coordinator;
+/// 分阶段总结（E2 F5）独立面：里程碑判定 + Schema 构造 + checkpoint
+/// 载荷转换 + 终结摘要素材继承链 + 配置解析辅助。pub 导出——壳层
+/// （core_run_commands.rs 触发/注入点）后续批次接线消费。
+pub mod stage_summary;
 
 #[cfg(test)]
 mod invariants;
@@ -225,9 +229,40 @@ pub struct SessionLoopOptions {
     /// 不携带任何会话/缓存亲和参数；失败降级 L1 占位符不阻塞主对话。
     pub summarizer: Option<Arc<dyn Summarizer>>,
     /// 单 run 自动压缩上限（默认 1，对齐 Reasonix compactStuck 防每轮
-    /// 重写前缀，P4 §3.4.6）：预检触发与溢出触发共用计数
-    /// （LoopState.compactions_this_run），0 = 禁用自动压缩。
+    /// 重写前缀，P4 §3.4.6）：**仅约束预检 / 用户消息边界 / 分阶段触发**
+    /// （LoopState.compactions_this_run，E2 F2 层 2 裁决后溢出阶梯绕开
+    /// 本计数——溢出自有 compression_retries 防死循环），0 = 禁用自动压缩。
     pub max_auto_compactions_per_run: u32,
+    /// 溢出压缩重试上限（E2 F2 层 2 / D1 §3.5.1，默认 2）：溢出致命路径
+    /// （ContextLengthExceeded 用尽 length 阶梯 / PayloadTooLarge 直入）的
+    /// 压缩重试次数上限，替代常量 [MAX_OVERFLOW_COMPRESSION_RETRIES]；
+    /// 0 = 溢出不压缩直接 fatal。壳层经 session_meta 键
+    /// `compact_overflow_retries` 装配覆盖。
+    pub compact_overflow_retries: u32,
+    /// 压缩 LLM 强制门（E2 F1，默认 true）：压缩触发必须携带 Summarizer
+    /// （LLM 摘要强制，禁止「纯丢弃式」线性压缩）。true = 无 Summarizer /
+    /// 摘要失败时——预检/用户消息边界/manual 路径不压缩、等待 LLM 可用
+    /// （发 runtime-intervention-required 事件），溢出致命路径默认直接
+    /// fatal（文案含「LLM 不可用」）；false = 显式允许 stub 降级豁免
+    /// （与 [Self::compact_allow_stub_fallback] 键面合一，E2 §7.1）。
+    /// 壳层经 session_meta 键 `compact_require_llm` 装配覆盖。
+    pub compact_require_llm: bool,
+    /// 溢出 stub 豁免开关（E2 F1 L3，默认 false）：溢出致命路径在
+    /// Summarizer 缺失/摘要失败时允许临时中性 stub（stub 非永驻——
+    /// 后台补摘要成功自动替换，块升级 committed），替代默认直接 fatal；
+    /// 与 [Self::compact_require_llm] = false 键面合一（任一放行即豁免）。
+    /// 壳层经 session_meta 键 `compact_allow_stub_fallback` 装配覆盖。
+    pub compact_allow_stub_fallback: bool,
+    /// 分阶段总结里程碑阶梯（E2 F5，session_meta 键 `compact_stage_ratios`，
+    /// 默认 [crate::r#loop::stage_summary::DEFAULT_COMPACT_STAGE_RATIOS] =
+    /// [0.4, 0.6, 0.8]）：estimate/window 比例达某里程碑 → run 收口评估
+    /// 触发阶段总结（tier="stage-N"，每阶梯对话生命周期内只触发一次）。
+    /// None = 显式禁用分阶段总结（消费方经 [Self::stage_ratios] 判定）；
+    /// Some(空数组) 同 None。解析辅助：
+    /// [crate::r#loop::stage_summary::stage_ratios_from_session_meta]
+    /// （宽容 fail-open，壳层后续批次装配覆盖）。**触发点/注入点在
+    /// core_run_commands.rs（F4 完成后接线），本字段为配置面。**
+    pub compact_stage_ratios: Option<Vec<f64>>,
     /// 缓存跟踪配置（P5 S2 / T-36）：None = 不构造 CacheStatsTracker
     /// （无缓存测量，行为与现状一致）；Some = run 起始在 LoopState 构造 /
     /// 复位跟踪器（fresh run），run 内跨 turn 维护签名基线并聚合
@@ -268,10 +303,34 @@ pub struct SessionLoopOptions {
     pub escape_watch: Option<EscapeWatchConfig>,
     /// 摘要后台调度配置（T-33，00-plan §6.4 R-F 异步面）：None = 生产缺省
     /// （退避 1s/3s/9s ±20% jitter、单次墙钟 [LOOP_SUMMARY_MAX_WALL_MS]、
-    /// attempts 上限 4 含同步）；测试可注入快速退避序列 + jitter=0.0
-    /// （确定性断言）。session_meta 可配键（compact_summary_backoff_ms 等）
-    /// 属轮次 6 配置面（T-44），本层只消费结构体配置。
+    /// episode attempts 上限 [MAX_SUMMARY_ATTEMPTS] 含同步）；测试可注入
+    /// 快速退避序列 + jitter=0.0（确定性断言）。session_meta 可配键
+    /// （compact_summary_backoff_ms / compact_summary_wall_ms）属轮次 6
+    /// 配置面（T-44），本层只消费结构体配置。**E2 F2 层 1 低功耗护栏**
+    /// （跨 episode 累计上限 + 观察窗口）不在此结构——见
+    /// [Self::compact_summary_max_attempts] / [Self::compact_summary_retry_window_ms]。
     pub summary_dispatch: Option<crate::r#loop::summary_dispatch::SummaryDispatchConfig>,
+    /// 摘要窗口内累计尝试护栏（E2 F2 层 1 低功耗模式，session_meta 键
+    /// `compact_summary_max_attempts`，默认 [crate::r#loop::summary_dispatch::DEFAULT_RETRY_GUARD_MAX_ATTEMPTS]）。
+    /// 废除 retired 永驻后，被动触发（用户消息边界 F3 / 新 run 装配 /
+    /// 下一次压缩）可反复重新触发摘要——本字段约束**观察窗口内跨 episode
+    /// 的累计尝试次数**（含同步那次），达上限停止重试，窗口过期重置后
+    /// 可再试（[crate::r#loop::summary_dispatch::SummaryRetryGate]）。
+    /// 与 [Self::summary_dispatch] 的 `max_attempts`（单 episode 主动退避
+    /// 上限 4）区分：后者约束一次 spawn 的退避循环，本字段约束窗口内
+    /// 全部 episode 的累计成本。装配：`with_options` 派生到 run 级调度器
+    /// （[crate::r#loop::summary_dispatch::SummaryDispatch::set_retry_guard]）；
+    /// **壳层经 session_meta 装配由后续批次接线**（本字段默认 8 = 设计
+    /// 默认，未装配即生效）。
+    pub compact_summary_max_attempts: u32,
+    /// 摘要低功耗观察窗口（E2 F2 层 1，session_meta 键
+    /// `compact_summary_retry_window_ms`，默认
+    /// [crate::r#loop::summary_dispatch::DEFAULT_RETRY_GUARD_WINDOW_MS] =
+    /// 30min）：窗口内 0 次被动触发 → 尝试计数重置（重新累计），窗口
+    /// 过期后无论触发与否计数从零开始。与
+    /// [Self::compact_summary_max_attempts] 成对消费（[SummaryRetryGate]）；
+    /// 壳层经 session_meta 装配由后续批次接线。
+    pub compact_summary_retry_window_ms: u64,
     /// 会话级摘要协调器（T-42，00-plan §6.5 R-I）：由壳层经注册表
     /// （[crate::r#loop::summary_coordinator::SessionSummaryCoordinatorRegistry]）
     /// 按会话装配注入——跨 run 单飞 + 全局并发上限（≤2）+ 任务跨 run
@@ -323,6 +382,21 @@ impl Default for SessionLoopOptions {
             compaction_policy: None,
             summarizer: None,
             max_auto_compactions_per_run: 1,
+            // E2（上下文压缩增强）：溢出重试上限 2（替代常量 1，默认值
+            // 与 stream_error.rs 常量单源）、LLM 强制默认开、stub 豁免
+            // 默认关——与 D1 §4.4 配置项汇总默认一致；壳层经 session_meta
+            // 键（compact_overflow_retries / compact_require_llm /
+            // compact_allow_stub_fallback）装配覆盖
+            compact_overflow_retries:
+                crate::r#loop::handlers::stream_error::MAX_OVERFLOW_COMPRESSION_RETRIES,
+            compact_require_llm: true,
+            compact_allow_stub_fallback: false,
+            // E2 F5（分阶段总结）：里程碑阶梯默认 [0.4, 0.6, 0.8]（设计
+            // 默认，E2 §7.1；壳层经 session_meta 键 compact_stage_ratios
+            // 装配覆盖由后续批次接线；None = 显式禁用）
+            compact_stage_ratios: Some(
+                crate::r#loop::stage_summary::DEFAULT_COMPACT_STAGE_RATIOS.to_vec(),
+            ),
             // P5 S2 / T-36：缓存测量缺省关闭（未配置即现状行为）
             cache_tracking: None,
             // T-EG-06：注册表与配额上下文缺省 None——with_options 装配块
@@ -339,8 +413,15 @@ impl Default for SessionLoopOptions {
             // T-ESC-03：逃逸监视缺省关闭（未配置即现状行为）
             escape_watch: None,
             // T-33：摘要后台调度缺省生产参数（退避 1s/3s/9s、墙钟 60s、
-            // attempts 4 含同步；测试经 options 注入快速参数）
+            // episode attempts 4 含同步；测试经 options 注入快速参数）
             summary_dispatch: None,
+            // E2 F2 层 1（低功耗模式）：窗口内累计尝试护栏默认 8 /
+            // 观察窗口默认 30min（设计默认；壳层经 session_meta 两新键
+            // 装配覆盖由后续批次接线）
+            compact_summary_max_attempts:
+                crate::r#loop::summary_dispatch::DEFAULT_RETRY_GUARD_MAX_ATTEMPTS,
+            compact_summary_retry_window_ms:
+                crate::r#loop::summary_dispatch::DEFAULT_RETRY_GUARD_WINDOW_MS,
             // T-42：会话级协调器缺省 None = 回退 run 级 dispatch（轮次 4
             // 语义；壳层装配面经注册表注入）
             summary_coordinator: None,
@@ -351,6 +432,18 @@ impl Default for SessionLoopOptions {
             // 壳层 / engine 经 options 注入 StoreNoteBackend
             note_backend: None,
         }
+    }
+}
+
+impl SessionLoopOptions {
+    /// 分阶段总结里程碑阶梯访问面（E2 F5）：None / 空数组 = 禁用（消费方
+    /// 跳过里程碑评估）；Some(非空) = 启用并返回升序阶梯。默认值
+    /// [crate::r#loop::stage_summary::DEFAULT_COMPACT_STAGE_RATIOS]
+    /// 由 [Default] 装配（[0.4, 0.6, 0.8]），壳层显式注入 None 可禁用。
+    pub fn stage_ratios(&self) -> Option<&[f64]> {
+        self.compact_stage_ratios
+            .as_deref()
+            .filter(|ratios| !ratios.is_empty())
     }
 }
 
@@ -532,6 +625,16 @@ impl AgentSessionLoop {
         // 会话级摘要协调器派生状态同步（T-42）：与 options 同源（壳层
         // 装配；None = 回退 run 级 dispatch）
         self.state.summary_coordinator = options.summary_coordinator.clone();
+        // E2 F2 层 1（低功耗模式）：低功耗护栏配置派生（两新键）——
+        // 装配到 run 级调度器 [SummaryDispatch]（会话级 coordinator 侧
+        // 的护栏接线由壳层批次在 SessionSummaryCoordinator 装配，07 §5.4
+        // 文件域；本处为 session-loop 内核面的完整默认接线，含测试路径）
+        self.state.summary_dispatch.set_retry_guard(
+            crate::r#loop::summary_dispatch::SummaryRetryGuardConfig {
+                max_attempts: options.compact_summary_max_attempts,
+                retry_window_ms: options.compact_summary_retry_window_ms,
+            },
+        );
         // 缓存测量派生状态同步（P5 S2 / T-36）：cache_tracker 与 options
         // 同源（构造期定，run 起始再复位）
         self.state.cache_tracker = build_tracker(self.state.options.cache_tracking.as_ref());
@@ -728,15 +831,21 @@ impl AgentSessionLoop {
         self.state.terminal_error = None;
         self.state.events.clear();
         // 压缩护栏归零（fresh run，P4 §3.4.6 / §3.5）：
-        // - compactions_this_run：单 run 压缩上限计数（预检与溢出触发共用）；
-        // - compression_retries：溢出压缩重试计数（上限 1）——stream_error.rs
-        //   压缩阶梯（ContextLengthExceeded 用尽后 / PayloadTooLarge）消费。
-        //   归零语义 T-34（第四波）确认闭合：每 run 起始清零，压缩 + 重试
-        //   一次后不可再超（防「压缩→仍超→再压缩」死循环）。
+        // - compactions_this_run：单 run 压缩上限计数（仅预检/用户消息
+        //   边界/分阶段触发约束——E2 F2 层 2 裁决后溢出阶梯绕开本计数）；
+        // - compression_retries：溢出压缩重试计数（上限
+        //   [SessionLoopOptions::compact_overflow_retries]，默认 2）——
+        //   stream_error.rs 压缩阶梯（ContextLengthExceeded 用尽后 /
+        //   PayloadTooLarge）消费。归零语义 T-34（第四波）确认闭合：
+        //   每 run 起始清零，压缩 + 重试上限后不可再超（防「压缩→仍超→
+        //   再压缩」死循环）。
         // last_compaction_at 不在此归零（跨 run 时间戳护栏，压缩边界持续
         // 有效；跨重启由 orchestrator SessionContextMeta 持久化恢复，T-34）
         self.state.compactions_this_run = 0;
         self.state.compression_retries = 0;
+        // E2 F1 L3：溢出 LLM 不可用标记随 run 归零（fatal 附注只在触发
+        // 压缩阶梯的 run 内消费）
+        self.state.overflow_llm_unavailable = false;
         // 缓存跟踪器复位（fresh run，P5 S2 / T-36 / §3.4.5「每 run 重建」语义）：
         // run 内跨 turn 基线在 tracker 内部维护；跨 run 基线持久化由 engine
         // 层负责（T-40，经 CacheStatsTracker::baseline 移交）——本层只保证
@@ -1041,6 +1150,18 @@ mod tests {
         assert!(
             options.summary_dispatch.is_none(),
             "summary_dispatch 缺省 None = 生产缺省退避参数（T-33）"
+        );
+        // E2 F2 层 1（低功耗模式）：窗口内累计尝试护栏默认 8 / 观察窗口
+        // 默认 30min（设计默认，E2 §3.1 层 1）
+        assert_eq!(
+            options.compact_summary_max_attempts,
+            summary_dispatch::DEFAULT_RETRY_GUARD_MAX_ATTEMPTS,
+            "compact_summary_max_attempts 默认 8（累计成本护栏）"
+        );
+        assert_eq!(
+            options.compact_summary_retry_window_ms,
+            summary_dispatch::DEFAULT_RETRY_GUARD_WINDOW_MS,
+            "compact_summary_retry_window_ms 默认 30min（观察窗口）"
         );
     }
 

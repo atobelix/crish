@@ -482,8 +482,8 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "SystemPromptWireMode", SystemPromptWireMode, 2);
     check_enum!(reg, "ProviderErrorKind", ProviderErrorKind, 13);
     check_enum!(reg, "RuntimeCheckpointKind", RuntimeCheckpointKind, 3);
-    check_enum!(reg, "ContextCompressionTrigger", ContextCompressionTrigger, 9);
-    check_enum!(reg, "ContextCompressionReason", ContextCompressionReason, 7);
+    check_enum!(reg, "ContextCompressionTrigger", ContextCompressionTrigger, 10);
+    check_enum!(reg, "ContextCompressionReason", ContextCompressionReason, 8);
     check_enum!(reg, "ContextCompressionPolicyTier", ContextCompressionPolicyTier, 5);
     check_enum!(reg, "ContextCompressionPolicyAction", ContextCompressionPolicyAction, 2);
     check_enum!(

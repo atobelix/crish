@@ -1539,4 +1539,111 @@ mod tests {
         let _ = db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, "not-json");
         assert!(store.load_all().is_empty(), "索引坏 JSON → 空集");
     }
+
+    /// LocalDb 真 store 版跨重启端到端（D6 §5.1「换真 store 同断言」；
+    /// 审计 04 重要项 Cron 同款）：注册（LocalDb 真 store 落库）→ 模拟
+    /// 引擎重启（新注册表 + 同 db）→ restore 重建 sleep（fire_override
+    /// 短延迟验证重建生效）→ 触发**恰好一次** + CronFired 恰好一条 +
+    /// enabled=false 落库 → 再次重启 → 不重复触发（enabled=false 跳过）。
+    #[tokio::test]
+    async fn local_db_scheduler_registry_persists_and_recovers() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        // 阶段 A：注册（LocalDb 真 store 落库；不设 override → 真实
+        // 分钟级 next_fire_at，注册表立即消亡模拟重启）
+        let next_fire_at_snapshot = {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let events = Arc::new(ProbeEvents::default());
+            let registry = Arc::new(SchedulerRegistry::new(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))) as Arc<dyn PendingSink>,
+                Arc::clone(&events) as Arc<dyn EventSink>,
+                Arc::new(LocalDbSchedStore::new(db.clone())) as Arc<dyn SchedStore>,
+                None,
+            ));
+            let cron_id = registry
+                .register(test_input("* * * * *", Some(1), false))
+                .await
+                .expect("注册应成功");
+            assert_eq!(cron_id, "cron-0");
+            let persisted = LocalDbSchedStore::new(db.clone()).load_all();
+            assert_eq!(persisted.len(), 1);
+            assert!(persisted[0].enabled, "注册后应 enabled=true");
+            persisted[0].next_fire_at_ms
+        };
+        // 阶段 B：模拟重启 → restore（fire_override 短延迟验证重建 sleep
+        // 生效；未到期任务不修改 next_fire_at）
+        let (registry_b, queue_b, events_b) = {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let events = Arc::new(ProbeEvents::default());
+            let registry = Arc::new(SchedulerRegistry::new(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))) as Arc<dyn PendingSink>,
+                Arc::clone(&events) as Arc<dyn EventSink>,
+                Arc::new(LocalDbSchedStore::new(db.clone())) as Arc<dyn SchedStore>,
+                None,
+            ));
+            registry.set_fire_override_ms(40);
+            registry.restore().await;
+            let persisted = LocalDbSchedStore::new(db.clone()).load_all();
+            assert_eq!(
+                persisted[0].next_fire_at_ms, next_fire_at_snapshot,
+                "重启恢复应保留 next_fire_at_ms"
+            );
+            assert!(registry.has_active(), "未到期任务恢复后应为活跃（sleep 已重建）");
+            (registry, queue, events)
+        };
+        // 触发恰好一次（max=1 → 停止；等观测状态而非固定 sleep）
+        let events_b_cond = Arc::clone(&events_b);
+        let queue_b_cond = Arc::clone(&queue_b);
+        wait_until(
+            "恢复后触发完成（CronFired 1 条 + 完成通知）",
+            move || {
+                events_b_cond
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    == 1
+                    && queue_len(&queue_b_cond) == 1
+            },
+        )
+        .await;
+        let entries = snapshot_queue(&queue_b);
+        assert_eq!(entries.len(), 1, "恢复后触发应恰好一条");
+        assert_eq!(
+            entries[0].group_id.as_deref(),
+            Some(steering_group_id("cron-0").as_str())
+        );
+        assert!(
+            entries[0].text.contains("已达最大触发次数 1，已停止"),
+            "恢复触发收口应为完成通知：{}",
+            entries[0].text
+        );
+        assert_eq!(events_b.emitted.lock().unwrap_or_else(|e| e.into_inner()).len(), 1);
+        let persisted = LocalDbSchedStore::new(db.clone()).load_all();
+        assert_eq!(persisted[0].fired_count, 1);
+        assert!(!persisted[0].enabled);
+        assert!(!registry_b.has_active());
+        // 阶段 C：再次模拟重启 → enabled=false 跳过 → 不重复触发
+        {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let events = Arc::new(ProbeEvents::default());
+            let registry = Arc::new(SchedulerRegistry::new(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))) as Arc<dyn PendingSink>,
+                Arc::clone(&events) as Arc<dyn EventSink>,
+                Arc::new(LocalDbSchedStore::new(db.clone())) as Arc<dyn SchedStore>,
+                None,
+            ));
+            registry.set_fire_override_ms(40);
+            registry.restore().await;
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            assert!(
+                snapshot_queue(&queue).is_empty(),
+                "enabled=false 的声明恢复后不得重复触发"
+            );
+            assert!(
+                events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+                "enabled=false 的声明恢复后不得重复发射"
+            );
+            assert!(!registry.has_active());
+        }
+    }
 }

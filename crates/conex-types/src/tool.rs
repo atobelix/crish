@@ -316,6 +316,11 @@ pub enum ContextCompressionTrigger {
     /// 用户消息边界触发（E2 F3：hold → compact → append，压缩发生在
     /// 用户消息入队之前——用户消息 100% 保留、必在发送序列尾部）
     UserMessage,
+    /// 分阶段总结触发（E2 F5：对话长度达里程碑阈值 estimate/window ≥
+    /// [0.4, 0.6, 0.8] 时对完整对话产出阶段总结——tier="stage-N"、不入
+    /// 丢弃段；每阶梯对话生命周期内只触发一次，随
+    /// context-compression-end 的 result.trigger 登记）
+    Stage,
     /// 发送前预检
     Preflight,
     /// 手动触发
@@ -339,6 +344,8 @@ pub enum ContextCompressionReason {
     Manual,
     /// 用户消息边界（E2 F3，与 trigger=UserMessage 同源）
     UserMessage,
+    /// 分阶段总结（E2 F5，与 trigger=Stage 同源：里程碑阈值触发）
+    Stage,
     Threshold,
     Overflow,
     Idle,

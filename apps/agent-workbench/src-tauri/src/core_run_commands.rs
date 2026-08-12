@@ -11977,6 +11977,85 @@ mod tests {
         assert_eq!(streak.count, 1, "收口熔断计数 +1");
     }
 
+    /// D1 §3.2.3 装配时序显式跨重启 e2e（审计 04 熔断跨重启 C9 补强）：
+    /// 失败 run 收口自然写 provider_fail_streak=1 → drop 整个 CoreRunState
+    /// （模拟引擎重启）→ 全新实例 run_restore 后失败 run 收口读-改-写
+    /// +1=2（计数跨实例存活累积）→ 预置补足 count=6 → 全新实例装配读键
+    /// → transient_retry 闸直接 fatal（provider 仅 1 次调用），熔断计数
+    /// 跨重启天然生效。
+    #[tokio::test]
+    async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
+        // provider 脚本：始终瞬态错误（Network 可重试 → 无闸时 3 次重试）
+        let failing = || {
+            Arc::new(
+                TestProvider::new(vec![
+                    ProviderStreamEvent::text("x"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ])
+                .with_error(conex_types::response::ClassifiedStreamError {
+                    kind: ProviderErrorKind::Network,
+                    message: "网络中断".to_string(),
+                    retryable: true,
+                    retry_after_ms: None,
+                }),
+            )
+        };
+        // 阶段 1：实例 A 失败 run → 收口自然写 count=1
+        let db = {
+            let (state, db, _emitter) = run_control_test_state(failing());
+            state.run_restore().await;
+            run_task_impl(Arc::clone(&state), test_options("run-cb-r1", "s1", "任务"))
+                .await
+                .expect("run 发起成功");
+            let streak = wait_for_fail_streak(&db, 1, Duration::from_secs(30)).await;
+            assert_eq!(streak.count, 1, "实例 A 收口自然写 count=1");
+            db
+        };
+        // 阶段 2：模拟重启（全新 CoreRunState + run_restore，同 db）→
+        // 失败 run → 收口读-改-写 count=2（跨实例计数链）
+        let db = {
+            let (state, db, _emitter) = run_control_test_state_on_db(failing(), db);
+            state.run_restore().await;
+            run_task_impl(Arc::clone(&state), test_options("run-cb-r2", "s1", "任务"))
+                .await
+                .expect("run 发起成功");
+            // 同步点 = 熔断键轮询（会话事件库含上一阶段 agent-end 历史，
+            // wait_run_agent_end_reason 会误命中旧事件；键值计数只在本
+            // 阶段收口后推进，是跨重启链路的唯一正确同步点）
+            let streak = wait_for_fail_streak(&db, 2, Duration::from_secs(30)).await;
+            assert_eq!(streak.count, 2, "重启后收口读-改-写 count=2（计数跨重启存活）");
+            db
+        };
+        // 阶段 3：预置补足 count=6（模拟第 3~6 次失败历史）+ 全新实例 →
+        // 装配读键 → 闸直接 fatal（provider 仅 1 次调用），收口 +1=7
+        let provider = failing();
+        let (state, db, _emitter) = run_control_test_state_on_db(provider.clone(), db);
+        db.set_session_meta(
+            PROVIDER_FAIL_STREAK_KEY,
+            &ProviderFailStreak {
+                count: 6,
+                first_fail_at_ms: 1_785_456_000_000,
+                last_fail_at_ms: 1_785_456_000_000,
+                window_ms: 0,
+            }
+            .to_json(),
+        )
+        .expect("熔断键预置 count=6");
+        state.run_restore().await;
+        run_task_impl(Arc::clone(&state), test_options("run-cb-r3", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
+        // 同步点 = 键值轮询：count=7 仅在本阶段闸 fatal 收口写键后出现，
+        // 返回即 provider 调用链已结束（同上理由，不用 agent-end 事件）
+        let streak = wait_for_fail_streak(&db, 7, Duration::from_secs(30)).await;
+        assert_eq!(streak.count, 7, "熔断 fatal 收口计数继续 +1");
+        assert_eq!(
+            provider.call_count(),
+            1,
+            "熔断闸生效：跳过 run 内重试直接 fatal（provider 仅 1 次调用）"
+        );
+    }
+
     /// D1 §3.1.4 纯解析：`provider_retry_backoff_ms` 键三形状（数组三值 /
     /// 单值 base / 坏值 fail-open）。
     #[test]
@@ -13330,10 +13409,32 @@ mod tests {
         provider: Arc<TestProvider>,
         model: &str,
     ) -> (Arc<CoreRunState>, LocalDb, Arc<RecordingEmitter>) {
-        let (bridge, emitter) = recording_bridge();
         let db = LocalDb::open_in_memory().expect("内存库");
         db.upsert_session_entry(&subagent_test_session_entry("s1"))
             .expect("会话条目");
+        run_control_test_state_on_db_with_model(provider, db, model)
+    }
+
+    /// 在既有 db 上重建测试状态（显式跨重启 e2e 用：模拟引擎重启时
+    /// 复用同一 LocalDb——session_meta 键库跨实例残留，熔断计数 /
+    /// 定时器声明等持久化面的重启恢复测试入口；会话条目由调用方 db
+    /// 携带，不重复 upsert）
+    fn run_control_test_state_on_db(
+        provider: Arc<TestProvider>,
+        db: LocalDb,
+    ) -> (Arc<CoreRunState>, LocalDb, Arc<RecordingEmitter>) {
+        run_control_test_state_on_db_with_model(provider, db, "deepseek-v4-flash")
+    }
+
+    /// on_db 变体的显式模型版（state 构造面与
+    /// [Self::run_control_test_state_with_model] 共享；db 由调用方持有
+    /// ——跨重启链路上传给下一实例）
+    fn run_control_test_state_on_db_with_model(
+        provider: Arc<TestProvider>,
+        db: LocalDb,
+        model: &str,
+    ) -> (Arc<CoreRunState>, LocalDb, Arc<RecordingEmitter>) {
+        let (bridge, emitter) = recording_bridge();
         let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
         let snapshots: Arc<dyn SnapshotStore> = Arc::new(
             orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(

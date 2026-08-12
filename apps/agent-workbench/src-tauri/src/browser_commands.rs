@@ -1000,7 +1000,7 @@ mod tests {
         {
             let calls = channel_calls.lock().unwrap_or_else(|p| p.into_inner());
             assert_eq!(
-                calls,
+                *calls,
                 vec![
                     ChannelCall::GetItems("http://example.org".to_string()),
                     ChannelCall::GetItems("https://example.com".to_string()),

@@ -3202,6 +3202,7 @@
       "values": [
         "auto",
         "usermessage",
+        "stage",
         "preflight",
         "manual",
         "threshold",
@@ -3217,6 +3218,7 @@
       "values": [
         "manual",
         "usermessage",
+        "stage",
         "threshold",
         "overflow",
         "idle",
