@@ -1,41 +1,27 @@
-// DeviceEnvelope 帧骨架（M5 §4.2 / D3 §5.3 / 裁决修正 2/5）
-// 协议真源 = M6 §10.1 DeviceEnvelope；生成面 packages/shared-types/src/generated/device
-// （R0-03 产物，已入库）。本文件为 TS 侧编解码落点：R2-02 接 HMAC 验签与类型守卫，
-// 若生成面已覆盖同构类型则优先复用生成产物（禁止手写第二套协议类型）
+// DeviceEnvelope 帧类型（M5 §4.2 / D3 §5.3 / M6 §10.1）
+// 协议真源 = crates/conex-types/contracts/device-protocol.json → 生成面
+// packages/shared-types/src/generated/device（R0-03 产物，已入库）。本文件
+// **禁止手抄第二套协议类型**：wire 类型全部引用生成面，仅以类型运算附加
+// 本地入站形态（配对期 auth 可选，D3 §5.2 / mock-daemon envelope.ts 先例）。
+// 生成面经相对路径引用（shared-types exports 仅暴露 "."，mock-daemon 同款做法）。
 
-/** 帧种类（D3 消息面注册） */
-export type EnvelopeKind =
-  | 'pair.*'
-  | 'auth.*'
-  | 'device.*'
-  | 'events.*'
-  | 'cmd.*'
-  | 'result.*'
-  | 'stream.*'
-  | 'heartbeat'
-  | 'error';
+import type {
+  DeviceEnvelope as ContractEnvelope,
+  AuthHeader as ContractAuthHeader,
+  Endpoint,
+} from '../../../../packages/shared-types/src/generated/device/types';
+import type { DeviceKind } from '../../../../packages/shared-types/src/generated/device/kinds';
+import type { JsonValue } from '../../../../packages/shared-types/src/primitive-types';
 
-/** 统一帧结构（v/kind/msgId/ts/from/to/auth/body） */
-export interface DeviceEnvelope {
-  v: 1;
-  kind: EnvelopeKind;
-  /** 发送方唯一（utils/id.ts nextId） */
-  msgId: string;
-  /** epoch ms */
-  ts: number;
-  from: 'mobile' | 'desktop';
-  to: 'mobile' | 'desktop';
-  /** 会话期必填；配对期可选（D3 §5.2） */
-  auth?: AuthHeader;
-  body: unknown;
-}
+/** 帧种类（生成面注册表 103 种 kind；新增 kind 经生成器自动跟进，本地不维护第二份清单） */
+export type EnvelopeKind = DeviceKind;
 
-/** 消息级 HMAC 认证头（D3 §5.1：canon = deviceId ∥ ts ∥ nonce ∥ msgId ∥ kind ∥ v） */
-export interface AuthHeader {
-  deviceId: string;
-  ts: number;
-  /** 随机 16B base64 */
-  nonce: string;
-  /** HMAC-SHA256(token_key, canon(header) + bodyJson) */
-  sig: string;
-}
+/** 出站信封（生成面 DeviceEnvelope：v/kind/msgId/ts/from/to/auth/body 全必填） */
+export type OutboundEnvelope = ContractEnvelope;
+
+/** 入站信封（组合：auth 可选化——配对期帧无签名域，D3 §5.2 配对期可选） */
+export type InboundEnvelope = Omit<ContractEnvelope, 'auth'> & {
+  auth?: ContractAuthHeader;
+};
+
+export type { ContractAuthHeader, ContractEnvelope, Endpoint, JsonValue };
