@@ -1,5 +1,14 @@
 /**
- * W3-G · PaperList：仅窗口（+ pin）块挂 DOM 的列表宿主。
+ * W3-G · PaperList：仅窗口（+ pin）块挂 DOM 的列表宿主（SD-20 切开）。
+ *
+ * 实现已拆：
+ * - `paperListConstants`：data-* 契约
+ * - `paperListTypes`：选项 / 窗口 / 滚动态
+ * - `paperListPlan`：HeightMap 对齐 + MountPlan
+ * - `paperListReconcile`：仅 mountIds 进 DOM；窗外真 remove
+ * - `paperListSpacer`：spacer 高度 + 根属性
+ *
+ * 本文件保持既有 import 路径与包级 API（`list/index.ts` 仍从本模块 re-export）。
  *
  * ## 角色
  * - 消费 `buildMountPlan*` / MountSpec 形状，把投影序 reconcile 到真实 DOM
@@ -7,12 +16,13 @@
  * - **禁止** CSS `hidden`/`display:none` 挂全量 DOM 冒充虚拟化
  * - **禁止** DOM / 假数据当文档权威；写仍走 Intent → apply
  *
- * ## 完成定义（W3-G Strict）
+ * ## 完成定义（W3-G Strict · SD-20）
  * 1. 窗口外块 **不** 进 DOM（或 mountedCount 有上界 ≤ MAX_MOUNTED_DOM_BLOCKS）
  * 2. 假数据 / 投影输入可测（silentFixture / 自定义 order）
- * 3. **≠** EL-01 e2e 满关；**≠** A-PERF 数值门
+ * 3. **≠** EL-01 e2e 满关；**≠** W3-P WindowManager；**≠** C2 默开
+ * 4. 主文件 **<400**（相对切开前 488 黄边显著下降）
  *
- * 测：`paperList.w3g.test.ts`
+ * 测：`paperList.w3g.test.ts` · `PaperList.line-budget.test.ts`
  */
 
 import type { BlockId, MountSpec } from '@crish/block-paper-contract';
@@ -23,81 +33,43 @@ import {
   isWithinDomMountBound,
   MAX_MOUNTED_DOM_BLOCKS,
 } from '@crish/editor-kit';
+import type { MountPlan, PaperBlockProjection } from './buildMountPlan';
 import {
-  buildMountPlanByScroll,
-  buildMountPlanByWindow,
-  type MountPlan,
-  type PaperBlockProjection,
-} from './buildMountPlan';
+  BP_PAPER_BLOCK,
+  BP_PAPER_BLOCK_HOST,
+  BP_PAPER_LIST,
+  BP_PAPER_MOUNTED_COUNT,
+  BP_PAPER_SPACER_AFTER,
+  BP_PAPER_SPACER_BEFORE,
+  BP_PAPER_TOTAL_COUNT,
+  PAPER_LIST_DEFAULT_VISIBLE_COUNT,
+} from './paperListConstants';
+import { computePaperListPlan } from './paperListPlan';
+import { applyPaperListPlan, normalizeProjections } from './paperListReconcile';
+import type {
+  PaperListOptions,
+  PaperListScrollState,
+  PaperListWindowState,
+} from './paperListTypes';
 
-// ---------------------------------------------------------------------------
-// data-* 契约（结构门 / e2e 可锚定）
-// ---------------------------------------------------------------------------
+export {
+  BP_PAPER_BLOCK,
+  BP_PAPER_BLOCK_ID,
+  BP_PAPER_BLOCK_HOST,
+  BP_PAPER_LIST,
+  BP_PAPER_MOUNTED_COUNT,
+  BP_PAPER_SPACER_AFTER,
+  BP_PAPER_SPACER_BEFORE,
+  BP_PAPER_TOTAL_COUNT,
+  BP_PAPER_WITHIN_DOM_BOUND,
+  PAPER_LIST_DEFAULT_VISIBLE_COUNT,
+} from './paperListConstants';
 
-/** 列表根 */
-export const BP_PAPER_LIST = 'data-bp-paper-list';
-/** 单块行（仅 mountIds） */
-export const BP_PAPER_BLOCK = 'data-bp-paper-block';
-/** block id */
-export const BP_PAPER_BLOCK_ID = 'data-block-id';
-/** 顶部 spacer */
-export const BP_PAPER_SPACER_BEFORE = 'data-bp-spacer-before';
-/** 底部 spacer */
-export const BP_PAPER_SPACER_AFTER = 'data-bp-spacer-after';
-/** 挂载块数（结构门可读） */
-export const BP_PAPER_MOUNTED_COUNT = 'data-mounted-count';
-/** 投影总块数（≠ DOM 数） */
-export const BP_PAPER_TOTAL_COUNT = 'data-total-count';
-
-// ---------------------------------------------------------------------------
-// 选项
-// ---------------------------------------------------------------------------
-
-export type PaperListScrollState = {
-  scrollTop: number;
-  viewportHeight: number;
-};
-
-export type PaperListWindowState = {
-  startIndex: number;
-  endIndex: number;
-};
-
-export type PaperListOptions = {
-  /**
-   * 展开序列有序 blockId（投影；可来自 silentFixture.order）。
-   * **假数据列表 ≠ 权威树**。
-   */
-  order: readonly BlockId[];
-  /**
-   * 可选呈现投影（id → flavour/text）。
-   * 缺省时行仅带 id，无正文节点。
-   */
-  projections?:
-    | ReadonlyMap<BlockId, PaperBlockProjection>
-    | readonly PaperBlockProjection[];
-  /** 索引窗口（与 scroll 二选一；都缺省时窗口 = 空或 [0, min(n, 默认可见)]） */
-  window?: PaperListWindowState;
-  /** 滚动态（优先于 window；需 heightMap 或自动建预估图） */
-  scroll?: PaperListScrollState;
-  /** 前后 overscan 块数 */
-  overscan?: number;
-  focusId?: BlockId | null;
-  composingIds?: Iterable<BlockId>;
-  extraPinned?: Iterable<BlockId>;
-  /** 可选 HeightMap；滚动路径会自动 resize 对齐 order */
-  heightMap?: HeightMap;
-  defaultEstimatePx?: number;
-  /**
-   * 未给 window/scroll 时的默认可见块数（结构门测友好）。
-   * 默认 20；仍受 overscan + MAX 约束。
-   */
-  defaultVisibleCount?: number;
-};
-
-// ---------------------------------------------------------------------------
-// Host
-// ---------------------------------------------------------------------------
+export type {
+  PaperListOptions,
+  PaperListScrollState,
+  PaperListWindowState,
+} from './paperListTypes';
 
 /**
  * 最小 PaperList DOM 宿主：窗口虚拟化挂载，不持文档权威。
@@ -141,7 +113,7 @@ export class PaperList {
 
     const blockHost = doc.createElement('div');
     blockHost.className = 'bp-paper-block-host';
-    blockHost.setAttribute('data-bp-block-host', '1');
+    blockHost.setAttribute(BP_PAPER_BLOCK_HOST, '1');
     root.appendChild(blockHost);
     this.blockHost = blockHost;
 
@@ -162,14 +134,11 @@ export class PaperList {
     this.extraPinned = options.extraPinned ? [...options.extraPinned] : [];
     this.heightMap = options.heightMap ?? null;
     this.defaultEstimatePx = options.defaultEstimatePx ?? DEFAULT_ESTIMATE_PX;
-    this.defaultVisibleCount = options.defaultVisibleCount ?? 20;
+    this.defaultVisibleCount =
+      options.defaultVisibleCount ?? PAPER_LIST_DEFAULT_VISIBLE_COUNT;
 
     this.sync();
   }
-
-  // -----------------------------------------------------------------------
-  // 公共 API
-  // -----------------------------------------------------------------------
 
   /** 替换投影序（假数据或 Diff 后的 order；**非**权威提交） */
   setOrder(order: readonly BlockId[]): void {
@@ -296,139 +265,35 @@ export class PaperList {
     this.root.remove();
   }
 
-  // -----------------------------------------------------------------------
-  // 内部
-  // -----------------------------------------------------------------------
-
   private computePlan(): MountPlan {
-    const order = this.order;
-    const n = order.length;
-
-    // 确保 HeightMap 与 order 对齐（滚动路径或调用方注入）
-    let hm = this.heightMap;
-    if (this.scrollState) {
-      if (!hm) {
-        hm = new HeightMap(n, this.defaultEstimatePx);
-        for (let i = 0; i < n; i++) {
-          hm.bindId(i, order[i]!);
-        }
-        this.heightMap = hm;
-      } else if (hm.count !== n) {
-        hm.resize(n, this.defaultEstimatePx);
-        for (let i = 0; i < n; i++) {
-          hm.bindId(i, order[i]!);
-        }
-      }
-    } else if (hm && hm.count !== n) {
-      hm.resize(n, this.defaultEstimatePx);
-      for (let i = 0; i < n; i++) {
-        hm.bindId(i, order[i]!);
-      }
-    } else if (hm) {
-      for (let i = 0; i < n; i++) {
-        hm.bindId(i, order[i]!);
-      }
-    }
-
-    if (this.scrollState && hm) {
-      const scrollInput: Parameters<typeof buildMountPlanByScroll>[0] = {
-        order,
-        scrollTop: this.scrollState.scrollTop,
-        viewportHeight: this.scrollState.viewportHeight,
-        overscan: this.overscan,
-        heightMap: hm,
-        defaultEstimatePx: this.defaultEstimatePx,
-        focusId: this.focusId,
-        composingIds: this.composingIds,
-        extraPinned: this.extraPinned,
-      };
-      return buildMountPlanByScroll(scrollInput);
-    }
-
-    const window =
-      this.windowState ?? defaultWindow(n, this.defaultVisibleCount);
-
-    const windowInput: Parameters<typeof buildMountPlanByWindow>[0] = {
-      order,
-      window,
+    const result = computePaperListPlan({
+      order: this.order,
+      scrollState: this.scrollState,
+      windowState: this.windowState,
       overscan: this.overscan,
-      defaultEstimatePx: this.defaultEstimatePx,
       focusId: this.focusId,
       composingIds: this.composingIds,
       extraPinned: this.extraPinned,
-    };
-    if (hm) {
-      windowInput.heightMap = hm;
-    }
-    return buildMountPlanByWindow(windowInput);
+      heightMap: this.heightMap,
+      defaultEstimatePx: this.defaultEstimatePx,
+      defaultVisibleCount: this.defaultVisibleCount,
+    });
+    this.heightMap = result.heightMap;
+    return result.plan;
   }
 
   private applyPlan(plan: MountPlan): void {
-    const doc = this.root.ownerDocument;
-    const want = new Set(plan.mountIds);
-
-    // 1) 卸载窗外（真 remove，禁止 hidden 假虚拟化）
-    for (const [id, el] of this.nodes) {
-      if (!want.has(id)) {
-        el.remove();
-        this.nodes.delete(id);
-      }
-    }
-
-    // 2) 按 mountIds 序挂载 / 重排
-    let anchor: Node | null = this.blockHost.firstChild;
-    for (const id of plan.mountIds) {
-      let el = this.nodes.get(id);
-      if (!el) {
-        el = this.createBlockElement(doc, id);
-        this.nodes.set(id, el);
-      } else {
-        this.paintBlock(el, id);
-      }
-      // 保持 order：若当前 anchor 不是 el，则 insertBefore
-      if (anchor !== el) {
-        this.blockHost.insertBefore(el, anchor);
-      } else {
-        anchor = el.nextSibling;
-        continue;
-      }
-      // insertBefore 后，下一个应对齐到刚插入节点之后
-      anchor = el.nextSibling;
-    }
-
-    // 3) spacer + 根属性
-    this.spacerBefore.style.height = `${plan.spacerBeforePx}px`;
-    this.spacerAfter.style.height = `${plan.spacerAfterPx}px`;
-    this.root.setAttribute(BP_PAPER_MOUNTED_COUNT, String(plan.mountedCount));
-    this.root.setAttribute(BP_PAPER_TOTAL_COUNT, String(plan.totalCount));
-    this.root.setAttribute(
-      'data-within-dom-bound',
-      plan.withinDomBound ? '1' : '0'
+    applyPaperListPlan(
+      {
+        root: this.root,
+        blockHost: this.blockHost,
+        spacerBefore: this.spacerBefore,
+        spacerAfter: this.spacerAfter,
+        nodes: this.nodes,
+        projections: this.projections,
+      },
+      plan
     );
-  }
-
-  private createBlockElement(doc: Document, id: BlockId): HTMLElement {
-    const el = doc.createElement('div');
-    el.className = 'bp-paper-block';
-    el.setAttribute(BP_PAPER_BLOCK, '1');
-    el.setAttribute(BP_PAPER_BLOCK_ID, id);
-    this.paintBlock(el, id);
-    return el;
-  }
-
-  private paintBlock(el: HTMLElement, id: BlockId): void {
-    el.setAttribute(BP_PAPER_BLOCK_ID, id);
-    const proj = this.projections.get(id);
-    if (proj?.flavour) {
-      el.setAttribute('data-flavour', proj.flavour);
-    } else {
-      el.removeAttribute('data-flavour');
-    }
-    // 正文仅呈现；**非**权威
-    const text = proj?.text ?? '';
-    if (el.textContent !== text) {
-      el.textContent = text;
-    }
   }
 
   private assertAlive(): void {
@@ -436,50 +301,6 @@ export class PaperList {
       throw new Error('PaperList 已 destroy');
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-function normalizeProjections(
-  projections:
-    | ReadonlyMap<BlockId, PaperBlockProjection>
-    | readonly PaperBlockProjection[]
-    | undefined
-): Map<BlockId, PaperBlockProjection> {
-  const map = new Map<BlockId, PaperBlockProjection>();
-  if (!projections) return map;
-  // Map 与数组分流（exactOptional + for-of 联合类型需显式分支）
-  if (isProjectionMap(projections)) {
-    projections.forEach((p, id) => {
-      map.set(id, p);
-    });
-    return map;
-  }
-  for (const p of projections) {
-    map.set(p.id, p);
-  }
-  return map;
-}
-
-function isProjectionMap(
-  v:
-    ReadonlyMap<BlockId, PaperBlockProjection> | readonly PaperBlockProjection[]
-): v is ReadonlyMap<BlockId, PaperBlockProjection> {
-  return (
-    typeof (v as ReadonlyMap<BlockId, PaperBlockProjection>).forEach ===
-      'function' && !Array.isArray(v)
-  );
-}
-
-function defaultWindow(
-  totalCount: number,
-  defaultVisibleCount: number
-): PaperListWindowState {
-  if (totalCount <= 0) return { startIndex: 0, endIndex: 0 };
-  const end = Math.min(totalCount, Math.max(0, defaultVisibleCount));
-  return { startIndex: 0, endIndex: end };
 }
 
 /** 类型守卫 */

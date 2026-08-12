@@ -1,10 +1,12 @@
 /**
- * W3-G · PaperList 窗口 DOM 列表
+ * W3-G · PaperList 窗口 DOM 列表（SD-20 切开）
  *
  * - buildMountPlan*：纯函数 MountSpec / mountIds
  * - PaperList：仅窗口∪pin 挂 DOM；窗外真 remove + spacer
+ * - 分模：constants / types / plan / reconcile / spacer
  *
- * **≠** EL-01；**≠** A-PERF 数值门；假数据列表 **≠** 权威树
+ * **≠** EL-01；**≠** W3-P；**≠** C2 默开；**≠** A-PERF 数值门
+ * 假数据列表 **≠** 权威树
  */
 
 export {
