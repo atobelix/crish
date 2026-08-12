@@ -135,6 +135,7 @@ export type WorkspaceEmptyStateProps = {
    * - `false` / 省略 → **无** detect 调用、**无** detect 定时器
    * - **不** 默认强制开 StatusBar 噪声；有 report 后按 E2 规则挂条
    * - 调度激活时挂条 idle 亦可（等待 detect）；**≠ EL-03**；**≠ inotify 满关**
+   * - CONN-E2′：产品宿主（Workspace）可默传 `true`；**本组件默认仍 false**
    */
   enableMirrorDetectSchedule?: boolean;
   /**
@@ -336,6 +337,8 @@ export function WorkspaceEmptyState({
       : mirrorWatchSource;
 
   const scheduleAttr = detectSchedule.scheduleActive ? '1' : '0';
+  /** CONN-E2′：宿主策略探针（组件默认 0；≠ scheduleActive，无 ipc 仍可为 1） */
+  const detectPolicyAttr = enableMirrorDetectSchedule === true ? '1' : '0';
   /** CONN-C2：产品空态 PaperList 会计钉（默认 0；opt-in 1） */
   const productPaperListAttr = enableProductPaperList === true ? '1' : '0';
 
@@ -356,6 +359,7 @@ export function WorkspaceEmptyState({
         data-md-prefix-sink={mdPrefixBinding.sink ? '1' : '0'}
         data-mirror-drift-bar={mirrorBarEnabled ? '1' : '0'}
         data-mirror-detect-schedule={scheduleAttr}
+        data-mirror-detect-policy={detectPolicyAttr}
         data-product-paper-list={productPaperListAttr}
         data-el03="not-claimed"
         data-inotify-full="not-claimed"
@@ -479,6 +483,7 @@ export function WorkspaceEmptyState({
       data-md-prefix-sink-source={mdPrefixBinding.source}
       data-mirror-drift-bar={mirrorBarEnabled ? '1' : '0'}
       data-mirror-detect-schedule={scheduleAttr}
+      data-mirror-detect-policy={detectPolicyAttr}
       data-product-paper-list={productPaperListAttr}
       data-el03="not-claimed"
       data-inotify-full="not-claimed"

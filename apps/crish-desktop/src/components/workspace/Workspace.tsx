@@ -7,8 +7,8 @@ import { Button, Tooltip } from '../ui';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { Columns, X } from 'lucide-react';
-import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 import { WorkspaceCanvas } from './WorkspaceCanvas';
+import { WorkspaceProductEmptyHost } from './workspaceProductMirrorDetect';
 import {
   computeRenderedColumns,
   isEmptyWorkspace,
@@ -28,6 +28,9 @@ export type { RenderedColumn } from './workspaceLayoutLib';
  * 工作区壳组件：容器 + 拆分 chrome + 读屏 live region + 画布/空态编排。
  * 列/组渲染派生（拖拽折叠、占位拼接）见 workspaceLayoutLib；
  * 画布与分割器见 WorkspaceCanvas / WorkspaceResizer。
+ *
+ * CONN-E2′：空态走 WorkspaceProductEmptyHost（默传 detect 策略 + 产品 mirrorIpc）。
+ * EmptyState 组件默认仍关。≠ EL-03 / ≠ inotify / ≠ 重做 E3。
  */
 export const Workspace: React.FC<WorkspaceProps> = React.memo(
   ({ wsId, onShowToast }) => {
@@ -154,7 +157,11 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
         {/* Main Column Grid — isolated so a panel crash doesn't blank the whole workspace chrome */}
         <AppErrorBoundary compact>
           {empty ? (
-            <WorkspaceEmptyState wsId={ws.id} onActivate={focusThisWorkspace} />
+            /* CONN-E2′：产品宿主默装 detect；EmptyState 默认仍关 */
+            <WorkspaceProductEmptyHost
+              wsId={ws.id}
+              onActivate={focusThisWorkspace}
+            />
           ) : (
             <WorkspaceCanvas
               ws={ws}
