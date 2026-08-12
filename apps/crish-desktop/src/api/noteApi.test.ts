@@ -12,6 +12,7 @@ import { invokeTyped } from './tauriInvoke';
 import { isRegisteredCommand } from './transport/commandManifest';
 import {
   NOTE_CMD_DOCUMENT_APPLY_MD,
+  NOTE_CMD_DOCUMENT_HYDRATE,
   NOTE_CMD_QUERY_BLOCKS,
   NOTE_CMD_SEND_TO_NOTE,
   NOTE_COMMANDS,
@@ -41,19 +42,22 @@ vi.mock('./tauriInvoke', () => ({
 const mockInvoke = vi.mocked(invokeTyped);
 
 describe('note 命令名常量', () => {
-  it('与任务书对齐：note_document_apply_md / note_query_blocks / note_send_to_note', () => {
+  it('与任务书对齐：note_document_apply_md / note_query_blocks / note_send_to_note / note_document_hydrate', () => {
     expect(NOTE_CMD_DOCUMENT_APPLY_MD).toBe('note_document_apply_md');
     expect(NOTE_CMD_QUERY_BLOCKS).toBe('note_query_blocks');
     expect(NOTE_CMD_SEND_TO_NOTE).toBe('note_send_to_note');
+    expect(NOTE_CMD_DOCUMENT_HYDRATE).toBe('note_document_hydrate');
     expect(NOTE_COMMANDS.documentApplyMd).toBe(NOTE_CMD_DOCUMENT_APPLY_MD);
     expect(NOTE_COMMANDS.queryBlocks).toBe(NOTE_CMD_QUERY_BLOCKS);
     expect(NOTE_COMMANDS.sendToNote).toBe(NOTE_CMD_SEND_TO_NOTE);
+    expect(NOTE_COMMANDS.documentHydrate).toBe(NOTE_CMD_DOCUMENT_HYDRATE);
   });
 
   it('commandManifest 已登记且 registered=true', () => {
     expect(isRegisteredCommand(NOTE_CMD_DOCUMENT_APPLY_MD)).toBe(true);
     expect(isRegisteredCommand(NOTE_CMD_QUERY_BLOCKS)).toBe(true);
     expect(isRegisteredCommand(NOTE_CMD_SEND_TO_NOTE)).toBe(true);
+    expect(isRegisteredCommand(NOTE_CMD_DOCUMENT_HYDRATE)).toBe(true);
   });
 });
 

@@ -58,17 +58,21 @@
 //! - [`WorkspaceStore::detect_mirror_drift`]：hash/mtime vs `mirror_meta` → 三路分类
 //! - [`WorkspaceStore::import_mirror_proposal`]：Op 批 **或** 冲突报告；禁静默盖 unpushed（X-05）
 //! - [`ThreeWayStrategy`]：`RetainLocalAndReimport` | `DropUnacked` | `ConflictBlocks`
-//! - **watcher 方向子集**（进程内/可轮询，**≠ OS inotify 生产满关**）：
+//! - **watcher 轮询子集**（进程内/可轮询；**≠** 用 poll 冒充 inotify 满关）：
 //!   - [`MirrorWatchHandle`] / [`poll_mirror_once`]：指纹基线 + 单次 poll → 可观测分类
 //!   - [`MirrorWatcher`] / [`MirrorWatcher::on_mirror_change`]：回调注册（上层 timer 驱动）
-//! - **诚实**：**≠ A-INV-02 产品 UI 满关**（无三路对话框）；**≠ OS inotify/FSEvents**；
-//!   **≠ EL-03**；**≠ Wave 2 存储完成**。详见 [`mirror`] 模块头注释。
+//! - **OS 事件 watcher 封装**（`notify`；见 [`mirror_os_watch`]）：
+//!   - [`MirrorOsWatcher`] / [`MirrorOsEventSource`]：内核 FS 事件 → 通道
+//!   - [`detect_if_os_event_hits_mirror`] / [`poll_on_os_hint`]：事件 hint → detect/poll（**不** apply）
+//! - **诚实**：**≠ A-INV-02 产品 UI 满关**（无三路对话框）；**≠**「poll = inotify 满关」；
+//!   OS 封装 **≠** 桌面产品订阅/IPC 全链路；**≠ EL-03**；**≠ Wave 2 存储完成**。
+//!   详见 [`mirror`] / [`mirror_os_watch`] 模块头注释。
 //!
 //! - **不变量**：工具默认 **禁止** 读 mirror 当权威；本 API 仅人/git 契约视图。
 //!
 //! # 后续扩展点
 //! - **W2-D Strict**：CAS GC / 外置 `blobs/` 大文件 path / A-PERF-11 结构门满关（W2-D-S 仅骨架）
-//! - OS 级 mirror watcher（inotify/FSEvents）产品接线（本 crate 已交轮询/回调入口，未绑内核 FS 事件）
+//! - OS watcher **产品**接线（桌面 timer/IPC/三路 UI；本 crate 已交 notify 封装 + poll 入口）
 //!
 //! # W2-F Strict（refs 自动物化 + 受限 query）
 //! - `WorkspaceStore::query_blocks` — FTS ∩ kind ∩ attrs ∩ refs 交集查询（agent-tools 接线见 W4）
@@ -81,6 +85,7 @@
 
 mod cas;
 mod mirror;
+mod mirror_os_watch;
 mod projection;
 mod query_blocks;
 mod refs;
@@ -90,6 +95,10 @@ pub use mirror::{
     poll_mirror_once, ConflictBlockInfo, ImportMirrorOpts, ImportMirrorResult,
     MirrorDriftClass, MirrorDriftReport, MirrorFileFingerprint, MirrorWatchHandle,
     MirrorWatchPollResult, MirrorWatcher, ThreeWayStrategy,
+};
+pub use mirror_os_watch::{
+    detect_if_os_event_hits_mirror, poll_on_os_hint, FakeMirrorOsEventSource, MirrorOsEvent,
+    MirrorOsEventKind, MirrorOsEventSource, MirrorOsWatchError, MirrorOsWatcher,
 };
 pub use projection::{
     block_kind_to_store_str, commit_ops, commit_ops_with_mirror, export_mirror_now,

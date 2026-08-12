@@ -11,12 +11,15 @@
  * - `note_query_blocks` = 组合检索摘要；`adaptNoteTransportAsHydrate` → source=`note-transport`
  * - **本命令** = 打开/加载文档后的 **hydrate 投影形状**；成功投影 source 固定 `tauri-ipc`
  * - **≠** `DocSession::hydrate` 产品全链路完成（W1-H）；**≠** 打开完成叙事关账
- * - **≠** EL-01 / EL-08；产品空态默认仍为 fixture（`createEmptyStateStrictDemoTransport`）
+ * - **≠** EL-01 / EL-08
+ * - 产品 Strict 默认见 `createProductStrictHydrateTransport`：
+ *   可检测 Tauri → 本 IPC（`tauri-ipc`）；无 Tauri → fixture（**≠ 生产权威**）
+ * - 后端现为 query 投影派生，**DocSession 全链若未满须诚实**
  *
  * ## 可注入面
  * - `NoteHydrateIpc`：命令契约（mock / Tauri）
  * - Strict 面板适配见 `hydrateProjection.adaptNoteHydrateIpcAsTransport`
- * - `createMockNoteHydrateIpc`：契约测 / 无后端
+ * - `createMockNoteHydrateIpc`：契约测 / 无后端（**禁止** fixture 伪装本 source）
  */
 
 import { invokeTyped, type InvokeTypedResult } from './tauriInvoke';
@@ -70,7 +73,8 @@ export type NoteHydrateIpcOutcome =
 
 /**
  * 桌面/workbench 侧可注入的 hydrate IPC 面。
- * 产品默认空态 **不** 强制走此面（仍 fixture）；注入后 Strict 可测真 IPC 形状。
+ * 产品 Strict 在可检测 Tauri 时经 `createProductStrictHydrateTransport` 默认走此面；
+ * 无 Tauri / 测环境仍 fixture。成功 source 恒 `tauri-ipc`（≠ fixture 伪装）。
  */
 export type NoteHydrateIpc = {
   hydrateDocument(

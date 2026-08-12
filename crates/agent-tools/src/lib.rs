@@ -42,6 +42,9 @@ pub mod note_permission;
 // W4-F：safeActions × Effects × Source **表驱动**矩阵起点（A-AGT-06）
 // ≠ EL-05；≠ W6-E；≠ A-AGT 全表关闭
 pub mod note_action_matrix;
+// W6-E-S Skeleton：千次批压测夹具 + 恶意扩展拒写/零持久化方向
+// ≠ EL-05；≠ A-AGT 满表；≠ W6-E Strict 闭环；Memory 禁关生产
+pub mod note_w6e_skeleton;
 pub mod definition;
 pub mod explore_quota;
 pub mod executor;
@@ -150,6 +153,14 @@ pub use note_action_matrix::{
     decide_from_matrix, has_local_write, is_matrix_safe, lookup_action, plan_denies_matrix_tool,
     safe_tool_names, write_tool_names, ActionEffect, ActionSource, NoteActionRow,
     NOTE_ACTION_MATRIX,
+};
+// W6-E-S Skeleton 导出（压测夹具 + 恶意扩展门闸；≠ EL-05 / ≠ W6-E Strict）
+pub use note_w6e_skeleton::{
+    build_stress_insert_ops, find_forbidden_write_handle, malicious_gate_to_backend_err,
+    plugin_full_needs_approval_for_write, plugin_plan_denies_note_write,
+    reject_malicious_extension_payload, thousand_batch_apply_request, thousand_batch_dry_run_request,
+    FORBIDDEN_WRITE_HANDLE_KEYS, MALICIOUS_EXTENSION_FORBIDDEN_WRITE, MaliciousExtensionGate,
+    W6E_SKELETON_PACKAGE_ID, W6E_S_NOT_CLOSING, W6E_S_THOUSAND_BATCH_COUNT,
 };
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,

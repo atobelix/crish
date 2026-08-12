@@ -1,12 +1,13 @@
 /**
- * A-PERF 结构门常量（H3 / W6-C）
+ * A-PERF 结构门常量（H3 / **W6-C-S** Skeleton；结构主责亦可记 W3-A）
  *
  * 权威：
  * - `docs/block-workspace-architecture/plans/acceptance/perf-baseline.md`
  * - `docs/block-workspace-architecture/plans/specs/perf-governance.md`
  * - D5 §3.3.3 overscan 建议区间 8～20 块
  *
- * 数值门（TTI / 键入 p95 等）见 perf-baseline.md，**不得**在此伪造标定初值。
+ * 数值门（TTI / 键入 p95 等）仅 **W6-C** Strict 标定后生效；
+ * **不得**在此伪造标定初值；**≠ EL-03**。
  */
 
 /** 默认 overscan 块数（前后各扩展；非像素） */

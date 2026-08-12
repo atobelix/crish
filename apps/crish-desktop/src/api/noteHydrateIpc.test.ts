@@ -7,8 +7,9 @@
  * - `note_hydrate_ipc_adapt_as_transport_source_tauri_ipc`
  * - `note_hydrate_ipc_tauri_missing_is_structured_failure`
  *
- * 诚实：产品空态默认仍 fixture（本测不切换 WorkspaceEmptyState）。
- * ≠ 打开完成 / ≠ EL。
+ * 诚实：本文件测 IPC 契约与 adapter；产品默认选型见 hydrateProjection
+ * `createProductStrictHydrateTransport` / `resolveProductStrictHydrateSource`。
+ * ≠ 打开完成 / ≠ EL；fixture 禁止伪装 tauri-ipc。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invokeTyped } from './tauriInvoke';

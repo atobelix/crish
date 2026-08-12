@@ -63,7 +63,9 @@ export const NOTE_CMD_QUERY_BLOCKS = 'note_query_blocks' as const;
 export const NOTE_CMD_SEND_TO_NOTE = 'note_send_to_note' as const;
 /**
  * Tauri / 前端 IPC：文档 hydrate 投影（open/load 形状）。
- * 契约实现见 `noteHydrateIpc.ts`；**产品空态默认仍 fixture**（≠ 打开完成）。
+ * 契约实现见 `noteHydrateIpc.ts`；产品 Strict 默认经
+ * `createProductStrictHydrateTransport`：可检测 Tauri → 本命令；无 Tauri → fixture。
+ * **≠ 打开完成**；**≠ EL**；**DocSession 全链若未满须诚实**。
  */
 export const NOTE_CMD_DOCUMENT_HYDRATE = 'note_document_hydrate' as const;
 

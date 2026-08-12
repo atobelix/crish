@@ -22,7 +22,13 @@
  * - 假数据投影 ≠ 文档权威；DOM 锚 `data-package-id="W5-B-S"` / `data-track="skeleton"`
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {
   BlockChromeModel,
   createSilentFixture,
@@ -30,12 +36,16 @@ import {
   SlashMenuModel,
   type BlockChromeDomHost,
   type HandleVisibility,
+  type IntentSink,
   type SilentFixture,
+  type SlashInsertIntent,
 } from '@crish/block-paper';
 /** DomHost chrome 皮（落点线/slash/把手热区）；与 module 块行皮并存；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
 import type { NoteQueryBlockHit, NoteTransport } from '../../api/noteApi';
 import { BlockChromeDomMount } from './BlockChromeDomMount';
+import { SlashMenuOverlay } from './SlashMenuOverlay';
+import { Button } from '../ui';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import {
   W5B_SKELETON_BOUNDARY,
@@ -62,6 +72,14 @@ export type NotePaperPanelProps = {
    * 未传时内部 new SlashMenuModel()，预览壳默认关闭。
    */
   slashMenu?: SlashMenuModel;
+  /**
+   * slash 选中后的 Intent sink（可选）。
+   * 注入时 React 浮层点击走 `selectSlashItemAndSubmit` → sink。
+   * 未注入仍产出 Intent 回调 `onSlashIntent`（测形状）；**≠** 生产写盘完成。
+   */
+  slashIntentSink?: IntentSink;
+  /** slash 产出 Intent 后回调（无论是否已 submit） */
+  onSlashIntent?: (intent: SlashInsertIntent) => void;
   /**
    * DomHost 就绪回调（W3-F DOM 桌面挂载子集；测试拿 setDropTarget 等）。
    * **≠ EL-01**；真 Pointer 拖拽全链后置。
@@ -114,6 +132,8 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   fixture: fixtureProp,
   chrome: chromeProp,
   slashMenu: slashMenuProp,
+  slashIntentSink,
+  onSlashIntent,
   onChromeDomHost,
   transport,
   refreshToken = 0,
@@ -140,6 +160,13 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
   const slashMenu = useMemo(
     () => slashMenuProp ?? new SlashMenuModel(),
     [slashMenuProp]
+  );
+
+  /** React slash 浮层：订阅 model 变更以同步 data-slash-open 等 */
+  const slashOpen = useSyncExternalStore(
+    (onStoreChange) => slashMenu.subscribe(onStoreChange),
+    () => (slashMenu.isOpen() ? '1' : '0'),
+    () => '0'
   );
 
   const silentBlocks = useMemo(() => listSilentBlocks(fixture), [fixture]);
@@ -229,7 +256,8 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
       data-rev={String(resolvedRev)}
       data-silent-level={snapshot.silentLevel}
       data-block-count={String(displayBlocks.length)}
-      data-slash-open={slashMenu.isOpen() ? 'true' : 'false'}
+      data-slash-open={slashOpen === '1' ? 'true' : 'false'}
+      data-slash-ui="react"
       data-source={useTransport ? 'transport' : 'silent'}
       data-transport-loading={
         useTransport && transportLoading ? 'true' : 'false'
@@ -251,8 +279,10 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
             {displayBlocks.length} 块
           </span>
           {useTransport ? (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={styles.badge}
               onClick={() => {
                 void loadFromTransport();
@@ -261,18 +291,20 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
               data-testid="note-paper-refresh"
             >
               刷新
-            </button>
+            </Button>
           ) : null}
           {onClose ? (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={styles.badge}
               onClick={onClose}
               aria-label="关闭笔记纸面预览"
               data-testid="note-paper-close"
             >
               关闭
-            </button>
+            </Button>
           ) : null}
         </div>
       </header>
@@ -348,8 +380,20 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
             })
           )}
           {/*
+            真 React slash 浮层（catalog 可点 → Intent → sink）。
+            DomHost 关 catalog 投影防双层。≠ EL-01；≠ A-BLK-02 e2e 满关。
+          */}
+          <SlashMenuOverlay
+            menu={slashMenu}
+            sink={slashIntentSink}
+            syncToken={chromeTick}
+            className={styles.slashOverlay}
+            onSelectIntent={onSlashIntent}
+            testId="note-paper-slash-overlay"
+          />
+          {/*
             W3-F DOM 桌面挂载：BlockChromeDomHost → data-bp-* 契约
-            （把手/落点线/slash 宿主）；与上列内容行并存。≠ EL-01。
+            （把手/落点线；slash catalog 由 React 浮层接管）。≠ EL-01。
           */}
           <BlockChromeDomMount
             blocks={displayBlocks.map((b) => ({
@@ -358,7 +402,8 @@ export const NotePaperPanel: React.FC<NotePaperPanelProps> = ({
             }))}
             chrome={chrome}
             slash={slashMenu}
-            syncToken={chromeTick}
+            projectSlashCatalog={false}
+            syncToken={`${chromeTick}:${slashOpen}`}
             onHostReady={onChromeDomHost}
             testId="note-paper-chrome-dom"
           />

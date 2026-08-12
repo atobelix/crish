@@ -4,7 +4,7 @@ import styles from './WorkspaceEmptyState.module.css';
 import { NotePaperPanel } from '../note-paper/NotePaperPanel';
 import { NotePaperStrictPanel } from '../note-paper/NotePaperStrictPanel';
 import {
-  createEmptyStateStrictDemoTransport,
+  createProductStrictHydrateTransport,
   type NoteHydrateTransport,
 } from '../note-paper/hydrateProjection';
 import {
@@ -30,13 +30,15 @@ export type WorkspaceEmptyStateProps = {
    * - `skeleton`：主 CTA 突出预览壳（旧主路径；测/回退）
    * **两轨入口均保留**；本 prop 只影响主次与默认高亮，不删 Skeleton。
    *
-   * 诚实：Strict 演示 = fixture/可注入 hydrate；**可演示 ≠ EL**；**≠ 打开完成**；
-   * **≠** 真 DocSession IPC 默认已挂。
+   * 诚实：Strict 默认 hydrate 见 `createProductStrictHydrateTransport`
+   * （可检测 Tauri → tauri-ipc；无 Tauri → fixture）；**可演示 ≠ EL**；
+   * **≠ 打开完成**；**DocSession 全链若未满须诚实**。
    */
   preferredNotePaperTrack?: NotePaperEmptyOpenMode;
   /**
-   * 可选注入 Strict hydrate 通路（测 / 未来 note transport / IPC）。
-   * 未注入时使用 `createEmptyStateStrictDemoTransport`（source=fixture）。
+   * 可选注入 Strict hydrate 通路（测 / mock / 自定义）。
+   * 未注入时使用 `createProductStrictHydrateTransport`：
+   * 可检测 Tauri → `tauri-ipc`；无 Tauri → fixture 演示（**≠ 生产权威**）。
    */
   strictHydrateTransport?: NoteHydrateTransport;
 };
@@ -45,13 +47,15 @@ export type WorkspaceEmptyStateProps = {
  * 工作区空态。
  *
  * ## 产品默认（W5-B 产品入口）
- * - 默认倾向 **Strict**：可点打开 `NotePaperStrictPanel` + fixture/注入 hydrate
+ * - 默认倾向 **Strict**：可点打开 `NotePaperStrictPanel` +
+ *   `createProductStrictHydrateTransport`（Tauri→tauri-ipc / 无 Tauri→fixture）
  * - **W5-B-S Skeleton** 预览壳入口 **保留**（`open-note-paper-preview`）
  *
- * ## 诚实边界（08 §0.2 / 20 L3–L4）
+ * ## 诚实边界（08 §0.2 / 20 L3–L4 · R10）
  * - **可演示 ≠ EL-01 / EL-08 关闭**
- * - **≠ 打开完成**（真 DocSession IPC 默认路径依赖 W1-H，本空态未宣称已挂）
- * - fixture 演示 **≠** 产品 IPC 真 hydrate
+ * - **≠ 打开完成**；后端 hydrate 现为 query 投影派生，**DocSession 全链未满**
+ * - **fixture ≠ 生产权威**；无 Tauri 回退 fixture **不是** 伪装 tauri-ipc
+ * - 有 Tauri 时失败/空/成功走真 IPC 三态，**不**静默回退 fixture
  * - 挂载冒充交付 = S5；禁止去 `-S` 冒充 Strict
  */
 export function WorkspaceEmptyState({
@@ -68,7 +72,7 @@ export function WorkspaceEmptyState({
   const resolvedStrictTransport = useMemo(
     () =>
       strictHydrateTransport ??
-      createEmptyStateStrictDemoTransport(strictDocId),
+      createProductStrictHydrateTransport(strictDocId),
     [strictHydrateTransport, strictDocId]
   );
 
@@ -188,7 +192,7 @@ export function WorkspaceEmptyState({
       </div>
       {/*
         产品默认 Strict（W5-B）+ Skeleton 预览壳（W5-B-S）双入口。
-        可演示 ≠ EL；≠ 打开完成；fixture ≠ DocSession IPC。
+        可演示 ≠ EL；≠ 打开完成；fixture ≠ 生产权威；DocSession 全链未满。
       */}
       <div
         className={styles.emptyStateActions}

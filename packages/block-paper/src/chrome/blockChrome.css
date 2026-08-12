@@ -51,6 +51,7 @@
     box-shadow var(--transition-micro, 100ms ease-out);
 }
 
+/* 行 hover：仅 tint/bg-hover（禁高饱和蓝底） */
 .bp-block-row:hover {
   background: var(
     --bg-hover,
@@ -59,6 +60,34 @@
       color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
     )
   );
+}
+
+/* 双轨同皮：focus / multi 与 note-paper module 同行温
+ * 属性在把手上（DomHost 契约）；:has 抬行底，避免第三套 data-* */
+.bp-block-row:has(.bp-block-handle[data-handle-visibility='focus']) {
+  background: var(
+    --bg-active,
+    var(
+      --tint-active,
+      color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
+    )
+  );
+  box-shadow: inset 0 0 0 1px
+    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+}
+
+.bp-block-row:has(.bp-block-handle[data-handle-visibility='multi']) {
+  background: var(
+    --tint-strong,
+    color-mix(in srgb, var(--text-primary, #111) 12%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px
+    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+}
+
+/* 拖中源行：轻抬，不抢落点线 */
+.bp-block-row[data-dragging='1'] {
+  opacity: 0.72;
 }
 
 /* ---------- 把手：L0 默认 hidden；热区略放大 ---------- */
@@ -125,7 +154,7 @@
   opacity: 0;
 }
 
-/* ---------- 多选框：低噪；靠 checked 与父级控显 ---------- */
+/* ---------- 多选框：L0 静默；仅 multi 模式露出（中性 accent） ---------- */
 
 .bp-multi-check {
   flex: 0 0 auto;
@@ -134,6 +163,16 @@
   margin-top: var(--space-1, 4px);
   accent-color: var(--text-secondary, #555555);
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-micro, 100ms ease-out);
+}
+
+/* 任意行进入 multi → 列表内多选框同显（可勾其它行） */
+.bp-chrome-root:has(.bp-block-handle[data-handle-visibility='multi'])
+  .bp-multi-check {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ---------- 落点线：2px 中性强调，清晰不刺眼 ---------- */
@@ -141,9 +180,10 @@
 .bp-drop-line {
   box-sizing: border-box;
   flex: 0 0 auto;
-  width: 100%;
+  /* 水平 inset 与块行 pad 齐（--space-2） */
+  width: calc(100% - 2 * var(--space-2, 8px));
   height: var(--bp-drop-line-h);
-  margin: var(--space-0_5, 2px) 0;
+  margin: var(--space-0_5, 2px) var(--space-2, 8px);
   padding: 0;
   border: none;
   border-radius: 1px;
@@ -170,11 +210,12 @@
 .bp-slash-host {
   box-sizing: border-box;
   position: absolute;
+  /* 主壳 popover 阶；禁止裸 9999 / 勿跳 --z-dropdown */
   z-index: var(--z-popover, 200);
   display: flex;
   flex-direction: column;
   gap: var(--dropdown-gap, var(--space-0_5, 2px));
-  width: min(var(--bp-slash-width), 100%);
+  width: min(var(--bp-slash-width, 280px), 100%);
   min-width: min(200px, 100%);
   max-height: min(360px, 70vh);
   overflow: auto;
@@ -183,7 +224,7 @@
   border: var(--hairline-width, 1px) solid
     var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
   border-radius: var(--radius-lg, 8px);
-  /* token：elevated 表面 + 大阴影（与设置下拉同族） */
+  /* 块域：elevated + shadow-lg（壳 dropdown 同族；≠ chat slash 无影） */
   background: var(--bg-elevated, hsl(35, 8%, 100%));
   box-shadow: var(
     --shadow-lg,
@@ -191,10 +232,14 @@
     0 8px 10px -6px rgba(0, 0, 0, 0.04)
   );
   color: var(--text-primary, #111111);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-ui, 1.35);
   /* 浮层滚动条：细、不抢纸面 */
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  /* 入场微透明；eco 下取消（见文末） */
+  transition: opacity var(--transition-micro, 100ms ease-out);
 }
 
 .bp-slash-host[hidden],
@@ -293,7 +338,8 @@
 
 .bp-slash-host .bp-slash-item-icon {
   box-sizing: border-box;
-  flex: 0 0 auto;
+  /* 图标盒 = control-height-sm（28 节奏，对齐 AFFiNE 完成度） */
+  flex: 0 0 var(--control-height-sm, 28px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -310,6 +356,9 @@
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
   line-height: 1;
+  transition:
+    border-color var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out);
 }
 
 /* active 项图标：略抬一层，仍中性 */
@@ -324,7 +373,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-0_5, 2px);
   align-items: flex-start;
 }
 
@@ -377,10 +426,44 @@
   color: var(--text-secondary, #555555);
 }
 
+/* ---------- 拖拽 ghost 最小皮（另轨真拖；此处仅不裸 DOM） ---------- */
+
+.bp-drag-preview {
+  box-sizing: border-box;
+  position: absolute;
+  /* 拖拽 ghost 用 drag 阶，避免与 slash popover 抢层 */
+  z-index: var(--z-drag-card, var(--z-drag-highlight, 1030));
+  max-width: min(280px, 80%);
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  border: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-elevated, hsl(35, 8%, 100%));
+  box-shadow: var(
+    --shadow-sm,
+    0 1px 2px color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
+  );
+  color: var(--text-secondary, #555555);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: var(--font-size-sm, 13px);
+  line-height: var(--line-height-ui, 1.35);
+  pointer-events: none;
+  opacity: 0.92;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bp-drag-preview[hidden] {
+  display: none !important;
+}
+
 /* eco：去掉过渡抖动 */
 html[data-perf-tier='eco'] .bp-chrome-root .bp-block-row,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-block-handle,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-drop-line,
+html[data-perf-tier='eco'] .bp-chrome-root .bp-multi-check,
+html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-host,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item-icon {
   transition: none;

@@ -163,6 +163,7 @@ button.badge:focus-visible {
 
 /* 阅读列：主壳 chat 列宽意图 + 左 gutter 给把手（visual-align §02） */
 .readingColumn {
+  position: relative; /* slash React 浮层 absolute 锚点 */
   width: 100%;
   max-width: var(--note-paper-col-max, var(--chat-col-max, 720px));
   margin-inline: auto;
@@ -175,9 +176,17 @@ button.badge:focus-visible {
   box-sizing: border-box;
 }
 
+/* React slash 浮层：与 .bp-slash-host 同皮；叠在阅读列内 */
+.slashOverlay {
+  /* chrome.css .bp-slash-host 已 absolute + z-popover；此处仅偏移锚点 */
+  top: var(--space-2, 8px);
+  left: var(--space-6, 24px);
+}
+
 /* ---------- 块行：静默默认 / hover·focus 按需 chrome ---------- */
 
 .blockRow {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: var(--space-2, 8px);
@@ -226,12 +235,42 @@ button.badge:focus-visible {
     var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
 }
 
+/*
+ * 落点线 React 投影皮（P6）：行上 data-drop-side=before|after 时画 2px 中性线。
+ * 真 DnD 属性挂载另轨；此处仅 token 同色同厚，≠ 真拖完成。
+ */
+.blockRow[data-drop-side='before']::before,
+.blockRow[data-drop-side='after']::after {
+  content: '';
+  position: absolute;
+  left: var(--space-2, 8px);
+  right: var(--space-2, 8px);
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text-primary, #111111) 28%, transparent);
+  box-shadow: 0 0 0 0.5px
+    color-mix(in srgb, var(--text-primary, #111111) 8%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.blockRow[data-drop-side='before']::before {
+  top: 0;
+  transform: translateY(-50%);
+}
+
+.blockRow[data-drop-side='after']::after {
+  bottom: 0;
+  transform: translateY(50%);
+}
+
 /* 拖拽把手：默认 invisible；hover/focus/multi 才显（L0 静默）
- * 二期：热区略放大（min 高 = control-height-xs），仍非 hover 零 chrome */
+ * 二期：热区略放大（min 高 = control-height-xs），仍非 hover 零 chrome
+ * 可点时仍须 L0：默认 opacity 0，禁止常驻 0.3「好看」 */
 .handle {
   box-sizing: border-box;
   flex: 0 0 auto;
-  /* 视觉点阵宽 ≈ icon；横向 padding 扩 hover 热区 */
+  /* 视觉点阵宽 ≈ icon；横向 padding 扩 hover 热区（= --bp-handle-hit-pad-x） */
   width: calc(var(--icon-size, 16px) + 2 * var(--space-1, 4px));
   min-width: calc(var(--icon-size, 16px) + 2 * var(--space-1, 4px));
   height: var(--control-height-xs, 24px);
@@ -310,7 +349,7 @@ button.badge:focus-visible {
   display: block;
 }
 
-/* 块正文：可读纸面；标题按 level 映射主壳字阶 */
+/* 块正文：可读纸面；标题按 level 映射主壳字阶（08 §1.2 / 01 §4） */
 .text {
   font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-normal, 400);
@@ -319,39 +358,65 @@ button.badge:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
   letter-spacing: var(--letter-spacing-normal, 0em);
+  /* 连续纸：段靠行 gap；标题自带 margin-block */
+  margin-block: 0;
 }
 
+/* H1：2xl + heavy + tighter；top space-5 / bottom space-2 */
 .blockRow[data-heading-level='1'] .text {
   font-size: var(--font-size-2xl, 22px);
-  font-weight: var(--font-weight-semibold, 600);
+  font-weight: var(--font-weight-heavy, var(--font-weight-content, 700));
   line-height: var(--line-height-tight, 1.25);
-  margin-top: var(--space-3, 12px);
+  letter-spacing: var(--letter-spacing-tighter, -0.02em);
+  margin-top: var(--space-5, 20px);
+  margin-bottom: var(--space-2, 8px);
 }
 
+/* H2：xl(19) + content；top space-4 / bottom space-2 */
 .blockRow[data-heading-level='2'] .text {
-  font-size: var(--font-size-xl, 18px);
-  font-weight: var(--font-weight-semibold, 600);
+  font-size: var(--font-size-xl, 19px);
+  font-weight: var(--font-weight-content, var(--font-weight-semibold, 600));
   line-height: var(--line-height-tight, 1.25);
-  margin-top: var(--space-2, 8px);
+  margin-top: var(--space-4, 16px);
+  margin-bottom: var(--space-2, 8px);
 }
 
+/* H3：lg(17) + content；top space-3 / bottom space-1_5 */
 .blockRow[data-heading-level='3'] .text {
-  font-size: var(--font-size-lg, 16px);
-  font-weight: var(--font-weight-semibold, 600);
-  margin-top: var(--space-2, 8px);
+  font-size: var(--font-size-lg, 17px);
+  font-weight: var(--font-weight-content, var(--font-weight-semibold, 600));
+  line-height: var(--line-height-ui, 1.35);
+  margin-top: var(--space-3, 12px);
+  margin-bottom: var(--space-1_5, 6px);
 }
 
-.blockRow[data-heading-level='4'] .text,
+/* H4：md + content；top space-3 / bottom space-1_5 */
+.blockRow[data-heading-level='4'] .text {
+  font-size: var(--font-size-md, 15px);
+  font-weight: var(--font-weight-content, var(--font-weight-medium, 500));
+  line-height: var(--line-height-ui, 1.35);
+  margin-top: var(--space-3, 12px);
+  margin-bottom: var(--space-1_5, 6px);
+}
+
+/* H5–H6：base + medium/content；top space-2 / bottom space-1 */
 .blockRow[data-heading-level='5'] .text,
 .blockRow[data-heading-level='6'] .text {
-  font-size: var(--font-size-md, 15px);
+  font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-medium, 500);
-  margin-top: var(--space-1, 4px);
+  line-height: var(--line-height-ui, 1.35);
+  margin-top: var(--space-2, 8px);
+  margin-bottom: var(--space-1, 4px);
+}
+
+/* 首块标题不顶出纸面大空白 */
+.readingColumn > .blockRow:first-child[data-heading-level] .text {
+  margin-top: 0;
 }
 
 /* ---------- 块种 flavour 轻量区分（二期 · 仅 note-paper 块行） ---------- */
 
-/* 代码块：md-code 表面 + mono，与 chat-markdown 同族 token */
+/* 代码块：md-code 表面 + mono；pad space-3、上下 space-2（08 §1.2） */
 .blockRow[data-flavour='code'] .text,
 .blockRow[data-flavour='Code'] .text {
   font-family: var(--font-mono, ui-monospace, 'Cascadia Code', monospace);
@@ -371,8 +436,8 @@ button.badge:focus-visible {
     var(--md-code-border, var(--border-color, hsl(35, 10%, 86%)));
   border-radius: var(--radius-sm, 5px);
   padding: var(--space-3, 12px);
-  margin-top: var(--space-1, 4px);
-  margin-bottom: var(--space-1, 4px);
+  margin-top: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
 }
 
 /* 引用：左边条 + 次级字色（blockquote / quote 均认） */
@@ -383,8 +448,8 @@ button.badge:focus-visible {
     var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
   padding-left: var(--space-3, 12px);
   color: var(--text-secondary, #555555);
-  margin-top: var(--space-1, 4px);
-  margin-bottom: var(--space-1, 4px);
+  margin-top: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
 }
 
 /* 列表：轻 indent（真列表叶标记后置；仅投影节奏） */
@@ -484,4 +549,10 @@ html[data-perf-tier='eco'] .stateLoading::before {
   animation: none;
   border-top-color: var(--border-color, hsl(35, 10%, 86%));
   opacity: 0.6;
+}
+
+/* eco：块行 / 把手过渡压平（与 blockChrome.css 同向） */
+html[data-perf-tier='eco'] .blockRow,
+html[data-perf-tier='eco'] .handle {
+  transition: none;
 }

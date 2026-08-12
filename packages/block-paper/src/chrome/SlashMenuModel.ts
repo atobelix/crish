@@ -179,6 +179,8 @@ export class SlashMenuModel {
   private query = '';
   private items: SlashMenuItemView[] = [];
   private activeIndex = 0;
+  /** React / DomHost 订阅：open·filter·select·close 后通知重绘 */
+  private readonly listeners = new Set<() => void>();
 
   constructor(options: SlashMenuModelOptions = {}) {
     this.isComposing = options.isComposing ?? (() => false);
@@ -188,12 +190,34 @@ export class SlashMenuModel {
     this.catalog = [...(options.catalog ?? DEFAULT_SLASH_CATALOG)];
   }
 
+  /**
+   * 订阅快照变更（useSyncExternalStore / 父级 forceUpdate）。
+   * @returns 取消订阅
+   */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emit(): void {
+    for (const l of this.listeners) {
+      try {
+        l();
+      } catch {
+        // 监听方异常不打断 model
+      }
+    }
+  }
+
   /** 替换目录（假数据 / 后续 flavour 贡献合并后注入） */
   setCatalog(catalog: readonly SlashContribution[]): void {
     this.catalog = [...catalog];
     if (this.openState) {
       this.refilter();
     }
+    this.emit();
   }
 
   /**
@@ -232,6 +256,7 @@ export class SlashMenuModel {
       Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
     this.query = initialQuery;
     this.refilter();
+    this.emit();
     return { ok: true, snapshot: this.getSnapshot() };
   }
 
@@ -245,6 +270,7 @@ export class SlashMenuModel {
     }
     this.query = query;
     this.refilter();
+    this.emit();
     return this.getSnapshot();
   }
 
@@ -260,6 +286,7 @@ export class SlashMenuModel {
     const len = this.items.length;
     const next = (((this.activeIndex + delta) % len) + len) % len;
     this.activeIndex = next;
+    this.emit();
     return this.getSnapshot();
   }
 
@@ -347,6 +374,7 @@ export class SlashMenuModel {
     this.query = '';
     this.items = [];
     this.activeIndex = 0;
+    this.emit();
     return this.getSnapshot();
   }
 
@@ -390,6 +418,7 @@ export class SlashMenuModel {
       createIntentId: this.createIntentId,
     });
     // 成功产出 Intent 后关闭（A-SIL-02：面板噪声消失；选区由宿主保持）
+    // close() 内已 emit
     const snapshot = this.close();
     return { ok: true, intent, snapshot };
   }

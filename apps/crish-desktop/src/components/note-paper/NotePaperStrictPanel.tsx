@@ -8,27 +8,39 @@
  * - **与 W5-B-S 并存**：Skeleton 壳见 `NotePaperPanel`（`data-package-id=W5-B-S`）；
  *   **禁止** 把 Skeleton 常量改成 W5-B 冒充本轨
  *
- * ## 诚实边界（钉死 · 08 §0.2 / 20 L3–L4）
+ * ## 诚实边界（钉死 · 08 §0.2 / 20 L3–L4 · R10）
  * - **可演示 ≠ EL-01 / EL-08 关闭**
  * - **≠ W5-C 隔离全关**（A-SURF 真扫主责）
  * - **挂载冒充交付 = S5**
- * - 真产品默认「打开完成」依赖 **W1-H**；本组件默认 **要求** 注入 `hydrateTransport`
- *   —— 产品 IPC 默认真路径未挂时仍算 Strict **方向**子集，不得去掉本注释
+ * - 本组件 **要求** 注入 `hydrateTransport`（禁止静默假段落）
+ * - 产品空态默认由 `createProductStrictHydrateTransport` 选型：
+ *   可检测 Tauri → `tauri-ipc`；无 Tauri → fixture（**fixture ≠ 生产权威**）
+ * - **≠ 打开完成**；后端 hydrate 现为 query 投影派生，**DocSession 全链若未满须诚实**
  * - **禁止** import 行级 EditorStore；投影 ≠ 文档权威
  *
  * surface = note-paper
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {
   BlockChromeModel,
   SlashMenuModel,
   type BlockChromeDomHost,
   type HandleVisibility,
+  type IntentSink,
+  type SlashInsertIntent,
 } from '@crish/block-paper';
 /** DomHost chrome 皮（与 Skeleton 同源）；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
 import { BlockChromeDomMount } from './BlockChromeDomMount';
+import { SlashMenuOverlay } from './SlashMenuOverlay';
+import { Button } from '../ui';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import type {
   DocHydrateProjection,
@@ -50,7 +62,8 @@ export type NotePaperStrictPanelProps = {
   /** 文档 id（hydrate 入参） */
   docId: string;
   /**
-   * **必填**：hydrate 通路（fixture / adapt(NoteTransport) / 未来真 IPC）。
+   * **必填**：hydrate 通路（fixture / note-transport / tauri-ipc）。
+   * 产品空态默认由外层 `createProductStrictHydrateTransport` 注入；
    * 不提供则无法挂载 Strict 轨——禁止静默回落假数据。
    */
   hydrateTransport: NoteHydrateTransport;
@@ -61,10 +74,17 @@ export type NotePaperStrictPanelProps = {
   /** 可选：外部 chrome（测试用） */
   chrome?: BlockChromeModel;
   /**
-   * 可选：外部 slash 模型（测试打开 slash 宿主）。
+   * 可选：外部 slash 模型（测试打开 slash 宿主 / React 浮层）。
    * 未传时内部 new SlashMenuModel()。
    */
   slashMenu?: SlashMenuModel;
+  /**
+   * slash 选中后的 Intent sink（可选）。
+   * 注入时 React 浮层点击 → selectSlashItemAndSubmit → sink。
+   */
+  slashIntentSink?: IntentSink;
+  /** slash 产出 Intent 后回调 */
+  onSlashIntent?: (intent: SlashInsertIntent) => void;
   /**
    * DomHost 就绪回调（W3-F DOM 桌面挂载子集）。
    * **≠ EL-01**；真 Pointer 拖拽全链后置。
@@ -94,6 +114,8 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   refreshToken = 0,
   chrome: chromeProp,
   slashMenu: slashMenuProp,
+  slashIntentSink,
+  onSlashIntent,
   onChromeDomHost,
   onClose,
   className,
@@ -106,6 +128,12 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   const slashMenu = useMemo(
     () => slashMenuProp ?? new SlashMenuModel(),
     [slashMenuProp]
+  );
+  /** React slash 浮层：订阅 model 变更以同步 data-slash-open */
+  const slashOpen = useSyncExternalStore(
+    (onStoreChange) => slashMenu.subscribe(onStoreChange),
+    () => (slashMenu.isOpen() ? '1' : '0'),
+    () => '0'
   );
 
   const [status, setStatus] = useState<HydrateUiStatus>('loading');
@@ -183,7 +211,8 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       data-rev={String(resolvedRev)}
       data-silent-level={snapshot.silentLevel}
       data-block-count={String(blocks.length)}
-      data-slash-open={slashMenu.isOpen() ? 'true' : 'false'}
+      data-slash-open={slashOpen === '1' ? 'true' : 'false'}
+      data-slash-ui="react"
       data-source="hydrate"
       data-hydrate-source={hydrateSource}
       data-hydrate-status={status}
@@ -208,8 +237,10 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           <span className={styles.badge} data-testid="note-paper-strict-count">
             {blocks.length} 块
           </span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             className={styles.badge}
             onClick={() => {
               void load();
@@ -218,17 +249,19 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
             data-testid="note-paper-strict-refresh"
           >
             刷新
-          </button>
+          </Button>
           {onClose ? (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               className={styles.badge}
               onClick={onClose}
               aria-label="关闭 Strict 笔记纸面"
               data-testid="note-paper-strict-close"
             >
               关闭
-            </button>
+            </Button>
           ) : null}
         </div>
       </header>
@@ -311,8 +344,20 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
               })
             : null}
           {/*
+            真 React slash 浮层（catalog 可点 → Intent → sink）。
+            DomHost 关 catalog 投影防双层。≠ EL-01；≠ A-BLK-02 e2e 满关。
+          */}
+          <SlashMenuOverlay
+            menu={slashMenu}
+            sink={slashIntentSink}
+            syncToken={chromeTick}
+            className={styles.slashOverlay}
+            onSelectIntent={onSlashIntent}
+            testId="note-paper-strict-slash-overlay"
+          />
+          {/*
             W3-F DOM 桌面挂载：BlockChromeDomHost → data-bp-* 契约
-            （把手/落点线/slash 宿主）；ready 时按 hydrate 块挂载。≠ EL-01。
+            （把手/落点线；slash catalog 由 React 浮层接管）。≠ EL-01。
           */}
           <BlockChromeDomMount
             blocks={
@@ -325,7 +370,8 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
             }
             chrome={chrome}
             slash={slashMenu}
-            syncToken={chromeTick}
+            projectSlashCatalog={false}
+            syncToken={`${chromeTick}:${slashOpen}`}
             onHostReady={onChromeDomHost}
             testId="note-paper-strict-chrome-dom"
           />

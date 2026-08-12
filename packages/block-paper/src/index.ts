@@ -1,7 +1,7 @@
 /**
  * @crish/block-paper
  *
- * 块纸面呈现层（W3-C chrome + W3-D 叶子 Intent + W3-E 代码叶 + W3-F 结构 Intent）：
+ * 块纸面呈现层（W3-C chrome + W3-D 叶子 Intent + W3-E 代码叶 + W3-F 结构 Intent + W3-H 方向）：
  * - BlockChromeModel：把手 / 折叠 / 多选高亮 / 静默 L0 / 批量结构 Intent
  * - SlashMenuModel：slash 打开·过滤·关闭·选中 → slash_insert；composing 禁开/禁交
  * - structureIntents：insert/delete/move/collapse/slash_insert + PaperIntent 联合
@@ -11,6 +11,7 @@
  * - **`createCollabApplySink`**：**生产默认** Intent → wire → 注入 `applyOps`（真 apply 形状）
  * - CodeLeafModel / mountCodeLeaf / Cm6CodeLeafHost：代码叶（可聚焦 + text_edit + 真 CM6 host）
  * - `submitStructureToCollabWire`：PaperIntent → collab wire JSON（喂 RS `ops_from_json`）
+ * - **W3-H 方向**：`mdPrefix` / `turnInto` / `unknownFlavourPlaceholder`（A-BLK-08/09/11 方向）
  *
  * **包边界 / 写锥（G-INV-3）**：
  * - **生产写路径**：`createCollabApplySink({ applyOps })` → IPC/库 → `DocSession::apply`
@@ -26,6 +27,12 @@
  *     （`chrome.w3f_apply.test.ts` + RS `w3_f_*`）
  *   - **W3-F DOM 余量** = `BlockChromeDomHost`（把手/多选框/落点线/slash 宿主/拖拽预览子集）；
  *     测 `chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`；**DOM 交付 ≠ EL-01**；A-BLK e2e 仍开
+ *   - **slash 选中→sink** = `selectSlashItemAndSubmit` / `groupSlashCatalogItems`（React 浮层共用写路径）
+ *   - 桌面 **React slash 浮层** = `apps/crish-desktop/.../SlashMenuOverlay`（包内无 React 依赖）
+ *   - **W3-G PaperList** = 仅窗口∪pin 挂 DOM（`list/PaperList` + `buildMountPlan`）；
+ *     测 `paperList.w3g.test.ts`；结构门 DOM 上界；假数据 **≠** 权威；**≠** EL-01 / A-PERF 数值
+ *   - **W3-H 方向子集** = MD 前缀快路径 + turn-into Intent + 未知 flavour 占位；
+ *     composing 禁前缀；测 `leaves/w3h.direction.test.ts`；**≠** A-BLK 全表 e2e；**≠** EL-01
  *   - **chrome 视觉皮** = `@crish/block-paper/chrome.css`（落点线/slash/把手热区 token 化）；
  *     **视觉皮 ≠ EL-01**
  *   - **≠ EL-01**；**≠ A-BLK 全表 e2e**；**≠** 块工作区完成
@@ -55,6 +62,17 @@ export {
   type SlashMenuSnapshot,
   type SlashMenuModelOptions,
 } from './chrome/SlashMenuModel';
+
+// Slash 选中 → Intent → sink（React 浮层 / 键盘确认共用）
+export {
+  selectSlashItemAndSubmit,
+  selectSlashActiveAndSubmit,
+  groupSlashCatalogItems,
+  type SlashSelectAndSubmitOk,
+  type SlashSelectAndSubmitFail,
+  type SlashSelectAndSubmitResult,
+  type SlashCatalogSegment,
+} from './chrome/slashSelectAndSubmit';
 
 // W3-F DOM 余量：chrome 最小 DOM 宿主 + 拖拽预览子集（≠ EL-01 / ≠ A-BLK e2e 全关）
 export {
@@ -197,6 +215,31 @@ export {
 } from './leaves/pm';
 
 // ---------------------------------------------------------------------------
+// W3-G：PaperList 仅窗口 DOM（假数据投影可测；≠ 权威树；≠ EL-01）
+// ---------------------------------------------------------------------------
+
+export {
+  buildMountPlanByWindow,
+  buildMountPlanByScroll,
+  PaperList,
+  isPaperList,
+  BP_PAPER_LIST,
+  BP_PAPER_BLOCK,
+  BP_PAPER_BLOCK_ID,
+  BP_PAPER_SPACER_BEFORE,
+  BP_PAPER_SPACER_AFTER,
+  BP_PAPER_MOUNTED_COUNT,
+  BP_PAPER_TOTAL_COUNT,
+  type PaperBlockProjection,
+  type BuildMountPlanByWindowInput,
+  type BuildMountPlanByScrollInput,
+  type MountPlan,
+  type PaperListOptions,
+  type PaperListScrollState,
+  type PaperListWindowState,
+} from './list';
+
+// ---------------------------------------------------------------------------
 // W3-E：CM6 代码叶（可聚焦 + text_edit + 真 CM6 host；不接 RS / 不全语言高亮）
 // ---------------------------------------------------------------------------
 
@@ -224,3 +267,50 @@ export {
   type CreateCm6EditorStateOptions,
   type Cm6EditorStateBundle,
 } from './leaves/code';
+
+// ---------------------------------------------------------------------------
+// W3-H 方向：MD 前缀快路径 / turn-into / 未知 flavour 占位（≠ A-BLK 全表 e2e / ≠ EL-01）
+// ---------------------------------------------------------------------------
+
+export {
+  matchMdPrefix,
+  shouldTriggerMdPrefix,
+  stripMdPrefix,
+  firstLineOf,
+  mdPrefixRuleCount,
+  type MdPrefixRuleId,
+  type MdPrefixMatch,
+} from './leaves/mdPrefix';
+
+export {
+  buildTurnIntoIntent,
+  isTurnIntoIntent,
+  clampLogicalSelection,
+  tryMdPrefixFastPath,
+  submitTurnIntoIntent,
+  turnIntoToStructureKey,
+  turnIntoIntentToProvisionalOps,
+  turnIntoStripToTextEdit,
+  type TurnIntoTrigger,
+  type LogicalSelection,
+  type TurnIntoIntent,
+  type BuildTurnIntoInput,
+  type MdPrefixFastPathRejectCode,
+  type MdPrefixFastPathResult,
+  type TryMdPrefixFastPathInput,
+  type TurnIntoSink,
+  type TurnIntoSinkResult,
+  type SubmitTurnIntoOptions,
+  type SubmitTurnIntoResult,
+} from './leaves/turnInto';
+
+export {
+  isUnknownCollabKind,
+  isUnknownFlavour,
+  createUnknownFlavourPlaceholder,
+  tryCreateUnknownFlavourPlaceholder,
+  placeholderWithText,
+  type UnknownCollabKind,
+  type UnknownFlavourPlaceholderSnapshot,
+  type CreateUnknownFlavourPlaceholderInput,
+} from './leaves/unknownFlavourPlaceholder';

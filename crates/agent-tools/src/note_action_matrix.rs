@@ -18,7 +18,7 @@
 //!
 //! # 诚实边界（强制）
 //! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**
-//! - **≠ W6-E**：无千次批 + 恶意扩展闭环
+//! - **≠ W6-E Strict**：无千次批 + 恶意扩展闭环（骨架见 **W6-E-S** `note_w6e_skeleton`）
 //! - **≠ A-AGT 全表关闭**（Memory 禁关生产）
 
 use crate::permission::{PermissionMode, PermissionVerdict};

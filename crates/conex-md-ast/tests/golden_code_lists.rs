@@ -1,6 +1,7 @@
 //! W2-A 扩表 · golden：围栏代码 + 列表/引用加深。
 //!
 //! 诚实：**≠ A-MD-01 全集** / **≠ EL-06**；本文件仅加深可点名结构类。
+//! 围栏 lang/meta 诚实与 task nested 续加深见 `golden_w2a_deepen.rs`（仍 ≠ EL-06）。
 
 use conex_md_ast::{
     BlockId, BlockKind, document_to_md, parse_document, serialize_tree, structure_eq,
@@ -34,7 +35,7 @@ fn golden_fenced_code_structure_and_text() {
 
     let n2 = tree.get(&c2).unwrap();
     assert_eq!(n2.kind, BlockKind::Code);
-    // 语言标签暂不进 kind（结构-only）；正文守恒
+    // 语言标签不进 kind 载荷（结构-only；有 lang 时 lossy structure_note 见 deepen 包）；正文守恒
     assert_eq!(
         n2.text_snapshot.as_deref(),
         Some("fn main() {\n    println!(\"hi\");\n}")

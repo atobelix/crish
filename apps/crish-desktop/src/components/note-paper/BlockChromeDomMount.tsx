@@ -37,6 +37,12 @@ export type BlockChromeDomMountProps = {
   /** 可选 slash 模型：open 时露出 slash 宿主 */
   slash?: SlashMenuModel;
   /**
+   * DomHost 是否投影 slash catalog 子节点。
+   * 默认 true（W3-F DOM 契约测）。
+   * 产品挂 React `SlashMenuOverlay` 时设 false，避免双浮层。
+   */
+  projectSlashCatalog?: boolean;
+  /**
    * 变更时触发 host.sync()（如 hover/focus 后 chromeTick）。
    * 块列表变化会 destroy + 重建宿主。
    */
@@ -64,6 +70,7 @@ export const BlockChromeDomMount: React.FC<BlockChromeDomMountProps> = ({
   blocks,
   chrome,
   slash,
+  projectSlashCatalog = true,
   syncToken = 0,
   onHostReady,
   className,
@@ -102,6 +109,7 @@ export const BlockChromeDomMount: React.FC<BlockChromeDomMountProps> = ({
       })),
       chrome,
       slash,
+      projectSlashCatalog,
     });
     hostRef.current = host;
     onHostReadyRef.current?.(host);
@@ -113,7 +121,7 @@ export const BlockChromeDomMount: React.FC<BlockChromeDomMountProps> = ({
       }
       onHostReadyRef.current?.(null);
     };
-  }, [blockKey, chrome, slash]);
+  }, [blockKey, chrome, slash, projectSlashCatalog]);
 
   // model 态变化 → 重投影（把手 / slash / 落点由外部 set 后也靠此 sync）
   useEffect(() => {

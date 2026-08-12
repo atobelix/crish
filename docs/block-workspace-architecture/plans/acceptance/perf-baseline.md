@@ -1,19 +1,30 @@
-# A-PERF 性能基线（W6-C · 结构门 + 数值占位骨架）
+# A-PERF 性能基线（**W6-C-S** · Skeleton · 结构门 + 数值占位骨架）
 
-> **权威**：`plans/specs/perf-governance.md` · `18-实现波前待决锁定-H1H2H3M1.md` §H3
+> **权威**：`plans/specs/perf-governance.md` · `18-实现波前待决锁定-H1H2H3M1.md` §H3 · `plans/08` 性能两阶段 · `plans/09` **W6-C-S** / **W6-C**
 > **断言索引**：`acceptance/A-assert-index.md`（`A-PERF-*` / `A-PERF-DEG-01` / `A-MEM-01`）
 > **禁止**：「先标低标准再宣称通过」。数值列为 **TBD（未标定）** 时，**不得** 以数值门绿灯合入宣称 PERF 通过；结构门可独立验收。
 
-| 元数据                | 值                                                                 |
-| --------------------- | ------------------------------------------------------------------ |
-| **perf_baseline_rev** | `0`                                                                |
-| **状态**              | 结构门可验；数值门 **未标定**（初值占位）                          |
-| **修订规则**          | 机器指纹或阈值变更 → **bump** `perf_baseline_rev` 并登记 diff 原因 |
-| **入库 Wave**         | W6-C                                                               |
+## 0. 轨声明（会计铁律 · 禁止偷换）
+
+| 项               | 值                                                                                     |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| **当前交付轨**   | **W6-C-S**（Skeleton）                                                                 |
+| **本轨完成定义** | 结构门常量 + baseline 文档骨架 + 可证伪结构/文档断言测；checklist 可勾**已有测证据**项 |
+| **明确 ≠**       | **W6-C** Strict（A-PERF **标定初值入库** / 数值门）                                    |
+| **明确 ≠**       | **EL-03** 关闭（结构主责 **W3-A**；数值仅 **W6-C** Strict）                            |
+| **TBD 数值**     | **≠ 通过**；**≠** 可写「数值门绿 / PERF 通过 / EL-03 关闭」                            |
+| **去 `-S` 条件** | **禁止**在本文件去掉 `-S` 除非 **W6-C** Strict 数值初值 + 机器指纹已人工标定入库       |
+
+| 元数据                | 值                                                                      |
+| --------------------- | ----------------------------------------------------------------------- |
+| **perf_baseline_rev** | `0`                                                                     |
+| **状态**              | **W6-C-S** 结构门骨架可验；数值门 **未标定**（初值占位 · **TBD≠通过**） |
+| **修订规则**          | 机器指纹或阈值变更 → **bump** `perf_baseline_rev` 并登记 diff 原因      |
+| **入库 Wave**         | **W6-C-S**（Skeleton；数值入库归 **W6-C** Strict）                      |
 
 ---
 
-## 1. 机器指纹（基准机）
+## 1. 机器指纹（基准机 · 数值门前置）
 
 | 字段         | 值         | 备注                                                      |
 | ------------ | ---------- | --------------------------------------------------------- |
@@ -25,13 +36,15 @@
 | **标定日期** | 待本机标定 | ISO `YYYY-MM-DD`                                          |
 | **标定提交** | 待本机标定 | git SHA（数值初值写入时）                                 |
 
-> 未填齐指纹前，**数值门**一律视为未生效；结构门不受影响。
+> 未填齐指纹前，**数值门**一律视为未生效；结构门不受影响。  
+> **W6-C-S 验收不要求**填齐指纹；填齐 + 手写数值 = **W6-C** Strict 工作，**不是**本 Skeleton 包。
 
 ---
 
 ## 2. 结构门（可立即验收 · 无数值也可红/绿）
 
-对齐 H3：**无数值也可合入**；下列项为硬门禁。
+对齐 H3：**无数值也可合入结构侧**；下列项为硬门禁。  
+**结构门绿 ≠ EL-03 关闭 ≠ W6-C 数值门。**
 
 | ID                      | 结构断言                          | 默认/契约                                                                                                                              | 代码锚点（可执行）                                                                              | 状态        |
 | ----------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------- |
@@ -49,21 +62,35 @@
 | 像素 overscan 等价        | —                           | 视口高度 0.5～1.0× | 产品层可换算；结构门以 **块数上界** 为准          |
 | pin 并集                  | 焦点 + composing + 选区端点 | —                  | pin 可短暂使挂载 > 纯窗口；**不得**因此取消窗口化 |
 
-### 2.2 结构门验收清单（合入 PR 可勾）
+### 2.2 结构门验收清单（合入 PR 可勾 · **仅勾有测证据项**）
 
-- [ ] `DEFAULT_MAX_HOT == 512` 且 `DocSession::new` 默认 `text_max_hot() == 512`
-- [ ] 活动热实例在非「全 pin」路径下 `hot_count ≤ max_hot`（A-MEM-01）
-- [ ] 典型视口 + 默认 overscan 的 `queryViewport(...).count ≤ MAX_MOUNTED_DOM_BLOCKS`
-- [ ] 默认 diff 路径 `fullRemountCount === 0`（A-IME-07）
-- [ ] 无「每键全量 snapshot」默认路径（A-PERF-09）
-- [ ] merge/批 apply 不阻塞 UI 主线程（A-PERF-06；接线后测）
+> **纪律**：`[x]` = 可点名测路径存在且绿；**禁止**无证据勾选。契约门未接线测的保持 `[ ]`。  
+> 本清单勾选 = **结构侧形式验收**；**≠** 数值门通过；**≠ EL-03**。
+
+- [x] `DEFAULT_MAX_HOT == 512` 且 `DocSession::new` 默认 `text_max_hot() == 512`  
+      — 证据：`crates/conex-doc-collab/src/session.rs` · `a_mem_01_default_max_hot_constant_is_512`；`text_engine.rs` · `a_mem_01_default_max_hot_is_512`；`packages/editor-kit` · `bounds.test.ts`
+- [x] 活动热实例在非「全 pin」路径下 `hot_count ≤ max_hot`（A-MEM-01）  
+      — 证据：`text_engine.rs` · `a_mem_01_hot_count_bounded`；`session.rs` · `a_mem_01_session_hot_bounded`
+- [x] 典型视口 + 默认 overscan 的 `queryViewport(...).count ≤ MAX_MOUNTED_DOM_BLOCKS`  
+      — 证据：`packages/editor-kit/src/viewport/bounds.test.ts` · A-PERF-01 典型视口
+- [x] 默认 diff 路径 `fullRemountCount === 0`（A-IME-07）  
+      — 证据：`packages/editor-kit/src/diff/applyProjectionDiff.test.ts`
+- [ ] 无「每键全量 snapshot」默认路径（A-PERF-09）— **契约门**；缺可红接线测 = 未交付（结构可执行层）
+- [ ] merge/批 apply 不阻塞 UI 主线程（A-PERF-06；接线后测）— **契约门**；缺线程归属断言 = 未交付
+
+### 2.3 结构门文档断言测（W6-C-S 可证伪）
+
+| 测路径                                                            | 断言摘要                                                                                                                                                            |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/editor-kit/src/viewport/perf-baseline.contract.test.ts` | 读本文件：钉 **W6-C-S**；常量 512/12/256 与代码一致；指纹仍「待本机标定」；数值表含 **TBD（未标定）**；禁止「数值门通过 / EL-03 关闭」假句；**≠ W6-C** 数值满关叙事 |
 
 ---
 
-## 3. 数值门表格（初值 **TBD · 未标定**）
+## 3. 数值门表格（初值 **TBD · 未标定** · **≠ 通过**）
 
-> 维度对齐 D7 §5.9 `A-PERF-01…11`；**维度不可删**。
-> 单位：时间 ms；jank 代理见下表注释。全部 **TBD** 直至本机标定写入并 bump rev。
+> 维度对齐 D7 §5.9 `A-PERF-01…11`；**维度不可删**。  
+> 单位：时间 ms；jank 代理见下表注释。全部 **TBD** 直至本机标定写入并 bump rev（**仅 W6-C Strict**）。  
+> **W6-C-S 完成时本表必须仍为 TBD（未标定）**——若出现假数字或「已通过」而无指纹，属会计事故。
 
 ### 3.1 打开文档（可交互时间）
 
@@ -101,6 +128,8 @@
 | A-PERF-09 | 击键写放大（update 字节/键）         | **TBD（未标定）** | 未标定   |
 | A-PERF-10 | 搜索（索引计划，非默认全表 LIKE）    | **TBD（未标定）** | 未标定   |
 | A-PERF-11 | 附件 blob 不进 snapshot 热路径       | **TBD（未标定）** | 未标定   |
+
+> **A-PERF-10 结构**（FTS5 / CJK `instr`）已由 **W2-C** 结构门覆盖（`crates/conex-workspace-store/tests/w2c_structure_gate.rs`）；**≠** 本表数值满关；**W6-C-S 不回退** 该结构门。
 
 ---
 
@@ -141,21 +170,25 @@ verdict: ok | watch | A-PERF-DEG-01
 | `MAX_MOUNTED_DOM_BLOCKS`      | `256`      | `@crish/editor-kit`（A-PERF 结构 DOM 上界） |
 | `fullRemountCount` 默认路径   | `0`        | `@crish/editor-kit` `applyProjectionDiff`   |
 
+文档断言测强制：上表数值必须与 `bounds.ts` / collab 导出一致（见 §2.3）。
+
 ---
 
 ## 6. 修订历史
 
-| rev   | 日期       | 说明                                                                             |
-| ----- | ---------- | -------------------------------------------------------------------------------- |
-| **0** | 2026-08-11 | W6-C：结构门骨架 + 数值 TBD 占位 + A-PERF-DEG-01 退化规则入库                    |
-| **0** | 2026-08-11 | Round9：数值门测量脚手架（`#[ignore]` + `perf:block-workspace`）；数值仍 **TBD** |
+| rev   | 日期       | 说明                                                                                                                                     |
+| ----- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** | 2026-08-11 | 初版：结构门骨架 + 数值 TBD 占位 + A-PERF-DEG-01 退化规则入库                                                                            |
+| **0** | 2026-08-11 | Round9：数值门测量脚手架（`#[ignore]` + `perf:block-workspace`）；数值仍 **TBD**                                                         |
+| **0** | 2026-08-12 | **W6-C-S 钉轨**：标题/入库 Wave 去裸 W6-C 号贩卖；§0 轨声明；§2.2 有证据勾选；§2.3 文档断言测；**≠ EL-03 / ≠ W6-C 数值**；数值仍 **TBD** |
 
 ---
 
 ## 7. 测量脚手架 · 如何跑 · 如何 **人工** 回填
 
-> **铁律**：脚手架 **只打印** JSON 行；**禁止** 任何脚本自动把本文件的 `TBD（未标定）` 改成数字或宣称「数值门通过」。
-> 标定 = 人在基准机上跑数 → 核对机器指纹 → 手写填表 → bump `perf_baseline_rev`（若指纹/阈值变更）。
+> **铁律**：脚手架 **只打印** JSON 行；**禁止** 任何脚本自动把本文件的 `TBD（未标定）` 改成数字或宣称「数值门通过」。  
+> 标定 = 人在基准机上跑数 → 核对机器指纹 → 手写填表 → bump `perf_baseline_rev`（若指纹/阈值变更）。  
+> 标定完成 = **W6-C** Strict 工作包；**不是** W6-C-S。
 
 ### 7.1 入口（CI **默认不跑**）
 
@@ -211,7 +244,7 @@ $env:PERF_N=10000; cargo test -p conex-doc-collab --test perf_open_nk_blocks --r
 | `open_nk_blocks`  | DocSession 批量 insert N 根块 wall time（A-PERF-01 **数据层代理**，无 UI） | §3.1 打开 1k/10k                             |
 | `heightmap_query` | HeightMap `offsetOf`+`indexAt` 查询墙钟（虚拟化路径代理）                  | §3.3 / 结构伴随备忘；**不是** 滚动 jank 终值 |
 
-### 7.3 人工回填清单（数值门生效前必做）
+### 7.3 人工回填清单（数值门生效前必做 · **W6-C Strict**）
 
 1. 在 **基准机** 上用 **release** 跑 §7.1（至少 1k；自愿 10k）。
 2. 把输出中的 `os` / CPU / RAM / WebView 写入 **§1 机器指纹**（未填齐则数值门不生效）。
@@ -219,6 +252,7 @@ $env:PERF_N=10000; cargo test -p conex-doc-collab --test perf_open_nk_blocks --r
 4. 指纹或阈值变更 → **bump** `perf_baseline_rev` 并在 §6 写 diff 原因。
 5. **禁止**：为「好看」压低预算；禁止未标定就勾选「数值门通过」；禁止脚本 PR 只改 TBD→假数字。
 6. 标定后的退化比较走 **A-PERF-DEG-01**（§4）：p95≥2× 或 p50≥1.5× 连续 3 次 → 强制 A-SWAP 评估。
+7. 完成上述后，调度态可标 **W6-C** Strict；**仍不得**单独用本文件关 **EL-03**（须 `08` 表 A + 结构 W3-A + 仪表盘）。
 
 ### 7.4 代码锚点
 
@@ -228,4 +262,8 @@ $env:PERF_N=10000; cargo test -p conex-doc-collab --test perf_open_nk_blocks --r
 | Node/tsx 编排  | `scripts/block-workspace-perf.mjs`                                              |
 | npm script     | `package.json` → `perf:block-workspace`                                         |
 | HeightMap      | `packages/editor-kit/src/viewport/HeightMap.ts`                                 |
+| 结构常量       | `packages/editor-kit/src/viewport/bounds.ts`                                    |
+| 结构常量测     | `packages/editor-kit/src/viewport/bounds.test.ts`                               |
+| **文档断言测** | `packages/editor-kit/src/viewport/perf-baseline.contract.test.ts`（**W6-C-S**） |
 | 退化 ID        | `conex_doc_collab::a_perf::A_PERF_DEG_01`                                       |
+| W2-C 搜索结构  | `crates/conex-workspace-store/tests/w2c_structure_gate.rs`（**勿回退**）        |

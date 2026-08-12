@@ -15,6 +15,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+# W2-E OS mirror watcher（notify 8；与 conex-fs 同 workspace 版本；窄面向 mirror 路径）
+notify = { workspace = true }
 
 [lints]
 workspace = true

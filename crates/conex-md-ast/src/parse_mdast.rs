@@ -10,6 +10,9 @@
 //! - **Table / TaskItem kind 未入 collab IR**（`conex-doc-collab::BlockKind` 无变体；本 crate **禁止平行 IR**）
 //!   - 表 → `Paragraph` + `structure_note`（行列/对齐进 plain；W2-A 加深）
 //!   - 任务项 → `BulletItem`/`OrderedItem` + 勾选 plain 前缀 + 列表级 `structure_note`
+//! - **围栏 Code**：kind 已入 collab；**lang/meta 未进载荷** → 有 info 时 `structure_note` 可点名；S 空 lang
+//! - 嵌套 blockquote → 单 Quote 多行 plain（**无** 子 Quote 块）
+//! - 同秩列表嵌套 → 扁平兄弟（容器栈秩=10）；真嵌套列表语义 **未** 关
 //! - 删除线 / 链接 / autolink：inline 剥为 plain（**≠** 叶子 inline RT 关账）
 //! - wiki `[[…]]`：**未**建模；作 plain 文本保留（**≠** A-MD-03 / EL-06）
 
@@ -215,8 +218,28 @@ fn lower_flow_node(
             );
         }
         Node::Code(code) => {
-            // 结构-only：语言标签暂不进 kind（S 侧围栏 lang 仍空）；正文进 snapshot
-            let _lang = code.lang.as_deref();
+            // 结构-only：`BlockKind::Code` 已入 collab，但 **lang/meta 载荷未建模**
+            // （S 侧围栏 info 仍空）；正文进 snapshot。
+            // W2-A 加深：有 lang/meta 时记 structure_note，可点名丢弃的 info（≠ A-MD-01 围栏 kind 满关）。
+            let lang = code.lang.as_deref().filter(|s| !s.is_empty());
+            let meta = code.meta.as_deref().filter(|s| !s.is_empty());
+            if lang.is_some() || meta.is_some() {
+                let mut parts = Vec::new();
+                if let Some(l) = lang {
+                    parts.push(format!("lang={l}"));
+                }
+                if let Some(m) = meta {
+                    parts.push(format!("meta={m}"));
+                }
+                lossy.push(
+                    "structure_note",
+                    format!(
+                        "line {line}: 围栏代码 info（{}）经 markdown-rs 识别后丢弃不进 BlockKind::Code 载荷（S 输出空 lang；正文 plain 守恒）",
+                        parts.join(" ")
+                    ),
+                    Some(line),
+                );
+            }
             push_block(
                 blocks,
                 pending,

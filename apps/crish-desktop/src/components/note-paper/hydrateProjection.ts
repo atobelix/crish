@@ -10,22 +10,32 @@
  * ## 诚实边界（强制）
  * - **可演示 ≠ EL-01 / EL-08**；**≠ W5-C 隔离全关**；挂载冒充交付 = S5
  * - 产品 IPC 默认「打开文档完成」叙事依赖 W1-H；本 adapter **不**宣称 W1-H 已关
- * - `createFixtureHydrateTransport` = 可测 Strict 方向子集；`source: 'fixture'`
+ * - `createFixtureHydrateTransport` = 可测 / 演示 Strict 方向子集；`source: 'fixture'`
+ *   —— **fixture ≠ 生产权威**；禁止 fixture 伪装 `tauri-ipc`
  * - `adaptNoteTransportAsHydrate` = 把已有 `note_query_blocks` 形状映射为投影
  *   （Tauri / Memory 皆可注入）；**不等于** DocSession::hydrate 产品全链路完成
  * - `adaptNoteHydrateIpcAsTransport` = 专用 `note_document_hydrate` IPC →
- *   source=`tauri-ipc`；**产品空态默认仍 fixture**（≠ 打开完成 / ≠ EL）
+ *   source=`tauri-ipc`
+ * - **产品 Strict 默认**（`createProductStrictHydrateTransport`）：
+ *   可检测 Tauri → `tauri-ipc`；无 Tauri → 仍 `fixture`
+ *   —— **≠ 打开完成**；**≠ EL**；后端经 query 投影派生，**DocSession 全链未满**
  *
  * ## 禁止
  * - import 行级 EditorStore / lines[] 权威
  * - 用静默假段落冒充 hydrate 投影
+ * - fixture 响应写 `source:'tauri-ipc'` 骗测
  */
 
-import type {
-  NoteHydrateIpc,
-  NoteHydrateIpcSuccess,
+import {
+  createTauriNoteHydrateIpc,
+  type NoteHydrateIpc,
+  type NoteHydrateIpcSuccess,
 } from '../../api/noteHydrateIpc';
-import type { NoteQueryBlockHit, NoteTransport } from '../../api/noteApi';
+import {
+  isNoteTauriRuntime,
+  type NoteQueryBlockHit,
+  type NoteTransport,
+} from '../../api/noteApi';
 
 // ---------------------------------------------------------------------------
 // 投影形状（hydrate 后 · 只读）
@@ -57,10 +67,10 @@ export type DocHydrateProjection = {
   blocks: HydratedBlockProjection[];
   /**
    * 来源：
-   * - `fixture`：测试 / 演示注入的 hydrate 形状（**产品空态默认**）
+   * - `fixture`：测试 / 无 Tauri 演示注入（**≠ 生产权威**）
    * - `note-transport`：经 NoteTransport.queryBlocks 映射
-   * - `tauri-ipc`：专用 `note_document_hydrate`（`adaptNoteHydrateIpcAsTransport`）；
-   *     **不**等于产品默认已挂 / 打开完成
+   * - `tauri-ipc`：专用 `note_document_hydrate`（可检测 Tauri 时产品默认）；
+   *     **≠** DocSession::hydrate 全链 / 打开完成 / EL
    */
   source: 'fixture' | 'note-transport' | 'tauri-ipc';
 };
@@ -250,8 +260,9 @@ export function adaptNoteTransportAsHydrate(
  *
  * 诚实边界：
  * - 成功投影 source 固定 `tauri-ipc`（与 query 适配的 `note-transport` 分轨）
- * - **产品空态默认仍 fixture**；本 adapter 仅在调用方显式注入时生效
+ * - 产品默认经 `createProductStrictHydrateTransport` 在 Tauri 环境选用本 adapter
  * - **不**宣称「打开文档完成」/ W1-H / EL 关闭
+ * - 后端 `note_document_hydrate` 现为 query 投影派生，**≠ DocSession 全链**
  */
 export function adaptNoteHydrateIpcAsTransport(
   ipc: NoteHydrateIpc
@@ -307,18 +318,17 @@ export function makeHydratedBlock(
 }
 
 // ---------------------------------------------------------------------------
-// 产品空态 Strict 演示 fixture（≠ DocSession IPC 默认挂载完成）
+// 产品空态 Strict 演示 fixture（无 Tauri 回退 · ≠ 生产权威）
 // ---------------------------------------------------------------------------
 
 /**
- * 工作区空态打开 Strict 面板时的默认 hydrate 通路（source=`fixture`）。
+ * 无 Tauri / 显式演示用 fixture hydrate 通路（source=`fixture`）。
  *
  * 诚实边界（钉死）：
+ * - **fixture ≠ 生产权威**；DOM / 投影 `source` 必须为 `fixture`，禁止伪装 `tauri-ipc`
  * - **可演示 ≠ EL-01 / EL-08**；挂载冒充交付 = S5
- * - **≠ 打开完成**：本 fixture **不是** `DocSession::hydrate` 产品 IPC 默认路径
- * - 产品侧可注入真 transport / `adaptNoteTransportAsHydrate` /
- *   `adaptNoteHydrateIpcAsTransport` 替换本工厂；**未注入时默认仍 fixture**
- * - DOM / 投影 `source` 必须为 `fixture`，禁止伪装 `tauri-ipc`
+ * - **≠ 打开完成**；**≠** `DocSession::hydrate` 全链
+ * - 产品默认见 `createProductStrictHydrateTransport`（Tauri → tauri-ipc）
  */
 export function createEmptyStateStrictDemoTransport(
   docId: string
@@ -337,7 +347,7 @@ export function createEmptyStateStrictDemoTransport(
         makeHydratedBlock({
           id: 'empty-strict-p1',
           flavour: 'paragraph',
-          text: '可演示 ≠ EL-01/EL-08 · ≠ 打开完成 · fixture ≠ DocSession IPC',
+          text: '可演示 ≠ EL-01/EL-08 · ≠ 打开完成 · fixture ≠ 生产权威',
           index: 1,
         }),
         makeHydratedBlock({
@@ -349,4 +359,77 @@ export function createEmptyStateStrictDemoTransport(
       ],
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// 产品 Strict 默认 hydrate 通路（可检测 Tauri → tauri-ipc · 否则 fixture）
+// ---------------------------------------------------------------------------
+
+/**
+ * 产品 Strict 空态选用的 hydrate 来源。
+ * - `tauri-ipc`：可检测 Tauri 运行时，走 `note_document_hydrate`
+ * - `fixture`：无 Tauri（单测 / 纯浏览器），保留演示轨
+ */
+export type ProductStrictHydrateSource = 'tauri-ipc' | 'fixture';
+
+export type ResolveProductStrictHydrateSourceOptions = {
+  /**
+   * 覆盖运行时探测（单测注入）。
+   * 未传时使用 `isNoteTauriRuntime()`（`__TAURI__` / `__TAURI_INTERNALS__` / `isTauri`）。
+   */
+  isTauriRuntime?: boolean;
+};
+
+/**
+ * 解析产品 Strict 默认 hydrate 来源（纯选择逻辑，可单测）。
+ *
+ * 纪律：
+ * - **禁止** 无 Tauri 时返回 tauri-ipc（否则 fixture 伪装）
+ * - **禁止** 用 fixture 响应字符串冒充 ipc source
+ * - 选择 tauri-ipc **≠** 打开完成 / **≠** EL / **≠** DocSession 全链已满
+ */
+export function resolveProductStrictHydrateSource(
+  options: ResolveProductStrictHydrateSourceOptions = {}
+): ProductStrictHydrateSource {
+  const tauri =
+    options.isTauriRuntime !== undefined
+      ? options.isTauriRuntime
+      : isNoteTauriRuntime();
+  return tauri ? 'tauri-ipc' : 'fixture';
+}
+
+export type CreateProductStrictHydrateTransportOptions =
+  ResolveProductStrictHydrateSourceOptions & {
+    /**
+     * 注入 hydrate IPC（测 mock / 自定义后端）。
+     * 仅当解析结果为 `tauri-ipc` 时使用；未传则 `createTauriNoteHydrateIpc()`。
+     */
+    hydrateIpc?: NoteHydrateIpc;
+  };
+
+/**
+ * 工作区空态打开 Strict 面板时的 **产品默认** hydrate 通路。
+ *
+ * | 环境 | 默认 source | transport |
+ * |------|-------------|---------|
+ * | 可检测 Tauri | `tauri-ipc` | `adaptNoteHydrateIpcAsTransport(createTauriNoteHydrateIpc())` |
+ * | 无 Tauri | `fixture` | `createEmptyStateStrictDemoTransport(docId)` |
+ *
+ * 诚实边界（钉死 · R10）：
+ * - **fixture ≠ 生产权威**；无 Tauri 回退 fixture **不是** 伪装 ipc
+ * - 有 Tauri 时失败/空/成功走真 IPC 三态，**不**静默回退 fixture
+ * - **≠ 打开完成**；**≠ EL-01/EL-08**；后端 hydrate 命令现为 query 投影派生，
+ *   **DocSession::hydrate 全链若未满须诚实，本工厂不宣称已关**
+ * - 调用方可经 `WorkspaceEmptyState.strictHydrateTransport` 覆盖
+ */
+export function createProductStrictHydrateTransport(
+  docId: string,
+  options: CreateProductStrictHydrateTransportOptions = {}
+): NoteHydrateTransport {
+  const source = resolveProductStrictHydrateSource(options);
+  if (source === 'tauri-ipc') {
+    const ipc = options.hydrateIpc ?? createTauriNoteHydrateIpc();
+    return adaptNoteHydrateIpcAsTransport(ipc);
+  }
+  return createEmptyStateStrictDemoTransport(docId);
 }

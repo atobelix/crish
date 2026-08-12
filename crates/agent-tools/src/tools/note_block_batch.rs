@@ -11,7 +11,8 @@
 //! - ask 存在则 [`maybe_ask_note_write`]
 //!
 //! # 诚实边界
-//! - **≠ EL-05**；**≠ A-AGT 全表关闭**；**≠ W6-E** 千次+恶意闭环
+//! - **≠ EL-05**；**≠ A-AGT 全表关闭**；**≠ W6-E Strict** 千次+恶意闭环
+//! - 千次批压测夹具 / 恶意扩展拒写方向见 **W6-E-S**（`note_w6e_skeleton`；Skeleton ≠ Strict）
 //! - Memory 测绿 **禁关**生产 A-AGT
 //! - `block_update`/`block_delete`/`block_move` 已有独立工具；batch 仍可含 move op
 

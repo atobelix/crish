@@ -25,6 +25,12 @@ export {
   type BlockChromeDomMountProps,
 } from './BlockChromeDomMount';
 
+/** 真 React slash 浮层：catalog 可点 → Intent → sink（≠ EL-01 / ≠ A-BLK-02 e2e） */
+export {
+  SlashMenuOverlay,
+  type SlashMenuOverlayProps,
+} from './SlashMenuOverlay';
+
 export {
   SendToNoteButton,
   type SendToNoteButtonProps,
@@ -60,9 +66,12 @@ export {
   adaptNoteTransportAsHydrate,
   createEmptyStateStrictDemoTransport,
   createFixtureHydrateTransport,
+  createProductStrictHydrateTransport,
   makeHydratedBlock,
   mapHydrateIpcSuccessToProjection,
   mapQueryHitToProjection,
+  resolveProductStrictHydrateSource,
+  type CreateProductStrictHydrateTransportOptions,
   type DocHydrateProjection,
   type FixtureHydrateDoc,
   type HydratedBlockProjection,
@@ -70,4 +79,6 @@ export {
   type NoteHydrateOutcome,
   type NoteHydrateSuccess,
   type NoteHydrateTransport,
+  type ProductStrictHydrateSource,
+  type ResolveProductStrictHydrateSourceOptions,
 } from './hydrateProjection';

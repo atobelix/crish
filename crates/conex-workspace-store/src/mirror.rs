@@ -7,17 +7,22 @@
 //!   - [`WorkspaceStore::detect_mirror_drift`]：mtime/hash vs `mirror_meta` → 三路分类
 //!   - [`ThreeWayStrategy`] / [`ImportMirrorResult`]：三路策略 + Op 批 **或** 冲突报告
 //!   - [`WorkspaceStore::import_mirror_proposal`]：**不**直接写权威；**禁**静默盖 unpushed
-//! - **本模块追加（W2-E · watcher 方向子集）**：
+//! - **本模块（W2-E · 轮询 watcher 子集）**：
 //!   - [`MirrorWatchHandle`] / [`poll_mirror_once`]：进程内指纹基线 + 单次轮询
 //!   - [`MirrorWatcher`] / [`MirrorWatcher::on_mirror_change`]：回调注册（由上层 timer 驱动 poll）
+//! - **OS 事件封装（同 crate · [`crate::mirror_os_watch`]）**：
+//!   - [`crate::MirrorOsWatcher`]（notify）+ [`crate::detect_if_os_event_hits_mirror`]
+//!   - 与本模块 **并存**；**禁止**用 poll 叙事冒充「已交 inotify 满关」
 //!
 //! # 诚实边界（不可冒充）
-//! - **≠ OS inotify/FSEvents 生产满关**：无内核 FS 事件订阅；靠上层 timer / 测试直接调
+//! - **本模块 poll 路径 ≠ OS inotify/FSEvents 生产满关**：poll 靠上层 timer / 测试直接调
 //!   [`MirrorWatchHandle::poll_mirror_once`] 或 [`MirrorWatcher::poll_once`]。
+//! - **OS 路径**见 [`crate::mirror_os_watch`]（notify 封装）；有 OS 入口 **仍 ≠**
+//!   A-INV-02 产品 UI / 桌面订阅全链路 / **EL-03**。
 //! - **≠ A-INV-02 产品 UI**：不弹三路对话框、不接线桌面；仅交付 **可测观察入口**。
 //! - **≠ EL-03**（恢复/打开叙事属 G-HYD / W3 等，不在本模块）。
 //! - **≠ Wave 2 存储完成**（杀进程权威恢复、refs 自动物化等分属他包）。
-//! - 仅 export+lag **≠** P6 完成；detect/三路 + 轮询 watcher 仍 **≠** 产品 UI 三路对话框满关。
+//! - 仅 export+lag **≠** P6 完成；detect/三路 + 轮询/OS watcher 仍 **≠** 产品 UI 三路对话框满关。
 //!
 //! # 不变量（S1 / X-05）
 //! 1. mirror **非**权威；工具默认 **禁止** 读 `exports/**` / mirror 文件当 get_md。
@@ -178,14 +183,15 @@ impl ImportMirrorResult {
     }
 }
 
-// ─── W2-E watcher 方向子集（进程内 / 可轮询；≠ OS inotify 满关）─────────────
+// ─── W2-E 轮询 watcher 子集（进程内 / 可轮询）──────────────────────────────
 //
 // 设计：
 // - 上层（timer / 测试）持有 [`MirrorWatchHandle`] 或 [`MirrorWatcher`]；
 // - 每次 `poll_*`：读 path 的 mtime+hash 指纹 → 与上次对比 → 调 `detect_mirror_drift`；
 // - 指纹变化时 [`MirrorWatcher`] 触发 `on_mirror_change` 回调，携带完整 [`MirrorDriftReport`]。
 //
-// **诚实**：本段 **≠ OS inotify 生产满关**；**≠ A-INV-02 产品 UI**；**≠ EL-03**。
+// **诚实**：本段是 **poll**，**≠**「poll = inotify 满关」；OS 事件见 [`crate::mirror_os_watch`]。
+// **≠ A-INV-02 产品 UI**；**≠ EL-03**。
 
 /// mirror 文件指纹（mtime + content hash + 是否存在），供轮询去抖/变更检测。
 #[derive(Debug, Clone, PartialEq, Eq)]

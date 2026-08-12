@@ -1,16 +1,22 @@
 /**
- * hydrate 投影形状 + adapter 单测（W5-B Strict · B-09）
+ * hydrate 投影形状 + adapter + 产品默认选型单测（W5-B Strict · B-09 / 真 hydrate 深化）
  *
  * 测名 w5b_strict_*：形状必须是 hydrate 后投影，非静默假段落。
+ * 产品默认：`resolveProductStrictHydrateSource` / `createProductStrictHydrateTransport`
+ * —— 可检测 Tauri → tauri-ipc；无 Tauri → fixture；**禁止** fixture 伪装 ipc。
  */
 import { describe, expect, it } from 'vitest';
 import { createMemoryNoteTransport } from '../../api/noteApi';
+import { createMockNoteHydrateIpc } from '../../api/noteHydrateIpc';
 import {
+  adaptNoteHydrateIpcAsTransport,
   adaptNoteTransportAsHydrate,
   createEmptyStateStrictDemoTransport,
   createFixtureHydrateTransport,
+  createProductStrictHydrateTransport,
   makeHydratedBlock,
   mapQueryHitToProjection,
+  resolveProductStrictHydrateSource,
 } from './hydrateProjection';
 
 describe('hydrateProjection · w5b_strict_shape', () => {
@@ -157,10 +163,6 @@ describe('hydrateProjection · w5b_strict_shape', () => {
   });
 
   it('w5b_strict_adapt_note_hydrate_ipc_source_tauri_ipc', async () => {
-    const { createMockNoteHydrateIpc } =
-      await import('../../api/noteHydrateIpc');
-    const { adaptNoteHydrateIpcAsTransport } =
-      await import('./hydrateProjection');
     const ipc = createMockNoteHydrateIpc({
       'doc-ipc': {
         rev: 5,
@@ -181,5 +183,128 @@ describe('hydrateProjection · w5b_strict_shape', () => {
     expect(out.projection.source).toBe('tauri-ipc');
     expect(out.projection.rev).toBe(5);
     expect(out.projection.blocks[0]?.text).toMatch(/NoteHydrateIpc/);
+  });
+});
+
+describe('hydrateProjection · product default source selection', () => {
+  it('product_strict_resolve_source_tauri_true_is_tauri_ipc', () => {
+    expect(resolveProductStrictHydrateSource({ isTauriRuntime: true })).toBe(
+      'tauri-ipc'
+    );
+  });
+
+  it('product_strict_resolve_source_tauri_false_is_fixture', () => {
+    expect(resolveProductStrictHydrateSource({ isTauriRuntime: false })).toBe(
+      'fixture'
+    );
+    // vitest 默认无 Tauri 全局 → 与显式 false 同向
+    expect(resolveProductStrictHydrateSource()).toBe('fixture');
+  });
+
+  it('product_strict_transport_no_tauri_uses_fixture_demo_not_ipc', async () => {
+    const t = createProductStrictHydrateTransport('strict-ws-product', {
+      isTauriRuntime: false,
+    });
+    const out = await t.hydrate('strict-ws-product');
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // 无 Tauri：演示 fixture，禁止伪装 tauri-ipc
+    expect(out.projection.source).toBe('fixture');
+    expect(out.projection.source).not.toBe('tauri-ipc');
+    expect(out.projection.blocks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('product_strict_transport_tauri_uses_ipc_source_success', async () => {
+    const ipc = createMockNoteHydrateIpc({
+      'doc-product-tauri': {
+        rev: 11,
+        blocks: [
+          {
+            id: 'pt1',
+            flavour: 'paragraph',
+            index: 0,
+            text: 'product default tauri-ipc',
+          },
+        ],
+      },
+    });
+    const t = createProductStrictHydrateTransport('doc-product-tauri', {
+      isTauriRuntime: true,
+      hydrateIpc: ipc,
+    });
+    const out = await t.hydrate('doc-product-tauri');
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.projection.source).toBe('tauri-ipc');
+    expect(out.projection.source).not.toBe('fixture');
+    expect(out.projection.rev).toBe(11);
+    expect(out.projection.blocks[0]?.text).toMatch(/product default tauri-ipc/);
+  });
+
+  it('product_strict_transport_tauri_empty_success_still_tauri_ipc', async () => {
+    // 未 seed = 空投影成功；有 Tauri 时不得回退 fixture
+    const ipc = createMockNoteHydrateIpc();
+    const t = createProductStrictHydrateTransport('doc-empty-tauri', {
+      isTauriRuntime: true,
+      hydrateIpc: ipc,
+    });
+    const out = await t.hydrate('doc-empty-tauri');
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.projection.blocks).toEqual([]);
+    expect(out.projection.source).toBe('tauri-ipc');
+    expect(out.projection.source).not.toBe('fixture');
+  });
+
+  it('product_strict_transport_tauri_failure_does_not_fallback_fixture', async () => {
+    const ipc = createMockNoteHydrateIpc({
+      'doc-fail': {
+        rev: 1,
+        blocks: [
+          {
+            id: 'f1',
+            flavour: 'paragraph',
+            index: 0,
+            text: 'should not surface on error',
+          },
+        ],
+      },
+    });
+    ipc.setNextError({
+      code: 'note.hydrate_failed',
+      reason: 'blob missing in product path',
+    });
+    const t = createProductStrictHydrateTransport('doc-fail', {
+      isTauriRuntime: true,
+      hydrateIpc: ipc,
+    });
+    const out = await t.hydrate('doc-fail');
+    // 失败三态：ok:false，不静默换成 fixture 演示块
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.code).toBe('note.hydrate_failed');
+    expect(out.reason).toMatch(/blob missing/);
+  });
+
+  it('product_strict_fixture_never_labels_source_as_tauri_ipc', async () => {
+    const fixture = createFixtureHydrateTransport({
+      'doc-fx': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'x',
+            flavour: 'paragraph',
+            text: 'fixture only',
+            index: 0,
+          }),
+        ],
+      },
+    });
+    const out = await fixture.hydrate('doc-fx');
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // 纪律：fixture 响应不得写 tauri-ipc 骗测
+    expect(out.projection.source).toBe('fixture');
+    expect(out.projection.source).not.toBe('tauri-ipc');
   });
 });

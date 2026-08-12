@@ -1063,6 +1063,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "conex-fs",
+ "conex-shared",
  "dirs",
  "futures-util",
  "libc",
@@ -1105,6 +1106,38 @@ dependencies = [
  "conex-types",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "conex-computer"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "conex-shared",
+ "enigo",
+ "image",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "tracing",
+ "windows 0.61.3",
+ "windows-sys 0.61.2",
+ "xcap",
+]
+
+[[package]]
+name = "conex-computer-tools"
+version = "0.1.0"
+dependencies = [
+ "agent-tools",
+ "async-trait",
+ "conex-browser-tools",
+ "conex-computer",
+ "conex-shared",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1212,6 +1245,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "conex-shared"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "conex-telemetry"
 version = "0.1.0"
 dependencies = [
@@ -1252,6 +1295,7 @@ dependencies = [
  "conex-doc-collab",
  "conex-md-ast",
  "hex",
+ "notify",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2035,6 +2079,25 @@ name = "endi"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
+
+[[package]]
+name = "enigo"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71c6c56e50f7acae2906a0dcbb34529ca647e40421119ad5d12e7f8ba6e50010"
+dependencies = [
+ "core-foundation 0.10.1",
+ "core-graphics 0.25.0",
+ "foreign-types-shared 0.3.1",
+ "libc",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "windows 0.61.3",
+ "xkbcommon",
+ "xkeysym",
+]
 
 [[package]]
 name = "ensure-cov"
@@ -2849,6 +2912,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "h2"
+version = "0.4.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6cb093c84e8bd9b188d4c4a8cb6579fc016968d14c99882163cd3ff402a4f155"
+dependencies = [
+ "atomic-waker",
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "http",
+ "indexmap 2.14.0",
+ "slab",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3061,6 +3143,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-core",
+ "h2",
  "http",
  "http-body",
  "httparse",
@@ -5755,6 +5838,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
+ "h2",
  "http",
  "http-body",
  "http-body-util",
@@ -7325,6 +7409,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "libc",
  "pin-project-lite",
  "tokio",
 ]
@@ -8821,6 +8906,23 @@ dependencies = [
  "libc",
  "quick-xml 0.30.0",
 ]
+
+[[package]]
+name = "xkbcommon"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a974f48060a14e95705c01f24ad9c3345022f4d97441b8a36beb7ed5c4a02d"
+dependencies = [
+ "libc",
+ "memmap2",
+ "xkeysym",
+]
+
+[[package]]
+name = "xkeysym"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 
 [[package]]
 name = "xml-rs"

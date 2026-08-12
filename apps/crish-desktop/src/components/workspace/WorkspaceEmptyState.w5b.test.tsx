@@ -3,11 +3,13 @@
  * WorkspaceEmptyState · W5-B Strict 产品默认入口（可挂 Strict 面板）
  *
  * 完成定义（产品向至少 1 条）：
- * - 空态可点 Strict → NotePaperStrictPanel（fixture hydrate）
- * - DOM 诚实：package-id=W5-B / track=strict / source=hydrate / hydrate-source=fixture
- * - 默认倾向 strict（W5B_PRODUCT_DEFAULT_EMPTY_TRACK）
+ * - 空态可点 Strict → NotePaperStrictPanel
+ * - 无 Tauri（vitest/jsdom）默认 hydrate-source=fixture（**≠ 伪装 tauri-ipc**）
+ * - 产品选型见 `createProductStrictHydrateTransport`（可检测 Tauri → tauri-ipc）
+ * - DOM 诚实：package-id=W5-B / track=strict / source=hydrate
+ * - 默认倾向 strict（W5B_PRODUCT_DEFAULT_EMPTY_TRACK）；Skeleton 双轨保留
  * - preferredNotePaperTrack 可切 skeleton 为主 CTA
- * - **可演示 ≠ EL**；**≠ 打开完成**；fixture ≠ DocSession IPC
+ * - **可演示 ≠ EL**；**≠ 打开完成**；fixture ≠ 生产权威；DocSession 全链未满
  *
  * Skeleton 入口/测见 WorkspaceEmptyState.w5bs.test.tsx（必须仍绿）。
  */
@@ -76,8 +78,9 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     expect(panel).toHaveAttribute('data-package-id', W5B_STRICT_PACKAGE_ID);
     expect(panel).toHaveAttribute('data-track', W5B_STRICT_TRACK);
     expect(panel).toHaveAttribute('data-source', 'hydrate');
-    // 诚实：空态默认 fixture，非伪装 tauri-ipc
+    // 诚实：vitest 无 Tauri → 产品默认回退 fixture，禁止伪装 tauri-ipc
     expect(panel).toHaveAttribute('data-hydrate-source', 'fixture');
+    expect(panel).not.toHaveAttribute('data-hydrate-source', 'tauri-ipc');
     expect(panel).toHaveAttribute('data-doc-id', 'strict-ws-strict-1');
     expect(panel).toHaveAttribute('data-block-count', '3');
     // 不得冒充 Skeleton
@@ -140,6 +143,49 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     expect(panel).toHaveAttribute('data-rev', '7');
     expect(panel).toHaveAttribute('data-block-count', '1');
     expect(screen.getByText('injected hydrate')).toBeInTheDocument();
+  });
+
+  it('w5b_product_empty_accepts_tauri_ipc_product_transport_when_injected', async () => {
+    // 模拟「可检测 Tauri」产品默认：source=tauri-ipc；≠ fixture 伪装
+    const { createMockNoteHydrateIpc } =
+      await import('../../api/noteHydrateIpc');
+    const { createProductStrictHydrateTransport } =
+      await import('../note-paper/hydrateProjection');
+    const ipc = createMockNoteHydrateIpc({
+      'strict-ws-ipc': {
+        rev: 3,
+        blocks: [
+          {
+            id: 'ipc-b1',
+            flavour: 'paragraph',
+            index: 0,
+            text: 'product tauri-ipc hydrate',
+          },
+        ],
+      },
+    });
+    const transport = createProductStrictHydrateTransport('strict-ws-ipc', {
+      isTauriRuntime: true,
+      hydrateIpc: ipc,
+    });
+
+    render(
+      <WorkspaceEmptyState wsId="ws-ipc" strictHydrateTransport={transport} />
+    );
+    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-hydrate-source', 'tauri-ipc');
+    expect(panel).not.toHaveAttribute('data-hydrate-source', 'fixture');
+    expect(panel).toHaveAttribute('data-package-id', W5B_STRICT_PACKAGE_ID);
+    expect(screen.getByText('product tauri-ipc hydrate')).toBeInTheDocument();
   });
 
   it('w5b_product_empty_preferred_skeleton_still_keeps_strict_entry', () => {

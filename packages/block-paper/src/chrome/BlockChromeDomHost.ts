@@ -30,6 +30,7 @@
 
 import type { BlockId } from '@crish/block-paper-contract';
 import type { BlockChromeModel, HandleVisibility } from './BlockChrome';
+import { groupSlashCatalogItems } from './slashSelectAndSubmit';
 import type { SlashMenuModel } from './SlashMenuModel';
 
 // ---------------------------------------------------------------------------
@@ -91,6 +92,13 @@ export type BlockChromeDomHostOptions = {
    */
   slash?: SlashMenuModel;
   /**
+   * 是否在 DomHost 内投影 catalog 子节点（group/item/empty）。
+   * 默认 `true`（W3-F DOM 契约）。
+   * 产品树若挂 **React** `SlashMenuOverlay` 可设 `false`，避免双浮层；
+   * 宿主仍同步 `data-slash-open` / 锚点属性。
+   */
+  projectSlashCatalog?: boolean;
+  /**
    * 多选框变更回调（宿主 ↔ model 同步后通知）。
    * **不**自动 submit delete；调用方负责 Intent → collab sink。
    */
@@ -136,6 +144,8 @@ export class BlockChromeDomHost {
   private readonly root: HTMLElement;
   private readonly chrome: BlockChromeModel;
   private readonly slash: SlashMenuModel | undefined;
+  /** 默认 true；React 浮层接管 catalog 时关投影防双层 */
+  private readonly projectSlashCatalog: boolean;
   private readonly onMultiSelectionChange:
     ((blockIds: readonly BlockId[]) => void) | undefined;
   private readonly rows = new Map<BlockId, HTMLElement>();
@@ -152,6 +162,7 @@ export class BlockChromeDomHost {
   constructor(parent: HTMLElement, options: BlockChromeDomHostOptions) {
     this.chrome = options.chrome;
     this.slash = options.slash;
+    this.projectSlashCatalog = options.projectSlashCatalog !== false;
     this.onMultiSelectionChange = options.onMultiSelectionChange;
 
     const doc = parent.ownerDocument;
@@ -522,9 +533,22 @@ export class BlockChromeDomHost {
   }
 
   private syncSlashHost(): void {
+    // React 浮层接管 catalog 时：DomHost 宿主恒 hidden，不占布局、不叠双层
+    if (!this.projectSlashCatalog) {
+      this.slashHost.hidden = true;
+      this.slashHost.setAttribute(BP_SLASH_OPEN, '0');
+      this.slashHost.setAttribute('data-slash-catalog', 'react');
+      this.slashHost.removeAttribute(BP_BLOCK_ID);
+      this.slashHost.removeAttribute('data-slash-query');
+      this.slashHost.removeAttribute('aria-activedescendant');
+      this.slashHost.replaceChildren();
+      return;
+    }
+
     const open = this.slash?.isOpen() === true;
     this.slashHost.hidden = !open;
     this.slashHost.setAttribute(BP_SLASH_OPEN, open ? '1' : '0');
+    this.slashHost.removeAttribute('data-slash-catalog');
 
     if (!open || !this.slash) {
       this.slashHost.removeAttribute(BP_BLOCK_ID);
@@ -577,19 +601,8 @@ export class BlockChromeDomHost {
       return;
     }
 
-    // 保序分组：相邻同 group 合并；不重排 catalog 顺序
-    type Item = (typeof items)[number];
-    type Seg = { group: string | undefined; items: Item[] };
-    const segs: Seg[] = [];
-    for (const it of items) {
-      const g = it.group;
-      const last = segs[segs.length - 1];
-      if (last && last.group === g) {
-        last.items.push(it);
-      } else {
-        segs.push({ group: g, items: [it] });
-      }
-    }
+    // 保序分组：与 React 浮层共用 groupSlashCatalogItems
+    const segs = groupSlashCatalogItems(items);
 
     let flatIndex = 0;
     let activeDomId: string | null = null;

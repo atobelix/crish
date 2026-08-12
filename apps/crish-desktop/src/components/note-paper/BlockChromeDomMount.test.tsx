@@ -278,13 +278,24 @@ describe('NotePaperStrictPanel · Strict chrome DomHost 挂载', () => {
       'code'
     );
 
-    // slash 宿主同步
+    // React slash 浮层：open 后可见 catalog；DomHost 宿主让位（projectSlashCatalog=false）
     act(() => {
       expect(slash.open('s1', 0).ok).toBe(true);
-      // Strict 内容行 hover 会 bump；此处直接 host.sync（slash 已 open）
       host!.sync();
     });
-    expect(host!.isSlashHostVisible()).toBe(true);
-    expect(host!.getSlashHostElement().getAttribute(BP_SLASH_OPEN)).toBe('1');
+    // DomHost 不再投影 catalog（防双浮层）；契约标记 react
+    expect(host!.isSlashHostVisible()).toBe(false);
+    expect(host!.getSlashHostElement().getAttribute('data-slash-catalog')).toBe(
+      'react'
+    );
+    // 产品可见层 = React SlashMenuOverlay
+    const reactSlash = await screen.findByTestId(
+      'note-paper-strict-slash-overlay'
+    );
+    expect(reactSlash).toHaveAttribute('data-slash-ui', 'react');
+    expect(reactSlash.getAttribute('data-block-id')).toBe('s1');
+    expect(
+      reactSlash.querySelectorAll('[data-bp-slash-item]').length
+    ).toBeGreaterThan(0);
   });
 });

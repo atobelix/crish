@@ -1,6 +1,8 @@
 /**
- * A-PERF 结构门：DOM 上界 / overscan 默认值（W6-C）
+ * A-PERF 结构门：DOM 上界 / overscan 默认值（**W6-C-S** / W3-A 结构）
  * 引用：perf-baseline.md · A-PERF-01 · A-MEM-01
+ *
+ * **≠ W6-C** 数值门；**≠ EL-03**。文档断言见 `perf-baseline.contract.test.ts`。
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -13,7 +15,7 @@ import {
 } from './bounds';
 import { queryViewport } from './ViewportQuery';
 
-describe('A-PERF structure bounds (W6-C)', () => {
+describe('A-PERF structure bounds (W6-C-S)', () => {
   it('DEFAULT_OVERSCAN_BLOCKS 落在 D5 建议区间 8～20', () => {
     expect(DEFAULT_OVERSCAN_BLOCKS).toBe(12);
     expect(DEFAULT_OVERSCAN_BLOCKS).toBeGreaterThanOrEqual(OVERSCAN_BLOCKS_MIN);
