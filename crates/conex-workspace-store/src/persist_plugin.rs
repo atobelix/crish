@@ -1,13 +1,18 @@
 //! `PersistencePlugin`：load / on_committed / flush + snapshot compact。
 //!
 //! SD-02：自 `lib.rs` 门面拆出权威落盘路径。
-//! **诚实**：**≠ EL-03**（恢复/打开产品叙事分属 W3 等）。
+//!
+//! # 模块内聚（**SD-21** · 黄带体积切开）
+//! - **本文件**：`PersistencePlugin for WorkspaceStore` / `SharedWorkspaceStore` / compact
+//! - [`tests`]（`persist_plugin_tests.rs`）：单元测外置
+//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::persist_plugin::*` / `lib` `pub use`）
+//!
+//! **诚实**：**≠ EL-04**（本包只切 persist 体积，不关 EL）；**≠ EL-03**（恢复/打开产品叙事分属 W3 等）。
+//! 不静默改 snapshot / updates 语义；**≠** 切 refs / os_watch。
 
-use crate::{SNAPSHOT_UPDATE_THRESHOLD, StoreError, WorkspaceStore};
-use conex_doc_collab::{
-    CommitBatch, EncodedUpdate, HydrateBlob, PersistError, PersistencePlugin,
-};
-use rusqlite::{Connection, OptionalExtension, params};
+use crate::{StoreError, WorkspaceStore, SNAPSHOT_UPDATE_THRESHOLD};
+use conex_doc_collab::{CommitBatch, EncodedUpdate, HydrateBlob, PersistError, PersistencePlugin};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -29,9 +34,7 @@ impl PersistencePlugin for WorkspaceStore {
 
         // 全部 pending 按 seq 升序
         let mut stmt = conn
-            .prepare(
-                "SELECT blob, kind FROM doc_updates WHERE doc_id=?1 ORDER BY seq ASC",
-            )
+            .prepare("SELECT blob, kind FROM doc_updates WHERE doc_id=?1 ORDER BY seq ASC")
             .map_err(|e| PersistError::Io(e.to_string()))?;
         let pending = stmt
             .query_map(params![doc_id], |r| {
@@ -189,9 +192,7 @@ pub(crate) fn compact_snapshot(conn: &Connection, doc_id: &str) -> Result<(), St
         )
         .optional()?;
 
-    let mut stmt = conn.prepare(
-        "SELECT blob FROM doc_updates WHERE doc_id=?1 ORDER BY seq ASC",
-    )?;
+    let mut stmt = conn.prepare("SELECT blob FROM doc_updates WHERE doc_id=?1 ORDER BY seq ASC")?;
     let chunks: Vec<Vec<u8>> = stmt
         .query_map(params![doc_id], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
@@ -218,10 +219,7 @@ pub(crate) fn compact_snapshot(conn: &Connection, doc_id: &str) -> Result<(), St
         params![doc_id, merged],
     )?;
 
-    conn.execute(
-        "DELETE FROM doc_updates WHERE doc_id=?1",
-        params![doc_id],
-    )?;
+    conn.execute("DELETE FROM doc_updates WHERE doc_id=?1", params![doc_id])?;
 
     Ok(())
 }
@@ -249,209 +247,5 @@ fn decode_encoded_update(blob: Vec<u8>, kind: &str) -> Result<EncodedUpdate, Per
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use conex_doc_collab::{Origin, TxId};
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    fn temp_db() -> (TempDir, PathBuf) {
-        let dir = TempDir::new();
-        let db = dir.path().join("workspace.db");
-        (dir, db)
-    }
-
-    struct TempDir(PathBuf);
-    impl TempDir {
-        fn new() -> Self {
-            let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-            let p = std::env::temp_dir().join(format!(
-                "conex-ws-pp-{}-{}-{}",
-                std::process::id(),
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos(),
-                n
-            ));
-            std::fs::create_dir_all(&p).unwrap();
-            Self(p)
-        }
-        fn path(&self) -> &std::path::Path {
-            &self.0
-        }
-    }
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-
-    fn make_update(bytes: Vec<u8>, kind: &str) -> EncodedUpdate {
-        serde_json::from_value(serde_json::json!({
-            "bytes": bytes,
-            "kind": kind,
-        }))
-        .expect("EncodedUpdate")
-    }
-
-    fn batch(updates: Vec<EncodedUpdate>, snapshot_tick: bool) -> CommitBatch {
-        CommitBatch {
-            tx_id: TxId::new(),
-            origin: Origin::User,
-            updates,
-            snapshot_tick,
-        }
-    }
-
-    #[test]
-    fn on_committed_pending_ordered_on_load() {
-        let (_dir, db) = temp_db();
-        let store = WorkspaceStore::open(&db).unwrap();
-
-        store
-            .on_committed(
-                "doc-a",
-                &batch(
-                    vec![
-                        make_update(vec![0x01], "structure"),
-                        make_update(vec![0x02, 0x03], "text"),
-                    ],
-                    false,
-                ),
-            )
-            .unwrap();
-        store
-            .on_committed(
-                "doc-a",
-                &batch(vec![make_update(vec![0x04], "combined")], false),
-            )
-            .unwrap();
-
-        assert_eq!(store.load_pending_count("doc-a").unwrap(), 3);
-        assert_eq!(store.load_rev("doc-a").unwrap(), 2);
-
-        let h = store.load_doc("doc-a").unwrap();
-        assert!(h.snapshot.is_none());
-        assert_eq!(h.pending.len(), 3);
-        assert_eq!(h.pending[0].bytes, vec![0x01]);
-        assert_eq!(h.pending[1].bytes, vec![0x02, 0x03]);
-        assert_eq!(h.pending[2].bytes, vec![0x04]);
-        // kind 经 serde 回环
-        let k0 = serde_json::to_value(&h.pending[0].kind).unwrap();
-        assert_eq!(k0, serde_json::json!("structure"));
-        let k1 = serde_json::to_value(&h.pending[1].kind).unwrap();
-        assert_eq!(k1, serde_json::json!("text"));
-    }
-
-    #[test]
-    fn snapshot_tick_compacts_and_clears_pending() {
-        let (_dir, db) = temp_db();
-        let store = WorkspaceStore::open(&db).unwrap();
-
-        store
-            .on_committed(
-                "doc-b",
-                &batch(vec![make_update(b"aaa".to_vec(), "combined")], false),
-            )
-            .unwrap();
-        store
-            .on_committed(
-                "doc-b",
-                &batch(vec![make_update(b"bbb".to_vec(), "combined")], false),
-            )
-            .unwrap();
-        assert_eq!(store.load_pending_count("doc-b").unwrap(), 2);
-
-        // snapshot_tick → 合并 + 裁剪
-        store
-            .on_committed("doc-b", &batch(vec![], true))
-            .unwrap();
-
-        assert_eq!(store.load_pending_count("doc-b").unwrap(), 0);
-        let h = store.load_doc("doc-b").unwrap();
-        assert!(h.pending.is_empty());
-        let snap = h.snapshot.expect("snapshot after tick");
-        // framing: [3][aaa][3][bbb]
-        assert_eq!(&snap[0..4], &3u32.to_le_bytes());
-        assert_eq!(&snap[4..7], b"aaa");
-        assert_eq!(&snap[7..11], &3u32.to_le_bytes());
-        assert_eq!(&snap[11..14], b"bbb");
-    }
-
-    #[test]
-    fn threshold_triggers_auto_snapshot() {
-        let (_dir, db) = temp_db();
-        let store = WorkspaceStore::open(&db).unwrap();
-
-        // 分批写入，最后一条使总数达到阈值
-        let batch_size = 25;
-        let rounds = SNAPSHOT_UPDATE_THRESHOLD / batch_size;
-        for r in 0..rounds {
-            let ups: Vec<_> = (0..batch_size)
-                .map(|i| {
-                    make_update(vec![(r * batch_size + i) as u8], "combined")
-                })
-                .collect();
-            store
-                .on_committed("doc-c", &batch(ups, false))
-                .unwrap();
-        }
-        // 恰好 100 → 自动 compact
-        assert_eq!(
-            store.load_pending_count("doc-c").unwrap(),
-            0,
-            "达到阈值后 pending 应被裁剪"
-        );
-        let h = store.load_doc("doc-c").unwrap();
-        assert!(h.snapshot.is_some());
-        assert!(h.pending.is_empty());
-    }
-
-    #[test]
-    fn flush_doc_and_flush_hint() {
-        let (_dir, db) = temp_db();
-        let store = WorkspaceStore::open(&db).unwrap();
-        store
-            .on_committed(
-                "doc-d",
-                &batch(vec![make_update(vec![9], "structure")], false),
-            )
-            .unwrap();
-        assert_eq!(store.load_pending_count("doc-d").unwrap(), 1);
-
-        store.flush_doc("doc-d").unwrap();
-        assert_eq!(store.load_pending_count("doc-d").unwrap(), 0);
-        assert!(store.load_doc("doc-d").unwrap().snapshot.is_some());
-
-        // 再写一条后 flush_hint
-        store
-            .on_committed(
-                "doc-d",
-                &batch(vec![make_update(vec![8], "text")], false),
-            )
-            .unwrap();
-        store.flush_hint("doc-d").unwrap();
-        assert_eq!(store.load_pending_count("doc-d").unwrap(), 0);
-    }
-
-    #[test]
-    fn open_migrate_and_commit_smoke() {
-        let (_dir, db) = temp_db();
-        let store = WorkspaceStore::open(&db).unwrap();
-        let batch = CommitBatch {
-            tx_id: TxId::new(),
-            origin: Origin::System,
-            updates: vec![make_update(vec![1, 2, 3], "combined")],
-            snapshot_tick: true,
-        };
-        store.on_committed("doc-a", &batch).unwrap();
-        let h = store.load_doc("doc-a").unwrap();
-        assert!(h.snapshot.is_some());
-        assert!(h.pending.is_empty());
-        assert!(store.load_rev("doc-a").unwrap() >= 1);
-    }
-}
+#[path = "persist_plugin_tests.rs"]
+mod tests;
