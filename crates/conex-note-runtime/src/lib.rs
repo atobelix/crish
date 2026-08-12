@@ -59,7 +59,7 @@ pub use hydrate_projection::{
     project_session_tree, projection_from_session, DocSessionHydrateBlock,
     DocSessionHydrateProjection, HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS,
 };
-pub use store_backend::StoreNoteBackend;
+pub use store_backend::{ApplyCollabOpsOutcome, StoreNoteBackend};
 
 // A-INV-02 / W2-E：产品 IPC 装配侧可直接用 store 镜像类型（detect / import 提案）
 pub use conex_workspace_store::{

@@ -4,12 +4,27 @@
  * 承载 hydrate 三态 UI + 内容宿主 A（react-rows）。
  * PaperList / chrome / slash 仍由面板编排（分槽契约）。
  *
+ * CONN-D3：content-row 正文经 `StrictContentRowLeaf` → mdPrefix 产品路径
+ *（有 sink 可写；无 → disabled 静态；≠ EL-01；UI 不读 pending 当 kind）。
+ *
  * ≠ EL-01；投影 ≠ 权威。
  */
 
 import React from 'react';
-import type { BlockChromeModel, HandleVisibility } from '@crish/block-paper';
+import type {
+  BlockChromeModel,
+  HandleVisibility,
+  TurnIntoIntent,
+  TurnIntoSink,
+} from '@crish/block-paper';
 import type { HydratedBlockProjection } from './hydrateProjection';
+import type {
+  ProductMdPrefixBinding,
+  ProductMdPrefixCommitResult,
+  ProductMdPrefixSinkSource,
+  ProductMdPrefixWriteMode,
+} from './noteMdPrefixBridge';
+import { StrictContentRowLeaf } from './StrictContentRowLeaf';
 import type { HydrateUiStatus } from './useNoteHydrate';
 import styles from './NotePaperPanel.module.css';
 
@@ -23,6 +38,13 @@ export type NotePaperStrictBodyProps = {
   chrome: BlockChromeModel;
   onHover: (blockId: string | null) => void;
   onFocus: (blockId: string | null) => void;
+  /** CONN-D3：MD 前缀写锥（无 → 叶 disabled 静态） */
+  turnIntoSink?: TurnIntoSink;
+  mdPrefixWriteMode?: ProductMdPrefixWriteMode;
+  mdPrefixSinkSource?: ProductMdPrefixSinkSource;
+  mdPrefixBinding?: ProductMdPrefixBinding;
+  onMdPrefixCommit?: (result: ProductMdPrefixCommitResult) => void;
+  onMdPrefixCommittedIntent?: (intent: TurnIntoIntent) => void;
   /** 内容宿主 B / chrome / slash 等兄弟槽（由面板传入） */
   children?: React.ReactNode;
 };
@@ -39,6 +61,12 @@ export const NotePaperStrictBody: React.FC<NotePaperStrictBodyProps> = ({
   chrome,
   onHover,
   onFocus,
+  turnIntoSink,
+  mdPrefixWriteMode,
+  mdPrefixSinkSource,
+  mdPrefixBinding,
+  onMdPrefixCommit,
+  onMdPrefixCommittedIntent,
   children,
 }) => {
   return (
@@ -78,6 +106,7 @@ export const NotePaperStrictBody: React.FC<NotePaperStrictBodyProps> = ({
         {/*
           内容宿主 A：React 全量 content-row。
           仅 react-rows / debug-dual；与 paper-list 产品路径互斥（SD-04）。
+          CONN-D3：正文叶 → mdPrefix 桥（非静态 text）。
         */}
         {status === 'ready' && renderReactRows
           ? blocks.map((block) => {
@@ -117,7 +146,17 @@ export const NotePaperStrictBody: React.FC<NotePaperStrictBodyProps> = ({
                       {block.flavour}
                       {level !== undefined ? ` h${level}` : ''}
                     </span>
-                    <div className={styles.text}>{block.text ?? ''}</div>
+                    <StrictContentRowLeaf
+                      blockId={block.id}
+                      flavour={block.flavour}
+                      text={block.text ?? ''}
+                      turnIntoSink={turnIntoSink}
+                      mdPrefixWriteMode={mdPrefixWriteMode}
+                      mdPrefixSinkSource={mdPrefixSinkSource}
+                      mdPrefixBinding={mdPrefixBinding}
+                      onMdPrefixCommit={onMdPrefixCommit}
+                      onCommittedIntent={onMdPrefixCommittedIntent}
+                    />
                   </div>
                 </div>
               );

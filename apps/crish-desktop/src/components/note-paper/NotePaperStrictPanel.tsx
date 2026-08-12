@@ -15,7 +15,8 @@
  * - **可演示 ≠ EL-01 / EL-08**；**≠ 打开完成（G-HYD）**；禁止 import 行级 EditorStore
  * - **CONN-A1**：可选 `data-hydrate-path`；path ≠ 打开完成 / ≠ EL-01/04/08
  * - **CONN-B**：无 sink → 只读 catalog；**CONN-B2** `/` / openSlash 打开
- * - **CONN-D2**：`turnIntoSink` 经 `noteMdPrefixBridge`；provisional ≠ kind UI
+ * - **CONN-D2/D3**：`turnIntoSink` 经 `noteMdPrefixBridge`；content-row 叶 → 产品路径；
+ *   provisional ≠ kind UI；**≠ A-BLK-08/09 全 e2e / ≠ EL-01**
  * - 要求注入 `hydrateTransport`；**≠** PaperList/W3-P/A-BLK e2e 满关
  *
  * ## SD-04-R 装配拆分
@@ -40,6 +41,7 @@ import {
 import '@crish/block-paper/chrome.css';
 /** W3-G PaperList 挂载皮；≠ EL-01 */
 import '@crish/block-paper/paper-list.css';
+import { createProductBlockSelection } from './blockSelectionProduct';
 import { NotePaperStrictBody } from './NotePaperStrictBody';
 import { NotePaperStrictChromeSlot } from './NotePaperStrictChromeSlot';
 import { NotePaperStrictHeader } from './NotePaperStrictHeader';
@@ -83,6 +85,8 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   hydrateTransport,
   refreshToken = 0,
   chrome: chromeProp,
+  blockSelection: blockSelectionProp,
+  onBlockSelectionReady,
   slashMenu: slashMenuProp,
   slashIntentSink,
   slashWriteMode: slashWriteModeProp,
@@ -90,6 +94,9 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   turnIntoSink,
   mdPrefixWriteMode: mdPrefixWriteModeProp,
   mdPrefixSinkSource: mdPrefixSinkSourceProp,
+  mdPrefixBinding,
+  onMdPrefixCommit,
+  onMdPrefixCommittedIntent,
   showOpenSlashButton = true,
   onSlashOpenResult,
   onSlashIntent,
@@ -126,6 +133,14 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     () => chromeProp ?? new BlockChromeModel(),
     [chromeProp]
   );
+  /**
+   * W3-E-desk：默认 / 注入 BlockSelectionBridge（统一 multi + focus 写入口）。
+   * focus 经 bridge → chrome.focusedBlockId，CONN-C pin 不回退。
+   */
+  const blockSelection = useMemo(
+    () => blockSelectionProp ?? createProductBlockSelection(chrome),
+    [blockSelectionProp, chrome]
+  );
   const slashMenu = useMemo(
     () => slashMenuProp ?? new SlashMenuModel(),
     [slashMenuProp]
@@ -137,12 +152,13 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       slashWriteMode: slashWriteModeProp,
       slashSinkSource: slashSinkSourceProp,
     });
-  /** CONN-D2：无 turnIntoSink 默认 disabled；有则 writable */
+  /** CONN-D2/D3：无 turnIntoSink/binding 默认 disabled；有则 writable */
+  const effectiveTurnIntoSink = mdPrefixBinding?.sink ?? turnIntoSink;
   const { writeMode: mdPrefixWriteMode, sinkSource: mdPrefixSinkSource } =
     resolveStrictMdPrefixBinding({
-      turnIntoSink,
-      mdPrefixWriteMode: mdPrefixWriteModeProp,
-      mdPrefixSinkSource: mdPrefixSinkSourceProp,
+      turnIntoSink: effectiveTurnIntoSink,
+      mdPrefixWriteMode: mdPrefixWriteModeProp ?? mdPrefixBinding?.mode,
+      mdPrefixSinkSource: mdPrefixSinkSourceProp ?? mdPrefixBinding?.source,
     });
   const slashOpen = useSyncExternalStore(
     (onStoreChange) => slashMenu.subscribe(onStoreChange),
@@ -171,6 +187,13 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   // 使外部 chrome.setFocused + rerender（CONN-C 测）也能驱动 PaperList pin
   void chromeTick;
   const snapshot = chrome.getSnapshot();
+  // 选区桥快照（data-sel-*）；外写 chrome 后 sync 对齐端点
+  const selSnapshot = blockSelection.getSnapshot();
+
+  // hydrate 块序 → bridge range 展开
+  useEffect(() => {
+    blockSelection.setBlockOrder(blocks.map((b) => b.id));
+  }, [blockSelection, blocks]);
 
   const handleHover = useCallback(
     (blockId: string | null) => {
@@ -179,12 +202,13 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     },
     [chrome, bump]
   );
+  /** 焦点经 bridge：multi 外默认清 multi；仍投影 chrome.focusedBlockId（CONN-C） */
   const handleFocus = useCallback(
     (blockId: string | null) => {
-      chrome.setFocused(blockId);
+      blockSelection.setFocused(blockId);
       bump();
     },
-    [chrome, bump]
+    [blockSelection, bump]
   );
 
   /** CONN-C：chrome focus → PaperList pin；≠ W3-P / ≠ EL-01 */
@@ -270,7 +294,8 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       data-slash-open-path="product"
       data-md-prefix-write-mode={mdPrefixWriteMode}
       data-md-prefix-sink-source={mdPrefixSinkSource}
-      data-md-prefix-sink={turnIntoSink ? '1' : '0'}
+      data-md-prefix-sink={effectiveTurnIntoSink ? '1' : '0'}
+      data-md-prefix-leaf-path="product"
       data-source="hydrate"
       data-hydrate-source={hydrateSource}
       data-hydrate-status={status}
@@ -284,6 +309,12 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
             undefined
           : undefined
       }
+      data-sel-bridge="1"
+      data-sel-mode={selSnapshot.mode}
+      data-sel-multi={selSnapshot.multiSelectedIds.join(',')}
+      data-sel-focus={selSnapshot.focusedBlockId ?? ''}
+      data-sel-anchor={selSnapshot.anchorBlockId ?? ''}
+      data-sel-head={selSnapshot.headBlockId ?? ''}
       role="region"
       aria-label={title}
       aria-busy={status === 'loading' ? true : undefined}
@@ -309,6 +340,12 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
         chrome={chrome}
         onHover={handleHover}
         onFocus={handleFocus}
+        turnIntoSink={effectiveTurnIntoSink}
+        mdPrefixWriteMode={mdPrefixWriteMode}
+        mdPrefixSinkSource={mdPrefixSinkSource}
+        mdPrefixBinding={mdPrefixBinding}
+        onMdPrefixCommit={onMdPrefixCommit}
+        onMdPrefixCommittedIntent={onMdPrefixCommittedIntent}
       >
         <NotePaperStrictChromeSlot
           status={status}
@@ -323,6 +360,8 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           paperListDefaultEstimatePx={paperListConfig.defaultEstimatePx}
           onPaperListReady={onPaperListReady}
           chrome={chrome}
+          blockSelection={blockSelection}
+          onBlockSelectionReady={onBlockSelectionReady}
           slashMenu={slashMenu}
           slashIntentSink={slashIntentSink}
           slashWriteMode={slashWriteMode}

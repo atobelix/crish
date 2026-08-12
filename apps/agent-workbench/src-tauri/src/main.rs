@@ -39,6 +39,10 @@ mod browser_commands;
 mod browser_import_sinks;
 mod catalog_commands;
 mod command_manifest;
+// 电脑操作会话槽（06 遗留⑨：ComputerSlot 命令面托管 + 工具装配接线面，
+// 接线点登记见 computer/mod.rs 模块头）
+mod computer;
+mod computer_commands;
 mod commands;
 mod config;
 mod core_commands;
@@ -264,6 +268,12 @@ command_registry![
     ("browser_import_history", browser_commands::browser_import_history),
     ("browser_list_bookmarks", browser_commands::browser_list_bookmarks),
     ("browser_list_history", browser_commands::browser_list_history),
+    // ── 电脑操作会话命令（06 遗留⑨：会话开关 + 急停 + 状态；代理到
+    //    ComputerSlot，状态事件 computer://state-changed）──
+    ("computer_session_enable", computer_commands::computer_session_enable),
+    ("computer_session_disable", computer_commands::computer_session_disable),
+    ("computer_estop", computer_commands::computer_estop),
+    ("computer_status", computer_commands::computer_status),
     // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     ("note_document_apply_md", note_commands::note_document_apply_md),
     ("note_query_blocks", note_commands::note_query_blocks),
@@ -272,6 +282,8 @@ command_registry![
     // A-INV-02 / W2-E 产品 IPC：detect + import 提案（不 apply；X-05；≠ EL-03）
     ("note_detect_mirror_drift", note_commands::note_detect_mirror_drift),
     ("note_import_mirror_proposal", note_commands::note_import_mirror_proposal),
+    // CONN-B3：collab wire JSON → DocSession::apply（产品 slash 写锥 IPC）
+    ("note_apply_ops", note_commands::note_apply_ops),
     // ── D4a 命令面：子代理显式恢复与关闭（D4 §3.1/§3.2/§3.5）。
     //    Tauri 宏约束：命令函数须以模块限定路径注册（裸标识符路径触发
     //    generate_handler! 的 `__cmd__<name>` 宏命名冲突），故命令壳定义
@@ -627,7 +639,9 @@ fn main() {
             let browser_emitter_handle = app_handle.clone();
             let bridge = EventBridge::new(
                 "workbench-run-event",
-                Arc::new(TauriEmitter::new(app_handle)),
+                // clone 供桥持有：原 app_handle 继续供后续装配（⑧e
+                // ComputerSlot 发射器接线）取用，避免移动后借用
+                Arc::new(TauriEmitter::new(app_handle.clone())),
             );
 
             // 快照存储（B4.3：主文件 + .prev 备份双文件模型）
@@ -679,6 +693,24 @@ fn main() {
             core_state.engine().browser_slot().attach_emitter(Arc::new(
                 TauriEmitter::new(browser_emitter_handle),
             ));
+
+            // ⑧e 06 遗留⑨：电脑操作会话槽装配——进程级单例托管
+            // （ComputerSlot：session_meta `computer_use_enabled` 惰性恢复 +
+            // 互斥门/审批门/急停旗；命令面 computer_session_* 消费）。
+            // 事件发射器接线：`computer://state-changed` 状态迁移 → 前端面板
+            // （挂接幂等；启动前即挂订阅，enable/disable/estop 不丢事件）。
+            // 引擎侧工具注册装配（register_computer_tools 后置注册 + 守卫
+            // 注入）为接线点（engine.rs 并行在途，见 computer/mod.rs 模块头
+            // 接线点①②：engine 增 computer_slot 字段/装配/访问器后，本托管
+            // 改为 `core_state.engine().computer_slot()` 取用同一实例——
+            // 命令访问面（State<Arc<ComputerSlot>>）不变）
+            {
+                let computer_slot = Arc::new(computer::ComputerSlot::new(Arc::new(
+                    computer::LocalDbComputerMetaStore::new(shared_db.local_db()),
+                )));
+                app.manage(Arc::clone(&computer_slot));
+                computer_slot.attach_emitter(Arc::new(TauriEmitter::new(app_handle.clone())));
+            }
 
             // ⑧b+ 30 方案 P2/P3 装配：后台任务事件面接线（生产发射链）——
             // ① 任务事件消费器注入（先于 set_event_bridge：EventBridgeSink

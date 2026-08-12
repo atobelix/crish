@@ -198,6 +198,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // A-INV-02 / W2-E：mirror detect + import 提案（不 apply；X-05；≠ EL-03）
     entry('note_detect_mirror_drift', 'note', 'engine'),
     entry('note_import_mirror_proposal', 'note', 'engine'),
+    // CONN-B3：collab wire → DocSession::apply（产品 slash 写锥；≠ EL-01）
+    entry('note_apply_ops', 'note', 'engine'),
     // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；与 Rust
     //    command_manifest.rs 同步）──
     entry('resume_subagent', 'core', 'engine'),

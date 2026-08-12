@@ -5,7 +5,8 @@
 //! - [`migrate`]：schema 迁移 / `ensure_*`
 //! - [`fts`]：blocks 投影 + FTS5 search/rebuild/CJK / reindex
 //! - [`persist_plugin`]：`PersistencePlugin` load/on_committed/flush + compact
-//! - [`mirror`] / [`mirror_os_watch`]：MD mirror 导出水位之上的 detect/三路/watcher（**不回退**）
+//! - [`mirror`]（薄门面）+ `mirror_detect` / `mirror_import` / `mirror_poll` / [`mirror_os_watch`]：
+//!   MD mirror detect/三路/轮询/OS watcher（**不回退**；SD-10 内聚）
 //! - 本文件：`WorkspaceStore` 薄门面（open/meta/clock/export 地基）+ `pub use`
 //!
 //! # S1 落盘五条
@@ -93,6 +94,9 @@
 mod cas;
 mod fts;
 mod migrate;
+mod mirror_detect;
+mod mirror_import;
+mod mirror_poll;
 mod mirror;
 mod mirror_os_watch;
 mod persist_plugin;
@@ -175,7 +179,7 @@ impl From<StoreError> for PersistError {
 /// - 本文件：open / meta / clock / flush / MD mirror 导出地基
 /// - [`fts`]：reindex / search / rebuild
 /// - [`persist_plugin`]：`PersistencePlugin` + [`SharedWorkspaceStore`]
-/// - [`mirror`]：detect / import 提案 / poll watcher
+/// - [`mirror`]：detect / import 提案 / poll watcher（SD-10：`mirror_detect` / `mirror_import` / `mirror_poll`）
 /// - [`cas`] / [`query_blocks`] / [`refs`] / [`projection`]：各域扩展
 pub struct WorkspaceStore {
     path: PathBuf,

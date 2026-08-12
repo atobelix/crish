@@ -110,23 +110,30 @@
 9. **镜像漂移 detect / 三路 import（CONN-E · A-INV-02 产品 IPC）**：
    - wire：`note_detect_mirror_drift` / `note_import_mirror_proposal`
    - 前端：`api/noteMirrorIpc.ts`（mock / Tauri）+ `mirrorThreeWayBridge.ts`
-   - **空态默认不展示** StatusBar；接 report 的两种方式：
-     1. **注入**：`mirrorDriftReport={makeMirrorDriftReportView({...})}`（单测 / 演示）
-     2. **detect 后注入**：
+   - **空态默认不展示** StatusBar（CONN-E2 opt-in）；接 report 的方式：
+     1. **EmptyState opt-in**（产品空态推荐）：
+        ```tsx
+        <WorkspaceEmptyState
+          wsId={wsId}
+          showMirrorDriftBar // 无 report 时 idle「未检测」，不造假
+          mirrorDriftReport={report} // 或省略；有值自动挂条
+          mirrorWatchSource="injected"
+          mirrorUnpushedOpCount={unpushed}
+          mirrorIpc={ipc} // 自动 createMirrorThreeWayOnAction
+          // 或 onMirrorThreeWay={fn} 优先于 mirrorIpc
+        />
+        ```
+     2. **Strict 直接注入**：`mirrorDriftReport` / `showMirrorDriftBar` / `onMirrorThreeWay`
+     3. **detect 后注入**：
         ```tsx
         const ipc = createTauriNoteMirrorIpc(); // 或 createMockNoteMirrorIpc
         const det = await ipc.detectMirrorDrift({ docId });
         if (det.ok) setReport(detectSuccessToReportView(det));
-        // Strict：
-        <NotePaperStrictPanel
-          docId={docId}
+        <WorkspaceEmptyState
+          wsId={wsId}
           mirrorDriftReport={report}
+          mirrorIpc={ipc}
           mirrorUnpushedOpCount={unpushed}
-          onMirrorThreeWay={createMirrorThreeWayOnAction({
-            docId,
-            unpushedOpCount: unpushed,
-            ipc,
-          })}
         />;
         ```
    - **X-05**：StatusBar 在 unpushed>0 时须勾选「显式丢弃」才映射 `drop_unacked`；
@@ -137,7 +144,7 @@
 
 - Skeleton：`NotePaperPanel.test.tsx` / `w5bSkeleton.test.ts` / `WorkspaceEmptyState.w5bs.test.tsx`
 - Strict：`NotePaperStrictPanel.test.tsx` / `hydrateProjection.test.ts` / `w5bStrict.test.ts`（`w5b_strict_*`）
-- **产品入口**：`WorkspaceEmptyState.w5b.test.tsx`（`w5b_product_empty_*`）
+- **产品入口**：`WorkspaceEmptyState.w5b.test.tsx`（`w5b_product_empty_*` / `conn_e2_*`）
 - **hydrate IPC**：`noteHydrateIpc.test.ts`（`note_hydrate_ipc_*`）
 - **mirror IPC / 三路桥**：`noteMirrorIpc.test.ts` / `mirrorThreeWayBridge.test.tsx` / `MirrorDriftStatusBar.test.tsx`
 - 边界：`note-paper.boundary.test.ts`（禁 EditorStore；两轨共用）

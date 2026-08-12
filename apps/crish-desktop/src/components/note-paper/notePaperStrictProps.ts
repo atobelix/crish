@@ -6,6 +6,7 @@
 import type {
   BlockChromeDomHost,
   BlockChromeModel,
+  BlockSelectionBridge,
   IntentSink,
   PaperList,
   PaperListScrollState,
@@ -13,11 +14,14 @@ import type {
   SlashInsertIntent,
   SlashMenuModel,
   SlashOpenResult,
+  TurnIntoIntent,
   TurnIntoSink,
 } from '@crish/block-paper';
 import type { SlashOverlayWriteMode } from './SlashMenuOverlay';
 import type { NoteHydrateTransport } from './hydrateProjection';
 import type {
+  ProductMdPrefixBinding,
+  ProductMdPrefixCommitResult,
   ProductMdPrefixSinkSource,
   ProductMdPrefixWriteMode,
 } from './noteMdPrefixBridge';
@@ -64,6 +68,17 @@ export type NotePaperStrictPanelProps = {
   hydrateTransport: NoteHydrateTransport;
   refreshToken?: number | string;
   chrome?: BlockChromeModel;
+  /**
+   * W3-E-desk：跨块 multi / focus 统一写入口（`BlockSelectionBridge`）。
+   * 省略 → 面板默认 `createProductBlockSelection(chrome)` + hydrate 块序。
+   * 注入时与 chrome 须同一实例投影。**≠ EL-01**；**≠** Notion 框选 e2e。
+   */
+  blockSelection?: BlockSelectionBridge;
+  /**
+   * 选区桥就绪回调（测可观测 setMulti/clear/focus）。
+   * 与 DomMount `onSelectionReady` 同源；0 块 / 卸载时可为 null。
+   */
+  onBlockSelectionReady?: (selection: BlockSelectionBridge | null) => void;
   slashMenu?: SlashMenuModel;
   /**
    * slash 选中后的 Intent sink。
@@ -80,8 +95,8 @@ export type NotePaperStrictPanelProps = {
    */
   slashSinkSource?: ProductSlashSinkSource;
   /**
-   * CONN-D2：MD 前缀 / turn_into 的 TurnInto sink。
-   * 注入 → 可写；未注 → disabled（`data-md-prefix-write-mode`）。
+   * CONN-D2/D3：MD 前缀 / turn_into 的 TurnInto sink。
+   * 注入 → content-row 叶可写；未注 → disabled 静态（`data-md-prefix-write-mode`）。
    * 叶/HiddenInput 经 `commitProductMdPrefixFromLeaf` 提交；**≠ EL-01**。
    */
   turnIntoSink?: TurnIntoSink;
@@ -93,6 +108,17 @@ export type NotePaperStrictPanelProps = {
    * MD 前缀能力来源诚实标注（`data-md-prefix-sink-source`）。
    */
   mdPrefixSinkSource?: ProductMdPrefixSinkSource;
+  /**
+   * CONN-D3：完整产品 binding（优先于 turnIntoSink 拼装；含 collab.wireCalls）。
+   * 测可注入 `createProductMdPrefixBinding({ applyOps })` 断言 pending 形状。
+   */
+  mdPrefixBinding?: ProductMdPrefixBinding;
+  /**
+   * CONN-D3：叶提交结果（含 disabled/composing 拒绝）；**≠** 旁路写盘。
+   */
+  onMdPrefixCommit?: (result: ProductMdPrefixCommitResult) => void;
+  /** CONN-D3：仅成功 Intent；UI 不得据此把 pending 当 kind */
+  onMdPrefixCommittedIntent?: (intent: TurnIntoIntent) => void;
   /**
    * 是否展示「打开斜杠菜单」产品入口（默认 true）。
    * 锚定首块 / 占位锚点 → `openProductSlash`；面板内 **`/`** 键同路径（CONN-B2）。

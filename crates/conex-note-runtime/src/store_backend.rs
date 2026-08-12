@@ -40,7 +40,8 @@ use crate::store_plan_ops::plan_block_ops_to_collab;
 /// 真实笔记后端：SharedWorkspaceStore + 进程内 DocSession 表 + intent 幂等。
 ///
 /// # 不变量
-/// - 写路径仅 `apply_md_fragment` / [`Self::apply_block_ops`] → Ops → `commit_ops`
+/// - 写路径仅 `apply_md_fragment` / [`Self::apply_block_ops`] /
+///   [`Self::apply_collab_ops_json`]（CONN-B3 collab wire）→ Ops → `commit_ops`
 ///   （权威 updates + 投影索引）；**禁止** fs.write 当权威
 /// - 读路径即时投影 / session 树 / `document_to_md`；**不**读 MD mirror 文件
 /// - 同 `intent_id` 二次调用返回首次结果（`idempotent=true`, `inserted=0`）
@@ -265,6 +266,67 @@ impl StoreNoteBackend {
             Some(id) => self.batch_tokens.validate(id),
         }
     }
+
+    /// CONN-B3：collab wire JSON → 真 `DocSession::apply`（经 `commit_ops`）。
+    ///
+    /// 对齐 TS `createCollabApplySink` / `ApplyOpsAdapter`：
+    /// `ops_json` 为 collab Op 数组（`ops_from_json` / `collabOpsToJson` 形状）。
+    ///
+    /// `origin`：`user` | `agent` | `remote` | `system`；缺省 / 未知 → User。
+    ///
+    /// # 诚实边界
+    /// - 桌面 IPC 入口见 workbench `note_apply_ops`
+    /// - **≠ EL-01**；本路径可测 **≠** A-BLK 全表 e2e / 打开完成
+    pub fn apply_collab_ops_json(
+        &self,
+        doc_id: &str,
+        ops_json: &str,
+        origin: Option<&str>,
+    ) -> Result<ApplyCollabOpsOutcome, NoteBackendError> {
+        let doc_id = doc_id.trim();
+        if doc_id.is_empty() {
+            return Err(NoteBackendError::Invalid(
+                "doc_id must be non-empty".into(),
+            ));
+        }
+        if ops_json.trim().is_empty() {
+            return Err(NoteBackendError::Invalid(
+                "ops_json must be non-empty".into(),
+            ));
+        }
+        let ops = conex_doc_collab::ops_from_json_str(ops_json).map_err(|e| {
+            NoteBackendError::Invalid(format!("ops_json parse: {e}"))
+        })?;
+        let origin = origin_from_str(origin);
+        let mut sessions = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        ensure_session(&mut sessions, &self.store, doc_id)?;
+        let session = sessions
+            .get_mut(doc_id)
+            .expect("ensure_session just inserted or existing");
+        if ops.is_empty() {
+            return Ok(ApplyCollabOpsOutcome {
+                rev: session.rev(),
+                applied: 0,
+            });
+        }
+        commit_ops(session, &self.store, origin, &ops).map_err(map_commit_err)?;
+        Ok(ApplyCollabOpsOutcome {
+            rev: session.rev(),
+            applied: ops.len() as u32,
+        })
+    }
+}
+
+/// `apply_collab_ops_json` 成功结果（IPC / 测断言）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ApplyCollabOpsOutcome {
+    /// apply 后会话 rev
+    pub rev: u64,
+    /// 本批 ops 条数
+    pub applied: u32,
 }
 
 // ── 跨模块错误 / Origin 映射（pub(crate)）──────────────────────────

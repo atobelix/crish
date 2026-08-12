@@ -1,5 +1,5 @@
 //! Round7+ · Tauri 笔记命令面（前端 `noteApi.ts` / `noteHydrateIpc.ts` /
-//! `noteMirrorIpc.ts` IPC）
+//! `noteMirrorIpc.ts` / `noteApplyOpsIpc.ts` IPC）
 //!
 //! 命令名（wire = 函数名）：
 //! - `note_document_apply_md`
@@ -8,17 +8,20 @@
 //! - `note_document_hydrate`（打开/加载投影 · 默认真 DocSession 路径）
 //! - `note_detect_mirror_drift`（A-INV-02 / W2-E · detect 可达前端）
 //! - `note_import_mirror_proposal`（三路策略提案；**不** apply；X-05）
+//! - `note_apply_ops`（CONN-B3 · collab wire JSON → DocSession::apply）
 //!
 //! 入参/出参 snake_case 线格式，对齐 `apps/crish-desktop/src/api/noteApi.ts`、
-//! `noteHydrateIpc.ts` / `noteMirrorIpc.ts` 与 `agent_tools::note_backend` 契约。
+//! `noteHydrateIpc.ts` / `noteMirrorIpc.ts` / `noteApplyOpsIpc.ts` 与
+//! `agent_tools::note_backend` 契约。
 //!
 //! 成功/业务失败均以 `{ ok: true|false, ... }` JSON 返回（Ok 包装），
 //! 便于前端 `parseApplyOutcome` / `parseQueryOutcome` / `parseHydrateIpcOutcome` /
-//! `parseDetectMirrorOutcome` / `parseImportMirrorOutcome`；
+//! `parseDetectMirrorOutcome` / `parseImportMirrorOutcome` / `parseApplyOpsIpcOutcome`；
 //! 仅 IPC 级故障走 `CoreError` reject。
 //!
 //! 纪律：
-//! - 写路径仅 `apply_md_fragment` / send_to_note（intent 幂等）
+//! - 写路径：`apply_md_fragment` / send_to_note（intent 幂等）/
+//!   **`note_apply_ops`**（collab wire → `DocSession::apply`）
 //! - **不**静默流式写笔记
 //! - 读路径走 store 投影；**不**默认读 MD mirror
 //! - **hydrate 分轨**（禁止撒谎）：
@@ -119,6 +122,22 @@ pub struct NoteImportMirrorArgs {
     /// 是否用 DocSession 权威树做块级 diff（默认 true）
     #[serde(default)]
     pub use_session_tree: Option<bool>,
+}
+
+/// CONN-B3 · collab wire apply 入参（对齐前端 `NoteApplyOpsRequest`）。
+///
+/// `ops_json` = TS `createCollabApplySink` 产出的 collab Op 数组 JSON 字符串。
+#[derive(Debug, Clone, Deserialize)]
+pub struct NoteApplyOpsArgs {
+    pub doc_id: String,
+    /// collab Op 数组 JSON（`ops_from_json` 形状）
+    pub ops_json: String,
+    /// 幂等 / 审计键（可选；前端 ApplyOpsAdapter meta.intentId）
+    #[serde(default)]
+    pub intent_id: Option<String>,
+    /// `user` | `agent` | `remote` | `system`；默认 user
+    #[serde(default)]
+    pub origin: Option<String>,
 }
 
 /// MirrorDriftClass → wire snake_case（对齐前端 `MirrorDriftClass`）。
@@ -436,6 +455,64 @@ pub async fn note_import_mirror_proposal(
     }
 }
 
+/// collab wire JSON → 真 `DocSession::apply`（CONN-B3 产品写锥 IPC）。
+///
+/// wire 名 = `note_apply_ops`（前端 `NOTE_CMD_APPLY_OPS`）。
+///
+/// # 形状
+/// - 入参：`doc_id` + `ops_json`（collab Op 数组字符串，对齐
+///   TS `createCollabApplySink` / `collabOpsToJson`）
+/// - 成功：`{ ok:true, doc_id, rev, applied, source:'tauri-ipc', intent_id? }`
+/// - 失败：`{ ok:false, code, reason }`（解析失败 / apply 拒 / unwired）
+///
+/// # 诚实边界
+/// - **≠ EL-01**；**≠ A-BLK 全表 e2e**；命令可测 **≠** 打开完成
+/// - 无 NoteRuntime → `note.unwired`（结构化失败，不抛）
+#[tauri::command]
+pub async fn note_apply_ops(req: NoteApplyOpsArgs) -> Result<JsonValue, CoreError> {
+    let doc_id = req.doc_id.trim().to_string();
+    if doc_id.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "doc_id must be non-empty",
+        }));
+    }
+    if req.ops_json.trim().is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "ops_json must be non-empty",
+        }));
+    }
+    let Some(store) = note_runtime::try_store_backend() else {
+        return Ok(unwired_failure());
+    };
+    match store.apply_collab_ops_json(&doc_id, &req.ops_json, req.origin.as_deref()) {
+        Ok(out) => {
+            let mut body = json!({
+                "ok": true,
+                "doc_id": doc_id,
+                "rev": out.rev,
+                "applied": out.applied,
+                "source": "tauri-ipc",
+            });
+            if let Some(intent) = req
+                .intent_id
+                .as_ref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
+                if let Some(obj) = body.as_object_mut() {
+                    obj.insert("intent_id".into(), json!(intent));
+                }
+            }
+            Ok(body)
+        }
+        Err(e) => Ok(err_outcome(e)),
+    }
+}
+
 /// query_blocks → hydrate 投影形状（派生索引；`hydrate_path=query-blocks`）。
 ///
 /// **不是** DocSession 权威主路径；仅对照 / 回归；禁止叙事为 full hydrate。
@@ -600,6 +677,64 @@ mod tests {
         .unwrap();
         assert_eq!(out["ok"], false);
         assert_eq!(out["code"], "note.invalid");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// CONN-B3：collab wire insert → note_apply_ops → rev/applied 可观测。
+    ///
+    /// **≠ EL-01**；本命令可测 **≠** A-BLK 全表 e2e。
+    #[tokio::test]
+    async fn note_apply_ops_collab_wire_insert() {
+        let (_guard, dir) = temp_install();
+        let id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        let ops_json = format!(
+            r#"[{{
+              "op": "insert",
+              "id": "{id}",
+              "parent": null,
+              "order": "a0",
+              "kind": "paragraph",
+              "props": {{ "attrs": {{}} }}
+            }}]"#
+        );
+        let out = note_apply_ops(NoteApplyOpsArgs {
+            doc_id: "apply-ops-doc".into(),
+            ops_json,
+            intent_id: Some("conn-b3-1".into()),
+            origin: Some("user".into()),
+        })
+        .await
+        .unwrap();
+        assert_eq!(out["ok"], true, "apply_ops must succeed: {out}");
+        assert_eq!(out["source"], "tauri-ipc");
+        assert_eq!(out["doc_id"], "apply-ops-doc");
+        assert_eq!(out["applied"], 1);
+        assert!(out["rev"].as_u64().unwrap_or(0) >= 1);
+        assert_eq!(out["intent_id"], "conn-b3-1");
+
+        // 空 doc_id / 空 ops → invalid
+        let bad = note_apply_ops(NoteApplyOpsArgs {
+            doc_id: "  ".into(),
+            ops_json: "[]".into(),
+            intent_id: None,
+            origin: None,
+        })
+        .await
+        .unwrap();
+        assert_eq!(bad["ok"], false);
+        assert_eq!(bad["code"], "note.invalid");
+
+        let bad_ops = note_apply_ops(NoteApplyOpsArgs {
+            doc_id: "apply-ops-doc".into(),
+            ops_json: "  ".into(),
+            intent_id: None,
+            origin: None,
+        })
+        .await
+        .unwrap();
+        assert_eq!(bad_ops["ok"], false);
+        assert_eq!(bad_ops["code"], "note.invalid");
+
         let _ = std::fs::remove_dir_all(dir);
     }
 

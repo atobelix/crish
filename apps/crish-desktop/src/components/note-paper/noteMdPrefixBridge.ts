@@ -1,12 +1,18 @@
 /**
- * 产品 Strict MD 前缀叶输入接线（CONN-D2 · 桌面 mdPrefix 写锥）
+ * 产品 Strict MD 前缀叶输入接线（CONN-D2/D3 · 桌面 mdPrefix 写锥）
  *
  * ## 角色
  * - 把库侧 `commitMdPrefixFromLeaf` / `createTurnIntoProvisionalCollabSink`
  *   接到 note-paper / 空态产品路径（与 CONN-B slash 写锥并列、**独立通道**）。
  * - 有 `applyOps` / 注入 `TurnIntoSink` → 可写；无后端 → **disabled**（不假装转块）。
- * - 文本叶 / 未来 HiddenInput 在「行首 MD 前缀 + 提交」后调用
- *   `commitProductMdPrefixFromLeaf`（或 `tryProductMdPrefixAfterLeafEdit`）。
+ * - 文本叶 / Strict content-row HiddenInput 在「行首 MD 前缀 + 提交」后调用
+ *   `commitProductMdPrefixFromLeaf`（或 `tryProductMdPrefixAfterLeafEdit` /
+ *   `simulateProductMdPrefixSubmit`）。
+ *
+ * ## CONN-D3
+ * - Strict content-row 叶宿主（`StrictContentRowLeaf`）→ 本桥产品路径
+ * - `simulateProductMdPrefixSubmit`：行首 `# `/`- ` + 提交可测（无 DOM 亦可）
+ * - **≠** A-BLK-08/09 全 e2e；**≠ EL-01**；UI **禁止**读 pending 当 kind
  *
  * ## 诚实边界（钉死）
  * - **桌面接线 ≠ 打开完成**；**≠ A-BLK-08/09 全表 e2e**；**≠ EL-01**
@@ -26,6 +32,7 @@
 import {
   commitMdPrefixFromLeaf,
   createTurnIntoProvisionalCollabSink,
+  TextLeafModel,
   tryMdPrefixAfterLeafEdit,
   type ApplyOpsAdapter,
   type MdPrefixCommitOptions,
@@ -47,10 +54,11 @@ export type ProductMdPrefixWriteMode = 'writable' | 'disabled';
  * 写锥能力来源（诚实标注，可测 data 属性）。
  * - `none`：无 applyOps / sink → disabled
  * - `injected-applyOps`：经 createTurnIntoProvisionalCollabSink 包装
+ * - `product-ipc`：经 note_apply_ops IPC 适配（CONN-B3）
  * - `injected-sink`：直接注入 TurnIntoSink（测/高级宿主）
  */
 export type ProductMdPrefixSinkSource =
-  'none' | 'injected-applyOps' | 'injected-sink';
+  'none' | 'injected-applyOps' | 'product-ipc' | 'injected-sink';
 
 export type CreateProductMdPrefixBindingOptions = {
   /**
@@ -63,6 +71,14 @@ export type CreateProductMdPrefixBindingOptions = {
    * 生产默认应优先 `applyOps` + provisional 工厂；本项供测 / 已组好的 sink。
    */
   turnIntoSink?: TurnIntoSink;
+  /**
+   * 覆盖 source 标注（CONN-B3：`product-ipc`）。
+   * 仅当走 `applyOps` 路径时生效；默认 `injected-applyOps`。
+   */
+  sourceLabel?: Extract<
+    ProductMdPrefixSinkSource,
+    'injected-applyOps' | 'product-ipc'
+  >;
 };
 
 /**
@@ -115,7 +131,7 @@ export function createProductMdPrefixBinding(
       mode: 'writable',
       sink: collab.sink,
       collab,
-      source: 'injected-applyOps',
+      source: options.sourceLabel ?? 'injected-applyOps',
     };
   }
 
@@ -267,6 +283,123 @@ export async function commitProductMdPrefixFromPlainText(input: {
   if (input.loose !== undefined) opts.loose = input.loose;
 
   return commitProductMdPrefixFromLeaf(snap, input.binding, opts);
+}
+
+// ---------------------------------------------------------------------------
+// CONN-D3：模拟「行首 MD 前缀键入 + 提交」产品路径
+// ---------------------------------------------------------------------------
+
+export type SimulateProductMdPrefixSubmitInput = {
+  blockId: string;
+  /**
+   * 行首要键入的前缀全文（如 `'# '` / `'- '` / `'> '`）。
+   * 经 TextLeafModel.applyLocalEdit 写入后再走产品 commit。
+   */
+  prefixText: string;
+  /** 键入前已有正文；缺省空（纯行首） */
+  initialText?: string;
+  fromFlavour?: string;
+  /**
+   * 若 true：叶进入 composing 后再写入前缀，期望被拒（双守卫不回退）。
+   */
+  composing?: boolean;
+  binding: ProductMdPrefixBinding;
+  createIntentId?: () => string;
+  onCommitted?: (intent: TurnIntoIntent) => void;
+  loose?: boolean;
+};
+
+export type SimulateProductMdPrefixSubmitResult = {
+  /** 叶在 commit 前的 plain 文本 */
+  leafText: string;
+  /** 非 composing 时 applyLocalEdit 产出的 text_edit id；composing 期可能为 null */
+  textEditIntentId: string | null;
+  wasComposing: boolean;
+  commit: ProductMdPrefixCommitResult;
+};
+
+/**
+ * CONN-D3 产品路径：模拟 Strict 叶「行首 `# `/`- ` + 提交」→ `commitProductMdPrefixFromLeaf`。
+ *
+ * - 有 binding.sink → 进 TurnInto 写锥；wireCalls 可含 `pending_turn_into_flavour`
+ * - disabled / 无 sink → `stage: product` 拒绝，**不**假转块
+ * - composing=true → 库双守卫拒绝，wire/sink 不增
+ *
+ * **不**碰 DOM / PM View；供 vitest 与宿主无 UI 回放。
+ * **≠** A-BLK-08/09 全 e2e；**≠ EL-01**。
+ */
+export async function simulateProductMdPrefixSubmit(
+  input: SimulateProductMdPrefixSubmitInput
+): Promise<SimulateProductMdPrefixSubmitResult> {
+  const leaf = new TextLeafModel(
+    input.blockId,
+    input.initialText ?? '',
+    input.createIntentId ? { createIntentId: input.createIntentId } : undefined
+  );
+
+  if (input.composing) {
+    leaf.beginComposition(leaf.getText().length);
+  }
+
+  const prefix = input.prefixText ?? '';
+  const start = leaf.getText().length;
+  const textEdit = leaf.applyLocalEdit(start, start, prefix);
+
+  const commit = await commitProductMdPrefixFromLeaf(
+    {
+      blockId: leaf.blockId,
+      text: leaf.getText(),
+      caretOffset: leaf.getText().length,
+      isComposing: () => leaf.isComposing(),
+      fromFlavour: input.fromFlavour ?? 'paragraph',
+    },
+    input.binding,
+    {
+      ...(input.createIntentId !== undefined
+        ? { createIntentId: input.createIntentId }
+        : {}),
+      ...(input.onCommitted !== undefined
+        ? { onCommitted: input.onCommitted }
+        : {}),
+      ...(input.loose !== undefined ? { loose: input.loose } : {}),
+    }
+  );
+
+  return {
+    leafText: leaf.getText(),
+    textEditIntentId: textEdit?.intentId ?? null,
+    wasComposing: leaf.isComposing(),
+    commit,
+  };
+}
+
+/**
+ * 从 Strict 面板 props 拼装叶宿主用 binding（无 collab 审计句柄）。
+ * EmptyState / 测可用 `createProductMdPrefixBinding` 拿 collab.wireCalls。
+ */
+export function bindingFromStrictMdPrefixProps(input: {
+  turnIntoSink?: TurnIntoSink;
+  writeMode?: ProductMdPrefixWriteMode;
+  sinkSource?: ProductMdPrefixSinkSource;
+}): ProductMdPrefixBinding {
+  const hasSink = Boolean(input.turnIntoSink);
+  const mode =
+    input.writeMode ??
+    (hasSink ? ('writable' as const) : ('disabled' as const));
+  if (mode === 'disabled' || !input.turnIntoSink) {
+    return {
+      mode: 'disabled',
+      sink: undefined,
+      collab: null,
+      source: input.sinkSource ?? 'none',
+    };
+  }
+  return {
+    mode: 'writable',
+    sink: input.turnIntoSink,
+    collab: null,
+    source: input.sinkSource ?? 'injected-sink',
+  };
 }
 
 // ---------------------------------------------------------------------------

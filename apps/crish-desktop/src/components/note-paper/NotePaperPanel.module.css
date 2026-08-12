@@ -437,6 +437,24 @@ button.badge:focus-visible {
   margin-block: 0;
 }
 
+/* CONN-D3：Strict content-row 叶（HiddenInput 方向）；≠ EL-01 */
+.text[data-strict-leaf-input='1'] {
+  outline: none;
+  min-height: 1.25em;
+  cursor: text;
+  /* 空叶仍可点 */
+  width: 100%;
+}
+
+.text[data-strict-leaf-input='1']:focus-visible {
+  /* 叶焦点由 blockRow 环表达；正文不抬第二层描边 */
+  outline: none;
+}
+
+.text[data-md-prefix-leaf-mode='disabled'] {
+  cursor: default;
+}
+
 /* H1：2xl + heavy + tighter；top space-5 / bottom space-2 */
 .blockRow[data-heading-level='1'] .text {
   font-size: var(--font-size-2xl, 22px);

@@ -1,5 +1,5 @@
 /**
- * CONN-D2 · 桌面 mdPrefix 叶输入接线
+ * CONN-D2/D3 · 桌面 mdPrefix 叶输入接线
  *
  * | 可宣称 | 禁止宣称 |
  * | ------ | -------- |
@@ -7,6 +7,7 @@
  * | 无后端 → mode=disabled、sink undefined | 库 mdPrefixHost 单测 = 桌面接线完成 |
  * | composing 双守卫不进 sink | provisional 属性 = 真 kind UI |
  * | 桌面产品路径调用 commitMdPrefixFromLeaf | 打开完成 / HiddenInput PM 全链 |
+ * | CONN-D3 simulate 行首 `# `/`- ` → commitProduct* | 单测抬 e2e / UI 读 pending 当 kind |
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -15,10 +16,12 @@ import {
   type ApplyOpsAdapter,
 } from '@crish/block-paper';
 import {
+  bindingFromStrictMdPrefixProps,
   commitProductMdPrefixFromLeaf,
   commitProductMdPrefixFromPlainText,
   createProductMdPrefixBinding,
   resolveStrictMdPrefixBinding,
+  simulateProductMdPrefixSubmit,
   tryProductMdPrefixAfterLeafEdit,
 } from './noteMdPrefixBridge';
 
@@ -265,6 +268,144 @@ describe('CONN-D2 诚实边界（结构钉）', () => {
       createIntentId: () => 'honesty-1',
     });
     expect(r.ok).toBe(true);
+    const wire = b.collab!.wireCalls[0]!;
+    expect(wire).toContain('pending_turn_into_flavour');
+    expect(wire).not.toContain('"op":"turn_into"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CONN-D3 · Strict 叶键入 → mdPrefix 产品路径（simulate + binding 拼装）
+// ---------------------------------------------------------------------------
+
+describe('simulateProductMdPrefixSubmit · CONN-D3 产品路径', () => {
+  it('conn_d3_simulate_hash_space_to_pending_wire', async () => {
+    const applied: string[] = [];
+    const b = createProductMdPrefixBinding({
+      applyOps: async (opsJson) => {
+        applied.push(opsJson);
+        return { ok: true };
+      },
+    });
+
+    const sim = await simulateProductMdPrefixSubmit({
+      blockId: 'blk-d3-h1',
+      prefixText: '# ',
+      fromFlavour: 'paragraph',
+      binding: b,
+      createIntentId: () => 'conn-d3-h1',
+    });
+
+    expect(sim.leafText).toBe('# ');
+    expect(sim.wasComposing).toBe(false);
+    expect(sim.commit.ok).toBe(true);
+    if (!sim.commit.ok) return;
+    expect(sim.commit.intent).toMatchObject({
+      type: 'turn_into',
+      flavour: 'heading-1',
+      trigger: 'md_prefix',
+      blockIds: ['blk-d3-h1'],
+      intentId: 'conn-d3-h1',
+    });
+    expect(b.collab!.wireCalls).toHaveLength(1);
+    expect(b.collab!.wireCalls[0]).toContain('pending_turn_into_flavour');
+    expect(b.collab!.wireCalls[0]).toContain('heading-1');
+    expect(b.collab!.wireCalls[0]).toContain('"op":"text_edit"');
+    expect(b.collab!.wireCalls[0]).not.toContain('"op":"turn_into"');
+    expect(applied).toHaveLength(1);
+  });
+
+  it('conn_d3_simulate_bullet_dash_space', async () => {
+    const mock = createMockTurnIntoSink();
+    const b = createProductMdPrefixBinding({ turnIntoSink: mock.sink });
+    const sim = await simulateProductMdPrefixSubmit({
+      blockId: 'blk-d3-bullet',
+      prefixText: '- ',
+      fromFlavour: 'paragraph',
+      binding: b,
+      createIntentId: () => 'conn-d3-bullet',
+    });
+    expect(sim.commit.ok).toBe(true);
+    if (!sim.commit.ok) return;
+    expect(sim.commit.intent.flavour).toBe('bullet');
+    expect(mock.calls).toHaveLength(1);
+    expect(mock.calls[0]!.trigger).toBe('md_prefix');
+  });
+
+  it('conn_d3_disabled_no_fake_turn_into', async () => {
+    const b = createProductMdPrefixBinding();
+    expect(b.mode).toBe('disabled');
+    const sim = await simulateProductMdPrefixSubmit({
+      blockId: 'blk-d3-ro',
+      prefixText: '# ',
+      binding: b,
+    });
+    expect(sim.commit.ok).toBe(false);
+    if (sim.commit.ok) return;
+    expect(sim.commit.stage).toBe('product');
+    if (sim.commit.stage === 'product') {
+      expect(sim.commit.code).toBe('disabled');
+    }
+  });
+
+  it('conn_d3_composing_dual_guard_no_wire', async () => {
+    const applied: string[] = [];
+    const b = createProductMdPrefixBinding({
+      applyOps: async (opsJson) => {
+        applied.push(opsJson);
+        return { ok: true };
+      },
+    });
+    const sim = await simulateProductMdPrefixSubmit({
+      blockId: 'blk-d3-ime',
+      prefixText: '# ',
+      fromFlavour: 'paragraph',
+      composing: true,
+      binding: b,
+      createIntentId: () => 'should-not-fire',
+    });
+    expect(sim.wasComposing).toBe(true);
+    expect(sim.commit.ok).toBe(false);
+    expect(b.collab!.wireCalls).toHaveLength(0);
+    expect(applied).toHaveLength(0);
+  });
+});
+
+describe('bindingFromStrictMdPrefixProps · CONN-D3 UI 拼装', () => {
+  it('conn_d3_binding_from_props_disabled_without_sink', () => {
+    const b = bindingFromStrictMdPrefixProps({});
+    expect(b.mode).toBe('disabled');
+    expect(b.sink).toBeUndefined();
+    expect(b.source).toBe('none');
+  });
+
+  it('conn_d3_binding_from_props_writable_with_sink', () => {
+    const mock = createMockTurnIntoSink();
+    const b = bindingFromStrictMdPrefixProps({
+      turnIntoSink: mock.sink,
+      sinkSource: 'injected-sink',
+    });
+    expect(b.mode).toBe('writable');
+    expect(b.sink).toBe(mock.sink);
+    expect(b.collab).toBeNull();
+  });
+});
+
+describe('CONN-D3 诚实边界（结构钉）', () => {
+  it('conn_d3_honesty_not_e2e_pending_not_kind_op', async () => {
+    // 钉：产品路径通 ≠ A-BLK-08/09 e2e；wire 非独立 turn_into Op；
+    // UI 不得把 pending 当 kind（本测不关 EL-01）
+    const b = createProductMdPrefixBinding({
+      applyOps: async () => ({ ok: true }),
+    });
+    const sim = await simulateProductMdPrefixSubmit({
+      blockId: 'd3-honesty',
+      prefixText: '# ',
+      fromFlavour: 'paragraph',
+      binding: b,
+      createIntentId: () => 'd3-honesty-1',
+    });
+    expect(sim.commit.ok).toBe(true);
     const wire = b.collab!.wireCalls[0]!;
     expect(wire).toContain('pending_turn_into_flavour');
     expect(wire).not.toContain('"op":"turn_into"');

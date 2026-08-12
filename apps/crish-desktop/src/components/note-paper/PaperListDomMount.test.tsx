@@ -197,7 +197,10 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
     expect(plMount).toHaveAttribute('data-bp-paper-list-mount', '1');
     expect(plMount).toHaveAttribute('data-paper-list-block-count', String(n));
 
-    expect(paperList).not.toBeNull();
+    // StrictMode 下 effect 先 null 再 ready；等最终 list 实例
+    await waitFor(() => {
+      expect(paperList).not.toBeNull();
+    });
     // 窗口 20 + overscan 4*2 = 28
     expect(paperList!.getMountedCount()).toBe(20 + 8);
     expect(paperList!.countDomBlocks()).toBe(paperList!.getMountedCount());
@@ -479,7 +482,10 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
       );
     });
 
-    expect(paperList).not.toBeNull();
+    // PaperList 在 status=ready 后 effect 挂载；等 onPaperListReady
+    await waitFor(() => {
+      expect(paperList).not.toBeNull();
+    });
     // 窗外块初始不在 DOM
     expect(paperList!.getBlockElement('pin-5')).toBeNull();
     expect(paperList!.getBlockElement('pin-45')).toBeTruthy();

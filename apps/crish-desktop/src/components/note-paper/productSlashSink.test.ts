@@ -1,11 +1,12 @@
 /**
- * CONN-B · 产品 Strict slash 写锥绑定工厂
+ * CONN-B / B3 · 产品 Strict slash 写锥绑定工厂
  *
  * | 可宣称 | 禁止宣称 |
  * | ------ | -------- |
  * | 有 applyOps → createCollabApplySink 可写 | EL-01 / A-BLK-02 e2e 满关 |
  * | 无后端 → mode=readonly、sink undefined | mock 当生产默认 |
- * | wireCalls 审计（injected-applyOps） | 桌面 note_apply_ops 产品 IPC 已挂 |
+ * | wireCalls 审计（injected-applyOps / product-ipc） | 假关 EL |
+ * | CONN-B3 product-ipc sourceLabel | 无 IPC 仍默认可写 |
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -14,6 +15,10 @@ import {
   submitIntent,
   type ApplyOpsAdapter,
 } from '@crish/block-paper';
+import {
+  createMockNoteApplyOpsIpc,
+  resolveProductStrictApplyOps,
+} from '../../api/noteApplyOpsIpc';
 import { createProductStrictSlashBinding } from './productSlashSink';
 
 const ID_NEW = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
@@ -98,5 +103,45 @@ describe('createProductStrictSlashBinding · CONN-B', () => {
     expect(typeof direct.sink).toBe('function');
     expect(viaProduct.collab).not.toBeNull();
     expect(Array.isArray(viaProduct.collab!.wireCalls)).toBe(true);
+  });
+
+  it('conn_b3_product_ipc_sourceLabel_and_wireCalls', async () => {
+    const mockIpc = createMockNoteApplyOpsIpc();
+    const resolved = resolveProductStrictApplyOps({
+      docId: 'slash-ipc-doc',
+      applyOpsIpc: mockIpc,
+      isTauriRuntime: false,
+    });
+    expect(resolved.source).toBe('product-ipc');
+
+    const b = createProductStrictSlashBinding({
+      applyOps: resolved.applyOps!,
+      sourceLabel: 'product-ipc',
+      allocateId: () => ID_NEW,
+      resolveOrder: () => 'a0',
+    });
+    expect(b.mode).toBe('writable');
+    expect(b.source).toBe('product-ipc');
+    expect(b.collab).not.toBeNull();
+    expect(b.collab!.wireCalls).toHaveLength(0);
+
+    const r = await submitIntent(
+      {
+        type: 'slash_insert' as const,
+        blockId: 'anchor-1',
+        offset: 0,
+        flavour: 'paragraph',
+        catalogItemId: 'paragraph',
+        origin: 'slash' as const,
+        intentId: 'conn-b3-slash-1',
+      },
+      b.sink!
+    );
+    expect(r.ok).toBe(true);
+    expect(b.collab!.wireCalls.length).toBeGreaterThanOrEqual(1);
+    expect(b.collab!.wireCalls[0]).toContain('"op":"insert"');
+    expect(mockIpc.calls).toHaveLength(1);
+    expect(mockIpc.calls[0]?.docId).toBe('slash-ipc-doc');
+    expect(mockIpc.calls[0]?.opsJson).toContain('"op":"insert"');
   });
 });

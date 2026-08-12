@@ -13,6 +13,7 @@ import React from 'react';
 import type {
   BlockChromeDomHost,
   BlockChromeModel,
+  BlockSelectionBridge,
   IntentSink,
   PaperList,
   PaperListScrollState,
@@ -44,6 +45,9 @@ export type NotePaperStrictChromeSlotProps = {
   paperListDefaultEstimatePx?: number;
   onPaperListReady?: (list: PaperList | null) => void;
   chrome: BlockChromeModel;
+  /** W3-E-desk：与面板同一 bridge（注入 DomMount，避免双实例） */
+  blockSelection?: BlockSelectionBridge;
+  onBlockSelectionReady?: (selection: BlockSelectionBridge | null) => void;
   slashMenu: SlashMenuModel;
   slashIntentSink?: IntentSink;
   slashWriteMode: SlashOverlayWriteMode;
@@ -72,6 +76,8 @@ export const NotePaperStrictChromeSlot: React.FC<
   paperListDefaultEstimatePx,
   onPaperListReady,
   chrome,
+  blockSelection,
+  onBlockSelectionReady,
   slashMenu,
   slashIntentSink,
   slashWriteMode,
@@ -133,10 +139,12 @@ export const NotePaperStrictChromeSlot: React.FC<
             : []
         }
         chrome={chrome}
+        selection={blockSelection}
         slash={slashMenu}
         projectSlashCatalog={false}
         syncToken={`${chromeTick}:${slashOpen}`}
         onHostReady={onChromeDomHost}
+        onSelectionReady={onBlockSelectionReady}
         testId="note-paper-strict-chrome-dom"
       />
     </>

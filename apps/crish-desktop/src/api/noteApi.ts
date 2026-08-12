@@ -68,6 +68,23 @@ export const NOTE_CMD_SEND_TO_NOTE = 'note_send_to_note' as const;
  * **≠ 打开完成**；**≠ EL**；**DocSession 全链若未满须诚实**。
  */
 export const NOTE_CMD_DOCUMENT_HYDRATE = 'note_document_hydrate' as const;
+/**
+ * Tauri：detect 镜像漂移（A-INV-02 / W2-E · CONN-E）。
+ * 契约实现见 `noteMirrorIpc.ts`；**≠ EL-03**；**≠ inotify 满关**。
+ */
+export const NOTE_CMD_DETECT_MIRROR_DRIFT = 'note_detect_mirror_drift' as const;
+/**
+ * Tauri：import 镜像提案（不 apply；X-05 禁静默盖 unpushed）。
+ * 契约实现见 `noteMirrorIpc.ts`。
+ */
+export const NOTE_CMD_IMPORT_MIRROR_PROPOSAL =
+  'note_import_mirror_proposal' as const;
+/**
+ * Tauri：collab wire JSON → DocSession::apply（CONN-B3 产品写锥）。
+ * 契约实现见 `noteApplyOpsIpc.ts`；产品默认经 `resolveProductStrictApplyOps`。
+ * **≠ EL-01**；无 Tauri → 不装配（只读）。
+ */
+export const NOTE_CMD_APPLY_OPS = 'note_apply_ops' as const;
 
 /** agent-tools 工具名（对照，非 IPC 命令） */
 export const NOTE_TOOL_DOCUMENT_APPLY_MD = 'document_apply_md' as const;
@@ -79,6 +96,9 @@ export const NOTE_COMMANDS = {
   queryBlocks: NOTE_CMD_QUERY_BLOCKS,
   sendToNote: NOTE_CMD_SEND_TO_NOTE,
   documentHydrate: NOTE_CMD_DOCUMENT_HYDRATE,
+  detectMirrorDrift: NOTE_CMD_DETECT_MIRROR_DRIFT,
+  importMirrorProposal: NOTE_CMD_IMPORT_MIRROR_PROPOSAL,
+  applyOps: NOTE_CMD_APPLY_OPS,
 } as const;
 
 // ---------------------------------------------------------------------------

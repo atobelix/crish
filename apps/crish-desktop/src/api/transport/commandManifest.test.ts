@@ -56,8 +56,9 @@ describe('commandManifest', () => {
       //   core_resume_run / core_compact_now 登记先行（6）（111 → 116）
       // note_document_hydrate：真 hydrate IPC（116 → 117；registered 110 → 111）
       // note_detect_mirror_drift + note_import_mirror_proposal（117 → 119；111 → 113）
-      expect(registered).toBe(113);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(119);
+      // note_apply_ops：CONN-B3 collab wire apply（119 → 120；113 → 114）
+      expect(registered).toBe(114);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(120);
     });
 
     it('命令名唯一', () => {
@@ -289,10 +290,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（119；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（120；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(119);
+      expect(total).toBe(120);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

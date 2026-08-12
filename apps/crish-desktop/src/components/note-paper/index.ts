@@ -50,6 +50,24 @@ export {
 } from './BlockChromeDomMount';
 
 /**
+ * W3-E-desk：产品挂 BlockSelectionBridge（薄适配 + data-sel-* 可观测）。
+ * DomMount / Strict 默认可注入或默认工厂；**≠ EL-01**；**≠** Notion 框选 e2e。
+ */
+export {
+  applyBlockSelectionDataAttrs,
+  blockSelectionSnapshotToDataAttrs,
+  createProductBlockSelection,
+  SEL_DATA_ANCHOR,
+  SEL_DATA_BRIDGE,
+  SEL_DATA_FOCUS,
+  SEL_DATA_HEAD,
+  SEL_DATA_MODE,
+  SEL_DATA_MULTI,
+  syncAndApplyBlockSelectionDataAttrs,
+  type CreateProductBlockSelectionOptions,
+} from './blockSelectionProduct';
+
+/**
  * W3-G PaperList 桌面挂载：仅窗口 DOM（≠ EL-01；≠ W3-P 全闭环）。
  * 与 chrome DomMount 分槽共存（data-bp-paper-list-mount ∥ data-bp-chrome-mount）。
  */
@@ -67,7 +85,8 @@ export {
 } from './SlashMenuOverlay';
 
 /**
- * CONN-B：产品 Strict slash 写锥绑定（有 applyOps → collab；无 → 只读）。
+ * CONN-B / B3：产品 Strict slash 写锥绑定（有 applyOps → collab；无 → 只读）。
+ * 默认后端见 `noteApplyOpsIpc.resolveProductStrictApplyOps`。
  * **≠ EL-01**；**≠ A-BLK-02 e2e**；禁止 mock 当生产默认。
  */
 export {
@@ -79,14 +98,16 @@ export {
 } from './productSlashSink';
 
 /**
- * CONN-D2：产品 Strict MD 前缀 / turn_into 写锥（叶/HiddenInput → commitMdPrefixFromLeaf）。
+ * CONN-D2/D3：产品 Strict MD 前缀 / turn_into 写锥（叶/HiddenInput → commitMdPrefixFromLeaf）。
  * **桌面接线 ≠ 打开完成**；**≠ A-BLK-08/09 e2e**；**≠ EL-01**；provisional ≠ kind UI。
  */
 export {
+  bindingFromStrictMdPrefixProps,
   commitProductMdPrefixFromLeaf,
   commitProductMdPrefixFromPlainText,
   createProductMdPrefixBinding,
   resolveStrictMdPrefixBinding,
+  simulateProductMdPrefixSubmit,
   tryProductMdPrefixAfterLeafEdit,
   type CommitProductMdPrefixOptions,
   type CreateProductMdPrefixBindingOptions,
@@ -95,8 +116,20 @@ export {
   type ProductMdPrefixSinkSource,
   type ProductMdPrefixWriteMode,
   type ResolveStrictMdPrefixBindingInput,
+  type SimulateProductMdPrefixSubmitInput,
+  type SimulateProductMdPrefixSubmitResult,
   type StrictMdPrefixUiBinding,
 } from './noteMdPrefixBridge';
+
+/**
+ * CONN-D3：Strict content-row 叶宿主（HiddenInput 方向 → mdPrefix 产品路径）。
+ * **≠ EL-01**；UI 不读 pending 当 kind。
+ */
+export {
+  StrictContentRowLeaf,
+  tryCommitStrictLeafMdPrefix,
+  type StrictContentRowLeafProps,
+} from './StrictContentRowLeaf';
 
 /**
  * CONN-B2：产品 slash 打开路径（`/` 键 / openProductSlash；composing 拒开）。

@@ -13,7 +13,9 @@
  * - **≠ EL-03**（禁止把本 UI 写成大文档存活关闭）
  * - onAction 收到决策后由上层经 `submitThreeWayViaMirrorIpc` 调
  *   `note_import_mirror_proposal`；本组件 **从不** 默认 confirmDiscardUnpushed=true
- * - **诚实未做**：空态默认注入 report / timer+OS 双开 debounce
+ * - **诚实未做**：timer+OS 双开 debounce；产品自动 detect 调度
+ * - 空态装配：经 `WorkspaceEmptyState` 的 `showMirrorDriftBar` /
+ *   `mirrorDriftReport` **opt-in**（默认关，避免噪声）
  *
  * surface 旁挂：note-paper Strict footer 或独立挂载。
  */
