@@ -41,21 +41,27 @@ test.describe('IME Composition', () => {
     // The store text should be empty because it's composing!
     let text = await page.evaluate(() => {
       // @ts-expect-error markdown-editor main.tsx 注入的测试全局
-      return window.__CRISH_SESSION_STORE__.getState().text;
+      return window.__CRISH_SESSION_STORE__.getState().getText();
     });
     expect(text).toBe('');
 
-    // End composition
+    // End composition——真实浏览器在 compositionend 后把最终文本写入 value
+    // 并补发 input（引擎 HiddenInput R4-C 状态机在组合缓冲期全部短路，
+    // 只在 50ms 延迟 flush 窗口以 textarea.value 为准一次性提交）
     await textarea.evaluate((node) => {
       node.dispatchEvent(
         new CompositionEvent('compositionend', { bubbles: true, data: '你好' })
       );
-      // React onChange is synchronous, the value will be picked up from compositionend
+      node.value = '你好';
+      node.dispatchEvent(new Event('input', { bubbles: true }));
     });
+
+    // 等待 flush 延迟窗口（FLUSH_DELAY_MS = 50ms）到期提交落库
+    await page.waitForTimeout(200);
 
     text = await page.evaluate(() => {
       // @ts-expect-error markdown-editor main.tsx 注入的测试全局
-      return window.__CRISH_SESSION_STORE__.getState().text;
+      return window.__CRISH_SESSION_STORE__.getState().getText();
     });
     expect(text).toBe('你好');
   });

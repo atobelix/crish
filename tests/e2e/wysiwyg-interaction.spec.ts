@@ -1,10 +1,67 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+
+// —— 虚拟化适配辅助（reference 演进：MarkdownEngine 只物化视口内行，
+// overscan 40 行；App.tsx 挂载即加载 100×test-document ≈ 1.5 万行）——
+// 滚动编辑器容器直到目标行被虚拟化物化（直接设 scrollTop，ScrollMap 在
+// 总高 ≤ 3000 万 px 时恒等短路，物理坐标 = 逻辑坐标）。
+async function scrollUntilMaterialized(
+  page: Page,
+  target: Locator,
+  stepPx = 1500,
+  maxSteps = 60
+): Promise<void> {
+  const container = page.locator('.editor-container');
+  for (let i = 0; i < maxSteps; i++) {
+    if ((await target.count()) > 0) return;
+    await container.evaluate((el, step) => (el.scrollTop += step), stepPx);
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`目标行滚动 ${maxSteps} 步后仍未物化（虚拟化窗口外）`);
+}
+
+// 把目标行滚到视口底部：page.mouse.* 原始坐标不自动滚动，且左上 OutlinePanel
+// （x∈[229,461]、y∈[77,498]，zIndex 500）会拦截覆盖区内的鼠标事件——
+// 贴视口底部可同时满足「事件坐标在视口内」与「避开面板覆盖区」。
+async function scrollToViewportBottom(
+  page: Page,
+  target: Locator
+): Promise<void> {
+  await target.first().evaluate((el) => el.scrollIntoView(false));
+  await page.waitForTimeout(150);
+}
+
+// App.tsx 挂载即加载 100×test-document（分块加载：首块 1000 行同步载入、
+// 续载走空闲分片）。加载期间每落一块，HiddenInput 光标跟随 effect 会把
+// scrollTop 拉回 0（光标停在文档首行、目标滚动位置在视口下方），虚拟化行
+// 随之卸载——所有滚动辅助必须先等加载完成再滚。判定：lineCount 连续两次
+// 采样一致（分块期间每次落地必然递增）即视为文档就绪。
+async function waitForDocumentLoaded(page: Page): Promise<void> {
+  let prev = -1;
+  for (let i = 0; i < 100; i++) {
+    const count = await page.evaluate(() =>
+      // @ts-expect-error markdown-editor main.tsx 注入的测试全局
+      window.__CRISH_SESSION_STORE__.getState().getLineCount()
+    );
+    if (count === prev) {
+      await page.waitForTimeout(200);
+      const again = await page.evaluate(() =>
+        // @ts-expect-error markdown-editor main.tsx 注入的测试全局
+        window.__CRISH_SESSION_STORE__.getState().getLineCount()
+      );
+      if (again === count) return;
+    }
+    prev = count;
+    await page.waitForTimeout(200);
+  }
+}
 
 test.describe('WYSIWYG Interaction & Active State Tests', () => {
   test.beforeEach(async ({ page }) => {
     page.on('console', (msg) => console.log('BROWSER CONSOLE:', msg.text()));
     await page.goto('http://localhost:5173');
     await page.waitForSelector('.editor-container');
+    // 等 100 副本分块加载完成（加载期间滚动位置会被分块落地复位，见上）
+    await waitForDocumentLoaded(page);
   });
 
   test('Heading prefix visibility toggles on click', async ({ page }) => {
@@ -62,14 +119,21 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
   });
 
   test('Blockquote toggles prefix visibility on click', async ({ page }) => {
-    // Find a blockquote block
+    // 引用行当前渲染为 .line-block + token-blockquote-prefix（无 .line-blockquote
+    // 类——BlockRenderer 已演进为 token 前缀架构），且位于初始视口外
+    // （虚拟化只物化视口内行）——按文本定位 + 先滚动物化再断言
     const quoteBlock = page
-      .locator('.line-blockquote')
-      .filter({ hasText: '第一层引用' })
+      .locator('.line-block')
+      .filter({ hasText: /第一层引用$/ })
       .first();
+    await scrollUntilMaterialized(page, quoteBlock);
     await expect(quoteBlock).toBeVisible();
 
-    const quoteSource = quoteBlock.locator('.blockquote-source');
+    // 引用前缀（> ）的隐藏/显示由 is-active-line 驱动（index.css:
+    // .is-active-line .token-blockquote-prefix .syntax-hidden）
+    const quoteSource = quoteBlock.locator(
+      '.token-blockquote-prefix .syntax-hidden'
+    );
 
     // 1. Before click, ">" prefix is hidden
     await expect(quoteSource).toBeHidden();
@@ -82,7 +146,7 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     const lineContainer = quoteBlock.locator('..').first();
     await expect(lineContainer).toHaveClass(/is-active-line/);
     await expect(quoteSource).toBeVisible();
-    await expect(quoteSource).toHaveText(/>\s?/);
+    await expect(quoteSource).toHaveText(/>\s*$/);
   });
 
   test('Inline code toggles backticks when clicking specifically on it', async ({
@@ -94,6 +158,8 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
       .filter({ hasText: '基础样式：' })
       .first();
     await expect(textBlock).toBeVisible();
+    // 点击点 x≈241 落在左上大纲面板覆盖区（x∈[229,461]），贴视口底部避开
+    await scrollToViewportBottom(page, textBlock);
 
     // The inline code token
     const codeToken = textBlock.locator('.style-inline-code').first();
@@ -120,14 +186,13 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
   test('Code fence start toggles language pill and ``` source on click', async ({
     page,
   }) => {
-    // Scroll down so virtualizer renders the code block section
-    await page
-      .locator('.editor-container')
-      .evaluate((el) => (el.scrollTop = 1800));
-    await page.waitForTimeout(300);
-
-    // Find the code fence start block for javascript
-    const fenceBlock = page.locator('.line-code-fence-start').first();
+    // 目标 javascript 围栏行：虚拟化下 first() = 视口内第一个围栏（json，
+    // 文档副本 1 第 6 节先出现），必须按语言文本过滤定位，先滚动物化再断言
+    const fenceBlock = page
+      .locator('.line-code-fence-start')
+      .filter({ hasText: 'javascript' })
+      .first();
+    await scrollUntilMaterialized(page, fenceBlock);
     await expect(fenceBlock).toBeVisible();
 
     const renderedPill = fenceBlock.locator('.code-fence-rendered');
@@ -195,6 +260,11 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
       .filter({ hasText: '基础样式：' })
       .first();
     await expect(line).toBeVisible();
+    // 目标行初始在视口底部下方（preamble + 100 副本位移，row≈26 → y≈811 >
+    // 视口高 800），page.mouse.* 原始坐标不自动滚动——浏览器把越界鼠标事件
+    // 钳制到视口边缘，拖选坐标全部错位。先贴视口底部（同 Inline code 用例），
+    // 保证 boundingBox 与鼠标事件落在可见区
+    await scrollToViewportBottom(page, line);
 
     const boldToken = line.locator('.style-bold').first();
     const italicToken = line.locator('.style-italic').first();
@@ -235,16 +305,13 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
   test('Subscript and Math formula toggle source syntax on click', async ({
     page,
   }) => {
-    // Scroll down to the extended syntax section
-    await page
-      .locator('.editor-container')
-      .evaluate((el) => (el.scrollTop = 2500));
-    await page.waitForTimeout(200);
-
+    // 目标行（数学公式 row≈151、上下标 row≈157）远超原 scrollTop=2500 的
+    // 物化窗口（rows [44,149]）——先滚动物化再断言
     const subSupBlock = page
       .locator('.line-block')
       .filter({ hasText: '上下标:' })
       .first();
+    await scrollUntilMaterialized(page, subSupBlock);
     await expect(subSupBlock).toBeVisible();
 
     // The first .style-sub corresponds to <sub>2</sub>
@@ -269,6 +336,7 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
       .locator('.line-block')
       .filter({ hasText: '数学公式:' })
       .first();
+    await scrollUntilMaterialized(page, mathBlock);
     await expect(mathBlock).toBeVisible();
     const mathWrapper = mathBlock.locator('.token-math-wrapper').first();
     await expect(mathWrapper).toBeVisible();
