@@ -1,16 +1,18 @@
 //! 工作区笔记库（独立 workspace.db）。W1-C / W1-D1 / W2-C / W2-D / W2-E / Round5：
 //! schema + snapshot/updates + blocks 投影 + FTS5 + CAS + MD mirror + **store↔collab 投影管线**。
 //!
-//! # 模块拆分（SD-02 · 门面减负 / **SD-27** 测旁挂）
+//! # 模块拆分（SD-02 · 门面减负 / **SD-27** 测旁挂 / **SD-38** export/lag）
 //! - [`migrate`]：schema 迁移 / `ensure_*`
 //! - [`fts`]：blocks 投影 + FTS5 search/rebuild/CJK / reindex
 //! - [`persist_plugin`]：`PersistencePlugin` load/on_committed/flush + compact
 //! - [`mirror`]（薄门面）+ `mirror_detect` / `mirror_import` / `mirror_poll` / [`mirror_os_watch`]：
 //!   MD mirror detect/三路/轮询/OS watcher（**不回退**；SD-10 内聚）
-//! - 本文件：`WorkspaceStore` 薄门面（open/meta/clock/export 地基）+ `pub use`
+//! - [`mirror_export`]：`export_md_mirror` / lag / `safe_doc_id`（**SD-38**；方法仍挂 [`WorkspaceStore`]）
+//! - 本文件：`WorkspaceStore` 薄门面（open/meta/clock）+ `pub use`
 //! - [`tests`]（`lib_tests.rs`）：门面测外置（`#[path]`；无孤儿）
 //!
-//! **诚实（SD-27）**：**≠ EL-03**；**≠ Wave 2「存储完成」**。测旁挂 ≠ 假关恢复 / ≠ 存储完成。
+//! **诚实（SD-27 / SD-38）**：**≠ EL-03**；**≠ Wave 2「存储完成」**。
+//! 测旁挂 / 实现再抽 ≠ 假关恢复 / ≠ 存储完成。
 //!
 //! # S1 落盘五条
 //! 1. 权威 = SQLite snapshot + updates（+ RS 内存树）
@@ -62,6 +64,7 @@ mod fts;
 mod migrate;
 mod mirror;
 mod mirror_detect;
+mod mirror_export;
 mod mirror_import;
 mod mirror_os_watch;
 mod mirror_poll;
@@ -101,9 +104,11 @@ pub use refs::{
 pub(crate) use fts::{
     build_fts_query, contains_cjk, is_safe_attr_key, reindex_block_conn, remove_block_index_conn,
 };
+pub(crate) use mirror_export::note_authority_advanced_conn;
+#[cfg(test)]
+pub(crate) use mirror_export::safe_doc_id;
 
-use conex_doc_collab::{BlockTree, PersistError};
-use conex_md_ast::serialize_tree;
+use conex_doc_collab::PersistError;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -141,8 +146,9 @@ impl From<StoreError> for PersistError {
 
 /// 独立 workspace.db 上的笔记权威存储（不与 sessions 混库）。
 ///
-/// 方法分布（SD-02）：
-/// - 本文件：open / meta / clock / flush / MD mirror 导出地基
+/// 方法分布（SD-02 / SD-38）：
+/// - 本文件：open / meta / clock / flush
+/// - [`mirror_export`]：MD mirror 导出 / lag / `safe_doc_id`
 /// - [`fts`]：reindex / search / rebuild
 /// - [`persist_plugin`]：`PersistencePlugin` + [`SharedWorkspaceStore`]
 /// - [`mirror`]：detect / import 提案 / poll watcher（SD-10：`mirror_detect` / `mirror_import` / `mirror_poll`）
@@ -174,7 +180,10 @@ impl WorkspaceStore {
 
     /// 当前库 schema_version。
     pub fn schema_version(&self) -> Result<i64, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let v: i64 = conn.query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
             r.get(0)
         })?;
@@ -183,7 +192,10 @@ impl WorkspaceStore {
 
     /// 该 doc 的 pending updates 条数。
     pub fn load_pending_count(&self, doc_id: &str) -> Result<usize, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let n: i64 = conn.query_row(
             "SELECT COUNT(*) FROM doc_updates WHERE doc_id=?1",
             params![doc_id],
@@ -194,7 +206,10 @@ impl WorkspaceStore {
 
     /// 该 doc 的 rev（无记录则 0）。
     pub fn load_rev(&self, doc_id: &str) -> Result<i64, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let rev: Option<i64> = conn
             .query_row(
                 "SELECT rev FROM doc_meta WHERE doc_id=?1",
@@ -207,7 +222,10 @@ impl WorkspaceStore {
 
     /// 强制将该 doc 的 pending updates 合并进 snapshot 并裁剪 updates。
     pub fn flush_doc(&self, doc_id: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let tx = conn.unchecked_transaction()?;
         persist_plugin::compact_snapshot(&tx, doc_id)?;
         tx.commit()?;
@@ -216,7 +234,10 @@ impl WorkspaceStore {
 
     /// 读/写 peer clock（W1 表就绪；CRDT 接线后由上层填充）。
     pub fn upsert_clock(&self, doc_id: &str, peer_id: &str, clock: i64) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         conn.execute(
             r#"
             INSERT INTO doc_clocks(doc_id, peer_id, clock) VALUES (?1, ?2, ?3)
@@ -228,7 +249,10 @@ impl WorkspaceStore {
     }
 
     pub fn load_clock(&self, doc_id: &str, peer_id: &str) -> Result<Option<i64>, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let c: Option<i64> = conn
             .query_row(
                 "SELECT clock FROM doc_clocks WHERE doc_id=?1 AND peer_id=?2",
@@ -238,157 +262,6 @@ impl WorkspaceStore {
             .optional()?;
         Ok(c)
     }
-
-    // ── W2-E：MD mirror 导出 + 延迟水位 ───────────────────────────────────
-    //
-    // **不变量（S1）**：
-    // - Conex-MD mirror = 人/git 契约视图，**非**第二写入口、**非**权威。
-    // - 工具默认 **禁止** 读 mirror 文件当权威；工具默认读 = 即时 S(树) / 编码态导出。
-    // - 本 API 仅服务人/git 可 diff 契约；延迟水位 [`mirror_lag`] 可观测。
-    // - **无**「读 mirror 当权威」API（detect/import 仅提案；见 [`mirror`]）。
-
-    /// 将 `tree` 序列化为 Conex-MD 并原子写入 `mirror_root/{safe_doc_id}.md`。
-    ///
-    /// - 内容来自 [`serialize_tree`]（含 `<!--c:UUID-->` 块 ID 注释）
-    /// - 原子写：tmp + rename（Windows 上若目标已存在先 remove）
-    /// - 更新 `mirror_meta`：`last_export_rev = rev`、`pending_lag = 0`、
-    ///   `content_hash`（SHA-256）+ `file_mtime_ms`（供 [`Self::detect_mirror_drift`]）
-    ///
-    /// **勿**将写出路径作为工具默认读源（见模块不变量）。
-    pub fn export_md_mirror(
-        &self,
-        doc_id: &str,
-        tree: &BlockTree,
-        rev: u64,
-        mirror_root: &Path,
-    ) -> Result<PathBuf, StoreError> {
-        std::fs::create_dir_all(mirror_root)?;
-
-        let safe = safe_doc_id(doc_id);
-        let final_path = mirror_root.join(format!("{safe}.md"));
-        let md = serialize_tree(tree);
-        let hash = content_hash(md.as_bytes());
-
-        // 原子写：先写临时文件再 rename 到目标
-        let tmp_name = format!(
-            "{safe}.md.tmp.{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        );
-        let tmp_path = mirror_root.join(tmp_name);
-        std::fs::write(&tmp_path, md.as_bytes())?;
-        // Windows：目标存在时 rename 会失败，先删再换
-        if final_path.exists() {
-            let _ = std::fs::remove_file(&final_path);
-        }
-        std::fs::rename(&tmp_path, &final_path)?;
-
-        let mtime = mirror::file_mtime_ms(&final_path);
-        let path_str = final_path.to_string_lossy().to_string();
-        let rev_i = rev as i64;
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
-        conn.execute(
-            r#"
-            INSERT INTO mirror_meta(
-                doc_id, path, last_export_rev, last_export_at, pending_lag,
-                content_hash, file_mtime_ms
-            )
-            VALUES (?1, ?2, ?3, strftime('%s','now'), 0, ?4, ?5)
-            ON CONFLICT(doc_id) DO UPDATE SET
-                path = excluded.path,
-                last_export_rev = excluded.last_export_rev,
-                last_export_at = excluded.last_export_at,
-                pending_lag = 0,
-                content_hash = excluded.content_hash,
-                file_mtime_ms = excluded.file_mtime_ms
-            "#,
-            params![doc_id, path_str, rev_i, hash, mtime],
-        )?;
-
-        Ok(final_path)
-    }
-
-    /// 权威 rev 前进时更新 mirror 延迟水位。
-    ///
-    /// `pending_lag = |new_rev - last_export_rev|`（以 i64 差的绝对值）。
-    /// 若该 doc 尚无 `mirror_meta` 行（从未 export），则插入骨架行：
-    /// `last_export_rev=0`、`path=''`、`pending_lag = new_rev`。
-    pub fn note_authority_advanced(&self, doc_id: &str, new_rev: u64) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
-        note_authority_advanced_conn(&conn, doc_id, new_rev)
-    }
-
-    /// 可观测 mirror 延迟水位（`pending_lag`）。
-    ///
-    /// 无 `mirror_meta` 行时返回 `None`（尚未有 export / advance 记录）。
-    pub fn mirror_lag(&self, doc_id: &str) -> Result<Option<i64>, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
-        let lag: Option<i64> = conn
-            .query_row(
-                "SELECT pending_lag FROM mirror_meta WHERE doc_id=?1",
-                params![doc_id],
-                |r| r.get(0),
-            )
-            .optional()?;
-        Ok(lag)
-    }
-}
-
-/// 将 doc_id 转为可作为文件名的安全片段（路径分隔符等替换为 `_`）。
-pub(crate) fn safe_doc_id(doc_id: &str) -> String {
-    let s: String = doc_id
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if s.is_empty() {
-        "_empty".into()
-    } else {
-        s
-    }
-}
-
-/// 事务内：权威 rev 前进 → 更新 `mirror_meta.pending_lag`（投影管线同事务调用）。
-pub(crate) fn note_authority_advanced_conn(
-    conn: &Connection,
-    doc_id: &str,
-    new_rev: u64,
-) -> Result<(), StoreError> {
-    let new_rev_i = new_rev as i64;
-    let existing: Option<i64> = conn
-        .query_row(
-            "SELECT last_export_rev FROM mirror_meta WHERE doc_id=?1",
-            params![doc_id],
-            |r| r.get(0),
-        )
-        .optional()?;
-    match existing {
-        Some(last) => {
-            let lag = (new_rev_i - last).abs();
-            conn.execute(
-                "UPDATE mirror_meta SET pending_lag = ?1 WHERE doc_id = ?2",
-                params![lag, doc_id],
-            )?;
-        }
-        None => {
-            conn.execute(
-                r#"
-                INSERT INTO mirror_meta(doc_id, path, last_export_rev, last_export_at, pending_lag)
-                VALUES (?1, '', 0, 0, ?2)
-                "#,
-                params![doc_id, new_rev_i],
-            )?;
-        }
-    }
-    Ok(())
 }
 
 // ── 测试（SD-27 外置） ─────────────────────────────────────────────────────

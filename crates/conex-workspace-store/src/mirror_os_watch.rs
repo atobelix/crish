@@ -1,7 +1,8 @@
 //! W2-E · OS 级 mirror 路径监视（notify 封装 / A-INV-02 事件方向）。
 //!
-//! # 模块内聚（SD-19 · 黄带体积切开）
+//! # 模块内聚（SD-19 · 黄带体积切开 / **SD-36** 再抽路径·分类）
 //! - **本文件**：OS 事件模型 / `MirrorOsWatcher` / Fake / detect·poll 胶水
+//! - [`path`]（`mirror_os_watch_path.rs`）：路径规范化 / `classify_notify_event` / `interest_allows`
 //! - [`tests`]（`mirror_os_watch_tests.rs`）：单元测外置
 //! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::mirror_os_watch::*` / `lib` `pub use`）
 //!
@@ -14,7 +15,7 @@
 //! - **禁止**用「有 poll」冒充「inotify 满关」，也 **禁止**用「有本模块」冒充产品三路 UI / EL-03。
 //!
 //! # 诚实边界（不可冒充）
-//! - **SD-19** · **≠ EL-03** · **≠ inotify 产品满关** · poll 并存但 **≠** 默认双开
+//! - **SD-36** · **SD-19** · **≠ EL-03** · **≠ 占 SD-19** · **≠ inotify 产品满关** · poll 并存但 **≠** 默认双开
 //! - **交付**：可点名的 OS 事件 watcher 封装（notify trait/API + 可测通道）。
 //! - **≠ poll API 已等于 inotify 满关**——poll 仍是独立子集；本模块是 **另一路径**。
 //! - **≠ A-INV-02 产品 UI**：不弹三路对话框、不接线桌面订阅层。
@@ -30,13 +31,21 @@
 
 use super::mirror::{MirrorDriftReport, MirrorWatchPollResult};
 use super::{StoreError, WorkspaceStore};
-use notify::event::{ModifyKind, RemoveKind, RenameMode};
-use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 use thiserror::Error;
+
+/// 路径规范化 / notify 分类 / interest 过滤（SD-36；**≠** 占 SD-19 / **≠** EL-03）。
+#[path = "mirror_os_watch_path.rs"]
+mod path;
+
+use path::{
+    classify_notify_event, interest_allows, normalize_abs_path, path_compare_key,
+    paths_equal_for_mirror,
+};
 
 // ─── 事件模型 ──────────────────────────────────────────────────────────────
 
@@ -71,10 +80,7 @@ pub enum MirrorOsWatchError {
     #[error("mirror OS watcher: notify 创建失败: {0}")]
     NotifyCreate(String),
     #[error("mirror OS watcher: 注册监视失败 ({path}): {detail}")]
-    Watch {
-        path: String,
-        detail: String,
-    },
+    Watch { path: String, detail: String },
 }
 
 // ─── 事件源 trait（可注入） ────────────────────────────────────────────────
@@ -348,99 +354,6 @@ pub fn poll_on_os_hint(
     // 命中后走既有 poll（指纹 + 分类）；不绕过 X-05 / detect
     let r = handle.poll_mirror_once(store, authority_rev)?;
     Ok(Some(r))
-}
-
-// ─── notify 分类 / 路径工具 ────────────────────────────────────────────────
-
-fn classify_notify_event(event: &notify::Event) -> Vec<(PathBuf, MirrorOsEventKind)> {
-    let kind = match event.kind {
-        EventKind::Create(_) => MirrorOsEventKind::Created,
-        EventKind::Remove(RemoveKind::File)
-        | EventKind::Remove(RemoveKind::Any)
-        | EventKind::Remove(RemoveKind::Folder)
-        | EventKind::Remove(RemoveKind::Other) => MirrorOsEventKind::Removed,
-        EventKind::Modify(ModifyKind::Name(RenameMode::From)) => MirrorOsEventKind::Removed,
-        EventKind::Modify(ModifyKind::Name(RenameMode::To)) => MirrorOsEventKind::Created,
-        EventKind::Modify(ModifyKind::Data(_))
-        | EventKind::Modify(ModifyKind::Metadata(_))
-        | EventKind::Modify(ModifyKind::Any)
-        | EventKind::Modify(ModifyKind::Other) => MirrorOsEventKind::Modified,
-        EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
-            // from + to：分别标 Removed / Created
-            if event.paths.len() >= 2 {
-                return vec![
-                    (event.paths[0].clone(), MirrorOsEventKind::Removed),
-                    (event.paths[1].clone(), MirrorOsEventKind::Created),
-                ];
-            }
-            MirrorOsEventKind::RescanHint
-        }
-        EventKind::Modify(ModifyKind::Name(RenameMode::Any))
-        | EventKind::Modify(ModifyKind::Name(RenameMode::Other)) => MirrorOsEventKind::RescanHint,
-        EventKind::Access(_) | EventKind::Any | EventKind::Other => {
-            return Vec::new();
-        }
-    };
-    event
-        .paths
-        .iter()
-        .map(|p| (p.clone(), kind))
-        .collect()
-}
-
-fn interest_allows(interest: &HashSet<String>, path: &Path) -> bool {
-    if interest.is_empty() {
-        return true;
-    }
-    interest.contains(&path_compare_key(path))
-}
-
-fn paths_equal_for_mirror(a: &Path, b: &Path) -> bool {
-    path_compare_key(a) == path_compare_key(b)
-}
-
-/// 规范化绝对路径：canonicalize 失败则原样；Windows 剥 `\\?\`。
-fn normalize_abs_path(p: &Path) -> PathBuf {
-    let abs = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(p))
-            .unwrap_or_else(|_| p.to_path_buf())
-    };
-    let canon = abs.canonicalize().unwrap_or(abs);
-    strip_verbatim(&canon)
-}
-
-fn strip_verbatim(p: &Path) -> PathBuf {
-    let s = p.to_string_lossy();
-    #[cfg(windows)]
-    {
-        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
-            return PathBuf::from(format!(r"\\{rest}"));
-        }
-        if let Some(rest) = s.strip_prefix(r"\\?\") {
-            return PathBuf::from(rest.to_string());
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = &s;
-    }
-    p.to_path_buf()
-}
-
-/// 路径比较键：统一分隔符 + Windows 小写。
-fn path_compare_key(p: &Path) -> String {
-    let mut s = p.to_string_lossy().replace('\\', "/");
-    #[cfg(windows)]
-    {
-        s = s.to_lowercase();
-    }
-    if s.len() > 1 {
-        s = s.trim_end_matches('/').to_string();
-    }
-    s
 }
 
 #[cfg(test)]

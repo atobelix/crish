@@ -136,8 +136,8 @@ fn import_mirror_proposal_text_edit_without_unpushed() {
         .replace("mirror hello", "edited");
     std::fs::write(&path, md.as_bytes()).unwrap();
 
-    let opts = ImportMirrorOpts::new(ThreeWayStrategy::RetainLocalAndReimport)
-        .with_authority_tree(&tree);
+    let opts =
+        ImportMirrorOpts::new(ThreeWayStrategy::RetainLocalAndReimport).with_authority_tree(&tree);
     let res = store.import_mirror_proposal("doc-t", 1, &opts).unwrap();
     match res {
         ImportMirrorResult::OpBatch {
