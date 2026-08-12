@@ -65,6 +65,10 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
   const [pairResult, setPairResult] = useState<PairStartResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [revokeHash, setRevokeHash] = useState<string | null>(null);
+  // 关闭配对确认（R1-11 G-4 语义变更）：关闭配对 = 撤销全部设备（D2 §5.4
+  // 关闭动作，令牌全部失效 + 已连接设备立即断开）——执行前弹确认弹窗，
+  // 避免误触开关导致全部配对关系被清除。
+  const [confirmClosePairing, setConfirmClosePairing] = useState(false);
   const [renamingHash, setRenamingHash] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [netEnv, setNetEnv] = useState<NetworkEnvInfo | null>(null);
@@ -237,7 +241,14 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
                 control={
                   <Switch
                     checked={enabled}
-                    onCheckedChange={(v) => void handleToggle(v)}
+                    onCheckedChange={(v) => {
+                      if (v) {
+                        void handleToggle(true);
+                      } else {
+                        // 关闭配对 = 撤销全部设备：先弹确认（G-4 语义）
+                        setConfirmClosePairing(true);
+                      }
+                    }}
                     aria-label="配对模式开关"
                   />
                 }
@@ -393,7 +404,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => void handleToggle(false)}
+                  onClick={() => setConfirmClosePairing(true)}
                   disabled={busy}
                 >
                   <Lucide.X size={14} aria-hidden /> 关闭配对
@@ -505,6 +516,19 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
         confirmLabel="撤销"
         onConfirm={() => void handleRevoke()}
         onCancel={() => setRevokeHash(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmClosePairing}
+        danger
+        title="关闭配对"
+        description="关闭配对将撤销全部已配对设备并断开连接（令牌全部失效，已连接设备立即断开，需重新扫码配对才能连接）。确定关闭配对？"
+        confirmLabel="关闭配对"
+        onConfirm={() => {
+          setConfirmClosePairing(false);
+          void handleToggle(false);
+        }}
+        onCancel={() => setConfirmClosePairing(false)}
       />
     </SettingsPage>
   );

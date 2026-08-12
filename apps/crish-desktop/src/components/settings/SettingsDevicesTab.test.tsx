@@ -169,7 +169,7 @@ describe('SettingsDevicesTab', () => {
     expect(await screen.findByTestId('firewall-hint')).toBeTruthy();
   });
 
-  it('关闭配对：调用 pairCancel 且二维码卡片消失', async () => {
+  it('关闭配对（G-4 语义变更）：确认弹窗出现 → 确认后 pairCancel 调用且二维码卡片消失', async () => {
     pairStart.mockImplementation(async () => {
       pairStatus.mockResolvedValue(ACTIVE_STATUS);
       return PAIR_RESULT;
@@ -183,10 +183,40 @@ describe('SettingsDevicesTab', () => {
       expect(toggle.getAttribute('aria-checked')).toBe('true')
     );
     fireEvent.click(toggle);
+    // 关闭配对 = 撤销全部设备：弹确认弹窗，文案说明撤销后果
+    expect(await screen.findByRole('alertdialog')).toBeTruthy();
+    expect(
+      screen.getByText(/关闭配对将撤销全部已配对设备并断开连接/)
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '关闭配对' }));
     await waitFor(() => expect(pairCancel).toHaveBeenCalled());
     await waitFor(() =>
       expect(screen.queryByTestId('pair-qr-card')).toBeNull()
     );
+  });
+
+  it('关闭配对（G-4 语义变更）：QR 卡按钮弹确认，取消不调用 pairCancel', async () => {
+    pairStart.mockImplementation(async () => {
+      pairStatus.mockResolvedValue(ACTIVE_STATUS);
+      return PAIR_RESULT;
+    });
+    renderTab();
+    await enableService();
+    const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
+    fireEvent.click(toggle);
+    expect(await screen.findByTestId('pair-qr-card')).toBeTruthy();
+    // 点 QR 卡内「关闭配对」按钮 → 确认弹窗出现
+    fireEvent.click(screen.getByRole('button', { name: '关闭配对' }));
+    expect(await screen.findByRole('alertdialog')).toBeTruthy();
+    expect(
+      screen.getByText(/关闭配对将撤销全部已配对设备并断开连接/)
+    ).toBeTruthy();
+    // 取消：弹窗关闭且 pairCancel 未被调用（未误触发撤销全部）
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(pairCancel).not.toHaveBeenCalled();
+    // 二维码卡片仍在（配对保持开启）
+    expect(screen.getByTestId('pair-qr-card')).toBeTruthy();
   });
 
   it('设备列表：展示标签/哈希截断/时间/已撤销徽标', async () => {

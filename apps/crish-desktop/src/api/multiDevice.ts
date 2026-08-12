@@ -67,7 +67,8 @@ export async function pairStatus(): Promise<PairStatus | null> {
   return null;
 }
 
-/** 取消配对：状态机重置 + 回环监听恢复 */
+/** 关闭配对（D2 §5.4 关闭动作 / R1-11 G-4）：撤销全部设备——令牌全部
+ *  失效 + WS 全部踢出 + 状态机重置 + 回 Loopback 重绑。 */
 export async function pairCancel(): Promise<boolean> {
   const res = await invokeTyped<void>('multi_device_pair_cancel', {});
   if (res.status === 'ok') return true;
