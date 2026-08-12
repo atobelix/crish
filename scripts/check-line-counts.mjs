@@ -125,7 +125,10 @@ function collectSourceFiles(targetPath, out = []) {
   if (!existsSync(targetPath)) return out;
   const stat = statSync(targetPath);
   if (stat.isFile()) {
-    if (/\.(ts|tsx|js|jsx|mts|cts)$/.test(targetPath) && !targetPath.endsWith('.test.ts') && !targetPath.endsWith('.spec.ts')) {
+    if (
+      /\.(ts|tsx|js|jsx|mts|cts)$/.test(targetPath) &&
+      !/\.(test|spec)\.(ts|tsx|mts|cts)$/.test(targetPath)
+    ) {
       out.push(targetPath);
     }
     return out;
@@ -141,7 +144,10 @@ function collectSourceFiles(targetPath, out = []) {
       const childStat = statSync(fullPath);
       if (childStat.isDirectory()) {
         collectSourceFiles(fullPath, out);
-      } else if (/\.(ts|tsx|js|jsx|mts|cts)$/.test(entry) && !entry.endsWith('.test.ts') && !entry.endsWith('.spec.ts')) {
+      } else if (
+        /\.(ts|tsx|js|jsx|mts|cts)$/.test(entry) &&
+        !/\.(test|spec)\.(ts|tsx|mts|cts)$/.test(entry)
+      ) {
         out.push(fullPath);
       }
     }
