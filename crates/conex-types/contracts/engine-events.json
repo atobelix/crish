@@ -3201,6 +3201,7 @@
       "description": "上下文压缩触发点",
       "values": [
         "auto",
+        "usermessage",
         "preflight",
         "manual",
         "threshold",
@@ -3215,6 +3216,7 @@
       "description": "上下文压缩原因",
       "values": [
         "manual",
+        "usermessage",
         "threshold",
         "overflow",
         "idle",

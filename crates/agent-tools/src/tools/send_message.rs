@@ -76,10 +76,18 @@ pub trait SubagentInjectChannel: Send + Sync + std::fmt::Debug {
 /// （group_id=`main-agent-msg`，下一 run decide_idle_resume 消费）。
 /// **恒不标记 user_touched**（主 agent 自发消息不算用户交互，收口不因此
 /// 抑制 idle 续 run——core_run_commands.rs:2517-2519 语义）。
+///
+/// `session_id` 入参为执行上下文会话（ToolContext.session_id）——多会话
+/// 并发时消息必须落在**发起会话**的主 run 环上（会话留档语义按会话隔离）。
 #[async_trait::async_trait]
 pub trait MainAgentMessageChannel: Send + Sync + std::fmt::Debug {
     /// 主 agent 给自己留话：返回消息 id（会话留档 + 入队一体完成）
-    async fn deliver_self(&self, message: &str, ring: MainMessageRing) -> Result<String, String>;
+    async fn deliver_self(
+        &self,
+        session_id: &str,
+        message: &str,
+        ring: MainMessageRing,
+    ) -> Result<String, String>;
 }
 
 /// send_message 工具：主 agent 任意时刻向运行中子代理调整方向、
@@ -163,7 +171,7 @@ impl Tool for SendMessageTool {
         &self.def
     }
 
-    async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         // target 必填且枚举合法（subagent / self）
         let target = super::require_string(&args, "target")?;
         if target != "subagent" && target != "self" {
@@ -221,7 +229,7 @@ impl Tool for SendMessageTool {
                     ));
                 };
                 let message_id = channel
-                    .deliver_self(&message, urgency)
+                    .deliver_self(&ctx.session_id, &message, urgency)
                     .await
                     .map_err(|message| ToolError::new(codes::TOOL_EXECUTION_FAILED, message))?;
                 Ok(serde_json::json!({
@@ -291,7 +299,7 @@ mod tests {
 
     /// 记录式主 agent 消息通道替身
     struct RecordingSelfChannel {
-        calls: Mutex<Vec<(String, MainMessageRing)>>,
+        calls: Mutex<Vec<(String, String, MainMessageRing)>>,
         fail: bool,
     }
 
@@ -316,7 +324,7 @@ mod tests {
             })
         }
 
-        fn calls(&self) -> Vec<(String, MainMessageRing)> {
+        fn calls(&self) -> Vec<(String, String, MainMessageRing)> {
             self.calls.lock().unwrap().clone()
         }
     }
@@ -325,10 +333,14 @@ mod tests {
     impl MainAgentMessageChannel for RecordingSelfChannel {
         async fn deliver_self(
             &self,
+            session_id: &str,
             message: &str,
             ring: MainMessageRing,
         ) -> Result<String, String> {
-            self.calls.lock().unwrap().push((message.to_string(), ring));
+            self.calls
+                .lock()
+                .unwrap()
+                .push((session_id.to_string(), message.to_string(), ring));
             if self.fail {
                 Err("消息留档失败：disk full".to_string())
             } else {
@@ -471,8 +483,9 @@ mod tests {
         assert!(out["messageId"].as_str().unwrap().starts_with("main-agent-msg-"));
         let calls = channel.calls();
         assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].0, "记住：明天继续调研 X");
-        assert_eq!(calls[0].1, MainMessageRing::FollowUp);
+        assert_eq!(calls[0].0, "mock-session", "会话 id 取自执行上下文");
+        assert_eq!(calls[0].1, "记住：明天继续调研 X");
+        assert_eq!(calls[0].2, MainMessageRing::FollowUp);
     }
 
     /// target=self + urgency=steer → 通道收到 steer 环
@@ -490,7 +503,7 @@ mod tests {
             .unwrap();
         assert_eq!(out["ring"], "steer");
         let calls = channel.calls();
-        assert_eq!(calls[0].1, MainMessageRing::Steer);
+        assert_eq!(calls[0].2, MainMessageRing::Steer);
     }
 
     /// target=self 留档失败 → tool.execution_failed 兜底

@@ -347,6 +347,12 @@ pub struct RecoveryNotification {
     pub subagent_run_id: String,
     /// 操作指纹（报表聚合依据）
     pub fingerprint: String,
+    /// provider 错误分类（阶梯 2 steering 文案承载具体 kind，AI 可区分
+    /// rate-limit/server-error/timeout/network 决策因子；None = 旧数据/未知，
+    /// 序列化缺省省略——向后兼容，旧库 `recover_notifications` 反序列化
+    /// 自动置 None，文本降级不含 kind）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_kind: Option<ProviderErrorKind>,
     /// 阶梯 1 已重试次数
     pub retries: u32,
     /// 剩余状态（上行时的 run 状态摘要）
@@ -362,13 +368,43 @@ pub fn steering_group_id(subagent_run_id: &str) -> String {
     format!("{RECOVER_GROUP_PREFIX}{subagent_run_id}")
 }
 
-/// 阶梯 2 steering 条目文案（哪个 run、已重试次数、剩余状态）
+/// provider 错误分类 → 中文人读标签（steering 文案 kind 段用；与
+/// stream_error.rs kind_str 的 wire 名互补——wire 名走事件面，人读名进对话）
+fn kind_label(kind: ProviderErrorKind) -> &'static str {
+    match kind {
+        ProviderErrorKind::Aborted => "中止",
+        ProviderErrorKind::PayloadTooLarge => "请求体过大",
+        ProviderErrorKind::GatewayChallenge => "网关质询",
+        ProviderErrorKind::Auth => "认证",
+        ProviderErrorKind::Quota => "配额",
+        ProviderErrorKind::EndpointUnavailable => "端点不可用",
+        ProviderErrorKind::ContextLengthExceeded => "上下文超长",
+        ProviderErrorKind::InvalidRequest => "无效请求",
+        ProviderErrorKind::RateLimit => "限速",
+        ProviderErrorKind::ServerError => "服务端",
+        ProviderErrorKind::Timeout => "超时",
+        ProviderErrorKind::Network => "网络",
+        ProviderErrorKind::Unknown => "未知",
+    }
+}
+
+/// 阶梯 2 steering 条目文案（哪个 run、错误分类、已重试次数、剩余状态，
+/// 以及主 agent 三决策路径指引：接管继续 / 重派（resume_subagent）/
+/// 关闭重来（kill_subagent 后重派）——对齐 final/00 §3.5 三决策路径）。
+///
+/// kind 段：`error_kind` 为 Some 时输出「网络类错误(Network)」形式；
+/// None（旧数据/未知）降级为空段，不出现 kind 信息。
 pub fn steering_text(notification: &RecoveryNotification) -> String {
+    let kind_section = notification
+        .error_kind
+        .map(|kind| format!("{}类错误({kind:?})", kind_label(kind)))
+        .unwrap_or_default();
     format!(
-        "子代理 {}（run {}）停摆：网络类错误重试预算已耗尽（已重试 {} 次，状态 {}）。\
-         请注入激活指令处理：继续等待 / 降低要求 / 取消。",
+        "子代理 {}（run {}）停摆：{}重试预算已耗尽（已重试 {} 次，状态 {}）。\
+         请决策：接管继续 / 重派（resume_subagent）/ 关闭重来（kill_subagent 后重派）。",
         notification.subagent_id,
         notification.subagent_run_id,
+        kind_section,
         notification.retries,
         notification.remaining_status
     )
@@ -988,6 +1024,7 @@ impl RecoveryCoordinator {
             subagent_id: ctx.subagent_id.clone(),
             subagent_run_id: ctx.subagent_run_id.clone(),
             fingerprint: fp,
+            error_kind: Some(ctx.error_kind),
             retries: ctx.retries,
             remaining_status: "running".to_string(),
             pending: true,
@@ -1747,6 +1784,7 @@ mod tests {
             subagent_id: "sub-1".to_string(),
             subagent_run_id: "run-1".to_string(),
             fingerprint: fingerprint("sub-1", "任务"),
+            error_kind: Some(ProviderErrorKind::Network),
             retries: 3,
             remaining_status: "running".to_string(),
             pending: true,
@@ -1762,12 +1800,77 @@ mod tests {
         assert!(entry.text.contains("sub-1"));
         assert!(entry.text.contains("run-1"));
         assert!(entry.text.contains("已重试 3 次"));
+        assert!(
+            entry.text.contains("网络类错误(Network)"),
+            "steering 文案承载具体 kind（区分 rate-limit/server-error 等决策因子）"
+        );
+        assert!(
+            entry.text.contains("接管继续")
+                && entry.text.contains("resume_subagent")
+                && entry.text.contains("kill_subagent"),
+            "三决策路径指引：接管继续 / 重派 / 关闭重来（附命令面提示）"
+        );
         // 同分组 replaceOrEnqueue 去重
         let mut queue = PendingMessageQueue::new();
         queue.replace_or_enqueue(build_steering_entry(&notification));
         let replaced = queue.replace_or_enqueue(build_steering_entry(&notification));
         assert!(replaced, "同 run 重复升级应原位替换");
         assert_eq!(queue.len(), 1);
+    }
+
+    /// steering 文案三决策对齐 + kind 缺省降级：error_kind=None（旧数据/
+    /// 未知）时不出现 kind 段，三决策指引保持完整
+    #[test]
+    fn steering_text_kind_degrade_and_three_decisions() {
+        let base = RecoveryNotification {
+            subagent_id: "sub-1".to_string(),
+            subagent_run_id: "run-1".to_string(),
+            fingerprint: fingerprint("sub-1", "任务"),
+            error_kind: None,
+            retries: 2,
+            remaining_status: "running".to_string(),
+            pending: true,
+            created_at_ms: 1_700_000_000_000,
+        };
+        let text = steering_text(&base);
+        assert!(text.contains("接管继续"), "接管决策指引");
+        assert!(text.contains("resume_subagent"), "重派命令面提示");
+        assert!(text.contains("kill_subagent"), "关闭重来命令面提示");
+        assert!(text.contains("已重试 2 次"));
+        assert!(!text.contains("类错误"), "None 降级：不含 kind 段");
+        // 各分类 kind 段（瞬态四类抽样，AI 决策因子区分的关键）
+        for (kind, label) in [
+            (ProviderErrorKind::RateLimit, "限速类错误(RateLimit)"),
+            (ProviderErrorKind::ServerError, "服务端类错误(ServerError)"),
+            (ProviderErrorKind::Timeout, "超时类错误(Timeout)"),
+            (ProviderErrorKind::Network, "网络类错误(Network)"),
+        ] {
+            let with_kind = RecoveryNotification {
+                error_kind: Some(kind),
+                ..base.clone()
+            };
+            assert!(steering_text(&with_kind).contains(label), "kind 段应含 {label}");
+        }
+    }
+
+    /// 序列化向后兼容：旧持久化 JSON 无 errorKind 字段 → 反序列化
+    /// error_kind = None；Some(kind) 序列化为 camelCase 键 + kebab-case wire 名
+    #[test]
+    fn notification_serialization_backward_compatible() {
+        // 旧形状（无 errorKind 字段，recover_notifications 既有落库形态）
+        let legacy = r#"{"subagentId":"sub-1","subagentRunId":"run-1","fingerprint":"fp","retries":3,"remainingStatus":"running","pending":true,"createdAtMs":1700000000000}"#;
+        let n: RecoveryNotification = serde_json::from_str(legacy).unwrap();
+        assert_eq!(n.error_kind, None, "缺省 None：旧数据可正常读回");
+        assert_eq!(n.retries, 3);
+        // 新形状 roundtrip：errorKind = "network"（kebab-case wire 名）
+        let n2 = RecoveryNotification {
+            error_kind: Some(ProviderErrorKind::Network),
+            ..n
+        };
+        let json = serde_json::to_string(&n2).unwrap();
+        assert!(json.contains("\"errorKind\":\"network\""), "error_kind 序列化为 camelCase 键");
+        let back: RecoveryNotification = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.error_kind, Some(ProviderErrorKind::Network));
     }
 
     // ── 协调器逐级测试 ────────────────────────────────────────────
@@ -1822,11 +1925,20 @@ mod tests {
         };
         assert!(notification.pending);
         assert_eq!(notification.retries, 5);
+        assert_eq!(
+            notification.error_kind,
+            Some(ProviderErrorKind::ServerError),
+            "steering 通知承载错误分类（ctx.error_kind 透传）"
+        );
         // 主 agent 可读（dequeue_all 取到条目）
         let mut queue = env.queue.lock().unwrap();
         let drained = queue.dequeue_all();
         assert_eq!(drained.len(), 1);
         assert!(drained[0].text.contains("run-1"));
+        assert!(
+            drained[0].text.contains("服务端类错误(ServerError)"),
+            "steering 文本含具体 kind"
+        );
         drop(queue);
         // 通知已落库（重启恢复依据）
         assert_eq!(coordinator.pending_notifications(), 1);

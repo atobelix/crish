@@ -669,6 +669,11 @@ fn main() {
             // T-D-13：子代理 spawner 注入面装配（launcher / db / wait 广播 /
             // steering 队列——Arc 构造完成后注入，spawner 在 engine 内）
             core_state.finalize_subagent_spawner();
+            // 审计 01 W1（任务连续性推进轮）：kill_subagent / send_message
+            // 三通道 + WaitChannel 控制总线解析器生产装配（与 spawner 同批
+            // ——Arc 构造完成后经板卡绑定真实现，工具从 unsupported 升级为
+            // 生产可用）
+            core_state.finalize_continuity_channels();
 
             // ⑦ restore：run_in_runtime 在 manage(CoreRunState) 之前执行
             //（成功 seed_sequences + 立即快照；失败降级不阻断，门禁经

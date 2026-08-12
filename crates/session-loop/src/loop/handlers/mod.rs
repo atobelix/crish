@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::registry::ToolRegistry;
+use conex_compaction::compaction::StubPolicy;
 use conex_compaction::{CompactionEngine, CompactionPlan, EstimateContext, Summarizer};
 use conex_types::context::ContextBudget;
 use conex_types::error::codes;
@@ -128,12 +129,23 @@ pub(crate) struct LoopState {
     /// 时间戳早于它则该 usage 不再描述当前前缀（压缩插入新前缀消息），
     /// 估算回退启发式（判定在 conex-compaction 引擎内部完成）。
     pub(crate) last_compaction_at: Option<i64>,
-    /// 单 run 压缩次数（P4 §3.4.6）：预检触发与溢出触发共用计数，
-    /// 上限 max_auto_compactions_per_run（默认 1）；run 起始归零。
+    /// 单 run 压缩次数（P4 §3.4.6）：预检触发与用户消息边界/分阶段触发
+    /// 共用计数，上限 max_auto_compactions_per_run（默认 1）；**溢出阶梯
+    /// 绕开本计数**（E2 F2 层 2：溢出自有 compression_retries 防死循环，
+    /// 预检不再饿死溢出恢复，DEEPCHECK-11 §7 冲突 1）；run 起始归零。
     pub(crate) compactions_this_run: u32,
-    /// 溢出压缩重试计数（P4 §3.5，上限 1）：T-34 压缩阶梯（ContextLength-
-    /// Exceeded / PayloadTooLarge 恢复）消费；本任务只提供字段与归零点。
+    /// 溢出压缩重试计数（P4 §3.5，上限 [SessionLoopOptions::compact_overflow_retries]
+    /// 默认 2）：T-34 压缩阶梯（ContextLengthExceeded / PayloadTooLarge
+    /// 恢复）消费；**绕开预检共享计数**（E2 F2 层 2：max_auto_compactions_per_run
+    /// 仅约束预检/边界/分阶段，溢出自有本计数防死循环）。本任务只提供
+    /// 字段与归零点。
     pub(crate) compression_retries: u32,
+    /// 溢出压缩因 LLM 摘要不可用而未压缩（E2 F1 L3）：compression_ladder
+    /// 在 plan.llm_unavailable 且无豁免时置 true，fatal 文案经
+    /// compression_fatal_note 输出「LLM 不可用」附注（显式失败不静默丢语义，
+    /// 信息分级约束 C：经 runtime-error 事件呈现，不进对话）；fresh run
+    /// 归零（loop/mod.rs run 起始同批）。
+    pub(crate) overflow_llm_unavailable: bool,
     /// 缓存跟踪器（P5 S2 / T-36）：None = 未配置缓存测量（行为与现状一致）；
     /// 构造 / 复位点 = LoopState 构造 + run() 起始（fresh run，P5 §3.4.5）；
     /// run 内跨 turn 维护签名基线并聚合 RunCacheStats；压缩事件（
@@ -149,6 +161,13 @@ pub(crate) struct LoopState {
     /// None = 回退 run 级 [Self::summary_dispatch]（轮次 4 语义）。
     pub(crate) summary_coordinator:
         Option<Arc<crate::r#loop::summary_coordinator::SessionSummaryCoordinator>>,
+    /// E2 F3：最近一次压缩的摘要待重试快照（用户消息边界被动触发点素材，
+    /// 07 方案 §2.4 断言 4）。[apply_compaction] 产出 stub 时记录（与后台
+    /// 任务同一入参源）；用户消息边界经 [maybe_retry_pending_summary] 重建
+    /// 任务单飞触发——判定「对话中仍存在该块 stub 消息」为待重试。块已被
+    /// 替换 / 清理则自然失效。fresh run 不重置（跨 run 待重试语义延续，
+    /// 与 summary_coordinator 任务存活语义对齐）。None = 无待重试摘要。
+    pub(crate) pending_summary_retry: Option<PendingSummaryRetry>,
 }
 
 impl LoopState {
@@ -209,9 +228,13 @@ impl LoopState {
             last_compaction_at: None,
             compactions_this_run: 0,
             compression_retries: 0,
+            // E2 F1 L3：溢出 LLM 不可用标记初始 false（无 fatal 前恒为假）
+            overflow_llm_unavailable: false,
             cache_tracker,
             summary_dispatch,
             summary_coordinator,
+            // E2 F3：无待重试摘要（fresh state）
+            pending_summary_retry: None,
         }
     }
 }
@@ -297,6 +320,25 @@ pub(crate) struct CompactionTriggerInfo {
     pub(crate) reason: ContextCompressionReason,
 }
 
+/// E2 F3：摘要待重试快照（用户消息边界被动触发点素材）。
+///
+/// 与后台摘要任务（[SummaryDispatchTask]）同一入参源——[apply_compaction]
+/// 产出 stub 时记录；被动触发时若对话中仍存在该块 stub 消息则重建任务
+/// 经协调器 / 调度器单飞触发（存活去重由协调器保证，重复触发幂等）。
+#[derive(Clone)]
+pub(crate) struct PendingSummaryRetry {
+    /// 块 id（`compacted-summary-{gen}-{fold}`，与链内摘要消息 id 同名）
+    pub(crate) block_id: String,
+    /// 压缩代数（R-K 单源）
+    pub(crate) generation: u32,
+    /// 丢弃消息（与同步尝试同源——重试同一批）
+    pub(crate) dropped: Vec<conex_types::message::AgentMessage>,
+    /// 既有摘要文本（链尾 stub / md 渲染；与同步尝试同源）
+    pub(crate) existing: Option<String>,
+    /// 摘要字节预算（max_summary_tokens × 4）
+    pub(crate) max_bytes: usize,
+}
+
 /// 阈值预检触发（P4 阶段 3-2 / §3.4.1 触发点 1，prepare_turn 步骤 5）。
 ///
 /// 条件（全部满足才压缩）：
@@ -305,12 +347,9 @@ pub(crate) struct CompactionTriggerInfo {
 /// 2. `estimate ≥ window - reserve`（对齐 pi threshold = window - reserve，
 ///    估算 = [estimate_context] 双源结果，C9 口径）；
 /// 3. 本 run 压缩次数未达上限（[SessionLoopOptions::max_auto_compactions_per_run]，
-///    单 run 护栏，预检与溢出触发共用计数，§3.4.6）。
+///    单 run 护栏，仅约束预检/边界/分阶段——E2 F2 层 2 后溢出绕开本计数）。
 ///
-/// 压缩动作：`compact_agent_messages` 同步执行（保留 system 消息 + 摘要
-/// 占位 + 保留段，合法切割点 tool 配对保护）；L2 摘要失败降级 L1 占位符；
-/// 无合法切割点（tool 孤儿无法配对 / 保留段覆盖全部消息）时计划为空动作，
-/// 不广播事件、不计数。
+/// 压缩动作（LLM 摘要强制 / 切割点 / 形状护栏见 [compact_with_llm_guard]）。
 ///
 /// 模型切换护栏（§3.4.6）依赖壳层注入的生效模型 id（LoopState 无模型
 /// 字段，P3 模型目录接线后由壳层在会话级比对），本层预留不实现。
@@ -335,12 +374,128 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
     if !engine.should_compact(estimate.tokens, u64::from(budget_tokens)) {
         return false;
     }
-    let plan = engine.compact_agent_messages(
+    let info = CompactionTriggerInfo {
+        trigger: ContextCompressionTrigger::Threshold,
+        reason: ContextCompressionReason::Threshold,
+    };
+    compact_with_llm_guard(state, budget_tokens, &policy, &info).await
+}
+
+/// E2 F3：用户消息边界压缩（hold → compact → append，07 方案 §2.1）。
+///
+/// prepare_turn 步骤 2 在用户消息 [record_message] **之前**调用——压缩对
+/// hold 消息透明：估算（[estimate_context]）不含 hold 消息（更保守、更早
+/// 触发），切割点恒在 hold 之前，用户消息 100% 保留、必在发送序列尾部
+/// （kept_ids 中绝不在 dropped_ids）。
+///
+/// 条件（与预检 [maybe_compact_preflight] 同口径，trigger=UserMessage）：
+///
+/// 1. 预算与压缩策略均已配置（None = 向后兼容现状，不触发）；
+/// 2. `estimate ≥ window - reserve` **或存在待重试摘要块**（awaiting/retired
+///    stub，07 §2.1 条件 1 OR——被动补摘要，不阻塞发送）；
+/// 3. 本 run 压缩次数未达上限（与预检共享单 run 计数——边界压缩后预检
+///    因计数封顶自然跳过；边界未压缩不消耗计数，预检可再试；计数封顶
+///    只跳过压缩，被动补摘要 [maybe_retry_pending_summary] 不受约束）；
+/// 4. LLM 摘要强制（同预检 stub_policy；不可用 → 发
+///    runtime-intervention-required 事件，消息照常发送、不消耗计数）。
+///
+/// 压缩动作：对「不含 hold 消息」的对话 compact_agent_messages
+/// （budget = window - reserve）→ [apply_compaction]（trigger=UserMessage，
+/// 摘要同步一次 + 失败后台重试）。压缩后（或未压缩时）执行边界被动摘要
+/// 重试 [maybe_retry_pending_summary]。
+///
+/// 返回是否实际发生了压缩（对话被替换 + 事件已广播）。
+pub(crate) async fn maybe_compact_user_boundary(state: &mut LoopState) -> bool {
+    let Some(budget) = state.budget else {
+        return false;
+    };
+    let Some(policy) = state.compaction_policy.clone() else {
+        return false;
+    };
+    // 快照锁定（与预检同一入口；估算需折算 tools 前缀）
+    streaming::ensure_tools_snapshot(state);
+    let estimate = estimate_context(state);
+    let budget_tokens = budget.context_window.saturating_sub(budget.reserve_tokens);
+    let engine = CompactionEngine::new(0);
+    let over_threshold = engine.should_compact(estimate.tokens, u64::from(budget_tokens));
+    if !over_threshold {
+        // 未超阈值 → 不压缩（不消耗计数）；仍执行被动摘要重试
+        // （待重试块存在时补摘要，不阻塞发送）
+        maybe_retry_pending_summary(state);
+        return false;
+    }
+    if state.compactions_this_run >= state.options.max_auto_compactions_per_run {
+        // 计数封顶 → 不压缩（与预检共享单 run 计数，边界压缩后预检自然
+        // 跳过）；被动补摘要**不受压缩计数约束**（不压缩对话、不消耗
+        // 计数——仅补摘要的被动触发面）
+        maybe_retry_pending_summary(state);
+        return false;
+    }
+    let info = CompactionTriggerInfo {
+        trigger: ContextCompressionTrigger::UserMessage,
+        reason: ContextCompressionReason::UserMessage,
+    };
+    let compacted = compact_with_llm_guard(state, budget_tokens, &policy, &info).await;
+    // 压缩后执行被动摘要重试：压缩成功但摘要同步失败（新 stub 已登记
+    // 后台任务，单飞去重）或压缩前存在待重试块 → 补摘要机会点
+    maybe_retry_pending_summary(state);
+    compacted
+}
+
+/// 共享压缩执行（预检 / 用户消息边界共用；E2 F1 L1 门禁集中面）。
+///
+/// - **LLM 摘要强制（E2 F1 L1/L3）**：豁免（compact_allow_stub_fallback /
+///   !compact_require_llm 任一放行）→ StubAllowed 降级 stub（现状语义）；
+///   默认 LlmRequired → 无 Summarizer/摘要失败不落 stub、等待 LLM 可用
+///   （不压缩、不计数，发 runtime-intervention-required 事件提示；预算
+///   钳制兜底仍在 streaming 面生效）。
+/// - **无合法切割点**：dropped_ids 为空 → 放弃压缩（不广播、不计数）。
+/// - **协议形状护栏（T-36）**：压缩产物无 system 且链后首条非 user →
+///   跳过压缩 + warn。
+/// - 通过全部护栏 → [apply_compaction]（唯一前缀重写点 + 计数 + Start/End
+///   事件）。
+///
+/// 返回是否实际发生了压缩。
+async fn compact_with_llm_guard(
+    state: &mut LoopState,
+    budget_tokens: u32,
+    policy: &conex_compaction::CompactionPolicy,
+    info: &CompactionTriggerInfo,
+) -> bool {
+    let stub_policy = if state.options.compact_allow_stub_fallback
+        || !state.options.compact_require_llm
+    {
+        StubPolicy::StubAllowed
+    } else {
+        StubPolicy::LlmRequired
+    };
+    let engine = CompactionEngine::new(0);
+    let plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
         budget_tokens as usize,
-        &policy,
+        policy,
         state.summarizer.as_deref(),
+        stub_policy,
     );
+    if plan.llm_unavailable {
+        // E2 F1 L1：Summarizer 缺失 / 摘要失败且 LLM 强制 → 不压缩、等待
+        // LLM 可用（不产生 stub、不计数——本路径不消耗单 run 上限，预算
+        // 钳制兜底仍在 streaming 面生效）；发 runtime-intervention-required
+        // 事件提示（信息分级约束 C：事件面呈现，不进对话、不给 AI）
+        tracing::warn!(
+            session_id = %state.machine.context().session_id,
+            trigger = ?info.trigger,
+            "压缩因 LLM 摘要不可用而跳过（等待 LLM 可用；compact_allow_stub_fallback=true 可豁免为 stub）"
+        );
+        state.events.push(AgentEvent::RuntimeInterventionRequired {
+            session_id: state.machine.context().session_id.clone(),
+            timestamp: crate::steering::now_iso_utc(),
+            reason: "LLM 摘要不可用，压缩等待 LLM 可用".to_string(),
+            choices: vec!["等待 LLM 摘要可用后自动压缩".to_string()],
+            message: "上下文已超窗但 LLM 摘要不可用——未压缩（禁止纯丢弃式线性压缩），等待 LLM 可用后重试".to_string(),
+        });
+        return false;
+    }
     if plan.dropped_ids.is_empty() {
         // 放弃压缩（无合法切割点 / 无可丢内容）：不广播、不计数
         return false;
@@ -351,24 +506,69 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
     if !compaction_shape_ok(&plan.messages) {
         tracing::warn!(
             session_id = %state.machine.context().session_id,
+            trigger = ?info.trigger,
             "压缩产物协议形状违规（无 system 且链后首条非 user）→ 跳过压缩（T-36 护栏）"
         );
         return false;
     }
-    let info = CompactionTriggerInfo {
-        trigger: ContextCompressionTrigger::Threshold,
-        reason: ContextCompressionReason::Threshold,
-    };
-    apply_compaction(state, &plan, &info, Some(u64::from(budget_tokens))).await;
+    apply_compaction(state, &plan, info, Some(u64::from(budget_tokens))).await;
     true
+}
+
+/// E2 F3：用户消息边界被动摘要重试（07 §2.4 断言 4；F2 层 1 低功耗模式
+/// 的被动触发点，卡 A 提供触发面）。
+///
+/// 判定：存在待重试快照（最近一次压缩产出 stub）&& 对话中仍存在该块
+/// stub 消息（块未升级替换 / 清理）&& Summarizer 可用 → 重建
+/// [SummaryDispatchTask] 经会话级协调器（try_trigger：单飞 + 全局 ≤2，
+/// summary_coordinator.rs:40 不变）或 run 级 dispatch（try_spawn）触发。
+///
+/// 不阻塞发送、不消耗压缩计数；存活任务去重由协调器 / 调度器保证——
+/// 重复触发幂等（摘要成功升级 committed 由后台任务回调面完成）。
+fn maybe_retry_pending_summary(state: &mut LoopState) {
+    let Some(pending) = state.pending_summary_retry.clone() else {
+        return;
+    };
+    // 块已不在对话（摘要成功替换 / 清理）→ 不再待重试
+    if !state
+        .conversation
+        .iter()
+        .any(|m| m.id == pending.block_id)
+    {
+        return;
+    }
+    let Some(summarizer) = state.summarizer.clone() else {
+        return;
+    };
+    let task = crate::r#loop::summary_dispatch::SummaryDispatchTask {
+        session_id: state.machine.context().session_id.clone(),
+        block_id: pending.block_id,
+        generation: pending.generation,
+        dropped: pending.dropped,
+        existing: pending.existing,
+        max_bytes: pending.max_bytes,
+        summarizer,
+    };
+    match &state.summary_coordinator {
+        // 会话级协调器（壳层注入）：跨 run 单飞 + 全局并发 ≤2 + 任务跨
+        // run 存活；默认回调（落 compression_blocks 表）随协调器携带
+        Some(coordinator) => {
+            coordinator.try_trigger(task, None);
+        }
+        // run 级 dispatch（未注入会话级容器时）：run 内单飞
+        None => {
+            state.summary_dispatch.try_spawn(task, None);
+        }
+    }
 }
 
 /// 应用压缩计划：替换对话 + 压缩计数 + 时间戳护栏 + 事件广播（§3.4.6）。
 ///
 /// - **对话替换**：压缩是唯一前缀重写点（I1，§3.6）——`plan.messages`
 ///   已保留 system 消息 + 摘要占位 + 保留段；
-/// - **护栏**：`compactions_this_run += 1`（单 run 上限共用计数）；压缩
-///   完成后重置 `last_compaction_at = now`（usage 源早于边界作废）；
+/// - **护栏**：`compactions_this_run += 1`（单 run 上限计数，仅约束预检/
+///   边界/分阶段触发；溢出阶梯绕开，E2 F2 层 2）；压缩完成后重置
+///   `last_compaction_at = now`（usage 源早于边界作废）；
 /// - **事件**：`ContextCompressionStart`（tokens_before + 触发原因）→
 ///   替换对话 → `ContextCompressionEnd`（record 载荷 = CompactionPlan
 ///   字段，trigger/reason/policy/tokens/ids/summary/threshold）；
@@ -510,6 +710,17 @@ pub(crate) async fn apply_compaction(
                 .as_ref()
                 .map(|p| p.max_summary_tokens.saturating_mul(4))
                 .unwrap_or(4096);
+            // E2 F3：记录摘要待重试快照（用户消息边界被动触发点素材，
+            // 07 方案 §2.4 断言 4）——与后台任务同一入参源
+            // （dropped/existing/max_bytes），边界触发经
+            // [maybe_retry_pending_summary] 重建任务单飞续试
+            state.pending_summary_retry = Some(PendingSummaryRetry {
+                block_id: block_id.clone(),
+                generation: plan.generation,
+                dropped: dropped_for_retry.clone(),
+                existing: existing.clone(),
+                max_bytes,
+            });
             let spawned = match &state.summary_coordinator {
                 // T-42：会话级协调器（壳层注入）——跨 run 单飞 + 全局
                 // 并发上限 + 任务跨 run 存活；默认回调（壳层装配：落
@@ -622,6 +833,7 @@ pub(crate) async fn apply_compaction(
 fn compression_reason_str(reason: ContextCompressionReason) -> &'static str {
     match reason {
         ContextCompressionReason::Manual => "manual",
+        ContextCompressionReason::UserMessage => "usermessage",
         ContextCompressionReason::Threshold => "threshold",
         ContextCompressionReason::Overflow => "overflow",
         ContextCompressionReason::Idle => "idle",
@@ -970,6 +1182,37 @@ mod tests {
         })
     }
 
+    /// 合法 Schema V1 JSON 文档（R-G 契约；测试摘要器成功输出面）
+    fn valid_summary_json(block_id: &str) -> String {
+        serde_json::json!({
+            "schemaVersion": 1,
+            "blockId": block_id,
+            "generation": 1,
+            "droppedIds": [],
+            "height": 1,
+            "tier": "chunk",
+            "goal": "修复构建流程",
+            "constraints": [],
+            "progress": ["已定位编译错误"],
+            "decisions": [],
+            "nextSteps": ["运行全量测试"],
+            "criticalContext": ["cargo build --workspace"],
+        })
+        .to_string()
+    }
+
+    /// 恒成功摘要器（测试辅助：LLM 可用面）
+    struct StubSummaryGuard;
+    impl Summarizer for StubSummaryGuard {
+        fn summarize(
+            &self,
+            _dropped: &[AgentMessage],
+            _existing: Option<&str>,
+        ) -> Result<String, String> {
+            Ok(valid_summary_json("compacted-summary-1-1"))
+        }
+    }
+
     /// 钳制数学（P4 §3.3.2 窗口边缘 / 下限不钳 / MIN 1）
     #[test]
     fn clamp_max_tokens_window_edge_and_floor() {
@@ -1121,6 +1364,269 @@ mod tests {
         assert!(state.events.is_empty(), "未触发不得广播任何事件");
     }
 
+    // ── E2 F3 用户消息边界（hold → compact → append）──────────────
+
+    /// E2 F3：边界触发压缩（trigger=UserMessage）——hold 消息不进压缩
+    /// 输入：压缩前后对话尾部 = 用户消息原文（逐字节相等），用户消息
+    /// 恒在发送序列尾部、绝不在 dropped_ids（07 方案 §2.4 断言 1/2）
+    #[tokio::test]
+    async fn user_boundary_compacts_when_over_threshold_and_holds_message() {
+        let mut state = test_state(SessionLoopOptions {
+            // E2 F1 L1：LLM 摘要强制——注入可用 Summarizer（合法 Schema V1）
+            summarizer: Some(Arc::new(StubSummaryGuard)),
+            ..budgeted_options()
+        });
+        state.conversation = big_conversation();
+        // 模拟 hold 消息（prepare_turn 步骤 2：dequeue 后未 record_message
+        // 即调用本函数——压缩对 hold 消息透明）
+        let held = Arc::new(AgentMessage {
+            id: "user-hold".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T10:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "hold 消息原文".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        });
+        // 边界压缩（对话不含 hold 消息）
+        assert!(
+            maybe_compact_user_boundary(&mut state).await,
+            "超阈值必须边界压缩"
+        );
+        assert_eq!(state.compactions_this_run, 1);
+        // append：用户消息入对话尾部
+        state.conversation.push(held.clone());
+        // 压缩前后对话尾部 = 用户消息原文（逐字节相等）
+        assert_eq!(
+            state.conversation.last().map(|m| m.text()),
+            Some("hold 消息原文".to_string()),
+            "用户消息必在发送序列尾部（压缩对 hold 消息透明）"
+        );
+        // 用户消息绝不在 dropped_ids（100% 保留）——压缩对 hold 消息
+        // 透明：用户消息未参与压缩（未入对话），append 后恒在对话尾部
+        let record = compression_record(&state).expect("必须携带压缩记录");
+        assert!(
+            !record.compressed_message_ids.contains(&"user-hold".to_string()),
+            "用户消息绝不在 dropped_ids"
+        );
+    }
+
+    /// E2 F3：trigger=UserMessage 事件广播（Start.reason / End.record.trigger
+    /// / reason 字段），policy 归 proactive（07 方案 §2.4 断言 2）
+    #[tokio::test]
+    async fn user_boundary_events_carry_usermessage_trigger() {
+        let mut state = test_state(SessionLoopOptions {
+            summarizer: Some(Arc::new(StubSummaryGuard)),
+            ..budgeted_options()
+        });
+        state.conversation = big_conversation();
+        assert!(maybe_compact_user_boundary(&mut state).await);
+        // Start 事件：reason = "usermessage"
+        let start_reason = state
+            .events
+            .iter()
+            .find_map(|e| match e {
+                AgentEvent::ContextCompressionStart { reason, .. } => Some(reason.clone()),
+                _ => None,
+            })
+            .expect("必须有压缩开始事件");
+        assert_eq!(start_reason, "usermessage");
+        // End 事件 record：trigger/reason = UserMessage
+        let record = compression_record(&state).expect("必须有压缩记录");
+        assert_eq!(record.trigger, ContextCompressionTrigger::UserMessage);
+        assert_eq!(record.reason, Some(ContextCompressionReason::UserMessage));
+        let policy = record.policy.expect("必须携带策略元数据");
+        assert_eq!(policy.tier, ContextCompressionPolicyTier::Proactive);
+    }
+
+    /// E2 F3：未超阈值 → 不压缩、无事件、不计数（行为与压缩前一致）；
+    /// 无预算配置 → 不触发（07 方案 §2.4 断言「未超阈值行为不变」）
+    #[tokio::test]
+    async fn user_boundary_skips_under_threshold() {
+        // 预算配置但估算低于阈值 → 不压缩、无事件
+        let mut state = test_state(budgeted_options());
+        state.conversation = vec![Arc::new(AgentMessage {
+            id: "m0".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T10:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "短消息".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        })];
+        assert!(
+            !maybe_compact_user_boundary(&mut state).await,
+            "未超阈值不得边界压缩"
+        );
+        assert_eq!(state.compactions_this_run, 0);
+        assert!(state.events.is_empty(), "未触发不得广播任何事件");
+        // 无预算配置（默认 options 全 None）→ 不触发
+        let mut state = test_state(SessionLoopOptions::default());
+        state.conversation = big_conversation();
+        assert!(!maybe_compact_user_boundary(&mut state).await);
+        assert!(state.events.is_empty());
+    }
+
+    /// E2 F3：LLM 摘要不可用（compact_require_llm=true 且无 Summarizer）→
+    /// 不压缩、不计数（预检仍可再试）、消息照常发送（边界不阻塞），发
+    /// runtime-intervention-required 事件（07 方案 §2.4 断言 2）
+    #[tokio::test]
+    async fn user_boundary_llm_unavailable_skips_but_sends_message() {
+        let mut state = test_state(budgeted_options());
+        state.conversation = big_conversation();
+        assert!(
+            !maybe_compact_user_boundary(&mut state).await,
+            "LLM 摘要不可用 → 不压缩"
+        );
+        assert_eq!(state.compactions_this_run, 0, "不消耗单 run 计数");
+        // 事件面提示（信息分级约束 C：事件呈现，不进对话）
+        assert!(
+            state
+                .events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::RuntimeInterventionRequired { .. })),
+            "LLM 不可用必须发 runtime-intervention-required 事件"
+        );
+        // 豁免开启（compact_allow_stub_fallback=true）→ 降级 stub 压缩完成
+        let mut state = test_state(SessionLoopOptions {
+            compact_allow_stub_fallback: true,
+            ..budgeted_options()
+        });
+        state.conversation = big_conversation();
+        assert!(
+            maybe_compact_user_boundary(&mut state).await,
+            "豁免开启 → stub 压缩照常执行"
+        );
+    }
+
+    /// E2 F3：边界压缩与预检共享单 run 计数——边界压缩消耗计数后，同
+    /// turn 预检因计数封顶自然跳过；边界未压缩（LLM 不可用）不消耗计数，
+    /// 预检可再试（07 方案 §2.1 / E2 §4.3 优先级表）
+    #[tokio::test]
+    async fn user_boundary_compaction_consumes_shared_run_limit() {
+        let mut state = test_state(SessionLoopOptions {
+            summarizer: Some(Arc::new(StubSummaryGuard)),
+            ..budgeted_options()
+        });
+        state.conversation = big_conversation();
+        assert!(maybe_compact_user_boundary(&mut state).await);
+        assert_eq!(state.compactions_this_run, 1);
+        // 同 turn 预检：对话重新膨胀但计数已封顶 → 自然跳过
+        state.conversation = big_conversation();
+        assert!(
+            !maybe_compact_preflight(&mut state).await,
+            "边界压缩后预检因计数封顶跳过"
+        );
+        // 反向：边界未压缩（LLM 不可用）不消耗计数 → 预检可再试
+        let mut state = test_state(budgeted_options());
+        state.conversation = big_conversation();
+        assert!(!maybe_compact_user_boundary(&mut state).await);
+        assert_eq!(state.compactions_this_run, 0);
+        let mut state = test_state(SessionLoopOptions {
+            summarizer: Some(Arc::new(StubSummaryGuard)),
+            ..budgeted_options()
+        });
+        state.conversation = big_conversation();
+        assert!(
+            maybe_compact_preflight(&mut state).await,
+            "边界未压缩不消耗计数 → 预检仍可压缩"
+        );
+    }
+
+    /// E2 F3：摘要待重试被动触发点（07 方案 §2.4 断言 4）——压缩产出
+    /// stub 后（摘要失败），用户消息边界（未超阈值）经
+    /// [maybe_retry_pending_summary] 重建任务单飞触发，摘要器被再次调用
+    #[tokio::test]
+    async fn user_boundary_retries_pending_summary() {
+        /// 恒失败摘要器（同步失败 → stub；后台任务重试全部失败 → retired）
+        struct AlwaysFailSummarizer {
+            calls: Arc<std::sync::Mutex<usize>>,
+        }
+        impl Summarizer for AlwaysFailSummarizer {
+            fn summarize(
+                &self,
+                _dropped: &[AgentMessage],
+                _existing: Option<&str>,
+            ) -> Result<String, String> {
+                *self.calls.lock().unwrap() += 1;
+                Err("摘要持续失败（模拟待重试）".to_string())
+            }
+        }
+        let calls = Arc::new(std::sync::Mutex::new(0usize));
+        let state = test_state(SessionLoopOptions {
+            summarizer: Some(Arc::new(AlwaysFailSummarizer { calls: calls.clone() })),
+            // 豁免开启（E2 F1 L3）：同步摘要失败 → 降级 stub（awaiting 块），
+            // 供被动摘要重试点消费（F1 强制默认路径下失败不落 stub）
+            compact_allow_stub_fallback: true,
+            summary_dispatch: Some(crate::r#loop::summary_dispatch::SummaryDispatchConfig {
+                backoff_ms: vec![1, 1, 1],
+                jitter: 0.0,
+                max_wall_ms: 5_000,
+                max_attempts: 4,
+            }),
+            ..budgeted_options()
+        });
+        // 首轮边界压缩（超阈值）：同步摘要失败 → stub + 待重试快照 +
+        // 后台任务登记
+        let mut state = state;
+        state.conversation = big_conversation();
+        assert!(maybe_compact_user_boundary(&mut state).await);
+        assert_eq!(*calls.lock().unwrap(), 1, "同步一次摘要尝试");
+        assert!(
+            state.pending_summary_retry.is_some(),
+            "产出 stub 必须记录待重试快照"
+        );
+        // 等首轮后台任务结束（恒失败 → retired，快退避 1ms×3）
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let after_first = *calls.lock().unwrap();
+        assert!(after_first >= 2, "后台退避重试必须已发生：{after_first}");
+        // 边界被动触发：对话含 stub（块仍待重试）+ 短消息（未超阈值）
+        // → 不压缩但触发补摘要（摘要器调用次数继续增长）
+        state.conversation = vec![
+            Arc::new(AgentMessage {
+                id: "compacted-summary-1-1".to_string(),
+                role: AgentMessageRole::Assistant,
+                created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "[Compacted(compacted-summary-1-1) 8 条消息 · 摘要见块表]".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: None,
+            }),
+            Arc::new(AgentMessage {
+                id: "m8".to_string(),
+                role: AgentMessageRole::User,
+                created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "短消息".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: None,
+            }),
+        ];
+        assert!(
+            !maybe_compact_user_boundary(&mut state).await,
+            "未超阈值不压缩"
+        );
+        assert_eq!(
+            state.compactions_this_run, 1,
+            "被动重试不消耗压缩计数"
+        );
+        // 等被动重试任务完成（退避 1ms×3 + 调用）
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let total = *calls.lock().unwrap();
+        assert!(
+            total >= after_first + 1,
+            "用户消息边界必须触发被动摘要重试（{after_first} → {total}）"
+        );
+    }
+
     /// 事件载荷：ContextCompressionEnd.record 字段 = CompactionPlan 字段
     /// （trigger/reason/policy/tokens/ids/summary/threshold，§3.4.6）
     #[tokio::test]
@@ -1140,6 +1646,7 @@ mod tests {
             tokens_after: 2_100,
             summary: "[Compacted 2 earlier message(s) to fit context window]".to_string(),
             summary_is_llm: false,
+            llm_unavailable: false,
             fold_chain_prev: 0,
             fold_chain_after: 0,
             fold_index: 0,
@@ -1247,6 +1754,7 @@ mod tests {
             tokens_after: 5_000,
             summary: "[Compacted 1 earlier message(s)]".to_string(),
             summary_is_llm: false,
+            llm_unavailable: false,
             fold_chain_prev: 0,
             fold_chain_after: 0,
             fold_index: 0,

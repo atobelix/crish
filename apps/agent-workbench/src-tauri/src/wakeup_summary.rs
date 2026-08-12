@@ -14,13 +14,13 @@
 //!   5. 后台任务完成（TaskCompleted，AB 方案事件）→
 //!      「任务 <id> 已运行 <duration>，日志已累积 <lines> 行，最近输出 <ts>」；
 //!   6. 恢复通知（orchestrator 既有 recovery 事件）→ 复用
-//!      `steering_text`（recovery.rs:359-368），不重写——恢复类唤醒
+//!      `steering_text`（recovery.rs:397-411），不重写——恢复类唤醒
 //!      不经本模块，由 orchestrator 直接构造 steering 条目。
 //! - 注入收口：摘要文本由 T-CF-11（idle 续 run）拼入 steering 条目
 //!   text（与 prompt 并存），随续 run 批量送达；AI 无需手动查询即可
 //!   知道发生了什么（REQ-C04 验收 3）。
 //!
-//! 文案风格对齐 `crates/orchestrator/src/recovery.rs:359-368`（steering_text）；
+//! 文案风格对齐 `crates/orchestrator/src/recovery.rs:397-411`（steering_text）；
 //! 时间/时长格式化遵循全仓 epoch 毫秒惯例（`tools/mod.rs:416-421`
 //! epoch_millis；ISO8601 ↔ epoch 换算与 `core_run_commands.rs:669`
 //! 同源算法，本模块本地实现以保持纯函数自足）。

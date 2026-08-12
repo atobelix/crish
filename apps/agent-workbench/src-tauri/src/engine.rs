@@ -49,15 +49,20 @@ use agent_tools::background::BackgroundTaskManager;
 use agent_tools::definition::{ToolDefinition, ToolError};
 use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
 use agent_tools::registry::ToolRegistry;
+// 审计 01 W1（任务连续性方案推进轮）：kill_subagent / send_message 生产
+// 通道装配——三通道契约经本文件 ContinuityChannelBoard 延迟绑定注入
+use agent_tools::tools::kill_subagent::{KillSubagentToolResult, SubagentKillChannel};
+use agent_tools::tools::send_message::{MainAgentMessageChannel, MainMessageRing, SubagentInjectChannel};
 use agent_tools::tools::set_timer::TimerChannel;
 use agent_tools::tools::wait_subagents::{DispatchDeclaration, SubagentWaitChannel};
 // R-CF3 装配收口（T-CF-10）：wait 通道契约与适配器经库目标引入
 // （wait_channel.rs 是库模块，bin 目标自动依赖同包 lib）
 use crish_agent_workbench::wait_channel::{
-    ControlBusResolver, EventStreamBroadcast, MemoryAgentSource, MemoryWaitStore,
-    NoopControlBusResolver, SubagentStatusSource, WaitChannel, WaitStore,
+    ControlBusResolver, EventStreamBroadcast, LocalDbWaitStore, MemoryAgentSource, MemoryWaitStore,
+    SubagentStatusSource, WaitChannel, WaitStore,
 };
 use async_trait::async_trait;
+use conex_db::LocalDb;
 use conex_types::denied_stats::DeniedStats;
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::{
@@ -86,13 +91,98 @@ use session_loop::{
 use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::fs_commands::skills::RustSkill;
-use crate::timers::{AgentEventSink, MemoryTimerStore, QueuePendingSink, TimerRegistry};
+use crate::timers::{
+    AgentEventSink, LocalDbTimerStore, MemoryTimerStore, QueuePendingSink, TimerRegistry,
+};
 use crate::watchdog::{LastWakeupTracker, Watchdog, WatchdogOptions};
 
 /// 首字节超时（等待流首个字节到达；None = 不设限，对齐 normalizeStreamTimeoutMs）
 const DEFAULT_FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(30);
 /// 流块间空闲超时
 const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// 连接配置覆盖面（D1 §3.3 连接配置表）：None 字段 = 默认值
+/// （connect_timeout 10s / tcp_keepalive 30s / h2 ping 30s+5s）；
+/// 测试装配可传参覆盖（短超时 / 关 keepalive——04 §2.3 可传参面）。
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ClientConnectionConfig {
+    /// 建连超时（默认 10s；reqwest 默认 30s 过长）
+    pub connect_timeout: Option<Duration>,
+    /// TCP keepalive（默认 30s；半开连接 2-3 探针周期内 RST）
+    pub tcp_keepalive: Option<Duration>,
+    /// HTTP/2 PING 间隔（默认 30s；h2 静默挂起对抗）
+    pub http2_keep_alive_interval: Option<Duration>,
+    /// HTTP/2 PING 无响应判定超时（默认 5s；须 interval>0 才生效）
+    pub http2_keep_alive_timeout: Option<Duration>,
+}
+
+impl Default for ClientConnectionConfig {
+    fn default() -> Self {
+        Self {
+            connect_timeout: None,
+            tcp_keepalive: None,
+            http2_keep_alive_interval: None,
+            http2_keep_alive_timeout: None,
+        }
+    }
+}
+
+impl ClientConnectionConfig {
+    /// 默认连接配置（D1 §3.3 / 04 §2.3 连接配置表）
+    pub(crate) fn defaults() -> Self {
+        Self {
+            connect_timeout: Some(Duration::from_secs(10)),
+            tcp_keepalive: Some(Duration::from_secs(30)),
+            http2_keep_alive_interval: Some(Duration::from_secs(30)),
+            http2_keep_alive_timeout: Some(Duration::from_secs(5)),
+        }
+    }
+
+    /// 解析生效配置：None 字段 → 默认值（单测断言字段级生效面）
+    fn resolve(options: Option<ClientConnectionConfig>) -> ClientConnectionConfig {
+        let defaults = Self::defaults();
+        match options {
+            None => defaults,
+            Some(overrides) => ClientConnectionConfig {
+                connect_timeout: overrides.connect_timeout.or(defaults.connect_timeout),
+                tcp_keepalive: overrides.tcp_keepalive.or(defaults.tcp_keepalive),
+                http2_keep_alive_interval: overrides
+                    .http2_keep_alive_interval
+                    .or(defaults.http2_keep_alive_interval),
+                http2_keep_alive_timeout: overrides
+                    .http2_keep_alive_timeout
+                    .or(defaults.http2_keep_alive_timeout),
+            },
+        }
+    }
+}
+
+/// 生产 HTTP 客户端构造（D1 §3.3 / 04 §2.3 单点封装；engine.rs 生产
+/// 装配点唯一替换——其余测试域 Client::new 保持不动，最小改动面）：
+/// connect_timeout 10s / tcp_keepalive 30s / h2 ping 30s+5s；
+/// **不设总 .timeout()**（流式长输出不被总超时误杀，请求级超时由
+/// 双段超时承担）；pool_idle_timeout 保持默认 90s（显式注明）。
+/// 测试装配经 [ClientConnectionConfig] 传参覆盖（短超时 / 关 keepalive）。
+pub(crate) fn build_http_client(options: Option<ClientConnectionConfig>) -> reqwest::Client {
+    let resolved = ClientConnectionConfig::resolve(options);
+    // resolve 恒填充默认值（None 字段 → 默认），unwrap 不会触发；
+    // 显式 expect 而非 unwrap_or——重复常量有漂移风险，报错指向 resolve
+    reqwest::Client::builder()
+        .connect_timeout(resolved.connect_timeout.expect("连接配置解析后恒有默认值"))
+        .tcp_keepalive(resolved.tcp_keepalive.expect("连接配置解析后恒有默认值"))
+        .http2_keep_alive_interval(
+            resolved
+                .http2_keep_alive_interval
+                .expect("连接配置解析后恒有默认值"),
+        )
+        .http2_keep_alive_timeout(
+            resolved
+                .http2_keep_alive_timeout
+                .expect("连接配置解析后恒有默认值"),
+        )
+        .build()
+        .expect("reqwest 客户端构造")
+}
 
 // ── 时间戳与消息 id ───────────────────────────────────────────────
 
@@ -790,6 +880,23 @@ impl crate::watchdog::DispatchStore for MemoryWaitStore {
     }
 }
 
+/// LocalDb 真适配同款桥接（D4 §3.8 ②：装配分支内存/真适配后 watchdog
+/// 读面一致——wait 落库即 watchdog 可读，与内存版同一语义）。
+impl crate::watchdog::DispatchStore for LocalDbWaitStore {
+    fn load_declarations(&self) -> Vec<DispatchDeclaration> {
+        WaitStore::load_all(self)
+    }
+}
+
+/// T-CF-10/13 双 trait 合并面（[WaitStore] + [crate::watchdog::DispatchStore]；
+/// D4 §8 D-6 最小 diff 定夺）：引擎持有的 dispatch 存储实例经本面稳定
+/// 类型化——装配分支（内存/真适配）后 [EngineHandle::dispatch_store]
+/// 访问器返回类型不漂移，双 trait 消费面经 trait 对象上转（upcast）
+/// 分别注入 WaitChannel 与 Watchdog。
+pub(crate) trait WaitDispatchStore: WaitStore + crate::watchdog::DispatchStore {}
+impl WaitDispatchStore for MemoryWaitStore {}
+impl WaitDispatchStore for LocalDbWaitStore {}
+
 /// 会话级 Summarizer 工厂（T-43，00-plan §10 轮次 6 / 04 §9.4 T16；评审
 /// 01 P1-2「补壳层/接线任务」）
 ///
@@ -999,6 +1106,137 @@ pub(crate) fn production_summarizer_factory(
     })
 }
 
+// ── 任务连续性通道板卡（审计 01 W1：kill_subagent / send_message 生产
+//    通道装配面）───────────────────────────────────────────────────
+
+/// 任务连续性三通道 + 控制总线解析器的延迟绑定板卡（审计 01 W1 装配收口）。
+///
+/// - kill_subagent / send_message 两工具的生产通道实现在 CoreRunState
+///   （活动 run 注册表 / 生命周期服务域），但 CoreRunState 在引擎构造
+///   之后才存在（CoreRunState::new 内部构造 EngineHandle）——引擎装配
+///   时以本板卡占位（WaitChannel 的 ControlBusResolver 与
+///   BuiltinToolConfig 三通道字段），CoreRunState Arc 构造完成后经
+///   [ContinuityChannelBoard::bind_*] 注入真实现（main.rs
+///   finalize_continuity_channels 装配面，与 finalize_subagent_spawner
+///   同批）；
+/// - 未绑定（None）→ 结构化错误文案上抛（工具侧按执行失败兜底映射；
+///   生产装配窗口 = 引擎构造与 finalize 之间，毫秒级）；
+/// - 绑定为覆盖语义（幂等：重复 bind 以最后一次为准——进程内仅一次）。
+pub(crate) struct ContinuityChannelBoard {
+    /// 子代理注入解析（send_message target=subagent 与 wait_channel
+    /// inject 共用；取代生产 NoopControlBusResolver）
+    control_bus: Mutex<Option<Arc<dyn ControlBusResolver>>>,
+    /// kill_subagent 终止通道（L3 强停 + 行归一）
+    kill: Mutex<Option<Arc<dyn SubagentKillChannel>>>,
+    /// send_message 子代理注入通道（L1 steer）
+    inject: Mutex<Option<Arc<dyn SubagentInjectChannel>>>,
+    /// send_message 主 agent 消息通道（followUp 环 + 会话留档）
+    self_message: Mutex<Option<Arc<dyn MainAgentMessageChannel>>>,
+}
+
+impl std::fmt::Debug for ContinuityChannelBoard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContinuityChannelBoard").finish_non_exhaustive()
+    }
+}
+
+impl ContinuityChannelBoard {
+    /// 新建板卡（全部插槽为空——未绑定状态）
+    pub(crate) fn new() -> Self {
+        Self {
+            control_bus: Mutex::new(None),
+            kill: Mutex::new(None),
+            inject: Mutex::new(None),
+            self_message: Mutex::new(None),
+        }
+    }
+
+    /// 绑定控制总线解析器（CoreRunState 实现；Weak 适配切断引用环）
+    pub(crate) fn bind_control_bus(&self, resolver: Arc<dyn ControlBusResolver>) {
+        *self.control_bus.lock().unwrap_or_else(|e| e.into_inner()) = Some(resolver);
+    }
+
+    /// 绑定 kill_subagent 终止通道（CoreRunState 实现）
+    pub(crate) fn bind_kill(&self, channel: Arc<dyn SubagentKillChannel>) {
+        *self.kill.lock().unwrap_or_else(|e| e.into_inner()) = Some(channel);
+    }
+
+    /// 绑定 send_message 子代理注入通道（CoreRunState 实现）
+    pub(crate) fn bind_inject(&self, channel: Arc<dyn SubagentInjectChannel>) {
+        *self.inject.lock().unwrap_or_else(|e| e.into_inner()) = Some(channel);
+    }
+
+    /// 绑定 send_message 主 agent 消息通道（CoreRunState 实现）
+    pub(crate) fn bind_self_message(&self, channel: Arc<dyn MainAgentMessageChannel>) {
+        *self.self_message.lock().unwrap_or_else(|e| e.into_inner()) = Some(channel);
+    }
+}
+
+impl ControlBusResolver for ContinuityChannelBoard {
+    fn control_bus(&self, subagent_id: &str) -> Option<Arc<Mutex<ControlBus>>> {
+        self.control_bus
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|resolver| resolver.control_bus(subagent_id))
+    }
+}
+
+#[async_trait::async_trait]
+impl SubagentKillChannel for ContinuityChannelBoard {
+    async fn kill_subagent(
+        &self,
+        session_id: &str,
+        subagent_id: &str,
+        reason: &str,
+    ) -> Result<KillSubagentToolResult, String> {
+        let Some(channel) = self
+            .kill
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        else {
+            return Err("kill_subagent 通道未绑定（引擎装配与 finalize 之间窗口）".to_string());
+        };
+        channel.kill_subagent(session_id, subagent_id, reason).await
+    }
+}
+
+#[async_trait::async_trait]
+impl SubagentInjectChannel for ContinuityChannelBoard {
+    async fn inject(&self, subagent_id: &str, message: &str) -> Result<(), String> {
+        let Some(channel) = self
+            .inject
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        else {
+            return Err("send_message 子代理注入通道未绑定（引擎装配与 finalize 之间窗口）".to_string());
+        };
+        channel.inject(subagent_id, message).await
+    }
+}
+
+#[async_trait::async_trait]
+impl MainAgentMessageChannel for ContinuityChannelBoard {
+    async fn deliver_self(
+        &self,
+        session_id: &str,
+        message: &str,
+        ring: MainMessageRing,
+    ) -> Result<String, String> {
+        let Some(channel) = self
+            .self_message
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        else {
+            return Err("send_message 主 agent 消息通道未绑定（引擎装配与 finalize 之间窗口）".to_string());
+        };
+        channel.deliver_self(session_id, message, ring).await
+    }
+}
+
 /// 引擎句柄（B6.4：provider 生效配置 + 工具注册表 + engineReady）
 ///
 /// - `ready()`：provider 配置三件套（baseUrl/model/apiKey）齐备即可发起
@@ -1047,8 +1285,9 @@ pub(crate) struct EngineHandle {
     wait_channel: Arc<dyn SubagentWaitChannel>,
     /// dispatch 声明存储（WaitChannel 落库 / A7 watchdog 读取的共享
     /// 实例；conex-db session_meta 真适配接线见 wait_channel.rs 模块头
-    /// 注记——与 TimerStore 同一接线缺口）
-    dispatch_store: Arc<MemoryWaitStore>,
+    /// 注记——与 TimerStore 同一接线缺口；装配分支（内存/真适配）经
+    /// [WaitDispatchStore] 合并面稳定类型化，D4 §8 D-6）
+    dispatch_store: Arc<dyn WaitDispatchStore>,
     /// subagent-ended 事件流广播（EventQueue 旁路适配：wait_for_terminal
     /// 的订阅面；经 [Self::terminal_stream] 访问器被 CoreRunState
     /// finalize_subagent_spawner 消费，陈旧 allow 已核销）
@@ -1073,6 +1312,11 @@ pub(crate) struct EngineHandle {
     /// CoreRunState 驱动）；G10 denied 计数共享实例。任务域审计
     /// （10-P3）EventBridge 直发、不经本 sink（30 §9 域隔离）
     audit_sink: Arc<RoutingAuditSink>,
+    /// 任务连续性通道板卡（审计 01 W1：kill_subagent / send_message 工具
+    /// 三通道 + WaitChannel ControlBusResolver 的延迟绑定面；消费方 =
+    /// CoreRunState::finalize_continuity_channels（main.rs 装配面），
+    /// 已接线）
+    continuity: Arc<ContinuityChannelBoard>,
     // T-D-13 精简：spawner 字段冗余（全仓无读取方，A8 D3）——实际
     // spawner 由 CoreRunState::finalize_subagent_spawner 自管，构造参数
     // 保留经 BuiltinToolConfig.subagent_spawner 注入 run_subagent 工具
@@ -1084,15 +1328,20 @@ impl EngineHandle {
     /// T-D-13：spawn 通道未注入（None）——run_subagent 返回
     /// common.unsupported 降级；生产装配走 [Self::new_with_spawner]。
     pub(crate) fn new(background_manager: Option<Arc<dyn BackgroundTaskManager>>) -> Self {
-        Self::new_with_spawner(background_manager, None)
+        Self::new_with_spawner(background_manager, None, None)
     }
 
-    /// 初始化引擎并注入子代理 spawn 通道（T-D-13 生产装配点：CoreRunState
-    /// 创建 spawner 实例后传入，经 BuiltinToolConfig.subagent_spawner 接线
-    /// run_subagent 工具）
+    /// 初始化引擎并注入子代理 spawn 通道与 LocalDb 连接（T-D-13 生产
+    /// 装配点：CoreRunState 创建 spawner 实例后传入，经
+    /// BuiltinToolConfig.subagent_spawner 接线 run_subagent 工具；
+    /// D6 §3.1 段 2 + D4 §3.8 ② 装配替换：`db: Option<LocalDb>`
+    /// （W4 统一签名，CoreRunState::new 经 `store.as_local_db()` 下转
+    /// 传入）——Some(db) → timer/sched/wait 三 store 真适配，
+    /// None（InMemoryStore 测试替身）→ 内存版回退保测试面）。
     pub(crate) fn new_with_spawner(
         background_manager: Option<Arc<dyn BackgroundTaskManager>>,
         subagent_spawner: Option<Arc<dyn agent_tools::tools::subagent::SubagentSpawner>>,
+        db: Option<LocalDb>,
     ) -> Self {
         // 34 §5.2 E-1（R-12）：attach 会话级开关值源 = BrowserToolsConfig
         // .mcp_attach_allowed（默认 false = 端点信息零暴露）；面板开关 →
@@ -1101,7 +1350,7 @@ impl EngineHandle {
         // （安全兜底）
         let mcp_attach_allowed =
             conex_browser_tools::BrowserToolsConfig::default().mcp_attach_allowed;
-        Self::build(background_manager, subagent_spawner, mcp_attach_allowed)
+        Self::build(background_manager, subagent_spawner, mcp_attach_allowed, db)
     }
 
     /// 测试面：指定 attach 会话级开关的完整装配（34 §5.2 E-1 装配注入
@@ -1109,23 +1358,26 @@ impl EngineHandle {
     /// `BrowserSlot::with_mcp_attach_allowed` 注入槽并由消费 seam 命中）。
     #[cfg(test)]
     pub(crate) fn new_with_mcp_attach_allowed(mcp_attach_allowed: bool) -> Self {
-        Self::build(None, None, mcp_attach_allowed)
+        Self::build(None, None, mcp_attach_allowed, None)
     }
 
     /// 引擎装配主路径（new / new_with_spawner / 测试注入构造共用；
     /// `mcp_attach_allowed` 由生产入口从 [BrowserToolsConfig] 读取、
-    /// 测试入口直接注入）。
+    /// 测试入口直接注入；`db` 为 timer/sched/wait 三 store 真适配的
+    /// LocalDb 连接（None = 内存版回退））。
     fn build(
         background_manager: Option<Arc<dyn BackgroundTaskManager>>,
         subagent_spawner: Option<Arc<dyn agent_tools::tools::subagent::SubagentSpawner>>,
         mcp_attach_allowed: bool,
+        db: Option<LocalDb>,
     ) -> Self {
-        let client = Arc::new(reqwest::Client::new());
+        let client = Arc::new(build_http_client(None));
 
         // G5 T-CF-06/07：TimerRegistry 装配（pending sink = 真实
-        // PendingMessageQueue、event sink = 缓冲适配、store = 内存适配；
-        // conex-db session_meta 与 EventBridge 真适配接线在 R-CF3 装配
-        // 收口，见 timers.rs 头部注记）
+        // PendingMessageQueue、event sink = 缓冲适配、store = D6 §3.1
+        // 段 2 装配替换：Some(db) → LocalDb 真适配（`timer_<id>` 键 +
+        // `timer_ids` 索引，重启恢复数据面）；None → 内存版回退
+        // （InMemoryStore 测试替身，测试面零改动））
         let timer_steering_queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
         // P4（30 方案 §4）：事件缓冲实例由引擎持有（经
         // [Self::timer_event_sink] 访问器暴露给 drain 转发 helper 与
@@ -1136,10 +1388,15 @@ impl EngineHandle {
         // 强转——Arc::clone 泛型推断无法经引用反向强转）
         let timer_event_sink_trait: Arc<dyn crate::timers::EventSink> =
             timer_event_sink.clone();
+        // 装配分支（LocalDb 真适配 / 内存回退）经 dyn TimerStore 收口
+        let timer_store: Arc<dyn crate::timers::TimerStore> = match &db {
+            Some(db) => Arc::new(LocalDbTimerStore::new(db.clone())),
+            None => MemoryTimerStore::shared(),
+        };
         let timer_registry = Arc::new(TimerRegistry::new(
             Arc::new(QueuePendingSink::new(Arc::clone(&timer_steering_queue))),
             timer_event_sink_trait,
-            MemoryTimerStore::shared(),
+            timer_store,
         ));
         // 启动恢复：扫描已持久化声明，重建未到期定时器 / 补发已到期未
         // 注入（内存 store 下为空集；conex-db 真适配接线后此处即重启
@@ -1162,14 +1419,29 @@ impl EngineHandle {
         // ── T-CF-10：WaitChannel 装配（SubagentWaitChannel 契约实现）──
         // dispatch 声明存储与 A7 watchdog 共享（同一实例双 trait 注入，
         // 桥接 impl 见文件头部「T-CF-10/13 共享适配桥」段）；终态事件流
-        // 广播为事件收口旁路点的订阅面（wait 通道不直接持有 EventQueue）
-        let dispatch_store = Arc::new(MemoryWaitStore::new());
+        // 广播为事件收口旁路点的订阅面（wait 通道不直接持有 EventQueue）。
+        // D4 §3.8 ② 装配替换：Some(db) → LocalDbWaitStore 真适配
+        // （dispatch_* 五键单声明槽）；None → MemoryWaitStore 内存回退。
+        let dispatch_store: Arc<dyn WaitDispatchStore> = match &db {
+            Some(db) => Arc::new(LocalDbWaitStore::new(db.clone())),
+            None => Arc::new(MemoryWaitStore::new()),
+        };
+        // 审计 01 W1（任务连续性推进轮）：三通道 + 控制总线解析器延迟绑定
+        // 板卡——WaitChannel 的 inject 面（wait_subagents 运行中注入）与
+        // BuiltinToolConfig 三通道字段（kill_subagent / send_message 工具）
+        // 均注入本板卡；CoreRunState 构造完成后经
+        // finalize_continuity_channels（main.rs 装配面）绑定真实现——
+        // 未绑定窗口内 resolver 恒 None（inject 返回结构化 InjectFailed）、
+        // 通道返回未绑定错误，行为与装配前一致（生产装配毫秒级完成）
+        let continuity = Arc::new(ContinuityChannelBoard::new());
         let terminal_stream = Arc::new(EventStreamBroadcast::new());
         let wait_channel = Arc::new(WaitChannel::new(
             Arc::clone(&dispatch_store) as Arc<dyn WaitStore>,
             Arc::new(MemoryAgentSource::new()) as Arc<dyn SubagentStatusSource>,
             Arc::clone(&terminal_stream),
-            Arc::new(NoopControlBusResolver) as Arc<dyn ControlBusResolver>,
+            // 生产缺省 NoopControlBusResolver 由板卡取代（真实解析 = 活动
+            // run 注册表；板卡未绑定 = Noop 同语义——恒 None）
+            Arc::clone(&continuity) as Arc<dyn ControlBusResolver>,
         ));
 
         // ── T-CF-13：Watchdog 装配（A7 提供 pub(crate) 构造器与 spawn）──
@@ -1206,6 +1478,7 @@ impl EngineHandle {
         let scheduler_registry = assemble_scheduler_registry(
             &timer_steering_queue,
             Arc::clone(&scheduler_event_sink),
+            db.clone(),
         );
 
         // ── 15-T-6（裁决 D9）：路由型 audit_sink 装配 ──────────────
@@ -1238,6 +1511,18 @@ impl EngineHandle {
             // common.unsupported；生产装配点 = CoreRunState 构造 spawner 后
             // 经 new_with_spawner 传入）
             subagent_spawner: subagent_spawner.clone(),
+            // 审计 01 W1（任务连续性推进轮）：kill_subagent / send_message
+            // 三通道注入板卡（延迟绑定——真实现经 finalize_continuity_channels
+            // 绑定；未绑定 = 通道返回结构化未绑定错误，行为与装配前一致）
+            subagent_kill_channel: Some(
+                Arc::clone(&continuity) as Arc<dyn SubagentKillChannel>
+            ),
+            subagent_inject_channel: Some(
+                Arc::clone(&continuity) as Arc<dyn SubagentInjectChannel>
+            ),
+            main_agent_message_channel: Some(
+                Arc::clone(&continuity) as Arc<dyn MainAgentMessageChannel>
+            ),
             // 15-T-6（裁决 D9）：路由型审计 sink 注入（shell/delete 工具
             // security-audit 发射点接线；现状 None = NoopAuditSink 静默
             // 丢弃，接线后经 run 桥到达前端审计面板）
@@ -1335,6 +1620,7 @@ impl EngineHandle {
             timer_event_sink,
             scheduler_event_sink,
             audit_sink,
+            continuity,
         }
     }
 
@@ -1463,9 +1749,10 @@ impl EngineHandle {
     }
 
     /// dispatch 声明存储（T-CF-10/13 共享实例；wait 落库 / watchdog 读取
-    /// / 测试断言读面）
+    /// / 测试断言读面；返回类型经 [WaitDispatchStore] 合并面稳定——
+    /// 装配分支（内存/真适配）不漂移，D4 §8 D-6）
     #[cfg_attr(not(test), allow(dead_code))] // 测试断言面消费
-    pub(crate) fn dispatch_store(&self) -> Arc<MemoryWaitStore> {
+    pub(crate) fn dispatch_store(&self) -> Arc<dyn WaitDispatchStore> {
         Arc::clone(&self.dispatch_store)
     }
 
@@ -1474,6 +1761,14 @@ impl EngineHandle {
     /// CoreRunState finalize_subagent_spawner，已接线）
     pub(crate) fn terminal_stream(&self) -> Arc<EventStreamBroadcast> {
         Arc::clone(&self.terminal_stream)
+    }
+
+    /// 任务连续性通道板卡（审计 01 W1：kill_subagent / send_message 工具
+    /// 三通道 + WaitChannel ControlBusResolver 的延迟绑定面；消费方 =
+    /// CoreRunState::finalize_continuity_channels（main.rs 装配面，
+    /// 与 finalize_subagent_spawner 同批），已接线）
+    pub(crate) fn continuity(&self) -> Arc<ContinuityChannelBoard> {
+        Arc::clone(&self.continuity)
     }
 
     /// 最近事件唤醒跟踪（T-CF-13：事件收口处 mark_wakeup 接线消费方 =
@@ -1658,9 +1953,9 @@ impl Default for EngineHandle {
 /// T-CF-09：Cron 调度注册表装配（A5 提供 pub(crate) 构造器与 restore；
 /// 已按 A5 落盘签名对齐：pending / events / store / launcher 四适配——
 /// pending 落真实 PendingMessageQueue（与定时器同队列）、events 用 sched
-/// 的事件槽（缓冲 + 日志，EventBridge 真适配后续轮）、store 用 sched 的
-/// 内存版（`sched_<id>` 键形状已冻结，conex-db 真适配与 TimerStore 同一
-/// 接线缺口）。
+/// 的事件槽（缓冲 + 日志，EventBridge 真适配后续轮）、store 用 D6 §3.1
+/// 段 2 装配替换：Some(db) → LocalDb 真适配（`sched_<id>` 键 + `sched_ids`
+/// 索引）；None → 内存版回退）。
 ///
 /// is_daemon 独立 run 拉起点（[crate::sched::DaemonRunLauncher]）暂不
 /// 接线：RunProducer 的 prompt 注入适配在 A8 域（T-CF-11 core_run_commands），
@@ -1672,11 +1967,17 @@ impl Default for EngineHandle {
 fn assemble_scheduler_registry(
     timer_steering_queue: &Arc<Mutex<PendingMessageQueue>>,
     scheduler_event_sink: Arc<crate::sched::SchedEventSink>,
+    db: Option<LocalDb>,
 ) -> Option<Arc<crate::sched::SchedulerRegistry>> {
+    // 装配分支（LocalDb 真适配 / 内存回退）经 dyn SchedStore 收口
+    let sched_store: Arc<dyn crate::sched::SchedStore> = match &db {
+        Some(db) => Arc::new(crate::sched::LocalDbSchedStore::new(db.clone())),
+        None => crate::sched::MemorySchedStore::shared(),
+    };
     let registry = Arc::new(crate::sched::SchedulerRegistry::new(
         Arc::new(crate::sched::QueuePendingSink::new(Arc::clone(timer_steering_queue))),
         scheduler_event_sink,
-        crate::sched::MemorySchedStore::shared(),
+        sched_store,
         None,
     ));
     // 启动恢复：扫描已持久化声明重建 cron sleep（与 TimerRegistry::restore
@@ -5063,6 +5364,215 @@ mod wait_wiring_tests {
     }
 }
 
+/// D6 §3.1 段 2 + D4 §3.8 ② store 装配替换测试：`new_with_spawner`
+/// 注入 `db: Option<LocalDb>`（W4 统一签名）后 timer/sched/wait 三 store
+/// 真适配落库 + 模拟重启恢复；None 回退内存版（功能面由既有
+/// EngineHandle::new(None) 测试全量覆盖，本模块补差分断言面）。
+#[cfg(test)]
+mod store_assembly_tests {
+    use super::*;
+    use crate::sched::CronTaskInput;
+    use agent_tools::tools::wait_subagents::{WaitMode, DISPATCH_META_KEY_MODE};
+    use conex_types::timer::TimerCondition;
+
+    /// 定时器经 LocalDb 真适配 store 落库（`timer_<id>` 键 + `timer_ids`
+    /// 索引）+ 模拟重启（新引擎读同一 db）restore 重建 sleep——验收
+    /// D6 数据面 4.1 与「重启后定时器声明恢复」引擎级语义（未到期
+    /// 60s 不触发 fire，只断言 restore 重建入活跃表）。
+    #[tokio::test]
+    async fn engine_localdb_timer_store_persists_and_recovers() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let engine = EngineHandle::new_with_spawner(None, None, Some(db.clone()));
+        let channel: Arc<dyn TimerChannel> = engine.timer_registry();
+        let handle = channel
+            .register(60, "重启恢复检查".to_string(), TimerCondition::Never)
+            .await
+            .expect("timer_channel 已接线");
+        assert_eq!(handle.timer_id, "timer-0");
+        // 真适配落库：键形状 `timer_<id>`（timers.rs store_key）+ 索引
+        assert!(
+            db.get_session_meta("timer_timer-0")
+                .expect("db 读应成功")
+                .is_some(),
+            "timer-0 声明应落库 session_meta（真适配装配）"
+        );
+        let index = db
+            .get_session_meta("timer_ids")
+            .expect("db 读应成功")
+            .expect("索引键应已写入");
+        assert!(index.contains("timer-0"), "索引应含 timer-0：{index}");
+        // 模拟重启：新引擎同 db → restore 扫描重建（未到期不 fire）
+        let restarted = EngineHandle::new_with_spawner(None, None, Some(db));
+        let restarted_channel: Arc<dyn TimerChannel> = restarted.timer_registry();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        loop {
+            let active = restarted_channel
+                .list_active()
+                .await
+                .expect("list_active 应可用");
+            if active.iter().any(|t| t.timer_id == "timer-0") {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "restore 应在窗口内重建 timer-0"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    /// wait 声明经 LocalDb 真适配 store 落库（dispatch_* 五键，单声明槽
+    /// 语义）+ watchdog 桥接读回同一数据面（D4 §3.8 ② / T9 引擎级）。
+    #[tokio::test]
+    async fn engine_localdb_wait_store_persists_and_bridges() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let engine = EngineHandle::new_with_spawner(None, None, Some(db.clone()));
+        let declaration = DispatchDeclaration {
+            mode: WaitMode::AwaitAll,
+            wait_ms: None,
+            subagent_ids: vec!["sa-1".to_string()],
+            dispatched_at_ms: 1_000,
+        };
+        engine
+            .wait_channel()
+            .persist_declaration(&declaration)
+            .await
+            .expect("声明落库应成功");
+        // 真适配落库：dispatch_* 键（单声明槽——mode/dispatched_at 有值）
+        assert!(
+            db.get_session_meta(DISPATCH_META_KEY_MODE)
+                .expect("db 读应成功")
+                .is_some(),
+            "dispatch_mode 应落库（真适配装配）"
+        );
+        assert!(
+            db.get_session_meta("dispatch_dispatched_at")
+                .expect("db 读应成功")
+                .is_some(),
+            "dispatch_dispatched_at 应落库"
+        );
+        // watchdog 桥接面：DispatchStore 读回同一数据（T-CF-10/13 双
+        // trait 注入，LocalDbWaitStore 桥接 impl）
+        let store = engine.dispatch_store();
+        let as_watchdog: Arc<dyn crate::watchdog::DispatchStore> = store;
+        let declarations = as_watchdog.load_declarations();
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].subagent_ids, vec!["sa-1".to_string()]);
+    }
+
+    /// sched 注册表装配分支：Some(db) → LocalDb 真适配（`sched_<id>` 键
+    /// + `sched_ids` 索引落库）；None → 内存版回退（注册功能可用，无
+    /// db 可落）。
+    #[tokio::test]
+    async fn engine_sched_store_assembly_branches() {
+        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let sink = Arc::new(crate::sched::SchedEventSink::new());
+        // Some(db) → 真适配：注册 cron 后 sched_* 键落库
+        let registry =
+            assemble_scheduler_registry(&queue, sink.clone(), Some(db.clone()))
+                .expect("装配应成功");
+        let cron_id = registry
+            .register(CronTaskInput {
+                expression: "* * * * *".to_string(),
+                prompt: "装配检查".to_string(),
+                max_iterations: Some(1),
+                is_daemon: false,
+            })
+            .await
+            .expect("cron 注册应成功");
+        assert_eq!(cron_id, "cron-0");
+        assert!(
+            db.get_session_meta("sched_cron-0")
+                .expect("db 读应成功")
+                .is_some(),
+            "cron-0 声明应落库 session_meta（真适配装配）"
+        );
+        assert!(
+            db.get_session_meta("sched_ids")
+                .expect("db 读应成功")
+                .is_some(),
+            "sched_ids 索引应已写入"
+        );
+        // None → 内存版回退：注册功能可用（数据不进 db，功能面同既有
+        // MemorySchedStore 语义）
+        let registry_mem = assemble_scheduler_registry(&queue, sink, None)
+            .expect("None 装配应成功（内存回退）");
+        let cron_id_mem = registry_mem
+            .register(CronTaskInput {
+                expression: "0 9 * * *".to_string(),
+                prompt: "内存回退检查".to_string(),
+                max_iterations: None,
+                is_daemon: false,
+            })
+            .await
+            .expect("内存版注册应成功");
+        assert_eq!(cron_id_mem, "cron-0", "内存版独立序号域");
+    }
+}
+
+/// 连接配置（D1 §3.3）单测：默认值字段级生效 + 测试装配传参覆盖
+/// （短超时 / 关 keepalive），`build_http_client` 单点构造成功面。
+#[cfg(test)]
+mod http_client_config_tests {
+    use super::*;
+
+    /// 默认连接配置字段级生效（D1 §3.3 连接配置表断言面）
+    #[test]
+    fn resolve_defaults_match_d1_table() {
+        let resolved = ClientConnectionConfig::resolve(None);
+        assert_eq!(resolved.connect_timeout, Some(Duration::from_secs(10)));
+        assert_eq!(resolved.tcp_keepalive, Some(Duration::from_secs(30)));
+        assert_eq!(
+            resolved.http2_keep_alive_interval,
+            Some(Duration::from_secs(30))
+        );
+        assert_eq!(
+            resolved.http2_keep_alive_timeout,
+            Some(Duration::from_secs(5))
+        );
+        // 生产装配点构造成功（不设总超时——编译面即承诺）
+        let client = build_http_client(None);
+        let _ = client;
+    }
+
+    /// 测试装配覆盖：显式字段覆盖生效、未覆盖字段保持默认（04 §2.3
+    /// 可传参面）
+    #[test]
+    fn resolve_partial_overrides_keep_defaults() {
+        let resolved = ClientConnectionConfig::resolve(Some(ClientConnectionConfig {
+            connect_timeout: Some(Duration::from_secs(2)),
+            ..ClientConnectionConfig::default()
+        }));
+        assert_eq!(
+            resolved.connect_timeout,
+            Some(Duration::from_secs(2)),
+            "显式覆盖应生效"
+        );
+        assert_eq!(
+            resolved.tcp_keepalive,
+            Some(Duration::from_secs(30)),
+            "未覆盖字段保持默认"
+        );
+        assert_eq!(
+            resolved.http2_keep_alive_interval,
+            Some(Duration::from_secs(30))
+        );
+        assert_eq!(
+            resolved.http2_keep_alive_timeout,
+            Some(Duration::from_secs(5))
+        );
+        // 覆盖配置构造成功（短超时客户端可正常构建）
+        let client = build_http_client(Some(ClientConnectionConfig {
+            connect_timeout: Some(Duration::from_secs(2)),
+            tcp_keepalive: None,
+            http2_keep_alive_interval: None,
+            http2_keep_alive_timeout: None,
+        }));
+        let _ = client;
+    }
+}
+
 /// P4（30 方案 §4）事件缓冲 drain 转发测试：timer/cron 缓冲 → 真实
 /// EventBridge 的信封直发形状，与访问器到达生产装配实例的断言面。
 ///
@@ -5471,5 +5981,127 @@ mod event_drain_tests {
             engine.provider_config().expect("重填后就绪").api_key,
             "sk-c"
         );
+    }
+}
+
+/// 审计 01 W1：ContinuityChannelBoard 板卡装配测试（延迟绑定语义——
+/// 未绑定结构化错误 / 绑定后委托 / 重复绑定覆盖；独立模块与上方既有
+/// tests 模块不共享上下文）。
+#[cfg(test)]
+mod continuity_wiring_tests {
+    use super::*;
+    use agent_tools::context::create_mock_tool_context;
+    use agent_tools::tools::kill_subagent::{
+        KillOutcomeKind, KillSubagentToolResult, SubagentKillChannel,
+    };
+    use agent_tools::tools::send_message::MainMessageRing;
+    use std::sync::Mutex;
+
+    /// 记录式终止通道替身（板卡委托断言）
+    struct RecordingKill {
+        calls: Mutex<usize>,
+    }
+
+    impl std::fmt::Debug for RecordingKill {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("RecordingKill").finish_non_exhaustive()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SubagentKillChannel for RecordingKill {
+        async fn kill_subagent(
+            &self,
+            _session_id: &str,
+            subagent_id: &str,
+            _reason: &str,
+        ) -> Result<KillSubagentToolResult, String> {
+            *self.calls.lock().unwrap() += 1;
+            Ok(KillSubagentToolResult {
+                subagent_id: subagent_id.to_string(),
+                subagent_run_id: None,
+                outcome: KillOutcomeKind::AlreadyTerminal,
+                force_cancel_delivered: false,
+            })
+        }
+    }
+
+    /// 未绑定 → 结构化未绑定错误（工具侧按执行失败兜底映射；生产装配
+    /// 窗口 = 引擎构造与 finalize 之间）
+    #[tokio::test]
+    async fn unbound_board_returns_wiring_error() {
+        let board = ContinuityChannelBoard::new();
+        let err = board
+            .kill_subagent("s1", "sub-1", "")
+            .await
+            .unwrap_err();
+        assert!(err.contains("未绑定"), "未绑定错误文案：{err}");
+        let err = board.inject("sub-1", "hi").await.unwrap_err();
+        assert!(err.contains("未绑定"));
+        let err = board
+            .deliver_self("s1", "hi", MainMessageRing::FollowUp)
+            .await
+            .unwrap_err();
+        assert!(err.contains("未绑定"));
+        assert!(
+            board.control_bus("sub-1").is_none(),
+            "未绑定解析器 → None（Noop 同语义）"
+        );
+    }
+
+    /// 绑定后委托到真实现；重复绑定以最后一次为准（覆盖语义）
+    #[tokio::test]
+    async fn bound_board_delegates_and_overwrites() {
+        let board = ContinuityChannelBoard::new();
+        let first = Arc::new(RecordingKill { calls: Mutex::new(0) });
+        let second = Arc::new(RecordingKill { calls: Mutex::new(0) });
+        board.bind_kill(Arc::clone(&first) as Arc<dyn SubagentKillChannel>);
+        let out = board
+            .kill_subagent("s1", "sub-1", "r")
+            .await
+            .expect("绑定后应委托成功");
+        assert_eq!(out.subagent_id, "sub-1");
+        assert_eq!(*first.calls.lock().unwrap(), 1);
+        // 重复绑定覆盖：最后一次为准（进程内仅一次，幂等防御面）
+        board.bind_kill(Arc::clone(&second) as Arc<dyn SubagentKillChannel>);
+        board
+            .kill_subagent("s1", "sub-2", "r")
+            .await
+            .expect("覆盖后应委托到新实现");
+        assert_eq!(*first.calls.lock().unwrap(), 1, "旧实现不再被调用");
+        assert_eq!(*second.calls.lock().unwrap(), 1, "新实现接管");
+    }
+
+    /// 生产装配面：EngineHandle 构造即注入板卡（工具注册面三通道就位，
+    /// 未绑定窗口返回未绑定错误而非 unsupported——装配前行为一致降级）
+    #[tokio::test]
+    async fn engine_wires_continuity_board_into_tools() {
+        let engine = EngineHandle::new(None);
+        let kill = engine
+            .tool_registry()
+            .get(agent_tools::tools::kill_subagent::SUBAGENT_KILL_TOOL_NAME)
+            .expect("kill_subagent 已注册");
+        let ctx = create_mock_tool_context();
+        // 未绑定窗口：结构化未绑定错误（production finalize 前毫秒级窗口）
+        let err = kill
+            .execute(&ctx, serde_json::json!({ "subagentId": "sub-1" }))
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("未绑定"),
+            "未绑定错误文案：{err}"
+        );
+        let send = engine
+            .tool_registry()
+            .get(agent_tools::tools::send_message::SEND_MESSAGE_TOOL_NAME)
+            .expect("send_message 已注册");
+        let err = send
+            .execute(
+                &ctx,
+                serde_json::json!({ "target": "self", "message": "hi" }),
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("未绑定"));
     }
 }

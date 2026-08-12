@@ -313,6 +313,9 @@ pub struct RuntimeCheckpointRestoreRecord {
 pub enum ContextCompressionTrigger {
     /// 自动触发
     Auto,
+    /// 用户消息边界触发（E2 F3：hold → compact → append，压缩发生在
+    /// 用户消息入队之前——用户消息 100% 保留、必在发送序列尾部）
+    UserMessage,
     /// 发送前预检
     Preflight,
     /// 手动触发
@@ -334,6 +337,8 @@ pub enum ContextCompressionTrigger {
 #[serde(rename_all = "lowercase")]
 pub enum ContextCompressionReason {
     Manual,
+    /// 用户消息边界（E2 F3，与 trigger=UserMessage 同源）
+    UserMessage,
     Threshold,
     Overflow,
     Idle,

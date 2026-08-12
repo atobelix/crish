@@ -432,7 +432,7 @@ async fn ladder2_budget_exhausted_creates_steering_readable() {
     assert_eq!(types, vec![RECOVER_ESCALATED_EVENT, RECOVER_STEERING_EVENT]);
 }
 
-// ── C7 验收 3：注入「继续等待」载体面 + acknowledge ───────────────
+// ── C7 验收 3：注入激活指令载体面 + acknowledge ─────────────────
 
 #[tokio::test]
 async fn ladder2_steering_injectable_and_acknowledgeable() {

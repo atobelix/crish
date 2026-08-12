@@ -41,6 +41,13 @@ use agent_tools::background::{
 };
 use agent_tools::context::ExploreDocsQuotaContext;
 use agent_tools::definition::ToolError;
+// 审计 01 W1（任务连续性推进轮）：kill_subagent / send_message 三通道
+// 生产实现（CoreRunState 契约面；经 ContinuityStateAdapter Weak 适配
+// 注入引擎 ContinuityChannelBoard）
+use agent_tools::tools::kill_subagent::{KillOutcomeKind, KillSubagentToolResult, SubagentKillChannel};
+use agent_tools::tools::send_message::{
+    MainAgentMessageChannel, MainMessageRing, SubagentInjectChannel,
+};
 use agent_tools::tools::subagent::{SubagentSpawner, SubagentState};
 use agent_tools::write_paths::{WritePathPolicy, WritePathRegistry};
 use conex_db::LocalDb;
@@ -92,6 +99,9 @@ use session_loop::{
 use crate::core_error::CoreError;
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::core_query_commands::{BackgroundTasksSummary, RestoreStatus, RunUsage, SnapshotStatus};
+// 审计 01 W1：ControlBusResolver 契约（库目标 wait_channel 定义；引擎
+// WaitChannel 的 inject 面与 send_message 子代理注入共用同一解析器）
+use crish_agent_workbench::wait_channel::ControlBusResolver;
 use crate::engine::{
     BridgeDeltaSink, BufferedRunEventBridge, ContextInjection, ContextInjectionKind, ContextInjector,
     EngineHandle, SessionLoopProducer,
@@ -3670,8 +3680,9 @@ impl CoreRunState {
 
     /// 子代理生命周期服务（T-D-09：kill_all / resume_subagent 命令面
     /// 依赖；db 与 [orchestrator::lifecycle::ForceCancelSink]（本状态实现）
-    /// 装配；LocalDb 不可用（测试替身 store）→ None）
-    #[cfg_attr(not(test), allow(dead_code))] // T-D-12 命令面消费；测试断言面消费
+    /// 装配；LocalDb 不可用（测试替身 store）→ None）。审计 01 W1：
+    /// kill_subagent 工具通道（[Self::kill_subagent_via_lifecycle]）生产
+    /// 消费——T-D-12 陈旧 dead_code 豁免已删除（D4 A5/T7b）
     pub(crate) fn lifecycle_service(
         self: &Arc<Self>,
     ) -> Option<orchestrator::lifecycle::SubagentLifecycleService> {
@@ -4047,6 +4058,265 @@ impl orchestrator::lifecycle::ForceCancelSink for CoreRunState {
             .unwrap_or_else(|e| e.into_inner())
             .request_subagent_force_cancel(subagent_run_id, Some(reason));
         true
+    }
+}
+
+// ── 审计 01 W1：任务连续性三通道生产接线（kill_subagent / send_message
+//    工具面）────────────────────────────────────────────────────────
+
+/// 任务连续性通道的状态适配器：以 Weak 引用切断「CoreRunState → 引擎
+/// → ContinuityChannelBoard → CoreRunState」强引用环（CoreRunStateLauncher
+/// 先例 :4011 同款——引擎在 CoreRunState 内，板卡在引擎内，强引用即
+/// 环）。进程内 CoreRunState 恒存活（main.rs app.manage），upgrade 失败
+/// 仅为防御面（结构化错误上抛，不 panic）。
+///
+/// 四契约合一（[ControlBusResolver] / [SubagentKillChannel] /
+/// [SubagentInjectChannel] / [MainAgentMessageChannel]），经
+/// [CoreRunState::finalize_continuity_channels] 绑定到引擎板卡。
+pub(crate) struct ContinuityStateAdapter {
+    /// 本状态弱引用（恒存活；upgrade 失败 → 结构化错误）
+    state: std::sync::Weak<CoreRunState>,
+}
+
+impl std::fmt::Debug for ContinuityStateAdapter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContinuityStateAdapter").finish_non_exhaustive()
+    }
+}
+
+impl CoreRunState {
+    /// 按子代理 id 解析活动 run 的控制总线（send_message target=subagent
+    /// 与 wait 期间 inject 共用的解析器真源）。
+    ///
+    /// active_runs 扫描（子代理配置 subagent_id 匹配）：活动集受
+    /// 16/16/1 守卫约束（主 run 1 + 子代理 ≤16），O(n) 平凡——不引入
+    /// 第二份 subagent_id → run_id 映射表（id 已在 ActiveRun.subagent
+    /// 装配配置内，扫描即真源）。
+    fn control_bus_for_subagent(&self, subagent_id: &str) -> Option<Arc<Mutex<ControlBus>>> {
+        let active = self.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+        active
+            .values()
+            .find(|run| {
+                run.subagent
+                    .as_ref()
+                    .map(|cfg| cfg.subagent_id.as_str())
+                    == Some(subagent_id)
+            })
+            .map(|run| Arc::clone(&run.control_bus))
+    }
+
+    /// 会话主 agent run 的控制总线（send_message target=self 的 followUp/
+    /// steer 环目标）：活动 run 中 subagent=None（普通 run）且会话匹配。
+    /// 会话内单活动 run 串行守卫下至多命中一条；无匹配（run 已收口）→
+    /// None，调用方转 PendingMessageQueue 兜底。
+    fn main_run_bus_for_session(&self, session_id: &str) -> Option<Arc<Mutex<ControlBus>>> {
+        let active = self.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+        active
+            .values()
+            .find(|run| run.subagent.is_none() && run.session_id == session_id)
+            .map(|run| Arc::clone(&run.control_bus))
+    }
+
+    /// kill_subagent 终止通道真实现：经 SubagentLifecycleService（LocalDb
+    /// 下转 + 本状态 ForceCancelSink）投递 L3 强停 + 行归一 failed；
+    /// 同步 SQLite 段经 spawn_blocking 包裹（F2-27，命令面同步调用面
+    /// 不落在 tokio worker 上——D4 §3.9 全表）。
+    async fn kill_subagent_via_lifecycle(
+        self: &Arc<Self>,
+        session_id: &str,
+        subagent_id: &str,
+        reason: &str,
+    ) -> Result<KillSubagentToolResult, String> {
+        let service = self
+            .lifecycle_service()
+            .ok_or_else(|| "kill_subagent 未接线：LocalDb 不可用（生命周期服务未装配）".to_string())?;
+        let (sid, aid, r) = (
+            session_id.to_string(),
+            subagent_id.to_string(),
+            reason.to_string(),
+        );
+        let result = tokio::task::spawn_blocking(move || service.kill_subagent(&sid, &aid, &r))
+            .await
+            .map_err(|e| format!("kill_subagent 阻塞任务失败：{e}"))?
+            .map_err(|e| e.to_string())?;
+        Ok(KillSubagentToolResult {
+            subagent_id: result.subagent_id,
+            subagent_run_id: Some(result.subagent_run_id),
+            outcome: match result.outcome {
+                "killed" => KillOutcomeKind::Killed,
+                _ => KillOutcomeKind::AlreadyTerminal,
+            },
+            force_cancel_delivered: result.force_cancel_delivered,
+        })
+    }
+
+    /// send_message 子代理注入真实现：定位目标 run 控制总线 →
+    /// `request_subagent_inject`（L1 steer 环，reason=`subagent_inject:<id>`，
+    /// 不打断子代理流——与 wait 期间 inject 同通道同语义）；目标不可达
+    /// → 结构化失败（不静默、不 panic）。
+    async fn inject_to_subagent(
+        &self,
+        subagent_id: &str,
+        message: &str,
+    ) -> Result<(), String> {
+        let Some(bus) = self.control_bus_for_subagent(subagent_id) else {
+            return Err(format!(
+                "目标子代理 {subagent_id} 的 run 控制总线不可达（无运行实例）"
+            ));
+        };
+        // std Mutex 不跨 await 持有：注入为同步调用，锁在语句内释放
+        bus.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .request_subagent_inject(subagent_id, message, Some("send_message_tool"));
+        tracing::info!(
+            target: "run",
+            subagent_id,
+            "send_message(target=subagent) 已送达目标 run 的 L1 steer 环"
+        );
+        Ok(())
+    }
+
+    /// send_message 主 agent 消息真实现（会话留档 + 入队一体完成）：
+    ///
+    /// 1. 构造 user 角色文本消息，metadata `{source:"main-agent"}`（与
+    ///    用户消息区分——用户消息无 source 字段）；**不标记 user_touched**
+    ///    （主 agent 自发消息不算用户交互，收口不因此抑制 idle 续 run）；
+    /// 2. 当前 run 存活 → 经主 run 自己 ControlBus 入环：FollowUp →
+    ///    `request_follow_up`（仅 idle promote 消费，不打断当前 run）；
+    ///    Steer → `request_steer`（下一安全点注入，当前 run 继续）；
+    /// 3. run 已收口（工具调用在收口后被重放等边角）→ PendingMessageQueue
+    ///    入队 steering 条目（group_id=`main-agent-msg`，下一 run
+    ///    decide_idle_resume 队列源消费——消息仍带 `kind:"steering"`
+    ///    标记，来源标记以队列条目承载）。
+    ///
+    /// 会话留档语义：消息随 run 对话进入事件流与会话历史（运行中入环的
+    /// 消息即 run 对话的一部分，收口原子替换进 SessionHistoryCache）。
+    async fn deliver_main_agent_message(
+        &self,
+        session_id: &str,
+        message: &str,
+        ring: MainMessageRing,
+    ) -> Result<String, String> {
+        // 1. 构造留档消息（id 唯一、metadata 来源标记）
+        let mut injected = crate::engine::user_message(message, None);
+        injected.id = crate::engine::new_message_id("main-agent-msg");
+        injected.metadata = Some(serde_json::json!({ "source": "main-agent" }));
+        let message_id = injected.id.clone();
+        // 2. 当前主 run 存活 → 经其控制总线入环（不打断当前 run）
+        if let Some(bus) = self.main_run_bus_for_session(session_id) {
+            let mut bus = bus.lock().unwrap_or_else(|e| e.into_inner());
+            match ring {
+                MainMessageRing::Steer => {
+                    bus.request_steer(injected, Some("send_message_tool".to_string()), Some("main-agent".to_string()));
+                }
+                MainMessageRing::FollowUp => {
+                    bus.request_follow_up(injected, Some("send_message_tool".to_string()), Some("main-agent".to_string()));
+                }
+            }
+            tracing::info!(
+                target: "run",
+                session_id,
+                ring = ring.as_str(),
+                "send_message(target=self) 已入主 run 控制总线（会话留档 + 环注入）"
+            );
+            return Ok(message_id);
+        }
+        // 3. run 已收口 → PendingMessageQueue 兜底（下一 run 队列源消费）
+        let entry = orchestrator::steering_queue::SteeringInputEntry {
+            id: message_id.clone(),
+            text: message.to_string(),
+            attachments: Vec::new(),
+            enqueued_at: now_ms_internal(),
+            group_id: Some("main-agent-msg".to_string()),
+            is_steering: true,
+        };
+        self.pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .replace_or_enqueue(entry);
+        tracing::info!(
+            target: "run",
+            session_id,
+            "send_message(target=self) 已入队 PendingMessageQueue（run 已收口兜底）"
+        );
+        Ok(message_id)
+    }
+
+    /// 审计 01 W1：任务连续性三通道生产装配（main.rs 在 Arc 构造完成后
+    /// 调用，与 [Self::finalize_subagent_spawner] 同批）——把本状态的
+    /// 四契约实现（ControlBusResolver / 三通道）经 [ContinuityStateAdapter]
+    /// 绑定进引擎 [crate::engine::ContinuityChannelBoard]：
+    ///
+    /// - WaitChannel 的 inject 面（wait_subagents 运行中注入）从生产
+    ///   NoopControlBusResolver 升级为真实解析（活动 run 注册表）；
+    /// - kill_subagent / send_message 两工具从「通道未绑定错误」升级为
+    ///   生产可用（三决策闭环工具侧闭合）。
+    pub(crate) fn finalize_continuity_channels(self: &Arc<Self>) {
+        let adapter = Arc::new(ContinuityStateAdapter {
+            state: Arc::downgrade(self),
+        });
+        let board = self.engine.continuity();
+        board.bind_control_bus(Arc::clone(&adapter) as Arc<dyn ControlBusResolver>);
+        board.bind_kill(Arc::clone(&adapter) as Arc<dyn SubagentKillChannel>);
+        board.bind_inject(Arc::clone(&adapter) as Arc<dyn SubagentInjectChannel>);
+        board.bind_self_message(adapter as Arc<dyn MainAgentMessageChannel>);
+        tracing::info!(
+            target: "engine",
+            "任务连续性三通道生产装配完成（kill_subagent / send_message 工具已接线；WaitChannel 控制总线解析器已升级）"
+        );
+    }
+}
+
+impl ControlBusResolver for ContinuityStateAdapter {
+    fn control_bus(&self, subagent_id: &str) -> Option<Arc<Mutex<ControlBus>>> {
+        self.state.upgrade()?.control_bus_for_subagent(subagent_id)
+    }
+}
+
+#[async_trait::async_trait]
+impl SubagentKillChannel for ContinuityStateAdapter {
+    async fn kill_subagent(
+        &self,
+        session_id: &str,
+        subagent_id: &str,
+        reason: &str,
+    ) -> Result<KillSubagentToolResult, String> {
+        let state = self
+            .state
+            .upgrade()
+            .ok_or_else(|| "CoreRunState 已释放（进程内恒存活，防御面）".to_string())?;
+        state
+            .kill_subagent_via_lifecycle(session_id, subagent_id, reason)
+            .await
+    }
+}
+
+#[async_trait::async_trait]
+impl SubagentInjectChannel for ContinuityStateAdapter {
+    async fn inject(&self, subagent_id: &str, message: &str) -> Result<(), String> {
+        let state = self
+            .state
+            .upgrade()
+            .ok_or_else(|| "CoreRunState 已释放（进程内恒存活，防御面）".to_string())?;
+        state.inject_to_subagent(subagent_id, message).await
+    }
+}
+
+#[async_trait::async_trait]
+impl MainAgentMessageChannel for ContinuityStateAdapter {
+    async fn deliver_self(
+        &self,
+        session_id: &str,
+        message: &str,
+        ring: MainMessageRing,
+    ) -> Result<String, String> {
+        let state = self
+            .state
+            .upgrade()
+            .ok_or_else(|| "CoreRunState 已释放（进程内恒存活，防御面）".to_string())?;
+        state
+            .deliver_main_agent_message(session_id, message, ring)
+            .await
     }
 }
 
@@ -5589,7 +5859,11 @@ pub(crate) async fn run_task_impl(
     // T-D-13：子代理 run 的工具注册表按 task_type 默认权限集裁剪
     // （filter_registry_for_task_type，T-D-08 fail-closed 白名单）+ 剔除
     // run_subagent（T-D-02 工具面防护：子代理无派发能力，防浪费非安全
-    // 边界；守卫层 NestingDenied 兜底）。普通 run 保持引擎共享注册表。
+    // 边界；守卫层 NestingDenied 兜底）+ 剔除 kill_subagent / send_message
+    // （D4 §3.3/§3.10 + E3：仅主 agent 工具集——子代理无关闭/消息注入
+    // 能力，防「子代理伪装主 agent」；剔除决策权威位在引擎装配点，
+    // filter_out_subagent_spawner 本体与锁定测试零改动）。普通 run 保持
+    // 引擎共享注册表。
     let base_registry = state.engine.tool_registry();
     let tool_registry = match &subagent_config {
         Some(config) => {
@@ -5603,6 +5877,8 @@ pub(crate) async fn run_task_impl(
             })?;
             let filtered = agent_tools::readonly::filter_registry(&filtered, |name| {
                 name != agent_tools::tools::subagent::SUBAGENT_SPAWNER_TOOL_NAME
+                    && name != agent_tools::tools::kill_subagent::SUBAGENT_KILL_TOOL_NAME
+                    && name != agent_tools::tools::send_message::SEND_MESSAGE_TOOL_NAME
             })
             .map_err(|error| {
                 CoreError::internal(format!("子代理工具集剔除失败：{error}"))
@@ -14325,6 +14601,400 @@ mod tests {
                     .unwrap_or(false)
             }),
             "实时广播应与落库并存（广播保实时、落库保底账）"
+        );
+    }
+
+    // ── 审计 01 W1：任务连续性三通道生产装配（kill_subagent /
+    //    send_message 工具面）───────────────────────────────────────
+
+    /// 测试助手：构造并登记活动 run（子代理配置可注入——审计 01 W1
+    /// 通道测试用；装配面与 build_active_run 对齐，active_runs 登记由
+    /// 本函数完成。ActiveRun 字段不可经 Arc 修改，故整构造复制）。
+    async fn insert_continuity_run(
+        state: &CoreRunState,
+        session_id: &str,
+        run_id: &str,
+        subagent: Option<crate::subagent_spawner::SubagentRunConfig>,
+    ) -> Arc<ActiveRun> {
+        let handle = Arc::new(tokio::sync::Mutex::new(
+            state
+                .run_manager
+                .start_run(session_id, run_id)
+                .await
+                .expect("start_run"),
+        ));
+        let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
+            state.store.clone(),
+            0,
+        )));
+        let bridge = Arc::new(BufferedRunEventBridge::new(
+            state.bridge.clone(),
+            run_id.to_string(),
+        ));
+        let broadcast_bridge = Arc::clone(&bridge);
+        let broadcast_run_id = run_id.to_string();
+        let broadcast = Box::new(move |event: AgentEvent| {
+            let envelope = AgentEventEnvelope::new(event, Some(broadcast_run_id.clone()), None);
+            broadcast_bridge.emit(&envelope);
+            broadcast_bridge.flush();
+        });
+        let approval = Arc::new(ApprovalGateImpl::new(
+            run_id.to_string(),
+            session_id.to_string(),
+            None,
+            broadcast,
+            Arc::clone(&handle),
+            state.store.clone(),
+            None,
+        ));
+        let active = Arc::new(ActiveRun {
+            session_id: session_id.to_string(),
+            run_id: run_id.to_string(),
+            handle,
+            queue,
+            control_bus: Arc::new(Mutex::new(ControlBus::new())),
+            abort_signal: AbortSignal::new(),
+            approval,
+            bridge,
+            delta_sink_active: true,
+            escape_watch: Mutex::new(None),
+            driver: Mutex::new(None),
+            user_touched: AtomicBool::new(false),
+            subagent,
+            audit_persist: Mutex::new(None),
+        });
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(run_id.to_string(), Arc::clone(&active));
+        active
+    }
+
+    /// 测试用会话级 ToolContext（session_id 覆盖——通道按会话定位主 run
+    /// 环，须与活动 run 会话一致；对齐生产装配的按会话 ToolContext）
+    fn continuity_tool_context(session_id: &str) -> agent_tools::context::ToolContext {
+        agent_tools::context::ToolContext {
+            session_id: session_id.to_string(),
+            ..agent_tools::context::create_mock_tool_context()
+        }
+    }
+
+    /// E2E：finalize_continuity_channels 装配后 send_message(target=self)
+    /// 在无活动 run 时走 PendingMessageQueue 兜底——条目 group_id=
+    /// main-agent-msg、steering 标记、文本保真；工具信封 delivered/messageId。
+    #[tokio::test]
+    async fn continuity_finalize_wires_send_message_self_queue_fallback() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        state.finalize_continuity_channels();
+        let tool = state
+            .engine
+            .tool_registry()
+            .get(agent_tools::tools::send_message::SEND_MESSAGE_TOOL_NAME)
+            .expect("send_message 已注册");
+        let ctx = continuity_tool_context("sess-main");
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "target": "self",
+                    "message": "记住：下一轮继续调研 X",
+                }),
+            )
+            .await
+            .expect("通道已装配，target=self 不应失败");
+        assert_eq!(out["target"], "self");
+        assert_eq!(out["delivered"], true);
+        assert_eq!(out["ring"], "follow_up", "缺省 follow_up（不打断当前 run）");
+        let message_id = out["messageId"].as_str().expect("messageId 应为字符串");
+        assert!(message_id.starts_with("main-agent-msg-"), "消息 id 前缀：{message_id}");
+        // 兜底队列：无活动 run → PendingMessageQueue 条目（下一 run 消费）
+        let queue = state.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(queue.len(), 1, "无活动 run 时应入队兜底");
+        let entry = queue.peek().expect("队首条目");
+        assert_eq!(entry.group_id.as_deref(), Some("main-agent-msg"));
+        assert!(entry.is_steering, "兜底条目为 steering（容量挤占保护）");
+        assert_eq!(entry.text, "记住：下一轮继续调研 X");
+        assert_eq!(entry.id, message_id, "条目 id 沿用工具返回的 messageId");
+    }
+
+    /// E2E：send_message(target=subagent) 送达目标子代理 run 的 L1 steer
+    /// 环——恰 1 条意图、kind=Steer、reason=subagent_inject:<id>、文本
+    /// 保真、无 L2/L3；生产 ControlBusResolver 接线后 wait_channel.inject
+    /// 同通道可用；目标不可达 → 结构化 subagent.not_found。
+    #[tokio::test]
+    async fn continuity_finalize_wires_send_message_subagent_steer() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        state.finalize_continuity_channels();
+        let subagent_run = insert_continuity_run(
+            &state,
+            "sess-main",
+            "sub-run-1-0",
+            Some(crate::subagent_spawner::SubagentRunConfig {
+                subagent_id: "sub-1-0".to_string(),
+                subagent_run_id: "sub-run-1-0".to_string(),
+                parent_session_id: "sess-main".to_string(),
+                task_type: None,
+                allowed_write_paths: None,
+                output_dir: None,
+                started_at_ms: 0,
+            }),
+        )
+        .await;
+        let tool = state
+            .engine
+            .tool_registry()
+            .get(agent_tools::tools::send_message::SEND_MESSAGE_TOOL_NAME)
+            .expect("send_message 已注册");
+        let ctx = continuity_tool_context("sess-main");
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "target": "subagent",
+                    "subagentId": "sub-1-0",
+                    "message": "优先低风险改动",
+                }),
+            )
+            .await
+            .expect("目标子代理可达，注入不应失败");
+        assert_eq!(out["target"], "subagent");
+        assert_eq!(out["delivered"], true);
+        assert_eq!(out["ring"], "steer", "target=subagent 恒 steer（L1 注入语义）");
+        // 目标 run 总线：恰 1 条 L1 steer 意图（无 L2/L3）
+        let intents = subagent_run
+            .control_bus
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain();
+        assert_eq!(intents.len(), 1, "应恰好一条控制意图");
+        assert_eq!(intents[0].kind, session_loop::control::ControlKind::Steer);
+        assert_eq!(
+            intents[0].reason.as_deref(),
+            Some("subagent_inject:sub-1-0"),
+            "reason 携带可观测标识"
+        );
+        let text = intents[0]
+            .message
+            .as_ref()
+            .expect("注入意图必须携带消息")
+            .blocks
+            .iter()
+            .find_map(|b| match b {
+                conex_types::message::AgentMessageBlock::Text { text } => Some(text.as_str()),
+                _ => None,
+            });
+        assert_eq!(text, Some("优先低风险改动"));
+        // 生产 ControlBusResolver 接线：wait_channel 的 inject 同通道可用
+        // （取代 NoopControlBusResolver——装配前 inject 恒 InjectFailed）
+        state
+            .engine
+            .wait_channel()
+            .inject("sub-1-0", "wait 期间调整")
+            .await
+            .expect("生产解析器应能定位目标 run（Noop 已被板卡取代）");
+        let intents2 = subagent_run
+            .control_bus
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain();
+        assert_eq!(intents2.len(), 1);
+        assert_eq!(intents2[0].kind, session_loop::control::ControlKind::Steer);
+        // 目标不可达 → 结构化 subagent.not_found（不静默、不 panic）
+        let err = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "target": "subagent",
+                    "subagentId": "ghost-sub",
+                    "message": "不应送达",
+                }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), conex_types::error::codes::SUBAGENT_NOT_FOUND);
+    }
+
+    /// E2E：send_message(target=self) 在活动主 run 存活时经主 run 自己
+    /// ControlBus 入环——followUp（缺省）/ steer（urgency=steer）两环；
+    /// 消息 metadata.source="main-agent"、reason=send_message_tool；
+    /// **不标记 user_touched**（收口不因此抑制 idle 续 run）。
+    #[tokio::test]
+    async fn continuity_finalize_wires_send_message_self_follow_up_ring() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        state.finalize_continuity_channels();
+        let main_run = insert_continuity_run(&state, "sess-main", "run-main", None).await;
+        let tool = state
+            .engine
+            .tool_registry()
+            .get(agent_tools::tools::send_message::SEND_MESSAGE_TOOL_NAME)
+            .expect("send_message 已注册");
+        let ctx = continuity_tool_context("sess-main");
+        // 缺省 urgency → followUp 环（仅 idle promote 消费，不打断当前 run）
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "target": "self",
+                    "message": "记住：继续调研 Y",
+                }),
+            )
+            .await
+            .expect("活动主 run 存活，消息应入 followUp 环");
+        assert_eq!(out["ring"], "follow_up");
+        // urgency=steer → steer 环（下一安全点注入，当前 run 继续）
+        tool.execute(
+            &ctx,
+            serde_json::json!({
+                "target": "self",
+                "message": "先修 X 再继续",
+                "urgency": "steer",
+            }),
+        )
+        .await
+        .expect("urgency=steer 应入 steer 环");
+        // 主 run 总线：两条意图（followUp + steer），消息元数据保真
+        let intents = main_run
+            .control_bus
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain();
+        assert_eq!(intents.len(), 2);
+        assert_eq!(intents[0].kind, session_loop::control::ControlKind::FollowUp);
+        assert_eq!(intents[1].kind, session_loop::control::ControlKind::Steer);
+        assert_eq!(intents[0].reason.as_deref(), Some("send_message_tool"));
+        assert_eq!(intents[1].reason.as_deref(), Some("send_message_tool"));
+        for intent in &intents {
+            let msg = intent.message.as_ref().expect("消息意图必须携带消息");
+            assert_eq!(msg.role, conex_types::message::AgentMessageRole::User);
+            let metadata = msg.metadata.as_ref().expect("消息应带来源标记");
+            assert_eq!(
+                metadata.get("source").and_then(|s| s.as_str()),
+                Some("main-agent"),
+                "来源标记 metadata.source=main-agent（与用户消息区分）"
+            );
+        }
+        let text = intents[0]
+            .message
+            .as_ref()
+            .expect("消息")
+            .blocks
+            .iter()
+            .find_map(|b| match b {
+                conex_types::message::AgentMessageBlock::Text { text } => Some(text.as_str()),
+                _ => None,
+            });
+        assert_eq!(text, Some("记住：继续调研 Y"));
+        // 不标记 user_touched：主 agent 自发消息不算「用户交互」（收口
+        // 不因此抑制 idle 续 run——core_run_commands.rs:2517-2519 语义）
+        assert!(
+            !main_run.user_touched.load(Ordering::SeqCst),
+            "send_message 路径恒不标记 user_touched"
+        );
+        // 队列零新增（run 存活时走环注入，不落兜底队列）
+        let queue = state.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(queue.is_empty(), "run 存活时消息入环，不写兜底队列");
+    }
+
+    /// E2E：kill_subagent 工具经生产通道三态——缺行 → 结构化
+    /// subagent.not_found；running 行 + 活动 run → killed + L3 强停意图 +
+    /// 行归一 failed；已终态行 → alreadyTerminal 幂等（无投递、不覆写）。
+    #[tokio::test]
+    async fn continuity_kill_channel_lifecycle_paths() {
+        let db = LocalDb::open_in_memory().expect("内存库");
+        // 会话条目前置（session_agents 外键约束；对齐子代理 e2e 装配）
+        db.upsert_session_entry(&subagent_test_session_entry("sess-main"))
+            .expect("会话条目");
+        let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+        state.finalize_continuity_channels();
+        let tool = state
+            .engine
+            .tool_registry()
+            .get(agent_tools::tools::kill_subagent::SUBAGENT_KILL_TOOL_NAME)
+            .expect("kill_subagent 已注册");
+        let ctx = continuity_tool_context("sess-main");
+        // ① 缺行 → subagent.not_found（结构化错误码）
+        let err = tool
+            .execute(&ctx, serde_json::json!({ "subagentId": "ghost" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), conex_types::error::codes::SUBAGENT_NOT_FOUND);
+        // ② running 行 + 活动 run → killed：L3 强停意图 + 行归一 failed
+        let row = conex_types::SessionAgent {
+            id: "sub-1-0".to_string(),
+            subagent_run_id: "sub-run-1-0".to_string(),
+            parent_session_id: "sess-main".to_string(),
+            parent_run_id: "run-main".to_string(),
+            parent_tool_call_id: None,
+            description: String::new(),
+            mode: "research".to_string(),
+            status: "running".to_string(),
+            summary: None,
+            messages: Vec::new(),
+            started_at: 1_000,
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+        };
+        db.upsert_session_agent(&row).expect("行落库");
+        let subagent_run = insert_continuity_run(
+            &state,
+            "sess-main",
+            "sub-run-1-0",
+            Some(crate::subagent_spawner::SubagentRunConfig {
+                subagent_id: "sub-1-0".to_string(),
+                subagent_run_id: "sub-run-1-0".to_string(),
+                parent_session_id: "sess-main".to_string(),
+                task_type: None,
+                allowed_write_paths: None,
+                output_dir: None,
+                started_at_ms: 1_000,
+            }),
+        )
+        .await;
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({ "subagentId": "sub-1-0", "reason": "目标不可恢复" }),
+            )
+            .await
+            .expect("running 行 + 活动 run 应 killed");
+        assert_eq!(out["subagentId"], "sub-1-0");
+        assert_eq!(out["subagentRunId"], "sub-run-1-0");
+        assert_eq!(out["outcome"], "killed");
+        assert_eq!(out["forceCancelDelivered"], true, "活动 run 存在，L3 应实际投递");
+        let intents = subagent_run
+            .control_bus
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain();
+        assert_eq!(intents.len(), 1, "应恰好一条 L3 强停意图");
+        assert_eq!(intents[0].kind, session_loop::control::ControlKind::ForceCancel);
+        assert_eq!(
+            intents[0].reason.as_deref(),
+            Some("subagent_force_cancel:sub-run-1-0"),
+            "reason 携带可观测标识"
+        );
+        let rows = db.load_session_agents("sess-main").expect("读行");
+        let row = rows.iter().find(|a| a.id == "sub-1-0").expect("行存在");
+        assert_eq!(row.status, "failed", "行归一 failed");
+        assert!(row.ended_at.is_some(), "ended_at 补齐");
+        // ③ 已终态行再 kill → alreadyTerminal 幂等（不投递、不覆写）
+        let out2 = tool
+            .execute(&ctx, serde_json::json!({ "subagentId": "sub-1-0" }))
+            .await
+            .expect("已终态 kill 应幂等成功");
+        assert_eq!(out2["outcome"], "alreadyTerminal");
+        assert_eq!(out2["forceCancelDelivered"], false);
+        let rows2 = db.load_session_agents("sess-main").expect("读行");
+        let row2 = rows2.iter().find(|a| a.id == "sub-1-0").expect("行存在");
+        assert_eq!(row2.status, "failed");
+        assert_eq!(
+            row2.ended_at, row.ended_at,
+            "幂等路径不覆写 ended_at（保留终态审计事实）"
         );
     }
 }
