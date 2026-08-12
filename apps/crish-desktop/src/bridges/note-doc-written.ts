@@ -1,32 +1,48 @@
 /**
- * note-doc-written — 笔记写后读回通知总线（CONN-G1）
+ * note-doc-written — 笔记写后读回通知总线（CONN-G1 / CONN-G2）
  *
- * 目的：`send_to_note` 成功写入后，同 docId 的 Strict 轨 hydrate
+ * 目的：笔记写路径成功 applied 后，同 docId 的 Strict 轨 hydrate
  * 可自动 reload（refresh 语义），**不**改 StrictPanel JSX 结构。
  *
- * 纪律：
+ * ## 写路径 → source（钉清）
+ * | source | 写路径 | 通知条件 |
+ * |--------|--------|----------|
+ * | `send_to_note` | chat → note 桥 `dispatchSendToNote` | sink 成功且 applied=true（幂等重放不通知） |
+ * | `product_apply` | 产品 `note_apply_ops` 适配（slash / mdPrefix 共用后端） | IPC ok 且 applied>0 |
+ *
+ * ## 纪律
  * - 本模块仅 pub/sub；**不**持有块树权威
- * - 仅写成功且实际 applied 时由桥层 notify（幂等重放 / 流未完成 / sink 拒 **不** 通知）
+ * - 仅写成功且实际 applied 时由桥层 / 产品 apply 适配 notify
+ *   （幂等重放 / 流未完成 / sink 拒 / applied=0 **不** 通知）
  * - note-paper 只读订阅；chat 不经本总线写树
  *
- * 诚实边界：
+ * ## 诚实边界
  * - **≠ EL-08**；**≠ EL-01**；**≠ 打开完成（G-HYD）**
  * - Skeleton 双轨保留（本总线默认只接 Strict hydrate）
+ * - 本总线 **≠** 假关打开完成；写后读回 ≠ 权威已同步证明
  */
 
 // ---------------------------------------------------------------------------
 // 类型
 // ---------------------------------------------------------------------------
 
-export type NoteDocWrittenSource = 'send_to_note';
+/**
+ * 写成功来源（CONN-G1/G2）。
+ * - `send_to_note`：chat 投递笔记（G1）
+ * - `product_apply`：产品 Strict apply（`note_apply_ops` / slash·mdPrefix 写锥后端，G2）
+ *
+ * 扩展纪律：新写路径成功 applied 后须 notify 并在此枚举钉清；
+ * 禁止静默写树却不发总线（Strict 投影会旧）。
+ */
+export type NoteDocWrittenSource = 'send_to_note' | 'product_apply';
 
-/** 写成功后的轻量事件（跨 chat→note 读回触发） */
+/** 写成功后的轻量事件（跨 chat→note / 产品 apply→Strict 读回触发） */
 export type NoteDocWrittenEvent = {
   /** 被写入的文档 id */
   docId: string;
   /** 可选：幂等 intentId（审计 / 调试） */
   intentId?: string;
-  /** 写路径来源；CONN-G1 现仅 send_to_note */
+  /** 写路径来源；见 `NoteDocWrittenSource` 表 */
   source: NoteDocWrittenSource;
 };
 
@@ -53,7 +69,8 @@ export function subscribeNoteDocWritten(
 
 /**
  * 通知同 doc 读回侧：写已 applied。
- * 桥层在 dispatchSendToNote 成功且 applied=true 时调用。
+ * - G1：桥层在 dispatchSendToNote 成功且 applied=true 时调用
+ * - G2：`adaptNoteApplyOpsIpcAsApplyOps` 在 IPC ok 且 applied>0 时调用
  */
 export function notifyNoteDocWritten(event: NoteDocWrittenEvent): void {
   if (typeof event.docId !== 'string' || event.docId.length === 0) {

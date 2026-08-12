@@ -7,6 +7,8 @@
  * - 可写时经 `createCollabApplySink`（生产形状）；**禁止** mock 当生产默认。
  * - **CONN-B3**：产品默认后端见 `resolveProductStrictApplyOps`（`noteApplyOpsIpc`）；
  *   有 Tauri / 显式 IPC → `source=product-ipc`；无 → 只读。
+ * - **CONN-G2**：product-ipc 写成功（applied>0）经 adapt 发 `notifyNoteDocWritten(source: product_apply)`，
+ *   同 doc Strict hydrate 读回；**≠ EL-08 / EL-01 / 打开完成**。
  *
  * ## 诚实边界
  * - **≠ EL-01**；**≠ A-BLK-02 产品 e2e 满关**

@@ -4,9 +4,10 @@
  * 从 `NotePaperStrictPanel` 抽出加载 / 空 / 错误 / 成功三态，
  * 降低面板主文件复杂度；**不**改 transport 契约。
  *
- * ## CONN-G1 · send_to_note → Strict 读回
+ * ## CONN-G1 / G2 · 写后 Strict 读回
  * 订阅 `bridges/note-doc-written`：同 docId 写成功（applied）后自动 reload。
- * 与外部 `refreshToken` 并存；**不**依赖 StrictPanel 大改 JSX。
+ * 来源含 `send_to_note`（G1）与 `product_apply`（G2 产品 note_apply_ops）。
+ * 与外部 `refreshToken` 并存；**不**依赖 StrictPanel 大改 JSX；不按 source 过滤。
  *
  * ## 诚实边界
  * - 投影 ≠ 文档权威；**禁止** 行级 EditorStore
@@ -15,7 +16,8 @@
  * - Skeleton 双轨保留；本 hook 仅 Strict 轨使用
  *
  * 测：StrictPanel hydrate 三态测不回退（`NotePaperStrictPanel.test.tsx`）；
- *     CONN-G1 写后读回见 `conn-g1.send-to-note-strict-refresh.test.tsx`
+ *     CONN-G1 写后读回见 `conn-g1.send-to-note-strict-refresh.test.tsx`；
+ *     CONN-G2 产品 apply 见 `conn-g2.product-apply-note-doc-written.test.ts`
  */
 
 import { useCallback, useEffect, useState } from 'react';

@@ -21,6 +21,8 @@
  * - UI **禁止**单读 `pending_turn_into_flavour` 当块 kind（权威是投影 kind）
  * - composing 双守卫（fast_path + submit）**不回退**
  * - **禁止**用本桥 / 库 `mdPrefixHost` 单测关 A-BLK-08/09 / EL-01
+ * - **CONN-G2**：product-ipc applyOps 写成功（applied>0）经 adapt 发
+ *   `notifyNoteDocWritten(source: product_apply)`；失败/未 applied 不通知；**≠ 打开完成**
  *
  * ## 与 slash 关系
  * - 本文件只走 `TurnIntoSink`；slash 仍走 `IntentSink`（productSlashSink）

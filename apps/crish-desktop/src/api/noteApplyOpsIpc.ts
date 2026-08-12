@@ -14,6 +14,12 @@
  *   可检测 Tauri → 本 IPC；**无 Tauri → 不装配（readonly）**；
  *   **禁止** 无后端静默 mock 可写
  *
+ * ## CONN-G2 · 写后 Strict 读回
+ * - `adaptNoteApplyOpsIpcAsApplyOps` 在 IPC **ok 且 applied>0** 时
+ *   `notifyNoteDocWritten({ docId, source:'product_apply', intentId? })`
+ * - slash（productSlashSink）/ mdPrefix（noteMdPrefixBridge）共用本适配 → 自动走总线
+ * - 失败 / applied=0 **不** 通知；**≠ EL-08 / EL-01 / 打开完成**
+ *
  * ## 诚实边界
  * - **≠ EL-01**；**≠ A-BLK 全表 e2e**；IPC 可测 **≠** 打开完成
  * - mock IPC **仅** 契约测 / 注入测；**禁止** 当生产默认
@@ -21,6 +27,7 @@
  */
 
 import type { ApplyOpsAdapter, IntentSinkResult } from '@crish/block-paper';
+import { notifyNoteDocWritten } from '../bridges/note-doc-written';
 import { isNoteTauriRuntime } from './noteApi';
 import { invokeTyped, type InvokeTypedResult } from './tauriInvoke';
 
@@ -300,6 +307,10 @@ export function createTauriNoteApplyOpsIpc(): NoteApplyOpsIpc {
 /**
  * 将 `NoteApplyOpsIpc` 适配为库 `ApplyOpsAdapter`（固定 docId）。
  * createCollabApplySink / productSlashSink / mdPrefix 均可注入。
+ *
+ * ## CONN-G2
+ * 写成功且 `applied > 0` → `notifyNoteDocWritten(source: 'product_apply')`，
+ * 供同 doc Strict hydrate 自动 reload。失败 / applied=0 不通知。
  */
 export function adaptNoteApplyOpsIpcAsApplyOps(
   ipc: NoteApplyOpsIpc,
@@ -314,6 +325,18 @@ export function adaptNoteApplyOpsIpcAsApplyOps(
       ...(options.origin !== undefined ? { origin: options.origin } : {}),
     });
     if (outcome.ok) {
+      // CONN-G2：实际有 op 落地才通知 Strict 读回（applied=0 不打扰投影）
+      if (outcome.applied > 0) {
+        const writtenDocId =
+          typeof outcome.docId === 'string' && outcome.docId.length > 0
+            ? outcome.docId
+            : docId;
+        notifyNoteDocWritten({
+          docId: writtenDocId,
+          intentId: outcome.intentId ?? meta.intentId,
+          source: 'product_apply',
+        });
+      }
       return { ok: true };
     }
     return {
@@ -372,6 +395,7 @@ export type ProductStrictApplyOpsResolution = {
  * 诚实钉死：
  * - **无 Tauri 且无注入 → readonly**；禁止静默 mock 可写
  * - mock IPC **仅** 经 `applyOpsIpc` 显式注入才进产品绑定
+ * - product-ipc 路径写成功 applied>0 自动走 CONN-G2 总线（见 adapt）
  * - **≠ EL-01**
  */
 export function resolveProductStrictApplyOps(
