@@ -4,7 +4,7 @@
 //!
 //! # 诚实边界（强制）
 //! - 本文件绿 = gfm-core **可点名结构类**加深可测（表 / 任务列表 / 删除线·autolink / 分割线·wiki plain /
-//!   **任务嵌套表** 组合边 / **引用嵌套表 flatten**）
+//!   **任务嵌套表** 组合边 / **引用嵌套表 flatten** / **普通列表嵌套表**（表降 Paragraph 叶子，非 flatten））
 //! - **≠ A-MD-01 全集关账**（§3.6 仍有未覆盖类；本包非全表）
 //! - **≠ A-MD 全集** / **≠ EL-06**（见 `plans/08` / `acceptance/EL-dashboard`；**禁止** 本批 golden 关 EL）
 //! - **≠ A-MD-03**（wiki 未建模，仅 plain 诚实）
@@ -689,5 +689,134 @@ fn golden_gfm_core_blockquote_nested_table_structure_or_plain() {
     let s1 = serialize_tree(tree);
     let s2 = serialize_tree(&parse_document(&s1).unwrap());
     assert_eq!(s1, s2, "RT-3 blockquote nested table flatten");
+    assert_eq!(document_to_md(tree), s1);
+}
+
+// ── A-MD 诚实加深 · 普通列表内嵌套 GFM 表（表降 Paragraph 叶子 · ≠ flatten / ≠ EL-06 / ≠ 旧 golden 重做） ──
+// 本段绿 = 可点名：普通 BulletItem 容器 + 表走 Node::Table lowering 降 Paragraph 叶子 + Table note + 兄弟旁路。
+// **禁止** 将本测解读为 EL-06 关账、A-MD-01 全集、「保留 Table 子树」、或 Quote/任务项套表重做。
+
+/// gfm-core 组合边：普通列表（**非 task**）**内含** GFM 表。
+///
+/// 实际树语义（禁止说成 flatten，也禁止说成「保留 Table 子树」）：
+/// - **不是** blockquote 那种 flatten：表 **不** 并进 `BulletItem.plain`，**不** 走 `to_string()` 单元格连写
+/// - `lower_list` 首段 → 项文本；表在 trailing / 后续 flow 中走 `Node::Table` lowering
+///   → `Paragraph` + `table_plain`（`|` / 对齐行）+ Table `structure_note`（kind **未入** collab）
+/// - assemble 容器栈：`BulletItem` 秩=10，表降级叶子挂父项下（与 `task_nested_table` 同挂法，但无勾选 / 无 TaskItem note）
+/// - 根兄弟另一普通项不吞并
+/// - **≠ EL-06**；**≠ A-MD-01 全集**；**≠** `task_nested_table` / `blockquote_nested_table` 重做
+#[test]
+fn golden_gfm_core_list_nested_table_paragraph_child() {
+    let md = include_str!("golden/gfm-core/list_nested_table.md");
+    let out = parse_document_detailed(md).expect("parse list_nested_table");
+    let tree = &out.tree;
+
+    let parent = bid("11111111-1111-4111-a111-111111111111");
+    let table = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    let sibling = bid("33333333-3333-4333-a333-333333333333");
+
+    // 根：父普通项 + 兄弟普通项（表挂在父项下，不在 root）
+    assert_eq!(tree.root_children, vec![parent, sibling]);
+
+    let n_parent = tree.get(&parent).unwrap();
+    assert_eq!(n_parent.kind, BlockKind::BulletItem, "普通无序项");
+    assert_eq!(
+        n_parent.text_snapshot.as_deref(),
+        Some("父无序项：嵌套表容器"),
+        "非 task：plain 不得带 [x]/[ ]"
+    );
+    assert!(
+        !n_parent
+            .text_snapshot
+            .as_deref()
+            .unwrap_or("")
+            .contains('[')
+            && !n_parent
+                .text_snapshot
+                .as_deref()
+                .unwrap_or("")
+                .contains(']'),
+        "普通列表不得编入 checkbox: {:?}",
+        n_parent.text_snapshot
+    );
+    assert_eq!(n_parent.children, vec![table], "表降 Paragraph 叶子挂父项，非 flatten");
+    assert_eq!(n_parent.parent, None);
+
+    let n_table = tree.get(&table).unwrap();
+    assert_eq!(
+        n_table.kind,
+        BlockKind::Paragraph,
+        "Table kind 未入 collab → Paragraph 叶子（不是 Table 子树）"
+    );
+    assert_eq!(n_table.parent, Some(parent));
+    assert!(n_table.children.is_empty(), "表降级后仍为叶子");
+    let snap = n_table.text_snapshot.as_deref().unwrap_or("");
+    assert!(
+        snap.contains("左") && snap.contains("右") && snap.contains("甲") && snap.contains("乙"),
+        "单元格 plain 可点名: {snap}"
+    );
+    assert!(
+        snap.contains(":---") && snap.contains("---:") && snap.contains('|'),
+        "须走 table_plain（| / 对齐），不是 to_string 连写 flatten: {snap}"
+    );
+
+    let n_sib = tree.get(&sibling).unwrap();
+    assert_eq!(n_sib.kind, BlockKind::BulletItem);
+    assert_eq!(n_sib.text_snapshot.as_deref(), Some("兄弟无序项"));
+    assert!(n_sib.children.is_empty());
+    assert_eq!(n_sib.parent, None);
+
+    // 仅 Table 缺席 note；普通列表不得假装 TaskItem 列表
+    assert!(
+        !out.lossy
+            .items
+            .iter()
+            .any(|i| i.code == "structure_note" && i.detail.contains("TaskItem")),
+        "非 task 列表不应发 TaskItem note: {:?}",
+        out.lossy
+    );
+    let table_note = out
+        .lossy
+        .items
+        .iter()
+        .find(|i| {
+            i.code == "structure_note" && (i.detail.contains("表格") || i.detail.contains("Table"))
+        })
+        .expect("list_nested_table 须 Table structure_note（证明走了 Node::Table，不是 flatten）");
+    assert!(
+        table_note.detail.contains("未入 collab"),
+        "Table note: {:?}",
+        table_note.detail
+    );
+    assert!(
+        table_note.detail.contains("2×2") || table_note.detail.contains("2x2"),
+        "2 行×2 列可点名: {:?}",
+        table_note.detail
+    );
+
+    // S：普通 bullet + 表 plain；结构往返
+    let md2 = serialize_tree(tree);
+    assert!(
+        md2.contains("- 父无序项：嵌套表容器") && md2.contains("- 兄弟无序项"),
+        "S 普通列表项: {md2}"
+    );
+    assert!(
+        !md2.contains("- [") && !md2.contains("[x]") && !md2.contains("[ ]"),
+        "S 不得编成任务列表: {md2}"
+    );
+    assert!(
+        md2.contains("左") && md2.contains("甲") && md2.contains('|'),
+        "S 表单元格: {md2}"
+    );
+    let tree2 = parse_document(&md2).unwrap();
+    assert!(
+        structure_eq(tree, &tree2),
+        "list nested table RT md2=\n{md2}"
+    );
+
+    // RT-3 双次稳定
+    let s1 = serialize_tree(tree);
+    let s2 = serialize_tree(&parse_document(&s1).unwrap());
+    assert_eq!(s1, s2, "RT-3 list nested table");
     assert_eq!(document_to_md(tree), s1);
 }
