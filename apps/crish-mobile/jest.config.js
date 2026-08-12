@@ -8,7 +8,7 @@ module.exports = {
   // immer 的 react-native export condition 指向 ESM 产物（immer.legacy-esm.js），
   // 不在 jest-expo 默认 allowlist 内 → 需加入 transform 白名单（store 单测经 zustand/middleware/immer 引入）
   transformIgnorePatterns: [
-    '/node_modules/(?!(.pnpm|immer|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation))',
+    '/node_modules/(?!(.pnpm|immer|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|@noble))',
     '/node_modules/react-native-reanimated/plugin/',
     '/node_modules/@react-native/babel-preset/',
   ],

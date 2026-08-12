@@ -1,6 +1,7 @@
 // 配对状态机深化单测（R2-03）：全状态转移表（7 状态 × 7 事件矩阵）
 // + 失败计数/重试边界（D3 §4.3 单码上限 5）+ 与协议层接线产物断言
 // （pendingHello 构造 / result 存 token / 换码重置计数）
+// + 密钥协商生命周期（R2-03 部分 2：生成 → 交换 → 派生 → paired，含错误路径）
 
 import {
   PAIR_INITIAL_STATE,
@@ -10,6 +11,8 @@ import {
   type PairMachineState,
   type PairState,
 } from './pairMachine';
+import { base64Encode, derivePairingKeys } from './crypto/keyAgreement';
+import { noblePrimitives } from './crypto/noblePrimitives';
 
 const VALID_CODE = 'CXN-7K4P-Q2MB-9XRT';
 const NORMALIZED_CODE = '7K4PQ2MB9XRT';
@@ -422,5 +425,247 @@ describe('全状态 × 全事件转移矩阵（7 × 7）', () => {
         }
       }
     }
+  });
+});
+
+// ── 密钥协商生命周期（R2-03 部分 2：生成 → 交换 → 派生 → paired）──────────
+
+describe('密钥协商生命周期（R2-03 部分 2 接线）', () => {
+  /** 移动端流程（注入真实原语 + 真实派生）：返回终态与双端派生产物 */
+  function runPairWithKeys(): {
+    state: PairMachineState;
+    desktopKeys: ReturnType<typeof noblePrimitives.generateKeyPair>;
+    desktopSet: ReturnType<typeof derivePairingKeys>;
+  } {
+    const desktopKeys = noblePrimitives.generateKeyPair();
+    let s = reducePairState(PAIR_INITIAL_STATE, { type: 'begin' });
+    s = reducePairState(s, {
+      type: 'submitCode',
+      code: VALID_CODE,
+      deviceName: '测试手机',
+      // sending-hello 前生成密钥对（D3 §4.4 第 1 步）
+      generateKeys: () => ({
+        ephemeral: noblePrimitives.generateKeyPair(),
+        longTerm: noblePrimitives.generateKeyPair(),
+      }),
+    });
+    const hello = s.pendingHello!;
+    // 桌面视角：从 pair.hello 帧取移动公钥，本地为桌面长期对
+    const desktopSet = derivePairingKeys(
+      {
+        code: NORMALIZED_CODE,
+        desktopId: 'crish-desktop',
+        mobilePub: hello.mobilePub,
+        mobileLongPub: hello.mobileLongPub,
+        remotePub: hello.mobileLongPub,
+        localKeys: {
+          ephemeral: desktopKeys,
+          longTerm: desktopKeys,
+        },
+      },
+      noblePrimitives
+    );
+    s = reducePairState(s, {
+      type: 'onHelloAck',
+      remotePub: base64Encode(desktopKeys.publicKey),
+    });
+    s = reducePairState(s, {
+      type: 'onPairOk',
+      desktopId: 'crish-desktop',
+      ttl: 86400,
+      token: 'tok-hex-64',
+      deriveKeys: (m) => derivePairingKeys(m, noblePrimitives),
+    });
+    return { state: s, desktopKeys, desktopSet };
+  }
+
+  it('submitCode 注入 generateKeys → hello 携带 base64 公钥（44 字符），localKeys 落态', () => {
+    let s = reducePairState(PAIR_INITIAL_STATE, { type: 'begin' });
+    s = reducePairState(s, {
+      type: 'submitCode',
+      code: VALID_CODE,
+      deviceName: 'd',
+      generateKeys: () => ({
+        ephemeral: noblePrimitives.generateKeyPair(),
+        longTerm: noblePrimitives.generateKeyPair(),
+      }),
+    });
+    expect(s.state).toBe('sending-hello');
+    expect(s.localKeys).not.toBeNull();
+    expect(s.localKeys?.ephemeral.publicKey.length).toBe(32);
+    expect(s.localKeys?.longTerm.publicKey.length).toBe(32);
+    expect(s.pendingHello?.mobilePub).toMatch(/^[A-Za-z0-9+/]{43}=$/);
+    expect(s.pendingHello?.mobileLongPub).toMatch(/^[A-Za-z0-9+/]{43}=$/);
+    expect(s.pendingHello?.mobilePub).not.toBe('');
+  });
+
+  it('onHelloAck 携带 remotePub → waiting-verify 并保存桌面公钥', () => {
+    let s = reducePairState(PAIR_INITIAL_STATE, { type: 'begin' });
+    s = reducePairState(s, makeEvent('submitCode'));
+    const desktopPub = base64Encode(
+      noblePrimitives.generateKeyPair().publicKey
+    );
+    const acked = reducePairState(s, {
+      type: 'onHelloAck',
+      remotePub: desktopPub,
+    });
+    expect(acked.state).toBe('waiting-verify');
+    expect(acked.pendingRemotePub).toBe(desktopPub);
+  });
+
+  it('完整生命周期：生成 → hello 公钥交换 → ack 存 remotePub → 派生 → paired', () => {
+    const { state, desktopSet } = runPairWithKeys();
+    expect(state.state).toBe('paired');
+    expect(state.changed).toBe(true);
+    expect(state.sessionKeys).not.toBeNull();
+    expect(state.sessionKeys!.tokenKey.length).toBe(44);
+    // 双端一致性：移动端 sessionKeys 与桌面端独立派生完全一致（对拍锚点）
+    expect(state.sessionKeys).toEqual(desktopSet);
+    expect(state.result?.desktopId).toBe('crish-desktop');
+    expect(state.failedAttempts).toBe(0);
+  });
+
+  it('不注入密钥（旧行为兼容）→ paired 但 sessionKeys 为 null', () => {
+    const s = runHappyPath();
+    expect(s.state).toBe('paired');
+    expect(s.sessionKeys).toBeNull();
+    expect(s.localKeys).toBeNull();
+    expect(s.pendingRemotePub).toBeNull();
+    // 兼容：未注入时 hello 公钥为空串（R2-03a 行为）
+    expect(s.pendingHello?.mobilePub).toBe('');
+  });
+
+  it('错误路径：注入 deriveKeys 但桌面公钥缺失 → error（key_material_missing，可重试）', () => {
+    let s = reducePairState(PAIR_INITIAL_STATE, { type: 'begin' });
+    s = reducePairState(s, {
+      type: 'submitCode',
+      code: VALID_CODE,
+      deviceName: 'd',
+      generateKeys: () => ({
+        ephemeral: noblePrimitives.generateKeyPair(),
+        longTerm: noblePrimitives.generateKeyPair(),
+      }),
+    });
+    // onHelloAck 未带 remotePub（桌面简化链缺 challenge 公钥）
+    s = reducePairState(s, { type: 'onHelloAck' });
+    const failed = reducePairState(s, {
+      type: 'onPairOk',
+      desktopId: 'crish-desktop',
+      ttl: 86400,
+      token: 'tok',
+      deriveKeys: (m) => derivePairingKeys(m, noblePrimitives),
+    });
+    expect(failed.state).toBe('error');
+    expect(failed.error?.code).toBe('pair.key_material_missing');
+    expect(failed.error?.retryable).toBe(true);
+    expect(failed.failedAttempts).toBe(1);
+    expect(failed.sessionKeys).toBeNull();
+    // 可重试：retry 回输入态
+    expect(reducePairState(failed, makeEvent('retry')).state).toBe(
+      'waiting-input'
+    );
+  });
+
+  it('错误路径：remotePub 格式非法 → error（key_agreement_failed）', () => {
+    let s = reducePairState(PAIR_INITIAL_STATE, { type: 'begin' });
+    s = reducePairState(s, {
+      type: 'submitCode',
+      code: VALID_CODE,
+      deviceName: 'd',
+      generateKeys: () => ({
+        ephemeral: noblePrimitives.generateKeyPair(),
+        longTerm: noblePrimitives.generateKeyPair(),
+      }),
+    });
+    s = reducePairState(s, { type: 'onHelloAck', remotePub: 'BAD-PUB-KEY!' });
+    const failed = reducePairState(s, {
+      type: 'onPairOk',
+      desktopId: 'crish-desktop',
+      ttl: 86400,
+      token: 'tok',
+      deriveKeys: (m) => derivePairingKeys(m, noblePrimitives),
+    });
+    expect(failed.state).toBe('error');
+    expect(failed.error?.code).toBe('pair.key_agreement_failed');
+    expect(failed.error?.retryable).toBe(true);
+    expect(failed.sessionKeys).toBeNull();
+  });
+
+  it('错误路径：注入 deriveKeys 但本地密钥缺失 → error（key_material_missing）', () => {
+    let s = reducePairState(PAIR_INITIAL_STATE, { type: 'begin' });
+    // submitCode 不注入 generateKeys → localKeys 为 null
+    s = reducePairState(s, makeEvent('submitCode'));
+    s = reducePairState(s, { type: 'onHelloAck', remotePub: 'a'.repeat(44) });
+    const failed = reducePairState(s, {
+      type: 'onPairOk',
+      desktopId: 'crish-desktop',
+      ttl: 86400,
+      token: 'tok',
+      deriveKeys: (m) => derivePairingKeys(m, noblePrimitives),
+    });
+    expect(failed.state).toBe('error');
+    expect(failed.error?.code).toBe('pair.key_material_missing');
+  });
+
+  it('reset 清空密钥协商材料（localKeys / pendingRemotePub / sessionKeys）', () => {
+    // paired 为终态拒绝 reset；从持有全部材料的 waiting-verify 态验证清空
+    const desktopPub = base64Encode(
+      noblePrimitives.generateKeyPair().publicKey
+    );
+    let s = reducePairState(PAIR_INITIAL_STATE, { type: 'begin' });
+    s = reducePairState(s, {
+      type: 'submitCode',
+      code: VALID_CODE,
+      deviceName: 'd',
+      generateKeys: () => ({
+        ephemeral: noblePrimitives.generateKeyPair(),
+        longTerm: noblePrimitives.generateKeyPair(),
+      }),
+    });
+    s = reducePairState(s, { type: 'onHelloAck', remotePub: desktopPub });
+    expect(s.state).toBe('waiting-verify');
+    expect(s.localKeys).not.toBeNull();
+    expect(s.pendingRemotePub).toBe(desktopPub);
+    const r = reducePairState(s, makeEvent('reset'));
+    expect(r.state).toBe('idle');
+    expect(r.localKeys).toBeNull();
+    expect(r.pendingRemotePub).toBeNull();
+    expect(r.sessionKeys).toBeNull();
+  });
+
+  it('派生失败计入失败计数并允许重试（与服务端错误同语义）', () => {
+    let s = reducePairState(PAIR_INITIAL_STATE, { type: 'begin' });
+    s = reducePairState(s, {
+      type: 'submitCode',
+      code: VALID_CODE,
+      deviceName: 'd',
+      generateKeys: () => ({
+        ephemeral: noblePrimitives.generateKeyPair(),
+        longTerm: noblePrimitives.generateKeyPair(),
+      }),
+    });
+    s = reducePairState(s, { type: 'onHelloAck', remotePub: 'BAD-PUB!' });
+    s = reducePairState(s, {
+      type: 'onPairOk',
+      desktopId: 'c',
+      ttl: 1,
+      token: 't',
+      deriveKeys: (m) => derivePairingKeys(m, noblePrimitives),
+    });
+    expect(s.state).toBe('error');
+    expect(s.failedAttempts).toBe(1);
+    // 重试后重新提交（同码）→ 计数保留累计
+    s = reducePairState(s, makeEvent('retry'));
+    s = reducePairState(s, {
+      type: 'submitCode',
+      code: VALID_CODE,
+      deviceName: 'd',
+      generateKeys: () => ({
+        ephemeral: noblePrimitives.generateKeyPair(),
+        longTerm: noblePrimitives.generateKeyPair(),
+      }),
+    });
+    expect(s.state).toBe('sending-hello');
+    expect(s.failedAttempts).toBe(1);
   });
 });

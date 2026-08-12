@@ -268,7 +268,11 @@ fn samples_blind_zone_stats() {
         "头部盲区统计应与 fixture 一致"
     );
     assert!(out.text.contains("|CANVAS|<canvas>"));
-    assert!(out.text.contains("|VIDEO|<video>"));
+    assert!(
+        out.text.contains("|VIDEO|<video src=clip.mp4>"),
+        "video 占位行保留 src 描述属性（T-16 补齐）：\n{}",
+        out.text
+    );
     assert!(out.text.contains("|IMG|<img alt=示意图>"), "img 占位保留属性（D4 不误伤）：\n{}", out.text);
     let indexed: HashSet<i64> = out.selector_map.values().map(|r| r.backend_node_id).collect();
     assert!(!indexed.contains(&1) && !indexed.contains(&2) && !indexed.contains(&3));

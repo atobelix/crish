@@ -1,11 +1,10 @@
-import PlaceholderScreen from '@/presentation/components/templates/PlaceholderScreen';
+import { router } from 'expo-router';
+import { SessionsScreen } from '@/presentation/screens';
 
-// 会话列表（F5 §2.1）：标题 / 最后消息预览 / 相对时间 —— R2-05 落地
-export default function SessionsScreen() {
+// 会话列表 Tab（R2-04 部分 3：审批角标；完整会话列表形态归 R2-05）：
+// 点击行 / 角标跳转审批列表（任务书允许「跳转审批列表或对应 run 的审批」）
+export default function SessionsRoute() {
   return (
-    <PlaceholderScreen
-      title="会话"
-      description="会话列表：标题 / 最后消息预览 / run 状态（R2-05 落地）"
-    />
+    <SessionsScreen onOpenApprovals={() => router.navigate('/approvals')} />
   );
 }

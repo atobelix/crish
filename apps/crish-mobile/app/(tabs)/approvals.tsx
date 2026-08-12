@@ -1,11 +1,13 @@
-import PlaceholderScreen from '@/presentation/components/templates/PlaceholderScreen';
+import { router } from 'expo-router';
+import { ApprovalListScreen } from '@/presentation/screens';
 
-// 审批中心（F2 / 移动端第一功能，M4 §0.2 占 Tab 位）：待批队列 + 角标 —— R2-04 落地
-export default function ApprovalsScreen() {
+// 审批中心 Tab（F2 §4 待办列表）：路由层注入导航回调
+// （页面组件不感知 expo-router，组件测试可直接挂载，对齐 approval/[toolCallId] 先例）
+export default function ApprovalsRoute() {
   return (
-    <PlaceholderScreen
-      title="审批"
-      description="审批中心：待批队列 / 风险徽标 / 倒计时（R2-04 落地）"
+    <ApprovalListScreen
+      onOpenItem={(toolCallId) => router.push(`/approval/${toolCallId}`)}
+      onOpenHistory={() => router.push('/approval-history')}
     />
   );
 }
