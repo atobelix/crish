@@ -24,11 +24,13 @@
 //! - **W4-F**：`block_batch`（ops + dryRun）+ 细粒度 `block_insert` /
 //!   `block_update` / `block_delete` / `block_move` 形状；dryRun **零写**权威树；
 //!   写中断 → [`NoteBackendError::ExecutionUnknown`]。
+//! - **W4-R**：细粒度 `block_set_attr` 默认委托 `apply_block_ops` 单 `SetAttr`。
 //!
 //! # 诚实边界
 //! - **已交付方向**：读/写工具 + lossy（W4-A）+ batch token/审批方向（W4-B）
 //!   + **W4-F**：`block_batch`+dryRun、细粒度 insert/update/delete/move、表驱动
-//!   矩阵、`execution_unknown`（见 `note_action_matrix` / 工具）；
+//!   矩阵、`execution_unknown`（见 `note_action_matrix` / 工具）
+//!   + **W4-R**：独立 `block_set_attr`（Memory 默认路径；**禁**把 Memory 绿写成生产满表）；
 //!   Store 真路径见 `conex-note-runtime::StoreNoteBackend`
 //! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**（须 Store 持久 + **W6-E** 等）
 //! - **≠ W6-E**：无千次批 + 恶意扩展闭环
@@ -49,7 +51,8 @@ pub use crate::note_types::{
     NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode, NoteBackendError, NoteBatchTokens,
     NoteBlockBatchRequest, NoteBlockBatchResult, NoteBlockDeleteRequest, NoteBlockDeleteResult,
     NoteBlockInsertRequest, NoteBlockInsertResult, NoteBlockMoveRequest, NoteBlockMoveResult,
-    NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview, NoteBlockUpdateRequest, NoteBlockUpdateResult,
+    NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview, NoteBlockSetAttrRequest,
+    NoteBlockSetAttrResult, NoteBlockUpdateRequest, NoteBlockUpdateResult,
     NoteLossyItem, NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit,
     NoteQueryBlocksParams, NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };
@@ -260,6 +263,40 @@ pub trait NoteBackend: Send + Sync + Debug {
             .next()
             .unwrap_or(fallback_id);
         Ok(NoteBlockMoveResult { id })
+    }
+
+    /// 细粒度设置块属性（W4-R · `block_set_attr`；可委托 apply_block_ops）
+    ///
+    /// **≠ EL-05**；**≠ W6-E**。Memory 绿 **禁关**生产 A-AGT。
+    async fn block_set_attr(
+        &self,
+        req: NoteBlockSetAttrRequest,
+    ) -> Result<NoteBlockSetAttrResult, NoteBackendError> {
+        let fallback_id = req.id.clone();
+        let batch = self
+            .apply_block_ops(NoteBlockBatchRequest {
+                doc_id: req.doc_id,
+                ops: vec![NoteBlockOp {
+                    op: NoteBlockOpKind::SetAttr,
+                    id: Some(req.id),
+                    parent_id: None,
+                    previous_id: None,
+                    content: None,
+                    kind: None,
+                    attrs: Some(req.attrs),
+                }],
+                dry_run: false,
+                batch_id: req.batch_id,
+                origin: req.origin,
+                force_execution_unknown: false,
+            })
+            .await?;
+        let id = batch
+            .block_ids
+            .into_iter()
+            .next()
+            .unwrap_or(fallback_id);
+        Ok(NoteBlockSetAttrResult { id })
     }
 }
 
@@ -626,6 +663,76 @@ mod tests {
             .unwrap();
         assert!(!r.block_id.is_empty());
         assert_eq!(r.kind, "paragraph");
+    }
+
+    /// W4-R：Memory `block_set_attr` 成功改属性（≠ EL-05 / ≠ 生产满表）
+    #[tokio::test]
+    async fn w4r_memory_block_set_attr_updates_attrs() {
+        let backend = MemoryNoteBackend::new();
+        backend.seed_doc(
+            "doc-sa",
+            vec![("b1".into(), "paragraph".into(), "body".into())],
+        );
+        let r = backend
+            .block_set_attr(NoteBlockSetAttrRequest {
+                doc_id: "doc-sa".into(),
+                id: "b1".into(),
+                attrs: serde_json::json!({ "checked": true, "level": 2 })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(r.id, "b1");
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-sa".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(q.blocks.len(), 1);
+        assert_eq!(q.blocks[0].attrs["checked"], true);
+        assert_eq!(q.blocks[0].attrs["level"], 2);
+    }
+
+    /// W4-R：空 id 失败（委托 SetAttr / plan_set_attr）
+    #[tokio::test]
+    async fn w4r_memory_block_set_attr_empty_id_fails() {
+        let backend = MemoryNoteBackend::new();
+        backend.seed_doc(
+            "doc-eid",
+            vec![("b1".into(), "paragraph".into(), "stay".into())],
+        );
+        let err = backend
+            .block_set_attr(NoteBlockSetAttrRequest {
+                doc_id: "doc-eid".into(),
+                id: "".into(),
+                attrs: serde_json::json!({ "x": 1 })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+                batch_id: None,
+                origin: Some("agent".into()),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, NoteBackendError::Invalid(_)));
+        assert!(
+            err.message().contains("non-empty id"),
+            "empty id must fail: {err:?}"
+        );
+        let q = backend
+            .query_blocks(NoteQueryBlocksParams {
+                doc_id: "doc-eid".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(q.blocks[0].attrs.is_empty(), "空 id 不得改属性");
     }
 
     /// 细粒度 block_move：b1 移到 b2 之后（Memory）

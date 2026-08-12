@@ -206,6 +206,7 @@ mod tests {
             "block_update",
             "block_delete",
             "block_move",
+            "block_set_attr",
         ] {
             assert!(
                 names.iter().any(|n| n == note),

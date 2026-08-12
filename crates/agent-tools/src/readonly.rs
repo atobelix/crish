@@ -47,8 +47,9 @@ pub const WRITE_TOOL_NAMES: [&str; 5] = [
 /// W4-A：query_blocks / document_outline 笔记读工具入列（dangerous=false；
 /// 未接 note_backend 时 stub 返回 note_backend_unwired，不写盘）。
 /// Round7：document_get_md 即时 S(树) 读全文，只读入列。
-/// W4-B/F 写工具 document_apply_md / send_to_note / block_batch /
-/// block_insert / block_update / block_delete / block_move **不**入只读集（dangerous=true）。
+/// W4-B/F/R 写工具 document_apply_md / send_to_note / block_batch /
+/// block_insert / block_update / block_delete / block_move / block_set_attr
+/// **不**入只读集（dangerous=true）。
 pub const READONLY_TOOL_NAMES: [&str; 12] = [
     "read_file",
     "list_dir",
@@ -276,8 +277,8 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        // 注册面 →32（W4-F 余量 block_move）
-        assert_eq!(reg.len(), 32);
+        // 注册面 →33（W4-R block_set_attr）
+        assert_eq!(reg.len(), 33);
         assert!(reg.has("run_subagent"));
     }
 
@@ -297,9 +298,9 @@ mod tests {
         // 假谓词 → 空注册表（fail-closed 底线）
         let empty = filter_registry(&reg, |_| false).unwrap();
         assert!(empty.is_empty());
-        // 原注册表不受影响（注册面 32 = W4-F update/delete/block_move + D4
+        // 原注册表不受影响（注册面 33 = W4-F + W4-R block_set_attr + D4
         // kill_subagent/send_message 后）
-        assert_eq!(reg.len(), 32);
+        assert_eq!(reg.len(), 33);
     }
 
     /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
@@ -357,10 +358,10 @@ mod tests {
             );
             assert!(!out.has("write_file"));
         }
-        // 原注册表不受影响（非破坏性裁剪；注册面 32 = W4-F block_move 后）
-        assert_eq!(reg.len(), 32);
+        // 原注册表不受影响（非破坏性裁剪；注册面 33 = W4-R block_set_attr 后）
+        assert_eq!(reg.len(), 33);
         assert!(reg.has("write_file"));
-        // W4-B/F 写工具不得进只读 / design 面（design 仅 + diff_file）
+        // W4-B/F/R 写工具不得进只读 / design 面（design 仅 + diff_file）
         for tt in ["analysis", "design"] {
             let out = filter_registry_for_task_type(&reg, tt).unwrap();
             assert!(!out.has("document_apply_md"), "{tt} 不得含 document_apply_md");
@@ -370,6 +371,7 @@ mod tests {
             assert!(!out.has("block_update"), "{tt} 不得含 block_update");
             assert!(!out.has("block_delete"), "{tt} 不得含 block_delete");
             assert!(!out.has("block_move"), "{tt} 不得含 block_move");
+            assert!(!out.has("block_set_attr"), "{tt} 不得含 block_set_attr");
             assert!(out.has("document_get_md"), "{tt} 必须保留 document_get_md");
         }
     }
@@ -422,9 +424,9 @@ mod tests {
         assert!(impl_reg.has("shell_command"));
         assert!(impl_reg.has("run_subagent"));
         // 原注册表不受影响（非破坏性裁剪）
-        // 32 内置（含 W4-F update/delete/block_move + D4 kill_subagent/
+        // 33 内置（含 W4-R block_set_attr + D4 kill_subagent/
         // send_message）+ 4 browser_* 假工具
-        assert_eq!(reg.len(), 36);
+        assert_eq!(reg.len(), 37);
         assert!(reg.has("browser_navigate"));
     }
 

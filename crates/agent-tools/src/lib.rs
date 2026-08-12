@@ -37,7 +37,7 @@ pub mod compression_store;
 //   为内部模块；公开 API 仍经 note_backend re-export（路径不 break）
 // 引擎侧实现注入；query_blocks / document_outline / document_get_md /
 // document_apply_md / send_to_note / block_batch / block_insert /
-// block_update / block_delete / block_move 消费本契约，
+// block_update / block_delete / block_move / block_set_attr 消费本契约，
 // 生产代码保持叶子依赖（不引入 doc-collab/store）
 // **≠ EL-05**；不宣称 Store 后端完成
 mod note_types;
@@ -152,7 +152,8 @@ pub use note_backend::{
     NoteApplyMdResult, NoteApplyMode, NoteBackend, NoteBackendError, NoteBackendHandle,
     NoteBatchTokens, NoteBlockBatchRequest, NoteBlockBatchResult, NoteBlockDeleteRequest,
     NoteBlockDeleteResult, NoteBlockInsertRequest, NoteBlockInsertResult, NoteBlockMoveRequest,
-    NoteBlockMoveResult, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview, NoteBlockUpdateRequest,
+    NoteBlockMoveResult, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview,
+    NoteBlockSetAttrRequest, NoteBlockSetAttrResult, NoteBlockUpdateRequest,
     NoteBlockUpdateResult,
     NoteLossyItem, NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit,
     NoteQueryBlocksParams, NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,

@@ -26,9 +26,10 @@
 //! - `note_*`：W4-A/B/F + Round7 笔记域工具——读 `query_blocks` /
 //!   `document_outline` / `document_get_md`；写 `document_apply_md` /
 //!   `send_to_note` / **`block_batch`** / **`block_insert`** /
-//!   **`block_update`** / **`block_delete`** / **`block_move`**
+//!   **`block_update`** / **`block_delete`** / **`block_move`** /
+//!   **`block_set_attr`**
 //!   （经 `ToolContext.note_backend` dyn trait 注入；
-//!   None → note_backend_unwired；注册面 29→32；读工具进只读集，
+//!   None → note_backend_unwired；注册面 32→33；读工具进只读集，
 //!   写工具 dangerous=true 不进只读集）
 //!   **≠ EL-05**；**≠ W6-E**；**≠ A-AGT 全表关闭**
 //!
@@ -47,13 +48,15 @@ pub mod fs;
 // D4 §3.3：kill_subagent 工具模块声明（仅主 agent 工具集；终止通道经
 // BuiltinToolConfig.subagent_kill_channel 注入，None = common.unsupported）
 pub mod kill_subagent;
-// W4-A/B/F + Round7：笔记域工具（读 outline/query/get_md + 写 apply_md/
+// W4-A/B/F/R + Round7：笔记域工具（读 outline/query/get_md + 写 apply_md/
 // send_to_note / block_batch / block_insert / block_update / block_delete /
-// block_move）；注册面 29→32；后端经 ctx.note_backend 注入；≠ EL-05 / ≠ W6-E
+// block_move / block_set_attr）；注册面 32→33；后端经 ctx.note_backend 注入；
+// ≠ EL-05 / ≠ W6-E
 pub mod note_block_batch;
 pub mod note_block_delete;
 pub mod note_block_insert;
 pub mod note_block_move;
+pub mod note_block_set_attr;
 pub mod note_block_update;
 pub mod note_document_apply_md;
 pub mod note_document_get_md;
@@ -245,14 +248,15 @@ pub fn register_builtin_tools_with_config(
     // 经同一 apply_md_fragment 后端路径；禁止 fs.write 当权威；不进只读集
     registry.register(Arc::new(note_document_apply_md::DocumentApplyMdTool::new()))?;
     registry.register(Arc::new(note_send_to_note::SendToNoteTool::new()))?;
-    // block_batch / block_insert / block_update / block_delete / block_move（W4-F）：
-    // 批 ops+dryRun + 细粒度 mutate；dangerous=true；plan Deny；
-    // ≠ EL-05 / ≠ W6-E
+    // block_batch / block_insert / block_update / block_delete / block_move（W4-F）
+    // + block_set_attr（W4-R）：批 ops+dryRun + 细粒度 mutate；
+    // dangerous=true；plan Deny；≠ EL-05 / ≠ W6-E
     registry.register(Arc::new(note_block_batch::BlockBatchTool::new()))?;
     registry.register(Arc::new(note_block_insert::BlockInsertTool::new()))?;
     registry.register(Arc::new(note_block_update::BlockUpdateTool::new()))?;
     registry.register(Arc::new(note_block_delete::BlockDeleteTool::new()))?;
     registry.register(Arc::new(note_block_move::BlockMoveTool::new()))?;
+    registry.register(Arc::new(note_block_set_attr::BlockSetAttrTool::new()))?;
     Ok(())
 }
 
@@ -798,7 +802,8 @@ mod tests {
         // →29（W4-F 余量 block_update / block_delete）
         // →31（D4：kill_subagent / send_message 两工具并入）
         // →32（W4-F 余量 block_move）
-        assert_eq!(registry.len(), 32);
+        // →33（W4-R block_set_attr）
+        assert_eq!(registry.len(), 33);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -812,6 +817,7 @@ mod tests {
                 "block_delete",
                 "block_insert",
                 "block_move",
+                "block_set_attr",
                 "block_update",
                 "cancel_timer",
                 "decompress_context",
@@ -861,6 +867,7 @@ mod tests {
         assert!(registry.has("block_update"));
         assert!(registry.has("block_delete"));
         assert!(registry.has("block_move"));
+        assert!(registry.has("block_set_attr"));
         let ctx = crate::context::create_mock_tool_context();
         for name in ["query_blocks", "document_outline", "document_get_md"] {
             let tool = registry.get(name).unwrap();
@@ -950,6 +957,40 @@ mod tests {
             .unwrap();
         assert_eq!(out["ok"], false);
         assert_eq!(out["reason"], "note_backend_unwired");
+        let sa = registry.get("block_set_attr").unwrap();
+        let out = sa
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "doc_id": "doc-stub",
+                    "id": "b1",
+                    "attrs": { "checked": true }
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["reason"], "note_backend_unwired");
+    }
+
+    /// W4-R：`block_set_attr` 已注册且 dangerous=true
+    #[test]
+    fn w4r_block_set_attr_registered() {
+        let mut registry = ToolRegistry::new();
+        register_builtin_tools(&mut registry).unwrap();
+        assert!(registry.has("block_set_attr"));
+        let tool = registry.get("block_set_attr").unwrap();
+        assert_eq!(tool.name(), "block_set_attr");
+        assert!(tool.definition().dangerous);
+        let required = tool.definition().input_schema["required"]
+            .as_array()
+            .unwrap();
+        for key in ["doc_id", "id", "attrs"] {
+            assert!(
+                required.iter().any(|v| v.as_str() == Some(key)),
+                "schema missing required {key}"
+            );
+        }
     }
 
     #[test]

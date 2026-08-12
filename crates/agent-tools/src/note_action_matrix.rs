@@ -125,6 +125,13 @@ pub static NOTE_ACTION_MATRIX: &[NoteActionRow] = &[
         safe: false,
         effects: &[ActionEffect::LocalWrite],
     },
+    // ── W4-R 写工具（≠ EL-05 / ≠ W6-E）────────────────────────────
+    NoteActionRow {
+        tool_name: "block_set_attr",
+        action: "set_attr",
+        safe: false,
+        effects: &[ActionEffect::LocalWrite],
+    },
 ];
 
 /// 按工具名查表行
@@ -253,12 +260,27 @@ mod tests {
         assert!(lookup_action("block_update").is_some());
         assert!(lookup_action("block_delete").is_some());
         assert!(lookup_action("block_move").is_some());
+        assert!(lookup_action("block_set_attr").is_some());
         assert!(!lookup_action("block_batch").unwrap().safe);
         assert!(has_local_write("block_batch"));
         assert!(has_local_write("block_insert"));
         assert!(has_local_write("block_update"));
         assert!(has_local_write("block_delete"));
         assert!(has_local_write("block_move"));
+        assert!(has_local_write("block_set_attr"));
+    }
+
+    /// W4-R：矩阵含 `block_set_attr` 且 LocalWrite（≠ EL-05 / ≠ W6-E）
+    #[test]
+    fn w4r_matrix_contains_block_set_attr_local_write() {
+        let row = lookup_action("block_set_attr").expect("matrix must contain block_set_attr");
+        assert_eq!(row.tool_name, "block_set_attr");
+        assert_eq!(row.action, "set_attr");
+        assert!(!row.safe);
+        assert!(has_local_write("block_set_attr"));
+        assert!(row.effects.contains(&ActionEffect::LocalWrite));
+        assert!(write_tool_names().contains(&"block_set_attr"));
+        assert!(plan_denies_matrix_tool("block_set_attr"));
     }
 
     /// safe × LocalRead × 任意 mode → Allow
@@ -339,8 +361,9 @@ mod tests {
         assert!(writes.contains(&"block_update"));
         assert!(writes.contains(&"block_delete"));
         assert!(writes.contains(&"block_move"));
-        // 表驱动痕迹：行数 ≥ 10（3 读 + 2 旧写 + 5 block_*）
-        assert!(NOTE_ACTION_MATRIX.len() >= 10);
+        assert!(writes.contains(&"block_set_attr"));
+        // 表驱动痕迹：行数 ≥ 11（3 读 + 2 旧写 + 6 block_*）
+        assert!(NOTE_ACTION_MATRIX.len() >= 11);
         let _ = "≠ EL-05 / ≠ W6-E / ≠ A-AGT 全表关闭";
     }
 }

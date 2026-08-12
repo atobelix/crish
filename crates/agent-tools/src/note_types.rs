@@ -426,6 +426,25 @@ pub struct NoteBlockMoveResult {
     pub id: String,
 }
 
+/// 细粒度 `block_set_attr` 请求（W4-R；≠ EL-05 / ≠ W6-E）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockSetAttrRequest {
+    pub doc_id: String,
+    /// 目标块 id
+    pub id: String,
+    pub attrs: Map<String, JsonValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
+/// 细粒度 set_attr 结果
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NoteBlockSetAttrResult {
+    pub id: String,
+}
+
 // ==================== batch token ====================
 
 /// 默认 batch token TTL（会话内轻量过期）
