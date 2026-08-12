@@ -9,11 +9,12 @@
  *   `SlashMenuModel` / `SlashMenuOverlay` / `submitIntent` 闭包
  * - slash_insert 仍走 `IntentSink`；二者可同会话审计并列，**不互抹**
  *
- * ## 诚实边界（钉未做）
- * - RS **尚无**独立 `turn_into` collab Op（`UpdateProps` 不改 kind）
- * - `createTurnIntoProvisionalCollabSink` 仅下发**前缀剥离** `text_edit` +
- *   `attrs.pending_turn_into_flavour` 标记（见 `turnIntoIntentToProvisionalOps`）
+ * ## 诚实边界
+ * - CONN-D：RS 已消费 `pending_turn_into_flavour` / 真 `Op::TurnInto`（apply 后 kind 可变）
+ * - `createTurnIntoProvisionalCollabSink` 下发 strip `text_edit` + pending 标记；
+ *   经真实 `applyOps`→RS 后 kind 可变；**桌面 PM/HiddenInput 键入全链仍可能未接**
  * - **≠ EL-01**；**≠ A-BLK-08/09 全表 e2e**；**≠** 假关 W3-H Strict 产品 e2e
+ * - UI **禁止**单读 `pending_turn_into_flavour` 当块 kind（权威是投影 kind）
  *
  * ## 轨
  * - 文件域：`leaves/mdPrefixHost.ts`（优先新文件，避 slash 大文件对撞）
@@ -391,10 +392,11 @@ export function createMockTurnIntoSink(
 /**
  * provisional collab sink：TurnIntoIntent → provisional ops JSON → applyOps。
  *
- * ## 诚实
- * - **不是** RS 真 `turn_into` Op（心侧尚无独立 kind 变更 Op）
- * - wire = 剥前缀 `text_edit` + `update_props.pending_turn_into_flavour`
- * - 仅作可注入 collab 形状通路；**≠** A-BLK-08 关闭证据
+ * ## wire 形状
+ * - strip 前缀 `text_edit` + `update_props.pending_turn_into_flavour`
+ * - **非**独立 `"op":"turn_into"` JSON（真 Op 见 RS `Op::TurnInto`；pending 路径亦改 kind）
+ * - CONN-D 后：真实 applyOps→RS 时 kind **会**变；mock applyOps 不证权威
+ * - **≠** A-BLK-08 关闭证据；**≠** 桌面键入 e2e
  */
 export type TurnIntoProvisionalCollabSink = {
   sink: TurnIntoSink;
@@ -409,7 +411,7 @@ export function createTurnIntoProvisionalCollabSink(
 ): TurnIntoProvisionalCollabSink {
   if (typeof applyOps !== 'function') {
     throw new Error(
-      'createTurnIntoProvisionalCollabSink：须注入 applyOps；RS 真 turn_into Op 仍未做，本 sink 仅 provisional wire'
+      'createTurnIntoProvisionalCollabSink：须注入 applyOps；wire 为 strip+pending（CONN-D：RS 消费 pending 改 kind）'
     );
   }
 
@@ -426,7 +428,7 @@ export function createTurnIntoProvisionalCollabSink(
       return r;
     }
 
-    // 诚实：provisional 而非真 turn_into Op
+    // provisional 形状（strip + pending）；RS CONN-D 消费 pending 改 kind
     const ops = turnIntoIntentToProvisionalOps(intent);
     const json = collabOpsToJson(ops);
     wireCalls.push(json);

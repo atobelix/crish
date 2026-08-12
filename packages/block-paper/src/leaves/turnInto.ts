@@ -9,10 +9,10 @@
  *
  * ## 写锥纪律
  * - **禁止** DOM / PM serialize 旁路写盘
- * - 宿主：`TurnIntoIntent` → `submitTurnIntoIntent` → sink →（未来）wire → `DocSession::apply`
- * - 诚实：RS **尚无**独立 `turn_into` collab Op（`UpdateProps` 不改 kind）；
- *   `turnIntoIntentToProvisionalOps` 仅产出**前缀剥离** `text_edit` + 可选 props 标记，
- *   **不得**以本桥冒充 A-BLK-08 e2e / EL-01 关闭
+ * - 宿主：`TurnIntoIntent` → `submitTurnIntoIntent` → sink → wire → `DocSession::apply`
+ * - CONN-D：RS 已消费 `attrs.pending_turn_into_flavour`（`UpdateProps` apply 后**改 kind**），
+ *   且有真 `Op::TurnInto` 子集；本模块 provisional 仍发 strip `text_edit` + pending 标记
+ *   （wire 可进 apply；**≠** 桌面 PM 键入全链；**不得**冒充 A-BLK-08 e2e / EL-01 关闭）
  *
  * ## 轨
  * - **W3-H 方向子集**（本文件 + `mdPrefix.ts` + 单测）
@@ -28,7 +28,7 @@ import type {
   TextEditIntent,
 } from '@crish/block-paper-contract';
 import { collabPropsWithAttrs } from '@crish/block-paper-contract';
-import { nextIntentId } from './TextLeafModel';
+import { nextIntentId } from '../intentId';
 import {
   matchMdPrefix,
   shouldTriggerMdPrefix,
@@ -464,12 +464,14 @@ export function turnIntoToStructureKey(intent: TurnIntoIntent): {
 // ---------------------------------------------------------------------------
 
 /**
- * 将 turn-into 映射为 **临时** collab wire 列表：
- * 1. 若有 `stripRange` → `text_edit` 剥前缀（真可 apply 的半）
- * 2. `update_props` 写入 `attrs.pending_turn_into_flavour`（**不**改 RS kind；
- *    心侧独立 turn_into Op 落地前的可审计标记）
+ * 将 turn-into 映射为 collab wire 列表（provisional 形状，可进 RS apply）：
+ * 1. 若有 `stripRange` → `text_edit` 剥前缀
+ * 2. `update_props` 写入 `attrs.pending_turn_into_flavour`
  *
- * **禁止**用本函数绿测宣称 A-BLK-08 / EL-01 关闭。
+ * CONN-D：RS `DocSession::apply` **消费**该标记并改权威 `kind`（亦支持真
+ * `op:"turn_into"`）。UI **须**以投影 `kind` 为准，**禁止**仅读 pending attrs 当 flavour。
+ *
+ * **禁止**用本函数绿测宣称 A-BLK-08 / EL-01 关闭；**≠** 桌面键入 e2e。
  */
 export function turnIntoIntentToProvisionalOps(
   intent: TurnIntoIntent

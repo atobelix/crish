@@ -39,7 +39,7 @@ import {
   submitIntent,
   type ApplyOpsAdapter,
 } from '../leaves/intentBridge';
-import { resetIntentIdSeqForTests } from '../leaves/TextLeafModel';
+import { resetIntentIdSeqForTests } from '../intentId';
 
 const ID_A = 'block-dom-a';
 const ID_B = 'block-dom-b';
@@ -320,10 +320,12 @@ describe('W3-F DOM · slash 宿主', () => {
     doc.body.appendChild(mount);
     chrome = new BlockChromeModel();
     slash = new SlashMenuModel();
+    // SD-03：catalog 投影须显式 true（默认 false 防产品双浮层）
     host = new BlockChromeDomHost(mount, {
       blocks: [{ blockId: ID_A }],
       chrome,
       slash,
+      projectSlashCatalog: true,
     });
   });
 
@@ -401,6 +403,32 @@ describe('W3-F DOM · slash 宿主', () => {
     expect(empty).toBeTruthy();
     expect(empty?.textContent).toContain('无匹配');
     expect(el.querySelectorAll(`[${BP_SLASH_ITEM}]`).length).toBe(0);
+  });
+
+  it('w3f_dom_slash_default_react_catalog: 默认不投影 item（data-slash-catalog=react）', () => {
+    host.destroy();
+    mount.remove();
+    const doc = requireDocument();
+    mount = doc.createElement('div');
+    doc.body.appendChild(mount);
+    chrome = new BlockChromeModel();
+    slash = new SlashMenuModel();
+    // 默认 projectSlashCatalog=false
+    host = new BlockChromeDomHost(mount, {
+      blocks: [{ blockId: ID_A }],
+      chrome,
+      slash,
+    });
+
+    expect(slash.open(ID_A, 0).ok).toBe(true);
+    host.sync();
+
+    const el = host.getSlashHostElement();
+    expect(host.isSlashHostVisible()).toBe(false);
+    expect(el.getAttribute('data-slash-catalog')).toBe('react');
+    expect(el.querySelectorAll(`[${BP_SLASH_ITEM}]`).length).toBe(0);
+    expect(el.querySelectorAll(`[${BP_SLASH_GROUP}]`).length).toBe(0);
+    expect(el.children.length).toBe(0);
   });
 });
 

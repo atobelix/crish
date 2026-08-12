@@ -14,7 +14,7 @@ import {
   isCollabOpWire,
   type CollabOpWire,
 } from '@crish/block-paper-contract';
-import { resetIntentIdSeqForTests } from '../leaves/TextLeafModel';
+import { resetIntentIdSeqForTests } from '../intentId';
 import {
   buildDeleteBlocksIntent,
   buildInsertBlockIntent,

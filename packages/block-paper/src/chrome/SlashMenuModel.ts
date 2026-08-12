@@ -20,7 +20,8 @@
 
 import type { BlockId, IntentId } from '@crish/block-paper-contract';
 import type { SlashContribution } from '@crish/block-paper-contract';
-import { nextIntentId } from '../leaves/TextLeafModel';
+// SD-05：中性 intentId；禁止 chrome→TextLeafModel 仅为 id
+import { nextIntentId } from '../intentId';
 import {
   buildSlashInsertIntent,
   type SlashInsertIntent,

@@ -11,7 +11,7 @@ import {
   createMockIntentSink,
   type ApplyOpsAdapter,
 } from '../leaves/intentBridge';
-import { resetIntentIdSeqForTests } from '../leaves/TextLeafModel';
+import { resetIntentIdSeqForTests } from '../intentId';
 import { SlashMenuModel } from './SlashMenuModel';
 import {
   groupSlashCatalogItems,

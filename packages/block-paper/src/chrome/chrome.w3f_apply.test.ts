@@ -15,10 +15,10 @@
  * - `chrome.w3f_dom.test.ts` = DOM 余量（把手/多选框/落点线/slash 宿主）；**DOM ≠ EL-01**
  * - 本文件 **禁止** 断言 `mock.calls` 关闭 W3-F；**不得**回退 mock 默认
  *
- * ## 未交付（诚实边界）
+ * ## 未交付（诚实边界 · 精确）
  *
- * - 拖拽预览全链路 / 桌面 React chrome 挂载
- * - A-BLK-02/04/05 **产品 e2e**（jsdom 契约 ≠ e2e）
+ * - **桌面 React chrome 挂载已交**（`BlockChromeDomMount` / Strict 槽）
+ * - **仍未交**：真 Pointer 拖拽产品 e2e / A-BLK-02/04/05 **产品 e2e**（jsdom ≠ e2e）
  * - 桌面 Tauri `note_apply_ops` IPC 产品挂载（adapter 形状已备；挂载属 W5-B 方向）
  */
 import { describe, expect, it, beforeEach } from 'vitest';
@@ -33,7 +33,7 @@ import {
   type ApplyOpsAdapter,
   type IntentSinkResult,
 } from '../leaves/intentBridge';
-import { resetIntentIdSeqForTests } from '../leaves/TextLeafModel';
+import { resetIntentIdSeqForTests } from '../intentId';
 import { BlockChromeModel } from './BlockChrome';
 import { SlashMenuModel } from './SlashMenuModel';
 

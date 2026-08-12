@@ -18,7 +18,7 @@
 
 use crate::block_id::BlockId;
 use crate::events::{BlockUpsert, DocEvent, ProjectionDiff};
-use crate::ir::{BlockNode, BlockProps, BlockTree};
+use crate::ir::{pending_turn_into_kind, BlockNode, BlockProps, BlockTree};
 use crate::op::{Op, Origin};
 use crate::persistence::{
     CommitBatch, EncodedUpdate, HydrateBlob, PersistencePlugin, UpdateKind,
@@ -720,6 +720,21 @@ impl DocSession {
                         .get_mut(id)
                         .ok_or_else(|| ApplyError::NotFound(id.to_string()))?;
                     n.props = props.clone();
+                    // CONN-D：消费 pending_turn_into_flavour → 真改权威 kind
+                    //（TS provisional wire 路径；标记保留审计；UI 须以 kind 为准）
+                    if let Some(kind) = pending_turn_into_kind(&n.props) {
+                        n.kind = kind;
+                    }
+                    upserts.push(block_to_upsert(n));
+                }
+                Op::TurnInto { id, kind } => {
+                    // CONN-D：真 structure turn_into Op 子集
+                    let n = self
+                        .tree
+                        .nodes
+                        .get_mut(id)
+                        .ok_or_else(|| ApplyError::NotFound(id.to_string()))?;
+                    n.kind = kind.clone();
                     upserts.push(block_to_upsert(n));
                 }
                 Op::Move {
@@ -845,6 +860,14 @@ impl DocSession {
                     }
                 }
                 Op::UpdateProps { id, .. } => {
+                    if deleted.contains(id) {
+                        return Err(ApplyError::NotFound(id.to_string()));
+                    }
+                    if !self.tree.nodes.contains_key(id) && !inserted.contains(id) {
+                        return Err(ApplyError::NotFound(id.to_string()));
+                    }
+                }
+                Op::TurnInto { id, .. } => {
                     if deleted.contains(id) {
                         return Err(ApplyError::NotFound(id.to_string()));
                     }

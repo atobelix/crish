@@ -173,7 +173,7 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
         paperList={{
           window: { startIndex: 50, endIndex: 70 },
           overscan: 4,
-          keepReactRows: false,
+          // 产品默认 paper-list：省略 presentationMode 即互斥 content-row
         }}
         onPaperListReady={(l) => {
           paperList = l;
@@ -190,6 +190,7 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
 
     const panel = screen.getByTestId('note-paper-strict-panel');
     expect(panel).toHaveAttribute('data-paper-list', '1');
+    expect(panel).toHaveAttribute('data-presentation-mode', 'paper-list');
     expect(panel).toHaveAttribute('data-block-count', String(n));
 
     const plMount = screen.getByTestId('note-paper-strict-paper-list');
@@ -207,8 +208,87 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
     expect(paperList!.getBlockElement('h-0')).toBeNull();
     expect(paperList!.getBlockElement('h-60')).toBeTruthy();
 
-    // keepReactRows=false → 无全量 content-row
+    // SD-04 产品默认：paper-list 模式无全量 content-row
     expect(panel.querySelectorAll('[data-content-row="1"]').length).toBe(0);
+  });
+
+  it('sd04_product_default_paper_list_mutex_content_row: 默认互斥双内容', async () => {
+    const transport = createFixtureHydrateTransport({
+      'doc-mutex': {
+        rev: 1,
+        blocks: Array.from({ length: 5 }, (_, i) =>
+          makeHydratedBlock({
+            id: `m-${i}`,
+            flavour: 'paragraph',
+            text: `t${i}`,
+            index: i,
+          })
+        ),
+      },
+    });
+
+    // paperList=true（无 config）→ 产品默认 paper-list，不得双内容
+    render(
+      <NotePaperStrictPanel
+        docId="doc-mutex"
+        hydrateTransport={transport}
+        paperList
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-presentation-mode', 'paper-list');
+    expect(panel).toHaveAttribute('data-paper-list', '1');
+    expect(panel.querySelectorAll('[data-content-row="1"]').length).toBe(0);
+    expect(screen.getByTestId('note-paper-strict-paper-list')).toHaveAttribute(
+      'data-bp-paper-list-mount',
+      '1'
+    );
+    // chrome 槽仍在（分槽，不计入内容互斥）
+    expect(screen.getByTestId('note-paper-strict-chrome-dom')).toHaveAttribute(
+      'data-bp-chrome-mount',
+      '1'
+    );
+  });
+
+  it('sd04_default_react_rows_no_paper_list_mount', async () => {
+    const transport = createFixtureHydrateTransport({
+      'doc-rr': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'r1',
+            flavour: 'paragraph',
+            text: 'only rows',
+            index: 0,
+          }),
+        ],
+      },
+    });
+
+    render(
+      <NotePaperStrictPanel docId="doc-rr" hydrateTransport={transport} />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-presentation-mode', 'react-rows');
+    expect(panel).toHaveAttribute('data-paper-list', '0');
+    expect(panel.querySelectorAll('[data-content-row="1"]').length).toBe(1);
+    expect(screen.queryByTestId('note-paper-strict-paper-list')).toBeNull();
   });
 
   it('w3g_desktop_coexist_chrome_and_paper_list: 分槽同屏不互删', async () => {
@@ -246,10 +326,10 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
         docId="doc-co"
         hydrateTransport={transport}
         chrome={chrome}
+        // 产品路径：paper-list 与 chrome 分槽共存（无 content-row）
         paperList={{
           window: { startIndex: 0, endIndex: 3 },
           overscan: 0,
-          keepReactRows: true,
         }}
         onPaperListReady={(l) => {
           paperList = l;
@@ -269,11 +349,15 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
 
     const paperMount = screen.getByTestId('note-paper-strict-paper-list');
     const chromeMount = screen.getByTestId('note-paper-strict-chrome-dom');
+    const panel = screen.getByTestId('note-paper-strict-panel');
 
     // 分槽锚同时存在
     expect(paperMount).toHaveAttribute('data-bp-paper-list-mount', '1');
     expect(chromeMount).toHaveAttribute('data-bp-chrome-mount', '1');
     expect(paperMount).not.toBe(chromeMount);
+    expect(panel).toHaveAttribute('data-presentation-mode', 'paper-list');
+    // 产品 paper-list：无全量 content-row
+    expect(panel.querySelectorAll('[data-content-row="1"]').length).toBe(0);
 
     expect(paperList).not.toBeNull();
     expect(chromeHost).not.toBeNull();
@@ -285,9 +369,6 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
     expect(paperList!.getBlockElement('c1')).toBeTruthy();
     expect(paperList!.countDomBlocks()).toBe(3);
 
-    // 同屏 content-row 仍在（keepReactRows）
-    expect(screen.getByTestId('note-strict-block-c1')).toBeTruthy();
-
     // 销毁一方不删另一方：destroy paper list 后 chrome 仍在
     act(() => {
       paperList!.destroy();
@@ -296,5 +377,173 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
     expect(chromeHost!.getHandleElement('c2')).toBeTruthy();
     // chrome 槽仍在 DOM
     expect(screen.getByTestId('note-paper-strict-chrome-dom')).toBeTruthy();
+  });
+
+  it('sd04_debug_dual_allows_content_row_and_paper_list', async () => {
+    let paperList: PaperList | null = null;
+    const transport = createFixtureHydrateTransport({
+      'doc-dual': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'd1',
+            flavour: 'paragraph',
+            text: 'dual-a',
+            index: 0,
+          }),
+          makeHydratedBlock({
+            id: 'd2',
+            flavour: 'paragraph',
+            text: 'dual-b',
+            index: 1,
+          }),
+        ],
+      },
+    });
+
+    render(
+      <NotePaperStrictPanel
+        docId="doc-dual"
+        hydrateTransport={transport}
+        paperList={{
+          window: { startIndex: 0, endIndex: 2 },
+          overscan: 0,
+          presentationMode: 'debug-dual',
+        }}
+        onPaperListReady={(l) => {
+          paperList = l;
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-presentation-mode', 'debug-dual');
+    expect(panel.querySelectorAll('[data-content-row="1"]').length).toBe(2);
+    expect(screen.getByTestId('note-strict-block-d1')).toBeTruthy();
+    expect(screen.getByTestId('note-paper-strict-paper-list')).toHaveAttribute(
+      'data-bp-paper-list-mount',
+      '1'
+    );
+    expect(paperList).not.toBeNull();
+    expect(paperList!.countDomBlocks()).toBe(2);
+  });
+
+  /**
+   * CONN-C · C-X1：chrome.setFocused → PaperList pin（至少一方向）。
+   * 窗外 focus 块须 pin 保留 DOM；≠ W3-P；≠ EL-01。
+   */
+  it('conn_c_chrome_focus_drives_paper_list_pin: setFocused 窗外 pin 保留 DOM', async () => {
+    let paperList: PaperList | null = null;
+    const chrome = new BlockChromeModel();
+    const n = 80;
+    const transport = createFixtureHydrateTransport({
+      'doc-pin': {
+        rev: 1,
+        blocks: Array.from({ length: n }, (_, i) =>
+          makeHydratedBlock({
+            id: `pin-${i}`,
+            flavour: 'paragraph',
+            text: `pin row ${i}`,
+            index: i,
+          })
+        ),
+      },
+    });
+
+    const panelProps = {
+      docId: 'doc-pin',
+      hydrateTransport: transport,
+      chrome,
+      paperList: {
+        window: { startIndex: 40, endIndex: 50 },
+        overscan: 0,
+      },
+      onPaperListReady: (l: PaperList | null) => {
+        paperList = l;
+      },
+    };
+
+    const { rerender } = render(<NotePaperStrictPanel {...panelProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    expect(paperList).not.toBeNull();
+    // 窗外块初始不在 DOM
+    expect(paperList!.getBlockElement('pin-5')).toBeNull();
+    expect(paperList!.getBlockElement('pin-45')).toBeTruthy();
+
+    // chrome focus 驱动 pin（CONN-C 至少一方向）
+    act(() => {
+      chrome.setFocused('pin-5');
+    });
+    rerender(<NotePaperStrictPanel {...panelProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-paper-list-focus-id',
+        'pin-5'
+      );
+    });
+
+    expect(paperList!.getBlockElement('pin-5')).toBeTruthy();
+    expect(paperList!.getMountSpec()?.pinned).toEqual(
+      expect.arrayContaining(['pin-5'])
+    );
+    // 窗口内块仍在；窗外非 pin 仍不挂
+    expect(paperList!.getBlockElement('pin-45')).toBeTruthy();
+    expect(paperList!.getBlockElement('pin-0')).toBeNull();
+  });
+
+  /**
+   * CONN-C · C-X2 子集：Strict 省略 paperList → data-paper-list=0 钉死。
+   * 防默默改默认 true 却无结构门测。
+   */
+  it('conn_c_strict_default_paper_list_off: 省略 paperList → data-paper-list=0', async () => {
+    const transport = createFixtureHydrateTransport({
+      'doc-default-pl': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'def-1',
+            flavour: 'paragraph',
+            text: 'default off',
+            index: 0,
+          }),
+        ],
+      },
+    });
+
+    render(
+      <NotePaperStrictPanel
+        docId="doc-default-pl"
+        hydrateTransport={transport}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    // 诚实快照：产品空态/默认路径 paperList 关
+    expect(panel).toHaveAttribute('data-paper-list', '0');
+    expect(panel).toHaveAttribute('data-presentation-mode', 'react-rows');
+    expect(screen.queryByTestId('note-paper-strict-paper-list')).toBeNull();
+    expect(panel.querySelector('[data-bp-paper-list-mount]')).toBeNull();
   });
 });

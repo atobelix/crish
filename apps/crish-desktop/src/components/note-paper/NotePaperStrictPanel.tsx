@@ -8,27 +8,30 @@
  * - **与 W5-B-S 并存**：Skeleton 壳见 `NotePaperPanel`（`data-package-id=W5-B-S`）；
  *   **禁止** 把 Skeleton 常量改成 W5-B 冒充本轨
  *
- * ## 诚实边界（钉死 · 08 §0.2 / 20 L3–L4 · R10）
- * - **可演示 ≠ EL-01 / EL-08 关闭**
- * - **≠ W5-C 隔离全关**（A-SURF 真扫主责）
- * - **挂载冒充交付 = S5**
+ * ## 呈现策略（SD-04 · 反三宿主）
+ * 内容宿主 **产品默认互斥**（见 `presentationMode.ts`）：
+ * | PresentationMode | content-row 全量 | PaperList | 产品默认 |
+ * |------------------|------------------|-----------|----------|
+ * | `react-rows`     | ✓                | ✗         | 未开 paperList |
+ * | `paper-list`     | ✗                | ✓         | 点名 paperList |
+ * | `debug-dual`     | ✓                | ✓         | **否**（调试） |
+ *
+ * chrome 槽 `[data-bp-chrome-mount]` 与 content 槽 **分槽共存**，不计入互斥。
+ *
+ * ## 诚实边界（钉死）
+ * - **可演示 ≠ EL-01 / EL-08 关闭**；挂载冒充交付 = S5
  * - 本组件 **要求** 注入 `hydrateTransport`（禁止静默假段落）
- * - 产品空态默认由 `createProductStrictHydrateTransport` 选型：
- *   可检测 Tauri → `tauri-ipc`；无 Tauri → fixture（**fixture ≠ 生产权威**）
- * - **≠ 打开完成**（G-HYD 全条件）；**≠ EL-04/01**
- * - 后端默认 `hydrate_path=doc-session`；产品关账仍依赖 G-HYD 全条件
- * - **禁止** import 行级 EditorStore；投影 ≠ 文档权威
- * - **W3-G PaperList**（`paperList` 可点名挂载）：仅窗口 DOM；**≠ EL-01**；
- *   **≠ W3-P WindowManager 全闭环**；与 chrome DomMount **分槽共存不互删**
- * - **A-INV-02 UI 方向**：可选 `mirrorDriftReport` → 状态条 + 三路入口；
- *   底层可能仍是 poll/OS 事件；**≠ inotify 满关**；**≠ EL-03**；**≠ A-INV-02 全关**
+ * - **≠ 打开完成**（G-HYD）；**禁止** import 行级 EditorStore
+ * - **W3-G PaperList**：仅窗口 DOM；**≠ EL-01**；**≠ W3-P**
+ * - chrome DomMount 分槽共存不互删
+ * - **CONN-B slash 写锥**：`slashIntentSink` 注入 → 可写；未注 → **只读 catalog**
+ *   （`data-slash-write-mode`）；禁止「可点无写」静默。**≠ EL-01**；**≠ A-BLK-02 e2e**
  *
  * surface = note-paper
  */
 
 import React, {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -37,27 +40,33 @@ import {
   BlockChromeModel,
   SlashMenuModel,
   type BlockChromeDomHost,
-  type HandleVisibility,
   type IntentSink,
   type PaperList,
   type PaperListScrollState,
   type PaperListWindowState,
   type SlashInsertIntent,
 } from '@crish/block-paper';
-/** DomHost chrome 皮（与 Skeleton 同源）；≠ EL-01 */
+/** DomHost chrome 皮；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
-/** W3-G PaperList 挂载皮（与 Skeleton 同源）；≠ EL-01 */
+/** W3-G PaperList 挂载皮；≠ EL-01 */
 import '@crish/block-paper/paper-list.css';
 import { BlockChromeDomMount } from './BlockChromeDomMount';
+import { NotePaperStrictBody } from './NotePaperStrictBody';
 import { PaperListDomMount } from './PaperListDomMount';
-import { SlashMenuOverlay } from './SlashMenuOverlay';
+import {
+  SlashMenuOverlay,
+  type SlashOverlayWriteMode,
+} from './SlashMenuOverlay';
 import { Button } from '../ui';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
-import type {
-  DocHydrateProjection,
-  HydratedBlockProjection,
-  NoteHydrateTransport,
-} from './hydrateProjection';
+import type { NoteHydrateTransport } from './hydrateProjection';
+import {
+  resolvePresentationMode,
+  showPaperListContent,
+  showReactContentRows,
+  type PresentationMode,
+} from './presentationMode';
+import { useNoteHydrate } from './useNoteHydrate';
 import {
   W5B_STRICT_BOUNDARY,
   W5B_STRICT_PACKAGE_ID,
@@ -69,6 +78,7 @@ import type {
   MirrorWatchSource,
   ThreeWayDecision,
 } from './mirrorDriftUi';
+import type { ProductSlashSinkSource } from './productSlashSink';
 import styles from './NotePaperPanel.module.css';
 
 // ---------------------------------------------------------------------------
@@ -77,14 +87,11 @@ import styles from './NotePaperPanel.module.css';
 
 /**
  * Strict 上可点名挂载的 PaperList 配置（W3-G 产品挂载子集）。
- * hydrate 成功后的 blocks 驱动 order/projections。
- *
- * **≠ EL-01**；**≠ W3-P WindowManager 全闭环**。
+ * **≠ EL-01**；**≠ W3-P**。
+ * 产品默认：开启 paperList 时走 `paper-list`（**不**再默认同屏 content-row）。
  */
 export type NotePaperStrictPaperListConfig = {
-  /** 索引窗口（与 scroll 二选一） */
   window?: PaperListWindowState;
-  /** 滚动态（优先于 window） */
   scroll?: PaperListScrollState;
   overscan?: number;
   focusId?: string | null;
@@ -92,98 +99,81 @@ export type NotePaperStrictPaperListConfig = {
   defaultVisibleCount?: number;
   defaultEstimatePx?: number;
   /**
-   * 启用 PaperList 时是否仍渲染 React 全量块行。
-   * - `true`（默认）：小投影双轨呈现（内容行 + 列表槽）
-   * - `false`：仅 PaperList 窗口 DOM 承载内容（大文档 / 结构门测）
+   * 内容呈现模式（SD-04）。优先于 `keepReactRows`。
+   * 省略：产品默认 `paper-list`（与 content-row 互斥）。
+   */
+  presentationMode?: PresentationMode;
+  /**
+   * @deprecated 请用 `presentationMode`。
+   * `true` → `debug-dual`；`false` → `paper-list`。
+   * @see PresentationMode / `presentationMode`
+   * @removeWhen 调用方全部迁到 `presentationMode` 后删除
    */
   keepReactRows?: boolean;
 };
 
 export type NotePaperStrictPanelProps = {
-  /** 文档 id（hydrate 入参） */
   docId: string;
   /**
-   * **必填**：hydrate 通路（fixture / note-transport / tauri-ipc）。
-   * 产品空态默认由外层 `createProductStrictHydrateTransport` 注入；
-   * 不提供则无法挂载 Strict 轨——禁止静默回落假数据。
+   * **必填**：hydrate 通路。产品空态由外层注入；禁止静默回落假数据。
    */
   hydrateTransport: NoteHydrateTransport;
-  /**
-   * 变更时重新 hydrate（演示写后刷新 / 外部触发）。
-   */
   refreshToken?: number | string;
-  /** 可选：外部 chrome（测试用） */
   chrome?: BlockChromeModel;
-  /**
-   * 可选：外部 slash 模型（测试打开 slash 宿主 / React 浮层）。
-   * 未传时内部 new SlashMenuModel()。
-   */
   slashMenu?: SlashMenuModel;
   /**
-   * slash 选中后的 Intent sink（可选）。
-   * 注入时 React 浮层点击 → selectSlashItemAndSubmit → sink。
+   * slash 选中后的 Intent sink。
+   * 注入 → 可写；未注 → 默认只读 catalog（CONN-B；禁止可点无写）。
    */
   slashIntentSink?: IntentSink;
-  /** slash 产出 Intent 后回调 */
-  onSlashIntent?: (intent: SlashInsertIntent) => void;
   /**
-   * DomHost 就绪回调（W3-F DOM 桌面挂载子集）。
-   * **≠ EL-01**；真 Pointer 拖拽全链后置。
+   * slash 写模式覆盖。默认：有 sink → writable；无 → readonly。
    */
+  slashWriteMode?: SlashOverlayWriteMode;
+  /**
+   * 写锥能力来源诚实标注（`data-slash-sink-source`）。
+   * 默认：有 sink → injected-sink；无 → none。
+   */
+  slashSinkSource?: ProductSlashSinkSource;
+  /**
+   * 是否展示「打开斜杠菜单」产品入口（默认 true）。
+   * 锚定首块 / 占位锚点 → menu.open；**≠** 完整 `/` 键 IME 路径。
+   */
+  showOpenSlashButton?: boolean;
+  onSlashIntent?: (intent: SlashInsertIntent) => void;
+  /** DomHost 就绪；**≠ EL-01** */
   onChromeDomHost?: (host: BlockChromeDomHost | null) => void;
   /**
-   * **W3-G PaperList 可点名挂载**（产品路径）。
-   * - `false` / 省略：不挂列表槽（默认，现有 React 块行）
-   * - `true`：默认窗口可见块挂载
-   * - 对象：window / scroll / overscan 等可测参数
-   *
-   * 与 `BlockChromeDomMount` **分槽共存**（`data-bp-paper-list-mount` ∥
-   * `data-bp-chrome-mount`），同屏不互删。
-   * **≠ EL-01**；**≠ W3-P**。
+   * W3-G PaperList 可点名挂载。
+   * - 省略：内容模式 `react-rows`
+   * - true / 对象：产品默认内容模式 `paper-list`（互斥 content-row）
+   * 与 chrome **分槽共存**（data-bp-paper-list-mount ∥ data-bp-chrome-mount）。
    */
   paperList?: boolean | NotePaperStrictPaperListConfig;
   /**
-   * PaperList 宿主就绪回调（测试拿 countDomBlocks / setScroll）。
+   * 面板级内容呈现模式覆盖（SD-04）。
+   * 优先于 paperList 配置内 mode / keepReactRows。
    */
+  presentationMode?: PresentationMode;
   onPaperListReady?: (list: PaperList | null) => void;
-  /** 可选：关闭回调 */
   onClose?: () => void;
-  /** 额外 className */
   className?: string;
-  /** 面板标题 */
   title?: string;
-  /**
-   * A-INV-02 方向：注入镜像漂移报告（可选）。
-   * 有值时在 footer 上挂 `MirrorDriftStatusBar`；
-   * **不**在本面板实现 poll/OS watcher；底层来源见 `mirrorWatchSource`。
-   * **≠ EL-03**；**≠ inotify 产品满关**；**≠ A-INV-02 全关**。
-   */
+  /** A-INV-02 方向；**≠ EL-03**；**≠ A-INV-02 全关** */
   mirrorDriftReport?: MirrorDriftReportView | null;
-  /**
-   * 镜像检测来源诚实标注（poll / os_event / injected）。
-   * 仅当展示镜像状态条时生效。
-   */
   mirrorWatchSource?: MirrorWatchSource;
-  /** unpushed op 数（X-05 门禁；默认 0） */
   mirrorUnpushedOpCount?: number;
-  /**
-   * 是否强制展示镜像状态条（即使无 report，展示 idle）。
-   * 默认：仅当 `mirrorDriftReport != null` 时展示。
-   */
   showMirrorDriftBar?: boolean;
-  /** 三路决策回调（骨架；不直接 apply） */
   onMirrorThreeWay?: (decision: ThreeWayDecision) => void;
 };
-
-type HydrateUiStatus = 'loading' | 'ready' | 'empty' | 'error';
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 /**
- * Strict 轨笔记纸面：只读 hydrate 投影列表 + L0 静默 chrome。
- * 写路径须经 Intent 桥；本组件 **不** 接行级 store / EditorStore。
+ * Strict 轨笔记纸面：hydrate 投影 + 内容宿主策略 + L0 chrome。
+ * 写路径须经 Intent 桥；**不** 接行级 store / EditorStore。
  */
 export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   docId,
@@ -192,9 +182,13 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   chrome: chromeProp,
   slashMenu: slashMenuProp,
   slashIntentSink,
+  slashWriteMode: slashWriteModeProp,
+  slashSinkSource: slashSinkSourceProp,
+  showOpenSlashButton = true,
   onSlashIntent,
   onChromeDomHost,
   paperList: paperListProp,
+  presentationMode: presentationModeProp,
   onPaperListReady,
   onClose,
   className,
@@ -211,7 +205,16 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     typeof paperListProp === 'object' && paperListProp !== null
       ? paperListProp
       : {};
-  const keepReactRows = paperListConfig.keepReactRows !== false;
+
+  // SD-04：内容宿主互斥（产品默认不双内容同屏）
+  const presentationMode = resolvePresentationMode({
+    paperListEnabled,
+    presentationMode: presentationModeProp ?? paperListConfig.presentationMode,
+    keepReactRows: paperListConfig.keepReactRows,
+  });
+  const renderReactRows = showReactContentRows(presentationMode);
+  const renderPaperList = showPaperListContent(presentationMode);
+
   const chrome = useMemo(
     () => chromeProp ?? new BlockChromeModel(),
     [chromeProp]
@@ -220,58 +223,38 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     () => slashMenuProp ?? new SlashMenuModel(),
     [slashMenuProp]
   );
-  /** React slash 浮层：订阅 model 变更以同步 data-slash-open */
+  /** CONN-B：无 sink 默认只读；有 sink 默认可写 */
+  const slashWriteMode: SlashOverlayWriteMode =
+    slashWriteModeProp ?? (slashIntentSink ? 'writable' : 'readonly');
+  const slashSinkSource: ProductSlashSinkSource =
+    slashSinkSourceProp ?? (slashIntentSink ? 'injected-sink' : 'none');
   const slashOpen = useSyncExternalStore(
     (onStoreChange) => slashMenu.subscribe(onStoreChange),
     () => (slashMenu.isOpen() ? '1' : '0'),
     () => '0'
   );
 
-  const [status, setStatus] = useState<HydrateUiStatus>('loading');
-  const [projection, setProjection] = useState<DocHydrateProjection | null>(
-    null
-  );
-  const [errorReason, setErrorReason] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setStatus('loading');
-    setErrorReason(null);
-    setErrorCode(null);
-    try {
-      const outcome = await hydrateTransport.hydrate(docId);
-      if (!outcome.ok) {
-        setProjection(null);
-        setErrorReason(outcome.reason);
-        setErrorCode(outcome.code);
-        setStatus('error');
-        return;
-      }
-      setProjection(outcome.projection);
-      setStatus(outcome.projection.blocks.length === 0 ? 'empty' : 'ready');
-    } catch (e) {
-      // transport 契约应返回 ok:false；若仍抛，收成错误态（零半写 UI）
-      setProjection(null);
-      setErrorReason(e instanceof Error ? e.message : String(e));
-      setErrorCode('note.hydrate_throw');
-      setStatus('error');
-    }
-  }, [hydrateTransport, docId]);
-
-  useEffect(() => {
-    void load();
-  }, [load, refreshToken]);
-
-  const blocks: HydratedBlockProjection[] = projection?.blocks ?? [];
-  const resolvedRev = projection?.rev ?? 0;
-  const hydrateSource = projection?.source ?? 'none';
+  const {
+    status,
+    projection,
+    errorReason,
+    errorCode,
+    blocks,
+    resolvedRev,
+    hydrateSource,
+    reload,
+  } = useNoteHydrate({
+    hydrateTransport,
+    docId,
+    refreshToken,
+  });
 
   const [chromeTick, setChromeTick] = useState(0);
   const bump = useCallback(() => setChromeTick((n) => n + 1), []);
-  const snapshot = useMemo(() => {
-    void chromeTick;
-    return chrome.getSnapshot();
-  }, [chrome, chromeTick]);
+  // chromeTick 触发内部重绘；快照每帧从 model 读，
+  // 使外部 chrome.setFocused + rerender（CONN-C 测）也能驱动 PaperList pin
+  void chromeTick;
+  const snapshot = chrome.getSnapshot();
 
   const handleHover = useCallback(
     (blockId: string | null) => {
@@ -280,7 +263,6 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     },
     [chrome, bump]
   );
-
   const handleFocus = useCallback(
     (blockId: string | null) => {
       chrome.setFocused(blockId);
@@ -288,6 +270,24 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     },
     [chrome, bump]
   );
+
+  /**
+   * CONN-C · C-X1：chrome focus → PaperList pin（至少一方向）。
+   * - chrome.focusedBlockId 优先驱动 list pin（窗外 pin 保留 DOM）
+   * - 无 chrome 焦点时回落 paperListConfig.focusId（props 手工注入仍可用）
+   * **≠ W3-P WindowManager**；**≠ EL-01**
+   */
+  const paperListFocusId =
+    snapshot.focusedBlockId ?? paperListConfig.focusId ?? null;
+
+  /** 产品路径：打开 slash 菜单（锚定首块或占位 id） */
+  const openSlashMenu = useCallback(() => {
+    const anchorId = blocks[0]?.id ?? `slash-anchor-${docId}`;
+    const opened = slashMenu.open(anchorId, 0);
+    if (opened.ok) {
+      bump();
+    }
+  }, [blocks, docId, slashMenu, bump]);
 
   const rootClass = [styles.panel, className].filter(Boolean).join(' ');
 
@@ -304,11 +304,21 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       data-block-count={String(blocks.length)}
       data-slash-open={slashOpen === '1' ? 'true' : 'false'}
       data-slash-ui="react"
+      data-slash-write-mode={slashWriteMode}
+      data-slash-sink-source={slashSinkSource}
+      data-slash-sink={slashIntentSink ? '1' : '0'}
       data-source="hydrate"
       data-hydrate-source={hydrateSource}
       data-hydrate-status={status}
       data-transport-loading={status === 'loading' ? 'true' : 'false'}
-      data-paper-list={paperListEnabled ? '1' : '0'}
+      data-paper-list={renderPaperList ? '1' : '0'}
+      data-presentation-mode={presentationMode}
+      data-paper-list-focus-id={
+        renderPaperList
+          ? (paperListConfig.focusId ?? snapshot.focusedBlockId ?? undefined) ||
+            undefined
+          : undefined
+      }
       role="region"
       aria-label={title}
       aria-busy={status === 'loading' ? true : undefined}
@@ -329,19 +339,49 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           <span className={styles.badge} data-testid="note-paper-strict-count">
             {blocks.length} 块
           </span>
+          <span
+            className={styles.badge}
+            data-testid="note-paper-strict-slash-mode"
+            data-slash-write-mode={slashWriteMode}
+            title={
+              slashWriteMode === 'readonly'
+                ? 'slash 只读（未接 apply；≠假写）'
+                : 'slash 可写（Intent → sink）'
+            }
+          >
+            slash={slashWriteMode}
+          </span>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className={styles.badge}
             onClick={() => {
-              void load();
+              void reload();
             }}
             aria-label="重新 hydrate 投影"
             data-testid="note-paper-strict-refresh"
           >
             刷新
           </Button>
+          {showOpenSlashButton ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={styles.badge}
+              onClick={openSlashMenu}
+              aria-label={
+                slashWriteMode === 'readonly'
+                  ? '打开斜杠菜单（只读 catalog；未接 apply）'
+                  : '打开斜杠菜单'
+              }
+              data-testid="note-paper-strict-open-slash"
+              data-slash-write-mode={slashWriteMode}
+            >
+              /
+            </Button>
+          ) : null}
           {onClose ? (
             <Button
               type="button"
@@ -358,147 +398,76 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
         </div>
       </header>
 
-      <div className={styles.body} data-testid="note-paper-strict-body">
-        <div className={styles.readingColumn}>
-          {status === 'loading' ? (
-            <div
-              className={`${styles.state} ${styles.stateLoading}`}
-              data-testid="note-paper-strict-loading"
-              role="status"
-              aria-live="polite"
-            >
-              正在 hydrate 投影…
-            </div>
-          ) : null}
-
-          {status === 'error' ? (
-            <div
-              className={`${styles.state} ${styles.stateError}`}
-              role="alert"
-              data-testid="note-paper-strict-error"
-              data-error-code={errorCode ?? ''}
-            >
-              {errorReason ?? 'hydrate 失败'}
-            </div>
-          ) : null}
-
-          {status === 'empty' ? (
-            <div
-              className={`${styles.state} ${styles.stateEmpty}`}
-              data-testid="note-paper-strict-empty"
-            >
-              空文档投影（hydrate 成功 · 0 块）
-            </div>
-          ) : null}
-
-          {status === 'ready' && keepReactRows
-            ? blocks.map((block) => {
-                const visibility: HandleVisibility = chrome.getHandleVisibility(
-                  block.id
-                );
-                const level =
-                  typeof block.props?.level === 'number'
-                    ? block.props.level
-                    : undefined;
-                return (
-                  <div
-                    key={block.id}
-                    className={styles.blockRow}
-                    data-block-id={block.id}
-                    data-content-row="1"
-                    data-block-index={String(block.index)}
-                    data-handle={visibility}
-                    data-flavour={block.flavour}
-                    data-heading-level={
-                      level !== undefined ? String(level) : undefined
-                    }
-                    data-testid={`note-strict-block-${block.id}`}
-                    tabIndex={0}
-                    onMouseEnter={() => handleHover(block.id)}
-                    onMouseLeave={() => handleHover(null)}
-                    onFocus={() => handleFocus(block.id)}
-                    onBlur={() => handleFocus(null)}
-                  >
-                    <span
-                      className={styles.handle}
-                      data-testid={`note-strict-handle-${block.id}`}
-                      aria-hidden
-                    />
-                    <div className={styles.blockContent}>
-                      <span className={styles.flavour}>
-                        {block.flavour}
-                        {level !== undefined ? ` h${level}` : ''}
-                      </span>
-                      <div className={styles.text}>{block.text ?? ''}</div>
-                    </div>
-                  </div>
-                );
-              })
-            : null}
-          {/*
-            W3-G PaperList 产品挂载（可点名）：hydrate 投影 → 仅窗口 DOM。
-            分槽：data-bp-paper-list-mount；与 chrome 槽同屏不互删。
-            ≠ EL-01；≠ W3-P WindowManager 全闭环。
-          */}
-          {paperListEnabled && status === 'ready' ? (
-            <PaperListDomMount
-              blocks={blocks.map((b) => ({
-                id: b.id,
-                flavour: b.flavour,
-                text: b.text,
-              }))}
-              window={paperListConfig.window}
-              scroll={paperListConfig.scroll}
-              overscan={paperListConfig.overscan}
-              focusId={paperListConfig.focusId}
-              composingIds={paperListConfig.composingIds}
-              defaultVisibleCount={paperListConfig.defaultVisibleCount}
-              defaultEstimatePx={paperListConfig.defaultEstimatePx}
-              onListReady={onPaperListReady}
-              testId="note-paper-strict-paper-list"
-            />
-          ) : null}
-          {/*
-            真 React slash 浮层（catalog 可点 → Intent → sink）。
-            DomHost 关 catalog 投影防双层。≠ EL-01；≠ A-BLK-02 e2e 满关。
-          */}
-          <SlashMenuOverlay
-            menu={slashMenu}
-            sink={slashIntentSink}
-            syncToken={chromeTick}
-            className={styles.slashOverlay}
-            onSelectIntent={onSlashIntent}
-            testId="note-paper-strict-slash-overlay"
+      <NotePaperStrictBody
+        status={status}
+        errorReason={errorReason}
+        errorCode={errorCode}
+        blocks={blocks}
+        renderReactRows={renderReactRows}
+        chrome={chrome}
+        onHover={handleHover}
+        onFocus={handleFocus}
+      >
+        {/*
+          内容宿主 B：W3-G PaperList。
+          槽锚 data-bp-paper-list-mount；仅 paper-list / debug-dual。
+          与 chrome 分槽同屏不互删；≠ EL-01；≠ W3-P。
+        */}
+        {renderPaperList && status === 'ready' ? (
+          <PaperListDomMount
+            blocks={blocks.map((b) => ({
+              id: b.id,
+              flavour: b.flavour,
+              text: b.text,
+            }))}
+            window={paperListConfig.window}
+            scroll={paperListConfig.scroll}
+            overscan={paperListConfig.overscan}
+            focusId={paperListFocusId}
+            composingIds={paperListConfig.composingIds}
+            defaultVisibleCount={paperListConfig.defaultVisibleCount}
+            defaultEstimatePx={paperListConfig.defaultEstimatePx}
+            onListReady={onPaperListReady}
+            testId="note-paper-strict-paper-list"
           />
-          {/*
-            W3-F DOM 桌面挂载：BlockChromeDomHost → data-bp-* 契约
-            （把手/落点线；slash catalog 由 React 浮层接管）。≠ EL-01。
-            与 PaperList **分槽共存**（data-bp-chrome-mount ∥ data-bp-paper-list-mount）。
-          */}
-          <BlockChromeDomMount
-            blocks={
-              status === 'ready'
-                ? blocks.map((b) => ({
-                    blockId: b.id,
-                    flavour: b.flavour,
-                  }))
-                : []
-            }
-            chrome={chrome}
-            slash={slashMenu}
-            projectSlashCatalog={false}
-            syncToken={`${chromeTick}:${slashOpen}`}
-            onHostReady={onChromeDomHost}
-            testId="note-paper-strict-chrome-dom"
-          />
-        </div>
-      </div>
+        ) : null}
+        {/*
+          React slash 浮层（catalog → Intent → sink）。
+          CONN-B：无 sink 时 writeMode=readonly，禁提交。≠ EL-01；≠ A-BLK-02 e2e。
+          DomHost 关 catalog 防双层。
+        */}
+        <SlashMenuOverlay
+          menu={slashMenu}
+          sink={slashIntentSink}
+          writeMode={slashWriteMode}
+          syncToken={chromeTick}
+          className={styles.slashOverlay}
+          onSelectIntent={onSlashIntent}
+          testId="note-paper-strict-slash-overlay"
+        />
+        {/*
+          chrome 槽：data-bp-chrome-mount（把手/落点）。
+          与内容槽分槽共存；不计入 SD-04 内容互斥。≠ EL-01。
+        */}
+        <BlockChromeDomMount
+          blocks={
+            status === 'ready'
+              ? blocks.map((b) => ({
+                  blockId: b.id,
+                  flavour: b.flavour,
+                }))
+              : []
+          }
+          chrome={chrome}
+          slash={slashMenu}
+          projectSlashCatalog={false}
+          syncToken={`${chromeTick}:${slashOpen}`}
+          onHostReady={onChromeDomHost}
+          testId="note-paper-strict-chrome-dom"
+        />
+      </NotePaperStrictBody>
 
-      {/*
-        A-INV-02 方向子集：镜像漂移状态 + 三路入口骨架。
-        默认仅当注入 mirrorDriftReport 时展示；不实现 poll/OS watcher。
-        ≠ EL-03；≠ inotify 产品满关；X-05 由 MirrorDriftStatusBar 门禁。
-      */}
+      {/* A-INV-02 方向子集；≠ EL-03；≠ inotify 满关 */}
       {showMirrorDriftBar === true || mirrorDriftReport != null ? (
         <MirrorDriftStatusBar
           report={mirrorDriftReport}

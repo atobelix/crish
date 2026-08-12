@@ -16,23 +16,9 @@ import type {
   IntentId,
   TextEditIntent,
 } from '@crish/block-paper-contract';
-
-// ---------------------------------------------------------------------------
-// intentId 生成（本地可测；真实波可由宿主注入）
-// ---------------------------------------------------------------------------
-
-let intentSeq = 0;
-
-/** 生成唯一 intentId（供单测可预测前缀） */
-export function nextIntentId(prefix = 'intent'): IntentId {
-  intentSeq += 1;
-  return `${prefix}-${intentSeq}`;
-}
-
-/** 测试专用：重置序号 */
-export function resetIntentIdSeqForTests(): void {
-  intentSeq = 0;
-}
+// SD-05：id 生成在中性 `intentId.ts`；本文件 re-export 保持 leaves 既有 import 路径
+import { nextIntentId } from '../intentId';
+export { nextIntentId, resetIntentIdSeqForTests } from '../intentId';
 
 // ---------------------------------------------------------------------------
 // 工具

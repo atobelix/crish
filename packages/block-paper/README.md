@@ -8,7 +8,7 @@
 > **禁止** 把 DOM / ProseMirror doc / 本包假数据当作真相源持久化。  
 > **W3-D Strict** = 真 PM + TextEdit/Structure → 真 apply（本包工厂 + RS 集成）；**≠ EL-01**；**≠ A-BLK 全表**。  
 > **W3-F Strict 子集** = chrome `slash_insert` / `delete_blocks` → `createCollabApplySink`（`chrome.w3f_apply.test.ts` + RS `w3_f_*`）；**mock 不得关闭**；**≠ EL-01**；**≠ A-BLK-02/04/05 全关**。  
-> **W3-F DOM 余量** = `BlockChromeDomHost`（把手可见性 / 多选框 / 落点线 / slash 宿主 jsdom 契约，`chrome.w3f_dom.test.ts`）；**DOM 交付 ≠ EL-01**；A-BLK 产品 e2e 仍开；拖拽预览 / 桌面 React 挂载未交付。  
+> **W3-F DOM 余量** = `BlockChromeDomHost`（把手 / 多选框 / 落点线 / slash 宿主 jsdom 契约，`chrome.w3f_dom.test.ts`）；**桌面 React chrome 挂载已交**（`BlockChromeDomMount`）；**DOM ≠ EL-01**；A-BLK 全表 e2e / 真 Pointer 拖拽产品 e2e 仍开。  
 > **W3-E ≠ 全语言高亮完成**。
 
 ## 边界
@@ -17,7 +17,7 @@
 | ------------------------------------------------- | ------------------------------------------- |
 | 静默 L0 chrome 状态（把手/折叠/多选高亮）         | 桌面 IPC 产品全链路挂载（adapter 形状已备） |
 | chrome 最小 DOM 宿主（把手/多选框/落点线/slash）  | A-BLK 产品 e2e / EL-01（**DOM ≠ EL-01**）   |
-| Slash 打开/过滤/关闭（composing 禁开）            | 桌面 React chrome / 拖拽预览全链路          |
+| 桌面 React chrome 槽挂载（`BlockChromeDomMount`） | 真 Pointer 拖拽产品 e2e / A-BLK 全表 e2e    |
 | N 块假投影（`ProjectionDiff` / `MemoryBlock`）    | 数据层超长分段（W1-B）                      |
 | 叶子 Intent + **`createCollabApplySink`**（生产） | —                                           |
 | 真 PM 叶（W3-D-PM）+ plain 叶（W3-D-S）           | —                                           |

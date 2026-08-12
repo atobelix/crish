@@ -9,7 +9,7 @@
  * ## 明确非完成
  * - ≠ A-BLK 全表 e2e
  * - ≠ EL-01 / 块工作区完成
- * - ≠ RS 独立 turn_into Op 真 apply
+ * - ≠ 桌面 PM/HiddenInput 键入全链（CONN-D 权威 apply 见 RS conn_d_turn_into_apply）
  * - 不回退 W3-D / W3-F collab apply 测
  */
 import { describe, expect, it, beforeEach } from 'vitest';

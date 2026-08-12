@@ -7,9 +7,10 @@
  * 3. 与 slash_insert 双通道不互抹
  *
  * ## 非完成
- * - ≠ EL-01；≠ A-BLK-08/09 全表 e2e
- * - ≠ RS 真 turn_into Op（provisional sink 仅 strip + pending 标记）
- * - 不回退 w3h.direction 纯函数测
+ * - ≠ EL-01；≠ A-BLK-08/09 全表 e2e；≠ 桌面 PM 键入全链
+ * - provisional sink 形状仍为 strip + pending（CONN-D：RS 消费 pending 改 kind，见
+ *   crates/conex-doc-collab/tests/conn_d_turn_into_apply.rs）
+ * - 不回退 w3h.direction 纯函数测；composing 拒 / 与 slash 不互抹 本文件钉死
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { resetIntentIdSeqForTests } from './TextLeafModel';
@@ -92,7 +93,7 @@ describe('W3-H · mdPrefixHost 产品路径', () => {
     expect(mock.calls[0]!.trigger).toBe('md_prefix');
   });
 
-  it('w3h_host_provisional_collab_sink: turn_into → provisional wire（非真 RS turn_into Op）', async () => {
+  it('w3h_host_provisional_collab_sink: turn_into → provisional wire（strip+pending 形状）', async () => {
     const applied: string[] = [];
     const collab = createTurnIntoProvisionalCollabSink(
       async (opsJson, meta) => {
@@ -118,7 +119,8 @@ describe('W3-H · mdPrefixHost 产品路径', () => {
     expect(r.ok).toBe(true);
     expect(collab.wireCalls).toHaveLength(1);
     expect(applied).toHaveLength(1);
-    // provisional：strip text_edit + pending_turn_into_flavour；非独立 turn_into Op
+    // provisional 形状：strip text_edit + pending；非独立 turn_into JSON
+    //（RS CONN-D 消费 pending 改 kind；本 mock applyOps 不证权威）
     expect(collab.wireCalls[0]).toContain('"op":"text_edit"');
     expect(collab.wireCalls[0]).toContain('pending_turn_into_flavour');
     expect(collab.wireCalls[0]).toContain('quote');

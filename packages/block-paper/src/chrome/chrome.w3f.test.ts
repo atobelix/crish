@@ -14,10 +14,7 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { ImeMachine } from '@crish/editor-kit';
-import {
-  resetIntentIdSeqForTests,
-  nextIntentId,
-} from '../leaves/TextLeafModel';
+import { resetIntentIdSeqForTests, nextIntentId } from '../intentId';
 import { createMockIntentSink, submitIntent } from '../leaves/intentBridge';
 import { BlockChromeModel } from './BlockChrome';
 import { SlashMenuModel } from './SlashMenuModel';

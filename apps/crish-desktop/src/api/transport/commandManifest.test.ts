@@ -52,8 +52,12 @@ describe('commandManifest', () => {
       // R1-11（G-1）：multi_device_set_enabled 已接线（103 → 104）
       // G-4 收尾：browser_import/list_bookmarks/history 四命令已接线（104 → 108）
       // Round7：note_document_apply_md / note_query_blocks / note_send_to_note（108 → 111）
-      expect(registered).toBe(107);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(111);
+      // D4a：resume_subagent / kill_all / kill_subagent（110）+
+      //   core_resume_run / core_compact_now 登记先行（6）（111 → 116）
+      // note_document_hydrate：真 hydrate IPC（116 → 117；registered 110 → 111）
+      // note_detect_mirror_drift + note_import_mirror_proposal（117 → 119；111 → 113）
+      expect(registered).toBe(113);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(119);
     });
 
     it('命令名唯一', () => {
@@ -136,8 +140,15 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('browser_import_history')).toBe(true);
       expect(isRegisteredCommand('browser_list_bookmarks')).toBe(true);
       expect(isRegisteredCommand('browser_list_history')).toBe(true);
+      // D4a：子代理显式恢复与关闭三命令已接线
+      expect(isRegisteredCommand('resume_subagent')).toBe(true);
+      expect(isRegisteredCommand('kill_all')).toBe(true);
+      expect(isRegisteredCommand('kill_subagent')).toBe(true);
       // 登记先行：尚未接线，不得视为可调用
       expect(isRegisteredCommand('append_session_messages')).toBe(false);
+      // D4a 登记先行（P2 / E2 未实现）：不得视为可调用
+      expect(isRegisteredCommand('core_resume_run')).toBe(false);
+      expect(isRegisteredCommand('core_compact_now')).toBe(false);
       // 未知名
       expect(isRegisteredCommand('nope')).toBe(false);
     });
@@ -278,10 +289,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（111；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（119；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(111);
+      expect(total).toBe(119);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

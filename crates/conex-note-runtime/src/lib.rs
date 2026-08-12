@@ -49,6 +49,11 @@ pub use hydrate_projection::{
 };
 pub use store_backend::StoreNoteBackend;
 
+// A-INV-02 / W2-E：产品 IPC 装配侧可直接用 store 镜像类型（detect / import 提案）
+pub use conex_workspace_store::{
+    ImportMirrorOpts, ImportMirrorResult, MirrorDriftClass, MirrorDriftReport, ThreeWayStrategy,
+};
+
 use agent_tools::note_backend::NoteBackendHandle;
 use std::path::Path;
 use std::sync::Arc;

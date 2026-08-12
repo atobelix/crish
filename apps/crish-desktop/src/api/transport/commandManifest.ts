@@ -189,12 +189,15 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('browser_import_history', 'browser', 'engine'),
     entry('browser_list_bookmarks', 'browser', 'engine'),
     entry('browser_list_history', 'browser', 'engine'),
-    // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc；与 Rust 同步）──
+    // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     entry('note_document_apply_md', 'note', 'engine'),
     entry('note_query_blocks', 'note', 'engine'),
     entry('note_send_to_note', 'note', 'engine'),
-    // 真 hydrate / open 投影（B-09 延伸；产品空态默认仍 fixture）
+    // 真 hydrate / open 投影（B-09；产品 Strict 可检测 Tauri 时默认 tauri-ipc）
     entry('note_document_hydrate', 'note', 'engine'),
+    // A-INV-02 / W2-E：mirror detect + import 提案（不 apply；X-05；≠ EL-03）
+    entry('note_detect_mirror_drift', 'note', 'engine'),
+    entry('note_import_mirror_proposal', 'note', 'engine'),
     // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；与 Rust
     //    command_manifest.rs 同步）──
     entry('resume_subagent', 'core', 'engine'),

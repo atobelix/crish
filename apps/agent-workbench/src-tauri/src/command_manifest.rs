@@ -202,12 +202,15 @@ entry("browser_import_bookmarks", "browser", "engine", true),
 entry("browser_import_history", "browser", "engine", true),
 entry("browser_list_bookmarks", "browser", "engine", true),
 entry("browser_list_history", "browser", "engine", true),
-        // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc；family=note）──
+        // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
         entry("note_document_apply_md", "note", "engine", true),
         entry("note_query_blocks", "note", "engine", true),
         entry("note_send_to_note", "note", "engine", true),
         // 真 hydrate / open 投影形状（B-09 延伸；≠ 打开完成 / ≠ EL）
         entry("note_document_hydrate", "note", "engine", true),
+        // A-INV-02 / W2-E：mirror detect + import 提案（不 apply；X-05；≠ EL-03）
+        entry("note_detect_mirror_drift", "note", "engine", true),
+        entry("note_import_mirror_proposal", "note", "engine", true),
         // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；
         //    实现体 = main.rs lifecycle_commands 命令壳 + lifecycle 引擎侧）──
         entry("resume_subagent", "core", "engine", true),
@@ -254,7 +257,8 @@ mod tests {
     /// Round7 note_* 三命令追加后 108 → 111；D4a 五命令
     /// （resume_subagent/kill_all/kill_subagent + core_resume_run/
     /// core_compact_now 登记先行）追加后 111 → 116；
-    /// note_document_hydrate 追加后 116 → 117）。
+    /// note_document_hydrate 追加后 116 → 117；
+    /// note_detect_mirror_drift + note_import_mirror_proposal 后 117 → 119）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -265,8 +269,11 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 117, "总数 117（note_document_hydrate + D4a，与前端同步）");
-        assert_eq!(registered, 111, "注册面 111");
+        assert_eq!(
+            total, 119,
+            "总数 119（mirror detect/import + hydrate + D4a，与前端同步）"
+        );
+        assert_eq!(registered, 113, "注册面 113");
         assert_eq!(pending, 6, "登记先行 6");
     }
 
@@ -413,11 +420,11 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 117);
+        assert_eq!(manifest.commands.len(), 119);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
-    /// Round7+：笔记 IPC 四命令登记且 registered=true（含 hydrate）。
+    /// Round7+：笔记 IPC 六命令登记且 registered=true（含 hydrate / mirror）。
     #[test]
     fn manifest_registers_note_commands() {
         let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
@@ -430,6 +437,8 @@ mod tests {
             "note_query_blocks",
             "note_send_to_note",
             "note_document_hydrate",
+            "note_detect_mirror_drift",
+            "note_import_mirror_proposal",
         ] {
             let entry = by_name
                 .get(name)

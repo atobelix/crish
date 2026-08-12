@@ -9,11 +9,14 @@
  * ## 轨
  * - 呈现方向（W3-F 桌面 React）；**≠ EL-01**；**≠ A-BLK-02 产品 e2e 满关**
  * - 写路径不回退 collab Strict：可注入 `createCollabApplySink`；测可用 mock
- * - DomHost catalog 投影可关（`projectSlashCatalog=false`）防双浮层
+ * - DomHost catalog 默认关闭（`projectSlashCatalog` 默认 false，SD-03）防双浮层
+ * - **CONN-B**：`writeMode="readonly"` 时 catalog **禁提交**（data-slash-write-mode），
+ *   禁止产品空态「可点无写」静默
  *
  * ## 诚实边界
  * - 本组件 **不** 宣称 `/` 键触发全路径 / IME WebView e2e 关闭
  * - 默认 L0：`open=false` 时不渲染可见菜单
+ * - `writeMode` 未传时：有 sink 走 submit；无 sink 仍可 intent-only（库测兼容）
  */
 
 import React, {
@@ -44,14 +47,27 @@ import '@crish/block-paper/chrome.css';
 // Props
 // ---------------------------------------------------------------------------
 
+/**
+ * slash 写模式（CONN-B）。
+ * - `writable`：允许选中并（有 sink 时）submit
+ * - `readonly`：catalog 可见但 **禁提交**；点击/Enter no-op（防假写）
+ * - 未传：兼容库测——有 sink 则 submit，无 sink 则 intent-only
+ */
+export type SlashOverlayWriteMode = 'writable' | 'readonly';
+
 export type SlashMenuOverlayProps = {
   /** 状态源；open/filter/active 全由 model 持有 */
   menu: SlashMenuModel;
   /**
    * Intent 接收端。提供时点击/Enter 自动 `select*AndSubmit`。
-   * 未提供时仅回调 `onSelectIntent`（调用方自行 sink）。
+   * 未提供且非 readonly 时仅回调 `onSelectIntent`（调用方自行 sink）。
    */
   sink?: IntentSink;
+  /**
+   * 写模式。产品 Strict 空态无 apply 时须传 `readonly`（CONN-B）。
+   * 未传时保持库测兼容（无 sink 仍可 intent-only）。
+   */
+  writeMode?: SlashOverlayWriteMode;
   /** 透传 submitIntent 的 IME 选项 */
   submitOptions?: SubmitIntentOptions;
   /**
@@ -75,6 +91,8 @@ export type SlashMenuOverlayProps = {
   onClose?: () => void;
   /** 空过滤文案 */
   emptyMessage?: string;
+  /** 只读态提示文案（writeMode=readonly 时可选展示） */
+  readOnlyMessage?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -84,10 +102,12 @@ export type SlashMenuOverlayProps = {
 /**
  * React slash 浮层：catalog 可点 → Intent → sink。
  * 关闭态返回 null（零噪声）。
+ * CONN-B：`writeMode=readonly` 时禁提交，不假装已 apply。
  */
 export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
   menu,
   sink,
+  writeMode,
   submitOptions,
   syncToken = 0,
   style,
@@ -97,6 +117,7 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
   onSubmitResult,
   onClose,
   emptyMessage = '无匹配项',
+  readOnlyMessage = '只读 catalog（未接 apply；禁止假写）',
 }) => {
   // model 变更 → React 重绘（open/setQuery/moveActive/close/select）
   const version = useSyncExternalStore(
@@ -121,6 +142,24 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
   const snap = menu.getSnapshot();
   const [pending, setPending] = useState(false);
 
+  /**
+   * 解析写模式：
+   * - 显式 readonly → 禁提交
+   * - 显式 writable → 允许（有 sink 则 submit，无 sink 则 intent-only）
+   * - 未传 → 库测兼容（不强制只读）
+   */
+  const resolvedWriteMode: SlashOverlayWriteMode | 'legacy' =
+    writeMode ?? 'legacy';
+  const isReadOnly = resolvedWriteMode === 'readonly';
+  /** 可测 data：legacy 时按有无 sink 标 writable/intent-only */
+  const dataWriteMode = isReadOnly
+    ? 'readonly'
+    : sink
+      ? 'writable'
+      : resolvedWriteMode === 'writable'
+        ? 'writable'
+        : 'intent-only';
+
   const segments = useMemo(
     () => groupSlashCatalogItems(snap.items),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version 指纹驱动
@@ -134,6 +173,8 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
   const runSelectItem = useCallback(
     async (catalogItemId: string) => {
       if (pending) return;
+      // CONN-B：只读态禁止 select/submit（防可点无写）
+      if (isReadOnly) return;
       setPending(true);
       try {
         if (sink) {
@@ -166,6 +207,7 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
     },
     [
       pending,
+      isReadOnly,
       sink,
       menu,
       submitOptions,
@@ -177,6 +219,7 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
 
   const runSelectActive = useCallback(async () => {
     if (pending) return;
+    if (isReadOnly) return;
     setPending(true);
     try {
       if (sink) {
@@ -205,6 +248,7 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
     }
   }, [
     pending,
+    isReadOnly,
     sink,
     menu,
     submitOptions,
@@ -272,13 +316,25 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
       {...{ [BP_SLASH_HOST]: '1' }}
       {...{ [BP_SLASH_OPEN]: '1' }}
       data-slash-ui="react"
+      data-slash-write-mode={dataWriteMode}
       data-block-id={snap.blockId ?? undefined}
       data-slash-query={snap.query}
       role="listbox"
-      aria-label="斜杠命令"
+      aria-label={isReadOnly ? '斜杠命令（只读）' : '斜杠命令'}
+      aria-disabled={isReadOnly ? true : undefined}
       aria-activedescendant={activeOptionId}
       aria-busy={pending ? true : undefined}
     >
+      {isReadOnly ? (
+        <div
+          className="bp-slash-empty"
+          data-testid={`${testId}-readonly-banner`}
+          data-slash-readonly="1"
+          role="status"
+        >
+          {readOnlyMessage}
+        </div>
+      ) : null}
       {snap.items.length === 0 ? (
         <div
           className="bp-slash-empty"
@@ -304,6 +360,7 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
               flatIndex += 1;
               const isActive = idx === snap.activeIndex;
               const optionId = `np-slash-opt-${it.id}`;
+              const itemDisabled = pending || isReadOnly;
               return (
                 <button
                   key={it.id}
@@ -313,11 +370,14 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
                   {...{ [BP_SLASH_ITEM]: '1' }}
                   data-item-id={it.id}
                   data-active={isActive ? '1' : '0'}
+                  data-slash-item-disabled={itemDisabled ? '1' : '0'}
                   role="option"
                   aria-selected={isActive}
+                  aria-disabled={itemDisabled ? true : undefined}
                   tabIndex={-1}
-                  disabled={pending}
+                  disabled={itemDisabled}
                   onMouseEnter={() => {
+                    if (isReadOnly) return;
                     // 对齐键盘 active：把高亮移到悬停项（moveActive 会 emit）
                     const delta = idx - menu.getSnapshot().activeIndex;
                     if (delta !== 0) {

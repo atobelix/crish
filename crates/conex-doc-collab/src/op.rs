@@ -19,8 +19,10 @@ pub enum Origin {
 ///
 /// # Wire（JSON）
 /// `#[serde(tag = "op", rename_all = "snake_case")]`：
-/// `{ "op": "insert" | "update_props" | "move" | "delete" | "text_edit", ... }`。
-/// 与 TS `@crish/block-paper-contract` `CollabOpWire` / `structureIntentToOps` 对齐。
+/// `{ "op": "insert" | "update_props" | "move" | "delete" | "text_edit" | "turn_into", ... }`。
+/// 与 TS `@crish/block-paper-contract` `CollabOpWire` / `structureIntentToOps` 对齐
+///（`turn_into` 为 CONN-D 子集；TS provisional 仍可走 `update_props`+pending 标记，
+/// RS 在 apply 时消费 pending 改 kind，见 [`crate::ir::pending_turn_into_kind`]）。
 ///
 /// # 写路径纪律
 /// UI StructureIntent **不得**直接写盘；须 Intent → wire JSON → [`ops_from_json`] →
@@ -55,6 +57,15 @@ pub enum Op {
         start: u32,
         end: u32,
         insert: String,
+    },
+    /// CONN-D / W3-H：结构转类型（改 `BlockNode.kind`；**不**改文本）。
+    ///
+    /// Wire：`{ "op":"turn_into", "id":"…", "kind":"paragraph"|{ "heading":{ "level":1 } }|… }`。
+    /// 与 `UpdateProps` 携带 `attrs.pending_turn_into_flavour` 的消费路径并存；
+    /// 二者均在 apply 后使权威 kind 可变。
+    TurnInto {
+        id: BlockId,
+        kind: BlockKind,
     },
 }
 
@@ -175,6 +186,10 @@ mod wire_tests {
                 kind: BlockKind::Heading { level: 1 },
                 props: BlockProps::default(),
             },
+            Op::TurnInto {
+                id,
+                kind: BlockKind::Quote,
+            },
         ];
         let bytes = ops_to_json(&ops).unwrap();
         let back = ops_from_json(&bytes).unwrap();
@@ -187,6 +202,27 @@ mod wire_tests {
         assert!(s.contains(r#""new_parent""#));
         assert!(s.contains(r#""op":"update_props""#));
         assert!(s.contains(r#""op":"text_edit""#));
+        assert!(s.contains(r#""op":"turn_into""#));
+    }
+
+    #[test]
+    fn ops_from_json_turn_into_wire() {
+        let json = r#"[
+          {
+            "op": "turn_into",
+            "id": "11111111-1111-1111-1111-111111111111",
+            "kind": { "heading": { "level": 2 } }
+          }
+        ]"#;
+        let ops = ops_from_json_str(json).expect("parse turn_into wire");
+        assert_eq!(ops.len(), 1);
+        match &ops[0] {
+            Op::TurnInto { id, kind } => {
+                assert_eq!(*id, sample_id());
+                assert_eq!(*kind, BlockKind::Heading { level: 2 });
+            }
+            other => panic!("expected turn_into, got {other:?}"),
+        }
     }
 
     #[test]

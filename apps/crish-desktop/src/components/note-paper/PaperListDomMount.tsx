@@ -6,15 +6,18 @@
  * - 输入：hydrate / 投影块（id + flavour/text 呈现），**非**权威树
  * - 仅窗口∪pin 进 DOM；窗外真 remove + spacer（**禁止** CSS hidden 假虚拟化）
  *
- * ## 与 chrome DomMount 共存（分槽 · 强制）
- * | 槽 | 锚 | 宿主 |
- * |----|----|------|
- * | chrome | `[data-bp-chrome-mount="1"]` | `BlockChromeDomHost` |
- * | paper-list | `[data-bp-paper-list-mount="1"]` | `PaperList` |
+ * ## 槽契约（SD-04 · chrome ∥ content 钉死）
+ * | 槽 | 锚 | 宿主 | 计入内容互斥？ |
+ * |----|----|------|----------------|
+ * | **chrome** | `[data-bp-chrome-mount="1"]` | `BlockChromeDomHost` | 否（chrome 皮） |
+ * | **content · paper-list** | `[data-bp-paper-list-mount="1"]` | 本组件 → `PaperList` | **是** |
+ * | **content · react-rows** | `[data-content-row="1"]` | Strict/Skeleton React 行 | **是** |
  *
- * - **同屏兄弟节点**，生命周期独立；destroy 一方 **不** 删另一方
+ * - chrome 与 content **同屏兄弟**，生命周期独立；destroy 一方 **不** 删另一方
  * - 不共享 DOM 子树；不共用 `hostRef`
- * - 内容 React 块行（`data-content-row`）可选并存或抑制（由面板 props 决定）
+ * - **产品默认**：`presentationMode='paper-list'` 时 **不** 再挂全量 content-row
+ *   （互斥由 `resolvePresentationMode` / StrictPanel 保证；本组件只负责列表槽）
+ * - `debug-dual` 才允许 content-row + 本槽同屏（非产品默认）
  *
  * ## 诚实边界（钉死）
  * - **≠ EL-01** e2e 满关；**≠** A-PERF 数值门（仅结构 DOM 上界）
@@ -22,7 +25,7 @@
  * - 假数据 / hydrate 投影列表 **≠** 权威树；写仍走 Intent
  * - 窗口/scroll 参数可测；挂载后 DOM 块数 ≤ `MAX_MOUNTED_DOM_BLOCKS`
  *
- * 测：`PaperListDomMount.test.tsx`
+ * 测：`PaperListDomMount.test.tsx` · `presentationMode.test.ts`
  */
 
 import React, { useEffect, useRef } from 'react';

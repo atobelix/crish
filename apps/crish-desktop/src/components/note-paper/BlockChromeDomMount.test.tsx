@@ -99,6 +99,8 @@ describe('BlockChromeDomMount · 独立挂载契约', () => {
           blocks={[{ blockId: ID_A }, { blockId: ID_B }]}
           chrome={chrome}
           slash={slash}
+          // 本测验证 Dom catalog 投影：显式 true（产品默认 false）
+          projectSlashCatalog={true}
           syncToken={tick}
           onHostReady={(h) => {
             host = h;
@@ -137,7 +139,7 @@ describe('BlockChromeDomMount · 独立挂载契约', () => {
     });
     expect(host!.isDropLineVisible()).toBe(false);
 
-    // 3) slash 宿主：open → data-slash-open=1 + catalog group/item 可见皮
+    // 3) slash 宿主：显式 projectSlashCatalog → catalog group/item 可见皮
     act(() => {
       const r = slash.open(ID_A, 0);
       expect(r.ok).toBe(true);
@@ -163,6 +165,39 @@ describe('BlockChromeDomMount · 独立挂载契约', () => {
     expect(host!.isSlashHostVisible()).toBe(false);
     expect(host!.getSlashHostElement().getAttribute(BP_SLASH_OPEN)).toBe('0');
     expect(host!.getSlashHostElement().children.length).toBe(0);
+  });
+
+  it('sd03_mount_default_no_dual_slash: 默认 projectSlashCatalog=false → react 让位无 item', () => {
+    let setTickExternal: ((n: number) => void) | null = null;
+    function Controlled() {
+      const [tick, setTick] = useState(0);
+      setTickExternal = setTick;
+      return (
+        <BlockChromeDomMount
+          blocks={[{ blockId: ID_A }]}
+          chrome={chrome}
+          slash={slash}
+          // 故意不传 projectSlashCatalog → 产品默认 false
+          syncToken={tick}
+          onHostReady={(h) => {
+            host = h;
+          }}
+        />
+      );
+    }
+
+    render(<Controlled />);
+    expect(host).not.toBeNull();
+
+    act(() => {
+      expect(slash.open(ID_A, 0).ok).toBe(true);
+      setTickExternal?.(1);
+    });
+
+    const slashEl = host!.getSlashHostElement();
+    expect(host!.isSlashHostVisible()).toBe(false);
+    expect(slashEl.getAttribute('data-slash-catalog')).toBe('react');
+    expect(slashEl.querySelectorAll(`[${BP_SLASH_ITEM}]`).length).toBe(0);
   });
 });
 

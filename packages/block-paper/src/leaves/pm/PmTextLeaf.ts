@@ -24,7 +24,7 @@ import type {
   IntentId,
   TextEditIntent,
 } from '@crish/block-paper-contract';
-import { nextIntentId } from '../TextLeafModel';
+import { nextIntentId } from '../../intentId';
 import {
   leafInlineSchema,
   leafDocToText,

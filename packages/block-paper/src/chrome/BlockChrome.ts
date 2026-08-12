@@ -15,11 +15,13 @@
  * - **W3-F Strict 子集**：`requestDeleteSelected` → `delete_blocks` → collab sink（见 `chrome.w3f_apply.test.ts`）
  * - mock sink **仅**形状（`chrome.w3f.test.ts`）；**≠** Strict 关闭证据
  * - **W3-F DOM 余量**：`BlockChromeDomHost` 把手/多选框 DOM（`chrome.w3f_dom.test.ts`）
- * - **≠ EL-01**；**≠** A-BLK 全表 e2e；**DOM 交付 ≠ EL-01**；产品拖拽预览 / 桌面 React 挂载仍未交付
+ * - **桌面 React chrome 挂载已交**（`BlockChromeDomMount`）；**DOM 交付 ≠ EL-01**
+ * - **仍未交付（精确）**：A-BLK 全表 e2e、真 Pointer 拖拽产品 e2e、产品级 chrome 交互 e2e
  */
 
 import type { BlockId, IntentId } from '@crish/block-paper-contract';
-import { nextIntentId } from '../leaves/TextLeafModel';
+// SD-05：中性 intentId；禁止 chrome→TextLeafModel 仅为 id
+import { nextIntentId } from '../intentId';
 import {
   buildDeleteBlocksIntent,
   buildToggleCollapseIntent,

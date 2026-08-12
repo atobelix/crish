@@ -6,13 +6,22 @@
  *   接到 note-paper React 树（Skeleton / Strict 共用）
  * - 呈现投影：`BlockChromeModel` + 可选 `SlashMenuModel` → 真实 DOM `data-bp-*`
  *
+ * ## 槽契约（SD-04 · chrome 槽 vs content 槽）
+ * | 槽 | 锚 | 宿主 |
+ * |----|----|------|
+ * | **chrome（本组件）** | `[data-bp-chrome-mount="1"]` | `BlockChromeDomHost` |
+ * | **content · paper-list** | `[data-bp-paper-list-mount="1"]` | `PaperList`（见 PaperListDomMount） |
+ * | **content · react-rows** | `[data-content-row="1"]` | Panel React 块行 |
+ *
+ * - 本槽是 **chrome 皮**，**不**计入 SD-04 内容宿主互斥
+ * - 与 content 槽 **分槽共存、同屏不互删**；destroy 本槽不删 paper-list / content-row
+ * - DomHost 自建 `data-bp-block-row` 属 chrome 行皮，**不是** 第二内容权威
+ *
  * ## 诚实边界（钉死）
  * - **DOM 挂载 ≠ EL-01**；**≠** A-BLK-02/04/05 产品 e2e 全关
  * - **真 Pointer 拖拽全链后置**（`applyDragPointerShape` mock 形状可测，非产品 Pointer 监听）
- * - 本宿主 **不** 旁路写盘 / 不持有文档权威；内容投影仍由 Panel 块行负责
- * - DomHost 自建 `data-bp-block-row` 行（与 Panel 内容行并存）；契约锚 `data-bp-*`
- * - **与 PaperList 分槽共存**：本槽 `data-bp-chrome-mount`；列表槽
- *   `data-bp-paper-list-mount`（见 `PaperListDomMount`）。同屏不互删。
+ * - 本宿主 **不** 旁路写盘 / 不持有文档权威；内容投影仍由 Panel 内容宿主负责
+ * - 契约锚 `data-bp-*`（本根 `data-bp-chrome-mount="1"`）
  *
  * 测：`BlockChromeDomMount.test.tsx`
  */
@@ -42,8 +51,9 @@ export type BlockChromeDomMountProps = {
   slash?: SlashMenuModel;
   /**
    * DomHost 是否投影 slash catalog 子节点。
-   * 默认 true（W3-F DOM 契约测）。
-   * 产品挂 React `SlashMenuOverlay` 时设 false，避免双浮层。
+   * **默认 false（SD-03）**：产品挂 React `SlashMenuOverlay` 时安全，防双浮层；
+   * 宿主标记 `data-slash-catalog=react`，无 `data-bp-slash-item`。
+   * 仅 jsdom DomHost catalog 契约测 / 无 Overlay 场景显式 `true`。
    */
   projectSlashCatalog?: boolean;
   /**
@@ -74,7 +84,8 @@ export const BlockChromeDomMount: React.FC<BlockChromeDomMountProps> = ({
   blocks,
   chrome,
   slash,
-  projectSlashCatalog = true,
+  // SD-03：产品默认 React catalog，DomHost 不投影 item（防双浮层）
+  projectSlashCatalog = false,
   syncToken = 0,
   onHostReady,
   className,

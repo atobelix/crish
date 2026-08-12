@@ -233,4 +233,75 @@ describe('SlashMenuOverlay · catalog 与可点', () => {
     expect(host.textContent).toContain('无匹配');
     expect(host.querySelectorAll(`[${BP_SLASH_ITEM}]`).length).toBe(0);
   });
+
+  it('conn_b_readonly_disables_submit_no_silent_apply', async () => {
+    const mock = createMockIntentSink();
+    const seen: SlashInsertIntent[] = [];
+    const menu = new SlashMenuModel({
+      createIntentId: () => 'ro-slash',
+    });
+    expect(menu.open('ro-anchor', 0).ok).toBe(true);
+    render(
+      <SlashMenuOverlay
+        menu={menu}
+        sink={mock.sink}
+        writeMode="readonly"
+        syncToken={1}
+        onSelectIntent={(i) => seen.push(i)}
+      />
+    );
+
+    const host = screen.getByTestId('note-paper-slash-overlay');
+    expect(host).toHaveAttribute('data-slash-write-mode', 'readonly');
+    expect(
+      screen.getByTestId('note-paper-slash-overlay-readonly-banner')
+    ).toBeInTheDocument();
+    expect(host.getAttribute('aria-disabled')).toBe('true');
+
+    const btn = host.querySelector(
+      `[${BP_SLASH_ITEM}][data-item-id="paragraph"]`
+    );
+    expect(btn).toBeTruthy();
+    expect(btn).toBeDisabled();
+    fireEvent.click(btn!);
+
+    // 只读：不得 submit / 不得假 apply
+    await waitFor(() => {
+      expect(mock.calls).toHaveLength(0);
+    });
+    expect(seen).toHaveLength(0);
+    // 菜单仍开（未 select 关闭）
+    expect(screen.getByTestId('note-paper-slash-overlay')).toBeInTheDocument();
+  });
+
+  it('conn_b_writable_with_sink_submits_on_click', async () => {
+    const applied: string[] = [];
+    const collab = createCollabApplySink({
+      applyOps: async (opsJson) => {
+        applied.push(opsJson);
+        return { ok: true };
+      },
+      allocateId: () => 'writable-new',
+      resolveOrder: () => 'a0',
+    });
+    const menu = new SlashMenuModel({
+      createIntentId: () => 'wr-slash',
+    });
+    expect(menu.open('wr-anchor', 1).ok).toBe(true);
+    render(
+      <SlashMenuOverlay
+        menu={menu}
+        sink={collab.sink}
+        writeMode="writable"
+        syncToken={1}
+      />
+    );
+    const host = screen.getByTestId('note-paper-slash-overlay');
+    expect(host).toHaveAttribute('data-slash-write-mode', 'writable');
+    fireEvent.click(
+      host.querySelector(`[${BP_SLASH_ITEM}][data-item-id="paragraph"]`)!
+    );
+    await waitFor(() => expect(collab.wireCalls).toHaveLength(1));
+    expect(applied[0]).toContain('"op":"insert"');
+  });
 });

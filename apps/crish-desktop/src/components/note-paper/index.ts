@@ -20,6 +20,29 @@ export {
   type NotePaperStrictPaperListConfig,
 } from './NotePaperStrictPanel';
 
+/**
+ * SD-04 内容呈现策略（反三宿主）：react-rows | paper-list | debug-dual。
+ * 产品默认内容宿主互斥；chrome 槽分槽共存。
+ */
+export {
+  isPresentationMode,
+  isProductContentHostExclusive,
+  PRESENTATION_MODES,
+  resolvePresentationMode,
+  showPaperListContent,
+  showReactContentRows,
+  type PresentationMode,
+  type ResolvePresentationModeInput,
+} from './presentationMode';
+
+/** Strict hydrate 状态机 hook（从 StrictPanel 抽出） */
+export {
+  useNoteHydrate,
+  type HydrateUiStatus,
+  type UseNoteHydrateOptions,
+  type UseNoteHydrateResult,
+} from './useNoteHydrate';
+
 /** W3-F DOM 桌面挂载：BlockChromeDomHost → React（≠ EL-01） */
 export {
   BlockChromeDomMount,
@@ -40,7 +63,20 @@ export {
 export {
   SlashMenuOverlay,
   type SlashMenuOverlayProps,
+  type SlashOverlayWriteMode,
 } from './SlashMenuOverlay';
+
+/**
+ * CONN-B：产品 Strict slash 写锥绑定（有 applyOps → collab；无 → 只读）。
+ * **≠ EL-01**；**≠ A-BLK-02 e2e**；禁止 mock 当生产默认。
+ */
+export {
+  createProductStrictSlashBinding,
+  type CreateProductStrictSlashBindingOptions,
+  type ProductSlashSinkSource,
+  type ProductSlashWriteMode,
+  type ProductStrictSlashBinding,
+} from './productSlashSink';
 
 export {
   SendToNoteButton,
@@ -95,13 +131,20 @@ export {
 } from './hydrateProjection';
 
 /**
- * A-INV-02 镜像漂移 UI 方向（状态条 + 三路入口骨架）。
+ * A-INV-02 镜像漂移 UI 方向（状态条 + 三路入口骨架 + CONN-E IPC 桥）。
  * ≠ EL-03；≠ inotify 产品满关；≠ A-INV-02 全关。
  */
 export {
   MirrorDriftStatusBar,
   type MirrorDriftStatusBarProps,
 } from './MirrorDriftStatusBar';
+
+export {
+  createMirrorThreeWayOnAction,
+  submitThreeWayViaMirrorIpc,
+  type MirrorThreeWaySubmitOpts,
+  type MirrorThreeWaySubmitResult,
+} from './mirrorThreeWayBridge';
 
 export {
   A_INV_02_UI_DIRECTION_ID,

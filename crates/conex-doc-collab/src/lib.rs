@@ -27,7 +27,10 @@ mod tx;
 pub use block_id::{BlockId, block_id_from_comment, block_id_to_comment};
 pub use events::{BlockUpsert, DocEvent, ProjectionDiff};
 pub use harness::{DualSessionHarness, PeerSide, SimplifiedEncodedOps};
-pub use ir::{BlockKind, BlockNode, BlockProps, BlockTree, cmp_order};
+pub use ir::{
+    pending_turn_into_kind, BlockKind, BlockNode, BlockProps, BlockTree,
+    PENDING_TURN_INTO_FLAVOUR_ATTR, cmp_order,
+};
 pub use op::{
     ops_from_json, ops_from_json_str, ops_to_json, ops_to_json_string, Op, Origin,
 };

@@ -28,7 +28,8 @@
  * - **≠ EL-01**；**≠ A-BLK 全表**；禁止 mock sink 冒充 Strict 关闭
  * - **W3-F DOM 余量**：`BlockChromeDomHost` 把手/多选框/落点线/slash 宿主/拖拽预览子集
  *   jsdom 契约（`chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`）；**DOM ≠ EL-01**
- * - **仍未交付**：桌面 React chrome 挂载、A-BLK 全表 e2e、拖拽产品 e2e
+ * - **桌面 React chrome 挂载已交**（`BlockChromeDomMount` / Strict 槽）；**仍未交付**的精确项：
+ *   A-BLK 全表 e2e、真 Pointer 拖拽产品 e2e、桌面产品级 chrome 交互 e2e
  */
 
 import type {
@@ -47,7 +48,8 @@ import {
   isCollabOpWire,
   orderFromIndex,
 } from '@crish/block-paper-contract';
-import { nextIntentId } from '../leaves/TextLeafModel';
+// SD-05：中性 intentId；禁止 chrome→TextLeafModel 仅为 id
+import { nextIntentId } from '../intentId';
 
 // ---------------------------------------------------------------------------
 // 起源 / 种类

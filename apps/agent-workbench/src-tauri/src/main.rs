@@ -264,11 +264,14 @@ command_registry![
     ("browser_import_history", browser_commands::browser_import_history),
     ("browser_list_bookmarks", browser_commands::browser_list_bookmarks),
     ("browser_list_history", browser_commands::browser_list_history),
-    // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc；同一 NoteRuntime）──
+    // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     ("note_document_apply_md", note_commands::note_document_apply_md),
     ("note_query_blocks", note_commands::note_query_blocks),
     ("note_send_to_note", note_commands::note_send_to_note),
     ("note_document_hydrate", note_commands::note_document_hydrate),
+    // A-INV-02 / W2-E 产品 IPC：detect + import 提案（不 apply；X-05；≠ EL-03）
+    ("note_detect_mirror_drift", note_commands::note_detect_mirror_drift),
+    ("note_import_mirror_proposal", note_commands::note_import_mirror_proposal),
     // ── D4a 命令面：子代理显式恢复与关闭（D4 §3.1/§3.2/§3.5）。
     //    Tauri 宏约束：命令函数须以模块限定路径注册（裸标识符路径触发
     //    generate_handler! 的 `__cmd__<name>` 宏命名冲突），故命令壳定义

@@ -1,16 +1,20 @@
-//! Round7+ · Tauri 笔记命令面（前端 `noteApi.ts` / `noteHydrateIpc.ts` IPC）
+//! Round7+ · Tauri 笔记命令面（前端 `noteApi.ts` / `noteHydrateIpc.ts` /
+//! `noteMirrorIpc.ts` IPC）
 //!
 //! 命令名（wire = 函数名）：
 //! - `note_document_apply_md`
 //! - `note_query_blocks`
 //! - `note_send_to_note`
 //! - `note_document_hydrate`（打开/加载投影 · 默认真 DocSession 路径）
+//! - `note_detect_mirror_drift`（A-INV-02 / W2-E · detect 可达前端）
+//! - `note_import_mirror_proposal`（三路策略提案；**不** apply；X-05）
 //!
 //! 入参/出参 snake_case 线格式，对齐 `apps/crish-desktop/src/api/noteApi.ts`、
-//! `noteHydrateIpc.ts` 与 `agent_tools::note_backend` 契约。
+//! `noteHydrateIpc.ts` / `noteMirrorIpc.ts` 与 `agent_tools::note_backend` 契约。
 //!
 //! 成功/业务失败均以 `{ ok: true|false, ... }` JSON 返回（Ok 包装），
-//! 便于前端 `parseApplyOutcome` / `parseQueryOutcome` / `parseHydrateIpcOutcome`；
+//! 便于前端 `parseApplyOutcome` / `parseQueryOutcome` / `parseHydrateIpcOutcome` /
+//! `parseDetectMirrorOutcome` / `parseImportMirrorOutcome`；
 //! 仅 IPC 级故障走 `CoreError` reject。
 //!
 //! 纪律：
@@ -21,14 +25,19 @@
 //!   - 默认：`hydrate_path=doc-session`（`load_doc` → `DocSession::hydrate` → CDCS 树）
 //!   - 旧：`hydrate_path=query-blocks`（`query_blocks` 派生索引；仅显式/回退）
 //!   - `source` 仍为 IPC 通道 `tauri-ipc`（与 fixture 分轨）
-//! - **≠** 产品「打开完成」（G-HYD 全条件）；**≠ EL-04 / EL-01**
+//! - **mirror detect/import**：只提案、不 apply；unpushed 禁静默 DropUnacked（X-05）
+//! - **≠** 产品「打开完成」（G-HYD 全条件）；**≠ EL-04 / EL-01 / EL-03**
+//! - **≠** poll timer 双开 debounce；**≠** inotify 产品满关
 
 use agent_tools::note_backend::{
     apply_result_json, NoteApplyMdRequest, NoteApplyMode, NoteBackendError, NoteQueryBlocksParams,
 };
 #[cfg(test)]
 use agent_tools::note_backend::{NoteApplyMdResult, NoteBackend as _};
-use conex_note_runtime::{HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS};
+use conex_note_runtime::{
+    ImportMirrorResult, MirrorDriftClass, MirrorDriftReport, ThreeWayStrategy,
+    HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS,
+};
 use conex_types::CoreError;
 use serde::Deserialize;
 use serde_json::{json, Map, Value as JsonValue};
@@ -83,6 +92,155 @@ pub struct NoteHydrateDocumentArgs {
     /// 仅测试/对照；生产默认 `doc-session`。
     #[serde(default)]
     pub prefer_query: Option<bool>,
+}
+
+/// detect 镜像漂移入参（对齐前端 `NoteDetectMirrorRequest`）。
+#[derive(Debug, Clone, Deserialize)]
+pub struct NoteDetectMirrorArgs {
+    pub doc_id: String,
+    /// 当前权威 rev；缺省则 session.rev / store.load_rev
+    #[serde(default)]
+    pub authority_rev: Option<u64>,
+}
+
+/// import_mirror_proposal 入参（对齐前端 `NoteImportMirrorRequest`）。
+///
+/// **不** apply；策略须由调用方显式给出（前端 resolveThreeWay + X-05）。
+#[derive(Debug, Clone, Deserialize)]
+pub struct NoteImportMirrorArgs {
+    pub doc_id: String,
+    /// `retain_local_and_reimport` | `drop_unacked` | `conflict_blocks`
+    pub strategy: String,
+    /// 未推送 / 未 ACK 本地 op 数；>0 时非 DropUnacked → 冲突（X-05）
+    #[serde(default)]
+    pub unpushed_op_count: Option<u64>,
+    #[serde(default)]
+    pub authority_rev: Option<u64>,
+    /// 是否用 DocSession 权威树做块级 diff（默认 true）
+    #[serde(default)]
+    pub use_session_tree: Option<bool>,
+}
+
+/// MirrorDriftClass → wire snake_case（对齐前端 `MirrorDriftClass`）。
+fn drift_class_wire(c: MirrorDriftClass) -> &'static str {
+    match c {
+        MirrorDriftClass::None => "none",
+        MirrorDriftClass::MirrorOnly => "mirror_only",
+        MirrorDriftClass::AuthorityOnly => "authority_only",
+        MirrorDriftClass::Both => "both",
+        MirrorDriftClass::NoMeta => "no_meta",
+        MirrorDriftClass::MissingFile => "missing_file",
+    }
+}
+
+/// ThreeWayStrategy → wire snake_case。
+fn strategy_wire(s: ThreeWayStrategy) -> &'static str {
+    match s {
+        ThreeWayStrategy::RetainLocalAndReimport => "retain_local_and_reimport",
+        ThreeWayStrategy::DropUnacked => "drop_unacked",
+        ThreeWayStrategy::ConflictBlocks => "conflict_blocks",
+    }
+}
+
+fn parse_strategy(s: &str) -> Option<ThreeWayStrategy> {
+    match s.trim() {
+        "retain_local_and_reimport" => Some(ThreeWayStrategy::RetainLocalAndReimport),
+        "drop_unacked" => Some(ThreeWayStrategy::DropUnacked),
+        "conflict_blocks" => Some(ThreeWayStrategy::ConflictBlocks),
+        _ => None,
+    }
+}
+
+/// 漂移报告 → IPC JSON 子集（前端 `MirrorDriftReportView` 可解析）。
+fn report_to_json(report: &MirrorDriftReport) -> JsonValue {
+    json!({
+        "doc_id": report.doc_id,
+        "class": drift_class_wire(report.class),
+        "path": report.path.to_string_lossy(),
+        "last_export_rev": report.last_export_rev,
+        "authority_rev": report.authority_rev,
+        "pending_lag": report.pending_lag,
+        "mirror_changed": report.mirror_changed,
+        "authority_changed": report.authority_changed,
+        "file_exists": report.file_exists,
+        "stored_hash": report.stored_hash,
+        "file_hash": report.file_hash,
+    })
+}
+
+/// import 结果 → IPC JSON（提案/冲突；永不暗示已 apply）。
+fn import_result_to_json(result: &ImportMirrorResult) -> JsonValue {
+    match result {
+        ImportMirrorResult::NoChange { report } => json!({
+            "ok": true,
+            "kind": "no_change",
+            "report": report_to_json(report),
+            "applied": false,
+            "source": "tauri-ipc",
+        }),
+        ImportMirrorResult::OpBatch {
+            report,
+            strategy,
+            ops,
+            source_md_hash,
+            preserves_unpushed,
+            discards_unpushed,
+            is_block_level_diff,
+        } => {
+            let ops_json: Vec<JsonValue> = ops
+                .iter()
+                .filter_map(|op| serde_json::to_value(op).ok())
+                .collect();
+            json!({
+                "ok": true,
+                "kind": "op_batch",
+                "report": report_to_json(report),
+                "strategy": strategy_wire(*strategy),
+                "ops": ops_json,
+                "ops_count": ops.len(),
+                "source_md_hash": source_md_hash,
+                "preserves_unpushed": preserves_unpushed,
+                "discards_unpushed": discards_unpushed,
+                "is_block_level_diff": is_block_level_diff,
+                "applied": false,
+                "source": "tauri-ipc",
+            })
+        }
+        ImportMirrorResult::Conflict {
+            report,
+            reason,
+            unpushed_op_count,
+            silent_overwrite_blocked,
+            suggested_strategies,
+            conflicted_blocks,
+        } => {
+            let suggested: Vec<&str> = suggested_strategies
+                .iter()
+                .map(|s| strategy_wire(*s))
+                .collect();
+            let blocks: Vec<JsonValue> = conflicted_blocks
+                .iter()
+                .map(|b| {
+                    json!({
+                        "block_id": b.block_id,
+                        "reason": b.reason,
+                    })
+                })
+                .collect();
+            json!({
+                "ok": true,
+                "kind": "conflict",
+                "report": report_to_json(report),
+                "reason": reason,
+                "unpushed_op_count": unpushed_op_count,
+                "silent_overwrite_blocked": silent_overwrite_blocked,
+                "suggested_strategies": suggested,
+                "conflicted_blocks": blocks,
+                "applied": false,
+                "source": "tauri-ipc",
+            })
+        }
+    }
 }
 
 /// 事务化 apply MD 片段 → 块树（权威路径）。
@@ -196,6 +354,86 @@ pub async fn note_document_hydrate(req: NoteHydrateDocumentArgs) -> Result<JsonV
 
     // ── 显式对照：query_blocks 派生（诚实标 query-blocks）────────
     hydrate_via_query_blocks(&doc_id, limit).await
+}
+
+/// detect 镜像漂移（A-INV-02 / W2-E 产品 IPC）。
+///
+/// wire 名 = `note_detect_mirror_drift`（前端 `NOTE_CMD_DETECT_MIRROR_DRIFT`）。
+///
+/// 结果可达前端 `MirrorDriftReportView`；**不**实现 poll/OS watcher；
+/// **≠ EL-03**；**≠ inotify 产品满关**。
+#[tauri::command]
+pub async fn note_detect_mirror_drift(req: NoteDetectMirrorArgs) -> Result<JsonValue, CoreError> {
+    let doc_id = req.doc_id.trim().to_string();
+    if doc_id.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "doc_id must be non-empty",
+        }));
+    }
+    let Some(store) = note_runtime::try_store_backend() else {
+        return Ok(unwired_failure());
+    };
+    match store.detect_mirror_drift(&doc_id, req.authority_rev) {
+        Ok(report) => {
+            let mut body = report_to_json(&report);
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("ok".into(), json!(true));
+                obj.insert("source".into(), json!("tauri-ipc"));
+            }
+            Ok(body)
+        }
+        Err(e) => Ok(err_outcome(e)),
+    }
+}
+
+/// import 镜像提案（三路策略；**不** apply）。
+///
+/// wire 名 = `note_import_mirror_proposal`（前端 `NOTE_CMD_IMPORT_MIRROR_PROPOSAL`）。
+///
+/// # X-05
+/// `unpushed_op_count > 0` 且 `strategy != drop_unacked` → `kind=conflict` 且
+/// `silent_overwrite_blocked=true`（禁止静默盖 unpushed）。
+///
+/// 前端应先经 `resolveThreeWayAction` 门禁，再调本命令。
+#[tauri::command]
+pub async fn note_import_mirror_proposal(
+    req: NoteImportMirrorArgs,
+) -> Result<JsonValue, CoreError> {
+    let doc_id = req.doc_id.trim().to_string();
+    if doc_id.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "doc_id must be non-empty",
+        }));
+    }
+    let Some(strategy) = parse_strategy(&req.strategy) else {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": format!(
+                "strategy 须为 retain_local_and_reimport | drop_unacked | conflict_blocks，got {:?}",
+                req.strategy
+            ),
+        }));
+    };
+    let Some(store) = note_runtime::try_store_backend() else {
+        return Ok(unwired_failure());
+    };
+    let unpushed = req.unpushed_op_count.unwrap_or(0) as usize;
+    let use_tree = req.use_session_tree.unwrap_or(true);
+    match store.import_mirror_proposal(
+        &doc_id,
+        strategy,
+        unpushed,
+        req.authority_rev,
+        use_tree,
+    ) {
+        Ok(result) => Ok(import_result_to_json(&result)),
+        Err(e) => Ok(err_outcome(e)),
+    }
 }
 
 /// query_blocks → hydrate 投影形状（派生索引；`hydrate_path=query-blocks`）。
@@ -463,6 +701,174 @@ mod tests {
         assert_eq!(h["source"], "tauri-ipc");
         assert_eq!(h["hydrate_path"], HYDRATE_PATH_QUERY_BLOCKS);
         assert_ne!(h["hydrate_path"], HYDRATE_PATH_DOC_SESSION);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// detect 可达：export → 外部改盘 → class=mirror_only；**≠ EL-03**。
+    #[tokio::test]
+    async fn note_detect_mirror_drift_ipc_classifies_mirror_only() {
+        let (_guard, dir) = temp_install();
+        let store = note_runtime::try_store_backend().expect("store");
+
+        let apply = note_document_apply_md(NoteApplyMdRequest {
+            doc_id: "mir-d".into(),
+            markdown: "mirror hello".into(),
+            parent_id: None,
+            after_block_id: None,
+            mode: NoteApplyMode::ApplyMdFragment,
+            intent_id: None,
+            batch_id: None,
+            message_id: None,
+            origin: Some("user".into()),
+        })
+        .await
+        .unwrap();
+        assert_eq!(apply["ok"], true);
+
+        // 未 export → no_meta（IPC 形状）
+        let no_meta = note_detect_mirror_drift(NoteDetectMirrorArgs {
+            doc_id: "mir-d".into(),
+            authority_rev: Some(1),
+        })
+        .await
+        .unwrap();
+        assert_eq!(no_meta["ok"], true);
+        assert_eq!(no_meta["source"], "tauri-ipc");
+        assert_eq!(no_meta["class"], "no_meta");
+        assert_eq!(no_meta["doc_id"], "mir-d");
+
+        // export + 外部改盘 → mirror_only
+        let mirror_root = dir.join("mirrors");
+        let path = store
+            .export_md_mirror_from_session("mir-d", &mirror_root, Some(1))
+            .expect("export from session");
+        let mut md = std::fs::read_to_string(&path).unwrap();
+        md.push_str("\n\nexternal edit\n");
+        std::fs::write(&path, md.as_bytes()).unwrap();
+
+        let det = note_detect_mirror_drift(NoteDetectMirrorArgs {
+            doc_id: "mir-d".into(),
+            authority_rev: Some(1),
+        })
+        .await
+        .unwrap();
+        assert_eq!(det["ok"], true, "{det}");
+        assert_eq!(det["class"], "mirror_only", "{det}");
+        assert_eq!(det["mirror_changed"], true);
+        assert_eq!(det["source"], "tauri-ipc");
+
+        let bad = note_detect_mirror_drift(NoteDetectMirrorArgs {
+            doc_id: "  ".into(),
+            authority_rev: None,
+        })
+        .await
+        .unwrap();
+        assert_eq!(bad["ok"], false);
+        assert_eq!(bad["code"], "note.invalid");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// X-05：IPC import 在 unpushed>0 且非 DropUnacked 时 silent_overwrite_blocked。
+    ///
+    /// 策略层不回退 store 测；本测钉 **命令面** 透传。
+    #[tokio::test]
+    async fn note_import_mirror_proposal_ipc_blocks_silent_overwrite() {
+        let (_guard, dir) = temp_install();
+        let store_be = note_runtime::try_store_backend().expect("store");
+
+        let apply = note_document_apply_md(NoteApplyMdRequest {
+            doc_id: "mir-x".into(),
+            markdown: "mirror hello".into(),
+            parent_id: None,
+            after_block_id: None,
+            mode: NoteApplyMode::ApplyMdFragment,
+            intent_id: None,
+            batch_id: None,
+            message_id: None,
+            origin: Some("user".into()),
+        })
+        .await
+        .unwrap();
+        assert_eq!(apply["ok"], true);
+
+        let mirror_root = dir.join("mirrors");
+        let path = store_be
+            .export_md_mirror_from_session("mir-x", &mirror_root, Some(1))
+            .expect("export");
+        // 外部改 mirror
+        let mut md = std::fs::read_to_string(&path).unwrap();
+        if let Some(pos) = md.find("mirror hello") {
+            md.replace_range(pos..pos + "mirror hello".len(), "external wins");
+        } else {
+            md.push_str("\n\nexternal wins\n");
+        }
+        std::fs::write(&path, md.as_bytes()).unwrap();
+
+        // RetainLocal + unpushed>0 → conflict + silent_overwrite_blocked
+        let res = note_import_mirror_proposal(NoteImportMirrorArgs {
+            doc_id: "mir-x".into(),
+            strategy: "retain_local_and_reimport".into(),
+            unpushed_op_count: Some(3),
+            authority_rev: Some(1),
+            use_session_tree: Some(true),
+        })
+        .await
+        .unwrap();
+        assert_eq!(res["ok"], true, "{res}");
+        assert_eq!(res["kind"], "conflict");
+        assert_eq!(res["silent_overwrite_blocked"], true);
+        assert_eq!(res["applied"], false);
+        assert_eq!(res["source"], "tauri-ipc");
+
+        // 显式 DropUnacked → 允许提案（仍 applied=false）
+        let drop_res = note_import_mirror_proposal(NoteImportMirrorArgs {
+            doc_id: "mir-x".into(),
+            strategy: "drop_unacked".into(),
+            unpushed_op_count: Some(2),
+            authority_rev: Some(1),
+            use_session_tree: Some(true),
+        })
+        .await
+        .unwrap();
+        assert_eq!(drop_res["ok"], true, "{drop_res}");
+        assert_eq!(drop_res["applied"], false);
+        if drop_res["kind"] == "op_batch" {
+            assert_eq!(drop_res["discards_unpushed"], true);
+            assert_eq!(drop_res["is_block_level_diff"], true);
+        } else {
+            // 缺树等业务冲突仍可；但 X-05 不得把 DropUnacked 标 silent blocked
+            assert_ne!(
+                drop_res.get("silent_overwrite_blocked"),
+                Some(&json!(true)),
+                "DropUnacked 不应 silent_overwrite_blocked: {drop_res}"
+            );
+        }
+
+        // 非法 strategy
+        let bad = note_import_mirror_proposal(NoteImportMirrorArgs {
+            doc_id: "mir-x".into(),
+            strategy: "silent_drop".into(),
+            unpushed_op_count: Some(1),
+            authority_rev: None,
+            use_session_tree: None,
+        })
+        .await
+        .unwrap();
+        assert_eq!(bad["ok"], false);
+        assert_eq!(bad["code"], "note.invalid");
+
+        // detect 在 export+改盘后应为 mirror_only
+        let det = note_detect_mirror_drift(NoteDetectMirrorArgs {
+            doc_id: "mir-x".into(),
+            authority_rev: Some(1),
+        })
+        .await
+        .unwrap();
+        assert_eq!(det["ok"], true, "{det}");
+        assert_eq!(det["class"], "mirror_only", "{det}");
+        assert_eq!(det["mirror_changed"], true);
 
         let _ = std::fs::remove_dir_all(dir);
     }

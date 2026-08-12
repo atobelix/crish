@@ -6,7 +6,7 @@
  * | 可宣称 | 禁止宣称 |
  * | ------ | -------- |
  * | 拖拽预览 ghost DOM 显隐 / data-drag-source | **EL-01** / A-BLK-04 产品 e2e 全关 |
- * | 指针形状 mock → 落点线 side/target | Notion 拖拽全链路 / 桌面 React 挂载 |
+ * | 指针形状 mock → 落点线 side/target | Notion 拖拽全链路 / 真 Pointer 产品 e2e |
  * | endDrag 清预览+落点 | 自动 wire Move Intent |
  *
  * **DOM 交付 ≠ EL-01**。A-BLK-04 产品 e2e 仍开。
@@ -30,7 +30,7 @@ import {
   type ApplyOpsAdapter,
 } from '../leaves/intentBridge';
 import { buildMoveBlocksIntent } from './structureIntents';
-import { resetIntentIdSeqForTests } from '../leaves/TextLeafModel';
+import { resetIntentIdSeqForTests } from '../intentId';
 
 const ID_A = 'block-drag-a';
 const ID_B = 'block-drag-b';

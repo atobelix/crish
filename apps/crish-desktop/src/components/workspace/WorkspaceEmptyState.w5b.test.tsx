@@ -9,13 +9,16 @@
  * - DOM 诚实：package-id=W5-B / track=strict / source=hydrate
  * - 默认倾向 strict（W5B_PRODUCT_DEFAULT_EMPTY_TRACK）；Skeleton 双轨保留
  * - preferredNotePaperTrack 可切 skeleton 为主 CTA
+ * - **CONN-B**：无 applyOps 默认 slash 只读；注入 applyOps 后点 slash → wire/submit
  * - **可演示 ≠ EL**；**≠ 打开完成**；fixture ≠ 生产权威；DocSession 全链未满
+ * - **≠ EL-01**；**≠ A-BLK-02 e2e 满关**
  *
  * Skeleton 入口/测见 WorkspaceEmptyState.w5bs.test.tsx（必须仍绿）。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { BP_SLASH_ITEM, type ApplyOpsAdapter } from '@crish/block-paper';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 import {
   createFixtureHydrateTransport,
@@ -89,6 +92,13 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
       W5B_SKELETON_PACKAGE_ID
     );
     expect(panel.querySelector('[data-lines]')).toBeNull();
+
+    // CONN-C · C-X2：空态产品默认 **不** 传 paperList → data-paper-list=0 钉死
+    // （防默默改默认 true 却无结构门测；库+opt-in 已挂 ≠ 空态默认挂）
+    expect(panel).toHaveAttribute('data-paper-list', '0');
+    expect(panel).toHaveAttribute('data-presentation-mode', 'react-rows');
+    expect(screen.queryByTestId('note-paper-strict-paper-list')).toBeNull();
+    expect(panel.querySelector('[data-bp-paper-list-mount]')).toBeNull();
 
     const footer = screen.getByTestId('note-paper-strict-footer');
     expect(footer.textContent).toMatch(/可演示≠EL-01|≠EL-01/);
@@ -207,5 +217,131 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     );
     expect(screen.getByTestId('open-note-paper-strict')).toBeInTheDocument();
     expect(screen.getByTestId('open-note-paper-preview')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // CONN-B：产品空态 slash 写锥（默认只读 / 注入可写）
+  // -------------------------------------------------------------------------
+
+  it('conn_b_product_empty_default_slash_readonly_no_silent_write', async () => {
+    render(<WorkspaceEmptyState wsId="ws-conn-b-ro" />);
+    // 空态根：无 apply → 只读诚实标注
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-slash-write-mode',
+      'readonly'
+    );
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-slash-sink-source',
+      'none'
+    );
+
+    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-slash-write-mode', 'readonly');
+    expect(panel).toHaveAttribute('data-slash-sink-source', 'none');
+    expect(panel).toHaveAttribute('data-slash-sink', '0');
+    expect(screen.getByTestId('note-paper-strict-host')).toHaveAttribute(
+      'data-slash-write-mode',
+      'readonly'
+    );
+
+    // 产品路径打开 slash（/ 按钮）
+    fireEvent.click(screen.getByTestId('note-paper-strict-open-slash'));
+    const overlay = await screen.findByTestId(
+      'note-paper-strict-slash-overlay'
+    );
+    expect(overlay).toHaveAttribute('data-slash-write-mode', 'readonly');
+    expect(
+      screen.getByTestId('note-paper-strict-slash-overlay-readonly-banner')
+    ).toBeInTheDocument();
+
+    const item = overlay.querySelector(
+      `[${BP_SLASH_ITEM}][data-item-id="paragraph"]`
+    );
+    expect(item).toBeTruthy();
+    expect(item).toBeDisabled();
+    fireEvent.click(item!);
+    // 只读：菜单仍开、未假装 apply（无 sink 可录；断言项仍 disabled + overlay 仍在）
+    expect(
+      screen.getByTestId('note-paper-strict-slash-overlay')
+    ).toBeInTheDocument();
+    expect(item).toBeDisabled();
+  });
+
+  it('conn_b_product_empty_with_applyOps_slash_click_submits_intent', async () => {
+    const applied: string[] = [];
+    const applyOps: ApplyOpsAdapter = async (opsJson) => {
+      applied.push(opsJson);
+      return { ok: true };
+    };
+
+    render(
+      <WorkspaceEmptyState
+        wsId="ws-conn-b-wr"
+        strictApplyOps={applyOps}
+        strictSlashWireOptions={{
+          allocateId: () => 'empty-slash-new-blk',
+          resolveOrder: () => 'a0',
+        }}
+      />
+    );
+
+    // 空态根：有 apply → 可写标注
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-slash-write-mode',
+      'writable'
+    );
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-slash-sink-source',
+      'injected-applyOps'
+    );
+
+    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-slash-write-mode', 'writable');
+    expect(panel).toHaveAttribute(
+      'data-slash-sink-source',
+      'injected-applyOps'
+    );
+    expect(panel).toHaveAttribute('data-slash-sink', '1');
+    // hydrate 默认仍 fixture（未回退）
+    expect(panel).toHaveAttribute('data-hydrate-source', 'fixture');
+
+    fireEvent.click(screen.getByTestId('note-paper-strict-open-slash'));
+    const overlay = await screen.findByTestId(
+      'note-paper-strict-slash-overlay'
+    );
+    expect(overlay).toHaveAttribute('data-slash-write-mode', 'writable');
+
+    fireEvent.click(
+      overlay.querySelector(`[${BP_SLASH_ITEM}][data-item-id="paragraph"]`)!
+    );
+
+    await waitFor(() => {
+      expect(applied.length).toBeGreaterThanOrEqual(1);
+    });
+    expect(applied[0]).toContain('"op":"insert"');
+    expect(applied[0]).toContain('empty-slash-new-blk');
+    // 选中后关闭（submit 成功）
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('note-paper-strict-slash-overlay')
+      ).toBeNull();
+    });
   });
 });

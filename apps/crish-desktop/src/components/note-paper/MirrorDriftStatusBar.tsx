@@ -9,10 +9,11 @@
  * ## 诚实边界
  * - 底层可能仍是 **poll** 或 **OS 事件** hint → detect；`data-watch-source` 如实标注
  * - **≠ inotify 产品满关**；有本条 **≠** OS watcher 生产全链路
- * - **≠ A-INV-02 全产品满关**（无真 import IPC / 无 apply）
+ * - **≠ A-INV-02 全产品满关**（无 apply 落盘；import 仅提案）
  * - **≠ EL-03**（禁止把本 UI 写成大文档存活关闭）
- * - onAction 收到决策后由上层决定是否调 `import_mirror_proposal`；
- *   本组件 **从不** 默认 confirmDiscardUnpushed=true
+ * - onAction 收到决策后由上层经 `submitThreeWayViaMirrorIpc` 调
+ *   `note_import_mirror_proposal`；本组件 **从不** 默认 confirmDiscardUnpushed=true
+ * - **诚实未做**：空态默认注入 report / timer+OS 双开 debounce
  *
  * surface 旁挂：note-paper Strict footer 或独立挂载。
  */

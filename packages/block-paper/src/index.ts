@@ -38,8 +38,8 @@
  *     composing 禁前缀；测 `leaves/w3h.direction.test.ts`；**≠** A-BLK 全表 e2e；**≠** EL-01
  *   - **W3-H 产品接线** = `mdPrefixHost`：叶输入 → `commitMdPrefixFromLeaf` /
  *     `simulateMdPrefixSubmit` → 可注入 TurnInto sink（mock / provisional collab）；
- *     与 slash_insert **双通道不互抹**；RS 真 turn_into Op **仍未做**；
- *     测 `leaves/mdPrefixHost.test.ts`
+ *     与 slash_insert **双通道不互抹**；CONN-D：RS 消费 pending / `Op::TurnInto` 改 kind；
+ *     测 `leaves/mdPrefixHost.test.ts` + RS `conn_d_turn_into_apply`
  *   - **chrome 视觉皮** = `@crish/block-paper/chrome.css`（落点线/slash/把手热区 token 化）；
  *     **视觉皮 ≠ EL-01**
  *   - **PaperList 视觉皮** = `@crish/block-paper/paper-list.css`（列表 gap/pad/gutter/滚动/块行）；
@@ -158,10 +158,11 @@ export {
 // W3-D：叶子文本 Intent + 真 apply sink 工厂
 // ---------------------------------------------------------------------------
 
+// SD-05：中性 intentId（chrome/leaves 同向依赖；禁止 chrome→TextLeafModel 仅为 id）
+export { nextIntentId, resetIntentIdSeqForTests } from './intentId';
+
 export {
   TextLeafModel,
-  nextIntentId,
-  resetIntentIdSeqForTests,
   type TextLeafSnapshot,
   type TextLeafModelOptions,
 } from './leaves/TextLeafModel';
@@ -347,7 +348,7 @@ export {
   type CreateUnknownFlavourPlaceholderInput,
 } from './leaves/unknownFlavourPlaceholder';
 
-// W3-H 产品输入接线（叶 → turn_into sink；≠ RS 真 turn_into Op；≠ EL-01）
+// W3-H 产品输入接线（叶 → turn_into sink；CONN-D RS kind 可变；≠ EL-01）
 export {
   commitMdPrefixFromLeaf,
   simulateMdPrefixSubmit,

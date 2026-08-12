@@ -6,9 +6,11 @@
  * - 底层检测来源可能是 **poll**（`MirrorWatcher`）或 **OS 事件**（`MirrorOsWatcher`）
  *   再调 `detect_mirror_drift`；本模块 **只消费报告**，**不**实现 poll/inotify。
  * - **≠ inotify / FSEvents 产品满关**（有状态条 ≠ OS watcher 生产全链路）
- * - **≠ A-INV-02 全产品满关**（无 IPC 装配 / 无真 import 落盘 / 无对话框产品化全链）
+ * - **≠ A-INV-02 全产品满关**（无对话框产品化全链 / 无 apply 落盘；IPC 见 `noteMirrorIpc`）
  * - **≠ EL-03**（大文档存活 / 热集内存叙事属他包；本 UI **禁止** 假关 EL-03）
  * - **X-05**：有 unpushed 时 **禁止** 默认 `DropUnacked` 静默盖写；须用户显式确认丢弃
+ * - **CONN-E**：detect/import 产品 IPC 可点名；三路经 `mirrorThreeWayBridge` 提交
+ * - **诚实未做**：timer poll 与 OS watcher **双开** debounce；产品空态默认无 report
  *
  * 对齐 store：`crates/conex-workspace-store/src/mirror.rs` 的
  * `MirrorDriftClass` / `ThreeWayStrategy` / `import_mirror_proposal` 语义（前端镜像命名）。

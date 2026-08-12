@@ -32,11 +32,19 @@ pub mod backup;
 // orchestrator）实现注入；search_context / decompress_context 消费本契约，
 // 生产代码保持叶子依赖（不引入 conex-db）
 pub mod compression_store;
-// W4-A/B/F + Round7：笔记后端契约（NoteBackend trait + MemoryNoteBackend）——
+// W4-A/B/F + Round7 + SD-01 纵向切开：笔记后端契约
+// - note_types / note_md_parse / note_plan_ops / note_memory / note_backend_json
+//   为内部模块；公开 API 仍经 note_backend re-export（路径不 break）
 // 引擎侧实现注入；query_blocks / document_outline / document_get_md /
 // document_apply_md / send_to_note / block_batch / block_insert /
 // block_update / block_delete / block_move 消费本契约，
 // 生产代码保持叶子依赖（不引入 doc-collab/store）
+// **≠ EL-05**；不宣称 Store 后端完成
+mod note_types;
+mod note_md_parse;
+mod note_plan_ops;
+mod note_backend_json;
+mod note_memory;
 pub mod note_backend;
 // W4-B/F：笔记工具审批名单（safe / write × plan|ask|full）
 pub mod note_permission;

@@ -15,10 +15,7 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { flavourToCollabKind } from '@crish/block-paper-contract';
-import {
-  resetIntentIdSeqForTests,
-  nextIntentId,
-} from '../leaves/TextLeafModel';
+import { resetIntentIdSeqForTests, nextIntentId } from '../intentId';
 import { createMockIntentSink, submitIntent } from '../leaves/intentBridge';
 import {
   createCm6EditorState,
