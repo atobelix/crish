@@ -11,6 +11,12 @@ import {
   connectionStore,
   type ConnectionState,
 } from '@/domain/store/connectionStore';
+import { eventStore, type EventState } from '@/domain/store/eventStore';
+import { sessionStore, type SessionState } from '@/domain/store/sessionStore';
+import {
+  devicePresenceStore,
+  type DevicePresenceState,
+} from '@/adapters/wiring/devicePresenceStore';
 
 export const useAuthStore = <T>(selector: (s: AuthState) => T): T =>
   useStore(authStore, useShallow(selector));
@@ -20,3 +26,16 @@ export const useApprovalStore = <T>(selector: (s: ApprovalState) => T): T =>
 
 export const useConnectionStore = <T>(selector: (s: ConnectionState) => T): T =>
   useStore(connectionStore, useShallow(selector));
+
+/** 事件流域订阅（R2-05 观测面：network / windows） */
+export const useEventStore = <T>(selector: (s: EventState) => T): T =>
+  useStore(eventStore, useShallow(selector));
+
+/** 会话面订阅（R2-05 观测面：sessions / selectedSessionId） */
+export const useSessionStore = <T>(selector: (s: SessionState) => T): T =>
+  useStore(sessionStore, useShallow(selector));
+
+/** 设备在场订阅（R2-05 状态卡：设备数，null = 未知） */
+export const useDevicePresenceStore = <T>(
+  selector: (s: DevicePresenceState) => T
+): T => useStore(devicePresenceStore, useShallow(selector));

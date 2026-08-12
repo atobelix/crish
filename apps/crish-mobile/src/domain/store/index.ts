@@ -22,3 +22,11 @@ export { sessionStore, selectedSessionOf } from './sessionStore';
 export type { SessionState } from './sessionStore';
 export type { SessionSummary } from './sessionReducers';
 export type { StoreIngestAction } from './eventMappers';
+export { filesStore } from './filesStore';
+export type { FilesState } from './filesStore';
+export type {
+  FilesTreeState,
+  DirLoadState,
+  DirSortMode,
+} from './filesReducers';
+export type { FileEntry } from '../types/domain';

@@ -1,0 +1,22 @@
+// 观测面接线层 barrel（R2-05：设备帧 → store 动作 / 相位投影 / 重连对账 / 装配）
+export {
+  FeedBridge,
+  MAX_ACTIVE_WINDOWS,
+  RESUME_PAGE_SIZE,
+  feedNetworkOf,
+} from './feedBridge';
+export type { FeedBridgeOptions, ListSessionsRepository } from './feedBridge';
+export { dispatchIngestActions } from './ingestRouter';
+export type { IngestDispatchOptions } from './ingestRouter';
+export { devicePresenceStore } from './devicePresenceStore';
+export type { DevicePresenceState } from './devicePresenceStore';
+export {
+  startObservationWiring,
+  ensureObservationWiring,
+  getObservationWiring,
+  resetObservationWiringForTest,
+} from './observationWiring';
+export type {
+  ObservationWiring,
+  ObservationWiringOptions,
+} from './observationWiring';

@@ -2,7 +2,19 @@
 // 契约类型变化时组合类型自动继承，编译期暴露不匹配
 // PermissionRequest 以引擎生成契约为准（generated/engine）：事件消费面（parseEngineEvent 产物）同源
 import type { PermissionRequest } from '../../../../../packages/shared-types/src/generated/engine/types';
-import type { ApprovalChannel } from '../../../../../packages/shared-types/src/generated/device/types';
+import type {
+  ApprovalChannel,
+  DirEntry,
+} from '../../../../../packages/shared-types/src/generated/device/types';
+
+// 文件条目：契约类型 DirEntry（name/isDir/size/modified，device-protocol.json ListDirResult
+// 响应元素）之上叠加移动端本地附加（F4 §2.2 条目结构 + 组合纪律：契约变化自动继承）
+export interface FileEntry extends DirEntry {
+  /** 本地附加：相对工作区根的完整路径（父目录 relPath + name 拼接，目录树定位用） */
+  relPath: string;
+  /** 本地附加：条目收达时刻 ms（目录缓存新鲜度 / 排序稳定兜底） */
+  receivedAtMs: number;
+}
 
 // 审批条目本地附加的 riskMeta（对齐桌面 parseApprovalPayload 的 S9 宽容解析，F2 §2.2）
 export interface ApprovalRiskMeta {
