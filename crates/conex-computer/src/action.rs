@@ -6,6 +6,10 @@
 //! (04 §2.2 Windows 表列出的选项之一,支持多显示器负坐标)。
 //!
 //! 输入节奏(04 §2.3):type 按 50 字符分块 + 12ms 节流;hold_key 时长上限 100s。
+//!
+//! S6 共享层对齐(05 §4.4):`inject::OsInputBackend` 内可变改造(Mutex<Enigo>)后
+//! 直接实现 `conex_shared::input::InputBackend`(八方法全形,click/scroll 补坐标
+//! 与修饰键参数);既有 `ComputerSession::dispatch` 派发路径继续可用(见 lib.rs)。
 
 /// type 分块大小(04 §2.3 TYPING_GROUP_SIZE)
 pub const TYPING_GROUP_SIZE: usize = 50;
@@ -339,12 +343,24 @@ pub fn chunk_text(text: &str, group_size: usize) -> Vec<String> {
         .collect()
 }
 
-/// Windows 注入后端(enigo 0.6.1 主实现 + 直连 SetCursorPos/GetCursorPos 补足)
+/// Windows 注入后端(enigo 0.6.1 主实现 + 直连 SetCursorPos/GetCursorPos 补足)。
+///
+/// S6 对齐(05 §4.4):句柄改 `Mutex<Enigo>` 内可变,全部方法 `&self`,
+/// 可经 `Arc<dyn InputBackend>` 共享调用;`InputBackend` 实现补全
+/// click/scroll 的坐标与修饰键参数(坐标存在先移动;修饰键 press/release 包裹)。
+/// 注入序列以纯数据步骤(`InjectStep`)构建,顺序语义可单测断言。
 #[cfg(windows)]
 pub mod inject {
+    use std::sync::Mutex;
     use std::thread;
     use std::time::Duration;
 
+    use async_trait::async_trait;
+    use conex_shared::input::{
+        ClickCount as SharedClickCount, InputBackend, InputBackendError, KeyName as SharedKeyName,
+        MouseButton as SharedMouseButton, PhysicalPoint as SharedPoint,
+        ScrollDirection as SharedScrollDirection,
+    };
     use enigo::{Axis, Button, Coordinate, Direction, Enigo, Keyboard, Mouse, Settings};
 
     use super::*;
@@ -355,9 +371,164 @@ pub mod inject {
     /// enigo 事件标记("conex" ASCII 位):与真实物理输入区分
     const ENIGO_EXTRA_INFO: usize = u64::from_be_bytes(*b"\0\0\0conex") as usize;
 
-    /// 注入后端:enigo 句柄 + 键名注册表解析
+    /// 注入原语序列步骤(纯数据:click/scroll/key 的「移动 → 修饰键包裹」顺序
+    /// 语义可单测断言;执行器按序逐条落到 enigo / SetCursorPos)
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum InjectStep {
+        /// 绝对移动(物理像素,直连 SetCursorPos)
+        MoveTo { x: i32, y: i32 },
+        /// 按键按下(归一化键名,经 resolve 解析)
+        KeyDown { name: String },
+        /// 按键抬起(归一化键名)
+        KeyUp { name: String },
+        /// 鼠标按压-抬起一次
+        ButtonClick { button: enigo::Button },
+        /// 滚轮(方向 → 增量符号在构建期确定)
+        Wheel { axis: enigo::Axis, amount: i32 },
+        /// 等待间隔(毫秒;双击/三击间隔与 hold 时长)
+        DelayMs { ms: u64 },
+    }
+
+    /// 构建点击序列(纯函数,05 §4.4 语义):
+    /// 坐标存在先 MoveTo → 修饰键按序 KeyDown → ButtonClick × times
+    /// (间隔 DelayMs,≤ 系统双击时间) → 修饰键逆序 KeyUp。
+    /// 顺序与既有 dispatch 包裹路径一致(先移动后修饰键,lib.rs)。
+    fn build_click_steps(
+        btn: enigo::Button,
+        times: u32,
+        p: Option<SharedPoint>,
+        mods: &[SharedKeyName],
+    ) -> Vec<InjectStep> {
+        let mut steps = Vec::new();
+        if let Some(p) = p {
+            steps.push(InjectStep::MoveTo { x: p.x, y: p.y });
+        }
+        for m in mods {
+            steps.push(InjectStep::KeyDown { name: m.0.clone() });
+        }
+        for i in 0..times {
+            steps.push(InjectStep::ButtonClick { button: btn });
+            if i + 1 < times {
+                steps.push(InjectStep::DelayMs { ms: CLICK_INTERVAL_MS });
+            }
+        }
+        for m in mods.iter().rev() {
+            steps.push(InjectStep::KeyUp { name: m.0.clone() });
+        }
+        steps
+    }
+
+    /// 构建滚动序列(纯函数):坐标先 MoveTo → 修饰键按序 KeyDown →
+    /// Wheel(方向 → 增量符号) → 修饰键逆序 KeyUp。
+    fn build_scroll_steps(
+        dir: SharedScrollDirection,
+        amount: u32,
+        p: Option<SharedPoint>,
+        mods: &[SharedKeyName],
+    ) -> Vec<InjectStep> {
+        let mut steps = Vec::new();
+        if let Some(p) = p {
+            steps.push(InjectStep::MoveTo { x: p.x, y: p.y });
+        }
+        for m in mods {
+            steps.push(InjectStep::KeyDown { name: m.0.clone() });
+        }
+        let (axis, signed) = match dir {
+            SharedScrollDirection::Up => (Axis::Vertical, -(amount as i32)),
+            SharedScrollDirection::Down => (Axis::Vertical, amount as i32),
+            SharedScrollDirection::Left => (Axis::Horizontal, -(amount as i32)),
+            SharedScrollDirection::Right => (Axis::Horizontal, amount as i32),
+        };
+        steps.push(InjectStep::Wheel { axis, amount: signed });
+        for m in mods.iter().rev() {
+            steps.push(InjectStep::KeyUp { name: m.0.clone() });
+        }
+        steps
+    }
+
+    /// 构建组合键序列(纯函数,04 §2.1):修饰键按序 KeyDown →
+    /// 主键 KeyDown[/DelayMs(hold)]/KeyUp → 修饰键逆序 KeyUp。
+    fn build_key_steps(keys: &[String], hold_ms: Option<u32>) -> Vec<InjectStep> {
+        let mut mods = Vec::new();
+        let mut main = None;
+        for name in keys {
+            if is_modifier_name(name) {
+                mods.push(name.clone());
+            } else if main.is_none() {
+                main = Some(name.clone());
+            }
+        }
+        let mut steps = Vec::new();
+        for m in &mods {
+            steps.push(InjectStep::KeyDown { name: m.clone() });
+        }
+        if let Some(main) = main {
+            steps.push(InjectStep::KeyDown { name: main.clone() });
+            if let Some(ms) = hold_ms {
+                steps.push(InjectStep::DelayMs { ms: ms as u64 });
+            }
+            steps.push(InjectStep::KeyUp { name: main });
+        }
+        for m in mods.iter().rev() {
+            steps.push(InjectStep::KeyUp { name: m.clone() });
+        }
+        steps
+    }
+
+    /// 执行步骤序列(持锁逐条注入;DelayMs 走线程休眠)
+    #[allow(unsafe_code)]
+    fn run_steps(enigo: &mut Enigo, steps: &[InjectStep]) -> Result<(), InjectError> {
+        for step in steps {
+            match step {
+                InjectStep::MoveTo { x, y } => {
+                    let ok = unsafe {
+                        windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos(*x, *y)
+                    };
+                    if ok == 0 {
+                        return Err(format!("SetCursorPos 失败: ({x}, {y})"));
+                    }
+                }
+                InjectStep::KeyDown { name } => {
+                    let key = OsInputBackend::resolve(name)
+                        .ok_or_else(|| format!("键名无法解析: {name}"))?;
+                    enigo
+                        .key(key, Direction::Press)
+                        .map_err(|e| format!("按键按下失败: {e:?}"))?;
+                }
+                InjectStep::KeyUp { name } => {
+                    let key = OsInputBackend::resolve(name)
+                        .ok_or_else(|| format!("键名无法解析: {name}"))?;
+                    enigo
+                        .key(key, Direction::Release)
+                        .map_err(|e| format!("按键抬起失败: {e:?}"))?;
+                }
+                InjectStep::ButtonClick { button } => {
+                    enigo
+                        .button(*button, Direction::Press)
+                        .map_err(|e| format!("按键按下失败: {e:?}"))?;
+                    enigo
+                        .button(*button, Direction::Release)
+                        .map_err(|e| format!("按键抬起失败: {e:?}"))?;
+                }
+                InjectStep::Wheel { axis, amount } => {
+                    enigo
+                        .scroll(*amount, *axis)
+                        .map_err(|e| format!("滚动失败: {e:?}"))?;
+                }
+                InjectStep::DelayMs { ms } => {
+                    thread::sleep(Duration::from_millis(*ms));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// 注入后端:enigo 句柄(`Mutex` 内可变,05 §4.4)+ 键名注册表解析。
+    ///
+    /// 内可变改造后全部方法 `&self`,可经 `Arc<dyn InputBackend>` 共享调用;
+    /// 注入为同步原语,std 互斥即可(05 §4.4)。序列级原子性由会话层单消费者保证。
     pub struct OsInputBackend {
-        enigo: Enigo,
+        enigo: Mutex<Enigo>,
     }
 
     /// 功能键编号 → enigo 键码(F1-F24,enigo 为独立变体)
@@ -392,6 +563,26 @@ pub mod inject {
         })
     }
 
+    /// 本地按键 → enigo 键码(动作面三键)
+    fn to_enigo_button(button: MouseButton) -> enigo::Button {
+        match button {
+            MouseButton::Left => Button::Left,
+            MouseButton::Middle => Button::Middle,
+            MouseButton::Right => Button::Right,
+        }
+    }
+
+    /// 共享层按键 → enigo 键码(含侧键 Back/Forward,S6 对齐扩展)
+    fn to_enigo_button_shared(button: SharedMouseButton) -> enigo::Button {
+        match button {
+            SharedMouseButton::Left => Button::Left,
+            SharedMouseButton::Middle => Button::Middle,
+            SharedMouseButton::Right => Button::Right,
+            SharedMouseButton::Back => Button::Back,
+            SharedMouseButton::Forward => Button::Forward,
+        }
+    }
+
     impl OsInputBackend {
         /// 初始化注入后端(等价 SendInput 直连面)
         pub fn new() -> Result<Self, InjectError> {
@@ -401,7 +592,9 @@ pub mod inject {
             };
             let enigo =
                 Enigo::new(&settings).map_err(|e| format!("enigo 初始化失败: {e:?}"))?;
-            Ok(Self { enigo })
+            Ok(Self {
+                enigo: Mutex::new(enigo),
+            })
         }
 
         /// 键名 → enigo 键码
@@ -496,59 +689,40 @@ pub mod inject {
             }
         }
 
-        /// 组合键注入:修饰键按序 down → 主键 down/up → 修饰键 up
-        /// (04 §2.1「修饰键多键时保持按住其余键」语义)
-        pub fn key(&mut self, keys: &[String]) -> Result<(), InjectError> {
-            let mut mods = Vec::new();
-            let mut main = None;
-            for name in keys {
-                let key = Self::resolve(name)
-                    .ok_or_else(|| format!("键名无法解析: {name}"))?;
-                if is_modifier_name(name) {
-                    mods.push(key);
-                } else if main.is_none() {
-                    main = Some(key);
-                }
-            }
-            for m in &mods {
-                self.enigo
-                    .key(*m, Direction::Press)
-                    .map_err(|e| format!("修饰键按下失败: {e:?}"))?;
-            }
-            if let Some(main) = main {
-                self.enigo
-                    .key(main, Direction::Press)
-                    .map_err(|e| format!("主键按下失败: {e:?}"))?;
-                self.enigo
-                    .key(main, Direction::Release)
-                    .map_err(|e| format!("主键抬起失败: {e:?}"))?;
-            }
-            for m in mods.iter().rev() {
-                self.enigo
-                    .key(*m, Direction::Release)
-                    .map_err(|e| format!("修饰键抬起失败: {e:?}"))?;
-            }
-            Ok(())
+        /// 组合键注入核心:修饰键按序 down → 主键 down/up → 修饰键 up
+        /// (04 §2.1「修饰键多键时保持按住其余键」语义);
+        /// `hold_ms = Some` 时主键按住后松开(共享层 key 语义,05 §4.1)。
+        fn key_hold_inner(&self, keys: &[String], hold_ms: Option<u32>) -> Result<(), InjectError> {
+            let steps = build_key_steps(keys, hold_ms);
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            run_steps(&mut enigo, &steps)
+        }
+
+        /// 组合键注入(dispatch 路径;hold_ms = None)
+        pub fn key(&self, keys: &[String]) -> Result<(), InjectError> {
+            self.key_hold_inner(keys, None)
         }
 
         /// 按住指定键 duration 秒后松开(上限 100s 已在校验层约束)
-        pub fn hold_key(&mut self, name: &str, duration_secs: f32) -> Result<(), InjectError> {
+        pub fn hold_key(&self, name: &str, duration_secs: f32) -> Result<(), InjectError> {
             let key = Self::resolve(name).ok_or_else(|| format!("键名无法解析: {name}"))?;
-            self.enigo
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            enigo
                 .key(key, Direction::Press)
                 .map_err(|e| format!("按键按下失败: {e:?}"))?;
             thread::sleep(Duration::from_secs_f32(duration_secs));
-            self.enigo
+            enigo
                 .key(key, Direction::Release)
                 .map_err(|e| format!("按键抬起失败: {e:?}"))?;
             Ok(())
         }
 
-        /// 文本输入:按 50 字符分块,块间 12ms 节流(04 §2.3;Unicode 直送,
+        /// 文本输入核心:按 50 字符分块,块间 12ms 节流(04 §2.3;Unicode 直送,
         /// 不依赖 IME,37 报告 Gate-B 三应用 0 丢字实证)
-        pub fn type_text(&mut self, text: &str) -> Result<(), InjectError> {
+        fn type_text_inner(&self, text: &str) -> Result<(), InjectError> {
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
             for chunk in chunk_text(text, TYPING_GROUP_SIZE) {
-                self.enigo
+                enigo
                     .text(&chunk)
                     .map_err(|e| format!("文本注入失败: {e:?}"))?;
                 thread::sleep(Duration::from_millis(TYPING_DELAY_MS));
@@ -556,10 +730,15 @@ pub mod inject {
             Ok(())
         }
 
+        /// 文本输入(dispatch 路径)
+        pub fn type_text(&self, text: &str) -> Result<(), InjectError> {
+            self.type_text_inner(text)
+        }
+
         /// 鼠标移动:直连 SetCursorPos(物理坐标,支持多显示器负坐标;
         /// enigo 0.6.1 绝对坐标仅支持主屏 0,0 原点)
         #[allow(unsafe_code)]
-        pub fn mouse_move(&mut self, p: Point) -> Result<(), InjectError> {
+        pub fn mouse_move(&self, p: Point) -> Result<(), InjectError> {
             let ok = unsafe {
                 windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos(p.x, p.y)
             };
@@ -569,51 +748,30 @@ pub mod inject {
             Ok(())
         }
 
-        /// 点击系列(含双击/三击,间隔 ≤ 系统双击时间)
-        pub fn click(
-            &mut self,
-            button: MouseButton,
-            count: ClickCount,
-        ) -> Result<(), InjectError> {
-            let btn = match button {
-                MouseButton::Left => Button::Left,
-                MouseButton::Middle => Button::Middle,
-                MouseButton::Right => Button::Right,
-            };
+        /// 点击系列(含双击/三击,间隔 ≤ 系统双击时间;dispatch 路径无坐标/修饰键,
+        /// 该语义由 dispatch 前置包裹;共享层路径走 InputBackend::click)
+        pub fn click(&self, button: MouseButton, count: ClickCount) -> Result<(), InjectError> {
             let times = match count {
                 ClickCount::Single => 1,
                 ClickCount::Double => 2,
                 ClickCount::Triple => 3,
             };
-            for i in 0..times {
-                self.enigo
-                    .button(btn, Direction::Press)
-                    .map_err(|e| format!("按键按下失败: {e:?}"))?;
-                self.enigo
-                    .button(btn, Direction::Release)
-                    .map_err(|e| format!("按键抬起失败: {e:?}"))?;
-                if i + 1 < times {
-                    thread::sleep(Duration::from_millis(CLICK_INTERVAL_MS));
-                }
-            }
-            Ok(())
+            let steps = build_click_steps(to_enigo_button(button), times, None, &[]);
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            run_steps(&mut enigo, &steps)
         }
 
         /// 按下/抬起分离原语
-        pub fn mouse_button(&mut self, button: MouseButton, down: bool) -> Result<(), InjectError> {
-            let btn = match button {
-                MouseButton::Left => Button::Left,
-                MouseButton::Middle => Button::Middle,
-                MouseButton::Right => Button::Right,
-            };
+        pub fn mouse_button(&self, button: MouseButton, down: bool) -> Result<(), InjectError> {
             let direction = if down { Direction::Press } else { Direction::Release };
-            self.enigo
-                .button(btn, direction)
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            enigo
+                .button(to_enigo_button(button), direction)
                 .map_err(|e| format!("鼠标按键失败: {e:?}"))
         }
 
         /// 拖拽:起点按下 → 分步线性插值移动 → 终点抬起(04 §2.2 语义)
-        pub fn drag(&mut self, from: Point, to: Point) -> Result<(), InjectError> {
+        pub fn drag(&self, from: Point, to: Point) -> Result<(), InjectError> {
             self.mouse_move(from)?;
             self.mouse_button(MouseButton::Left, true)?;
             let dx = to.x - from.x;
@@ -631,43 +789,39 @@ pub mod inject {
             self.mouse_button(MouseButton::Left, false)
         }
 
-        /// 滚动:方向 → 滚轮增量(enigo scroll 正=下/右,负=上/左)
-        pub fn scroll(
-            &mut self,
-            direction: ScrollDirection,
-            amount: u32,
-        ) -> Result<(), InjectError> {
-            let (axis, length) = match direction {
-                ScrollDirection::Up => (Axis::Vertical, -(amount as i32)),
-                ScrollDirection::Down => (Axis::Vertical, amount as i32),
-                ScrollDirection::Left => (Axis::Horizontal, -(amount as i32)),
-                ScrollDirection::Right => (Axis::Horizontal, amount as i32),
+        /// 滚动:方向 → 滚轮增量(enigo scroll 正=下/右,负=上/左;dispatch 路径
+        /// 无坐标/修饰键,该语义由 dispatch 前置包裹)
+        pub fn scroll(&self, direction: ScrollDirection, amount: u32) -> Result<(), InjectError> {
+            let dir = match direction {
+                ScrollDirection::Up => SharedScrollDirection::Up,
+                ScrollDirection::Down => SharedScrollDirection::Down,
+                ScrollDirection::Left => SharedScrollDirection::Left,
+                ScrollDirection::Right => SharedScrollDirection::Right,
             };
-            self.enigo
-                .scroll(length, axis)
-                .map_err(|e| format!("滚动失败: {e:?}"))
+            let steps = build_scroll_steps(dir, amount, None, &[]);
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            run_steps(&mut enigo, &steps)
         }
 
-        /// 按住一组修饰键(click/scroll 带 modifiers 语义)
-        pub fn press_modifiers(&mut self, modifiers: &[String]) -> Result<(), InjectError> {
-            for m in modifiers {
-                let key = Self::resolve(m).ok_or_else(|| format!("键名无法解析: {m}"))?;
-                self.enigo
-                    .key(key, Direction::Press)
-                    .map_err(|e| format!("修饰键按下失败: {e:?}"))?;
-            }
-            Ok(())
+        /// 按住一组修饰键(click/scroll 带 modifiers 语义,dispatch 前置包裹面)
+        pub fn press_modifiers(&self, modifiers: &[String]) -> Result<(), InjectError> {
+            let steps: Vec<InjectStep> = modifiers
+                .iter()
+                .map(|m| InjectStep::KeyDown { name: m.clone() })
+                .collect();
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            run_steps(&mut enigo, &steps)
         }
 
         /// 抬起一组修饰键(逆序)
-        pub fn release_modifiers(&mut self, modifiers: &[String]) -> Result<(), InjectError> {
-            for m in modifiers.iter().rev() {
-                let key = Self::resolve(m).ok_or_else(|| format!("键名无法解析: {m}"))?;
-                self.enigo
-                    .key(key, Direction::Release)
-                    .map_err(|e| format!("修饰键抬起失败: {e:?}"))?;
-            }
-            Ok(())
+        pub fn release_modifiers(&self, modifiers: &[String]) -> Result<(), InjectError> {
+            let steps: Vec<InjectStep> = modifiers
+                .iter()
+                .rev()
+                .map(|m| InjectStep::KeyUp { name: m.clone() })
+                .collect();
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            run_steps(&mut enigo, &steps)
         }
 
         /// 当前光标物理坐标(GetCursorPos 直连,多显示器负坐标正确)
@@ -684,7 +838,7 @@ pub mod inject {
         }
 
         /// 辅助:绝对移动(供 click/scroll 带坐标时先定位)
-        pub fn move_absolute(&mut self, p: Point) -> Result<(), InjectError> {
+        pub fn move_absolute(&self, p: Point) -> Result<(), InjectError> {
             // 预留:enigo 绝对移动仅主屏,统一走 SetCursorPos
             self.mouse_move(p)
         }
@@ -693,6 +847,265 @@ pub mod inject {
         #[allow(dead_code)]
         fn _coordinate_marker() -> Coordinate {
             Coordinate::Abs
+        }
+    }
+
+    /// 共享层输入后端对齐(05 §4.4):八方法全形,click/scroll 补坐标与修饰键
+    /// (坐标存在先移动;修饰键 press/release 包裹)。
+    ///
+    /// 与既有 `ComputerSession::dispatch` 派发路径并存:dispatch 走本地方法
+    /// (坐标/修饰键由 dispatch 前置包裹,lib.rs),共享 trait 方法为 S6 新契约;
+    /// 两者共享 `build_*` 序列构建与 `run_steps` 执行器,注入语义一致。
+    #[async_trait]
+    impl InputBackend for OsInputBackend {
+        async fn mouse_move(&self, p: SharedPoint) -> Result<(), InputBackendError> {
+            self.mouse_move(Point::new(p.x, p.y))
+                .map_err(InputBackendError::Failed)
+        }
+
+        async fn click(
+            &self,
+            btn: SharedMouseButton,
+            count: SharedClickCount,
+            p: Option<SharedPoint>,
+            mods: &[SharedKeyName],
+        ) -> Result<(), InputBackendError> {
+            let times = match count {
+                SharedClickCount::Single => 1,
+                SharedClickCount::Double => 2,
+                SharedClickCount::Triple => 3,
+            };
+            let steps = build_click_steps(to_enigo_button_shared(btn), times, p, mods);
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            run_steps(&mut enigo, &steps).map_err(InputBackendError::Failed)
+        }
+
+        async fn button(
+            &self,
+            btn: SharedMouseButton,
+            down: bool,
+        ) -> Result<(), InputBackendError> {
+            let direction = if down { Direction::Press } else { Direction::Release };
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            enigo
+                .button(to_enigo_button_shared(btn), direction)
+                .map_err(|e| InputBackendError::Failed(format!("鼠标按键失败: {e:?}")))
+        }
+
+        async fn drag(
+            &self,
+            from: SharedPoint,
+            to: SharedPoint,
+        ) -> Result<(), InputBackendError> {
+            self.drag(
+                Point::new(from.x, from.y),
+                Point::new(to.x, to.y),
+            )
+            .map_err(InputBackendError::Failed)
+        }
+
+        async fn scroll(
+            &self,
+            dir: SharedScrollDirection,
+            amount: u32,
+            p: Option<SharedPoint>,
+            mods: &[SharedKeyName],
+        ) -> Result<(), InputBackendError> {
+            let steps = build_scroll_steps(dir, amount, p, mods);
+            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+            run_steps(&mut enigo, &steps).map_err(InputBackendError::Failed)
+        }
+
+        async fn type_text(&self, text: &str) -> Result<(), InputBackendError> {
+            self.type_text_inner(text)
+                .map_err(InputBackendError::Failed)
+        }
+
+        async fn key(
+            &self,
+            keys: &[SharedKeyName],
+            hold_ms: Option<u32>,
+        ) -> Result<(), InputBackendError> {
+            let names: Vec<String> = keys.iter().map(|k| k.0.clone()).collect();
+            self.key_hold_inner(&names, hold_ms)
+                .map_err(InputBackendError::Failed)
+        }
+
+        async fn cursor_position(&self) -> Result<SharedPoint, InputBackendError> {
+            let p = self.cursor_physical().map_err(InputBackendError::Failed)?;
+            Ok(SharedPoint { x: p.x, y: p.y })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// 共享坐标构造
+        fn p(x: i32, y: i32) -> SharedPoint {
+            SharedPoint { x, y }
+        }
+
+        /// 共享键名构造
+        fn kn(name: &str) -> SharedKeyName {
+            SharedKeyName(name.to_string())
+        }
+
+        #[test]
+        fn click_steps_coord_moves_first_then_mods_wrapped() {
+            // 带坐标 + 修饰键:MoveTo → KeyDown(ctrl) → 点击 → KeyUp(ctrl)
+            let steps = build_click_steps(Button::Left, 1, Some(p(100, 200)), &[kn("ctrl")]);
+            assert_eq!(
+                steps,
+                vec![
+                    InjectStep::MoveTo { x: 100, y: 200 },
+                    InjectStep::KeyDown { name: "ctrl".to_string() },
+                    InjectStep::ButtonClick { button: Button::Left },
+                    InjectStep::KeyUp { name: "ctrl".to_string() },
+                ]
+            );
+        }
+
+        #[test]
+        fn click_steps_without_coords_no_move() {
+            let steps = build_click_steps(Button::Left, 1, None, &[]);
+            assert_eq!(
+                steps,
+                vec![InjectStep::ButtonClick { button: Button::Left }]
+            );
+        }
+
+        #[test]
+        fn click_steps_double_generates_interval_delay() {
+            // 双击:两次点击间插入 CLICK_INTERVAL_MS 间隔(≤ 系统双击时间,后端生成)
+            let steps = build_click_steps(Button::Right, 2, None, &[]);
+            assert_eq!(
+                steps,
+                vec![
+                    InjectStep::ButtonClick { button: Button::Right },
+                    InjectStep::DelayMs { ms: CLICK_INTERVAL_MS },
+                    InjectStep::ButtonClick { button: Button::Right },
+                ]
+            );
+        }
+
+        #[test]
+        fn click_steps_triple_generates_two_delays() {
+            let steps = build_click_steps(Button::Left, 3, None, &[]);
+            assert_eq!(steps.len(), 5);
+            assert_eq!(steps[0], InjectStep::ButtonClick { button: Button::Left });
+            assert_eq!(steps[2], InjectStep::ButtonClick { button: Button::Left });
+            assert_eq!(steps[4], InjectStep::ButtonClick { button: Button::Left });
+            assert_eq!(
+                steps[1],
+                InjectStep::DelayMs { ms: CLICK_INTERVAL_MS }
+            );
+            assert_eq!(
+                steps[3],
+                InjectStep::DelayMs { ms: CLICK_INTERVAL_MS }
+            );
+        }
+
+        #[test]
+        fn click_steps_multi_mods_press_order_release_reverse() {
+            // [ctrl, alt]:按序 down、逆序 up(04 §2.1 修饰键语义)
+            let steps = build_click_steps(Button::Left, 1, None, &[kn("ctrl"), kn("alt")]);
+            assert_eq!(
+                steps,
+                vec![
+                    InjectStep::KeyDown { name: "ctrl".to_string() },
+                    InjectStep::KeyDown { name: "alt".to_string() },
+                    InjectStep::ButtonClick { button: Button::Left },
+                    InjectStep::KeyUp { name: "alt".to_string() },
+                    InjectStep::KeyUp { name: "ctrl".to_string() },
+                ]
+            );
+        }
+
+        #[test]
+        fn scroll_steps_move_mods_wheel_wrapped() {
+            let steps = build_scroll_steps(
+                SharedScrollDirection::Down,
+                3,
+                Some(p(5, 6)),
+                &[kn("shift")],
+            );
+            assert_eq!(
+                steps,
+                vec![
+                    InjectStep::MoveTo { x: 5, y: 6 },
+                    InjectStep::KeyDown { name: "shift".to_string() },
+                    InjectStep::Wheel { axis: Axis::Vertical, amount: 3 },
+                    InjectStep::KeyUp { name: "shift".to_string() },
+                ]
+            );
+        }
+
+        #[test]
+        fn scroll_steps_direction_sign_mapping() {
+            // 正=下/右,负=上/左(enigo scroll 语义)
+            let up = build_scroll_steps(SharedScrollDirection::Up, 4, None, &[]);
+            assert_eq!(up[0], InjectStep::Wheel { axis: Axis::Vertical, amount: -4 });
+            let left = build_scroll_steps(SharedScrollDirection::Left, 2, None, &[]);
+            assert_eq!(left[0], InjectStep::Wheel { axis: Axis::Horizontal, amount: -2 });
+            let right = build_scroll_steps(SharedScrollDirection::Right, 2, None, &[]);
+            assert_eq!(right[0], InjectStep::Wheel { axis: Axis::Horizontal, amount: 2 });
+        }
+
+        #[test]
+        fn key_steps_mods_order_and_reverse_release() {
+            let steps = build_key_steps(
+                &["ctrl".to_string(), "alt".to_string(), "c".to_string()],
+                None,
+            );
+            assert_eq!(
+                steps,
+                vec![
+                    InjectStep::KeyDown { name: "ctrl".to_string() },
+                    InjectStep::KeyDown { name: "alt".to_string() },
+                    InjectStep::KeyDown { name: "c".to_string() },
+                    InjectStep::KeyUp { name: "c".to_string() },
+                    InjectStep::KeyUp { name: "alt".to_string() },
+                    InjectStep::KeyUp { name: "ctrl".to_string() },
+                ]
+            );
+        }
+
+        #[test]
+        fn key_steps_hold_ms_inserts_delay_between_down_up() {
+            // hold_ms = Some:主键 down → DelayMs → up(05 §4.1 语义)
+            let steps = build_key_steps(&["a".to_string()], Some(500));
+            assert_eq!(
+                steps,
+                vec![
+                    InjectStep::KeyDown { name: "a".to_string() },
+                    InjectStep::DelayMs { ms: 500 },
+                    InjectStep::KeyUp { name: "a".to_string() },
+                ]
+            );
+        }
+
+        #[test]
+        fn shared_button_mapping_covers_side_buttons() {
+            // 共享层五键全映射(含侧键,05 §4.1 扩展面)
+            assert_eq!(to_enigo_button_shared(SharedMouseButton::Left), Button::Left);
+            assert_eq!(to_enigo_button_shared(SharedMouseButton::Middle), Button::Middle);
+            assert_eq!(to_enigo_button_shared(SharedMouseButton::Right), Button::Right);
+            assert_eq!(to_enigo_button_shared(SharedMouseButton::Back), Button::Back);
+            assert_eq!(to_enigo_button_shared(SharedMouseButton::Forward), Button::Forward);
+            // 动作面三键映射
+            assert_eq!(to_enigo_button(MouseButton::Left), Button::Left);
+            assert_eq!(to_enigo_button(MouseButton::Middle), Button::Middle);
+            assert_eq!(to_enigo_button(MouseButton::Right), Button::Right);
+        }
+
+        #[test]
+        fn os_input_backend_send_sync_and_implements_trait() {
+            // 内可变改造后:可装箱为共享引用 trait 对象(Send + Sync)
+            fn assert_send_sync<T: Send + Sync>() {}
+            assert_send_sync::<OsInputBackend>();
+            fn assert_backend<T: InputBackend>() {}
+            assert_backend::<OsInputBackend>();
         }
     }
 }

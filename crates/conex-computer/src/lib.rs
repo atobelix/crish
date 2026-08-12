@@ -14,6 +14,8 @@
 pub mod action;
 pub mod activation;
 pub mod coord;
+pub mod desktop_capture;
+pub mod window_gate;
 pub mod perception;
 pub mod screen;
 pub mod security;

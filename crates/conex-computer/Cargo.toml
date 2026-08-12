@@ -20,6 +20,11 @@ default = ["capture-wgc"]
 capture-wgc = ["xcap/wgc"]
 
 [dependencies]
+# 共享抽象层（05 文档 §7 依赖方向：桌面线依赖叶子 crate conex-shared 提供
+# FrameSource/InputBackend/ActionTargetGate 三组 trait 与共享类型）。
+conex-shared = { path = "../conex-shared" }
+# async-trait：实现共享层对象安全 trait（InputBackend/FrameSource/FrameStream）
+async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -48,10 +53,15 @@ windows = { version = "0.61", features = [
 # windows-sys 0.61:workspace 既有声明(锁内 0.61.2);直连面用于
 # SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)与 GetCursorPos/SetCursorPos
 # (enigo 0.6.1 绝对鼠标移动仅支持主屏 0,0 原点,多显示器负坐标必须直连)。
+# Win32_Security + Win32_System_Threading + Win32_System_Diagnostics_ToolHelp:
+# window_gate 提权探测(TokenElevation 令牌查询 + Toolhelp 进程枚举,05 文档 §5.2)。
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_UI_HiDpi",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
 ] }
 
 [dev-dependencies]

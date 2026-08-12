@@ -39,7 +39,7 @@ pub use serialize::{BlindZoneKind, NodeRef, SerializeOptions, SerializeOutput, S
 
 use crate::cdp::version::{Stale, TabId, VersionTracker, VERSION_RESET_DELTA};
 use crate::snapshot::budget::{
-    HARD_TIMEOUT, MAX_RAW_PAYLOAD_BYTES, SNAPSHOT_CACHE_TOTAL_BYTES,
+    HARD_RAW_PAYLOAD_BYTES, HARD_TIMEOUT, SNAPSHOT_CACHE_TOTAL_BYTES,
 };
 use crate::snapshot::serialize::build_and_serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -566,16 +566,17 @@ pub fn snapshot_from_roots(
     }
 }
 
-/// 原始载荷护栏断言（采集层 150KB，T-2）。
+/// 原始载荷护栏断言（采集层 512KB 硬护栏，T-2 + 46 复核；150KB 常规预算
+/// 为降级触发阈值不阻断采集，硬护栏才是「采集成功」的载荷上界）。
 pub fn raw_payload_within_budget(bytes: usize) -> bool {
-    bytes <= MAX_RAW_PAYLOAD_BYTES
+    bytes <= HARD_RAW_PAYLOAD_BYTES
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::cdp::bus::BusHandle;
-    use crate::snapshot::budget::{BudgetConfig, MAX_RAW_PAYLOAD_BYTES};
+    use crate::snapshot::budget::{BudgetConfig, HARD_RAW_PAYLOAD_BYTES};
     use crate::snapshot::collect::{CollectedData, EnhancedNode, FixtureCollector};
     use async_trait::async_trait;
     use std::time::Duration;
@@ -944,11 +945,11 @@ mod tests {
         assert!(inactive.serialized_text.contains("[2]<button>搜索</button>"));
     }
 
-    /// 载荷护栏（T-2）：150KB 原始载荷上限判定。
+    /// 载荷护栏（T-2 + 46 复核）：512KB 硬护栏边界判定。
     #[tokio::test]
     async fn payload_budget_guard() {
-        assert!(raw_payload_within_budget(MAX_RAW_PAYLOAD_BYTES));
-        assert!(!raw_payload_within_budget(MAX_RAW_PAYLOAD_BYTES + 1));
+        assert!(raw_payload_within_budget(HARD_RAW_PAYLOAD_BYTES));
+        assert!(!raw_payload_within_budget(HARD_RAW_PAYLOAD_BYTES + 1));
     }
 
     /// 采集错误透传（采集失败 → 状态回 Idle）。

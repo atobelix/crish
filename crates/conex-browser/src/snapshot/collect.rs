@@ -2,13 +2,21 @@
 //! AX 辅助 + 布局数据；`EnhancedNode` 中间表示 = DOM 属性 + AX + 样式/布局三合一）
 //!
 //! ## 采集方案（§1.1）
-//! - 主采集：`DOMSnapshot.captureSnapshot`（computedStyles 白名单 10 项 +
-//!   includePaintOrder + includeDOMRects）
+//! - 主采集：`DOMSnapshot.captureSnapshot`（computedStyles 白名单 10 项；
+//!   includePaintOrder/includeDOMRects 默认关——最小面，46 复核：两路数据
+//!   当前实现不消费，`BudgetConfig::with_full_payload(true)` 可开启）
 //! - 结构通道：`DOM.getDocument(depth=15, pierce=true)`（父子关系/backendNodeId/属性；
-//!   depth 有限值防全深度序列化载荷爆炸，合计超 150KB 预算时降级跳过——仅用主通道）
+//!   depth 有限值防全深度序列化载荷爆炸，合计超 150KB 常规预算时降级跳过——
+//!   仅用主通道）
 //! - 辅助通道：`Accessibility.getFullAXTree`（逐帧并行；失败降级为空 AX）
 //! - 布局：`Page.getLayoutMetrics`（CSS 视口 + devicePixelRatio）
 //! - 四路并行（`tokio::join!`），首轮 10s 超时，未完成取消重发再等 2s（§1.2）
+//!
+//! ## 载荷双层护栏（46 复核）
+//! - 150KB（`MAX_RAW_PAYLOAD_BYTES`）= 常规页合计降级触发阈值：主通道 + 结构
+//!   通道合计超限 → 丢弃结构通道（getDocument 当前不被消费，零损失）
+//! - 512KB（`HARD_RAW_PAYLOAD_BYTES`）= 主通道硬护栏：DOMSnapshot 单通道超限
+//!   → PayloadOverflow（主数据缺失无法降级；防连接爆炸，4.99MB 级才断连）
 //!
 //! ## 数据来源双通道（任务口径）
 //! 快照数据来源有两种——真实 CDP 采集（需要浏览器，`CdpCollector`）与**构造输入**
@@ -24,7 +32,9 @@ use crate::cdp::domains::{
     AXNode, CaptureSnapshotResult, FrameTree, GetDocumentResult, GetFrameOwnerResult,
     GetFrameTreeResult, GetTargetsResult, SnapshotNode,
 };
-use crate::snapshot::budget::{BudgetConfig, MAX_RAW_PAYLOAD_BYTES};
+use crate::snapshot::budget::{
+    BudgetConfig, COLLECT_P95_TARGET, HARD_RAW_PAYLOAD_BYTES, MAX_RAW_PAYLOAD_BYTES,
+};
 use crate::snapshot::SnapshotError;
 use crate::SessionRef;
 use async_trait::async_trait;
@@ -474,7 +484,8 @@ pub struct CollectedData {
 }
 
 /// 跨域帧预算（§1.5：max_iframes=64 与主 DOMSnapshot 文档数**共用**同一上限，
-/// 跨域递归帧数并入；150KB 原始载荷上限跨帧累计，T-2）。
+/// 跨域递归帧数并入；512KB 硬护栏原始载荷跨帧累计，46 复核——T-2 双层语义
+/// 中硬护栏承接跨帧累计，150KB 降级阈值仅作用于单文档合计）。
 #[derive(Debug, Clone, Copy)]
 struct FrameBudget {
     /// 剩余可处理的跨域帧数（主文档数已从 64 中扣除）
@@ -588,15 +599,16 @@ impl SnapshotCollector for FixtureCollector {
 /// 真实 CDP 采集器（需要浏览器会话；e2e 验证路径）。
 pub struct CdpCollector {
     session: std::sync::Arc<crate::BrowserSession>,
-    /// 跨域 iframe 递归采集开关（U-4 二期，取自 BudgetConfig；默认 false 一期行为）
-    cross_origin_iframes: bool,
+    /// 采集预算全集（跨域递归开关 + 采集载荷面开关，46 复核后整体持有；
+    /// 构造时传入 BudgetConfig，采集参数面随预算派生一致）
+    budgets: BudgetConfig,
 }
 
 impl CdpCollector {
     pub fn new(session: std::sync::Arc<crate::BrowserSession>, budgets: BudgetConfig) -> Self {
         CdpCollector {
             session,
-            cross_origin_iframes: budgets.cross_origin_iframes,
+            budgets,
         }
     }
 }
@@ -618,8 +630,8 @@ impl SnapshotCollector for CdpCollector {
                 DOM_SNAPSHOT_CAPTURE_SNAPSHOT,
                 json!({
                     "computedStyles": COMPUTED_STYLES_WHITELIST,
-                    "includePaintOrder": true,
-                    "includeDOMRects": true,
+                    "includePaintOrder": self.budgets.include_paint_order,
+                    "includeDOMRects": self.budgets.include_dom_rects,
                 }),
             );
             let dom_fut = self.session.send_page::<Value>(
@@ -656,8 +668,8 @@ impl SnapshotCollector for CdpCollector {
                         .session
                         .send_page::<Value>(session, DOM_SNAPSHOT_CAPTURE_SNAPSHOT, json!({
                             "computedStyles": COMPUTED_STYLES_WHITELIST,
-                            "includePaintOrder": true,
-                            "includeDOMRects": true,
+                            "includePaintOrder": self.budgets.include_paint_order,
+                            "includeDOMRects": self.budgets.include_dom_rects,
                         }))
                         .await;
                     let d = self
@@ -695,25 +707,27 @@ impl SnapshotCollector for CdpCollector {
             }
         };
 
-        // —— 反序列化 + 载荷护栏（150KB 采集层上限，T-2）——
-        // 分层语义：主通道 DOMSnapshot 超预算 = 硬错误（主数据缺失无法降级）；
-        // 结构通道 DOM.getDocument 为兜底校验输入（build_enhanced_tree 实际
-        // 以 DOMSnapshot 重建，getDocument 仅预留校验面），合计超预算时**降级
-        // 跳过结构通道**——仅用 DOMSnapshot 继续，快照不失败（性能修复：中页
-        // getDocument 全深度 215KB vs DOMSnapshot 85KB，曾致合计 ≈300KB 直接
-        // 报 PayloadOverflow 使采集整体失败）。
+        // —— 反序列化 + 载荷双层护栏（46 复核）——
+        // 分层语义：主通道 DOMSnapshot 超 512KB 硬护栏 = 硬错误（主数据缺失
+        // 无法降级，防连接爆炸）；结构通道 getDocument 为兜底校验输入
+        // （build_enhanced_tree 实际以 DOMSnapshot 重建，getDocument 仅预留
+        // 校验面），合计超 150KB 常规预算时**降级跳过结构通道**——仅用
+        // DOMSnapshot 继续，快照不失败（性能修复：中页面 getDocument 全深度
+        // 215KB vs DOMSnapshot 85KB，曾致合计 ≈300KB 直接报 PayloadOverflow
+        // 使采集整体失败；46 复核后 300 条目列表页主通道 326KB 在硬护栏内
+        // 成功采集——模型输入面 32KB 截断树不受影响）。
         let snapshot_bytes = snapshot_value.to_string().len();
-        if snapshot_bytes > MAX_RAW_PAYLOAD_BYTES {
+        if snapshot_bytes > HARD_RAW_PAYLOAD_BYTES {
             return Err(SnapshotError::PayloadOverflow {
                 bytes: snapshot_bytes,
-                max: MAX_RAW_PAYLOAD_BYTES,
+                max: HARD_RAW_PAYLOAD_BYTES,
             });
         }
         let dom_bytes = dom_value.to_string().len();
         let dom_degraded = snapshot_bytes + dom_bytes > MAX_RAW_PAYLOAD_BYTES;
         if dom_degraded {
             tracing::warn!(
-                "DOM.getDocument 结构通道载荷超预算（快照 {snapshot_bytes}B + 结构 {dom_bytes}B > {}B），降级仅用 DOMSnapshot 主通道",
+                "DOM.getDocument 结构通道载荷超常规预算（快照 {snapshot_bytes}B + 结构 {dom_bytes}B > {}B），降级仅用 DOMSnapshot 主通道",
                 MAX_RAW_PAYLOAD_BYTES
             );
         }
@@ -776,7 +790,7 @@ impl SnapshotCollector for CdpCollector {
         // —— 跨域 iframe 递归（U-4 二期；`cross_origin_iframes` 配置位开启时）——
         // §1.5：Page.getFrameTree 取主 frame 树 → 对「未 pierce 的 frame」
         // （其 frameId 不在 DOMSnapshot 文档集内）帧级 attach → 递归采集。
-        if self.cross_origin_iframes {
+        if self.budgets.cross_origin_iframes {
             match tokio::time::timeout(
                 FRAME_COLLECT_TIMEOUT,
                 self.session
@@ -796,10 +810,10 @@ impl SnapshotCollector for CdpCollector {
                     // 去重集合（防环/重复子树防御；主帧自身先行占位）
                     let mut visited: HashSet<String> = HashSet::new();
                     visited.insert(frame_tree.frame_tree.frame.id.clone());
-                    // 预算：max_iframes=64 与主文档数共用；150KB 载荷跨帧累计
+                    // 预算：max_iframes=64 与主文档数共用；512KB 硬护栏载荷跨帧累计
                     let mut budget = FrameBudget::new(
                         MAX_IFRAMES.saturating_sub(capture.documents.len()),
-                        MAX_RAW_PAYLOAD_BYTES.saturating_sub(payload_bytes),
+                        HARD_RAW_PAYLOAD_BYTES.saturating_sub(payload_bytes),
                     );
                     self.recurse_frames(
                         session,
@@ -836,13 +850,26 @@ impl SnapshotCollector for CdpCollector {
             .map(|u| u.resolve(&capture.strings))
             .unwrap_or_default();
 
+        // —— 耗时预算联动（T-1/46 复核观测面）——
+        // 单次采集超出常规页 p95 目标（1.5s）时告警（含载荷分解），为
+        // 「12s 硬超时（管理器兜底）→ 5s 硬预算 → p95 2s → 采集 p95 1.5s」
+        // 分层中补上采集层自身的观测点；不中止采集（硬超时由管理器负责）。
+        let collect_ms = started.elapsed().as_millis() as u64;
+        if collect_ms > COLLECT_P95_TARGET.as_millis() as u64 {
+            tracing::warn!(
+                "快照采集超常规耗时预算：{collect_ms}ms > 目标 {}ms（载荷 {payload_bytes}B，结构通道{}）",
+                COLLECT_P95_TARGET.as_millis(),
+                if dom_degraded { "降级丢弃" } else { "保留" }
+            );
+        }
+
         Ok(CollectedData {
             roots,
             url,
             title,
             layout,
             raw_payload_bytes: payload_bytes,
-            collect_ms: started.elapsed().as_millis() as u64,
+            collect_ms,
             cross_origin,
         })
     }
@@ -1197,8 +1224,8 @@ impl CdpCollector {
                 DOM_SNAPSHOT_CAPTURE_SNAPSHOT,
                 json!({
                     "computedStyles": COMPUTED_STYLES_WHITELIST,
-                    "includePaintOrder": true,
-                    "includeDOMRects": true,
+                    "includePaintOrder": self.budgets.include_paint_order,
+                    "includeDOMRects": self.budgets.include_dom_rects,
                 }),
             );
             let d = self.session.send_page::<Value>(
@@ -2023,7 +2050,7 @@ mod tests {
         let pierced: HashSet<String> = ["MAIN"].iter().map(|s| s.to_string()).collect();
         let mut visited: HashSet<String> = HashSet::new();
         let mut stats = CrossOriginStats::default();
-        let budget = FrameBudget::new(64, MAX_RAW_PAYLOAD_BYTES);
+        let budget = FrameBudget::new(64, HARD_RAW_PAYLOAD_BYTES);
 
         // 同源 pierce 已覆盖 → 排除（不占统计）
         assert!(!frame_candidate_eligible("MAIN", &pierced, &mut visited, 0, &budget, &mut stats));
@@ -2040,9 +2067,9 @@ mod tests {
         assert!(frame_candidate_eligible("D4", &pierced, &mut visited, 3, &budget, &mut stats));
 
         // 帧数预算耗尽（max_iframes=64 共用）→ 截断
-        let exhausted = FrameBudget::new(0, MAX_RAW_PAYLOAD_BYTES);
+        let exhausted = FrameBudget::new(0, HARD_RAW_PAYLOAD_BYTES);
         assert!(!frame_candidate_eligible("B0", &pierced, &mut visited, 0, &exhausted, &mut stats));
-        // 载荷预算耗尽（150KB，T-2）→ 截断
+        // 载荷预算耗尽（512KB 硬护栏，T-2/46）→ 截断
         let no_payload = FrameBudget::new(64, 0);
         assert!(!frame_candidate_eligible("P0", &pierced, &mut visited, 0, &no_payload, &mut stats));
         assert_eq!(stats.skipped_budget, 3);
@@ -2482,8 +2509,9 @@ mod tests {
         assert!(find_node_by_id(std::slice::from_ref(main_root), 202).is_some());
     }
 
-    /// 主通道硬错误语义保持：DOMSnapshot 自身超预算 → PayloadOverflow（主数据
-    /// 缺失无法降级，与结构通道降级严格区分）。
+    /// 主通道硬错误语义保持：DOMSnapshot 自身超 512KB 硬护栏 → PayloadOverflow
+    /// （主数据缺失无法降级，与结构通道降级严格区分；46 复核后硬护栏从
+    /// 150KB 提升至 512KB——150KB 仅作常规合计降级触发阈值）。
     #[tokio::test]
     async fn snapshot_over_budget_remains_hard_error() {
         let mut mock = MockServer::spawn().await;
@@ -2498,14 +2526,135 @@ mod tests {
         let session = connect_mock(&mock, "/devtools/browser/snapshot-overflow").await;
         let collector = CdpCollector::new(session.clone(), BudgetConfig::active());
         let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
-        // 主通道 3000 条长字符串 ≈ 330KB > 150KB
-        drive_capture_snapshot(&mut mock, big_snapshot_fixture(3000, &"y".repeat(100))).await;
+        // 主通道 3000 条长字符串（200 字符）≈ 618KB > 512KB 硬护栏
+        drive_capture_snapshot(&mut mock, big_snapshot_fixture(3000, &"y".repeat(200))).await;
         let res = collect_task.await.expect("采集任务应完成");
         session.shutdown().await;
         assert!(
             matches!(res, Err(SnapshotError::PayloadOverflow { .. })),
-            "主通道超预算应为硬错误：{res:?}"
+            "主通道超硬护栏应为硬错误：{res:?}"
         );
+    }
+
+    /// 46 复核分层语义：主通道超 150KB 常规预算（但低于 512KB 硬护栏）→
+    /// **采集成功不失败**——结构通道降级丢弃，payload 仅计主通道；模型输入面
+    /// 32KB 截断树不受影响（列表页形态 300 条目 326KB 的同构场景）。
+    #[tokio::test]
+    async fn snapshot_mid_size_succeeds_below_hard_budget() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        fill_noncritical_auto_replies(&mock);
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_DOCUMENT,
+            MockReply::Ok(json!({ "root": { "nodeId": 1 } })),
+        );
+        let session = connect_mock(&mock, "/devtools/browser/snapshot-mid-size").await;
+        let collector = CdpCollector::new(session.clone(), BudgetConfig::active());
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        // 主通道 3000 条 100 字符字符串 ≈ 330KB：> 150KB 常规预算但 < 512KB 硬护栏
+        let mid = big_snapshot_fixture(3000, &"y".repeat(100));
+        let mid_bytes = mid.to_string().len();
+        assert!(
+            mid_bytes > MAX_RAW_PAYLOAD_BYTES && mid_bytes < HARD_RAW_PAYLOAD_BYTES,
+            "夹具应落在双层预算之间：{mid_bytes}B"
+        );
+        drive_capture_snapshot(&mut mock, mid).await;
+        let collected = collect_task
+            .await
+            .expect("采集任务应完成")
+            .expect("中量级主通道应成功（硬护栏内）");
+        session.shutdown().await;
+        assert_eq!(
+            collected.raw_payload_bytes, mid_bytes,
+            "payload 应计主通道全量字节（硬护栏内不截断）"
+        );
+        assert!(collected.raw_payload_bytes <= HARD_RAW_PAYLOAD_BYTES);
+        assert_eq!(collected.roots.len(), 1, "主树完整");
+    }
+
+    /// 46 复核默认采集最小面：captureSnapshot 命令参数 includeDOMRects/
+    /// includePaintOrder 默认 false（两路数据当前实现不消费，源级削减载荷）。
+    #[tokio::test]
+    async fn capture_payload_minimal_by_default() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        fill_noncritical_auto_replies(&mock);
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_DOCUMENT,
+            MockReply::Ok(json!({ "root": { "nodeId": 1 } })),
+        );
+        let session = connect_mock(&mock, "/devtools/browser/payload-minimal").await;
+        let collector = CdpCollector::new(session.clone(), BudgetConfig::active());
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        // 捕获实际发出的 captureSnapshot 命令参数（防回归为全量载荷面）
+        let cmd = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            mock.expect_command("DOMSnapshot.captureSnapshot"),
+        )
+        .await
+        .expect("等待 captureSnapshot 命令超时");
+        assert_eq!(
+            cmd["params"]["includeDOMRects"], false,
+            "默认最小面不应请求 DOMRects：{cmd}"
+        );
+        assert_eq!(
+            cmd["params"]["includePaintOrder"], false,
+            "默认最小面不应请求 paintOrders：{cmd}"
+        );
+        mock.reply(cmd["id"].as_u64().expect("命令 id 缺失"), main_capture_fixture());
+        let collected = collect_task
+            .await
+            .expect("采集任务应完成")
+            .expect("最小面采集应成功");
+        session.shutdown().await;
+        assert_eq!(collected.roots.len(), 1, "最小面不影响主树构建");
+    }
+
+    /// 46 复核完整载荷面 opt-in：`with_full_payload(true)` 后 captureSnapshot
+    /// 命令参数 includeDOMRects/includePaintOrder 为 true（绘制序过滤接线
+    /// 或 DOMRects 消费方接入时的开关面）。
+    #[tokio::test]
+    async fn capture_full_payload_opt_in() {
+        let mut mock = MockServer::spawn().await;
+        for (method, reply) in restore_reply_map() {
+            mock.set_auto_reply(method, reply);
+        }
+        fill_noncritical_auto_replies(&mock);
+        mock.set_auto_reply(
+            crate::cdp::domains::names::DOM_GET_DOCUMENT,
+            MockReply::Ok(json!({ "root": { "nodeId": 1 } })),
+        );
+        let session = connect_mock(&mock, "/devtools/browser/payload-full").await;
+        let collector = CdpCollector::new(
+            session.clone(),
+            BudgetConfig::active().with_full_payload(true),
+        );
+        let collect_task = tokio::spawn(async move { collector.collect("t1", "S1").await });
+        let cmd = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            mock.expect_command("DOMSnapshot.captureSnapshot"),
+        )
+        .await
+        .expect("等待 captureSnapshot 命令超时");
+        assert_eq!(
+            cmd["params"]["includeDOMRects"], true,
+            "完整载荷面应请求 DOMRects：{cmd}"
+        );
+        assert_eq!(
+            cmd["params"]["includePaintOrder"], true,
+            "完整载荷面应请求 paintOrders：{cmd}"
+        );
+        mock.reply(cmd["id"].as_u64().expect("命令 id 缺失"), main_capture_fixture());
+        let collected = collect_task
+            .await
+            .expect("采集任务应完成")
+            .expect("完整载荷面采集应成功");
+        session.shutdown().await;
+        assert_eq!(collected.roots.len(), 1);
     }
 
     /// 跨域子帧结构通道超预算：帧级 getDocument 降级（仅 DOMSnapshot 入树），

@@ -58,6 +58,9 @@ reqwest = { workspace = true }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 # 受管 profile 删除走 conex-fs trash（R-2 裁决：用户资产不直接 remove，trash.rs 铁律）
 conex-fs = { path = "../conex-fs" }
+# 共享抽象层（05 文档 §6.1 接线级：FrameSource/InputBackend/ActionTargetGate 三 trait，
+# 浏览器线经 adapters/ 三适配器实现，纯加法）
+conex-shared = { path = "../conex-shared" }
 # Windows 平台侧（10 文档 §8 差异表）：Job Object 杀树 + SingletonLock 存活探测；
 # windows-sys 0.61 已在锁内（agent-provider 同款用法），feature 按使用面补齐
 windows-sys = { workspace = true, features = [

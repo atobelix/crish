@@ -1,0 +1,31 @@
+[package]
+name = "conex-computer-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# 工具注册面（Tool/ToolDefinition/ToolError/ToolRegistry/ToolContext）：只读消费 pub 接口，
+# 不进入 agent-tools 的 register_builtin_tools（后置注册函数在本 crate，对齐 browser 先例）
+agent-tools = { path = "../agent-tools" }
+# 电脑操作会话面（Action/ActionResult/SessionError/ComputerSession/PerceptionSnapshot 等
+# pub 导出；S1/S2 已落盘，本 crate 只读消费）
+conex-computer = { path = "../conex-computer" }
+# 共享抽象面（FrameSource/InputBackend/ActionTargetGate，05 文档定稿）：本骨架声明依赖，
+# 实施轮接线（输入归一化 / 动作前检查器）消费
+conex-shared = { path = "../conex-shared" }
+serde_json = { workspace = true }
+# 异步 trait（ComputerOps / Tool 实现面）：workspace 既有依赖
+async-trait = { workspace = true }
+
+[dev-dependencies]
+# 异步单测（注册/执行契约）：workspace 最小集（rt + macros 已含）
+tokio = { workspace = true }
+# 命名空间共存测试（同注册表注册两族工具断言，06 文档 §3.4）：仅测试面依赖
+conex-browser-tools = { path = "../conex-browser-tools" }

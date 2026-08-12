@@ -27,6 +27,7 @@
 //! 由 M3 在 `import/` 子模块实现，聚合入口 `ImportService`。
 
 pub mod action;
+pub mod adapters;
 pub mod browser;
 pub mod cdp;
 pub mod frames;
