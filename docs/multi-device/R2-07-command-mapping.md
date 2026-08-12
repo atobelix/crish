@@ -103,3 +103,15 @@
 - crates/conex-types/src/lib.rs：SessionIndexEntry（239-265）
 - crates/conex-types/contracts/device-protocol.json：C01-C10 commands 段与
   types 段（paramsType/resultType 字段表，唯一真源）
+
+---
+
+## 主控裁决（2026-08-11，D-02/D-04/D-05 归档）
+
+| #    | 差异                                                            | 裁决                                                                                                                       | 影响   |
+| ---- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------ |
+| D-02 | 桌面端不下发 activeRuns/pendingApprovals（P-7 预留）            | 移动端容忍缺省（注册表可选字段）；首拉对账走 mobile_list_pending_approvals（C13 已实现）；P-7 桌面端装配随 R2 桌面增强排期 | 无阻塞 |
+| D-04 | readSessionEvents direction=backward 解析但不生效（恒 forward） | v1 契约 = forward-only；backward 回看排期（R2-05 会话回看增强，需求驱动）                                                  | 无阻塞 |
+| D-05 | includeLastMessage 接受不生效                                   | 会话列表预览用本地已缓存最后消息；includeLastMessage 语义留增强                                                            | 无阻塞 |
+
+依据：效果锁（不为 v1 砍契约字段，语义降级显式登记）+ 注册表为准（R2-07 对拍总原则）。
