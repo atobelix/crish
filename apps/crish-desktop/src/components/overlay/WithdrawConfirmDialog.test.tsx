@@ -27,7 +27,12 @@ afterEach(() => {
 describe('WithdrawConfirmDialog（ui/Dialog 基座迁移后）', () => {
   it('打开时渲染 alertdialog 角色与危险确认按钮', () => {
     render(
-      <WithdrawConfirmDialog scope={scope} isOpen onConfirm={() => {}} onCancel={() => {}} />,
+      <WithdrawConfirmDialog
+        scope={scope}
+        isOpen
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
     );
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     expect(screen.getByText('确认撤回')).toBeInTheDocument();
@@ -36,16 +41,28 @@ describe('WithdrawConfirmDialog（ui/Dialog 基座迁移后）', () => {
 
   it('设计无关闭按钮（showCloseButton=false），初始聚焦取消按钮', () => {
     render(
-      <WithdrawConfirmDialog scope={scope} isOpen onConfirm={() => {}} onCancel={() => {}} />,
+      <WithdrawConfirmDialog
+        scope={scope}
+        isOpen
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
     );
-    expect(screen.queryByRole('button', { name: '关闭弹窗' })).not.toBeInTheDocument();
-    expect(screen.getByText('取消')).toHaveFocus();
+    expect(
+      screen.queryByRole('button', { name: '关闭弹窗' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消' })).toHaveFocus();
   });
 
   it('Esc 触发 onCancel（等价原自管 Esc）', () => {
     const onCancel = vi.fn();
     render(
-      <WithdrawConfirmDialog scope={scope} isOpen onConfirm={() => {}} onCancel={onCancel} />,
+      <WithdrawConfirmDialog
+        scope={scope}
+        isOpen
+        onConfirm={() => {}}
+        onCancel={onCancel}
+      />
     );
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onCancel).toHaveBeenCalledTimes(1);
@@ -54,7 +71,12 @@ describe('WithdrawConfirmDialog（ui/Dialog 基座迁移后）', () => {
   it('确认撤回触发 onConfirm', () => {
     const onConfirm = vi.fn();
     render(
-      <WithdrawConfirmDialog scope={scope} isOpen onConfirm={onConfirm} onCancel={() => {}} />,
+      <WithdrawConfirmDialog
+        scope={scope}
+        isOpen
+        onConfirm={onConfirm}
+        onCancel={() => {}}
+      />
     );
     fireEvent.click(screen.getByTestId('withdraw-confirm-btn'));
     expect(onConfirm).toHaveBeenCalledTimes(1);

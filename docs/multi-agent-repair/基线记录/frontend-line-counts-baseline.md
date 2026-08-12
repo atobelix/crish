@@ -20,9 +20,9 @@
 
 ## 基线登记（2026-08-10 建线）
 
-| 文件（相对仓库根） | 有效行数（基线值） |
-|---|---|
-| （见下方标记区，脚本维护） | — |
+| 文件（相对仓库根）         | 有效行数（基线值） |
+| -------------------------- | ------------------ |
+| （见下方标记区，脚本维护） | —                  |
 
 ## 治理记录
 
@@ -32,10 +32,11 @@
 - 2026-08-10（批次 7.3 补完）：package.json 新增 `check:line-counts` 并并入 `check:desktop`；
   ci.yml lint job 追加 `npm run check:line-counts`；`.agents/AGENTS.md` 规则 1/3 声明与实现
   逐条同步（基线豁免句 + 实现载体句）。吞错报告模式（check:swallowed-errors-frontend）同期接线。
-- >650 高发清单（步骤④拆分优先队列输入）：pricingStore.ts / sessionRustDb.ts /
-  useStreamCallbacks.ts / modelCatalog.ts / store/layout-tree/operations.ts 等（见标记区实测）。
+- > 650 高发清单（步骤④拆分优先队列输入）：pricingStore.ts / sessionRustDb.ts /
+  > useStreamCallbacks.ts / modelCatalog.ts / store/layout-tree/operations.ts 等（见标记区实测）。
 
 <!-- BASELINE_START -->
+
 apps/crish-desktop/src/api/applyFileDiff.ts 441
 apps/crish-desktop/src/api/approvalMeta.ts 400
 apps/crish-desktop/src/api/backgroundTasksApi.ts 621
@@ -67,7 +68,7 @@ apps/crish-desktop/src/api/tool-presentation/toolCardPresenter.ts 776
 apps/crish-desktop/src/api/toolFeedback.ts 575
 apps/crish-desktop/src/api/workspaceFsApi.ts 360
 apps/crish-desktop/src/components/agent-card/AgentTeamBoard.tsx 461
-apps/crish-desktop/src/components/agent-card/InlineAgentPanel.tsx 436
+apps/crish-desktop/src/components/agent-card/InlineAgentPanel.tsx 604
 apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 472
 apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 441
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 432
