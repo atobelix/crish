@@ -17,6 +17,11 @@
  * - **W3-F DOM 余量**：`BlockChromeDomHost` 把手/多选框 DOM（`chrome.w3f_dom.test.ts`）
  * - **桌面 React chrome 挂载已交**（`BlockChromeDomMount`）；**DOM 交付 ≠ EL-01**
  * - **仍未交付（精确）**：A-BLK 全表 e2e、真 Pointer 拖拽产品 e2e、产品级 chrome 交互 e2e
+ *
+ * ## SD-40
+ * - 类型：`BlockChrome.types`
+ * - 快照 / 静默 / 把手：`BlockChrome.snapshot`
+ * - 本文件：状态机 + 结构 Intent 装配（写锥不变）
  */
 
 import type { BlockId, IntentId } from '@crish/block-paper-contract';
@@ -26,69 +31,35 @@ import {
   buildDeleteBlocksIntent,
   buildToggleCollapseIntent,
   type DeleteBlocksIntent,
-  type StructureIntentOrigin,
   type ToggleCollapseIntent,
 } from './structureIntents';
+import type {
+  BlockChromeModelOptions,
+  BlockChromeSnapshot,
+  ChromeStructureOptions,
+  ChromeStructureResult,
+  HandleVisibility,
+  SilentLevel,
+} from './BlockChrome.types';
+import {
+  applyLocalCollapse,
+  buildChromeSnapshot,
+  chromeStructureFail,
+  isDangerousStructureAllowed,
+  normalizeBlockId,
+  resolveHandleVisibility,
+  uniqueBlockIds,
+} from './BlockChrome.snapshot';
 
-// ---------------------------------------------------------------------------
-// 静默层级 / 把手可见性
-// ---------------------------------------------------------------------------
-
-/**
- * 静默模式层级（产品默认 L0）。
- * - `L0`：极净纸面；把手仅 hover/focus；无常驻菜单
- * - `L1`：按需块操作（多选/命令态可抬高 chrome）
- */
-export type SilentLevel = 'L0' | 'L1';
-
-/** 单块把手呈现态 */
-export type HandleVisibility = 'hidden' | 'hover' | 'focus' | 'multi';
-
-/** chrome 只读快照 */
-export type BlockChromeSnapshot = {
-  silentLevel: SilentLevel;
-  /** 当前悬停块（无则 null） */
-  hoveredBlockId: BlockId | null;
-  /** 当前焦点块（无则 null） */
-  focusedBlockId: BlockId | null;
-  /** 多选高亮的有序 blockId（逻辑 id，非像素推导） */
-  multiSelectedIds: BlockId[];
-  /** 折叠中的块 id 集合（拷贝） */
-  collapsedIds: BlockId[];
-  /**
-   * 是否处于「命令态」（slash 打开 / 批量操作条等）。
-   * true 时允许 L1 级 chrome 露出；关闭后回到 silentLevel 默认。
-   */
-  commandActive: boolean;
-};
-
-// ---------------------------------------------------------------------------
-// 结构操作结果（W3-F）
-// ---------------------------------------------------------------------------
-
-/** 危险/批量结构操作拒绝码 */
-export type ChromeStructureRejectCode =
-  'empty_selection' | 'silent_l0_guard' | 'invalid_target';
-
-export type ChromeStructureResult<T> =
-  | { ok: true; intent: T; snapshot: BlockChromeSnapshot }
-  | {
-      ok: false;
-      code: ChromeStructureRejectCode;
-      reason: string;
-    };
-
-export type ChromeStructureOptions = {
-  /** intentId 工厂；缺省 nextIntentId('chrome') */
-  createIntentId?: () => IntentId;
-  /** 覆盖 origin；缺省 chrome / batch */
-  origin?: StructureIntentOrigin;
-  /**
-   * 显式 blockIds；缺省用 multiSelectedIds。
-   * 在 L0 且无多选/命令态时，显式传入仍受 silent_l0_guard（危险操作）。
-   */
-  blockIds?: readonly BlockId[];
-};
+export type {
+  SilentLevel,
+  HandleVisibility,
+  BlockChromeSnapshot,
+  ChromeStructureRejectCode,
+  ChromeStructureResult,
+  ChromeStructureOptions,
+  BlockChromeModelOptions,
+} from './BlockChrome.types';
 
 // ---------------------------------------------------------------------------
 // Store
@@ -109,7 +80,7 @@ export class BlockChromeModel {
   private commandActive = false;
   private readonly createIntentId: () => IntentId;
 
-  constructor(options: { createIntentId?: () => IntentId } = {}) {
+  constructor(options: BlockChromeModelOptions = {}) {
     this.createIntentId =
       options.createIntentId ?? (() => nextIntentId('chrome'));
   }
@@ -133,29 +104,23 @@ export class BlockChromeModel {
 
   /** 悬停块（null = 离开） */
   setHovered(blockId: BlockId | null): BlockChromeSnapshot {
-    this.hoveredBlockId = blockId && blockId.length > 0 ? blockId : null;
+    this.hoveredBlockId = normalizeBlockId(blockId);
     return this.getSnapshot();
   }
 
   /** 焦点块（null = 失焦） */
   setFocused(blockId: BlockId | null): BlockChromeSnapshot {
-    this.focusedBlockId = blockId && blockId.length > 0 ? blockId : null;
+    this.focusedBlockId = normalizeBlockId(blockId);
     return this.getSnapshot();
   }
 
-  /**
-   * 计算指定块的把手可见性（A-SIL 按需）。
-   *
-   * 优先级：multi > focus > hover > hidden
-   * L0 且无交互 → 一律 hidden（默认纸面无噪声）
-   */
+  /** 计算指定块的把手可见性（A-SIL 按需） */
   getHandleVisibility(blockId: BlockId): HandleVisibility {
-    if (!blockId) return 'hidden';
-    if (this.multiSelectedIds.includes(blockId)) return 'multi';
-    if (this.focusedBlockId === blockId) return 'focus';
-    if (this.hoveredBlockId === blockId) return 'hover';
-    // 命令态下仍不强制常驻所有把手（避免 L0 退化为 Notion 常驻 chrome）
-    return 'hidden';
+    return resolveHandleVisibility(blockId, {
+      multiSelectedIds: this.multiSelectedIds,
+      focusedBlockId: this.focusedBlockId,
+      hoveredBlockId: this.hoveredBlockId,
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -164,21 +129,13 @@ export class BlockChromeModel {
 
   setCollapsed(blockId: BlockId, collapsed: boolean): BlockChromeSnapshot {
     if (!blockId) return this.getSnapshot();
-    if (collapsed) {
-      this.collapsed.add(blockId);
-    } else {
-      this.collapsed.delete(blockId);
-    }
+    applyLocalCollapse(this.collapsed, [blockId], collapsed);
     return this.getSnapshot();
   }
 
   toggleCollapsed(blockId: BlockId): BlockChromeSnapshot {
     if (!blockId) return this.getSnapshot();
-    if (this.collapsed.has(blockId)) {
-      this.collapsed.delete(blockId);
-    } else {
-      this.collapsed.add(blockId);
-    }
+    applyLocalCollapse(this.collapsed, [blockId]);
     return this.getSnapshot();
   }
 
@@ -195,15 +152,7 @@ export class BlockChromeModel {
    * **禁止**调用方用像素测距推导 id；此处仅存逻辑列表。
    */
   setMultiSelected(blockIds: readonly BlockId[]): BlockChromeSnapshot {
-    const seen = new Set<BlockId>();
-    const ids: BlockId[] = [];
-    for (const id of blockIds) {
-      if (id && !seen.has(id)) {
-        seen.add(id);
-        ids.push(id);
-      }
-    }
-    this.multiSelectedIds = ids;
+    this.multiSelectedIds = uniqueBlockIds(blockIds);
     return this.getSnapshot();
   }
 
@@ -231,20 +180,13 @@ export class BlockChromeModel {
   // W3-F：多选 → 批量结构 Intent
   // -----------------------------------------------------------------------
 
-  /**
-   * 是否允许危险结构操作（删除等）。
-   *
-   * 对齐 A-SIL：纯 L0 静默纸面、无多选高亮、无命令态 → 拒绝危险批量。
-   * 抬升条件（任一）：
-   * - silentLevel === 'L1'
-   * - commandActive
-   * - multiSelectedIds 非空（用户已显式多选）
-   */
+  /** 是否允许危险结构操作（删除等）。对齐 A-SIL。 */
   canPerformDangerousStructure(): boolean {
-    if (this.silentLevel === 'L1') return true;
-    if (this.commandActive) return true;
-    if (this.multiSelectedIds.length > 0) return true;
-    return false;
+    return isDangerousStructureAllowed({
+      silentLevel: this.silentLevel,
+      commandActive: this.commandActive,
+      multiSelectedCount: this.multiSelectedIds.length,
+    });
   }
 
   /**
@@ -260,19 +202,16 @@ export class BlockChromeModel {
   ): ChromeStructureResult<DeleteBlocksIntent> {
     const ids = this.resolveTargetIds(options.blockIds);
     if (ids.length === 0) {
-      return {
-        ok: false,
-        code: 'empty_selection',
-        reason: 'BlockChromeModel.requestDeleteSelected：无选中块可删',
-      };
+      return chromeStructureFail(
+        'empty_selection',
+        'BlockChromeModel.requestDeleteSelected：无选中块可删'
+      );
     }
     if (!this.canPerformDangerousStructure()) {
-      return {
-        ok: false,
-        code: 'silent_l0_guard',
-        reason:
-          '静默 L0：禁止无多选/命令态的危险批量删除（A-SIL）；请先多选或进入命令态/L1',
-      };
+      return chromeStructureFail(
+        'silent_l0_guard',
+        '静默 L0：禁止无多选/命令态的危险批量删除（A-SIL）；请先多选或进入命令态/L1'
+      );
     }
 
     const intent = buildDeleteBlocksIntent({
@@ -305,11 +244,10 @@ export class BlockChromeModel {
       ids = [this.focusedBlockId];
     }
     if (ids.length === 0) {
-      return {
-        ok: false,
-        code: 'empty_selection',
-        reason: 'BlockChromeModel.requestToggleCollapse：无目标块',
-      };
+      return chromeStructureFail(
+        'empty_selection',
+        'BlockChromeModel.requestToggleCollapse：无目标块'
+      );
     }
 
     const intent = buildToggleCollapseIntent({
@@ -319,19 +257,7 @@ export class BlockChromeModel {
       ...(collapsed !== undefined ? { collapsed } : {}),
     });
 
-    // 本地呈现同步（乐观）；权威以 sink/投影为准
-    for (const id of ids) {
-      if (collapsed === true) {
-        this.collapsed.add(id);
-      } else if (collapsed === false) {
-        this.collapsed.delete(id);
-      } else if (this.collapsed.has(id)) {
-        this.collapsed.delete(id);
-      } else {
-        this.collapsed.add(id);
-      }
-    }
-
+    applyLocalCollapse(this.collapsed, ids, collapsed);
     return { ok: true, intent, snapshot: this.getSnapshot() };
   }
 
@@ -352,14 +278,14 @@ export class BlockChromeModel {
   }
 
   getSnapshot(): BlockChromeSnapshot {
-    return {
+    return buildChromeSnapshot({
       silentLevel: this.silentLevel,
       hoveredBlockId: this.hoveredBlockId,
       focusedBlockId: this.focusedBlockId,
-      multiSelectedIds: [...this.multiSelectedIds],
-      collapsedIds: [...this.collapsed],
+      multiSelectedIds: this.multiSelectedIds,
+      collapsedIds: this.collapsed,
       commandActive: this.commandActive,
-    };
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -367,17 +293,7 @@ export class BlockChromeModel {
   // -----------------------------------------------------------------------
 
   private resolveTargetIds(explicit?: readonly BlockId[]): BlockId[] {
-    if (explicit !== undefined) {
-      const seen = new Set<BlockId>();
-      const ids: BlockId[] = [];
-      for (const id of explicit) {
-        if (id && !seen.has(id)) {
-          seen.add(id);
-          ids.push(id);
-        }
-      }
-      return ids;
-    }
+    if (explicit !== undefined) return uniqueBlockIds(explicit);
     return [...this.multiSelectedIds];
   }
 }

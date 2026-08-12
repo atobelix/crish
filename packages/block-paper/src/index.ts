@@ -59,6 +59,7 @@ export {
   type ChromeStructureRejectCode,
   type ChromeStructureResult,
   type ChromeStructureOptions,
+  type BlockChromeModelOptions,
 } from './chrome/BlockChrome';
 
 // W3-E′：跨块多选 / 焦点方向桥（chrome 投影；≠ EL-01；≠ 重复 code 叶）
