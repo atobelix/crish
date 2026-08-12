@@ -373,6 +373,19 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
   // ≠ EL-01；禁止 mock 当生产默认
   // -------------------------------------------------------------------------
 
+  it('conn_b3_product_empty_default_no_tauri_readonly_via_resolve', () => {
+    // CONN-B3′：产品入口默认 resolveProductStrictApplyOps({docId})；
+    // vitest/jsdom 无 Tauri → source=none → slash/mdPrefix 只读；禁止 mock 生产默认
+    render(<WorkspaceEmptyState wsId="ws-conn-b3-ro" />);
+    const root = screen.getByRole('status');
+    expect(root).toHaveAttribute('data-slash-write-mode', 'readonly');
+    expect(root).toHaveAttribute('data-slash-sink-source', 'none');
+    expect(root).toHaveAttribute('data-md-prefix-write-mode', 'disabled');
+    expect(root).toHaveAttribute('data-md-prefix-sink-source', 'none');
+    // 会计门：mirror 默认仍关（CONN-E2 不回潮）
+    expect(root).toHaveAttribute('data-mirror-drift-bar', '0');
+  });
+
   it('conn_b3_product_empty_with_applyOpsIpc_slash_click_product_ipc', async () => {
     const mockIpc = createMockNoteApplyOpsIpc();
     render(
