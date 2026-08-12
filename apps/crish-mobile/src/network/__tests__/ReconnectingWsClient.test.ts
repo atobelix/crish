@@ -1,4 +1,5 @@
 // ReconnectingWsClient 纯逻辑单测（R2-02）：退避序列 / 心跳假死判定 / 相位投影映射表全量
+// + R2-02 部分 2：connect/disconnect 原生 WS 接线（mock WebSocket 事件序列驱动状态机）
 import {
   HEARTBEAT_DEAD_MS,
   HEARTBEAT_INTERVAL_MS,
@@ -8,13 +9,26 @@ import {
   RETRY_BACKOFF_CAP_MS,
   RETRY_BACKOFF_MULTIPLIER,
   RETRY_JITTER_MAX_MS,
+  ReconnectingWsClient,
   classifyReconcile,
   isHeartbeatDead,
   nextRetryDelayMs,
   projectReconnect,
   shouldSendHeartbeat,
 } from '../ReconnectingWsClient';
-import type { ReconcileSnapshot } from '../ReconnectingWsClient';
+import type {
+  ReconcileSnapshot,
+  ReconnectingWsClientOptions,
+  ReconnectProjection,
+  WsSocket,
+} from '../ReconnectingWsClient';
+import {
+  DEFAULT_INVOKE_TIMEOUT_MS,
+  WsGateway,
+  encodeFrame,
+} from '../WsGateway';
+import type { WsPhase } from '@/domain/pure/selectors';
+import type { JsonValue } from '../../../../../packages/shared-types/src/primitive-types';
 
 describe('指数退避参数表（D4 §6.2.4：1s → 2s → 4s → 8s → 16s → 30s 封顶）', () => {
   test('参数表常量对齐任务书口径', () => {
@@ -233,5 +247,447 @@ describe('projectReconnect 相位投影映射表全量（M6 §9.3 ①~⑤）', (
     expect(p.actions).toEqual([]);
     expect(p.log).toEqual([]);
     expect(p.outboxFlush).toBe(false);
+  });
+});
+
+// ── R2-02 部分 2：connect/disconnect 原生 WS 接线（M5 §4.3.1 状态机）────────
+
+/**
+ * mock WebSocket（RN jest 环境无原生 WS）：模拟 open/message/close/error 事件序列。
+ * close() 同步触发 onclose（对齐 RN 真实行为：close 后必发 close 事件）。
+ */
+class MockWebSocket implements WsSocket {
+  static instances: MockWebSocket[] = [];
+  readonly url: string;
+  onopen: (() => void) | null = null;
+  onmessage: ((ev: { data: unknown }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  readonly sent: string[] = [];
+  readonly closeSpy = jest.fn(() => {
+    this.onclose?.();
+  });
+  readonly sendSpy = jest.fn((data: string) => {
+    this.sent.push(data);
+  });
+
+  constructor(url: string) {
+    this.url = url;
+    MockWebSocket.instances.push(this);
+  }
+
+  send(data: string): void {
+    this.sendSpy(data);
+  }
+
+  close(): void {
+    this.closeSpy();
+  }
+
+  emitOpen(): void {
+    this.onopen?.();
+  }
+
+  emitMessage(raw: unknown): void {
+    this.onmessage?.({ data: raw });
+  }
+
+  emitClose(): void {
+    this.onclose?.();
+  }
+
+  emitError(): void {
+    this.onerror?.();
+  }
+}
+
+/** 服务端入站帧编码（桌面 → 移动端形态；供 emitMessage 模拟对端消息） */
+function serverFrame(kind: string, body: JsonValue): string {
+  return encodeFrame({
+    v: 1,
+    kind,
+    msgId: `srv-${Math.random().toString(36).slice(2, 8)}`,
+    ts: 1,
+    from: 'desktop',
+    to: 'mobile',
+    body,
+  });
+}
+
+interface Harness {
+  client: ReconnectingWsClient;
+  factory: jest.Mock;
+  ws: MockWebSocket;
+  gateway: WsGateway;
+  phaseCalls: WsPhase[];
+  projectionCalls: ReconnectProjection[];
+}
+
+/**
+ * 装配客户端 + mock 工厂（jitter 锁定 0 便于断言退避序列）。
+ * 默认自动 connect（ws = 首个 socket 已就绪）；传 autoConnect:false 拿到未连接态。
+ */
+function makeHarness(
+  opts: Partial<ReconnectingWsClientOptions> = {},
+  cfg: { autoConnect?: boolean } = {}
+): Harness {
+  MockWebSocket.instances = [];
+  const factory = jest.fn((url: string) => new MockWebSocket(url));
+  const phaseCalls: WsPhase[] = [];
+  const projectionCalls: ReconnectProjection[] = [];
+  const gateway = new WsGateway();
+  const client = new ReconnectingWsClient({
+    url: 'wss://host:8765',
+    factory,
+    gateway,
+    jitterMaxMs: 0,
+    onPhaseChange: (p) => phaseCalls.push(p),
+    onProjection: (p) => projectionCalls.push(p),
+    ...opts,
+  });
+  if (cfg.autoConnect !== false) client.connect();
+  return {
+    client,
+    factory,
+    ws: MockWebSocket.instances[0]!,
+    gateway,
+    phaseCalls,
+    projectionCalls,
+  };
+}
+
+describe('ReconnectingWsClient connect 生命周期（M5 §4.3.1）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('connect → connecting → open；相位回调序列 + 投影调用（open 相位对账）', () => {
+    const { client, factory, ws, phaseCalls, projectionCalls } = makeHarness();
+    expect(client.url).toBe('wss://host:8765'); // url 透出（端点诊断/日志）
+    client.connect();
+    expect(client.phase).toBe('connecting');
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(factory).toHaveBeenCalledWith('wss://host:8765');
+    expect(client.gateway).toBeInstanceOf(WsGateway);
+    ws.emitOpen();
+    expect(client.phase).toBe('open');
+    expect(phaseCalls).toEqual(['connecting', 'open']);
+    expect(projectionCalls).toHaveLength(1);
+    expect(projectionCalls[0]?.phase).toBe('open');
+    expect(client.retryCount).toBe(0);
+    expect(client.lastProjection?.actions).toEqual([]);
+  });
+
+  test('open 相位投影：注入对账源 → 动作分类正确（R2-05 接线点）', () => {
+    const snap: ReconcileSnapshot = {
+      sessionId: 's-1',
+      localCursor: 0,
+      serverNext: 5,
+      serverStale: false,
+    };
+    const { client, ws, projectionCalls } = makeHarness({
+      projections: () => ({ snapshots: [snap], outboxPending: true }),
+    });
+    client.connect();
+    ws.emitOpen();
+    expect(projectionCalls[0]?.actions).toEqual(['resume']);
+    expect(projectionCalls[0]?.outboxFlush).toBe(true);
+    expect(client.lastProjection?.resume).toEqual(['s-1']);
+  });
+
+  test('双连接防护：connect 两次只建一个 socket（R2B §4）', () => {
+    const { client, factory } = makeHarness();
+    client.connect();
+    client.connect();
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  test('onmessage → decodeFrame → 分发到订阅者；heartbeat.ok 更新回执', () => {
+    const { client, ws, gateway } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    const pushHandler = jest.fn();
+    gateway.on('events.push', pushHandler);
+    ws.emitMessage(
+      serverFrame('events.push', {
+        sessionId: 's-1',
+        event: { type: 'agent-start', sessionId: 's-1', timestamp: 1 },
+      })
+    );
+    expect(pushHandler).toHaveBeenCalledTimes(1);
+    expect(pushHandler.mock.calls[0]?.[0]?.kind).toBe('events.push');
+    ws.emitMessage(
+      serverFrame('heartbeat.ok', {
+        ts: 1754651200000,
+        serverTime: 1754651200300,
+      })
+    );
+    expect(client.lastHeartbeatOk).toEqual({
+      ts: 1754651200000,
+      serverTime: 1754651200300,
+    });
+    expect(client.phase).toBe('open');
+  });
+
+  test('解码失败帧 → 宽容丢弃（不打断连接，D3 §10.3）', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client, ws } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    ws.emitMessage('not-json{');
+    ws.emitMessage('"scalar"');
+    expect(client.phase).toBe('open');
+    expect(ws.closeSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  test('非文本帧（二进制等）→ 宽容丢弃不处理', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client, ws, gateway } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    const spy = jest.fn();
+    gateway.on('*', spy);
+    ws.emitMessage({ binary: true }); // 非 string data：协议 v1 全文本，丢弃
+    expect(spy).not.toHaveBeenCalled();
+    expect(client.phase).toBe('open');
+    warnSpy.mockRestore();
+  });
+
+  test('路由骨架：subscribe.ok / resume.page / resume.done 接分发（R2-05 域实现）', () => {
+    const { client, ws, gateway } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    const spy = jest.fn();
+    gateway.on('events.subscribe.ok', spy);
+    ws.emitMessage(
+      serverFrame('events.subscribe.ok', {
+        sessions: [{ sessionId: 's-1', nextSequence: 10, stale: false }],
+      })
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
+    ws.emitMessage(
+      serverFrame('events.resume.page', {
+        sessionId: 's-1',
+        events: [],
+        nextAfterSequence: 10,
+        hasMore: false,
+      })
+    );
+    ws.emitMessage(
+      serverFrame('events.resume.done', { sessionId: 's-1', resumedTo: 10 })
+    );
+    expect(client.phase).toBe('open'); // 骨架不破坏连接
+  });
+});
+
+describe('ReconnectingWsClient 心跳（D3 §9.3：30s 发包 / 90s 假死）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('open 后每 30s 发 heartbeat；90s 无收包 → 假死 close → 重连', () => {
+    const { client, ws, phaseCalls } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    jest.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    expect(ws.sent).toHaveLength(1);
+    const hb = JSON.parse(ws.sent[0] ?? '') as {
+      kind: string;
+      body: { ts: number; deviceTimeMs: number };
+    };
+    expect(hb.kind).toBe('heartbeat');
+    expect(typeof hb.body.ts).toBe('number');
+    expect(typeof hb.body.deviceTimeMs).toBe('number');
+    jest.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 2); // 到 90s：无收包 → 假死
+    expect(ws.closeSpy).toHaveBeenCalledTimes(1);
+    expect(client.phase).toBe('reconnecting');
+    expect(phaseCalls).toContain('reconnecting');
+  });
+
+  test('heartbeat.ok 重置假死计时：回执期内不判死，90s 无回执才判死', () => {
+    const { client, ws } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    // t=30s 发心跳 → 对端回 heartbeat.ok（重置假死计时）
+    jest.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    ws.emitMessage(serverFrame('heartbeat.ok', { ts: 1, serverTime: 2 }));
+    // t=60s 再发 → 再回执
+    jest.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    ws.emitMessage(serverFrame('heartbeat.ok', { ts: 1, serverTime: 2 }));
+    // t=90s：距上次收包仅 30s → 存活
+    jest.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    expect(ws.closeSpy).not.toHaveBeenCalled();
+    // t=120s：距上次收包 60s → 仍存活
+    jest.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    expect(ws.closeSpy).not.toHaveBeenCalled();
+    // t=150s：距上次收包 90s → 假死
+    jest.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    expect(ws.closeSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ReconnectingWsClient 重连退避（D4 §6.2.4 / M5 §4.3.2）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('退避序列 1s→2s→4s→8s→16s；连续 6 次失败 → dead 终态不再重连', () => {
+    const { client, factory, ws } = makeHarness({ maxRetries: 5 });
+    client.connect();
+    ws.emitOpen();
+    const delays = [1000, 2000, 4000, 8000, 16000];
+    for (let i = 0; i < delays.length; i++) {
+      MockWebSocket.instances[i]!.emitClose();
+      expect(client.phase).toBe('reconnecting');
+      expect(client.retryCount).toBe(i + 1);
+      jest.advanceTimersByTime(delays[i]! - 1);
+      expect(factory).toHaveBeenCalledTimes(i + 1); // 退避未到不重试
+      jest.advanceTimersByTime(1);
+      expect(factory).toHaveBeenCalledTimes(i + 2); // 退避到期 → 新连接
+      expect(client.phase).toBe('connecting');
+    }
+    // 第 6 次失败（超 maxRetries=5）→ dead（任务书「closed」终态）
+    MockWebSocket.instances[5]!.emitClose();
+    expect(client.phase).toBe('dead');
+    jest.advanceTimersByTime(120_000);
+    expect(factory).toHaveBeenCalledTimes(delays.length + 1);
+  });
+
+  test('重连成功：投影再次调用（open 相位）+ retryCount 归零', () => {
+    const { client, ws, projectionCalls } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    expect(projectionCalls).toHaveLength(1);
+    ws.emitClose();
+    jest.advanceTimersByTime(1000);
+    expect(client.phase).toBe('connecting');
+    MockWebSocket.instances[1]!.emitOpen();
+    expect(client.phase).toBe('open');
+    expect(client.retryCount).toBe(0);
+    expect(projectionCalls).toHaveLength(2);
+    expect(projectionCalls[1]?.phase).toBe('open');
+  });
+
+  test('reconnecting 中 connect() → 取消退避立即重试（防双连接）', () => {
+    const { client, factory, ws } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    ws.emitClose();
+    expect(client.phase).toBe('reconnecting');
+    client.connect();
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(client.phase).toBe('connecting');
+    jest.advanceTimersByTime(60_000); // 原退避计时已取消
+    expect(factory).toHaveBeenCalledTimes(2);
+  });
+
+  test('offline 注入（NetInfo 断网，R2-03 接线点）→ 直接 dead 不重试', () => {
+    const { client, factory, ws } = makeHarness({ offline: () => true });
+    client.connect();
+    ws.emitOpen();
+    ws.emitClose();
+    expect(client.phase).toBe('dead');
+    jest.advanceTimersByTime(120_000);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  test('onerror 不触发重连（以 onclose 为判死事件，M5 R-02）', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client, factory, ws } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    ws.emitError();
+    expect(client.phase).toBe('open');
+    jest.advanceTimersByTime(60_000);
+    expect(factory).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  test('意外断开 → 挂起请求 reject transport.closed（outbox 重发入口）', async () => {
+    const { client, ws, gateway } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    const p = gateway.invoke('remote.approve', { toolCallId: 'tc-1' });
+    expect(gateway.pendingCount()).toBe(1);
+    ws.emitClose();
+    await expect(p).rejects.toMatchObject({
+      code: 'transport.closed',
+      retryable: true,
+    });
+    expect(gateway.pendingCount()).toBe(0);
+  });
+});
+
+describe('ReconnectingWsClient disconnect 清理（M5 §4.3.2）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('disconnect：清 pending/心跳/重连计时器 + 相位 idle + 不自动重连', async () => {
+    const { client, factory, ws, gateway } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    const p = gateway.invoke('remote.getStatus', {});
+    expect(gateway.pendingCount()).toBe(1);
+    expect(ws.sent).toHaveLength(1); // 请求帧
+    client.disconnect();
+    expect(ws.closeSpy).toHaveBeenCalledTimes(1);
+    expect(client.phase).toBe('idle');
+    await expect(p).rejects.toMatchObject({ code: 'cmd.cancelled' });
+    expect(gateway.pendingCount()).toBe(0);
+    // 心跳/重连计时器已清：时间推进无发包、无重连
+    jest.advanceTimersByTime(300_000);
+    expect(ws.sent).toHaveLength(1);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  test('disconnect 后 connect 可重新连接（idle → connecting → open）', () => {
+    const { client, factory, ws } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    client.disconnect();
+    client.connect();
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(client.phase).toBe('connecting');
+    MockWebSocket.instances[1]!.emitOpen();
+    expect(client.phase).toBe('open');
+  });
+
+  test('idle 态 disconnect 幂等（无副作用）', () => {
+    const { client, factory } = makeHarness({}, { autoConnect: false });
+    client.disconnect();
+    expect(client.phase).toBe('idle');
+    expect(factory).not.toHaveBeenCalled();
+  });
+
+  test('invoke 超时（默认 10s）→ cmd.timeout reject + pending 清理', async () => {
+    const { client, ws, gateway } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    const p = gateway.invoke('remote.getStatus', {});
+    jest.advanceTimersByTime(DEFAULT_INVOKE_TIMEOUT_MS);
+    await expect(p).rejects.toMatchObject({
+      code: 'cmd.timeout',
+      retryable: true,
+    });
+    expect(gateway.pendingCount()).toBe(0);
+  });
+
+  test('token 构造注入（R2-03 接线占位）透出读取', () => {
+    const { client } = makeHarness({ token: 'tok-1' });
+    expect(client.token).toBe('tok-1');
   });
 });

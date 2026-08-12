@@ -5,9 +5,22 @@
 // - generated 目录排除覆盖率（生成物由协议漂移门禁保证，R0-05）
 module.exports = {
   preset: 'jest-expo',
+  // immer 的 react-native export condition 指向 ESM 产物（immer.legacy-esm.js），
+  // 不在 jest-expo 默认 allowlist 内 → 需加入 transform 白名单（store 单测经 zustand/middleware/immer 引入）
+  transformIgnorePatterns: [
+    '/node_modules/(?!(.pnpm|immer|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation))',
+    '/node_modules/react-native-reanimated/plugin/',
+    '/node_modules/@react-native/babel-preset/',
+  ],
   moduleNameMapper: {
     '^@crish/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
     '^@/(.*)$': '<rootDir>/src/$1',
+    // 单 React 副本纪律：仓库并存多版本 react（根 node_modules 为桌面端 19.2.7），
+    // 组件测试必须让 renderer / react-native / 应用代码共用 app 声明的 19.2.3 同一实例，
+    // 否则出现 "Invalid hook call"（两 React 副本）。升级 React 版本时同步此三处映射。
+    '^react$': '<rootDir>/node_modules/react/index.js',
+    '^react/jsx-runtime$': '<rootDir>/node_modules/react/jsx-runtime.js',
+    '^react/jsx-dev-runtime$': '<rootDir>/node_modules/react/jsx-dev-runtime.js',
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   collectCoverageFrom: [

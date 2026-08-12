@@ -1,3 +1,14 @@
-// 业务区块占位（M4 §2.3 L3：ApprovalCard/EventRow/SessionRow/ConnectionBanner/…）
+// 业务区块（M4 §2.3 L3：ApprovalCard/EventRow/SessionRow/ConnectionBanner/…）
 // 区块 props 一律为「领域类型 + 派生标记」，不感知数据来源
-export {};
+export { default as ApprovalCard } from './ApprovalCard';
+export type { ApprovalCardProps } from './ApprovalCard';
+export {
+  decisionStatusText,
+  formatRemainingMs,
+  maskCommandSecrets,
+  maskSensitiveParamValue,
+  summarizeParameters,
+  COUNTDOWN_WARNING_MS,
+} from './ApprovalCard';
+export { default as ApprovalActionBar } from './ApprovalActionBar';
+export type { ApprovalActionBarProps } from './ApprovalActionBar';

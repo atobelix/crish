@@ -19,6 +19,15 @@ export type EnvelopeKind = DeviceKind;
 /** 出站信封（生成面 DeviceEnvelope：v/kind/msgId/ts/from/to/auth/body 全必填） */
 export type OutboundEnvelope = ContractEnvelope;
 
+/**
+ * 出站信封宽松形态（auth 可选：配对期帧无签名域 D3 §5.2；会话期由接线层
+ * 经 signer 注入——R2-03 请求帧构建器接线点）。encodeFrame/decodeFrame
+ * 以此为入参/出参基型（OutboundEnvelope 是其子型，可直接传入）。
+ */
+export type OutgoingEnvelope = Omit<ContractEnvelope, 'auth'> & {
+  auth?: ContractAuthHeader;
+};
+
 /** 入站信封（组合：auth 可选化——配对期帧无签名域，D3 §5.2 配对期可选） */
 export type InboundEnvelope = Omit<ContractEnvelope, 'auth'> & {
   auth?: ContractAuthHeader;
