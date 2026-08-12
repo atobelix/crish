@@ -82,10 +82,12 @@ export {
   type SelectionSnapshot,
 } from './selection/SelectionStore';
 
-// IME（W3-B + Round9 A-IME-03…05 + **W6-B-S** Skeleton；≠ W6-B L2 / ≠ 叶子核 / ≠ EL）
+// IME（W3-B + Round9 A-IME-03…05 + **W6-B-S** + A-IME-06 方向加深；≠ W6-B L2 全关 / ≠ 叶子核 / ≠ EL）
 export {
   ImeMachine,
   IME_FOCUS_SWITCH_STRATEGY,
+  IME_REMOTE_MERGE_STRATEGY,
+  decideRemotePatch,
   type ImePhase,
   type ImeSnapshot,
   type ImeStartResult,
@@ -93,6 +95,12 @@ export {
   type ImeCommitBoundary,
   type ImeFocusSwitchStrategy,
   type ImeFocusSwitchResult,
+  type ImeRemotePatch,
+  type ImeRemotePatchDecision,
+  type ImeRemotePatchKind,
+  type ImeRemotePatchOrigin,
+  type ImeRemotePatchRejectCode,
+  type ImeRemoteMergeStrategy,
 } from './ime/ImeMachine';
 
 export {

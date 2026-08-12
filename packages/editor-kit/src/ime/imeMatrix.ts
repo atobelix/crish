@@ -5,6 +5,7 @@
  *
  * ## 包轨钉死（W6-B-S）
  * - 本模块轨 = **W6-B-S**（必须带 `-S`）：L0 矩阵成型 + L1/L1+ 语义自动化可测加深
+ * - **W6-B 方向加深**：A-IME-06 可标 🟨automated（语义子集）；**仍禁止**写 e2e / 去 `-S`
  * - **≠ W6-B** Strict：WebView L2 必测格 e2e / 叶子核锁定门禁属 W6-B，本文件不得冒充
  * - **≠ 叶子核锁定门禁**：L3「叶子核=PM」仅在 L2 必测全 `e2e` 后；`imeMatrixLeafCoreLockEligible` 在 Skeleton 下应恒 false
  * - **≠ EL**：不关闭任何 EL（IME 锁定相关仅认 **W6-B** + 真 PM）；见 EL-dashboard 表 E
@@ -195,8 +196,10 @@ const PLATFORMS: readonly ImeMatrixPlatform[] = [
 /**
  * Round8：A-IME-01 / A-IME-02 automated。
  * Round9 / **W6-B-S**：A-IME-03…05 语义自动化加深（仍非 WebView e2e）。
+ * **W6-B 方向加深**：A-IME-06 语义自动化（远端/Agent 暂缓/禁 remount）；仍非 e2e。
  *
- * 注意：`automated` **≠** L2 `e2e`；本集合不得被写成「W6-B 完成」。
+ * 注意：`automated` **≠** L2 `e2e`；本集合不得被写成「W6-B 完成 / 叶子核锁定 / EL 关」。
+ * 07–08 仍 open；全矩阵无 e2e 格。
  */
 const AUTOMATED_IDS: ReadonlySet<ImeMatrixAssertId> = new Set([
   'A-IME-01',
@@ -204,6 +207,8 @@ const AUTOMATED_IDS: ReadonlySet<ImeMatrixAssertId> = new Set([
   'A-IME-03',
   'A-IME-04',
   'A-IME-05',
+  /** W6-B 方向加深一格：语义 🟨；≠ L2 e2e */
+  'A-IME-06',
 ]);
 
 /** L1 核心：A-IME-01 / 02（04-S / W6-B-S 语义子集） */
@@ -239,6 +244,11 @@ const AUTOMATION_REFS: Partial<Record<ImeMatrixAssertId, readonly string[]>> = {
   'A-IME-05': [
     'packages/editor-kit/src/ime/ime-matrix.contract.test.ts',
     'A-IME-05 多次 update 仅 end 产生一条 commit 边界',
+  ],
+  'A-IME-06': [
+    'packages/editor-kit/src/ime/ime-matrix.contract.test.ts',
+    'A-IME-06 合成中远端/Agent 同块 text 暂缓；禁 full remount',
+    'packages/editor-kit/src/ime/remotePatchGuard.ts',
   ],
 };
 
@@ -286,7 +296,7 @@ export function imeMatrixCellsForPlatform(
 
 /**
  * 矩阵格抽样：按覆盖状态过滤。
- * W6-B-S 预期：`automated` 含 01–05×3 端；`e2e` 为空；`open` 含 06–08。
+ * W6-B-S + 方向加深预期：`automated` 含 01–06×3 端；`e2e` 为空；`open` 含 07–08。
  */
 export function imeMatrixCellsByStatus(
   status: ImeMatrixCellStatus

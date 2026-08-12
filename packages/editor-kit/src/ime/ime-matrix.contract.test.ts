@@ -16,6 +16,7 @@
  * - **A-IME-03**：合成中滚动 pin；planScrollUnmount 不卸 composing/焦点
  * - **A-IME-04**：点另一块钉死 end_then_switch（先 end 再切）
  * - **A-IME-05**：多次 update 仅 end 产生一条 commit 边界（groupId）
+ * - **A-IME-06**（W6-B 方向加深）：合成中远端/Agent 同块 text 暂缓；结构拒；禁 full remount
  * - **W6-B-S 加深**：composing 边界（idle update / 空 final / 全结构键种）+
  *   状态迁移 + 矩阵格抽样（必测/抽样 · 端 · L1+ · 无 e2e）
  *
@@ -23,7 +24,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildPinSet, planScrollUnmount } from '../viewport/pin';
-import { IME_FOCUS_SWITCH_STRATEGY, ImeMachine } from './ImeMachine';
+import {
+  IME_FOCUS_SWITCH_STRATEGY,
+  IME_REMOTE_MERGE_STRATEGY,
+  ImeMachine,
+  decideRemotePatch,
+} from './ImeMachine';
+import type { ImeRemotePatch } from './remotePatchGuard';
 import {
   IME_MATRIX_ASSERTS,
   IME_MATRIX_CELLS,
@@ -107,13 +114,14 @@ describe('IME matrix · L0 常量成型', () => {
     );
   });
 
-  it('A-IME-01…05 三端均为 automated（🟨自动化）；06–08 open；无 e2e', () => {
+  it('A-IME-01…06 三端均为 automated（🟨自动化）；07–08 open；无 e2e', () => {
     const automatedIds: readonly ImeMatrixAssertId[] = [
       'A-IME-01',
       'A-IME-02',
       'A-IME-03',
       'A-IME-04',
       'A-IME-05',
+      'A-IME-06',
     ];
     const automatedSet = new Set<ImeMatrixAssertId>(automatedIds);
     for (const id of automatedIds) {
@@ -170,9 +178,9 @@ describe('IME matrix · W6-B-S 包轨与矩阵格抽样（≠ W6-B / ≠ 叶子�
       'A-IME-05',
     ]);
 
-    // 状态桶抽样：15 automated（5×3）+ 9 open（3×3）；0 e2e
-    expect(imeMatrixCellsByStatus('automated')).toHaveLength(15);
-    expect(imeMatrixCellsByStatus('open')).toHaveLength(9);
+    // 状态桶抽样：18 automated（6×3）+ 6 open（2×3）；0 e2e
+    expect(imeMatrixCellsByStatus('automated')).toHaveLength(18);
+    expect(imeMatrixCellsByStatus('open')).toHaveLength(6);
     expect(imeMatrixCellsByStatus('e2e')).toHaveLength(0);
     expect(imeMatrixAnyE2e()).toBe(false);
 
@@ -227,12 +235,19 @@ describe('IME matrix · W6-B-S 包轨与矩阵格抽样（≠ W6-B / ≠ 叶子�
     expect(
       imeMatrixCellsFor('A-IME-07').every((c) => c.requirement === '必测')
     ).toBe(true);
-    // 06–08 仍 open（W6-B-S 不宣称 A-IME 全表）
-    for (const id of ['A-IME-06', 'A-IME-07', 'A-IME-08'] as const) {
+    // 07–08 仍 open（方向加深仅推进 06 语义 🟨；≠ 全表 / ≠ e2e）
+    for (const id of ['A-IME-07', 'A-IME-08'] as const) {
       expect(imeMatrixCellsFor(id).every((c) => c.status === 'open')).toBe(
         true
       );
     }
+    // A-IME-06 方向加深：三端 automated，仍无 e2e
+    expect(
+      imeMatrixCellsFor('A-IME-06').every((c) => c.status === 'automated')
+    ).toBe(true);
+    expect(imeMatrixCellsFor('A-IME-06').every((c) => c.status !== 'e2e')).toBe(
+      true
+    );
   });
 });
 
@@ -737,5 +752,190 @@ describe('IME matrix · W6-B-S composing 边界与状态迁移加深', () => {
     expect(ime.startComposition('third').ok).toBe(false);
     ime.endComposition('新块定稿');
     expect(ime.drainCommitBoundaries()).toHaveLength(2); // 切块 end + 本 end
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A-IME-06 合成中远端/Agent（W6-B 方向加深 · 🟨自动化 · ≠ L2 e2e）
+// ---------------------------------------------------------------------------
+
+/**
+ * A-IME-06 语义子集（不依赖真实 collab / Agent 运行时 / WebView）：
+ * - 同块 text → defer，end 后 drain 合并
+ * - 同块 structure → reject
+ * - full_remount → reject（禁止默认整页 remount）
+ * - 异块 / idle → apply
+ *
+ * **≠ W6-B** 全 L2 e2e；**≠** 叶子核锁定；**≠ EL-01**。
+ */
+describe('IME matrix · A-IME-06 合成中远端/Agent 暂缓与禁 remount', () => {
+  it('A-IME-06: 策略常量钉死 defer_same_block_until_end', () => {
+    expect(IME_REMOTE_MERGE_STRATEGY).toBe('defer_same_block_until_end');
+    const ime = new ImeMachine();
+    expect(ime.remoteMergeStrategy).toBe('defer_same_block_until_end');
+  });
+
+  it('A-IME-06: composing 同块 text_edit 暂缓；end 后 drain 可合并（不自动 apply）', () => {
+    const ime = new ImeMachine();
+    ime.startComposition('same-block');
+    ime.updateComposition('本地拼音');
+
+    const remoteText: ImeRemotePatch = {
+      kind: 'text_edit',
+      blockId: 'same-block',
+      origin: 'remote',
+      payload: { insert: '远端增量' },
+    };
+    const agentText: ImeRemotePatch = {
+      kind: 'text_edit',
+      blockId: 'same-block',
+      origin: 'agent',
+      payload: { insert: 'Agent改写' },
+    };
+
+    // decide 无副作用
+    const d0 = ime.decideRemotePatch(remoteText);
+    expect(d0.action).toBe('defer');
+    expect(ime.peekDeferredRemotePatches()).toHaveLength(0);
+
+    const a1 = ime.acceptRemotePatch(remoteText);
+    expect(a1.action).toBe('defer');
+    if (a1.action === 'defer') {
+      expect(a1.reason).toMatch(/A-IME-06|暂缓|defer/i);
+      expect(a1.strategy).toBe('defer_same_block_until_end');
+    }
+    const a2 = ime.acceptRemotePatch(agentText);
+    expect(a2.action).toBe('defer');
+    expect(ime.peekDeferredRemotePatches()).toHaveLength(2);
+
+    // 合成仍继续；commit 边界与暂缓队列独立
+    expect(ime.isComposing()).toBe(true);
+    expect(ime.peekCommitBoundaries()).toHaveLength(0);
+
+    const end = ime.endComposition('本地拼音定稿');
+    expect(end.committedText).toBe('本地拼音定稿');
+    expect(ime.isComposing()).toBe(false);
+
+    // end 不清空暂缓——宿主 drain 后合并
+    const deferred = ime.drainDeferredRemotePatches();
+    expect(deferred).toHaveLength(2);
+    expect(deferred[0]).toEqual(remoteText);
+    expect(deferred[1]).toEqual(agentText);
+    expect(ime.peekDeferredRemotePatches()).toHaveLength(0);
+    expect(ime.drainDeferredRemotePatches()).toEqual([]);
+
+    // commit 边界仍仅一条（A-IME-05 不变量）
+    expect(ime.drainCommitBoundaries()).toHaveLength(1);
+  });
+
+  it('A-IME-06: composing 禁止 full_remount；异块 patch 放行；同块 structure 拒绝', () => {
+    const ime = new ImeMachine();
+    ime.startComposition('comp-remote');
+
+    const remount: ImeRemotePatch = {
+      kind: 'full_remount',
+      origin: 'remote',
+    };
+    const rRemount = ime.acceptRemotePatch(remount);
+    expect(rRemount.action).toBe('reject');
+    if (rRemount.action === 'reject') {
+      expect(rRemount.code).toBe('composing_forbid_full_remount');
+      expect(rRemount.reason).toMatch(/A-IME-06|remount/i);
+    }
+    // reject 不入队
+    expect(ime.peekDeferredRemotePatches()).toHaveLength(0);
+
+    const structSame: ImeRemotePatch = {
+      kind: 'structure_op',
+      blockId: 'comp-remote',
+      origin: 'agent',
+      payload: { op: 'split_block' },
+    };
+    const rStruct = ime.acceptRemotePatch(structSame);
+    expect(rStruct.action).toBe('reject');
+    if (rStruct.action === 'reject') {
+      expect(rStruct.code).toBe('composing_remote_structure');
+    }
+    expect(ime.peekDeferredRemotePatches()).toHaveLength(0);
+
+    const otherText: ImeRemotePatch = {
+      kind: 'text_edit',
+      blockId: 'other-block',
+      origin: 'remote',
+    };
+    const otherStruct: ImeRemotePatch = {
+      kind: 'structure_op',
+      blockId: 'other-block',
+      origin: 'agent',
+    };
+    expect(ime.acceptRemotePatch(otherText).action).toBe('apply');
+    expect(ime.acceptRemotePatch(otherStruct).action).toBe('apply');
+    // apply 不入队
+    expect(ime.peekDeferredRemotePatches()).toHaveLength(0);
+    // composing 不被远端决策打断
+    expect(ime.isComposing()).toBe(true);
+    expect(ime.getComposingBlockId()).toBe('comp-remote');
+  });
+
+  it('A-IME-06: idle 一律 apply（含 full_remount 决策层允许）；纯函数与机一致', () => {
+    const ime = new ImeMachine();
+    expect(ime.isComposing()).toBe(false);
+
+    const patches: ImeRemotePatch[] = [
+      { kind: 'text_edit', blockId: 'b1', origin: 'remote' },
+      { kind: 'structure_op', blockId: 'b1', origin: 'agent' },
+      { kind: 'full_remount', origin: 'remote' },
+    ];
+    for (const patch of patches) {
+      const d = ime.decideRemotePatch(patch);
+      expect(d.action, `${patch.kind} idle`).toBe('apply');
+      // 纯函数同源
+      expect(decideRemotePatch(false, null, patch).action).toBe('apply');
+    }
+
+    // composing 纯函数路径
+    const sameText: ImeRemotePatch = {
+      kind: 'text_edit',
+      blockId: 'x',
+      origin: 'remote',
+    };
+    expect(decideRemotePatch(true, 'x', sameText).action).toBe('defer');
+    expect(decideRemotePatch(true, 'x', { kind: 'full_remount' }).action).toBe(
+      'reject'
+    );
+    expect(
+      decideRemotePatch(true, 'x', {
+        kind: 'structure_op',
+        blockId: 'x',
+      }).action
+    ).toBe('reject');
+    expect(
+      decideRemotePatch(true, 'x', {
+        kind: 'text_edit',
+        blockId: 'y',
+      }).action
+    ).toBe('apply');
+  });
+
+  it('A-IME-06: 矩阵格 三端 automated 且 automationRefs 非空；仍非 e2e / 非叶子核', () => {
+    const cells = imeMatrixCellsFor('A-IME-06');
+    expect(cells).toHaveLength(3);
+    for (const cell of cells) {
+      expect(cell.status).toBe('automated');
+      expect(imeMatrixStatusGlyph(cell.status)).toBe('🟨自动化');
+      expect(cell.automationRefs?.length).toBeGreaterThan(0);
+      expect(cell.status).not.toBe('e2e');
+    }
+    // 包轨与 L2/L3 边界不回退
+    expect(IME_MATRIX_PACKAGE_TRACK).toBe('W6-B-S');
+    expect(imeMatrixAnyE2e()).toBe(false);
+    expect(imeMatrixLeafCoreLockEligible()).toBe(false);
+    // 07/08 仍 open —— 未假关全矩阵
+    expect(
+      imeMatrixCellsFor('A-IME-07').every((c) => c.status === 'open')
+    ).toBe(true);
+    expect(
+      imeMatrixCellsFor('A-IME-08').every((c) => c.status === 'open')
+    ).toBe(true);
   });
 });

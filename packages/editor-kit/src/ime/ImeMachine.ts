@@ -1,11 +1,12 @@
 /**
  * IME composition 状态机（stub，可测）。
  *
- * 轨：**W6-B-S** 语义子集可测（L0/L1/L1+）；**≠ W6-B** WebView L2 e2e；
- * **≠ 叶子核锁定门禁**；**≠ EL** 关闭。
+ * 轨：**W6-B-S** 语义子集可测（L0/L1/L1+）+ **A-IME-06 方向加深**（🟨）；
+ * **≠ W6-B** WebView L2 e2e 全关；**≠ 叶子核锁定门禁**；**≠ EL** 关闭。
  *
  * 对齐：
  * - A-IME-01…05：合成生命周期 + 结构键/slash 禁 + pin + 切块策略 + 一步撤销边界
+ * - A-IME-06：合成中远端/Agent 同块 text 暂缓；结构拒；禁止 full remount
  * - round-D D5 §6：Idle | Composing（PendingFlush 可后续扩展）
  * - W0 MountSpec：composing 块必须在 pinned；卸载焦点/composing = 违规
  *
@@ -15,6 +16,7 @@
  * 3. composing 块必须进入 pin（buildPinSet 自动并入）
  * 4. A-IME-04：合成中点另一块 → **end_then_switch**（先 end 提交原块再切）
  * 5. A-IME-05：仅 endComposition 产生一次 commit 边界（同 groupId）；update 不产生边界
+ * 6. A-IME-06：同块远端 text → defer 队列；full_remount / 同块结构 → reject
  */
 
 import type { BlockId } from '@crish/block-paper-contract';
@@ -28,6 +30,12 @@ import {
   type PinResult,
   type PinViolationCode,
 } from '../viewport/pin';
+import {
+  decideRemotePatch as decideRemotePatchPure,
+  IME_REMOTE_MERGE_STRATEGY,
+  type ImeRemotePatch,
+  type ImeRemotePatchDecision,
+} from './remotePatchGuard';
 import {
   filterStructureIntents,
   guardStructureIntent,
@@ -124,6 +132,12 @@ export class ImeMachine {
   private preview = '';
   /** A-IME-05：自上次 drain 起产生的提交边界（仅 end 写入） */
   private pendingBoundaries: ImeCommitBoundary[] = [];
+  /**
+   * A-IME-06：合成中同块远端/Agent text 暂缓队列。
+   * 仅 `acceptRemotePatch` 在 decision=defer 时入队；reject/apply 不入队。
+   * end 后宿主 `drainDeferredRemotePatches` 合并；不自动 apply。
+   */
+  private deferredRemotePatches: ImeRemotePatch[] = [];
 
   /** 当前是否 composing */
   isComposing(): boolean {
@@ -190,6 +204,7 @@ export class ImeMachine {
    * Idle 时调用 → 空提交，状态不变，**不**写边界。
    *
    * 离开 composing 时写入 **恰好一条** `ImeCommitBoundary`（A-IME-05 一步撤销）。
+   * A-IME-06 暂缓队列**不**在此清空——宿主 end 后 drain 合并。
    *
    * @param finalText 控件最终文本；缺省则用 preview
    */
@@ -290,6 +305,50 @@ export class ImeMachine {
       toBlockId: targetBlockId,
       ended,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // A-IME-06：远端 / Agent 补丁（暂缓 / 禁 remount）
+  // -------------------------------------------------------------------------
+
+  /**
+   * A-IME-06：纯决策（无入队副作用）。
+   * 策略钉死 `IME_REMOTE_MERGE_STRATEGY`。
+   */
+  decideRemotePatch(patch: ImeRemotePatch): ImeRemotePatchDecision {
+    return decideRemotePatchPure(this.isComposing(), this.blockId, patch);
+  }
+
+  /**
+   * A-IME-06：接受远端/Agent 补丁决策；`defer` 时入队，`reject`/`apply` 不入队。
+   * 宿主在 `apply` 时自行落盘；`defer` 等 end 后 `drainDeferredRemotePatches`。
+   */
+  acceptRemotePatch(patch: ImeRemotePatch): ImeRemotePatchDecision {
+    const decision = this.decideRemotePatch(patch);
+    if (decision.action === 'defer') {
+      this.deferredRemotePatches.push(patch);
+    }
+    return decision;
+  }
+
+  /**
+   * A-IME-06：取出并清空暂缓的远端/Agent 补丁（通常在 endComposition 之后）。
+   * 不自动 apply——宿主按序合并。
+   */
+  drainDeferredRemotePatches(): ImeRemotePatch[] {
+    const out = this.deferredRemotePatches;
+    this.deferredRemotePatches = [];
+    return out;
+  }
+
+  /** A-IME-06：只读窥视暂缓队列（不消费） */
+  peekDeferredRemotePatches(): readonly ImeRemotePatch[] {
+    return this.deferredRemotePatches;
+  }
+
+  /** A-IME-06：策略常量透出（与 remotePatchGuard 同源） */
+  get remoteMergeStrategy() {
+    return IME_REMOTE_MERGE_STRATEGY;
   }
 
   /**
@@ -427,3 +486,15 @@ export class ImeMachine {
 }
 
 export type { PinViolationCode, GuardableIntent, StructureGuardResult };
+export type {
+  ImeRemotePatch,
+  ImeRemotePatchDecision,
+  ImeRemotePatchKind,
+  ImeRemotePatchOrigin,
+  ImeRemotePatchRejectCode,
+  ImeRemoteMergeStrategy,
+} from './remotePatchGuard';
+export {
+  IME_REMOTE_MERGE_STRATEGY,
+  decideRemotePatch,
+} from './remotePatchGuard';
