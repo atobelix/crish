@@ -7,6 +7,10 @@ import {
   setDefaultNoteTransport,
 } from '../api/noteApi';
 import {
+  clearNoteDocWrittenListenersForTests,
+  subscribeNoteDocWritten,
+} from './note-doc-written';
+import {
   assertStreamCompleted,
   buildSendToNoteIntent,
   clearSendToNoteIdempotencyForTests,
@@ -22,6 +26,7 @@ import {
 beforeEach(() => {
   resetSendToNoteIntentSeqForTests();
   clearSendToNoteIdempotencyForTests();
+  clearNoteDocWrittenListenersForTests();
   setDefaultNoteTransport(null);
 });
 
@@ -130,6 +135,10 @@ describe('dispatchSendToNote + mock sink', () => {
       ok: true,
       blockIds: ['b-a', 'b-b'],
     });
+    const written: string[] = [];
+    const unsub = subscribeNoteDocWritten((ev) => {
+      written.push(ev.docId);
+    });
     const result = await dispatchSendToNote(
       {
         messageId: 'msg-ok',
@@ -146,6 +155,9 @@ describe('dispatchSendToNote + mock sink', () => {
     expect(result.blockIds).toEqual(['b-a', 'b-b']);
     expect(mock.calls).toHaveLength(1);
     expect(mock.calls[0]!.source.markdown).toBe('## ok body');
+    // CONN-G1：applied 写后通知同 doc
+    expect(written).toEqual(['doc-ok']);
+    unsub();
   });
 
   it('失败：返回 Result，不假装已写树', async () => {

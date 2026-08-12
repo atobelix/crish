@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import type { ApplyOpsAdapter, IntentSink } from '@crish/block-paper';
+import type {
+  ApplyOpsAdapter,
+  IntentSink,
+  TurnIntoSink,
+} from '@crish/block-paper';
 import styles from './WorkspaceEmptyState.module.css';
 import { NotePaperPanel } from '../note-paper/NotePaperPanel';
 import { NotePaperStrictPanel } from '../note-paper/NotePaperStrictPanel';
@@ -8,6 +12,7 @@ import {
   createProductStrictHydrateTransport,
   type NoteHydrateTransport,
 } from '../note-paper/hydrateProjection';
+import { createProductMdPrefixBinding } from '../note-paper/noteMdPrefixBridge';
 import {
   createProductStrictSlashBinding,
   type CreateProductStrictSlashBindingOptions,
@@ -37,7 +42,7 @@ export type WorkspaceEmptyStateProps = {
    *
    * 诚实：Strict 默认 hydrate 见 `createProductStrictHydrateTransport`
    * （可检测 Tauri → tauri-ipc；无 Tauri → fixture）；**可演示 ≠ EL**；
-   * **≠ 打开完成**；**DocSession 全链若未满须诚实**。
+   * **≠ 打开完成**；后端默认 `hydrate_path=doc-session` 仍 **≠ EL-01/04/08**。
    */
   preferredNotePaperTrack?: NotePaperEmptyOpenMode;
   /**
@@ -47,17 +52,23 @@ export type WorkspaceEmptyStateProps = {
    */
   strictHydrateTransport?: NoteHydrateTransport;
   /**
-   * CONN-B：可选注入真 apply 适配器（DocSession::apply / IPC 等价）。
-   * 有值 → 空态 Strict 默认 `createCollabApplySink` 可写；
-   * 无值 → **只读 catalog**（`data-slash-write-mode=readonly`），禁止可点无写。
-   * **禁止** 无后端时静默 mock 当生产默认。**≠ EL-01**；**≠ A-BLK-02 e2e**。
+   * CONN-B / CONN-D2：可选注入真 apply 适配器（DocSession::apply / IPC 等价）。
+   * 有值 → slash 可写 collab + MD 前缀 provisional turn_into 可写；
+   * 无值 → slash **只读 catalog** + mdPrefix **disabled**，禁止静默假写。
+   * **禁止** 无后端时静默 mock 当生产默认。
+   * **≠ EL-01**；**≠ A-BLK-02/08/09 e2e**；桌面接线 ≠ 打开完成。
    */
   strictApplyOps?: ApplyOpsAdapter;
   /**
-   * 可选直接注入 Intent sink（优先于 `strictApplyOps`）。
+   * 可选直接注入 Intent sink（优先于 `strictApplyOps` 的 slash 通道）。
    * 测/高级宿主；生产形状应优先 applyOps + collab 工厂。
    */
   slashIntentSink?: IntentSink;
+  /**
+   * 可选直接注入 TurnInto sink（优先于 `strictApplyOps` 的 MD 前缀通道）。
+   * CONN-D2；与 slash **分通道**。
+   */
+  turnIntoSink?: TurnIntoSink;
   /**
    * 透传 collab wire 选项（allocateId / resolveOrder 等）。
    * 仅当走 `strictApplyOps` 路径时生效。
@@ -77,14 +88,18 @@ export type WorkspaceEmptyStateProps = {
  * - **W5-B-S Skeleton** 预览壳入口 **保留**（`open-note-paper-preview`）
  * - **CONN-B slash 写锥**：有 `strictApplyOps`/`slashIntentSink` → 可写 collab sink；
  *   无后端 → 显式只读 catalog（禁止假写路径）
+ * - **CONN-D2 mdPrefix 写锥**：有 `strictApplyOps`/`turnIntoSink` → provisional turn_into；
+ *   无后端 → disabled；**≠ A-BLK-08/09 e2e**；provisional ≠ kind UI
  *
- * ## 诚实边界（08 §0.2 / 20 L3–L4 · R10）
+ * ## 诚实边界（08 §0.2 / 20 L3–L4 · R10 · CONN-A1）
  * - **可演示 ≠ EL-01 / EL-08 关闭**
- * - **≠ 打开完成**；后端 hydrate 现为 query 投影派生，**DocSession 全链未满**
+ * - **≠ 打开完成**；后端默认 `hydrate_path=doc-session`（真 `DocSession::hydrate` 投影）；
+ *   对照轨 `prefer_query` → `query-blocks`；**path 字符串 ≠ G-HYD 打开完成 / ≠ EL-01/04/08**
  * - **fixture ≠ 生产权威**；无 Tauri 回退 fixture **不是** 伪装 tauri-ipc
  * - 有 Tauri 时失败/空/成功走真 IPC 三态，**不**静默回退 fixture
  * - 挂载冒充交付 = S5；禁止去 `-S` 冒充 Strict
- * - slash 默认可写 **仅当** 注入 applyOps/sink；**≠** A-BLK-02 e2e / EL-01 关闭
+ * - slash / mdPrefix 默认可写 **仅当** 注入 applyOps/sink；**≠** e2e / EL 关闭
+ * - 桌面 mdPrefix 接线 ≠ 打开完成
  */
 export function WorkspaceEmptyState({
   wsId,
@@ -93,6 +108,7 @@ export function WorkspaceEmptyState({
   strictHydrateTransport,
   strictApplyOps,
   slashIntentSink,
+  turnIntoSink: turnIntoSinkProp,
   strictSlashWireOptions,
 }: WorkspaceEmptyStateProps) {
   const [openMode, setOpenMode] = useState<NotePaperEmptyOpenMode | null>(null);
@@ -122,6 +138,23 @@ export function WorkspaceEmptyState({
     [strictApplyOps, slashIntentSink, strictSlashWireOptions]
   );
 
+  /**
+   * CONN-D2：产品默认 MD 前缀 / turn_into 写锥。
+   * - 有 applyOps/sink → writable + provisional collab（pending 形状）
+   * - 无 → disabled（UI 可测；不假装已转块）
+   * 与 slash **分通道**；同 strictApplyOps 可并行驱动。
+   */
+  const mdPrefixBinding = useMemo(
+    () =>
+      createProductMdPrefixBinding({
+        ...(strictApplyOps !== undefined ? { applyOps: strictApplyOps } : {}),
+        ...(turnIntoSinkProp !== undefined
+          ? { turnIntoSink: turnIntoSinkProp }
+          : {}),
+      }),
+    [strictApplyOps, turnIntoSinkProp]
+  );
+
   if (openMode === 'strict') {
     return (
       <div
@@ -134,6 +167,9 @@ export function WorkspaceEmptyState({
         data-slash-write-mode={slashBinding.mode}
         data-slash-sink-source={slashBinding.source}
         data-slash-sink={slashBinding.sink ? '1' : '0'}
+        data-md-prefix-write-mode={mdPrefixBinding.mode}
+        data-md-prefix-sink-source={mdPrefixBinding.source}
+        data-md-prefix-sink={mdPrefixBinding.sink ? '1' : '0'}
         data-testid="note-paper-strict-host"
         style={{
           alignItems: 'stretch',
@@ -148,6 +184,9 @@ export function WorkspaceEmptyState({
           slashIntentSink={slashBinding.sink}
           slashWriteMode={slashBinding.mode}
           slashSinkSource={slashBinding.source}
+          turnIntoSink={mdPrefixBinding.sink}
+          mdPrefixWriteMode={mdPrefixBinding.mode}
+          mdPrefixSinkSource={mdPrefixBinding.source}
           title="笔记纸面（W5-B Strict · 空态演示）"
           onClose={() => setOpenMode(null)}
         />
@@ -235,6 +274,8 @@ export function WorkspaceEmptyState({
       data-product-default-track={W5B_PRODUCT_DEFAULT_EMPTY_TRACK}
       data-slash-write-mode={slashBinding.mode}
       data-slash-sink-source={slashBinding.source}
+      data-md-prefix-write-mode={mdPrefixBinding.mode}
+      data-md-prefix-sink-source={mdPrefixBinding.source}
       onPointerDown={onActivate}
     >
       <div className={styles.emptyStateIconWrapper}>
@@ -246,8 +287,11 @@ export function WorkspaceEmptyState({
       </div>
       {/*
         产品默认 Strict（W5-B）+ Skeleton 预览壳（W5-B-S）双入口。
-        可演示 ≠ EL；≠ 打开完成；fixture ≠ 生产权威；DocSession 全链未满。
+        可演示 ≠ EL；≠ 打开完成；fixture ≠ 生产权威；
+        后端默认 hydrate_path=doc-session 仍 ≠ EL-01/04/08（CONN-A1）。
         CONN-B：无 apply 默认 slash 只读；注入 applyOps 后可写。
+        CONN-D2：无 apply 默认 mdPrefix disabled；注入后 provisional turn_into 可写。
+        桌面接线 ≠ 打开完成 / ≠ A-BLK-08/09 e2e / ≠ EL-01。
       */}
       <div
         className={styles.emptyStateActions}

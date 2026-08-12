@@ -1,8 +1,9 @@
 /**
  * @crish/block-paper
  *
- * 块纸面呈现层（W3-C chrome + W3-D 叶子 Intent + W3-E 代码叶 + W3-F 结构 Intent + W3-H 方向）：
+ * 块纸面呈现层（W3-C chrome + W3-D 叶子 Intent + W3-E 代码叶 + W3-E′ 选区/多选/焦点 + W3-F 结构 Intent + W3-H 方向）：
  * - BlockChromeModel：把手 / 折叠 / 多选高亮 / 静默 L0 / 批量结构 Intent
+ * - **W3-E′** `BlockSelectionBridge`：跨块 multi + anchor/head + focus 交互（可点名可测；**≠ EL-01**）
  * - SlashMenuModel：slash 打开·过滤·关闭·选中 → slash_insert；composing 禁开/禁交
  * - structureIntents：insert/delete/move/collapse/slash_insert + PaperIntent 联合
  * - silentFixture：N 块假文档投影（ProjectionDiff / MemoryBlock）
@@ -25,6 +26,8 @@
  *   - **W3-D** = 真 PM + TextEdit/Structure Intent → 真 apply（本包工厂 + RS 集成）
  *   - **W3-E 方向子集** = 代码叶 Model + 真 CM6 host + flavour/fence→kind 映射 + 只读呈现；
  *     测 `leaves/code/*.w3e.test.ts`；**≠** A-BLK-14 产品 e2e；**≠** EL-01
+ *   - **W3-E′ 选区/多选/焦点方向** = `BlockSelectionBridge`（跨块 multi + anchor/head + focus 交互）；
+ *     测 `chrome/blockSelection.w3e_sel.test.ts`；**≠ EL-01**；**≠** Notion 框选 e2e
  *   - **W3-F-S** = StructureIntent + wire + mock（`chrome.w3f.test.ts`）
  *   - **W3-F Strict 子集** = chrome slash_insert / delete_blocks → `createCollabApplySink`
  *     （`chrome.w3f_apply.test.ts` + RS `w3_f_*`）
@@ -57,6 +60,18 @@ export {
   type ChromeStructureResult,
   type ChromeStructureOptions,
 } from './chrome/BlockChrome';
+
+// W3-E′：跨块多选 / 焦点方向桥（chrome 投影；≠ EL-01；≠ 重复 code 叶）
+export {
+  BlockSelectionBridge,
+  expandBlockRange,
+  type BlockSelectionMode,
+  type BlockSelectionSnapshot,
+  type SetMultiSelectedOptions,
+  type ClearMultiOptions,
+  type SetFocusedOptions,
+  type BlockSelectionBridgeOptions,
+} from './chrome/blockSelection';
 
 // Slash 菜单
 export {

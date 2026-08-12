@@ -183,6 +183,52 @@ describe('hydrateProjection · w5b_strict_shape', () => {
     expect(out.projection.source).toBe('tauri-ipc');
     expect(out.projection.rev).toBe(5);
     expect(out.projection.blocks[0]?.text).toMatch(/NoteHydrateIpc/);
+    // CONN-A1：mock 默认 path=doc-session 可观测；≠ 打开完成 / ≠ 关 EL
+    expect(out.projection.hydratePath).toBe('doc-session');
+  });
+
+  it('conn_a1_mock_ipc_default_hydrate_path_doc_session_observable', async () => {
+    // 默认 mock 成功体 path=doc-session；preferQuery → query-blocks 对照
+    // **禁止** 用本测宣称关 EL-01/04/08 或打开完成（仅分轨可观测）
+    const ipc = createMockNoteHydrateIpc({
+      'doc-path': {
+        rev: 2,
+        blocks: [
+          {
+            id: 'p1',
+            flavour: 'paragraph',
+            index: 0,
+            text: 'path label only',
+          },
+        ],
+      },
+    });
+    const t = adaptNoteHydrateIpcAsTransport(ipc);
+    const def = await t.hydrate('doc-path');
+    expect(def.ok).toBe(true);
+    if (!def.ok) return;
+    expect(def.projection.source).toBe('tauri-ipc');
+    expect(def.projection.hydratePath).toBe('doc-session');
+    // fixture 演示轨不得带 tauri-ipc / doc-session 冒充
+    const fx = createFixtureHydrateTransport({
+      'doc-fx-path': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'f1',
+            flavour: 'paragraph',
+            text: 'fixture',
+            index: 0,
+          }),
+        ],
+      },
+    });
+    const fxOut = await fx.hydrate('doc-fx-path');
+    expect(fxOut.ok).toBe(true);
+    if (!fxOut.ok) return;
+    expect(fxOut.projection.source).toBe('fixture');
+    expect(fxOut.projection.source).not.toBe('tauri-ipc');
+    expect(fxOut.projection.hydratePath).toBeUndefined();
   });
 });
 
@@ -215,6 +261,7 @@ describe('hydrateProjection · product default source selection', () => {
   });
 
   it('product_strict_transport_tauri_uses_ipc_source_success', async () => {
+    // path=doc-session 可观测 ≠ 打开完成 / ≠ 关 EL（CONN-A1 分轨诚实）
     const ipc = createMockNoteHydrateIpc({
       'doc-product-tauri': {
         rev: 11,
@@ -237,6 +284,7 @@ describe('hydrateProjection · product default source selection', () => {
     if (!out.ok) return;
     expect(out.projection.source).toBe('tauri-ipc');
     expect(out.projection.source).not.toBe('fixture');
+    expect(out.projection.hydratePath).toBe('doc-session');
     expect(out.projection.rev).toBe(11);
     expect(out.projection.blocks[0]?.text).toMatch(/product default tauri-ipc/);
   });

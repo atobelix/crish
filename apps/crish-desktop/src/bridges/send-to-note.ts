@@ -15,6 +15,7 @@
  */
 
 import { resolveNoteTransport, type NoteTransport } from '../api/noteApi';
+import { notifyNoteDocWritten } from './note-doc-written';
 
 // ---------------------------------------------------------------------------
 // Surface 常量（本地；若 contract 后续导出 EditorSurface 可对齐替换）
@@ -407,6 +408,12 @@ export async function dispatchSendToNote(
       success.blockIds = [...sinkResult.blockIds];
     }
     cache.set(intent.intentId, success);
+    // CONN-G1：写后通知同 doc Strict hydrate 读回（幂等重放 applied=false 不通知）
+    notifyNoteDocWritten({
+      docId: intent.target.docId,
+      intentId: intent.intentId,
+      source: 'send_to_note',
+    });
     return success;
   } catch (err) {
     const reason =

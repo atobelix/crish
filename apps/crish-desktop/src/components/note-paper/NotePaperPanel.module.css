@@ -180,12 +180,41 @@ button.badge:focus-visible {
   box-sizing: border-box;
 }
 
-/* React slash 浮层：与 .bp-slash-host 同皮；叠在阅读列内 */
+/*
+ * React slash 浮层锚点（SlashMenuOverlay className）
+ * 皮：chrome.css .bp-slash-host（elevated + shadow-lg + z-popover + 280 宽）
+ * 此处只做阅读列内偏移；禁止第三套色 / 裸 z / 删影冒充 chat 域。
+ * Strict / Skeleton 共用；open 路径 ≠ EL-01。
+ */
 .slashOverlay {
-  /* chrome.css .bp-slash-host 已 absolute + z-popover；此处仅偏移锚点 */
   top: var(--space-2, 8px);
   left: var(--space-6, 24px);
+  /* 列内不溢出：宽已由 host min(280,100%)；锚点贴左 gutter */
+  max-width: calc(100% - var(--space-2, 8px));
 }
+
+/* Strict / 产品顶栏：slash 写模式 chip（data-slash-write-mode on .badge） */
+.badge[data-slash-write-mode='readonly'] {
+  background: var(
+    --color-info-bg,
+    var(--accent-blue-light, hsl(217, 70%, 96%))
+  );
+  color: var(--color-info, var(--accent-blue, #1d4ed8));
+}
+
+.badge[data-slash-write-mode='writable'] {
+  background: var(
+    --control-soft-bg,
+    color-mix(
+      in srgb,
+      var(--control-mix-color, #4a4035) 4%,
+      var(--bg-primary, #f0ebe6)
+    )
+  );
+  color: var(--text-secondary, #555555);
+}
+
+/* slash 打开：纸面不改底、不抬整面板影；只读/可写靠 chip + 浮层 banner */
 
 /*
  * W3-G PaperList 产品挂载槽（② PaperListDomMount · class np-paper-list-mount）

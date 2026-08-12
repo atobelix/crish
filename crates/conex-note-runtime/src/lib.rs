@@ -14,10 +14,18 @@
 //!   → dryRun? preview 零写 : commit_ops 原子批
 //! ```
 //!
-//! # 诚实边界（W4-A / W4-F）
+//! # SD-06 纵向切开
+//! - [`store_backend`]：薄 facade + `NoteBackend` trait + re-export 入口
+//! - [`store_plan_ops`]：`plan_block_ops_to_collab`（plan→collab）
+//! - [`store_hydrate`]：session ensure + hydrate 冷热投影
+//! - [`store_apply_md`]：`apply_md_fragment` 真路径 + lossy 映射
+//! - [`store_outline`]：大纲 DFS / 投影表
+//! - 公开 API 仍经 [`StoreNoteBackend`]（**无 break**）
+//!
+//! # 诚实边界（W4-A / W4-F / SD-06）
 //! - **已交付**：Store 路径映射 `ApplyReport.lossy` → 工具契约 `NoteLossyReport`
 //! - **已交付**：`StoreNoteBackend::apply_block_ops` 真写入（非默认 trait 拒写）
-//! - **≠ EL-05**；**≠ A-AGT 满表**；**≠ W6-E**
+//! - **已交付（结构）**：SD-06 切开上帝文件；**≠ EL-05**；**≠ A-AGT 满表**；**≠ W6-E**
 //!
 //! # 会话策略
 //! 进程内 `Mutex<HashMap<doc_id, DocSession>>`：
@@ -41,7 +49,11 @@
 #![allow(missing_docs)]
 
 mod hydrate_projection;
+mod store_apply_md;
 mod store_backend;
+mod store_hydrate;
+mod store_outline;
+mod store_plan_ops;
 
 pub use hydrate_projection::{
     project_session_tree, projection_from_session, DocSessionHydrateBlock,

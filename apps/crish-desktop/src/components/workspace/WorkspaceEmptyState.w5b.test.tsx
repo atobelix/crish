@@ -10,8 +10,13 @@
  * - 默认倾向 strict（W5B_PRODUCT_DEFAULT_EMPTY_TRACK）；Skeleton 双轨保留
  * - preferredNotePaperTrack 可切 skeleton 为主 CTA
  * - **CONN-B**：无 applyOps 默认 slash 只读；注入 applyOps 后点 slash → wire/submit
- * - **可演示 ≠ EL**；**≠ 打开完成**；fixture ≠ 生产权威；DocSession 全链未满
- * - **≠ EL-01**；**≠ A-BLK-02 e2e 满关**
+ * - **CONN-D2**：无 applyOps 默认 mdPrefix disabled；注入后 `data-md-prefix-write-mode=writable`
+ *   （叶路径见 `noteMdPrefixBridge.test.ts` wireCalls）；**≠ A-BLK-08/09 e2e**
+ * - **CONN-A1**：mock/IPC 成功体可透传 `data-hydrate-path=doc-session`；
+ *   **禁止** 该属性/文案宣称关 EL / 打开完成；fixture 不得伪装 tauri-ipc
+ * - **可演示 ≠ EL**；**≠ 打开完成**；fixture ≠ 生产权威；
+ *   后端默认 `hydrate_path=doc-session` 仍 **≠ EL-01/04/08**
+ * - **≠ EL-01**；**≠ A-BLK-02/08 e2e 满关**；桌面接线 ≠ 打开完成
  *
  * Skeleton 入口/测见 WorkspaceEmptyState.w5bs.test.tsx（必须仍绿）。
  */
@@ -84,6 +89,8 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     // 诚实：vitest 无 Tauri → 产品默认回退 fixture，禁止伪装 tauri-ipc
     expect(panel).toHaveAttribute('data-hydrate-source', 'fixture');
     expect(panel).not.toHaveAttribute('data-hydrate-source', 'tauri-ipc');
+    // CONN-A1：fixture 无后端 path 标签，不得冒充 doc-session 数据面
+    expect(panel).not.toHaveAttribute('data-hydrate-path');
     expect(panel).toHaveAttribute('data-doc-id', 'strict-ws-strict-1');
     expect(panel).toHaveAttribute('data-block-count', '3');
     // 不得冒充 Skeleton
@@ -157,6 +164,8 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
 
   it('w5b_product_empty_accepts_tauri_ipc_product_transport_when_injected', async () => {
     // 模拟「可检测 Tauri」产品默认：source=tauri-ipc；≠ fixture 伪装
+    // CONN-A1：mock 默认 hydrate_path=doc-session → DOM data-hydrate-path 可观测
+    // **本测绿 ≠ 打开完成 / ≠ 关 EL-01/04/08**（仅分轨诚实）
     const { createMockNoteHydrateIpc } =
       await import('../../api/noteHydrateIpc');
     const { createProductStrictHydrateTransport } =
@@ -195,6 +204,8 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     expect(panel).toHaveAttribute('data-hydrate-source', 'tauri-ipc');
     expect(panel).not.toHaveAttribute('data-hydrate-source', 'fixture');
     expect(panel).toHaveAttribute('data-package-id', W5B_STRICT_PACKAGE_ID);
+    // CONN-A1：path 可观测；禁止把本属性当 EL/打开完成证据
+    expect(panel).toHaveAttribute('data-hydrate-path', 'doc-session');
     expect(screen.getByText('product tauri-ipc hydrate')).toBeInTheDocument();
   });
 
@@ -343,5 +354,73 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
         screen.queryByTestId('note-paper-strict-slash-overlay')
       ).toBeNull();
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // CONN-D2：产品空态 mdPrefix 写锥（默认 disabled / 注入可写）
+  // 桌面接线 ≠ 打开完成；≠ A-BLK-08/09 e2e；≠ EL-01
+  // -------------------------------------------------------------------------
+
+  it('conn_d2_product_empty_default_md_prefix_disabled', async () => {
+    render(<WorkspaceEmptyState wsId="ws-conn-d2-ro" />);
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-md-prefix-write-mode',
+      'disabled'
+    );
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-md-prefix-sink-source',
+      'none'
+    );
+
+    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-md-prefix-write-mode', 'disabled');
+    expect(panel).toHaveAttribute('data-md-prefix-sink-source', 'none');
+    expect(panel).toHaveAttribute('data-md-prefix-sink', '0');
+    expect(screen.getByTestId('note-paper-strict-host')).toHaveAttribute(
+      'data-md-prefix-write-mode',
+      'disabled'
+    );
+  });
+
+  it('conn_d2_product_empty_with_applyOps_md_prefix_writable_attrs', async () => {
+    const applyOps: ApplyOpsAdapter = async () => ({ ok: true });
+    render(
+      <WorkspaceEmptyState wsId="ws-conn-d2-wr" strictApplyOps={applyOps} />
+    );
+
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-md-prefix-write-mode',
+      'writable'
+    );
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-md-prefix-sink-source',
+      'injected-applyOps'
+    );
+
+    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-md-prefix-write-mode', 'writable');
+    expect(panel).toHaveAttribute(
+      'data-md-prefix-sink-source',
+      'injected-applyOps'
+    );
+    expect(panel).toHaveAttribute('data-md-prefix-sink', '1');
+    // 与 slash 同 applyOps 可并行；≠ 关 EL / A-BLK-08
+    expect(panel).toHaveAttribute('data-slash-write-mode', 'writable');
   });
 });

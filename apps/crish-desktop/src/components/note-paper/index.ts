@@ -78,6 +78,45 @@ export {
   type ProductStrictSlashBinding,
 } from './productSlashSink';
 
+/**
+ * CONN-D2：产品 Strict MD 前缀 / turn_into 写锥（叶/HiddenInput → commitMdPrefixFromLeaf）。
+ * **桌面接线 ≠ 打开完成**；**≠ A-BLK-08/09 e2e**；**≠ EL-01**；provisional ≠ kind UI。
+ */
+export {
+  commitProductMdPrefixFromLeaf,
+  commitProductMdPrefixFromPlainText,
+  createProductMdPrefixBinding,
+  resolveStrictMdPrefixBinding,
+  tryProductMdPrefixAfterLeafEdit,
+  type CommitProductMdPrefixOptions,
+  type CreateProductMdPrefixBindingOptions,
+  type ProductMdPrefixBinding,
+  type ProductMdPrefixCommitResult,
+  type ProductMdPrefixSinkSource,
+  type ProductMdPrefixWriteMode,
+  type ResolveStrictMdPrefixBindingInput,
+  type StrictMdPrefixUiBinding,
+} from './noteMdPrefixBridge';
+
+/**
+ * CONN-B2：产品 slash 打开路径（`/` 键 / openProductSlash；composing 拒开）。
+ * 打开后 writeMode 仍由 B1 binding 决定。**≠ EL-01**。
+ */
+export {
+  handleProductSlashKeydown,
+  isNativeFormFieldTarget,
+  isProductSlashOpenKey,
+  isWithinProductSlashFocusContext,
+  openProductSlash,
+  resolveProductSlashAnchor,
+  tryOpenProductSlashFromKey,
+  type HandleProductSlashKeydownArgs,
+  type OpenProductSlashArgs,
+  type ProductSlashKeyLike,
+  type ProductSlashOpenResult,
+  type ResolveProductSlashAnchorInput,
+} from './productSlashOpen';
+
 export {
   SendToNoteButton,
   type SendToNoteButtonProps,

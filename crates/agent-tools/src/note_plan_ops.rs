@@ -3,9 +3,37 @@
 //! 从 `note_backend` 巨石抽出 W4-F 规划引擎：校验 + 预览 + mutations，
 //! 与权威树提交分离（dryRun 零写）。
 //!
+//! # SD-07 · 双 plan 引擎对齐契约（Memory ∥ Store）
+//!
+//! 平行实现：本模块 [`plan_block_ops`]（Memory 扁平）∥
+//! `conex-note-runtime::StoreNoteBackend::plan_block_ops_to_collab`（collab 树）。
+//! **禁止** silently 行为分叉；同场景须同稳定错误码，或登记在有意差异表。
+//! 差分测：`crates/conex-note-runtime/tests/note_plan_parity.rs`（经 `NoteBackend` 公开 API）。
+//!
+//! ## 共享用例表（N≥5 · 同码 / 同 dry_run 零写）
+//!
+//! | ID | 场景 | 稳定码 / 形状 | 双端 |
+//! | -- | ---- | ------------- | ---- |
+//! | **P-01** | insert 预分配 id 已存在 | `note.id_conflict` | ✅ |
+//! | **P-02** | insert `previous_id` 不存在（合法 id 形） | `note.not_found` | ✅ |
+//! | **P-03** | update/delete 目标块不存在 | `note.not_found` | ✅ |
+//! | **P-04** | `dry_run=true` 规划成功 | preview 非空 + **零写**权威树 | ✅ |
+//! | **P-05** | `force_execution_unknown`（非 dry_run） | `note.execution_unknown` + **零半写** | ✅ |
+//! | **P-06** | update 缺 content / 空 id | `note.invalid` | ✅ |
+//!
+//! ## 有意差异表（Memory 扁平 vs Store collab · 可审计）
+//!
+//! | ID | 维度 | Memory | Store | 说明 |
+//! | -- | ---- | ------ | ----- | ---- |
+//! | **D-01** | 块 id 格式 | 任意非空串 | **UUID only**（`parse_block_id`） | 非 UUID → Store `note.invalid`；Memory 当普通 id |
+//! | **D-02** | 树模型 | 扁平 `Vec` 序 | parent + fractional `order` | move/insert 锚点语义同 previous，落盘结构不同 |
+//! | **D-03** | `parent_id` 空树 | 空文档时可不存在 parent | parent 必须已在 known | Memory 宽松探测；Store 严格 |
+//! | **D-04** | heading `kind` 预览 | `"heading"` | `"heading:{level}"` | preview 标签；错误码无关 |
+//! | **D-05** | 提交形态 | `apply_planned_ops` 列表 mutate | `commit_ops` collab Op 批 | 测形状对齐，**≠** 宣称同事务实现 |
+//!
 //! # 诚实边界
 //! - Memory 扁平列表；**≠** Store 真事务
-//! - **≠ EL-05**；**≠ W6-E Strict**；不宣称 Store 后端完成
+//! - **≠ EL-05**；**≠ W6-E Strict**；不宣称 Store 后端完成；**不**删除 Memory
 
 use crate::note_md_parse::parse_heading_level_from_text;
 use crate::note_types::{
@@ -385,5 +413,97 @@ mod tests {
         apply_planned_ops(&mut doc, plan.mutations).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert_eq!(doc.blocks[1].id, "p2");
+    }
+
+    // ── SD-07 共享用例（plan 层 · Memory；Store 对侧见 note_plan_parity）──
+
+    /// P-03：update 目标不存在 → note.not_found
+    #[test]
+    fn plan_block_ops_update_not_found() {
+        let existing = seed_p1();
+        let ops = [NoteBlockOp {
+            op: NoteBlockOpKind::Update,
+            id: Some("ghost".into()),
+            parent_id: None,
+            previous_id: None,
+            content: Some("x".into()),
+            kind: None,
+            attrs: None,
+        }];
+        let err = plan_block_ops(Some(&existing), &ops, || "n".into()).unwrap_err();
+        assert_eq!(err.code(), "note.not_found");
+        assert!(matches!(err, NoteBackendError::NotFound(_)));
+        assert_eq!(existing.len(), 1, "plan 不得改输入树");
+    }
+
+    /// P-03：delete 目标不存在 → note.not_found
+    #[test]
+    fn plan_block_ops_delete_not_found() {
+        let existing = seed_p1();
+        let ops = [NoteBlockOp {
+            op: NoteBlockOpKind::Delete,
+            id: Some("missing".into()),
+            parent_id: None,
+            previous_id: None,
+            content: None,
+            kind: None,
+            attrs: None,
+        }];
+        let err = plan_block_ops(Some(&existing), &ops, || "n".into()).unwrap_err();
+        assert_eq!(err.code(), "note.not_found");
+    }
+
+    /// P-06：update 缺 content → note.invalid
+    #[test]
+    fn plan_block_ops_update_missing_content_invalid() {
+        let existing = seed_p1();
+        let ops = [NoteBlockOp {
+            op: NoteBlockOpKind::Update,
+            id: Some("p1".into()),
+            parent_id: None,
+            previous_id: None,
+            content: None,
+            kind: None,
+            attrs: None,
+        }];
+        let err = plan_block_ops(Some(&existing), &ops, || "n".into()).unwrap_err();
+        assert_eq!(err.code(), "note.invalid");
+        assert!(matches!(err, NoteBackendError::Invalid(_)));
+    }
+
+    /// P-06：update 空 id → note.invalid
+    #[test]
+    fn plan_block_ops_update_empty_id_invalid() {
+        let existing = seed_p1();
+        let ops = [NoteBlockOp {
+            op: NoteBlockOpKind::Update,
+            id: Some("  ".into()),
+            parent_id: None,
+            previous_id: None,
+            content: Some("x".into()),
+            kind: None,
+            attrs: None,
+        }];
+        let err = plan_block_ops(Some(&existing), &ops, || "n".into()).unwrap_err();
+        assert_eq!(err.code(), "note.invalid");
+    }
+
+    /// move：previous_id 不存在 → note.not_found（对齐 P-02 形状）
+    #[test]
+    fn plan_block_ops_move_previous_not_found() {
+        let existing = seed_p1();
+        let ops = [NoteBlockOp {
+            op: NoteBlockOpKind::Move,
+            id: Some("p1".into()),
+            parent_id: None,
+            previous_id: Some("ghost-prev".into()),
+            content: None,
+            kind: None,
+            attrs: None,
+        }];
+        let err = plan_block_ops(Some(&existing), &ops, || "n".into()).unwrap_err();
+        assert_eq!(err.code(), "note.not_found");
+        assert!(err.message().contains("previous_id"));
+        assert_eq!(existing.len(), 1);
     }
 }

@@ -4,14 +4,22 @@
  * 从 `NotePaperStrictPanel` 抽出加载 / 空 / 错误 / 成功三态，
  * 降低面板主文件复杂度；**不**改 transport 契约。
  *
+ * ## CONN-G1 · send_to_note → Strict 读回
+ * 订阅 `bridges/note-doc-written`：同 docId 写成功（applied）后自动 reload。
+ * 与外部 `refreshToken` 并存；**不**依赖 StrictPanel 大改 JSX。
+ *
  * ## 诚实边界
  * - 投影 ≠ 文档权威；**禁止** 行级 EditorStore
  * - **≠** 打开完成（G-HYD）；**≠** EL-01 / EL-08
+ * - 投影可带 `hydratePath`（`doc-session` | `query-blocks`）；**path ≠ 关 EL / 打开完成**
+ * - Skeleton 双轨保留；本 hook 仅 Strict 轨使用
  *
- * 测：StrictPanel hydrate 三态测不回退（`NotePaperStrictPanel.test.tsx`）
+ * 测：StrictPanel hydrate 三态测不回退（`NotePaperStrictPanel.test.tsx`）；
+ *     CONN-G1 写后读回见 `conn-g1.send-to-note-strict-refresh.test.tsx`
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { subscribeNoteDocWritten } from '../../bridges/note-doc-written';
 import type {
   DocHydrateProjection,
   HydratedBlockProjection,
@@ -33,8 +41,14 @@ export type UseNoteHydrateOptions = {
   /**
    * 变更时重新 hydrate（演示写后刷新 / 外部触发）。
    * 默认 0。
+   * 与 CONN-G1 自动读回并存：任一侧变更均触发 reload。
    */
   refreshToken?: number | string;
+  /**
+   * 是否订阅 send_to_note 写后同 doc 读回（CONN-G1）。
+   * 默认 true；单测可关以避免跨测总线干扰。
+   */
+  autoRefreshOnWrite?: boolean;
 };
 
 export type UseNoteHydrateResult = {
@@ -62,7 +76,12 @@ export type UseNoteHydrateResult = {
 export function useNoteHydrate(
   options: UseNoteHydrateOptions
 ): UseNoteHydrateResult {
-  const { hydrateTransport, docId, refreshToken = 0 } = options;
+  const {
+    hydrateTransport,
+    docId,
+    refreshToken = 0,
+    autoRefreshOnWrite = true,
+  } = options;
 
   const [status, setStatus] = useState<HydrateUiStatus>('loading');
   const [projection, setProjection] = useState<DocHydrateProjection | null>(
@@ -70,6 +89,11 @@ export function useNoteHydrate(
   );
   const [errorReason, setErrorReason] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  /**
+   * CONN-G1：写后自动读回代次（内部 refreshToken 语义）。
+   * 外部 props.refreshToken 与写事件任一变化都会触发 reload。
+   */
+  const [writeRefreshSeq, setWriteRefreshSeq] = useState(0);
 
   const reload = useCallback(async () => {
     setStatus('loading');
@@ -95,9 +119,21 @@ export function useNoteHydrate(
     }
   }, [hydrateTransport, docId]);
 
+  // CONN-G1：同 docId 的 send_to_note applied → 内部 seq++ → reload
+  useEffect(() => {
+    if (!autoRefreshOnWrite) {
+      return undefined;
+    }
+    return subscribeNoteDocWritten((ev) => {
+      if (ev.docId === docId) {
+        setWriteRefreshSeq((n) => n + 1);
+      }
+    });
+  }, [docId, autoRefreshOnWrite]);
+
   useEffect(() => {
     void reload();
-  }, [reload, refreshToken]);
+  }, [reload, refreshToken, writeRefreshSeq]);
 
   const blocks: HydratedBlockProjection[] = projection?.blocks ?? [];
   const resolvedRev = projection?.rev ?? 0;

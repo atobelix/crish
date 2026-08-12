@@ -235,10 +235,12 @@
   font-family: var(--font-sans, system-ui, sans-serif);
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-ui, 1.35);
-  /* 浮层滚动条：细、不抢纸面 */
+  /* 浮层滚动条：与 shell / .body 同温 thin + tint thumb */
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  /* 入场微透明；eco 下取消（见文末） */
+  scrollbar-color: var(--tint-strong, var(--tint-scrollbar-thumb, transparent))
+    transparent;
+  /* 入场微透明；eco 下取消（见文末；含 React 裸 .bp-slash-host） */
   transition: opacity var(--transition-micro, 100ms ease-out);
 }
 
@@ -412,6 +414,66 @@
   user-select: none;
 }
 
+/*
+ * 只读 banner（CONN-B / Strict 未接 apply）
+ * DOM：.bp-slash-empty[data-slash-readonly=1]（SlashMenuOverlay）
+ * 与「无匹配」空态分皮：紧凑顶栏 + soft 信息底，非大块居中空态。
+ * ≠ 假写；≠ 关 EL。
+ */
+.bp-slash-host [data-slash-readonly='1'],
+.bp-slash-host .bp-slash-empty[data-slash-readonly='1'] {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: var(--space-1_5, 6px) var(--space-2, 8px);
+  border-radius: var(--item-radius, var(--radius-sm, 5px));
+  border: var(--hairline-width, 1px) solid
+    var(
+      --color-info-border,
+      color-mix(in srgb, var(--accent-blue, #1d4ed8) 18%, transparent)
+    );
+  background: var(
+    --color-info-bg,
+    var(--accent-blue-light, hsl(217, 70%, 96%))
+  );
+  color: var(--color-info, var(--accent-blue, #1d4ed8));
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  line-height: var(--line-height-ui, 1.35);
+  text-align: left;
+  letter-spacing: var(--letter-spacing-normal, 0em);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* 只读态：项禁点；中性压暗，禁止 hover 染「看起来可点」 */
+.bp-slash-host .bp-slash-item:disabled,
+.bp-slash-host .bp-slash-item[data-slash-item-disabled='1'],
+.bp-slash-host .bp-slash-item[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--text-secondary, #555555);
+}
+
+.bp-slash-host .bp-slash-item:disabled:hover,
+.bp-slash-host .bp-slash-item[data-slash-item-disabled='1']:hover,
+.bp-slash-host .bp-slash-item[aria-disabled='true']:hover,
+.bp-slash-host .bp-slash-item:disabled[data-active='1'],
+.bp-slash-host .bp-slash-item[data-slash-item-disabled='1'][data-active='1'],
+.bp-slash-host .bp-slash-item[aria-disabled='true'][aria-selected='true'] {
+  background: transparent;
+}
+
+.bp-slash-host .bp-slash-item:disabled .bp-slash-item-icon,
+.bp-slash-host .bp-slash-item[data-slash-item-disabled='1'] .bp-slash-item-icon,
+.bp-slash-host .bp-slash-item[aria-disabled='true'] .bp-slash-item-icon {
+  opacity: 0.75;
+  color: var(--text-tertiary, #696969);
+}
+
+/* host[data-slash-write-mode=readonly]：保持 elevated + shadow-lg；只读靠 banner / aria */
+
 /* ---------- flavour 轻量（DomHost 若写 data-flavour 时生效） ---------- */
 
 .bp-block-row[data-flavour='code'] {
@@ -458,13 +520,17 @@
   display: none !important;
 }
 
-/* eco：去掉过渡抖动 */
+/* eco：去掉过渡抖动
+ * React SlashMenuOverlay 常挂在阅读列、不在 .bp-chrome-root 内 → 须裸选 .bp-slash-* */
 html[data-perf-tier='eco'] .bp-chrome-root .bp-block-row,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-block-handle,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-drop-line,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-multi-check,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-host,
 html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item,
-html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item-icon {
+html[data-perf-tier='eco'] .bp-chrome-root .bp-slash-item-icon,
+html[data-perf-tier='eco'] .bp-slash-host,
+html[data-perf-tier='eco'] .bp-slash-item,
+html[data-perf-tier='eco'] .bp-slash-item-icon {
   transition: none;
 }
