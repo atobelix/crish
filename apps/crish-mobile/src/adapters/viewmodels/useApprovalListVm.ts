@@ -10,6 +10,11 @@ import type { ApprovalItem, ApprovalRecord } from '@/domain/types/domain';
 import { approvalStore } from '@/domain/store/approvalStore';
 import { useApprovalStore } from '@/adapters/hooks/useAppStore';
 import { useCountdownTick } from '@/adapters/hooks/useCountdownTick';
+import { ensureApprovalWiring } from '@/adapters/wiring/approvalWiring';
+import {
+  ensureObservationWiring,
+  getObservationWiring,
+} from '@/adapters/wiring/observationWiring';
 
 /** 已处理区展示条数（F2 §7.1 本地保留 500 条；列表只展示最近 N 条，全量查询归历史页） */
 export const APPROVAL_HISTORY_RECENT_SHOWN = 5;
@@ -54,6 +59,10 @@ export function useApprovalListVm(): ApprovalListVm {
 
   // 首帧加载态：数据源为同步 store（无异步 IO），首次 effect 后即就绪（M4 §5.9 加载态不空转）
   useEffect(() => {
+    // 审批接线装配点：观测面未启动时随审批页启动（冷启动深链直进审批场景），
+    // 已启动则复用同一网关/连接；幂等单例（useFilesVm 同款装配模式）。
+    const wiring = getObservationWiring() ?? ensureObservationWiring();
+    if (wiring) ensureApprovalWiring();
     setPhase('ready');
   }, []);
 

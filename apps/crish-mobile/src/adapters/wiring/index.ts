@@ -20,3 +20,23 @@ export type {
   ObservationWiring,
   ObservationWiringOptions,
 } from './observationWiring';
+export {
+  ApprovalBridge,
+  startApprovalWiring,
+  ensureApprovalWiring,
+  getApprovalWiring,
+  resetApprovalWiringForTest,
+  enqueueApprovalDecision,
+  approvalOutboxCount,
+  resetApprovalOutboxForTest,
+  buildApproveRequest,
+  buildDenyRequest,
+  gatewayListPendingApprovals,
+  mapReconcileApprovalItem,
+} from './approvalWiring';
+export type {
+  ApprovalWiring,
+  ApprovalWiringOptions,
+  ApprovalCommandRequest,
+  ListPendingApprovalsRepository,
+} from './approvalWiring';

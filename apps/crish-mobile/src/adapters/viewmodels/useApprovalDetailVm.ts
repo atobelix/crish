@@ -1,57 +1,27 @@
 // 审批详情页视图模型（M4 §2.2.2 范式：页面唯一数据入口，状态×命令投影）
 // - 读：approvalStore.pending / decisionBusy / history + 本地倒计时 tick（M5 §3.3 不进 store）；
 // - 写：beginDecision（决策发送开始，decisionBusy 语义，F2 §9.3-3 防双点由 store 强制执行）
-//       → outbox 入队（F2 §8.2）→ markQueued（待发送态）；
-//       本阶段网络发送桥未接线（repositories 属 R2-04 后续），入队即「待发送」，
-//       送达/回执由仓库接线后经 markDecisionSent / handleResolved 收敛（F2 §11.3）。
+//       → 决策入 outbox（F2 §8.2，接线层 approvalWiring 持有队列）→ markQueued（待发送态）；
+//       送达/回执由接线层重放闭环（invoke → markSent / approval-resolved → 收敛，F2 §11.3），
+//       本 VM 只负责入队与状态呈现，不接触网络。
 import { useCallback, useEffect, useMemo } from 'react';
 import type { ApprovalItem } from '@/domain/types/domain';
 import { approvalStore } from '@/domain/store/approvalStore';
 import { useApprovalStore } from '@/adapters/hooks/useAppStore';
 import { useCountdownTick } from '@/adapters/hooks/useCountdownTick';
 import {
-  createOutboxState,
-  enqueueDecision,
-  type EnqueueInput,
-  type OutboxState,
-} from '@/domain/data/outbox';
+  approvalOutboxCount,
+  enqueueApprovalDecision,
+  resetApprovalOutboxForTest,
+} from '@/adapters/wiring/approvalWiring';
 
-// 临时内存 outbox（F2 §8.2 纯逻辑接线；持久化与重放由 domain/repositories 接管，届时本态移除）
-let outboxState: OutboxState = createOutboxState();
-
-/** 未完成 outbox 条数（pending/failed 计入角标，sent 等待确认不计，R2UX-04-05） */
-export function approvalOutboxCount(): number {
-  return outboxState.items.filter((i) => i.status !== 'sent').length;
-}
-
-/** 测试隔离：清空内存 outbox 队列（仅测试调用） */
-export function resetApprovalOutboxForTest(): void {
-  outboxState = createOutboxState();
-}
-
-/**
- * 决策入 outbox（幂等键 toolCallId + decision，D6 §6.2；msgId 供重发幂等，D3 §8.5）。
- * 返回 outbox 入队结果：ok / superseded（同键覆盖）/ full（容量满拒绝）。
- */
-export function enqueueApprovalDecision(
-  item: ApprovalItem,
-  decision: 'approved' | 'denied',
-  reason?: string
-): 'ok' | 'superseded' | 'full' {
-  const nowMs = Date.now();
-  const input: EnqueueInput = {
-    id: `${item.request.toolCallId}::${decision}::${nowMs}`,
-    toolCallId: item.request.toolCallId,
-    decision,
-    ...(reason !== undefined ? { reason } : {}),
-    ...(item.runId !== null ? { runId: item.runId } : {}),
-    msgId: `approval-${item.request.toolCallId}-${decision}-${nowMs}`,
-    createdAtMs: nowMs,
-  };
-  const result = enqueueDecision(outboxState, input, nowMs);
-  outboxState = result.state;
-  return result.outcome;
-}
+// 兼容出口：outbox 状态与入队已迁移至接线层（approvalWiring），
+// 本模块保留导出签名供 presentation 层既有引用（approvalDetailScreen.test 等）。
+export {
+  approvalOutboxCount,
+  enqueueApprovalDecision,
+  resetApprovalOutboxForTest,
+};
 
 export interface ApprovalHistoryResult {
   decision: 'approved' | 'denied' | 'expired';
@@ -121,16 +91,15 @@ export function useApprovalDetailVm(toolCallId: string): ApprovalDetailVm {
       const outcome = current
         ? enqueueApprovalDecision(current, decision, reason)
         : 'full';
-      const s = approvalStore.getState();
       if (outcome === 'full') {
-        // 队列满：回滚 deciding→pending 并反馈失败（F2 §8.2 容量语义）
-        s.markDecisionFailed(toolCallId);
-        s.setOutboxCount(approvalOutboxCount());
+        // 队列满：回滚 deciding→pending 并反馈失败（F2 §8.2 容量语义；
+        // outboxCount 角标已由接线层 enqueue 同步）
+        approvalStore.getState().markDecisionFailed(toolCallId);
         return { ok: false, reason: 'queue-full' };
       }
-      // 决策已入 outbox → 待发送态（网络恢复后由仓库补发，F2 §8.2 / R2UX-04-05）
-      s.markQueued(toolCallId);
-      s.setOutboxCount(approvalOutboxCount());
+      // 决策已入 outbox → 待发送态（接线层重放：在线立即发送，离线等重连补发，
+      // F2 §8.2 / R2UX-04-05）
+      approvalStore.getState().markQueued(toolCallId);
       return { ok: true, queued: true };
     },
     [decisionBusy, toolCallId]
