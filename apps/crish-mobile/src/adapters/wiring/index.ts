@@ -40,3 +40,28 @@ export type {
   ApprovalCommandRequest,
   ListPendingApprovalsRepository,
 } from './approvalWiring';
+export {
+  PairingWiring,
+  startPairingWiring,
+  ensurePairingWiring,
+  getPairingWiring,
+  resetPairingWiringForTest,
+  buildAuthPersist,
+  buildSessionGateway,
+  buildSignedRequest,
+  randomNonce,
+  defaultConnectSession,
+  PAIRING_META_DEVICE_ID_KEY,
+  PAIRING_META_DESKTOP_ID_KEY,
+  PAIRING_META_HOST_KEY,
+  DEFAULT_DEVICE_NAME,
+} from './pairingWiring';
+export type {
+  PairingWiringOptions,
+  PairingInput,
+  PairingStartResult,
+  PairingSessionContext,
+  PairingWiringError,
+  PairingSnapshot,
+  SessionConnector,
+} from './pairingWiring';

@@ -30,3 +30,21 @@ export type {
   DirSortMode,
 } from './filesReducers';
 export type { FileEntry } from '../types/domain';
+
+// ── R2-14 第一波：authStore / connectionStore 追加导出（只追加，不改既有行）────
+export { configureAuthPersistence } from './authStore';
+export type {
+  AuthIdentityMeta,
+  AuthPersist,
+  PairingMeta,
+  PairingStage,
+  TokenMeta,
+} from './authStore';
+export type { ConnectionEndpoint } from './connectionStore';
+export {
+  CONNECTION_PHASE_TEXT,
+  mapWsPhase,
+  selectConnectionPhaseText,
+} from './connectionStore';
+export type { WsPhase } from './connectionStore';
+export { transitionPairState } from './authReducers';
