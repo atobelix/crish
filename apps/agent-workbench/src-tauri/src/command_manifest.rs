@@ -234,12 +234,10 @@ entry("browser_list_history", "browser", "engine", true),
         // 本轮不排期，实现随排期翻 true（与 resume_subagent 同一命令登记轮，
         // 裁决 #17）
         entry("core_resume_run", "core", "engine", false),
-        // E2 扩展：core_compact_now 同批登记（D4 §3.1 步骤 2；实现体与
-        // make_handlers! 注册随 E2 实现轮落，翻 true）。registered=false =
-        // 登记先行（无实现体不得 registered=true——registered 子集 =
-        // make_handlers! 注册面不变量，红线 6 禁止假接线；E0 裁决 4 的
-        // 「5→6」口径与本实现一致）
-        entry("core_compact_now", "core", "engine", false),
+        // E2 扩展：core_compact_now 实现体已落（E2 实现轮），registered=true
+        // 子集 = make_handlers! 注册面不变量（红线 6 禁止假接线；main.rs
+        // 同批注册，E0 裁决 4 的「5→6」口径与本实现一致）
+        entry("core_compact_now", "core", "engine", true),
     ],
 };
 
@@ -265,27 +263,29 @@ mod tests {
     /// 四命令（browser_import/list_bookmarks/history）追加后 104 → 108；
     /// Round7 note_* 三命令追加后 108 → 111；D4a 五命令
     /// （resume_subagent/kill_all/kill_subagent + core_resume_run/
-    /// core_compact_now 登记先行）追加后 111 → 116；
-    /// note_document_hydrate 追加后 116 → 117；
-    /// note_detect_mirror_drift + note_import_mirror_proposal 后 117 → 119；
-    /// note_apply_ops（CONN-B3）后 119 → 120）。
-    #[test]
-    fn manifest_count_matches_registered_surface() {
-        let total = COMMAND_MANIFEST.commands.len();
-        let registered = COMMAND_MANIFEST
-            .commands
-            .iter()
-            .filter(|c| c.registered)
-            .count();
-        let pending = total - registered;
-        assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(
-            total, 120,
-            "总数 120（note_apply_ops + mirror + hydrate + D4a，与前端同步）"
-        );
-        assert_eq!(registered, 114, "注册面 114");
-        assert_eq!(pending, 6, "登记先行 6");
-    }
+     /// core_compact_now 登记先行）追加后 111 → 116；
+     /// note_document_hydrate 追加后 116 → 117；
+     /// note_detect_mirror_drift + note_import_mirror_proposal 后 117 → 119；
+     /// note_apply_ops（CONN-B3）后 119 → 120；
+     /// 电脑操作四命令（computer_session_* / computer_estop / computer_status）
+     /// 追加后 120 → 124；E2 F4 core_compact_now 接线 114 → 119（登记先行 6 → 5）。
+     #[test]
+     fn manifest_count_matches_registered_surface() {
+         let total = COMMAND_MANIFEST.commands.len();
+         let registered = COMMAND_MANIFEST
+             .commands
+             .iter()
+             .filter(|c| c.registered)
+             .count();
+         let pending = total - registered;
+         assert!(pending > 0, "登记先行必须 > 0");
+         assert_eq!(
+             total, 124,
+             "总数 124（电脑操作四命令 + note_apply_ops + mirror + hydrate + D4a，与前端同步）"
+         );
+         assert_eq!(registered, 119, "注册面 119（含 core_compact_now 已接线）");
+         assert_eq!(pending, 5, "登记先行 5");
+     }
 
     /// 命令名唯一（重复名会破坏前端清单校验）。
     #[test]
@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 120);
+        assert_eq!(manifest.commands.len(), 124);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
@@ -478,8 +478,8 @@ mod tests {
     }
 
     /// D4a：子代理显式恢复与关闭命令双端登记（D4 §1.2 A5）——三条命令
-    /// registered=true（与 main.rs 注册面一致）；core_resume_run / 
-    /// core_compact_now 登记先行 registered=false。
+    /// registered=true（与 main.rs 注册面一致）；core_resume_run 登记先行
+    /// registered=false；core_compact_now（E2 F4）已接线 registered=true。
     #[test]
     fn manifest_registers_d4a_subagent_commands() {
         let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
@@ -495,11 +495,14 @@ mod tests {
             assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
             assert!(entry.registered, "{name} 已接线应 registered=true");
         }
-        for name in ["core_resume_run", "core_compact_now"] {
-            let entry = by_name
-                .get(name)
-                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（登记先行）"));
-            assert!(!entry.registered, "{name} 登记先行应 registered=false");
-        }
+        // E2 F4：core_compact_now 实现体 + make_handlers! 注册已落 → true
+        let compact = by_name
+            .get("core_compact_now")
+            .unwrap_or_else(|| panic!("core_compact_now 必须登记 manifest（E2 扩展）"));
+        assert!(compact.registered, "core_compact_now 已接线应 registered=true");
+        let resume = by_name
+            .get("core_resume_run")
+            .unwrap_or_else(|| panic!("core_resume_run 必须登记 manifest（登记先行）"));
+        assert!(!resume.registered, "core_resume_run 登记先行应 registered=false");
     }
 }

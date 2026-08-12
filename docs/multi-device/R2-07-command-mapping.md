@@ -160,7 +160,7 @@
 1. **身份键统一**：设备域 5 条命令（除 getPairState 外）身份键一律 `deviceId`（移动端生成 UUID，8-64 字符）；桌面旧命令面的 64 位令牌哈希仅存于桌面命令面，不进协议面——服务端新增面负责 deviceId ↔ 令牌映射。
 2. **撤销 401 语义**：revokeDevice/unlink 成功后本设备令牌立即失效 → 后续任何请求 401（auth.device_revoked / auth.unknown_device）；移动端须在本地清空凭据并回到配对态（接线层职责，本批只构造/解析）。
 3. **状态词汇两套**：桌面 PairStateMachine 5 态 ↔ 协议 PairState 6 态 ↔ 移动端 pairMachine 5+ 态；getPairState 的响应只按注册表枚举解析，跨态映射在接线层（本批不接线）。
-4. _*mobile_* 8 条新增_*：`mobile_list_pending_approvals` / `mobile_approval_sync_state` / `mobile_get_workspace_state` / `mobile_search_files` / `mobile_asset_url` / `mobile_settings_confirm` / `mobile_pause_automation` / `mobile_search_sessions` 属各自功能域批次（approval/files/settings/sessions），不在本 B6 设备域批范围（R2-12 为「部分」——本批仅设备域 5 条 + queryPresence 归属裁定）。
+4. _\*mobile_* 8 条新增_*：`mobile_list_pending_approvals` / `mobile_approval_sync_state` / `mobile_get_workspace_state` / `mobile_search_files` / `mobile_asset_url` / `mobile_settings_confirm` / `mobile_pause_automation` / `mobile_search_sessions` 属各自功能域批次（approval/files/settings/sessions），不在本 B6 设备域批范围（R2-12 为「部分」——本批仅设备域 5 条 + queryPresence 归属裁定）。
 5. **上报主控裁决项**：D-09 名称上限（桌面 40 vs 注册表 64）与 D-11 状态映射是否需要服务端新增面双向映射表（桌面态→协议态），由服务端实现轮次确认。
 
 ### B6-5. 证据索引（只读核对引用的代码位置）
@@ -324,3 +324,106 @@ pending:true, confirmRequestId}`（60s 超时视为拒绝，settings.confirm_tim
   types 段（GetSettingsParams/SetSettingsParams/SettingsConfirmParams/
   PauseAutomationParams/PresenceParams + 各 resultType）+ enums 段
   （SettingsKey 3 键 / SettingsConfirmAction / ConfirmStatus），唯一真源
+
+---
+
+# R2-08 命令批 B2：F2 审批域 5 条命令 ↔ 桌面端 REST 端点对应表
+
+> 追加日期：2026-08-13（R2-08 B2 审批批，本文件第 4 批次节）
+> 移动端实现：`apps/crish-mobile/src/domain/repositories/approvalCommands.ts`，
+> 对拍测试：`approvalCommands.test.ts`（§4 桌面端对应表断言 = 本表可测纯函数面）。
+> 桌面端只读核对面：router.rs 审批写面常量路径（148-154）与 handler（427-503）、
+> core_backend.rs（approve 615-625 / deny 629-644 / list_pending_approvals 648-657 /
+> approval_history 660-672）、core_run_commands.rs（approve_tool_impl 7214 /
+> deny_tool_impl 7252 / list_pending_approvals_impl 7296-7329 /
+> approval_history_impl 7361-7395）、server/error.rs（HTTP 状态映射 120-133）。
+> 真源：device-protocol.json commands 段 C11-C15（注册表唯一真源）；
+> Rust 同构体 `crates/conex-types/src/device/commands.rs`（ApproveParams 454-460 /
+> DenyParams 462-470 / PendingApproval 717-753 / ApprovalHistoryItem 等）。
+
+## 14. B2 总表：M6 审批域命令 → 桌面 REST 端点 → 数据面
+
+| #   | M6 命令              | kind                        | REST 端点（router.rs 常量）                                                                     | 数据面（直调体）                                                         | 响应形状                                         | 差异     |
+| --- | -------------------- | --------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------ | -------- |
+| C11 | approve              | remote.approve              | `POST /v1/approval/{toolCallId}/approve`（APPROVAL_APPROVE_PATH:148）                           | core_backend.rs:615-625 → approve_tool_impl（core_run_commands.rs:7214） | `{ok, toolCallId, decision:"approved"}`          | **D-16** |
+| C12 | deny                 | remote.deny                 | `POST /v1/approval/{toolCallId}/deny`（APPROVAL_DENY_PATH:150）                                 | core_backend.rs:629-644 → deny_tool_impl（core_run_commands.rs:7252）    | `{ok, toolCallId, decision:"denied"}`            | **D-16** |
+| C13 | listPendingApprovals | remote.listPendingApprovals | `GET /v1/approvals/pending`（APPROVALS_PENDING_PATH:152）                                       | core_backend.rs:648-657 → list_pending_approvals_impl（7296-7329）       | `{approvals: PendingApproval[], latestSequence}` | **D-17** |
+| C14 | approvalHistory      | remote.approvalHistory      | `GET /v1/approvals/history`（APPROVALS_HISTORY_PATH:154）                                       | core_backend.rs:660-672 → approval_history_impl（7361-7395）             | `{items, nextAfterSequence, hasMore}`            | **D-18** |
+| C15 | checkCommand         | remote.checkCommand         | **v1 无 REST 端点**（仅引擎命令面 core_check_command registered=true，command_manifest.rs:125） | —（REST 直调面无 check_command 路由；WsGateway 信封面可直接调用）        | `{decision, reason?}`                            | **D-15** |
+
+## 15. B2 参数承载（注册表 paramsType ↔ REST body / 路径 / 查询参数）
+
+| 命令                 | 注册表参数（device-protocol.json types 段）                               | REST 侧承载                                                                                  | 差异                                                                                               |
+| -------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| approve              | toolCallId*、runId?（**无 decision 字段**——协议面恒 approved，M6 §4.2.1） | body = `{runId?}`（router.rs:430-441）；**toolCallId 路径真键**（body 中 toolCallId 不解析） | 承载面差异（D-16）：注册表 toolCallId 为 body 字段；REST 侧为路径字段（与 B4 D-10 cancelRun 同型） |
+| deny                 | toolCallId*、runId?、reason?（reason ≤256，缺省 "user denied"）           | body = `{runId?, reason?}`（router.rs:445-468）；toolCallId 路径真键                         | 承载面差异（D-16）：同上；body 全量字段（runId/reason）与注册表一一对应                            |
+| listPendingApprovals | afterSequence?（增量水位）                                                | `afterSequence` 查询参数（router.rs:470-484）                                                | 语义降级（D-17）：R1-04 实现为全量对账，latestSequence 恒 None——参数可传无害，增量水位未生效       |
+| approvalHistory      | sessionId?、afterSequence?、limit?（limit 缺省 100 上限 500）             | `sessionId`/`afterSequence`/`limit` 查询参数（router.rs:486-503）                            | 夹紧归属桌面端（D-18）：limit clamp(1,500) 桌面保证（core_run_commands.rs:7367），构造侧透传不重算 |
+| checkCommand         | command*、params?（JsonValue，如 shell:write 的 {script}）                | —（无端点）                                                                                  | 无承载面（D-15）：v1 仅引擎命令面，REST 直连不可用                                                 |
+
+**幂等与决策语义（无差异面，F2 决策语义快照）**：
+
+- `approve` / `deny`：**I-02 天然幂等（状态机级）**——第二次命中同一 toolCallId →
+  `cmd.approval_mismatch` 409，不改状态机（D3 §8.5 / M6 §1.3；router.rs:2416-2445
+  测试：首次 200 → 重复 409 code=cmd.approval_mismatch，retryable=false）；
+  叠加请求级幂等：同 msgId 重发回显缓存结果（TTL 5min）；**先到者胜**——双端
+  并发决策时引擎 pending 集合原子移除（core_run_commands.rs:235-240），后到者
+  NotFound/mismatch 收敛（F2 §11.2 冲突表）；冲突收敛以 `approval-resolved`
+  事件为唯一裁决。决策走 outbox + toolCallId+msgId 幂等键（注册表 idempotencyKey）。
+- `listPendingApprovals` / `approvalHistory` / `checkCommand`：只读天然幂等。
+- **不可重试冲突码**（approvalWiring.ts PERMANENT_DECISION_ERROR_CODES 静态
+  镜像）：`cmd.approval_mismatch` / `cmd.not_found` / `cmd.denied` /
+  `cmd.invalid` / `approval.expired` / `approval.rejected` → 出队收敛
+  （D6 §6.3 不自动重试 conflict/stale）；网络/超时瞬态错误才退避重试。
+
+## 16. B2 差异清单（D-15 ~ D-18）与判定
+
+| 编号 | 命令                 | 桌面端事实（代码证据）                                                                                                                                                                                                                             | 注册表/移动端面                                                                                                                                               | 判定                                                                                                                                                                                                                                                                                                          |
+| ---- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-15 | checkCommand         | **v1 无 REST 端点**：core_check_command 在 manifest 登记 registered=true（command_manifest.rs:125），但 router.rs 无 check_command 路由（挂载面 188-207 无对应项）——REST 直连面不存在，仅引擎命令面可经 WsGateway/网关调用                         | 注册表 CheckCommandParams {command*, params?}；resultType {decision*, reason?}；错误码 cmd.unknown                                                            | 注册表为准：构造侧照常构造；v1 移动端若走 REST 直连不可用（404），须走 WsGateway 信封面（远程命令面）或本地预判定兜底；decision 三值（allowed/requires-approval/blocked）为只读预览，非安全判定（D3 §8.3，真实判定在引擎 gatekeeper/审批门）                                                                  |
+| D-16 | approve / deny       | REST handler 以**路径 toolCallId 为真键**（router.rs:430-441 / 445-468 `Path(tool_call_id)`），body 仅解析 `{runId?}` / `{runId?, reason?}`；响应 decision **恒 approved / denied**（core_backend.rs:620-624 / 639-643 装配，不透传引擎 decision） | 注册表 ApproveParams {toolCallId*, runId?}；DenyParams {toolCallId*, runId?, reason?}；resultType 共用 ApproveResult；**协议面无 decision 字段**（M6 §4.2.1） | 注册表为准：构造侧 toolCallId 仍为 body 字段（WsGateway 信封面使用）；REST 直连时 toolCallId 走路径（与 B4 D-10 cancelRun 同型承载面差异，两承载面语义等价）；任务书草案「approve{toolCallId, decision?}」以注册表为准——**无 decision 字段**，恒 approved/denied 由桌面装配，移动端构造侧不得添加 decision 键 |
+| D-17 | listPendingApprovals | R1-04 实现为**全量对账**：core_backend.rs:646-657 忽略 after_sequence（参数下划线命名 `_params`）+ `latest_sequence: None` 恒不返回；派生面 list_pending_approvals_impl（core_run_commands.rs:7296-7329）为 active_runs 待审批集合快照             | 注册表 ListPendingApprovalsParams {afterSequence?}；resultType {approvals*, latestSequence?}                                                                  | 注册表为准：afterSequence 照常透传（可传无害，桌面忽略）；**latestSequence 恒缺省合法**（可选字段）——移动端不得依赖增量水位与水位回读；对账语义 = 全量拉取 + 本地双向往收敛（F2 §4.1 / D6 §6.5）                                                                                                              |
+| D-18 | approvalHistory      | limit 夹紧归属桌面端：approval_history_impl `limit.unwrap_or(100).clamp(1, 500)`（core_run_commands.rs:7367）；approval-resolved 事件白名单投影，不携带参数全量（同 C13 隐私红线）                                                                 | 注册表 ApprovalHistoryParams {sessionId?, afterSequence?, limit?}；resultType {items*, nextAfterSequence?, hasMore?}                                          | 注册表为准：构造侧 limit 原样透传不重算（M6 §2.4 原则 1）；响应分页字段 nextAfterSequence/hasMore 全可选（尾页缺省合法）——移动端按「有 hasMore 续拉、无则到尾」消费；历史条目 decision 三值含 expired（事件面）                                                                                               |
+
+**decision 语义备注（非差异）**：协议面 approve/deny 不携带 decision 字段——
+跨端消灭「传错决策」的可能性（M6 §4.2.1）；响应侧 decision 恒 approved/denied
+（桌面装配，不透传引擎内部裁决）；ApprovalDecision 三值（approved/denied/expired）
+中 expired 出现在事件面（approval-resolved）与历史补拉面，不出现在决策回执面。
+
+## 17. B2 证据索引（只读核对引用的代码位置）
+
+- router.rs：审批写面常量路径（148-154：APPROVAL_APPROVE_PATH /
+  APPROVAL_DENY_PATH / APPROVALS_PENDING_PATH / APPROVALS_HISTORY_PATH）、
+  写面路由挂载（203-206）、handler（427-503：handle_approve / handle_deny /
+  handle_approvals_pending / handle_approvals_history）、重复决策 409 测试
+  （2416-2445）
+- core_backend.rs：approve（612-625）、deny（627-644）、resolve_approval_run_id /
+  resolve_deny_run_id（717-746，toolCallId 不在待审批集合 → cmd.approval_mismatch）、
+  list_pending_approvals（646-657，全量对账 latest_sequence 恒 None）、
+  approval_history（659-672）
+- core_run_commands.rs：approve_tool_impl（7214）、deny_tool_impl（7252）、
+  list_pending_approvals_impl（7296-7329，pending_requests 快照 + derive_danger_level
+  7337-7355）、approval_history_impl（7361-7395，limit clamp 7367）
+- server/error.rs：HTTP 状态映射（120-133，cmd.approval_mismatch → 409 /
+  cmd.denied → 403 / cmd.not_found → 404 / cmd.invalid → 400）
+- command_manifest.rs：core_check_command（125，registered=true）、
+  core_approve_tool / core_deny_tool（126-127）
+- crates/conex-types/src/device/commands.rs：ApproveParams / DenyParams /
+  ApproveResult / ListPendingApprovalsParams / PendingApproval（717-753，
+  nullable 字段 skip_serializing_if=Option::is_none）/ ListPendingApprovalsResult /
+  ApprovalHistoryParams / ApprovalHistoryItem / ApprovalHistoryResult /
+  CheckCommandParams / CheckCommandResult
+- crates/conex-types/contracts/device-protocol.json：C11-C15 commands 段与
+  types 段（paramsType/resultType 字段表）+ enums 段（ApprovalDecision /
+  CheckCommandDecision / ApprovalChannel / Arbiter），唯一真源
+- docs/multi-device/plans/F2-approval-center.md：§11.2 冲突场景表（先到者胜 /
+  双端并发 / 已过期 NotFound 收敛）、§4.1 启动对账
+
+**wiring 换用注记（本任务不修改 adapters/）**：`approvalWiring.ts`（既有域，
+R2-04 已提交）现持有本地命令构造（buildApproveRequest / buildDenyRequest /
+buildListPendingApprovalsRequest，approvalWiring.ts:97-141）与
+gatewayListPendingApprovals 网关实现（151-163，复用生成面
+parseListPendingApprovalsResult）。本批 approvalCommands.ts 为命令域规范化产物
+（统一 kind 映射 + 响应分发 + 对拍门禁），与 wiring 本地信封键集完全等价
+（测试 §5 wiring 快照断言）；接线层后续轮次换用本模块统一命令构造面，
+本任务不动 adapters/。

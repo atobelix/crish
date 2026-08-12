@@ -26,7 +26,12 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     keywords: ['h1', 'title', 'heading'],
     command: ({ editor, range }: { editor: any; range?: any }) => {
       if (range) {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 1 }).run();
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode('heading', { level: 1 })
+          .run();
       } else {
         editor.chain().focus().setNode('heading', { level: 1 }).run();
       }
@@ -40,7 +45,12 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     keywords: ['h2', 'subtitle', 'heading'],
     command: ({ editor, range }: { editor: any; range?: any }) => {
       if (range) {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 2 }).run();
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode('heading', { level: 2 })
+          .run();
       } else {
         editor.chain().focus().setNode('heading', { level: 2 }).run();
       }
@@ -54,7 +64,12 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     keywords: ['h3', 'subheading', 'heading'],
     command: ({ editor, range }: { editor: any; range?: any }) => {
       if (range) {
-        editor.chain().focus().deleteRange(range).setNode('heading', { level: 3 }).run();
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode('heading', { level: 3 })
+          .run();
       } else {
         editor.chain().focus().setNode('heading', { level: 3 }).run();
       }
@@ -130,6 +145,27 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
       }
     },
   },
+  // E2 F4：手动上下文压缩（/compact [目标 token 数]；会话级副作用命令，
+  // 发送时经 resolveSlashCommand → useSlashSend 调 daemon core_compact_now）
+  {
+    id: 'compact',
+    title: 'Compact',
+    description: '手动压缩上下文（/compact [目标 token 数]）',
+    iconName: 'Compress',
+    keywords: ['compact', '压缩', 'compress', '压缩上下文'],
+    command: ({ editor, range }: { editor: any; range?: any }) => {
+      if (range) {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent('/compact ')
+          .run();
+      } else {
+        editor.chain().focus().insertContent('/compact ').run();
+      }
+    },
+  },
 ];
 
 const getSuggestionItems = (
@@ -171,7 +207,10 @@ const getMentionItems = (
       if (range) chain.deleteRange(range);
       chain
         .insertContent([
-          { type: 'mention', attrs: { id: c.id, label: c.label, kind: c.kind ?? 'file' } },
+          {
+            type: 'mention',
+            attrs: { id: c.id, label: c.label, kind: c.kind ?? 'file' },
+          },
           { type: 'text', text: ' ' },
         ])
         .run();
@@ -229,12 +268,14 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         component?.destroy();
         component = null;
       },
-      clientRect: props.clientRect || (() => {
-        const view = props.editor?.view;
-        if (!view || !props.range) return null;
-        const coords = view.coordsAtPos(props.range.from);
-        return new DOMRect(coords.left, coords.bottom, 0, 0);
-      }),
+      clientRect:
+        props.clientRect ||
+        (() => {
+          const view = props.editor?.view;
+          if (!view || !props.range) return null;
+          const coords = view.coordsAtPos(props.range.from);
+          return new DOMRect(coords.left, coords.bottom, 0, 0);
+        }),
       label: ctx.label,
       emptyMessage: ctx.emptyMessage,
       listboxId: ctx.listboxId,
@@ -353,43 +394,44 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
 });
 
 /** 提及建议插件：@ 触发第二 suggestion 实例（T8，候选人引用桥接） */
-export const MentionSuggestionExtension = Extension.create<MentionSuggestionOptions>({
-  name: 'mentionSuggestion',
+export const MentionSuggestionExtension =
+  Extension.create<MentionSuggestionOptions>({
+    name: 'mentionSuggestion',
 
-  addOptions() {
-    return {
-      candidatesRef: undefined,
-      listboxId: undefined,
-    };
-  },
+    addOptions() {
+      return {
+        candidatesRef: undefined,
+        listboxId: undefined,
+      };
+    },
 
-  addProseMirrorPlugins() {
-    return [
-      Suggestion({
-        editor: this.editor,
-        char: '@',
-        allowSpaces: true,
-        // 提及允许任意前缀（含中文相邻无空格场景，如「请分析@」）；
-        // tiptap v3 默认仅允许空白前缀，CJK 聊天语境下过于苛刻
-        allowedPrefixes: null,
-        // 独立 keyed plugin：与斜杠实例共存（同编辑器双 suggestion）
-        pluginKey: mentionSuggestionKey,
-        items: ({ query }: { query: string }) =>
-          getMentionItems(query, this.options.candidatesRef?.current ?? []),
-        command: ({ editor, range, props }: any) => {
-          props.command({ editor, range });
-        },
-        render: createSuggestionRenderer({
-          listboxId: this.options.listboxId,
-          label: '提及候选人',
-          emptyMessage: '无匹配项',
-          skipEmpty: true,
+    addProseMirrorPlugins() {
+      return [
+        Suggestion({
+          editor: this.editor,
+          char: '@',
+          allowSpaces: true,
+          // 提及允许任意前缀（含中文相邻无空格场景，如「请分析@」）；
+          // tiptap v3 默认仅允许空白前缀，CJK 聊天语境下过于苛刻
+          allowedPrefixes: null,
+          // 独立 keyed plugin：与斜杠实例共存（同编辑器双 suggestion）
           pluginKey: mentionSuggestionKey,
+          items: ({ query }: { query: string }) =>
+            getMentionItems(query, this.options.candidatesRef?.current ?? []),
+          command: ({ editor, range, props }: any) => {
+            props.command({ editor, range });
+          },
+          render: createSuggestionRenderer({
+            listboxId: this.options.listboxId,
+            label: '提及候选人',
+            emptyMessage: '无匹配项',
+            skipEmpty: true,
+            pluginKey: mentionSuggestionKey,
+          }),
         }),
-      }),
-    ];
-  },
-});
+      ];
+    },
+  });
 
 /**
  * Inline Entity Mention (@) Node Extension (FR-103)
@@ -439,7 +481,13 @@ export const MentionExtension = Node.create({
     ];
   },
 
-  renderHTML({ node, HTMLAttributes }: { node: any; HTMLAttributes: Record<string, any> }) {
+  renderHTML({
+    node,
+    HTMLAttributes,
+  }: {
+    node: any;
+    HTMLAttributes: Record<string, any>;
+  }) {
     const label = node.attrs.label || node.attrs.id || 'mention';
     const kind = node.attrs.kind || 'file';
     return [

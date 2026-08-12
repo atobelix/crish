@@ -81,15 +81,26 @@ describe('resolveSlashCommand', () => {
   it('parses schedule / teamwork / browser (navigation)', () => {
     expect(resolveSlashCommand('/schedule')).toEqual({ kind: 'schedule' });
     expect(resolveSlashCommand('/Schedule')).toEqual({ kind: 'schedule' });
-    expect(resolveSlashCommand('/schedule ignored-args')).toEqual({ kind: 'schedule' });
-    expect(resolveSlashCommand('/teamwork-preview')).toEqual({ kind: 'teamwork-preview' });
-    expect(resolveSlashCommand('/teamwork')).toEqual({ kind: 'teamwork-preview' });
-    expect(resolveSlashCommand('/TEAMWORK extra')).toEqual({ kind: 'teamwork-preview' });
+    expect(resolveSlashCommand('/schedule ignored-args')).toEqual({
+      kind: 'schedule',
+    });
+    expect(resolveSlashCommand('/teamwork-preview')).toEqual({
+      kind: 'teamwork-preview',
+    });
+    expect(resolveSlashCommand('/teamwork')).toEqual({
+      kind: 'teamwork-preview',
+    });
+    expect(resolveSlashCommand('/TEAMWORK extra')).toEqual({
+      kind: 'teamwork-preview',
+    });
     expect(resolveSlashCommand('/browser https://a.com')).toEqual({
       kind: 'browser',
       url: 'https://a.com',
     });
-    expect(resolveSlashCommand('/browser')).toEqual({ kind: 'browser', url: '' });
+    expect(resolveSlashCommand('/browser')).toEqual({
+      kind: 'browser',
+      url: '',
+    });
     expect(resolveSlashCommand('/browser   https://b.com  ')).toEqual({
       kind: 'browser',
       url: 'https://b.com',
@@ -154,10 +165,22 @@ describe('resolveSlashCommand', () => {
   });
 
   it('parses learn / goal / grill-me with missing args', () => {
-    expect(resolveSlashCommand('/learn')).toMatchObject({ kind: 'learn', missingArg: true });
-    expect(resolveSlashCommand('/learn no any')).toEqual({ kind: 'learn', rule: 'no any' });
-    expect(resolveSlashCommand('/goal')).toMatchObject({ kind: 'goal', missingArg: true });
-    expect(resolveSlashCommand('/goal fix tests')).toEqual({ kind: 'goal', goal: 'fix tests' });
+    expect(resolveSlashCommand('/learn')).toMatchObject({
+      kind: 'learn',
+      missingArg: true,
+    });
+    expect(resolveSlashCommand('/learn no any')).toEqual({
+      kind: 'learn',
+      rule: 'no any',
+    });
+    expect(resolveSlashCommand('/goal')).toMatchObject({
+      kind: 'goal',
+      missingArg: true,
+    });
+    expect(resolveSlashCommand('/goal fix tests')).toEqual({
+      kind: 'goal',
+      goal: 'fix tests',
+    });
     expect(resolveSlashCommand('/grill-me')).toMatchObject({
       kind: 'grill-me',
       missingArg: true,
@@ -238,9 +261,69 @@ describe('resolveSlashCommand', () => {
     });
   });
 
+  it('parses compact (/compact 手动压缩，可选目标 token 数)', () => {
+    // 无参数 → 缺省（引擎 window - reserve 口径）
+    expect(resolveSlashCommand('/compact')).toEqual({ kind: 'compact' });
+    expect(resolveSlashCommand('/compact   ')).toEqual({ kind: 'compact' });
+    // 合法目标 token 数
+    expect(resolveSlashCommand('/compact 60000')).toEqual({
+      kind: 'compact',
+      tokens: 60000,
+    });
+    expect(resolveSlashCommand('/compact 1000')).toEqual({
+      kind: 'compact',
+      tokens: 1000,
+    });
+    // 非法参数 → invalidArg（前端 toast 用法，不调引擎）
+    expect(resolveSlashCommand('/compact abc')).toEqual({
+      kind: 'compact',
+      invalidArg: true,
+    });
+    expect(resolveSlashCommand('/compact 12abc')).toEqual({
+      kind: 'compact',
+      invalidArg: true,
+    });
+    expect(resolveSlashCommand('/compact -5')).toEqual({
+      kind: 'compact',
+      invalidArg: true,
+    });
+    expect(resolveSlashCommand('/compact 0')).toEqual({
+      kind: 'compact',
+      invalidArg: true,
+    });
+    expect(resolveSlashCommand('/compact 1.5')).toEqual({
+      kind: 'compact',
+      invalidArg: true,
+    });
+    // 别名：/压缩、/compress（含中文）
+    expect(resolveSlashCommand('/压缩')).toEqual({ kind: 'compact' });
+    expect(resolveSlashCommand('/compress 50000')).toEqual({
+      kind: 'compact',
+      tokens: 50000,
+    });
+    expect(resolveSlashCommand('/压缩 8000')).toEqual({
+      kind: 'compact',
+      tokens: 8000,
+    });
+    // 会话语义：会话级副作用命令——不建会话、不写对话（isSessionlessSlash）
+    expect(isSessionlessSlash({ kind: 'compact' })).toBe(true);
+    expect(isConversationSlash('compact')).toBe(false);
+    expect(slashUsageHint('compact')).toBe('用法：/compact [目标 token 数]');
+    expect(canonicalSlashFill('compact')).toBe('/compact ');
+    expect(KNOWN_SLASH_TOKENS).toEqual(expect.arrayContaining(['compact']));
+    expect(slashMenuPick('/compact')).toEqual({
+      action: 'fill',
+      text: '/compact ',
+    });
+    expect(SLASH_COMMAND_SPECS.some((s) => s.kind === 'compact')).toBe(true);
+  });
+
   it('accepts fullwidth slash prefix', () => {
     expect(resolveSlashCommand('／schedule')).toEqual({ kind: 'schedule' });
-    expect(resolveSlashCommand('／goal ship')).toEqual({ kind: 'goal', goal: 'ship' });
+    expect(resolveSlashCommand('／goal ship')).toEqual({
+      kind: 'goal',
+      goal: 'ship',
+    });
     expect(resolveSlashCommand('／目标 完成迁移')).toEqual({
       kind: 'goal',
       goal: '完成迁移',
@@ -275,9 +358,9 @@ describe('resolveSlashCommand', () => {
   it('isSessionlessSlash guards navigation + missingArg (no ghost session)', () => {
     expect(isSessionlessSlash(resolveSlashCommand('/schedule'))).toBe(true);
     expect(isSessionlessSlash(resolveSlashCommand('/teamwork'))).toBe(true);
-    expect(isSessionlessSlash(resolveSlashCommand('/browser https://a.com'))).toBe(
-      true,
-    );
+    expect(
+      isSessionlessSlash(resolveSlashCommand('/browser https://a.com'))
+    ).toBe(true);
     expect(isSessionlessSlash(resolveSlashCommand('/定时'))).toBe(true);
     expect(isSessionlessSlash(resolveSlashCommand('/协作'))).toBe(true);
     expect(isSessionlessSlash(resolveSlashCommand('/浏览'))).toBe(true);
@@ -297,7 +380,9 @@ describe('resolveSlashCommand', () => {
     expect(isSessionlessSlash(resolveSlashCommand('/goal ship'))).toBe(false);
     expect(isSessionlessSlash(resolveSlashCommand('/skill:x'))).toBe(false);
     expect(isSessionlessSlash(resolveSlashCommand('/技能：总结'))).toBe(false);
-    expect(isSessionlessSlash(resolveSlashCommand('/目标：修测试'))).toBe(false);
+    expect(isSessionlessSlash(resolveSlashCommand('/目标：修测试'))).toBe(
+      false
+    );
     expect(isSessionlessSlash(resolveSlashCommand('plain'))).toBe(false);
     expect(isSessionlessSlash(resolveSlashCommand('/unknown'))).toBe(false);
   });
@@ -341,24 +426,48 @@ describe('resolveSlashCommand', () => {
         'goal',
         'grill-me',
         'skill',
-      ]),
+      ])
     );
     expect(SLASH_COMMAND_SPECS.some((s) => s.kind === 'goal')).toBe(true);
   });
 
   it('slashMenuPick aligns menu fill with resolveSlashCommand kinds', () => {
     expect(slashMenuPick('/schedule')).toEqual({ action: 'open-schedule' });
-    expect(slashMenuPick('/teamwork')).toEqual({ action: 'fill', text: '/teamwork' });
-    expect(slashMenuPick('/teamwork-preview')).toEqual({ action: 'fill', text: '/teamwork' });
-    expect(slashMenuPick('/browser')).toEqual({ action: 'fill', text: '/browser ' });
-    expect(slashMenuPick('/learn')).toEqual({ action: 'fill', text: '/learn ' });
+    expect(slashMenuPick('/teamwork')).toEqual({
+      action: 'fill',
+      text: '/teamwork',
+    });
+    expect(slashMenuPick('/teamwork-preview')).toEqual({
+      action: 'fill',
+      text: '/teamwork',
+    });
+    expect(slashMenuPick('/browser')).toEqual({
+      action: 'fill',
+      text: '/browser ',
+    });
+    expect(slashMenuPick('/learn')).toEqual({
+      action: 'fill',
+      text: '/learn ',
+    });
     expect(slashMenuPick('/goal')).toEqual({ action: 'fill', text: '/goal ' });
-    expect(slashMenuPick('/grill-me')).toEqual({ action: 'fill', text: '/grill-me ' });
-    expect(slashMenuPick('/skill:review')).toEqual({ action: 'fill', text: '/skill:review ' });
-    expect(slashMenuPick('/simulate')).toEqual({ action: 'fill', text: '/simulate ' });
+    expect(slashMenuPick('/grill-me')).toEqual({
+      action: 'fill',
+      text: '/grill-me ',
+    });
+    expect(slashMenuPick('/skill:review')).toEqual({
+      action: 'fill',
+      text: '/skill:review ',
+    });
+    expect(slashMenuPick('/simulate')).toEqual({
+      action: 'fill',
+      text: '/simulate ',
+    });
     // 中文别名点选 → 规范英文 fill / open
     expect(slashMenuPick('/定时')).toEqual({ action: 'open-schedule' });
-    expect(slashMenuPick('协作')).toEqual({ action: 'fill', text: '/teamwork' });
+    expect(slashMenuPick('协作')).toEqual({
+      action: 'fill',
+      text: '/teamwork',
+    });
     expect(slashMenuPick('/目标')).toEqual({ action: 'fill', text: '/goal ' });
     expect(slashMenuPick('')).toEqual({ action: 'fill', text: '/' });
     expect(slashMenuPick('goal')).toEqual({ action: 'fill', text: '/goal ' });

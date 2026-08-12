@@ -100,6 +100,12 @@ mod watchdog;
 mod wake_watcher;
 mod workspace;
 mod outputs_config;
+// C3 交付物(任务连续性测试基建):可脚本化 mock SSE/HTTP server——
+// 响应序列(429+Retry-After / 5xx / 发数据后断流 / 正常流)按请求序号
+// 消费,记录请求供断言;供 D1/D2/D3/D5 壳层测试共用(cfg(test) 仅测试面,
+// 不参与生产构建)
+#[cfg(test)]
+mod scripted_mock_server;
 
 use std::sync::{Arc, RwLock};
 
@@ -186,6 +192,9 @@ command_registry![
     ("core_read_session_events", core_query_commands::core_read_session_events),
     ("core_run_task", core_run_commands::core_run_task),
     ("core_run_control", core_run_commands::core_run_control),
+    // E2 F4（07 §3 卡 C）：手动压缩（slash /compact → 引擎命令；registered
+    // 面 = make_handlers! 注册面不变量，command_manifest 同批翻 true）
+    ("core_compact_now", core_run_commands::core_compact_now),
     ("core_cancel_run", core_run_commands::core_cancel_run),
     ("core_approve_tool", core_run_commands::core_approve_tool),
     ("core_deny_tool", core_run_commands::core_deny_tool),

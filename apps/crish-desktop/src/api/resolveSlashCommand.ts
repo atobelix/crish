@@ -18,6 +18,7 @@ export type SlashCommandKind =
   | 'goal'
   | 'grill-me'
   | 'skill'
+  | 'compact'
   | 'none';
 
 /** none 细分：纯文本 / 空斜杠 / 未注册命令（kind 仍为 none，保持调用方兼容） */
@@ -40,11 +41,18 @@ export type ResolvedSlashCommand =
       skillName?: string;
       /** 技能参数（name 之后） */
       skillArgs?: string;
+    }
+  | {
+      kind: 'compact';
+      /** 可选目标 token 数（缺省 = window - reserve，与引擎预检同口径） */
+      tokens?: number;
+      /** 参数非法（非正整数）→ 前端 toast 用法，不调引擎 */
+      invalidArg?: boolean;
     };
 
 // ─── 命令表（英文主 token + 中文/别名）────────────────────────────────────
 
-type ArgField = 'none' | 'url' | 'rule' | 'goal' | 'topic';
+type ArgField = 'none' | 'url' | 'rule' | 'goal' | 'topic' | 'tokens';
 
 type SlashSpec = {
   kind: Exclude<SlashCommandKind, 'none' | 'skill'>;
@@ -96,6 +104,13 @@ export const SLASH_COMMAND_SPECS: readonly SlashSpec[] = [
     aliases: ['grillme', '拷问', '对齐'],
     arg: 'topic',
   },
+  // E2 F4：手动压缩（可选目标 token 数；缺省 = window - reserve）
+  {
+    kind: 'compact',
+    token: 'compact',
+    aliases: ['压缩', 'compress'],
+    arg: 'tokens',
+  },
 ] as const;
 
 /** 英文主 token 列表（菜单过滤等） */
@@ -124,7 +139,11 @@ function normalizeSlashInput(input: string): string {
   return t;
 }
 
-type AliasEntry = { alias: string; kind: Exclude<SlashCommandKind, 'none' | 'skill'>; arg: ArgField };
+type AliasEntry = {
+  alias: string;
+  kind: Exclude<SlashCommandKind, 'none' | 'skill'>;
+  arg: ArgField;
+};
 
 /** 长别名优先，避免「定时」抢先于「定时任务」 */
 const ALIAS_ENTRIES: readonly AliasEntry[] = (() => {
@@ -160,7 +179,10 @@ function matchAlias(raw: string, alias: string): string | null {
   return rest;
 }
 
-function splitSkillRest(rest: string): { skillName: string; skillArgs: string } {
+function splitSkillRest(rest: string): {
+  skillName: string;
+  skillArgs: string;
+} {
   const t = rest.trim();
   if (!t) return { skillName: '', skillArgs: '' };
   const sp = t.search(/\s/);
@@ -169,8 +191,8 @@ function splitSkillRest(rest: string): { skillName: string; skillArgs: string } 
 }
 
 function withArg(
-  kind: 'browser' | 'learn' | 'goal' | 'grill-me',
-  args: string,
+  kind: 'browser' | 'learn' | 'goal' | 'grill-me' | 'compact',
+  args: string
 ): ResolvedSlashCommand {
   if (kind === 'browser') {
     return { kind: 'browser', url: args };
@@ -184,6 +206,16 @@ function withArg(
     return args
       ? { kind: 'goal', goal: args }
       : { kind: 'goal', goal: '', missingArg: true };
+  }
+  if (kind === 'compact') {
+    // 可选参数：正整数 → tokens；非法值 → invalidArg（前端 toast 用法）
+    const trimmed = args.trim();
+    if (!trimmed) return { kind: 'compact' };
+    const tokens = Number(trimmed);
+    if (!Number.isSafeInteger(tokens) || tokens <= 0) {
+      return { kind: 'compact', invalidArg: true };
+    }
+    return { kind: 'compact', tokens };
   }
   // grill-me
   return args
@@ -229,7 +261,10 @@ export function resolveSlashCommand(input: string): ResolvedSlashCommand {
       if (entry.kind === 'schedule') return { kind: 'schedule' };
       return { kind: 'teamwork-preview' };
     }
-    return withArg(entry.kind as 'browser' | 'learn' | 'goal' | 'grill-me', args);
+    return withArg(
+      entry.kind as 'browser' | 'learn' | 'goal' | 'grill-me' | 'compact',
+      args
+    );
   }
 
   return { kind: 'none', raw, noneReason: 'unknown' };
@@ -241,9 +276,7 @@ export function resolveSlashCommand(input: string): ResolvedSlashCommand {
  */
 export function isNavigationSlash(kind: SlashCommandKind): boolean {
   return (
-    kind === 'schedule' ||
-    kind === 'teamwork-preview' ||
-    kind === 'browser'
+    kind === 'schedule' || kind === 'teamwork-preview' || kind === 'browser'
   );
 }
 
@@ -280,6 +313,8 @@ export function slashMissingArg(cmd: ResolvedSlashCommand): boolean {
 export function isSessionlessSlash(cmd: ResolvedSlashCommand): boolean {
   if (cmd.kind === 'none') return false;
   if (isNavigationSlash(cmd.kind)) return true;
+  // E2 F4：compact 为会话级副作用命令——不写对话、不建会话（纯引擎命令）
+  if (cmd.kind === 'compact') return true;
   // 解析期可知的 skill 空名：勿建幽灵会话（异步未找到仍归调用方）
   if (cmd.kind === 'skill' && !cmd.skillName) return true;
   return slashMissingArg(cmd);
@@ -287,7 +322,7 @@ export function isSessionlessSlash(cmd: ResolvedSlashCommand): boolean {
 
 /** none 原因；非 none 返回 null */
 export function getSlashNoneReason(
-  cmd: ResolvedSlashCommand,
+  cmd: ResolvedSlashCommand
 ): SlashNoneReason | null {
   if (cmd.kind !== 'none') return null;
   return cmd.noneReason ?? 'plain';
@@ -319,13 +354,17 @@ export function slashUsageHint(kind: SlashCommandKind): string | null {
       return '用法：/browser <url>';
     case 'skill':
       return '用法：/skill:<技能名> [参数]';
+    case 'compact':
+      return '用法：/compact [目标 token 数]';
     default:
       return null;
   }
 }
 
 /** 主 token → 规范 fill 文本（尾空格表示待续参） */
-export function canonicalSlashFill(kind: Exclude<SlashCommandKind, 'none'>): string {
+export function canonicalSlashFill(
+  kind: Exclude<SlashCommandKind, 'none'>
+): string {
   switch (kind) {
     case 'schedule':
       return '/schedule';
@@ -341,6 +380,8 @@ export function canonicalSlashFill(kind: Exclude<SlashCommandKind, 'none'>): str
       return '/grill-me ';
     case 'skill':
       return '/skill:';
+    case 'compact':
+      return '/compact ';
     default:
       return '/';
   }
@@ -355,8 +396,7 @@ export function canonicalSlashFill(kind: Exclude<SlashCommandKind, 'none'>): str
  * - skill / 演示命令：同样尾空格
  */
 export type SlashMenuPickResult =
-  | { action: 'open-schedule' }
-  | { action: 'fill'; text: string };
+  { action: 'open-schedule' } | { action: 'fill'; text: string };
 
 function ensureSlashPrefix(token: string): string {
   const t = token.trim();

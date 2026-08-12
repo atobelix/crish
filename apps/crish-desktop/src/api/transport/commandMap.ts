@@ -34,6 +34,14 @@ export const COMMAND_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
   // ── 审批类（core_*）──
   'core_approve_tool',
   'core_deny_tool',
+  // ── D4a：子代理显式恢复与关闭（D4 §3.1 步骤 4；D8 前端失败态卡片经
+  //    transport 调三命令，须过 resolveTauriCommand 白名单；core_resume_run
+  //    registered=false 不入白名单）──
+  'resume_subagent',
+  'kill_all',
+  'kill_subagent',
+  // ── E2 F4：手动压缩命令（slash /compact 消费面；registered=true 已接线）──
+  'core_compact_now',
   // ── 壳命令（config / session，F5 终态名：config_update / list_sessions）──
   'config_update',
   'list_sessions',
@@ -73,7 +81,9 @@ export function checkCommandMapConsistency(): void {
  * config_secret_set / config_profile_apply，禁止经 config_update 通道）。
  * 幽灵命令（rewind 等）的整形条目已随映射删除（T03.1）。
  */
-const PAYLOAD_SHAPERS: Readonly<Record<string, (p: Record<string, unknown>) => Record<string, unknown>>> = {
+const PAYLOAD_SHAPERS: Readonly<
+  Record<string, (p: Record<string, unknown>) => Record<string, unknown>>
+> = {
   config_update: (p) => {
     const { type: _type, apiKey: _apiKey, ...rest } = p;
     return rest;
@@ -83,7 +93,7 @@ const PAYLOAD_SHAPERS: Readonly<Record<string, (p: Record<string, unknown>) => R
 /** Tauri 路径 payload 整形（无整形条目 → 原样） */
 export function shapeTauriPayload(
   type: string,
-  payload?: Record<string, unknown>,
+  payload?: Record<string, unknown>
 ): Record<string, unknown> | undefined {
   const shaper = PAYLOAD_SHAPERS[type];
   if (!shaper || !payload) return payload;

@@ -200,6 +200,13 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('note_import_mirror_proposal', 'note', 'engine'),
     // CONN-B3：collab wire → DocSession::apply（产品 slash 写锥；≠ EL-01）
     entry('note_apply_ops', 'note', 'engine'),
+    // ── 电脑操作会话命令（06 遗留⑨：computer_session_enable/disable、
+    //    computer_estop、computer_status；代理到 ComputerSlot，状态事件
+    //    computer://state-changed；与 Rust command_manifest.rs 同步）──
+    entry('computer_session_enable', 'computer', 'engine'),
+    entry('computer_session_disable', 'computer', 'engine'),
+    entry('computer_estop', 'computer', 'engine'),
+    entry('computer_status', 'computer', 'engine'),
     // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；与 Rust
     //    command_manifest.rs 同步）──
     entry('resume_subagent', 'core', 'engine'),
@@ -214,9 +221,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // D4 §3.7：core_resume_run（P2）登记先行——主 run 重启续跑命令，
     // 本轮不排期，实现随排期翻 true
     entry('core_resume_run', 'core', 'engine', false),
-    // E2 扩展：core_compact_now 同批登记（登记先行；实现体与 make_handlers!
-    // 注册随 E2 实现轮落，翻 true）
-    entry('core_compact_now', 'core', 'engine', false),
+    // E2 扩展：core_compact_now 实现体已落（E2 实现轮，registered=true；
+    // 与 Rust command_manifest.rs 同步）
+    entry('core_compact_now', 'core', 'engine', true),
   ],
 };
 

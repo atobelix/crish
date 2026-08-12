@@ -21,11 +21,16 @@
  * 有效性自证：故意改任一侧（Rust 新增事件类型不补归一器 / 删归一器 /
  * 改样本输出形状）立即红。
  */
-import { beforeEach, afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
-  ENGINE_NORMALIZERS,
-  parseBridgeEvent,
-} from './eventParser';
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+  vi,
+} from 'vitest';
+import { ENGINE_NORMALIZERS, parseBridgeEvent } from './eventParser';
 import {
   ENGINE_EVENT_TYPES,
   parseEngineEvent,
@@ -82,7 +87,13 @@ const NORMALIZER_SAMPLES: Record<string, Record<string, unknown>> = {
   'message-end': {
     type: 'message-end',
     sessionId: 's1',
-    message: { id: 'm1', role: 'assistant', createdAt: 't1', content: 'hi', blocks: [] },
+    message: {
+      id: 'm1',
+      role: 'assistant',
+      createdAt: 't1',
+      content: 'hi',
+      blocks: [],
+    },
   },
   'tool-start': {
     type: 'tool-start',
@@ -282,6 +293,79 @@ const NORMALIZER_SAMPLES: Record<string, Record<string, unknown>> = {
     iteration: 1,
     firedAtMs: 1,
   },
+  // ── 连续性域 8 事件（D8 登记面 41→49；样本与 events-v1 fixture 同形）──
+  'recovery-escalated': {
+    type: 'recovery-escalated',
+    sessionId: 's1',
+    subagentRunId: 'r1',
+    kind: 'timeout',
+    retries: 2,
+    elapsedMs: 1500,
+  },
+  'recovery-steering': {
+    type: 'recovery-steering',
+    sessionId: 's1',
+    subagentId: 'a1',
+    subagentRunId: 'r1',
+    fingerprint: 'fp-1',
+    retries: 1,
+    remainingStatus: 'queued',
+    pending: true,
+    createdAtMs: 1,
+  },
+  'recovery-fork': {
+    type: 'recovery-fork',
+    sessionId: 's1',
+    fingerprint: 'fp-1',
+    subagentId: 'a1',
+    fromRunId: 'r1',
+    fromLeafId: 'l1',
+    newRunId: 'r2',
+    newLeafId: 'l2',
+    contextMode: 'verbatim',
+  },
+  'recovery-report': {
+    type: 'recovery-report',
+    sessionId: 's1',
+    subagentId: 'a1',
+    subagentRunId: 'r1',
+    stuckAtMs: 1,
+    suggestion: 'retry',
+  },
+  'recovery-budget-denied': {
+    type: 'recovery-budget-denied',
+    sessionId: 's1',
+    subagentRunId: 'r1',
+    fingerprint: 'fp-1',
+    count: 3,
+    max: 2,
+  },
+  'goal-round-started': {
+    type: 'goal-round-started',
+    sessionId: 's1',
+    round: 1,
+    maxRounds: 12,
+    goal: 'fix build',
+  },
+  'goal-round-completed': {
+    type: 'goal-round-completed',
+    sessionId: 's1',
+    round: 1,
+    toolCallCount: 2,
+    toolSuccessCount: 1,
+    messageCount: 3,
+    decision: 'Continue',
+    reasonDetail: '',
+    stalledDelta: 0,
+    evidence: '',
+  },
+  'goal-continuation-decided': {
+    type: 'goal-continuation-decided',
+    sessionId: 's1',
+    action: 'continue',
+    reason: 'in-progress',
+    prompt: '继续',
+  },
 };
 
 describe('T-F 06 T4.1：归一器键集与生成事件类型双向锁定', () => {
@@ -291,7 +375,10 @@ describe('T-F 06 T4.1：归一器键集与生成事件类型双向锁定', () =>
       ENGINE_EVENT_TYPES.filter((t) => !LEGACY_TYPES.includes(t))
     );
     for (const alias of HISTORICAL_ALIASES) {
-      expect(normalizerKeys.has(alias), `历史别名 ${alias} 必须保留在归一器表`).toBe(true);
+      expect(
+        normalizerKeys.has(alias),
+        `历史别名 ${alias} 必须保留在归一器表`
+      ).toBe(true);
       normalizerKeys.delete(alias);
     }
     // 新增事件类型若缺归一器 → 红（把「新增事件流程」从人肉检查变测试强制）
@@ -349,7 +436,7 @@ describe('T-F 06 T4.1：归一器键集与生成事件类型双向锁定', () =>
   it('expectTypeOf：归一器输出与生成 EngineEvent 联合类型相等（类型级双端）', () => {
     // 每个归一器样本输出都必须落在生成 EngineEvent 联合内（编译期强制，
     // 手写归一器形状与生成类型漂移立即红）
-    for (const [type, raw] of Object.entries(NORMALIZER_SAMPLES)) {
+    for (const [_type, raw] of Object.entries(NORMALIZER_SAMPLES)) {
       const r = parseBridgeEvent(raw);
       expect(r.ok).toBe(true);
       if (r.ok && r.data.kind === 'engine') {
@@ -371,13 +458,18 @@ describe('T-F 06 T4.2：静默默认值可观测（非安全向显式登记）',
   });
 
   it('normalizeRunTerminal 未知 terminal → 日志后回退 completed（不再静默）', () => {
-    const r = parseBridgeEvent({ type: 'run-terminal', terminal: 'mystery-status' });
+    const r = parseBridgeEvent({
+      type: 'run-terminal',
+      terminal: 'mystery-status',
+    });
     expect(console.warn).toHaveBeenCalled();
     expect(r.ok).toBe(true);
     if (r.ok && r.data.kind === 'engine') {
       expect(r.data.event.type).toBe('run-terminal');
       // 回退值 completed 仍是规范值（消费方宽容度：不破坏生成类型）
-      expect((r.data.event as { terminal?: string }).terminal).toBe('completed');
+      expect((r.data.event as { terminal?: string }).terminal).toBe(
+        'completed'
+      );
     }
   });
 
@@ -423,7 +515,9 @@ describe('T-F 06 T4.4：宽容路径深度守卫（256 层放行 / 257 层拒绝
     });
     expect(r.ok).toBe(true);
     if (r.ok && r.data.kind === 'engine') {
-      const block = (r.data.event as { block?: { type?: string; text?: string } }).block;
+      const block = (
+        r.data.event as { block?: { type?: string; text?: string } }
+      ).block;
       expect(block?.type).toBe('text');
       expect(block?.text).toBe('');
     }
@@ -436,7 +530,9 @@ describe('T-F 06 T4.4：宽容路径深度守卫（256 层放行 / 257 层拒绝
     });
     expect(r.ok).toBe(true);
     if (r.ok && r.data.kind === 'engine') {
-      expect((r.data.event as { block?: { type?: string } }).block?.type).toBe('text');
+      expect((r.data.event as { block?: { type?: string } }).block?.type).toBe(
+        'text'
+      );
     }
   });
 
@@ -447,9 +543,7 @@ describe('T-F 06 T4.4：宽容路径深度守卫（256 层放行 / 257 层拒绝
     });
     expect(r.ok).toBe(true);
     if (r.ok && r.data.kind === 'engine') {
-      expect(
-        (r.data.event as { calls?: unknown }).calls
-      ).toEqual([]);
+      expect((r.data.event as { calls?: unknown }).calls).toEqual([]);
     }
   });
 

@@ -17,10 +17,20 @@ import {
   createInitialGoalMode,
   GOAL_DEFAULT_MAX_ITERATIONS,
 } from '../../api/goalModeController';
-import { isNavigationSlash, resolveSlashCommand, slashMissingArg } from '../../api/resolveSlashCommand';
+import {
+  isNavigationSlash,
+  resolveSlashCommand,
+  slashMissingArg,
+} from '../../api/resolveSlashCommand';
 import { emitUiEvent } from '../../api/uiEvents';
-import { deriveSessionTitle, isDefaultSessionTitle } from '../../api/sessionTitle';
-import { formatAnnotationsForModel, takePendingFileAnnotations } from '../../api/workspaceFsApi';
+import {
+  deriveSessionTitle,
+  isDefaultSessionTitle,
+} from '../../api/sessionTitle';
+import {
+  formatAnnotationsForModel,
+  takePendingFileAnnotations,
+} from '../../api/workspaceFsApi';
 import { GRILL_ME_PREFIX } from './slash-prefixes';
 import { buildMultimodalFromAttachments } from './multimodal';
 import {
@@ -32,6 +42,8 @@ import {
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { checkEngineReadyRealtime } from '../../api/chat-bridge/ConnectionLifecycle';
 import { domainUserMessage } from '../../api/userFacingErrors';
+// E2 F4：/compact 手动压缩命令调用（invokeTyped 三态：ok/missing/error）
+import { invokeTyped } from '../../api/tauriInvoke';
 import type { UseChatStreamOptions, ChatAttachment } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
 import type { SessionMessage } from '../../store/layoutStore';
@@ -44,7 +56,7 @@ export function useSlashSend(
     userMsgId: string,
     sessionIdOverride?: string,
     streamOptions?: StreamRequestOptions
-  ) => void,
+  ) => void
 ): {
   handleSendChat: (
     isInsert?: boolean,
@@ -113,16 +125,20 @@ export function useSlashSend(
         return;
       }
       if (slash.kind === 'teamwork-preview') {
-        void import('../../api/openAgentPanel').then(({ openAgentPanelBrowse }) => {
-          openAgentPanelBrowse({ sessionId: activeSessionId || undefined });
-        });
+        void import('../../api/openAgentPanel').then(
+          ({ openAgentPanelBrowse }) => {
+            openAgentPanelBrowse({ sessionId: activeSessionId || undefined });
+          }
+        );
         return;
       }
       handleGlobalTabClick('preview');
       if (slash.kind === 'browser' && slash.url) {
-        void import('../../api/previewBrowserStore').then(({ normalizeBrowseUrl, setPreviewUrl }) => {
-          setPreviewUrl(normalizeBrowseUrl(slash.url));
-        });
+        void import('../../api/previewBrowserStore').then(
+          ({ normalizeBrowseUrl, setPreviewUrl }) => {
+            setPreviewUrl(normalizeBrowseUrl(slash.url));
+          }
+        );
       }
       return;
     }
@@ -132,16 +148,18 @@ export function useSlashSend(
       setSlashMenuOpen(false);
       if (slash.kind === 'learn') onShowToast('用法：/learn <要记住的规则>');
       else if (slash.kind === 'goal') onShowToast('用法：/goal <要完成的目标>');
-      else if (slash.kind === 'grill-me') onShowToast('用法：/grill-me <要对齐的主题>');
+      else if (slash.kind === 'grill-me')
+        onShowToast('用法：/grill-me <要对齐的主题>');
       return;
     }
 
     // 草稿 → 真会话：commit 后补建 shell tab + 绑 chat leaf。
     // openNewDraftTab 解绑了 chat leaf.sessionId 且 draft 不进 openTabs；
     // 若不补 openOrFocusSession，顶栏工具按钮找不到 tab、右侧坞无法展开。
-    const commitDraftAndOpenShell = (
-      opts?: { title?: string; folder?: string }
-    ): string => {
+    const commitDraftAndOpenShell = (opts?: {
+      title?: string;
+      folder?: string;
+    }): string => {
       const newId = commitDraftIfNeeded(opts);
       if (!newId || isPendingDraft(newId)) return newId;
       const shell = getCompositionRoot().shell.getState();
@@ -164,7 +182,8 @@ export function useSlashSend(
         return;
       }
       try {
-        const { resolveSkillSlash, formatSkillInjection } = await import('../../api/skillsApi');
+        const { resolveSkillSlash, formatSkillInjection } =
+          await import('../../api/skillsApi');
         const resolved = await resolveSkillSlash(slash.raw);
         if (!resolved) {
           setChatInput('');
@@ -179,7 +198,9 @@ export function useSlashSend(
       } catch (e) {
         setChatInput('');
         setSlashMenuOpen(false);
-        onShowToast(`加载技能失败：${e instanceof Error ? e.message : String(e)}`);
+        onShowToast(
+          `加载技能失败：${e instanceof Error ? e.message : String(e)}`
+        );
         return;
       }
     }
@@ -202,7 +223,8 @@ export function useSlashSend(
         }
         const next = [...prev, ruleText];
         await clientApi.saveSettingsEx(cwd, 'global', { customRules: next });
-        const { rulesLinesToText, syncRulesToDaemon } = await import('../../api/rulesApi');
+        const { rulesLinesToText, syncRulesToDaemon } =
+          await import('../../api/rulesApi');
         const globalText = rulesLinesToText(next, '# 全局规则');
         void syncRulesToDaemon({ globalText });
 
@@ -219,7 +241,10 @@ export function useSlashSend(
           }
         }
         learnSid = resolveStreamSessionId(learnSid, null) || '';
-        if (!learnSid || !canStreamLocalSession(learnSid, !!getSessionById(learnSid))) {
+        if (
+          !learnSid ||
+          !canStreamLocalSession(learnSid, !!getSessionById(learnSid))
+        ) {
           onShowToast('会话不可用，规则已保存但未写入时间线');
           return;
         }
@@ -242,7 +267,65 @@ export function useSlashSend(
           status: 'completed',
         });
       } catch (e) {
-        onShowToast(`记住规则失败：${e instanceof Error ? e.message : String(e)}`);
+        onShowToast(
+          `记住规则失败：${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+      return;
+    }
+
+    // E2 F4：/compact 手动压缩（可选目标 token 数）——会话级副作用命令：
+    // 不写对话、不建会话（isSessionlessSlash 语义），直接调 daemon
+    // core_compact_now；结果经临时通知（toast）展示，不进对话上下文
+    // （D8 §3.7.4 临时通知通道：过程性信息不给 AI 看）
+    if (slash.kind === 'compact') {
+      setChatInput('');
+      setSlashMenuOpen(false);
+      if (slash.invalidArg) {
+        onShowToast('用法：/compact [目标 token 数]（正整数）');
+        return;
+      }
+      // 会话解析：草稿 → commit 出真会话；缺 sid → 无可压缩会话
+      let compactSid = '';
+      if (isPendingDraft(activeSessionId)) {
+        compactSid = commitDraftAndOpenShell();
+      } else {
+        compactSid = resolveStreamSessionId(null, activeSessionId) || '';
+        if (!compactSid) {
+          compactSid = commitDraftAndOpenShell();
+        }
+      }
+      compactSid = resolveStreamSessionId(compactSid, null) || '';
+      if (!compactSid) {
+        onShowToast('会话不可用，请新建会话后重试');
+        return;
+      }
+      try {
+        const res = await invokeTyped<{
+          tokensBefore: number;
+          tokensAfter: number;
+          dropped: number;
+          summaryState: string;
+        }>('core_compact_now', {
+          sessionId: compactSid,
+          targetTokens: slash.tokens ?? null,
+        });
+        if (res.status === 'ok') {
+          const fmt = (n: number) => n.toLocaleString();
+          const stateLabel =
+            res.data.summaryState === 'committed'
+              ? '摘要已生成'
+              : '摘要后台生成中';
+          onShowToast(
+            `压缩完成：${fmt(res.data.tokensBefore)} → ${fmt(res.data.tokensAfter)} token（丢弃 ${res.data.dropped} 条，${stateLabel}）`
+          );
+        } else if (res.status === 'missing') {
+          onShowToast('压缩命令未接线（引擎未注册 core_compact_now）');
+        } else {
+          onShowToast(res.message || '压缩失败');
+        }
+      } catch (e) {
+        onShowToast(`压缩失败：${e instanceof Error ? e.message : String(e)}`);
       }
       return;
     }
@@ -259,7 +342,10 @@ export function useSlashSend(
         sessionId = commitDraftAndOpenShell();
       }
     }
-    if (!sessionId || !canStreamLocalSession(sessionId, !!getSessionById(sessionId))) {
+    if (
+      !sessionId ||
+      !canStreamLocalSession(sessionId, !!getSessionById(sessionId))
+    ) {
       setPickerInlineError('会话不可用，请新建会话后重试');
       return;
     }
@@ -288,18 +374,25 @@ export function useSlashSend(
     }
 
     const { promptAttachBlock, streamOptions } = buildMultimodalFromAttachments(
-      modelText, activeAttachments
+      modelText,
+      activeAttachments
     );
     const fileAnns = takePendingFileAnnotations();
     const annBlock = formatAnnotationsForModel(fileAnns);
-    const input = (annBlock ? `${annBlock}\n\n` : '') + modelText + promptAttachBlock;
+    const input =
+      (annBlock ? `${annBlock}\n\n` : '') + modelText + promptAttachBlock;
     let finalStreamOptions = streamOptions;
     if (finalStreamOptions?.content?.length && annBlock) {
       const parts = [...finalStreamOptions.content];
-      const firstText = parts.findIndex((p: ChatContentPart) => p.type === 'text');
+      const firstText = parts.findIndex(
+        (p: ChatContentPart) => p.type === 'text'
+      );
       const head = firstText >= 0 ? parts[firstText] : undefined;
       if (head && head.type === 'text') {
-        parts[firstText] = { type: 'text', text: `${annBlock}\n\n${head.text}` };
+        parts[firstText] = {
+          type: 'text',
+          text: `${annBlock}\n\n${head.text}`,
+        };
       } else {
         parts.unshift({ type: 'text', text: annBlock });
       }
@@ -331,7 +424,9 @@ export function useSlashSend(
       setPickerInlineError('会话不可用，请新建会话后重试');
       return;
     }
-    const sessMsgs = Array.isArray(sessLookup.messages) ? sessLookup.messages : [];
+    const sessMsgs = Array.isArray(sessLookup.messages)
+      ? sessLookup.messages
+      : [];
     // L1 follow_up（pi）：运行中再发送 → 入队 status=queued，不 abort 当前 stream
     // （composer queueMode 同源；drainQueuedAfterComplete 在 idle 时再开 stream）
     const liveHandle = streamManagerRef.current?.get(sessionId);
@@ -351,7 +446,9 @@ export function useSlashSend(
         const seed = (priorUser?.text || rawInput).trim();
         const nextTitle = deriveSessionTitle(seed);
         if (!isDefaultSessionTitle(nextTitle)) {
-          getCompositionRoot().session.getState().renameSession(sessionId, nextTitle);
+          getCompositionRoot()
+            .session.getState()
+            .renameSession(sessionId, nextTitle);
         }
       }
     }

@@ -57,8 +57,12 @@ describe('commandManifest', () => {
       // note_document_hydrate：真 hydrate IPC（116 → 117；registered 110 → 111）
       // note_detect_mirror_drift + note_import_mirror_proposal（117 → 119；111 → 113）
       // note_apply_ops：CONN-B3 collab wire apply（119 → 120；113 → 114）
-      expect(registered).toBe(114);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(120);
+      // 电脑操作四命令（computer_session_* / computer_estop / computer_status）已接线
+      //   （120 → 124；114 → 118）
+      // E2 F4：core_compact_now 已接线（registered=false → true；118 → 119，
+      //   登记先行 6 → 5）
+      expect(registered).toBe(119);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(124);
     });
 
     it('命令名唯一', () => {
@@ -147,9 +151,10 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('kill_subagent')).toBe(true);
       // 登记先行：尚未接线，不得视为可调用
       expect(isRegisteredCommand('append_session_messages')).toBe(false);
-      // D4a 登记先行（P2 / E2 未实现）：不得视为可调用
+      // D4a 登记先行（P2）：不得视为可调用
       expect(isRegisteredCommand('core_resume_run')).toBe(false);
-      expect(isRegisteredCommand('core_compact_now')).toBe(false);
+      // E2 F4：core_compact_now 已接线（registered=true，可调用）
+      expect(isRegisteredCommand('core_compact_now')).toBe(true);
       // 未知名
       expect(isRegisteredCommand('nope')).toBe(false);
     });
@@ -290,10 +295,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（120；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（124；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(120);
+      expect(total).toBe(124);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

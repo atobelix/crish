@@ -54,6 +54,16 @@ use conex_db::LocalDb;
 // DEEPCHECK-01 P0：历史 token 估算复用 conex-compaction count_tokens 启发式
 // （ASCII 单词约 4 字符/token，与前端 estimateTextTokens 对齐）
 use conex_compaction::count_tokens;
+// E2 F4（手动压缩命令面）：LlmRequired = 无 Summarizer / 摘要失败 → 放弃
+// 压缩（禁止纯丢弃式线性压缩，E2 §2 F1 L1/L2）
+use conex_compaction::compaction::StubPolicy;
+// E2 F5（分阶段总结壳层接线）：里程碑判定纯函数 + Schema 构造 + checkpoint
+// 载荷转换 + 配置解析（stage_summary.rs 轮 1 已落地，本面只读调用）
+use session_loop::r#loop::stage_summary::{
+    DEFAULT_COMPACT_STAGE_RATIOS, StageSummaryDocument, StageSummaryRange,
+    build_stage_summary_document, next_pending_milestone, stage_ratios_from_session_meta,
+    stage_summary_to_checkpoint_payload, stage_summary_to_markdown, stage_tier,
+};
 use conex_types::device::{
     ApprovalChannel as RemoteApprovalChannel, ApprovalHistoryItem, ApprovalHistoryResult, Arbiter,
     PendingApproval,
@@ -66,6 +76,12 @@ use conex_types::events::{
 use conex_types::error::ProviderErrorKind;
 use conex_types::impact::ImpactAssessment;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+// E2 F4：压缩记录（context-compression-end 载荷）+ Manual 触发/原因变体 +
+// 块语义 details 构造（orchestrator::blocks 消费面，blocks.rs:96-137）
+use conex_types::tool::{
+    compaction_block_details, ContextCompressionReason, ContextCompressionRecord,
+    ContextCompressionTrigger,
+};
 use conex_types::session::AgentEndReason;
 use conex_types::{codes, ContextBudget, CrishError, CrishErrorPayload, HistoryMessage};
 use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
@@ -4980,6 +4996,308 @@ fn truncate_chars(text: &str, max: usize) -> String {
     result
 }
 
+// ── E2 F5（07 §4 卡 D）：分阶段总结壳层接线 ────────────────────────
+//
+// 里程碑触发（run 收口评估）+ 阶段总结产出（Summarizer 通道）+ 系统提示
+// 词段注入（build_system_prompt 输出后拼接）+ checkpoint 载荷落库。
+// 已触发记录选型（动态决策）：会话级 session_meta 键
+// `{session_id}:compact_stage_triggered`（已触发里程碑下标集合）与
+// `{session_id}:compact_stage_summaries`（阶段总结列表 {tier, markdown}）
+// ——与 compact_stage_ratios 同一命名空间、跨 run 持久、无 goal_state 耦合；
+// 事件面最小化（E2 §7.2「若事件总数最小化」分支）：阶段总结不新增事件
+// 类型（避免 registry_drift 双面登记级联），观测面 = session_meta 键 +
+// checkpoint + 日志。
+
+/// F5：会话级已触发里程碑键（`{session_id}:compact_stage_triggered`）
+fn stage_triggered_meta_key(session_id: &str) -> String {
+    crate::outputs_config::session_meta_key_of(session_id, "compact_stage_triggered")
+}
+
+/// F5：会话级阶段总结列表键（`{session_id}:compact_stage_summaries`）
+fn stage_summaries_meta_key(session_id: &str) -> String {
+    crate::outputs_config::session_meta_key_of(session_id, "compact_stage_summaries")
+}
+
+/// F5：读取已触发里程碑下标集合（session_meta 键；缺失/坏 JSON → 空集
+/// fail-open，不 panic）
+pub(crate) fn stage_triggered_indices(state: &CoreRunState, session_id: &str) -> Vec<u32> {
+    let Some(db) = state.local_db() else {
+        return Vec::new();
+    };
+    db.get_session_meta(&stage_triggered_meta_key(session_id))
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<Vec<u32>>(&raw).ok())
+        .unwrap_or_default()
+}
+
+/// F5：写入已触发里程碑下标集合（失败仅告警——下次收口按当前集合重判，
+/// 幂等语义）
+fn save_stage_triggered(state: &CoreRunState, session_id: &str, indices: &[u32]) {
+    let Some(db) = state.local_db() else {
+        return;
+    };
+    let raw = serde_json::to_string(indices).unwrap_or_else(|_| "[]".to_string());
+    if let Err(error) = db.set_session_meta(&stage_triggered_meta_key(session_id), &raw) {
+        tracing::warn!(
+            target: "run",
+            session_id,
+            error = %error,
+            "阶段里程碑标记落库失败（下次收口重判）"
+        );
+    }
+}
+
+/// F5：读取已产出阶段总结列表（{tier, markdown}；缺失/坏 JSON → 空）
+pub(crate) fn stored_stage_summaries(state: &CoreRunState, session_id: &str) -> Vec<(String, String)> {
+    let Some(db) = state.local_db() else {
+        return Vec::new();
+    };
+    let Some(raw) = db
+        .get_session_meta(&stage_summaries_meta_key(session_id))
+        .ok()
+        .flatten()
+    else {
+        return Vec::new();
+    };
+    let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(&raw) else {
+        return Vec::new();
+    };
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let tier = item.get("tier")?.as_str()?.to_string();
+            let markdown = item.get("markdown")?.as_str()?.to_string();
+            Some((tier, markdown))
+        })
+        .collect()
+}
+
+/// F5：追加一条阶段总结（按 tier 幂等去重——同阶梯只存一份，防重复注入
+/// 造成前缀碎片，E2 §6.5 ①/⑤ 稳定化纪律）
+fn append_stage_summary(state: &CoreRunState, session_id: &str, tier: &str, markdown: &str) {
+    let Some(db) = state.local_db() else {
+        return;
+    };
+    let key = stage_summaries_meta_key(session_id);
+    let mut items: Vec<serde_json::Value> = db
+        .get_session_meta(&key)
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<Vec<serde_json::Value>>(&raw).ok())
+        .unwrap_or_default();
+    if items
+        .iter()
+        .any(|item| item.get("tier").and_then(|v| v.as_str()) == Some(tier))
+    {
+        return;
+    }
+    items.push(serde_json::json!({ "tier": tier, "markdown": markdown }));
+    let raw = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
+    if let Err(error) = db.set_session_meta(&key, &raw) {
+        tracing::warn!(
+            target: "run",
+            session_id,
+            error = %error,
+            "阶段总结存储失败（注入面不可见，checkpoint 仍可携带）"
+        );
+    }
+}
+
+/// F5 §6.3：系统提示词段注入——build_system_prompt 规范化输出后拼接
+/// 「阶段总结：N 条」段（每阶梯 md 渲染 + tier 标注；零对话污染、天然跨
+/// run 携带，E2 §6.3 主选）。读取会话级阶段总结列表；无总结 → 原样返回
+/// build_system_prompt 输出（行为与接线前一致）。
+pub(crate) fn assemble_system_prompt_with_stages(
+    state: &CoreRunState,
+    session_id: &str,
+    system_prompt: Option<String>,
+) -> Option<String> {
+    let base = build_system_prompt(system_prompt);
+    let stages = stored_stage_summaries(state, session_id);
+    if stages.is_empty() {
+        return base;
+    }
+    let mut section = format!("阶段总结：{} 条", stages.len());
+    for (_, markdown) in &stages {
+        section.push_str("\n\n");
+        section.push_str(markdown);
+    }
+    match base {
+        Some(base) => Some(format!("{base}\n\n{section}")),
+        None => Some(section),
+    }
+}
+
+/// F5：Schema V1 字符串数组字段提取（非数组/非字符串项跳过；阶段总结
+/// 构造辅助）
+fn stage_doc_string_array(doc: &serde_json::Value, key: &str) -> Vec<String> {
+    doc.get(key)
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// F5 §6.2/07 §4.1：run 收口里程碑评估（触发点 = run 收口，Stop 收场路径）。
+///
+/// - 输入：当前对话（outcome.messages）+ 会话级已触发集合（session_meta）；
+/// - 判定：estimate（count_agent_message_tokens 启发式合计，压缩链同源
+///   口径）/ window（生效模型目录窗口；目录缺失回退 ContextBudget 默认
+///   64000）比例 ≥ compact_stage_ratios（默认 [0.4,0.6,0.8]，可配）中
+///   首个未触发阶梯（next_pending_milestone 纯函数）；
+/// - 触发：经 Summarizer 对完整对话产出 Schema V1 阶段总结（tier=stage-N、
+///   droppedIds 空、custom range = 消息 id 区间）→ 存储 + checkpoint 落载荷；
+/// - 失败语义：Summarizer 缺失 / 摘要失败 / 非法 JSON → 里程碑**不标记**
+///   （下轮收口重试，与 F2 层 1「被动重试」同向）；标记在产出成功后写入
+///   （防「假触发」）；
+/// - 每阶梯只触发一次：已触发集合跨 run 持久（session_meta 键），新 run
+///   重新评估时更高阶梯达标才补触发（重复触发抑制，07 §4.4 测试 1）。
+pub(crate) async fn evaluate_stage_milestones(
+    state: &Arc<CoreRunState>,
+    session_id: &str,
+    messages: &[Arc<AgentMessage>],
+) {
+    if messages.is_empty() {
+        return;
+    }
+    // 里程碑阶梯（session_meta `compact_stage_ratios` 可配；键缺失回退
+    // 默认 40/60/80%——stage_ratios_from_session_meta fail-open）
+    let ratios = {
+        let db = state.local_db();
+        let meta = |key: &str| db.as_ref().and_then(|d| d.get_session_meta(key).ok().flatten());
+        stage_ratios_from_session_meta(meta)
+            .unwrap_or_else(|| DEFAULT_COMPACT_STAGE_RATIOS.to_vec())
+    };
+    // 估算（启发式 token 合计）与窗口（生效模型目录；缺目录回退默认窗口）
+    let estimate: u64 = messages
+        .iter()
+        .map(|m| conex_compaction::count_agent_message_tokens(m) as u64)
+        .sum();
+    let window = state
+        .engine
+        .provider_config()
+        .and_then(|config| crate::engine::effective_context_window(&config))
+        .map(u64::from)
+        .unwrap_or(u64::from(ContextBudget::default().context_window));
+    let ratio = session_loop::r#loop::stage_summary::estimate_ratio(estimate, window);
+    let triggered = stage_triggered_indices(state, session_id);
+    let Some(index) = next_pending_milestone(ratio, &ratios, &triggered) else {
+        return;
+    };
+    // 触发：Summarizer 解析（F1 L1：无 Summarizer → 不产出、不标记）
+    let Some(summarizer) = state.summarizer_for(session_id) else {
+        tracing::warn!(
+            target: "run",
+            session_id,
+            ratio,
+            "阶段里程碑达标但 LLM 摘要不可用 → 跳过（下轮收口重试）"
+        );
+        return;
+    };
+    // 完整对话 → 阶段总结（Summarizer 为同步 trait，ProviderSummarizer
+    // 内部专用线程异步——收口 async 面经 spawn_blocking 隔离阻塞，与
+    // save_run_usage 先例同纪律）
+    let dropped: Vec<AgentMessage> = messages.iter().map(|m| m.as_ref().clone()).collect();
+    let summarizer = Arc::clone(&summarizer);
+    let summarize_result =
+        tokio::task::spawn_blocking(move || summarizer.summarize(&dropped, None))
+            .await
+            .map_err(|join| format!("阶段总结任务 join 失败：{join}"));
+    let text = match summarize_result {
+        Ok(Ok(text)) => text,
+        Ok(Err(error)) => {
+            tracing::warn!(
+                target: "run",
+                session_id,
+                error,
+                "阶段总结产出失败 → 不标记（下轮收口重试）"
+            );
+            return;
+        }
+        Err(error) => {
+            tracing::warn!(
+                target: "run",
+                session_id,
+                error,
+                "阶段总结任务失败 → 不标记（下轮收口重试）"
+            );
+            return;
+        }
+    };
+    // Schema V1 校验 + 字段提取（goal/constraints/progress/decisions/
+    // nextSteps/criticalContext）；非法输出 → 不标记（下轮重试）
+    let llm_doc: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(doc) => doc,
+        Err(error) => {
+            tracing::warn!(
+                target: "run",
+                session_id,
+                error = %error,
+                "阶段总结非 Schema V1 JSON → 不标记（下轮收口重试）"
+            );
+            return;
+        }
+    };
+    let tier = stage_tier(index);
+    let stage_doc = build_stage_summary_document(&StageSummaryDocument {
+        stage_index: index,
+        block_id: format!("stage-summary-{}", index + 1),
+        generation: 1,
+        goal: llm_doc
+            .get("goal")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        constraints: stage_doc_string_array(&llm_doc, "constraints"),
+        progress: stage_doc_string_array(&llm_doc, "progress"),
+        decisions: stage_doc_string_array(&llm_doc, "decisions"),
+        next_steps: stage_doc_string_array(&llm_doc, "nextSteps"),
+        critical_context: llm_doc
+            .get("criticalContext")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        range: Some(StageSummaryRange {
+            start_message_id: messages
+                .first()
+                .map(|m| m.id.clone())
+                .unwrap_or_default(),
+            end_message_id: messages.last().map(|m| m.id.clone()).unwrap_or_default(),
+            message_count: messages.len() as u32,
+        }),
+    });
+    let markdown = stage_summary_to_markdown(&stage_doc);
+    // 标记已触发（产出成功后）+ 存储总结（注入面数据源；tier 幂等去重）
+    let mut next_triggered = triggered;
+    next_triggered.push(index);
+    next_triggered.sort_unstable();
+    next_triggered.dedup();
+    save_stage_triggered(state, session_id, &next_triggered);
+    append_stage_summary(state, session_id, &tier, &markdown);
+    // checkpoint 落载荷（set_leaf_checkpoint；无树/无叶子 → 跳过不阻断，
+    // 与 collect_checkpoint_on_close 同语义）
+    let payload = stage_summary_to_checkpoint_payload(&stage_doc);
+    let written = with_session_tree(state, session_id, |tree| {
+        let Some(leaf_id) = tree.current_leaf_id().map(str::to_string) else {
+            return false;
+        };
+        tree.set_leaf_checkpoint(&leaf_id, &payload).is_ok()
+    });
+    tracing::info!(
+        target: "run",
+        session_id,
+        tier,
+        message_count = messages.len(),
+        checkpoint = written.unwrap_or(false),
+        "阶段里程碑触发：阶段总结已产出并存储"
+    );
+}
+
 /// T-CF-11：idle 续 run 拉起（收口处判定命中后调用）——复用
 /// [run_task_impl] 的 run 装配拉起新 run（新 run id / 新 producer /
 /// 新 ActiveRun / 新 drive_run_loop；history 回退 SessionHistoryCache，
@@ -5133,6 +5451,16 @@ pub(crate) async fn drive_run_loop(
     // 罕见，跳过可接受，D7 §8 决策 3）。采集侧损坏 warn + 不写 + 不
     // 阻断（§3.5 降级）；子代理会话无树自动跳过（R8）──
     collect_checkpoint_on_close(&state, &session_id, &outcome);
+
+    // ── E2 F5（07 §4 卡 D）：run 收口里程碑评估——对话长度达
+    // compact_stage_ratios 阈值（默认 40/60/80%）时经 Summarizer 对完整
+    // 对话产出阶段总结（tier=stage-N），存储（session_meta 注入面数据源）
+    // + checkpoint 落载荷；每阶梯只触发一次（会话级已触发集合跨 run
+    // 持久）。子代理 run 不评估（一次性任务，无里程碑语义——与 goal
+    // 收口评估同守卫）──
+    if active.subagent.is_none() {
+        evaluate_stage_milestones(&state, &session_id, &outcome.messages).await;
+    }
 
     // T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②）：
     // outcome.cache_stats 非空（tracker.finish 产物，T-36）→ 会话级状态
@@ -5423,11 +5751,15 @@ pub(crate) async fn drive_run_loop(
 /// T-CF-11 / drive_run_loop 子模块 re-export（drive_run_loop 与
 /// run_task_impl 相互引用 opaque future，跨模块定义后 Send 检查可终止；
 /// 外层与测试经此引用）
-use idle_resume::{EpisodeConsume, ResumeLauncher, WakeSourceCheck, drive_run_loop};
+use idle_resume::{
+    EpisodeConsume, ResumeLauncher, WakeSourceCheck, assemble_system_prompt_with_stages,
+    drive_run_loop,
+};
 #[cfg(test)]
 use idle_resume::{
     checkpoint_injection_section, collect_checkpoint_on_close, decide_idle_resume,
-    drain_pending_to_inject_messages,
+    drain_pending_to_inject_messages, evaluate_stage_milestones, stage_triggered_indices,
+    stored_stage_summaries,
 };
 
 /// T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②；
@@ -6202,7 +6534,10 @@ pub(crate) async fn run_task_impl(
     let options = SessionLoopOptions {
         cwd: cwd.clone(),
         assistant_client_message_id: assistant_client_message_id.clone(),
-        system_prompt: build_system_prompt(system_prompt),
+        // P1 B1：systemPrompt 入站规范化一次 + E2 F5 阶段总结段注入
+        // （build_system_prompt 输出后拼接「阶段总结：N 条」段——零对话
+        // 污染、天然跨 run 携带，E2 §6.3 主选；无总结时行为与接线前一致）
+        system_prompt: assemble_system_prompt_with_stages(&state, &session_id, system_prompt),
         context_budget,
         // D1 §3.1.4（R6）：瞬态重试退避配置（session_meta 键注入；
         // None = 现状立即重试向后兼容）
@@ -6521,6 +6856,280 @@ pub(crate) async fn run_control_impl(
             Ok(())
         }
         other => Err(CoreError::invalid_input(format!("未知 level：{other}"))),
+    }
+}
+
+// ── E2 F4（07 §3 卡 C）：手动压缩命令 core_compact_now ─────────────
+//
+// slash /compact（别名 /压缩 /compress，可选目标 token 数）→ 本命令。
+// 链路（E2 §5.2）：会话存在性 → 活动 run 检查（busy 拒绝，不打断活动
+// 流）→ 对话源（SessionHistoryCache 优先 / DB body 兜底）→ Summarizer
+// 检查（F1 L1：无 → 结构化错误「LLM 摘要不可用，未压缩」）→
+// CompactionEngine（StubPolicy::LlmRequired——摘要不可用不降级 stub）→
+// 应用（缓存对话替换 + context-compression-start/end 事件 + 块表落库）
+// → CompactNowResult。manual 不受 max_auto_compactions_per_run 限制
+// （用户显式意志，00 规范红线 2「手动路径不受限」对称语义）。
+
+/// F4：手动压缩结果（slash /compact 返回载荷；camelCase wire）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompactNowResult {
+    /// 压缩前 token 数（启发式口径）
+    pub tokens_before: u64,
+    /// 压缩后 token 数（启发式口径）
+    pub tokens_after: u64,
+    /// 被压缩（丢弃并进入摘要）的消息条数
+    pub dropped: usize,
+    /// 摘要状态（committed = LLM 摘要成功 / awaiting = 后台重试中）
+    pub summary_state: String,
+}
+
+/// F4：手动压缩命令（daemon IPC；registered 面经 command_manifest 双端
+/// 三处翻转 + main.rs make_handlers! 注册，registered = 注册面不变量）
+#[tauri::command]
+pub(crate) async fn core_compact_now(
+    state: tauri::State<'_, Arc<CoreRunState>>,
+    session_id: String,
+    target_tokens: Option<u64>,
+) -> Result<CompactNowResult, CoreError> {
+    compact_now_impl(&state, session_id.trim(), target_tokens).await
+}
+
+/// F4 命令体（测试直调，不依赖 Tauri runtime；对齐 run_control_impl
+/// 「契约体」模式）
+pub(crate) async fn compact_now_impl(
+    state: &Arc<CoreRunState>,
+    session_id: &str,
+    target_tokens: Option<u64>,
+) -> Result<CompactNowResult, CoreError> {
+    // 1. 会话存在性（内存注册表 session_trees / sessions + DB sessions 表
+    //    三面检查——冷启动无内存注册表时以 DB 为权威）
+    let session_exists = {
+        let trees = state.session_trees.lock().unwrap_or_else(|e| e.into_inner());
+        let in_trees = trees.contains_key(session_id);
+        let in_sessions = {
+            let sessions = state.sessions.lock().unwrap_or_else(|e| e.into_inner());
+            sessions.iter().any(|record| record.session_id == session_id)
+        };
+        let in_db = state
+            .local_db()
+            .and_then(|db| db.list_sessions().ok())
+            .map(|entries| entries.iter().any(|entry| entry.id == session_id))
+            .unwrap_or(false);
+        in_trees || in_sessions || in_db
+    };
+    if !session_exists {
+        return Err(CoreError::NotFound(format!("会话 {session_id} 不存在")));
+    }
+    // 2. 活动 run 检查（busy → 拒绝，不打断活动流；用户可待 idle 后再试）
+    {
+        let active = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+        if active.values().any(|run| run.session_id == session_id) {
+            return Err(CoreError::InvalidInput(format!(
+                "会话 {session_id} 正在运行中，压缩命令等待空闲后执行（不打断活动流）"
+            )));
+        }
+    }
+    // 3. 预算：显式 target_tokens 或 window - reserve（预检同口径）；
+    //    下限 = reserve + keep_recent（护栏：目标过小必裁掉保留段原文，
+    //    语义等价不可行 → InvalidInput，E2 §5.3 护栏）。参数校验前置
+    //    （对话加载之前，与 run_control_impl 的入参先验纪律一致）
+    let policy = state.compaction_policy_for(session_id).unwrap_or_default();
+    let window = state
+        .engine
+        .provider_config()
+        .and_then(|config| crate::engine::effective_context_window(&config))
+        .map(u64::from)
+        .unwrap_or(u64::from(ContextBudget::default().context_window));
+    let reserve = u64::from(ContextBudget::default().reserve_tokens);
+    let keep_recent = policy.keep_recent_tokens as u64;
+    let budget = match target_tokens {
+        Some(target) => target,
+        None => window.saturating_sub(reserve),
+    };
+    if budget < reserve + keep_recent {
+        return Err(CoreError::InvalidInput(format!(
+            "目标 token 数 {budget} 低于下限 {reserve}（reserve）+ {keep_recent}（keep_recent）"
+        )));
+    }
+    // 4. 对话源：SessionHistoryCache 优先（引擎权威增量）；DB body 兜底
+    //    （重启后冷启动——SessionMessage 与 HistoryMessage 字段一一对应，
+    //    转换后走缓存同款保真水合 cached_history_to_conversation）
+    let conversation = if let Some(cached) = state.session_history.get(session_id) {
+        cached_history_to_conversation(cached)
+    } else {
+        let Some(db) = state.local_db() else {
+            return Err(CoreError::Internal(
+                "LocalDb 不可用，无法加载会话对话".to_string(),
+            ));
+        };
+        let body = db
+            .load_session_body(session_id)
+            .map_err(|error| CoreError::Io(format!("store.load_session_body: {error}")))?;
+        let history: Vec<HistoryMessage> =
+            body.into_iter().map(session_message_to_history).collect();
+        cached_history_to_conversation(history)
+    };
+    if conversation.is_empty() {
+        return Err(CoreError::InvalidInput(format!(
+            "会话 {session_id} 无对话内容可压缩"
+        )));
+    }
+    // 5. Summarizer 检查（F1 L1：无 Summarizer → 不压缩、结构化错误）
+    let Some(summarizer) = state.summarizer_for(session_id) else {
+        return Err(CoreError::InvalidInput(
+            "LLM 摘要不可用，未压缩（请配置 provider 后重试）".to_string(),
+        ));
+    };
+    // 6. 压缩（LlmRequired：无 Summarizer / 摘要失败 → 放弃压缩，禁止
+    //    纯丢弃式 stub，E2 F1）
+    let engine = conex_compaction::CompactionEngine::new(budget as usize);
+    let plan = engine.compact_agent_messages_with_stub_policy(
+        &conversation,
+        budget as usize,
+        &policy,
+        Some(summarizer.as_ref()),
+        StubPolicy::LlmRequired,
+    );
+    if plan.llm_unavailable {
+        return Err(CoreError::InvalidInput(
+            "LLM 摘要不可用，未压缩（摘要生成失败，对话保持原样）".to_string(),
+        ));
+    }
+    if plan.dropped_ids.is_empty() {
+        return Err(CoreError::InvalidInput(format!(
+            "无合法切割点，未压缩（对话过短或无 Tool 配对保护冲突，tokens_before={}）",
+            plan.tokens_before
+        )));
+    }
+    // 7. 应用：缓存对话替换（下次 run 装配即用压缩后序列）+ 事件 + 块表
+    let replaced: Vec<HistoryMessage> = plan
+        .messages
+        .iter()
+        .map(|message| to_history_message(message.as_ref()))
+        .collect();
+    state.session_history.store(session_id, replaced);
+    let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
+        state.store.clone(),
+        state.base_sequence_for(session_id).await,
+    )));
+    let bridge = state.event_bridge();
+    let now_iso = crate::engine::now_iso_utc();
+    // Start 事件（触发原因 + 压缩前 token；会话级队列入队持久化 + 全局
+    // 事件桥信封广播——非 run 上下文 run_id 缺省 None）
+    push_emit_idle_event(
+        &queue,
+        &bridge,
+        session_id,
+        AgentEvent::ContextCompressionStart {
+            session_id: session_id.to_string(),
+            timestamp: now_iso.clone(),
+            reason: "manual".to_string(),
+            tokens_before: plan.tokens_before,
+        },
+    )
+    .await;
+    // End 事件（record 载荷 = CompactionPlan 字段；details 携带块语义键，
+    // orchestrator::blocks 消费落块表，blocks.rs:96-137）
+    let summary_state = if plan.summary_is_llm { "committed" } else { "awaiting" };
+    let block_id = format!("compacted-summary-{}-{}", plan.generation, plan.fold_index);
+    let record = ContextCompressionRecord {
+        id: block_id.clone(),
+        trigger: ContextCompressionTrigger::Manual,
+        reason: Some(ContextCompressionReason::Manual),
+        policy: None,
+        summary: plan.summary.clone(),
+        first_kept_message_id: plan.first_kept_message_id.clone(),
+        compressed_message_ids: plan.dropped_ids.clone(),
+        kept_message_ids: plan.kept_ids.clone(),
+        tokens_before: plan.tokens_before,
+        tokens_after: plan.tokens_after,
+        threshold_tokens: Some(budget),
+        created_at: now_iso.clone(),
+        handoff: None,
+        cache_boundary: None,
+        details: Some(compaction_block_details(
+            &block_id,
+            plan.generation,
+            (plan.fold_chain_prev > 0)
+                .then(|| format!("compacted-summary-{}-{}", plan.generation, plan.fold_chain_prev))
+                .as_deref(),
+            iso8601_to_epoch_millis(&now_iso),
+            summary_state,
+        )),
+    };
+    let end_event = AgentEvent::ContextCompressionEnd {
+        session_id: session_id.to_string(),
+        timestamp: now_iso,
+        result: Some(record),
+        aborted: false,
+        error: None,
+    };
+    let sequence = push_emit_idle_event(&queue, &bridge, session_id, end_event.clone()).await;
+    // 块表落库（与 drive 路径同源 persist_compression_block；失败仅告警
+    // ——块表是索引面，原文在事件流可回放）
+    if let Some(sequence) = sequence {
+        if let Err(error) = orchestrator::blocks::persist_compression_block(
+            state.store.as_ref(),
+            session_id,
+            &end_event,
+            sequence,
+        )
+        .await
+        {
+            tracing::warn!(
+                target: "run",
+                session_id,
+                error = %error,
+                "手动压缩块表落库失败（索引面，原文在事件流可回放）"
+            );
+        }
+    }
+    tracing::info!(
+        target: "run",
+        session_id,
+        tokens_before = plan.tokens_before,
+        tokens_after = plan.tokens_after,
+        dropped = plan.dropped_ids.len(),
+        "手动压缩完成（slash /compact）"
+    );
+    Ok(CompactNowResult {
+        tokens_before: plan.tokens_before,
+        tokens_after: plan.tokens_after,
+        dropped: plan.dropped_ids.len(),
+        summary_state: summary_state.to_string(),
+    })
+}
+
+/// F4：空闲态事件发射（无活动 run 上下文——会话级 EventQueue 入队持久化
+/// + 全局事件桥信封广播；run_id 缺省 None，前端按会话域消费）。返回事件
+/// 序列号（块表落库锚点）；失败 → None（事件仅尽力而为，不阻断命令）
+async fn push_emit_idle_event(
+    queue: &Arc<tokio::sync::Mutex<EventQueue>>,
+    bridge: &crate::core_event_bridge::EventBridge,
+    session_id: &str,
+    event: AgentEvent,
+) -> Option<u64> {
+    let mut queue = queue.lock().await;
+    let sequenced = queue.push(session_id, event).await.ok()?;
+    let envelope = AgentEventEnvelope::new(sequenced.event, None, Some(sequenced.sequence));
+    bridge.emit_envelope(&envelope);
+    Some(sequenced.sequence)
+}
+
+/// F4：DB body（SessionMessage）→ HistoryMessage（字段一一对应；再经
+/// cached_history_to_conversation 保真水合为对话——与缓存路径同源）
+fn session_message_to_history(message: conex_types::SessionMessage) -> HistoryMessage {
+    HistoryMessage {
+        id: message.id,
+        sender: message.sender,
+        text: message.text,
+        thinking: message.thinking,
+        blocks_json: message.blocks_json,
+        tool_calls_json: message.tool_calls_json,
+        tool_call_results_json: message.tool_call_results_json,
+        status: message.status,
+        timestamp: message.timestamp,
     }
 }
 
@@ -11373,6 +11982,36 @@ mod tests {
         assert_eq!(streak, 0, "Cron 空注入轮不计 streak");
     }
 
+    /// D6-⑤（W2）+ 审计 04 补缺（e）：定时器源空注入轮**多轮待命**不误停
+    /// ——连续超过空转上限（IDLE_RESUME_MAX_EMPTY_ROUNDS=3）的空注入轮
+    /// streak 保持 0 且判定持续命中（裁决 #21：待命是正常态，不增不减）
+    #[tokio::test]
+    async fn timer_standby_multi_empty_rounds_keep_streak_zero() {
+        let (state, _registry) = state_with_background();
+        state.set_timer_has_active(Some(Arc::new(|| Box::pin(async { true }))));
+        let active = build_active_run(&state, "s1", "run-1").await;
+        // 6 轮待命（> 上限 3）：每轮仍续 run，streak 不被消耗
+        for round in 1..=6u32 {
+            let verdict = decide_idle_resume(
+                &state,
+                &active,
+                AgentEndReason::Stop,
+                false,
+                &ResumeSignals::default(),
+            )
+            .await;
+            assert!(verdict.is_some(), "第 {round} 轮定时器待命应持续续 run");
+            let streak = state
+                .resume_empty_streak
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get("s1")
+                .copied()
+                .unwrap_or(0);
+            assert_eq!(streak, 0, "第 {round} 轮后 streak 仍为 0（不增不减）");
+        }
+    }
+
     /// D6-⑤（W2）：真实队列条目轮无产出 → 计入 streak（有真实任务输入，
     /// 护栏照常计数）
     #[tokio::test]
@@ -11744,6 +12383,353 @@ mod tests {
         assert_eq!(goal["stopped_reason"], serde_json::Value::Null, "子代理 run 不写键");
     }
 
+    // ── D5 goal 集成测试补缺（审计 04 / D5 §5.2 I 系列）：stalled 指纹
+    //    终态 / 轮数上限终态 / 注入文本内容 / 模式切换（普通 run 保留 +
+    //    新 /goal 覆盖）────────────────────────────────────────────
+
+    /// 构造「同一工具批 + 失败工具结果」的 stop 收场 outcome（stalled
+    /// 指纹测试用：签名相同且无成功工具结果 → stalled 计入）
+    fn goal_stalled_outcome() -> RunOutcome {
+        RunOutcome {
+            reason: AgentEndReason::Stop,
+            messages: vec![
+                Arc::new(amsg(
+                    "u1",
+                    AgentMessageRole::User,
+                    vec![text_block("继续任务")],
+                )),
+                Arc::new(amsg(
+                    "m1",
+                    AgentMessageRole::Assistant,
+                    vec![
+                        text_block("重试读取同一文件"),
+                        tool_call_block("t1", "read_file"),
+                    ],
+                )),
+                Arc::new(amsg(
+                    "m2",
+                    AgentMessageRole::Tool,
+                    vec![AgentMessageBlock::ToolResult {
+                        tool_call_id: "t1".into(),
+                        tool_name: "read_file".into(),
+                        output: ToolOutput::text("读取失败".to_string()),
+                        is_error: true,
+                    }],
+                )),
+            ],
+            ..canned_outcome()
+        }
+    }
+
+    /// D5 验收 A2 / I3：工具批指纹连续相同且无成功工具结果 → stalled
+    /// 计数递增（首轮 NoProgress 续轮），达 max_stalled_rounds=2 →
+    /// goal-stalled 终态（stopped_reason=goal-stalled 落键、status 推断
+    /// Blocked → goal_pending 恒 false → 无第二次续轮）。预置
+    /// progress_signature = 本轮工具批指纹，两轮 drive 走生产收口路径。
+    #[tokio::test]
+    async fn goal_run_stalled_fingerprint_terminates_goal() {
+        // 预置指纹 = 「read_file + path 顶层 key」工具批签名（与两轮
+        // outcome 同构——签名相同轨道）
+        let signature = orchestrator::goal_state::tool_batch_fingerprint(&[ToolCallStamp {
+            tool_name: "read_file".to_string(),
+            param_keys: vec!["path".to_string()],
+        }])
+        .expect("有工具轮必有签名");
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        let mut preset = GoalState::new("修复目标", 12, 2);
+        preset.progress_signature = Some(signature.clone());
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &preset.to_json(),
+        )
+        .expect("goal_state 预置（带进度签名）");
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        let outcome = goal_stalled_outcome();
+        // 第一轮：签名相同 → stalled_delta=1（NoProgress，未达阈值 2）→
+        // goal_pending 命中 → 续轮拉起（count 1）
+        drive_run_loop(
+            Arc::clone(&state),
+            build_active_run(&state, "s1", "run-st-1").await,
+            Box::new(TestProducer::new(outcome.clone())),
+        )
+        .await;
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("键存在");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        assert_eq!(goal["stalled_rounds"], 1, "首轮指纹相同计入 stalled");
+        assert_eq!(goal["stopped_reason"], "stop", "未达阈值仍为非终态收场");
+        assert_eq!(goal["current_round"], 1, "Stop 轮 current_round+1");
+        assert_eq!(
+            goal["progress_signature"], signature,
+            "签名相同轮沿用指纹（advance 保持）"
+        );
+        assert_eq!(counter.load(Ordering::SeqCst), 1, "首轮 NoProgress 应续轮");
+        // 第二轮：stalled_rounds 1+1 >= 2 → Blocked(goal-stalled)，终态
+        // → goal_pending 恒 false → 不再续轮
+        drive_run_loop(
+            Arc::clone(&state),
+            build_active_run(&state, "s1", "run-st-2").await,
+            Box::new(TestProducer::new(outcome)),
+        )
+        .await;
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("键存在");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        assert_eq!(
+            goal["stopped_reason"], "goal-stalled",
+            "达 max_stalled_rounds → goal-stalled 终态"
+        );
+        assert_eq!(goal["stalled_rounds"], 2, "连续两轮 stalled 累计为 2");
+        assert_eq!(goal["current_round"], 2, "两轮 Stop 收场各 +1");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "goal-stalled 终态 → goal_pending 恒 false，无第二次续轮"
+        );
+    }
+
+    /// D5 验收 A3 / I4：max_rounds 耗尽（current_round=11、max=12，
+    /// 未完成）→ Blocked(goal-max-rounds) 终态——stopped_reason 落键、
+    /// current_round 推进到 12、goal_pending 恒 false → 无续轮。
+    #[tokio::test]
+    async fn goal_run_max_rounds_exhausted_terminates_goal() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        let mut preset = GoalState::new("修复目标", 12, 2);
+        preset.current_round = 11;
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &preset.to_json(),
+        )
+        .expect("goal_state 预置（末轮）");
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        let outcome = RunOutcome {
+            reason: AgentEndReason::Stop,
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block("还没完成，继续推进。")],
+            ))],
+            ..canned_outcome()
+        };
+        drive_run_loop(
+            Arc::clone(&state),
+            build_active_run(&state, "s1", "run-max-1").await,
+            Box::new(TestProducer::new(outcome)),
+        )
+        .await;
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("键存在");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        assert_eq!(
+            goal["stopped_reason"], "goal-max-rounds",
+            "轮数耗尽 → goal-max-rounds 终态（restore.rs 保真匹配）"
+        );
+        assert_eq!(goal["current_round"], 12, "末轮 Stop +1 推进到上限");
+        assert_eq!(goal["stalled_rounds"], 0, "轮数上限判定先于 stalled，不计 stalled");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            0,
+            "goal-max-rounds 终态 → goal_pending 恒 false，无续轮"
+        );
+    }
+
+    /// D5 §3.7 / I2 注入面：goal_pending 续轮拉起 mode=goal-continue，
+    /// 注入消息文本含 goal 前缀（模板 buildGoalModePrefix 同构）——
+    /// 「目标：{goal}」「当前第 X/Y 轮（自动续写上限 Y 轮）」，且消息
+    /// metadata.kind="goal-continue"（引擎自主续轮标识）。
+    #[tokio::test]
+    async fn goal_continue_inject_text_contains_goal_prefix_and_round() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("完成第一步，继续推进目标。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        state.run_restore().await;
+        // 捕获型拉起器替身（记录 mode + 注入消息，不驱动续 run 链）
+        let captured: Arc<std::sync::Mutex<Vec<(String, Vec<AgentMessage>)>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let probe = Arc::clone(&captured);
+        let launcher: ResumeLauncher = Arc::new(move |_state, _sid, mode, messages| {
+            let probe = Arc::clone(&probe);
+            let mode = mode.to_string();
+            Box::pin(async move {
+                probe.lock().unwrap().push((mode, messages));
+            })
+        });
+        state.set_resume_launcher(Some(launcher));
+        let mut options = test_options("run-goal-inj", "s1", "请完成目标");
+        options.mode = Some("goal".to_string());
+        options.visible_goal = Some("修复构建问题".to_string());
+        options.max_rounds = Some(5);
+        options.max_stalled_rounds = Some(2);
+        run_task_impl(Arc::clone(&state), options)
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        // 轮询至注入捕获（goal_pending 拉起在收口尾部）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let captured = captured.lock().unwrap();
+            if !captured.is_empty() {
+                break;
+            }
+            drop(captured);
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "goal_pending 注入未在窗口内捕获"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let captured = captured.lock().unwrap();
+        assert_eq!(captured.len(), 1, "应恰好拉起一次续轮");
+        assert_eq!(captured[0].0, "goal-continue", "续轮 mode=goal-continue");
+        let messages = &captured[0].1;
+        assert_eq!(messages.len(), 1, "纯 goal 前缀注入 = 单条消息");
+        let text = messages[0].text();
+        assert!(
+            text.contains("[目标模式 · 系统指令]"),
+            "注入文本应含目标模式系统指令头：{text}"
+        );
+        assert!(text.contains("目标：修复构建问题"), "注入含 goal 文本：{text}");
+        // 首轮收口后 current_round 0→1，续轮注入 round = current_round+1 =
+        // 2（注入读的是收口推进后的 goal_state——续轮本身就是第 2 轮）
+        assert!(
+            text.contains("当前第 2/5 轮（自动续写上限 5 轮）"),
+            "注入含轮次信息（续轮为第 2/5 轮）：{text}"
+        );
+        let metadata = messages[0]
+            .metadata
+            .as_ref()
+            .expect("goal 续轮消息带 metadata");
+        assert_eq!(
+            metadata["kind"], "goal-continue",
+            "注入消息 metadata.kind=goal-continue（引擎自主续轮标识）"
+        );
+    }
+
+    /// D5 验收 A1 / §3.8 模式切换（普通 run 不清 goal_state）：goal_state
+    /// 是会话级长期意图——普通 run（mode 非 goal）收口不删除键，且收口
+    /// 评估照常推进（current_round 3→4）、goal_pending 仍可命中续轮。
+    #[tokio::test]
+    async fn goal_run_plain_mode_preserves_goal_state() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        let mut preset = GoalState::new("修复目标", 12, 2);
+        preset.current_round = 3;
+        preset.progress_signature = Some("tools:fnv1a:aaaaaaaaaaaaaaaa".into());
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &preset.to_json(),
+        )
+        .expect("goal_state 预置（挂起中）");
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        // 普通 run（mode 非 goal，无 goal 装配）——直驱收口路径
+        let outcome = RunOutcome {
+            reason: AgentEndReason::Stop,
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block("闲聊回复，无目标清单。")],
+            ))],
+            ..canned_outcome()
+        };
+        drive_run_loop(
+            Arc::clone(&state),
+            build_active_run(&state, "s1", "run-plain-1").await,
+            Box::new(TestProducer::new(outcome)),
+        )
+        .await;
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("普通 run 收口后 goal_state 键必须保留");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        assert_eq!(goal["goal"], "修复目标", "goal 文本保留（未清键）");
+        assert_eq!(goal["current_round"], 4, "普通 run 收口照常推进 goal 轮次");
+        assert_eq!(goal["stopped_reason"], "stop", "非终态收场");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "普通 run 后 goal_pending 仍命中 → 续轮（goal 是会话级长期意图）"
+        );
+    }
+
+    /// D5 §3.8 模式切换（新 /goal 覆盖旧 goal_state）：旧键（current=5、
+    /// stalled=2、旧 max_rounds=6）被新 /goal 装配覆盖——goal 文本更新、
+    /// 轮次归零（收口后从第 1 轮重计）、max_rounds/max_stalled_rounds
+    /// 取新下发值；JSON 形状 snake_case（schemaVersion 驼峰例外，S1）。
+    #[tokio::test]
+    async fn goal_mode_new_goal_overwrites_old_state() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        state.run_restore().await;
+        let mut old = GoalState::new("旧目标", 6, 4);
+        old.current_round = 5;
+        old.stalled_rounds = 2;
+        old.progress_signature = Some("tools:fnv1a:bbbbbbbbbbbbbbbb".into());
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &old.to_json(),
+        )
+        .expect("旧 goal_state 预置");
+        let counter = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+        let mut options = test_options("run-goal-new", "s1", "请完成目标");
+        options.mode = Some("goal".to_string());
+        options.visible_goal = Some("新目标".to_string());
+        options.max_rounds = Some(10);
+        options.max_stalled_rounds = Some(3);
+        run_task_impl(Arc::clone(&state), options)
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("键读取")
+            .expect("键存在");
+        let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
+        // 覆盖语义：新 goal 文本 + 新上限；旧轮次/旧 stalled 归零重计
+        assert_eq!(goal["goal"], "新目标", "新 /goal 覆盖旧 goal 文本");
+        assert_eq!(goal["max_rounds"], 10, "新 max_rounds 落键");
+        assert_eq!(goal["max_stalled_rounds"], 3, "新 max_stalled_rounds 落键");
+        assert_eq!(goal["current_round"], 1, "轮次归零后从第 1 轮重计（旧值 5 消失）");
+        assert_eq!(goal["stalled_rounds"], 1, "新目标首轮纯文本轮 stalled 从 0 重计");
+        // JSON 形状断言（§4.1 snake_case；schemaVersion 驼峰经 S1 批准）
+        assert_eq!(goal["schemaVersion"], 1, "schemaVersion 自描述字段（驼峰例外）");
+        assert_eq!(goal["stopped_reason"], "stop", "非终态收场");
+        assert!(goal["progress_signature"].is_null(), "新装配无历史签名");
+        assert!(goal.get("maxRounds").is_none(), "不得序列化为 camelCase 字段");
+        assert!(goal.get("currentRound").is_none(), "不得序列化为 camelCase 字段");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "新 /goal 覆盖后继续推进（首轮未完成 → 续轮）"
+        );
+    }
+
     /// D1 规则 C2/C3 生产路径：provider 恒瞬态错误（Network）→ run 内 3
     /// 次重试耗尽 → fatal 收口（provider_error=Some）→ 收口熔断计数 +1
     /// 落键（count=1）。error 收场自动续 run 由 counting 替身拦截。
@@ -11841,6 +12827,622 @@ mod tests {
         let streak = wait_for_fail_streak(&db, 1, Duration::from_secs(10)).await;
         assert_eq!(streak.count, 1, "部分保留断流（瞬态类）计入熔断（S2）");
         assert_eq!(counter.load(Ordering::SeqCst), 1, "E1 续写子分支拉起（拦截至替身）");
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // E1 断流续写（审计 04 重要缺口补测）：部分保留断流 → 内容级续写 run
+    // 端到端（E1 A1/A2/A3 + 任务书 a/b）+ 预算上限（A5/c）+ 非瞬态不续
+    // （A7/e）+ 失败降级（A4/d，指纹域隔离）
+    // ══════════════════════════════════════════════════════════════════
+
+    /// 按调用序号注入传输层错误的 provider 包装（E1 降级 e2e：续写 run
+    /// 的每次调用返回瞬态错误 → run 内 3 次重试耗尽 → Error 收场；其余
+    /// 调用走内层脚本）。最小 mock 扩展，归属 C3 交付物候选——TestProvider
+    /// 的 with_error 为全量注入（每次调用都失败），无法表达「仅续写 run
+    /// 故障、首尾 run 正常」的脚本形态。
+    struct FaultInjectProvider {
+        inner: Arc<TestProvider>,
+        fault_at: Vec<usize>,
+        fault: conex_types::response::ClassifiedStreamError,
+        calls: Mutex<usize>,
+    }
+
+    impl FaultInjectProvider {
+        fn new(
+            inner: Arc<TestProvider>,
+            fault_at: Vec<usize>,
+            fault: conex_types::response::ClassifiedStreamError,
+        ) -> Self {
+            Self {
+                inner,
+                fault_at,
+                fault,
+                calls: Mutex::new(0),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ProviderCall for FaultInjectProvider {
+        async fn stream<'a>(
+            &self,
+            request: &session_loop::provider::ProviderRequest<'a>,
+        ) -> Result<
+            session_loop::provider::ProviderEventStream,
+            conex_types::response::ClassifiedStreamError,
+        > {
+            let index = {
+                let mut count = self.calls.lock().unwrap_or_else(|e| e.into_inner());
+                let index = *count;
+                *count += 1;
+                index
+            };
+            if self.fault_at.contains(&index) {
+                return Err(self.fault.clone());
+            }
+            self.inner.stream(request).await
+        }
+    }
+
+    /// 自定义 provider 注入的测试状态（FaultInjectProvider 包装用；共享
+    /// run_control_test_state 签名锁定 Arc<TestProvider>，本测试域内联
+    /// 等价装配——含会话 s1 条目 + 内存库 + 记录型事件桥）
+    async fn fault_inject_test_state(
+        provider: Arc<dyn ProviderCall>,
+    ) -> (Arc<CoreRunState>, LocalDb, Arc<RecordingEmitter>) {
+        let db = LocalDb::open_in_memory().expect("内存库");
+        db.upsert_session_entry(&subagent_test_session_entry("s1"))
+            .expect("会话条目");
+        let (bridge, emitter) = recording_bridge();
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_run_control_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        let state = Arc::new(CoreRunState::new(
+            Arc::new(LocalDbStore::new(db.clone())),
+            snapshots,
+            bridge,
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ));
+        let config = EngineProviderConfig {
+            base_url: "http://test.local/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        state.engine.inject_provider_for_test(provider, config);
+        (state, db, emitter)
+    }
+
+    /// 记录型续 run 拉起器包装（记录 mode + 注入文本，仍委托生产拉起器
+    /// 拉起真实续写 run——E1 e2e 断言「mode=content-resume + 模板注入」的
+    /// 同时保持续 run 链路真实闭合）
+    fn recording_resume_launcher(
+        recorded: Arc<Mutex<Vec<(String, String, Vec<String>)>>>,
+    ) -> ResumeLauncher {
+        let prod = production_resume_launcher();
+        let launcher: ResumeLauncher = Arc::new(move |state, session_id, mode, messages| {
+            let recorded = Arc::clone(&recorded);
+            let prod = Arc::clone(&prod);
+            let state = Arc::clone(state);
+            let session_id = session_id.to_string();
+            let mode = mode.to_string();
+            let texts: Vec<String> = messages.iter().map(|m| m.text()).collect();
+            Box::pin(async move {
+                recorded
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push((session_id.clone(), mode.clone(), texts));
+                prod(&state, &session_id, &mode, messages).await;
+            })
+        });
+        launcher
+    }
+
+    /// E1 §4 A1/A2/A3 + 任务书 a/b：部分保留断流（text + error stop，D7
+    /// 瞬态标注 network）→ run 1 收场 reason=Stop → decide_idle_resume 续写
+    /// 分支命中 → 续写 run 拉起（mode="content-resume"、注入文本精确等于
+    /// 锁定模板「从断点继续,不要重复已输出的内容」）；续写请求对话含 run 1
+    /// 部分文本（assistant 前缀经 SessionHistoryCache 水合，A2 上下文完整）
+    /// 且部分文本恰好出现一次（防重复注入，A3/任务书 b）。
+    #[tokio::test]
+    async fn content_resume_e2e_partial_stream_resumes_with_template_and_history() {
+        let provider = Arc::new(TestProvider::with_scripts(vec![
+            // run 1：产出部分文本后断流（error stop 携带瞬态分类标注——
+            // 与 streaming handler 流中错误注入形态一致，streaming.rs:124-129）
+            vec![
+                ProviderStreamEvent::text("这是部分回答,断流点之前的内容"),
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Error,
+                    error: Some("上游网络中断".to_string()),
+                    error_kind: Some(ProviderErrorKind::Network),
+                    usage: None,
+                },
+            ],
+            // run 2（续写 run）：正常完成剩余部分
+            vec![
+                ProviderStreamEvent::text("这是续写完成的剩余内容"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let (state, db, _emitter) = run_control_test_state(Arc::clone(&provider));
+        state.run_restore().await;
+        // C4 退避注入：跳过真实跨 run 退避睡眠（测试直接驱动）
+        state.set_resume_backoff(Some(Arc::new(|_attempt| Duration::ZERO)));
+        let recorded: Arc<Mutex<Vec<(String, String, Vec<String>)>>> =
+            Arc::new(Mutex::new(Vec::new()));
+        state.set_resume_launcher(Some(recording_resume_launcher(Arc::clone(&recorded))));
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-e1-e2e-1", "s1", "任务"),
+        )
+        .await
+        .expect("run 发起成功");
+        // run 1 收场 reason=Stop（部分保留断流的正常收场形态，E1 §2.1 前提）
+        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+        assert_eq!(agent_reason, "stop", "断流 run 以 Stop 正常收场（E1 续写分支前提）");
+        // 续写拉起断言：mode="content-resume" + 注入文本精确等于锁定模板
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let rec = recorded.lock().unwrap_or_else(|e| e.into_inner());
+            if !rec.is_empty() {
+                assert_eq!(rec.len(), 1, "断流 → 恰好一次续写拉起");
+                assert_eq!(rec[0].1, "content-resume", "续写 run mode=content-resume");
+                assert_eq!(
+                    rec[0].2[0],
+                    "上一轮生成中断(Network),请从断点继续完成,不要重复已输出的内容",
+                    "注入文本精确等于锁定模板（E1 §3.2 A1 断言绑定）"
+                );
+                break;
+            }
+            drop(rec);
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "续写拉起未在窗口内发生"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 续写 run 2 请求（序号 1）断言：对话含 run 1 部分文本（assistant
+        // 前缀，A2 上下文完整）+ 注入模板；部分文本恰好出现一次（防重复，
+        // 任务书 b——已产出文本只在 history 中一次）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let requests = provider.requests();
+            if requests.len() >= 2 {
+                let messages = &requests[1].messages;
+                let joined: String = messages
+                    .iter()
+                    .map(|m| m.text())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let partial = "这是部分回答,断流点之前的内容";
+                assert!(
+                    joined.contains(partial),
+                    "续写请求对话应含 run 1 部分文本（历史水合）"
+                );
+                assert_eq!(
+                    joined.matches(partial).count(),
+                    1,
+                    "部分文本在续写请求中恰好出现一次（不重复注入已产出内容）"
+                );
+                assert!(
+                    joined.contains(
+                        "上一轮生成中断(Network),请从断点继续完成,不要重复已输出的内容"
+                    ),
+                    "续写请求含锁定模板注入"
+                );
+                assert!(
+                    messages
+                        .iter()
+                        .any(|m| m.role == AgentMessageRole::Assistant
+                            && m.text().contains(partial)),
+                    "部分文本以 assistant 前缀形态存在于续写对话"
+                );
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "续写 run 2 请求未在窗口内到达"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 首轮 + 续写轮两次 run-terminal 落库（链路闭合——续写 run 正常
+        // 完成且最后消息无断流标注，不再二次续写）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        loop {
+            let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
+            let terminals = events
+                .iter()
+                .filter(|e| e.event_type == "run-terminal")
+                .count();
+            if terminals >= 2 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "应发生首轮 + 续写轮两次 run-terminal：{terminals}"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    /// E1 §4 A5 + 任务书 c：续写预算上限（content_resume_max 缺省 2）——
+    /// 连续 3 次断流判定：前 2 次续写（预算 0→2），第 3 次不续写（None +
+    /// recovery-budget-denied 事件留痕，recover_episodes 计数=2）。
+    #[tokio::test]
+    async fn content_resume_budget_caps_at_two() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, emitter) = run_control_test_state(provider);
+        state.set_resume_backoff(Some(Arc::new(|_attempt| Duration::ZERO)));
+        let active = build_active_run(&state, "s1", "run-e1-cap").await;
+        let signals = ResumeSignals {
+            task_text: "任务".to_string(),
+            provider_error: None,
+            last_assistant: Some(LastAssistantSignal {
+                kind: Some(ProviderErrorKind::Network),
+                retryable: Some(true),
+                is_plain_text: true,
+            }),
+        };
+        // 前 2 次：预算内续写命中（注入模板精确）
+        for round in 1..=2u32 {
+            let verdict = decide_idle_resume(
+                &state,
+                &active,
+                AgentEndReason::Stop,
+                true,
+                &signals,
+            )
+            .await;
+            let decision = verdict.unwrap_or_else(|| panic!("第 {round} 次断流应在预算内续写"));
+            assert_eq!(decision.mode, "content-resume", "续写 mode 固定 content-resume");
+            assert_eq!(
+                decision.inject[0].text(),
+                "上一轮生成中断(Network),请从断点继续完成,不要重复已输出的内容",
+                "注入文本精确等于锁定模板"
+            );
+        }
+        // 第 3 次：预算耗尽 → 不续写
+        let denied = decide_idle_resume(&state, &active, AgentEndReason::Stop, true, &signals).await;
+        assert!(denied.is_none(), "第 3 次断流预算耗尽不得续写");
+        // 预算落键：content-resume 指纹计数 = 2（上限封顶）
+        let raw = db
+            .get_session_meta(RECOVER_EPISODES_KEY)
+            .expect("预算键读取")
+            .expect("预算键已写入");
+        let counts: serde_json::Value = serde_json::from_str(&raw).expect("预算键合法 JSON");
+        let fp = fingerprint_with_source("main", "任务", WAKE_SOURCE_CONTENT_RESUME);
+        assert_eq!(counts[fp.as_str()].as_u64(), Some(2), "content-resume 域计数 = 2");
+        // 预算耗尽事件留痕（W6 双发射方：主 run 侧 subagentRunId=None）
+        let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let values: Vec<serde_json::Value> = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .collect();
+        assert!(
+            values
+                .iter()
+                .any(|v| v["type"] == "recovery-budget-denied" && v["subagentRunId"].is_null()),
+            "预算耗尽应发射 recovery-budget-denied（subagentRunId=None）"
+        );
+        // 队列卫生：拒绝轮不残留恢复条目（半截保留交用户）
+        assert!(
+            state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "预算拒绝不产生队列条目"
+        );
+    }
+
+    /// E1 §4 A7 + 任务书 e：非瞬态断流（Auth 类标注）不触发续写——半截
+    /// 保留交用户（decide_idle_resume 返回 None、无预算消费、无队列条目）。
+    /// 附带 T2/T3 门禁：瞬态类但 retryable=false 不续写；含工具调用消息
+    /// 不续写。
+    #[tokio::test]
+    async fn content_resume_skips_non_transient_kind() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        state.set_resume_backoff(Some(Arc::new(|_attempt| Duration::ZERO)));
+        let active = build_active_run(&state, "s1", "run-e1-auth").await;
+        // Auth 类：非瞬态 → 不续写
+        let auth_signals = ResumeSignals {
+            task_text: "任务".to_string(),
+            provider_error: None,
+            last_assistant: Some(LastAssistantSignal {
+                kind: Some(ProviderErrorKind::Auth),
+                retryable: Some(false),
+                is_plain_text: true,
+            }),
+        };
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            true,
+            &auth_signals,
+        )
+        .await;
+        assert!(verdict.is_none(), "Auth 非瞬态断流不得触发续写（E1 §2.3）");
+        // 瞬态类但显式标注不可重试（providerErrorRetryable=false）→ 不续写
+        let not_retryable = ResumeSignals {
+            task_text: "任务".to_string(),
+            provider_error: None,
+            last_assistant: Some(LastAssistantSignal {
+                kind: Some(ProviderErrorKind::Network),
+                retryable: Some(false),
+                is_plain_text: true,
+            }),
+        };
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            true,
+            &not_retryable,
+        )
+        .await;
+        assert!(verdict.is_none(), "瞬态类但 retryable=false 不得续写（E1 §2.2 T2）");
+        // 非纯文本消息（含工具调用）→ 不续写（T3：工具调用已提交不续写）
+        let tool_signals = ResumeSignals {
+            task_text: "任务".to_string(),
+            provider_error: None,
+            last_assistant: Some(LastAssistantSignal {
+                kind: Some(ProviderErrorKind::Network),
+                retryable: Some(true),
+                is_plain_text: false,
+            }),
+        };
+        let verdict = decide_idle_resume(
+            &state,
+            &active,
+            AgentEndReason::Stop,
+            true,
+            &tool_signals,
+        )
+        .await;
+        assert!(verdict.is_none(), "含工具调用的消息不得触发续写（T3）");
+        // 预算零消费 + 队列无残留
+        assert!(
+            db.get_session_meta(RECOVER_EPISODES_KEY)
+                .expect("预算键读取")
+                .is_none(),
+            "非瞬态/不可重试/非纯文本判定不消费续写预算"
+        );
+        assert!(
+            state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "不续写时无队列条目"
+        );
+    }
+
+    /// E1 §4 A5/A6 + T5/T7：续写开关关闭 / 熔断触发 / abort / user_touched
+    /// 四组闸门均不触发续写（保持现状：半截保留交用户）；熔断闸拒绝时
+    /// 预算不消费（动作未发生不消费）。
+    #[tokio::test]
+    async fn content_resume_gates_disabled_circuit_abort_user_touched() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("x"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        state.set_resume_backoff(Some(Arc::new(|_attempt| Duration::ZERO)));
+        let active = build_active_run(&state, "s1", "run-e1-gate").await;
+        let signals = ResumeSignals {
+            task_text: "任务".to_string(),
+            provider_error: None,
+            last_assistant: Some(LastAssistantSignal {
+                kind: Some(ProviderErrorKind::Network),
+                retryable: Some(true),
+                is_plain_text: true,
+            }),
+        };
+        // T7：开关关闭 → 不续写
+        db.set_session_meta(CONTENT_RESUME_ENABLED_KEY, "false")
+            .expect("开关键写入");
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true, &signals).await;
+        assert!(verdict.is_none(), "content_resume_enabled=false 不续写");
+        db.set_session_meta(CONTENT_RESUME_ENABLED_KEY, "true")
+            .expect("开关键复位");
+        // T5：熔断触发（count=6 预置 ≥ 阈值 6）→ 不续写且预算不消费
+        db.set_session_meta(
+            PROVIDER_FAIL_STREAK_KEY,
+            &ProviderFailStreak {
+                count: 6,
+                first_fail_at_ms: 1_785_456_000_000,
+                last_fail_at_ms: 1_785_456_000_000,
+                window_ms: 0,
+            }
+            .to_json(),
+        )
+        .expect("熔断键预置 count=6");
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true, &signals).await;
+        assert!(verdict.is_none(), "熔断触发不续写（T5）");
+        assert!(
+            db.get_session_meta(RECOVER_EPISODES_KEY)
+                .expect("预算键读取")
+                .is_none(),
+            "熔断闸拒绝不消费预算（动作未发生不消费）"
+        );
+        // abort 硬条件：不续写（即使信号齐备，T4）
+        let active_abort = build_active_run(&state, "s1", "run-e1-gate-2").await;
+        active_abort.abort_signal.abort();
+        let verdict = decide_idle_resume(
+            &state,
+            &active_abort,
+            AgentEndReason::Stop,
+            true,
+            &signals,
+        )
+        .await;
+        assert!(verdict.is_none(), "abort 硬条件不续写（E1 §2.2 T4）");
+        // user_touched 硬条件：不续写（T4）
+        let active_touched = build_active_run(&state, "s1", "run-e1-gate-3").await;
+        active_touched.user_touched.store(true, Ordering::SeqCst);
+        let verdict = decide_idle_resume(
+            &state,
+            &active_touched,
+            AgentEndReason::Stop,
+            true,
+            &signals,
+        )
+        .await;
+        assert!(verdict.is_none(), "user_touched 硬条件不续写（T4）");
+    }
+
+    /// E1 §4 A4 + 任务书 d：续写 run 自身 error 收场 → 自然降级 D2 error
+    /// 续 run 通道（mode="recovery-retry"、注入 D2 锁定模板「继续任务」）；
+    /// content-resume 与 error-retry 指纹域隔离（各自预算计数互不消耗）。
+    #[tokio::test]
+    async fn content_resume_degrades_to_error_retry_when_resume_run_fails() {
+        let inner = Arc::new(TestProvider::with_scripts(vec![
+            // run 1：部分保留断流（触发续写）
+            vec![
+                ProviderStreamEvent::text("半截回答"),
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Error,
+                    error: Some("网络中断".to_string()),
+                    error_kind: Some(ProviderErrorKind::Network),
+                    usage: None,
+                },
+            ],
+            // run 3（error 续 run）：恢复完成
+            vec![
+                ProviderStreamEvent::text("error 续 run 完成"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        // 续写 run 2 的每次调用注入瞬态错误（调用序号 1-4：run 内 3 次
+        // 重试（1/2/3）+ 第 4 次耗尽 fatal → Error 收场 retryable=true）
+        let fault = conex_types::response::ClassifiedStreamError {
+            kind: ProviderErrorKind::Network,
+            message: "续写 run 持续断流".to_string(),
+            retryable: true,
+            retry_after_ms: None,
+        };
+        let provider: Arc<dyn ProviderCall> = Arc::new(FaultInjectProvider::new(
+            Arc::clone(&inner),
+            vec![1, 2, 3, 4],
+            fault,
+        ));
+        let (state, db, _emitter) = fault_inject_test_state(provider).await;
+        state.run_restore().await;
+        state.set_resume_backoff(Some(Arc::new(|_attempt| Duration::ZERO)));
+        let recorded: Arc<Mutex<Vec<(String, String, Vec<String>)>>> =
+            Arc::new(Mutex::new(Vec::new()));
+        state.set_resume_launcher(Some(recording_resume_launcher(Arc::clone(&recorded))));
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-e1-e2e-2", "s1", "任务"),
+        )
+        .await
+        .expect("run 发起成功");
+        // 两次自动拉起：content-resume（run 1 断流）→ recovery-retry（run 2
+        // error 收场降级，E1 §3.5 降级链 ② → ③）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        loop {
+            let rec = recorded.lock().unwrap_or_else(|e| e.into_inner());
+            if rec.len() >= 2 {
+                assert_eq!(rec[0].1, "content-resume", "第 1 次拉起 = 续写 run");
+                assert_eq!(
+                    rec[0].2[0],
+                    "上一轮生成中断(Network),请从断点继续完成,不要重复已输出的内容",
+                    "续写注入 = E1 锁定模板"
+                );
+                assert_eq!(
+                    rec[1].1,
+                    "recovery-retry",
+                    "续写 run 自身 error 收场 → 降级 error 续 run"
+                );
+                assert_eq!(
+                    rec[1].2[0],
+                    MAIN_RESUME_INJECT_TEXT,
+                    "error 续 run 注入 = D2 锁定模板「继续任务」"
+                );
+                break;
+            }
+            drop(rec);
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "续写 → error 续 run 两级拉起未在窗口内发生"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 指纹域隔离：content-resume 与 error-retry 各自计数 1（互不消耗，
+        // E1 §3.4 同键互斥 + D2 §3.4 域隔离）
+        let raw = db
+            .get_session_meta(RECOVER_EPISODES_KEY)
+            .expect("预算键读取")
+            .expect("预算键已写入");
+        let counts: serde_json::Value = serde_json::from_str(&raw).expect("预算键合法 JSON");
+        let resume_fp = fingerprint_with_source("main", "任务", WAKE_SOURCE_CONTENT_RESUME);
+        let retry_fp = fingerprint_with_source("main", "任务", WAKE_SOURCE_ERROR_RETRY);
+        assert_eq!(counts[resume_fp.as_str()].as_u64(), Some(1), "续写域计数 1");
+        assert_eq!(
+            counts[retry_fp.as_str()].as_u64(),
+            Some(1),
+            "error-retry 域计数 1（两域隔离互不消耗）"
+        );
+        // run 3 请求含「继续任务」注入（FaultInjectProvider 短路注入错误
+        // 不记录请求快照——成功调用序列 = run 1（0）+ run 3（1））
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let requests = inner.requests();
+            if requests.len() >= 2 {
+                let joined: String = requests[1]
+                    .messages
+                    .iter()
+                    .map(|m| m.text())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                assert!(
+                    joined.contains(MAIN_RESUME_INJECT_TEXT),
+                    "run 3 请求含「继续任务」注入"
+                );
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "run 3 请求未在窗口内到达"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 三轮 run-terminal 落库（run 1 stop → run 2 error → run 3 stop，
+        // 链路闭合）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
+            let terminals = events
+                .iter()
+                .filter(|e| e.event_type == "run-terminal")
+                .count();
+            if terminals >= 3 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "应发生三轮 run-terminal：{terminals}"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
     }
 
     /// D1 规则 C5：熔断触发边沿（count 4→5 预置 + 本轮瞬态 +1 跨过阈值 6）→
@@ -14478,6 +16080,551 @@ mod tests {
         }
     }
 
+    // ── D6 无人值守唤醒 e2e（审计 04 补缺：AI 休眠 → watcher 拉起链路）──
+
+    /// 验收 A1（审计 04 §3 补测建议 3）：AI 休眠（收口三源全空）后定时器
+    /// 注册到期 → steering 条目入队 → 真实 watcher 首轮延迟后 tick →
+    /// 队列非空且无活动 run → 拉起 idle-resume run → 注入文本含定时器
+    /// 到期提示（真实定时器注册表 + 真实共享队列 + 真实 watcher 周期任务
+    /// + 真实 run 链全链路端到端）
+    #[tokio::test]
+    async fn watcher_wakes_sleeping_ai_after_timer_expiry_e2e() {
+        let provider = Arc::new(TestProvider::with_scripts(vec![
+            // 脚本 0：首轮 run（正常收口三源全空 → AI 休眠）
+            vec![
+                ProviderStreamEvent::text("第一轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            // 脚本 1：watcher 拉起的 idle-resume run（空注入——队列条目
+            // 由新 run 收口时 decide_idle_resume drain，D6 §8 决策 2 路径①）
+            vec![
+                ProviderStreamEvent::text("watcher 拉起轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            // 脚本 2：收口判定 drain 注入定时器到期文本的续 run 轮
+            vec![
+                ProviderStreamEvent::text("注入轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let (state, _db, _emitter) = run_control_test_state(Arc::clone(&provider));
+        state.run_restore().await;
+        // 首轮 run：收口三源全空 → AI 休眠（无续 run）
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-sleep-1", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        // 等待首轮收口（AI 休眠：无活动 run 且仅一次 provider 调用）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let active_empty = state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            if active_empty && provider.call_count() == 1 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "首轮应快速收口进入 AI 休眠（call_count={}）",
+                provider.call_count()
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        assert_eq!(provider.call_count(), 1, "收口三源全空不续 run（AI 休眠）");
+        // 注册 1s 定时器（AI 休眠后到期的唤醒事件源；到期经真实注册表
+        // fire_timer → steering 条目入共享队列）
+        let channel: Arc<dyn agent_tools::tools::set_timer::TimerChannel> =
+            state.engine.timer_registry();
+        let handle = channel
+            .register(
+                1,
+                "提醒喝水".to_string(),
+                conex_types::timer::TimerCondition::Never,
+            )
+            .await
+            .expect("定时器注册应成功");
+        // 等待定时器到期 → steering 条目入共享队列（group_id = timer-<id>）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let entry = state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .peek()
+                .cloned();
+            if let Some(entry) = entry {
+                assert_eq!(
+                    entry.group_id.as_deref(),
+                    Some(crate::timers::steering_group_id(&handle.timer_id).as_str()),
+                    "到期条目 group_id 应为 timer-<id>"
+                );
+                assert!(
+                    entry.text.contains("已到期"),
+                    "到期条目文本应含到期提示：{}",
+                    entry.text
+                );
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "定时器到期条目未在窗口内入队"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 真实 watcher（首轮 run 装配时已 spawn，首轮延迟 5s）到期后 tick：
+        // 队列非空且无活动 run → 拉起 idle-resume run → 收口判定 drain
+        // 注入 → 续 run 轮 provider 对话包含「提醒喝水（定时器 <id> 已到期）」
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        let mut injected = false;
+        loop {
+            for idx in 0..8 {
+                if provider.request_message_arcs(idx).iter().any(|m| {
+                    m.text().contains("提醒喝水") && m.text().contains("已到期")
+                }) {
+                    injected = true;
+                    break;
+                }
+            }
+            if injected {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "定时器到期唤醒未在窗口内到达续 run 对话（call_count={}）",
+                provider.call_count()
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        // 链条收束：注入轮收口后队列清空 → AI 休眠（无第 4 次调用）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let active_empty = state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            let queue_empty = state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            if active_empty && queue_empty && provider.call_count() >= 3 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "唤醒链应收束（call_count={}）",
+                provider.call_count()
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(
+            provider.call_count(),
+            3,
+            "唤醒链共 3 轮（首轮 + watcher 拉起轮 + 注入轮），不得继续拉起"
+        );
+        // 收尾：停掉后台 watcher 周期任务（防 runtime 销毁前的残留 tick）
+        let watcher = state
+            .wake_watchers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .cloned();
+        if let Some(watcher) = watcher {
+            watcher.stop();
+        }
+    }
+
+    /// 验收 A5（审计 04 补缺 b）：watcher 拉起与收口判定并发双拉 →
+    /// 串行守卫拒绝后发者（幂等）——真实 run 活动期间 watcher tick 经
+    /// has_active_run 短路、并发 spawn 经 run_task_impl 串行守卫拒绝，
+    /// 仅一个 run 成立（真实 run 链 + 真实 watcher 实例）
+    #[tokio::test]
+    async fn watcher_concurrent_double_launch_only_one_run_e2e() {
+        let provider = Arc::new(
+            TestProvider::with_scripts(vec![
+                // 脚本 0：首轮 run 保持活动 3s（栅栏窗口内并发双拉）
+                vec![
+                    ProviderStreamEvent::text("首轮"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+                // 脚本 1：收口判定续 run（注入定时器条目文本）
+                vec![
+                    ProviderStreamEvent::text("续轮"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+            ])
+            .with_pause(0, 3_000),
+        );
+        let (state, _db, _emitter) = run_control_test_state(Arc::clone(&provider));
+        state.run_restore().await;
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-double-1", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        // 等待首轮 run 活动（active_runs 恰 1 且 provider 已调用）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let active_len = state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len();
+            if active_len == 1 && provider.call_count() == 1 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "首轮 run 应进入活动态（active={active_len}）"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 唤醒源条目入队（定时器到期语义）
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering(
+                "timer-e2e",
+                "提醒喝水（定时器 t-e2e 已到期）",
+                1_000_000,
+            ));
+        // 并发双拉：watcher tick（真实实例，has_active_run 短路）+ 收口
+        // 判定同款 spawn_idle_resume_run（run_task_impl 串行守卫拒绝后发者）
+        let watcher = state
+            .wake_watchers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .cloned()
+            .expect("首轮 run 装配已 spawn watcher");
+        watcher.stop();
+        tokio::join!(
+            watcher.tick(),
+            idle_resume::spawn_idle_resume_run(
+                Arc::clone(&state),
+                "s1".to_string(),
+                "idle-resume",
+                Vec::new(),
+            ),
+        );
+        // 双拉均被拒：活动 run 仍恰 1 个，无第二个 run 成立（幂等）
+        assert_eq!(provider.call_count(), 1, "并发双拉不得创建第二个 run");
+        assert_eq!(
+            state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            1,
+            "活动 run 仍恰 1 个"
+        );
+        // 首轮收口（栅栏 3s 后）→ 收口判定 drain 条目 → 恰一次续 run
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let active_empty = state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            let queue_empty = state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            if active_empty && queue_empty && provider.call_count() == 2 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "收口判定应恰一次续 run（call_count={}）",
+                provider.call_count()
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        // 续 run 注入轮对话含定时器条目原文（条目被恰一次消费）
+        let injected = provider
+            .request_message_arcs(1)
+            .iter()
+            .any(|m| m.text().contains("提醒喝水") && m.text().contains("已到期"));
+        assert!(injected, "续 run 注入应含定时器到期提示");
+    }
+
+    /// 审计 04 补缺（c）：最小拉 run 间隔接线面——真实 watcher 实例在
+    /// 距上次拉起 < min_launch_interval（10s）内的重复 tick 不拉起
+    /// （抖动护栏；「间隔到达后放行」由 wake_watcher.rs 单测
+    /// watcher_min_launch_interval 以注入时钟覆盖）
+    #[tokio::test]
+    async fn watcher_min_launch_interval_blocks_retick_e2e() {
+        let provider = Arc::new(TestProvider::with_scripts(vec![
+            // 脚本 0：首轮 run
+            vec![
+                ProviderStreamEvent::text("第一轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            // 脚本 1：watcher 拉起轮（空注入）+ 后续轮（脚本数组超出取最后）
+            vec![
+                ProviderStreamEvent::text("拉起轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let (state, _db, _emitter) = run_control_test_state(Arc::clone(&provider));
+        state.run_restore().await;
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-min-int-1", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        // 等待首轮收口（AI 休眠）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let active_empty = state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            if active_empty && provider.call_count() == 1 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "首轮应快速收口（call_count={}）",
+                provider.call_count()
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        let watcher = state
+            .wake_watchers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .cloned()
+            .expect("watcher 已装配");
+        watcher.stop();
+        // 唤醒源条目入队 → 手动 tick 拉起（记录上次拉起时刻）
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering(
+                "timer-min",
+                "提醒喝水（定时器 t-min 已到期）",
+                1_000_000,
+            ));
+        watcher.tick().await;
+        // 拉起轮收口 → 收口判定 drain → 注入轮（条目消费）→ AI 休眠
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let active_empty = state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            let queue_empty = state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            if active_empty && queue_empty && provider.call_count() >= 2 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "拉起轮应收口（call_count={}）",
+                provider.call_count()
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let settled_calls = provider.call_count();
+        // 新条目入队 + 立即 tick：距上次拉起 < 10s → 不拉起（间隔护栏）
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering(
+                "timer-min-2",
+                "第二个到期提醒",
+                1_000_001,
+            ));
+        watcher.tick().await;
+        assert_eq!(
+            provider.call_count(),
+            settled_calls,
+            "最小间隔内重复 tick 不得拉起"
+        );
+        assert!(
+            !state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "未拉起的条目应保留在队列"
+        );
+    }
+
+    /// 审计 04 补缺（d）：user_stopped 端到端——真实 L3 用户停止 →
+    /// 定时器到期条目入队 → watcher tick 不拉起（护栏 2「用户显式停止
+    /// 永不自动续」跨 run 语义）；用户新 run 清除标记 → watcher 恢复拉起
+    #[tokio::test]
+    async fn watcher_user_stopped_blocks_then_user_run_resumes_e2e() {
+        let provider = Arc::new(
+            TestProvider::with_scripts(vec![
+                // 脚本 0：首轮 run 保持活动 3s（L3 停止窗口）
+                vec![
+                    ProviderStreamEvent::text("首轮"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+                // 脚本 1：用户新 run（清除停止标记）
+                vec![
+                    ProviderStreamEvent::text("用户新 run"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+                // 脚本 2：注入轮（脚本数组超出取最后）
+                vec![
+                    ProviderStreamEvent::text("注入轮"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+            ])
+            .with_pause(0, 3_000),
+        );
+        let (state, _db, _emitter) = run_control_test_state(Arc::clone(&provider));
+        state.run_restore().await;
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-stop-1", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        // 等待首轮活动 → L3 用户强停（run_control_impl → 会话级 user_stopped）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let active_len = state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len();
+            if active_len == 1 && provider.call_count() == 1 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "首轮 run 应进入活动态（active={active_len}）"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        run_control_impl(&state, "run-stop-1", "force_cancel", None, None, None)
+            .await
+            .expect("L3 强停应成功");
+        // 等待首轮收口（用户停止 → 收口不续 run）+ user_stopped 置位
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            let active_empty = state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            if active_empty && state.is_user_stopped("s1") {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "用户停止后应收口并置位会话级标记（active_empty={active_empty}）"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        let watcher = state
+            .wake_watchers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("s1")
+            .cloned()
+            .expect("watcher 已装配");
+        watcher.stop();
+        // 定时器到期条目入队 → watcher tick → user_stopped 不拉起
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering(
+                "timer-stop",
+                "提醒喝水（定时器 t-stop 已到期）",
+                1_000_000,
+            ));
+        watcher.tick().await;
+        assert_eq!(
+            provider.call_count(),
+            1,
+            "用户停止后 watcher 不得拉起 run"
+        );
+        assert!(
+            !state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "未拉起的到期条目应保留在队列"
+        );
+        // 用户新 run（mode=task → 装配清除 user_stopped）→ 收口判定
+        // drain 到期条目 → 注入轮对话含到期提示
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-resume-1", "s1", "用户新消息"),
+        )
+        .await
+        .expect("用户新 run 发起成功");
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            if provider.call_count() >= 3 && !state.is_user_stopped("s1") {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "用户新 run 应清除标记并消费到期条目（call_count={}）",
+                provider.call_count()
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        // 到期条目已消费（经新 run 收口判定注入轮）
+        let injected = (0..4).any(|idx| {
+            provider.request_message_arcs(idx).iter().any(|m| {
+                m.text().contains("提醒喝水") && m.text().contains("已到期")
+            })
+        });
+        assert!(injected, "到期条目应被新 run 收口判定注入");
+        // 恢复后 watcher 可拉起：新条目入队 + tick → 拉起（清除标记生效）
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering(
+                "timer-resume",
+                "恢复后的到期提醒",
+                1_000_002,
+            ));
+        let before = provider.call_count();
+        watcher.tick().await;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            if provider.call_count() > before {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "清除标记后 watcher 应恢复拉起（call_count={}）",
+                provider.call_count()
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
     // ── 15-T-6（裁决 D9）：审计路由注册/收口注销（run 生命周期面）──
 
     /// run 启动注册 → drive_run_loop 收口强制注销（注册表无残留断言：
@@ -15097,5 +17244,267 @@ mod tests {
             row2.ended_at, row.ended_at,
             "幂等路径不覆写 ended_at（保留终态审计事实）"
         );
+    }
+
+    // ── E2 F4（07 §3 卡 C）：core_compact_now 手动压缩命令 ──────────────
+
+    /// F4/F5 测试辅助：返回固定 Schema V1 文档的 Summarizer（校验通过，
+    /// 字段含 goal/progress/nextSteps 供阶段总结提取）
+    struct FakeLlmSummarizer;
+    impl conex_compaction::Summarizer for FakeLlmSummarizer {
+        fn summarize(
+            &self,
+            _dropped: &[conex_types::message::AgentMessage],
+            _existing: Option<&str>,
+        ) -> Result<String, String> {
+            Ok(r#"{"schemaVersion":1,"blockId":"fake-1","generation":1,"droppedIds":[],"height":1,"tier":"stage-1","goal":"测试目标","constraints":[],"progress":["进展一"],"decisions":[],"nextSteps":["下一步一"],"criticalContext":"关键上下文"}"#.to_string())
+        }
+    }
+
+    /// F4/F5 测试辅助：注入 FakeLlmSummarizer 工厂（会话参数透传）
+    fn inject_fake_summarizer(state: &Arc<CoreRunState>) {
+        state.set_summarizer_factory(Some(Box::new(|_session_id: &str| {
+            Some(Arc::new(FakeLlmSummarizer) as Arc<dyn conex_compaction::Summarizer>)
+        })));
+    }
+
+    /// F4/F5 测试辅助：构造超预算对话（N 条大消息；ASCII 约 4 字符/token，
+    /// 8000 字符 ≈ 2000 token/条；15 条 ≈ 30k token ≈ 窗口 64000 的 47%）
+    fn big_llm_conversation(n: usize) -> Vec<Arc<AgentMessage>> {
+        let mut messages = vec![Arc::new(amsg(
+            "system-1",
+            AgentMessageRole::System,
+            vec![text_block("系统提示词段")],
+        ))];
+        for i in 0..n {
+            let role = if i % 2 == 0 {
+                AgentMessageRole::User
+            } else {
+                AgentMessageRole::Assistant
+            };
+            messages.push(Arc::new(amsg(
+                &format!("m{i}"),
+                role,
+                vec![text_block(&"x".repeat(8000))],
+            )));
+        }
+        messages
+    }
+
+    /// F4：手动压缩往返——缓存对话替换 + Manual 事件 + 块表落库 + 返回载荷
+    #[tokio::test]
+    async fn compact_now_manual_roundtrip_replaces_cache_emits_events_and_writes_block() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+        let state = core_state_with_store(store);
+        inject_fake_summarizer(&state);
+        // 预置超预算对话（缓存路径：引擎权威增量；30 条 ≈ 60k token）
+        let messages = big_llm_conversation(30);
+        let history: Vec<HistoryMessage> =
+            messages.iter().map(|m| to_history_message(m.as_ref())).collect();
+        state.session_history.store("s1", history);
+
+        // 显式目标预算 40000（≥ 下限 16384+20000，且 < 60k 对话 → 必压缩；
+        // 测试引擎的生效窗口不参与计算，断言确定性）
+        let result = compact_now_impl(&state, "s1", Some(40_000))
+            .await
+            .expect("手动压缩成功");
+        assert!(result.tokens_before > result.tokens_after, "压缩后 token 下降");
+        assert!(result.dropped > 0, "有消息被压缩");
+        assert_eq!(result.summary_state, "committed", "LLM 摘要成功 → committed");
+
+        // 缓存被压缩后序列替换（下次 run 装配即用压缩后对话）
+        let cached = state.session_history.get("s1").expect("缓存被替换");
+        assert!(
+            cached.iter().any(|m| m.id.starts_with("compacted-summary")),
+            "缓存含压缩摘要消息"
+        );
+        assert!(cached.len() < 31, "压缩后消息条数下降");
+
+        // Manual 事件落库（Start + End；envelope 载荷含 result.trigger=manual）
+        let events = db.query_events("s1", 0, None).unwrap();
+        let types: Vec<&str> = events.iter().map(|e| e.event_type.as_str()).collect();
+        assert!(types.contains(&"context-compression-start"), "Start 事件落库");
+        assert!(types.contains(&"context-compression-end"), "End 事件落库");
+        let end_payload: serde_json::Value = serde_json::from_str(
+            &events
+                .iter()
+                .find(|e| e.event_type == "context-compression-end")
+                .unwrap()
+                .payload,
+        )
+        .unwrap();
+        assert_eq!(end_payload["result"]["trigger"], "manual", "trigger=Manual");
+
+        // 块表落库（details 携带块语义键；state=committed）
+        let block = db
+            .get_block("s1", "compacted-summary-1-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(block.block_id, "compacted-summary-1-1");
+        assert_eq!(block.state, conex_db::BlockState::Committed);
+        assert!(block.summary_is_llm, "committed ⇒ LLM 摘要");
+    }
+
+    /// F4：busy 拒绝——活动 run 存在时压缩命令返回结构化错误（不打断活动流）
+    #[tokio::test]
+    async fn compact_now_rejects_busy_session() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        inject_fake_summarizer(&state);
+        let active = build_active_run(&state, "s1", "run-1").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-1".to_string(), active);
+        let error = compact_now_impl(&state, "s1", None).await.unwrap_err();
+        assert!(error.to_string().contains("正在运行"), "busy 拒绝文案：{error}");
+    }
+
+    /// F4：目标 token 校验——低于 reserve + keep_recent 下限 → InvalidInput
+    #[tokio::test]
+    async fn compact_now_validates_target_tokens() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        inject_fake_summarizer(&state);
+        let error = compact_now_impl(&state, "s1", Some(1000))
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("低于下限"), "下限护栏：{error}");
+    }
+
+    /// F4：无 Summarizer → 结构化错误「LLM 摘要不可用，未压缩」（F1 L1）
+    #[tokio::test]
+    async fn compact_now_rejects_without_summarizer() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        state.set_summarizer_factory(None);
+        let messages = big_llm_conversation(30);
+        let history: Vec<HistoryMessage> =
+            messages.iter().map(|m| to_history_message(m.as_ref())).collect();
+        state.session_history.store("s1", history);
+        let error = compact_now_impl(&state, "s1", None).await.unwrap_err();
+        assert!(
+            error.to_string().contains("LLM 摘要不可用"),
+            "无 Summarizer 错误：{error}"
+        );
+    }
+
+    /// F4：无切割点（对话过短）→ 结构化错误（不破坏对话）
+    #[tokio::test]
+    async fn compact_now_rejects_noop_short_conversation() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        inject_fake_summarizer(&state);
+        let messages = vec![
+            Arc::new(amsg(
+                "system-1",
+                AgentMessageRole::System,
+                vec![text_block("系统")],
+            )),
+            Arc::new(amsg("m0", AgentMessageRole::User, vec![text_block("你好")])),
+        ];
+        let history: Vec<HistoryMessage> =
+            messages.iter().map(|m| to_history_message(m.as_ref())).collect();
+        state.session_history.store("s1", history);
+        let error = compact_now_impl(&state, "s1", None).await.unwrap_err();
+        assert!(error.to_string().contains("无合法切割点"), "noop 错误：{error}");
+    }
+
+    // ── E2 F5（07 §4 卡 D）：分阶段总结壳层接线 ────────────────────────
+
+    /// F5：里程碑触发——阈值达标即产出 stage-1 总结（存储 + checkpoint
+    /// 落载荷）；重复触发抑制（已触发集合跨 run 持久，同比例重评不新增）。
+    /// 阈值经 session_meta `compact_stage_ratios` 收敛到 [0.001, 0.999]：
+    /// 测试引擎生效窗口不定（目录兜底 64k~500k），30k token 对话比例
+    /// ∈ [0.06, 0.47] 恒 ≥ 0.001 且 < 0.999——首轮触发 stage-1、二轮抑制
+    /// （07 §4.4 测试 4「compact_stage_ratios 可配」语义）。
+    #[tokio::test]
+    async fn stage_milestone_triggers_once_and_suppresses_repeat() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.set_session_meta("compact_stage_ratios", "[0.001, 0.999]")
+            .unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        inject_fake_summarizer(&state);
+        // 会话树（checkpoint 落载荷面）
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({}))
+            .expect("追加叶子");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        // 15 条 ≈ 30k token（任意窗口下比例 ∈ [0.06, 0.47] → 命中 stage-1）
+        let messages = big_llm_conversation(15);
+
+        evaluate_stage_milestones(&state, "s1", &messages).await;
+        assert_eq!(
+            stage_triggered_indices(&state, "s1"),
+            vec![0],
+            "stage-1 已触发"
+        );
+        let summaries = stored_stage_summaries(&state, "s1");
+        assert_eq!(summaries.len(), 1, "产出 1 条阶段总结");
+        assert_eq!(summaries[0].0, "stage-1", "tier = stage-1");
+        assert!(summaries[0].1.contains("阶段"), "md 渲染含 tier 标注头");
+        // checkpoint 落载荷（target ← goal / next ← nextSteps）
+        {
+            let trees = state.session_trees.lock().unwrap();
+            let tree = trees.get("s1").unwrap().lock().unwrap();
+            match tree.read_leaf_checkpoint(None) {
+                conex_types::LeafCheckpointState::Present(payload) => {
+                    assert_eq!(payload.target, "测试目标", "target ← goal");
+                    assert_eq!(payload.next, vec!["下一步一".to_string()], "next ← nextSteps");
+                }
+                other => panic!("期望 Present，实际 {other:?}"),
+            }
+        }
+        // 重复触发抑制：同比例再评估 → 不新增总结、不重复标记
+        evaluate_stage_milestones(&state, "s1", &messages).await;
+        assert_eq!(
+            stored_stage_summaries(&state, "s1").len(),
+            1,
+            "重复评估不新增（每阶梯只触发一次）"
+        );
+        assert_eq!(stage_triggered_indices(&state, "s1"), vec![0], "标记幂等");
+    }
+
+    /// F5：系统提示词段注入——build_system_prompt 输出后拼接「阶段总结」段；
+    /// 无总结 → 原样返回（行为与接线前一致）
+    #[test]
+    fn stage_summary_injected_into_system_prompt() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> =
+            Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+        let state = core_state_with_store(store);
+        // 无总结 → 原样（build_system_prompt trim 规范化后输出）
+        let base =
+            assemble_system_prompt_with_stages(&state, "s1", Some("  基础提示词  ".to_string()));
+        assert_eq!(base.as_deref(), Some("基础提示词"), "无总结原样返回");
+        // 预置一条阶段总结 → 拼接「阶段总结：N 条」段 + md 渲染（tier 标注）
+        db.set_session_meta(
+            "s1:compact_stage_summaries",
+            r###"[{"tier":"stage-1","markdown":"## 阶段性总结（stage-1）\n- 进展一"}]"###,
+        )
+        .unwrap();
+        let injected = assemble_system_prompt_with_stages(&state, "s1", Some("基础".to_string()))
+            .expect("注入非空");
+        assert!(injected.contains("阶段总结：1 条"), "段头");
+        assert!(injected.contains("阶段性总结（stage-1）"), "md 渲染内容");
+        assert!(injected.starts_with("基础"), "基础段在前（拼接语义）");
     }
 }
