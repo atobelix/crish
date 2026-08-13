@@ -13,13 +13,15 @@
  * 上下文，仅事件流 + UI 面（横幅 / 临时通知）。
  */
 import { applyGoalRoundEventToGoalMode } from '../../../hooks/chat-stream/useGoalMode';
-import { useLayoutStore } from '../../../store/layoutStore';
+import {
+  getLayoutChromeState,
+  getSessionById,
+} from '../../../store/storeAccess';
 import {
   CIRCUIT_BANNER_DEFAULT_MESSAGE,
   isCircuitTripDetail,
   useContinuityUiStore,
 } from '../../continuity/continuityUiStore';
-import { getSessionById } from '../../../store/sessionStore';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
@@ -54,7 +56,7 @@ export function onGoalRoundStarted(
     goal: envelope.event.goal,
   });
   if (next !== null && next !== sess.goalMode) {
-    useLayoutStore.getState().patchSession(sid, { goalMode: next });
+    getLayoutChromeState().patchSession(sid, { goalMode: next });
   }
 }
 
@@ -74,7 +76,7 @@ export function onGoalRoundCompleted(
     stalledDelta: envelope.event.stalledDelta,
   });
   if (next !== null && next !== sess.goalMode) {
-    useLayoutStore.getState().patchSession(sid, { goalMode: next });
+    getLayoutChromeState().patchSession(sid, { goalMode: next });
   }
 }
 
@@ -92,7 +94,7 @@ export function onGoalContinuationDecided(
     reason: envelope.event.reason,
   });
   if (next !== null && next !== sess.goalMode) {
-    useLayoutStore.getState().patchSession(sid, { goalMode: next });
+    getLayoutChromeState().patchSession(sid, { goalMode: next });
   }
 }
 
@@ -125,7 +127,7 @@ export function onRecoveryEscalated(
   }
   // 子代理侧：失败卡片 kind/retries 投影（errorKind/retries 字段进 agent 行，
   // 渲染面见失败态卡片；subagentRunId 匹配定位 agent）
-  const state = useLayoutStore.getState();
+  const state = getLayoutChromeState();
   const sess =
     state.sessionsById[sid] || state.sessions.find((s) => s.id === sid);
   const agent = sess?.agents?.find((a) => a.subagentRunId === subagentRunId);

@@ -21,7 +21,12 @@ import { useSettingsStore, type SettingsStore } from './settingsStore';
 import { useLayoutStore, type LayoutStore } from './layoutStore';
 import type { FileDiff, SettingsTabType } from './types';
 import type { PermissionMode } from '../api/permissionModes';
-import type { CronJob, McpServer, ProviderInfo, Settings } from '../api/clientApi';
+import type {
+  CronJob,
+  McpServer,
+  ProviderInfo,
+  Settings,
+} from '../api/clientApi';
 import type {
   ActiveWorkerState,
   ShellChromeMode,
@@ -43,11 +48,11 @@ export const selectTerminalLines = (s: Pick<TerminalStore, 'terminalLines'>) =>
   s.terminalLines;
 
 export const selectTerminalBySession = (
-  s: Pick<TerminalStore, 'terminalBySession'>,
+  s: Pick<TerminalStore, 'terminalBySession'>
 ) => s.terminalBySession;
 
 export const selectActiveDiffSource = (
-  s: Pick<TerminalStore, 'activeDiffSource'>,
+  s: Pick<TerminalStore, 'activeDiffSource'>
 ) => s.activeDiffSource;
 
 export const selectDiffFiles = (s: Pick<TerminalStore, 'diffFiles'>) =>
@@ -63,16 +68,15 @@ export function useWorkerField<T>(selector: (state: WorkerStore) => T): T {
   return useWorkerStore(selector);
 }
 
-export const selectActiveWorkers = (
-  s: Pick<WorkerStore, 'activeWorkers'>,
-) => s.activeWorkers;
+export const selectActiveWorkers = (s: Pick<WorkerStore, 'activeWorkers'>) =>
+  s.activeWorkers;
 
 export const selectKilledWorkerIds = (
-  s: Pick<WorkerStore, 'killedWorkerIds'>,
+  s: Pick<WorkerStore, 'killedWorkerIds'>
 ) => s.killedWorkerIds;
 
 export const selectManuallyTriggeredWorkers = (
-  s: Pick<WorkerStore, 'manuallyTriggeredWorkers'>,
+  s: Pick<WorkerStore, 'manuallyTriggeredWorkers'>
 ) => s.manuallyTriggeredWorkers;
 
 // ── permission 域读面 ───────────────────────────────────────────────────────
@@ -81,24 +85,25 @@ export function getPermissionState(): PermissionStore {
   return usePermissionStore.getState();
 }
 
-export function usePermissionField<T>(selector: (state: PermissionStore) => T): T {
+export function usePermissionField<T>(
+  selector: (state: PermissionStore) => T
+): T {
   return usePermissionStore(selector);
 }
 
 export const selectPermissionMode = (
-  s: Pick<PermissionStore, 'permissionMode'>,
+  s: Pick<PermissionStore, 'permissionMode'>
 ) => s.permissionMode;
 
 export const selectPlanModeEnabled = (
-  s: Pick<PermissionStore, 'planModeEnabled'>,
+  s: Pick<PermissionStore, 'planModeEnabled'>
 ) => s.planModeEnabled;
 
-export const selectPlanApproved = (
-  s: Pick<PermissionStore, 'planApproved'>,
-) => s.planApproved;
+export const selectPlanApproved = (s: Pick<PermissionStore, 'planApproved'>) =>
+  s.planApproved;
 
 export const selectCommandPermissions = (
-  s: Pick<PermissionStore, 'commandPermissions'>,
+  s: Pick<PermissionStore, 'commandPermissions'>
 ) => s.commandPermissions;
 
 // ── settings 域读面 ─────────────────────────────────────────────────────────
@@ -118,7 +123,7 @@ export const selectProviders = (s: Pick<SettingsStore, 'providers'>) =>
   s.providers;
 
 export const selectScheduledTasks = (
-  s: Pick<SettingsStore, 'scheduledTasks'>,
+  s: Pick<SettingsStore, 'scheduledTasks'>
 ) => s.scheduledTasks;
 
 export const selectMcpServers = (s: Pick<SettingsStore, 'mcpServers'>) =>
@@ -136,28 +141,31 @@ export function getLayoutChromeState(): LayoutStore {
 export const selectUiSize = (s: Pick<LayoutStore, 'uiSize'>) => s.uiSize;
 
 export const selectShellChromeMode = (
-  s: Pick<LayoutStore, 'shellChromeMode'>,
+  s: Pick<LayoutStore, 'shellChromeMode'>
 ) => s.shellChromeMode;
 
 export const selectChatMainSurface = (
-  s: Pick<LayoutStore, 'chatMainSurface'>,
+  s: Pick<LayoutStore, 'chatMainSurface'>
 ) => s.chatMainSurface;
 
 export const selectSidebarCollapsed = (
-  s: Pick<LayoutStore, 'sidebarCollapsed'>,
+  s: Pick<LayoutStore, 'sidebarCollapsed'>
 ) => s.sidebarCollapsed;
 
-export const selectTabModeEnabled = (
-  s: Pick<LayoutStore, 'tabModeEnabled'>,
-) => s.tabModeEnabled;
+export const selectTabModeEnabled = (s: Pick<LayoutStore, 'tabModeEnabled'>) =>
+  s.tabModeEnabled;
 
 export const selectShowSettingsOverlay = (
-  s: Pick<LayoutStore, 'showSettingsOverlay'>,
+  s: Pick<LayoutStore, 'showSettingsOverlay'>
 ) => s.showSettingsOverlay;
 
 export const selectSettingsActiveTab = (
-  s: Pick<LayoutStore, 'settingsActiveTab'>,
+  s: Pick<LayoutStore, 'settingsActiveTab'>
 ) => s.settingsActiveTab;
+
+// ── session 域只读面（CT-03 补：等价转发，零行为改动；写面仍走 layoutStore actions）──
+
+export { getSessionById } from './sessionStore';
 
 // ── 类型再导出（读面消费方经本模块取类型，避免直连 store 模块）─────────────────
 

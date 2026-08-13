@@ -12,7 +12,7 @@
  * 直写 agents store（与 per-run 面的 useStreamCallbacks 消费语义对齐）。
  */
 import { surfaceStreamFailure } from '../BridgeErrorPolicy';
-import { useLayoutStore } from '../../../store/layoutStore';
+import { getLayoutChromeState } from '../../../store/storeAccess';
 import type { LegacyEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
@@ -93,7 +93,7 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
   const sid = resolveSubagentSessionId(raw);
   const subagentId = String(raw.subagentId ?? '');
   if (!sid || !subagentId) return;
-  const store = useLayoutStore.getState();
+  const store = getLayoutChromeState();
   const existing = store.sessionsById[sid]?.agents?.find(
     (a) => a.id === subagentId
   );
@@ -107,7 +107,7 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
     parentSessionId: sid,
     parentRunId: typeof raw.runId === 'string' ? raw.runId.trim() : '',
     parentToolCallId,
-    description: (String(raw.description ?? '协作任务')).trim() || '协作任务',
+    description: String(raw.description ?? '协作任务').trim() || '协作任务',
     mode: String(raw.mode ?? 'research'),
     status: 'running',
     messages: [],
@@ -116,11 +116,14 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
   if (parentToolCallId) {
     // T-E 步骤 3（S1）：raw setState → markToolCallLocalStatus（终态工具卡不回退
     // running 的守卫在 action 内建；scope 限定本会话避免全表扫描）
-    useLayoutStore
-      .getState()
-      .markToolCallLocalStatus(parentToolCallId, 'running', '协作进行中…', {
+    getLayoutChromeState().markToolCallLocalStatus(
+      parentToolCallId,
+      'running',
+      '协作进行中…',
+      {
         sessionId: sid,
-      });
+      }
+    );
   }
 }
 
@@ -138,9 +141,7 @@ export function onSubagentEventGlobal(raw: Record<string, unknown>): void {
       : {};
   // T-E 步骤 3（S2）：raw setState → applySubagentEventToAgent action
   //（applySubagentEventToMessages 纯函数复用内建，与 per-run 面 U2 同承载面）
-  useLayoutStore
-    .getState()
-    .applySubagentEventToAgent(sid, subagentId, ev);
+  getLayoutChromeState().applySubagentEventToAgent(sid, subagentId, ev);
 }
 
 /**
@@ -156,7 +157,7 @@ export function onSubagentEndedGlobal(raw: Record<string, unknown>): void {
   const summary = raw.summary ? String(raw.summary) : undefined;
   // T-E 步骤 3（S3）：raw setState → patchSessionAgentToolStatus action
   //（与 per-run 面 U3 同一承载面：agent 终态 + 时间线收口 + 父工具卡终态）
-  useLayoutStore.getState().patchSessionAgentToolStatus(sid, subagentId, {
+  getLayoutChromeState().patchSessionAgentToolStatus(sid, subagentId, {
     status,
     ...(summary !== undefined ? { summary } : {}),
   });

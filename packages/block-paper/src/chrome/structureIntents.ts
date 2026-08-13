@@ -37,6 +37,14 @@
  *   jsdom 契约（`chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`）；**DOM ≠ EL-01**
  * - **桌面 React chrome 挂载已交**（`BlockChromeDomMount` / Strict 槽）；**仍未交付**的精确项：
  *   A-BLK 全表 e2e、真 Pointer 拖拽产品 e2e、桌面产品级 chrome 交互 e2e
+ *
+ * ## 分层边界（gray zone · CT-04 固化 · 2026-08-13）
+ *
+ * - 本模块为**中立 intent 契约**（类型 + wire 半桥），不隶属 chrome / leaves 任一侧；
+ * - `leaves/` 层的类型/wire 消费（`intentBridge` 下行）为本仓库**受权边界**；
+ * - `chrome/` 内新 UI 不得反向依赖 `leaves/` 内部实现，仅可经 `intentBridge`
+ *   提交协议下行（既有生产面：`slashSelectAndSubmit.ts` 仅消费 intentBridge 协议）；
+ * - 禁止迁移本模块到 contract 包或新建共享目录（反过度设计红线）。
  */
 
 // 类型 + 守卫

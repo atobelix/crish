@@ -199,7 +199,10 @@ export async function submitIntent(
  *
  * 集成测 / 宿主装配时：
  * - RS 库内：`ops_from_json_str(json)` → `session.apply(Origin::User, &ops)`
- * - 桌面：IPC `note_apply_ops` / 等价 command（若尚未接线，仍用本 adapter 形状，库内 RS 测证真 apply）
+ * - 桌面：IPC `note_apply_ops`（已接 CONN-B3，`noteApplyOpsIpc.ts` 生产默认）——
+ *   真 apply 经该 IPC 到达 Rust `DocSession::apply`；库内 RS 集成测证真 apply
+ *   （`w3_d_*_true_apply`）。adapter 形状保持：`applyOps` 注入面不变，
+ *   IPC / 库内双轨均为真写锥。
  *
  * **禁止**用空实现 + mock.calls 冒充本接口的「真 apply」关闭证据。
  */
