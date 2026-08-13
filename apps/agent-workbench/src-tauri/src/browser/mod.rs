@@ -564,7 +564,12 @@ impl BrowserSlot {
         };
         let mut rx = manager.subscribe();
         let slot = Arc::clone(self);
-        tokio::spawn(async move {
+        // 同步上下文守卫（G-13 L3 P0）：本函数在 main.rs setup（无 tokio
+        // runtime 的同步回调）与命令面（browser_status 为同步命令）均可达——
+        // 直接 tokio::spawn 会 panic（"no reactor running"）。改用
+        // tauri::async_runtime::spawn：Tauri 全局 runtime（惰性初始化，
+        // setup 中可用），任务在应用 runtime 线程池运行，语义不变。
+        tauri::async_runtime::spawn(async move {
             loop {
                 match rx.recv().await {
                     Ok(ProcessEvent::StateChanged { state, .. }) => {
@@ -1175,7 +1180,10 @@ fn not_ready_err(reason: String) -> ToolError {
 /// watcher——abort 触发 → [BrowserSlot::cancel_estop]（在途命令逐 id 取消
 /// + 新命令拒绝；急停旗随下一启动周期复位）。
 pub(crate) fn spawn_browser_estop_watcher(slot: Arc<BrowserSlot>, signal: AbortSignal) {
-    tokio::spawn(async move {
+    // 同步入口函数（无 async 签名）：调用方上下文不保证有 tokio runtime，
+    // 统一走 tauri::async_runtime::spawn（全局 runtime，同步/异步上下文
+    // 均安全；与 tokio::spawn 语义一致——任务 detach 运行，句柄不持有）。
+    tauri::async_runtime::spawn(async move {
         signal.wait_aborted().await;
         slot.cancel_estop();
     });
@@ -1650,6 +1658,8 @@ mod tests {
                 let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
                 let flag_written = Arc::new(AtomicBool::new(false));
                 let (rx, fx) = (Arc::clone(&received), Arc::clone(&flag_written));
+                // 测试专用迷你服务端：#[tokio::test] 异步上下文（自带 runtime），
+                // 保持 tokio::spawn 即可（与生产面无关；G-13 L3 P0 只涉及同步路径）
                 tokio::spawn(async move {
                     loop {
                         let (stream, _) = match listener.accept().await {
@@ -1658,6 +1668,7 @@ mod tests {
                         };
                         let (rx, fx) = (Arc::clone(&rx), Arc::clone(&fx));
                         let profile = profile_dir.clone();
+                        // 同 async 上下文（外层任务内），保持 tokio::spawn
                         tokio::spawn(async move {
                             let ws = match tokio_tungstenite::accept_async(stream).await {
                                 Ok(w) => w,

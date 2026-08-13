@@ -6,6 +6,7 @@ import { usePreviewNavigation } from './usePreviewNavigation';
 import { PreviewToolbar } from './PreviewToolbar';
 import { PreviewHistoryPanel } from './PreviewHistoryPanel';
 import { BrowserPanel } from './BrowserPanel';
+import { ComputerPanel } from './computer-panel/ComputerPanel';
 import { QUICK_LOCAL } from './previewCardLib';
 
 interface PreviewCardProps {
@@ -99,7 +100,12 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
       />
 
       {aiBrowser ? (
-        <BrowserPanel onShowToast={onShowToast} />
+        <div className={styles.aiStack}>
+          <div className={styles.aiBrowserPane}>
+            <BrowserPanel onShowToast={onShowToast} />
+          </div>
+          <ComputerPanel onShowToast={onShowToast} />
+        </div>
       ) : (
         <>
           {showHist ? (

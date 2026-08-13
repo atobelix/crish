@@ -178,6 +178,14 @@ pub struct CoreStatus {
     /// 后台任务汇总（活跃任务数 / 守护进程数 / 最近终态；未接线或
     /// 查询失败 = 全零缺省——前端展示「无任务」）
     pub background_tasks: BackgroundTasksSummary,
+    // ── P-7 增量（R2-07 D-02 收尾：/v1/status activeRuns/pendingApprovals
+    // 字段补全；M6 §4.1.1 形状，注册表 StatusResult 可选字段——桌面端
+    // 总是下发数组，空数组合法）──
+    /// 活动 run 摘要列表（运行时真源：活动注册表；prompt 兜底空串，
+    /// 见 core_run_commands::ActiveRunSummary）
+    pub active_runs: Vec<ActiveRunSummary>,
+    /// 待审批摘要列表（C13 对账投影 M6 摘要子集）
+    pub pending_approvals: Vec<PendingApprovalSummary>,
 }
 
 /// 组装 CoreStatus（**唯一**组装函数；F2 串行序：PE-01 → PE-04 → PE-08 以追加参数并入，
@@ -205,6 +213,9 @@ pub fn build_status(
     snapshot: SnapshotStatus,
     // T-AB-19 增量（run 生命周期整合：后台任务汇总）
     background_tasks: BackgroundTasksSummary,
+    // P-7 增量（R2-07 D-02 收尾：activeRuns / pendingApprovals 摘要）
+    active_runs: Vec<ActiveRunSummary>,
+    pending_approvals: Vec<PendingApprovalSummary>,
 ) -> CoreStatus {
     CoreStatus {
         initialized,
@@ -221,6 +232,8 @@ pub fn build_status(
         restore,
         snapshot,
         background_tasks,
+        active_runs,
+        pending_approvals,
     }
 }
 
@@ -260,7 +273,7 @@ fn log_dir() -> String {
 // - `snapshot_status(&self) -> SnapshotStatus`：快照域状态（PE-08 T08.6）；
 // - `run_error(&self, run_id: &str) -> Option<String>`：run 终态错误文案（无则 None）；
 // - `run_usage(&self, run_id: &str) -> Option<RunUsage>`：usage 域（未接线时 None）。
-use crate::core_run_commands::CoreRunState;
+use crate::core_run_commands::{ActiveRunSummary, CoreRunState, PendingApprovalSummary};
 
 /// core_get_status：核心状态查询（03 §3.2 B；无硬编码 true 字段）。
 ///
@@ -318,6 +331,10 @@ pub async fn core_get_status(
         core.restore_status(),
         core.snapshot_status(),
         core.background_tasks_summary().await,
+        // P-7（R2-07 D-02 收尾）：activeRuns / pendingApprovals 摘要——
+        // GUI 命令面与 /v1/status 共用同一组装函数，同步下发
+        crate::core_run_commands::list_active_runs_impl(&core).await,
+        crate::core_run_commands::list_pending_approval_summaries_impl(&core),
     ))
 }
 
@@ -693,6 +710,21 @@ mod tests {
                     finished_at_ms: 1_700_000_000_003,
                 }),
             },
+            // P-7（R2-07 D-02 收尾）：activeRuns / pendingApprovals 摘要
+            vec![ActiveRunSummary {
+                run_id: "r-1".to_string(),
+                session_id: "s-1".to_string(),
+                status: "running".to_string(),
+                started_at: 1_700_000_000_004,
+                // prompt 兜底：runs 表无 prompt 持久化，恒空串
+                prompt: String::new(),
+            }],
+            vec![PendingApprovalSummary {
+                tool_call_id: "tc-9".to_string(),
+                tool_name: "shell:write".to_string(),
+                run_id: Some("r-1".to_string()),
+                summary: Some("npm test 需要执行权限".to_string()),
+            }],
         );
         let json = serde_json::to_value(&status).unwrap();
         // 基线字段 camelCase
@@ -731,6 +763,19 @@ mod tests {
             json["backgroundTasks"]["lastFinished"]["finishedAtMs"],
             1_700_000_000_003_i64
         );
+        // P-7 增量（activeRuns / pendingApprovals；M6 §4.1.1 形状）
+        assert_eq!(json["activeRuns"][0]["runId"], "r-1");
+        assert_eq!(json["activeRuns"][0]["sessionId"], "s-1");
+        assert_eq!(json["activeRuns"][0]["status"], "running");
+        assert_eq!(json["activeRuns"][0]["startedAt"], 1_700_000_000_004_i64);
+        assert_eq!(json["activeRuns"][0]["prompt"], "", "prompt 兜底恒空串");
+        assert_eq!(json["pendingApprovals"][0]["toolCallId"], "tc-9");
+        assert_eq!(json["pendingApprovals"][0]["toolName"], "shell:write");
+        assert_eq!(json["pendingApprovals"][0]["runId"], "r-1");
+        assert_eq!(
+            json["pendingApprovals"][0]["summary"],
+            "npm test 需要执行权限"
+        );
         // 不得出现 snake_case 键
         for key in [
             "search_index_ready",
@@ -744,6 +789,8 @@ mod tests {
             "active_count",
             "daemon_count",
             "last_finished",
+            "active_runs",
+            "pending_approvals",
         ] {
             assert!(json.get(key).is_none(), "不得出现 snake_case 键 {key}");
         }
@@ -781,6 +828,8 @@ mod tests {
                 last_error: None,
             },
             BackgroundTasksSummary::default(),
+            Vec::new(),
+            Vec::new(),
         );
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["initialized"], false);
@@ -796,6 +845,10 @@ mod tests {
             json["backgroundTasks"].get("lastFinished").is_none(),
             "无终态任务时 lastFinished 缺省"
         );
+        // P-7：空态 activeRuns / pendingApprovals 下发空数组（注册表可选
+        // 字段——桌面端总是下发数组，空数组合法）
+        assert_eq!(json["activeRuns"], serde_json::json!([]));
+        assert_eq!(json["pendingApprovals"], serde_json::json!([]));
     }
 
     /// T-AB-19：后台任务汇总 wire 形状（camelCase + lastFinished 缺省规则）

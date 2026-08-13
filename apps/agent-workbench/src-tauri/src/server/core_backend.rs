@@ -36,10 +36,10 @@ use crate::core_event_bridge::EventBridge;
 use crate::core_run_commands::{
     approval_history_impl, approve_tool_impl, cancel_run_impl, deny_tool_impl,
     find_run_by_pending_tool_call, generate_run_id, generate_session_id, get_flow_snapshot_impl,
-    get_run_snapshot_impl, get_task_output_impl, list_background_tasks_impl,
-    list_pending_approvals_impl, list_sessions_impl, read_run_events_impl,
-    read_session_events_impl, run_control_impl, run_task_impl, settings_get_impl,
-    settings_update_impl, CoreRunState, RunTaskOptions,
+    get_run_snapshot_impl, get_task_output_impl, list_active_runs_impl,
+    list_background_tasks_impl, list_pending_approval_summaries_impl, list_pending_approvals_impl,
+    list_sessions_impl, read_run_events_impl, read_session_events_impl, run_control_impl,
+    run_task_impl, settings_get_impl, settings_update_impl, CoreRunState, RunTaskOptions,
 };
 use crate::core_commands::SharedSearchState;
 use crate::server::backend::{ApiBackend, SettingsUpdateParams};
@@ -420,6 +420,11 @@ impl ApiBackend for CoreStateBackend {
             self.core.restore_status(),
             self.core.snapshot_status(),
             self.core.background_tasks_summary().await,
+            // P-7（R2-07 D-02 收尾）：activeRuns / pendingApprovals 摘要
+            // 注入——活动 run 注册表 + 审批门 pending 集合（复用 C13
+            // 对账公共方法，M6 §4.1.1 摘要形状）
+            list_active_runs_impl(&self.core).await,
+            list_pending_approval_summaries_impl(&self.core),
         );
         serde_json::to_value(status)
             .map_err(|e| ServerError::internal(format!("状态序列化失败：{e}")))
@@ -1607,5 +1612,136 @@ mod tests {
             .await
             .expect_err("占位端点必须返回错误");
         assert_eq!(err.device_code(), DeviceErrorCode::CmdUnknown);
+    }
+
+    // ── P-7（R2-07 D-02 收尾）：/v1/status activeRuns / pendingApprovals ──
+
+    /// 空态接线：get_status 响应必须包含 activeRuns / pendingApprovals
+    /// 数组（注册表 StatusResult 可选字段——桌面端总是下发数组，
+    /// 空数组合法，移动端解析宽容；D-02「缺省合法」面）
+    #[tokio::test]
+    async fn p7_status_empty_state_includes_active_runs_and_pending_approvals() {
+        let backend = CoreStateBackend::new(r2_test_core_state());
+        let status = backend.get_status().await.expect("get_status");
+        assert_eq!(
+            status["activeRuns"],
+            serde_json::json!([]),
+            "空态 activeRuns = 空数组"
+        );
+        assert_eq!(
+            status["pendingApprovals"],
+            serde_json::json!([]),
+            "空态 pendingApprovals = 空数组"
+        );
+    }
+
+    /// 端到端：真实 run（write_file 危险工具 + ask 权限模式）→ 审批门
+    /// pending 注册 + run 停 awaiting-approval → get_status 的
+    /// activeRuns / pendingApprovals 均非空且字段形状 = M6 §4.1.1
+    /// （activeRuns：runId/sessionId/status/startedAt + prompt 兜底空串；
+    /// pendingApprovals：toolCallId/toolName/runId/summary）
+    #[tokio::test]
+    async fn p7_status_includes_active_runs_and_pending_approvals_end_to_end() {
+        use agent_provider::config::Endpoint;
+        use session_loop::provider::ProviderCall;
+        use session_loop::stream::{ProviderStreamEvent, StopReason};
+        use session_loop::testing::TestProvider;
+
+        let state = r2_test_core_state();
+        // TestProvider：文本 + 危险工具 write_file 调用（ask 模式 →
+        // NeedsApproval → 审批门 request_approval；测试不裁决 → run 停在
+        // awaiting-approval 保持活动——activeRuns/pendingApprovals 双非空）
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("写入文件。"),
+            ProviderStreamEvent::tool_call(
+                Some("call-p7".to_string()),
+                "write_file",
+                serde_json::json!({ "path": "x.md", "content": "p7" }),
+            ),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let routed: Arc<dyn ProviderCall> = provider;
+        let config = crate::engine::EngineProviderConfig {
+            base_url: "http://test.local/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+            extra: std::collections::BTreeMap::new(),
+        };
+        state.engine().inject_provider_for_test(routed, config);
+        state.run_restore().await;
+
+        let backend = CoreStateBackend::new(Arc::clone(&state));
+        let result = backend
+            .run_task(RunTaskParams {
+                session_id: Some("s1".to_string()),
+                prompt: "写入文件".to_string(),
+                prompt_ref: None,
+                mode: None,
+                cwd: None,
+                permission_mode: Some(PermissionMode::Ask),
+                history: None,
+                client_message_id: None,
+            })
+            .await
+            .expect("run 应发起（ask 权限模式）");
+
+        // 轮询 get_status 直到 pendingApprovals 非空（工具调用 → 审批门
+        // pending 注册；run 未裁决保持活动，activeRuns 同时非空）
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let status = loop {
+            let value = backend.get_status().await.expect("get_status");
+            let pending = value["pendingApprovals"]
+                .as_array()
+                .map(Vec::len)
+                .unwrap_or(0);
+            let active = value["activeRuns"].as_array().map(Vec::len).unwrap_or(0);
+            if pending > 0 && active > 0 {
+                break value;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "审批未在窗口内进入 pending：{value}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        };
+        // activeRuns 形状（M6 §4.1.1；wire 排序 = run_id 字典序）
+        assert_eq!(status["activeRuns"][0]["runId"], result.run_id);
+        assert_eq!(status["activeRuns"][0]["sessionId"], "s1");
+        let run_status = status["activeRuns"][0]["status"]
+            .as_str()
+            .expect("status 应为字符串");
+        assert!(
+            ["queued", "initializing", "running", "awaiting-approval"].contains(&run_status),
+            "活动 run 状态应在非终态集合内：{run_status}"
+        );
+        assert!(
+            status["activeRuns"][0]["startedAt"].as_i64().is_some(),
+            "startedAt 应为 epoch ms"
+        );
+        assert_eq!(
+            status["activeRuns"][0]["prompt"],
+            "",
+            "prompt 兜底恒空串（runs 表无 prompt 持久化）"
+        );
+        // pendingApprovals 形状（M6 §4.1.1；wire 排序 = tool_call_id 字典序）
+        assert_eq!(status["pendingApprovals"][0]["toolCallId"], "call-p7");
+        assert_eq!(status["pendingApprovals"][0]["toolName"], "write_file");
+        assert_eq!(status["pendingApprovals"][0]["runId"], result.run_id);
+        assert_eq!(
+            status["pendingApprovals"][0]["summary"],
+            "call write_file",
+            "审批门摘要（format!(\"call {{tool_name}}\")）透传"
+        );
+        // 收尾：取消 run（L3）释放审批等待（APPROVAL_TIMEOUT 120s
+        // 超时不阻塞测试收尾；终态后 active_runs 移出注册表）
+        let cancelled = backend
+            .cancel_run(CancelRunParams {
+                run_id: result.run_id.clone(),
+                reason: Some("p7 测试收尾".to_string()),
+            })
+            .await;
+        assert!(cancelled.is_ok(), "取消 run 收尾：{cancelled:?}");
     }
 }

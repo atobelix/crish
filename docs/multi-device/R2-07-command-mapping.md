@@ -787,3 +787,63 @@ _2026-08-13 桌面端收尾轮完成 · C19 接线翻 true · C13/C14 判定不�
   与 `cargo fmt --check`（未跑全量格式化，避免触碰并行阵营改动区）。
 
 _2026-08-14 桌面接线轮完成 · C21/C30/C31 已实现 + C22 占位 501 · sched.rs 新增 pause 字段（汇报）· 编译待并行阵营恢复后补验_
+
+---
+
+# P-7 收尾：D-02 归档 —— /v1/status activeRuns / pendingApprovals 字段补全
+
+> 追加日期：2026-08-14（P-7 排期项落地；D-02 主控裁决「P-7 桌面端装配随 R2
+> 桌面增强排期」兑现）。桌面端实现（CoreStateBackend 真实实现）；移动端
+> 消费注记见 §4。
+
+## 1. 实现
+
+- **CoreStatus 补字段**（core_query_commands.rs）：`activeRuns` /
+  `pendingApprovals`（serde camelCase；注册表 StatusResult 二者为可选
+  JsonValue[]——桌面端**总是下发数组**，空数组合法，超集无害，D-01 先例）。
+  `build_status` 追加两参数（F2 串行序追加参数模式），GUI 命令面
+  `core_get_status` 与 `/v1/status`（CoreStateBackend）同步下发。
+- **数据源**（core_run_commands.rs，最小公共方法提取）：
+  - `list_active_runs_impl`：活动 run 注册表 `active_runs` 为运行时真源
+    （终态收口即移出，天然只含活动 run）；摘要 = `{runId, sessionId,
+status, startedAt, prompt}`（RunHandle 状态镜像，M6 §4.1.1 形状），
+    按 runId 排序保证 wire 确定性；
+  - `list_pending_approval_summaries_impl`：复用 C13 对账
+    `list_pending_approvals_impl`（单一数据源，无第二套 pending 查询
+    语义），投影 M6 §4.1.1 摘要子集 `{toolCallId, toolName, runId,
+summary}`——全量对账面为 C13，首页状态卡不下发 cwd/reason/paramKeys；
+    按 toolCallId 排序。
+- **prompt 兜底**：runs 表无 prompt 持久化（ActiveRun 不保留 prompt，
+  本表 D-02 判定已注记）——`prompt` 恒空串下发并注释，移动端按「无摘要
+  文本」展示。
+
+## 2. /v1/status 响应变化
+
+- 新增 `activeRuns: []` / `pendingApprovals: []`（空态也下发数组——
+  之前缺省无字段）；非空形状对齐 M6 §4.1.1 示例（runId/sessionId/status/
+  startedAt/prompt；toolCallId/toolName/runId/summary）。
+- 鉴权不变（D2 §7.1 零信任：/v1/status 仍在 Bearer 保护组）。
+
+## 3. 测试
+
+- `build_status` wire 契约（core_query_commands.rs 测试扩展）：注入摘要
+  断言 camelCase 键 + snake_case 零出现；
+- 空态接线（core_backend.rs）：get_status 响应含 `activeRuns: []` /
+  `pendingApprovals: []`；
+- 端到端（core_backend.rs）：真实 run（write_file 危险工具 + ask 权限
+  模式）→ 审批门 pending 注册 + run 停 awaiting-approval → get_status
+  双字段非空、字段形状断言（含 summary="call write_file" 透传）；
+- router `status_endpoint_returns_m6_subset`（MockBackend）前序已断言
+  activeRuns/pendingApprovals 透传，未动。
+
+## 4. 移动端消费注记
+
+- 移动端首拉对账（D-02 裁决「移动端容忍缺省；首拉对账走
+  mobile_list_pending_approvals（C13）」）**不变**——本字段补全为桌面端
+  超集下发；移动端解析器按注册表字段抽取（activeRuns/pendingApprovals
+  可选），宽容忽略多余字段；
+- F1 F03 活动任务列表数据源（engineStatus.ts:58-86 投影）：activeRuns
+  现可首拉即得（不再依赖事件流重建）；prompt 空串时按无摘要文本降级展示；
+  pendingApprovals 仅计数可 L0 展示（M7 §5.2），裁决动作仍走 F2（C11/C12）。
+
+_2026-08-14 P-7 收尾 · D-02 归档 · 桌面端 activeRuns/pendingApprovals 已装配（CoreStateBackend 真实实现）· 移动端容忍缺省面不变

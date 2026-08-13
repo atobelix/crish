@@ -16,7 +16,8 @@
   gap: var(--space-0_5);
   padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
   min-height: var(--card-header-min-height, 36px);
-  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle));
   flex-shrink: 0;
   background: var(--bg-primary);
   box-sizing: border-box;
@@ -67,7 +68,11 @@
   box-sizing: border-box;
 }
 .urlForm:focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  ) !important;
   background: var(--bg-primary);
   box-shadow: none !important;
 }
@@ -132,6 +137,24 @@
   min-height: 0;
   position: relative;
   background: var(--bg-tertiary);
+}
+/* AI 受管视图装配：浏览器面板（弹性，内部滚动）+ 电脑操作面板（底部自然高度） */
+.aiStack {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.aiBrowserPane {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .iframe {
   width: 100%;
@@ -250,7 +273,8 @@
   min-width: 0;
   overflow-y: auto;
   padding: var(--space-1_5);
-  border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  border-right: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle));
 }
 .histCol:last-child {
   border-right: none;
@@ -376,7 +400,8 @@
   }
   .histCol {
     border-right: none;
-    border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+    border-bottom: var(--hairline-width, 1px) solid
+      var(--hairline, var(--border-subtle));
     max-height: 120px;
   }
   .histCol:last-child {
