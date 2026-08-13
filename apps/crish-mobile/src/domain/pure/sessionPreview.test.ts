@@ -10,6 +10,7 @@ import {
   lastPreviewOfWindow,
   previewText,
   SESSION_PREVIEW_MAX,
+  tailIsStreamingOfWindow,
 } from './sessionPreview';
 
 function makeEntry(
@@ -160,5 +161,44 @@ describe('lastPreviewOfWindow 窗口尾部数据面', () => {
     const window = createWindow();
     window.entries.push(makeEntry('run-terminal', { terminal: 'completed' }));
     expect(lastPreviewOfWindow(window)).toBe('');
+  });
+});
+
+describe('tailIsStreamingOfWindow 尾部流式标记数据面（R2UX-05-02）', () => {
+  it('无窗口 / 空窗口 → false', () => {
+    expect(tailIsStreamingOfWindow(undefined)).toBe(false);
+    expect(tailIsStreamingOfWindow(createWindow())).toBe(false);
+  });
+
+  it('尾部为流式增量类型（message-delta / tool-update / task-output）→ true', () => {
+    const window = createWindow();
+    window.entries.push(
+      makeEntry('message-delta', { sequence: 1, text: '增量' })
+    );
+    expect(tailIsStreamingOfWindow(window)).toBe(true);
+    const toolWindow = createWindow();
+    toolWindow.entries.push(makeEntry('tool-update', { sequence: 1 }));
+    expect(tailIsStreamingOfWindow(toolWindow)).toBe(true);
+    const taskWindow = createWindow();
+    taskWindow.entries.push(makeEntry('task-output', { sequence: 1 }));
+    expect(tailIsStreamingOfWindow(taskWindow)).toBe(true);
+  });
+
+  it('尾部为终态类型（message-end / run-terminal 等）→ false', () => {
+    const window = createWindow();
+    window.entries.push(
+      makeEntry('message-delta', { sequence: 1, text: '增量' }),
+      makeEntry('message-end', {
+        sequence: 2,
+        message: { id: 'asst-2', role: 'assistant', blocks: [] },
+      })
+    );
+    expect(tailIsStreamingOfWindow(window)).toBe(false);
+  });
+
+  it('未知 type → false（保真兜底，不猜流式）', () => {
+    const window = createWindow();
+    window.entries.push(makeEntry('mystery-event'));
+    expect(tailIsStreamingOfWindow(window)).toBe(false);
   });
 });

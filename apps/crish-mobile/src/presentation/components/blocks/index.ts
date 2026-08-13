@@ -33,3 +33,7 @@ export {
   slideCancel,
 } from './slideConfirmMachine';
 export type { SlideConfirmState, SlidePhase } from './slideConfirmMachine';
+export { StreamingText, STREAMING_CURSOR } from './StreamingText';
+export type { StreamingTextProps } from './StreamingText';
+export { useStreamingText } from './useStreamingText';
+export type { UseStreamingTextOptions } from './useStreamingText';

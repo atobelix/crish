@@ -8,5 +8,9 @@
 //! - [wait_channel]：SubagentWaitChannel 引擎侧实现（dispatch_* 落库 /
 //!   session_agents 快照 / subagent-ended 事件流等待 / L1 steer 注入），
 //!   引擎装配（engine.rs）只读消费其契约与适配器。
+//! - [push]：push-core 推送决策引擎（R3-01，纯函数决策面：push_intent /
+//!   去重 / 合并 / 静默 / 节流 + 13 场景登记；无 I/O）。发送与装配
+//!   （R3-02 WS 直推 / R3-03 厂商通道）不在本模块。
 
+pub mod push;
 pub mod wait_channel;

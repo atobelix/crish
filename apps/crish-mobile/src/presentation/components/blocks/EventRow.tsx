@@ -3,8 +3,9 @@
 //   未迁移，用简单映射 + 标注，摘要函数纯函数导出供单测）；
 // - 错误高亮（F3 §3.3.3：runtime-error / run-terminal failed / tool-end isError /
 //   task-failed / security-audit blocked——deriveErrorLevel 复用 eventReducers）；
-// - 流式增量类型（message-delta / tool-update / task-output）行尾静态「▍」光标
-//   （R2UX-02-06-3 / 裁决 A3：静态光标不构成逐字动画）；
+// - 流式渲染（R2UX-05-02）：流式增量类型（message-delta / tool-update / task-output）
+//   经 StreamingText 节流渐进渲染（preview 帧 18ms 合并 / 100ms 强制刷新 / 终值立即），
+//   行尾静态「▍」光标（R2UX-02-06-3 / 裁决 A3：静态光标不构成逐字动画）；
 // - 未知 type 保真兜底「事件 <type>」（F1 §4.3：不丢不猜）；
 // - 固定行高（EVENT_ROW_HEIGHT）供 FlatList 虚拟化 getItemLayout。
 import { memo } from 'react';
@@ -20,17 +21,14 @@ import {
   readRecord,
   readString,
 } from '@/domain/store/eventReducers';
+import { STREAMING_TYPES } from '@/domain/pure/streamingTypes';
 import { useTheme } from '@/adapters/platform/theme';
+import { StreamingText } from './StreamingText';
+
+export { STREAMING_TYPES };
 
 /** 固定行高（虚拟化 getItemLayout 数据面，R2UX-05-01） */
 export const EVENT_ROW_HEIGHT = 56;
-
-/** 流式增量类型（preview 帧实时预览语义：行尾静态光标，M6 §10.5） */
-export const STREAMING_TYPES: ReadonlySet<string> = new Set([
-  'message-delta',
-  'tool-update',
-  'task-output',
-]);
 
 /** 只看工具 kind 白名单（F3 §5.1：tool-card + task-card + audit-card 条目类型集合） */
 export const TOOL_KIND_WHITELIST: ReadonlySet<string> = new Set([
@@ -104,7 +102,8 @@ export function clipSummary(text: string, maxLength = 60): string {
 /**
  * 事件人话摘要（F3 §6.3 语义：toolHumanLabel 共享包未迁移，先以简单映射 + 标注落地；
  * 未知 type 保真兜底「事件 <type>」）。字段读取走宽容 read* 助手（缺失 → 缺省文案）。
- * 流式增量类型不在此追加光标——由行组件按 STREAMING_TYPES 统一渲染「▍」（单一渲染位）。
+ * 流式增量类型不在此追加光标——由 StreamingText 按 STREAMING_TYPES 统一渲染
+ * 「▍」（单一渲染位，R2UX-05-02）。
  */
 export function summarizeEventFrame(frame: EventEnvelopeFrame): string {
   const runId = readString(frame, 'runId');
@@ -200,23 +199,30 @@ export function formatFeedTime(ms: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/** 事件行条目稳定键（FlatList keyExtractor 与流式 identity 共用单一公式：
+ * type + sequence 幂等键 + receivedAtMs 兜底——同 seq 覆盖保留首次收达时间，键稳定
+ * 不重挂载（不闪烁）；F3 §3.1.1 防重放语义） */
+export function feedEntryKey(entry: FeedEntry): string {
+  return `${entry.sessionId}:${entry.type}:${entry.sequence ?? 'seq-null'}:${entry.receivedAtMs}`;
+}
+
 export interface EventRowProps {
   entry: FeedEntry;
 }
 
-/** 事件行（memo：流式追加时历史行零重渲染，R2UX-05-01 行 memo 纪律） */
+/** 事件行（memo：流式追加时历史行零重渲染，R2UX-05-01 行 memo 纪律；
+ * 流式摘要经 StreamingText 节流渐进渲染——preview 帧同 seq 覆盖同节点更新） */
 export const EventRow = memo(function EventRow({ entry }: EventRowProps) {
   const theme = useTheme();
   const isError = deriveErrorLevel(entry);
   const streaming = STREAMING_TYPES.has(entry.type);
   const summary = summarizeEventFrame(entry);
-  const label = eventKindLabel(entry);
 
   return (
     <View
       testID={isError ? 'event-row-error' : 'event-row'}
       accessible
-      accessibilityLabel={`事件 ${label}：${summary}`}
+      accessibilityLabel={`事件 ${eventKindLabel(entry)}：${summary}`}
       style={[
         styles.row,
         { borderBottomColor: theme.hairline },
@@ -247,28 +253,22 @@ export const EventRow = memo(function EventRow({ entry }: EventRowProps) {
             { color: isError ? theme.colorError : theme.textSecondary },
           ]}
         >
-          {label}
+          {eventKindLabel(entry)}
         </Text>
       </View>
-      <Text
+      <StreamingText
         testID="event-row-summary"
-        numberOfLines={1}
+        identity={feedEntryKey(entry)}
+        text={summary}
+        streaming={streaming}
+        cursorTestID="event-row-streaming"
+        cursorStyle={{ color: theme.textTertiary }}
         style={[
           styles.summary,
           { color: isError ? theme.colorError : theme.textPrimary },
         ]}
-      >
-        {summary}
-        {streaming ? (
-          <Text
-            testID="event-row-streaming"
-            style={{ color: theme.textTertiary }}
-          >
-            {' '}
-            ▍
-          </Text>
-        ) : null}
-      </Text>
+        numberOfLines={1}
+      />
     </View>
   );
 });

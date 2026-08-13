@@ -9,7 +9,10 @@
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { useEventStore, useSessionStore } from '@/adapters/hooks/useAppStore';
-import { lastPreviewOfWindow } from '@/domain/pure/sessionPreview';
+import {
+  lastPreviewOfWindow,
+  tailIsStreamingOfWindow,
+} from '@/domain/pure/sessionPreview';
 import { SessionRow } from '@/presentation/components/sessions';
 
 export interface SessionsScreenProps {
@@ -51,6 +54,7 @@ export default function SessionsScreen({
         <SessionRow
           session={item}
           preview={lastPreviewOfWindow(windows[item.id])}
+          previewStreaming={tailIsStreamingOfWindow(windows[item.id])}
           onOpen={onOpenSession}
           onOpenApprovals={onOpenApprovals}
         />

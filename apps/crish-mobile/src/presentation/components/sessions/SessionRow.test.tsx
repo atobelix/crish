@@ -1,9 +1,10 @@
 // 会话列表行组件测试（R2-05 部分 4：完整行形态）
 // 覆盖：标题 + 预览 + 相对时间（nowMs 注入）、运行中指示（activeRunIds）、
 // 未读角标（unreadCount > 0 显示 / =0 隐藏 / 99+ 收敛）、审批角标透传与点击、
-// 行点击导航（onOpen 携带 sessionId）、空预览不渲染预览行
+// 行点击导航（onOpen 携带 sessionId）、空预览不渲染预览行、
+// 流式预览（R2UX-05-02：previewStreaming 光标 + 节流渐进渲染 + 终值立即）
 // 注：@testing-library/react-native v14 render/fireEvent 为异步 API，全部 await
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { SessionRow, unreadLabel } from './SessionRow';
 
@@ -196,5 +197,120 @@ describe('SessionRow 点击导航', () => {
 
     await fireEvent.press(screen.getByTestId('approval-badge'));
     expect(onOpen).not.toHaveBeenCalled();
+  });
+});
+
+describe('SessionRow 流式预览（R2UX-05-02 最小接入）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('previewStreaming=true：预览行尾静态 ▍ 光标', async () => {
+    await render(
+      <SessionRow
+        session={makeSession({ id: 's-1' })}
+        preview="正在生成回答"
+        previewStreaming
+        nowMs={NOW}
+        onOpen={jest.fn()}
+      />
+    );
+    expect(screen.getByTestId('session-row-preview')).toBeTruthy();
+    expect(screen.getByTestId('session-row-preview-streaming')).toBeTruthy();
+    expect(
+      screen.getByTestId('session-row-preview-streaming').props.children
+    ).toBe(' ▍');
+  });
+
+  it('previewStreaming=false（缺省）：无光标（原行为不变）', async () => {
+    await render(
+      <SessionRow
+        session={makeSession({ id: 's-1' })}
+        preview="普通预览"
+        nowMs={NOW}
+        onOpen={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId('session-row-preview-streaming')).toBeNull();
+    expect(screen.getByTestId('session-row-preview')).toHaveTextContent(
+      '普通预览'
+    );
+  });
+
+  it('流式预览节流：窗口内多帧合并为一次渲染（只跳最新值）', async () => {
+    const { rerender } = await render(
+      <SessionRow
+        session={makeSession({ id: 's-1' })}
+        preview="帧1"
+        previewStreaming
+        nowMs={NOW}
+        onOpen={jest.fn()}
+      />
+    );
+    await rerender(
+      <SessionRow
+        session={makeSession({ id: 's-1' })}
+        preview="帧2"
+        previewStreaming
+        nowMs={NOW}
+        onOpen={jest.fn()}
+      />
+    );
+    await rerender(
+      <SessionRow
+        session={makeSession({ id: 's-1' })}
+        preview="帧3"
+        previewStreaming
+        nowMs={NOW}
+        onOpen={jest.fn()}
+      />
+    );
+    // 窗口未到期：仍显示首帧；到期后一次跳到最新（中间帧被合并）
+    expect(screen.getByTestId('session-row-preview')).toHaveTextContent(
+      '帧1 ▍'
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(18);
+    });
+    expect(screen.getByTestId('session-row-preview')).toHaveTextContent(
+      '帧3 ▍'
+    );
+    expect(
+      screen.getByTestId('session-row-preview').props.children
+    ).not.toContain('帧2');
+  });
+
+  it('流式结束（previewStreaming 翻 false）：终值立即渲染 + 光标消失（无闪烁）', async () => {
+    const { rerender } = await render(
+      <SessionRow
+        session={makeSession({ id: 's-1' })}
+        preview="增量"
+        previewStreaming
+        nowMs={NOW}
+        onOpen={jest.fn()}
+      />
+    );
+    await rerender(
+      <SessionRow
+        session={makeSession({ id: 's-1' })}
+        preview="最终消息"
+        previewStreaming={false}
+        nowMs={NOW}
+        onOpen={jest.fn()}
+      />
+    );
+    expect(screen.getByTestId('session-row-preview')).toHaveTextContent(
+      '最终消息'
+    ); // 同步立即
+    expect(screen.queryByTestId('session-row-preview-streaming')).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(screen.getByTestId('session-row-preview')).toHaveTextContent(
+      '最终消息'
+    ); // 无旧帧回调覆盖
   });
 });

@@ -57,9 +57,12 @@ describe('SessionsScreen 会话列表完整形态', () => {
       <SessionsScreen onOpenApprovals={jest.fn()} onOpenSession={jest.fn()} />
     );
 
+    // 尾部为 message-delta（流式增量类型）→ 预览带流式光标（R2UX-05-02 最小接入）；
+    // toHaveTextContent 为精确匹配（默认 exact），断言组合串
     expect(screen.getByTestId('session-row-preview')).toHaveTextContent(
-      '问题定位在 src/pages/login.tsx'
+      '问题定位在 src/pages/login.tsx ▍'
     );
+    expect(screen.getByTestId('session-row-preview-streaming')).toBeTruthy();
   });
 
   it('无事件窗口的会话不渲染预览行（诚实化）', async () => {

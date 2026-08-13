@@ -607,7 +607,7 @@ _\*8 条 mobile_* 桌面面全部未登记（缺失）\**——manifest 无任�
   surface/registered=false 全量
 - apps/agent-workbench/src-tauri/src/command_manifest.rs：全文（124 条 =
   119 + 5，测试断言 282-288）；workbench_list_workspaces 登记先行（:231）；
-  _*无任何 mobile_* 条目_*（全文检索）
+  _\*无任何 mobile_* 条目_*（全文检索）
 - apps/agent-workbench/src-tauri/src/main.rs：command_registry!（139-303）——
   无 mobile_*、无 workbench_list_workspaces（登记先行不挂 invoke_handler）
 - apps/agent-workbench/src-tauri/src/workspace.rs：workbench_list_workspaces
@@ -634,3 +634,156 @@ _\*8 条 mobile_* 桌面面全部未登记（缺失）\**——manifest 无任�
   （690-714，C13/C14/C19/C21/C22/C27/C30/C31 行）、R2-12 行（:1384）
 
 _2026-08-13 R2-12c 承载面核实完成 · 修正 R2-12b M-2/M-3 判定 · 真实缺口 4 条 + C13/C14 登记面收尾 + C19 接线翻 true_
+
+---
+
+# R2-12c 收尾结果（桌面端收尾轮：C19 接线翻 true + C13/C14 判定 + 缺口排期）
+
+> 追加日期：2026-08-13（桌面端收尾轮，主控派发的实现任务；对应 M-6 节
+> 「真实缺口 4 条 + C13/C14 登记面收尾 + C19 接线翻 true」的收尾执行）
+> 纪律：本任务只落代码不自行 commit（git 提交由主控收口轮统一执行）。
+
+## M-6.6 收尾结果
+
+### 1. C19 workbench_list_workspaces 已接线（登记先行翻 true）
+
+- **main.rs command_registry!**：挂载 `("workbench_list_workspaces", workspace::workbench_list_workspaces)`——注册面唯一真源（COMMAND_REGISTRY_NAMES），与 manifest registered=true 逐项一致测试（main.rs:1115-1128）双向锁定；
+- **command_manifest.rs**：条目翻 true（registered=false → true）；条数断言 124 = **120 + 4**（注册面 120、登记先行 4）；头注释与 9 条登记测试同步；
+- **workspace.rs**：移除 `#[allow(dead_code)]`（G11a 备注退役）；新增 invoke 级测试 `workbench_list_workspaces_returns_authorized_roots`（tauri mock app + manage WorkspaceRegistry → 命令返回已授权根列表）；
+- **前端 commandManifest.ts / commandManifest.test.ts**：内置快照翻 true + 条数断言 120/124 + isRegisteredCommand(workbench_list_workspaces)=true 同步；
+- **M6 §12.4 mobile_get_workspace_state 薄壳（M4-2）**：按反过度设计红线**不新建**——F4 手机端工作区列表数据源本即 workbench_list_workspaces（F4 §3.1.2），复用本命令即可；
+- 提交：主控收口轮统一提交（本任务不自行 commit）。
+
+### 2. C13/C14 登记判定：**不登记**（REST 承载已够 · tauriCommand 语义核实）
+
+核实依据（device-protocol.json tauriCommand 字段语义）：
+
+1. **tauriCommand =「协议命令的桌面桥实现名」**：对已实现命令（C15 core_check_command、C16-C19 workbench__）与桌面 manifest 真名逐字一致；对 mobile__ 新增命令（C13/C14）为 M6 §12.4 [新增] 设计名（sync_projection.rs 实现位置）——**不是桌面 GUI 的 Tauri invoke 面**；
+2. **移动端消费面 = REST 网关直调**（M-6.4.3：REST + WS kind，跨设备从不走 Tauri invoke）；C13/C14 的 REST 端点 `GET /v1/approvals/pending`、`GET /v1/approvals/history` **已实现可用**（R2-08 B2 批，router.rs:152/154/205/206 + core_backend.rs:648-664 + core_run_commands.rs:7296/7361）；
+3. **桌面 GUI 无消费者**：前端无任何代码 invoke `mobile_list_pending_approvals` / `mobile_approval_sync_state`；
+4. **X-5 登记路径针对「暴露新桌面面」**：C13/C14 未暴露任何新桌面面（REST 面早已登记于 router.rs 路由表，非本收尾轮新增）；
+5. 协议面 registered=false 保持（能力发现降级语义不变；移动端按 REST 直调消费，B2 批已对拍锁定）。
+
+**判定**：command_manifest.rs / command_registry! _\*均不落 mobile_* 条目_*——登记仅为协议对齐收尾且无真实消费方，按反过度设计红线不为空集登记。若未来桌面 GUI 需要 invoke（M6 §12.4 command_adapter 接线轮），再按 X-5 登记（registered=false → true）。
+
+### 3. 真实缺口 4 条排期记录（不实现，登记排期）
+
+| C#  | 命令                    | 缺口类型                                                                                  | 排期注记                                                                                                        |
+| --- | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| C21 | mobile_search_files     | 登记 + 实现（fuzzy_find 薄壳，复用 conex-search）+ REST 端点                              | 桌面接线轮（M-6.3.1）                                                                                           |
+| C30 | mobile_settings_confirm | 登记 + 实现（settings_bridge 桌面确认通道：withdraw 幂等、60s 超时拒绝，M6 T-M6-14 锚点） | 桌面接线轮（M-6.3.2）                                                                                           |
+| C31 | mobile_pause_automation | 登记 + 实现（settings_bridge 一次性指令，msgId 幂等）                                     | 桌面接线轮（M-6.3.3）                                                                                           |
+| C22 | mobile_asset_url        | 登记 + 实现（convertFileSrc 代理）                                                        | **先决**：HTTP 资源代理开放问题 14.4-4（F4 §5.4 / device-protocol.json:2709 自注），网络域评审后接线（M-6.3.4） |
+
+**非缺口（不需接线）**：C27 mobile_search_sessions（P2 预留 v2，v1 移动端本地标题过滤兜底，R2-07 B4 批 D-11 记录）。
+
+### 4. 验证记录
+
+- **前端 transport 全绿（2026-08-13 实测）**：`npx vitest run src/api/transport` 5 文件 56 测试
+  全过——`command-contract-drift.test.ts` 4 测试（哨兵注册面 ≡ manifest、零断链、零幽灵、
+  动态拼接 0）+ `commandManifest.test.ts` 12 测试（条数 120/124、登记齐备、
+  isRegisteredCommand 三分支、动态对照三式直读 Rust 真源）；
+- **computer\_*「幽灵」修正（本收尾轮顺手处理，汇报主控）**：断言二零幽灵报
+  `computer_estop / computer_session_enable / computer_session_disable / computer_status`
+  ——核实为**扫描器形态面漏判**而非真幽灵：前端消费面在 `computerSessionApi.ts:37-40`
+  常量（COMPUTER_SESSION_ENABLE_CMD 等）+ useComputerSession invokeTyped 封装
+  （第一参为常量变量，静态字面量面提取不到），且 `computer_` 前缀不在
+  COMMAND_PREFIX_RE 形态白名单（与 resume_/kill_ 同型）。修复：白名单补
+  `computer_` 前缀（command-contract-drift.test.ts:137），幽灵真正清零，豁免集不膨胀；
+- **C19 豁免注释（command-contract-drift.test.ts 豁免集）**：workbench_list_workspaces
+  桌面前端暂无静态 invoke（消费面在 F4 手机端复用 / M6 §12.4 薄壳复用 + 桌面工作区
+  列表接线轮），按 workbench_select_folder 先例加豁免注释（接线后应先移除）；
+- **Rust**：cargo test -p crish-agent-workbench 相关测试（manifest_count_matches_
+  registered_surface / registration_surface_matches_manifest / workbench_list_workspaces_
+  returns_authorized_roots）**被并行阵营编译阻塞暂未跑通**——orchestrator 恢复域拆分
+  在途（restore.rs 引用 restore_snapshot.rs 模块未落盘 + SessionRecord 未定义，非本任务
+  域），错误窗口恢复后由主控收口补跑验证；`cargo fmt --check` 全仓既有漂移（含并行轮
+  E2 F4 断言区），非本任务引入，未跑全量格式化（避免触碰并行阵营改动区）。
+
+_2026-08-13 桌面端收尾轮完成 · C19 接线翻 true · C13/C14 判定不登记（REST 承载已够）· 真实缺口 4 条排期记录_
+
+---
+
+# R2-12c 桌面实现落地（M-6.7：真实缺口 4 条收口）
+
+> 追加日期：2026-08-14（桌面接线轮实现任务，对应 M-6.6 §3 排期记录中的
+> 4 条真实缺口：C21 / C30 / C31 / C22）。
+> 纪律：本任务只落代码不自行 commit（git 提交由主控收口轮统一执行）。
+
+## 1. C21 mobile_search_files → `GET /v1/search/files`（已实现）
+
+- **路由**：`SEARCH_FILES_PATH = /v1/search/files`（router.rs）；query 必填
+  （缺失/空白 → 400 cmd.invalid），root / maxResults 可选查询参数；
+- **数据面**：CoreStateBackend::search_files 复用引擎 `core_search_files`
+  的搜索逻辑——同一 SharedSearchState 索引 + conex-search 模糊匹配 +
+  并行阈值（1000，与 core_commands 同口径）；远程面差异按注册表契约：
+  query 1-256（桌面命令面为 1024）、maxResults 缺省 100 钳制 100、
+  root 相对路径按组件边界过滤（目录边界锚定防前缀误匹配）、
+  relPath 相对搜索根剥离输出（统一 `/` 分隔符）；
+- **装配**：需 main.rs 注入 `with_search_state` + `with_search_root`
+  （本任务文件域不含 main.rs——**主控收口轮接线**；未接线时返回
+  cmd.engine_not_ready 诚实降级）；kind/size 缺省 None（搜索索引只存
+  路径，注册表 optional 字段缺省合法）；
+- **测试**：router 透传/校验/鉴权 + core_backend 真实直调（relPath
+  剥离、root 过滤、钳制、校验、未接线降级）。
+
+## 2. C30 mobile_settings_confirm → `POST /v1/settings/confirm`（已实现）
+
+- **语义依据**：R1-04 直调面无确认通道（D-13：settings 直接生效、无
+  pending/confirmRequestId 下发；F6 §8.3 桌面确认通道待 M6 §12.4 接线）
+  → 本面实现为**确认回执**：`action=query` 任意 id → `expired`（桌面端
+  无待确认请求记录）；`action=withdraw` → `withdrawn`（撤回已不存在 =
+  幂等成功，R2-11 §11「撤回已撤回 = 成功，天然」）；reason 携带依据；
+- **测试**：router 透传/非法 action/缺 id 400/鉴权 + core_backend 回执
+  三态（withdraw/query/空 id）。
+
+## 3. C31 mobile_pause_automation → `POST /v1/settings/pause-automation`（已实现）
+
+- **语义依据**：自动化 = 定时任务（sched.rs SchedulerRegistry）；F6 §8.2
+  「受限触发」一次性指令——不改变持久化配置（暂停为纯内存态，重启不
+  恢复）；durationSec 缺省 3600、钳制 [60, 86400]（注册表契约，桌面端
+  钳制）；重复暂停刷新 pausedUntil；
+- **落地**：sched.rs 新增暂停开关（`SchedulerComponents.pause`：
+  `Arc<Mutex<Option<u64>>>`，epoch ms 截止）+ `pause_for` / `pause_deadline`
+  - `fire_cron` 段 0 暂停门控（暂停期内到点不触发——不发射事件、不推进
+    fired_count、不落库；sleep 延后到暂停结束时刻重试，恢复后继续照常
+    触发）——**注意：sched.rs 按任务书「暂停开关如需新增字段先汇报」
+    新增了 `pause` 字段，本注记即汇报记录**；
+- **测试**：sched.rs 暂停门控（暂停窗口内零触发痕迹 + 恢复后照常触发
+  两次）+ core_backend 真实装配链（缺省/钳制下限 60/钳制上限 86400/
+  刷新覆盖）。
+
+## 4. C22 mobile_asset_url → `GET /v1/assets/url`（命令面占位，501）
+
+- **处置**：F4 §5.4 要求 HTTP 资源代理 + 10 分钟短期令牌（开放问题
+  14.4-4，device-protocol.json:2709 自注「依赖 HTTP 资源代理」）——
+  实现完整代理需令牌签名/校验 + 二进制内容服务 + 授权根二次校验，
+  属网络域评审范畴；本期按任务书「复杂则占位 + 注释」落地**命令面
+  占位端点**：端点已登记路由与鉴权面，恒返回 **501 Not Implemented +
+  cmd.unknown**（error.rs http_status 新增 CmdUnknown → 501 映射——
+  M6 C27「v1 返回 cmd.unknown」的 HTTP 形态；此前 server 面无
+  CmdUnknown 使用，映射为纯新增）；
+- **测试**：router 501 形状（status/code/retryable）+ kind 缺失/非法
+  400 + 鉴权 401 + core_backend 缺省实现断言。
+
+## 5. 白名单与登记面核对
+
+- **remote_whitelist.rs 零改动**：C21/C22/C30/C31 四条命令（searchFiles /
+  assetUrl / settingsConfirm / pauseAutomation）早已登记于 32 条白名单
+  （R1-11 G-5 冻结），router 测试 `r2_12_endpoints_registered_in_whitelist`
+  双向锁定；`g5_rest_routes_never_register_secret_surface` 登记表补入 4 条
+  新路径（防未来被禁命令名与新路径漂移）；
+- **device-protocol.json / command_manifest 零改动**：协议注册表保持
+  registered=false（M-6.6 判定：协议面能力发现降级语义不变；REST 承载
+  面即消费面，跨端从不走 Tauri invoke）。
+
+## 6. 验证记录
+
+- **Rust 编译被并行阵营阻塞**：orchestrator 恢复域拆分在途（restore.rs
+  引用 restore_snapshot.rs / restore_manager.rs 模块未落盘 +
+  SessionRecord 未定义，非本任务域）——`cargo check -p crish-agent-workbench`
+  无法通过依赖面；已完成全量静态自查（类型/导入/边界/测试断言逐项
+  核对），错误窗口恢复后由主控收口轮补跑 `cargo test -p crish-agent-workbench`
+  与 `cargo fmt --check`（未跑全量格式化，避免触碰并行阵营改动区）。
+
+_2026-08-14 桌面接线轮完成 · C21/C30/C31 已实现 + C22 占位 501 · sched.rs 新增 pause 字段（汇报）· 编译待并行阵营恢复后补验_

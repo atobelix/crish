@@ -16,15 +16,20 @@ use std::sync::Arc;
 
 use conex_types::device::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
-    CancelRunResult, DenyParams, EventPageParams, EventPageResult, FlowSnapshotParams,
-    FlowSnapshotResult, GetSettingsParams, GetSettingsResult, ListCommandsResult,
-    ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult,
-    ListTasksParams, ListTasksResult, PermissionMode, RunControlLevel, RunControlParams,
-    RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
-    RunTaskResult, SearchIndexResult,
+    CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams, EventPageResult,
+    FileSearchHit, FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
+    ListCommandsResult, ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams,
+    ListSessionsResult, ListTasksParams, ListTasksResult, PauseAutomationParams,
+    PauseAutomationResult, PermissionMode, RunControlLevel, RunControlParams, RunControlResult,
+    RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
+    SearchFilesParams, SearchFilesResult, SearchIndexResult, SettingsConfirmAction,
+    SettingsConfirmParams, SettingsConfirmResult, SettingsConfirmStatus,
 };
 use conex_types::events::{AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation};
 use conex_types::impact::ImpactAssessment;
+
+use conex_search::fuzzy::FuzzyMatcher;
+use conex_search::search::{search_files, search_files_parallel};
 
 use crate::core_event_bridge::EventBridge;
 
@@ -36,8 +41,17 @@ use crate::core_run_commands::{
     read_session_events_impl, run_control_impl, run_task_impl, settings_get_impl,
     settings_update_impl, CoreRunState, RunTaskOptions,
 };
+use crate::core_commands::SharedSearchState;
 use crate::server::backend::{ApiBackend, SettingsUpdateParams};
 use crate::server::ServerError;
+
+/// C21 远程面 query 上限（注册表契约 1-256；桌面命令面 core_search_files
+/// 为 1024——两承载面各自口径，R2-07 总则「注册表为准」）
+const SEARCH_QUERY_MAX_LEN_REMOTE: usize = 256;
+
+/// C21 搜索并行阈值（对齐 core_commands::SEARCH_PARALLEL_THRESHOLD=1000——
+/// 大索引走并行匹配，小索引走顺序匹配，同引擎口径）
+const SEARCH_PARALLEL_THRESHOLD: usize = 1000;
 
 /// 命令后端（R1-04 注入 ServerState；持有引擎核心状态与只读面就绪标记）
 pub struct CoreStateBackend {
@@ -48,6 +62,12 @@ pub struct CoreStateBackend {
     search_index_ready: bool,
     /// 压缩能力接线标记（同上）
     compaction_ready: bool,
+    /// C21 搜索索引（与命令面 SharedSearchState 同一实例；None = 未接线，
+    /// search_files 返回 cmd.engine_not_ready 诚实降级）
+    search_state: Option<Arc<SharedSearchState>>,
+    /// C21 搜索索引根（索引构建时的 canonical 工作区根；relPath 剥离
+    /// 依据——与 search_state 配套注入）
+    search_root: Option<String>,
 }
 
 impl CoreStateBackend {
@@ -59,6 +79,8 @@ impl CoreStateBackend {
             core,
             search_index_ready: false,
             compaction_ready: false,
+            search_state: None,
+            search_root: None,
         }
     }
 
@@ -78,6 +100,25 @@ impl CoreStateBackend {
         self
     }
 
+    /// 注入 C21 搜索索引（R2-12c：main.rs 装配面将命令面同实例
+    /// SharedSearchState 注入——与 search_index_ready 同源事实；
+    /// 未注入时 search_files 返回 cmd.engine_not_ready 诚实降级）
+    // R2-12c 备注：main.rs 装配面消费——dead_code 静音
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn with_search_state(mut self, state: Arc<SharedSearchState>) -> Self {
+        self.search_state = Some(state);
+        self
+    }
+
+    /// 注入 C21 搜索索引根（R2-12c：索引构建时的 canonical 工作区根；
+    /// relPath 剥离依据——与 with_search_state 配套注入）
+    // R2-12c 备注：main.rs 装配面消费——dead_code 静音
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn with_search_root(mut self, root: impl Into<String>) -> Self {
+        self.search_root = Some(root.into());
+        self
+    }
+
     /// 全局事件桥（R1-11：remote-* 审计事件发射通道；main.rs 装配面经此
     /// 挂接 ServerState.audit_bridge——router 白名单拒绝分支（remote-source-
     /// attempt）与 run 装配面（remote-mode-downgrade）共用同一桥实例）
@@ -91,6 +132,51 @@ impl CoreStateBackend {
     fn map_core(error: conex_types::CoreError) -> ServerError {
         ServerError::from_core_error(&error)
     }
+
+    /// 索引绝对路径 → 注册表 relPath：剥离搜索根前缀（若已注入），
+    /// 统一 `/` 分隔符（跨端契约；未注入根时回传索引原路径——装配面
+    /// 应与 with_search_state 配套注入 with_search_root）
+    fn rel_path_for(&self, path: &str) -> String {
+        let normalized = path.replace('\\', "/");
+        if let Some(root) = &self.search_root {
+            let root_norm = root.replace('\\', "/").trim_end_matches('/');
+            if let Some(stripped) = normalized.strip_prefix(root_norm) {
+                // 目录边界锚定：剥离后须为空或以 `/` 开头——防
+                // "C:/proj" 误剥 "C:/projects/x.rs"（字符串前缀 ≠ 目录前缀）
+                if stripped.is_empty() || stripped.starts_with('/') {
+                    return stripped.trim_start_matches('/').to_string();
+                }
+            }
+        }
+        normalized
+    }
+}
+
+/// 路径是否绝对路径（Unix `/` / Windows `\` 开头或盘符 `C:\` / `C:/`；
+/// F4 §7.2：手机端只传相对路径，绝对路径请求按 cmd.invalid 拒绝）
+fn is_absolute_path(path: &str) -> bool {
+    if path.starts_with('/') || path.starts_with('\\') {
+        return true;
+    }
+    let bytes = path.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+}
+
+/// C21 root 组件序列匹配（索引路径为绝对路径、root 为相对路径——按
+/// 完整组件序列匹配，目录边界锚定防前缀误匹配；搜索索引仅覆盖工作区，
+/// 无跨根误报）
+fn hit_path_within_root(hit_path: &str, root: &str) -> bool {
+    let root_norm = root.replace('\\', "/").trim_matches('/');
+    if root_norm.is_empty() {
+        return true;
+    }
+    let hit_norm = hit_path.replace('\\', "/");
+    hit_norm.starts_with(&format!("{root_norm}/"))
+        || hit_norm.contains(&format!("/{root_norm}/"))
+        || hit_norm.ends_with(&format!("/{root_norm}"))
 }
 
 // ── R1-10 安全测试面：远程装配与双轨路由纯函数（T-07 / T-08 / T-14）──
@@ -712,6 +798,137 @@ impl ApiBackend for CoreStateBackend {
         .map_err(Self::map_core)?;
         Ok(GetSettingsResult { settings })
     }
+
+    /// C21 递归文件名搜索（对齐注册表 SearchFilesParams/Result；复用
+    /// 引擎 core_search_files 的搜索逻辑——同一搜索索引
+    /// （SharedSearchState）+ conex-search 模糊匹配 + 并行阈值，远程
+    /// 面差异：query 1-256（注册表契约）、maxResults 缺省 100 钳制
+    /// 100（注册表钳制）、root 相对路径按组件边界过滤、relPath 相对
+    /// 搜索根输出）
+    async fn search_files(
+        &self,
+        params: SearchFilesParams,
+    ) -> Result<SearchFilesResult, ServerError> {
+        let query = params.query.trim().to_string();
+        if query.is_empty() {
+            return Err(ServerError::protocol(
+                DeviceErrorCode::CmdInvalid,
+                "query 不能为空（注册表 1-256）",
+            ));
+        }
+        if query.chars().count() > SEARCH_QUERY_MAX_LEN_REMOTE {
+            return Err(ServerError::protocol(
+                DeviceErrorCode::CmdInvalid,
+                format!(
+                    "query 超过 {SEARCH_QUERY_MAX_LEN_REMOTE} 字符上限（注册表契约）"
+                ),
+            ));
+        }
+        let root = params
+            .root
+            .map(|root| root.trim().to_string())
+            .filter(|root| !root.is_empty());
+        if let Some(root) = &root {
+            if is_absolute_path(root) {
+                return Err(ServerError::protocol(
+                    DeviceErrorCode::CmdInvalid,
+                    "root 必须为相对路径（F4 §7.2：手机端不传绝对路径）",
+                ));
+            }
+        }
+        let state = self.search_state.as_ref().ok_or_else(|| {
+            ServerError::protocol(
+                DeviceErrorCode::CmdEngineNotReady,
+                "搜索索引未接线（装配面注入 SharedSearchState 后可用）",
+            )
+        })?;
+        let files = state
+            .files
+            .read()
+            .map_err(|e| ServerError::internal(format!("search index lock: {e}")))?
+            .clone();
+        let limit = params.max_results.unwrap_or(100).clamp(1, 100) as usize;
+        let hits = tokio::task::spawn_blocking(move || {
+            let matcher = FuzzyMatcher::new(false);
+            let mut hits = if files.len() >= SEARCH_PARALLEL_THRESHOLD {
+                search_files_parallel(&query, &files, limit, &matcher)
+            } else {
+                search_files(&query, &files, limit, &matcher)
+            };
+            if let Some(root) = &root {
+                hits.retain(|hit| hit_path_within_root(&hit.path, root));
+            }
+            hits
+        })
+        .await
+        .map_err(|e| ServerError::internal(format!("search task failed: {e}")))?;
+        let results = hits
+            .into_iter()
+            .map(|hit| FileSearchHit {
+                rel_path: self.rel_path_for(&hit.path),
+                // 搜索索引只存路径（无 kind/size 元数据）——注册表
+                // optional 字段缺省合法（少发送可选字段即合法）
+                kind: None,
+                size: None,
+            })
+            .collect();
+        Ok(SearchFilesResult { results })
+    }
+
+    /// C30 桌面确认请求回执（R1-04 直调面无确认通道——D-13：settings
+    /// 直接生效、无 pending/confirmRequestId 下发；F6 §8.3 桌面确认
+    /// 通道待 M6 §12.4 接线。本面实现为**确认回执**：query 任意 id →
+    /// expired（桌面端无待确认请求记录）；withdraw → withdrawn（撤回
+    /// 已不存在 = 幂等成功，R2-11 §11「撤回已撤回 = 成功，天然」））
+    async fn settings_confirm(
+        &self,
+        params: SettingsConfirmParams,
+    ) -> Result<SettingsConfirmResult, ServerError> {
+        if params.confirm_request_id.trim().is_empty() {
+            return Err(ServerError::protocol(
+                DeviceErrorCode::CmdInvalid,
+                "confirmRequestId 不能为空",
+            ));
+        }
+        Ok(match params.action {
+            SettingsConfirmAction::Withdraw => SettingsConfirmResult {
+                status: SettingsConfirmStatus::Withdrawn,
+                reason: Some(
+                    "桌面端无待确认请求记录；撤回幂等成功（R1-04 直调面直接生效，F6 §8.3 确认通道待接线）"
+                        .to_string(),
+                ),
+            },
+            SettingsConfirmAction::Query => SettingsConfirmResult {
+                status: SettingsConfirmStatus::Expired,
+                reason: Some(
+                    "桌面端无待确认请求记录（R1-04 直调面直接生效；F6 §8.3 桌面确认通道待 M6 §12.4 接线）"
+                        .to_string(),
+                ),
+            },
+        })
+    }
+
+    /// C31 暂停定时自动执行（自动化 = 定时任务 SchedulerRegistry；F6
+    /// §8.2「受限触发」一次性指令——不改变持久化配置，暂停为内存态
+    /// 重启不恢复；durationSec 缺省 3600、钳制 [60, 86400]（注册表
+    /// 契约，桌面端钳制）；重复暂停刷新 pausedUntil）
+    async fn pause_automation(
+        &self,
+        params: PauseAutomationParams,
+    ) -> Result<PauseAutomationResult, ServerError> {
+        let duration_sec = params.duration_sec.unwrap_or(3600).clamp(60, 86400);
+        let registry = self.core.scheduler_registry().ok_or_else(|| {
+            ServerError::protocol(
+                DeviceErrorCode::CmdEngineNotReady,
+                "调度器未装配（Cron 注册表未接线）",
+            )
+        })?;
+        let paused_until = registry.pause_for(duration_sec);
+        Ok(PauseAutomationResult {
+            ok: true,
+            paused_until,
+        })
+    }
 }
 
 /// 审批 run 归属解析（M6 C11：runId 提供 → 沿用；缺失 → 按待审批
@@ -1135,5 +1352,260 @@ mod tests {
             );
             tokio::time::sleep(std::time::Duration::from_millis(30)).await;
         }
+    }
+
+    // ── R2-12c：C21/C30/C31 真实直调面（CoreStateBackend）──
+
+    /// 测试用 CoreRunState（真实引擎路径——scheduler_registry 装配为
+    /// Some；对齐 core_run_commands 测试先例）
+    fn r2_test_core_state() -> Arc<CoreRunState> {
+        static R2_TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let (bridge, _emitter) = recording_bridge();
+        let seq = R2_TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let db = conex_db::LocalDb::open_in_memory().expect("内存库");
+        let snapshots: Arc<dyn orchestrator::restore::SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_r2_12c_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        Arc::new(CoreRunState::new(
+            Arc::new(orchestrator::persist::LocalDbStore::new(db)),
+            snapshots,
+            bridge,
+            Arc::new(crate::status_diagnostics::StatusDiagnostics::new()),
+            None,
+        ))
+    }
+
+    /// C21 搜索后端（注入索引 + 工作区根）
+    fn search_backend(files: Vec<String>, root: Option<&str>) -> CoreStateBackend {
+        let state = Arc::new(crate::core_commands::SharedSearchState {
+            files: std::sync::RwLock::new(Arc::new(files)),
+        });
+        let mut backend = CoreStateBackend::new(r2_test_core_state()).with_search_state(state);
+        if let Some(root) = root {
+            backend = backend.with_search_root(root.to_string());
+        }
+        backend
+    }
+
+    /// C21：命中映射（relPath 剥离工作区根 + 统一 `/`；kind/size 缺省
+    /// None——搜索索引只存路径，注册表 optional 字段缺省合法）
+    #[tokio::test]
+    async fn r2_12_search_files_maps_hits_to_relative_paths() {
+        let backend = search_backend(
+            vec![
+                "C:/proj/src/main.rs".to_string(),
+                "C:/proj/README.md".to_string(),
+            ],
+            Some("C:/proj"),
+        );
+        let result = backend
+            .search_files(SearchFilesParams {
+                query: "main".to_string(),
+                root: None,
+                max_results: None,
+            })
+            .await
+            .expect("搜索应成功");
+        assert_eq!(result.results.len(), 1);
+        assert_eq!(result.results[0].rel_path, "src/main.rs");
+        assert_eq!(result.results[0].kind, None);
+        assert_eq!(result.results[0].size, None);
+    }
+
+    /// C21：root 相对路径按组件边界过滤（root=src → 仅 src 子树命中；
+    /// 目录边界锚定——根目录的 main.rs 与 docs/ 下 main 均不误命中）
+    #[tokio::test]
+    async fn r2_12_search_files_filters_by_relative_root() {
+        let backend = search_backend(
+            vec![
+                "C:/proj/src/main.rs".to_string(),
+                "C:/proj/src/lib.rs".to_string(),
+                "C:/proj/docs/main-guide.md".to_string(),
+                "C:/proj/main.rs".to_string(),
+            ],
+            Some("C:/proj"),
+        );
+        let result = backend
+            .search_files(SearchFilesParams {
+                query: "main".to_string(),
+                root: Some("src".to_string()),
+                max_results: Some(10),
+            })
+            .await
+            .expect("搜索应成功");
+        let paths: Vec<&str> = result.results.iter().map(|h| h.rel_path.as_str()).collect();
+        assert_eq!(paths, vec!["src/main.rs"], "root=src 仅命中 src 子树：{paths:?}");
+    }
+
+    /// C21：校验面（空 query / 超长 query / 绝对 root / 索引未接线）
+    #[tokio::test]
+    async fn r2_12_search_files_validation_errors() {
+        let backend = search_backend(
+            vec!["C:/proj/src/main.rs".to_string()],
+            Some("C:/proj"),
+        );
+        let cases = [
+            (
+                "query 为空",
+                SearchFilesParams {
+                    query: "  ".to_string(),
+                    root: None,
+                    max_results: None,
+                },
+            ),
+            (
+                "query 超长（>256）",
+                SearchFilesParams {
+                    query: "x".repeat(257),
+                    root: None,
+                    max_results: None,
+                },
+            ),
+            (
+                "root 绝对路径",
+                SearchFilesParams {
+                    query: "main".to_string(),
+                    root: Some("C:/proj/src".to_string()),
+                    max_results: None,
+                },
+            ),
+        ];
+        for (label, params) in cases {
+            let err = backend.search_files(params).await.expect_err("应拒绝");
+            assert_eq!(err.device_code(), DeviceErrorCode::CmdInvalid, "{label}");
+        }
+        // 索引未接线 → cmd.engine_not_ready（诚实降级）
+        let unwired = CoreStateBackend::new(r2_test_core_state());
+        let err = unwired
+            .search_files(SearchFilesParams {
+                query: "main".to_string(),
+                root: None,
+                max_results: None,
+            })
+            .await
+            .expect_err("未接线应拒绝");
+        assert_eq!(err.device_code(), DeviceErrorCode::CmdEngineNotReady);
+    }
+
+    /// C21：maxResults 钳制 [1, 100]（注册表桌面端钳制）
+    #[tokio::test]
+    async fn r2_12_search_files_clamps_max_results() {
+        let files: Vec<String> = (0..150).map(|i| format!("C:/proj/f{i}.rs")).collect();
+        let backend = search_backend(files, Some("C:/proj"));
+        let result = backend
+            .search_files(SearchFilesParams {
+                query: "f".to_string(),
+                root: None,
+                max_results: Some(10_000),
+            })
+            .await
+            .expect("搜索应成功");
+        assert_eq!(result.results.len(), 100, "maxResults 超限钳制到 100");
+        let result = backend
+            .search_files(SearchFilesParams {
+                query: "f".to_string(),
+                root: None,
+                max_results: Some(0),
+            })
+            .await
+            .expect("搜索应成功");
+        assert_eq!(result.results.len(), 1, "maxResults 钳制下限 1");
+    }
+
+    /// C30：设置确认回执（query → expired / withdraw → withdrawn；
+    /// 空 confirmRequestId → cmd.invalid）
+    #[tokio::test]
+    async fn r2_12_settings_confirm_receipts() {
+        let backend = CoreStateBackend::new(r2_test_core_state());
+        let withdrawn = backend
+            .settings_confirm(SettingsConfirmParams {
+                confirm_request_id: "req-1".to_string(),
+                action: SettingsConfirmAction::Withdraw,
+            })
+            .await
+            .expect("撤回应成功");
+        assert_eq!(withdrawn.status, SettingsConfirmStatus::Withdrawn);
+        assert!(withdrawn.reason.is_some(), "撤回回执应携带原因（回执语义）");
+        let queried = backend
+            .settings_confirm(SettingsConfirmParams {
+                confirm_request_id: "req-1".to_string(),
+                action: SettingsConfirmAction::Query,
+            })
+            .await
+            .expect("查询应成功");
+        assert_eq!(queried.status, SettingsConfirmStatus::Expired);
+        assert!(queried.reason.is_some(), "查询回执应携带原因（回执语义）");
+        let err = backend
+            .settings_confirm(SettingsConfirmParams {
+                confirm_request_id: "  ".to_string(),
+                action: SettingsConfirmAction::Query,
+            })
+            .await
+            .expect_err("空 id 应拒绝");
+        assert_eq!(err.device_code(), DeviceErrorCode::CmdInvalid);
+    }
+
+    /// C31：暂停定时自动执行（真实 scheduler 装配链——缺省 3600、
+    /// 钳制 [60, 86400]、重复暂停刷新 pausedUntil）
+    #[tokio::test]
+    async fn r2_12_pause_automation_via_real_scheduler() {
+        let state = r2_test_core_state();
+        assert!(
+            state.scheduler_registry().is_some(),
+            "真实引擎路径调度器应已装配"
+        );
+        let backend = CoreStateBackend::new(Arc::clone(&state));
+        let before = crate::server::now_ms();
+        let result = backend
+            .pause_automation(PauseAutomationParams { duration_sec: None })
+            .await
+            .expect("暂停应成功");
+        assert!(result.ok);
+        assert!(
+            result.paused_until >= before + 3600 * 1000,
+            "缺省 durationSec=3600"
+        );
+        let registry = state.scheduler_registry().expect("调度器");
+        assert_eq!(registry.pause_deadline(), Some(result.paused_until));
+        // 钳制：<60 → 60；>86400 → 86400（注册表契约，桌面端钳制）
+        let min = backend
+            .pause_automation(PauseAutomationParams { duration_sec: Some(5) })
+            .await
+            .expect("钳制下限");
+        let expected_min = before + 60 * 1000;
+        assert!(min.paused_until >= expected_min, "钳制下限 60s：{min:?}");
+        assert!(min.paused_until <= expected_min + 5_000, "钳制下限 60s（含余量）：{min:?}");
+        let max = backend
+            .pause_automation(PauseAutomationParams { duration_sec: Some(999_999) })
+            .await
+            .expect("钳制上限");
+        let expected_max = before + 86400 * 1000;
+        assert!(max.paused_until >= expected_max, "钳制上限 86400s：{max:?}");
+        assert!(max.paused_until <= expected_max + 5_000, "钳制上限 86400s（含余量）：{max:?}");
+        // 重复暂停刷新 pausedUntil（R2-11 §11）
+        let refreshed = backend
+            .pause_automation(PauseAutomationParams { duration_sec: Some(120) })
+            .await
+            .expect("刷新");
+        assert!(refreshed.paused_until < max.paused_until, "刷新应覆盖旧截止");
+        assert_eq!(registry.pause_deadline(), Some(refreshed.paused_until));
+    }
+
+    /// C22：资源 URL 占位（ApiBackend 缺省实现 = 501 cmd.unknown——
+    /// F4 §5.4 资源代理未实现，诚实降级不捏造 URL）
+    #[tokio::test]
+    async fn r2_12_asset_url_placeholder_not_implemented() {
+        let backend = CoreStateBackend::new(r2_test_core_state());
+        let err = backend
+            .asset_url(conex_types::device::AssetUrlParams {
+                path: "docs/x.png".to_string(),
+                kind: conex_types::device::AssetKind::Image,
+            })
+            .await
+            .expect_err("占位端点必须返回错误");
+        assert_eq!(err.device_code(), DeviceErrorCode::CmdUnknown);
     }
 }

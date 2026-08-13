@@ -426,6 +426,10 @@ pub(crate) struct SchedulerComponents {
     store: Arc<dyn SchedStore>,
     /// is_daemon 独立 run 拉起点（None = 未接线，daemon 降级 steering）
     launcher: Option<Arc<dyn DaemonRunLauncher>>,
+    /// 暂停开关（R2-12c C31 pauseAutomation 落点；F6 §8.2「受限触发」——
+    /// 一次性指令不改变持久化配置：暂停为纯内存态，重启不恢复）：
+    /// Some(epoch ms) = 暂停至该时刻；None = 未暂停
+    pause: Arc<Mutex<Option<u64>>>,
     /// 测试钩子：固定短触发延迟（免等分钟级真实触发；生产构建零影响）
     #[cfg(test)]
     fire_override: Arc<Mutex<Option<u64>>>,
@@ -456,6 +460,7 @@ impl SchedulerRegistry {
                 events,
                 store,
                 launcher,
+                pause: Arc::new(Mutex::new(None)),
                 #[cfg(test)]
                 fire_override: Arc::new(Mutex::new(None)),
             },
@@ -611,6 +616,49 @@ impl SchedulerRegistry {
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = Some(ms);
     }
+
+    /// 暂停定时自动执行（R2-12c C31 pauseAutomation；F6 §8.2「受限
+    /// 触发」——一次性指令，不改变持久化配置：暂停为内存态，重启不
+    /// 恢复）。duration_sec 由命令面钳制（注册表 60-86400）；重复调用
+    /// 刷新 pausedUntil（R2-11 §11「重复暂停刷新 pausedUntil」）。
+    /// 返回暂停截止时刻（epoch ms）。
+    pub(crate) fn pause_for(&self, duration_sec: u64) -> u64 {
+        let paused_until = now_ms().saturating_add(duration_sec.saturating_mul(1000));
+        *self
+            .components
+            .pause
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(paused_until);
+        tracing::info!(
+            target: "sched",
+            duration_sec,
+            paused_until,
+            "定时自动执行已临时暂停（内存态，重启不恢复）"
+        );
+        paused_until
+    }
+
+    /// 当前暂停截止时刻（None = 未暂停；C31 查询面与测试断言）
+    // R2-12c 备注：生产查询面（M6 §12.4 网关轮）接线前仅测试消费——
+    // dead_code 静音（测试构建保持检查）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn pause_deadline(&self) -> Option<u64> {
+        *self
+            .components
+            .pause
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// 测试钩子：直接设置暂停截止时刻（免等真实时长；生产构建零影响）
+    #[cfg(test)]
+    pub(crate) fn set_paused_until_ms_for_test(&self, until: Option<u64>) {
+        *self
+            .components
+            .pause
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = until;
+    }
 }
 
 impl std::fmt::Debug for SchedulerRegistry {
@@ -672,6 +720,33 @@ async fn fire_cron(
     task: CronTask,
     allow_rebuild_without_entry: bool,
 ) {
+    // 段 0（R2-12c C31 暂停门控）：暂停期内到点不触发——不发射事件、
+    // 不推进 fired_count、不落库；sleep 延后到暂停结束时刻重试（恢复
+    // 后继续照常触发）。暂停为一次性指令（F6 §8.2），不改变持久化配置
+    if let Some(paused_until) = *components.pause.lock().unwrap_or_else(|e| e.into_inner()) {
+        let now = now_ms();
+        if now < paused_until {
+            let delay = paused_until - now;
+            tracing::info!(
+                target: "sched",
+                cron_id = %task.cron_id,
+                delay_ms = delay,
+                "cron 暂停期内到点：延后到暂停结束时刻重试（C31）"
+            );
+            let handle = spawn_fire_task(components.clone(), task.clone(), delay);
+            let mut map = components.tasks.lock().unwrap_or_else(|e| e.into_inner());
+            match map.get_mut(&task.cron_id) {
+                // 常规路径：替换当前 sleep（当前任务即自身，替换后自然收尾）
+                Some(entry) => entry.sleep_task = handle,
+                // restore 补发路径：表内无条目，直接挂载
+                None if allow_rebuild_without_entry => {
+                    map.insert(task.cron_id.clone(), CronEntry { task, sleep_task: handle });
+                }
+                _ => handle.abort(), // 已被取消/移除 → 不重建（防复活）
+            }
+            return;
+        }
+    }
     // 段 1：同步触发核心（幂等守卫 / 事件 / 计数 / 落库）
     let outcome = match std::panic::catch_unwind(AssertUnwindSafe(|| {
         fire_once(&components, &task)
@@ -1463,6 +1538,88 @@ mod tests {
     #[test]
     fn steering_group_id_shape() {
         assert_eq!(steering_group_id("cron-0"), "cron-cron-0");
+    }
+
+    // ── R2-12c C31：暂停定时自动执行（pauseAutomation 落点）──
+
+    /// pause_for 设置暂停截止时刻（now + duration*1000），重复调用刷新
+    /// （覆盖旧值）；暂停不改变持久化 store（F6 §8.2 一次性指令）。
+    #[test]
+    fn scheduler_registry_pause_for_sets_and_refreshes_deadline() {
+        let (registry, _, _, store) = test_registry();
+        let before = now_ms();
+        let first = registry.pause_for(3600);
+        assert!(
+            first >= before + 3600 * 1000,
+            "pause_for(3600) 截止应 ≈ now+1h：{first}"
+        );
+        assert_eq!(registry.pause_deadline(), Some(first));
+        // 重复暂停刷新 pausedUntil（R2-11 §11）：覆盖为更短时长
+        let refreshed = registry.pause_for(120);
+        assert!(refreshed < first, "刷新应覆盖旧截止");
+        assert_eq!(registry.pause_deadline(), Some(refreshed));
+        // 不改变持久化配置（store 无任务声明落库）
+        assert!(store.load_all().is_empty(), "暂停不得落库（内存态）");
+    }
+
+    /// 暂停期内到点不触发（无事件、无 steering、fired_count 不推进）；
+    /// 暂停结束后恢复照常触发（事件/计数/队列正常）——「暂停后定时任务
+    /// 不触发 / 恢复后继续」验收（C31 测试要求）。
+    #[tokio::test]
+    async fn scheduler_registry_pause_blocks_fire_then_resume_continues() {
+        let (registry, pending, events, store) = test_registry();
+        registry.set_fire_override_ms(40);
+        // 暂停至 now+250ms；fire_override=40ms → 首个到期点在暂停窗口内
+        let pause_until = now_ms() + 250;
+        registry.set_paused_until_ms_for_test(Some(pause_until));
+        registry
+            .register(test_input("* * * * *", Some(2), false))
+            .await
+            .expect("注册应成功");
+        assert!(registry.has_active(), "暂停不改变任务登记态");
+        // 暂停窗口内（150ms）：不得有任何触发痕迹
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(
+            events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            "暂停窗口内不得发射 CronFired"
+        );
+        assert!(
+            snapshot_queue(&pending).is_empty(),
+            "暂停窗口内不得注入 steering 条目"
+        );
+        let persisted = store.load_all();
+        assert_eq!(persisted[0].fired_count, 0, "暂停窗口内 fired_count 不得推进");
+        assert!(persisted[0].enabled, "暂停不得禁用任务");
+        // 暂停结束后：恢复触发（max=2 → 两次触发后停止）
+        let events_cond = Arc::clone(&events);
+        let pending_cond = Arc::clone(&pending);
+        wait_until(
+            "暂停结束恢复触发（CronFired 2 条 + 队列完成通知）",
+            move || {
+                events_cond
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    == 2
+                    && queue_len(&pending_cond) == 1
+            },
+        )
+        .await;
+        let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(emitted.len(), 2, "恢复后应照常触发两次（迭代 1、2）");
+        assert!(
+            emitted.iter().all(|event| matches!(
+                event,
+                CronEvent::Fired { fired_at_ms, .. } if *fired_at_ms >= pause_until
+            )),
+            "恢复后的触发时刻必须晚于暂停截止"
+        );
+        drop(emitted);
+        let persisted = store.load_all();
+        assert_eq!(persisted[0].fired_count, 2);
+        assert!(!persisted[0].enabled, "max 达到后停止");
+        assert!(!registry.has_active());
     }
 
     // ── LocalDb 真适配（D6 §3.1 ①）────────────────────────────────

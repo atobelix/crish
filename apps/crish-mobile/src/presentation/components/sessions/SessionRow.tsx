@@ -1,6 +1,9 @@
 // 会话列表行（R2-05 部分 4：完整行形态；F5 §4.1 / F1 §4.4 / R2UX §2 密度·触达·状态行）
 // - 结构：标题（1 行截断）+ 预览（最后消息 1 行灰字，纯函数派生注入）+ 元信息行
 //   （相对时间 + 运行中指示）+ 右侧角标区（未读数字角标 + 审批角标复用 ApprovalBadge）；
+// - 流式预览（R2UX-05-02 最小接入）：previewStreaming=true 时预览文本经 StreamingText
+//   节流渐进渲染 + 行尾静态「▍」光标（尾部条目为 message-delta 等增量类型时，
+//   会话列表实时反映助手正在生成的内容，光标不逐字动画——裁决 A3）；
 // - 状态指示（F1 §5.2 会话状态派生）：运行中 = activeRunIds 非空（agent-start 后）；
 //   待审批 = pendingApprovalCount > 0（ApprovalBadge，F2 口径）；未读 = unreadCount > 0
 //   （F5 §6.3 lastReadSequence 差值派生，本地游标）；
@@ -13,6 +16,7 @@ import { useTheme } from '@/adapters/platform/theme';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { formatRelativeTime } from '@/domain/pure/time';
 import ApprovalBadge from '@/presentation/components/blocks/ApprovalBadge';
+import { StreamingText } from '@/presentation/components/blocks/StreamingText';
 
 /** 未读角标上限（F1 §5.3 角标上限 99+） */
 export const UNREAD_BADGE_CAP = 99;
@@ -26,6 +30,9 @@ export interface SessionRowProps {
   session: SessionSummary;
   /** 最后消息预览（纯函数派生：lastPreviewOfWindow）；空串 = 不渲染预览行 */
   preview?: string;
+  /** 预览是否处于流式期（尾部条目为增量类型；true = 节流渐进渲染 + 行尾 ▍ 光标，
+   * R2UX-05-02 最小接入；缺省 false 保持原行为） */
+  previewStreaming?: boolean;
   /** 相对时间基准（缺省 Date.now；测试注入固定值） */
   nowMs?: number;
   /** 行点击 → 会话详情（F5 §4.1 会话项点击 → 会话详情） */
@@ -38,6 +45,7 @@ export interface SessionRowProps {
 export const SessionRow = memo(function SessionRow({
   session,
   preview = '',
+  previewStreaming = false,
   nowMs = Date.now(),
   onOpen,
   onOpenApprovals,
@@ -81,13 +89,28 @@ export const SessionRow = memo(function SessionRow({
           {title}
         </Text>
         {preview !== '' ? (
-          <Text
-            testID="session-row-preview"
-            style={[styles.preview, { color: theme.textSecondary }]}
-            numberOfLines={1}
-          >
-            {preview}
-          </Text>
+          previewStreaming ? (
+            // 流式预览（R2UX-05-02）：节流渐进渲染 + 行尾静态 ▍ 光标；
+            // identity 用会话级常量键（跨增量帧稳定，帧更新只合并渲染）
+            <StreamingText
+              testID="session-row-preview"
+              identity={`session:${session.id}`}
+              text={preview}
+              streaming
+              cursorTestID="session-row-preview-streaming"
+              cursorStyle={{ color: theme.textTertiary }}
+              style={[styles.preview, { color: theme.textSecondary }]}
+              numberOfLines={1}
+            />
+          ) : (
+            <Text
+              testID="session-row-preview"
+              style={[styles.preview, { color: theme.textSecondary }]}
+              numberOfLines={1}
+            >
+              {preview}
+            </Text>
+          )
         ) : null}
         <View style={styles.metaLine}>
           <Text

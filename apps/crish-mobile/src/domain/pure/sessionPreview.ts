@@ -12,6 +12,7 @@ import type {
 } from '@/domain/store/eventReducers';
 import { readRecord, readString } from '@/domain/store/eventReducers';
 import { stripAnsi } from './ansi';
+import { isStreamingEntry } from './streamingTypes';
 
 /** 列表预览单行上限（F5 §5.3 索引预览 ≤80 字符 → 收窄 60，与 F3 §3.4.2 折叠预览同量级） */
 export const SESSION_PREVIEW_MAX = 60;
@@ -82,4 +83,13 @@ export function previewText(entry: FeedEntry): string {
 export function lastPreviewOfWindow(window: EventWindow | undefined): string {
   const tail = window?.entries[window.entries.length - 1];
   return tail ? previewText(tail) : '';
+}
+
+/** 事件窗口尾部条目是否处于流式期（增量类型判定；会话列表预览流式标记数据面，
+ * R2UX-05-02：预览文本流式渐进渲染 + 行尾 ▍ 光标的开关） */
+export function tailIsStreamingOfWindow(
+  window: EventWindow | undefined
+): boolean {
+  const tail = window?.entries[window.entries.length - 1];
+  return tail ? isStreamingEntry(tail) : false;
 }

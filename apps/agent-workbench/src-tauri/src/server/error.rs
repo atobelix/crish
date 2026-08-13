@@ -129,6 +129,10 @@ impl ServerError {
                 | DeviceErrorCode::CmdEngineNotReady
                 | DeviceErrorCode::CmdSessionBusy => 409,
                 DeviceErrorCode::CmdTooManyRequests => 429,
+                // R2-12c C22：命令未注册/未实现 → 501（资源代理占位端点
+                // 语义；M6 C27「v1 返回 cmd.unknown」的 HTTP 形态——
+                // 端点已登记但实现未接线，诚实降级而非 500）
+                DeviceErrorCode::CmdUnknown => 501,
                 _ => 500,
             },
         }
@@ -204,6 +208,11 @@ mod tests {
         assert_eq!(
             ServerError::protocol(DeviceErrorCode::CmdTooManyRequests, "x").http_status(),
             429
+        );
+        // R2-12c C22：命令未注册/未实现 → 501（占位端点语义）
+        assert_eq!(
+            ServerError::protocol(DeviceErrorCode::CmdUnknown, "x").http_status(),
+            501
         );
     }
 

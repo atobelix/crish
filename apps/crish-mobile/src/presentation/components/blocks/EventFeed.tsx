@@ -25,7 +25,12 @@ import {
 import type { FeedEntry } from '@/domain/store/eventReducers';
 import { deriveErrorLevel, filterFeed } from '@/domain/store/eventReducers';
 import { useTheme } from '@/adapters/platform/theme';
-import { EventRow, EVENT_ROW_HEIGHT, TOOL_KIND_WHITELIST } from './EventRow';
+import {
+  EventRow,
+  EVENT_ROW_HEIGHT,
+  TOOL_KIND_WHITELIST,
+  feedEntryKey,
+} from './EventRow';
 
 /** 吸底跟随阈值（R2UX-05-03 / M4 §5.5：40dp，上翻超阈值暂停跟随） */
 export const AUTO_FOLLOW_THRESHOLD_DP = 40;
@@ -178,11 +183,6 @@ export function EventFeed({
       />
     </View>
   );
-}
-
-/** 条目稳定键（type + sequence 幂等键 + receivedAtMs 兜底，F3 §3.1.1 防重放语义） */
-function feedEntryKey(entry: FeedEntry): string {
-  return `${entry.sessionId}:${entry.type}:${entry.sequence ?? 'seq-null'}:${entry.receivedAtMs}`;
 }
 
 /** 过滤 chip（R2UX-05-06 过滤条；44pt 触控热区，M4 §3.4） */

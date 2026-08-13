@@ -19,12 +19,14 @@
 
 use conex_types::device::commands::{TaskOutputParams, TaskOutputResult};
 use conex_types::device::{
-    ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
-    CancelRunResult, DenyParams, EventPageParams, EventPageResult, FlowSnapshotParams,
-    FlowSnapshotResult, GetSettingsParams, GetSettingsResult, ListCommandsResult,
-    ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult,
-    ListTasksParams, ListTasksResult, RunControlParams, RunControlResult, RunEventsParams,
-    RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult, SearchIndexResult,
+    ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, AssetUrlParams,
+    AssetUrlResult, CancelRunParams, CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams,
+    EventPageResult, FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
+    ListCommandsResult, ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams,
+    ListSessionsResult, ListTasksParams, ListTasksResult, PauseAutomationParams,
+    PauseAutomationResult, RunControlParams, RunControlResult, RunEventsParams, RunSnapshotParams,
+    RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams, SearchFilesResult,
+    SearchIndexResult, SettingsConfirmParams, SettingsConfirmResult,
 };
 
 use crate::server::ServerError;
@@ -219,6 +221,58 @@ pub trait ApiBackend: Send + Sync {
     ) -> Result<GetSettingsResult, ServerError> {
         Err(ServerError::internal(
             "settings_set 未接线（CoreStateBackend 由 R1-04 注入）",
+        ))
+    }
+
+    // ── R2-12c 新增面：F4 文件域 C21/C22 + F6 设置域 C30/C31 ──
+
+    /// C21 递归文件名搜索（GET /v1/search/files；对应引擎
+    /// core_search_files 搜索逻辑——共享搜索索引 + conex-search 模糊
+    /// 匹配，结果钳制 100 条；
+    /// 缺省 = 未接线 internal——CoreStateBackend 覆盖为真实直调
+    /// （需装配面注入 SharedSearchState + 工作区根））
+    async fn search_files(
+        &self,
+        _params: SearchFilesParams,
+    ) -> Result<SearchFilesResult, ServerError> {
+        Err(ServerError::internal(
+            "search_files 未接线（CoreStateBackend 由 R2-12c 注入；需装配面注入搜索索引）",
+        ))
+    }
+
+    /// C22 资源 URL（GET /v1/assets/url；F4 §5.4 HTTP 资源代理 +
+    /// 10 分钟令牌未实现——命令面占位：恒 501 cmd.unknown 诚实降级
+    /// （开放问题 14.4-4 网络域评审后接线）；本缺省即占位语义，各实现
+    /// 方默认继承）
+    async fn asset_url(&self, _params: AssetUrlParams) -> Result<AssetUrlResult, ServerError> {
+        Err(ServerError::protocol(
+            DeviceErrorCode::CmdUnknown,
+            "资源 URL 代理未实现（F4 §5.4：HTTP 资源代理 + 10 分钟令牌；开放问题 14.4-4 评审后接线）",
+        ))
+    }
+
+    /// C30 桌面确认请求回执（POST /v1/settings/confirm；R1-04 直调面
+    /// 无确认通道（D-13）——query → expired / withdraw → withdrawn
+    /// 幂等回执；
+    /// 缺省 = 未接线 internal——CoreStateBackend 覆盖为真实回执）
+    async fn settings_confirm(
+        &self,
+        _params: SettingsConfirmParams,
+    ) -> Result<SettingsConfirmResult, ServerError> {
+        Err(ServerError::internal(
+            "settings_confirm 未接线（CoreStateBackend 由 R2-12c 注入）",
+        ))
+    }
+
+    /// C31 暂停定时自动执行（POST /v1/settings/pause-automation；直调
+    /// SchedulerRegistry 暂停开关——一次性指令不改变持久化配置；
+    /// 缺省 = 未接线 internal——CoreStateBackend 覆盖为真实直调）
+    async fn pause_automation(
+        &self,
+        _params: PauseAutomationParams,
+    ) -> Result<PauseAutomationResult, ServerError> {
+        Err(ServerError::internal(
+            "pause_automation 未接线（CoreStateBackend 由 R2-12c 注入）",
         ))
     }
 }

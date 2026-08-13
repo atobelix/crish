@@ -1,13 +1,15 @@
 // EventRow 单测（F3 §3.3 渲染面 + 纯函数面）：
 // - 纯函数：eventKindLabel 全部分组 / clipSummary 截断 / summarizeEventFrame 各事件摘要
 //   （含宽容缺省、流式类型、错误态）/ formatFeedTime 本地时间；
-// - 组件冒烟：正常行 / 错误高亮行 / 流式光标行（memo 组件渲染路径）。
-import { render, screen } from '@testing-library/react-native';
+// - 组件冒烟：正常行 / 错误高亮行 / 流式光标行（memo 组件渲染路径）；
+// - 流式渲染（R2UX-05-02）：preview 帧渐进（同 seq 覆盖节流渲染）/ 终值替换（无闪烁）。
+import { act, render, screen } from '@testing-library/react-native';
 import type { FeedEntry } from '@/domain/store/eventReducers';
 import {
   EventRow,
   clipSummary,
   eventKindLabel,
+  feedEntryKey,
   formatFeedTime,
   summarizeEventFrame,
 } from './EventRow';
@@ -211,5 +213,47 @@ describe('EventRow 组件冒烟', () => {
   it('非流式类型无光标', async () => {
     await render(<EventRow entry={makeEntry('message-end')} />);
     expect(screen.queryByTestId('event-row-streaming')).toBeNull();
+  });
+});
+
+describe('EventRow 流式渲染（R2UX-05-02：preview 渐进 / 新条目立即）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('preview 帧渐进：同 seq 覆盖保持同节点（键稳定），窗口合并后跳到最新摘要', async () => {
+    const entry = makeEntry('message-delta', { text: '帧1' });
+    await render(<EventRow entry={entry} />);
+    const identity = feedEntryKey(entry);
+    // 同 seq 覆盖（preview → 正式帧：类型不变，receivedAtMs 保留——键稳定不重挂载）
+    await screen.rerender(<EventRow entry={{ ...entry, text: '帧2' }} />);
+    await screen.rerender(<EventRow entry={{ ...entry, text: '帧3' }} />);
+    expect(screen.getByTestId('event-row-summary')).toBeTruthy();
+    expect(identity).toBe(feedEntryKey({ ...entry, text: '帧3' }));
+    // 窗口未到期：仍显示首帧摘要；到期后一次跳到最新（中间帧被合并）
+    expect(screen.getByText('正文增量：帧1 ▍')).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(18);
+    });
+    expect(screen.getByText('正文增量：帧3 ▍')).toBeTruthy();
+    expect(screen.queryByText('正文增量：帧2 ▍')).toBeNull();
+  });
+
+  it('新条目（无 seq 追加帧 / 新 seq）：立即渲染，不继承旧条目节流状态', async () => {
+    const first = makeEntry('message-delta', { text: '旧增量' });
+    await render(<EventRow entry={first} />);
+    expect(screen.getByText('正文增量：旧增量 ▍')).toBeTruthy();
+    // 新条目：receivedAtMs 变化（新帧追加）→ 新 identity → 立即渲染
+    const next = {
+      ...first,
+      text: '新增量',
+      receivedAtMs: first.receivedAtMs + 1,
+    };
+    await screen.rerender(<EventRow entry={next} />);
+    expect(screen.getByText('正文增量：新增量 ▍')).toBeTruthy(); // 不等窗口
+    expect(screen.queryByText('正文增量：旧增量 ▍')).toBeNull();
   });
 });
