@@ -28,6 +28,7 @@ use crate::definition::ToolError;
 use crate::tools::subagent::{SubagentCapabilityMode, SubagentRole};
 use conex_types::error::codes;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// 配额键：可配上限（默认 [DEFAULT_EXPLORE_DOCS_QUOTA]）
@@ -129,6 +130,18 @@ pub trait ExploreDocsQuotaStore: Send + Sync + std::fmt::Debug {
     fn release(&self, _session_id: &str, _run_id: &str) {}
 }
 
+/// B5 毒丸恢复计数原语：`InMemoryExploreDocsQuotaStore.inner` 锁中毒恢复
+/// 累计次数（只在毒化分支 `fetch_add`，正常路径零开销；供本 crate 毒化测
+/// 断言 + S3 埋点消费）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 锁中毒恢复累计计数（B5：毒丸恢复观测化；当前消费者 = 本 crate 毒化测，
+/// S3 埋点消费为后续切片，届时移除 allow）
+#[allow(dead_code)]
+pub(crate) fn poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
+
 /// 内存版存储（测试 / 未接线兜底：进程内计数，跨进程重启不恢复——
 /// 持久化语义由引擎侧 session_meta 后端承担）
 #[derive(Debug, Default)]
@@ -145,12 +158,12 @@ impl InMemoryExploreDocsQuotaStore {
 
 impl ExploreDocsQuotaStore for InMemoryExploreDocsQuotaStore {
     fn snapshot(&self, session_id: &str) -> ExploreDocsQuotaSnapshot {
-        self.inner
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(session_id)
-            .cloned()
-            .unwrap_or_default()
+        let map = self.inner.lock().unwrap_or_else(|e| {
+            tracing::error!("探索文档配额快照读 inner 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
+        map.get(session_id).cloned().unwrap_or_default()
     }
 
     fn consume(
@@ -158,7 +171,11 @@ impl ExploreDocsQuotaStore for InMemoryExploreDocsQuotaStore {
         session_id: &str,
         run_id: &str,
     ) -> Result<ExploreDocsQuotaSnapshot, String> {
-        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self.inner.lock().unwrap_or_else(|e| {
+            tracing::error!("探索文档配额消耗 inner 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let entry = map.entry(session_id.to_string()).or_default();
         entry.consumed = entry.consumed.saturating_add(1);
         entry.last_consumer_run_id = Some(run_id.to_string());
@@ -173,7 +190,11 @@ impl ExploreDocsQuotaStore for InMemoryExploreDocsQuotaStore {
     ) -> Result<ExploreDocsQuotaSnapshot, String> {
         // F3 #9：互斥内读改写——检查与占用原子（并发调用只放行恰好
         // quota 份，无 check-then-consume 竞态窗口）
-        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self.inner.lock().unwrap_or_else(|e| {
+            tracing::error!("探索文档配额原子占用 inner 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let entry = map.entry(session_id.to_string()).or_default();
         if entry.consumed >= quota {
             return Err(format!(
@@ -188,7 +209,11 @@ impl ExploreDocsQuotaStore for InMemoryExploreDocsQuotaStore {
 
     fn release(&self, session_id: &str, _run_id: &str) {
         // 补偿：reserve 后写盘失败回滚占用（下限 0，不产生负计数）
-        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self.inner.lock().unwrap_or_else(|e| {
+            tracing::error!("探索文档配额释放 inner 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         if let Some(entry) = map.get_mut(session_id) {
             entry.consumed = entry.consumed.saturating_sub(1);
         }
@@ -418,6 +443,67 @@ mod tests {
     use crate::context::{create_mock_tool_context, ToolContext};
     use crate::tools::subagent::SubagentState;
     use conex_test_utils::TempWorkspace;
+
+    // ── 日志捕获（B1-4 毒化测三要素用）──
+    //
+    // agent-tools 未声明 tracing-subscriber（禁止新增依赖），以 tracing
+    // 核心 trait 自建最小捕获订阅器：仅收集事件 message 字段，足够断言
+    // 毒丸恢复的 tracing::error 日志出现。
+
+    /// 最小日志捕获订阅器（仅捕获事件 message 字段）
+    #[derive(Default)]
+    struct CaptureSubscriber {
+        lines: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl tracing::Subscriber for CaptureSubscriber {
+        fn enabled(&self, _metadata: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _span: &tracing::span::Attributes<'_>) -> tracing::Id {
+            tracing::Id::from_u64(1)
+        }
+        fn record(&self, _span: &tracing::Id, _values: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _span: &tracing::Id, _follows: &tracing::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut visitor = MessageVisitor { message: None };
+            event.record(&mut visitor);
+            if let Some(message) = visitor.message {
+                self.lines.lock().unwrap().push(message);
+            }
+        }
+        fn enter(&self, _span: &tracing::Id) {}
+        fn exit(&self, _span: &tracing::Id) {}
+        fn try_close(&self, _id: tracing::Id) -> bool {
+            true
+        }
+    }
+
+    /// 事件字段访问器：取 `message` 字段的 Debug 渲染
+    struct MessageVisitor {
+        message: Option<String>,
+    }
+
+    impl tracing::field::Visit for MessageVisitor {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if field.name() == "message" {
+                self.message = Some(format!("{value:?}"));
+            }
+        }
+    }
+
+    /// 在捕获订阅器下执行闭包，返回 (结果, 捕获的事件 message 行)
+    fn with_capture<F, R>(f: F) -> (R, Vec<String>)
+    where
+        F: FnOnce() -> R,
+    {
+        let subscriber = CaptureSubscriber::default();
+        let lines = Arc::clone(&subscriber.lines);
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let result = f();
+        let captured = lines.lock().unwrap().clone();
+        (result, captured)
+    }
 
     /// 测试存储：固定注入已消耗快照（不递增）
     #[derive(Debug)]
@@ -767,6 +853,33 @@ mod tests {
             .unwrap();
         assert!(ws.path().join("doc.md").is_file());
         assert_eq!(store.snapshot("sess-q").consumed, 1);
+    }
+
+    // ── B1-4 毒丸恢复观测化 ──
+
+    /// 毒化测（B1-4，三要素：正常返回 + 日志 + 计数）：inner 锁毒化后
+    /// consume 仍正常返回（恢复式继续，不 panic、不传播），并发出
+    /// tracing::error 日志、毒化恢复计数 +1
+    #[test]
+    fn poisoned_inner_lock_recovers_with_log_and_count() {
+        let store = InMemoryExploreDocsQuotaStore::new();
+        crate::test_support::poison_std_lock(&store.inner);
+        let before = poison_recovery_count();
+
+        let (result, lines) = with_capture(|| store.consume("sess-poison", "run-1"));
+
+        let snapshot = result.expect("毒化后 consume 仍正常返回");
+        assert_eq!(snapshot.consumed, 1, "恢复式继续后仍可正常计数");
+        let joined = lines.join("\n");
+        assert!(
+            joined.contains("inner 锁中毒"),
+            "应捕获锁中毒 error 日志：\n{joined}"
+        );
+        assert_eq!(
+            poison_recovery_count(),
+            before + 1,
+            "毒化恢复计数应 +1"
+        );
     }
 
     // ── 持久化格式与键编码 ──

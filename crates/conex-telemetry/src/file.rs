@@ -20,6 +20,7 @@
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use tracing_subscriber::fmt::writer::MakeWriter;
@@ -52,6 +53,19 @@ pub(crate) struct DailyFileWriter {
     dir: PathBuf,
     prefix: String,
     state: Mutex<DailyState>,
+}
+
+/// B1-6 毒丸恢复计数原语：文件层降级恢复事件累计次数（锁毒化恢复 +
+/// 打开失败降级两类事件共用；只在毒化/降级分支 `fetch_add`，正常路径
+/// 零开销；计数不受 `error_reported` 去重影响——每次事件都累计，去重
+/// 仅防日志刷屏；供本 crate 毒化测断言 + S3 埋点消费）
+static FILE_LAYER_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 文件层降级恢复累计计数（B1-6：毒丸恢复观测化；当前消费者 = 本 crate
+/// 毒化测，S3 埋点消费为后续切片，届时移除 allow）
+#[allow(dead_code)]
+pub(crate) fn file_layer_recovery_count() -> u64 {
+    FILE_LAYER_RECOVERIES.load(Ordering::Relaxed)
 }
 
 /// 文件层滚动状态。
@@ -144,7 +158,11 @@ impl MakeWriter<'_> for DailyFileWriter {
     type Writer = FileSink;
 
     fn make_writer(&self) -> Self::Writer {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state = self.state.lock().unwrap_or_else(|e| {
+            tracing::error!("日志文件层 state 锁中毒，按恢复模式继续：{e}");
+            FILE_LAYER_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let today = today_key();
         // 日期变化 → 重置分片号（新文件开始，实现按日轮转）
         if state.day_key.as_deref() != Some(today.as_str()) {
@@ -168,10 +186,13 @@ impl MakeWriter<'_> for DailyFileWriter {
                 }
                 Err(e) => {
                     // 写失败不 panic：降级为空目标，仅首次打印原因
+                    // （error_reported 去重防刷屏，REV-02 口径保留）；
+                    // 计数不受去重影响（每次降级都累计）
                     if !state.error_reported {
-                        eprintln!("[telemetry] file layer unavailable: {}", e);
+                        tracing::error!("日志文件层不可用，降级为空目标：{e}");
                         state.error_reported = true;
                     }
+                    FILE_LAYER_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                     return FileSink::Null;
                 }
             }
@@ -404,6 +425,7 @@ mod tests {
     #![allow(clippy::disallowed_methods)]
 
     use super::*;
+    use std::sync::Arc;
 
     /// 独立临时目录（测试并发安全：进程 id + 纳秒时间戳唯一）
     fn temp_dir(tag: &str) -> PathBuf {
@@ -642,5 +664,138 @@ mod tests {
         ));
         let deleted = cleanup_logs(&dir, &LogRetention::default());
         assert!(deleted.is_empty());
+    }
+
+    // ── B1-6 毒丸恢复观测化 ──
+
+    /// 串行化 B1-6 毒化/降级测（两测共享 `FILE_LAYER_RECOVERIES` 模块计数，
+    /// 并行线程会相互干扰 diff 断言——计数语义不变，仅测试面串行）
+    static RECOVERY_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    /// 毒化 std `Mutex`（持锁线程内 panic → PoisonError 注入；与
+    /// agent-tools test_support::poison_std_lock 同形，测试注入用）
+    fn poison_std_lock<T: Send>(lock: &Mutex<T>) {
+        let _ = std::panic::catch_unwind(|| {
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    let _guard = lock.lock().unwrap();
+                    panic!("模拟持锁 panic（毒化锁）");
+                });
+            });
+        });
+    }
+
+    /// 捕获日志的内存缓冲（fmt writer 共享同一缓冲；对齐
+    /// session-loop/tests/observability.rs 的 LogCapture 模式）
+    #[derive(Default)]
+    struct LogCapture {
+        lines: Mutex<Vec<String>>,
+    }
+
+    impl LogCapture {
+        fn push(&self, line: &str) {
+            self.lines.lock().unwrap().push(line.to_string());
+        }
+        fn snapshot(&self) -> Vec<String> {
+            self.lines.lock().unwrap().clone()
+        }
+    }
+
+    /// fmt writer：Arc 包装共享缓冲
+    struct ArcWriter(Arc<LogCapture>);
+
+    impl std::io::Write for ArcWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            // fmt 会以行调用；按行切分逐行记录
+            let text = String::from_utf8_lossy(buf);
+            for line in text.lines() {
+                self.0.push(line);
+            }
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// 在捕获 subscriber 下执行闭包，返回 (结果, 捕获行)
+    fn with_capture<F, R>(f: F) -> (R, Vec<String>)
+    where
+        F: FnOnce() -> R,
+    {
+        let capture = Arc::new(LogCapture::default());
+        let writer = capture.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || ArcWriter(writer.clone()))
+            .with_max_level(tracing::Level::INFO)
+            .with_ansi(false)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let result = f();
+        let lines = capture.snapshot();
+        (result, lines)
+    }
+
+    /// 毒化测（B1-6 验收 1，三要素：正常返回 + 日志 + 计数）：state 锁
+    /// 毒化后 make_writer 仍正常返回可写 sink（恢复式继续，不 panic），
+    /// 并发出 tracing::error 日志、降级恢复计数 +1
+    #[test]
+    fn poisoned_state_lock_recovers_with_log_and_count() {
+        let _serial = RECOVERY_TEST_LOCK.lock().unwrap();
+        let dir = temp_dir("poison");
+        let writer = DailyFileWriter::new(dir.clone(), "workbench".to_string());
+        poison_std_lock(&writer.state);
+        let before = file_layer_recovery_count();
+
+        let (sink, lines) = with_capture(|| writer.make_writer());
+
+        assert!(
+            matches!(sink, FileSink::File(_)),
+            "毒化后仍正常返回可写文件 sink"
+        );
+        let joined = lines.join("\n");
+        assert!(
+            joined.contains("锁中毒"),
+            "应捕获锁中毒 error 日志：\n{joined}"
+        );
+        assert_eq!(
+            file_layer_recovery_count(),
+            before + 1,
+            "毒化恢复计数应 +1"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 去重不回归（B1-6 验收 2）：打开失败连发多条仅 1 条日志
+    /// （error_reported 去重保留），但计数累计多条（计数不受去重影响）
+    #[test]
+    fn open_failure_logs_once_but_count_accumulates() {
+        let _serial = RECOVERY_TEST_LOCK.lock().unwrap();
+        // 目录路径被普通文件占据 → 打开日志文件恒失败 → 降级 FileSink::Null
+        let dir = temp_dir("dedup");
+        let blocker = dir.join("blocker");
+        fs::write(&blocker, b"not a dir").unwrap();
+
+        let writer = DailyFileWriter::new(blocker.clone(), "workbench".to_string());
+        let before = file_layer_recovery_count();
+
+        let (sinks, lines) = with_capture(|| (0..3).map(|_| writer.make_writer()).collect::<Vec<_>>());
+
+        assert!(
+            sinks.iter().all(|s| matches!(s, FileSink::Null)),
+            "打开失败应全部降级为空目标"
+        );
+        let joined = lines.join("\n");
+        let occurrences = joined.matches("日志文件层不可用").count();
+        assert_eq!(
+            occurrences, 1,
+            "error_reported 去重：连发多条仅 1 条日志，实际：\n{joined}"
+        );
+        assert_eq!(
+            file_layer_recovery_count(),
+            before + 3,
+            "计数不受去重影响：3 次降级应累计 3"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 }
