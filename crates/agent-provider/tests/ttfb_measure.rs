@@ -1,4 +1,4 @@
-﻿//! PE-09 T09.7 首 token 延迟测量（agent-provider 传输 + 解析侧）
+//! PE-09 T09.7 首 token 延迟测量（agent-provider 传输 + 解析侧）
 //!
 //! 真实本地 TCP mock SSE（复用 transport tests 的 serve_sse 模式）：
 //! 慢速分块——首 token 500ms 延迟、总时长 ≈ 5s。经 [stream_frames] +

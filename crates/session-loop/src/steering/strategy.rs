@@ -1,4 +1,4 @@
-﻿//! RecoverySteeringStrategy（对齐 TS recovery-steering-strategy.ts）
+//! RecoverySteeringStrategy（对齐 TS recovery-steering-strategy.ts）
 //!
 //! 唯一活跃策略：phases = `after-tools` / `empty-response`（01 §3.1）。
 //!
