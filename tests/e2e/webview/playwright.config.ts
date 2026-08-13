@@ -1,0 +1,36 @@
+/**
+ * CONN-01 · 真 WebView e2e 独立配置（e2e-webview project）
+ *
+ * 与根 playwright.config.ts 的关系：
+ * - 根 config 的 testDir 递归覆盖 tests/e2e → 已在根 config testIgnore
+ *   排除本目录（/webview\//），避免 L2 中层（npx playwright test tests/e2e）
+ *   误扫需真 Tauri 的 spec；
+ * - 本 config 专跑真 WebView（载体重、需 dev:workbench），**不挂 webServer**
+ *   （Tauri 应用自带 Vite dev server 与 Rust 引擎，由 npm run dev:workbench
+ *   负责拉起）；9222 不可达由 cdp.ts fail-fast 抛可读错误，不静默超时。
+ *
+ * CI 归属建议（主控定夺）：进慢层（nightly/发布前）或手动；
+ * 不并入 PR 中层（中层无 Tauri 宿主，必红）。
+ */
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './',
+  timeout: 30_000,
+  fullyParallel: true,
+  workers: 1,
+  reporter: [['list']],
+  expect: {
+    timeout: 8_000,
+  },
+  use: {
+    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
+  },
+  projects: [
+    {
+      name: 'e2e-webview',
+      testMatch: /webview-smoke\.spec\.ts$/,
+    },
+  ],
+});
