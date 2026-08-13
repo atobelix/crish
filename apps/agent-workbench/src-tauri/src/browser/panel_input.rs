@@ -19,8 +19,8 @@
 //! 注入管线 = `conex_browser::input::InputPipeline`（12 §4.1：语义化
 //! `InputCmd` + 有界 mpsc + 单消费者串行派发 + no-wait + 版本推进）：
 //! - 本模块完成「前端事件语义 → InputCmd」的映射层（12 §3 映射表）；
-//! - 派发 no-wait：`route` 只入队（tokio::spawn 后立即返回 invoke），
-//!   不等待 CDP 注入结果（12 §4.1 no-wait 语义）；
+//! - 派发 no-wait：`route` 只入队（tauri::async_runtime::spawn 后立即返回
+//!   invoke），不等待 CDP 注入结果（12 §4.1 no-wait 语义）；
 //! - 版本推进（R-1/U-1 注入即时 +1）与活动钩子（input_active 升帧 / 维度 15
 //!   上报）由 P1-A 管线内部承担（consumer_loop 注入成功 → bump + activity）；
 //! - 管线随连接生命周期注入/清除（BrowserSlot::connect /
@@ -358,8 +358,11 @@ impl PanelInputRouter {
             );
             return;
         };
-        // no-wait：入队即返回；版本推进/活动钩子由管线消费端内部承担
-        tokio::spawn(async move {
+        // no-wait：入队即返回；版本推进/活动钩子由管线消费端内部承担。
+        // 同步 fn 内 tokio::spawn → tauri::async_runtime::spawn（全局 runtime
+        // 惰性初始化，同步/异步上下文均安全；与 tokio::spawn 语义一致，
+        // 任务 detach 运行，句柄不持有）。
+        tauri::async_runtime::spawn(async move {
             if let Err(error) = pipeline.dispatch(cmd).await {
                 tracing::warn!(target: "browser", error = %error, "输入注入失败（丢弃）");
             }
@@ -372,7 +375,10 @@ impl PanelInputRouter {
             return;
         }
         let this = Arc::clone(self);
-        tokio::spawn(async move {
+        // 同步 fn 内 tokio::spawn → tauri::async_runtime::spawn（全局 runtime
+        // 惰性初始化，同步/异步上下文均安全；闭包内 tokio::time 在 tauri 的
+        // tokio runtime 中运行，interval 语义不变）。
+        tauri::async_runtime::spawn(async move {
             let mut tick = tokio::time::interval(this.flush_ms);
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {

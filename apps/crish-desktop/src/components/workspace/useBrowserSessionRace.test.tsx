@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * useBrowserSession 挂载竞态测试（评审 P2 补强第 10 项）：
  * 「初始查询在途 + 事件先到」的合并语义。
@@ -10,7 +11,6 @@
  *   - 事件先到、查询在途回包：事件态不被过期回包覆盖（修复语义）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import React from 'react';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { mockTauriCommand } from '../../test-setup';
 import { useBrowserSession } from './useBrowserSession';
@@ -43,12 +43,15 @@ describe('useBrowserSession 挂载竞态（查询在途 × 事件先到）', () 
     toast.mockClear();
     eventMock.handlers.clear();
     eventMock.listen.mockImplementation(
-      async (event: string, handler: TauriEventHandler): Promise<() => void> => {
+      async (
+        event: string,
+        handler: TauriEventHandler
+      ): Promise<() => void> => {
         eventMock.handlers.set(event, handler);
         return () => {
           eventMock.handlers.delete(event);
         };
-      },
+      }
     );
   });
 
@@ -61,9 +64,13 @@ describe('useBrowserSession 挂载竞态（查询在途 × 事件先到）', () 
     mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
       state: 'idle' as const,
     }));
-    const { result } = renderHook(() => useBrowserSession({ onShowToast: toast }));
+    const { result } = renderHook(() =>
+      useBrowserSession({ onShowToast: toast })
+    );
     await waitFor(() => expect(result.current.state).toBe('idle'));
-    await waitFor(() => expect(eventMock.handlers.has(BROWSER_STATE_EVENT)).toBe(true));
+    await waitFor(() =>
+      expect(eventMock.handlers.has(BROWSER_STATE_EVENT)).toBe(true)
+    );
 
     // 事件后到：以事件为最新真相
     act(() => emitBrowserEvent({ state: 'running', url: 'https://a.b' }));
@@ -71,34 +78,34 @@ describe('useBrowserSession 挂载竞态（查询在途 × 事件先到）', () 
     expect(result.current.url).toBe('https://a.b');
   });
 
-  it(
-    '竞态（F2 修复语义）：事件先到 → 查询回包（查询时刻的旧快照）不得覆盖事件态',
-    async () => {
-      // 门控查询：回包延迟到事件之后释放（模拟引擎慢响应）
-      let release: () => void = () => {};
-      const gate = new Promise<void>((r) => {
-        release = r;
-      });
-      mockTauriCommand(
-        BROWSER_STATUS_CMD,
-        () => gate.then(() => ({ state: 'idle' as const })),
-      );
-      const { result } = renderHook(() => useBrowserSession({ onShowToast: toast }));
-      await waitFor(() => expect(eventMock.handlers.has(BROWSER_STATE_EVENT)).toBe(true));
+  it('竞态（F2 修复语义）：事件先到 → 查询回包（查询时刻的旧快照）不得覆盖事件态', async () => {
+    // 门控查询：回包延迟到事件之后释放（模拟引擎慢响应）
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    mockTauriCommand(BROWSER_STATUS_CMD, () =>
+      gate.then(() => ({ state: 'idle' as const }))
+    );
+    const { result } = renderHook(() =>
+      useBrowserSession({ onShowToast: toast })
+    );
+    await waitFor(() =>
+      expect(eventMock.handlers.has(BROWSER_STATE_EVENT)).toBe(true)
+    );
 
-      // 事件先到：引擎广播真实状态
-      act(() => emitBrowserEvent({ state: 'running', url: 'https://a.b' }));
-      expect(result.current.state).toBe('running');
+    // 事件先到：引擎广播真实状态
+    act(() => emitBrowserEvent({ state: 'running', url: 'https://a.b' }));
+    expect(result.current.state).toBe('running');
 
-      // 释放查询：回包携带查询时刻的旧快照（idle）
-      await act(async () => {
-        release();
-        await gate;
-      });
-      // 修复语义：事件态优先，过期回包不得覆盖
-      expect(result.current.state).toBe('running');
-      expect(result.current.url).toBe('https://a.b');
-      expect(toast).not.toHaveBeenCalled();
-    },
-  );
+    // 释放查询：回包携带查询时刻的旧快照（idle）
+    await act(async () => {
+      release();
+      await gate;
+    });
+    // 修复语义：事件态优先，过期回包不得覆盖
+    expect(result.current.state).toBe('running');
+    expect(result.current.url).toBe('https://a.b');
+    expect(toast).not.toHaveBeenCalled();
+  });
 });

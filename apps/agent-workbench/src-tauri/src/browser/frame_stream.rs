@@ -93,7 +93,7 @@ pub(crate) struct FrameStreamController {
     /// 当前订阅通道（None = 无订阅者；转发任务每帧读取，空则不下行）
     channel: Mutex<Option<Channel<Response>>>,
     /// 转发任务（单飞：随会话生命周期常驻；帧输出 → Tauri Channel）
-    forwarder: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    forwarder: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     /// 事件发射器（与 BrowserSlot 共用 attach_emitter 接线）
     emitter: Mutex<Option<Arc<dyn Emitter>>>,
     /// 帧状态（0=stopped 1=starting 2=active；browser_frame_status 查询源）
@@ -191,7 +191,11 @@ impl FrameStreamController {
         else {
             return;
         };
-        tokio::spawn(async move {
+        // 统一走 tauri::async_runtime::spawn（全局 runtime 惰性初始化，同步/
+        // 异步上下文均安全——同步 fn 内 tokio::spawn 在无 runtime 上下文会
+        // panic "no reactor running"；与 tokio::spawn 语义一致，任务 detach
+        // 运行，句柄不持有；与 52ba3165 R1-1 同类修复对齐）。
+        tauri::async_runtime::spawn(async move {
             screencast.shutdown().await;
         });
         self.set_state(FrameStreamState::Stopped, None);
@@ -228,7 +232,10 @@ impl FrameStreamController {
         }
         let receiver = screencast.subscribe_frames();
         let ctrl = Arc::clone(self);
-        let task = tokio::spawn(async move {
+        // 同步 fn 内 tokio::spawn → tauri::async_runtime::spawn（全局 runtime
+        // 惰性初始化，同步/异步上下文均安全；JoinHandle 语义不变，仅存字段
+        // 做单飞判空，不 await）。
+        let task = tauri::async_runtime::spawn(async move {
             loop {
                 let Some(frame) = receiver.recv().await else {
                     break; // 会话释放（sink 关闭）

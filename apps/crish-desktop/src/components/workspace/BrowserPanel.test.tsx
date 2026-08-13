@@ -1,10 +1,18 @@
+// @vitest-environment jsdom
 /**
  * BrowserPanel 组件测试：状态渲染 / 按钮可用性矩阵 / 操作 invoke / 错误 toast。
  * invoke 走 test-setup 全局 mock；事件订阅 mock @tauri-apps/api/event。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { mockTauriCommand, mockTauriError } from '../../test-setup';
 import { BrowserPanel } from './BrowserPanel';
 import {
@@ -39,17 +47,21 @@ function renderPanel() {
 describe('BrowserPanel', () => {
   const startBtn = () => screen.getByRole('button', { name: '启动浏览器' });
   const stopBtn = () => screen.getByRole('button', { name: '停止浏览器' });
-  const killBtn = () => screen.getByRole('button', { name: '急停浏览器（强制）' });
+  const killBtn = () =>
+    screen.getByRole('button', { name: '急停浏览器（强制）' });
 
   beforeEach(() => {
     eventMock.handlers.clear();
     eventMock.listen.mockImplementation(
-      async (event: string, handler: TauriEventHandler): Promise<() => void> => {
+      async (
+        event: string,
+        handler: TauriEventHandler
+      ): Promise<() => void> => {
         eventMock.handlers.set(event, handler);
         return () => {
           eventMock.handlers.delete(event);
         };
-      },
+      }
     );
   });
 
@@ -59,7 +71,9 @@ describe('BrowserPanel', () => {
   });
 
   it('idle：显示「未启动」，启动可用，停止/急停禁用', async () => {
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'idle' as const }));
+    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
+      state: 'idle' as const,
+    }));
     renderPanel();
     await waitFor(() => expect(screen.getByText('未启动')).toBeTruthy());
     expect(startBtn()).toBeEnabled();
@@ -92,7 +106,9 @@ describe('BrowserPanel', () => {
   });
 
   it('stopped：重新启动可用', async () => {
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'stopped' as const }));
+    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
+      state: 'stopped' as const,
+    }));
     renderPanel();
     await waitFor(() => expect(screen.getByText('已停止')).toBeTruthy());
     expect(startBtn()).toBeEnabled();
@@ -100,24 +116,30 @@ describe('BrowserPanel', () => {
   });
 
   it('crashed / error：展示异常文案并允许重新启动', async () => {
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'crashed' as const }));
-    const { unmount } = render(
-      <BrowserPanel onShowToast={vi.fn()} />,
-    );
+    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
+      state: 'crashed' as const,
+    }));
+    const { unmount } = render(<BrowserPanel onShowToast={vi.fn()} />);
     await waitFor(() => expect(screen.getByText('已崩溃')).toBeTruthy());
     expect(startBtn()).toBeEnabled();
     unmount();
     cleanup();
 
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'error' as const }));
+    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
+      state: 'error' as const,
+    }));
     render(<BrowserPanel onShowToast={vi.fn()} />);
     await waitFor(() => expect(screen.getByText('异常')).toBeTruthy());
     expect(startBtn()).toBeEnabled();
   });
 
   it('点击启动 → invoke browser_start，状态迁移 launching → running（事件驱动）', async () => {
-    mockTauriCommand(BROWSER_START_CMD, async () => ({ state: 'running' as const }));
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'idle' as const }));
+    mockTauriCommand(BROWSER_START_CMD, async () => ({
+      state: 'running' as const,
+    }));
+    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
+      state: 'idle' as const,
+    }));
     renderPanel();
     await waitFor(() => expect(startBtn()).toBeEnabled());
 
@@ -132,7 +154,9 @@ describe('BrowserPanel', () => {
   it('点击停止 → invoke browser_stop，事件驱动 stopped', async () => {
     const impl = vi.fn(async () => ({ state: 'stopped' as const }));
     mockTauriCommand(BROWSER_STOP_CMD, impl);
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'running' as const }));
+    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
+      state: 'running' as const,
+    }));
     renderPanel();
     await waitFor(() => expect(stopBtn()).toBeEnabled());
 
@@ -157,14 +181,16 @@ describe('BrowserPanel', () => {
 
   it('启动失败（invoke error）→ 错误状态 + toast', async () => {
     mockTauriError(BROWSER_START_CMD, new Error('chrome spawn failed'));
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'idle' as const }));
+    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
+      state: 'idle' as const,
+    }));
     const onShowToast = renderPanel();
     await waitFor(() => expect(startBtn()).toBeEnabled());
 
     fireEvent.click(startBtn());
     await waitFor(() => expect(screen.getByText('异常')).toBeTruthy());
     expect(onShowToast).toHaveBeenCalledWith(
-      expect.stringMatching(/启动浏览器失败：chrome spawn failed/),
+      expect.stringMatching(/启动浏览器失败：chrome spawn failed/)
     );
   });
 
@@ -173,7 +199,7 @@ describe('BrowserPanel', () => {
     const onShowToast = renderPanel();
     await waitFor(() => expect(screen.getByText('异常')).toBeTruthy());
     expect(onShowToast).toHaveBeenCalledWith(
-      expect.stringMatching(/查询浏览器状态失败/),
+      expect.stringMatching(/查询浏览器状态失败/)
     );
   });
 });

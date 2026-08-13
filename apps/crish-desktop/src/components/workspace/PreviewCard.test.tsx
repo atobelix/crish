@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * PreviewCard 装配测试（R1-3 面板装配收口）：AI 受管视图（aiBrowser 切换）下
  * BrowserPanel 与 ComputerPanel 并列挂载断言 + 互斥状态展示 + 未接线降级徽标。
