@@ -3,6 +3,7 @@
 //! 由父模 [`crate::mirror_os_watch`] 经 `#[path]` 接入。
 //! **≠ EL-03**；**≠ inotify 产品满关**；poll 并存但 **≠** 默认双开。
 
+use super::path::paths_equal_for_mirror;
 use super::*;
 use crate::mirror::{MirrorDriftClass, MirrorWatchHandle};
 use crate::WorkspaceStore;

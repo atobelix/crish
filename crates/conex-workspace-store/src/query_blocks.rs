@@ -4,9 +4,10 @@
 //! - `docs/block-workspace-architecture/plans/specs/query-blocks-tool-schema.md`
 //! - `packages/block-paper-contract/src/query-blocks.ts`
 //!
-//! # 模块内聚（SD-12 · 黄带体积切开）
+//! # 模块内聚（SD-12 · 黄带体积切开；**SD-50** 再抽滤器）
 //! - **本文件**：公开类型 / `WorkspaceStore::query_blocks` / [`query_blocks_conn`] 调度门面
-//! - [`sql`]（`query_blocks_sql.rs`）：FTS / CJK `instr` / 纯 SQL 三路 + kind·attrs·refs 过滤器
+//! - [`sql`]（`query_blocks_sql.rs`）：FTS / CJK `instr` / 纯 SQL 三路
+//! - 滤器兄弟模：`query_blocks_sql_filters.rs`（挂在 `sql` 下，`#[path]`）
 //! - [`tests`]（`query_blocks_tests.rs`）：单元测外置
 //! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::query_blocks::*` / `lib` `pub use`）
 //!
@@ -32,7 +33,7 @@ use rusqlite::Connection;
 use serde_json::{Map, Value as JsonValue};
 use std::collections::BTreeMap;
 
-/// SQL 三路读路径 + 过滤器（SD-12）。
+/// SQL 三路读路径（SD-12；滤器 **SD-50** 再抽）。
 #[path = "query_blocks_sql.rs"]
 mod sql;
 

@@ -31,6 +31,12 @@
     var(--border-color) 94%,
     var(--text-primary) 6%
   );
+  /* 行环槽：与 edge 同 6%，专供块行 inset；勿引入新色相 */
+  --np-focus-row: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
 }
 
 /* 区域壳可程序聚焦（tabIndex=-1）；不画整卡硬环 */
@@ -309,18 +315,13 @@ button.badge:focus-visible {
   );
 }
 
-/* 焦点：中性淡染 8% + 1px inset 6% 软环（非硬黑边 / 非暗色 30%） */
-.panel .blockRow[data-handle='focus'],
-.panel .blockRow:focus-visible,
-.panel .blockRow:focus-within {
-  background: var(
-    --bg-active,
-    var(
-      --tint-active,
-      color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
-    )
-  );
-  box-shadow: inset 0 0 0 1px var(--np-focus-edge);
+/* 焦点：1px inset 6% 软环。须含 [tabindex]:not 才能打赢全局 (0,3,0) */
+.blockRow[data-handle='focus'],
+.blockRow[tabindex]:not([tabindex='-1']):focus-visible,
+.blockRow:has(.text[data-strict-leaf-input='1']:focus-visible) {
+  outline: none;
+  background: var(--bg-active, var(--tint-active));
+  box-shadow: inset 0 0 0 1px var(--np-focus-row, var(--np-focus-edge));
 }
 
 .blockRow[data-handle='multi'] {
@@ -468,8 +469,9 @@ button.badge:focus-visible {
   width: 100%;
 }
 
-.text[data-strict-leaf-input='1']:focus-visible {
-  /* 叶焦点由 blockRow :focus-within 环表达；正文不抬第二层描边 */
+.text[data-strict-leaf-input='1']:focus-visible,
+.text[data-strict-leaf-input='1'][tabindex]:not([tabindex='-1']):focus-visible {
+  /* 叶焦点由 blockRow 行环表达；清 box-shadow 以免叠全局 2px 外环 */
   outline: none;
   box-shadow: none;
 }

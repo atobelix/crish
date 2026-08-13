@@ -1,8 +1,10 @@
 //! W2-E · OS 级 mirror 路径监视（notify 封装 / A-INV-02 事件方向）。
 //!
-//! # 模块内聚（SD-19 · 黄带体积切开 / **SD-36** 再抽路径·分类）
-//! - **本文件**：OS 事件模型 / `MirrorOsWatcher` / Fake / detect·poll 胶水
-//! - [`path`]（`mirror_os_watch_path.rs`）：路径规范化 / `classify_notify_event` / `interest_allows`
+//! # 模块内聚（SD-19 · **SD-36** 路径·分类 / **SD-51** 胶水再抽）
+//! - **本文件**：OS 事件模型 / `MirrorOsWatcher` / 事件源 trait
+//! - [`path`]（`mirror_os_watch_path.rs`）：路径规范化 / `classify_notify_event` / `interest_allows`（**SD-36**；本轮不改）
+//! - [`fake`]（`mirror_os_watch_fake.rs`）：`FakeMirrorOsEventSource`（**SD-51**）
+//! - [`glue`]（`mirror_os_watch_glue.rs`）：`detect_if_os_event_hits_mirror` / `poll_on_os_hint`（**SD-51**）
 //! - [`tests`]（`mirror_os_watch_tests.rs`）：单元测外置
 //! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::mirror_os_watch::*` / `lib` `pub use`）
 //!
@@ -15,22 +17,19 @@
 //! - **禁止**用「有 poll」冒充「inotify 满关」，也 **禁止**用「有本模块」冒充产品三路 UI / EL-03。
 //!
 //! # 诚实边界（不可冒充）
-//! - **SD-36** · **SD-19** · **≠ EL-03** · **≠ 占 SD-19** · **≠ inotify 产品满关** · poll 并存但 **≠** 默认双开
+//! - **SD-51** 胶水再抽 · **≠** 占 SD-19/36 · **SD-36** · **SD-19** · **≠ EL-03** · **≠ inotify 产品满关** · poll 并存但 **≠** 默认双开
 //! - **交付**：可点名的 OS 事件 watcher 封装（notify trait/API + 可测通道）。
 //! - **≠ poll API 已等于 inotify 满关**——poll 仍是独立子集；本模块是 **另一路径**。
 //! - **≠ A-INV-02 产品 UI**：不弹三路对话框、不接线桌面订阅层。
 //! - **≠ EL-03**（恢复/打开/PERF 数值叙事属 G-HYD / W3 / W6-C，不在本模块）。
 //! - **≠ 产品全链路**：无 IPC、无 timer 产品装配、无静默 import；事件仅 hint。
-//! - **≠** 整文件拷贝 `conex-fs::WorkspaceWatcher`（逃逸追踪职责）；本模块窄面向 mirror 路径。
 //!
 //! # 不变量
 //! 1. mirror **非**权威；OS 事件 **不**授权读 exports 当 get_md。
-//! 2. 事件后分类/提案仍走 [`WorkspaceStore::detect_mirror_drift`] /
-//!    [`WorkspaceStore::import_mirror_proposal`]；本模块 **从不** apply。
+//! 2. 事件后分类/提案仍走 [`crate::WorkspaceStore::detect_mirror_drift`] /
+//!    [`crate::WorkspaceStore::import_mirror_proposal`]；本模块 **从不** apply。
 //! 3. X-05 仍由 import 侧强制；本模块不绕过 unpushed 门禁。
 
-use super::mirror::{MirrorDriftReport, MirrorWatchPollResult};
-use super::{StoreError, WorkspaceStore};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -42,12 +41,17 @@ use thiserror::Error;
 #[path = "mirror_os_watch_path.rs"]
 mod path;
 
-use path::{
-    classify_notify_event, interest_allows, normalize_abs_path, path_compare_key,
-    paths_equal_for_mirror,
-};
+use path::{classify_notify_event, interest_allows, normalize_abs_path, path_compare_key};
 
-// ─── 事件模型 ──────────────────────────────────────────────────────────────
+/// Fake 事件源（**SD-51**；**≠** OS inotify 满关；**≠** 占 SD-19/36）。
+#[path = "mirror_os_watch_fake.rs"]
+mod fake;
+pub use fake::FakeMirrorOsEventSource;
+
+/// detect / poll 胶水（**SD-51**；不 apply；**≠** 默认双开；**≠** EL-03）。
+#[path = "mirror_os_watch_glue.rs"]
+mod glue;
+pub use glue::{detect_if_os_event_hits_mirror, poll_on_os_hint};
 
 /// OS 侧 mirror 路径变更种类（窄于 `conex-fs` 逃逸追踪 wire；仅 mirror 方向）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,9 +74,7 @@ pub struct MirrorOsEvent {
     pub kind: MirrorOsEventKind,
 }
 
-// ─── 错误 ──────────────────────────────────────────────────────────────────
-
-/// OS watcher 创建/注册失败（与 [`StoreError`] 分离：监视失败 ≠ 权威库错误）。
+/// OS watcher 创建/注册失败（与 [`crate::StoreError`] 分离：监视失败 ≠ 权威库错误）。
 #[derive(Debug, Error)]
 pub enum MirrorOsWatchError {
     #[error("mirror OS watcher: 路径无效或无父目录: {0}")]
@@ -82,8 +84,6 @@ pub enum MirrorOsWatchError {
     #[error("mirror OS watcher: 注册监视失败 ({path}): {detail}")]
     Watch { path: String, detail: String },
 }
-
-// ─── 事件源 trait（可注入） ────────────────────────────────────────────────
 
 /// OS 事件源抽象：生产 [`MirrorOsWatcher`]；测试可注入 [`FakeMirrorOsEventSource`]。
 ///
@@ -95,8 +95,6 @@ pub trait MirrorOsEventSource {
     /// 带超时等待一条事件；超时返回 `None`。
     fn recv_event_timeout(&mut self, timeout: Duration) -> Option<MirrorOsEvent>;
 }
-
-// ─── notify 封装 ───────────────────────────────────────────────────────────
 
 /// mirror 路径 OS 监视器（`notify::RecommendedWatcher`）。
 ///
@@ -267,93 +265,6 @@ impl MirrorOsEventSource for MirrorOsWatcher {
     fn recv_event_timeout(&mut self, timeout: Duration) -> Option<MirrorOsEvent> {
         self.recv_timeout(timeout)
     }
-}
-
-// ─── Fake（可证伪 / 单测不绑内核） ─────────────────────────────────────────
-
-/// 测试注入用事件源（**不是** OS inotify；用于 trait 契约测）。
-///
-/// **诚实**：Fake 绿 **≠** OS watcher 生产满关；真 OS 路径见
-/// [`os_watcher_emits_event_on_mirror_file_write`]。
-#[derive(Debug, Default)]
-pub struct FakeMirrorOsEventSource {
-    queue: std::collections::VecDeque<MirrorOsEvent>,
-}
-
-impl FakeMirrorOsEventSource {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn push(&mut self, event: MirrorOsEvent) {
-        self.queue.push_back(event);
-    }
-
-    pub fn push_modified(&mut self, path: impl Into<PathBuf>) {
-        self.push(MirrorOsEvent {
-            path: path.into(),
-            kind: MirrorOsEventKind::Modified,
-        });
-    }
-}
-
-impl MirrorOsEventSource for FakeMirrorOsEventSource {
-    fn try_recv_event(&mut self) -> Option<MirrorOsEvent> {
-        self.queue.pop_front()
-    }
-
-    fn recv_event_timeout(&mut self, _timeout: Duration) -> Option<MirrorOsEvent> {
-        self.queue.pop_front()
-    }
-}
-
-// ─── 与 detect 的胶水（不 apply） ──────────────────────────────────────────
-
-/// 若 OS 事件路径命中该 doc 当前 mirror path，则跑 [`WorkspaceStore::detect_mirror_drift`]。
-///
-/// - 命中 → `Some(report)`（含三路分类）
-/// - 未命中 / 无 meta path → `Ok(None)`（事件与本 doc 无关）
-///
-/// **诚实**：
-/// - **不** apply / **不** import；仅 detect。
-/// - **≠** A-INV-02 产品 UI；**≠** EL-03。
-/// - **≠**「有 poll 即 inotify」——本函数消费的是 **OS 事件 hint**，与 poll 并行。
-pub fn detect_if_os_event_hits_mirror(
-    store: &WorkspaceStore,
-    doc_id: &str,
-    authority_rev: u64,
-    event: &MirrorOsEvent,
-) -> Result<Option<MirrorDriftReport>, StoreError> {
-    let report = store.detect_mirror_drift(doc_id, authority_rev)?;
-    if report.path.as_os_str().is_empty() {
-        return Ok(None);
-    }
-    if paths_equal_for_mirror(&report.path, &event.path) {
-        Ok(Some(report))
-    } else {
-        Ok(None)
-    }
-}
-
-/// OS 事件命中后：用 [`crate::MirrorWatchHandle::poll_mirror_once`] 刷新指纹基线并得完整 poll 结果。
-///
-/// 组合路径：`OS hint → poll/detect`；**仍 ≠** 产品 UI / EL-03。
-pub fn poll_on_os_hint(
-    handle: &mut crate::MirrorWatchHandle,
-    store: &WorkspaceStore,
-    authority_rev: u64,
-    event: &MirrorOsEvent,
-) -> Result<Option<MirrorWatchPollResult>, StoreError> {
-    let report = store.detect_mirror_drift(handle.doc_id(), authority_rev)?;
-    if report.path.as_os_str().is_empty() {
-        return Ok(None);
-    }
-    if !paths_equal_for_mirror(&report.path, &event.path) {
-        return Ok(None);
-    }
-    // 命中后走既有 poll（指纹 + 分类）；不绕过 X-05 / detect
-    let r = handle.poll_mirror_once(store, authority_rev)?;
-    Ok(Some(r))
 }
 
 #[cfg(test)]
