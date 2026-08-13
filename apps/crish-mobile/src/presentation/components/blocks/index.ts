@@ -12,3 +12,24 @@ export {
 } from './ApprovalCard';
 export { default as ApprovalActionBar } from './ApprovalActionBar';
 export type { ApprovalActionBarProps } from './ApprovalActionBar';
+export { default as SlideToConfirm } from './SlideToConfirm';
+export type {
+  SlideToConfirmProps,
+  SlidePanConfig,
+  SlidePanDeps,
+} from './SlideToConfirm';
+export {
+  SLIDE_TRIGGER_THRESHOLD,
+  SLIDE_ARBITER_MIN_DX,
+  SLIDE_ARBITER_RATIO,
+  SLIDE_THUMB_SIZE,
+  SLIDE_REBOUND_MS,
+  createSlideConfirmState,
+  slideUsableWidth,
+  shouldClaimSlidePan,
+  slideStart,
+  slideMove,
+  slideEnd,
+  slideCancel,
+} from './slideConfirmMachine';
+export type { SlideConfirmState, SlidePhase } from './slideConfirmMachine';

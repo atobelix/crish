@@ -1,6 +1,7 @@
 // 审批详情页（L2 页面组件，M4 §2.2.1：只组合 view-model 与区块组件，不触碰领域层）
 // - 深链目标页（F2 §5.1 / M4 §4.2）：首屏即见决策区（固定底部不滚动，R2UX-04-01 3 秒决策路径）；
 // - 三态：待办数据态（卡 + 决策区）/ 结果态（决策后审计回执）/ 空态（不存在或已过期，M4 §5.9）；
+// - 决策区危险分级（F2 §5.3 / §15-4）：dangerLevel 2 条目允许改滑动确认（ApprovalActionBar 内部切换）；
 // - main-agent 裁决请求只读展示（F2 §4.4：无决策按钮）；
 // - onBack 由路由注入（页面不依赖 expo-router，组件测试可直接挂载）。
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -86,6 +87,7 @@ export default function ApprovalDetailScreen({
               onAllow={onAllow}
               onDeny={onDeny}
               toolName={item.request.toolName}
+              dangerLevel={item.dangerLevel}
             />
           ) : null}
         </>
