@@ -344,6 +344,84 @@
         assert!(out.results.iter().all(|r| r.is_ok()));
     }
 
+    /// B4 并发上限：默认值（4）生效——批 16 个 Parallel 慢工具，并发峰值
+    /// ≤ 默认上限（且 ≥2，证明计数点观测到真实并行，而非退化为串行）；
+    /// 批尾活跃计数归零（permit/计数无泄漏）
+    #[tokio::test]
+    async fn parallel_group_concurrency_peak_bounded_by_default() {
+        let reg = registry_with(vec![Arc::new(SlowTool { ms: 25 })]);
+        let exec = ToolExecutor::new(reg);
+        let calls = (0..16)
+            .map(|i| call(&format!("p{i}"), "slow", ToolConcurrency::Parallel))
+            .collect::<Vec<_>>();
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        let peak = exec.concurrency_obs().peak();
+        assert!(
+            peak >= 2 && peak <= DEFAULT_MAX_PARALLEL,
+            "16 工具批默认并发峰值应 ∈ [2, {DEFAULT_MAX_PARALLEL}]，实际 {peak}"
+        );
+        assert!(out.results.iter().all(|r| r.is_ok()), "全部工具应成功");
+        assert_eq!(out.results.len(), 16, "结果数与入参一致");
+        assert_eq!(
+            exec.concurrency_obs().active(),
+            0,
+            "批完成后活跃计数应归零（计数点无泄漏）"
+        );
+    }
+
+    /// B4 并发上限：max_parallel=1 生效——16 个 Parallel 工具被信号量
+    /// 串行化，并发峰值恰为 1（严格排队，不拒绝、不砍批）
+    #[tokio::test]
+    async fn parallel_group_max_parallel_one_serializes() {
+        let reg = registry_with(vec![Arc::new(SlowTool { ms: 10 })]);
+        let exec = ToolExecutor::new(reg);
+        let calls = (0..16)
+            .map(|i| call(&format!("p{i}"), "slow", ToolConcurrency::Parallel))
+            .collect::<Vec<_>>();
+        let opts = ToolBatchOptions {
+            max_parallel: Some(1),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        assert_eq!(
+            exec.concurrency_obs().peak(),
+            1,
+            "max_parallel=1 时并发峰值应为 1"
+        );
+        assert!(out.results.iter().all(|r| r.is_ok()), "排队等待不拒绝，全部成功");
+        assert_eq!(out.results.len(), 16);
+        assert_eq!(exec.concurrency_obs().active(), 0);
+    }
+
+    /// B4 并发上限：max_parallel=4 显式配置生效——峰值 ≤ 4（且 ≥2 证明
+    /// 并行仍发生），与默认行为一致
+    #[tokio::test]
+    async fn parallel_group_max_parallel_four_caps_peak() {
+        let reg = registry_with(vec![Arc::new(SlowTool { ms: 25 })]);
+        let exec = ToolExecutor::new(reg);
+        let calls = (0..16)
+            .map(|i| call(&format!("p{i}"), "slow", ToolConcurrency::Parallel))
+            .collect::<Vec<_>>();
+        let opts = ToolBatchOptions {
+            max_parallel: Some(4),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        let peak = exec.concurrency_obs().peak();
+        assert!(
+            (2..=4).contains(&peak),
+            "max_parallel=4 时并发峰值应 ∈ [2, 4]，实际 {peak}"
+        );
+        assert!(out.results.iter().all(|r| r.is_ok()));
+        assert_eq!(exec.concurrency_obs().active(), 0);
+    }
+
     #[tokio::test]
     async fn timeout_tool() {
         let reg = registry_with(vec![Arc::new(SlowTool { ms: 500 })]);
@@ -1143,8 +1221,10 @@
         assert!(out.fatal.is_none());
     }
 
-    /// T09.6/P8：审批开启时并行组恢复并行——5×50ms 慢工具批耗时接近单
-    /// 工具（旧串行退化 ≈ 5×50ms = 250ms，改后 ≈ max(50ms) + 审批链）
+    /// T09.6/P8：审批开启时并行组恢复并行——5×50ms 慢工具批耗时远小于
+    /// 串行（串行退化 ≈ 5×50ms = 250ms）。B4 并发上限（默认 4）下 5 个
+    /// 工具拆 2 波 ≈ 100ms 量级，断言阈值取 180ms（2 波上界 ~130ms 与
+    /// 串行 250ms 之间的安全中线，证明并行仍生效且并发有界）
     #[tokio::test]
     async fn approval_parallel_executes_concurrently() {
         let reg = registry_with(vec![Arc::new(SlowTool { ms: 50 })]);
@@ -1166,8 +1246,8 @@
         let elapsed = start.elapsed();
         assert!(out.results.iter().all(|r| r.is_ok()));
         assert!(
-            elapsed.as_millis() < 120,
-            "审批并行批耗时应接近单工具（50ms），实际 {elapsed:?}"
+            elapsed.as_millis() < 180,
+            "审批并行批耗应远小于串行 250ms（B4 上限 4 → 2 波 ~100ms），实际 {elapsed:?}"
         );
     }
 

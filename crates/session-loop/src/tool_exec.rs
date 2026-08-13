@@ -77,6 +77,7 @@ use agent_tools::streaming::ToolProgress;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency, ToolProgressUpdate};
 use serde_json::Value;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -125,6 +126,48 @@ pub struct ToolBatchOutcome {
     pub fatal: Option<String>,
 }
 
+/// 并行组并发观测（B4 并发上限的 AtomicUsize 计数点）：活跃并行数 + 峰值。
+///
+/// 实例级挂载于 [ToolExecutor]（`new` 创建，`clone_executor` 共享同一
+/// Arc）——测试按执行器隔离断言并发峰值，不受同进程其它并行批测干扰；
+/// 生产面亦可用于观测批并行度（非指标系统，计数原语形态对齐 B5）。
+#[derive(Debug, Default)]
+pub(crate) struct ParallelExecObs {
+    /// 当前活跃并行数（进入并行执行段 +1、离开 -1）
+    active: AtomicUsize,
+    /// 观测峰值（自创建以来）
+    peak: AtomicUsize,
+}
+
+impl ParallelExecObs {
+    /// 进入并行执行段：活跃 +1 并更新峰值，返回本次活跃数
+    pub(crate) fn enter(&self) -> usize {
+        let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+        self.peak.fetch_max(active, Ordering::SeqCst);
+        active
+    }
+
+    /// 离开并行执行段：活跃 -1
+    pub(crate) fn leave(&self) {
+        self.active.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    /// 当前活跃并行数
+    #[allow(dead_code)]
+    pub(crate) fn active(&self) -> usize {
+        self.active.load(Ordering::SeqCst)
+    }
+
+    /// 并发峰值（自创建以来观测到的最大活跃数）
+    ///
+    /// 当前消费者 = 本 crate 并行批测断言（并发峰值 ≤ 上限）；S3 埋点
+    /// 消费为后续切片，届时移除 allow
+    #[allow(dead_code)]
+    pub(crate) fn peak(&self) -> usize {
+        self.peak.load(Ordering::SeqCst)
+    }
+}
+
 // SR-03 · 拆分 · ≠ EL：批调度/单工具/裁决/中间件四模拆出，本文件为薄门面
 //（barrel）；公开符号 ToolExecCtx / ToolBatchOutcome / ToolExecutor 仍在本
 // 文件定义，调用方路径零改动。
@@ -138,6 +181,7 @@ mod exec_verdict;
 mod exec_middleware;
 
 // 内部面 re-export：子模块与测试经 `use super::*` 消费（公开 API 不变）
+pub(crate) use exec_batch::DEFAULT_MAX_PARALLEL;
 pub(crate) use exec_verdict::{
     ApprovalWaitOutcome, approval_wait, classify_tool_error, denied_message, denied_result,
     mark_rest_cancelled,
@@ -161,6 +205,8 @@ pub struct ToolExecutor {
     /// （语义估算评估器 + 默认阈值），引擎可经 [Self::with_revert_policy]
     /// 注入 session_meta 覆盖阈值 / 真实 git 面积评估器。
     revert_policy: RevertPolicy,
+    /// 并行组并发观测（B4：活跃数 + 峰值计数点；经 clone_executor 共享）
+    concurrency_obs: Arc<ParallelExecObs>,
 }
 
 #[cfg(test)]

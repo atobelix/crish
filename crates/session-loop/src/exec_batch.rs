@@ -1,12 +1,18 @@
 //! 批调度面（SR-03 拆分 · ≠ EL）：ToolExecutor builder 装配面 + execute_batch
 //!
-//! 批次调度（分组 / 并行组审批逐个 await / join_all 并行执行 / 取消收尾）
-//! 与执行器装配面（new / with_* builder / clone_executor）随本模落位；
+//! 批次调度（分组 / 并行组审批逐个 await / join_all 并行执行（B4：信号量
+//! 并发上限 + 计数点）/ 取消收尾）与执行器装配面（new / with_* builder /
+//! clone_executor）随本模落位；
 //! 单工具执行面在 `exec_single`，权限/裁决/审批等待面在 `exec_verdict`，
 //! 中间件与钩子面在 `exec_middleware`。语义与拆分前逐行一致（只搬移不改行为）。
 
 use super::*;
 use crate::input::next_batch_seq;
+use tokio::sync::Semaphore;
+
+/// 并行组默认最大并发数（B4 并发上限）：`ToolBatchOptions.max_parallel`
+/// 未设置（None）时生效。超出的项排队等待 permit，不拒绝、不砍批。
+pub(crate) const DEFAULT_MAX_PARALLEL: usize = 4;
 
 impl ToolExecutor {
     /// 新建执行器
@@ -18,6 +24,7 @@ impl ToolExecutor {
             middleware_timeouts: MiddlewareTimeoutConfig::default(),
             hooks: None,
             revert_policy: RevertPolicy::default(),
+            concurrency_obs: Arc::new(ParallelExecObs::default()),
         }
     }
 
@@ -31,6 +38,7 @@ impl ToolExecutor {
             middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
+            concurrency_obs: self.concurrency_obs,
         }
     }
 
@@ -47,6 +55,7 @@ impl ToolExecutor {
             middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
+            concurrency_obs: self.concurrency_obs,
         }
     }
 
@@ -69,6 +78,7 @@ impl ToolExecutor {
             middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
+            concurrency_obs: self.concurrency_obs,
         }
     }
 
@@ -85,6 +95,7 @@ impl ToolExecutor {
             middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
+            concurrency_obs: self.concurrency_obs,
         }
     }
 
@@ -99,6 +110,7 @@ impl ToolExecutor {
             middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
+            concurrency_obs: self.concurrency_obs,
         }
     }
 
@@ -114,6 +126,7 @@ impl ToolExecutor {
             middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
+            concurrency_obs: self.concurrency_obs,
         }
     }
 }
@@ -257,11 +270,19 @@ impl ToolExecutor {
                 }
 
                 // 执行阶段：已批准项 join_all 并行执行（拒绝/过期/abort
-                // 中断/权限拒绝项不执行，直接构造结果）
+                // 中断/权限拒绝项不执行，直接构造结果）。
+                // B4 并发上限：轻量信号量（默认 4 / max_parallel 可配）——
+                // acquire_owned 排队不拒绝（FIFO 等待 permit），permit
+                // 覆盖单工具执行全程，future drop（含 abort 收场）自动
+                // 释放；并发计数点（AtomicUsize active/peak）随执行器
+                // 实例观测。禁滑动窗口/熔断器（反过度设计红线）。
                 let exec = self.clone_executor();
                 let ctx_own = ctx.clone();
                 let options_own = options.clone();
                 let approval_own = approval.clone();
+                let max_parallel = options.max_parallel.unwrap_or(DEFAULT_MAX_PARALLEL).max(1);
+                let semaphore = Arc::new(Semaphore::new(max_parallel));
+                let obs = Arc::clone(&exec.concurrency_obs);
                 let mut futures = Vec::new();
                 let mut executed: Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>> =
                     vec![None; group.len()];
@@ -339,10 +360,18 @@ impl ToolExecutor {
                     let o = options_own.clone();
                     let ab = abort.cloned();
                     let g = approval_own.clone();
+                    let s = Arc::clone(&semaphore);
+                    let obs = Arc::clone(&obs);
                     futures.push(async move {
+                        // 信号量排队获取（不拒绝；`ok()` 仅在信号量被关闭时
+                        // 为 None——本批内永不关闭，防御性兜底照常执行）
+                        let permit = s.acquire_owned().await.ok();
+                        let _active = obs.enter();
                         let (r, extra) = e
                             .execute_single_with_retry(&call, &c, &o, ab.as_ref(), g)
                             .await;
+                        obs.leave();
+                        drop(permit);
                         (pos, r, extra)
                     });
                 }
@@ -423,6 +452,16 @@ impl ToolExecutor {
             middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks.clone(),
             revert_policy: self.revert_policy.clone(),
+            concurrency_obs: Arc::clone(&self.concurrency_obs),
         }
+    }
+
+    /// 并行组并发观测句柄（B4）：活跃数 / 峰值计数点——测试断言与观测消费
+    ///
+    /// 当前消费者 = 本 crate 并行批测断言（并发峰值 ≤ 上限）；S3 埋点
+    /// 消费为后续切片，届时移除 allow
+    #[allow(dead_code)]
+    pub(crate) fn concurrency_obs(&self) -> &Arc<ParallelExecObs> {
+        &self.concurrency_obs
     }
 }

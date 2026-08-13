@@ -271,6 +271,11 @@ pub struct ToolBatchOptions {
     /// [ApprovalDecision::Expired]（复用既有 Expired 分支，非致命）。
     /// 测试注入短超时验证收敛。
     pub approval_timeout: Option<Duration>,
+    /// 并行组最大并发数（B4 并发上限）：None = 默认 4（常量
+    /// `DEFAULT_MAX_PARALLEL`）。超出上限的项**排队等待 permit**而非
+    /// 立即拒绝；与 abort/超时语义正交（取消仍逐点穿透，permit 随
+    /// future drop 自动释放）。
+    pub max_parallel: Option<usize>,
 }
 
 impl Default for ToolBatchOptions {
@@ -282,6 +287,7 @@ impl Default for ToolBatchOptions {
             output_budget_bytes: None,
             permission_mode: None,
             approval_timeout: None,
+            max_parallel: None,
         }
     }
 }
