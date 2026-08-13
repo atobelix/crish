@@ -151,6 +151,20 @@ describe('GatewayFilesRepository', () => {
     });
   });
 
+  it('传输层抛非 GatewayError 异常 → 归一为 FilesCommandError(internal)（未知错误兜底）', async () => {
+    // send 抛普通异常：invoke 以原始错误 reject（非 GatewayError）→ 兜底 internal
+    const gateway = new WsGateway({
+      send: () => {
+        throw new Error('发送异常');
+      },
+    });
+    const repo = new GatewayFilesRepository(gateway);
+    await expect(repo.listDir({ path: 'x' })).rejects.toMatchObject({
+      code: 'internal',
+      retryable: false,
+    });
+  });
+
   it('FilesCommandError instanceof 判定（VM errorCodeOf 依赖）', () => {
     const err = new FilesCommandError('path_not_found', 'x', false);
     expect(err).toBeInstanceOf(Error);

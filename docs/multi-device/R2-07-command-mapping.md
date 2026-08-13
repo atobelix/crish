@@ -427,3 +427,90 @@ parseListPendingApprovalsResult）。本批 approvalCommands.ts 为命令域规�
 （统一 kind 映射 + 响应分发 + 对拍门禁），与 wiring 本地信封键集完全等价
 （测试 §5 wiring 快照断言）；接线层后续轮次换用本模块统一命令构造面，
 本任务不动 adapters/。
+
+---
+
+# R2-12 命令批（部分 2）：mobile_* 8 条新增命令 → 桌面 manifest 登记核对
+
+> 追加日期：2026-08-13（R2-12 部分 2，本文件第 5 批次节）
+> 范围：确认 mobile_* 清单（device-protocol.json 真源）→ 去重既有批次 → 核对
+> 桌面 manifest 登记状态（command_manifest.rs，只读）→ 产出登记表与缺口清单。
+> 移动端核对面：`apps/crish-mobile/src/domain/repositories/` 各域命令文件
+> （approvalCommands / filesCommands / sessionCommands / settingsCommands）；
+> 横向对拍测试：`mobileCommands.test.ts`（§3 登记表断言 = 本表可测纯函数面）。
+> 纪律：**桌面端只读**（不修改任何桌面端代码）；未登记缺口供桌面接线轮处理。
+
+## M-1. mobile_* 8 条清单（真源口径）
+
+真源 `device-protocol.json` commands 段 **tauriCommand 带 mobile\_ 前缀 = 7 条**
+（C13/C14/C21/C22/C27/C30/C31）；第 8 条 `mobile_get_workspace_state` 非
+tauriCommand 字段值，而是 C19 listWorkspaces 描述文本中的接线名
+（device-protocol.json:2658「登记先行 + mobile_get_workspace_state 接线」；
+注册表 tauriCommand = workbench_list_workspaces）——R2-07 B6-4.4 清单口径计入，
+**合计 8 条**。
+
+| #   | mobile_* 桌面实现名           | 注册表命令           | C 编号 | domain   | registered |
+| --- | ----------------------------- | -------------------- | ------ | -------- | ---------- |
+| 1   | mobile_list_pending_approvals | listPendingApprovals | C13    | approval | false      |
+| 2   | mobile_approval_sync_state    | approvalHistory      | C14    | approval | false      |
+| 3   | mobile_get_workspace_state    | listWorkspaces       | C19    | files    | false      |
+| 4   | mobile_search_files           | searchFiles          | C21    | files    | false      |
+| 5   | mobile_asset_url              | assetUrl             | C22    | files    | false      |
+| 6   | mobile_search_sessions        | searchSessions       | C27    | sessions | false      |
+| 7   | mobile_settings_confirm       | settingsConfirm      | C30    | settings | false      |
+| 8   | mobile_pause_automation       | pauseAutomation      | C31    | settings | false      |
+
+## M-2. 登记表（命令 / 桌面 manifest 登记状态 / 移动端实现状态）
+
+核对结论（只读，command_manifest.rs 全文 128 条 = 注册面 119 + 登记先行 5）：
+_*8 条 mobile_* 桌面面全部未登记（缺失）\**——manifest 无任何 mobile__ 条目
+（含登记先行 registered=false 均未落）；移动端侧 8 条**全部已实现**（跨既有批次）。
+
+| mobile_* 桌面实现名           | 桌面 manifest 登记状态         | 移动端实现状态                       |
+| ----------------------------- | ------------------------------ | ------------------------------------ |
+| mobile_list_pending_approvals | 缺失（未登记，桌面接线轮缺口） | 已实现（B2 批，approvalCommands.ts） |
+| mobile_approval_sync_state    | 缺失（未登记，桌面接线轮缺口） | 已实现（B2 批，approvalCommands.ts） |
+| mobile_get_workspace_state    | 缺失（未登记，桌面接线轮缺口） | 已实现（F4 批，filesCommands.ts）    |
+| mobile_search_files           | 缺失（未登记，桌面接线轮缺口） | 已实现（F4 批，filesCommands.ts）    |
+| mobile_asset_url              | 缺失（未登记，桌面接线轮缺口） | 已实现（F4 批，filesCommands.ts）    |
+| mobile_search_sessions        | 缺失（未登记，桌面接线轮缺口） | 已实现（B4 批，sessionCommands.ts）  |
+| mobile_settings_confirm       | 缺失（未登记，桌面接线轮缺口） | 已实现（B5 批，settingsCommands.ts） |
+| mobile_pause_automation       | 缺失（未登记，桌面接线轮缺口） | 已实现（B5 批，settingsCommands.ts） |
+
+## M-3. 缺口清单（桌面接线轮，8 条全部）
+
+1. 桌面面实现（REST / WS 命令面）须按 Z0 X-5 登记路径**先登记 manifest 再暴露**
+   （registered=false 登记先行 → 接线后翻 true，command_manifest.rs 维护规则）；
+2. 登记锚点：上表 8 个 `mobile_*` 桌面实现名（family 建议 multi_device /
+   engine 契约面；与注册表 tauriCommand 逐字一致）；
+3. 桌面对照先例：multi_device_* 面（registered=true）、core_search_files
+   （C10 索引就绪面，registered=true）已按 X-5 落地——mobile_* 为后续接线轮
+   的同类登记；
+4. 语义降级已定（各域批次映射表）：C27 searchSessions v1 无端点（D-11，
+   P2 预留）、C30/C31/C32 v1 无端点（D-14）——移动端已按 registered=false
+   降级展示，桌面接线不改变协议形状。
+
+## M-4. 判定总则
+
+1. **无新增构造**：8 条 mobile_* 全部由既有批次实现（B2/F4/B4/B5），本批不
+   重复构造（反过度设计：不为空集新建 mobileCommands.ts 薄壳）——横向覆盖
+   完整性由 `mobileCommands.test.ts` 锁定（注册表新增 mobile_* 命令而未实现
+   时测试红）；
+2. **桌面面缺失 ≠ 协议面缺失**：注册表 8 条命令完整登记（registered=false 新增
+   面），桌面 manifest 缺失是**桌面接线轮缺口**，移动端构造侧先行已就绪；
+3. **对照语义不混淆**：core_search_files（C10）与 mobile_search_files（C21）
+   为不同命令（索引就绪查询 vs 文件名搜索），manifest 已登记前者不构成后者
+   已登记。
+
+## M-5. 证据索引（只读核对引用的代码位置）
+
+- apps/agent-workbench/src-tauri/src/command_manifest.rs：全文（128 条；
+  维护规则 10-15、登记先行 §7.2、multi_device_* 100-110、core_search_files 126）
+- crates/conex-types/contracts/device-protocol.json：C13/C14/C19/C21/C22/C27/
+  C30/C31 commands 段 + types 段（paramsType/resultType 字段表）+ enums 段，
+  唯一真源
+- apps/crish-mobile/src/domain/repositories/：approvalCommands.ts（C13/C14）、
+  filesCommands.ts（C19/C21/C22）、sessionCommands.ts（C27）、
+  settingsCommands.ts（C30/C31）、mobileCommands.test.ts（横向对拍）
+- docs/multi-device/Z0-master-plan.md：§4.10（C 表 692-712）、R2-12 行（1384）、
+  X-5 登记路径（406）

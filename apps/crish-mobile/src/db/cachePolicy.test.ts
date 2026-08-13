@@ -334,4 +334,67 @@ describe('runCleanup：执行器集成（内存 driver）', () => {
     expect(db.rowCount('events')).toBe(4);
     expect(summary.eventsDeleted).toBe(8);
   });
+
+  it('events 行 session_id 为 NULL → 防御性跳过（不参与清理统计）', async () => {
+    const db = new MemorySqlDriver();
+    await migrateIfNeeded(db);
+    // 直接插入 NULL session_id 行（绕过 DAO 类型约束，模拟脏数据）
+    await db.exec(
+      `INSERT INTO events (sequence, event_id, type, session_id, timestamp, payload_json, schema_version, ingested_at) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)`,
+      [1, 'e-null', 'message', 1, '{}', 1, 1]
+    );
+    const summary = await runCleanup(db, now, limits);
+    expect(db.rowCount('events')).toBe(1); // NULL 行保留
+    expect(summary.eventsDeleted).toBe(0);
+  });
+
+  it('keepCount ≤ 0 → 删除该会话全部事件（会话清空路径）', async () => {
+    const db = new MemorySqlDriver();
+    await migrateIfNeeded(db);
+    const eventsDao = new SqlEventsDao(db);
+    for (let i = 1; i <= 4; i++) await eventsDao.upsert(makeEvent(i, 's1'));
+    // 全局上限 1 → s1 每会话窗口 3 → 全局兜底收缩到 1？不——用 eventsGlobal 极小值触发 keepCount=0
+    const summary = await runCleanup(db, now, {
+      ...limits,
+      eventsPerSession: 3,
+      eventsGlobal: 1,
+    });
+    expect(db.rowCount('events')).toBe(1);
+    expect(summary.eventsDeleted).toBe(3);
+  });
+
+  it('session_summaries 空表 + sessionKeepCount=0 → 全删不报错（防御分支）', async () => {
+    const db = new MemorySqlDriver();
+    await migrateIfNeeded(db);
+    const sessionsDao = new SqlSessionSummariesDao(db);
+    await sessionsDao.upsert({
+      sessionId: 's1',
+      title: 's1',
+      cwd: '/w',
+      status: 'open',
+      isPinned: 0,
+      isArchived: 0,
+      messageCount: 0,
+      engineCursor: 0,
+      engineLastRunId: null,
+      updatedAt: 1000,
+      lastMessagePreview: null,
+      metadataJson: null,
+    });
+    const summary = await runCleanup(db, now, {
+      ...limits,
+      sessionKeepCount: 0,
+    });
+    expect(db.rowCount('session_summaries')).toBe(0);
+    expect(summary.sessionsDeleted).toBe(1);
+  });
+
+  it('runCleanup 缺省 limits（默认容量规格）', async () => {
+    const db = new MemorySqlDriver();
+    await migrateIfNeeded(db);
+    await expect(runCleanup(db, now)).resolves.toMatchObject({
+      eventsDeleted: 0,
+      sessionsDeleted: 0,
+    });
+  });
 });

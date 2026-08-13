@@ -177,4 +177,24 @@ describe('notifications DAO（M5 §5.2 / D7 §3.4.1 去重）', () => {
     expect(db.rowCount('notifications')).toBe(2);
     expect(await dao.findById('n-old')).toBeNull();
   });
+
+  it('count：空表为 0；写入后统计条数', async () => {
+    const db = new MemorySqlDriver();
+    await migrateIfNeeded(db);
+    const dao = new SqlNotificationsDao(db);
+    expect(await dao.count()).toBe(0);
+    await dao.upsert(makeNotification('n-1'));
+    await dao.upsert(makeNotification('n-2'));
+    expect(await dao.count()).toBe(2);
+  });
+
+  it('deleteById 删除单条', async () => {
+    const db = new MemorySqlDriver();
+    await migrateIfNeeded(db);
+    const dao = new SqlNotificationsDao(db);
+    await dao.upsert(makeNotification('n-1'));
+    await dao.deleteById('n-1');
+    expect(await dao.count()).toBe(0);
+    expect(await dao.findById('n-1')).toBeNull();
+  });
 });

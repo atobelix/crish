@@ -48,3 +48,45 @@ export {
 } from './connectionStore';
 export type { WsPhase } from './connectionStore';
 export { transitionPairState } from './authReducers';
+
+// ── R2-14 第三波：terminalStore / settingsStore / notificationStore 追加导出（只追加）────
+export { terminalStore, linesOf } from './terminalStore';
+export type { TerminalState } from './terminalStore';
+export type { TerminalRunState, TerminalView } from './terminalReducers';
+export { settingsStore, configureSettingsPersistence } from './settingsStore';
+export type { SettingsState, SettingsPersist } from './settingsStore';
+export type {
+  AppearancePrefs,
+  FilesPrefs,
+  GeneralPrefs,
+  NotifyPrefs,
+  NotifyQuietPrefs,
+  NotifyScene,
+  QuietPolicy,
+  ResponseStyle,
+  SettingsGroupName,
+  SettingsGroups,
+} from './settingsReducers';
+export {
+  SETTINGS_KEY_PREFIX,
+  defaultSettingsGroups,
+  mergeSettingsGroup,
+  settingsGroupKey,
+} from './settingsReducers';
+export {
+  notificationStore,
+  configureNotificationsPersistence,
+  listOf,
+  resetNotificationsForTest,
+  unreadOf,
+} from './notificationStore';
+export type {
+  NotificationState,
+  NotificationsPersist,
+} from './notificationStore';
+export type {
+  InAppNotification,
+  NotificationInput,
+  NotificationStatus,
+} from './notificationReducers';
+export { NOTIFICATION_RESOLVED_RETENTION_MS } from './notificationReducers';

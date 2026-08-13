@@ -115,3 +115,27 @@ describe('迁移：版本一致性护栏', () => {
     expect(LATEST_VERSION).toBe(SCHEMA_VERSION);
   });
 });
+
+describe('迁移：防御性读取（db.ts 兜底分支）', () => {
+  it('PRAGMA user_version 读取返回 null（驱动异常面）→ 视为 v0 从零迁移', async () => {
+    const db = new MemorySqlDriver();
+    // 包裹驱动：版本读取返回 null，其余透传（防御性兜底 `row?.user_version ?? 0`）
+    const wrapped = new Proxy(db, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        if (prop === 'getFirst') {
+          return async (sql: string, params?: readonly unknown[]) => {
+            if (String(sql).includes('user_version')) return null;
+            return target.getFirst(sql as never, params);
+          };
+        }
+        return value;
+      },
+    });
+    const version = await migrateIfNeeded(wrapped);
+    expect(version).toBe(LATEST_VERSION);
+    await expect(db.getFirst('PRAGMA user_version')).resolves.toEqual({
+      user_version: LATEST_VERSION,
+    });
+  });
+});
