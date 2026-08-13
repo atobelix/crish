@@ -10,6 +10,17 @@ use crate::note_types::{
     NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode, NoteBackendError, NoteLossyReport,
 };
 use serde_json::Map;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// 毒丸恢复计数（B1-3 观测化：intents/docs 锁中毒恢复次数；对齐 registry.rs
+/// 「tracing::error! 成对 + 计数」样板，零新依赖；本文件 4 处锁共用）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 impl MemoryNoteBackend {
     /// MD 片段写入（intent 幂等；append_to_block / 定位插入）
@@ -31,7 +42,12 @@ impl MemoryNoteBackend {
                     "intent_id must be non-empty when provided".into(),
                 ));
             }
-            let intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
+            let intents = self.intents.lock().unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+                tracing::error!("MemoryNoteBackend intents 锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            });
             if let Some(prev) = intents.get(intent) {
                 let mut out = prev.clone();
                 out.idempotent = true;
@@ -42,7 +58,12 @@ impl MemoryNoteBackend {
 
         let drafts = parse_md_lines(&req.markdown);
 
-        let mut docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+        let mut docs = self.docs.lock().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+            tracing::error!("MemoryNoteBackend docs 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let doc = Self::ensure_doc(&mut docs, &req.doc_id);
 
         // append_to_block：把 markdown 追加到 after_block_id 或末块
@@ -72,7 +93,12 @@ impl MemoryNoteBackend {
             };
             drop(docs);
             if let Some(ref intent) = req.intent_id {
-                let mut intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
+                let mut intents = self.intents.lock().unwrap_or_else(|e| {
+                    // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+                    tracing::error!("MemoryNoteBackend intents 锁中毒，按恢复模式继续：{e}");
+                    POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                    e.into_inner()
+                });
                 intents.insert(intent.clone(), result.clone());
             }
             return Ok(result);
@@ -141,9 +167,57 @@ impl MemoryNoteBackend {
 
         drop(docs);
         if let Some(ref intent) = req.intent_id {
-            let mut intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
+            let mut intents = self.intents.lock().unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+                tracing::error!("MemoryNoteBackend intents 锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            });
             intents.insert(intent.clone(), result.clone());
         }
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::capture::with_capture;
+    use super::*;
+
+    /// B1-3 毒化测：intents 锁中毒后 apply_md_fragment（带 intent_id）正常
+    /// 返回 + error 日志出现 + 毒丸恢复计数 +2（三要素）。
+    ///
+    /// +2 依据：intents 锁在同一次调用内被取两次——幂等检查（:34）与
+    /// 幂等写入（:144）各自经恢复分支，每次 +1。
+    #[test]
+    fn poisoned_intents_lock_apply_md_recovers_with_log_and_count() {
+        let backend = MemoryNoteBackend::new();
+        let before = poison_recovery_count();
+        crate::test_support::poison_std_lock(&backend.intents);
+        let (result, lines) = with_capture(|| {
+            backend.run_apply_md_fragment(NoteApplyMdRequest {
+                doc_id: "d".into(),
+                markdown: "# T\nbody".into(),
+                parent_id: None,
+                after_block_id: None,
+                mode: NoteApplyMode::ApplyMdFragment,
+                intent_id: Some("intent-p".into()),
+                batch_id: None,
+                message_id: None,
+                origin: Some("agent".into()),
+            })
+        });
+        let result = result.unwrap();
+        assert_eq!(result.inserted, 2, "毒化后写入语义不变（恢复模式）");
+        assert!(
+            lines.iter().any(|l| l.contains("锁中毒")),
+            "缺少锁中毒 error 日志，捕获：\n{}",
+            lines.join("\n")
+        );
+        assert_eq!(
+            poison_recovery_count(),
+            before + 2,
+            "intents 锁两处恢复各计数 +1"
+        );
     }
 }

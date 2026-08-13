@@ -9,6 +9,17 @@ use crate::note_types::{
     NoteBackendError, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
     NoteQueryBlocksResult,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// 毒丸恢复计数（B1-3 观测化：docs 锁中毒恢复次数；对齐 registry.rs
+/// 「tracing::error! 成对 + 计数」样板，零新依赖；本文件 3 处 docs 锁共用）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 impl MemoryNoteBackend {
     /// 组合查询块摘要（内存过滤）
@@ -21,7 +32,12 @@ impl MemoryNoteBackend {
         }
         let limit = params.limit.unwrap_or(50).clamp(1, 200) as usize;
 
-        let docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+        let docs = self.docs.lock().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+            tracing::error!("MemoryNoteBackend docs 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let doc = match docs.get(&params.doc_id) {
             Some(d) => d,
             None => {
@@ -112,7 +128,12 @@ impl MemoryNoteBackend {
         }
         let max_depth = max_depth.unwrap_or(6).clamp(1, 16);
 
-        let docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+        let docs = self.docs.lock().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+            tracing::error!("MemoryNoteBackend docs 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let doc = match docs.get(doc_id) {
             Some(d) => d,
             None => {
@@ -160,7 +181,12 @@ impl MemoryNoteBackend {
         if doc_id.trim().is_empty() {
             return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
         }
-        let docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+        let docs = self.docs.lock().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+            tracing::error!("MemoryNoteBackend docs 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let Some(doc) = docs.get(doc_id) else {
             // 无文档 = 空树即时 S；禁止 mirror 回退
             return Ok(String::new());
@@ -204,6 +230,39 @@ fn insert_outline_node(roots: &mut Vec<NoteOutlineNode>, node: NoteOutlineNode) 
     // 递归：从 roots 找最深的 level < node.level 的节点挂 children
     if !try_insert_child(roots, &node) {
         roots.push(node);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::capture::with_capture;
+    use super::*;
+
+    /// B1-3 毒化测：docs 锁中毒后 query_blocks 正常返回 + error 日志出现 +
+    /// 毒丸恢复计数 +1（三要素）
+    #[test]
+    fn poisoned_docs_lock_query_recovers_with_log_and_count() {
+        let backend = MemoryNoteBackend::new();
+        let before = poison_recovery_count();
+        crate::test_support::poison_std_lock(&backend.docs);
+        let (result, lines) = with_capture(|| {
+            backend.run_query_blocks(NoteQueryBlocksParams {
+                doc_id: "d".into(),
+                ..Default::default()
+            })
+        });
+        let result = result.unwrap();
+        assert!(result.blocks.is_empty(), "毒化后查询语义不变（恢复模式）");
+        assert!(
+            lines.iter().any(|l| l.contains("锁中毒")),
+            "缺少锁中毒 error 日志，捕获：\n{}",
+            lines.join("\n")
+        );
+        assert_eq!(
+            poison_recovery_count(),
+            before + 1,
+            "docs 锁中毒恢复必须计数 +1"
+        );
     }
 }
 

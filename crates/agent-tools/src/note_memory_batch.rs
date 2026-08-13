@@ -8,6 +8,17 @@ use crate::note_plan_ops::{apply_planned_ops, plan_block_ops};
 use crate::note_types::{
     NoteBackendError, NoteBlockBatchRequest, NoteBlockBatchResult, NoteBlockOpPreview,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// 毒丸恢复计数（B1-3 观测化：docs 锁中毒恢复次数；对齐 registry.rs
+/// 「tracing::error! 成对 + 计数」样板，零新依赖；本文件 2 处 docs 锁共用）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 impl MemoryNoteBackend {
     /// 可选 batch token 校验（无 id 放行；有则走内嵌 [`NoteBatchTokens`]）
@@ -41,7 +52,12 @@ impl MemoryNoteBackend {
 
         // 在锁外规划（仅读当前树做校验）；成功后再一次提交
         let plan = {
-            let docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+            let docs = self.docs.lock().unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+                tracing::error!("MemoryNoteBackend docs 锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            });
             let existing = docs.get(&req.doc_id).map(|d| d.blocks.as_slice());
             plan_block_ops(existing, &req.ops, || self.next_id())?
         };
@@ -61,7 +77,12 @@ impl MemoryNoteBackend {
 
         // 原子提交：整批写入（Memory 扁平列表；≠ Store 真事务，仅测形状）
         {
-            let mut docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
+            let mut docs = self.docs.lock().unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-3 观测化）
+                tracing::error!("MemoryNoteBackend docs 锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            });
             let doc = Self::ensure_doc(&mut docs, &req.doc_id);
             apply_planned_ops(doc, plan.mutations)?;
         }
@@ -72,5 +93,45 @@ impl MemoryNoteBackend {
             block_ids,
             preview,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::capture::with_capture;
+    use super::*;
+
+    /// B1-3 毒化测：docs 锁中毒后 apply_block_ops 正常返回 + error 日志
+    /// 出现 + 毒丸恢复计数 +2（三要素）。
+    ///
+    /// +2 依据：docs 锁在同一次调用内被取两次——规划（:44）与提交（:64）
+    /// 各自经恢复分支，每次 +1。
+    #[test]
+    fn poisoned_docs_lock_batch_recovers_with_log_and_count() {
+        let backend = MemoryNoteBackend::new();
+        let before = poison_recovery_count();
+        crate::test_support::poison_std_lock(&backend.docs);
+        let (result, lines) = with_capture(|| {
+            backend.run_apply_block_ops(NoteBlockBatchRequest {
+                doc_id: "d".into(),
+                ops: vec![],
+                dry_run: false,
+                batch_id: None,
+                origin: None,
+                force_execution_unknown: false,
+            })
+        });
+        let result = result.unwrap();
+        assert_eq!(result.applied, 0, "毒化后批写语义不变（恢复模式）");
+        assert!(
+            lines.iter().any(|l| l.contains("锁中毒")),
+            "缺少锁中毒 error 日志，捕获：\n{}",
+            lines.join("\n")
+        );
+        assert_eq!(
+            poison_recovery_count(),
+            before + 2,
+            "docs 锁两处恢复各计数 +1"
+        );
     }
 }
