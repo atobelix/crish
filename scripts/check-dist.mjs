@@ -9,11 +9,13 @@
  *   · vendor-tiptap-*.js / vendor-xterm-*.js 存在（拆分落地，T2-3）；
  *   · --csp-enforce 时（CI 固定加参，T3-4）：恰 1 个 CSP meta；无 unsafe-eval；
  *     script-src 无 unsafe-inline；connect-src 无泛化 http:/https:/ws:/wss:
- *     （仅允许具体 localhost/ipc 条目）；script-src 含 sha256- 条目（内联 theme
- *     script hash 放行）。
+ *     （仅允许具体 localhost/ipc 条目）；内联 script 双态（G-05B 修订）——
+ *     内联 script 为零时允许 script-src 无 sha256- 条目（阶段 A 外链化后常态）；
+ *     有内联 script 时其对应 sha256 hash 必须存在于 script-src（逐条校验内容）。
  * 用法：node scripts/check-dist.mjs [--max-app-kb 500] [--csp-enforce]
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 const DIST_DIR = join(process.cwd(), 'apps', 'crish-desktop', 'dist');
@@ -99,6 +101,10 @@ if (!exists(htmlPath)) {
     (m) => m[0]
   );
   const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].map((m) => m[1]);
+  // 内联 script 正文（无 src 的 <script> 内容；G-05B 双态断言用，逐条核对 hash）
+  const inlineBodies = [
+    ...html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi),
+  ].map((m) => m[1]);
   const preloads = [...html.matchAll(/<link\b[^>]*rel=["']modulepreload["'][^>]*>/gi)].map(
     (m) => m[0]
   );
@@ -134,14 +140,31 @@ if (!exists(htmlPath)) {
       if (scriptSrc && scriptSrc.includes("'unsafe-inline'")) {
         fail('script-src 含 unsafe-inline（内联 script 必须经 sha256 hash 放行）');
       }
-      if (scriptSrc && !scriptSrc.some((t) => t.replace(/^'|'$/g, '').startsWith('sha256-'))) {
-        fail('script-src 无 sha256- 条目（内联 theme script 放行缺失）');
+      // 内联 script 双态断言（G-05B 修订，取代「必须含 sha256-」旧断言：
+      // 阶段 A 外链化后内联归零是常态，零内联时允许无 hash；有内联则必须
+      // 逐条带与内容匹配的 sha256 hash，防止 hash 与内容脱节）
+      if (scriptSrc && inlineBodies.length === 0) {
+        console.log('内联 script 为零，script-src 无需 sha256- 条目 ✓');
+      }
+      if (scriptSrc && inlineBodies.length > 0) {
+        const accepted = new Set(
+          scriptSrc.map((t) => t.replace(/^'|'$/g, ''))
+        );
+        for (const body of inlineBodies) {
+          const hash = `sha256-${createHash('sha256').update(body).digest('base64')}`;
+          if (!accepted.has(hash)) {
+            fail(`内联 script 缺对应 sha256 条目：${hash}（script-src 必须含与内联内容匹配的 hash）`);
+          }
+        }
+        if (errors.length === 0) {
+          console.log(`内联 script ${inlineBodies.length} 个，对应 sha256- 条目齐备 ✓`);
+        }
       }
       if (genericConn.length > 0) {
         fail(`connect-src 含泛化 ${genericConn.join(' ')}（仅允许具体 localhost/ipc 条目）`);
       }
       if (errors.length === 0) {
-        console.log('CSP 断言：单 policy、无 unsafe-eval、script-src 无 unsafe-inline、connect-src 无泛化、含 sha256- ✓');
+        console.log('CSP 断言：单 policy、无 unsafe-eval、script-src 无 unsafe-inline、connect-src 无泛化、内联 hash 双态 ✓');
       }
     }
   }
