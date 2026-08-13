@@ -25,6 +25,37 @@
 | src/git.rs                 | 658  | mod  | 存量登记               | 后续轮次评估 |
 | src/workspace.rs           | 717  | mod  | 存量登记               | 后续轮次评估 |
 
+### apps/agent-workbench/src-tauri 新增登记（26 · 2026-08-13 G-02 批③）
+
+| 文件                        | 行数 | 类型 | 登记理由                                                        | 拆分时限                                                       |
+| --------------------------- | ---- | ---- | --------------------------------------------------------------- | -------------------------------------------------------------- |
+| src/background.rs           | 5188 | mod  | SR-05 拆分对象（G-02 批③ 登记，只登记不拆）                     | SR-05 拆分完成（≤600）后移除登记                               |
+| src/browser/mod.rs          | 1826 | mod  | SR-06 域切分对象（G-02 批③ 登记）                               | SR-06 域切分完成后移除（触发事实=该文件 ≤600 行）              |
+| src/browser/panel_input.rs  | 667  | mod  | SR-06 域切分对象（G-02 批③ 登记）                               | SR-06 域切分完成后移除（触发事实=该文件 ≤600 行）              |
+| src/browser_commands.rs     | 1737 | mod  | SR-06 域切分对象（G-02 批③ 登记）                               | SR-06 域切分完成后移除（触发事实=该文件 ≤600 行）              |
+| src/fs_commands/mod.rs      | 673  | mod  | SR-06 域切分对象（G-02 批③ 登记）                               | SR-06 域切分完成后移除（触发事实=该文件 ≤600 行）              |
+| src/main.rs                 | 1362 | mod  | SR-06f 入口类（G-02 批③ 登记）                                  | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/multi_device/tls.rs     | 1209 | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
+| src/note_commands.rs        | 1010 | mod  | SR-06 批⑥→B2→CT-01 三方串行链占位（00 裁决 7，G-02 批③ 只登记） | SR-06 批⑥→B2→CT-01 串行链完成后移除（触发事实=该文件 ≤600 行） |
+| src/outputs_config.rs       | 800  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
+| src/process.rs              | 976  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
+| src/resource.rs             | 935  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
+| src/sched.rs                | 1649 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/scripted_mock_server.rs | 1008 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/server/auth.rs          | 622  | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
+| src/server/core_backend.rs  | 1139 | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
+| src/server/fanout.rs        | 920  | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
+| src/server/limiter.rs       | 661  | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
+| src/server/mod.rs           | 1217 | mod  | SR-06 server 入口类（G-02 批③ 登记）                            | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
+| src/server/pairing.rs       | 883  | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
+| src/server/pair_endpoint.rs | 698  | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
+| src/server/router.rs        | 3292 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/server/ws.rs            | 2845 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/session_commands.rs     | 1314 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/timers.rs               | 1511 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/wait_channel.rs         | 1008 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/workflow_commands.rs    | 1708 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+
 ### crates/agent-provider（19）
 
 | 文件                    | 行数 | 类型 | 登记理由 | 拆分时限     |
@@ -48,56 +79,111 @@
 | src/retry.rs            | 1197 | mod  | 存量登记 | 后续轮次评估 |
 | src/sse/reader.rs       | 768  | mod  | 存量登记 | 后续轮次评估 |
 
-### crates/agent-tools（11）
+### crates/agent-tools（19）
 
-| 文件                        | 行数 | 类型 | 登记理由 | 拆分时限     |
-| --------------------------- | ---- | ---- | -------- | ------------ |
-| src/explore_quota.rs        | 614  | mod  | 存量登记 | 后续轮次评估 |
-| src/idempotency.rs          | 637  | mod  | 存量登记 | 后续轮次评估 |
-| src/mcp/bridge.rs           | 1185 | mod  | 存量登记 | 后续轮次评估 |
-| src/permission.rs           | 607  | mod  | 存量登记 | 后续轮次评估 |
-| src/revert.rs               | 801  | mod  | 存量登记 | 后续轮次评估 |
-| src/revert_guard.rs         | 661  | mod  | 存量登记 | 后续轮次评估 |
-| src/tools/fs.rs             | 673  | mod  | 存量登记 | 后续轮次评估 |
-| src/tools/shell.rs          | 1371 | mod  | 存量登记 | 后续轮次评估 |
-| src/tools/subagent.rs       | 1425 | mod  | 存量登记 | 后续轮次评估 |
-| src/tools/wait_subagents.rs | 1405 | mod  | 存量登记 | 后续轮次评估 |
-| src/write_paths.rs          | 649  | mod  | 存量登记 | 后续轮次评估 |
+| 文件                         | 行数 | 类型 | 登记理由                                         | 拆分时限                                             |
+| ---------------------------- | ---- | ---- | ------------------------------------------------ | ---------------------------------------------------- |
+| src/executor.rs              | 1304 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
+| src/explore_quota.rs         | 614  | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/idempotency.rs           | 637  | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/mcp/bridge.rs            | 1185 | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/permission.rs            | 607  | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/revert.rs                | 801  | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/revert_guard.rs          | 661  | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/tools/background_task.rs | 851  | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
+| src/tools/fs.rs              | 673  | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/tools/mod.rs             | 1025 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
+| src/tools/output_dir.rs      | 976  | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
+| src/tools/project_tree.rs    | 967  | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
+| src/tools/replace.rs         | 1196 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
+| src/tools/search.rs          | 844  | mod  | SR-06 批① 覆盖只登记（刚过线但 >700 不拆）       | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
+| src/tools/shell.rs           | 1371 | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/tools/shell_tests.rs     | 1462 | mod  | 测试旁挂（SR-06a-2 shell.rs 拆分产物，测试外置） | SR-06 批① shell 域收尾：测试再外置拆分 ≤600 移除登记 |
+| src/tools/subagent.rs        | 1425 | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/tools/wait_subagents.rs  | 1405 | mod  | 存量登记                                         | 后续轮次评估                                         |
+| src/write_paths.rs           | 649  | mod  | 存量登记                                         | 后续轮次评估                                         |
+
+### crates/conex-browser（23 · 2026-08-13 G-02 批② 新增登记）
+
+| 文件                                                   | 行数 | 类型 | 登记理由                            | 拆分时限                                             |
+| ------------------------------------------------------ | ---- | ---- | ----------------------------------- | ---------------------------------------------------- |
+| crates/conex-browser/src/action/keyboard.rs            | 1006 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/action/mocks.rs               | 695  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/action/mod.rs                 | 1621 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/action/ops.rs                 | 1482 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/action/wait.rs                | 667  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/adapters/cdp_input_backend.rs | 935  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/browser/cft.rs                | 1238 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/browser/discover.rs           | 725  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/browser/mod.rs                | 2369 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/browser/profile.rs            | 971  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/browser/state.rs              | 702  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/cdp/bus.rs                    | 1346 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/cdp/client.rs                 | 689  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/cdp/sender.rs                 | 1806 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/cdp/transport.rs              | 951  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/cdp/version.rs                | 852  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/frames/session.rs             | 1400 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/import/bookmarks.rs           | 680  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/import/copy.rs                | 861  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/snapshot/collect.rs           | 2721 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/snapshot/interactive.rs       | 888  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/snapshot/mod.rs               | 977  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+| crates/conex-browser/src/snapshot/serialize.rs         | 1823 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
+
+### crates 其它域（11 · 2026-08-13 G-02 批③ 新增登记）
+
+| 文件                                       | 行数 | 类型 | 登记理由                                                                | 拆分时限                                                    |
+| ------------------------------------------ | ---- | ---- | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
+| crates/agent-provider/src/sse/frame.rs     | 626  | mod  | SR-06 拆分对象（G-02 批③ 登记，刚过线未顺带拆）                         | SR-06 拆分完成（触发事实=该文件 ≤600 行）                   |
+| crates/conex-db/src/agents.rs              | 846  | mod  | SR-06 拆分对象（G-02 批③ 登记）                                         | SR-06 拆分完成（触发事实=该文件 ≤600 行）                   |
+| crates/conex-db/src/migrate.rs             | 607  | mod  | SR-06 拆分对象（G-02 批③ 登记，刚过线未顺带拆）                         | SR-06 拆分完成（触发事实=该文件 ≤600 行）                   |
+| crates/conex-doc-collab/src/session.rs     | 2922 | mod  | SR-06 批⑦→CT-01 串行链占位（00 裁决 8，G-02 批③ 只登记）                | SR-06 批⑦→CT-01 串行链完成后移除（触发事实=该文件 ≤600 行） |
+| crates/conex-doc-collab/src/text_engine.rs | 616  | mod  | SR-06 拆分对象（G-02 批③ 登记，刚过线未顺带拆）                         | SR-06 拆分完成（触发事实=该文件 ≤600 行）                   |
+| crates/conex-fs/src/watch.rs               | 806  | mod  | SR-06 拆分对象（G-02 批③ 登记）                                         | SR-06 拆分完成（触发事实=该文件 ≤600 行）                   |
+| crates/conex-types/src/cron.rs             | 831  | mod  | SR-06 拆分对象（G-02 批③ 登记）                                         | SR-06 拆分完成（触发事实=该文件 ≤600 行）                   |
+| crates/conex-types/src/device/commands.rs  | 1601 | mod  | SR-06g 拆分对象（G-02 批③ 登记）                                        | SR-06g 拆分完成（触发事实=该文件 ≤600 行）                  |
+| crates/conex-types/src/device/events.rs    | 631  | mod  | SR-06 拆分对象（G-02 批③ 登记，刚过线未顺带拆）                         | SR-06 拆分完成（触发事实=该文件 ≤600 行）                   |
+| crates/orchestrator/src/goal_state.rs      | 1135 | mod  | SR-06 批④（orchestrator 域，D-03 SR-06d 收录）拆分对象（G-02 批③ 登记） | SR-06 批④ 拆分完成（触发事实=该文件 ≤600 行）               |
+| crates/orchestrator/src/task_events.rs     | 838  | mod  | 不在 SR-06 批④ 清单内（G-02 批③ 登记）                                  | 结构轮批表补录后拆分（触发事实=该文件 ≤600 行）             |
 
 ### 其余 crates（28）
 
-| 文件                                                  | 行数 | 类型  | 登记理由                                         | 拆分时限     |
-| ----------------------------------------------------- | ---- | ----- | ------------------------------------------------ | ------------ |
-| crates/conex-compaction/src/ai_summary.rs             | 962  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/conex-compaction/src/lib.rs                    | 2058 | entry | 存量登记（lib.rs 大文件，AI 摘要域）             | 后续轮次评估 |
-| crates/conex-db/src/tests.rs                          | 850  | mod   | 存量登记（测试文件行数超限，测试规模计数观察项） | 后续轮次评估 |
-| crates/conex-fs/src/trash.rs                          | 965  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/conex-markdown/src/renderer.rs                 | 1107 | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/conex-sandbox/src/semantics.rs                 | 804  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/conex-telemetry/src/file.rs                    | 646  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/conex-types/src/error.rs                       | 1267 | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/conex-types/src/events.rs                      | 800  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/orchestrator/src/events.rs                     | 1195 | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/orchestrator/src/flow_graph.rs                 | 1748 | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/orchestrator/src/normalize.rs                  | 640  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/orchestrator/src/persist.rs                    | 1038 | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/orchestrator/src/recovery.rs                   | 2177 | mod   | 存量登记（I8 G10 统计点接线位）                  | 后续轮次评估 |
-| crates/orchestrator/src/restore.rs                    | 1494 | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/orchestrator/src/run.rs                        | 886  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/orchestrator/src/session.rs                    | 1850 | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/orchestrator/src/steering_queue.rs             | 636  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/cache_tracker.rs              | 766  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/control.rs                    | 697  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/hooks.rs                      | 1248 | mod   | 存量登记（并行域在途，--update 登记）            | 后续轮次评估 |
-| crates/session-loop/src/loop/handlers/mod.rs          | 949  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/loop/handlers/stream_error.rs | 709  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/loop/mod.rs                   | 838  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/safe_point.rs                 | 698  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/state.rs                      | 617  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/steering/mod.rs               | 886  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/steering/strategy.rs          | 632  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/stream.rs                     | 787  | mod   | 存量登记                                         | 后续轮次评估 |
-| crates/session-loop/src/tool_exec.rs                  | 3562 | mod   | 存量登记（最大超限文件）                         | 后续轮次评估 |
+| 文件                                                  | 行数 | 类型  | 登记理由                                         | 拆分时限                                          |
+| ----------------------------------------------------- | ---- | ----- | ------------------------------------------------ | ------------------------------------------------- |
+| crates/conex-compaction/src/ai_summary.rs             | 962  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/conex-compaction/src/lib.rs                    | 2058 | entry | 存量登记（lib.rs 大文件，AI 摘要域）             | 后续轮次评估                                      |
+| crates/conex-db/src/tests.rs                          | 850  | mod   | 存量登记（测试文件行数超限，测试规模计数观察项） | 后续轮次评估                                      |
+| crates/conex-fs/src/trash.rs                          | 965  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/conex-markdown/src/renderer.rs                 | 1107 | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/conex-sandbox/src/semantics.rs                 | 804  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/conex-telemetry/src/file.rs                    | 646  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/conex-types/src/error.rs                       | 1267 | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/conex-types/src/events.rs                      | 800  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/orchestrator/src/events.rs                     | 1195 | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/orchestrator/src/flow_graph.rs                 | 1748 | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/orchestrator/src/normalize.rs                  | 640  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/orchestrator/src/persist.rs                    | 1038 | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/orchestrator/src/recovery.rs                   | 2177 | mod   | 存量登记（I8 G10 统计点接线位）                  | 后续轮次评估                                      |
+| crates/orchestrator/src/restore.rs                    | 1494 | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/orchestrator/src/run.rs                        | 886  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/orchestrator/src/session.rs                    | 1850 | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/orchestrator/src/steering_queue.rs             | 636  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/cache_tracker.rs              | 766  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/control.rs                    | 697  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/escape_watch.rs               | 870  | mod   | SR-06 批③ 覆盖只登记（E2 批）                    | SR-06 批③ session-loop 域拆分完成后 ≤600 移除登记 |
+| crates/session-loop/src/hooks.rs                      | 1248 | mod   | 存量登记（并行域在途，--update 登记）            | 后续轮次评估                                      |
+| crates/session-loop/src/hydrate.rs                    | 678  | mod   | SR-06 批③ 覆盖只登记（E2 批）                    | SR-06 批③ session-loop 域拆分完成后 ≤600 移除登记 |
+| crates/session-loop/src/loop/handlers/mod.rs          | 949  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/loop/handlers/stream_error.rs | 709  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/loop/mod.rs                   | 838  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/loop/summary_dispatch.rs      | 1146 | mod   | SR-06 批③ 占位（02 方案批③清单内）               | SR-06 批③ 完成 ≤600 移除登记                      |
+| crates/session-loop/src/safe_point.rs                 | 698  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/state.rs                      | 617  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/steering/mod.rs               | 886  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/steering/strategy.rs          | 632  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/stream.rs                     | 787  | mod   | 存量登记                                         | 后续轮次评估                                      |
+| crates/session-loop/src/tool_exec.rs                  | 3562 | mod   | 存量登记（最大超限文件）                         | 后续轮次评估                                      |
 
 ## 测试规模顺带计数（观察项，2026-08-04，不设门禁）
 
@@ -127,15 +213,68 @@ CI 以脚本实时输出为准。
 - 豁免/拆分的既有治理约定：conex-db 专属门禁脚本 `check-conex-db-size.mjs` 保留
   不动（本脚本为其泛化，两脚本并存，域内规则一致：lib.rs ≤ 800 / mod ≤ 600）。
 - 新增超限文件处置：优先拆分；拆分在途需豁免时 `--update` 登记 + 本注记补理由。
+- 2026-08-13（G-02 批② · conex-browser + conex-compaction 域）：conex-browser 23 个
+  clean 超限文件登记（SR-06 批② 拆分对象，登记 = 限速豁免；实测行数 = 标记区/正文表数值）。
+  时限注记（二元结构）：**SR-06 批②（browser 域拆分）完成后移除登记；触发事实 = 该文件
+  ≤ 600 行（入口类 ≤ 800）**。并行域在途 M 文件不登记不拆，收口后由主控按实测值登记：
+  `cdp/domains.rs`、`gate.rs`、`import/storage_state.rs`、`input/pipeline.rs`、`lib.rs`
+  （5 个，git M，快照基线 B.1 并行域文件类）。conex-compaction 域无 FAIL（`ai_summary.rs`
+  1055 / `lib.rs` 2647 既有登记仍生效；`lib.rs` 并行域 M 在途，登记值 2647 与当前实测一致，
+  收口后复核）。
+- 2026-08-13（G-02 批③ · workbench 壳 + 其它 crate 域）：apps/agent-workbench/src-tauri 26 个
+  clean 超限文件登记（SR-04/05/06 拆分对象，登记 = 限速豁免；实测行数 = 标记区/正文表数值）。
+  `engine.rs` 已登记 6107（G-01 迁移值，实测 6107 不 FAIL 无需动作，SR-04 拆分后自行收紧/移除）、
+  `core_run_commands.rs` 已登记 17510（G-01 迁移时点值，实测 17510 不 FAIL，SR-02 拆分后移除）；
+  `background.rs` 为 SR-05 拆分对象（只登记不拆）；`note_commands.rs` 为 SR-06 批⑥→B2→CT-01
+  三方串行链占位（00 裁决 7，只登记不拆）。其它 crate 域 11 个 clean 超限文件登记
+  （agent-provider / db / doc-collab / fs / types / orchestrator；doc-collab `session.rs` 为
+  SR-06 批⑦→CT-01 占位，00 裁决 8，只登记不拆）。时限注记（二元结构）：**SR-0x 拆分完成后
+  移除登记；触发事实 = 该文件 ≤ 600 行（入口类 ≤ 800）**。并行域在途文件不登记不拆：
+  `subagent_spawner.rs`（git M）、`computer/mod.rs`（未跟踪目录），收口后由主控按实测值登记。
+- 2026-08-13（G-02 批① · agent-tools + session-loop 域）：agent-tools 8 个 clean 超限文件
+  登记（SR-06 批① 拆分对象，只登记不拆；`shell_tests.rs` 为 SR-06a-2 shell.rs 拆分产物的
+  测试旁挂文件，注记「测试外置」）；session-loop 3 个 clean 超限文件登记（`escape_watch.rs` /
+  `hydrate.rs` 为 SR-06 批③ 覆盖只登记；`summary_dispatch.rs` 为 SR-06 批③ 占位，02 方案
+  批③清单内）。**顺带拆 2 个**：`stage_summary.rs`(638→360) 与 `executing_tools.rs`(646→397)
+  测试外置（`#[path]` 接线，仿 shell.rs/subagent.rs 测试旁挂先例），行为零变更——域内测试
+  stage_summary 18/18 + executing_tools 4/4 全绿；session-loop 全量 412 passed / 12 failed
+  （12 失败 = 开工基线同集合，并行域 compaction 中间态，SR-06c-1 已上报，非本批引入）。
+  时限注记（二元结构）：**SR-06 批①/批③ 拆分完成后移除登记；触发事实 = 该文件 ≤ 600 行**。
 
 <!-- BASELINE_START -->
 
+apps/agent-workbench/src-tauri/src/background.rs 5188
+apps/agent-workbench/src-tauri/src/browser/mod.rs 1826
+apps/agent-workbench/src-tauri/src/browser/panel_input.rs 667
+apps/agent-workbench/src-tauri/src/browser_commands.rs 1737
 apps/agent-workbench/src-tauri/src/config/provider.rs 788
 apps/agent-workbench/src-tauri/src/core_commands.rs 981
 apps/agent-workbench/src-tauri/src/core_query_commands.rs 991
 apps/agent-workbench/src-tauri/src/core_run_commands.rs 17510
 apps/agent-workbench/src-tauri/src/engine.rs 6107
+apps/agent-workbench/src-tauri/src/fs_commands/mod.rs 673
 apps/agent-workbench/src-tauri/src/git.rs 911
+apps/agent-workbench/src-tauri/src/main.rs 1362
+apps/agent-workbench/src-tauri/src/multi_device/tls.rs 1209
+apps/agent-workbench/src-tauri/src/note_commands.rs 1010
+apps/agent-workbench/src-tauri/src/outputs_config.rs 800
+apps/agent-workbench/src-tauri/src/process.rs 976
+apps/agent-workbench/src-tauri/src/resource.rs 935
+apps/agent-workbench/src-tauri/src/sched.rs 1649
+apps/agent-workbench/src-tauri/src/scripted_mock_server.rs 1008
+apps/agent-workbench/src-tauri/src/server/auth.rs 622
+apps/agent-workbench/src-tauri/src/server/core_backend.rs 1139
+apps/agent-workbench/src-tauri/src/server/fanout.rs 920
+apps/agent-workbench/src-tauri/src/server/limiter.rs 661
+apps/agent-workbench/src-tauri/src/server/mod.rs 1217
+apps/agent-workbench/src-tauri/src/server/pair_endpoint.rs 698
+apps/agent-workbench/src-tauri/src/server/pairing.rs 883
+apps/agent-workbench/src-tauri/src/server/router.rs 3292
+apps/agent-workbench/src-tauri/src/server/ws.rs 2845
+apps/agent-workbench/src-tauri/src/session_commands.rs 1314
+apps/agent-workbench/src-tauri/src/timers.rs 1511
+apps/agent-workbench/src-tauri/src/wait_channel.rs 1008
+apps/agent-workbench/src-tauri/src/workflow_commands.rs 1708
 apps/agent-workbench/src-tauri/src/workspace.rs 718
 crates/agent-provider/src/config.rs 671
 crates/agent-provider/src/consume/mod.rs 811
@@ -154,29 +293,70 @@ crates/agent-provider/src/request/messages.rs 1543
 crates/agent-provider/src/request/schema.rs 685
 crates/agent-provider/src/request/vendor.rs 1015
 crates/agent-provider/src/retry.rs 1238
+crates/agent-provider/src/sse/frame.rs 626
 crates/agent-provider/src/sse/reader.rs 768
+crates/agent-tools/src/executor.rs 1304
 crates/agent-tools/src/explore_quota.rs 948
 crates/agent-tools/src/idempotency.rs 792
 crates/agent-tools/src/mcp/bridge.rs 1185
 crates/agent-tools/src/permission.rs 771
 crates/agent-tools/src/revert.rs 801
 crates/agent-tools/src/revert_guard.rs 661
+crates/agent-tools/src/tools/background_task.rs 851
 crates/agent-tools/src/tools/fs.rs 1193
+crates/agent-tools/src/tools/mod.rs 1025
+crates/agent-tools/src/tools/output_dir.rs 976
+crates/agent-tools/src/tools/project_tree.rs 967
+crates/agent-tools/src/tools/replace.rs 1196
+crates/agent-tools/src/tools/search.rs 844
 crates/agent-tools/src/tools/shell.rs 3251
+crates/agent-tools/src/tools/shell_tests.rs 1462
 crates/agent-tools/src/tools/subagent.rs 3305
 crates/agent-tools/src/tools/wait_subagents.rs 1875
 crates/agent-tools/src/write_paths.rs 1034
 crates/conex-compaction/src/ai_summary.rs 1055
 crates/conex-compaction/src/lib.rs 2647
+crates/conex-browser/src/action/keyboard.rs 1006
+crates/conex-browser/src/action/mocks.rs 695
+crates/conex-browser/src/action/mod.rs 1621
+crates/conex-browser/src/action/ops.rs 1482
+crates/conex-browser/src/action/wait.rs 667
+crates/conex-browser/src/adapters/cdp_input_backend.rs 935
+crates/conex-browser/src/browser/cft.rs 1238
+crates/conex-browser/src/browser/discover.rs 725
+crates/conex-browser/src/browser/mod.rs 2369
+crates/conex-browser/src/browser/profile.rs 971
+crates/conex-browser/src/browser/state.rs 702
+crates/conex-browser/src/cdp/bus.rs 1346
+crates/conex-browser/src/cdp/client.rs 689
+crates/conex-browser/src/cdp/sender.rs 1806
+crates/conex-browser/src/cdp/transport.rs 951
+crates/conex-browser/src/cdp/version.rs 852
+crates/conex-browser/src/frames/session.rs 1400
+crates/conex-browser/src/import/bookmarks.rs 680
+crates/conex-browser/src/import/copy.rs 861
+crates/conex-browser/src/snapshot/collect.rs 2721
+crates/conex-browser/src/snapshot/interactive.rs 888
+crates/conex-browser/src/snapshot/mod.rs 977
+crates/conex-browser/src/snapshot/serialize.rs 1823
+crates/conex-db/src/agents.rs 846
+crates/conex-db/src/migrate.rs 607
 crates/conex-db/src/tests.rs 965
+crates/conex-doc-collab/src/session.rs 2922
+crates/conex-doc-collab/src/text_engine.rs 616
 crates/conex-fs/src/trash.rs 1292
+crates/conex-fs/src/watch.rs 806
 crates/conex-markdown/src/renderer.rs 1107
 crates/conex-sandbox/src/semantics.rs 1725
 crates/conex-telemetry/src/file.rs 801
+crates/conex-types/src/cron.rs 831
+crates/conex-types/src/device/commands.rs 1601
+crates/conex-types/src/device/events.rs 631
 crates/conex-types/src/error.rs 1561
 crates/conex-types/src/events.rs 1200
 crates/orchestrator/src/events.rs 1355
 crates/orchestrator/src/flow_graph.rs 2031
+crates/orchestrator/src/goal_state.rs 1135
 crates/orchestrator/src/normalize.rs 677
 crates/orchestrator/src/persist.rs 1091
 crates/orchestrator/src/recovery.rs 2345
@@ -184,12 +364,16 @@ crates/orchestrator/src/restore.rs 2027
 crates/orchestrator/src/run.rs 944
 crates/orchestrator/src/session.rs 1856
 crates/orchestrator/src/steering_queue.rs 636
+crates/orchestrator/src/task_events.rs 838
 crates/session-loop/src/cache_tracker.rs 1087
 crates/session-loop/src/control.rs 736
+crates/session-loop/src/escape_watch.rs 870
 crates/session-loop/src/hooks.rs 1242
+crates/session-loop/src/hydrate.rs 678
 crates/session-loop/src/loop/handlers/mod.rs 2180
 crates/session-loop/src/loop/handlers/stream_error.rs 1938
 crates/session-loop/src/loop/mod.rs 1870
+crates/session-loop/src/loop/summary_dispatch.rs 1146
 crates/session-loop/src/safe_point.rs 698
 crates/session-loop/src/state.rs 645
 crates/session-loop/src/steering/mod.rs 884
