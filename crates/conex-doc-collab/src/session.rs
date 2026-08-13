@@ -4,7 +4,8 @@
 //! - 文本：私有 [`crate::text_engine::TextEngine`]（yrs + 热集/冷藏，H1）
 //! - 同批原子：预校验失败整批零改树/零改文本（A-INV-09a）
 //! - **P-H2（18 补丁 / 01 §2.4.1 方案 A）**：`on_committed` / 同批突变失败 →
-//!   树 + 文本引擎 + rev + last_tx 回滚到 apply 前快照，零半提交
+//!   树 + 文本引擎 + rev + last_tx 回滚到 apply 前快照，零半提交；
+//!   **CT-01 CAS Conflict 亦走 P-H2 回滚**（只是又一种失败）
 //! - 删块同步释放文本引擎（A-INV-09c）
 //! - 超长单块（M2 / A-HUGE）：`T_HUGE` 亚阈保持单叶；超阈同事务分段叶子（`split_of`）
 //! - **结构 encode**：整树可逆 CDCS snapshot（G-HYD-1），**禁止** `rev.to_le_bytes()` 占位
@@ -24,8 +25,8 @@
 //! - [`session_hydrate`]：hydrate 重建
 //! - 测试旁挂 `session_tests*.rs`（`#[path]` 接入，零删除零改写）
 //!
-//! 拆分只切不修：公开 API 不 break（lib.rs re-export 不变）；**未**预置 CT-01 CAS
-//! 逻辑（后续单元在拆分产物上接线，行号以本版为基准）。
+//! 拆分只切不修：公开 API 不 break（lib.rs re-export 不变）；**CT-01 CAS 已接线**
+//!（emit_commit 期望版本参数 + 三写路径传入本次写前 rev，见 [`Self::emit_commit`]）。
 
 use crate::block_id::BlockId;
 use crate::events::BlockUpsert;
@@ -356,16 +357,18 @@ impl DocSession {
         self.last_text_updates = snap.last_text_updates;
     }
 
-    /// 同源 commit：写 Structure（整树 CDCS）+ 可选 Text updates，并调 `on_committed`。
+    /// 同源 commit：写 Structure（整树 CDCS）+ 可选 Text updates，并调 `on_committed_expect`。
     ///
     /// 三个写路径（apply / undo / 远端文本合入）统一汇入本面；失败由调用方
-    /// P-H2 快照回滚。**CT-01 接线点**：CAS 期望版本参数在本拆分后的产物上由
-    /// 后续单元（CT-01 U3）引入——本版本**未**预置。
+    /// P-H2 快照回滚。**CT-01 CAS**：`expect_rev` = 本次写前会话 rev（increment 前），
+    /// 经存储层条件更新比对；陈旧写 → [`crate::persistence::PersistError::Conflict`] →
+    /// `ApplyError::Persist`（消息含稳定 `conflict` 标识，供上层错误码透传链消费）。
     fn emit_commit(
         &self,
         origin: Origin,
         tx_id: TxId,
         rev: u64,
+        expect_rev: Option<u64>,
         text_payloads: &[TextUpdatePayload],
     ) -> Result<(), ApplyError> {
         let Some(p) = &self.persistence else {
@@ -387,7 +390,7 @@ impl DocSession {
             updates,
             snapshot_tick: false,
         };
-        p.on_committed(&self.doc_id, &batch)
+        p.on_committed_expect(&self.doc_id, &batch, expect_rev)
             .map_err(|e| ApplyError::Persist(e.to_string()))?;
         Ok(())
     }

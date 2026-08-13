@@ -1,4 +1,9 @@
 //! PersistencePlugin 冻结形状（W0-D / plans/interfaces/00）。
+//!
+//! **CT-01 CAS**：`on_committed_expect` = 版本期望比对的条件提交。
+//! **CAS = 检测并报错，不自动合并**；跨进程陈旧写与同进程双会话写同一 doc
+//! 均受保护（版本不符 → [`PersistError::Conflict`]）。默认实现忽略期望值
+//!（委托 `on_committed`，旧 LWW 行为），既有实现者零改动。
 
 use crate::op::Origin;
 use crate::tx::TxId;
@@ -41,6 +46,10 @@ pub enum PersistError {
     Io(String),
     #[error("corrupt: {0}")]
     Corrupt(String),
+    /// CT-01 CAS：期望版本不匹配（陈旧写被拦截）。Display 含稳定 `conflict` 标识，
+    /// 供既有错误透传链（ApplyError → CommitPipelineError → NoteBackendError）识别。
+    #[error("conflict: rev 已前进，期望 {expect} 不匹配")]
+    Conflict { expect: u64 },
 }
 
 /// 01↔02 闸门接口。实现放在 conex-workspace-store。
@@ -48,6 +57,19 @@ pub trait PersistencePlugin: Send + Sync {
     fn load_doc(&self, doc_id: &str) -> Result<HydrateBlob, PersistError>;
     fn on_committed(&self, doc_id: &str, commit: &CommitBatch) -> Result<(), PersistError>;
     fn flush_hint(&self, doc_id: &str) -> Result<(), PersistError>;
+
+    /// CT-01 CAS 版 `on_committed`：`expect_rev = Some(期望)` 时按期望版本条件更新，
+    /// 版本不符 → [`PersistError::Conflict`]。**CAS = 检测并报错，不自动合并**。
+    /// 默认实现忽略期望值（委托 `on_committed`，旧 LWW 行为），既有实现者零改动。
+    fn on_committed_expect(
+        &self,
+        doc_id: &str,
+        commit: &CommitBatch,
+        expect_rev: Option<u64>,
+    ) -> Result<(), PersistError> {
+        let _ = expect_rev;
+        self.on_committed(doc_id, commit)
+    }
 }
 
 /// 内存 mock：契约测 / G-HYD 往返用。

@@ -23,6 +23,10 @@ pub enum NoteBackendError {
     ///
     /// 稳定码：`note.execution_unknown`（W4-F；**≠** W6-E 满关）。
     ExecutionUnknown(String),
+    /// 持久层版本冲突（CT-01 CAS）：陈旧写被 `PersistError::Conflict` 拦截
+    ///
+    /// 稳定码：`note.persist_conflict`；**CAS = 检测并报错，不自动合并**。
+    Conflict(String),
 }
 
 impl NoteBackendError {
@@ -37,6 +41,7 @@ impl NoteBackendError {
             Self::BatchTokenInvalid(_) => "note.batch_token_invalid",
             Self::BatchTokenExpired(_) => "note.batch_token_expired",
             Self::ExecutionUnknown(_) => "note.execution_unknown",
+            Self::Conflict(_) => "note.persist_conflict",
         }
     }
 
@@ -50,7 +55,8 @@ impl NoteBackendError {
             | Self::IdConflict(m)
             | Self::BatchTokenInvalid(m)
             | Self::BatchTokenExpired(m)
-            | Self::ExecutionUnknown(m) => m.clone(),
+            | Self::ExecutionUnknown(m)
+            | Self::Conflict(m) => m.clone(),
         }
     }
 }

@@ -9,6 +9,14 @@
 //!
 //! **诚实**：**≠ EL-04**（本包只切 persist 体积，不关 EL）；**≠ EL-03**（恢复/打开产品叙事分属 W3 等）。
 //! 不静默改 snapshot / updates 语义；**≠** 切 refs / os_watch。
+//!
+//! # CT-01 CAS（乐观锁 · 版本期望比对）
+//! - `on_committed_expect`：`expect_rev = Some(期望)` 时，UPSERT 的 UPDATE 分支带
+//!   `WHERE doc_meta.rev = ?期望` 条件——受影响行数 = 0（行存在但 rev ≠ 期望）→
+//!   [`PersistError::Conflict`]（tx 未 commit 随 drop 回滚，rev/updates 零副作用）。
+//!   INSERT 分支恒 1 行（行不存在 = 无争用史，无条件放行）；`None` 走原 SQL 原样（旧 LWW）。
+//! - **CAS = 检测并报错，不自动合并**；与 [`crate::cas`]（blob 内容 SHA-256 去重）
+//!   是两回事——去重管存储空间，CAS 管版本争用。
 
 use crate::{StoreError, WorkspaceStore, SNAPSHOT_UPDATE_THRESHOLD};
 use conex_doc_collab::{CommitBatch, EncodedUpdate, HydrateBlob, PersistError, PersistencePlugin};
@@ -56,6 +64,16 @@ impl PersistencePlugin for WorkspaceStore {
     }
 
     fn on_committed(&self, doc_id: &str, commit: &CommitBatch) -> Result<(), PersistError> {
+        // CT-01：旧 LWW 面收敛为无条件版本（None）委托，行为与现状逐字节一致
+        self.on_committed_expect(doc_id, commit, None)
+    }
+
+    fn on_committed_expect(
+        &self,
+        doc_id: &str,
+        commit: &CommitBatch,
+        expect_rev: Option<u64>,
+    ) -> Result<(), PersistError> {
         let conn = self
             .conn
             .lock()
@@ -66,18 +84,41 @@ impl PersistencePlugin for WorkspaceStore {
 
         let tx_s = format!("{:?}", commit.tx_id);
 
-        // 抬升 rev；确保 meta 行存在
-        tx.execute(
-            r#"
-            INSERT INTO doc_meta(doc_id, rev, updated_at)
-            VALUES (?1, 1, strftime('%s','now'))
-            ON CONFLICT(doc_id) DO UPDATE SET
-                rev = rev + 1,
-                updated_at = strftime('%s','now')
-            "#,
-            params![doc_id],
-        )
+        // 抬升 rev；确保 meta 行存在。CT-01：Some(expect) → UPDATE 分支带
+        // WHERE doc_meta.rev = ?2（期望版本比对）；受影响行数 = 0 → 陈旧写冲突。
+        // INSERT 分支恒 1 行（行不存在 = 无争用史，无条件放行，首写 rev=1 语义不变）。
+        let affected = match expect_rev {
+            Some(expect) => tx.execute(
+                r#"
+                INSERT INTO doc_meta(doc_id, rev, updated_at)
+                VALUES (?1, 1, strftime('%s','now'))
+                ON CONFLICT(doc_id) DO UPDATE SET
+                    rev = rev + 1,
+                    updated_at = strftime('%s','now')
+                WHERE doc_meta.rev = ?2
+                "#,
+                params![doc_id, expect as i64],
+            ),
+            None => tx.execute(
+                r#"
+                INSERT INTO doc_meta(doc_id, rev, updated_at)
+                VALUES (?1, 1, strftime('%s','now'))
+                ON CONFLICT(doc_id) DO UPDATE SET
+                    rev = rev + 1,
+                    updated_at = strftime('%s','now')
+                "#,
+                params![doc_id],
+            ),
+        }
         .map_err(|e| PersistError::Io(e.to_string()))?;
+
+        if affected == 0 {
+            // 陈旧写：行存在但 rev ≠ 期望。tx 未 commit 随 drop 自动回滚——
+            // doc_meta.rev 保持原值、doc_updates 零追加（D-06 D2/D6）。
+            return Err(PersistError::Conflict {
+                expect: expect_rev.unwrap_or(0),
+            });
+        }
 
         // 追加 updates（seq 单调）
         for u in &commit.updates {
@@ -179,6 +220,17 @@ impl PersistencePlugin for SharedWorkspaceStore {
 
     fn flush_hint(&self, doc_id: &str) -> Result<(), PersistError> {
         self.0.flush_hint(doc_id)
+    }
+
+    /// CT-01：**必须**覆写转发（生产会话挂的是 SharedWorkspaceStore）。
+    /// 若不覆写，trait 默认方法会经 `on_committed` 静默回退纯 LWW——CAS 在生产路径失效。
+    fn on_committed_expect(
+        &self,
+        doc_id: &str,
+        commit: &CommitBatch,
+        expect_rev: Option<u64>,
+    ) -> Result<(), PersistError> {
+        self.0.on_committed_expect(doc_id, commit, expect_rev)
     }
 }
 

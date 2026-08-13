@@ -198,3 +198,135 @@ fn open_migrate_and_commit_smoke() {
     assert!(h.pending.is_empty());
     assert!(store.load_rev("doc-a").unwrap() >= 1);
 }
+
+// ─── CT-01 CAS（乐观锁）· T1–T4 ────────────────────────────────────────
+
+/// T1 · 期望不匹配 → Conflict + rev 保持 + updates 零追加。
+#[test]
+fn cas_expected_mismatch_conflicts_and_preserves_rev() {
+    let (_dir, db) = temp_db();
+    let store = WorkspaceStore::open(&db).unwrap();
+
+    // 无行首写：INSERT 分支无条件放行，rev=1
+    store
+        .on_committed_expect(
+            "doc-cas-t1",
+            &batch(vec![make_update(vec![0x11], "structure")], false),
+            Some(0),
+        )
+        .unwrap();
+    assert_eq!(store.load_rev("doc-cas-t1").unwrap(), 1);
+    assert_eq!(store.load_pending_count("doc-cas-t1").unwrap(), 1);
+
+    // 陈旧期望（行已存在且 rev=1 ≠ 0）→ Conflict{expect:0}
+    let err = store
+        .on_committed_expect(
+            "doc-cas-t1",
+            &batch(vec![make_update(vec![0x12], "structure")], false),
+            Some(0),
+        )
+        .unwrap_err();
+    assert!(matches!(err, PersistError::Conflict { expect: 0 }));
+
+    // 副作用断言：rev 不被覆盖、updates 零追加
+    assert_eq!(store.load_rev("doc-cas-t1").unwrap(), 1);
+    assert_eq!(store.load_pending_count("doc-cas-t1").unwrap(), 1);
+}
+
+/// T2 · 期望匹配 → 单调前进；再冲突。
+#[test]
+fn cas_expected_match_advances_then_conflicts() {
+    let (_dir, db) = temp_db();
+    let store = WorkspaceStore::open(&db).unwrap();
+
+    store
+        .on_committed_expect("doc-cas-t2", &batch(vec![make_update(vec![1], "structure")], false), Some(0))
+        .unwrap();
+    assert_eq!(store.load_rev("doc-cas-t2").unwrap(), 1);
+    store
+        .on_committed_expect("doc-cas-t2", &batch(vec![make_update(vec![2], "structure")], false), Some(1))
+        .unwrap();
+    assert_eq!(store.load_rev("doc-cas-t2").unwrap(), 2);
+
+    let err = store
+        .on_committed_expect("doc-cas-t2", &batch(vec![make_update(vec![3], "structure")], false), Some(1))
+        .unwrap_err();
+    assert!(matches!(err, PersistError::Conflict { expect: 1 }));
+    assert_eq!(store.load_rev("doc-cas-t2").unwrap(), 2);
+    assert_eq!(store.load_pending_count("doc-cas-t2").unwrap(), 2);
+}
+
+/// T3 · None 兼容 = 旧 LWW 行为（回归护栏）。
+#[test]
+fn cas_none_preserves_lww_behavior() {
+    let (_dir, db) = temp_db();
+    let store = WorkspaceStore::open(&db).unwrap();
+
+    // on_committed 直调两次（None 路径）→ rev=2（与现状完全一致）
+    store
+        .on_committed("doc-cas-t3", &batch(vec![make_update(vec![1], "structure")], false))
+        .unwrap();
+    store
+        .on_committed("doc-cas-t3", &batch(vec![make_update(vec![2], "structure")], false))
+        .unwrap();
+    assert_eq!(store.load_rev("doc-cas-t3").unwrap(), 2);
+
+    // on_committed_expect(None) 同理（委托同路径）
+    store
+        .on_committed_expect("doc-cas-t3", &batch(vec![make_update(vec![3], "structure")], false), None)
+        .unwrap();
+    assert_eq!(store.load_rev("doc-cas-t3").unwrap(), 3);
+    assert_eq!(store.load_pending_count("doc-cas-t3").unwrap(), 3);
+}
+
+/// T4 · seq 不空洞：冲突事务零追加，后续成功写从原 max 继续。
+#[test]
+fn cas_conflict_leaves_no_seq_hole() {
+    let (_dir, db) = temp_db();
+    let store = WorkspaceStore::open(&db).unwrap();
+
+    // A：Some(0) 首写 Ok（2 条 update，seq=1,2）
+    store
+        .on_committed_expect(
+            "doc-cas-t4",
+            &batch(
+                vec![make_update(vec![1], "structure"), make_update(vec![2], "text")],
+                false,
+            ),
+            Some(0),
+        )
+        .unwrap();
+
+    // B：Some(0) 陈旧 → Err（零追加，tx 回滚）
+    let err = store
+        .on_committed_expect(
+            "doc-cas-t4",
+            &batch(vec![make_update(vec![3], "structure")], false),
+            Some(0),
+        )
+        .unwrap_err();
+    assert!(matches!(err, PersistError::Conflict { expect: 0 }));
+
+    // C：Some(1) Ok（seq=3，紧接 max+1，无空洞）
+    store
+        .on_committed_expect(
+            "doc-cas-t4",
+            &batch(vec![make_update(vec![4], "structure")], false),
+            Some(1),
+        )
+        .unwrap();
+
+    assert_eq!(store.load_pending_count("doc-cas-t4").unwrap(), 3);
+
+    // 直接读 seq 列验证 [1,2,3]（无空洞）
+    let conn = Connection::open(&db).unwrap();
+    let mut stmt = conn
+        .prepare("SELECT seq FROM doc_updates WHERE doc_id=?1 ORDER BY seq ASC")
+        .unwrap();
+    let seqs: Vec<i64> = stmt
+        .query_map(params!["doc-cas-t4"], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(seqs, vec![1, 2, 3]);
+}

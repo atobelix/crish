@@ -19,6 +19,8 @@
 //! # 诚实边界
 //! - **≠ EL-05**；**≠ A-AGT 满表**；**≠ W6-E**
 //! - SD-29 **仅结构再切**，不抬关任何 EL / A-AGT；**≠** 整包重做 SD-06
+//! - **G-HYD-5 / LR-H4-B**：`intents` HashMap **仅进程内**；杀进程 / 重开 db **可双插**；
+//!   **≠** 落盘；**≠** 用 `send_intent_idempotent_*` 关 A-SURF-06 / EL
 
 use agent_tools::note_backend::{
     NoteApplyMdRequest, NoteApplyMdResult, NoteBackend, NoteBackendError, NoteBatchTokens,
@@ -53,7 +55,7 @@ pub(crate) fn poison_recovery_count() -> u64 {
 ///   [`Self::apply_collab_ops_json`]（CONN-B3 collab wire）→ Ops → `commit_ops`
 ///   （权威 updates + 投影索引）；**禁止** fs.write 当权威
 /// - 读路径即时投影 / session 树 / `document_to_md`；**不**读 MD mirror 文件
-/// - 同 `intent_id` 二次调用返回首次结果（`idempotent=true`, `inserted=0`）
+/// - 同 `intent_id` 二次调用返回首次结果（`idempotent=true`, `inserted=0`）——**仅本进程**
 /// - batch token：内嵌 [`NoteBatchTokens`]（与 Memory 后端同语义）
 /// - **W4-A**：`ApplyReport.lossy` → [`NoteApplyMdResult::lossy`]（工具 result 可观测；
 ///   **禁止**只写 ops 丢 lossy）。**≠ EL-05 / ≠ A-AGT 满表**。
@@ -66,7 +68,7 @@ pub struct StoreNoteBackend {
     /// get_md 持 doc 锁长临界——多 doc 并发读写互不串行；锁条目数上界 =
     /// 打开的 doc 数，不随调用次数增长）。
     pub(crate) sessions: Mutex<HashMap<String, Arc<Mutex<DocSession>>>>,
-    /// intent_id → 首次 apply 结果（send_to_note 幂等）
+    /// intent_id → 首次 apply 结果（send_to_note 幂等；**仅进程内**，不随 workspace.db 复活）
     pub(crate) intents: Mutex<HashMap<String, NoteApplyMdResult>>,
     pub(crate) batch_tokens: NoteBatchTokens,
 }
@@ -144,6 +146,10 @@ pub(crate) fn map_commit_err(e: conex_workspace_store::CommitPipelineError) -> N
                 NoteBackendError::NotFound(s)
             } else if s.contains("id") && s.to_lowercase().contains("conflict") {
                 NoteBackendError::IdConflict(s)
+            } else if s.to_lowercase().contains("conflict") {
+                // CT-01：CAS 陈旧写（PersistError::Conflict Display 含稳定 "conflict"）
+                // → note.persist_conflict。置于 IdConflict 臂之后：先命中 id_conflict 的场景不变。
+                NoteBackendError::Conflict(s)
             } else {
                 NoteBackendError::ApplyFailed(s)
             }
