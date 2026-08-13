@@ -65,6 +65,7 @@ import {
 } from './sessionPersistenceTypes';
 import { invokeResult } from '../tauriInvoke';
 import { logInternalError } from '../userFacingErrors';
+import { errorStore } from '../../services/ErrorStore';
 import { hasQuotaTruncation } from './sessionQuota';
 import {
   clearAgentsTruncation,
@@ -249,12 +250,12 @@ function toRustSessionAgent(agent: SessionAgent): RustSessionAgent {
   if (agent.summary != null) out.summary = agent.summary;
   if (agent.endedAt != null) out.endedAt = agent.endedAt;
   if (agent.depth != null) out.depth = agent.depth;
-if (agent.subagentPath && agent.subagentPath.length) {
-try {
-out.subagentPathJson = JSON.stringify(agent.subagentPath);
-} catch {
-/* swallow-ok: 子代理路径序列化失败时字段留空，不阻塞形状转换 */
-}
+  if (agent.subagentPath && agent.subagentPath.length) {
+    try {
+      out.subagentPathJson = JSON.stringify(agent.subagentPath);
+    } catch {
+      /* swallow-ok: 子代理路径序列化失败时字段留空，不阻塞形状转换 */
+    }
   }
   return out;
 }
@@ -432,13 +433,13 @@ function lsLoadSessionIndex(): SessionIndexEntry[] {
 
 function lsSaveSessionIndex(entries: SessionIndexEntry[]): void {
   try {
-localStorage.setItem(
-SESSION_INDEX_KEY,
-JSON.stringify(parseSessionIndexList(entries))
-);
-} catch {
-/* swallow-ok: quota/隐私模式写索引尽力而为，失败走内存态 */
-}
+    localStorage.setItem(
+      SESSION_INDEX_KEY,
+      JSON.stringify(parseSessionIndexList(entries))
+    );
+  } catch {
+    /* swallow-ok: quota/隐私模式写索引尽力而为，失败走内存态 */
+  }
 }
 
 /**
@@ -499,11 +500,11 @@ function lsLoadSessionBody(sessionId: string): SessionMessage[] {
       if (!t) continue;
       try {
         const item = JSON.parse(t);
-const m = attachStoredCacheMetrics(parseSessionMessage(item), item);
-if (m) out.push(m);
-} catch {
-/* swallow-ok: 单行损坏跳过，不阻断整批回放 */
-}
+        const m = attachStoredCacheMetrics(parseSessionMessage(item), item);
+        if (m) out.push(m);
+      } catch {
+        /* swallow-ok: 单行损坏跳过，不阻断整批回放 */
+      }
     }
     return out;
   } catch {
@@ -516,13 +517,13 @@ function lsSaveSessionBody(
   messages: SessionMessage[]
 ): void {
   try {
-localStorage.setItem(
-SESSION_BODY_PREFIX + sessionId,
-JSON.stringify(messages)
-);
-} catch {
-/* swallow-ok: quota 超限时正文尽力写，失败保留引擎侧数据 */
-}
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + sessionId,
+      JSON.stringify(messages)
+    );
+  } catch {
+    /* swallow-ok: quota 超限时正文尽力写，失败保留引擎侧数据 */
+  }
 }
 
 function lsLoadSessionAgents(sessionId: string): SessionAgent[] {
@@ -561,13 +562,13 @@ function lsSaveSessionAgents(sessionId: string, agents: SessionAgent[]): void {
     }
     // 未超上限：全量落盘并清除历史截断标志（恢复策略，同 P1-F3 quota 口径）
     localStorage.setItem(
-SESSION_AGENTS_PREFIX + sessionId,
-JSON.stringify(agents)
-);
-clearAgentsTruncation(sessionId);
-} catch {
-/* swallow-ok: quota 超限时 agents 写失败不影响会话主体 */
-}
+      SESSION_AGENTS_PREFIX + sessionId,
+      JSON.stringify(agents)
+    );
+    clearAgentsTruncation(sessionId);
+  } catch {
+    /* swallow-ok: quota 超限时 agents 写失败不影响会话主体 */
+  }
 }
 
 function lsLoadActiveSessionId(): string | null {
@@ -587,10 +588,10 @@ function lsSaveActiveSessionId(id: string): void {
       localStorage.removeItem(SESSION_ACTIVE_KEY);
       return;
     }
-localStorage.setItem(SESSION_ACTIVE_KEY, String(id).trim());
-} catch {
-/* swallow-ok: 活跃会话标记写失败仅影响重启后的默认选中 */
-}
+    localStorage.setItem(SESSION_ACTIVE_KEY, String(id).trim());
+  } catch {
+    /* swallow-ok: 活跃会话标记写失败仅影响重启后的默认选中 */
+  }
 }
 
 function lsLoadFolderOrder(): string[] | null {
@@ -604,11 +605,11 @@ function lsLoadFolderOrder(): string[] | null {
 }
 
 function lsSaveFolderOrder(order: string[]): void {
-try {
-localStorage.setItem(SESSION_FOLDER_KEY, JSON.stringify(order || []));
-} catch {
-/* swallow-ok: 文件夹顺序持久化尽力而为，失败回退默认排序 */
-}
+  try {
+    localStorage.setItem(SESSION_FOLDER_KEY, JSON.stringify(order || []));
+  } catch {
+    /* swallow-ok: 文件夹顺序持久化尽力而为，失败回退默认排序 */
+  }
 }
 
 // ── 降级戳（P1-F1 F5-01） ─────────────────────────────────────────────────────
@@ -630,11 +631,11 @@ function degradedMarkerKey(sessionId: string): string {
  * 写入自身 try/catch：quota/隐私模式下戳写不进也不阻塞降级路径（AU-03:127 残余细节）。
  */
 function markDegradedSession(sessionId: string): void {
-try {
-localStorage.setItem(degradedMarkerKey(sessionId), String(Date.now()));
-} catch {
-/* swallow-ok: quota/隐私模式下降级标记写失败，下次回放仍可判定 */
-}
+  try {
+    localStorage.setItem(degradedMarkerKey(sessionId), String(Date.now()));
+  } catch {
+    /* swallow-ok: quota/隐私模式下降级标记写失败，下次回放仍可判定 */
+  }
 }
 
 /** 会话是否存在未修复的降级戳。 */
@@ -652,11 +653,11 @@ function hasDegradedSession(sessionId: string): boolean {
  * 保持戳，下次 hydrate 重试单向修复，避免分叉在无痕状态下复发。
  */
 function clearDegradedSession(sessionId: string): void {
-try {
-localStorage.removeItem(degradedMarkerKey(sessionId));
-} catch {
-/* swallow-ok: 降级标记清除失败仅留下过期标记，无功能影响 */
-}
+  try {
+    localStorage.removeItem(degradedMarkerKey(sessionId));
+  } catch {
+    /* swallow-ok: 降级标记清除失败仅留下过期标记，无功能影响 */
+  }
 }
 
 // ── 14 个 async API（invoke + localStorage 回退） ──────────────────────────
@@ -985,23 +986,23 @@ function collectLegacySessionIds(): Set<string> {
     const raw = localStorage.getItem(SESSION_INDEX_KEY);
     if (raw) {
       const entries = parseSessionIndexList(safeParseJson<unknown>(raw, null));
-for (const e of entries) if (e?.id) ids.add(e.id);
-}
-} catch {
-/* swallow-ok: localStorage 不可用时回退空集合 */
-}
+      for (const e of entries) if (e?.id) ids.add(e.id);
+    }
+  } catch {
+    /* swallow-ok: localStorage 不可用时回退空集合 */
+  }
   return ids;
 }
 
 /** 删除一组 LS key（尽力而为；key 缺失时 removeItem 为 no-op） */
 function removeLegacyKeys(keys: string[], removed: string[]): void {
-for (const k of keys) {
-try {
-localStorage.removeItem(k);
-removed.push(k);
-} catch {
-/* swallow-ok: quota/隐私模式单键删除失败跳过，尽力清理 */
-}
+  for (const k of keys) {
+    try {
+      localStorage.removeItem(k);
+      removed.push(k);
+    } catch {
+      /* swallow-ok: quota/隐私模式单键删除失败跳过，尽力清理 */
+    }
   }
 }
 
@@ -1039,7 +1040,10 @@ export async function cleanupLegacyLocalStorageSessionsGuarded(): Promise<Legacy
     const hasLsData = lsBody.length > 0 || lsAgents.length > 0;
     if (!hasLsData) {
       // LS 镜像为空：删除无风险（key 缺失时 removeItem 为 no-op）
-      removeLegacyKeys([SESSION_BODY_PREFIX + id, SESSION_AGENTS_PREFIX + id], removed);
+      removeLegacyKeys(
+        [SESSION_BODY_PREFIX + id, SESSION_AGENTS_PREFIX + id],
+        removed
+      );
       continue;
     }
     if (!sqliteIds.has(id)) {
@@ -1048,12 +1052,18 @@ export async function cleanupLegacyLocalStorageSessionsGuarded(): Promise<Legacy
       continue;
     }
     const [bodyRes, agentsRes] = await Promise.all([
-      invokeResult<RustSessionMessage[]>('load_session_body', { sessionId: id }),
-      invokeResult<RustSessionAgent[]>('load_session_agents', { sessionId: id }),
+      invokeResult<RustSessionMessage[]>('load_session_body', {
+        sessionId: id,
+      }),
+      invokeResult<RustSessionAgent[]>('load_session_agents', {
+        sessionId: id,
+      }),
     ]);
     // invoke 异常按「未校验」处理 → 保留（无法确认则不删）
-    const sqliteBodyOk = bodyRes.status === 'ok' && (bodyRes.data || []).length > 0;
-    const sqliteAgentsOk = agentsRes.status === 'ok' && (agentsRes.data || []).length > 0;
+    const sqliteBodyOk =
+      bodyRes.status === 'ok' && (bodyRes.data || []).length > 0;
+    const sqliteAgentsOk =
+      agentsRes.status === 'ok' && (agentsRes.data || []).length > 0;
     const bodyRisk = lsBody.length > 0 && !sqliteBodyOk;
     const agentsRisk = lsAgents.length > 0 && !sqliteAgentsOk;
     if (bodyRisk || agentsRisk) {
@@ -1061,12 +1071,18 @@ export async function cleanupLegacyLocalStorageSessionsGuarded(): Promise<Legacy
       continue;
     }
     // 4. SQLite 确认持有数据 → 删除该会话的 LS 镜像 key
-    removeLegacyKeys([SESSION_BODY_PREFIX + id, SESSION_AGENTS_PREFIX + id], removed);
+    removeLegacyKeys(
+      [SESSION_BODY_PREFIX + id, SESSION_AGENTS_PREFIX + id],
+      removed
+    );
   }
 
   // 5. 元数据 key：全部会话确认后才删；有保留则整体保留（索引承载保留会话）
   if (preserved.length === 0) {
-    removeLegacyKeys([SESSION_INDEX_KEY, SESSION_ACTIVE_KEY, SESSION_FOLDER_KEY], removed);
+    removeLegacyKeys(
+      [SESSION_INDEX_KEY, SESSION_ACTIVE_KEY, SESSION_FOLDER_KEY],
+      removed
+    );
   }
 
   return { removed, preserved, reason: 'confirmed' };
@@ -1141,6 +1157,8 @@ async function loadSessionBodyWithDegradedRecovery(
   if (res.status === 'ok') {
     writtenBodyBatchVersions.set(sessionId, version);
     clearDegradedSession(sessionId);
+    // D-05 S1：回灌清戳成功 = 分叉消除、invoke 已恢复 → 持久化降级状态解除
+    errorStore.setPersistenceStatus('healthy');
   } else {
     // 回写失败：保持降级戳（下次 hydrate 重试单向修复），日志暴露修复未完成
     logInternalError('hydrate-degraded-repair-failed', {
@@ -1355,13 +1373,13 @@ export async function persistAllSessionsRust(
 
     // 索引层：始终写一份到 localStorage（侧栏元数据真相源，过渡期设计）。
     // invoke 缺失时，这就是唯一的索引落盘点。
-if (options?.sessionsToIndex) {
-try {
-const entries = options.sessionsToIndex(list);
-lsSaveSessionIndex(entries);
-} catch {
-/* swallow-ok: 索引快照回调失败不阻断索引主流程 */
-}
+    if (options?.sessionsToIndex) {
+      try {
+        const entries = options.sessionsToIndex(list);
+        lsSaveSessionIndex(entries);
+      } catch {
+        /* swallow-ok: 索引快照回调失败不阻断索引主流程 */
+      }
     }
 
     // 检测 invoke 可用性（用 list_sessions 作为探针）
@@ -1374,6 +1392,8 @@ lsSaveSessionIndex(entries);
         command: 'list_sessions(probe)',
         status: probe.status,
       });
+      // D-05 S1：批级降级状态推进（Fail-Open 是设计内行为，但必须可感知）
+      errorStore.setPersistenceStatus('warning');
       persistAllSessionsLocalFallback(list, activePersistable, folderOrder);
       return;
     }
@@ -1417,6 +1437,9 @@ lsSaveSessionIndex(entries);
     if (keepIds.size > 0) {
       await cleanupOrphanSessions(Array.from(keepIds));
     }
+
+    // D-05 S1：probe 成功且批收口 → 持久化降级状态回落健康（恢复点）
+    errorStore.setPersistenceStatus('healthy');
   });
 }
 
@@ -1459,20 +1482,20 @@ function persistAllSessionsLocalFallback(
         const k = localStorage.key(i);
         if (k) keys.push(k);
       }
-        for (const k of keys) {
-          let id: string | null = null;
-          if (k.startsWith(SESSION_BODY_PREFIX))
-            id = k.slice(SESSION_BODY_PREFIX.length);
-          else if (k.startsWith(SESSION_AGENTS_PREFIX))
-            id = k.slice(SESSION_AGENTS_PREFIX.length);
-          if (id != null && !keep.has(id)) localStorage.removeItem(k);
-        }
-      } catch {
-        /* swallow-ok: 清理孤儿键失败时残留无害键，下次清理重试 */
+      for (const k of keys) {
+        let id: string | null = null;
+        if (k.startsWith(SESSION_BODY_PREFIX))
+          id = k.slice(SESSION_BODY_PREFIX.length);
+        else if (k.startsWith(SESSION_AGENTS_PREFIX))
+          id = k.slice(SESSION_AGENTS_PREFIX.length);
+        if (id != null && !keep.has(id)) localStorage.removeItem(k);
       }
+    } catch {
+      /* swallow-ok: 清理孤儿键失败时残留无害键，下次清理重试 */
     }
+  }
 
-    lsSaveActiveSessionId(activeSessionId || '');
+  lsSaveActiveSessionId(activeSessionId || '');
   lsSaveFolderOrder(folderOrder || []);
 }
 

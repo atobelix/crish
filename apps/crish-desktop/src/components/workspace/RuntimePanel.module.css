@@ -236,6 +236,21 @@
   flex-shrink: 0;
 }
 
+.persistenceWarning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-orange) 9%, transparent);
+  color: var(--accent-orange);
+  font-size: var(--font-size-xxs);
+}
+
+.persistenceWarning .dot {
+  background: var(--accent-orange);
+}
+
 .dot.on {
   background: var(--accent-green);
 }

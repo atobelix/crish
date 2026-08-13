@@ -7,6 +7,7 @@ import {
 } from '../../store/storeAccess';
 import { useEngineState } from '../../hooks/useEngineState';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
+import { usePersistenceStatus } from '../../hooks/usePersistenceStatus';
 import { RuntimeSection } from './RuntimeSection';
 import { LiveTasksSection } from './LiveTasksSection';
 import { BgTasksSection } from './BgTasksSection';
@@ -53,6 +54,8 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
   const ds = useEngineState();
   // D2：连接态真源 = errorStore.connectionStatus（useEngineState 已去 engineOnline）
   const connectionStatus = useConnectionStatus();
+  // D-05 S1：持久化降级状态（批写 Fail-Open 可感知；healthy 时零渲染）
+  const persistenceStatus = usePersistenceStatus();
   const data = useRuntimePanelData();
   const cachePanel = useCacheEventsStore();
   const auditEntries = useSecurityAuditStore((s) => s.entries);
@@ -111,6 +114,20 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
           </div>
         }
       />
+
+      {/* D-05 S1：批写降级最小展示槽——仅在非 healthy 时渲染；
+          诚实文案（描述现状「暂存本地」，不承诺已同步、不宣称数据丢失） */}
+      {persistenceStatus !== 'healthy' ? (
+        <div
+          className={styles.persistenceWarning}
+          data-persistence-status={persistenceStatus}
+          role="status"
+          aria-live="polite"
+        >
+          <span className={styles.dot} aria-hidden />
+          存储降级中：会话数据正在暂存本地
+        </div>
+      ) : null}
 
       <RuntimeSection
         titleId="rt-sec-usage"

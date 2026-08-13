@@ -5,7 +5,10 @@ export async function bootstrapFull(): Promise<void> {
     // 1. 核心就绪探测（C3.5：transport「核心已初始化」语义；WS 回退路径内部含 keep-alive）
     (async () => {
       const { ensureEngineConnected } = await import('./api/chatBridge');
-      await ensureEngineConnected().catch(() => {});
+      await ensureEngineConnected().catch(() => {
+        /* swallow-ok: 核心连接失败不阻塞 bootstrap；失败语义由连接状态面
+           （errorStore.connectionStatus / 重连逻辑）接管，此处只放行首屏 */
+      });
     })(),
 
     // 2. 同步引擎配置
@@ -14,10 +17,13 @@ export async function bootstrapFull(): Promise<void> {
       try {
         const settings = await clientApi.getSettings();
         if (settings?.theme) {
-          const { applyTheme, normalizeTheme } = await import('./api/themeStore');
+          const { applyTheme, normalizeTheme } =
+            await import('./api/themeStore');
           applyTheme(normalizeTheme(settings.theme));
         }
-      } catch { /* 主题读取失败时保持默认主题 */ }
+      } catch {
+        /* 主题读取失败时保持默认主题 */
+      }
     })(),
 
     // 3. 运行时模型目录快照（DEEPCHECK-02 P0：catalog_get 接线；Rust 目录真源
@@ -32,6 +38,9 @@ export async function bootstrapFull(): Promise<void> {
   const { scaleUpPool } = await import('./workers/index');
   scaleUpPool();
 
-  window.__crish_perf = { ...window.__crish_perf, fullReady: performance.now() };
+  window.__crish_perf = {
+    ...window.__crish_perf,
+    fullReady: performance.now(),
+  };
   console.debug(`[perf] bootstrapFull: ${performance.now() - start}ms`);
 }

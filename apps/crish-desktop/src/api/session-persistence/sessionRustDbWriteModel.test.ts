@@ -27,6 +27,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand, mockTauriError } from '../../test-setup';
 import * as userFacingErrors from '../userFacingErrors';
+import { errorStore } from '../../services/ErrorStore';
+import { telemetry } from '../../services/TelemetryService';
 
 import type { SessionMessage, SessionState } from '../../store/layoutStore';
 import {
@@ -502,9 +504,13 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
 
     // 新契约（P0-1）：SQLite 确认持有的会话镜像删除
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 'in-sqlite')).toBeNull();
-    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 'in-sqlite')).toBeNull();
+    expect(
+      localStorage.getItem(SESSION_AGENTS_PREFIX + 'in-sqlite')
+    ).toBeNull();
     // SQLite 无对应会话 → LS 唯一副本保留（可经 hydrate 回迁），索引随之保留
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only')).not.toBeNull();
+    expect(
+      localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only')
+    ).not.toBeNull();
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
     // SQLite 真相源不受清理影响
     expect(db.sessions.has('in-sqlite')).toBe(true);
@@ -524,7 +530,10 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
       messages: [msg('m2', 'user')],
       agents: [],
     });
-    localStorage.setItem(SESSION_BODY_PREFIX + 'a', JSON.stringify([msg('m1', 'user')]));
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'a',
+      JSON.stringify([msg('m1', 'user')])
+    );
     localStorage.setItem(
       SESSION_INDEX_KEY,
       JSON.stringify([{ ...indexEntry('a') }, { ...indexEntry('b') }])
@@ -590,18 +599,23 @@ describe('P0-1 降级窗口 30 天清理防护（N0-1 回归）', () => {
     // 降级窗口：磁盘 SQLite 无任何会话数据（假库为空），LS 持有唯一副本
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'degraded-only',
-      JSON.stringify([msg('m1', 'user')]),
+      JSON.stringify([msg('m1', 'user')])
     );
     localStorage.setItem(
       SESSION_INDEX_KEY,
-      JSON.stringify([{ ...indexEntry('degraded-only', '降级期会话') }]),
+      JSON.stringify([{ ...indexEntry('degraded-only', '降级期会话') }])
     );
-    db.meta.set('migration_completed_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+    db.meta.set(
+      'migration_completed_at',
+      String(Date.now() - 31 * 24 * 60 * 60 * 1000)
+    );
 
     await runMigrationCleanupIfNeeded();
 
     // LS 唯一副本保留，且不置位清理完成标记（下次启动重试）
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'degraded-only')).not.toBeNull();
+    expect(
+      localStorage.getItem(SESSION_BODY_PREFIX + 'degraded-only')
+    ).not.toBeNull();
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
     expect(db.meta.get('legacy_localstorage_cleaned')).toBeUndefined();
 
@@ -613,7 +627,9 @@ describe('P0-1 降级窗口 30 天清理防护（N0-1 回归）', () => {
     });
     await runMigrationCleanupIfNeeded();
 
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'degraded-only')).toBeNull();
+    expect(
+      localStorage.getItem(SESSION_BODY_PREFIX + 'degraded-only')
+    ).toBeNull();
     expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
     expect(db.meta.get('legacy_localstorage_cleaned')).toBe('1');
   });
@@ -628,23 +644,37 @@ describe('P0-1 降级窗口 30 天清理防护（N0-1 回归）', () => {
     });
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'sq-empty',
-      JSON.stringify([msg('m1', 'user', 'only-copy')]),
+      JSON.stringify([msg('m1', 'user', 'only-copy')])
     );
-    localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify([{ ...indexEntry('sq-empty') }]));
+    localStorage.setItem(
+      SESSION_INDEX_KEY,
+      JSON.stringify([{ ...indexEntry('sq-empty') }])
+    );
     installFakeTransport(call);
-    db.meta.set('migration_completed_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+    db.meta.set(
+      'migration_completed_at',
+      String(Date.now() - 31 * 24 * 60 * 60 * 1000)
+    );
 
     await runMigrationCleanupIfNeeded();
 
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'sq-empty')).not.toBeNull();
+    expect(
+      localStorage.getItem(SESSION_BODY_PREFIX + 'sq-empty')
+    ).not.toBeNull();
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
     expect(db.meta.get('legacy_localstorage_cleaned')).toBeUndefined();
   });
 
   it('SQLite invoke 不可用（missing）→ 30 天清理全保留（无法校验不删）', async () => {
     // 不安装 transport：list_sessions 为 missing → 无法校验 → 全保留
-    localStorage.setItem(SESSION_BODY_PREFIX + 'any', JSON.stringify([msg('m1', 'user')]));
-    localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify([{ ...indexEntry('any') }]));
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'any',
+      JSON.stringify([msg('m1', 'user')])
+    );
+    localStorage.setItem(
+      SESSION_INDEX_KEY,
+      JSON.stringify([{ ...indexEntry('any') }])
+    );
     const meta = new Map<string, string>();
     mockTauriCommand('get_session_meta', async (args: unknown) => {
       const { key } = args as { key: string };
@@ -655,7 +685,10 @@ describe('P0-1 降级窗口 30 天清理防护（N0-1 回归）', () => {
       meta.set(key, value);
       return undefined;
     });
-    meta.set('migration_completed_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+    meta.set(
+      'migration_completed_at',
+      String(Date.now() - 31 * 24 * 60 * 60 * 1000)
+    );
 
     await runMigrationCleanupIfNeeded();
 
@@ -667,18 +700,20 @@ describe('P0-1 降级窗口 30 天清理防护（N0-1 回归）', () => {
 
 describe('P0-2 boot 窗口清理防护（N0-2 回归）', () => {
   it('persist 空会话列表跳过孤儿清理（不 invoke cleanup，不清 LS 镜像）', async () => {
-    const { db, call } = makeFakeDb();
+    const { call } = makeFakeDb();
     installFakeTransport(call);
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'ghost',
-      JSON.stringify([msg('m1', 'user')]),
+      JSON.stringify([msg('m1', 'user')])
     );
 
     await persistAllSessionsRust([], '', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
 
-    const cleanups = call.mock.calls.filter((c) => c[0] === 'cleanup_orphan_sessions');
+    const cleanups = call.mock.calls.filter(
+      (c) => c[0] === 'cleanup_orphan_sessions'
+    );
     expect(cleanups).toHaveLength(0);
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ghost')).not.toBeNull();
   });
@@ -687,7 +722,7 @@ describe('P0-2 boot 窗口清理防护（N0-2 回归）', () => {
     // 不安装 transport → probe missing → persistAllSessionsLocalFallback（keep=∅）
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'ghost',
-      JSON.stringify([msg('m1', 'user')]),
+      JSON.stringify([msg('m1', 'user')])
     );
 
     await persistAllSessionsRust([], '', [DEFAULT_SESSION_FOLDER], {
@@ -698,12 +733,18 @@ describe('P0-2 boot 窗口清理防护（N0-2 回归）', () => {
   });
 
   it('清理回退分支：非空 keep 删除 LS 孤儿、保留 keep 会话（N1-2 语义保持）', async () => {
-    const { db, call } = makeFakeDb();
+    const { call } = makeFakeDb();
     installFakeTransport(call);
     // cleanup_orphan_sessions 失败 → JS 回退分支（keep 非空 → 正常清理）
     mockTauriError('cleanup_orphan_sessions', new Error('boom'));
-    localStorage.setItem(SESSION_BODY_PREFIX + 'ghost', JSON.stringify([msg('m1', 'user')]));
-    localStorage.setItem(SESSION_BODY_PREFIX + 'keep1', JSON.stringify([msg('m2', 'user')]));
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'ghost',
+      JSON.stringify([msg('m1', 'user')])
+    );
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'keep1',
+      JSON.stringify([msg('m2', 'user')])
+    );
 
     const s = sess('keep1', [msg('m2', 'user')]);
     await persistAllSessionsRust([s], 'keep1', [DEFAULT_SESSION_FOLDER], {
@@ -999,5 +1040,66 @@ describe('P1-F1 降级与分叉恢复（T5.1）', () => {
       (c) => c[0] === 'save_session_body'
     ).length;
     expect(writesAfterSecond).toBe(writesAfterFirst);
+  });
+});
+
+describe('S1 降级可感知：persistenceStatus 状态推进（D-05）', () => {
+  beforeEach(() => {
+    // errorStore 为全局单例：复位健康态，并解决历史残留的降级专名条目，
+    // 保证本用例 push 走「新建条目 → telemetry.error」分支（existing 分支不重报）
+    errorStore.setPersistenceStatus('healthy');
+    errorStore.resolveByCode('persist-degraded-ls');
+  });
+
+  it('probe 失败（list_sessions 报错）→ 批级降级：persistenceStatus=warning + errorStore/telemetry 上报', async () => {
+    const { call } = makeFakeDb();
+    installFakeTransport(call);
+    // 预热 invoke 懒加载（与既有先例一致），随后覆盖 list_sessions 为 error → probe 失败
+    await invokeResult('list_sessions');
+    mockTauriError('list_sessions', new Error('sqlite busy'));
+    const telemetrySpy = vi.spyOn(telemetry, 'error');
+
+    const s = sess('s1', [msg('m1', 'user')]);
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    // 主验收（REV-02 定口径）：ErrorStore 状态断言
+    expect(errorStore.getState().persistenceStatus).toBe('warning');
+    // 降级事件进入 errorStore（logInternalError 升级链：专名可检索）
+    expect(
+      errorStore
+        .getState()
+        .activeErrors.some((e) => e.code === 'persist-degraded-ls')
+    ).toBe(true);
+    // 上报链：errorStore.push → telemetry.error（专名可检索）
+    expect(telemetrySpy).toHaveBeenCalledWith(
+      'session-persistence',
+      expect.stringContaining('persist-degraded-ls'),
+      undefined,
+      expect.objectContaining({
+        code: 'persist-degraded-ls',
+        severity: 'warning',
+      })
+    );
+  });
+
+  it('回落：probe 恢复且批收口 → persistenceStatus=healthy', async () => {
+    const { call } = makeFakeDb();
+    installFakeTransport(call);
+    await invokeResult('list_sessions');
+    mockTauriError('list_sessions', new Error('sqlite busy'));
+    const s = sess('s1', [msg('m1', 'user')]);
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+    expect(errorStore.getState().persistenceStatus).toBe('warning');
+
+    // 恢复 invoke（重注册 list_sessions 为 ok）→ 下一批 probe 成功 → 回落 healthy
+    installFakeTransport(call);
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+    expect(errorStore.getState().persistenceStatus).toBe('healthy');
   });
 });

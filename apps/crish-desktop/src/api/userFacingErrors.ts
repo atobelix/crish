@@ -5,6 +5,8 @@
  * - Agent runtime detail stays out of the bubble unless we classify a soft setup hint.
  */
 
+import { errorStore } from '../services/ErrorStore';
+
 const NETWORK_RE =
   /network|timeout|offline|econn|enotfound|econnrefused|not connected|failed to connect|connect(?:ion)? (?:failed|refused|reset|closed)|disconnected|unable to connect|proxy|dns|net::|fetch failed|socket/i;
 
@@ -39,7 +41,8 @@ export function normalizeErrorText(input: unknown): string {
     const o = input as Record<string, unknown>;
     if (typeof o.message === 'string') return o.message;
     if (typeof o.error === 'string') return o.error;
-    if (typeof o.code === 'string' && typeof o.message !== 'string') return o.code;
+    if (typeof o.code === 'string' && typeof o.message !== 'string')
+      return o.code;
     try {
       return JSON.stringify(input);
     } catch {
@@ -144,7 +147,8 @@ const KEBAB_TO_DOMAIN: Record<string, ErrorDomain> = {
   aborted: 'S6',
 };
 
-const PROVIDER_CONFIG_MISSING_RE = /provider\s*配置缺失|provider config.*missing/i;
+const PROVIDER_CONFIG_MISSING_RE =
+  /provider\s*配置缺失|provider config.*missing/i;
 const RESTORE_IN_PROGRESS_RE = /restore in progress|restore.*进行中/i;
 const LOCAL_CORE_NOT_READY_RE = /engine not ready|引擎未就绪|核心未就绪/i;
 const PROVIDER_SIDE_FAULT_RE = /server.?error|5\d{2}|rate.?limit|gateway/i;
@@ -171,7 +175,9 @@ function isStatusLike(input: unknown): input is Record<string, unknown> {
  * 判定顺序对齐 Rust 门禁（core_run_commands.rs:2851-2874）：
  * initialized=false → S1；restore.state=pending → S3；engineReady=false → S2。
  */
-function classifyStatusDomain(status: Record<string, unknown>): ErrorDomain | null {
+function classifyStatusDomain(
+  status: Record<string, unknown>
+): ErrorDomain | null {
   if (status.initialized === false) return 'S1';
   const restore =
     typeof status.restore === 'object' && status.restore !== null
@@ -262,10 +268,37 @@ export function assistantBubbleForFailure(input: unknown): string | null {
   return null;
 }
 
+/**
+ * 持久化降级专名面（D-05 S1 上报链）：命中这些 scope 的内部错误除 console 日志外，
+ * 额外推入 errorStore（severity=warning）→ 经 errorStore.push 进入 telemetry.error，
+ * 供「批写降级可感知」UI 槽与诊断检索（persist-degraded-ls / persist-degraded-meta /
+ * hydrate-degraded-repair / hydrate-degraded-repair-failed）。
+ * 其它 scope 保持既有 console.warn 行为不变（避免把全仓内部错误全部推入错误面板）。
+ */
+const PERSIST_DEGRADED_SCOPE_RE = /^(persist-degraded-|hydrate-degraded-)/;
+
 export function logInternalError(scope: string, input: unknown): void {
   try {
-    console.warn(`[crish-desktop][${scope}]`, normalizeErrorText(input) || input);
+    console.warn(
+      `[crish-desktop][${scope}]`,
+      normalizeErrorText(input) || input
+    );
   } catch {
     /* ignore */
+  }
+  if (PERSIST_DEGRADED_SCOPE_RE.test(scope)) {
+    try {
+      errorStore.push({
+        code: scope,
+        module: 'session-persistence',
+        severity: 'warning',
+        message: `会话持久化降级（${scope}）`,
+        ...(normalizeErrorText(input)
+          ? { technical: normalizeErrorText(input) }
+          : {}),
+      });
+    } catch {
+      /* 上报失败不阻断降级主流程 */
+    }
   }
 }
