@@ -185,6 +185,24 @@
 | crates/session-loop/src/stream.rs                     | 787  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/tool_exec.rs                  | 3562 | mod   | 存量登记（最大超限文件）                         | 后续轮次评估                                      |
 
+### G-02 收尾批新增登记（13 · 2026-08-13 · 结构轮拆分新产物）
+
+| 文件                                                | 行数 | 类型 | 登记理由                                                   | 拆分时限                                          |
+| --------------------------------------------------- | ---- | ---- | ---------------------------------------------------------- | ------------------------------------------------- |
+| crates/agent-provider/src/models/catalog_tests.rs   | 968  | mod  | 测试外置（SR-06e 拆分产物测试旁挂，G-02 收尾批登记）       | SR-06e 测试再外置拆分 ≤600 移除登记               |
+| crates/agent-provider/src/request/cache_tests.rs    | 928  | mod  | 测试外置（SR-06e 拆分产物测试旁挂，G-02 收尾批登记）       | SR-06e 测试再外置拆分 ≤600 移除登记               |
+| crates/agent-provider/src/request/messages_tests.rs | 908  | mod  | 测试外置（SR-06e 拆分产物测试旁挂，G-02 收尾批登记）       | SR-06e 测试再外置拆分 ≤600 移除登记               |
+| crates/conex-browser-tools/src/gate.rs              | 672  | mod  | SR-06 对应批次拆分对象（G-02 收尾批登记）                  | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行） |
+| crates/conex-browser-tools/src/session.rs           | 963  | mod  | SR-06 对应批次拆分对象（G-02 收尾批登记）                  | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行） |
+| crates/conex-browser-tools/src/tools/interact.rs    | 684  | mod  | SR-06 对应批次拆分对象（G-02 收尾批登记）                  | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行） |
+| crates/conex-browser-tools/src/tools/navigate.rs    | 1199 | mod  | SR-06 对应批次拆分对象（G-02 收尾批登记）                  | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行） |
+| crates/conex-computer/src/action.rs                 | 1434 | mod  | SR-06 对应批次拆分对象（G-02 收尾批登记）                  | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行） |
+| crates/conex-computer/src/perception.rs             | 759  | mod  | SR-06 对应批次拆分对象（G-02 收尾批登记）                  | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行） |
+| crates/conex-computer/src/security.rs               | 705  | mod  | SR-06 对应批次拆分对象（G-02 收尾批登记）                  | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行） |
+| crates/conex-computer-tools/src/tests.rs            | 1035 | mod  | 测试旁挂（测试外置，G-02 收尾批登记）                      | SR-06 对应批次：测试再外置拆分 ≤600 移除登记      |
+| crates/conex-computer-tools/src/tools.rs            | 1382 | mod  | SR-06 对应批次拆分对象（G-02 收尾批登记）                  | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行） |
+| crates/session-loop/src/exec_single.rs              | 751  | mod  | SR-03 tool_exec 拆分产物（single 执行面，G-02 收尾批登记） | SR-03 拆分收尾完成（触发事实=该文件 ≤600 行）     |
+
 ## 测试规模顺带计数（观察项，2026-08-04，不设门禁）
 
 | crate                        | 测试行数 | 用例数 |
@@ -240,6 +258,20 @@ CI 以脚本实时输出为准。
   stage_summary 18/18 + executing_tools 4/4 全绿；session-loop 全量 412 passed / 12 failed
   （12 失败 = 开工基线同集合，并行域 compaction 中间态，SR-06c-1 已上报，非本批引入）。
   时限注记（二元结构）：**SR-06 批①/批③ 拆分完成后移除登记；触发事实 = 该文件 ≤ 600 行**。
+- 2026-08-13（G-02 收尾批 · 结构轮拆分新产物登记）：13 个 clean 未登记文件登记（实测行数 = 标记区/正文表数值）。
+  ① **测试旁挂 4 个**（注记「测试外置」）：agent-provider `catalog_tests.rs` 968 / `cache_tests.rs` 928 /
+  `messages_tests.rs` 908（SR-06e 拆分产物测试旁挂）；conex-computer-tools `tests.rs` 1035（测试旁挂）。
+  ② **实现文件 9 个**（SR-xx 拆分后收紧）：session-loop `exec_single.rs` 751（SR-03 tool_exec 拆分产物
+  single 执行面）；browser-tools `gate.rs` 672 / `session.rs` 963 / `interact.rs` 684 / `navigate.rs` 1199；
+  computer `action.rs` 1434 / `perception.rs` 759 / `security.rs` 705；computer-tools `tools.rs` 1382
+  （均为 SR-06 对应批次拆分对象）。时限注记（二元结构）：**SR-0x 拆分完成后移除登记；触发事实 =
+  该文件 ≤ 600 行**。**跳过（并行域/在途，收口后由主控按实测值登记）**：`tool_exec_tests.rs`（M，
+  并行在加 B4 并发上限测试，实测 3233）、`engine_tests.rs`（M 3408）/ `engine_build.rs`（M 1539）/
+  `engine_provider.rs`（M 749）（M = import 重排型在途改动，实测超出任务卡时点值 3328/1520/717）、
+  `background_tests_events.rs`（?? 630）/ `background_tests_resource.rs`（?? 617）（SR-05 提交后新拆
+  在途，提交态仅 background_tests.rs 530）、`subagent_spawner.rs`（M 1694）、`computer/mod.rs`（?? 707）、
+  conex-browser 5（M：domains 1710 / gate 1176 / storage_state 1603 / pipeline 618 / lib 1229）。
+  新登记注记 5 禁词自查 0 命中（禁词表见 D-01 详案 §G-02 验收③）。
 
 <!-- BASELINE_START -->
 
@@ -283,13 +315,16 @@ crates/agent-provider/src/error.rs 1063
 crates/agent-provider/src/events.rs 770
 crates/agent-provider/src/models/behavior.rs 849
 crates/agent-provider/src/models/catalog.rs 1819
+crates/agent-provider/src/models/catalog_tests.rs 968
 crates/agent-provider/src/parse/anthropic.rs 1070
 crates/agent-provider/src/parse/chat.rs 1043
 crates/agent-provider/src/parse/gemini.rs 1144
 crates/agent-provider/src/parse/responses.rs 1046
 crates/agent-provider/src/request/build.rs 1228
 crates/agent-provider/src/request/cache.rs 1826
+crates/agent-provider/src/request/cache_tests.rs 928
 crates/agent-provider/src/request/messages.rs 1543
+crates/agent-provider/src/request/messages_tests.rs 908
 crates/agent-provider/src/request/schema.rs 685
 crates/agent-provider/src/request/vendor.rs 1015
 crates/agent-provider/src/retry.rs 1238
@@ -339,6 +374,15 @@ crates/conex-browser/src/snapshot/collect.rs 2721
 crates/conex-browser/src/snapshot/interactive.rs 888
 crates/conex-browser/src/snapshot/mod.rs 977
 crates/conex-browser/src/snapshot/serialize.rs 1823
+crates/conex-browser-tools/src/gate.rs 672
+crates/conex-browser-tools/src/session.rs 963
+crates/conex-browser-tools/src/tools/interact.rs 684
+crates/conex-browser-tools/src/tools/navigate.rs 1199
+crates/conex-computer/src/action.rs 1434
+crates/conex-computer/src/perception.rs 759
+crates/conex-computer/src/security.rs 705
+crates/conex-computer-tools/src/tests.rs 1035
+crates/conex-computer-tools/src/tools.rs 1382
 crates/conex-db/src/agents.rs 846
 crates/conex-db/src/migrate.rs 607
 crates/conex-db/src/tests.rs 965
@@ -368,6 +412,7 @@ crates/orchestrator/src/task_events.rs 838
 crates/session-loop/src/cache_tracker.rs 1087
 crates/session-loop/src/control.rs 736
 crates/session-loop/src/escape_watch.rs 870
+crates/session-loop/src/exec_single.rs 751
 crates/session-loop/src/hooks.rs 1242
 crates/session-loop/src/hydrate.rs 678
 crates/session-loop/src/loop/handlers/mod.rs 2180
