@@ -9,5 +9,7 @@ export { default as SessionDetailScreen } from './sessionDetailScreen';
 export type { SessionDetailScreenProps } from './sessionDetailScreen';
 export { default as TerminalScreen } from './terminalScreen';
 export type { TerminalScreenProps } from './terminalScreen';
+export { default as RunDetailScreen } from './runDetailScreen';
+export type { RunDetailScreenProps } from './runDetailScreen';
 export { default as NotificationCenterScreen } from './notificationCenterScreen';
 export type { NotificationCenterScreenProps } from './notificationCenterScreen';
