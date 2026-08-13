@@ -5,7 +5,9 @@
  * 标尺：主壳 tokens（暖中性灰 / tint / hairline / elevated 浮层）。
  * 惯例：AFFiNE 式静默 L0——默认无 chrome 噪声；hover/focus/multi 才抬。
  *
- * **≠ EL-01**；**≠** A-BLK 产品 e2e 全关；**≠** Notion chrome 完成。
+ * LR-V1：slash / .bp-paper-block / chrome 焦点行不吃全局 --focus-ring
+ *（暗色 30% / 2px 外环）。行环 1px inset · color-mix 6%。
+ * **≠ EL**；**≠** 改 tokens；**≠** A-BLK 产品 e2e 全关；**≠** Notion chrome 完成。
  * 消费方：`import '@crish/block-paper/chrome.css'`（或挂载 DomHost 的壳）。
  */
 
@@ -34,6 +36,23 @@
   min-width: 0;
   font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-primary, #111111);
+}
+
+/* LR-V1 焦点槽：border 94% + text 6%；局部覆盖暗色 --focus-ring。≠ 改 tokens */
+.bp-chrome-root,
+.bp-paper-list,
+.bp-slash-host,
+.bp-paper-block {
+  --bp-focus-row: color-mix(
+    in srgb,
+    var(--border-color, hsl(35, 10%, 86%)) 94%,
+    var(--text-primary, #111111) 6%
+  );
+  --bp-focus-ctrl: color-mix(
+    in srgb,
+    var(--border-color, hsl(35, 10%, 86%)) 94%,
+    var(--text-primary, #111111) 6%
+  );
 }
 
 /* ---------- 块行 ---------- */
@@ -72,8 +91,8 @@
       color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
     )
   );
-  box-shadow: inset 0 0 0 1px
-    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+  /* LR-V1：1px inset 6%；:has 非 :focus-visible，不跟全局 (0,3,0) 抢 */
+  box-shadow: inset 0 0 0 1px var(--bp-focus-row);
 }
 
 .bp-block-row:has(.bp-block-handle[data-handle-visibility='multi']) {
@@ -88,6 +107,26 @@
 /* 拖中源行：轻抬，不抢落点线 */
 .bp-block-row[data-dragging='1'] {
   opacity: 0.72;
+}
+
+/*
+ * LR-V1 · .bp-paper-block 行环（皮在 list，本文件抬特异性）
+ * [data-bp-paper-block][data-bp-focus] = (0,3,0) 压后载 paperList 同属 (0,2,0)
+ * [tabindex]:not:focus-visible = (0,4,0) 赢全局 (0,3,0)
+ */
+.bp-paper-block[data-bp-paper-block][data-bp-focus='1'],
+.bp-paper-block[data-bp-paper-block][data-handle='focus'],
+.bp-paper-block[data-bp-paper-block]:focus-visible,
+.bp-paper-block[tabindex]:not([tabindex='-1']):focus-visible {
+  outline: none;
+  background: var(
+    --bg-active,
+    var(
+      --tint-active,
+      color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
+    )
+  );
+  box-shadow: inset 0 0 0 1px var(--bp-focus-row);
 }
 
 /* ---------- 把手：L0 默认 hidden；热区略放大 ---------- */
@@ -330,12 +369,16 @@
   outline: none;
 }
 
-.bp-slash-host .bp-slash-item:focus-visible {
-  box-shadow: var(
-    --focus-ring,
-    0 0 0 2px
-      color-mix(in srgb, var(--control-mix-color, #4a4035) 8%, transparent)
-  );
+/*
+ * LR-V1：slash 项不引用 --focus-ring。
+ * button.bp-slash-item:focus-visible = (0,3,1)；[data-bp-slash-item]:focus-visible = (0,4,0)
+ * 均赢全局 [tabindex]:not([tabindex="-1"]):focus-visible (0,3,0)
+ */
+.bp-slash-host button.bp-slash-item:focus-visible,
+.bp-slash-host .bp-slash-item[data-bp-slash-item]:focus-visible,
+.bp-slash-host .bp-slash-item[data-bp-focus='1'] {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bp-focus-ctrl);
 }
 
 .bp-slash-host .bp-slash-item-icon {

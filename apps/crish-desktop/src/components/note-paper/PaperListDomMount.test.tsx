@@ -142,6 +142,49 @@ describe('PaperListDomMount · 独立挂载契约', () => {
     const mount = screen.getByTestId('note-paper-paper-list');
     expect(mount).toHaveAttribute('data-paper-list-scroll', '2000:200');
   });
+
+  /**
+   * LR-V4：桌面挂载把 level/focus 写到已挂 list 行。
+   * **≠ EL-01**；**≠ W3-P**。
+   */
+  it('lr_v4_desktop_heading_level_and_focus_on_mounted_dom', () => {
+    render(
+      <PaperListDomMount
+        blocks={[
+          { id: 't1', flavour: 'heading', text: '一级', level: 1 },
+          { id: 't2', flavour: 'heading', text: '二级', level: 2 },
+          { id: 'p1', flavour: 'paragraph', text: '正文' },
+        ]}
+        window={{ startIndex: 0, endIndex: 3 }}
+        overscan={0}
+        focusId="t1"
+        onListReady={(l) => {
+          list = l;
+        }}
+      />
+    );
+
+    expect(list).not.toBeNull();
+    expect(list!.countDomBlocks()).toBe(3);
+    expect(
+      list!.getBlockElement('t1')?.getAttribute('data-heading-level')
+    ).toBe('1');
+    expect(
+      list!.getBlockElement('t2')?.getAttribute('data-heading-level')
+    ).toBe('2');
+    expect(
+      list!.getBlockElement('p1')?.hasAttribute('data-heading-level')
+    ).toBe(false);
+    expect(list!.getBlockElement('t1')?.getAttribute('data-bp-focus')).toBe(
+      '1'
+    );
+    expect(list!.getBlockElement('t2')?.hasAttribute('data-bp-focus')).toBe(
+      false
+    );
+    expect(
+      list!.getRootElement().querySelector('[data-heading-level="1"]')
+    ).toBe(list!.getBlockElement('t1'));
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -551,5 +594,90 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
     expect(panel).toHaveAttribute('data-presentation-mode', 'react-rows');
     expect(screen.queryByTestId('note-paper-strict-paper-list')).toBeNull();
     expect(panel.querySelector('[data-bp-paper-list-mount]')).toBeNull();
+  });
+
+  /**
+   * LR-V4：Strict hydrate `props.level` → ChromeSlot → 已挂 list `data-heading-level`。
+   * chrome.setFocused → `data-bp-focus`。≠ EL-01；≠ W3-P。
+   */
+  it('lr_v4_strict_hydrate_heading_level_and_focus_skin', async () => {
+    let paperList: PaperList | null = null;
+    const chrome = new BlockChromeModel();
+    const transport = createFixtureHydrateTransport({
+      'doc-lv4': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'lv4-h1',
+            flavour: 'heading',
+            text: '一级标题',
+            index: 0,
+            props: { level: 1 },
+          }),
+          makeHydratedBlock({
+            id: 'lv4-h2',
+            flavour: 'heading',
+            text: '二级标题',
+            index: 1,
+            props: { level: 2 },
+          }),
+          makeHydratedBlock({
+            id: 'lv4-p',
+            flavour: 'paragraph',
+            text: '正文',
+            index: 2,
+          }),
+        ],
+      },
+    });
+
+    const panelProps = {
+      docId: 'doc-lv4',
+      hydrateTransport: transport,
+      chrome,
+      paperList: {
+        window: { startIndex: 0, endIndex: 3 },
+        overscan: 0,
+      },
+      onPaperListReady: (l: PaperList | null) => {
+        paperList = l;
+      },
+    };
+
+    const { rerender } = render(<NotePaperStrictPanel {...panelProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+    await waitFor(() => {
+      expect(paperList).not.toBeNull();
+    });
+
+    expect(
+      paperList!.getBlockElement('lv4-h1')?.getAttribute('data-heading-level')
+    ).toBe('1');
+    expect(
+      paperList!.getBlockElement('lv4-h2')?.getAttribute('data-heading-level')
+    ).toBe('2');
+    expect(
+      paperList!.getBlockElement('lv4-p')?.hasAttribute('data-heading-level')
+    ).toBe(false);
+
+    act(() => {
+      chrome.setFocused('lv4-h2');
+    });
+    rerender(<NotePaperStrictPanel {...panelProps} />);
+
+    await waitFor(() => {
+      expect(
+        paperList!.getBlockElement('lv4-h2')?.getAttribute('data-bp-focus')
+      ).toBe('1');
+    });
+    expect(
+      paperList!.getBlockElement('lv4-h1')?.hasAttribute('data-bp-focus')
+    ).toBe(false);
   });
 });

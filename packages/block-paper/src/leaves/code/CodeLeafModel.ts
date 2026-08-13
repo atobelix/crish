@@ -1,22 +1,17 @@
 /**
- * CM6 代码叶本地模型（W3-E 方向子集）。
+ * CM6 代码叶本地模型（W3-E 方向子集 · SD-54 再抽）。
  *
- * 对齐：
- * - W0 Intent：`text_edit`（blockId + range + insert + intentId）
- *   —— 代码叶变更走同一形状；sink / submitIntent 无需新类型即可下发
- * - 可聚焦：`focus()` / `blur()`；焦点态进 snapshot
- * - 只读：编辑拒绝，不产出 Intent、不改 content
- * - A-IME：可注入 `isComposing`；合成期缓冲，end 时 flush（与 TextLeafModel 同构）
- * - 写路径：Intent → submitIntent → sink →（未来）RS apply；**禁止** serialize(DOM)
- * - flavour / fence → collab kind：见 `codeFlavourMap`（kind=`code`；lang 进 attrs）
+ * 类型 / 快照 / helpers → `CodeLeafModel.types`；IME / 只读留本 class。
+ * 既有 `from './CodeLeafModel'` 与 `from './index'` 公开面不断。
  *
- * **本模块不接真实后端**。Host 经 `CodeLeafHost` 注入；
- * 真 CM6 见 `Cm6CodeLeafHost` / `mountCodeLeaf({ createHost })`。
+ * 对齐：`text_edit` Intent；可聚焦；只读拒绝；A-IME 缓冲 flush；
+ * 写路径 Intent → submitIntent → sink（**禁止** serialize(DOM)）。
+ * flavour / fence → `codeFlavourMap`（本刀不改）。Host 经 `CodeLeafHost`。
  *
  * ## 诚实边界
- * - **≠** 产品 e2e 满关；**≠** EL-01；**≠** A-BLK-14 产品 focus e2e
- * - **≠** 全语言高亮完成：language 字段 + Compartment 钩子就位；
- *   当前 CM6 lang 包仅 javascript，其余按需后接
+ * - **SD-54 再抽**；**≠** EL-01；**≠** A-BLK-14 产品 focus e2e
+ * - **≠** 占 W3-E 首批；**≠** 改 flavour / fence 映射
+ * - **≠** 全语言高亮完成：language 字段 + Compartment 钩子就位
  */
 
 import type {
@@ -26,79 +21,23 @@ import type {
 } from '@crish/block-paper-contract';
 import { nextIntentId } from '../../intentId';
 import type { CodeLeafHost } from './CodeLeafHost';
+import {
+  buildCodeTextEditIntent,
+  clampOffset,
+  resolveFlag,
+  type CodeLanguage,
+  type CodeLeafSnapshot,
+  type CodeLeafModelOptions,
+  type CodeEditAttempt,
+} from './CodeLeafModel.types';
 
-// ---------------------------------------------------------------------------
-// 类型
-// ---------------------------------------------------------------------------
-
-/** 语言 id：与 fence info / CM6 LanguageSupport 对齐的轻量字符串 */
-export type CodeLanguage = string;
-
-/** 代码叶只读快照 */
-export type CodeLeafSnapshot = {
-  blockId: BlockId;
-  /** 全文 content（plain；CM6 doc 投影） */
-  content: string;
-  language: CodeLanguage;
-  readOnly: boolean;
-  focused: boolean;
-  composing: boolean;
-  /** 合成锚点 offset；非 composing 时 null */
-  compositionAnchor: number | null;
-  /** 合成开始时被替换区间 end（半开）；非 composing 时 null */
-  compositionReplaceEnd: number | null;
-};
-
-export type CodeLeafModelOptions = {
-  /** 初始语言；默认 `plaintext` */
-  language?: CodeLanguage;
-  /** 只读；默认 false */
-  readOnly?: boolean;
-  /**
-   * 自定义 intentId 工厂；缺省用共享 `nextIntentId`。
-   */
-  createIntentId?: () => IntentId;
-  /**
-   * 可选 IME composing 查询（boolean 或回调）。
-   * - 若注入且当前 composing：`applyLocalEdit` 仅改本地缓冲，返回 null
-   * - 亦可走本模型 `beginComposition` 本地合成态（与 TextLeaf 同构）
-   * 与 editor-kit `ImeMachine.isComposing` 对接时注入即可。
-   */
-  isComposing?: boolean | (() => boolean);
-  /**
-   * 可选 host（CM6 / mock）。构造后也可 `attachHost`。
-   */
-  host?: CodeLeafHost;
-};
-
-/** 编辑拒绝原因 */
-export type CodeEditRejectCode = 'read_only' | 'not_focused' | 'invalid_range';
-
-/**
- * 带拒绝码的编辑结果（只读 / 失焦显式失败；composing 仍返回 null Intent 以对齐 TextLeaf）。
- */
-export type CodeEditAttempt =
-  | { ok: true; intent: TextEditIntent | null; content: string }
-  | { ok: false; code: CodeEditRejectCode; reason: string };
-
-// ---------------------------------------------------------------------------
-// 工具
-// ---------------------------------------------------------------------------
-
-function clampOffset(n: number, min: number, max: number): number {
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, Math.floor(n)));
-}
-
-function resolveFlag(v: boolean | (() => boolean) | undefined): boolean {
-  if (v === undefined) return false;
-  if (typeof v === 'function') return Boolean(v());
-  return Boolean(v);
-}
-
-// ---------------------------------------------------------------------------
-// Model
-// ---------------------------------------------------------------------------
+export type {
+  CodeLanguage,
+  CodeLeafSnapshot,
+  CodeLeafModelOptions,
+  CodeEditRejectCode,
+  CodeEditAttempt,
+} from './CodeLeafModel.types';
 
 /**
  * 单代码叶缓冲 + 焦点 + Intent 产出。
@@ -148,9 +87,7 @@ export class CodeLeafModel {
     }
   }
 
-  // -----------------------------------------------------------------------
-  // 读
-  // -----------------------------------------------------------------------
+  // -- 读
 
   getContent(): string {
     return this.content;
@@ -185,9 +122,7 @@ export class CodeLeafModel {
     };
   }
 
-  // -----------------------------------------------------------------------
-  // 焦点
-  // -----------------------------------------------------------------------
+  // -- 焦点
 
   /**
    * 聚焦代码叶。
@@ -209,9 +144,7 @@ export class CodeLeafModel {
     this.host?.blur();
   }
 
-  // -----------------------------------------------------------------------
-  // 元数据
-  // -----------------------------------------------------------------------
+  // -- 元数据
 
   /**
    * 设置语言 id。
@@ -231,9 +164,7 @@ export class CodeLeafModel {
     this.host?.setReadOnly(this.readOnly);
   }
 
-  // -----------------------------------------------------------------------
-  // Host 绑定
-  // -----------------------------------------------------------------------
+  // -- Host 绑定
 
   /**
    * 绑定 / 替换 host。将当前 content / language / readOnly / focus 推到 host。
@@ -265,9 +196,7 @@ export class CodeLeafModel {
     return this.host;
   }
 
-  // -----------------------------------------------------------------------
-  // 投影回填（不产生 Intent）
-  // -----------------------------------------------------------------------
+  // -- 投影回填（不产生 Intent）
 
   /**
    * 以投影/权威文本覆盖本地缓冲。
@@ -282,9 +211,7 @@ export class CodeLeafModel {
     return true;
   }
 
-  // -----------------------------------------------------------------------
-  // 本地编辑 → Intent
-  // -----------------------------------------------------------------------
+  // -- 本地编辑 → Intent
 
   /**
    * 本地区间替换：`content[start, end) ← insert`。
@@ -370,14 +297,18 @@ export class CodeLeafModel {
 
     return {
       ok: true,
-      intent: this.buildTextEditIntent(s, e, ins),
+      intent: buildCodeTextEditIntent(
+        this.blockId,
+        s,
+        e,
+        ins,
+        this.createIntentId()
+      ),
       content: this.content,
     };
   }
 
-  // -----------------------------------------------------------------------
-  // Composition（与 TextLeaf 同构；可选对接外部 isComposing）
-  // -----------------------------------------------------------------------
+  // -- Composition（与 TextLeaf 同构；可选对接外部 isComposing）
 
   /**
    * 进入 composition。
@@ -438,7 +369,13 @@ export class CodeLeafModel {
 
     this.clearCompositionState(false);
     this.host?.setContent(this.content);
-    return this.buildTextEditIntent(anchor, replaceEnd, insert);
+    return buildCodeTextEditIntent(
+      this.blockId,
+      anchor,
+      replaceEnd,
+      insert,
+      this.createIntentId()
+    );
   }
 
   /** 取消 composition：回滚，不发 Intent */
@@ -448,9 +385,7 @@ export class CodeLeafModel {
     this.host?.setContent(this.content);
   }
 
-  // -----------------------------------------------------------------------
-  // 内部
-  // -----------------------------------------------------------------------
+  // -- 内部
 
   private clearCompositionState(rollback: boolean): void {
     if (rollback && this.preCompositionContent != null) {
@@ -460,19 +395,5 @@ export class CodeLeafModel {
     this.compositionAnchor = null;
     this.compositionReplaceEnd = null;
     this.preCompositionContent = null;
-  }
-
-  private buildTextEditIntent(
-    start: number,
-    end: number,
-    insert: string
-  ): TextEditIntent {
-    return {
-      type: 'text_edit',
-      blockId: this.blockId,
-      range: [start, end],
-      insert,
-      intentId: this.createIntentId(),
-    };
   }
 }

@@ -67,3 +67,27 @@ rg "A_MEM_04|a_mem_04|A_COL_04|a_col_04" crates/conex-doc-collab
 
 _2026-08-11 伪完成清理（方案 B）：撤锚 + 改名 + 会计登记。_  
 _2026-08-11 W1-U Strict：真 Undo v1；A-MEM-04 / A-COL-04 / A-INV-09c 后半测绿；**EL 表 A 仍全未关**。_
+
+---
+
+## 5. G-HYD-5 / A-SURF-06 挡关（LR-H4-B · 选项 B · 2026-08-13）
+
+> 权威：`audit/2026-08-13-launch-gap/00` §4 行 5；`01` LR-04 **选项 B**；`plans/09` §1.3 G-HYD-5。  
+> 本段 **只追加诚实句**。**≠** 假装 intent 已落盘；**≠** 关 EL；**≠** 改表 A 关闭列。本波 **不做** H4-A 落盘。
+
+| ID / 锁       | 写死口径                                                          | 证据（源码形状）                                                               | 会计                                  |
+| ------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------- |
+| **G-HYD-5**   | intent 幂等 **仅进程内**；杀进程 / 重开 `workspace.db` **可双插** | `store_backend.rs` `intents: Mutex<HashMap<…>>`；`store_apply_md.rs` 读/写该表 | 文档声明已交（选项 B）；**未** 持久化 |
+| **A-SURF-06** | **挡关**                                                          | 不得用进程内 `send_intent_idempotent_no_double_insert` / `x01_*` 幂等关本断言  | **未关**                              |
+| 产品 / 工具   | **禁止**宣称跨会话「不双插 / 不丢 intent」                        | —                                                                              | 违反即虚标                            |
+
+**可引用验收句（选项 B）**：`StoreNoteBackend.intents` 是进程内 HashMap，**不**随 `workspace.db` 复活。同 `intent_id` 二次调用仅在**同一进程、同一后端实例**内返回 `idempotent=true` / `inserted=0`。杀进程、丢 session、重开库后再 apply **可以双插**。A-SURF-06 因此 **挡关**。进程内绿 **≠** 跨会话不双插 / 不丢 intent。
+
+**禁止**：
+
+- 用 `send_intent_idempotent_*` 关 A-SURF-06
+- 把本段写成「已落盘 / 跨进程幂等已交」
+- 改 `EL-dashboard.md` 表 A 关闭列
+- 产品 UI / 工具文案写跨会话「不双插 / 不丢 intent」
+
+_2026-08-13 · LR-H4-B：诚实声明挡关；intent **未**落盘；EL 表 A 仍全未关。_

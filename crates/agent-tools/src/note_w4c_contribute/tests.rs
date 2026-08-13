@@ -1,7 +1,7 @@
 //! W4-C / contribute 测（外置）
 //!
-//! 诚实边界：Memory 测绿 **禁关** EL-07 / A-EXT 全表 / 生产 A-AGT。
-//! 拒写方向不回退；不回退 W4-B 审批矩阵、W4-F batch token / move。
+//! 诚实边界：Memory 测绿 **禁关** EL-05 / EL-07 / A-EXT 全表 / 生产 A-AGT。
+//! **≠ EL-05**；拒写方向不回退；不回退 W4-B 审批矩阵、W4-F batch token / move。
 
 use super::*;
 use crate::note_action_matrix::plan_denies_matrix_tool;

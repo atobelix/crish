@@ -17,6 +17,12 @@
 //!   hydrate 投影经 [`try_store_backend`] 走真 `DocSession::hydrate`。
 //!
 //! 纪律：不静默流式写笔记；读路径禁止默认 MD mirror。
+//!
+//! # LR-T1（launch-gap/00 §4 行 4 · 原 05·LR-02）
+//! 生产注入只允许 [`StoreNoteBackend`] 或未接线 `None`（工具
+//! `note_backend_unwired`）。**禁止**把 Memory 测试后端装进本模块 /
+//! workbench 生产装配。Memory 集成测绿 **不得**关 EL-05 / A-AGT 满表。
+//! 本包 **≠ 关 EL-05**。门禁见 `tests/lr_t1_memory_prod_ban.rs`。
 
 use agent_tools::note_backend::NoteBackendHandle;
 use conex_note_runtime::StoreNoteBackend;
@@ -27,6 +33,9 @@ use std::sync::{Arc, OnceLock, RwLock};
 #[derive(Clone)]
 pub struct SharedNoteRuntime {
     /// 具体 Store 后端（真 DocSession hydrate 投影入口）。
+    ///
+    /// LR-T1 断言点：类型钉死 Store；打开失败则不 [`install`]，[`try_backend`]
+    /// / [`try_store_backend`] 为 `None`（unwired）。不得换成 Memory 测试后端。
     store_backend: Arc<StoreNoteBackend>,
     /// 打开时的 db 绝对/规范路径（诊断与测试断言）
     path: PathBuf,
@@ -78,6 +87,7 @@ pub fn open_at(path: impl AsRef<Path>) -> Result<SharedNoteRuntime, String> {
             })?;
         }
     }
+    // LR-T1：生产打开路径只构造 Store。失败向上返回，调用方不 install。
     let store_backend = Arc::new(StoreNoteBackend::open(&path).map_err(|e| {
         format!("打开 workspace.db 失败 ({}): {e}", path.display())
     })?);
@@ -117,6 +127,11 @@ pub fn try_store_backend() -> Option<Arc<StoreNoteBackend>> {
     try_shared().map(|s| s.store_backend())
 }
 
+/// LR-T1 编译期断言点：生产槽位 = Store；读取面允许 `None`（unwired）。
+const _: fn(&SharedNoteRuntime) -> Arc<StoreNoteBackend> = SharedNoteRuntime::store_backend;
+const _: fn() -> Option<Arc<StoreNoteBackend>> = try_store_backend;
+const _: fn() -> Option<NoteBackendHandle> = try_backend;
+
 /// setup：打开默认 `app_dir()/workspace.db` 并安装。
 ///
 /// 成功返回路径字符串；失败返回 Err（调用方记诊断，不阻断启动）。
@@ -143,6 +158,7 @@ pub fn install_for_test(path: impl AsRef<Path>) -> Result<SharedNoteRuntime, Str
 
 #[cfg(test)]
 mod tests {
+    // LR-T1：本模组测走 `open_at` → Store；未安装时 try_* = None。≠ 关 EL-05。
     use super::*;
     use agent_tools::note_backend::{
         NoteApplyMdRequest, NoteApplyMode, NoteBackend as _, NoteQueryBlocksParams,

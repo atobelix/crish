@@ -25,6 +25,10 @@ export const BP_PAPER_TOTAL_COUNT = 'data-total-count';
 export const BP_PAPER_WITHIN_DOM_BOUND = 'data-within-dom-bound';
 /** 块宿主（仅窗口∪pin 行） */
 export const BP_PAPER_BLOCK_HOST = 'data-bp-block-host';
+/** 标题级 1–6（LR-V4；与 React `.blockRow[data-heading-level]` 同选择器名） */
+export const BP_PAPER_HEADING_LEVEL = 'data-heading-level';
+/** 焦点行皮（LR-V4；吃 inset，不吃 `--focus-ring` 30%） */
+export const BP_PAPER_FOCUS = 'data-bp-focus';
 
 /**
  * 未给 window/scroll 时的默认可见块数（结构门测友好）。

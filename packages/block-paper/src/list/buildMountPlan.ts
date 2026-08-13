@@ -39,6 +39,11 @@ export type PaperBlockProjection = {
   flavour?: string;
   /** 叶子展示文本（mock 可测；非权威） */
   text?: string;
+  /**
+   * 标题级 1–6（LR-V4）。reconcile 写 `data-heading-level`。
+   * 不参与窗口 / overscan / pin 算法。
+   */
+  level?: number;
 };
 
 /** 由索引窗口构造计划 */

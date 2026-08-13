@@ -8,6 +8,9 @@
 //! # 执行面
 //! - `ctx.note_backend` 已注入 → [`NoteBackend::get_md`]
 //! - 未注入 → `{"ok":false,"reason":"note_backend_unwired","md":""}`
+//!
+//! # 诚实边界
+//! - **≠ EL-05**；Memory 测绿 **禁关**生产 A-AGT / EL-05
 
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};

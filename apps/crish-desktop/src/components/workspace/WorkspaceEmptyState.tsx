@@ -20,12 +20,15 @@
  *   （`enableMirrorDetectSchedule` **默认 false**；E2′ 只改宿主）
  * - **CONN-C2 PaperList**：默认 **不** 挂（`enableProductPaperList` **默认 false**）
  * - **CONN-C2′**：产品宿主（WorkspaceProductEmptyHost）显式默传 `true`（**组件默认仍 false**）
+ * - **LR-H1**：打开 docId 可绑已 persist 文档（`productStrictDocId` /
+ *   最近一篇 / 打开前 apply+commit 登记）；无绑定仍 `strict-${wsId}` 诚实空
  *
  * ## 诚实边界
- * - **可演示 ≠ EL-01 / EL-08 关闭**；**≠ 打开完成**
+ * - **可演示 ≠ EL-01 / EL-08 关闭**；**≠ 打开完成**；**≠ EL-01/04/08**
  * - fixture ≠ 生产权威；无 Tauri 回退 fixture **不是** 伪装 tauri-ipc
  * - 禁止去 `-S` 冒充 Strict；**≠ EL-01/03**；**≠** 重做 E2′ 宿主
  * - detect / PaperList **仅** 显式 opt-in（组件级）；C2′ 由产品宿主显式默传；关时无 timer / 不双内容
+ * - LR-H1 只换打开 id，**≠ 打开完成**（真 WebView 句属 LR-H2）
  */
 
 import React, { useState } from 'react';
@@ -53,6 +56,10 @@ import {
   WorkspaceEmptyStateSkeletonHost,
   WorkspaceEmptyStateStrictHost,
 } from './workspaceEmptyStatePaperEntry';
+import {
+  buildStrictDocBindingDataAttrs,
+  resolveProductStrictDocId,
+} from './workspaceEmptyStateStrictDoc';
 import styles from './WorkspaceEmptyState.module.css';
 
 /** 空态可打开的笔记纸面轨（双轨并存） */
@@ -173,6 +180,17 @@ export type WorkspaceEmptyStateProps = {
    *   **本组件默认仍 false**（C2 会计门不回退）
    */
   enableProductPaperList?: boolean;
+  /**
+   * LR-H1：显式绑定已 persist 文档 id，覆盖合成 `strict-${wsId}`。
+   * 空 / 空白视为无绑定 → 仍走诚实空回退。
+   * **≠ 打开完成**；**≠ EL-01/04/08**
+   */
+  productStrictDocId?: string;
+  /**
+   * LR-H1：最近一篇已 persist 文档 id。
+   * 显式 `productStrictDocId` 优先；二者皆空时再读打开前登记。
+   */
+  recentPersistedDocId?: string;
 };
 
 /**
@@ -198,10 +216,19 @@ export function WorkspaceEmptyState({
   enableMirrorDetectSchedule = false,
   mirrorDetectIntervalMs,
   enableProductPaperList = false,
+  productStrictDocId,
+  recentPersistedDocId,
 }: WorkspaceEmptyStateProps) {
   const [openMode, setOpenMode] = useState<NotePaperEmptyOpenMode | null>(null);
 
-  const strictDocId = `strict-${wsId}`;
+  /** LR-H1：可绑 persist；无绑定仍 `strict-${wsId}`（不得删回退） */
+  const strictDoc = resolveProductStrictDocId({
+    wsId,
+    productStrictDocId,
+    recentPersistedDocId,
+  });
+  const strictDocId = strictDoc.docId;
+  const strictDocBindingAttrs = buildStrictDocBindingDataAttrs(strictDoc);
   const skeletonDocId = `preview-${wsId}`;
 
   const paper = useWorkspaceEmptyStatePaperBindings({
@@ -232,6 +259,7 @@ export function WorkspaceEmptyState({
       <WorkspaceEmptyStateStrictHost
         wsId={wsId}
         strictDocId={strictDocId}
+        strictDocBindingAttrs={strictDocBindingAttrs}
         paper={paper}
         mirror={mirror}
         mirrorUnpushedOpCount={mirrorUnpushedOpCount}
@@ -267,6 +295,7 @@ export function WorkspaceEmptyState({
       {...mirror.dataAttrs}
       data-product-paper-list={paper.productPaperListAttr}
       {...EMPTY_STATE_PAPER_HONESTY_ATTRS}
+      {...strictDocBindingAttrs}
       onPointerDown={onActivate}
     >
       <WorkspaceEmptyStateLanding

@@ -22,6 +22,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import { Button } from '../ui';
+import { Tooltip } from '../ui/Tooltip/Tooltip';
 import {
   A_INV_02_UI_DIRECTION_ID,
   isDriftAttention,
@@ -154,13 +155,14 @@ export const MirrorDriftStatusBar: React.FC<MirrorDriftStatusBarProps> = ({
         >
           镜像：{statusLabel}
         </span>
-        <span
-          className={styles.mirrorDriftMeta}
-          data-testid="mirror-drift-watch-source"
-          title={MIRROR_DRIFT_UI_HONESTY}
-        >
-          src={sourceLabel}
-        </span>
+        <Tooltip content={MIRROR_DRIFT_UI_HONESTY}>
+          <span
+            className={styles.mirrorDriftMeta}
+            data-testid="mirror-drift-watch-source"
+          >
+            src={sourceLabel}
+          </span>
+        </Tooltip>
         {report?.pendingLag !== undefined ? (
           <span
             className={styles.mirrorDriftMeta}

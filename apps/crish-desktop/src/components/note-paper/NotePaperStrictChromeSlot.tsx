@@ -22,7 +22,10 @@ import type {
   SlashMenuModel,
 } from '@crish/block-paper';
 import { BlockChromeDomMount } from './BlockChromeDomMount';
-import { PaperListDomMount } from './PaperListDomMount';
+import {
+  PaperListDomMount,
+  type PaperListMountBlock,
+} from './PaperListDomMount';
 import {
   SlashMenuOverlay,
   type SlashOverlayWriteMode,
@@ -30,6 +33,21 @@ import {
 import type { HydratedBlockProjection } from './hydrateProjection';
 import type { HydrateUiStatus } from './useNoteHydrate';
 import styles from './NotePaperPanel.module.css';
+
+/** hydrate 块 → PaperList 投影；透传 `props.level` 写 data-heading-level */
+function toPaperListMountBlock(
+  block: HydratedBlockProjection
+): PaperListMountBlock {
+  const row: PaperListMountBlock = {
+    id: block.id,
+    flavour: block.flavour,
+  };
+  if (block.text !== undefined) row.text = block.text;
+  if (typeof block.props?.level === 'number') {
+    row.level = block.props.level;
+  }
+  return row;
+}
 
 export type NotePaperStrictChromeSlotProps = {
   status: HydrateUiStatus;
@@ -95,11 +113,7 @@ export const NotePaperStrictChromeSlot: React.FC<
       */}
       {renderPaperList && status === 'ready' ? (
         <PaperListDomMount
-          blocks={blocks.map((b) => ({
-            id: b.id,
-            flavour: b.flavour,
-            text: b.text,
-          }))}
+          blocks={blocks.map(toPaperListMountBlock)}
           window={paperListWindow}
           scroll={paperListScroll}
           overscan={paperListOverscan}

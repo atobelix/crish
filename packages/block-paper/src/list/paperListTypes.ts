@@ -28,8 +28,9 @@ export type PaperListOptions = {
    */
   order: readonly BlockId[];
   /**
-   * 可选呈现投影（id → flavour/text）。
+   * 可选呈现投影（id → flavour/text/level）。
    * 缺省时行仅带 id，无正文节点。
+   * `level` 仅写 `data-heading-level`，不改窗口算法。
    */
   projections?:
     | ReadonlyMap<BlockId, PaperBlockProjection>

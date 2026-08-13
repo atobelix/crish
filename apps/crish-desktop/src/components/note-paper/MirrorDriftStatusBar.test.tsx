@@ -37,6 +37,12 @@ describe('MirrorDriftStatusBar · 状态展示', () => {
       /EL-03|inotify/
     );
     expect(screen.queryByTestId('mirror-drift-three-way')).toBeNull();
+    // LR-V2：src 悬停走 Tooltip，零原生 title=
+    const src = screen.getByTestId('mirror-drift-watch-source');
+    expect(src).not.toHaveAttribute('title');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseEnter(src);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/≠ EL-03|inotify/);
   });
 
   it('mirror_only：展示分类 + 三路按钮 + lag', () => {

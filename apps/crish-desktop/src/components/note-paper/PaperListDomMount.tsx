@@ -3,7 +3,7 @@
  *
  * ## 角色
  * - 把 `@crish/block-paper` 的 `PaperList` 接到 note-paper React 树
- * - 输入：hydrate / 投影块（id + flavour/text 呈现），**非**权威树
+ * - 输入：hydrate / 投影块（id + flavour/text/level 呈现），**非**权威树
  * - 仅窗口∪pin 进 DOM；窗外真 remove + spacer（**禁止** CSS hidden 假虚拟化）
  *
  * ## 槽契约（SD-04 · chrome ∥ content 钉死）
@@ -47,7 +47,19 @@ export type PaperListMountBlock = {
   id: string;
   flavour?: string;
   text?: string;
+  /** 标题级 1–6；写入 list 行 `data-heading-level`（LR-V4） */
+  level?: number;
 };
+
+function toPaperBlockProjection(
+  block: PaperListMountBlock
+): PaperBlockProjection {
+  const proj: PaperBlockProjection = { id: block.id };
+  if (block.flavour !== undefined) proj.flavour = block.flavour;
+  if (block.text !== undefined) proj.text = block.text;
+  if (block.level !== undefined) proj.level = block.level;
+  return proj;
+}
 
 export type PaperListDomMountProps = {
   /**
@@ -95,7 +107,7 @@ export type PaperListDomMountProps = {
  * 命令式挂载 PaperList：挂在 ref 容器内，生命周期与 React 对齐。
  *
  * 块 id 序列 / 窗口 / scroll 变化会 rebuild 或 set* 同步；
- * 呈现投影（flavour/text）变化走 setProjections。
+ * 呈现投影（flavour/text/level）变化走 setProjections。
  */
 export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
   blocks,
@@ -136,7 +148,7 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
 
   // 呈现投影签名（不重建 list，只 setProjections）
   const projKey = blocks
-    .map((b) => `${b.id}:${b.flavour ?? ''}:${b.text ?? ''}`)
+    .map((b) => `${b.id}:${b.flavour ?? ''}:${b.text ?? ''}:${b.level ?? ''}`)
     .join('|');
 
   // 1) 创建 / 销毁 PaperList（order 变化 → 重建，确保 HeightMap 对齐）
@@ -154,12 +166,9 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
       return;
     }
 
-    const projections: PaperBlockProjection[] = specs.map((b) => {
-      const p: PaperBlockProjection = { id: b.id };
-      if (b.flavour !== undefined) p.flavour = b.flavour;
-      if (b.text !== undefined) p.text = b.text;
-      return p;
-    });
+    const projections: PaperBlockProjection[] = specs.map(
+      toPaperBlockProjection
+    );
 
     const opts: ConstructorParameters<typeof PaperList>[1] = {
       order: specs.map((b) => b.id),
@@ -225,17 +234,14 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
     extraPinned,
   ]);
 
-  // 3) 呈现投影文本/flavour 变化
+  // 3) 呈现投影文本/flavour/level 变化
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
     void projKey;
-    const projections: PaperBlockProjection[] = blocksRef.current.map((b) => {
-      const p: PaperBlockProjection = { id: b.id };
-      if (b.flavour !== undefined) p.flavour = b.flavour;
-      if (b.text !== undefined) p.text = b.text;
-      return p;
-    });
+    const projections: PaperBlockProjection[] = blocksRef.current.map(
+      toPaperBlockProjection
+    );
     list.setProjections(projections);
   }, [projKey]);
 

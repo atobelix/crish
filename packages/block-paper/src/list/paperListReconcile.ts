@@ -9,7 +9,12 @@
 
 import type { BlockId } from '@crish/block-paper-contract';
 import type { MountPlan, PaperBlockProjection } from './buildMountPlan';
-import { BP_PAPER_BLOCK, BP_PAPER_BLOCK_ID } from './paperListConstants';
+import {
+  BP_PAPER_BLOCK,
+  BP_PAPER_BLOCK_ID,
+  BP_PAPER_FOCUS,
+  BP_PAPER_HEADING_LEVEL,
+} from './paperListConstants';
 import { applyPaperListSpacers } from './paperListSpacer';
 
 export type PaperListReconcileContext = {
@@ -19,6 +24,8 @@ export type PaperListReconcileContext = {
   spacerAfter: HTMLElement;
   nodes: Map<BlockId, HTMLElement>;
   projections: Map<BlockId, PaperBlockProjection>;
+  /** 焦点块 → `data-bp-focus=1`（LR-V4）；不改窗口 / pin 算法 */
+  focusId?: BlockId | null;
 };
 
 export function normalizeProjections(
@@ -52,10 +59,33 @@ function isProjectionMap(
   );
 }
 
+/**
+ * 标题级：显式 `level` 1–6 优先；否则 h1–h6 flavour；heading/Heading → 2。
+ * 与 Skeleton `resolveSkeletonHeadingLevel` 同族，不改窗口算法。
+ */
+export function resolvePaperHeadingLevel(
+  proj: PaperBlockProjection | undefined
+): number | undefined {
+  if (!proj) return undefined;
+  if (typeof proj.level === 'number' && Number.isFinite(proj.level)) {
+    const n = Math.trunc(proj.level);
+    if (n >= 1 && n <= 6) return n;
+  }
+  const flavour = proj.flavour ?? '';
+  if (/^h[1-6]$/i.test(flavour)) {
+    return Number(flavour.slice(1));
+  }
+  if (flavour === 'heading' || flavour === 'Heading') {
+    return 2;
+  }
+  return undefined;
+}
+
 export function paintPaperBlock(
   el: HTMLElement,
   id: BlockId,
-  projections: Map<BlockId, PaperBlockProjection>
+  projections: Map<BlockId, PaperBlockProjection>,
+  focusId?: BlockId | null
 ): void {
   el.setAttribute(BP_PAPER_BLOCK_ID, id);
   const proj = projections.get(id);
@@ -63,6 +93,17 @@ export function paintPaperBlock(
     el.setAttribute('data-flavour', proj.flavour);
   } else {
     el.removeAttribute('data-flavour');
+  }
+  const level = resolvePaperHeadingLevel(proj);
+  if (level !== undefined) {
+    el.setAttribute(BP_PAPER_HEADING_LEVEL, String(level));
+  } else {
+    el.removeAttribute(BP_PAPER_HEADING_LEVEL);
+  }
+  if (focusId != null && focusId === id) {
+    el.setAttribute(BP_PAPER_FOCUS, '1');
+  } else {
+    el.removeAttribute(BP_PAPER_FOCUS);
   }
   // 正文仅呈现；**非**权威
   const text = proj?.text ?? '';
@@ -74,13 +115,14 @@ export function paintPaperBlock(
 export function createPaperBlockElement(
   doc: Document,
   id: BlockId,
-  projections: Map<BlockId, PaperBlockProjection>
+  projections: Map<BlockId, PaperBlockProjection>,
+  focusId?: BlockId | null
 ): HTMLElement {
   const el = doc.createElement('div');
   el.className = 'bp-paper-block';
   el.setAttribute(BP_PAPER_BLOCK, '1');
   el.setAttribute(BP_PAPER_BLOCK_ID, id);
-  paintPaperBlock(el, id, projections);
+  paintPaperBlock(el, id, projections, focusId);
   return el;
 }
 
@@ -108,10 +150,10 @@ export function applyPaperListPlan(
   for (const id of plan.mountIds) {
     let el = ctx.nodes.get(id);
     if (!el) {
-      el = createPaperBlockElement(doc, id, ctx.projections);
+      el = createPaperBlockElement(doc, id, ctx.projections, ctx.focusId);
       ctx.nodes.set(id, el);
     } else {
-      paintPaperBlock(el, id, ctx.projections);
+      paintPaperBlock(el, id, ctx.projections, ctx.focusId);
     }
     // 保持 order：若当前 anchor 不是 el，则 insertBefore
     if (anchor !== el) {

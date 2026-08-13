@@ -140,10 +140,13 @@
   );
 }
 
-/* focus：中性 active + hairline inset（禁 accent 描边） */
+/*
+ * focus：1px inset 6% 软环（同 React --np-focus-row / --np-focus-edge）。
+ * 走 [data-bp-focus] / [tabindex]:not，勿吃暗色 30% 全局环。
+ */
 .bp-paper-block[data-handle='focus'],
 .bp-paper-block[data-bp-focus='1'],
-.bp-paper-block:focus-visible {
+.bp-paper-block[tabindex]:not([tabindex='-1']):focus-visible {
   background: var(
     --bg-active,
     var(
@@ -152,7 +155,17 @@
     )
   );
   box-shadow: inset 0 0 0 1px
-    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+    var(
+      --np-focus-row,
+      var(
+        --np-focus-edge,
+        color-mix(
+          in srgb,
+          var(--border-color, hsl(35, 10%, 86%)) 94%,
+          var(--text-primary, #111) 6%
+        )
+      )
+    );
 }
 
 /* multi：强 tint + 中性环 */

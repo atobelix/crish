@@ -147,7 +147,7 @@ export class PaperList {
     this.sync();
   }
 
-  /** 更新呈现投影 map（仅 DOM 文本/flavour） */
+  /** 更新呈现投影 map（仅 DOM 文本/flavour/level；焦点皮走 setPin） */
   setProjections(
     projections:
       | ReadonlyMap<BlockId, PaperBlockProjection>
@@ -291,6 +291,7 @@ export class PaperList {
         spacerAfter: this.spacerAfter,
         nodes: this.nodes,
         projections: this.projections,
+        focusId: this.focusId,
       },
       plan
     );

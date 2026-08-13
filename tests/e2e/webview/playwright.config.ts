@@ -7,7 +7,11 @@
  *   误扫需真 Tauri 的 spec；
  * - 本 config 专跑真 WebView（载体重、需 dev:workbench），**不挂 webServer**
  *   （Tauri 应用自带 Vite dev server 与 Rust 引擎，由 npm run dev:workbench
- *   负责拉起）；9222 不可达由 cdp.ts fail-fast 抛可读错误，不静默超时。
+ *   负责拉起）。
+ * - webview-smoke：9222 不可达 → cdp.ts fail-fast 可读错误。
+ * - mirror-detect（CONN-E2′-tauri）：9222 不可达或无 Host → skip=未交付；
+ *   交付主面在 jsdom `Workspace.conn-e2-prime-tauri.test.tsx`。
+ * - w6a-*（W6-A-02 等）：9222 不可达 → 同 smoke fail-fast；勿用 jsdom w3f_* 关片。
  *
  * CI 归属建议（主控定夺）：进慢层（nightly/发布前）或手动；
  * 不并入 PR 中层（中层无 Tauri 宿主，必红）。
@@ -30,7 +34,8 @@ export default defineConfig({
   projects: [
     {
       name: 'e2e-webview',
-      testMatch: /webview-smoke\.spec\.ts$/,
+      testMatch:
+        /(webview-smoke|mirror-detect)\.spec\.ts$|w6[abc]-.*\.spec\.ts$/,
     },
   ],
 });

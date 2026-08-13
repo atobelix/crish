@@ -15,6 +15,9 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_ESTIMATE_PX,
   DEFAULT_OVERSCAN_BLOCKS,
@@ -26,6 +29,7 @@ import {
   buildMountPlanByScroll,
   buildMountPlanByWindow,
 } from './buildMountPlan';
+import { resolvePaperHeadingLevel } from './paperListReconcile';
 import {
   PaperList,
   isPaperList,
@@ -36,6 +40,13 @@ import {
   BP_PAPER_SPACER_BEFORE,
   BP_PAPER_SPACER_AFTER,
 } from './PaperList';
+
+const LIST_DIR =
+  typeof import.meta.dirname === 'string'
+    ? import.meta.dirname
+    : import.meta.url.startsWith('file:')
+      ? dirname(fileURLToPath(import.meta.url))
+      : resolve(process.cwd(), 'packages/block-paper/src/list');
 
 function requireDocument(): Document {
   if (typeof document === 'undefined' || !document.createElement) {
@@ -313,5 +324,157 @@ describe('W3-G · PaperList DOM 仅窗口', () => {
     expect(spec!.pinned).toContain('m-0');
     expect(spec!.heights.length).toBeGreaterThan(0);
     expect(spec!.heights.every((h) => typeof h.px === 'number')).toBe(true);
+  });
+
+  /**
+   * LR-V4 / 02·LR-04：挂载行写 data-heading-level + 焦点 data-bp-focus。
+   * **≠ EL-01**；**≠ W3-P**；不改窗口算法 / 假虚拟化。
+   */
+  it('lr_v4_heading_level_and_focus_attr: 已挂行有 H1/H2 级 + 焦点皮', () => {
+    const order = ['h1', 'h2', 'p', 'h3f'];
+    list = new PaperList(mount, {
+      order,
+      window: { startIndex: 0, endIndex: 4 },
+      overscan: 0,
+      focusId: 'h2',
+      projections: [
+        { id: 'h1', flavour: 'heading', text: '一级', level: 1 },
+        { id: 'h2', flavour: 'heading', text: '二级', level: 2 },
+        { id: 'p', flavour: 'paragraph', text: '正文' },
+        { id: 'h3f', flavour: 'h3', text: '三级 flavour' },
+      ],
+    });
+
+    const elH1 = list.getBlockElement('h1');
+    const elH2 = list.getBlockElement('h2');
+    const elP = list.getBlockElement('p');
+    const elH3 = list.getBlockElement('h3f');
+    expect(elH1).toBeTruthy();
+    expect(elH2).toBeTruthy();
+    expect(elH1!.getAttribute('data-heading-level')).toBe('1');
+    expect(elH2!.getAttribute('data-heading-level')).toBe('2');
+    expect(elH3!.getAttribute('data-heading-level')).toBe('3');
+    expect(elP!.hasAttribute('data-heading-level')).toBe(false);
+
+    expect(elH1!.getAttribute('data-bp-focus')).toBeNull();
+    expect(elH2!.getAttribute('data-bp-focus')).toBe('1');
+    expect(elP!.getAttribute('data-bp-focus')).toBeNull();
+
+    // pin 换焦：旧行卸皮、新行上皮；窗口 DOM 数不变
+    const mountedBefore = list.getMountedCount();
+    list.setPin({ focusId: 'h1' });
+    expect(list.getMountedCount()).toBe(mountedBefore);
+    expect(list.getBlockElement('h1')!.getAttribute('data-bp-focus')).toBe('1');
+    expect(list.getBlockElement('h2')!.hasAttribute('data-bp-focus')).toBe(
+      false
+    );
+
+    // heading 无 level → 与 Skeleton 同族默认 2
+    list.setProjections([
+      { id: 'h1', flavour: 'heading', text: '无级' },
+      { id: 'h2', flavour: 'heading', text: '二级', level: 2 },
+      { id: 'p', flavour: 'paragraph', text: '正文' },
+      { id: 'h3f', flavour: 'h3', text: '三级 flavour' },
+    ]);
+    expect(list.getBlockElement('h1')!.getAttribute('data-heading-level')).toBe(
+      '2'
+    );
+  });
+
+  it('lr_v4_heading_does_not_change_window_algorithm: 级差皮不扩 mountIds', () => {
+    const order = Array.from({ length: 40 }, (_, i) => `w-${i}`);
+    list = new PaperList(mount, {
+      order,
+      window: { startIndex: 10, endIndex: 15 },
+      overscan: 0,
+      focusId: 'w-12',
+      projections: order.map((id, i) => ({
+        id,
+        flavour: i % 5 === 0 ? 'heading' : 'paragraph',
+        text: id,
+        ...(i % 5 === 0 ? { level: 1 as const } : {}),
+      })),
+    });
+    expect(list.getMountedCount()).toBe(5);
+    expect(list.countDomBlocks()).toBe(5);
+    expect(list.getBlockElement('w-0')).toBeNull();
+    // 窗口 [10,15)：w-10 为 heading level 1；焦点仍可钉在非标题行
+    expect(
+      list.getBlockElement('w-10')?.getAttribute('data-heading-level')
+    ).toBe('1');
+    expect(list.getBlockElement('w-12')?.getAttribute('data-bp-focus')).toBe(
+      '1'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LR-V4 · CSS token 同族（源文件可 rg）
+// ---------------------------------------------------------------------------
+
+describe('LR-V4 · resolvePaperHeadingLevel', () => {
+  it('lr_v4_resolve_level_prefers_explicit_then_flavour', () => {
+    expect(
+      resolvePaperHeadingLevel({ id: 'a', flavour: 'heading', level: 1 })
+    ).toBe(1);
+    expect(
+      resolvePaperHeadingLevel({ id: 'a', flavour: 'heading', level: 2 })
+    ).toBe(2);
+    expect(resolvePaperHeadingLevel({ id: 'a', flavour: 'heading' })).toBe(2);
+    expect(resolvePaperHeadingLevel({ id: 'a', flavour: 'h3' })).toBe(3);
+    expect(
+      resolvePaperHeadingLevel({ id: 'a', flavour: 'paragraph' })
+    ).toBeUndefined();
+    expect(
+      resolvePaperHeadingLevel({ id: 'a', flavour: 'paragraph', level: 9 })
+    ).toBeUndefined();
+  });
+});
+
+describe('LR-V4 · paperList.css 标题/焦点 token', () => {
+  it('lr_v4_css_heading_tokens_match_react_family: 2xl/xl + heavy/content；焦点 inset 不吃 focus-ring', () => {
+    const css = readFileSync(join(LIST_DIR, 'paperList.css'), 'utf8');
+
+    expect(css).toMatch(
+      /\.bp-paper-block\[data-heading-level='1'\][\s\S]*--font-size-2xl/
+    );
+    expect(css).toMatch(
+      /\.bp-paper-block\[data-heading-level='1'\][\s\S]*--font-weight-heavy/
+    );
+    expect(css).toMatch(
+      /\.bp-paper-block\[data-heading-level='2'\][\s\S]*--font-size-xl/
+    );
+    expect(css).toMatch(
+      /\.bp-paper-block\[data-heading-level='2'\][\s\S]*--font-weight-content/
+    );
+    expect(css).not.toMatch(/font-size:\s*22px\s*;/);
+    expect(css).toMatch(/\[data-bp-focus='1'\]/);
+    expect(css).toMatch(/inset 0 0 0 1px/);
+    expect(css).not.toMatch(/var\(\s*--focus-ring/);
+  });
+});
+
+describe('LR-V4 · 桌面透传源可 rg', () => {
+  it('lr_v4_desktop_sources_pass_level: ChromeSlot / DomMount 写 level', () => {
+    const repoRoot = resolve(LIST_DIR, '../../../..');
+    const slot = readFileSync(
+      join(
+        repoRoot,
+        'apps/crish-desktop/src/components/note-paper/NotePaperStrictChromeSlot.tsx'
+      ),
+      'utf8'
+    );
+    const mountSrc = readFileSync(
+      join(
+        repoRoot,
+        'apps/crish-desktop/src/components/note-paper/PaperListDomMount.tsx'
+      ),
+      'utf8'
+    );
+    expect(slot).toMatch(/props\?\.level/);
+    expect(slot).toMatch(/row\.level\s*=/);
+    expect(mountSrc).toMatch(/level\?: number/);
+    expect(mountSrc).toMatch(/proj\.level = block\.level/);
+    expect(mountSrc).toMatch(/b\.level \?\? ''/);
   });
 });

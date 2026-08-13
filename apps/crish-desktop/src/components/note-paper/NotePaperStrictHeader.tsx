@@ -8,6 +8,7 @@
 import React from 'react';
 import type { SlashOverlayWriteMode } from './SlashMenuOverlay';
 import { Button } from '../ui';
+import { Tooltip } from '../ui/Tooltip/Tooltip';
 import { W5B_STRICT_PACKAGE_ID, W5B_STRICT_TRACK } from './w5bStrict';
 import styles from './NotePaperPanel.module.css';
 
@@ -35,6 +36,11 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = ({
   onOpenSlash,
   onClose,
 }) => {
+  const slashModeHint =
+    slashWriteMode === 'readonly'
+      ? 'slash 只读（未接 apply；≠假写）'
+      : 'slash 可写（Intent → sink）';
+
   return (
     <header className={styles.header}>
       <h2 className={styles.title}>{title}</h2>
@@ -51,18 +57,15 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = ({
         <span className={styles.badge} data-testid="note-paper-strict-count">
           {blockCount} 块
         </span>
-        <span
-          className={styles.badge}
-          data-testid="note-paper-strict-slash-mode"
-          data-slash-write-mode={slashWriteMode}
-          title={
-            slashWriteMode === 'readonly'
-              ? 'slash 只读（未接 apply；≠假写）'
-              : 'slash 可写（Intent → sink）'
-          }
-        >
-          slash={slashWriteMode}
-        </span>
+        <Tooltip content={slashModeHint}>
+          <span
+            className={styles.badge}
+            data-testid="note-paper-strict-slash-mode"
+            data-slash-write-mode={slashWriteMode}
+          >
+            slash={slashWriteMode}
+          </span>
+        </Tooltip>
         <Button
           type="button"
           variant="ghost"
