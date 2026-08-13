@@ -294,9 +294,11 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
 /// [ProviderRequest.tools] 冻结为 owned 形态，AU-04 F1 契约不变）。
 /// system_prompt 经 `as_deref()` 透传（P1 阶段 2 通路第三层），与 messages
 /// 同生命周期（`'a` 借用期，实现方在返回流前完成序列化）。
-/// session_id 暂填 None（P2 步骤 4a 契约字段，C5 合并登记）；会话 ID 的注入
-/// 接线（engine.rs 适配层 / SessionLoopOptions 透传）归 T-17（P2 步骤 4b）。
-/// 待接（F1 审计 F3-08）：T-17 落地前该字段恒 None，缓存键不含会话维度。
+/// session_id 注入真实会话 ID（P2 步骤 4b 接线完成，数据源
+/// `state.machine.context().session_id`，与事件面 :360/:496/:541 同源）。
+/// 已注入真实值，缓存键含会话维度——engine.rs:452 消费链已就位
+/// （`build_cache_policy(..., request.session_id.as_deref(), ...)`，
+/// provider.rs:83-89 键来源契约）。
 ///
 /// P4（预算钳制）：max_tokens 发请求前经 [clamp_max_tokens] 钳制
 /// （window - estimate - safety，估算 = [estimate_context] 双源，
@@ -307,7 +309,7 @@ fn build_request(state: &LoopState) -> ProviderRequest<'_> {
         tools: tools_schema(state).to_vec(),
         max_tokens: Some(clamp_request_max_tokens(state)),
         system_prompt: state.options.system_prompt.as_deref(),
-        session_id: None,
+        session_id: Some(state.machine.context().session_id.clone()),
     }
 }
 

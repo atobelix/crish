@@ -994,6 +994,29 @@ async fn test_provider_records_requests() {
     assert_eq!(requests[0].max_tokens, Some(8192));
 }
 
+/// S5 契约测钉（D-02）：build_request 注入真实 session_id——构造 loop 时
+/// 传入的会话 ID（loop_with_arc 固定 "sess-1"）经请求快照捕获，断言
+/// 非 None 且等于构造值（缓存键会话维度来源；engine.rs:452
+/// build_cache_policy 消费链已就位）
+#[tokio::test]
+async fn request_session_id_injected_into_provider_request() {
+    let provider_handle = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("回复。"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
+
+    let outcome = loop_.run(user("你好")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert!(outcome.error.is_none());
+    // 构造时传入 session_id = "sess-1"（loop_with_arc），请求快照捕获真实值
+    assert_eq!(
+        provider_handle.request_session_id(0),
+        Some("sess-1".to_string()),
+        "build_request 必须注入真实会话 ID（缓存键会话维度来源）"
+    );
+}
+
 /// 事件序列契约抽查（01 §五.6）：agent-start/end 首尾、turn-start/end 成对、
 /// message-start/end 每条消息成对
 #[tokio::test]

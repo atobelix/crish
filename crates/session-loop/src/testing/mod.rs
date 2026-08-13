@@ -145,6 +145,12 @@ impl TestProvider {
     pub fn request_system_prompt(&self, n: usize) -> Option<String> {
         self.requests().get(n).and_then(|r| r.system_prompt.clone())
     }
+
+    /// 第 n 次请求的 session_id（S5 契约测钉断言用：build_request 注入
+    /// 真实会话 ID，请求快照逐一对齐 [ProviderRequest] 字段）
+    pub fn request_session_id(&self, n: usize) -> Option<String> {
+        self.requests().get(n).and_then(|r| r.session_id.clone())
+    }
 }
 
 #[async_trait]
@@ -268,6 +274,9 @@ pub struct RequestSnapshot {
     /// 本次调用 system prompt（M1：注入通道断言用；system 角色面，
     /// 独立于会话对话）
     pub system_prompt: Option<String>,
+    /// 本次调用 session_id（S5 接线后断言：build_request 注入真实值，
+    /// 缓存键会话维度来源）
+    pub session_id: Option<String>,
 }
 
 impl RequestSnapshot {
@@ -278,6 +287,7 @@ impl RequestSnapshot {
             tools: request.tools.clone(),
             max_tokens: request.max_tokens,
             system_prompt: request.system_prompt.map(str::to_string),
+            session_id: request.session_id.clone(),
         }
     }
 }
