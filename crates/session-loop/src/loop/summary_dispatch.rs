@@ -321,33 +321,36 @@ pub struct SummaryRetryGate {
     config: SummaryRetryGuardConfig,
     /// 当前窗口内累计尝试次数（含同步那次口径，与 episode attempts 同源）
     attempts_in_window: u32,
-    /// 当前窗口起点（epoch ms；0 = 窗口尚未开始）
-    window_started_at_ms: u64,
+    /// 当前窗口起点（epoch ms；None = 窗口尚未开始）。用 Option 而非 0
+    /// 哨兵——epoch 0 是合法时刻（测试假时钟从 0 起步），0 哨兵会误判
+    /// 「未开始」导致窗口起点滑动错误
+    window_started_at_ms: Option<u64>,
 }
 
 impl SummaryRetryGate {
-    /// 新建护栏（config 装配时定；state 从零开始）
+    /// 新建护栏（config 装配时定；state 从零开始，窗口未开始 = None）
     pub fn new(config: SummaryRetryGuardConfig) -> Self {
         Self {
             config,
             attempts_in_window: 0,
-            window_started_at_ms: 0,
+            window_started_at_ms: None,
         }
     }
 
-    /// 窗口过期检查：自窗口起点流逝 ≥ [SummaryRetryGuardConfig::retry_window_ms]
-    /// → 重置计数与窗口起点（窗口内 0 次被动触发 → 计数重置语义）
+    /// 窗口过期检查：窗口已开始（Some）且自窗口起点流逝 ≥
+    /// [SummaryRetryGuardConfig::retry_window_ms] → 重置计数与窗口起点
+    /// （窗口内 0 次被动触发 → 计数重置语义）
     fn reset_if_window_expired(&mut self, now_ms: u64) {
-        if self.window_started_at_ms != 0
-            && now_ms.saturating_sub(self.window_started_at_ms) >= self.config.retry_window_ms
-        {
-            tracing::debug!(
-                attempts_in_window = self.attempts_in_window,
-                window_ms = self.config.retry_window_ms,
-                "低功耗观察窗口过期 → 尝试计数重置（可再试）"
-            );
-            self.attempts_in_window = 0;
-            self.window_started_at_ms = 0;
+        if let Some(started_at) = self.window_started_at_ms {
+            if now_ms.saturating_sub(started_at) >= self.config.retry_window_ms {
+                tracing::debug!(
+                    attempts_in_window = self.attempts_in_window,
+                    window_ms = self.config.retry_window_ms,
+                    "低功耗观察窗口过期 → 尝试计数重置（可再试）"
+                );
+                self.attempts_in_window = 0;
+                self.window_started_at_ms = None;
+            }
         }
     }
 
@@ -366,8 +369,8 @@ impl SummaryRetryGate {
     /// 被拒绝的 episode（未 spawn）不记账。
     pub fn record_episode(&mut self, attempts_used: u32, now_ms: u64) {
         self.reset_if_window_expired(now_ms);
-        if self.window_started_at_ms == 0 {
-            self.window_started_at_ms = now_ms;
+        if self.window_started_at_ms.is_none() {
+            self.window_started_at_ms = Some(now_ms);
         }
         self.attempts_in_window = self.attempts_in_window.saturating_add(attempts_used);
     }
@@ -779,10 +782,21 @@ mod tests {
         assert_eq!(done[0].summary_json, None);
         let calls = summarizer.calls.lock().unwrap().clone();
         assert_eq!(calls.len(), 3, "后台只重试 3 次（上限 4 含同步）");
-        // 第二段：被动触发（窗口内累计 4 < 默认护栏 8 → 放行）→ 成功
+        // 第二段：被动触发（窗口内累计 4 < 默认护栏 8 → 放行）→ 成功。
+        // 回调必须再次注入（FnOnce 不能复用，另建同源收集器）——否则第二
+        // 段 outcome 只在护栏记账、不进 outcomes，断言收不到第二个结果
         *summarizer.result.lock().unwrap() = Ok(valid_json("compacted-summary-1-1"));
+        let cb2 = {
+            let outcomes = outcomes.clone();
+            Box::new(move |o: SummaryDispatchOutcome| {
+                outcomes.lock().unwrap().push(o);
+            }) as SummaryOutcomeCallback
+        };
         assert!(
-            dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-1"), None),
+            dispatch.try_spawn(
+                task_with(summarizer.clone(), "compacted-summary-1-1"),
+                Some(cb2),
+            ),
             "被动触发必须放行（窗口内累计 4 < 8）"
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
