@@ -1,15 +1,28 @@
+// @vitest-environment jsdom
 /**
  * useImeBridge hook 测试（P1-B2）：jsdom 模拟 composition 事件序列 ——
  * 全流程提交 / Esc 取消 / 失焦悬置 / 停流复位 / 定位钳制 / 接管信号。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react';
 import { useImeBridge } from './useImeBridge';
 
 /** 面板 rect 替身（jsdom 无布局：注入固定尺寸，验证坐标换算与钳制）。 */
 function panelRect(overrides: Partial<DOMRect> = {}): DOMRect {
-  return { left: 10, top: 20, width: 800, height: 600, ...overrides } as DOMRect;
+  return {
+    left: 10,
+    top: 20,
+    width: 800,
+    height: 600,
+    ...overrides,
+  } as DOMRect;
 }
 
 interface HarnessProps {
@@ -43,7 +56,9 @@ function Harness({
         onKeyDown={bridge.imeInputHandlers.onKeyDown}
         onBlur={bridge.onImeBlur}
       />
-      <span data-testid="composing">{bridge.composing ? '合成中' : '空闲'}</span>
+      <span data-testid="composing">
+        {bridge.composing ? '合成中' : '空闲'}
+      </span>
       <button
         type="button"
         data-testid="anchor"
@@ -113,7 +128,9 @@ describe('useImeBridge', () => {
     fireEvent.compositionStart(input, { data: '' });
     fireEvent.compositionUpdate(input, { data: '你好' });
     act(() => {
-      input.dispatchEvent(new window.CompositionEvent('compositioncancel', { data: '' }));
+      input.dispatchEvent(
+        new window.CompositionEvent('compositioncancel', { data: '' })
+      );
     });
     expect(onCommitted).not.toHaveBeenCalled();
     expect(composingText()).toBe('空闲');
@@ -153,7 +170,11 @@ describe('useImeBridge', () => {
     fireEvent.compositionStart(input, { data: '' });
     fireEvent.compositionUpdate(input, { data: '你好' });
     for (let i = 0; i < 5; i++) {
-      fireEvent.keyDown(input, { key: 'Process', code: 'Process', keyCode: 229 });
+      fireEvent.keyDown(input, {
+        key: 'Process',
+        code: 'Process',
+        keyCode: 229,
+      });
     }
     expect(composingText()).toBe('合成中');
     expect(onCommitted).not.toHaveBeenCalled();

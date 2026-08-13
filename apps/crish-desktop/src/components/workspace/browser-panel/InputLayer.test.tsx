@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * InputLayer 集成测试（P1-B2）：IME 桥全流程 —— 隐藏输入框 composition
  * 序列 → browser_input text 注入；点击聚焦/候选窗定位；合成期键盘阻断。
@@ -5,7 +6,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { mockTauriCommand } from '../../../test-setup';
 import { BROWSER_INPUT_CMD } from '../../../api/browserSessionApi';
 import { InputLayer } from './InputLayer';
@@ -19,7 +26,7 @@ function renderLayer(props: Partial<Parameters<typeof InputLayer>[0]> = {}) {
       getFrameMeta={() => META}
       onUserInput={() => {}}
       {...props}
-    />,
+    />
   );
 }
 
@@ -91,12 +98,15 @@ describe('InputLayer IME 桥', () => {
   it('点击输入层：隐藏输入框获得焦点（候选窗定位换算见 useImeBridge 测试）', () => {
     renderLayer();
     const ime = imeInput();
-    fireEvent.mouseDown(screen.getByRole('application', { name: '受管浏览器输入层' }), {
-      clientX: 120,
-      clientY: 80,
-      button: 0,
-      buttons: 1,
-    });
+    fireEvent.mouseDown(
+      screen.getByRole('application', { name: '受管浏览器输入层' }),
+      {
+        clientX: 120,
+        clientY: 80,
+        button: 0,
+        buttons: 1,
+      }
+    );
     expect(document.activeElement).toBe(ime);
   });
 
@@ -105,7 +115,13 @@ describe('InputLayer IME 桥', () => {
     const ime = imeInput();
     fireEvent.compositionStart(ime, { data: '' });
     fireEvent.compositionUpdate(ime, { data: '你好' });
-    rerender(<InputLayer active={false} getFrameMeta={() => META} onUserInput={() => {}} />);
+    rerender(
+      <InputLayer
+        active={false}
+        getFrameMeta={() => META}
+        onUserInput={() => {}}
+      />
+    );
     fireEvent.compositionEnd(ime, { data: '你好' });
     await new Promise((r) => setTimeout(r, 60));
     expect(input).not.toHaveBeenCalled();

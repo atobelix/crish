@@ -1,10 +1,17 @@
+// @vitest-environment jsdom
 /**
  * usePanelInput hook 测试（P1-B1）：事件归一化 / 高频合并 / 直通语义 /
  * 修饰键 / 点击计数 / 失焦兜底。invoke 走 test-setup 全局 mock。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React, { useRef } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { mockTauriCommand } from '../../../test-setup';
 import { BROWSER_INPUT_CMD } from '../../../api/browserSessionApi';
 import { usePanelInput } from './usePanelInput';
@@ -66,7 +73,12 @@ describe('usePanelInput', () => {
   it('disabled（帧流未激活）：事件不转发', async () => {
     render(<Harness enabled={false} />);
     const layer = screen.getByTestId('layer');
-    fireEvent.mouseDown(layer, { clientX: 10, clientY: 20, button: 0, buttons: 1 });
+    fireEvent.mouseDown(layer, {
+      clientX: 10,
+      clientY: 20,
+      button: 0,
+      buttons: 1,
+    });
     fireEvent.keyDown(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
     await new Promise((r) => setTimeout(r, 60));
     expect(input).not.toHaveBeenCalled();
@@ -75,10 +87,15 @@ describe('usePanelInput', () => {
   it('mousedown 直通：button/buttons/clickCount/modifiers 归一化', async () => {
     render(<Harness enabled />);
     const layer = screen.getByTestId('layer');
-    fireEvent.mouseDown(layer, { clientX: 100, clientY: 200, button: 0, buttons: 1 });
+    fireEvent.mouseDown(layer, {
+      clientX: 100,
+      clientY: 200,
+      button: 0,
+      buttons: 1,
+    });
     await waitInvocations(1);
     const [args] = input.mock.calls[0];
-    
+
     expect(args.event).toMatchObject({
       kind: 'mouse',
       action: 'down',
@@ -96,7 +113,11 @@ describe('usePanelInput', () => {
     const layer = screen.getByTestId('layer');
     // 同窗内 5 次 move（jsdom 下 rect 为零值 → 页面坐标 = client 坐标）
     for (let i = 1; i <= 5; i++) {
-      fireEvent.mouseMove(layer, { clientX: i * 10, clientY: i * 10, buttons: 0 });
+      fireEvent.mouseMove(layer, {
+        clientX: i * 10,
+        clientY: i * 10,
+        buttons: 0,
+      });
     }
     await new Promise((r) => setTimeout(r, 80));
     await waitInvocations(1);
@@ -152,7 +173,11 @@ describe('usePanelInput', () => {
   it('组合键（Ctrl+A）：text 置空（§3.3 命令和弦语义）', async () => {
     render(<Harness enabled />);
     const layer = screen.getByTestId('layer');
-    fireEvent.keyDown(layer, { key: 'Control', code: 'ControlLeft', keyCode: 17 });
+    fireEvent.keyDown(layer, {
+      key: 'Control',
+      code: 'ControlLeft',
+      keyCode: 17,
+    });
     fireEvent.keyDown(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
     await waitInvocations(2);
     const [args] = input.mock.calls[1];
@@ -183,7 +208,11 @@ describe('usePanelInput', () => {
   it('失焦（blur）：补发按住修饰键 keyUp + 清空状态（防 sticky）', async () => {
     render(<Harness enabled />);
     const layer = screen.getByTestId('layer');
-    fireEvent.keyDown(layer, { key: 'Control', code: 'ControlLeft', keyCode: 17 });
+    fireEvent.keyDown(layer, {
+      key: 'Control',
+      code: 'ControlLeft',
+      keyCode: 17,
+    });
     await waitInvocations(1);
     fireEvent.blur(layer);
     await waitInvocations(2);
@@ -199,7 +228,11 @@ describe('usePanelInput', () => {
   it('blur 后修饰位清空：后续按键 modifiers=0', async () => {
     render(<Harness enabled />);
     const layer = screen.getByTestId('layer');
-    fireEvent.keyDown(layer, { key: 'Control', code: 'ControlLeft', keyCode: 17 });
+    fireEvent.keyDown(layer, {
+      key: 'Control',
+      code: 'ControlLeft',
+      keyCode: 17,
+    });
     await waitInvocations(1);
     fireEvent.blur(layer);
     await waitInvocations(2);
@@ -211,12 +244,27 @@ describe('usePanelInput', () => {
   it('点击计数（§3.5）：快速同点两次 down → clickCount=2；位移大 → 重置 1', async () => {
     render(<Harness enabled />);
     const layer = screen.getByTestId('layer');
-    fireEvent.mouseDown(layer, { clientX: 100, clientY: 100, button: 0, buttons: 1 });
-    fireEvent.mouseDown(layer, { clientX: 101, clientY: 101, button: 0, buttons: 1 });
+    fireEvent.mouseDown(layer, {
+      clientX: 100,
+      clientY: 100,
+      button: 0,
+      buttons: 1,
+    });
+    fireEvent.mouseDown(layer, {
+      clientX: 101,
+      clientY: 101,
+      button: 0,
+      buttons: 1,
+    });
     await waitInvocations(2);
     expect(input.mock.calls[1][0].event.clickCount).toBe(2);
 
-    fireEvent.mouseDown(layer, { clientX: 400, clientY: 400, button: 0, buttons: 1 });
+    fireEvent.mouseDown(layer, {
+      clientX: 400,
+      clientY: 400,
+      button: 0,
+      buttons: 1,
+    });
     await waitInvocations(3);
     expect(input.mock.calls[2][0].event.clickCount).toBe(1);
   });
@@ -256,9 +304,20 @@ describe('usePanelInput', () => {
     const layer = screen.getByTestId('layer');
     fireEvent.mouseMove(layer, { clientX: 10, clientY: 10, buttons: 0 });
     expect(onUserInput).not.toHaveBeenCalled();
-    fireEvent.mouseDown(layer, { clientX: 10, clientY: 10, button: 0, buttons: 1 });
+    fireEvent.mouseDown(layer, {
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+      buttons: 1,
+    });
     fireEvent.keyDown(layer, { key: 'a', code: 'KeyA', keyCode: 65 });
-    fireEvent.wheel(layer, { clientX: 10, clientY: 10, deltaMode: 0, deltaX: 1, deltaY: 1 });
+    fireEvent.wheel(layer, {
+      clientX: 10,
+      clientY: 10,
+      deltaMode: 0,
+      deltaX: 1,
+      deltaY: 1,
+    });
     // 注入面：down + key + 合并窗 flush（move+wheel 同窗合并为 2 条）
     await waitInvocations(4);
     expect(onUserInput).toHaveBeenCalledTimes(3);
@@ -277,7 +336,12 @@ describe('usePanelInput', () => {
     const onUserInput = vi.fn();
     render(<Harness enabled={false} onUserInput={onUserInput} />);
     const layer = screen.getByTestId('layer');
-    fireEvent.mouseDown(layer, { clientX: 10, clientY: 10, button: 0, buttons: 1 });
+    fireEvent.mouseDown(layer, {
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+      buttons: 1,
+    });
     await new Promise((r) => setTimeout(r, 60));
     expect(onUserInput).not.toHaveBeenCalled();
   });

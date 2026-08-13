@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * usePanelStatus hook 测试（P1-B2）：接管状态机时序（800ms 过渡）/ 推断模式
  * （帧在动 + 用户安静）/ 引擎信号模式 / 暂停恢复 / 推断抑制面。
@@ -11,16 +12,21 @@ import { TOKEN_MIN_STABLE_WINDOW_MS } from './panelStatusMachine';
 import { usePanelStatus, type UsePanelStatusOptions } from './usePanelStatus';
 
 function makeOpts(
-  overrides: Partial<UsePanelStatusOptions> = {},
+  overrides: Partial<UsePanelStatusOptions> = {}
 ): UsePanelStatusOptions {
-  return { frameState: 'active', lastFrameSeq: null, engineAiBusy: null, ...overrides };
+  return {
+    frameState: 'active',
+    lastFrameSeq: null,
+    engineAiBusy: null,
+    ...overrides,
+  };
 }
 
 /** 挂载（回调接收 props：rerender 可更新选项，供帧/引擎信号注入）。 */
 function renderStatus(opts: UsePanelStatusOptions = makeOpts()) {
   return renderHook(
     (props: UsePanelStatusOptions | undefined) => usePanelStatus(props ?? opts),
-    { initialProps: opts },
+    { initialProps: opts }
   );
 }
 
@@ -28,7 +34,7 @@ function renderStatus(opts: UsePanelStatusOptions = makeOpts()) {
 function pumpFrame(
   rerender: (opts: UsePanelStatusOptions) => void,
   opts: UsePanelStatusOptions,
-  seq: number,
+  seq: number
 ) {
   act(() => {
     rerender({ ...opts, lastFrameSeq: seq });
@@ -154,7 +160,9 @@ describe('usePanelStatus', () => {
   });
 
   it('引擎信号模式（接线后）：engineAiBusy 直接驱动 ai-busy/idle', () => {
-    const { result, rerender } = renderStatus(makeOpts({ engineAiBusy: false }));
+    const { result, rerender } = renderStatus(
+      makeOpts({ engineAiBusy: false })
+    );
     expect(result.current.status).toBe('idle');
     rerender(makeOpts({ engineAiBusy: true }));
     act(() => vi.advanceTimersByTime(250));

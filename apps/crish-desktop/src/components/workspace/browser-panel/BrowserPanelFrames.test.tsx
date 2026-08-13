@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * BrowserPanel 帧舞台测试（P1-B1）：running 态帧流订阅 / 指示条状态 /
  * 帧消息驱动「帧流已激活」/ 输入层挂载。
@@ -49,18 +50,25 @@ describe('BrowserPanel 帧舞台', () => {
   beforeEach(() => {
     eventMock.handlers.clear();
     eventMock.listen.mockImplementation(
-      async (event: string, handler: TauriEventHandler): Promise<() => void> => {
+      async (
+        event: string,
+        handler: TauriEventHandler
+      ): Promise<() => void> => {
         eventMock.handlers.set(event, handler);
         return () => {
           eventMock.handlers.delete(event);
         };
-      },
+      }
     );
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({ state: 'idle' as const }));
+    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
+      state: 'idle' as const,
+    }));
     mockTauriCommand(BROWSER_START_FRAMES_CMD, async () => ({
       state: 'starting' as const,
     }));
-    mockTauriCommand(BROWSER_STOP_FRAMES_CMD, async () => ({ state: 'stopped' as const }));
+    mockTauriCommand(BROWSER_STOP_FRAMES_CMD, async () => ({
+      state: 'stopped' as const,
+    }));
   });
 
   afterEach(() => {
@@ -74,16 +82,20 @@ describe('BrowserPanel 帧舞台', () => {
       <BrowserPanel
         onShowToast={vi.fn()}
         frameChannelFactory={async () => channel}
-      />,
+      />
     );
     // 先等初始查询落定（监听器就绪后再发事件，防挂载竞态丢事件）
     await waitFor(() => expect(screen.getByText('未启动')).toBeTruthy());
     act(() => emitBrowserEvent({ state: 'running' }));
     await waitFor(() => expect(screen.getByText('运行中')).toBeTruthy());
     // 引擎订阅返回 starting（startScreencast 在途，首帧未到）
-    await waitFor(() => expect(screen.getAllByText('帧流启动中…')[0]).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getAllByText('帧流启动中…')[0]).toBeTruthy()
+    );
     // 输入层挂载（受管浏览器输入层）
-    expect(screen.getByRole('application', { name: '受管浏览器输入层' })).toBeTruthy();
+    expect(
+      screen.getByRole('application', { name: '受管浏览器输入层' })
+    ).toBeTruthy();
   });
 
   it('非 running 态：无帧流舞台（idle 不渲染画布/输入层）', async () => {
@@ -100,7 +112,7 @@ describe('BrowserPanel 帧舞台', () => {
       <BrowserPanel
         onShowToast={vi.fn()}
         frameChannelFactory={async () => channel}
-      />,
+      />
     );
     await waitFor(() => expect(screen.getByText('未启动')).toBeTruthy());
     act(() => emitBrowserEvent({ state: 'running' }));
@@ -122,11 +134,13 @@ describe('BrowserPanel 帧舞台', () => {
       <BrowserPanel
         onShowToast={vi.fn()}
         frameChannelFactory={async () => channel}
-      />,
+      />
     );
     await waitFor(() => expect(screen.getByText('未启动')).toBeTruthy());
     act(() => emitBrowserEvent({ state: 'running' }));
-    await waitFor(() => expect(screen.getAllByText('帧流启动中…')[0]).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getAllByText('帧流启动中…')[0]).toBeTruthy()
+    );
     act(() => emitBrowserEvent({ state: 'stopped' }));
     await waitFor(() => expect(screen.getByText('已停止')).toBeTruthy());
     expect(screen.queryByText('帧流启动中…')).toBeNull();
@@ -144,12 +158,14 @@ describe('BrowserPanel 帧舞台', () => {
       <BrowserPanel
         onShowToast={onShowToast}
         frameChannelFactory={async () => channel}
-      />,
+      />
     );
     await waitFor(() => expect(screen.getByText('未启动')).toBeTruthy());
     act(() => emitBrowserEvent({ state: 'running' }));
     await waitFor(() => expect(screen.getByText('运行中')).toBeTruthy());
-    await waitFor(() => expect(screen.getAllByText('帧流未激活')[0]).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getAllByText('帧流未激活')[0]).toBeTruthy()
+    );
     await new Promise((r) => setTimeout(r, 50));
     expect(onShowToast).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: '停止浏览器' })).toBeEnabled();

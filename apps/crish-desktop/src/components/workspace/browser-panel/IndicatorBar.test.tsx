@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * IndicatorBar 组件测试（P1-B2）：四态文案 / 暂停按钮可见性与切换语义 /
  * AI 动作文本透出 / 点击回调。
@@ -11,7 +12,11 @@ import type { PanelStatus } from './browserPanelTypes';
 function renderBar(status: PanelStatus, aiActionText: string | null = null) {
   const onTogglePause = vi.fn();
   render(
-    <IndicatorBar status={status} aiActionText={aiActionText} onTogglePause={onTogglePause} />,
+    <IndicatorBar
+      status={status}
+      aiActionText={aiActionText}
+      onTogglePause={onTogglePause}
+    />
   );
   return onTogglePause;
 }
@@ -57,11 +62,15 @@ describe('IndicatorBar', () => {
 
   it('AI 动作文本透出：ai-busy 时拼接「AI 正在点击元素 [3]…」', () => {
     renderBar('ai-busy', 'AI 正在点击元素 [3]…');
-    expect(screen.getByText('AI 正在操作…（AI 正在点击元素 [3]…）')).toBeTruthy();
+    expect(
+      screen.getByText('AI 正在操作…（AI 正在点击元素 [3]…）')
+    ).toBeTruthy();
   });
 
   it('状态根节点携带 data-status 标记（样式投影面）', () => {
     renderBar('paused');
-    expect(screen.getByRole('status').getAttribute('data-status')).toBe('paused');
+    expect(screen.getByRole('status').getAttribute('data-status')).toBe(
+      'paused'
+    );
   });
 });
