@@ -79,8 +79,11 @@ use crate::steering_queue::PendingMessageQueue;
 // 公开面经 `pub use` 重导出，orchestrator::recovery::* 路径不 break；
 // 测试旁挂 recovery_tests.rs / recovery_tests_coordinator.rs（include! 接线）。
 
+#[path = "recovery_notify.rs"]
 mod recovery_notify;
+#[path = "recovery_policy.rs"]
 mod recovery_policy;
+#[path = "recovery_store.rs"]
 mod recovery_store;
 
 pub use recovery_notify::{

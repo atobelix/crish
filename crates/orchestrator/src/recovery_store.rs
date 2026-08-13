@@ -5,8 +5,8 @@
 use std::fmt;
 
 use conex_db::{LocalDb, RunStatus};
-
-use crate::recovery::RecoveryError;
+// RecoveryError 本文件 :135 定义（原 recovery.rs 迁入），无需自引用导入；
+// 公开面经 recovery.rs `pub use` 重导出。SR-06d 拆分注记。
 
 /// 恢复域持久化抽象（session_meta / events 表 / run 状态 / 子代理路径）。
 ///
