@@ -19,12 +19,13 @@
  * - **CONN-E3 detect 调度**：默认 **不** 调 detect
  *   （`enableMirrorDetectSchedule` **默认 false**；E2′ 只改宿主）
  * - **CONN-C2 PaperList**：默认 **不** 挂（`enableProductPaperList` **默认 false**）
+ * - **CONN-C2′**：产品宿主（WorkspaceProductEmptyHost）显式默传 `true`（**组件默认仍 false**）
  *
  * ## 诚实边界
  * - **可演示 ≠ EL-01 / EL-08 关闭**；**≠ 打开完成**
  * - fixture ≠ 生产权威；无 Tauri 回退 fixture **不是** 伪装 tauri-ipc
  * - 禁止去 `-S` 冒充 Strict；**≠ EL-01/03**；**≠** 重做 E2′ 宿主
- * - detect / PaperList **仅** opt-in；关时无 timer / 不双内容
+ * - detect / PaperList **仅** 显式 opt-in（组件级）；C2′ 由产品宿主显式默传；关时无 timer / 不双内容
  */
 
 import React, { useState } from 'react';
@@ -168,6 +169,8 @@ export type WorkspaceEmptyStateProps = {
    *   （与 content-row **互斥**；chrome 分槽仍可同屏）
    * - **≠ EL-01**；**≠ W3-P 满窗**；库层 PaperList 已挂 ≠ 空态默认挂
    * - 测钉：`conn_c2_default_no_paper_list` / `conn_c2_opt_in_paper_list_mutex`
+   * - CONN-C2′：产品宿主（WorkspaceProductEmptyHost）经策略常量显式默传 `true`；
+   *   **本组件默认仍 false**（C2 会计门不回退）
    */
   enableProductPaperList?: boolean;
 };

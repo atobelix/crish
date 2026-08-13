@@ -29,8 +29,8 @@ export type { RenderedColumn } from './workspaceLayoutLib';
  * 列/组渲染派生（拖拽折叠、占位拼接）见 workspaceLayoutLib；
  * 画布与分割器见 WorkspaceCanvas / WorkspaceResizer。
  *
- * CONN-E2′：空态走 WorkspaceProductEmptyHost（默传 detect 策略 + 产品 mirrorIpc）。
- * EmptyState 组件默认仍关。≠ EL-03 / ≠ inotify / ≠ 重做 E3。
+ * CONN-E2′/C2′：空态走 WorkspaceProductEmptyHost（默传 detect 策略 + 产品 mirrorIpc +
+ * PaperList 默开）。EmptyState 组件默认仍关。≠ EL-03 / ≠ inotify / ≠ 重做 E3；≠ W3-P / ≠ EL-01。
  */
 export const Workspace: React.FC<WorkspaceProps> = React.memo(
   ({ wsId, onShowToast }) => {
@@ -157,7 +157,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
         {/* Main Column Grid — isolated so a panel crash doesn't blank the whole workspace chrome */}
         <AppErrorBoundary compact>
           {empty ? (
-            /* CONN-E2′：产品宿主默装 detect；EmptyState 默认仍关 */
+            /* CONN-E2′/C2′：产品宿主默装 detect + PaperList；EmptyState 组件默认仍关 */
             <WorkspaceProductEmptyHost
               wsId={ws.id}
               onActivate={focusThisWorkspace}

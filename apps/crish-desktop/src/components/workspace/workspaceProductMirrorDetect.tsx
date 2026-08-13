@@ -4,12 +4,14 @@
  * 产品 Workspace 空态路径写死默传：
  * - `enableMirrorDetectSchedule = true`
  * - `mirrorIpc = createProductNoteMirrorIpc()`（有 Tauri → tauri-ipc；无 → undefined）
+ * - `enableProductPaperList = true`（CONN-C2′ PaperList 产品默开，见 workspaceProductPaperList.ts）
  *
- * EmptyState **组件默认仍 false**（CONN-E2 会计门不回退）。
+ * EmptyState **组件默认仍 false**（CONN-E2 / CONN-C2 会计门不回退）。
  *
  * ≠ 重做 CONN-E3 调度整包（mirrorDetectSchedule / useMirrorDetectProduct）
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 默认双开 poll+OS
- * ≠ 改 enableProductPaperList 默认（C2）
+ * ≠ 改 EmptyState 组件 enableProductPaperList 默认（C2 会计门）；C2′ 仅产品宿主显式默传
+ * ≠ W3-P · ≠ EL-01（PaperList 默开 ≠ 完成）
  * X-05 禁静默盖 unpushed 不回退
  * 无 Tauri **禁止** mock 当产品默认、**禁止**造假 drift report
  */
@@ -21,6 +23,7 @@ import {
   type NoteMirrorIpc,
 } from '../../api/noteMirrorIpc';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
+import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from './workspaceProductPaperList';
 
 /** 产品宿主写死：Workspace 空态默开 detect 调度（≠ EmptyState 组件默认） */
 export const WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE = true as const;
@@ -83,6 +86,7 @@ export function WorkspaceProductEmptyHost({
       onActivate={onActivate}
       enableMirrorDetectSchedule={productMirror.enableMirrorDetectSchedule}
       mirrorIpc={productMirror.mirrorIpc}
+      enableProductPaperList={WORKSPACE_PRODUCT_ENABLE_PAPER_LIST}
     />
   );
 }
