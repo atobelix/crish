@@ -16,9 +16,15 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# PE-07 T07.6：锁中毒恢复路径错误日志（复用 workspace 既有依赖，非新外部依赖）
+tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+# B1-1 毒化测日志捕获（LogCapture + with_capture 同形复制，对齐
+# crates/session-loop/tests/observability.rs：15-61；tracing-subscriber 为
+# workspace 既有依赖，零新 crate / 零 lockfile 变化）
+tracing-subscriber = { workspace = true }
 
 [lints]
 workspace = true

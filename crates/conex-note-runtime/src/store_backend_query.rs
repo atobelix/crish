@@ -20,9 +20,19 @@ use conex_workspace_store::{
     ImportMirrorOpts, ImportMirrorResult, MirrorDriftReport, QueryBlocksParams, ThreeWayStrategy,
 };
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::store_backend::{map_store_err, StoreNoteBackend};
-use crate::store_hydrate::ensure_session;
+
+/// 毒丸恢复计数（B1-1 观测化：本文件 sessions 索引锁 / per-doc 锁中毒恢复次数；
+/// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 impl StoreNoteBackend {
     /// 同步版即时 S（测试 / 进程内）；语义同 [`agent_tools::note_backend::NoteBackend::get_md`]。
@@ -33,13 +43,35 @@ impl StoreNoteBackend {
         if doc_id.trim().is_empty() {
             return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
         }
-        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
-        match sessions.get(doc_id) {
-            Some(session) if !session.tree().root_children.is_empty() => {
-                Ok(conex_md_ast::document_to_md(session.tree()))
+        // B3：map 锁短临界取句柄，doc 锁持读（不同 doc 的 get_md 互不串行）
+        let arc = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                tracing::error!(target: "conex_note_runtime", "sessions 索引锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
+            .get(doc_id)
+            .cloned();
+        match arc {
+            Some(arc) => {
+                let session = arc.lock().unwrap_or_else(|e| {
+                    // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                    tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
+                    POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                    e.into_inner()
+                });
+                if session.tree().root_children.is_empty() {
+                    // 无 session 或空树：与 NoteBackend::get_md 契约一致
+                    Ok(String::new())
+                } else {
+                    Ok(conex_md_ast::document_to_md(session.tree()))
+                }
             }
             // 无 session 或空树：与 NoteBackend::get_md 契约一致
-            _ => Ok(String::new()),
+            None => Ok(String::new()),
         }
     }
 
@@ -59,11 +91,27 @@ impl StoreNoteBackend {
         if let Some(r) = authority_rev {
             return Ok(r);
         }
-        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(session) = sessions.get(doc_id) {
+        // B3：map 锁短临界取句柄，doc 锁持读
+        let arc = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                tracing::error!(target: "conex_note_runtime", "sessions 索引锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
+            .get(doc_id)
+            .cloned();
+        if let Some(arc) = arc {
+            let session = arc.lock().unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            });
             return Ok(session.rev());
         }
-        drop(sessions);
         let loaded = self.store.load_rev(doc_id).map_err(map_store_err)?;
         Ok(if loaded < 0 { 0 } else { loaded as u64 })
     }
@@ -105,12 +153,21 @@ impl StoreNoteBackend {
         }
         let rev = self.resolve_authority_rev(doc_id, authority_rev)?;
 
-        // 先克隆树，再释放 sessions 锁，避免与 store I/O 长持锁
+        // 先克隆树，再释放 doc 锁，避免与 store I/O 长持锁
         let tree_owned: Option<BlockTree> = if use_session_tree {
-            let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
             // 尽量 ensure：有 blob 则 hydrate；失败不阻断（import 仍可 Conflict）
-            let _ = ensure_session(&mut sessions, &self.store, doc_id);
-            sessions.get(doc_id).map(|s| s.tree().clone())
+            match self.session_handle(doc_id) {
+                Ok(arc) => {
+                    let session = arc.lock().unwrap_or_else(|e| {
+                        // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                        tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
+                        POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                        e.into_inner()
+                    });
+                    Some(session.tree().clone())
+                }
+                Err(_) => None,
+            }
         } else {
             None
         };
@@ -139,14 +196,16 @@ impl StoreNoteBackend {
         if doc_id.is_empty() {
             return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
         }
-        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
-        ensure_session(&mut sessions, &self.store, doc_id)?;
-        let session = sessions
-            .get(doc_id)
-            .ok_or_else(|| NoteBackendError::NotFound(format!("no session: {doc_id}")))?;
+        let arc = self.session_handle(doc_id)?;
+        let session = arc.lock().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+            tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let export_rev = rev.unwrap_or_else(|| session.rev());
         let tree = session.tree().clone();
-        drop(sessions);
+        drop(session);
         self.store
             .export_md_mirror(doc_id, &tree, export_rev, mirror_root)
             .map_err(map_store_err)

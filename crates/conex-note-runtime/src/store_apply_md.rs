@@ -18,12 +18,22 @@ use agent_tools::note_backend::{
 use conex_doc_collab::{BlockId, Op};
 use conex_md_ast::{apply_md_fragment, LossyReport, MdError};
 use conex_workspace_store::commit_ops;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::store_backend::{
     map_commit_err, origin_from_req, StoreNoteBackend,
 };
-use crate::store_hydrate::ensure_session;
 use crate::store_plan_ops::parse_block_id;
+
+/// 毒丸恢复计数（B1-1 观测化：本文件 intents / per-doc 锁中毒恢复次数；
+/// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 impl StoreNoteBackend {
     /// 从 ops 收集新 Insert 的 block id（字符串）。
@@ -96,7 +106,12 @@ impl StoreNoteBackend {
                     "intent_id must be non-empty when provided".into(),
                 ));
             }
-            let intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
+            let intents = self.intents.lock().unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                tracing::error!(target: "conex_note_runtime", "intents 锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            });
             if let Some(prev) = intents.get(intent) {
                 let mut out = prev.clone();
                 out.idempotent = true;
@@ -106,14 +121,14 @@ impl StoreNoteBackend {
         }
 
         let origin = origin_from_req(&req);
-        let mut sessions = self
-            .sessions
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        ensure_session(&mut sessions, &self.store, &req.doc_id)?;
-        let session = sessions
-            .get_mut(&req.doc_id)
-            .expect("ensure_session just inserted");
+        // B3：per-doc 锁——mode 生成 ops + commit 全程持 doc 锁（原子性不变）
+        let arc = self.session_handle(&req.doc_id)?;
+        let mut session = arc.lock().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+            tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
 
         // 3. 按 mode 生成 Ops + 保留 lossy（W4-A：进 NoteApplyMdResult）
         let (ops, lossy): (Vec<Op>, NoteLossyReport) = match req.mode {
@@ -195,7 +210,12 @@ impl StoreNoteBackend {
                 lossy,
             };
             if let Some(ref intent) = req.intent_id {
-                let mut intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
+                let mut intents = self.intents.lock().unwrap_or_else(|e| {
+                    // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                    tracing::error!(target: "conex_note_runtime", "intents 锁中毒，按恢复模式继续：{e}");
+                    POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                    e.into_inner()
+                });
                 intents.insert(intent.clone(), result.clone());
             }
             return Ok(result);
@@ -219,7 +239,7 @@ impl StoreNoteBackend {
         };
 
         // 4. commit_ops：session.apply + apply_projection_diff（原子；失败零半树）
-        commit_ops(session, &self.store, origin, &ops).map_err(map_commit_err)?;
+        commit_ops(&mut session, &self.store, origin, &ops).map_err(map_commit_err)?;
 
         let result = NoteApplyMdResult {
             block_ids,
@@ -229,7 +249,12 @@ impl StoreNoteBackend {
         };
 
         if let Some(ref intent) = req.intent_id {
-            let mut intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
+            let mut intents = self.intents.lock().unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                tracing::error!(target: "conex_note_runtime", "intents 锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            });
             intents.insert(intent.clone(), result.clone());
         }
         Ok(result)

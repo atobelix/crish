@@ -30,7 +30,9 @@
 //! - **已交付（结构）**：SD-06 切开上帝文件；SD-29 再切 apply；SD-49 再切 query/镜像；**≠ EL-05**；**≠ A-AGT 满表**；**≠ W6-E**
 //!
 //! # 会话策略
-//! 进程内 `Mutex<HashMap<doc_id, DocSession>>`：
+//! 进程内会话索引 + **per-doc 分片锁**（B3：`Mutex<HashMap<doc_id, Arc<Mutex<DocSession>>>>`，
+//! map 锁只保护索引短临界，doc 锁持长临界——多 doc 并发读写互不串行；
+//! 锁序恒 `map → doc → store.conn` 单向）：
 //! - 首次打开：`load_doc` → `DocSession::hydrate`（G-HYD-2 可逆结构 snapshot）
 //!   + `with_persistence(SharedWorkspaceStore)`。
 //! - 同进程后续写走同一 session 树（零半树由 collab 原子 apply 保证）。
@@ -39,6 +41,8 @@
 //! - **打开投影**：[`StoreNoteBackend::hydrate_document_from_session`] 走真
 //!   `DocSession::hydrate` + CDCS 树投影（`hydrate_path=doc-session`）；
 //!   **≠** `query_blocks` 派生（`hydrate_path=query-blocks`）。
+//! - **诚实边界**：SQLite 仍经 workspace-store 单连接串行（B3 不扩连接，
+//!   解除的是内存会话锁面）。
 //!
 //! # 诚实边界（hydrate 投影）
 //! - 真路径可测 **≠** 产品「打开完成」（G-HYD 全条件）

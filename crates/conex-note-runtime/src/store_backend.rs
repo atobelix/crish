@@ -30,10 +30,21 @@ use conex_doc_collab::{DocSession, Origin};
 use conex_workspace_store::{SharedWorkspaceStore, StoreError};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub use crate::store_backend_apply::ApplyCollabOpsOutcome;
+
+/// 毒丸恢复计数（B1-1 观测化：本文件 sessions 索引锁 / per-doc 锁中毒恢复次数；
+/// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 /// 真实笔记后端：SharedWorkspaceStore + 进程内 DocSession 表 + intent 幂等。
 ///
@@ -50,8 +61,11 @@ pub use crate::store_backend_apply::ApplyCollabOpsOutcome;
 ///   `force_execution_unknown` 不半写）。**≠ EL-05**；**≠ W6-E**；**≠ A-AGT 全表**。
 pub struct StoreNoteBackend {
     pub(crate) store: SharedWorkspaceStore,
-    /// 进程内打开的文档会话（唯一写入口持有者）。
-    pub(crate) sessions: Mutex<HashMap<String, DocSession>>,
+    /// 进程内打开的文档会话索引（**B3 per-doc 分片锁**：map 锁只保护索引
+    /// get/insert 短临界；每条目为 doc 独立 `Mutex<DocSession>`，apply/outline/
+    /// get_md 持 doc 锁长临界——多 doc 并发读写互不串行；锁条目数上界 =
+    /// 打开的 doc 数，不随调用次数增长）。
+    pub(crate) sessions: Mutex<HashMap<String, Arc<Mutex<DocSession>>>>,
     /// intent_id → 首次 apply 结果（send_to_note 幂等）
     pub(crate) intents: Mutex<HashMap<String, NoteApplyMdResult>>,
     pub(crate) batch_tokens: NoteBatchTokens,
@@ -174,11 +188,28 @@ impl NoteBackend for StoreNoteBackend {
         }
         let max_depth = max_depth.unwrap_or(6).clamp(1, 16);
 
-        // 优先 session 树（文档序 DFS）；否则投影表
+        // 优先 session 树（文档序 DFS）；否则投影表（map 锁短临界取句柄，
+        // doc 锁持读——B3：不同 doc 的 outline 互不串行）
         {
-            let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(session) = sessions.get(doc_id) {
-                return Ok(Self::build_outline_from_session(session, max_depth));
+            let arc = self
+                .sessions
+                .lock()
+                .unwrap_or_else(|e| {
+                    // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                    tracing::error!(target: "conex_note_runtime", "sessions 索引锁中毒，按恢复模式继续：{e}");
+                    POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                    e.into_inner()
+                })
+                .get(doc_id)
+                .cloned();
+            if let Some(arc) = arc {
+                let session = arc.lock().unwrap_or_else(|e| {
+                    // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                    tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
+                    POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                    e.into_inner()
+                });
+                return Ok(Self::build_outline_from_session(&session, max_depth));
             }
         }
         self.build_outline_from_store(doc_id, max_depth)
