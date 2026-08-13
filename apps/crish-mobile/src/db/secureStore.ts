@@ -1,8 +1,9 @@
 // 安全存储封装（M5 §6.1-6.3 / D4 §7.4）：expo-secure-store 接口 + 注入模式
 // 划分原则（M5 §6.1）：「泄漏即等于身份/会话失守」的密钥材料 → secure-store（Keychain/Keystore 系统级加密）；
 // 「泄漏仅损失隐私/体验」的数据 → SQLite。配对的密码学推导不落任何存储（M5 §6.1 注释）。
-// 本文件不直接 import expo-secure-store（注入模式）：调用方注入 SecureStoreDriver，
-// 真实环境接线点见文件底部注释；jest 使用 InMemorySecureStore。
+// 核心逻辑不直接依赖 expo-secure-store（注入模式）：调用方注入 SecureStoreDriver；
+// 唯一接线点为本文件底部 expoSecureStoreDriver 工厂（R-3 已启用真实驱动，
+// 依赖 expo-secure-store ~57.0.1）；jest 使用 InMemorySecureStore（仅测试注入）。
 
 /**
  * 密钥位清单（M5 §6.3 KEYS 全量）：
@@ -181,21 +182,25 @@ export async function clearExchangeNonce(
 }
 
 /**
- * 真实环境接线点（expo-secure-store，依赖安装后启用；jest 使用 InMemorySecureStore）：
- *
- * ```ts
- * import * as SecureStore from 'expo-secure-store';
- * import type { SecureStoreDriver } from '../src/db/secureStore';
- *
- * export function expoSecureStoreDriver(): SecureStoreDriver {
- *   return {
- *     async getItem(key) { return SecureStore.getItemAsync(key); },
- *     async setItem(key, value) { await SecureStore.setItemAsync(key, value); },
- *     async deleteItem(key) { await SecureStore.deleteItemAsync(key); },
- *   };
- * }
- * ```
+ * 真实环境安全存储驱动（R-3 落地，接线点启用）：映射 expo-secure-store 的
+ * getItemAsync/setItemAsync/deleteItemAsync，异常语义透传（读写失败原样抛出，
+ * 由调用方按 M5 §6.2 处理）；deleteItem 不存在静默成功（expo-secure-store 语义）。
  *
  * 注意（M5 §6.3 / D4 §7.4）：iOS 单值上限 2048 字节（本方案各值均 ≤64B base64）；
  * Android 需确认 allowBackup=false；开发/生产构建 Keychain 访问组一致（EAS 配置）。
  */
+import * as SecureStore from 'expo-secure-store';
+
+export function expoSecureStoreDriver(): SecureStoreDriver {
+  return {
+    async getItem(key) {
+      return SecureStore.getItemAsync(key);
+    },
+    async setItem(key, value) {
+      await SecureStore.setItemAsync(key, value);
+    },
+    async deleteItem(key) {
+      await SecureStore.deleteItemAsync(key);
+    },
+  };
+}

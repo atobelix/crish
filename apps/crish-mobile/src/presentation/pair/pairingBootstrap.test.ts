@@ -1,12 +1,17 @@
-// 配对装配引导测试（R2-03 部分 3）：
+// 配对装配引导测试（R2-03 部分 3 / R-3 真实驱动落地）：
 // - configurePairingDriver 注入驱动 → ensurePairingController 装配单例（幂等，
 //   重复调用返回同一实例）；
-// - 未配置驱动 → InMemorySecureStore 回退（开发/模拟器配对可用，持久化
-//   待 R-3 真实驱动，R2-16 §3.3 注记）；
+// - 未配置驱动 → 回退 expoSecureStoreDriver（真实环境默认，expo-secure-store
+//   经 jest.setup 全局 mock——内存 Map，M5 §10.4.5；冷启动恢复持久化可用，
+//   R2-16 §3.3 注记）；InMemorySecureStore 仅测试注入使用；
 // - ensurePairingWiringForApp = 装配 + 冷启动恢复水合：有凭据 + 接线元数据
 //   → authStore 恢复 paired（(tabs) AuthGuard 放行依据）；无凭据 → 保持
 //   未配对（走配对引导）。
-import { InMemorySecureStore, savePairingCredential } from '@/db/secureStore';
+import {
+  expoSecureStoreDriver,
+  InMemorySecureStore,
+  savePairingCredential,
+} from '@/db/secureStore';
 import { authStore } from '@/domain/store/authStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import {
@@ -50,7 +55,7 @@ describe('ensurePairingController（装配单例）', () => {
     expect(ensurePairingController()).toBe(wiring);
   });
 
-  it('未配置驱动时回退 InMemorySecureStore（开发/模拟器配对可用，R2-16 R-3 注记）', () => {
+  it('未配置驱动时回退 expoSecureStoreDriver（真实环境默认；expo 层 jest 全局 mock）', () => {
     const wiring = ensurePairingController();
     expect(wiring).not.toBeNull();
     expect(ensurePairingController()).toBe(wiring);
@@ -87,5 +92,25 @@ describe('ensurePairingWiringForApp（装配 + 冷启动恢复水合）', () => 
     expect(authStore.getState().pairState).toBe('unpaired');
     expect(authStore.getState().hasKeyMaterial).toBe(false);
     expect(wiring.getMachineState().state).toBe('idle');
+  });
+
+  it('默认真实驱动（expo 层 mock）冷启动：无凭据 → 未配对；注入凭据后 → 恢复 paired', async () => {
+    // 未配置驱动 → 回退 expoSecureStoreDriver（expo-secure-store 全局 mock）
+    connectionStore.setState({ phase: 'ready' });
+    await ensurePairingWiringForApp();
+    expect(authStore.getState().pairState).toBe('unpaired');
+
+    // 经真实驱动（expo mock）写入凭据 + 接线元数据 → 重新装配水合恢复 paired
+    resetPairingWiringForTest();
+    const driver = expoSecureStoreDriver();
+    await savePairingCredential(driver, CRED);
+    await driver.setItem(PAIRING_META_DEVICE_ID_KEY, 'dev-expo-0001');
+    await driver.setItem(PAIRING_META_DESKTOP_ID_KEY, 'crish-desktop');
+    await driver.setItem(PAIRING_META_HOST_KEY, '10.0.2.2');
+
+    await ensurePairingWiringForApp();
+    expect(authStore.getState().pairState).toBe('paired');
+    expect(authStore.getState().deviceId).toBe('dev-expo-0001');
+    expect(authStore.getState().hydrated).toBe(true);
   });
 });

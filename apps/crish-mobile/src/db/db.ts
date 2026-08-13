@@ -1,5 +1,8 @@
 // 数据库入口（M5 §5.4 / §2.1 db.ts）：迁移执行 + 真实环境接线点
 // 纪律（M5 §5.4）：迁移只追加不改写；幂等重复执行不报错；业务数据保留。
+// R-3 落地：expoSqlDriver 为真实环境适配器（expo-sqlite ~57.0.1）；仅类型导入，
+// 运行时由调用方（app 层 SQLiteProvider / openDatabaseAsync）传入 SQLiteDatabase。
+import type { SQLiteDatabase, SQLiteBindParams } from 'expo-sqlite';
 import type { SqlDriver } from './driver';
 import { MIGRATIONS, type Migration } from './migrations';
 
@@ -32,27 +35,48 @@ export async function migrateIfNeeded(
 }
 
 /**
- * 真实环境接线点（expo-sqlite，注入适配后供 app 层调用；jest 环境使用 MemorySqlDriver）：
+ * 真实环境接线点（R-3 落地）：expo-sqlite 适配器，SQL 语义对齐 MemorySqlDriver 子集——
+ * - exec：无参数走 execAsync（多语句迁移 SQL）；带参数走 prepareAsync + executeAsync +
+ *   finalizeAsync（SDK 57 execAsync 不支持参数绑定，参数化语句必须经 prepared statement）；
+ * - getFirst/getAll：透传 getFirstAsync/getAllAsync（含参数数组）；
+ * - withTransaction：透传 withTransactionAsync（fn 的返回值经事务内捕获返回，
+ *   失败自动回滚并传播异常，对齐 MemorySqlDriver 语义）。
+ * 调用形态（app 层接线，M5 §2.1：SQLiteProvider onInit 或启动装配）：
  *
  * ```ts
- * // app/_layout.tsx（M5 §2.1：SQLiteProvider onInit）
  * import { openDatabaseAsync } from 'expo-sqlite';
- * import { expoSqliteDriver } from '../src/db/db';
- *
+ * import { expoSqlDriver, migrateIfNeeded } from '@/db';
  * const db = await openDatabaseAsync('crish-mobile.db');
  * await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
- * await migrateIfNeeded(expoSqliteDriver(db));
- * ```
- *
- * expo-sqlite 适配器（依赖安装后启用，D8 门禁：expo-sqlite ~57.0.1）：
- * ```ts
- * export function expoSqliteDriver(db: SQLiteDatabase): SqlDriver {
- *   return {
- *     async exec(sql, params) { await db.execAsync(sql, params as any[]); },
- *     async getFirst(sql, params) { return db.getFirstAsync(sql, params as any[]); },
- *     async getAll(sql, params) { return db.getAllAsync(sql, params as any[]); },
- *     async withTransaction(fn) { return db.withTransactionAsync(fn); },
- *   };
- * }
+ * await migrateIfNeeded(expoSqlDriver(db));
  * ```
  */
+export function expoSqlDriver(db: SQLiteDatabase): SqlDriver {
+  return {
+    async exec(sql, params) {
+      if (params === undefined || params.length === 0) {
+        await db.execAsync(sql);
+        return;
+      }
+      const statement = await db.prepareAsync(sql);
+      try {
+        await statement.executeAsync(params as SQLiteBindParams);
+      } finally {
+        await statement.finalizeAsync();
+      }
+    },
+    async getFirst(sql, params) {
+      return db.getFirstAsync(sql, (params ?? []) as SQLiteBindParams);
+    },
+    async getAll(sql, params) {
+      return db.getAllAsync(sql, (params ?? []) as SQLiteBindParams);
+    },
+    async withTransaction(fn) {
+      let result!: Awaited<ReturnType<typeof fn>>;
+      await db.withTransactionAsync(async () => {
+        result = await fn();
+      });
+      return result;
+    },
+  };
+}

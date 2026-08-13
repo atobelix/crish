@@ -462,22 +462,38 @@ tauriCommand 字段值，而是 C19 listWorkspaces 描述文本中的接线名
 
 ## M-2. 登记表（命令 / 桌面 manifest 登记状态 / 移动端实现状态）
 
-核对结论（只读，command_manifest.rs 全文 128 条 = 注册面 119 + 登记先行 5）：
-_*8 条 mobile_* 桌面面全部未登记（缺失）\**——manifest 无任何 mobile__ 条目
+核对结论（只读，command_manifest.rs 全文 124 条 = 注册面 119 + 登记先行 5，条数实测见
+command_manifest.rs:283-287 断言——旧稿「128 条」为笔误）：
+_\*8 条 mobile_* 桌面面全部未登记（缺失）\**——manifest 无任何 mobile__ 条目
 （含登记先行 registered=false 均未落）；移动端侧 8 条**全部已实现**（跨既有批次）。
 
-| mobile_* 桌面实现名           | 桌面 manifest 登记状态         | 移动端实现状态                       |
-| ----------------------------- | ------------------------------ | ------------------------------------ |
-| mobile_list_pending_approvals | 缺失（未登记，桌面接线轮缺口） | 已实现（B2 批，approvalCommands.ts） |
-| mobile_approval_sync_state    | 缺失（未登记，桌面接线轮缺口） | 已实现（B2 批，approvalCommands.ts） |
-| mobile_get_workspace_state    | 缺失（未登记，桌面接线轮缺口） | 已实现（F4 批，filesCommands.ts）    |
-| mobile_search_files           | 缺失（未登记，桌面接线轮缺口） | 已实现（F4 批，filesCommands.ts）    |
-| mobile_asset_url              | 缺失（未登记，桌面接线轮缺口） | 已实现（F4 批，filesCommands.ts）    |
-| mobile_search_sessions        | 缺失（未登记，桌面接线轮缺口） | 已实现（B4 批，sessionCommands.ts）  |
-| mobile_settings_confirm       | 缺失（未登记，桌面接线轮缺口） | 已实现（B5 批，settingsCommands.ts） |
-| mobile_pause_automation       | 缺失（未登记，桌面接线轮缺口） | 已实现（B5 批，settingsCommands.ts） |
+> ⚠️ **R2-12c 修正（2026-08-13，取代本 M-2 结论）**：本表第 3 行判定**有误**——
+> C19 注册表 tauriCommand 真名为 `workbench_list_workspaces`（device-protocol.json:2648），
+> 已在 command_manifest.rs:231 **登记**（registered=false 登记先行；实现体
+> workspace.rs:393-402 已存在，未挂 invoke_handler——设计内状态，**非缺失**）；
+> R2-12b 以「mobile_get_workspace_state」为名搜索造成误判。其余 7 条按真名
+> 查确未登记，但「未登记」≠「无承载」：C13/C14 的功能承载面（REST 端点 +
+> 引擎命令面 impl）**已实现可用**，C27 为 P2 预留 v1 设计内不实现（注册表
+> device-protocol.json:2800 自注）——真实缺口仅 4 条（C21/C22/C30/C31）。
+> 逐条承载面核实、修正项清单与真实缺口清单见本文件 **M-6 节**。
+
+| mobile_* 桌面实现名           | 桌面 manifest 登记状态                                                                           | 移动端实现状态                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| mobile_list_pending_approvals | 缺失（未登记，桌面接线轮缺口）                                                                   | 已实现（B2 批，approvalCommands.ts） |
+| mobile_approval_sync_state    | 缺失（未登记，桌面接线轮缺口）                                                                   | 已实现（B2 批，approvalCommands.ts） |
+| mobile_get_workspace_state    | 已登记（登记先行，真名 workbench_list_workspaces，command_manifest.rs:231；R2-12c 修正，见 M-6） | 已实现（F4 批，filesCommands.ts）    |
+| mobile_search_files           | 缺失（未登记，桌面接线轮缺口）                                                                   | 已实现（F4 批，filesCommands.ts）    |
+| mobile_asset_url              | 缺失（未登记，桌面接线轮缺口）                                                                   | 已实现（F4 批，filesCommands.ts）    |
+| mobile_search_sessions        | 缺失（未登记，桌面接线轮缺口）                                                                   | 已实现（B4 批，sessionCommands.ts）  |
+| mobile_settings_confirm       | 缺失（未登记，桌面接线轮缺口）                                                                   | 已实现（B5 批，settingsCommands.ts） |
+| mobile_pause_automation       | 缺失（未登记，桌面接线轮缺口）                                                                   | 已实现（B5 批，settingsCommands.ts） |
 
 ## M-3. 缺口清单（桌面接线轮，8 条全部）
+
+> ⚠️ **R2-12c 修正（2026-08-13）**：本清单「8 条全部」判定已被 M-6 节修正——
+> 真实缺口仅 4 条（C21/C22/C30/C31）；C13/C14 功能面已由 REST 承载（仅剩
+> mobile_* 名登记面收尾）、C19 为登记先行设计内状态、C27 为 P2 预留设计内
+> 不实现。下述 1-4 条登记路径要求（X-5）不变，缺口范围以 M-6 为准。
 
 1. 桌面面实现（REST / WS 命令面）须按 Z0 X-5 登记路径**先登记 manifest 再暴露**
    （registered=false 登记先行 → 接线后翻 true，command_manifest.rs 维护规则）；
@@ -514,3 +530,107 @@ _*8 条 mobile_* 桌面面全部未登记（缺失）\**——manifest 无任何
   settingsCommands.ts（C30/C31）、mobileCommands.test.ts（横向对拍）
 - docs/multi-device/Z0-master-plan.md：§4.10（C 表 692-712）、R2-12 行（1384）、
   X-5 登记路径（406）
+
+---
+
+# R2-12c：mobile_* 8 条命令桌面承载面核实（M-6 节，修正 R2-12b 判定）
+
+> 追加日期：2026-08-13（R2-12c 承载面核实轮，只读核对，未修改任何代码）
+> 背景：R2-12b（本文件 M-1~M-5）以「mobile_get_workspace_state」为名在
+> command_manifest.rs 搜索并判「缺失」——但注册表该命令的 tauriCommand 字段
+> 真名为 `workbench_list_workspaces`（device-protocol.json:2648），已登记为
+> 登记先行（registered=false）——属「登记先行」设计内状态，非缺口。本核实轮
+> 改为**按注册表 tauriCommand 字段名逐条重查**，并区分承载面（Tauri invoke
+> 面 / 引擎命令面 / REST 端点 / WS kind / 无承载），产出真实缺口清单。
+>
+> 范围：C13/C14/C19/C21/C22/C27/C30/C31 共 8 条（真源口径与 M-1 一致：
+> 7 条 tauriCommand 带 mobile_ 前缀 + C19 真名 workbench_list_workspaces）。
+
+## M-6.1 承载面核实总表（注册表真名口径）
+
+| C#  | 注册表 tauriCommand 真名        | kind（remote.*）     | domain   | manifest 登记（按真名）                                                                                | 设计承载面（M6 §12.4 / 注册表）                                                                                                              | 实际承载面（代码证据）                                                                                                                                                                                                                             | 缺口判定                                                                                        |
+| --- | ------------------------------- | -------------------- | -------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| C13 | `mobile_list_pending_approvals` | listPendingApprovals | approval | **未登记**（command_manifest.rs 全文无 mobile_* 条目，128 条 → 实测 124）                              | engine 面；M6 §12.4 sync_projection.rs（events 表派生）；注册表 surface=engine                                                               | **REST GET /v1/approvals/pending 已实现**（router.rs:152/205，handler 470-484）+ 引擎命令面 `list_pending_approvals_impl`（core_run_commands.rs:7296-7329）+ backend 直调接线（core_backend.rs:648-652）；WS kind 不处理（ws.rs:939-947 忽略分支） | **登记面缺口**（mobile_* 名未登记 manifest，X-5 待登记）；**功能承载面已完整可用（REST 直调）** |
+| C14 | `mobile_approval_sync_state`    | approvalHistory      | approval | **未登记**                                                                                             | engine 面；M6 §12.4 sync_projection.rs（approval-resolved 投影）                                                                             | **REST GET /v1/approvals/history 已实现**（router.rs:154/206，handler 488-503）+ `approval_history_impl`（core_run_commands.rs:7361-7395）+ backend 接线（core_backend.rs:660-664）；WS 不处理                                                     | **登记面缺口**；**功能承载面已完整可用（REST 直调）**                                           |
+| C19 | `workbench_list_workspaces`     | listWorkspaces       | files    | **已登记**（command_manifest.rs:231，registered=false 登记先行；前端快照 commandManifest.ts:219 同步） | gui 面（注册表 surface=gui）；M6 §12.4 mobile_get_workspace_state = workspace.rs 薄壳（M4-2，依赖本命令接线）                                | 实现体 `workbench_list_workspaces` 已存在（workspace.rs:393-402，#[tauri::command] 定义）；**Tauri invoke 未挂**（main.rs command_registry! 无，登记先行语义）；REST 无端点；WS 不处理                                                             | **非缺口（设计内：登记先行）**——R2-12b 误判项；接线轮挂 invoke_handler + 翻 true                |
+| C21 | `mobile_search_files`           | searchFiles          | files    | **未登记**                                                                                             | engine 面；M6 §12.4 fuzzy_find 薄壳（M4-3）；注册表「薄壳封装 fuzzy_find，只返回 relPath+kind+size」                                         | **无承载**：无 REST 端点、无 Tauri invoke、WS 不处理、无实现体；注：core_search_files（C10，command_manifest.rs:126，registered=true）为索引就绪查询，**不同命令**（M-4.3 对照语义已述）                                                           | **真实缺口**（桌面接线轮：登记 + 实现）                                                         |
+| C22 | `mobile_asset_url`              | assetUrl             | files    | **未登记**                                                                                             | engine 面；M6 §12.4 convertFileSrc 代理（M4-4）；依赖 HTTP 资源代理（开放问题 14.4-4，device-protocol.json:2709 自注「依赖 HTTP 资源代理」） | **无承载**：无 REST 端点、无 Tauri invoke、WS 不处理、无实现体                                                                                                                                                                                     | **真实缺口**（先决：HTTP 资源代理开放问题 14.4-4）                                              |
+| C27 | `mobile_search_sessions`        | searchSessions       | sessions | **未登记**                                                                                             | engine 面；M6 §12.4 明确「P2 预留（v2）」；注册表「v1 未注册返回 cmd.unknown，移动端本地过滤兜底」                                           | **无承载（设计内）**：v1 不实现是协议设计（device-protocol.json:2800）；无 REST 端点、无 Tauri invoke、WS 不处理                                                                                                                                   | **非缺口（设计内：P2 预留 v2）**——v1 语义降级已定（R2-07 B4 批 D-11 记录，本文件 :489 行）      |
+| C30 | `mobile_settings_confirm`       | settingsConfirm      | settings | **未登记**                                                                                             | engine 面；M6 §12.4 settings_bridge.rs（桌面确认通道；60s 超时拒绝语义）                                                                     | **无承载**：无 REST 端点、无 Tauri invoke、WS 不处理、无实现体                                                                                                                                                                                     | **真实缺口**（桌面接线轮：登记 + 实现）                                                         |
+| C31 | `mobile_pause_automation`       | pauseAutomation      | settings | **未登记**                                                                                             | engine 面；M6 §12.4 settings_bridge.rs（一次性指令，重复刷新 pausedUntil）                                                                   | **无承载**：无 REST 端点、无 Tauri invoke、WS 不处理、无实现体                                                                                                                                                                                     | **真实缺口**（桌面接线轮：登记 + 实现）                                                         |
+
+## M-6.2 R2-12b 修正项清单（与既有 M-1~M-5 的差异）
+
+| #   | 修正项                              | R2-12b 旧判定                                          | R2-12c 修正后判定                                                                                                                                                                                    | 证据                                                                               |
+| --- | ----------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 1   | C19 登记状态                        | 「缺失（未登记，桌面接线轮缺口）」（M-2 表第 3 行）    | **已登记（登记先行）**：按注册表真名 workbench_list_workspaces 查 manifest 命中 command_manifest.rs:231（registered=false）；实现体 workspace.rs:393-402 存在未挂 invoke_handler——登记先行设计内状态 | device-protocol.json:2648；command_manifest.rs:231；workspace.rs:393-402           |
+| 2   | M-2 结论「8 条全部未登记」          | 8 条全部缺失                                           | 7 条 mobile_* 名未登记 + C19 已登记（登记先行）；且 C13/C14 功能面已由 REST 承载、C27 设计内 P2 预留——「未登记」≠「无承载/缺口」                                                                     | 本 M-6.1 表                                                                        |
+| 3   | M-2/M-5 条数口径                    | 「全文 128 条 = 注册面 119 + 登记先行 5」              | **124 条 = 119 + 5**（旧稿 128 为笔误；command_manifest.rs:283-287 测试断言 total=124/registered=119/pending=5）                                                                                     | command_manifest.rs:282-288                                                        |
+| 4   | M-3 缺口清单范围                    | 缺口清单 8 条全部                                      | **真实缺口 4 条**（C21/C22/C30/C31）+ C13/C14 登记面收尾 + C19 接线翻 true + C27 非缺口（P2 预留）                                                                                                   | 本 M-6.1 表                                                                        |
+| 5   | 「桌面面缺失 ≠ 协议面缺失」结论细化 | 桌面 manifest 缺失即缺口                               | C13/C14 的实际承载面（REST /v1/approvals/* + 引擎 impl）已实现可用——移动端经 REST 即可消费，缺口仅限 mobile_* 名登记面（X-5 路径要求）                                                               | router.rs:152/154/205/206；core_backend.rs:648-664；core_run_commands.rs:7296/7361 |
+| 6   | 搜索口径错误根因                    | 以「mobile_get_workspace_state」为名搜 manifest 判缺失 | 该名不是注册表 tauriCommand 字段值（只是 C19 描述文本中的接线名，device-protocol.json:2658）；**须按 tauriCommand 字段名搜索**                                                                       | device-protocol.json:2648/2658                                                     |
+
+## M-6.3 真实缺口清单（桌面接线轮，按优先序）
+
+1. **C21 mobile_search_files**：command_manifest.rs 登记（registered=false 登记先行 → 实现后翻 true）+ 实现（fuzzy_find 薄壳，复用 conex-search）+ REST 端点（如需移动端 REST 直调）。
+2. **C30 mobile_settings_confirm**：登记 + 实现（settings_bridge 桌面确认通道：withdraw 幂等、60s 超时拒绝语义——M6 T-M6-14 锚点）。
+3. **C31 mobile_pause_automation**：登记 + 实现（settings_bridge 一次性指令，msgId 幂等）。
+4. **C22 mobile_asset_url**：登记 + 实现（convertFileSrc 代理）——**先决**：HTTP 资源代理（F4 §5.4 / 开放问题 14.4-4，device-protocol.json:2709 自注依赖），网络域评审后再接线。
+5. **C13/C14 登记面收尾**：功能承载面（REST）已可用，仅需按 X-5 把 mobile_* 名登记进 command_manifest.rs（registered=false 登记先行）——若移动端全走 REST 直调，登记仅为协议对齐收尾，不阻塞功能。
+6. **C19 workbench_list_workspaces 接线**：挂入 main.rs command_registry! + manifest 翻 true（登记先行语义完成）；M6 §12.4 的 mobile_get_workspace_state 薄壳（M4-2）是否新建由接线轮按反过度设计红线评估（复用本命令即可）。
+
+**非缺口（不需接线）**：C27 mobile_search_sessions（P2 预留 v2，v1 移动端本地过滤兜底）。
+
+## M-6.4 判定总则（R2-12c）
+
+1. **真名口径**：所有桌面面查询一律以注册表 tauriCommand 字段值（真名）为键，
+   不以文档描述名/移动端命令名为键——R2-12b 误判根因即混用描述名搜索。
+2. **登记先行语义**：manifest registered=false = 已登记未接线（设计内状态），
+   非缺口；接线轮挂 invoke_handler 后翻 true（X-5 登记路径的唯一出口）。
+3. **承载面分级**：移动端消费面 = REST（网关直调面，router.rs 路由表）+ WS
+   kind（当前仅 events/pair/heartbeat，remote.* 全部忽略分支 ws.rs:939-947）；
+   桌面 GUI 消费面 = Tauri invoke（main.rs command_registry!）。mobile_* 命令
+   的「缺失」判定须三面分别确认：manifest 登记（已查）+ invoke_handler 挂载
+   （已查）+ REST 端点（已查）——任一存在即算有承载。
+4. **白名单 vs 路由**：remote_whitelist.rs 已含 8 条 kind（listPendingApprovals:78 /
+   approvalHistory:79 / listWorkspaces:85 / searchFiles:87 / assetUrl:88 /
+   searchSessions:94 / settingsConfirm:98 / pauseAutomation:99，共 32 条 C01-C32
+   冻结）——白名单面已齐（设计在），缺口在路由/实现面，接线轮只需补端点与
+   实现，无需动白名单。
+
+## M-6.5 证据索引（R2-12c 只读核对引用）
+
+- crates/conex-types/contracts/device-protocol.json：C13（:2533）、C14（:2550）、
+  C19（:2648，tauriCommand=workbench_list_workspaces；:2658 描述含
+  mobile_get_workspace_state 接线名）、C21（:2682）、C22（:2699）、C27（:2790，
+  :2800 P2 预留自注）、C30（:2846）、C31（:2863）——tauriCommand 真名/kind/
+  surface/registered=false 全量
+- apps/agent-workbench/src-tauri/src/command_manifest.rs：全文（124 条 =
+  119 + 5，测试断言 282-288）；workbench_list_workspaces 登记先行（:231）；
+  _*无任何 mobile_* 条目_*（全文检索）
+- apps/agent-workbench/src-tauri/src/main.rs：command_registry!（139-303）——
+  无 mobile_*、无 workbench_list_workspaces（登记先行不挂 invoke_handler）
+- apps/agent-workbench/src-tauri/src/workspace.rs：workbench_list_workspaces
+  实现体（393-402，#[tauri::command] 定义 + #[allow(dead_code)] 待接线）
+- apps/agent-workbench/src-tauri/src/server/router.rs：路由表（176-217，22 端点；
+  无 workspaces/search_files/asset_url/settings_confirm/pause_automation 端点）；
+  C13/C14 端点常量（:152/:154）+ 注册（:205/:206）+ handler（470-503）；
+  handle_not_found（581-598，未注册路径 → 404 cmd.not_found / secret → 403）
+- apps/agent-workbench/src-tauri/src/server/ws.rs：kind 分发 match（920-948）——
+  remote.* 全部落入 `_ =>` 忽略分支（939-947，R1-05 范围外宽容忽略）
+- apps/agent-workbench/src-tauri/src/server/remote_whitelist.rs：32 条白名单
+  （63-101；8 条 mobile_* kind 全部在列 78-99）
+- apps/agent-workbench/src-tauri/src/server/core_backend.rs：list_pending_approvals
+  （648-652）、approval_history（660-664）——REST 直调接线
+- apps/agent-workbench/src-tauri/src/core_run_commands.rs：list_pending_approvals_impl
+  （7296-7329）、approval_history_impl（7361-7395）——引擎命令面实现
+- apps/agent-workbench/src-tauri/src/server/backend.rs：ApiBackend 契约
+  list_pending_approvals/approval_history（180-199，缺省未接线 internal）
+- apps/crish-desktop/src/api/transport/commandManifest.ts：前端快照
+  workbench_list_workspaces（:219，registered=false）——双端镜像一致
+- docs/multi-device/plans/M6-protocol-messages.md：§12.4 桌面壳侧新增接线清单
+  （2686-2714，mobile_* 各命令实现位置与依赖）
+- docs/multi-device/Z0-master-plan.md：§3.4 X-5 登记路径（:406）、§4.10 C 表
+  （690-714，C13/C14/C19/C21/C22/C27/C30/C31 行）、R2-12 行（:1384）
+
+_2026-08-13 R2-12c 承载面核实完成 · 修正 R2-12b M-2/M-3 判定 · 真实缺口 4 条 + C13/C14 登记面收尾 + C19 接线翻 true_

@@ -43,6 +43,7 @@ import {
   buildSessionGateway,
   buildSignedRequest,
   defaultConnectSession,
+  engineTlsEnabled,
   randomNonce,
   resetPairingWiringForTest,
   startPairingWiring,
@@ -174,15 +175,13 @@ async function runFullChain(
       tlsFingerprint: 'fp-1',
     })
   );
-  h.wiring
-    .getPairingClient()!
-    .gateway.dispatchFrame(
-      frame('pair.ok', {
-        desktopId: 'crish-desktop',
-        ttl: 86400,
-        token: opts.token ?? 'tok-abc',
-      })
-    );
+  h.wiring.getPairingClient()!.gateway.dispatchFrame(
+    frame('pair.ok', {
+      desktopId: 'crish-desktop',
+      ttl: 86400,
+      token: opts.token ?? 'tok-abc',
+    })
+  );
   await flush();
 }
 
@@ -237,15 +236,13 @@ describe('全链装配（begin → hello → ok → 派生 → 持久化 → 连
     expect(h.wiring.getMachineState().state).toBe('waiting-verify');
     expect(h.wiring.getMachineState().pendingRemotePub).toBe(desktopPub);
     // ok → paired + 派生 sessionKeys
-    h.wiring
-      .getPairingClient()!
-      .gateway.dispatchFrame(
-        frame('pair.ok', {
-          desktopId: 'crish-desktop',
-          ttl: 86400,
-          token: 'tok-abc',
-        })
-      );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok-abc',
+      })
+    );
     await flush();
     const s = h.wiring.getMachineState();
     expect(s.state).toBe('paired');
@@ -363,15 +360,13 @@ describe('全链装配（begin → hello → ok → 派生 → 持久化 → 连
     h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
     h.sockets[0]!.onopen!();
     expect(h.sockets[0]!.sent.length).toBeGreaterThan(0);
-    h.wiring
-      .getPairingClient()!
-      .gateway.dispatchFrame(
-        frame('pair.ok', {
-          desktopId: 'crish-desktop',
-          ttl: 86400,
-          token: 'tok-plain',
-        })
-      );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok-plain',
+      })
+    );
     await flush();
     const s = h.wiring.getMachineState();
     expect(s.state).toBe('paired');
@@ -573,15 +568,13 @@ describe('错误路径（派生失败 / 持久化失败 / 错误帧 / 传输失�
     const h = makeHarness();
     h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
     h.sockets[0]!.onopen!();
-    h.wiring
-      .getPairingClient()!
-      .gateway.dispatchFrame(
-        frame('error', {
-          code: 'pair.invalid_code',
-          message: '配对码错误',
-          retryable: false,
-        })
-      );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('error', {
+        code: 'pair.invalid_code',
+        message: '配对码错误',
+        retryable: false,
+      })
+    );
     const s = h.wiring.getMachineState();
     expect(s.state).toBe('error');
     expect(s.failedAttempts).toBe(1);
@@ -807,5 +800,130 @@ describe('接线装配面（订阅快照 / 状态拒绝）', () => {
     expect(r.error).toBeDefined();
     expect(h.wiring.getMachineState().state).toBe('waiting-input');
     expect(h.sockets).toHaveLength(0);
+  });
+});
+
+describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联调豁免）', () => {
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_ENGINE_TLS;
+  });
+
+  it('缺省（未设置 env）：配对期连接 + 会话连接均解析 wss（生产语义不变）', async () => {
+    const urls: string[] = [];
+    const sockets: MockSocket[] = [];
+    const h = makeHarness({
+      factory: (url) => {
+        urls.push(url);
+        const s = makeSocket();
+        sockets.push(s);
+        return s;
+      },
+    });
+    h.wiring.beginPairing({ code: VALID_CODE, host: '192.168.1.5' });
+    expect(urls[0]).toBe('wss://192.168.1.5:8765');
+    sockets[0]!.onopen!();
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.challenge', {
+        challenge: 'ch-1',
+        desktopPub: pushDesktopPub(),
+        desktopId: 'crish-desktop',
+        tlsFingerprint: 'fp-1',
+      })
+    );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok-abc',
+      })
+    );
+    await flush();
+    expect(h.sessionCtxs).toHaveLength(1);
+    expect(h.sessionCtxs[0]!.url).toBe('wss://192.168.1.5:8765');
+  });
+
+  it('EXPO_PUBLIC_ENGINE_TLS=false：配对期连接解析 ws（明文豁免生效）', () => {
+    process.env.EXPO_PUBLIC_ENGINE_TLS = 'false';
+    const urls: string[] = [];
+    const h = makeHarness({
+      factory: (url) => {
+        urls.push(url);
+        return makeSocket();
+      },
+    });
+    h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.2.2' });
+    expect(urls[0]).toBe('ws://10.0.2.2:8765');
+    expect(h.wiring.getPairingClient()!.url).toBe('ws://10.0.2.2:8765');
+  });
+
+  it('EXPO_PUBLIC_ENGINE_TLS=false：配对成功会话连接解析 ws', async () => {
+    process.env.EXPO_PUBLIC_ENGINE_TLS = 'false';
+    const urls: string[] = [];
+    const sockets: MockSocket[] = [];
+    const h = makeHarness({
+      factory: (url) => {
+        urls.push(url);
+        const s = makeSocket();
+        sockets.push(s);
+        return s;
+      },
+    });
+    h.wiring.beginPairing({ code: VALID_CODE, host: '192.168.1.5' });
+    sockets[0]!.onopen!();
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.challenge', {
+        challenge: 'ch-1',
+        desktopPub: pushDesktopPub(),
+        desktopId: 'crish-desktop',
+        tlsFingerprint: 'fp-1',
+      })
+    );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok-abc',
+      })
+    );
+    await flush();
+    expect(h.sessionCtxs).toHaveLength(1);
+    expect(h.sessionCtxs[0]!.url).toBe('ws://192.168.1.5:8765');
+  });
+
+  it('EXPO_PUBLIC_ENGINE_TLS=false：冷启动恢复（hydrate）会话连接解析 ws', async () => {
+    process.env.EXPO_PUBLIC_ENGINE_TLS = 'false';
+    const driver = new InMemorySecureStore();
+    await savePairingCredential(driver, {
+      tokenKey: 'tk-1',
+      refreshKey: 'rk-1',
+      deviceKeypairPriv: 'priv-1',
+      deviceKeypairPub: 'pub-1',
+    });
+    await driver.setItem(PAIRING_META_DEVICE_ID_KEY, 'dev-cold-0001');
+    await driver.setItem(PAIRING_META_DESKTOP_ID_KEY, 'crish-desktop');
+    await driver.setItem(PAIRING_META_HOST_KEY, '10.0.2.2');
+    const sessionCtxs: PairingSessionContext[] = [];
+    const wiring = track(
+      startPairingWiring({
+        driver,
+        connectSession: (ctx) => {
+          sessionCtxs.push(ctx);
+        },
+      })
+    );
+    expect(await wiring.hydrate()).toBe(true);
+    expect(sessionCtxs).toHaveLength(1);
+    expect(sessionCtxs[0]!.url).toBe('ws://10.0.2.2:8765');
+  });
+
+  it('engineTlsEnabled：仅精确值 false 关闭 TLS（缺省/其它值 → true）', () => {
+    delete process.env.EXPO_PUBLIC_ENGINE_TLS;
+    expect(engineTlsEnabled()).toBe(true);
+    process.env.EXPO_PUBLIC_ENGINE_TLS = '0';
+    expect(engineTlsEnabled()).toBe(true);
+    process.env.EXPO_PUBLIC_ENGINE_TLS = 'FALSE';
+    expect(engineTlsEnabled()).toBe(true);
+    process.env.EXPO_PUBLIC_ENGINE_TLS = 'false';
+    expect(engineTlsEnabled()).toBe(false);
   });
 });

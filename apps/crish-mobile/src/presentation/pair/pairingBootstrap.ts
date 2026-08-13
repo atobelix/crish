@@ -1,10 +1,9 @@
 // 配对接线装配引导（R2-03 部分 3：pair 页面挂载装配点）
 // - ensurePairingController：同步确保配对接线单例（幂等；pair 页面消费
 //   beginPairing/subscribe/getSnapshot 的统一入口）；
-// - 驱动注入：configurePairingDriver——真实环境 expo-secure-store 驱动（R-3
-//   依赖安装后由 app 装配调用，对齐 secureStore.ts 底部接线点注释）；未注入
-//   时回退 InMemorySecureStore（开发/模拟器配对流程可用，持久化随进程——
-//   E2E-4 断线重连/冷启动恢复依赖 R-3 真实驱动，R2-16 §3.3 注记）；
+// - 驱动注入（R-3 落地）：默认回退 expoSecureStoreDriver()（真实环境 expo-secure-store
+//   持久化，冷启动恢复可用——E2E-4 断线重连/冷启动恢复依赖，R2-16 §3.3）；测试显式
+//   注入 InMemorySecureStore 隔离（configurePairingDriver 传 null 复位）；
 // - ensurePairingWiringForApp：装配 + 冷启动恢复水合（pair/_layout 挂载调用：
 //   已配对 → 恢复 paired → (tabs) AuthGuard 自动放行；未配对 → 走配对引导）；
 // - 只读纪律：本文件只消费 pairingWiring 公开 API，不改动接线层。
@@ -18,7 +17,7 @@ import type {
   PairingStartResult,
   PairingWiring,
 } from '@/adapters/wiring/pairingWiring';
-import { InMemorySecureStore } from '@/db/secureStore';
+import { expoSecureStoreDriver } from '@/db/secureStore';
 import type { SecureStoreDriver } from '@/db/secureStore';
 
 /** 应用级安全存储驱动（configurePairingDriver 注入；null = 未注入） */
@@ -42,20 +41,20 @@ export interface PairingController {
 }
 
 /**
- * 真实安全存储驱动注入点：expo-secure-store 安装（R-3）后由 app 装配调用
- * `configurePairingDriver(expoSecureStoreDriver())`；测试注入内存驱动。
- * 传 null 复位（测试隔离）。
+ * 安全存储驱动注入点（R-3 落地）：默认已接 expoSecureStoreDriver()（真实环境
+ * expo-secure-store 持久化）；configurePairingDriver 用于测试隔离（注入
+ * InMemorySecureStore）或特殊装配覆盖。传 null 复位回默认（测试隔离）。
  */
 export function configurePairingDriver(driver: SecureStoreDriver | null): void {
   appDriver = driver;
 }
 
-/** 同步确保配对接线单例（幂等）：未装配时以当前驱动装配（缺省 InMemory 回退） */
+/** 同步确保配对接线单例（幂等）：未装配时以当前驱动装配（缺省 expo 真实驱动） */
 export function ensurePairingController(): PairingWiring {
   const existing = getPairingWiring();
   if (existing) return existing;
   return ensurePairingWiring({
-    driver: appDriver ?? new InMemorySecureStore(),
+    driver: appDriver ?? expoSecureStoreDriver(),
   });
 }
 

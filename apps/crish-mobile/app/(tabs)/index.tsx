@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { useNotificationStore } from '@/adapters/hooks/useNotificationStore';
 import { NotificationBadge } from '@/presentation/components/notifications/NotificationBadge';
+import { QuickRunPanel } from '@/presentation/components/dashboard/QuickRunPanel';
+import { useQuickRunVm } from '@/adapters/viewmodels/useQuickRunVm';
 import PlaceholderScreen from '@/presentation/components/templates/PlaceholderScreen';
 
 // 首页仪表盘（F1）：连接状态卡 / 活跃 run / 待批概览 / 会话摘要 —— R2-05 落地
@@ -13,6 +15,7 @@ export default function DashboardScreen() {
   const theme = useTheme();
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const hydrated = useNotificationStore((s) => s.hydrated);
+  const quickRunVm = useQuickRunVm();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
@@ -42,6 +45,7 @@ export default function DashboardScreen() {
           ) : null}
         </Pressable>
       </View>
+      <QuickRunPanel vm={quickRunVm} />
       <PlaceholderScreen
         title="首页"
         description="仪表盘：连接状态 / 活跃任务 / 待批概览（R2-05 落地）"

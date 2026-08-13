@@ -90,3 +90,9 @@ export type {
   NotificationStatus,
 } from './notificationReducers';
 export { NOTIFICATION_RESOLVED_RETENTION_MS } from './notificationReducers';
+
+// ── R-3：真实持久化装配引导（settings/notification persist 注入）──────────
+export {
+  configureSqlitePersistence,
+  DaoNotificationsPersist,
+} from './persistBootstrap';

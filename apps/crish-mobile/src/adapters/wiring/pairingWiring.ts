@@ -89,6 +89,15 @@ export const PAIRING_META_HOST_KEY = 'pairing.meta.host';
 /** 缺省设备名（pair.hello deviceName 兜底，对齐 pair/manual.tsx 占位） */
 export const DEFAULT_DEVICE_NAME = 'crish-mobile';
 
+/** 引擎传输安全开关（R2-16 联调豁免，裁决-1）：`EXPO_PUBLIC_ENGINE_TLS=false`
+ *  → 配对期/会话端点解析为明文 ws（联调 harness tls_enabled=false 场景；
+ *   RN WebSocket 无自签证书信任选项，R2-16-e2e-plan §3.1 风险 R-1）；
+ *  缺省/其它值 → wss（生产装配语义不变）。与 observationWiring 的
+ *  EXPO_PUBLIC_ENGINE_URL env 模式对齐（D8 §6.2 优先级 1）。 */
+export function engineTlsEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_ENGINE_TLS !== 'false';
+}
+
 // ── 领域类型（接线层出入口）─────────────────────────────────────────────────
 
 /** 接线层错误（code 复用 pairMachine/PairErrorInfo 领域码 + 接线层本地码） */
@@ -430,7 +439,7 @@ export class PairingWiring {
       .hydrate(this.persist, { deviceId, desktopId, host });
     // 冷启动已配对 → 直接连接（tokenKey 即持久化的会话密钥材料）
     this.connectSessionOnce({
-      url: resolveWsUrl(host),
+      url: resolveWsUrl(host, DEFAULT_GATEWAY_PORT, engineTlsEnabled()),
       host,
       deviceId,
       desktopId,
@@ -491,14 +500,12 @@ export class PairingWiring {
     this.machine = s;
     this.pairingHost = host;
     this.pairingPort = input.port ?? DEFAULT_GATEWAY_PORT;
-    authStore
-      .getState()
-      .setPairingMeta({
-        host,
-        port: this.pairingPort,
-        code: input.code,
-        stage: 'entered',
-      });
+    authStore.getState().setPairingMeta({
+      host,
+      port: this.pairingPort,
+      code: input.code,
+      stage: 'entered',
+    });
     this.emit();
     this.openPairingConnection();
     return { ok: true };
@@ -584,7 +591,8 @@ export class PairingWiring {
   private openPairingConnection(): void {
     this.closePairingConnection();
     const url =
-      this.urlOverride ?? resolveWsUrl(this.pairingHost, this.pairingPort);
+      this.urlOverride ??
+      resolveWsUrl(this.pairingHost, this.pairingPort, engineTlsEnabled());
     const gateway = new PairingGateway({ msgIdPrefix: 'mob' });
     const client = new ReconnectingWsClient({
       url,
@@ -784,7 +792,13 @@ export class PairingWiring {
     }
     this.closePairingConnection();
     this.connectSessionOnce({
-      url: this.urlOverride ?? resolveWsUrl(this.pairingHost),
+      url:
+        this.urlOverride ??
+        resolveWsUrl(
+          this.pairingHost,
+          DEFAULT_GATEWAY_PORT,
+          engineTlsEnabled()
+        ),
       host: this.pairingHost,
       deviceId,
       desktopId: ok.desktopId,
