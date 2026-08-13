@@ -1,0 +1,148 @@
+:root {
+  --loader-bg: #0b0b0e;
+  --loader-card-bg: linear-gradient(180deg, #131316 0%, #08080a 100%);
+  --loader-border: rgba(255, 255, 255, 0.08);
+  --loader-line-stroke: #f4f4f5;
+  --loader-text: #a1a1aa;
+  --loader-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.85);
+}
+
+html[data-theme='light'],
+html[data-theme='default'],
+html.theme-light {
+  --loader-bg: #f4f4f5;
+  --loader-card-bg: linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%);
+  --loader-border: rgba(0, 0, 0, 0.08);
+  --loader-line-stroke: #18181b;
+  --loader-text: #71717a;
+  --loader-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme='dark'],
+html.theme-dark {
+  --loader-bg: #0b0b0e;
+  --loader-card-bg: linear-gradient(180deg, #131316 0%, #08080a 100%);
+  --loader-border: rgba(255, 255, 255, 0.08);
+  --loader-line-stroke: #f4f4f5;
+  --loader-text: #a1a1aa;
+  --loader-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.85);
+}
+
+.app-initial-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  width: 100vw;
+  background-color: var(--loader-bg);
+  transition: background-color 0.3s ease;
+  user-select: none;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.app-loader-icon-card {
+  width: 110px;
+  height: 110px;
+  border-radius: 28px;
+  background: var(--loader-card-bg);
+  border: 1px solid var(--loader-border);
+  box-shadow: var(--loader-shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: loader-card-breathe 2.4s ease-in-out infinite;
+}
+
+.app-loader-svg {
+  width: 72px;
+  height: 72px;
+  display: block;
+}
+
+.app-loader-green-dot {
+  fill: #10b981;
+  animation: loader-dot-pulse 1.8s ease-in-out infinite;
+  transform-origin: 100px 35px;
+}
+
+.app-loader-lines {
+  stroke: var(--loader-line-stroke);
+  stroke-width: 26;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  animation: loader-lines-fade 2.4s ease-in-out infinite;
+}
+
+.app-loader-caption {
+  margin-top: 24px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  color: var(--loader-text);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.85;
+}
+
+.app-loader-spinner-bar {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+  display: inline-block;
+  animation: loader-dot-blink 1.2s infinite ease-in-out;
+}
+
+@keyframes loader-card-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes loader-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes loader-lines-fade {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@keyframes loader-dot-blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
