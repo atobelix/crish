@@ -15,8 +15,13 @@
  *
  * 错误面：invokeTyped 三态——missing（引擎未接线）/ error（结构化 kind/message，
  * tool.browser.not_ready / tool.invalid_input 前缀由 message 透传展示）。
+ *
+ * 结构（D-01 G-03b 拆分）：业务状态与行为已迁至 `import-hooks/` 四个 hook
+ * （useBookmarksImport / useHistoryImport（含列表）/ useStorageImport /
+ * useExportAuth），导出两段确认对话框抽为 ExportAuthDialogs 纯展示壳；
+ * 本文件仅保留：props + useId + busy 编排 + 派生 + JSX 渲染（UI ≤500 行门禁）。
  */
-import React, { useCallback, useId, useRef, useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   Bookmark,
   Download,
@@ -28,31 +33,18 @@ import {
   Upload,
 } from 'lucide-react';
 import styles from './BrowserImportSection.module.css';
-import { Button, ConfirmDialog, Input, Tooltip } from '../../ui';
-import { downloadTextFile } from '../../../api/sessionExport';
+import { Button, Input, Tooltip } from '../../ui';
 import {
-  importBookmarks,
-  importHistory,
-  importStorageState,
-  exportStorageState,
-  listBookmarks,
-  listHistory,
-  readTextFileAtPath,
-  type BookmarksImportPayload,
-  type HistoryImportPayload,
-  type ImportedBookmarkRow,
-  type ImportedHistoryRow,
-  type StorageImportPayload,
-} from '../../../api/browserImportApi';
-import {
-  BROWSER_IMPORT_MAX_BYTES,
   formatUnixSecTime,
   isUsableJsonText,
-  parseStorageStatePreview,
-  storageStateExportFilename,
-  type StorageStatePreview,
 } from '../../../api/browserImportLib';
 import type { ShowToastFn } from '../../../hooks/useToastQueue';
+import { useBookmarksImport } from './import-hooks/useBookmarksImport';
+import { useHistoryImport } from './import-hooks/useHistoryImport';
+import { useStorageImport } from './import-hooks/useStorageImport';
+import { useExportAuth } from './import-hooks/useExportAuth';
+import { ExportAuthDialogs } from './ExportAuthDialogs';
+import type { BusyKind } from './import-hooks/browserImportShared';
 
 export interface BrowserImportSectionProps {
   onShowToast: ShowToastFn;
@@ -60,25 +52,6 @@ export interface BrowserImportSectionProps {
   browserRunning?: boolean;
   /** 测试注入：登录态「另存为」写盘（缺省 downloadTextFile）。 */
   saveExport?: (filename: string, content: string) => void;
-}
-
-type BusyKind =
-  | 'bookmarks'
-  | 'bookmarksPath'
-  | 'history'
-  | 'storageExport'
-  | 'storageImport'
-  | 'list'
-  | null;
-
-/** FileReader 文本读取（DOM 面；jsdom 原生支持）。 */
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsText(file);
-  });
 }
 
 export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
@@ -89,266 +62,21 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
   const baseId = useId();
   const [busy, setBusy] = useState<BusyKind>(null);
 
-  // ── 书签 ──
-  const [bookmarksJson, setBookmarksJson] = useState('');
-  const [bookmarksFileName, setBookmarksFileName] = useState('');
-  const [bookmarksResult, setBookmarksResult] =
-    useState<BookmarksImportPayload | null>(null);
-  const [bookmarksError, setBookmarksError] = useState('');
-  const [bookmarksPath, setBookmarksPath] = useState('');
-  const bookmarksFileRef = useRef<HTMLInputElement>(null);
-
-  // ── 历史 ──
-  const [historyPath, setHistoryPath] = useState('');
-  const [historyResult, setHistoryResult] =
-    useState<HistoryImportPayload | null>(null);
-  const [historyError, setHistoryError] = useState('');
-
-  // ── 登录态 ──
-  const [exportAuthOpen, setExportAuthOpen] = useState(false);
-  const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
-  const [exportPreview, setExportPreview] =
-    useState<StorageStatePreview | null>(null);
-  const [exportedJson, setExportedJson] = useState('');
-  const [storageError, setStorageError] = useState('');
-  const [storageJson, setStorageJson] = useState('');
-  const [storageFileName, setStorageFileName] = useState('');
-  const [storageResult, setStorageResult] =
-    useState<StorageImportPayload | null>(null);
-  const storageFileRef = useRef<HTMLInputElement>(null);
-
-  // ── 列表 ──
-  const [listTab, setListTab] = useState<'bookmarks' | 'history' | null>(null);
-  const [historyLimit, setHistoryLimit] = useState('50');
-  const [bookmarkRows, setBookmarkRows] = useState<
-    ImportedBookmarkRow[] | null
-  >(null);
-  const [historyRows, setHistoryRows] = useState<ImportedHistoryRow[] | null>(
-    null
-  );
-  const [listError, setListError] = useState('');
-
-  /** 错误统一出口：行内 role=alert + toast（仅错误走 toast）。 */
-  const reportError = useCallback(
-    (area: string, prefix: string, msg: string) => {
-      const full = `${prefix}${msg}`;
-      if (area === 'bookmarks') setBookmarksError(full);
-      else if (area === 'history') setHistoryError(full);
-      else if (area === 'storage') setStorageError(full);
-      else setListError(full);
-      onShowToast(full);
-    },
-    [onShowToast]
-  );
-
-  const resultMessage = useCallback(
-    (
-      res:
-        | { status: 'ok' }
-        | { status: 'missing' }
-        | { status: 'error'; message: string },
-      prefix: string
-    ): string => {
-      if (res.status === 'ok') return '';
-      if (res.status === 'missing') return `${prefix}引擎未接线（命令不可用）`;
-      return `${prefix}${res.message}`;
-    },
-    []
-  );
-
-  // ── 书签：文件三通道（选择 / 拖入 / 路径读取）共用装载 ──
-  const applyBookmarksContent = useCallback(
-    async (file: File) => {
-      if (file.size > BROWSER_IMPORT_MAX_BYTES) {
-        reportError(
-          'bookmarks',
-          '书签导入失败：',
-          `文件超过 ${BROWSER_IMPORT_MAX_BYTES / 1024 / 1024}MB 上限`
-        );
-        return;
-      }
-      try {
-        const text = await readFileAsText(file);
-        setBookmarksJson(text);
-        setBookmarksFileName(file.name);
-        setBookmarksResult(null);
-        setBookmarksError('');
-      } catch (err) {
-        reportError('bookmarks', '读取书签文件失败：', String(err ?? ''));
-      }
-    },
-    [reportError]
-  );
-
-  const onBookmarksFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (file) void applyBookmarksContent(file);
-  };
-
-  const onBookmarksDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const file = e.dataTransfer?.files?.[0];
-    if (file) void applyBookmarksContent(file);
-  };
-
-  const runBookmarksPathRead = async () => {
-    if (busy || !bookmarksPath.trim()) return;
-    setBusy('bookmarksPath');
-    setBookmarksError('');
-    try {
-      const text = await readTextFileAtPath(bookmarksPath.trim());
-      if (text === null) {
-        reportError(
-          'bookmarks',
-          '路径读取不可用：',
-          '非 Tauri 环境不支持按路径读取，请用文件选择或拖入'
-        );
-      } else {
-        setBookmarksJson(text);
-        setBookmarksFileName(bookmarksPath.trim());
-        setBookmarksResult(null);
-      }
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const runBookmarksImport = async () => {
-    if (busy || !isUsableJsonText(bookmarksJson)) return;
-    setBusy('bookmarks');
-    setBookmarksError('');
-    const res = await importBookmarks(bookmarksJson);
-    if (res.status === 'ok') {
-      setBookmarksResult(res.data);
-    } else {
-      reportError('bookmarks', '书签导入失败：', resultMessage(res, ''));
-    }
-    setBusy(null);
-  };
-
-  // ── 历史 ──
-  const runHistoryImport = async () => {
-    if (busy || !historyPath.trim()) return;
-    setBusy('history');
-    setHistoryError('');
-    const res = await importHistory(historyPath.trim());
-    if (res.status === 'ok') {
-      setHistoryResult(res.data);
-    } else {
-      reportError('history', '历史导入失败：', resultMessage(res, ''));
-    }
-    setBusy(null);
-  };
-
-  // ── 登录态导出：两段确认（① 授权读取 → ② 预览域名清单后确认写盘） ──
-  const runExportAuth = async () => {
-    setExportAuthOpen(false);
-    setBusy('storageExport');
-    setStorageError('');
-    const res = await exportStorageState(true);
-    if (res.status === 'ok') {
-      setExportedJson(res.data);
-      setExportPreview(parseStorageStatePreview(res.data));
-      setExportPreviewOpen(true);
-    } else {
-      reportError('storage', '登录态导出失败：', resultMessage(res, ''));
-    }
-    setBusy(null);
-  };
-
-  const runExportSave = () => {
-    const filename = storageStateExportFilename();
-    const doSave =
-      saveExport ??
-      ((f: string, c: string) => {
-        downloadTextFile(f, c, { mimeType: 'application/json;charset=utf-8' });
-      });
-    try {
-      doSave(filename, exportedJson);
-      setExportPreviewOpen(false);
-      setExportedJson('');
-      setExportPreview(null);
-    } catch (err) {
-      reportError('storage', '登录态保存失败：', String(err ?? ''));
-    }
-  };
-
-  // ── 登录态导入 ──
-  const onStorageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (file) void applyStorageFile(file);
-  };
-
-  const applyStorageFile = async (file: File) => {
-    if (file.size > BROWSER_IMPORT_MAX_BYTES) {
-      reportError(
-        'storage',
-        '登录态导入失败：',
-        `文件超过 ${BROWSER_IMPORT_MAX_BYTES / 1024 / 1024}MB 上限`
-      );
-      return;
-    }
-    try {
-      const text = await readFileAsText(file);
-      setStorageJson(text);
-      setStorageFileName(file.name);
-      setStorageResult(null);
-      setStorageError('');
-    } catch (err) {
-      reportError('storage', '读取登录态文件失败：', String(err ?? ''));
-    }
-  };
-
-  const runStorageImport = async () => {
-    if (busy || !isUsableJsonText(storageJson)) return;
-    setBusy('storageImport');
-    setStorageError('');
-    const res = await importStorageState(storageJson);
-    if (res.status === 'ok') {
-      setStorageResult(res.data);
-    } else {
-      reportError('storage', '登录态导入失败：', resultMessage(res, ''));
-    }
-    setBusy(null);
-  };
-
-  // ── 列表（可折叠 + 历史 limit 控制） ──
-  const loadList = async (tab: 'bookmarks' | 'history') => {
-    setBusy('list');
-    if (tab === 'bookmarks') {
-      const res = await listBookmarks();
-      if (res.status === 'ok') setBookmarkRows(res.data);
-      else reportError('list', '书签列表加载失败：', resultMessage(res, ''));
-    } else {
-      const limit = Math.max(1, Math.floor(Number(historyLimit)) || 50);
-      const res = await listHistory(undefined, limit);
-      if (res.status === 'ok') setHistoryRows(res.data);
-      else reportError('list', '历史列表加载失败：', resultMessage(res, ''));
-    }
-    setBusy(null);
-  };
-
-  const toggleList = async (tab: 'bookmarks' | 'history') => {
-    setListError('');
-    if (listTab === tab) {
-      setListTab(null);
-      return;
-    }
-    setListTab(tab);
-    await loadList(tab);
-  };
-
-  const refreshList = async () => {
-    if (!listTab || busy === 'list') return;
-    setListError('');
-    await loadList(listTab);
-  };
+  const bookmarks = useBookmarksImport({ busy, setBusy, onShowToast });
+  const history = useHistoryImport({ busy, setBusy, onShowToast });
+  const storage = useStorageImport({ busy, setBusy, onShowToast });
+  const exportAuth = useExportAuth({
+    setBusy,
+    onShowToast,
+    setStorageError: storage.setStorageError,
+    saveExport,
+  });
 
   const exportReady = browserRunning && busy !== 'storageExport';
   const storageImportReady =
-    browserRunning && isUsableJsonText(storageJson) && busy !== 'storageImport';
+    browserRunning &&
+    isUsableJsonText(storage.storageJson) &&
+    busy !== 'storageImport';
 
   return (
     <section className={styles.section} aria-label="数据导入">
@@ -366,12 +94,12 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
         </h4>
         <div className={styles.row}>
           <input
-            ref={bookmarksFileRef}
+            ref={bookmarks.bookmarksFileRef}
             type="file"
             accept=".json,application/json"
             className={styles.hiddenFileInput}
             data-testid="bookmarks-file-input"
-            onChange={onBookmarksFileChange}
+            onChange={bookmarks.onBookmarksFileChange}
           />
           <Button
             type="button"
@@ -379,7 +107,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             size="sm"
             icon={<FileJson size={14} aria-hidden />}
             disabled={busy !== null}
-            onClick={() => bookmarksFileRef.current?.click()}
+            onClick={() => bookmarks.bookmarksFileRef.current?.click()}
           >
             选择文件
           </Button>
@@ -394,10 +122,12 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
                 <Upload size={14} aria-hidden />
               )
             }
-            disabled={busy !== null || !isUsableJsonText(bookmarksJson)}
+            disabled={
+              busy !== null || !isUsableJsonText(bookmarks.bookmarksJson)
+            }
             loading={busy === 'bookmarks'}
             onClick={() => {
-              void runBookmarksImport();
+              void bookmarks.runBookmarksImport();
             }}
           >
             导入书签
@@ -409,17 +139,17 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
           aria-label="拖入 Chrome Bookmarks JSON"
           tabIndex={0}
           onDragOver={(e) => e.preventDefault()}
-          onDrop={onBookmarksDrop}
+          onDrop={bookmarks.onBookmarksDrop}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              bookmarksFileRef.current?.click();
+              bookmarks.bookmarksFileRef.current?.click();
             }
           }}
         >
-          {bookmarksFileName ? (
+          {bookmarks.bookmarksFileName ? (
             <span className={styles.fileLoaded}>
-              已装载：<code>{bookmarksFileName}</code>
+              已装载：<code>{bookmarks.bookmarksFileName}</code>
             </span>
           ) : (
             <span>
@@ -433,8 +163,8 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             label="或输入文件路径"
             size="sm"
             placeholder="C:\Users\…\Bookmarks"
-            value={bookmarksPath}
-            onChange={(e) => setBookmarksPath(e.target.value)}
+            value={bookmarks.bookmarksPath}
+            onChange={(e) => bookmarks.setBookmarksPath(e.target.value)}
             clearable
             hint="非 Tauri 环境不支持路径读取，请用文件选择或拖入"
           />
@@ -443,37 +173,37 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
               type="button"
               variant="secondary"
               size="sm"
-              disabled={busy !== null || !bookmarksPath.trim()}
+              disabled={busy !== null || !bookmarks.bookmarksPath.trim()}
               loading={busy === 'bookmarksPath'}
               onClick={() => {
-                void runBookmarksPathRead();
+                void bookmarks.runBookmarksPathRead();
               }}
             >
               读取路径
             </Button>
           </Tooltip>
         </div>
-        {bookmarksError ? (
+        {bookmarks.bookmarksError ? (
           <p className={styles.error} role="alert">
-            {bookmarksError}
+            {bookmarks.bookmarksError}
           </p>
         ) : null}
-        {bookmarksResult ? (
+        {bookmarks.bookmarksResult ? (
           <p className={styles.stats} role="status" aria-live="polite">
-            新增 {bookmarksResult.inserted} 条，跳过{' '}
-            {bookmarksResult.skippedDupes} 条（此前已导入）；解析{' '}
-            {bookmarksResult.parsedItems} 条
-            {bookmarksResult.skippedInvalid > 0
-              ? `，无效跳过 ${bookmarksResult.skippedInvalid}`
+            新增 {bookmarks.bookmarksResult.inserted} 条，跳过{' '}
+            {bookmarks.bookmarksResult.skippedDupes} 条（此前已导入）；解析{' '}
+            {bookmarks.bookmarksResult.parsedItems} 条
+            {bookmarks.bookmarksResult.skippedInvalid > 0
+              ? `，无效跳过 ${bookmarks.bookmarksResult.skippedInvalid}`
               : ''}
-            {bookmarksResult.depthCutoff > 0
-              ? `，深度超限 ${bookmarksResult.depthCutoff}`
+            {bookmarks.bookmarksResult.depthCutoff > 0
+              ? `，深度超限 ${bookmarks.bookmarksResult.depthCutoff}`
               : ''}
-            {bookmarksResult.droppedDupes > 0
-              ? `，解析去重 ${bookmarksResult.droppedDupes}`
+            {bookmarks.bookmarksResult.droppedDupes > 0
+              ? `，解析去重 ${bookmarks.bookmarksResult.droppedDupes}`
               : ''}
-            {bookmarksResult.truncated > 0
-              ? `，截断 ${bookmarksResult.truncated}`
+            {bookmarks.bookmarksResult.truncated > 0
+              ? `，截断 ${bookmarks.bookmarksResult.truncated}`
               : ''}
           </p>
         ) : null}
@@ -490,8 +220,8 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             label="History 库路径"
             size="sm"
             placeholder="C:\Users\…\AppData\Local\Google\Chrome\User Data\Default\History"
-            value={historyPath}
-            onChange={(e) => setHistoryPath(e.target.value)}
+            value={history.historyPath}
+            onChange={(e) => history.setHistoryPath(e.target.value)}
             clearable
             hint="只读读取最近 90 天 / 上限 1000 条；来源浏览器须已关闭"
           />
@@ -506,26 +236,27 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
                 <Upload size={14} aria-hidden />
               )
             }
-            disabled={busy !== null || !historyPath.trim()}
+            disabled={busy !== null || !history.historyPath.trim()}
             loading={busy === 'history'}
             onClick={() => {
-              void runHistoryImport();
+              void history.runHistoryImport();
             }}
           >
             导入历史
           </Button>
         </div>
-        {historyError ? (
+        {history.historyError ? (
           <p className={styles.error} role="alert">
-            {historyError}
+            {history.historyError}
           </p>
         ) : null}
-        {historyResult ? (
+        {history.historyResult ? (
           <p className={styles.stats} role="status" aria-live="polite">
-            新增 {historyResult.inserted} 条，跳过 {historyResult.skippedDupes}{' '}
-            条（此前已导入）；读取 {historyResult.readTotal} 条
-            {historyResult.skippedInvalidUrl > 0
-              ? `，无效 URL 跳过 ${historyResult.skippedInvalidUrl}`
+            新增 {history.historyResult.inserted} 条，跳过{' '}
+            {history.historyResult.skippedDupes} 条（此前已导入）；读取{' '}
+            {history.historyResult.readTotal} 条
+            {history.historyResult.skippedInvalidUrl > 0
+              ? `，无效 URL 跳过 ${history.historyResult.skippedInvalidUrl}`
               : ''}
           </p>
         ) : null}
@@ -557,7 +288,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
               }
               disabled={!exportReady}
               loading={busy === 'storageExport'}
-              onClick={() => setExportAuthOpen(true)}
+              onClick={() => exportAuth.setExportAuthOpen(true)}
             >
               导出登录态
             </Button>
@@ -568,17 +299,17 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             size="sm"
             icon={<FileJson size={14} aria-hidden />}
             disabled={busy !== null || !browserRunning}
-            onClick={() => storageFileRef.current?.click()}
+            onClick={() => storage.storageFileRef.current?.click()}
           >
             选择文件
           </Button>
           <input
-            ref={storageFileRef}
+            ref={storage.storageFileRef}
             type="file"
             accept=".json,application/json"
             className={styles.hiddenFileInput}
             data-testid="storage-file-input"
-            onChange={onStorageFileChange}
+            onChange={storage.onStorageFileChange}
           />
           <Button
             type="button"
@@ -594,7 +325,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             disabled={!storageImportReady}
             loading={busy === 'storageImport'}
             onClick={() => {
-              void runStorageImport();
+              void storage.runStorageImport();
             }}
           >
             导入登录态
@@ -604,34 +335,35 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
           id={`${baseId}-storage-json`}
           className={styles.textarea}
           placeholder="粘贴标准 storage_state JSON（Playwright 兼容 { cookies, origins }）"
-          value={storageJson}
+          value={storage.storageJson}
           onChange={(e) => {
-            setStorageJson(e.target.value);
-            setStorageResult(null);
+            storage.setStorageJson(e.target.value);
+            storage.setStorageResult(null);
           }}
           rows={3}
         />
-        {storageFileName ? (
+        {storage.storageFileName ? (
           <p className={styles.fileLoaded}>
-            已装载文件：<code>{storageFileName}</code>
+            已装载文件：<code>{storage.storageFileName}</code>
           </p>
         ) : null}
-        {storageError ? (
+        {storage.storageError ? (
           <p className={styles.error} role="alert">
-            {storageError}
+            {storage.storageError}
           </p>
         ) : null}
-        {storageResult ? (
+        {storage.storageResult ? (
           <p className={styles.stats} role="status" aria-live="polite">
-            cookies {storageResult.cookies} · origins {storageResult.origins} ·
-            localStorage {storageResult.localStorageItems} 条（直写{' '}
-            {storageResult.injectedItems}，脚本 {storageResult.injectedScripts}
-            ）
-            {storageResult.droppedDupes > 0
-              ? ` · 去重丢弃 ${storageResult.droppedDupes}`
+            cookies {storage.storageResult.cookies} · origins{' '}
+            {storage.storageResult.origins} · localStorage{' '}
+            {storage.storageResult.localStorageItems} 条（直写{' '}
+            {storage.storageResult.injectedItems}，脚本{' '}
+            {storage.storageResult.injectedScripts}）
+            {storage.storageResult.droppedDupes > 0
+              ? ` · 去重丢弃 ${storage.storageResult.droppedDupes}`
               : ''}
-            {storageResult.skippedEmptyName > 0
-              ? ` · 空名跳过 ${storageResult.skippedEmptyName}`
+            {storage.storageResult.skippedEmptyName > 0
+              ? ` · 空名跳过 ${storage.storageResult.skippedEmptyName}`
               : ''}
           </p>
         ) : null}
@@ -643,37 +375,37 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
         <div className={styles.row}>
           <Button
             type="button"
-            variant={listTab === 'bookmarks' ? 'primary' : 'secondary'}
+            variant={history.listTab === 'bookmarks' ? 'primary' : 'secondary'}
             size="sm"
             disabled={busy === 'list'}
             onClick={() => {
-              void toggleList('bookmarks');
+              void history.toggleList('bookmarks');
             }}
           >
-            书签列表{listTab === 'bookmarks' ? '（收起）' : ''}
+            书签列表{history.listTab === 'bookmarks' ? '（收起）' : ''}
           </Button>
           <Button
             type="button"
-            variant={listTab === 'history' ? 'primary' : 'secondary'}
+            variant={history.listTab === 'history' ? 'primary' : 'secondary'}
             size="sm"
             disabled={busy === 'list'}
             onClick={() => {
-              void toggleList('history');
+              void history.toggleList('history');
             }}
           >
-            历史列表{listTab === 'history' ? '（收起）' : ''}
+            历史列表{history.listTab === 'history' ? '（收起）' : ''}
           </Button>
-          {listTab ? (
+          {history.listTab ? (
             <>
-              {listTab === 'history' ? (
+              {history.listTab === 'history' ? (
                 <Input
                   id={`${baseId}-hist-limit`}
                   label="limit"
                   size="sm"
                   type="number"
                   min={1}
-                  value={historyLimit}
-                  onChange={(e) => setHistoryLimit(e.target.value)}
+                  value={history.historyLimit}
+                  onChange={(e) => history.setHistoryLimit(e.target.value)}
                 />
               ) : null}
               <Button
@@ -683,7 +415,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
                 icon={<RefreshCw size={13} aria-hidden />}
                 disabled={busy === 'list'}
                 onClick={() => {
-                  void refreshList();
+                  void history.refreshList();
                 }}
               >
                 刷新
@@ -691,21 +423,21 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             </>
           ) : null}
         </div>
-        {listError ? (
+        {history.listError ? (
           <p className={styles.error} role="alert">
-            {listError}
+            {history.listError}
           </p>
         ) : null}
-        {listTab === 'bookmarks' && bookmarkRows !== null ? (
+        {history.listTab === 'bookmarks' && history.bookmarkRows !== null ? (
           <div className={styles.listWrap}>
             <p className={styles.listCaption} role="status">
-              共 {bookmarkRows.length} 条（导入时间倒序）
+              共 {history.bookmarkRows.length} 条（导入时间倒序）
             </p>
-            {bookmarkRows.length === 0 ? (
+            {history.bookmarkRows.length === 0 ? (
               <p className={styles.listEmpty}>暂无已导入书签</p>
             ) : (
               <ul className={styles.list}>
-                {bookmarkRows.map((row) => (
+                {history.bookmarkRows.map((row) => (
                   <li
                     key={`${row.url}\u0000${row.name}`}
                     className={styles.listItem}
@@ -725,16 +457,16 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             )}
           </div>
         ) : null}
-        {listTab === 'history' && historyRows !== null ? (
+        {history.listTab === 'history' && history.historyRows !== null ? (
           <div className={styles.listWrap}>
             <p className={styles.listCaption} role="status">
-              共 {historyRows.length} 条（visited_at 倒序，limit 截断）
+              共 {history.historyRows.length} 条（visited_at 倒序，limit 截断）
             </p>
-            {historyRows.length === 0 ? (
+            {history.historyRows.length === 0 ? (
               <p className={styles.listEmpty}>暂无已导入历史</p>
             ) : (
               <ul className={styles.list}>
-                {historyRows.map((row) => (
+                {history.historyRows.map((row) => (
                   <li
                     key={`${row.url}\u0000${row.visited_at}`}
                     className={styles.listItem}
@@ -757,56 +489,17 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
       </div>
 
       {/* ── 导出两段确认对话框 ── */}
-      <ConfirmDialog
-        open={exportAuthOpen}
-        title="授权读取登录态"
-        description={
-          <>
-            将读取受管浏览器会话的 cookie（<strong>仅内存传递，不写盘</strong>
-            ；含 cookie value 明文，请勿泄露至日志）。确认后先展示域名清单预览，
-            由你再次确认后才导出文件。未授权不会执行读取（零副作用）。
-          </>
-        }
-        confirmLabel="继续读取"
-        cancelLabel="取消"
-        disabled={busy === 'storageExport'}
-        onConfirm={() => {
-          void runExportAuth();
-        }}
-        onCancel={() => setExportAuthOpen(false)}
-      />
-      <ConfirmDialog
-        open={exportPreviewOpen}
-        title="确认导出登录态"
-        description={
-          exportPreview ? (
-            <>
-              将导出 {exportPreview.cookieCount} 条 cookie
-              {exportPreview.origins > 0
-                ? `、${exportPreview.origins} 个 origin`
-                : ''}
-              ，涉及域名：
-              <code className={styles.domainList}>
-                {exportPreview.domains.length > 0
-                  ? exportPreview.domains.join('、')
-                  : '（无）'}
-              </code>
-              。导出文件含 cookie value 明文，请谨慎保管；保存位置由「另存为」
-              对话框决定（不自动写盘）。
-            </>
-          ) : (
-            '导出内容为空（未读取到 cookie）。'
-          )
-        }
-        confirmLabel="确认导出"
-        cancelLabel="取消"
-        disabled={busy === 'storageExport'}
-        onConfirm={runExportSave}
-        onCancel={() => {
-          setExportPreviewOpen(false);
-          setExportPreview(null);
-          setExportedJson('');
-        }}
+      <ExportAuthDialogs
+        busy={busy}
+        exportAuthOpen={exportAuth.exportAuthOpen}
+        setExportAuthOpen={exportAuth.setExportAuthOpen}
+        exportPreviewOpen={exportAuth.exportPreviewOpen}
+        setExportPreviewOpen={exportAuth.setExportPreviewOpen}
+        exportPreview={exportAuth.exportPreview}
+        setExportPreview={exportAuth.setExportPreview}
+        setExportedJson={exportAuth.setExportedJson}
+        runExportAuth={exportAuth.runExportAuth}
+        runExportSave={exportAuth.runExportSave}
       />
     </section>
   );
