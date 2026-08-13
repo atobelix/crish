@@ -15,6 +15,8 @@ import {
   transportTitle,
   type SortMode,
 } from './types';
+import { McpServerTools } from './McpServerTools';
+import { McpServerToolbar } from './McpServerToolbar';
 
 export type McpServerListProps = {
   demo: boolean;
@@ -85,62 +87,6 @@ export const McpServerList: React.FC<McpServerListProps> = ({
     ? EMPTY_LIVE_HINT_CONFIGURED
     : EMPTY_LIVE_HINT_UNCONFIGURED;
 
-  const renderTools = (srv: McpServerInfo, panelId: string) => {
-    const toolN = srv.toolCount ?? srv.tools.length;
-    return (
-      <div
-        className={`${styles.mcpTools} mcp-tools`}
-        id={panelId}
-        role="region"
-        aria-label={`${srv.name} 的工具`}
-      >
-        {srv.tools.length === 0 ? (
-          <div
-            className={`${styles.mcpToolsEmpty} mcp-tools-empty`}
-            role="status"
-          >
-            {toolN > 0 ? `工具 ${toolN}（未返回名称）` : '暂无工具'}
-          </div>
-        ) : (
-          <ul>
-            {srv.tools.map((t) => (
-              <li key={t}>
-                <Lucide.Wrench size={12} aria-hidden />
-                <Tooltip content="复制工具名">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={`${styles.mcpInlineCopy} mcp-inline-copy`}
-                    aria-label={`复制工具名 ${t}`}
-                    onClick={() => onCopy(t)}
-                  >
-                    <code>{t}</code>
-                  </Button>
-                </Tooltip>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className={`${styles.mcpCardId} mcp-card-id`}>
-          标识{' '}
-          <Tooltip content="复制标识">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={`${styles.mcpInlineCopy} mcp-inline-copy`}
-              aria-label={`复制标识 ${srv.id}`}
-              onClick={() => onCopy(srv.id)}
-            >
-              <code>{srv.id}</code>
-            </Button>
-          </Tooltip>
-        </div>
-      </div>
-    );
-  };
-
   const renderFilterEmpty = (hasAny: boolean) => {
     if (loading) {
       return (
@@ -181,86 +127,18 @@ export const McpServerList: React.FC<McpServerListProps> = ({
   };
 
   const renderSharedToolbar = () => (
-    <div
-      className={`${styles.mcpToolbar} mcp-toolbar`}
-      role="toolbar"
-      aria-label="扩展服务工具栏"
-    >
-      <Tooltip content={loading ? '刷新中…' : '刷新列表'}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onRefresh}
-          disabled={loading}
-          aria-label={loading ? '刷新中' : '刷新列表'}
-          aria-busy={loading || undefined}
-          icon={
-            <Lucide.RefreshCw
-              size={14}
-              className={loading ? 'spin' : undefined}
-              aria-hidden
-            />
-          }
-        />
-      </Tooltip>
-      <div
-        className="ui-segment ui-segment--inline settings-segment-pill"
-        role="group"
-        aria-label="排序方式"
-      >
-        <Tooltip content="按名称排序">
-          <button
-            type="button"
-            className={`ui-segment-item ${sortMode === 'name' ? 'active' : ''}`}
-            onClick={() => onSetSort('name')}
-            aria-pressed={sortMode === 'name'}
-          >
-            名称
-          </button>
-        </Tooltip>
-        <Tooltip content={demo ? '按启用状态排序' : '按运行状态排序'}>
-          <button
-            type="button"
-            className={`ui-segment-item ${sortMode === 'state' ? 'active' : ''}`}
-            onClick={() => onSetSort('state')}
-            aria-pressed={sortMode === 'state'}
-          >
-            状态
-          </button>
-        </Tooltip>
-      </div>
-      <Tooltip content="搜索名称、标识或工具；Esc 清除">
-        <input
-          className={`settings-field-input settings-field-input--sm ${styles.mcpSearch} mcp-search`}
-          placeholder="搜索名称、标识…"
-          value={filter}
-          onChange={(e) => onSetFilter(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' && filter) {
-              e.preventDefault();
-              onClearFilter();
-            }
-          }}
-          aria-label="搜索扩展服务"
-        />
-      </Tooltip>
-      {demo ? (
-        <Tooltip content={showAdd ? '收起添加表单' : '添加演示服务'}>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => onSetShowAdd((v) => !v)}
-            aria-label={showAdd ? '收起添加表单' : '添加演示服务'}
-            aria-expanded={showAdd}
-            icon={<Lucide.Plus size={14} aria-hidden />}
-          >
-            {showAdd ? '收起' : '添加'}
-          </Button>
-        </Tooltip>
-      ) : null}
-    </div>
+    <McpServerToolbar
+      demo={demo}
+      loading={loading}
+      filter={filter}
+      sortMode={sortMode}
+      showAdd={showAdd}
+      onRefresh={onRefresh}
+      onSetSort={onSetSort}
+      onSetFilter={onSetFilter}
+      onClearFilter={onClearFilter}
+      onSetShowAdd={onSetShowAdd}
+    />
   );
 
   const renderServiceList = <T,>(opts: {
@@ -571,7 +449,9 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                   )}
                 </div>
               </div>
-              {isOpen ? renderTools(srv, panelId) : null}
+              {isOpen ? (
+                <McpServerTools srv={srv} panelId={panelId} onCopy={onCopy} />
+              ) : null}
             </div>
           );
         },

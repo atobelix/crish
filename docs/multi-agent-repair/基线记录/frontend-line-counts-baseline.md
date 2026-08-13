@@ -35,6 +35,22 @@
 - > 650 高发清单（步骤④拆分优先队列输入）：pricingStore.ts / sessionRustDb.ts /
   > useStreamCallbacks.ts / modelCatalog.ts / store/layout-tree/operations.ts 等（见标记区实测）。
 
+## G-03d VIOL 处置登记（2026-08-13-wave · 门禁治理维度）
+
+> 处置口径：`--update` 按路径精确登记（未跑 `--all`，避免误登记 HARD 文件）；登记三要素 = 实测行数 / 理由 / 拆分时限触发条件。登记 ≠ 拆分完成。
+
+| 文件                   | 实测有效行 | 理由                                                                                            | 拆分时限触发条件（二元结构）                                    |
+| ---------------------- | ---------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| sessionSearch.ts       | 412        | 小幅超类别上限 400（+12），纯函数搜索助手，拆分面大收益低                                       | SR-06 结构轮 sessionSearch 拆分完成（该文件 ≤400 行时移除登记） |
+| MessageVirtualizer.tsx | 492        | 类别上限 500 内（492<500），React.memo 穷尽检查面，拆分破坏 memo 契约风险高                     | SR-06 结构轮 MessageVirtualizer 拆分完成（≤441 行时移除登记）   |
+| ChangeOverviewCard.tsx | 481        | 类别上限 500 内（481<500），单组件强耦合，拆分归结构轮                                          | SR-06 结构轮 ChangeOverviewCard 拆分完成（≤432 行时移除登记）   |
+| useSlashSend.ts        | 457        | 单闭包 hook（handleSendChat 巨型函数），提取依赖注入面大，拆分归结构轮                          | SR-06 结构轮 useSlashSend 拆分完成（≤400 行时移除登记）         |
+| useAgentStream.ts      | 454        | 单 hook 强耦合 useCallback 链（buildStreamCallbacks/finalizeAgentStop），拆分归结构轮           | SR-06 结构轮 useAgentStream 拆分完成（≤400 行时移除登记）       |
+| McpServerList.tsx      | 453        | G-03d 已拆 renderTools/renderSharedToolbar（→McpServerTools/McpServerToolbar），实测回落 500 内 | SR-06 结构轮继续拆分（≤425 行时 --update 自动移除登记）         |
+
+> 同日处置（非登记）：messageWindow.ts 三切分（Primitives/DomBudget/Viewport/Indices/Expand 五叶 + hub re-export），
+> 实测 558→111 有效行，`--update` 自动移除其 498 基线条目；并行域 M 文件（goalModeController 644 / sessionSharedHelpers 422）未触碰，收口后由后续轮次处置。
+
 <!-- BASELINE_START -->
 
 apps/crish-desktop/src/api/applyFileDiff.ts 441
@@ -51,7 +67,6 @@ apps/crish-desktop/src/api/goalModeController.ts 623
 apps/crish-desktop/src/api/markdown-render/IncrementalMarkdownParser.ts 362
 apps/crish-desktop/src/api/markdown-render/markdownPlugins.ts 517
 apps/crish-desktop/src/api/messageUserProjection.ts 626
-apps/crish-desktop/src/api/messageWindow.ts 498
 apps/crish-desktop/src/api/modelCatalog.ts 868
 apps/crish-desktop/src/api/previewBrowserStore.ts 343
 apps/crish-desktop/src/api/pricingStore.ts 1409
@@ -60,7 +75,7 @@ apps/crish-desktop/src/api/session-persistence/sessionHydration.ts 387
 apps/crish-desktop/src/api/session-persistence/sessionRustDb.ts 1068
 apps/crish-desktop/src/api/sessionEventHydrate.ts 554
 apps/crish-desktop/src/api/sessionExport.ts 547
-apps/crish-desktop/src/api/sessionSearch.ts 403
+apps/crish-desktop/src/api/sessionSearch.ts 412
 apps/crish-desktop/src/api/sessionTitle.ts 342
 apps/crish-desktop/src/api/skillsApi.ts 636
 apps/crish-desktop/src/api/themeStore.ts 697
@@ -70,20 +85,20 @@ apps/crish-desktop/src/api/workspaceFsApi.ts 360
 apps/crish-desktop/src/components/agent-card/AgentTeamBoard.tsx 461
 apps/crish-desktop/src/components/agent-card/InlineAgentPanel.tsx 604
 apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 472
-apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 441
-apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 432
+apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 492
+apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
 apps/crish-desktop/src/components/settings-extensions/ExtensionCard.tsx 466
 apps/crish-desktop/src/components/settings-extensions/useExtensionMarket.tsx 438
-apps/crish-desktop/src/components/settings-mcp/McpServerList.tsx 503
+apps/crish-desktop/src/components/settings-mcp/McpServerList.tsx 453
 apps/crish-desktop/src/components/settings-models/useModelProfilesState.ts 501
 apps/crish-desktop/src/components/settings-skills/useSkillsSettingsState.ts 635
 apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 447
 apps/crish-desktop/src/components/workspace/TerminalCard.xterm.tsx 431
-apps/crish-desktop/src/hooks/chat-stream/useSlashSend.ts 367
+apps/crish-desktop/src/hooks/chat-stream/useSlashSend.ts 457
 apps/crish-desktop/src/hooks/chat-stream/useStreamCallbacks.ts 915
 apps/crish-desktop/src/hooks/tab-drag/tabDragGeometry.ts 718
 apps/crish-desktop/src/hooks/tab-drag/useTabDragEvents.ts 359
-apps/crish-desktop/src/hooks/useAgentStream.ts 389
+apps/crish-desktop/src/hooks/useAgentStream.ts 454
 apps/crish-desktop/src/hooks/useToastQueue.ts 395
 apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 352
 apps/crish-desktop/src/store/layout-tree/operations.ts 761
