@@ -459,6 +459,13 @@
       "supportsResponses": true,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
+      "reasoningEffortTiers": {
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "max": "max"
+      },
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
@@ -495,6 +502,13 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
+      "reasoningEffortTiers": {
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "max": "max"
+      },
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
@@ -1256,6 +1270,14 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
+      "reasoningEffortTiers": {
+        "off": null,
+        "minimal": null,
+        "low": "high",
+        "medium": "high",
+        "high": "high",
+        "max": "max"
+      },
       "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",

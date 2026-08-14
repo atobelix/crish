@@ -583,10 +583,7 @@ mod tests {
             assert!(value.get("errorKind").is_some(), "error_kind 应序列化");
             // roundtrip 后 error_kind 还原
             let back: ProviderStreamEvent = serde_json::from_value(value.clone()).unwrap();
-            let ProviderStreamEvent::Stop {
-                error_kind, ..
-            } = back
-            else {
+            let ProviderStreamEvent::Stop { error_kind, .. } = back else {
                 panic!("应为 Stop");
             };
             assert_eq!(error_kind, Some(kind), "roundtrip 后 error_kind 应还原");

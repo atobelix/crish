@@ -1,9 +1,9 @@
 //! responses.rs 测试旁挂（SR-06e · 拆分 · ≠ EL；经父模 `#[path]` 接线，非直接 mod）
 //! 原 responses.rs `mod tests` 整段搬入，零删除零合并；测试名与断言形状不变。
 use super::*;
-use conex_types::ProviderErrorKind;
 use crate::events::{stream_error_kind, ProviderStreamEvent, StopReason};
 use crate::sse::frame::SseFrame;
+use conex_types::ProviderErrorKind;
 use serde_json::json;
 /// 便捷构造：处理一帧并立即 finish，返回全部事件
 fn parse_all(frames: Vec<&str>) -> Vec<ProviderStreamEvent> {

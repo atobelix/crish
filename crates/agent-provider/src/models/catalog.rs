@@ -282,9 +282,12 @@ impl ModelCatalogEntry {
     /// 供「模型能力描述」只读接口（R2 T2.4）暴露稳定档位集（前端档位面板唯一数据源）。
     pub fn offered_levels(&self) -> Vec<String> {
         let mut levels = BTreeSet::new();
-        for map in [self.thinking_level_map.as_ref(), self.reasoning_effort_tiers.as_ref()]
-            .into_iter()
-            .flatten()
+        for map in [
+            self.thinking_level_map.as_ref(),
+            self.reasoning_effort_tiers.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
         {
             for (level, wire) in map {
                 if wire.is_some() {

@@ -209,7 +209,9 @@ impl Aggregate {
     /// 统一管线兜底为 Unknown 等分类，retry_after 由消息模式分类给出）
     fn classify_error(&self) -> ClassifiedStreamError {
         let message = self.error.clone().unwrap_or_default();
-        let kind = self.effective_error_kind().unwrap_or(ProviderErrorKind::Unknown);
+        let kind = self
+            .effective_error_kind()
+            .unwrap_or(ProviderErrorKind::Unknown);
         let retry_after_ms = classify_provider_error(None, Some(&message), None, None)
             .retry_after()
             .map(|d| d.as_millis() as u64);
@@ -388,7 +390,9 @@ fn build_message_metadata(
         // （bool），供水合后模型/熔断感知中断原因（E1 续写触发信号数据源）。
         // G1-c：优先采用 Stop 构造点携带的 error_kind（构造点已按统一管线分类），
         // 否则由 error 文案经同一管线兜底重分类——两处镜像分类一致
-        let kind = aggregate.effective_error_kind().unwrap_or(ProviderErrorKind::Unknown);
+        let kind = aggregate
+            .effective_error_kind()
+            .unwrap_or(ProviderErrorKind::Unknown);
         metadata.insert(
             "providerErrorKind".to_string(),
             serde_json::to_value(kind).unwrap_or_else(|_| Value::String("unknown".to_string())),

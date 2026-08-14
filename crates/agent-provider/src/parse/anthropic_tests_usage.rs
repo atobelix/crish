@@ -137,7 +137,11 @@ fn parse_anthropic_usage_reasoning_from_nested_details() {
         "output_tokens_details": { "reasoning_tokens": 25 },
     })))
     .expect("解析成功");
-    assert_eq!(usage.reasoning_tokens, Some(25), "嵌套 details.reasoning_tokens");
+    assert_eq!(
+        usage.reasoning_tokens,
+        Some(25),
+        "嵌套 details.reasoning_tokens"
+    );
     // completion 保留总输出（含思考），reasoning 不把思考从 completion 扣走（对齐 pi-ai）
     assert_eq!(usage.completion_tokens, Some(60));
     assert_eq!(usage.reasoning_tokens, Some(25));
@@ -154,7 +158,11 @@ fn parse_anthropic_usage_reasoning_alias_fallback() {
         "reasoning_tokens": 4,
     })))
     .expect("解析成功");
-    assert_eq!(usage.reasoning_tokens, Some(4), "顶层 reasoning_tokens 别名");
+    assert_eq!(
+        usage.reasoning_tokens,
+        Some(4),
+        "顶层 reasoning_tokens 别名"
+    );
 
     // 顶层 thinking_tokens 别名兜底
     let usage = parse_anthropic_usage(Some(&json!({

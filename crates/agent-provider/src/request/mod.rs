@@ -30,6 +30,10 @@ pub mod wire_protocol;
 #[cfg(test)]
 mod deepseek_invariants;
 
+// 描述面 ↔ 请求校验面一致性回归闸（多模型适配战役 轮次 4 · A3）
+#[cfg(test)]
+mod consistency_gate_tests;
+
 pub use build::{
     build_chat_completions_request_body, build_responses_request_body, build_system_prompt,
     resolve_endpoint, ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,
@@ -58,10 +62,12 @@ pub use tools::{
     to_responses_tool_choice, ToolChoice, ToolDefinition,
 };
 pub use vendor::{
-    effort_to_budget_tokens, effort_to_gemini_thinking_level, infer_reasoning_vendor,
-    infer_thinking_capability, normalize_reasoning_effort, normalize_thinking_intensity,
-    reasoning_effort_headers, reasoning_effort_object, resolve_thinking_params, ReasoningEffort,
-    ReasoningEffortFormat, ReasoningFormat, ReasoningVendor, ThinkingCapability, ThinkingIntensity,
-    NO_THINKING,
+    build_reasoning_wire, effort_to_budget_tokens, effort_to_gemini_thinking_level,
+    infer_reasoning_vendor, infer_thinking_capability, normalize_reasoning_effort,
+    normalize_thinking_intensity, reasoning_effort_headers, reasoning_effort_headers_for_model,
+    reasoning_effort_object, resolve_reasoning_level, resolve_thinking_params,
+    resolve_wire_spelling_with_tiers, DegradePolicy, ReasoningEffort, ReasoningEffortFormat,
+    ReasoningEffortState, ReasoningFormat, ReasoningReject, ReasoningVendor, ThinkingCapability,
+    ThinkingIntensity, NO_THINKING,
 };
 pub use wire_protocol::{resolve_wire_protocol, WireProtocol};

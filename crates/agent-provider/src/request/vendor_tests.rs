@@ -611,3 +611,367 @@ fn adaptive_effort_enum_and_header_extensions() {
         Some(("anthropic-beta", "interleaved-thinking-2025-05-14"))
     );
 }
+
+// ── R4 T4.1：请求面降级改拒绝（G8-b + G8-c；resolve_reasoning_level / build_reasoning_wire）──
+
+use std::collections::BTreeMap;
+
+use conex_types::error::ProviderErrorKind as Kind;
+
+/// 白名单 ['low','medium','high'] 的能力（系列级 typical）。
+fn whitelist_low_medium_high() -> ThinkingCapability {
+    ThinkingCapability {
+        supported: true,
+        levels: &[
+            ThinkingIntensity::Low,
+            ThinkingIntensity::Medium,
+            ThinkingIntensity::High,
+        ],
+        format: ReasoningFormat::ReasoningEffort,
+        vendor: ReasoningVendor::Deepseek,
+    }
+}
+
+#[test]
+fn reject_explicit_max_outside_whitelist() {
+    // 白名单 ['low','medium','high'] 显式请求 max → 拒绝（分类错误 InvalidRequest），不改写。
+    let cap = whitelist_low_medium_high();
+    let err = resolve_reasoning_level(
+        ReasoningEffortState::Explicit(ReasoningEffort::Max),
+        &cap,
+        DegradePolicy::Reject,
+    )
+    .expect_err("max 不在白名单 → 应拒绝");
+    assert_eq!(err.kind, Kind::InvalidRequest, "复用 InvalidRequest 分类");
+    assert_eq!(err.effort, "max");
+    assert!(
+        err.message.contains(ReasoningReject::UNSUPPORTED_TAG),
+        "拒绝文案应携带 UNSUPPORTED_REASONING_EFFORT 语义标签"
+    );
+}
+
+#[test]
+fn reject_explicit_unknown_model() {
+    // 未知模型（capability.supported=false）显式非 off 档 → 拒绝。
+    let unknown = NO_THINKING;
+    let err = resolve_reasoning_level(
+        ReasoningEffortState::Explicit(ReasoningEffort::Low),
+        &unknown,
+        DegradePolicy::Reject,
+    )
+    .expect_err("未知模型显式档位 → 应拒绝");
+    assert_eq!(err.kind, Kind::InvalidRequest);
+}
+
+#[test]
+fn omitted_state_yields_no_params() {
+    // 省略档位 → 不发送思考参数（Ok(None)），保留提供方默认。
+    let cap = whitelist_low_medium_high();
+    assert_eq!(
+        resolve_reasoning_level(ReasoningEffortState::Omitted, &cap, DegradePolicy::Reject),
+        Ok(None)
+    );
+    // build_reasoning_wire 省略 → Ok(None)。
+    let wire = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Omitted,
+        Some(ReasoningVendor::Deepseek),
+        &cap,
+        None,
+        DegradePolicy::Reject,
+    );
+    assert_eq!(wire, Ok(None));
+}
+
+#[test]
+fn three_state_explicit_default_omitted_distinguishable() {
+    // G8-c 三态分流可辨：显式可发 / 默认取白名单首个 / 省略不发。
+    let cap = whitelist_low_medium_high();
+    // 显式有效档 → 发送。
+    assert_eq!(
+        resolve_reasoning_level(
+            ReasoningEffortState::Explicit(ReasoningEffort::Medium),
+            &cap,
+            DegradePolicy::Reject,
+        ),
+        Ok(Some(ReasoningEffort::Medium))
+    );
+    // 默认 → 白名单首个（low）。
+    assert_eq!(
+        resolve_reasoning_level(ReasoningEffortState::Default, &cap, DegradePolicy::Reject),
+        Ok(Some(ReasoningEffort::Low))
+    );
+    // 省略 → 不发。
+    assert_eq!(
+        resolve_reasoning_level(ReasoningEffortState::Omitted, &cap, DegradePolicy::Reject),
+        Ok(None)
+    );
+}
+
+#[test]
+fn off_and_auto_never_send() {
+    let cap = whitelist_low_medium_high();
+    for off in [ReasoningEffort::Off, ReasoningEffort::Auto] {
+        assert_eq!(
+            resolve_reasoning_level(
+                ReasoningEffortState::Explicit(off),
+                &cap,
+                DegradePolicy::Reject,
+            ),
+            Ok(None),
+            "{off:?} 关闭思考，不发送"
+        );
+    }
+}
+
+#[test]
+fn degrade_policy_switch_preserves_old_behavior_when_on() {
+    // 降级开关开启（AllowDegrade）：保留旧降级钳制（xhigh→high、minimal→low）。
+    let cap = whitelist_low_medium_high();
+    assert_eq!(
+        resolve_reasoning_level(
+            ReasoningEffortState::Explicit(ReasoningEffort::Xhigh),
+            &cap,
+            DegradePolicy::AllowDegrade,
+        ),
+        Ok(Some(ReasoningEffort::High)),
+        "AllowDegrade 时 xhigh 降级到 high"
+    );
+    // 默认关闭（Reject）时同档位拒绝。
+    assert!(resolve_reasoning_level(
+        ReasoningEffortState::Explicit(ReasoningEffort::Xhigh),
+        &cap,
+        DegradePolicy::Reject,
+    )
+    .is_err());
+}
+
+// ── R4 T4.2：模型级 wire 改名（G6-a；resolve_wire_spelling_with_tiers / build_reasoning_wire）──
+
+#[test]
+fn model_level_rename_medium_to_high_wire_byte() {
+    // {medium:"high"} 改名映射 → 请求体 reasoning_effort:"high"（wire 字节断言）。
+    let mut tiers = BTreeMap::new();
+    tiers.insert("medium".to_string(), Some("high".to_string()));
+    let cap = whitelist_low_medium_high();
+    let wire = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        Some(&tiers),
+        ReasoningEffortState::Explicit(ReasoningEffort::Medium),
+        Some(ReasoningVendor::Glm),
+        &cap,
+        Some(ReasoningFormat::ReasoningEffort),
+        DegradePolicy::Reject,
+    );
+    assert_eq!(wire, Ok(Some(json!({ "reasoning_effort": "high" }))));
+}
+
+#[test]
+fn model_level_rename_falls_back_to_series_spelling() {
+    // 改名未覆盖档位 → 回落系列级换算（medium 无改名 → "medium"）。
+    let mut tiers = BTreeMap::new();
+    tiers.insert("low".to_string(), Some("low".to_string()));
+    let cap = whitelist_low_medium_high();
+    let wire = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        Some(&tiers),
+        ReasoningEffortState::Explicit(ReasoningEffort::Medium),
+        Some(ReasoningVendor::Deepseek),
+        &cap,
+        Some(ReasoningFormat::ReasoningEffort),
+        DegradePolicy::Reject,
+    );
+    assert_eq!(wire, Ok(Some(json!({ "reasoning_effort": "medium" }))));
+}
+
+#[test]
+fn hidden_tier_rejects_as_unsupported() {
+    // 隐藏档（None 值）：档位在能力白名单但在模型级为隐藏 → 拒绝（不静默省略/改名）。
+    let mut tiers = BTreeMap::new();
+    tiers.insert("medium".to_string(), None);
+    let cap = whitelist_low_medium_high();
+    let err = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        Some(&tiers),
+        ReasoningEffortState::Explicit(ReasoningEffort::Medium),
+        Some(ReasoningVendor::Deepseek),
+        &cap,
+        Some(ReasoningFormat::ReasoningEffort),
+        DegradePolicy::Reject,
+    )
+    .expect_err("模型级隐藏档 → 应拒绝");
+    assert_eq!(err.kind, Kind::InvalidRequest);
+}
+
+// ── R4 T4.4：anthropic-beta 头随 adaptive 跳过（G6-b / T4.4）──
+
+#[test]
+fn adaptive_model_skips_beta_header() {
+    // adaptive 代际 + high → 无 anthropic-beta 头。
+    assert_eq!(
+        reasoning_effort_headers_for_model(
+            "claude-opus-4-7",
+            Some(ReasoningVendor::Anthropic),
+            Some(ReasoningEffort::High)
+        ),
+        None
+    );
+    assert_eq!(
+        reasoning_effort_headers_for_model(
+            "claude-sonnet-5",
+            Some(ReasoningVendor::Anthropic),
+            Some(ReasoningEffort::Max)
+        ),
+        None
+    );
+    // 旧代际 + high → 仍返头。
+    assert_eq!(
+        reasoning_effort_headers_for_model(
+            "claude-opus-4-6",
+            Some(ReasoningVendor::Anthropic),
+            Some(ReasoningEffort::High)
+        ),
+        Some(("anthropic-beta", "interleaved-thinking-2025-05-14"))
+    );
+    // 兼容 2 参签名（旧代际语义）。
+    assert_eq!(
+        reasoning_effort_headers(
+            Some(ReasoningVendor::Anthropic),
+            Some(ReasoningEffort::High)
+        ),
+        Some(("anthropic-beta", "interleaved-thinking-2025-05-14"))
+    );
+}
+
+// ── R4 T4.5：开关/嵌套方言 + deepseek off 显式 disabled（G5-c + G6-c）──
+
+#[test]
+fn qwen_dialect_uses_enable_thinking() {
+    // qwen 开关型方言 → enable_thinking 布尔。
+    let cap = ThinkingCapability {
+        supported: true,
+        levels: &[
+            ThinkingIntensity::Low,
+            ThinkingIntensity::Medium,
+            ThinkingIntensity::High,
+        ],
+        format: ReasoningFormat::QwenEnableThinking,
+        vendor: ReasoningVendor::Qwen,
+    };
+    let wire = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Explicit(ReasoningEffort::High),
+        Some(ReasoningVendor::Qwen),
+        &cap,
+        Some(ReasoningFormat::QwenEnableThinking),
+        DegradePolicy::Reject,
+    );
+    assert_eq!(wire, Ok(Some(json!({ "enable_thinking": true }))));
+}
+
+#[test]
+fn zai_dialect_uses_thinking_object() {
+    // zai/GLM 方言 → thinking:{type:"enabled",clear_thinking:false} + reasoning_effort。
+    let cap = ThinkingCapability {
+        supported: true,
+        levels: &[
+            ThinkingIntensity::Low,
+            ThinkingIntensity::Medium,
+            ThinkingIntensity::High,
+        ],
+        format: ReasoningFormat::ZaiThinking,
+        vendor: ReasoningVendor::Glm,
+    };
+    let wire = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Explicit(ReasoningEffort::High),
+        Some(ReasoningVendor::Glm),
+        &cap,
+        Some(ReasoningFormat::ZaiThinking),
+        DegradePolicy::Reject,
+    );
+    assert_eq!(
+        wire,
+        Ok(Some(json!({
+            "thinking": { "type": "enabled", "clear_thinking": false },
+            "reasoning_effort": "high",
+        })))
+    );
+}
+
+#[test]
+fn openrouter_dialect_uses_nested_reasoning() {
+    // openrouter 嵌套方言 → reasoning:{effort}。
+    let cap = ThinkingCapability {
+        supported: true,
+        levels: &[
+            ThinkingIntensity::Low,
+            ThinkingIntensity::Medium,
+            ThinkingIntensity::High,
+        ],
+        format: ReasoningFormat::OpenRouterReasoning,
+        vendor: ReasoningVendor::Openai,
+    };
+    let wire = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Explicit(ReasoningEffort::High),
+        Some(ReasoningVendor::Openai),
+        &cap,
+        Some(ReasoningFormat::OpenRouterReasoning),
+        DegradePolicy::Reject,
+    );
+    assert_eq!(wire, Ok(Some(json!({ "reasoning": { "effort": "high" } }))));
+}
+
+#[test]
+fn deepseek_off_emits_disabled_thinking() {
+    // deepseek 方言 off → 显式 thinking:{type:"disabled"}，无 reasoning_effort。
+    let cap = ThinkingCapability {
+        supported: true,
+        levels: &[
+            ThinkingIntensity::Low,
+            ThinkingIntensity::Medium,
+            ThinkingIntensity::High,
+        ],
+        format: ReasoningFormat::ReasoningEffort,
+        vendor: ReasoningVendor::Deepseek,
+    };
+    let wire = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Explicit(ReasoningEffort::Off),
+        Some(ReasoningVendor::Deepseek),
+        &cap,
+        Some(ReasoningFormat::ReasoningEffort),
+        DegradePolicy::Reject,
+    );
+    assert_eq!(
+        wire,
+        Ok(Some(json!({ "thinking": { "type": "disabled" } })))
+    );
+    // 非 deepseek 方言 off → 省略（不发，保留关闭思考语义）。
+    let openai_cap = ThinkingCapability {
+        supported: true,
+        levels: &[
+            ThinkingIntensity::Low,
+            ThinkingIntensity::Medium,
+            ThinkingIntensity::High,
+        ],
+        format: ReasoningFormat::ReasoningEffort,
+        vendor: ReasoningVendor::Openai,
+    };
+    let wire_openai = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Explicit(ReasoningEffort::Off),
+        Some(ReasoningVendor::Openai),
+        &openai_cap,
+        Some(ReasoningFormat::ReasoningEffort),
+        DegradePolicy::Reject,
+    );
+    assert_eq!(wire_openai, Ok(None), "非 deepseek off → 省略");
+}
