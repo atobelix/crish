@@ -180,6 +180,42 @@
         }
     }
 
+    /// S5 测钉工具（D-02 LK-01）：快照记录执行时收到的
+    /// ToolContext.tool_call_id（Option 原样记录，None 与空串可区分），
+    /// 供断言验证键源注入——工具侧读 ctx.tool_call_id 即「当前调用 id」
+    struct RecordingCtxTool {
+        seen_call_ids: Arc<Mutex<Vec<Option<String>>>>,
+    }
+    impl RecordingCtxTool {
+        fn new(seen: Arc<Mutex<Vec<Option<String>>>>) -> Self {
+            Self { seen_call_ids: seen }
+        }
+    }
+    #[async_trait::async_trait]
+    impl Tool for RecordingCtxTool {
+        fn name(&self) -> &str {
+            "recording-ctx"
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            DEF.get_or_init(|| ToolDefinition {
+                name: "recording-ctx".into(),
+                description: "records ctx.tool_call_id".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: false,
+                fatal_on_error: false,
+            })
+        }
+        async fn execute(
+            &self,
+            ctx: &ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
+            self.seen_call_ids.lock().unwrap().push(ctx.tool_call_id.clone());
+            Ok(serde_json::json!({"ok": true}))
+        }
+    }
+
     fn registry_with(tools: Vec<Arc<dyn Tool>>) -> Arc<ToolRegistry> {
         let mut reg = ToolRegistry::new();
         for t in tools {
@@ -224,6 +260,40 @@
         assert!(matches!(out.events[1], ToolEvent::ToolStart { .. }));
         assert!(matches!(out.events[2], ToolEvent::ToolEnd { .. }));
         assert!(matches!(out.events[3], ToolEvent::BatchEnd { .. }));
+    }
+
+    /// S5 测钉（D-02 LK-01）：工具执行时 ToolContext.tool_call_id == 当前
+    /// call.id——键源在 exec_single.rs 唯一生产构造点注入（与
+    /// ExecutorContext.tool_call_id 同源）；连续两个调用逐个注入不串键
+    #[tokio::test]
+    async fn tool_context_tool_call_id_injected_from_current_call() {
+        let seen: Arc<Mutex<Vec<Option<String>>>> = Arc::new(Mutex::new(Vec::new()));
+        let reg = registry_with(vec![Arc::new(RecordingCtxTool::new(Arc::clone(&seen)))]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![
+            call("call-1", "recording-ctx", ToolConcurrency::Sequential),
+            call("call-2", "recording-ctx", ToolConcurrency::Sequential),
+        ];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert!(out.results.iter().all(|r| r.is_ok()));
+        // S5：快照记录 → getter → 断言——每个调用注入自己的 call.id
+        let snapshot = seen.lock().unwrap();
+        assert_eq!(
+            snapshot.as_slice(),
+            &[Some("call-1".to_string()), Some("call-2".to_string())]
+        );
+    }
+
+    /// S5 测钉（D-02 LK-01）：未接线路径 tool_call_id 恒 None——mock 工厂
+    /// 与 ToolContext::new 便捷构造均不注入（非工具调用上下文）
+    #[test]
+    fn tool_context_tool_call_id_none_on_unwired_paths() {
+        let mock = agent_tools::context::create_mock_tool_context();
+        assert!(mock.tool_call_id.is_none(), "mock 工厂未接线应为 None");
+        let fresh = ToolContext::new("sess-unwired", std::path::PathBuf::from("."));
+        assert!(fresh.tool_call_id.is_none(), "便捷构造未接线应为 None");
     }
 
     /// S1 出站映射纯函数（TOOLS-01 §3.1.5）：Text/Custom/Content 三形态

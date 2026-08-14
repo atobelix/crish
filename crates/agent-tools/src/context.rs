@@ -142,6 +142,10 @@ pub struct ToolContext {
     /// [crate::note_backend::NoteBackend] 后注入——**禁止** agent-tools
     /// 硬依赖 conex-doc-collab / workspace-store，保持叶子依赖）
     pub note_backend: Option<Arc<dyn crate::note_backend::NoteBackend>>,
+    /// 工具调用 id（D-02 LK-01：唯一生产构造点在引擎工具执行单点
+    /// `exec_single.rs` 注入 `call.id`；工具侧审计/发射时填充；
+    /// None = 非工具调用上下文（mock/测试/引擎命令直连））
+    pub tool_call_id: Option<String>,
 }
 
 /// 探索类文档配额检查上下文（C5，I6-M11）
@@ -180,6 +184,7 @@ impl ToolContext {
             log_root: None,
             compression_store: None,
             note_backend: None,
+            tool_call_id: None,
         }
     }
 }
@@ -205,6 +210,7 @@ pub fn create_mock_tool_context() -> ToolContext {
         log_root: None,
         compression_store: None,
         note_backend: None,
+        tool_call_id: None,
     }
 }
 

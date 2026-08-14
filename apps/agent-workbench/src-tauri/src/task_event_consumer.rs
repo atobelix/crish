@@ -121,11 +121,11 @@ impl TaskEventConsumer {
         let Some((task_id, result)) = audit_key else {
             return;
         };
-        // 操作者：壳层任务域暂无工具调用上下文，默认 AI 工具调用且
-        // tool_call_id 缺省空串（文档化；用户命令形态留后续接线）
-        let operator = TaskAuditOperator::AiTool {
-            tool_call_id: String::new(),
-        };
+        // 操作者：壳层任务域事件链当前无工具调用上下文可注入（task wire
+        // 事件不携带 tool_call_id；任务注册表亦无记忆）——置 None 而非空串
+        // （LK-03 空串消解：禁空串；工具发起传真值的注入点留待任务 adopt
+        // 链路携带 call id 后接线，届时与「真值」同为有效完成态）
+        let operator = TaskAuditOperator::AiTool { tool_call_id: None };
         let record = {
             let mut audit = self.audit.lock().unwrap_or_else(|e| e.into_inner());
             if !audit.push(event, operator) {
@@ -348,6 +348,35 @@ mod tests {
             .map(|(_, p)| parse_envelope(p))
             .collect();
         assert_eq!(envelopes.len(), 2, "审计留痕不受影响");
+    }
+
+    /// LK-03 空串消解：任务域审计事件 tool_call_id 置 None（禁空串）——
+    /// 壳层任务事件链无工具调用上下文（task wire 事件不携带 call id、
+    /// 注册表无记忆），不得以空串冒充真值
+    #[test]
+    fn consumer_audit_tool_call_id_none_not_empty() {
+        let (consumer, emitter, _queue) = consumer();
+        consumer.on_task_event(&started("t-1", "run-main"));
+        consumer.on_task_event(&completed("t-1", 0));
+
+        let envelopes: Vec<AgentEventEnvelope> = emitter
+            .calls()
+            .iter()
+            .map(|(_, p)| parse_envelope(p))
+            .collect();
+        assert_eq!(envelopes.len(), 2, "started + completed 各直发一条 security-audit");
+        for envelope in &envelopes {
+            let AgentEvent::SecurityAudit {
+                tool_call_id, ..
+            } = &envelope.event
+            else {
+                panic!("应为 security-audit 变体");
+            };
+            assert!(
+                tool_call_id.is_none(),
+                "无工具调用上下文 → None（禁空串）: {tool_call_id:?}"
+            );
+        }
     }
 
     /// 验收（30 方案 P3）：同任务两次终态 → 队列原位替换（len 不变，

@@ -271,6 +271,10 @@ impl ToolExecutor {
             // Round6 / W4-E：笔记后端经 ToolExecCtx 透传（None = unwired 占位；
             // 引擎 / SessionLoopOptions 可注入 conex-note-runtime::StoreNoteBackend）
             note_backend: ctx.note_backend.clone(),
+            // D-02 LK-01：键源注入——与上方 ExecutorContext.tool_call_id
+            //（:209 同源）取当前 call.id；工具侧审计/发射经 ctx.tool_call_id
+            // 反查本调用（LK-03 消费）；None = 非工具调用上下文
+            tool_call_id: Some(call.id.clone()),
         };
         // ── 中间件链 + 插件钩子（审批已通过，进入执行面；优先级语义
         //    见模块头注：审批优先于中间件，中间件 Block 不绕过审批）──

@@ -465,11 +465,13 @@ impl MainAgentMessageChannel for ContinuityChannelBoard {
 }
 // ── P4：缓冲事件 drain 转发（30 方案 §4 改动点 2）───────────────────
 // 定时器 / cron 事件缓冲（AgentEventSink / SchedEventSink）到真实
-// EventBridge 的转发路径：drain 取走缓冲 → 信封直发（runId/sequence
-// 不注入，对齐 EventBridgeSink 先例 background.rs:2145——timer/cron
-// 事件无 run 归属，前端按 timerId/cronId 消费）。批 3 装配轮以 500ms
-// tick 周期调用（main.rs drain 任务）——事件从缓冲到真实桥延迟
-// ≤ 500ms；drain 为 Vec::take 语义，空缓冲返回 0，重复调用不重复转发。
+// EventBridge 的转发路径：drain 取走缓冲 → 信封直发。R-22：timer/cron
+// 事件仅实时轨广播、不落库（本战役定案；完整落库依赖 R-CF3 会话化
+// 前置，见 execution/06-RCF3 登记）——信封 runId 注入 timer-<id> /
+// cron-<id> 伪 runId（契约对齐，前端按 timerId/cronId 消费），
+// sequence 不注入（无 run 序列域）。批 3 装配轮以 500ms tick 周期
+// 调用（main.rs drain 任务）——事件从缓冲到真实桥延迟 ≤ 500ms；
+// drain 为 Vec::take 语义，空缓冲返回 0，重复调用不重复转发。
 
 /// 缓冲定时器事件 → 信封直发；返回实际发射条数
 /// （[EventBridge::emit_envelope] 序列化失败条目不计数；生产消费方 =
@@ -488,11 +490,26 @@ pub(crate) fn forward_drained_scheduler_events(
     forward_drained_events(sink.drain(), bridge)
 }
 
-/// drain 转发公共实现（缓冲事件 → 信封直发；runId/sequence 不注入）
+/// drain 转发公共实现（缓冲事件 → 信封直发；sequence 不注入）
 fn forward_drained_events(events: Vec<AgentEvent>, bridge: &EventBridge) -> usize {
     let mut forwarded = 0usize;
     for event in events {
-        let envelope = AgentEventEnvelope::new(event, None, None);
+        // R-22：伪 runId 契约对齐（文档-实现漂移修复——conex-types 信封
+        // 契约约定「置空串或 timer-<id> / cron-<id> 伪 runId」，此前实现
+        // 为 None 导致 wire 缺 runId 键）。timer/cron 事件仅实时轨广播、
+        // 不落库（本战役定案）；完整落库依赖会话化前置（R-CF3 登记，
+        // 翻转点 = 事件体 sessionId 非空 + 落库通道就绪）。
+        // 注：事件体 timer_id/cron_id 已含前缀（timer-<seq>/cron-<seq>），
+        // 此处按任务书字面拼接 timer-{id} / cron-{id}（对齐 F6:34 历史
+        // 「保持字面登记」先例）；前端按 timerId/cronId 消费，不依赖
+        // runId 值，伪 runId 仅契约面占位。
+        let run_id = match &event {
+            AgentEvent::TimerFired { timer_id, .. }
+            | AgentEvent::TimerCancelled { timer_id, .. } => Some(format!("timer-{timer_id}")),
+            AgentEvent::CronFired { cron_id, .. } => Some(format!("cron-{cron_id}")),
+            _ => None,
+        };
+        let envelope = AgentEventEnvelope::new(event, run_id, None);
         forwarded += bridge.emit_envelope(&envelope).emitted;
     }
     if forwarded > 0 {

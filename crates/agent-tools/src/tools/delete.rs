@@ -219,14 +219,15 @@ async fn execute_delete(
         .trash_file(&target, backup)
         .map_err(|e| ToolError::execution_failed(tool_name, format!("{display}: {e}")))?;
     // I2-S8：删除接管审计事件（decision=redirected，影响面来自预检）——
-    // 经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）
+    // 经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）；
+    // tool_call_id 取执行上下文真值（LK-03：工具执行 → 审计携带真实调用 id）
     audit_sink.emit(&security_audit_event(
         &ctx.session_id,
         SecurityAuditOperation::Delete,
         vec![display.clone()],
         impact,
         SecurityAuditDecision::Redirected,
-        None,
+        ctx.tool_call_id.clone(),
     ));
     // 审计记录（结构化安全审计日志；工具结果经 tool-end 事件流落库）
     tracing::info!(
@@ -278,10 +279,12 @@ mod tests {
     use conex_test_utils::TempWorkspace;
     use serde_json::json;
 
-    /// 测试用会话上下文：workspace_root 指向临时工作区
+    /// 测试用会话上下文：workspace_root 指向临时工作区；
+    /// tool_call_id 注入模拟值（LK-03：审计真值断言锚）
     fn mock_ctx(ws: &TempWorkspace) -> ToolContext {
         ToolContext {
             workspace_root: ws.path().clone(),
+            tool_call_id: Some("mock-call-id".to_string()),
             ..create_mock_tool_context()
         }
     }
@@ -491,7 +494,11 @@ mod tests {
                 assert_eq!(impact.directory_count, 1);
                 assert_eq!(decision, &Decision::Redirected);
                 assert!(permission_mode.is_none(), "permissionMode 由 emit 层注入");
-                assert!(tool_call_id.is_none(), "工具侧无调用 id 上下文");
+                assert_eq!(
+                    tool_call_id,
+                    &Some("mock-call-id".to_string()),
+                    "LK-03：工具执行 → security-audit 携带真实调用 id（非 None）"
+                );
             }
             other => panic!("应为 security-audit，实际 {}", other.type_name()),
         }

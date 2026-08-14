@@ -25,7 +25,8 @@ const DELETE_REDIRECT_GUIDANCE: &str =
     "如确需删除请改用 delete_file / delete_dir 工具（统一删除接口，可恢复）";
 
 /// 拦截类审计发射（I2-S8：decision=blocked；targets 为被拦目标/命令原文；
-/// 影响面未知 → 空载荷，与审计字段语义一致——操作未执行）
+/// 影响面未知 → 空载荷，与审计字段语义一致——操作未执行；
+/// tool_call_id 取执行上下文真值，LK-03：工具执行 → 审计携带真实调用 id）
 pub(crate) fn emit_blocked_audit(
     audit_sink: &Arc<dyn SecurityAuditSink>,
     ctx: &ToolContext,
@@ -38,7 +39,7 @@ pub(crate) fn emit_blocked_audit(
         targets,
         ImpactAssessment::default(),
         SecurityAuditDecision::Blocked,
-        None,
+        ctx.tool_call_id.clone(),
     ));
 }
 
@@ -182,7 +183,8 @@ pub(crate) fn redirect_or_intercept_delete(
         }
     }
     // 6. 审计：重定向成功（decision=redirected，影响面来自预检）——
-    //    经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）
+    //    经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）；
+    //    tool_call_id 取执行上下文真值（LK-03）
     let target_displays: Vec<String> = targets
         .iter()
         .map(|t| t.display().to_string())
@@ -193,7 +195,7 @@ pub(crate) fn redirect_or_intercept_delete(
         target_displays.clone(),
         impact,
         SecurityAuditDecision::Redirected,
-        None,
+        ctx.tool_call_id.clone(),
     ));
     // 7. 审计日志（结构化安全审计；工具结果经 tool-end 事件流落库）
     let entry_ids: Vec<&str> = entries
