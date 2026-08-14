@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use agent_provider::config::Endpoint;
 use agent_provider::events::ProviderStreamEvent as WireEvent;
-use agent_provider::request::WireProtocol;
+use agent_provider::request::{describe_model, WireProtocol};
 use agent_provider::sse::SseFrame;
 use conex_types::error::ProviderErrorKind;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
@@ -473,4 +473,112 @@ fn stop_error_kind_passes_through_to_loop_event() {
         }
         other => panic!("期望 Stop，得到 {other:?}"),
     }
+}
+
+// ── 战役 I4 · R5 B-1：请求面思考档位拒绝接线（网络 I/O 前）──────────
+
+/// 拒绝接线的数据源（describe_model C9）权威性抽查：deepseek-v4-flash 目录
+/// `reasoningEffortTiers` 只提供 high/max（low 为隐藏档）→ 描述面白名单仅含 high/max。
+#[test]
+fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
+    let call = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::ChatCompletions);
+    let cap = describe_model(
+        bundled_catalog(),
+        catalog_vendor(&call.config),
+        &call.config.model,
+        Some(call.config.endpoint),
+    );
+    assert!(cap.supports_reasoning, "deepseek-v4-flash 支持 reasoning");
+    assert_eq!(cap.efforts, vec!["high".to_string(), "max".to_string()]);
+    assert!(cap.efforts.iter().any(|e| e == "high"));
+
+    // 合法档位放行；越白名单档位（low/minimal/medium）拒绝。
+    assert!(
+        thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::High)).is_ok(),
+        "high 在 deepseek-v4-flash 白名单应放行"
+    );
+    let rejected = thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::Low));
+    match rejected {
+        Err(err) => {
+            assert_eq!(err.kind, ProviderErrorKind::InvalidRequest, "越白名单 → 分类错误");
+            assert!(
+                err.message.contains("UNSUPPORTED_REASONING_EFFORT"),
+                "文案携带语义标签：{}",
+                err.message
+            );
+        }
+        Ok(()) => panic!("low 不在 deepseek-v4-flash 白名单，应拒绝"),
+    }
+}
+
+/// 显式档位超出模型能力白名单 → `stream()` 返回流前 `Err`（分类错误），
+/// **HTTP 请求未发出**（base_url 指向必然连接失败的端口；若校验未提前 return，
+/// 此处会得到 reqwest 连接错误而非我们的 InvalidRequest）。
+#[tokio::test]
+async fn out_of_whitelist_effort_rejected_before_http() {
+    // 用 deepseek-v4-flash（白名单 high/max）+ 越档 low + 死端口 URL：
+    // 错误必须在请求发送前由拒绝校验返回，证明网络 I/O 未发生。
+    let config = EngineProviderConfig {
+        base_url: "http://127.0.0.1:1".to_string(),
+        api_key: "k-test".to_string(),
+        model: "deepseek-v4-flash".to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    let call = HttpProviderCall::new(reqwest::Client::new(), config);
+    let messages = vec![user_msg("你好")];
+    let request = single_user_request(&messages, Some(LoopEffort::Low));
+
+    let err = match call.stream(&request).await {
+        Ok(_) => panic!("越白名单显式档位必须在流前被拒绝"),
+        Err(err) => err,
+    };
+    assert_eq!(
+        err.kind,
+        ProviderErrorKind::InvalidRequest,
+        "拒绝应为分类错误（且是校验返回而非 HTTP 连接错误）：{err:?}"
+    );
+    assert!(
+        err.message.contains("UNSUPPORTED_REASONING_EFFORT"),
+        "拒绝文案携带语义标签：{}",
+        err.message
+    );
+}
+
+/// 省略思考档位（None）→ `stream()` 不拒绝、正常发起；请求体不携带思考参数
+/// （省略即不发送，保留提供方默认）。
+#[test]
+fn omitted_effort_passes_validation_and_omits_thinking_param() {
+    // 校验面：省略（None）→ Ok（放行到构建/HTTP，不发送思考参数）。
+    let call = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::ChatCompletions);
+    assert!(
+        thinking::validate_reasoning_effort(&call.config, None).is_ok(),
+        "省略档位不应被拒绝"
+    );
+    // 请求体：None → 不写入 reasoning_effort（省略即不发送思考参数）。
+    let messages = vec![user_msg("你好")];
+    let body = call.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
+    assert!(
+        body.get("reasoning_effort").is_none(),
+        "省略档位不应发送思考参数：{body}"
+    );
+}
+
+/// 合法显式档位 → 校验放行，请求体写入对应思考参数（白名单内直发不降级）。
+#[test]
+fn in_whitelist_effort_passes_and_emits_reasoning_param() {
+    let call = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::ChatCompletions);
+    // 校验面：high 在 deepseek-v4-flash 白名单 → 放行。
+    assert!(
+        thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::High)).is_ok(),
+        "white-list 内档位应放行"
+    );
+    // 请求体：high → reasoning_effort:"high"（白名单内直发，不降级）。
+    let messages = vec![user_msg("你好")];
+    let body = call.request_body_for(WireProtocol::Chat, &single_user_request(&messages, Some(LoopEffort::High)));
+    assert_eq!(
+        body["reasoning_effort"], "high",
+        "白名单内 high 档应写入 reasoning_effort：{body}"
+    );
 }

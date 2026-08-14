@@ -45,7 +45,8 @@ pub(crate) fn bundled_catalog() -> &'static ModelCatalog {
 
 /// 生效配置 → 目录 vendor 字符串（对齐 catalog.json 条目 vendor 字段；
 /// 未识别 → `"auto"`，命中目录未知厂商的 chat 兜底路径）。
-fn catalog_vendor(config: &EngineProviderConfig) -> &'static str {
+/// pub(crate)：供 thinking 域（B-1 请求面拒绝校验的 catalog 白名单 lookup）复用。
+pub(crate) fn catalog_vendor(config: &EngineProviderConfig) -> &'static str {
     match infer_reasoning_vendor(Some(&config.base_url), Some(&config.model)) {
         ReasoningVendor::Deepseek => "deepseek",
         ReasoningVendor::Openai => "openai",

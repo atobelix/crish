@@ -236,3 +236,56 @@ fn wire_protocol_as_str_is_stable() {
     assert_eq!(WireProtocol::Anthropic.as_str(), "anthropic");
     assert_eq!(WireProtocol::Gemini.as_str(), "gemini");
 }
+
+// ── 验收断言 4（A6）：点号→横线归一（apiModel 异形体路由到横线目录键）──
+
+/// 点号模型名（`gemini-2.5-pro`）精确命中目录横线键（`gemini-2-5-pro`）
+/// → 返回其 mode（Gemini），不落 chat 兜底。
+#[test]
+fn dotted_model_normalizes_to_hyphen_key_gemini() {
+    let catalog = fake_catalog(&[(
+        "acme::gemini-2-5-pro".into(),
+        entry(Some("gemini"), false),
+    )]);
+    assert_eq!(
+        resolve_wire_protocol(&catalog, "acme", "gemini-2.5-pro", None),
+        WireProtocol::Gemini,
+        "点号异形体 gemini-2.5-pro 应按横线键 gemini-2-5-pro 命中 mode:gemini",
+    );
+}
+
+/// 点号模型名命中横线键且 mode=anthropic → Anthropic（归一后沿用 mode 语义）。
+#[test]
+fn dotted_model_normalizes_for_anthropic_mode() {
+    let catalog = fake_catalog(&[("acme::claude-2-5".into(), entry(Some("anthropic"), false))]);
+    assert_eq!(
+        resolve_wire_protocol(&catalog, "acme", "claude-2.5", None),
+        WireProtocol::Anthropic,
+        "点号异形体应按横线键命中 mode",
+    );
+}
+
+/// 点号形态但横线键不存在（目录未收录）→ 落回原兜底语义
+/// （全局 endpoint：未知模型 + 非 responses → chat）。
+#[test]
+fn dotted_model_without_hyphen_key_falls_back_to_chat() {
+    let catalog = fake_catalog(&[]);
+    for endpoint in [None, Some(Endpoint::ChatCompletions), Some(Endpoint::Auto)] {
+        assert_eq!(
+            resolve_wire_protocol(&catalog, "acme", "gemini-9.9-pro", endpoint),
+            WireProtocol::Chat,
+            "点号模型无对应横线键 + endpoint={endpoint:?} 应 chat 兜底（原语义不回归）",
+        );
+    }
+}
+
+/// 横线形态模型名精确命中（无需归一）→ 原行为不受归一引入影响。
+#[test]
+fn hyphen_model_follows_original_exact_lookup() {
+    let catalog = fake_catalog(&[("acme::gemini-2-5-pro".into(), entry(Some("gemini"), false))]);
+    assert_eq!(
+        resolve_wire_protocol(&catalog, "acme", "gemini-2-5-pro", Some(Endpoint::Responses)),
+        WireProtocol::Gemini,
+        "横线键精确命中 mode，独立于归一路径",
+    );
+}

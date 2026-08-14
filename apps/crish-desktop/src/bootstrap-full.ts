@@ -27,10 +27,14 @@ export async function bootstrapFull(): Promise<void> {
     })(),
 
     // 3. 运行时模型目录快照（DEEPCHECK-02 P0：catalog_get 接线；Rust 目录真源
-    //    → 前端四指标定价；invoke 失败内部降级静态表，恒不抛）
+    //    → 前端四指标定价 + 思考档位单源（T5.2b 描述接口 offered）；invoke 失败
+    //    内部降级静态表 / 提供方默认，恒不抛）
     (async () => {
       const { fetchCatalogSnapshot } = await import('./api/modelCatalog');
       await fetchCatalogSnapshot();
+      const { fetchDescribeEffortsSnapshot } =
+        await import('./api/thinkingGear');
+      await fetchDescribeEffortsSnapshot();
     })(),
   ]);
 

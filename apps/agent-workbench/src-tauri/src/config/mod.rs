@@ -6,12 +6,14 @@
 //! - `credentials.rs`：DPAPI 密钥槽（`secrets/{id}.dpapi`）+ 命令
 //!   `config_secret_set / get / has / clear / reveal`（K-02：默认只回 last4）；
 //! - `persistence.rs`：配置 JSON 原子写（tmp + rename）+ 路径布局 + id 白名单；
+//! - `profile.rs`：多 profile 引擎侧投影（T5.2a · G3 收敛，独立 `profile-config.json`）；
 //! - `resolution.rs`：字段规范化 / Endpoint 解析 / 来源标记；
 //! - `env_filter.rs`：环境变量名清单。
 
 mod credentials;
 mod env_filter;
 mod persistence;
+mod profile;
 mod provider;
 mod resolution;
 

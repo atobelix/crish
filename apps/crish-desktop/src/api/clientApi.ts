@@ -74,8 +74,17 @@ export interface Settings {
   lastChangelogVersion?: string;
   defaultProvider?: string;
   defaultModel?: string;
-  defaultThinkingLevel?:
-    'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  /**
+   * 思考档位偏好（本机设置；单源 = 描述接口，见 THINKING_LEVEL_IDS 移除说明）。
+   *
+   * 语义（G8-c / R4 T4.1「显式档位/默认档位区分」）：
+   * - 缺省 / 'default' → 跟随引擎侧默认档位（描述接口 derived default_effort，省略不注入）；
+   * - 其它字符串 → 尽量透传为显式档位，最终有效性由请求面校验
+   *   （T4.1：白名单外显式档位在请求面拒绝，前端不代答）。
+   *
+   * 不再固化为固定档位集常量（消除前端自造档位表与 Rust 静态表双实现漂移）。
+   */
+  defaultThinkingLevel?: string;
   theme?: string;
   /** UI / mono font preferences (mirrored in crish_fonts) */
   fonts?: {
@@ -132,22 +141,14 @@ export interface Settings {
 /** 回答风格四档（设置 · 个性化） */
 export type ResponseStyle = 'minimal' | 'low' | 'medium' | 'high';
 
-export type ThinkingLevel = NonNullable<Settings['defaultThinkingLevel']>;
+/** 语义档位段（透传）——不为档位面板数据源；描述接口白名单才是单源 */
+export type ThinkingLevel = string;
 
 export const RESPONSE_STYLE_IDS: readonly ResponseStyle[] = [
   'minimal',
   'low',
   'medium',
   'high',
-] as const;
-
-export const THINKING_LEVEL_IDS: readonly ThinkingLevel[] = [
-  'off',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
 ] as const;
 
 export const RESPONSE_STYLE_OPTIONS: ReadonlyArray<{
@@ -210,20 +211,19 @@ export function normalizeResponseStyle(raw: unknown): ResponseStyle {
   return 'medium';
 }
 
+/**
+ * 规范档位透传（纯）。单源 = 描述接口（THINKING_LEVEL_IDS 已移除，front 不维护
+ * 档位面板数据源）；本函数仅做设置持久化的合法值夹取与「提供方默认」归一：
+ *
+ * - 'default' / 空 / 非法 → 'default'（跟随引擎默认档位，不注入显式思考参数）；
+ * - 其余字符串（含 'off' / 'minimal' / 'low' / 'medium' / 'high' / 'xhigh' 等
+ *   引擎已知档位）→ 小写透传；最终请求面有效性由 T4.1 校验，此处不代答。
+ */
 export function normalizeThinkingLevel(raw: unknown): ThinkingLevel {
-  if (
-    raw === 'off' ||
-    raw === 'minimal' ||
-    raw === 'low' ||
-    raw === 'medium' ||
-    raw === 'high' ||
-    raw === 'xhigh'
-  ) {
-    return raw;
-  }
   if (typeof raw === 'string' || typeof raw === 'number') {
     const t = normalizeSettingsText(raw).toLowerCase();
     if (
+      t === 'default' ||
       t === 'off' ||
       t === 'minimal' ||
       t === 'low' ||
@@ -233,8 +233,10 @@ export function normalizeThinkingLevel(raw: unknown): ThinkingLevel {
     ) {
       return t;
     }
+    // 未知字符串：不代答成固定默认（避免把自造档位表当真值），回落「提供方默认」
+    return 'default';
   }
-  return 'medium';
+  return 'default';
 }
 
 /** Coerce loose LS / JSON values to boolean; unknown → fallback. */
@@ -398,17 +400,17 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
   ) {
     const f = o.fonts as Record<string, unknown>;
     const _uiFont =
-        'uiFont' in f
-          ? normalizeSettingsText(f.uiFont) || 'auto'
-          : (o.fonts as Settings['fonts'])?.uiFont;
+      'uiFont' in f
+        ? normalizeSettingsText(f.uiFont) || 'auto'
+        : (o.fonts as Settings['fonts'])?.uiFont;
     const _monoFont =
-        'monoFont' in f
-          ? normalizeSettingsText(f.monoFont) || 'auto'
-          : (o.fonts as Settings['fonts'])?.monoFont;
+      'monoFont' in f
+        ? normalizeSettingsText(f.monoFont) || 'auto'
+        : (o.fonts as Settings['fonts'])?.monoFont;
     const _monoLigatures =
-        'monoLigatures' in f
-          ? normalizeSettingsBool(f.monoLigatures, false)
-          : (o.fonts as Settings['fonts'])?.monoLigatures;
+      'monoLigatures' in f
+        ? normalizeSettingsBool(f.monoLigatures, false)
+        : (o.fonts as Settings['fonts'])?.monoLigatures;
     out.fonts = {
       ...(o.fonts as Settings['fonts']),
       ...(_uiFont !== undefined && { uiFont: _uiFont }),
@@ -505,7 +507,7 @@ const DEFAULT_SETTINGS: Settings = {
   customRules: [],
   defaultProvider: '',
   defaultModel: '',
-  defaultThinkingLevel: 'medium',
+  defaultThinkingLevel: 'default',
   theme: 'default',
   fonts: { uiFont: 'auto', monoFont: 'auto', monoLigatures: false, v: 1 },
   hideThinkingBlock: false,

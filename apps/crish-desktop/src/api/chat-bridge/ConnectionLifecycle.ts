@@ -198,9 +198,7 @@ export function buildHistoryMessages(
   const source = messages ?? [];
   const rawBudget = opts?.tokenBudget;
   const budget =
-    typeof rawBudget === 'number' &&
-    Number.isFinite(rawBudget) &&
-    rawBudget > 0
+    typeof rawBudget === 'number' && Number.isFinite(rawBudget) && rawBudget > 0
       ? Math.floor(rawBudget)
       : HISTORY_TOKEN_BUDGET;
   const excludeId = opts?.excludeId;
@@ -345,16 +343,16 @@ export function createFinishController(
     if (approvalFlow.isDeferredTerminal()) {
       approvalFlow.dispatch({ type: 'force_finish' });
     }
-state.finished = true;
-cleanup();
-try {
-callbacks.onComplete();
-} catch {
-/* swallow-ok: 完成回调抛错不阻断连接终态 */
-}
-};
+    state.finished = true;
+    cleanup();
+    try {
+      callbacks.onComplete();
+    } catch {
+      /* swallow-ok: 完成回调抛错不阻断连接终态 */
+    }
+  };
 
-const tryResumeFinish = () => {
+  const tryResumeFinish = () => {
     if (state.finished || state.cancelled) return;
     const snap = approvalFlow.snapshot();
     if (!snap.deferredTerminal) return;
@@ -400,13 +398,13 @@ export function createStreamCancel(
       reason: mode === 'cooperative' ? 'ui-stop' : 'ui-force-cancel',
     });
 
-state.finished = true;
-try {
-callbacks.onComplete();
-} catch {
-/* swallow-ok: 完成回调抛错不阻断取消终态 */
-}
-};
+    state.finished = true;
+    try {
+      callbacks.onComplete();
+    } catch {
+      /* swallow-ok: 完成回调抛错不阻断取消终态 */
+    }
+  };
 }
 
 /**
@@ -522,12 +520,14 @@ export async function createStreamSession(
       const tl = String(sets?.defaultThinkingLevel || '')
         .trim()
         .toLowerCase();
-      if (tl === 'off') budgetDifficulty = undefined;
-      else if (tl === 'minimal') budgetDifficulty = 'easy';
-      else if (tl === 'low') budgetDifficulty = 'easy';
+      // 「提供方默认」/ off / 未知 → 不注入显式思考（引擎按描述接口默认执行）；
+      // 显式档位 → 推导预算档（会话侧难度）。最终档位有效性由请求面校验（T4.1）。
+      if (tl === '' || tl === 'default' || tl === 'off') {
+        budgetDifficulty = undefined;
+      } else if (tl === 'minimal' || tl === 'low') budgetDifficulty = 'easy';
       else if (tl === 'medium') budgetDifficulty = 'normal';
-      else if (tl === 'high') budgetDifficulty = 'hard';
-      else if (tl === 'xhigh') budgetDifficulty = 'hard';
+      else if (tl === 'high' || tl === 'xhigh') budgetDifficulty = 'hard';
+      else budgetDifficulty = undefined;
 
       const styleKey = String(sets?.responseStyle ?? 'medium');
       const styleMap: Record<string, string> = {
@@ -549,10 +549,10 @@ export async function createStreamSession(
         styleMap.medium;
 
       // P4 T-31：contextWindow 解析（设置预留键 → 生效模型 catalog；缺省 undefined）
-contextWindow = resolveContextWindow(sets);
-} catch {
-/* swallow-ok: contextWindow 解析失败回退 undefined，引擎按默认窗口执行 */
-}
+      contextWindow = resolveContextWindow(sets);
+    } catch {
+      /* swallow-ok: contextWindow 解析失败回退 undefined，引擎按默认窗口执行 */
+    }
 
     const goalMode =
       typeof options?.mode === 'string' ? options.mode.trim() : '';
@@ -681,11 +681,11 @@ export function streamViaEngine(
     (typeof options?.assistantClientMessageId === 'string' &&
       options.assistantClientMessageId.trim()) ||
     '';
-try {
-callbacks.onRunMeta?.({ runId });
-} catch {
-/* swallow-ok: runMeta 回调抛错不阻断 run 启动 */
-}
+  try {
+    callbacks.onRunMeta?.({ runId });
+  } catch {
+    /* swallow-ok: runMeta 回调抛错不阻断 run 启动 */
+  }
 
   const cleanup = () => {
     cleanupStreamState(state);

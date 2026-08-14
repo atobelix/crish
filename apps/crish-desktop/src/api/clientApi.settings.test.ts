@@ -12,7 +12,6 @@ import {
   normalizeThinkingLevel,
   parseSettingsJson,
   RESPONSE_STYLE_OPTIONS,
-  THINKING_LEVEL_IDS,
 } from './clientApi';
 
 describe('settings pure helpers', () => {
@@ -53,14 +52,23 @@ describe('settings pure helpers', () => {
     ]);
   });
 
-  it('normalizeThinkingLevel clamps to known ids', () => {
-    for (const id of THINKING_LEVEL_IDS) {
-      expect(normalizeThinkingLevel(id)).toBe(id);
-    }
+  it('normalizeThinkingLevel passthroughs explicit levels and falls back to provider default', () => {
+    // 单源收敛：档位面板数据源已移交描述接口；normalize 仅做「提供方默认」归一，
+    // 不再固化为自造档位集常量（THINKING_LEVEL_IDS 已移除）。
+    expect(normalizeThinkingLevel('off')).toBe('off');
+    expect(normalizeThinkingLevel('minimal')).toBe('minimal');
+    expect(normalizeThinkingLevel('low')).toBe('low');
+    expect(normalizeThinkingLevel('medium')).toBe('medium');
+    expect(normalizeThinkingLevel('high')).toBe('high');
+    expect(normalizeThinkingLevel('xhigh')).toBe('xhigh');
     expect(normalizeThinkingLevel(' XHIGH ')).toBe('xhigh');
-    expect(normalizeThinkingLevel('bogus')).toBe('medium');
-    expect(normalizeThinkingLevel(undefined)).toBe('medium');
-    expect(normalizeThinkingLevel({ level: 'high' })).toBe('medium');
+    expect(normalizeThinkingLevel('default')).toBe('default');
+    // 空 / 非法 / 非字符串 → 'default'（跟随引擎侧默认档位，不代答固定档）
+    expect(normalizeThinkingLevel('bogus')).toBe('default');
+    expect(normalizeThinkingLevel(undefined)).toBe('default');
+    expect(normalizeThinkingLevel(null)).toBe('default');
+    expect(normalizeThinkingLevel(42)).toBe('default');
+    expect(normalizeThinkingLevel({ level: 'high' })).toBe('default');
   });
 
   it('normalizeSettingsBool coerces loose LS / Chinese yes-no', () => {
@@ -81,7 +89,15 @@ describe('settings pure helpers', () => {
     expect(normalizeCustomRules(null)).toEqual([]);
     expect(normalizeCustomRules('not-array')).toEqual([]);
     expect(
-      normalizeCustomRules(['  keep  ', '\u3000中文规则：禁止外泄\u3000', '', '   ', 12, null, {}]),
+      normalizeCustomRules([
+        '  keep  ',
+        '\u3000中文规则：禁止外泄\u3000',
+        '',
+        '   ',
+        12,
+        null,
+        {},
+      ])
     ).toEqual(['keep', '中文规则：禁止外泄', '12']);
   });
 
@@ -95,7 +111,9 @@ describe('settings pure helpers', () => {
     expect(parseSettingsJson('"str"')).toBeNull();
     expect(parseSettingsJson('{"theme":"dark"}')).toEqual({ theme: 'dark' });
     expect(parseSettingsJson('\u3000{"a":1}\u3000')).toEqual({ a: 1 });
-    expect(parseSettingsJson({ theme: 'default' })).toEqual({ theme: 'default' });
+    expect(parseSettingsJson({ theme: 'default' })).toEqual({
+      theme: 'default',
+    });
   });
 
   it('normalizeSettingsPartial only rewrites present fields (project patch safe)', () => {
@@ -167,7 +185,7 @@ describe('deepMergeSettings', () => {
   it('replaces arrays instead of element-wise merge', () => {
     const merged = deepMergeSettings(
       { customRules: ['old'], nested: { a: 1 } },
-      { customRules: ['new-a', 'new-b'] },
+      { customRules: ['new-a', 'new-b'] }
     );
     expect(merged.customRules).toEqual(['new-a', 'new-b']);
     expect(merged.nested.a).toBe(1);
@@ -189,7 +207,7 @@ describe('clientApi settings hydrate / save', () => {
     // 模拟历史残缺 settings
     localStorage.setItem(
       'crish_settings',
-      JSON.stringify({ customRules: ['rule-a'], theme: 'default' }),
+      JSON.stringify({ customRules: ['rule-a'], theme: 'default' })
     );
     const s = await clientApi.getSettingsEx('__global__');
     expect(s.customRules).toEqual(['rule-a']);
@@ -205,7 +223,9 @@ describe('clientApi settings hydrate / save', () => {
     expect(broken.responseStyle).toBe('medium');
     expect(broken.theme).toBe('default');
     // rewritten to valid default JSON
-    expect(() => JSON.parse(localStorage.getItem('crish_settings')!)).not.toThrow();
+    expect(() =>
+      JSON.parse(localStorage.getItem('crish_settings')!)
+    ).not.toThrow();
 
     localStorage.setItem('crish_settings', '[]');
     const arr = await clientApi.getSettingsEx('__global__');
@@ -227,11 +247,11 @@ describe('clientApi settings hydrate / save', () => {
         tabModeEnabled: '否',
         customRules: ['\u3000保持中文\u3000', '', 99],
         defaultModel: '  模型-甲  ',
-      }),
+      })
     );
     const s = await clientApi.getSettingsEx('__global__');
     expect(s.responseStyle).toBe('high');
-    expect(s.defaultThinkingLevel).toBe('medium');
+    expect(s.defaultThinkingLevel).toBe('default');
     expect(s.hideThinkingBlock).toBe(true);
     expect(s.tabModeEnabled).toBe(false);
     expect(s.customRules).toEqual(['保持中文', '99']);
@@ -267,7 +287,9 @@ describe('clientApi settings hydrate / save', () => {
   });
 
   it('tabModeEnabled false after save false overwrites true', async () => {
-    await clientApi.saveSettingsEx('__global__', 'global', { tabModeEnabled: true });
+    await clientApi.saveSettingsEx('__global__', 'global', {
+      tabModeEnabled: true,
+    });
     const off = await clientApi.saveSettingsEx('__global__', 'global', {
       tabModeEnabled: false,
     });
@@ -314,7 +336,9 @@ describe('clientApi settings hydrate / save', () => {
   });
 
   it('corrupt project settings fall back to global', async () => {
-    await clientApi.saveSettingsEx('__global__', 'global', { responseStyle: 'minimal' });
+    await clientApi.saveSettingsEx('__global__', 'global', {
+      responseStyle: 'minimal',
+    });
     localStorage.setItem('crish_project_settings_c:/x', '{nope');
     const s = await clientApi.getSettingsEx('C:/x');
     expect(s.responseStyle).toBe('minimal');
@@ -323,7 +347,7 @@ describe('clientApi settings hydrate / save', () => {
   it('legacy conex_pi_settings key migrates on read', async () => {
     localStorage.setItem(
       'conex_pi_settings',
-      JSON.stringify({ theme: 'legacy', customRules: ['旧规则'] }),
+      JSON.stringify({ theme: 'legacy', customRules: ['旧规则'] })
     );
     const s = await clientApi.getSettingsEx('__global__');
     expect(s.theme).toBe('legacy');

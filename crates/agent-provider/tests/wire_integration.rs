@@ -378,8 +378,9 @@ fn dialect_resolve_thinking_params_adaptive_for_new_gen() {
 // ─────────── 6. 路由跨层（C12 四轨 · bundled catalog 真源） ───────────
 
 /// `resolve_wire_protocol` × 内置目录对 anthropic/gemini 的实际路由真源核对。
-/// 【依赖 A1/目录数据】当前 catalog mode="chat"（非专轨值），据实记录实际 chat 路由；
-/// 目录 mode 演进为专轨值时本断言须同步更新（见跨层结论报告）。
+/// 【依赖 A1/A6 目录数据】目录 mode 已补录为专轨值（anthropic→"anthropic"、
+/// gemini→"gemini"），模型级 mode 优先于全局 endpoint：claude/gemini 条目
+/// 即使显式 ChatCompletions 端点也路由到对应专轨协议（见跨层结论报告 A6）。
 #[test]
 fn wire_routing_bundled_catalog_ground_truth() {
     let catalog = ModelCatalog::bundled();
@@ -392,18 +393,18 @@ fn wire_routing_bundled_catalog_ground_truth() {
     let gemini = resolve_wire_protocol(
         &catalog,
         "gemini",
-        "gemini-2.5-pro",
+        "gemini-2-5-pro",
         Some(Endpoint::ChatCompletions),
     );
     assert_eq!(
         claude,
-        WireProtocol::Chat,
-        "catalog 当前 mode=chat → claude 路由 chat"
+        WireProtocol::Anthropic,
+        "catalog mode=\"anthropic\" → claude 路由 Anthropic（mode 优先于 endpoint）"
     );
     assert_eq!(
         gemini,
-        WireProtocol::Chat,
-        "catalog 当前 mode=chat → gemini 路由 chat"
+        WireProtocol::Gemini,
+        "catalog mode=\"gemini\" → gemini 路由 Gemini（mode 优先于 endpoint）"
     );
     assert_eq!(WireProtocol::Anthropic.as_str(), "anthropic");
     assert_eq!(WireProtocol::Gemini.as_str(), "gemini");

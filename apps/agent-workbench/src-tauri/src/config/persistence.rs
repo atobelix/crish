@@ -36,7 +36,7 @@ pub(crate) fn default_secret_path() -> PathBuf {
     config_dir().join(DEFAULT_SECRET_FILE_NAME)
 }
 
-fn config_dir() -> PathBuf {
+pub(crate) fn config_dir() -> PathBuf {
     if let Ok(path) = env::var("CRISH_WORKBENCH_CONFIG_DIR") {
         if let Some(path) = non_empty_config_value(path) {
             return PathBuf::from(path);

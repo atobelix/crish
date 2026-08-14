@@ -32,6 +32,10 @@ use super::persistence::{
     default_config_path, default_secret_path, read_persisted_config, write_persisted_config,
     PersistedProviderConfig,
 };
+use super::profile::{
+    apply_profile_config, clear_active_profile, resolve_active_context, snapshot_providers,
+    ActiveProviderContext, PersistedProfileState,
+};
 use super::resolution::{
     first_env_value, last4, non_empty_config_value, normalize_config_value,
     normalize_credential_mode, normalize_provider_endpoint, ApiKeySource, ProviderConfigDiagnostic,
@@ -49,6 +53,8 @@ pub(crate) struct ApiConfigStore {
     secret_path: PathBuf,
     credential_store: CredentialStore,
     diagnostic: Option<ProviderConfigDiagnostic>,
+    /// 多 profile 引擎侧投影（T5.2a · G3 收敛）：活跃 profile → 每 profile 端点/模型。
+    profile_state: PersistedProfileState,
 }
 
 impl ApiConfigStore {
@@ -88,6 +94,7 @@ impl ApiConfigStore {
             secret_path,
             credential_store,
             diagnostic,
+            profile_state: PersistedProfileState::load(),
         }
     }
 
@@ -111,8 +118,20 @@ impl ApiConfigStore {
     }
 
     // ── effective_* 函数族：runtime → persisted → env → 默认 ──
+    // 多 profile 投影（T5.2a）：活跃 profile 三件套齐备时，其端点/模型/凭据
+    // 优先于单轨（对齐 C2 per-provider 语义）；否则回退既有单轨逻辑。
+
+    /// 活跃 profile 生效上下文（解析失败/未启用 → None，回退单轨）。密钥读取
+    /// 经 profile 密钥槽（`secrets/{id}.dpapi`），不触碰单轨 direct-key 槽。
+    fn active_profile_context(&self) -> Option<ActiveProviderContext> {
+        resolve_active_context(&self.profile_state).ok().flatten()
+    }
 
     fn effective_credential_mode(&self) -> String {
+        if self.active_profile_context().is_some() {
+            // profile 轨走 direct（壳层 profile 均为直接 api key）。
+            return "direct".to_string();
+        }
         self.runtime
             .credential_mode
             .clone()
@@ -129,6 +148,9 @@ impl ApiConfigStore {
     }
 
     fn effective_endpoint(&self) -> String {
+        if let Some(context) = self.active_profile_context() {
+            return context.endpoint;
+        }
         self.runtime
             .endpoint
             .clone()
@@ -142,6 +164,9 @@ impl ApiConfigStore {
     }
 
     fn effective_stream(&self) -> bool {
+        if let Some(context) = self.active_profile_context() {
+            return context.stream;
+        }
         self.runtime
             .stream
             .or(self.persisted.stream)
@@ -149,6 +174,13 @@ impl ApiConfigStore {
     }
 
     fn effective_api_key(&self) -> Option<ResolvedSecret> {
+        if let Some(context) = self.active_profile_context() {
+            return Some(ResolvedSecret {
+                value: context.api_key,
+                source: ApiKeySource::RuntimeUpdate,
+                persistence: CredentialPersistence::Persisted,
+            });
+        }
         if self.effective_credential_mode() == "account-center" {
             return None;
         }
@@ -180,6 +212,9 @@ impl ApiConfigStore {
     }
 
     fn effective_base_url(&self) -> Option<String> {
+        if let Some(context) = self.active_profile_context() {
+            return Some(context.base_url);
+        }
         self.runtime
             .base_url
             .clone()
@@ -188,6 +223,9 @@ impl ApiConfigStore {
     }
 
     fn effective_model(&self) -> Option<String> {
+        if let Some(context) = self.active_profile_context() {
+            return Some(context.model);
+        }
         self.runtime
             .model
             .clone()
@@ -238,14 +276,21 @@ impl ApiConfigStore {
         self.save_non_secret_config()
     }
 
+    /// 手动单轨 baseUrl 写入（config_update / REST settings 共用）。写入即视为
+    /// 退出 profile 轨（T5.2a：避免陈旧活跃 profile 遮蔽手动配置），先清活跃
+    /// profile 再落单轨槽。
     pub(crate) fn set_base_url(&mut self, value: String) -> Result<(), String> {
+        clear_active_profile(&mut self.profile_state)?;
         let value = non_empty_config_value(value);
         self.runtime.base_url = value.clone();
         self.persisted.base_url = value;
         self.save_non_secret_config()
     }
 
+    /// 手动单轨 model 写入（config_update / REST settings 共用）；同 [Self::set_base_url]，
+    /// 写入即视为退出 profile 轨。
     pub(crate) fn set_model(&mut self, value: String) -> Result<(), String> {
+        clear_active_profile(&mut self.profile_state)?;
         let value = non_empty_config_value(value);
         self.runtime.model = value.clone();
         self.persisted.model = value;
@@ -303,6 +348,7 @@ impl ApiConfigStore {
             .as_ref()
             .map(|secret| secret.persistence)
             .unwrap_or(CredentialPersistence::Unset);
+        let active_profile_id = self.profile_state.active_profile_id.clone();
         serde_json::json!({
             "apiKey": "",
             "baseUrl": self.effective_base_url().unwrap_or_default(),
@@ -314,6 +360,8 @@ impl ApiConfigStore {
             "endpoint": self.effective_endpoint(),
             "stream": self.effective_stream(),
             "credentialPersistence": persistence.as_str(),
+            "activeProfileId": active_profile_id.unwrap_or_default(),
+            "providers": snapshot_providers(&self.profile_state),
             "credentialDiagnostic": self.diagnostic.as_ref().map(|diagnostic| {
                 serde_json::json!({
                     "code": diagnostic.code,
@@ -546,15 +594,18 @@ pub(crate) fn config_profile_apply(
         })?,
     };
 
-    // 2. 引擎配置写入（进程内 ApiConfigStore；密钥同步进引擎直连槽）。
+    // 2. 多 profile 投影写入（T5.2a）：per-profile 端点/模型落 `profile_state`
+    //    （活跃 profile 切到 profileId），非敏感配置互不复用（C2 per-provider
+    //    语义）；同时把密钥同步进单轨 direct 槽（既有 `effective_*` / 状态面
+    //    hasApiKey 展示兼容）。
     with_store_mut(|store| {
         store.set_api_key(plain)?;
-        if let Some(url) = base_url {
-            store.set_base_url(url)?;
-        }
-        if let Some(m) = model {
-            store.set_model(m)?;
-        }
+        apply_profile_config(
+            &mut store.profile_state,
+            &profile_id,
+            base_url.clone(),
+            model.clone(),
+        )?;
         Ok(())
     })?;
 

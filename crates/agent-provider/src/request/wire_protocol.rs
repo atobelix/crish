@@ -12,6 +12,12 @@
 //!
 //! 决议优先级（设计，保持向后兼容）：
 //!
+//! 0. **点号→横线归一（A6）**：lookup 键采用**横线形态**（如 `gemini-2-5-pro`，目录顶层键
+//!    `vendor::model` 全程横线），而 API 请求面常使用**点号异形体**（apiModel，如
+//!    `gemini-2.5-pro`）——点号形态精确匹配目录键会落空而误走 chat 兜底。故在一次精确
+//!    lookup 落空后，用「点号→横线」归一表单体重试一次（仅影响目录命中，不改写返回的
+//!    protocol；未命中的点号模型仍以 chat 兜底语义落回原行为）。仅在该模型名含点号时
+//!    触发，不影响既有横线键路径。
 //! 1. **模型级 `mode`**（条目命中且 `mode` 有值，单一真源）：
 //!    - `"responses"` → [WireProtocol::Responses]
 //!    - `"anthropic"` → [WireProtocol::Anthropic]
@@ -80,8 +86,19 @@ pub fn resolve_wire_protocol(
         _ => WireProtocol::Chat,
     };
 
+    // 0. 一次精确目录命中（含 model 级 mode 与 supports_responses 决定）。
+    //    未命中且模型名含点号（apiModel 异形体）→ 用点号→横线归一表单体重试一次
+    //    （A6；如 `gemini-2.5-pro` → 横线键 `gemini-2-5-pro`）。
+    let mut effective_model = model;
+    let normalized = model.contains('.').then(|| model.replace('.', "-"));
+    if catalog.lookup(vendor, effective_model).is_none() {
+        if let Some(norm) = normalized.as_deref() {
+            effective_model = norm;
+        }
+    }
+
     // 1. 模型级 mode（单一真源）
-    if let Some(entry) = catalog.lookup(vendor, model) {
+    if let Some(entry) = catalog.lookup(vendor, effective_model) {
         if let Some(mode) = entry.mode.as_deref() {
             match mode {
                 "responses" => return WireProtocol::Responses,

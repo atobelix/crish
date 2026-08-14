@@ -64,12 +64,15 @@ export function buildStableCacheKey(sessionId?: string): string | undefined {
 }
 
 /**
- * Maps frontend thinking levels ('off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh')
- * to standard OpenAI / DeepSeek reasoning parameters.
+ * Maps frontend thinking levels ('off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+ * | 'default') to standard OpenAI / DeepSeek reasoning parameters.
+ *
+ * 单源收敛（T5.2b）：'default'（提供方默认）与 'off' 均不注入显式思考参数——
+ * 省略档位交由请求面按描述接口默认执行（G8-c / R4 T4.1）。
  */
 function buildThinkingParams(thinkingLevel?: string): Record<string, unknown> {
   const level = (thinkingLevel || '').trim().toLowerCase();
-  if (!level || level === 'off') return {};
+  if (!level || level === 'off' || level === 'default') return {};
 
   let effort: 'low' | 'medium' | 'high' = 'medium';
   let budgetTokens = 4096;

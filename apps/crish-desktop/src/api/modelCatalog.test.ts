@@ -57,12 +57,17 @@ import {
   type CatalogModelEntry,
   type CatalogSnapshotWire,
 } from './modelCatalog';
+import {
+  applyCatalogEfforts,
+  clearCatalogEfforts,
+  effortsFromEntryWire,
+  thinkingLevelOptionsFor,
+  isExplicitThinkingLevel,
+  resolveCatalogEfforts,
+} from './thinkingGear';
 import { saveProfiles, setProfileKey } from './providerProfiles';
 import { invokeResult } from './tauriInvoke';
-import {
-  clearCatalogCacheSnapshot,
-  resolve4dPrices,
-} from './pricingStore';
+import { clearCatalogCacheSnapshot, resolve4dPrices } from './pricingStore';
 
 function entry(
   partial: Partial<CatalogModelEntry> &
@@ -598,11 +603,22 @@ describe('modelCatalog', () => {
           cacheReadPrice: 0.2,
           cacheWritePrice: 0.0,
           tieredPricing: [
-            { minTokens: 200_000, inputPrice: 4.0, outputPrice: 18.0, cacheReadPrice: 0.4 },
+            {
+              minTokens: 200_000,
+              inputPrice: 4.0,
+              outputPrice: 18.0,
+              cacheReadPrice: 0.4,
+            },
           ],
         },
         // null 价 = 未收录（禁 0 占位）
-        { model: 'gpt-5.5-pro', inputPrice: 30.0, outputPrice: 180.0, cacheReadPrice: null, cacheWritePrice: 0.0 },
+        {
+          model: 'gpt-5.5-pro',
+          inputPrice: 30.0,
+          outputPrice: 180.0,
+          cacheReadPrice: null,
+          cacheWritePrice: 0.0,
+        },
       ],
     };
 
@@ -675,6 +691,110 @@ describe('modelCatalog', () => {
       } finally {
         warn.mockRestore();
       }
+    });
+  });
+
+  describe('思考档位单源（描述接口 offered → 档位面板；T5.2b）', () => {
+    describe('effortsFromEntryWire（Rust 描述接口档位映射 → 提供档位集 + 默认档位）', () => {
+      it('跨 thinkingLevelMap / reasoningEffortTiers 并集，仅收录提供档位，wire 排序', () => {
+        const r = effortsFromEntryWire({
+          thinkingLevelMap: { high: 'high', low: 'low', medium: 'medium' },
+        });
+        expect(r).toEqual({
+          offered: ['high', 'low', 'medium'],
+          defaultEffort: 'high',
+        });
+      });
+
+      it('跨双映射并集（offered_levels 语义）：隐藏档（null）不入集，非 null wire 跨映射合并', () => {
+        const r = effortsFromEntryWire({
+          thinkingLevelMap: { low: null, medium: 'medium', high: 'high' },
+          reasoningEffortTiers: { low: 'low', minimal: 'minimal' },
+        });
+        // 并集语义（对齐 Rust offered_levels()）：
+        // thinkingLevelMap 的 low:null 隐藏不入集；reasoningEffortTiers 的 low:low / minimal 是提供档
+        expect(r?.offered).toEqual(['high', 'low', 'medium', 'minimal']);
+        expect(r?.defaultEffort).toBe('high');
+      });
+
+      it('两映射均缺省 / 全隐藏 → null（无能力元数据 → 档位面板回落提供方默认）', () => {
+        expect(effortsFromEntryWire({})).toBeNull();
+        expect(effortsFromEntryWire(undefined)).toBeNull();
+        expect(
+          effortsFromEntryWire({ thinkingLevelMap: { low: null } })
+        ).toBeNull();
+      });
+    });
+
+    describe('thinkingLevelOptionsFor（档位面板渲染选项：能力档位 + 提供方默认）', () => {
+      it('能力元数据 ["low","medium","high"] → 只渲染这三项 + 提供方默认（首项）', () => {
+        const opts = thinkingLevelOptionsFor({
+          offered: ['low', 'medium', 'high'],
+          defaultEffort: 'low',
+        });
+        expect(opts.map((o) => o.value)).toEqual([
+          'default',
+          'low',
+          'medium',
+          'high',
+        ]);
+        expect(opts[0]).toMatchObject({
+          value: 'default',
+          isProviderDefault: true,
+        });
+        expect(opts.slice(1).every((o) => !o.isProviderDefault)).toBe(true);
+        expect(opts.find((o) => o.value === 'medium')?.label).toBe('详细');
+      });
+
+      it('无能力元数据 → 只有提供方默认项（不渲染自造档位）', () => {
+        const opts = thinkingLevelOptionsFor(null);
+        expect(opts.map((o) => o.value)).toEqual(['default']);
+        expect(opts[0].isProviderDefault).toBe(true);
+        expect(thinkingLevelOptionsFor({ offered: [] })).toEqual([
+          { value: 'default', label: '提供方默认', isProviderDefault: true },
+        ]);
+      });
+    });
+
+    it('isExplicitThinkingLevel：提供方默认 / 空 不注入显式档位，其余命中', () => {
+      expect(isExplicitThinkingLevel('default')).toBe(false);
+      expect(isExplicitThinkingLevel('')).toBe(false);
+      expect(isExplicitThinkingLevel('medium')).toBe(true);
+      expect(isExplicitThinkingLevel('off')).toBe(true);
+    });
+
+    it('describe 快照 → resolveCatalogEfforts 单源读取（含 apiModel 别名 / 无元数据回落）', () => {
+      clearCatalogEfforts();
+      applyCatalogEfforts({
+        entries: [
+          {
+            model: 'deepseek-v4-flash',
+            reasoningEffortTiers: {
+              low: 'low',
+              medium: 'medium',
+              high: 'high',
+            },
+          },
+          {
+            model: 'gemini-3-1-pro',
+            apiModel: 'gemini-3.1-pro-preview',
+            thinkingLevelMap: { low: 'low', medium: 'medium' },
+          },
+        ],
+      });
+      // 主键
+      expect(resolveCatalogEfforts('deepseek-v4-flash')).toEqual({
+        offered: ['high', 'low', 'medium'],
+        defaultEffort: 'high',
+      });
+      // apiModel 别名同享
+      expect(resolveCatalogEfforts('gemini-3.1-pro-preview')).toEqual({
+        offered: ['low', 'medium'],
+        defaultEffort: 'low',
+      });
+      // 未收录 → 空 offered（档位面板仅提供方默认）
+      expect(resolveCatalogEfforts('unknown-model')).toEqual({ offered: [] });
+      clearCatalogEfforts();
     });
   });
 });

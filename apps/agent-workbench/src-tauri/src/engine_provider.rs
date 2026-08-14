@@ -288,10 +288,14 @@ impl ProviderCall for HttpProviderCall {
         &self,
         request: &ProviderRequest<'a>,
     ) -> Result<ProviderEventStream, ClassifiedStreamError> {
-        // 1. 同步构建请求体（返回流 'static：请求体必须在此处序列化完毕）。
+        // 1. 请求面思考档位拒绝校验（战役 I4 · R5 B-1）：显式档位不在模型能力白名单
+        //    （describe_model C9）→ 流前 Err（分类错误，不降级不改写）——**HTTP I/O 之前**
+        //    返回；省略 / off / auto → 放行（省略即不发送思考参数）。随后构建请求体、
+        //    发起 HTTP（其余照旧）。
         //    R3 T3.2：协议路由单一真源——URL / body / parser 三处统一由
         //    effective_protocol 决策，保证四轨同轨。
         let protocol = effective_protocol(&self.config);
+        thinking::validate_reasoning_effort(&self.config, request.reasoning_effort)?;
         let body = self.request_body_for(protocol, request);
         let url = provider_url(&self.config);
 
