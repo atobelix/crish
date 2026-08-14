@@ -19,8 +19,8 @@ use orchestrator::events::EventQueue;
 use orchestrator::run::{CancelMode, CancelPath, RunManager};
 
 use common::{
-    agent_end, agent_start, approval_requested, approval_resolved, assert_single_terminal,
-    outcome, setup,
+    agent_end, agent_start, approval_requested, approval_resolved, assert_single_terminal, outcome,
+    setup,
 };
 
 /// 审批挂起/恢复往返：awaiting-approval 为中间态，不终结 run
@@ -37,7 +37,11 @@ async fn request_and_resolve_approval_roundtrip_keeps_run_alive() {
     assert_eq!(run.status, RunStatus::AwaitingApproval);
     assert!(!run.is_terminal(), "awaiting-approval 为中间态");
     assert!(!run.terminal_sent());
-    assert_eq!(mem.runs()[0].status, RunStatus::AwaitingApproval, "中间态可观测");
+    assert_eq!(
+        mem.runs()[0].status,
+        RunStatus::AwaitingApproval,
+        "中间态可观测"
+    );
 
     // 恢复：awaiting-approval → running
     run.resolve_approval(store.as_ref()).await.unwrap();
@@ -190,10 +194,11 @@ async fn resolve_approval_without_request_is_rejected() {
     let mut run = manager.start_run("s1", "r_approval_miss").await.unwrap();
 
     let err = run.resolve_approval(store.as_ref()).await.unwrap_err();
-    assert_eq!(err, orchestrator::run::RunError::Transition(
-        orchestrator::run::TransitionError {
+    assert_eq!(
+        err,
+        orchestrator::run::RunError::Transition(orchestrator::run::TransitionError {
             from: RunStatus::Running,
             event: "APPROVAL_RESOLVED",
-        }
-    ));
+        })
+    );
 }

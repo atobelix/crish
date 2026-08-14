@@ -31,7 +31,7 @@
 //! - 手工 seed API 可保留，**不得**作为 A-QRY-01 唯一路径
 
 use super::{StoreError, WorkspaceStore};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::collections::BTreeSet;
 
 /// Logseq 风格块引用 `((id))` 的 `block_refs.kind`。

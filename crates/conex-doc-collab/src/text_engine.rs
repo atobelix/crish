@@ -38,7 +38,6 @@ unsafe impl Send for TextHost {}
 #[allow(unsafe_code)]
 unsafe impl Sync for TextHost {}
 
-
 impl TextHost {
     pub fn new() -> Self {
         let doc = Doc::new();
@@ -91,6 +90,10 @@ pub enum TextEngineError {
     UpdateDecode(String),
     #[error("yrs apply update: {0}")]
     UpdateApply(String),
+    #[error("no undo history")]
+    NoUndoHistory,
+    #[error("no redo history")]
+    NoRedoHistory,
 }
 
 /// 叶子文本引擎：热 Doc 表 + 全量快照 + 冷藏二进制 + pin/LRU。
@@ -292,10 +295,7 @@ impl TextEngine {
         insert: &str,
     ) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
-        let host = self
-            .hot
-            .get_mut(&id)
-            .expect("ensure_hot 后必热");
+        let host = self.hot.get_mut(&id).expect("ensure_hot 后必热");
         let text = host.doc.get_or_insert_text(ROOT_TEXT);
         let current = {
             let txn = host.doc.transact();
@@ -330,10 +330,7 @@ impl TextEngine {
         bytes: &[u8],
     ) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
-        let host = self
-            .hot
-            .get_mut(&id)
-            .expect("ensure_hot 后必热");
+        let host = self.hot.get_mut(&id).expect("ensure_hot 后必热");
         {
             let remote_origin = YrsOrigin::from("remote");
             let mut txn = host.doc.transact_mut_with(remote_origin);
@@ -370,16 +367,16 @@ impl TextEngine {
     /// 仅回退属于本地 Client 的变更，不伤害并发远端协作者的文本。
     pub fn undo_text(&mut self, id: BlockId) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
-        let current = {
-            let host = self
-                .hot
-                .get_mut(&id)
-                .expect("ensure_hot 后必热");
-            let _ = host.undo_mgr.undo_blocking();
+        let (undone, current) = {
+            let host = self.hot.get_mut(&id).expect("ensure_hot 后必热");
+            let undone = host.undo_mgr.undo_blocking();
             let text = host.doc.get_or_insert_text(ROOT_TEXT);
             let txn = host.doc.transact();
-            text.get_string(&txn)
+            (undone, text.get_string(&txn))
         };
+        if !undone {
+            return Err(TextEngineError::NoUndoHistory);
+        }
         self.snapshots.insert(id, Arc::from(current.as_str()));
         self.touch_lru(id);
         self.evict_cold_if_needed();
@@ -389,16 +386,16 @@ impl TextEngine {
     /// 执行指定块的文本级 CRDT 原生因果重做（UndoManager）。
     pub fn redo_text(&mut self, id: BlockId) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
-        let current = {
-            let host = self
-                .hot
-                .get_mut(&id)
-                .expect("ensure_hot 后必热");
-            let _ = host.undo_mgr.redo_blocking();
+        let (redone, current) = {
+            let host = self.hot.get_mut(&id).expect("ensure_hot 后必热");
+            let redone = host.undo_mgr.redo_blocking();
             let text = host.doc.get_or_insert_text(ROOT_TEXT);
             let txn = host.doc.transact();
-            text.get_string(&txn)
+            (redone, text.get_string(&txn))
         };
+        if !redone {
+            return Err(TextEngineError::NoRedoHistory);
+        }
         self.snapshots.insert(id, Arc::from(current.as_str()));
         self.touch_lru(id);
         self.evict_cold_if_needed();
@@ -459,8 +456,6 @@ impl TextEngine {
         }
         self.lru.retain(|x| *x != id);
     }
-
-
 
     #[allow(dead_code)] // init_block_with_text 热路径
     fn rewrite_hot_from_snapshot(&mut self, id: BlockId) {
@@ -536,7 +531,6 @@ pub(crate) struct TextEngineCheckpoint {
     /// 检查点时刻处于热态的块 id（恢复后 rehydrate）。
     was_hot: HashSet<BlockId>,
 }
-
 
 /// char 闭开区间 → UTF-8 字节起点与删除字节长度。
 fn char_range_to_bytes(s: &str, start: u32, end: u32) -> Result<(u32, u32), TextEngineError> {
@@ -682,8 +676,13 @@ mod tests {
             eng.apply_edit(other, 0, 1, "y").unwrap();
         }
         // 本地冷路径 edit（不依赖跨 Doc 全量 merge 语义）
-        eng.apply_edit(cold_id, before.chars().count() as u32, before.chars().count() as u32, "!")
-            .unwrap();
+        eng.apply_edit(
+            cold_id,
+            before.chars().count() as u32,
+            before.chars().count() as u32,
+            "!",
+        )
+        .unwrap();
         assert_eq!(eng.read_text(cold_id), format!("{before}!"));
         // remote API 烟雾：对登记块 apply 不 panic / 不静默忽略
         let _ = bytes; // 保留构造以备后续真 CRDT 互推
@@ -779,7 +778,6 @@ mod tests {
         drop(host);
     }
 
-
     /// CRDT 因果撤销测试：并发远端编辑不受本地 Undo 破坏
     #[test]
     fn test_causal_undo_preserves_concurrent_remote_insert() {
@@ -873,7 +871,3 @@ mod tests {
         assert_eq!(redone, "你好🎉世界👨‍👩‍👧‍👦");
     }
 }
-
-
-
-

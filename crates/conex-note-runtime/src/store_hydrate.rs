@@ -60,9 +60,10 @@ impl StoreNoteBackend {
             return Ok(arc);
         }
         // 慢路径（首次打开）：load_doc + hydrate 不持 map 锁（I/O 出锁）
-        let blob = self.store.load_doc(doc_id).map_err(|e| {
-            NoteBackendError::ApplyFailed(format!("load_doc: {e}"))
-        })?;
+        let blob = self
+            .store
+            .load_doc(doc_id)
+            .map_err(|e| NoteBackendError::ApplyFailed(format!("load_doc: {e}")))?;
         let session = DocSession::hydrate(doc_id.to_string(), blob)
             .map_err(|e| NoteBackendError::ApplyFailed(format!("hydrate: {e}")))?
             .with_persistence(Box::new(self.store.clone()));
@@ -136,9 +137,7 @@ impl StoreNoteBackend {
     ) -> Result<DocSessionHydrateProjection, NoteBackendError> {
         let doc_id = doc_id.trim();
         if doc_id.is_empty() {
-            return Err(NoteBackendError::Invalid(
-                "doc_id must be non-empty".into(),
-            ));
+            return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
         }
         let limit = limit.clamp(1, 200) as usize;
         let arc = self.session_handle(doc_id)?;
@@ -170,9 +169,7 @@ impl StoreNoteBackend {
     ) -> Result<DocSessionHydrateProjection, NoteBackendError> {
         let doc_id = doc_id.trim();
         if doc_id.is_empty() {
-            return Err(NoteBackendError::Invalid(
-                "doc_id must be non-empty".into(),
-            ));
+            return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
         }
         self.remove_session_for_cold(doc_id);
         self.hydrate_document_from_session(doc_id, limit)

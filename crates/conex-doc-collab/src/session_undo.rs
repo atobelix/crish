@@ -80,6 +80,7 @@ impl DocSession {
     /// - `on_committed` 失败 → 内存态与栈深度回滚到 undo 前（P-H2 同向）
     ///
     /// **redo 本波未交付**。
+    #[deprecated(note = "legacy full tree undo; use text_undo for CRDT causal undo")]
     pub fn undo(&mut self, filter: Option<Origin>) -> Result<DocEvent, UndoError> {
         let top = self.undo_stack.last().ok_or(UndoError::Empty)?;
         if let Some(expected) = filter {
@@ -147,10 +148,7 @@ impl DocSession {
         let pre = self.capture_memory_snapshot();
         let rev_before = self.rev;
 
-        let new_text = match self.text_engine.undo_text(id) {
-            Ok(t) => t,
-            Err(e) => return Err(e.into()),
-        };
+        let new_text = self.text_engine.undo_text(id)?;
         if let Some(n) = self.tree.nodes.get_mut(&id) {
             n.text_snapshot = Some(new_text.clone());
         }
@@ -170,7 +168,8 @@ impl DocSession {
         self.last_text_updates = text_payloads.clone();
 
         // 统一 commit 面：期望 = increment 前 rev（rev_before）
-        if let Err(e) = self.emit_commit(Origin::User, tx_id, rev, Some(rev_before), &text_payloads) {
+        if let Err(e) = self.emit_commit(Origin::User, tx_id, rev, Some(rev_before), &text_payloads)
+        {
             self.restore_memory_snapshot(pre);
             return Err(e);
         }
@@ -186,10 +185,7 @@ impl DocSession {
         let pre = self.capture_memory_snapshot();
         let rev_before = self.rev;
 
-        let new_text = match self.text_engine.redo_text(id) {
-            Ok(t) => t,
-            Err(e) => return Err(e.into()),
-        };
+        let new_text = self.text_engine.redo_text(id)?;
         if let Some(n) = self.tree.nodes.get_mut(&id) {
             n.text_snapshot = Some(new_text.clone());
         }
@@ -208,7 +204,8 @@ impl DocSession {
         };
         self.last_text_updates = text_payloads.clone();
 
-        if let Err(e) = self.emit_commit(Origin::User, tx_id, rev, Some(rev_before), &text_payloads) {
+        if let Err(e) = self.emit_commit(Origin::User, tx_id, rev, Some(rev_before), &text_payloads)
+        {
             self.restore_memory_snapshot(pre);
             return Err(e);
         }
@@ -226,4 +223,3 @@ impl DocSession {
         self.text_engine.can_redo_text(id)
     }
 }
-

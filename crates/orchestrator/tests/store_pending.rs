@@ -10,8 +10,8 @@
 
 mod common;
 
-use orchestrator::PendingMessageQueue;
 use orchestrator::steering_queue::SteeringInputEntry;
+use orchestrator::PendingMessageQueue;
 
 /// 构造按 run 关联的普通用户输入条目（group_id 承载 run 归属；
 /// T06.3 Q15：session_id 恒空字段已删除）
@@ -71,7 +71,9 @@ fn pending_withdrawn_by_run_keeps_other_runs_intact() {
     assert_eq!(removed[0].id, "a1", "撤回保持 FIFO 顺序");
     assert_eq!(removed[1].id, "a2");
     assert!(
-        removed.iter().all(|e| e.group_id.as_deref() == Some("run-a")),
+        removed
+            .iter()
+            .all(|e| e.group_id.as_deref() == Some("run-a")),
         "只撤回目标 run"
     );
 
@@ -143,7 +145,11 @@ fn pending_capacity_evicts_oldest_non_steering_keeps_steering() {
     queue.enqueue(run_steering("r2", "s1", "steer-1", 4));
     assert!(queue.has_pending_steering());
     let ids: Vec<String> = queue.dequeue_all().into_iter().map(|e| e.id).collect();
-    assert_eq!(ids, vec!["u2", "u3", "s1"], "steering 保留、最旧普通消息被挤掉");
+    assert_eq!(
+        ids,
+        vec!["u2", "u3", "s1"],
+        "steering 保留、最旧普通消息被挤掉"
+    );
 
     // 全为 steering 满容量：新普通消息被丢弃、新 steering 挤掉最旧
     let mut all_steer = PendingMessageQueue::with_capacity(2);
@@ -167,7 +173,10 @@ fn pending_default_capacity_and_predicates() {
     for i in 0..(orchestrator::steering_queue::DEFAULT_QUEUE_CAPACITY + 5) {
         queue.enqueue(run_entry("r1", &format!("m-{i}"), "x", i as u64));
     }
-    assert_eq!(queue.len(), orchestrator::steering_queue::DEFAULT_QUEUE_CAPACITY);
+    assert_eq!(
+        queue.len(),
+        orchestrator::steering_queue::DEFAULT_QUEUE_CAPACITY
+    );
     assert_eq!(
         queue.peek().expect("队首").id,
         "m-5",

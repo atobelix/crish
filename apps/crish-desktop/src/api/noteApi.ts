@@ -57,7 +57,9 @@ import { invokeTyped } from './tauriInvoke';
 import {
   NOTE_CMD_DOCUMENT_APPLY_MD,
   NOTE_CMD_QUERY_BLOCKS,
+  NOTE_CMD_REDO_TEXT,
   NOTE_CMD_SEND_TO_NOTE,
+  NOTE_CMD_UNDO_TEXT,
 } from './noteApiContracts';
 import type {
   NoteApplyMdOutcome,
@@ -65,16 +67,23 @@ import type {
   NoteApplyMode,
   NoteQueryBlocksOutcome,
   NoteQueryBlocksParams,
+  NoteRedoOutcome,
+  NoteRedoTextRequest,
   NoteSendToNoteRequest,
   NoteTransport,
+  NoteUndoOutcome,
+  NoteUndoTextRequest,
 } from './noteApiContracts';
 import {
   mapInvokeFailure,
   parseApplyOutcome,
   parseQueryOutcome,
+  parseUndoOutcome,
   wrapApplyInvokeArgs,
   wrapQueryInvokeArgs,
+  wrapRedoInvokeArgs,
   wrapSendInvokeArgs,
+  wrapUndoInvokeArgs,
 } from './noteApiWire';
 import { createMemoryNoteTransport } from './noteApiMemory';
 
@@ -153,6 +162,26 @@ export function createTauriNoteTransport(): NoteTransport {
         return mapInvokeFailure(res, NOTE_CMD_SEND_TO_NOTE);
       }
       return parseApplyOutcome(res.data);
+    },
+    async undoText(req) {
+      const res = await invokeTyped<unknown>(
+        NOTE_CMD_UNDO_TEXT,
+        wrapUndoInvokeArgs(req)
+      );
+      if (res.status !== 'ok') {
+        return mapInvokeFailure(res, NOTE_CMD_UNDO_TEXT);
+      }
+      return parseUndoOutcome(res.data);
+    },
+    async redoText(req) {
+      const res = await invokeTyped<unknown>(
+        NOTE_CMD_REDO_TEXT,
+        wrapRedoInvokeArgs(req)
+      );
+      if (res.status !== 'ok') {
+        return mapInvokeFailure(res, NOTE_CMD_REDO_TEXT);
+      }
+      return parseUndoOutcome(res.data);
     },
   };
 }
@@ -283,6 +312,36 @@ export async function noteSendToNote(
   transport?: NoteTransport | null
 ): Promise<NoteApplyMdOutcome> {
   return resolveNoteTransport(transport).sendToNote(req);
+}
+
+export async function noteUndoText(
+  req: NoteUndoTextRequest,
+  transport?: NoteTransport | null
+): Promise<NoteUndoOutcome> {
+  const t = resolveNoteTransport(transport);
+  if (t.undoText) {
+    return t.undoText(req);
+  }
+  return {
+    ok: false,
+    code: 'note.unsupported',
+    reason: 'undoText not supported by transport',
+  };
+}
+
+export async function noteRedoText(
+  req: NoteRedoTextRequest,
+  transport?: NoteTransport | null
+): Promise<NoteRedoOutcome> {
+  const t = resolveNoteTransport(transport);
+  if (t.redoText) {
+    return t.redoText(req);
+  }
+  return {
+    ok: false,
+    code: 'note.unsupported',
+    reason: 'redoText not supported by transport',
+  };
 }
 
 /**

@@ -194,12 +194,11 @@ impl CoreRunState {
                     // coordinator 惰性构造（new 自动恢复预算/forks/通知/
                     // needs_user，recovery.rs:855-863）
                     if let Some(coord) = self.coordinator_for(&record.session_id) {
-                        // pending 通知重排入队（同步 → spawn_blocking，F2-27）
-                        match blocking_coordinator_call(coord, |c| {
+                        let reinsert_res = {
+                            let mut c = coord.lock().await;
                             c.restore_steering_notifications()
-                        })
-                        .await
-                        {
+                        };
+                        match reinsert_res {
                             Ok(reinserted) => {
                                 tracing::info!(
                                     target: "restore",

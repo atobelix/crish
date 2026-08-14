@@ -41,12 +41,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::subagent_inject::{
-    git_revert_caution_section, iso8601_from_epoch_ms, resolve_started_at,
-    started_at_section, subagent_session_injections, DEFAULT_REF_AGE_THRESHOLD_HOURS,
+    git_revert_caution_section, iso8601_from_epoch_ms, resolve_started_at, started_at_section,
+    subagent_session_injections, DEFAULT_REF_AGE_THRESHOLD_HOURS,
 };
 use agent_tools::tools::subagent::{
-    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner,
-    SubagentState,
+    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner, SubagentState,
 };
 use agent_tools::tools::wait_subagents::{
     wait_for_terminal_events, SubagentTerminalEvent, SubagentWaitResult,
@@ -57,8 +56,8 @@ use conex_types::error::ProviderErrorKind;
 use conex_types::events::SubagentEndStatus;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use orchestrator::flow_graph::{
-    FlowAdvance, FlowDeclaration, FlowError, FlowMetaStore, FlowNode, FlowNodeState,
-    FlowScheduler, FlowStarted,
+    FlowAdvance, FlowDeclaration, FlowError, FlowMetaStore, FlowNode, FlowNodeState, FlowScheduler,
+    FlowStarted,
 };
 use orchestrator::persist::{InMemoryStore, Store};
 use orchestrator::recovery::{
@@ -209,8 +208,7 @@ impl MockEngine {
         let store_dyn: Arc<dyn Store> = store.clone();
         let meta = InMemoryMeta::new();
         let spawner = ChainSpawner::new();
-        let sched =
-            FlowScheduler::new(session_id, spawner.clone(), meta).expect("调度器创建失败");
+        let sched = FlowScheduler::new(session_id, spawner.clone(), meta).expect("调度器创建失败");
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
         let tree = Arc::new(Mutex::new(SessionTree::new(session_id)));
         tree.lock()
@@ -521,7 +519,9 @@ fn now_iso_utc_like() -> String {
 
 /// 超预算消息序列（C9 压缩环节输入）：1 条 system + 4 条对话消息
 fn over_budget_messages() -> Vec<Arc<AgentMessage>> {
-    let text_block = |text: &str| AgentMessageBlock::Text { text: text.to_string() };
+    let text_block = |text: &str| AgentMessageBlock::Text {
+        text: text.to_string(),
+    };
     let mut messages: Vec<Arc<AgentMessage>> = vec![Arc::new(AgentMessage {
         id: "sys-1".to_string(),
         role: AgentMessageRole::System,
@@ -541,7 +541,9 @@ fn over_budget_messages() -> Vec<Arc<AgentMessage>> {
             id: format!("m-{i}"),
             role,
             created_at: format!("2026-08-04T00:00:0{i}.000Z"),
-            blocks: vec![text_block(&"压缩前的早期对话内容，用于撑爆预算。".repeat(30))],
+            blocks: vec![text_block(
+                &"压缩前的早期对话内容，用于撑爆预算。".repeat(30),
+            )],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -630,7 +632,13 @@ async fn full_chain_dependency_graph_to_reinjection() {
     let dispatched_at = (now_ms() - 1) as u64;
     let wait_handle = tokio::spawn(async move {
         // 逃生上限 30s：逻辑正确时毫秒级返回，超时即失败而非悬挂
-        wait_for_terminal_events(&ids, wait_rx, Some(std::time::Duration::from_secs(30)), dispatched_at).await
+        wait_for_terminal_events(
+            &ids,
+            wait_rx,
+            Some(std::time::Duration::from_secs(30)),
+            dispatched_at,
+        )
+        .await
     });
     // A 完成 → B 启动 → 终态事件流送达（on_subagent_terminal 内部不动点推进）
     let adv2 = engine
@@ -640,7 +648,9 @@ async fn full_chain_dependency_graph_to_reinjection() {
     engine.emit_started_for_flow(&adv2.started).await;
     let run_b = adv2.started[0].subagent_run_id.clone();
     let sub_b = engine.spawner.subagent_id_for_run(&run_b);
-    let adv3 = engine.terminal(&run_b, SubagentState::Completed, &sub_b).await;
+    let adv3 = engine
+        .terminal(&run_b, SubagentState::Completed, &sub_b)
+        .await;
     engine
         .standalone_terminal(
             &x_result.subagent_run_id,
@@ -658,7 +668,10 @@ async fn full_chain_dependency_graph_to_reinjection() {
     assert_eq!(result.agents.len(), 2, "等待名单 = 分发对象（A + X）");
     for agent in &result.agents {
         assert!(agent.terminal, "终态摘要必须带 terminal 标记");
-        assert!(agent.elapsed_ms > 0, "elapsed 必须按 ended - dispatched 计算");
+        assert!(
+            agent.elapsed_ms > 0,
+            "elapsed 必须按 ended - dispatched 计算"
+        );
     }
     // 终态事件落库（ended 为 Critical 必达；A/B/X 三枚）
     let ended_types: Vec<String> = {
@@ -811,9 +824,15 @@ async fn full_chain_dependency_graph_to_reinjection() {
     };
     let first = render(&injections, true).unwrap();
     let second = render(&injections, true).unwrap();
-    assert_eq!(first, second, "同一配置两次构建 system 段字节必须一致（C10 验收 1）");
+    assert_eq!(
+        first, second,
+        "同一配置两次构建 system 段字节必须一致（C10 验收 1）"
+    );
     // started_at 等于库值（epoch ms）且带 @dynamic 与隔离边界（C2 验收 1）
-    assert!(first.contains(&format!("{started_at_db}")), "started_at 必须等于库内值");
+    assert!(
+        first.contains(&format!("{started_at_db}")),
+        "started_at 必须等于库内值"
+    );
     assert!(first.contains("@dynamic"), "@dynamic 标记豁免字节级断言");
     assert!(first.contains("隔离边界"), "隔离边界声明必须存在");
     // 回退谨慎指引固定片段（C2 验收 3）
@@ -831,7 +850,10 @@ async fn full_chain_dependency_graph_to_reinjection() {
     let pos_caution = first
         .find(&git_revert_caution_section(DEFAULT_REF_AGE_THRESHOLD_HOURS))
         .expect("回退指引段存在");
-    assert!(pos_started < pos_caution, "started_at 段先于回退指引段（注入顺序冻结）");
+    assert!(
+        pos_started < pos_caution,
+        "started_at 段先于回退指引段（注入顺序冻结）"
+    );
 }
 
 // ── 链路环节细节断言（各环节独立验证，链路主测试的支撑） ─────────
@@ -873,8 +895,14 @@ async fn chain_event_envelopes_carry_subagent_identity() {
         .expect("started 事件必须存在");
     assert!(started_payload.contains(&result.subagent_id));
     assert!(started_payload.contains(&result.subagent_run_id));
-    assert!(started_payload.contains(session_id), "信封 sessionId 必须存在");
-    assert!(started_payload.contains("call-1"), "parentToolCallId 必须透传");
+    assert!(
+        started_payload.contains(session_id),
+        "信封 sessionId 必须存在"
+    );
+    assert!(
+        started_payload.contains("call-1"),
+        "parentToolCallId 必须透传"
+    );
     assert!(
         started_payload.contains("solve") && started_payload.contains("信封子代理"),
         "mode 与 description 字段必须透传"
@@ -890,9 +918,10 @@ async fn chain_wait_ignores_unlisted_subagent_terminals() {
     let (wait_tx, wait_rx) = mpsc::channel(8);
     let dispatch_at = now_ms() as u64;
     let ids = vec!["sub-a".to_string()];
-    let handle = tokio::spawn(async move {
-        wait_for_terminal_events(&ids, wait_rx, None, dispatch_at).await
-    });
+    let handle =
+        tokio::spawn(
+            async move { wait_for_terminal_events(&ids, wait_rx, None, dispatch_at).await },
+        );
     // 未知 id 终态事件：忽略不计数
     wait_tx
         .send(SubagentTerminalEvent {
@@ -969,8 +998,15 @@ async fn chain_recovery_budget_exhausted_skips_ladder2() {
         .on_subagent_run_failure(&ctx2)
         .await
         .unwrap();
-    assert_eq!(out2.ladder, RecoveryLadder::Ladder4User, "预算耗尽直落阶梯 4");
-    assert!(engine.coordinator.run_needs_user("run-second"), "需用户介入标记");
+    assert_eq!(
+        out2.ladder,
+        RecoveryLadder::Ladder4User,
+        "预算耗尽直落阶梯 4"
+    );
+    assert!(
+        engine.coordinator.run_needs_user("run-second"),
+        "需用户介入标记"
+    );
     let types: Vec<String> = {
         let events = engine.recovery_events();
         events.iter().map(|(_, t, _)| t.to_string()).collect()
@@ -980,7 +1016,9 @@ async fn chain_recovery_budget_exhausted_skips_ladder2() {
         "预算耗尽不产生阶梯 2 steering 事件"
     );
     assert!(
-        types.iter().any(|t| t == RECOVER_ESCALATED_EVENT || t == "recovery-budget-denied"),
+        types
+            .iter()
+            .any(|t| t == RECOVER_ESCALATED_EVENT || t == "recovery-budget-denied"),
         "升级或预算拒绝必须留痕"
     );
 }

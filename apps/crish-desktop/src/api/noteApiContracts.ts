@@ -41,6 +41,16 @@ export const NOTE_CMD_IMPORT_MIRROR_PROPOSAL =
  */
 export const NOTE_CMD_APPLY_OPS = 'note_apply_ops' as const;
 
+/**
+ * Tauri：文本级 CRDT 因果撤销（CRDT-01/03）。
+ */
+export const NOTE_CMD_UNDO_TEXT = 'note_undo_text' as const;
+
+/**
+ * Tauri：文本级 CRDT 因果重做（CRDT-01/03）。
+ */
+export const NOTE_CMD_REDO_TEXT = 'note_redo_text' as const;
+
 /** agent-tools 工具名（对照，非 IPC 命令） */
 export const NOTE_TOOL_DOCUMENT_APPLY_MD = 'document_apply_md' as const;
 export const NOTE_TOOL_QUERY_BLOCKS = 'query_blocks' as const;
@@ -54,6 +64,8 @@ export const NOTE_COMMANDS = {
   detectMirrorDrift: NOTE_CMD_DETECT_MIRROR_DRIFT,
   importMirrorProposal: NOTE_CMD_IMPORT_MIRROR_PROPOSAL,
   applyOps: NOTE_CMD_APPLY_OPS,
+  undoText: NOTE_CMD_UNDO_TEXT,
+  redoText: NOTE_CMD_REDO_TEXT,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -148,6 +160,40 @@ export type NoteSendToNoteRequest = {
   batchId?: string;
 };
 
+/** 块文本级撤销请求 */
+export type NoteUndoTextRequest = {
+  docId: string;
+  blockId: string;
+};
+
+/** 块文本级重做请求 */
+export type NoteRedoTextRequest = {
+  docId: string;
+  blockId: string;
+};
+
+/** 块文本级撤销/重做成功结果 */
+export type NoteUndoResult = {
+  ok: true;
+  docId: string;
+  blockId: string;
+  rev: number;
+  text: string;
+  isNoop: boolean;
+  source?: string;
+};
+
+export type NoteRedoResult = NoteUndoResult;
+
+export type NoteUndoFailure = {
+  ok: false;
+  code: string;
+  reason: string;
+};
+
+export type NoteUndoOutcome = NoteUndoResult | NoteUndoFailure;
+export type NoteRedoOutcome = NoteRedoResult | NoteUndoFailure;
+
 // ---------------------------------------------------------------------------
 // Transport 契约
 // ---------------------------------------------------------------------------
@@ -160,4 +206,6 @@ export type NoteTransport = {
   applyMd(req: NoteApplyMdRequest): Promise<NoteApplyMdOutcome>;
   queryBlocks(params: NoteQueryBlocksParams): Promise<NoteQueryBlocksOutcome>;
   sendToNote(req: NoteSendToNoteRequest): Promise<NoteApplyMdOutcome>;
+  undoText?(req: NoteUndoTextRequest): Promise<NoteUndoOutcome>;
+  redoText?(req: NoteRedoTextRequest): Promise<NoteRedoOutcome>;
 };

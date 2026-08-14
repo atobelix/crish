@@ -149,7 +149,9 @@ impl WorkspaceStore {
         };
 
         // 检查在途导出守卫状态机（INV-STORE-01：零假漂移与瞬态假删除压制）
-        let verdict = self.export_guard.check_and_suppress(&path, file_hash.as_deref());
+        let verdict = self
+            .export_guard
+            .check_and_suppress(&path, file_hash.as_deref());
         let effective_file_exists = match verdict {
             InFlightSuppressVerdict::SuppressTransientDeletion => {
                 // 瞬态重命名期间物理文件微秒级不存在，压制假删除

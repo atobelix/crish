@@ -553,16 +553,12 @@ impl CoreRunState {
             // lifecycle.rs:451-458；会话窗口近似）
             run_message_bytes,
         );
-        // 决策闭包经 spawn_blocking 执行（F2-27）；ctx 克隆进闭包（决策
-        // 只读消费），原件随 AutoRetry 计划移交重派执行
+        // 决策通过全异步 L2 业务互斥锁直接执行
         let ctx_for_decision = ctx.clone();
-        let decision = blocking_coordinator_call(Arc::clone(&coord), move |c| {
-            // on_subagent_run_failure 为无 await 的 async 方法（函数体全
-            // 同步，recovery.rs:914-978），经 Handle::block_on 在 blocking
-            // 线程执行（D3 §3.4.1）
-            block_on_coordinator_failure(c, &ctx_for_decision)
-        })
-        .await;
+        let decision = {
+            let mut c = coord.lock().await;
+            c.on_subagent_run_failure(&ctx_for_decision).await
+        };
         match decision {
             Ok(RecoveryOutcome {
                 action: RecoveryAction::AutoRetry { delay, .. },
@@ -686,10 +682,10 @@ impl CoreRunState {
                 let mut escalate_ctx = ctx;
                 escalate_ctx.retries = self.ladder1_retry_count(session_id, &fp);
                 let run_id_for_log = escalate_ctx.subagent_run_id.clone();
-                let outcome = blocking_coordinator_call(coord, move |c| {
-                    block_on_coordinator_failure(c, &escalate_ctx)
-                })
-                .await;
+                let outcome = {
+                    let mut c = coord.lock().await;
+                    c.on_subagent_run_failure(&escalate_ctx).await
+                };
                 tracing::warn!(
                     target: "run",
                     session_id,

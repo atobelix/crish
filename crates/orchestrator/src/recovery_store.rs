@@ -150,10 +150,11 @@ impl RecoveryStore for LocalDb {
         // LK-02：经 conex-db 既有接口（load_session_agents）反查原行
         // parent_tool_call_id——不新增库方法（恢复域纪律）；行缺失按
         // None 返回（观测增强，不阻断 fork）
-        let agents = conex_db::LocalDb::load_session_agents(self, session_id)
-            .map_err(|e| RecoveryError::PersistFailed {
+        let agents = conex_db::LocalDb::load_session_agents(self, session_id).map_err(|e| {
+            RecoveryError::PersistFailed {
                 message: e.to_string(),
-            })?;
+            }
+        })?;
         Ok(agents
             .iter()
             .find(|a| a.subagent_run_id == subagent_run_id)

@@ -68,7 +68,10 @@ impl RunEngine for TestEngine {
         if !self.cooperative_supported {
             return false;
         }
-        self.cooperative_calls.lock().unwrap().push(reason.to_string());
+        self.cooperative_calls
+            .lock()
+            .unwrap()
+            .push(reason.to_string());
         true
     }
 
@@ -184,7 +187,11 @@ pub fn approval_requested(session: &str, tool_call_id: &str) -> AgentEvent {
 }
 
 /// approval-resolved 事件（批准 / 拒绝决策均由本事件表达，03 §5.3-3）
-pub fn approval_resolved(session: &str, tool_call_id: &str, decision: ApprovalDecision) -> AgentEvent {
+pub fn approval_resolved(
+    session: &str,
+    tool_call_id: &str,
+    decision: ApprovalDecision,
+) -> AgentEvent {
     AgentEvent::ApprovalResolved {
         session_id: session.to_string(),
         tool_call_id: tool_call_id.to_string(),
@@ -246,4 +253,24 @@ pub fn assert_single_terminal(
         Some(terminals[0].sequence),
         "run-terminal 应为事件流最后一个事件"
     );
+}
+
+/// 确定性异步状态轮询器（消除测试中的假等待与固定 sleep）
+pub async fn wait_until<T, F, Fut>(
+    timeout_dur: std::time::Duration,
+    poll_interval: std::time::Duration,
+    mut condition: F,
+) -> Result<T, &'static str>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Option<T>>,
+{
+    let start = std::time::Instant::now();
+    while start.elapsed() < timeout_dur {
+        if let Some(res) = condition().await {
+            return Ok(res);
+        }
+        tokio::time::sleep(poll_interval).await;
+    }
+    Err("wait_until 超时：在指定时限内未达成预期状态")
 }

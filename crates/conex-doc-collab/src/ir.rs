@@ -13,14 +13,18 @@ pub fn cmp_order(a: &str, b: &str) -> Ordering {
 #[serde(rename_all = "snake_case")]
 pub enum BlockKind {
     Paragraph,
-    Heading { level: u8 },
+    Heading {
+        level: u8,
+    },
     BulletItem,
     OrderedItem,
     Code,
     Quote,
     Divider,
     /// 未知 flavour 占位
-    Unknown { flavour: String },
+    Unknown {
+        flavour: String,
+    },
 }
 
 impl BlockKind {
@@ -48,9 +52,7 @@ impl BlockKind {
             "h4" => BlockKind::Heading { level: 4 },
             "h5" => BlockKind::Heading { level: 5 },
             "h6" => BlockKind::Heading { level: 6 },
-            "bullet" | "bullet_item" | "bullet-item" | "list" | "ul" => {
-                BlockKind::BulletItem
-            }
+            "bullet" | "bullet_item" | "bullet-item" | "list" | "ul" => BlockKind::BulletItem,
             "ordered" | "ordered_item" | "ordered-item" | "numbered" | "ol" => {
                 BlockKind::OrderedItem
             }
@@ -59,11 +61,7 @@ impl BlockKind {
             "divider" | "hr" | "horizontal_rule" => BlockKind::Divider,
             _ => BlockKind::Unknown {
                 // 保留原始 flavour（非 lower），与 TS unknown 分支一致
-                flavour: if raw.is_empty() {
-                    f
-                } else {
-                    raw.to_string()
-                },
+                flavour: if raw.is_empty() { f } else { raw.to_string() },
             },
         }
     }

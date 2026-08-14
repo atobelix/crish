@@ -251,7 +251,11 @@ mod tests {
     fn run_id_not_overwritten_when_present() {
         let envelope = AgentEventEnvelope::new(agent_start(), Some("run-0".into()), None);
         let normalized = normalize_envelope(envelope, Some("run-1"), "sess-1");
-        assert_eq!(normalized.run_id.as_deref(), Some("run-0"), "已有 runId 不被覆盖");
+        assert_eq!(
+            normalized.run_id.as_deref(),
+            Some("run-0"),
+            "已有 runId 不被覆盖"
+        );
     }
 
     /// 事件体 sessionId 缺失（空串）时补齐
@@ -500,7 +504,11 @@ mod tests {
     /// 信封视角终态判据
     #[test]
     fn is_terminal_envelope_wraps_event_criterion() {
-        assert!(is_terminal_envelope(&AgentEventEnvelope::new(run_terminal(), None, None)));
+        assert!(is_terminal_envelope(&AgentEventEnvelope::new(
+            run_terminal(),
+            None,
+            None
+        )));
         assert!(!is_terminal_envelope(&AgentEventEnvelope::new(
             agent_end(AgentEndReason::Stop),
             None,
@@ -555,9 +563,18 @@ mod tests {
     /// 仅自然完成（stop）允许 goal 模式评估续轮
     #[test]
     fn cooperative_stop_does_not_auto_continue() {
-        assert!(allows_auto_continue(AgentEndReason::Stop), "自然完成可评估续轮");
-        assert!(!allows_auto_continue(AgentEndReason::Stopped), "stopped 不续轮（D1）");
-        assert!(!allows_auto_continue(AgentEndReason::MaxTurns), "预算耗尽阻断不续轮");
+        assert!(
+            allows_auto_continue(AgentEndReason::Stop),
+            "自然完成可评估续轮"
+        );
+        assert!(
+            !allows_auto_continue(AgentEndReason::Stopped),
+            "stopped 不续轮（D1）"
+        );
+        assert!(
+            !allows_auto_continue(AgentEndReason::MaxTurns),
+            "预算耗尽阻断不续轮"
+        );
         assert!(!allows_auto_continue(AgentEndReason::Aborted), "取消不续轮");
         assert!(!allows_auto_continue(AgentEndReason::Error), "失败不续轮");
     }
@@ -565,9 +582,18 @@ mod tests {
     /// 终态 → reason 逆映射（事件重放用）
     #[test]
     fn end_reason_for_terminal_mapping() {
-        assert_eq!(end_reason_for_terminal(RunTerminalStatus::Completed), AgentEndReason::Stop);
-        assert_eq!(end_reason_for_terminal(RunTerminalStatus::Cancelled), AgentEndReason::Aborted);
-        assert_eq!(end_reason_for_terminal(RunTerminalStatus::Failed), AgentEndReason::Error);
+        assert_eq!(
+            end_reason_for_terminal(RunTerminalStatus::Completed),
+            AgentEndReason::Stop
+        );
+        assert_eq!(
+            end_reason_for_terminal(RunTerminalStatus::Cancelled),
+            AgentEndReason::Aborted
+        );
+        assert_eq!(
+            end_reason_for_terminal(RunTerminalStatus::Failed),
+            AgentEndReason::Error
+        );
     }
 
     // ── 测试构件（最小字段构造）──

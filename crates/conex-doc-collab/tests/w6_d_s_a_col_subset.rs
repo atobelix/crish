@@ -48,10 +48,10 @@ fn w6_d_s_package_id_and_honest_boundary() {
     assert!(package_id_is_skeleton_track());
     assert_eq!(W6_D_S_TRACK, "Skeleton");
     assert!(does_not_close_el04_or_w6_d());
-    assert!(W6_D_S_NOT_CLOSING.iter().any(|s| *s == "EL-04" || s.contains("EL-04")));
     assert!(W6_D_S_NOT_CLOSING
         .iter()
-        .any(|s| s.contains("W6-D Strict")));
+        .any(|s| *s == "EL-04" || s.contains("EL-04")));
+    assert!(W6_D_S_NOT_CLOSING.iter().any(|s| s.contains("W6-D Strict")));
     // 显式诚实句（调度/审计可 grep）
     let honest = "W6-D-S ≠ W6-D / ≠ EL-04 满关";
     assert!(honest.contains("≠ W6-D"));

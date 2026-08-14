@@ -27,11 +27,9 @@ use session_loop::RunOutcome;
 
 use crate::blocks::persist_compression_block;
 use crate::normalize::normalize_envelope;
-use crate::persist::{SessionSequencer, Store, StoreError};
-use crate::run::{
-    EVENT_STORE_WRITE_FAILED_REASON, RunError, RunHandle, map_outcome_to_terminal,
-};
 use crate::now_iso_utc;
+use crate::persist::{SessionSequencer, Store, StoreError};
+use crate::run::{map_outcome_to_terminal, RunError, RunHandle, EVENT_STORE_WRITE_FAILED_REASON};
 
 /// 是否非持久化事件（D-04 PC-05 迁移：单一分类事实源 [event_policy] 的
 /// persist 决策；delta/soft 增量不阻塞 drive loop——05 §2.8 语义不变）
@@ -69,7 +67,11 @@ pub struct PersistError {
 
 impl std::fmt::Display for PersistError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "事件 {} 落库失败（sequence={}）：{}", self.event_type, self.sequence, self.error)
+        write!(
+            f,
+            "事件 {} 落库失败（sequence={}）：{}",
+            self.event_type, self.sequence, self.error
+        )
     }
 }
 
@@ -219,7 +221,13 @@ impl EventQueue {
             error: StoreError::new("serialize_event", err.to_string()),
         })?;
         self.store()
-            .append_event(session_id, sequence, event_type, &payload, run_id.as_deref())
+            .append_event(
+                session_id,
+                sequence,
+                event_type,
+                &payload,
+                run_id.as_deref(),
+            )
             .await
             .map_err(|error| PersistError {
                 sequence,
@@ -250,7 +258,13 @@ impl EventQueue {
         let persisted = match payload {
             Some(payload) => self
                 .store()
-                .append_event(session_id, sequence, event_type, &payload, run_id.as_deref())
+                .append_event(
+                    session_id,
+                    sequence,
+                    event_type,
+                    &payload,
+                    run_id.as_deref(),
+                )
                 .await
                 .is_ok(),
             None => false,
@@ -276,7 +290,13 @@ impl EventQueue {
         let persisted = match payload {
             Some(payload) => self
                 .store()
-                .append_event(session_id, sequence, event_type, &payload, run_id.as_deref())
+                .append_event(
+                    session_id,
+                    sequence,
+                    event_type,
+                    &payload,
+                    run_id.as_deref(),
+                )
                 .await
                 .is_ok(),
             None => false,
@@ -570,7 +590,10 @@ mod tests {
             if !self.cooperative_supported {
                 return false;
             }
-            self.cooperative_calls.lock().unwrap().push(reason.to_string());
+            self.cooperative_calls
+                .lock()
+                .unwrap()
+                .push(reason.to_string());
             true
         }
 
@@ -682,10 +705,7 @@ mod tests {
         assert_eq!(seqs, (1..=sequences.len() as u64).collect::<Vec<_>>());
         // delta 不落库；持久化事件已落库
         assert_eq!(
-            sequences
-                .iter()
-                .map(|s| s.persisted)
-                .collect::<Vec<_>>(),
+            sequences.iter().map(|s| s.persisted).collect::<Vec<_>>(),
             vec![true, false, false, false, true]
         );
         assert_eq!(queue.next_sequence(), sequences.len() as u64 + 1);
@@ -708,7 +728,10 @@ mod tests {
         let started = Instant::now();
         queue.push("s1", agent_start()).await.unwrap();
         queue.push("s1", message_end()).await.unwrap();
-        queue.push("s1", agent_end(AgentEndReason::Stop)).await.unwrap();
+        queue
+            .push("s1", agent_end(AgentEndReason::Stop))
+            .await
+            .unwrap();
         let elapsed = started.elapsed();
         assert!(
             elapsed >= Duration::from_millis(120),
@@ -783,7 +806,10 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stop, vec![agent_start(), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
         )
         .await
         .unwrap();
@@ -818,7 +844,10 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stop, vec![agent_start(), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
         )
         .await
         .unwrap();
@@ -846,7 +875,10 @@ mod tests {
         assert_eq!(path, CancelPath::Cooperative);
         // L2：协作停止注入，不 hard abort（05 §2.8 orchestrator.test.ts:1113）
         assert_eq!(engine.abort_calls(), Vec::<String>::new());
-        assert_eq!(engine.cooperative_calls(), vec!["cancelled-by-user".to_string()]);
+        assert_eq!(
+            engine.cooperative_calls(),
+            vec!["cancelled-by-user".to_string()]
+        );
         assert!(run.cancel_requested());
         assert_eq!(run.cancel_path(), Some(CancelPath::Cooperative));
 
@@ -854,7 +886,10 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stopped, vec![agent_start(), agent_end(AgentEndReason::Stopped)]),
+            outcome(
+                AgentEndReason::Stopped,
+                vec![agent_start(), agent_end(AgentEndReason::Stopped)],
+            ),
         )
         .await
         .unwrap();
@@ -885,7 +920,10 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Aborted, vec![agent_start(), agent_end(AgentEndReason::Aborted)]),
+            outcome(
+                AgentEndReason::Aborted,
+                vec![agent_start(), agent_end(AgentEndReason::Aborted)],
+            ),
         )
         .await
         .unwrap();
@@ -916,12 +954,18 @@ mod tests {
         // 回落 L3：强制中断（05 §2.8 orchestrator.test.ts:1186）
         assert_eq!(engine.abort_calls(), vec!["no-bus".to_string()]);
         assert_eq!(engine.cooperative_calls(), Vec::<String>::new());
-        assert_eq!(run.cancel_path(), Some(CancelPath::CooperativeFallbackForce));
+        assert_eq!(
+            run.cancel_path(),
+            Some(CancelPath::CooperativeFallbackForce)
+        );
 
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Aborted, vec![agent_start(), agent_end(AgentEndReason::Aborted)]),
+            outcome(
+                AgentEndReason::Aborted,
+                vec![agent_start(), agent_end(AgentEndReason::Aborted)],
+            ),
         )
         .await
         .unwrap();
@@ -942,7 +986,10 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stop, vec![agent_start(), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
         )
         .await
         .unwrap();
@@ -955,8 +1002,15 @@ mod tests {
         assert!(failure.error.message.contains("disk is read-only"));
 
         assert_eq!(run.status, conex_db::RunStatus::Failed);
-        assert_eq!(run.end_reason.as_deref(), Some(EVENT_STORE_WRITE_FAILED_REASON));
-        assert!(run.error.as_deref().unwrap_or_default().contains("disk is read-only"));
+        assert_eq!(
+            run.end_reason.as_deref(),
+            Some(EVENT_STORE_WRITE_FAILED_REASON)
+        );
+        assert!(run
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("disk is read-only"));
         assert_eq!(mem.runs()[0].status, conex_db::RunStatus::Failed);
         assert_eq!(
             mem.runs()[0].end_reason.as_deref(),
@@ -978,7 +1032,10 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stop, vec![agent_start(), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
         )
         .await
         .unwrap();
@@ -990,13 +1047,22 @@ mod tests {
         let err = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stop, vec![agent_start(), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
         )
         .await
         .unwrap_err();
         assert_eq!(err, RunError::TerminalImmutable);
         assert_eq!(queue.next_sequence(), seq_before, "终态后不再分配序列");
-        assert_eq!(mem.events().iter().filter(|e| e.event_type == "run-terminal").count(), 1);
+        assert_eq!(
+            mem.events()
+                .iter()
+                .filter(|e| e.event_type == "run-terminal")
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]
@@ -1009,14 +1075,20 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::MaxTurns, vec![agent_start(), agent_end(AgentEndReason::MaxTurns)]),
+            outcome(
+                AgentEndReason::MaxTurns,
+                vec![agent_start(), agent_end(AgentEndReason::MaxTurns)],
+            ),
         )
         .await
         .unwrap();
         // max-turns → failed 而非 completed（05 §2.8 orchestrator.test.ts:1223）
         assert_eq!(result.terminal_status, RunTerminalStatus::Failed);
         assert_eq!(result.end_reason, "max-turns");
-        assert_eq!(result.terminal_error.as_deref(), Some(MAX_TURNS_FAILED_MESSAGE));
+        assert_eq!(
+            result.terminal_error.as_deref(),
+            Some(MAX_TURNS_FAILED_MESSAGE)
+        );
         assert_eq!(run.status, conex_db::RunStatus::Failed);
     }
 
@@ -1030,7 +1102,10 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Error, vec![agent_start(), agent_end(AgentEndReason::Error)]),
+            outcome(
+                AgentEndReason::Error,
+                vec![agent_start(), agent_end(AgentEndReason::Error)],
+            ),
         )
         .await
         .unwrap();
@@ -1057,12 +1132,19 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stop, vec![agent_start(), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
         )
         .await
         .unwrap();
         assert_eq!(result.events.last().unwrap().sequence, 3);
-        assert_eq!(mem.runs()[0].cursor, 3, "R1 终态 cursor = 最后事件 sequence");
+        assert_eq!(
+            mem.runs()[0].cursor,
+            3,
+            "R1 终态 cursor = 最后事件 sequence"
+        );
 
         // R2：序列续接（会话内全局单调，跨 run 不重置——Q24/T08.12）
         let mut run2 = manager.start_run("s1", "r2").await.unwrap();
@@ -1070,7 +1152,10 @@ mod tests {
         let result2 = drive_outcome(
             &mut run2,
             &mut queue2,
-            outcome(AgentEndReason::Stop, vec![agent_start(), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
         )
         .await
         .unwrap();
@@ -1111,7 +1196,11 @@ mod tests {
         let mut all = sa.unwrap();
         all.extend(sb.unwrap());
         all.sort_unstable();
-        assert_eq!(all, (1..=100).collect::<Vec<_>>(), "并发取号全唯一连续（Q23）");
+        assert_eq!(
+            all,
+            (1..=100).collect::<Vec<_>>(),
+            "并发取号全唯一连续（Q23）"
+        );
 
         // 全部落库成功且不重复（无 event-store-write-failed）
         let stored = mem.events();
@@ -1135,7 +1224,10 @@ mod tests {
         let result = drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stop, vec![agent_start(), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
         )
         .await
         .unwrap();
@@ -1192,11 +1284,17 @@ mod tests {
         assert_eq!(terminals, 1, "run-terminal（session.end 源）只发一次");
         // 事件流首尾语义：agent-start 在首、终态在尾（映射表锚点）
         assert!(
-            matches!(result.events.first().map(|e| &e.event), Some(AgentEvent::AgentStart { .. })),
+            matches!(
+                result.events.first().map(|e| &e.event),
+                Some(AgentEvent::AgentStart { .. })
+            ),
             "session.start 源必须是流首"
         );
         assert!(
-            matches!(result.events.last().map(|e| &e.event), Some(AgentEvent::RunTerminal { .. })),
+            matches!(
+                result.events.last().map(|e| &e.event),
+                Some(AgentEvent::RunTerminal { .. })
+            ),
             "session.end 源必须是流尾"
         );
         // 落库同样恰好一次（Critical 必达）
@@ -1240,10 +1338,19 @@ mod tests {
                 payload: None,
             },
         };
-        assert!(is_non_persistent(&progress), "progress 类为 Delta：不落库不阻塞 drive loop");
-        assert!(!is_non_persistent(&soft), "message/tool 类为 Soft：尽力落库");
+        assert!(
+            is_non_persistent(&progress),
+            "progress 类为 Delta：不落库不阻塞 drive loop"
+        );
+        assert!(
+            !is_non_persistent(&soft),
+            "message/tool 类为 Soft：尽力落库"
+        );
         assert!(!is_non_persistent(&agent_start()), "agent-start 必达落库");
-        assert!(is_non_persistent(&message_delta(0)), "message-delta 保持既有语义");
+        assert!(
+            is_non_persistent(&message_delta(0)),
+            "message-delta 保持既有语义"
+        );
     }
 
     // ── T-18（轮次 2 持久层）：压缩事件 → 块行入库（drive 端到端）──
@@ -1289,13 +1396,9 @@ mod tests {
             agent_end(AgentEndReason::Stop),
         ];
 
-        let result = drive_outcome(
-            &mut run,
-            &mut queue,
-            outcome(AgentEndReason::Stop, events),
-        )
-        .await
-        .unwrap();
+        let result = drive_outcome(&mut run, &mut queue, outcome(AgentEndReason::Stop, events))
+            .await
+            .unwrap();
         assert!(result.persist_failure.is_none(), "压缩事件应落库成功");
 
         // 压缩事件序列号（agent-start=1 → compression=2）
@@ -1322,7 +1425,9 @@ mod tests {
         assert_eq!(db.count_blocks("s1").unwrap(), 1);
         // 落库事件原文与块行同源（原文回放面不受块表影响）
         let stored = db.query_events("s1", 0, None).unwrap();
-        assert!(stored.iter().any(|e| e.event_type == "context-compression-end"));
+        assert!(stored
+            .iter()
+            .any(|e| e.event_type == "context-compression-end"));
     }
 
     /// 块行幂等：drive 重放（同事件再次驱动）不产生重复行——INSERT OR
@@ -1363,7 +1468,14 @@ mod tests {
         drive_outcome(
             &mut run,
             &mut queue,
-            outcome(AgentEndReason::Stop, vec![agent_start(), compression("b1"), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![
+                    agent_start(),
+                    compression("b1"),
+                    agent_end(AgentEndReason::Stop),
+                ],
+            ),
         )
         .await
         .unwrap();
@@ -1375,11 +1487,22 @@ mod tests {
         drive_outcome(
             &mut run2,
             &mut queue2,
-            outcome(AgentEndReason::Stop, vec![agent_start(), compression("b1"), agent_end(AgentEndReason::Stop)]),
+            outcome(
+                AgentEndReason::Stop,
+                vec![
+                    agent_start(),
+                    compression("b1"),
+                    agent_end(AgentEndReason::Stop),
+                ],
+            ),
         )
         .await
         .unwrap();
-        assert_eq!(db.count_blocks("s1").unwrap(), 1, "同 block_id 重放不重复行");
+        assert_eq!(
+            db.count_blocks("s1").unwrap(),
+            1,
+            "同 block_id 重放不重复行"
+        );
     }
 
     // ── D-01 DM-04：run 归属列 + 信封落库 + goal-* 轮次域 ──
@@ -1399,12 +1522,19 @@ mod tests {
         assert_eq!(row.run_id.as_deref(), Some("r-main"), "列值 = 构造绑定值");
         let envelope: AgentEventEnvelope =
             serde_json::from_str(&row.payload).expect("落库 payload 应为完整信封 JSON");
-        assert_eq!(envelope.run_id.as_deref(), Some("r-main"), "信封 runId == 列值");
+        assert_eq!(
+            envelope.run_id.as_deref(),
+            Some("r-main"),
+            "信封 runId == 列值"
+        );
         assert_eq!(envelope.sequence, Some(1), "信封携带 sequence");
         assert_eq!(envelope.schema_version, 1, "信封携带 schemaVersion");
         let wire = serde_json::to_value(&envelope).unwrap();
         assert_eq!(wire["type"], "agent-start");
-        assert_eq!(wire["sessionId"], "s1", "事件体 sessionId 在场（与广播 wire 同构）");
+        assert_eq!(
+            wire["sessionId"], "s1",
+            "事件体 sessionId 在场（与广播 wire 同构）"
+        );
     }
 
     /// D-01 DM-04 验收锚：绑 None 落库 = 会话域事件——按 run 查询不命中、
@@ -1519,7 +1649,11 @@ mod tests {
         queue.push("s1", terminal).await.unwrap();
         let row = &mem.events()[1];
         let envelope: AgentEventEnvelope = serde_json::from_str(&row.payload).unwrap();
-        assert_eq!(envelope.run_id.as_deref(), Some("r-main"), "信封 runId 在场");
+        assert_eq!(
+            envelope.run_id.as_deref(),
+            Some("r-main"),
+            "信封 runId 在场"
+        );
         match &envelope.event {
             AgentEvent::RunTerminal { run_id, .. } => {
                 assert_eq!(run_id, "r-main", "终态事件体 runId 补齐（03 §5.1-16）");

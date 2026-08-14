@@ -86,7 +86,7 @@ function legacySkillIdFromPath(filePath: string): string {
 function resolveActivationFromMap(
   map: Record<string, SkillActivation>,
   id: string,
-  filePath: string,
+  filePath: string
 ): { activation?: SkillActivation; migrated: boolean } {
   if (map[id]) return { activation: map[id], migrated: false };
   const legacyId = legacySkillIdFromPath(filePath);
@@ -204,34 +204,33 @@ export function removeExtraSkillDir(dir: string) {
 /* ---------- FS helpers（plugin-fs 优先，突破工作区沙箱） ---------- */
 
 async function tryPluginFs(): Promise<{
-  readDir?: (p: string) => Promise<Array<{ name?: unknown; isDirectory?: boolean; isDir?: boolean; children?: unknown }>>;
+  readDir?: (
+    p: string
+  ) => Promise<
+    Array<{
+      name?: unknown;
+      isDirectory?: boolean;
+      isDir?: boolean;
+      children?: unknown;
+    }>
+  >;
   readTextFile?: (p: string) => Promise<string>;
   writeTextFile?: (p: string, content: string) => Promise<void>;
   mkdir?: (p: string, opts?: { recursive?: boolean }) => Promise<void>;
   exists?: (p: string) => Promise<boolean>;
 } | null> {
-  try {
-    const fs: unknown = await (import(/* @vite-ignore */ '@tauri-apps/plugin-fs') as Promise<unknown>).catch(
-      () => null,
-    );
-    if (!fs) return null;
-    return fs as NonNullable<Awaited<ReturnType<typeof tryPluginFs>>>;
-  } catch {
-    return null;
-  }
+  const fs: unknown = await (
+    import(/* @vite-ignore */ '@tauri-apps/plugin-fs') as Promise<unknown>
+  ).catch(() => null);
+  return (fs as NonNullable<Awaited<ReturnType<typeof tryPluginFs>>>) || null;
 }
 
 async function tryHomeDir(): Promise<string | null> {
-  try {
-    const pathApi = (await (import(/* @vite-ignore */ '@tauri-apps/api/path') as Promise<unknown>).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
-    if (pathApi?.homeDir) {
-      const h = await pathApi.homeDir();
-      if (h) return String(h);
-    }
-  } catch {
-    /* swallow-ok: home 目录探测失败时回退 null（调用方走默认目录） */
-  }
-  return null;
+  const pathApi = (await (
+    import(/* @vite-ignore */ '@tauri-apps/api/path') as Promise<unknown>
+  ).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
+  const h = pathApi?.homeDir ? await pathApi.homeDir().catch(() => null) : null;
+  return h ? String(h) : null;
 }
 
 async function listDirAny(dirPath: string): Promise<FsDirEntry[]> {
@@ -257,7 +256,10 @@ async function listDirAny(dirPath: string): Promise<FsDirEntry[]> {
   }
 }
 
-async function readTextAny(filePath: string, maxLines = 8000): Promise<string | null> {
+async function readTextAny(
+  filePath: string,
+  maxLines = 8000
+): Promise<string | null> {
   const path = filePath.trim();
   if (!path) return null;
   const fs = await tryPluginFs();
@@ -276,7 +278,10 @@ async function readTextAny(filePath: string, maxLines = 8000): Promise<string | 
   }
 }
 
-async function writeTextAny(filePath: string, content: string): Promise<boolean> {
+async function writeTextAny(
+  filePath: string,
+  content: string
+): Promise<boolean> {
   const fs = await tryPluginFs();
   if (fs?.writeTextFile) {
     try {
@@ -307,7 +312,7 @@ async function mkdirAny(dirPath: string): Promise<boolean> {
 async function loadSkillFile(
   filePath: string,
   scope: SkillScope,
-  opts?: { system?: boolean; activationOverride?: SkillActivation },
+  opts?: { system?: boolean; activationOverride?: SkillActivation }
 ): Promise<DesktopSkill | null> {
   const raw = await readTextAny(filePath);
   if (raw == null) return null;
@@ -319,7 +324,7 @@ async function loadSkillFile(
     .replace(/^-+|-+$/g, '');
   const name = String(parsed.data.name || fallbackName || 'skill');
   const description = String(
-    parsed.data.description || firstMarkdownSentence(parsed.body) || name,
+    parsed.data.description || firstMarkdownSentence(parsed.body) || name
   );
   const fileActivation =
     skillActivation(parsed.data.activation) ||
@@ -329,7 +334,8 @@ async function loadSkillFile(
   const map = loadActivationMap();
   const resolved = resolveActivationFromMap(map, id, filePath);
   if (resolved.migrated) saveActivationMap(map);
-  const activation = opts?.activationOverride || resolved.activation || fileActivation;
+  const activation =
+    opts?.activationOverride || resolved.activation || fileActivation;
   const isSystem =
     opts?.system ||
     /[/\\]\.system[/\\]/i.test(filePath) ||
@@ -357,16 +363,20 @@ async function discoverInDir(
   scope: SkillScope,
   depth = 0,
   out: DesktopSkill[] = [],
-  system = false,
+  system = false
 ): Promise<DesktopSkill[]> {
   if (depth > 5) return out;
   const entries = await listDirAny(dir);
   if (!entries.length) return out;
 
-  const hasSkillMd = entries.some((e) => !e.isDir && e.name.toUpperCase() === 'SKILL.MD');
+  const hasSkillMd = entries.some(
+    (e) => !e.isDir && e.name.toUpperCase() === 'SKILL.MD'
+  );
   if (hasSkillMd) {
     const skillPath = joinPath(dir, 'SKILL.md');
-    const hit = entries.find((e) => !e.isDir && e.name.toUpperCase() === 'SKILL.MD');
+    const hit = entries.find(
+      (e) => !e.isDir && e.name.toUpperCase() === 'SKILL.MD'
+    );
     const filePath = hit?.path || skillPath;
     const skill = await loadSkillFile(filePath, scope, { system });
     if (skill) out.push(skill);
@@ -375,11 +385,16 @@ async function discoverInDir(
 
   for (const e of entries) {
     if (e.name === 'node_modules' || e.name === '__pycache__') continue;
-    if (e.name.startsWith('.') && !ALLOWED_DOT_DIRS.has(e.name.toLowerCase())) continue;
+    if (e.name.startsWith('.') && !ALLOWED_DOT_DIRS.has(e.name.toLowerCase()))
+      continue;
     if (e.isDir) {
       const nextSystem = system || e.name.toLowerCase() === '.system';
       await discoverInDir(e.path, scope, depth + 1, out, nextSystem);
-    } else if (depth === 0 && e.name.endsWith('.md') && e.name.toUpperCase() !== 'README.MD') {
+    } else if (
+      depth === 0 &&
+      e.name.endsWith('.md') &&
+      e.name.toUpperCase() !== 'README.MD'
+    ) {
       const skill = await loadSkillFile(e.path, scope, { system });
       if (skill) out.push(skill);
     }
@@ -389,7 +404,13 @@ async function discoverInDir(
 
 export type DiscoverSkillsResult = {
   skills: DesktopSkill[];
-  roots: { path: string; scope: SkillScope; ok: boolean; count: number; error?: string }[];
+  roots: {
+    path: string;
+    scope: SkillScope;
+    ok: boolean;
+    count: number;
+    error?: string;
+  }[];
 };
 
 export async function discoverSkills(opts?: {
@@ -399,24 +420,24 @@ export async function discoverSkills(opts?: {
   const extraDirs = getExtraSkillDirs();
 
   type RustSkillRow = {
-  name?: unknown;
-  filePath?: unknown;
-  description?: unknown;
-  baseDir?: unknown;
-  content?: unknown;
-  raw?: unknown;
-  scope?: unknown;
-  tags?: unknown;
-  appliesTo?: unknown;
-  fileActivation?: unknown;
-  system?: unknown;
-  disableModelInvocation?: unknown;
-};
+    name?: unknown;
+    filePath?: unknown;
+    description?: unknown;
+    baseDir?: unknown;
+    content?: unknown;
+    raw?: unknown;
+    scope?: unknown;
+    tags?: unknown;
+    appliesTo?: unknown;
+    fileActivation?: unknown;
+    system?: unknown;
+    disableModelInvocation?: unknown;
+  };
 
-// T-F 06 T6.1：invokeCmd（tryInvokeTauri 别名）→ invokeTyped 三态化——
-// missing/error → logInternalError 后走 legacy JS 发现 fallback
-// （错误不再被吞为 null，可观测性保留；fallback 语义与旧行为等价）
-const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
+  // T-F 06 T6.1：invokeCmd（tryInvokeTauri 别名）→ invokeTyped 三态化——
+  // missing/error → logInternalError 后走 legacy JS 发现 fallback
+  // （错误不再被吞为 null，可观测性保留；fallback 语义与旧行为等价）
+  const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
     workspacePath: workspace || null,
     extraDirs,
   });
@@ -442,7 +463,9 @@ const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
       const resolved = resolveActivationFromMap(map, id, filePath);
       if (resolved.migrated) saveActivationMap(map);
 
-      const fileActivation = skillActivation(rs.fileActivation) || (rs.system ? 'recommended' : 'recommended');
+      const fileActivation =
+        skillActivation(rs.fileActivation) ||
+        (rs.system ? 'recommended' : 'recommended');
       const activation = resolved.activation || fileActivation;
 
       skills.push({
@@ -483,7 +506,7 @@ const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
       { path: joinPath(workspace, '.conex/skills'), scope: 'project' },
       { path: joinPath(workspace, '.codex/skills'), scope: 'project' },
       { path: joinPath(workspace, '.agents/skills'), scope: 'project' },
-      { path: joinPath(workspace, '.claude/skills'), scope: 'project' },
+      { path: joinPath(workspace, '.claude/skills'), scope: 'project' }
     );
   }
 
@@ -495,12 +518,15 @@ const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
       { path: joinPath(home, '.claude/skills'), scope: 'global' },
       { path: joinPath(home, '.agents/skills'), scope: 'global' },
       { path: joinPath(home, '.grok/skills'), scope: 'global' },
-      { path: joinPath(home, '.grok/bundled/skills'), scope: 'global' },
+      { path: joinPath(home, '.grok/bundled/skills'), scope: 'global' }
     );
   }
 
   for (const extra of getExtraSkillDirs()) {
-    roots.push({ path: extra, scope: isAbsoluteFsPath(extra) ? 'global' : 'project' });
+    roots.push({
+      path: extra,
+      scope: isAbsoluteFsPath(extra) ? 'global' : 'project',
+    });
   }
 
   const seenRoot = new Set<string>();
@@ -518,7 +544,12 @@ const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
   for (const r of uniqueRoots) {
     try {
       const found = await discoverInDir(r.path, r.scope, 0, []);
-      rootStatus.push({ path: r.path, scope: r.scope, ok: true, count: found.length });
+      rootStatus.push({
+        path: r.path,
+        scope: r.scope,
+        ok: true,
+        count: found.length,
+      });
       for (const s of found) {
         if (seenSkill.has(s.id)) continue;
         seenSkill.add(s.id);
@@ -561,7 +592,7 @@ export type SkillActivationResult = {
  */
 export async function setSkillActivation(
   skill: DesktopSkill,
-  activation: SkillActivation,
+  activation: SkillActivation
 ): Promise<SkillActivationResult> {
   const map = loadActivationMap();
   map[skill.id] = activation;
@@ -574,7 +605,9 @@ export async function setSkillActivation(
 }
 
 /** 批量同步到引擎：T03.7 后无引擎通道，恒 0/0（保留签名兼容调用方） */
-export async function syncSkillsToDaemon(_skills: DesktopSkill[]): Promise<{ ok: number; fail: number }> {
+export async function syncSkillsToDaemon(
+  _skills: DesktopSkill[]
+): Promise<{ ok: number; fail: number }> {
   return { ok: 0, fail: 0 };
 }
 
@@ -593,7 +626,9 @@ export async function pickSkillDirectory(): Promise<string | null> {
 /** 在系统资源管理器中显示路径 */
 export async function revealSkillPath(filePath: string): Promise<boolean> {
   try {
-    const opener = (await (import(/* @vite-ignore */ '@tauri-apps/plugin-opener') as Promise<unknown>).catch(() => null)) as {
+    const opener = (await (
+      import(/* @vite-ignore */ '@tauri-apps/plugin-opener') as Promise<unknown>
+    ).catch(() => null)) as {
       openPath?: (p: string) => Promise<unknown>;
       revealItemInDir?: (p: string) => Promise<unknown>;
     } | null;
@@ -606,16 +641,18 @@ export async function revealSkillPath(filePath: string): Promise<boolean> {
       return true;
     }
   } catch {
-    /* swallow-ok: opener 插件不可用/失败时继续尝试 shell 打开 */
+    /* swallow-ok */
   }
   try {
-    const shell = (await (import(/* @vite-ignore */ '@tauri-apps/plugin-shell') as Promise<unknown>).catch(() => null)) as { open?: (url: string) => Promise<unknown> } | null;
+    const shell = (await (
+      import(/* @vite-ignore */ '@tauri-apps/plugin-shell') as Promise<unknown>
+    ).catch(() => null)) as { open?: (url: string) => Promise<unknown> } | null;
     if (shell?.open) {
       await shell.open(dirname(filePath));
       return true;
     }
   } catch {
-    /* swallow-ok: shell 打开失败时返回 false，由调用方兜底提示 */
+    /* swallow-ok */
   }
   return false;
 }
@@ -677,12 +714,14 @@ export async function createProjectSkill(opts: {
 }
 
 /** 启用且未禁用模型调用的技能 → 斜杠命令 */
-export function skillsToSlashCommands(skills: DesktopSkill[]): SkillSlashCommand[] {
+export function skillsToSlashCommands(
+  skills: DesktopSkill[]
+): SkillSlashCommand[] {
   return skills
     .filter(
       (s) =>
         (s.activation === 'enabled' || s.activation === 'recommended') &&
-        !s.disableModelInvocation,
+        !s.disableModelInvocation
     )
     .map((s) => ({
       cmd: `/skill:${normalizeSlashName(s.name)}`,
@@ -696,7 +735,7 @@ export function skillsToSlashCommands(skills: DesktopSkill[]): SkillSlashCommand
 /** 解析 /skill:name 并返回技能正文（用于注入用户消息） */
 export async function resolveSkillSlash(
   input: string,
-  skills?: DesktopSkill[],
+  skills?: DesktopSkill[]
 ): Promise<{ skill: DesktopSkill; rest: string } | null> {
   const m = /^\/skill:([a-z0-9._-]+)\s*([\s\S]*)$/i.exec(input.trim());
   if (!m) return null;
@@ -710,7 +749,10 @@ export async function resolveSkillSlash(
   return { skill, rest };
 }
 
-export function formatSkillInjection(skill: DesktopSkill, userRest: string): string {
+export function formatSkillInjection(
+  skill: DesktopSkill,
+  userRest: string
+): string {
   const header = [
     `【技能：${skill.name}】`,
     skill.description ? `说明：${skill.description}` : '',
@@ -727,8 +769,11 @@ export function formatSkillInjection(skill: DesktopSkill, userRest: string): str
 }
 
 /** 缓存：斜杠菜单用，避免每次按键全量扫描 */
-let slashCache: { at: number; commands: SkillSlashCommand[]; skills: DesktopSkill[] } | null =
-  null;
+let slashCache: {
+  at: number;
+  commands: SkillSlashCommand[];
+  skills: DesktopSkill[];
+} | null = null;
 const SLASH_CACHE_MS = 30_000;
 
 export async function getSkillSlashCommandsCached(force = false): Promise<{

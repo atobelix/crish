@@ -240,16 +240,28 @@ fn cas_expected_match_advances_then_conflicts() {
     let store = WorkspaceStore::open(&db).unwrap();
 
     store
-        .on_committed_expect("doc-cas-t2", &batch(vec![make_update(vec![1], "structure")], false), Some(0))
+        .on_committed_expect(
+            "doc-cas-t2",
+            &batch(vec![make_update(vec![1], "structure")], false),
+            Some(0),
+        )
         .unwrap();
     assert_eq!(store.load_rev("doc-cas-t2").unwrap(), 1);
     store
-        .on_committed_expect("doc-cas-t2", &batch(vec![make_update(vec![2], "structure")], false), Some(1))
+        .on_committed_expect(
+            "doc-cas-t2",
+            &batch(vec![make_update(vec![2], "structure")], false),
+            Some(1),
+        )
         .unwrap();
     assert_eq!(store.load_rev("doc-cas-t2").unwrap(), 2);
 
     let err = store
-        .on_committed_expect("doc-cas-t2", &batch(vec![make_update(vec![3], "structure")], false), Some(1))
+        .on_committed_expect(
+            "doc-cas-t2",
+            &batch(vec![make_update(vec![3], "structure")], false),
+            Some(1),
+        )
         .unwrap_err();
     assert!(matches!(err, PersistError::Conflict { expect: 1 }));
     assert_eq!(store.load_rev("doc-cas-t2").unwrap(), 2);
@@ -264,16 +276,26 @@ fn cas_none_preserves_lww_behavior() {
 
     // on_committed 直调两次（None 路径）→ rev=2（与现状完全一致）
     store
-        .on_committed("doc-cas-t3", &batch(vec![make_update(vec![1], "structure")], false))
+        .on_committed(
+            "doc-cas-t3",
+            &batch(vec![make_update(vec![1], "structure")], false),
+        )
         .unwrap();
     store
-        .on_committed("doc-cas-t3", &batch(vec![make_update(vec![2], "structure")], false))
+        .on_committed(
+            "doc-cas-t3",
+            &batch(vec![make_update(vec![2], "structure")], false),
+        )
         .unwrap();
     assert_eq!(store.load_rev("doc-cas-t3").unwrap(), 2);
 
     // on_committed_expect(None) 同理（委托同路径）
     store
-        .on_committed_expect("doc-cas-t3", &batch(vec![make_update(vec![3], "structure")], false), None)
+        .on_committed_expect(
+            "doc-cas-t3",
+            &batch(vec![make_update(vec![3], "structure")], false),
+            None,
+        )
         .unwrap();
     assert_eq!(store.load_rev("doc-cas-t3").unwrap(), 3);
     assert_eq!(store.load_pending_count("doc-cas-t3").unwrap(), 3);
@@ -290,7 +312,10 @@ fn cas_conflict_leaves_no_seq_hole() {
         .on_committed_expect(
             "doc-cas-t4",
             &batch(
-                vec![make_update(vec![1], "structure"), make_update(vec![2], "text")],
+                vec![
+                    make_update(vec![1], "structure"),
+                    make_update(vec![2], "text"),
+                ],
                 false,
             ),
             Some(0),

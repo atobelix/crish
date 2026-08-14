@@ -24,8 +24,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::tools::subagent::{
-    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner,
-    SubagentState,
+    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner, SubagentState,
 };
 use async_trait::async_trait;
 use conex_db::{LocalDb, RunStatus};
@@ -35,9 +34,8 @@ use conex_types::SessionAgent;
 use orchestrator::recovery::{
     fingerprint, RecoveryAction, RecoveryCoordinator, RecoveryError, RecoveryLadder,
     RecoveryNotification, RecoveryRetryPolicy, RecoveryStore, RunFailureContext,
-    RECOVER_EPISODES_KEY, RECOVER_ESCALATED_EVENT, RECOVER_FORK_EVENT,
-    RECOVER_MAX_EPISODES_KEY, RECOVER_NOTIFICATIONS_KEY, RECOVER_REPORT_EVENT,
-    RECOVER_STEERING_EVENT,
+    RECOVER_EPISODES_KEY, RECOVER_ESCALATED_EVENT, RECOVER_FORK_EVENT, RECOVER_MAX_EPISODES_KEY,
+    RECOVER_NOTIFICATIONS_KEY, RECOVER_REPORT_EVENT, RECOVER_STEERING_EVENT,
 };
 use orchestrator::session::SessionTree;
 use orchestrator::steering_queue::PendingMessageQueue;
@@ -171,12 +169,12 @@ impl RecoveryStore for DbStore {
         event_type: &str,
         payload: &str,
     ) -> Result<(), RecoveryError> {
-        let sequence = self
-            .db
-            .reserve_sequence(session_id)
-            .map_err(|e| RecoveryError::PersistFailed {
-                message: e.to_string(),
-            })?;
+        let sequence =
+            self.db
+                .reserve_sequence(session_id)
+                .map_err(|e| RecoveryError::PersistFailed {
+                    message: e.to_string(),
+                })?;
         // DM-02：conex-db append_event 已加 run_id 列参数；RecoveryStore
         // trait 签名本波不变（DM-05 裁决）——此处恒传 None，recovery-* 行的
         // 列级 run 归属待 DM-05 合并时补透传（对齐 recovery_store.rs 实现）
@@ -220,12 +218,12 @@ impl RecoveryStore for DbStore {
         subagent_run_id: &str,
         path_json: &str,
     ) -> Result<(), RecoveryError> {
-        let mut agents = self
-            .db
-            .load_session_agents(session_id)
-            .map_err(|e| RecoveryError::PersistFailed {
-                message: e.to_string(),
-            })?;
+        let mut agents =
+            self.db
+                .load_session_agents(session_id)
+                .map_err(|e| RecoveryError::PersistFailed {
+                    message: e.to_string(),
+                })?;
         let row = agents
             .iter_mut()
             .find(|a| a.subagent_run_id == subagent_run_id)
@@ -247,12 +245,12 @@ impl RecoveryStore for DbStore {
     ) -> Result<Option<String>, RecoveryError> {
         // LK-02：对齐 recovery_store.rs 的 LocalDb 实现（load_session_agents
         // 过滤原行）；行缺失 = None
-        let agents = self
-            .db
-            .load_session_agents(session_id)
-            .map_err(|e| RecoveryError::PersistFailed {
-                message: e.to_string(),
-            })?;
+        let agents =
+            self.db
+                .load_session_agents(session_id)
+                .map_err(|e| RecoveryError::PersistFailed {
+                    message: e.to_string(),
+                })?;
         Ok(agents
             .iter()
             .find(|a| a.subagent_run_id == subagent_run_id)
@@ -307,7 +305,9 @@ impl SubagentSpawner for RecordingSpawner {
     ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
         self.requests.lock().unwrap().push(req.clone());
         if self.reject {
-            return Err(SubagentSpawnError::SpawnFailed("模拟 spawn 失败".to_string()));
+            return Err(SubagentSpawnError::SpawnFailed(
+                "模拟 spawn 失败".to_string(),
+            ));
         }
         let n = self.seq.fetch_add(1, Ordering::SeqCst);
         let run_id = format!("fork-run-{n}");
@@ -338,9 +338,10 @@ impl SubagentSpawner for RecordingSpawner {
                 // T-D-07 v6 新列：测试域 spawner 透传请求字段（模型覆盖不落库）
                 task_type: req.task_type.map(|t| t.as_str().to_string()),
                 display_label: req.display_label.clone(),
-                allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
-                    serde_json::to_string(paths).expect("路径白名单序列化不应失败")
-                }),
+                allowed_write_paths_json: req
+                    .allowed_write_paths
+                    .as_ref()
+                    .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
                 // D-02 LK-04 v9 列：测试域无子会话映射（None）
                 sub_session_id: None,
             });
@@ -462,12 +463,7 @@ async fn ladder1_two_transient_errors_recover_without_steering() {
 async fn ladder2_budget_exhausted_creates_steering_readable() {
     let (store, queue, _tree, mut coordinator) = setup_mem();
     let outcome = coordinator
-        .on_subagent_run_failure(&failure_ctx(
-            "run-1",
-            ProviderErrorKind::Network,
-            5,
-            61_000,
-        ))
+        .on_subagent_run_failure(&failure_ctx("run-1", ProviderErrorKind::Network, 5, 61_000))
         .await
         .expect("预算耗尽应升级阶梯 2");
     assert_eq!(outcome.ladder, RecoveryLadder::Ladder2MainAgent);
@@ -493,12 +489,7 @@ async fn ladder2_budget_exhausted_creates_steering_readable() {
 async fn ladder2_steering_injectable_and_acknowledgeable() {
     let (store, queue, _tree, mut coordinator) = setup_mem();
     coordinator
-        .on_subagent_run_failure(&failure_ctx(
-            "run-1",
-            ProviderErrorKind::Timeout,
-            3,
-            61_000,
-        ))
+        .on_subagent_run_failure(&failure_ctx("run-1", ProviderErrorKind::Timeout, 3, 61_000))
         .await
         .expect("应升级阶梯 2");
     // 主 agent 注入激活的载体：steering 条目转为用户消息（下一条消息
@@ -600,7 +591,12 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
         .await
         .expect("应升级阶梯 2");
     let outcome = coordinator
-        .fork_and_reassign(&failure_ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000))
+        .fork_and_reassign(&failure_ctx(
+            "run-1",
+            ProviderErrorKind::ServerError,
+            5,
+            61_000,
+        ))
         .await
         .expect("fork 应成功");
     assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
@@ -609,7 +605,11 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
     };
     assert_eq!(record.from_run_id, "run-1");
     assert_eq!(record.new_run_id, "fork-run-0");
-    assert_eq!(record.context_mode.as_str(), "verbatim", "同窗 ≤80% 字节级继承");
+    assert_eq!(
+        record.context_mode.as_str(),
+        "verbatim",
+        "同窗 ≤80% 字节级继承"
+    );
 
     // subagent_path_json：新 run 行落工作流路径（根 → 新叶子）
     let agents = db.load_session_agents("s1").expect("读取子代理行失败");
@@ -617,13 +617,9 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
         .iter()
         .find(|a| a.subagent_run_id == "fork-run-0")
         .expect("新 run 行必须存在");
-    let path: Vec<String> = serde_json::from_str(
-        new_row
-            .subagent_path_json
-            .as_deref()
-            .expect("路径必须落库"),
-    )
-    .expect("路径 JSON 解析失败");
+    let path: Vec<String> =
+        serde_json::from_str(new_row.subagent_path_json.as_deref().expect("路径必须落库"))
+            .expect("路径 JSON 解析失败");
     assert_eq!(path, vec!["leaf-a", "recovery-fork-run-1-0"]);
 
     // 原 run 置 failed（runs 表经既有 update_run_status 接口）
@@ -645,10 +641,7 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
     // 预算计数落 session_meta（recover_episodes）
     let fp = fingerprint("sub-a", "完成模块 A");
     assert_eq!(coordinator.budget().count(&fp), 1);
-    assert!(store
-        .get_meta(RECOVER_EPISODES_KEY)
-        .unwrap()
-        .is_some());
+    assert!(store.get_meta(RECOVER_EPISODES_KEY).unwrap().is_some());
 
     // 会话树新叶子挂源叶子下
     let tree_guard = tree.lock().unwrap();
@@ -716,7 +709,12 @@ async fn ladder3_fork_propagates_parent_tool_call_id_in_sqlite() {
     .expect("协调器构造失败");
 
     let outcome = coordinator
-        .fork_and_reassign(&failure_ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000))
+        .fork_and_reassign(&failure_ctx(
+            "run-1",
+            ProviderErrorKind::ServerError,
+            5,
+            61_000,
+        ))
         .await
         .expect("fork 应成功");
     assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
@@ -763,7 +761,12 @@ async fn ladder3_fork_propagates_parent_tool_call_id_in_memory() {
     .expect("协调器构造失败");
 
     let outcome = coordinator
-        .fork_and_reassign(&failure_ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000))
+        .fork_and_reassign(&failure_ctx(
+            "run-1",
+            ProviderErrorKind::ServerError,
+            5,
+            61_000,
+        ))
         .await
         .expect("fork 应成功");
     assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
@@ -805,7 +808,12 @@ async fn ladder3_fork_without_row_keeps_none_in_sqlite() {
     .expect("协调器构造失败");
 
     let outcome = coordinator
-        .fork_and_reassign(&failure_ctx("run-ghost", ProviderErrorKind::ServerError, 5, 61_000))
+        .fork_and_reassign(&failure_ctx(
+            "run-ghost",
+            ProviderErrorKind::ServerError,
+            5,
+            61_000,
+        ))
         .await
         .expect("fork 应成功（缺键不阻断）");
     assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
@@ -844,12 +852,7 @@ async fn restart_keeps_unhandled_steering() {
     )
     .expect("协调器构造失败");
     coordinator
-        .on_subagent_run_failure(&failure_ctx(
-            "run-1",
-            ProviderErrorKind::Network,
-            4,
-            62_000,
-        ))
+        .on_subagent_run_failure(&failure_ctx("run-1", ProviderErrorKind::Network, 4, 62_000))
         .await
         .expect("应升级阶梯 2");
     drop(coordinator);
@@ -956,7 +959,11 @@ async fn budget_limits_forks_per_episode() {
     // 第 2 次 fork（同指纹不同 run）：预算超限即停 → 阶梯 4
     let ctx2 = failure_ctx("run-2", ProviderErrorKind::ServerError, 5, 61_000);
     let outcome = coordinator.fork_and_reassign(&ctx2).await.unwrap();
-    assert_eq!(outcome.ladder, RecoveryLadder::Ladder4User, "超预算禁止自动恢复");
+    assert_eq!(
+        outcome.ladder,
+        RecoveryLadder::Ladder4User,
+        "超预算禁止自动恢复"
+    );
     assert!(coordinator.run_needs_user("run-2"));
 }
 

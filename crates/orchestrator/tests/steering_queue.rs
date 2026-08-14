@@ -10,8 +10,8 @@
 mod common;
 
 use conex_types::message::AgentMessageRole;
-use orchestrator::PendingMessageQueue;
 use orchestrator::steering_queue::SteeringInputEntry;
+use orchestrator::PendingMessageQueue;
 use session_loop::input::AgentInputQueue;
 use session_loop::steering::{PendingNudge, PendingNudgeChannel, SteeringReason};
 
@@ -82,7 +82,11 @@ fn transfer_to_respects_destination_capacity_and_steering_priority() {
     let drained = dest.dequeue_all();
     let ids: Vec<&str> = drained.iter().map(|e| e.id.as_str()).collect();
     // 逐条收容：s1 挤掉 d1；u1 再挤掉 d2 → 最终 [s1, u1]
-    assert_eq!(ids, vec!["s1", "u1"], "普通消息（d1/d2）先被挤掉，steering 保留");
+    assert_eq!(
+        ids,
+        vec!["s1", "u1"],
+        "普通消息（d1/d2）先被挤掉，steering 保留"
+    );
 }
 
 /// 目标队列全为 steering 满容量：转移进来的普通消息被丢弃（不挤占 steering）
@@ -132,7 +136,11 @@ fn transfer_follow_up_lands_in_follow_up_ring_and_promotes_on_idle() {
     let second = input.dequeue().expect("第二条");
     assert_eq!(second.text(), "请检查遗漏的工具调用");
     assert_eq!(
-        second.metadata.as_ref().and_then(|m| m.get("kind")).and_then(|k| k.as_str()),
+        second
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("kind"))
+            .and_then(|k| k.as_str()),
         Some("steering"),
         "steering 条目带元数据标记"
     );
@@ -168,7 +176,10 @@ fn drain_nudges_converts_with_group_dedup() {
     let drained = queue.dequeue_all();
     assert!(drained.iter().all(|e| e.is_steering));
     assert_eq!(drained[0].group_id.as_deref(), Some("empty-response"));
-    assert_eq!(drained[0].text, "第二次空响应提示（应替换第一次）", "同组后入者替换先入者");
+    assert_eq!(
+        drained[0].text, "第二次空响应提示（应替换第一次）",
+        "同组后入者替换先入者"
+    );
     assert_eq!(drained[1].group_id.as_deref(), Some("tool-errors"));
 }
 

@@ -79,7 +79,8 @@ fn store_error_code(kind: &str) -> Option<&'static str> {
         // 锁竞争 / 锁中毒 → store.write_failed（Transient, retryable）
         "lock" => Some(codes::STORE_WRITE_FAILED),
         // run 记录写路径 → event_store.append_failed
-        "append_event" | "insert_run" | "update_run_status" | "touch_session" | "serialize_event" | "reserve_sequence" | "seed_sequence" => {
+        "append_event" | "insert_run" | "update_run_status" | "touch_session"
+        | "serialize_event" | "reserve_sequence" | "seed_sequence" => {
             Some(codes::EVENT_STORE_APPEND_FAILED)
         }
         // 读路径 → event_store.read_failed
@@ -513,7 +514,10 @@ impl Store for InMemoryStore {
             return Err(StoreError::new("append_event", message.clone()));
         }
         if !guard.next_failures.is_empty() {
-            return Err(StoreError::new("append_event", guard.next_failures.remove(0)));
+            return Err(StoreError::new(
+                "append_event",
+                guard.next_failures.remove(0),
+            ));
         }
         // 对齐 events 表的 UNIQUE(session_id, sequence) 约束
         if guard
@@ -690,8 +694,10 @@ impl LocalDbStore {
     /// 执行，占用阻塞线程池而非 tokio worker）
     #[cfg(test)]
     pub fn set_append_delay(&self, delay: std::time::Duration) {
-        self.append_delay
-            .store(delay.as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
+        self.append_delay.store(
+            delay.as_millis() as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
     }
 }
 
@@ -852,7 +858,10 @@ impl Store for LocalDbStore {
     async fn load_pending_inputs(&self, session_id: &str) -> StoreResult<Vec<PendingInput>> {
         let db = self.db.clone();
         let session_id = session_id.to_string();
-        blocking_db_call("load_pending_inputs", move || db.load_pending_inputs(&session_id)).await
+        blocking_db_call("load_pending_inputs", move || {
+            db.load_pending_inputs(&session_id)
+        })
+        .await
     }
 
     async fn delete_pending_input(&self, id: &str) -> StoreResult<bool> {
@@ -1000,8 +1009,14 @@ mod tests {
         let store = InMemoryStore::new();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            store.append_event("s1", 1, "agent-start", "{}", None).await.unwrap();
-            let err = store.append_event("s1", 1, "agent-end", "{}", None).await.unwrap_err();
+            store
+                .append_event("s1", 1, "agent-start", "{}", None)
+                .await
+                .unwrap();
+            let err = store
+                .append_event("s1", 1, "agent-end", "{}", None)
+                .await
+                .unwrap_err();
             assert_eq!(err.kind, "append_event");
             assert!(err.message.contains("sequence"));
         });
@@ -1014,7 +1029,10 @@ mod tests {
         rt.block_on(async {
             store.append_event("s1", 1, "a", "{}", None).await.unwrap();
             store.fail_all_appends("disk is read-only");
-            let err = store.append_event("s1", 2, "b", "{}", None).await.unwrap_err();
+            let err = store
+                .append_event("s1", 2, "b", "{}", None)
+                .await
+                .unwrap_err();
             assert_eq!(err.message, "disk is read-only");
 
             let stored = store.events();
@@ -1023,7 +1041,10 @@ mod tests {
             // 一次性故障：消费一条后恢复正常（无 fail_all 干扰）
             let single = InMemoryStore::new();
             single.fail_next_append("一次故障");
-            let err2 = single.append_event("s1", 1, "c", "{}", None).await.unwrap_err();
+            let err2 = single
+                .append_event("s1", 1, "c", "{}", None)
+                .await
+                .unwrap_err();
             assert_eq!(err2.message, "一次故障");
             single.append_event("s1", 1, "c", "{}", None).await.unwrap();
 
@@ -1040,7 +1061,10 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             for seq in 1..=5u64 {
-                store.append_event("s1", seq, "a", "{}", None).await.unwrap();
+                store
+                    .append_event("s1", seq, "a", "{}", None)
+                    .await
+                    .unwrap();
             }
             let limited = store.query_events("s1", 0, Some(3)).await.unwrap();
             assert_eq!(limited.len(), 3, "limit 生效");
@@ -1058,27 +1082,52 @@ mod tests {
         let store = InMemoryStore::new();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            store.append_event("s1", 1, "agent-start", "{}", Some("r1")).await.unwrap();
-            store.append_event("s1", 2, "agent-start", "{}", Some("r2")).await.unwrap();
-            store.append_event("s1", 3, "agent-end", "{}", Some("r1")).await.unwrap();
-            store.append_event("s1", 4, "idle", "{}", None).await.unwrap();
+            store
+                .append_event("s1", 1, "agent-start", "{}", Some("r1"))
+                .await
+                .unwrap();
+            store
+                .append_event("s1", 2, "agent-start", "{}", Some("r2"))
+                .await
+                .unwrap();
+            store
+                .append_event("s1", 3, "agent-end", "{}", Some("r1"))
+                .await
+                .unwrap();
+            store
+                .append_event("s1", 4, "idle", "{}", None)
+                .await
+                .unwrap();
 
             // 交错 run 只返本 run，按 sequence 升序
-            let r1 = store.query_events_by_run("s1", "r1", 0, None).await.unwrap();
+            let r1 = store
+                .query_events_by_run("s1", "r1", 0, None)
+                .await
+                .unwrap();
             assert_eq!(r1.len(), 2, "只返 r1 事件");
             assert_eq!(r1[0].sequence, 1);
             assert_eq!(r1[1].sequence, 3);
             assert_eq!(r1[1].event_type, "agent-end");
             // after 开区间（> after）
-            let r1_after = store.query_events_by_run("s1", "r1", 1, None).await.unwrap();
+            let r1_after = store
+                .query_events_by_run("s1", "r1", 1, None)
+                .await
+                .unwrap();
             assert_eq!(r1_after.len(), 1);
             assert_eq!(r1_after[0].sequence, 3);
             // limit 生效
-            let r1_limited = store.query_events_by_run("s1", "r1", 0, Some(1)).await.unwrap();
+            let r1_limited = store
+                .query_events_by_run("s1", "r1", 0, Some(1))
+                .await
+                .unwrap();
             assert_eq!(r1_limited.len(), 1);
             assert_eq!(r1_limited[0].sequence, 1);
             // 不存在的 run → 空
-            assert!(store.query_events_by_run("s1", "nope", 0, None).await.unwrap().is_empty());
+            assert!(store
+                .query_events_by_run("s1", "nope", 0, None)
+                .await
+                .unwrap()
+                .is_empty());
             // run_id=NULL 会话域事件不命中 by_run，但按会话查询命中
             let all = store.query_events("s1", 0, None).await.unwrap();
             assert_eq!(all.len(), 4, "会话查询含 NULL run_id 行");
@@ -1091,8 +1140,14 @@ mod tests {
         let store = InMemoryStore::new();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            store.append_event("s1", 1, "agent-start", "{}", Some("r1")).await.unwrap();
-            store.append_event("s1", 2, "idle", "{}", None).await.unwrap();
+            store
+                .append_event("s1", 1, "agent-start", "{}", Some("r1"))
+                .await
+                .unwrap();
+            store
+                .append_event("s1", 2, "idle", "{}", None)
+                .await
+                .unwrap();
             let events = store.query_events("s1", 0, None).await.unwrap();
             assert_eq!(events[0].run_id.as_deref(), Some("r1"));
             assert_eq!(events[1].run_id, None);
@@ -1106,26 +1161,47 @@ mod tests {
         let db = LocalDb::open_in_memory().unwrap();
         db.insert_session("s1", "s1").unwrap();
         let store = LocalDbStore::new(db);
-        store.append_event("s1", 1, "agent-start", "{}", Some("r1")).await.unwrap();
-        store.append_event("s1", 2, "agent-start", "{}", Some("r2")).await.unwrap();
-        store.append_event("s1", 3, "agent-end", "{}", Some("r1")).await.unwrap();
-        store.append_event("s1", 4, "idle", "{}", None).await.unwrap();
+        store
+            .append_event("s1", 1, "agent-start", "{}", Some("r1"))
+            .await
+            .unwrap();
+        store
+            .append_event("s1", 2, "agent-start", "{}", Some("r2"))
+            .await
+            .unwrap();
+        store
+            .append_event("s1", 3, "agent-end", "{}", Some("r1"))
+            .await
+            .unwrap();
+        store
+            .append_event("s1", 4, "idle", "{}", None)
+            .await
+            .unwrap();
 
         // SQL 层过滤：交错 run 只返本 run，按 sequence 升序
-        let r1 = store.query_events_by_run("s1", "r1", 0, None).await.unwrap();
+        let r1 = store
+            .query_events_by_run("s1", "r1", 0, None)
+            .await
+            .unwrap();
         assert_eq!(r1.len(), 2);
         assert_eq!(r1[0].sequence, 1);
         assert_eq!(r1[1].sequence, 3);
         assert_eq!(r1[1].run_id.as_deref(), Some("r1"), "读面携带 run_id 列");
         // limit 下推生效
-        let limited = store.query_events_by_run("s1", "r1", 0, Some(1)).await.unwrap();
+        let limited = store
+            .query_events_by_run("s1", "r1", 0, Some(1))
+            .await
+            .unwrap();
         assert_eq!(limited.len(), 1);
         assert_eq!(limited[0].sequence, 1);
         // 会话查询含全部（含 NULL run_id 行），run_id 随行带出
         let all = store.query_events("s1", 0, None).await.unwrap();
         assert_eq!(all.len(), 4);
         assert_eq!(all[3].run_id, None);
-        assert!(!all[0].created_at.is_empty(), "created_at 随 SELECT 列集带出");
+        assert!(
+            !all[0].created_at.is_empty(),
+            "created_at 随 SELECT 列集带出"
+        );
     }
 
     #[test]
@@ -1145,8 +1221,14 @@ mod tests {
                 .update_run_status("r1", RunStatus::Running, None, None)
                 .await
                 .unwrap();
-            store.append_event("s1", 1, "agent-start", "{}", None).await.unwrap();
-            store.append_event("s1", 2, "agent-end", "{}", None).await.unwrap();
+            store
+                .append_event("s1", 1, "agent-start", "{}", None)
+                .await
+                .unwrap();
+            store
+                .append_event("s1", 2, "agent-end", "{}", None)
+                .await
+                .unwrap();
             // T08.4：终态写点携带 cursor
             store
                 .update_run_status("r1", RunStatus::Completed, Some("stop"), Some(2))
@@ -1158,11 +1240,7 @@ mod tests {
             assert_eq!(events[0].sequence, 1);
             assert_eq!(events[1].event_type, "agent-end");
 
-            let run = store
-                .db
-                .get_run("r1")
-                .unwrap()
-                .expect("run 应已落库");
+            let run = store.db.get_run("r1").unwrap().expect("run 应已落库");
             assert_eq!(run.status, RunStatus::Completed);
             assert_eq!(run.cursor, 2, "终态 cursor 落库（T08.4）");
             // T08.12：LocalDb 路径取号与 seed 校准
@@ -1220,7 +1298,11 @@ mod tests {
         sequences.sort_unstable();
         sequences.dedup();
         assert_eq!(sequences.len(), 160, "序列号应全部唯一（UNIQUE 约束语义）");
-        assert_eq!(ticker.await.unwrap(), 5, "计时任务全程运行（worker 未被阻塞）");
+        assert_eq!(
+            ticker.await.unwrap(),
+            5,
+            "计时任务全程运行（worker 未被阻塞）"
+        );
     }
 
     /// T08.5：慢盘模拟——append 注入 150ms 阻塞延迟（在 spawn_blocking
@@ -1236,7 +1318,9 @@ mod tests {
 
         let slow = store.clone();
         let append = tokio::spawn(async move {
-            slow.append_event("s1", 1, "agent-start", "{}", None).await.unwrap();
+            slow.append_event("s1", 1, "agent-start", "{}", None)
+                .await
+                .unwrap();
         });
         // 计时任务：10ms × 5 ≈ 50ms，应在 400ms 慢盘调用期间完成。
         // 阈值 200ms：Windows 定时器粒度 ~15.6ms（5 拍最坏 ~80ms，余量充足）；

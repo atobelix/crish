@@ -168,3 +168,25 @@ pub struct NoteApplyMdResult {
     #[serde(default)]
     pub lossy: NoteLossyReport,
 }
+
+// ==================== undo_text / redo_text 类型 ====================
+
+/// `undo_text` 结果
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NoteUndoResult {
+    pub doc_id: String,
+    pub block_id: String,
+    pub rev: u64,
+    pub text: String,
+    pub is_noop: bool,
+}
+
+/// `redo_text` 结果
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NoteRedoResult {
+    pub doc_id: String,
+    pub block_id: String,
+    pub rev: u64,
+    pub text: String,
+    pub is_noop: bool,
+}

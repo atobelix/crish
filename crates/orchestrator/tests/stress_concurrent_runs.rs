@@ -93,9 +93,13 @@ async fn drive_completed_run(
         events.push(message_end(session_id));
     }
     events.push(agent_end(session_id, AgentEndReason::Stop));
-    let result = drive_outcome(&mut run, &mut queue, outcome(AgentEndReason::Stop, None, events))
-        .await
-        .expect("驱动 run 不应失败");
+    let result = drive_outcome(
+        &mut run,
+        &mut queue,
+        outcome(AgentEndReason::Stop, None, events),
+    )
+    .await
+    .expect("驱动 run 不应失败");
     (result.terminal_status, result.persist_failure)
 }
 
@@ -120,8 +124,15 @@ async fn stress_same_session_10_concurrent_runs() {
     let elapsed = started.elapsed();
 
     for (i, (status, failure)) in results.iter().enumerate() {
-        assert_eq!(*status, RunTerminalStatus::Completed, "run {i} 应 completed 收场");
-        assert!(failure.is_none(), "run {i} 不得有持久化失败（无 UNIQUE 冲突）");
+        assert_eq!(
+            *status,
+            RunTerminalStatus::Completed,
+            "run {i} 应 completed 收场"
+        );
+        assert!(
+            failure.is_none(),
+            "run {i} 不得有持久化失败（无 UNIQUE 冲突）"
+        );
     }
 
     let stored = mem.events();
@@ -137,8 +148,14 @@ async fn stress_same_session_10_concurrent_runs() {
 
     let runs = mem.runs();
     assert_eq!(runs.len(), 10, "10 条 run 记录全部落库");
-    assert!(runs.iter().all(|r| r.status == RunStatus::Completed), "全部 run 终态 completed");
-    assert!(runs.iter().all(|r| r.cursor > 0), "终态 cursor 全部落库（T08.4）");
+    assert!(
+        runs.iter().all(|r| r.status == RunStatus::Completed),
+        "全部 run 终态 completed"
+    );
+    assert!(
+        runs.iter().all(|r| r.cursor > 0),
+        "终态 cursor 全部落库（T08.4）"
+    );
 
     let qps = total as f64 / elapsed.as_secs_f64();
     println!(
@@ -162,7 +179,11 @@ async fn stress_cross_session_20_concurrent_runs() {
     }
     for handle in handles {
         let (status, failure) = handle.await.expect("并发任务不应 panic");
-        assert_eq!(status, RunTerminalStatus::Completed, "跨会话 run 应 completed 收场");
+        assert_eq!(
+            status,
+            RunTerminalStatus::Completed,
+            "跨会话 run 应 completed 收场"
+        );
         assert!(failure.is_none(), "跨会话并发 run 不得有持久化失败");
     }
     let elapsed = started.elapsed();
@@ -176,10 +197,17 @@ async fn stress_cross_session_20_concurrent_runs() {
             .map(|e| e.sequence)
             .collect();
         seqs.sort_unstable();
-        assert_eq!(seqs, vec![1, 2, 3, 4, 5, 6], "会话 {session} 序列应 1..=6 连续");
+        assert_eq!(
+            seqs,
+            vec![1, 2, 3, 4, 5, 6],
+            "会话 {session} 序列应 1..=6 连续"
+        );
     }
     assert_eq!(mem.runs().len(), 20, "20 条 run 记录全部落库");
-    assert!(mem.runs().iter().all(|r| r.status == RunStatus::Completed), "全部 run 终态 completed");
+    assert!(
+        mem.runs().iter().all(|r| r.status == RunStatus::Completed),
+        "全部 run 终态 completed"
+    );
 
     let total = stored.len();
     let qps = total as f64 / elapsed.as_secs_f64();
@@ -311,7 +339,10 @@ async fn stress_16_subagents_high_concurrency_real_db() {
     let peak = active_peak.load(Ordering::SeqCst);
     let mut lat_list = latencies.lock().unwrap().clone();
     lat_list.sort_unstable();
-    let p50 = lat_list.get(lat_list.len() / 2).cloned().unwrap_or_default();
+    let p50 = lat_list
+        .get(lat_list.len() / 2)
+        .cloned()
+        .unwrap_or_default();
     let p95 = lat_list
         .get((lat_list.len() as f64 * 0.95) as usize)
         .cloned()
@@ -475,7 +506,26 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
                 let t2 = Instant::now();
                 {
                     let mut recovery = l2.lock().await;
-                    let _ = recovery.restore_steering_notifications();
+                    let ctx = orchestrator::recovery::RunFailureContext {
+                        subagent_id: format!("sub-{worker_id}"),
+                        subagent_run_id: format!("run-{worker_id}-{iter}"),
+                        task: format!("task payload {worker_id}-{iter}"),
+                        error_kind: conex_types::error::ProviderErrorKind::Network,
+                        retries: (iter % 3) as u32,
+                        retry_elapsed_ms: 1000,
+                        produced_content: false,
+                        from_leaf_id: Some("root".to_string()),
+                        started_at_ms: 1700000000000,
+                        inject_bytes: 50,
+                        window_bytes: 1000,
+                    };
+                    let outcome = recovery.on_subagent_run_failure(&ctx).await.expect("恢复决策失败");
+                    assert!(matches!(
+                        outcome.action,
+                        orchestrator::recovery::RecoveryAction::AutoRetry { .. }
+                            | orchestrator::recovery::RecoveryAction::SteeringQueued { .. }
+                            | orchestrator::recovery::RecoveryAction::NeedsUser { .. }
+                    ));
                 }
                 let l2_dur = t2.elapsed();
                 l2_wait_times.lock().unwrap().push(l2_dur);
@@ -561,6 +611,37 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
         .cloned()
         .unwrap_or_default();
 
+    // 激活死数据：计算各锁层级的 P99 等待时延并断言偏序单调性
+    let mut l0_sorted = l0_wait_times.lock().unwrap().clone();
+    let mut l1_sorted = l1_wait_times.lock().unwrap().clone();
+    let mut l2_sorted = l2_wait_times.lock().unwrap().clone();
+    l0_sorted.sort_unstable();
+    l1_sorted.sort_unstable();
+    l2_sorted.sort_unstable();
+
+    let p99_idx_0 = ((l0_sorted.len() as f64 * 0.99) as usize).min(l0_sorted.len().saturating_sub(1));
+    let p99_idx_1 = ((l1_sorted.len() as f64 * 0.99) as usize).min(l1_sorted.len().saturating_sub(1));
+    let p99_idx_2 = ((l2_sorted.len() as f64 * 0.99) as usize).min(l2_sorted.len().saturating_sub(1));
+    let p99_l0 = l0_sorted.get(p99_idx_0).cloned().unwrap_or_default();
+    let p99_l1 = l1_sorted.get(p99_idx_1).cloned().unwrap_or_default();
+    let p99_l2 = l2_sorted.get(p99_idx_2).cloned().unwrap_or_default();
+
+    // 偏序时延单调性物理断言：L0 (纳秒级内存守卫) <= L1 (微秒级领域状态锁) <= L2 (异步业务互斥锁)
+    assert!(
+        p99_l0 <= p99_l1,
+        "L0 纳秒内存守卫 P99 ({p99_l0:?}) 必须 <= L1 微秒领域状态锁 P99 ({p99_l1:?})"
+    );
+    assert!(
+        p99_l1 <= p99_l2,
+        "L1 微秒领域状态锁 P99 ({p99_l1:?}) 必须 <= L2 异步业务锁 P99 ({p99_l2:?})"
+    );
+
+    // Group Commit P99 写入延迟 SLA 硬断言
+    assert!(
+        p99_write < Duration::from_millis(50),
+        "Group Commit P99 写入延迟必须小于 50ms SLA 门槛: {p99_write:?}"
+    );
+
     let pool_stats = l4_reader_pool.stats();
     let writer_stats = l3_writer.stats();
 
@@ -574,7 +655,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
     let qps = expected_writes as f64 / total_test_duration.as_secs_f64();
 
     println!(
-        "[STRESS-METRICS] 五级锁偏序与零死锁拓扑实证:\n  - 死锁发生率: 0.00% (0/{expected_writes})\n  - 线程饥饿: 0 (全部 {total_workers} Worker 顺利完成)\n  - 写入 QPS: {qps:.2} ops/s (总耗时: {total_test_duration:?})\n  - Group Commit 写入延迟: P50={p50_write:?}, P95={p95_write:?}, P99={p99_write:?}\n  - Group Commit 批统计: 总操作={ops}, 批次总数={batches}, 最大批量={max_batch}\n  - ReaderPool 统计: 获取次数={acqs}, 快速路径命中={fast_hits}, 超时={timeouts}",
+        "[STRESS-METRICS] 五级锁偏序与零死锁拓扑实证:\n  - 死锁发生率: 0.00% (0/{expected_writes})\n  - 线程饥饿: 0 (全部 {total_workers} Worker 顺利完成)\n  - 写入 QPS: {qps:.2} ops/s (总耗时: {total_test_duration:?})\n  - 锁等待时延: P99(L0)={p99_l0:?}, P99(L1)={p99_l1:?}, P99(L2)={p99_l2:?}\n  - Group Commit 写入延迟: P50={p50_write:?}, P95={p95_write:?}, P99={p99_write:?}\n  - Group Commit 批统计: 总操作={ops}, 批次总数={batches}, 最大批量={max_batch}\n  - ReaderPool 统计: 获取次数={acqs}, 快速路径命中={fast_hits}, 超时={timeouts}",
         ops = writer_stats.total_operations,
         batches = writer_stats.total_batches,
         max_batch = writer_stats.max_batch_size_seen,
@@ -643,175 +724,191 @@ impl ForceCancelSink for MockCanceller {
 /// 在 16 个子 Agent 密集执行期间触发 `kill_all`，验证所有子进程、PTY 句柄与内存会话 100% 安全释放，无孤儿泄漏。
 #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
 async fn stress_kill_all_cascade_no_orphans() {
-    let (_guard, db_path) = create_temp_db_path();
-    let db = LocalDb::open(&db_path).expect("打开 LocalDb 失败");
-    let main_session_id = "master-session-kill-all";
-    db.insert_session(main_session_id, "主控级联终止测试会话")
-        .expect("创建主会话失败");
+    let timeout_res = tokio::time::timeout(Duration::from_secs(10), async {
+        let (_guard, db_path) = create_temp_db_path();
+        let db = LocalDb::open(&db_path).expect("打开 LocalDb 失败");
+        let main_session_id = "master-session-kill-all";
+        db.insert_session(main_session_id, "主控级联终止测试会话")
+            .expect("创建主会话失败");
 
-    let total_subagents = 16usize;
-    let canceller = MockCanceller::new();
-    let now = now_ms();
+        let total_subagents = 16usize;
+        let canceller = MockCanceller::new();
+        let now = now_ms();
 
-    // 预置 16 个 running 状态的子 Agent 记录，每条带有产出消息和活跃句柄
-    let mut initial_agents = Vec::new();
-    let mut cancel_flags = Vec::new();
-    let mut pty_flags = Vec::new();
+        // 预置 16 个 running 状态的子 Agent 记录，每条带有产出消息和活跃句柄
+        let mut initial_agents = Vec::new();
+        let mut cancel_flags = Vec::new();
+        let mut pty_flags = Vec::new();
 
-    for i in 0..total_subagents {
-        let subagent_id = format!("sub-agent-{i}");
-        let run_id = format!("sub-run-{i}");
-        let (cancelled, pty_freed) = canceller.register(&run_id);
-        cancel_flags.push(cancelled);
-        pty_flags.push(pty_freed);
+        for i in 0..total_subagents {
+            let subagent_id = format!("sub-agent-{i}");
+            let run_id = format!("sub-run-{i}");
+            let (cancelled, pty_freed) = canceller.register(&run_id);
+            cancel_flags.push(cancelled);
+            pty_flags.push(pty_freed);
 
-        initial_agents.push(SessionAgent {
-            id: subagent_id.clone(),
-            subagent_run_id: run_id.clone(),
-            parent_session_id: main_session_id.to_string(),
-            parent_run_id: "master-run-0".to_string(),
-            parent_tool_call_id: Some(format!("tc-{i}")),
-            description: format!("任务执行单元 {i}"),
-            mode: "implement".to_string(),
-            status: "running".to_string(),
-            summary: None,
-            messages: vec![SessionMessage {
-                id: format!("msg-sub-{i}"),
-                sender: "user".to_string(),
-                text: Some(format!("执行子任务产出数据 #{i}")),
-                thinking: None,
-                timestamp: now,
-                status: None,
-                stream_text_offset: None,
-                thinking_time: None,
-                tool_calls_json: None,
-                blocks_json: None,
-                tool_call_results_json: None,
-                usage: None,
-            }],
-            started_at: now,
-            ended_at: None,
-            depth: Some(1),
-            subagent_path_json: None,
-            task_type: None,
-            display_label: Some(format!("Worker #{i}")),
-            allowed_write_paths_json: None,
-            sub_session_id: None,
-        });
-    }
+            initial_agents.push(SessionAgent {
+                id: subagent_id.clone(),
+                subagent_run_id: run_id.clone(),
+                parent_session_id: main_session_id.to_string(),
+                parent_run_id: "master-run-0".to_string(),
+                parent_tool_call_id: Some(format!("tc-{i}")),
+                description: format!("任务执行单元 {i}"),
+                mode: "implement".to_string(),
+                status: "running".to_string(),
+                summary: None,
+                messages: vec![SessionMessage {
+                    id: format!("msg-sub-{i}"),
+                    sender: "user".to_string(),
+                    text: Some(format!("执行子任务产出数据 #{i}")),
+                    thinking: None,
+                    timestamp: now,
+                    status: None,
+                    stream_text_offset: None,
+                    thinking_time: None,
+                    tool_calls_json: None,
+                    blocks_json: None,
+                    tool_call_results_json: None,
+                    usage: None,
+                }],
+                started_at: now,
+                ended_at: None,
+                depth: Some(1),
+                subagent_path_json: None,
+                task_type: None,
+                display_label: Some(format!("Worker #{i}")),
+                allowed_write_paths_json: None,
+                sub_session_id: None,
+            });
+        }
 
-    db.save_session_agents(main_session_id, &initial_agents)
-        .expect("保存初始 session_agents 失败");
+        db.save_session_agents(main_session_id, &initial_agents)
+            .expect("保存初始 session_agents 失败");
 
-    // 确认此时有 16 个活跃句柄
-    assert_eq!(
-        canceller.active_count(),
-        16,
-        "初始必须有 16 个活跃运行句柄"
-    );
+        // 确认此时有 16 个活跃句柄
+        assert_eq!(canceller.active_count(), 16, "初始必须有 16 个活跃运行句柄");
 
-    // 启动 16 个并发后台异步写入任务模拟运行中的事件与写争用
-    let mut bg_handles = Vec::new();
-    let stop_signal = Arc::new(AtomicBool::new(false));
+        // 启动 16 个并发后台异步写入任务模拟运行中的事件与写争用
+        let mut bg_handles = Vec::new();
+        let stop_signal = Arc::new(AtomicBool::new(false));
+        let bg_ready_counter = Arc::new(AtomicUsize::new(0));
 
-    for i in 0..total_subagents {
-        let db_clone = db.clone();
-        let stop_clone = stop_signal.clone();
-        let sub_sess = format!("subagent-runtime-sess-{i}");
-        let _ = db_clone.insert_session(&sub_sess, "子代理临时会话");
-        bg_handles.push(tokio::spawn(async move {
-            let mut seq = 1i64;
-            while !stop_clone.load(Ordering::Relaxed) {
-                let _ = db_clone.append_event(
-                    &sub_sess,
-                    seq,
-                    "message_delta",
-                    r#"{"text":"streaming chunk"}"#,
-                    None,
-                );
-                seq += 1;
-                tokio::time::sleep(Duration::from_millis(1)).await;
-            }
-        }));
-    }
+        for i in 0..total_subagents {
+            let db_clone = db.clone();
+            let stop_clone = stop_signal.clone();
+            let bg_ready = bg_ready_counter.clone();
+            let sub_sess = format!("subagent-runtime-sess-{i}");
+            let _ = db_clone.insert_session(&sub_sess, "子代理临时会话");
+            bg_handles.push(tokio::spawn(async move {
+                bg_ready.fetch_add(1, Ordering::SeqCst);
+                let mut seq = 1i64;
+                while !stop_clone.load(Ordering::Relaxed) {
+                    let _ = db_clone.append_event(
+                        &sub_sess,
+                        seq,
+                        "message_delta",
+                        r#"{"text":"streaming chunk"}"#,
+                        None,
+                    );
+                    seq += 1;
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+            }));
+        }
 
-    // 稍等 10ms 确保所有 16 个子任务均进入高频执行态
-    tokio::time::sleep(Duration::from_millis(10)).await;
+        // 确定性状态等待：确保全部 16 个后台写争用任务已启动并进入循环
+        common::wait_until(
+            Duration::from_secs(5),
+            Duration::from_millis(1),
+            || async {
+                if bg_ready_counter.load(Ordering::SeqCst) == total_subagents {
+                    Some(())
+                } else {
+                    None
+                }
+            },
+        )
+        .await
+        .expect("所有 16 个后台写争用任务必须已进入高频执行态");
 
-    // 触发 SubagentLifecycleService::kill_all 批量终止
-    let service = SubagentLifecycleService::new(Arc::new(db.clone()), canceller.clone());
-    let kill_start = Instant::now();
-    let outcome = service
-        .kill_all(main_session_id, "stress_kill_all")
-        .expect("kill_all 执行不应报错");
-    let kill_elapsed = kill_start.elapsed();
+        // 触发 SubagentLifecycleService::kill_all 批量终止
+        let service = SubagentLifecycleService::new(Arc::new(db.clone()), canceller.clone());
+        let kill_start = Instant::now();
+        let outcome = service
+            .kill_all(main_session_id, "stress_kill_all")
+            .expect("kill_all 执行不应报错");
+        let kill_elapsed = kill_start.elapsed();
 
-    // 停止后台任务
-    stop_signal.store(true, Ordering::SeqCst);
-    for h in bg_handles {
-        let _ = h.await;
-    }
+        // 停止后台任务
+        stop_signal.store(true, Ordering::SeqCst);
+        for h in bg_handles {
+            let _ = h.await;
+        }
 
-    // 断言 1: KillAllOutcome 汇报精准
-    assert_eq!(
-        outcome.terminated.len(),
-        16,
-        "16 个 running 子代理必须全部被终止"
-    );
-    assert_eq!(
-        outcome.non_terminal.len(),
-        0,
-        "不应存在未投递成功或未终态条目"
-    );
-
-    // 断言 2: 16 个子 Agent 的 PTY / 进程句柄 100% 释放，无孤儿泄漏
-    assert_eq!(
-        canceller.active_count(),
-        0,
-        "kill_all 级联终止后活跃 PTY / 进程句柄数必须为 0（零孤儿泄漏）"
-    );
-    for (i, pty_flag) in pty_flags.iter().enumerate() {
-        assert!(
-            pty_flag.load(Ordering::SeqCst),
-            "子 Agent {i} 的 PTY / 进程句柄未释放"
-        );
-    }
-
-    // 断言 3: 数据库 session_agents 行全部归一为 failed，且产出数据完整保留
-    let final_agents = db
-        .load_session_agents(main_session_id)
-        .expect("加载最终 session_agents 失败");
-    assert_eq!(final_agents.len(), 16, "16 个子代理行必须依然存在");
-    for agent in &final_agents {
+        // 断言 1: KillAllOutcome 汇报精准
         assert_eq!(
-            agent.status, "failed",
-            "子代理 {} 终态必须归一为 failed",
-            agent.id
-        );
-        assert!(
-            agent.ended_at.is_some(),
-            "子代理 {} 必须记录 ended_at 终态时间戳",
-            agent.id
+            outcome.terminated.len(),
+            16,
+            "16 个 running 子代理必须全部被终止"
         );
         assert_eq!(
-            agent.messages.len(),
-            1,
-            "子代理 {} 历史产出消息必须完整保留",
-            agent.id
+            outcome.non_terminal.len(),
+            0,
+            "不应存在未投递成功或未终态条目"
         );
-        let expected_text = format!("执行子任务产出数据 #{}", &agent.id["sub-agent-".len()..]);
+
+        // 断言 2: 16 个子 Agent 的 PTY / 进程句柄 100% 释放，无孤儿泄漏
         assert_eq!(
-            agent.messages[0].text.as_deref(),
-            Some(expected_text.as_str())
+            canceller.active_count(),
+            0,
+            "kill_all 级联终止后活跃 PTY / 进程句柄数必须为 0（零孤儿泄漏）"
         );
-    }
+        for (i, pty_flag) in pty_flags.iter().enumerate() {
+            assert!(
+                pty_flag.load(Ordering::SeqCst),
+                "子 Agent {i} 的 PTY / 进程句柄未释放"
+            );
+        }
 
-    // 断言 4: 数据库无损坏，ReaderPool 健康探测通过
-    let reader_pool = ReaderPool::open(&db_path, ReaderPoolConfig::default())
-        .expect("打开 ReaderPool 验证健康失败");
-    reader_pool.check_health().expect("数据库健康检查必须通过");
+        // 断言 3: 数据库 session_agents 行全部归一为 failed，且产出数据完整保留
+        let final_agents = db
+            .load_session_agents(main_session_id)
+            .expect("加载最终 session_agents 失败");
+        assert_eq!(final_agents.len(), 16, "16 个子代理行必须依然存在");
+        for agent in &final_agents {
+            assert_eq!(
+                agent.status, "failed",
+                "子代理 {} 终态必须归一为 failed",
+                agent.id
+            );
+            assert!(
+                agent.ended_at.is_some(),
+                "子代理 {} 必须记录 ended_at 终态时间戳",
+                agent.id
+            );
+            assert_eq!(
+                agent.messages.len(),
+                1,
+                "子代理 {} 历史产出消息必须完整保留",
+                agent.id
+            );
+            let expected_text = format!("执行子任务产出数据 #{}", &agent.id["sub-agent-".len()..]);
+            assert_eq!(
+                agent.messages[0].text.as_deref(),
+                Some(expected_text.as_str())
+            );
+        }
 
-    println!(
-        "[STRESS-METRICS] 16-Agent 全局一键终止 (Kill All) 级联压测:\n  - 终止目标数: 16/16\n  - 终止总耗时: {kill_elapsed:?}\n  - 活跃 PTY / 孤儿句柄泄漏: 0 (100% 干净释放)\n  - 历史产出保留率: 100% (16/16 消息完整落库)\n  - 数据库一致性检查: PASS"
-    );
+        // 断言 4: 数据库无损坏，ReaderPool 健康探测通过
+        let reader_pool = ReaderPool::open(&db_path, ReaderPoolConfig::default())
+            .expect("打开 ReaderPool 验证健康失败");
+        reader_pool.check_health().expect("数据库健康检查必须通过");
+
+        println!(
+            "[STRESS-METRICS] 16-Agent 全局一键终止 (Kill All) 级联压测:\n  - 终止目标数: 16/16\n  - 终止总耗时: {kill_elapsed:?}\n  - 活跃 PTY / 孤儿句柄泄漏: 0 (100% 干净释放)\n  - 历史产出保留率: 100% (16/16 消息完整落库)\n  - 数据库一致性检查: PASS"
+        );
+    })
+    .await;
+
+    assert!(timeout_res.is_ok(), "全局一键终止级联压测在 10 秒内未完成：发生死锁或挂起！");
 }

@@ -34,4 +34,5 @@ pub use error::NoteBackendError;
 pub use ops::{
     NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode, NoteLossyItem, NoteLossyReport,
     NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams, NoteQueryBlocksResult,
+    NoteRedoResult, NoteUndoResult,
 };

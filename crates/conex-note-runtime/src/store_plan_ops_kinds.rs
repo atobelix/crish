@@ -16,10 +16,7 @@ pub(super) fn plan_insert(
     op: &NoteBlockOp,
 ) -> Result<(), NoteBackendError> {
     let content = op.content.clone().unwrap_or_default();
-    let kind_s = op
-        .kind
-        .clone()
-        .unwrap_or_else(|| "paragraph".to_string());
+    let kind_s = op.kind.clone().unwrap_or_else(|| "paragraph".to_string());
     let kind = parse_block_kind(&kind_s);
     let kind_label = kind_label(&kind);
 
@@ -53,9 +50,10 @@ pub(super) fn plan_insert(
         }
         Some(pid)
     } else if let Some(prev) = previous {
-        let meta = state.known.get(&prev).ok_or_else(|| {
-            NoteBackendError::NotFound(format!("previous_id not found: {prev}"))
-        })?;
+        let meta = state
+            .known
+            .get(&prev)
+            .ok_or_else(|| NoteBackendError::NotFound(format!("previous_id not found: {prev}")))?;
         meta.parent
     } else {
         None
@@ -149,10 +147,7 @@ pub(super) fn plan_insert(
 }
 
 /// Update：全量 TextEdit 替换 + 可选 UpdateProps。
-pub(super) fn plan_update(
-    state: &mut PlanState,
-    op: &NoteBlockOp,
-) -> Result<(), NoteBackendError> {
+pub(super) fn plan_update(state: &mut PlanState, op: &NoteBlockOp) -> Result<(), NoteBackendError> {
     let id_s = op
         .id
         .clone()
@@ -195,10 +190,7 @@ pub(super) fn plan_update(
 }
 
 /// Delete：Op::Delete + 规划期 known/children 摘除。
-pub(super) fn plan_delete(
-    state: &mut PlanState,
-    op: &NoteBlockOp,
-) -> Result<(), NoteBackendError> {
+pub(super) fn plan_delete(state: &mut PlanState, op: &NoteBlockOp) -> Result<(), NoteBackendError> {
     let id_s = op
         .id
         .clone()
@@ -227,10 +219,7 @@ pub(super) fn plan_delete(
 }
 
 /// Move：解析 new_parent / previous → order → Op::Move + 规划期父子重挂。
-pub(super) fn plan_move(
-    state: &mut PlanState,
-    op: &NoteBlockOp,
-) -> Result<(), NoteBackendError> {
+pub(super) fn plan_move(state: &mut PlanState, op: &NoteBlockOp) -> Result<(), NoteBackendError> {
     let id_s = op
         .id
         .clone()

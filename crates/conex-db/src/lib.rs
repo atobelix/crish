@@ -38,7 +38,7 @@ mod schema;
 mod sessions;
 
 pub use blocks::{BlockState, CompactionBlockRow, BLOCK_SCHEMA_VERSION};
-pub use cas_gc::{compute_sha256_hex, CasBlobRow, CasGcConfig, GcScanStats};
+pub use cas_gc::{compute_sha256_hex, spawn_cas_gc_loop, CasBlobRow, CasGcConfig, GcScanStats};
 pub use error::{DbFailure, DbFailureKind};
 pub use events::StoredEvent;
 pub use explore_docs_quota_store::SessionMetaExploreDocsQuotaStore;
@@ -68,6 +68,10 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone)]
 pub struct LocalDb {
     conn: Arc<Mutex<Connection>>,
+    writer: DbWriteHandle,
+    reader_pool: Arc<ReaderPool>,
+    lease_guard: Arc<BlobLeaseGuard>,
+    gc_config: CasGcConfig,
     failure: Arc<Mutex<Option<DbFailure>>>,
     /// compression_blocks 表存在性缓存（R12/P2-1 缺表降级用；
     /// None = 尚未探测，首次访问时查询 sqlite_master 并缓存——每连接一次）。
@@ -101,13 +105,36 @@ impl LocalDb {
     /// Open (or create) a database at the given path.
     /// Use ":memory:" for an in-memory database (testing).
     pub fn open(path: impl AsRef<Path>) -> Result<Self, DbFailure> {
-        let conn = Connection::open(path.as_ref()).map_err(|e| DbFailure {
+        let path_ref = path.as_ref();
+        let conn = Connection::open(path_ref).map_err(|e| DbFailure {
             message: format!("failed to open database: {e}"),
             kind: DbFailureKind::Open,
         })?;
 
+        // 启用 WAL 模式优化
+        let _ = conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+
+        let write_conn = Connection::open(path_ref).map_err(|e| DbFailure {
+            message: format!("failed to open writer database: {e}"),
+            kind: DbFailureKind::Open,
+        })?;
+        let _ = write_conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+        let writer = DbWriteHandle::spawn(write_conn, GroupCommitConfig::default());
+
+        let reader_pool = match ReaderPool::open(path_ref, ReaderPoolConfig::default()) {
+            Ok(pool) => Arc::new(pool),
+            Err(_) => Arc::new(ReaderPool::from_connections(
+                vec![],
+                ReaderPoolConfig::default(),
+            )),
+        };
+
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
+            writer,
+            reader_pool,
+            lease_guard: Arc::new(BlobLeaseGuard::new()),
+            gc_config: CasGcConfig::default(),
             failure: Arc::new(Mutex::new(None)),
             compression_blocks_present: Arc::new(Mutex::new(None)),
             imported_tables_present: Arc::new(Mutex::new(None)),
@@ -123,14 +150,75 @@ impl LocalDb {
             kind: DbFailureKind::Open,
         })?;
 
+        let writer_conn = Connection::open_in_memory().map_err(|e| DbFailure {
+            message: format!("failed to open in-memory writer: {e}"),
+            kind: DbFailureKind::Open,
+        })?;
+        let writer = DbWriteHandle::spawn(writer_conn, GroupCommitConfig::default());
+
+        let reader_pool = Arc::new(ReaderPool::from_connections(
+            vec![],
+            ReaderPoolConfig::default(),
+        ));
+
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
+            writer,
+            reader_pool,
+            lease_guard: Arc::new(BlobLeaseGuard::new()),
+            gc_config: CasGcConfig::default(),
             failure: Arc::new(Mutex::new(None)),
             compression_blocks_present: Arc::new(Mutex::new(None)),
             imported_tables_present: Arc::new(Mutex::new(None)),
         };
         db.migrate()?;
         Ok(db)
+    }
+
+    /// 专用单写 Actor 句柄
+    pub fn writer(&self) -> &DbWriteHandle {
+        &self.writer
+    }
+
+    /// 自适应 WAL 只读连接池
+    pub fn reader_pool(&self) -> &ReaderPool {
+        &self.reader_pool
+    }
+
+    /// 活数据租约守卫
+    pub fn lease_guard(&self) -> &BlobLeaseGuard {
+        &self.lease_guard
+    }
+
+    /// CAS GC 配置
+    pub fn gc_config(&self) -> &CasGcConfig {
+        &self.gc_config
+    }
+
+    /// 异步写操作
+    pub async fn write<F, R>(&self, f: F) -> Result<R, DbFailure>
+    where
+        F: FnOnce(&mut Connection) -> Result<R, DbFailure> + Send + 'static,
+        R: Send + 'static,
+    {
+        self.writer.write(f).await
+    }
+
+    /// 只读查询
+    pub fn read<F, R>(&self, f: F) -> Result<R, DbFailure>
+    where
+        F: FnOnce(&Connection) -> Result<R, DbFailure>,
+    {
+        self.reader_pool.read(f)
+    }
+
+    /// 异步只读查询
+    pub async fn read_async<F, R>(&self, f: F) -> Result<R, DbFailure>
+    where
+        F: FnOnce(&Connection) -> Result<R, DbFailure> + Send + 'static,
+        R: Send + 'static,
+    {
+        self.reader_pool.read_async(f).await
     }
 
     /// Get the current failure latch (None if healthy).

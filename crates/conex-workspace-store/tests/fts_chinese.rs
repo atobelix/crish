@@ -4,9 +4,7 @@
 //! - 产品路径 `search_fulltext` / `query_blocks`：含 CJK 时 `instr` 子串回退须命中
 //! - 英文 FTS 路径不得被本改进破坏（见 crate 内既有 `reindex_two_blocks_search_hits`）
 
-use conex_workspace_store::{
-    QueryBlocksParams, ReindexBlockOpts, WorkspaceStore,
-};
+use conex_workspace_store::{QueryBlocksParams, ReindexBlockOpts, WorkspaceStore};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -186,9 +184,7 @@ fn english_fts_path_unchanged_when_no_cjk() {
     let store = WorkspaceStore::open(dir.db()).unwrap();
     seed_chinese_notes(&store);
 
-    let hits = store
-        .search_fulltext("doc-zh", "workspace", 50)
-        .unwrap();
+    let hits = store.search_fulltext("doc-zh", "workspace", 50).unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].block_id, "b-en");
 
@@ -222,9 +218,7 @@ fn cjk_multi_token_and() {
         )
         .unwrap();
 
-    let hits = store
-        .search_fulltext("doc-m", "工作区 块笔记", 50)
-        .unwrap();
+    let hits = store.search_fulltext("doc-m", "工作区 块笔记", 50).unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].block_id, "both");
 }
@@ -235,22 +229,15 @@ fn cjk_reindex_and_remove() {
     let dir = TempDir::new();
     let store = WorkspaceStore::open(dir.db()).unwrap();
     store
-        .reindex_block(
-            "doc-rm",
-            "x",
-            "临时工作区内容",
-            ReindexBlockOpts::default(),
-        )
+        .reindex_block("doc-rm", "x", "临时工作区内容", ReindexBlockOpts::default())
         .unwrap();
     assert_eq!(
         store.search_fulltext("doc-rm", "工作区", 10).unwrap().len(),
         1
     );
     store.remove_block_index("doc-rm", "x").unwrap();
-    assert!(
-        store
-            .search_fulltext("doc-rm", "工作区", 10)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(store
+        .search_fulltext("doc-rm", "工作区", 10)
+        .unwrap()
+        .is_empty());
 }

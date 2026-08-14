@@ -15,8 +15,8 @@
 //! 对齐：`06-交叉连通性审计` §4 链 D；TS `turnIntoIntentToProvisionalOps`。
 
 use conex_doc_collab::{
-    ops_from_json_str, pending_turn_into_kind, BlockId, BlockKind, BlockProps, DocSession,
-    Origin, Op, PENDING_TURN_INTO_FLAVOUR_ATTR,
+    ops_from_json_str, pending_turn_into_kind, BlockId, BlockKind, BlockProps, DocSession, Op,
+    Origin, PENDING_TURN_INTO_FLAVOUR_ATTR,
 };
 use std::str::FromStr;
 
@@ -59,8 +59,14 @@ fn conn_d_pending_turn_into_flavour_changes_kind() {
         .attrs
         .insert("turn_into_trigger".into(), serde_json::json!("md_prefix"));
 
-    s.apply(Origin::User, &[Op::UpdateProps { id, props: props.clone() }])
-        .expect("apply pending update_props");
+    s.apply(
+        Origin::User,
+        &[Op::UpdateProps {
+            id,
+            props: props.clone(),
+        }],
+    )
+    .expect("apply pending update_props");
 
     let node = s.tree().get(&id).expect("node");
     assert_eq!(
@@ -98,8 +104,7 @@ fn conn_d_turn_into_op_wire_changes_kind() {
       }
     ]"#;
     let ops = ops_from_json_str(wire).expect("parse turn_into wire");
-    s.apply(Origin::User, &ops)
-        .expect("apply turn_into Op");
+    s.apply(Origin::User, &ops).expect("apply turn_into Op");
 
     assert_eq!(
         s.tree().get(&id).unwrap().kind,
@@ -259,8 +264,5 @@ fn conn_d_block_kind_from_flavour_mapping() {
     assert_eq!(BlockKind::from_flavour("quote"), BlockKind::Quote);
     assert_eq!(BlockKind::from_flavour("code"), BlockKind::Code);
     assert_eq!(BlockKind::from_flavour("paragraph"), BlockKind::Paragraph);
-    assert_eq!(
-        BlockKind::from_flavour("divider"),
-        BlockKind::Divider
-    );
+    assert_eq!(BlockKind::from_flavour("divider"), BlockKind::Divider);
 }

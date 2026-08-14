@@ -56,7 +56,7 @@ pub use crate::note_types::{
     NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview, NoteBlockSetAttrRequest,
     NoteBlockSetAttrResult, NoteBlockUpdateRequest, NoteBlockUpdateResult, NoteLossyItem,
     NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
-    NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
+    NoteQueryBlocksResult, NoteRedoResult, NoteUndoResult, DEFAULT_BATCH_TOKEN_TTL,
 };
 
 // ==================== NoteBackend trait ====================
@@ -66,6 +66,29 @@ pub use crate::note_types::{
 /// ToolContext 派生 Debug，trait 对象须可打印（对齐 CompressionContextStore）。
 #[async_trait]
 pub trait NoteBackend: Send + Sync + Debug {
+    /// 对指定文档中的目标块执行 CRDT 文本因果撤销
+    async fn undo_text(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<NoteUndoResult, NoteBackendError> {
+        let _ = (doc_id, block_id);
+        Err(NoteBackendError::Invalid(
+            "undo_text not supported by this backend".into(),
+        ))
+    }
+
+    /// 对指定文档中的目标块执行 CRDT 文本因果重做
+    async fn redo_text(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<NoteRedoResult, NoteBackendError> {
+        let _ = (doc_id, block_id);
+        Err(NoteBackendError::Invalid(
+            "redo_text not supported by this backend".into(),
+        ))
+    }
     /// 组合查询块摘要
     async fn query_blocks(
         &self,

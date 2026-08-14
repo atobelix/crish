@@ -130,12 +130,8 @@ fn os_watcher_emits_event_on_mirror_file_write() {
     assert!(path.is_file(), "export 后 mirror 文件须存在");
 
     // 启动 OS watcher（父目录 + interest 过滤）
-    let watcher = MirrorOsWatcher::watch_mirror_file(&path)
-        .expect("OS watcher 须能注册（notify）");
-    assert!(
-        !watcher.watched_dirs().is_empty(),
-        "须注册至少一个父目录"
-    );
+    let watcher = MirrorOsWatcher::watch_mirror_file(&path).expect("OS watcher 须能注册（notify）");
+    assert!(!watcher.watched_dirs().is_empty(), "须注册至少一个父目录");
     // 清启动噪声
     let _ = watcher.drain();
     // 部分平台 watch 注册后需极短稳定窗口
@@ -230,10 +226,7 @@ fn mirror_os_watcher_api_is_not_poll_and_not_el03() {
 
     // 文档契约（源码字符串钉死，防叙事回退）
     let src = include_str!("mirror_os_watch.rs");
-    assert!(
-        src.contains("SD-19"),
-        "头注释须钉 SD-19"
-    );
+    assert!(src.contains("SD-19"), "头注释须钉 SD-19");
     assert!(
         src.contains("≠ EL-03") || src.contains("**≠ EL-03**"),
         "头注释须显式 ≠ EL-03"
@@ -242,10 +235,7 @@ fn mirror_os_watcher_api_is_not_poll_and_not_el03() {
         src.contains("poll") && (src.contains("inotify") || src.contains("满关")),
         "头注释须区分 poll 与 OS/inotify，禁止 poll=满关叙事"
     );
-    assert!(
-        src.contains("notify"),
-        "须点名 notify 作为 OS 后端"
-    );
+    assert!(src.contains("notify"), "须点名 notify 作为 OS 后端");
     // 须保留「poll 与 OS 并存 / 禁止 poll 冒充」纪律句
     assert!(
         src.contains("禁止") && src.contains("poll") && src.contains("inotify"),
@@ -311,11 +301,7 @@ fn in_flight_guard_suppresses_self_export_events() {
     let hit = detect_if_os_event_hits_mirror(&store, "doc-guard-test", 1, &ev)
         .unwrap()
         .expect("自发事件仍命中对应 mirror path");
-    assert_eq!(
-        hit.class,
-        MirrorDriftClass::None,
-        "自发事件分类必须为 None"
-    );
+    assert_eq!(hit.class, MirrorDriftClass::None, "自发事件分类必须为 None");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -330,7 +316,9 @@ fn in_flight_guard_suppresses_transient_deletion() {
     let final_path = mirror_root.join("doc-transient.md");
 
     // 手动模拟写入初期（Writing 阶段）登记
-    let _token = store.export_guard().register(&final_path, "expected_hash_val", 1);
+    let _token = store
+        .export_guard()
+        .register(&final_path, "expected_hash_val", 1);
 
     // 在 Writing 阶段且物理文件尚不存在（瞬态间隙）-> check_and_suppress 必须返回 SuppressTransientDeletion
     let verdict = store.export_guard().check_and_suppress(&final_path, None);

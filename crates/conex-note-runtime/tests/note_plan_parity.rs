@@ -185,11 +185,7 @@ async fn run_p04_dry_run_zero_write(backend: &dyn NoteBackend, doc_id: &str) {
     assert!(r.dry_run, "P-04 dry_run flag");
     assert_eq!(r.applied, 1);
     assert!(!r.preview.is_empty(), "P-04 preview");
-    assert_eq!(
-        block_count(backend, doc_id).await,
-        1,
-        "P-04 dry_run 零写"
-    );
+    assert_eq!(block_count(backend, doc_id).await, 1, "P-04 dry_run 零写");
 }
 
 async fn run_p05_execution_unknown(backend: &dyn NoteBackend, doc_id: &str) {
@@ -211,12 +207,7 @@ async fn run_p05_execution_unknown(backend: &dyn NoteBackend, doc_id: &str) {
 async fn run_p06_invalid_update(backend: &dyn NoteBackend, doc_id: &str) {
     seed_paragraph(backend, doc_id, SEED_ID, "keep").await;
     let err = backend
-        .apply_block_ops(batch(
-            doc_id,
-            vec![op_update(SEED_ID, None)],
-            false,
-            false,
-        ))
+        .apply_block_ops(batch(doc_id, vec![op_update(SEED_ID, None)], false, false))
         .await
         .expect_err("P-06 expects Invalid");
     assert_eq!(err.code(), "note.invalid", "P-06 {err:?}");

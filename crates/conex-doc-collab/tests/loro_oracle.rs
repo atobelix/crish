@@ -90,10 +90,7 @@ impl DualForest {
 
     /// 在双方同时 insert：parent=None 为根。
     fn insert(&mut self, label: Label, parent: Option<Label>, order: &str) {
-        assert!(
-            !self.ids.contains_key(label),
-            "重复 insert 逻辑名 {label}"
-        );
+        assert!(!self.ids.contains_key(label), "重复 insert 逻辑名 {label}");
         let bid = BlockId::new();
         let parent_bid = parent.map(|p| self.rs_id(p));
         self.rs
@@ -169,7 +166,9 @@ impl DualForest {
                 let pid = self.loro_id(p);
                 let idx = self.loro_insert_index(Some(p), order);
                 // 优先带 index 的 mov_to；失败再 mov
-                tree.mov_to(tid, pid, idx).or_else(|_| tree.mov(tid, pid)).is_ok()
+                tree.mov_to(tid, pid, idx)
+                    .or_else(|_| tree.mov(tid, pid))
+                    .is_ok()
             }
         };
         if loro_ok {
@@ -292,10 +291,7 @@ fn assert_rs_no_cycle(tree: &BlockTree) {
         let mut cur = Some(start);
         let mut steps = 0usize;
         while let Some(id) = cur {
-            assert!(
-                seen.insert(id),
-                "自研 parent 成环：start={start} 再访 {id}"
-            );
+            assert!(seen.insert(id), "自研 parent 成环：start={start} 再访 {id}");
             steps += 1;
             assert!(steps <= n + 1, "自研 parent 链过长 start={start}");
             cur = tree.nodes.get(&id).and_then(|node| node.parent);
@@ -321,10 +317,7 @@ fn assert_rs_parent_child(tree: &BlockTree) {
                 assert!(p.children.contains(id), "子未出现在父 children");
             }
             None => {
-                assert!(
-                    tree.root_children.contains(id),
-                    "根节点不在 root_children"
-                );
+                assert!(tree.root_children.contains(id), "根节点不在 root_children");
             }
         }
     }
@@ -386,7 +379,10 @@ fn loro_diff_insert_move_no_cycle() {
     d.insert("a", None, "a0");
     d.insert("b", None, "a1");
     let (rs_ok, lo_ok) = d.try_move("b", Some("a"), "a0");
-    assert!(rs_ok && lo_ok, "合法 move 双方应成功 rs={rs_ok} loro={lo_ok}");
+    assert!(
+        rs_ok && lo_ok,
+        "合法 move 双方应成功 rs={rs_ok} loro={lo_ok}"
+    );
 
     assert_both_invariants(&d);
     assert_live_parent_maps_equal(&d);
@@ -422,9 +418,8 @@ fn loro_diff_cycle_both_reject() {
     // 显式校验自研错误类型
     let bid_a = d.rs_id("a");
     let bid_c = d.rs_id("c");
-    let err = d
-        .rs
-        .apply(
+    let err =
+        d.rs.apply(
             Origin::User,
             &[Op::Move {
                 id: bid_a,
@@ -480,9 +475,8 @@ fn loro_diff_delete_wins_over_move() {
     // ── 自研：move under 已删 → NotFound，B 仍根 ──
     let bid_b = d.rs_id("b");
     let bid_a = d.rs_id("a");
-    let err = d
-        .rs
-        .apply(
+    let err =
+        d.rs.apply(
             Origin::User,
             &[Op::Move {
                 id: bid_b,
@@ -495,28 +489,19 @@ fn loro_diff_delete_wins_over_move() {
         matches!(err, ApplyError::NotFound(_)),
         "自研删胜：move 目标不存在 → NotFound，得 {err:?}"
     );
-    assert!(
-        d.rs.tree().get(&bid_b).is_some(),
-        "自研 B 仍 live"
-    );
+    assert!(d.rs.tree().get(&bid_b).is_some(), "自研 B 仍 live");
     assert_eq!(
         d.rs.tree().get(&bid_b).unwrap().parent,
         None,
         "自研 B 仍为根（move 未生效）"
     );
-    assert!(
-        d.rs.tree().get(&bid_a).is_none(),
-        "自研 A 已删"
-    );
+    assert!(d.rs.tree().get(&bid_a).is_none(), "自研 A 已删");
 
     // ── Loro：mov 到 Deleted 父 → 成功但 B 变 tombstone（规则差） ──
     let tree = d.tree();
     let tid_a = d.loro_id("a");
     let tid_b = d.loro_id("b");
-    assert!(
-        tree.is_node_deleted(&tid_a).unwrap_or(false),
-        "Loro A 已删"
-    );
+    assert!(tree.is_node_deleted(&tid_a).unwrap_or(false), "Loro A 已删");
     let loro_mov = tree.mov(tid_b, tid_a);
     // 允许 Ok（tombstone）或 Err；两种都须满足删胜方向
     match loro_mov {

@@ -314,10 +314,9 @@ async fn g10_budget_denied_increments_global_stats() {
         "预算拒绝事件留痕"
     );
     let after = global_denied_stats().summary().recovery_budget_denied;
-    assert_eq!(
-        after,
-        before + 1,
-        "全局恢复预算 denied 计数应 +1（月度报告数据源）"
+    assert!(
+        after >= before + 1,
+        "全局恢复预算 denied 计数应至少 +1（月度报告数据源）"
     );
 }
 

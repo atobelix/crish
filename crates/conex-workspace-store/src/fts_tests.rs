@@ -95,7 +95,10 @@ fn reindex_two_blocks_search_hits() {
     assert_eq!(hits_a[0].kind, "paragraph");
 
     // 空查询
-    assert!(store.search_fulltext("doc-s", "   ", 10).unwrap().is_empty());
+    assert!(store
+        .search_fulltext("doc-s", "   ", 10)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -182,12 +185,10 @@ fn rebuild_fts_from_blocks_after_clear() {
         let conn = Connection::open(&db).unwrap();
         conn.execute("DELETE FROM blocks_fts", []).unwrap();
     }
-    assert!(
-        store
-            .search_fulltext("doc-f", "rebuildable_token_one", 10)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(store
+        .search_fulltext("doc-f", "rebuildable_token_one", 10)
+        .unwrap()
+        .is_empty());
 
     // 从 blocks 重建
     store.rebuild_fts(Some("doc-f")).unwrap();
@@ -218,12 +219,10 @@ fn reindex_upsert_updates_fts() {
     store
         .reindex_block("d", "b", "new_token_uvw", ReindexBlockOpts::default())
         .unwrap();
-    assert!(
-        store
-            .search_fulltext("d", "old_token_xyz", 10)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(store
+        .search_fulltext("d", "old_token_xyz", 10)
+        .unwrap()
+        .is_empty());
     assert_eq!(
         store
             .search_fulltext("d", "new_token_uvw", 10)

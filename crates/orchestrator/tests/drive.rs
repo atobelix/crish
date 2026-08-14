@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use conex_db::RunStatus;
 use conex_types::events::{AgentEvent, RunTerminalStatus};
 use conex_types::session::AgentEndReason;
-use orchestrator::events::{EventQueue, DriveOutcome, SequencedEvent};
+use orchestrator::events::{DriveOutcome, EventQueue, SequencedEvent};
 use orchestrator::run::{RunError, RunManager};
 
 use common::{agent_end, agent_start, message_delta, message_end, outcome, setup};
@@ -129,11 +129,18 @@ async fn full_lifecycle_queued_to_completed_emits_terminal_sequence() {
 
     // 持久化分流：delta 不落库，其余全落库
     assert_eq!(
-        result.events.iter().map(|e| e.persisted).collect::<Vec<_>>(),
+        result
+            .events
+            .iter()
+            .map(|e| e.persisted)
+            .collect::<Vec<_>>(),
         vec![true, false, false, true, true, true]
     );
     let stored_types: Vec<String> = mem.events().iter().map(|e| e.event_type.clone()).collect();
-    assert_eq!(stored_types, vec!["agent-start", "message-end", "agent-end", "run-terminal"]);
+    assert_eq!(
+        stored_types,
+        vec!["agent-start", "message-end", "agent-end", "run-terminal"]
+    );
 
     // 落库终态记录
     assert_eq!(mem.runs()[0].status, RunStatus::Completed);
@@ -150,7 +157,10 @@ async fn full_lifecycle_queued_to_completed_emits_terminal_sequence() {
     assert_eq!(err, RunError::TerminalImmutable);
     assert_eq!(queue.next_sequence(), seq_before, "终态后不再分配序列");
     assert_eq!(
-        mem.events().iter().filter(|e| e.event_type == "run-terminal").count(),
+        mem.events()
+            .iter()
+            .filter(|e| e.event_type == "run-terminal")
+            .count(),
         1,
         "run-terminal 只落库一次"
     );

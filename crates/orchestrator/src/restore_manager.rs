@@ -8,12 +8,12 @@ use conex_db::RunStatus;
 use conex_types::events::AgentEvent;
 
 use super::{
-    CANCEL_INTERRUPTED_ERROR, INTERRUPTED_ERROR, INTERRUPTED_REASON,
-    ReconcileConflict, RestoreError, RestoreMode, RestoreOutcome, RUN_INTERRUPTED_EVENT,
+    ReconcileConflict, RestoreError, RestoreMode, RestoreOutcome, CANCEL_INTERRUPTED_ERROR,
+    INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
 };
-use crate::persist::{Store, StoreError};
-use crate::session::{CONTEXT_COMPRESSION_END_EVENT, SESSION_LEAF_MOVED_EVENT, SessionRecord};
 use crate::now_ms;
+use crate::persist::{Store, StoreError};
+use crate::session::{SessionRecord, CONTEXT_COMPRESSION_END_EVENT, SESSION_LEAF_MOVED_EVENT};
 
 /// 重启恢复管理器（B4.3）
 pub struct RestoreManager;
@@ -94,18 +94,16 @@ impl RestoreManager {
             // 枚举成员（不扩枚举，保持自定义审计事件形态），读侧 D8
             // fallback 以 type 键路由；InterruptedRun 自身带 runId/sessionId
             // 字段，归属可还原
-            let mut payload = serde_json::to_value(&record).map_err(|e| {
-                RestoreError::new("serialize_interrupted", e.to_string())
-            })?;
+            let mut payload = serde_json::to_value(&record)
+                .map_err(|e| RestoreError::new("serialize_interrupted", e.to_string()))?;
             if let Some(obj) = payload.as_object_mut() {
                 obj.insert(
                     "type".to_string(),
                     serde_json::Value::String(RUN_INTERRUPTED_EVENT.to_string()),
                 );
             }
-            let payload = serde_json::to_string(&payload).map_err(|e| {
-                RestoreError::new("serialize_interrupted", e.to_string())
-            })?;
+            let payload = serde_json::to_string(&payload)
+                .map_err(|e| RestoreError::new("serialize_interrupted", e.to_string()))?;
             let sequence = next_sequence(store, &run.session_id).await?;
             // T08.4：打断路径写 cursor = 审计事件前会话最大已落库序列
             // （sequence-1，T08.8 的 sequence 口径）
@@ -144,9 +142,9 @@ impl RestoreManager {
         // （as_local_db 下转；InMemoryStore 等测试替身无 session_agents 面，
         // 跳过——生产恒为 LocalDbStore）
         if let Some(db) = store.as_local_db() {
-            let running_rows = db.load_running_session_agents().map_err(|e| {
-                RestoreError::new("load_running_session_agents", e.to_string())
-            })?;
+            let running_rows = db
+                .load_running_session_agents()
+                .map_err(|e| RestoreError::new("load_running_session_agents", e.to_string()))?;
             if !running_rows.is_empty() {
                 let ended_at = now_ms();
                 for (session_id, subagent_run_id) in &running_rows {
@@ -157,9 +155,7 @@ impl RestoreManager {
                             "failed",
                             Some(ended_at),
                         )
-                        .map_err(|e| {
-                            RestoreError::new("normalize_session_agent", e.to_string())
-                        })?;
+                        .map_err(|e| RestoreError::new("normalize_session_agent", e.to_string()))?;
                     if affected == 0 {
                         tracing::warn!(
                             target: "restore",
@@ -185,8 +181,7 @@ impl RestoreManager {
         // 后续裁决）。注意：打断循环已就地更新 run.status（failed/cancelled），
         // 对账看到的是打断后终态——「事件说 completed、记录说 failed」矛盾
         // 即在本步暴露。
-        let reconcile_conflicts =
-            reconcile_terminal_conflicts(store, &runs).await?;
+        let reconcile_conflicts = reconcile_terminal_conflicts(store, &runs).await?;
         for conflict in &reconcile_conflicts {
             tracing::warn!(
                 target: "restore",
@@ -229,7 +224,10 @@ impl RestoreManager {
                     .collect()
             })
             .unwrap_or_default();
-        let base_sequence = snapshot.as_ref().map(|snap| snap.last_sequence).unwrap_or(0);
+        let base_sequence = snapshot
+            .as_ref()
+            .map(|snap| snap.last_sequence)
+            .unwrap_or(0);
         let mut last_sequence = base_sequence;
         for session in &mut sessions {
             // P1-1：会话级 base = 该会话自身已重放的最大序列（快照逐会话
@@ -240,9 +238,7 @@ impl RestoreManager {
             let base = if snapshot_session_ids.contains(session.session_id.as_str()) {
                 snapshot
                     .as_ref()
-                    .and_then(|snap| {
-                        snap.session_last_sequence.get(&session.session_id)
-                    })
+                    .and_then(|snap| snap.session_last_sequence.get(&session.session_id))
                     .copied()
                     .unwrap_or(base_sequence)
             } else {
@@ -282,10 +278,7 @@ impl RestoreManager {
             unknown_status_runs,
             last_sequence,
             snapshot_note,
-            snapshot_generation: snapshot
-                .as_ref()
-                .map(|snap| snap.generation)
-                .unwrap_or(0),
+            snapshot_generation: snapshot.as_ref().map(|snap| snap.generation).unwrap_or(0),
             reconcile_conflicts,
         })
     }
@@ -322,12 +315,7 @@ async fn next_sequence(store: &dyn Store, session_id: &str) -> Result<u64, Store
     // limit=None：全量读取取 max（DM-03 签名已加 limit 参数，无限制
     // 等价旧语义）
     let events = store.query_events(session_id, 0, None).await?;
-    Ok(events
-        .iter()
-        .map(|event| event.sequence)
-        .max()
-        .unwrap_or(0)
-        + 1)
+    Ok(events.iter().map(|event| event.sequence).max().unwrap_or(0) + 1)
 }
 
 /// G-29 终态矛盾对账（DM-08）：只读校验 events 表 run-terminal 与 runs

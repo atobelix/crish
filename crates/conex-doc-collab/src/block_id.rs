@@ -18,6 +18,11 @@ impl BlockId {
         self.0
     }
 
+    /// 从字符串解析 BlockId
+    pub fn parse(s: &str) -> Result<Self, uuid::Error> {
+        s.parse()
+    }
+
     /// `<!--c:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx-->`
     pub fn to_html_comment(&self) -> String {
         format!("<!--c:{}-->", self.0)

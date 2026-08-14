@@ -49,7 +49,7 @@ use conex_types::SessionAgent;
 use serde::{Deserialize, Serialize};
 
 use crate::subagent_events::{
-    SubagentEmitContext, SubagentEndedInfo, SubagentEventEmitter, started_info_from_spawn,
+    started_info_from_spawn, SubagentEmitContext, SubagentEndedInfo, SubagentEventEmitter,
 };
 
 // ── 依赖图模型（04 C6 §2.1：after / parallel 声明；
@@ -144,7 +144,10 @@ pub enum FlowGraphError {
     /// 自依赖（禁止：after 不允许包含自身）
     SelfDependency { node_id: FlowNodeId },
     /// 引用了不存在的节点
-    UnknownDependency { node: FlowNodeId, dependency: FlowNodeId },
+    UnknownDependency {
+        node: FlowNodeId,
+        dependency: FlowNodeId,
+    },
     /// 依赖环（附环路径，如 ["a","b","c","a"]）
     Cycle { nodes: Vec<FlowNodeId> },
     /// 空声明（至少一个任务）
@@ -237,7 +240,9 @@ impl FlowGraph {
         let mut seen = HashSet::new();
         for node in &self.nodes {
             if !seen.insert(node.id.clone()) {
-                return Err(FlowGraphError::DuplicateNode { id: node.id.clone() });
+                return Err(FlowGraphError::DuplicateNode {
+                    id: node.id.clone(),
+                });
             }
         }
         // 第二遍：自依赖 + 未知引用（引用目标必须是图内节点）
@@ -637,13 +642,11 @@ impl FlowError {
                 current,
                 max,
             },
-            RecursionGuardRejection::ConcurrentExceeded { current, max } => {
-                Self::BudgetExceeded {
-                    kind: BudgetExceededKind::Concurrent,
-                    current,
-                    max,
-                }
-            }
+            RecursionGuardRejection::ConcurrentExceeded { current, max } => Self::BudgetExceeded {
+                kind: BudgetExceededKind::Concurrent,
+                current,
+                max,
+            },
             // T-D-01 确认：NestingDenied 等深度类拒绝不会经流程快照产生
             // （流程快照 depth 恒为 1，maxDepth=1 嵌套判定按「新会话深度
             // > 1」命中）——若意外出现按 InvalidState 上报兜底
@@ -652,7 +655,8 @@ impl FlowError {
             },
         }
     }
-}impl From<FlowGraphError> for FlowError {
+}
+impl From<FlowGraphError> for FlowError {
     fn from(err: FlowGraphError) -> Self {
         Self::InvalidGraph(err)
     }
@@ -664,11 +668,9 @@ impl fmt::Display for FlowError {
             Self::NotFound { message } => write!(f, "无编排声明：{message}"),
             Self::AlreadyDeclared => write!(f, "会话已有未终态编排（一轮一编排）"),
             Self::InvalidGraph(err) => write!(f, "依赖图校验失败：{err}"),
-            Self::BudgetExceeded { kind, current, max } => write!(
-                f,
-                "并发预算超限（{:?}，当前 {current} > {max}）",
-                kind
-            ),
+            Self::BudgetExceeded { kind, current, max } => {
+                write!(f, "并发预算超限（{:?}，当前 {current} > {max}）", kind)
+            }
             Self::SpawnFailed { message } => write!(f, "spawn 失败：{message}"),
             Self::PersistFailed { message } => write!(f, "flow 持久化失败：{message}"),
             Self::UnknownRun { run_id } => write!(f, "未知 run（不在编排中）：{run_id}"),
@@ -735,9 +737,7 @@ fn read_meta_strategy(meta: &dyn FlowMetaStore) -> Result<FailStrategy, FlowErro
 }
 
 /// 读取可配预算与综合节点开关（缺失 = DEFAULT_RECURSION_GUARD / true）
-fn read_meta_config(
-    meta: &dyn FlowMetaStore,
-) -> Result<(usize, usize, bool), FlowError> {
+fn read_meta_config(meta: &dyn FlowMetaStore) -> Result<(usize, usize, bool), FlowError> {
     let default = DEFAULT_RECURSION_GUARD;
     let max_siblings = read_meta_usize(meta, FLOW_MAX_SIBLINGS_KEY, default.max_siblings)?;
     let max_concurrent = read_meta_usize(meta, FLOW_MAX_CONCURRENT_KEY, default.max_concurrent)?;
@@ -751,7 +751,11 @@ fn read_meta_config(
 }
 
 /// 读取 usize 型元数据键（缺失 / 解析失败取默认；可配位宽容语义）
-fn read_meta_usize(meta: &dyn FlowMetaStore, key: &str, default: usize) -> Result<usize, FlowError> {
+fn read_meta_usize(
+    meta: &dyn FlowMetaStore,
+    key: &str,
+    default: usize,
+) -> Result<usize, FlowError> {
     match meta.get_meta(key)? {
         Some(raw) => Ok(raw.parse::<usize>().unwrap_or(default)),
         None => Ok(default),
@@ -895,10 +899,12 @@ impl FlowScheduler {
         let graph = FlowGraph::from_declaration(decl)?;
         // 2. 一轮一编排：已有未终态编排 → 拒绝（终态后可替换开新一轮）
         if let Some(existing) = &self.graph {
-            let all_terminal = existing
-                .nodes()
-                .iter()
-                .all(|n| self.states.get(&n.id).map(|s| s.is_terminal()).unwrap_or(false));
+            let all_terminal = existing.nodes().iter().all(|n| {
+                self.states
+                    .get(&n.id)
+                    .map(|s| s.is_terminal())
+                    .unwrap_or(false)
+            });
             if !all_terminal {
                 return Err(FlowError::AlreadyDeclared);
             }
@@ -914,8 +920,7 @@ impl FlowScheduler {
         self.graph = Some(graph);
         self.planner_run_id = decl.planner_run_id.clone();
         // 声明时刻刷新可配位（flow_on_failed / 预算 / 自动排队）
-        let (max_siblings, max_concurrent, auto_spawn_composite) =
-            read_meta_config(&*self.meta)?;
+        let (max_siblings, max_concurrent, auto_spawn_composite) = read_meta_config(&*self.meta)?;
         // T-D-01 确认：max_depth 跟随 DEFAULT_RECURSION_GUARD（=1）；流程
         // 节点全部为主 Agent 直接子节点，快照 depth 恒为 1 不受影响
         self.guard = RecursionGuardConfig {
@@ -1079,16 +1084,10 @@ impl FlowScheduler {
                         if let Some(emitter) = &self.subagent_events {
                             let ctx = SubagentEmitContext {
                                 session_id: self.session_id.clone(),
-                                parent_run_id: self
-                                    .planner_run_id
-                                    .clone()
-                                    .unwrap_or_default(),
+                                parent_run_id: self.planner_run_id.clone().unwrap_or_default(),
                             };
                             match emitter
-                                .emit_started(
-                                    &ctx,
-                                    &started_info_from_spawn(&request, &result),
-                                )
+                                .emit_started(&ctx, &started_info_from_spawn(&request, &result))
                                 .await
                             {
                                 Ok(_) => {}
@@ -1113,19 +1112,13 @@ impl FlowScheduler {
                         });
                         // 自动排队成功：补记本轮唤醒事件的 auto_spawned 标记
                         if node.is_composite {
-                            if let Some(w) = out
-                                .wakeups
-                                .iter_mut()
-                                .rev()
-                                .find(|w| w.node_id == node_id)
+                            if let Some(w) =
+                                out.wakeups.iter_mut().rev().find(|w| w.node_id == node_id)
                             {
                                 w.auto_spawned = true;
                             }
-                            if let Some(w) = self
-                                .wakeups
-                                .iter_mut()
-                                .rev()
-                                .find(|w| w.node_id == node_id)
+                            if let Some(w) =
+                                self.wakeups.iter_mut().rev().find(|w| w.node_id == node_id)
                             {
                                 w.auto_spawned = true;
                             }
@@ -1261,9 +1254,7 @@ impl FlowScheduler {
                         run_id: Some(subagent_run_id.to_string()),
                         strategy: Some(strategy),
                         kind: FlowReportKind::NodeFailed,
-                        message: format!(
-                            "节点 {node_id} 失败（Report 策略：照常推进但记录）"
-                        ),
+                        message: format!("节点 {node_id} 失败（Report 策略：照常推进但记录）"),
                     });
                 }
                 FailStrategy::Block => {
@@ -1272,9 +1263,7 @@ impl FlowScheduler {
                         run_id: Some(subagent_run_id.to_string()),
                         strategy: Some(strategy),
                         kind: FlowReportKind::NodeFailed,
-                        message: format!(
-                            "节点 {node_id} 失败（Block 策略：阻塞依赖节点并上报）"
-                        ),
+                        message: format!("节点 {node_id} 失败（Block 策略：阻塞依赖节点并上报）"),
                     });
                 }
             }
@@ -1299,11 +1288,9 @@ impl FlowScheduler {
                 message: "会话无编排声明".to_string(),
             });
         };
-        let node = graph
-            .node(node_id)
-            .ok_or_else(|| FlowError::InvalidState {
-                message: format!("节点不存在：{node_id}"),
-            })?;
+        let node = graph.node(node_id).ok_or_else(|| FlowError::InvalidState {
+            message: format!("节点不存在：{node_id}"),
+        })?;
         if !node.is_composite {
             return Err(FlowError::InvalidState {
                 message: format!("只有综合节点可挂接外部 run：{node_id}"),
@@ -1342,7 +1329,8 @@ impl FlowScheduler {
             return Err(FlowError::from_guard_rejection(rejection));
         }
         runtime.subagent_run_id = Some(subagent_run_id.to_string());
-        self.states.insert(node_id.to_string(), FlowNodeState::Running);
+        self.states
+            .insert(node_id.to_string(), FlowNodeState::Running);
         // 挂接的外部 run 同样计入流程内预算（终态时随 release 释放）
         self.budget.reserve();
         self.persist_runtime()?;
@@ -1367,14 +1355,15 @@ impl FlowScheduler {
     ) -> Result<Self, FlowError> {
         let session_id = session_id.into();
         // 1. 编排声明（缺 / 解析失败 → NotFound：没有编排就没有可恢复的流程）
-        let raw = meta.get_meta(FLOW_DECLARATION_KEY)?.ok_or_else(|| FlowError::NotFound {
-            message: "会话无 flow_declaration 编排声明".to_string(),
-        })?;
-        let declaration: FlowDeclaration = serde_json::from_str(&raw).map_err(|e| {
-            FlowError::InvalidState {
+        let raw = meta
+            .get_meta(FLOW_DECLARATION_KEY)?
+            .ok_or_else(|| FlowError::NotFound {
+                message: "会话无 flow_declaration 编排声明".to_string(),
+            })?;
+        let declaration: FlowDeclaration =
+            serde_json::from_str(&raw).map_err(|e| FlowError::InvalidState {
                 message: format!("flow_declaration 解析失败：{e}"),
-            }
-        })?;
+            })?;
         let graph = FlowGraph::from_declaration(&declaration)?;
         // 2. 运行时状态（run 映射 / 唤醒标记）
         let runtime: HashMap<FlowNodeId, FlowNodeRuntime> = match meta.get_meta(FLOW_STATE_KEY)? {
@@ -1383,7 +1372,10 @@ impl FlowScheduler {
                     serde_json::from_str(&state_raw).map_err(|e| FlowError::InvalidState {
                         message: format!("flow_state 解析失败：{e}"),
                     })?;
-                entries.into_iter().map(|rt| (rt.node_id.clone(), rt)).collect()
+                entries
+                    .into_iter()
+                    .map(|rt| (rt.node_id.clone(), rt))
+                    .collect()
             }
             None => HashMap::new(),
         };
@@ -1408,7 +1400,10 @@ impl FlowScheduler {
             match rows.get(run_id.as_str()) {
                 Some(row) => {
                     let subagent_state = SubagentState::from_db_status(&row.status);
-                    states.insert(node_id.clone(), FlowNodeState::from_subagent(subagent_state));
+                    states.insert(
+                        node_id.clone(),
+                        FlowNodeState::from_subagent(subagent_state),
+                    );
                 }
                 None => {
                     // 数据不一致：run 记录缺失 → 按失败处理并记录（fail-open）
@@ -1518,9 +1513,12 @@ impl FlowScheduler {
         self.graph
             .as_ref()
             .map(|g| {
-                g.nodes()
-                    .iter()
-                    .all(|n| self.states.get(&n.id).map(|s| s.is_terminal()).unwrap_or(false))
+                g.nodes().iter().all(|n| {
+                    self.states
+                        .get(&n.id)
+                        .map(|s| s.is_terminal())
+                        .unwrap_or(false)
+                })
             })
             .unwrap_or(false)
     }
@@ -1543,14 +1541,18 @@ impl FlowScheduler {
         if self.states.get(&node.id).copied() != Some(FlowNodeState::Pending) {
             return false;
         }
-        if !node.depends_on.iter().all(|dep| match self.states.get(dep) {
-            Some(FlowNodeState::Completed) => true,
-            Some(FlowNodeState::Failed) => matches!(
-                self.effective_strategy(dep),
-                FailStrategy::Skip | FailStrategy::Report
-            ),
-            _ => false,
-        }) {
+        if !node
+            .depends_on
+            .iter()
+            .all(|dep| match self.states.get(dep) {
+                Some(FlowNodeState::Completed) => true,
+                Some(FlowNodeState::Failed) => matches!(
+                    self.effective_strategy(dep),
+                    FailStrategy::Skip | FailStrategy::Report
+                ),
+                _ => false,
+            })
+        {
             return false;
         }
         !self.serial_predecessor_pending(node)
@@ -1604,15 +1606,16 @@ impl FlowScheduler {
                 if self.states.get(&node.id).copied() != Some(FlowNodeState::Pending) {
                     continue;
                 }
-                let blocker = node.depends_on.iter().find(|dep| {
-                    match self.states.get(*dep) {
+                let blocker = node
+                    .depends_on
+                    .iter()
+                    .find(|dep| match self.states.get(*dep) {
                         Some(FlowNodeState::Blocked) => true,
                         Some(FlowNodeState::Failed) => {
                             self.effective_strategy(dep) == FailStrategy::Block
                         }
                         _ => false,
-                    }
-                });
+                    });
                 if let Some(blocker) = blocker {
                     self.states.insert(node.id.clone(), FlowNodeState::Blocked);
                     out.blocked.push(node.id.clone());
@@ -1726,7 +1729,10 @@ mod tests {
             FlowGraphError::Cycle { nodes } => {
                 assert_eq!(nodes.len(), 4, "环路径闭合回起点");
                 assert_eq!(nodes.first(), nodes.last(), "环路径首尾闭合");
-                let mut sorted: Vec<&str> = nodes[..nodes.len() - 1].iter().map(|s| s.as_str()).collect();
+                let mut sorted: Vec<&str> = nodes[..nodes.len() - 1]
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect();
                 sorted.sort_unstable();
                 assert_eq!(sorted, vec!["a", "b", "c"], "环路径覆盖 a/b/c 三节点");
             }
@@ -1801,8 +1807,7 @@ mod tests {
 
     #[test]
     fn add_dependency_rejects_self_edge_without_mutation() {
-        let mut graph = FlowGraph::from_declaration(&declaration(vec![node("a", &[])]))
-            .unwrap();
+        let mut graph = FlowGraph::from_declaration(&declaration(vec![node("a", &[])])).unwrap();
         let err = graph
             .add_dependency(&"a".to_string(), &"a".to_string())
             .unwrap_err();
@@ -1812,10 +1817,13 @@ mod tests {
 
     #[test]
     fn add_dependency_rejects_unknown_nodes() {
-        let mut graph = FlowGraph::from_declaration(&declaration(vec![node("a", &[])]))
-            .unwrap();
-        assert!(graph.add_dependency(&"ghost".to_string(), &"a".to_string()).is_err());
-        assert!(graph.add_dependency(&"a".to_string(), &"ghost".to_string()).is_err());
+        let mut graph = FlowGraph::from_declaration(&declaration(vec![node("a", &[])])).unwrap();
+        assert!(graph
+            .add_dependency(&"ghost".to_string(), &"a".to_string())
+            .is_err());
+        assert!(graph
+            .add_dependency(&"a".to_string(), &"ghost".to_string())
+            .is_err());
         assert_eq!(graph.len(), 1, "图不变");
     }
 
@@ -1850,7 +1858,11 @@ mod tests {
             assert_eq!(FailStrategy::parse(wire), Some(strategy));
             assert_eq!(strategy.as_str(), wire);
         }
-        assert_eq!(FailStrategy::parse("abort"), None, "04 术语已映射，未知拒绝");
+        assert_eq!(
+            FailStrategy::parse("abort"),
+            None,
+            "04 术语已映射，未知拒绝"
+        );
         assert_eq!(FailStrategy::parse(""), None);
     }
 
@@ -1930,12 +1942,16 @@ mod tests {
         n2.parallel = false;
         let mut sched = sched_with_graph(vec![n1, n2]);
         let n2_node = sched.graph.as_ref().unwrap().node("n2").unwrap().clone();
-        sched.states.insert("n1".to_string(), FlowNodeState::Running);
+        sched
+            .states
+            .insert("n1".to_string(), FlowNodeState::Running);
         assert!(
             !sched.is_ready(&n2_node),
             "前驱同级 Running 时不得就绪（同波次串行）"
         );
-        sched.states.insert("n1".to_string(), FlowNodeState::Completed);
+        sched
+            .states
+            .insert("n1".to_string(), FlowNodeState::Completed);
         assert!(sched.is_ready(&n2_node), "前驱同级终态后就绪");
         sched.states.insert("n1".to_string(), FlowNodeState::Failed);
         assert!(
@@ -1959,21 +1975,14 @@ mod tests {
         let x_node = graph.node("x").unwrap().clone();
         let y_node = graph.node("y").unwrap().clone();
         sched.states.insert("a".to_string(), FlowNodeState::Running);
-        assert!(
-            !sched.is_ready(&y_node),
-            "同波次前驱 Running → y 不就绪"
-        );
-        assert!(
-            !sched.is_ready(&x_node),
-            "x 依赖（a）未完成 → 不就绪"
-        );
+        assert!(!sched.is_ready(&y_node), "同波次前驱 Running → y 不就绪");
+        assert!(!sched.is_ready(&x_node), "x 依赖（a）未完成 → 不就绪");
         // a 终态：同波次 y 就绪；异波次 x 也同时就绪（两波次并行推进）
-        sched.states.insert("a".to_string(), FlowNodeState::Completed);
+        sched
+            .states
+            .insert("a".to_string(), FlowNodeState::Completed);
         assert!(sched.is_ready(&y_node));
-        assert!(
-            sched.is_ready(&x_node),
-            "异波次不受 parallel 串行约束"
-        );
+        assert!(sched.is_ready(&x_node), "异波次不受 parallel 串行约束");
     }
 
     #[test]
@@ -1984,7 +1993,9 @@ mod tests {
         let n2 = node("n2", &[]); // helper 默认 parallel=true
         let mut sched = sched_with_graph(vec![n1, n2]);
         let n2_node = sched.graph.as_ref().unwrap().node("n2").unwrap().clone();
-        sched.states.insert("n1".to_string(), FlowNodeState::Running);
+        sched
+            .states
+            .insert("n1".to_string(), FlowNodeState::Running);
         assert!(
             sched.is_ready(&n2_node),
             "parallel=true 显式并发，不受串行约束"
@@ -2002,10 +2013,7 @@ mod tests {
         let mut sched = sched_with_graph(vec![n1, n2]);
         let n2_node = sched.graph.as_ref().unwrap().node("n2").unwrap().clone();
         sched.states.insert("n1".to_string(), FlowNodeState::Failed);
-        assert!(
-            sched.is_ready(&n2_node),
-            "Failed + Skip 生效策略视为满足"
-        );
+        assert!(sched.is_ready(&n2_node), "Failed + Skip 生效策略视为满足");
         // 对照：Report 同样视为满足
         let mut n1 = node("n1", &[]);
         n1.parallel = false;
@@ -2014,7 +2022,9 @@ mod tests {
         n2.parallel = false;
         let mut sched2 = sched_with_graph(vec![n1, n2]);
         let n2_node2 = sched2.graph.as_ref().unwrap().node("n2").unwrap().clone();
-        sched2.states.insert("n1".to_string(), FlowNodeState::Failed);
+        sched2
+            .states
+            .insert("n1".to_string(), FlowNodeState::Failed);
         assert!(sched2.is_ready(&n2_node2), "Failed + Report 视为满足");
     }
 
@@ -2038,7 +2048,11 @@ mod tests {
             FlowNodeState::from_subagent(SubagentState::Failed),
             FlowNodeState::Failed
         );
-        for terminal in [FlowNodeState::Completed, FlowNodeState::Failed, FlowNodeState::Blocked] {
+        for terminal in [
+            FlowNodeState::Completed,
+            FlowNodeState::Failed,
+            FlowNodeState::Blocked,
+        ] {
             assert!(terminal.is_terminal());
         }
         assert!(!FlowNodeState::Pending.is_terminal());

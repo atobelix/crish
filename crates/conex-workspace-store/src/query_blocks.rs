@@ -26,9 +26,7 @@
 //! - **≠ Wave 2 存储完成**；**≠** A-PERF-10 数值满关。
 //! - 本包仅为 **结构切开**（体积/职责），**不**静默改查询语义。
 
-use super::{
-    StoreError, WorkspaceStore, build_fts_query, contains_cjk, is_safe_attr_key,
-};
+use super::{build_fts_query, contains_cjk, is_safe_attr_key, StoreError, WorkspaceStore};
 use rusqlite::Connection;
 use serde_json::{Map, Value as JsonValue};
 use std::collections::BTreeMap;
@@ -109,9 +107,7 @@ pub fn query_blocks_conn(
 ) -> Result<QueryBlocksResult, StoreError> {
     let doc_id = params.doc_id.as_str();
     if doc_id.is_empty() {
-        return Err(StoreError::Persist(
-            "query_blocks: doc_id 不能为空".into(),
-        ));
+        return Err(StoreError::Persist("query_blocks: doc_id 不能为空".into()));
     }
 
     let limit = normalize_limit(params.limit);
@@ -126,10 +122,7 @@ pub fn query_blocks_conn(
         .filter(|s| !s.is_empty());
 
     // kind_in：Some(空) 与 None 均视为「不过滤 kind」；非空则 IN
-    let kinds: Option<&[String]> = params
-        .kind_in
-        .as_deref()
-        .filter(|k| !k.is_empty());
+    let kinds: Option<&[String]> = params.kind_in.as_deref().filter(|k| !k.is_empty());
 
     // 校验 attrs 键并收集
     let attrs: Vec<(&str, &JsonValue)> = match &params.attrs_eq {

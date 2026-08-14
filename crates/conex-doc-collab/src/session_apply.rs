@@ -231,12 +231,7 @@ impl DocSession {
         split_candidates.sort_by_key(|id| id.as_uuid());
         split_candidates.dedup();
         for cid in split_candidates {
-            self.maybe_split_huge_in_tx(
-                cid,
-                &mut upserts,
-                &mut text_touches,
-                &mut text_payloads,
-            )?;
+            self.maybe_split_huge_in_tx(cid, &mut upserts, &mut text_touches, &mut text_payloads)?;
         }
 
         self.rev += 1;
@@ -405,13 +400,7 @@ impl DocSession {
             self.text_engine.init_block(seg_id);
             self.tree.resort_children_of(parent);
 
-            self.set_block_text_and_record(
-                seg_id,
-                seg,
-                upserts,
-                text_touches,
-                text_payloads,
-            )?;
+            self.set_block_text_and_record(seg_id, seg, upserts, text_touches, text_payloads)?;
             if let Some(n) = self.tree.nodes.get(&seg_id) {
                 upserts.push(block_to_upsert(n));
             }

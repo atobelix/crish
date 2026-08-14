@@ -608,16 +608,88 @@ pub fn run_cas_gc_conn(
         conn.query_row("SELECT COUNT(*) FROM blob_cas WHERE pinned = 1", [], |r| {
             r.get(0)
         })?;
+    let lease_protected: i64 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT blob_hash) FROM active_blob_leases WHERE expires_at > datetime('now')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let reference_protected: i64 = conn
+        .query_row(
+            r#"
+            SELECT COUNT(DISTINCT b.hash) FROM blob_cas b
+            WHERE b.hash IN (SELECT hash FROM block_attachments WHERE hash IS NOT NULL)
+               OR b.hash IN (SELECT blob_hash FROM doc_snapshots_attachments WHERE blob_hash IS NOT NULL)
+               OR b.hash IN (SELECT blob_hash FROM session_undo_blobs WHERE blob_hash IS NOT NULL)
+            "#,
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let grace_param = format!("-{} seconds", config.creation_grace_secs);
+    let grace_protected: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM blob_cas WHERE (pinned = 0 OR pinned IS NULL) AND created_at > datetime('now', ?1)",
+            params![grace_param],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
     let quarantined_hashes = mark_quarantine_orphans_conn(conn, config)?;
     let purged_hashes = purge_expired_quarantined_conn(conn, config)?;
 
     Ok(GcScanStats {
         total_blobs_scanned: total_blobs_scanned as usize,
-        reference_protected: 0,
-        lease_protected: 0,
+        reference_protected: reference_protected as usize,
+        lease_protected: lease_protected as usize,
         pinned_protected: pinned_protected as usize,
-        grace_protected: 0,
+        grace_protected: grace_protected as usize,
         quarantined_hashes,
         purged_hashes,
+    })
+}
+
+/// 启动后台 CAS GC 守护循环。
+///
+/// 定期（如每 1 小时）执行一次轻量扫描；支持通过 cancel_rx 安全退出。
+pub fn spawn_cas_gc_loop(
+    db: LocalDb,
+    interval: std::time::Duration,
+    config: CasGcConfig,
+    mut cancel_rx: tokio::sync::watch::Receiver<bool>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut timer = tokio::time::interval(interval);
+        loop {
+            tokio::select! {
+                _ = cancel_rx.changed() => {
+                    if *cancel_rx.borrow() {
+                        tracing::info!(target: "conex_db", "CAS GC 调度器收到退出信号，安全终止");
+                        break;
+                    }
+                }
+                _ = timer.tick() => {
+                    tracing::debug!(target: "conex_db", "开始执行周期性 CAS GC 扫描...");
+                    match db.run_cas_gc(&config) {
+                        Ok(stats) => {
+                            if !stats.quarantined_hashes.is_empty() || !stats.purged_hashes.is_empty() {
+                                tracing::info!(
+                                    target: "conex_db",
+                                    "CAS GC 执行完成: 隔离 {} 个, 物理清除 {} 个, 租约保护 {}, 引用保护 {}",
+                                    stats.quarantined_hashes.len(),
+                                    stats.purged_hashes.len(),
+                                    stats.lease_protected,
+                                    stats.reference_protected
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(target: "conex_db", "CAS GC 执行失败: {e}");
+                        }
+                    }
+                }
+            }
+        }
     })
 }

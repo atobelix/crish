@@ -54,11 +54,18 @@ function extractRegistryNames(): string[] {
     throw new Error(`Rust 真源缺失：${file}（契约门禁必须 fail，不得 skip）`);
   }
   const src = readFileSync(file, 'utf8');
-  // 注册宏条目：行首 `("name", ...)`；去掉块注释防误配
-  const stripped = src.replace(/\/\*[\s\S]*?\*\//g, '');
-  const re = /^\s*\("([a-z][a-z0-9_-]*)",/gm;
+  // 注册宏条目：先去注释，再精确截取 command_registry![ ... ]; 宏体
+  const stripped = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  const macroMatch = stripped.match(/command_registry!\s*\[([\s\S]*?)\];/);
+  if (!macroMatch?.[1]) {
+    throw new Error('未在 main.rs 中找到 command_registry! 宏调用块');
+  }
+  const macroBody = macroMatch[1];
+  const re = /\(\s*"([a-z][a-z0-9_-]*)",/g;
   const names: string[] = [];
-  for (const m of stripped.matchAll(re)) {
+  for (const m of macroBody.matchAll(re)) {
     if (m[1] !== undefined) names.push(m[1]);
   }
   return names;

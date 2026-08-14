@@ -4,7 +4,9 @@
 //! mod tests;`（非直接 `mod`，无孤儿）。用例形状与拆分前完全一致（零删除、
 //! 零合并）；诚实边界句全保留。
 
-use super::note_commands_apply::{NoteApplyOpsArgs, NoteSendToNoteArgs};
+use super::note_commands_apply::{
+    NoteApplyOpsArgs, NoteRedoTextArgs, NoteSendToNoteArgs, NoteUndoTextArgs,
+};
 use super::note_commands_hydrate::NoteHydrateDocumentArgs;
 use super::note_commands_mirror::{NoteDetectMirrorArgs, NoteImportMirrorArgs};
 use super::*;
@@ -511,5 +513,68 @@ async fn test_apply_md_for_test_direct_smoke() {
     .expect("apply_md_for_test 应成功");
     assert_eq!(res.inserted, 2);
     assert_eq!(res.block_ids.len(), 2);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn note_undo_and_redo_text_ipc_roundtrip() {
+    let (_guard, dir) = temp_install();
+    let apply = note_document_apply_md(NoteApplyMdRequest {
+        doc_id: "undo-ipc-doc".into(),
+        markdown: "first content".into(),
+        parent_id: None,
+        after_block_id: None,
+        mode: NoteApplyMode::ApplyMdFragment,
+        intent_id: None,
+        batch_id: None,
+        message_id: None,
+        origin: Some("user".into()),
+    })
+    .await
+    .unwrap();
+    assert_eq!(apply["ok"], true);
+    let block_id = apply["block_ids"][0].as_str().unwrap().to_string();
+
+    // 1. apply 细粒度更新文本
+    let ops_json = serde_json::json!([
+        {
+            "op": "text_edit",
+            "id": block_id,
+            "start": 0,
+            "end": 0,
+            "insert": "Extra Text "
+        }
+    ])
+    .to_string();
+    let apply_res = note_apply_ops(NoteApplyOpsArgs {
+        doc_id: "undo-ipc-doc".into(),
+        ops_json,
+        intent_id: None,
+        origin: Some("user".into()),
+    })
+    .await
+    .unwrap();
+    assert_eq!(apply_res["ok"], true, "apply_res failed: {apply_res}");
+
+    // 2. 触发 note_undo_text
+    let undo_res = note_undo_text(NoteUndoTextArgs {
+        doc_id: "undo-ipc-doc".into(),
+        block_id: block_id.clone(),
+    })
+    .await
+    .unwrap();
+    assert_eq!(undo_res["ok"], true);
+    assert_eq!(undo_res["is_noop"], false);
+
+    // 3. 触发 note_redo_text
+    let redo_res = note_redo_text(NoteRedoTextArgs {
+        doc_id: "undo-ipc-doc".into(),
+        block_id: block_id.clone(),
+    })
+    .await
+    .unwrap();
+    assert_eq!(redo_res["ok"], true);
+    assert_eq!(redo_res["is_noop"], false);
+
     let _ = std::fs::remove_dir_all(dir);
 }

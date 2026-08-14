@@ -5,7 +5,7 @@
 
 use super::ReindexBlockOpts;
 use crate::StoreError;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 /// 事务内：UPSERT blocks + 同步 FTS。
 pub(crate) fn reindex_block_conn(

@@ -103,10 +103,7 @@ mod tests {
     #[test]
     fn w6_a_s_binds_a_blk_sample_scenarios_not_full_table() {
         assert_eq!(W6_A_S_A_BLK_FAMILY, "A-BLK");
-        assert!(
-            !W6_A_S_A_BLK_SCENARIOS.is_empty(),
-            "抽样场景表不得为空"
-        );
+        assert!(!W6_A_S_A_BLK_SCENARIOS.is_empty(), "抽样场景表不得为空");
         assert!(
             W6_A_S_A_BLK_SCENARIOS
                 .iter()

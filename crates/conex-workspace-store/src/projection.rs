@@ -153,15 +153,9 @@ impl WorkspaceStore {
 
 /// 清空某 doc 的全部投影索引（full_rebuild 用；**不**动 snapshot/updates 权威）。
 fn clear_doc_projection_conn(conn: &rusqlite::Connection, doc_id: &str) -> Result<(), StoreError> {
-    conn.execute(
-        "DELETE FROM blocks_fts WHERE doc_id = ?1",
-        params![doc_id],
-    )?;
+    conn.execute("DELETE FROM blocks_fts WHERE doc_id = ?1", params![doc_id])?;
     conn.execute("DELETE FROM blocks WHERE doc_id = ?1", params![doc_id])?;
-    conn.execute(
-        "DELETE FROM block_refs WHERE doc_id = ?1",
-        params![doc_id],
-    )?;
+    conn.execute("DELETE FROM block_refs WHERE doc_id = ?1", params![doc_id])?;
     conn.execute(
         "DELETE FROM block_attachments WHERE doc_id = ?1",
         params![doc_id],

@@ -20,9 +20,7 @@ use conex_md_ast::{apply_md_fragment, LossyReport, MdError};
 use conex_workspace_store::commit_ops;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::store_backend::{
-    map_commit_err, origin_from_req, SlowPathProbe, StoreNoteBackend,
-};
+use crate::store_backend::{map_commit_err, origin_from_req, SlowPathProbe, StoreNoteBackend};
 use crate::store_plan_ops::parse_block_id;
 
 /// 毒丸恢复计数（B1-1 观测化：本文件 intents / per-doc 锁中毒恢复次数；
@@ -74,10 +72,7 @@ impl StoreNoteBackend {
         let after_parent = tree.get(after).and_then(|n| n.parent);
         let mut seq = 0u32;
         for op in ops.iter_mut() {
-            if let Op::Insert {
-                parent, order, ..
-            } = op
-            {
+            if let Op::Insert { parent, order, .. } = op {
                 if *parent == after_parent {
                     // fractional 简化：after_order + 后缀保证字典序靠后
                     *order = format!("{after_order}~{seq:04}");
@@ -170,9 +165,7 @@ impl StoreNoteBackend {
             }
             NoteApplyMode::ApplyMdFragment | NoteApplyMode::InsertBlocks => {
                 let parent = match req.parent_id.as_deref() {
-                    Some(p) if !p.trim().is_empty() => {
-                        Some(parse_block_id(p, "parent_id")?)
-                    }
+                    Some(p) if !p.trim().is_empty() => Some(parse_block_id(p, "parent_id")?),
                     _ => None,
                 };
                 // parent 存在性：apply_md_fragment 会 UnknownParent；after 可隐式定父
@@ -181,9 +174,7 @@ impl StoreNoteBackend {
                     Some(a) if !a.trim().is_empty() => {
                         let aid = parse_block_id(a, "after_block_id")?;
                         let node = session.tree().get(&aid).ok_or_else(|| {
-                            NoteBackendError::NotFound(format!(
-                                "after_block_id not found: {aid}"
-                            ))
+                            NoteBackendError::NotFound(format!("after_block_id not found: {aid}"))
                         })?;
                         if parent.is_none() {
                             parent = node.parent;
@@ -194,8 +185,8 @@ impl StoreNoteBackend {
                 };
 
                 // W2-B + W4-A：ApplyReport 取 ops 并透出 lossy → 工具 result
-                let mut report = apply_md_fragment(session.tree(), parent, &req.markdown)
-                    .map_err(map_md_err)?;
+                let mut report =
+                    apply_md_fragment(session.tree(), parent, &req.markdown).map_err(map_md_err)?;
                 if let Some(aid) = after_id {
                     Self::rewrite_orders_after(&mut report.ops, &aid, session.tree());
                 }

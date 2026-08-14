@@ -12,10 +12,13 @@
 //!   升序 + id 决胜）保持——崩溃恢复 FIFO 语义在真实写者下续绿
 //!   （全流程恢复测试见 crash_consistency.rs 既有用例）。
 
+mod common;
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use agent_tools::registry::ToolRegistry;
+use common::wait_until;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use orchestrator::persist::{InMemoryStore, Store};
 use session_loop::testing::TestProvider;
@@ -37,9 +40,7 @@ fn user_msg(id: &str, text: &str) -> AgentMessage {
 }
 
 /// 装配带输入留痕注入的 loop（未注入 = 不落库，向后兼容）
-fn loop_with_pending_store(
-    store: Arc<InMemoryStore>,
-) -> (AgentSessionLoop, Arc<InMemoryStore>) {
+fn loop_with_pending_store(store: Arc<InMemoryStore>) -> (AgentSessionLoop, Arc<InMemoryStore>) {
     let persist: Arc<dyn PendingInputStore> = store.clone();
     let loop_inst = AgentSessionLoop::new(
         "s1",
@@ -57,16 +58,32 @@ fn loop_with_pending_store(
 async fn enqueue_writes_pending_input_with_run_id() {
     let (mut loop_inst, store) = loop_with_pending_store(Arc::new(InMemoryStore::new()));
     loop_inst.enqueue_input(user_msg("m-1", "你好"), InputEnqueueMode::Force);
-    // fire-and-forget 落库：等待 spawn 任务完成
-    tokio::time::sleep(Duration::from_millis(30)).await;
 
-    let rows = store.load_pending_inputs("s1").await.unwrap();
+    // 确定性状态轮询：等待 spawn 落库完成
+    let rows = wait_until(
+        Duration::from_secs(3),
+        Duration::from_millis(5),
+        || async {
+            let r = store.load_pending_inputs("s1").await.ok()?;
+            if !r.is_empty() {
+                Some(r)
+            } else {
+                None
+            }
+        },
+    )
+    .await
+    .expect("enqueue 写点必须在超时前落库一条");
+
     assert_eq!(rows.len(), 1, "enqueue 写点必须落库一条");
     assert_eq!(rows[0].id, "m-1", "pending 行 id = 消息 id");
     assert_eq!(rows[0].session_id, "s1");
     assert_eq!(rows[0].run_id.as_deref(), Some("r1"), "run_id 正确性");
     assert!(rows[0].payload.contains("你好"), "payload = 消息 JSON 正文");
-    assert!(rows[0].payload.contains("\"id\":\"m-1\""), "payload 含消息 id 字段");
+    assert!(
+        rows[0].payload.contains("\"id\":\"m-1\""),
+        "payload 含消息 id 字段"
+    );
     // 其它会话不命中
     let other = store.load_pending_inputs("s-other").await.unwrap();
     assert!(other.is_empty(), "会话隔离");
@@ -79,14 +96,40 @@ async fn consume_deletes_pending_input_row() {
     let (mut loop_inst, store) = loop_with_pending_store(Arc::new(InMemoryStore::new()));
     // enqueue 注入面写点（run 前）
     loop_inst.enqueue_input(user_msg("m-1", "第一问"), InputEnqueueMode::Force);
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    assert_eq!(store.load_pending_inputs("s1").await.unwrap().len(), 1);
+    let rows_before = wait_until(
+        Duration::from_secs(3),
+        Duration::from_millis(5),
+        || async {
+            let r = store.load_pending_inputs("s1").await.ok()?;
+            if r.len() == 1 {
+                Some(r)
+            } else {
+                None
+            }
+        },
+    )
+    .await
+    .expect("enqueue 写入必须在超时前就绪");
+    assert_eq!(rows_before.len(), 1);
 
     // run 起始写点（用户消息主路径）+ 消费删点（record_message）
     let _outcome = loop_inst.run(user_msg("m-2", "第二问")).await;
-    tokio::time::sleep(Duration::from_millis(30)).await;
 
-    let rows = store.load_pending_inputs("s1").await.unwrap();
+    let rows = wait_until(
+        Duration::from_secs(3),
+        Duration::from_millis(5),
+        || async {
+            let r = store.load_pending_inputs("s1").await.ok()?;
+            if r.is_empty() {
+                Some(r)
+            } else {
+                None
+            }
+        },
+    )
+    .await
+    .expect("消费后 pending 行必须在超时前全部删除");
+
     assert!(
         rows.is_empty(),
         "消费后 pending 行必须全部删除（含 enqueue 写点 m-1 与 run 写点 m-2）：{rows:?}"
@@ -102,11 +145,23 @@ async fn restore_reads_written_pending_inputs_in_fifo_order() {
     loop_inst.enqueue_input(user_msg("p1", "一"), InputEnqueueMode::Force);
     loop_inst.enqueue_input(user_msg("p2", "二"), InputEnqueueMode::Steer);
     loop_inst.enqueue_input(user_msg("p3", "三"), InputEnqueueMode::FollowUp);
-    tokio::time::sleep(Duration::from_millis(30)).await;
 
-    // 恢复消费端 = RestoreManager::restore 的 load_pending_inputs 数据源
-    //（restore_manager.rs:273；全流程恢复测试见 crash_consistency.rs）
-    let rows = store.load_pending_inputs("s1").await.unwrap();
+    // 确定性状态轮询：等待 3 条记录全部写入
+    let rows = wait_until(
+        Duration::from_secs(3),
+        Duration::from_millis(5),
+        || async {
+            let r = store.load_pending_inputs("s1").await.ok()?;
+            if r.len() == 3 {
+                Some(r)
+            } else {
+                None
+            }
+        },
+    )
+    .await
+    .expect("3 条记录必须在超时前全部写入");
+
     let ids: Vec<&str> = rows.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(ids, vec!["p1", "p2", "p3"], "FIFO：创建时间升序 + id 决胜");
     assert_eq!(rows[0].run_id.as_deref(), Some("r1"));
@@ -118,11 +173,37 @@ async fn restore_reads_written_pending_inputs_in_fifo_order() {
 async fn repeated_enqueue_is_idempotent_by_id() {
     let (mut loop_inst, store) = loop_with_pending_store(Arc::new(InMemoryStore::new()));
     loop_inst.enqueue_input(user_msg("dup", "v1"), InputEnqueueMode::Force);
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    loop_inst.enqueue_input(user_msg("dup", "v2"), InputEnqueueMode::Force);
-    tokio::time::sleep(Duration::from_millis(30)).await;
+    let _ = wait_until(
+        Duration::from_secs(3),
+        Duration::from_millis(5),
+        || async {
+            let r = store.load_pending_inputs("s1").await.ok()?;
+            if r.len() == 1 && r[0].payload.contains("v1") {
+                Some(r)
+            } else {
+                None
+            }
+        },
+    )
+    .await
+    .expect("v1 应落库");
 
-    let rows = store.load_pending_inputs("s1").await.unwrap();
+    loop_inst.enqueue_input(user_msg("dup", "v2"), InputEnqueueMode::Force);
+    let rows = wait_until(
+        Duration::from_secs(3),
+        Duration::from_millis(5),
+        || async {
+            let r = store.load_pending_inputs("s1").await.ok()?;
+            if r.len() == 1 && r[0].payload.contains("v2") {
+                Some(r)
+            } else {
+                None
+            }
+        },
+    )
+    .await
+    .expect("v2 应覆盖落库");
+
     assert_eq!(rows.len(), 1, "同 id 覆盖不重复（INSERT OR REPLACE 幂等）");
     assert!(rows[0].payload.contains("v2"), "幂等覆盖后为最新载荷");
 }

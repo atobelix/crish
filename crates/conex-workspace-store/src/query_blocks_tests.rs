@@ -278,10 +278,7 @@ fn reject_unsafe_attr_key() {
             ..Default::default()
         })
         .unwrap_err();
-    assert!(
-        err.to_string().contains("非法属性键"),
-        "err={err}"
-    );
+    assert!(err.to_string().contains("非法属性键"), "err={err}");
 }
 
 #[test]

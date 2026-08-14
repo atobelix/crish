@@ -196,11 +196,7 @@ fn a_col_06_det_move_and_reject_cycle() {
     let a = BlockId::new();
     let b = BlockId::new();
     let c = BlockId::new();
-    for (id, parent, order) in [
-        (a, None, "a0"),
-        (b, Some(a), "a0"),
-        (c, Some(a), "a1"),
-    ] {
+    for (id, parent, order) in [(a, None, "a0"), (b, Some(a), "a0"), (c, Some(a), "a1")] {
         s.apply(
             Origin::User,
             &[Op::Insert {

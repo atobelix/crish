@@ -13,7 +13,10 @@
 //! - **≠ EL-01 / EL-03 / EL-04**；本包只切结构，不抬关
 //! - 保留 dry_run 零写 / `force_execution_unknown` 不半写
 
-use agent_tools::note_backend::{NoteBackendError, NoteBlockBatchRequest, NoteBlockBatchResult};
+use agent_tools::note_backend::{
+    NoteBackendError, NoteBlockBatchRequest, NoteBlockBatchResult, NoteRedoResult, NoteUndoResult,
+};
+use conex_doc_collab::BlockId;
 use conex_workspace_store::commit_ops;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -165,5 +168,105 @@ impl StoreNoteBackend {
             block_ids,
             preview,
         })
+    }
+
+    /// 对指定文档的目标块执行 CRDT 文本因果撤销
+    pub async fn undo_text_inner(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<NoteUndoResult, NoteBackendError> {
+        let doc_id = doc_id.trim();
+        if doc_id.is_empty() {
+            return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
+        }
+        let bid = BlockId::parse(block_id)
+            .map_err(|e| NoteBackendError::Invalid(format!("invalid block_id: {e}")))?;
+
+        let arc = self.session_handle(doc_id)?;
+        let mut probe = SlowPathProbe::start(doc_id);
+        let mut session = arc.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
+        probe.finish_lock();
+
+        let rev_before = session.rev();
+        match session.text_undo(bid) {
+            Ok(new_text) => Ok(NoteUndoResult {
+                doc_id: doc_id.to_string(),
+                block_id: block_id.to_string(),
+                rev: session.rev(),
+                text: new_text,
+                is_noop: false,
+            }),
+            Err(conex_doc_collab::ApplyError::Undo(conex_doc_collab::UndoError::Empty)) => {
+                let current_text = session
+                    .tree()
+                    .nodes
+                    .get(&bid)
+                    .and_then(|n| n.text_snapshot.clone())
+                    .unwrap_or_default();
+                Ok(NoteUndoResult {
+                    doc_id: doc_id.to_string(),
+                    block_id: block_id.to_string(),
+                    rev: rev_before,
+                    text: current_text,
+                    is_noop: true,
+                })
+            }
+            Err(e) => Err(NoteBackendError::ApplyFailed(e.to_string())),
+        }
+    }
+
+    /// 对指定文档的目标块执行 CRDT 文本因果重做
+    pub async fn redo_text_inner(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<NoteRedoResult, NoteBackendError> {
+        let doc_id = doc_id.trim();
+        if doc_id.is_empty() {
+            return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
+        }
+        let bid = BlockId::parse(block_id)
+            .map_err(|e| NoteBackendError::Invalid(format!("invalid block_id: {e}")))?;
+
+        let arc = self.session_handle(doc_id)?;
+        let mut probe = SlowPathProbe::start(doc_id);
+        let mut session = arc.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
+        probe.finish_lock();
+
+        let rev_before = session.rev();
+        match session.text_redo(bid) {
+            Ok(new_text) => Ok(NoteRedoResult {
+                doc_id: doc_id.to_string(),
+                block_id: block_id.to_string(),
+                rev: session.rev(),
+                text: new_text,
+                is_noop: false,
+            }),
+            Err(conex_doc_collab::ApplyError::Undo(conex_doc_collab::UndoError::Empty)) => {
+                let current_text = session
+                    .tree()
+                    .nodes
+                    .get(&bid)
+                    .and_then(|n| n.text_snapshot.clone())
+                    .unwrap_or_default();
+                Ok(NoteRedoResult {
+                    doc_id: doc_id.to_string(),
+                    block_id: block_id.to_string(),
+                    rev: rev_before,
+                    text: current_text,
+                    is_noop: true,
+                })
+            }
+            Err(e) => Err(NoteBackendError::ApplyFailed(e.to_string())),
+        }
     }
 }

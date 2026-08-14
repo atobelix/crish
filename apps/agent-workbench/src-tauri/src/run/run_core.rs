@@ -353,9 +353,9 @@ pub struct CoreRunState {
     /// [Self::finalize_subagent_spawner] 装配）
     pub(crate) subagent_spawner: Arc<crate::subagent_spawner::SubagentSpawnerImpl>,
     /// D3 §3.1：每会话恢复协调器（C7 权威实例；五件套装配，惰性构造——
-    /// [Self::coordinator_for]；restore 后经 [Self::run_restore] 触发
-    /// 构造并自动从 session_meta 恢复预算/通知/forks/needs_user）
-    pub(crate) recovery_coordinators: Mutex<HashMap<String, Arc<Mutex<RecoveryCoordinator>>>>,
+    /// 外层 Mutex<HashMap> 为 L0 内存守卫，持锁 < 100ns；
+    /// 内层统一为 Arc<tokio::sync::Mutex<RecoveryCoordinator>> 异步业务锁，支持 await）
+    pub(crate) recovery_coordinators: Mutex<HashMap<String, Arc<tokio::sync::Mutex<RecoveryCoordinator>>>>,
     /// D3 §3.1/§3.3：每会话会话树（restore 后 from_session_record 重建；
     /// 阶梯 3 fork 的源叶子载体；coordinator 惰性构造时缺省空树）
     pub(crate) session_trees: Mutex<HashMap<String, Arc<Mutex<SessionTree>>>>,
@@ -906,8 +906,8 @@ impl CoreRunState {
     pub(crate) fn coordinator_for(
         &self,
         session_id: &str,
-    ) -> Option<Arc<Mutex<RecoveryCoordinator>>> {
-        // 1. 已构造 → 返回既有（幂等，同会话同实例）
+    ) -> Option<Arc<tokio::sync::Mutex<RecoveryCoordinator>>> {
+        // 1. 快速路径：读锁命中既有实例 (L0 锁立取立释)
         {
             let map = self
                 .recovery_coordinators
@@ -921,7 +921,7 @@ impl CoreRunState {
         let Some(db) = self.local_db() else {
             return None;
         };
-        // 3. 五件套装配（tree 与 coordinator 同批插入，防并发双构造）
+        // 3. 五件套装配（tree 与 coordinator 同批装配）
         let tree = {
             let mut trees = self.session_trees.lock().unwrap_or_else(|e| e.into_inner());
             trees.get(session_id).cloned().unwrap_or_else(|| {
@@ -950,12 +950,7 @@ impl CoreRunState {
             ..Default::default()
         };
         let session_id_owned = session_id.to_string();
-        // 4. RecoveryCoordinator::new 经专用线程执行（F2-27：同步读 4-5
-        //    键的 SQLite 工作不落在 tokio worker 上；new 为纯同步函数，
-        //    std::thread::scope 承接——调用线程同步等待 join，一次性惰性
-        //    构造，进程内每会话仅一次。不用 Handle::block_on：coordinator_for
-        //    是同步 fn、被 async 上下文调用，async 上下文内 block_on 会
-        //    panic（EnterRuntime 守卫））
+        // 4. RecoveryCoordinator::new 构造（读 SQLite meta 走独立线程，不占 async worker）
         let constructed = std::thread::scope(|scope| {
             scope
                 .spawn(move || {
@@ -969,7 +964,7 @@ impl CoreRunState {
             })
         });
         let coord = match constructed {
-            Ok(coordinator) => Arc::new(Mutex::new(coordinator)),
+            Ok(coordinator) => Arc::new(tokio::sync::Mutex::new(coordinator)),
             Err(error) => {
                 tracing::warn!(
                     target: "run",
@@ -980,7 +975,7 @@ impl CoreRunState {
                 return None;
             }
         };
-        // 5. double-check：锁内重查（并发双构造时丢弃后到者）
+        // 5. double-check 插入：并发双构造时丢弃后到者
         let mut map = self
             .recovery_coordinators
             .lock()
@@ -1442,41 +1437,7 @@ pub(crate) async fn write_back_cache_stats(
     }
 }
 
-// ── D3：F2-27 spawn_blocking 覆盖（维度文档 D3 §3.4，仿 save_run_usage
-//    先例）──────────────────────────────────────────────────────────
 
-/// F2-27 内部：on_subagent_run_failure（声明 async、函数体无 await，
-/// recovery.rs:914-978）在 spawn_blocking 线程经 tokio Handle::block_on
-/// 执行（无 await future 立即完成，无阻塞；futures-util 未启用 executor
-/// feature，Handle::block_on 为 blocking 线程内的标准运行期模式——
-/// spawn_blocking 闭包携带运行期上下文）。
-pub(crate) fn block_on_coordinator_failure(
-    c: &mut RecoveryCoordinator,
-    ctx: &RunFailureContext,
-) -> Result<RecoveryOutcome, RecoveryError> {
-    tokio::runtime::Handle::current().block_on(c.on_subagent_run_failure(ctx))
-}
-
-/// F2-27：RecoveryStore 同步 SQLite 全走 spawn_blocking（tokio worker 不
-/// 执行同步 SQLite）。coordinator 变体：持锁在 blocking 线程执行同步方法
-/// ——[RecoveryCoordinator] 的纯同步方法（new / restore_steering_notifications
-/// / acknowledge / report_to_user / persist_*）闭包直调；
-/// on_subagent_run_failure（声明 async、函数体无 await，recovery.rs:914
-/// -978）闭包内 `futures_util::executor::block_on` 执行（无 await future
-/// 立即完成，无阻塞）。
-pub(crate) async fn blocking_coordinator_call<R: Send + 'static>(
-    coord: Arc<Mutex<RecoveryCoordinator>>,
-    f: impl FnOnce(&mut RecoveryCoordinator) -> Result<R, RecoveryError> + Send + 'static,
-) -> Result<R, RecoveryError> {
-    tokio::task::spawn_blocking(move || {
-        let mut c = coord.lock().unwrap_or_else(|e| e.into_inner());
-        f(&mut c)
-    })
-    .await
-    .map_err(|join| RecoveryError::PersistFailed {
-        message: format!("恢复协调器阻塞调用 join 失败：{join}"),
-    })?
-}
 
 /// D5 §3.9 / D1 §3.2.2：壳层事件发射统一入口（入队持久化 + 信封 emit；
 /// sequence 由 EventQueue 会话级原子分配）。goal-* 与熔断观测事件

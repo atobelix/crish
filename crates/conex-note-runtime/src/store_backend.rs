@@ -25,7 +25,7 @@
 use agent_tools::note_backend::{
     NoteApplyMdRequest, NoteApplyMdResult, NoteBackend, NoteBackendError, NoteBatchTokens,
     NoteBlockBatchRequest, NoteBlockBatchResult, NoteOutline, NoteQueryBlocksParams,
-    NoteQueryBlocksResult,
+    NoteQueryBlocksResult, NoteRedoResult, NoteUndoResult,
 };
 use async_trait::async_trait;
 use conex_doc_collab::{DocSession, Origin};
@@ -330,6 +330,22 @@ impl NoteBackend for StoreNoteBackend {
         req: NoteBlockBatchRequest,
     ) -> Result<NoteBlockBatchResult, NoteBackendError> {
         self.apply_block_ops_inner(req)
+    }
+
+    async fn undo_text(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<NoteUndoResult, NoteBackendError> {
+        self.undo_text_inner(doc_id, block_id).await
+    }
+
+    async fn redo_text(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<NoteRedoResult, NoteBackendError> {
+        self.redo_text_inner(doc_id, block_id).await
     }
 }
 

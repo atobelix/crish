@@ -38,16 +38,14 @@ pub mod w6_a_s;
 /// **W6-D-S** Skeleton：A-COL-01 子集轨锚（包 ID / 诚实边界 / 场景表）。
 pub mod w6_d_s;
 
-pub use block_id::{BlockId, block_id_from_comment, block_id_to_comment};
+pub use block_id::{block_id_from_comment, block_id_to_comment, BlockId};
 pub use events::{BlockUpsert, DocEvent, ProjectionDiff};
 pub use harness::{DualSessionHarness, PeerSide, SimplifiedEncodedOps};
 pub use ir::{
-    pending_turn_into_kind, BlockKind, BlockNode, BlockProps, BlockTree,
-    PENDING_TURN_INTO_FLAVOUR_ATTR, cmp_order,
+    cmp_order, pending_turn_into_kind, BlockKind, BlockNode, BlockProps, BlockTree,
+    PENDING_TURN_INTO_FLAVOUR_ATTR,
 };
-pub use op::{
-    ops_from_json, ops_from_json_str, ops_to_json, ops_to_json_string, Op, Origin,
-};
+pub use op::{ops_from_json, ops_from_json_str, ops_to_json, ops_to_json_string, Op, Origin};
 pub use persistence::{CommitBatch, EncodedUpdate, HydrateBlob, PersistError, PersistencePlugin};
 pub use session::{
     partition_utf8, ApplyError, DocSession, HydrateError, TextUpdatePayload, UndoError,

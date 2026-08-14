@@ -39,8 +39,8 @@ use conex_types::events::{AgentEvent, SecurityAuditDecision, SecurityAuditOperat
 use conex_types::impact::ImpactAssessment;
 
 use crate::events::{EventQueue, PersistError};
-use crate::persist::Store;
 use crate::now_iso_utc;
+use crate::persist::Store;
 use crate::steering_queue::{PendingMessageQueue, SteeringInputEntry};
 
 // ── 唤醒摘要（REQ-C04 四模板，01 方案 §4.5 通知文案冻结）────────────
@@ -59,7 +59,9 @@ pub fn task_wake_summary(event: &AgentEvent) -> Option<String> {
         } => Some(format!("任务 {task_id} 已完成，退出码 {exit_code}")),
         AgentEvent::TaskFailed {
             task_id, exit_code, ..
-        } => Some(format!("任务 {task_id} 异常退出（exit code {exit_code}），附最后 20 行日志")),
+        } => Some(format!(
+            "任务 {task_id} 异常退出（exit code {exit_code}），附最后 20 行日志"
+        )),
         AgentEvent::TaskSuspicious {
             task_id,
             silence_ms,
@@ -120,7 +122,12 @@ impl TaskWakeBatch {
         if self.entries.is_empty() {
             return None;
         }
-        let merged = self.entries.values().cloned().collect::<Vec<_>>().join("\n");
+        let merged = self
+            .entries
+            .values()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
         self.entries.clear();
         Some(merged)
     }
@@ -197,10 +204,7 @@ pub fn build_task_failed_steering_entry(event: &AgentEvent) -> Option<SteeringIn
 ///
 /// 「AI 显式等待关键任务」的判定由接线方在调用前裁决（本模块只投递
 /// 不重试）；非 task-failed 事件直接返回 false 不写队列。
-pub fn steer_for_task_failed(
-    queue: &mut PendingMessageQueue,
-    event: &AgentEvent,
-) -> bool {
+pub fn steer_for_task_failed(queue: &mut PendingMessageQueue, event: &AgentEvent) -> bool {
     let Some(entry) = build_task_failed_steering_entry(event) else {
         return false;
     };
@@ -428,10 +432,7 @@ impl TaskAuditAccumulator {
 
     /// 指定结果的记录数（验收断言「审计留痕计数」）
     pub fn count_by_result(&self, result: TaskAuditResult) -> usize {
-        self.records
-            .iter()
-            .filter(|r| r.result == result)
-            .count()
+        self.records.iter().filter(|r| r.result == result).count()
     }
 
     /// 逐条发射 security-audit 事件（经 [EventQueue] 落库，Critical 必达）。
@@ -489,8 +490,8 @@ pub fn filter_tasks_by_owner<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::events::AgentEvent;
     use crate::persist::InMemoryStore;
+    use conex_types::events::AgentEvent;
 
     const TS: &str = "2026-08-04T00:00:00.000Z";
 
@@ -650,15 +651,23 @@ mod tests {
         ));
         assert!(!first && second, "同分组重复注入原位替换");
         assert_eq!(queue.len(), 1);
-        assert_eq!(queue.peek().unwrap().group_id.as_deref(), Some(TASK_WAKE_GROUP_ID));
+        assert_eq!(
+            queue.peek().unwrap().group_id.as_deref(),
+            Some(TASK_WAKE_GROUP_ID)
+        );
     }
 
     // ── C7 衔接（T-AB-18 验收：task-failed steering 条目去重）──
 
     #[test]
     fn failed_steering_entry_group_and_protection_bit() {
-        let entry = build_task_failed_steering_entry(&failed("t-1", 1)).expect("task-failed 有条目");
-        assert_eq!(entry.group_id.as_deref(), Some("task-t-1"), "group_id=task-<id>");
+        let entry =
+            build_task_failed_steering_entry(&failed("t-1", 1)).expect("task-failed 有条目");
+        assert_eq!(
+            entry.group_id.as_deref(),
+            Some("task-t-1"),
+            "group_id=task-<id>"
+        );
         assert!(entry.is_steering, "is_steering 受保护位");
         assert_eq!(entry.id, "task-failed-t-1");
         assert_eq!(
@@ -716,7 +725,10 @@ mod tests {
             .find(|r| r.result == TaskAuditResult::Completed)
             .expect("有 completed 记录");
         assert_eq!(completed_rec.task_id, "t-1");
-        assert_eq!(completed_rec.command, "cargo build", "command 摘要来自 task-started");
+        assert_eq!(
+            completed_rec.command, "cargo build",
+            "command 摘要来自 task-started"
+        );
         assert_eq!(completed_rec.operator, ai);
         assert!(completed_rec.at_ms > 0, "时间戳必填");
     }
@@ -765,11 +777,17 @@ mod tests {
         acc.push(&failed("t-1", 2), TaskAuditOperator::UserCommand);
         acc.push(&completed("t-2", 0), TaskAuditOperator::UserCommand);
 
-        let emitted = acc.emit_audit_events(store, "s1").await.expect("审计事件落库");
+        let emitted = acc
+            .emit_audit_events(store, "s1")
+            .await
+            .expect("审计事件落库");
         assert_eq!(emitted, 3, "每条审计记录发射一条 security-audit");
 
         let stored = mem.events();
-        let audits: Vec<_> = stored.iter().filter(|e| e.event_type == "security-audit").collect();
+        let audits: Vec<_> = stored
+            .iter()
+            .filter(|e| e.event_type == "security-audit")
+            .collect();
         assert_eq!(audits.len(), 3, "security-audit 落库三条");
         for row in &audits {
             let event: AgentEvent = serde_json::from_str(&row.payload).unwrap();
@@ -788,7 +806,10 @@ mod tests {
                     assert_eq!(impact, ImpactAssessment::default(), "任务域空影响面");
                     if targets[0] == "t-1" {
                         // t-1 先 failed 后 completed（不同 result 各留一条）
-                        assert!(matches!(decision, SecurityAuditDecision::Denied | SecurityAuditDecision::Approved));
+                        assert!(matches!(
+                            decision,
+                            SecurityAuditDecision::Denied | SecurityAuditDecision::Approved
+                        ));
                     }
                 }
                 other => panic!("应为 security-audit，实际 {}", other.type_name()),
@@ -798,10 +819,16 @@ mod tests {
         let first: AgentEvent = serde_json::from_str(&audits[0].payload).unwrap();
         match first {
             AgentEvent::SecurityAudit {
-                tool_call_id, targets, ..
+                tool_call_id,
+                targets,
+                ..
             } => {
                 assert_eq!(targets[0], "t-1", "targets 承载任务 id（审计可检索）");
-                assert_eq!(tool_call_id.as_deref(), Some("tc-9"), "AI 工具调用操作者携带 toolCallId");
+                assert_eq!(
+                    tool_call_id.as_deref(),
+                    Some("tc-9"),
+                    "AI 工具调用操作者携带 toolCallId"
+                );
             }
             _ => unreachable!(),
         }
@@ -813,7 +840,11 @@ mod tests {
                 ..
             } => {
                 assert_eq!(tool_call_id, None, "用户命令无工具调用 id");
-                assert_eq!(decision, SecurityAuditDecision::Denied, "failed → denied 展示位");
+                assert_eq!(
+                    decision,
+                    SecurityAuditDecision::Denied,
+                    "failed → denied 展示位"
+                );
             }
             _ => unreachable!(),
         }
@@ -833,7 +864,9 @@ mod tests {
         assert_eq!(task_owner_run_id(&events[2]), None, "非 started 事件无来源");
         let main_tasks = filter_tasks_by_owner(events.iter(), "run-main");
         assert_eq!(main_tasks.len(), 2, "主 agent 来源两个任务");
-        assert!(main_tasks.iter().all(|e| task_owner_run_id(e) == Some("run-main")));
+        assert!(main_tasks
+            .iter()
+            .all(|e| task_owner_run_id(e) == Some("run-main")));
         let sub_tasks = filter_tasks_by_owner(events.iter(), "run-sub-1");
         assert_eq!(sub_tasks.len(), 1, "子 agent 来源一个任务");
         assert_eq!(task_owner_run_id(sub_tasks[0]), Some("run-sub-1"));

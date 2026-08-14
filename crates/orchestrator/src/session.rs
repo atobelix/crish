@@ -20,9 +20,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use conex_db::RunStatus;
-use conex_types::checkpoint::{
-    CHECKPOINT_PAYLOAD_KEY, CheckpointPayload, LeafCheckpointState,
-};
+use conex_types::checkpoint::{CheckpointPayload, LeafCheckpointState, CHECKPOINT_PAYLOAD_KEY};
 use conex_types::context::SessionContextMeta;
 use serde::{Deserialize, Serialize};
 
@@ -71,7 +69,11 @@ pub struct SessionTreeEntry {
 
 impl SessionTreeEntry {
     /// 构造节点条目
-    pub fn node(id: impl Into<String>, parent_id: Option<String>, payload: serde_json::Value) -> Self {
+    pub fn node(
+        id: impl Into<String>,
+        parent_id: Option<String>,
+        payload: serde_json::Value,
+    ) -> Self {
         Self {
             id: id.into(),
             parent_id,
@@ -126,7 +128,10 @@ impl fmt::Display for SessionTreeError {
             Self::InvalidState { message } => write!(f, "会话树结构非法: {message}"),
             Self::DuplicateId { id } => write!(f, "会话树条目 id 重复: {id}"),
             Self::ExpectedLeafMismatch { expected, actual } => {
-                write!(f, "叶子移动期望校验失败：期望当前叶子 {expected}，实际 {actual:?}")
+                write!(
+                    f,
+                    "叶子移动期望校验失败：期望当前叶子 {expected}，实际 {actual:?}"
+                )
             }
             Self::Cycle { id } => write!(f, "会话树分支路径存在环: {id}"),
         }
@@ -171,16 +176,16 @@ impl SessionRecord {
     /// 注意：持久化事件可引用运行时叶子（不要求存在于分支列表内，
     /// 与 orchestrator.moveSessionLeaf 一致），故不做存在性校验。
     pub fn apply_leaf_move_event(&mut self, payload: &str) -> Result<(), SessionTreeError> {
-        let value: serde_json::Value = serde_json::from_str(payload).map_err(|e| {
-            SessionTreeError::InvalidState {
+        let value: serde_json::Value =
+            serde_json::from_str(payload).map_err(|e| SessionTreeError::InvalidState {
                 message: format!("叶子移动事件载荷解析失败: {e}"),
-            }
-        })?;
-        let to_leaf_id = value.get("toLeafId").and_then(serde_json::Value::as_str).ok_or_else(|| {
-            SessionTreeError::InvalidState {
+            })?;
+        let to_leaf_id = value
+            .get("toLeafId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| SessionTreeError::InvalidState {
                 message: "叶子移动事件载荷缺少 toLeafId".to_string(),
-            }
-        })?;
+            })?;
         self.current_leaf_id = Some(to_leaf_id.to_string());
         Ok(())
     }
@@ -213,7 +218,9 @@ impl SessionRecord {
         let Some(boundary_ms) = parse_iso8601_epoch_ms(timestamp_iso) else {
             return false;
         };
-        let meta = self.context_meta.get_or_insert_with(SessionContextMeta::default);
+        let meta = self
+            .context_meta
+            .get_or_insert_with(SessionContextMeta::default);
         meta.last_compaction_at = Some(boundary_ms);
         meta.last_compaction_sequence = Some(sequence);
         meta.last_compaction_generation = Some(meta.last_compaction_generation.unwrap_or(0) + 1);
@@ -244,9 +251,8 @@ pub(crate) fn parse_iso8601_epoch_ms(value: &str) -> Option<i64> {
     if bytes[13] != b':' || bytes[16] != b':' {
         return None;
     }
-    let num = |start: usize, len: usize| -> Option<i64> {
-        value.get(start..start + len)?.parse().ok()
-    };
+    let num =
+        |start: usize, len: usize| -> Option<i64> { value.get(start..start + len)?.parse().ok() };
     let year = num(0, 4)?;
     let month = num(5, 2)?;
     let day = num(8, 2)?;
@@ -286,9 +292,7 @@ pub(crate) fn parse_iso8601_epoch_ms(value: &str) -> Option<i64> {
         return None;
     }
     let days = days_from_civil(year, month as u32, day as u32)?;
-    Some(
-        (days * 86_400 + hour * 3_600 + minute * 60 + second) * 1_000 + millis,
-    )
+    Some((days * 86_400 + hour * 3_600 + minute * 60 + second) * 1_000 + millis)
 }
 
 /// 公历日期 → 1970-01-01 起天数（Howard Hinnant civil-from-days 逆运算，
@@ -300,10 +304,9 @@ fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
     let year = if month <= 2 { year - 1 } else { year };
     let era = (if year >= 0 { year } else { year - 399 }) / 400;
     let year_of_era = year - era * 400;
-    let day_of_year: i64 =
-        (153 * i64::from(if month > 2 { month - 3 } else { month + 9 }) + 2) / 5
-            + i64::from(day)
-            - 1;
+    let day_of_year: i64 = (153 * i64::from(if month > 2 { month - 3 } else { month + 9 }) + 2) / 5
+        + i64::from(day)
+        - 1;
     let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
     Some(era * 146_097 + day_of_era - 719_468)
 }
@@ -362,7 +365,11 @@ impl SessionTree {
 
     /// 追加新分支：新节点挂在当前叶子下，当前叶子指针推进到新节点
     /// （session-tree.test.ts:7 语义）
-    pub fn append(&mut self, id: impl Into<String>, payload: serde_json::Value) -> Result<SessionTreeEntry, SessionTreeError> {
+    pub fn append(
+        &mut self,
+        id: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Result<SessionTreeEntry, SessionTreeError> {
         let entry = self.create_node(id, self.current_leaf_id.clone(), payload)?;
         self.push_entry(entry.clone());
         Ok(entry)
@@ -370,7 +377,12 @@ impl SessionTree {
 
     /// 分叉：从指定节点派生新叶子（parent = from_leaf_id），当前叶子
     /// 指针推进到新叶子；原分支路径不被改写（session-tree.test.ts:19 语义）
-    pub fn fork(&mut self, from_leaf_id: &str, id: impl Into<String>, payload: serde_json::Value) -> Result<SessionTreeEntry, SessionTreeError> {
+    pub fn fork(
+        &mut self,
+        from_leaf_id: &str,
+        id: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Result<SessionTreeEntry, SessionTreeError> {
         if !self.entries.iter().any(|e| e.id == from_leaf_id) {
             return Err(SessionTreeError::NotFound {
                 id: from_leaf_id.to_string(),
@@ -462,19 +474,26 @@ impl SessionTree {
 
     /// 读取从根到指定叶子的分支路径（None = 空路径；环检测防御，
     /// session-tree.test.ts:156 语义）
-    pub fn read_branch_path(&self, leaf_id: Option<&str>) -> Result<Vec<SessionTreeEntry>, SessionTreeError> {
+    pub fn read_branch_path(
+        &self,
+        leaf_id: Option<&str>,
+    ) -> Result<Vec<SessionTreeEntry>, SessionTreeError> {
         let leaf_id = match leaf_id {
             Some(id) => id,
             None => return Ok(Vec::new()),
         };
         let mut path = Vec::new();
         let mut seen = HashSet::new();
-        let mut current = self.entry(leaf_id).ok_or_else(|| SessionTreeError::NotFound {
-            id: leaf_id.to_string(),
-        })?;
+        let mut current = self
+            .entry(leaf_id)
+            .ok_or_else(|| SessionTreeError::NotFound {
+                id: leaf_id.to_string(),
+            })?;
         loop {
             if !seen.insert(current.id.clone()) {
-                return Err(SessionTreeError::Cycle { id: current.id.clone() });
+                return Err(SessionTreeError::Cycle {
+                    id: current.id.clone(),
+                });
             }
             path.push(current.clone());
             current = match &current.parent_id {
@@ -559,16 +578,15 @@ impl SessionTree {
                 message: format!("条目 {leaf_id} 不是会话节点，不能写入检查点"),
             });
         };
-        let object = payload.as_object_mut().ok_or_else(|| {
-            SessionTreeError::InvalidState {
+        let object = payload
+            .as_object_mut()
+            .ok_or_else(|| SessionTreeError::InvalidState {
                 message: format!("条目 {leaf_id} 的 payload 不是 JSON 对象，不能写入检查点"),
-            }
-        })?;
-        let value = serde_json::to_value(checkpoint).map_err(|err| {
-            SessionTreeError::InvalidState {
+            })?;
+        let value =
+            serde_json::to_value(checkpoint).map_err(|err| SessionTreeError::InvalidState {
                 message: format!("检查点序列化失败: {err}"),
-            }
-        })?;
+            })?;
         object.insert(CHECKPOINT_PAYLOAD_KEY.to_string(), value);
         Ok(())
     }
@@ -605,12 +623,17 @@ impl SessionTree {
         let mut seen = HashSet::new();
         for entry in &entries {
             if !seen.insert(entry.id.clone()) {
-                return Err(SessionTreeError::DuplicateId { id: entry.id.clone() });
+                return Err(SessionTreeError::DuplicateId {
+                    id: entry.id.clone(),
+                });
             }
             if let Some(parent) = &entry.parent_id {
                 if !seen.contains(parent) {
                     return Err(SessionTreeError::InvalidState {
-                        message: format!("条目 {} 的父节点 {} 必须先于子条目出现", entry.id, parent),
+                        message: format!(
+                            "条目 {} 的父节点 {} 必须先于子条目出现",
+                            entry.id, parent
+                        ),
                     });
                 }
             }
@@ -620,7 +643,9 @@ impl SessionTree {
             } = &entry.kind
             {
                 if !seen.contains(abandoned) {
-                    return Err(SessionTreeError::NotFound { id: abandoned.clone() });
+                    return Err(SessionTreeError::NotFound {
+                        id: abandoned.clone(),
+                    });
                 }
             }
         }
@@ -1136,7 +1161,9 @@ mod tests {
         let mut t = tree();
         let (root, original, _leaf) = chain(&mut t);
 
-        let branch = t.fork(&root.id, "branch", json!({ "text": "branch" })).unwrap();
+        let branch = t
+            .fork(&root.id, "branch", json!({ "text": "branch" }))
+            .unwrap();
         assert_eq!(branch.parent_id.as_deref(), Some("root"));
         assert_eq!(t.current_leaf_id(), Some("branch"));
         // 原叶子路径仍可回溯（original = mid，路径为 root → mid）
@@ -1213,7 +1240,11 @@ mod tests {
         assert_eq!(t.current_leaf_id(), Some("root"));
 
         t.restore_leaf(None).unwrap();
-        assert_eq!(t.current_leaf_id(), Some("leaf"), "无显式叶子时回最后插入条目");
+        assert_eq!(
+            t.current_leaf_id(),
+            Some("leaf"),
+            "无显式叶子时回最后插入条目"
+        );
     }
 
     /// 恢复叶子：根前位置（null）合法（session-tree.test.ts:110）
@@ -1245,7 +1276,11 @@ mod tests {
     /// 父先于子校验（session-tree.test.ts:121）
     #[test]
     fn from_entries_rejects_parent_after_child() {
-        let entries = vec![SessionTreeEntry::node("child", Some("missing".to_string()), json!({}))];
+        let entries = vec![SessionTreeEntry::node(
+            "child",
+            Some("missing".to_string()),
+            json!({}),
+        )];
         let err = SessionTree::from_entries("s".into(), entries, None).unwrap_err();
         assert!(matches!(err, SessionTreeError::InvalidState { .. }));
     }
@@ -1279,8 +1314,14 @@ mod tests {
         t.append("b", json!({})).unwrap();
         let (a, b) = (t.entry("a").unwrap().clone(), t.entry("b").unwrap().clone());
         t.entries = vec![
-            SessionTreeEntry { parent_id: Some(b.id.clone()), ..a.clone() },
-            SessionTreeEntry { parent_id: Some(a.id.clone()), ..b.clone() },
+            SessionTreeEntry {
+                parent_id: Some(b.id.clone()),
+                ..a.clone()
+            },
+            SessionTreeEntry {
+                parent_id: Some(a.id.clone()),
+                ..b.clone()
+            },
         ];
         let err = t.read_branch_path(Some("b")).unwrap_err();
         assert!(matches!(err, SessionTreeError::Cycle { .. }));
@@ -1332,7 +1373,9 @@ mod tests {
         assert_eq!(restored.current_leaf_id(), Some("root"));
         assert_eq!(restored.entries().len(), 3);
         // 当前叶子为 root（移动后的指针保真）
-        let branch = restored.read_branch_path(restored.current_leaf_id()).unwrap();
+        let branch = restored
+            .read_branch_path(restored.current_leaf_id())
+            .unwrap();
         let path: Vec<&str> = branch.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(path, vec!["root"]);
         // 原分支路径仍可回溯（树结构完整）
@@ -1345,7 +1388,9 @@ mod tests {
     #[test]
     fn leaf_move_event_payload_roundtrip() {
         let mut record = tree().to_session_record();
-        record.apply_leaf_move_event(&session_leaf_moved_payload("leaf_target")).unwrap();
+        record
+            .apply_leaf_move_event(&session_leaf_moved_payload("leaf_target"))
+            .unwrap();
         assert_eq!(record.current_leaf_id.as_deref(), Some("leaf_target"));
 
         let err = record.apply_leaf_move_event("{}").unwrap_err();
@@ -1396,7 +1441,11 @@ mod tests {
         let boundary2 = parse_iso8601_epoch_ms("2026-08-03T12:30:00.000Z").unwrap();
         assert!(record.apply_compression_end(15, "2026-08-03T12:30:00.000Z"));
         let meta = record.context_meta().expect("护栏持续存在");
-        assert_eq!(meta.last_compaction_at, Some(boundary2), "边界推进到最近压缩");
+        assert_eq!(
+            meta.last_compaction_at,
+            Some(boundary2),
+            "边界推进到最近压缩"
+        );
         assert_eq!(meta.last_compaction_sequence, Some(15));
         assert_eq!(meta.last_compaction_generation, Some(2), "代数按事件累计");
     }
@@ -1411,17 +1460,18 @@ mod tests {
         assert!(record.apply_compression_end(2, "2026-08-03T10:00:00.000Z"));
         assert!(!record.apply_compression_end(3, "2026-13-99T99:99:99.000Z"));
         let meta = record.context_meta().expect("既有护栏保留");
-        assert_eq!(meta.last_compaction_sequence, Some(2), "非法输入不得推进序列");
+        assert_eq!(
+            meta.last_compaction_sequence,
+            Some(2),
+            "非法输入不得推进序列"
+        );
         assert_eq!(meta.last_compaction_generation, Some(1));
     }
 
     /// ISO 时间戳解析精度：毫秒、缺毫秒、非法形态
     #[test]
     fn parse_iso8601_epoch_ms_precision() {
-        assert_eq!(
-            parse_iso8601_epoch_ms("1970-01-01T00:00:00.000Z"),
-            Some(0)
-        );
+        assert_eq!(parse_iso8601_epoch_ms("1970-01-01T00:00:00.000Z"), Some(0));
         assert_eq!(
             parse_iso8601_epoch_ms("1970-01-01T00:00:00.500Z"),
             Some(500)
@@ -1528,7 +1578,12 @@ mod tests {
         let step_types: Vec<&str> = plan.steps.iter().map(|s| s.type_name()).collect();
         assert_eq!(
             step_types,
-            vec!["cancel-runs", "clear-approvals", "restore-workspace", "move-session-leaf"]
+            vec![
+                "cancel-runs",
+                "clear-approvals",
+                "restore-workspace",
+                "move-session-leaf"
+            ]
         );
     }
 
@@ -1628,7 +1683,10 @@ mod tests {
             Ok(())
         }
 
-        async fn clear_approval(&self, clearance: &RewindApprovalClearance) -> Result<(), RewindError> {
+        async fn clear_approval(
+            &self,
+            clearance: &RewindApprovalClearance,
+        ) -> Result<(), RewindError> {
             self.calls
                 .lock()
                 .unwrap()
@@ -1636,7 +1694,10 @@ mod tests {
             Ok(())
         }
 
-        async fn restore_workspace(&self, restore: &RewindWorkspaceRestore) -> Result<(), RewindError> {
+        async fn restore_workspace(
+            &self,
+            restore: &RewindWorkspaceRestore,
+        ) -> Result<(), RewindError> {
             self.calls
                 .lock()
                 .unwrap()
@@ -1781,7 +1842,8 @@ mod tests {
             "当前叶子（摘要条目）→ Absent"
         );
         // 值为 null → Absent（不是损坏）
-        t.append("null_leaf", json!({ "checkpoint": null })).unwrap();
+        t.append("null_leaf", json!({ "checkpoint": null }))
+            .unwrap();
         assert_eq!(
             t.read_leaf_checkpoint(Some("null_leaf")),
             LeafCheckpointState::Absent
@@ -1793,7 +1855,8 @@ mod tests {
     fn leaf_checkpoint_corrupt_degrades() {
         let mut t = tree();
         // 值类型错误（target 非字符串）
-        t.append("bad1", json!({ "checkpoint": { "target": 123 } })).unwrap();
+        t.append("bad1", json!({ "checkpoint": { "target": 123 } }))
+            .unwrap();
         // 值非对象（字符串）
         t.append("bad2", json!({ "checkpoint": "oops" })).unwrap();
         for leaf in ["bad1", "bad2"] {
@@ -1823,11 +1886,15 @@ mod tests {
         let summary = t
             .abandon_branch_with_summary(None, "summary_1", "abandoned", None)
             .unwrap();
-        let err = t.set_leaf_checkpoint(summary.id(), &checkpoint).unwrap_err();
+        let err = t
+            .set_leaf_checkpoint(summary.id(), &checkpoint)
+            .unwrap_err();
         assert!(matches!(err, SessionTreeError::InvalidState { .. }));
 
         t.append("text_payload", json!("just-a-string")).unwrap();
-        let err = t.set_leaf_checkpoint("text_payload", &checkpoint).unwrap_err();
+        let err = t
+            .set_leaf_checkpoint("text_payload", &checkpoint)
+            .unwrap_err();
         assert!(matches!(err, SessionTreeError::InvalidState { .. }));
     }
 

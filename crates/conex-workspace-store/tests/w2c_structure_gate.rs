@@ -16,12 +16,8 @@
 //!
 //! 缺下列任一测 = **未交付** W2-C 结构门。
 
-use conex_doc_collab::{
-    BlockId, BlockKind, BlockProps, BlockUpsert, ProjectionDiff,
-};
-use conex_workspace_store::{
-    QueryBlocksParams, ReindexBlockOpts, WorkspaceStore,
-};
+use conex_doc_collab::{BlockId, BlockKind, BlockProps, BlockUpsert, ProjectionDiff};
+use conex_workspace_store::{QueryBlocksParams, ReindexBlockOpts, WorkspaceStore};
 use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -97,10 +93,13 @@ fn w2c_a_perf_10_english_uses_fts5_match_plan() {
         )
         .unwrap();
     let plan: Vec<String> = stmt
-        .query_map(rusqlite::params!["doc-en", "\"indexed_alpha_token\""], |r| {
-            // detail 列
-            r.get::<_, String>(3)
-        })
+        .query_map(
+            rusqlite::params!["doc-en", "\"indexed_alpha_token\""],
+            |r| {
+                // detail 列
+                r.get::<_, String>(3)
+            },
+        )
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
@@ -250,12 +249,10 @@ fn w2c_projection_fts_row_consistency_after_diff() {
     store.apply_projection_diff("doc-c", &diff2).unwrap();
     assert_eq!(store.count_blocks("doc-c").unwrap(), 1);
     assert_eq!(store.count_fts_blocks("doc-c").unwrap(), 1);
-    assert!(
-        store
-            .search_fulltext("doc-c", "块笔记", 10)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(store
+        .search_fulltext("doc-c", "块笔记", 10)
+        .unwrap()
+        .is_empty());
 }
 
 /// A-INV-06 索引侧：FTS 清空后 `rebuild_fts` 恢复；权威表仍在（文档仍可开依赖 01 hydrate，本测只锁索引侧）。

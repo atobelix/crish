@@ -39,7 +39,11 @@ async fn l2_cooperative_cancel_injects_without_hard_abort() {
         .await
         .unwrap();
     assert_eq!(path, CancelPath::Cooperative);
-    assert_eq!(engine.abort_calls(), Vec::<String>::new(), "L2 不 hard abort");
+    assert_eq!(
+        engine.abort_calls(),
+        Vec::<String>::new(),
+        "L2 不 hard abort"
+    );
     assert_eq!(
         engine.cooperative_calls(),
         vec!["cancelled-by-user".to_string()],
@@ -48,7 +52,11 @@ async fn l2_cooperative_cancel_injects_without_hard_abort() {
     assert!(run.cancel_requested());
     assert_eq!(run.cancel_path(), Some(CancelPath::Cooperative));
     assert_eq!(run.cancel_reason(), Some("cancelled-by-user"));
-    assert_eq!(run.status, RunStatus::Cancelling, "协作停止进入 cancelling 中间态");
+    assert_eq!(
+        run.status,
+        RunStatus::Cancelling,
+        "协作停止进入 cancelling 中间态"
+    );
     assert_eq!(mem.runs()[0].status, RunStatus::Cancelling);
 
     // 安全点收场（stopped）→ 终态 cancelled（end_reason=aborted，05 §2.8）
@@ -90,7 +98,11 @@ async fn l3_force_cancel_hard_aborts_and_ends_cancelled() {
         .await
         .unwrap();
     assert_eq!(path, CancelPath::Force);
-    assert_eq!(engine.abort_calls(), vec!["ui-force".to_string()], "L3 hard abort");
+    assert_eq!(
+        engine.abort_calls(),
+        vec!["ui-force".to_string()],
+        "L3 hard abort"
+    );
     assert_eq!(engine.cooperative_calls(), Vec::<String>::new());
     assert_eq!(run.cancel_path(), Some(CancelPath::Force));
     assert_eq!(run.status, RunStatus::Cancelling);
@@ -134,9 +146,16 @@ async fn cooperative_cancel_falls_back_to_force_without_l2_support() {
         .await
         .unwrap();
     assert_eq!(path, CancelPath::CooperativeFallbackForce);
-    assert_eq!(engine.abort_calls(), vec!["no-bus".to_string()], "回落按 L3 执行");
+    assert_eq!(
+        engine.abort_calls(),
+        vec!["no-bus".to_string()],
+        "回落按 L3 执行"
+    );
     assert_eq!(engine.cooperative_calls(), Vec::<String>::new());
-    assert_eq!(run.cancel_path(), Some(CancelPath::CooperativeFallbackForce));
+    assert_eq!(
+        run.cancel_path(),
+        Some(CancelPath::CooperativeFallbackForce)
+    );
 
     let result = orchestrator::events::drive_outcome(
         &mut run,
@@ -195,17 +214,16 @@ async fn terminal_run_rejects_cancel() {
     assert_eq!(run.status, RunStatus::Completed);
 
     let err = run
-        .cancel_run(
-            CancelMode::Force,
-            Some(&engine),
-            "too-late",
-            store.as_ref(),
-        )
+        .cancel_run(CancelMode::Force, Some(&engine), "too-late", store.as_ref())
         .await
         .unwrap_err();
     assert_eq!(err, RunError::TerminalImmutable);
     assert!(!run.cancel_requested(), "终态 run 不接受取消请求");
-    assert_eq!(engine.abort_calls(), Vec::<String>::new(), "终态不触发 abort");
+    assert_eq!(
+        engine.abort_calls(),
+        Vec::<String>::new(),
+        "终态不触发 abort"
+    );
 }
 
 /// 终态事件与取消路径的组合：L2 之后自然 stop 收场也归为 cancelled

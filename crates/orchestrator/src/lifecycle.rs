@@ -222,7 +222,9 @@ impl SubagentLifecycleService {
         let mut terminated = Vec::new();
         let mut non_terminal = Vec::new();
         for agent in &targets {
-            let delivered = self.control.request_force_cancel(&agent.subagent_run_id, reason);
+            let delivered = self
+                .control
+                .request_force_cancel(&agent.subagent_run_id, reason);
             if delivered {
                 terminated.push(KilledEntry {
                     subagent_id: agent.id.clone(),
@@ -343,7 +345,8 @@ impl SubagentLifecycleService {
         prompt: Option<&str>,
     ) -> Result<ResumeOutcome, LifecycleError> {
         let ctx = self.prepare_resume(session_id, subagent_id, prompt)?;
-        self.resume_with_prepared(coordinator, session_id, ctx).await
+        self.resume_with_prepared(coordinator, session_id, ctx)
+            .await
     }
 
     /// resume 同步准备段（D4 §3.5）：加载子代理行、按 (session_id,
@@ -396,14 +399,16 @@ impl SubagentLifecycleService {
             })?,
         };
         // 源叶子：工作流路径末元素（subagent_path_json = 根 → 叶 id 数组）
-        let from_leaf_id = leaf_from_path(current.subagent_path_json.as_deref())
-            .ok_or_else(|| LifecycleError::InvalidState {
-                message: format!(
-                    "子代理 {subagent_id}（run {current_run_id}）缺少工作流路径\
+        let from_leaf_id =
+            leaf_from_path(current.subagent_path_json.as_deref()).ok_or_else(|| {
+                LifecycleError::InvalidState {
+                    message: format!(
+                        "子代理 {subagent_id}（run {current_run_id}）缺少工作流路径\
                      （subagent_path_json），无法确定 fork 源叶子——resume 仅对\
                      恢复阶梯 fork 出的 run 可用（fork 路径落库且树节点存在），\
                      普通 spawn 的 run 无树节点，不支持 resume"
-                ),
+                    ),
+                }
             })?;
         // fork 三态字节数：注入内容 = 该 run 消息字节；会话窗口 = 全会话
         // 子代理消息字节（decide_fork_context 输入）
@@ -477,12 +482,7 @@ impl SubagentLifecycleService {
     ) -> Result<(), LifecycleError> {
         let affected = self
             .db
-            .update_session_agent_status(
-                session_id,
-                subagent_run_id,
-                "failed",
-                Some(now_ms()),
-            )
+            .update_session_agent_status(session_id, subagent_run_id, "failed", Some(now_ms()))
             .map_err(db_err)?;
         if affected == 0 {
             return Err(LifecycleError::NotFound {

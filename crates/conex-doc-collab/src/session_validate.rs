@@ -28,11 +28,7 @@ impl DocSession {
                     inserted.insert(*id);
                     sim_text.insert(*id, String::new());
                 }
-                Op::Move {
-                    id,
-                    new_parent,
-                    ..
-                } => {
+                Op::Move { id, new_parent, .. } => {
                     // 被删节点不可再 move；目标父被删 → 删胜，NotFound 整批失败
                     if deleted.contains(id) {
                         return Err(ApplyError::NotFound(id.to_string()));

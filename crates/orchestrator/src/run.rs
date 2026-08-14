@@ -28,8 +28,8 @@ use conex_db::RunStatus;
 use conex_types::events::RunTerminalStatus;
 use conex_types::session::AgentEndReason;
 
-use crate::persist::{Store, StoreError};
 use crate::now_ms;
+use crate::persist::{Store, StoreError};
 
 /// run 生命周期事件（对齐 run-lifecycle.ts 的 RunLifecycleEvent）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -146,15 +146,21 @@ impl RunStateMachine {
             (RunStatus::Initializing, RunLifecycleEvent::CancelRequested) => RunStatus::Cancelling,
             (RunStatus::Initializing, RunLifecycleEvent::CancelConfirmed) => RunStatus::Cancelled,
             (RunStatus::Initializing, RunLifecycleEvent::ForceInterrupt) => RunStatus::Failed,
-            (RunStatus::Running, RunLifecycleEvent::ApprovalRequested) => RunStatus::AwaitingApproval,
+            (RunStatus::Running, RunLifecycleEvent::ApprovalRequested) => {
+                RunStatus::AwaitingApproval
+            }
             (RunStatus::Running, RunLifecycleEvent::AgentStop) => RunStatus::Completing,
             (RunStatus::Running, RunLifecycleEvent::MaxTurnsReached) => RunStatus::Completing,
             (RunStatus::Running, RunLifecycleEvent::GoalComplete) => RunStatus::Completing,
             (RunStatus::Running, RunLifecycleEvent::CancelRequested) => RunStatus::Cancelling,
             (RunStatus::Running, RunLifecycleEvent::RuntimeError) => RunStatus::Failed,
             (RunStatus::Running, RunLifecycleEvent::ForceInterrupt) => RunStatus::Failed,
-            (RunStatus::AwaitingApproval, RunLifecycleEvent::ApprovalResolved) => RunStatus::Running,
-            (RunStatus::AwaitingApproval, RunLifecycleEvent::CancelRequested) => RunStatus::Cancelling,
+            (RunStatus::AwaitingApproval, RunLifecycleEvent::ApprovalResolved) => {
+                RunStatus::Running
+            }
+            (RunStatus::AwaitingApproval, RunLifecycleEvent::CancelRequested) => {
+                RunStatus::Cancelling
+            }
             (RunStatus::AwaitingApproval, RunLifecycleEvent::RuntimeError) => RunStatus::Failed,
             (RunStatus::AwaitingApproval, RunLifecycleEvent::ForceInterrupt) => RunStatus::Failed,
             (RunStatus::Cancelling, RunLifecycleEvent::CancelConfirmed) => RunStatus::Cancelled,
@@ -348,7 +354,10 @@ impl RunHandle {
         if self.machine.is_terminal() {
             return Err(RunError::TerminalImmutable);
         }
-        let next = self.machine.transition(event).map_err(RunError::Transition)?;
+        let next = self
+            .machine
+            .transition(event)
+            .map_err(RunError::Transition)?;
         store
             .update_run_status(&self.run_id, next.clone(), None, None)
             .await
@@ -368,12 +377,14 @@ impl RunHandle {
 
     /// 审批挂起（running → awaiting-approval，B4.1）
     pub async fn request_approval(&mut self, store: &dyn Store) -> Result<(), RunError> {
-        self.transition(store, RunLifecycleEvent::ApprovalRequested).await
+        self.transition(store, RunLifecycleEvent::ApprovalRequested)
+            .await
     }
 
     /// 审批恢复（awaiting-approval → running；批准后回 running → completed）
     pub async fn resolve_approval(&mut self, store: &dyn Store) -> Result<(), RunError> {
-        self.transition(store, RunLifecycleEvent::ApprovalResolved).await
+        self.transition(store, RunLifecycleEvent::ApprovalResolved)
+            .await
     }
 
     /// 取消 run 三路径（B4.1 验收：L2 协作不 hard abort；L3 强制 hard
@@ -393,7 +404,8 @@ impl RunHandle {
                 // 等待安全点以 stopped 收场
                 if let Some(engine) = engine {
                     if engine.request_cooperative_stop(reason) {
-                        self.transition(store, RunLifecycleEvent::CancelRequested).await?;
+                        self.transition(store, RunLifecycleEvent::CancelRequested)
+                            .await?;
                         self.cancel = Some(CancelRequest {
                             path: CancelPath::Cooperative,
                             reason: reason.to_string(),
@@ -406,7 +418,8 @@ impl RunHandle {
                     .await
             }
             CancelMode::Force => {
-                self.cancel_force(engine, reason, store, CancelPath::Force).await
+                self.cancel_force(engine, reason, store, CancelPath::Force)
+                    .await
             }
         }
     }
@@ -419,7 +432,8 @@ impl RunHandle {
         store: &dyn Store,
         path: CancelPath,
     ) -> Result<CancelPath, RunError> {
-        self.transition(store, RunLifecycleEvent::CancelRequested).await?;
+        self.transition(store, RunLifecycleEvent::CancelRequested)
+            .await?;
         if let Some(engine) = engine {
             engine.abort(reason);
         }
@@ -488,7 +502,11 @@ impl RunHandle {
     /// 终态记录为 failed（对齐 task-executor.ts failRunForPersistenceFailure
     /// 的 isTerminalRunStatus 分支）。两分支均携带 cursor（T08.4：
     /// 终态游标 = 最后已分配 sequence）。
-    pub async fn fail_event_store(&mut self, store: &dyn Store, message: &str) -> Result<(), RunError> {
+    pub async fn fail_event_store(
+        &mut self,
+        store: &dyn Store,
+        message: &str,
+    ) -> Result<(), RunError> {
         if !self.machine.is_terminal() {
             return self
                 .finalize(
@@ -564,7 +582,10 @@ impl RunManager {
 }
 
 /// 当前状态 → 目标终态的合法转移链（对齐 run-lifecycle.ts 转移表）
-fn terminal_path(from: RunStatus, terminal: RunTerminalStatus) -> Result<Vec<RunLifecycleEvent>, RunError> {
+fn terminal_path(
+    from: RunStatus,
+    terminal: RunTerminalStatus,
+) -> Result<Vec<RunLifecycleEvent>, RunError> {
     match terminal {
         RunTerminalStatus::Completed => match from {
             RunStatus::Running => Ok(vec![
@@ -664,10 +685,22 @@ mod tests {
     #[test]
     fn machine_follows_main_lifecycle_path() {
         let mut m = machine();
-        assert_eq!(m.transition(RunLifecycleEvent::Start).unwrap(), RunStatus::Initializing);
-        assert_eq!(m.transition(RunLifecycleEvent::RuntimeReady).unwrap(), RunStatus::Running);
-        assert_eq!(m.transition(RunLifecycleEvent::AgentStop).unwrap(), RunStatus::Completing);
-        assert_eq!(m.transition(RunLifecycleEvent::Finalized).unwrap(), RunStatus::Completed);
+        assert_eq!(
+            m.transition(RunLifecycleEvent::Start).unwrap(),
+            RunStatus::Initializing
+        );
+        assert_eq!(
+            m.transition(RunLifecycleEvent::RuntimeReady).unwrap(),
+            RunStatus::Running
+        );
+        assert_eq!(
+            m.transition(RunLifecycleEvent::AgentStop).unwrap(),
+            RunStatus::Completing
+        );
+        assert_eq!(
+            m.transition(RunLifecycleEvent::Finalized).unwrap(),
+            RunStatus::Completed
+        );
         assert!(m.is_terminal());
     }
 
@@ -697,19 +730,29 @@ mod tests {
         m.transition(RunLifecycleEvent::RuntimeReady).unwrap();
         m.transition(RunLifecycleEvent::CancelRequested).unwrap();
         assert_eq!(m.state(), RunStatus::Cancelling);
-        assert_eq!(m.transition(RunLifecycleEvent::CancelConfirmed).unwrap(), RunStatus::Cancelled);
+        assert_eq!(
+            m.transition(RunLifecycleEvent::CancelConfirmed).unwrap(),
+            RunStatus::Cancelled
+        );
         assert!(m.is_terminal());
 
         let mut m2 = machine();
         m2.transition(RunLifecycleEvent::Start).unwrap();
         m2.transition(RunLifecycleEvent::RuntimeReady).unwrap();
-        assert_eq!(m2.transition(RunLifecycleEvent::RuntimeError).unwrap(), RunStatus::Failed);
+        assert_eq!(
+            m2.transition(RunLifecycleEvent::RuntimeError).unwrap(),
+            RunStatus::Failed
+        );
         assert!(m2.is_terminal());
     }
 
     #[test]
     fn machine_terminal_states_reject_further_transitions() {
-        for terminal in [RunStatus::Completed, RunStatus::Failed, RunStatus::Cancelled] {
+        for terminal in [
+            RunStatus::Completed,
+            RunStatus::Failed,
+            RunStatus::Cancelled,
+        ] {
             let mut m = RunStateMachine::new(terminal.clone());
             for event in [
                 RunLifecycleEvent::Start,
@@ -727,7 +770,9 @@ mod tests {
     #[test]
     fn machine_undefined_transition_fails() {
         let mut m = machine();
-        let err = m.transition(RunLifecycleEvent::ApprovalResolved).unwrap_err();
+        let err = m
+            .transition(RunLifecycleEvent::ApprovalResolved)
+            .unwrap_err();
         assert_eq!(err.from, RunStatus::Queued);
         assert_eq!(err.event, "APPROVAL_RESOLVED");
     }
@@ -757,8 +802,16 @@ mod tests {
             RunLifecycleEvent::ForceInterrupt,
         ] {
             let err = m.transition(event).unwrap_err();
-            assert_eq!(err.from, RunStatus::Unknown("sneaky".to_string()), "{event:?} 应被拒绝");
-            assert_eq!(m.state(), RunStatus::Unknown("sneaky".to_string()), "状态不变（死态滞留）");
+            assert_eq!(
+                err.from,
+                RunStatus::Unknown("sneaky".to_string()),
+                "{event:?} 应被拒绝"
+            );
+            assert_eq!(
+                m.state(),
+                RunStatus::Unknown("sneaky".to_string()),
+                "状态不变（死态滞留）"
+            );
         }
     }
 
@@ -791,9 +844,21 @@ mod tests {
         // aborted → cancelled；error → failed
         for (reason, terminal, end_reason) in [
             (AgentEndReason::Stop, RunTerminalStatus::Completed, "stop"),
-            (AgentEndReason::Stopped, RunTerminalStatus::Completed, "stop"),
-            (AgentEndReason::MaxTurns, RunTerminalStatus::Failed, "max-turns"),
-            (AgentEndReason::Aborted, RunTerminalStatus::Cancelled, "aborted"),
+            (
+                AgentEndReason::Stopped,
+                RunTerminalStatus::Completed,
+                "stop",
+            ),
+            (
+                AgentEndReason::MaxTurns,
+                RunTerminalStatus::Failed,
+                "max-turns",
+            ),
+            (
+                AgentEndReason::Aborted,
+                RunTerminalStatus::Cancelled,
+                "aborted",
+            ),
             (AgentEndReason::Error, RunTerminalStatus::Failed, "error"),
         ] {
             let (t, r) = map_outcome_to_terminal(false, reason);
@@ -862,9 +927,15 @@ mod tests {
         // T08.4：终态游标 = 该 run 最后事件 sequence（调用方在终态事件
         // 发出后传入）
         run.cursor = 3;
-        run.finalize(store.as_ref(), RunTerminalStatus::Completed, "stop", None, run.cursor)
-            .await
-            .unwrap();
+        run.finalize(
+            store.as_ref(),
+            RunTerminalStatus::Completed,
+            "stop",
+            None,
+            run.cursor,
+        )
+        .await
+        .unwrap();
         assert_eq!(run.status, RunStatus::Completed);
         assert_eq!(run.end_reason.as_deref(), Some("stop"));
         assert!(run.terminal_sent());
@@ -898,7 +969,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(run.status, RunStatus::Failed);
-        assert_eq!(run.end_reason.as_deref(), Some(EVENT_STORE_WRITE_FAILED_REASON));
+        assert_eq!(
+            run.end_reason.as_deref(),
+            Some(EVENT_STORE_WRITE_FAILED_REASON)
+        );
         assert_eq!(run.error.as_deref(), Some("disk is read-only"));
         assert_eq!(mem.runs()[0].status, RunStatus::Failed);
         assert_eq!(

@@ -502,3 +502,47 @@ async fn test_high_concurrency_reader_writer_wal_stress() {
         "All writes must be successfully committed to WAL"
     );
 }
+
+#[tokio::test]
+async fn test_group_commit_panic_isolation_and_recovery() {
+    let conn = create_in_memory_db();
+    let config = GroupCommitConfig {
+        batch_timeout: Duration::from_millis(5),
+        max_batch_size: 50,
+        channel_capacity: 1024,
+    };
+    let handle = DbWriteHandle::spawn(conn, config);
+
+    // 1. 发起一个会 panic 的任务
+    let panic_res = handle
+        .write(|_c| {
+            panic!("simulated crash inside write closure");
+            #[allow(unreachable_code)]
+            Ok::<(), DbFailure>(())
+        })
+        .await;
+
+    assert!(panic_res.is_err(), "Panicking task must return error");
+    let err = panic_res.unwrap_err();
+    assert_eq!(err.kind, DbFailureKind::Other("write_closure_panic".to_string()));
+    assert!(err.message.contains("simulated crash inside write closure"));
+
+    // 2. 验证 Actor 依然存活，紧随其后的后续写操作 100% 成功
+    let success_res: i64 = handle
+        .write(|c| {
+            c.execute(
+                "INSERT INTO test_events (session_id, seq, payload) VALUES ('after_panic', 100, 'alive');",
+                [],
+            )
+            .map_err(|e| DbFailure {
+                message: e.to_string(),
+                kind: DbFailureKind::Other("insert".into()),
+            })?;
+            Ok(c.last_insert_rowid())
+        })
+        .await
+        .expect("write after panic must succeed");
+
+    assert_eq!(success_res, 1);
+    assert!(!handle.is_closed(), "Actor channel must remain open and alive");
+}

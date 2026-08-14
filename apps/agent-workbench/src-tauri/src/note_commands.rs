@@ -79,8 +79,10 @@ mod note_commands_hydrate;
 #[path = "note_commands_mirror.rs"]
 mod note_commands_mirror;
 
-// 公开 API 保持：main.rs `command_registry!` 引用的 7 个命令路径不变
-pub use note_commands_apply::{note_apply_ops, note_document_apply_md, note_send_to_note};
+// 公开 API 保持：main.rs `command_registry!` 引用的命令路径不变
+pub use note_commands_apply::{
+    note_apply_ops, note_document_apply_md, note_redo_text, note_send_to_note, note_undo_text,
+};
 pub use note_commands_hydrate::{note_document_hydrate, note_query_blocks};
 pub use note_commands_mirror::{note_detect_mirror_drift, note_import_mirror_proposal};
 // SR-06f 拆分补完：tauri 宏生成的 invoke 包装符号（`__cmd__*`）与命令名
@@ -89,9 +91,10 @@ pub use note_commands_mirror::{note_detect_mirror_drift, note_import_mirror_prop
 // 解析包装符号——门面必须透出，否则 bin 编译失败（de8e744e 欠验债，
 // 此处补闭环；零逻辑改动）。
 pub use note_commands_apply::{
-    __cmd__note_apply_ops, __cmd__note_document_apply_md, __cmd__note_send_to_note,
-    __tauri_command_name_note_apply_ops, __tauri_command_name_note_document_apply_md,
-    __tauri_command_name_note_send_to_note,
+    __cmd__note_apply_ops, __cmd__note_document_apply_md, __cmd__note_redo_text,
+    __cmd__note_send_to_note, __cmd__note_undo_text, __tauri_command_name_note_apply_ops,
+    __tauri_command_name_note_document_apply_md, __tauri_command_name_note_redo_text,
+    __tauri_command_name_note_send_to_note, __tauri_command_name_note_undo_text,
 };
 pub use note_commands_hydrate::{
     __cmd__note_document_hydrate, __cmd__note_query_blocks,

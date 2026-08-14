@@ -146,7 +146,11 @@ impl PendingMessageQueue {
     /// 未设置分组名的条目恒走入队路径（05 §2.2:106）。
     pub fn replace_or_enqueue(&mut self, entry: SteeringInputEntry) -> bool {
         if let Some(group_id) = &entry.group_id {
-            if let Some(idx) = self.entries.iter().position(|e| e.group_id.as_deref() == Some(group_id)) {
+            if let Some(idx) = self
+                .entries
+                .iter()
+                .position(|e| e.group_id.as_deref() == Some(group_id))
+            {
                 self.entries[idx] = entry;
                 return true;
             }
@@ -163,7 +167,10 @@ impl PendingMessageQueue {
     }
 
     /// 按谓词提取条目（撤销语义，对齐 TS withdraw）
-    pub fn withdraw(&mut self, predicate: impl Fn(&SteeringInputEntry) -> bool) -> Vec<SteeringInputEntry> {
+    pub fn withdraw(
+        &mut self,
+        predicate: impl Fn(&SteeringInputEntry) -> bool,
+    ) -> Vec<SteeringInputEntry> {
         let mut matched = Vec::new();
         let mut remaining = VecDeque::new();
         while let Some(entry) = self.entries.pop_front() {
@@ -389,11 +396,7 @@ mod tests {
             queue.enqueue(user_entry(&format!("m-{i}"), "x", i as u64));
         }
         assert_eq!(queue.len(), DEFAULT_QUEUE_CAPACITY);
-        assert_eq!(
-            queue.peek().expect("队首").id,
-            "m-5",
-            "最旧的 5 条被挤掉"
-        );
+        assert_eq!(queue.peek().expect("队首").id, "m-5", "最旧的 5 条被挤掉");
     }
 
     /// 05 §2.2:107：满容量时 steering 优先——普通消息先被挤掉，steering 保留
@@ -409,7 +412,11 @@ mod tests {
         assert!(queue.has_pending_steering(), "steering 条目已入队");
         let drained = queue.dequeue_all();
         let ids: Vec<&str> = drained.iter().map(|e| e.id.as_str()).collect();
-        assert_eq!(ids, vec!["u2", "u3", "s1"], "steering 保留、最旧普通消息被挤掉");
+        assert_eq!(
+            ids,
+            vec!["u2", "u3", "s1"],
+            "steering 保留、最旧普通消息被挤掉"
+        );
 
         // 再入队普通消息：继续挤掉最旧普通消息 u2，steering 仍保留
         let mut queue2 = PendingMessageQueue::with_capacity(3);
@@ -418,7 +425,11 @@ mod tests {
         }
         queue2.enqueue(user_entry("u4", "plain-4", 5));
         let ids: Vec<String> = queue2.dequeue_all().into_iter().map(|e| e.id).collect();
-        assert_eq!(ids, vec!["u3", "s1", "u4"], "普通消息先被挤掉，steering 始终保留");
+        assert_eq!(
+            ids,
+            vec!["u3", "s1", "u4"],
+            "普通消息先被挤掉，steering 始终保留"
+        );
     }
 
     /// 满容量全为 steering：新 steering 挤掉最旧（对齐 TS evictFor shift 分支）
@@ -511,7 +522,11 @@ mod tests {
         let second = input.dequeue().expect("第二条");
         assert_eq!(second.text(), "please fix");
         assert_eq!(
-            second.metadata.as_ref().and_then(|m| m.get("kind")).and_then(|k| k.as_str()),
+            second
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("kind"))
+                .and_then(|k| k.as_str()),
             Some("steering"),
             "steering 条目带元数据标记"
         );
@@ -556,9 +571,15 @@ mod tests {
         // 重复 reason 去重：只剩 2 条
         assert_eq!(queue.len(), 2);
         let drained = queue.dequeue_all();
-        assert!(drained.iter().all(|e| e.is_steering), "nudge 均为 steering 条目");
+        assert!(
+            drained.iter().all(|e| e.is_steering),
+            "nudge 均为 steering 条目"
+        );
         assert_eq!(drained[0].group_id.as_deref(), Some("empty-response"));
-        assert_eq!(drained[0].text, "第二次空响应提示（应替换第一次）", "同组后入者替换先入者");
+        assert_eq!(
+            drained[0].text, "第二次空响应提示（应替换第一次）",
+            "同组后入者替换先入者"
+        );
         assert_eq!(drained[1].group_id.as_deref(), Some("tool-errors"));
     }
 
@@ -621,7 +642,10 @@ mod tests {
         assert_eq!(message.text(), "请检查文件");
         assert!(message.created_at.ends_with('Z'), "ISO8601 时间戳");
         let metadata = message.metadata.as_ref().expect("steering 条目须带元数据");
-        assert_eq!(metadata.get("kind").and_then(|k| k.as_str()), Some("steering"));
+        assert_eq!(
+            metadata.get("kind").and_then(|k| k.as_str()),
+            Some("steering")
+        );
 
         let plain = user_entry("u1", "plain", 1_785_456_000_000).into_user_message();
         assert!(plain.metadata.is_none(), "普通条目不带 steering 元数据");

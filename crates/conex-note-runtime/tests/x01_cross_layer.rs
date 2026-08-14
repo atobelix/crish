@@ -152,11 +152,7 @@ async fn x01_apply_md_query_outline_idempotent_and_get_md() {
         .document_outline(doc, Some(6))
         .await
         .expect("outline");
-    assert!(
-        !outline.outline.is_empty(),
-        "outline 应非空: {:?}",
-        outline
-    );
+    assert!(!outline.outline.is_empty(), "outline 应非空: {:?}", outline);
     let title_ok = outline.outline.iter().any(|n| {
         n.level >= 1
             && (n.title.contains("跨层")
@@ -263,13 +259,21 @@ async fn x01_a_surf_note_runtime_factory_send_path() {
     let doc = "doc-x01-surf";
 
     let r1 = handle
-        .apply_md_fragment(apply_req(doc, "# Surf\n\nsurf_x01_body", Some("surf-intent-1")))
+        .apply_md_fragment(apply_req(
+            doc,
+            "# Surf\n\nsurf_x01_body",
+            Some("surf-intent-1"),
+        ))
         .await
         .unwrap();
     assert!(!r1.idempotent && r1.inserted >= 1);
 
     let r2 = handle
-        .apply_md_fragment(apply_req(doc, "# Surf\n\nsurf_x01_body", Some("surf-intent-1")))
+        .apply_md_fragment(apply_req(
+            doc,
+            "# Surf\n\nsurf_x01_body",
+            Some("surf-intent-1"),
+        ))
         .await
         .unwrap();
     assert!(r2.idempotent && r2.inserted == 0);

@@ -225,6 +225,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("note_import_mirror_proposal", "note", "engine", true),
         // CONN-B3：collab wire → DocSession::apply（产品 slash 写锥；≠ EL-01）
         entry("note_apply_ops", "note", "engine", true),
+        // CRDT-01/03：文本级 CRDT 因果撤销与重做
+        entry("note_undo_text", "note", "engine", true),
+        entry("note_redo_text", "note", "engine", true),
         // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；
         //    实现体 = main.rs lifecycle_commands 命令壳 + lifecycle 引擎侧）──
         entry("resume_subagent", "core", "engine", true),
@@ -286,12 +289,12 @@ mod tests {
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
         assert_eq!(
-             total, 125,
-             "总数 125（电脑操作四命令 + note_apply_ops + mirror + hydrate + D4a + core_read_run_events 恢复，与前端同步）"
+             total, 127,
+             "总数 127（电脑操作四命令 + note_apply_ops + note_undo_text + note_redo_text + mirror + hydrate + D4a + core_read_run_events 恢复，与前端同步）"
          );
         assert_eq!(
-            registered, 120,
-            "注册面 120（含 core_compact_now 已接线 + core_read_run_events 恢复激活）"
+            registered, 122,
+            "注册面 122（含 core_compact_now 已接线 + core_read_run_events 恢复激活 + note_undo_text/redo_text）"
         );
         assert_eq!(pending, 5, "登记先行 5");
     }
@@ -439,11 +442,11 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 125);
+        assert_eq!(manifest.commands.len(), 127);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
-    /// Round7+：笔记 IPC 七命令登记且 registered=true（含 hydrate / mirror / apply_ops）。
+    /// Round7+：笔记 IPC 九命令登记且 registered=true（含 hydrate / mirror / apply_ops / undo_text / redo_text）。
     #[test]
     fn manifest_registers_note_commands() {
         let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
@@ -459,6 +462,8 @@ mod tests {
             "note_detect_mirror_drift",
             "note_import_mirror_proposal",
             "note_apply_ops",
+            "note_undo_text",
+            "note_redo_text",
         ] {
             let entry = by_name
                 .get(name)

@@ -21,8 +21,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::tools::subagent::{
-    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner,
-    SubagentState,
+    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner, SubagentState,
 };
 use async_trait::async_trait;
 use conex_db::LocalDb;
@@ -30,9 +29,8 @@ use conex_test_utils::TempWorkspace;
 use conex_types::SessionAgent;
 use orchestrator::flow_graph::{
     FailStrategy, FlowDeclaration, FlowError, FlowGraphError, FlowMetaStore, FlowNode,
-    FlowNodeState, FlowReportKind, FlowScheduler, FLOW_AUTO_COMPOSITE_KEY,
-    FLOW_DECLARATION_KEY, FLOW_MAX_SIBLINGS_KEY, FLOW_ON_FAILED_KEY, FLOW_RELEASED_KEY,
-    FLOW_RESERVED_KEY,
+    FlowNodeState, FlowReportKind, FlowScheduler, FLOW_AUTO_COMPOSITE_KEY, FLOW_DECLARATION_KEY,
+    FLOW_MAX_SIBLINGS_KEY, FLOW_ON_FAILED_KEY, FLOW_RELEASED_KEY, FLOW_RESERVED_KEY,
 };
 
 // ── 测试替身 ──────────────────────────────────────────────────────
@@ -56,7 +54,10 @@ impl FlowMetaStore for InMemoryMeta {
     }
 
     fn set_meta(&self, key: &str, value: &str) -> Result<(), FlowError> {
-        self.store.lock().unwrap().insert(key.to_string(), value.to_string());
+        self.store
+            .lock()
+            .unwrap()
+            .insert(key.to_string(), value.to_string());
         Ok(())
     }
 }
@@ -126,7 +127,9 @@ impl SubagentSpawner for RecordingSpawner {
             }
         };
         if should_fail {
-            return Err(SubagentSpawnError::SpawnFailed("模拟 spawn 失败".to_string()));
+            return Err(SubagentSpawnError::SpawnFailed(
+                "模拟 spawn 失败".to_string(),
+            ));
         }
         let n = self.seq.fetch_add(1, Ordering::SeqCst);
         let run_id = format!("flow-run-{n}");
@@ -155,9 +158,10 @@ impl SubagentSpawner for RecordingSpawner {
                 // T-D-07 v6 新列：测试域 spawner 透传请求字段（模型覆盖不落库）
                 task_type: req.task_type.map(|t| t.as_str().to_string()),
                 display_label: req.display_label.clone(),
-                allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
-                    serde_json::to_string(paths).expect("路径白名单序列化不应失败")
-                }),
+                allowed_write_paths_json: req
+                    .allowed_write_paths
+                    .as_ref()
+                    .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
                 // D-02 LK-04：子会话 id 随行（与结果信封 session_id 同源）
                 sub_session_id: Some(format!("sess-{n}")),
             });
@@ -184,7 +188,8 @@ fn set_row_status(db: &LocalDb, session_id: &str, run_id: &str, status: &str) {
         .find(|a| a.subagent_run_id == run_id)
         .expect("run 行必须存在");
     row.status = status.to_string();
-    db.save_session_agents(session_id, &agents).expect("保存行失败");
+    db.save_session_agents(session_id, &agents)
+        .expect("保存行失败");
 }
 
 // ── 构造助手 ──────────────────────────────────────────────────────
@@ -211,7 +216,8 @@ fn decl(tasks: Vec<FlowNode>) -> FlowDeclaration {
 fn harness() -> (FlowScheduler, Arc<RecordingSpawner>, Arc<InMemoryMeta>) {
     let spawner = Arc::new(RecordingSpawner::new());
     let meta = Arc::new(InMemoryMeta::new());
-    let sched = FlowScheduler::new("sess-a", spawner.clone(), meta.clone()).expect("调度器创建失败");
+    let sched =
+        FlowScheduler::new("sess-a", spawner.clone(), meta.clone()).expect("调度器创建失败");
     (sched, spawner, meta)
 }
 
@@ -263,7 +269,11 @@ async fn parallel_burst_peak_respects_max_concurrent_event_driven() {
     let (mut sched, spawner, _meta) = harness();
     let tasks: Vec<FlowNode> = (0..20).map(|i| node(&format!("n{i}"), &[])).collect();
     let adv = sched.declare_flow(&decl(tasks)).await.unwrap();
-    assert_eq!(adv.started.len(), 17, "快照不含本次请求：in_flight 到 16 后第 17 个放行、第 18 个被拒");
+    assert_eq!(
+        adv.started.len(),
+        17,
+        "快照不含本次请求：in_flight 到 16 后第 17 个放行、第 18 个被拒"
+    );
     assert_eq!(spawner.requests().len(), 17);
     assert_eq!(sched.budget_in_flight(), 17);
     // 事件驱动不轮询：完成一个 → 终态事件内部立即补位一个
@@ -276,7 +286,11 @@ async fn parallel_burst_peak_respects_max_concurrent_event_driven() {
     assert_eq!(spawner.requests().len(), 18);
     assert!(sched.budget_in_flight() <= 17, "在途峰值不超过预算");
     // 逐个完成 → 剩余节点全部补位，峰值全程 ≤ 17
-    let mut run_queue: Vec<String> = adv.started.iter().map(|s| s.subagent_run_id.clone()).collect();
+    let mut run_queue: Vec<String> = adv
+        .started
+        .iter()
+        .map(|s| s.subagent_run_id.clone())
+        .collect();
     run_queue.push(adv2.started[0].subagent_run_id.clone());
     let mut in_flight_peak = sched.budget_in_flight();
     let mut cursor = 0usize;
@@ -304,11 +318,12 @@ async fn serial_siblings_start_in_declaration_order() {
     n1.parallel = false;
     let mut n2 = node("n2", &[]);
     n2.parallel = false;
-    let adv = sched
-        .declare_flow(&decl(vec![n1, n2]))
-        .await
-        .unwrap();
-    assert_eq!(adv.started.len(), 1, "同波次 parallel=false 首轮只启动声明序第一个");
+    let adv = sched.declare_flow(&decl(vec![n1, n2])).await.unwrap();
+    assert_eq!(
+        adv.started.len(),
+        1,
+        "同波次 parallel=false 首轮只启动声明序第一个"
+    );
     assert_eq!(adv.started[0].node_id, "n1");
     assert_eq!(sched.node_state("n1"), Some(FlowNodeState::Running));
     assert_eq!(
@@ -326,7 +341,11 @@ async fn serial_siblings_start_in_declaration_order() {
     assert_eq!(adv2.started.len(), 1);
     assert_eq!(adv2.started[0].node_id, "n2", "spawn2 在 terminal 事件后");
     assert_eq!(sched.node_state("n2"), Some(FlowNodeState::Running));
-    assert_eq!(spawner.requests().len(), 2, "spawn 时序：n1 先、n2 在终态事件后");
+    assert_eq!(
+        spawner.requests().len(),
+        2,
+        "spawn 时序：n1 先、n2 在终态事件后"
+    );
     // n2 完成 → 编排终态
     let run_n2 = adv2.started[0].subagent_run_id.clone();
     let adv3 = sched
@@ -347,7 +366,11 @@ async fn parallel_siblings_spawn_concurrently() {
         .await
         .unwrap();
     let ids: Vec<&str> = adv.started.iter().map(|s| s.node_id.as_str()).collect();
-    assert_eq!(ids, vec!["p1", "p2"], "同轮就绪集合含两节点（并行不受约束）");
+    assert_eq!(
+        ids,
+        vec!["p1", "p2"],
+        "同轮就绪集合含两节点（并行不受约束）"
+    );
     assert_eq!(sched.node_state("p1"), Some(FlowNodeState::Running));
     assert_eq!(sched.node_state("p2"), Some(FlowNodeState::Running));
     assert_eq!(spawner.requests().len(), 2);
@@ -366,7 +389,10 @@ async fn serial_constraint_applies_per_wave_independently() {
     b1.parallel = false;
     let mut b2 = node("b2", &["a1", "a2"]);
     b2.parallel = false;
-    let adv = sched.declare_flow(&decl(vec![a1, a2, b1, b2])).await.unwrap();
+    let adv = sched
+        .declare_flow(&decl(vec![a1, a2, b1, b2]))
+        .await
+        .unwrap();
     assert_eq!(adv.started.len(), 1);
     assert_eq!(adv.started[0].node_id, "a1", "波 1 串行首节点");
     assert_eq!(sched.node_state("a2"), Some(FlowNodeState::Pending));
@@ -384,7 +410,11 @@ async fn serial_constraint_applies_per_wave_independently() {
         .unwrap();
     assert_eq!(adv3.started.len(), 1);
     assert_eq!(adv3.started[0].node_id, "b1", "波 2 首节点（依赖满足后）");
-    assert_eq!(sched.node_state("b2"), Some(FlowNodeState::Pending), "波 2 内串行");
+    assert_eq!(
+        sched.node_state("b2"),
+        Some(FlowNodeState::Pending),
+        "波 2 内串行"
+    );
     let run_b1 = adv3.started[0].subagent_run_id.clone();
     let adv4 = sched
         .on_subagent_terminal(&run_b1, SubagentState::Completed)
@@ -417,7 +447,11 @@ async fn serial_siblings_do_not_deadlock_with_budget_one() {
         .unwrap();
     assert_eq!(adv.started.len(), 1, "预算 1：同一时刻只 spawn 一个节点");
     assert_eq!(adv.started[0].node_id, "n1", "声明序靠前且就绪者先 spawn");
-    assert_eq!(sched.node_state("n2"), Some(FlowNodeState::Pending), "串行前驱未完成不启动");
+    assert_eq!(
+        sched.node_state("n2"),
+        Some(FlowNodeState::Pending),
+        "串行前驱未完成不启动"
+    );
     // 逐个终态事件推进：n2、p3 依次启动——预算不足只延迟、不永久阻塞
     let run_n1 = adv.started[0].subagent_run_id.clone();
     let adv2 = sched
@@ -463,8 +497,7 @@ async fn on_failed_skip_allows_dependents_without_report() {
     assert_eq!(adv2.started[0].node_id, "b");
     assert_eq!(sched.node_state("a"), Some(FlowNodeState::Failed));
     assert!(
-        adv2
-            .reports
+        adv2.reports
             .iter()
             .all(|r| r.kind != FlowReportKind::NodeFailed),
         "Skip 策略不上报失败"
@@ -478,7 +511,11 @@ async fn on_failed_block_blocks_downstream_transitively_with_reports() {
     let (mut sched, spawner, _meta) = harness();
     // a → b → c；a 失败（节点未声明 → 会话默认 Block）
     let adv = sched
-        .declare_flow(&decl(vec![node("a", &[]), node("b", &["a"]), node("c", &["b"])]))
+        .declare_flow(&decl(vec![
+            node("a", &[]),
+            node("b", &["a"]),
+            node("c", &["b"]),
+        ]))
         .await
         .unwrap();
     let run_a = adv.started[0].subagent_run_id.clone();
@@ -492,14 +529,15 @@ async fn on_failed_block_blocks_downstream_transitively_with_reports() {
     assert_eq!(sched.node_state("b"), Some(FlowNodeState::Blocked));
     assert_eq!(sched.node_state("c"), Some(FlowNodeState::Blocked));
     assert!(
-        adv2
-            .reports
-            .iter()
-            .any(|r| r.kind == FlowReportKind::NodeFailed && r.strategy == Some(FailStrategy::Block)),
+        adv2.reports.iter().any(
+            |r| r.kind == FlowReportKind::NodeFailed && r.strategy == Some(FailStrategy::Block)
+        ),
         "Block 策略必须上报失败"
     );
     assert!(
-        adv2.reports.iter().any(|r| r.kind == FlowReportKind::Blocked),
+        adv2.reports
+            .iter()
+            .any(|r| r.kind == FlowReportKind::Blocked),
         "阻塞节点产生上报"
     );
     assert!(adv2.flow_terminal, "部分完成即编排终态（后续不启动）");
@@ -523,10 +561,10 @@ async fn on_failed_report_proceeds_and_records() {
     assert_eq!(adv2.started.len(), 1, "Report：照常推进");
     assert_eq!(adv2.started[0].node_id, "b");
     assert!(
-        adv2
-            .reports
+        adv2.reports
             .iter()
-            .any(|r| r.kind == FlowReportKind::NodeFailed && r.strategy == Some(FailStrategy::Report)),
+            .any(|r| r.kind == FlowReportKind::NodeFailed
+                && r.strategy == Some(FailStrategy::Report)),
         "Report 策略必须记录上报"
     );
 }
@@ -547,7 +585,9 @@ async fn session_default_strategy_read_from_meta_key() {
         .unwrap();
     assert_eq!(adv2.started.len(), 1, "会话默认 report：后置照常启动");
     assert!(
-        adv2.reports.iter().any(|r| r.kind == FlowReportKind::NodeFailed),
+        adv2.reports
+            .iter()
+            .any(|r| r.kind == FlowReportKind::NodeFailed),
         "会话默认 report 产生上报记录"
     );
 }
@@ -588,7 +628,10 @@ async fn second_declare_rejected_while_flow_active() {
         .declare_flow(&decl(vec![node("x", &[])]))
         .await
         .unwrap_err();
-    assert!(matches!(err, FlowError::AlreadyDeclared), "一轮一编排：{err:?}");
+    assert!(
+        matches!(err, FlowError::AlreadyDeclared),
+        "一轮一编排：{err:?}"
+    );
     assert_eq!(spawner.requests().len(), 1, "第二次声明零 run");
 }
 
@@ -702,8 +745,14 @@ async fn budget_recomputed_across_restart_from_active_runs() {
     assert_eq!(budget.reserved(), 2);
     assert_eq!(budget.released(), 1);
     // 落库一致（防 double-charge：已完成任务不再占位）
-    assert_eq!(meta.get_meta(FLOW_RESERVED_KEY).unwrap().as_deref(), Some("2"));
-    assert_eq!(meta.get_meta(FLOW_RELEASED_KEY).unwrap().as_deref(), Some("1"));
+    assert_eq!(
+        meta.get_meta(FLOW_RESERVED_KEY).unwrap().as_deref(),
+        Some("2")
+    );
+    assert_eq!(
+        meta.get_meta(FLOW_RELEASED_KEY).unwrap().as_deref(),
+        Some("1")
+    );
 }
 
 // ── 合成唤醒（02 方案 M6 内容 7：不轮询 + planner 亲和）────────────
@@ -749,7 +798,11 @@ async fn synthetic_wakeup_composite_observation_mode() {
         .unwrap();
     assert!(adv3.flow_terminal);
     assert_eq!(sched.node_state("gate"), Some(FlowNodeState::Completed));
-    assert_eq!(spawner.requests().len(), 1, "综合 run 由主 agent 启动，调度器不 spawn");
+    assert_eq!(
+        spawner.requests().len(),
+        1,
+        "综合 run 由主 agent 启动，调度器不 spawn"
+    );
 }
 
 #[tokio::test]
@@ -843,7 +896,10 @@ async fn attach_run_rejected_when_budget_full() {
 async fn declare_after_flow_terminal_allows_new_round() {
     let (mut sched, spawner, _meta) = harness();
     // 第一轮：a 完成 → 编排终态
-    let adv = sched.declare_flow(&decl(vec![node("a", &[])])).await.unwrap();
+    let adv = sched
+        .declare_flow(&decl(vec![node("a", &[])]))
+        .await
+        .unwrap();
     let run_a = adv.started[0].subagent_run_id.clone();
     sched
         .on_subagent_terminal(&run_a, SubagentState::Completed)
@@ -876,7 +932,9 @@ async fn spawn_failure_marks_node_failed_and_blocks_downstream() {
     assert_eq!(sched.node_state("a"), Some(FlowNodeState::Failed));
     assert_eq!(sched.node_state("b"), Some(FlowNodeState::Blocked));
     assert!(
-        adv.reports.iter().any(|r| r.kind == FlowReportKind::SpawnFailed),
+        adv.reports
+            .iter()
+            .any(|r| r.kind == FlowReportKind::SpawnFailed),
         "spawn 失败必须上报"
     );
     assert!(adv.flow_terminal);
@@ -901,7 +959,10 @@ async fn terminal_event_for_unknown_run_rejected() {
 #[tokio::test]
 async fn duplicate_terminal_event_is_idempotent() {
     let (mut sched, _spawner, _meta) = harness();
-    let adv = sched.declare_flow(&decl(vec![node("a", &[])])).await.unwrap();
+    let adv = sched
+        .declare_flow(&decl(vec![node("a", &[])]))
+        .await
+        .unwrap();
     let run_a = adv.started[0].subagent_run_id.clone();
     let adv1 = sched
         .on_subagent_terminal(&run_a, SubagentState::Completed)
@@ -970,8 +1031,7 @@ async fn subagent_events_emitted_once_on_spawn_and_terminal() {
             ..
         } => {
             assert_eq!(
-                subagent_run_id,
-                adv.started[0].subagent_run_id,
+                subagent_run_id, adv.started[0].subagent_run_id,
                 "信封 subagentRunId = spawn 结果 run id"
             );
             // flow 节点 spawn 不携带 description/mode（M2 契约可选字段）
@@ -992,11 +1052,7 @@ async fn subagent_events_emitted_once_on_spawn_and_terminal() {
     let types: Vec<&str> = stored.iter().map(|e| e.event_type.as_str()).collect();
     assert_eq!(
         types,
-        vec![
-            "subagent-started",
-            "subagent-ended",
-            "subagent-started",
-        ],
+        vec!["subagent-started", "subagent-ended", "subagent-started",],
         "事件流：started(A) → ended(A) → started(B)，各恰一次"
     );
     let parsed: AgentEvent = serde_json::from_str(&stored[1].payload).expect("信封 JSON 可解析");
@@ -1064,7 +1120,10 @@ async fn without_emitter_no_subagent_events() {
     let mut sched =
         FlowScheduler::new("sess-a", spawner.clone(), meta.clone()).expect("调度器创建失败");
 
-    let adv = sched.declare_flow(&decl(vec![node("a", &[])])).await.unwrap();
+    let adv = sched
+        .declare_flow(&decl(vec![node("a", &[])]))
+        .await
+        .unwrap();
     let run_a = adv.started[0].subagent_run_id.clone();
     let _ = sched
         .on_subagent_terminal(&run_a, SubagentState::Completed)

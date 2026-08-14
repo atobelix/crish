@@ -204,6 +204,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('note_import_mirror_proposal', 'note', 'engine'),
     // CONN-B3：collab wire → DocSession::apply（产品 slash 写锥；≠ EL-01）
     entry('note_apply_ops', 'note', 'engine'),
+    // CRDT-01/03：文本级 CRDT 因果撤销与重做
+    entry('note_undo_text', 'note', 'engine'),
+    entry('note_redo_text', 'note', 'engine'),
     // ── 电脑操作会话命令（06 遗留⑨：computer_session_enable/disable、
     //    computer_estop、computer_status；代理到 ComputerSlot，状态事件
     //    computer://state-changed；与 Rust command_manifest.rs 同步）──

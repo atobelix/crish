@@ -133,11 +133,7 @@ pub enum GoalStatus {
 
 impl GoalState {
     /// 装配新 goal（run_task_impl 装配处调用；新 /goal 覆盖语义，§3.8）
-    pub fn new(
-        goal: impl Into<String>,
-        max_rounds: u32,
-        max_stalled_rounds: u32,
-    ) -> Self {
+    pub fn new(goal: impl Into<String>, max_rounds: u32, max_stalled_rounds: u32) -> Self {
         Self {
             schema_version: GOAL_SCHEMA_VERSION,
             goal: goal.into(),
@@ -170,9 +166,7 @@ impl GoalState {
     pub fn status(&self) -> GoalStatus {
         match self.stopped_reason.as_deref() {
             Some(GOAL_COMPLETED_REASON) => GoalStatus::Completed,
-            Some(reason) if TERMINAL_STOPPED_REASONS.contains(&reason) => {
-                GoalStatus::Blocked
-            }
+            Some(reason) if TERMINAL_STOPPED_REASONS.contains(&reason) => GoalStatus::Blocked,
             _ => GoalStatus::Active,
         }
     }
@@ -226,9 +220,7 @@ impl GoalState {
         if input.end_reason == AgentEndReason::Stop {
             next.current_round = next.current_round.saturating_add(1);
         }
-        next.stalled_rounds = next
-            .stalled_rounds
-            .saturating_add(assessment.stalled_delta);
+        next.stalled_rounds = next.stalled_rounds.saturating_add(assessment.stalled_delta);
         if let Some(sig) = &assessment.next_progress_signature {
             next.progress_signature = Some(sig.clone());
         }
@@ -514,9 +506,7 @@ fn parse_checklist_line(line: &str) -> Option<(bool, &str)> {
 /// 伪任务判据（前端 PSEUDO_TASK_RE 同构：`本轮总结` / `本轮小结` /
 /// `本轮回顾` 开头）
 fn is_pseudo_task(body: &str) -> bool {
-    body.starts_with("本轮总结")
-        || body.starts_with("本轮小结")
-        || body.starts_with("本轮回顾")
+    body.starts_with("本轮总结") || body.starts_with("本轮小结") || body.starts_with("本轮回顾")
 }
 
 /// 文案 DONE 信号（L0 候选；对齐前端 replyLooksGoalDone，
@@ -646,11 +636,7 @@ mod tests {
 
     #[test]
     fn u4_done_with_open_tasks_does_not_complete() {
-        let input = round(
-            AgentEndReason::Stop,
-            "DONE\n- [x] 任务A\n- [ ] 任务B",
-            &[],
-        );
+        let input = round(AgentEndReason::Stop, "DONE\n- [x] 任务A\n- [ ] 任务B", &[]);
         let assessment = assess_round(&input);
         assert_ne!(
             assessment.decision,
@@ -694,10 +680,7 @@ mod tests {
         };
         let a2 = assess_round(&second);
         assert_eq!(a2.decision, GoalDecision::Blocked, "达阈值停滞阻断");
-        assert_eq!(
-            a2.stopped_reason.as_deref(),
-            Some(GOAL_STALLED_REASON)
-        );
+        assert_eq!(a2.stopped_reason.as_deref(), Some(GOAL_STALLED_REASON));
         assert_eq!(a2.reason_detail, GOAL_STALLED_REASON);
         state = state.advance(&second, &a2);
         assert_eq!(state.stalled_rounds, 2);
@@ -716,7 +699,10 @@ mod tests {
             ..round(AgentEndReason::Stop, "总结一下进展", &[])
         };
         let assessment = assess_round(&input);
-        assert_eq!(assessment.stalled_delta, 1, "纯文字轮正确计入 stalled（03 §2D）");
+        assert_eq!(
+            assessment.stalled_delta, 1,
+            "纯文字轮正确计入 stalled（03 §2D）"
+        );
         assert_eq!(
             assessment.next_progress_signature, None,
             "无工具轮不产出新签名，沿用上轮"
@@ -728,7 +714,10 @@ mod tests {
     fn u6_first_text_only_round_stalls() {
         let input = round(AgentEndReason::Stop, "先想一下方案", &[]);
         let assessment = assess_round(&input);
-        assert_eq!(assessment.stalled_delta, 1, "无历史签名时纯文字轮计入 stalled");
+        assert_eq!(
+            assessment.stalled_delta, 1,
+            "无历史签名时纯文字轮计入 stalled"
+        );
         assert_eq!(assessment.decision, GoalDecision::NoProgress);
     }
 
@@ -747,7 +736,10 @@ mod tests {
             ..round(AgentEndReason::Stop, "写入成功", &calls)
         };
         let assessment = assess_round(&input);
-        assert_eq!(assessment.stalled_delta, 0, "成功工具结果重置 stalled（U7）");
+        assert_eq!(
+            assessment.stalled_delta, 0,
+            "成功工具结果重置 stalled（U7）"
+        );
         let next_sig = assessment.next_progress_signature.clone().unwrap();
         assert!(next_sig.starts_with("tools:fnv1a:"), "签名更新为工具批指纹");
         assert_ne!(next_sig, "tools:fnv1a:old000000000000");
@@ -774,7 +766,10 @@ mod tests {
         let advanced = state.advance(&input, &assessment);
         assert_eq!(advanced.current_round, 12);
         assert!(advanced.is_terminal(), "goal-max-rounds 后为终态");
-        assert!(!advanced.goal_pending(AgentEndReason::Stop), "此后 goal_pending 恒 false（A3）");
+        assert!(
+            !advanced.goal_pending(AgentEndReason::Stop),
+            "此后 goal_pending 恒 false（A3）"
+        );
 
         // 后续评估：已终态 → NoGoal，不评估不写、不续
         let after = RoundInput {
@@ -802,10 +797,16 @@ mod tests {
         assert_eq!(assessment.decision, GoalDecision::Blocked);
         assert_eq!(assessment.reason_detail, "error");
         assert_eq!(assessment.stalled_delta, 0, "error 轮不计 stalled（U9）");
-        assert!(!assessment.should_continue, "error 不触发 goal_pending（A4）");
+        assert!(
+            !assessment.should_continue,
+            "error 不触发 goal_pending（A4）"
+        );
 
         let advanced = state.advance(&input, &assessment);
-        assert_eq!(advanced.current_round, 2, "error 轮不递增 current_round（01 §3 第3条）");
+        assert_eq!(
+            advanced.current_round, 2,
+            "error 轮不递增 current_round（01 §3 第3条）"
+        );
         assert_eq!(advanced.stalled_rounds, 1, "error 轮 stalled 保持");
     }
 
@@ -820,7 +821,11 @@ mod tests {
         ] {
             let input = round(reason, "收场", &[]);
             let assessment = assess_round(&input);
-            assert_eq!(assessment.decision, GoalDecision::Blocked, "{reason:?} 阻断");
+            assert_eq!(
+                assessment.decision,
+                GoalDecision::Blocked,
+                "{reason:?} 阻断"
+            );
             assert!(
                 !assessment.should_continue,
                 "{reason:?} 不触发 goal_pending（U10）"
@@ -841,7 +846,11 @@ mod tests {
     #[test]
     fn u11_from_json_fail_open() {
         assert_eq!(GoalState::from_json(None), None, "缺键 = 无 goal");
-        assert_eq!(GoalState::from_json(Some("not json{")), None, "坏 JSON = 无 goal");
+        assert_eq!(
+            GoalState::from_json(Some("not json{")),
+            None,
+            "坏 JSON = 无 goal"
+        );
         // 字段级容忍：空对象 → 全默认
         let empty = GoalState::from_json(Some("{}")).expect("空对象应取默认态");
         assert_eq!(empty, GoalState::default());
@@ -889,7 +898,10 @@ mod tests {
         let state = GoalState::from_json(Some(&raw.to_string())).unwrap();
         assert_eq!(state.goal, "修复构建");
         assert_eq!(state.max_rounds, 5);
-        assert_eq!(state.max_stalled_rounds, DEFAULT_GOAL_MAX_STALLED_ROUNDS, "缺省字段取默认值");
+        assert_eq!(
+            state.max_stalled_rounds, DEFAULT_GOAL_MAX_STALLED_ROUNDS,
+            "缺省字段取默认值"
+        );
         assert_eq!(state.current_round, 0);
         assert!(state.progress_signature.is_none());
     }
@@ -910,9 +922,15 @@ mod tests {
             ..round(AgentEndReason::Stop, "读取成功", &calls)
         };
         let assessment = assess_round(&input);
-        assert_eq!(assessment.stalled_delta, 0, "成功计数 >0 重置 stalled（L2 证据）");
+        assert_eq!(
+            assessment.stalled_delta, 0,
+            "成功计数 >0 重置 stalled（L2 证据）"
+        );
         // 事件载荷 evidence 数据源：壳层直取 RoundInput.tool_success_count
-        assert_eq!(input.tool_success_count, 3, "壳层可直取计数进 goal-round-completed 载荷");
+        assert_eq!(
+            input.tool_success_count, 3,
+            "壳层可直取计数进 goal-round-completed 载荷"
+        );
     }
 
     // ── 补充：checklist 解析器（L1 基础）────────────────────────
@@ -930,10 +948,7 @@ mod tests {
 - [x]任务无空白分隔不算
 ";
         let items = parse_checklist(text);
-        let texts: Vec<(&str, bool)> = items
-            .iter()
-            .map(|i| (i.text.as_str(), i.done))
-            .collect();
+        let texts: Vec<(&str, bool)> = items.iter().map(|i| (i.text.as_str(), i.done)).collect();
         assert_eq!(
             texts,
             vec![
@@ -965,7 +980,10 @@ mod tests {
         assert!(reply_looks_goal_done("目标已完成"));
         assert!(reply_looks_goal_done("  完成 DONE  "));
         assert!(!reply_looks_goal_done(""));
-        assert!(reply_looks_goal_done(r"DONE 未完成"), r"DONE 后空格即单词边界（\bDONE\b）");
+        assert!(
+            reply_looks_goal_done(r"DONE 未完成"),
+            r"DONE 后空格即单词边界（\bDONE\b）"
+        );
         assert!(!reply_looks_goal_done("DONEXX")); // \b 边界
         assert!(!reply_looks_goal_done("XDONE")); // \b 边界
         assert!(!reply_looks_goal_done("随便说说"));
@@ -1060,18 +1078,33 @@ mod tests {
     #[test]
     fn goal_pending_only_when_active_under_limit_and_stop() {
         let state = active_state();
-        assert!(state.goal_pending(AgentEndReason::Stop), "进行中未达上限 + stop → pending");
-        assert!(!state.goal_pending(AgentEndReason::Error), "error 不续（A4）");
-        assert!(!state.goal_pending(AgentEndReason::MaxTurns), "max-turns 不续");
+        assert!(
+            state.goal_pending(AgentEndReason::Stop),
+            "进行中未达上限 + stop → pending"
+        );
+        assert!(
+            !state.goal_pending(AgentEndReason::Error),
+            "error 不续（A4）"
+        );
+        assert!(
+            !state.goal_pending(AgentEndReason::MaxTurns),
+            "max-turns 不续"
+        );
         assert!(!state.goal_pending(AgentEndReason::Stopped), "stopped 不续");
 
         let mut at_limit = active_state();
         at_limit.current_round = at_limit.max_rounds;
-        assert!(!at_limit.goal_pending(AgentEndReason::Stop), "达上限后恒 false（A3）");
+        assert!(
+            !at_limit.goal_pending(AgentEndReason::Stop),
+            "达上限后恒 false（A3）"
+        );
 
         let mut terminal = active_state();
         terminal.stopped_reason = Some(GOAL_STALLED_REASON.into());
-        assert!(!terminal.goal_pending(AgentEndReason::Stop), "终态后恒 false");
+        assert!(
+            !terminal.goal_pending(AgentEndReason::Stop),
+            "终态后恒 false"
+        );
     }
 
     // ── 补充：status 推断（§4.1：终态后 status 由 stopped_reason 推断）──

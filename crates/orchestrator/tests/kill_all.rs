@@ -15,8 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::tools::subagent::{
-    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner,
-    SubagentState,
+    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner, SubagentState,
 };
 use async_trait::async_trait;
 use conex_db::LocalDb;
@@ -93,7 +92,10 @@ impl SubagentSpawner for DbSpawner {
             parent_session_id: self.session_id.clone(),
             parent_run_id: req.parent_run_id.clone().unwrap_or_default(),
             parent_tool_call_id: req.parent_tool_call_id.clone(),
-            description: req.flow_node_id.clone().unwrap_or_else(|| "直调".to_string()),
+            description: req
+                .flow_node_id
+                .clone()
+                .unwrap_or_else(|| "直调".to_string()),
             mode: String::new(),
             status: "running".to_string(),
             summary: None,
@@ -119,9 +121,10 @@ impl SubagentSpawner for DbSpawner {
             // T-D-07 v6 新列：测试域 spawner 透传请求字段
             task_type: req.task_type.map(|t| t.as_str().to_string()),
             display_label: req.display_label.clone(),
-            allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
-                serde_json::to_string(paths).expect("路径白名单序列化不应失败")
-            }),
+            allowed_write_paths_json: req
+                .allowed_write_paths
+                .as_ref()
+                .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
             // D-02 LK-04 v9 列：测试域无子会话映射（None）
             sub_session_id: None,
         });
@@ -266,7 +269,11 @@ fn resume_env(session_id: &str) -> ResumeEnv {
         },
     )
     .expect("协调器构造失败");
-    ResumeEnv { db, spawner, coordinator }
+    ResumeEnv {
+        db,
+        spawner,
+        coordinator,
+    }
 }
 
 /// 服务构造（投递替身默认成功）
@@ -305,7 +312,11 @@ async fn kill_all_terminates_running_and_flow_has_no_residual() {
     let sink = RecordingCancelSink::new(true);
     let service = SubagentLifecycleService::new(db.clone(), sink.clone());
     let outcome = service.kill_all(session_id, "kill_all").unwrap();
-    assert_eq!(outcome.terminated.len(), 3, "终止列表 = 3 个 running 子代理");
+    assert_eq!(
+        outcome.terminated.len(),
+        3,
+        "终止列表 = 3 个 running 子代理"
+    );
     assert!(outcome.non_terminal.is_empty(), "无未终态汇总");
     let terminated: HashSet<&str> = outcome
         .terminated
@@ -364,15 +375,25 @@ async fn kill_all_filters_non_running_and_other_parents() {
     let rows = vec![
         // 命中：running + 父会话 = 主会话
         agent_row(
-            "sub-1", "run-1", "running", now, session_id, None, vec![user_msg("产出 1")],
+            "sub-1",
+            "run-1",
+            "running",
+            now,
+            session_id,
+            None,
+            vec![user_msg("产出 1")],
         ),
         // 状态不符：completed 不终止
-        agent_row(
-            "sub-2", "run-2", "completed", now, session_id, None, vec![],
-        ),
+        agent_row("sub-2", "run-2", "completed", now, session_id, None, vec![]),
         // 父会话不符：其它父会话的 run 不动
         agent_row(
-            "sub-3", "run-3", "running", now, "other-session", None, vec![],
+            "sub-3",
+            "run-3",
+            "running",
+            now,
+            "other-session",
+            None,
+            vec![],
         ),
     ];
     db.save_session_agents(session_id, &rows).unwrap();
@@ -400,10 +421,22 @@ async fn kill_all_reports_undelivered_as_non_terminal() {
     let now = now_ms();
     let rows = vec![
         agent_row(
-            "sub-1", "run-1", "running", now, session_id, None, vec![user_msg("产出 1")],
+            "sub-1",
+            "run-1",
+            "running",
+            now,
+            session_id,
+            None,
+            vec![user_msg("产出 1")],
         ),
         agent_row(
-            "sub-2", "run-2", "running", now, session_id, None, vec![user_msg("产出 2")],
+            "sub-2",
+            "run-2",
+            "running",
+            now,
+            session_id,
+            None,
+            vec![user_msg("产出 2")],
         ),
     ];
     db.save_session_agents(session_id, &rows).unwrap();
@@ -483,10 +516,22 @@ async fn kill_all_preserves_row_spawned_during_kill() {
     let now = now_ms();
     let rows = vec![
         agent_row(
-            "sub-1", "run-1", "running", now, session_id, None, vec![user_msg("产出 1")],
+            "sub-1",
+            "run-1",
+            "running",
+            now,
+            session_id,
+            None,
+            vec![user_msg("产出 1")],
         ),
         agent_row(
-            "sub-2", "run-2", "running", now, session_id, None, vec![user_msg("产出 2")],
+            "sub-2",
+            "run-2",
+            "running",
+            now,
+            session_id,
+            None,
+            vec![user_msg("产出 2")],
         ),
     ];
     db.save_session_agents(session_id, &rows).unwrap();
@@ -597,7 +642,9 @@ async fn resume_forks_new_run_verbatim_and_consumes_budget() {
 
     // 预算消费记账（操作指纹 = subagent_id + 任务）
     assert_eq!(
-        env.coordinator.budget().count(&fingerprint("sub-1", "完成模块 A")),
+        env.coordinator
+            .budget()
+            .count(&fingerprint("sub-1", "完成模块 A")),
         1,
         "resume 消费一次 Episode 预算"
     );
@@ -618,12 +665,22 @@ async fn resume_context_three_states() {
                 session_id,
                 &[
                     agent_row(
-                        "sub-1", "run-1", "failed", started_at, session_id,
-                        Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                        "sub-1",
+                        "run-1",
+                        "failed",
+                        started_at,
+                        session_id,
+                        Some(r#"["leaf-root","leaf-1"]"#),
+                        vec![user_msg("完成模块 A")],
                     ),
                     agent_row(
-                        "sub-2", "run-2", "failed", started_at, session_id,
-                        Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"X".repeat(200))],
+                        "sub-2",
+                        "run-2",
+                        "failed",
+                        started_at,
+                        session_id,
+                        Some(r#"["leaf-root","leaf-1"]"#),
+                        vec![assistant_msg(&"X".repeat(200))],
                     ),
                 ],
             )
@@ -649,16 +706,22 @@ async fn resume_context_three_states() {
                 session_id,
                 &[
                     agent_row(
-                        "sub-1", "run-1", "failed", started_at, session_id,
+                        "sub-1",
+                        "run-1",
+                        "failed",
+                        started_at,
+                        session_id,
                         Some(r#"["leaf-root","leaf-1"]"#),
-                        vec![
-                            user_msg("完成模块 A"),
-                            assistant_msg(&"X".repeat(886)),
-                        ],
+                        vec![user_msg("完成模块 A"), assistant_msg(&"X".repeat(886))],
                     ),
                     agent_row(
-                        "sub-2", "run-2", "failed", started_at, session_id,
-                        Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"Y".repeat(100))],
+                        "sub-2",
+                        "run-2",
+                        "failed",
+                        started_at,
+                        session_id,
+                        Some(r#"["leaf-root","leaf-1"]"#),
+                        vec![assistant_msg(&"Y".repeat(100))],
                     ),
                 ],
             )
@@ -686,8 +749,13 @@ async fn resume_context_three_states() {
             .save_session_agents(
                 session_id,
                 &[agent_row(
-                    "sub-1", "run-1", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![],
+                    "sub-1",
+                    "run-1",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![],
                 )],
             )
             .unwrap();
@@ -717,12 +785,22 @@ async fn resume_shares_episode_budget_with_recovery_ladder() {
             session_id,
             &[
                 agent_row(
-                    "sub-1", "run-1", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                    "sub-1",
+                    "run-1",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![user_msg("完成模块 A")],
                 ),
                 agent_row(
-                    "sub-2", "run-2", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"X".repeat(200))],
+                    "sub-2",
+                    "run-2",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![assistant_msg(&"X".repeat(200))],
                 ),
             ],
         )
@@ -792,12 +870,22 @@ async fn resume_budget_exhausted_falls_to_ladder4() {
             session_id,
             &[
                 agent_row(
-                    "sub-1", "run-1", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                    "sub-1",
+                    "run-1",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![user_msg("完成模块 A")],
                 ),
                 agent_row(
-                    "sub-2", "run-2", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"X".repeat(200))],
+                    "sub-2",
+                    "run-2",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![assistant_msg(&"X".repeat(200))],
                 ),
             ],
         )
@@ -855,19 +943,34 @@ async fn resume_with_prompt_override_uses_new_task() {
             session_id,
             &[
                 agent_row(
-                    "sub-1", "run-1", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("旧任务")],
+                    "sub-1",
+                    "run-1",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![user_msg("旧任务")],
                 ),
                 agent_row(
-                    "sub-2", "run-2", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"X".repeat(200))],
+                    "sub-2",
+                    "run-2",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![assistant_msg(&"X".repeat(200))],
                 ),
             ],
         )
         .unwrap();
     let service = service(&env, &RecordingCancelSink::new(true));
     let outcome = service
-        .resume(&mut env.coordinator, session_id, "sub-1", Some("新任务指令"))
+        .resume(
+            &mut env.coordinator,
+            session_id,
+            "sub-1",
+            Some("新任务指令"),
+        )
         .await
         .unwrap();
     let ResumeOutcome::Forked(record) = outcome else {
@@ -878,8 +981,18 @@ async fn resume_with_prompt_override_uses_new_task() {
     assert_eq!(reqs.len(), 1);
     assert_eq!(reqs[0].prompt, "新任务指令");
     // 不同任务 = 不同操作指纹：不消耗旧任务预算，新任务独立记账
-    assert_eq!(env.coordinator.budget().count(&fingerprint("sub-1", "旧任务")), 0);
-    assert_eq!(env.coordinator.budget().count(&fingerprint("sub-1", "新任务指令")), 1);
+    assert_eq!(
+        env.coordinator
+            .budget()
+            .count(&fingerprint("sub-1", "旧任务")),
+        0
+    );
+    assert_eq!(
+        env.coordinator
+            .budget()
+            .count(&fingerprint("sub-1", "新任务指令")),
+        1
+    );
     assert_eq!(record.context_mode, ForkContextMode::Verbatim);
 }
 
@@ -893,8 +1006,13 @@ async fn resume_running_target_delivers_force_cancel_first() {
         .save_session_agents(
             session_id,
             &[agent_row(
-                "sub-1", "run-1", "running", started_at, session_id,
-                Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                "sub-1",
+                "run-1",
+                "running",
+                started_at,
+                session_id,
+                Some(r#"["leaf-root","leaf-1"]"#),
+                vec![user_msg("完成模块 A")],
             )],
         )
         .unwrap();
@@ -907,7 +1025,10 @@ async fn resume_running_target_delivers_force_cancel_first() {
     let ResumeOutcome::Forked(record) = outcome else {
         panic!("期望 Forked：{outcome:?}");
     };
-    assert!(!record.new_run_id.is_empty(), "running 目标 resume 产出新 run");
+    assert!(
+        !record.new_run_id.is_empty(),
+        "running 目标 resume 产出新 run"
+    );
     // kill-for-resume：目标 run 收到 L3 强停（防存活循环终态回写覆盖）
     let calls = sink.calls();
     assert_eq!(calls.len(), 1);
@@ -916,7 +1037,10 @@ async fn resume_running_target_delivers_force_cancel_first() {
     // 原 run 行归一 failed
     let rows = env.db.load_session_agents(session_id).unwrap();
     let original = rows.iter().find(|a| a.id == "sub-1").unwrap();
-    assert_eq!(original.status, "failed", "running 目标 resume 后原 run 置 failed");
+    assert_eq!(
+        original.status, "failed",
+        "running 目标 resume 后原 run 置 failed"
+    );
 }
 
 // ── kill_subagent（D4 §3.2：单目标终止）───────────────────────────
@@ -931,10 +1055,22 @@ async fn kill_subagent_terminates_only_target() {
     let now = now_ms();
     let rows = vec![
         agent_row(
-            "sub-a", "run-a", "running", now, session_id, None, vec![user_msg("产出 A")],
+            "sub-a",
+            "run-a",
+            "running",
+            now,
+            session_id,
+            None,
+            vec![user_msg("产出 A")],
         ),
         agent_row(
-            "sub-b", "run-b", "running", now, session_id, None, vec![user_msg("产出 B")],
+            "sub-b",
+            "run-b",
+            "running",
+            now,
+            session_id,
+            None,
+            vec![user_msg("产出 B")],
         ),
     ];
     db.save_session_agents(session_id, &rows).unwrap();
@@ -1022,7 +1158,13 @@ async fn kill_subagent_undelivered_still_normalizes_row() {
     db.insert_session(session_id, "主会话").unwrap();
     let now = now_ms();
     let rows = vec![agent_row(
-        "sub-1", "run-1", "running", now, session_id, None, vec![user_msg("产出 1")],
+        "sub-1",
+        "run-1",
+        "running",
+        now,
+        session_id,
+        None,
+        vec![user_msg("产出 1")],
     )];
     db.save_session_agents(session_id, &rows).unwrap();
 
@@ -1053,13 +1195,22 @@ async fn prepare_resume_builds_context_synchronously() {
             session_id,
             &[
                 agent_row(
-                    "sub-1", "run-1", "failed", started_at, session_id,
+                    "sub-1",
+                    "run-1",
+                    "failed",
+                    started_at,
+                    session_id,
                     Some(r#"["leaf-root","leaf-1"]"#),
                     vec![user_msg("完成模块 A"), assistant_msg(&"X".repeat(20))],
                 ),
                 agent_row(
-                    "sub-2", "run-2", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"Y".repeat(100))],
+                    "sub-2",
+                    "run-2",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![assistant_msg(&"Y".repeat(100))],
                 ),
             ],
         )
@@ -1071,7 +1222,10 @@ async fn prepare_resume_builds_context_synchronously() {
         .expect("prepare_resume 应成功");
     assert_eq!(ctx.subagent_id, "sub-1");
     assert_eq!(ctx.subagent_run_id, "run-1");
-    assert_eq!(ctx.task, "完成模块 A", "task = 首条 user 消息（derive_task 语义）");
+    assert_eq!(
+        ctx.task, "完成模块 A",
+        "task = 首条 user 消息（derive_task 语义）"
+    );
     assert_eq!(ctx.from_leaf_id.as_deref(), Some("leaf-1"), "路径末元素");
     assert_eq!(ctx.started_at_ms, started_at);
     // inject = 该 run 消息字节（user 14 + assistant 20 = 34）;
@@ -1096,16 +1250,19 @@ async fn prepare_resume_delivers_force_cancel_for_running_target() {
         .save_session_agents(
             session_id,
             &[agent_row(
-                "sub-1", "run-1", "running", started_at, session_id,
-                Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                "sub-1",
+                "run-1",
+                "running",
+                started_at,
+                session_id,
+                Some(r#"["leaf-root","leaf-1"]"#),
+                vec![user_msg("完成模块 A")],
             )],
         )
         .unwrap();
     let sink = RecordingCancelSink::new(true);
     let service = service(&env, &sink);
-    let ctx = service
-        .prepare_resume(session_id, "sub-1", None)
-        .unwrap();
+    let ctx = service.prepare_resume(session_id, "sub-1", None).unwrap();
     let calls = sink.calls();
     assert_eq!(calls.len(), 1, "running 目标在准备段投递 kill-for-resume");
     assert_eq!(calls[0].0, "run-1");
@@ -1125,27 +1282,48 @@ async fn prepare_resume_errors_structured() {
             session_id,
             &[
                 agent_row(
-                    "sub-1", "run-1", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                    "sub-1",
+                    "run-1",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![user_msg("完成模块 A")],
                 ),
                 agent_row(
-                    "sub-2", "run-2", "failed", started_at, session_id, None,
+                    "sub-2",
+                    "run-2",
+                    "failed",
+                    started_at,
+                    session_id,
+                    None,
                     vec![user_msg("完成模块 B")],
                 ),
                 agent_row(
-                    "sub-3", "run-3", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![],
+                    "sub-3",
+                    "run-3",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![],
                 ),
             ],
         )
         .unwrap();
     let service = service(&env, &RecordingCancelSink::new(true));
 
-    let err = service.prepare_resume(session_id, "sub-unknown", None).unwrap_err();
+    let err = service
+        .prepare_resume(session_id, "sub-unknown", None)
+        .unwrap_err();
     assert!(matches!(err, LifecycleError::NotFound { .. }));
-    let err = service.prepare_resume(session_id, "sub-2", None).unwrap_err();
+    let err = service
+        .prepare_resume(session_id, "sub-2", None)
+        .unwrap_err();
     assert!(matches!(err, LifecycleError::InvalidState { .. }));
-    let err = service.prepare_resume(session_id, "sub-3", None).unwrap_err();
+    let err = service
+        .prepare_resume(session_id, "sub-3", None)
+        .unwrap_err();
     assert!(matches!(err, LifecycleError::InvalidState { .. }));
     // 缺消息但给 prompt → 成功（显式 prompt 兜底）
     service
@@ -1203,9 +1381,18 @@ async fn subagent_history_maps_messages_faithfully() {
     assert_eq!(history[0].text.as_deref(), Some("任务"));
     assert_eq!(history[0].thinking.as_deref(), Some("思考"));
     assert_eq!(history[0].status.as_deref(), Some("completed"));
-    assert_eq!(history[0].tool_calls_json.as_deref(), Some(r#"[{"id":"c1"}]"#));
-    assert_eq!(history[0].blocks_json.as_deref(), Some(r#"[{"type":"text","text":"任务"}]"#));
-    assert_eq!(history[0].tool_call_results_json.as_deref(), Some(r#"[{"callId":"c1"}]"#));
+    assert_eq!(
+        history[0].tool_calls_json.as_deref(),
+        Some(r#"[{"id":"c1"}]"#)
+    );
+    assert_eq!(
+        history[0].blocks_json.as_deref(),
+        Some(r#"[{"type":"text","text":"任务"}]"#)
+    );
+    assert_eq!(
+        history[0].tool_call_results_json.as_deref(),
+        Some(r#"[{"callId":"c1"}]"#)
+    );
     assert_eq!(history[0].timestamp, now);
     assert_eq!(history[1].id, "m2");
     assert_eq!(history[1].thinking, None, "可选字段缺失 → None");
@@ -1227,12 +1414,22 @@ async fn resume_two_stage_equivalent_to_one_shot() {
             session_id,
             &[
                 agent_row(
-                    "sub-1", "run-1", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                    "sub-1",
+                    "run-1",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![user_msg("完成模块 A")],
                 ),
                 agent_row(
-                    "sub-2", "run-2", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"X".repeat(200))],
+                    "sub-2",
+                    "run-2",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![assistant_msg(&"X".repeat(200))],
                 ),
             ],
         )
@@ -1268,18 +1465,33 @@ async fn resume_errors_structured() {
             session_id,
             &[
                 agent_row(
-                    "sub-1", "run-1", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                    "sub-1",
+                    "run-1",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![user_msg("完成模块 A")],
                 ),
                 // 无工作流路径行
                 agent_row(
-                    "sub-2", "run-2", "failed", started_at, session_id, None,
+                    "sub-2",
+                    "run-2",
+                    "failed",
+                    started_at,
+                    session_id,
+                    None,
                     vec![user_msg("完成模块 B")],
                 ),
                 // 无消息行（无任务可推断）
                 agent_row(
-                    "sub-3", "run-3", "failed", started_at, session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#), vec![],
+                    "sub-3",
+                    "run-3",
+                    "failed",
+                    started_at,
+                    session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![],
                 ),
             ],
         )

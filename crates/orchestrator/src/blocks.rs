@@ -26,8 +26,8 @@ use conex_db::{BlockState, CompactionBlockRow, DbFailure, LocalDb};
 use conex_types::events::AgentEvent;
 use conex_types::tool::ContextCompressionRecord;
 
-use crate::persist::StoreError;
 use crate::now_ms;
+use crate::persist::StoreError;
 
 /// 压缩事件（context-compression-end）落库成功后写入块行。
 ///
@@ -39,7 +39,11 @@ pub async fn persist_compression_block(
     event: &AgentEvent,
     sequence: u64,
 ) -> Result<(), StoreError> {
-    let AgentEvent::ContextCompressionEnd { result: Some(record), .. } = event else {
+    let AgentEvent::ContextCompressionEnd {
+        result: Some(record),
+        ..
+    } = event
+    else {
         return Ok(());
     };
     // 块写入仅生产路径（SQLite）；InMemoryStore 等测试替身无连接 → 跳过
@@ -111,7 +115,11 @@ fn build_block_row(
     // 与 restore 重放 apply_compression_end 的 +1 语义一致（R-K 单源）
     let generation = u64_field("generation")
         .map(|g| g as u32)
-        .or_else(|| db.count_compression_events(session_id).ok().map(|c| c as u32))
+        .or_else(|| {
+            db.count_compression_events(session_id)
+                .ok()
+                .map(|c| c as u32)
+        })
         .unwrap_or(1);
     // prev_block_id：details 优先；兜底 = 块表链尾（list 首条即最新）
     let prev_block_id = str_field("prevBlockId").or_else(|| {
@@ -215,8 +223,14 @@ mod tests {
         let db = LocalDb::open_in_memory().unwrap();
         db.insert_session(session_id, session_id).unwrap();
         for seq in 1..=compression_events {
-            db.append_event(session_id, seq as i64, "context-compression-end", "{}", None)
-                .unwrap();
+            db.append_event(
+                session_id,
+                seq as i64,
+                "context-compression-end",
+                "{}",
+                None,
+            )
+            .unwrap();
         }
         db
     }
@@ -232,12 +246,18 @@ mod tests {
             .await
             .unwrap();
 
-        let block = db.get_block("s1", "compacted-summary-1-1").unwrap().unwrap();
+        let block = db
+            .get_block("s1", "compacted-summary-1-1")
+            .unwrap()
+            .unwrap();
         assert_eq!(block.block_id, "compacted-summary-1-1");
         assert_eq!(block.sequence, 42, "sequence = 事件序列号");
         assert_eq!(block.generation, 1, "首次压缩代数 = 1（事件计数兜底）");
         assert_eq!(block.prev_block_id, None, "首块无上游");
-        assert_eq!(block.dropped_message_ids, vec!["u1".to_string(), "a1".to_string()]);
+        assert_eq!(
+            block.dropped_message_ids,
+            vec!["u1".to_string(), "a1".to_string()]
+        );
         assert_eq!(block.first_kept_message_id.as_deref(), Some("u2"));
         assert_eq!(block.summary, "摘要文本");
         assert!(!block.summary_is_llm);
@@ -275,19 +295,26 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            db.get_block("s1", "compacted-summary-1-1").unwrap().unwrap().generation,
+            db.get_block("s1", "compacted-summary-1-1")
+                .unwrap()
+                .unwrap()
+                .generation,
             1,
             "第一次压缩代数 = 1（事件计数，含本次）"
         );
 
         // 第二次压缩事件落库（drive 路径语义：事件先落库再写块）
-        db.append_event("s1", 2, "context-compression-end", "{}", None).unwrap();
+        db.append_event("s1", 2, "context-compression-end", "{}", None)
+            .unwrap();
         let second = compression_event(plain_record("compacted-summary-1-2", vec!["u2"]));
         persist_compression_block(store.as_ref(), "s1", &second, 20)
             .await
             .unwrap();
 
-        let b2 = db.get_block("s1", "compacted-summary-1-2").unwrap().unwrap();
+        let b2 = db
+            .get_block("s1", "compacted-summary-1-2")
+            .unwrap()
+            .unwrap();
         assert_eq!(b2.generation, 2, "第二次压缩代数 = 2（事件计数，含本次）");
         assert_eq!(
             b2.prev_block_id.as_deref(),
@@ -315,10 +342,19 @@ mod tests {
             .await
             .unwrap();
 
-        let block = db.get_block("s1", "compacted-summary-3-5").unwrap().unwrap();
-        assert_eq!(block.block_id, "compacted-summary-3-5", "details.blockId 优先于 record.id");
+        let block = db
+            .get_block("s1", "compacted-summary-3-5")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            block.block_id, "compacted-summary-3-5",
+            "details.blockId 优先于 record.id"
+        );
         assert_eq!(block.generation, 3, "details.generation 优先于事件计数");
-        assert_eq!(block.prev_block_id.as_deref(), Some("compacted-summary-2-4"));
+        assert_eq!(
+            block.prev_block_id.as_deref(),
+            Some("compacted-summary-2-4")
+        );
         assert_eq!(block.dropped_at_ms, 1_752_000_000_000);
         assert_eq!(block.state, BlockState::Committed, "details.summaryState");
         assert!(block.summary_is_llm, "committed ⇒ LLM 摘要");
@@ -363,7 +399,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(db.count_blocks("s1").unwrap(), 1);
-        assert_eq!(db.count_blocks("s2").unwrap(), 1, "跨会话同 block_id 各自成行");
+        assert_eq!(
+            db.count_blocks("s2").unwrap(),
+            1,
+            "跨会话同 block_id 各自成行"
+        );
     }
 
     // ── T-42：摘要任务完成回调落库面（两阶段写协议阶段二）─────────────
@@ -383,7 +423,10 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            db.get_block("s1", "compacted-summary-1-1").unwrap().unwrap().state,
+            db.get_block("s1", "compacted-summary-1-1")
+                .unwrap()
+                .unwrap()
+                .state,
             BlockState::Awaiting
         );
 
@@ -398,7 +441,10 @@ mod tests {
         )
         .unwrap();
 
-        let row = db.get_block("s1", "compacted-summary-1-1").unwrap().unwrap();
+        let row = db
+            .get_block("s1", "compacted-summary-1-1")
+            .unwrap()
+            .unwrap();
         assert_eq!(row.state, BlockState::Committed, "调度器成功后 state 推进");
         assert_eq!(row.summary_json.as_deref(), Some(json), "JSON 规范面落库");
         assert_eq!(row.attempts, 2, "累计尝试（同步 1 + 后台 1）");
@@ -489,15 +535,8 @@ mod tests {
     #[tokio::test]
     async fn update_block_summary_skips_without_local_db() {
         let mem: Arc<dyn Store> = Arc::new(InMemoryStore::new());
-        update_compression_block_summary(
-            mem.as_ref(),
-            "s1",
-            "b1",
-            BlockState::Committed,
-            None,
-            1,
-        )
-        .unwrap();
+        update_compression_block_summary(mem.as_ref(), "s1", "b1", BlockState::Committed, None, 1)
+            .unwrap();
         assert!(mem.as_local_db().is_none());
     }
 }

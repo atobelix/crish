@@ -41,8 +41,8 @@ use conex_types::events::{
 };
 
 use crate::events::{EventQueue, PersistError, SequencedEvent};
-use crate::persist::Store;
 use crate::now_iso_utc;
+use crate::persist::Store;
 
 /// 发射上下文（父 run 归属：信封 runId = parent_run_id，03 §5.3-2）
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,9 +116,7 @@ impl SubagentEndedInfo {
         state: agent_tools::tools::subagent::SubagentState,
     ) -> Self {
         let status = match state {
-            agent_tools::tools::subagent::SubagentState::Completed => {
-                SubagentEndStatus::Completed
-            }
+            agent_tools::tools::subagent::SubagentState::Completed => SubagentEndStatus::Completed,
             _ => SubagentEndStatus::Failed,
         };
         Self {
@@ -135,10 +133,7 @@ impl SubagentEndedInfo {
 }
 
 /// 构造 `subagent-started` 事件（信封对齐 subagentHandlers.ts:17-26）
-pub fn build_subagent_started(
-    ctx: &SubagentEmitContext,
-    info: &SubagentStartedInfo,
-) -> AgentEvent {
+pub fn build_subagent_started(ctx: &SubagentEmitContext, info: &SubagentStartedInfo) -> AgentEvent {
     AgentEvent::SubagentStarted {
         session_id: ctx.session_id.clone(),
         subagent_id: info.subagent_id.clone(),
@@ -334,12 +329,12 @@ pub(crate) fn started_info_from_spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::persist::InMemoryStore;
     use agent_tools::tools::subagent::{
         SubagentCapabilityMode, SubagentRole, SubagentSpawnRequest, SubagentSpawnResult,
         SubagentState,
     };
     use conex_types::events::{event_backpressure, BackpressureLevel};
-    use crate::persist::InMemoryStore;
 
     fn ctx() -> SubagentEmitContext {
         SubagentEmitContext {
@@ -443,7 +438,10 @@ mod tests {
     #[test]
     fn started_info_from_spawn_keeps_none_without_tool_call() {
         let info = started_info_from_spawn(&spawn_request(None), &spawn_result());
-        assert!(info.parent_tool_call_id.is_none(), "无工具调用上下文保持 None");
+        assert!(
+            info.parent_tool_call_id.is_none(),
+            "无工具调用上下文保持 None"
+        );
         assert_eq!(
             info.subagent_session_id.as_deref(),
             Some("sub-sess-1"),
@@ -530,7 +528,10 @@ mod tests {
             "subagent-started 必达落库"
         );
         assert_eq!(
-            event_backpressure(&build_subagent_ended(&ctx(), &ended_info(SubagentEndStatus::Failed))),
+            event_backpressure(&build_subagent_ended(
+                &ctx(),
+                &ended_info(SubagentEndStatus::Failed)
+            )),
             BackpressureLevel::Critical,
             "subagent-ended 必达落库"
         );
@@ -592,7 +593,11 @@ mod tests {
         // 序列连续（store 端原子计数器，T08.12）：progress 也取号（2）但
         // 不落库，故落库序列为 1 与 3——无空洞语义 = 取号连续，非落库连续
         let seqs: Vec<u64> = stored.iter().map(|e| e.sequence).collect();
-        assert_eq!(seqs, vec![1, 3], "started=1、progress 取号 2 不落库、ended=3");
+        assert_eq!(
+            seqs,
+            vec![1, 3],
+            "started=1、progress 取号 2 不落库、ended=3"
+        );
     }
 
     #[tokio::test]
@@ -650,20 +655,22 @@ mod tests {
                 Some("run-main"),
                 "信封 runId == parent_run_id（与列同源）"
             );
-            assert_eq!(envelope.sequence, Some(row.sequence), "信封 sequence == 行 sequence");
+            assert_eq!(
+                envelope.sequence,
+                Some(row.sequence),
+                "信封 sequence == 行 sequence"
+            );
         }
     }
 
     #[tokio::test]
     async fn ended_from_state_maps_terminal_status() {
         // completed → Completed；failed（含被终止归一）→ Failed
-        let completed = SubagentEndedInfo::from_subagent_state(
-            "sub-1",
-            "sub-run-1",
-            SubagentState::Completed,
-        );
+        let completed =
+            SubagentEndedInfo::from_subagent_state("sub-1", "sub-run-1", SubagentState::Completed);
         assert_eq!(completed.status, SubagentEndStatus::Completed);
-        let failed = SubagentEndedInfo::from_subagent_state("sub-1", "sub-run-1", SubagentState::Failed);
+        let failed =
+            SubagentEndedInfo::from_subagent_state("sub-1", "sub-run-1", SubagentState::Failed);
         assert_eq!(failed.status, SubagentEndStatus::Failed);
     }
 }

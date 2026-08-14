@@ -96,11 +96,8 @@ pub fn decode_structure_from_snapshot(
     let mut last: Option<StructureSnapshotV1> = None;
     let mut saw_frame = false;
     while offset + 4 <= bytes.len() {
-        let len = u32::from_le_bytes(
-            bytes[offset..offset + 4]
-                .try_into()
-                .expect("4 bytes"),
-        ) as usize;
+        let len =
+            u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("4 bytes")) as usize;
         offset += 4;
         if offset + len > bytes.len() {
             return Err(StructureCodecError::Framed(format!(

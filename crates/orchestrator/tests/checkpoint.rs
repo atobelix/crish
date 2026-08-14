@@ -12,7 +12,7 @@
 //! 消费同一批 API（read_leaf_checkpoint + signal）。
 
 use conex_types::checkpoint::{
-    CHECKPOINT_CORRUPT_SIGNAL, CHECKPOINT_PRESENT_SIGNAL, CheckpointPayload, LeafCheckpointState,
+    CheckpointPayload, LeafCheckpointState, CHECKPOINT_CORRUPT_SIGNAL, CHECKPOINT_PRESENT_SIGNAL,
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use orchestrator::session::SessionTree;
@@ -107,8 +107,11 @@ fn session_with_checkpoint_marks_preferred_resume() {
 fn corrupt_checkpoint_degrades_without_panic() {
     // 叶子侧损坏（值类型错误）
     let mut tree = SessionTree::new("s1");
-    tree.append("leaf1", serde_json::json!({ "checkpoint": { "target": 123 } }))
-        .unwrap();
+    tree.append(
+        "leaf1",
+        serde_json::json!({ "checkpoint": { "target": 123 } }),
+    )
+    .unwrap();
     let state = tree.read_leaf_checkpoint(Some("leaf1"));
     match &state {
         LeafCheckpointState::Corrupt(reason) => {
@@ -132,7 +135,10 @@ fn no_checkpoint_keeps_current_behavior() {
     let mut tree = SessionTree::new("s1");
     tree.append("leaf1", serde_json::json!({ "text": "普通会话" }))
         .unwrap();
-    assert_eq!(tree.read_leaf_checkpoint(Some("leaf1")), LeafCheckpointState::Absent);
+    assert_eq!(
+        tree.read_leaf_checkpoint(Some("leaf1")),
+        LeafCheckpointState::Absent
+    );
     assert_eq!(tree.read_leaf_checkpoint(None).signal(), None);
 
     let messages = vec![

@@ -32,10 +32,10 @@
 //!    而非「删光整树再挂载」。
 
 // 实现拆至同 crate 内聚子模块；本文件仅 re-export 保持公开 API 稳定。
-#[doc(inline)]
-pub use crate::mirror_detect::{MirrorDriftClass, MirrorDriftReport};
 #[doc(hidden)]
 pub(crate) use crate::mirror_detect::file_mtime_ms;
+#[doc(inline)]
+pub use crate::mirror_detect::{MirrorDriftClass, MirrorDriftReport};
 
 #[doc(inline)]
 pub use crate::mirror_import::{

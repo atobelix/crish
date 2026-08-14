@@ -17,7 +17,7 @@
 //! 文件域：`crates/conex-workspace-store/**`（02 钉死；不写 sessions / conex-db）。
 
 use super::{StoreError, WorkspaceStore};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 
 /// 计算内容哈希（SHA-256 hex 小写）。
@@ -224,11 +224,9 @@ mod tests {
         let (dir, db) = temp_db();
         let store = WorkspaceStore::open(&db).unwrap();
 
-        assert!(
-            store
-                .link_block_attachment("d1", "b1", "no_such_hash")
-                .is_err()
-        );
+        assert!(store
+            .link_block_attachment("d1", "b1", "no_such_hash")
+            .is_err());
 
         let h = store.put_blob(b"img-bytes").unwrap();
         store.link_block_attachment("d1", "b1", &h).unwrap();

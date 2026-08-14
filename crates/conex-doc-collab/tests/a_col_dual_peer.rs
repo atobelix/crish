@@ -277,9 +277,7 @@ fn a_col_01_delete_vs_remote_props_delete_wins() {
     seed_shared_paragraph(&mut h, id, "p0");
 
     let mut props = BlockProps::default();
-    props
-        .attrs
-        .insert("color".into(), serde_json::json!("red"));
+    props.attrs.insert("color".into(), serde_json::json!("red"));
 
     let (_ev_del, enc_del) = h
         .apply(PeerSide::A, Origin::User, &[Op::Delete { id }])

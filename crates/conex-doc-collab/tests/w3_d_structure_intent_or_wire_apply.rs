@@ -16,9 +16,7 @@
 //!
 //! **生产默认写路径**：TS `createCollabApplySink`（非 `createMockIntentSink`）。
 
-use conex_doc_collab::{
-    ops_from_json_str, BlockId, BlockKind, DocEvent, DocSession, Origin,
-};
+use conex_doc_collab::{ops_from_json_str, BlockId, BlockKind, DocEvent, DocSession, Origin};
 use std::str::FromStr;
 
 fn bid(s: &str) -> BlockId {
@@ -133,15 +131,9 @@ fn run_w3_d_strict_true_apply() {
         diff3.removes.contains(&id_b),
         "delete 须进 ProjectionDiff.removes"
     );
-    assert!(
-        !session.tree().nodes.contains_key(&id_b),
-        "树须移除 B"
-    );
+    assert!(!session.tree().nodes.contains_key(&id_b), "树须移除 B");
     assert_eq!(session.tree().root_children, vec![id_a]);
-    assert!(
-        session.tree().nodes.contains_key(&id_a),
-        "未删块保持"
-    );
+    assert!(session.tree().nodes.contains_key(&id_a), "未删块保持");
     assert_eq!(
         session.read_text(&id_a),
         "hello-w3d",
@@ -203,9 +195,7 @@ fn run_w3_f_slash_or_delete_true_apply() {
       }
     ]"#;
     let seed_ops = ops_from_json_str(seed).expect("seed");
-    session
-        .apply(Origin::User, &seed_ops)
-        .expect("seed apply");
+    session.apply(Origin::User, &seed_ops).expect("seed apply");
 
     // ── slash_insert 等价 insert（TS chrome.w3f_apply：heading-1 + allocateId=cccccccc…）──
     let slash_json = r#"[
@@ -252,10 +242,7 @@ fn run_w3_f_slash_or_delete_true_apply() {
         !session.tree().nodes.contains_key(&id_del),
         "树须移除被删块"
     );
-    assert!(
-        session.tree().nodes.contains_key(&id_keep),
-        "未删锚点保持"
-    );
+    assert!(session.tree().nodes.contains_key(&id_keep), "未删锚点保持");
     assert!(
         session.tree().nodes.contains_key(&id_slash),
         "slash 新块保持"

@@ -109,9 +109,8 @@ impl PlanState {
 
 /// 解析块 UUID。
 pub(crate) fn parse_block_id(s: &str, label: &str) -> Result<BlockId, NoteBackendError> {
-    BlockId::from_str(s.trim()).map_err(|_| {
-        NoteBackendError::Invalid(format!("{label} is not a valid block UUID: {s}"))
-    })
+    BlockId::from_str(s.trim())
+        .map_err(|_| NoteBackendError::Invalid(format!("{label} is not a valid block UUID: {s}")))
 }
 
 /// 工具 kind 字符串 → collab [`BlockKind`]。
@@ -154,10 +153,7 @@ pub(crate) fn kind_label(kind: &BlockKind) -> String {
 /// 父下兄弟 order 序号起点（对齐 md-ast sibling_base_seq）。
 pub(crate) fn sibling_base_seq(tree: &BlockTree, parent: Option<BlockId>) -> u32 {
     match parent {
-        Some(pid) => tree
-            .get(&pid)
-            .map(|n| n.children.len() as u32)
-            .unwrap_or(0),
+        Some(pid) => tree.get(&pid).map(|n| n.children.len() as u32).unwrap_or(0),
         None => tree.root_children.len() as u32,
     }
 }

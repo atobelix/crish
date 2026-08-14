@@ -169,9 +169,8 @@ fn poisoned_sessions_map_outline_recovers_with_log_and_count() {
     apply_md(&backend, "poison-outline", "# Poison Outline\n\nbody");
     let before = super::poison_recovery_count();
     poison_std_lock(&backend.sessions);
-    let (res, lines) = with_capture(|| {
-        block_on(backend.document_outline("poison-outline", Some(6)))
-    });
+    let (res, lines) =
+        with_capture(|| block_on(backend.document_outline("poison-outline", Some(6))));
     let outline = res.expect("毒化后 outline 仍正常返回");
     assert!(
         !outline.outline.is_empty(),
@@ -209,9 +208,8 @@ fn poisoned_per_doc_lock_apply_collab_recovers_with_log_and_count() {
     let before = crate::store_backend_apply::poison_recovery_count();
     poison_std_lock(&arc);
     let ops_json = r#"[{"op":"insert","id":"22222222-2222-4222-a222-222222222222","parent":null,"order":"a0","kind":"paragraph","props":{"attrs":{}}}]"#;
-    let (res, lines) = with_capture(|| {
-        backend.apply_collab_ops_json("poison-collab", ops_json, Some("user"))
-    });
+    let (res, lines) =
+        with_capture(|| backend.apply_collab_ops_json("poison-collab", ops_json, Some("user")));
     let out = res.expect("毒化后 apply_collab_ops_json 仍正常返回");
     assert_eq!(out.applied, 1, "恢复式继续后写仍落地");
     assert!(
@@ -277,9 +275,7 @@ fn poisoned_sessions_map_hydrate_recovers_with_log_and_count() {
     apply_md(&backend, "poison-hyd", "# Poison Hydrate\n\nbody");
     let before = crate::store_hydrate::poison_recovery_count();
     poison_std_lock(&backend.sessions);
-    let (res, lines) = with_capture(|| {
-        backend.hydrate_document_from_session("poison-hyd", 50)
-    });
+    let (res, lines) = with_capture(|| backend.hydrate_document_from_session("poison-hyd", 50));
     let proj = res.expect("毒化后 hydrate 投影仍正常返回");
     assert!(!proj.blocks.is_empty(), "投影应可读: {:?}", proj);
     assert!(
@@ -364,7 +360,11 @@ fn poisoned_intents_lock_apply_md_recovers_with_log_and_count() {
         }))
     });
     let r = res.expect("毒化后 intent 写仍正常返回");
-    assert!(!r.idempotent && r.inserted >= 1, "首次写不幂等且落块: {:?}", r);
+    assert!(
+        !r.idempotent && r.inserted >= 1,
+        "首次写不幂等且落块: {:?}",
+        r
+    );
     assert!(
         lines.iter().any(|l| l.contains("锁中毒")),
         "缺少锁中毒 error 日志，捕获：\n{}",
@@ -480,7 +480,8 @@ fn same_doc_writes_stay_serialized_under_per_doc_lock() {
         .recv_timeout(std::time::Duration::from_secs(10))
         .expect("写线程已就绪");
     assert!(
-        rx.recv_timeout(std::time::Duration::from_millis(300)).is_err(),
+        rx.recv_timeout(std::time::Duration::from_millis(300))
+            .is_err(),
         "同 doc 写必须被 per-doc 锁串行（持锁期间不得完成）"
     );
     drop(_held);
@@ -553,9 +554,7 @@ fn concurrent_first_open_distinct_docs_lands_two_sessions() {
     }
     barrier.wait();
     for h in handles {
-        h.join()
-            .expect("写线程不应 panic")
-            .expect("并发首开写成功");
+        h.join().expect("写线程不应 panic").expect("并发首开写成功");
     }
     assert_eq!(
         backend.sessions.lock().unwrap().len(),
@@ -656,8 +655,7 @@ mod s3_slow_path_tests {
             let _ = tx.send(());
             std::thread::sleep(std::time::Duration::from_millis(30));
         });
-        rx.recv()
-            .expect("持锁线程已拿到锁（channel 同步）");
+        rx.recv().expect("持锁线程已拿到锁（channel 同步）");
         let (res, lines) = with_capture_warn(|| backend.document_to_md("slow-lock"));
         let md = res.expect("等待后 document_to_md 正常返回");
         assert!(md.contains("Slow Lock"), "读路径不受埋点影响: {md:?}");

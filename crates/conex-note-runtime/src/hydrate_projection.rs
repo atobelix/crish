@@ -123,10 +123,7 @@ pub fn project_session_tree(
                 props.insert(k.clone(), v.clone());
             }
             // order 可观测（调试 / 对齐）；非写权威
-            props.insert(
-                "order".into(),
-                JsonValue::String(node.order.clone()),
-            );
+            props.insert("order".into(), JsonValue::String(node.order.clone()));
             out.push(DocSessionHydrateBlock {
                 id: id.to_string(),
                 flavour: kind_to_flavour(&node.kind),

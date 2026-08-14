@@ -4,7 +4,7 @@
 
 use super::*;
 use agent_tools::note_backend::NoteBlockOpKind;
-use conex_doc_collab::{BlockProps, DocSession, HydrateBlob, Origin, Op};
+use conex_doc_collab::{BlockProps, DocSession, HydrateBlob, Op, Origin};
 use std::str::FromStr;
 
 fn empty_session(doc_id: &str) -> DocSession {

@@ -31,8 +31,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::tools::subagent::{
-    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner,
-    SubagentState,
+    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner, SubagentState,
 };
 use async_trait::async_trait;
 use conex_db::{LocalDb, PendingInput, RunStatus, StoredRun};
@@ -41,10 +40,10 @@ use conex_types::error::ProviderErrorKind;
 use conex_types::events::RunTerminalStatus;
 use conex_types::session::AgentEndReason;
 use conex_types::SessionAgent;
-use orchestrator::events::{EventQueue, drive_outcome};
+use orchestrator::events::{drive_outcome, EventQueue};
 use orchestrator::flow_graph::{
-    FlowDeclaration, FlowNode, FlowNodeState, FlowReportKind, FlowScheduler,
-    FLOW_RELEASED_KEY, FLOW_RESERVED_KEY, FLOW_STATE_KEY,
+    FlowDeclaration, FlowNode, FlowNodeState, FlowReportKind, FlowScheduler, FLOW_RELEASED_KEY,
+    FLOW_RESERVED_KEY, FLOW_STATE_KEY,
 };
 use orchestrator::lifecycle::SubagentLifecycleService;
 use orchestrator::persist::{LocalDbStore, SessionSequencer, Store};
@@ -52,10 +51,10 @@ use orchestrator::recovery::{
     fingerprint, RecoveryCoordinator, RecoveryRetryPolicy, RunFailureContext,
 };
 use orchestrator::restore::{
-    CANCEL_INTERRUPTED_ERROR, INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
     RestoreManager, RestoreMode, SnapshotError, SnapshotFileStore, SnapshotStore, StateSnapshot,
+    CANCEL_INTERRUPTED_ERROR, INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
 };
-use orchestrator::run::{EVENT_STORE_WRITE_FAILED_REASON, RunError, RunHandle, RunManager};
+use orchestrator::run::{RunError, RunHandle, RunManager, EVENT_STORE_WRITE_FAILED_REASON};
 use orchestrator::session::{SessionRecord, SessionTree};
 use orchestrator::steering_queue::PendingMessageQueue;
 
@@ -197,7 +196,13 @@ async fn crash_restore_interrupts_in_flight_runs_with_status_mapping() {
         .collect();
     assert_eq!(
         prev,
-        vec!["queued", "initializing", "running", "awaiting-approval", "cancelling"]
+        vec![
+            "queued",
+            "initializing",
+            "running",
+            "awaiting-approval",
+            "cancelling"
+        ]
     );
     assert_eq!(outcome.interrupted[0].error, INTERRUPTED_ERROR);
     assert_eq!(outcome.interrupted[4].error, CANCEL_INTERRUPTED_ERROR);
@@ -215,8 +220,14 @@ async fn crash_restore_interrupts_in_flight_runs_with_status_mapping() {
     assert_eq!(payload["reason"], "daemon-restarted");
     // DM-05：run-interrupted payload 补顶层 type 键 + 携带被打断 run 的
     // run_id（audit[0] 对应 r_queued；列级 run_id 断言随 DM-03 合并后落）
-    assert_eq!(payload["type"], "run-interrupted", "DM-05：payload 顶层 type 键");
-    assert_eq!(payload["runId"], "r_queued", "DM-05：payload 携带真实 run_id");
+    assert_eq!(
+        payload["type"], "run-interrupted",
+        "DM-05：payload 顶层 type 键"
+    );
+    assert_eq!(
+        payload["runId"], "r_queued",
+        "DM-05：payload 携带真实 run_id"
+    );
 }
 
 // ── T12.2 + T12.3 审计序列连续无空洞 + cursor = sequence-1 ──
@@ -369,7 +380,11 @@ async fn restore_then_sequence_reservations_monotonic_and_continue() {
     // 生产行为：恢复后 seed 预热（按库内 max+1 对齐）后取号单调
     let sequencer = SessionSequencer::new(store.clone());
     sequencer.seed("s1", 7).await.unwrap();
-    assert_eq!(sequencer.reserve("s1").await.unwrap(), 7, "取号 = 恢复后 max+1");
+    assert_eq!(
+        sequencer.reserve("s1").await.unwrap(),
+        7,
+        "取号 = 恢复后 max+1"
+    );
     assert_eq!(sequencer.reserve("s1").await.unwrap(), 8, "取号单调不回退");
 
     // 恢复后新 run 续接序列（无重复无回落，9 起为已消费取号后的续接），终态唯一
@@ -388,14 +403,22 @@ async fn restore_then_sequence_reservations_monotonic_and_continue() {
     .await
     .unwrap();
     let seqs: Vec<u64> = result.events.iter().map(|e| e.sequence).collect();
-    assert_eq!(seqs, vec![9, 10, 11], "R2 从已消费取号后续接（不重复不回落）");
+    assert_eq!(
+        seqs,
+        vec![9, 10, 11],
+        "R2 从已消费取号后续接（不重复不回落）"
+    );
     assert_eq!(result.terminal_status, RunTerminalStatus::Completed);
     assert!(result.persist_failure.is_none(), "无序列冲突");
     let mut all: Vec<u64> = mem.events().iter().map(|e| e.sequence).collect();
     all.sort_unstable();
     // 7/8 为手动取号（未产生事件），事件流 = 1..=6 + 9..=11：
     // 无重复、不回落到 6 以下（单调性以取号断言为准）
-    assert_eq!(all, vec![1, 2, 3, 4, 5, 6, 9, 10, 11], "全事件无重复且不回退");
+    assert_eq!(
+        all,
+        vec![1, 2, 3, 4, 5, 6, 9, 10, 11],
+        "全事件无重复且不回退"
+    );
 }
 
 // ── T12.6 终态唯一：恢复不重发 run-terminal，再驱动被拒绝 ──
@@ -516,7 +539,10 @@ async fn event_store_write_failure_does_not_pretend_replayable() {
         Some(EVENT_STORE_WRITE_FAILED_REASON)
     );
     let error = result.terminal_error.as_deref().unwrap_or_default();
-    assert!(error.contains("disk is read-only"), "错误文案保留原因：{error}");
+    assert!(
+        error.contains("disk is read-only"),
+        "错误文案保留原因：{error}"
+    );
 }
 
 // ── pending FIFO 恢复：崩溃前未消费输入按创建时间升序 ──
@@ -614,7 +640,8 @@ async fn sqlite_restart_full_crash_cycle_recovers_and_continues() {
             .save_pending_input("p1", session_id, Some(run_id), r#"{"text":"hi"}"#)
             .await
             .unwrap();
-        let snapshot = StateSnapshot::build(1, 2, Vec::new(), Vec::new(), Vec::new(), HashMap::new());
+        let snapshot =
+            StateSnapshot::build(1, 2, Vec::new(), Vec::new(), Vec::new(), HashMap::new());
         SnapshotFileStore::new(&snapshot_path)
             .save_snapshot(&snapshot)
             .unwrap();
@@ -637,7 +664,10 @@ async fn sqlite_restart_full_crash_cycle_recovers_and_continues() {
     assert_eq!(outcome.interrupted[0].previous_status, "running");
     assert_eq!(outcome.interrupted[0].status, "failed");
     assert_eq!(outcome.runs[0].status, RunStatus::Failed);
-    assert_eq!(outcome.runs[0].cursor, 2, "打断 cursor = 审计事件前 max(sequence)");
+    assert_eq!(
+        outcome.runs[0].cursor, 2,
+        "打断 cursor = 审计事件前 max(sequence)"
+    );
     // pending FIFO 恢复
     assert_eq!(outcome.pending_inputs.len(), 1);
     assert_eq!(outcome.pending_inputs[0].id, "p1");
@@ -734,9 +764,10 @@ impl SubagentSpawner for DbSpawner {
             // T-D-07 v6 新列：测试域 spawner 透传请求字段（模型覆盖不落库）
             task_type: req.task_type.map(|t| t.as_str().to_string()),
             display_label: req.display_label.clone(),
-            allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
-                serde_json::to_string(paths).expect("路径白名单序列化不应失败")
-            }),
+            allowed_write_paths_json: req
+                .allowed_write_paths
+                .as_ref()
+                .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
             // D-02 LK-04 v9 列：测试域无子会话映射（None）
             sub_session_id: None,
         });
@@ -775,7 +806,8 @@ fn set_row_status(db: &LocalDb, session_id: &str, run_id: &str, status: &str) {
         .find(|a| a.subagent_run_id == run_id)
         .expect("run 行必须存在");
     row.status = status.to_string();
-    db.save_session_agents(session_id, &agents).expect("保存行失败");
+    db.save_session_agents(session_id, &agents)
+        .expect("保存行失败");
 }
 
 /// 当前 UTC 毫秒
@@ -906,7 +938,10 @@ async fn flow_budget_and_recovery_episodes_survive_crash_window() {
     coordinator
         .restore_steering_notifications()
         .expect("通知恢复入队必须成功");
-    assert!(!queue.lock().unwrap().is_empty(), "重启后 steering 条目重新入队");
+    assert!(
+        !queue.lock().unwrap().is_empty(),
+        "重启后 steering 条目重新入队"
+    );
 }
 
 // ── T-D-09 扩展：kill_all 崩溃一致性（kill_all 后重启，session_agents
@@ -997,7 +1032,11 @@ async fn kill_all_rows_stay_terminal_across_restart() {
         );
     }
     assert!(restored.flow_terminal(), "编排全终态（无残留节点）");
-    assert_eq!(restored.budget_in_flight(), 0, "无运行残留（预算不 double-charge）");
+    assert_eq!(
+        restored.budget_in_flight(),
+        0,
+        "无运行残留（预算不 double-charge）"
+    );
 }
 
 // ── PERSIST-02 P1-3：running 中崩溃（无 kill_all）重启归一 ────────
@@ -1044,7 +1083,10 @@ async fn running_subagents_normalized_across_crash_restart() {
         .restore(&store, &NoSnapshots)
         .await
         .unwrap();
-    assert!(outcome.runs.is_empty(), "runs 表无主 run（子代理 run 不落 runs 表）");
+    assert!(
+        outcome.runs.is_empty(),
+        "runs 表无主 run（子代理 run 不落 runs 表）"
+    );
 
     // running 行归一 failed + ended_at；终态写面与 kill_all 语义一致
     let rows = db.load_session_agents(session_id).unwrap();
@@ -1070,8 +1112,15 @@ async fn running_subagents_normalized_across_crash_restart() {
             "节点 {node} 从归一后行重建为终态"
         );
     }
-    assert!(restored.flow_terminal(), "编排全终态（running 中崩溃重启自愈）");
-    assert_eq!(restored.budget_in_flight(), 0, "无运行残留（预算不 double-charge）");
+    assert!(
+        restored.flow_terminal(),
+        "编排全终态（running 中崩溃重启自愈）"
+    );
+    assert_eq!(
+        restored.budget_in_flight(),
+        0,
+        "无运行残留（预算不 double-charge）"
+    );
 }
 
 // ── PS-03 T3.4 D4：flow 节点 spawn 后崩溃不重复 spawn（孤儿双跑）──────
@@ -1326,7 +1375,14 @@ async fn restore_reconcile_terminal_vs_record_reports_conflict() {
     assert_eq!(runs[0].status, RunStatus::Failed);
     assert_eq!(runs[0].end_reason.as_deref(), Some(INTERRUPTED_REASON));
     let events = mem.events();
-    assert_eq!(events.iter().filter(|e| e.event_type == "run-terminal").count(), 1, "run-terminal 不重发");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e.event_type == "run-terminal")
+            .count(),
+        1,
+        "run-terminal 不重发"
+    );
 }
 
 /// DM-08（G-29 反向）：runs 记录 completed 但事件流无 run-terminal →
@@ -1480,13 +1536,11 @@ async fn run_events_attribution_contract_goal_excluded_tail_included() {
     assert_eq!(r2[0].event_type, "agent-start");
 
     // goal-* 与空闲态（run_id 列 None）不命中任何 run 查询（诚实未知不臆断）
-    assert!(
-        store
-            .query_events_by_run("s1", "goal", 0, None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(store
+        .query_events_by_run("s1", "goal", 0, None)
+        .await
+        .unwrap()
+        .is_empty());
 
     // 会话级查询全量可见（含轮次域与空闲态），仍按 sequence 升序
     let all = store.query_events("s1", 0, None).await.unwrap();

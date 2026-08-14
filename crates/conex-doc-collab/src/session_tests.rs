@@ -27,89 +27,89 @@ mod hydrate;
 #[path = "session_tests_undo.rs"]
 mod undo;
 
-    fn insert_root(s: &mut DocSession, id: BlockId, order: &str) {
-        s.apply(
-            Origin::User,
-            &[Op::Insert {
-                id,
-                parent: None,
-                order: order.into(),
-                kind: BlockKind::Paragraph,
-                props: BlockProps::default(),
-            }],
-        )
-        .unwrap();
-    }
-    fn insert_child(s: &mut DocSession, id: BlockId, parent: BlockId, order: &str) {
-        s.apply(
-            Origin::User,
-            &[Op::Insert {
-                id,
-                parent: Some(parent),
-                order: order.into(),
-                kind: BlockKind::Paragraph,
-                props: BlockProps::default(),
-            }],
-        )
-        .unwrap();
-    }
-    /// 拼接 anchor 及其 `split_of` 兄弟正文（按 order）。
-    fn join_split_chain(s: &DocSession, anchor: BlockId) -> String {
-        let parent = s.tree.get(&anchor).and_then(|n| n.parent);
-        let siblings: Vec<BlockId> = match parent {
-            Some(pid) => s
-                .tree
-                .get(&pid)
-                .map(|n| n.children.clone())
-                .unwrap_or_default(),
-            None => s.tree.root_children.clone(),
-        };
-        let mut parts = Vec::new();
-        for sid in siblings {
-            if sid == anchor {
-                parts.push(s.read_text(&sid));
-                continue;
-            }
-            let is_seg = s
-                .tree
-                .get(&sid)
-                .and_then(|n| n.props.attrs.get(ATTR_SPLIT_OF))
-                .and_then(|v| v.as_str())
-                .map(|x| x == anchor.to_string())
-                .unwrap_or(false);
-            if is_seg {
-                parts.push(s.read_text(&sid));
-            }
+fn insert_root(s: &mut DocSession, id: BlockId, order: &str) {
+    s.apply(
+        Origin::User,
+        &[Op::Insert {
+            id,
+            parent: None,
+            order: order.into(),
+            kind: BlockKind::Paragraph,
+            props: BlockProps::default(),
+        }],
+    )
+    .unwrap();
+}
+fn insert_child(s: &mut DocSession, id: BlockId, parent: BlockId, order: &str) {
+    s.apply(
+        Origin::User,
+        &[Op::Insert {
+            id,
+            parent: Some(parent),
+            order: order.into(),
+            kind: BlockKind::Paragraph,
+            props: BlockProps::default(),
+        }],
+    )
+    .unwrap();
+}
+/// 拼接 anchor 及其 `split_of` 兄弟正文（按 order）。
+fn join_split_chain(s: &DocSession, anchor: BlockId) -> String {
+    let parent = s.tree.get(&anchor).and_then(|n| n.parent);
+    let siblings: Vec<BlockId> = match parent {
+        Some(pid) => s
+            .tree
+            .get(&pid)
+            .map(|n| n.children.clone())
+            .unwrap_or_default(),
+        None => s.tree.root_children.clone(),
+    };
+    let mut parts = Vec::new();
+    for sid in siblings {
+        if sid == anchor {
+            parts.push(s.read_text(&sid));
+            continue;
         }
-        parts.concat()
+        let is_seg = s
+            .tree
+            .get(&sid)
+            .and_then(|n| n.props.attrs.get(ATTR_SPLIT_OF))
+            .and_then(|v| v.as_str())
+            .map(|x| x == anchor.to_string())
+            .unwrap_or(false);
+        if is_seg {
+            parts.push(s.read_text(&sid));
+        }
     }
+    parts.concat()
+}
 
-    fn count_split_segments(s: &DocSession, anchor: BlockId) -> usize {
-        let parent = s.tree.get(&anchor).and_then(|n| n.parent);
-        let siblings: Vec<BlockId> = match parent {
-            Some(pid) => s
-                .tree
-                .get(&pid)
-                .map(|n| n.children.clone())
-                .unwrap_or_default(),
-            None => s.tree.root_children.clone(),
-        };
-        let mut n = 0;
-        for sid in siblings {
-            if sid == anchor {
-                n += 1;
-                continue;
-            }
-            let is_seg = s
-                .tree
-                .get(&sid)
-                .and_then(|node| node.props.attrs.get(ATTR_SPLIT_OF))
-                .and_then(|v| v.as_str())
-                .map(|x| x == anchor.to_string())
-                .unwrap_or(false);
-            if is_seg {
-                n += 1;
-            }
+fn count_split_segments(s: &DocSession, anchor: BlockId) -> usize {
+    let parent = s.tree.get(&anchor).and_then(|n| n.parent);
+    let siblings: Vec<BlockId> = match parent {
+        Some(pid) => s
+            .tree
+            .get(&pid)
+            .map(|n| n.children.clone())
+            .unwrap_or_default(),
+        None => s.tree.root_children.clone(),
+    };
+    let mut n = 0;
+    for sid in siblings {
+        if sid == anchor {
+            n += 1;
+            continue;
         }
-        n
+        let is_seg = s
+            .tree
+            .get(&sid)
+            .and_then(|node| node.props.attrs.get(ATTR_SPLIT_OF))
+            .and_then(|v| v.as_str())
+            .map(|x| x == anchor.to_string())
+            .unwrap_or(false);
+        if is_seg {
+            n += 1;
+        }
     }
+    n
+}

@@ -17,7 +17,10 @@ import type {
   NoteQueryBlockHit,
   NoteQueryBlocksOutcome,
   NoteQueryBlocksParams,
+  NoteRedoTextRequest,
   NoteSendToNoteRequest,
+  NoteUndoOutcome,
+  NoteUndoTextRequest,
 } from './noteApiContracts';
 import type { InvokeTypedResult } from './tauriInvoke';
 
@@ -103,6 +106,42 @@ export function wrapSendInvokeArgs(
   req: NoteSendToNoteRequest
 ): Record<string, unknown> {
   return { req: sendReqToWire(req) };
+}
+
+/**
+ * undo_text 请求 → wire 字段（snake_case）。
+ */
+export function undoReqToWire(
+  req: NoteUndoTextRequest
+): Record<string, unknown> {
+  return {
+    doc_id: req.docId,
+    block_id: req.blockId,
+  };
+}
+
+/**
+ * redo_text 请求 → wire 字段（snake_case）。
+ */
+export function redoReqToWire(
+  req: NoteRedoTextRequest
+): Record<string, unknown> {
+  return {
+    doc_id: req.docId,
+    block_id: req.blockId,
+  };
+}
+
+export function wrapUndoInvokeArgs(
+  req: NoteUndoTextRequest
+): Record<string, unknown> {
+  return { req: undoReqToWire(req) };
+}
+
+export function wrapRedoInvokeArgs(
+  req: NoteRedoTextRequest
+): Record<string, unknown> {
+  return { req: redoReqToWire(req) };
 }
 
 function asRec(v: unknown): Record<string, unknown> | null {
@@ -219,5 +258,33 @@ export function mapInvokeFailure(
     ok: false,
     code: res.kind || 'note.invoke_error',
     reason: res.message || `invoke ${cmd} 失败`,
+  };
+}
+
+/** 解析 undo / redo 线格式响应 */
+export function parseUndoOutcome(raw: unknown): NoteUndoOutcome {
+  const rec = asRec(raw);
+  if (!rec) {
+    return {
+      ok: false,
+      code: 'note.invalid_response',
+      reason: 'undo/redo 响应非对象',
+    };
+  }
+  if (rec.ok === false) {
+    return {
+      ok: false,
+      code: coerceString(rec.code ?? rec.reason) || 'note.undo_failed',
+      reason: coerceString(rec.reason ?? rec.message) || 'undo/redo 失败',
+    };
+  }
+  return {
+    ok: true,
+    docId: coerceString(rec.docId ?? rec.doc_id),
+    blockId: coerceString(rec.blockId ?? rec.block_id),
+    rev: typeof rec.rev === 'number' ? rec.rev : Number(rec.rev) || 0,
+    text: coerceString(rec.text),
+    isNoop: rec.isNoop === true || rec.is_noop === true,
+    source: typeof rec.source === 'string' ? rec.source : undefined,
   };
 }

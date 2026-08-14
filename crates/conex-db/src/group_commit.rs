@@ -108,15 +108,19 @@ impl DbWriteHandle {
     ///
     /// 接收一个专有的 SQLite 写连接所有权，并在后台 Tokio 任务中循环批处理。
     pub fn spawn(conn: rusqlite::Connection, config: GroupCommitConfig) -> Self {
-        let (sender, receiver) = mpsc::channel(config.channel_capacity);
-        let stats = Arc::new(StatsInner::default());
-        let stats_clone = Arc::clone(&stats);
+        if tokio::runtime::Handle::try_current().is_ok() {
+            let (sender, receiver) = mpsc::channel(config.channel_capacity);
+            let stats = Arc::new(StatsInner::default());
+            let stats_clone = Arc::clone(&stats);
 
-        tokio::spawn(async move {
-            run_actor_loop(conn, receiver, config, stats_clone).await;
-        });
+            tokio::spawn(async move {
+                run_actor_loop(conn, receiver, config, stats_clone).await;
+            });
 
-        Self { sender, stats }
+            Self { sender, stats }
+        } else {
+            Self::spawn_dedicated_thread(conn, config, None)
+        }
     }
 
     /// 在专有的独立 OS 线程中启动 Single Writer Actor（隔绝通用异步运行时抖动）。
@@ -236,6 +240,8 @@ async fn run_actor_loop(
     }
 }
 
+use std::panic::{catch_unwind, AssertUnwindSafe};
+
 fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, stats: &StatsInner) {
     if batch.is_empty() {
         return;
@@ -248,9 +254,10 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
         let task = batch.remove(0);
         let res = match conn.execute_batch("BEGIN IMMEDIATE;") {
             Ok(()) => {
-                let op_res = (task.op)(conn);
-                match op_res {
-                    Ok(val) => match conn.execute_batch("COMMIT;") {
+                let op = task.op;
+                let panic_res = catch_unwind(AssertUnwindSafe(|| op(conn)));
+                match panic_res {
+                    Ok(Ok(val)) => match conn.execute_batch("COMMIT;") {
                         Ok(()) => Ok(val),
                         Err(e) => {
                             let _ = conn.execute_batch("ROLLBACK;");
@@ -260,9 +267,24 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
                             })
                         }
                     },
-                    Err(err) => {
+                    Ok(Err(err)) => {
                         let _ = conn.execute_batch("ROLLBACK;");
                         Err(err)
+                    }
+                    Err(panic_payload) => {
+                        let _ = conn.execute_batch("ROLLBACK;");
+                        let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "unknown panic inside write closure".to_string()
+                        };
+                        tracing::error!(target: "conex_db", "捕获写闭包内部 Panic (已安全隔离并回滚): {panic_msg}");
+                        Err(DbFailure {
+                            message: format!("panic in write closure: {panic_msg}"),
+                            kind: DbFailureKind::Other("write_closure_panic".to_string()),
+                        })
                     }
                 }
             }
@@ -310,9 +332,10 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
             continue;
         }
 
-        let op_res = (task.op)(conn);
-        match op_res {
-            Ok(val) => {
+        let op = task.op;
+        let panic_res = catch_unwind(AssertUnwindSafe(|| op(conn)));
+        match panic_res {
+            Ok(Ok(val)) => {
                 if let Err(e) = conn.execute_batch(&sp_release) {
                     let err = DbFailure {
                         message: format!("savepoint release failed: {e}"),
@@ -324,10 +347,28 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
                     pending_responses.push((task.respond_to, Ok(val)));
                 }
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 stats.record_error();
                 let _ = conn.execute_batch(&sp_rollback);
                 let _ = conn.execute_batch(&sp_release);
+                pending_responses.push((task.respond_to, Err(err)));
+            }
+            Err(panic_payload) => {
+                stats.record_error();
+                let _ = conn.execute_batch(&sp_rollback);
+                let _ = conn.execute_batch(&sp_release);
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown panic inside write closure".to_string()
+                };
+                tracing::error!(target: "conex_db", "捕获写闭包内部 Panic (已安全隔离并回滚): {panic_msg}");
+                let err = DbFailure {
+                    message: format!("panic in write closure: {panic_msg}"),
+                    kind: DbFailureKind::Other("write_closure_panic".to_string()),
+                };
                 pending_responses.push((task.respond_to, Err(err)));
             }
         }

@@ -195,7 +195,10 @@ impl StateSnapshot {
             written_at: now_ms(),
             sessions,
             runs: runs.iter().map(SnapshotRun::from).collect(),
-            pending_inputs: pending_inputs.iter().map(SnapshotPendingInput::from).collect(),
+            pending_inputs: pending_inputs
+                .iter()
+                .map(SnapshotPendingInput::from)
+                .collect(),
             checksum: String::new(),
         };
         snapshot.checksum = snapshot.compute_checksum();
@@ -315,7 +318,10 @@ impl SnapshotStore for SnapshotFileStore {
     #[allow(clippy::disallowed_methods)]
     fn save_snapshot(&self, snapshot: &StateSnapshot) -> Result<(), SnapshotError> {
         if !snapshot.valid() {
-            return Err(SnapshotError::new("save_snapshot", "快照内容校验失败，拒绝写入"));
+            return Err(SnapshotError::new(
+                "save_snapshot",
+                "快照内容校验失败，拒绝写入",
+            ));
         }
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io_err("snapshot_mkdir", e))?;
@@ -334,9 +340,8 @@ impl SnapshotStore for SnapshotFileStore {
         ));
         let body = format!(
             "{}\n",
-            serde_json::to_string(snapshot).map_err(|e| {
-                SnapshotError::new("serialize_snapshot", e.to_string())
-            })?
+            serde_json::to_string(snapshot)
+                .map_err(|e| { SnapshotError::new("serialize_snapshot", e.to_string()) })?
         );
         std::fs::write(&tmp_path, body).map_err(|e| io_err("snapshot_write_tmp", e))?;
         // 轮转：当前主快照 → 备份（Windows rename 不覆盖，先删旧备份）

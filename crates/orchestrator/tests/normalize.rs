@@ -60,7 +60,11 @@ async fn driven_events_get_run_and_session_injected() {
             "信封 runId 注入（{}）",
             normalized.type_name()
         );
-        assert_eq!(normalized.sequence, Some(sequenced.sequence), "sequence 保留");
+        assert_eq!(
+            normalized.sequence,
+            Some(sequenced.sequence),
+            "sequence 保留"
+        );
 
         // 事件体 sessionId 已存在（drive 产出即带）→ 不被覆盖
         let session = match &normalized.event {
@@ -125,7 +129,11 @@ async fn run_terminal_is_the_only_terminal_event_in_driven_stream() {
 
     for (i, sequenced) in result.events.iter().enumerate() {
         let is_last = i == result.events.len() - 1;
-        assert_eq!(is_terminal_event(&sequenced.event), is_last, "仅最后一条为终态");
+        assert_eq!(
+            is_terminal_event(&sequenced.event),
+            is_last,
+            "仅最后一条为终态"
+        );
         let env = envelope(sequenced.event.clone(), sequenced.sequence);
         assert_eq!(is_terminal_envelope(&env), is_last, "信封判据一致");
     }
@@ -164,9 +172,18 @@ async fn cooperative_stop_maps_completed_and_does_not_auto_continue() {
     assert_eq!(run.status, conex_db::RunStatus::Completed);
 
     // cooperative stop 不触发自动续轮；仅自然 stop 可评估续轮
-    assert!(allows_auto_continue(AgentEndReason::Stop), "自然完成可评估续轮");
-    assert!(!allows_auto_continue(AgentEndReason::Stopped), "stopped 不续轮（D1）");
-    assert!(!allows_auto_continue(AgentEndReason::MaxTurns), "预算耗尽不续轮");
+    assert!(
+        allows_auto_continue(AgentEndReason::Stop),
+        "自然完成可评估续轮"
+    );
+    assert!(
+        !allows_auto_continue(AgentEndReason::Stopped),
+        "stopped 不续轮（D1）"
+    );
+    assert!(
+        !allows_auto_continue(AgentEndReason::MaxTurns),
+        "预算耗尽不续轮"
+    );
     assert!(!allows_auto_continue(AgentEndReason::Aborted), "取消不续轮");
     assert!(!allows_auto_continue(AgentEndReason::Error), "失败不续轮");
 

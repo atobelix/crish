@@ -83,7 +83,8 @@ fn cas_dual_session_stale_write_conflicts_and_rolls_back() {
 
     // A 写入成功 → DB rev=1，updates=N
     let id_a = BlockId::new();
-    a.apply(Origin::User, &[insert_op(id_a, "a0")]).expect("A 首写");
+    a.apply(Origin::User, &[insert_op(id_a, "a0")])
+        .expect("A 首写");
     assert_eq!(store.load_rev(doc_id).unwrap(), 1);
     let updates_before = store.load_pending_count(doc_id).unwrap();
 
@@ -107,7 +108,8 @@ fn cas_dual_session_stale_write_conflicts_and_rolls_back() {
 
     // 再断言：A 继续 apply → Ok，rev=2（权威线未断）
     let id_a2 = BlockId::new();
-    a.apply(Origin::User, &[insert_op(id_a2, "a1")]).expect("A 续写");
+    a.apply(Origin::User, &[insert_op(id_a2, "a1")])
+        .expect("A 续写");
     assert_eq!(store.load_rev(doc_id).unwrap(), 2);
 
     // load_doc 后 hydrate 树 ≡ A 的树（含 a/a2，不含 b）
@@ -129,7 +131,8 @@ fn cas_dual_session_stale_undo_conflicts() {
 
     // B 先写一步（占栈，DB rev=1）
     let id_b = BlockId::new();
-    b.apply(Origin::User, &[insert_op(id_b, "b0")]).expect("B 写");
+    b.apply(Origin::User, &[insert_op(id_b, "b0")])
+        .expect("B 写");
     assert_eq!(store.load_rev(doc_id).unwrap(), 1);
     assert_eq!(b.undo_len(), 1);
 
@@ -137,7 +140,8 @@ fn cas_dual_session_stale_undo_conflicts() {
     // （若 A 仍持旧 rev=0 会话，其 apply 本身就会被 CAS 拦截——那是 T5 的场景）
     let mut a = hydrate_session(&store, doc_id).with_persistence(Box::new(store.clone()));
     assert_eq!(a.rev(), 1);
-    a.apply(Origin::User, &[insert_op(BlockId::new(), "a0")]).expect("A 写");
+    a.apply(Origin::User, &[insert_op(BlockId::new(), "a0")])
+        .expect("A 写");
     assert_eq!(store.load_rev(doc_id).unwrap(), 2);
     let updates_before = store.load_pending_count(doc_id).unwrap();
 
@@ -179,9 +183,11 @@ impl PersistencePlugin for NoopPersistence {
 fn cas_default_impl_ignores_expect_rev() {
     let mut s = DocSession::new("doc-cas-t7").with_persistence(Box::new(NoopPersistence));
     let id1 = BlockId::new();
-    s.apply(Origin::User, &[insert_op(id1, "a0")]).expect("首次 apply");
+    s.apply(Origin::User, &[insert_op(id1, "a0")])
+        .expect("首次 apply");
     let id2 = BlockId::new();
-    s.apply(Origin::User, &[insert_op(id2, "a1")]).expect("二次 apply");
+    s.apply(Origin::User, &[insert_op(id2, "a1")])
+        .expect("二次 apply");
     assert_eq!(s.rev(), 2);
     assert!(s.tree().get(&id1).is_some());
     assert!(s.tree().get(&id2).is_some());

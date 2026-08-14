@@ -441,6 +441,8 @@ command_registry![
     ),
     // CONN-B3：collab wire JSON → DocSession::apply（产品 slash 写锥 IPC）
     ("note_apply_ops", note_commands::note_apply_ops),
+    ("note_undo_text", note_commands::note_undo_text),
+    ("note_redo_text", note_commands::note_redo_text),
     // ── D4a 命令面：子代理显式恢复与关闭（D4 §3.1/§3.2/§3.5）。
     //    Tauri 宏约束：命令函数须以模块限定路径注册（裸标识符路径触发
     //    generate_handler! 的 `__cmd__<name>` 宏命名冲突），故命令壳定义
@@ -533,18 +535,8 @@ pub(crate) mod lifecycle_commands {
     ///   纯 DB + 内存）经 spawn_blocking（F2-27）；
     /// - ② fork 段 [orchestrator::lifecycle::SubagentLifecycleService::
     ///   resume_with_prepared] 经调用方持有的 RecoveryCoordinator 权威
-    ///   实例（D3 装配；未装配 → 结构化错误「恢复协调器未装配」——D3
-    ///   完成前 resume 命令不可用，D4 §3.5）。
-    ///
-    /// **协调器锁与真异步调用的兼容**：coordinator_for 返回
-    /// `Arc<std::sync::Mutex<RecoveryCoordinator>>`，而 fork_and_reassign
-    /// 含真实 await（spawner.spawn，recovery.rs:1136-1142）——std
-    /// MutexGuard 跨 await 不 Send、Tauri 命令 future 要求 Send，故 fork
-    /// 段在 spawn_blocking 内持锁并以 `Handle::block_on` 驱动（D3
-    /// `blocking_coordinator_call` + `block_on_coordinator_failure` 模式
-    /// 扩展，core_run_commands.rs:3628-3654；block_on 不阻塞 tokio worker
-    /// 池，fork 链串行执行于 blocking 线程，同步 SQLite 面仍不落 tokio
-    /// worker，符合 F2-27 纪律）。
+    ///   实例（D3 装配；未装配 → 结构化错误「恢复协调器未装配」——全原生异步
+    ///   获取 L2 锁并 await 执行，零 block_on 违规）。
     #[tauri::command]
     pub(crate) async fn resume_subagent(
         state: tauri::State<'_, Arc<core_run_commands::CoreRunState>>,
@@ -569,23 +561,16 @@ pub(crate) mod lifecycle_commands {
             })?
             .map_err(map_lifecycle_err)?
         };
-        // ② fork 段：coordinator 权威实例（D3 装配；未装配 → 结构化错误）
+        // ② fork 段：全异步获取 L2 锁并执行，零 block_on
         let coord = state.coordinator_for(&session_id).ok_or_else(|| {
             core_error::CoreError::internal("恢复协调器未装配（D3 未接线，resume 暂不可用）")
         })?;
-        tokio::task::spawn_blocking(move || {
-            let mut coordinator = coord.lock().unwrap_or_else(|e| e.into_inner());
-            // 锁内 block_on（D3 模式扩展；block_on 线程持有 runtime context，
-            // fork 链 await 的任务由 worker 池执行，无死锁面）
-            tokio::runtime::Handle::current().block_on(service.resume_with_prepared(
-                &mut coordinator,
-                &session_id,
-                prepared,
-            ))
-        })
-        .await
-        .map_err(|e| core_error::CoreError::internal(format!("resume fork 段阻塞任务失败：{e}")))?
-        .map_err(map_lifecycle_err)
+
+        let mut coordinator = coord.lock().await;
+        service
+            .resume_with_prepared(&mut coordinator, &session_id, prepared)
+            .await
+            .map_err(map_lifecycle_err)
     }
 }
 

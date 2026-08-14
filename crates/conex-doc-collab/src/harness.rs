@@ -157,10 +157,7 @@ impl DualSessionHarness {
         from_right: PeerSide,
         encoded_right: &SimplifiedEncodedOps,
     ) -> Result<(DocEvent, DocEvent), ApplyError> {
-        debug_assert_ne!(
-            from_left, from_right,
-            "exchange_encoded: 两侧须为不同 peer"
-        );
+        debug_assert_ne!(from_left, from_right, "exchange_encoded: 两侧须为不同 peer");
         let ev_to_right = self.push(from_left.other(), encoded_left)?;
         let ev_to_left = self.push(from_right.other(), encoded_right)?;
         Ok((ev_to_right, ev_to_left))

@@ -67,7 +67,9 @@ pub use goal_state::{
     assess_round, GoalDecision, GoalState, RoundAssessment, RoundInput, ToolCallStamp,
     DEFAULT_GOAL_MAX_ROUNDS, DEFAULT_GOAL_MAX_STALLED_ROUNDS, GOAL_STATE_KEY,
 };
-pub use normalize::{allows_auto_continue, is_terminal_event, normalize_envelope, terminal_status_for_end_reason};
+pub use normalize::{
+    allows_auto_continue, is_terminal_event, normalize_envelope, terminal_status_for_end_reason,
+};
 pub use steering_queue::PendingMessageQueue;
 
 /// 当前 UTC 毫秒时间戳（epoch ms，run 记录与事件共用）

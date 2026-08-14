@@ -9,10 +9,7 @@ use rusqlite::Connection;
 
 /// 属性键白名单：仅字母数字下划线（`query_blocks` 子模块复用）。
 pub(crate) fn is_safe_attr_key(key: &str) -> bool {
-    !key.is_empty()
-        && key
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    !key.is_empty() && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 /// 将用户查询转为 FTS5 MATCH 表达式（空格分词 AND；词加引号防语法注入）。
@@ -61,10 +58,7 @@ pub(super) fn search_fulltext_cjk_instr(
     query: &str,
     limit: i64,
 ) -> Result<Vec<BlockHit>, StoreError> {
-    let tokens: Vec<&str> = query
-        .split_whitespace()
-        .filter(|t| !t.is_empty())
-        .collect();
+    let tokens: Vec<&str> = query.split_whitespace().filter(|t| !t.is_empty()).collect();
     if tokens.is_empty() {
         return Ok(Vec::new());
     }

@@ -441,11 +441,10 @@ impl RecoveryCoordinator {
         self.persist_notifications()?;
         // 事件留痕（DM-05 降级路径：RecoveryNotification 镜像 + 顶层
         // type 键——errorKind 字段超出 typed 变体形状，镜像保真不丢失）
-        let payload_value = serde_json::to_value(&notification).map_err(|e| {
-            RecoveryError::InvalidState {
+        let payload_value =
+            serde_json::to_value(&notification).map_err(|e| RecoveryError::InvalidState {
                 message: format!("steering 事件序列化失败：{e}"),
-            }
-        })?;
+            })?;
         self.store.append_event(
             &self.session_id,
             RECOVER_STEERING_EVENT,
@@ -651,11 +650,10 @@ impl RecoveryCoordinator {
         self.persist_budget()?;
         // DM-05 降级路径：ForkRecord 镜像 + 顶层 type 键（createdAtMs
         // 超出 typed 变体形状，镜像保真不丢失）
-        let payload_value = serde_json::to_value(&record).map_err(|e| {
-            RecoveryError::InvalidState {
+        let payload_value =
+            serde_json::to_value(&record).map_err(|e| RecoveryError::InvalidState {
                 message: format!("fork 事件序列化失败：{e}"),
-            }
-        })?;
+            })?;
         self.store.append_event(
             &self.session_id,
             RECOVER_FORK_EVENT,
@@ -693,11 +691,10 @@ impl RecoveryCoordinator {
         // DM-05 降级路径：UserReport 镜像 + 顶层 type 键（attempts 尝试
         // 明细超出 typed 变体形状——注册表明确「attempts 不在事件面」，
         // 镜像保真不丢失，读侧仍可聚合）
-        let payload_value = serde_json::to_value(&report).map_err(|e| {
-            RecoveryError::InvalidState {
+        let payload_value =
+            serde_json::to_value(&report).map_err(|e| RecoveryError::InvalidState {
                 message: format!("上报事件序列化失败：{e}"),
-            }
-        })?;
+            })?;
         self.store.append_event(
             &self.session_id,
             RECOVER_REPORT_EVENT,

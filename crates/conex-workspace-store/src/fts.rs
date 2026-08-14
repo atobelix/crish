@@ -11,7 +11,7 @@
 //! **诚实**：**≠ A-PERF-10 数值满关**；**≠ EL-03**（本包仅为结构切开，不静默改查询语义）。
 
 use crate::{StoreError, WorkspaceStore};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{params, OptionalExtension};
 
 /// 查询辅助：MATCH 表达式 / CJK 检测 / `instr` 路径（SD-16）。
 #[path = "fts_search.rs"]
@@ -66,7 +66,10 @@ impl WorkspaceStore {
         plain_text: &str,
         opts: ReindexBlockOpts,
     ) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let tx = conn.unchecked_transaction()?;
         reindex_block_conn(&tx, doc_id, block_id, plain_text, &opts)?;
         tx.commit()?;
@@ -75,7 +78,10 @@ impl WorkspaceStore {
 
     /// 从投影与 FTS 中移除单块索引（文档权威不受影响）。
     pub fn remove_block_index(&self, doc_id: &str, block_id: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let tx = conn.unchecked_transaction()?;
         remove_block_index_conn(&tx, doc_id, block_id)?;
         tx.commit()?;
@@ -100,7 +106,10 @@ impl WorkspaceStore {
             return Ok(Vec::new());
         }
         let limit = limit.max(1).min(500) as i64;
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
 
         if contains_cjk(q) {
             return search_fulltext_cjk_instr(&conn, doc_id, q, limit);
@@ -160,7 +169,10 @@ impl WorkspaceStore {
             return Ok(Vec::new());
         }
         let limit = limit.max(1).min(500) as i64;
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let mut stmt = conn.prepare(
             r#"
             SELECT
@@ -203,7 +215,10 @@ impl WorkspaceStore {
     /// - `doc_id = None`：重建全部 FTS
     /// - `doc_id = Some(id)`：仅重建该文档的 FTS 行
     pub fn rebuild_fts(&self, doc_id: Option<&str>) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let tx = conn.unchecked_transaction()?;
         rebuild_fts_conn(&tx, doc_id)?;
         tx.commit()?;
@@ -224,7 +239,10 @@ impl WorkspaceStore {
             return Ok(Vec::new());
         }
         let limit = limit.max(1).min(500) as i64;
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
 
         // 动态 AND json_extract 条件（键已白名单，可安全拼入 json path）
         let mut sql = String::from(
@@ -274,7 +292,10 @@ impl WorkspaceStore {
 
     /// 该 doc 已投影的块数量（测试 / 诊断）。
     pub fn count_blocks(&self, doc_id: &str) -> Result<usize, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let n: i64 = conn.query_row(
             "SELECT COUNT(*) FROM blocks WHERE doc_id=?1",
             params![doc_id],
@@ -287,7 +308,10 @@ impl WorkspaceStore {
     ///
     /// 正常路径下应与 [`Self::count_blocks`] 相等；不等 → 索引损坏或半写，走 [`Self::rebuild_fts`]。
     pub fn count_fts_blocks(&self, doc_id: &str) -> Result<usize, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let n: i64 = conn.query_row(
             "SELECT COUNT(*) FROM blocks_fts WHERE doc_id=?1",
             params![doc_id],
@@ -302,7 +326,10 @@ impl WorkspaceStore {
         doc_id: &str,
         block_id: &str,
     ) -> Result<Option<String>, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let t: Option<String> = conn
             .query_row(
                 "SELECT plain_text FROM blocks WHERE doc_id=?1 AND block_id=?2",

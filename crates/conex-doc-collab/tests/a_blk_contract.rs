@@ -44,9 +44,7 @@ fn w6_a_s_package_track_is_skeleton_not_el01() {
         "诚实钉：不得关闭 EL-01"
     );
     assert!(
-        W6_A_S_NOT_CLOSING
-            .iter()
-            .any(|s| s.contains("W6-A Strict")),
+        W6_A_S_NOT_CLOSING.iter().any(|s| s.contains("W6-A Strict")),
         "诚实钉：不得关闭 W6-A Strict"
     );
     assert!(
@@ -149,11 +147,7 @@ fn a_blk_04_move_single_reorder_order() {
     insert_root(&mut s, x, "a0");
     insert_root(&mut s, y, "a1");
     insert_root(&mut s, z, "a2");
-    assert_eq!(
-        s.tree().root_children,
-        vec![x, y, z],
-        "初始 order a0<a1<a2"
-    );
+    assert_eq!(s.tree().root_children, vec![x, y, z], "初始 order a0<a1<a2");
 
     // 单次 Move：将 z 重排到 x 之前。
     // 字典序注意：`"a00" > "a0"`（前缀更短更小），故用 `"a"` 才 < `"a0"`。
@@ -367,10 +361,7 @@ fn a_blk_07_cross_doc_import_must_regen_block_ids() {
 
     // 跨文档导入策略：目标侧预分配 **新** id，再 Insert（不得以 src_id 写入 dst）
     let dst_id = BlockId::new();
-    assert_ne!(
-        dst_id, src_id,
-        "导入预分配 id 必须与源 id 不同（重生契约）"
-    );
+    assert_ne!(dst_id, src_id, "导入预分配 id 必须与源 id 不同（重生契约）");
     dst.apply(
         Origin::User,
         &[Op::Insert {
@@ -627,11 +618,7 @@ fn a_blk_11_unknown_turn_into_recovery_keeps_id_and_text() {
         "恢复转类型不得重生 block_id"
     );
     assert_eq!(s.tree().get(&id).unwrap().kind, BlockKind::Quote);
-    assert_eq!(
-        s.read_text(&id),
-        "recover-me",
-        "占位恢复后文本不得丢失"
-    );
+    assert_eq!(s.read_text(&id), "recover-me", "占位恢复后文本不得丢失");
     // 结构 snapshot 往返仍可解析原 id
     let bytes = encode_structure_payload(s.rev(), s.tree());
     let snap = decode_structure_payload(&bytes).expect("decode");

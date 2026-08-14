@@ -128,7 +128,7 @@ pub(crate) enum RecoveryPlan {
         /// run 失败上下文（重派请求与 escalate 重入共用）
         ctx: RunFailureContext,
         /// 会话恢复协调器（重入 escalate 用）
-        coord: Arc<Mutex<RecoveryCoordinator>>,
+        coord: Arc<tokio::sync::Mutex<RecoveryCoordinator>>,
     },
 }
 

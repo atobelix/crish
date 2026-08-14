@@ -201,6 +201,58 @@ impl NoteBackend for MemoryNoteBackend {
     ) -> Result<NoteBlockBatchResult, NoteBackendError> {
         self.run_apply_block_ops(req)
     }
+
+    async fn undo_text(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<crate::note_types::NoteUndoResult, NoteBackendError> {
+        let docs = self.docs.lock().unwrap_or_else(|e| {
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
+        let doc = docs
+            .get(doc_id)
+            .ok_or_else(|| NoteBackendError::NotFound(format!("doc not found: {doc_id}")))?;
+        let block = doc
+            .blocks
+            .iter()
+            .find(|b| b.id == block_id)
+            .ok_or_else(|| NoteBackendError::NotFound(format!("block not found: {block_id}")))?;
+        Ok(crate::note_types::NoteUndoResult {
+            doc_id: doc_id.to_string(),
+            block_id: block_id.to_string(),
+            rev: 1,
+            text: block.text.clone(),
+            is_noop: true,
+        })
+    }
+
+    async fn redo_text(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<crate::note_types::NoteRedoResult, NoteBackendError> {
+        let docs = self.docs.lock().unwrap_or_else(|e| {
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
+        let doc = docs
+            .get(doc_id)
+            .ok_or_else(|| NoteBackendError::NotFound(format!("doc not found: {doc_id}")))?;
+        let block = doc
+            .blocks
+            .iter()
+            .find(|b| b.id == block_id)
+            .ok_or_else(|| NoteBackendError::NotFound(format!("block not found: {block_id}")))?;
+        Ok(crate::note_types::NoteRedoResult {
+            doc_id: doc_id.to_string(),
+            block_id: block_id.to_string(),
+            rev: 1,
+            text: block.text.clone(),
+            is_noop: true,
+        })
+    }
 }
 
 /// 毒化测日志捕获（B1-3 观测化验收：LogCapture + with_capture 同形复制，

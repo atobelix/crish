@@ -17,10 +17,7 @@ use crate::store_backend::{map_store_err, StoreNoteBackend};
 
 impl StoreNoteBackend {
     /// 从已打开 session 树抽 heading 大纲（文档序 DFS）。
-    pub(crate) fn build_outline_from_session(
-        session: &DocSession,
-        max_depth: u32,
-    ) -> NoteOutline {
+    pub(crate) fn build_outline_from_session(session: &DocSession, max_depth: u32) -> NoteOutline {
         let mut flat: Vec<(String, u32, String)> = Vec::new();
         let mut saw_deeper = false;
         // 文档序：DFS 根 children

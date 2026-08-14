@@ -21,7 +21,7 @@ use conex_db::{LocalDb, ORPHAN_GRACE_MS};
 use conex_types::events::RunTerminalStatus;
 use conex_types::SessionIndexEntry;
 use orchestrator::persist::{LocalDbStore, Store};
-use orchestrator::run::{RunManager, RunHandle};
+use orchestrator::run::{RunHandle, RunManager};
 
 /// 当前 epoch 毫秒（与库层 cleanup 的 now_ms 口径一致）
 fn now_ms() -> i64 {
@@ -139,7 +139,11 @@ async fn terminal_rewrite_does_not_refresh_session() {
     run.fail_event_store(store.as_ref(), "终态事件落库失败")
         .await
         .unwrap();
-    assert_eq!(run.status, conex_db::RunStatus::Failed, "已终态记录应翻转 failed");
+    assert_eq!(
+        run.status,
+        conex_db::RunStatus::Failed,
+        "已终态记录应翻转 failed"
+    );
 
     let after = session_updated_at(&db, "s1");
     assert_eq!(

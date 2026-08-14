@@ -156,6 +156,8 @@ pub enum ApplyError {
     Persist(String),
     #[error("invariant: {0}")]
     Invariant(String),
+    #[error("undo: {0}")]
+    Undo(#[from] UndoError),
 }
 
 /// `DocSession::undo` 失败（W1-U）。
@@ -192,6 +194,9 @@ impl From<TextEngineError> for ApplyError {
             TextEngineError::UpdateDecode(m) | TextEngineError::UpdateApply(m) => {
                 ApplyError::Schema(format!("text update: {m}"))
             }
+            TextEngineError::NoUndoHistory | TextEngineError::NoRedoHistory => {
+                ApplyError::Undo(UndoError::Empty)
+            }
         }
     }
 }
@@ -219,11 +224,9 @@ pub struct DocSession {
     undo_stack: Vec<UndoEntry>,
 }
 
-// SAFETY: DocSession 内部通过受控访问或 Mutex 包装保护，可在线程间安全传递与共享
+// SAFETY: DocSession 内部通过受控访问或 Mutex 包装保护，可在线程间安全传递
 #[allow(unsafe_code)]
 unsafe impl Send for DocSession {}
-#[allow(unsafe_code)]
-unsafe impl Sync for DocSession {}
 
 impl DocSession {
     pub fn new(doc_id: impl Into<String>) -> Self {

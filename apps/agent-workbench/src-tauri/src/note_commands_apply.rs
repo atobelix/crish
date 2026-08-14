@@ -218,3 +218,115 @@ pub async fn note_apply_ops(req: NoteApplyOpsArgs) -> Result<JsonValue, CoreErro
         )))),
     }
 }
+
+/// CRDT-01/03 · 文本级 CRDT 因果撤销入参。
+#[derive(Debug, Clone, Deserialize)]
+pub struct NoteUndoTextArgs {
+    pub doc_id: String,
+    pub block_id: String,
+}
+
+/// CRDT-01/03 · 文本级 CRDT 因果重传入参。
+#[derive(Debug, Clone, Deserialize)]
+pub struct NoteRedoTextArgs {
+    pub doc_id: String,
+    pub block_id: String,
+}
+
+/// 块文本级 CRDT 因果撤销。
+///
+/// wire 名 = `note_undo_text`（前端 NOTE_CMD_UNDO_TEXT）。
+#[tauri::command]
+pub async fn note_undo_text(req: NoteUndoTextArgs) -> Result<JsonValue, CoreError> {
+    let doc_id = req.doc_id.trim().to_string();
+    let block_id = req.block_id.trim().to_string();
+    if doc_id.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "doc_id must be non-empty",
+        }));
+    }
+    if block_id.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "block_id must be non-empty",
+        }));
+    }
+    let Some(backend) = note_runtime::try_backend() else {
+        return Ok(unwired_failure());
+    };
+    let handle = tokio::runtime::Handle::current();
+    let joined = tokio::task::spawn_blocking(move || {
+        handle.block_on(backend.undo_text(&doc_id, &block_id))
+    })
+    .await;
+    let result = match joined {
+        Ok(r) => r,
+        Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        ))),
+    };
+    match result {
+        Ok(res) => Ok(json!({
+            "ok": true,
+            "doc_id": res.doc_id,
+            "block_id": res.block_id,
+            "rev": res.rev,
+            "text": res.text,
+            "is_noop": res.is_noop,
+            "source": "tauri-ipc",
+        })),
+        Err(e) => Ok(err_outcome(e)),
+    }
+}
+
+/// 块文本级 CRDT 因果重做。
+///
+/// wire 名 = `note_redo_text`（前端 NOTE_CMD_REDO_TEXT）。
+#[tauri::command]
+pub async fn note_redo_text(req: NoteRedoTextArgs) -> Result<JsonValue, CoreError> {
+    let doc_id = req.doc_id.trim().to_string();
+    let block_id = req.block_id.trim().to_string();
+    if doc_id.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "doc_id must be non-empty",
+        }));
+    }
+    if block_id.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "code": "note.invalid",
+            "reason": "block_id must be non-empty",
+        }));
+    }
+    let Some(backend) = note_runtime::try_backend() else {
+        return Ok(unwired_failure());
+    };
+    let handle = tokio::runtime::Handle::current();
+    let joined = tokio::task::spawn_blocking(move || {
+        handle.block_on(backend.redo_text(&doc_id, &block_id))
+    })
+    .await;
+    let result = match joined {
+        Ok(r) => r,
+        Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        ))),
+    };
+    match result {
+        Ok(res) => Ok(json!({
+            "ok": true,
+            "doc_id": res.doc_id,
+            "block_id": res.block_id,
+            "rev": res.rev,
+            "text": res.text,
+            "is_noop": res.is_noop,
+            "source": "tauri-ipc",
+        })),
+        Err(e) => Ok(err_outcome(e)),
+    }
+}

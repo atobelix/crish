@@ -16,8 +16,12 @@ import type {
   NoteQueryBlockHit,
   NoteQueryBlocksOutcome,
   NoteQueryBlocksParams,
+  NoteRedoOutcome,
+  NoteRedoTextRequest,
   NoteSendToNoteRequest,
   NoteTransport,
+  NoteUndoOutcome,
+  NoteUndoTextRequest,
 } from './noteApiContracts';
 
 type MemBlock = {
@@ -310,10 +314,48 @@ export function createMemoryNoteTransport(): MemoryNoteTransport {
     });
   };
 
+  const undoText = async (
+    req: NoteUndoTextRequest
+  ): Promise<NoteUndoOutcome> => {
+    const doc = docs.get(req.docId);
+    if (!doc) {
+      return {
+        ok: false,
+        code: 'note.not_found',
+        reason: `doc not found: ${req.docId}`,
+      };
+    }
+    const block = doc.blocks.find((b) => b.id === req.blockId);
+    if (!block) {
+      return {
+        ok: false,
+        code: 'note.not_found',
+        reason: `block not found: ${req.blockId}`,
+      };
+    }
+    return {
+      ok: true,
+      docId: req.docId,
+      blockId: req.blockId,
+      rev: 1,
+      text: block.text,
+      isNoop: true,
+      source: 'memory',
+    };
+  };
+
+  const redoText = async (
+    req: NoteRedoTextRequest
+  ): Promise<NoteRedoOutcome> => {
+    return undoText(req);
+  };
+
   return {
     applyMd,
     queryBlocks,
     sendToNote,
+    undoText,
+    redoText,
     seedDoc(docId, blocks) {
       const doc = ensureDoc(docId);
       for (const [id, kind, text] of blocks) {
