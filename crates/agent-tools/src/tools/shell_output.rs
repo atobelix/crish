@@ -305,7 +305,9 @@ pub(crate) fn high_output_suggestion(command: &str) -> Option<String> {
         && !lower.contains("--stat")
         && !lower.contains("--name-only")
     {
-        return Some("git diff/git show 输出可能较大，建议添加 --stat 或 --name-only 限制输出".to_string());
+        return Some(
+            "git diff/git show 输出可能较大，建议添加 --stat 或 --name-only 限制输出".to_string(),
+        );
     }
     None
 }

@@ -24,7 +24,10 @@ fn runtime_state_roundtrip() {
         assert_eq!(runtime_state_of(runtime_state_code(state)), state);
     }
     // serde lowercase（对齐前端 state 字符串）
-    assert_eq!(serde_json::to_string(&McpServerRuntimeState::Degraded).unwrap(), "\"degraded\"");
+    assert_eq!(
+        serde_json::to_string(&McpServerRuntimeState::Degraded).unwrap(),
+        "\"degraded\""
+    );
 }
 
 /// 会话不可用错误：退出原因进消息

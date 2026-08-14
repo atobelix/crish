@@ -108,10 +108,7 @@ impl ToolRegistry {
             tracing::error!("工具注册表 tools 锁中毒，按恢复模式继续：{e}");
             e.into_inner()
         });
-        names
-            .iter()
-            .filter_map(|n| tools.get(n).cloned())
-            .collect()
+        names.iter().filter_map(|n| tools.get(n).cloned()).collect()
     }
 
     /// 装配定义改写链（E4 on_definition；替换现有链；空链 = 不启用）。
@@ -119,10 +116,7 @@ impl ToolRegistry {
     /// 改写链挂 `list_definitions` 构建点——引擎给 provider 发 schema 前
     /// 统一改写（与四维过滤的未来点位共享）；执行侧不改动（工具实际
     /// 执行仍走原定义）。
-    pub fn with_definition_transformers(
-        self,
-        chain: Vec<Arc<dyn ToolMiddleware>>,
-    ) -> Self {
+    pub fn with_definition_transformers(self, chain: Vec<Arc<dyn ToolMiddleware>>) -> Self {
         *self.definition_transformers.lock().unwrap_or_else(|e| {
             tracing::error!("工具注册表 definition_transformers 锁中毒，按恢复模式继续：{e}");
             e.into_inner()
@@ -166,11 +160,8 @@ impl ToolRegistry {
     /// E4：排序后依次经定义改写链（on_definition 按注册序同步改写，
     /// 可改 description 与 input_schema；空链 = 无改写，行为与现状一致）。
     pub fn list_definitions(&self) -> Vec<ToolDefinition> {
-        let mut defs: Vec<ToolDefinition> = self
-            .list()
-            .iter()
-            .map(|t| t.definition().clone())
-            .collect();
+        let mut defs: Vec<ToolDefinition> =
+            self.list().iter().map(|t| t.definition().clone()).collect();
         defs.sort_by(|a, b| a.name.cmp(&b.name));
         let transformers = self
             .definition_transformers
@@ -304,7 +295,10 @@ mod tests {
         let v = serde_json::to_value(&defs[0]).unwrap();
         assert_eq!(v["name"], "a");
         assert_eq!(v["description"], "回显入参");
-        assert_eq!(v["inputSchema"], json!({ "type": "object", "properties": {} }));
+        assert_eq!(
+            v["inputSchema"],
+            json!({ "type": "object", "properties": {} })
+        );
         assert_eq!(v["dangerous"], false);
     }
 
@@ -332,7 +326,10 @@ mod tests {
         reg.register(echo("echo")).unwrap();
         let tool = reg.get("echo").unwrap();
         let out = tool
-            .execute(&crate::context::create_mock_tool_context(), json!({ "msg": "闭环" }))
+            .execute(
+                &crate::context::create_mock_tool_context(),
+                json!({ "msg": "闭环" }),
+            )
             .await
             .unwrap();
         assert_eq!(out, json!({ "echo": { "msg": "闭环" } }));
@@ -374,7 +371,10 @@ mod tests {
         assert_eq!(defs[0].name, "shell_run");
         assert_eq!(defs[0].description, "回显入参（改写）");
         // 原始定义不被改写（改写面只作用于 list_definitions 输出克隆）
-        assert_eq!(reg.get("shell_run").unwrap().definition().description, "回显入参");
+        assert_eq!(
+            reg.get("shell_run").unwrap().definition().description,
+            "回显入参"
+        );
     }
 
     /// 空实现 no-op：无改写中间件时 list_definitions 输出与现状一致
@@ -401,7 +401,10 @@ mod tests {
             suffix_mw("second", "|2"),
         ]);
         let defs = reg.list_definitions();
-        assert_eq!(defs[0].description, "回显入参|1|2", "改写必须按链序顺序生效");
+        assert_eq!(
+            defs[0].description, "回显入参|1|2",
+            "改写必须按链序顺序生效"
+        );
     }
 
     /// add_definition_transformer 共享面追加（&self；插件运行时用）

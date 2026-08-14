@@ -9,7 +9,7 @@
 //! - 并发 enable 互斥（多线程恰好一个成功）。
 
 use conex_computer::security::{
-    COMPUTER_USE_ENABLED_KEY, EnableSource, EnablementError, SessionEnablement,
+    EnableSource, EnablementError, SessionEnablement, COMPUTER_USE_ENABLED_KEY,
 };
 use std::sync::Arc;
 use std::thread;

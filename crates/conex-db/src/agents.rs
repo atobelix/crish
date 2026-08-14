@@ -372,13 +372,29 @@ mod tests {
             "s1",
             &[
                 agent("a1", "run-1", "running", "s1", None, None, Vec::new()),
-                agent("a2", "run-2", "completed", "s1", Some(200), None, Vec::new()),
+                agent(
+                    "a2",
+                    "run-2",
+                    "completed",
+                    "s1",
+                    Some(200),
+                    None,
+                    Vec::new(),
+                ),
             ],
         )
         .unwrap();
         db.save_session_agents(
             "s2",
-            &[agent("a3", "run-3", "running", "s2", None, None, Vec::new())],
+            &[agent(
+                "a3",
+                "run-3",
+                "running",
+                "s2",
+                None,
+                None,
+                Vec::new(),
+            )],
         )
         .unwrap();
 
@@ -425,6 +441,10 @@ mod tests {
         assert_eq!(by_id("a44").messages.len(), 1, "末位子代理消息不丢");
         assert_eq!(by_id("a44").messages[0].id, "m44");
         assert_eq!(by_id("a0").messages[0].id, "m0");
-        assert_eq!(by_id("a40").messages[0].id, "m40", "第 41 个起的子代理消息随行");
+        assert_eq!(
+            by_id("a40").messages[0].id,
+            "m40",
+            "第 41 个起的子代理消息随行"
+        );
     }
 }

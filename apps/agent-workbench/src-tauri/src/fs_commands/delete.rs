@@ -47,10 +47,7 @@ pub(crate) fn delete_file_with_guard(
     conex_fs::trash::TrashService::new(trash_root)
         .trash_file(&file_path, true)
         .map_err(|e| {
-            FileCommandError::new(
-                ERR_DELETE_FILE,
-                format!("Failed to delete file: {e}"),
-            )
+            FileCommandError::new(ERR_DELETE_FILE, format!("Failed to delete file: {e}"))
         })?;
 
     Ok(DeleteFileResult {

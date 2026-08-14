@@ -191,14 +191,9 @@ impl Action {
                 let _ = amount;
                 Ok(())
             }
-            Action::HoldKey {
-                key,
-                duration_secs,
-            } => {
+            Action::HoldKey { key, duration_secs } => {
                 if !is_valid_key_name(key) {
-                    return Err(ActionError::InvalidParams(format!(
-                        "未知键名: {key}"
-                    )));
+                    return Err(ActionError::InvalidParams(format!("未知键名: {key}")));
                 }
                 if !(0.0 < *duration_secs && *duration_secs <= HOLD_KEY_MAX_SECS) {
                     return Err(ActionError::InvalidParams(format!(
@@ -278,7 +273,9 @@ fn validate_coord(p: Point, scale: &ScaleSpec) -> Result<(), ActionError> {
             p.x, p.y
         )));
     }
-    scale.validate_api(p).map_err(|_| ActionError::CoordsOutOfBounds)?;
+    scale
+        .validate_api(p)
+        .map_err(|_| ActionError::CoordsOutOfBounds)?;
     Ok(())
 }
 
@@ -409,7 +406,9 @@ pub mod inject {
         for i in 0..times {
             steps.push(InjectStep::ButtonClick { button: btn });
             if i + 1 < times {
-                steps.push(InjectStep::DelayMs { ms: CLICK_INTERVAL_MS });
+                steps.push(InjectStep::DelayMs {
+                    ms: CLICK_INTERVAL_MS,
+                });
             }
         }
         for m in mods.iter().rev() {
@@ -439,7 +438,10 @@ pub mod inject {
             SharedScrollDirection::Left => (Axis::Horizontal, -(amount as i32)),
             SharedScrollDirection::Right => (Axis::Horizontal, amount as i32),
         };
-        steps.push(InjectStep::Wheel { axis, amount: signed });
+        steps.push(InjectStep::Wheel {
+            axis,
+            amount: signed,
+        });
         for m in mods.iter().rev() {
             steps.push(InjectStep::KeyUp { name: m.0.clone() });
         }
@@ -510,7 +512,10 @@ pub mod inject {
             if let Some(s) = stop {
                 if s.stopped() {
                     release_all_keys_and_buttons(enigo);
-                    return Err(format!("急停触发，注入已中止（已完成 {idx}/{} 步）", steps.len()));
+                    return Err(format!(
+                        "急停触发，注入已中止（已完成 {idx}/{} 步）",
+                        steps.len()
+                    ));
                 }
             }
             match step {
@@ -555,7 +560,10 @@ pub mod inject {
                         if let Some(s) = stop {
                             if s.stopped() {
                                 release_all_keys_and_buttons(enigo);
-                                return Err(format!("急停触发，注入已中止（已完成 {idx}/{} 步）", steps.len()));
+                                return Err(format!(
+                                    "急停触发，注入已中止（已完成 {idx}/{} 步）",
+                                    steps.len()
+                                ));
                             }
                         }
                         let slice = remaining.min(5);
@@ -641,8 +649,7 @@ pub mod inject {
                 windows_dw_extra_info: Some(ENIGO_EXTRA_INFO),
                 ..Settings::default()
             };
-            let enigo =
-                Enigo::new(&settings).map_err(|e| format!("enigo 初始化失败: {e:?}"))?;
+            let enigo = Enigo::new(&settings).map_err(|e| format!("enigo 初始化失败: {e:?}"))?;
             Ok(Self {
                 enigo: Mutex::new(enigo),
                 stop: Mutex::new(None),
@@ -786,7 +793,7 @@ pub mod inject {
             enigo
                 .key(key, Direction::Press)
                 .map_err(|e| format!("按键按下失败: {e:?}"))?;
-            
+
             let mut remaining_ms = (duration_secs * 1000.0) as u64;
             while remaining_ms > 0 {
                 if let Some(ref s) = stop {
@@ -846,9 +853,7 @@ pub mod inject {
         /// enigo 0.6.1 绝对坐标仅支持主屏 0,0 原点)
         #[allow(unsafe_code)]
         pub fn mouse_move(&self, p: Point) -> Result<(), InjectError> {
-            let ok = unsafe {
-                windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos(p.x, p.y)
-            };
+            let ok = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos(p.x, p.y) };
             if ok == 0 {
                 return Err(format!("SetCursorPos 失败: ({}, {})", p.x, p.y));
             }
@@ -871,7 +876,11 @@ pub mod inject {
 
         /// 按下/抬起分离原语
         pub fn mouse_button(&self, button: MouseButton, down: bool) -> Result<(), InjectError> {
-            let direction = if down { Direction::Press } else { Direction::Release };
+            let direction = if down {
+                Direction::Press
+            } else {
+                Direction::Release
+            };
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
             enigo
                 .button(to_enigo_button(button), direction)
@@ -966,9 +975,8 @@ pub mod inject {
         #[allow(unsafe_code)]
         pub fn cursor_physical(&self) -> Result<Point, InjectError> {
             let mut point = windows_sys::Win32::Foundation::POINT { x: 0, y: 0 };
-            let ok = unsafe {
-                windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut point)
-            };
+            let ok =
+                unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut point) };
             if ok == 0 {
                 return Err("GetCursorPos 失败".to_string());
             }
@@ -1023,23 +1031,20 @@ pub mod inject {
             btn: SharedMouseButton,
             down: bool,
         ) -> Result<(), InputBackendError> {
-            let direction = if down { Direction::Press } else { Direction::Release };
+            let direction = if down {
+                Direction::Press
+            } else {
+                Direction::Release
+            };
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
             enigo
                 .button(to_enigo_button_shared(btn), direction)
                 .map_err(|e| InputBackendError::Failed(format!("鼠标按键失败: {e:?}")))
         }
 
-        async fn drag(
-            &self,
-            from: SharedPoint,
-            to: SharedPoint,
-        ) -> Result<(), InputBackendError> {
-            self.drag(
-                Point::new(from.x, from.y),
-                Point::new(to.x, to.y),
-            )
-            .map_err(InputBackendError::Failed)
+        async fn drag(&self, from: SharedPoint, to: SharedPoint) -> Result<(), InputBackendError> {
+            self.drag(Point::new(from.x, from.y), Point::new(to.x, to.y))
+                .map_err(InputBackendError::Failed)
         }
 
         async fn scroll(
@@ -1097,9 +1102,15 @@ pub mod inject {
                 steps,
                 vec![
                     InjectStep::MoveTo { x: 100, y: 200 },
-                    InjectStep::KeyDown { name: "ctrl".to_string() },
-                    InjectStep::ButtonClick { button: Button::Left },
-                    InjectStep::KeyUp { name: "ctrl".to_string() },
+                    InjectStep::KeyDown {
+                        name: "ctrl".to_string()
+                    },
+                    InjectStep::ButtonClick {
+                        button: Button::Left
+                    },
+                    InjectStep::KeyUp {
+                        name: "ctrl".to_string()
+                    },
                 ]
             );
         }
@@ -1109,7 +1120,9 @@ pub mod inject {
             let steps = build_click_steps(Button::Left, 1, None, &[]);
             assert_eq!(
                 steps,
-                vec![InjectStep::ButtonClick { button: Button::Left }]
+                vec![InjectStep::ButtonClick {
+                    button: Button::Left
+                }]
             );
         }
 
@@ -1120,9 +1133,15 @@ pub mod inject {
             assert_eq!(
                 steps,
                 vec![
-                    InjectStep::ButtonClick { button: Button::Right },
-                    InjectStep::DelayMs { ms: CLICK_INTERVAL_MS },
-                    InjectStep::ButtonClick { button: Button::Right },
+                    InjectStep::ButtonClick {
+                        button: Button::Right
+                    },
+                    InjectStep::DelayMs {
+                        ms: CLICK_INTERVAL_MS
+                    },
+                    InjectStep::ButtonClick {
+                        button: Button::Right
+                    },
                 ]
             );
         }
@@ -1131,16 +1150,35 @@ pub mod inject {
         fn click_steps_triple_generates_two_delays() {
             let steps = build_click_steps(Button::Left, 3, None, &[]);
             assert_eq!(steps.len(), 5);
-            assert_eq!(steps[0], InjectStep::ButtonClick { button: Button::Left });
-            assert_eq!(steps[2], InjectStep::ButtonClick { button: Button::Left });
-            assert_eq!(steps[4], InjectStep::ButtonClick { button: Button::Left });
+            assert_eq!(
+                steps[0],
+                InjectStep::ButtonClick {
+                    button: Button::Left
+                }
+            );
+            assert_eq!(
+                steps[2],
+                InjectStep::ButtonClick {
+                    button: Button::Left
+                }
+            );
+            assert_eq!(
+                steps[4],
+                InjectStep::ButtonClick {
+                    button: Button::Left
+                }
+            );
             assert_eq!(
                 steps[1],
-                InjectStep::DelayMs { ms: CLICK_INTERVAL_MS }
+                InjectStep::DelayMs {
+                    ms: CLICK_INTERVAL_MS
+                }
             );
             assert_eq!(
                 steps[3],
-                InjectStep::DelayMs { ms: CLICK_INTERVAL_MS }
+                InjectStep::DelayMs {
+                    ms: CLICK_INTERVAL_MS
+                }
             );
         }
 
@@ -1151,11 +1189,21 @@ pub mod inject {
             assert_eq!(
                 steps,
                 vec![
-                    InjectStep::KeyDown { name: "ctrl".to_string() },
-                    InjectStep::KeyDown { name: "alt".to_string() },
-                    InjectStep::ButtonClick { button: Button::Left },
-                    InjectStep::KeyUp { name: "alt".to_string() },
-                    InjectStep::KeyUp { name: "ctrl".to_string() },
+                    InjectStep::KeyDown {
+                        name: "ctrl".to_string()
+                    },
+                    InjectStep::KeyDown {
+                        name: "alt".to_string()
+                    },
+                    InjectStep::ButtonClick {
+                        button: Button::Left
+                    },
+                    InjectStep::KeyUp {
+                        name: "alt".to_string()
+                    },
+                    InjectStep::KeyUp {
+                        name: "ctrl".to_string()
+                    },
                 ]
             );
         }
@@ -1172,9 +1220,16 @@ pub mod inject {
                 steps,
                 vec![
                     InjectStep::MoveTo { x: 5, y: 6 },
-                    InjectStep::KeyDown { name: "shift".to_string() },
-                    InjectStep::Wheel { axis: Axis::Vertical, amount: 3 },
-                    InjectStep::KeyUp { name: "shift".to_string() },
+                    InjectStep::KeyDown {
+                        name: "shift".to_string()
+                    },
+                    InjectStep::Wheel {
+                        axis: Axis::Vertical,
+                        amount: 3
+                    },
+                    InjectStep::KeyUp {
+                        name: "shift".to_string()
+                    },
                 ]
             );
         }
@@ -1183,11 +1238,29 @@ pub mod inject {
         fn scroll_steps_direction_sign_mapping() {
             // 正=下/右,负=上/左(enigo scroll 语义)
             let up = build_scroll_steps(SharedScrollDirection::Up, 4, None, &[]);
-            assert_eq!(up[0], InjectStep::Wheel { axis: Axis::Vertical, amount: -4 });
+            assert_eq!(
+                up[0],
+                InjectStep::Wheel {
+                    axis: Axis::Vertical,
+                    amount: -4
+                }
+            );
             let left = build_scroll_steps(SharedScrollDirection::Left, 2, None, &[]);
-            assert_eq!(left[0], InjectStep::Wheel { axis: Axis::Horizontal, amount: -2 });
+            assert_eq!(
+                left[0],
+                InjectStep::Wheel {
+                    axis: Axis::Horizontal,
+                    amount: -2
+                }
+            );
             let right = build_scroll_steps(SharedScrollDirection::Right, 2, None, &[]);
-            assert_eq!(right[0], InjectStep::Wheel { axis: Axis::Horizontal, amount: 2 });
+            assert_eq!(
+                right[0],
+                InjectStep::Wheel {
+                    axis: Axis::Horizontal,
+                    amount: 2
+                }
+            );
         }
 
         #[test]
@@ -1199,12 +1272,24 @@ pub mod inject {
             assert_eq!(
                 steps,
                 vec![
-                    InjectStep::KeyDown { name: "ctrl".to_string() },
-                    InjectStep::KeyDown { name: "alt".to_string() },
-                    InjectStep::KeyDown { name: "c".to_string() },
-                    InjectStep::KeyUp { name: "c".to_string() },
-                    InjectStep::KeyUp { name: "alt".to_string() },
-                    InjectStep::KeyUp { name: "ctrl".to_string() },
+                    InjectStep::KeyDown {
+                        name: "ctrl".to_string()
+                    },
+                    InjectStep::KeyDown {
+                        name: "alt".to_string()
+                    },
+                    InjectStep::KeyDown {
+                        name: "c".to_string()
+                    },
+                    InjectStep::KeyUp {
+                        name: "c".to_string()
+                    },
+                    InjectStep::KeyUp {
+                        name: "alt".to_string()
+                    },
+                    InjectStep::KeyUp {
+                        name: "ctrl".to_string()
+                    },
                 ]
             );
         }
@@ -1216,9 +1301,13 @@ pub mod inject {
             assert_eq!(
                 steps,
                 vec![
-                    InjectStep::KeyDown { name: "a".to_string() },
+                    InjectStep::KeyDown {
+                        name: "a".to_string()
+                    },
                     InjectStep::DelayMs { ms: 500 },
-                    InjectStep::KeyUp { name: "a".to_string() },
+                    InjectStep::KeyUp {
+                        name: "a".to_string()
+                    },
                 ]
             );
         }
@@ -1226,11 +1315,26 @@ pub mod inject {
         #[test]
         fn shared_button_mapping_covers_side_buttons() {
             // 共享层五键全映射(含侧键,05 §4.1 扩展面)
-            assert_eq!(to_enigo_button_shared(SharedMouseButton::Left), Button::Left);
-            assert_eq!(to_enigo_button_shared(SharedMouseButton::Middle), Button::Middle);
-            assert_eq!(to_enigo_button_shared(SharedMouseButton::Right), Button::Right);
-            assert_eq!(to_enigo_button_shared(SharedMouseButton::Back), Button::Back);
-            assert_eq!(to_enigo_button_shared(SharedMouseButton::Forward), Button::Forward);
+            assert_eq!(
+                to_enigo_button_shared(SharedMouseButton::Left),
+                Button::Left
+            );
+            assert_eq!(
+                to_enigo_button_shared(SharedMouseButton::Middle),
+                Button::Middle
+            );
+            assert_eq!(
+                to_enigo_button_shared(SharedMouseButton::Right),
+                Button::Right
+            );
+            assert_eq!(
+                to_enigo_button_shared(SharedMouseButton::Back),
+                Button::Back
+            );
+            assert_eq!(
+                to_enigo_button_shared(SharedMouseButton::Forward),
+                Button::Forward
+            );
             // 动作面三键映射
             assert_eq!(to_enigo_button(MouseButton::Left), Button::Left);
             assert_eq!(to_enigo_button(MouseButton::Middle), Button::Middle);
@@ -1317,7 +1421,9 @@ mod tests {
 
     #[test]
     fn validate_type_empty_rejected() {
-        let action = Action::Type { text: String::new() };
+        let action = Action::Type {
+            text: String::new(),
+        };
         assert!(matches!(
             action.validate(&scale_16x9()),
             Err(ActionError::InvalidParams(_))
@@ -1420,7 +1526,10 @@ mod tests {
                 duration_secs: bad,
             };
             assert!(
-                matches!(action.validate(&scale_16x9()), Err(ActionError::InvalidParams(_))),
+                matches!(
+                    action.validate(&scale_16x9()),
+                    Err(ActionError::InvalidParams(_))
+                ),
                 "时长 {bad} 应拒绝"
             );
         }
@@ -1516,9 +1625,32 @@ mod tests {
     fn is_valid_key_name_covers_spec() {
         // 04 §2.4 键名规范全覆盖
         let spec_names = [
-            "ctrl", "alt", "shift", "win", "a", "z", "0", "9", "f1", "f12", "f24", "enter",
-            "tab", "space", "backspace", "delete", "escape", "arrow_up", "arrow_down",
-            "arrow_left", "arrow_right", "home", "end", "page_up", "page_down", "caps_lock",
+            "ctrl",
+            "alt",
+            "shift",
+            "win",
+            "a",
+            "z",
+            "0",
+            "9",
+            "f1",
+            "f12",
+            "f24",
+            "enter",
+            "tab",
+            "space",
+            "backspace",
+            "delete",
+            "escape",
+            "arrow_up",
+            "arrow_down",
+            "arrow_left",
+            "arrow_right",
+            "home",
+            "end",
+            "page_up",
+            "page_down",
+            "caps_lock",
         ];
         for name in spec_names {
             assert!(is_valid_key_name(name), "规范键名 {name} 应合法");

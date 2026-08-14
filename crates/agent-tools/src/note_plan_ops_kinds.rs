@@ -15,10 +15,7 @@ pub(super) fn plan_insert(
     next_id: &mut impl FnMut() -> String,
 ) -> Result<(), NoteBackendError> {
     let content = op.content.clone().unwrap_or_default();
-    let kind = op
-        .kind
-        .clone()
-        .unwrap_or_else(|| "paragraph".to_string());
+    let kind = op.kind.clone().unwrap_or_else(|| "paragraph".to_string());
     let level = if kind == "heading" {
         parse_heading_level_from_text(&content).unwrap_or(1)
     } else {
@@ -105,7 +102,9 @@ pub(super) fn plan_update(
         summary: Some(content.chars().take(80).collect()),
     });
     state.block_ids.push(id.clone());
-    state.mutations.push(PlannedMutation::Update { id, content });
+    state
+        .mutations
+        .push(PlannedMutation::Update { id, content });
     Ok(())
 }
 
@@ -186,9 +185,7 @@ pub(super) fn plan_set_attr(
         .id
         .clone()
         .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| {
-            NoteBackendError::Invalid("set_attr requires non-empty id".into())
-        })?;
+        .ok_or_else(|| NoteBackendError::Invalid("set_attr requires non-empty id".into()))?;
     let attrs = op.attrs.clone().unwrap_or_default();
     let pos = state
         .work
@@ -203,8 +200,6 @@ pub(super) fn plan_set_attr(
         summary: Some(format!("{} attrs", attrs.len())),
     });
     state.block_ids.push(id.clone());
-    state
-        .mutations
-        .push(PlannedMutation::SetAttr { id, attrs });
+    state.mutations.push(PlannedMutation::SetAttr { id, attrs });
     Ok(())
 }

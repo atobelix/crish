@@ -146,9 +146,8 @@ pub fn budget_text_for_context(text: &str, options: &ToolOutputBudgetOptions) ->
     let tail_chars = tail.chars().count();
     let omitted_chars = original_chars.saturating_sub(head_chars + tail_chars);
 
-    let marker = format!(
-        "\n\n[... {omitted_chars} characters omitted from {original_chars} total ...]\n\n"
-    );
+    let marker =
+        format!("\n\n[... {omitted_chars} characters omitted from {original_chars} total ...]\n\n");
     let budgeted = format!("{head}{marker}{tail}");
     let budgeted_bytes = budgeted.len();
     BudgetedText {
@@ -319,10 +318,10 @@ mod tests {
         let size = output_size(&v);
         assert_eq!(size.chars, 7);
         assert_eq!(size.bytes, 11);
-        assert_eq!(OutputSize::of_text("abc"), OutputSize {
-            chars: 3,
-            bytes: 3
-        });
+        assert_eq!(
+            OutputSize::of_text("abc"),
+            OutputSize { chars: 3, bytes: 3 }
+        );
     }
 
     // ── 预算截断 ──
@@ -353,7 +352,9 @@ mod tests {
         // 头部按 0.4 占比保留 20 字符，尾部保留剩余 30 字符
         assert!(out.text.starts_with(&"a".repeat(20)));
         assert!(out.text.ends_with(&"a".repeat(30)));
-        assert!(out.text.contains("[... 150 characters omitted from 200 total ...]"));
+        assert!(out
+            .text
+            .contains("[... 150 characters omitted from 200 total ...]"));
         assert_eq!(out.bytes, out.text.len());
     }
 
@@ -433,7 +434,10 @@ mod tests {
         let out = summarize(&v, 50);
         assert!(out.truncated);
         assert_eq!(out.original_chars, 200);
-        assert!(out.value["text"].as_str().unwrap().contains("characters omitted"));
+        assert!(out.value["text"]
+            .as_str()
+            .unwrap()
+            .contains("characters omitted"));
         // artifacts 原样保留
         assert_eq!(out.value["artifacts"], v["artifacts"]);
         // 标记字段（对齐 TS contextBudget 形状）

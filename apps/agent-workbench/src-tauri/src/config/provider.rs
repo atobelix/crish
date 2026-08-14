@@ -23,7 +23,6 @@ use std::sync::Mutex;
 use conex_types::CoreError;
 use serde_json::Value;
 
-use crate::core_run_commands::CoreRunState;
 use super::credentials::{config_secret_set, CredentialPersistence, CredentialStore};
 use super::env_filter::{
     api_base_url_env_var_names, api_key_env_var_names, credential_mode_env_var_names,
@@ -40,6 +39,7 @@ use super::resolution::{
     DEFAULT_PROVIDER_STREAM,
 };
 use super::API_CONFIG_STORE;
+use crate::core_run_commands::CoreRunState;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ApiConfigStore {
@@ -123,8 +123,7 @@ impl ApiConfigStore {
                     .and_then(normalize_credential_mode)
             })
             .or_else(|| {
-                first_env_value(credential_mode_env_var_names())
-                    .and_then(normalize_credential_mode)
+                first_env_value(credential_mode_env_var_names()).and_then(normalize_credential_mode)
             })
             .unwrap_or_else(|| DEFAULT_CREDENTIAL_MODE.to_string())
     }
@@ -352,11 +351,9 @@ fn with_store<T>(operation: impl FnOnce(&ApiConfigStore) -> T) -> Result<T, Core
     {
         // 测试面：可重置静态（config/mod.rs 注释）——重置后按当前
         // CRISH_WORKBENCH_CONFIG_DIR 重新懒加载（命令级测试隔离用）。
-        let mut outer = API_CONFIG_STORE
-            .lock()
-            .map_err(|error| {
-                CoreError::Internal(format!("Failed to lock API config store: {error}"))
-            })?;
+        let mut outer = API_CONFIG_STORE.lock().map_err(|error| {
+            CoreError::Internal(format!("Failed to lock API config store: {error}"))
+        })?;
         let store = outer.get_or_insert_with(|| {
             ApiConfigStore::load(default_config_path(), default_secret_path())
         });
@@ -386,11 +383,9 @@ pub(crate) fn with_store_mut<T>(
     }
     #[cfg(test)]
     {
-        let mut outer = API_CONFIG_STORE
-            .lock()
-            .map_err(|error| {
-                CoreError::Internal(format!("Failed to lock API config store: {error}"))
-            })?;
+        let mut outer = API_CONFIG_STORE.lock().map_err(|error| {
+            CoreError::Internal(format!("Failed to lock API config store: {error}"))
+        })?;
         let store = outer.get_or_insert_with(|| {
             ApiConfigStore::load(default_config_path(), default_secret_path())
         });
@@ -543,9 +538,11 @@ pub(crate) fn config_profile_apply(
             normalize_config_value(key)
         }
         None => super::with_profile_secrets(|store| {
-            let path = super::persistence::profile_secret_path(&profile_id)
-                .map_err(core_err)?;
-            store.read(&path).map_err(core_err).map(|value| value.unwrap_or_default())
+            let path = super::persistence::profile_secret_path(&profile_id).map_err(core_err)?;
+            store
+                .read(&path)
+                .map_err(core_err)
+                .map(|value| value.unwrap_or_default())
         })?,
     };
 

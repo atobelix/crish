@@ -284,7 +284,12 @@ fn build_shell_command(cwd: &Path) -> CommandBuilder {
         cmd.env("PYTHONUTF8", "1");
         cmd.env("PYTHONIOENCODING", "utf-8");
         // Interactive-ish: login shell when using bash
-        if cmd.get_argv().first().map(|a| a.to_string_lossy().contains("bash")).unwrap_or(false) {
+        if cmd
+            .get_argv()
+            .first()
+            .map(|a| a.to_string_lossy().contains("bash"))
+            .unwrap_or(false)
+        {
             cmd.arg("-i");
         }
         cmd
@@ -514,9 +519,7 @@ pub(crate) fn write_session(pty_id: &str, data: &[u8]) -> Result<(), CoreError> 
     let reg = registry()
         .lock()
         .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
-    let session = reg
-        .get(pty_id)
-        .ok_or_else(|| not_found_error(pty_id))?;
+    let session = reg.get(pty_id).ok_or_else(|| not_found_error(pty_id))?;
     session.touch();
     let mut writer = session
         .writer
@@ -535,9 +538,7 @@ pub(crate) fn resize_session(pty_id: &str, cols: u16, rows: u16) -> Result<(), C
     let reg = registry()
         .lock()
         .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
-    let session = reg
-        .get(pty_id)
-        .ok_or_else(|| not_found_error(pty_id))?;
+    let session = reg.get(pty_id).ok_or_else(|| not_found_error(pty_id))?;
     session.touch();
     session
         .master
@@ -555,9 +556,7 @@ pub(crate) fn detach_session(pty_id: &str) -> Result<(), CoreError> {
     let reg = registry()
         .lock()
         .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
-    let session = reg
-        .get(pty_id)
-        .ok_or_else(|| not_found_error(pty_id))?;
+    let session = reg.get(pty_id).ok_or_else(|| not_found_error(pty_id))?;
     session.set_state(PtyLivenessState::Detached);
     tracing::debug!(target: "pty", pty_id, "pty session detached to background");
     Ok(())
@@ -568,9 +567,7 @@ pub(crate) fn attach_session(pty_id: &str) -> Result<(), CoreError> {
     let reg = registry()
         .lock()
         .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
-    let session = reg
-        .get(pty_id)
-        .ok_or_else(|| not_found_error(pty_id))?;
+    let session = reg.get(pty_id).ok_or_else(|| not_found_error(pty_id))?;
     session.set_state(PtyLivenessState::Active);
     session.touch();
     tracing::debug!(target: "pty", pty_id, "pty session attached to foreground");
@@ -582,9 +579,7 @@ pub(crate) fn touch_session(pty_id: &str) -> Result<(), CoreError> {
     let reg = registry()
         .lock()
         .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
-    let session = reg
-        .get(pty_id)
-        .ok_or_else(|| not_found_error(pty_id))?;
+    let session = reg.get(pty_id).ok_or_else(|| not_found_error(pty_id))?;
     session.touch();
     Ok(())
 }
@@ -595,9 +590,7 @@ pub(crate) fn get_session_state(pty_id: &str) -> Result<PtyLivenessState, CoreEr
     let reg = registry()
         .lock()
         .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
-    let session = reg
-        .get(pty_id)
-        .ok_or_else(|| not_found_error(pty_id))?;
+    let session = reg.get(pty_id).ok_or_else(|| not_found_error(pty_id))?;
     Ok(session.state())
 }
 
@@ -653,4 +646,3 @@ pub(crate) fn kill_all() {
         tracing::info!(target: "pty", count, "killed all pty sessions");
     }
 }
-

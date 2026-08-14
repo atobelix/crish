@@ -264,7 +264,10 @@ impl FrameSource for DesktopCaptureSource {
         if self.inner.status() != FrameSourceStatus::Active {
             return Err(FrameSourceError::NotActive);
         }
-        let frame = self.inner.capture_once().map_err(FrameSourceError::Failed)?;
+        let frame = self
+            .inner
+            .capture_once()
+            .map_err(FrameSourceError::Failed)?;
         self.inner.push_frame(&frame);
         Ok(frame)
     }
@@ -392,7 +395,8 @@ mod tests {
 
     #[test]
     fn lifecycle_start_stop_state_machine() {
-        let source = DesktopCaptureSource::new(Box::new(MockProducer::new(vec![frame(1, 100, 50)])));
+        let source =
+            DesktopCaptureSource::new(Box::new(MockProducer::new(vec![frame(1, 100, 50)])));
         assert_eq!(source.status(), FrameSourceStatus::Idle);
         block_on(source.start(event_driven_policy())).expect("启动失败");
         assert_eq!(source.status(), FrameSourceStatus::Active);
@@ -402,7 +406,8 @@ mod tests {
 
     #[test]
     fn duplicate_start_rejected() {
-        let source = DesktopCaptureSource::new(Box::new(MockProducer::new(vec![frame(1, 100, 50)])));
+        let source =
+            DesktopCaptureSource::new(Box::new(MockProducer::new(vec![frame(1, 100, 50)])));
         block_on(source.start(event_driven_policy())).expect("首次启动失败");
         assert!(matches!(
             block_on(source.start(event_driven_policy())),
@@ -419,7 +424,8 @@ mod tests {
 
     #[test]
     fn request_sync_frame_requires_active() {
-        let source = DesktopCaptureSource::new(Box::new(MockProducer::new(vec![frame(1, 100, 50)])));
+        let source =
+            DesktopCaptureSource::new(Box::new(MockProducer::new(vec![frame(1, 100, 50)])));
         assert!(matches!(
             block_on(source.request_sync_frame()),
             Err(FrameSourceError::NotActive)
@@ -428,9 +434,8 @@ mod tests {
 
     #[test]
     fn request_sync_frame_produces_png_frame() {
-        let source = DesktopCaptureSource::new(Box::new(MockProducer::new(vec![
-            frame(1, 1366, 768),
-        ])));
+        let source =
+            DesktopCaptureSource::new(Box::new(MockProducer::new(vec![frame(1, 1366, 768)])));
         block_on(source.start(event_driven_policy())).expect("启动失败");
         let f = block_on(source.request_sync_frame()).expect("回显失败");
         assert_eq!(f.seq, 1);

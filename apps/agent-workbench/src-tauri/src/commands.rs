@@ -80,7 +80,10 @@ mod tests {
     use crate::core_error::CoreError;
 
     /// 协议断言：错误必须按 CoreError `{kind, detail}` 形状序列化。
-    fn assert_core_error_kind<T: std::fmt::Debug>(result: Result<T, CoreError>, expected_kind: &str) {
+    fn assert_core_error_kind<T: std::fmt::Debug>(
+        result: Result<T, CoreError>,
+        expected_kind: &str,
+    ) {
         let err = result.expect_err("必须返回错误");
         let json = serde_json::to_value(&err).expect("错误必须可序列化");
         assert_eq!(
@@ -93,16 +96,26 @@ mod tests {
     /// T4.5-R4（红 → 绿）：非法 method（参数校验类）→ `CoreError::InvalidInput`。
     #[tokio::test]
     async fn http_request_rejects_unsupported_method_with_core_error() {
-        let result =
-            workbench_http_request("https://example.com/v1".to_string(), "DELETE".to_string(), None, None).await;
+        let result = workbench_http_request(
+            "https://example.com/v1".to_string(),
+            "DELETE".to_string(),
+            None,
+            None,
+        )
+        .await;
         assert_core_error_kind(result, "InvalidInput");
     }
 
     /// T4.5-R4（红 → 绿）：非 http(s) url（参数校验类）→ `CoreError::InvalidInput`。
     #[tokio::test]
     async fn http_request_rejects_non_http_url_with_core_error() {
-        let result =
-            workbench_http_request("file:///etc/passwd".to_string(), "GET".to_string(), None, None).await;
+        let result = workbench_http_request(
+            "file:///etc/passwd".to_string(),
+            "GET".to_string(),
+            None,
+            None,
+        )
+        .await;
         assert_core_error_kind(result, "InvalidInput");
     }
 

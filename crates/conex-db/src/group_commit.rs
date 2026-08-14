@@ -152,9 +152,7 @@ impl DbWriteHandle {
     {
         let (tx, rx) = oneshot::channel();
         let task = WriteTask {
-            op: Box::new(move |conn| {
-                f(conn).map(|r| Box::new(r) as Box<dyn Any + Send>)
-            }),
+            op: Box::new(move |conn| f(conn).map(|r| Box::new(r) as Box<dyn Any + Send>)),
             respond_to: tx,
         };
 
@@ -238,11 +236,7 @@ async fn run_actor_loop(
     }
 }
 
-fn process_batch(
-    conn: &mut rusqlite::Connection,
-    batch: &mut Vec<WriteTask>,
-    stats: &StatsInner,
-) {
+fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, stats: &StatsInner) {
     if batch.is_empty() {
         return;
     }

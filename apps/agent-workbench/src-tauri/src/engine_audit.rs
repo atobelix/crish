@@ -16,7 +16,6 @@ use conex_types::denied_stats::DeniedStats;
 use conex_types::events::{AgentEvent, SecurityAuditDecision};
 use crish_agent_workbench::wait_channel::{LocalDbWaitStore, MemoryWaitStore, WaitStore};
 
-
 /// 毒丸恢复计数（B1-5 观测化：RoutingAuditSink routes 锁中毒恢复次数；
 /// 对齐 registry.rs / note_memory.rs 「tracing::error! 成对 + 计数」样板，
 /// 零新依赖；本文件 4 处 routes 锁共用）
@@ -27,7 +26,6 @@ static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
 pub(crate) fn audit_poison_recovery_count() -> u64 {
     POISON_RECOVERIES.load(Ordering::Relaxed)
 }
-
 
 // ── 15-T-6（裁决 D9）：路由型审计 sink ────────────────────────────
 

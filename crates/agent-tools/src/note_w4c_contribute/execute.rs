@@ -53,10 +53,7 @@ impl ContributeViewRegistry {
         reject_write_handles(&contrib)?;
 
         let key = make_registration_key(&contrib.plugin_id, contrib.kind, &contrib.id);
-        let mut guard = self
-            .entries
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         if guard.contains_key(&key) {
             return Err(ContributeRegisterError::DuplicateId {
                 message: format!(
@@ -79,10 +76,7 @@ impl ContributeViewRegistry {
     ///
     /// **永不**返回写句柄；调用方不得据此 apply。
     pub fn list(&self, kind: Option<ContributeKind>) -> Vec<ViewDescriptor> {
-        let guard = self
-            .entries
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let guard = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let mut out: Vec<ViewDescriptor> = guard
             .values()
             .filter(|d| match kind {
@@ -91,29 +85,19 @@ impl ContributeViewRegistry {
             })
             .cloned()
             .collect();
-        out.sort_by(|a, b| {
-            a.plugin_id
-                .cmp(&b.plugin_id)
-                .then_with(|| a.id.cmp(&b.id))
-        });
+        out.sort_by(|a, b| a.plugin_id.cmp(&b.plugin_id).then_with(|| a.id.cmp(&b.id)));
         out
     }
 
     /// 按全局键注销；返回是否删到。
     pub fn unregister(&self, registration_key: &str) -> bool {
-        let mut guard = self
-            .entries
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         guard.remove(registration_key).is_some()
     }
 
     /// 按 plugin_id 批量注销；返回删除条数。
     pub fn unregister_by_plugin(&self, plugin_id: &str) -> usize {
-        let mut guard = self
-            .entries
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let keys: Vec<String> = guard
             .iter()
             .filter(|(_, d)| d.plugin_id == plugin_id)
@@ -128,10 +112,7 @@ impl ContributeViewRegistry {
 
     /// 当前条目数（测用）
     pub fn len(&self) -> usize {
-        self.entries
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .len()
+        self.entries.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     pub fn is_empty(&self) -> bool {

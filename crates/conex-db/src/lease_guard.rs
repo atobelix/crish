@@ -177,8 +177,7 @@ impl LocalDb {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
         })?;
-        is_blob_leased_conn(&conn, blob_hash)
-            .map_err(|e| self.latch_error("is_blob_leased", e))
+        is_blob_leased_conn(&conn, blob_hash).map_err(|e| self.latch_error("is_blob_leased", e))
     }
 
     /// 清理持久化表中所有已过期的租约记录，返回清理行数。

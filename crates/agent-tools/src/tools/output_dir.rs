@@ -55,10 +55,7 @@ pub fn sanitize_session_id(session_id: &str) -> String {
     session_id
         .chars()
         .filter(|c| {
-            !matches!(
-                c,
-                '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
-            ) && !c.is_control()
+            !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && !c.is_control()
         })
         .collect()
 }
@@ -344,7 +341,12 @@ impl std::fmt::Debug for OutputWorkspace {
 impl OutputWorkspace {
     /// 新建服务（默认时钟与本地时区偏移）
     pub fn new(workspace_root: PathBuf, store: Arc<dyn OutputDirStore>) -> Self {
-        Self::with_time(workspace_root, store, SystemTime::now, local_utc_offset_minutes)
+        Self::with_time(
+            workspace_root,
+            store,
+            SystemTime::now,
+            local_utc_offset_minutes,
+        )
     }
 
     /// 新建服务并注入固定时钟与固定偏移（单测确定性用）
@@ -395,7 +397,9 @@ impl OutputDirResolver for OutputWorkspace {
                     sanitize_session_id(session_id)
                 );
                 (
-                    self.workspace_root.join(DEFAULT_OUTPUTS_ROOT_NAME).join(name),
+                    self.workspace_root
+                        .join(DEFAULT_OUTPUTS_ROOT_NAME)
+                        .join(name),
                     false,
                 )
             }
@@ -471,7 +475,11 @@ impl Tool for ResolveOutputDirTool {
         &self.def
     }
 
-    async fn execute(&self, ctx: &ToolContext, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         // 产出目录服务未接线 → 结构化不可用错误（对齐 set_timer /
         // wait_subagents 未接线模式，引擎集成前零副作用）
         let Some(resolver) = &ctx.output_dir else {
@@ -622,14 +630,14 @@ mod tests {
     /// 日期前缀：跨日边界（本地时区下零点偏移导致日期漂移的确定性断言）
     #[test]
     fn format_date_prefix_crosses_midnight() {
-        let late = SystemTime::UNIX_EPOCH
-            + Duration::from_secs((FIXED_EPOCH_2026_08_05 + 84_600) as u64);
+        let late =
+            SystemTime::UNIX_EPOCH + Duration::from_secs((FIXED_EPOCH_2026_08_05 + 84_600) as u64);
         assert_eq!(format_date_prefix(late, 0), "2026-08-05");
         // 23:30 UTC + 1 小时偏移 → 本地次日
         assert_eq!(format_date_prefix(late, 60), "2026-08-06");
         // 00:30 UTC - 1 小时偏移 → 本地前一日
-        let early = SystemTime::UNIX_EPOCH
-            + Duration::from_secs((FIXED_EPOCH_2026_08_05 + 1_800) as u64);
+        let early =
+            SystemTime::UNIX_EPOCH + Duration::from_secs((FIXED_EPOCH_2026_08_05 + 1_800) as u64);
         assert_eq!(format_date_prefix(early, -60), "2026-08-04");
     }
 
@@ -643,7 +651,10 @@ mod tests {
         let controls = "a\x00b\x01c\x1fd\x7fe";
         assert_eq!(sanitize_session_id(controls), "abcde");
         // 合法字符（含中文与连字符）保留
-        assert_eq!(sanitize_session_id("会话-2026-08-04-9f2a"), "会话-2026-08-04-9f2a");
+        assert_eq!(
+            sanitize_session_id("会话-2026-08-04-9f2a"),
+            "会话-2026-08-04-9f2a"
+        );
         // 空串保持空（退化场景由调用方处理）
         assert_eq!(sanitize_session_id(""), "");
     }
@@ -673,14 +684,19 @@ mod tests {
         assert_eq!(name, "2026-08-05-sess-1withbadchars");
         assert_eq!(
             result.dir.dir,
-            ws.path().join(".agent-outputs").join("2026-08-05-sess-1withbadchars")
+            ws.path()
+                .join(".agent-outputs")
+                .join("2026-08-05-sess-1withbadchars")
         );
         // 产出根 = <workspace_root>/.agent-outputs
         assert_eq!(result.dir.root, ws.path().join(".agent-outputs"));
         // 惰性：不建目录
         assert!(!result.dir_created);
         assert!(!result.dir.dir.exists(), "惰性：resolve 后目录不得存在");
-        assert!(!ws.path().join(".agent-outputs").exists(), "惰性：产出根不得被创建");
+        assert!(
+            !ws.path().join(".agent-outputs").exists(),
+            "惰性：产出根不得被创建"
+        );
     }
 
     // ===== session_meta 往返（conex-db dev-dependency） =====
@@ -771,7 +787,10 @@ mod tests {
         let again = svc.resolve("sess-1", None);
         assert!(!again.first_resolve);
         assert_eq!(again.dir.dir, explicit, "用户指定路径必须默认沿用");
-        assert!(again.dir.user_specified, "user_specified 必须随持久化值恢复");
+        assert!(
+            again.dir.user_specified,
+            "user_specified 必须随持久化值恢复"
+        );
 
         // 未指定会话（sess-2）不受影响：走默认生成
         let other = svc.resolve("sess-2", None);
@@ -866,7 +885,10 @@ mod tests {
         assert_eq!(out["dirCreated"], false);
         let text = out["text"].as_str().expect("text 必须存在");
         assert!(text.contains("首次写入时自动创建"), "必须说明惰性创建语义");
-        assert!(!ws.path().join(".agent-outputs").exists(), "工具调用不得创建目录");
+        assert!(
+            !ws.path().join(".agent-outputs").exists(),
+            "工具调用不得创建目录"
+        );
     }
 
     /// 显式 folder：解析返回指定路径且落 meta（后续默认沿用）；
@@ -882,7 +904,10 @@ mod tests {
         // 工作区内（尚不存在）的目录：直接返回（惰性不创建）
         let folder = ws.path().join("docs/reports");
         let out = tool
-            .execute(&ctx, serde_json::json!({ "folder": folder.to_string_lossy() }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "folder": folder.to_string_lossy() }),
+            )
             .await
             .expect("工作区内 folder 应放行");
         assert_eq!(out["userSpecified"], true);
@@ -945,7 +970,10 @@ mod tests {
             .execute(&ctx, serde_json::json!({}))
             .await
             .expect("只读子代理默认调用应成功");
-        assert_eq!(plain["path"], out["path"], "只读子代理路径与主 agent 规划一致");
+        assert_eq!(
+            plain["path"], out["path"],
+            "只读子代理路径与主 agent 规划一致"
+        );
     }
 
     /// 非法字符净化：工具级调用携带含非法字符的 session_id → 目录名净化、
@@ -970,7 +998,11 @@ mod tests {
             .expect("净化后的解析应成功");
         assert_eq!(out["path"], ".agent-outputs/2026-08-05-s1234/");
         // 键仍按原始 session_id 编码（幂等稳定）
-        let key = crate::explore_quota::session_meta_key_of("s/1\\2:3*4", SESSION_META_KEY_OUTPUT_DIR);
-        assert!(db.get_session_meta(&key).expect("读 meta").is_some(), "meta 键必须用原始标识");
+        let key =
+            crate::explore_quota::session_meta_key_of("s/1\\2:3*4", SESSION_META_KEY_OUTPUT_DIR);
+        assert!(
+            db.get_session_meta(&key).expect("读 meta").is_some(),
+            "meta 键必须用原始标识"
+        );
     }
 }

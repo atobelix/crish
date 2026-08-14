@@ -29,9 +29,12 @@ fn append_and_query_events() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "Session").unwrap();
 
-    db.append_event("s1", 1, "user-message", r#"{"text":"hello"}"#, None).unwrap();
-    db.append_event("s1", 2, "assistant-message", r#"{"text":"hi"}"#, None).unwrap();
-    db.append_event("s1", 3, "tool-call", r#"{"name":"search"}"#, None).unwrap();
+    db.append_event("s1", 1, "user-message", r#"{"text":"hello"}"#, None)
+        .unwrap();
+    db.append_event("s1", 2, "assistant-message", r#"{"text":"hi"}"#, None)
+        .unwrap();
+    db.append_event("s1", 3, "tool-call", r#"{"name":"search"}"#, None)
+        .unwrap();
 
     // Query all events (无限制)
     let events = db.query_events("s1", 0, None).unwrap();
@@ -76,8 +79,10 @@ fn append_event_run_id_roundtrip() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "Session").unwrap();
 
-    db.append_event("s1", 1, "agent-start", "{}", Some("run-1")).unwrap();
-    db.append_event("s1", 2, "agent-end", "{}", Some("run-1")).unwrap();
+    db.append_event("s1", 1, "agent-start", "{}", Some("run-1"))
+        .unwrap();
+    db.append_event("s1", 2, "agent-end", "{}", Some("run-1"))
+        .unwrap();
     db.append_event("s1", 3, "idle", "{}", None).unwrap();
 
     let events = db.query_events("s1", 0, None).unwrap();
@@ -93,10 +98,14 @@ fn query_events_by_run_filters_own_run_and_after_open_interval() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "Session").unwrap();
 
-    db.append_event("s1", 1, "agent-start", "{}", Some("run-a")).unwrap();
-    db.append_event("s1", 2, "agent-start", "{}", Some("run-b")).unwrap();
-    db.append_event("s1", 3, "agent-end", "{}", Some("run-a")).unwrap();
-    db.append_event("s1", 4, "agent-end", "{}", Some("run-b")).unwrap();
+    db.append_event("s1", 1, "agent-start", "{}", Some("run-a"))
+        .unwrap();
+    db.append_event("s1", 2, "agent-start", "{}", Some("run-b"))
+        .unwrap();
+    db.append_event("s1", 3, "agent-end", "{}", Some("run-a"))
+        .unwrap();
+    db.append_event("s1", 4, "agent-end", "{}", Some("run-b"))
+        .unwrap();
 
     let a = db.query_events_by_run("s1", "run-a", 0, None).unwrap();
     assert_eq!(a.len(), 2, "交错 run 只返本 run");
@@ -122,7 +131,8 @@ fn query_events_by_run_limit_effective() {
     db.insert_session("s1", "Session").unwrap();
 
     for i in 1..=5 {
-        db.append_event("s1", i, "event", "{}", Some("run-x")).unwrap();
+        db.append_event("s1", i, "event", "{}", Some("run-x"))
+            .unwrap();
     }
 
     let limited = db.query_events_by_run("s1", "run-x", 0, Some(3)).unwrap();
@@ -142,19 +152,27 @@ fn query_events_by_run_empty_and_null_run_id_not_matched() {
 
     // 仅会话域事件（run_id = NULL）与另一个 run 的事件
     db.append_event("s1", 1, "idle", "{}", None).unwrap();
-    db.append_event("s1", 2, "agent-start", "{}", Some("other-run")).unwrap();
+    db.append_event("s1", 2, "agent-start", "{}", Some("other-run"))
+        .unwrap();
 
     assert!(
-        db.query_events_by_run("s1", "no-such-run", 0, None).unwrap().is_empty(),
+        db.query_events_by_run("s1", "no-such-run", 0, None)
+            .unwrap()
+            .is_empty(),
         "不存在的 run → 空结果"
     );
     assert!(
-        db.query_events_by_run("s1", "no-such-run", 0, Some(10)).unwrap().is_empty(),
+        db.query_events_by_run("s1", "no-such-run", 0, Some(10))
+            .unwrap()
+            .is_empty(),
         "带 limit 的未命中同样为空"
     );
     // run_id NULL 行不命中任何 by_run（SQL NULL 比较语义）
     assert!(
-        db.query_events_by_run("s1", "other-run", 0, None).unwrap().iter().all(|e| e.sequence != 1),
+        db.query_events_by_run("s1", "other-run", 0, None)
+            .unwrap()
+            .iter()
+            .all(|e| e.sequence != 1),
         "NULL run_id 行不命中 by_run"
     );
     // 但按会话查询命中（含 NULL 行）
@@ -169,12 +187,17 @@ fn query_events_by_run_empty_and_null_run_id_not_matched() {
 fn append_event_created_at_millisecond_precision() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "Session").unwrap();
-    db.append_event("s1", 1, "agent-start", "{}", Some("run-1")).unwrap();
+    db.append_event("s1", 1, "agent-start", "{}", Some("run-1"))
+        .unwrap();
 
     let events = db.query_events("s1", 0, None).unwrap();
     assert_eq!(events.len(), 1);
     let created_at = &events[0].created_at;
-    assert_eq!(created_at.len(), 23, "created_at 应为 YYYY-MM-DD HH:MM:SS.SSS，实际: {created_at}");
+    assert_eq!(
+        created_at.len(),
+        23,
+        "created_at 应为 YYYY-MM-DD HH:MM:SS.SSS，实际: {created_at}"
+    );
     let bytes = created_at.as_bytes();
     assert_eq!(bytes[4], b'-');
     assert_eq!(bytes[7], b'-');
@@ -182,8 +205,14 @@ fn append_event_created_at_millisecond_precision() {
     assert_eq!(bytes[13], b':');
     assert_eq!(bytes[16], b':');
     assert_eq!(bytes[19], b'.');
-    assert!(created_at[..4].chars().all(|c| c.is_ascii_digit()), "年份为数字: {created_at}");
-    assert!(created_at[20..].chars().all(|c| c.is_ascii_digit()), "毫秒为三位数字: {created_at}");
+    assert!(
+        created_at[..4].chars().all(|c| c.is_ascii_digit()),
+        "年份为数字: {created_at}"
+    );
+    assert!(
+        created_at[20..].chars().all(|c| c.is_ascii_digit()),
+        "毫秒为三位数字: {created_at}"
+    );
 }
 
 #[test]
@@ -281,7 +310,10 @@ fn upsert_does_not_cascade_delete_messages() {
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
     db.save_session_body(
         "s1",
-        &[sample_message("m1", "user", 1), sample_message("m2", "assistant", 2)],
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+        ],
     )
     .unwrap();
 
@@ -318,11 +350,15 @@ fn save_and_load_session_body() {
 fn save_session_body_replaces() {
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
-    db.save_session_body("s1", &[sample_message("m1", "user", 1)]).unwrap();
+    db.save_session_body("s1", &[sample_message("m1", "user", 1)])
+        .unwrap();
     // 再次保存覆盖
     db.save_session_body(
         "s1",
-        &[sample_message("m2", "user", 2), sample_message("m3", "assistant", 3)],
+        &[
+            sample_message("m2", "user", 2),
+            sample_message("m3", "assistant", 3),
+        ],
     )
     .unwrap();
 
@@ -335,11 +371,15 @@ fn save_session_body_replaces() {
 fn append_session_messages_increments_seq() {
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
-    db.save_session_body("s1", &[sample_message("m1", "user", 1)]).unwrap();
+    db.save_session_body("s1", &[sample_message("m1", "user", 1)])
+        .unwrap();
 
     db.append_session_messages(
         "s1",
-        &[sample_message("m2", "assistant", 2), sample_message("m3", "user", 3)],
+        &[
+            sample_message("m2", "assistant", 2),
+            sample_message("m3", "user", 3),
+        ],
     )
     .unwrap();
 
@@ -354,19 +394,24 @@ fn trigger_maintains_message_count() {
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
     db.save_session_body(
         "s1",
-        &[sample_message("m1", "user", 1), sample_message("m2", "assistant", 2)],
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+        ],
     )
     .unwrap();
 
     let list = db.list_sessions().unwrap();
     assert_eq!(list[0].message_count, 2);
 
-    db.append_session_messages("s1", &[sample_message("m3", "user", 3)]).unwrap();
+    db.append_session_messages("s1", &[sample_message("m3", "user", 3)])
+        .unwrap();
     let list2 = db.list_sessions().unwrap();
     assert_eq!(list2[0].message_count, 3);
 
     // save_session_body 替换为 1 条：先 delete(-2) 再 insert(+1) = -1
-    db.save_session_body("s1", &[sample_message("m-only", "user", 10)]).unwrap();
+    db.save_session_body("s1", &[sample_message("m-only", "user", 10)])
+        .unwrap();
     let list3 = db.list_sessions().unwrap();
     assert_eq!(list3[0].message_count, 1);
 }
@@ -375,7 +420,8 @@ fn trigger_maintains_message_count() {
 fn delete_session_cascades() {
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
-    db.save_session_body("s1", &[sample_message("m1", "user", 1)]).unwrap();
+    db.save_session_body("s1", &[sample_message("m1", "user", 1)])
+        .unwrap();
     db.save_session_agents(
         "s1",
         &[SessionAgent {
@@ -490,11 +536,17 @@ fn session_meta_roundtrip() {
     assert!(db.get_session_meta("missing").unwrap().is_none());
 
     db.set_session_meta("schema_version", "2").unwrap();
-    assert_eq!(db.get_session_meta("schema_version").unwrap().as_deref(), Some("2"));
+    assert_eq!(
+        db.get_session_meta("schema_version").unwrap().as_deref(),
+        Some("2")
+    );
 
     // 再次 set 应 upsert
     db.set_session_meta("schema_version", "3").unwrap();
-    assert_eq!(db.get_session_meta("schema_version").unwrap().as_deref(), Some("3"));
+    assert_eq!(
+        db.get_session_meta("schema_version").unwrap().as_deref(),
+        Some("3")
+    );
 }
 
 #[test]

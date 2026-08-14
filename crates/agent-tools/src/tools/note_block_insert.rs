@@ -174,7 +174,14 @@ mod tests {
         assert!(required.iter().any(|v| v.as_str() == Some("doc_id")));
         assert!(required.iter().any(|v| v.as_str() == Some("content")));
         let props = schema["properties"].as_object().unwrap();
-        for key in ["doc_id", "content", "parent_id", "previous_id", "kind", "batch_id"] {
+        for key in [
+            "doc_id",
+            "content",
+            "parent_id",
+            "previous_id",
+            "kind",
+            "batch_id",
+        ] {
             assert!(props.contains_key(key), "missing {key}");
         }
         assert_eq!(schema["additionalProperties"], false);
@@ -185,10 +192,7 @@ mod tests {
         let tool = BlockInsertTool::new();
         let ctx = create_mock_tool_context();
         let out = tool
-            .execute(
-                &ctx,
-                serde_json::json!({ "doc_id": "d", "content": "x" }),
-            )
+            .execute(&ctx, serde_json::json!({ "doc_id": "d", "content": "x" }))
             .await
             .unwrap();
         assert_eq!(out["ok"], false);

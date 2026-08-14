@@ -204,8 +204,7 @@ impl Tool for SendMessageTool {
                     .map_err(|message| {
                         // 目标不可达 → 结构化失败（不静默、不 panic）；码映射：
                         // 「不可达/不存在」→ subagent.not_found，其余执行失败兜底
-                        let code = if message.contains("不可达")
-                            || message.contains("不存在")
+                        let code = if message.contains("不可达") || message.contains("不存在")
                         {
                             codes::SUBAGENT_NOT_FOUND
                         } else {
@@ -258,7 +257,8 @@ mod tests {
 
     impl std::fmt::Debug for RecordingInjectChannel {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("RecordingInjectChannel").finish_non_exhaustive()
+            f.debug_struct("RecordingInjectChannel")
+                .finish_non_exhaustive()
         }
     }
 
@@ -305,7 +305,8 @@ mod tests {
 
     impl std::fmt::Debug for RecordingSelfChannel {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("RecordingSelfChannel").finish_non_exhaustive()
+            f.debug_struct("RecordingSelfChannel")
+                .finish_non_exhaustive()
         }
     }
 
@@ -344,13 +345,19 @@ mod tests {
             if self.fail {
                 Err("消息留档失败：disk full".to_string())
             } else {
-                Ok(format!("main-agent-msg-{}", self.calls.lock().unwrap().len()))
+                Ok(format!(
+                    "main-agent-msg-{}",
+                    self.calls.lock().unwrap().len()
+                ))
             }
         }
     }
 
     fn wired_tool() -> SendMessageTool {
-        SendMessageTool::with_channels(Some(RecordingInjectChannel::ok()), Some(RecordingSelfChannel::ok()))
+        SendMessageTool::with_channels(
+            Some(RecordingInjectChannel::ok()),
+            Some(RecordingSelfChannel::ok()),
+        )
     }
 
     /// target 缺失 / 非法 → invalid_input
@@ -364,7 +371,10 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.code(), codes::TOOL_INVALID_INPUT);
         let err = tool
-            .execute(&ctx, serde_json::json!({ "target": "both", "message": "hi" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "target": "both", "message": "hi" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), codes::TOOL_INVALID_INPUT);
@@ -418,12 +428,18 @@ mod tests {
         let tool = SendMessageTool::new();
         let ctx = create_mock_tool_context();
         let err = tool
-            .execute(&ctx, serde_json::json!({ "target": "subagent", "subagentId": "s1", "message": "hi" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "target": "subagent", "subagentId": "s1", "message": "hi" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), codes::COMMON_UNSUPPORTED);
         let err = tool
-            .execute(&ctx, serde_json::json!({ "target": "self", "message": "hi" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "target": "self", "message": "hi" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), codes::COMMON_UNSUPPORTED);
@@ -433,7 +449,8 @@ mod tests {
     #[tokio::test]
     async fn subagent_target_injects_via_channel() {
         let channel = RecordingInjectChannel::ok();
-        let tool = SendMessageTool::with_channels(Some(channel.clone()), Some(RecordingSelfChannel::ok()));
+        let tool =
+            SendMessageTool::with_channels(Some(channel.clone()), Some(RecordingSelfChannel::ok()));
         let ctx = create_mock_tool_context();
         let out = tool
             .execute(
@@ -444,7 +461,10 @@ mod tests {
             .unwrap();
         assert_eq!(out["target"], "subagent");
         assert_eq!(out["delivered"], true);
-        assert_eq!(out["ring"], "steer", "target=subagent 恒 steer（L1 注入语义）");
+        assert_eq!(
+            out["ring"], "steer",
+            "target=subagent 恒 steer（L1 注入语义）"
+        );
         let calls = channel.calls();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "sub-7");
@@ -471,16 +491,25 @@ mod tests {
     #[tokio::test]
     async fn self_target_delivers_with_default_follow_up() {
         let channel = RecordingSelfChannel::ok();
-        let tool = SendMessageTool::with_channels(Some(RecordingInjectChannel::ok()), Some(channel.clone()));
+        let tool = SendMessageTool::with_channels(
+            Some(RecordingInjectChannel::ok()),
+            Some(channel.clone()),
+        );
         let ctx = create_mock_tool_context();
         let out = tool
-            .execute(&ctx, serde_json::json!({ "target": "self", "message": "记住：明天继续调研 X" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "target": "self", "message": "记住：明天继续调研 X" }),
+            )
             .await
             .unwrap();
         assert_eq!(out["target"], "self");
         assert_eq!(out["delivered"], true);
         assert_eq!(out["ring"], "follow_up", "缺省 follow_up（不打断当前 run）");
-        assert!(out["messageId"].as_str().unwrap().starts_with("main-agent-msg-"));
+        assert!(out["messageId"]
+            .as_str()
+            .unwrap()
+            .starts_with("main-agent-msg-"));
         let calls = channel.calls();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "mock-session", "会话 id 取自执行上下文");
@@ -492,7 +521,10 @@ mod tests {
     #[tokio::test]
     async fn self_target_steer_ring_respected() {
         let channel = RecordingSelfChannel::ok();
-        let tool = SendMessageTool::with_channels(Some(RecordingInjectChannel::ok()), Some(channel.clone()));
+        let tool = SendMessageTool::with_channels(
+            Some(RecordingInjectChannel::ok()),
+            Some(channel.clone()),
+        );
         let ctx = create_mock_tool_context();
         let out = tool
             .execute(
@@ -510,10 +542,14 @@ mod tests {
     #[tokio::test]
     async fn self_target_failure_maps_to_execution_failed() {
         let channel = RecordingSelfChannel::failing();
-        let tool = SendMessageTool::with_channels(Some(RecordingInjectChannel::ok()), Some(channel));
+        let tool =
+            SendMessageTool::with_channels(Some(RecordingInjectChannel::ok()), Some(channel));
         let ctx = create_mock_tool_context();
         let err = tool
-            .execute(&ctx, serde_json::json!({ "target": "self", "message": "x" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "target": "self", "message": "x" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), codes::TOOL_EXECUTION_FAILED);

@@ -76,9 +76,7 @@ pub(crate) fn read_chunk(path: &Path, offset: u64, size: usize) -> Result<FileCh
         // - 文件句柄在 mmap 生命周期内保持有效
         // - 经 offset+read_size 访问的映射区间在文件边界内
         // 成功后 mmap 提供文件内容的只读视图。
-        let mmap = unsafe {
-            Mmap::map(&file).map_err(|e| format!("Failed to mmap file: {e}"))?
-        };
+        let mmap = unsafe { Mmap::map(&file).map_err(|e| format!("Failed to mmap file: {e}"))? };
         let end = (offset as usize + read_size).min(mmap.len());
         data.copy_from_slice(&mmap[offset as usize..end]);
     } else {
@@ -101,7 +99,8 @@ pub(crate) fn read_chunk(path: &Path, offset: u64, size: usize) -> Result<FileCh
 // 测试专用：同 FileChunk。
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn file_info(path: &Path) -> Result<FileInfo, String> {
-    let sym_meta = std::fs::symlink_metadata(path).map_err(|e| format!("Failed to stat file: {e}"))?;
+    let sym_meta =
+        std::fs::symlink_metadata(path).map_err(|e| format!("Failed to stat file: {e}"))?;
     let is_symlink = sym_meta.is_symlink();
     let meta = if is_symlink {
         std::fs::metadata(path).map_err(|e| format!("Failed to stat symlink target: {e}"))?
@@ -132,7 +131,11 @@ pub(crate) fn file_info(path: &Path) -> Result<FileInfo, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{env, fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        env, fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn temp_dir() -> PathBuf {
         let nanos = SystemTime::now()

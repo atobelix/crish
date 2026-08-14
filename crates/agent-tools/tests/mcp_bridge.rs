@@ -55,7 +55,12 @@ async fn start_handshake_and_list_tools() {
     let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
     assert_eq!(
         names,
-        ["mcp_fake__echo", "mcp_fake__add", "mcp_fake__boom", "mcp_fake__env"]
+        [
+            "mcp_fake__echo",
+            "mcp_fake__add",
+            "mcp_fake__boom",
+            "mcp_fake__env"
+        ]
     );
     assert_eq!(bridge.state("fake"), McpServerRuntimeState::Ready);
     assert!(bridge.is_running("fake"));
@@ -75,7 +80,10 @@ async fn start_is_idempotent_when_ready() {
     assert_eq!(first, second);
     // 仍可正常调用（同一会话）
     let adapter = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let out = adapter.execute(&tool_ctx(), json!({ "msg": "重复" })).await.unwrap();
+    let out = adapter
+        .execute(&tool_ctx(), json!({ "msg": "重复" }))
+        .await
+        .unwrap();
     assert!(out["text"].as_str().unwrap().contains("重复"));
     bridge.stop("fake").await.unwrap();
 }
@@ -87,12 +95,18 @@ async fn execute_echo_and_add_roundtrip() {
 
     // echo：text 段拼接
     let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let out = echo.execute(&tool_ctx(), json!({ "msg": "你好，MCP" })).await.unwrap();
+    let out = echo
+        .execute(&tool_ctx(), json!({ "msg": "你好，MCP" }))
+        .await
+        .unwrap();
     assert!(out["text"].as_str().unwrap().contains("你好，MCP"));
 
     // add：structuredContent 进 json 字段，text 兜底
     let add = bridge.get_adapter("fake", "mcp_fake__add").unwrap();
-    let out = add.execute(&tool_ctx(), json!({ "a": 1, "b": 2 })).await.unwrap();
+    let out = add
+        .execute(&tool_ctx(), json!({ "a": 1, "b": 2 }))
+        .await
+        .unwrap();
     assert_eq!(out["json"]["sum"].as_f64(), Some(3.0));
     assert_eq!(out["text"], "3");
 
@@ -152,7 +166,10 @@ async fn stop_then_restart_works() {
     let defs = bridge.start(&config).await.unwrap();
     assert!(!defs.is_empty());
     let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let out = echo.execute(&tool_ctx(), json!({ "msg": "重启后" })).await.unwrap();
+    let out = echo
+        .execute(&tool_ctx(), json!({ "msg": "重启后" }))
+        .await
+        .unwrap();
     assert!(out["text"].as_str().unwrap().contains("重启后"));
     bridge.stop("fake").await.unwrap();
 }
@@ -177,12 +194,19 @@ async fn crash_detection_marks_exited_and_fails_calls() {
         Duration::from_secs(5),
     )
     .await;
-    assert!(exited, "崩溃后状态应为 Exited，实际 {:?}", bridge.state("fake"));
+    assert!(
+        exited,
+        "崩溃后状态应为 Exited，实际 {:?}",
+        bridge.state("fake")
+    );
     assert!(!bridge.is_running("fake"));
 
     // 崩溃后的调用报 connection_failed 且带退出原因
     let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let err = echo.execute(&tool_ctx(), json!({ "msg": "x" })).await.unwrap_err();
+    let err = echo
+        .execute(&tool_ctx(), json!({ "msg": "x" }))
+        .await
+        .unwrap_err();
     assert_eq!(err.code(), "mcp.connection_failed");
     assert!(err.to_string().contains("不可用"));
 
@@ -197,7 +221,10 @@ async fn call_timeout_applies() {
     let config = fake_server_config(&[("FAKE_MCP_SLOW_MS", "1500")]);
     bridge.start(&config).await.unwrap();
     let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let err = echo.execute(&tool_ctx(), json!({ "msg": "慢" })).await.unwrap_err();
+    let err = echo
+        .execute(&tool_ctx(), json!({ "msg": "慢" }))
+        .await
+        .unwrap_err();
     assert_eq!(err.code(), "runtime.timeout");
     assert!(err.to_string().contains("tools/call"));
     bridge.stop("fake").await.unwrap();
@@ -237,7 +264,12 @@ async fn register_plugin_server_merges_tools_into_registry() {
     let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
     assert_eq!(
         names,
-        ["mcp_fake__echo", "mcp_fake__add", "mcp_fake__boom", "mcp_fake__env"]
+        [
+            "mcp_fake__echo",
+            "mcp_fake__add",
+            "mcp_fake__boom",
+            "mcp_fake__env"
+        ]
     );
     // 工具可见（list_definitions 消费面；输出按 name 升序）
     let mut listed: Vec<String> = registry
@@ -248,14 +280,23 @@ async fn register_plugin_server_merges_tools_into_registry() {
     let mut expected = names.clone();
     listed.sort();
     expected.sort();
-    assert_eq!(listed, expected, "并入后 list_definitions 应可见全部 MCP 工具");
+    assert_eq!(
+        listed, expected,
+        "并入后 list_definitions 应可见全部 MCP 工具"
+    );
     // 注册表执行往返（适配器生效）
     let echo = registry.get("mcp_fake__echo").unwrap();
-    let out = echo.execute(&tool_ctx(), json!({ "msg": "插件注册" })).await.unwrap();
+    let out = echo
+        .execute(&tool_ctx(), json!({ "msg": "插件注册" }))
+        .await
+        .unwrap();
     assert!(out["text"].as_str().unwrap().contains("插件注册"));
     // 生命周期：stop 后注册表工具仍在（适配器调用报不可用）
     bridge.stop("fake").await.unwrap();
-    let err = echo.execute(&tool_ctx(), json!({ "msg": "x" })).await.unwrap_err();
+    let err = echo
+        .execute(&tool_ctx(), json!({ "msg": "x" }))
+        .await
+        .unwrap_err();
     assert_eq!(err.code(), "mcp.connection_failed");
 }
 

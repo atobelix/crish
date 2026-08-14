@@ -2,9 +2,7 @@
 //!
 //! 将后端结果与错误映射为工具面形状；**≠ EL-05**。
 
-use crate::note_types::{
-    NoteApplyMdResult, NoteBackendError, NoteBlockBatchResult,
-};
+use crate::note_types::{NoteApplyMdResult, NoteBackendError, NoteBlockBatchResult};
 use serde_json::Value as JsonValue;
 
 /// 将后端错误映射为工具执行失败（写工具）；读工具更常返回 ok=false

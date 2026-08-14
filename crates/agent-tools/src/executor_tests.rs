@@ -136,21 +136,32 @@ async fn idempotent_second_call_is_deduplicated() {
     let policy = ToolExecutionPolicy::default();
     let args = json!({ "path": "a.txt" });
 
-    let first = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
+    let first = execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
     assert!(!first.deduplicated);
     assert_eq!(tool.call_count(), 1);
 
-    let second = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
+    let second =
+        execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
+            .await
+            .unwrap();
     assert!(second.deduplicated);
     // 未真正执行
     assert_eq!(tool.call_count(), 1);
     // 输出带 deduplicated 标记与键
     assert_eq!(second.output["json"]["deduplicated"], true);
-    assert!(second.output["json"]["key"].as_str().unwrap().starts_with("counter:"));
+    assert!(second.output["json"]["key"]
+        .as_str()
+        .unwrap()
+        .starts_with("counter:"));
     assert!(second.text.contains("skipped re-execution"));
 }
 
@@ -160,13 +171,26 @@ async fn idempotent_different_args_execute_normally() {
     let guard = ToolIdempotencyGuard::new();
     let policy = ToolExecutionPolicy::default();
 
-    execute_with_output_policy(&tool, json!({ "path": "a.txt" }), &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
-    let second =
-        execute_with_output_policy(&tool, json!({ "path": "b.txt" }), &tool_ctx(), &ctx(), Some(&guard), &policy)
-            .await
-            .unwrap();
+    execute_with_output_policy(
+        &tool,
+        json!({ "path": "a.txt" }),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
+    let second = execute_with_output_policy(
+        &tool,
+        json!({ "path": "b.txt" }),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
     assert!(!second.deduplicated);
     assert_eq!(tool.call_count(), 2);
 }
@@ -178,12 +202,26 @@ async fn clear_reenables_execution() {
     let policy = ToolExecutionPolicy::default();
     let args = json!({ "path": "a.txt" });
 
-    execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
-    let second = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
+    execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
+    let second = execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
     assert!(second.deduplicated);
 
     guard.clear("run-1:sess-1");
@@ -212,11 +250,17 @@ async fn budget_truncation_applies_and_preserves_artifacts() {
     .unwrap();
     assert!(result.truncated);
     assert!(!result.deduplicated);
-    assert!(result.output["text"].as_str().unwrap().contains("characters omitted"));
+    assert!(result.output["text"]
+        .as_str()
+        .unwrap()
+        .contains("characters omitted"));
     // 标记字段生效
     assert_eq!(result.output["json"]["contextBudget"]["truncated"], true);
     // artifacts 原样保留
-    assert_eq!(result.output["artifacts"], json!([{ "kind": "file", "title": "big" }]));
+    assert_eq!(
+        result.output["artifacts"],
+        json!([{ "kind": "file", "title": "big" }])
+    );
 }
 
 #[tokio::test]
@@ -249,13 +293,21 @@ async fn deduplicated_result_not_affected_by_budget() {
     };
     let args = json!({ "path": "a.txt" });
 
-    let first = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
+    let first = execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
     assert!(first.truncated);
-    let second = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
+    let second =
+        execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
+            .await
+            .unwrap();
     assert!(second.deduplicated);
     assert!(!second.truncated);
     assert_eq!(tool.call_count(), 1);
@@ -268,9 +320,16 @@ async fn failed_execution_returns_error_and_is_not_recorded() {
     let policy = ToolExecutionPolicy::default();
     let args = json!({ "path": "a.txt" });
 
-    let err = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap_err();
+    let err = execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap_err();
     assert!(err.to_string().contains("模拟失败"));
 
     // 失败不记录：再次执行仍走执行路径（重新抛错，而非返回 deduplicated）
@@ -290,12 +349,20 @@ async fn idempotency_disabled_ignores_guard() {
     };
     let args = json!({ "path": "a.txt" });
 
-    execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
-    let second = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
+    execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
+    let second =
+        execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
+            .await
+            .unwrap();
     assert!(!second.deduplicated);
     assert_eq!(tool.call_count(), 2);
 }
@@ -306,10 +373,7 @@ async fn idempotency_disabled_ignores_guard() {
 #[tokio::test]
 async fn path_existence_marker_splits_keys_on_state_flip() {
     let tool = CountingTool::new();
-    let root = std::env::temp_dir().join(format!(
-        "agent_tools_idem_probe_{}",
-        std::process::id()
-    ));
+    let root = std::env::temp_dir().join(format!("agent_tools_idem_probe_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let target = root.join("a.txt");
@@ -323,25 +387,40 @@ async fn path_existence_marker_splits_keys_on_state_flip() {
     let args = json!({ "path": "a.txt" });
 
     // 首次：文件不存在 → 执行（键素材 exists=false）
-    let first = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &exec_ctx, Some(&guard), &policy)
-        .await
-        .unwrap();
+    let first = execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &exec_ctx,
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
     assert!(!first.deduplicated);
     assert_eq!(tool.call_count(), 1);
 
     // 外部创建目标（模拟文件状态翻转）→ 重试键素材 exists=true，
     // 与已记录键（exists=false）不同 → 重新执行而非去重
     std::fs::write(&target, "x").unwrap();
-    let second = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &exec_ctx, Some(&guard), &policy)
-        .await
-        .unwrap();
+    let second = execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &exec_ctx,
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
     assert!(!second.deduplicated, "状态翻转后不得去重");
     assert_eq!(tool.call_count(), 2);
 
     // 状态不再翻转 → 第三次命中已记录键（exists=true）去重
-    let third = execute_with_output_policy(&tool, args, &tool_ctx(), &exec_ctx, Some(&guard), &policy)
-        .await
-        .unwrap();
+    let third =
+        execute_with_output_policy(&tool, args, &tool_ctx(), &exec_ctx, Some(&guard), &policy)
+            .await
+            .unwrap();
     assert!(third.deduplicated, "状态一致应去重");
     assert_eq!(tool.call_count(), 2);
 
@@ -357,12 +436,20 @@ async fn path_existence_marker_absent_without_cwd() {
     let policy = ToolExecutionPolicy::default();
     let args = json!({ "path": "a.txt" });
 
-    execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
-    let second = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
-        .await
-        .unwrap();
+    execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &policy,
+    )
+    .await
+    .unwrap();
+    let second =
+        execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
+            .await
+            .unwrap();
     assert!(second.deduplicated);
     assert_eq!(tool.call_count(), 1);
 }
@@ -447,10 +534,16 @@ async fn execution_result_persisted_via_store() {
     let tool = CountingTool::new();
     let args = json!({ "path": "a.txt" });
 
-    let result =
-        execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &ToolExecutionPolicy::default())
-            .await
-            .unwrap();
+    let result = execute_with_output_policy(
+        &tool,
+        args.clone(),
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard),
+        &ToolExecutionPolicy::default(),
+    )
+    .await
+    .unwrap();
     assert!(!result.deduplicated);
 
     // 结果落盘：store 中已有该域键
@@ -460,10 +553,16 @@ async fn execution_result_persisted_via_store() {
 
     // 新守卫（模拟重启）共享同一 store：同参执行被去重
     let guard2 = ToolIdempotencyGuard::with_store(store.clone());
-    let second =
-        execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard2), &ToolExecutionPolicy::default())
-            .await
-            .unwrap();
+    let second = execute_with_output_policy(
+        &tool,
+        args,
+        &tool_ctx(),
+        &ctx(),
+        Some(&guard2),
+        &ToolExecutionPolicy::default(),
+    )
+    .await
+    .unwrap();
     assert!(second.deduplicated);
     assert_eq!(tool.call_count(), 1);
 }
@@ -538,7 +637,10 @@ async fn execution_result_persisted_via_store_retries_after_append_failure() {
     )
     .await
     .unwrap_err();
-    assert!(err.to_string().contains("幂等记录持久化失败"), "错误文案须含持久化失败语义");
+    assert!(
+        err.to_string().contains("幂等记录持久化失败"),
+        "错误文案须含持久化失败语义"
+    );
     assert_eq!(tool.call_count(), 1);
 
     // 重试：内存无键（store 未落盘）→ 走执行路径重新执行
@@ -744,15 +846,20 @@ async fn streaming_default_impl_matches_legacy_output() {
     let policy = ToolExecutionPolicy::default();
     let args = json!({ "msg": "hi" });
 
-    let legacy = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), None, &policy)
-        .await
-        .unwrap();
-    let streamed = execute_stream_with_output_policy(&tool, args, &tool_ctx(), &ctx(), None, &policy, None)
-        .await
-        .unwrap();
+    let legacy =
+        execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), None, &policy)
+            .await
+            .unwrap();
+    let streamed =
+        execute_stream_with_output_policy(&tool, args, &tool_ctx(), &ctx(), None, &policy, None)
+            .await
+            .unwrap();
 
     assert_eq!(streamed.text, legacy.text, "流式路径 text 须与旧路径一致");
-    assert_eq!(streamed.output, legacy.output, "流式路径 output 须与旧路径一致");
+    assert_eq!(
+        streamed.output, legacy.output,
+        "流式路径 output 须与旧路径一致"
+    );
     assert_eq!(streamed.deduplicated, legacy.deduplicated);
     assert_eq!(streamed.truncated, legacy.truncated);
 }
@@ -932,7 +1039,10 @@ async fn streaming_budget_truncation_applies_to_terminal_value() {
     .await
     .unwrap();
     assert!(result.truncated);
-    assert!(result.output["text"].as_str().unwrap().contains("characters omitted"));
+    assert!(result.output["text"]
+        .as_str()
+        .unwrap()
+        .contains("characters omitted"));
     assert_eq!(result.output["json"]["contextBudget"]["truncated"], true);
 }
 
@@ -978,7 +1088,11 @@ async fn streaming_abort_interrupts_stream_and_skips_record() {
 
     let (result, guard) = handle.await.unwrap();
     let err = result.unwrap_err();
-    assert_eq!(err.code(), codes::RUNTIME_ABORTED, "中止应收口为 runtime.aborted");
+    assert_eq!(
+        err.code(),
+        codes::RUNTIME_ABORTED,
+        "中止应收口为 runtime.aborted"
+    );
 
     // 已发 Progress 保留（第一块），中止后不再转发（第二块被丢弃）
     {

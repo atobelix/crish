@@ -49,19 +49,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::{
-    Json,
     body::Bytes,
     extract::{FromRequestParts, Request, State, WebSocketUpgrade},
-    http::{HeaderMap, StatusCode, Uri, header},
+    http::{header, HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Response},
-};
-use conex_types::device::{
-    DeviceEndpoint, DeviceEnvelope, DeviceErrorCode, ErrorBody, EventAck, EventsPush,
-    MessageKind, PROTOCOL_VERSION, Resume, ResumeDone, ResumePage, SessionCursor,
-    Subscribe, SubscribeAll, SubscribeOk,
+    Json,
 };
 use conex_types::device::version::{
     EVENT_WINDOW, MAX_SUBSCRIPTIONS, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX,
+};
+use conex_types::device::{
+    DeviceEndpoint, DeviceEnvelope, DeviceErrorCode, ErrorBody, EventAck, EventsPush, MessageKind,
+    Resume, ResumeDone, ResumePage, SessionCursor, Subscribe, SubscribeAll, SubscribeOk,
+    PROTOCOL_VERSION,
 };
 use conex_types::events::BackpressureLevel;
 use futures_util::{SinkExt, StreamExt};
@@ -70,7 +70,7 @@ use serde_json::Value;
 use tokio::sync::{mpsc, watch};
 
 use crate::server::fanout::{FanoutError, FanoutReceiver, SubscriptionFilter};
-use crate::server::{ServerError, ServerState, auth, gateway, now_ms};
+use crate::server::{auth, gateway, now_ms, ServerError, ServerState};
 
 /// WS 事件端点路径（R1-02 占位登记；R1-05 注册路由）
 pub const WS_EVENTS_PATH: &str = "/v1/events";
@@ -315,7 +315,13 @@ impl WsRegistry {
 
     /// 重放期间实时事件入 pending（上限 [RESUME_PENDING_CAPACITY]；超限丢
     /// Delta 保 Critical——复用既有丢帧哲学，D2 §10.3）
-    pub fn push_pending(&self, conn_id: u64, session_id: &str, payload: String, level: BackpressureLevel) {
+    pub fn push_pending(
+        &self,
+        conn_id: u64,
+        session_id: &str,
+        payload: String,
+        level: BackpressureLevel,
+    ) {
         let mut inner = lock(&self.inner);
         let Some(conn) = inner.conns.get_mut(&conn_id) else {
             return;
@@ -483,7 +489,9 @@ impl WsRegistry {
         let frame = outbound_frame(conn_id, MessageKind::EventsPush, body);
         Some(
             out_tx
-                .try_send(Outbound::Frame(axum::extract::ws::Message::Text(frame.into())))
+                .try_send(Outbound::Frame(axum::extract::ws::Message::Text(
+                    frame.into(),
+                )))
                 .is_ok(),
         )
     }
@@ -563,7 +571,10 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
     if !origin_allowed(request.headers()) {
         return (
             StatusCode::FORBIDDEN,
-            Json(ErrorBody::new(DeviceErrorCode::CmdDenied, "Origin 不被允许")),
+            Json(ErrorBody::new(
+                DeviceErrorCode::CmdDenied,
+                "Origin 不被允许",
+            )),
         )
             .into_response();
     }
@@ -602,7 +613,10 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
             }
             return (
                 StatusCode::UNAUTHORIZED,
-                Json(ErrorBody::new(DeviceErrorCode::AuthBadSignature, "令牌校验失败")),
+                Json(ErrorBody::new(
+                    DeviceErrorCode::AuthBadSignature,
+                    "令牌校验失败",
+                )),
             )
                 .into_response();
         }
@@ -623,9 +637,7 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         // 旧实现 8 hex 截断，对齐铁律 12 hex 口径（脱敏单一真源在
         // conex-telemetry::redact，避免各处自造截断口径漂移）
         .unwrap_or_else(|| conex_telemetry::redact::redact_token(&token));
-    ws.on_upgrade(move |socket| {
-        handle_socket(socket, state, token_hash, label, false)
-    })
+    ws.on_upgrade(move |socket| handle_socket(socket, state, token_hash, label, false))
 }
 
 /// 配对升级路径（R1-11 G-2）：配对激活期无令牌/无效令牌连接放行进入
@@ -672,7 +684,11 @@ async fn handle_socket(
                 None,
             );
             let mut socket = socket;
-            if socket.send(axum::extract::ws::Message::Text(frame.into())).await.is_ok() {
+            if socket
+                .send(axum::extract::ws::Message::Text(frame.into()))
+                .await
+                .is_ok()
+            {
                 let _ = socket.close().await;
             }
             return;
@@ -709,27 +725,29 @@ async fn handle_socket(
     // 广播 drain task：fanout 接收端 → 重放 pending / 背压入队
     // （R1-01 FanOutEmitter：连接建立即注册空过滤器，events.subscribe
     // 到达后经 refresh_fanout_filter 重建；fanout 未装配 = 无广播推送）
-    let fanout_ctx: Option<(watch::Sender<FanoutReceiver>, watch::Receiver<FanoutReceiver>)> =
-        if let Some(fanout) = state.fanout() {
-            match fanout.subscribe(conn_id.to_string(), SubscriptionFilter::default()) {
-                Ok(receiver) => {
-                    let (rx_tx, rx_rx) = watch::channel(receiver);
-                    Some((rx_tx, rx_rx))
-                }
-                Err(FanoutError::AlreadyRegistered) => {
-                    // 连接 id 冲突属进程级异常：关闭广播（订阅/续传/心跳
-                    // 仍可用），记错误日志
-                    tracing::error!(
-                        target: "ws",
-                        conn_id,
-                        "fanout 订阅注册冲突，本连接广播推送禁用"
-                    );
-                    None
-                }
+    let fanout_ctx: Option<(
+        watch::Sender<FanoutReceiver>,
+        watch::Receiver<FanoutReceiver>,
+    )> = if let Some(fanout) = state.fanout() {
+        match fanout.subscribe(conn_id.to_string(), SubscriptionFilter::default()) {
+            Ok(receiver) => {
+                let (rx_tx, rx_rx) = watch::channel(receiver);
+                Some((rx_tx, rx_rx))
             }
-        } else {
-            None
-        };
+            Err(FanoutError::AlreadyRegistered) => {
+                // 连接 id 冲突属进程级异常：关闭广播（订阅/续传/心跳
+                // 仍可用），记错误日志
+                tracing::error!(
+                    target: "ws",
+                    conn_id,
+                    "fanout 订阅注册冲突，本连接广播推送禁用"
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
     let drain_task = if let Some((_, rx_rx)) = &fanout_ctx {
         Some(tokio::spawn(drain_loop(
             rx_rx.clone(),
@@ -765,7 +783,9 @@ async fn handle_socket(
                 // 客户端主动 Ping → 回 Pong
                 registry.touch(conn_id, virtual_now_ms());
                 let _ = out_tx
-                    .send(Outbound::Frame(axum::extract::ws::Message::Pong(payload.into())))
+                    .send(Outbound::Frame(axum::extract::ws::Message::Pong(
+                        payload.into(),
+                    )))
                     .await;
             }
             Ok(axum::extract::ws::Message::Binary(_)) => {
@@ -793,7 +813,10 @@ async fn handle_socket(
 
 /// sender task：独占 WS 写端（出站通道消费 + 踢出信号处理）
 async fn sender_loop(
-    mut ws_sender: futures_util::stream::SplitSink<axum::extract::ws::WebSocket, axum::extract::ws::Message>,
+    mut ws_sender: futures_util::stream::SplitSink<
+        axum::extract::ws::WebSocket,
+        axum::extract::ws::Message,
+    >,
     mut out_rx: mpsc::Receiver<Outbound>,
     mut kill_rx: watch::Receiver<Option<String>>,
     registry: Arc<WsRegistry>,
@@ -861,7 +884,9 @@ async fn heartbeat_loop(
         }
         // 传输层保活（客户端库自动回 Pong → 主循环 touch 刷新活动时刻）
         if out_tx
-            .send(Outbound::Frame(axum::extract::ws::Message::Ping(Bytes::new())))
+            .send(Outbound::Frame(axum::extract::ws::Message::Ping(
+                Bytes::new(),
+            )))
             .await
             .is_err()
         {
@@ -906,7 +931,9 @@ async fn drain_loop(
                 continue;
             }
         };
-        match out_tx.try_send(Outbound::Frame(axum::extract::ws::Message::Text(frame.into()))) {
+        match out_tx.try_send(Outbound::Frame(axum::extract::ws::Message::Text(
+            frame.into(),
+        ))) {
             Ok(()) => {}
             Err(mpsc::error::TrySendError::Full(full)) => {
                 if event.level == conex_types::events::BackpressureLevel::Delta {
@@ -958,7 +985,10 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
         let frame = error_frame(
             ctx.conn_id,
             DeviceErrorCode::VersionMismatch,
-            format!("协议版本不匹配：期望 {PROTOCOL_VERSION}，收到 {}", envelope.v),
+            format!(
+                "协议版本不匹配：期望 {PROTOCOL_VERSION}，收到 {}",
+                envelope.v
+            ),
             Some(envelope.msg_id.as_str()),
         );
         return send_then_close(ctx, frame).await;
@@ -978,7 +1008,9 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
         return send_frame(ctx, frame).await;
     }
     match &envelope.kind {
-        MessageKind::PairHello => handle_pair_hello_frame(envelope.body, envelope.msg_id.as_str(), ctx).await,
+        MessageKind::PairHello => {
+            handle_pair_hello_frame(envelope.body, envelope.msg_id.as_str(), ctx).await
+        }
         MessageKind::EventsSubscribe => handle_subscribe(envelope.body, ctx).await,
         MessageKind::EventsSubscribeAll => handle_subscribe_all(envelope.body, ctx).await,
         MessageKind::EventsResume => handle_resume(envelope.body, ctx).await,
@@ -1081,7 +1113,11 @@ async fn handle_subscribe(body: Value, ctx: &ConnCtx) -> Action {
         let frame = error_frame(
             ctx.conn_id,
             DeviceErrorCode::StreamTooManySubscriptions,
-            format!("订阅会话超限（{}，上限 {}）", subscribe.sessions.len(), MAX_SUBSCRIPTIONS),
+            format!(
+                "订阅会话超限（{}，上限 {}）",
+                subscribe.sessions.len(),
+                MAX_SUBSCRIPTIONS
+            ),
             None,
         );
         return send_frame(ctx, frame).await;
@@ -1206,7 +1242,10 @@ async fn handle_resume(body: Value, ctx: &ConnCtx) -> Action {
         let frame = error_frame(
             ctx.conn_id,
             DeviceErrorCode::StreamNotSubscribed,
-            format!("未订阅会话 {} 即请求续传（stream.not_subscribed）", resume.session_id),
+            format!(
+                "未订阅会话 {} 即请求续传（stream.not_subscribed）",
+                resume.session_id
+            ),
             None,
         );
         return send_frame(ctx, frame).await;
@@ -1280,7 +1319,9 @@ async fn handle_resume(body: Value, ctx: &ConnCtx) -> Action {
         };
         if ctx
             .out_tx
-            .send(Outbound::Frame(axum::extract::ws::Message::Text(frame.into())))
+            .send(Outbound::Frame(axum::extract::ws::Message::Text(
+                frame.into(),
+            )))
             .await
             .is_err()
         {
@@ -1320,12 +1361,18 @@ async fn send_envelope(ctx: &ConnCtx, kind: MessageKind, body: impl Serialize) -
 
 /// 发送文本帧（必达语义：缓冲满时等待腾出）
 async fn send_frame(ctx: &ConnCtx, frame: String) -> Action {
-    match ctx.out_tx.try_send(Outbound::Frame(axum::extract::ws::Message::Text(frame.clone().into()))) {
+    match ctx
+        .out_tx
+        .try_send(Outbound::Frame(axum::extract::ws::Message::Text(
+            frame.clone().into(),
+        ))) {
         Ok(()) => Action::Continue,
         Err(mpsc::error::TrySendError::Full(_)) => {
             if ctx
                 .out_tx
-                .send(Outbound::Frame(axum::extract::ws::Message::Text(frame.into())))
+                .send(Outbound::Frame(axum::extract::ws::Message::Text(
+                    frame.into(),
+                )))
                 .await
                 .is_err()
             {
@@ -1384,7 +1431,12 @@ fn kicked_envelope(reason: &str, conn_id: u64) -> DeviceEnvelope {
 }
 
 /// 构造 error 帧文本（统一出网错误；reqMsgId 关联请求）
-fn error_frame(conn_id: u64, code: DeviceErrorCode, message: String, req_msg_id: Option<&str>) -> String {
+fn error_frame(
+    conn_id: u64,
+    code: DeviceErrorCode,
+    message: String,
+    req_msg_id: Option<&str>,
+) -> String {
     let mut body = ErrorBody::new(code, message);
     if let Some(msg_id) = req_msg_id {
         body = body.with_req_msg_id(msg_id);
@@ -1414,13 +1466,25 @@ fn push_frame(session_id: &str, payload: &str) -> Result<Value, ServerError> {
 /// 广播载荷分类（R1-01 fanout 侧已解析元信息；本函数保留给测试与
 /// 诊断复用：sessionId / type / 背压级别，解析失败按 Critical 保守）
 #[cfg(test)]
-fn classify_payload(payload: &str) -> (Option<String>, Option<String>, conex_types::events::BackpressureLevel) {
+fn classify_payload(
+    payload: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    conex_types::events::BackpressureLevel,
+) {
     let value: Value = match serde_json::from_str(payload) {
         Ok(value) => value,
         Err(_) => return (None, None, conex_types::events::BackpressureLevel::Critical),
     };
-    let session_id = value.get("sessionId").and_then(Value::as_str).map(str::to_string);
-    let event_type = value.get("type").and_then(Value::as_str).map(str::to_string);
+    let session_id = value
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let event_type = value
+        .get("type")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     // 背压级别复用既有 event_backpressure（需 AgentEvent 结构解析；信封
     // 解析失败保守按 Critical）
     let level = serde_json::from_str::<conex_types::events::AgentEventEnvelope>(payload)
@@ -1489,16 +1553,16 @@ mod tests {
 
     use super::*;
     use crate::core_event_bridge::Emitter;
+    use crate::server::auth::{sha256_hex, TokenStore};
     use crate::server::backend::ApiBackend;
     use crate::server::fanout::FanOutEmitter;
-    use crate::server::{ServerConfig, ServerHandle, ServerInstance, ServerState, router};
-    use crate::server::auth::{TokenStore, sha256_hex};
+    use crate::server::{router, ServerConfig, ServerHandle, ServerInstance, ServerState};
     use conex_types::device::version::MAX_FRAME_BYTES;
     use conex_types::device::{
-        ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, EventPageParams,
-        EventPageResult, ListCommandsResult, ListSessionsParams, ListSessionsResult,
-        RunControlParams, RunControlResult, RunSnapshotParams, RunSnapshotResult,
-        RunTaskParams, RunTaskResult,
+        ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams,
+        EventPageParams, EventPageResult, ListCommandsResult, ListSessionsParams,
+        ListSessionsResult, RunControlParams, RunControlResult, RunSnapshotParams,
+        RunSnapshotResult, RunTaskParams, RunTaskResult,
     };
     use std::net::SocketAddr;
     use std::time::Duration;
@@ -1773,7 +1837,8 @@ mod tests {
             ws,
             "heartbeat",
             serde_json::json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
-        ).await;
+        )
+        .await;
         let (kind, _) = parse_frame(&next_text(ws).await.expect("必须收到 heartbeat.ok"));
         assert_eq!(kind, "heartbeat.ok");
     }
@@ -1819,7 +1884,9 @@ mod tests {
     async fn upgrade_accepts_query_token_and_upgrades() {
         let (addr, _handle, token, _registry) = test_server(None, None).await;
         let url = format!("ws://{addr}/v1/events?token={token}");
-        let (mut ws, response) = tokio_tungstenite::connect_async(&url).await.expect("升级必须成功");
+        let (mut ws, response) = tokio_tungstenite::connect_async(&url)
+            .await
+            .expect("升级必须成功");
         assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
         let _ = ws.close(None).await;
     }
@@ -1828,15 +1895,15 @@ mod tests {
     async fn upgrade_accepts_bearer_header() {
         let (addr, _handle, token, _registry) = test_server(None, None).await;
         let url = format!("ws://{addr}/v1/events");
-        let mut request = tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(
-            url,
-        )
-        .unwrap();
-        request.headers_mut().insert(
-            "Authorization",
-            format!("Bearer {token}").parse().unwrap(),
-        );
-        let (mut ws, response) = tokio_tungstenite::connect_async(request).await.expect("升级必须成功");
+        let mut request =
+            tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(url)
+                .unwrap();
+        request
+            .headers_mut()
+            .insert("Authorization", format!("Bearer {token}").parse().unwrap());
+        let (mut ws, response) = tokio_tungstenite::connect_async(request)
+            .await
+            .expect("升级必须成功");
         assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
         let _ = ws.close(None).await;
     }
@@ -1845,15 +1912,13 @@ mod tests {
     async fn upgrade_rejects_cross_origin() {
         let (addr, _handle, token, _registry) = test_server(None, None).await;
         let url = format!("ws://{addr}/v1/events?token={token}");
-        let mut request = tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(
-            url,
-        )
-        .unwrap();
+        let mut request =
+            tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(url)
+                .unwrap();
         // 跨站 Origin（非本机 host）→ 403 拒绝
-        request.headers_mut().insert(
-            "Origin",
-            "https://evil.example.com".parse().unwrap(),
-        );
+        request
+            .headers_mut()
+            .insert("Origin", "https://evil.example.com".parse().unwrap());
         let response = tokio_tungstenite::connect_async(request)
             .await
             .expect_err("跨站 Origin 必须被拒绝");
@@ -1880,7 +1945,8 @@ mod tests {
                 "sessions": ["s-1", "s-2"],
                 "lastSequences": { "s-1": 1 }
             }),
-        ).await;
+        )
+        .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "events.subscribe.ok");
         let ok: SubscribeOk = serde_json::from_value(body).unwrap();
@@ -1910,7 +1976,8 @@ mod tests {
                 "sessions": ["s-1"],
                 "lastSequences": { "s-1": 0 }
             }),
-        ).await;
+        )
+        .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "events.subscribe.ok");
         let ok: SubscribeOk = serde_json::from_value(body).unwrap();
@@ -1928,7 +1995,8 @@ mod tests {
             &mut ws,
             "events.subscribe",
             serde_json::json!({ "sessions": sessions, "lastSequences": {} }),
-        ).await;
+        )
+        .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "error");
         let error: ErrorBody = serde_json::from_value(body).unwrap();
@@ -1940,14 +2008,14 @@ mod tests {
     #[tokio::test]
     async fn push_filtered_by_subscription() {
         let fanout = test_fanout();
-        let (addr, _handle, token, _registry) =
-            test_server(None, Some(fanout.clone())).await;
+        let (addr, _handle, token, _registry) = test_server(None, Some(fanout.clone())).await;
         let mut ws = ws_connect(addr, &token).await;
         send_envelope_text(
             &mut ws,
             "events.subscribe",
             serde_json::json!({ "sessions": ["s-1"], "lastSequences": {} }),
-        ).await;
+        )
+        .await;
         let (kind, _) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "events.subscribe.ok");
         // 广播：s-1 命中订阅，s-2 未订阅（无全局白名单）→ 只推 s-1
@@ -1964,14 +2032,14 @@ mod tests {
     #[tokio::test]
     async fn push_marks_preview_when_sequence_missing() {
         let fanout = test_fanout();
-        let (addr, _handle, token, _registry) =
-            test_server(None, Some(fanout.clone())).await;
+        let (addr, _handle, token, _registry) = test_server(None, Some(fanout.clone())).await;
         let mut ws = ws_connect(addr, &token).await;
         send_envelope_text(
             &mut ws,
             "events.subscribe",
             serde_json::json!({ "sessions": ["s-1"], "lastSequences": {} }),
-        ).await;
+        )
+        .await;
         let _ = next_text(&mut ws).await;
         // 实时预览帧（sequence=None，D3 §7.4：移动端不推进游标）
         publish(&fanout, "s-1", "agent-start", None);
@@ -1984,8 +2052,7 @@ mod tests {
     #[tokio::test]
     async fn push_filtered_by_subscribe_all_whitelist() {
         let fanout = test_fanout();
-        let (addr, _handle, token, _registry) =
-            test_server(None, Some(fanout.clone())).await;
+        let (addr, _handle, token, _registry) = test_server(None, Some(fanout.clone())).await;
         let mut ws = ws_connect(addr, &token).await;
         // 先心跳往返确认服务端已 spawn drain（fanout 订阅就绪）
         confirm_registered(&mut ws).await;
@@ -1993,7 +2060,8 @@ mod tests {
             &mut ws,
             "events.subscribeAll",
             serde_json::json!({ "events": ["run-terminal"] }),
-        ).await;
+        )
+        .await;
         // subscribeAll 无专用回执：以后续 heartbeat.ok 确认服务端已处理
         //（同连接帧序保证：heartbeat 在 subscribeAll 之后到达 = 订阅已生效）
         confirm_registered(&mut ws).await;
@@ -2019,13 +2087,15 @@ mod tests {
             &mut ws,
             "events.subscribe",
             serde_json::json!({ "sessions": ["s-1"], "lastSequences": {} }),
-        ).await;
+        )
+        .await;
         let _ = next_text(&mut ws).await;
         send_envelope_text(
             &mut ws,
             "events.resume",
             serde_json::json!({ "sessionId": "s-1", "afterSequence": 0, "maxEvents": 200 }),
-        ).await;
+        )
+        .await;
         // 第 1 页：1..=200
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "events.resume.page");
@@ -2060,13 +2130,15 @@ mod tests {
             &mut ws,
             "events.subscribe",
             serde_json::json!({ "sessions": ["s-1"], "lastSequences": { "s-1": 280 } }),
-        ).await;
+        )
+        .await;
         let _ = next_text(&mut ws).await;
         send_envelope_text(
             &mut ws,
             "events.resume",
             serde_json::json!({ "sessionId": "s-1", "afterSequence": 280 }),
-        ).await;
+        )
+        .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "events.resume.page");
         let page: ResumePage = serde_json::from_value(body).unwrap();
@@ -2086,7 +2158,8 @@ mod tests {
             &mut ws,
             "events.resume",
             serde_json::json!({ "sessionId": "s-1", "afterSequence": 0 }),
-        ).await;
+        )
+        .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "error");
         let error: ErrorBody = serde_json::from_value(body).unwrap();
@@ -2101,7 +2174,8 @@ mod tests {
             &mut ws,
             "events.resume",
             serde_json::json!({ "sessionId": 42, "afterSequence": "x" }),
-        ).await;
+        )
+        .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "error");
         let error: ErrorBody = serde_json::from_value(body).unwrap();
@@ -2114,24 +2188,23 @@ mod tests {
         let backend = Arc::new(MemoryBackend::new());
         backend.push_range("s-1", "message-end", 1, 500);
         let fanout = test_fanout();
-        let (addr, _handle, token, _registry) = test_server(
-            Some(backend as Arc<dyn ApiBackend>),
-            Some(fanout.clone()),
-        )
-        .await;
+        let (addr, _handle, token, _registry) =
+            test_server(Some(backend as Arc<dyn ApiBackend>), Some(fanout.clone())).await;
         let mut ws = ws_connect(addr, &token).await;
         send_envelope_text(
             &mut ws,
             "events.subscribe",
             serde_json::json!({ "sessions": ["s-1"], "lastSequences": {} }),
-        ).await;
+        )
+        .await;
         let _ = next_text(&mut ws).await;
         // 发起 resume（25 页分页，窗口足够大）
         send_envelope_text(
             &mut ws,
             "events.resume",
             serde_json::json!({ "sessionId": "s-1", "afterSequence": 0, "maxEvents": 20 }),
-        ).await;
+        )
+        .await;
         // 收到第 1 页 = 服务端已进入重放态 → 广播实时帧必入 pending
         let (kind, _) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "events.resume.page");
@@ -2149,7 +2222,10 @@ mod tests {
         let done: ResumeDone = serde_json::from_value(body).unwrap();
         assert_eq!(done.resumed_to, 500);
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
-        assert_eq!(kind, "events.push", "pending 实时帧必须在 done 之后按序 flush");
+        assert_eq!(
+            kind, "events.push",
+            "pending 实时帧必须在 done 之后按序 flush"
+        );
         let push: EventsPush = serde_json::from_value(body).unwrap();
         assert_eq!(push.event["type"], "agent-start");
     }
@@ -2164,7 +2240,8 @@ mod tests {
             &mut ws,
             "heartbeat",
             serde_json::json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
-        ).await;
+        )
+        .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "heartbeat.ok");
         let ok: conex_types::device::HeartbeatOk = serde_json::from_value(body).unwrap();
@@ -2342,7 +2419,11 @@ mod tests {
         }
         // 第 9 个连接 → 拒绝（error conn.limit + 关闭）
         let mut ninth = ws_connect(addr, &tokens[8]).await;
-        let (kind, body) = parse_frame(&next_text(&mut ninth).await.expect("应收到 conn.limit 拒绝帧"));
+        let (kind, body) = parse_frame(
+            &next_text(&mut ninth)
+                .await
+                .expect("应收到 conn.limit 拒绝帧"),
+        );
         assert_eq!(kind, "error");
         let error: ErrorBody = serde_json::from_value(body).unwrap();
         assert!(
@@ -2363,7 +2444,11 @@ mod tests {
         let hash = sha256_hex(token.as_bytes());
         let kicked = registry.kick_by_token_hash(&hash, KICK_REVOKED);
         assert_eq!(kicked.len(), 1, "撤销必须命中在线连接");
-        let (kind, body) = parse_frame(&next_text(&mut ws).await.expect("应收到 token-revoked 踢出帧"));
+        let (kind, body) = parse_frame(
+            &next_text(&mut ws)
+                .await
+                .expect("应收到 token-revoked 踢出帧"),
+        );
         assert_eq!(kind, "error");
         let error: ErrorBody = serde_json::from_value(body).unwrap();
         assert_eq!(error.code, DeviceErrorCode::AuthDeviceRevoked);
@@ -2378,15 +2463,15 @@ mod tests {
     async fn disconnect_unregisters_subscription() {
         // 断线清理：连接关闭 → 注册表注销 + fanout 订阅注销
         let fanout = test_fanout();
-        let (addr, _handle, token, registry) =
-            test_server(None, Some(fanout.clone())).await;
+        let (addr, _handle, token, registry) = test_server(None, Some(fanout.clone())).await;
         let mut ws = ws_connect(addr, &token).await;
         confirm_registered(&mut ws).await;
         send_envelope_text(
             &mut ws,
             "events.subscribe",
             serde_json::json!({ "sessions": ["s-1"], "lastSequences": {} }),
-        ).await;
+        )
+        .await;
         let _ = next_text(&mut ws).await;
         assert_eq!(registry.count(), 1, "连接必须已注册");
         assert_eq!(fanout.subscriber_count(), 1, "fanout 订阅必须已注册");
@@ -2411,8 +2496,11 @@ mod tests {
         let mut ws = ws_connect(addr, &token).await;
         // 超 1 MiB 帧（M6 §8.1：MAX_FRAME_BYTES 超限断链防内存放大）
         let big = "x".repeat(MAX_FRAME_BYTES + 1);
-        let _ = ws.send(tokio_tungstenite::tungstenite::Message::Text(big.into())).await;
-        let (kind, body) = parse_frame(&next_text(&mut ws).await.expect("应收到 frame_too_large 帧"));
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Text(big.into()))
+            .await;
+        let (kind, body) =
+            parse_frame(&next_text(&mut ws).await.expect("应收到 frame_too_large 帧"));
         assert_eq!(kind, "error");
         let error: ErrorBody = serde_json::from_value(body).unwrap();
         assert_eq!(error.code, DeviceErrorCode::FrameTooLarge);
@@ -2442,9 +2530,11 @@ mod tests {
         // 手工改版本号
         let mut value = serde_json::to_value(&envelope).unwrap();
         value["v"] = serde_json::json!(99);
-        let _ = ws.send(tokio_tungstenite::tungstenite::Message::Text(
-            value.to_string().into(),
-        )).await;
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                value.to_string().into(),
+            ))
+            .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.expect("应收到 version_mismatch"));
         assert_eq!(kind, "error");
         let error: ErrorBody = serde_json::from_value(body).unwrap();
@@ -2456,7 +2546,11 @@ mod tests {
         let (addr, _handle, token, _registry) = test_server(None, None).await;
         let mut ws = ws_connect(addr, &token).await;
         // 非 JSON 帧 → 错误帧提示 + 保持连接（防御性宽容）
-        let _ = ws.send(tokio_tungstenite::tungstenite::Message::Text("not-json".into())).await;
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                "not-json".into(),
+            ))
+            .await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.expect("应收到解析错误帧"));
         assert_eq!(kind, "error");
         let error: ErrorBody = serde_json::from_value(body).unwrap();
@@ -2557,7 +2651,8 @@ mod tests {
         let registry = WsRegistry::new();
         for i in 0..MAX_WS_CONNECTIONS {
             let (kill_tx, _) = watch::channel::<Option<String>>(None);
-            let outcome = registry.register(&format!("hash-{i}"), &format!("dev-{i}"), kill_tx, i as u64);
+            let outcome =
+                registry.register(&format!("hash-{i}"), &format!("dev-{i}"), kill_tx, i as u64);
             assert!(matches!(outcome, RegisterOutcome::Registered(_)));
         }
         let (kill_tx, _) = watch::channel::<Option<String>>(None);
@@ -2585,20 +2680,37 @@ mod tests {
             );
         }
         // 再入 Delta → 超限被丢
-        registry.push_pending(conn_id, "s-1", "delta-overflow".to_string(), BackpressureLevel::Delta);
+        registry.push_pending(
+            conn_id,
+            "s-1",
+            "delta-overflow".to_string(),
+            BackpressureLevel::Delta,
+        );
         // 再入 Critical → 挤掉队头，必达
-        registry.push_pending(conn_id, "s-1", "critical-arrived".to_string(), BackpressureLevel::Critical);
+        registry.push_pending(
+            conn_id,
+            "s-1",
+            "critical-arrived".to_string(),
+            BackpressureLevel::Critical,
+        );
         let pending = registry.end_replay(conn_id, "s-1");
         assert_eq!(pending.len(), RESUME_PENDING_CAPACITY);
         assert!(
-            !pending.iter().any(|(_, payload)| payload == "delta-overflow"),
+            !pending
+                .iter()
+                .any(|(_, payload)| payload == "delta-overflow"),
             "Delta 超限必须被丢"
         );
         assert!(
-            pending.iter().any(|(_, payload)| payload == "critical-arrived"),
+            pending
+                .iter()
+                .any(|(_, payload)| payload == "critical-arrived"),
             "Critical 必须保留"
         );
-        assert!(!registry.is_replaying(conn_id, "s-1"), "end_replay 后退出重放态");
+        assert!(
+            !registry.is_replaying(conn_id, "s-1"),
+            "end_replay 后退出重放态"
+        );
     }
 
     #[test]
@@ -2616,7 +2728,11 @@ mod tests {
         registry.set_subscriptions(conn_id, vec!["s-2".to_string(), "s-1".to_string()]);
         registry.set_subscribe_all(conn_id, vec!["security-audit".to_string()]);
         let (sessions, global) = registry.filter_parts(conn_id);
-        assert_eq!(sessions, vec!["s-1".to_string(), "s-2".to_string()], "会话应排序稳定");
+        assert_eq!(
+            sessions,
+            vec!["s-1".to_string(), "s-2".to_string()],
+            "会话应排序稳定"
+        );
         assert_eq!(global, vec!["security-audit".to_string()]);
         // 注销后 → 空
         registry.unregister(conn_id);
@@ -2816,12 +2932,21 @@ mod tests {
         // 无 Origin（原生客户端）→ 放行
         assert!(origin_allowed(&headers));
         // 本机 host → 放行
-        headers.insert(header::ORIGIN, HeaderValue::from_static("http://localhost:1420"));
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://localhost:1420"),
+        );
         assert!(origin_allowed(&headers));
-        headers.insert(header::ORIGIN, HeaderValue::from_static("http://127.0.0.1:8765"));
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://127.0.0.1:8765"),
+        );
         assert!(origin_allowed(&headers));
         // 跨站 → 拒绝
-        headers.insert(header::ORIGIN, HeaderValue::from_static("https://evil.example.com"));
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("https://evil.example.com"),
+        );
         assert!(!origin_allowed(&headers));
     }
 
@@ -2830,8 +2955,11 @@ mod tests {
     /// 配对服务测试装配：服务开关开启 + 配对协调器注入（协调器令牌库与
     /// 路由层令牌库同文件——reload_tokens 收口；码经协调器激活）。返回
     /// (地址, 句柄, 协调器)。
-    async fn spawn_pairing_server(
-    ) -> (SocketAddr, ServerHandle, Arc<crate::server::pairing::PairingCoordinator>) {
+    async fn spawn_pairing_server() -> (
+        SocketAddr,
+        ServerHandle,
+        Arc<crate::server::pairing::PairingCoordinator>,
+    ) {
         let dir = tempfile::tempdir().expect("临时目录必须可创建");
         let file = dir.path().join("pairing.json");
         let mut config = ServerConfig::new(dir.path());
@@ -2840,8 +2968,10 @@ mod tests {
         config.pairing_file_path = file.clone();
         let tokens = Arc::new(Mutex::new(TokenStore::new(file)));
         let ws_registry = Arc::new(WsRegistry::new());
-        let coordinator =
-            Arc::new(crate::server::pairing::PairingCoordinator::new(tokens, ws_registry));
+        let coordinator = Arc::new(crate::server::pairing::PairingCoordinator::new(
+            tokens,
+            ws_registry,
+        ));
         let instance = ServerInstance::bind(config).await.expect("测试绑定失败");
         let addr = instance.addr();
         let handle = instance.handle().clone();
@@ -2945,8 +3075,14 @@ mod tests {
         assert_eq!(kind, "pair.ok", "配对成功必须回 pair.ok");
         let token = {
             let ok = body.as_object().expect("pair.ok 必须为对象");
-            assert_eq!(ok["desktopId"].as_str(), Some(crate::server::pair_endpoint::DESKTOP_ID));
-            assert_eq!(ok["ttl"].as_u64(), Some(crate::server::pair_endpoint::PAIR_TTL_SECONDS));
+            assert_eq!(
+                ok["desktopId"].as_str(),
+                Some(crate::server::pair_endpoint::DESKTOP_ID)
+            );
+            assert_eq!(
+                ok["ttl"].as_u64(),
+                Some(crate::server::pair_endpoint::PAIR_TTL_SECONDS)
+            );
             let token = ok["token"].as_str().expect("pair.ok 必须携带令牌明文");
             assert_eq!(token.len(), 64, "32B hex 令牌");
             token.to_string()
@@ -3028,7 +3164,10 @@ mod tests {
             RegisterOutcome::Registered(id) => id,
             _ => panic!("注册必须成功"),
         };
-        assert!(!registry.is_authenticated(conn_id), "配对升级连接默认未认证");
+        assert!(
+            !registry.is_authenticated(conn_id),
+            "配对升级连接默认未认证"
+        );
         assert!(
             registry.mark_authenticated(conn_id, "real-token-hash", "配对测试手机"),
             "迁移必须命中"
@@ -3042,7 +3181,9 @@ mod tests {
         );
         // 占位哈希不再占用令牌槽
         assert!(
-            registry.kick_by_token_hash("pairing-pending:1", KICK_REVOKED).is_empty(),
+            registry
+                .kick_by_token_hash("pairing-pending:1", KICK_REVOKED)
+                .is_empty(),
             "占位哈希应已释放"
         );
     }

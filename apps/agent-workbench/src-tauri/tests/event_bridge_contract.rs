@@ -68,8 +68,10 @@ impl Emitter for RecordingEmitter {
 /// 构造测试桥（记录发射器 + 冻结通道名 workbench-run-event，03 §3.1）
 fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
     let emitter = Arc::new(RecordingEmitter::default());
-    let bridge =
-        EventBridge::new("workbench-run-event", Arc::clone(&emitter) as Arc<dyn Emitter>);
+    let bridge = EventBridge::new(
+        "workbench-run-event",
+        Arc::clone(&emitter) as Arc<dyn Emitter>,
+    );
     (bridge, emitter)
 }
 
@@ -141,7 +143,11 @@ fn permission_request() -> PermissionRequest {
 
 /// 发射并返回**新增**载荷 JSON（记录发射前调用数，支持同一桥多次发射；
 /// 断言通道名 = workbench-run-event）
-fn emit_and_get(bridge: &EventBridge, emitter: &RecordingEmitter, envelope: AgentEventEnvelope) -> Value {
+fn emit_and_get(
+    bridge: &EventBridge,
+    emitter: &RecordingEmitter,
+    envelope: AgentEventEnvelope,
+) -> Value {
     let before = emitter.calls().len();
     bridge.emit_envelope(&envelope);
     let calls = emitter.calls();
@@ -359,8 +365,14 @@ fn tool_end_result_contract() {
             Some(1),
         ),
     );
-    assert_eq!(json["result"]["id"], "tc-1", "result.id 恒有（硬失败=无 id）");
-    assert_eq!(json["result"]["output"]["text"], "文件内容", "output.text 锚定");
+    assert_eq!(
+        json["result"]["id"], "tc-1",
+        "result.id 恒有（硬失败=无 id）"
+    );
+    assert_eq!(
+        json["result"]["output"]["text"], "文件内容",
+        "output.text 锚定"
+    );
     assert_eq!(json["result"]["isError"], false, "isError 锚定");
 }
 
@@ -382,13 +394,22 @@ fn approval_requested_contract() {
             Some(1),
         ),
     );
-    assert_eq!(json["request"]["toolCallId"], "tc-1", "request.toolCallId 锚定");
-    assert_eq!(json["request"]["toolName"], "write_file", "request.toolName 锚定");
+    assert_eq!(
+        json["request"]["toolCallId"], "tc-1",
+        "request.toolCallId 锚定"
+    );
+    assert_eq!(
+        json["request"]["toolName"], "write_file",
+        "request.toolName 锚定"
+    );
     assert_eq!(
         json["request"]["parameters"]["path"], "a.txt",
         "request.parameters 参数包锚定"
     );
-    assert_eq!(json["request"]["summary"], "写入文件", "request.summary 锚定");
+    assert_eq!(
+        json["request"]["summary"], "写入文件",
+        "request.summary 锚定"
+    );
 }
 
 // ── 10：approval-resolved 硬依赖（toolCallId + decision 规范值）──
@@ -511,14 +532,35 @@ fn no_error_envelope_variant_in_event_set() {
     // （IPC 模式失败收口走 run-terminal(failed)，30 号清单 §4.1-13 记录）。
     // 2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除，基线 24 → 23。
     let names: Vec<&str> = vec![
-        "agent-start", "agent-end", "turn-start", "turn-end", "message-start", "message-delta",
-        "message-end", "tool-start", "tool-update", "tool-end", "tool-batch-start",
-        "tool-batch-end", "context-compression-start",
-        "context-compression-end", "provider-diagnostic", "runtime-error", "runtime-steering",
-        "runtime-intervention-required", "approval-requested", "approval-resolved",
-        "checkpoint-created", "checkpoint-restored", "run-terminal",
+        "agent-start",
+        "agent-end",
+        "turn-start",
+        "turn-end",
+        "message-start",
+        "message-delta",
+        "message-end",
+        "tool-start",
+        "tool-update",
+        "tool-end",
+        "tool-batch-start",
+        "tool-batch-end",
+        "context-compression-start",
+        "context-compression-end",
+        "provider-diagnostic",
+        "runtime-error",
+        "runtime-steering",
+        "runtime-intervention-required",
+        "approval-requested",
+        "approval-resolved",
+        "checkpoint-created",
+        "checkpoint-restored",
+        "run-terminal",
     ];
-    assert_eq!(names.len(), 23, "24 事件基线（tool-input-repaired 核销后为 23）");
+    assert_eq!(
+        names.len(),
+        23,
+        "24 事件基线（tool-input-repaired 核销后为 23）"
+    );
     assert!(!names.contains(&"error"), "error 信封不是域事件");
 }
 
@@ -567,7 +609,12 @@ fn schema_version_always_injected_as_one() {
             &emitter,
             AgentEventEnvelope::new(event.clone(), Some("r1".into()), Some(i as u64)),
         );
-        assert_eq!(json["schemaVersion"], 1, "{}：新事件必带 schemaVersion=1", event.type_name());
+        assert_eq!(
+            json["schemaVersion"],
+            1,
+            "{}：新事件必带 schemaVersion=1",
+            event.type_name()
+        );
     }
 }
 

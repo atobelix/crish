@@ -114,9 +114,8 @@ impl Tool for DecompressContextTool {
             })?;
 
         // 落文件资格：仅主 agent（write_claim_holder=None）+ output_dir 注入
-        let can_write_file = !inline
-            && ctx.write_claim_holder.is_none()
-            && ctx.output_dir.is_some();
+        let can_write_file =
+            !inline && ctx.write_claim_holder.is_none() && ctx.output_dir.is_some();
 
         if can_write_file {
             // 落文件：完整原文（不经 clean），返回路径
@@ -173,7 +172,7 @@ impl Tool for DecompressContextTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compression_store::{BlockContent, CompressionContextStore, BlockHit};
+    use crate::compression_store::{BlockContent, BlockHit, CompressionContextStore};
     use crate::context::{create_mock_tool_context, ToolContext};
     use crate::tools::output_dir::{AgentOutputDir, OutputDirResolver, ResolveOutputDirResult};
     use conex_test_utils::TempWorkspace;
@@ -233,11 +232,7 @@ mod tests {
     }
 
     impl OutputDirResolver for FakeOutputDirResolver {
-        fn resolve(
-            &self,
-            _session_id: &str,
-            _folder: Option<&str>,
-        ) -> ResolveOutputDirResult {
+        fn resolve(&self, _session_id: &str, _folder: Option<&str>) -> ResolveOutputDirResult {
             ResolveOutputDirResult {
                 dir: AgentOutputDir {
                     session_id: "mock-session".to_string(),
@@ -317,7 +312,9 @@ mod tests {
             "subagent sees this".to_string(),
         )]));
         let out_dir = ws.path().join("outputs");
-        let resolver: Arc<dyn OutputDirResolver> = Arc::new(FakeOutputDirResolver { dir: out_dir.clone() });
+        let resolver: Arc<dyn OutputDirResolver> = Arc::new(FakeOutputDirResolver {
+            dir: out_dir.clone(),
+        });
         let tool = DecompressContextTool::new();
         // 子代理上下文（write_claim_holder 注入 run id）→ 即使 output_dir
         // 可用也不落文件（P1-6：子代理只读集无写文件权）
@@ -327,7 +324,10 @@ mod tests {
             Some(resolver),
             Some("sub-run-1".to_string()),
         );
-        let out = tool.execute(&ctx, json!({ "blockId": "cb-1" })).await.unwrap();
+        let out = tool
+            .execute(&ctx, json!({ "blockId": "cb-1" }))
+            .await
+            .unwrap();
         assert_eq!(out["inline"], true, "子代理必须回退 inline");
         assert!(!out_dir.exists(), "子代理不得写文件");
     }
@@ -340,8 +340,9 @@ mod tests {
             "完整原文 A\n完整原文 B\n".to_string(),
         )]));
         let out_dir = ws.path().join("outputs");
-        let resolver: Arc<dyn OutputDirResolver> =
-            Arc::new(FakeOutputDirResolver { dir: out_dir.clone() });
+        let resolver: Arc<dyn OutputDirResolver> = Arc::new(FakeOutputDirResolver {
+            dir: out_dir.clone(),
+        });
         let tool = DecompressContextTool::new();
         let out = tool
             .execute(
@@ -368,8 +369,9 @@ mod tests {
             "inline content".to_string(),
         )]));
         let out_dir = ws.path().join("outputs");
-        let resolver: Arc<dyn OutputDirResolver> =
-            Arc::new(FakeOutputDirResolver { dir: out_dir.clone() });
+        let resolver: Arc<dyn OutputDirResolver> = Arc::new(FakeOutputDirResolver {
+            dir: out_dir.clone(),
+        });
         let tool = DecompressContextTool::new();
         // 主 agent + output_dir 均可用，但 inline=true 显式强制 inline
         let out = tool
@@ -386,9 +388,14 @@ mod tests {
     #[tokio::test]
     async fn preview_truncated_without_full() {
         let ws = TempWorkspace::new("dctx_preview");
-        let long = (0..250).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
-        let store: Arc<dyn CompressionContextStore> =
-            Arc::new(FakeCompressionStore::new(vec![("cb-1".to_string(), long.clone())]));
+        let long = (0..250)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let store: Arc<dyn CompressionContextStore> = Arc::new(FakeCompressionStore::new(vec![(
+            "cb-1".to_string(),
+            long.clone(),
+        )]));
         let tool = DecompressContextTool::new();
         // inline + full=false → 预览（前 200 行 + 提示）
         let out = tool
@@ -418,8 +425,7 @@ mod tests {
     #[tokio::test]
     async fn block_not_found_errors() {
         let ws = TempWorkspace::new("dctx_notfound");
-        let store: Arc<dyn CompressionContextStore> =
-            Arc::new(FakeCompressionStore::new(vec![]));
+        let store: Arc<dyn CompressionContextStore> = Arc::new(FakeCompressionStore::new(vec![]));
         let tool = DecompressContextTool::new();
         let err = tool
             .execute(

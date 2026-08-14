@@ -121,11 +121,7 @@ impl ScaleSpec {
     /// API 空间边界校验(04 §4.4 校验链第 1 层):
     /// 非负整数且 `0 ≤ x ≤ target_w`、`0 ≤ y ≤ target_h`,越界返回错误
     pub fn validate_api(&self, p: Point) -> Result<Point, CoordError> {
-        if p.x < 0
-            || p.y < 0
-            || p.x > self.target_w as i32
-            || p.y > self.target_h as i32
-        {
+        if p.x < 0 || p.y < 0 || p.x > self.target_w as i32 || p.y > self.target_h as i32 {
             Err(CoordError::CoordsOutOfBounds)
         } else {
             Ok(p)
@@ -135,14 +131,8 @@ impl ScaleSpec {
     /// 物理空间回检钳制(04 §4.4 校验链第 2 层):
     /// 防缩放舍入越界 1px 时钳制到物理边界内(调用方负责记审计)
     pub fn clamp_phys(&self, p: Point) -> Point {
-        let x = p.x.clamp(
-            self.origin_x,
-            self.origin_x + self.phys_w as i32,
-        );
-        let y = p.y.clamp(
-            self.origin_y,
-            self.origin_y + self.phys_h as i32,
-        );
+        let x = p.x.clamp(self.origin_x, self.origin_x + self.phys_w as i32);
+        let y = p.y.clamp(self.origin_y, self.origin_y + self.phys_h as i32);
         Point::new(x, y)
     }
 }
@@ -175,8 +165,7 @@ mod tests {
         let phys = scale.api_to_phys(api);
         let back = scale.phys_to_api(phys);
         assert!(
-            (back.x - api.x).unsigned_abs() <= 1
-                && (back.y - api.y).unsigned_abs() <= 1,
+            (back.x - api.x).unsigned_abs() <= 1 && (back.y - api.y).unsigned_abs() <= 1,
             "往返误差超 1px: api={api:?} phys={phys:?} back={back:?}"
         );
     }
@@ -257,8 +246,14 @@ mod tests {
         let scale = ScaleSpec::new(-1920, 0, 3840, 1080, 3840, 1080);
         assert!(scale.is_isometric());
         // 物理 (-100,300) → API (1820,300) → 物理 (-100,300)
-        assert_eq!(scale.phys_to_api(Point::new(-100, 300)), Point::new(1820, 300));
-        assert_eq!(scale.api_to_phys(Point::new(1820, 300)), Point::new(-100, 300));
+        assert_eq!(
+            scale.phys_to_api(Point::new(-100, 300)),
+            Point::new(1820, 300)
+        );
+        assert_eq!(
+            scale.api_to_phys(Point::new(1820, 300)),
+            Point::new(-100, 300)
+        );
         assert_roundtrip_grid(&scale);
     }
 
@@ -301,7 +296,10 @@ mod tests {
         // 虚拟桌面跨度 [-100, -100+2560) = [-100, 2460],钳制上下界随原点平移
         let scale = ScaleSpec::new(-100, 0, 2560, 1440, 1280, 720);
         assert_eq!(scale.clamp_phys(Point::new(3000, -20)), Point::new(2460, 0));
-        assert_eq!(scale.clamp_phys(Point::new(-500, 500)), Point::new(-100, 500));
+        assert_eq!(
+            scale.clamp_phys(Point::new(-500, 500)),
+            Point::new(-100, 500)
+        );
         // 边界内原样返回
         assert_eq!(scale.clamp_phys(Point::new(100, 100)), Point::new(100, 100));
     }

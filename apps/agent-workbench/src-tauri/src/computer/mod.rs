@@ -50,7 +50,9 @@ use agent_tools::definition::ToolError;
 use agent_tools::registry::ToolRegistry;
 use conex_computer::activation::{ActivationError, ActivationGate, SessionMode};
 use conex_computer::security::COMPUTER_USE_ENABLED_KEY;
-use conex_computer::{ApprovalGate, EmergencyStop, EnableSource, EnablementError, SessionEnablement};
+use conex_computer::{
+    ApprovalGate, EmergencyStop, EnableSource, EnablementError, SessionEnablement,
+};
 use conex_computer_tools::session::ComputerOps;
 #[cfg(test)]
 use conex_computer_tools::{register_computer_tools, ComputerToolsConfig};
@@ -282,13 +284,9 @@ impl ComputerSlot {
     /// → `computer://state-changed` 广播。
     pub(crate) fn enable(&self) -> Result<(), ComputerError> {
         self.ensure_restored();
-        self.activation
-            .request_desktop()
-            .map_err(|e| match e {
-                ActivationError::Exclusive { current, .. } => {
-                    ComputerError::Exclusive { current }
-                }
-            })?;
+        self.activation.request_desktop().map_err(|e| match e {
+            ActivationError::Exclusive { current, .. } => ComputerError::Exclusive { current },
+        })?;
         match self.enablement.enable(EnableSource::User) {
             Ok(()) => {}
             Err(EnablementError::AlreadyEnabled) => {
@@ -323,7 +321,8 @@ impl ComputerSlot {
         if was_active {
             self.activation.release();
         }
-        self.enablement.disable(reason.clone().unwrap_or_else(|| "用户停用".to_string()));
+        self.enablement
+            .disable(reason.clone().unwrap_or_else(|| "用户停用".to_string()));
         self.persist(false)?;
         self.emit(&StateChangePayload {
             enabled: Some(false),
@@ -345,7 +344,8 @@ impl ComputerSlot {
         if was_active {
             self.activation.release();
         }
-        self.enablement.disable(reason.clone().unwrap_or_else(|| "面板急停".to_string()));
+        self.enablement
+            .disable(reason.clone().unwrap_or_else(|| "面板急停".to_string()));
         self.persist(false)?;
         self.emit(&StateChangePayload {
             enabled: Some(false),
@@ -376,7 +376,11 @@ impl ComputerSlot {
         register_computer_tools(
             registry,
             ComputerToolsConfig {
-                session: self._session.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+                session: self
+                    ._session
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
                 enablement: Some(Arc::clone(&self.enablement)),
                 activation: Some(Arc::clone(&self.activation)),
                 approval: Some(Arc::clone(&self._approval)),
@@ -395,7 +399,11 @@ impl ComputerSlot {
 
     /// 广播状态事件（尽力而为：序列化失败仅记录，发射器缺失静默跳过）。
     fn emit(&self, payload: &StateChangePayload) {
-        let emitter = self.emitter.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let emitter = self
+            .emitter
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         let Some(emitter) = emitter else { return };
         let json = serde_json::to_string(payload).unwrap_or_else(|e| {
             tracing::warn!(
@@ -433,9 +441,9 @@ mod tests {
     /// 内存库槽（真实 LocalDbComputerMetaStore 读写面）。
     fn in_memory_slot() -> (Arc<ComputerSlot>, LocalDb) {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(
-            LocalDbComputerMetaStore::new(db.clone()),
-        )));
+        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
+            db.clone(),
+        ))));
         (slot, db)
     }
 
@@ -474,8 +482,12 @@ mod tests {
     fn defaults_disabled_zero_tools_registered() {
         let (slot, _db) = in_memory_slot();
         let mut registry = ToolRegistry::new();
-        slot.register_tools(&mut registry).expect("未开启零注册应返回 Ok");
-        assert!(registered_names(&registry).is_empty(), "未开启不得挂载任何 computer_* 工具");
+        slot.register_tools(&mut registry)
+            .expect("未开启零注册应返回 Ok");
+        assert!(
+            registered_names(&registry).is_empty(),
+            "未开启不得挂载任何 computer_* 工具"
+        );
     }
 
     /// 挂载判据：显式开启后注册全部 13 工具，名称与 ALL_TOOL_NAMES 一致。
@@ -495,8 +507,10 @@ mod tests {
         let (slot, _db) = in_memory_slot();
         slot.enable().expect("开启不应失败");
         let mut registry = ToolRegistry::new();
-        slot.register_tools(&mut registry).expect("首次注册不应失败");
-        slot.register_tools(&mut registry).expect("重复注册应幂等返回 Ok");
+        slot.register_tools(&mut registry)
+            .expect("首次注册不应失败");
+        slot.register_tools(&mut registry)
+            .expect("重复注册应幂等返回 Ok");
         assert_eq!(registry.list_definitions().len(), ALL_TOOL_NAMES.len());
     }
 
@@ -507,9 +521,9 @@ mod tests {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
         db.set_session_meta(COMPUTER_USE_ENABLED_KEY, "true")
             .expect("预置开启标记");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(
-            LocalDbComputerMetaStore::new(db),
-        )));
+        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
+            db,
+        ))));
         let status = slot.status();
         assert!(status.enabled, "恢复后应为开启态");
         assert_eq!(status.mode, "desktop", "恢复开启应同步激活桌面会话");
@@ -524,9 +538,9 @@ mod tests {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
         db.set_session_meta(COMPUTER_USE_ENABLED_KEY, "false")
             .expect("预置关闭标记");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(
-            LocalDbComputerMetaStore::new(db),
-        )));
+        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
+            db,
+        ))));
         let status = slot.status();
         assert!(!status.enabled, "恢复后应为关闭态");
         assert_eq!(status.mode, "idle");
@@ -575,7 +589,8 @@ mod tests {
     fn disable_releases_persists_and_records_reason() {
         let (slot, db) = in_memory_slot();
         slot.enable().expect("开启不应失败");
-        slot.disable(Some("测试停用".to_string())).expect("停用不应失败");
+        slot.disable(Some("测试停用".to_string()))
+            .expect("停用不应失败");
         assert_eq!(
             db.get_session_meta(COMPUTER_USE_ENABLED_KEY)
                 .expect("读库不应失败")
@@ -586,7 +601,10 @@ mod tests {
         assert!(!status.enabled);
         assert_eq!(status.mode, "idle");
         assert_eq!(status.reason.as_deref(), Some("测试停用"));
-        assert!(!slot.activation().current().is_active(), "停用后互斥门应回 Idle");
+        assert!(
+            !slot.activation().current().is_active(),
+            "停用后互斥门应回 Idle"
+        );
         // 幂等：未开启时再次停用不报错
         slot.disable(None).expect("重复停用应幂等返回 Ok");
     }
@@ -614,7 +632,11 @@ mod tests {
             None,
             "拒绝时不得落盘"
         );
-        assert!(err.as_command_err().starts_with("tool.session.exclusive:"), "错误串：{}", err.as_command_err());
+        assert!(
+            err.as_command_err().starts_with("tool.session.exclusive:"),
+            "错误串：{}",
+            err.as_command_err()
+        );
     }
 
     /// estop：置急停旗（Panel 源）→ 释放互斥门 → 落盘 false（04 §4.3）。
@@ -622,11 +644,16 @@ mod tests {
     fn estop_triggers_stop_releases_and_persists() {
         let (slot, db) = in_memory_slot();
         slot.enable().expect("开启不应失败");
-        slot.estop(Some("测试急停".to_string())).expect("急停不应失败");
+        slot.estop(Some("测试急停".to_string()))
+            .expect("急停不应失败");
         assert!(slot.stop().stopped(), "急停旗必须置位");
         let records = slot.stop().records();
         assert_eq!(records.len(), 1);
-        assert_eq!(records[0].source, StopSource::Panel, "面板急停按钮为 Panel 源");
+        assert_eq!(
+            records[0].source,
+            StopSource::Panel,
+            "面板急停按钮为 Panel 源"
+        );
         assert_eq!(
             db.get_session_meta(COMPUTER_USE_ENABLED_KEY)
                 .expect("读库不应失败")
@@ -648,7 +675,8 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&events))));
         slot.enable().expect("开启不应失败");
-        slot.disable(Some("测试".to_string())).expect("停用不应失败");
+        slot.disable(Some("测试".to_string()))
+            .expect("停用不应失败");
         let events = events.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events.len(), 2, "enable 与 disable 各广播一次");
         let first: serde_json::Value = serde_json::from_str(&events[0]).expect("事件 JSON");
@@ -666,9 +694,9 @@ mod tests {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
         db.set_session_meta(COMPUTER_USE_ENABLED_KEY, "true")
             .expect("预置开启标记");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(
-            LocalDbComputerMetaStore::new(db),
-        )));
+        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
+            db,
+        ))));
         let events = Arc::new(Mutex::new(Vec::new()));
         slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&events))));
         let _ = slot.status();
@@ -720,9 +748,7 @@ mod tests {
             ) -> Result<conex_computer::CapturedFrame, conex_computer::SessionError> {
                 Err(conex_computer::SessionError::Capture("dummy".into()))
             }
-            async fn snapshot(
-                &self,
-            ) -> Result<PerceptionSnapshot, PerceptionError> {
+            async fn snapshot(&self) -> Result<PerceptionSnapshot, PerceptionError> {
                 Err(PerceptionError::NoActiveWindow)
             }
             fn perception_version(&self) -> u64 {

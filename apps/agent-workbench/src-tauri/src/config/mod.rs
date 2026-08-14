@@ -22,16 +22,14 @@ use std::sync::OnceLock;
 use conex_types::CoreError;
 
 use credentials::CredentialStore;
-use persistence::{
-    default_config_path, default_secret_path, profile_secrets_dir,
-};
+use persistence::{default_config_path, default_secret_path, profile_secrets_dir};
 use provider::ApiConfigStore;
 
 // ── Static stores ──
 // 生产（cfg(not(test))）：OnceLock 单例——首次访问时按当前配置目录懒加载。
 // 测试（cfg(test)）：可重置形态——`OnceLock` 无 `&mut` 重置面，命令级测试
 // （config_profile_apply / config_update 等）需要把静态隔离到独立临时目录
-// （禁止写入真实用户配置），故测试面换 `Mutex<Option<T>>` + 
+// （禁止写入真实用户配置），故测试面换 `Mutex<Option<T>>` +
 // [reset_config_stores_for_test]：重置为 None 后，下一次访问按当前
 // `CRISH_WORKBENCH_CONFIG_DIR` 重新懒加载。
 #[cfg(not(test))]
@@ -65,16 +63,12 @@ pub(crate) fn init_api_config_store() {
     }
     #[cfg(test)]
     {
-        let mut outer = API_CONFIG_STORE
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut outer = API_CONFIG_STORE.lock().unwrap_or_else(|e| e.into_inner());
         outer.get_or_insert_with(|| ApiConfigStore::load(config_path, secret_path));
         let mut secrets = PROFILE_SECRET_STORE
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        secrets.get_or_insert_with(|| {
-            CredentialStore::new(profile_secrets_dir().join(".probe"))
-        });
+        secrets.get_or_insert_with(|| CredentialStore::new(profile_secrets_dir().join(".probe")));
     }
 }
 
@@ -85,14 +79,15 @@ pub(crate) fn init_api_config_store() {
 #[cfg(test)]
 pub(crate) fn reset_config_stores_for_test() {
     *API_CONFIG_STORE.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    *PROFILE_SECRET_STORE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    *PROFILE_SECRET_STORE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 #[cfg(not(test))]
 fn profile_secret_store() -> &'static Mutex<CredentialStore> {
-    PROFILE_SECRET_STORE.get_or_init(|| {
-        Mutex::new(CredentialStore::new(profile_secrets_dir().join(".probe")))
-    })
+    PROFILE_SECRET_STORE
+        .get_or_init(|| Mutex::new(CredentialStore::new(profile_secrets_dir().join(".probe"))))
 }
 
 /// 多 profile 密钥槽锁内写操作（错误统一 CoreError，IPC 面唯一协议）。
@@ -108,14 +103,11 @@ fn with_profile_secrets_mut<T>(
     }
     #[cfg(test)]
     {
-        let mut outer = PROFILE_SECRET_STORE
-            .lock()
-            .map_err(|error| {
-                CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
-            })?;
-        let store = outer.get_or_insert_with(|| {
-            CredentialStore::new(profile_secrets_dir().join(".probe"))
-        });
+        let mut outer = PROFILE_SECRET_STORE.lock().map_err(|error| {
+            CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
+        })?;
+        let store =
+            outer.get_or_insert_with(|| CredentialStore::new(profile_secrets_dir().join(".probe")));
         operation(store)
     }
 }
@@ -133,14 +125,11 @@ fn with_profile_secrets<T>(
     }
     #[cfg(test)]
     {
-        let mut outer = PROFILE_SECRET_STORE
-            .lock()
-            .map_err(|error| {
-                CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
-            })?;
-        let store = outer.get_or_insert_with(|| {
-            CredentialStore::new(profile_secrets_dir().join(".probe"))
-        });
+        let mut outer = PROFILE_SECRET_STORE.lock().map_err(|error| {
+            CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
+        })?;
+        let store =
+            outer.get_or_insert_with(|| CredentialStore::new(profile_secrets_dir().join(".probe")));
         operation(store)
     }
 }

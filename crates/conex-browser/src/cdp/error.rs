@@ -62,56 +62,33 @@ pub enum CdpError {
         message: String,
     },
     /// -32601：域/方法不支持 → 能力探测记 unsupported（§6 降级）
-    DomainUnavailable {
-        method: String,
-    },
+    DomainUnavailable { method: String },
     /// -32602：参数无效
-    BadParams {
-        method: String,
-        message: String,
-    },
+    BadParams { method: String, message: String },
     /// -32603：内部错误（含锁中毒恢复路径，B8 纪律）
     Internal {
         method: Option<String>,
         message: String,
     },
     /// -32000 及其他未分类服务器错误
-    Server {
-        code: i64,
-        message: String,
-    },
+    Server { code: i64, message: String },
     /// -32000 特判：Target closed / Cannot find context（维度 14 导航竞态分类）
-    ContextGone {
-        method: String,
-        message: String,
-    },
+    ContextGone { method: String, message: String },
     /// 命令级超时（pending 项已移除）
-    Timeout {
-        method: String,
-        elapsed: Duration,
-    },
+    Timeout { method: String, elapsed: Duration },
     /// 连接丢失（pending oneshot 通道关闭即刻返回，不等超时）
     ConnectionLost,
     /// 取消（abort 抢断 / 急停）
-    Cancelled {
-        reason: CancelReason,
-    },
+    Cancelled { reason: CancelReason },
     /// 审批拒绝（§4.1 ③ 审批段；Deny → 审计 + 拒绝，不发送）
-    ApprovalDenied {
-        reason: String,
-    },
+    ApprovalDenied { reason: String },
     /// 会话只读能力集拦截（R-12，34 §5.2 E-3）：attach 会话下命令不在只读
     /// 白名单 → fail-closed 拒绝（维度 17 §2.3 默认拒绝面同级，不可审批豁免，
     /// 检查先于审批段）。工具层映射 `tool.browser.capability_disabled`
     /// （conex-types error.rs 已登记，双端口径一致）。
-    CapabilityDenied {
-        method: String,
-    },
+    CapabilityDenied { method: String },
     /// 序列化失败（出站信封/参数编码）
-    Serialize {
-        method: String,
-        message: String,
-    },
+    Serialize { method: String, message: String },
     /// 恢复期门禁（R-9-4）：重连/崩溃重启完成前工具面不可用；
     /// 结构化 `browser.not_ready` 错误码由工具层（维度 17）登记，本层提供底层信号
     NotReady(String),
@@ -204,7 +181,10 @@ impl std::fmt::Display for CdpError {
             CdpError::Protocol { method, message } => write!(
                 f,
                 "协议错误{}{}",
-                method.as_deref().map(|m| format!("[{m}]")).unwrap_or_default(),
+                method
+                    .as_deref()
+                    .map(|m| format!("[{m}]"))
+                    .unwrap_or_default(),
                 message
             ),
             CdpError::DomainUnavailable { method } => write!(f, "域不支持[{method}]"),
@@ -212,7 +192,10 @@ impl std::fmt::Display for CdpError {
             CdpError::Internal { method, message } => write!(
                 f,
                 "内部错误{}{}",
-                method.as_deref().map(|m| format!("[{m}]")).unwrap_or_default(),
+                method
+                    .as_deref()
+                    .map(|m| format!("[{m}]"))
+                    .unwrap_or_default(),
                 message
             ),
             CdpError::Server { code, message } => write!(f, "服务器错误({code})：{message}"),
@@ -232,7 +215,9 @@ impl std::fmt::Display for CdpError {
             CdpError::Serialize { method, message } => write!(f, "序列化失败[{method}]：{message}"),
             CdpError::NotReady(detail) => write!(f, "浏览器恢复中，工具面不可用：{detail}"),
             CdpError::NoActiveTab => write!(f, "无活动标签会话"),
-            CdpError::NoSuchTab { tab_id } => write!(f, "标签 {tab_id} 不存在或已关闭（无可用会话）"),
+            CdpError::NoSuchTab { tab_id } => {
+                write!(f, "标签 {tab_id} 不存在或已关闭（无可用会话）")
+            }
         }
     }
 }
@@ -330,7 +315,10 @@ mod tests {
     /// -32000 特判的否定面：普通服务器消息不进 ContextGone。
     #[test]
     fn from_wire_32000_generic_is_server() {
-        let got = CdpError::from_wire("Page.navigate", &wire(Some(-32000), "browser process crashed"));
+        let got = CdpError::from_wire(
+            "Page.navigate",
+            &wire(Some(-32000), "browser process crashed"),
+        );
         match &got {
             CdpError::Server { code, message } => {
                 assert_eq!(*code, -32000);
@@ -352,7 +340,10 @@ mod tests {
     /// -32601 → 域/方法不可用（能力探测降级语义）。
     #[test]
     fn from_wire_32601_domain_unavailable() {
-        let got = CdpError::from_wire("Page.captureScreenshot", &wire(Some(-32601), "Method not found"));
+        let got = CdpError::from_wire(
+            "Page.captureScreenshot",
+            &wire(Some(-32601), "Method not found"),
+        );
         assert!(
             matches!(got, CdpError::DomainUnavailable { ref method } if method == "Page.captureScreenshot"),
             "实际 {got:?}"
@@ -415,17 +406,35 @@ mod tests {
     #[test]
     fn connection_level_classification() {
         assert!(CdpError::ConnectionLost.is_connection_level());
-        assert!(CdpError::Timeout { method: "x".into(), elapsed: Duration::ZERO }.is_connection_level());
-        assert!(!CdpError::Server { code: -32000, message: "m".into() }.is_connection_level());
+        assert!(CdpError::Timeout {
+            method: "x".into(),
+            elapsed: Duration::ZERO
+        }
+        .is_connection_level());
+        assert!(!CdpError::Server {
+            code: -32000,
+            message: "m".into()
+        }
+        .is_connection_level());
         assert!(!CdpError::DomainUnavailable { method: "x".into() }.is_connection_level());
-        assert!(!CdpError::ContextGone { method: "x".into(), message: "m".into() }.is_connection_level());
+        assert!(!CdpError::ContextGone {
+            method: "x".into(),
+            message: "m".into()
+        }
+        .is_connection_level());
     }
 
     /// CdpErrorCode::from_i64 边界补强：0 与 i64 极值落 Unknown。
     #[test]
     fn error_code_unknown_boundaries() {
         assert_eq!(CdpErrorCode::from_i64(0), CdpErrorCode::Unknown(0));
-        assert_eq!(CdpErrorCode::from_i64(i64::MIN), CdpErrorCode::Unknown(i64::MIN));
-        assert_eq!(CdpErrorCode::from_i64(i64::MAX), CdpErrorCode::Unknown(i64::MAX));
+        assert_eq!(
+            CdpErrorCode::from_i64(i64::MIN),
+            CdpErrorCode::Unknown(i64::MIN)
+        );
+        assert_eq!(
+            CdpErrorCode::from_i64(i64::MAX),
+            CdpErrorCode::Unknown(i64::MAX)
+        );
     }
 }

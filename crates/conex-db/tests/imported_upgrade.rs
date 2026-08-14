@@ -221,9 +221,7 @@ fn v7_fixture_upgrades_to_v8_imported_tables_present() {
         "imported_bookmarks 列清单与方案 §2.1 一致"
     );
     let history_cols: Vec<String> = {
-        let mut stmt = conn
-            .prepare("PRAGMA table_info(imported_history)")
-            .unwrap();
+        let mut stmt = conn.prepare("PRAGMA table_info(imported_history)").unwrap();
         stmt.query_map([], |r| r.get::<_, String>(1))
             .unwrap()
             .map(|c| c.unwrap())
@@ -282,7 +280,11 @@ fn v8_migration_idempotent_second_open() {
     let db1 = LocalDb::open(temp.path()).unwrap();
     db1.import_bookmarks(&[sample_bookmark("https://a.example.com", "A")])
         .unwrap();
-    assert_eq!(backup_files(temp.path()).len(), 0, "v7 起点只跑 v7→v8（无备份）");
+    assert_eq!(
+        backup_files(temp.path()).len(),
+        0,
+        "v7 起点只跑 v7→v8（无备份）"
+    );
 
     // 二次 open：短路路径（current == LATEST_VERSION）幂等，不报错
     let db2 = LocalDb::open(temp.path()).unwrap();

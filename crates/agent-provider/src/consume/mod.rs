@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::classify_provider_error;
-use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason};
+use crate::events::{stream_error_kind, ProviderStreamEvent, ProviderUsage, StopReason};
 
 /// 消费终止原因（metadata.stopReason 的取值域）
 ///
@@ -124,6 +124,9 @@ struct Aggregate {
     diagnostics: Vec<ProviderDiagnostic>,
     /// 错误文案（stop.reason=error 携带，对齐 TS error / end.error 记录，02 §一.3：102-116）
     error: Option<String>,
+    /// Stop 事件携带的错误分类（G1-c：构造点已分类，消费侧优先沿用；
+    /// 无 → 兜底由 [Aggregate::error] 文案经 [classify_provider_error] 重分类）
+    error_kind: Option<ProviderErrorKind>,
     /// stop 携带的用量
     usage: Option<ProviderUsage>,
     /// 终止事件的原因（每流恰好一个，02 §六.9）
@@ -173,6 +176,7 @@ impl Aggregate {
             ProviderStreamEvent::Stop {
                 reason,
                 error,
+                error_kind,
                 usage,
             } => {
                 self.finish_reason = Some(reason);
@@ -180,6 +184,8 @@ impl Aggregate {
                     // error stop 即「流中曾有 error」（02 §一.3：102-116）
                     self.error = Some(error.unwrap_or_else(|| "provider 流异常终止".to_string()));
                 }
+                // G1-c：构造点分类透传；仅携带 error 文案而分类为空时，消费侧兜底重分类
+                self.error_kind = error_kind;
                 if let Some(usage) = usage {
                     self.usage = Some(usage);
                 }
@@ -187,6 +193,32 @@ impl Aggregate {
         }
         // F3-05：正文/思考任一超限即标记（不静默截断）
         self.text.len() > MAX_AGGREGATE_TEXT_BYTES || self.thought.len() > MAX_AGGREGATE_TEXT_BYTES
+    }
+
+    /// 有效错误分类（G1-c）：优先采用 Stop 构造点携带的 [Self::error_kind]，
+    /// 否则由错误文案经统一分类管线兜底重分类（与构造点同源镜像，两处分类一致）。
+    fn effective_error_kind(&self) -> Option<ProviderErrorKind> {
+        match (self.error_kind, self.error.as_deref()) {
+            (Some(kind), _) => Some(kind),
+            (None, Some(message)) => Some(stream_error_kind(message)),
+            (None, None) => None,
+        }
+    }
+
+    /// 构建无内容流错误分类（G1-c：沿用构造点分类；无内容时 error 文案经
+    /// 统一管线兜底为 Unknown 等分类，retry_after 由消息模式分类给出）
+    fn classify_error(&self) -> ClassifiedStreamError {
+        let message = self.error.clone().unwrap_or_default();
+        let kind = self.effective_error_kind().unwrap_or(ProviderErrorKind::Unknown);
+        let retry_after_ms = classify_provider_error(None, Some(&message), None, None)
+            .retry_after()
+            .map(|d| d.as_millis() as u64);
+        ClassifiedStreamError {
+            kind,
+            message,
+            retryable: kind.default_retryable(),
+            retry_after_ms,
+        }
     }
 }
 
@@ -248,9 +280,10 @@ fn finish(aggregate: Aggregate, aborted: bool) -> ConsumeResult {
     // 无内容且 error → StreamError：仅「无文字且无 tool-call 且 stopReason=error」
     // 归入错误路径（01 §五.3 / 01 D6），进入上层分类重试阶梯
     if !has_content {
-        let message = aggregate.error.unwrap_or_default();
+        // G1-c：沿用 Stop 构造点携带的 error_kind，兜底由错误文案重分类
+        let classified = aggregate.classify_error();
         return ConsumeResult {
-            response: ProviderOutput::stream_error(classify_stream_error(&message)),
+            response: ProviderOutput::stream_error(classified),
             diagnostics: aggregate.diagnostics,
             metadata: Value::Null,
         };
@@ -353,17 +386,16 @@ fn build_message_metadata(
         // D7 §3.7 流中断结构化标注（镜像 session-loop stream.rs）：providerError
         // 之外新增 providerErrorKind（kebab-case 13 类）+ providerErrorRetryable
         // （bool），供水合后模型/熔断感知中断原因（E1 续写触发信号数据源）。
-        // 分类走统一管线 classify_provider_error（与 classify_stream_error 同源，
-        // 流内 error 帧文案 → 13 类判定），保持两处镜像分类一致
-        let classified = classify_provider_error(None, Some(error.as_str()), None, None);
+        // G1-c：优先采用 Stop 构造点携带的 error_kind（构造点已按统一管线分类），
+        // 否则由 error 文案经同一管线兜底重分类——两处镜像分类一致
+        let kind = aggregate.effective_error_kind().unwrap_or(ProviderErrorKind::Unknown);
         metadata.insert(
             "providerErrorKind".to_string(),
-            serde_json::to_value(classified.kind())
-                .unwrap_or_else(|_| Value::String("unknown".to_string())),
+            serde_json::to_value(kind).unwrap_or_else(|_| Value::String("unknown".to_string())),
         );
         metadata.insert(
             "providerErrorRetryable".to_string(),
-            Value::Bool(classified.is_retryable()),
+            Value::Bool(kind.default_retryable()),
         );
     }
     if aborted {
@@ -379,21 +411,6 @@ fn finish_reason_str(reason: StopReason) -> &'static str {
         StopReason::ToolCall => "tool-call",
         StopReason::Length => "length",
         StopReason::Error => "error",
-    }
-}
-
-/// 流错误兜底分类（F3 #4 根因修复）：接入 [classify_provider_error] 统一
-/// 分类管线（消息模式兜底）——上游/网关以 error 事件帧返回瞬时 429/5xx
-/// 文案时（HTTP 200 + SSE error 帧的常见形态），「未产出内容」可走
-/// 重试阶梯；修复前恒按 Unknown（retryable=false）分类 → 流内错误
-/// 永不重试（02 §6.7「无内容可重试」语义未落位）。
-fn classify_stream_error(message: &str) -> ClassifiedStreamError {
-    let classified = classify_provider_error(None, Some(message), None, None);
-    ClassifiedStreamError {
-        kind: classified.kind(),
-        message: message.to_string(),
-        retryable: classified.is_retryable(),
-        retry_after_ms: classified.retry_after().map(|d| d.as_millis() as u64),
     }
 }
 
@@ -435,6 +452,7 @@ mod tests {
         ProviderStreamEvent::Stop {
             reason,
             error: error.map(str::to_string),
+            error_kind: None,
             usage,
         }
     }
@@ -591,6 +609,51 @@ mod tests {
             "流内 5xx 文案必须分类为 ServerError（F3 #4）"
         );
         assert!(classified.retryable);
+    }
+
+    /// G1-c（T3.3）：Stop 构造点携带 error_kind → consume 无内容 StreamError
+    /// 沿用它做分类（不重分类），error_kind 首选通路
+    #[test]
+    fn stop_carries_error_kind_used_in_stream_error() {
+        let result = consume(
+            vec![ProviderStreamEvent::Stop {
+                reason: StopReason::Error,
+                error: Some("provider opaque message".into()),
+                error_kind: Some(ProviderErrorKind::Timeout),
+                usage: None,
+            }],
+            false,
+        );
+        let ProviderOutput::StreamError { classified } = &result.response else {
+            panic!("应为 StreamError，得到 {:?}", result.response);
+        };
+        assert_eq!(
+            classified.kind,
+            ProviderErrorKind::Timeout,
+            "构造点明确分类应优先于文案推断"
+        );
+        assert!(classified.retryable, "Timeout 按默认矩阵可重试");
+    }
+
+    /// G1-c（T3.3）：Stop 无 error/error_kind（正常终态）→ StreamError 不产生；
+    /// 有内容 + error_kind → metadata.providerErrorKind 沿用构造点分类
+    #[test]
+    fn stop_error_kind_annoted_in_metadata_when_message() {
+        let result = consume(
+            vec![
+                text_delta("部分输出"),
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Error,
+                    error: Some("rate limit".into()),
+                    error_kind: Some(ProviderErrorKind::RateLimit),
+                    usage: None,
+                },
+            ],
+            false,
+        );
+        assert!(result.response.is_message());
+        assert_eq!(result.metadata["providerErrorKind"], "rate-limit");
+        assert_eq!(result.metadata["providerErrorRetryable"], true);
     }
 
     /// F3 盲区 #4 反向：流内 error 帧为不可重试文案（如认证失败）→ 仍
@@ -765,6 +828,54 @@ mod tests {
         assert_eq!(result.metadata["usage"]["promptTokens"], 10);
         assert_eq!(result.metadata["providerFinishReason"], "tool-call");
         assert_eq!(result.metadata["text"], "x");
+    }
+
+    /// T3.4（G1-d）chat 轨归一口径：`prompt_tokens` 保留原始值（Included，
+    /// prompt 已含缓存），归一 `input = prompt - cached - write` 由
+    /// [ProviderUsage::cache_breakdown] 在 usage 聚合层派生收敛（C9 口径）——
+    /// Included 下 `CacheBreakdown.miss` 即归一 input。reasoning 从 completion 侧
+    /// 独立解析，completion 保留总输出（含思考）。
+    #[test]
+    fn chat_usage_normalized_input_matches_s_b1() {
+        // chat 轨 mock usage：prompt 含 cached（Included 口径）
+        let usage = ProviderUsage {
+            prompt_tokens: Some(100),
+            completion_tokens: Some(30),
+            total_tokens: Some(130),
+            cache_read_tokens: Some(70),
+            cache_write_tokens: Some(10),
+            reasoning_tokens: Some(12),
+            ..ProviderUsage::default()
+        };
+        let result = consume(
+            vec![
+                text_delta("你好"),
+                stop_with(StopReason::Stop, None, Some(usage.clone())),
+            ],
+            false,
+        );
+        assert!(result.response.is_message());
+        // 归一口径（Included）：miss = prompt - cached - write = 100 - 70 - 10 = 20
+        let breakdown = usage
+            .cache_breakdown(crate::events::CacheAccounting::Included)
+            .expect("prompt 存在必可派生");
+        assert_eq!(breakdown.miss, 20, "归一 input = prompt - cached - write");
+        assert_eq!(
+            breakdown.input_total, 100,
+            "Included：input_total = prompt（不重复计缓存）"
+        );
+        // 恒等式（C9）：input_total = miss + read + write
+        assert_eq!(
+            breakdown.miss + breakdown.read + breakdown.write,
+            breakdown.input_total
+        );
+        // 元数据透传原始 usage（promptTokens 保持原始值，不回写归一值——对齐 session-loop）
+        assert_eq!(result.metadata["usage"]["promptTokens"], 100);
+        assert_eq!(result.metadata["usage"]["reasoningTokens"], 12);
+        assert_eq!(
+            result.metadata["usage"]["completionTokens"], 30,
+            "reasoning 不把 completion 中的思考扣走"
+        );
     }
 
     /// abort 有内容且流中有 error → 部分保留同时带 providerError 标注

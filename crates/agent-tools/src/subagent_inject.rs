@@ -201,7 +201,10 @@ pub fn permission_relay_section(task_type: Option<&str>, boundary: Option<&str>)
 /// 权限申请指引注入项（M1 挂载形状）：返回 `(标题, 正文)`，挂载方
 /// `ContextInjector::push(ContextInjection::new(kind, title, content))`。
 /// T-D-13 引擎 spawn 装配路径按需调用（子代理 run 才挂载）。
-pub fn permission_relay_injection(task_type: Option<&str>, boundary: Option<&str>) -> (String, String) {
+pub fn permission_relay_injection(
+    task_type: Option<&str>,
+    boundary: Option<&str>,
+) -> (String, String) {
     (
         PERMISSION_RELAY_TITLE.to_string(),
         permission_relay_section(task_type, boundary),
@@ -292,10 +295,7 @@ mod tests {
     /// ISO8601 换算对齐全仓同源锚点（含毫秒 / 零点 / 负值容错）
     #[test]
     fn iso8601_conversion_matches_known_anchors() {
-        assert_eq!(
-            iso8601_from_epoch_ms(ANCHOR_MS),
-            "2026-07-31T00:00:00.000Z"
-        );
+        assert_eq!(iso8601_from_epoch_ms(ANCHOR_MS), "2026-07-31T00:00:00.000Z");
         assert_eq!(
             iso8601_from_epoch_ms(ANCHOR_MS + 123),
             "2026-07-31T00:00:00.123Z"
@@ -312,7 +312,8 @@ mod tests {
     fn injected_system_prompt_contains_started_at_equal_to_db_value() {
         // 模拟 M1 ContextInjector::render：base 段置首 + `## {title}\n{content}`
         let base = "agent 定义\nskill 内容\nMCP 工具声明";
-        let sections = subagent_session_injections(Some(ANCHOR_MS), DEFAULT_REF_AGE_THRESHOLD_HOURS);
+        let sections =
+            subagent_session_injections(Some(ANCHOR_MS), DEFAULT_REF_AGE_THRESHOLD_HOURS);
         assert_eq!(sections.len(), 2);
         let rendered: Vec<String> = sections
             .iter()
@@ -418,7 +419,8 @@ mod tests {
             subagent_session_injections(None, DEFAULT_REF_AGE_THRESHOLD_HOURS).is_empty(),
             "主 agent / 非子代理上下文：无注入行为不变"
         );
-        let sections = subagent_session_injections(Some(ANCHOR_MS), DEFAULT_REF_AGE_THRESHOLD_HOURS);
+        let sections =
+            subagent_session_injections(Some(ANCHOR_MS), DEFAULT_REF_AGE_THRESHOLD_HOURS);
         assert_eq!(sections.len(), 2, "有 started_at 应注入两段");
         assert_eq!(sections[0].0, STARTED_AT_SECTION_TITLE);
         assert!(sections[0].1.contains(&ANCHOR_MS.to_string()));
@@ -435,18 +437,38 @@ mod tests {
         let started = ANCHOR_MS; // 2026-07-31T00:00:00Z
         let hour_ms = 3_600_000;
         // ref 恰好早 24 小时（含等于触发，对齐 C3「≥」语义）
-        assert!(ref_older_than_threshold(started, started - 24 * hour_ms, 24));
+        assert!(ref_older_than_threshold(
+            started,
+            started - 24 * hour_ms,
+            24
+        ));
         // ref 早 23 小时 → 不触发
-        assert!(!ref_older_than_threshold(started, started - 23 * hour_ms, 24));
+        assert!(!ref_older_than_threshold(
+            started,
+            started - 23 * hour_ms,
+            24
+        ));
         // ref 早 48 小时 → 触发
-        assert!(ref_older_than_threshold(started, started - 48 * hour_ms, 24));
+        assert!(ref_older_than_threshold(
+            started,
+            started - 48 * hour_ms,
+            24
+        ));
         // ref 晚于 started_at（时钟偏差 / 未来提交）→ 不触发
         assert!(!ref_older_than_threshold(started, started + hour_ms, 24));
         // ref 恰等于 started_at → 不触发
         assert!(!ref_older_than_threshold(started, started, 24));
         // 阈值可配：默认 24 不触发，调小后触发
-        assert!(!ref_older_than_threshold(started, started - 23 * hour_ms, 24));
-        assert!(ref_older_than_threshold(started, started - 23 * hour_ms, 23));
+        assert!(!ref_older_than_threshold(
+            started,
+            started - 23 * hour_ms,
+            24
+        ));
+        assert!(ref_older_than_threshold(
+            started,
+            started - 23 * hour_ms,
+            23
+        ));
     }
 
     // ── T-D-14 权限传递层：权限申请指引段 ──

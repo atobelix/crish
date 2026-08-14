@@ -317,15 +317,18 @@ pub fn classify_after_truncation(
     window: u64,
     thresholds: &CompactionThresholds,
 ) -> ThresholdDecision {
-    thresholds.classify(estimate_after_truncation(estimate, result.tokens_saved), window)
+    thresholds.classify(
+        estimate_after_truncation(estimate, result.tokens_saved),
+        window,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         classify_after_truncation, estimate_after_truncation, truncate_tool_output,
-        ToolOutputTruncationLimits, ToolOutputTruncationRecord,
-        TOOL_OUTPUT_MAX_BYTES_DEFAULT, TOOL_OUTPUT_MAX_LINES_DEFAULT,
+        ToolOutputTruncationLimits, ToolOutputTruncationRecord, TOOL_OUTPUT_MAX_BYTES_DEFAULT,
+        TOOL_OUTPUT_MAX_LINES_DEFAULT,
     };
     use crate::compaction::{CompactionThresholds, ThresholdDecision};
 

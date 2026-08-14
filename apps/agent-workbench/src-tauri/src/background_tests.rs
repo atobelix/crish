@@ -11,18 +11,6 @@
 //   tasklist / kill -0 存活探测辅助，T-AB-06/07 验收），非产品执行面；
 //   测试 mod 内 allow + 理由（裁决 D8 背书）。
 #![allow(clippy::disallowed_methods)]
-use super::*;
-pub(crate) use agent_tools::background::{
-    BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskStatus,
-    KillResult, TaskState,
-};
-pub(crate) use conex_types::error::codes;
-pub(crate) use conex_types::events::{AgentEvent, AgentEventEnvelope};
-pub(crate) use crate::core_error::CoreError;
-pub(crate) use crate::resource::{
-    cpu_percent_from_delta, sample_usage, EventSink, RawUsage,
-    ResourceMonitorConfig, TaskNotifier,
-};
 pub(crate) use super::bg_commands::{
     build_list_response, build_output_response, build_send_input_response,
 };
@@ -30,6 +18,17 @@ pub(crate) use super::bg_events::SamplerFn;
 pub(crate) use super::bg_log::{read_meta, strip_log_prefix};
 pub(crate) use super::bg_registry::MAX_BACKGROUND_TASKS;
 pub(crate) use super::bg_task::task_summary;
+use super::*;
+pub(crate) use crate::core_error::CoreError;
+pub(crate) use crate::resource::{
+    cpu_percent_from_delta, sample_usage, EventSink, RawUsage, ResourceMonitorConfig, TaskNotifier,
+};
+pub(crate) use agent_tools::background::{
+    BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskStatus,
+    KillResult, TaskState,
+};
+pub(crate) use conex_types::error::codes;
+pub(crate) use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use std::collections::HashSet;
 use std::path::Path;
 use std::process::Stdio;
@@ -127,17 +126,10 @@ fn build_test_command(command: &str) -> tokio::process::Command {
 
 pub(crate) fn test_registry() -> BackgroundTaskRegistry {
     let seq = TEST_SEQ.fetch_add(1, Ordering::Relaxed);
-    let root = std::env::temp_dir().join(format!(
-        "crish-bg-test-{}-{seq}",
-        std::process::id()
-    ));
+    let root = std::env::temp_dir().join(format!("crish-bg-test-{}-{seq}", std::process::id()));
     // 纯构造（不启动归档线程）：常规测试用 30 分钟保留 + 默认容量，无需
     // 归档循环；归档/容量专项测试显式用 with_log_root/with_config（Arc）
-    BackgroundTaskRegistry::construct(
-        root,
-        Duration::from_secs(30 * 60),
-        MAX_BACKGROUND_TASKS,
-    )
+    BackgroundTaskRegistry::construct(root, Duration::from_secs(30 * 60), MAX_BACKGROUND_TASKS)
 }
 
 pub(crate) fn adopt_request(
@@ -249,7 +241,13 @@ async fn registry_adopt_and_list() {
     let pid = child.id().expect("spawned pid");
 
     let task_ref = registry
-        .adopt(adopt_request(child, "long-run", Path::new("."), false, None))
+        .adopt(adopt_request(
+            child,
+            "long-run",
+            Path::new("."),
+            false,
+            None,
+        ))
         .await
         .expect("adopt");
     assert!(task_ref.task_id.starts_with("task-"));
@@ -323,7 +321,10 @@ async fn registry_state_machine() {
         .find(|i| i.task_id == r1.task_id)
         .expect("完成条目存在");
     let finished1 = fin1.finished_at_ms.expect("终态应有 finishedAtMs");
-    assert!(finished1 >= fin1.started_at_ms, "finishedAtMs 不应早于 startedAtMs");
+    assert!(
+        finished1 >= fin1.started_at_ms,
+        "finishedAtMs 不应早于 startedAtMs"
+    );
 
     // Failed 路径
     let child = spawn_test_child("exit 7");
@@ -343,7 +344,10 @@ async fn registry_state_machine() {
         fin2.finished_at_ms.is_some(),
         "Failed 终态同样固化 finishedAtMs"
     );
-    assert!(fin2.duration_ms > 0, "Failed 计时合理（exit 7 经 wait 收口）");
+    assert!(
+        fin2.duration_ms > 0,
+        "Failed 计时合理（exit 7 经 wait 收口）"
+    );
 }
 
 /// T-AB-07 验收：任务 id 唯一且带 task- 前缀（命名空间独立于 pty id）。
@@ -355,10 +359,20 @@ async fn task_ids_are_unique_and_prefixed() {
         let child = spawn_test_child(LONG_COMMAND);
         let pid = child.id().expect("spawned pid");
         let task_ref = registry
-            .adopt(adopt_request(child, &format!("cmd-{i}"), Path::new("."), false, None))
+            .adopt(adopt_request(
+                child,
+                &format!("cmd-{i}"),
+                Path::new("."),
+                false,
+                None,
+            ))
             .await
             .expect("adopt");
-        assert!(task_ref.task_id.starts_with("task-"), "id 格式: {}", task_ref.task_id);
+        assert!(
+            task_ref.task_id.starts_with("task-"),
+            "id 格式: {}",
+            task_ref.task_id
+        );
         assert!(
             seen.insert(task_ref.task_id.clone()),
             "重复 task id: {}",
@@ -380,7 +394,10 @@ async fn registry_methods_error_contract() {
     let cwd = std::env::current_dir().expect("cwd");
 
     // 未知 id → NotFound（不静默返回空值）
-    let err = registry.read_log("task-nope", None, 100).await.expect_err("read_log");
+    let err = registry
+        .read_log("task-nope", None, 100)
+        .await
+        .expect_err("read_log");
     assert_eq!(err.code(), codes::TOOL_NOT_FOUND);
     let err = registry
         .send_input("task-nope", "hi", true)
@@ -397,7 +414,10 @@ async fn registry_methods_error_contract() {
         .await
         .expect("adopt");
 
-    let slice = registry.read_log(&r.task_id, None, 100).await.expect("read_log 已实装");
+    let slice = registry
+        .read_log(&r.task_id, None, 100)
+        .await
+        .expect("read_log 已实装");
     assert_eq!(slice.task_id, r.task_id);
     assert!(
         slice.lines.is_empty(),
@@ -422,7 +442,11 @@ async fn registry_methods_error_contract() {
         "运行中任务 kill 应返回 Killed，实际 {result:?}"
     );
     let status = registry.status(&r.task_id).await.expect("status");
-    assert_eq!(status.status, TaskState::Killed, "kill 后状态机应翻转为 Killed");
+    assert_eq!(
+        status.status,
+        TaskState::Killed,
+        "kill 后状态机应翻转为 Killed"
+    );
 }
 
 /// T-AB-08 验收：list 契约——`{ tasks: [...] }`，每条含 taskId/command/
@@ -433,22 +457,34 @@ async fn workbench_list_background_tasks_contract() {
     let child = spawn_test_child(LONG_COMMAND);
     let pid = child.id().expect("spawned pid");
     registry
-        .adopt(adopt_request(child, "list-contract", Path::new("."), false, None))
+        .adopt(adopt_request(
+            child,
+            "list-contract",
+            Path::new("."),
+            false,
+            None,
+        ))
         .await
         .expect("adopt");
 
-    let response = build_list_response(&registry).await.expect("build_list_response");
+    let response = build_list_response(&registry)
+        .await
+        .expect("build_list_response");
     let json = serde_json::to_value(&response).expect("serialize");
     assert!(json.get("tasks").is_some(), "响应必须含 tasks 数组");
     let tasks = json["tasks"].as_array().expect("tasks 数组");
     assert_eq!(tasks.len(), 1, "应恰有 1 条任务");
 
     let task = &tasks[0];
-    for key in ["taskId", "command", "startedAt", "duration", "status", "logPath"] {
-        assert!(
-            task.get(key).is_some(),
-            "列表条目缺字段 {key}: {task}"
-        );
+    for key in [
+        "taskId",
+        "command",
+        "startedAt",
+        "duration",
+        "status",
+        "logPath",
+    ] {
+        assert!(task.get(key).is_some(), "列表条目缺字段 {key}: {task}");
     }
     assert_eq!(task["status"], "running", "运行中任务 status=running");
     assert_eq!(task["command"], "list-contract");
@@ -471,7 +507,13 @@ async fn workbench_get_background_task_output_contract() {
     let child = spawn_test_child(LOG_KILL_COMMAND);
     let pid = child.id().expect("spawned pid");
     let r = registry
-        .adopt(adopt_request(child, "output-contract", Path::new("."), false, None))
+        .adopt(adopt_request(
+            child,
+            "output-contract",
+            Path::new("."),
+            false,
+            None,
+        ))
         .await
         .expect("adopt");
 
@@ -490,14 +532,18 @@ async fn workbench_get_background_task_output_contract() {
     );
 
     // output 字段（前端 parseBackgroundTaskOutput 直通取 output）
-    let response = build_output_response(&registry, &r.task_id).await.expect("build_output_response");
+    let response = build_output_response(&registry, &r.task_id)
+        .await
+        .expect("build_output_response");
     assert_eq!(response.output, second.tail, "output 应等于最新 tail");
     let json = serde_json::to_value(&response).expect("serialize");
     assert_eq!(json["output"], second.tail, "wire 面 output 直通");
     assert_eq!(json["taskId"], r.task_id);
 
     // 未知 taskId → NotFound 风格错误
-    let err = build_output_response(&registry, "task-999999").await.expect_err("unknown id");
+    let err = build_output_response(&registry, "task-999999")
+        .await
+        .expect_err("unknown id");
     assert!(
         matches!(err, CoreError::NotFound(_)),
         "未知 taskId 应返回 NotFound，实际 {err:?}"

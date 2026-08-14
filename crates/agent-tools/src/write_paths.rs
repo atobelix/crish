@@ -67,6 +67,7 @@ use conex_types::error::codes;
 /// 冲突为确定拒绝、不可重试——等待占用者释放后由主 agent 编排串行重试）
 pub(crate) const TOOL_WRITE_PATH_CONFLICT: &str = codes::TOOL_WRITE_PATH_CONFLICT;
 
+pub(crate) use write_paths_state::{check_write_allowance_for_ctx, claim_write_guard};
 pub use write_paths_state::{
     ClaimMode, WriteClaimGuard, WritePathClaim, WritePathConflict, WritePathRegistry,
     DEFAULT_CLAIM_TTL_MS,
@@ -75,7 +76,6 @@ pub use write_paths_validate::{
     check_write_allowance, paths_overlap_normalized, validate_write_path, WriteAllowanceError,
     WritePathPolicy,
 };
-pub(crate) use write_paths_state::{claim_write_guard, check_write_allowance_for_ctx};
 
 // ── 测试（SR-06a-5 外置；`#[path]` 旁挂，无孤儿）───────────────────
 

@@ -80,9 +80,7 @@ impl Tool for DocumentOutlineTool {
         args: serde_json::Value,
     ) -> Result<serde_json::Value, ToolError> {
         let doc_id = require_string(&args, "doc_id")?;
-        let max_depth = optional_u64(&args, "max_depth")
-            .unwrap_or(6)
-            .clamp(1, 16) as u32;
+        let max_depth = optional_u64(&args, "max_depth").unwrap_or(6).clamp(1, 16) as u32;
 
         let Some(backend) = ctx.note_backend.as_ref() else {
             return Ok(serde_json::json!({

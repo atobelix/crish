@@ -8,9 +8,9 @@
 //! - cmd.too_many_requests → 429；其余 → 500（internal）。
 
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 
 use conex_types::device::{DeviceErrorCode, ErrorBody};
@@ -157,8 +157,8 @@ impl ServerError {
 /// 以 `Result<Json<T>, ServerError>` 返回，`?` 传播后由本实现出网）
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
-        let status = StatusCode::from_u16(self.http_status())
-            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status =
+            StatusCode::from_u16(self.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         (status, Json(self.error_body())).into_response()
     }
 }
@@ -238,8 +238,7 @@ mod tests {
             DeviceErrorCode::CmdNotFound
         );
         assert_eq!(
-            ServerError::from_core_error(&CoreError::InvalidInput("bad id".into()))
-                .device_code(),
+            ServerError::from_core_error(&CoreError::InvalidInput("bad id".into())).device_code(),
             DeviceErrorCode::CmdInvalid
         );
         assert_eq!(
@@ -256,8 +255,8 @@ mod tests {
     /// R1-03：IntoResponse 出网（HTTP 状态 + ErrorBody JSON 载荷）
     #[tokio::test]
     async fn into_response_maps_status_and_error_body() {
-        let response = ServerError::protocol(DeviceErrorCode::CmdNotFound, "run 不存在")
-            .into_response();
+        let response =
+            ServerError::protocol(DeviceErrorCode::CmdNotFound, "run 不存在").into_response();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await

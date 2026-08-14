@@ -14,8 +14,7 @@ mod probe {
 
     /// 冒烟 1:截屏一次 — 布局查询 → 捕获 → 缩放 → PNG 落盘(temp 目录)
     pub fn capture_once() -> Result<(), String> {
-        let mut capture =
-            ScreenCapture::new().map_err(|e| format!("截屏源初始化失败: {e}"))?;
+        let mut capture = ScreenCapture::new().map_err(|e| format!("截屏源初始化失败: {e}"))?;
         let layout = capture.layout().clone();
         println!(
             "布局: origin=({},{}) 物理={}x{} 显示器数={}",
@@ -55,8 +54,7 @@ mod probe {
 
     /// 冒烟 2:坐标往返 — 真实布局规格下 API→物理→API 双向网格采样,误差 ≤1px
     pub fn coord_roundtrip() -> Result<(), String> {
-        let capture =
-            ScreenCapture::new().map_err(|e| format!("截屏源初始化失败: {e}"))?;
+        let capture = ScreenCapture::new().map_err(|e| format!("截屏源初始化失败: {e}"))?;
         let spec = capture.layout().to_scale_spec();
         let mut worst = (0i32, 0i32);
         let mut x = 0i32;
@@ -91,8 +89,7 @@ mod probe {
 
     /// 冒烟 3:会话门面初始化 + 光标位置读取(物理→API 换算)
     pub fn session_probe() -> Result<(), String> {
-        let mut session =
-            ComputerSession::new().map_err(|e| format!("会话初始化失败: {e}"))?;
+        let mut session = ComputerSession::new().map_err(|e| format!("会话初始化失败: {e}"))?;
         let result = session
             .dispatch(&Action::CursorPosition)
             .map_err(|e| format!("光标查询失败: {e}"))?;

@@ -95,7 +95,8 @@ impl FixtureNode {
         }
         for (k, v) in self.styles {
             node = node.style(&k, &v);
-        }        if let Some([x, y, w, h]) = self.bounds {
+        }
+        if let Some([x, y, w, h]) = self.bounds {
             node = node.bounds(x, y, w, h);
         }
         if self.scrollable {
@@ -133,12 +134,22 @@ impl FixtureNode {
 }
 
 /// 加载 fixture 并跑默认预算序列化。
-fn run_sample(name: &str) -> (Vec<EnhancedNode>, conex_browser::snapshot::serialize::SerializeOutput) {
+fn run_sample(
+    name: &str,
+) -> (
+    Vec<EnhancedNode>,
+    conex_browser::snapshot::serialize::SerializeOutput,
+) {
     let path = fixtures_dir().join(name);
-    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 fixture {path:?} 失败：{e}"));
+    let raw = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("读取 fixture {path:?} 失败：{e}"));
     let fixture: SampleFixture =
         serde_json::from_str(&raw).unwrap_or_else(|e| panic!("fixture {name} JSON 解析失败：{e}"));
-    let roots: Vec<EnhancedNode> = fixture.roots.into_iter().map(FixtureNode::into_enhanced).collect();
+    let roots: Vec<EnhancedNode> = fixture
+        .roots
+        .into_iter()
+        .map(FixtureNode::into_enhanced)
+        .collect();
     let budgets = BudgetConfig::active();
     let previous = HashSet::new();
     let opts = SerializeOptions::new(&budgets, "samples", &previous);
@@ -149,10 +160,15 @@ fn run_sample(name: &str) -> (Vec<EnhancedNode>, conex_browser::snapshot::serial
 /// 断言期望集合与 selector_map 完全一致（正例全检出、负例全不检出）。
 fn assert_expectations(name: &str, out: &conex_browser::snapshot::serialize::SerializeOutput) {
     let path = fixtures_dir().join(name);
-    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 fixture {path:?} 失败：{e}"));
+    let raw = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("读取 fixture {path:?} 失败：{e}"));
     let fixture: SampleFixture =
         serde_json::from_str(&raw).unwrap_or_else(|e| panic!("fixture {name} JSON 解析失败：{e}"));
-    let indexed: HashSet<i64> = out.selector_map.values().map(|r| r.backend_node_id).collect();
+    let indexed: HashSet<i64> = out
+        .selector_map
+        .values()
+        .map(|r| r.backend_node_id)
+        .collect();
     for id in &fixture.expected.interactive {
         assert!(
             indexed.contains(id),
@@ -209,7 +225,10 @@ fn samples_s03_listener_channel_gated() {
         .collect();
     assert!(indexed_default.contains(&1));
     assert!(indexed_default.contains(&3));
-    assert!(!indexed_default.contains(&2), "通道关闭时纯监听器元素不检出（T-4）");
+    assert!(
+        !indexed_default.contains(&2),
+        "通道关闭时纯监听器元素不检出（T-4）"
+    );
 
     // 通道开启：S1 命中 → id=2 检出
     let budgets = BudgetConfig::active();
@@ -217,7 +236,11 @@ fn samples_s03_listener_channel_gated() {
     let mut opts_on = SerializeOptions::new(&budgets, "samples", &previous);
     opts_on.listener_channel = true;
     let out_on = build_and_serialize(&roots, &opts_on);
-    let indexed_on: HashSet<i64> = out_on.selector_map.values().map(|r| r.backend_node_id).collect();
+    let indexed_on: HashSet<i64> = out_on
+        .selector_map
+        .values()
+        .map(|r| r.backend_node_id)
+        .collect();
     assert!(indexed_on.contains(&2), "通道开启时监听器元素应检出");
 }
 
@@ -226,9 +249,16 @@ fn samples_s03_listener_channel_gated() {
 #[test]
 fn samples_s08_closed_shadow_unoperable() {
     let (_, out) = run_sample("s08_shadow_closed.json");
-    assert_eq!(out.blind_zone.unoperable, 1, "closed shadow 降级元素应计入统计");
+    assert_eq!(
+        out.blind_zone.unoperable, 1,
+        "closed shadow 降级元素应计入统计"
+    );
     assert!(out.text.contains("|SHADOW(closed)|"));
-    assert!(out.text.contains("|UNOPERABLE|"), "不可操作前缀应呈现：\n{}", out.text);
+    assert!(
+        out.text.contains("|UNOPERABLE|"),
+        "不可操作前缀应呈现：\n{}",
+        out.text
+    );
     assert!(out.text.contains("Shadow End"));
 }
 
@@ -236,10 +266,19 @@ fn samples_s08_closed_shadow_unoperable() {
 #[test]
 fn samples_s09_iframe_placeholder_and_content() {
     let (_, out) = run_sample("s09_iframe.json");
-    assert!(out.text.contains("|IFRAME|<iframe src=https://same.example/frame.html />"));
-    let indexed: HashSet<i64> = out.selector_map.values().map(|r| r.backend_node_id).collect();
+    assert!(out
+        .text
+        .contains("|IFRAME|<iframe src=https://same.example/frame.html />"));
+    let indexed: HashSet<i64> = out
+        .selector_map
+        .values()
+        .map(|r| r.backend_node_id)
+        .collect();
     assert!(!indexed.contains(&1), "iframe 占位不分配交互索引（U-4）");
-    assert!(indexed.contains(&3) && indexed.contains(&4), "同源 pierce 子树检出");
+    assert!(
+        indexed.contains(&3) && indexed.contains(&4),
+        "同源 pierce 子树检出"
+    );
 }
 
 /// s10 专用：select options 展开 / 日期 format 提示 / 隐藏 file input 强制可见。
@@ -251,9 +290,19 @@ fn samples_s10_complex_controls() {
         "select options 应展开：\n{}",
         out.text
     );
-    assert!(out.text.contains("format=YYYY-MM-DD"), "日期输入应附 format 提示");
-    let indexed: HashSet<i64> = out.selector_map.values().map(|r| r.backend_node_id).collect();
-    assert!(indexed.contains(&3), "隐藏 file input 强制可见（§2.3 例外）");
+    assert!(
+        out.text.contains("format=YYYY-MM-DD"),
+        "日期输入应附 format 提示"
+    );
+    let indexed: HashSet<i64> = out
+        .selector_map
+        .values()
+        .map(|r| r.backend_node_id)
+        .collect();
+    assert!(
+        indexed.contains(&3),
+        "隐藏 file input 强制可见（§2.3 例外）"
+    );
 }
 
 /// 盲区统计（V4/T-16）：canvas/video/img 占位呈现、不分配索引、头部统计一致。
@@ -273,8 +322,16 @@ fn samples_blind_zone_stats() {
         "video 占位行保留 src 描述属性（T-16 补齐）：\n{}",
         out.text
     );
-    assert!(out.text.contains("|IMG|<img alt=示意图>"), "img 占位保留属性（D4 不误伤）：\n{}", out.text);
-    let indexed: HashSet<i64> = out.selector_map.values().map(|r| r.backend_node_id).collect();
+    assert!(
+        out.text.contains("|IMG|<img alt=示意图>"),
+        "img 占位保留属性（D4 不误伤）：\n{}",
+        out.text
+    );
+    let indexed: HashSet<i64> = out
+        .selector_map
+        .values()
+        .map(|r| r.backend_node_id)
+        .collect();
     assert!(!indexed.contains(&1) && !indexed.contains(&2) && !indexed.contains(&3));
     assert!(indexed.contains(&4));
 }

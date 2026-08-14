@@ -172,7 +172,9 @@ mod tests {
             scope.spawn(move || unsafe {
                 let handle = CreateMutexW(std::ptr::null(), 1, thread_name.as_ptr());
                 assert!(!handle.is_null(), "首次创建命名互斥必须成功");
-                tx_created.send(handle as usize).expect("通知主线程创建完成");
+                tx_created
+                    .send(handle as usize)
+                    .expect("通知主线程创建完成");
                 // 超时兜底：主线程断言失败时避免 scope 收尾死锁
                 let _ = rx_release.recv_timeout(std::time::Duration::from_secs(30));
                 ReleaseMutex(handle);

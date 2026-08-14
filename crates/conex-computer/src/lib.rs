@@ -15,10 +15,10 @@ pub mod action;
 pub mod activation;
 pub mod coord;
 pub mod desktop_capture;
-pub mod window_gate;
 pub mod perception;
 pub mod screen;
 pub mod security;
+pub mod window_gate;
 
 pub use action::{Action, ActionError, ClickCount, MouseButton, ScrollDirection};
 pub use activation::{ActivationError, ActivationGate, CleanupAction, SessionMode};
@@ -26,7 +26,7 @@ pub use coord::{CoordError, Point, ScaleSpec};
 pub use screen::{CapturedFrame, DesktopLayout, MonitorInfo};
 pub use security::{
     Approval, ApprovalGate, ApprovalRequest, EmergencyStop, EnableSource, EnablementError,
-    IdleTimeout, SessionEnablement, StopSource, StopRecord,
+    IdleTimeout, SessionEnablement, StopRecord, StopSource,
 };
 
 /// 会话级错误(动作校验 / 注入 / 截屏 / 初始化 / 目标门禁五类)。
@@ -138,7 +138,9 @@ impl ComputerSession {
     pub fn dispatch(&mut self, action: &Action) -> Result<ActionResult, SessionError> {
         if let Some(ref s) = self.stop {
             if s.stopped() {
-                return Err(SessionError::Inject("急停已置位，拒绝派发注入动作".to_string()));
+                return Err(SessionError::Inject(
+                    "急停已置位，拒绝派发注入动作".to_string(),
+                ));
             }
         }
         action.validate(&self.spec)?;
@@ -214,10 +216,7 @@ impl ComputerSession {
                     .release_modifiers(modifiers)
                     .map_err(SessionError::Inject)?;
             }
-            Action::HoldKey {
-                key,
-                duration_secs,
-            } => {
+            Action::HoldKey { key, duration_secs } => {
                 self.backend
                     .hold_key(key, *duration_secs)
                     .map_err(SessionError::Inject)?;
@@ -248,7 +247,7 @@ impl ComputerSession {
 #[allow(unsafe_code)]
 fn set_process_dpi_aware() {
     use windows_sys::Win32::UI::HiDpi::{
-        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
+        SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
     };
     let ok = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     if ok == 0 {

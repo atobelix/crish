@@ -31,16 +31,21 @@ impl CoreRunState {
                 .iter()
                 .map(|record| record.run_id.clone())
                 .collect();
-            let candidate_sessions: Vec<String> =
-                outcome.sessions.iter().map(|session| session.session_id.clone()).collect();
-            self.resolve_subagent_parents(&run_ids, &candidate_sessions).await
+            let candidate_sessions: Vec<String> = outcome
+                .sessions
+                .iter()
+                .map(|session| session.session_id.clone())
+                .collect();
+            self.resolve_subagent_parents(&run_ids, &candidate_sessions)
+                .await
         };
         let mut queue = self.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
         for record in &outcome.interrupted {
             let now = now_ms_internal();
             // 目标会话为语义注记（队列为全局共享面，无会话字段——消费
             // 方按 group_id/条目文本承载归属语义，T06.3 Q15）
-            let (_target_session, text) = if record.session_id.starts_with(SUBAGENT_SESSION_PREFIX) {
+            let (_target_session, text) = if record.session_id.starts_with(SUBAGENT_SESSION_PREFIX)
+            {
                 match parents.get(&record.run_id) {
                     Some(parent) => (
                         parent.clone(),
@@ -61,7 +66,10 @@ impl CoreRunState {
                     }
                 }
             } else {
-                (record.session_id.clone(), RESTORE_MAIN_INJECT_TEXT.to_string())
+                (
+                    record.session_id.clone(),
+                    RESTORE_MAIN_INJECT_TEXT.to_string(),
+                )
             };
             // 分组去重（replace_or_enqueue：同 run 不重复堆积——重启
             // 双恢复场景仅 1 条）；带时间戳 id 保证同组替换后仍唯一
@@ -96,7 +104,10 @@ impl CoreRunState {
                 match db.load_session_agents(session) {
                     Ok(agents) => {
                         for agent in agents {
-                            if targets.iter().any(|target| target == &agent.subagent_run_id) {
+                            if targets
+                                .iter()
+                                .any(|target| target == &agent.subagent_run_id)
+                            {
                                 parents.insert(agent.subagent_run_id, agent.parent_session_id);
                             }
                         }
@@ -152,25 +163,30 @@ impl CoreRunState {
                     Some(mode.to_string());
                 *self.restore_note.lock().unwrap_or_else(|e| e.into_inner()) =
                     outcome.snapshot_note.clone();
-                *self.interrupted_count.lock().unwrap_or_else(|e| e.into_inner()) =
-                    outcome.interrupted.len();
-                *self.restore_last_sequence.lock().unwrap_or_else(|e| e.into_inner()) =
-                    Some(outcome.last_sequence);
+                *self
+                    .interrupted_count
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = outcome.interrupted.len();
+                *self
+                    .restore_last_sequence
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(outcome.last_sequence);
                 // D3 §3.3：逐会话重建会话树 + 构造协调器 + 重排 pending
                 // 通知（树先于 coordinator 插入——coordinator_for 从
                 // session_trees 取树；from_session_record 失败 → 降级空树，
                 // fail-open：阶梯 1/2/4 照常、阶梯 3 fork 结构化拒绝，
                 // recovery.rs:1066-1070）
                 for record in &outcome.sessions {
-                    let tree = SessionTree::from_session_record(record.clone()).unwrap_or_else(|e| {
-                        tracing::warn!(
-                            target: "restore",
-                            session_id = %record.session_id,
-                            error = %e,
-                            "会话树重建失败（降级空树：阶梯 1/2/4 照常，fork 结构化拒绝）"
-                        );
-                        SessionTree::new(&record.session_id)
-                    });
+                    let tree =
+                        SessionTree::from_session_record(record.clone()).unwrap_or_else(|e| {
+                            tracing::warn!(
+                                target: "restore",
+                                session_id = %record.session_id,
+                                error = %e,
+                                "会话树重建失败（降级空树：阶梯 1/2/4 照常，fork 结构化拒绝）"
+                            );
+                            SessionTree::new(&record.session_id)
+                        });
                     self.session_trees
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
@@ -179,10 +195,9 @@ impl CoreRunState {
                     // needs_user，recovery.rs:855-863）
                     if let Some(coord) = self.coordinator_for(&record.session_id) {
                         // pending 通知重排入队（同步 → spawn_blocking，F2-27）
-                        match blocking_coordinator_call(
-                            coord,
-                            |c| c.restore_steering_notifications(),
-                        )
+                        match blocking_coordinator_call(coord, |c| {
+                            c.restore_steering_notifications()
+                        })
                         .await
                         {
                             Ok(reinserted) => {
@@ -256,8 +271,14 @@ impl CoreRunState {
         match self.build_and_save_snapshot().await {
             Ok(generation) => {
                 self.snapshot_generation.store(generation, Ordering::SeqCst);
-                *self.snapshot_last_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                *self.snapshot_written_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(
+                *self
+                    .snapshot_last_error
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = None;
+                *self
+                    .snapshot_written_at
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_millis() as i64)
@@ -267,7 +288,10 @@ impl CoreRunState {
             }
             Err(error) => {
                 tracing::error!(target: "restore", error = %error, "快照保存失败（P16 显式标记）");
-                *self.snapshot_last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
+                *self
+                    .snapshot_last_error
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(error);
             }
         }
     }
@@ -290,7 +314,11 @@ impl CoreRunState {
             return Err("restore 失败，跳过快照保存（保留既有快照文件）".to_string());
         }
         let runs = self.store.query_runs().await.map_err(|e| e.to_string())?;
-        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let sessions = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         let mut pending = Vec::new();
         let mut last_sequence = 0u64;
         // PERSIST-02 P1-1：逐会话锚点（session_id → 该会话事件 max）。
@@ -363,4 +391,3 @@ impl CoreRunState {
         tauri::async_runtime::block_on(async move { this.save_snapshot_now().await });
     }
 }
-

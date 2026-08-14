@@ -98,11 +98,16 @@ export function buildCodeTextEditIntent(
   endU16: number,
   insert: string,
   intentId: IntentId,
-  baseContent?: string
+  baseContent: string
 ): TextEditIntent {
-  const text = baseContent ?? '';
-  const startScalar = utf16OffsetToUnicodeScalar(text, asUtf16Offset(startU16));
-  const endScalar = utf16OffsetToUnicodeScalar(text, asUtf16Offset(endU16));
+  const startScalar = utf16OffsetToUnicodeScalar(
+    baseContent,
+    asUtf16Offset(startU16)
+  );
+  const endScalar = utf16OffsetToUnicodeScalar(
+    baseContent,
+    asUtf16Offset(endU16)
+  );
   return {
     type: 'text_edit',
     blockId,

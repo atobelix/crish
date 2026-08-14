@@ -34,8 +34,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use conex_types::device::{
-    ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, DeviceEnvelope,
-    DeviceEndpoint, DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, EventsPush,
+    ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, DeviceEndpoint,
+    DeviceEnvelope, DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, EventsPush,
     HeartbeatOk, ListCommandsResult, ListSessionsParams, ListSessionsResult, MessageKind,
     ResumeDone, ResumePage, RunControlParams, RunControlResult, RunSnapshotParams,
     RunSnapshotResult, RunTaskParams, RunTaskResult,
@@ -44,11 +44,11 @@ use crish_agent_workbench::core_event_bridge::Emitter;
 use crish_agent_workbench::server::backend::ApiBackend;
 use crish_agent_workbench::server::pairing::PairingCoordinator;
 use crish_agent_workbench::server::{
-    auth, router, ServerConfig, ServerError, ServerHandle, ServerInstance, ServerState,
-    fanout::FanOutEmitter,
+    auth, fanout::FanOutEmitter, router, ServerConfig, ServerError, ServerHandle, ServerInstance,
+    ServerState,
 };
 use futures_util::{SinkExt, StreamExt};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// 测试本地时钟（epoch ms；服务端 now_ms 为 crate 私有，测试自持同源
 /// 实现——SystemTime 与墙钟一致，仅作信封 ts 占位）
@@ -280,7 +280,8 @@ async fn spawn_server(
 
 // ── WS 客户端工具（tokio-tungstenite 真实连接）──
 
-type WsStream = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+type WsStream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// 建立真实 WS 连接（query token 升级；升级失败即 panic）
 async fn ws_connect(addr: SocketAddr, token: &str) -> WsStream {
@@ -371,10 +372,7 @@ fn publish(
 }
 
 /// 订阅 + 等待回执（sessions + 逐会话断线游标）
-async fn subscribe(
-    ws: &mut WsStream,
-    sessions: &[(&str, u64)],
-) -> (String, Value) {
+async fn subscribe(ws: &mut WsStream, sessions: &[(&str, u64)]) -> (String, Value) {
     let last_sequences = serde_json::Map::from_iter(
         sessions
             .iter()
@@ -388,17 +386,18 @@ async fn subscribe(
     .await;
     let text = next_text(ws).await.expect("订阅回执必须到达");
     let (kind, body) = parse_frame(&text);
-    assert_eq!(
-        kind,
-        "events.subscribe.ok",
-        "订阅回执：{text}"
-    );
+    assert_eq!(kind, "events.subscribe.ok", "订阅回执：{text}");
     (kind, body)
 }
 
 /// 心跳往返（确认服务端已注册本连接——所有用例的注册完成屏障）
 async fn confirm_registered(ws: &mut WsStream) {
-    send_envelope(ws, MessageKind::Heartbeat, json!({ "ts": now_ms(), "deviceTimeMs": now_ms() })).await;
+    send_envelope(
+        ws,
+        MessageKind::Heartbeat,
+        json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
+    )
+    .await;
     let text = next_text(ws).await.expect("必须收到 heartbeat.ok");
     let (kind, _) = parse_frame(&text);
     assert_eq!(kind, "heartbeat.ok", "注册确认心跳回执：{text}");
@@ -451,8 +450,13 @@ async fn integration_pair_over_rest_issues_usable_token() {
 /// EventBridge 输出同构——事件字段逐字节透传，sequence 不被裁剪）。
 #[tokio::test]
 async fn integration_subscribe_receives_broadcast_push() {
-    let server = spawn_server(None, Some(Arc::new(FanOutEmitter::new(vec![]))), &["dev-1"], false)
-        .await;
+    let server = spawn_server(
+        None,
+        Some(Arc::new(FanOutEmitter::new(vec![]))),
+        &["dev-1"],
+        false,
+    )
+    .await;
     let mut ws = ws_connect(server.addr, &server.token).await;
     confirm_registered(&mut ws).await;
     subscribe(&mut ws, &[("s-1", 0)]).await;
@@ -518,7 +522,10 @@ async fn integration_resume_defers_realtime_until_done() {
     assert_eq!(done.resumed_to, 300);
 
     let (kind, body) = parse_frame(&next_text(&mut ws).await.expect("pending 实时帧必须到达"));
-    assert_eq!(kind, "events.push", "pending 实时帧必须在 done 之后按序 flush");
+    assert_eq!(
+        kind, "events.push",
+        "pending 实时帧必须在 done 之后按序 flush"
+    );
     let push: EventsPush = serde_json::from_value(body).expect("push 载荷必须合法");
     assert_eq!(push.event["type"], "agent-start");
 }
@@ -530,8 +537,13 @@ async fn integration_resume_defers_realtime_until_done() {
 async fn integration_resume_after_disconnect_continues_from_last_seq() {
     let backend = Arc::new(MemoryBackend::new());
     backend.push_range("s-1", "message-end", 1, 300);
-    let server = spawn_server(Some(backend as Arc<dyn ApiBackend>), None, &["dev-1"], false)
-        .await;
+    let server = spawn_server(
+        Some(backend as Arc<dyn ApiBackend>),
+        None,
+        &["dev-1"],
+        false,
+    )
+    .await;
 
     // 首次连接：全量重放 0..300（200/页 → 2 页）→ 记录已同步游标
     let mut ws1 = ws_connect(server.addr, &server.token).await;
@@ -573,8 +585,7 @@ async fn integration_resume_after_disconnect_continues_from_last_seq() {
     assert_eq!(kind, "events.resume.page");
     let page: ResumePage = serde_json::from_value(body).expect("分页载荷必须合法");
     assert_eq!(
-        page.events[0]["sequence"],
-        201,
+        page.events[0]["sequence"], 201,
         "断线续传必须从 lastSeq+1（201）起，不得重发已同步事件"
     );
     assert_eq!(page.events.len(), 100, "200..300 共 100 条");
@@ -590,8 +601,13 @@ async fn integration_resume_after_disconnect_continues_from_last_seq() {
 /// 断言 message-end 到达且 delta 不全达（丢帧可观测）。
 #[tokio::test]
 async fn integration_delta_flood_keeps_message_end() {
-    let server = spawn_server(None, Some(Arc::new(FanOutEmitter::new(vec![]))), &["dev-1"], false)
-        .await;
+    let server = spawn_server(
+        None,
+        Some(Arc::new(FanOutEmitter::new(vec![]))),
+        &["dev-1"],
+        false,
+    )
+    .await;
     let mut ws = ws_connect(server.addr, &server.token).await;
     confirm_registered(&mut ws).await;
     subscribe(&mut ws, &[("s-1", 0)]).await;
@@ -721,7 +737,9 @@ async fn integration_ninth_connection_rejected_with_conn_limit() {
 
     // 第 9 个连接 → 拒绝（conn.limit 错误帧 + 关闭）
     let mut ninth = ws_connect(server.addr, &server.tokens[8]).await;
-    let text = next_text(&mut ninth).await.expect("应收到 conn.limit 拒绝帧");
+    let text = next_text(&mut ninth)
+        .await
+        .expect("应收到 conn.limit 拒绝帧");
     let (kind, body) = parse_frame(&text);
     assert_eq!(kind, "error");
     let error: ErrorBody = serde_json::from_value(body).expect("错误载荷必须合法");
@@ -797,9 +815,12 @@ async fn integration_revoked_token_rejected_on_reconnect() {
     let _ = ws.close(None).await;
 
     // 重连：升级阶段即 401（auth.device_revoked）
-    let response = reqwest::get(format!("http://{}/v1/events?token={}", server.addr, server.token))
-        .await
-        .expect("升级请求必须可达");
+    let response = reqwest::get(format!(
+        "http://{}/v1/events?token={}",
+        server.addr, server.token
+    ))
+    .await
+    .expect("升级请求必须可达");
     assert_eq!(
         response.status(),
         reqwest::StatusCode::UNAUTHORIZED,
@@ -825,7 +846,9 @@ async fn integration_revoke_all_kicks_every_active_connection() {
     coordinator.revoke_all();
 
     for (name, ws) in [("dev-a", &mut ws_a), ("dev-b", &mut ws_b)] {
-        let text = next_text(ws).await.expect(&format!("{name} 必须收到踢出帧"));
+        let text = next_text(ws)
+            .await
+            .expect(&format!("{name} 必须收到踢出帧"));
         let (kind, body) = parse_frame(&text);
         assert_eq!(kind, "error", "{name} 踢出帧：{text}");
         let error: ErrorBody = serde_json::from_value(body).expect("错误载荷必须合法");

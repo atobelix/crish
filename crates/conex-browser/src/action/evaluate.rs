@@ -51,26 +51,55 @@ pub const EVAL_TIMEOUT_MS: u32 = 2000;
 /// 禁止访问的全局/构造标识符（17 §3.1 禁止面：宿主全局、构造面、网络面、存储面）。
 const FORBIDDEN_IDENTS: &[&str] = &[
     // 全局对象面
-    "window", "document", "globalThis", "self", "top", "parent", "frames",
+    "window",
+    "document",
+    "globalThis",
+    "self",
+    "top",
+    "parent",
+    "frames",
     // 导航/环境面
-    "location", "navigator", "history", "screen",
+    "location",
+    "navigator",
+    "history",
+    "screen",
     // 网络面
-    "fetch", "XMLHttpRequest", "WebSocket", "EventSource", "sendBeacon",
+    "fetch",
+    "XMLHttpRequest",
+    "WebSocket",
+    "EventSource",
+    "sendBeacon",
     // 存储面
-    "localStorage", "sessionStorage", "cookie", "indexedDB",
+    "localStorage",
+    "sessionStorage",
+    "cookie",
+    "indexedDB",
     // 剪贴板面
     "clipboard",
     // 构造面
-    "eval", "Function", "constructor", "prototype", "__proto__", "import", "require",
+    "eval",
+    "Function",
+    "constructor",
+    "prototype",
+    "__proto__",
+    "import",
+    "require",
     // 宿主全局（防注入面）
-    "process", "Deno", "Buffer", "global", "module", "exports",
+    "process",
+    "Deno",
+    "Buffer",
+    "global",
+    "module",
+    "exports",
 ];
 
 /// 字符串成员访问形态的构造面成员（`x['constructor']` 等，17 §3.2 ②）。
 const STRING_MEMBER_FORBIDDEN: &[&str] = &["constructor", "prototype", "__proto__"];
 
 /// 赋值类操作符（17 §3.2 ① 黑名单；`==`/`!=`/`===`/`!==`/`=>` 放行）。
-const ASSIGN_OPS: &[&str] = &["=", "+=", "-=", "*=", "/=", "%=", "&&=", "||=", "??=", "++", "--"];
+const ASSIGN_OPS: &[&str] = &[
+    "=", "+=", "-=", "*=", "/=", "%=", "&&=", "||=", "??=", "++", "--",
+];
 
 /// 全深度禁止关键字（17 §3.1：with/delete 语句形态）。
 const ALWAYS_FORBIDDEN_KEYWORDS: &[&str] = &["with", "delete"];
@@ -91,7 +120,9 @@ pub enum LexRejection {
 impl std::fmt::Display for LexRejection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LexRejection::TooLong(n) => write!(f, "脚本长度超限（{n} 字节 > {MAX_EXPRESSION_BYTES}）"),
+            LexRejection::TooLong(n) => {
+                write!(f, "脚本长度超限（{n} 字节 > {MAX_EXPRESSION_BYTES}）")
+            }
             LexRejection::ForbiddenIdent(s) => write!(f, "禁止访问全局/构造标识符：{s}"),
             LexRejection::AssignmentOp(s) => write!(f, "禁止赋值类操作符：{s}"),
             LexRejection::ForbiddenKeyword(s) => write!(f, "禁止关键字/语句形态：{s}"),
@@ -135,9 +166,21 @@ impl<'a> Lexer<'a> {
                     let mut it = self.chars.clone();
                     let _ = it.next();
                     match it.peek() {
-                        Some('/') => { let _ = self.chars.next(); let _ = self.chars.next(); self.skip_line_comment(); }
-                        Some('*') => { let _ = self.chars.next(); let _ = self.chars.next(); self.skip_block_comment(); }
-                        Some('=') => { let _ = self.chars.next(); let _ = self.chars.next(); self.push_op("/=".to_string()); }
+                        Some('/') => {
+                            let _ = self.chars.next();
+                            let _ = self.chars.next();
+                            self.skip_line_comment();
+                        }
+                        Some('*') => {
+                            let _ = self.chars.next();
+                            let _ = self.chars.next();
+                            self.skip_block_comment();
+                        }
+                        Some('=') => {
+                            let _ = self.chars.next();
+                            let _ = self.chars.next();
+                            self.push_op("/=".to_string());
+                        }
                         _ => self.skip_regex(),
                     }
                 }
@@ -162,8 +205,12 @@ impl<'a> Lexer<'a> {
                     let _ = self.chars.next();
                 }
                 c if c.is_ascii_alphabetic() || c == '_' || c == '$' => self.scan_ident(),
-                c if c.is_ascii_digit() => { let _ = self.chars.next(); }
-                c if c.is_ascii_whitespace() => { let _ = self.chars.next(); }
+                c if c.is_ascii_digit() => {
+                    let _ = self.chars.next();
+                }
+                c if c.is_ascii_whitespace() => {
+                    let _ = self.chars.next();
+                }
                 _ => self.scan_op(),
             }
         }
@@ -179,9 +226,13 @@ impl<'a> Lexer<'a> {
         let _ = self.chars.next(); // 开引号
         let mut content = String::new();
         while let Some(c) = self.chars.next() {
-            if c == '\\' { let _ = self.chars.next(); }
-            else if c == quote { break; }
-            else { content.push(c); }
+            if c == '\\' {
+                let _ = self.chars.next();
+            } else if c == quote {
+                break;
+            } else {
+                content.push(c);
+            }
         }
         let member_access = self.last_pushed.as_deref() == Some("[");
         if member_access && STRING_MEMBER_FORBIDDEN.contains(&content.as_str()) {
@@ -193,9 +244,11 @@ impl<'a> Lexer<'a> {
     fn skip_template(&mut self) {
         let _ = self.chars.next(); // `
         while let Some(c) = self.chars.next() {
-            if c == '\\' { let _ = self.chars.next(); }
-            else if c == '`' { break; }
-            else if c == '$' && self.chars.peek() == Some(&'{') {
+            if c == '\\' {
+                let _ = self.chars.next();
+            } else if c == '`' {
+                break;
+            } else if c == '$' && self.chars.peek() == Some(&'{') {
                 // ${expr} 内嵌表达式：继续扫描（简化：按模板内容跳过至 `}`——保留扫描一致性）
                 let _ = self.chars.next();
             }
@@ -204,14 +257,18 @@ impl<'a> Lexer<'a> {
 
     fn skip_line_comment(&mut self) {
         for c in self.chars.by_ref() {
-            if c == '\n' { break; }
+            if c == '\n' {
+                break;
+            }
         }
     }
 
     fn skip_block_comment(&mut self) {
         let mut prev = '\0';
         for c in self.chars.by_ref() {
-            if prev == '*' && c == '/' { break; }
+            if prev == '*' && c == '/' {
+                break;
+            }
             prev = c;
         }
     }
@@ -219,11 +276,24 @@ impl<'a> Lexer<'a> {
     fn skip_regex(&mut self) {
         let mut in_class = false;
         while let Some(c) = self.chars.next() {
-            if c == '\\' { let _ = self.chars.next(); continue; }
-            if c == '[' { in_class = true; continue; }
-            if c == ']' { in_class = false; continue; }
-            if c == '/' && !in_class { break; }
-            if c == '\n' { break; } // 单行正则字面量（简化）
+            if c == '\\' {
+                let _ = self.chars.next();
+                continue;
+            }
+            if c == '[' {
+                in_class = true;
+                continue;
+            }
+            if c == ']' {
+                in_class = false;
+                continue;
+            }
+            if c == '/' && !in_class {
+                break;
+            }
+            if c == '\n' {
+                break;
+            } // 单行正则字面量（简化）
         }
     }
 
@@ -245,13 +315,24 @@ impl<'a> Lexer<'a> {
         // 收集最长操作符前缀（2-3 字符），跳过非操作符字符
         let mut s = String::new();
         while let Some(&c) = self.chars.peek() {
-            if c.is_ascii_alphanumeric() || c.is_ascii_whitespace() || c == '_' || c == '$'
-                || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' {
+            if c.is_ascii_alphanumeric()
+                || c.is_ascii_whitespace()
+                || c == '_'
+                || c == '$'
+                || c == '('
+                || c == ')'
+                || c == '['
+                || c == ']'
+                || c == '{'
+                || c == '}'
+            {
                 break;
             }
             s.push(c);
             let _ = self.chars.next();
-            if s.len() >= 3 { break; }
+            if s.len() >= 3 {
+                break;
+            }
         }
         if !s.is_empty() {
             self.push_op(s);
@@ -320,15 +401,19 @@ pub async fn dispatch_evaluate(
 ) -> Result<Option<Value>, ActionError> {
     // ① 静态词法
     lexical_check(&request.expression).map_err(|r| {
-        ActionError::new(ActionErrorKind::InvalidInput, format!("受限求值词法拒绝：{r}"))
+        ActionError::new(
+            ActionErrorKind::InvalidInput,
+            format!("受限求值词法拒绝：{r}"),
+        )
     })?;
 
     // ② 隔离执行（每次创建独立 world——页面导航即失效，简单可靠）
-    let world = exec
-        .ops
-        .create_isolated_world()
-        .await
-        .map_err(|e| ActionError::new(ActionErrorKind::Unsupported, format!("隔离世界创建失败：{}", e.message)))?;
+    let world = exec.ops.create_isolated_world().await.map_err(|e| {
+        ActionError::new(
+            ActionErrorKind::Unsupported,
+            format!("隔离世界创建失败：{}", e.message),
+        )
+    })?;
     let result = exec
         .ops
         .evaluate_isolated(&world, &request.expression)
@@ -337,13 +422,19 @@ pub async fn dispatch_evaluate(
             if e.kind == ActionErrorKind::Timeout {
                 e
             } else {
-                ActionError::new(ActionErrorKind::InvalidInput, format!("受限求值执行失败：{}", e.message))
+                ActionError::new(
+                    ActionErrorKind::InvalidInput,
+                    format!("受限求值执行失败：{}", e.message),
+                )
             }
         })?;
 
     // ③ 结果校验
     validate_result(&result).map_err(|r| {
-        ActionError::new(ActionErrorKind::InvalidInput, format!("受限求值结果超限：{r}"))
+        ActionError::new(
+            ActionErrorKind::InvalidInput,
+            format!("受限求值结果超限：{r}"),
+        )
     })?;
 
     Ok(Some(result))
@@ -366,7 +457,11 @@ mod tests {
     }
 
     fn req(expression: &str) -> EvaluateRequest {
-        EvaluateRequest { expression: expression.to_string(), element: None, timeout_ms: EVAL_TIMEOUT_MS }
+        EvaluateRequest {
+            expression: expression.to_string(),
+            element: None,
+            timeout_ms: EVAL_TIMEOUT_MS,
+        }
     }
 
     // ── 词法层 ──
@@ -383,7 +478,10 @@ mod tests {
     fn lexical_rejects_assignment_ops() {
         for op in ASSIGN_OPS {
             let expr = format!("__crish_read.text('#a') {op} 1");
-            assert_eq!(lexical_check(&expr), Err(LexRejection::AssignmentOp(op.to_string())));
+            assert_eq!(
+                lexical_check(&expr),
+                Err(LexRejection::AssignmentOp(op.to_string()))
+            );
         }
     }
 
@@ -397,9 +495,24 @@ mod tests {
 
     #[test]
     fn lexical_rejects_forbidden_idents() {
-        for ident in ["document", "window", "eval", "Function", "constructor", "__proto__", "fetch", "localStorage", "location", "process", "require"] {
+        for ident in [
+            "document",
+            "window",
+            "eval",
+            "Function",
+            "constructor",
+            "__proto__",
+            "fetch",
+            "localStorage",
+            "location",
+            "process",
+            "require",
+        ] {
             let expr = format!("{ident}.x");
-            assert_eq!(lexical_check(&expr), Err(LexRejection::ForbiddenIdent(ident.to_string())));
+            assert_eq!(
+                lexical_check(&expr),
+                Err(LexRejection::ForbiddenIdent(ident.to_string()))
+            );
         }
     }
 
@@ -429,7 +542,10 @@ mod tests {
 
     #[test]
     fn lexical_rejects_top_level_semicolons() {
-        assert_eq!(lexical_check("__crish_read.text('#a'); __crish_read.text('#b')"), Err(LexRejection::TopLevelStatement));
+        assert_eq!(
+            lexical_check("__crish_read.text('#a'); __crish_read.text('#b')"),
+            Err(LexRejection::TopLevelStatement)
+        );
         // IIFE 内部的分号不误伤（深度 > 0）
         assert!(lexical_check("(function(){ var x; return __crish_read.text('#a'); })()").is_ok());
     }
@@ -447,7 +563,10 @@ mod tests {
     #[test]
     fn lexical_length_limit() {
         let long = "x".repeat(MAX_EXPRESSION_BYTES + 1);
-        assert_eq!(lexical_check(&long), Err(LexRejection::TooLong(MAX_EXPRESSION_BYTES + 1)));
+        assert_eq!(
+            lexical_check(&long),
+            Err(LexRejection::TooLong(MAX_EXPRESSION_BYTES + 1))
+        );
     }
 
     // ── 结果校验 ──
@@ -471,25 +590,41 @@ mod tests {
             s.isolated_result = serde_json::json!({"tag": "button", "text": "你好"});
         }
         let exec = executor_with(ops.clone());
-        let out = dispatch_evaluate(&exec, &req("__crish_read.text('#b')")).await.expect("应成功");
-        assert_eq!(out, Some(serde_json::json!({"tag": "button", "text": "你好"})));
+        let out = dispatch_evaluate(&exec, &req("__crish_read.text('#b')"))
+            .await
+            .expect("应成功");
+        assert_eq!(
+            out,
+            Some(serde_json::json!({"tag": "button", "text": "你好"}))
+        );
         // 记录：创建世界 → 隔离求值（顺序）
         let s = ops.state.lock().unwrap_or_else(|p| p.into_inner());
         let ops_seq: Vec<_> = s.calls.iter().map(|c| c.op).collect();
         let expected = vec![MockOp::CreateIsolatedWorld, MockOp::EvaluateIsolated];
-        assert!(ops_seq.ends_with(&expected), "应依次创建世界并隔离求值，实际 {ops_seq:?}");
-        assert!(s.calls.iter().any(|c| c.op == MockOp::EvaluateIsolated && c.detail.contains("world-42")));
+        assert!(
+            ops_seq.ends_with(&expected),
+            "应依次创建世界并隔离求值，实际 {ops_seq:?}"
+        );
+        assert!(s
+            .calls
+            .iter()
+            .any(|c| c.op == MockOp::EvaluateIsolated && c.detail.contains("world-42")));
     }
 
     #[tokio::test]
     async fn dispatch_lexical_rejection_no_world_created() {
         let ops = MockOps::new();
         let exec = executor_with(ops.clone());
-        let err = dispatch_evaluate(&exec, &req("document.title")).await.unwrap_err();
+        let err = dispatch_evaluate(&exec, &req("document.title"))
+            .await
+            .unwrap_err();
         assert_eq!(err.kind, ActionErrorKind::InvalidInput);
         assert!(err.message.contains("词法拒绝"));
         let s = ops.state.lock().unwrap_or_else(|p| p.into_inner());
-        assert!(!s.calls.iter().any(|c| c.op == MockOp::CreateIsolatedWorld), "词法拒绝不应创建世界");
+        assert!(
+            !s.calls.iter().any(|c| c.op == MockOp::CreateIsolatedWorld),
+            "词法拒绝不应创建世界"
+        );
     }
 
     #[tokio::test]
@@ -500,7 +635,9 @@ mod tests {
             s.isolated_world = None;
         }
         let exec = executor_with(ops.clone());
-        let err = dispatch_evaluate(&exec, &req("__crish_read.text('#a')")).await.unwrap_err();
+        let err = dispatch_evaluate(&exec, &req("__crish_read.text('#a')"))
+            .await
+            .unwrap_err();
         assert!(err.message.contains("隔离世界创建失败"));
     }
 
@@ -512,7 +649,9 @@ mod tests {
             s.isolated_result = serde_json::json!({"a": {"b": {"c": {"d": {"e": 1}}}}});
         }
         let exec = executor_with(ops.clone());
-        let err = dispatch_evaluate(&exec, &req("__crish_read.state()")).await.unwrap_err();
+        let err = dispatch_evaluate(&exec, &req("__crish_read.state()"))
+            .await
+            .unwrap_err();
         assert_eq!(err.kind, ActionErrorKind::InvalidInput);
         assert!(err.message.contains("结果超限"));
     }
@@ -528,7 +667,9 @@ mod tests {
             );
         }
         let exec = executor_with(ops.clone());
-        let err = dispatch_evaluate(&exec, &req("__crish_read.text('#a')")).await.unwrap_err();
+        let err = dispatch_evaluate(&exec, &req("__crish_read.text('#a')"))
+            .await
+            .unwrap_err();
         assert_eq!(err.kind, ActionErrorKind::Timeout, "超时保持 Timeout 语义");
     }
 }

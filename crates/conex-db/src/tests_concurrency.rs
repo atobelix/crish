@@ -47,7 +47,12 @@ fn create_temp_file_db() -> (TempDbGuard, std::path::PathBuf) {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let path = std::env::temp_dir().join(format!("conex_test_wal_{}_{}_{}.db", std::process::id(), now, id));
+    let path = std::env::temp_dir().join(format!(
+        "conex_test_wal_{}_{}_{}.db",
+        std::process::id(),
+        now,
+        id
+    ));
     let conn = Connection::open(&path).expect("open temp file db failed");
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
@@ -200,12 +205,11 @@ async fn test_group_commit_error_isolation_savepoint() {
 
     let f2 = tokio::spawn(async move {
         h2.write(|c| {
-            c.execute("INVALID SQL SYNTAX STATEMENT HERE;", []).map_err(|e| {
-                DbFailure {
+            c.execute("INVALID SQL SYNTAX STATEMENT HERE;", [])
+                .map_err(|e| DbFailure {
                     message: e.to_string(),
                     kind: DbFailureKind::Other("syntax_error".into()),
-                }
-            })
+                })
         })
         .await
     });
@@ -309,7 +313,10 @@ fn test_reader_pool_read_only_enforcement() {
         })
     });
 
-    assert!(err.is_err(), "Writer operation on ReaderPool must be rejected");
+    assert!(
+        err.is_err(),
+        "Writer operation on ReaderPool must be rejected"
+    );
 }
 
 #[test]
@@ -336,13 +343,11 @@ fn test_reader_pool_multi_thread_concurrent_reads() {
             for _ in 0..ops_per_thread {
                 let count: i64 = p
                     .read(|conn| {
-                        conn.query_row("SELECT count(*) FROM test_events;", [], |row| {
-                            row.get(0)
-                        })
-                        .map_err(|e| DbFailure {
-                            message: e.to_string(),
-                            kind: DbFailureKind::Other("query".into()),
-                        })
+                        conn.query_row("SELECT count(*) FROM test_events;", [], |row| row.get(0))
+                            .map_err(|e| DbFailure {
+                                message: e.to_string(),
+                                kind: DbFailureKind::Other("query".into()),
+                            })
                     })
                     .expect("read in thread failed");
                 assert_eq!(count, 0);
@@ -454,13 +459,11 @@ async fn test_high_concurrency_reader_writer_wal_stress() {
             for _ in 0..reads_per_actor {
                 let _count: i64 = r_pool
                     .read_async(|conn| {
-                        conn.query_row("SELECT count(*) FROM test_events;", [], |row| {
-                            row.get(0)
-                        })
-                        .map_err(|e| DbFailure {
-                            message: e.to_string(),
-                            kind: DbFailureKind::Other("query".into()),
-                        })
+                        conn.query_row("SELECT count(*) FROM test_events;", [], |row| row.get(0))
+                            .map_err(|e| DbFailure {
+                                message: e.to_string(),
+                                kind: DbFailureKind::Other("query".into()),
+                            })
                     })
                     .await
                     .expect("reader stress read failed");

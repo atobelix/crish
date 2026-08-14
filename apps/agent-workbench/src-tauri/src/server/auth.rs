@@ -17,17 +17,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use axum::{
-    Json,
     extract::{Request, State},
-    http::{StatusCode, header},
+    http::{header, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
+    Json,
 };
 use conex_types::device::{DeviceErrorCode, ErrorBody};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::server::{ServerError, ServerState, now_ms};
+use crate::server::{now_ms, ServerError, ServerState};
 
 /// 令牌原始字节数（D2 §7.2：32 字节 CSPRNG，hex 64 字符）
 // R1-02 备注：R1-07 配对签发消费——dead_code 静音（测试构建保持检查）
@@ -206,7 +206,9 @@ impl AdvancedNonceGuard {
     pub fn get_cached_response(&self, device_id: &str, nonce: &str) -> Option<(u16, Vec<u8>)> {
         let key = (device_id.to_string(), nonce.to_string());
         let store = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        store.get(&key).map(|e| (e.cached_status, e.cached_body.clone()))
+        store
+            .get(&key)
+            .map(|e| (e.cached_status, e.cached_body.clone()))
     }
 
     /// 当前缓存条目数
@@ -373,7 +375,9 @@ impl TokenStore {
                     Self::new(path.to_path_buf())
                 }
             },
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Self::new(path.to_path_buf()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Self::new(path.to_path_buf())
+            }
             Err(error) => {
                 tracing::warn!(
                     target: "server",
@@ -529,7 +533,10 @@ impl TokenStore {
 
     /// 全部令牌哈希（含已撤销）。R1-07 撤销全链消费。
     pub fn all_hashes(&self) -> Vec<String> {
-        self.tokens.iter().map(|record| record.hash.clone()).collect()
+        self.tokens
+            .iter()
+            .map(|record| record.hash.clone())
+            .collect()
     }
 
     /// 设备列表（配对管理面；id = 哈希截断 12 字符展示，不泄露原文）。
@@ -571,7 +578,10 @@ pub fn constant_time_eq(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.bytes()
+        .zip(b.bytes())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 /// Bearer 令牌校验中间件（D2 §7.1 零信任：除 /v1/info 与 /v1/pair 外全部
@@ -583,7 +593,11 @@ pub async fn require_bearer_token(
 ) -> Response {
     let now = now_ms();
     let unauthorized = |code: DeviceErrorCode, message: &str| -> Response {
-        let mut resp = (StatusCode::UNAUTHORIZED, Json(ErrorBody::new(code, message))).into_response();
+        let mut resp = (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorBody::new(code, message)),
+        )
+            .into_response();
         if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
             resp.headers_mut().insert(SERVER_TIME_HEADER, val);
         }
@@ -699,10 +713,7 @@ mod tests {
         let raw = store.issue("Pixel-9", 1000).expect("签发必须成功");
         let text = fs::read_to_string(&path).expect("落盘文件必须存在");
         // 防泄漏：文件里不得出现明文令牌
-        assert!(
-            !text.contains(&raw),
-            "pairing.json 不得包含明文令牌"
-        );
+        assert!(!text.contains(&raw), "pairing.json 不得包含明文令牌");
         // 形状：hash 字段 = 64 字符 hex，且不等于明文
         let file: PairingFile = serde_json::from_str(&text).expect("文件应为合法 pairing.json");
         assert_eq!(file.version, PAIRING_FILE_VERSION);
@@ -724,8 +735,7 @@ mod tests {
         assert!(store.revoke(&hash), "撤销应命中");
         assert_eq!(store.verify(&raw, 2000), TokenVerdict::Revoked);
         // 撤销后落盘持久化
-        let file: PairingFile =
-            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let file: PairingFile = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(file.tokens[0].revoked);
         let _ = fs::remove_file(path);
     }
@@ -738,8 +748,7 @@ mod tests {
         store.issue("b", 1).unwrap();
         store.revoke_all();
         assert_eq!(store.records().iter().filter(|t| !t.revoked).count(), 0);
-        let file: PairingFile =
-            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let file: PairingFile = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(!file.pairing_enabled, "全部撤销后配对面视为关闭");
         let _ = fs::remove_file(path);
     }
@@ -930,7 +939,10 @@ mod tests {
             payload_hash,
         );
         match unaligned_res {
-            NonceCheckResult::ClockSkewTooLarge { diff_ms, max_skew_ms } => {
+            NonceCheckResult::ClockSkewTooLarge {
+                diff_ms,
+                max_skew_ms,
+            } => {
                 assert_eq!(diff_ms, 600_000);
                 assert_eq!(max_skew_ms, 300_000);
             }
@@ -968,7 +980,8 @@ mod tests {
             let current_server_now = server_base_time_ms + (req_idx as u64 * 100) + (jitter_ms / 2);
 
             // 模拟 30% 丢包率（当 req_idx % 10 in [2, 5, 8] 时模拟网络丢包，触发客户端 1~2 次重传）
-            let will_drop_packet = (req_idx % 10 == 2) || (req_idx % 10 == 5) || (req_idx % 10 == 8);
+            let will_drop_packet =
+                (req_idx % 10 == 2) || (req_idx % 10 == 5) || (req_idx % 10 == 8);
 
             // 首次请求到达服务端
             total_attempts += 1;
@@ -983,7 +996,8 @@ mod tests {
             match check1 {
                 NonceCheckResult::Valid => {
                     total_first_valids += 1;
-                    let resp_body = format!("{{\"runId\":\"run-{req_idx}\",\"status\":\"success\"}}");
+                    let resp_body =
+                        format!("{{\"runId\":\"run-{req_idx}\",\"status\":\"success\"}}");
                     guard.update_response("device-mobile-01", &nonce, 200, resp_body.as_bytes());
                 }
                 other => {
@@ -1079,10 +1093,12 @@ mod tests {
         assert!(!verify_hmac_sha256(b"wrong-key", data, &sig));
         assert!(!verify_hmac_sha256(key, data, "invalid-hex"));
 
-        let canon_http = canonical_http_signing_payload("dev-1", "POST", "/v1/runs", 1000, "nonce-1", "abcdef");
+        let canon_http =
+            canonical_http_signing_payload("dev-1", "POST", "/v1/runs", 1000, "nonce-1", "abcdef");
         assert_eq!(canon_http, "dev-1POST/v1/runs1000nonce-1abcdef");
 
-        let canon_ws = canonical_ws_signing_payload("dev-1", 1000, "nonce-1", "msg-1", "runTask", 1, "{}");
+        let canon_ws =
+            canonical_ws_signing_payload("dev-1", 1000, "nonce-1", "msg-1", "runTask", 1, "{}");
         assert_eq!(canon_ws, "dev-11000nonce-1msg-1runTask1{}");
     }
 

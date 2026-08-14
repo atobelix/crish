@@ -43,10 +43,8 @@ pub async fn note_query_blocks(params: NoteQueryBlocksParams) -> Result<JsonValu
     };
     // B2：同步核心段（SQLite 派生索引查询）在 blocking 线程执行
     let handle = tokio::runtime::Handle::current();
-    let joined = tokio::task::spawn_blocking(move || {
-        handle.block_on(backend.query_blocks(params))
-    })
-    .await;
+    let joined =
+        tokio::task::spawn_blocking(move || handle.block_on(backend.query_blocks(params))).await;
     let result = match joined {
         Ok(r) => r,
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
@@ -137,10 +135,8 @@ async fn hydrate_via_query_blocks(doc_id: &str, limit: u32) -> Result<JsonValue,
     };
     // B2：同步核心段（SQLite 派生索引查询）在 blocking 线程执行
     let handle = tokio::runtime::Handle::current();
-    let joined = tokio::task::spawn_blocking(move || {
-        handle.block_on(backend.query_blocks(params))
-    })
-    .await;
+    let joined =
+        tokio::task::spawn_blocking(move || handle.block_on(backend.query_blocks(params))).await;
     let result = match joined {
         Ok(r) => r,
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(

@@ -9,7 +9,9 @@ use crate::definition::ToolError;
 use crate::tools::optional_string;
 
 /// 构建外壳调用：Windows 用系统 PowerShell EncodedCommand，其它平台 bash -lc
-pub(crate) fn build_shell_invocation(command: &str) -> Result<(String, Vec<String>, String), String> {
+pub(crate) fn build_shell_invocation(
+    command: &str,
+) -> Result<(String, Vec<String>, String), String> {
     if cfg!(windows) {
         let ps = resolve_system_powershell()?;
         let script = build_windows_powershell_script(command);

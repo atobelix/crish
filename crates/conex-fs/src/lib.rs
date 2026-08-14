@@ -109,7 +109,10 @@ pub mod path_utils {
         // 拦截 Windows DOS 保留设备名称（按路径分隔符切分检查）
         for seg in path_str.split(['/', '\\']) {
             if !seg.is_empty() && is_dos_device_name(seg) {
-                bail!("DOS device name detected: '{}' is a reserved device name", seg);
+                bail!(
+                    "DOS device name detected: '{}' is a reserved device name",
+                    seg
+                );
             }
         }
 
@@ -121,10 +124,7 @@ pub mod path_utils {
             match components_iter.peek() {
                 Some(Component::RootDir) => {} // Absolute drive path C:\... -> OK
                 _ => {
-                    bail!(
-                        "drive-relative path not allowed: '{}'",
-                        path.display()
-                    );
+                    bail!("drive-relative path not allowed: '{}'", path.display());
                 }
             }
         }
@@ -137,7 +137,10 @@ pub mod path_utils {
                 Component::Normal(os_str) => {
                     let name = os_str.to_string_lossy();
                     if is_dos_device_name(&name) {
-                        bail!("DOS device name detected: '{}' is a reserved device name", name);
+                        bail!(
+                            "DOS device name detected: '{}' is a reserved device name",
+                            name
+                        );
                     }
                     depth += 1;
                     if depth > max_depth {
@@ -351,7 +354,7 @@ mod tests {
 
         let hash = compute_file_hash(&file_path).unwrap();
         assert_eq!(hash.len(), 64); // SHA-256 = 32 bytes = 64 hex chars
-        // Known SHA-256 of "hello world"
+                                    // Known SHA-256 of "hello world"
         assert_eq!(
             hash,
             "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"

@@ -81,7 +81,13 @@ impl Tool for DiffTextTool {
         } else {
             let a = require_string(&args, "contentA")?;
             let b = require_string(&args, "contentB")?;
-            (a, b, "contentA".to_string(), "contentB".to_string(), "contents")
+            (
+                a,
+                b,
+                "contentA".to_string(),
+                "contentB".to_string(),
+                "contents",
+            )
         };
 
         let result = DiffEngine::diff(&old_text, &new_text);
@@ -106,12 +112,16 @@ impl Tool for DiffTextTool {
 
 /// 读文件为文本（UTF-8 lossy，二进制含 NUL 拒绝）
 fn read_file_text(path: &std::path::Path) -> Result<String, ToolError> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| ToolError::execution_failed("diff_text", format!("{}: {e}", path.display())))?;
+    let bytes = std::fs::read(path).map_err(|e| {
+        ToolError::execution_failed("diff_text", format!("{}: {e}", path.display()))
+    })?;
     if bytes.contains(&0u8) {
         return Err(ToolError::execution_failed(
             "diff_text",
-            format!("File is binary and cannot be read as text: {}", path.display()),
+            format!(
+                "File is binary and cannot be read as text: {}",
+                path.display()
+            ),
         ));
     }
     Ok(String::from_utf8_lossy(&bytes).into_owned())
@@ -162,7 +172,10 @@ mod tests {
         let ctx = create_mock_tool_context();
         let tool = DiffTextTool::new();
         let out = tool
-            .execute(&ctx, json!({ "contentA": "aaa\nbbb\nccc\n", "contentB": "aaa\nxxx\nccc\n" }))
+            .execute(
+                &ctx,
+                json!({ "contentA": "aaa\nbbb\nccc\n", "contentB": "aaa\nxxx\nccc\n" }),
+            )
             .await
             .unwrap();
         assert_eq!(out["mode"], "contents");
@@ -196,7 +209,10 @@ mod tests {
         ws.write_file("new.txt", "line1\nchanged\n");
         let tool = DiffTextTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "pathA": "old.txt", "pathB": "new.txt" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "pathA": "old.txt", "pathB": "new.txt" }),
+            )
             .await
             .unwrap();
         assert_eq!(out["mode"], "files");

@@ -41,7 +41,8 @@ fn db_with_session() -> LocalDb {
 
 /// 全量保存路径：先删后插（P6 写放大 O(n)）
 fn save_full(db: &LocalDb, session_id: &str, messages: &[SessionMessage]) {
-    db.save_session_body(session_id, messages).expect("全量保存");
+    db.save_session_body(session_id, messages)
+        .expect("全量保存");
 }
 
 /// 增量追加路径：MAX(seq)+1 续写（P6 写放大 O(k)）
@@ -54,8 +55,7 @@ fn bench_db_write(c: &mut Criterion) {
     // 全量保存：消息数增长时耗时线性（O(n) 写放大对照）
     let mut full_group = c.benchmark_group("db_write/save_full");
     for count in [100usize, 1000, 5000] {
-        let messages: Vec<SessionMessage> =
-            (0..count).map(|i| message(i, 256)).collect();
+        let messages: Vec<SessionMessage> = (0..count).map(|i| message(i, 256)).collect();
         full_group.bench_with_input(
             BenchmarkId::new("messages", format!("{count}")),
             &messages,
@@ -76,9 +76,8 @@ fn bench_db_write(c: &mut Criterion) {
     let base: Vec<SessionMessage> = (0..1000).map(|i| message(i, 256)).collect();
     let mut append_group = c.benchmark_group("db_write/append_incremental");
     for added in [1usize, 10, 100] {
-        let new_messages: Vec<SessionMessage> = (1000..1000 + added)
-            .map(|i| message(i, 256))
-            .collect();
+        let new_messages: Vec<SessionMessage> =
+            (1000..1000 + added).map(|i| message(i, 256)).collect();
         append_group.bench_with_input(
             BenchmarkId::new("added", format!("+{added}")),
             &new_messages,

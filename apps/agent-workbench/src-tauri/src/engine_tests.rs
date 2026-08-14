@@ -24,9 +24,7 @@ use std::time::Duration;
 use agent_provider::config::Endpoint;
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::parse::responses::ResponsesParser;
-use agent_provider::request::{
-    build_chat_completions_request_body, ReasoningContentMode,
-};
+use agent_provider::request::{build_chat_completions_request_body, ReasoningContentMode};
 use agent_provider::sse::SseFrame;
 use agent_tools::audit::{AuditSink, SecurityAuditSink};
 use agent_tools::definition::ToolDefinition;
@@ -39,9 +37,9 @@ use agent_tools::tools::set_timer::TimerChannel;
 use agent_tools::tools::wait_subagents::DispatchDeclaration;
 // R-CF3 装配收口（T-CF-10）：wait 通道契约与适配器经库目标引入
 // （wait_channel.rs 是库模块，bin 目标自动依赖同包 lib）
-use crish_agent_workbench::wait_channel::ControlBusResolver;
 use async_trait::async_trait;
 use conex_db::LocalDb;
+use conex_telemetry::cache::WARN_MISSED_TOKENS;
 use conex_types::denied_stats::DeniedStats;
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::{
@@ -49,801 +47,1154 @@ use conex_types::events::{
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
-use conex_telemetry::cache::WARN_MISSED_TOKENS;
+use crish_agent_workbench::wait_channel::ControlBusResolver;
 use futures_util::StreamExt;
 use orchestrator::PendingMessageQueue;
-use session_loop::provider::{
-    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest,
-};
-use session_loop::stream::{
-    ProviderStreamEvent, ProviderUsage, StopReason as LoopStopReason,
-};
-use session_loop::{
-    CacheTrackingConfig, SessionLoopOptions, ToolBatchOptions,
-};
+use session_loop::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest};
+use session_loop::stream::{ProviderStreamEvent, ProviderUsage, StopReason as LoopStopReason};
+use session_loop::{CacheTrackingConfig, SessionLoopOptions, ToolBatchOptions};
 
 use crate::core_event_bridge::EventBridge;
 use crate::fs_commands::skills::RustSkill;
 use crate::timers::AgentEventSink;
 
+/// ISO8601 时间戳形状（毫秒精度 + Z 后缀）
+#[test]
+fn now_iso_utc_formats_iso8601() {
+    let value = now_iso_utc();
+    assert!(value.ends_with('Z'), "应带 Z 后缀：{value}");
+    assert!(value.len() >= 24, "应含毫秒精度：{value}");
+    let (date, rest) = value.split_once('T').expect("T 分隔");
+    let parts: Vec<&str> = date.split('-').collect();
+    assert_eq!(parts.len(), 3);
+    assert_eq!(parts[0].len(), 4);
+    assert!(
+        rest.ends_with(".000Z") || rest.contains('.'),
+        "毫秒精度：{value}"
+    );
+}
 
-    /// ISO8601 时间戳形状（毫秒精度 + Z 后缀）
-    #[test]
-    fn now_iso_utc_formats_iso8601() {
-        let value = now_iso_utc();
-        assert!(value.ends_with('Z'), "应带 Z 后缀：{value}");
-        assert!(value.len() >= 24, "应含毫秒精度：{value}");
-        let (date, rest) = value.split_once('T').expect("T 分隔");
-        let parts: Vec<&str> = date.split('-').collect();
-        assert_eq!(parts.len(), 3);
-        assert_eq!(parts[0].len(), 4);
-        assert!(rest.ends_with(".000Z") || rest.contains('.'), "毫秒精度：{value}");
-    }
+/// 消息 id 前缀 + 唯一
+#[test]
+fn message_ids_are_unique_per_prefix() {
+    let a = new_message_id("user");
+    let b = new_message_id("user");
+    assert!(a.starts_with("user-"));
+    assert_ne!(a, b);
+}
 
-    /// 消息 id 前缀 + 唯一
-    #[test]
-    fn message_ids_are_unique_per_prefix() {
-        let a = new_message_id("user");
-        let b = new_message_id("user");
-        assert!(a.starts_with("user-"));
-        assert_ne!(a, b);
-    }
+/// 用户消息构造：clientMessageId 透传（21-log §5.2 缺口 2 修复）
+#[test]
+fn user_message_carries_client_message_id() {
+    let message = user_message("你好", Some("user-msg-1"));
+    assert_eq!(message.client_message_id.as_deref(), Some("user-msg-1"));
+    assert_eq!(message.role, AgentMessageRole::User);
+    let text = message.blocks.iter().find_map(|block| match block {
+        AgentMessageBlock::Text { text } => Some(text.as_str()),
+        _ => None,
+    });
+    assert_eq!(text, Some("你好"));
+    // None 不标注（向后兼容）
+    assert!(user_message("hi", None).client_message_id.is_none());
+}
 
-    /// 用户消息构造：clientMessageId 透传（21-log §5.2 缺口 2 修复）
-    #[test]
-    fn user_message_carries_client_message_id() {
-        let message = user_message("你好", Some("user-msg-1"));
-        assert_eq!(message.client_message_id.as_deref(), Some("user-msg-1"));
-        assert_eq!(message.role, AgentMessageRole::User);
-        let text = message.blocks.iter().find_map(|block| match block {
-            AgentMessageBlock::Text { text } => Some(text.as_str()),
-            _ => None,
-        });
-        assert_eq!(text, Some("你好"));
-        // None 不标注（向后兼容）
-        assert!(user_message("hi", None).client_message_id.is_none());
-    }
+/// 端点路径：chat-completions（00 D3）/ responses
+#[test]
+fn provider_url_respects_endpoint() {
+    let base = EngineProviderConfig {
+        base_url: "https://api.example.com/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: "m".to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    assert_eq!(
+        provider_url(&base),
+        "https://api.example.com/v1/chat/completions"
+    );
+    let responses = EngineProviderConfig {
+        endpoint: Endpoint::Responses,
+        ..base
+    };
+    assert_eq!(
+        provider_url(&responses),
+        "https://api.example.com/v1/responses"
+    );
+}
 
-    /// 端点路径：chat-completions（00 D3）/ responses
-    #[test]
-    fn provider_url_respects_endpoint() {
-        let base = EngineProviderConfig {
-            base_url: "https://api.example.com/v1/".to_string(),
-            api_key: "k".to_string(),
-            model: "m".to_string(),
-            endpoint: Endpoint::ChatCompletions,
-            stream: true,
-            extra: BTreeMap::new(),
-        };
-        assert_eq!(provider_url(&base), "https://api.example.com/v1/chat/completions");
-        let responses = EngineProviderConfig {
-            endpoint: Endpoint::Responses,
-            ..base
-        };
-        assert_eq!(provider_url(&responses), "https://api.example.com/v1/responses");
-    }
-
-    /// 低级事件 → session-loop 事件转换（形状逐字段一致）
-    #[test]
-    fn wire_event_converts_to_loop_event() {
-        let wire = WireEvent::Stop {
-            reason: agent_provider::events::StopReason::Length,
-            error: None,
-            usage: Some(agent_provider::events::ProviderUsage {
-                prompt_tokens: Some(1),
-                completion_tokens: Some(2),
-                total_tokens: Some(3),
-                cache_read_tokens: None,
-                cache_write_tokens: None,
-                cache_miss_tokens: Some(7),
-                reasoning_tokens: None,
-            }),
-        };
-        match to_loop_event(wire) {
-            ProviderStreamEvent::Stop {
-                reason,
-                usage,
-                error,
-                // D7 §3.7 兼容：老注入方（WireEvent::Stop 无分类字段）→ None
-                error_kind,
-            } => {
-                assert_eq!(reason, LoopStopReason::Length);
-                assert!(error.is_none());
-                assert!(error_kind.is_none(), "老注入方不携带分类字段");
-                let usage = usage.expect("usage 透传");
-                assert_eq!(usage.total_tokens, Some(3));
-                // P2：cacheMissTokens 逐字段透传（E0063 补齐）
-                assert_eq!(usage.cache_miss_tokens, Some(7));
-            }
-            other => panic!("期望 Stop，得到 {other:?}"),
+/// 低级事件 → session-loop 事件转换（形状逐字段一致）
+#[test]
+fn wire_event_converts_to_loop_event() {
+    let wire = WireEvent::Stop {
+        reason: agent_provider::events::StopReason::Length,
+        error: None,
+        error_kind: None,
+        usage: Some(agent_provider::events::ProviderUsage {
+            prompt_tokens: Some(1),
+            completion_tokens: Some(2),
+            total_tokens: Some(3),
+            cache_read_tokens: None,
+            cache_write_tokens: None,
+            cache_miss_tokens: Some(7),
+            reasoning_tokens: None,
+        }),
+    };
+    match to_loop_event(wire) {
+        ProviderStreamEvent::Stop {
+            reason,
+            usage,
+            error,
+            // D7 §3.7 兼容：老注入方（WireEvent::Stop 无分类字段）→ None
+            error_kind,
+        } => {
+            assert_eq!(reason, LoopStopReason::Length);
+            assert!(error.is_none());
+            assert!(error_kind.is_none(), "老注入方不携带分类字段");
+            let usage = usage.expect("usage 透传");
+            assert_eq!(usage.total_tokens, Some(3));
+            // P2：cacheMissTokens 逐字段透传（E0063 补齐）
+            assert_eq!(usage.cache_miss_tokens, Some(7));
         }
+        other => panic!("期望 Stop，得到 {other:?}"),
     }
+}
 
-    /// 分类错误：ProviderError → ClassifiedStreamError（kind/retryable 透传）
-    #[test]
-    fn classified_error_preserves_kind_and_retryable() {
-        let error = agent_provider::error::ProviderError::Server {
-            status: Some(503),
-        };
-        let classified = to_classified(error);
-        assert_eq!(classified.kind, ProviderErrorKind::ServerError);
-        assert!(classified.retryable);
-        assert!(classified.retry_after_ms.is_none());
+/// 分类错误：ProviderError → ClassifiedStreamError（kind/retryable 透传）
+#[test]
+fn classified_error_preserves_kind_and_retryable() {
+    let error = agent_provider::error::ProviderError::Server { status: Some(503) };
+    let classified = to_classified(error);
+    assert_eq!(classified.kind, ProviderErrorKind::ServerError);
+    assert!(classified.retryable);
+    assert!(classified.retry_after_ms.is_none());
+}
+
+/// 解析错误分类：Unknown / 不可重试（T09.1.2 步骤 2）
+#[test]
+fn parse_error_classifies_unknown_not_retryable() {
+    let error = StreamParseError::EventAfterStop;
+    let classified = classify_stream_parse(&error);
+    assert_eq!(classified.kind, ProviderErrorKind::Unknown);
+    assert!(!classified.retryable);
+}
+
+// ── P1：system prompt 透传 + 请求体稳定性（T-06，P1 阶段 2 步骤 2.3 /
+//     阶段 4 步骤 4.3）──────────────────────────────────────────────
+
+/// 构造测试用适配层（chat-completions 端点）
+fn test_provider_call(model: &str) -> HttpProviderCall {
+    let client = reqwest::Client::new();
+    let config = EngineProviderConfig {
+        base_url: "https://api.example.com/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: model.to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    HttpProviderCall::new(client, config)
+}
+
+/// 构造单条 user 消息的会话（验证 system 前置与请求体字节稳定）
+fn single_user_request<'a>(
+    messages: &'a Vec<Arc<AgentMessage>>,
+    system_prompt: Option<&'a str>,
+) -> ProviderRequest<'a> {
+    ProviderRequest {
+        messages,
+        tools: Vec::new(),
+        max_tokens: Some(4096),
+        system_prompt,
+        session_id: None,
+        reasoning_effort: None,
     }
+}
 
-    /// 解析错误分类：Unknown / 不可重试（T09.1.2 步骤 2）
-    #[test]
-    fn parse_error_classifies_unknown_not_retryable() {
-        let error = StreamParseError::EventAfterStop;
-        let classified = classify_stream_parse(&error);
-        assert_eq!(classified.kind, ProviderErrorKind::Unknown);
-        assert!(!classified.retryable);
+/// build_context 透传 system_prompt；相同设置下两次构建请求体字节一致
+///
+/// 断言（P1 §5.1 验收 4/10 + §5.3 路径 3）：
+/// - system_prompt 到达请求构建上下文（不再硬编码 None）；
+/// - system 消息始终是 messages[0]（静态前缀前置纪律）；
+/// - 同进程两次构建请求体 to_string 字节相等（前缀稳定性）。
+#[test]
+fn build_context_passes_system_prompt_and_is_stable() {
+    let call = test_provider_call("deepseek-chat");
+
+    let user = AgentMessage {
+        id: "user-1".to_string(),
+        role: AgentMessageRole::User,
+        created_at: "2026-08-03T00:00:00.000Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "你好".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let messages = vec![Arc::new(user)];
+    let request = single_user_request(&messages, Some("你是助手，使用中文回答。"));
+
+    // 透传正确：system_prompt 到达构建上下文（P-04 修复点）
+    let context_a = call.build_context(&request);
+    let context_b = call.build_context(&request);
+    assert_eq!(
+        context_a.system_prompt.as_deref(),
+        Some("你是助手，使用中文回答。")
+    );
+
+    // 稳定性：相同设置下两次构建请求体字节一致（同进程对比）
+    let options = call.request_options(&request);
+    let body_a = build_chat_completions_request_body(&options, &context_a);
+    let body_b = build_chat_completions_request_body(&options, &context_b);
+    assert_eq!(body_a.to_string(), body_b.to_string());
+
+    // system 消息始终是 messages[0]（静态前缀前置，P1 §5.3 路径 3）
+    let wire_messages = body_a
+        .get("messages")
+        .and_then(serde_json::Value::as_array)
+        .expect("请求体应含 messages 数组");
+    let first = wire_messages.first().expect("至少一条消息");
+    assert_eq!(first["role"], "system");
+    assert_eq!(first["content"], "你是助手，使用中文回答。");
+}
+
+/// reasoning_content 模式按 vendor 判定（P1 C3 唯一实现）：
+/// DeepSeek → Require（键存在性，空串兜底）；其余厂商 → Omit
+#[test]
+fn reasoning_content_mode_follows_vendor() {
+    let deepseek = test_provider_call("deepseek-chat");
+    assert_eq!(
+        deepseek.reasoning_content_mode(),
+        ReasoningContentMode::Require
+    );
+
+    let openai = test_provider_call("gpt-4o");
+    assert_eq!(openai.reasoning_content_mode(), ReasoningContentMode::Omit);
+
+    // base_url 含 deepseek 关键字同样判定（infer_reasoning_vendor 双通道）
+    let mut config = EngineProviderConfig {
+        base_url: "https://deepseek.example.com/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: "random-model".to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    let call = HttpProviderCall::new(reqwest::Client::new(), config.clone());
+    assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Require);
+
+    // 未知厂商 → Auto → Omit（现状保持）
+    config.base_url = "https://unknown.example.com/v1/".to_string();
+    config.model = "custom-model".to_string();
+    let call = HttpProviderCall::new(reqwest::Client::new(), config);
+    assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Omit);
+}
+
+// ── DEEPCHECK-06 P0：生效模型窗口解析（子代理预算入站数据源）──────
+
+/// 生效模型窗口：catalog 条目命中 → 窗口值透传（vendor 经
+/// [infer_vendor] 双通道——model 前缀判定，覆盖目录厂商）；版本后缀
+/// 逐级剥离命中基础条目；目录缺失（未知模型 / Auto 厂商）→ None
+/// （不臆造窗口，与主会话 catalog 兜底失败行为一致）
+#[test]
+fn effective_context_window_resolves_from_bundled_catalog() {
+    // 产品默认模型 deepseek-v4-flash：目录条目窗口 1M
+    let deepseek = test_provider_call("deepseek-v4-flash");
+    assert_eq!(
+        effective_context_window(&deepseek.config),
+        Some(1_000_000),
+        "deepseek-v4-flash 应命中 catalog 窗口"
+    );
+    // 版本后缀模型（strip_version_suffix 路径）：deepseek-v4-flash-0731
+    let dated = test_provider_call("deepseek-v4-flash-0731");
+    assert_eq!(
+        effective_context_window(&dated.config),
+        Some(1_000_000),
+        "版本后缀应逐级剥离命中基础条目"
+    );
+    // Grok（目录厂商，模型前缀判定）：窗口 500K
+    let grok = test_provider_call("grok-4.5");
+    assert_eq!(effective_context_window(&grok.config), Some(500_000));
+    // 未知模型（Auto 厂商）→ None（不臆造窗口）
+    let unknown = test_provider_call("llama-3.1");
+    assert_eq!(effective_context_window(&unknown.config), None);
+}
+
+// ── P2：build_cache_policy 接线 + session_id 注入（T-17，P2 步骤 4b）────
+
+/// 构造单条 user 消息 + 会话 ID 的请求（cache 接线断言用）
+fn session_request<'a>(
+    messages: &'a Vec<Arc<AgentMessage>>,
+    session_id: Option<&'a str>,
+) -> ProviderRequest<'a> {
+    ProviderRequest {
+        messages,
+        tools: Vec::new(),
+        max_tokens: Some(4096),
+        system_prompt: None,
+        session_id: session_id.map(str::to_string),
+        reasoning_effort: None,
     }
+}
 
-    // ── P1：system prompt 透传 + 请求体稳定性（T-06，P1 阶段 2 步骤 2.3 /
-    //     阶段 4 步骤 4.3）──────────────────────────────────────────────
+/// request_options 组装 cache：engine.rs 只调用 build_cache_policy（C2 唯一
+/// 运行时判定/消费入口），能力判定收敛在其内部（catalog = bundled_catalog()
+/// 真源路径，T-23 单例；无 catalog 时兜底内置保守表）
+///
+/// 断言（P2 §5.1/§5.3）：
+/// - DeepSeek：build_cache_policy 归 None → 请求体不含任何 cache 键
+///   （省略行为测试钉死，对齐 deepseek-reasonix-cache-analysis.md:111-112）；
+/// - Key 机制（gpt-4o）+ 会话 ID → 注入 prompt_cache_key（码点钳 64）；
+/// - Key 机制无会话 ID → 不注入（无键无路由对象）；
+/// - 未知/本地厂商 → 保守全关。
+#[test]
+fn request_options_wires_build_cache_policy() {
+    let user = AgentMessage {
+        id: "user-1".to_string(),
+        role: AgentMessageRole::User,
+        created_at: "2026-08-03T00:00:00.000Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "你好".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let messages = vec![Arc::new(user)];
+    let request = session_request(&messages, Some("ses-abc"));
 
-    /// 构造测试用适配层（chat-completions 端点）
-    fn test_provider_call(model: &str) -> HttpProviderCall {
-        let client = reqwest::Client::new();
-        let config = EngineProviderConfig {
-            base_url: "https://api.example.com/v1/".to_string(),
-            api_key: "k".to_string(),
-            model: model.to_string(),
-            endpoint: Endpoint::ChatCompletions,
-            stream: true,
-            extra: BTreeMap::new(),
-        };
-        HttpProviderCall::new(client, config)
-    }
+    // DeepSeek：省略整个 cache 参数组（机制 Auto + omit 恒 true）
+    let deepseek = test_provider_call("deepseek-v4");
+    assert!(deepseek.request_options(&request).cache.is_none());
+    let body = build_chat_completions_request_body(
+        &deepseek.request_options(&request),
+        &deepseek.build_context(&request),
+    );
+    assert!(body.get("prompt_cache_key").is_none());
+    assert!(body.get("prompt_cache_retention").is_none());
+    assert!(body.get("prompt_cache_options").is_none());
 
-    /// 构造单条 user 消息的会话（验证 system 前置与请求体字节稳定）
-    fn single_user_request<'a>(
-        messages: &'a Vec<Arc<AgentMessage>>,
-        system_prompt: Option<&'a str>,
-    ) -> ProviderRequest<'a> {
-        ProviderRequest {
-            messages,
-            tools: Vec::new(),
-            max_tokens: Some(4096),
-            system_prompt,
-            session_id: None,
-        }
-    }
+    // Key 机制（gpt-4o）+ 会话 ID → 注入缓存策略与 wire 键
+    let openai = test_provider_call("gpt-4o");
+    let options = openai.request_options(&request);
+    let policy = options.cache.clone().expect("Key 机制应注入缓存策略");
+    assert_eq!(policy.mechanism, CacheMechanism::Key);
+    assert_eq!(policy.cache_key, Some(CacheKey("ses-abc".to_string())));
+    let body = build_chat_completions_request_body(&options, &openai.build_context(&request));
+    assert_eq!(body["prompt_cache_key"], "ses-abc");
 
-    /// build_context 透传 system_prompt；相同设置下两次构建请求体字节一致
-    ///
-    /// 断言（P1 §5.1 验收 4/10 + §5.3 路径 3）：
-    /// - system_prompt 到达请求构建上下文（不再硬编码 None）；
-    /// - system 消息始终是 messages[0]（静态前缀前置纪律）；
-    /// - 同进程两次构建请求体 to_string 字节相等（前缀稳定性）。
-    #[test]
-    fn build_context_passes_system_prompt_and_is_stable() {
-        let call = test_provider_call("deepseek-chat");
+    // Key 机制无会话 ID → 无键可发，整体不注入（session_id? 短路）
+    let no_session = session_request(&messages, None);
+    assert!(openai.request_options(&no_session).cache.is_none());
 
-        let user = AgentMessage {
-            id: "user-1".to_string(),
-            role: AgentMessageRole::User,
-            created_at: "2026-08-03T00:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text {
-                text: "你好".to_string(),
-            }],
-            metadata: None,
-            client_message_id: None,
-            content: None,
-        };
-        let messages = vec![Arc::new(user)];
-        let request = single_user_request(&messages, Some("你是助手，使用中文回答。"));
+    // 未知/本地厂商（base_url 无关键字 + model 前缀未命中）→ 保守全关
+    let ollama = test_provider_call("llama-3.1");
+    assert!(ollama.request_options(&request).cache.is_none());
+}
 
-        // 透传正确：system_prompt 到达构建上下文（P-04 修复点）
-        let context_a = call.build_context(&request);
-        let context_b = call.build_context(&request);
-        assert_eq!(
-            context_a.system_prompt.as_deref(),
-            Some("你是助手，使用中文回答。")
-        );
+/// G1 遗留 1：发送层基础请求头合并亲和头（affinity_http_headers 消费点）。
+/// Grok + 会话 ID → x-grok-conv-id 出现（值 = 会话 ID，与 cache_key 同源
+/// 前 64 码点）；其他厂商（OpenAI / DeepSeek / 未知）与无会话 → 不出现；
+/// Authorization 恒在（既有固定头不受影响）。
+#[test]
+fn request_headers_merges_affinity_header() {
+    let user = AgentMessage {
+        id: "user-1".to_string(),
+        role: AgentMessageRole::User,
+        created_at: "2026-08-03T00:00:00.000Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "你好".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let messages = vec![Arc::new(user)];
+    let request = session_request(&messages, Some("ses-abc"));
 
-        // 稳定性：相同设置下两次构建请求体字节一致（同进程对比）
-        let options = call.request_options(&request);
-        let body_a = build_chat_completions_request_body(&options, &context_a);
-        let body_b = build_chat_completions_request_body(&options, &context_b);
-        assert_eq!(body_a.to_string(), body_b.to_string());
+    // Grok（catalog 真源路径）：x-grok-conv-id 随基础请求头出现
+    let grok = test_provider_call("grok-4.5");
+    let options = grok.request_options(&request);
+    let headers = grok.request_headers(options.cache.as_ref());
+    assert!(headers.iter().any(|(name, _)| name == &"Authorization"));
+    assert!(
+        headers
+            .iter()
+            .any(|(name, value)| name == &"x-grok-conv-id" && value == "ses-abc"),
+        "Grok 应注入 x-grok-conv-id"
+    );
 
-        // system 消息始终是 messages[0]（静态前缀前置，P1 §5.3 路径 3）
-        let wire_messages = body_a
-            .get("messages")
-            .and_then(serde_json::Value::as_array)
-            .expect("请求体应含 messages 数组");
-        let first = wire_messages.first().expect("至少一条消息");
-        assert_eq!(first["role"], "system");
-        assert_eq!(first["content"], "你是助手，使用中文回答。");
-    }
+    // 无会话 ID → 无亲和头（仅 Authorization）
+    let no_session = session_request(&messages, None);
+    let headers = grok.request_headers(grok.request_options(&no_session).cache.as_ref());
+    assert!(headers.iter().any(|(name, _)| name == &"Authorization"));
+    assert!(!headers.iter().any(|(name, _)| name == &"x-grok-conv-id"));
 
-    /// reasoning_content 模式按 vendor 判定（P1 C3 唯一实现）：
-    /// DeepSeek → Require（键存在性，空串兜底）；其余厂商 → Omit
-    #[test]
-    fn reasoning_content_mode_follows_vendor() {
-        let deepseek = test_provider_call("deepseek-chat");
-        assert_eq!(
-            deepseek.reasoning_content_mode(),
-            ReasoningContentMode::Require
-        );
-
-        let openai = test_provider_call("gpt-4o");
-        assert_eq!(openai.reasoning_content_mode(), ReasoningContentMode::Omit);
-
-        // base_url 含 deepseek 关键字同样判定（infer_reasoning_vendor 双通道）
-        let mut config = EngineProviderConfig {
-            base_url: "https://deepseek.example.com/v1/".to_string(),
-            api_key: "k".to_string(),
-            model: "random-model".to_string(),
-            endpoint: Endpoint::ChatCompletions,
-            stream: true,
-            extra: BTreeMap::new(),
-        };
-        let call = HttpProviderCall::new(reqwest::Client::new(), config.clone());
-        assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Require);
-
-        // 未知厂商 → Auto → Omit（现状保持）
-        config.base_url = "https://unknown.example.com/v1/".to_string();
-        config.model = "custom-model".to_string();
-        let call = HttpProviderCall::new(reqwest::Client::new(), config);
-        assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Omit);
-    }
-
-    // ── DEEPCHECK-06 P0：生效模型窗口解析（子代理预算入站数据源）──────
-
-    /// 生效模型窗口：catalog 条目命中 → 窗口值透传（vendor 经
-    /// [infer_vendor] 双通道——model 前缀判定，覆盖目录厂商）；版本后缀
-    /// 逐级剥离命中基础条目；目录缺失（未知模型 / Auto 厂商）→ None
-    /// （不臆造窗口，与主会话 catalog 兜底失败行为一致）
-    #[test]
-    fn effective_context_window_resolves_from_bundled_catalog() {
-        // 产品默认模型 deepseek-v4-flash：目录条目窗口 1M
-        let deepseek = test_provider_call("deepseek-v4-flash");
-        assert_eq!(
-            effective_context_window(&deepseek.config),
-            Some(1_000_000),
-            "deepseek-v4-flash 应命中 catalog 窗口"
-        );
-        // 版本后缀模型（strip_version_suffix 路径）：deepseek-v4-flash-0731
-        let dated = test_provider_call("deepseek-v4-flash-0731");
-        assert_eq!(
-            effective_context_window(&dated.config),
-            Some(1_000_000),
-            "版本后缀应逐级剥离命中基础条目"
-        );
-        // Grok（目录厂商，模型前缀判定）：窗口 500K
-        let grok = test_provider_call("grok-4.5");
-        assert_eq!(effective_context_window(&grok.config), Some(500_000));
-        // 未知模型（Auto 厂商）→ None（不臆造窗口）
-        let unknown = test_provider_call("llama-3.1");
-        assert_eq!(effective_context_window(&unknown.config), None);
-    }
-
-    // ── P2：build_cache_policy 接线 + session_id 注入（T-17，P2 步骤 4b）────
-
-    /// 构造单条 user 消息 + 会话 ID 的请求（cache 接线断言用）
-    fn session_request<'a>(
-        messages: &'a Vec<Arc<AgentMessage>>,
-        session_id: Option<&'a str>,
-    ) -> ProviderRequest<'a> {
-        ProviderRequest {
-            messages,
-            tools: Vec::new(),
-            max_tokens: Some(4096),
-            system_prompt: None,
-            session_id: session_id.map(str::to_string),
-        }
-    }
-
-    /// request_options 组装 cache：engine.rs 只调用 build_cache_policy（C2 唯一
-    /// 运行时判定/消费入口），能力判定收敛在其内部（catalog = bundled_catalog()
-    /// 真源路径，T-23 单例；无 catalog 时兜底内置保守表）
-    ///
-    /// 断言（P2 §5.1/§5.3）：
-    /// - DeepSeek：build_cache_policy 归 None → 请求体不含任何 cache 键
-    ///   （省略行为测试钉死，对齐 deepseek-reasonix-cache-analysis.md:111-112）；
-    /// - Key 机制（gpt-4o）+ 会话 ID → 注入 prompt_cache_key（码点钳 64）；
-    /// - Key 机制无会话 ID → 不注入（无键无路由对象）；
-    /// - 未知/本地厂商 → 保守全关。
-    #[test]
-    fn request_options_wires_build_cache_policy() {
-        let user = AgentMessage {
-            id: "user-1".to_string(),
-            role: AgentMessageRole::User,
-            created_at: "2026-08-03T00:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text {
-                text: "你好".to_string(),
-            }],
-            metadata: None,
-            client_message_id: None,
-            content: None,
-        };
-        let messages = vec![Arc::new(user)];
-        let request = session_request(&messages, Some("ses-abc"));
-
-        // DeepSeek：省略整个 cache 参数组（机制 Auto + omit 恒 true）
-        let deepseek = test_provider_call("deepseek-v4");
-        assert!(deepseek.request_options(&request).cache.is_none());
-        let body = build_chat_completions_request_body(
-            &deepseek.request_options(&request),
-            &deepseek.build_context(&request),
-        );
-        assert!(body.get("prompt_cache_key").is_none());
-        assert!(body.get("prompt_cache_retention").is_none());
-        assert!(body.get("prompt_cache_options").is_none());
-
-        // Key 机制（gpt-4o）+ 会话 ID → 注入缓存策略与 wire 键
-        let openai = test_provider_call("gpt-4o");
-        let options = openai.request_options(&request);
-        let policy = options.cache.clone().expect("Key 机制应注入缓存策略");
-        assert_eq!(policy.mechanism, CacheMechanism::Key);
-        assert_eq!(policy.cache_key, Some(CacheKey("ses-abc".to_string())));
-        let body = build_chat_completions_request_body(&options, &openai.build_context(&request));
-        assert_eq!(body["prompt_cache_key"], "ses-abc");
-
-        // Key 机制无会话 ID → 无键可发，整体不注入（session_id? 短路）
-        let no_session = session_request(&messages, None);
-        assert!(openai.request_options(&no_session).cache.is_none());
-
-        // 未知/本地厂商（base_url 无关键字 + model 前缀未命中）→ 保守全关
-        let ollama = test_provider_call("llama-3.1");
-        assert!(ollama.request_options(&request).cache.is_none());
-    }
-
-    /// G1 遗留 1：发送层基础请求头合并亲和头（affinity_http_headers 消费点）。
-    /// Grok + 会话 ID → x-grok-conv-id 出现（值 = 会话 ID，与 cache_key 同源
-    /// 前 64 码点）；其他厂商（OpenAI / DeepSeek / 未知）与无会话 → 不出现；
-    /// Authorization 恒在（既有固定头不受影响）。
-    #[test]
-    fn request_headers_merges_affinity_header() {
-        let user = AgentMessage {
-            id: "user-1".to_string(),
-            role: AgentMessageRole::User,
-            created_at: "2026-08-03T00:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text {
-                text: "你好".to_string(),
-            }],
-            metadata: None,
-            client_message_id: None,
-            content: None,
-        };
-        let messages = vec![Arc::new(user)];
-        let request = session_request(&messages, Some("ses-abc"));
-
-        // Grok（catalog 真源路径）：x-grok-conv-id 随基础请求头出现
-        let grok = test_provider_call("grok-4.5");
-        let options = grok.request_options(&request);
-        let headers = grok.request_headers(options.cache.as_ref());
-        assert!(headers.iter().any(|(name, _)| name == &"Authorization"));
+    // 其他厂商（OpenAI / DeepSeek / 未知）：亲和头不出现
+    for model in ["gpt-4o", "deepseek-v4", "llama-3.1"] {
+        let call = test_provider_call(model);
+        let headers = call.request_headers(call.request_options(&request).cache.as_ref());
         assert!(
-            headers
-                .iter()
-                .any(|(name, value)| name == &"x-grok-conv-id" && value == "ses-abc"),
-            "Grok 应注入 x-grok-conv-id"
+            !headers.iter().any(|(name, _)| name == &"x-grok-conv-id"),
+            "{model} 不应注入 x-grok-conv-id"
         );
+    }
+}
 
-        // 无会话 ID → 无亲和头（仅 Authorization）
-        let no_session = session_request(&messages, None);
-        let headers = grok.request_headers(grok.request_options(&no_session).cache.as_ref());
-        assert!(headers.iter().any(|(name, _)| name == &"Authorization"));
-        assert!(!headers.iter().any(|(name, _)| name == &"x-grok-conv-id"));
+/// 捕获请求的测试 provider（session_id 注入断言用）
+struct CaptureProvider {
+    captured: Arc<Mutex<Option<String>>>,
+}
 
-        // 其他厂商（OpenAI / DeepSeek / 未知）：亲和头不出现
-        for model in ["gpt-4o", "deepseek-v4", "llama-3.1"] {
-            let call = test_provider_call(model);
-            let headers = call.request_headers(call.request_options(&request).cache.as_ref());
-            assert!(
-                !headers.iter().any(|(name, _)| name == &"x-grok-conv-id"),
-                "{model} 不应注入 x-grok-conv-id"
+#[async_trait]
+impl ProviderCall for CaptureProvider {
+    async fn stream<'a>(
+        &self,
+        request: &ProviderRequest<'a>,
+    ) -> Result<ProviderEventStream, ClassifiedStreamError> {
+        *self.captured.lock().unwrap_or_else(|e| e.into_inner()) = request.session_id.clone();
+        let stream: ProviderEventStream =
+            Box::pin(futures_util::stream::empty::<ProviderStreamItem>());
+        Ok(stream)
+    }
+}
+
+/// SharedProvider::stream 把会话 ID 注入 ProviderRequest.session_id
+/// （P2 步骤 4b：prompt_cache_key 键来源；值 = AgentSessionContext.session_id
+/// 同源——两者同源于 run-task 下发的 sessionId）
+#[tokio::test]
+async fn shared_provider_injects_session_id() {
+    let captured = Arc::new(Mutex::new(None));
+    let shared = SharedProvider {
+        inner: Arc::new(CaptureProvider {
+            captured: Arc::clone(&captured),
+        }),
+        session_id: "ses-42".to_string(),
+    };
+    let messages = Vec::<Arc<AgentMessage>>::new();
+    let request = session_request(&messages, None);
+    let stream = shared.stream(&request).await.expect("空流应成功");
+    drop(stream);
+    assert_eq!(
+        captured
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_deref(),
+        Some("ses-42"),
+        "会话 ID 应注入 ProviderRequest.session_id"
+    );
+}
+
+// ── P3：provider_url 接入 supports_responses_for（T-23，P3 步骤 4b / §3.4.2）──
+
+/// 构造测试用配置（Responses 支持判定用；base_url 含 deepseek 关键字，
+/// 经 infer_reasoning_vendor 双通道判定厂商）
+fn responses_config(model: &str, endpoint: Endpoint) -> EngineProviderConfig {
+    EngineProviderConfig {
+        base_url: "https://api.deepseek.com/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: model.to_string(),
+        endpoint,
+        stream: true,
+        extra: BTreeMap::new(),
+    }
+}
+
+/// provider_url 按目录 supports_responses 判定端点（P3 ⑤ 验收 3）：
+/// - deepseek-v4-flash → 允许 responses（/responses）；
+/// - 版本后缀 deepseek-v4-flash-0731（官方版本号）经 lookup 多级兜底同样允许；
+/// - deepseek-v4-pro → 不支持 → 拒绝 responses 并降级 chat-completions；
+/// - deepseek 前缀内未收录模型 → 保守视为不支持 → 同样降级；
+/// - 未知厂商（baseUrl/model 无关键字）→ 保留现状走 /responses（不臆断）；
+/// - chat-completions 端点不受判定影响（原路径保持）。
+#[test]
+fn provider_url_gates_responses_by_catalog_support() {
+    // v4-flash：目录 supportsResponses=true → 保持 /responses
+    let flash = responses_config("deepseek-v4-flash", Endpoint::Responses);
+    assert_eq!(
+        provider_url(&flash),
+        "https://api.deepseek.com/v1/responses",
+        "v4-flash 应允许 responses 端点"
+    );
+
+    // 版本后缀兜底：DeepSeek-V4-Flash-0731 命中内置 v4-flash 条目
+    let flash_0731 = responses_config("deepseek-v4-flash-0731", Endpoint::Responses);
+    assert_eq!(
+        provider_url(&flash_0731),
+        "https://api.deepseek.com/v1/responses",
+        "版本后缀模型应经 lookup 兜底命中 v4-flash"
+    );
+
+    // v4-pro：官方尚未支持 Responses（2026 年 8 月初加入）→ 降级 chat-completions
+    let pro = responses_config("deepseek-v4-pro", Endpoint::Responses);
+    assert_eq!(
+        provider_url(&pro),
+        "https://api.deepseek.com/v1/chat/completions",
+        "v4-pro 应拒绝 responses 并降级 chat-completions"
+    );
+
+    // deepseek 前缀内未收录模型 → 保守视为不支持 → 降级
+    let unknown = responses_config("deepseek-custom", Endpoint::Responses);
+    assert_eq!(
+        provider_url(&unknown),
+        "https://api.deepseek.com/v1/chat/completions",
+        "未收录模型应保守降级"
+    );
+
+    // 未知厂商（无关键字网关）→ 目录无数据 → 保留现状走 /responses
+    let gateway = EngineProviderConfig {
+        base_url: "https://gw.example.com/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: "m".to_string(),
+        endpoint: Endpoint::Responses,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    assert_eq!(
+        provider_url(&gateway),
+        "https://gw.example.com/v1/responses",
+        "未知厂商不应臆断降级"
+    );
+
+    // chat-completions 端点恒不受判定影响
+    let chat = responses_config("deepseek-v4-pro", Endpoint::ChatCompletions);
+    assert_eq!(
+        provider_url(&chat),
+        "https://api.deepseek.com/v1/chat/completions"
+    );
+}
+
+/// responses_supported 辅助函数语义（目录查询面）：
+/// v4-flash → true；v4-pro → false；版本后缀兜底 → true；
+/// 未收录模型 → false（保守）；未知厂商（Auto）→ true（保留现状）。
+#[test]
+fn responses_supported_follows_catalog_entry() {
+    assert!(responses_supported(&responses_config(
+        "deepseek-v4-flash",
+        Endpoint::Responses
+    )));
+    assert!(responses_supported(&responses_config(
+        "deepseek-v4-flash-0731",
+        Endpoint::Responses
+    )));
+    assert!(!responses_supported(&responses_config(
+        "deepseek-v4-pro",
+        Endpoint::Responses
+    )));
+    assert!(!responses_supported(&responses_config(
+        "deepseek-custom",
+        Endpoint::Responses
+    )));
+
+    // 未知厂商：base_url/model 均无关键字 → Auto → 保留现状（不降级）
+    let gateway = EngineProviderConfig {
+        base_url: "https://gw.example.com/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: "m".to_string(),
+        endpoint: Endpoint::Responses,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    assert!(responses_supported(&gateway));
+}
+
+// ── DEEPCHECK-05 #10：Responses 轨三件套同轨（URL / body / parser）──
+
+/// responses_endpoint_active = endpoint=Responses && 目录支持（三件套统一判定点）
+#[test]
+fn responses_endpoint_active_follows_catalog_and_endpoint() {
+    // v4-flash + responses 端点 → 生效
+    assert!(responses_endpoint_active(&responses_config(
+        "deepseek-v4-flash",
+        Endpoint::Responses
+    )));
+    // v4-pro + responses 端点 → 不生效（降级 chat 轨）
+    assert!(!responses_endpoint_active(&responses_config(
+        "deepseek-v4-pro",
+        Endpoint::Responses
+    )));
+    // v4-flash + chat 端点 → 不生效（chat 轨恒走 chat）
+    assert!(!responses_endpoint_active(&responses_config(
+        "deepseek-v4-flash",
+        Endpoint::ChatCompletions
+    )));
+    // 未知厂商 + responses 端点 → 生效（保留现状不降级）
+    let gateway = EngineProviderConfig {
+        base_url: "https://gw.example.com/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: "m".to_string(),
+        endpoint: Endpoint::Responses,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    assert!(responses_endpoint_active(&gateway));
+}
+
+/// request_body 按轨分流（DEEPCHECK-05 #10 核心修复）：responses 轨 →
+/// responses wire 形状（input/instructions/max_output_tokens，无 chat 缓存字段）；
+/// chat 轨 → chat 形状（既有字节路径回归护栏）
+#[test]
+fn request_body_dispatches_by_rail() {
+    let user = AgentMessage {
+        id: "user-1".to_string(),
+        role: AgentMessageRole::User,
+        created_at: "2026-08-03T00:00:00.000Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "你好".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let messages = vec![Arc::new(user)];
+    let request = ProviderRequest {
+        messages: &messages,
+        tools: Vec::new(),
+        max_tokens: Some(4096),
+        system_prompt: Some("你是助手，使用中文回答。"),
+        session_id: None,
+        reasoning_effort: None,
+    };
+
+    // responses 轨：body 为 responses 形状
+    let responses_call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        responses_config("deepseek-v4-flash", Endpoint::Responses),
+    );
+    let options = responses_call.request_options(&request);
+    let context = responses_call.build_context(&request);
+    let body = responses_call.request_body(&options, &context);
+    assert_eq!(body["model"], "deepseek-v4-flash");
+    assert_eq!(body["instructions"], "你是助手，使用中文回答。");
+    assert_eq!(
+        body["input"][0],
+        serde_json::json!({ "type": "message", "role": "user", "content": "你好" })
+    );
+    assert_eq!(body["max_output_tokens"], 4096);
+    assert!(
+        body.get("messages").is_none(),
+        "responses 轨不得出现 messages"
+    );
+    for key in [
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "prompt_cache_options",
+        "stream_options",
+    ] {
+        assert!(body.get(key).is_none(), "responses 轨不得注入 {key}");
+    }
+
+    // chat 轨：body 保持 chat 形状（既有路径字节不变）
+    let chat_call = test_provider_call("deepseek-v4-flash");
+    let options = chat_call.request_options(&request);
+    let context = chat_call.build_context(&request);
+    let body = chat_call.request_body(&options, &context);
+    assert_eq!(body["model"], "deepseek-v4-flash");
+    assert!(body.get("messages").is_some(), "chat 轨必须携带 messages");
+    assert!(body.get("input").is_none(), "chat 轨不得出现 input");
+    assert!(
+        body.get("instructions").is_none(),
+        "chat 轨不得出现 instructions"
+    );
+    assert_eq!(body["max_tokens"], 4096, "chat 轨保持 max_tokens 字段名");
+    assert_eq!(body["messages"][0]["role"], "system");
+    assert_eq!(body["messages"][0]["content"], "你是助手，使用中文回答。");
+}
+
+/// HttpStreamParser 二态解析器：responses 轨 → ResponsesParser 消费
+/// responses 事件帧（text delta + 终态 + usage）；与 chat 轨解析器行为隔离
+#[test]
+fn http_stream_parser_dispatch_responses_frames() {
+    let mut parser = HttpStreamParser::Responses(ResponsesParser::new());
+    let frames = [
+        r#"{"type":"response.output_text.delta","delta":"你好"}"#,
+        r#"{"type":"response.output_text.delta","delta":"，世界"}"#,
+        r#"{"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}"#,
+    ];
+    let mut events = Vec::new();
+    for data in frames {
+        events.extend(
+            parser
+                .push_frame(&SseFrame {
+                    event: None,
+                    data: Some(data.to_string()),
+                    id: None,
+                    retry: None,
+                })
+                .expect("帧处理"),
+        );
+    }
+    events.extend(parser.finish().expect("流结束"));
+    let texts: Vec<&str> = events
+        .iter()
+        .filter_map(|event| match event {
+            WireEvent::TextDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(texts, vec!["你好", "，世界"]);
+    let stop = events
+        .iter()
+        .find(|event| matches!(event, WireEvent::Stop { .. }))
+        .expect("流内应有 stop");
+    match stop {
+        WireEvent::Stop {
+            reason: agent_provider::events::StopReason::Stop,
+            usage: Some(usage),
+            ..
+        } => {
+            assert_eq!(usage.prompt_tokens, Some(100));
+            assert_eq!(
+                usage.cache_read_tokens,
+                Some(50),
+                "cached_tokens → cache_read"
             );
         }
+        other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
     }
+}
 
-    /// 捕获请求的测试 provider（session_id 注入断言用）
-    struct CaptureProvider {
-        captured: Arc<Mutex<Option<String>>>,
-    }
+/// 端到端（DEEPCHECK-05 #10 验收）：v4-flash responses 配置下，真实 HTTP 链路
+/// 三件套一致——URL=/responses + body=input 形状 + ResponsesParser 解析事件流
+#[tokio::test]
+async fn responses_stream_end_to_end_over_mock_sse() {
+    let frames = vec![
+        r#"data: {"type":"response.output_text.delta","delta":"你好"}"#,
+        r#"data: {"type":"response.output_text.delta","delta":"，世界"}"#,
+        r#"data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}"#,
+    ];
+    let server = ResponsesMockServer::start(frames).await;
+    let config = EngineProviderConfig {
+        base_url: server.base_url(),
+        api_key: "k".to_string(),
+        model: "deepseek-v4-flash".to_string(),
+        endpoint: Endpoint::Responses,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    // 未知主机判定：base_url 无关键字 → Auto → responses 保留（不依赖 catalog 命中）
+    assert!(
+        responses_endpoint_active(&config),
+        "mock 网关应走 responses 轨"
+    );
+    let call = HttpProviderCall::new(reqwest::Client::new(), config);
 
-    #[async_trait]
-    impl ProviderCall for CaptureProvider {
-        async fn stream<'a>(
-            &self,
-            request: &ProviderRequest<'a>,
-        ) -> Result<ProviderEventStream, ClassifiedStreamError> {
-            *self
-                .captured
-                .lock()
-                .unwrap_or_else(|e| e.into_inner()) = request.session_id.clone();
-            let stream: ProviderEventStream =
-                Box::pin(futures_util::stream::empty::<ProviderStreamItem>());
-            Ok(stream)
+    let user = AgentMessage {
+        id: "user-1".to_string(),
+        role: AgentMessageRole::User,
+        created_at: "2026-08-03T00:00:00.000Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "你好".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let messages = vec![Arc::new(user)];
+    let request = session_request(&messages, None);
+    let mut stream = call.stream(&request).await.expect("stream 应成功");
+
+    let mut texts = Vec::new();
+    let mut stop: Option<ProviderStreamEvent> = None;
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(ProviderStreamEvent::TextDelta { text }) => texts.push(text),
+            Ok(event @ ProviderStreamEvent::Stop { .. }) => stop = Some(event),
+            Ok(_) => {}
+            Err(error) => panic!("流错误：{error:?}"),
         }
     }
+    assert_eq!(
+        texts,
+        vec!["你好", "，世界"],
+        "responses 帧应经 ResponsesParser 产出文本增量"
+    );
+    match stop.expect("流内应有 stop") {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
+            assert_eq!(usage.prompt_tokens, Some(100));
+            assert_eq!(usage.cache_read_tokens, Some(50), "终态 usage 覆盖式生效");
+        }
+        other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
+    }
 
-    /// SharedProvider::stream 把会话 ID 注入 ProviderRequest.session_id
-    /// （P2 步骤 4b：prompt_cache_key 键来源；值 = AgentSessionContext.session_id
-    /// 同源——两者同源于 run-task 下发的 sessionId）
-    #[tokio::test]
-    async fn shared_provider_injects_session_id() {
-        let captured = Arc::new(Mutex::new(None));
-        let shared = SharedProvider {
-            inner: Arc::new(CaptureProvider {
-                captured: Arc::clone(&captured),
-            }),
-            session_id: "ses-42".to_string(),
-        };
-        let messages = Vec::<Arc<AgentMessage>>::new();
-        let request = session_request(&messages, None);
-        let stream = shared.stream(&request).await.expect("空流应成功");
-        drop(stream);
-        assert_eq!(
-            captured
+    // URL 与 body 同轨：/responses + input 形状（不是 chat body 发往 /responses）
+    let (path, body) = server.captured().await;
+    assert_eq!(path, "/v1/responses", "responses 轨 URL 必须为 /responses");
+    assert_eq!(body["model"], "deepseek-v4-flash");
+    assert!(
+        body.get("input").is_some(),
+        "responses 轨 body 必须为 input 形状"
+    );
+    assert!(
+        body.get("messages").is_none(),
+        "不得把 chat body 发往 /responses"
+    );
+    for key in [
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "prompt_cache_options",
+        "stream_options",
+    ] {
+        assert!(body.get(key).is_none(), "responses 轨不得注入 {key}");
+    }
+}
+
+/// 本地 SSE mock 服务器（Responses 端到端测试）：捕获请求路径 + body JSON，
+/// 回 chunked SSE 帧（text/event-stream，无 [DONE]——DeepSeek Responses 语义）
+struct ResponsesMockServer {
+    addr: std::net::SocketAddr,
+    captured_path: Arc<Mutex<Option<String>>>,
+    captured_body: Arc<Mutex<Option<serde_json::Value>>>,
+}
+
+impl ResponsesMockServer {
+    async fn start(frames: Vec<&'static str>) -> Arc<Self> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock sse server");
+        let addr = listener.local_addr().expect("local addr");
+        let captured_path: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let captured_body: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
+        let server = Arc::new(Self {
+            addr,
+            captured_path: Arc::clone(&captured_path),
+            captured_body: Arc::clone(&captured_body),
+        });
+        tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let captured_path = Arc::clone(&captured_path);
+            let captured_body = Arc::clone(&captured_body);
+            tokio::spawn(async move {
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                let head_end = loop {
+                    if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                        break pos + 4;
+                    }
+                    let n = socket.read(&mut chunk).await.unwrap_or(0);
+                    if n == 0 {
+                        return;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                };
+                let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
+                let request_line = head.lines().next().unwrap_or_default();
+                let path = request_line
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_string();
+                let content_length = head
+                    .lines()
+                    .find_map(|line| line.split_once(':'))
+                    .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                    .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                let mut req_body = buf[head_end..].to_vec();
+                while req_body.len() < content_length {
+                    let n = socket.read(&mut chunk).await.unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    req_body.extend_from_slice(&chunk[..n]);
+                }
+                *captured_path.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
+                if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&req_body) {
+                    *captured_body.lock().unwrap_or_else(|e| e.into_inner()) = Some(json);
+                }
+                let mut response = String::from(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n",
+                    );
+                for frame in frames {
+                    let wire = format!("{frame}\n\n");
+                    response.push_str(&format!("{:x}\r\n{wire}\r\n", wire.len()));
+                }
+                response.push_str("0\r\n\r\n");
+                let _ = socket.write_all(response.as_bytes()).await;
+            });
+        });
+        server
+    }
+
+    fn base_url(&self) -> String {
+        format!("http://{}/v1", self.addr)
+    }
+
+    /// 等待捕获请求（5s 超时兜底，防测试悬挂）
+    async fn captured(&self) -> (String, serde_json::Value) {
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
+        loop {
+            let path = self
+                .captured_path
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .as_deref(),
-            Some("ses-42"),
-            "会话 ID 应注入 ProviderRequest.session_id"
-        );
-    }
-
-    // ── P3：provider_url 接入 supports_responses_for（T-23，P3 步骤 4b / §3.4.2）──
-
-    /// 构造测试用配置（Responses 支持判定用；base_url 含 deepseek 关键字，
-    /// 经 infer_reasoning_vendor 双通道判定厂商）
-    fn responses_config(model: &str, endpoint: Endpoint) -> EngineProviderConfig {
-        EngineProviderConfig {
-            base_url: "https://api.deepseek.com/v1/".to_string(),
-            api_key: "k".to_string(),
-            model: model.to_string(),
-            endpoint,
-            stream: true,
-            extra: BTreeMap::new(),
-        }
-    }
-
-    /// provider_url 按目录 supports_responses 判定端点（P3 ⑤ 验收 3）：
-    /// - deepseek-v4-flash → 允许 responses（/responses）；
-    /// - 版本后缀 deepseek-v4-flash-0731（官方版本号）经 lookup 多级兜底同样允许；
-    /// - deepseek-v4-pro → 不支持 → 拒绝 responses 并降级 chat-completions；
-    /// - deepseek 前缀内未收录模型 → 保守视为不支持 → 同样降级；
-    /// - 未知厂商（baseUrl/model 无关键字）→ 保留现状走 /responses（不臆断）；
-    /// - chat-completions 端点不受判定影响（原路径保持）。
-    #[test]
-    fn provider_url_gates_responses_by_catalog_support() {
-        // v4-flash：目录 supportsResponses=true → 保持 /responses
-        let flash = responses_config("deepseek-v4-flash", Endpoint::Responses);
-        assert_eq!(
-            provider_url(&flash),
-            "https://api.deepseek.com/v1/responses",
-            "v4-flash 应允许 responses 端点"
-        );
-
-        // 版本后缀兜底：DeepSeek-V4-Flash-0731 命中内置 v4-flash 条目
-        let flash_0731 = responses_config("deepseek-v4-flash-0731", Endpoint::Responses);
-        assert_eq!(
-            provider_url(&flash_0731),
-            "https://api.deepseek.com/v1/responses",
-            "版本后缀模型应经 lookup 兜底命中 v4-flash"
-        );
-
-        // v4-pro：官方尚未支持 Responses（2026 年 8 月初加入）→ 降级 chat-completions
-        let pro = responses_config("deepseek-v4-pro", Endpoint::Responses);
-        assert_eq!(
-            provider_url(&pro),
-            "https://api.deepseek.com/v1/chat/completions",
-            "v4-pro 应拒绝 responses 并降级 chat-completions"
-        );
-
-        // deepseek 前缀内未收录模型 → 保守视为不支持 → 降级
-        let unknown = responses_config("deepseek-custom", Endpoint::Responses);
-        assert_eq!(
-            provider_url(&unknown),
-            "https://api.deepseek.com/v1/chat/completions",
-            "未收录模型应保守降级"
-        );
-
-        // 未知厂商（无关键字网关）→ 目录无数据 → 保留现状走 /responses
-        let gateway = EngineProviderConfig {
-            base_url: "https://gw.example.com/v1/".to_string(),
-            api_key: "k".to_string(),
-            model: "m".to_string(),
-            endpoint: Endpoint::Responses,
-            stream: true,
-            extra: BTreeMap::new(),
-        };
-        assert_eq!(
-            provider_url(&gateway),
-            "https://gw.example.com/v1/responses",
-            "未知厂商不应臆断降级"
-        );
-
-        // chat-completions 端点恒不受判定影响
-        let chat = responses_config("deepseek-v4-pro", Endpoint::ChatCompletions);
-        assert_eq!(
-            provider_url(&chat),
-            "https://api.deepseek.com/v1/chat/completions"
-        );
-    }
-
-    /// responses_supported 辅助函数语义（目录查询面）：
-    /// v4-flash → true；v4-pro → false；版本后缀兜底 → true；
-    /// 未收录模型 → false（保守）；未知厂商（Auto）→ true（保留现状）。
-    #[test]
-    fn responses_supported_follows_catalog_entry() {
-        assert!(responses_supported(&responses_config(
-            "deepseek-v4-flash",
-            Endpoint::Responses
-        )));
-        assert!(responses_supported(&responses_config(
-            "deepseek-v4-flash-0731",
-            Endpoint::Responses
-        )));
-        assert!(!responses_supported(&responses_config(
-            "deepseek-v4-pro",
-            Endpoint::Responses
-        )));
-        assert!(!responses_supported(&responses_config(
-            "deepseek-custom",
-            Endpoint::Responses
-        )));
-
-        // 未知厂商：base_url/model 均无关键字 → Auto → 保留现状（不降级）
-        let gateway = EngineProviderConfig {
-            base_url: "https://gw.example.com/v1/".to_string(),
-            api_key: "k".to_string(),
-            model: "m".to_string(),
-            endpoint: Endpoint::Responses,
-            stream: true,
-            extra: BTreeMap::new(),
-        };
-        assert!(responses_supported(&gateway));
-    }
-
-    // ── DEEPCHECK-05 #10：Responses 轨三件套同轨（URL / body / parser）──
-
-    /// responses_endpoint_active = endpoint=Responses && 目录支持（三件套统一判定点）
-    #[test]
-    fn responses_endpoint_active_follows_catalog_and_endpoint() {
-        // v4-flash + responses 端点 → 生效
-        assert!(responses_endpoint_active(&responses_config(
-            "deepseek-v4-flash",
-            Endpoint::Responses
-        )));
-        // v4-pro + responses 端点 → 不生效（降级 chat 轨）
-        assert!(!responses_endpoint_active(&responses_config(
-            "deepseek-v4-pro",
-            Endpoint::Responses
-        )));
-        // v4-flash + chat 端点 → 不生效（chat 轨恒走 chat）
-        assert!(!responses_endpoint_active(&responses_config(
-            "deepseek-v4-flash",
-            Endpoint::ChatCompletions
-        )));
-        // 未知厂商 + responses 端点 → 生效（保留现状不降级）
-        let gateway = EngineProviderConfig {
-            base_url: "https://gw.example.com/v1/".to_string(),
-            api_key: "k".to_string(),
-            model: "m".to_string(),
-            endpoint: Endpoint::Responses,
-            stream: true,
-            extra: BTreeMap::new(),
-        };
-        assert!(responses_endpoint_active(&gateway));
-    }
-
-    /// request_body 按轨分流（DEEPCHECK-05 #10 核心修复）：responses 轨 →
-    /// responses wire 形状（input/instructions/max_output_tokens，无 chat 缓存字段）；
-    /// chat 轨 → chat 形状（既有字节路径回归护栏）
-    #[test]
-    fn request_body_dispatches_by_rail() {
-        let user = AgentMessage {
-            id: "user-1".to_string(),
-            role: AgentMessageRole::User,
-            created_at: "2026-08-03T00:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text {
-                text: "你好".to_string(),
-            }],
-            metadata: None,
-            client_message_id: None,
-            content: None,
-        };
-        let messages = vec![Arc::new(user)];
-        let request = ProviderRequest {
-            messages: &messages,
-            tools: Vec::new(),
-            max_tokens: Some(4096),
-            system_prompt: Some("你是助手，使用中文回答。"),
-            session_id: None,
-        };
-
-        // responses 轨：body 为 responses 形状
-        let responses_call = HttpProviderCall::new(
-            reqwest::Client::new(),
-            responses_config("deepseek-v4-flash", Endpoint::Responses),
-        );
-        let options = responses_call.request_options(&request);
-        let context = responses_call.build_context(&request);
-        let body = responses_call.request_body(&options, &context);
-        assert_eq!(body["model"], "deepseek-v4-flash");
-        assert_eq!(body["instructions"], "你是助手，使用中文回答。");
-        assert_eq!(
-            body["input"][0],
-            serde_json::json!({ "type": "message", "role": "user", "content": "你好" })
-        );
-        assert_eq!(body["max_output_tokens"], 4096);
-        assert!(body.get("messages").is_none(), "responses 轨不得出现 messages");
-        for key in [
-            "prompt_cache_key",
-            "prompt_cache_retention",
-            "prompt_cache_options",
-            "stream_options",
-        ] {
-            assert!(body.get(key).is_none(), "responses 轨不得注入 {key}");
-        }
-
-        // chat 轨：body 保持 chat 形状（既有路径字节不变）
-        let chat_call = test_provider_call("deepseek-v4-flash");
-        let options = chat_call.request_options(&request);
-        let context = chat_call.build_context(&request);
-        let body = chat_call.request_body(&options, &context);
-        assert_eq!(body["model"], "deepseek-v4-flash");
-        assert!(body.get("messages").is_some(), "chat 轨必须携带 messages");
-        assert!(body.get("input").is_none(), "chat 轨不得出现 input");
-        assert!(body.get("instructions").is_none(), "chat 轨不得出现 instructions");
-        assert_eq!(body["max_tokens"], 4096, "chat 轨保持 max_tokens 字段名");
-        assert_eq!(body["messages"][0]["role"], "system");
-        assert_eq!(body["messages"][0]["content"], "你是助手，使用中文回答。");
-    }
-
-    /// HttpStreamParser 二态解析器：responses 轨 → ResponsesParser 消费
-    /// responses 事件帧（text delta + 终态 + usage）；与 chat 轨解析器行为隔离
-    #[test]
-    fn http_stream_parser_dispatch_responses_frames() {
-        let mut parser = HttpStreamParser::Responses(ResponsesParser::new());
-        let frames = [
-            r#"{"type":"response.output_text.delta","delta":"你好"}"#,
-            r#"{"type":"response.output_text.delta","delta":"，世界"}"#,
-            r#"{"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}"#,
-        ];
-        let mut events = Vec::new();
-        for data in frames {
-            events.extend(
-                parser
-                    .push_frame(&SseFrame {
-                        event: None,
-                        data: Some(data.to_string()),
-                        id: None,
-                        retry: None,
-                    })
-                    .expect("帧处理"),
-            );
-        }
-        events.extend(parser.finish().expect("流结束"));
-        let texts: Vec<&str> = events
-            .iter()
-            .filter_map(|event| match event {
-                WireEvent::TextDelta { text } => Some(text.as_str()),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(texts, vec!["你好", "，世界"]);
-        let stop = events
-            .iter()
-            .find(|event| matches!(event, WireEvent::Stop { .. }))
-            .expect("流内应有 stop");
-        match stop {
-            WireEvent::Stop { reason: agent_provider::events::StopReason::Stop, usage: Some(usage), .. } => {
-                assert_eq!(usage.prompt_tokens, Some(100));
-                assert_eq!(usage.cache_read_tokens, Some(50), "cached_tokens → cache_read");
+                .clone();
+            let body = self
+                .captured_body
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            if let (Some(path), Some(body)) = (path, body) {
+                return (path, body);
             }
-            other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
+            if tokio::time::Instant::now() >= deadline {
+                panic!("mock 服务器未捕获到请求");
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
         }
     }
+}
 
-    /// 端到端（DEEPCHECK-05 #10 验收）：v4-flash responses 配置下，真实 HTTP 链路
-    /// 三件套一致——URL=/responses + body=input 形状 + ResponsesParser 解析事件流
-    #[tokio::test]
-    async fn responses_stream_end_to_end_over_mock_sse() {
-        let frames = vec![
-            r#"data: {"type":"response.output_text.delta","delta":"你好"}"#,
-            r#"data: {"type":"response.output_text.delta","delta":"，世界"}"#,
-            r#"data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}"#,
-        ];
-        let server = ResponsesMockServer::start(frames).await;
-        let config = EngineProviderConfig {
-            base_url: server.base_url(),
-            api_key: "k".to_string(),
-            model: "deepseek-v4-flash".to_string(),
-            endpoint: Endpoint::Responses,
-            stream: true,
-            extra: BTreeMap::new(),
-        };
-        // 未知主机判定：base_url 无关键字 → Auto → responses 保留（不依赖 catalog 命中）
-        assert!(responses_endpoint_active(&config), "mock 网关应走 responses 轨");
-        let call = HttpProviderCall::new(reqwest::Client::new(), config);
+// ── T-30：produce 水合分支 + 预算透传（P4 阶段 1-3/1-4，§3.2.1/§3.2.3）──
 
-        let user = AgentMessage {
-            id: "user-1".to_string(),
+/// 构造测试用 producer（initial_conversation / options 可注入；
+/// provider 为脚本化替身，供请求快照断言）
+fn test_producer(
+    initial_conversation: Option<Vec<Arc<AgentMessage>>>,
+    options: SessionLoopOptions,
+) -> (SessionLoopProducer, Arc<TestProvider>) {
+    let provider = Arc::new(TestProvider::text_reply("收到"));
+    let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
+    let producer = SessionLoopProducer::new(
+        "ses-t30".to_string(),
+        "run-t30".to_string(),
+        8,
+        provider_call,
+        Arc::new(ToolRegistry::new()),
+        options,
+        ToolBatchOptions::default(),
+        None,
+        None,
+        initial_conversation,
+        user_message("第二轮提问", Some("user-t30")),
+    );
+    (producer, provider)
+}
+
+/// T-30：produce 水合分支——预置对话经 with_initial_conversation_arc
+/// 零拷贝续接（Arc 身份不变），run 追加新用户消息与助手回复；
+/// 收口 outcome.messages 携带完整续接序列（SessionHistoryCache 的
+/// 原子替换数据源，P4 阶段 1-4）。
+/// 载荷注记（T-36 对齐）：预置首条为 user（水合协议形状——跳过
+/// system 后的首条必须为 user，assistant/tool 开头 provider 400
+/// 风险；assert_conversation_head_tail 调试断言强制）
+#[tokio::test]
+async fn produce_hydrates_initial_conversation() {
+    let initial_text = AgentMessage {
+        id: "user-1".to_string(),
+        role: AgentMessageRole::User,
+        created_at: "2026-08-03T00:00:00.000Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "首轮提问".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let initial: Vec<Arc<AgentMessage>> = vec![Arc::new(initial_text)];
+    let (mut producer, provider) =
+        test_producer(Some(initial.clone()), SessionLoopOptions::default());
+
+    let outcome = producer.produce().await;
+
+    // 请求链：预置对话 + 新用户消息（水合分支生效，历史回流 LLM）
+    let sent = provider.request_message_arcs(0);
+    assert_eq!(
+        sent.len(),
+        initial.len() + 1,
+        "请求应含预置对话 + 新用户消息"
+    );
+    assert!(
+        Arc::ptr_eq(&initial[0], &sent[0]),
+        "预置消息零拷贝续接（Arc 身份不变）"
+    );
+    assert_eq!(sent[0].role, AgentMessageRole::User);
+    let last = sent.last().expect("至少一条消息");
+    assert_eq!(last.role, AgentMessageRole::User, "尾部应为新用户消息");
+    let text = last.blocks.iter().find_map(|block| match block {
+        AgentMessageBlock::Text { text } => Some(text.as_str()),
+        _ => None,
+    });
+    assert_eq!(text, Some("第二轮提问"));
+
+    // 收口：outcome = 预置 + 用户 + 助手回复（缓存原子替换的数据源）
+    assert_eq!(outcome.messages.len(), initial.len() + 2);
+    assert!(
+        Arc::ptr_eq(&initial[0], &outcome.messages[0]),
+        "收口续接保留预置消息 Arc 身份"
+    );
+    assert_eq!(
+        outcome.messages.last().map(|m| m.role),
+        Some(AgentMessageRole::Assistant)
+    );
+}
+
+/// T-30：initial_conversation 为空（None / 空 Vec）→ 现状单消息路径
+/// （向后兼容：请求只含本次用户消息，不产生空预置）
+#[tokio::test]
+async fn produce_without_initial_conversation_stays_single_message() {
+    let (mut producer, provider) = test_producer(None, SessionLoopOptions::default());
+    let outcome = producer.produce().await;
+    let sent = provider.request_message_arcs(0);
+    assert_eq!(sent.len(), 1, "无预置时请求只含本次用户消息");
+    assert_eq!(sent[0].role, AgentMessageRole::User);
+    assert_eq!(outcome.messages.len(), 2, "用户 + 助手回复");
+
+    // Some(空 Vec) 同样走单消息路径（空预置不产生水合调用）
+    let (mut producer_empty, provider_empty) =
+        test_producer(Some(Vec::new()), SessionLoopOptions::default());
+    producer_empty.produce().await;
+    assert_eq!(provider_empty.request_message_arcs(0).len(), 1);
+}
+
+/// T-30：context_budget 透传（core_run_commands 构造点 → options →
+/// 预算层）——窗口收紧到 12288 时 max_tokens 被钳到默认 8192 之下
+/// （clamp = min(requested, window - estimate - safety)，估算 > 0）
+#[tokio::test]
+async fn produce_applies_context_budget_clamp() {
+    let options = SessionLoopOptions {
+        context_budget: Some(ContextBudget {
+            context_window: 12_288,
+            ..ContextBudget::default()
+        }),
+        ..SessionLoopOptions::default()
+    };
+    let (mut producer, provider) = test_producer(None, options);
+    producer.produce().await;
+    let max_tokens = provider
+        .request_max_tokens(0)
+        .expect("请求应携带 max_tokens");
+    assert!(
+        max_tokens < session_loop::r#loop::DEFAULT_MAX_TOKENS,
+        "预算钳制应把 max_tokens 收到默认 8192 之下（实际 {max_tokens}）"
+    );
+    assert!(max_tokens >= 1, "钳制下限 MIN_MAX_TOKENS = 1");
+}
+
+// ── COMPACTION-01 P0-3：生产 Summarizer（ProviderSummarizer）──────
+
+fn summary_config(base_url: String, model: &str) -> EngineProviderConfig {
+    EngineProviderConfig {
+        base_url,
+        api_key: "sk-summary".to_string(),
+        model: model.to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: false,
+        extra: BTreeMap::new(),
+    }
+}
+
+fn dropped_summary_messages() -> Vec<conex_types::message::AgentMessage> {
+    vec![
+        AgentMessage {
+            id: "u-drop".to_string(),
             role: AgentMessageRole::User,
-            created_at: "2026-08-03T00:00:00.000Z".to_string(),
+            created_at: "2026-08-09T10:00:00.000Z".to_string(),
             blocks: vec![AgentMessageBlock::Text {
-                text: "你好".to_string(),
+                text: "实现压缩模块".to_string(),
             }],
             metadata: None,
             client_message_id: None,
             content: None,
-        };
-        let messages = vec![Arc::new(user)];
-        let request = session_request(&messages, None);
-        let mut stream = call
-            .stream(&request)
+        },
+        AgentMessage {
+            id: "a-drop".to_string(),
+            role: AgentMessageRole::Assistant,
+            created_at: "2026-08-09T10:00:01.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "已完成（read_file src/lib.rs）".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        },
+    ]
+}
+
+/// C14 隔离面（请求体纯函数断言）：摘要请求 = 单条 user 消息、
+/// 无 system、无 tools、无任何缓存键 / 断点（prompt_cache_key /
+/// prompt_cache_retention / prompt_cache_options / cache_control）、
+/// 无会话亲和参数；模型 / 非流式 / max_tokens 预算正确透传。
+#[test]
+fn provider_summarizer_request_body_is_c14_isolated() {
+    let summarizer = ProviderSummarizer::new(
+        reqwest::Client::new(),
+        summary_config("https://x.example/v1".to_string(), "model-a"),
+        conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
+    );
+    let body = summarizer.build_request_body("摘要提示词内容");
+    let messages = body["messages"].as_array().expect("messages 必须为数组");
+    assert_eq!(messages.len(), 1, "摘要请求必须是单条消息（独立前缀域）");
+    assert_eq!(
+        messages[0]["role"], "user",
+        "唯一消息必须是 user（无 system 注入）"
+    );
+    assert!(
+        messages[0]["content"]
+            .as_str()
+            .map(|s| s.contains("摘要提示词内容"))
+            .unwrap_or(false),
+        "提示词经单条 user 消息 content 发出"
+    );
+    assert!(body.get("tools").is_none(), "摘要请求不得携带 tools");
+    assert!(
+        body.get("tool_choice").is_none(),
+        "摘要请求不得携带 tool_choice"
+    );
+    assert!(body.get("system").is_none(), "摘要请求不得携带 system 消息");
+    // C14：无缓存断点 / 无会话亲和键（cache: None → 整个 cache 参数组不出现）
+    for key in [
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "prompt_cache_options",
+    ] {
+        assert!(body.get(key).is_none(), "请求体不得含缓存键 {key}");
+    }
+    assert!(
+        messages[0].get("cache_control").is_none(),
+        "消息不得含 cache_control 断点"
+    );
+    // 模型 / 预算 / 非流式
+    assert_eq!(body["model"], "model-a");
+    assert_eq!(body["stream"], false);
+    assert_eq!(body["max_tokens"], 1024);
+}
+
+/// 本地 mock 服务器（COMPACTION-01 P0-3 测试）：捕获请求体 JSON +
+/// 按脚本逐连接返回 canned HTTP 响应
+struct SummaryMockServer {
+    addr: std::net::SocketAddr,
+    captured: Arc<Mutex<Vec<serde_json::Value>>>,
+}
+
+impl SummaryMockServer {
+    async fn start(respond: Vec<(u16, String)>) -> Arc<Self> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
-            .expect("stream 应成功");
-
-        let mut texts = Vec::new();
-        let mut stop: Option<ProviderStreamEvent> = None;
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(ProviderStreamEvent::TextDelta { text }) => texts.push(text),
-                Ok(event @ ProviderStreamEvent::Stop { .. }) => stop = Some(event),
-                Ok(_) => {}
-                Err(error) => panic!("流错误：{error:?}"),
-            }
-        }
-        assert_eq!(texts, vec!["你好", "，世界"], "responses 帧应经 ResponsesParser 产出文本增量");
-        match stop.expect("流内应有 stop") {
-            ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
-                assert_eq!(usage.prompt_tokens, Some(100));
-                assert_eq!(usage.cache_read_tokens, Some(50), "终态 usage 覆盖式生效");
-            }
-            other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
-        }
-
-        // URL 与 body 同轨：/responses + input 形状（不是 chat body 发往 /responses）
-        let (path, body) = server.captured().await;
-        assert_eq!(path, "/v1/responses", "responses 轨 URL 必须为 /responses");
-        assert_eq!(body["model"], "deepseek-v4-flash");
-        assert!(body.get("input").is_some(), "responses 轨 body 必须为 input 形状");
-        assert!(body.get("messages").is_none(), "不得把 chat body 发往 /responses");
-        for key in ["prompt_cache_key", "prompt_cache_retention", "prompt_cache_options", "stream_options"] {
-            assert!(body.get(key).is_none(), "responses 轨不得注入 {key}");
-        }
-    }
-
-    /// 本地 SSE mock 服务器（Responses 端到端测试）：捕获请求路径 + body JSON，
-    /// 回 chunked SSE 帧（text/event-stream，无 [DONE]——DeepSeek Responses 语义）
-    struct ResponsesMockServer {
-        addr: std::net::SocketAddr,
-        captured_path: Arc<Mutex<Option<String>>>,
-        captured_body: Arc<Mutex<Option<serde_json::Value>>>,
-    }
-
-    impl ResponsesMockServer {
-        async fn start(frames: Vec<&'static str>) -> Arc<Self> {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-                .await
-                .expect("bind mock sse server");
-            let addr = listener.local_addr().expect("local addr");
-            let captured_path: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-            let captured_body: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
-            let server = Arc::new(Self {
-                addr,
-                captured_path: Arc::clone(&captured_path),
-                captured_body: Arc::clone(&captured_body),
-            });
-            tokio::spawn(async move {
+            .expect("bind summary mock server");
+        let addr = listener.local_addr().expect("local addr");
+        let captured: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let server = Arc::new(Self {
+            addr,
+            captured: Arc::clone(&captured),
+        });
+        tokio::spawn(async move {
+            for (status, body) in respond {
                 let Ok((mut socket, _)) = listener.accept().await else {
-                    return;
+                    break;
                 };
-                let captured_path = Arc::clone(&captured_path);
-                let captured_body = Arc::clone(&captured_body);
+                let captured = Arc::clone(&captured);
                 tokio::spawn(async move {
+                    // 读请求（头 + Content-Length 体）
                     let mut buf = Vec::new();
                     let mut chunk = [0u8; 4096];
                     let head_end = loop {
-                        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                        if let Some(pos) = buf.windows(4).position(|window| window == b"\r\n\r\n") {
                             break pos + 4;
                         }
                         let n = socket.read(&mut chunk).await.unwrap_or(0);
@@ -853,12 +1204,6 @@ use crate::timers::AgentEventSink;
                         buf.extend_from_slice(&chunk[..n]);
                     };
                     let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
-                    let request_line = head.lines().next().unwrap_or_default();
-                    let path = request_line
-                        .split_whitespace()
-                        .nth(1)
-                        .unwrap_or_default()
-                        .to_string();
                     let content_length = head
                         .lines()
                         .find_map(|line| line.split_once(':'))
@@ -873,1438 +1218,1140 @@ use crate::timers::AgentEventSink;
                         }
                         req_body.extend_from_slice(&chunk[..n]);
                     }
-                    *captured_path
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner()) = Some(path);
                     if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&req_body) {
-                        *captured_body
+                        captured
                             .lock()
-                            .unwrap_or_else(|e| e.into_inner()) = Some(json);
+                            .unwrap_or_else(|e| e.into_inner())
+                            .push(json);
                     }
-                    let mut response = String::from(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n",
-                    );
-                    for frame in frames {
-                        let wire = format!("{frame}\n\n");
-                        response.push_str(&format!("{:x}\r\n{wire}\r\n", wire.len()));
-                    }
-                    response.push_str("0\r\n\r\n");
-                    let _ = socket.write_all(response.as_bytes()).await;
-                });
-            });
-            server
-        }
-
-        fn base_url(&self) -> String {
-            format!("http://{}/v1", self.addr)
-        }
-
-        /// 等待捕获请求（5s 超时兜底，防测试悬挂）
-        async fn captured(&self) -> (String, serde_json::Value) {
-            let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
-            loop {
-                let path = self
-                    .captured_path
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .clone();
-                let body = self
-                    .captured_body
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .clone();
-                if let (Some(path), Some(body)) = (path, body) {
-                    return (path, body);
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    panic!("mock 服务器未捕获到请求");
-                }
-                tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
-            }
-        }
-    }
-
-
-    // ── T-30：produce 水合分支 + 预算透传（P4 阶段 1-3/1-4，§3.2.1/§3.2.3）──
-
-    /// 构造测试用 producer（initial_conversation / options 可注入；
-    /// provider 为脚本化替身，供请求快照断言）
-    fn test_producer(
-        initial_conversation: Option<Vec<Arc<AgentMessage>>>,
-        options: SessionLoopOptions,
-    ) -> (SessionLoopProducer, Arc<TestProvider>) {
-        let provider = Arc::new(TestProvider::text_reply("收到"));
-        let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
-        let producer = SessionLoopProducer::new(
-            "ses-t30".to_string(),
-            "run-t30".to_string(),
-            8,
-            provider_call,
-            Arc::new(ToolRegistry::new()),
-            options,
-            ToolBatchOptions::default(),
-            None,
-            None,
-            initial_conversation,
-            user_message("第二轮提问", Some("user-t30")),
-        );
-        (producer, provider)
-    }
-
-    /// T-30：produce 水合分支——预置对话经 with_initial_conversation_arc
-    /// 零拷贝续接（Arc 身份不变），run 追加新用户消息与助手回复；
-    /// 收口 outcome.messages 携带完整续接序列（SessionHistoryCache 的
-    /// 原子替换数据源，P4 阶段 1-4）。
-    /// 载荷注记（T-36 对齐）：预置首条为 user（水合协议形状——跳过
-    /// system 后的首条必须为 user，assistant/tool 开头 provider 400
-    /// 风险；assert_conversation_head_tail 调试断言强制）
-    #[tokio::test]
-    async fn produce_hydrates_initial_conversation() {
-        let initial_text = AgentMessage {
-            id: "user-1".to_string(),
-            role: AgentMessageRole::User,
-            created_at: "2026-08-03T00:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text {
-                text: "首轮提问".to_string(),
-            }],
-            metadata: None,
-            client_message_id: None,
-            content: None,
-        };
-        let initial: Vec<Arc<AgentMessage>> = vec![Arc::new(initial_text)];
-        let (mut producer, provider) =
-            test_producer(Some(initial.clone()), SessionLoopOptions::default());
-
-        let outcome = producer.produce().await;
-
-        // 请求链：预置对话 + 新用户消息（水合分支生效，历史回流 LLM）
-        let sent = provider.request_message_arcs(0);
-        assert_eq!(
-            sent.len(),
-            initial.len() + 1,
-            "请求应含预置对话 + 新用户消息"
-        );
-        assert!(
-            Arc::ptr_eq(&initial[0], &sent[0]),
-            "预置消息零拷贝续接（Arc 身份不变）"
-        );
-        assert_eq!(sent[0].role, AgentMessageRole::User);
-        let last = sent.last().expect("至少一条消息");
-        assert_eq!(last.role, AgentMessageRole::User, "尾部应为新用户消息");
-        let text = last
-            .blocks
-            .iter()
-            .find_map(|block| match block {
-                AgentMessageBlock::Text { text } => Some(text.as_str()),
-                _ => None,
-            });
-        assert_eq!(text, Some("第二轮提问"));
-
-        // 收口：outcome = 预置 + 用户 + 助手回复（缓存原子替换的数据源）
-        assert_eq!(outcome.messages.len(), initial.len() + 2);
-        assert!(
-            Arc::ptr_eq(&initial[0], &outcome.messages[0]),
-            "收口续接保留预置消息 Arc 身份"
-        );
-        assert_eq!(
-            outcome.messages.last().map(|m| m.role),
-            Some(AgentMessageRole::Assistant)
-        );
-    }
-
-    /// T-30：initial_conversation 为空（None / 空 Vec）→ 现状单消息路径
-    /// （向后兼容：请求只含本次用户消息，不产生空预置）
-    #[tokio::test]
-    async fn produce_without_initial_conversation_stays_single_message() {
-        let (mut producer, provider) = test_producer(None, SessionLoopOptions::default());
-        let outcome = producer.produce().await;
-        let sent = provider.request_message_arcs(0);
-        assert_eq!(sent.len(), 1, "无预置时请求只含本次用户消息");
-        assert_eq!(sent[0].role, AgentMessageRole::User);
-        assert_eq!(outcome.messages.len(), 2, "用户 + 助手回复");
-
-        // Some(空 Vec) 同样走单消息路径（空预置不产生水合调用）
-        let (mut producer_empty, provider_empty) =
-            test_producer(Some(Vec::new()), SessionLoopOptions::default());
-        producer_empty.produce().await;
-        assert_eq!(provider_empty.request_message_arcs(0).len(), 1);
-    }
-
-    /// T-30：context_budget 透传（core_run_commands 构造点 → options →
-    /// 预算层）——窗口收紧到 12288 时 max_tokens 被钳到默认 8192 之下
-    /// （clamp = min(requested, window - estimate - safety)，估算 > 0）
-    #[tokio::test]
-    async fn produce_applies_context_budget_clamp() {
-        let options = SessionLoopOptions {
-            context_budget: Some(ContextBudget {
-                context_window: 12_288,
-                ..ContextBudget::default()
-            }),
-            ..SessionLoopOptions::default()
-        };
-        let (mut producer, provider) = test_producer(None, options);
-        producer.produce().await;
-        let max_tokens = provider
-            .request_max_tokens(0)
-            .expect("请求应携带 max_tokens");
-        assert!(
-            max_tokens < session_loop::r#loop::DEFAULT_MAX_TOKENS,
-            "预算钳制应把 max_tokens 收到默认 8192 之下（实际 {max_tokens}）"
-        );
-        assert!(max_tokens >= 1, "钳制下限 MIN_MAX_TOKENS = 1");
-    }
-
-    // ── COMPACTION-01 P0-3：生产 Summarizer（ProviderSummarizer）──────
-
-    fn summary_config(base_url: String, model: &str) -> EngineProviderConfig {
-        EngineProviderConfig {
-            base_url,
-            api_key: "sk-summary".to_string(),
-            model: model.to_string(),
-            endpoint: Endpoint::ChatCompletions,
-            stream: false,
-            extra: BTreeMap::new(),
-        }
-    }
-
-    fn dropped_summary_messages() -> Vec<conex_types::message::AgentMessage> {
-        vec![
-            AgentMessage {
-                id: "u-drop".to_string(),
-                role: AgentMessageRole::User,
-                created_at: "2026-08-09T10:00:00.000Z".to_string(),
-                blocks: vec![AgentMessageBlock::Text {
-                    text: "实现压缩模块".to_string(),
-                }],
-                metadata: None,
-                client_message_id: None,
-                content: None,
-            },
-            AgentMessage {
-                id: "a-drop".to_string(),
-                role: AgentMessageRole::Assistant,
-                created_at: "2026-08-09T10:00:01.000Z".to_string(),
-                blocks: vec![AgentMessageBlock::Text {
-                    text: "已完成（read_file src/lib.rs）".to_string(),
-                }],
-                metadata: None,
-                client_message_id: None,
-                content: None,
-            },
-        ]
-    }
-
-    /// C14 隔离面（请求体纯函数断言）：摘要请求 = 单条 user 消息、
-    /// 无 system、无 tools、无任何缓存键 / 断点（prompt_cache_key /
-    /// prompt_cache_retention / prompt_cache_options / cache_control）、
-    /// 无会话亲和参数；模型 / 非流式 / max_tokens 预算正确透传。
-    #[test]
-    fn provider_summarizer_request_body_is_c14_isolated() {
-        let summarizer = ProviderSummarizer::new(
-            reqwest::Client::new(),
-            summary_config("https://x.example/v1".to_string(), "model-a"),
-            conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
-        );
-        let body = summarizer.build_request_body("摘要提示词内容");
-        let messages = body["messages"].as_array().expect("messages 必须为数组");
-        assert_eq!(messages.len(), 1, "摘要请求必须是单条消息（独立前缀域）");
-        assert_eq!(
-            messages[0]["role"], "user",
-            "唯一消息必须是 user（无 system 注入）"
-        );
-        assert!(
-            messages[0]["content"]
-                .as_str()
-                .map(|s| s.contains("摘要提示词内容"))
-                .unwrap_or(false),
-            "提示词经单条 user 消息 content 发出"
-        );
-        assert!(body.get("tools").is_none(), "摘要请求不得携带 tools");
-        assert!(body.get("tool_choice").is_none(), "摘要请求不得携带 tool_choice");
-        assert!(body.get("system").is_none(), "摘要请求不得携带 system 消息");
-        // C14：无缓存断点 / 无会话亲和键（cache: None → 整个 cache 参数组不出现）
-        for key in [
-            "prompt_cache_key",
-            "prompt_cache_retention",
-            "prompt_cache_options",
-        ] {
-            assert!(body.get(key).is_none(), "请求体不得含缓存键 {key}");
-        }
-        assert!(
-            messages[0].get("cache_control").is_none(),
-            "消息不得含 cache_control 断点"
-        );
-        // 模型 / 预算 / 非流式
-        assert_eq!(body["model"], "model-a");
-        assert_eq!(body["stream"], false);
-        assert_eq!(body["max_tokens"], 1024);
-    }
-
-    /// 本地 mock 服务器（COMPACTION-01 P0-3 测试）：捕获请求体 JSON +
-    /// 按脚本逐连接返回 canned HTTP 响应
-    struct SummaryMockServer {
-        addr: std::net::SocketAddr,
-        captured: Arc<Mutex<Vec<serde_json::Value>>>,
-    }
-
-    impl SummaryMockServer {
-        async fn start(respond: Vec<(u16, String)>) -> Arc<Self> {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-                .await
-                .expect("bind summary mock server");
-            let addr = listener.local_addr().expect("local addr");
-            let captured: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
-            let server = Arc::new(Self {
-                addr,
-                captured: Arc::clone(&captured),
-            });
-            tokio::spawn(async move {
-                for (status, body) in respond {
-                    let Ok((mut socket, _)) = listener.accept().await else {
-                        break;
-                    };
-                    let captured = Arc::clone(&captured);
-                    tokio::spawn(async move {
-                        // 读请求（头 + Content-Length 体）
-                        let mut buf = Vec::new();
-                        let mut chunk = [0u8; 4096];
-                        let head_end = loop {
-                            if let Some(pos) =
-                                buf.windows(4).position(|window| window == b"\r\n\r\n")
-                            {
-                                break pos + 4;
-                            }
-                            let n = socket.read(&mut chunk).await.unwrap_or(0);
-                            if n == 0 {
-                                return;
-                            }
-                            buf.extend_from_slice(&chunk[..n]);
-                        };
-                        let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
-                        let content_length = head
-                            .lines()
-                            .find_map(|line| line.split_once(':'))
-                            .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-                            .and_then(|(_, value)| value.trim().parse::<usize>().ok())
-                            .unwrap_or(0);
-                        let mut req_body = buf[head_end..].to_vec();
-                        while req_body.len() < content_length {
-                            let n = socket.read(&mut chunk).await.unwrap_or(0);
-                            if n == 0 {
-                                break;
-                            }
-                            req_body.extend_from_slice(&chunk[..n]);
-                        }
-                        if let Ok(json) =
-                            serde_json::from_slice::<serde_json::Value>(&req_body)
-                        {
-                            captured
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .push(json);
-                        }
-                        let response = format!(
+                    let response = format!(
                             "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                             body.len()
                         );
-                        let _ = socket.write_all(response.as_bytes()).await;
-                    });
-                }
-            });
-            server
-        }
-
-        fn base_url(&self) -> String {
-            format!("http://{}/v1", self.addr)
-        }
-
-        fn captured(&self) -> Vec<serde_json::Value> {
-            self.captured
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone()
-        }
+                    let _ = socket.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+        server
     }
 
-    /// 真实调用形状（wire 断言）：成功路径——单 user 消息 / 无 tools /
-    /// 无缓存参数 / 无会话亲和头；响应 content 原样返回（Schema V1 JSON
-    /// 字符串），供引擎校验渲染。
-    ///
-    /// 注：summarize 为同步阻塞调用（专用线程 + 独立 runtime），测试用
-    /// multi_thread 运行时保证 listener 与调用并发。
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn provider_summarizer_success_extracts_content_via_chat_completions() {
-        let summary_json = serde_json::json!({
-            "schemaVersion": 1,
-            "blockId": "summary",
-            "generation": 1,
-            "droppedIds": ["u-drop", "a-drop"],
-            "height": 1,
-            "tier": "chunk",
-            "goal": "实现压缩模块",
-            "constraints": [],
-            "progress": ["完成切割点保护"],
-            "decisions": [],
-            "nextSteps": ["补充测试"],
-            "criticalContext": ["src/lib.rs"],
+    fn base_url(&self) -> String {
+        format!("http://{}/v1", self.addr)
+    }
+
+    fn captured(&self) -> Vec<serde_json::Value> {
+        self.captured
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+}
+
+/// 真实调用形状（wire 断言）：成功路径——单 user 消息 / 无 tools /
+/// 无缓存参数 / 无会话亲和头；响应 content 原样返回（Schema V1 JSON
+/// 字符串），供引擎校验渲染。
+///
+/// 注：summarize 为同步阻塞调用（专用线程 + 独立 runtime），测试用
+/// multi_thread 运行时保证 listener 与调用并发。
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_summarizer_success_extracts_content_via_chat_completions() {
+    let summary_json = serde_json::json!({
+        "schemaVersion": 1,
+        "blockId": "summary",
+        "generation": 1,
+        "droppedIds": ["u-drop", "a-drop"],
+        "height": 1,
+        "tier": "chunk",
+        "goal": "实现压缩模块",
+        "constraints": [],
+        "progress": ["完成切割点保护"],
+        "decisions": [],
+        "nextSteps": ["补充测试"],
+        "criticalContext": ["src/lib.rs"],
+    })
+    .to_string();
+    let server = SummaryMockServer::start(vec![(
+        200,
+        serde_json::json!({
+            "choices": [{"message": {"role": "assistant", "content": summary_json}}]
         })
-        .to_string();
-        let server = SummaryMockServer::start(vec![(
-            200,
-            serde_json::json!({
-                "choices": [{"message": {"role": "assistant", "content": summary_json}}]
-            })
+        .to_string(),
+    )])
+    .await;
+    let summarizer = ProviderSummarizer::new(
+        reqwest::Client::new(),
+        summary_config(server.base_url(), "model-a"),
+        conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
+    );
+    let result = summarizer.summarize(&dropped_summary_messages(), None);
+    assert_eq!(
+        result.as_deref(),
+        Ok(summary_json.as_str()),
+        "成功路径返回 content"
+    );
+    // wire 断言（C14 隔离面）
+    let captured = server.captured();
+    assert_eq!(captured.len(), 1, "应恰好捕获 1 个摘要请求");
+    let req = &captured[0];
+    assert_eq!(req["model"], "model-a", "摘要请求用当前 provider 模型");
+    assert_eq!(req["stream"], false, "摘要请求非流式");
+    assert_eq!(req["max_tokens"], 1024, "摘要输出预算 = 1024");
+    let messages = req["messages"].as_array().expect("messages 数组");
+    assert_eq!(messages.len(), 1, "单条 user 消息（独立前缀域）");
+    assert_eq!(messages[0]["role"], "user");
+    let content = messages[0]["content"].as_str().expect("content 为字符串");
+    assert!(content.contains("实现压缩模块"), "丢弃消息渲染进提示词");
+    assert!(content.contains("src/lib.rs"), "工具调用细节进提示词");
+    assert!(req.get("tools").is_none(), "无 tools");
+    assert!(req.get("prompt_cache_key").is_none(), "无会话亲和缓存键");
+    assert!(req.get("prompt_cache_retention").is_none(), "无缓存保留键");
+    assert!(req.get("prompt_cache_options").is_none(), "无缓存选项键");
+    assert!(messages[0].get("cache_control").is_none(), "无消息级断点");
+}
+
+/// 失败降级 L1：非 2xx → Err（调用方按契约回退中性 stub，不阻塞主对话）
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_summarizer_http_error_degrades_to_err() {
+    let server = SummaryMockServer::start(vec![(500, "{\"error\":\"boom\"}".to_string())]).await;
+    let summarizer = ProviderSummarizer::new(
+        reqwest::Client::new(),
+        summary_config(server.base_url(), "model-a"),
+        1024,
+    );
+    let result = summarizer.summarize(&dropped_summary_messages(), None);
+    let err = result.expect_err("HTTP 500 必须返回 Err（降级 L1 占位符）");
+    assert!(err.contains("500"), "错误文案应携带状态码：{err}");
+}
+
+/// 失败降级 L1：2xx 但响应缺 content（空 / 缺字段）→ Err
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_summarizer_missing_content_degrades_to_err() {
+    let server = SummaryMockServer::start(vec![(
+        200,
+        serde_json::json!({ "choices": [{"message": {"role": "assistant", "content": null}}] })
             .to_string(),
-        )])
-        .await;
-        let summarizer = ProviderSummarizer::new(
-            reqwest::Client::new(),
-            summary_config(server.base_url(), "model-a"),
-            conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
-        );
-        let result = summarizer.summarize(&dropped_summary_messages(), None);
-        assert_eq!(result.as_deref(), Ok(summary_json.as_str()), "成功路径返回 content");
-        // wire 断言（C14 隔离面）
-        let captured = server.captured();
-        assert_eq!(captured.len(), 1, "应恰好捕获 1 个摘要请求");
-        let req = &captured[0];
-        assert_eq!(req["model"], "model-a", "摘要请求用当前 provider 模型");
-        assert_eq!(req["stream"], false, "摘要请求非流式");
-        assert_eq!(req["max_tokens"], 1024, "摘要输出预算 = 1024");
-        let messages = req["messages"].as_array().expect("messages 数组");
-        assert_eq!(messages.len(), 1, "单条 user 消息（独立前缀域）");
-        assert_eq!(messages[0]["role"], "user");
-        let content = messages[0]["content"].as_str().expect("content 为字符串");
-        assert!(content.contains("实现压缩模块"), "丢弃消息渲染进提示词");
-        assert!(content.contains("src/lib.rs"), "工具调用细节进提示词");
-        assert!(req.get("tools").is_none(), "无 tools");
-        assert!(req.get("prompt_cache_key").is_none(), "无会话亲和缓存键");
-        assert!(req.get("prompt_cache_retention").is_none(), "无缓存保留键");
-        assert!(req.get("prompt_cache_options").is_none(), "无缓存选项键");
-        assert!(messages[0].get("cache_control").is_none(), "无消息级断点");
+    )])
+    .await;
+    let summarizer = ProviderSummarizer::new(
+        reqwest::Client::new(),
+        summary_config(server.base_url(), "model-a"),
+        1024,
+    );
+    let result = summarizer.summarize(&dropped_summary_messages(), None);
+    assert!(
+        result.is_err(),
+        "响应缺 content 必须返回 Err（降级 L1 占位符）"
+    );
+}
+
+/// 生产工厂：provider 未就绪 → None（不注入，纯 stub awaiting 语义）；
+/// 就绪 → 返回真实 ProviderSummarizer（模型 = 当前生效配置）
+#[test]
+fn production_factory_returns_real_summarizer_from_engine_config() {
+    use crate::core_run_commands::{isolate_config_store, CONFIG_TEST_LOCK};
+    let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let dir =
+        std::env::temp_dir().join(format!("conex-config-test-{}-{nanos}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create config dir");
+    isolate_config_store(&dir);
+
+    let engine = Arc::new(EngineHandle::new(None));
+    let factory = production_summarizer_factory(Arc::clone(&engine));
+    assert!(
+        factory("s1").is_none(),
+        "provider 未就绪（无配置）→ 不注入，保持 stub 语义"
+    );
+    let provider: Arc<dyn ProviderCall> = Arc::new(HttpProviderCall::new(
+        reqwest::Client::new(),
+        summary_config("https://x.example/v1".to_string(), "model-prod"),
+    ));
+    engine.inject_provider_for_test(
+        provider,
+        summary_config("https://x.example/v1".to_string(), "model-prod"),
+    );
+    let summarizer = factory("s1").expect("配置就绪后工厂必须返回真实实现");
+    // 实例边界：同工厂两次解析为独立实例（per-session 隔离决议）
+    let second = factory("s2").expect("再次解析成功");
+    assert!(
+        !Arc::ptr_eq(&summarizer, &second),
+        "每会话独立实例（04 §7.1 隔离决议）"
+    );
+}
+
+// ── P5 S5 / T-40：缓存测量装配与事件（engine 接线段）────────────
+
+/// 携带 usage 的停止事件（ProviderUsage camelCase 标量面；与
+/// session-loop T-36 测试同形状）
+fn stop_with_usage(
+    prompt: u64,
+    completion: u64,
+    read: u64,
+    write: u64,
+    miss: Option<u64>,
+) -> ProviderStreamEvent {
+    ProviderStreamEvent::Stop {
+        reason: LoopStopReason::Stop,
+        error: None,
+        error_kind: None,
+        usage: Some(ProviderUsage {
+            prompt_tokens: Some(prompt),
+            completion_tokens: Some(completion),
+            total_tokens: Some(prompt.saturating_add(completion)),
+            cache_read_tokens: Some(read),
+            cache_write_tokens: Some(write),
+            cache_miss_tokens: miss,
+            reasoning_tokens: None,
+        }),
     }
+}
 
-    /// 失败降级 L1：非 2xx → Err（调用方按契约回退中性 stub，不阻塞主对话）
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn provider_summarizer_http_error_degrades_to_err() {
-        let server = SummaryMockServer::start(vec![(500, "{\"error\":\"boom\"}".to_string())])
-            .await;
-        let summarizer = ProviderSummarizer::new(
-            reqwest::Client::new(),
-            summary_config(server.base_url(), "model-a"),
-            1024,
-        );
-        let result = summarizer.summarize(&dropped_summary_messages(), None);
-        let err = result.expect_err("HTTP 500 必须返回 Err（降级 L1 占位符）");
-        assert!(err.contains("500"), "错误文案应携带状态码：{err}");
+/// 捕获实时轨事件的测试 sink（ColdCacheWarning / CacheWasteAlert 断言）
+struct CaptureDeltaSink {
+    events: Arc<Mutex<Vec<AgentEvent>>>,
+}
+
+impl DeltaSink for CaptureDeltaSink {
+    fn push(&self, delta: AgentEvent) {
+        self.events
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(delta);
     }
+}
 
-    /// 失败降级 L1：2xx 但响应缺 content（空 / 缺字段）→ Err
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn provider_summarizer_missing_content_degrades_to_err() {
-        let server = SummaryMockServer::start(vec![(
-            200,
-            serde_json::json!({ "choices": [{"message": {"role": "assistant", "content": null}}] })
-                .to_string(),
-        )])
-        .await;
-        let summarizer = ProviderSummarizer::new(
-            reqwest::Client::new(),
-            summary_config(server.base_url(), "model-a"),
-            1024,
-        );
-        let result = summarizer.summarize(&dropped_summary_messages(), None);
-        assert!(
-            result.is_err(),
-            "响应缺 content 必须返回 Err（降级 L1 占位符）"
-        );
+/// 测试用 run 级缓存统计（字段齐全，避免逐字段构造样板）
+fn sample_stats(warm_until_ms: Option<u64>, missed_tokens: u64) -> RunCacheStats {
+    RunCacheStats {
+        prompt_tokens: 10_000,
+        completion_tokens: 100,
+        total_tokens: 10_100,
+        cache_read_tokens: 9_000,
+        cache_write_tokens: 500,
+        cache_miss_tokens: 500,
+        sample_count: 1,
+        hit_ratio: Some(0.9),
+        write_ratio: Some(0.05),
+        missed_tokens,
+        warm_until_ms,
     }
+}
 
-    /// 生产工厂：provider 未就绪 → None（不注入，纯 stub awaiting 语义）；
-    /// 就绪 → 返回真实 ProviderSummarizer（模型 = 当前生效配置）
-    #[test]
-    fn production_factory_returns_real_summarizer_from_engine_config() {
-        use crate::core_run_commands::{isolate_config_store, CONFIG_TEST_LOCK};
-        let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "conex-config-test-{}-{nanos}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&dir).expect("create config dir");
-        isolate_config_store(&dir);
+/// T-40：装配缓存跟踪配置——provider / model 取生效配置、TTL 走
+/// P3 路由表（DeepSeek 300s）；未知厂商 → ttl 0（不提示不阻塞）
+#[test]
+fn cache_tracking_config_resolves_provider_model_ttl() {
+    let deepseek = responses_config("deepseek-v4-flash", Endpoint::ChatCompletions);
+    let config = build_cache_tracking_config(&deepseek);
+    assert_eq!(config.provider, "deepseek");
+    assert_eq!(config.model, "deepseek-v4-flash");
+    assert_eq!(config.ttl_seconds, 300, "DeepSeek 自动前缀缓存 TTL 300s");
 
-        let engine = Arc::new(EngineHandle::new(None));
-        let factory = production_summarizer_factory(Arc::clone(&engine));
-        assert!(
-            factory("s1").is_none(),
-            "provider 未就绪（无配置）→ 不注入，保持 stub 语义"
-        );
-        let provider: Arc<dyn ProviderCall> = Arc::new(HttpProviderCall::new(
-            reqwest::Client::new(),
-            summary_config("https://x.example/v1".to_string(), "model-prod"),
-        ));
-        engine.inject_provider_for_test(provider, summary_config(
-            "https://x.example/v1".to_string(),
-            "model-prod",
-        ));
-        let summarizer = factory("s1").expect("配置就绪后工厂必须返回真实实现");
-        // 实例边界：同工厂两次解析为独立实例（per-session 隔离决议）
-        let second = factory("s2").expect("再次解析成功");
-        assert!(
-            !Arc::ptr_eq(&summarizer, &second),
-            "每会话独立实例（04 §7.1 隔离决议）"
-        );
-    }
+    // 未知厂商（无关键字网关）→ 保守全关（TTL 0 = 不提示不阻塞）
+    let gateway = EngineProviderConfig {
+        base_url: "https://gw.example.com/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: "custom-model".to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: BTreeMap::new(),
+    };
+    let config = build_cache_tracking_config(&gateway);
+    assert_eq!(config.provider, "auto");
+    assert_eq!(config.ttl_seconds, 0);
+}
 
-    // ── P5 S5 / T-40：缓存测量装配与事件（engine 接线段）────────────
-
-    /// 携带 usage 的停止事件（ProviderUsage camelCase 标量面；与
-    /// session-loop T-36 测试同形状）
-    fn stop_with_usage(
-        prompt: u64,
-        completion: u64,
-        read: u64,
-        write: u64,
-        miss: Option<u64>,
-    ) -> ProviderStreamEvent {
-        ProviderStreamEvent::Stop {
-            reason: LoopStopReason::Stop,
-            error: None,
-            error_kind: None,
-            usage: Some(ProviderUsage {
-                prompt_tokens: Some(prompt),
-                completion_tokens: Some(completion),
-                total_tokens: Some(prompt.saturating_add(completion)),
-                cache_read_tokens: Some(read),
-                cache_write_tokens: Some(write),
-                cache_miss_tokens: miss,
-                reasoning_tokens: None,
-            }),
+/// T-40：冷缓存预警——温暖截止过期判定（完成时刻反解 idle、
+/// 重发量 = 上次 input_total，C9 恒等式）；TTL 未知 / 未过期 /
+/// 无截止 → 不预警
+#[test]
+fn cold_cache_warning_fires_after_warm_until() {
+    let config = CacheTrackingConfig {
+        provider: "deepseek".to_string(),
+        model: "deepseek-v4-flash".to_string(),
+        ttl_seconds: 60,
+    };
+    // 上一 run：完成 1000ms、warm = 1000 + 60_000 = 61_000
+    let last = sample_stats(Some(61_000), 0);
+    assert!(
+        cold_cache_warning_event("s1", &config, &last, 60_000).is_none(),
+        "未过期不预警"
+    );
+    assert!(
+        cold_cache_warning_event("s1", &config, &last, 61_000).is_none(),
+        "恰好等于截止仍温暖"
+    );
+    let event = cold_cache_warning_event("s1", &config, &last, 121_001).expect("超 TTL 必须预警");
+    match event {
+        AgentEvent::ColdCacheWarning {
+            session_id,
+            ttl_seconds,
+            idle_ms,
+            resend_estimate_tokens,
+            ..
+        } => {
+            assert_eq!(session_id, "s1");
+            assert_eq!(ttl_seconds, 60);
+            // idle = now - completed = 121_001 - 1_000
+            assert_eq!(idle_ms, 120_001);
+            // 重发量 = 上次 input_total = 500 + 9000 + 500
+            assert_eq!(resend_estimate_tokens, 10_000);
         }
+        other => panic!("期望 ColdCacheWarning，得到 {other:?}"),
     }
+    // TTL 未知（0）→ 不预警（P5 §3.4.4：TTL 查询失败不提示）
+    let no_ttl = CacheTrackingConfig {
+        ttl_seconds: 0,
+        ..config.clone()
+    };
+    assert!(cold_cache_warning_event("s1", &no_ttl, &last, 121_001).is_none());
+    // 无温暖截止 → 不预警
+    let mut no_warm = last;
+    no_warm.warm_until_ms = None;
+    assert!(cold_cache_warning_event("s1", &config, &no_warm, 121_001).is_none());
+}
 
-    /// 捕获实时轨事件的测试 sink（ColdCacheWarning / CacheWasteAlert 断言）
-    struct CaptureDeltaSink {
-        events: Arc<Mutex<Vec<AgentEvent>>>,
-    }
-
-    impl DeltaSink for CaptureDeltaSink {
-        fn push(&self, delta: AgentEvent) {
-            self.events
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push(delta);
-        }
-    }
-
-    /// 测试用 run 级缓存统计（字段齐全，避免逐字段构造样板）
-    fn sample_stats(warm_until_ms: Option<u64>, missed_tokens: u64) -> RunCacheStats {
-        RunCacheStats {
-            prompt_tokens: 10_000,
-            completion_tokens: 100,
-            total_tokens: 10_100,
-            cache_read_tokens: 9_000,
-            cache_write_tokens: 500,
-            cache_miss_tokens: 500,
-            sample_count: 1,
-            hit_ratio: Some(0.9),
-            write_ratio: Some(0.05),
+/// T-40：浪费预警阈值（≥ 20_000 token 才打扰，pi 口径；2026-08-09 接线
+/// WARN_MISSED_COST_USD 后 token / 金额双阈值 or 判定）——低于阈值只计入
+/// run 聚合；触发时 attribution 诚实兜底 Unknown + wire 形状 + 金额实测
+#[test]
+fn waste_alert_emitted_above_threshold_with_honest_attribution() {
+    let below = sample_stats(Some(61_000), WARN_MISSED_TOKENS - 1);
+    assert!(
+        waste_alert_event("s1", &below, false, "deepseek", "deepseek-v4-flash").is_none(),
+        "低于阈值不打扰"
+    );
+    let over = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
+    let event = waste_alert_event("s1", &over, true, "deepseek", "deepseek-v4-flash")
+        .expect("达到阈值必须预警");
+    match event {
+        AgentEvent::CacheWasteAlert {
+            ref session_id,
+            attribution,
             missed_tokens,
-            warm_until_ms,
+            model_changed,
+            missed_cost_usd,
+            ..
+        } => {
+            assert_eq!(session_id, "s1");
+            assert_eq!(attribution, MissAttribution::Unknown);
+            assert_eq!(missed_tokens, WARN_MISSED_TOKENS);
+            assert!(model_changed);
+            // 金额 = 20_000 × (0.14 - 0.0028)/1M = 0.002744（deepseek-v4-flash
+            // 官方四价，catalog.json）
+            let cost = missed_cost_usd.expect("价格已入库必须给出金额");
+            assert!((cost - 0.002744).abs() < 1e-9, "金额口径偏差：{cost}");
         }
+        other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
     }
-
-    /// T-40：装配缓存跟踪配置——provider / model 取生效配置、TTL 走
-    /// P3 路由表（DeepSeek 300s）；未知厂商 → ttl 0（不提示不阻塞）
-    #[test]
-    fn cache_tracking_config_resolves_provider_model_ttl() {
-        let deepseek = responses_config("deepseek-v4-flash", Endpoint::ChatCompletions);
-        let config = build_cache_tracking_config(&deepseek);
-        assert_eq!(config.provider, "deepseek");
-        assert_eq!(config.model, "deepseek-v4-flash");
-        assert_eq!(config.ttl_seconds, 300, "DeepSeek 自动前缀缓存 TTL 300s");
-
-        // 未知厂商（无关键字网关）→ 保守全关（TTL 0 = 不提示不阻塞）
-        let gateway = EngineProviderConfig {
-            base_url: "https://gw.example.com/v1/".to_string(),
-            api_key: "k".to_string(),
-            model: "custom-model".to_string(),
-            endpoint: Endpoint::ChatCompletions,
-            stream: true,
-            extra: BTreeMap::new(),
-        };
-        let config = build_cache_tracking_config(&gateway);
-        assert_eq!(config.provider, "auto");
-        assert_eq!(config.ttl_seconds, 0);
-    }
-
-    /// T-40：冷缓存预警——温暖截止过期判定（完成时刻反解 idle、
-    /// 重发量 = 上次 input_total，C9 恒等式）；TTL 未知 / 未过期 /
-    /// 无截止 → 不预警
-    #[test]
-    fn cold_cache_warning_fires_after_warm_until() {
-        let config = CacheTrackingConfig {
-            provider: "deepseek".to_string(),
-            model: "deepseek-v4-flash".to_string(),
-            ttl_seconds: 60,
-        };
-        // 上一 run：完成 1000ms、warm = 1000 + 60_000 = 61_000
-        let last = sample_stats(Some(61_000), 0);
-        assert!(
-            cold_cache_warning_event("s1", &config, &last, 60_000).is_none(),
-            "未过期不预警"
-        );
-        assert!(
-            cold_cache_warning_event("s1", &config, &last, 61_000).is_none(),
-            "恰好等于截止仍温暖"
-        );
-        let event = cold_cache_warning_event("s1", &config, &last, 121_001)
-            .expect("超 TTL 必须预警");
-        match event {
-            AgentEvent::ColdCacheWarning {
-                session_id,
-                ttl_seconds,
-                idle_ms,
-                resend_estimate_tokens,
-                ..
-            } => {
-                assert_eq!(session_id, "s1");
-                assert_eq!(ttl_seconds, 60);
-                // idle = now - completed = 121_001 - 1_000
-                assert_eq!(idle_ms, 120_001);
-                // 重发量 = 上次 input_total = 500 + 9000 + 500
-                assert_eq!(resend_estimate_tokens, 10_000);
-            }
-            other => panic!("期望 ColdCacheWarning，得到 {other:?}"),
+    // wire 形状：kebab-case attribution + camelCase 字段
+    let value = serde_json::to_value(&event).unwrap();
+    assert_eq!(value["type"], "cache-waste-alert");
+    assert_eq!(value["attribution"], "unknown");
+    assert_eq!(value["missedTokens"], WARN_MISSED_TOKENS);
+    assert!(value.get("missed_tokens").is_none(), "不得出现 snake_case");
+    // 价格缺失（未知厂商）→ 金额 None，仅 token 阈值判定（诚实兜底不估算）
+    let unknown = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
+    let event = waste_alert_event("s1", &unknown, false, "auto", "custom-model")
+        .expect("token 阈值已超，未知厂商也应预警");
+    match event {
+        AgentEvent::CacheWasteAlert {
+            missed_cost_usd, ..
+        } => {
+            assert!(missed_cost_usd.is_none(), "无价格数据 → 金额 None");
         }
-        // TTL 未知（0）→ 不预警（P5 §3.4.4：TTL 查询失败不提示）
-        let no_ttl = CacheTrackingConfig {
-            ttl_seconds: 0,
-            ..config.clone()
-        };
-        assert!(cold_cache_warning_event("s1", &no_ttl, &last, 121_001).is_none());
-        // 无温暖截止 → 不预警
-        let mut no_warm = last;
-        no_warm.warm_until_ms = None;
-        assert!(cold_cache_warning_event("s1", &config, &no_warm, 121_001).is_none());
+        other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
     }
+}
 
-    /// T-40：浪费预警阈值（≥ 20_000 token 才打扰，pi 口径；2026-08-09 接线
-    /// WARN_MISSED_COST_USD 后 token / 金额双阈值 or 判定）——低于阈值只计入
-    /// run 聚合；触发时 attribution 诚实兜底 Unknown + wire 形状 + 金额实测
-    #[test]
-    fn waste_alert_emitted_above_threshold_with_honest_attribution() {
-        let below = sample_stats(Some(61_000), WARN_MISSED_TOKENS - 1);
-        assert!(
-            waste_alert_event("s1", &below, false, "deepseek", "deepseek-v4-flash").is_none(),
-            "低于阈值不打扰"
-        );
-        let over = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
-        let event = waste_alert_event("s1", &over, true, "deepseek", "deepseek-v4-flash")
-            .expect("达到阈值必须预警");
-        match event {
-            AgentEvent::CacheWasteAlert {
-                ref session_id,
-                attribution,
-                missed_tokens,
-                model_changed,
-                missed_cost_usd,
-                ..
-            } => {
-                assert_eq!(session_id, "s1");
-                assert_eq!(attribution, MissAttribution::Unknown);
-                assert_eq!(missed_tokens, WARN_MISSED_TOKENS);
-                assert!(model_changed);
-                // 金额 = 20_000 × (0.14 - 0.0028)/1M = 0.002744（deepseek-v4-flash
-                // 官方四价，catalog.json）
-                let cost = missed_cost_usd.expect("价格已入库必须给出金额");
-                assert!((cost - 0.002744).abs() < 1e-9, "金额口径偏差：{cost}");
-            }
-            other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
+/// 金额阈值独立触发（2026-08-09 接线 WARN_MISSED_COST_USD）：token 低于
+/// 20_000 但估算金额 ≥ $0.1 → 仍预警（pi 双阈值 or 语义）。用高差价
+/// USD 模型 gpt-5.5-cyber（input 12.5 - cacheRead 1.25 = 11.25/1M）：
+/// 10_000 token → $0.1125 ≥ $0.1
+#[test]
+fn waste_alert_fires_on_cost_threshold_alone() {
+    // token 阈值以下（10_000 < 20_000）但金额超 $0.1 → 必须预警
+    let stats = sample_stats(Some(61_000), 10_000);
+    let event = waste_alert_event("s1", &stats, false, "openai", "gpt-5.5-cyber")
+        .expect("金额阈值单独触发");
+    match event {
+        AgentEvent::CacheWasteAlert {
+            missed_tokens,
+            missed_cost_usd,
+            ..
+        } => {
+            assert_eq!(missed_tokens, 10_000);
+            let cost = missed_cost_usd.expect("价格已入库必须给出金额");
+            assert!((cost - 0.1125).abs() < 1e-9, "金额口径偏差：{cost}");
         }
-        // wire 形状：kebab-case attribution + camelCase 字段
-        let value = serde_json::to_value(&event).unwrap();
-        assert_eq!(value["type"], "cache-waste-alert");
-        assert_eq!(value["attribution"], "unknown");
-        assert_eq!(value["missedTokens"], WARN_MISSED_TOKENS);
-        assert!(value.get("missed_tokens").is_none(), "不得出现 snake_case");
-        // 价格缺失（未知厂商）→ 金额 None，仅 token 阈值判定（诚实兜底不估算）
-        let unknown = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
-        let event = waste_alert_event("s1", &unknown, false, "auto", "custom-model")
-            .expect("token 阈值已超，未知厂商也应预警");
-        match event {
-            AgentEvent::CacheWasteAlert { missed_cost_usd, .. } => {
-                assert!(missed_cost_usd.is_none(), "无价格数据 → 金额 None");
-            }
-            other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
-        }
+        other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
     }
+    // 对照：同模型 token 更低且金额不足（如 1_000 token → $0.01125）→ 不预警
+    let low = sample_stats(Some(61_000), 1_000);
+    assert!(waste_alert_event("s1", &low, false, "openai", "gpt-5.5-cyber").is_none());
+}
 
-    /// 金额阈值独立触发（2026-08-09 接线 WARN_MISSED_COST_USD）：token 低于
-    /// 20_000 但估算金额 ≥ $0.1 → 仍预警（pi 双阈值 or 语义）。用高差价
-    /// USD 模型 gpt-5.5-cyber（input 12.5 - cacheRead 1.25 = 11.25/1M）：
-    /// 10_000 token → $0.1125 ≥ $0.1
-    #[test]
-    fn waste_alert_fires_on_cost_threshold_alone() {
-        // token 阈值以下（10_000 < 20_000）但金额超 $0.1 → 必须预警
-        let stats = sample_stats(Some(61_000), 10_000);
-        let event = waste_alert_event("s1", &stats, false, "openai", "gpt-5.5-cyber")
-            .expect("金额阈值单独触发");
-        match event {
-            AgentEvent::CacheWasteAlert {
-                missed_tokens,
-                missed_cost_usd,
-                ..
-            } => {
-                assert_eq!(missed_tokens, 10_000);
-                let cost = missed_cost_usd.expect("价格已入库必须给出金额");
-                assert!((cost - 0.1125).abs() < 1e-9, "金额口径偏差：{cost}");
-            }
-            other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
-        }
-        // 对照：同模型 token 更低且金额不足（如 1_000 token → $0.01125）→ 不预警
-        let low = sample_stats(Some(61_000), 1_000);
-        assert!(waste_alert_event("s1", &low, false, "openai", "gpt-5.5-cyber").is_none());
-    }
+/// T-40：模型切换检测——上一 run model ≠ 当前 model；无上一 run
+/// 基线（首次 run）不算切换（首轮归因 Cold）
+#[test]
+fn model_switch_detection_compares_last_and_current() {
+    assert!(model_switched(Some("gpt-4o"), Some("deepseek-v4-flash")));
+    assert!(!model_switched(
+        Some("deepseek-v4-flash"),
+        Some("deepseek-v4-flash")
+    ));
+    assert!(
+        !model_switched(None, Some("deepseek-v4-flash")),
+        "无上一 run 基线 → 不算切换"
+    );
+    assert!(!model_switched(Some("deepseek-v4-flash"), None));
+    assert!(!model_switched(None, None));
+}
 
-    /// T-40：模型切换检测——上一 run model ≠ 当前 model；无上一 run
-    /// 基线（首次 run）不算切换（首轮归因 Cold）
-    #[test]
-    fn model_switch_detection_compares_last_and_current() {
-        assert!(model_switched(Some("gpt-4o"), Some("deepseek-v4-flash")));
-        assert!(!model_switched(Some("deepseek-v4-flash"), Some("deepseek-v4-flash")));
-        assert!(
-            !model_switched(None, Some("deepseek-v4-flash")),
-            "无上一 run 基线 → 不算切换"
-        );
-        assert!(!model_switched(Some("deepseek-v4-flash"), None));
-        assert!(!model_switched(None, None));
-    }
+/// T-40 集成：启用缓存测量后 produce 收口——RunOutcome.cache_stats
+/// 携带 run 级聚合 + cache-stats-updated 事件入收口轨
+#[tokio::test]
+async fn produce_emits_cache_stats_updated_when_tracking_enabled() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("你好"),
+        stop_with_usage(1_000, 50, 800, 100, None),
+    ]));
+    let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
+    let mut producer = SessionLoopProducer::new(
+        "ses-t40".to_string(),
+        "run-t40".to_string(),
+        8,
+        provider_call,
+        Arc::new(ToolRegistry::new()),
+        SessionLoopOptions::default(),
+        ToolBatchOptions::default(),
+        None,
+        None,
+        None,
+        user_message("第一轮", Some("user-t40")),
+    )
+    .with_cache_tracking(Some(CacheTrackingConfig {
+        provider: "deepseek".to_string(),
+        model: "deepseek-v4-flash".to_string(),
+        ttl_seconds: 300,
+    }));
 
-    /// T-40 集成：启用缓存测量后 produce 收口——RunOutcome.cache_stats
-    /// 携带 run 级聚合 + cache-stats-updated 事件入收口轨
-    #[tokio::test]
-    async fn produce_emits_cache_stats_updated_when_tracking_enabled() {
-        let provider = Arc::new(TestProvider::new(vec![
-            ProviderStreamEvent::text("你好"),
-            stop_with_usage(1_000, 50, 800, 100, None),
-        ]));
-        let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
-        let mut producer = SessionLoopProducer::new(
-            "ses-t40".to_string(),
-            "run-t40".to_string(),
-            8,
-            provider_call,
-            Arc::new(ToolRegistry::new()),
-            SessionLoopOptions::default(),
-            ToolBatchOptions::default(),
-            None,
-            None,
-            None,
-            user_message("第一轮", Some("user-t40")),
-        )
-        .with_cache_tracking(Some(CacheTrackingConfig {
-            provider: "deepseek".to_string(),
-            model: "deepseek-v4-flash".to_string(),
-            ttl_seconds: 300,
-        }));
+    let outcome = producer.produce().await;
 
-        let outcome = producer.produce().await;
+    let stats = outcome.cache_stats.expect("启用测量后收口必须携带缓存统计");
+    assert_eq!(stats.sample_count, 1);
+    assert_eq!(stats.cache_read_tokens, 800);
+    // Included：miss = prompt - read - write
+    assert_eq!(stats.cache_miss_tokens, 100);
+    // cache-stats-updated 入收口轨（与 agent-end 同轨）
+    let updated = outcome
+        .events
+        .iter()
+        .rev()
+        .find_map(|event| match event {
+            AgentEvent::CacheStatsUpdated {
+                session_id, stats, ..
+            } => Some((session_id.as_str(), *stats)),
+            _ => None,
+        })
+        .expect("收口事件应含 cache-stats-updated");
+    assert_eq!(updated.0, "ses-t40");
+    assert_eq!(updated.1.cache_read_tokens, 800);
+}
 
-        let stats = outcome.cache_stats.expect("启用测量后收口必须携带缓存统计");
-        assert_eq!(stats.sample_count, 1);
-        assert_eq!(stats.cache_read_tokens, 800);
-        // Included：miss = prompt - read - write
-        assert_eq!(stats.cache_miss_tokens, 100);
-        // cache-stats-updated 入收口轨（与 agent-end 同轨）
-        let updated = outcome
+/// T-40 向后兼容：未配置缓存测量 → cache_stats None、无
+/// cache-stats-updated 事件（行为与现状一致）
+#[tokio::test]
+async fn produce_without_cache_tracking_keeps_legacy_behavior() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("hi"),
+        stop_with_usage(100, 10, 0, 0, None),
+    ]));
+    let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
+    let mut producer = SessionLoopProducer::new(
+        "ses-legacy".to_string(),
+        "run-legacy".to_string(),
+        8,
+        provider_call,
+        Arc::new(ToolRegistry::new()),
+        SessionLoopOptions::default(),
+        ToolBatchOptions::default(),
+        None,
+        None,
+        None,
+        user_message("hi", None),
+    );
+    let outcome = producer.produce().await;
+    assert!(
+        outcome.cache_stats.is_none(),
+        "未配置 → cache_stats 为 None"
+    );
+    assert!(
+        outcome
             .events
             .iter()
-            .rev()
-            .find_map(|event| match event {
-                AgentEvent::CacheStatsUpdated { session_id, stats, .. } => {
-                    Some((session_id.as_str(), *stats))
-                }
-                _ => None,
-            })
-            .expect("收口事件应含 cache-stats-updated");
-        assert_eq!(updated.0, "ses-t40");
-        assert_eq!(updated.1.cache_read_tokens, 800);
-    }
+            .all(|e| !matches!(e, AgentEvent::CacheStatsUpdated { .. })),
+        "未配置 → 不发射 cache-stats-updated"
+    );
+}
 
-    /// T-40 向后兼容：未配置缓存测量 → cache_stats None、无
-    /// cache-stats-updated 事件（行为与现状一致）
-    #[tokio::test]
-    async fn produce_without_cache_tracking_keeps_legacy_behavior() {
-        let provider = Arc::new(TestProvider::new(vec![
-            ProviderStreamEvent::text("hi"),
-            stop_with_usage(100, 10, 0, 0, None),
-        ]));
-        let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
-        let mut producer = SessionLoopProducer::new(
-            "ses-legacy".to_string(),
-            "run-legacy".to_string(),
-            8,
-            provider_call,
-            Arc::new(ToolRegistry::new()),
-            SessionLoopOptions::default(),
-            ToolBatchOptions::default(),
-            None,
-            None,
-            None,
-            user_message("hi", None),
-        );
-        let outcome = producer.produce().await;
-        assert!(outcome.cache_stats.is_none(), "未配置 → cache_stats 为 None");
-        assert!(
-            outcome
-                .events
-                .iter()
-                .all(|e| !matches!(e, AgentEvent::CacheStatsUpdated { .. })),
-            "未配置 → 不发射 cache-stats-updated"
-        );
-    }
+/// T-40 集成：上一 run warm_until_ms 已过期 → produce 启动前经
+/// 实时轨 DeltaSink 发射 cold-cache-warning 一次（重发量 = 上次
+/// input_total）
+#[tokio::test]
+async fn produce_emits_cold_cache_warning_when_previous_run_cold() {
+    let now = unix_millis_now();
+    // 上一 run：温暖截止 = now - 1（刚过期）；TTL 60s
+    let last = sample_stats(Some(now.saturating_sub(1)), 0);
+    let sink_events: Arc<Mutex<Vec<AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink: Arc<dyn DeltaSink> = Arc::new(CaptureDeltaSink {
+        events: Arc::clone(&sink_events),
+    });
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("hi"),
+        stop_with_usage(100, 10, 0, 0, None),
+    ]));
+    let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
+    let mut producer = SessionLoopProducer::new(
+        "ses-cold".to_string(),
+        "run-cold".to_string(),
+        8,
+        provider_call,
+        Arc::new(ToolRegistry::new()),
+        SessionLoopOptions::default(),
+        ToolBatchOptions::default(),
+        None,
+        Some(sink),
+        None,
+        user_message("hi", None),
+    )
+    .with_cache_tracking(Some(CacheTrackingConfig {
+        provider: "deepseek".to_string(),
+        model: "deepseek-v4-flash".to_string(),
+        ttl_seconds: 60,
+    }))
+    .with_cache_session(SessionCacheState {
+        last_stats: Some(last),
+        last_model: Some("deepseek-v4-flash".to_string()),
+    });
 
-    /// T-40 集成：上一 run warm_until_ms 已过期 → produce 启动前经
-    /// 实时轨 DeltaSink 发射 cold-cache-warning 一次（重发量 = 上次
-    /// input_total）
-    #[tokio::test]
-    async fn produce_emits_cold_cache_warning_when_previous_run_cold() {
-        let now = unix_millis_now();
-        // 上一 run：温暖截止 = now - 1（刚过期）；TTL 60s
-        let last = sample_stats(Some(now.saturating_sub(1)), 0);
-        let sink_events: Arc<Mutex<Vec<AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
-        let sink: Arc<dyn DeltaSink> = Arc::new(CaptureDeltaSink {
-            events: Arc::clone(&sink_events),
-        });
-        let provider = Arc::new(TestProvider::new(vec![
-            ProviderStreamEvent::text("hi"),
-            stop_with_usage(100, 10, 0, 0, None),
-        ]));
-        let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
-        let mut producer = SessionLoopProducer::new(
-            "ses-cold".to_string(),
-            "run-cold".to_string(),
-            8,
-            provider_call,
-            Arc::new(ToolRegistry::new()),
-            SessionLoopOptions::default(),
-            ToolBatchOptions::default(),
-            None,
-            Some(sink),
-            None,
-            user_message("hi", None),
-        )
-        .with_cache_tracking(Some(CacheTrackingConfig {
-            provider: "deepseek".to_string(),
-            model: "deepseek-v4-flash".to_string(),
-            ttl_seconds: 60,
-        }))
-        .with_cache_session(SessionCacheState {
-            last_stats: Some(last),
-            last_model: Some("deepseek-v4-flash".to_string()),
-        });
+    producer.produce().await;
 
-        producer.produce().await;
+    let captured = sink_events.lock().unwrap_or_else(|e| e.into_inner());
+    let warning = captured
+        .iter()
+        .find_map(|event| match event {
+            AgentEvent::ColdCacheWarning {
+                ttl_seconds,
+                resend_estimate_tokens,
+                ..
+            } => Some((*ttl_seconds, *resend_estimate_tokens)),
+            _ => None,
+        })
+        .expect("实时轨应收到 cold-cache-warning");
+    assert_eq!(warning.0, 60);
+    // 重发量 = 上次 input_total = 9000 + 500 + 500（C9 恒等式）
+    assert_eq!(warning.1, 10_000);
+}
 
-        let captured = sink_events.lock().unwrap_or_else(|e| e.into_inner());
-        let warning = captured
-            .iter()
-            .find_map(|event| match event {
-                AgentEvent::ColdCacheWarning {
-                    ttl_seconds,
-                    resend_estimate_tokens,
-                    ..
-                } => Some((*ttl_seconds, *resend_estimate_tokens)),
-                _ => None,
-            })
-            .expect("实时轨应收到 cold-cache-warning");
-        assert_eq!(warning.0, 60);
-        // 重发量 = 上次 input_total = 9000 + 500 + 500（C9 恒等式）
-        assert_eq!(warning.1, 10_000);
-    }
+/// T-40：cache-stats-updated 事件 wire 形状（camelCase 全字段）
+#[test]
+fn cache_stats_updated_event_serializes_camel_case() {
+    let event = AgentEvent::CacheStatsUpdated {
+        session_id: "s1".to_string(),
+        timestamp: now_iso_utc(),
+        stats: sample_stats(Some(61_000), 0),
+    };
+    let value = serde_json::to_value(&event).unwrap();
+    assert_eq!(value["type"], "cache-stats-updated");
+    assert_eq!(value["sessionId"], "s1");
+    let stats = &value["stats"];
+    assert_eq!(stats["promptTokens"], 10_000);
+    assert_eq!(stats["completionTokens"], 100);
+    assert_eq!(stats["totalTokens"], 10_100);
+    assert_eq!(stats["cacheReadTokens"], 9_000);
+    assert_eq!(stats["cacheWriteTokens"], 500);
+    assert_eq!(stats["cacheMissTokens"], 500);
+    assert_eq!(stats["sampleCount"], 1);
+    assert_eq!(stats["hitRatio"], 0.9);
+    assert_eq!(stats["writeRatio"], 0.05);
+    assert_eq!(stats["missedTokens"], 0);
+    assert_eq!(stats["warmUntilMs"], 61_000);
+    assert!(
+        value.get("cache_read_tokens").is_none(),
+        "不得出现 snake_case 键"
+    );
+}
 
-    /// T-40：cache-stats-updated 事件 wire 形状（camelCase 全字段）
-    #[test]
-    fn cache_stats_updated_event_serializes_camel_case() {
-        let event = AgentEvent::CacheStatsUpdated {
-            session_id: "s1".to_string(),
-            timestamp: now_iso_utc(),
-            stats: sample_stats(Some(61_000), 0),
-        };
-        let value = serde_json::to_value(&event).unwrap();
-        assert_eq!(value["type"], "cache-stats-updated");
-        assert_eq!(value["sessionId"], "s1");
-        let stats = &value["stats"];
-        assert_eq!(stats["promptTokens"], 10_000);
-        assert_eq!(stats["completionTokens"], 100);
-        assert_eq!(stats["totalTokens"], 10_100);
-        assert_eq!(stats["cacheReadTokens"], 9_000);
-        assert_eq!(stats["cacheWriteTokens"], 500);
-        assert_eq!(stats["cacheMissTokens"], 500);
-        assert_eq!(stats["sampleCount"], 1);
-        assert_eq!(stats["hitRatio"], 0.9);
-        assert_eq!(stats["writeRatio"], 0.05);
-        assert_eq!(stats["missedTokens"], 0);
-        assert_eq!(stats["warmUntilMs"], 61_000);
-        assert!(
-            value.get("cache_read_tokens").is_none(),
-            "不得出现 snake_case 键"
-        );
-    }
+// ── M1：Tool Context 注入通道（C10 地基；build_context 立通道）────
 
-    // ── M1：Tool Context 注入通道（C10 地基；build_context 立通道）────
+/// M1 注入顺序契约（冻结快照）：`system → skills → mcp → agent 定义`
+///
+/// 断言（02 M1 内容 4 + 任务书内容 2）：顺序常量与枚举声明序/排序序
+/// 三方一致——排序即协议，M11 重注入断言以此为契约；顺序变化必须
+/// 同时改三处并被本快照捕获。
+#[test]
+fn injection_order_contract_is_frozen() {
+    assert_eq!(
+        CONTEXT_INJECTION_ORDER,
+        [
+            ContextInjectionKind::System,
+            ContextInjectionKind::Skills,
+            ContextInjectionKind::Mcp,
+            ContextInjectionKind::AgentDefinition,
+        ],
+        "注入顺序契约：system → skills → mcp → agent 定义（变化视为协议变更）"
+    );
+    // 常量已按 enum Ord 升序（声明序 = 排序序 = 协议序）
+    let mut sorted = CONTEXT_INJECTION_ORDER.to_vec();
+    sorted.sort();
+    assert_eq!(sorted, CONTEXT_INJECTION_ORDER);
+}
 
-    /// M1 注入顺序契约（冻结快照）：`system → skills → mcp → agent 定义`
-    ///
-    /// 断言（02 M1 内容 4 + 任务书内容 2）：顺序常量与枚举声明序/排序序
-    /// 三方一致——排序即协议，M11 重注入断言以此为契约；顺序变化必须
-    /// 同时改三处并被本快照捕获。
-    #[test]
-    fn injection_order_contract_is_frozen() {
-        assert_eq!(
-            CONTEXT_INJECTION_ORDER,
-            [
-                ContextInjectionKind::System,
-                ContextInjectionKind::Skills,
-                ContextInjectionKind::Mcp,
-                ContextInjectionKind::AgentDefinition,
-            ],
-            "注入顺序契约：system → skills → mcp → agent 定义（变化视为协议变更）"
-        );
-        // 常量已按 enum Ord 升序（声明序 = 排序序 = 协议序）
-        let mut sorted = CONTEXT_INJECTION_ORDER.to_vec();
-        sorted.sort();
-        assert_eq!(sorted, CONTEXT_INJECTION_ORDER);
-    }
+/// M1 注入点存在且可注入（mock）：push 累积、空判定、kinds 按契约序
+#[test]
+fn injector_push_accumulates_and_kinds_follow_contract() {
+    let mut injector = ContextInjector::new();
+    assert!(injector.is_empty());
+    assert_eq!(injector.kinds(), Vec::<ContextInjectionKind>::new());
 
-    /// M1 注入点存在且可注入（mock）：push 累积、空判定、kinds 按契约序
-    #[test]
-    fn injector_push_accumulates_and_kinds_follow_contract() {
-        let mut injector = ContextInjector::new();
-        assert!(injector.is_empty());
-        assert_eq!(injector.kinds(), Vec::<ContextInjectionKind>::new());
+    // 乱序 push：agent 定义 → skills → mcp
+    injector
+        .push(ContextInjection::new(
+            ContextInjectionKind::AgentDefinition,
+            "Agent 定义",
+            "agent-body",
+        ))
+        .push(ContextInjection::new(
+            ContextInjectionKind::Skills,
+            "Skill 定义",
+            "skill-body",
+        ))
+        .push(ContextInjection::new(
+            ContextInjectionKind::Mcp,
+            "MCP 工具声明",
+            "mcp-body",
+        ));
+    assert!(!injector.is_empty());
+    assert_eq!(
+        injector.kinds(),
+        vec![
+            ContextInjectionKind::Skills,
+            ContextInjectionKind::Mcp,
+            ContextInjectionKind::AgentDefinition,
+        ],
+        "kinds() 必须按冻结顺序返回（skills → mcp → agent 定义）"
+    );
+}
 
-        // 乱序 push：agent 定义 → skills → mcp
-        injector
-            .push(ContextInjection::new(
-                ContextInjectionKind::AgentDefinition,
-                "Agent 定义",
-                "agent-body",
-            ))
-            .push(ContextInjection::new(
-                ContextInjectionKind::Skills,
-                "Skill 定义",
-                "skill-body",
-            ))
-            .push(ContextInjection::new(
-                ContextInjectionKind::Mcp,
-                "MCP 工具声明",
-                "mcp-body",
-            ));
-        assert!(!injector.is_empty());
-        assert_eq!(
-            injector.kinds(),
-            vec![
-                ContextInjectionKind::Skills,
-                ContextInjectionKind::Mcp,
-                ContextInjectionKind::AgentDefinition,
-            ],
-            "kinds() 必须按冻结顺序返回（skills → mcp → agent 定义）"
-        );
-    }
-
-    /// M1 顺序契约 + 快照：乱序 push 后 render 仍按冻结顺序拼接
-    /// （system 段 → skill 段 → MCP 段 → agent 定义段），且同一配置
-    /// 两次构建字节一致（动态字段以 `@dynamic` 标记豁免，不在断言范围）
-    #[test]
-    fn injector_render_respects_frozen_order_and_is_byte_stable() {
-        let mut injector = ContextInjector::new();
-        injector
-            .push(ContextInjection::new(
-                ContextInjectionKind::AgentDefinition,
-                "Agent 定义",
-                "agent-body",
-            ))
-            .push(ContextInjection::new(
-                ContextInjectionKind::Mcp,
-                "MCP 工具声明",
-                "mcp-body",
-            ))
-            .push(ContextInjection::new(
-                ContextInjectionKind::Skills,
-                "Skill 定义",
-                "skill-body",
-            ));
-
-        let rendered = injector
-            .render(Some("基础系统提示".to_string()))
-            .expect("有注入段时必然产出");
-        // 顺序：基础段 → Skills → MCP → Agent 定义（契约断言）
-        let skill = rendered.find("## Skill 定义").expect("skill 段存在");
-        let mcp = rendered.find("## MCP 工具声明").expect("MCP 段存在");
-        let agent = rendered.find("## Agent 定义").expect("agent 段存在");
-        assert!(rendered.starts_with("基础系统提示"), "system 段必须置首");
-        assert!(skill < mcp, "skill 段先于 MCP 段（契约）");
-        assert!(mcp < agent, "MCP 段先于 agent 定义段（契约）");
-        // 每段渲染为 `## {title}\n{content}`，段间 \n\n 分隔
-        assert!(rendered.contains("## Skill 定义\nskill-body"));
-        assert!(rendered.contains("## MCP 工具声明\nmcp-body"));
-        assert!(rendered.contains("## Agent 定义\nagent-body"));
-
-        // 快照：两次构建 system 段字节一致（M1 内容 4）
-        let second = injector
-            .render(Some("基础系统提示".to_string()))
-            .expect("有注入段时必然产出");
-        assert_eq!(rendered, second, "同一配置两次构建 system 段字节必须一致");
-    }
-
-    /// M1 默认行为回归：无注入段时 render 原样返回基础段
-    /// （None → None；Some → 原样透传，含空串——空值归一属装配点
-    /// build_system_prompt 职责，注入通道不做二次规范化），与现状
-    /// 逐字节一致
-    #[test]
-    fn injector_render_without_injections_preserves_base() {
-        let injector = ContextInjector::new();
-        assert_eq!(injector.render(None), None, "无注入且无基础段 → None（现状）");
-        assert_eq!(
-            injector.render(Some("基础系统提示".to_string())),
-            Some("基础系统提示".to_string()),
-            "无注入时基础段原样透传（现状）"
-        );
-        // 原样透传：空串基础段不归一（归一化在装配点 build_system_prompt）
-        assert_eq!(injector.render(Some(String::new())), Some(String::new()));
-    }
-
-    /// M1 集成：produce 装配注入通道后，渲染结果经 system_prompt 面送达
-    /// provider（注入点存在且可注入），且对话消息不含 system 角色——
-    /// 注入段归类 system 角色、结构上不进压缩输入（独立于压缩预算）
-    #[tokio::test]
-    async fn produce_with_injector_sends_rendered_system_prompt_as_system_role() {
-        let mut injector = ContextInjector::new();
-        injector
-            .push(ContextInjection::new(
-                ContextInjectionKind::AgentDefinition,
-                "Agent 定义",
-                "agent-body",
-            ))
-            .push(ContextInjection::new(
-                ContextInjectionKind::Skills,
-                "Skill 定义",
-                "skill-body",
-            ))
-            .push(ContextInjection::new(
-                ContextInjectionKind::Mcp,
-                "MCP 工具声明",
-                "mcp-body",
-            ));
-        let (producer, provider) = test_producer(None, SessionLoopOptions::default());
-        let mut producer = producer.with_context_injector(Some(injector));
-        producer.produce().await;
-
-        // 注入段经 system_prompt 面送达（非对话消息）
-        let sent_system = provider
-            .request_system_prompt(0)
-            .expect("注入后请求必须携带 system prompt");
-        let skill = sent_system.find("## Skill 定义").expect("skill 段存在");
-        let mcp = sent_system.find("## MCP 工具声明").expect("MCP 段存在");
-        let agent = sent_system.find("## Agent 定义").expect("agent 段存在");
-        assert!(skill < mcp, "skill 段先于 MCP 段（契约）");
-        assert!(mcp < agent, "MCP 段先于 agent 定义段（契约）");
-        assert!(sent_system.contains("## Agent 定义\nagent-body"));
-
-        // 对话消息不含 system 角色：注入段归类 system 角色（system_prompt
-        // 面），压缩只作用于会话对话 → 注入段不进压缩预算
-        let sent_messages = provider.request_message_arcs(0);
-        assert!(
-            sent_messages
-                .iter()
-                .all(|m| m.role != AgentMessageRole::System),
-            "注入段不得混入会话消息（system 角色面 = system_prompt）"
-        );
-    }
-
-    /// M1 默认行为回归（produce 级）：未装配注入通道时 system_prompt
-    /// 原样透传（None → None；已有基础段 → 不变），与现状一致
-    #[tokio::test]
-    async fn produce_without_injector_keeps_default_system_prompt_behavior() {
-        // 无注入且无基础段：请求不携带 system prompt（P1 阶段 2 现状）
-        let (mut producer, provider) = test_producer(None, SessionLoopOptions::default());
-        producer.produce().await;
-        assert!(
-            provider.request_system_prompt(0).is_none(),
-            "无注入无基础段 → system_prompt 保持 None（现状）"
-        );
-
-        // 无注入但 options 已带基础段：原样透传（不被注入通道改写）
-        let options = SessionLoopOptions {
-            system_prompt: Some("基础系统提示".to_string()),
-            ..SessionLoopOptions::default()
-        };
-        let (mut producer_base, provider_base) = test_producer(None, options);
-        producer_base.produce().await;
-        assert_eq!(
-            provider_base.request_system_prompt(0).as_deref(),
-            Some("基础系统提示"),
-            "无注入 → 基础段原样透传（现状）"
-        );
-    }
-
-    // ── T-D-03：子代理角色约束注入（F4 R-D1；spawn 装配路径 F11 T-D-13 接入）──
-
-    /// T-D-03 冻结文案（测试断言锚点）：段标题/正文/类型三者与任务书一致；
-    /// 段类型 = System（按 [CONTEXT_INJECTION_ORDER] 首段位）；静态文本
-    /// 不含 `@dynamic` 标记，纳入 C10 字节级一致断言范围
-    #[test]
-    fn subagent_role_constraint_frozen_text_is_exact() {
-        assert_eq!(SUBAGENT_ROLE_CONSTRAINT_TITLE, "子代理角色约束");
-        assert_eq!(
-            SUBAGENT_ROLE_CONSTRAINT_CONTENT,
-            "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。"
-        );
-        assert!(
-            !SUBAGENT_ROLE_CONSTRAINT_CONTENT.contains("@dynamic"),
-            "静态文本不得带动态字段标记"
-        );
-        let mut injector = ContextInjector::new();
-        push_subagent_role_constraint(&mut injector);
-        assert_eq!(
-            injector.kinds(),
-            vec![ContextInjectionKind::System],
-            "段类型 = System（按 CONTEXT_INJECTION_ORDER 首段位）"
-        );
-    }
-
-    /// T-D-03 渲染契约（render 拼接顺序回归）：基础系统段置首、角色约束段
-    /// 紧随其后（System 首段位，位于 Skills 段之前）；两次构建字节一致
-    /// （C10 快照断言面）
-    #[test]
-    fn subagent_role_constraint_renders_after_base_before_skills() {
-        let mut injector = ContextInjector::new();
-        // 子代理装配面：角色约束段 + Skills 段（验证 System 首段位）
-        push_subagent_role_constraint(&mut injector);
-        injector.push(ContextInjection::new(
+/// M1 顺序契约 + 快照：乱序 push 后 render 仍按冻结顺序拼接
+/// （system 段 → skill 段 → MCP 段 → agent 定义段），且同一配置
+/// 两次构建字节一致（动态字段以 `@dynamic` 标记豁免，不在断言范围）
+#[test]
+fn injector_render_respects_frozen_order_and_is_byte_stable() {
+    let mut injector = ContextInjector::new();
+    injector
+        .push(ContextInjection::new(
+            ContextInjectionKind::AgentDefinition,
+            "Agent 定义",
+            "agent-body",
+        ))
+        .push(ContextInjection::new(
+            ContextInjectionKind::Mcp,
+            "MCP 工具声明",
+            "mcp-body",
+        ))
+        .push(ContextInjection::new(
             ContextInjectionKind::Skills,
             "Skill 定义",
             "skill-body",
         ));
-        let rendered = injector
-            .render(Some("基础系统提示".to_string()))
-            .expect("有注入段时必然产出");
-        assert!(rendered.starts_with("基础系统提示"), "基础系统段必须置首");
-        let constraint = rendered
-            .find("## 子代理角色约束")
-            .expect("角色约束段存在");
-        let skills = rendered.find("## Skill 定义").expect("skill 段存在");
-        assert!(constraint < skills, "System 段位于 Skills 段之前（首段位）");
-        // 段渲染形状：`## {title}\n{content}`，段间 \n\n 分隔
-        let section = format!("## {SUBAGENT_ROLE_CONSTRAINT_TITLE}\n{SUBAGENT_ROLE_CONSTRAINT_CONTENT}");
-        assert!(rendered.contains(&section), "角色约束段渲染为 `## 标题\n正文`");
-        // C10 字节级一致：同一配置两次构建逐字节一致
-        let second = injector
-            .render(Some("基础系统提示".to_string()))
-            .expect("有注入段时必然产出");
-        assert_eq!(rendered, second, "静态注入段两次构建必须逐字节一致");
-    }
 
-    /// T-D-03 produce 级（子代理 run 装配面）：经 request_system_prompt 取
-    /// system_prompt，断言含冻结文案全文；注入段归类 system 角色、不进
-    /// 会话对话（独立于压缩预算）
-    #[tokio::test]
-    async fn subagent_run_system_prompt_contains_frozen_constraint() {
-        let mut injector = ContextInjector::new();
-        push_subagent_role_constraint(&mut injector);
-        let (producer, provider) = test_producer(None, SessionLoopOptions::default());
-        let mut producer = producer.with_context_injector(Some(injector));
-        producer.produce().await;
+    let rendered = injector
+        .render(Some("基础系统提示".to_string()))
+        .expect("有注入段时必然产出");
+    // 顺序：基础段 → Skills → MCP → Agent 定义（契约断言）
+    let skill = rendered.find("## Skill 定义").expect("skill 段存在");
+    let mcp = rendered.find("## MCP 工具声明").expect("MCP 段存在");
+    let agent = rendered.find("## Agent 定义").expect("agent 段存在");
+    assert!(rendered.starts_with("基础系统提示"), "system 段必须置首");
+    assert!(skill < mcp, "skill 段先于 MCP 段（契约）");
+    assert!(mcp < agent, "MCP 段先于 agent 定义段（契约）");
+    // 每段渲染为 `## {title}\n{content}`，段间 \n\n 分隔
+    assert!(rendered.contains("## Skill 定义\nskill-body"));
+    assert!(rendered.contains("## MCP 工具声明\nmcp-body"));
+    assert!(rendered.contains("## Agent 定义\nagent-body"));
 
-        let sent_system = provider
-            .request_system_prompt(0)
-            .expect("注入后请求必须携带 system prompt");
-        assert!(
-            sent_system.contains("你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配"),
-            "system_prompt 必须含冻结文案前半句"
-        );
-        assert!(
-            sent_system.contains("如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。"),
-            "system_prompt 必须含冻结文案后半句"
-        );
-        assert!(sent_system.contains("## 子代理角色约束"), "段标题渲染可见");
-        // 注入段归类 system 角色，不进会话对话（独立于压缩预算）
-        let sent_messages = provider.request_message_arcs(0);
-        assert!(
-            sent_messages
-                .iter()
-                .all(|m| m.role != AgentMessageRole::System),
-            "注入段不得混入会话消息（system 角色面 = system_prompt）"
-        );
-    }
+    // 快照：两次构建 system 段字节一致（M1 内容 4）
+    let second = injector
+        .render(Some("基础系统提示".to_string()))
+        .expect("有注入段时必然产出");
+    assert_eq!(rendered, second, "同一配置两次构建 system 段字节必须一致");
+}
 
-    /// T-D-03 主 Agent run 差异断言：主 Agent 装配点不调用
-    /// push_subagent_role_constraint → system_prompt 不含本段
-    /// （即便装配了其他注入段，角色约束段也不出现）
-    #[tokio::test]
-    async fn main_agent_run_excludes_subagent_role_constraint() {
-        // 主 Agent 装配面：仅常规注入段（Skills），无角色约束段
-        let mut injector = ContextInjector::new();
-        injector.push(EngineHandle::skill_context_injection(&[sample_skill(
-            "code-review",
-            "代码评审",
-            "按正确性优先评审。",
-        )]));
-        let (producer, provider) = test_producer(None, SessionLoopOptions::default());
-        let mut producer = producer.with_context_injector(Some(injector));
-        producer.produce().await;
+/// M1 默认行为回归：无注入段时 render 原样返回基础段
+/// （None → None；Some → 原样透传，含空串——空值归一属装配点
+/// build_system_prompt 职责，注入通道不做二次规范化），与现状
+/// 逐字节一致
+#[test]
+fn injector_render_without_injections_preserves_base() {
+    let injector = ContextInjector::new();
+    assert_eq!(
+        injector.render(None),
+        None,
+        "无注入且无基础段 → None（现状）"
+    );
+    assert_eq!(
+        injector.render(Some("基础系统提示".to_string())),
+        Some("基础系统提示".to_string()),
+        "无注入时基础段原样透传（现状）"
+    );
+    // 原样透传：空串基础段不归一（归一化在装配点 build_system_prompt）
+    assert_eq!(injector.render(Some(String::new())), Some(String::new()));
+}
 
-        let sent_system = provider
-            .request_system_prompt(0)
-            .expect("有注入段时请求必带 system prompt");
-        assert!(
-            !sent_system.contains("子代理角色约束"),
-            "主 Agent run 不得含角色约束段标题"
-        );
-        assert!(
-            !sent_system.contains("你没有创建子 Agent 的能力"),
-            "主 Agent run 不得含冻结文案"
-        );
-    }
+/// M1 集成：produce 装配注入通道后，渲染结果经 system_prompt 面送达
+/// provider（注入点存在且可注入），且对话消息不含 system 角色——
+/// 注入段归类 system 角色、结构上不进压缩输入（独立于压缩预算）
+#[tokio::test]
+async fn produce_with_injector_sends_rendered_system_prompt_as_system_role() {
+    let mut injector = ContextInjector::new();
+    injector
+        .push(ContextInjection::new(
+            ContextInjectionKind::AgentDefinition,
+            "Agent 定义",
+            "agent-body",
+        ))
+        .push(ContextInjection::new(
+            ContextInjectionKind::Skills,
+            "Skill 定义",
+            "skill-body",
+        ))
+        .push(ContextInjection::new(
+            ContextInjectionKind::Mcp,
+            "MCP 工具声明",
+            "mcp-body",
+        ));
+    let (producer, provider) = test_producer(None, SessionLoopOptions::default());
+    let mut producer = producer.with_context_injector(Some(injector));
+    producer.produce().await;
 
-    // ── E5：MCP 接入 + C10 注入读取面（03 方案 E5 内容 1/3）────────────
+    // 注入段经 system_prompt 面送达（非对话消息）
+    let sent_system = provider
+        .request_system_prompt(0)
+        .expect("注入后请求必须携带 system prompt");
+    let skill = sent_system.find("## Skill 定义").expect("skill 段存在");
+    let mcp = sent_system.find("## MCP 工具声明").expect("MCP 段存在");
+    let agent = sent_system.find("## Agent 定义").expect("agent 段存在");
+    assert!(skill < mcp, "skill 段先于 MCP 段（契约）");
+    assert!(mcp < agent, "MCP 段先于 agent 定义段（契约）");
+    assert!(sent_system.contains("## Agent 定义\nagent-body"));
 
-    /// 构造测试用 RustSkill（C10 注入断言用）
-    fn sample_skill(name: &str, description: &str, content: &str) -> RustSkill {
-        RustSkill {
-            file_path: format!("C:\\skills\\{name}\\SKILL.md"),
-            base_dir: format!("C:\\skills\\{name}"),
-            content: content.to_string(),
-            raw: format!("---\nname: {name}\n---\n{content}"),
-            scope: "project".to_string(),
-            system: false,
-            name: name.to_string(),
-            description: description.to_string(),
-            tags: Vec::new(),
-            applies_to: Vec::new(),
-            disable_model_invocation: false,
-            file_activation: None,
-        }
-    }
-
-    /// C10 Skills 注入段：RustSkill 读取面 → 注入段渲染确定（同一配置
-    /// 两次构建 system 段字节一致），条目含技能名/描述/正文
-    #[test]
-    fn skill_injection_is_byte_stable_and_contains_skills() {
-        let skills = vec![
-            sample_skill("code-review", "代码评审", "按正确性优先评审。"),
-            sample_skill("conex-committer", "提交规范", "按仓库风格提交。"),
-        ];
-        let injection = EngineHandle::skill_context_injection(&skills);
-        assert_eq!(injection.kind, ContextInjectionKind::Skills);
-        let mut injector = ContextInjector::new();
-        injector.push(injection);
-        let rendered = injector
-            .render(Some("基础系统提示".to_string()))
-            .expect("有注入段时必然产出");
-        // 渲染确定：两次构建字节一致（C10 断言）
-        let second = injector
-            .render(Some("基础系统提示".to_string()))
-            .expect("有注入段时必然产出");
-        assert_eq!(rendered, second, "同一技能集合两次构建 system 段必须字节一致");
-        // 读取面内容可见
-        assert!(rendered.contains("## Skill 定义"));
-        assert!(rendered.contains("- code-review（project）：代码评审"));
-        assert!(rendered.contains("按正确性优先评审。"));
-        assert!(rendered.contains("- conex-committer（project）：提交规范"));
-        // system 标记技能带（系统）标注
-        let mut sys = sample_skill("sys-skill", "系统技能", "系统正文");
-        sys.system = true;
-        let inj = EngineHandle::skill_context_injection(&[sys]);
-        let mut injector_sys = ContextInjector::new();
-        injector_sys.push(inj);
-        let render = injector_sys.render(None).expect("必产出");
-        assert!(render.contains("- sys-skill（系统）（project）：系统技能"));
-    }
-
-    /// C10 MCP 工具声明注入段：定义列表 → 注入段渲染确定，条目含
-    /// `mcp_<server>__<tool>` 命名工具
-    #[test]
-    fn mcp_injection_is_byte_stable_and_lists_tools() {
-        let defs = vec![
-            ToolDefinition {
-                name: "mcp_files__read".to_string(),
-                description: "读文件".to_string(),
-                input_schema: serde_json::json!({ "type": "object" }),
-                dangerous: false,
-                fatal_on_error: false,
-            },
-            ToolDefinition {
-                name: "mcp_files__write".to_string(),
-                description: "写文件".to_string(),
-                input_schema: serde_json::json!({ "type": "object" }),
-                dangerous: true,
-                fatal_on_error: false,
-            },
-        ];
-        let injection = EngineHandle::mcp_context_injection(&defs);
-        assert_eq!(injection.kind, ContextInjectionKind::Mcp);
-        let mut injector = ContextInjector::new();
-        injector.push(injection);
-        let rendered = injector.render(None).expect("有注入段时必然产出");
-        let second = injector.render(None).expect("有注入段时必然产出");
-        assert_eq!(rendered, second, "同一 MCP 工具集两次构建必须字节一致");
-        assert!(rendered.contains("## MCP 工具声明"));
-        assert!(rendered.contains("- mcp_files__read：读文件"));
-        assert!(rendered.contains("- mcp_files__write：写文件"));
-    }
-
-    /// C10 注入集成（produce 级）：skill 注入段经 system_prompt 面送达
-    /// provider（M1 注入点 + M11 输出消费），对话消息不含 system 角色
-    #[tokio::test]
-    async fn produce_with_skill_injection_sends_skill_segment() {
-        let skills = vec![sample_skill("code-review", "代码评审", "按正确性优先评审。")];
-        let mut injector = ContextInjector::new();
-        injector
-            .push(EngineHandle::skill_context_injection(&skills))
-            .push(EngineHandle::mcp_context_injection(&[ToolDefinition {
-                name: "mcp_files__read".to_string(),
-                description: "读文件".to_string(),
-                input_schema: serde_json::json!({ "type": "object" }),
-                dangerous: false,
-                fatal_on_error: false,
-            }]));
-        let (producer, provider) = test_producer(None, SessionLoopOptions::default());
-        let mut producer = producer.with_context_injector(Some(injector));
-        producer.produce().await;
-
-        let sent_system = provider
-            .request_system_prompt(0)
-            .expect("注入后请求必须携带 system prompt");
-        assert!(sent_system.contains("## Skill 定义"));
-        assert!(sent_system.contains("code-review"));
-        // 注入顺序契约：skills 段先于 MCP 段
-        let skill = sent_system.find("## Skill 定义").expect("skill 段存在");
-        let mcp = sent_system.find("## MCP 工具声明").expect("MCP 段存在");
-        assert!(skill < mcp, "skill 段先于 MCP 段（M1 冻结顺序）");
-        // 注入段归类 system 角色，不进会话对话（独立于压缩预算）
-        let sent_messages = provider.request_message_arcs(0);
-        assert!(
-            sent_messages
-                .iter()
-                .all(|m| m.role != AgentMessageRole::System),
-            "注入段不得混入会话消息（system 角色面 = system_prompt）"
-        );
-    }
-
-    /// 定位 agent-tools 测试夹具二进制（mcp-fake-server）：workspace 测试
-    /// 构建时与测试可执行同目录产出；独立构建本 crate 测试时可能缺失
-    fn locate_mcp_fake_server() -> Option<std::path::PathBuf> {
-        let exe = std::env::current_exe().ok()?;
-        let dir = exe.parent()?;
-        let name = if cfg!(windows) {
-            "mcp-fake-server.exe"
-        } else {
-            "mcp-fake-server"
-        };
-        let candidate = dir.join(name);
-        candidate.exists().then_some(candidate)
-    }
-
-    /// 引擎集成：插件 mcpServers 声明 → 服务器启动 → 工具并入注册表
-    /// （mcp_<server>__<tool> 命名），注册后可执行往返；启动失败 =
-    /// mcp.* 错误上抛且注册表不污染
-    #[tokio::test]
-    async fn register_plugin_mcp_server_integration() {
-        let engine = EngineHandle::new(None);
-
-        // 错误路径：非法命令 → mcp.connection_failed，注册表无残留
-        let bad = McpServerConfig::new("missing", "definitely-not-a-real-command-xyz");
-        let err = engine.register_plugin_mcp_server(bad).await.unwrap_err();
-        assert_eq!(err.code(), "mcp.connection_failed");
-        let listed: Vec<String> = engine
-            .tool_registry()
-            .list_definitions()
+    // 对话消息不含 system 角色：注入段归类 system 角色（system_prompt
+    // 面），压缩只作用于会话对话 → 注入段不进压缩预算
+    let sent_messages = provider.request_message_arcs(0);
+    assert!(
+        sent_messages
             .iter()
-            .map(|d| d.name.clone())
-            .collect();
-        assert!(
-            !listed.iter().any(|n| n.starts_with("mcp_missing")),
-            "启动失败不得污染注册表"
-        );
+            .all(|m| m.role != AgentMessageRole::System),
+        "注入段不得混入会话消息（system 角色面 = system_prompt）"
+    );
+}
 
-        // 成功路径：依赖 agent-tools 测试夹具（workspace 全量测试时存在；
-        // 单独构建本 crate 时跳过并记录）
-        let Some(fake) = locate_mcp_fake_server() else {
-            tracing::warn!(
-                "mcp-fake-server 夹具未构建（需 workspace 全量构建），跳过引擎级 MCP 成功路径断言"
-            );
-            return;
-        };
-        let config = McpServerConfig::new("fake", fake.to_string_lossy().to_string());
-        let defs = engine.register_plugin_mcp_server(config).await.unwrap();
-        let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
-        assert!(
-            names.contains(&"mcp_fake__echo".to_string()),
-            "MCP 工具应并入：{names:?}"
+/// M1 默认行为回归（produce 级）：未装配注入通道时 system_prompt
+/// 原样透传（None → None；已有基础段 → 不变），与现状一致
+#[tokio::test]
+async fn produce_without_injector_keeps_default_system_prompt_behavior() {
+    // 无注入且无基础段：请求不携带 system prompt（P1 阶段 2 现状）
+    let (mut producer, provider) = test_producer(None, SessionLoopOptions::default());
+    producer.produce().await;
+    assert!(
+        provider.request_system_prompt(0).is_none(),
+        "无注入无基础段 → system_prompt 保持 None（现状）"
+    );
+
+    // 无注入但 options 已带基础段：原样透传（不被注入通道改写）
+    let options = SessionLoopOptions {
+        system_prompt: Some("基础系统提示".to_string()),
+        ..SessionLoopOptions::default()
+    };
+    let (mut producer_base, provider_base) = test_producer(None, options);
+    producer_base.produce().await;
+    assert_eq!(
+        provider_base.request_system_prompt(0).as_deref(),
+        Some("基础系统提示"),
+        "无注入 → 基础段原样透传（现状）"
+    );
+}
+
+// ── T-D-03：子代理角色约束注入（F4 R-D1；spawn 装配路径 F11 T-D-13 接入）──
+
+/// T-D-03 冻结文案（测试断言锚点）：段标题/正文/类型三者与任务书一致；
+/// 段类型 = System（按 [CONTEXT_INJECTION_ORDER] 首段位）；静态文本
+/// 不含 `@dynamic` 标记，纳入 C10 字节级一致断言范围
+#[test]
+fn subagent_role_constraint_frozen_text_is_exact() {
+    assert_eq!(SUBAGENT_ROLE_CONSTRAINT_TITLE, "子代理角色约束");
+    assert_eq!(
+            SUBAGENT_ROLE_CONSTRAINT_CONTENT,
+            "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。"
         );
-        let listed: Vec<String> = engine
-            .tool_registry()
-            .list_definitions()
+    assert!(
+        !SUBAGENT_ROLE_CONSTRAINT_CONTENT.contains("@dynamic"),
+        "静态文本不得带动态字段标记"
+    );
+    let mut injector = ContextInjector::new();
+    push_subagent_role_constraint(&mut injector);
+    assert_eq!(
+        injector.kinds(),
+        vec![ContextInjectionKind::System],
+        "段类型 = System（按 CONTEXT_INJECTION_ORDER 首段位）"
+    );
+}
+
+/// T-D-03 渲染契约（render 拼接顺序回归）：基础系统段置首、角色约束段
+/// 紧随其后（System 首段位，位于 Skills 段之前）；两次构建字节一致
+/// （C10 快照断言面）
+#[test]
+fn subagent_role_constraint_renders_after_base_before_skills() {
+    let mut injector = ContextInjector::new();
+    // 子代理装配面：角色约束段 + Skills 段（验证 System 首段位）
+    push_subagent_role_constraint(&mut injector);
+    injector.push(ContextInjection::new(
+        ContextInjectionKind::Skills,
+        "Skill 定义",
+        "skill-body",
+    ));
+    let rendered = injector
+        .render(Some("基础系统提示".to_string()))
+        .expect("有注入段时必然产出");
+    assert!(rendered.starts_with("基础系统提示"), "基础系统段必须置首");
+    let constraint = rendered.find("## 子代理角色约束").expect("角色约束段存在");
+    let skills = rendered.find("## Skill 定义").expect("skill 段存在");
+    assert!(constraint < skills, "System 段位于 Skills 段之前（首段位）");
+    // 段渲染形状：`## {title}\n{content}`，段间 \n\n 分隔
+    let section =
+        format!("## {SUBAGENT_ROLE_CONSTRAINT_TITLE}\n{SUBAGENT_ROLE_CONSTRAINT_CONTENT}");
+    assert!(
+        rendered.contains(&section),
+        "角色约束段渲染为 `## 标题\n正文`"
+    );
+    // C10 字节级一致：同一配置两次构建逐字节一致
+    let second = injector
+        .render(Some("基础系统提示".to_string()))
+        .expect("有注入段时必然产出");
+    assert_eq!(rendered, second, "静态注入段两次构建必须逐字节一致");
+}
+
+/// T-D-03 produce 级（子代理 run 装配面）：经 request_system_prompt 取
+/// system_prompt，断言含冻结文案全文；注入段归类 system 角色、不进
+/// 会话对话（独立于压缩预算）
+#[tokio::test]
+async fn subagent_run_system_prompt_contains_frozen_constraint() {
+    let mut injector = ContextInjector::new();
+    push_subagent_role_constraint(&mut injector);
+    let (producer, provider) = test_producer(None, SessionLoopOptions::default());
+    let mut producer = producer.with_context_injector(Some(injector));
+    producer.produce().await;
+
+    let sent_system = provider
+        .request_system_prompt(0)
+        .expect("注入后请求必须携带 system prompt");
+    assert!(
+        sent_system.contains("你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配"),
+        "system_prompt 必须含冻结文案前半句"
+    );
+    assert!(
+        sent_system.contains(
+            "如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。"
+        ),
+        "system_prompt 必须含冻结文案后半句"
+    );
+    assert!(sent_system.contains("## 子代理角色约束"), "段标题渲染可见");
+    // 注入段归类 system 角色，不进会话对话（独立于压缩预算）
+    let sent_messages = provider.request_message_arcs(0);
+    assert!(
+        sent_messages
             .iter()
-            .map(|d| d.name.clone())
-            .collect();
-        assert!(
-            listed.contains(&"mcp_fake__echo".to_string()),
-            "list_definitions 应可见并入的 MCP 工具"
-        );
-        // 幂等：重复注册不报错、不重复并入
-        engine
-            .register_plugin_mcp_server(McpServerConfig::new("fake", fake.to_string_lossy().to_string()))
-            .await
-            .unwrap();
-        let count = engine
-            .tool_registry()
-            .list_definitions()
+            .all(|m| m.role != AgentMessageRole::System),
+        "注入段不得混入会话消息（system 角色面 = system_prompt）"
+    );
+}
+
+/// T-D-03 主 Agent run 差异断言：主 Agent 装配点不调用
+/// push_subagent_role_constraint → system_prompt 不含本段
+/// （即便装配了其他注入段，角色约束段也不出现）
+#[tokio::test]
+async fn main_agent_run_excludes_subagent_role_constraint() {
+    // 主 Agent 装配面：仅常规注入段（Skills），无角色约束段
+    let mut injector = ContextInjector::new();
+    injector.push(EngineHandle::skill_context_injection(&[sample_skill(
+        "code-review",
+        "代码评审",
+        "按正确性优先评审。",
+    )]));
+    let (producer, provider) = test_producer(None, SessionLoopOptions::default());
+    let mut producer = producer.with_context_injector(Some(injector));
+    producer.produce().await;
+
+    let sent_system = provider
+        .request_system_prompt(0)
+        .expect("有注入段时请求必带 system prompt");
+    assert!(
+        !sent_system.contains("子代理角色约束"),
+        "主 Agent run 不得含角色约束段标题"
+    );
+    assert!(
+        !sent_system.contains("你没有创建子 Agent 的能力"),
+        "主 Agent run 不得含冻结文案"
+    );
+}
+
+// ── E5：MCP 接入 + C10 注入读取面（03 方案 E5 内容 1/3）────────────
+
+/// 构造测试用 RustSkill（C10 注入断言用）
+fn sample_skill(name: &str, description: &str, content: &str) -> RustSkill {
+    RustSkill {
+        file_path: format!("C:\\skills\\{name}\\SKILL.md"),
+        base_dir: format!("C:\\skills\\{name}"),
+        content: content.to_string(),
+        raw: format!("---\nname: {name}\n---\n{content}"),
+        scope: "project".to_string(),
+        system: false,
+        name: name.to_string(),
+        description: description.to_string(),
+        tags: Vec::new(),
+        applies_to: Vec::new(),
+        disable_model_invocation: false,
+        file_activation: None,
+    }
+}
+
+/// C10 Skills 注入段：RustSkill 读取面 → 注入段渲染确定（同一配置
+/// 两次构建 system 段字节一致），条目含技能名/描述/正文
+#[test]
+fn skill_injection_is_byte_stable_and_contains_skills() {
+    let skills = vec![
+        sample_skill("code-review", "代码评审", "按正确性优先评审。"),
+        sample_skill("conex-committer", "提交规范", "按仓库风格提交。"),
+    ];
+    let injection = EngineHandle::skill_context_injection(&skills);
+    assert_eq!(injection.kind, ContextInjectionKind::Skills);
+    let mut injector = ContextInjector::new();
+    injector.push(injection);
+    let rendered = injector
+        .render(Some("基础系统提示".to_string()))
+        .expect("有注入段时必然产出");
+    // 渲染确定：两次构建字节一致（C10 断言）
+    let second = injector
+        .render(Some("基础系统提示".to_string()))
+        .expect("有注入段时必然产出");
+    assert_eq!(
+        rendered, second,
+        "同一技能集合两次构建 system 段必须字节一致"
+    );
+    // 读取面内容可见
+    assert!(rendered.contains("## Skill 定义"));
+    assert!(rendered.contains("- code-review（project）：代码评审"));
+    assert!(rendered.contains("按正确性优先评审。"));
+    assert!(rendered.contains("- conex-committer（project）：提交规范"));
+    // system 标记技能带（系统）标注
+    let mut sys = sample_skill("sys-skill", "系统技能", "系统正文");
+    sys.system = true;
+    let inj = EngineHandle::skill_context_injection(&[sys]);
+    let mut injector_sys = ContextInjector::new();
+    injector_sys.push(inj);
+    let render = injector_sys.render(None).expect("必产出");
+    assert!(render.contains("- sys-skill（系统）（project）：系统技能"));
+}
+
+/// C10 MCP 工具声明注入段：定义列表 → 注入段渲染确定，条目含
+/// `mcp_<server>__<tool>` 命名工具
+#[test]
+fn mcp_injection_is_byte_stable_and_lists_tools() {
+    let defs = vec![
+        ToolDefinition {
+            name: "mcp_files__read".to_string(),
+            description: "读文件".to_string(),
+            input_schema: serde_json::json!({ "type": "object" }),
+            dangerous: false,
+            fatal_on_error: false,
+        },
+        ToolDefinition {
+            name: "mcp_files__write".to_string(),
+            description: "写文件".to_string(),
+            input_schema: serde_json::json!({ "type": "object" }),
+            dangerous: true,
+            fatal_on_error: false,
+        },
+    ];
+    let injection = EngineHandle::mcp_context_injection(&defs);
+    assert_eq!(injection.kind, ContextInjectionKind::Mcp);
+    let mut injector = ContextInjector::new();
+    injector.push(injection);
+    let rendered = injector.render(None).expect("有注入段时必然产出");
+    let second = injector.render(None).expect("有注入段时必然产出");
+    assert_eq!(rendered, second, "同一 MCP 工具集两次构建必须字节一致");
+    assert!(rendered.contains("## MCP 工具声明"));
+    assert!(rendered.contains("- mcp_files__read：读文件"));
+    assert!(rendered.contains("- mcp_files__write：写文件"));
+}
+
+/// C10 注入集成（produce 级）：skill 注入段经 system_prompt 面送达
+/// provider（M1 注入点 + M11 输出消费），对话消息不含 system 角色
+#[tokio::test]
+async fn produce_with_skill_injection_sends_skill_segment() {
+    let skills = vec![sample_skill(
+        "code-review",
+        "代码评审",
+        "按正确性优先评审。",
+    )];
+    let mut injector = ContextInjector::new();
+    injector
+        .push(EngineHandle::skill_context_injection(&skills))
+        .push(EngineHandle::mcp_context_injection(&[ToolDefinition {
+            name: "mcp_files__read".to_string(),
+            description: "读文件".to_string(),
+            input_schema: serde_json::json!({ "type": "object" }),
+            dangerous: false,
+            fatal_on_error: false,
+        }]));
+    let (producer, provider) = test_producer(None, SessionLoopOptions::default());
+    let mut producer = producer.with_context_injector(Some(injector));
+    producer.produce().await;
+
+    let sent_system = provider
+        .request_system_prompt(0)
+        .expect("注入后请求必须携带 system prompt");
+    assert!(sent_system.contains("## Skill 定义"));
+    assert!(sent_system.contains("code-review"));
+    // 注入顺序契约：skills 段先于 MCP 段
+    let skill = sent_system.find("## Skill 定义").expect("skill 段存在");
+    let mcp = sent_system.find("## MCP 工具声明").expect("MCP 段存在");
+    assert!(skill < mcp, "skill 段先于 MCP 段（M1 冻结顺序）");
+    // 注入段归类 system 角色，不进会话对话（独立于压缩预算）
+    let sent_messages = provider.request_message_arcs(0);
+    assert!(
+        sent_messages
             .iter()
-            .filter(|d| d.name.starts_with("mcp_fake__"))
-            .count();
-        assert_eq!(count, 4, "重复注册不得重复并入");
-        // 生命周期收口
-        engine.mcp_bridge().stop_all().await;
-    }
+            .all(|m| m.role != AgentMessageRole::System),
+        "注入段不得混入会话消息（system 角色面 = system_prompt）"
+    );
+}
 
-    /// 34 §5.2 E-1 装配注入断言 + E-4 消费路径（拒绝态，R-12 安全默认）：
-    /// 默认装配（开关 false）经引擎 seam `browser_attach_mcp_server_config`
-    /// 消费守卫 → 结构化 `tool.browser.capability_disabled`（端点零暴露；
-    /// 若装配未把开关注入 BrowserSlot，守卫无法命中开关先行判定——装配
-    /// 注入由错误码互斥背书）。
-    #[tokio::test]
-    async fn mcp_attach_assembly_default_denies_zero_exposure() {
-        use conex_browser_tools::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
-        let engine = EngineHandle::new(None);
-        let err = engine
-            .browser_attach_mcp_server_config("browser-mcp")
-            .unwrap_err();
-        assert_eq!(err.code(), TOOL_BROWSER_CAPABILITY_DISABLED);
-    }
+/// 定位 agent-tools 测试夹具二进制（mcp-fake-server）：workspace 测试
+/// 构建时与测试可执行同目录产出；独立构建本 crate 测试时可能缺失
+fn locate_mcp_fake_server() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let name = if cfg!(windows) {
+        "mcp-fake-server.exe"
+    } else {
+        "mcp-fake-server"
+    };
+    let candidate = dir.join(name);
+    candidate.exists().then_some(candidate)
+}
 
-    /// 34 §5.2 E-1 装配注入断言（允许态，mock 配置）：经
-    /// [EngineHandle::new_with_mcp_attach_allowed](true) 注入开关 →
-    /// 引擎 seam 消费守卫 → `tool.browser.not_ready`（受管实例未启动；
-    /// 若装配未注入开关会命中 capability_disabled——两态互斥区分装配
-    /// 注入生效；就绪放行面由 browser 域单测以样例端点覆盖，引擎级不
-    /// 触发真实浏览器启动）。
-    #[tokio::test]
-    async fn mcp_attach_assembly_enabled_requires_running_endpoint() {
-        use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
-        let engine = EngineHandle::new_with_mcp_attach_allowed(true);
-        let err = engine
-            .browser_attach_mcp_server_config("browser-mcp")
-            .unwrap_err();
-        assert_eq!(err.code(), TOOL_BROWSER_NOT_READY);
-    }
+/// 引擎集成：插件 mcpServers 声明 → 服务器启动 → 工具并入注册表
+/// （mcp_<server>__<tool> 命名），注册后可执行往返；启动失败 =
+/// mcp.* 错误上抛且注册表不污染
+#[tokio::test]
+async fn register_plugin_mcp_server_integration() {
+    let engine = EngineHandle::new(None);
+
+    // 错误路径：非法命令 → mcp.connection_failed，注册表无残留
+    let bad = McpServerConfig::new("missing", "definitely-not-a-real-command-xyz");
+    let err = engine.register_plugin_mcp_server(bad).await.unwrap_err();
+    assert_eq!(err.code(), "mcp.connection_failed");
+    let listed: Vec<String> = engine
+        .tool_registry()
+        .list_definitions()
+        .iter()
+        .map(|d| d.name.clone())
+        .collect();
+    assert!(
+        !listed.iter().any(|n| n.starts_with("mcp_missing")),
+        "启动失败不得污染注册表"
+    );
+
+    // 成功路径：依赖 agent-tools 测试夹具（workspace 全量测试时存在；
+    // 单独构建本 crate 时跳过并记录）
+    let Some(fake) = locate_mcp_fake_server() else {
+        tracing::warn!(
+            "mcp-fake-server 夹具未构建（需 workspace 全量构建），跳过引擎级 MCP 成功路径断言"
+        );
+        return;
+    };
+    let config = McpServerConfig::new("fake", fake.to_string_lossy().to_string());
+    let defs = engine.register_plugin_mcp_server(config).await.unwrap();
+    let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
+    assert!(
+        names.contains(&"mcp_fake__echo".to_string()),
+        "MCP 工具应并入：{names:?}"
+    );
+    let listed: Vec<String> = engine
+        .tool_registry()
+        .list_definitions()
+        .iter()
+        .map(|d| d.name.clone())
+        .collect();
+    assert!(
+        listed.contains(&"mcp_fake__echo".to_string()),
+        "list_definitions 应可见并入的 MCP 工具"
+    );
+    // 幂等：重复注册不报错、不重复并入
+    engine
+        .register_plugin_mcp_server(McpServerConfig::new(
+            "fake",
+            fake.to_string_lossy().to_string(),
+        ))
+        .await
+        .unwrap();
+    let count = engine
+        .tool_registry()
+        .list_definitions()
+        .iter()
+        .filter(|d| d.name.starts_with("mcp_fake__"))
+        .count();
+    assert_eq!(count, 4, "重复注册不得重复并入");
+    // 生命周期收口
+    engine.mcp_bridge().stop_all().await;
+}
+
+/// 34 §5.2 E-1 装配注入断言 + E-4 消费路径（拒绝态，R-12 安全默认）：
+/// 默认装配（开关 false）经引擎 seam `browser_attach_mcp_server_config`
+/// 消费守卫 → 结构化 `tool.browser.capability_disabled`（端点零暴露；
+/// 若装配未把开关注入 BrowserSlot，守卫无法命中开关先行判定——装配
+/// 注入由错误码互斥背书）。
+#[tokio::test]
+async fn mcp_attach_assembly_default_denies_zero_exposure() {
+    use conex_browser_tools::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
+    let engine = EngineHandle::new(None);
+    let err = engine
+        .browser_attach_mcp_server_config("browser-mcp")
+        .unwrap_err();
+    assert_eq!(err.code(), TOOL_BROWSER_CAPABILITY_DISABLED);
+}
+
+/// 34 §5.2 E-1 装配注入断言（允许态，mock 配置）：经
+/// [EngineHandle::new_with_mcp_attach_allowed](true) 注入开关 →
+/// 引擎 seam 消费守卫 → `tool.browser.not_ready`（受管实例未启动；
+/// 若装配未注入开关会命中 capability_disabled——两态互斥区分装配
+/// 注入生效；就绪放行面由 browser 域单测以样例端点覆盖，引擎级不
+/// 触发真实浏览器启动）。
+#[tokio::test]
+async fn mcp_attach_assembly_enabled_requires_running_endpoint() {
+    use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
+    let engine = EngineHandle::new_with_mcp_attach_allowed(true);
+    let err = engine
+        .browser_attach_mcp_server_config("browser-mcp")
+        .unwrap_err();
+    assert_eq!(err.code(), TOOL_BROWSER_NOT_READY);
+}
 
 impl EngineHandle {
     /// 测试面：指定 attach 会话级开关的完整装配（34 §5.2 E-1 装配注入
@@ -2323,7 +2370,10 @@ impl EngineHandle {
         config: EngineProviderConfig,
     ) {
         *self.provider.lock().unwrap_or_else(|e| e.into_inner()) = Some(provider);
-        *self.provider_config.lock().unwrap_or_else(|e| e.into_inner()) = Some(config);
+        *self
+            .provider_config
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(config);
         self.ready.store(true, Ordering::SeqCst);
         *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
@@ -2375,7 +2425,11 @@ mod timer_wiring_tests {
             .expect("cancel 应可用");
         assert!(cancelled);
         assert!(
-            channel.list_active().await.expect("list_active 应可用").is_empty(),
+            channel
+                .list_active()
+                .await
+                .expect("list_active 应可用")
+                .is_empty(),
             "取消后活跃列表应为空"
         );
         // 真实 PendingMessageQueue 落点：注册新定时器到期 → 队列出现
@@ -2503,10 +2557,7 @@ mod wait_wiring_tests {
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
-        assert!(
-            stream.subscriber_count() > 0,
-            "wait 期间应已订阅终态事件流"
-        );
+        assert!(stream.subscriber_count() > 0, "wait 期间应已订阅终态事件流");
         // feed subagent-ended（事件收口旁路点接线面的同构调用）
         stream.feed(&AgentEvent::SubagentEnded {
             session_id: "mock-session".to_string(),
@@ -2664,9 +2715,8 @@ mod store_assembly_tests {
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
         let sink = Arc::new(crate::sched::SchedEventSink::new());
         // Some(db) → 真适配：注册 cron 后 sched_* 键落库
-        let registry =
-            assemble_scheduler_registry(&queue, sink.clone(), Some(db.clone()))
-                .expect("装配应成功");
+        let registry = assemble_scheduler_registry(&queue, sink.clone(), Some(db.clone()))
+            .expect("装配应成功");
         let cron_id = registry
             .register(CronTaskInput {
                 expression: "* * * * *".to_string(),
@@ -2691,8 +2741,8 @@ mod store_assembly_tests {
         );
         // None → 内存版回退：注册功能可用（数据不进 db，功能面同既有
         // MemorySchedStore 语义）
-        let registry_mem = assemble_scheduler_registry(&queue, sink, None)
-            .expect("None 装配应成功（内存回退）");
+        let registry_mem =
+            assemble_scheduler_registry(&queue, sink, None).expect("None 装配应成功（内存回退）");
         let cron_id_mem = registry_mem
             .register(CronTaskInput {
                 expression: "0 9 * * *".to_string(),
@@ -2851,11 +2901,13 @@ mod event_drain_tests {
             serde_json::from_str(&calls[0].1).expect("载荷应为合法 JSON");
         assert_eq!(first["type"], "timer-fired");
         assert_eq!(
-            first["runId"],
-            "timer-timer-0",
+            first["runId"], "timer-timer-0",
             "R-22 伪 runId：timer-加timerId（timer_id 已含前缀，字面拼接，对齐 F6:34 先例）"
         );
-        assert!(first.get("sequence").is_none(), "timer 事件不得注入 sequence");
+        assert!(
+            first.get("sequence").is_none(),
+            "timer 事件不得注入 sequence"
+        );
         assert_eq!(first["schemaVersion"], 1);
         assert_eq!(first["sessionId"], "");
         assert_eq!(first["timerId"], "timer-0");
@@ -2864,7 +2916,10 @@ mod event_drain_tests {
         let second: serde_json::Value =
             serde_json::from_str(&calls[1].1).expect("载荷应为合法 JSON");
         assert_eq!(second["type"], "timer-cancelled");
-        assert_eq!(second["runId"], "timer-timer-1", "timer-cancelled 同形注入伪 runId");
+        assert_eq!(
+            second["runId"], "timer-timer-1",
+            "timer-cancelled 同形注入伪 runId"
+        );
         assert_eq!(second["timerId"], "timer-1");
         assert_eq!(second["reason"], "early-exit");
         assert_eq!(second["cancelledAtMs"], 1_700_000_000_456_u64);
@@ -2903,11 +2958,13 @@ mod event_drain_tests {
             serde_json::from_str(&calls[0].1).expect("载荷应为合法 JSON");
         assert_eq!(payload["type"], "cron-fired");
         assert_eq!(
-            payload["runId"],
-            "cron-cron-0",
+            payload["runId"], "cron-cron-0",
             "R-22 伪 runId：cron-加cronId（cron_id 已含前缀，字面拼接，对齐 F6:34 先例）"
         );
-        assert!(payload.get("sequence").is_none(), "cron 事件不得注入 sequence");
+        assert!(
+            payload.get("sequence").is_none(),
+            "cron 事件不得注入 sequence"
+        );
         assert_eq!(payload["schemaVersion"], 1);
         assert_eq!(payload["cronId"], "cron-0");
         assert_eq!(payload["prompt"], "每日备份");
@@ -3026,13 +3083,22 @@ mod event_drain_tests {
         sink.register("s1", Arc::clone(&s1) as AuditSink);
         sink.register("s2", Arc::clone(&s2) as AuditSink);
         assert_eq!(sink.route_count(), 2);
-        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Blocked));
-        sink.emit(&routing_test_audit_event("s2", SecurityAuditDecision::Blocked));
+        sink.emit(&routing_test_audit_event(
+            "s1",
+            SecurityAuditDecision::Blocked,
+        ));
+        sink.emit(&routing_test_audit_event(
+            "s2",
+            SecurityAuditDecision::Blocked,
+        ));
         // 各会话事件仅达自己的 run 桥
         assert_eq!(s1.emitted().len(), 1);
         assert_eq!(s2.emitted().len(), 1);
         // 未注册会话 → tracing 兜底（不 panic、不送达）
-        sink.emit(&routing_test_audit_event("ghost", SecurityAuditDecision::Blocked));
+        sink.emit(&routing_test_audit_event(
+            "ghost",
+            SecurityAuditDecision::Blocked,
+        ));
         assert_eq!(s1.emitted().len(), 1);
         assert_eq!(s2.emitted().len(), 1);
     }
@@ -3045,9 +3111,18 @@ mod event_drain_tests {
         let sink = RoutingAuditSink::new(Arc::clone(&stats));
         let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&s1) as AuditSink);
-        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Denied));
-        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Redirected));
-        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Denied));
+        sink.emit(&routing_test_audit_event(
+            "s1",
+            SecurityAuditDecision::Denied,
+        ));
+        sink.emit(&routing_test_audit_event(
+            "s1",
+            SecurityAuditDecision::Redirected,
+        ));
+        sink.emit(&routing_test_audit_event(
+            "s1",
+            SecurityAuditDecision::Denied,
+        ));
         // 仅 denied 计数（G10），全部事件转发
         assert_eq!(stats.summary().security_audit_denied, 2);
         assert_eq!(s1.emitted().len(), 3);
@@ -3063,8 +3138,14 @@ mod event_drain_tests {
         sink.unregister("s1");
         sink.unregister("s1");
         assert_eq!(sink.route_count(), 0, "重复注销幂等，注册表无残留");
-        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Blocked));
-        assert!(s1.emitted().is_empty(), "注销后事件不再送达（tracing 兜底）");
+        sink.emit(&routing_test_audit_event(
+            "s1",
+            SecurityAuditDecision::Blocked,
+        ));
+        assert!(
+            s1.emitted().is_empty(),
+            "注销后事件不再送达（tracing 兜底）"
+        );
     }
 
     /// 同 session 多 run 并发注册 → 后注册者覆盖（新 run 覆盖旧 run，
@@ -3076,7 +3157,10 @@ mod event_drain_tests {
         let new = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&old) as AuditSink);
         sink.register("s1", Arc::clone(&new) as AuditSink);
-        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Blocked));
+        sink.emit(&routing_test_audit_event(
+            "s1",
+            SecurityAuditDecision::Blocked,
+        ));
         assert!(old.emitted().is_empty(), "旧 run 桥应被新 run 覆盖");
         assert_eq!(new.emitted().len(), 1);
     }
@@ -3102,10 +3186,8 @@ mod event_drain_tests {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "conex-config-test-{}-{nanos}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("conex-config-test-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("create config dir");
         isolate_config_store(&dir);
 
@@ -3151,10 +3233,8 @@ mod event_drain_tests {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "conex-config-test-{}-{nanos}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("conex-config-test-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("create config dir");
         isolate_config_store(&dir);
 
@@ -3177,7 +3257,10 @@ mod event_drain_tests {
         engine.reload_provider();
         assert!(!engine.ready(), "清 key 后未就绪");
         assert!(engine.provider().is_none(), "清 key 后 provider=None");
-        assert!(engine.provider_config().is_none(), "清 key 后 provider_config=None");
+        assert!(
+            engine.provider_config().is_none(),
+            "清 key 后 provider_config=None"
+        );
         assert!(engine.ready_reason().is_some(), "未就绪原因可诊断");
 
         // 重填 → 恢复
@@ -3242,10 +3325,7 @@ mod continuity_wiring_tests {
     #[tokio::test]
     async fn unbound_board_returns_wiring_error() {
         let board = ContinuityChannelBoard::new();
-        let err = board
-            .kill_subagent("s1", "sub-1", "")
-            .await
-            .unwrap_err();
+        let err = board.kill_subagent("s1", "sub-1", "").await.unwrap_err();
         assert!(err.contains("未绑定"), "未绑定错误文案：{err}");
         let err = board.inject("sub-1", "hi").await.unwrap_err();
         assert!(err.contains("未绑定"));
@@ -3264,8 +3344,12 @@ mod continuity_wiring_tests {
     #[tokio::test]
     async fn bound_board_delegates_and_overwrites() {
         let board = ContinuityChannelBoard::new();
-        let first = Arc::new(RecordingKill { calls: Mutex::new(0) });
-        let second = Arc::new(RecordingKill { calls: Mutex::new(0) });
+        let first = Arc::new(RecordingKill {
+            calls: Mutex::new(0),
+        });
+        let second = Arc::new(RecordingKill {
+            calls: Mutex::new(0),
+        });
         board.bind_kill(Arc::clone(&first) as Arc<dyn SubagentKillChannel>);
         let out = board
             .kill_subagent("s1", "sub-1", "r")
@@ -3298,10 +3382,7 @@ mod continuity_wiring_tests {
             .execute(&ctx, serde_json::json!({ "subagentId": "sub-1" }))
             .await
             .unwrap_err();
-        assert!(
-            err.to_string().contains("未绑定"),
-            "未绑定错误文案：{err}"
-        );
+        assert!(err.to_string().contains("未绑定"), "未绑定错误文案：{err}");
         let send = engine
             .tool_registry()
             .get(agent_tools::tools::send_message::SEND_MESSAGE_TOOL_NAME)
@@ -3470,11 +3551,7 @@ mod b1_5_poison_tests {
             before + 1,
             "routes 锁中毒恢复必须计数 +1"
         );
-        assert_eq!(
-            sink.route_count(),
-            1,
-            "毒化后注册仍应生效（恢复语义不变）"
-        );
+        assert_eq!(sink.route_count(), 1, "毒化后注册仍应生效（恢复语义不变）");
     }
 
     /// B1-5 毒化测（engine_channels 事件桥）：缓冲锁中毒后 emit 正常入队
@@ -3482,7 +3559,10 @@ mod b1_5_poison_tests {
     #[test]
     fn poisoned_buffer_lock_emit_recovers_with_log_and_count() {
         let emitter = Arc::new(RecordingEmitter::default());
-        let bridge = EventBridge::new("workbench-run-event", Arc::clone(&emitter) as Arc<dyn Emitter>);
+        let bridge = EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn Emitter>,
+        );
         let buffered = BufferedRunEventBridge::new(bridge, "run-poison");
         buffered.poison_buffer_for_test();
         let before = channels_poison_recovery_count();
@@ -3762,8 +3842,7 @@ mod s3_hotspot_tests {
             stream: true,
             extra: BTreeMap::new(),
         };
-        let call = HttpProviderCall::new(reqwest::Client::new(), config)
-            .with_abort_signal(signal);
+        let call = HttpProviderCall::new(reqwest::Client::new(), config).with_abort_signal(signal);
         assert!(call.abort_signal.is_some());
     }
 

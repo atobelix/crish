@@ -44,12 +44,12 @@
 //!
 //! 公开 API 不 break：main.rs `command_registry!` 的 `note_commands::*` 路径零改动。
 
+#[cfg(test)]
+use crate::note_runtime;
 use agent_tools::note_backend::NoteBackendError;
 #[cfg(test)]
 use agent_tools::note_backend::{NoteApplyMdRequest, NoteApplyMdResult};
 use serde_json::{json, Value as JsonValue};
-#[cfg(test)]
-use crate::note_runtime;
 
 // ── 共享失败面（三模共用；子模经 `super::` 引用）──────────────────────
 
@@ -80,13 +80,9 @@ mod note_commands_hydrate;
 mod note_commands_mirror;
 
 // 公开 API 保持：main.rs `command_registry!` 引用的 7 个命令路径不变
-pub use note_commands_apply::{
-    note_apply_ops, note_document_apply_md, note_send_to_note,
-};
+pub use note_commands_apply::{note_apply_ops, note_document_apply_md, note_send_to_note};
 pub use note_commands_hydrate::{note_document_hydrate, note_query_blocks};
-pub use note_commands_mirror::{
-    note_detect_mirror_drift, note_import_mirror_proposal,
-};
+pub use note_commands_mirror::{note_detect_mirror_drift, note_import_mirror_proposal};
 // SR-06f 拆分补完：tauri 宏生成的 invoke 包装符号（`__cmd__*`）与命令名
 // 常量（`__tauri_command_name_*`）随命令定义于三个子模块，`generate_handler!`
 // 从注册路径（main.rs command_registry! 的 `note_commands::*`）所在模块
@@ -103,7 +99,8 @@ pub use note_commands_hydrate::{
 };
 pub use note_commands_mirror::{
     __cmd__note_detect_mirror_drift, __cmd__note_import_mirror_proposal,
-    __tauri_command_name_note_detect_mirror_drift, __tauri_command_name_note_import_mirror_proposal,
+    __tauri_command_name_note_detect_mirror_drift,
+    __tauri_command_name_note_import_mirror_proposal,
 };
 
 /// 命令层同步 smoke 助手（测试 / 非 Tauri 路径）：apply 后返回结果。

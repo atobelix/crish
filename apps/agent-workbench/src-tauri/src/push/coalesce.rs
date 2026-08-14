@@ -179,9 +179,7 @@ impl CoalesceState {
                 self.accumulate(pending);
                 None
             }
-            SceneId::SubagentCompleted
-            | SceneId::ApprovalRequested
-            | SceneId::CronFired => {
+            SceneId::SubagentCompleted | SceneId::ApprovalRequested | SceneId::CronFired => {
                 self.accumulate(pending);
                 None
             }
@@ -212,7 +210,9 @@ impl CoalesceState {
         let bucket_key = format!("subagent:{}", pending.group_key);
         let mut merged = if let Some(bucket) = self.buckets.remove(&bucket_key) {
             let group = bucket.group_key_of();
-            if pending.arrived_at_ms.saturating_sub(bucket.first.arrived_at_ms)
+            if pending
+                .arrived_at_ms
+                .saturating_sub(bucket.first.arrived_at_ms)
                 < self.windows.subagent_run_terminal_ms
             {
                 // 子代理数 + run 本体（items 不含首条，故 +2）
@@ -260,8 +260,7 @@ impl CoalesceState {
     pub fn flush(&mut self, now_ms: u64) -> Vec<MergedPush> {
         let mut out = Vec::new();
         self.buckets.retain(|_, bucket| {
-            let expired =
-                now_ms.saturating_sub(bucket.first.arrived_at_ms) >= bucket.window_ms;
+            let expired = now_ms.saturating_sub(bucket.first.arrived_at_ms) >= bucket.window_ms;
             if expired {
                 out.push(bucket.merged(bucket.items.len() + 1));
             }
@@ -292,10 +291,19 @@ impl CoalesceState {
 
     fn accumulate(&mut self, pending: PendingPush) {
         let (bucket_key, window_ms) = match pending.scene {
-            SceneId::SubagentCompleted => (format!("subagent:{}", pending.group_key), self.windows.subagent_run_terminal_ms),
-            SceneId::ApprovalRequested => (format!("approval:{}", pending.group_key), self.windows.approval_batch_ms),
+            SceneId::SubagentCompleted => (
+                format!("subagent:{}", pending.group_key),
+                self.windows.subagent_run_terminal_ms,
+            ),
+            SceneId::ApprovalRequested => (
+                format!("approval:{}", pending.group_key),
+                self.windows.approval_batch_ms,
+            ),
             SceneId::CronFired => (format!("cron:{}", pending.group_key), self.windows.cron_ms),
-            SceneId::TaskFailed => (format!("task-failed:{}", pending.group_key), self.windows.task_failed_ms),
+            SceneId::TaskFailed => (
+                format!("task-failed:{}", pending.group_key),
+                self.windows.task_failed_ms,
+            ),
             _ => return,
         };
         match self.buckets.get_mut(&bucket_key) {

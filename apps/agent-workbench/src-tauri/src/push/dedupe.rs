@@ -137,16 +137,20 @@ impl SqliteDedupeBackend {
     /// 显式清理已过期条目（D7 §8.2「24h TTL 扫描清理」周期维护；
     /// [DedupeState::prune] 之外的独立清理面）
     pub fn prune_expired(&mut self, now_ms: u64) {
-        let _ = self.conn.lock().map_err(|_| {
-            tracing::warn!(target: "push", "SQLite 去重表锁损坏，跳过过期清理");
-        }).and_then(|conn| {
-            conn.execute(
-                "DELETE FROM push_events_dedupe WHERE expires_at < ?1",
-                rusqlite::params![now_ms as i64],
-            )
-            .map(|_| ())
-            .map_err(|e| tracing::warn!(target: "push", "SQLite 去重表过期清理失败: {e}"))
-        });
+        let _ = self
+            .conn
+            .lock()
+            .map_err(|_| {
+                tracing::warn!(target: "push", "SQLite 去重表锁损坏，跳过过期清理");
+            })
+            .and_then(|conn| {
+                conn.execute(
+                    "DELETE FROM push_events_dedupe WHERE expires_at < ?1",
+                    rusqlite::params![now_ms as i64],
+                )
+                .map(|_| ())
+                .map_err(|e| tracing::warn!(target: "push", "SQLite 去重表过期清理失败: {e}"))
+            });
     }
 }
 
@@ -205,11 +209,9 @@ impl DedupeBackend for SqliteDedupeBackend {
             Ok(c) => c,
             Err(_) => return 0,
         };
-        conn.query_row(
-            "SELECT COUNT(*) FROM push_events_dedupe",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
+        conn.query_row("SELECT COUNT(*) FROM push_events_dedupe", [], |row| {
+            row.get::<_, i64>(0)
+        })
         .unwrap_or(0) as usize
     }
 }
@@ -339,7 +341,11 @@ mod tests {
         backend.record("new", 5_000);
         backend.prune_older_than(4_000);
         assert_eq!(backend.recorded_at("old"), None, "截止线前的条目应清理");
-        assert_eq!(backend.recorded_at("new"), Some(5_000), "截止线后的条目保留");
+        assert_eq!(
+            backend.recorded_at("new"),
+            Some(5_000),
+            "截止线后的条目保留"
+        );
         assert_eq!(backend.len(), 1);
     }
 
@@ -350,8 +356,16 @@ mod tests {
         backend.record("a", 0);
         backend.record("b", 5_000);
         backend.prune_expired(12_000);
-        assert_eq!(backend.recorded_at("a"), None, "expires_at(10s) < now(12s) → 清理");
-        assert_eq!(backend.recorded_at("b"), Some(5_000), "expires_at(15s) ≥ now(12s) → 保留");
+        assert_eq!(
+            backend.recorded_at("a"),
+            None,
+            "expires_at(10s) < now(12s) → 清理"
+        );
+        assert_eq!(
+            backend.recorded_at("b"),
+            Some(5_000),
+            "expires_at(15s) ≥ now(12s) → 保留"
+        );
     }
 
     /// DedupeState 装配 SQLite 后端：TTL 判定语义与内存后端一致（同 trait 等价）
@@ -362,8 +376,14 @@ mod tests {
             10_000,
         );
         assert!(state.check_and_record("run-terminal:run-1", 1_000));
-        assert!(!state.check_and_record("run-terminal:run-1", 10_999), "TTL 内重复抑制");
-        assert!(state.check_and_record("run-terminal:run-1", 11_000), "TTL 过后重新放行");
+        assert!(
+            !state.check_and_record("run-terminal:run-1", 10_999),
+            "TTL 内重复抑制"
+        );
+        assert!(
+            state.check_and_record("run-terminal:run-1", 11_000),
+            "TTL 过后重新放行"
+        );
         // 惰性容量护栏路径同样工作（不 panic）
         assert!(state.check_and_record("approval-requested:tc-2", 12_000));
     }
@@ -400,12 +420,18 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&db_path).expect("建库");
-            let mut state = DedupeState::new(Box::new(SqliteDedupeBackend::new(conn, ttl).expect("建表")), ttl);
+            let mut state = DedupeState::new(
+                Box::new(SqliteDedupeBackend::new(conn, ttl).expect("建表")),
+                ttl,
+            );
             assert!(state.check_and_record("approval-requested:tc-1", 1_000));
         } // 重启
 
         let conn = rusqlite::Connection::open(&db_path).expect("重开库");
-        let mut state = DedupeState::new(Box::new(SqliteDedupeBackend::new(conn, ttl).expect("建表")), ttl);
+        let mut state = DedupeState::new(
+            Box::new(SqliteDedupeBackend::new(conn, ttl).expect("建表")),
+            ttl,
+        );
         assert!(
             !state.check_and_record("approval-requested:tc-1", 2_000),
             "重启后同审批键仍在 TTL 内 → 抑制重推"

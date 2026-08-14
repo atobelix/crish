@@ -53,8 +53,7 @@ impl SharedDb {
 
     /// 数据库是否已就绪（setup 完成且无 fatal failure）。
     pub fn db_ready(&self) -> bool {
-        self.ready.load(std::sync::atomic::Ordering::Relaxed)
-            && self.db.get_failure().is_none()
+        self.ready.load(std::sync::atomic::Ordering::Relaxed) && self.db.get_failure().is_none()
     }
 
     /// 获取 `LocalDb` clone（Arc +1），供异步任务拥有数据副本。
@@ -113,7 +112,9 @@ fn self_heal_then_save_body(
 }
 
 #[tauri::command]
-pub async fn list_sessions(db_state: State<'_, SharedDb>) -> Result<Vec<SessionIndexEntry>, CoreError> {
+pub async fn list_sessions(
+    db_state: State<'_, SharedDb>,
+) -> Result<Vec<SessionIndexEntry>, CoreError> {
     let db = db_state.inner().local_db();
     let entries = tokio::task::spawn_blocking(move || db.list_sessions())
         .await
@@ -206,12 +207,11 @@ pub async fn delete_session(
     let db = db_state.inner().local_db();
     // 删除前读产出 meta → 删除会话行（spawn_blocking 内，避免阻塞命令线程）
     let meta_session_id = session_id.clone();
-    let meta = tokio::task::spawn_blocking(move || {
-        delete_session_and_read_meta(&db, &meta_session_id)
-    })
-        .await
-        .map_err(|e| CoreError::Internal(format!("delete_session join: {e}")))?
-        .map_err(map_db_err)?;
+    let meta =
+        tokio::task::spawn_blocking(move || delete_session_and_read_meta(&db, &meta_session_id))
+            .await
+            .map_err(|e| CoreError::Internal(format!("delete_session join: {e}")))?
+            .map_err(map_db_err)?;
     // 产出目录清理（G03 T-EG-12 完整链路：删除 → 进回收站（trash 接管）→
     // 通知用户；越界安全红线由清理侧裁决）
     let cleanup = crate::outputs_config::cleanup_session_outputs(
@@ -436,15 +436,13 @@ fn build_flow_snapshot(
     let Some(declaration_raw) = declaration_raw else {
         return Ok(FlowSnapshot { nodes: Vec::new() });
     };
-    let declaration: FlowDeclaration = serde_json::from_str(&declaration_raw).map_err(|e| {
-        CoreError::Internal(format!("flow_declaration 解析失败：{e}"))
-    })?;
+    let declaration: FlowDeclaration = serde_json::from_str(&declaration_raw)
+        .map_err(|e| CoreError::Internal(format!("flow_declaration 解析失败：{e}")))?;
     // 运行时状态：节点 id → FlowNodeRuntime（run 映射 / 唤醒标记）
     let runtime: HashMap<String, FlowNodeRuntime> = match state_raw {
         Some(state_raw) => {
-            let entries: Vec<FlowNodeRuntime> = serde_json::from_str(&state_raw).map_err(|e| {
-                CoreError::Internal(format!("flow_state 解析失败：{e}"))
-            })?;
+            let entries: Vec<FlowNodeRuntime> = serde_json::from_str(&state_raw)
+                .map_err(|e| CoreError::Internal(format!("flow_state 解析失败：{e}")))?;
             entries
                 .into_iter()
                 .map(|rt| (rt.node_id.clone(), rt))
@@ -529,9 +527,7 @@ fn build_flow_snapshot(
                 .unwrap_or(FlowNodeState::Pending)
                 .as_str()
                 .to_string(),
-            subagent_run_id: runtime
-                .get(&n.id)
-                .and_then(|rt| rt.subagent_run_id.clone()),
+            subagent_run_id: runtime.get(&n.id).and_then(|rt| rt.subagent_run_id.clone()),
         })
         .collect();
     Ok(FlowSnapshot { nodes })
@@ -551,9 +547,13 @@ pub async fn get_flow_snapshot(
     require_session_id(&session_id)?;
     let db = db_state.inner().local_db();
     let snapshot = tokio::task::spawn_blocking(move || -> Result<FlowSnapshot, CoreError> {
-        let declaration = db.get_session_meta(FLOW_DECLARATION_KEY).map_err(map_db_err)?;
+        let declaration = db
+            .get_session_meta(FLOW_DECLARATION_KEY)
+            .map_err(map_db_err)?;
         let state = db.get_session_meta(FLOW_STATE_KEY).map_err(map_db_err)?;
-        let on_failed = db.get_session_meta(FLOW_ON_FAILED_KEY).map_err(map_db_err)?;
+        let on_failed = db
+            .get_session_meta(FLOW_ON_FAILED_KEY)
+            .map_err(map_db_err)?;
         let agents = db.load_session_agents(&session_id).map_err(map_db_err)?;
         build_flow_snapshot(declaration, state, on_failed, &agents)
     })
@@ -797,7 +797,8 @@ mod tests {
         );
         db.set_session_meta(&out_dir_key, "/tmp/conex/x/2026-08-05-s1")
             .unwrap();
-        db.set_session_meta(&out_root_key, ".agent-outputs").unwrap();
+        db.set_session_meta(&out_root_key, ".agent-outputs")
+            .unwrap();
 
         let (dir, root) = delete_session_and_read_meta(&db, "s1").unwrap();
         assert_eq!(dir.as_deref(), Some("/tmp/conex/x/2026-08-05-s1"));
@@ -848,7 +849,10 @@ mod tests {
             false,
         );
         assert!(result.cleaned, "notice: {}", result.notice);
-        assert_eq!(result.trashed_dirs, vec![out_dir.to_string_lossy().into_owned()]);
+        assert_eq!(
+            result.trashed_dirs,
+            vec![out_dir.to_string_lossy().into_owned()]
+        );
         assert!(!out_dir.exists(), "产出目录应已移入回收站");
 
         // ③ trash 注册断言：条目可见、原路径正确、类型为目录
@@ -861,7 +865,11 @@ mod tests {
         // ④ 清理通知发出：结果 + 回收站位置
         assert!(result.notice.contains("移入回收站"));
         assert!(result.notice.contains("回收站位置"));
-        assert!(result.trash_root.contains("trash"), "回收站位置应指向 trash 根：{}", result.trash_root);
+        assert!(
+            result.trash_root.contains("trash"),
+            "回收站位置应指向 trash 根：{}",
+            result.trash_root
+        );
     }
 
     /// 无产出目录的会话删除：清理为干净 no-op，通知说明无需清理
@@ -887,9 +895,9 @@ mod tests {
         assert!(!result.cleaned);
         assert!(result.notice.contains("未发现会话产出目录"));
         assert!(result.notice.contains("回收站位置"));
-        assert!(
-            conex_fs::trash::TrashService::new(trash.path()).list().is_empty()
-        );
+        assert!(conex_fs::trash::TrashService::new(trash.path())
+            .list()
+            .is_empty());
     }
 
     // ── F11b（T-D-12）：get_flow_snapshot 只读快照查询 ──
@@ -935,7 +943,14 @@ mod tests {
     }
 
     /// 直接从库读取原始 flow 键（模拟命令侧读取面）
-    fn read_raw_flow(db: &LocalDb) -> (Option<String>, Option<String>, Option<String>, Vec<SessionAgent>) {
+    fn read_raw_flow(
+        db: &LocalDb,
+    ) -> (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Vec<SessionAgent>,
+    ) {
         (
             db.get_session_meta(FLOW_DECLARATION_KEY).unwrap(),
             db.get_session_meta(FLOW_STATE_KEY).unwrap(),
@@ -1047,11 +1062,8 @@ mod tests {
         let (decl, state, on_failed, agents) = read_raw_flow(&db);
         let snap = build_flow_snapshot(decl, state, on_failed, &agents).unwrap();
         assert_eq!(snap.nodes.len(), 4, "节点数 = 声明任务数");
-        let by_id: HashMap<&str, &FlowSnapshotNode> = snap
-            .nodes
-            .iter()
-            .map(|n| (n.id.as_str(), n))
-            .collect();
+        let by_id: HashMap<&str, &FlowSnapshotNode> =
+            snap.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         // 状态与持久化数据一致（flow_state + session_agents 拼装）
         assert_eq!(by_id["t1"].state, "completed");
         assert_eq!(by_id["t1"].subagent_run_id.as_deref(), Some("run-1"));
@@ -1062,7 +1074,10 @@ mod tests {
         assert_eq!(by_id["t4"].subagent_run_id.as_deref(), Some("run-4"));
         // 声明字段透传（含依赖边）
         assert_eq!(by_id["t1"].depends_on, Vec::<String>::new());
-        assert_eq!(by_id["t3"].depends_on, vec!["t1".to_string(), "t2".to_string()]);
+        assert_eq!(
+            by_id["t3"].depends_on,
+            vec!["t1".to_string(), "t2".to_string()]
+        );
         assert!(by_id["t1"].parallel);
         assert!(by_id["t3"].is_composite);
         assert!(!by_id["t2"].is_composite);
@@ -1119,11 +1134,8 @@ mod tests {
         // 无 flow_on_failed 键 → 会话级默认 Block：b、c 传递阻塞
         let (decl, state, on_failed, agents) = read_raw_flow(&db);
         let snap = build_flow_snapshot(decl, state, on_failed, &agents).unwrap();
-        let by_id: HashMap<&str, &FlowSnapshotNode> = snap
-            .nodes
-            .iter()
-            .map(|n| (n.id.as_str(), n))
-            .collect();
+        let by_id: HashMap<&str, &FlowSnapshotNode> =
+            snap.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         assert_eq!(by_id["a"].state, "failed");
         assert_eq!(by_id["b"].state, "blocked");
         assert_eq!(by_id["c"].state, "blocked", "Block 传递阻塞");
@@ -1172,13 +1184,13 @@ mod tests {
 
         let (decl, state, on_failed, agents) = read_raw_flow(&db);
         let snap = build_flow_snapshot(decl, state, on_failed, &agents).unwrap();
-        let by_id: HashMap<&str, &FlowSnapshotNode> = snap
-            .nodes
-            .iter()
-            .map(|n| (n.id.as_str(), n))
-            .collect();
+        let by_id: HashMap<&str, &FlowSnapshotNode> =
+            snap.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         assert_eq!(by_id["a"].state, "failed");
-        assert_eq!(by_id["b"].state, "pending", "Skip 策略：失败视为满足，不阻塞");
+        assert_eq!(
+            by_id["b"].state, "pending",
+            "Skip 策略：失败视为满足，不阻塞"
+        );
     }
 
     /// 节点级策略覆盖：失败节点的节点级 on_failed 放宽（Report）→ 其依赖者
@@ -1245,21 +1257,27 @@ mod tests {
         );
         db.save_session_agents(
             "s1",
-            &[sample_agent("run-a", "failed"), sample_agent("run-d", "failed")],
+            &[
+                sample_agent("run-a", "failed"),
+                sample_agent("run-d", "failed"),
+            ],
         )
         .unwrap();
 
         let (decl, state, on_failed, agents) = read_raw_flow(&db);
         let snap = build_flow_snapshot(decl, state, on_failed, &agents).unwrap();
-        let by_id: HashMap<&str, &FlowSnapshotNode> = snap
-            .nodes
-            .iter()
-            .map(|n| (n.id.as_str(), n))
-            .collect();
+        let by_id: HashMap<&str, &FlowSnapshotNode> =
+            snap.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         assert_eq!(by_id["a"].state, "failed");
-        assert_eq!(by_id["b"].state, "pending", "失败节点 a 的 Report 覆盖会话级 Block");
+        assert_eq!(
+            by_id["b"].state, "pending",
+            "失败节点 a 的 Report 覆盖会话级 Block"
+        );
         assert_eq!(by_id["d"].state, "failed");
-        assert_eq!(by_id["c"].state, "blocked", "失败节点 d 未覆盖 → 按会话级 Block 阻塞");
+        assert_eq!(
+            by_id["c"].state, "blocked",
+            "失败节点 d 未覆盖 → 按会话级 Block 阻塞"
+        );
     }
 
     /// 损坏 JSON 显式报错（与 FlowScheduler::load 的解析失败语义一致）
@@ -1267,9 +1285,11 @@ mod tests {
     fn flow_snapshot_parse_failure_errors() {
         let db = LocalDb::open_in_memory().unwrap();
         db.upsert_session_entry(&sample_entry("s1")).unwrap();
-        db.set_session_meta(FLOW_DECLARATION_KEY, "{corrupt").unwrap();
+        db.set_session_meta(FLOW_DECLARATION_KEY, "{corrupt")
+            .unwrap();
         let (decl, state, on_failed, agents) = read_raw_flow(&db);
-        let err = build_flow_snapshot(decl, state, on_failed, &agents).expect_err("损坏 JSON 应报错");
+        let err =
+            build_flow_snapshot(decl, state, on_failed, &agents).expect_err("损坏 JSON 应报错");
         match err {
             CoreError::Internal(msg) => assert!(msg.contains("flow_declaration 解析失败")),
             other => panic!("expected Internal, got {other:?}"),
@@ -1314,7 +1334,10 @@ mod tests {
         assert_eq!(n0["subagentRunId"], "run-1");
         let n1 = &json["nodes"][1];
         assert_eq!(n1["dependsOn"], serde_json::json!(["t1", "t2"]));
-        assert!(n1.get("subagentRunId").is_none(), "未启动节点省略 subagentRunId");
+        assert!(
+            n1.get("subagentRunId").is_none(),
+            "未启动节点省略 subagentRunId"
+        );
         // 不得出现 snake_case 键
         assert!(n0.get("depends_on").is_none());
         assert!(n0.get("is_composite").is_none());

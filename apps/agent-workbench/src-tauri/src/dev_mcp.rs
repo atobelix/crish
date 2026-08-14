@@ -33,7 +33,9 @@ const MCP_SOCKET_PORT: u16 = 4000;
 /// 读取开关环境变量：仅精确等于 "1" 生效，其余取值一律关闭（防
 /// `CRISH_MCP_SOCKET=0` / `=true` 之类的近似取值误开）。
 fn env_flag(name: &str) -> bool {
-    std::env::var(name).map(|value| value == "1").unwrap_or(false)
+    std::env::var(name)
+        .map(|value| value == "1")
+        .unwrap_or(false)
 }
 
 /// MCP socket 是否开启（debug + env 双条件；release 由插件自身拒绝兜底）。
@@ -55,7 +57,9 @@ pub(crate) fn mcp_exec_enabled() -> bool {
 /// release 构建下该函数不参与编译（main.rs 由 `#[cfg(debug_assertions)]` 分支调用），
 /// 插件自身的 `allow_release_builds=false` 作为第二重保险。
 #[cfg(debug_assertions)]
-pub(crate) fn register_if_enabled(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+pub(crate) fn register_if_enabled(
+    builder: tauri::Builder<tauri::Wry>,
+) -> tauri::Builder<tauri::Wry> {
     if !mcp_socket_enabled() {
         return builder;
     }

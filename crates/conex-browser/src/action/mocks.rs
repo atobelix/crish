@@ -114,13 +114,11 @@ impl MockOps {
             counts: HashMap::new(),
             url: "https://example.com".to_string(),
             url_after_mouse: None,
-            viewport: ViewportSize { width: 1280.0, height: 720.0 },
-            node_by_backend: HashMap::from([
-                (11, 111),
-                (21, 121),
-                (22, 122),
-                (31, 131),
-            ]),
+            viewport: ViewportSize {
+                width: 1280.0,
+                height: 720.0,
+            },
+            node_by_backend: HashMap::from([(11, 111), (21, 121), (22, 122), (31, 131)]),
             box_models: HashMap::from([
                 (111, box_at(0.0, 0.0, 100.0, 50.0)),
                 (121, box_at(200.0, 0.0, 100.0, 50.0)),
@@ -146,13 +144,18 @@ impl MockOps {
             isolated_world: Some("world-42".to_string()),
             isolated_result: Value::Null,
         };
-        MockOps { state: Arc::new(Mutex::new(state)) }
+        MockOps {
+            state: Arc::new(Mutex::new(state)),
+        }
     }
 
     fn record(&self, op: MockOp, detail: impl Into<String>) {
         let mut s = self.state.lock().unwrap_or_else(|p| p.into_inner());
         *s.counts.entry(op).or_insert(0) += 1;
-        s.calls.push(MockCall { op, detail: detail.into() });
+        s.calls.push(MockCall {
+            op,
+            detail: detail.into(),
+        });
     }
 
     fn inject(&self, op: MockOp) -> Option<ActionError> {
@@ -257,7 +260,12 @@ impl PageOps for MockOps {
         if self.hangs(MockOp::CurrentUrl) {
             std::future::pending().await
         }
-        Ok(self.state.lock().unwrap_or_else(|p| p.into_inner()).url.clone())
+        Ok(self
+            .state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .url
+            .clone())
     }
 
     async fn viewport(&self) -> Result<ViewportSize, ActionError> {
@@ -265,7 +273,11 @@ impl PageOps for MockOps {
         if let Some(err) = self.inject(MockOp::Viewport) {
             return Err(err);
         }
-        Ok(self.state.lock().unwrap_or_else(|p| p.into_inner()).viewport)
+        Ok(self
+            .state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .viewport)
     }
 
     async fn push_nodes(&self, backend_ids: &[i64]) -> Result<Vec<i64>, ActionError> {
@@ -416,8 +428,15 @@ impl PageOps for MockOps {
             .ok_or_else(|| ActionError::new(ActionErrorKind::Unsupported, "世界创建失败（注入）"))
     }
 
-    async fn evaluate_isolated(&self, world_id: &str, expression: &str) -> Result<Value, ActionError> {
-        self.record(MockOp::EvaluateIsolated, format!("world={world_id} expr={expression}"));
+    async fn evaluate_isolated(
+        &self,
+        world_id: &str,
+        expression: &str,
+    ) -> Result<Value, ActionError> {
+        self.record(
+            MockOp::EvaluateIsolated,
+            format!("world={world_id} expr={expression}"),
+        );
         if let Some(err) = self.inject(MockOp::EvaluateIsolated) {
             return Err(err);
         }
@@ -430,7 +449,11 @@ impl PageOps for MockOps {
         if let Some(err) = self.inject(MockOp::NetworkInFlight) {
             return Err(err);
         }
-        Ok(self.state.lock().unwrap_or_else(|p| p.into_inner()).in_flight)
+        Ok(self
+            .state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .in_flight)
     }
 
     async fn set_file_input_files(
@@ -489,7 +512,12 @@ impl PageOps for MockOps {
         if let Some(err) = self.inject(MockOp::AwaitConnectionRestored) {
             return Err(err);
         }
-        if self.state.lock().unwrap_or_else(|p| p.into_inner()).restored {
+        if self
+            .state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .restored
+        {
             Ok(())
         } else {
             Err(ActionError::new(
@@ -637,11 +665,16 @@ pub struct RecordingDelay {
 
 impl RecordingDelay {
     pub fn new() -> Self {
-        RecordingDelay { sleeps: Arc::new(Mutex::new(Vec::new())) }
+        RecordingDelay {
+            sleeps: Arc::new(Mutex::new(Vec::new())),
+        }
     }
 
     pub fn durations(&self) -> Vec<Duration> {
-        self.sleeps.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.sleeps
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 }
 

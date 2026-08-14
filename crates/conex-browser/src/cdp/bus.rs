@@ -125,30 +125,66 @@ pub struct FrameChunk {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserEvent {
     // —— 连接面 ——
-    ConnectionLost { attempt: u32 },
+    ConnectionLost {
+        attempt: u32,
+    },
     /// epoch = global_epoch（R-1 跨标签失效语义）；维度 12 据此重启帧通道（R-9-3）
-    ConnectionRestored { elapsed_ms: u64, epoch: u64 },
+    ConnectionRestored {
+        elapsed_ms: u64,
+        epoch: u64,
+    },
     // —— 导航面 ——
     /// frameStartedNavigating
-    NavigationStarted { session: String, frame: String, url: String },
+    NavigationStarted {
+        session: String,
+        frame: String,
+        url: String,
+    },
     /// frameNavigated（main = 主 frame）
-    Navigated { session: String, frame: String, url: String, main: bool },
+    Navigated {
+        session: String,
+        frame: String,
+        url: String,
+        main: bool,
+    },
     /// SPA pushState/hash
-    NavigatedWithinDocument { session: String, frame: String, url: String },
+    NavigatedWithinDocument {
+        session: String,
+        frame: String,
+        url: String,
+    },
     /// domContent/loadEventFired
-    Lifecycle { session: String, frame: String, kind: LifecycleKind },
+    Lifecycle {
+        session: String,
+        frame: String,
+        kind: LifecycleKind,
+    },
     // —— 目标/会话面 ——
     TargetCreated(TargetInfo),
-    TargetDestroyed { target_id: String },
+    TargetDestroyed {
+        target_id: String,
+    },
     TargetInfoChanged(TargetInfo),
-    SessionAttached { target_id: String, session: String },
+    SessionAttached {
+        target_id: String,
+        session: String,
+    },
     // —— 内容变更面 ——
-    DomChanged { session: String, kind: DomChangeKind },
+    DomChanged {
+        session: String,
+        kind: DomChangeKind,
+    },
     // —— 对话框/弹窗面 ——
     DialogOpened(DialogInfo),
-    DialogClosed { session: String, accepted: bool },
+    DialogClosed {
+        session: String,
+        accepted: bool,
+    },
     /// window.open 收口请求（§7.2，域名门禁裁决后 allow/deny）
-    WindowOpenRequested { url: String, session: String },
+    WindowOpenRequested {
+        url: String,
+        session: String,
+    },
     // —— 脚本/控制台面 ——
     /// url/line：来源脚本 URL 与行号（G-11 补齐；consoleAPICalled 取
     /// stackTrace.callFrames[0]、pageError 取 entry，缺省 None）
@@ -161,7 +197,12 @@ pub enum BrowserEvent {
     },
     /// url/line：来源脚本 URL 与行号（G-11 补齐；exceptionThrown 取
     /// exceptionDetails、pageError 取 entry，缺省 None）
-    PageError { session: String, text: String, url: Option<String>, line: Option<u64> },
+    PageError {
+        session: String,
+        text: String,
+        url: Option<String>,
+        line: Option<u64>,
+    },
     // —— 网络面（维度 17 门禁/审计消费）——
     /// status：HTTP 状态码（G-11 补齐；requestWillBeSent 时为 None，由
     /// responseReceived 转译提供）
@@ -173,15 +214,33 @@ pub enum BrowserEvent {
     },
     /// size：响应体编码后字节数（G-11 补齐；loadingFinished 取
     /// encodedDataLength，失败类终止事件为 None）
-    NetworkDone { request_id: String, ok: bool, size: Option<u64> },
+    NetworkDone {
+        request_id: String,
+        ok: bool,
+        size: Option<u64>,
+    },
     // —— 版本面（R-1 per-tab）——
-    VersionAdvanced { tab_id: String, from: u64, to: u64, reason: VersionReason },
+    VersionAdvanced {
+        tab_id: String,
+        from: u64,
+        to: u64,
+        reason: VersionReason,
+    },
     /// 重连/崩溃重启：global_epoch+1，全部标签版本失效
-    VersionReset { epoch: u64, reason: VersionReason },
+    VersionReset {
+        epoch: u64,
+        reason: VersionReason,
+    },
     // —— 标签页列表（重连对账）——
-    TargetsReconciled { tabs: Vec<TabSummary> },
+    TargetsReconciled {
+        tabs: Vec<TabSummary>,
+    },
     /// R-3 补齐：fileChooserOpened（维度 14 上传触发）
-    FileChooserOpened { session: String, frame: String, backend_node_id: i64 },
+    FileChooserOpened {
+        session: String,
+        frame: String,
+        backend_node_id: i64,
+    },
 }
 
 /// 分类忽略（含原因；未知 method 记 debug 忽略，宽容解析）。
@@ -261,39 +320,37 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
     let method = event.method.as_str();
     match method {
         // —— 目标/会话面 ——
-        "Target.targetCreated" => {
-            typed::<TargetCreatedEvent>(&event.params, |e| BrowserEvent::TargetCreated(e.target_info))
-        }
-        "Target.targetDestroyed" => typed::<TargetDestroyedEvent>(&event.params, |e| {
-            BrowserEvent::TargetDestroyed {
-                target_id: e.target_id,
-            }
+        "Target.targetCreated" => typed::<TargetCreatedEvent>(&event.params, |e| {
+            BrowserEvent::TargetCreated(e.target_info)
         }),
+        "Target.targetDestroyed" => {
+            typed::<TargetDestroyedEvent>(&event.params, |e| BrowserEvent::TargetDestroyed {
+                target_id: e.target_id,
+            })
+        }
         "Target.targetInfoChanged" => typed::<TargetCreatedEvent>(&event.params, |e| {
             BrowserEvent::TargetInfoChanged(e.target_info)
         }),
-        "Target.attachedToTarget" => typed::<AttachedToTargetEvent>(&event.params, |e| {
-            BrowserEvent::SessionAttached {
+        "Target.attachedToTarget" => {
+            typed::<AttachedToTargetEvent>(&event.params, |e| BrowserEvent::SessionAttached {
                 target_id: e.target_info.target_id,
                 session: e.session_id,
-            }
-        }),
+            })
+        }
         "Target.detachedFromTarget" => Err(Ignored("detachedFromTarget 不订阅".to_string())),
         // —— 导航面 ——
-        "Page.frameStartedNavigating" => typed::<FrameEvent>(&event.params, |e| {
-            BrowserEvent::NavigationStarted {
+        "Page.frameStartedNavigating" => {
+            typed::<FrameEvent>(&event.params, |e| BrowserEvent::NavigationStarted {
                 session: session(),
                 frame: e.frame.id,
                 url: e.frame.url,
-            }
-        }),
-        "Page.frameNavigated" => typed::<FrameEvent>(&event.params, |e| {
-            BrowserEvent::Navigated {
-                session: session(),
-                frame: e.frame.id,
-                url: e.frame.url,
-                main: e.frame.parent_id.is_none(),
-            }
+            })
+        }
+        "Page.frameNavigated" => typed::<FrameEvent>(&event.params, |e| BrowserEvent::Navigated {
+            session: session(),
+            frame: e.frame.id,
+            url: e.frame.url,
+            main: e.frame.parent_id.is_none(),
         }),
         "Page.navigatedWithinDocument" => {
             typed::<NavigatedWithinDocumentEvent>(&event.params, |e| {
@@ -343,18 +400,18 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
             session: session(),
             kind: DomChangeKind::SetChildNodes,
         }),
-        "Page.frameAttached" => typed::<FrameAttachedEvent>(&event.params, |_| {
-            BrowserEvent::DomChanged {
+        "Page.frameAttached" => {
+            typed::<FrameAttachedEvent>(&event.params, |_| BrowserEvent::DomChanged {
                 session: session(),
                 kind: DomChangeKind::FrameAttached,
-            }
-        }),
-        "Page.frameDetached" => typed::<FrameDetachedEvent>(&event.params, |_| {
-            BrowserEvent::DomChanged {
+            })
+        }
+        "Page.frameDetached" => {
+            typed::<FrameDetachedEvent>(&event.params, |_| BrowserEvent::DomChanged {
                 session: session(),
                 kind: DomChangeKind::FrameDetached,
-            }
-        }),
+            })
+        }
         // —— 对话框/弹窗面 ——
         "Page.javascriptDialogOpening" => {
             typed::<JavascriptDialogOpeningEvent>(&event.params, |e| {
@@ -368,19 +425,17 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
             })
         }
         "Page.javascriptDialogClosed" => {
-            typed::<JavascriptDialogClosedEvent>(&event.params, |e| {
-                BrowserEvent::DialogClosed {
-                    session: session(),
-                    accepted: e.result,
-                }
+            typed::<JavascriptDialogClosedEvent>(&event.params, |e| BrowserEvent::DialogClosed {
+                session: session(),
+                accepted: e.result,
             })
         }
-        "Page.windowOpen" => typed::<WindowOpenEvent>(&event.params, |e| {
-            BrowserEvent::WindowOpenRequested {
+        "Page.windowOpen" => {
+            typed::<WindowOpenEvent>(&event.params, |e| BrowserEvent::WindowOpenRequested {
                 url: e.url,
                 session: session(),
-            }
-        }),
+            })
+        }
         // —— 脚本/控制台面 ——
         "Runtime.consoleAPICalled" => typed::<ConsoleApiCalledEvent>(&event.params, |e| {
             let level = match e.call_type.as_str() {
@@ -407,9 +462,7 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
             let call_frame = event.params["stackTrace"]["callFrames"]
                 .as_array()
                 .and_then(|frames| frames.first());
-            let url = call_frame
-                .and_then(|f| f["url"].as_str())
-                .map(String::from);
+            let url = call_frame.and_then(|f| f["url"].as_str()).map(String::from);
             let line = call_frame
                 .and_then(|f| f["lineNumber"].as_i64())
                 .filter(|v| *v >= 0)
@@ -504,13 +557,13 @@ pub fn classify(event: &CdpEvent) -> Result<BrowserEvent, Ignored> {
             size: None,
         }),
         // —— R-3 补齐：上传触发 ——
-        "Page.fileChooserOpened" => typed::<FileChooserOpenedEvent>(&event.params, |e| {
-            BrowserEvent::FileChooserOpened {
+        "Page.fileChooserOpened" => {
+            typed::<FileChooserOpenedEvent>(&event.params, |e| BrowserEvent::FileChooserOpened {
                 session: session(),
                 frame: e.frame_id,
                 backend_node_id: e.backend_node_id,
-            }
-        }),
+            })
+        }
         // —— 帧专用通道（§5.2 不入 typed 总线）——
         "Page.screencastFrame" | "Page.screencastVisibilityChanged" => {
             Err(Ignored("screencast 帧走专用通道".to_string()))
@@ -559,16 +612,11 @@ pub fn parse_frame(event: &CdpEvent) -> Option<FrameChunk> {
         session,
         ack_session,
         // frameNumber 缺省回退帧时间戳毫秒（Chrome 151 实测不发该字段）
-        frame: event.params["frameNumber"]
-            .as_u64()
-            .unwrap_or(timestamp_ms),
+        frame: event.params["frameNumber"].as_u64().unwrap_or(timestamp_ms),
         timestamp_ms,
         // 尺寸按浮点解析取整（Chrome 151 实测为浮点值）
         device_width: meta["deviceWidth"].as_f64().unwrap_or(0.0).round() as u32,
-        device_height: meta["deviceHeight"]
-            .as_f64()
-            .unwrap_or(0.0)
-            .round() as u32,
+        device_height: meta["deviceHeight"].as_f64().unwrap_or(0.0).round() as u32,
     })
 }
 
@@ -681,9 +729,23 @@ mod tests {
         }
         // 后续事件仍按序可得（自愈：不丢后续）
         let got = slow.recv().await.expect("重对齐后应能继续消费");
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r2".to_string(), ok: true, size: None });
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkDone {
+                request_id: "r2".to_string(),
+                ok: true,
+                size: None
+            }
+        );
         let got = slow.recv().await.expect("重对齐后应能继续消费");
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r3".to_string(), ok: true, size: None });
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkDone {
+                request_id: "r3".to_string(),
+                ok: true,
+                size: None
+            }
+        );
 
         // 版本跟踪器自愈（U-2）：Lagged 检测 → 全标签 +1000 + epoch+1 + VersionReset
         let bus2 = BusHandle::new(64, 4);
@@ -702,7 +764,10 @@ mod tests {
         let got = rx.recv().await.expect("应广播 VersionReset");
         assert!(matches!(
             got,
-            BrowserEvent::VersionReset { epoch: 1, reason: VersionReason::LaggedResync }
+            BrowserEvent::VersionReset {
+                epoch: 1,
+                reason: VersionReason::LaggedResync
+            }
         ));
     }
 
@@ -829,7 +894,10 @@ mod tests {
         assert_eq!(parsed.device_width, 1280, "浮点宽度取整");
         assert_eq!(parsed.device_height, 634, "浮点高度取整（633.6 → 634）");
         assert_eq!(parsed.timestamp_ms, 1_786_338_969_668, "时间戳毫秒");
-        assert_eq!(parsed.frame, 1_786_338_969_668, "无 frameNumber 回退时间戳毫秒");
+        assert_eq!(
+            parsed.frame, 1_786_338_969_668,
+            "无 frameNumber 回退时间戳毫秒"
+        );
 
         // 同信封两帧：帧序号（时间戳回退）互异 → 帧泵去重不误杀
         let evt2 = raw(
@@ -918,7 +986,10 @@ mod tests {
         );
         assert_eq!(
             classify(&e).unwrap(),
-            BrowserEvent::SessionAttached { target_id: "T2".to_string(), session: "S2".to_string() }
+            BrowserEvent::SessionAttached {
+                target_id: "T2".to_string(),
+                session: "S2".to_string()
+            }
         );
 
         let e = raw(
@@ -926,7 +997,10 @@ mod tests {
             json!({ "url": "https://e.com", "message": "hello", "type": "alert", "defaultPrompt": null }),
             Some("S1"),
         );
-        assert!(matches!(classify(&e).unwrap(), BrowserEvent::DialogOpened(_)));
+        assert!(matches!(
+            classify(&e).unwrap(),
+            BrowserEvent::DialogOpened(_)
+        ));
 
         // 未知事件宽容忽略
         let e = raw("Foo.bar", json!({}), None);
@@ -948,8 +1022,12 @@ mod tests {
             "openerId": "T0",
         });
         // targetCreated → TargetCreated 全字段透传
-        let got = classify(&raw("Target.targetCreated", json!({ "targetInfo": info }), None))
-            .expect("targetCreated 应转译");
+        let got = classify(&raw(
+            "Target.targetCreated",
+            json!({ "targetInfo": info }),
+            None,
+        ))
+        .expect("targetCreated 应转译");
         match got {
             BrowserEvent::TargetCreated(t) => {
                 assert_eq!(t.target_id, "T1");
@@ -963,30 +1041,52 @@ mod tests {
             other => panic!("应为 TargetCreated，实际 {other:?}"),
         }
         // targetInfoChanged → TargetInfoChanged
-        let got = classify(&raw("Target.targetInfoChanged", json!({ "targetInfo": info }), None))
-            .expect("targetInfoChanged 应转译");
+        let got = classify(&raw(
+            "Target.targetInfoChanged",
+            json!({ "targetInfo": info }),
+            None,
+        ))
+        .expect("targetInfoChanged 应转译");
         assert!(matches!(got, BrowserEvent::TargetInfoChanged(t) if t.target_id == "T1"));
         // targetDestroyed → TargetDestroyed
-        let got = classify(&raw("Target.targetDestroyed", json!({ "targetId": "T9" }), None))
-            .expect("targetDestroyed 应转译");
-        assert_eq!(got, BrowserEvent::TargetDestroyed { target_id: "T9".to_string() });
+        let got = classify(&raw(
+            "Target.targetDestroyed",
+            json!({ "targetId": "T9" }),
+            None,
+        ))
+        .expect("targetDestroyed 应转译");
+        assert_eq!(
+            got,
+            BrowserEvent::TargetDestroyed {
+                target_id: "T9".to_string()
+            }
+        );
         // attachedToTarget → SessionAttached（双层路由建立点）
-        let got = classify(
-            &raw(
-                "Target.attachedToTarget",
-                json!({
-                    "sessionId": "S2",
-                    "targetInfo": { "targetId": "T2", "type": "page", "title": "t", "url": "u" },
-                    "waitingForDebugger": false,
-                }),
-                None,
-            ),
-        )
+        let got = classify(&raw(
+            "Target.attachedToTarget",
+            json!({
+                "sessionId": "S2",
+                "targetInfo": { "targetId": "T2", "type": "page", "title": "t", "url": "u" },
+                "waitingForDebugger": false,
+            }),
+            None,
+        ))
         .expect("attachedToTarget 应转译");
-        assert_eq!(got, BrowserEvent::SessionAttached { target_id: "T2".to_string(), session: "S2".to_string() });
+        assert_eq!(
+            got,
+            BrowserEvent::SessionAttached {
+                target_id: "T2".to_string(),
+                session: "S2".to_string()
+            }
+        );
         // detachedFromTarget → 显式忽略
         assert!(
-            classify(&raw("Target.detachedFromTarget", json!({ "sessionId": "S2" }), None)).is_err(),
+            classify(&raw(
+                "Target.detachedFromTarget",
+                json!({ "sessionId": "S2" }),
+                None
+            ))
+            .is_err(),
             "detachedFromTarget 不订阅"
         );
     }
@@ -996,58 +1096,96 @@ mod tests {
     #[test]
     fn bus_table_navigation_domain() {
         // frameStartedNavigating → NavigationStarted（FrameInfo 全字段宽容解析）
-        let got = classify(
-            &raw(
-                "Page.frameStartedNavigating",
-                json!({ "frame": { "id": "F1", "url": "https://n.example" } }),
-                Some("S1"),
-            ),
-        )
+        let got = classify(&raw(
+            "Page.frameStartedNavigating",
+            json!({ "frame": { "id": "F1", "url": "https://n.example" } }),
+            Some("S1"),
+        ))
         .expect("frameStartedNavigating 应转译");
         assert_eq!(
             got,
-            BrowserEvent::NavigationStarted { session: "S1".to_string(), frame: "F1".to_string(), url: "https://n.example".to_string() }
+            BrowserEvent::NavigationStarted {
+                session: "S1".to_string(),
+                frame: "F1".to_string(),
+                url: "https://n.example".to_string()
+            }
         );
         // frameNavigated 主帧（parentId 缺省）→ main=true
-        let got = classify(
-            &raw(
-                "Page.frameNavigated",
-                json!({ "frame": { "id": "F1", "url": "https://e.com", "parentId": null } }),
-                Some("S1"),
-            ),
-        )
+        let got = classify(&raw(
+            "Page.frameNavigated",
+            json!({ "frame": { "id": "F1", "url": "https://e.com", "parentId": null } }),
+            Some("S1"),
+        ))
         .expect("frameNavigated 应转译");
         assert_eq!(
             got,
-            BrowserEvent::Navigated { session: "S1".to_string(), frame: "F1".to_string(), url: "https://e.com".to_string(), main: true }
+            BrowserEvent::Navigated {
+                session: "S1".to_string(),
+                frame: "F1".to_string(),
+                url: "https://e.com".to_string(),
+                main: true
+            }
         );
         // frameNavigated 子帧（parentId 存在）→ main=false
-        let got = classify(
-            &raw(
-                "Page.frameNavigated",
-                json!({ "frame": { "id": "F2", "url": "https://i.example", "parentId": "F1" } }),
-                Some("S1"),
-            ),
-        )
+        let got = classify(&raw(
+            "Page.frameNavigated",
+            json!({ "frame": { "id": "F2", "url": "https://i.example", "parentId": "F1" } }),
+            Some("S1"),
+        ))
         .expect("子帧应转译");
         assert_eq!(
             got,
-            BrowserEvent::Navigated { session: "S1".to_string(), frame: "F2".to_string(), url: "https://i.example".to_string(), main: false }
+            BrowserEvent::Navigated {
+                session: "S1".to_string(),
+                frame: "F2".to_string(),
+                url: "https://i.example".to_string(),
+                main: false
+            }
         );
         // navigatedWithinDocument（SPA pushState/hash）
-        let got = classify(
-            &raw("Page.navigatedWithinDocument", json!({ "frameId": "F1", "url": "https://e.com/#/route" }), Some("S1")),
-        )
+        let got = classify(&raw(
+            "Page.navigatedWithinDocument",
+            json!({ "frameId": "F1", "url": "https://e.com/#/route" }),
+            Some("S1"),
+        ))
         .expect("navigatedWithinDocument 应转译");
         assert_eq!(
             got,
-            BrowserEvent::NavigatedWithinDocument { session: "S1".to_string(), frame: "F1".to_string(), url: "https://e.com/#/route".to_string() }
+            BrowserEvent::NavigatedWithinDocument {
+                session: "S1".to_string(),
+                frame: "F1".to_string(),
+                url: "https://e.com/#/route".to_string()
+            }
         );
         // domContentEventFired / loadEventFired → Lifecycle
-        let got = classify(&raw("Page.domContentEventFired", json!({ "timestamp": 1.0 }), Some("S1"))).unwrap();
-        assert_eq!(got, BrowserEvent::Lifecycle { session: "S1".to_string(), frame: String::new(), kind: LifecycleKind::DomContent });
-        let got = classify(&raw("Page.loadEventFired", json!({ "timestamp": 2.0 }), Some("S1"))).unwrap();
-        assert_eq!(got, BrowserEvent::Lifecycle { session: "S1".to_string(), frame: String::new(), kind: LifecycleKind::Load });
+        let got = classify(&raw(
+            "Page.domContentEventFired",
+            json!({ "timestamp": 1.0 }),
+            Some("S1"),
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::Lifecycle {
+                session: "S1".to_string(),
+                frame: String::new(),
+                kind: LifecycleKind::DomContent
+            }
+        );
+        let got = classify(&raw(
+            "Page.loadEventFired",
+            json!({ "timestamp": 2.0 }),
+            Some("S1"),
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::Lifecycle {
+                session: "S1".to_string(),
+                frame: String::new(),
+                kind: LifecycleKind::Load
+            }
+        );
     }
 
     /// DOM 域七子类 + frameAttached/frameDetached 归并 → DomChanged 全子类。
@@ -1057,23 +1195,61 @@ mod tests {
             ("DOM.documentUpdated", DomChangeKind::DocumentUpdated),
             ("DOM.childNodeInserted", DomChangeKind::ChildNodeInserted),
             ("DOM.childNodeRemoved", DomChangeKind::ChildNodeRemoved),
-            ("DOM.characterDataModified", DomChangeKind::CharacterDataModified),
+            (
+                "DOM.characterDataModified",
+                DomChangeKind::CharacterDataModified,
+            ),
             ("DOM.attributeModified", DomChangeKind::AttributeModified),
             ("DOM.attributeRemoved", DomChangeKind::AttributeRemoved),
             ("DOM.setChildNodes", DomChangeKind::SetChildNodes),
         ];
         for (method, kind) in cases {
             let got = classify(&raw(method, json!({}), Some("S1"))).expect("应转译");
-            assert_eq!(got, BrowserEvent::DomChanged { session: "S1".to_string(), kind }, "{method}");
+            assert_eq!(
+                got,
+                BrowserEvent::DomChanged {
+                    session: "S1".to_string(),
+                    kind
+                },
+                "{method}"
+            );
         }
         // frameAttached / frameDetached 归入 DOM 合并窗口子类
-        let got = classify(&raw("Page.frameAttached", json!({ "frameId": "F3", "parentFrameId": "F1" }), Some("S1"))).unwrap();
-        assert_eq!(got, BrowserEvent::DomChanged { session: "S1".to_string(), kind: DomChangeKind::FrameAttached });
-        let got = classify(&raw("Page.frameDetached", json!({ "frameId": "F3", "reason": "remove" }), Some("S1"))).unwrap();
-        assert_eq!(got, BrowserEvent::DomChanged { session: "S1".to_string(), kind: DomChangeKind::FrameDetached });
+        let got = classify(&raw(
+            "Page.frameAttached",
+            json!({ "frameId": "F3", "parentFrameId": "F1" }),
+            Some("S1"),
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::DomChanged {
+                session: "S1".to_string(),
+                kind: DomChangeKind::FrameAttached
+            }
+        );
+        let got = classify(&raw(
+            "Page.frameDetached",
+            json!({ "frameId": "F3", "reason": "remove" }),
+            Some("S1"),
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::DomChanged {
+                session: "S1".to_string(),
+                kind: DomChangeKind::FrameDetached
+            }
+        );
         // session 缺省 → 空串（宽容解析）
         let got = classify(&raw("DOM.documentUpdated", json!({}), None)).unwrap();
-        assert_eq!(got, BrowserEvent::DomChanged { session: String::new(), kind: DomChangeKind::DocumentUpdated });
+        assert_eq!(
+            got,
+            BrowserEvent::DomChanged {
+                session: String::new(),
+                kind: DomChangeKind::DocumentUpdated
+            }
+        );
     }
 
     /// 对话框/弹窗面：javascriptDialogOpening（含 defaultPrompt）/ javascriptDialogClosed /
@@ -1100,22 +1276,52 @@ mod tests {
             other => panic!("应为 DialogOpened，实际 {other:?}"),
         }
         // defaultPrompt 为 null → None
-        let got = classify(
-            &raw("Page.javascriptDialogOpening", json!({ "url": "u", "message": "m", "type": "alert", "defaultPrompt": null }), Some("S1")),
-        )
+        let got = classify(&raw(
+            "Page.javascriptDialogOpening",
+            json!({ "url": "u", "message": "m", "type": "alert", "defaultPrompt": null }),
+            Some("S1"),
+        ))
         .unwrap();
         assert!(matches!(got, BrowserEvent::DialogOpened(info) if info.default_prompt.is_none()));
         // closed：result=true/false
-        let got = classify(&raw("Page.javascriptDialogClosed", json!({ "result": true, "userGesture": true }), Some("S1"))).unwrap();
-        assert_eq!(got, BrowserEvent::DialogClosed { session: "S1".to_string(), accepted: true });
-        let got = classify(&raw("Page.javascriptDialogClosed", json!({ "result": false }), Some("S1"))).unwrap();
-        assert_eq!(got, BrowserEvent::DialogClosed { session: "S1".to_string(), accepted: false });
+        let got = classify(&raw(
+            "Page.javascriptDialogClosed",
+            json!({ "result": true, "userGesture": true }),
+            Some("S1"),
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::DialogClosed {
+                session: "S1".to_string(),
+                accepted: true
+            }
+        );
+        let got = classify(&raw(
+            "Page.javascriptDialogClosed",
+            json!({ "result": false }),
+            Some("S1"),
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::DialogClosed {
+                session: "S1".to_string(),
+                accepted: false
+            }
+        );
         // windowOpen → WindowOpenRequested
         let got = classify(
             &raw("Page.windowOpen", json!({ "url": "https://pop.example", "windowName": "w", "windowFeatures": ["width=100"], "userGesture": true }), Some("S1")),
         )
         .unwrap();
-        assert_eq!(got, BrowserEvent::WindowOpenRequested { url: "https://pop.example".to_string(), session: "S1".to_string() });
+        assert_eq!(
+            got,
+            BrowserEvent::WindowOpenRequested {
+                url: "https://pop.example".to_string(),
+                session: "S1".to_string()
+            }
+        );
     }
 
     /// 控制台面：consoleAPICalled 全级别映射 + 参数拼接（JSON 序列化语义）；
@@ -1132,13 +1338,11 @@ mod tests {
             ("未知级别", ConsoleLevel::Log),
         ];
         for (call_type, level) in level_cases {
-            let got = classify(
-                &raw(
-                    "Runtime.consoleAPICalled",
-                    json!({ "type": call_type, "args": [ { "type": "string", "value": "你好" } ] }),
-                    Some("S1"),
-                ),
-            )
+            let got = classify(&raw(
+                "Runtime.consoleAPICalled",
+                json!({ "type": call_type, "args": [ { "type": "string", "value": "你好" } ] }),
+                Some("S1"),
+            ))
             .unwrap_or_else(|_| panic!("consoleAPICalled({call_type}) 应转译"));
             // value 经 Value::to_string() 序列化 → 字符串带 JSON 引号
             assert_eq!(
@@ -1154,20 +1358,18 @@ mod tests {
             );
         }
         // 多参数空格拼接 + 无 value 时回退 description
-        let got = classify(
-            &raw(
-                "Runtime.consoleAPICalled",
-                json!({
-                    "type": "log",
-                    "args": [
-                        { "type": "string", "value": "a" },
-                        { "type": "number", "value": 42 },
-                        { "type": "object", "description": "Object{len:2}" }
-                    ]
-                }),
-                Some("S1"),
-            ),
-        )
+        let got = classify(&raw(
+            "Runtime.consoleAPICalled",
+            json!({
+                "type": "log",
+                "args": [
+                    { "type": "string", "value": "a" },
+                    { "type": "number", "value": 42 },
+                    { "type": "object", "description": "Object{len:2}" }
+                ]
+            }),
+            Some("S1"),
+        ))
         .unwrap();
         assert_eq!(
             got,
@@ -1210,7 +1412,17 @@ mod tests {
             json!({ "type": "log", "args": [ { "type": "string", "value": "x" } ], "stackTrace": { "callFrames": [] } }),
         ] {
             let got = classify(&raw("Runtime.consoleAPICalled", params, Some("S1"))).unwrap();
-            assert!(matches!(got, BrowserEvent::Console { url: None, line: None, .. }), "缺省路径必须 None");
+            assert!(
+                matches!(
+                    got,
+                    BrowserEvent::Console {
+                        url: None,
+                        line: None,
+                        ..
+                    }
+                ),
+                "缺省路径必须 None"
+            );
         }
         // G-11：exceptionThrown → exceptionDetails.url/lineNumber 提取（0-based 原值）
         let got = classify(
@@ -1223,17 +1435,33 @@ mod tests {
         .unwrap();
         match got {
             BrowserEvent::PageError { url, line, .. } => {
-                assert_eq!(url.as_deref(), Some("https://e.com/app.js"), "exceptionDetails.url");
+                assert_eq!(
+                    url.as_deref(),
+                    Some("https://e.com/app.js"),
+                    "exceptionDetails.url"
+                );
                 assert_eq!(line, Some(7), "exceptionDetails.lineNumber");
             }
             other => panic!("应为 PageError，实际 {other:?}"),
         }
         // G-11：exceptionDetails 无 url/lineNumber（eval/内建）→ None
-        let got = classify(
-            &raw("Runtime.exceptionThrown", json!({ "timestamp": 1.0, "exceptionDetails": { "text": "TypeError: y" } }), Some("S1")),
-        )
+        let got = classify(&raw(
+            "Runtime.exceptionThrown",
+            json!({ "timestamp": 1.0, "exceptionDetails": { "text": "TypeError: y" } }),
+            Some("S1"),
+        ))
         .unwrap();
-        assert!(matches!(got, BrowserEvent::PageError { url: None, line: None, .. }), "缺省路径必须 None");
+        assert!(
+            matches!(
+                got,
+                BrowserEvent::PageError {
+                    url: None,
+                    line: None,
+                    ..
+                }
+            ),
+            "缺省路径必须 None"
+        );
         // G-11：pageError → entry.url/lineNumber 提取
         let got = classify(
             &raw(
@@ -1264,7 +1492,15 @@ mod tests {
             ),
         )
         .unwrap();
-        assert_eq!(got, BrowserEvent::NetworkRequest { request_id: "r1".to_string(), url: "https://cdn.example/x.js".to_string(), method: "GET".to_string(), status: None });
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkRequest {
+                request_id: "r1".to_string(),
+                url: "https://cdn.example/x.js".to_string(),
+                method: "GET".to_string(),
+                status: None
+            }
+        );
         // G-11：responseReceived → NetworkRequest 补 status（response.status）
         let got = classify(
             &raw(
@@ -1278,48 +1514,132 @@ mod tests {
             ),
         )
         .unwrap();
-        assert_eq!(got, BrowserEvent::NetworkRequest { request_id: "r1".to_string(), url: "https://cdn.example/x.js".to_string(), method: String::new(), status: Some(200) });
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkRequest {
+                request_id: "r1".to_string(),
+                url: "https://cdn.example/x.js".to_string(),
+                method: String::new(),
+                status: Some(200)
+            }
+        );
         // G-11：responseReceived 缺 status/url → None/空串（宽容解析）
-        let got = classify(
-            &raw("Network.responseReceived", json!({ "requestId": "r3", "response": {} }), None),
-        )
+        let got = classify(&raw(
+            "Network.responseReceived",
+            json!({ "requestId": "r3", "response": {} }),
+            None,
+        ))
         .unwrap();
-        assert!(matches!(got, BrowserEvent::NetworkRequest { request_id: ref id, url: ref u, status: None, .. } if id == "r3" && u.is_empty()), "缺省路径必须 None/空串");
+        assert!(
+            matches!(got, BrowserEvent::NetworkRequest { request_id: ref id, url: ref u, status: None, .. } if id == "r3" && u.is_empty()),
+            "缺省路径必须 None/空串"
+        );
         // 三终止事件 → NetworkDone（ok 语义：仅 loadingFinished 为 true）
-        let got = classify(&raw("Network.loadingFinished", json!({ "requestId": "r1" }), None)).unwrap();
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true, size: None });
+        let got = classify(&raw(
+            "Network.loadingFinished",
+            json!({ "requestId": "r1" }),
+            None,
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkDone {
+                request_id: "r1".to_string(),
+                ok: true,
+                size: None
+            }
+        );
         // G-11：loadingFinished → size = encodedDataLength（整数形态）
-        let got = classify(
-            &raw("Network.loadingFinished", json!({ "requestId": "r1", "encodedDataLength": 12345 }), None),
-        )
+        let got = classify(&raw(
+            "Network.loadingFinished",
+            json!({ "requestId": "r1", "encodedDataLength": 12345 }),
+            None,
+        ))
         .unwrap();
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true, size: Some(12345) });
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkDone {
+                request_id: "r1".to_string(),
+                ok: true,
+                size: Some(12345)
+            }
+        );
         // G-11：encodedDataLength 浮点形态（CDP number 实际形态）也提取
-        let got = classify(
-            &raw("Network.loadingFinished", json!({ "requestId": "r1", "encodedDataLength": 12345.0 }), None),
-        )
+        let got = classify(&raw(
+            "Network.loadingFinished",
+            json!({ "requestId": "r1", "encodedDataLength": 12345.0 }),
+            None,
+        ))
         .unwrap();
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true, size: Some(12345) });
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkDone {
+                request_id: "r1".to_string(),
+                ok: true,
+                size: Some(12345)
+            }
+        );
         // G-11：encodedDataLength 缺失 → size None
-        let got = classify(&raw("Network.loadingFinished", json!({ "requestId": "r1" }), None)).unwrap();
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r1".to_string(), ok: true, size: None });
+        let got = classify(&raw(
+            "Network.loadingFinished",
+            json!({ "requestId": "r1" }),
+            None,
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkDone {
+                request_id: "r1".to_string(),
+                ok: true,
+                size: None
+            }
+        );
         for method in ["Network.loadingFailed", "Network.requestFailed"] {
             let got = classify(&raw(method, json!({ "requestId": "r2" }), None)).unwrap();
-            assert_eq!(got, BrowserEvent::NetworkDone { request_id: "r2".to_string(), ok: false, size: None }, "{method}");
+            assert_eq!(
+                got,
+                BrowserEvent::NetworkDone {
+                    request_id: "r2".to_string(),
+                    ok: false,
+                    size: None
+                },
+                "{method}"
+            );
         }
         // requestId 缺省 → 空串兜底（宽容解析）
-        let got = classify(&raw("Network.loadingFailed", json!({ "errorText": "net::ERR_ABORTED" }), None)).unwrap();
-        assert_eq!(got, BrowserEvent::NetworkDone { request_id: String::new(), ok: false, size: None });
+        let got = classify(&raw(
+            "Network.loadingFailed",
+            json!({ "errorText": "net::ERR_ABORTED" }),
+            None,
+        ))
+        .unwrap();
+        assert_eq!(
+            got,
+            BrowserEvent::NetworkDone {
+                request_id: String::new(),
+                ok: false,
+                size: None
+            }
+        );
     }
 
     /// R-3 补齐面：fileChooserOpened → FileChooserOpened（上传触发）。
     #[test]
     fn bus_table_file_chooser() {
-        let got = classify(
-            &raw("Page.fileChooserOpened", json!({ "frameId": "F1", "mode": "selectMultiple", "backendNodeId": 77 }), Some("S1")),
-        )
+        let got = classify(&raw(
+            "Page.fileChooserOpened",
+            json!({ "frameId": "F1", "mode": "selectMultiple", "backendNodeId": 77 }),
+            Some("S1"),
+        ))
         .expect("fileChooserOpened 应转译");
-        assert_eq!(got, BrowserEvent::FileChooserOpened { session: "S1".to_string(), frame: "F1".to_string(), backend_node_id: 77 });
+        assert_eq!(
+            got,
+            BrowserEvent::FileChooserOpened {
+                session: "S1".to_string(),
+                frame: "F1".to_string(),
+                backend_node_id: 77
+            }
+        );
     }
 
     /// 忽略面全表：screencast 双事件 / 执行环境三事件 / 未知方法 / 解析失败。
@@ -1337,10 +1657,27 @@ mod tests {
                 "{method} 必须记忽略（不炸事件泵）"
             );
         }
-        assert!(classify(&raw("Nope.nope", json!({}), None)).is_err(), "未知事件宽容忽略");
+        assert!(
+            classify(&raw("Nope.nope", json!({}), None)).is_err(),
+            "未知事件宽容忽略"
+        );
         // 已知方法但参数残缺 → Ignored（宽容解析，不 panic）
-        assert!(classify(&raw("Target.targetCreated", json!({}), None)).is_err(), "参数解析失败应忽略");
-        assert!(classify(&raw("Page.frameNavigated", json!({}), None)).is_err(), "frameNavigated 缺参应忽略");
-        assert!(classify(&raw("Runtime.consoleAPICalled", json!({ "type": "log" }), None)).is_err(), "consoleAPICalled 缺 args 应忽略");
+        assert!(
+            classify(&raw("Target.targetCreated", json!({}), None)).is_err(),
+            "参数解析失败应忽略"
+        );
+        assert!(
+            classify(&raw("Page.frameNavigated", json!({}), None)).is_err(),
+            "frameNavigated 缺参应忽略"
+        );
+        assert!(
+            classify(&raw(
+                "Runtime.consoleAPICalled",
+                json!({ "type": "log" }),
+                None
+            ))
+            .is_err(),
+            "consoleAPICalled 缺 args 应忽略"
+        );
     }
 }

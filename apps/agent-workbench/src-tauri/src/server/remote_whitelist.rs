@@ -30,11 +30,11 @@
 //!   （D5 §4.5「设备管理与服务配置命令（admin 面，仅桌面端）」）；
 //! - 任何以明文返回密钥/令牌/配对码的命令。
 
+use crate::core_event_bridge::EventBridge;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation,
 };
 use conex_types::impact::ImpactAssessment;
-use crate::core_event_bridge::EventBridge;
 
 #[cfg(test)]
 pub(crate) fn remote_source_attempt_marker(command: &str) -> String {
@@ -165,42 +165,138 @@ pub struct RemoteCommandEntry {
 /// 命令总表顺序——测试按序断言防漂移，注册表是命令面的唯一真源）
 pub const REMOTE_COMMAND_WHITELIST: &[RemoteCommandEntry] = &[
     // ── F1 监控域（C01-C10，10 条）──
-    RemoteCommandEntry { name: "getStatus", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "getRunSnapshot", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "readSessionEvents", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "readRunEvents", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "listSessions", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "listBackgroundTasks", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "getTaskOutput", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "getFlowSnapshot", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "listCommands", category: RemoteCommandCategory::Monitor },
-    RemoteCommandEntry { name: "getSearchIndex", category: RemoteCommandCategory::Monitor },
+    RemoteCommandEntry {
+        name: "getStatus",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "getRunSnapshot",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "readSessionEvents",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "readRunEvents",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "listSessions",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "listBackgroundTasks",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "getTaskOutput",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "getFlowSnapshot",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "listCommands",
+        category: RemoteCommandCategory::Monitor,
+    },
+    RemoteCommandEntry {
+        name: "getSearchIndex",
+        category: RemoteCommandCategory::Monitor,
+    },
     // ── F2 审批域（C11-C15，5 条）──
-    RemoteCommandEntry { name: "approve", category: RemoteCommandCategory::Approval },
-    RemoteCommandEntry { name: "deny", category: RemoteCommandCategory::Approval },
-    RemoteCommandEntry { name: "listPendingApprovals", category: RemoteCommandCategory::Approval },
-    RemoteCommandEntry { name: "approvalHistory", category: RemoteCommandCategory::Approval },
-    RemoteCommandEntry { name: "checkCommand", category: RemoteCommandCategory::Approval },
+    RemoteCommandEntry {
+        name: "approve",
+        category: RemoteCommandCategory::Approval,
+    },
+    RemoteCommandEntry {
+        name: "deny",
+        category: RemoteCommandCategory::Approval,
+    },
+    RemoteCommandEntry {
+        name: "listPendingApprovals",
+        category: RemoteCommandCategory::Approval,
+    },
+    RemoteCommandEntry {
+        name: "approvalHistory",
+        category: RemoteCommandCategory::Approval,
+    },
+    RemoteCommandEntry {
+        name: "checkCommand",
+        category: RemoteCommandCategory::Approval,
+    },
     // ── F4 文件域（C16-C23，8 条）──
-    RemoteCommandEntry { name: "listDir", category: RemoteCommandCategory::File },
-    RemoteCommandEntry { name: "readFile", category: RemoteCommandCategory::File },
-    RemoteCommandEntry { name: "writeFile", category: RemoteCommandCategory::File },
-    RemoteCommandEntry { name: "listWorkspaces", category: RemoteCommandCategory::File },
-    RemoteCommandEntry { name: "switchWorkspace", category: RemoteCommandCategory::File },
-    RemoteCommandEntry { name: "searchFiles", category: RemoteCommandCategory::File },
-    RemoteCommandEntry { name: "assetUrl", category: RemoteCommandCategory::File },
-    RemoteCommandEntry { name: "fileStat", category: RemoteCommandCategory::File },
+    RemoteCommandEntry {
+        name: "listDir",
+        category: RemoteCommandCategory::File,
+    },
+    RemoteCommandEntry {
+        name: "readFile",
+        category: RemoteCommandCategory::File,
+    },
+    RemoteCommandEntry {
+        name: "writeFile",
+        category: RemoteCommandCategory::File,
+    },
+    RemoteCommandEntry {
+        name: "listWorkspaces",
+        category: RemoteCommandCategory::File,
+    },
+    RemoteCommandEntry {
+        name: "switchWorkspace",
+        category: RemoteCommandCategory::File,
+    },
+    RemoteCommandEntry {
+        name: "searchFiles",
+        category: RemoteCommandCategory::File,
+    },
+    RemoteCommandEntry {
+        name: "assetUrl",
+        category: RemoteCommandCategory::File,
+    },
+    RemoteCommandEntry {
+        name: "fileStat",
+        category: RemoteCommandCategory::File,
+    },
     // ── F5 会话域（C24-C27，4 条）──
-    RemoteCommandEntry { name: "runTask", category: RemoteCommandCategory::Session },
-    RemoteCommandEntry { name: "runControl", category: RemoteCommandCategory::Session },
-    RemoteCommandEntry { name: "cancelRun", category: RemoteCommandCategory::Session },
-    RemoteCommandEntry { name: "searchSessions", category: RemoteCommandCategory::Session },
+    RemoteCommandEntry {
+        name: "runTask",
+        category: RemoteCommandCategory::Session,
+    },
+    RemoteCommandEntry {
+        name: "runControl",
+        category: RemoteCommandCategory::Session,
+    },
+    RemoteCommandEntry {
+        name: "cancelRun",
+        category: RemoteCommandCategory::Session,
+    },
+    RemoteCommandEntry {
+        name: "searchSessions",
+        category: RemoteCommandCategory::Session,
+    },
     // ── F6 设置域（C28-C32，5 条）──
-    RemoteCommandEntry { name: "getSettings", category: RemoteCommandCategory::Settings },
-    RemoteCommandEntry { name: "setSettings", category: RemoteCommandCategory::Settings },
-    RemoteCommandEntry { name: "settingsConfirm", category: RemoteCommandCategory::Settings },
-    RemoteCommandEntry { name: "pauseAutomation", category: RemoteCommandCategory::Settings },
-    RemoteCommandEntry { name: "queryPresence", category: RemoteCommandCategory::Settings },
+    RemoteCommandEntry {
+        name: "getSettings",
+        category: RemoteCommandCategory::Settings,
+    },
+    RemoteCommandEntry {
+        name: "setSettings",
+        category: RemoteCommandCategory::Settings,
+    },
+    RemoteCommandEntry {
+        name: "settingsConfirm",
+        category: RemoteCommandCategory::Settings,
+    },
+    RemoteCommandEntry {
+        name: "pauseAutomation",
+        category: RemoteCommandCategory::Settings,
+    },
+    RemoteCommandEntry {
+        name: "queryPresence",
+        category: RemoteCommandCategory::Settings,
+    },
 ];
 
 /// 白名单条目总数（M6 §4 C01-C32 冻结口径：32 条）
@@ -276,17 +372,13 @@ mod tests {
             ("queryPresence", RemoteCommandCategory::Settings),
         ];
         assert_eq!(
-            REMOTE_COMMAND_WHITELIST_LEN,
-            32,
+            REMOTE_COMMAND_WHITELIST_LEN, 32,
             "白名单必须恰好 32 条（M6 §4 C01-C32 冻结）"
         );
         assert_eq!(expected.len(), 32, "期望表必须恰好 32 条");
         for (index, (name, category)) in expected.iter().enumerate() {
             let entry = &REMOTE_COMMAND_WHITELIST[index];
-            assert_eq!(
-                entry.name, *name,
-                "第 {index} 条命令名与 M6 表不符（漂移）"
-            );
+            assert_eq!(entry.name, *name, "第 {index} 条命令名与 M6 表不符（漂移）");
             assert_eq!(
                 entry.category, *category,
                 "第 {index} 条 {name} 类别与 M6 功能域不符"

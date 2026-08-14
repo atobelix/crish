@@ -192,13 +192,18 @@ mod tests {
         }
         let n: AxNode = serde_json::from_str(r#"{"nodeId": 42}"#).expect("数字 nodeId 容错失败");
         assert_eq!(n.node_id, "42");
-        let n: AxNode = serde_json::from_str(r#"{"nodeId": "42"}"#).expect("字符串 nodeId 解析失败");
+        let n: AxNode =
+            serde_json::from_str(r#"{"nodeId": "42"}"#).expect("字符串 nodeId 解析失败");
         assert_eq!(n.node_id, "42");
 
         // opt_vec_string_or_int 容错
         #[derive(Deserialize)]
         struct Node {
-            #[serde(default, rename = "childIds", deserialize_with = "opt_vec_string_or_int")]
+            #[serde(
+                default,
+                rename = "childIds",
+                deserialize_with = "opt_vec_string_or_int"
+            )]
             child_ids: Option<Vec<String>>,
         }
         let n: Node = serde_json::from_str(r#"{"childIds":[1,"2",3]}"#).expect("混合数组容错失败");
@@ -210,7 +215,10 @@ mod tests {
     /// 验收 9.1-3：-32601 → DomainUnavailable；-32000 + Context gone → ContextGone
     #[test]
     fn types_error_map_domain_not_implemented() {
-        let e = CdpError::from_wire("DOMSnapshot.captureSnapshot", &wire_error(-32601, "Method not found"));
+        let e = CdpError::from_wire(
+            "DOMSnapshot.captureSnapshot",
+            &wire_error(-32601, "Method not found"),
+        );
         assert!(matches!(
             e,
             CdpError::DomainUnavailable { ref method } if method == "DOMSnapshot.captureSnapshot"
@@ -219,11 +227,17 @@ mod tests {
         let e = CdpError::from_wire("Page.navigate", &wire_error(-32000, "Target closed"));
         assert!(matches!(e, CdpError::ContextGone { .. }));
 
-        let e = CdpError::from_wire("Runtime.evaluate", &wire_error(-32000, "Cannot find context with specified id"));
+        let e = CdpError::from_wire(
+            "Runtime.evaluate",
+            &wire_error(-32000, "Cannot find context with specified id"),
+        );
         assert!(matches!(e, CdpError::ContextGone { .. }));
 
         // 其他 -32000 保持 Server
-        let e = CdpError::from_wire("Page.navigate", &wire_error(-32000, "Session with given id not found."));
+        let e = CdpError::from_wire(
+            "Page.navigate",
+            &wire_error(-32000, "Session with given id not found."),
+        );
         assert!(matches!(e, CdpError::Server { code: -32000, .. }));
 
         // 各错误码归类

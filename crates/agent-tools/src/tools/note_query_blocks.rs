@@ -96,14 +96,14 @@ fn parse_kind_in(args: &JsonValue) -> Result<Option<Vec<String>>, ToolError> {
     match args.get("kind_in") {
         None | Some(JsonValue::Null) => Ok(None),
         Some(v) => {
-            let arr = v.as_array().ok_or_else(|| {
-                ToolError::invalid_input("kind_in must be an array of strings")
-            })?;
+            let arr = v
+                .as_array()
+                .ok_or_else(|| ToolError::invalid_input("kind_in must be an array of strings"))?;
             let mut out = Vec::with_capacity(arr.len());
             for item in arr {
-                let s = item.as_str().ok_or_else(|| {
-                    ToolError::invalid_input("kind_in items must be strings")
-                })?;
+                let s = item
+                    .as_str()
+                    .ok_or_else(|| ToolError::invalid_input("kind_in items must be strings"))?;
                 out.push(s.to_string());
             }
             Ok(Some(out))
@@ -115,9 +115,9 @@ fn parse_attrs_eq(args: &JsonValue) -> Result<Option<Map<String, JsonValue>>, To
     match args.get("attrs_eq") {
         None | Some(JsonValue::Null) => Ok(None),
         Some(v) => {
-            let obj = v.as_object().ok_or_else(|| {
-                ToolError::invalid_input("attrs_eq must be an object")
-            })?;
+            let obj = v
+                .as_object()
+                .ok_or_else(|| ToolError::invalid_input("attrs_eq must be an object"))?;
             Ok(Some(obj.clone()))
         }
     }
@@ -213,10 +213,7 @@ mod tests {
     async fn query_blocks_requires_doc_id() {
         let tool = QueryBlocksTool::new();
         let ctx = create_mock_tool_context();
-        let err = tool
-            .execute(&ctx, serde_json::json!({}))
-            .await
-            .unwrap_err();
+        let err = tool.execute(&ctx, serde_json::json!({})).await.unwrap_err();
         assert_eq!(err.code(), "tool.invalid_input");
     }
 

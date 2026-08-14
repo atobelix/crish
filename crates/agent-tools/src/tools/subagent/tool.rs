@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::{
-    apply_forgery_boundary, SubagentCapabilityMode, SubagentRole, SubagentSpawner,
-    SubagentSpawnRequest, TaskType,
+    apply_forgery_boundary, SubagentCapabilityMode, SubagentRole, SubagentSpawnRequest,
+    SubagentSpawner, TaskType,
 };
 
 // ── run_subagent 工具 ─────────────────────────────────────────────
@@ -262,15 +262,17 @@ fn parse_tasks(args: &Value) -> Result<Option<Vec<BatchTaskArg>>, ToolError> {
             .ok_or_else(|| ToolError::invalid_input("tasks 条目缺少必填 prompt"))?
             .to_string();
         let role = match obj.get("role").and_then(Value::as_str) {
-            Some(raw_role) => Some(SubagentRole::parse(raw_role).ok_or_else(|| {
-                ToolError::invalid_input(format!("未知角色：{raw_role}"))
-            })?),
+            Some(raw_role) => Some(
+                SubagentRole::parse(raw_role)
+                    .ok_or_else(|| ToolError::invalid_input(format!("未知角色：{raw_role}")))?,
+            ),
             None => None,
         };
         let capability_mode = match obj.get("capabilityMode").and_then(Value::as_str) {
-            Some(raw_mode) => Some(SubagentCapabilityMode::parse(raw_mode).ok_or_else(|| {
-                ToolError::invalid_input(format!("未知能力模式：{raw_mode}"))
-            })?),
+            Some(raw_mode) => Some(
+                SubagentCapabilityMode::parse(raw_mode)
+                    .ok_or_else(|| ToolError::invalid_input(format!("未知能力模式：{raw_mode}")))?,
+            ),
             None => None,
         };
         let display_label = obj
@@ -302,11 +304,7 @@ impl Tool for RunSubagentTool {
         &self.def
     }
 
-    async fn execute(
-        &self,
-        ctx: &ToolContext,
-        args: Value,
-    ) -> Result<Value, ToolError> {
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         // T-D-06 单发/批量互斥：prompt 与 tasks 二选一（防歧义）
         let prompt = crate::tools::optional_string(&args, "prompt");
         let tasks = parse_tasks(&args)?;
@@ -341,24 +339,24 @@ impl Tool for RunSubagentTool {
         // 入参解析：role/capabilityMode/allowedTools 可选
         let agent_id = crate::tools::optional_string(&args, "agentId");
         let role = match crate::tools::optional_string(&args, "role") {
-            Some(raw) => Some(SubagentRole::parse(&raw).ok_or_else(|| {
-                ToolError::invalid_input(format!("未知角色：{raw}"))
-            })?),
+            Some(raw) => Some(
+                SubagentRole::parse(&raw)
+                    .ok_or_else(|| ToolError::invalid_input(format!("未知角色：{raw}")))?,
+            ),
             None => None,
         };
         let capability_mode = match crate::tools::optional_string(&args, "capabilityMode") {
-            Some(raw) => Some(SubagentCapabilityMode::parse(&raw).ok_or_else(|| {
-                ToolError::invalid_input(format!("未知能力模式：{raw}"))
-            })?),
+            Some(raw) => Some(
+                SubagentCapabilityMode::parse(&raw)
+                    .ok_or_else(|| ToolError::invalid_input(format!("未知能力模式：{raw}")))?,
+            ),
             None => None,
         };
         let allowed_tools: Option<Vec<String>> = match args.get("allowedTools") {
             Some(value) => Some(
                 value
                     .as_array()
-                    .ok_or_else(|| {
-                        ToolError::invalid_input("allowedTools 必须是字符串数组")
-                    })?
+                    .ok_or_else(|| ToolError::invalid_input("allowedTools 必须是字符串数组"))?
                     .iter()
                     .map(|v| {
                         v.as_str().map(str::to_string).ok_or_else(|| {
@@ -372,18 +370,17 @@ impl Tool for RunSubagentTool {
         let description = crate::tools::optional_string(&args, "description");
         let mode = crate::tools::optional_string(&args, "mode");
         let task_type = match crate::tools::optional_string(&args, "taskType") {
-            Some(raw) => Some(TaskType::parse(&raw).ok_or_else(|| {
-                ToolError::invalid_input(format!("未知任务类型：{raw}"))
-            })?),
+            Some(raw) => Some(
+                TaskType::parse(&raw)
+                    .ok_or_else(|| ToolError::invalid_input(format!("未知任务类型：{raw}")))?,
+            ),
             None => None,
         };
         let allowed_write_paths: Option<Vec<PathBuf>> = match args.get("allowedWritePaths") {
             Some(value) => Some(
                 value
                     .as_array()
-                    .ok_or_else(|| {
-                        ToolError::invalid_input("allowedWritePaths 必须是字符串数组")
-                    })?
+                    .ok_or_else(|| ToolError::invalid_input("allowedWritePaths 必须是字符串数组"))?
                     .iter()
                     .map(|v| {
                         v.as_str().map(PathBuf::from).ok_or_else(|| {

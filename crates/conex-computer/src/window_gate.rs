@@ -121,6 +121,42 @@ impl ActionTargetGate for WindowTargetGate {
     }
 }
 
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn get_process_name_by_pid(pid: u32) -> Option<String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == INVALID_HANDLE_VALUE {
+            return None;
+        }
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        let mut name = None;
+        if Process32FirstW(snapshot, &mut entry) != 0 {
+            loop {
+                if entry.th32ProcessID == pid {
+                    let exe_name = wide_to_string(&entry.szExeFile);
+                    if !exe_name.is_empty() {
+                        name = Some(exe_name);
+                    }
+                    break;
+                }
+                if Process32NextW(snapshot, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snapshot);
+        name
+    }
+}
+
 /// 解析当前前台活动窗口目标（HWND/PID/真实 ExeName，Fail-Closed 提权探针）。
 #[allow(unsafe_code)]
 pub fn resolve_foreground_target() -> ActionTarget {
@@ -160,32 +196,30 @@ pub fn resolve_foreground_target() -> ActionTarget {
         }
 
         let process_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if process_handle.is_null() {
-            // Fail-Closed 铁律：无法打开句柄说明权限高于当前进程，直接标记提权阻止注入
-            return ActionTarget::Window {
-                title,
-                process: Some("access_denied_elevated.exe".to_string()),
+        let proc_name = if !process_handle.is_null() {
+            let mut name_buf = [0u16; 1024];
+            let mut size = name_buf.len() as u32;
+            let name = if QueryFullProcessImageNameW(
+                process_handle,
+                0,
+                name_buf.as_mut_ptr(),
+                &mut size,
+            ) != 0
+            {
+                let full_path = String::from_utf16_lossy(&name_buf[..size as usize]);
+                std::path::Path::new(&full_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_string())
+            } else {
+                get_process_name_by_pid(pid)
             };
-        }
-
-        let mut name_buf = [0u16; 1024];
-        let mut size = name_buf.len() as u32;
-        let proc_name = if QueryFullProcessImageNameW(
-            process_handle,
-            0,
-            name_buf.as_mut_ptr(),
-            &mut size,
-        ) != 0
-        {
-            let full_path = String::from_utf16_lossy(&name_buf[..size as usize]);
-            std::path::Path::new(&full_path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map(|s| s.to_string())
+            CloseHandle(process_handle);
+            name
         } else {
-            None
+            // Fail-Closed: 无法以 LIMITED_INFORMATION 打开句柄，通过 ToolHelp 快照查找真实进程名
+            get_process_name_by_pid(pid)
         };
-        CloseHandle(process_handle);
 
         ActionTarget::Window {
             title,
@@ -208,9 +242,6 @@ pub struct TokenElevationProbe;
 #[cfg(windows)]
 impl ElevationProbe for TokenElevationProbe {
     fn is_elevated(&self, process: &str) -> bool {
-        if process.eq_ignore_ascii_case("access_denied_elevated.exe") {
-            return true;
-        }
         is_any_process_elevated(process)
     }
 }
@@ -230,13 +261,10 @@ impl ElevationProbe for TokenElevationProbe {
 #[cfg(windows)]
 #[allow(unsafe_code)]
 pub fn is_any_process_elevated(process: &str) -> bool {
-    if process.eq_ignore_ascii_case("access_denied_elevated.exe") {
-        return true;
-    }
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
-        PROCESSENTRY32W,
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
     };
 
     unsafe {
@@ -271,7 +299,7 @@ pub fn is_any_process_elevated(process: &str) -> bool {
 #[cfg(windows)]
 #[allow(unsafe_code)]
 pub fn process_is_elevated(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
+    use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::Security::{
         GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
     };
@@ -282,16 +310,15 @@ pub fn process_is_elevated(pid: u32) -> bool {
     unsafe {
         let process_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if process_handle.is_null() {
-            // Fail-Closed 铁律：打开进程报 ACCESS_DENIED 或任何异常直接判定为提权进程
-            let err = GetLastError();
-            return err == ERROR_ACCESS_DENIED || err != 0;
+            // Fail-Closed 铁律：打开进程句柄失败（权限高于当前进程或受保护进程），坚决判定为提权
+            return true;
         }
 
         let mut token_handle: *mut core::ffi::c_void = std::ptr::null_mut();
         if OpenProcessToken(process_handle, TOKEN_QUERY, &mut token_handle) == 0 {
-            let err = GetLastError();
             CloseHandle(process_handle);
-            return err == ERROR_ACCESS_DENIED || err != 0;
+            // Fail-Closed 铁律：打开进程令牌失败，坚决判定为提权
+            return true;
         }
 
         let mut elevation: TOKEN_ELEVATION = std::mem::zeroed();
@@ -364,7 +391,10 @@ mod tests {
         }
     }
 
-    fn gate(whitelist: Vec<WhitelistEntry>, elevated: Vec<String>) -> (WindowTargetGate, Arc<MockProbe>) {
+    fn gate(
+        whitelist: Vec<WhitelistEntry>,
+        elevated: Vec<String>,
+    ) -> (WindowTargetGate, Arc<MockProbe>) {
         let probe = Arc::new(MockProbe::new(elevated));
         let gate = WindowTargetGate::with_probe(whitelist, probe.clone());
         (gate, probe)
@@ -372,29 +402,38 @@ mod tests {
 
     #[test]
     fn whitelist_title_match_ok() {
-        let (gate, _probe) = gate(
-            vec![WhitelistEntry::new("记事本", None)],
-            vec![],
-        );
-        assert!(gate.check(&target_win("记事本", Some("notepad.exe"))).is_ok());
+        let (gate, _probe) = gate(vec![WhitelistEntry::new("记事本", None)], vec![]);
+        assert!(gate
+            .check(&target_win("记事本", Some("notepad.exe")))
+            .is_ok());
     }
 
     #[test]
     fn whitelist_title_and_process_match_ok() {
         let (gate, _probe) = gate(
-            vec![WhitelistEntry::new("记事本", Some("notepad.exe".to_string()))],
+            vec![WhitelistEntry::new(
+                "记事本",
+                Some("notepad.exe".to_string()),
+            )],
             vec![],
         );
-        assert!(gate.check(&target_win("记事本", Some("notepad.exe"))).is_ok());
+        assert!(gate
+            .check(&target_win("记事本", Some("notepad.exe")))
+            .is_ok());
     }
 
     #[test]
     fn whitelist_process_mismatch_denied() {
         let (gate, _probe) = gate(
-            vec![WhitelistEntry::new("记事本", Some("notepad.exe".to_string()))],
+            vec![WhitelistEntry::new(
+                "记事本",
+                Some("notepad.exe".to_string()),
+            )],
             vec![],
         );
-        let err = gate.check(&target_win("记事本", Some("calc.exe"))).expect_err("应拒绝");
+        let err = gate
+            .check(&target_win("记事本", Some("calc.exe")))
+            .expect_err("应拒绝");
         assert_eq!(err.kind, TargetDenialKind::Whitelist);
         assert_eq!(err.target, "记事本 (calc.exe)");
     }
@@ -444,7 +483,10 @@ mod tests {
     fn elevation_takes_precedence_over_whitelist() {
         // 提权窗口即使命中白名单也拒绝(04 §6.2 风险 R3 红线)
         let (gate, _probe) = gate(
-            vec![WhitelistEntry::new("系统设置", Some("SystemSettings.exe".to_string()))],
+            vec![WhitelistEntry::new(
+                "系统设置",
+                Some("SystemSettings.exe".to_string()),
+            )],
             vec!["SystemSettings.exe".to_string()],
         );
         let err = gate
@@ -459,7 +501,9 @@ mod tests {
             vec![WhitelistEntry::new("记事本", None)],
             vec!["SystemSettings.exe".to_string()],
         );
-        assert!(gate.check(&target_win("记事本", Some("notepad.exe"))).is_ok());
+        assert!(gate
+            .check(&target_win("记事本", Some("notepad.exe")))
+            .is_ok());
         // 探测被调用且返回未提权
         assert!(probe.call_count() >= 1);
     }
@@ -489,8 +533,16 @@ mod tests {
             WhitelistEntry::new("记事本", None),
             WhitelistEntry::new("终端", Some("WindowsTerminal.exe".to_string())),
         ];
-        assert!(WindowTargetGate::matches_whitelist(&whitelist, "记事本", None));
-        assert!(WindowTargetGate::matches_whitelist(&whitelist, "记事本", Some("calc.exe")));
+        assert!(WindowTargetGate::matches_whitelist(
+            &whitelist,
+            "记事本",
+            None
+        ));
+        assert!(WindowTargetGate::matches_whitelist(
+            &whitelist,
+            "记事本",
+            Some("calc.exe")
+        ));
         assert!(WindowTargetGate::matches_whitelist(
             &whitelist,
             "终端",
@@ -501,7 +553,11 @@ mod tests {
             "终端",
             Some("cmd.exe")
         ));
-        assert!(!WindowTargetGate::matches_whitelist(&whitelist, "计算器", None));
+        assert!(!WindowTargetGate::matches_whitelist(
+            &whitelist,
+            "计算器",
+            None
+        ));
     }
 
     #[test]
@@ -516,11 +572,18 @@ mod tests {
         {
             // System PID 4 (Fail-Closed ACCESS_DENIED)
             let is_elevated = process_is_elevated(4);
-            assert!(is_elevated, "权限查询遭遇 ACCESS_DENIED 必须 Fail-Closed 判定为提权");
-            
-            // access_denied_elevated.exe probe check
-            let probe = TokenElevationProbe;
-            assert!(probe.is_elevated("access_denied_elevated.exe"));
+            assert!(
+                is_elevated,
+                "权限查询遭遇 ACCESS_DENIED 必须 Fail-Closed 判定为提权"
+            );
+
+            let target = resolve_foreground_target();
+            match target {
+                ActionTarget::Window { title, .. } => {
+                    assert!(!title.is_empty(), "前台窗口标题不应为空");
+                }
+                _ => panic!("前台目标必须是 Window 类型"),
+            }
         }
     }
 }

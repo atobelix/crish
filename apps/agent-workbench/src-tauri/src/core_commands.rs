@@ -180,9 +180,7 @@ pub async fn core_rebuild_search_index<R: tauri::Runtime>(
 ) -> Result<RebuildSearchIndexResponse, CoreError> {
     let root = root.trim().to_string();
     if root.is_empty() {
-        return Err(CoreError::InvalidInput(
-            "root path is empty".to_string(),
-        ));
+        return Err(CoreError::InvalidInput("root path is empty".to_string()));
     }
     if root.len() > SEARCH_ROOT_MAX_LEN {
         return Err(CoreError::InvalidInput(format!(
@@ -281,9 +279,7 @@ pub async fn core_check_command(
     gatekeeper_state: State<'_, SharedGatekeeper>,
 ) -> Result<GatekeeperResult, CoreError> {
     if cmd.trim().is_empty() {
-        return Err(CoreError::InvalidInput(
-            "cmd must not be empty".to_string(),
-        ));
+        return Err(CoreError::InvalidInput("cmd must not be empty".to_string()));
     }
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let result = gatekeeper_state.gatekeeper.check_command(&cmd, &args_ref);
@@ -375,12 +371,11 @@ pub async fn core_hash_compute(
     data: Vec<u8>,
     algorithm: Option<String>,
 ) -> Result<String, CoreError> {
-    let result = tokio::task::spawn_blocking(move || {
-        crate::perf::hash::perf_hash_compute(data, algorithm)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("core_hash_compute join: {e}")))?
-    .map_err(map_perf_err)?;
+    let result =
+        tokio::task::spawn_blocking(move || crate::perf::hash::perf_hash_compute(data, algorithm))
+            .await
+            .map_err(|e| CoreError::Internal(format!("core_hash_compute join: {e}")))?
+            .map_err(map_perf_err)?;
     Ok(result)
 }
 
@@ -390,12 +385,11 @@ pub async fn core_base64_encode(
     data: Vec<u8>,
     config: Option<String>,
 ) -> Result<String, CoreError> {
-    let result = tokio::task::spawn_blocking(move || {
-        crate::perf::hash::perf_base64_encode(data, config)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("core_base64_encode join: {e}")))?
-    .map_err(map_perf_err)?;
+    let result =
+        tokio::task::spawn_blocking(move || crate::perf::hash::perf_base64_encode(data, config))
+            .await
+            .map_err(|e| CoreError::Internal(format!("core_base64_encode join: {e}")))?
+            .map_err(map_perf_err)?;
     Ok(result)
 }
 
@@ -405,12 +399,11 @@ pub async fn core_base64_decode(
     encoded: String,
     config: Option<String>,
 ) -> Result<Vec<u8>, CoreError> {
-    let result = tokio::task::spawn_blocking(move || {
-        crate::perf::hash::perf_base64_decode(encoded, config)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("core_base64_decode join: {e}")))?
-    .map_err(map_perf_err)?;
+    let result =
+        tokio::task::spawn_blocking(move || crate::perf::hash::perf_base64_decode(encoded, config))
+            .await
+            .map_err(|e| CoreError::Internal(format!("core_base64_decode join: {e}")))?
+            .map_err(map_perf_err)?;
     Ok(result)
 }
 
@@ -419,12 +412,11 @@ pub async fn core_base64_decode(
 pub async fn core_detect_encoding(
     data: Vec<u8>,
 ) -> Result<crate::perf::encoding::EncodingDetectResult, CoreError> {
-    let result = tokio::task::spawn_blocking(move || {
-        crate::perf::encoding::perf_encoding_detect(data)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("core_detect_encoding join: {e}")))?
-    .map_err(map_perf_err)?;
+    let result =
+        tokio::task::spawn_blocking(move || crate::perf::encoding::perf_encoding_detect(data))
+            .await
+            .map_err(|e| CoreError::Internal(format!("core_detect_encoding join: {e}")))?
+            .map_err(map_perf_err)?;
     Ok(result)
 }
 
@@ -460,9 +452,7 @@ pub async fn core_parse_diff(
 
 /// 消息数组 → JSONL 字符串（每行一个 JSON 对象；替代 io-worker messages.to-jsonl）。
 #[tauri::command]
-pub async fn core_messages_to_jsonl(
-    messages: Vec<serde_json::Value>,
-) -> Result<String, CoreError> {
+pub async fn core_messages_to_jsonl(messages: Vec<serde_json::Value>) -> Result<String, CoreError> {
     let result = tokio::task::spawn_blocking(move || -> Result<String, CoreError> {
         let mut buf = String::with_capacity(messages.len() * 256);
         for msg in &messages {
@@ -484,36 +474,35 @@ pub async fn core_messages_to_jsonl(
 
 /// JSONL 文本 → 消息数组（兼容 JSON 数组格式；跳过空行与非法行）。
 #[tauri::command]
-pub async fn core_jsonl_to_messages(
-    text: String,
-) -> Result<Vec<serde_json::Value>, CoreError> {
-    let result = tokio::task::spawn_blocking(move || -> Result<Vec<serde_json::Value>, CoreError> {
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
-            return Ok(Vec::new());
-        }
-        // 优先尝试 JSON 数组（历史格式）
-        if trimmed.starts_with('[') {
-            let parsed: Vec<serde_json::Value> = serde_json::from_str(trimmed)
-                .map_err(|e| CoreError::Internal(format!("parse JSON array: {e}")))?;
-            return Ok(parsed);
-        }
-        // JSONL 路径：逐行解析，跳过空行与非法行（str::lines 兼容 \r\n / \n）
-        let mut out: Vec<serde_json::Value> = Vec::new();
-        for line in trimmed.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
+pub async fn core_jsonl_to_messages(text: String) -> Result<Vec<serde_json::Value>, CoreError> {
+    let result =
+        tokio::task::spawn_blocking(move || -> Result<Vec<serde_json::Value>, CoreError> {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                return Ok(Vec::new());
             }
-            match serde_json::from_str::<serde_json::Value>(line) {
-                Ok(v) => out.push(v),
-                Err(_) => continue,
+            // 优先尝试 JSON 数组（历史格式）
+            if trimmed.starts_with('[') {
+                let parsed: Vec<serde_json::Value> = serde_json::from_str(trimmed)
+                    .map_err(|e| CoreError::Internal(format!("parse JSON array: {e}")))?;
+                return Ok(parsed);
             }
-        }
-        Ok(out)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("core_jsonl_to_messages join: {e}")))?;
+            // JSONL 路径：逐行解析，跳过空行与非法行（str::lines 兼容 \r\n / \n）
+            let mut out: Vec<serde_json::Value> = Vec::new();
+            for line in trimmed.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                match serde_json::from_str::<serde_json::Value>(line) {
+                    Ok(v) => out.push(v),
+                    Err(_) => continue,
+                }
+            }
+            Ok(out)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("core_jsonl_to_messages join: {e}")))?;
     result
 }
 
@@ -527,9 +516,8 @@ pub async fn core_text_encode(
         match encoding {
             None => Ok(text.into_bytes()),
             Some(label) => {
-                let enc = encoding_rs::Encoding::for_label(label.as_bytes()).ok_or_else(|| {
-                    CoreError::Encoding(format!("unsupported encoding: {label}"))
-                })?;
+                let enc = encoding_rs::Encoding::for_label(label.as_bytes())
+                    .ok_or_else(|| CoreError::Encoding(format!("unsupported encoding: {label}")))?;
                 let (cow, _, _) = enc.encode(&text);
                 Ok(cow.into_owned())
             }
@@ -679,7 +667,10 @@ mod tests {
         let gatekeeper = CommandGatekeeper::new();
         let blocked = check_command_verdict(&gatekeeper, "rm", &["-rf", "/"]);
         assert!(blocked.blocked && !blocked.allowed && !blocked.requires_approval);
-        assert_eq!(blocked.reason, Some("blocked by safety red-line gatekeeper"));
+        assert_eq!(
+            blocked.reason,
+            Some("blocked by safety red-line gatekeeper")
+        );
 
         let approval = check_command_verdict(&gatekeeper, "git", &["push", "--force"]);
         assert!(
@@ -761,17 +752,11 @@ mod tests {
                         "detail 应含 workspace_not_granted 文案：{detail}"
                     );
                 }
-                other => panic!(
-                    "未授权 root 应被拒绝（workspace_not_granted），实际 {other:?}"
-                ),
+                other => panic!("未授权 root 应被拒绝（workspace_not_granted），实际 {other:?}"),
             }
             // 索引不得被重建（保持初始空状态）
             assert!(
-                state
-                    .files
-                    .read()
-                    .expect("index lock")
-                    .is_empty(),
+                state.files.read().expect("index lock").is_empty(),
                 "越界 root 不得重建索引"
             );
         });
@@ -823,12 +808,9 @@ mod tests {
             .build()
             .unwrap();
         runtime.block_on(async {
-            let result = core_rebuild_search_index(
-                app.handle().clone(),
-                "   ".to_string(),
-                state.clone(),
-            )
-            .await;
+            let result =
+                core_rebuild_search_index(app.handle().clone(), "   ".to_string(), state.clone())
+                    .await;
             assert!(matches!(result, Err(CoreError::InvalidInput(_))));
 
             let oversized = "x".repeat(SEARCH_ROOT_MAX_LEN + 1);
@@ -875,13 +857,8 @@ mod tests {
             .build()
             .unwrap();
         runtime.block_on(async {
-            let result = core_jsonl_append(
-                "  ".to_string(),
-                vec!["x".to_string()],
-                None,
-                None,
-            )
-            .await;
+            let result =
+                core_jsonl_append("  ".to_string(), vec!["x".to_string()], None, None).await;
             assert!(matches!(result, Err(CoreError::InvalidInput(_))));
 
             let result = core_jsonl_append("a.jsonl".to_string(), Vec::new(), None, None).await;
@@ -907,7 +884,9 @@ mod tests {
             .enable_all()
             .build()
             .unwrap();
-        let hash = runtime.block_on(core_hash_compute(data.clone(), None)).unwrap();
+        let hash = runtime
+            .block_on(core_hash_compute(data.clone(), None))
+            .unwrap();
         let perf = crate::perf::hash::perf_hash_compute(data, None).unwrap();
         assert_eq!(hash, perf);
         assert_eq!(
@@ -927,9 +906,7 @@ mod tests {
             .block_on(core_base64_encode(data.clone(), None))
             .unwrap();
         assert_eq!(encoded, "aGVsbG8gd29ybGQ=");
-        let decoded = runtime
-            .block_on(core_base64_decode(encoded, None))
-            .unwrap();
+        let decoded = runtime.block_on(core_base64_decode(encoded, None)).unwrap();
         assert_eq!(decoded, data);
     }
 

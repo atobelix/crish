@@ -29,6 +29,7 @@ import {
   utf16Length,
   utf16RangeToUnicodeScalarRange,
   unicodeScalarRangeToUtf16Range,
+  diffToReplace,
 } from './index';
 
 describe('coordinates: 强类型品牌类型与构造器', () => {
@@ -156,5 +157,36 @@ describe('coordinates: 标量坐标双向单射转换（对齐 Rust chars().coun
 
     const backToU16 = unicodeScalarRangeToUtf16Range(text, rangeScalar);
     expect(backToU16).toEqual(rangeU16);
+  });
+
+  it('场景 F：代理项中间偏移 Floor 对齐与双向 Round-trip 单射', () => {
+    const text = 'A🎉B'; // 'A'(0), High(1), Low(2), 'B'(3)
+    // 传入落在代理项对中间的非法偏移 2
+    const scalar = utf16OffsetToUnicodeScalar(text, 2);
+    // Floor 对齐到高代理项起点 -> 标量 1 ('A')
+    expect(scalar).toBe(1);
+    const restoredU16 = unicodeScalarToUtf16Offset(text, scalar);
+    // 还原后与对齐后的边界严格相等，不发生跨字符漂移
+    expect(restoredU16).toBe(1);
+    expect(restoredU16).toBe(alignToSurrogateBoundaryFloor(text, 2));
+  });
+
+  it('场景 G：diffToReplace 强类型契约与 Emoji 差分替换', () => {
+    const oldText = '👨‍👩‍👧‍👦Text';
+    const newText = '👨‍👩‍👧‍👦Doc';
+    const res = diffToReplace(oldText, newText);
+
+    expect(res.startU16).toBe(11);
+    expect(res.endU16).toBe(15);
+    expect(res.startScalar).toBe(7);
+    expect(res.endScalar).toBe(11);
+    expect(res.replacement).toBe('Doc');
+    expect(res.insert).toBe('Doc');
+
+    const reconstructed =
+      oldText.slice(0, res.startU16) +
+      res.replacement +
+      oldText.slice(res.endU16);
+    expect(reconstructed).toBe(newText);
   });
 });

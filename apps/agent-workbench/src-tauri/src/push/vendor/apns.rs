@@ -29,9 +29,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 
 use super::super::PushLevel;
-use super::{
-    APNsCredentials, VendorError, VendorNotification, VendorSendOutcome,
-};
+use super::{APNsCredentials, VendorError, VendorNotification, VendorSendOutcome};
 
 /// APNs 生产主机（M8 §2.2.3-1）
 pub const APNS_PROD_HOST: &str = "api.push.apple.com";
@@ -303,7 +301,11 @@ pub(crate) fn build_apns_send_request_at(
 
 /// 解析 `Retry-After` 头（秒值；HTTP-date 形态由接线轮按需扩展）
 pub fn parse_retry_after(header: Option<&str>) -> Option<std::time::Duration> {
-    header?.trim().parse::<u64>().ok().map(std::time::Duration::from_secs)
+    header?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(std::time::Duration::from_secs)
 }
 
 /// 响应解析：APNs 状态码 → 发送结果语义（M8 §2.2.3-4）
@@ -341,7 +343,12 @@ pub fn parse_apns_response(
 /// 从 APNs 错误体提取 `reason`（无 body/非 JSON 时回退状态码文本）
 fn apns_failure_reason(status: u16, body: Option<&str>) -> String {
     body.and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
-        .and_then(|value| value.get("reason").and_then(|r| r.as_str()).map(str::to_string))
+        .and_then(|value| {
+            value
+                .get("reason")
+                .and_then(|r| r.as_str())
+                .map(str::to_string)
+        })
         .unwrap_or_else(|| format!("APNs 状态码 {status}"))
 }
 
@@ -349,8 +356,8 @@ fn apns_failure_reason(status: u16, body: Option<&str>) -> String {
 mod tests {
     use super::*;
     use crate::push::intent::PayloadDigest;
-    use crate::push::PushLevel;
     use crate::push::vendor::{VendorDevice, VendorNotification, VendorPlatform};
+    use crate::push::PushLevel;
 
     const KEY_ID: &str = "ABC123DEFG";
     const TEAM_ID: &str = "TEAMID42";
@@ -407,18 +414,16 @@ mod tests {
         assert_eq!(parts.len(), 3, "JWT 必为三段");
 
         // header：alg=ES256、kid=KeyID
-        let header: serde_json::Value = serde_json::from_slice(
-            &URL_SAFE_NO_PAD.decode(parts[0]).expect("header base64url"),
-        )
-        .expect("header JSON");
+        let header: serde_json::Value =
+            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[0]).expect("header base64url"))
+                .expect("header JSON");
         assert_eq!(header["alg"], "ES256");
         assert_eq!(header["kid"], KEY_ID);
 
         // claims：iss=TeamID、iat=now、exp=now+1h
-        let claims: serde_json::Value = serde_json::from_slice(
-            &URL_SAFE_NO_PAD.decode(parts[1]).expect("claims base64url"),
-        )
-        .expect("claims JSON");
+        let claims: serde_json::Value =
+            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).expect("claims base64url"))
+                .expect("claims JSON");
         assert_eq!(claims["iss"], TEAM_ID);
         assert_eq!(claims["iat"], now);
         assert_eq!(claims["exp"], now + APNS_JWT_TTL_SECS);
@@ -523,7 +528,10 @@ mod tests {
             },
         );
         let payload = apns_payload(&n);
-        assert_eq!(payload.aps.alert.title.chars().count(), APNS_TITLE_MAX_CHARS);
+        assert_eq!(
+            payload.aps.alert.title.chars().count(),
+            APNS_TITLE_MAX_CHARS
+        );
         assert_eq!(payload.aps.alert.body.chars().count(), APNS_BODY_MAX_CHARS);
     }
 
@@ -567,11 +575,13 @@ mod tests {
         assert_eq!(req.apns_priority, 10);
         assert_eq!(req.apns_topic, "com.crish.mobile");
         assert_eq!(req.apns_collapse_id.as_deref(), Some("session:s-7"));
-        let body: serde_json::Value =
-            serde_json::from_slice(&req.body).expect("body 是 JSON");
+        let body: serde_json::Value = serde_json::from_slice(&req.body).expect("body 是 JSON");
         assert_eq!(body["aps"]["alert"]["title"], "bash");
 
-        let sandbox_creds = APNsCredentials { sandbox: true, ..creds.clone() };
+        let sandbox_creds = APNsCredentials {
+            sandbox: true,
+            ..creds.clone()
+        };
         let req_sandbox = build_apns_send_request(&sandbox_creds, &n, "jwt").expect("沙箱请求");
         assert_eq!(
             req_sandbox.url,

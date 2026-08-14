@@ -27,27 +27,24 @@
 //! （CfT 缓存 → 系统 Chrome → 系统 Edge），无需测试侧自建候选逻辑。
 //! 测试页：data: URL（本地内联 HTML，无 fixture server、无临时文件）。
 
-use conex_browser::cdp::bus::{BrowserEvent, LifecycleKind};
-use conex_browser::cdp::sender::{
-    ApprovalDenied, BrowserAuditEvent, CancellationToken, CdpCommandView, CommandPolicyHooks,
-    IdKey,
-};
 use conex_browser::action::evaluate::EVAL_TIMEOUT_MS;
 use conex_browser::action::gate::{DomainGate, GateDenial};
+use conex_browser::action::ops::{session_for_active, BrowserPageOps, BrowserSnapshotStore};
 use conex_browser::action::{
     ActionError, ActionErrorKind, ActionExecutor, ElementRef, EvaluateRequest, MouseButton,
-};
-use conex_browser::action::ops::{
-    BrowserPageOps, BrowserSnapshotStore, session_for_active,
 };
 use conex_browser::browser::args::EngineMode;
 use conex_browser::browser::discover::{resolve_backend, BackendOverride, ResolveOptions};
 use conex_browser::browser::{BrowserManager, LaunchConfig, ProcessError, StopReason};
+use conex_browser::cdp::bus::{BrowserEvent, LifecycleKind};
+use conex_browser::cdp::sender::{
+    ApprovalDenied, BrowserAuditEvent, CancellationToken, CdpCommandView, CommandPolicyHooks, IdKey,
+};
 use conex_browser::frames::{ScreencastConfig, ScreencastSession, ScreencastStatus};
 use conex_browser::input::{InputCmd, InputPipeline};
 use conex_browser::snapshot::budget::MAX_RAW_PAYLOAD_BYTES;
 use conex_browser::snapshot::collect::{CdpCollector, SnapshotCollector};
-use conex_browser::snapshot::serialize::{SerializeOptions, build_and_serialize};
+use conex_browser::snapshot::serialize::{build_and_serialize, SerializeOptions};
 use conex_browser::snapshot::{BudgetConfig, SnapshotDocument, SnapshotError, SnapshotManager};
 use conex_browser::{BrowserSession, BrowserState, CdpError};
 use serde_json::{json, Value};
@@ -185,8 +182,18 @@ fn data_url(html: &str) -> String {
     let mut out = String::from("data:text/html;charset=utf-8,");
     for b in html.as_bytes() {
         match *b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'(' | b')'
-            | b'!' | b'*' | b'\'' => out.push(*b as char),
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'('
+            | b')'
+            | b'!'
+            | b'*'
+            | b'\'' => out.push(*b as char),
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -355,30 +362,25 @@ async fn navigate_and_wait(env: &E2eEnv, url: &str) {
         .send_page(&env.session_id, "Page.navigate", json!({ "url": url }))
         .await
         .expect("Page.navigate 命令失败");
-    assert!(
-        result.get("errorText").is_none(),
-        "导航被拦截：{result}"
-    );
+    assert!(result.get("errorText").is_none(), "导航被拦截：{result}");
     let mut saw_navigated = false;
-    wait_event(&mut rx, Duration::from_secs(15), |ev| {
-        match ev {
-            BrowserEvent::Navigated {
-                session,
-                main: true,
-                url: u,
-                ..
-            } if *session == env.session_id => {
-                assert_eq!(u, url, "导航落点不符");
-                saw_navigated = true;
-                false
-            }
-            BrowserEvent::Lifecycle {
-                session,
-                kind: LifecycleKind::Load,
-                ..
-            } if *session == env.session_id => saw_navigated,
-            _ => false,
+    wait_event(&mut rx, Duration::from_secs(15), |ev| match ev {
+        BrowserEvent::Navigated {
+            session,
+            main: true,
+            url: u,
+            ..
+        } if *session == env.session_id => {
+            assert_eq!(u, url, "导航落点不符");
+            saw_navigated = true;
+            false
         }
+        BrowserEvent::Lifecycle {
+            session,
+            kind: LifecycleKind::Load,
+            ..
+        } if *session == env.session_id => saw_navigated,
+        _ => false,
     })
     .await;
     // 加载完成后再沉降一帧，避免采集窗口内首屏 DomChanged 竞态
@@ -404,7 +406,9 @@ fn element_ref_by_tag(doc: &SnapshotDocument, tag: &str) -> ElementRef {
     let mark = format!("<{tag}");
     for line in doc.serialized_text.lines() {
         if line.contains(&mark) {
-            let start = line.find('[').unwrap_or_else(|| panic!("行无索引前缀：{line}"));
+            let start = line
+                .find('[')
+                .unwrap_or_else(|| panic!("行无索引前缀：{line}"));
             let end = line.find(']').expect("行无索引闭合括号");
             let index: usize = line[start + 1..end]
                 .parse()
@@ -488,7 +492,10 @@ async fn e2e_launch_and_connect() {
         "product 身份不符：{product}"
     );
     // current_session 就绪（SessionAttached 已登记活动标签）
-    let current = env.session.current_session().expect("current_session 未就绪");
+    let current = env
+        .session
+        .current_session()
+        .expect("current_session 未就绪");
     assert_eq!(current.session, env.session_id);
     assert_eq!(current.target_id, env.tab_id);
     println!(
@@ -534,7 +541,10 @@ async fn e2e_navigate_and_snapshot() {
     // 索引 → backendNodeId 可解析（E3 动作的输入面）
     let input = element_ref_by_tag(&doc, "input");
     let btn = element_ref_by_tag(&doc, "button");
-    assert!(input.backend_node_id > 0 && btn.backend_node_id > 0, "backendNodeId 应有效");
+    assert!(
+        input.backend_node_id > 0 && btn.backend_node_id > 0,
+        "backendNodeId 应有效"
+    );
     println!(
         "[E2] v{} 元素 {} 索引 {} 耗时 {}ms url={}",
         doc.meta.snapshot_version,
@@ -656,9 +666,8 @@ async fn e2e_clean_stop() {
     // 优雅路径：先置位停止意图（stop 任务），再发 Browser.close 令进程自然退出。
     // 若进程先于意图退出会被误判崩溃重启（§6.2 意图标志），故先 spawn stop。
     let mgr = env.mgr.clone();
-    let stop_task = tokio::spawn(async move {
-        mgr.stop(StopReason::Graceful).await.expect("优雅停止失败")
-    });
+    let stop_task =
+        tokio::spawn(async move { mgr.stop(StopReason::Graceful).await.expect("优雅停止失败") });
     let _ = env
         .session
         .send_browser::<Value>("Browser.close", json!({}))
@@ -745,7 +754,11 @@ async fn e2e_frame_stream_end_to_end() {
         seqs.push(f.seq);
         total_bytes += f.data.len();
         assert!(!f.data.is_empty(), "帧数据不得为空");
-        assert!(f.data.len() > 200, "JPEG 帧应有体量（{} 字节）", f.data.len());
+        assert!(
+            f.data.len() > 200,
+            "JPEG 帧应有体量（{} 字节）",
+            f.data.len()
+        );
         assert!(
             f.data.starts_with(&[0xFF, 0xD8]),
             "JPEG SOI 头（FF D8），前 2 字节 {:02X}{:02X}",
@@ -799,7 +812,11 @@ async fn e2e_frame_stream_end_to_end() {
         stats.acks_sent,
         stats.frames_sent
     );
-    assert!(stats.frames_sent >= 5, "帧流应持续产出（实际 {}）", stats.frames_sent);
+    assert!(
+        stats.frames_sent >= 5,
+        "帧流应持续产出（实际 {}）",
+        stats.frames_sent
+    );
     assert_eq!(stats.ack_failures, 0, "ack 发送不得失败");
 
     // —— 帧延迟测量：注入 DOM 变化 → 含变化帧到达（≥5 样本，记录 min/avg/p95）——
@@ -807,7 +824,11 @@ async fn e2e_frame_stream_end_to_end() {
     let mut lats: Vec<u64> = Vec::new();
     for _ in 0..5 {
         let started = Instant::now();
-        eval_dom(&env, "document.getElementById('dyn').textContent='注入'+Date.now()").await;
+        eval_dom(
+            &env,
+            "document.getElementById('dyn').textContent='注入'+Date.now()",
+        )
+        .await;
         let f = rx
             .recv_timeout(Duration::from_secs(2))
             .await
@@ -823,7 +844,11 @@ async fn e2e_frame_stream_end_to_end() {
     frames.stop().await;
     assert_eq!(frames.status(), ScreencastStatus::Idle, "stop 后回 Idle");
     let after_stop = frames.stats().frames_sent;
-    eval_dom(&env, "document.getElementById('dyn').textContent='停流后注入'").await;
+    eval_dom(
+        &env,
+        "document.getElementById('dyn').textContent='停流后注入'",
+    )
+    .await;
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(frames.stats().frames_sent, after_stop, "stop 后不再输出帧");
     assert!(
@@ -831,7 +856,10 @@ async fn e2e_frame_stream_end_to_end() {
         "stop 后输出槽应排空"
     );
     frames.shutdown().await;
-    assert!(rx.recv().await.is_none(), "shutdown 后帧通道关闭（recv=None）");
+    assert!(
+        rx.recv().await.is_none(),
+        "shutdown 后帧通道关闭（recv=None）"
+    );
 
     println!(
         "[E6] start={start_ms}ms 帧数={} 总字节={} 间隔中位={med}ms \
@@ -934,7 +962,10 @@ async fn e2e_ime_insert_text_chinese() {
     assert_eq!(evt["beforeinput"], 1, "beforeinput 应恰 1 条（C2）");
     assert_eq!(evt["compositionstart"], 0, "insertText 不得触发合成");
     assert_eq!(evt["compositionend"], 0, "insertText 不得触发合成结束");
-    assert_eq!(evt["keydown"], 0, "insertText 不得触发键盘事件（无 229/Process 污染）");
+    assert_eq!(
+        evt["keydown"], 0,
+        "insertText 不得触发键盘事件（无 229/Process 污染）"
+    );
 
     // —— contenteditable：同样整串注入（C6 实测面） ——
     eval_dom(
@@ -1032,7 +1063,11 @@ async fn e2e_evaluate_whitelist_and_lexical_reject() {
     let l0 = Instant::now();
     let err = eval_req(&env, "document.title").await.unwrap_err();
     let lex_ms = l0.elapsed().as_millis() as u64;
-    assert_eq!(err.kind, ActionErrorKind::InvalidInput, "词法拒绝应为 InvalidInput");
+    assert_eq!(
+        err.kind,
+        ActionErrorKind::InvalidInput,
+        "词法拒绝应为 InvalidInput"
+    );
     assert!(
         err.message.contains("词法拒绝"),
         "消息应含「词法拒绝」：{}",
@@ -1076,7 +1111,10 @@ async fn e2e_evaluate_whitelist_and_lexical_reject() {
         Ok(v) => v,
         Err(e) => panic!("白名单 attr 读取失败：{:?} {}", e.kind, e.message),
     };
-    assert_eq!(attr, "链接标签", "attr('#link','data-tag') 应返回中文属性值");
+    assert_eq!(
+        attr, "链接标签",
+        "attr('#link','data-tag') 应返回中文属性值"
+    );
     let rect = match eval_req(&env, "__crish_read.rect('#box')").await {
         Ok(v) => v,
         Err(e) => panic!("白名单 rect 读取失败：{:?} {}", e.kind, e.message),
@@ -1157,17 +1195,28 @@ async fn e2e_evaluate_isolation_and_budget() {
         .expect("深度 4 应放行");
     assert_eq!(ok4["a"]["b"]["c"]["d"], 1, "深度 4 正例应返回原值");
     let d0 = Instant::now();
-    let deep = eval_req(&env, "JSON.parse('{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":1}}}}}')")
-        .await
-        .unwrap_err();
+    let deep = eval_req(
+        &env,
+        "JSON.parse('{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":1}}}}}')",
+    )
+    .await
+    .unwrap_err();
     let deep_ms = d0.elapsed().as_millis() as u64;
-    assert!(deep.message.contains("结果超限"), "深度 5 应拒绝：{}", deep.message);
+    assert!(
+        deep.message.contains("结果超限"),
+        "深度 5 应拒绝：{}",
+        deep.message
+    );
 
     // —— 结果预算 ②：序列化 > 64KB 拒绝 ——
     let s0 = Instant::now();
     let big = eval_req(&env, "'x'.repeat(70000)").await.unwrap_err();
     let size_ms = s0.elapsed().as_millis() as u64;
-    assert!(big.message.contains("结果超限"), "70KB 结果应拒绝：{}", big.message);
+    assert!(
+        big.message.contains("结果超限"),
+        "70KB 结果应拒绝：{}",
+        big.message
+    );
 
     // —— 执行硬限：死循环 ~2s 超时终止（宽松窗口防 flaky）——
     let u0 = Instant::now();
@@ -1183,9 +1232,7 @@ async fn e2e_evaluate_isolation_and_budget() {
         "死循环应在 ~2s 超时终止（实际 {timeout_ms}ms）"
     );
 
-    println!(
-        "[E11] 隔离={iso_ms}ms 深度拒绝={deep_ms}ms 大小拒绝={size_ms}ms 超时={timeout_ms}ms"
-    );
+    println!("[E11] 隔离={iso_ms}ms 深度拒绝={deep_ms}ms 大小拒绝={size_ms}ms 超时={timeout_ms}ms");
     env.shutdown().await;
 }
 
@@ -1288,9 +1335,7 @@ async fn e2e_ascii_no_double_write() {
     assert_eq!(evt["keypress"], 4, "keypress 应恰 4 条（char 事件承载）");
     assert_eq!(evt["input"], 4, "input 应恰 4 条（每字符插入 1，无双写）");
 
-    println!(
-        "[E13] type={type_ms}ms value=demo 事件 keydown/keypress/input=4/4/4（无双写）"
-    );
+    println!("[E13] type={type_ms}ms value=demo 事件 keydown/keypress/input=4/4/4（无双写）");
     env.shutdown().await;
 }
 

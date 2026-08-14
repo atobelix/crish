@@ -190,21 +190,19 @@ describe('PmTextLeaf（dispatchTransaction → TextEditIntent）', () => {
 
   it('diffToReplace 收敛前后缀', () => {
     expect(diffToReplace('abc', 'aXc')).toMatchObject({
-      start: 1,
-      end: 2,
       startU16: 1,
       endU16: 2,
       startScalar: 1,
       endScalar: 2,
+      replacement: 'X',
       insert: 'X',
     });
     expect(diffToReplace('ab', 'ab!')).toMatchObject({
-      start: 2,
-      end: 2,
       startU16: 2,
       endU16: 2,
       startScalar: 2,
       endScalar: 2,
+      replacement: '!',
       insert: '!',
     });
   });

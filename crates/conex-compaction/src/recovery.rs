@@ -175,7 +175,10 @@ mod tests {
         assert_eq!(meta.sequence, 42);
         assert_eq!(meta.generation, 1);
         assert_eq!(meta.prev_block_id.as_deref(), Some("compacted-summary-1-1"));
-        assert_eq!(meta.dropped_message_ids, vec!["u1".to_string(), "a1".to_string()]);
+        assert_eq!(
+            meta.dropped_message_ids,
+            vec!["u1".to_string(), "a1".to_string()]
+        );
         assert_eq!(meta.first_kept_message_id.as_deref(), Some("u2"));
         assert!(!meta.summary_is_llm);
         assert_eq!(meta.tokens_before, 10_000);
@@ -209,14 +212,23 @@ mod tests {
     fn details_json_uses_camel_case_shape() {
         let meta = sample_meta();
         let value = meta.to_details_json();
-        assert_eq!(value.get("blockId"), Some(&serde_json::json!("compacted-summary-1-2")));
+        assert_eq!(
+            value.get("blockId"),
+            Some(&serde_json::json!("compacted-summary-1-2"))
+        );
         assert_eq!(value.get("generation"), Some(&serde_json::json!(1)));
         assert_eq!(
             value.get("prevBlockId"),
             Some(&serde_json::json!("compacted-summary-1-1"))
         );
-        assert_eq!(value.get("droppedAtMs"), Some(&serde_json::json!(meta.dropped_at_ms)));
-        assert_eq!(value.get("summaryState"), Some(&serde_json::json!("awaiting")));
+        assert_eq!(
+            value.get("droppedAtMs"),
+            Some(&serde_json::json!(meta.dropped_at_ms))
+        );
+        assert_eq!(
+            value.get("summaryState"),
+            Some(&serde_json::json!("awaiting"))
+        );
     }
 
     #[test]

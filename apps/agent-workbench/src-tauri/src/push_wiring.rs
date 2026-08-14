@@ -99,7 +99,9 @@ impl WsPushChannel {
 impl PushChannel for WsPushChannel {
     fn send(&self, device_key: &str, message: &PushMessage) -> Result<(), PushChannelError> {
         let body = serde_json::to_value(crish_agent_workbench::push::ws_push_body(message))
-            .map_err(|e| PushChannelError::SendFailed(format!("events.push 载荷序列化失败：{e}")))?;
+            .map_err(|e| {
+                PushChannelError::SendFailed(format!("events.push 载荷序列化失败：{e}"))
+            })?;
         match self.registry.send_push_frame(device_key, body) {
             Some(true) => Ok(()),
             Some(false) => Err(PushChannelError::SendFailed(
@@ -163,7 +165,9 @@ mod tests {
         let online: Vec<DeviceActivity> = registry
             .connected_devices()
             .into_iter()
-            .filter(|d| crish_agent_workbench::push::is_device_online(d.last_frame_at_ms, 61_000, 30_000))
+            .filter(|d| {
+                crish_agent_workbench::push::is_device_online(d.last_frame_at_ms, 61_000, 30_000)
+            })
             .collect();
         assert_eq!(online.len(), 1, "仅在线设备命中");
         assert_eq!(online[0].device_key, "tok-a");
@@ -221,11 +225,10 @@ mod tests {
         registry.attach_outbound(conn_id, out_tx);
 
         let channel = WsPushChannel::new(Arc::clone(&registry));
-        channel.send("tok-a", &push_message()).expect("在线设备直推必须成功");
-        assert!(
-            out_rx.recv().await.is_some(),
-            "直推帧必须到达连接出站通道"
-        );
+        channel
+            .send("tok-a", &push_message())
+            .expect("在线设备直推必须成功");
+        assert!(out_rx.recv().await.is_some(), "直推帧必须到达连接出站通道");
     }
 
     /// 无活动连接 → NoConnection（在线判定与连接生命周期竞态）
@@ -253,11 +256,16 @@ mod tests {
         registry.attach_outbound(conn_id, out_tx);
 
         let channel = WsPushChannel::new(Arc::clone(&registry));
-        channel.send("tok-a", &push_message()).expect("首帧应入缓冲");
+        channel
+            .send("tok-a", &push_message())
+            .expect("首帧应入缓冲");
         let error = channel
             .send("tok-a", &push_message())
             .expect_err("缓冲满必须报错");
-        assert!(matches!(error, PushChannelError::SendFailed(_)), "背压错误：{error:?}");
+        assert!(
+            matches!(error, PushChannelError::SendFailed(_)),
+            "背压错误：{error:?}"
+        );
         let _ = out_rx;
     }
 

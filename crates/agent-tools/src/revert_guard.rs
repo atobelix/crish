@@ -293,8 +293,7 @@ mod tests {
             let last_key = Self::key_of(session_id, KEY_LAST_AT);
             let count = self.db.get_session_meta(&count_key).ok().flatten();
             let last_at = self.db.get_session_meta(&last_key).ok().flatten();
-            snapshot_from_persisted(count.as_deref(), last_at.as_deref())
-                .unwrap_or_default()
+            snapshot_from_persisted(count.as_deref(), last_at.as_deref()).unwrap_or_default()
         }
 
         fn save(&self, session_id: &str, snapshot: RevertCounterSnapshot) {
@@ -326,7 +325,11 @@ mod tests {
         assert_eq!(first.snapshot_after.streak_count, 1);
 
         let second = guard.record_revert("s1", 1_100);
-        assert_eq!(second.streak, StreakVerdict::NeedsApproval, "窗口内第 2 次必审批");
+        assert_eq!(
+            second.streak,
+            StreakVerdict::NeedsApproval,
+            "窗口内第 2 次必审批"
+        );
         assert_eq!(second.snapshot_after.streak_count, 2);
         assert_eq!(second.snapshot_after.last_revert_at_unix, Some(1_100));
     }
@@ -376,8 +379,15 @@ mod tests {
         // 距上次回退超过 600s → 惰性归零
         let later = 1_700_000_100 + 601;
         let outcome = guard.record_revert("s1", later);
-        assert_eq!(outcome.streak, StreakVerdict::Allow, "超时窗后再次回退不触发");
-        assert_eq!(outcome.snapshot_after.streak_count, 1, "归零后本次为第 1 次");
+        assert_eq!(
+            outcome.streak,
+            StreakVerdict::Allow,
+            "超时窗后再次回退不触发"
+        );
+        assert_eq!(
+            outcome.snapshot_after.streak_count, 1,
+            "归零后本次为第 1 次"
+        );
         assert_eq!(outcome.snapshot_after.last_revert_at_unix, Some(later));
     }
 
@@ -526,12 +536,14 @@ mod tests {
                 RevertGuardReason::StreakSecondCall,
             ]
         );
-        assert_eq!(guard_reasons(true, StreakVerdict::Allow), vec![
-            RevertGuardReason::AreaOverThreshold
-        ]);
-        assert_eq!(guard_reasons(false, StreakVerdict::NeedsApproval), vec![
-            RevertGuardReason::StreakSecondCall
-        ]);
+        assert_eq!(
+            guard_reasons(true, StreakVerdict::Allow),
+            vec![RevertGuardReason::AreaOverThreshold]
+        );
+        assert_eq!(
+            guard_reasons(false, StreakVerdict::NeedsApproval),
+            vec![RevertGuardReason::StreakSecondCall]
+        );
         assert!(guard_reasons(false, StreakVerdict::Allow).is_empty());
     }
 
@@ -576,8 +588,7 @@ mod tests {
         let persisted_last;
         {
             let db = conex_db::LocalDb::open(&db_path).expect("打开测试库失败");
-            let store: Arc<dyn RevertCounterStore> =
-                Arc::new(SessionMetaRevertCounterStore { db });
+            let store: Arc<dyn RevertCounterStore> = Arc::new(SessionMetaRevertCounterStore { db });
             let guard = RevertCounterGuard::with_default_window(store);
             let first = guard.record_revert("", 1_700_000_000);
             assert_eq!(first.streak, StreakVerdict::Allow);
@@ -618,8 +629,7 @@ mod tests {
     fn session_meta_store_missing_keys_yield_fresh_state() {
         let ws = TempWorkspace::new("revert_counter_fresh");
         let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-        let store: Arc<dyn RevertCounterStore> =
-            Arc::new(SessionMetaRevertCounterStore { db });
+        let store: Arc<dyn RevertCounterStore> = Arc::new(SessionMetaRevertCounterStore { db });
         let guard = RevertCounterGuard::with_default_window(store);
         let first = guard.record_revert("", 1_700_000_000);
         assert_eq!(first.streak, StreakVerdict::Allow, "全新会话首次回退放行");
@@ -637,10 +647,20 @@ mod tests {
         guard.record_revert("s1", 1_700_000_000);
         guard.record_revert("s1", 1_700_000_100);
         let other = guard.record_revert("s2", 1_700_000_200);
-        assert_eq!(other.streak, StreakVerdict::Allow, "会话 s2 不受 s1 计数影响");
+        assert_eq!(
+            other.streak,
+            StreakVerdict::Allow,
+            "会话 s2 不受 s1 计数影响"
+        );
         // 落库键含会话前缀
-        assert!(db.get_session_meta("s1:revert_streak_count").unwrap().is_some());
-        assert!(db.get_session_meta("s2:revert_streak_count").unwrap().is_some());
+        assert!(db
+            .get_session_meta("s1:revert_streak_count")
+            .unwrap()
+            .is_some());
+        assert!(db
+            .get_session_meta("s2:revert_streak_count")
+            .unwrap()
+            .is_some());
     }
 
     /// 集成：真实 session_meta 存储走 3 次回退 → 2 个审批请求、计数递增。
@@ -648,8 +668,7 @@ mod tests {
     fn counter_sequence_via_session_meta_store() {
         let ws = TempWorkspace::new("revert_counter_seq");
         let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-        let store: Arc<dyn RevertCounterStore> =
-            Arc::new(SessionMetaRevertCounterStore { db });
+        let store: Arc<dyn RevertCounterStore> = Arc::new(SessionMetaRevertCounterStore { db });
         let guard = RevertCounterGuard::with_default_window(store);
         let approvals = (1_700_000_000..=1_700_000_200)
             .step_by(100)

@@ -30,17 +30,15 @@ pub mod serialize;
 
 pub use budget::{BudgetConfig, TruncationInfo, TruncationKind};
 pub use collect::{
-    AxInfo, AxProperties, Bounds, CdpCollector, CollectedData, CollectError, CrossOriginStats,
-    EnhancedNode, FixtureCollector, FrameMarker, LayoutMetrics, StyleInfo, SnapshotCollector,
+    AxInfo, AxProperties, Bounds, CdpCollector, CollectError, CollectedData, CrossOriginStats,
+    EnhancedNode, FixtureCollector, FrameMarker, LayoutMetrics, SnapshotCollector, StyleInfo,
     COMPUTED_STYLES_WHITELIST, FIRST_ROUND_TIMEOUT, FRAME_COLLECT_TIMEOUT, MAX_IFRAMES,
     MIN_IFRAME_SIZE, RETRY_WINDOW, VIEWPORT_THRESHOLD,
 };
 pub use serialize::{BlindZoneKind, NodeRef, SerializeOptions, SerializeOutput, SimplifiedNode};
 
 use crate::cdp::version::{Stale, TabId, VersionTracker, VERSION_RESET_DELTA};
-use crate::snapshot::budget::{
-    HARD_RAW_PAYLOAD_BYTES, HARD_TIMEOUT, SNAPSHOT_CACHE_TOTAL_BYTES,
-};
+use crate::snapshot::budget::{HARD_RAW_PAYLOAD_BYTES, HARD_TIMEOUT, SNAPSHOT_CACHE_TOTAL_BYTES};
 use crate::snapshot::serialize::build_and_serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -121,7 +119,11 @@ pub enum SnapshotError {
     Busy,
     /// 缓存写入拒绝（版本回退断言，M-6）
     #[error("快照缓存拒绝版本回退：tab={tab_id} version={version} < 已缓存最大 {max}")]
-    CacheRollback { tab_id: TabId, version: u64, max: u64 },
+    CacheRollback {
+        tab_id: TabId,
+        version: u64,
+        max: u64,
+    },
 }
 
 /// 采集状态机（M-5：Idle → Collecting{...} → Committed；中断回 Idle）。
@@ -208,10 +210,8 @@ impl SnapshotCache {
         self.max_version.insert(tab_id.clone(), version.max(max));
 
         let bytes = doc.approx_bytes();
-        self.entries.insert(
-            (tab_id.clone(), version),
-            CacheEntry { doc, bytes },
-        );
+        self.entries
+            .insert((tab_id.clone(), version), CacheEntry { doc, bytes });
         self.lru.push_back((tab_id.clone(), version));
         self.bytes += bytes;
 
@@ -245,7 +245,12 @@ impl SnapshotCache {
             return None;
         }
         let doc = self.get(tab_id, version - 1)?;
-        Some(doc.selector_map.values().map(|r| r.backend_node_id).collect())
+        Some(
+            doc.selector_map
+                .values()
+                .map(|r| r.backend_node_id)
+                .collect(),
+        )
     }
 
     /// 按键删除（LRU/跳变清出共用）。
@@ -368,19 +373,25 @@ impl SnapshotManager {
         } else {
             self.budgets.inactive()
         };
-        let collected: CollectedData = match tokio::time::timeout(HARD_TIMEOUT, self.collector.collect(tab_id, session))
-            .await
-        {
-            Ok(Ok(data)) => data,
-            Ok(Err(e)) => {
-                self.state.lock().unwrap_or_else(|p| p.into_inner()).remove(tab_id);
-                return Err(e);
-            }
-            Err(_) => {
-                self.state.lock().unwrap_or_else(|p| p.into_inner()).remove(tab_id);
-                return Err(SnapshotError::Timeout(HARD_TIMEOUT));
-            }
-        };
+        let collected: CollectedData =
+            match tokio::time::timeout(HARD_TIMEOUT, self.collector.collect(tab_id, session)).await
+            {
+                Ok(Ok(data)) => data,
+                Ok(Err(e)) => {
+                    self.state
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .remove(tab_id);
+                    return Err(e);
+                }
+                Err(_) => {
+                    self.state
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .remove(tab_id);
+                    return Err(SnapshotError::Timeout(HARD_TIMEOUT));
+                }
+            };
 
         // —— 校验（版本/epoch 双读；窗口内推进 → Stale 不提交）——
         let entry = self
@@ -448,10 +459,12 @@ impl SnapshotManager {
         let doc = Arc::new(doc);
 
         // —— 提交（防回退断言 + LRU + 跳变清出）——
-        self.cache
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .put(tab_id, entry.start_version, doc.clone(), entry.start_epoch)?;
+        self.cache.lock().unwrap_or_else(|p| p.into_inner()).put(
+            tab_id,
+            entry.start_version,
+            doc.clone(),
+            entry.start_epoch,
+        )?;
 
         Ok(doc)
     }
@@ -585,7 +598,10 @@ mod tests {
         collector: Arc<dyn SnapshotCollector>,
     ) -> (SnapshotManager, Arc<VersionTracker>, BusHandle) {
         let bus = BusHandle::new(64, 4);
-        let version = Arc::new(VersionTracker::new(bus.event_tx(), Duration::from_millis(200)));
+        let version = Arc::new(VersionTracker::new(
+            bus.event_tx(),
+            Duration::from_millis(200),
+        ));
         (
             SnapshotManager::new(version.clone(), collector, BudgetConfig::active()),
             version,
@@ -609,7 +625,10 @@ mod tests {
     async fn capture_transaction_commits() {
         let (mgr, version, _bus) = test_manager(Arc::new(FixtureCollector::new(page_fixture())));
         version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
-        let doc = mgr.capture(&"t1".to_string(), "s1", true).await.expect("采集应成功");
+        let doc = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("采集应成功");
         assert_eq!(doc.meta.snapshot_version, 1);
         assert_eq!(doc.meta.tab_id, "t1");
         assert!(doc.serialized_text.contains("[1]<input name=q"));
@@ -623,18 +642,36 @@ mod tests {
     async fn capture_stale_on_version_advance() {
         // 采集器与管理器共享同一版本跟踪器（窗口内推进才能被校验检出）
         let bus = BusHandle::new(64, 4);
-        let version = Arc::new(VersionTracker::new(bus.event_tx(), Duration::from_millis(200)));
-        let collector = Arc::new(AdvancingCollector { version: version.clone() });
+        let version = Arc::new(VersionTracker::new(
+            bus.event_tx(),
+            Duration::from_millis(200),
+        ));
+        let collector = Arc::new(AdvancingCollector {
+            version: version.clone(),
+        });
         let mgr = SnapshotManager::new(version.clone(), collector, BudgetConfig::active());
-        let err = mgr.capture(&"t1".to_string(), "s1", true).await.expect_err("窗口内推进应 Stale");
+        let err = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect_err("窗口内推进应 Stale");
         assert!(matches!(err, SnapshotError::Stale(_)));
-        assert_eq!(mgr.state_kind(), CaptureStateKind::Idle, "Stale 后状态回 Idle");
-        assert!(mgr.get_cached(&"t1".to_string(), 0).is_none(), "Stale 不产生缓存条目");
+        assert_eq!(
+            mgr.state_kind(),
+            CaptureStateKind::Idle,
+            "Stale 后状态回 Idle"
+        );
+        assert!(
+            mgr.get_cached(&"t1".to_string(), 0).is_none(),
+            "Stale 不产生缓存条目"
+        );
         // 再次采集应成功（无半成品残留）
         let collector2 = Arc::new(FixtureCollector::new(page_fixture()));
         let (mgr2, version2, _bus2) = test_manager(collector2);
         version2.bump("t1", crate::cdp::bus::VersionReason::Navigation);
-        let _ = mgr2.capture(&"t1".to_string(), "s1", true).await.expect("重拍应成功");
+        let _ = mgr2
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("重拍应成功");
     }
 
     /// 采集期间推进版本的采集器（Stale 注入）。
@@ -649,7 +686,8 @@ mod tests {
             _tab_id: &str,
             _session: &str,
         ) -> Result<CollectedData, SnapshotError> {
-            self.version.bump("t1", crate::cdp::bus::VersionReason::ActionDone);
+            self.version
+                .bump("t1", crate::cdp::bus::VersionReason::ActionDone);
             tokio::time::sleep(Duration::from_millis(10)).await;
             Ok(CollectedData {
                 roots: page_fixture(),
@@ -666,14 +704,28 @@ mod tests {
     /// 12s 硬超时（T-1）：注入挂起采集 → Timeout，状态回 Idle。
     #[tokio::test]
     async fn capture_hard_timeout_hangs() {
-        let hanging = Arc::new(FixtureCollector::new(page_fixture()).hang_for(Duration::from_secs(30)));
+        let hanging =
+            Arc::new(FixtureCollector::new(page_fixture()).hang_for(Duration::from_secs(30)));
         let (mgr, _version, _bus) = test_manager(hanging);
         let started = std::time::Instant::now();
-        let err = mgr.capture(&"t1".to_string(), "s1", true).await.expect_err("挂起采集应超时");
+        let err = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect_err("挂起采集应超时");
         assert!(matches!(err, SnapshotError::Timeout(_)));
-        assert!(started.elapsed() < Duration::from_secs(15), "应在 12s 硬超时内返回");
-        assert_eq!(mgr.state_kind(), CaptureStateKind::Idle, "超时后状态回 Idle");
-        assert!(mgr.get_cached(&"t1".to_string(), 0).is_none(), "超时不产生缓存条目");
+        assert!(
+            started.elapsed() < Duration::from_secs(15),
+            "应在 12s 硬超时内返回"
+        );
+        assert_eq!(
+            mgr.state_kind(),
+            CaptureStateKind::Idle,
+            "超时后状态回 Idle"
+        );
+        assert!(
+            mgr.get_cached(&"t1".to_string(), 0).is_none(),
+            "超时不产生缓存条目"
+        );
     }
 
     /// M2：采集文档携带密码标记——type=password 输入 backendNodeId 入集合，
@@ -694,9 +746,18 @@ mod tests {
         ];
         let (mgr, version, _bus) = test_manager(Arc::new(FixtureCollector::new(roots)));
         version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
-        let doc = mgr.capture(&"t1".to_string(), "s1", true).await.expect("采集应成功");
-        assert!(doc.password_backend_ids.contains(&1), "type=password 输入必须入标记集合");
-        assert!(doc.password_backend_ids.contains(&2), "敏感 autocomplete 输入必须入标记集合");
+        let doc = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("采集应成功");
+        assert!(
+            doc.password_backend_ids.contains(&1),
+            "type=password 输入必须入标记集合"
+        );
+        assert!(
+            doc.password_backend_ids.contains(&2),
+            "敏感 autocomplete 输入必须入标记集合"
+        );
         assert!(!doc.password_backend_ids.contains(&3), "普通按钮不敏感");
         assert!(!doc.password_backend_ids.contains(&4), "文本节点不敏感");
     }
@@ -707,7 +768,10 @@ mod tests {
     async fn capture_concurrent_queues_serially() {
         let probe = ProbeCollector::new(Duration::from_millis(150));
         let bus = BusHandle::new(64, 4);
-        let version = Arc::new(VersionTracker::new(bus.event_tx(), Duration::from_millis(200)));
+        let version = Arc::new(VersionTracker::new(
+            bus.event_tx(),
+            Duration::from_millis(200),
+        ));
         let mgr = Arc::new(SnapshotManager::new(
             version.clone(),
             probe.clone(),
@@ -725,9 +789,19 @@ mod tests {
         assert!(ra.is_ok(), "排队后首拍应成功：{ra:?}");
         assert!(rb.is_ok(), "排队后次拍应成功：{rb:?}");
         assert_eq!(probe.max_active(), 1, "默认限流 1：同时最多 1 个采集在跑");
-        assert_eq!(mgr.state_kind(), CaptureStateKind::Idle, "全部结束后回 Idle");
-        assert!(mgr.get_cached(&"t1".to_string(), 1).is_some(), "t1 快照已提交");
-        assert!(mgr.get_cached(&"t2".to_string(), 1).is_some(), "t2 快照已提交");
+        assert_eq!(
+            mgr.state_kind(),
+            CaptureStateKind::Idle,
+            "全部结束后回 Idle"
+        );
+        assert!(
+            mgr.get_cached(&"t1".to_string(), 1).is_some(),
+            "t1 快照已提交"
+        );
+        assert!(
+            mgr.get_cached(&"t2".to_string(), 1).is_some(),
+            "t2 快照已提交"
+        );
     }
 
     /// M9：限流可配——并发度 2 时不同标签采集并行执行（同时活跃数到 2）。
@@ -735,7 +809,10 @@ mod tests {
     async fn capture_concurrency_limit_configurable() {
         let probe = ProbeCollector::new(Duration::from_millis(150));
         let bus = BusHandle::new(64, 4);
-        let version = Arc::new(VersionTracker::new(bus.event_tx(), Duration::from_millis(200)));
+        let version = Arc::new(VersionTracker::new(
+            bus.event_tx(),
+            Duration::from_millis(200),
+        ));
         let mgr = Arc::new(
             SnapshotManager::new(version.clone(), probe.clone(), BudgetConfig::active())
                 .with_capture_concurrency(2),
@@ -752,7 +829,11 @@ mod tests {
         assert!(ra.is_ok(), "并行采集应成功：{ra:?}");
         assert!(rb.is_ok(), "并行采集应成功：{rb:?}");
         assert_eq!(probe.max_active(), 2, "并发度 2：两个采集并行执行");
-        assert_eq!(mgr.state_kind(), CaptureStateKind::Idle, "全部结束后回 Idle");
+        assert_eq!(
+            mgr.state_kind(),
+            CaptureStateKind::Idle,
+            "全部结束后回 Idle"
+        );
     }
 
     /// 并发探针采集器（M9）：统计同时活跃的采集数（确定性并发度断言）。
@@ -785,11 +866,15 @@ mod tests {
             _tab_id: &str,
             _session: &str,
         ) -> Result<CollectedData, SnapshotError> {
-            let now = self.active.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            let now = self
+                .active
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                + 1;
             self.max_active
                 .fetch_max(now, std::sync::atomic::Ordering::SeqCst);
             tokio::time::sleep(self.hang).await;
-            self.active.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            self.active
+                .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
             Ok(CollectedData {
                 roots: self.roots.clone(),
                 url: String::new(),
@@ -807,12 +892,23 @@ mod tests {
     async fn validate_epoch_change_is_stale() {
         let (mgr, version, _bus) = test_manager(Arc::new(FixtureCollector::new(page_fixture())));
         version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
-        let doc = mgr.capture(&"t1".to_string(), "s1", true).await.expect("采集应成功");
-        assert!(mgr.validate_snapshot(&"t1".to_string(), doc.meta.snapshot_version).is_ok());
+        let doc = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("采集应成功");
+        assert!(mgr
+            .validate_snapshot(&"t1".to_string(), doc.meta.snapshot_version)
+            .is_ok());
         // VersionReset：epoch+1、版本 +1000 → 旧快照 Stale
         version.reset(crate::cdp::bus::VersionReason::Reconnected);
-        assert!(mgr.validate_snapshot(&"t1".to_string(), 1).is_err(), "epoch 变化应 Stale");
-        assert!(mgr.validate_document(&doc).is_err(), "validate_document 应检出 epoch 变化");
+        assert!(
+            mgr.validate_snapshot(&"t1".to_string(), 1).is_err(),
+            "epoch 变化应 Stale"
+        );
+        assert!(
+            mgr.validate_document(&doc).is_err(),
+            "validate_document 应检出 epoch 变化"
+        );
     }
 
     /// +1000 跳变（重连/崩溃重启）→ Stale。
@@ -823,7 +919,10 @@ mod tests {
         assert!(mgr.validate_snapshot(&"t1".to_string(), 1).is_ok());
         // 直接跳变 +1000（模拟跟踪器重对齐）
         version.reset(crate::cdp::bus::VersionReason::LaggedResync);
-        assert!(mgr.validate_snapshot(&"t1".to_string(), 1).is_err(), "+1000 跳变应 Stale");
+        assert!(
+            mgr.validate_snapshot(&"t1".to_string(), 1).is_err(),
+            "+1000 跳变应 Stale"
+        );
         assert!(mgr.validate_snapshot(&"t1".to_string(), 1001).is_ok());
     }
 
@@ -832,9 +931,15 @@ mod tests {
     async fn cache_rejects_version_rollback() {
         let (mgr, version, _bus) = test_manager(Arc::new(FixtureCollector::new(page_fixture())));
         version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
-        let _ = mgr.capture(&"t1".to_string(), "s1", true).await.expect("v1 采集成功");
+        let _ = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("v1 采集成功");
         version.bump("t1", crate::cdp::bus::VersionReason::ActionDone);
-        let _ = mgr.capture(&"t1".to_string(), "s1", true).await.expect("v2 采集成功");
+        let _ = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("v2 采集成功");
 
         // 直接向缓存写入旧版本（模拟异常路径/外部注入）→ 防回退断言拒绝
         let doc = snapshot_from_roots(
@@ -846,7 +951,9 @@ mod tests {
             &BudgetConfig::active(),
         );
         let mut cache = SnapshotCache::new(SNAPSHOT_CACHE_TOTAL_BYTES);
-        cache.put(&"t1".to_string(), 2, Arc::new(doc), 0).expect("v2 正常写入");
+        cache
+            .put(&"t1".to_string(), 2, Arc::new(doc), 0)
+            .expect("v2 正常写入");
         let old_doc = snapshot_from_roots(
             page_fixture(),
             &"t1".to_string(),
@@ -875,10 +982,16 @@ mod tests {
     async fn cache_clears_old_versions_on_reset_jump() {
         let (mgr, version, _bus) = test_manager(Arc::new(FixtureCollector::new(page_fixture())));
         version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
-        let _ = mgr.capture(&"t1".to_string(), "s1", true).await.expect("v1 采集成功");
+        let _ = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("v1 采集成功");
         assert!(mgr.get_cached(&"t1".to_string(), 1).is_some());
         version.reset(crate::cdp::bus::VersionReason::Reconnected);
-        let _ = mgr.capture(&"t1".to_string(), "s1", true).await.expect("v1001 采集成功");
+        let _ = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("v1001 采集成功");
         assert!(mgr.get_cached(&"t1".to_string(), 1001).is_some());
         assert!(
             mgr.get_cached(&"t1".to_string(), 1).is_none(),
@@ -900,7 +1013,9 @@ mod tests {
                 "s1",
                 &BudgetConfig::active(),
             );
-            cache.put(&"t1".to_string(), v, Arc::new(doc), 0).expect("正常写入");
+            cache
+                .put(&"t1".to_string(), v, Arc::new(doc), 0)
+                .expect("正常写入");
         }
         assert!(cache.get(&"t1".to_string(), 3).is_some(), "最新条目保留");
         assert!(cache.get(&"t1".to_string(), 2).is_none(), "最久未用逐出");
@@ -917,16 +1032,35 @@ mod tests {
                 "s1",
                 &BudgetConfig::active(),
             );
-            cache2.put(&"t1".to_string(), v, Arc::new(doc), 0).expect("正常写入");
+            cache2
+                .put(&"t1".to_string(), v, Arc::new(doc), 0)
+                .expect("正常写入");
         }
         assert!(cache2.get(&"t1".to_string(), 3).is_some());
         assert!(cache2.get(&"t1".to_string(), 2).is_some());
-        assert!(cache2.get(&"t1".to_string(), 1).is_none(), "最久未用（v1）逐出");
+        assert!(
+            cache2.get(&"t1".to_string(), 1).is_none(),
+            "最久未用（v1）逐出"
+        );
 
         // 跨 tab 独立（维度 15 隔离语义）
         let mut cache3 = SnapshotCache::new(100 * 1024);
-        let d1 = snapshot_from_roots(page_fixture(), &"t1".to_string(), 1, 0, "s1", &BudgetConfig::active());
-        let d2 = snapshot_from_roots(page_fixture(), &"t2".to_string(), 1, 0, "s1", &BudgetConfig::active());
+        let d1 = snapshot_from_roots(
+            page_fixture(),
+            &"t1".to_string(),
+            1,
+            0,
+            "s1",
+            &BudgetConfig::active(),
+        );
+        let d2 = snapshot_from_roots(
+            page_fixture(),
+            &"t2".to_string(),
+            1,
+            0,
+            "s1",
+            &BudgetConfig::active(),
+        );
         cache3.put(&"t1".to_string(), 1, Arc::new(d1), 0).unwrap();
         cache3.put(&"t2".to_string(), 1, Arc::new(d2), 0).unwrap();
         assert!(cache3.get(&"t1".to_string(), 1).is_some());
@@ -938,11 +1072,19 @@ mod tests {
     async fn capture_inactive_budget_scaled() {
         let (mgr, version, _bus) = test_manager(Arc::new(FixtureCollector::new(page_fixture())));
         version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
-        let _active = mgr.capture(&"t1".to_string(), "s1", true).await.expect("活跃全额");
+        let _active = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect("活跃全额");
         version.bump("t1", crate::cdp::bus::VersionReason::ActionDone);
-        let inactive = mgr.capture(&"t1".to_string(), "s1", false).await.expect("非活跃惰性");
+        let inactive = mgr
+            .capture(&"t1".to_string(), "s1", false)
+            .await
+            .expect("非活跃惰性");
         // 小页面在非活跃预算下完整表达（250 节点/125 索引足够）
-        assert!(inactive.serialized_text.contains("[2]<button>搜索</button>"));
+        assert!(inactive
+            .serialized_text
+            .contains("[2]<button>搜索</button>"));
     }
 
     /// 载荷护栏（T-2 + 46 复核）：512KB 硬护栏边界判定。
@@ -957,7 +1099,10 @@ mod tests {
     async fn capture_propagates_collect_error() {
         let failing = Arc::new(FailingCollector);
         let (mgr, _version, _bus) = test_manager(failing);
-        let err = mgr.capture(&"t1".to_string(), "s1", true).await.expect_err("采集失败应透传");
+        let err = mgr
+            .capture(&"t1".to_string(), "s1", true)
+            .await
+            .expect_err("采集失败应透传");
         assert!(matches!(err, SnapshotError::Collect(_)));
         assert_eq!(mgr.state_kind(), CaptureStateKind::Idle);
     }

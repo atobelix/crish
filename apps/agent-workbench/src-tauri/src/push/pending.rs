@@ -302,11 +302,9 @@ impl PendingApprovalStore {
             Ok(c) => c,
             Err(_) => return 0,
         };
-        conn.query_row(
-            "SELECT COUNT(*) FROM push_pending_approvals",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
+        conn.query_row("SELECT COUNT(*) FROM push_pending_approvals", [], |row| {
+            row.get::<_, i64>(0)
+        })
         .unwrap_or(0) as usize
     }
 }
@@ -381,7 +379,10 @@ mod tests {
         let store = PendingApprovalStore::open_in_memory().expect("内存库");
         let message = approval_message("tc-9f3a");
         assert!(store.enqueue("tok-a", &message, T0));
-        assert!(store.enqueue("tok-a", &message, T0 + 1_000), "幂等命中也算已落库");
+        assert!(
+            store.enqueue("tok-a", &message, T0 + 1_000),
+            "幂等命中也算已落库"
+        );
         assert_eq!(store.len(), 1, "不重复计数");
         // 不同设备独立计数（多设备各推一条）
         assert!(store.enqueue("tok-b", &message, T0));
@@ -423,7 +424,11 @@ mod tests {
         let first = store.take_due(T0);
         assert_eq!(first.len(), 1);
         assert_eq!(first[0].retry_count, 1);
-        assert_eq!(first[0].next_retry_at_ms, T0 + 15 * 60 * 1000, "第 1 次重推 +15min");
+        assert_eq!(
+            first[0].next_retry_at_ms,
+            T0 + 15 * 60 * 1000,
+            "第 1 次重推 +15min"
+        );
 
         // 阶梯逐跳：每次推进 1，间隔 = 旧计数对应值（1..=4 → 60min）
         let mut now = T0 + 15 * 60 * 1000;
@@ -452,7 +457,10 @@ mod tests {
         assert!(store.enqueue("tok-a", &approval_message("tc-7"), T0));
         store.take_due(T0); // 首取 → 下次 +15min
 
-        assert!(store.take_due(T0 + 15 * 60 * 1000 - 1).is_empty(), "未到时刻不取走");
+        assert!(
+            store.take_due(T0 + 15 * 60 * 1000 - 1).is_empty(),
+            "未到时刻不取走"
+        );
         assert_eq!(store.take_due(T0 + 15 * 60 * 1000).len(), 1, "到点取走");
     }
 
@@ -505,7 +513,11 @@ mod tests {
             1,
             T0,
         );
-        assert_eq!(approval_id_for(&run), "run-terminal:run-42:failed", "非审批回退去重键");
+        assert_eq!(
+            approval_id_for(&run),
+            "run-terminal:run-42:failed",
+            "非审批回退去重键"
+        );
     }
 
     /// 损坏 payload 行：取走时删除并跳过（不阻塞整批、不重复死扫）
@@ -546,11 +558,7 @@ mod tests {
         let presence = Arc::new(MemoryPresenceSource::new());
         presence.set_devices(vec![device_activity("tok-a", "手机 A", T0 - 60_000)]);
         let channel = Arc::new(RecordingChannel);
-        PushDispatcher::new(
-            presence,
-            channel as Arc<dyn PushChannel>,
-        )
-        .with_pending_store(store)
+        PushDispatcher::new(presence, channel as Arc<dyn PushChannel>).with_pending_store(store)
     }
 
     /// 桥接 · 入队落库 + take 从库读：离线分发 → 待发表落库（无内存重复），
@@ -568,7 +576,11 @@ mod tests {
         let taken = dispatcher.take_pending();
         assert_eq!(taken.len(), 1, "take 从库读，不重复");
         assert_eq!(taken[0].device_key, "tok-a");
-        assert_eq!(taken[0].message.title.as_deref(), Some("Crish 需要你的批准"), "copy.rs 文案随分发注入");
+        assert_eq!(
+            taken[0].message.title.as_deref(),
+            Some("Crish 需要你的批准"),
+            "copy.rs 文案随分发注入"
+        );
         assert_eq!(store.len(), 1, "取走后行保留（阶梯推进，送达才清库）");
         assert!(dispatcher.take_pending().is_empty(), "阶梯未到点不再产出");
     }
@@ -594,7 +606,10 @@ mod tests {
         let taken = dispatcher.take_pending();
         assert_eq!(taken.len(), 1, "重启后到期待发自动恢复");
         assert_eq!(taken[0].message.target.params["toolCallId"], "tc-1");
-        assert_eq!(taken[0].message.title.as_deref(), Some("Crish 需要你的批准"));
+        assert_eq!(
+            taken[0].message.title.as_deref(),
+            Some("Crish 需要你的批准")
+        );
     }
 
     /// 桥接 · 送达清库：mark_delivered 移除待发表行（R3-03 消费接线面）

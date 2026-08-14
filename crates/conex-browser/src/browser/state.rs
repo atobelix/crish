@@ -96,7 +96,10 @@ pub enum Transition {
     /// Stopping --StopTimeout--> Stopped：杀树 + 删 profile。
     StoppedAfterKill,
     /// 非法迁移（状态机拒绝，调用方记 warning）。
-    Invalid { state: BrowserState, event: StateEvent },
+    Invalid {
+        state: BrowserState,
+        event: StateEvent,
+    },
 }
 
 /// 崩溃重启预算（30s 窗口内 3 次上限，§6.2/§6.4）。
@@ -203,13 +206,13 @@ impl StateMachine {
         let state = self.state;
         match (state, event) {
             // —— 合法迁移（§6.2 全表）——
-            (BrowserState::Stopped, StateEvent::Start) => {
-                Transition::SpawnBrowser { attempt: 1 }
-            }
+            (BrowserState::Stopped, StateEvent::Start) => Transition::SpawnBrowser { attempt: 1 },
             (BrowserState::Launching { .. }, StateEvent::PortReady) => Transition::RunningReady,
             (BrowserState::Launching { attempt }, StateEvent::LaunchFailed) => {
                 if attempt < 3 {
-                    Transition::RetryLaunch { attempt: attempt + 1 }
+                    Transition::RetryLaunch {
+                        attempt: attempt + 1,
+                    }
                 } else {
                     Transition::GiveUp
                 }
@@ -229,14 +232,16 @@ impl StateMachine {
                     Transition::CrashEnter { restarts }
                 }
             }
-            (BrowserState::Crashed { .. }, StateEvent::RestartTick) => {
-                Transition::RestartBrowser { restarts: self.restarts }
-            }
+            (BrowserState::Crashed { .. }, StateEvent::RestartTick) => Transition::RestartBrowser {
+                restarts: self.restarts,
+            },
             // 扩展（文档未列但必要）：崩溃窗口/启动中收到停止意图 → 直接收敛
             (BrowserState::Crashed { .. }, StateEvent::Stop { .. }) => Transition::StoppedClean,
             (BrowserState::Launching { .. }, StateEvent::Stop { .. }) => Transition::StoppedClean,
             (BrowserState::Stopping { .. }, StateEvent::StopExited) => Transition::StoppedClean,
-            (BrowserState::Stopping { .. }, StateEvent::StopTimeout) => Transition::StoppedAfterKill,
+            (BrowserState::Stopping { .. }, StateEvent::StopTimeout) => {
+                Transition::StoppedAfterKill
+            }
             // —— 非法迁移（全部其余组合）——
             _ => Transition::Invalid { state, event },
         }
@@ -288,9 +293,9 @@ mod tests {
             (BrowserState::Running, StateEvent::Stop { graceful: false }) => {
                 Transition::BeginForceStop
             }
-            (BrowserState::Running, StateEvent::CrashDetected { .. }) => {
-                Transition::CrashEnter { restarts: restarts + 1 }
-            }
+            (BrowserState::Running, StateEvent::CrashDetected { .. }) => Transition::CrashEnter {
+                restarts: restarts + 1,
+            },
             (BrowserState::Crashed { .. }, StateEvent::RestartTick) => {
                 Transition::RestartBrowser { restarts }
             }
@@ -327,7 +332,9 @@ mod tests {
                 // 先记录 restarts-1 次崩溃并重启回 Running，最后一次崩溃留在 Crashed
                 for _ in 0..restarts.saturating_sub(1) {
                     sm.on(
-                        StateEvent::CrashDetected { reason: CrashReason::ProcessExit(1) },
+                        StateEvent::CrashDetected {
+                            reason: CrashReason::ProcessExit(1),
+                        },
                         now(),
                         &budget,
                     );
@@ -335,7 +342,9 @@ mod tests {
                     sm.on(StateEvent::PortReady, now(), &budget);
                 }
                 sm.on(
-                    StateEvent::CrashDetected { reason: CrashReason::ProcessExit(1) },
+                    StateEvent::CrashDetected {
+                        reason: CrashReason::ProcessExit(1),
+                    },
                     now(),
                     &budget,
                 );
@@ -360,7 +369,10 @@ mod tests {
             BrowserState::Launching { attempt: 2 },
             BrowserState::Launching { attempt: 3 },
             BrowserState::Running,
-            BrowserState::Crashed { reason: CrashReason::Unknown, restarts: 2 },
+            BrowserState::Crashed {
+                reason: CrashReason::Unknown,
+                restarts: 2,
+            },
             BrowserState::Stopping { graceful: true },
             BrowserState::Stopping { graceful: false },
         ];
@@ -370,7 +382,9 @@ mod tests {
             StateEvent::LaunchFailed,
             StateEvent::Stop { graceful: true },
             StateEvent::Stop { graceful: false },
-            StateEvent::CrashDetected { reason: CrashReason::ProcessExit(1) },
+            StateEvent::CrashDetected {
+                reason: CrashReason::ProcessExit(1),
+            },
             StateEvent::RestartTick,
             StateEvent::StopExited,
             StateEvent::StopTimeout,
@@ -401,8 +415,10 @@ mod tests {
                     Transition::RunningReady => {
                         assert_eq!(sm.state(), BrowserState::Running, "{state:?} × {event:?}")
                     }
-                    Transition::GiveUp | Transition::CrashAbort { .. }
-                    | Transition::StoppedClean | Transition::StoppedAfterKill => {
+                    Transition::GiveUp
+                    | Transition::CrashAbort { .. }
+                    | Transition::StoppedClean
+                    | Transition::StoppedAfterKill => {
                         assert_eq!(sm.state(), BrowserState::Stopped, "{state:?} × {event:?}")
                     }
                     _ => {}
@@ -476,7 +492,9 @@ mod tests {
             let t = t0 + Duration::from_secs(u64::from(n));
             assert_eq!(
                 sm.on(
-                    StateEvent::CrashDetected { reason: CrashReason::ProcessExit(n.into()) },
+                    StateEvent::CrashDetected {
+                        reason: CrashReason::ProcessExit(n.into())
+                    },
                     t,
                     &budget
                 ),
@@ -490,7 +508,9 @@ mod tests {
         let t4 = t0 + Duration::from_secs(4);
         assert_eq!(
             sm.on(
-                StateEvent::CrashDetected { reason: CrashReason::ProcessExit(4) },
+                StateEvent::CrashDetected {
+                    reason: CrashReason::ProcessExit(4)
+                },
                 t4,
                 &budget
             ),
@@ -511,7 +531,9 @@ mod tests {
             let t = t0 + Duration::from_secs(u64::from(n));
             assert!(matches!(
                 sm.on(
-                    StateEvent::CrashDetected { reason: CrashReason::ProcessExit(1) },
+                    StateEvent::CrashDetected {
+                        reason: CrashReason::ProcessExit(1)
+                    },
                     t,
                     &budget
                 ),
@@ -523,7 +545,9 @@ mod tests {
         // 第 4 次崩溃发生在窗口之外（首个崩溃恰满 30s → 出窗剔除）→ 仍可重启
         let t_far = t0 + Duration::from_secs(31);
         let t = sm.on(
-            StateEvent::CrashDetected { reason: CrashReason::ProcessExit(1) },
+            StateEvent::CrashDetected {
+                reason: CrashReason::ProcessExit(1),
+            },
             t_far,
             &budget,
         );
@@ -534,7 +558,10 @@ mod tests {
         assert_eq!(sm.restarts(), 3);
         assert_eq!(
             sm.state(),
-            BrowserState::Crashed { reason: CrashReason::ProcessExit(1), restarts: 3 }
+            BrowserState::Crashed {
+                reason: CrashReason::ProcessExit(1),
+                restarts: 3
+            }
         );
     }
 
@@ -547,13 +574,19 @@ mod tests {
         sm.on(StateEvent::Start, t0, &budget);
         sm.on(StateEvent::PortReady, t0, &budget);
         sm.on(
-            StateEvent::CrashDetected { reason: CrashReason::CdpDisconnected },
+            StateEvent::CrashDetected {
+                reason: CrashReason::CdpDisconnected,
+            },
             t0 + Duration::from_secs(2),
             &budget,
         );
         assert_eq!(sm.restarts(), 1);
         assert_eq!(
-            sm.on(StateEvent::RestartTick, t0 + Duration::from_secs(2), &budget),
+            sm.on(
+                StateEvent::RestartTick,
+                t0 + Duration::from_secs(2),
+                &budget
+            ),
             Transition::RestartBrowser { restarts: 1 }
         );
         assert_eq!(sm.state(), BrowserState::Launching { attempt: 1 });
@@ -569,7 +602,9 @@ mod tests {
         sm.on(StateEvent::Start, t0, &budget);
         sm.on(StateEvent::PortReady, t0, &budget);
         sm.on(
-            StateEvent::CrashDetected { reason: CrashReason::Unknown },
+            StateEvent::CrashDetected {
+                reason: CrashReason::Unknown,
+            },
             t0,
             &budget,
         );
@@ -590,7 +625,9 @@ mod tests {
             StateEvent::LaunchFailed,
             StateEvent::Stop { graceful: true },
             StateEvent::Stop { graceful: false },
-            StateEvent::CrashDetected { reason: CrashReason::Unknown },
+            StateEvent::CrashDetected {
+                reason: CrashReason::Unknown,
+            },
             StateEvent::RestartTick,
             StateEvent::StopExited,
             StateEvent::StopTimeout,
@@ -614,7 +651,13 @@ mod tests {
 
     /// 在 t 时刻崩溃并立即重启回 Running（确定性序列）。
     fn crash_and_restart(sm: &mut StateMachine, t: Instant, budget: &CrashBudget) {
-        sm.on(StateEvent::CrashDetected { reason: CrashReason::ProcessExit(1) }, t, budget);
+        sm.on(
+            StateEvent::CrashDetected {
+                reason: CrashReason::ProcessExit(1),
+            },
+            t,
+            budget,
+        );
         sm.on(StateEvent::RestartTick, t, budget);
         sm.on(StateEvent::PortReady, t, budget);
     }
@@ -628,11 +671,17 @@ mod tests {
         for sec in [0u64, 10, 20, 29] {
             if sec == 29 {
                 let t = sm.on(
-                    StateEvent::CrashDetected { reason: CrashReason::ProcessExit(4) },
+                    StateEvent::CrashDetected {
+                        reason: CrashReason::ProcessExit(4),
+                    },
                     t0 + Duration::from_secs(sec),
                     &budget,
                 );
-                assert_eq!(t, Transition::CrashAbort { restarts: 4 }, "29s 仍在窗口内 → 超限");
+                assert_eq!(
+                    t,
+                    Transition::CrashAbort { restarts: 4 },
+                    "29s 仍在窗口内 → 超限"
+                );
                 assert_eq!(sm.state(), BrowserState::Stopped);
             } else {
                 crash_and_restart(&mut sm, t0 + Duration::from_secs(sec), &budget);
@@ -652,7 +701,9 @@ mod tests {
         }
         // 第 4 次崩溃恰在 t0+30s：now - oldest = 30s >= window → 出窗剔除
         let t = sm.on(
-            StateEvent::CrashDetected { reason: CrashReason::ProcessExit(4) },
+            StateEvent::CrashDetected {
+                reason: CrashReason::ProcessExit(4),
+            },
             t0 + Duration::from_secs(30),
             &budget,
         );
@@ -664,11 +715,17 @@ mod tests {
         // 出窗后的新基线：下一个崩溃距最早崩溃（t=10s）不足 30s → 窗口内 4 次 → 超限
         crash_and_restart(&mut sm, t0 + Duration::from_secs(35), &budget);
         let t = sm.on(
-            StateEvent::CrashDetected { reason: CrashReason::ProcessExit(7) },
+            StateEvent::CrashDetected {
+                reason: CrashReason::ProcessExit(7),
+            },
             t0 + Duration::from_secs(39),
             &budget,
         );
-        assert_eq!(t, Transition::CrashAbort { restarts: 4 }, "新窗口内 4 次 → 超限");
+        assert_eq!(
+            t,
+            Transition::CrashAbort { restarts: 4 },
+            "新窗口内 4 次 → 超限"
+        );
     }
 
     /// 窗口滑动：29s 间隔连续崩溃，首崩逐渐滑出、计数按窗口收敛
@@ -686,10 +743,16 @@ mod tests {
         assert_eq!(sm.restarts(), 2);
         // 第 3 次（t=58s）：0 出窗（58-0 >= 30），29 在窗内（58-29=29 < 30）→ restarts=2
         crash_and_restart(&mut sm, t0 + Duration::from_secs(58), &budget);
-        assert_eq!(sm.restarts(), 2, "窗口滑动：最旧崩溃被剔除，计数不随次数单调");
+        assert_eq!(
+            sm.restarts(),
+            2,
+            "窗口滑动：最旧崩溃被剔除，计数不随次数单调"
+        );
         // 第 4 次（t=87s）：29 出窗（87-29=58 >= 30），58 在窗内 → restarts=2 → 仍可重启
         let t = sm.on(
-            StateEvent::CrashDetected { reason: CrashReason::ProcessExit(4) },
+            StateEvent::CrashDetected {
+                reason: CrashReason::ProcessExit(4),
+            },
             t0 + Duration::from_secs(87),
             &budget,
         );

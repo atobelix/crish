@@ -116,13 +116,9 @@ impl CdpInputBackend {
 /// InputError → InputBackendError（05 文档 §4.1 错误面映射）。
 fn map_input_error(e: InputError) -> InputBackendError {
     match e {
-        InputError::NoActiveTab => {
-            InputBackendError::Failed("无活动标签会话".to_string())
-        }
+        InputError::NoActiveTab => InputBackendError::Failed("无活动标签会话".to_string()),
         InputError::SendFailed { message } => InputBackendError::Failed(message),
-        InputError::QueueClosed => {
-            InputBackendError::Failed("输入管线已关闭".to_string())
-        }
+        InputError::QueueClosed => InputBackendError::Failed("输入管线已关闭".to_string()),
     }
 }
 
@@ -701,7 +697,10 @@ mod tests {
             .await
             .expect("移动失败");
         let _ = next_mouse(&mut mock).await;
-        backend.button(MouseButton::Left, true).await.expect("按下失败");
+        backend
+            .button(MouseButton::Left, true)
+            .await
+            .expect("按下失败");
         let press = next_mouse(&mut mock).await;
         assert_eq!(press["type"], "mousePressed");
         assert_eq!(press["x"], 5.0, "作用于当前光标位置");
@@ -732,10 +731,7 @@ mod tests {
         let (mut mock, session) = setup().await;
         let backend = CdpInputBackend::new(InputPipeline::new(session.clone()));
         backend
-            .drag(
-                PhysicalPoint { x: 0, y: 0 },
-                PhysicalPoint { x: 100, y: 0 },
-            )
+            .drag(PhysicalPoint { x: 0, y: 0 }, PhysicalPoint { x: 100, y: 0 })
             .await
             .expect("拖拽失败");
         let m0 = next_mouse(&mut mock).await;
@@ -814,10 +810,7 @@ mod tests {
         let (mut mock, session) = setup().await;
         let backend = CdpInputBackend::new(InputPipeline::new(session.clone()));
         let started = tokio::time::Instant::now();
-        backend
-            .type_text(&"x".repeat(120))
-            .await
-            .expect("输入失败");
+        backend.type_text(&"x".repeat(120)).await.expect("输入失败");
         for expected_len in [50usize, 50, 20] {
             let p = next_insert(&mut mock).await;
             assert_eq!(
@@ -908,10 +901,7 @@ mod tests {
             .expect_err("未知修饰键应失败");
         assert!(matches!(err, InputBackendError::Failed(_)));
         let err = backend
-            .key(
-                &[KeyName("a".to_string()), KeyName("b".to_string())],
-                None,
-            )
+            .key(&[KeyName("a".to_string()), KeyName("b".to_string())], None)
             .await
             .expect_err("多主键应失败");
         assert!(matches!(err, InputBackendError::Failed(_)));

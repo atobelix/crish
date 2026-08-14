@@ -12,10 +12,10 @@
 use std::path::Path;
 use tokio::process::Command;
 
-#[cfg(windows)]
-mod windows;
 #[cfg(not(windows))]
 mod unix;
+#[cfg(windows)]
+mod windows;
 
 /// 进程树终结器（spawn 时创建，生命周期绑定进程）。
 pub trait ProcessTreeKiller: Send {

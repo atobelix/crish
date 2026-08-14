@@ -143,14 +143,24 @@ impl Tool for MultiReplaceFileTool {
         let mut spans: Vec<ChunkSpan> = Vec::new();
         for (idx, chunk) in chunks.iter().enumerate() {
             let (lo, hi) = scope_range(
-                &normalized, &line_starts, total_lines, text_len,
-                chunk.start_line, chunk.end_line,
+                &normalized,
+                &line_starts,
+                total_lines,
+                text_len,
+                chunk.start_line,
+                chunk.end_line,
             );
             let scope = &normalized[lo..hi];
             let target = normalize_eol(&chunk.target_content);
             let hits = find_matches(scope, &target);
             if hits.is_empty() {
-                return Err(chunk_not_found_error(idx, chunk, scope, &target, total_lines));
+                return Err(chunk_not_found_error(
+                    idx,
+                    chunk,
+                    scope,
+                    &target,
+                    total_lines,
+                ));
             }
             if hits.len() > 1 && !chunk.allow_multiple {
                 return Err(chunk_multiple_error(idx, chunk, hits.len(), total_lines));
@@ -527,7 +537,11 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), ToolError> {
     let mut tmp: Option<std::path::PathBuf> = None;
     for i in 0..128u32 {
         let candidate = parent.join(format!("{base}.agent-tmp-{}-{i}", std::process::id()));
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
             Ok(mut f) => {
                 use std::io::Write;
                 if let Err(e) = f.write_all(bytes) {
@@ -706,7 +720,12 @@ function Component() {
             .iter()
             .filter_map(|v| v.as_str())
             .collect();
-        for field in ["start_line", "end_line", "target_content", "replacement_content"] {
+        for field in [
+            "start_line",
+            "end_line",
+            "target_content",
+            "replacement_content",
+        ] {
             assert!(required.contains(&field), "缺失 required 字段 {field}");
         }
     }
@@ -718,14 +737,20 @@ function Component() {
         // 对标 legacy e2e 黄金场景（现状分析 1.10）：三块非连续替换全部生效
         let ws = TempWorkspace::new("mrepl_golden");
         ws.write_file("src/component.ts", COMPONENT_TS_INITIAL);
-        let out = tool().execute(&mock_ctx(&ws), golden_chunks_args()).await.unwrap();
+        let out = tool()
+            .execute(&mock_ctx(&ws), golden_chunks_args())
+            .await
+            .unwrap();
 
         // 输出形状：path / chunksApplied / newSnapshotTag / text（对齐 write_file）
         assert_eq!(out["path"], "src/component.ts");
         assert_eq!(out["chunksApplied"], 3);
         let tag = out["newSnapshotTag"].as_str().unwrap();
         assert_eq!(tag.len(), 12);
-        assert!(out["text"].as_str().unwrap().contains("Replaced 3 chunks in src/component.ts"));
+        assert!(out["text"]
+            .as_str()
+            .unwrap()
+            .contains("Replaced 3 chunks in src/component.ts"));
         assert!(out["text"].as_str().unwrap().contains("Snapshot tag:"));
 
         // 三处修改全部生效，未覆盖内容原样
@@ -748,11 +773,18 @@ function Component() {
 
         let err = tool().execute(&mock_ctx(&ws), args).await.unwrap_err();
         // 错误形状：失败 chunk 序号 + 原因 + 「文件未做任何修改」
-        assert!(err.to_string().contains("chunk #2"), "错误应含失败 chunk 序号");
+        assert!(
+            err.to_string().contains("chunk #2"),
+            "错误应含失败 chunk 序号"
+        );
         assert!(err.to_string().contains("未找到 target_content"));
         assert!(err.to_string().contains("文件未做任何修改"));
         // 回滚：文件字节与调用前完全一致
-        assert_eq!(raw_bytes(&ws, "src/component.ts"), before, "文件必须保持原状");
+        assert_eq!(
+            raw_bytes(&ws, "src/component.ts"),
+            before,
+            "文件必须保持原状"
+        );
     }
 
     // ==================== 与手工修改等价（REQ-E01 验收 3） ====================
@@ -768,7 +800,10 @@ function Component() {
         args["target_file"] = json!("src/a.ts");
         tool().execute(&mock_ctx(&ws), args).await.unwrap();
         WriteFileTool::new()
-            .execute(&mock_ctx(&ws), json!({ "path": "src/b.ts", "content": COMPONENT_TS_EXPECTED, "overwrite": true }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "src/b.ts", "content": COMPONENT_TS_EXPECTED, "overwrite": true }),
+            )
             .await
             .unwrap();
 
@@ -855,7 +890,11 @@ function Component() {
             .await
             .unwrap();
 
-        assert_eq!(ws.read_file("s.txt"), "ZZZ\nBBB\nAAA\n", "范围外同名内容不得改动");
+        assert_eq!(
+            ws.read_file("s.txt"),
+            "ZZZ\nBBB\nAAA\n",
+            "范围外同名内容不得改动"
+        );
     }
 
     // ==================== chunks=1 等价单块（REQ-E01 1.3） ====================
@@ -884,7 +923,10 @@ function Component() {
             .unwrap();
 
         assert_eq!(out["chunksApplied"], 1);
-        assert_eq!(ws.read_file("x.rs"), "fn main() {\n    println!(\"hello\");\n}\n");
+        assert_eq!(
+            ws.read_file("x.rs"),
+            "fn main() {\n    println!(\"hello\");\n}\n"
+        );
     }
 
     // ==================== 注释保留（REQ-E03 验收共用） ====================
@@ -927,7 +969,10 @@ function Component() {
         // 未覆盖区间的注释原样保留
         assert!(result.contains("// 头部注释：模块说明"), "头部注释必须保留");
         assert!(result.contains("// 行内注释：字段定义"), "行内注释必须保留");
-        assert!(result.contains("/// 尾部 doc 注释"), "尾部 doc 注释必须保留");
+        assert!(
+            result.contains("/// 尾部 doc 注释"),
+            "尾部 doc 注释必须保留"
+        );
         // replacement_content 承载的注释行完整落地
         assert!(
             result.contains("  // 字段已更新为 10\n  const count = 10;"),
@@ -945,7 +990,10 @@ function Component() {
         let crlf_body = COMPONENT_TS_INITIAL.replace('\n', "\r\n");
         ws.write_file("src/component.ts", &crlf_body);
 
-        tool().execute(&mock_ctx(&ws), golden_chunks_args()).await.unwrap();
+        tool()
+            .execute(&mock_ctx(&ws), golden_chunks_args())
+            .await
+            .unwrap();
 
         let bytes = raw_bytes(&ws, "src/component.ts");
         let result = String::from_utf8(bytes).unwrap();
@@ -1056,8 +1104,14 @@ function Component() {
             .await
             .unwrap_err();
 
-        assert!(err.to_string().contains("legacy 编码"), "错误文案必须含 legacy 编码引导");
-        assert!(err.to_string().contains("转码为 UTF-8"), "错误文案必须含转码引导");
+        assert!(
+            err.to_string().contains("legacy 编码"),
+            "错误文案必须含 legacy 编码引导"
+        );
+        assert!(
+            err.to_string().contains("转码为 UTF-8"),
+            "错误文案必须含转码引导"
+        );
         assert_eq!(
             raw_bytes(&ws, "gbk.txt"),
             before,
@@ -1089,7 +1143,10 @@ function Component() {
 
         // 空数组（违反 minItems 1）
         let err = tool()
-            .execute(&mock_ctx(&ws), json!({ "target_file": "x.txt", "replacement_chunks": [] }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "target_file": "x.txt", "replacement_chunks": [] }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.invalid_input");

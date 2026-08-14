@@ -80,7 +80,11 @@ mod tests {
         let catalog = ModelCatalog::bundled();
         let snap = snapshot(&catalog);
         assert_eq!(snap.version, 0);
-        assert!(snap.entries.len() >= 27, "内置条目 = {}", snap.entries.len());
+        assert!(
+            snap.entries.len() >= 27,
+            "内置条目 = {}",
+            snap.entries.len()
+        );
         let flash = snap
             .entries
             .iter()

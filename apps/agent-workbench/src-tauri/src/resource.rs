@@ -160,13 +160,13 @@ pub(crate) fn sample_usage(pid: u32) -> Result<RawUsage, String> {
 /// FFI 风格对齐 `process.rs:391-443`（每处 unsafe 有 SAFETY 说明，经评审后允许）。
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows Job Objects FFI（QueryInformationJobObject × 2），
-// SAFETY 见函数内注释，经评审后允许
+                      // SAFETY 见函数内注释，经评审后允许
 fn sample_windows(job: windows_sys::Win32::Foundation::HANDLE) -> Result<RawUsage, String> {
     use core::mem;
     use windows_sys::Win32::System::JobObjects::{
         JobObjectBasicAccountingInformation, JobObjectExtendedLimitInformation,
-        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        QueryInformationJobObject,
+        QueryInformationJobObject, JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     };
 
     let mut basic: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = unsafe { mem::zeroed() };
@@ -208,9 +208,7 @@ fn sample_windows(job: windows_sys::Win32::Foundation::HANDLE) -> Result<RawUsag
 
     // FILETIME 100ns → 毫秒：除以 10_000；u64 转换取低 63 位（CPU 时间单调非负，
     // 符号位恒 0），saturating 防溢出
-    let cpu_ms = (basic.TotalUserTime as u64)
-        .saturating_add(basic.TotalKernelTime as u64)
-        / 10_000;
+    let cpu_ms = (basic.TotalUserTime as u64).saturating_add(basic.TotalKernelTime as u64) / 10_000;
     let rss_bytes = extended.PeakJobMemoryUsed as u64;
     Ok(RawUsage { cpu_ms, rss_bytes })
 }
@@ -223,7 +221,7 @@ fn sample_windows(job: windows_sys::Win32::Foundation::HANDLE) -> Result<RawUsag
 /// 未回收孙进程不计入——与 Windows Job 树聚合存在数值口径差异。
 #[cfg(not(windows))]
 #[allow(unsafe_code)] // POSIX libc FFI（sysconf / getrusage），参数为整数或栈指针，
-// SAFETY 见函数内注释，经评审后允许
+                      // SAFETY 见函数内注释，经评审后允许
 fn sample_unix(pid: u32) -> Result<RawUsage, String> {
     use core::mem;
 
@@ -253,10 +251,7 @@ fn sample_unix(pid: u32) -> Result<RawUsage, String> {
     let clk_tck = unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as u64;
     // SAFETY: 同上
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u64;
-    let cpu_ms = utime
-        .saturating_add(stime)
-        .saturating_mul(1000)
-        / clk_tck.max(1);
+    let cpu_ms = utime.saturating_add(stime).saturating_mul(1000) / clk_tck.max(1);
 
     // 已回收子进程近似（RUSAGE_CHILDREN）：累计值差值由采样循环按周期差值模型
     // 处理（本函数只读当前值）；ru_utime/ru_stime 为 timeval（秒+微秒）
@@ -266,7 +261,10 @@ fn sample_unix(pid: u32) -> Result<RawUsage, String> {
     let rc = unsafe { libc::getrusage(libc::RUSAGE_CHILDREN, &mut usage) };
     let child_cpu_ms = if rc == 0 {
         let secs = usage.ru_utime.tv_sec.saturating_add(usage.ru_stime.tv_sec) as u64;
-        let usecs = usage.ru_utime.tv_usec.saturating_add(usage.ru_stime.tv_usec) as u64;
+        let usecs = usage
+            .ru_utime
+            .tv_usec
+            .saturating_add(usage.ru_stime.tv_usec) as u64;
         secs.saturating_mul(1000).saturating_add(usecs / 1000)
     } else {
         0
@@ -433,12 +431,7 @@ impl TaskNotifier {
     /// 误报面控制：编译类命令长时间无输出属正常，AI 见通知自行判断）。
     /// 通道一 nudge 排队；通道二发射 task-suspicious 事件（Soft 分级，
     /// payload：taskId / silenceMs / lastOutputAtMs，§4.5）。
-    pub(crate) fn notify_suspicious(
-        &self,
-        task_id: &str,
-        silence_ms: u64,
-        last_output_at_ms: u64,
-    ) {
+    pub(crate) fn notify_suspicious(&self, task_id: &str, silence_ms: u64, last_output_at_ms: u64) {
         let text = format!(
             "任务 {task_id} 疑似卡死（{} 秒无输出），请确认是否终止（由 AI 裁决，系统不自动终止）",
             silence_ms / 1000
@@ -707,18 +700,30 @@ mod tests {
     /// - 差值回退（非单调防御）→ clamp 0。
     #[test]
     fn cpu_percent_delta_is_finite_and_bounded() {
-        let prev = RawUsage { cpu_ms: 1000, rss_bytes: 4096 };
+        let prev = RawUsage {
+            cpu_ms: 1000,
+            rss_bytes: 4096,
+        };
         // 零差值：不产生 NaN/异常值（首采样无基线时循环直接丢弃，本函数保证
         // 即使被误调也不出非有限值）
-        let same = RawUsage { cpu_ms: 1000, rss_bytes: 4096 };
+        let same = RawUsage {
+            cpu_ms: 1000,
+            rss_bytes: 4096,
+        };
         assert_eq!(cpu_percent_from_delta(&prev, &same, 1000, 3000), 0.0);
         // 墙钟零差值：不除零
         assert_eq!(cpu_percent_from_delta(&prev, &same, 3000, 3000), 0.0);
         // 正常：2s 窗口内 500ms CPU → 25%
-        let busy = RawUsage { cpu_ms: 1500, rss_bytes: 4096 };
+        let busy = RawUsage {
+            cpu_ms: 1500,
+            rss_bytes: 4096,
+        };
         assert_eq!(cpu_percent_from_delta(&prev, &busy, 1000, 3000), 25.0);
         // 差值回退（时钟异常）：clamp 下限 0
-        let lower = RawUsage { cpu_ms: 800, rss_bytes: 4096 };
+        let lower = RawUsage {
+            cpu_ms: 800,
+            rss_bytes: 4096,
+        };
         assert_eq!(cpu_percent_from_delta(&prev, &lower, 1000, 3000), 0.0);
     }
 
@@ -738,7 +743,10 @@ mod tests {
         }
         impl EventSink for MemSink {
             fn emit(&self, event_type: &str, payload: serde_json::Value) {
-                self.0.lock().unwrap().push((event_type.to_string(), payload));
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push((event_type.to_string(), payload));
             }
         }
         let notifier = TaskNotifier {
@@ -799,7 +807,10 @@ mod tests {
         }
         impl EventSink for MemSink {
             fn emit(&self, event_type: &str, payload: serde_json::Value) {
-                self.0.lock().unwrap().push((event_type.to_string(), payload));
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push((event_type.to_string(), payload));
             }
         }
         let emitted = Arc::new(Mutex::new(Vec::new()));
@@ -819,7 +830,11 @@ mod tests {
 
         let events = emitted.lock().unwrap();
         // 序号：started(0) / output-flush(1) / completed(2) / heartbeat(3) / killed(4)
-        assert_eq!(events.len(), 5, "五方法应各发射一条（输出窗口在完成时冲刷）");
+        assert_eq!(
+            events.len(),
+            5,
+            "五方法应各发射一条（输出窗口在完成时冲刷）"
+        );
         // started：taskId/command/cwd/ownerRunId/isDaemon
         assert_eq!(events[0].0, "task-started");
         let p = &events[0].1;
@@ -866,7 +881,10 @@ mod tests {
         }
         impl EventSink for MemSink {
             fn emit(&self, event_type: &str, payload: serde_json::Value) {
-                self.0.lock().unwrap().push((event_type.to_string(), payload));
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push((event_type.to_string(), payload));
             }
         }
         let emitted = Arc::new(Mutex::new(Vec::new()));

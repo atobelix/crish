@@ -75,10 +75,7 @@ impl McpServerConfig {
     /// 规则：server_id 与 command 非空；env 键非空且不含 `=`（避免伪造环境赋值）。
     pub fn validate(&self) -> Result<(), ToolError> {
         if self.server_id.trim().is_empty() {
-            return Err(ToolError::new(
-                codes::CONFIG_INVALID,
-                "server_id 不能为空",
-            ));
+            return Err(ToolError::new(codes::CONFIG_INVALID, "server_id 不能为空"));
         }
         if self.command.trim().is_empty() {
             return Err(ToolError::new(
@@ -88,10 +85,7 @@ impl McpServerConfig {
         }
         for key in self.env.keys() {
             if key.is_empty() {
-                return Err(ToolError::new(
-                    codes::CONFIG_INVALID,
-                    "环境变量键不能为空",
-                ));
+                return Err(ToolError::new(codes::CONFIG_INVALID, "环境变量键不能为空"));
             }
             if key.contains('=') {
                 return Err(ToolError::new(
@@ -198,15 +192,12 @@ impl McpServerStore {
 
     /// 删除配置（返回被删配置；不存在 → mcp.server_not_found）
     pub async fn remove(&mut self, server_id: &str) -> Result<McpServerConfig, ToolError> {
-        let removed = self
-            .configs
-            .remove(server_id)
-            .ok_or_else(|| {
-                ToolError::new(
-                    codes::MCP_SERVER_NOT_FOUND,
-                    format!("MCP server 配置不存在：{server_id}"),
-                )
-            })?;
+        let removed = self.configs.remove(server_id).ok_or_else(|| {
+            ToolError::new(
+                codes::MCP_SERVER_NOT_FOUND,
+                format!("MCP server 配置不存在：{server_id}"),
+            )
+        })?;
         self.order.retain(|id| id != server_id);
         self.persist().await?;
         Ok(removed)
@@ -247,7 +238,8 @@ impl McpServerStore {
     fn insert_locked(&mut self, config: McpServerConfig) {
         self.order.push(config.server_id.clone());
         self.configs.insert(config.server_id.clone(), config);
-    }}
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -304,7 +296,11 @@ mod tests {
         store.add(sample("c", "cmd-c")).await.unwrap();
         assert_eq!(store.len(), 3);
         assert_eq!(
-            store.list().iter().map(|c| c.server_id.as_str()).collect::<Vec<_>>(),
+            store
+                .list()
+                .iter()
+                .map(|c| c.server_id.as_str())
+                .collect::<Vec<_>>(),
             ["a", "b", "c"]
         );
         assert_eq!(store.get("b").unwrap().command, "cmd-b");
@@ -336,7 +332,11 @@ mod tests {
         assert_eq!(b.args, vec!["--x"]);
         // 顺序不变
         assert_eq!(
-            store.list().iter().map(|c| c.server_id.as_str()).collect::<Vec<_>>(),
+            store
+                .list()
+                .iter()
+                .map(|c| c.server_id.as_str())
+                .collect::<Vec<_>>(),
             ["a", "b"]
         );
     }
@@ -388,8 +388,13 @@ mod tests {
     #[test]
     fn serde_camel_case_roundtrip() {
         let mut config = sample("filesystem", "npx");
-        config.args = vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()];
-        config.env.insert("PATH".to_string(), "/usr/bin".to_string());
+        config.args = vec![
+            "-y".to_string(),
+            "@modelcontextprotocol/server-filesystem".to_string(),
+        ];
+        config
+            .env
+            .insert("PATH".to_string(), "/usr/bin".to_string());
         let value = serde_json::to_value(&config).unwrap();
         // 字段 camelCase：serverId / args / env / transport
         assert_eq!(value["serverId"], "filesystem");

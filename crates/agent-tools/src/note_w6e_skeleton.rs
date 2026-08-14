@@ -24,9 +24,7 @@
 //! - W6-E-S Skeleton：batch token / 审批 / 压测夹具骨架（本文）
 
 use crate::note_action_matrix::{decide_from_matrix, ActionSource};
-use crate::note_backend::{
-    NoteBackendError, NoteBlockBatchRequest, NoteBlockOp, NoteBlockOpKind,
-};
+use crate::note_backend::{NoteBackendError, NoteBlockBatchRequest, NoteBlockOp, NoteBlockOpKind};
 use crate::permission::{PermissionMode, PermissionVerdict};
 use serde_json::Value as JsonValue;
 
@@ -214,11 +212,7 @@ pub fn plugin_plan_denies_note_write(tool_name: &str) -> bool {
 /// Plugin 源 full 仍 NeedsApproval（外部源默认确认；≠ 自动放行写）
 pub fn plugin_full_needs_approval_for_write(tool_name: &str) -> bool {
     matches!(
-        decide_from_matrix(
-            tool_name,
-            ActionSource::Plugin,
-            PermissionMode::FullAccess
-        ),
+        decide_from_matrix(tool_name, ActionSource::Plugin, PermissionMode::FullAccess),
         Some(PermissionVerdict::NeedsApproval)
     )
 }
@@ -260,11 +254,7 @@ mod tests {
         assert_eq!(ops[999].id.as_deref(), Some("stress-0999"));
         assert!(ops.iter().all(|o| o.op == NoteBlockOpKind::Insert));
         assert!(
-            ops[0]
-                .content
-                .as_deref()
-                .unwrap_or("")
-                .contains("W6-E-S"),
+            ops[0].content.as_deref().unwrap_or("").contains("W6-E-S"),
             "夹具 content 须可点名 W6-E-S"
         );
     }
@@ -414,7 +404,10 @@ mod tests {
 
         let gate = reject_malicious_extension_payload(&payload);
         match gate {
-            MaliciousExtensionGate::Reject { code, forbidden_key } => {
+            MaliciousExtensionGate::Reject {
+                code,
+                forbidden_key,
+            } => {
                 assert_eq!(code, MALICIOUS_EXTENSION_FORBIDDEN_WRITE);
                 assert_eq!(forbidden_key, "applyOp");
             }
@@ -510,10 +503,7 @@ mod tests {
                 "W6-E-S: Plugin full must NeedsApproval {tool}"
             );
             // Builtin plan Deny 不回退
-            assert!(
-                plan_denies_matrix_tool(tool),
-                "plan Deny 不回退: {tool}"
-            );
+            assert!(plan_denies_matrix_tool(tool), "plan Deny 不回退: {tool}");
             assert!(
                 plan_denies_note_tool(tool),
                 "note_permission plan Deny 不回退: {tool}"

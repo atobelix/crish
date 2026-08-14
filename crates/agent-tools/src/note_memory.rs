@@ -12,12 +12,12 @@
 //! - Memory 测绿 **禁关**生产 A-AGT / EL-05
 //! - **≠** 宣称 Store 后端完成；**≠** 第二套写锥
 
-#[path = "note_memory_query.rs"]
-mod query;
 #[path = "note_memory_apply.rs"]
 mod apply;
 #[path = "note_memory_batch.rs"]
 mod batch;
+#[path = "note_memory_query.rs"]
+mod query;
 
 use crate::note_backend::NoteBackend;
 use crate::note_md_parse::parse_heading_level_from_text;

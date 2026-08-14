@@ -204,9 +204,18 @@ mod tests {
             );
         }
         // createTarget（新建标签 = 写入面）与未列出的 Target 方法不授予
-        assert!(!caps.allows_command("Target.createTarget"), "新建标签必须拒绝");
-        assert!(!caps.allows_command("Target.closeTarget"), "关闭目标必须拒绝");
-        assert!(!caps.allows_command("Target.activateTarget"), "激活目标必须拒绝");
+        assert!(
+            !caps.allows_command("Target.createTarget"),
+            "新建标签必须拒绝"
+        );
+        assert!(
+            !caps.allows_command("Target.closeTarget"),
+            "关闭目标必须拒绝"
+        );
+        assert!(
+            !caps.allows_command("Target.activateTarget"),
+            "激活目标必须拒绝"
+        );
     }
 
     /// 典型拒绝面（17 §2 矩阵 / 34 §4.3 实测工具→CDP 映射）：交互注入、
@@ -215,23 +224,23 @@ mod tests {
     fn mcp_attach_default_denies_typical_non_readonly_commands() {
         let caps = ReadonlyCaps::mcp_attach_default();
         for method in [
-            "Runtime.evaluate",                 // 求值类（34 §4.3：MCP 自身不拒绝，此面是唯一拦截点）
-            "Input.dispatchMouseEvent",         // 交互注入
-            "Input.dispatchKeyEvent",           // 交互注入
-            "Input.insertText",                 // 交互注入（剪贴板 M-7 注入面）
-            "Input.dispatchTouchEvent",         // 交互注入
-            "Network.getAllCookies",            // cookie 全量读取（敏感域只读命令不授予）
-            "Network.setCookie",                // cookie 写入
-            "Network.deleteCookies",            // cookie 删除
-            "Network.setBlockedURLs",           // 网络阻断配置（配置面非观察面）
-            "Page.navigate",                    // 导航（写入面）
-            "Page.reload",                      // 导航
-            "Page.setDownloadBehavior",         // 下载配置
-            "DOM.setFileInputFiles",            // 上传注入
+            "Runtime.evaluate",         // 求值类（34 §4.3：MCP 自身不拒绝，此面是唯一拦截点）
+            "Input.dispatchMouseEvent", // 交互注入
+            "Input.dispatchKeyEvent",   // 交互注入
+            "Input.insertText",         // 交互注入（剪贴板 M-7 注入面）
+            "Input.dispatchTouchEvent", // 交互注入
+            "Network.getAllCookies",    // cookie 全量读取（敏感域只读命令不授予）
+            "Network.setCookie",        // cookie 写入
+            "Network.deleteCookies",    // cookie 删除
+            "Network.setBlockedURLs",   // 网络阻断配置（配置面非观察面）
+            "Page.navigate",            // 导航（写入面）
+            "Page.reload",              // 导航
+            "Page.setDownloadBehavior", // 下载配置
+            "DOM.setFileInputFiles",    // 上传注入
             "Emulation.setDeviceMetricsOverride", // 模拟面
-            "Target.createTarget",              // 目标管理
-            "Browser.close",                    // 浏览器生命周期
-            "Accessibility.getFullAXTree",      // 快照未列入的命令面（精确匹配）
+            "Target.createTarget",      // 目标管理
+            "Browser.close",            // 浏览器生命周期
+            "Accessibility.getFullAXTree", // 快照未列入的命令面（精确匹配）
         ] {
             assert!(
                 !caps.allows_command(method),
@@ -252,7 +261,11 @@ mod tests {
         ] {
             assert!(!caps.allows_command(method), "{method} 应被拒绝");
         }
-        for event in ["Runtime.consoleAPICalled", "Network.requestWillBeSent", "任何.事件"] {
+        for event in [
+            "Runtime.consoleAPICalled",
+            "Network.requestWillBeSent",
+            "任何.事件",
+        ] {
             assert!(!caps.allows_event(event), "{event} 应被拒绝");
         }
     }
@@ -262,15 +275,15 @@ mod tests {
     fn mcp_attach_default_event_whitelist() {
         let caps = ReadonlyCaps::mcp_attach_default();
         for event in [
-            "Runtime.consoleAPICalled",          // console 面精确命中
-            "Network.requestWillBeSent",         // network 面（通配）
-            "Network.responseReceived",          // network 面（通配）
-            "Network.loadingFinished",           // network 面（通配）
-            "Network.loadingFailed",             // network 面（通配）
-            "Network.dataReceived",              // network 面（通配）
+            "Runtime.consoleAPICalled",           // console 面精确命中
+            "Network.requestWillBeSent",          // network 面（通配）
+            "Network.responseReceived",           // network 面（通配）
+            "Network.loadingFinished",            // network 面（通配）
+            "Network.loadingFailed",              // network 面（通配）
+            "Network.dataReceived",               // network 面（通配）
             "Network.requestWillBeSentExtraInfo", // network 面（通配，协议扩展事件）
-            "Network.webSocketFrameReceived",    // network 面（通配，子面事件）
-            "DOMSnapshot.documentUpdated",       // snapshot 面事件
+            "Network.webSocketFrameReceived",     // network 面（通配，子面事件）
+            "DOMSnapshot.documentUpdated",        // snapshot 面事件
         ] {
             assert!(caps.allows_event(event), "只读事件 {event} 应透传");
         }
@@ -281,11 +294,11 @@ mod tests {
     fn mcp_attach_default_event_denies_others() {
         let caps = ReadonlyCaps::mcp_attach_default();
         for event in [
-            "Runtime.exceptionThrown",   // 异常事件不在 console 面清单
+            "Runtime.exceptionThrown", // 异常事件不在 console 面清单
             "Runtime.executionContextCreated",
-            "Page.frameNavigated",       // 页面导航事件（非观察白名单）
+            "Page.frameNavigated", // 页面导航事件（非观察白名单）
             "Page.loadEventFired",
-            "Input.dispatchKeyEvent",    // 事件面同样拒绝交互域
+            "Input.dispatchKeyEvent", // 事件面同样拒绝交互域
             "Target.attachedToTarget",
             "DOM.childNodeInserted",
             "Accessibility.loadComplete",
@@ -299,8 +312,14 @@ mod tests {
     #[test]
     fn command_whitelist_is_exact_no_wildcard() {
         let caps = ReadonlyCaps::new(["Page.*"], ["Network.*"]);
-        assert!(!caps.allows_command("Page.navigate"), "命令面不允许通配命中");
-        assert!(!caps.allows_command("Page.captureScreenshot"), "通配条目不等于精确列出");
+        assert!(
+            !caps.allows_command("Page.navigate"),
+            "命令面不允许通配命中"
+        );
+        assert!(
+            !caps.allows_command("Page.captureScreenshot"),
+            "通配条目不等于精确列出"
+        );
         // 事件面通配语义不受影响（对照面）
         assert!(caps.allows_event("Network.requestWillBeSent"));
     }
@@ -321,27 +340,25 @@ mod tests {
         // 混合注入：2 个白名单事件 + 3 个非白名单事件（含 Runtime.evaluate 同域
         // 变体与 Network 域外事件）
         mock.send_event("Runtime.consoleAPICalled", json!({ "type": "log" }), None);
-        mock.send_event("Network.requestWillBeSent", json!({ "requestId": "1" }), None);
+        mock.send_event(
+            "Network.requestWillBeSent",
+            json!({ "requestId": "1" }),
+            None,
+        );
         mock.send_event("Runtime.evaluate", json!({ "result": {} }), None);
         mock.send_event("Page.frameNavigated", json!({ "frame": {} }), None);
         mock.send_event("Runtime.exceptionThrown", json!({ "exception": {} }), None);
 
         // 过滤迭代器只产出白名单事件（顺序保持注入序）
-        let e1 = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            filtered.next_allowed(),
-        )
-        .await
-        .expect("等待白名单事件超时")
-        .expect("迭代器提前结束");
+        let e1 = tokio::time::timeout(std::time::Duration::from_secs(2), filtered.next_allowed())
+            .await
+            .expect("等待白名单事件超时")
+            .expect("迭代器提前结束");
         assert_eq!(e1.method, "Runtime.consoleAPICalled");
-        let e2 = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            filtered.next_allowed(),
-        )
-        .await
-        .expect("等待白名单事件超时")
-        .expect("迭代器提前结束");
+        let e2 = tokio::time::timeout(std::time::Duration::from_secs(2), filtered.next_allowed())
+            .await
+            .expect("等待白名单事件超时")
+            .expect("迭代器提前结束");
         assert_eq!(e2.method, "Network.requestWillBeSent");
         // 非白名单事件不透传：短暂窗口后迭代器仍无第三个事件
         let got_third = tokio::time::timeout(

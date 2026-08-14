@@ -82,7 +82,10 @@ impl<T> AtomicSlot<T> {
     /// 是否已有值
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_some(&self) -> bool {
-        self.inner.lock().map(|guard| guard.is_some()).unwrap_or(false)
+        self.inner
+            .lock()
+            .map(|guard| guard.is_some())
+            .unwrap_or(false)
     }
 }
 
@@ -192,7 +195,10 @@ mod tests {
         assert!(error.message.contains("模拟错误"));
         // 覆盖写入
         diagnostics.set_last_error(payload("tool.execution_failed"));
-        assert_eq!(diagnostics.last_error().unwrap().code, "tool.execution_failed");
+        assert_eq!(
+            diagnostics.last_error().unwrap().code,
+            "tool.execution_failed"
+        );
         // 清除
         diagnostics.clear_last_error();
         assert!(diagnostics.last_error().is_none());

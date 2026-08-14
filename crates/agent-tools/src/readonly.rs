@@ -183,10 +183,7 @@ pub fn command_allowed_for_task_type(task_type: &str, command_line: &str) -> boo
 
 /// 命令首词提取（按空白切分的第一段；空串返回空）
 fn first_token(command_line: &str) -> &str {
-    command_line
-        .split_whitespace()
-        .next()
-        .unwrap_or("")
+    command_line.split_whitespace().next().unwrap_or("")
 }
 
 #[cfg(test)]
@@ -212,10 +209,7 @@ mod tests {
             .iter()
             .map(|d| d.name.clone())
             .collect();
-        let mut expected: Vec<String> = READONLY_TOOL_NAMES
-            .iter()
-            .map(|n| n.to_string())
-            .collect();
+        let mut expected: Vec<String> = READONLY_TOOL_NAMES.iter().map(|n| n.to_string()).collect();
         expected.sort();
         assert_eq!(names, expected);
     }
@@ -237,7 +231,8 @@ mod tests {
     fn filter_readonly_drops_unknown_tools_fail_closed() {
         // 未知工具（非白名单）一律剔除：白名单语义防未来新写工具漏网
         let mut reg = ToolRegistry::new();
-        reg.register(Arc::new(EchoTool::new("mystery_write_tool"))).unwrap();
+        reg.register(Arc::new(EchoTool::new("mystery_write_tool")))
+            .unwrap();
         register_builtin_tools(&mut reg).unwrap();
         let ro = filter_readonly_registry(&reg).unwrap();
         assert!(!ro.has("mystery_write_tool"));
@@ -364,7 +359,10 @@ mod tests {
         // W4-B/F/R 写工具不得进只读 / design 面（design 仅 + diff_file）
         for tt in ["analysis", "design"] {
             let out = filter_registry_for_task_type(&reg, tt).unwrap();
-            assert!(!out.has("document_apply_md"), "{tt} 不得含 document_apply_md");
+            assert!(
+                !out.has("document_apply_md"),
+                "{tt} 不得含 document_apply_md"
+            );
             assert!(!out.has("send_to_note"), "{tt} 不得含 send_to_note");
             assert!(!out.has("block_batch"), "{tt} 不得含 block_batch");
             assert!(!out.has("block_insert"), "{tt} 不得含 block_insert");
@@ -397,9 +395,22 @@ mod tests {
         }
         // 全部 task_type（含 implementation 全量分支与未知回退）：browser_*
         // 一律剔除（fail-closed）
-        for tt in ["implementation", "analysis", "design", "review", "commit", "", "bogus"] {
+        for tt in [
+            "implementation",
+            "analysis",
+            "design",
+            "review",
+            "commit",
+            "",
+            "bogus",
+        ] {
             let out = filter_registry_for_task_type(&reg, tt).unwrap();
-            for name in ["browser_navigate", "browser_snapshot", "browser_type_text", "browser_console_list"] {
+            for name in [
+                "browser_navigate",
+                "browser_snapshot",
+                "browser_type_text",
+                "browser_console_list",
+            ] {
                 assert!(!out.has(name), "{tt:?} 注册面不得含 {name}");
             }
             // 27 §5 验收口径：list_definitions 面同样无 browser_*

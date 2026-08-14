@@ -55,7 +55,9 @@ pub fn multi_device_pair_cancel(coordinator: State<'_, Arc<PairingCoordinator>>)
 
 /// 已配对设备列表（哈希截断展示）。
 #[tauri::command]
-pub fn multi_device_list_devices(coordinator: State<'_, Arc<PairingCoordinator>>) -> Vec<DeviceInfo> {
+pub fn multi_device_list_devices(
+    coordinator: State<'_, Arc<PairingCoordinator>>,
+) -> Vec<DeviceInfo> {
     coordinator.list_devices()
 }
 

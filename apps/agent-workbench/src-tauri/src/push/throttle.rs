@@ -140,7 +140,10 @@ mod tests {
         assert_eq!(tracker.check("s-7", T0), ThrottleDecision::Allow);
         assert_eq!(tracker.check("s-7", T0 + 1_000), ThrottleDecision::Allow);
         // 第 3 条（同分钟）超限
-        assert_eq!(tracker.check("s-7", T0 + 2_000), ThrottleDecision::FoldIntoSummary);
+        assert_eq!(
+            tracker.check("s-7", T0 + 2_000),
+            ThrottleDecision::FoldIntoSummary
+        );
         // 跨分钟后额度恢复
         assert_eq!(tracker.check("s-7", T0 + 60_000), ThrottleDecision::Allow);
     }
@@ -153,7 +156,10 @@ mod tests {
         assert_eq!(tracker.check("s-1", T0 + 60_100), ThrottleDecision::Allow);
         assert_eq!(tracker.check("s-1", T0 + 120_200), ThrottleDecision::Allow);
         // s-1 第 4 条（10min 内）折叠
-        assert_eq!(tracker.check("s-1", T0 + 180_300), ThrottleDecision::FoldIntoSummary);
+        assert_eq!(
+            tracker.check("s-1", T0 + 180_300),
+            ThrottleDecision::FoldIntoSummary
+        );
         // s-2 独立额度
         assert_eq!(tracker.check("s-2", T0 + 180_400), ThrottleDecision::Allow);
         // 10min 窗口滑出后恢复
@@ -175,7 +181,10 @@ mod tests {
                 "第 {i} 条应放行"
             );
         }
-        assert_eq!(tracker.check("s-7", T0 + 3 * MINUTE_MS), ThrottleDecision::FoldIntoSummary);
+        assert_eq!(
+            tracker.check("s-7", T0 + 3 * MINUTE_MS),
+            ThrottleDecision::FoldIntoSummary
+        );
         // 次日恢复（跨 UTC 自然日）
         let next_day = T0 + DAY_MS + 1_000;
         assert_eq!(tracker.check("s-7", next_day), ThrottleDecision::Allow);
@@ -190,9 +199,15 @@ mod tests {
         };
         let mut tracker = ThrottleTracker::new(limits);
         assert_eq!(tracker.check("s-7", T0), ThrottleDecision::Allow);
-        assert_eq!(tracker.check("s-7", T0 + 1_000), ThrottleDecision::FoldIntoSummary);
+        assert_eq!(
+            tracker.check("s-7", T0 + 1_000),
+            ThrottleDecision::FoldIntoSummary
+        );
         assert_eq!(tracker.check("s-7", T0 + 60_000), ThrottleDecision::Allow);
-        assert_eq!(tracker.check("s-7", T0 + 60_001), ThrottleDecision::FoldIntoSummary);
+        assert_eq!(
+            tracker.check("s-7", T0 + 60_001),
+            ThrottleDecision::FoldIntoSummary
+        );
     }
 
     #[test]
@@ -206,7 +221,10 @@ mod tests {
         tracker.check("s-7", T0);
         // 折叠多次不消耗额度：窗口滑出后仍只有 1 条额度
         for _ in 0..5 {
-            assert_eq!(tracker.check("s-7", T0 + 1_000), ThrottleDecision::FoldIntoSummary);
+            assert_eq!(
+                tracker.check("s-7", T0 + 1_000),
+                ThrottleDecision::FoldIntoSummary
+            );
         }
         assert_eq!(tracker.check("s-7", T0 + 60_000), ThrottleDecision::Allow);
     }

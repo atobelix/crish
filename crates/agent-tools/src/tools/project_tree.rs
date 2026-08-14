@@ -155,8 +155,9 @@ struct TreeCache {
     cells: Mutex<HashMap<CacheKey, CacheCell>>,
 }
 
-static TREE_CACHE: LazyLock<TreeCache> =
-    LazyLock::new(|| TreeCache { cells: Mutex::new(HashMap::new()) });
+static TREE_CACHE: LazyLock<TreeCache> = LazyLock::new(|| TreeCache {
+    cells: Mutex::new(HashMap::new()),
+});
 
 impl TreeCache {
     /// 取或构建：返回 (条目, 是否缓存命中)。
@@ -319,20 +320,24 @@ fn build_tree(params: &ProjectTreeParams) -> TreeEntry {
                     ),
                 );
                 dirs += 1;
-                stack
-                    .last_mut()
-                    .unwrap()
-                    .push(TreeNode { name, is_dir: true, size: 1, children: Vec::new() });
+                stack.last_mut().unwrap().push(TreeNode {
+                    name,
+                    is_dir: true,
+                    size: 1,
+                    children: Vec::new(),
+                });
                 stack.push(Vec::new());
             } else if params.include_files {
                 if glob_excluded(&params.exclude_globs, &rel_str) {
                     continue;
                 }
                 files += 1;
-                stack
-                    .last_mut()
-                    .unwrap()
-                    .push(TreeNode { name, is_dir: false, size: 1, children: Vec::new() });
+                stack.last_mut().unwrap().push(TreeNode {
+                    name,
+                    is_dir: false,
+                    size: 1,
+                    children: Vec::new(),
+                });
             }
         }
     }
@@ -426,12 +431,7 @@ struct RenderState {
 }
 
 /// 渲染一层子节点（`depth` = 本层节点的显示深度，根的直接子节点 = 1）
-fn render_children(
-    st: &mut RenderState,
-    prefix: &str,
-    nodes: &[TreeNode],
-    depth: usize,
-) {
+fn render_children(st: &mut RenderState, prefix: &str, nodes: &[TreeNode], depth: usize) {
     let n = nodes.len();
     for (i, node) in nodes.iter().enumerate() {
         if st.shown >= st.budget {
@@ -441,7 +441,8 @@ fn render_children(
             st.truncated = true;
             let last = i == n - 1;
             let branch = if last { "└── " } else { "├── " };
-            st.out.push(format!("{prefix}{branch}... (+{rest} 项未展开)"));
+            st.out
+                .push(format!("{prefix}{branch}... (+{rest} 项未展开)"));
             return;
         }
         let last = i == n - 1;
@@ -517,7 +518,8 @@ impl Tool for ProjectTreeTool {
             })
             .unwrap_or_default();
         exclude_globs.sort();
-        let max_items = optional_u64(&args, "maxItems").unwrap_or(DEFAULT_MAX_ITEMS as u64) as usize;
+        let max_items =
+            optional_u64(&args, "maxItems").unwrap_or(DEFAULT_MAX_ITEMS as u64) as usize;
         let max_depth_content = optional_u64(&args, "maxDepthContent")
             .unwrap_or(DEFAULT_MAX_DEPTH_CONTENT as u64) as usize;
 
@@ -645,7 +647,10 @@ mod tests {
         let ws = sample_ws();
         let tool = ProjectTreeTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), serde_json::json!({ "depth": 16, "dirsOnly": true }))
+            .execute(
+                &mock_ctx(&ws),
+                serde_json::json!({ "depth": 16, "dirsOnly": true }),
+            )
             .await
             .unwrap();
         let text = tree_text(&out);
@@ -662,14 +667,20 @@ mod tests {
         let ws = sample_ws();
         let tool = ProjectTreeTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), serde_json::json!({ "depth": 16, "includeFiles": false }))
+            .execute(
+                &mock_ctx(&ws),
+                serde_json::json!({ "depth": 16, "includeFiles": false }),
+            )
             .await
             .unwrap();
         assert_eq!(out["files"], 0);
         assert_eq!(out["shown"], 2);
         // dirsOnly=true 折叠到同一参数面（同一缓存键）→ 同文本
         let out2 = tool
-            .execute(&mock_ctx(&ws), serde_json::json!({ "depth": 16, "dirsOnly": true }))
+            .execute(
+                &mock_ctx(&ws),
+                serde_json::json!({ "depth": 16, "dirsOnly": true }),
+            )
             .await
             .unwrap();
         assert_eq!(out["text"], out2["text"]);
@@ -691,7 +702,10 @@ mod tests {
             .await
             .unwrap();
         let text = tree_text(&out);
-        assert!(!text.contains("generated"), "整枝剪除：generated 子树不出树: {text}");
+        assert!(
+            !text.contains("generated"),
+            "整枝剪除：generated 子树不出树: {text}"
+        );
         assert!(text.contains("keep.rs"), "{text}");
         assert_eq!(out["dirs"], 1);
         assert_eq!(out["files"], 1);
@@ -726,7 +740,10 @@ mod tests {
         // depth=999 钳制到 MAX_WALK_DEPTH=16：不报错、输出 depth 字段为 16；
         // maxDepthContent 调高避免折叠遮挡断言目标
         let out = tool
-            .execute(&mock_ctx(&ws), serde_json::json!({ "depth": 999, "maxDepthContent": 16 }))
+            .execute(
+                &mock_ctx(&ws),
+                serde_json::json!({ "depth": 999, "maxDepthContent": 16 }),
+            )
             .await
             .unwrap();
         assert_eq!(out["depth"], 16);
@@ -753,7 +770,10 @@ mod tests {
         let ws = sample_ws();
         let tool = ProjectTreeTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), serde_json::json!({ "path": "src", "depth": 16 }))
+            .execute(
+                &mock_ctx(&ws),
+                serde_json::json!({ "path": "src", "depth": 16 }),
+            )
             .await
             .unwrap();
         let text = tree_text(&out);
@@ -773,7 +793,10 @@ mod tests {
         ws.write_file("b/h.txt", "x");
         let tool = ProjectTreeTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), serde_json::json!({ "depth": 16, "maxItems": 4 }))
+            .execute(
+                &mock_ctx(&ws),
+                serde_json::json!({ "depth": 16, "maxItems": 4 }),
+            )
             .await
             .unwrap();
         let text = tree_text(&out);
@@ -801,7 +824,10 @@ mod tests {
         ws.write_file("b/y1.txt", "x");
         let tool = ProjectTreeTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), serde_json::json!({ "depth": 16, "maxItems": 3 }))
+            .execute(
+                &mock_ctx(&ws),
+                serde_json::json!({ "depth": 16, "maxItems": 3 }),
+            )
             .await
             .unwrap();
         // 树共 2 目录 + 4 文件 = 6 节点；预算 3：a/ x1 x2 渲染，其余 3 折叠
@@ -817,7 +843,10 @@ mod tests {
         let tool = ProjectTreeTool::new();
         // maxDepthContent=2：显示深度 3 及以上的目录折叠为 (+N 项)
         let out = tool
-            .execute(&mock_ctx(&ws), serde_json::json!({ "depth": 16, "maxDepthContent": 2 }))
+            .execute(
+                &mock_ctx(&ws),
+                serde_json::json!({ "depth": 16, "maxDepthContent": 2 }),
+            )
             .await
             .unwrap();
         let text = tree_text(&out);

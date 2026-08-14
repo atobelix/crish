@@ -127,7 +127,10 @@ pub fn platform_key() -> Result<&'static str, CftError> {
         ("linux", "aarch64") => Err(CftError::UnsupportedPlatform(
             "Linux arm64 无官方 CfT 构建，请使用系统 chromium".to_string(),
         )),
-        other => Err(CftError::UnsupportedPlatform(format!("{}/{}", other.0, other.1))),
+        other => Err(CftError::UnsupportedPlatform(format!(
+            "{}/{}",
+            other.0, other.1
+        ))),
     }
 }
 
@@ -157,7 +160,9 @@ fn binary_candidates(dest_dir: &Path) -> Vec<PathBuf> {
 
 /// 取实际存在的二进制（两种布局任一命中）。
 fn find_binary(dest_dir: &Path) -> Option<PathBuf> {
-    binary_candidates(dest_dir).into_iter().find(|p| p.is_file())
+    binary_candidates(dest_dir)
+        .into_iter()
+        .find(|p| p.is_file())
 }
 
 /// 缓存根（`<root>/browsers/`，root = `<data_root>/conex/browser`）。
@@ -261,7 +266,11 @@ struct LkgDownloadItem {
 }
 
 /// 拉取 last-known-good JSON 并解析出 Stable 版本与下载 URL。
-async fn fetch_lkg(client: &reqwest::Client, url: &str, key: &str) -> Result<(String, String), CftError> {
+async fn fetch_lkg(
+    client: &reqwest::Client,
+    url: &str,
+    key: &str,
+) -> Result<(String, String), CftError> {
     let resp = client
         .get(url)
         .send()
@@ -274,14 +283,21 @@ async fn fetch_lkg(client: &reqwest::Client, url: &str, key: &str) -> Result<(St
         .await
         .map_err(|e| CftError::Json(e.to_string()))?;
     let version = lkg.channels.stable.version;
-    let items = lkg.channels.stable.downloads.chrome.ok_or_else(|| {
-        CftError::MissingDownload { platform: key.to_string() }
-    })?;
+    let items = lkg
+        .channels
+        .stable
+        .downloads
+        .chrome
+        .ok_or_else(|| CftError::MissingDownload {
+            platform: key.to_string(),
+        })?;
     let url = items
         .iter()
         .find(|i| i.platform == key)
         .map(|i| i.url.clone())
-        .ok_or_else(|| CftError::MissingDownload { platform: key.to_string() })?;
+        .ok_or_else(|| CftError::MissingDownload {
+            platform: key.to_string(),
+        })?;
     Ok((version, url))
 }
 
@@ -395,8 +411,8 @@ fn extract_zip_limited(
     limits: CftLimits,
 ) -> Result<(), CftError> {
     let file = std::fs::File::open(zip_path)?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| CftError::Extract(format!("打开 zip 失败：{e}")))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| CftError::Extract(format!("打开 zip 失败：{e}")))?;
     // 条目数上限：先于 create_dir_all 与任何写出（防海量条目写爆目录）
     if archive.len() > limits.max_entries {
         return Err(CftError::TooLarge {
@@ -425,9 +441,9 @@ fn extract_zip_limited(
         let mut entry = archive
             .by_index(i)
             .map_err(|e| CftError::Extract(format!("读条目 {i} 失败：{e}")))?;
-        let enclosed = entry.enclosed_name().ok_or_else(|| {
-            CftError::Extract(format!("条目 {i} 路径穿越：enclosed_name 拒绝"))
-        })?;
+        let enclosed = entry
+            .enclosed_name()
+            .ok_or_else(|| CftError::Extract(format!("条目 {i} 路径穿越：enclosed_name 拒绝")))?;
         if enclosed.as_os_str().is_empty() {
             continue;
         }
@@ -447,10 +463,12 @@ fn extract_zip_limited(
             continue;
         }
         // 深度校验：相对路径不得含 ParentDir/RootDir/Prefix 组件（防御 `..` 变体）
-        if rel
-            .components()
-            .any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
-        {
+        if rel.components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        }) {
             return Err(CftError::Extract(format!(
                 "条目 {i} 含非法路径组件：{}",
                 enclosed.display()
@@ -594,9 +612,18 @@ mod tests {
     /// 版本比较：多版本并存取最高。
     #[test]
     fn version_cmp_orders() {
-        assert_eq!(version_cmp("151.0.7922.77", "151.0.7922.72"), std::cmp::Ordering::Greater);
-        assert_eq!(version_cmp("150.0.7922.77", "151.0.1.1"), std::cmp::Ordering::Less);
-        assert_eq!(version_cmp("151.0.0.1", "151.0.0.1"), std::cmp::Ordering::Equal);
+        assert_eq!(
+            version_cmp("151.0.7922.77", "151.0.7922.72"),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            version_cmp("150.0.7922.77", "151.0.1.1"),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            version_cmp("151.0.0.1", "151.0.0.1"),
+            std::cmp::Ordering::Equal
+        );
         assert_eq!(version_cmp("151", "151.0.0.1"), std::cmp::Ordering::Less);
     }
 
@@ -606,7 +633,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("临时目录");
         let root = dir.path().join("browser");
         let rel = binary_rel_path().expect("路径");
-        for (v, marker) in [("151.0.7922.77", "a"), ("152.0.1.2", "b"), ("151.0.1.1", "c")] {
+        for (v, marker) in [
+            ("151.0.7922.77", "a"),
+            ("152.0.1.2", "b"),
+            ("151.0.1.1", "c"),
+        ] {
             let d = cft_root(&root).join(format!("chrome-{v}"));
             std::fs::create_dir_all(&d).expect("目录");
             let b = d.join(rel);
@@ -773,9 +804,16 @@ mod tests {
         let client = reqwest::Client::new();
         let dir = tempfile::tempdir().expect("临时目录");
         let root = dir.path().join("browser");
-        let err = ensure_downloaded_from(&client, "9.9.9.9", &url, &root, &DownloadOpts::default(), CftLimits::default())
-            .await
-            .expect_err("损坏 zip 应失败");
+        let err = ensure_downloaded_from(
+            &client,
+            "9.9.9.9",
+            &url,
+            &root,
+            &DownloadOpts::default(),
+            CftLimits::default(),
+        )
+        .await
+        .expect_err("损坏 zip 应失败");
         assert!(
             err.to_string().contains("解压") || err.to_string().contains("zip"),
             "错误应指向解压失败：{err}"
@@ -831,22 +869,42 @@ mod tests {
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored);
             let top = format!("chrome-{key}");
-            writer.start_file(format!("{top}/chrome.exe"), options).expect("start");
+            writer
+                .start_file(format!("{top}/chrome.exe"), options)
+                .expect("start");
             writer.write_all(b"bin").expect("写入");
-            writer.start_file(format!("{top}/sub/f.txt"), options).expect("start");
+            writer
+                .start_file(format!("{top}/sub/f.txt"), options)
+                .expect("start");
             writer.write_all(b"txt").expect("写入");
             writer.finish().expect("finish").into_inner()
         };
         let (_server, url) = mock_vec_server(zip_bytes, 1).await;
         let client = reqwest::Client::new();
         let root = dir.path().join("browser");
-        let cache = ensure_downloaded_from(&client, "151.0.7922.77", &url, &root, &DownloadOpts::default(), CftLimits::default())
-            .await
-            .expect("成功");
+        let cache = ensure_downloaded_from(
+            &client,
+            "151.0.7922.77",
+            &url,
+            &root,
+            &DownloadOpts::default(),
+            CftLimits::default(),
+        )
+        .await
+        .expect("成功");
         assert_eq!(cache.version, "151.0.7922.77");
-        assert!(cache.binary.is_file(), "二进制必须就位：{}", cache.binary.display());
+        assert!(
+            cache.binary.is_file(),
+            "二进制必须就位：{}",
+            cache.binary.display()
+        );
         assert_eq!(std::fs::read(&cache.binary).unwrap(), b"bin");
-        assert!(!cft_root(&root).join("chrome-151.0.7922.77/chrome.zip").exists(), "zip 残留应删除");
+        assert!(
+            !cft_root(&root)
+                .join("chrome-151.0.7922.77/chrome.zip")
+                .exists(),
+            "zip 残留应删除"
+        );
     }
 
     /// 评审 29 §M7：版本目录名 sanitize 放行合法版本。
@@ -964,20 +1022,26 @@ mod tests {
     fn extract_limits_entries_exceeded() {
         let dir = tempfile::tempdir().expect("临时目录");
         let zip_path = dir.path().join("many.zip");
-        std::fs::write(&zip_path, build_test_zip(&["a.txt", "b.txt", "c.txt"], b"x"))
-            .expect("写入");
+        std::fs::write(
+            &zip_path,
+            build_test_zip(&["a.txt", "b.txt", "c.txt"], b"x"),
+        )
+        .expect("写入");
         let dest = dir.path().join("dest");
         let limits = CftLimits {
             max_download_bytes: 0,
             max_entries: 2,
             max_extract_bytes: 0,
         };
-        let err = extract_zip_limited(&zip_path, &dest, limits)
-            .expect_err("应拒绝超条目数");
+        let err = extract_zip_limited(&zip_path, &dest, limits).expect_err("应拒绝超条目数");
         assert!(
             matches!(
                 err,
-                CftError::TooLarge { what: "解压条目数", limit: 2, actual: 3 }
+                CftError::TooLarge {
+                    what: "解压条目数",
+                    limit: 2,
+                    actual: 3
+                }
             ),
             "应为条目数上限错误：{err}"
         );
@@ -998,12 +1062,15 @@ mod tests {
             max_entries: 100,
             max_extract_bytes: 1024,
         };
-        let err = extract_zip_limited(&zip_path, &dest, limits)
-            .expect_err("应拒绝超字节数");
+        let err = extract_zip_limited(&zip_path, &dest, limits).expect_err("应拒绝超字节数");
         assert!(
             matches!(
                 err,
-                CftError::TooLarge { what: "解压总字节数", limit: 1024, actual: 4096 }
+                CftError::TooLarge {
+                    what: "解压总字节数",
+                    limit: 1024,
+                    actual: 4096
+                }
             ),
             "应为字节数上限错误：{err}"
         );
@@ -1019,9 +1086,13 @@ mod tests {
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored);
             let top = format!("chrome-{key}");
-            writer.start_file(format!("{top}/chrome.exe"), options).expect("start");
+            writer
+                .start_file(format!("{top}/chrome.exe"), options)
+                .expect("start");
             writer.write_all(b"bin").expect("写入");
-            writer.start_file(format!("{top}/sub/f.txt"), options).expect("start");
+            writer
+                .start_file(format!("{top}/sub/f.txt"), options)
+                .expect("start");
             writer.write_all(b"txt").expect("写入");
             writer.finish().expect("finish").into_inner()
         };
@@ -1072,10 +1143,7 @@ mod tests {
         )
         .await
         .expect_err("截断 zip 应失败");
-        assert!(
-            err.to_string().contains("zip"),
-            "错误应指向解压失败：{err}"
-        );
+        assert!(err.to_string().contains("zip"), "错误应指向解压失败：{err}");
         assert!(
             !cft_root(&root).join("chrome-9.9.9.6").exists(),
             "失败后版本目录必须清理"
@@ -1089,7 +1157,9 @@ mod tests {
     where
         F: FnMut(&str) -> u16 + Send + 'static,
     {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("绑定");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定");
         let addr = listener.local_addr().expect("地址");
         let url = format!("http://{addr}/file.zip");
         let handle = tokio::spawn(async move {
@@ -1103,7 +1173,11 @@ mod tests {
                 let mut buf = [0u8; 2048];
                 let _ = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await;
                 let status = handler("req");
-                let body = if status == 200 { b"hello chrome zip".to_vec() } else { Vec::new() };
+                let body = if status == 200 {
+                    b"hello chrome zip".to_vec()
+                } else {
+                    Vec::new()
+                };
                 let reason = if status == 200 { "OK" } else { "Err" };
                 write_http(&mut sock, status, reason, &body).await;
             }
@@ -1112,8 +1186,13 @@ mod tests {
     }
 
     /// 固定字节应答（损坏 zip / 合法 zip 注入）。
-    async fn mock_vec_server(payload: Vec<u8>, count: usize) -> (tokio::task::JoinHandle<()>, String) {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("绑定");
+    async fn mock_vec_server(
+        payload: Vec<u8>,
+        count: usize,
+    ) -> (tokio::task::JoinHandle<()>, String) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定");
         let addr = listener.local_addr().expect("地址");
         let url = format!("http://{addr}/payload");
         let handle = tokio::spawn(async move {
@@ -1133,7 +1212,9 @@ mod tests {
         chunk: usize,
         count: usize,
     ) -> (tokio::task::JoinHandle<()>, String) {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("绑定");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定");
         let addr = listener.local_addr().expect("地址");
         let url = format!("http://{addr}/chunked");
         let handle = tokio::spawn(async move {
@@ -1166,18 +1247,15 @@ mod tests {
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
         for name in files {
-            writer.start_file(name.to_string(), options).expect("start_file");
+            writer
+                .start_file(name.to_string(), options)
+                .expect("start_file");
             writer.write_all(content).expect("写入");
         }
         writer.finish().expect("finish").into_inner()
     }
 
-    async fn write_http(
-        sock: &mut tokio::net::TcpStream,
-        status: u16,
-        reason: &str,
-        body: &[u8],
-    ) {
+    async fn write_http(sock: &mut tokio::net::TcpStream, status: u16, reason: &str, body: &[u8]) {
         use tokio::io::AsyncWriteExt;
         let head = format!(
             "HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -1193,7 +1271,8 @@ mod tests {
     fn write_test_zip(zip_path: &Path, src: &Path) {
         let file = std::fs::File::create(zip_path).expect("创建 zip");
         let mut writer = zip::ZipWriter::new(file);
-        let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
         fn add_dir(
             writer: &mut zip::ZipWriter<std::fs::File>,
             base: &Path,
@@ -1206,15 +1285,11 @@ mod tests {
                 let rel_path = rel.join(entry.file_name());
                 if path.is_dir() {
                     let name = format!("{}/", rel_path.to_string_lossy().replace('\\', "/"));
-                    writer
-                        .add_directory(name, options)
-                        .expect("add_directory");
+                    writer.add_directory(name, options).expect("add_directory");
                     add_dir(writer, base, &rel_path, options);
                 } else {
                     let name = rel_path.to_string_lossy().replace('\\', "/");
-                    writer
-                        .start_file(name, options)
-                        .expect("start_file");
+                    writer.start_file(name, options).expect("start_file");
                     std::io::copy(&mut std::fs::File::open(&path).expect("open"), writer)
                         .expect("copy");
                 }
@@ -1228,7 +1303,8 @@ mod tests {
     fn write_evil_zip(zip_path: &Path, evil_name: &str, content: &[u8]) {
         let file = std::fs::File::create(zip_path).expect("创建 zip");
         let mut writer = zip::ZipWriter::new(file);
-        let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
         writer
             .start_file(evil_name.to_string(), options)
             .expect("start_file");

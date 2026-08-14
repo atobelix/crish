@@ -166,8 +166,7 @@ pub(crate) fn redirect_or_intercept_delete(
         }
         match service.trash_file(target, true) {
             Ok(entry) => {
-                let mut v = serde_json::to_value(&entry)
-                    .unwrap_or_else(|_| serde_json::json!({}));
+                let mut v = serde_json::to_value(&entry).unwrap_or_else(|_| serde_json::json!({}));
                 v["path"] = serde_json::Value::String(display);
                 v["entryId"] = serde_json::Value::String(entry.id.clone());
                 entries.push(v);
@@ -185,10 +184,7 @@ pub(crate) fn redirect_or_intercept_delete(
     // 6. 审计：重定向成功（decision=redirected，影响面来自预检）——
     //    经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）；
     //    tool_call_id 取执行上下文真值（LK-03）
-    let target_displays: Vec<String> = targets
-        .iter()
-        .map(|t| t.display().to_string())
-        .collect();
+    let target_displays: Vec<String> = targets.iter().map(|t| t.display().to_string()).collect();
     audit_sink.emit(&security_audit_event(
         &ctx.session_id,
         SecurityAuditOperation::Delete,
@@ -340,9 +336,7 @@ pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> 
     if segments.is_empty() {
         return None;
     }
-    if conex_sandbox::semantics::classify_command_segments(&segments)
-        != CommandClass::CdShape
-    {
+    if conex_sandbox::semantics::classify_command_segments(&segments) != CommandClass::CdShape {
         return None;
     }
     let pure_cd = segments.len() == 1;

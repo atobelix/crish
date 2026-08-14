@@ -146,10 +146,7 @@ impl ToolIdempotencyGuard {
 
     /// 首次出现的调用 ID 返回 true 并记录；重复 ID 返回 false
     pub fn should_execute(&self, tool_call_id: &str) -> bool {
-        let mut domains = self
-            .domains
-            .lock()
-            .unwrap_or_else(recover_lock);
+        let mut domains = self.domains.lock().unwrap_or_else(recover_lock);
         let state = domains
             .entry(DEFAULT_IDEMPOTENCY_DOMAIN.to_string())
             .or_default();
@@ -162,10 +159,7 @@ impl ToolIdempotencyGuard {
 
     /// 批量注册已执行过的 ID（从持久化状态恢复时）
     pub fn restore(&self, ids: &[String]) {
-        let mut domains = self
-            .domains
-            .lock()
-            .unwrap_or_else(recover_lock);
+        let mut domains = self.domains.lock().unwrap_or_else(recover_lock);
         let state = domains
             .entry(DEFAULT_IDEMPOTENCY_DOMAIN.to_string())
             .or_default();
@@ -174,10 +168,7 @@ impl ToolIdempotencyGuard {
 
     /// 已执行的调用 ID 快照（副本，修改不影响内部状态）
     pub fn snapshot(&self) -> Vec<String> {
-        let domains = self
-            .domains
-            .lock()
-            .unwrap_or_else(recover_lock);
+        let domains = self.domains.lock().unwrap_or_else(recover_lock);
         domains
             .get(DEFAULT_IDEMPOTENCY_DOMAIN)
             .map(|s| s.keys.iter().cloned().collect())
@@ -197,10 +188,7 @@ impl ToolIdempotencyGuard {
         let domain = ctx.domain();
         self.ensure_loaded(&domain).await?;
         let key = execution_key(ctx, args);
-        let domains = self
-            .domains
-            .lock()
-            .unwrap_or_else(recover_lock);
+        let domains = self.domains.lock().unwrap_or_else(recover_lock);
         let executed = domains
             .get(&domain)
             .map(|s| s.keys.contains(&key))
@@ -222,11 +210,7 @@ impl ToolIdempotencyGuard {
     ///   持久化失败」语义（`append_key` 幂等契约：重复写不报错）。
     /// - store 先写后、内存写前崩溃 → store 有键内存无 → 下次 check 懒
     ///   加载收敛（不产生重复副作用）。
-    pub async fn record(
-        &self,
-        ctx: &IdempotencyContext,
-        args: &Value,
-    ) -> Result<(), ToolError> {
+    pub async fn record(&self, ctx: &IdempotencyContext, args: &Value) -> Result<(), ToolError> {
         let domain = ctx.domain();
         self.ensure_loaded(&domain).await?;
         let key = execution_key(ctx, args);
@@ -267,41 +251,26 @@ impl ToolIdempotencyGuard {
 
     /// 清除全部域的已执行记录
     pub fn clear_all(&self) {
-        self.domains
-            .lock()
-            .unwrap_or_else(recover_lock)
-            .clear();
+        self.domains.lock().unwrap_or_else(recover_lock).clear();
     }
 
     /// 懒加载：某域首次访问时从持久化 store 拉取已执行键
     async fn ensure_loaded(&self, domain: &str) -> Result<(), ToolError> {
         let need_load = {
-            let domains = self
-                .domains
-                .lock()
-                .unwrap_or_else(recover_lock);
-            !domains
-                .get(domain)
-                .map(|s| s.loaded)
-                .unwrap_or(false)
+            let domains = self.domains.lock().unwrap_or_else(recover_lock);
+            !domains.get(domain).map(|s| s.loaded).unwrap_or(false)
         };
         if !need_load {
             return Ok(());
         }
         if let Some(store) = &self.store {
             let keys = store.load_keys(domain).await?;
-            let mut domains = self
-                .domains
-                .lock()
-                .unwrap_or_else(recover_lock);
+            let mut domains = self.domains.lock().unwrap_or_else(recover_lock);
             let state = domains.entry(domain.to_string()).or_default();
             state.keys.extend(keys);
             state.loaded = true;
         } else {
-            let mut domains = self
-                .domains
-                .lock()
-                .unwrap_or_else(recover_lock);
+            let mut domains = self.domains.lock().unwrap_or_else(recover_lock);
             domains.entry(domain.to_string()).or_default().loaded = true;
         }
         Ok(())
@@ -493,7 +462,10 @@ mod tests {
         let guard = ToolIdempotencyGuard::new();
         let c1 = ctx("run-1", "sess-1", "read_file");
         let c2 = ctx("run-2", "sess-1", "read_file");
-        guard.record(&c1, &json!({ "path": "a.txt" })).await.unwrap();
+        guard
+            .record(&c1, &json!({ "path": "a.txt" }))
+            .await
+            .unwrap();
         let next = guard.check(&c2, &json!({ "path": "a.txt" })).await.unwrap();
         assert!(matches!(next, IdempotencyDecision::Execute { .. }));
     }
@@ -671,7 +643,10 @@ mod tests {
         }
 
         fn append_calls(&self) -> usize {
-            *self.append_calls.lock().expect("测试 store 锁中毒后不可恢复")
+            *self
+                .append_calls
+                .lock()
+                .expect("测试 store 锁中毒后不可恢复")
         }
     }
 
@@ -727,7 +702,10 @@ mod tests {
 
         // 首次 record：store 追加失败 → record 返回错误（工具已执行、记录未落）
         let err = guard.record(&c, &args).await.unwrap_err();
-        assert!(err.to_string().contains("幂等记录持久化失败"), "错误文案须含持久化失败语义");
+        assert!(
+            err.to_string().contains("幂等记录持久化失败"),
+            "错误文案须含持久化失败语义"
+        );
         assert!(err.to_string().contains(&c.domain()));
         // 内存键不残留：同进程同参 check 仍为 Execute（重试可再执行）
         assert!(matches!(

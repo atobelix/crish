@@ -9,8 +9,8 @@
 //! - 脱敏函数：命中 → 占位符，未命中 → 原文。
 
 use conex_computer::security::{
-    is_password_field_name, redact_password_field, PASSWORD_KEYNAME_PATTERNS,
-    PASSWORD_PLACEHOLDER, PASSWORD_REDACTION_PLACEHOLDER,
+    is_password_field_name, redact_password_field, PASSWORD_KEYNAME_PATTERNS, PASSWORD_PLACEHOLDER,
+    PASSWORD_REDACTION_PLACEHOLDER,
 };
 
 /// 占位符常量登记（UIA 输出不落实际字符，04 §4.5 ①：占位符可记长度、
@@ -59,8 +59,19 @@ fn keyname_hit_variants() {
 #[test]
 fn non_keyname_fields_untouched() {
     for miss in [
-        "", "name", "title", "value", "button", "text", "email", "phone",
-        "用户名", "登录", "标题", "确认", "验证码",
+        "",
+        "name",
+        "title",
+        "value",
+        "button",
+        "text",
+        "email",
+        "phone",
+        "用户名",
+        "登录",
+        "标题",
+        "确认",
+        "验证码",
     ] {
         assert!(!is_password_field_name(miss), "不应命中键名模式：{miss:?}");
     }
@@ -73,7 +84,10 @@ fn redact_preserves_or_redacts() {
         redact_password_field("login_password"),
         PASSWORD_REDACTION_PLACEHOLDER
     );
-    assert_eq!(redact_password_field("password"), PASSWORD_REDACTION_PLACEHOLDER);
+    assert_eq!(
+        redact_password_field("password"),
+        PASSWORD_REDACTION_PLACEHOLDER
+    );
     assert_eq!(redact_password_field("标题"), "标题");
     assert_eq!(redact_password_field("name"), "name");
 }

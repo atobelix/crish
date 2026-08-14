@@ -207,14 +207,11 @@ impl ToolMiddleware for RecordingMiddleware {
         output: Value,
         _ctx: &ToolExecutionContext,
     ) -> Result<AfterExecuteResult, ToolError> {
-        let mut records = self
-            .records
-            .lock()
-            .unwrap_or_else(|e| {
-                // PE-07 T07.6 A 模式（Q18 处置）：锁中毒恢复，不 panic
-                tracing::error!("记录中间件锁中毒，按恢复模式继续：{e}");
-                e.into_inner()
-            });
+        let mut records = self.records.lock().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式（Q18 处置）：锁中毒恢复，不 panic
+            tracing::error!("记录中间件锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
         records.push(RecordingRecord::Result {
             tool_name: tool.name().to_string(),
             output,
@@ -229,14 +226,11 @@ impl ToolMiddleware for RecordingMiddleware {
         error: &ToolError,
         _ctx: &ToolExecutionContext,
     ) -> Result<(), ToolError> {
-        let mut records = self
-            .records
-            .lock()
-            .unwrap_or_else(|e| {
-                // PE-07 T07.6 A 模式（Q18 处置）：锁中毒恢复，不 panic
-                tracing::error!("记录中间件锁中毒，按恢复模式继续：{e}");
-                e.into_inner()
-            });
+        let mut records = self.records.lock().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式（Q18 处置）：锁中毒恢复，不 panic
+            tracing::error!("记录中间件锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
         records.push(RecordingRecord::Error {
             tool_name: tool.name().to_string(),
             message: error.to_string(),
@@ -316,7 +310,10 @@ mod tests {
         };
         let mut final_output = output;
         for m in chain {
-            match m.on_result(tool, &current, final_output.clone(), ctx).await? {
+            match m
+                .on_result(tool, &current, final_output.clone(), ctx)
+                .await?
+            {
                 AfterExecuteResult::Passthrough => {}
                 AfterExecuteResult::Replace(v) => final_output = v,
             }

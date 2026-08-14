@@ -90,7 +90,9 @@ pub(crate) async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRu
     state.background.clear_current_run(&run_id);
     // T-D-13：spawner 侧 run 上下文释放 + 子代理终态收口（防御性失败
     // 路径同样归一 failed——记账释放 / 行更新 / 事件发射 / 通知面）
-    state.subagent_spawner.clear_current_run(&active.session_id, &run_id);
+    state
+        .subagent_spawner
+        .clear_current_run(&active.session_id, &run_id);
     if let Some(cfg) = active.subagent.clone() {
         state
             .on_subagent_run_terminal(&cfg, conex_db::RunStatus::Failed)
@@ -329,17 +331,13 @@ pub(crate) async fn run_task_impl(
                 &base_registry,
                 task_type_wire,
             )
-            .map_err(|error| {
-                CoreError::internal(format!("子代理工具集裁剪失败：{error}"))
-            })?;
+            .map_err(|error| CoreError::internal(format!("子代理工具集裁剪失败：{error}")))?;
             let filtered = agent_tools::readonly::filter_registry(&filtered, |name| {
                 name != agent_tools::tools::subagent::SUBAGENT_SPAWNER_TOOL_NAME
                     && name != agent_tools::tools::kill_subagent::SUBAGENT_KILL_TOOL_NAME
                     && name != agent_tools::tools::send_message::SEND_MESSAGE_TOOL_NAME
             })
-            .map_err(|error| {
-                CoreError::internal(format!("子代理工具集剔除失败：{error}"))
-            })?;
+            .map_err(|error| CoreError::internal(format!("子代理工具集剔除失败：{error}")))?;
             Arc::new(filtered)
         }
         None => base_registry,
@@ -401,10 +399,8 @@ pub(crate) async fn run_task_impl(
 
     // T09.1 实时 delta 双轨：BridgeDeltaSink 注入 SessionLoopProducer
     // （core_run_commands.rs:667-716 装配，PE-09 T09.1.2 步骤 4）
-    let delta_sink: Arc<dyn DeltaSink> = Arc::new(BridgeDeltaSink::new(
-        Arc::clone(&bridge),
-        run_id.clone(),
-    ));
+    let delta_sink: Arc<dyn DeltaSink> =
+        Arc::new(BridgeDeltaSink::new(Arc::clone(&bridge), run_id.clone()));
 
     // ── T-29 context_window 入站（P4 §3.3.2）──────────────────────
     // 生效模型窗口 → ContextBudget（reserve/safety 取默认）；经
@@ -448,11 +444,8 @@ pub(crate) async fn run_task_impl(
     // （按发射序 reserve + append_event 落库 events 表；句柄随
     // ActiveRun 收口 await 排空，终态前落库完成）
     let (audit_persist_tx, audit_persist_rx) = tokio::sync::mpsc::unbounded_channel();
-    let audit_worker = spawn_audit_persistence(
-        Arc::clone(&queue),
-        session_id.clone(),
-        audit_persist_rx,
-    );
+    let audit_worker =
+        spawn_audit_persistence(Arc::clone(&queue), session_id.clone(), audit_persist_rx);
     let bridge_audit_sink = Arc::new(BridgeAuditSink::new(
         Arc::clone(&bridge),
         run_id.clone(),
@@ -556,95 +549,93 @@ pub(crate) async fn run_task_impl(
     let subagent_injector: Option<ContextInjector> = None;
     let subagent_write_registry: Option<Arc<WritePathRegistry>> = None;
     let subagent_quota: Option<ExploreDocsQuotaContext> = None;
-    let (subagent_write_registry, subagent_quota, subagent_injector) =
-        match &subagent_config {
-            None => (subagent_write_registry, subagent_quota, subagent_injector),            Some(config) => {
-                // 工作区根解析链（30-P5：与 loop 装配块同源，经共用 helper
-                // resolve_escape_watch_root——单一真源，杜绝双处漂移复发；
-                // 壳层 workspace_root 恒 None，等效 cwd → current_dir）
-                let root = resolve_escape_watch_root(cwd.as_deref());
-                // 写路径沙箱装配
-                let write_registry = match &config.allowed_write_paths {
-                    Some(paths) => {
-                        let policy = WritePathPolicy::from_entries(&root, paths.clone())
-                            .map_err(|error| {
-                                CoreError::internal(format!("写路径白名单解析失败：{error}"))
-                            })?;
-                        Some(Arc::new(
-                            WritePathRegistry::new(session_id.clone(), &root)
-                                .with_write_policy(policy),
-                        ))
-                    }
-                    None => match config.task_type.as_deref() {
-                        // implementation 默认 = 工作区根沙箱（Allowed 白名单）
-                        Some("implementation") => Some(Arc::new(
-                            WritePathRegistry::new(session_id.clone(), &root)
-                                .with_write_policy(WritePathPolicy::Allowed(vec![root.clone()])),
-                        )),
-                        // 其余类型：工具面（只读/仅 shell）+ 配额面闭合，
-                        // 不注册策略（越权检查不强制）
-                        _ => None,
-                    },
-                };
-                // 权限申请上下文（design/review 配额凭证；T-D-14）
-                let quota = match config.task_type.as_deref() {
-                    Some("design") | Some("review") => state.local_db().map(|db| {
-                        ExploreDocsQuotaContext {
-                            session_id: session_id.clone(),
-                            run_id: run_id.clone(),
-                            granted: true,
-                            quota: 1,
-                            store: Some(Arc::new(
-                                conex_db::SessionMetaExploreDocsQuotaStore::new(db),
-                            )),
-                        }
-                    }),
-                    _ => None,
-                };
-                // 提示词注入段装配（M1 挂载形状：title + content → push）
-                let mut injector = ContextInjector::new();
-                // T-D-03：子代理角色约束（主 Agent run 装配点不调用——
-                // 「主 Agent run 不含本段」断言的关键差异点）
-                crate::engine::push_subagent_role_constraint(&mut injector);
-                // C2：started_at 段 + git 回退谨慎指引（started_at 与落库同源）
-                for (title, content) in agent_tools::subagent_inject::subagent_session_injections(
-                    Some(config.started_at_ms),
-                    agent_tools::subagent_inject::DEFAULT_REF_AGE_THRESHOLD_HOURS,
-                ) {
-                    injector.push(ContextInjection::new(
-                        ContextInjectionKind::System,
-                        title,
-                        content,
-                    ));
+    let (subagent_write_registry, subagent_quota, subagent_injector) = match &subagent_config {
+        None => (subagent_write_registry, subagent_quota, subagent_injector),
+        Some(config) => {
+            // 工作区根解析链（30-P5：与 loop 装配块同源，经共用 helper
+            // resolve_escape_watch_root——单一真源，杜绝双处漂移复发；
+            // 壳层 workspace_root 恒 None，等效 cwd → current_dir）
+            let root = resolve_escape_watch_root(cwd.as_deref());
+            // 写路径沙箱装配
+            let write_registry = match &config.allowed_write_paths {
+                Some(paths) => {
+                    let policy =
+                        WritePathPolicy::from_entries(&root, paths.clone()).map_err(|error| {
+                            CoreError::internal(format!("写路径白名单解析失败：{error}"))
+                        })?;
+                    Some(Arc::new(
+                        WritePathRegistry::new(session_id.clone(), &root).with_write_policy(policy),
+                    ))
                 }
-                // T-D-14：权限申请指引段（任务类型 + 一句话边界参数化）
-                let boundary = config
-                    .task_type
-                    .as_deref()
-                    .and_then(agent_tools::tools::subagent::TaskType::parse)
-                    .map(|t| t.boundary_summary());
-                let (title, content) =
-                    agent_tools::subagent_inject::permission_relay_injection(
-                        config.task_type.as_deref(),
-                        boundary,
-                    );
+                None => match config.task_type.as_deref() {
+                    // implementation 默认 = 工作区根沙箱（Allowed 白名单）
+                    Some("implementation") => Some(Arc::new(
+                        WritePathRegistry::new(session_id.clone(), &root)
+                            .with_write_policy(WritePathPolicy::Allowed(vec![root.clone()])),
+                    )),
+                    // 其余类型：工具面（只读/仅 shell）+ 配额面闭合，
+                    // 不注册策略（越权检查不强制）
+                    _ => None,
+                },
+            };
+            // 权限申请上下文（design/review 配额凭证；T-D-14）
+            let quota = match config.task_type.as_deref() {
+                Some("design") | Some("review") => {
+                    state.local_db().map(|db| ExploreDocsQuotaContext {
+                        session_id: session_id.clone(),
+                        run_id: run_id.clone(),
+                        granted: true,
+                        quota: 1,
+                        store: Some(Arc::new(conex_db::SessionMetaExploreDocsQuotaStore::new(
+                            db,
+                        ))),
+                    })
+                }
+                _ => None,
+            };
+            // 提示词注入段装配（M1 挂载形状：title + content → push）
+            let mut injector = ContextInjector::new();
+            // T-D-03：子代理角色约束（主 Agent run 装配点不调用——
+            // 「主 Agent run 不含本段」断言的关键差异点）
+            crate::engine::push_subagent_role_constraint(&mut injector);
+            // C2：started_at 段 + git 回退谨慎指引（started_at 与落库同源）
+            for (title, content) in agent_tools::subagent_inject::subagent_session_injections(
+                Some(config.started_at_ms),
+                agent_tools::subagent_inject::DEFAULT_REF_AGE_THRESHOLD_HOURS,
+            ) {
                 injector.push(ContextInjection::new(
                     ContextInjectionKind::System,
                     title,
                     content,
                 ));
-                // 产出目录段（主控已定产出目录时注入）
-                if let Some(dir) = &config.output_dir {
-                    let (title, content) = agent_tools::subagent_inject::output_dir_injection(dir);
-                    injector.push(ContextInjection::new(
-                        ContextInjectionKind::System,
-                        title,
-                        content,
-                    ));
-                }
-                (write_registry, quota, Some(injector))
             }
-        };
+            // T-D-14：权限申请指引段（任务类型 + 一句话边界参数化）
+            let boundary = config
+                .task_type
+                .as_deref()
+                .and_then(agent_tools::tools::subagent::TaskType::parse)
+                .map(|t| t.boundary_summary());
+            let (title, content) = agent_tools::subagent_inject::permission_relay_injection(
+                config.task_type.as_deref(),
+                boundary,
+            );
+            injector.push(ContextInjection::new(
+                ContextInjectionKind::System,
+                title,
+                content,
+            ));
+            // 产出目录段（主控已定产出目录时注入）
+            if let Some(dir) = &config.output_dir {
+                let (title, content) = agent_tools::subagent_inject::output_dir_injection(dir);
+                injector.push(ContextInjection::new(
+                    ContextInjectionKind::System,
+                    title,
+                    content,
+                ));
+            }
+            (write_registry, quota, Some(injector))
+        }
+    };
 
     // ── D1 §3.1.4/§3.2.3：退避与熔断配置装配（读 session_meta 键；
     //    None = 向后兼容：立即重试 / 不启用熔断闸）──
@@ -739,12 +730,13 @@ pub(crate) async fn run_task_impl(
     // 由 with_initial_conversation_arc 零拷贝水合。
     let assembled_history =
         resolve_history_source(&history, state.session_history.get(&session_id));
-    let initial_conversation: Option<Vec<Arc<AgentMessage>>> = assembled_history
-        .as_ref()
-        .map(|(source, payload)| match source {
-            HistorySource::Frontend => hydrate_history(payload.clone()),
-            HistorySource::Cache => cached_history_to_conversation(payload.clone()),
-        });
+    let initial_conversation: Option<Vec<Arc<AgentMessage>>> =
+        assembled_history
+            .as_ref()
+            .map(|(source, payload)| match source {
+                HistorySource::Frontend => hydrate_history(payload.clone()),
+                HistorySource::Cache => cached_history_to_conversation(payload.clone()),
+            });
     tracing::debug!(
         target: "run",
         session_id = %session_id,
@@ -882,7 +874,15 @@ pub(crate) async fn core_run_control(
     reason: Option<String>,
     payload: Option<serde_json::Value>,
 ) -> Result<(), CoreError> {
-    run_control_impl(state.inner(), run_id.trim(), &level, message, reason, payload).await
+    run_control_impl(
+        state.inner(),
+        run_id.trim(),
+        &level,
+        message,
+        reason,
+        payload,
+    )
+    .await
 }
 
 /// run 控制命令体（测试直调，不依赖 Tauri runtime；对齐 background.rs
@@ -924,10 +924,7 @@ pub(crate) async fn run_control_impl(
             // T-CF-11：用户经 L1 注入消息 → 标记用户交互（收口判定
             // 「用户消息到达后的正常收场不触发续 run」）
             active.user_touched.store(true, Ordering::SeqCst);
-            let mut bus = active
-                .control_bus
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
+            let mut bus = active.control_bus.lock().unwrap_or_else(|e| e.into_inner());
             if follow_up {
                 bus.request_follow_up(injected, reason, Some("ui".to_string()));
             } else {
@@ -941,10 +938,7 @@ pub(crate) async fn run_control_impl(
             // 语义——watcher 与收口判定不再自动续，直到用户新 run 清除；
             // L2 不置 run 级 user_touched，会话级标记兜底 error 收场竞态）
             state.set_user_stopped(&active.session_id);
-            let mut bus = active
-                .control_bus
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
+            let mut bus = active.control_bus.lock().unwrap_or_else(|e| e.into_inner());
             bus.request_cooperative_stop(
                 Some(reason.unwrap_or_else(|| "ui-stop".to_string())),
                 Some("ui".to_string()),
@@ -960,10 +954,7 @@ pub(crate) async fn run_control_impl(
             state.set_user_stopped(&active.session_id);
             active.abort_signal.abort();
             {
-                let mut bus = active
-                    .control_bus
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
+                let mut bus = active.control_bus.lock().unwrap_or_else(|e| e.into_inner());
                 bus.request_force_cancel(
                     Some(reason.unwrap_or_else(|| "ui-force-cancel".to_string())),
                     Some("ui".to_string()),
@@ -977,7 +968,10 @@ pub(crate) async fn run_control_impl(
             // run 的普通任务（is_daemon=false）」发起优雅终止（两阶段 kill，
             // best-effort，不阻断强停）。
             if l3_force_cancel_tasks_enabled() {
-                state.background.graceful_stop_tasks_for_run(&active.run_id).await;
+                state
+                    .background
+                    .graceful_stop_tasks_for_run(&active.run_id)
+                    .await;
             }
             Ok(())
         }
@@ -1031,11 +1025,16 @@ pub(crate) async fn compact_now_impl(
     // 1. 会话存在性（内存注册表 session_trees / sessions + DB sessions 表
     //    三面检查——冷启动无内存注册表时以 DB 为权威）
     let session_exists = {
-        let trees = state.session_trees.lock().unwrap_or_else(|e| e.into_inner());
+        let trees = state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let in_trees = trees.contains_key(session_id);
         let in_sessions = {
             let sessions = state.sessions.lock().unwrap_or_else(|e| e.into_inner());
-            sessions.iter().any(|record| record.session_id == session_id)
+            sessions
+                .iter()
+                .any(|record| record.session_id == session_id)
         };
         let in_db = state
             .local_db()
@@ -1158,7 +1157,11 @@ pub(crate) async fn compact_now_impl(
     .await;
     // End 事件（record 载荷 = CompactionPlan 字段；details 携带块语义键，
     // orchestrator::blocks 消费落块表，blocks.rs:96-137）
-    let summary_state = if plan.summary_is_llm { "committed" } else { "awaiting" };
+    let summary_state = if plan.summary_is_llm {
+        "committed"
+    } else {
+        "awaiting"
+    };
     let block_id = format!("compacted-summary-{}-{}", plan.generation, plan.fold_index);
     let record = ContextCompressionRecord {
         id: block_id.clone(),
@@ -1179,7 +1182,12 @@ pub(crate) async fn compact_now_impl(
             &block_id,
             plan.generation,
             (plan.fold_chain_prev > 0)
-                .then(|| format!("compacted-summary-{}-{}", plan.generation, plan.fold_chain_prev))
+                .then(|| {
+                    format!(
+                        "compacted-summary-{}-{}",
+                        plan.generation, plan.fold_chain_prev
+                    )
+                })
                 .as_deref(),
             iso8601_to_epoch_millis(&now_iso),
             summary_state,
@@ -1317,4 +1325,3 @@ pub(crate) async fn cancel_run_impl(
         run_id: active.run_id.clone(),
     })
 }
-

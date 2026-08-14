@@ -24,8 +24,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 
 use super::apns::{
-    build_apns_send_request_at, parse_apns_response, APNS_JWT_TTL_SECS, APNS_PROD_HOST,
-    APNS_SANDBOX_HOST, JwtEs256Signer,
+    build_apns_send_request_at, parse_apns_response, JwtEs256Signer, APNS_JWT_TTL_SECS,
+    APNS_PROD_HOST, APNS_SANDBOX_HOST,
 };
 use super::credentials::{CredentialsProvider, EnvCredentialsProvider};
 use super::{
@@ -58,7 +58,8 @@ impl JwtRotation {
 
     /// 缓存是否仍可用（签发后未满 `TTL - 余量` → 复用，否则轮换）
     pub fn fresh(&self, now_secs: u64) -> bool {
-        now_secs.saturating_sub(self.issued_at_secs) < APNS_JWT_TTL_SECS - APNS_JWT_ROTATE_LEEWAY_SECS
+        now_secs.saturating_sub(self.issued_at_secs)
+            < APNS_JWT_TTL_SECS - APNS_JWT_ROTATE_LEEWAY_SECS
     }
 
     /// 缓存 JWT
@@ -122,7 +123,9 @@ impl ApnsSender {
         http: reqwest::Client,
         provider: &dyn CredentialsProvider,
     ) -> Option<Result<Self, VendorError>> {
-        provider.apns().map(|credentials| Self::new(http, credentials))
+        provider
+            .apns()
+            .map(|credentials| Self::new(http, credentials))
     }
 
     /// 注入发送基址（测试用：本地 mock HTTP 端点；生产走 [new]/[from_env]）
@@ -138,7 +141,8 @@ impl ApnsSender {
         now_secs: u64,
     ) -> Result<VendorSendOutcome, VendorError> {
         let jwt = self.fresh_jwt(now_secs)?;
-        let request = build_apns_send_request_at(&self.credentials, notification, &jwt, &self.base_url)?;
+        let request =
+            build_apns_send_request_at(&self.credentials, notification, &jwt, &self.base_url)?;
 
         let mut builder = self
             .http
@@ -183,9 +187,10 @@ impl ApnsSender {
 
     /// 取新鲜 JWT（缓存有效复用；否则重签 + 记时刻；锁内无 await）
     fn fresh_jwt(&self, now_secs: u64) -> Result<String, VendorError> {
-        let mut cached = self.jwt.lock().map_err(|_| {
-            VendorError::Crypto("APNs JWT 缓存锁损坏".to_string())
-        })?;
+        let mut cached = self
+            .jwt
+            .lock()
+            .map_err(|_| VendorError::Crypto("APNs JWT 缓存锁损坏".to_string()))?;
         if let Some(rotation) = cached.as_ref() {
             if rotation.fresh(now_secs) {
                 return Ok(rotation.token().to_string());
@@ -221,9 +226,9 @@ impl VendorPushChannel for ApnsSender {
 mod tests {
     use super::*;
     use crate::push::intent::PayloadDigest;
-    use crate::push::PushLevel;
     use crate::push::vendor::test_support::{start_mock_server, MockResponse, MockRoute};
     use crate::push::vendor::{VendorDevice, VendorPlatform};
+    use crate::push::PushLevel;
 
     const KEY_ID: &str = "ABC123DEFG";
     const TEAM_ID: &str = "TEAMID42";
@@ -313,7 +318,10 @@ mod tests {
         .await;
         let sender = sender_against(mock.addr);
 
-        let outcome = sender.send_at(&notification("tok-1"), 1_786_214_400).await.expect("发送");
+        let outcome = sender
+            .send_at(&notification("tok-1"), 1_786_214_400)
+            .await
+            .expect("发送");
         assert_eq!(outcome, VendorSendOutcome::Delivered);
 
         let requests = mock.requests.lock().unwrap();
@@ -329,7 +337,10 @@ mod tests {
                 .map(|(_, value)| value.clone())
         };
         let authorization = header("authorization").expect("authorization 头");
-        assert!(authorization.starts_with("bearer "), "bearer 前缀：{authorization}");
+        assert!(
+            authorization.starts_with("bearer "),
+            "bearer 前缀：{authorization}"
+        );
         let jwt = authorization.trim_start_matches("bearer ");
         assert_eq!(jwt.split('.').count(), 3, "JWT 三段结构");
         assert_eq!(header("apns-push-type").as_deref(), Some("alert"));
@@ -352,16 +363,30 @@ mod tests {
         let mock = start_mock_server(&[MockRoute {
             path_frag: "/3/device/",
             responses: &[
-                MockResponse { status: "200 OK", body: "", headers: &[] },
-                MockResponse { status: "200 OK", body: "", headers: &[] },
+                MockResponse {
+                    status: "200 OK",
+                    body: "",
+                    headers: &[],
+                },
+                MockResponse {
+                    status: "200 OK",
+                    body: "",
+                    headers: &[],
+                },
             ],
         }])
         .await;
         let sender = sender_against(mock.addr);
         let t0 = 1_786_214_400;
 
-        sender.send_at(&notification("tok-a"), t0).await.expect("首次发送");
-        sender.send_at(&notification("tok-b"), t0).await.expect("同刻复用");
+        sender
+            .send_at(&notification("tok-a"), t0)
+            .await
+            .expect("首次发送");
+        sender
+            .send_at(&notification("tok-b"), t0)
+            .await
+            .expect("同刻复用");
         assert_eq!(mock.requests.lock().unwrap().len(), 2, "两连发");
         let first = mock.requests.lock().unwrap()[0]
             .header_value("authorization")
@@ -372,14 +397,20 @@ mod tests {
         assert_eq!(first, second, "TTL 内复用同一 JWT");
 
         // 跨过 TTL → 重签（JWT iat 变化 → 签名段变化，auth 头不同）
-        sender.send_at(&notification("tok-c"), t0 + APNS_JWT_TTL_SECS).await.expect("轮换发送");
+        sender
+            .send_at(&notification("tok-c"), t0 + APNS_JWT_TTL_SECS)
+            .await
+            .expect("轮换发送");
         let rotated = mock.requests.lock().unwrap()[2]
             .header_value("authorization")
             .expect("轮换后 auth 头");
         assert_ne!(rotated, first, "到期后必须重签");
 
         // 轮换后仍可复用（第四个请求回落到缓存 JWT）
-        sender.send_at(&notification("tok-d"), t0 + APNS_JWT_TTL_SECS + 1).await.expect("复用发送");
+        sender
+            .send_at(&notification("tok-d"), t0 + APNS_JWT_TTL_SECS + 1)
+            .await
+            .expect("复用发送");
         let reused = mock.requests.lock().unwrap()[3]
             .header_value("authorization")
             .expect("复用 auth 头");
@@ -397,18 +428,31 @@ mod tests {
                     body: r#"{"reason":"ExpiredProviderToken"}"#,
                     headers: &[],
                 },
-                MockResponse { status: "200 OK", body: "", headers: &[] },
+                MockResponse {
+                    status: "200 OK",
+                    body: "",
+                    headers: &[],
+                },
             ],
         }])
         .await;
         let sender = sender_against(mock.addr);
         let t0 = 1_786_214_400;
 
-        let outcome = sender.send_at(&notification("tok-1"), t0).await.expect("403 发送");
-        assert!(matches!(outcome, VendorSendOutcome::FailedPermanent { .. }), "403 = 永久失败");
+        let outcome = sender
+            .send_at(&notification("tok-1"), t0)
+            .await
+            .expect("403 发送");
+        assert!(
+            matches!(outcome, VendorSendOutcome::FailedPermanent { .. }),
+            "403 = 永久失败"
+        );
 
         // 同一时刻再发 → 缓存已作废 → 重签（JWT 不同）
-        sender.send_at(&notification("tok-2"), t0).await.expect("重签发送");
+        sender
+            .send_at(&notification("tok-2"), t0)
+            .await
+            .expect("重签发送");
         let requests = mock.requests.lock().unwrap();
         assert_eq!(requests.len(), 2);
         let first = requests[0].header_value("authorization").expect("403 请求");
@@ -429,7 +473,10 @@ mod tests {
         }])
         .await;
         let sender = sender_against(mock.addr);
-        let outcome = sender.send_at(&notification("tok-1"), 1_786_214_400).await.expect("发送");
+        let outcome = sender
+            .send_at(&notification("tok-1"), 1_786_214_400)
+            .await
+            .expect("发送");
         assert_eq!(outcome, VendorSendOutcome::DeviceNotRegistered);
     }
 
@@ -446,7 +493,10 @@ mod tests {
         }])
         .await;
         let sender = sender_against(mock.addr);
-        let outcome = sender.send_at(&notification("tok-1"), 1_786_214_400).await.expect("发送");
+        let outcome = sender
+            .send_at(&notification("tok-1"), 1_786_214_400)
+            .await
+            .expect("发送");
         assert_eq!(
             outcome,
             VendorSendOutcome::RateLimited {
@@ -459,11 +509,16 @@ mod tests {
     #[tokio::test]
     async fn transport_error_maps_to_retryable() {
         // 绑定后立即释放 → 端口无人监听 → 连接拒绝
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("绑定");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定");
         let addr = listener.local_addr().expect("地址");
         drop(listener);
         let sender = sender_against(addr);
-        let outcome = sender.send_at(&notification("tok-1"), 1_786_214_400).await.expect("不抛错");
+        let outcome = sender
+            .send_at(&notification("tok-1"), 1_786_214_400)
+            .await
+            .expect("不抛错");
         assert_eq!(
             outcome,
             VendorSendOutcome::FailedRetryable { retry_after: None }

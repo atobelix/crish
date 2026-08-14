@@ -1,8 +1,8 @@
 pub mod semantics;
 // T-AB-05 / Unit 5.1 新增公开导出：禁 cd 语义层与反混淆/AST 门禁接口
 pub use semantics::{
-    analyze_segment_ast, analyze_token_danger, classify_command_segments, is_ps_encoded_command_flag,
-    split_command_args_normalized, CommandClass,
+    analyze_segment_ast, analyze_token_danger, classify_command_segments,
+    is_ps_encoded_command_flag, split_command_args_normalized, CommandClass,
 };
 pub mod gatekeeper {
     use regex::RegexSet;
@@ -26,12 +26,12 @@ pub mod gatekeeper {
             let blocked_patterns = RegexSet::new([
                 // 静态红线清单（第一层，对象窄化：只对准确定性毁灭目标）
                 // Unix 毁灭性命令
-                r"(?i)\brm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(/|/\*|\*)",
+                r"(?i)\brm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(/|/\*|\*)(\s|$)",
                 r"(?i)\brm\s+--no-preserve-root",
                 // PS-01 T1.3（R1 ③ 盲区）：-- 变体纵深防御——语义层已归一
                 // 拦截 rm -rf -- /，此处补静态层条目（新增，不改写既有 14 条），
                 // host_openers 逐参场景依赖正则兜底（lib.rs:30 注释）
-                r"(?i)\brm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)(\s+--)?\s+(/|/\*|\*)",
+                r"(?i)\brm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)(\s+--)?\s+(/|/\*|\*|/etc)(/|\s|$)",
                 r"(?i)\bdd\s+if=.*of=/dev/sd[a-z]",
                 // 文件系统创建/格式化（确定性毁灭目标；S2 窄化时误删，host opener 逐参场景依赖正则兜底）
                 r"(?i)\bmkfs(\.[a-z0-9]+)?\s+/dev/sd[a-z]",
@@ -39,10 +39,9 @@ pub mod gatekeeper {
                 // 远程执行红线：curl/wget 管道直接进 shell（语义层视 Dangerous，此处升级为红线）
                 r"(?i)\b(curl|wget)\b[^\r\n]*\|\s*(ba|z|d)?sh\b",
                 // Windows 毁灭性命令
-                r"(?i)\bRemove-Item\b.*(-Recurse|-Path)",
+                r"(?i)\bRemove-Item\b.*(-Recurse|-Force).*[A-Za-z]:(\\|\/)?(\*|\s*$)",
                 r"(?i)\bformat\s+[A-Za-z]:",
-                r"(?i)\bdel\b.*[A-Za-z]:",
-                r"(?i)\brd\b.*[A-Za-z]:",
+                r"(?i)\b(del|erase|rd|rmdir)\b.*[A-Za-z]:(\\|\/)?(\*|\s*$)",
                 r"(?i)\bFormat-Volume\b",
                 r"(?i)\bClear-Disk\b",
                 r"(?i)\bStop-Computer\b",
@@ -108,6 +107,7 @@ pub mod gatekeeper {
                 .any(|s| s.class == crate::semantics::CommandClass::Dangerous)
                 || analysis.overall_class == crate::semantics::CommandClass::Dangerous
                 || analysis.has_indirect_delete
+                || (analysis.overall_class == crate::semantics::CommandClass::Indirect && !analysis.delete_targets.is_empty())
             {
                 return GatekeeperResult::RequiresApproval;
             }
@@ -178,25 +178,37 @@ mod tests {
     #[test]
     fn blocks_rm_rf_root() {
         let gk = CommandGatekeeper::new();
-        assert_eq!(gk.check_command("rm", &["-rf", "/"]), GatekeeperResult::Blocked);
+        assert_eq!(
+            gk.check_command("rm", &["-rf", "/"]),
+            GatekeeperResult::Blocked
+        );
     }
 
     #[test]
     fn blocks_format_volume() {
         let gk = CommandGatekeeper::new();
-        assert_eq!(gk.check_command("Format-Volume", &[]), GatekeeperResult::Blocked);
+        assert_eq!(
+            gk.check_command("Format-Volume", &[]),
+            GatekeeperResult::Blocked
+        );
     }
 
     #[test]
     fn blocks_clear_disk() {
         let gk = CommandGatekeeper::new();
-        assert_eq!(gk.check_command("Clear-Disk", &["-Number", "0"]), GatekeeperResult::Blocked);
+        assert_eq!(
+            gk.check_command("Clear-Disk", &["-Number", "0"]),
+            GatekeeperResult::Blocked
+        );
     }
 
     #[test]
     fn blocks_stop_computer() {
         let gk = CommandGatekeeper::new();
-        assert_eq!(gk.check_command("Stop-Computer", &[]), GatekeeperResult::Blocked);
+        assert_eq!(
+            gk.check_command("Stop-Computer", &[]),
+            GatekeeperResult::Blocked
+        );
     }
 
     #[test]
@@ -230,8 +242,14 @@ mod tests {
     fn allows_normal_commands() {
         let gk = CommandGatekeeper::new();
         assert_eq!(gk.check_command("ls", &["-la"]), GatekeeperResult::Allowed);
-        assert_eq!(gk.check_command("git", &["status"]), GatekeeperResult::Allowed);
-        assert_eq!(gk.check_command("npm", &["install"]), GatekeeperResult::Allowed);
+        assert_eq!(
+            gk.check_command("git", &["status"]),
+            GatekeeperResult::Allowed
+        );
+        assert_eq!(
+            gk.check_command("npm", &["install"]),
+            GatekeeperResult::Allowed
+        );
     }
 
     #[test]
@@ -239,7 +257,12 @@ mod tests {
         let gk = CommandGatekeeper::new();
         // Normal command inside workspace = Allowed
         assert_eq!(
-            gk.check_command_with_context("ls", &["-la"], "/home/user/project", "/home/user/project"),
+            gk.check_command_with_context(
+                "ls",
+                &["-la"],
+                "/home/user/project",
+                "/home/user/project"
+            ),
             GatekeeperResult::Allowed
         );
         // Normal command outside workspace = RequiresApproval
@@ -249,7 +272,12 @@ mod tests {
         );
         // Blocked command stays blocked regardless of context
         assert_eq!(
-            gk.check_command_with_context("rm", &["-rf", "/"], "/home/user/project", "/home/user/project"),
+            gk.check_command_with_context(
+                "rm",
+                &["-rf", "/"],
+                "/home/user/project",
+                "/home/user/project"
+            ),
             GatekeeperResult::Blocked
         );
     }
@@ -262,17 +290,17 @@ mod tests {
         let gk = CommandGatekeeper::new();
         // 同根目录名前缀的兄弟目录 → 界外 → 升级审批（修复前：Allowed）
         assert_eq!(
-            gk.check_command_with_context(
-                "ls",
-                &["-la"],
-                "C:/project_evil",
-                "C:/project",
-            ),
+            gk.check_command_with_context("ls", &["-la"], "C:/project_evil", "C:/project",),
             GatekeeperResult::RequiresApproval,
             "C:/project_evil 必须按界外升级（F3 #6 前缀混淆）"
         );
         assert_eq!(
-            gk.check_command_with_context("ls", &["-la"], "/home/user/project_extra", "/home/user/project"),
+            gk.check_command_with_context(
+                "ls",
+                &["-la"],
+                "/home/user/project_extra",
+                "/home/user/project"
+            ),
             GatekeeperResult::RequiresApproval
         );
         // 根自身 / 根下任意层级 → 界内放行
@@ -419,7 +447,10 @@ mod tests {
     fn semantics_normal_commands_stay_allowed() {
         let gk = CommandGatekeeper::new();
         // 既有普通命令语义保持（git status / npm test）
-        assert_eq!(gk.check_command("git status", &[]), GatekeeperResult::Allowed);
+        assert_eq!(
+            gk.check_command("git status", &[]),
+            GatekeeperResult::Allowed
+        );
         assert_eq!(gk.check_command("npm test", &[]), GatekeeperResult::Allowed);
         assert_eq!(
             gk.check_command("git", &["status"]),
@@ -502,11 +533,44 @@ mod tests {
 
         // 2. 工作区越界升级
         let out_cmd = "git status";
-        let verdict_out = gk.check_command_with_context(out_cmd, &[], "C:\\Windows\\System32", "C:\\ws");
+        let verdict_out =
+            gk.check_command_with_context(out_cmd, &[], "C:\\Windows\\System32", "C:\\ws");
         assert_eq!(
             verdict_out,
             GatekeeperResult::RequiresApproval,
             "工作区越界命令必须自动升级为 RequiresApproval"
         );
+    }
+
+    #[test]
+    fn test_powershell_call_operator_and_indirect_remediation_matrix() {
+        let exploits = [
+            ("& cmd /c rmdir /s /q D:\\old", GatekeeperResult::RequiresApproval, true),
+            ("& 'cmd' /c rmdir /s /q D:\\old", GatekeeperResult::RequiresApproval, true),
+            ("& \"cmd.exe\" /c rmdir /s /q D:\\old", GatekeeperResult::RequiresApproval, true),
+            ("& bash -c 'rm -rf /tmp/test'", GatekeeperResult::RequiresApproval, true),
+            ("& bash -c 'rm /tmp/x'", GatekeeperResult::RequiresApproval, true),
+            ("& pwsh -Command \"Remove-Item -Recurse -Force D:\\data\"", GatekeeperResult::RequiresApproval, true),
+            ("& cmd /c Remove-Item D:\\file.txt", GatekeeperResult::RequiresApproval, true),
+            ("Invoke-Command -ScriptBlock { Remove-Item -Recurse D:\\old }", GatekeeperResult::RequiresApproval, true),
+            ("icm -ScriptBlock { rm /tmp/x }", GatekeeperResult::RequiresApproval, true),
+            ("& cmd /c rm -rf /", GatekeeperResult::Blocked, true),
+            ("& cmd.exe /c format D:", GatekeeperResult::Blocked, false),
+        ];
+
+        let gate = CommandGatekeeper::new();
+        for (cmd, expected_gate, expected_indirect_del) in exploits {
+            let sem = crate::semantics::analyze(cmd);
+            if expected_indirect_del {
+                assert!(
+                    sem.has_indirect_delete
+                        || sem.overall_class == crate::semantics::CommandClass::DeleteShape
+                        || sem.overall_class == crate::semantics::CommandClass::Redline,
+                    "命令 {cmd} 必须识别为间接删除或删除形态或红线, 实际: {sem:?}"
+                );
+            }
+            let res = gate.check_command(cmd, &[]);
+            assert_eq!(res, expected_gate, "命令 {cmd} 的 Gatekeeper 判定结果不符合预期, 实际语义: {sem:?}");
+        }
     }
 }

@@ -31,9 +31,9 @@
 //! - [`execute`]：注册表 + 旁路写禁令 + 宿主复用入口
 //! - `tests`（cfg）：W4-C / contribute 相关测（外置，主实现显著下降）
 
+pub mod execute;
 pub mod schema;
 pub mod validate;
-pub mod execute;
 
 #[cfg(test)]
 mod tests;
@@ -65,11 +65,11 @@ pub const W4C_NOT_CLOSING: &[&str] = &[
 
 // ── 公开 API 扁平 re-export（保持 lib.rs / 外部路径不 break）────────
 
-pub use schema::{
-    ContributeKind, ContributeRegisterError, ContributeRegisterOk, ContributeRegistration,
-    ViewDescriptor, CONTRIBUTE_KINDS,
-};
 pub use execute::{
     contribute_err_to_backend_err, contribute_payload_has_write_handle, make_registration_key,
     try_mutate_via_contribute, ContributeViewRegistry,
+};
+pub use schema::{
+    ContributeKind, ContributeRegisterError, ContributeRegisterOk, ContributeRegistration,
+    ViewDescriptor, CONTRIBUTE_KINDS,
 };

@@ -50,10 +50,7 @@ pub fn parse(content: &str) -> Result<CdpEndpoint, ParseError> {
     if port == 0 {
         return Err(ParseError::InvalidPort(port_line.to_string()));
     }
-    let ws_path = lines
-        .first()
-        .ok_or(ParseError::MissingWsPath)?
-        .to_string();
+    let ws_path = lines.first().ok_or(ParseError::MissingWsPath)?.to_string();
     if !is_valid_ws_path(&ws_path) {
         return Err(ParseError::InvalidWsPath(ws_path));
     }
@@ -66,9 +63,7 @@ pub fn is_valid_ws_path(path: &str) -> bool {
     if !path.starts_with('/') {
         return false;
     }
-    !path
-        .chars()
-        .any(|c| c.is_whitespace() || c.is_control())
+    !path.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
 /// 删除 profile 根下残留的陈旧 DevToolsActivePort（§5.1 第 1 步，S0-02 陷阱）。
@@ -161,8 +156,10 @@ pub fn redact_urls(text: &str) -> String {
                 && (j == 0 || !is_url_char(bytes[j - 1]))
                 && (j + scheme.len() >= bytes.len() || bytes[j + scheme.len()] != b':')
         };
-        if is_scheme(i, b"ws://") || is_scheme(i, b"wss://")
-            || is_scheme(i, b"http://") || is_scheme(i, b"https://")
+        if is_scheme(i, b"ws://")
+            || is_scheme(i, b"wss://")
+            || is_scheme(i, b"http://")
+            || is_scheme(i, b"https://")
         {
             out.push_str("<redacted>");
             // 跳到 URL 结尾（空白/行尾）
@@ -230,7 +227,10 @@ mod tests {
         let content = "38689\n/devtools/browser/ba90110e-33a1-4569-9dd1-5437b8f729b0\n";
         let ep = parse(content).expect("合法内容");
         assert_eq!(ep.port, 38689);
-        assert_eq!(ep.ws_path, "/devtools/browser/ba90110e-33a1-4569-9dd1-5437b8f729b0");
+        assert_eq!(
+            ep.ws_path,
+            "/devtools/browser/ba90110e-33a1-4569-9dd1-5437b8f729b0"
+        );
     }
 
     /// 端口校验：非数字/0/越界 → InvalidPort。
@@ -250,7 +250,10 @@ mod tests {
     fn parse_rejects_missing_ws_path() {
         assert!(matches!(parse("38689\n"), Err(ParseError::MissingWsPath)));
         assert!(matches!(parse("38689"), Err(ParseError::MissingWsPath)));
-        assert!(matches!(parse("38689\n  \n"), Err(ParseError::MissingWsPath)));
+        assert!(matches!(
+            parse("38689\n  \n"),
+            Err(ParseError::MissingWsPath)
+        ));
     }
 
     /// 尾随空白/空行容忍。
@@ -429,7 +432,10 @@ mod tests {
         .expect("陈旧内容");
         // 启动前删除（S0-02 铁律）
         remove_stale_active_port(dir.path());
-        assert!(!dir.path().join(ACTIVE_PORT_FILE).exists(), "启动前必须删除陈旧文件");
+        assert!(
+            !dir.path().join(ACTIVE_PORT_FILE).exists(),
+            "启动前必须删除陈旧文件"
+        );
         // 轮询开始后新进程才写入
         let dir2 = dir.path().to_path_buf();
         let write = tokio::spawn(async move {
@@ -460,8 +466,11 @@ mod tests {
         let dir2 = dir.path().to_path_buf();
         let write = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(120)).await;
-            std::fs::write(dir2.join(ACTIVE_PORT_FILE), "23456\n/devtools/browser/later\n")
-                .expect("延迟写入");
+            std::fs::write(
+                dir2.join(ACTIVE_PORT_FILE),
+                "23456\n/devtools/browser/later\n",
+            )
+            .expect("延迟写入");
         });
         let ring = tokio::sync::Mutex::new(StderrRing::new(20));
         let outcome = wait_active_port(dir.path(), None, &ring, &poll_settings()).await;
@@ -474,7 +483,10 @@ mod tests {
         }
         write.await.expect("写入任务");
         // 文件真实存在（临时目录 fixture 落盘校验）
-        assert_eq!(std::fs::read_to_string(&path).expect("读回"), "23456\n/devtools/browser/later\n");
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("读回"),
+            "23456\n/devtools/browser/later\n"
+        );
     }
 
     /// 超时路径：窗口内始终无文件 → WaitOutcome::Timeout（短设置注入）。

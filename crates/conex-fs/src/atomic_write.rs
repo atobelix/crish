@@ -233,8 +233,14 @@ mod tests {
         // 验证没有残留的 .tmp 或 .bak 文件
         for entry in fs::read_dir(&dir).unwrap().flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            assert!(!name.starts_with(".conex-tmp-"), "found leftover tmp: {name}");
-            assert!(!name.starts_with(".conex-bak-"), "found leftover bak: {name}");
+            assert!(
+                !name.starts_with(".conex-tmp-"),
+                "found leftover tmp: {name}"
+            );
+            assert!(
+                !name.starts_with(".conex-bak-"),
+                "found leftover bak: {name}"
+            );
         }
 
         let _ = fs::remove_dir_all(&dir);
@@ -256,8 +262,14 @@ mod tests {
         // 验证没有残留的 .tmp 或 .bak 文件
         for entry in fs::read_dir(&dir).unwrap().flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            assert!(!name.starts_with(".conex-tmp-"), "found leftover tmp: {name}");
-            assert!(!name.starts_with(".conex-bak-"), "found leftover bak: {name}");
+            assert!(
+                !name.starts_with(".conex-tmp-"),
+                "found leftover tmp: {name}"
+            );
+            assert!(
+                !name.starts_with(".conex-bak-"),
+                "found leftover bak: {name}"
+            );
         }
 
         let _ = fs::remove_dir_all(&dir);

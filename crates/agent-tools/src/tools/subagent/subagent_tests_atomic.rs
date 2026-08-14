@@ -20,7 +20,8 @@ async fn spawn_many_three_tasks_all_persist_unique_ids() {
     // 入参一致（T-D-06 验收 1）
     let ws = TempWorkspace::new("subagent_many_ok");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db.clone());
     let reqs = vec![
         request("任务 A", "sess-main", Some("run-main")),
@@ -35,12 +36,14 @@ async fn spawn_many_three_tasks_all_persist_unique_ids() {
     assert_eq!(ids.len(), 3, "3 条 subagentId 必须唯一");
     for (i, result) in results.iter().enumerate() {
         assert_eq!(result.status, SubagentState::Running);
-        assert_eq!(result.subagent_id, format!("sub-1-{i}"), "深度 1 首批发 id 序号 {i}");
+        assert_eq!(
+            result.subagent_id,
+            format!("sub-1-{i}"),
+            "深度 1 首批发 id 序号 {i}"
+        );
         assert_eq!(result.subagent_run_id, format!("sub-run-1-{i}"));
     }
-    let agents = db
-        .load_session_agents("sess-main")
-        .expect("读取落库行失败");
+    let agents = db.load_session_agents("sess-main").expect("读取落库行失败");
     assert_eq!(agents.len(), 3, "3 个任务全部落库");
     let mut run_ids: Vec<&str> = agents.iter().map(|a| a.subagent_run_id.as_str()).collect();
     run_ids.sort();
@@ -56,7 +59,8 @@ async fn spawn_many_guard_rejection_concurrent_zero_run() {
     // session_agents 无新增行（T-D-06 验收 2）
     let ws = TempWorkspace::new("subagent_many_conc");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db.clone());
     for (parent_run, count) in [("run-a", 5), ("run-b", 5), ("run-c", 6)] {
         for i in 0..count {
@@ -98,11 +102,16 @@ async fn spawn_many_guard_rejection_siblings_zero_run() {
     // 整体失败零 run
     let ws = TempWorkspace::new("subagent_many_sib");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db.clone());
     for i in 0..16 {
         spawner
-            .spawn(&request(&format!("任务 {i}"), "sess-main", Some("run-main")))
+            .spawn(&request(
+                &format!("任务 {i}"),
+                "sess-main",
+                Some("run-main"),
+            ))
             .await
             .expect("兄弟预算内 spawn 应成功");
     }
@@ -135,7 +144,8 @@ async fn spawn_many_boundary_concurrent_16_allowed() {
     // 见 spawn_many_guard_rejection_concurrent_zero_run）
     let ws = TempWorkspace::new("subagent_many_bound");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db.clone());
     for (parent_run, count) in [("run-a", 5), ("run-b", 8)] {
         for i in 0..count {
@@ -171,7 +181,8 @@ async fn spawn_many_empty_input_returns_empty() {
     // 空批量防御：成功返回空结果，零落库
     let ws = TempWorkspace::new("subagent_many_empty");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db);
     let results = spawner.spawn_many(&[]).await.expect("空批量应成功返回空");
     assert!(results.is_empty());
@@ -191,7 +202,8 @@ async fn tool_batch_three_tasks_unique_ids_via_db_spawner() {
     // 成功，返回 3 条唯一 id，session_agents 新增 3 行（T-D-06 验收 1）
     let ws = TempWorkspace::new("subagent_many_tool");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let tool = RunSubagentTool::with_spawner(Some(Arc::new(DbSpawner::new(db.clone()))));
     let ctx = ToolContext {
         session_id: "sess-main".to_string(),
@@ -224,9 +236,7 @@ async fn tool_batch_three_tasks_unique_ids_via_db_spawner() {
     ids.sort();
     ids.dedup();
     assert_eq!(ids.len(), 3, "3 条 subagentId 必须唯一");
-    let agents = db
-        .load_session_agents("sess-main")
-        .expect("读取落库行失败");
+    let agents = db.load_session_agents("sess-main").expect("读取落库行失败");
     assert_eq!(agents.len(), 3, "3 个任务全部落库");
 }
 
@@ -244,20 +254,14 @@ async fn subagent_write_ops_route_through_ask_channel() {
     // 审批记录与 exitCode 存在，不关心成败）。
     let recorder = RecordingAskChannel::allowing();
     let mut ctx = create_mock_tool_context();
-    let probe_dir = std::env::temp_dir().join(format!(
-        "ask_probe_{}",
-        std::process::id()
-    ));
+    let probe_dir = std::env::temp_dir().join(format!("ask_probe_{}", std::process::id()));
     std::fs::create_dir_all(&probe_dir).ok();
     ctx.workspace_root = probe_dir;
     ctx.ask = Some(Arc::new(recorder.clone()) as AskCallback);
     let tool = ShellCommandTool::new(30_000, 200_000, None);
     let command = "git push --force origin main";
     let out = tool
-        .execute(
-            &ctx,
-            serde_json::json!({ "command": command }),
-        )
+        .execute(&ctx, serde_json::json!({ "command": command }))
         .await
         .expect("审批放行后命令执行不应返回工具错误（非致命）");
     let calls = recorder.calls();

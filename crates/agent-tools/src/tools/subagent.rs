@@ -47,19 +47,18 @@ mod tool;
 
 pub use contract::{
     apply_forgery_boundary, detect_forgery_wording, filter_out_subagent_spawner,
-    filter_out_subagent_tools, FORGERY_BOUNDARY_NOTICE, FORGERY_WORDINGS,
-    SUBAGENT_SPAWNER_TOOL_NAME, SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult,
-    SubagentSpawner,
+    filter_out_subagent_tools, SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult,
+    SubagentSpawner, FORGERY_BOUNDARY_NOTICE, FORGERY_WORDINGS, SUBAGENT_SPAWNER_TOOL_NAME,
 };
 pub use defs::{
-    default_permissions, is_db_status_allowed, DB_STATUS_ALLOWED, DefaultCommandPolicy,
-    DefaultPermissions, DefaultToolSet, DefaultWriteScope, SubagentCapabilityMode,
-    SubagentDefinition, SubagentDefinitionRegistry, SubagentRegistryError, SubagentRole,
-    SubagentState, TaskType,
+    default_permissions, is_db_status_allowed, DefaultCommandPolicy, DefaultPermissions,
+    DefaultToolSet, DefaultWriteScope, SubagentCapabilityMode, SubagentDefinition,
+    SubagentDefinitionRegistry, SubagentRegistryError, SubagentRole, SubagentState, TaskType,
+    DB_STATUS_ALLOWED,
 };
 pub use guard::{
-    check_ancestor_chain, check_recursion_guard, DeadlockCheckInput, DEFAULT_RECURSION_GUARD,
-    RecursionGuardConfig, RecursionGuardRejection, RecursionGuardSnapshot,
+    check_ancestor_chain, check_recursion_guard, DeadlockCheckInput, RecursionGuardConfig,
+    RecursionGuardRejection, RecursionGuardSnapshot, DEFAULT_RECURSION_GUARD,
 };
 pub(crate) use tool::RunSubagentTool;
 

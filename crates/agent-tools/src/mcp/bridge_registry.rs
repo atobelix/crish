@@ -23,7 +23,7 @@ use std::time::Duration;
 use super::bridge_protocol::{
     adapt_tool_list, initialize_params, DEFAULT_MCP_CALL_TIMEOUT, DEFAULT_MCP_INIT_TIMEOUT,
 };
-use super::bridge_session::{recover_lock, McpServerSession, McpServerRuntimeState};
+use super::bridge_session::{recover_lock, McpServerRuntimeState, McpServerSession};
 
 /// MCP 工具适配器：把远端 tools/call 包装成本地 Tool trait 实现
 pub struct McpToolAdapter {
@@ -83,7 +83,10 @@ impl McpClientBridge {
     /// - 降级 / 已退出：替换重建会话
     /// - 握手失败：进程被杀、会话不入表、返回 mcp.* 错误
     /// - 工具枚举失败：会话保留（Degraded），返回错误
-    pub async fn start(&self, config: &crate::mcp::servers::McpServerConfig) -> Result<Vec<ToolDefinition>, ToolError> {
+    pub async fn start(
+        &self,
+        config: &crate::mcp::servers::McpServerConfig,
+    ) -> Result<Vec<ToolDefinition>, ToolError> {
         config.validate()?;
         {
             let sessions = self.sessions.lock().unwrap_or_else(recover_lock);
@@ -166,9 +169,7 @@ impl McpClientBridge {
 
     /// 停止全部 server，返回停止数量
     pub async fn stop_all(&self) -> usize {
-        let sessions = std::mem::take(
-            &mut *self.sessions.lock().unwrap_or_else(recover_lock),
-        );
+        let sessions = std::mem::take(&mut *self.sessions.lock().unwrap_or_else(recover_lock));
         let count = sessions.len();
         for session in sessions.values() {
             session.stop().await;

@@ -247,30 +247,22 @@ async fn probe_domain(sender: &CommandSender, domain: Domain, major: u64) -> Dom
         }
         Domain::Page => {
             sender
-                .execute(
-                    Command::new(PAGE_ENABLE).with_timeout(PROBE_COMMAND_TIMEOUT),
-                )
+                .execute(Command::new(PAGE_ENABLE).with_timeout(PROBE_COMMAND_TIMEOUT))
                 .await
         }
         Domain::Runtime => {
             sender
-                .execute(
-                    Command::new(RUNTIME_ENABLE).with_timeout(PROBE_COMMAND_TIMEOUT),
-                )
+                .execute(Command::new(RUNTIME_ENABLE).with_timeout(PROBE_COMMAND_TIMEOUT))
                 .await
         }
         Domain::Dom => {
             sender
-                .execute(
-                    Command::new(DOM_ENABLE).with_timeout(PROBE_COMMAND_TIMEOUT),
-                )
+                .execute(Command::new(DOM_ENABLE).with_timeout(PROBE_COMMAND_TIMEOUT))
                 .await
         }
         Domain::Network => {
             sender
-                .execute(
-                    Command::new(NETWORK_ENABLE).with_timeout(PROBE_COMMAND_TIMEOUT),
-                )
+                .execute(Command::new(NETWORK_ENABLE).with_timeout(PROBE_COMMAND_TIMEOUT))
                 .await
         }
         Domain::Log => {
@@ -320,9 +312,7 @@ async fn probe_domain(sender: &CommandSender, domain: Domain, major: u64) -> Dom
         }
         Domain::SystemInfo => {
             sender
-                .execute(
-                    Command::new(SYSTEM_INFO_GET_INFO).with_timeout(PROBE_COMMAND_TIMEOUT),
-                )
+                .execute(Command::new(SYSTEM_INFO_GET_INFO).with_timeout(PROBE_COMMAND_TIMEOUT))
                 .await
         }
     };
@@ -370,7 +360,7 @@ mod tests {
     use super::*;
     use crate::cdp::mock::{MockReply, MockServer};
     use crate::cdp::sender::{
-        ApprovalDenied, BrowserAuditEvent, CancellationToken, CommandChannel, CdpCommandView,
+        ApprovalDenied, BrowserAuditEvent, CancellationToken, CdpCommandView, CommandChannel,
         CommandPolicyHooks, IdKey,
     };
     use std::sync::atomic::AtomicBool;
@@ -426,22 +416,36 @@ mod tests {
 
     fn ok_map() -> Vec<(&'static str, MockReply)> {
         vec![
-            (BROWSER_GET_VERSION, MockReply::Ok(json!({
-                "protocolVersion": "1.3",
-                "product": "Chrome/131.0.6778.204",
-                "revision": "@abc",
-                "userAgent": "ua",
-                "jsVersion": "13.1.71"
-            }))),
-            (SYSTEM_INFO_GET_INFO, MockReply::Ok(json!({ "gpu": {}, "modelName": "m", "modelVersion": "v", "commandLine": "" }))),
+            (
+                BROWSER_GET_VERSION,
+                MockReply::Ok(json!({
+                    "protocolVersion": "1.3",
+                    "product": "Chrome/131.0.6778.204",
+                    "revision": "@abc",
+                    "userAgent": "ua",
+                    "jsVersion": "13.1.71"
+                })),
+            ),
+            (
+                SYSTEM_INFO_GET_INFO,
+                MockReply::Ok(
+                    json!({ "gpu": {}, "modelName": "m", "modelVersion": "v", "commandLine": "" }),
+                ),
+            ),
             (TARGET_SET_DISCOVER_TARGETS, MockReply::Ok(json!({}))),
             (PAGE_ENABLE, MockReply::Ok(json!({}))),
             (RUNTIME_ENABLE, MockReply::Ok(json!({}))),
             (DOM_ENABLE, MockReply::Ok(json!({}))),
             (NETWORK_ENABLE, MockReply::Ok(json!({}))),
             (LOG_ENABLE, MockReply::Ok(json!({}))),
-            (ACCESSIBILITY_GET_FULL_AX_TREE, MockReply::Ok(json!({ "nodes": [] }))),
-            (DOM_SNAPSHOT_CAPTURE_SNAPSHOT, MockReply::Ok(json!({ "strings": [], "documents": [] }))),
+            (
+                ACCESSIBILITY_GET_FULL_AX_TREE,
+                MockReply::Ok(json!({ "nodes": [] })),
+            ),
+            (
+                DOM_SNAPSHOT_CAPTURE_SNAPSHOT,
+                MockReply::Ok(json!({ "strings": [], "documents": [] })),
+            ),
         ]
     }
 
@@ -449,14 +453,20 @@ mod tests {
     #[tokio::test]
     async fn probe_unsupported_domain_reported() {
         let mut map = ok_map();
-        map.push((ACCESSIBILITY_GET_FULL_AX_TREE, MockReply::Error {
-            code: -32601,
-            message: "Method not found".to_string(),
-        }));
-        map.push((DOM_SNAPSHOT_CAPTURE_SNAPSHOT, MockReply::Error {
-            code: -32601,
-            message: "Method not found".to_string(),
-        }));
+        map.push((
+            ACCESSIBILITY_GET_FULL_AX_TREE,
+            MockReply::Error {
+                code: -32601,
+                message: "Method not found".to_string(),
+            },
+        ));
+        map.push((
+            DOM_SNAPSHOT_CAPTURE_SNAPSHOT,
+            MockReply::Error {
+                code: -32601,
+                message: "Method not found".to_string(),
+            },
+        ));
         let (_mock, sender) = setup_probe(map).await;
 
         let report = run(&sender).await;
@@ -477,7 +487,10 @@ mod tests {
             .expect("报告缺 DOMSnapshot");
         assert!(matches!(snap.status, DomainStatus::Unsupported { .. }));
         assert!(!report.features.snapshot_ax, "AX 旗标应关闭");
-        assert!(!report.features.snapshot_dom, "DOM 快照旗标应关闭（DOMSnapshot 缺失）");
+        assert!(
+            !report.features.snapshot_dom,
+            "DOM 快照旗标应关闭（DOMSnapshot 缺失）"
+        );
         // 其余旗标不受影响
         assert!(report.features.screencast);
         assert!(report.features.input_injection);
@@ -493,10 +506,17 @@ mod tests {
 
         assert_eq!(report.domains.len(), 13, "R-3 补齐后应为 13 域");
         for d in Domain::ALL {
-            let r = report.domains.iter().find(|r| r.domain == d).unwrap_or_else(|| {
-                panic!("报告缺域 {}", d.name())
-            });
-            assert_eq!(r.status, DomainStatus::Supported, "域 {} 应 Supported", d.name());
+            let r = report
+                .domains
+                .iter()
+                .find(|r| r.domain == d)
+                .unwrap_or_else(|| panic!("报告缺域 {}", d.name()));
+            assert_eq!(
+                r.status,
+                DomainStatus::Supported,
+                "域 {} 应 Supported",
+                d.name()
+            );
         }
         assert!(report.features.screencast);
         assert!(report.features.snapshot_dom);

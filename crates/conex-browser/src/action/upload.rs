@@ -12,9 +12,7 @@
 //! 路径安全检查（§9.1 注记）：仅允许工作区内路径（canonicalize + symlink 双保险 +
 //! 组件边界，以 17 §7.2 为唯一权威）；`..` 穿越与符号链接在 canonicalize 后校验。
 
-use crate::action::{
-    ActionError, ActionErrorKind, ActionExecutor, MouseButton,
-};
+use crate::action::{ActionError, ActionErrorKind, ActionExecutor, MouseButton};
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -87,13 +85,7 @@ pub async fn dispatch_upload(
         exec.opts.scroll_retries,
     )
     .await?;
-    crate::action::pointer::dispatch_mouse_click(
-        exec,
-        &point,
-        MouseButton::Left,
-        1,
-    )
-    .await?;
+    crate::action::pointer::dispatch_mouse_click(exec, &point, MouseButton::Left, 1).await?;
     let chooser_backend = exec
         .ops
         .file_chooser_node(exec.opts.file_chooser_wait)
@@ -102,8 +94,8 @@ pub async fn dispatch_upload(
         .set_file_input_files(chooser_backend, std::slice::from_ref(&path_str))
         .await?;
     // 回读（chooser 暴露的 file input 节点）
-    let chooser_node = crate::action::locate::resolve_node_id(exec.ops.as_ref(), chooser_backend)
-        .await?;
+    let chooser_node =
+        crate::action::locate::resolve_node_id(exec.ops.as_ref(), chooser_backend).await?;
     upload_readback(exec, chooser_node, &path_str).await
 }
 
@@ -189,13 +181,24 @@ mod tests {
         ops.state.lock().unwrap().readback_name = "report.txt".to_string();
         let (exec, ops, _delay) = executor(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let success = exec
-            .upload_file(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, file.as_path())
+            .upload_file(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                file.as_path(),
+            )
             .await
             .expect("直接路径应成功");
         assert_eq!(success.payload.as_ref().unwrap()["name"], "report.txt");
@@ -219,20 +222,43 @@ mod tests {
         // chooser 暴露的节点 31 → 需可见 box（代理触发器回读走 resolve_node_id(31)）
         let (exec, ops, _delay) = executor(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let success = exec
-            .upload_file(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, file.as_path())
+            .upload_file(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                file.as_path(),
+            )
             .await
             .expect("代理路径应成功");
         assert_eq!(success.payload.as_ref().unwrap()["files"], 1);
-        assert_eq!(ops.count(MockOp::MouseEvent), 3, "点击序列（moved/pressed/released）");
-        assert_eq!(ops.count(MockOp::FileChooserNode), 1, "等待 fileChooserOpened");
+        assert_eq!(
+            ops.count(MockOp::MouseEvent),
+            3,
+            "点击序列（moved/pressed/released）"
+        );
+        assert_eq!(
+            ops.count(MockOp::FileChooserNode),
+            1,
+            "等待 fileChooserOpened"
+        );
         let sets = ops.calls_of(MockOp::SetFileInputFiles);
-        assert!(sets[0].detail.contains("backend=31"), "注入到 chooser 节点：{}", sets[0].detail);
+        assert!(
+            sets[0].detail.contains("backend=31"),
+            "注入到 chooser 节点：{}",
+            sets[0].detail
+        );
     }
 
     /// 选择器超时（§9.1 4b：≤3s 无事件 → Timeout，可重试一次后致命）。
@@ -243,33 +269,44 @@ mod tests {
         std::fs::write(&file, "x").expect("写文件");
         let ops = MockOps::new();
         ops.state.lock().unwrap().file_inputs.remove(&111);
-        ops.state
-            .lock()
-            .unwrap()
-            .persist_errors
-            .insert(
-                MockOp::FileChooserNode,
-                ActionError::new(ActionErrorKind::Timeout, "等待 fileChooserOpened 超时"),
-            );
+        ops.state.lock().unwrap().persist_errors.insert(
+            MockOp::FileChooserNode,
+            ActionError::new(ActionErrorKind::Timeout, "等待 fileChooserOpened 超时"),
+        );
         let delay = Arc::new(RecordingDelay::new());
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             CancellationToken::new(),
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(delay.clone());
         let err = exec
-            .upload_file(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, file.as_path())
+            .upload_file(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                file.as_path(),
+            )
             .await
             .expect_err("选择器超时应失败");
         assert_eq!(err.kind, ActionErrorKind::Timeout);
         // 超时策略：等待就绪 → 重试 1 次 → 仍失败 → 致命（不升级）
         assert!(!err.escalate);
-        assert_eq!(ops.count(MockOp::FileChooserNode), 2, "重试重新等待选择器一次");
+        assert_eq!(
+            ops.count(MockOp::FileChooserNode),
+            2,
+            "重试重新等待选择器一次"
+        );
     }
 
     /// 回读不符：文件注入后 files 为空 → Timeout 重试一次 → Fatal。
@@ -283,13 +320,24 @@ mod tests {
         ops.state.lock().unwrap().readback_name = String::new(); // files 为空
         let (exec, ops, _delay) = executor(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let err = exec
-            .upload_file(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, file.as_path())
+            .upload_file(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                file.as_path(),
+            )
             .await
             .expect_err("回读不符应失败");
         assert_eq!(err.kind, ActionErrorKind::Timeout);

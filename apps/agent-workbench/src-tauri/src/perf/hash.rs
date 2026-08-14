@@ -41,7 +41,10 @@ fn base64_decode(input: &str, config: &str) -> Result<Vec<u8>, String> {
 /// Supported algorithms: `sha256`, `sha256-hex` (default).
 /// Returns the hash as a lowercase hex string.
 #[tauri::command]
-pub(crate) fn perf_hash_compute(data: Vec<u8>, algorithm: Option<String>) -> Result<String, String> {
+pub(crate) fn perf_hash_compute(
+    data: Vec<u8>,
+    algorithm: Option<String>,
+) -> Result<String, String> {
     let _algo = algorithm.as_deref().unwrap_or("sha256-hex");
     Ok(sha256_compute(&data))
 }
@@ -62,7 +65,10 @@ pub(crate) fn perf_base64_encode(data: Vec<u8>, config: Option<String>) -> Resul
 /// - `standard` (default): standard base64 with `=` padding
 /// - `url_safe`: URL-safe base64 without padding
 #[tauri::command]
-pub(crate) fn perf_base64_decode(encoded: String, config: Option<String>) -> Result<Vec<u8>, String> {
+pub(crate) fn perf_base64_decode(
+    encoded: String,
+    config: Option<String>,
+) -> Result<Vec<u8>, String> {
     base64_decode(&encoded, config.as_deref().unwrap_or("standard"))
 }
 
@@ -144,7 +150,8 @@ mod tests {
 
     #[test]
     fn test_encode_command_url_safe() {
-        let result = perf_base64_encode(b"\xFB\xFF".to_vec(), Some("url_safe".to_string())).unwrap();
+        let result =
+            perf_base64_encode(b"\xFB\xFF".to_vec(), Some("url_safe".to_string())).unwrap();
         assert_eq!(result, "-_8");
     }
 

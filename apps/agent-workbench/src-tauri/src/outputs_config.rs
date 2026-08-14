@@ -80,19 +80,13 @@ impl Default for OutputsRootInner {
 impl OutputsRootConfig {
     /// 读取当前配置（(全局根, 是否允许工作区外)）
     pub(crate) fn get(&self) -> (Option<PathBuf>, bool) {
-        let inner = self
-            .inner
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         (inner.root.clone(), inner.allow_outputs_outside_workspace)
     }
 
     /// 写入配置（调用方已完成校验）
     pub(crate) fn set(&self, root: Option<PathBuf>, allow_outside: bool) {
-        let mut inner = self
-            .inner
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.root = root;
         inner.allow_outputs_outside_workspace = allow_outside;
     }
@@ -118,10 +112,7 @@ pub(crate) fn resolve_outputs_root(
         // 相对路径：仅放行普通组件（`..`/`.`/根/盘符前缀一律拒绝）
         for comp in configured.components() {
             if !matches!(comp, Component::Normal(_)) {
-                return Err(format!(
-                    "产出根含非法路径组件：{}",
-                    configured.display()
-                ));
+                return Err(format!("产出根含非法路径组件：{}", configured.display()));
             }
         }
         return Ok(workspace_root.join(configured));
@@ -223,8 +214,7 @@ pub(crate) async fn set_session_output_root(
             e.code, e.message
         ))
     })?;
-    resolve_outputs_root(parsed, guard.root(), allow_outside)
-        .map_err(CoreError::invalid_input)?;
+    resolve_outputs_root(parsed, guard.root(), allow_outside).map_err(CoreError::invalid_input)?;
     let Some(value) = root.filter(|v| !v.trim().is_empty()) else {
         // 清空覆盖：不写键（get 返回 None → 工具侧回落全局/默认）
         return Ok(());
@@ -234,7 +224,12 @@ pub(crate) async fn set_session_output_root(
     tokio::task::spawn_blocking(move || db.set_session_meta(&key, &value))
         .await
         .map_err(|e| CoreError::Internal(format!("set_session_output_root join: {e}")))?
-        .map_err(|e| CoreError::Internal(format!("set_session_output_root: {}: {}", e.kind, e.message)))
+        .map_err(|e| {
+            CoreError::Internal(format!(
+                "set_session_output_root: {}: {}",
+                e.kind, e.message
+            ))
+        })
 }
 
 /// 会话删除清理结果（T-EG-12：清理通知载荷）
@@ -516,8 +511,8 @@ mod tests {
     #[test]
     fn resolve_relative_root_joins_workspace() {
         let ws = TempDir::new("ws");
-        let root = resolve_outputs_root(Some(Path::new("docs/.agent-outputs")), ws.path(), false)
-            .unwrap();
+        let root =
+            resolve_outputs_root(Some(Path::new("docs/.agent-outputs")), ws.path(), false).unwrap();
         assert_eq!(root, ws.0.join("docs/.agent-outputs"));
     }
 
@@ -597,7 +592,10 @@ mod tests {
             false,
         );
         assert!(result.cleaned, "notice: {}", result.notice);
-        assert_eq!(result.trashed_dirs, vec![out_dir.to_string_lossy().into_owned()]);
+        assert_eq!(
+            result.trashed_dirs,
+            vec![out_dir.to_string_lossy().into_owned()]
+        );
         assert!(!result.skipped_outside);
         assert!(!out_dir.exists(), "删除后产出目录应消失");
         assert!(result.notice.contains("回收站位置"));
@@ -621,21 +619,16 @@ mod tests {
             std::fs::create_dir_all(d).unwrap();
         }
 
-        let result = cleanup_session_outputs_at(
-            trash.path(),
-            ws.path(),
-            "s1",
-            None,
-            None,
-            None,
-            false,
-        );
+        let result =
+            cleanup_session_outputs_at(trash.path(), ws.path(), "s1", None, None, None, false);
         assert!(result.cleaned);
         assert_eq!(result.trashed_dirs.len(), 2, "s1 两个日期目录都进回收站");
         assert!(!d1.exists() && !d2.exists());
         assert!(other.exists(), "其它会话目录不受影响");
         assert_eq!(
-            conex_fs::trash::TrashService::new(trash.path()).list().len(),
+            conex_fs::trash::TrashService::new(trash.path())
+                .list()
+                .len(),
             2
         );
     }
@@ -660,7 +653,9 @@ mod tests {
         assert!(result.cleaned);
         assert!(!dir.exists(), "覆盖根下的会话目录应进回收站");
         assert_eq!(
-            conex_fs::trash::TrashService::new(trash.path()).list().len(),
+            conex_fs::trash::TrashService::new(trash.path())
+                .list()
+                .len(),
             1
         );
     }
@@ -683,7 +678,9 @@ mod tests {
         assert!(result.skipped_outside, "越界应标记安全跳过");
         assert!(result.notice.contains("已跳过清理"));
         assert!(
-            conex_fs::trash::TrashService::new(trash.path()).list().is_empty(),
+            conex_fs::trash::TrashService::new(trash.path())
+                .list()
+                .is_empty(),
             "越界跳过时不得产生回收站条目"
         );
     }
@@ -691,23 +688,16 @@ mod tests {
     #[test]
     fn cleanup_no_outputs_is_clean_noop() {
         let (trash, ws) = cleanup_fixture();
-        let result = cleanup_session_outputs_at(
-            trash.path(),
-            ws.path(),
-            "ghost",
-            None,
-            None,
-            None,
-            false,
-        );
+        let result =
+            cleanup_session_outputs_at(trash.path(), ws.path(), "ghost", None, None, None, false);
         assert!(!result.cleaned);
         assert!(!result.skipped_outside);
         assert!(result.trashed_dirs.is_empty());
         assert!(result.notice.contains("未发现会话产出目录"));
         assert!(result.notice.contains("回收站位置"));
-        assert!(
-            conex_fs::trash::TrashService::new(trash.path()).list().is_empty()
-        );
+        assert!(conex_fs::trash::TrashService::new(trash.path())
+            .list()
+            .is_empty());
     }
 
     #[test]
@@ -727,9 +717,9 @@ mod tests {
         );
         assert!(!result.cleaned, "工作区外 meta 目标不得清理");
         assert!(outside.0.exists(), "工作区外目录必须原样保留");
-        assert!(
-            conex_fs::trash::TrashService::new(trash.path()).list().is_empty()
-        );
+        assert!(conex_fs::trash::TrashService::new(trash.path())
+            .list()
+            .is_empty());
     }
 
     #[test]
@@ -757,9 +747,15 @@ mod tests {
         assert!(!result.cleaned, "相对逃逸 meta 目标不得清理");
         assert!(victim.exists(), "工作区外目录必须原样保留");
         assert!(result.skipped_outside, "相对逃逸应标记安全跳过");
-        assert!(result.notice.contains("已跳过清理"), "notice: {}", result.notice);
         assert!(
-            conex_fs::trash::TrashService::new(trash.path()).list().is_empty(),
+            result.notice.contains("已跳过清理"),
+            "notice: {}",
+            result.notice
+        );
+        assert!(
+            conex_fs::trash::TrashService::new(trash.path())
+                .list()
+                .is_empty(),
             "相对逃逸目标不得进回收站"
         );
     }
@@ -794,7 +790,10 @@ mod tests {
         assert!(!out_dir.exists(), "工作区内相对目标应进回收站");
         assert!(!result.skipped_outside);
         assert!(
-            conex_fs::trash::TrashService::new(trash.path()).list().len() == 1
+            conex_fs::trash::TrashService::new(trash.path())
+                .list()
+                .len()
+                == 1
         );
     }
 }

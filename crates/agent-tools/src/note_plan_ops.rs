@@ -48,9 +48,7 @@ mod kinds;
 #[path = "note_plan_ops_tests.rs"]
 mod tests;
 
-use crate::note_types::{
-    NoteBackendError, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview,
-};
+use crate::note_types::{NoteBackendError, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview};
 use serde_json::{Map, Value as JsonValue};
 
 // ── Memory 扁平块模型（plan / Memory 共用）──────────────────────────
@@ -175,13 +173,9 @@ pub(crate) fn apply_planned_ops(
                 doc.blocks.insert(at, block);
             }
             PlannedMutation::Update { id, content } => {
-                let b = doc
-                    .blocks
-                    .iter_mut()
-                    .find(|b| b.id == id)
-                    .ok_or_else(|| {
-                        NoteBackendError::NotFound(format!("block not found on commit: {id}"))
-                    })?;
+                let b = doc.blocks.iter_mut().find(|b| b.id == id).ok_or_else(|| {
+                    NoteBackendError::NotFound(format!("block not found on commit: {id}"))
+                })?;
                 b.text = content;
             }
             PlannedMutation::Delete { id } => {
@@ -199,13 +193,9 @@ pub(crate) fn apply_planned_ops(
                 doc.blocks.insert(to, block);
             }
             PlannedMutation::SetAttr { id, attrs } => {
-                let b = doc
-                    .blocks
-                    .iter_mut()
-                    .find(|b| b.id == id)
-                    .ok_or_else(|| {
-                        NoteBackendError::NotFound(format!("block not found on commit: {id}"))
-                    })?;
+                let b = doc.blocks.iter_mut().find(|b| b.id == id).ok_or_else(|| {
+                    NoteBackendError::NotFound(format!("block not found on commit: {id}"))
+                })?;
                 b.attrs = attrs;
             }
         }

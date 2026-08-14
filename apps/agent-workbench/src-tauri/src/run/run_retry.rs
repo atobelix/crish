@@ -88,7 +88,9 @@ pub(crate) fn fingerprint_with_source(subagent_id: &str, task: &str, source: &st
 /// - JSON 数组 [base, max, budget] → 三字段全量配置；
 /// - JSON 单数值 base → 仅 base 定制（max/budget None 回落内核常量）；
 /// - 其余形状 / 坏 JSON → None（不装配 = 现状立即重试向后兼容）。
-pub(crate) fn parse_retry_backoff_config(raw: &str) -> Option<session_loop::r#loop::RetryBackoffConfig> {
+pub(crate) fn parse_retry_backoff_config(
+    raw: &str,
+) -> Option<session_loop::r#loop::RetryBackoffConfig> {
     let value: serde_json::Value = serde_json::from_str(raw).ok()?;
     match value {
         serde_json::Value::Number(n) => Some(session_loop::r#loop::RetryBackoffConfig {
@@ -146,7 +148,10 @@ impl CoreRunState {
 
     /// D3 §3.5：重派成功后计数 +1（AutoRetry 实际拉起）
     pub(crate) fn bump_ladder1_retry(&self, session_id: &str, fp: &str) -> u32 {
-        let mut map = self.ladder1_retries.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self
+            .ladder1_retries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let entry = map
             .entry((session_id.to_string(), fp.to_string()))
             .or_insert(0);
@@ -159,8 +164,12 @@ impl CoreRunState {
     /// 不静默、无假重试）
     pub(crate) fn force_ladder1_retry_max(&self, session_id: &str, fp: &str) {
         let max = self.ladder1_max_retries_config();
-        let mut map = self.ladder1_retries.lock().unwrap_or_else(|e| e.into_inner());
-        *map.entry((session_id.to_string(), fp.to_string())).or_insert(0) = max;
+        let mut map = self
+            .ladder1_retries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *map.entry((session_id.to_string(), fp.to_string()))
+            .or_insert(0) = max;
     }
 
     /// D3 §4.1：阶梯 1 跨 run 重试次数配置解析（可配键缺省 2；与
@@ -287,7 +296,10 @@ impl CoreRunState {
 
     /// D6 §3.2：构造会话 watcher（注入件闭包全部经 Weak 引用——
     /// CoreRunState ↔ watcher 互相持有会构成 Arc 强引用环泄漏）
-    pub(crate) fn build_wake_watcher(self: &Arc<Self>, session_id: &str) -> Arc<crate::wake_watcher::WakeWatcher> {
+    pub(crate) fn build_wake_watcher(
+        self: &Arc<Self>,
+        session_id: &str,
+    ) -> Arc<crate::wake_watcher::WakeWatcher> {
         let queue = Arc::clone(&self.pending_queue);
         let weak_active = Arc::downgrade(self);
         let has_active_run: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |sid: &str| {
@@ -357,10 +369,7 @@ impl CoreRunState {
         };
         let threshold = self.provider_fail_threshold_config(&db);
         tokio::task::spawn_blocking(move || {
-            let raw = db
-                .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
-                .ok()
-                .flatten();
+            let raw = db.get_session_meta(PROVIDER_FAIL_STREAK_KEY).ok().flatten();
             let streak = ProviderFailStreak::from_json(raw.as_deref());
             streak.effective_count(now_ms_internal()) >= threshold
         })
@@ -384,10 +393,7 @@ impl CoreRunState {
         };
         let threshold = self.provider_fail_threshold_config(&db);
         tokio::task::spawn_blocking(move || {
-            let raw = db
-                .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
-                .ok()
-                .flatten();
+            let raw = db.get_session_meta(PROVIDER_FAIL_STREAK_KEY).ok().flatten();
             let mut streak = ProviderFailStreak::from_json(raw.as_deref());
             let now = now_ms_internal();
             let before = streak.effective_count(now);
@@ -424,10 +430,7 @@ impl CoreRunState {
     pub(crate) async fn provider_fail_streak_count(&self, _session_id: &str) -> Option<u32> {
         let db = self.local_db()?;
         tokio::task::spawn_blocking(move || {
-            let raw = db
-                .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
-                .ok()
-                .flatten();
+            let raw = db.get_session_meta(PROVIDER_FAIL_STREAK_KEY).ok().flatten();
             let streak = ProviderFailStreak::from_json(raw.as_deref());
             let count = streak.effective_count(now_ms_internal());
             (count > 0).then_some(count)
@@ -485,4 +488,3 @@ impl CoreRunState {
         tokio::time::sleep(delay).await;
     }
 }
-

@@ -19,15 +19,17 @@ use conex_types::device::commands::{
 };
 use conex_types::device::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
-    CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams, EventPageResult,
-    FileSearchHit, FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
+    CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams, EventPageResult, FileSearchHit,
+    FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
     ListCommandsResult, ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams,
     ListSessionsResult, ListTasksParams, ListTasksResult, PauseAutomationParams,
     PauseAutomationResult, PermissionMode, RunControlLevel, RunControlParams, RunControlResult,
     RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
     SearchFilesParams, SearchFilesResult, SearchIndexResult,
 };
-use conex_types::events::{AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation};
+use conex_types::events::{
+    AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation,
+};
 use conex_types::impact::ImpactAssessment;
 
 use conex_search::fuzzy::FuzzyMatcher;
@@ -35,15 +37,15 @@ use conex_search::search::{search_files, search_files_parallel};
 
 use crate::core_event_bridge::EventBridge;
 
+use crate::core_commands::SharedSearchState;
 use crate::core_run_commands::{
     approval_history_impl, approve_tool_impl, cancel_run_impl, deny_tool_impl,
     find_run_by_pending_tool_call, generate_run_id, generate_session_id, get_flow_snapshot_impl,
-    get_run_snapshot_impl, get_task_output_impl, list_active_runs_impl,
-    list_background_tasks_impl, list_pending_approval_summaries_impl, list_pending_approvals_impl,
-    list_sessions_impl, read_run_events_impl, read_session_events_impl, run_control_impl,
-    run_task_impl, settings_get_impl, settings_update_impl, CoreRunState, RunTaskOptions,
+    get_run_snapshot_impl, get_task_output_impl, list_active_runs_impl, list_background_tasks_impl,
+    list_pending_approval_summaries_impl, list_pending_approvals_impl, list_sessions_impl,
+    read_run_events_impl, read_session_events_impl, run_control_impl, run_task_impl,
+    settings_get_impl, settings_update_impl, CoreRunState, RunTaskOptions,
 };
-use crate::core_commands::SharedSearchState;
 use crate::server::backend::{ApiBackend, SettingsUpdateParams};
 use crate::server::ServerError;
 
@@ -191,7 +193,9 @@ fn hit_path_within_root(hit_path: &str, root: &str) -> bool {
 /// 远程不存在 full-access（TH-12 直接缓解）；ask / plan 原样；None 原样。
 /// 返回（生效模式, 是否降级）——降级时调用方必须发 remote-mode-downgrade
 /// 审计标记（D5 §8.2 / §9.2 矩阵：approve/operate × full-access → ask 降级）。
-pub(crate) fn apply_remote_mode(requested: Option<PermissionMode>) -> (Option<PermissionMode>, bool) {
+pub(crate) fn apply_remote_mode(
+    requested: Option<PermissionMode>,
+) -> (Option<PermissionMode>, bool) {
     match requested {
         Some(PermissionMode::FullAccess) => (Some(PermissionMode::Ask), true),
         other => (other, false),
@@ -803,9 +807,7 @@ impl ApiBackend for CoreStateBackend {
         if query.chars().count() > SEARCH_QUERY_MAX_LEN_REMOTE {
             return Err(ServerError::protocol(
                 DeviceErrorCode::CmdInvalid,
-                format!(
-                    "query 超过 {SEARCH_QUERY_MAX_LEN_REMOTE} 字符上限（注册表契约）"
-                ),
+                format!("query 超过 {SEARCH_QUERY_MAX_LEN_REMOTE} 字符上限（注册表契约）"),
             ));
         }
         let root = params
@@ -993,7 +995,10 @@ mod tests {
     /// 无人值守（缺省 false = 保守模式）→ RemoteOnly + remote-only 审计标记
     #[test]
     fn t14_unattended_routes_to_remote_only_marker() {
-        assert_eq!(route_remote_approval(false), RemoteApprovalRoute::RemoteOnly);
+        assert_eq!(
+            route_remote_approval(false),
+            RemoteApprovalRoute::RemoteOnly
+        );
         assert_eq!(REMOTE_ONLY_AUDIT_MARKER, "remote-only");
     }
 
@@ -1077,8 +1082,16 @@ mod tests {
             panic!("应为 SecurityAudit 事件");
         };
         assert_eq!(operation, SecurityAuditOperation::RemoteModeDowngrade);
-        assert_eq!(decision, SecurityAuditDecision::Blocked, "降级动作决策 = blocked（记录降级）");
-        assert_eq!(permission_mode.as_deref(), Some("full-access"), "permission_mode 记录降级前申请值");
+        assert_eq!(
+            decision,
+            SecurityAuditDecision::Blocked,
+            "降级动作决策 = blocked（记录降级）"
+        );
+        assert_eq!(
+            permission_mode.as_deref(),
+            Some("full-access"),
+            "permission_mode 记录降级前申请值"
+        );
         assert_eq!(targets, vec!["run-42".to_string()], "targets 承载 runId");
         assert_eq!(session_id, "s1");
     }
@@ -1089,8 +1102,7 @@ mod tests {
         let (bridge, emitter) = recording_bridge();
         emit_remote_mode_downgrade_audit(Some(&bridge), "", "s1");
         let recorded = emitter.0.lock().unwrap();
-        let json: serde_json::Value =
-            serde_json::from_str(&recorded[0]).expect("信封 JSON 可解析");
+        let json: serde_json::Value = serde_json::from_str(&recorded[0]).expect("信封 JSON 可解析");
         // 信封 flatten 序列化：type/事件体字段在顶层（AgentEventEnvelope
         // serialize 把事件体字段并入顶层 map——对齐既有信封契约）
         assert_eq!(json["type"], "security-audit");
@@ -1125,7 +1137,11 @@ mod tests {
     #[test]
     fn t07_remote_source_attempt_redacts_token_in_payload() {
         let token = "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE";
-        assert_eq!(token.chars().count(), 43, "测试令牌须为 43 字符 base64url 形态");
+        assert_eq!(
+            token.chars().count(),
+            43,
+            "测试令牌须为 43 字符 base64url 形态"
+        );
         let command = format!("config_secret_get token={token}");
         let (bridge, emitter) = recording_bridge();
         emit_remote_source_attempt_audit(Some(&bridge), &command);
@@ -1136,16 +1152,10 @@ mod tests {
             "事件载荷不得含令牌/配对码明文形态：{}",
             recorded[0]
         );
-        assert!(
-            !recorded[0].contains(&token),
-            "事件载荷不得含令牌原文"
-        );
+        assert!(!recorded[0].contains(&token), "事件载荷不得含令牌原文");
         // 标记载荷同源打码（发射侧与标记共用同一 redact 输入）
         let marker = remote_source_attempt_marker(&conex_telemetry::redact::redact_text(&command));
-        assert!(
-            !marker.contains(&token),
-            "标记载荷不得含令牌原文"
-        );
+        assert!(!marker.contains(&token), "标记载荷不得含令牌原文");
     }
 
     /// remote-only 事件载荷（D5 §4.4：无人值守移动端单方批准标记）
@@ -1163,7 +1173,11 @@ mod tests {
             panic!("应为 SecurityAudit 事件");
         };
         assert_eq!(operation, SecurityAuditOperation::RemoteOnly);
-        assert_eq!(decision, SecurityAuditDecision::Approved, "单方批准已放行 → approved");
+        assert_eq!(
+            decision,
+            SecurityAuditDecision::Approved,
+            "单方批准已放行 → approved"
+        );
         assert_eq!(session_id, "s1");
     }
 
@@ -1318,7 +1332,10 @@ mod tests {
             operation,
             conex_types::events::SecurityAuditOperation::RemoteModeDowngrade
         );
-        assert_eq!(decision, conex_types::events::SecurityAuditDecision::Blocked);
+        assert_eq!(
+            decision,
+            conex_types::events::SecurityAuditDecision::Blocked
+        );
         assert_eq!(
             permission_mode.as_deref(),
             Some("full-access"),
@@ -1424,16 +1441,17 @@ mod tests {
             .await
             .expect("搜索应成功");
         let paths: Vec<&str> = result.results.iter().map(|h| h.rel_path.as_str()).collect();
-        assert_eq!(paths, vec!["src/main.rs"], "root=src 仅命中 src 子树：{paths:?}");
+        assert_eq!(
+            paths,
+            vec!["src/main.rs"],
+            "root=src 仅命中 src 子树：{paths:?}"
+        );
     }
 
     /// C21：校验面（空 query / 超长 query / 绝对 root / 索引未接线）
     #[tokio::test]
     async fn r2_12_search_files_validation_errors() {
-        let backend = search_backend(
-            vec!["C:/proj/src/main.rs".to_string()],
-            Some("C:/proj"),
-        );
+        let backend = search_backend(vec!["C:/proj/src/main.rs".to_string()], Some("C:/proj"));
         let cases = [
             (
                 "query 为空",
@@ -1623,25 +1641,40 @@ mod tests {
         assert_eq!(registry.pause_deadline(), Some(result.paused_until));
         // 钳制：<60 → 60；>86400 → 86400（注册表契约，桌面端钳制）
         let min = backend
-            .pause_automation(PauseAutomationParams { duration_sec: Some(5) })
+            .pause_automation(PauseAutomationParams {
+                duration_sec: Some(5),
+            })
             .await
             .expect("钳制下限");
         let expected_min = before + 60 * 1000;
         assert!(min.paused_until >= expected_min, "钳制下限 60s：{min:?}");
-        assert!(min.paused_until <= expected_min + 5_000, "钳制下限 60s（含余量）：{min:?}");
+        assert!(
+            min.paused_until <= expected_min + 5_000,
+            "钳制下限 60s（含余量）：{min:?}"
+        );
         let max = backend
-            .pause_automation(PauseAutomationParams { duration_sec: Some(999_999) })
+            .pause_automation(PauseAutomationParams {
+                duration_sec: Some(999_999),
+            })
             .await
             .expect("钳制上限");
         let expected_max = before + 86400 * 1000;
         assert!(max.paused_until >= expected_max, "钳制上限 86400s：{max:?}");
-        assert!(max.paused_until <= expected_max + 5_000, "钳制上限 86400s（含余量）：{max:?}");
+        assert!(
+            max.paused_until <= expected_max + 5_000,
+            "钳制上限 86400s（含余量）：{max:?}"
+        );
         // 重复暂停刷新 pausedUntil（R2-11 §11）
         let refreshed = backend
-            .pause_automation(PauseAutomationParams { duration_sec: Some(120) })
+            .pause_automation(PauseAutomationParams {
+                duration_sec: Some(120),
+            })
             .await
             .expect("刷新");
-        assert!(refreshed.paused_until < max.paused_until, "刷新应覆盖旧截止");
+        assert!(
+            refreshed.paused_until < max.paused_until,
+            "刷新应覆盖旧截止"
+        );
         assert_eq!(registry.pause_deadline(), Some(refreshed.paused_until));
     }
 
@@ -1717,7 +1750,11 @@ mod tests {
         };
         state.engine().inject_provider_for_test(routed, config);
         state.run_restore().await;
-        state.local_db().expect("local_db").insert_session("s1", "s1").expect("创建测试会话");
+        state
+            .local_db()
+            .expect("local_db")
+            .insert_session("s1", "s1")
+            .expect("创建测试会话");
 
         let backend = CoreStateBackend::new(Arc::clone(&state));
         let result = backend
@@ -1768,8 +1805,7 @@ mod tests {
             "startedAt 应为 epoch ms"
         );
         assert_eq!(
-            status["activeRuns"][0]["prompt"],
-            "",
+            status["activeRuns"][0]["prompt"], "",
             "prompt 兜底恒空串（runs 表无 prompt 持久化）"
         );
         // pendingApprovals 形状（M6 §4.1.1；wire 排序 = tool_call_id 字典序）
@@ -1777,8 +1813,7 @@ mod tests {
         assert_eq!(status["pendingApprovals"][0]["toolName"], "write_file");
         assert_eq!(status["pendingApprovals"][0]["runId"], result.run_id);
         assert_eq!(
-            status["pendingApprovals"][0]["summary"],
-            "call write_file",
+            status["pendingApprovals"][0]["summary"], "call write_file",
             "审批门摘要（format!(\"call {{tool_name}}\")）透传"
         );
         // 收尾：取消 run（L3）释放审批等待（APPROVAL_TIMEOUT 120s
@@ -1796,7 +1831,10 @@ mod tests {
     fn remote_approval_helpers_and_bridge_smoke() {
         let (bridge, _emitter) = recording_bridge();
         assert_eq!(route_remote_approval(true), RemoteApprovalRoute::Dual);
-        assert_eq!(route_remote_approval(false), RemoteApprovalRoute::RemoteOnly);
+        assert_eq!(
+            route_remote_approval(false),
+            RemoteApprovalRoute::RemoteOnly
+        );
         assert!(combine_dual_decisions(true, true));
         assert!(!combine_dual_decisions(true, false));
         assert!(!combine_dual_decisions(false, true));

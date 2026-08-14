@@ -340,7 +340,11 @@ mod tests {
             write_file_content_at_root(&root, "a.txt", "overwritten", false),
             types::ERR_FILE_EXISTS,
         );
-        assert_eq!(fs::read_to_string(&file).expect("read"), "original", "拒绝后不得改动原文件");
+        assert_eq!(
+            fs::read_to_string(&file).expect("read"),
+            "original",
+            "拒绝后不得改动原文件"
+        );
     }
 
     /// 已存在 + overwrite=true → 放行覆盖写入
@@ -366,7 +370,10 @@ mod tests {
 
         let result =
             write_file_content_at_root(&root, "fresh.txt", "hello", false).expect("create file");
-        assert_eq!(fs::read_to_string(root.join("fresh.txt")).expect("read"), "hello");
+        assert_eq!(
+            fs::read_to_string(root.join("fresh.txt")).expect("read"),
+            "hello"
+        );
         assert_eq!(result.bytes_written, 5);
     }
 
@@ -459,7 +466,11 @@ mod tests {
 
     // ── S11 补缺：delete_file（删除接管）──
 
-    fn delete_at_root(root: &Path, trash_root: &Path, path: &str) -> Result<types::DeleteFileResult, FileCommandError> {
+    fn delete_at_root(
+        root: &Path,
+        trash_root: &Path,
+        path: &str,
+    ) -> Result<types::DeleteFileResult, FileCommandError> {
         delete::delete_file_with_guard(&guard_for(root), trash_root, path)
     }
 
@@ -501,10 +512,7 @@ mod tests {
         let trash = temp.path().join("trash");
         fs::create_dir_all(root.join("dir")).expect("create dir");
 
-        assert_error_code(
-            delete_at_root(&root, &trash, "dir"),
-            types::ERR_NOT_FILE,
-        );
+        assert_error_code(delete_at_root(&root, &trash, "dir"), types::ERR_NOT_FILE);
         assert!(root.join("dir").exists(), "拒绝后目录不得被移动");
     }
 
@@ -592,7 +600,10 @@ mod tests {
         // 合法目录（授权根内）→ 注册成功（路径返回 canonical）
         let ok = dialog::register_picked_folder(app.handle(), auth_root.clone())
             .expect("授权根内应注册成功");
-        assert_eq!(ok.path.as_deref(), Some(auth_root.to_string_lossy().as_ref()));
+        assert_eq!(
+            ok.path.as_deref(),
+            Some(auth_root.to_string_lossy().as_ref())
+        );
     }
 
     /// T4.5-R3（红 → 绿）：`workbench_discover_skills` 的 workspace_path 越界

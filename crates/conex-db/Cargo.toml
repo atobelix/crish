@@ -26,6 +26,8 @@ conex-types = { path = "../conex-types" }
 # 的依赖环（agent-tools 侧为 dev 边，仅测试构建存在），生产构建无环。
 agent-tools = { path = "../agent-tools" }
 tokio = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 # Criterion 基准（PE-09 T09.7：db_write 写放大，仅 dev-dependency）

@@ -150,10 +150,7 @@ impl TrashService {
             bail!("目标既不是普通文件也不是目录：{}", path.display());
         }
         if path_is_within(&self.root, path) {
-            bail!(
-                "目标位于回收站根目录内，拒绝入回收站：{}",
-                path.display()
-            );
+            bail!("目标位于回收站根目录内，拒绝入回收站：{}", path.display());
         }
         let original = abs_clean(path);
         let id = gen_entry_id();
@@ -179,7 +176,11 @@ impl TrashService {
         } else {
             (None, None)
         };
-        let size = if is_dir { dir_size(path)? } else { metadata.len() };
+        let size = if is_dir {
+            dir_size(path)?
+        } else {
+            metadata.len()
+        };
 
         atomic_move(path, &payload_dst, is_dir)
             .with_context(|| format!("移入回收站失败：{}", path.display()))?;
@@ -188,7 +189,11 @@ impl TrashService {
             id: id.clone(),
             original_path: original.clone(),
             trashed_at: now_millis(),
-            kind: if is_dir { TrashKind::Dir } else { TrashKind::File },
+            kind: if is_dir {
+                TrashKind::Dir
+            } else {
+                TrashKind::File
+            },
             size,
             checksum,
             mode: EntryMode::Trash,
@@ -216,23 +221,30 @@ impl TrashService {
             .join(PAYLOAD_DIR)
             .join(relative_path_of(&original));
 
-        if !path.exists() {
-            crate::path_utils::ensure_parent_dir(&entry_dir.join(META_FILE))?;
-            let entry = TrashEntry {
-                id: id.clone(),
-                original_path: original.clone(),
-                trashed_at: now_millis(),
-                kind: TrashKind::File,
-                size: 0,
-                checksum: None,
-                mode: EntryMode::Snapshot,
-            };
-            write_meta(&entry_dir, &entry, true, None, false)?;
-            return Ok(entry);
-        }
+        let metadata_res = fs::symlink_metadata(path);
+        let metadata = match metadata_res {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                crate::path_utils::ensure_parent_dir(&entry_dir.join(META_FILE))?;
+                let entry = TrashEntry {
+                    id: id.clone(),
+                    original_path: original.clone(),
+                    trashed_at: now_millis(),
+                    kind: TrashKind::File,
+                    size: 0,
+                    checksum: None,
+                    mode: EntryMode::Snapshot,
+                };
+                write_meta(&entry_dir, &entry, true, None, false)?;
+                return Ok(entry);
+            }
+            Err(e) => {
+                return Err(e).with_context(|| {
+                    format!("快照目标元数据获取失败 (Fail-Closed)：{}", path.display())
+                });
+            }
+        };
 
-        let metadata = fs::metadata(path)
-            .with_context(|| format!("快照目标不可访问：{}", path.display()))?;
         if metadata.is_dir() {
             bail!("快照仅支持普通文件，拒绝目录：{}", path.display());
         }
@@ -330,9 +342,7 @@ impl TrashService {
             let _ = force_remove_dir_all(&entry_dir);
             return Ok(original.clone());
         }
-        let payload = entry_dir
-            .join(PAYLOAD_DIR)
-            .join(relative_path_of(original));
+        let payload = entry_dir.join(PAYLOAD_DIR).join(relative_path_of(original));
         if !payload.exists() {
             bail!("条目内容缺失，无法恢复：{}", payload.display());
         }
@@ -378,8 +388,7 @@ impl TrashService {
         if !entry_dir.is_dir() {
             bail!("回收站条目不存在：{entry_id}");
         }
-        force_remove_dir_all(&entry_dir)
-            .with_context(|| format!("清除条目失败：{entry_id}"))?;
+        force_remove_dir_all(&entry_dir).with_context(|| format!("清除条目失败：{entry_id}"))?;
         Ok(())
     }
 
@@ -463,10 +472,7 @@ fn validate_original_path(original: &Path, trash_root: &Path) -> Result<()> {
         );
     }
     if path_is_within(trash_root, original) {
-        bail!(
-            "原路径位于回收站根目录内，拒绝恢复：{}",
-            original.display()
-        );
+        bail!("原路径位于回收站根目录内，拒绝恢复：{}", original.display());
     }
     Ok(())
 }
@@ -500,8 +506,7 @@ fn atomic_move(src: &Path, dst: &Path, is_dir: bool) -> Result<()> {
 
 /// 递归复制目录（跨卷回退与测试辅助共用）
 fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
-    fs::create_dir_all(dst)
-        .with_context(|| format!("创建目录失败：{}", dst.display()))?;
+    fs::create_dir_all(dst).with_context(|| format!("创建目录失败：{}", dst.display()))?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let target = dst.join(entry.file_name());
@@ -525,8 +530,9 @@ pub fn force_remove_file(path: &Path) -> Result<()> {
                 if perms.readonly() {
                     perms.set_readonly(false);
                     let _ = fs::set_permissions(path, perms);
-                    return fs::remove_file(path)
-                        .with_context(|| format!("清除只读属性后删除文件仍失败：{}", path.display()));
+                    return fs::remove_file(path).with_context(|| {
+                        format!("清除只读属性后删除文件仍失败：{}", path.display())
+                    });
                 }
             }
             Err(e).with_context(|| format!("删除文件失败：{}", path.display()))
@@ -558,8 +564,12 @@ pub fn force_remove_dir_all(path: &Path) -> Result<()> {
         Ok(()) => Ok(()),
         Err(e) => {
             clear_readonly_recursive(path);
-            fs::remove_dir_all(path)
-                .with_context(|| format!("清除只读属性后删除目录仍失败（原错误: {e}）：{}", path.display()))
+            fs::remove_dir_all(path).with_context(|| {
+                format!(
+                    "清除只读属性后删除目录仍失败（原错误: {e}）：{}",
+                    path.display()
+                )
+            })
         }
     }
 }
@@ -777,8 +787,14 @@ mod tests {
         assert!(!dir.exists());
 
         svc.restore(&entry.id).unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("inner.txt")).unwrap(), "inner");
-        assert_eq!(std::fs::read_to_string(dir.join("deep/x.txt")).unwrap(), "x");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("inner.txt")).unwrap(),
+            "inner"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("deep/x.txt")).unwrap(),
+            "x"
+        );
     }
 
     #[test]
@@ -939,9 +955,7 @@ mod tests {
     fn trash_file_missing_target_errors() {
         let src = TempDir::new("missing");
         let svc = service();
-        let err = svc
-            .trash_file(&src.0.join("ghost.txt"), false)
-            .unwrap_err();
+        let err = svc.trash_file(&src.0.join("ghost.txt"), false).unwrap_err();
         assert!(err.to_string().contains("不存在"));
     }
 
@@ -1104,7 +1118,10 @@ mod tests {
             }
             let size = dir_size(&d.0).unwrap();
             assert!(size >= 7, "真实文件大小计入");
-            assert!(size <= 10_000_000, "junction 环内大小必须有限（不递归展开）");
+            assert!(
+                size <= 10_000_000,
+                "junction 环内大小必须有限（不递归展开）"
+            );
         }
         #[cfg(unix)]
         {

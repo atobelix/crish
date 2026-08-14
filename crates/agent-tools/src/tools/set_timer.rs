@@ -87,9 +87,9 @@ impl TimerError {
                 "同 sender 已有活跃定时器：{existing}（同一 sender 只能有一个活跃定时器，\
                  请先 cancel 或等待其到期）"
             ),
-            Self::InvalidDuration => format!(
-                "durationSeconds 须为 1~{MAX_TIMER_DURATION_SECONDS} 的正整数（秒）"
-            ),
+            Self::InvalidDuration => {
+                format!("durationSeconds 须为 1~{MAX_TIMER_DURATION_SECONDS} 的正整数（秒）")
+            }
             Self::IdNotFound => "定时器不存在或已取消".to_string(),
             Self::Unsupported => "定时器通道未接线（引擎集成后可用）".to_string(),
         }
@@ -244,7 +244,8 @@ impl Tool for SetTimerTool {
 
         // 结果信封：timerId / expiresAtMs / text 摘要
         // （「定时器 <id> 已设置，将于 <时刻> 到期」，时刻为 ISO8601 UTC）
-        let expires_iso = crate::subagent_inject::iso8601_from_epoch_ms(handle.expires_at_ms as i64);
+        let expires_iso =
+            crate::subagent_inject::iso8601_from_epoch_ms(handle.expires_at_ms as i64);
         Ok(serde_json::json!({
             "timerId": handle.timer_id,
             "expiresAtMs": handle.expires_at_ms,
@@ -439,7 +440,10 @@ mod tests {
         // 输出信封：timerId / expiresAtMs / text 摘要
         assert_eq!(out["timerId"], "timer-1");
         assert_eq!(out["expiresAtMs"], serde_json::json!(1_700_000_000_000u64));
-        assert!(out["text"].as_str().unwrap().contains("定时器 timer-1 已设置"));
+        assert!(out["text"]
+            .as_str()
+            .unwrap()
+            .contains("定时器 timer-1 已设置"));
     }
 
     #[tokio::test]
@@ -472,7 +476,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(channel.registers()[0].2, TimerCondition::Task("task-42".to_string()));
+        assert_eq!(
+            channel.registers()[0].2,
+            TimerCondition::Task("task-42".to_string())
+        );
         // 非法条件（空串）→ 结构化入参错误
         let channel = Arc::new(RecordingTimerChannel::new(Ok(ok_handle("timer-4", 1))));
         let tool = SetTimerTool::with_channel(Some(channel.clone()));
@@ -591,8 +598,14 @@ mod tests {
     #[tokio::test]
     async fn timer_error_code_mapping() {
         // 错误码映射回归（对齐 SubagentWaitError 风格）
-        assert_eq!(TimerError::Conflict("t".to_string()).code(), codes::TOOL_VERSION_CONFLICT);
-        assert_eq!(TimerError::InvalidDuration.code(), codes::TOOL_INVALID_INPUT);
+        assert_eq!(
+            TimerError::Conflict("t".to_string()).code(),
+            codes::TOOL_VERSION_CONFLICT
+        );
+        assert_eq!(
+            TimerError::InvalidDuration.code(),
+            codes::TOOL_INVALID_INPUT
+        );
         assert_eq!(TimerError::IdNotFound.code(), codes::COMMON_NOT_FOUND);
         assert_eq!(TimerError::Unsupported.code(), codes::COMMON_UNSUPPORTED);
         assert!(TimerError::IdNotFound.message().contains("不存在"));

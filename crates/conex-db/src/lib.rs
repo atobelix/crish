@@ -24,8 +24,8 @@ mod blocks;
 pub mod cas_gc;
 mod error;
 mod events;
-pub mod group_commit;
 mod explore_docs_quota_store;
+pub mod group_commit;
 mod import;
 mod imported;
 pub mod lease_guard;
@@ -46,7 +46,9 @@ pub use group_commit::{
     DbWriteHandle, GroupCommitConfig, GroupCommitStats, DEFAULT_GROUP_COMMIT_CHANNEL_CAPACITY,
     DEFAULT_GROUP_COMMIT_MAX_BATCH, DEFAULT_GROUP_COMMIT_TIMEOUT_MS,
 };
-pub use imported::{ImportedBookmarkRow, ImportedHistoryRow, ImportedWriteStats, IMPORT_BATCH_SIZE};
+pub use imported::{
+    ImportedBookmarkRow, ImportedHistoryRow, ImportedWriteStats, IMPORT_BATCH_SIZE,
+};
 pub use lease_guard::{
     generate_lease_id, ActiveBlobLease, BlobLeaseGuard, DEFAULT_LEASE_DURATION,
     DEFAULT_LEASE_DURATION_SECS,
@@ -164,9 +166,8 @@ impl LocalDb {
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-mod tests_migrations;
+mod tests_cas_gc;
 #[cfg(test)]
 mod tests_concurrency;
 #[cfg(test)]
-mod tests_cas_gc;
-
+mod tests_migrations;

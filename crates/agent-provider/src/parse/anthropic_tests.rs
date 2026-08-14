@@ -112,6 +112,7 @@ fn normal_text_stream_flow() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: Some(ProviderUsage {
                 prompt_tokens: Some(11),
                 completion_tokens: Some(7),
@@ -256,6 +257,7 @@ fn tool_use_with_input_json_delta_chunks() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::ToolCall,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -464,6 +466,7 @@ fn max_tokens_stop_reason_yields_length() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Length,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -483,6 +486,7 @@ fn refusal_stop_reason_yields_error() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -507,6 +511,7 @@ fn stop_reason_later_frame_overrides() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Length,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );

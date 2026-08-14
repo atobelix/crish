@@ -73,14 +73,10 @@ impl LocalDb {
     /// imported_bookmarks / imported_history 两张表是否都在场
     /// （sqlite_master 探测，每连接缓存一次；任一缺失视为缺表形态）。
     fn imported_tables_present(&self) -> Result<bool, DbFailure> {
-        if let Some(present) = *self
-            .imported_tables_present
-            .lock()
-            .map_err(|e| DbFailure {
-                message: format!("lock poisoned: {e}"),
-                kind: DbFailureKind::Lock,
-            })?
-        {
+        if let Some(present) = *self.imported_tables_present.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })? {
             return Ok(present);
         }
         let conn = self.conn.lock().map_err(|e| DbFailure {
@@ -139,16 +135,17 @@ impl LocalDb {
                     )
                     .map_err(|e| self.latch_error("import_bookmarks_prepare", e))?;
                 for row in chunk {
-                    let folder_path_json = serde_json::to_string(&row.folder_path).map_err(|e| {
-                        let failure = DbFailure {
-                            message: format!("import_bookmarks_folder_json: {e}"),
-                            kind: DbFailureKind::Other(
-                                "import_bookmarks_folder_json".to_string(),
-                            ),
-                        };
-                        self.set_failure(failure.clone());
-                        failure
-                    })?;
+                    let folder_path_json =
+                        serde_json::to_string(&row.folder_path).map_err(|e| {
+                            let failure = DbFailure {
+                                message: format!("import_bookmarks_folder_json: {e}"),
+                                kind: DbFailureKind::Other(
+                                    "import_bookmarks_folder_json".to_string(),
+                                ),
+                            };
+                            self.set_failure(failure.clone());
+                            failure
+                        })?;
                     let changed = stmt
                         .execute(rusqlite::params![
                             row.url,
@@ -304,11 +301,7 @@ impl LocalDb {
             kind: DbFailureKind::Lock,
         })?;
         let count: i64 = conn
-            .query_row(
-                &format!("SELECT COUNT(*) FROM {table}"),
-                [],
-                |r| r.get(0),
-            )
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
             .map_err(|e| self.latch_error(operation, e))?;
         Ok(count as u64)
     }
@@ -466,7 +459,11 @@ mod tests {
             .iter()
             .find(|r| r.url == "https://h.example.com" && r.visited_at == 100)
             .expect("存在");
-        assert_eq!(h100.title.as_deref(), Some("标题"), "首版标题保留（IGNORE）");
+        assert_eq!(
+            h100.title.as_deref(),
+            Some("标题"),
+            "首版标题保留（IGNORE）"
+        );
         let o100 = loaded
             .iter()
             .find(|r| r.url == "https://o.example.com")
@@ -479,12 +476,8 @@ mod tests {
     fn list_history_sorts_filters_limits() {
         let db = LocalDb::open_in_memory().unwrap();
         for (i, v) in [100i64, 300, 200, 150].iter().enumerate() {
-            db.import_history(&[history_row(
-                &format!("https://{i}.example.com"),
-                *v,
-                None,
-            )])
-            .unwrap();
+            db.import_history(&[history_row(&format!("https://{i}.example.com"), *v, None)])
+                .unwrap();
         }
         let all = db.list_history(None, usize::MAX).unwrap();
         let times: Vec<i64> = all.iter().map(|r| r.visited_at).collect();

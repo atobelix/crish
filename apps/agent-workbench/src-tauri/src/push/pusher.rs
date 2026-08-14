@@ -129,10 +129,7 @@ pub struct PushDispatcher {
 
 impl PushDispatcher {
     /// 用在线状态源 + 直推通道构造
-    pub fn new(
-        presence: Arc<dyn DevicePresenceSource>,
-        channel: Arc<dyn PushChannel>,
-    ) -> Self {
+    pub fn new(presence: Arc<dyn DevicePresenceSource>, channel: Arc<dyn PushChannel>) -> Self {
         Self {
             presence,
             channel,
@@ -444,11 +441,7 @@ mod tests {
     }
 
     impl PushChannel for RecordingChannel {
-        fn send(
-            &self,
-            device_key: &str,
-            message: &PushMessage,
-        ) -> Result<(), PushChannelError> {
+        fn send(&self, device_key: &str, message: &PushMessage) -> Result<(), PushChannelError> {
             if let Some(error) = self.fail_with.lock().unwrap().clone() {
                 return Err(error);
             }
@@ -485,7 +478,8 @@ mod tests {
         let presence = Arc::new(MemoryPresenceSource::new());
         presence.set_devices(devices);
         let channel = Arc::new(RecordingChannel::new());
-        let dispatcher = PushDispatcher::new(presence, Arc::clone(&channel) as Arc<dyn PushChannel>);
+        let dispatcher =
+            PushDispatcher::new(presence, Arc::clone(&channel) as Arc<dyn PushChannel>);
         (dispatcher, channel)
     }
 
@@ -626,7 +620,10 @@ mod tests {
         assert_eq!(seqs_of("tok-c"), vec![1, 2], "C 设备独立单调递增");
         // id 全局递增（跨设备）
         let ids: Vec<&str> = sent.iter().map(|(_, m)| m.id.as_str()).collect();
-        assert_eq!(ids, ["push-000001", "push-000002", "push-000003", "push-000004"]);
+        assert_eq!(
+            ids,
+            ["push-000001", "push-000002", "push-000003", "push-000004"]
+        );
     }
 
     /// 无已连接设备（未配对）：不推不标记（D7 §6.4「未配对 不推」）
@@ -779,7 +776,10 @@ mod tests {
             Box::new(|| T0),
         );
 
-        emitter.emit("workbench-run-event", &envelope_payload(noise_event(), Some("run-42"), Some(8)));
+        emitter.emit(
+            "workbench-run-event",
+            &envelope_payload(noise_event(), Some("run-42"), Some(8)),
+        );
         assert_eq!(inner.calls().len(), 1, "转发照常");
         assert!(channel.sent().is_empty(), "P3 噪音不推");
         assert_eq!(emitter.dispatcher.pending_len(), 0);
@@ -802,7 +802,10 @@ mod tests {
             Box::new(|| T0),
         );
 
-        emitter.emit("workbench-run-event", &envelope_payload(run_failed_event(), Some("run-42"), Some(9)));
+        emitter.emit(
+            "workbench-run-event",
+            &envelope_payload(run_failed_event(), Some("run-42"), Some(9)),
+        );
         assert!(channel.sent().is_empty(), "离线设备不直推");
         let pending = emitter.dispatcher.take_pending();
         assert_eq!(pending.len(), 1);
@@ -852,18 +855,22 @@ mod tests {
         );
 
         // 入桶（cron 累积族）：事件不立即产出决策
-        let cron = |iteration: u64| {
-            AgentEvent::CronFired {
-                session_id: "s-7".to_string(),
-                cron_id: "cron-2".to_string(),
-                prompt: "日报".to_string(),
-                expression: "0 9 * * *".to_string(),
-                iteration,
-                fired_at_ms: T0,
-            }
+        let cron = |iteration: u64| AgentEvent::CronFired {
+            session_id: "s-7".to_string(),
+            cron_id: "cron-2".to_string(),
+            prompt: "日报".to_string(),
+            expression: "0 9 * * *".to_string(),
+            iteration,
+            fired_at_ms: T0,
         };
-        emitter.emit("workbench-run-event", &envelope_payload(cron(1), None, Some(1)));
-        emitter.emit("workbench-run-event", &envelope_payload(cron(2), None, Some(2)));
+        emitter.emit(
+            "workbench-run-event",
+            &envelope_payload(cron(1), None, Some(1)),
+        );
+        emitter.emit(
+            "workbench-run-event",
+            &envelope_payload(cron(2), None, Some(2)),
+        );
         assert!(channel.sent().is_empty(), "窗口内不出桶");
 
         // drain 到点 → 合并产出 + 在线直推
@@ -874,7 +881,10 @@ mod tests {
         // fired_at_ms（引擎按 arrived_at_ms = now_ms 入桶，见 engine.rs
         // pending_from）——此处只断言前缀（键形状），不绑定具体时刻
         assert!(
-            sent[0].1.dedupe_key.starts_with("merged:cron-fired:cron-2:"),
+            sent[0]
+                .1
+                .dedupe_key
+                .starts_with("merged:cron-fired:cron-2:"),
             "合并键 = merged:cron-fired:cron-2:<入桶时刻>（实际：{}）",
             sent[0].1.dedupe_key
         );

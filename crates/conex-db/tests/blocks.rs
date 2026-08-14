@@ -27,10 +27,8 @@ struct TempDb {
 impl TempDb {
     fn new(name: &str) -> Self {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "conex-blocks-{name}-{}-{n}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("conex-blocks-{name}-{}-{n}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("sessions.db");
         let _ = std::fs::remove_file(&path);
@@ -226,9 +224,13 @@ fn v7_migration_idempotent_second_open() {
     );
 
     // 升级后的块表可正常读写（升级 → 使用闭环）
-    db2.insert_block(&sample_row("s1", "compacted-summary-1-1", 1)).unwrap();
+    db2.insert_block(&sample_row("s1", "compacted-summary-1-1", 1))
+        .unwrap();
     assert_eq!(db2.count_blocks("s1").unwrap(), 1);
-    assert!(db2.get_block("s1", "compacted-summary-1-1").unwrap().is_some());
+    assert!(db2
+        .get_block("s1", "compacted-summary-1-1")
+        .unwrap()
+        .is_some());
 }
 
 /// 复合主键冲突行为：同 (session_id, block_id) 重插被 INSERT OR IGNORE
@@ -254,7 +256,8 @@ fn missing_blocks_table_degrades_gracefully() {
     let db = LocalDb::open(temp.path()).unwrap();
     // 独立连接删除块表 = v6 库形态（该库不含 compression_blocks 表）
     let conn = Connection::open(temp.path()).unwrap();
-    conn.execute_batch("DROP TABLE compression_blocks;").unwrap();
+    conn.execute_batch("DROP TABLE compression_blocks;")
+        .unwrap();
     drop(conn);
 
     assert_eq!(db.list_blocks("s1", None).unwrap().len(), 0);

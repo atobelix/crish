@@ -86,7 +86,10 @@ mod tests {
         let t = SessionToken::new();
         let debug = format!("{t:?}");
         let display = t.to_string();
-        assert!(!debug.contains(t.as_str()), "Debug 不得含 token 原文：{debug}");
+        assert!(
+            !debug.contains(t.as_str()),
+            "Debug 不得含 token 原文：{debug}"
+        );
         assert!(debug.contains("<redacted>"));
         assert_eq!(display, "<redacted>");
     }
@@ -101,7 +104,10 @@ mod tests {
         let debug = format!("{e:?}");
         assert!(!debug.contains("38689"), "Debug 不得含端口：{debug}");
         assert!(!debug.contains("ba90110e"), "Debug 不得含 ws_path：{debug}");
-        assert!(!debug.contains("/devtools/"), "Debug 不得含 path 片段：{debug}");
+        assert!(
+            !debug.contains("/devtools/"),
+            "Debug 不得含 path 片段：{debug}"
+        );
     }
 
     // ---------- 脱敏变体全表（评审 P2 补强：12 种端口/路径/token 形态零泄漏） ----------
@@ -112,22 +118,40 @@ mod tests {
     fn endpoint_debug_redaction_variants() {
         let cases = [
             (1u16, "/devtools/browser/a"),
-            (443, "/devtools/browser/ba90110e-33a1-4569-9dd1-5437b8f729b0"),
+            (
+                443,
+                "/devtools/browser/ba90110e-33a1-4569-9dd1-5437b8f729b0",
+            ),
             (38689, "/devtools/browser/38689"),
             (65535, "/"),
             (8080, "/devtools/page/ABC123"),
             (10000, "/devtools/browser/token?secret=1"),
         ];
         for (port, path) in cases {
-            let e = CdpEndpoint { port, ws_path: path.to_string() };
+            let e = CdpEndpoint {
+                port,
+                ws_path: path.to_string(),
+            };
             let debug = format!("{e:?}");
-            assert_eq!(debug, "CdpEndpoint { <redacted> }", "Debug 必须固定形态（port={port} path={path}）");
-            assert!(!debug.contains(&port.to_string()), "端口 {port} 不得泄漏：{debug}");
+            assert_eq!(
+                debug, "CdpEndpoint { <redacted> }",
+                "Debug 必须固定形态（port={port} path={path}）"
+            );
+            assert!(
+                !debug.contains(&port.to_string()),
+                "端口 {port} 不得泄漏：{debug}"
+            );
             assert!(!debug.contains("devtools"), "ws_path 不得泄漏：{path}");
             assert!(!debug.contains("secret"), "路径参数不得泄漏：{path}");
             // url() 仅用于内部建连（不进日志面），功能面仍可用
-            assert!(e.url().starts_with("ws://127.0.0.1:"), "url() 拼接不受脱敏影响");
-            assert!(e.url().contains(&port.to_string()), "url() 内部必须携带端口（建连用）");
+            assert!(
+                e.url().starts_with("ws://127.0.0.1:"),
+                "url() 拼接不受脱敏影响"
+            );
+            assert!(
+                e.url().contains(&port.to_string()),
+                "url() 内部必须携带端口（建连用）"
+            );
         }
     }
 

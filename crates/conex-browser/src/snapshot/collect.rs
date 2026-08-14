@@ -110,7 +110,8 @@ impl Bounds {
             return 0.0;
         }
         let ix = ((self.x + self.width).min(other.x + other.width) - self.x.max(other.x)).max(0.0);
-        let iy = ((self.y + self.height).min(other.y + other.height) - self.y.max(other.y)).max(0.0);
+        let iy =
+            ((self.y + self.height).min(other.y + other.height) - self.y.max(other.y)).max(0.0);
         (ix * iy) / (other.width * other.height)
     }
 }
@@ -295,7 +296,12 @@ impl EnhancedNode {
 
     /// 设置 bounds（构造输入）。
     pub fn bounds(mut self, x: f64, y: f64, width: f64, height: f64) -> Self {
-        self.bounds = Some(Bounds { x, y, width, height });
+        self.bounds = Some(Bounds {
+            x,
+            y,
+            width,
+            height,
+        });
         self
     }
 
@@ -523,11 +529,7 @@ impl std::error::Error for CollectError {}
 #[async_trait]
 pub trait SnapshotCollector: Send + Sync {
     /// 采集指定会话的增强树。实现方负责四路并行、超时与降级语义。
-    async fn collect(
-        &self,
-        tab_id: &str,
-        session: &str,
-    ) -> Result<CollectedData, SnapshotError>;
+    async fn collect(&self, tab_id: &str, session: &str) -> Result<CollectedData, SnapshotError>;
 }
 
 /// 构造输入采集器（测试/引擎侧确定性输入；不触网）。
@@ -576,11 +578,7 @@ impl FixtureCollector {
 
 #[async_trait]
 impl SnapshotCollector for FixtureCollector {
-    async fn collect(
-        &self,
-        _tab_id: &str,
-        _session: &str,
-    ) -> Result<CollectedData, SnapshotError> {
+    async fn collect(&self, _tab_id: &str, _session: &str) -> Result<CollectedData, SnapshotError> {
         if let Some(d) = self.hang {
             tokio::time::sleep(d).await;
         }
@@ -606,21 +604,14 @@ pub struct CdpCollector {
 
 impl CdpCollector {
     pub fn new(session: std::sync::Arc<crate::BrowserSession>, budgets: BudgetConfig) -> Self {
-        CdpCollector {
-            session,
-            budgets,
-        }
+        CdpCollector { session, budgets }
     }
 }
 
 /// 真实采集：四路并行 + 首轮 10s 超时 + 2s 重发窗口 + AX 降级。
 #[async_trait]
 impl SnapshotCollector for CdpCollector {
-    async fn collect(
-        &self,
-        _tab_id: &str,
-        session: &str,
-    ) -> Result<CollectedData, SnapshotError> {
+    async fn collect(&self, _tab_id: &str, session: &str) -> Result<CollectedData, SnapshotError> {
         let started = std::time::Instant::now();
 
         // —— 首轮并行（10s 超时；AX 失败降级为空，其余失败进重发）——
@@ -639,16 +630,12 @@ impl SnapshotCollector for CdpCollector {
                 crate::cdp::domains::names::DOM_GET_DOCUMENT,
                 json!({ "depth": GET_DOCUMENT_DEPTH, "pierce": true }),
             );
-            let metrics_fut = self.session.send_page::<Value>(
-                session,
-                PAGE_GET_LAYOUT_METRICS,
-                json!({}),
-            );
-            let ax_fut = self.session.send_page::<Value>(
-                session,
-                ACCESSIBILITY_GET_FULL_AX_TREE,
-                json!({}),
-            );
+            let metrics_fut =
+                self.session
+                    .send_page::<Value>(session, PAGE_GET_LAYOUT_METRICS, json!({}));
+            let ax_fut =
+                self.session
+                    .send_page::<Value>(session, ACCESSIBILITY_GET_FULL_AX_TREE, json!({}));
             (
                 snapshot_fut.await,
                 dom_fut.await,
@@ -666,15 +653,23 @@ impl SnapshotCollector for CdpCollector {
                 let retry = tokio::time::timeout(RETRY_WINDOW, async {
                     let s = self
                         .session
-                        .send_page::<Value>(session, DOM_SNAPSHOT_CAPTURE_SNAPSHOT, json!({
-                            "computedStyles": COMPUTED_STYLES_WHITELIST,
-                            "includePaintOrder": self.budgets.include_paint_order,
-                            "includeDOMRects": self.budgets.include_dom_rects,
-                        }))
+                        .send_page::<Value>(
+                            session,
+                            DOM_SNAPSHOT_CAPTURE_SNAPSHOT,
+                            json!({
+                                "computedStyles": COMPUTED_STYLES_WHITELIST,
+                                "includePaintOrder": self.budgets.include_paint_order,
+                                "includeDOMRects": self.budgets.include_dom_rects,
+                            }),
+                        )
                         .await;
                     let d = self
                         .session
-                        .send_page::<Value>(session, DOM_GET_DOCUMENT, json!({ "depth": GET_DOCUMENT_DEPTH, "pierce": true }))
+                        .send_page::<Value>(
+                            session,
+                            DOM_GET_DOCUMENT,
+                            json!({ "depth": GET_DOCUMENT_DEPTH, "pierce": true }),
+                        )
                         .await;
                     (s, d)
                 })
@@ -682,7 +677,9 @@ impl SnapshotCollector for CdpCollector {
                 match retry {
                     Ok((s, d)) => (s, d, Ok(json!({})), Ok(json!({ "nodes": [] }))),
                     Err(_) => {
-                        return Err(SnapshotError::Timeout(crate::snapshot::budget::HARD_TIMEOUT));
+                        return Err(SnapshotError::Timeout(
+                            crate::snapshot::budget::HARD_TIMEOUT,
+                        ));
                     }
                 }
             }
@@ -691,12 +688,10 @@ impl SnapshotCollector for CdpCollector {
         let snapshot_value = snapshot_res.map_err(|e| {
             SnapshotError::Collect(format!("DOMSnapshot.captureSnapshot 失败：{e}"))
         })?;
-        let dom_value = dom_res.map_err(|e| {
-            SnapshotError::Collect(format!("DOM.getDocument 失败：{e}"))
-        })?;
-        let metrics_value = metrics_res.map_err(|e| {
-            SnapshotError::Collect(format!("Page.getLayoutMetrics 失败：{e}"))
-        })?;
+        let dom_value =
+            dom_res.map_err(|e| SnapshotError::Collect(format!("DOM.getDocument 失败：{e}")))?;
+        let metrics_value = metrics_res
+            .map_err(|e| SnapshotError::Collect(format!("Page.getLayoutMetrics 失败：{e}")))?;
 
         // —— AX 失败降级为空（§1.2：AX 树失败可降级，主结构不丢）——
         let ax: Vec<AXNode> = match ax_res {
@@ -738,9 +733,8 @@ impl SnapshotCollector for CdpCollector {
             snapshot_bytes + dom_bytes
         };
 
-        let capture: CaptureSnapshotResult = serde_json::from_value(snapshot_value).map_err(
-            |e| SnapshotError::Collect(format!("DOMSnapshot 响应解析失败：{e}")),
-        )?;
+        let capture: CaptureSnapshotResult = serde_json::from_value(snapshot_value)
+            .map_err(|e| SnapshotError::Collect(format!("DOMSnapshot 响应解析失败：{e}")))?;
         // 降级时结构通道以空占位（build_enhanced_tree 不使用该输入，仅签名占位）
         let document: GetDocumentResult = if dom_degraded {
             GetDocumentResult::default()
@@ -749,30 +743,32 @@ impl SnapshotCollector for CdpCollector {
                 .map_err(|e| SnapshotError::Collect(format!("DOM.getDocument 响应解析失败：{e}")))?
         };
 
-        let metrics: crate::cdp::domains::GetLayoutMetricsResult =
-            serde_json::from_value(metrics_value).unwrap_or(crate::cdp::domains::GetLayoutMetricsResult {
-                layout_viewport: crate::cdp::domains::LayoutViewport {
-                    x: 0.0,
-                    y: 0.0,
-                    width: 1280.0,
-                    height: 800.0,
-                    page_x: 0.0,
-                    page_y: 0.0,
-                    client_width: 1280.0,
-                    client_height: 800.0,
-                    scale: Some(1.0),
-                },
-                visual_viewport: crate::cdp::domains::VisualViewport {
-                    offset_x: 0.0,
-                    offset_y: 0.0,
-                    page_x: 0.0,
-                    page_y: 0.0,
-                    client_width: 1280.0,
-                    client_height: 800.0,
-                    scale: 1.0,
-                },
-                content_size: None,
-            });
+        let metrics: crate::cdp::domains::GetLayoutMetricsResult = serde_json::from_value(
+            metrics_value,
+        )
+        .unwrap_or(crate::cdp::domains::GetLayoutMetricsResult {
+            layout_viewport: crate::cdp::domains::LayoutViewport {
+                x: 0.0,
+                y: 0.0,
+                width: 1280.0,
+                height: 800.0,
+                page_x: 0.0,
+                page_y: 0.0,
+                client_width: 1280.0,
+                client_height: 800.0,
+                scale: Some(1.0),
+            },
+            visual_viewport: crate::cdp::domains::VisualViewport {
+                offset_x: 0.0,
+                offset_y: 0.0,
+                page_x: 0.0,
+                page_y: 0.0,
+                client_width: 1280.0,
+                client_height: 800.0,
+                scale: 1.0,
+            },
+            content_size: None,
+        });
 
         let layout = LayoutMetrics {
             viewport: Bounds {
@@ -793,8 +789,11 @@ impl SnapshotCollector for CdpCollector {
         if self.budgets.cross_origin_iframes {
             match tokio::time::timeout(
                 FRAME_COLLECT_TIMEOUT,
-                self.session
-                    .send_page::<GetFrameTreeResult>(session, PAGE_GET_FRAME_TREE, json!({})),
+                self.session.send_page::<GetFrameTreeResult>(
+                    session,
+                    PAGE_GET_FRAME_TREE,
+                    json!({}),
+                ),
             )
             .await
             {
@@ -958,9 +957,7 @@ fn find_owner_by_src(roots: &[EnhancedNode], url: &str) -> Option<i64> {
     for root in roots {
         let mut hit = None;
         root.walk(&mut |n| {
-            if hit.is_none()
-                && n.tag.as_deref() == Some("iframe")
-                && n.get_attr("src") == Some(url)
+            if hit.is_none() && n.tag.as_deref() == Some("iframe") && n.get_attr("src") == Some(url)
             {
                 hit = Some(n.backend_node_id);
             }
@@ -1046,101 +1043,110 @@ impl CdpCollector {
         stats: &'a mut CrossOriginStats,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
         Box::pin(async move {
-        let children = tree.child_frames.as_deref().unwrap_or_default();
-        for child in children {
-            let frame_id = &child.frame.id;
-            let frame_url = child.frame.url.as_str();
-            // 前置判定（pierce/去重/深度/帧数/载荷预算；纯函数）
-            if !frame_candidate_eligible(frame_id, pierced, visited, depth, budget, stats) {
-                continue;
-            }
-            // 定位 owner（getFrameOwner 主路径 + src URL 兜底）并打 |IFRAME| 标记
-            let owner = match self.locate_frame_owner(roots, parent_session, frame_id, frame_url).await {
-                Some(owner) => owner,
-                None => {
-                    // 无法定位 owner：按小/未知帧处理（占位已尽力标记，见 locate）
+            let children = tree.child_frames.as_deref().unwrap_or_default();
+            for child in children {
+                let frame_id = &child.frame.id;
+                let frame_url = child.frame.url.as_str();
+                // 前置判定（pierce/去重/深度/帧数/载荷预算；纯函数）
+                if !frame_candidate_eligible(frame_id, pierced, visited, depth, budget, stats) {
+                    continue;
+                }
+                // 定位 owner（getFrameOwner 主路径 + src URL 兜底）并打 |IFRAME| 标记
+                let owner = match self
+                    .locate_frame_owner(roots, parent_session, frame_id, frame_url)
+                    .await
+                {
+                    Some(owner) => owner,
+                    None => {
+                        // 无法定位 owner：按小/未知帧处理（占位已尽力标记，见 locate）
+                        stats.skipped_small += 1;
+                        continue;
+                    }
+                };
+                // 尺寸门限（10px×10px，§1.5）
+                if !iframe_size_qualified(owner.1) {
                     stats.skipped_small += 1;
                     continue;
                 }
-            };
-            // 尺寸门限（10px×10px，§1.5）
-            if !iframe_size_qualified(owner.1) {
-                stats.skipped_small += 1;
-                continue;
-            }
-            // 预算扣减（至此才占额：尺寸/定位不过门的帧不计入 64）
-            budget.frames_left -= 1;
-            // 帧级会话建立（frameId 即 OOPIF targetId 主路径；getTargets URL 兜底）
-            let frame_session = match self.attach_frame_session(frame_id, frame_url).await {
-                Ok(s) => s,
-                Err(e) => {
-                    stats.failed += 1;
-                    tracing::warn!("跨域帧 attach 失败（{frame_id}）：{e}");
+                // 预算扣减（至此才占额：尺寸/定位不过门的帧不计入 64）
+                budget.frames_left -= 1;
+                // 帧级会话建立（frameId 即 OOPIF targetId 主路径；getTargets URL 兜底）
+                let frame_session = match self.attach_frame_session(frame_id, frame_url).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        stats.failed += 1;
+                        tracing::warn!("跨域帧 attach 失败（{frame_id}）：{e}");
+                        continue;
+                    }
+                };
+                stats.sessions_attached += 1;
+                // 子文档采集（DOMSnapshot + DOM.getDocument + AX；失败降级占位）
+                let frame_doc = match self.collect_frame_document(&frame_session.session).await {
+                    Ok(d) => d,
+                    Err(e) => {
+                        stats.failed += 1;
+                        tracing::warn!("跨域帧采集失败（{frame_id}）：{e}");
+                        self.detach_frame_session(&frame_session.session, stats)
+                            .await;
+                        continue;
+                    }
+                };
+                // 载荷预算（150KB 采集层护栏，T-2）：超限该帧不入树并停止递归
+                if frame_doc.payload > budget.payload_left {
+                    stats.skipped_budget += 1;
+                    tracing::warn!(
+                        "跨域帧载荷超剩余预算（{frame_id}：{}B），截断",
+                        frame_doc.payload
+                    );
+                    budget.payload_left = 0;
+                    self.detach_frame_session(&frame_session.session, stats)
+                        .await;
                     continue;
                 }
-            };
-            stats.sessions_attached += 1;
-            // 子文档采集（DOMSnapshot + DOM.getDocument + AX；失败降级占位）
-            let frame_doc = match self.collect_frame_document(&frame_session.session).await {
-                Ok(d) => d,
-                Err(e) => {
-                    stats.failed += 1;
-                    tracing::warn!("跨域帧采集失败（{frame_id}）：{e}");
-                    self.detach_frame_session(&frame_session.session, stats).await;
-                    continue;
-                }
-            };
-            // 载荷预算（150KB 采集层护栏，T-2）：超限该帧不入树并停止递归
-            if frame_doc.payload > budget.payload_left {
-                stats.skipped_budget += 1;
-                tracing::warn!("跨域帧载荷超剩余预算（{frame_id}：{}B），截断", frame_doc.payload);
-                budget.payload_left = 0;
-                self.detach_frame_session(&frame_session.session, stats).await;
-                continue;
-            }
-            budget.payload_left -= frame_doc.payload;
+                budget.payload_left -= frame_doc.payload;
 
-            // 子文档增强树（独立根树，与主树同入根森林；索引碰撞由序列化
-            // 合成索引消解——见模块注释「索引协调选择」）
-            let mut frame_roots =
-                build_enhanced_tree(&frame_doc.capture, &frame_doc.document, &frame_doc.ax);
+                // 子文档增强树（独立根树，与主树同入根森林；索引碰撞由序列化
+                // 合成索引消解——见模块注释「索引协调选择」）
+                let mut frame_roots =
+                    build_enhanced_tree(&frame_doc.capture, &frame_doc.document, &frame_doc.ax);
 
-            // 子帧自身的跨域子帧递归（其 getFrameTree 失败则跳过嵌套递归，
-            // 已采内容保留——best-effort 语义）
-            match tokio::time::timeout(
-                FRAME_COLLECT_TIMEOUT,
-                self.session.send_page::<GetFrameTreeResult>(
-                    &frame_session.session,
-                    PAGE_GET_FRAME_TREE,
-                    json!({}),
-                ),
-            )
-            .await
-            {
-                Ok(Ok(sub_tree)) => {
-                    self.recurse_frames(
+                // 子帧自身的跨域子帧递归（其 getFrameTree 失败则跳过嵌套递归，
+                // 已采内容保留——best-effort 语义）
+                match tokio::time::timeout(
+                    FRAME_COLLECT_TIMEOUT,
+                    self.session.send_page::<GetFrameTreeResult>(
                         &frame_session.session,
-                        &mut frame_roots,
-                        &sub_tree.frame_tree,
-                        &frame_doc.pierced,
-                        visited,
-                        depth + 1,
-                        budget,
-                        stats,
-                    )
-                    .await;
+                        PAGE_GET_FRAME_TREE,
+                        json!({}),
+                    ),
+                )
+                .await
+                {
+                    Ok(Ok(sub_tree)) => {
+                        self.recurse_frames(
+                            &frame_session.session,
+                            &mut frame_roots,
+                            &sub_tree.frame_tree,
+                            &frame_doc.pierced,
+                            visited,
+                            depth + 1,
+                            budget,
+                            stats,
+                        )
+                        .await;
+                    }
+                    Ok(Err(e)) => tracing::warn!("子帧帧树采集失败（{frame_id}）：{e}"),
+                    Err(_) => tracing::warn!("子帧帧树采集超时（{frame_id}）"),
                 }
-                Ok(Err(e)) => tracing::warn!("子帧帧树采集失败（{frame_id}）：{e}"),
-                Err(_) => tracing::warn!("子帧帧树采集超时（{frame_id}）"),
+
+                // 合并：子文档根树追加进父树根森林
+                roots.append(&mut frame_roots);
+                stats.frames_collected += 1;
+
+                // 会话生命周期：采集后立即 detach（见模块注释「会话生命周期选择」）
+                self.detach_frame_session(&frame_session.session, stats)
+                    .await;
             }
-
-            // 合并：子文档根树追加进父树根森林
-            roots.append(&mut frame_roots);
-            stats.frames_collected += 1;
-
-            // 会话生命周期：采集后立即 detach（见模块注释「会话生命周期选择」）
-            self.detach_frame_session(&frame_session.session, stats).await;
-        }
         })
     }
 
@@ -1174,7 +1180,9 @@ impl CdpCollector {
                 None
             }
         };
-        let owner_id = by_frame.await.or_else(|| find_owner_by_src(roots, frame_url))?;
+        let owner_id = by_frame
+            .await
+            .or_else(|| find_owner_by_src(roots, frame_url))?;
         let bounds = find_node_bounds(roots, owner_id);
         mark_owner_iframe(roots, owner_id);
         Some((owner_id, bounds))
@@ -1191,7 +1199,9 @@ impl CdpCollector {
         match self.session.attach_frame(frame_id).await {
             Ok(r) => Ok(r),
             Err(e) => {
-                tracing::warn!("iframe attach 主路径失败（{frame_id}：{e}），尝试 getTargets URL 兜底");
+                tracing::warn!(
+                    "iframe attach 主路径失败（{frame_id}：{e}），尝试 getTargets URL 兜底"
+                );
                 self.attach_by_target_url(frame_url).await
             }
         }
@@ -1210,7 +1220,11 @@ impl CdpCollector {
             .find(|t| t.target_type == "iframe" && t.url == url)
             .map(|t| t.target_id.clone());
         match hit {
-            Some(target_id) => self.session.attach_frame(&target_id).await.map_err(|e| e.to_string()),
+            Some(target_id) => self
+                .session
+                .attach_frame(&target_id)
+                .await
+                .map_err(|e| e.to_string()),
             None => Err("getTargets 未找到匹配 URL 的 iframe 目标".to_string()),
         }
     }
@@ -1233,9 +1247,9 @@ impl CdpCollector {
                 DOM_GET_DOCUMENT,
                 json!({ "depth": GET_DOCUMENT_DEPTH, "pierce": true }),
             );
-            let ax = self
-                .session
-                .send_page::<Value>(session, ACCESSIBILITY_GET_FULL_AX_TREE, json!({}));
+            let ax =
+                self.session
+                    .send_page::<Value>(session, ACCESSIBILITY_GET_FULL_AX_TREE, json!({}));
             (s.await, d.await, ax.await)
         };
         let (s, d, ax) = tokio::time::timeout(FRAME_COLLECT_TIMEOUT, fut)
@@ -1252,7 +1266,11 @@ impl CdpCollector {
                 "子帧 DOM.getDocument 结构通道载荷超预算（快照 {snapshot_bytes}B + 结构 {dom_bytes}B），降级仅用 DOMSnapshot"
             );
         }
-        let payload = if dom_degraded { snapshot_bytes } else { snapshot_bytes + dom_bytes };
+        let payload = if dom_degraded {
+            snapshot_bytes
+        } else {
+            snapshot_bytes + dom_bytes
+        };
         let capture: CaptureSnapshotResult = serde_json::from_value(snapshot_value)
             .map_err(|e| format!("子帧 DOMSnapshot 响应解析失败：{e}"))?;
         let document: GetDocumentResult = if dom_degraded {
@@ -1530,13 +1548,13 @@ mod tests {
     use super::*;
     use crate::cdp::mock::{MockReply, MockServer};
     use crate::cdp::sender::{
-        ApprovalDenied, BrowserAuditEvent, CancellationToken, CdpCommandView,
-        CommandPolicyHooks, IdKey,
+        ApprovalDenied, BrowserAuditEvent, CancellationToken, CdpCommandView, CommandPolicyHooks,
+        IdKey,
     };
     use crate::cdp::transport::{CdpEndpoint, ExpectedBrowser};
-    use crate::snapshot::serialize::{SerializeOptions, build_and_serialize};
+    use crate::snapshot::serialize::{build_and_serialize, SerializeOptions};
     use crate::{BrowserSession, CdpError};
-    use std::sync::{Arc, atomic::AtomicBool};
+    use std::sync::{atomic::AtomicBool, Arc};
 
     /// 放行钩子（mock CDP 集成测试用；对齐 lib.rs 测试面）。
     struct AllowHooks {
@@ -1574,29 +1592,47 @@ mod tests {
     fn restore_reply_map() -> Vec<(&'static str, MockReply)> {
         use crate::cdp::domains::names::*;
         vec![
-            (BROWSER_GET_VERSION, MockReply::Ok(json!({
-                "protocolVersion": "1.3",
-                "product": "Chrome/131.0.6778.204",
-                "revision": "@abc",
-                "userAgent": "ua",
-                "jsVersion": "13.1.71"
-            }))),
+            (
+                BROWSER_GET_VERSION,
+                MockReply::Ok(json!({
+                    "protocolVersion": "1.3",
+                    "product": "Chrome/131.0.6778.204",
+                    "revision": "@abc",
+                    "userAgent": "ua",
+                    "jsVersion": "13.1.71"
+                })),
+            ),
             (TARGET_SET_DISCOVER_TARGETS, MockReply::Ok(json!({}))),
-            (TARGET_GET_TARGETS, MockReply::Ok(json!({
-                "targetInfos": [
-                    { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
-                ]
-            }))),
-            (TARGET_ATTACH_TO_TARGET, MockReply::Ok(json!({ "sessionId": "FRAME_S1" }))),
-            (TARGET_DETACH_FROM_TARGET, MockReply::Ok(json!({ "success": true }))),
+            (
+                TARGET_GET_TARGETS,
+                MockReply::Ok(json!({
+                    "targetInfos": [
+                        { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
+                    ]
+                })),
+            ),
+            (
+                TARGET_ATTACH_TO_TARGET,
+                MockReply::Ok(json!({ "sessionId": "FRAME_S1" })),
+            ),
+            (
+                TARGET_DETACH_FROM_TARGET,
+                MockReply::Ok(json!({ "success": true })),
+            ),
             (PAGE_ENABLE, MockReply::Ok(json!({}))),
             (PAGE_SET_LIFECYCLE_EVENTS_ENABLED, MockReply::Ok(json!({}))),
             (RUNTIME_ENABLE, MockReply::Ok(json!({}))),
             (DOM_ENABLE, MockReply::Ok(json!({}))),
             (NETWORK_ENABLE, MockReply::Ok(json!({}))),
             (NETWORK_SET_BLOCKED_URLS, MockReply::Ok(json!({}))),
-            (RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, MockReply::Ok(json!({}))),
-            (RUNTIME_EVALUATE, MockReply::Ok(json!({ "result": { "value": 1 } }))),
+            (
+                RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER,
+                MockReply::Ok(json!({})),
+            ),
+            (
+                RUNTIME_EVALUATE,
+                MockReply::Ok(json!({ "result": { "value": 1 } })),
+            ),
             (PAGE_SET_WINDOW_OPEN_HANDLER, MockReply::Ok(json!({}))),
             (PAGE_HANDLE_JAVASCRIPT_DIALOG, MockReply::Ok(json!({}))),
         ]
@@ -1683,10 +1719,7 @@ mod tests {
     }
 
     /// 两态之一的主采集驱动：等待主 captureSnapshot 并应答（递归开启时再答一帧）。
-    async fn drive_capture_snapshot(
-        mock: &mut MockServer,
-        reply_value: Value,
-    ) {
+    async fn drive_capture_snapshot(mock: &mut MockServer, reply_value: Value) {
         let cmd = tokio::time::timeout(
             std::time::Duration::from_secs(5),
             mock.expect_command("DOMSnapshot.captureSnapshot"),
@@ -1737,9 +1770,8 @@ mod tests {
     /// 遍历与可交互计数（后序/前序语义）。
     #[test]
     fn enhanced_node_walk_counts() {
-        let root = EnhancedNode::element("div", 1).push(
-            EnhancedNode::element("div", 2).push(EnhancedNode::element("button", 3)),
-        );
+        let root = EnhancedNode::element("div", 1)
+            .push(EnhancedNode::element("div", 2).push(EnhancedNode::element("button", 3)));
         let mut visited = Vec::new();
         root.walk(&mut |n| visited.push(n.backend_node_id));
         assert_eq!(visited, vec![1, 2, 3]);
@@ -1752,21 +1784,62 @@ mod tests {
     /// 布局：零尺寸/图标尺寸/大 iframe/包含比例。
     #[test]
     fn bounds_helpers() {
-        let zero = Bounds { x: 0.0, y: 0.0, width: 0.0, height: 10.0 };
+        let zero = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 10.0,
+        };
         assert!(zero.is_zero());
-        let icon = Bounds { x: 0.0, y: 0.0, width: 20.0, height: 20.0 };
+        let icon = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        };
         assert!(icon.is_icon_size());
         assert!(!icon.is_big_iframe());
-        let big = Bounds { x: 0.0, y: 0.0, width: 300.0, height: 200.0 };
+        let big = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 300.0,
+            height: 200.0,
+        };
         assert!(big.is_big_iframe());
 
-        let outer = Bounds { x: 0.0, y: 0.0, width: 100.0, height: 100.0 };
-        let inner = Bounds { x: 10.0, y: 10.0, width: 20.0, height: 20.0 };
-        assert!((outer.containment(&inner) - 1.0).abs() < 1e-9, "完全包含应 100%");
-        let outside = Bounds { x: 200.0, y: 0.0, width: 20.0, height: 20.0 };
+        let outer = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        };
+        let inner = Bounds {
+            x: 10.0,
+            y: 10.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        assert!(
+            (outer.containment(&inner) - 1.0).abs() < 1e-9,
+            "完全包含应 100%"
+        );
+        let outside = Bounds {
+            x: 200.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        };
         assert_eq!(outer.containment(&outside), 0.0);
-        let half = Bounds { x: 90.0, y: 10.0, width: 20.0, height: 20.0 };
-        assert!((outer.containment(&half) - 0.5).abs() < 1e-9, "半包含应 50%");
+        let half = Bounds {
+            x: 90.0,
+            y: 10.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        assert!(
+            (outer.containment(&half) - 0.5).abs() < 1e-9,
+            "半包含应 50%"
+        );
     }
 
     /// 样式：隐藏/可滚动候选/背景不透明。
@@ -2004,8 +2077,8 @@ mod tests {
                 "contentHeight": 624
             }]
         });
-        let capture: CaptureSnapshotResult = serde_json::from_value(raw)
-            .expect("Chrome 151 真实形态解析失败（协议漂移回归）");
+        let capture: CaptureSnapshotResult =
+            serde_json::from_value(raw).expect("Chrome 151 真实形态解析失败（协议漂移回归）");
         let doc = &capture.documents[0];
         // documentURL/title 为字符串池下标 → 池解析
         assert_eq!(
@@ -2054,40 +2127,112 @@ mod tests {
         let budget = FrameBudget::new(64, HARD_RAW_PAYLOAD_BYTES);
 
         // 同源 pierce 已覆盖 → 排除（不占统计）
-        assert!(!frame_candidate_eligible("MAIN", &pierced, &mut visited, 0, &budget, &mut stats));
+        assert!(!frame_candidate_eligible(
+            "MAIN",
+            &pierced,
+            &mut visited,
+            0,
+            &budget,
+            &mut stats
+        ));
         // 合格帧 → 通过并入 visited
-        assert!(frame_candidate_eligible("F1", &pierced, &mut visited, 0, &budget, &mut stats));
+        assert!(frame_candidate_eligible(
+            "F1",
+            &pierced,
+            &mut visited,
+            0,
+            &budget,
+            &mut stats
+        ));
         // 去重：已访问帧 → 排除（防环/重复子树防御）
-        assert!(!frame_candidate_eligible("F1", &pierced, &mut visited, 0, &budget, &mut stats));
+        assert!(!frame_candidate_eligible(
+            "F1",
+            &pierced,
+            &mut visited,
+            0,
+            &budget,
+            &mut stats
+        ));
         assert_eq!(stats.skipped_budget, 0, "pierce/去重不占预算统计");
 
         // 深度预算：父深度 4 → 子帧深度 5 > max_iframe_depth=4 → 截断
-        assert!(!frame_candidate_eligible("D5", &pierced, &mut visited, 4, &budget, &mut stats));
+        assert!(!frame_candidate_eligible(
+            "D5",
+            &pierced,
+            &mut visited,
+            4,
+            &budget,
+            &mut stats
+        ));
         assert_eq!(stats.skipped_budget, 1);
         // 父深度 3 → 子帧深度 4 = 上限内
-        assert!(frame_candidate_eligible("D4", &pierced, &mut visited, 3, &budget, &mut stats));
+        assert!(frame_candidate_eligible(
+            "D4",
+            &pierced,
+            &mut visited,
+            3,
+            &budget,
+            &mut stats
+        ));
 
         // 帧数预算耗尽（max_iframes=64 共用）→ 截断
         let exhausted = FrameBudget::new(0, HARD_RAW_PAYLOAD_BYTES);
-        assert!(!frame_candidate_eligible("B0", &pierced, &mut visited, 0, &exhausted, &mut stats));
+        assert!(!frame_candidate_eligible(
+            "B0",
+            &pierced,
+            &mut visited,
+            0,
+            &exhausted,
+            &mut stats
+        ));
         // 载荷预算耗尽（512KB 硬护栏，T-2/46）→ 截断
         let no_payload = FrameBudget::new(64, 0);
-        assert!(!frame_candidate_eligible("P0", &pierced, &mut visited, 0, &no_payload, &mut stats));
+        assert!(!frame_candidate_eligible(
+            "P0",
+            &pierced,
+            &mut visited,
+            0,
+            &no_payload,
+            &mut stats
+        ));
         assert_eq!(stats.skipped_budget, 3);
     }
 
     /// 尺寸门限（§1.5：≥ 10px×10px 才进入；无法确认尺寸不进入——保守）。
     #[test]
     fn iframe_size_gate() {
-        let min = Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 };
+        let min = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+        };
         assert!(iframe_size_qualified(Some(min)), "恰好 10px 应通过");
-        let big = Bounds { x: 0.0, y: 0.0, width: 320.0, height: 240.0 };
+        let big = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 320.0,
+            height: 240.0,
+        };
         assert!(iframe_size_qualified(Some(big)));
-        let narrow = Bounds { x: 0.0, y: 0.0, width: 9.0, height: 300.0 };
+        let narrow = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 9.0,
+            height: 300.0,
+        };
         assert!(!iframe_size_qualified(Some(narrow)), "宽 < 10px 不进入");
-        let thin = Bounds { x: 0.0, y: 0.0, width: 300.0, height: 5.0 };
+        let thin = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 300.0,
+            height: 5.0,
+        };
         assert!(!iframe_size_qualified(Some(thin)), "高 < 10px 不进入");
-        assert!(!iframe_size_qualified(None), "无法确认尺寸 → 不进入（保守占位）");
+        assert!(
+            !iframe_size_qualified(None),
+            "无法确认尺寸 → 不进入（保守占位）"
+        );
     }
 
     /// owner 定位辅助：src URL 兜底匹配 / bounds 查找 / `|IFRAME|` 标记。
@@ -2150,13 +2295,20 @@ mod tests {
         );
         // |IFRAME| 标记行（src 属性经白名单序列化）
         assert!(
-            out.text.contains("|IFRAME|<iframe src=https://b.example/embed"),
+            out.text
+                .contains("|IFRAME|<iframe src=https://b.example/embed"),
             "iframe 占位/标记行应呈现：{}",
             out.text
         );
         // 两个按钮均入树且索引互不相同（碰撞 → 合成索引）
-        assert!(out.text.contains("<button>主按钮</button>"), "主树按钮应入树");
-        assert!(out.text.contains("<button>帧按钮</button>"), "子帧按钮应入树（独立根树）");
+        assert!(
+            out.text.contains("<button>主按钮</button>"),
+            "主树按钮应入树"
+        );
+        assert!(
+            out.text.contains("<button>帧按钮</button>"),
+            "子帧按钮应入树（独立根树）"
+        );
         let mut indices: Vec<u32> = Vec::new();
         for line in out.text.lines() {
             if let Some(rest) = line.split('[').nth(1) {
@@ -2169,8 +2321,15 @@ mod tests {
         }
         assert_eq!(indices.len(), 2, "两个按钮共 2 个索引：{indices:?}");
         let unique: HashSet<u32> = indices.iter().copied().collect();
-        assert_eq!(unique.len(), indices.len(), "跨会话 id 复用不得产生索引碰撞：{indices:?}");
-        assert!(unique.contains(&202), "默认索引 = backendNodeId：{indices:?}");
+        assert_eq!(
+            unique.len(),
+            indices.len(),
+            "跨会话 id 复用不得产生索引碰撞：{indices:?}"
+        );
+        assert!(
+            unique.contains(&202),
+            "默认索引 = backendNodeId：{indices:?}"
+        );
         // 合成索引：从简化树内全部 backendNodeId 的 max+1 起——文本节点被元素
         // 行吸收（inline_text）不进简化树，树内 id 集 = {1,101,202,1001} →
         // max=1001 → 子帧按钮（跨会话复用 202）合成索引 = 1002
@@ -2284,7 +2443,8 @@ mod tests {
             &SerializeOptions::new(&budgets, "S1", &HashSet::new()),
         );
         assert!(
-            out.text.contains("|IFRAME|<iframe src=https://b.example/embed"),
+            out.text
+                .contains("|IFRAME|<iframe src=https://b.example/embed"),
             "序列化应呈现 iframe 占位/标记：{}",
             out.text
         );
@@ -2360,7 +2520,10 @@ mod tests {
         // 恒打 |IFRAME| 占位标记（13 §1.5/§3.2——占位是一期语义，与递归开关
         // 无关；关闭态不打标记的旧断言与文档冲突，2026-08-12 修正）
         assert_eq!(collected.roots.len(), 1, "关闭态仅主文档根树");
-        assert!(find_node_by_id(&collected.roots, 1001).is_none(), "子帧内容不得入树");
+        assert!(
+            find_node_by_id(&collected.roots, 1001).is_none(),
+            "子帧内容不得入树"
+        );
         let owner = find_node_by_id(&collected.roots, 101).expect("iframe 元素仍在树中");
         assert_eq!(
             owner.frame_marker,
@@ -2373,7 +2536,8 @@ mod tests {
             &SerializeOptions::new(&BudgetConfig::active(), "S1", &HashSet::new()),
         );
         assert!(
-            out.text.contains("|IFRAME|<iframe src=https://b.example/embed"),
+            out.text
+                .contains("|IFRAME|<iframe src=https://b.example/embed"),
             "关闭态也应呈现 |IFRAME| 占位：{}",
             out.text
         );
@@ -2459,7 +2623,10 @@ mod tests {
             "结构通道深度应受限而非全深度：{cmd}"
         );
         assert_eq!(cmd["params"]["pierce"], true, "pierce 语义保持：{cmd}");
-        mock.reply(cmd["id"].as_u64().expect("命令 id"), json!({ "root": { "nodeId": 1 } }));
+        mock.reply(
+            cmd["id"].as_u64().expect("命令 id"),
+            json!({ "root": { "nodeId": 1 } }),
+        );
         let collected = collect_task
             .await
             .expect("采集任务应完成")
@@ -2606,7 +2773,10 @@ mod tests {
             cmd["params"]["includePaintOrder"], false,
             "默认最小面不应请求 paintOrders：{cmd}"
         );
-        mock.reply(cmd["id"].as_u64().expect("命令 id 缺失"), main_capture_fixture());
+        mock.reply(
+            cmd["id"].as_u64().expect("命令 id 缺失"),
+            main_capture_fixture(),
+        );
         let collected = collect_task
             .await
             .expect("采集任务应完成")
@@ -2649,7 +2819,10 @@ mod tests {
             cmd["params"]["includePaintOrder"], true,
             "完整载荷面应请求 paintOrders：{cmd}"
         );
-        mock.reply(cmd["id"].as_u64().expect("命令 id 缺失"), main_capture_fixture());
+        mock.reply(
+            cmd["id"].as_u64().expect("命令 id 缺失"),
+            main_capture_fixture(),
+        );
         let collected = collect_task
             .await
             .expect("采集任务应完成")

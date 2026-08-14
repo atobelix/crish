@@ -8,11 +8,12 @@
 //! transport → parse → consume 全链路，断言产出 Message（文本 + 思考块）
 //! + 每流恰好一个 Stop + usage 逐字段透传（cached/write/reasoning）。
 //!
-//! 与既有 `parse_anthropic.rs` 的差异：本文件专注于「cached/write/reasoning
-//! 拆分是否正确」的验收口径——按 R1 小结 C5 契约登记，usage 归一化形状
-//! （`input = prompt - cached - write`、reasoning 从 completion 拆分）由
-//! R3 T3.4 承担实现，本单元以**现状逐字段透传**为准断言，并把未拆分项
-//! （anthropic reasoning）记录为 R3 承接。
+//! 与既有 `parse_anthropic.rs` 的差异：本文件专注「cached/write/reasoning
+//! 拆分是否正确」的验收口径。T3.4（G1-d）落地后：`reasoning_tokens` 由
+//! anthropic_map 解析（兼容网关经 `output_tokens_details.reasoning_tokens` 上报时
+//! 非 None），本单元 mock 显式上报 reasoning 并断言其透传；
+//! 归一化形状（`input = prompt - cached - write`）落在 usage 聚合层
+//! （[ProviderUsage::cache_breakdown]，C9 口径），不在本 wire 层改写 prompt。
 
 mod common;
 
@@ -112,11 +113,16 @@ async fn anthropic_full_stream_usage_pass_through() {
                 // 第 8 帧：content_block_stop（text）
                 MockFrame::data(json!({ "type": "content_block_stop", "index": 1 }).to_string()),
                 // 第 9 帧：message_delta（stop_reason + usage 分片补全 output）
+                // T3.4（G1-d）：兼容网关经 output_tokens_details.reasoning_tokens
+                // 显式上报思考计数（Anthropic 官方 wire 不单列，缺省 None）
                 MockFrame::data(
                     json!({
                         "type": "message_delta",
                         "delta": { "stop_reason": "end_turn" },
-                        "usage": { "output_tokens": 12 },
+                        "usage": {
+                            "output_tokens": 12,
+                            "output_tokens_details": { "reasoning_tokens": 4 },
+                        },
                     })
                     .to_string(),
                 ),
@@ -157,9 +163,11 @@ async fn anthropic_full_stream_usage_pass_through() {
     assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
     assert_eq!(result.metadata["providerFinishReason"], "stop");
 
-    // ── usage 现状逐字段透传断言（R1 C5 口径；归一拆分由 R3 T3.4 实现）──
+    // ── usage 透传断言（T3.4 G1-d：prompt 保持原始 input，cached/write 独立单列，
+    //    reasoning 从 completion 侧拆分解析；归一 `input=prompt-cached-write` 由
+    //    ProviderUsage::cache_breakdown 在聚合层派生，不在本 wire 层改写 prompt）──
     let usage = &result.metadata["usage"];
-    // prompt = input_tokens（现状不透传 cached/write 到 prompt ——缺口 R3）
+    // prompt = input_tokens（Included 归一在聚合层派生，此处保留原始值）
     assert_eq!(usage["promptTokens"], 50);
     assert_eq!(usage["completionTokens"], 12);
     // total 由合并后 prompt+completion 重算（consume 透传 ProviderUsage.total）
@@ -168,12 +176,11 @@ async fn anthropic_full_stream_usage_pass_through() {
     assert_eq!(usage["cacheReadTokens"], 8);
     // write（cache_creation_input_tokens）透传
     assert_eq!(usage["cacheWriteTokens"], 4);
-    // ⚠ reasoning：anthropic 解析器当前不解析思考 token（anthropic_map.rs
-    // parse_anthropic_usage 恒置 reasoning_tokens: None）——记录为 R3 T3.4 承接。
+    // T3.4（G1-d）：reasoning 从 completion 侧拆分解析（output_tokens_details.
+    // reasoning_tokens），不再恒 None；completion 保留总输出（含思考）
     assert_eq!(
-        usage.get("reasoningTokens"),
-        None,
-        "anthropic 现状不透传 reasoningTokens（R3 T3.4 归一实现前）"
+        usage["reasoningTokens"], 4,
+        "anthropic 兼容网关上报 reasoning 时应透传（T3.4 G1-d）"
     );
 }
 

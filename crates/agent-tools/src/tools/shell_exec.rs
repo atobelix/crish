@@ -20,8 +20,8 @@ use tokio::time::Duration;
 
 use super::shell_invoke::{build_shell_invocation, decode_console_bytes, ShellMode};
 use super::shell_output::{
-    build_sync_result, build_timeout_result, stream_until_deadline, epoch_millis_now, StreamEnd,
-    OutputAccumulator,
+    build_sync_result, build_timeout_result, epoch_millis_now, stream_until_deadline,
+    OutputAccumulator, StreamEnd,
 };
 use super::PreparedCommand;
 
@@ -46,8 +46,8 @@ pub(crate) async fn run_command_maybe_background(
     log_root: Option<PathBuf>,
     session_id: &str,
 ) -> Result<serde_json::Value, ToolError> {
-    let (program, args, shell_label) =
-        build_shell_invocation(command).map_err(|e| ToolError::execution_failed("shell_command", e))?;
+    let (program, args, shell_label) = build_shell_invocation(command)
+        .map_err(|e| ToolError::execution_failed("shell_command", e))?;
 
     let mut child_cmd = TokioCommand::new(&program);
     child_cmd
@@ -72,9 +72,12 @@ pub(crate) async fn run_command_maybe_background(
     child_cmd.env("PYTHONIOENCODING", "utf-8");
     child_cmd.env("PAGER", "cat");
 
-    let mut child = child_cmd
-        .spawn()
-        .map_err(|e| ToolError::execution_failed("shell_command", format!("failed to spawn {shell_label}: {e}")))?;
+    let mut child = child_cmd.spawn().map_err(|e| {
+        ToolError::execution_failed(
+            "shell_command",
+            format!("failed to spawn {shell_label}: {e}"),
+        )
+    })?;
     let child_pid = child.id();
     let started = std::time::Instant::now();
 
@@ -124,7 +127,14 @@ pub(crate) async fn run_command_maybe_background(
     };
     let deadline = tokio::time::Instant::now() + Duration::from_millis(window_ms);
 
-    let streamed = stream_until_deadline(&mut out_reader, &mut err_reader, &mut acc_out, &mut acc_err, deadline).await;
+    let streamed = stream_until_deadline(
+        &mut out_reader,
+        &mut err_reader,
+        &mut acc_out,
+        &mut acc_err,
+        deadline,
+    )
+    .await;
     let duration_ms = started.elapsed().as_millis() as u64;
 
     match streamed {
@@ -165,22 +175,22 @@ pub(crate) async fn run_command_maybe_background(
                         )
                         .await
                     }
-                // 未接线环境：保持现状（超时即杀 + 树杀），零回归——
-                // 管道已收回 child，reader 已被 into_inner 消费，无需再 drop
-                None => {
-                    if let Some(pid) = child_pid {
-                        let _ = terminate_process_tree(pid);
+                    // 未接线环境：保持现状（超时即杀 + 树杀），零回归——
+                    // 管道已收回 child，reader 已被 into_inner 消费，无需再 drop
+                    None => {
+                        if let Some(pid) = child_pid {
+                            let _ = terminate_process_tree(pid);
+                        }
+                        let _ = child.kill().await;
+                        let _ = child.wait().await;
+                        Ok(build_timeout_result(
+                            command,
+                            cwd,
+                            &shell_label,
+                            timeout_ms,
+                            duration_ms,
+                        ))
                     }
-                    let _ = child.kill().await;
-                    let _ = child.wait().await;
-                    Ok(build_timeout_result(
-                        command,
-                        cwd,
-                        &shell_label,
-                        timeout_ms,
-                        duration_ms,
-                    ))
-                }
                 }
             } else {
                 // 同步模式：树杀语义不变（先 drop 流式 reader 句柄再树杀，
@@ -216,11 +226,10 @@ pub(crate) async fn run_command_maybe_background(
 // 同一豁免面（函数级 allow + 理由）。
 #[allow(clippy::disallowed_methods)]
 pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand) -> ToolStream {
-    let (program, shell_args, shell_label) =
-        match build_shell_invocation(&c.command) {
-            Ok(v) => v,
-            Err(e) => return terminal_only(Err(ToolError::execution_failed("shell_command", e))),
-        };
+    let (program, shell_args, shell_label) = match build_shell_invocation(&c.command) {
+        Ok(v) => v,
+        Err(e) => return terminal_only(Err(ToolError::execution_failed("shell_command", e))),
+    };
 
     let mut child_cmd = TokioCommand::new(&program);
     child_cmd
@@ -534,12 +543,10 @@ async fn adopt_child(
         // R-AB3 接线 owner_run_id（审计与过滤用，不级联杀）
         owner_run_id: None,
     };
-    let result = manager.adopt(req).await.map_err(|e| {
-        ToolError::new(
-            e.code(),
-            format!("后台托管失败（adopt）：{e}"),
-        )
-    })?;
+    let result = manager
+        .adopt(req)
+        .await
+        .map_err(|e| ToolError::new(e.code(), format!("后台托管失败（adopt）：{e}")))?;
     let text = format!("命令已转后台（task {}），可随时查询状态", result.task_id);
     Ok(serde_json::json!({
         "mode": "background",

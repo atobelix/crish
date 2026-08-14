@@ -33,10 +33,7 @@ fn guard_depth_exceeded_rejected() {
     assert!(err.message().contains("所有子 Agent 由主 Agent 分配"));
     assert_eq!(
         err,
-        RecursionGuardRejection::NestingDenied {
-            current: 2,
-            max: 1
-        }
+        RecursionGuardRejection::NestingDenied { current: 2, max: 1 }
     );
 }
 
@@ -62,10 +59,7 @@ fn guard_depth_exceeded_semantics_preserved() {
     assert!(err.message().contains("减少递归层级"));
     assert_eq!(
         err,
-        RecursionGuardRejection::DepthExceeded {
-            current: 3,
-            max: 2
-        }
+        RecursionGuardRejection::DepthExceeded { current: 3, max: 2 }
     );
     // 边界深度（2 = max）通过
     assert!(check_recursion_guard(
@@ -110,10 +104,7 @@ fn guard_nesting_denied() {
     );
     assert_eq!(
         err,
-        RecursionGuardRejection::NestingDenied {
-            current: 2,
-            max: 1
-        }
+        RecursionGuardRejection::NestingDenied { current: 2, max: 1 }
     );
 }
 
@@ -174,8 +165,14 @@ fn default_guard_limits_terminal_values() {
     // 仅主 Agent 可派发）
     let guard = DEFAULT_RECURSION_GUARD;
     assert_eq!(guard.max_depth, 1, "maxDepth=1（仅主 Agent 可派发）");
-    assert_eq!(guard.max_siblings, 16, "maxSiblings=16（同父上限 = 全局上限）");
-    assert_eq!(guard.max_concurrent, 16, "maxConcurrent=16（用户裁决 12→16）");
+    assert_eq!(
+        guard.max_siblings, 16,
+        "maxSiblings=16（同父上限 = 全局上限）"
+    );
+    assert_eq!(
+        guard.max_concurrent, 16,
+        "maxConcurrent=16（用户裁决 12→16）"
+    );
 }
 
 #[test]
@@ -209,10 +206,7 @@ fn guard_within_limits_allowed() {
     };
     assert_eq!(
         check_recursion_guard(snapshot, config),
-        Err(RecursionGuardRejection::NestingDenied {
-            current: 2,
-            max: 1
-        }),
+        Err(RecursionGuardRejection::NestingDenied { current: 2, max: 1 }),
         "depth=2 必须拒绝（嵌套禁止优先于深度/兄弟/并发判定）"
     );
 }
@@ -257,10 +251,7 @@ fn ancestor_chain_without_cycle_allows() {
 #[tokio::test]
 async fn guard_rejection_maps_to_structured_tool_error() {
     let spawner = Arc::new(RecordingSpawner::rejecting(
-        RecursionGuardRejection::ConcurrentExceeded {
-            current: 7,
-            max: 6,
-        },
+        RecursionGuardRejection::ConcurrentExceeded { current: 7, max: 6 },
     ));
     let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
     let ctx = create_mock_tool_context();
@@ -280,10 +271,7 @@ async fn nesting_denied_maps_to_structured_tool_error() {
     // 原样映射为 ToolError——错误码 subagent.nesting_denied、文案带
     // 「所有子 Agent 由主 Agent 分配」指引
     let spawner = Arc::new(RecordingSpawner::rejecting_nesting(
-        RecursionGuardRejection::NestingDenied {
-            current: 2,
-            max: 1,
-        },
+        RecursionGuardRejection::NestingDenied { current: 2, max: 1 },
     ));
     let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
     let ctx = create_mock_tool_context();
@@ -301,7 +289,8 @@ async fn nesting_denied_maps_to_structured_tool_error() {
         "文案必须带「所有子 Agent 由主 Agent 分配」指引"
     );
     assert!(
-        err.to_string().contains("请通过消息/上报向主 Agent 请求派发"),
+        err.to_string()
+            .contains("请通过消息/上报向主 Agent 请求派发"),
         "文案必须带上报指引"
     );
 }
@@ -319,4 +308,3 @@ async fn main_agent_spawn_regression_via_tool() {
     assert_eq!(out["status"], "running");
     assert_eq!(spawner.requests().len(), 1);
 }
-

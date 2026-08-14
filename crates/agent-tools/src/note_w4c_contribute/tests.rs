@@ -46,11 +46,17 @@ fn block_view_ok(id: &str, flavour: &str) -> ContributeRegistration {
 #[test]
 fn w4c_package_id_and_honest_not_closing_el07() {
     assert_eq!(W4C_PACKAGE_ID, "W4-C");
-    assert!(!W4C_PACKAGE_ID.ends_with("-S"), "W4-C 为 Strict 方向，非 Skeleton -S");
+    assert!(
+        !W4C_PACKAGE_ID.ends_with("-S"),
+        "W4-C 为 Strict 方向，非 Skeleton -S"
+    );
     assert!(W4C_NOT_CLOSING.iter().any(|s| s.contains("EL-07")));
     assert!(W4C_NOT_CLOSING.iter().any(|s| s.contains("A-EXT")));
     assert_eq!(REQUIRED_CONTRIBUTE_PERMISSION, "ui:contribute");
-    assert_eq!(CONTRIBUTE_FORBIDDEN_WRITE, "note.contribute_forbidden_write_handle");
+    assert_eq!(
+        CONTRIBUTE_FORBIDDEN_WRITE,
+        "note.contribute_forbidden_write_handle"
+    );
     // 禁写表与 W6-E-S / plugin-sdk 对齐方向
     assert!(FORBIDDEN_WRITE_HANDLE_KEYS.contains(&"applyOp"));
     assert!(FORBIDDEN_WRITE_HANDLE_KEYS.contains(&"store"));
@@ -74,7 +80,10 @@ fn w4c_contribute_view_registry_register_and_list_projection_only() {
         .permissions
         .iter()
         .any(|p| p == REQUIRED_CONTRIBUTE_PERMISSION));
-    assert_eq!(list[0].fields.get("title").map(String::as_str), Some("Hello"));
+    assert_eq!(
+        list[0].fields.get("title").map(String::as_str),
+        Some("Hello")
+    );
 
     // 投影-only：序列化 JSON 不得含写句柄键
     let json = serde_json::to_value(&list[0]).expect("ser");
@@ -121,9 +130,7 @@ fn w4c_contribute_reject_write_handle_in_payload_json() {
     }));
     let err = reg.register(evil).expect_err("must reject nested sqlite");
     assert_eq!(err.code(), "forbidden_write_handle");
-    assert!(
-        err.message().contains("sqlite") || err.message().contains(CONTRIBUTE_FORBIDDEN_WRITE)
-    );
+    assert!(err.message().contains("sqlite") || err.message().contains(CONTRIBUTE_FORBIDDEN_WRITE));
     assert!(reg.is_empty());
 
     let mut evil2 = block_view_ok("evil-html", "paragraph");
@@ -145,7 +152,9 @@ fn w4c_contribute_requires_ui_contribute_permission() {
 
     let mut note_only = slash_ok("note-only");
     note_only.permissions = vec!["note:write".into()];
-    let err2 = reg.register(note_only).expect_err("note:write alone insufficient");
+    let err2 = reg
+        .register(note_only)
+        .expect_err("note:write alone insufficient");
     assert_eq!(err2.code(), "missing_permission");
     assert!(reg.is_empty());
 }
@@ -155,10 +164,7 @@ fn w4c_contribute_requires_ui_contribute_permission() {
 fn w4c_note_write_permission_does_not_grant_write_handle() {
     let reg = ContributeViewRegistry::new();
     let mut c = slash_ok("with-write-decl");
-    c.permissions = vec![
-        REQUIRED_CONTRIBUTE_PERMISSION.into(),
-        "note:write".into(),
-    ];
+    c.permissions = vec![REQUIRED_CONTRIBUTE_PERMISSION.into(), "note:write".into()];
     reg.register(c).expect("ui:contribute + note:write ok");
     let list = reg.list(None);
     assert_eq!(list.len(), 1);
@@ -191,8 +197,7 @@ async fn w4c_try_mutate_via_contribute_zero_persist() {
     let err = try_mutate_via_contribute(&reg, "ui-only", "doc-w4c", "should-never-land")
         .expect_err("View 轨禁止 mutate");
     assert!(
-        err.message().contains(CONTRIBUTE_MUTATE_DENIED)
-            || format!("{err:?}").contains("denied"),
+        err.message().contains(CONTRIBUTE_MUTATE_DENIED) || format!("{err:?}").contains("denied"),
         "err must name contribute_mutate_denied: {err:?}"
     );
 
@@ -385,8 +390,14 @@ async fn w4c_no_regress_block_move_memory_shape() {
 /// kind 解析与注册键稳定
 #[test]
 fn w4c_contribute_kind_parse_and_registration_key() {
-    assert_eq!(ContributeKind::parse("slash_item"), Some(ContributeKind::SlashItem));
-    assert_eq!(ContributeKind::parse("block_view"), Some(ContributeKind::BlockView));
+    assert_eq!(
+        ContributeKind::parse("slash_item"),
+        Some(ContributeKind::SlashItem)
+    );
+    assert_eq!(
+        ContributeKind::parse("block_view"),
+        Some(ContributeKind::BlockView)
+    );
     assert_eq!(ContributeKind::parse("nope"), None);
     assert_eq!(CONTRIBUTE_KINDS.len(), 4);
     let k = make_registration_key("@p/x", ContributeKind::Widget, "w1");

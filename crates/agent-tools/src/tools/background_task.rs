@@ -109,11 +109,7 @@ impl Tool for BackgroundTaskTool {
         &self.def
     }
 
-    async fn execute(
-        &self,
-        ctx: &ToolContext,
-        args: Value,
-    ) -> Result<Value, ToolError> {
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         // 先解析 action（入参校验独立于接线状态，保证错误分类稳定）
         let action = super::require_string(&args, "action")?;
         // 后台任务管理器未接线 → 结构化不可用错误（不 panic，与
@@ -291,10 +287,7 @@ mod tests {
             ))
         }
 
-        async fn list(
-            &self,
-            include_finished: bool,
-        ) -> Result<Vec<BackgroundTaskInfo>, ToolError> {
+        async fn list(&self, include_finished: bool) -> Result<Vec<BackgroundTaskInfo>, ToolError> {
             self.list_calls.lock().unwrap().push(include_finished);
             self.list_result.clone()
         }
@@ -323,10 +316,11 @@ mod tests {
             text: &str,
             append_newline: bool,
         ) -> Result<(), ToolError> {
-            self.send_input_calls
-                .lock()
-                .unwrap()
-                .push((task_id.to_string(), text.to_string(), append_newline));
+            self.send_input_calls.lock().unwrap().push((
+                task_id.to_string(),
+                text.to_string(),
+                append_newline,
+            ));
             self.send_input_result.clone()
         }
 
@@ -485,7 +479,11 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(manager.list_calls(), vec![true], "includeFinished=true 必须透传");
+        assert_eq!(
+            manager.list_calls(),
+            vec![true],
+            "includeFinished=true 必须透传"
+        );
         // 终态任务字段有值路径（§4.2 全字段形状）
         let second = &out["tasks"][1];
         assert_eq!(second["status"], "completed");
@@ -514,7 +512,10 @@ mod tests {
         let manager = recording_manager();
         let (tool, ctx) = tool_with_manager(Arc::clone(&manager) as Arc<dyn BackgroundTaskManager>);
         let out = tool
-            .execute(&ctx, serde_json::json!({ "action": "status", "taskId": "task-1" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "action": "status", "taskId": "task-1" }),
+            )
             .await
             .unwrap();
         assert_eq!(manager.status_calls(), vec!["task-1".to_string()]);
@@ -654,7 +655,10 @@ mod tests {
         let manager = recording_manager();
         let (tool, ctx) = tool_with_manager(Arc::clone(&manager) as Arc<dyn BackgroundTaskManager>);
         let out = tool
-            .execute(&ctx, serde_json::json!({ "action": "kill", "taskId": "task-1" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "action": "kill", "taskId": "task-1" }),
+            )
             .await
             .unwrap();
         assert_eq!(manager.kill_calls(), vec!["task-1".to_string()]);
@@ -680,7 +684,10 @@ mod tests {
         ));
         let (tool, ctx) = tool_with_manager(Arc::clone(&manager) as Arc<dyn BackgroundTaskManager>);
         let out = tool
-            .execute(&ctx, serde_json::json!({ "action": "kill", "taskId": "task-2" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "action": "kill", "taskId": "task-2" }),
+            )
             .await
             .unwrap();
         assert_eq!(out["alreadyExited"]["task_id"], "task-2");
@@ -699,7 +706,10 @@ mod tests {
         ));
         let (tool, ctx) = tool_with_manager(Arc::clone(&manager) as Arc<dyn BackgroundTaskManager>);
         let out = tool
-            .execute(&ctx, serde_json::json!({ "action": "kill", "taskId": "task-3" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "action": "kill", "taskId": "task-3" }),
+            )
             .await
             .unwrap();
         assert_eq!(out["failed"]["task_id"], "task-3");
@@ -751,14 +761,20 @@ mod tests {
         let (tool, ctx) = tool_with_manager(manager as Arc<dyn BackgroundTaskManager>);
         // status 透传 manager 的 not_found
         let err = tool
-            .execute(&ctx, serde_json::json!({ "action": "status", "taskId": "task-999" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "action": "status", "taskId": "task-999" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), codes::TOOL_NOT_FOUND);
         assert_eq!(err.to_string(), not_found.to_string(), "错误消息原样透传");
         // kill 透传 manager 的 not_found
         let err = tool
-            .execute(&ctx, serde_json::json!({ "action": "kill", "taskId": "task-999" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "action": "kill", "taskId": "task-999" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), codes::TOOL_NOT_FOUND);
@@ -800,10 +816,7 @@ mod tests {
     #[tokio::test]
     async fn action_required() {
         let (tool, ctx) = tool_with_manager(recording_manager() as Arc<dyn BackgroundTaskManager>);
-        let err = tool
-            .execute(&ctx, serde_json::json!({}))
-            .await
-            .unwrap_err();
+        let err = tool.execute(&ctx, serde_json::json!({})).await.unwrap_err();
         assert_eq!(err.code(), "tool.invalid_input");
         assert!(err.to_string().contains("action"));
     }
@@ -832,18 +845,27 @@ mod tests {
         let desc = &tool.definition().description;
         // 非 PTY 管道 stdin：仅适用于 [Y/n] 确认与逐行输入
         assert!(desc.contains("PTY"), "必须声明非 PTY 管道边界：{desc}");
-        assert!(desc.contains("[Y/n]"), "必须声明 [Y/n] 确认适用场景：{desc}");
+        assert!(
+            desc.contains("[Y/n]"),
+            "必须声明 [Y/n] 确认适用场景：{desc}"
+        );
         // 全屏 TUI（fzf / vi）引导用户用终端面板
         assert!(desc.contains("fzf"), "必须点名 fzf：{desc}");
         assert!(desc.contains("vi"), "必须点名 vi：{desc}");
         assert!(desc.contains("终端面板"), "必须引导用户用终端面板：{desc}");
         // timeoutMs 与 waitMsBeforeAsync 两个维度 + 无限运行语义
-        assert!(desc.contains("timeoutMs"), "必须声明 timeoutMs 维度：{desc}");
+        assert!(
+            desc.contains("timeoutMs"),
+            "必须声明 timeoutMs 维度：{desc}"
+        );
         assert!(
             desc.contains("waitMsBeforeAsync"),
             "必须声明 waitMsBeforeAsync 维度：{desc}"
         );
-        assert!(desc.contains("无限运行"), "必须声明转后台默认无限运行：{desc}");
+        assert!(
+            desc.contains("无限运行"),
+            "必须声明转后台默认无限运行：{desc}"
+        );
         // 终止路径：kill 与健康判定通知
         assert!(desc.contains("kill"), "必须声明 kill 终止路径：{desc}");
         assert!(desc.contains("健康判定"), "必须声明健康判定通知：{desc}");

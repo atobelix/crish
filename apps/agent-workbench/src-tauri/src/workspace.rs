@@ -105,17 +105,15 @@ impl WorkspaceRegistry {
 
     /// 注册授权根。Dialog 为唯一新授权入口；RecentList/DefaultAppRoot 仅复授权
     /// （路径必须在 recent 列表内或等于默认应用根），否则 `workspace_not_granted`。
-    pub(crate) fn register(
-        &self,
-        path: &Path,
-        source: RegisterSource,
-    ) -> Result<PathBuf, String> {
+    pub(crate) fn register(&self, path: &Path, source: RegisterSource) -> Result<PathBuf, String> {
         if path.as_os_str().is_empty() {
             return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path is empty"));
         }
         let path_str = path.to_string_lossy();
         if path_str.contains('\0') {
-            return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"));
+            return Err(format!(
+                "{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"
+            ));
         }
         // 根不可达（盘符移除/无法解析）→ 明确拒绝，绝不裸用传入根（T07.2 用例 13）
         let canonical = canonicalize_root(path).map_err(|e| {
@@ -128,9 +126,10 @@ impl WorkspaceRegistry {
             ));
         }
 
-        let mut inner = self.inner.lock().map_err(|e| {
-            format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}")
-        })?;
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
 
         match source {
             RegisterSource::Dialog => {
@@ -161,7 +160,9 @@ impl WorkspaceRegistry {
         }
 
         // 去重 + 置为活动根（最近授权者）
-        inner.roots.retain(|root| !paths_equal(&root.path, &canonical));
+        inner
+            .roots
+            .retain(|root| !paths_equal(&root.path, &canonical));
         inner.roots.push(WorkspaceRoot {
             path: canonical.clone(),
             source,
@@ -169,7 +170,11 @@ impl WorkspaceRegistry {
         inner.active = Some(inner.roots.len() - 1);
 
         // recent 记录追加（去重）并落盘（tmp + rename）
-        if !inner.recent.iter().any(|item| paths_equal(item, &canonical)) {
+        if !inner
+            .recent
+            .iter()
+            .any(|item| paths_equal(item, &canonical))
+        {
             inner.recent.push(canonical.clone());
         }
         persist_recent_list(&inner.config_dir, &inner.recent);
@@ -182,9 +187,15 @@ impl WorkspaceRegistry {
     /// - 绝对路径：先 canonicalize 再与全部已授权根前缀匹配（T07.2 用例 11/12）。
     ///
     /// 越界 → `ERR_OUTSIDE_WORKSPACE`；不可达 → 明确错误（不退化裸用）。
-    pub(crate) fn resolve_guard(&self, requested: &str) -> Result<WorkspaceFsGuard, FileCommandError> {
+    pub(crate) fn resolve_guard(
+        &self,
+        requested: &str,
+    ) -> Result<WorkspaceFsGuard, FileCommandError> {
         let inner = self.inner.lock().map_err(|e| {
-            FileCommandError::new(ERR_INTERNAL, format!("workspace registry lock poisoned: {e}"))
+            FileCommandError::new(
+                ERR_INTERNAL,
+                format!("workspace registry lock poisoned: {e}"),
+            )
         })?;
         if inner.roots.is_empty() {
             return Err(FileCommandError::new(
@@ -221,10 +232,7 @@ impl WorkspaceRegistry {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FileCommandError::new(ERR_NOT_FOUND, "Path does not exist.")
             } else {
-                FileCommandError::new(
-                    ERR_READ_FILE,
-                    format!("Failed to resolve path: {e}"),
-                )
+                FileCommandError::new(ERR_READ_FILE, format!("Failed to resolve path: {e}"))
             }
         })?;
         for root in &inner.roots {
@@ -390,9 +398,7 @@ pub(crate) fn workbench_open_workspace(
 // G11a 备注：登记先行面（command_manifest registered=false），PE-07 T07.2 接线在途。
 #[allow(dead_code)]
 #[tauri::command]
-pub(crate) fn workbench_list_workspaces(
-    app: tauri::AppHandle,
-) -> Result<Vec<String>, String> {
+pub(crate) fn workbench_list_workspaces(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
     Ok(reg
         .roots()
@@ -410,10 +416,10 @@ pub(crate) struct OpenWorkspaceResult {
     pub(crate) path: String,
 }
 
-    #[cfg(test)]
-    mod tests {
-        // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
-        #![allow(clippy::disallowed_methods)]
+#[cfg(test)]
+mod tests {
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
 
     use super::*;
     use std::fs;
@@ -555,11 +561,8 @@ pub(crate) struct OpenWorkspaceResult {
         let temp = TestDir::new();
         let config_dir = temp.path().join("config");
         fs::create_dir(&config_dir).expect("create config dir");
-        fs::write(
-            config_dir.join(RECENT_FILE_NAME),
-            "not-valid-json{{{{",
-        )
-        .expect("write corrupt recent");
+        fs::write(config_dir.join(RECENT_FILE_NAME), "not-valid-json{{{{")
+            .expect("write corrupt recent");
         let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init");
         // 损坏的 recent 不应使注册表初始化失败
         let inner = reg.inner.lock().expect("lock");
@@ -648,12 +651,18 @@ pub(crate) struct OpenWorkspaceResult {
         let guard = reg
             .resolve_guard("")
             .expect("empty path resolves to active root");
-        assert_eq!(guard.root(), &strip_verbatim_prefix(&root.canonicalize().expect("canon")));
+        assert_eq!(
+            guard.root(),
+            &strip_verbatim_prefix(&root.canonicalize().expect("canon"))
+        );
 
         let guard = reg
             .resolve_guard("nested")
             .expect("relative path resolves to active root");
-        assert_eq!(guard.root(), &strip_verbatim_prefix(&root.canonicalize().expect("canon")));
+        assert_eq!(
+            guard.root(),
+            &strip_verbatim_prefix(&root.canonicalize().expect("canon"))
+        );
     }
 
     /// 根内子目录绝对路径：前缀匹配授权。

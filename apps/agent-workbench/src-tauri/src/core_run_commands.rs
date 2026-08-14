@@ -46,4 +46,4 @@ mod tests;
 /// `crate::core_run_commands::{CONFIG_TEST_LOCK, isolate_config_store}`
 /// 引用；定义在旁挂测试文件，此处 re-export 保持既有路径不 break）
 #[cfg(test)]
-pub(crate) use tests::{CONFIG_TEST_LOCK, isolate_config_store};
+pub(crate) use tests::{isolate_config_store, CONFIG_TEST_LOCK};

@@ -69,7 +69,8 @@ pub struct BackgroundTaskRegistry {
     /// 30 方案 P3：任务事件消费器注入槽（EventBridgeSink 构造时读取
     /// 快照；顺序契约：先 set_task_event_consumer 后 set_event_bridge——
     /// 批 3 main.rs 装配轮按此序，30 文档 §5 改动点 3）
-    pub(crate) task_event_consumer: Mutex<Option<Arc<crate::task_event_consumer::TaskEventConsumer>>>,
+    pub(crate) task_event_consumer:
+        Mutex<Option<Arc<crate::task_event_consumer::TaskEventConsumer>>>,
 }
 
 impl std::fmt::Debug for BackgroundTaskRegistry {
@@ -129,8 +130,7 @@ impl OutputPreview {
     pub(crate) fn push_line(&mut self, line: String) {
         self.recent_bytes += line.len();
         self.recent_lines.push_back(line);
-        while self.recent_lines.len() > PREVIEW_MAX_LINES || self.recent_bytes > PREVIEW_MAX_BYTES
-        {
+        while self.recent_lines.len() > PREVIEW_MAX_LINES || self.recent_bytes > PREVIEW_MAX_BYTES {
             if let Some(popped) = self.recent_lines.pop_front() {
                 self.recent_bytes = self.recent_bytes.saturating_sub(popped.len());
             }
@@ -344,7 +344,10 @@ impl BackgroundTaskRegistry {
 
     /// 任务是否命中终态（归档/过滤判定用）。
     pub(crate) fn is_terminal(state: TaskState) -> bool {
-        matches!(state, TaskState::Completed | TaskState::Failed | TaskState::Killed)
+        matches!(
+            state,
+            TaskState::Completed | TaskState::Failed | TaskState::Killed
+        )
     }
 
     /// 任务不存在统一错误（NotFound 风格，命令面透传为 CoreError::NotFound）。
@@ -377,10 +380,7 @@ impl BackgroundTaskRegistry {
 
     /// 取任务句柄（不存在 → NotFound）。
     pub(crate) fn get_handle(&self, task_id: &str) -> Result<Arc<TaskHandle>, ToolError> {
-        let tasks = self
-            .tasks
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
+        let tasks = self.tasks.lock().unwrap_or_else(|p| p.into_inner());
         tasks
             .get(task_id)
             .cloned()
@@ -405,21 +405,15 @@ impl BackgroundTaskRegistry {
     /// 返回本轮归档条目数。终态条目即 writer 已收口（状态翻转发生在 writer 内、
     /// 全部落盘与 meta 收尾之后），故无需 await writer。
     #[allow(clippy::disallowed_methods)] // 归档清 .meta.json 属任务日志内部索引
-    // 清理（非用户文件，豁免裸删除；.log 永远保留）
+                                         // 清理（非用户文件，豁免裸删除；.log 永远保留）
     pub(crate) fn archive_expired(&self) -> usize {
         let now = now_millis() as u64;
         let retention_ms = self.retention.as_millis() as u64;
         let mut expired: Vec<String> = Vec::new();
         {
-            let tasks = self
-                .tasks
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
+            let tasks = self.tasks.lock().unwrap_or_else(|p| p.into_inner());
             for (task_id, handle) in tasks.iter() {
-                let info = handle
-                    .info
-                    .read()
-                    .unwrap_or_else(|p| p.into_inner());
+                let info = handle.info.read().unwrap_or_else(|p| p.into_inner());
                 if !Self::is_terminal(info.status) {
                     continue;
                 }
@@ -465,45 +459,29 @@ impl BackgroundTaskRegistry {
     ///
     /// 调用点：adopt 登记之后（async 上下文，可 await writer 收口）。
     #[allow(clippy::disallowed_methods)] // 淘汰清 .meta.json 属任务日志内部索引
-    // 清理（非用户文件，豁免裸删除；.log 永远保留）
+                                         // 清理（非用户文件，豁免裸删除；.log 永远保留）
     pub(crate) async fn evict_overflow(&self) {
         let mut overflow: Vec<(String, Arc<TaskHandle>)> = Vec::new();
         let max = self.max_tasks;
         {
-            let tasks = self
-                .tasks
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
+            let tasks = self.tasks.lock().unwrap_or_else(|p| p.into_inner());
             if tasks.len() <= max {
                 return;
             }
             // FIFO：started_at 最早者最旧；同值按 task_id 排序兜底
             let mut entries: Vec<(&String, &Arc<TaskHandle>)> = tasks.iter().collect();
             entries.sort_by(|a, b| {
-                let a_info = a
-                    .1
-                    .info
-                    .read()
-                    .unwrap_or_else(|p| p.into_inner());
-                let b_info = b
-                    .1
-                    .info
-                    .read()
-                    .unwrap_or_else(|p| p.into_inner());
-                (a_info.started_at_ms, a.0)
-                    .cmp(&(b_info.started_at_ms, b.0))
+                let a_info = a.1.info.read().unwrap_or_else(|p| p.into_inner());
+                let b_info = b.1.info.read().unwrap_or_else(|p| p.into_inner());
+                (a_info.started_at_ms, a.0).cmp(&(b_info.started_at_ms, b.0))
             });
             for (id, handle) in entries.into_iter().take(tasks.len() - max) {
                 overflow.push((id.clone(), Arc::clone(handle)));
             }
         }
         for (task_id, handle) in overflow {
-            let is_running = handle
-                .info
-                .read()
-                .unwrap_or_else(|p| p.into_inner())
-                .status
-                == TaskState::Running;
+            let is_running =
+                handle.info.read().unwrap_or_else(|p| p.into_inner()).status == TaskState::Running;
             if is_running {
                 // 先终止：take 子进程 → force 树杀 → await writer 收口（writer
                 // 的 child 槽为 None → 按 Killed 收尾）。kill 语义对齐 T-AB-11

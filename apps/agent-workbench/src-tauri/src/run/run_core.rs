@@ -432,8 +432,9 @@ impl CoreRunState {
         // 工厂每次解析读取引擎当前生效配置——config_profile_apply 热更新后
         // 下一次 run 立即生效。T-43 通道生产注入点（session.start /
         // 配置加载 = CoreRunState::new，与 SessionHistoryCache 同生命周期）。
-        let summarizer_factory =
-            Some(crate::engine::production_summarizer_factory(Arc::clone(&engine)));
+        let summarizer_factory = Some(crate::engine::production_summarizer_factory(Arc::clone(
+            &engine,
+        )));
         let pending_queue = engine.timer_steering_queue();
         // 30 方案 P3：任务事件消费器（与 pending_queue 同实例；bridge 为
         // 本状态持有实例的克隆——security-audit 直发不经 engine audit_sink，
@@ -473,31 +474,33 @@ impl CoreRunState {
         // 同步面，回调为 FnOnce 语义直接调用；失败仅告警不阻断——块表
         // 是索引面，原文仍在事件流可回放）
         let persist_store = Arc::clone(&store);
-        let summary_coordinators = Arc::new(session_loop::SessionSummaryCoordinatorRegistry::new(
-            Some(Arc::new(move |outcome: session_loop::SummaryDispatchOutcome| {
-                let outcome_state = match outcome.state.as_str() {
-                    "committed" => conex_db::BlockState::Committed,
-                    "retired" => conex_db::BlockState::Retired,
-                    _ => conex_db::BlockState::Awaiting,
-                };
-                if let Err(error) = orchestrator::blocks::update_compression_block_summary(
-                    persist_store.as_ref(),
-                    &outcome.session_id,
-                    &outcome.block_id,
-                    outcome_state,
-                    outcome.summary_json.as_deref(),
-                    outcome.attempts,
-                ) {
-                    tracing::warn!(
-                        target: "run",
-                        session_id = %outcome.session_id,
-                        block_id = %outcome.block_id,
-                        error = %error,
-                        "摘要任务完成回调落库失败（块表是索引面，原文在事件流可回放）"
-                    );
-                }
-            }) as Arc<dyn Fn(session_loop::SummaryDispatchOutcome) + Send + Sync>),
-        ));
+        let summary_coordinators =
+            Arc::new(session_loop::SessionSummaryCoordinatorRegistry::new(Some(
+                Arc::new(move |outcome: session_loop::SummaryDispatchOutcome| {
+                    let outcome_state = match outcome.state.as_str() {
+                        "committed" => conex_db::BlockState::Committed,
+                        "retired" => conex_db::BlockState::Retired,
+                        _ => conex_db::BlockState::Awaiting,
+                    };
+                    if let Err(error) = orchestrator::blocks::update_compression_block_summary(
+                        persist_store.as_ref(),
+                        &outcome.session_id,
+                        &outcome.block_id,
+                        outcome_state,
+                        outcome.summary_json.as_deref(),
+                        outcome.attempts,
+                    ) {
+                        tracing::warn!(
+                            target: "run",
+                            session_id = %outcome.session_id,
+                            block_id = %outcome.block_id,
+                            error = %error,
+                            "摘要任务完成回调落库失败（块表是索引面，原文在事件流可回放）"
+                        );
+                    }
+                })
+                    as Arc<dyn Fn(session_loop::SummaryDispatchOutcome) + Send + Sync>,
+            )));
         Self {
             store: Arc::clone(&store),
             run_manager: RunManager::new(store),
@@ -706,7 +709,10 @@ impl CoreRunState {
     ///   侧（轮次 1）已删 AgentMessage 面 L1 改 stub，运行时双态切换需
     ///   引擎支持；V1 仅读取面（[session_loop::summary_l1_placeholder]）
     ///   文档化、不改变行为，预留给 V2。
-    pub(crate) fn summary_dispatch_config(&self, session_id: &str) -> Option<SummaryDispatchConfig> {
+    pub(crate) fn summary_dispatch_config(
+        &self,
+        session_id: &str,
+    ) -> Option<SummaryDispatchConfig> {
         let db = self.local_db()?;
         // 仅当任一配置键存在时构造（无键 = 生产缺省 None，行为不变）
         let has_key = [
@@ -714,20 +720,13 @@ impl CoreRunState {
             session_loop::META_KEY_SUMMARY_WALL_MS,
         ]
         .iter()
-        .any(|key| {
-            db.get_session_meta(key)
-                .ok()
-                .flatten()
-                .is_some()
-        });
+        .any(|key| db.get_session_meta(key).ok().flatten().is_some());
         if !has_key {
             return None;
         }
         // L1 回退开关读取（V1 启动级：不改变行为，仅登记读取；引擎动态
         // 双态支持见 V2 挂账）
-        if session_loop::summary_l1_placeholder(|key| {
-            db.get_session_meta(key).ok().flatten()
-        }) {
+        if session_loop::summary_l1_placeholder(|key| db.get_session_meta(key).ok().flatten()) {
             tracing::warn!(
                 target: "run",
                 session_id = session_id,
@@ -759,9 +758,8 @@ impl CoreRunState {
         session_id: &str,
     ) -> Option<conex_compaction::compaction::CompactionPolicy> {
         let db = self.local_db()?;
-        let policy = compaction_policy_from_session_meta(|key| {
-            db.get_session_meta(key).ok().flatten()
-        });
+        let policy =
+            compaction_policy_from_session_meta(|key| db.get_session_meta(key).ok().flatten());
         tracing::debug!(
             target: "run",
             session_id = session_id,
@@ -780,9 +778,7 @@ impl CoreRunState {
         &self,
         session_id: &str,
     ) -> Arc<session_loop::SessionSummaryCoordinator> {
-        let config = self
-            .summary_dispatch_config(session_id)
-            .unwrap_or_default();
+        let config = self.summary_dispatch_config(session_id).unwrap_or_default();
         self.summary_coordinators.get_or_create(session_id, config)
     }
 
@@ -1104,10 +1100,7 @@ pub(crate) struct CoreRunStateLauncher {
 
 #[async_trait::async_trait]
 impl crate::subagent_spawner::SubagentRunLauncher for CoreRunStateLauncher {
-    async fn launch(
-        &self,
-        options: RunTaskOptions,
-    ) -> Result<RunTaskResponse, CoreError> {
+    async fn launch(&self, options: RunTaskOptions) -> Result<RunTaskResponse, CoreError> {
         let state = self.state.upgrade().ok_or_else(|| {
             CoreError::internal("子代理 run 启动失败：CoreRunState 已释放（启动器弱引用失效）")
         })?;
@@ -1123,10 +1116,7 @@ impl crate::subagent_spawner::SubagentRunLauncher for CoreRunStateLauncher {
 /// 的运行实例（已终态 / 重启后未恢复）→ false（调用方按未终态汇总）。
 impl orchestrator::lifecycle::ForceCancelSink for CoreRunState {
     fn request_force_cancel(&self, subagent_run_id: &str, reason: &str) -> bool {
-        let active = self
-            .active_runs
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let active = self.active_runs.lock().unwrap_or_else(|e| e.into_inner());
         let Some(run) = active.get(subagent_run_id) else {
             return false;
         };
@@ -1158,7 +1148,8 @@ pub(crate) struct ContinuityStateAdapter {
 
 impl std::fmt::Debug for ContinuityStateAdapter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ContinuityStateAdapter").finish_non_exhaustive()
+        f.debug_struct("ContinuityStateAdapter")
+            .finish_non_exhaustive()
     }
 }
 
@@ -1170,15 +1161,15 @@ impl CoreRunState {
     /// 16/16/1 守卫约束（主 run 1 + 子代理 ≤16），O(n) 平凡——不引入
     /// 第二份 subagent_id → run_id 映射表（id 已在 ActiveRun.subagent
     /// 装配配置内，扫描即真源）。
-    pub(crate) fn control_bus_for_subagent(&self, subagent_id: &str) -> Option<Arc<Mutex<ControlBus>>> {
+    pub(crate) fn control_bus_for_subagent(
+        &self,
+        subagent_id: &str,
+    ) -> Option<Arc<Mutex<ControlBus>>> {
         let active = self.active_runs.lock().unwrap_or_else(|e| e.into_inner());
         active
             .values()
             .find(|run| {
-                run.subagent
-                    .as_ref()
-                    .map(|cfg| cfg.subagent_id.as_str())
-                    == Some(subagent_id)
+                run.subagent.as_ref().map(|cfg| cfg.subagent_id.as_str()) == Some(subagent_id)
             })
             .map(|run| Arc::clone(&run.control_bus))
     }
@@ -1187,7 +1178,10 @@ impl CoreRunState {
     /// steer 环目标）：活动 run 中 subagent=None（普通 run）且会话匹配。
     /// 会话内单活动 run 串行守卫下至多命中一条；无匹配（run 已收口）→
     /// None，调用方转 PendingMessageQueue 兜底。
-    pub(crate) fn main_run_bus_for_session(&self, session_id: &str) -> Option<Arc<Mutex<ControlBus>>> {
+    pub(crate) fn main_run_bus_for_session(
+        &self,
+        session_id: &str,
+    ) -> Option<Arc<Mutex<ControlBus>>> {
         let active = self.active_runs.lock().unwrap_or_else(|e| e.into_inner());
         active
             .values()
@@ -1205,9 +1199,9 @@ impl CoreRunState {
         subagent_id: &str,
         reason: &str,
     ) -> Result<KillSubagentToolResult, String> {
-        let service = self
-            .lifecycle_service()
-            .ok_or_else(|| "kill_subagent 未接线：LocalDb 不可用（生命周期服务未装配）".to_string())?;
+        let service = self.lifecycle_service().ok_or_else(|| {
+            "kill_subagent 未接线：LocalDb 不可用（生命周期服务未装配）".to_string()
+        })?;
         let (sid, aid, r) = (
             session_id.to_string(),
             subagent_id.to_string(),
@@ -1285,10 +1279,18 @@ impl CoreRunState {
             let mut bus = bus.lock().unwrap_or_else(|e| e.into_inner());
             match ring {
                 MainMessageRing::Steer => {
-                    bus.request_steer(injected, Some("send_message_tool".to_string()), Some("main-agent".to_string()));
+                    bus.request_steer(
+                        injected,
+                        Some("send_message_tool".to_string()),
+                        Some("main-agent".to_string()),
+                    );
                 }
                 MainMessageRing::FollowUp => {
-                    bus.request_follow_up(injected, Some("send_message_tool".to_string()), Some("main-agent".to_string()));
+                    bus.request_follow_up(
+                        injected,
+                        Some("send_message_tool".to_string()),
+                        Some("main-agent".to_string()),
+                    );
                 }
             }
             tracing::info!(
@@ -1405,7 +1407,9 @@ pub(crate) async fn write_back_cache_stats(
     stats: RunCacheStats,
 ) {
     if let Some(config) = state.engine.cache_tracking_config() {
-        state.engine.update_cache_session(session_id, &stats, &config.model);
+        state
+            .engine
+            .update_cache_session(session_id, &stats, &config.model);
     } else {
         tracing::warn!(
             target: "run",
@@ -1496,4 +1500,3 @@ pub(crate) async fn emit_envelope_event(
         bridge.flush();
     }
 }
-

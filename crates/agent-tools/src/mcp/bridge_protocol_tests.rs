@@ -36,7 +36,10 @@ fn adapt_tool_list_builds_prefixed_defs() {
     assert_eq!(defs.len(), 2);
     assert_eq!(defs[0].name, "mcp_files__read");
     assert_eq!(defs[0].description, "读文件");
-    assert_eq!(defs[0].input_schema, json!({ "type": "object", "properties": {} }));
+    assert_eq!(
+        defs[0].input_schema,
+        json!({ "type": "object", "properties": {} })
+    );
     assert_eq!(defs[1].name, "mcp_files__write");
     assert_eq!(
         defs[1].input_schema,
@@ -46,7 +49,10 @@ fn adapt_tool_list_builds_prefixed_defs() {
     // 序列化 camelCase，可作为注册表工具列表载荷
     let value = serde_json::to_value(&defs[0]).unwrap();
     assert_eq!(value["name"], "mcp_files__read");
-    assert_eq!(value["inputSchema"], json!({ "type": "object", "properties": {} }));
+    assert_eq!(
+        value["inputSchema"],
+        json!({ "type": "object", "properties": {} })
+    );
 }
 
 #[test]
@@ -115,8 +121,11 @@ fn response_result_maps_json_rpc_error() {
     let err = response_result("s1", json!({ "jsonrpc": "2.0", "id": 1 })).unwrap_err();
     assert_eq!(err.code(), "mcp.protocol_violation");
 
-    let result = response_result("s1", json!({ "jsonrpc": "2.0", "id": 1, "result": { "ok": true } }))
-        .unwrap();
+    let result = response_result(
+        "s1",
+        json!({ "jsonrpc": "2.0", "id": 1, "result": { "ok": true } }),
+    )
+    .unwrap();
     assert_eq!(result["ok"], true);
 }
 

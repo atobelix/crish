@@ -195,16 +195,13 @@ impl SubagentSpawnerImpl {
         session_id: &str,
         parent_run_id: Option<String>,
     ) {
-        self.runs
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(
-                run_id.to_string(),
-                RunRecord {
-                    session_id: session_id.to_string(),
-                    parent_run_id: parent_run_id.clone(),
-                },
-            );
+        self.runs.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            run_id.to_string(),
+            RunRecord {
+                session_id: session_id.to_string(),
+                parent_run_id: parent_run_id.clone(),
+            },
+        );
         self.run_depths
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -348,7 +345,11 @@ impl SubagentSpawnerImpl {
             started_at_ms: now,
         };
         let launch_result = {
-            let launcher = self.launcher.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let launcher = self
+                .launcher
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             match launcher {
                 Some(launcher) => {
                     launcher
@@ -410,24 +411,26 @@ impl SubagentSpawnerImpl {
 
         // 4. 记账（已分配语义；终态经 [Self::on_subagent_terminal] 释放）
         {
-            let mut siblings = self.active_siblings.lock().unwrap_or_else(|e| e.into_inner());
-            *siblings.entry(parent_run.clone().unwrap_or_default()).or_insert(0) += 1;
+            let mut siblings = self
+                .active_siblings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *siblings
+                .entry(parent_run.clone().unwrap_or_default())
+                .or_insert(0) += 1;
         }
         self.active_concurrent.fetch_add(1, Ordering::SeqCst);
         self.run_depths
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(subagent_run_id.clone(), depth);
-        self.runs
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(
-                subagent_run_id.clone(),
-                RunRecord {
-                    session_id: session_id.clone(),
-                    parent_run_id: parent_run.clone(),
-                },
-            );
+        self.runs.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            subagent_run_id.clone(),
+            RunRecord {
+                session_id: session_id.clone(),
+                parent_run_id: parent_run.clone(),
+            },
+        );
         if let Some(parent) = &parent_run {
             self.parents
                 .lock()
@@ -485,7 +488,11 @@ impl SubagentSpawnerImpl {
         let info = SubagentStartedInfo {
             subagent_id: subagent_id.to_string(),
             subagent_run_id: subagent_run_id.to_string(),
-            role: req.role.map(|r| r.as_str()).unwrap_or("researcher").to_string(),
+            role: req
+                .role
+                .map(|r| r.as_str())
+                .unwrap_or("researcher")
+                .to_string(),
             capability_mode: req
                 .capability_mode
                 .map(|m| m.as_str())
@@ -552,11 +559,7 @@ impl SubagentSpawnerImpl {
     /// 终态统一处理（子代理 run 收口后由 CoreRunState 调用）：
     /// 记账释放 → 行终态更新 → subagent-ended 发射（非 flow 路径）→
     /// wait 通道 feed → steering 通知（主 agent 下一 run 唤醒）。
-    pub(crate) async fn on_subagent_terminal(
-        &self,
-        cfg: &SubagentRunConfig,
-        state: SubagentState,
-    ) {
+    pub(crate) async fn on_subagent_terminal(&self, cfg: &SubagentRunConfig, state: SubagentState) {
         let run_id = cfg.subagent_run_id.clone();
         let parent_run = self
             .parents
@@ -571,7 +574,10 @@ impl SubagentSpawnerImpl {
 
         // 1. 记账释放（兄弟 / 全局并发 / 深度 / run 注册表）
         {
-            let mut siblings = self.active_siblings.lock().unwrap_or_else(|e| e.into_inner());
+            let mut siblings = self
+                .active_siblings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some(parent) = &parent_run {
                 if let Some(count) = siblings.get_mut(parent) {
                     *count = count.saturating_sub(1);
@@ -641,11 +647,8 @@ impl SubagentSpawnerImpl {
         // 3. subagent-ended 事件：flow 路径由 FlowScheduler 发射（本 spawner
         //    不双发）；工具直调路径（无 flow 关联）由本 spawner 发射（M14
         //    唯一发射方）——Critical 必达落库 + wait 通道 feed + steering
-        let mut info = SubagentEndedInfo::from_subagent_state(
-            cfg.subagent_id.clone(),
-            run_id.clone(),
-            state,
-        );
+        let mut info =
+            SubagentEndedInfo::from_subagent_state(cfg.subagent_id.clone(), run_id.clone(), state);
         // D-02 LK-04：后置赋值子会话 id（runs 注册表反查；None = 注册表
         // 无记录/未接线，前端回退行级反查）
         info.subagent_session_id = sub_session_id;
@@ -666,9 +669,7 @@ impl SubagentSpawnerImpl {
                         false
                     } else {
                         db.query_events_by_run(&cfg.parent_session_id, &parent, 0, Some(200))
-                            .map(|rows| {
-                                rows.iter().any(|e| e.event_type == "subagent-ended")
-                            })
+                            .map(|rows| rows.iter().any(|e| e.event_type == "subagent-ended"))
                             .unwrap_or(false)
                     }
                 }
@@ -808,9 +809,10 @@ impl SubagentSpawnerImpl {
             // 随 spawn 请求落库（model_override 扩展点预留不落库）
             task_type: req.task_type.map(|t| t.as_str().to_string()),
             display_label: req.display_label.clone(),
-            allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
-                serde_json::to_string(paths).expect("路径白名单序列化不应失败")
-            }),
+            allowed_write_paths_json: req
+                .allowed_write_paths
+                .as_ref()
+                .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
             // D-02 LK-04：子会话 id 随行落库（v9 新列；反向导航键——子会话
             // 事件流 → session_agents 行反查，`sub-sess-{depth}-{n}`）
             sub_session_id: Some(session_id.to_string()),
@@ -837,7 +839,6 @@ impl SubagentSpawnerImpl {
         }
         chain
     }
-
 }
 
 #[async_trait]
@@ -1107,7 +1108,9 @@ mod tests {
 
         // D-02 LK-04：subagent-started 事件体信封携带子会话 id（跨会话导航
         // 键：父会话三事件视图 → 子会话事件流）
-        let events = db.query_events("sess-main", 0, Some(100)).expect("事件查询");
+        let events = db
+            .query_events("sess-main", 0, Some(100))
+            .expect("事件查询");
         let started: Vec<_> = events
             .iter()
             .filter(|e| e.event_type == "subagent-started")
@@ -1134,7 +1137,10 @@ mod tests {
         assert_eq!(config.subagent_run_id, result.subagent_run_id);
         assert_eq!(config.parent_session_id, "sess-main");
         assert_eq!(config.task_type.as_deref(), Some("analysis"));
-        assert_eq!(config.started_at_ms, row.started_at, "started_at 与落库同源（C2）");
+        assert_eq!(
+            config.started_at_ms, row.started_at,
+            "started_at 与落库同源（C2）"
+        );
         assert!(config.output_dir.is_none());
     }
 
@@ -1240,12 +1246,19 @@ mod tests {
             SubagentSpawnError::GuardRejected(rejection) => {
                 assert!(matches!(
                     rejection,
-                    RecursionGuardRejection::SiblingsExceeded { current: 17, max: 16 }
+                    RecursionGuardRejection::SiblingsExceeded {
+                        current: 17,
+                        max: 16
+                    }
                 ));
             }
             other => panic!("必须为 GuardRejected(SiblingsExceeded)，实际 {other:?}"),
         }
-        assert_eq!(db.load_session_agents("sess-main").unwrap().len(), 17, "拒绝零 run");
+        assert_eq!(
+            db.load_session_agents("sess-main").unwrap().len(),
+            17,
+            "拒绝零 run"
+        );
     }
 
     /// 全局并发超限（maxConcurrent=16，快照不含本次请求的冻结语义）
@@ -1276,7 +1289,11 @@ mod tests {
                 max: 16
             })
         ));
-        assert_eq!(db.load_session_agents("sess-main").unwrap().len(), 17, "拒绝零 run");
+        assert_eq!(
+            db.load_session_agents("sess-main").unwrap().len(),
+            17,
+            "拒绝零 run"
+        );
     }
 
     // ── 批量派发（T-D-06：前瞻快照统一守卫原子语义）───────────────
@@ -1293,10 +1310,7 @@ mod tests {
             })
             .collect();
 
-        let results = spawner
-            .spawn_many(&reqs)
-            .await
-            .expect("批量派发应成功");
+        let results = spawner.spawn_many(&reqs).await.expect("批量派发应成功");
         assert_eq!(results.len(), 3);
         // 结果顺序与入参一致 + id 唯一
         let ids: Vec<&str> = results.iter().map(|r| r.subagent_id.as_str()).collect();
@@ -1307,7 +1321,12 @@ mod tests {
         for launch in launcher.launches() {
             assert_eq!(launch.parent_run_id.as_deref(), Some("run-main"));
             assert_eq!(
-                launch.subagent_config.as_ref().unwrap().task_type.as_deref(),
+                launch
+                    .subagent_config
+                    .as_ref()
+                    .unwrap()
+                    .task_type
+                    .as_deref(),
                 Some("review")
             );
         }
@@ -1434,7 +1453,9 @@ mod tests {
         assert!(rows[0].summary.is_some());
 
         // 2. subagent-ended 落库（父会话事件流，M14 唯一发射方）
-        let events = db.query_events("sess-main", 0, Some(100)).expect("事件查询");
+        let events = db
+            .query_events("sess-main", 0, Some(100))
+            .expect("事件查询");
         let ended: Vec<_> = events
             .iter()
             .filter(|e| e.event_type == "subagent-ended")
@@ -1457,7 +1478,11 @@ mod tests {
         };
         assert_eq!(entries.len(), 1);
         assert!(entries[0].is_steering);
-        assert!(entries[0].text.contains("子代理"), "摘要模板：{}", entries[0].text);
+        assert!(
+            entries[0].text.contains("子代理"),
+            "摘要模板：{}",
+            entries[0].text
+        );
         assert!(entries[0].text.contains("成功"));
         assert!(entries[0].text.contains(&result.subagent_id));
     }
@@ -1613,7 +1638,10 @@ mod tests {
             .expect("终态推进");
         assert_eq!(advance_b.started.len(), 1, "B 应启动");
         assert_eq!(advance_b.started[0].node_id, "node-b");
-        assert_eq!(scheduler.node_state("node-a"), Some(FlowNodeState::Completed));
+        assert_eq!(
+            scheduler.node_state("node-a"),
+            Some(FlowNodeState::Completed)
+        );
         assert_eq!(scheduler.node_state("node-b"), Some(FlowNodeState::Running));
         let run_b = advance_b.started[0].subagent_run_id.clone();
 
@@ -1623,7 +1651,10 @@ mod tests {
             .await
             .expect("终态推进");
         assert!(advance_final.flow_terminal, "全部节点终态 → 编排完成");
-        assert_eq!(scheduler.node_state("node-b"), Some(FlowNodeState::Completed));
+        assert_eq!(
+            scheduler.node_state("node-b"),
+            Some(FlowNodeState::Completed)
+        );
         // 幂等：同 run 重复终态通知忽略（不重复推进）
         let again = scheduler
             .on_subagent_terminal(&run_b, SubagentState::Completed)
@@ -1676,7 +1707,10 @@ mod tests {
             .await
             .expect("失败推进");
         assert!(advance_fail.started.is_empty(), "B 被阻塞不得 spawn");
-        assert!(advance_fail.flow_terminal, "A failed + B blocked → 编排收敛");
+        assert!(
+            advance_fail.flow_terminal,
+            "A failed + B blocked → 编排收敛"
+        );
         assert!(
             advance_fail.reports.iter().any(|r| r.node_id == "node-b"),
             "Block 传播上报：{reports:?}",
@@ -1825,7 +1859,9 @@ mod tests {
         // 事件链补齐：行 failed + ended(failed) 落库（此前断链——有行无事件）
         let rows = db.load_session_agents("sess-main").unwrap();
         assert_eq!(rows[0].status, "failed");
-        let events = db.query_events("sess-main", 0, Some(100)).expect("事件查询");
+        let events = db
+            .query_events("sess-main", 0, Some(100))
+            .expect("事件查询");
         let ended: Vec<_> = events
             .iter()
             .filter(|e| e.event_type == "subagent-ended")
@@ -1884,7 +1920,9 @@ mod tests {
             .on_subagent_terminal(&cfg, SubagentState::Completed)
             .await;
 
-        let events = db.query_events("sess-main", 0, Some(100)).expect("事件查询");
+        let events = db
+            .query_events("sess-main", 0, Some(100))
+            .expect("事件查询");
         let ended: Vec<_> = events
             .iter()
             .filter(|e| e.event_type == "subagent-ended")

@@ -503,7 +503,9 @@ impl ServerState {
     pub fn server_info(&self) -> ServerInfo {
         ServerInfo {
             service: "crish-agent-workbench".to_string(),
-            version: option_env!("CARGO_PKG_VERSION").unwrap_or("0.0.0").to_string(),
+            version: option_env!("CARGO_PKG_VERSION")
+                .unwrap_or("0.0.0")
+                .to_string(),
             protocol_version: PROTOCOL_VERSION,
             min_protocol_version: MIN_PROTOCOL_VERSION,
             port: self.actual_addr.port(),
@@ -605,17 +607,22 @@ mod tests {
 
     #[tokio::test]
     async fn port_probe_falls_back_to_next_port_when_occupied() {
-        // 动态占住基准端口 → 探测兜底应落到 base_port + 1
+        // 动态占住基准端口 → 探测兜底应落到后续可用探测端口（并发下 base_port + 1 可能被其它测试占用）
         let temp_listener = StdTcpListener::bind("127.0.0.1:0").expect("获取可用临时端口");
         let base_port = temp_listener.local_addr().expect("读取端口").port();
         let occupied = temp_listener;
         let instance = ServerInstance::bind(temp_config(base_port))
             .await
             .expect("探测兜底必须成功");
-        assert_eq!(
+        assert_ne!(
             instance.addr().port(),
-            base_port + 1,
-            "基准端口被占用时应回退到 base_port + 1"
+            base_port,
+            "不得绑定已被占用的基准端口"
+        );
+        assert!(
+            instance.addr().port() > base_port
+                && instance.addr().port() <= base_port + config::PORT_PROBE_COUNT,
+            "基准端口被占用时应回退到探测范围内的可用端口"
         );
         drop(occupied);
     }
@@ -660,7 +667,9 @@ mod tests {
 
     #[tokio::test]
     async fn serve_info_endpoint_then_graceful_shutdown() {
-        let instance = ServerInstance::bind(temp_config(0)).await.expect("绑定失败");
+        let instance = ServerInstance::bind(temp_config(0))
+            .await
+            .expect("绑定失败");
         let addr = instance.addr();
         let handle = instance.handle().clone();
         let router = instance.router(None, None, None, None, None);
@@ -746,27 +755,44 @@ mod tests {
             Err(ServerError::internal("test stub"))
         }
 
-        async fn list_commands(&self) -> Result<conex_types::device::ListCommandsResult, ServerError> {
+        async fn list_commands(
+            &self,
+        ) -> Result<conex_types::device::ListCommandsResult, ServerError> {
             Err(ServerError::internal("test stub"))
         }
 
-        async fn run_task(&self, _p: conex_types::device::RunTaskParams) -> Result<conex_types::device::RunTaskResult, ServerError> {
+        async fn run_task(
+            &self,
+            _p: conex_types::device::RunTaskParams,
+        ) -> Result<conex_types::device::RunTaskResult, ServerError> {
             Err(ServerError::internal("test stub"))
         }
 
-        async fn run_control(&self, _p: conex_types::device::RunControlParams) -> Result<conex_types::device::RunControlResult, ServerError> {
+        async fn run_control(
+            &self,
+            _p: conex_types::device::RunControlParams,
+        ) -> Result<conex_types::device::RunControlResult, ServerError> {
             Err(ServerError::internal("test stub"))
         }
 
-        async fn cancel_run(&self, _p: conex_types::device::CancelRunParams) -> Result<conex_types::device::CancelRunResult, ServerError> {
+        async fn cancel_run(
+            &self,
+            _p: conex_types::device::CancelRunParams,
+        ) -> Result<conex_types::device::CancelRunResult, ServerError> {
             Err(ServerError::internal("test stub"))
         }
 
-        async fn approve(&self, _p: conex_types::device::ApproveParams) -> Result<conex_types::device::ApproveResult, ServerError> {
+        async fn approve(
+            &self,
+            _p: conex_types::device::ApproveParams,
+        ) -> Result<conex_types::device::ApproveResult, ServerError> {
             Err(ServerError::internal("test stub"))
         }
 
-        async fn deny(&self, _p: conex_types::device::DenyParams) -> Result<conex_types::device::ApproveResult, ServerError> {
+        async fn deny(
+            &self,
+            _p: conex_types::device::DenyParams,
+        ) -> Result<conex_types::device::ApproveResult, ServerError> {
             Err(ServerError::internal("test stub"))
         }
     }
@@ -809,14 +835,11 @@ mod tests {
         .expect("订阅帧发送必须成功");
         // 等待 subscribe.ok（服务端已处理订阅并重建 fanout 过滤器）
         let (kind, _) = {
-            let text = tokio::time::timeout(
-                std::time::Duration::from_secs(3),
-                ws.next(),
-            )
-            .await
-            .expect("等待订阅回执超时")
-            .expect("订阅回执帧必须存在")
-            .expect("帧读取成功");
+            let text = tokio::time::timeout(std::time::Duration::from_secs(3), ws.next())
+                .await
+                .expect("等待订阅回执超时")
+                .expect("订阅回执帧必须存在")
+                .expect("帧读取成功");
             let frame: serde_json::Value =
                 serde_json::from_str(&text.to_string()).expect("订阅回执必须为合法信封");
             assert_eq!(
@@ -942,7 +965,11 @@ mod tests {
         assert_eq!(push["event"]["type"].as_str(), Some("agent-start"));
         // preview=false 时字段省略（skip_serializing_if）——带 sequence 的
         // 实时帧不得标记预览
-        assert_ne!(push["preview"].as_bool(), Some(true), "带 sequence 的帧不得为 preview");
+        assert_ne!(
+            push["preview"].as_bool(),
+            Some(true),
+            "带 sequence 的帧不得为 preview"
+        );
 
         // ⑤ 优雅关停
         handle.shutdown();
@@ -955,7 +982,9 @@ mod tests {
     #[tokio::test]
     async fn router_with_fanout_shuts_down_gracefully() {
         let fanout = Arc::new(fanout::FanOutEmitter::new(vec![]));
-        let instance = ServerInstance::bind(temp_config(0)).await.expect("绑定失败");
+        let instance = ServerInstance::bind(temp_config(0))
+            .await
+            .expect("绑定失败");
         let addr = instance.addr();
         let handle = instance.handle().clone();
         let router = instance.router(None, Some(fanout), None, None, None);
@@ -1110,17 +1139,21 @@ mod tests {
         // 预签发令牌（pairing.json 在 bind 前写入；router() 从文件加载）
         let token = {
             let mut store = auth::TokenStore::new(config.pairing_file_path.clone());
-            store.issue("tls-test-device", now_ms()).expect("签发必须成功")
+            store
+                .issue("tls-test-device", now_ms())
+                .expect("签发必须成功")
         };
-        let instance = ServerInstance::bind(config).await.expect("TLS 实例绑定必须成功");
+        let instance = ServerInstance::bind(config)
+            .await
+            .expect("TLS 实例绑定必须成功");
         let addr = instance.addr();
         let handle = instance.handle().clone();
         let router = instance.router(None, None, None, None, None);
         let task = tokio::spawn(async move { instance.serve(router).await });
         // 读取 CA 材料（与实例同目录，bind 返回后文件锁已释放可重载；
         // reload_keeps_fingerprint 保证同一证书文件不被重写）
-        let material = crate::multi_device::tls::load_or_generate_in(&cert_dir)
-            .expect("CA 材料必须可重载");
+        let material =
+            crate::multi_device::tls::load_or_generate_in(&cert_dir).expect("CA 材料必须可重载");
         let ca_der = material_ca_der(&material);
         let ca_pem = material.ca_cert_pem().expect("CA PEM 必须可读");
         // 就绪探测：TLS 握手成功即服务已进入 accept 循环
@@ -1144,7 +1177,9 @@ mod tests {
     /// TLS 客户端配置：信任锚 = 指定 CA 证书（None = 空根库，模拟未配对
     /// 设备无 pin 状态；移动端 pinning 模型 = 只信配对期拿到的 CA，D5
     /// §2.2 信任锚语义与默认链校验等价）。
-    fn tls_client_with_root(ca: Option<&rustls::pki_types::CertificateDer<'static>>) -> rustls::ClientConfig {
+    fn tls_client_with_root(
+        ca: Option<&rustls::pki_types::CertificateDer<'static>>,
+    ) -> rustls::ClientConfig {
         let mut roots = rustls::RootCertStore::empty();
         if let Some(ca) = ca {
             roots.add(ca.clone()).expect("CA 入根库");
@@ -1159,7 +1194,9 @@ mod tests {
 
     /// 从 TLS 材料取 CA 证书 DER（走公开的 `ca_cert_pem()` 读盘路径；
     /// `TlsMaterial` 字段私有，测试经公开面取证，与 tls.rs 内部测试同源）。
-    fn material_ca_der(material: &crate::multi_device::tls::TlsMaterial) -> rustls::pki_types::CertificateDer<'static> {
+    fn material_ca_der(
+        material: &crate::multi_device::tls::TlsMaterial,
+    ) -> rustls::pki_types::CertificateDer<'static> {
         let pem = material.ca_cert_pem().expect("CA PEM 必须可读");
         let mut reader = std::io::BufReader::new(pem.as_bytes());
         let certs = rustls_pemfile::certs(&mut reader)
@@ -1193,7 +1230,13 @@ mod tests {
         addr: SocketAddr,
         client: rustls::ClientConfig,
         request_path: &str,
-    ) -> Result<(String, tokio_rustls::client::TlsStream<tokio::net::TcpStream>), String> {
+    ) -> Result<
+        (
+            String,
+            tokio_rustls::client::TlsStream<tokio::net::TcpStream>,
+        ),
+        String,
+    > {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let connector = tokio_rustls::TlsConnector::from(Arc::new(client));
         let stream = tokio::net::TcpStream::connect(addr)
@@ -1217,7 +1260,10 @@ mod tests {
         let mut byte = [0u8; 1];
         let mut header_end = false;
         for _ in 0..64 * 1024 {
-            let n = tls.read(&mut byte).await.map_err(|e| format!("读取响应失败：{e}"))?;
+            let n = tls
+                .read(&mut byte)
+                .await
+                .map_err(|e| format!("读取响应失败：{e}"))?;
             if n == 0 {
                 break;
             }
@@ -1252,15 +1298,15 @@ mod tests {
             harness.token,
             harness.addr.port()
         );
-        stream.write_all(request.as_bytes()).await.expect("写入握手请求必须成功");
+        stream
+            .write_all(request.as_bytes())
+            .await
+            .expect("写入握手请求必须成功");
         // 服务端在 TLS 层拒绝：读到的要么是 EOF，要么是 TLS alert 字节，
         // 绝不可能是 HTTP 101 响应
         let mut buf = [0u8; 1024];
-        let read = tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            stream.read(&mut buf),
-        )
-        .await;
+        let read =
+            tokio::time::timeout(std::time::Duration::from_secs(3), stream.read(&mut buf)).await;
         let got: Vec<u8> = match read {
             Ok(Ok(0)) => Vec::new(),
             Ok(Ok(n)) => buf[..n].to_vec(),
@@ -1281,7 +1327,10 @@ mod tests {
         let (status, tls) = wss_upgrade(harness.addr, client, &path)
             .await
             .expect("拒绝明文后合法 wss 必须仍可连");
-        assert!(status.starts_with("HTTP/1.1 101"), "wss 升级状态行：{status}");
+        assert!(
+            status.starts_with("HTTP/1.1 101"),
+            "wss 升级状态行：{status}"
+        );
         drop(tls);
         // 优雅关停
         harness.handle.shutdown();
@@ -1303,11 +1352,16 @@ mod tests {
         let (status, tls) = wss_upgrade(harness.addr, client, &path)
             .await
             .expect("正确 CA 必须升级成功");
-        assert!(status.starts_with("HTTP/1.1 101"), "wss 升级状态行：{status}");
+        assert!(
+            status.starts_with("HTTP/1.1 101"),
+            "wss 升级状态行：{status}"
+        );
         // 响应头大小写不敏感（hyper 以小写输出）；Sec-WebSocket-Accept 存在
         // = WS 升级计算完成
         assert!(
-            status.to_ascii_lowercase().contains("sec-websocket-accept:"),
+            status
+                .to_ascii_lowercase()
+                .contains("sec-websocket-accept:"),
             "101 必须携带 Sec-WebSocket-Accept：{status}"
         );
         drop(tls);
@@ -1354,8 +1408,7 @@ mod tests {
         let info: serde_json::Value = response.json().await.expect("info 必须为合法 JSON");
         assert_eq!(info["service"].as_str(), Some("crish-agent-workbench"));
         // 明文 http 同端口 → TLS 层拒绝（无 HTTP 响应）
-        let plain = reqwest::get(format!("http://127.0.0.1:{}/v1/info", harness.addr.port()))
-            .await;
+        let plain = reqwest::get(format!("http://127.0.0.1:{}/v1/info", harness.addr.port())).await;
         assert!(
             plain.is_err() || !plain.unwrap().status().is_success(),
             "明文 http 必须被拒绝（wss-only，T-04 REST 变体）"

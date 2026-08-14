@@ -55,12 +55,20 @@ fn main() -> ExitCode {
         let Ok(message) = serde_json::from_str::<Value>(trimmed) else {
             continue;
         };
-        let method = message.get("method").and_then(Value::as_str).map(String::from);
+        let method = message
+            .get("method")
+            .and_then(Value::as_str)
+            .map(String::from);
         let id = message.get("id").cloned();
         match method.as_deref() {
             Some("initialize") => {
                 if reject_init {
-                    respond(&mut out, &id, Some(json!({ "code": -32000, "message": "initialize 被拒绝" })), None);
+                    respond(
+                        &mut out,
+                        &id,
+                        Some(json!({ "code": -32000, "message": "initialize 被拒绝" })),
+                        None,
+                    );
                 } else {
                     // 回显请求中的协议版本（对齐真实 server 的协商行为）
                     let version = message

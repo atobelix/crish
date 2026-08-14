@@ -47,7 +47,10 @@ fn test_put_get_blob_roundtrip_and_idempotence() {
     assert_eq!(read_back, data);
 
     // 查询不存在的 Hash 返回 None
-    assert!(db.get_blob("0000000000000000000000000000000000000000000000000000000000000000").unwrap().is_none());
+    assert!(db
+        .get_blob("0000000000000000000000000000000000000000000000000000000000000000")
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -57,7 +60,8 @@ fn test_multi_source_joint_scan_block_attachments_protects() {
     let h2 = db.put_blob(b"orphan-blob").unwrap();
 
     // 关联 h1 到 block_attachments
-    db.link_block_attachment("doc-1", "block-img-1", &h1).unwrap();
+    db.link_block_attachment("doc-1", "block-img-1", &h1)
+        .unwrap();
 
     let links = db.list_block_attachments("doc-1", "block-img-1").unwrap();
     assert_eq!(links, vec![h1.clone()]);
@@ -85,13 +89,20 @@ fn test_multi_source_joint_scan_doc_snapshots_protects() {
     let h2 = db.put_blob(b"orphan-blob-2").unwrap();
 
     // 关联 h1 到 doc_snapshots_attachments（CRDT 历史快照保护）
-    db.link_snapshot_attachment("doc-history-1", "snap-v4", &h1).unwrap();
+    db.link_snapshot_attachment("doc-history-1", "snap-v4", &h1)
+        .unwrap();
 
     let cfg = CasGcConfig::zero_grace();
     let stats = db.run_cas_gc(&cfg).unwrap();
 
-    assert!(!stats.quarantined_hashes.contains(&h1), "快照附件严禁被 GC 隔离");
-    assert!(stats.quarantined_hashes.contains(&h2), "孤儿 Blob 必须被隔离");
+    assert!(
+        !stats.quarantined_hashes.contains(&h1),
+        "快照附件严禁被 GC 隔离"
+    );
+    assert!(
+        stats.quarantined_hashes.contains(&h2),
+        "孤儿 Blob 必须被隔离"
+    );
 
     let meta1 = db.peek_blob_meta(&h1).unwrap().unwrap();
     assert!(meta1.marked_for_delete_at.is_none());
@@ -109,8 +120,14 @@ fn test_multi_source_joint_scan_session_undo_protects() {
     let cfg = CasGcConfig::zero_grace();
     let stats = db.run_cas_gc(&cfg).unwrap();
 
-    assert!(!stats.quarantined_hashes.contains(&h1), "Undo 栈附件严禁被 GC 隔离");
-    assert!(stats.quarantined_hashes.contains(&h2), "孤儿 Blob 必须被隔离");
+    assert!(
+        !stats.quarantined_hashes.contains(&h1),
+        "Undo 栈附件严禁被 GC 隔离"
+    );
+    assert!(
+        stats.quarantined_hashes.contains(&h2),
+        "孤儿 Blob 必须被隔离"
+    );
 
     let meta1 = db.peek_blob_meta(&h1).unwrap().unwrap();
     assert!(meta1.marked_for_delete_at.is_none());
@@ -123,7 +140,13 @@ fn test_lease_guard_30_min_lease_protects_upload_in_flight() {
     let h2 = db.put_blob(b"unprotected-orphan").unwrap();
 
     // 获取 30 分钟活数据保护租约
-    let lease = db.acquire_blob_lease(&h1, Some("agent-upload-session"), Some(Duration::from_secs(1800))).unwrap();
+    let lease = db
+        .acquire_blob_lease(
+            &h1,
+            Some("agent-upload-session"),
+            Some(Duration::from_secs(1800)),
+        )
+        .unwrap();
     assert_eq!(lease.blob_hash, h1);
     assert!(db.is_blob_leased(&h1).unwrap());
     assert!(!db.is_blob_leased(&h2).unwrap());
@@ -133,7 +156,10 @@ fn test_lease_guard_30_min_lease_protects_upload_in_flight() {
     let stats = db.run_cas_gc(&cfg).unwrap();
 
     // 租约保护下的 h1 绝不进入软隔离
-    assert!(!stats.quarantined_hashes.contains(&h1), "活跃租约中的 Blob 绝不能被隔离");
+    assert!(
+        !stats.quarantined_hashes.contains(&h1),
+        "活跃租约中的 Blob 绝不能被隔离"
+    );
     assert!(stats.quarantined_hashes.contains(&h2));
 
     // 释放租约后再次 GC
@@ -141,7 +167,10 @@ fn test_lease_guard_30_min_lease_protects_upload_in_flight() {
     assert!(!db.is_blob_leased(&h1).unwrap());
 
     let stats2 = db.run_cas_gc(&cfg).unwrap();
-    assert!(stats2.quarantined_hashes.contains(&h1), "租约释放且无引用的 Blob 正确进入隔离");
+    assert!(
+        stats2.quarantined_hashes.contains(&h1),
+        "租约释放且无引用的 Blob 正确进入隔离"
+    );
 }
 
 #[test]
@@ -160,15 +189,29 @@ fn test_blob_lease_guard_in_memory_and_db_flow() {
 
     // 2. DB 持久化租约方法测试
     let db = LocalDb::open_in_memory().unwrap();
-    let l1 = db.acquire_blob_lease("hash-db-1", Some("holder-1"), Some(Duration::from_secs(1800))).unwrap();
-    let l2 = db.acquire_blob_lease("hash-db-2", Some("holder-2"), Some(Duration::from_secs(1800))).unwrap();
+    let l1 = db
+        .acquire_blob_lease(
+            "hash-db-1",
+            Some("holder-1"),
+            Some(Duration::from_secs(1800)),
+        )
+        .unwrap();
+    let l2 = db
+        .acquire_blob_lease(
+            "hash-db-2",
+            Some("holder-2"),
+            Some(Duration::from_secs(1800)),
+        )
+        .unwrap();
     assert_eq!(l2.blob_hash, "hash-db-2");
 
     let active = db.list_active_blob_leases().unwrap();
     assert_eq!(active.len(), 2);
 
     // 续期租约
-    let renewed = db.renew_blob_lease(&l1.lease_id, Some(Duration::from_secs(3600))).unwrap();
+    let renewed = db
+        .renew_blob_lease(&l1.lease_id, Some(Duration::from_secs(3600)))
+        .unwrap();
     assert!(renewed);
 
     // 按 Hash 批量释放
@@ -204,7 +247,10 @@ fn test_soft_delete_quarantine_7_days_does_not_immediately_purge() {
     // 连续多次运行 GC，在 7 天内绝不物理删除
     for _ in 0..3 {
         let stats_repeat = db.run_cas_gc(&cfg).unwrap();
-        assert!(stats_repeat.purged_hashes.is_empty(), "7 天隔离期内绝不物理删除");
+        assert!(
+            stats_repeat.purged_hashes.is_empty(),
+            "7 天隔离期内绝不物理删除"
+        );
         assert_eq!(db.count_blobs().unwrap(), 1);
     }
 }
@@ -219,7 +265,8 @@ fn test_quarantine_unhealed_purged_after_7_days() {
     conn.execute(
         "UPDATE blob_cas SET marked_for_delete_at = datetime('now', '-8 days') WHERE hash = ?1",
         params![h],
-    ).unwrap();
+    )
+    .unwrap();
     drop(conn);
 
     let meta = db.peek_blob_meta(&h).unwrap().unwrap();
@@ -250,15 +297,24 @@ fn test_unquarantine_self_healing_on_read() {
     assert_eq!(marked, vec![h.clone()]);
 
     let meta_before = db.peek_blob_meta(&h).unwrap().unwrap();
-    assert!(meta_before.marked_for_delete_at.is_some(), "必须处于软删除隔离期");
+    assert!(
+        meta_before.marked_for_delete_at.is_some(),
+        "必须处于软删除隔离期"
+    );
 
     // 用户通过 get_blob 读取内容 -> 触发反隔离自愈！
-    let read_data = db.get_blob(&h).unwrap().expect("blob must be readable during quarantine");
+    let read_data = db
+        .get_blob(&h)
+        .unwrap()
+        .expect("blob must be readable during quarantine");
     assert_eq!(read_data, payload);
 
     // 验证反隔离自愈：marked_for_delete_at 已原子恢复为 NULL
     let meta_after = db.peek_blob_meta(&h).unwrap().unwrap();
-    assert!(meta_after.marked_for_delete_at.is_none(), "读取必须自动完成反隔离自愈！");
+    assert!(
+        meta_after.marked_for_delete_at.is_none(),
+        "读取必须自动完成反隔离自愈！"
+    );
 
     // 模拟隔离期满（8 天）再次 GC：因为已自愈，绝不被误杀物理删除！
     let purge_cfg = CasGcConfig {
@@ -275,8 +331,14 @@ fn test_unquarantine_self_healing_on_meta_read() {
     let db = LocalDb::open_in_memory().unwrap();
     let h = db.put_blob(b"meta-heal-data").unwrap();
 
-    db.mark_quarantine_orphans(&CasGcConfig::zero_grace()).unwrap();
-    assert!(db.peek_blob_meta(&h).unwrap().unwrap().marked_for_delete_at.is_some());
+    db.mark_quarantine_orphans(&CasGcConfig::zero_grace())
+        .unwrap();
+    assert!(db
+        .peek_blob_meta(&h)
+        .unwrap()
+        .unwrap()
+        .marked_for_delete_at
+        .is_some());
 
     // get_blob_meta 默认触发反隔离自愈
     let meta = db.get_blob_meta(&h).unwrap().unwrap();
@@ -303,14 +365,20 @@ fn test_pinned_blob_never_quarantined_or_purged() {
     let cfg = CasGcConfig::zero_grace();
     let stats = db.run_cas_gc(&cfg).unwrap();
 
-    assert!(stats.quarantined_hashes.is_empty(), "Pinned Blob 严禁进入隔离期");
+    assert!(
+        stats.quarantined_hashes.is_empty(),
+        "Pinned Blob 严禁进入隔离期"
+    );
     assert!(stats.purged_hashes.is_empty(), "Pinned Blob 严禁被物理清除");
     assert_eq!(db.count_blobs().unwrap(), 1);
 
     // 取消置顶后再 GC
     db.pin_blob(&h, false).unwrap();
     let stats2 = db.run_cas_gc(&cfg).unwrap();
-    assert!(stats2.quarantined_hashes.contains(&h), "取消置顶后正常进入隔离");
+    assert!(
+        stats2.quarantined_hashes.contains(&h),
+        "取消置顶后正常进入隔离"
+    );
 }
 
 #[test]
@@ -320,37 +388,60 @@ fn test_full_undo_lifecycle_with_quarantine_and_healing() {
     let hash = db.put_blob(img_bytes).unwrap();
 
     // 1. 用户将图片插入 Block 1
-    db.link_block_attachment("doc-notes", "block-img-1", &hash).unwrap();
+    db.link_block_attachment("doc-notes", "block-img-1", &hash)
+        .unwrap();
 
     // 2. 用户删除了 Block 1，此时将历史状态存入 session_undo_blobs
-    db.unlink_block_attachment("doc-notes", "block-img-1", &hash).unwrap();
-    db.link_undo_blob("session-user", "undo-op-42", &hash).unwrap();
+    db.unlink_block_attachment("doc-notes", "block-img-1", &hash)
+        .unwrap();
+    db.link_undo_blob("session-user", "undo-op-42", &hash)
+        .unwrap();
 
     // 3. 后台定时 GC 运行：由于 Undo 栈引用存在，绝不隔离！
     let cfg = CasGcConfig::zero_grace();
     let stats1 = db.run_cas_gc(&cfg).unwrap();
     assert!(!stats1.quarantined_hashes.contains(&hash));
-    assert!(db.peek_blob_meta(&hash).unwrap().unwrap().marked_for_delete_at.is_none());
+    assert!(db
+        .peek_blob_meta(&hash)
+        .unwrap()
+        .unwrap()
+        .marked_for_delete_at
+        .is_none());
 
     // 4. 会话结束或 Undo 栈清空（移除 undo 引用）
     let conn = db.conn.lock().unwrap();
-    conn.execute("DELETE FROM session_undo_blobs WHERE blob_hash = ?1", params![hash]).unwrap();
+    conn.execute(
+        "DELETE FROM session_undo_blobs WHERE blob_hash = ?1",
+        params![hash],
+    )
+    .unwrap();
     drop(conn);
 
     // 5. 下一次 GC：进入 7 天隔离期
     let stats2 = db.run_cas_gc(&CasGcConfig::zero_grace()).unwrap();
     assert!(stats2.quarantined_hashes.contains(&hash));
-    assert!(db.peek_blob_meta(&hash).unwrap().unwrap().marked_for_delete_at.is_some());
+    assert!(db
+        .peek_blob_meta(&hash)
+        .unwrap()
+        .unwrap()
+        .marked_for_delete_at
+        .is_some());
 
     // 6. 用户触发撤销（Undo），恢复 Block 并调用 get_blob
     let restored_bytes = db.get_blob(&hash).unwrap().expect("Blob 必须在隔离期可读");
     assert_eq!(restored_bytes, img_bytes);
 
     // 7. 重新关联 Block 附件
-    db.link_block_attachment("doc-notes", "block-img-1", &hash).unwrap();
+    db.link_block_attachment("doc-notes", "block-img-1", &hash)
+        .unwrap();
 
     // 8. 验证已反隔离自愈
-    assert!(db.peek_blob_meta(&hash).unwrap().unwrap().marked_for_delete_at.is_none());
+    assert!(db
+        .peek_blob_meta(&hash)
+        .unwrap()
+        .unwrap()
+        .marked_for_delete_at
+        .is_none());
 
     // 9. 后续 GC 运行，数据完好无损
     let stats3 = db.run_cas_gc(&CasGcConfig::zero_grace()).unwrap();
@@ -366,7 +457,13 @@ fn test_lease_transition_to_block_attachment() {
     let hash = db.put_blob(file_data).unwrap();
 
     // 1. 上传期间获取租约（30 分钟）
-    let lease = db.acquire_blob_lease(&hash, Some("upload-job-99"), Some(Duration::from_secs(1800))).unwrap();
+    let lease = db
+        .acquire_blob_lease(
+            &hash,
+            Some("upload-job-99"),
+            Some(Duration::from_secs(1800)),
+        )
+        .unwrap();
 
     // 2. GC 运行：租约保护，不进入隔离
     let cfg = CasGcConfig::zero_grace();
@@ -374,7 +471,8 @@ fn test_lease_transition_to_block_attachment() {
     assert!(!stats1.quarantined_hashes.contains(&hash));
 
     // 3. LLM 确认并合入文档块
-    db.link_block_attachment("doc-target", "block-video", &hash).unwrap();
+    db.link_block_attachment("doc-target", "block-video", &hash)
+        .unwrap();
 
     // 4. 释放上传租约
     db.release_blob_lease(&lease.lease_id).unwrap();
@@ -383,4 +481,46 @@ fn test_lease_transition_to_block_attachment() {
     let stats2 = db.run_cas_gc(&cfg).unwrap();
     assert!(!stats2.quarantined_hashes.contains(&hash));
     assert_eq!(db.count_blobs().unwrap(), 1);
+}
+
+#[test]
+fn test_purge_physically_removes_external_file() {
+    let db = LocalDb::open_in_memory().unwrap();
+    let temp_dir = std::env::temp_dir().join(format!("conex_cas_test_{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let temp_file = temp_dir.join("external_blob.bin");
+    std::fs::write(&temp_file, b"external payload content").unwrap();
+    assert!(temp_file.exists());
+
+    let file_path_str = temp_file.to_str().unwrap().to_string();
+    let hash = db
+        .put_blob_with_options(b"external payload content", "file", &file_path_str)
+        .unwrap();
+
+    // 1. 进入软隔离
+    let cfg = CasGcConfig::zero_grace();
+    let stats1 = db.run_cas_gc(&cfg).unwrap();
+    assert!(stats1.quarantined_hashes.contains(&hash));
+    assert!(temp_file.exists(), "软删除期间物理文件必须保留");
+
+    // 2. 模拟 8 天前过期并执行物理清除
+    let conn = db.conn.lock().unwrap();
+    conn.execute(
+        "UPDATE blob_cas SET marked_for_delete_at = datetime('now', '-8 days') WHERE hash = ?1",
+        params![hash],
+    )
+    .unwrap();
+    drop(conn);
+
+    let purge_cfg = CasGcConfig {
+        quarantine_duration_secs: 7 * 86400,
+        creation_grace_secs: 0,
+    };
+    let purged = db.purge_expired_quarantined(&purge_cfg).unwrap();
+    assert_eq!(purged, vec![hash.clone()]);
+    assert_eq!(db.count_blobs().unwrap(), 0);
+
+    // 3. 验证物理文件被真正 unlink
+    assert!(!temp_file.exists(), "物理清除后外置文件必须被真正删除");
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

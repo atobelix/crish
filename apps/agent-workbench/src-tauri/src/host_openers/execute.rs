@@ -32,8 +32,8 @@ use crate::host_openers::resolve::{
     unavailable_diagnostic,
 };
 use crate::host_openers::types::{
-    host_opener_diagnostic, host_opener_error, to_core_error, HostOpenerError, HostOpenResult,
-    HostOpenTarget, HostOpenTargetKindForResult, ResolvedOpenTarget,
+    host_opener_diagnostic, host_opener_error, to_core_error, HostOpenResult, HostOpenTarget,
+    HostOpenTargetKindForResult, HostOpenerError, ResolvedOpenTarget,
 };
 
 /// cmd 元字符拒绝集（P1-S5 纵深防御）：`& | < > ^ ( )` 中 `< > ( )` 在
@@ -58,8 +58,7 @@ pub(crate) fn open_host_target(
     let path_env = std::env::var_os("PATH");
     let env_lookup = |key: &str| std::env::var_os(key);
     let path_exists = |path: &Path| path.exists();
-    let path_dirs = std::env::split_paths(&path_env.unwrap_or_default())
-        .collect::<Vec<_>>();
+    let path_dirs = std::env::split_paths(&path_env.unwrap_or_default()).collect::<Vec<_>>();
     let candidates = opener_candidates(&env_lookup);
     let candidate = candidates
         .iter()
@@ -72,18 +71,23 @@ pub(crate) fn open_host_target(
                 None,
             ))
         })?;
-    let resolved = resolve_candidate_command(candidate, &path_dirs, &path_exists).ok_or_else(|| {
-        let diagnostic = unavailable_diagnostic(candidate);
-        to_core_error(HostOpenerError {
-            code: "host-opener-unavailable".to_string(),
-            message: diagnostic.message.clone(),
-            diagnostic,
-        })
+    let resolved =
+        resolve_candidate_command(candidate, &path_dirs, &path_exists).ok_or_else(|| {
+            let diagnostic = unavailable_diagnostic(candidate);
+            to_core_error(HostOpenerError {
+                code: "host-opener-unavailable".to_string(),
+                message: diagnostic.message.clone(),
+                diagnostic,
+            })
+        })?;
+    let app_dir = crate::host_paths::app_dir().map_err(|message| {
+        to_core_error(host_opener_error(
+            "host-path-root-unavailable",
+            message,
+            None,
+            None,
+        ))
     })?;
-    let app_dir = crate::host_paths::app_dir()
-        .map_err(|message| to_core_error(host_opener_error(
-            "host-path-root-unavailable", message, None, None,
-        )))?;
     let workspace = crate::host_paths::workspace_root(&app_dir);
     let roots = [workspace.as_path()];
     let resolved_target = resolve_open_target_for_roots(&target, &roots).map_err(to_core_error)?;
@@ -92,7 +96,8 @@ pub(crate) fn open_host_target(
     let command_display = resolved.command.display().to_string();
     let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
     let args_strs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    if gatekeeper.check_command(&command_display, &args_strs) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
+    if gatekeeper.check_command(&command_display, &args_strs)
+        == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || args.iter().any(|a| gatekeeper.patterns().is_match(a))
     {
         return Err(to_core_error(host_opener_error(
@@ -156,10 +161,14 @@ fn open_with_shortcut(
             None,
         )));
     }
-    let app_dir = crate::host_paths::app_dir()
-        .map_err(|message| to_core_error(host_opener_error(
-            "host-path-root-unavailable", message, None, None,
-        )))?;
+    let app_dir = crate::host_paths::app_dir().map_err(|message| {
+        to_core_error(host_opener_error(
+            "host-path-root-unavailable",
+            message,
+            None,
+            None,
+        ))
+    })?;
     let workspace = crate::host_paths::workspace_root(&app_dir);
     let roots = [workspace.as_path()];
     let resolved_target = resolve_open_target_for_roots(&target, &roots).map_err(to_core_error)?;
@@ -169,7 +178,8 @@ fn open_with_shortcut(
     };
 
     let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
-    if gatekeeper.check_command(lnk_path, &[&file_arg]) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
+    if gatekeeper.check_command(lnk_path, &[&file_arg])
+        == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || gatekeeper.patterns().is_match(lnk_path)
         || gatekeeper.patterns().is_match(&file_arg)
     {
@@ -254,7 +264,8 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
     // 无空格含 `&` 的已存在路径），门禁静态正则只覆盖毁灭性命令，
     // 不覆盖该注入面，故在此显式拦截（双防线之外的第三重）。
     let metachar_unsafe = target.chars().any(|c| CMD_METACHARS.contains(&c));
-    if gatekeeper.check_command("start", &[&target]) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
+    if gatekeeper.check_command("start", &[&target])
+        == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || gatekeeper.patterns().is_match(&target)
         || metachar_unsafe
     {

@@ -13,10 +13,10 @@
 //   tasklist / kill -0 存活探测辅助，T-AB-06/07 验收），非产品执行面；
 //   测试 mod 内 allow + 理由（裁决 D8 背书）。
 #![allow(clippy::disallowed_methods)]
+pub(crate) use super::bg_events::SuspiciousDebounce;
 use super::tests::*;
 use super::*;
 use crate::resource::ProcessHealth;
-pub(crate) use super::bg_events::SuspiciousDebounce;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::path::PathBuf;

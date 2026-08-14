@@ -14,7 +14,8 @@ use std::path::PathBuf;
 async fn spawn_persists_row_with_parent_chain() {
     let ws = TempWorkspace::new("subagent_db");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db);
 
     // 第一层：主会话（深度 0）spawn 直接子代理 → 深度 1
@@ -48,7 +49,8 @@ async fn spawn_persists_task_type_columns_and_reads_back() {
     // 预留不落库——SessionAgent 无该字段，类型级保证）
     let ws = TempWorkspace::new("subagent_ext_db");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db.clone());
 
     let mut req = request("实现任务", "sess-main", Some("run-main"));
@@ -59,12 +61,14 @@ async fn spawn_persists_task_type_columns_and_reads_back() {
     let result = spawner.spawn(&req).await.expect("spawn 应成功");
 
     // 读回断言：三列与请求一致
-    let agents = db
-        .load_session_agents("sess-main")
-        .expect("读取落库行失败");
+    let agents = db.load_session_agents("sess-main").expect("读取落库行失败");
     assert_eq!(agents.len(), 1);
     let row = &agents[0];
-    assert_eq!(row.task_type.as_deref(), Some("implementation"), "task_type 落库");
+    assert_eq!(
+        row.task_type.as_deref(),
+        Some("implementation"),
+        "task_type 落库"
+    );
     assert_eq!(
         row.display_label.as_deref(),
         Some("实现工程师"),
@@ -82,7 +86,8 @@ async fn spawn_persists_task_type_columns_and_reads_back() {
 async fn spawn_depth_counts_along_parent_chain() {
     let ws = TempWorkspace::new("subagent_depth");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db.clone());
 
     // 主会话（深度 0）→ 子代理（新会话深度 1，落 sess-main）：通过
@@ -100,10 +105,7 @@ async fn spawn_depth_counts_along_parent_chain() {
         .expect("读取第一层落库行失败");
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].depth, Some(1), "主 Agent 直接子代理深度 = 1");
-    assert_eq!(
-        rows[0].parent_run_id, "run-main",
-        "parent 链指向父 run"
-    );
+    assert_eq!(rows[0].parent_run_id, "run-main", "parent 链指向父 run");
     assert_eq!(
         rows[0].parent_session_id, "sess-main",
         "parent 链指向父会话"
@@ -114,7 +116,11 @@ async fn spawn_depth_counts_along_parent_chain() {
     db.insert_session(&child.session_id, "子会话")
         .expect("插入子会话失败");
     let err = spawner
-        .spawn(&request("任务 B", &child.session_id, Some(&child.subagent_run_id)))
+        .spawn(&request(
+            "任务 B",
+            &child.session_id,
+            Some(&child.subagent_run_id),
+        ))
         .await
         .unwrap_err();
     assert_eq!(
@@ -142,14 +148,19 @@ async fn spawn_depth_counts_along_parent_chain() {
 async fn guard_rejection_writes_no_row() {
     let ws = TempWorkspace::new("subagent_guard_db");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db);
 
     // 顶满并发后第 18 次 spawn 必须被拒（同父 run 下 17 兄弟已超
     // maxSiblings=16，判定序：深度 → 兄弟 → 并发，兄弟先命中）
     for i in 0..17 {
         spawner
-            .spawn(&request(&format!("任务 {i}"), "sess-main", Some("run-main")))
+            .spawn(&request(
+                &format!("任务 {i}"),
+                "sess-main",
+                Some("run-main"),
+            ))
             .await
             .expect("并发预算内 spawn 应成功");
     }
@@ -177,7 +188,8 @@ async fn guard_rejection_writes_no_row() {
 async fn guard_depth_rejection_writes_no_row() {
     let ws = TempWorkspace::new("subagent_guard_depth");
     let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
-    db.insert_session("sess-main", "主会话").expect("插入会话失败");
+    db.insert_session("sess-main", "主会话")
+        .expect("插入会话失败");
     let spawner = DbSpawner::new(db.clone());
 
     // maxDepth=1 下链长上限 = 1：第 1 层（深度 1）成功，第 2 层（深度 2）
@@ -203,12 +215,10 @@ async fn guard_depth_rejection_writes_no_row() {
                 let err = result.unwrap_err();
                 assert_eq!(
                     err,
-                    SubagentSpawnError::NestingDenied(
-                        RecursionGuardRejection::NestingDenied {
-                            current: 2,
-                            max: 1
-                        }
-                    ),
+                    SubagentSpawnError::NestingDenied(RecursionGuardRejection::NestingDenied {
+                        current: 2,
+                        max: 1
+                    }),
                     "第 2 层（新会话深度 2 > maxDepth=1）必须快速失败"
                 );
             }
@@ -222,4 +232,3 @@ async fn guard_depth_rejection_writes_no_row() {
         .expect("读取第二层落库行失败");
     assert_eq!(rows.len(), 0, "嵌套拒绝不得产生任何 run 行");
 }
-

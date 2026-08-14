@@ -133,9 +133,7 @@ pub struct ToolContext {
     /// [crate::compression_store::CompressionContextStore] 后注入——
     /// 对齐 output_dir 的 Option + dyn trait 执行期装配模式，生产代码
     /// 保持叶子依赖，会话作用域由实现方绑定）
-    pub compression_store: Option<
-        Arc<dyn crate::compression_store::CompressionContextStore>,
-    >,
+    pub compression_store: Option<Arc<dyn crate::compression_store::CompressionContextStore>>,
     /// 笔记后端（W4-A/B + Round7：None = 未接线，query_blocks /
     /// document_outline / document_get_md / document_apply_md / send_to_note
     /// 返回 `note_backend_unwired` 占位；引擎侧实现
@@ -236,7 +234,10 @@ mod tests {
     #[tokio::test]
     async fn noop_ask_channel_allows() {
         let channel = NoopAskChannel;
-        let decision = channel.ask("shell_command", &json!({ "command": "git push" })).await.unwrap();
+        let decision = channel
+            .ask("shell_command", &json!({ "command": "git push" }))
+            .await
+            .unwrap();
         assert_eq!(decision, AskDecision::Allowed);
     }
 

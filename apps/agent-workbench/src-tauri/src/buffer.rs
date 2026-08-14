@@ -135,7 +135,13 @@ impl EventBuffer {
     pub fn drain(&mut self, run_id: &str) -> Vec<String> {
         self.runs
             .remove(run_id)
-            .map(|queue| queue.entries.into_iter().map(|(_, payload)| payload).collect())
+            .map(|queue| {
+                queue
+                    .entries
+                    .into_iter()
+                    .map(|(_, payload)| payload)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -373,11 +379,23 @@ mod stress_tests {
         let elapsed = started.elapsed();
 
         let drained = buffer.drain("r1");
-        assert!(drained.contains(&"run-terminal".to_string()), "run-terminal 必达");
-        assert!(drained.contains(&"message-end".to_string()), "message-end 必达（全文兜底）");
-        assert!(drained.contains(&"agent-start".to_string()), "agent-start 不可丢");
+        assert!(
+            drained.contains(&"run-terminal".to_string()),
+            "run-terminal 必达"
+        );
+        assert!(
+            drained.contains(&"message-end".to_string()),
+            "message-end 必达（全文兜底）"
+        );
+        assert!(
+            drained.contains(&"agent-start".to_string()),
+            "agent-start 不可丢"
+        );
         let soft_alive = drained.iter().filter(|p| p.starts_with("delta-")).count();
-        assert!(soft_alive <= 64, "缓冲内 delta 不得超过软水位（丢帧只丢 delta 旧帧）");
+        assert!(
+            soft_alive <= 64,
+            "缓冲内 delta 不得超过软水位（丢帧只丢 delta 旧帧）"
+        );
 
         let dropped = enqueued - drained.len();
         println!(
@@ -420,8 +438,14 @@ mod stress_tests {
         let terminal = buffer.enqueue("r1", DropClass::Critical, "run-terminal".into());
         assert!(terminal.buffered, "run-terminal 永不丢");
         let final_batch = buffer.drain("r1");
-        assert!(final_batch.contains(&"run-terminal".to_string()), "run-terminal 必达");
-        assert!(final_batch.contains(&"message-end-final".to_string()), "message-end 必达");
+        assert!(
+            final_batch.contains(&"run-terminal".to_string()),
+            "run-terminal 必达"
+        );
+        assert!(
+            final_batch.contains(&"message-end-final".to_string()),
+            "message-end 必达"
+        );
         let elapsed = started.elapsed();
 
         let total = cycles as usize * 3002 + 2;

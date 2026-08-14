@@ -221,10 +221,7 @@ impl LogWriter {
                 return;
             }
         }
-        let file = self
-            .file
-            .as_mut()
-            .expect("append_line 前已确保 file 存在");
+        let file = self.file.as_mut().expect("append_line 前已确保 file 存在");
         self.last_start = Some(self.offset);
         let result = file
             .write_all(prefix.as_bytes())
@@ -283,7 +280,7 @@ fn open_log_append(path: &Path) -> Option<std::fs::File> {
 /// 返回值：成功 → 新文件行数（调用方负责同步 info.line_count 与清空 checkpoints）；
 /// 失败 → None（warn，保持原文件继续追加）。
 #[allow(clippy::disallowed_methods)] // 轮转清理 .log.rot 临时文件（任务日志内部
-// 索引整理，非用户文件，豁免裸删除）
+                                     // 索引整理，非用户文件，豁免裸删除）
 pub(crate) fn maybe_rotate_log(
     log_path: &Path,
     log: &mut LogWriter,
@@ -293,9 +290,7 @@ pub(crate) fn maybe_rotate_log(
         return None;
     }
     log.close();
-    let size = std::fs::metadata(log_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let size = std::fs::metadata(log_path).map(|m| m.len()).unwrap_or(0);
     if size == 0 {
         // 文件异常为空：直接放弃本轮（offset 与物理大小不一致属极端异常）
         log.reopen(log_path);
@@ -413,7 +408,11 @@ pub(crate) fn detect_prompt(line: &str) -> bool {
 ///
 /// 完整行边界：向前探 1 字节判定 chunk 首字节是否为行首（精确边界）；尾部半行
 /// （append 进行中）直接丢弃。返回 `(行内容, 首行号, truncated)`。
-pub(crate) fn read_log_tail(path: &Path, total_lines: u64, max_lines: u64) -> (Vec<String>, u64, bool) {
+pub(crate) fn read_log_tail(
+    path: &Path,
+    total_lines: u64,
+    max_lines: u64,
+) -> (Vec<String>, u64, bool) {
     let size = match file_info(path) {
         Ok(info) => info.size,
         Err(e) => {

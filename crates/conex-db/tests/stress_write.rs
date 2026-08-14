@@ -32,10 +32,8 @@ struct TempDb {
 impl TempDb {
     fn new(name: &str) -> Self {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "conex-stress-{name}-{}-{n}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("conex-stress-{name}-{}-{n}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("sessions.db");
         let _ = std::fs::remove_file(&path);
@@ -114,8 +112,14 @@ fn stress_append_5000_events_timing_and_integrity() {
 
     let started = Instant::now();
     for seq in 1..=5000i64 {
-        db.append_event("s1", seq, "agent-start", &format!(r#"{{"seq":{seq}}}"#), None)
-            .expect("追加事件不应失败");
+        db.append_event(
+            "s1",
+            seq,
+            "agent-start",
+            &format!(r#"{{"seq":{seq}}}"#),
+            None,
+        )
+        .expect("追加事件不应失败");
     }
     let elapsed = started.elapsed();
 
@@ -126,7 +130,10 @@ fn stress_append_5000_events_timing_and_integrity() {
     seqs.sort_unstable();
     assert_eq!(seqs, (1..=5000).collect::<Vec<_>>(), "序列唯一连续");
     assert!(events[0].payload.contains("\"seq\":1"), "首事件载荷可读回");
-    assert!(events[4999].payload.contains("\"seq\":5000"), "末事件载荷可读回");
+    assert!(
+        events[4999].payload.contains("\"seq\":5000"),
+        "末事件载荷可读回"
+    );
 
     // 宽松上界（机器无关；正常 < 1s）
     assert!(elapsed.as_secs() < 60, "5000 事件顺序写入过慢：{elapsed:?}");
@@ -151,7 +158,8 @@ fn stress_wal_concurrent_appends_and_upserts() {
     // 预写一条触发 WAL 边车文件（随后验证 journal_mode）。
     // 注意：query_events 的 after_sequence=0 语义为 `sequence > 0`，
     // 预热行序列号须落在线程区间之外（线程写 1..=4000，预热用 4001）
-    db.append_event("s1", 4001, "warmup", "{}", None).expect("预热写入");
+    db.append_event("s1", 4001, "warmup", "{}", None)
+        .expect("预热写入");
 
     let mut handles = Vec::new();
     for t in 0..8u64 {
@@ -194,7 +202,11 @@ fn stress_wal_concurrent_appends_and_upserts() {
     seqs.sort_unstable();
     seqs.dedup();
     assert_eq!(seqs.len(), 4001, "序列号全部唯一（无锁冲突）");
-    assert_eq!(db.list_sessions().expect("列出会话").len(), 1, "upsert 不产生重复会话");
+    assert_eq!(
+        db.list_sessions().expect("列出会话").len(),
+        1,
+        "upsert 不产生重复会话"
+    );
 
     // WAL 模式验证：journal_mode 应为 wal（并发写友好，PE-08 T08.7）
     let probe = rusqlite::Connection::open(temp.path()).expect("探针连接");
@@ -225,27 +237,51 @@ fn stress_write_amplification_report() {
 
     // 全量保存 2000 条
     let all: Vec<SessionMessage> = (0..2000u64)
-        .map(|i| sample_message(&format!("m{i}"), if i % 2 == 0 { "user" } else { "assistant" }, i as i64))
+        .map(|i| {
+            sample_message(
+                &format!("m{i}"),
+                if i % 2 == 0 { "user" } else { "assistant" },
+                i as i64,
+            )
+        })
         .collect();
     let started = Instant::now();
     db.save_session_body("s1", &all).expect("全量保存");
     let full_save = started.elapsed();
-    assert_eq!(db.load_session_body("s1").expect("读回").len(), 2000, "全量保存后行数准确");
+    assert_eq!(
+        db.load_session_body("s1").expect("读回").len(),
+        2000,
+        "全量保存后行数准确"
+    );
 
     // 增量追加 500 条（P6 优化路径）
     let inc: Vec<SessionMessage> = (2000..2500u64)
-        .map(|i| sample_message(&format!("m{i}"), if i % 2 == 0 { "user" } else { "assistant" }, i as i64))
+        .map(|i| {
+            sample_message(
+                &format!("m{i}"),
+                if i % 2 == 0 { "user" } else { "assistant" },
+                i as i64,
+            )
+        })
         .collect();
     let started = Instant::now();
     db.append_session_messages("s1", &inc).expect("增量追加");
     let inc_append = started.elapsed();
-    assert_eq!(db.load_session_body("s1").expect("读回").len(), 2500, "增量追加后行数准确");
+    assert_eq!(
+        db.load_session_body("s1").expect("读回").len(),
+        2500,
+        "增量追加后行数准确"
+    );
 
     // 再次全量保存（写放大：重写全部现有行）
     let started = Instant::now();
     db.save_session_body("s1", &all).expect("再次全量保存");
     let full_rewrite = started.elapsed();
-    assert_eq!(db.load_session_body("s1").expect("读回").len(), 2000, "再次全量保存后行数准确");
+    assert_eq!(
+        db.load_session_body("s1").expect("读回").len(),
+        2000,
+        "再次全量保存后行数准确"
+    );
 
     println!(
         "[stress] 写放大报告（报告模式，无耗时断言）：全量保存 2000 条={full_save:?}，增量追加 500 条={inc_append:?}，再次全量重写 2500 条={full_rewrite:?}"

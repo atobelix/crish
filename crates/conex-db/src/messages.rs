@@ -124,7 +124,9 @@ impl LocalDb {
 
         let next_seq: i64 = {
             let mut stmt = tx
-                .prepare("SELECT COALESCE(MAX(seq), -1) + 1 FROM session_messages WHERE session_id = ?1")
+                .prepare(
+                    "SELECT COALESCE(MAX(seq), -1) + 1 FROM session_messages WHERE session_id = ?1",
+                )
                 .map_err(|e| self.latch_error("append_session_messages_max_seq", e))?;
             stmt.query_row(rusqlite::params![session_id], |row| row.get::<_, i64>(0))
                 .map_err(|e| self.latch_error("append_session_messages_max_seq_row", e))?

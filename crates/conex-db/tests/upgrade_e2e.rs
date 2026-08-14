@@ -90,7 +90,9 @@ fn count_rows(conn: &Connection, table: &str) -> i64 {
 }
 
 fn table_columns(conn: &Connection, table: &str) -> Vec<String> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})")).unwrap();
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .unwrap();
     stmt.query_map([], |r| r.get::<_, String>(1))
         .unwrap()
         .filter_map(|c| c.ok())
@@ -278,12 +280,20 @@ fn assert_upgraded_state(db: &LocalDb, temp: &TempDb) {
         Some(SCHEMA_VERSION_STRING)
     );
     assert_eq!(count_rows(&conn, "sessions"), 3, "3 个会话全部保留");
-    assert_eq!(count_rows(&conn, "session_messages"), 4, "消息保留（s1×3 + s2×1）");
+    assert_eq!(
+        count_rows(&conn, "session_messages"),
+        4,
+        "消息保留（s1×3 + s2×1）"
+    );
     assert_eq!(count_rows(&conn, "session_agents"), 1);
     assert_eq!(count_rows(&conn, "session_agent_messages"), 1);
     assert_eq!(count_rows(&conn, "events"), 4, "孤儿事件（ghost）被过滤");
     assert_eq!(count_rows(&conn, "runs"), 1, "孤儿 run 被过滤");
-    assert_eq!(count_rows(&conn, "pending_inputs"), 1, "孤儿 pending 被过滤");
+    assert_eq!(
+        count_rows(&conn, "pending_inputs"),
+        1,
+        "孤儿 pending 被过滤"
+    );
     assert_eq!(count_rows(&conn, "session_sequence"), 2);
     let orphans: String = conn
         .query_row(
@@ -326,10 +336,25 @@ fn upgrade_e2e_v3_to_v4_data_visible_via_public_api() {
     assert_eq!(body.len(), 3);
     let m2 = &body[1];
     assert_eq!(m2.sender, "assistant");
-    assert!(m2.thinking.as_deref().unwrap_or("").contains("推理"), "thinking 保留");
-    assert!(m2.tool_calls_json.as_deref().unwrap_or("").contains("web_search"));
-    assert!(m2.blocks_json.as_deref().unwrap_or("").contains("paragraph"));
-    assert!(m2.tool_call_results_json.as_deref().unwrap_or("").contains("success"));
+    assert!(
+        m2.thinking.as_deref().unwrap_or("").contains("推理"),
+        "thinking 保留"
+    );
+    assert!(m2
+        .tool_calls_json
+        .as_deref()
+        .unwrap_or("")
+        .contains("web_search"));
+    assert!(m2
+        .blocks_json
+        .as_deref()
+        .unwrap_or("")
+        .contains("paragraph"));
+    assert!(m2
+        .tool_call_results_json
+        .as_deref()
+        .unwrap_or("")
+        .contains("success"));
     assert_eq!(db.load_session_body("s2").unwrap().len(), 1);
 
     // 子代理可读
@@ -355,9 +380,15 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
     assert_upgraded_state(&db, &temp);
 
     // ── run 生命周期：insert → update → get → list ──
-    db.insert_run("r-new", "s1", RunStatus::Running, None, 4).unwrap();
-    db.update_run_status("r-new", RunStatus::Completed, Some("goal-complete"), Some(5))
+    db.insert_run("r-new", "s1", RunStatus::Running, None, 4)
         .unwrap();
+    db.update_run_status(
+        "r-new",
+        RunStatus::Completed,
+        Some("goal-complete"),
+        Some(5),
+    )
+    .unwrap();
     let run = db.get_run("r-new").unwrap().expect("r-new 存在");
     assert_eq!(run.status, RunStatus::Completed);
     assert_eq!(run.end_reason.as_deref(), Some("goal-complete"));
@@ -373,14 +404,17 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
     assert_eq!(db.reserve_sequence("s3").unwrap(), 42, "seed 抬高不回退");
 
     // ── 事件：升级后追加 + 查询 ──
-    db.append_event("s1", 4, "run-terminal", r#"{"reason":"ok"}"#, None).unwrap();
+    db.append_event("s1", 4, "run-terminal", r#"{"reason":"ok"}"#, None)
+        .unwrap();
     let after = db.query_events("s1", 3, None).unwrap();
     assert_eq!(after.len(), 1);
     assert_eq!(after[0].sequence, 4);
 
     // ── 正文：全量替换 / 增量追加 ──
-    db.save_session_body("s3", &[sample_message("n1", "user")]).unwrap();
-    db.append_session_messages("s3", &[sample_message("n2", "assistant")]).unwrap();
+    db.save_session_body("s3", &[sample_message("n1", "user")])
+        .unwrap();
+    db.append_session_messages("s3", &[sample_message("n2", "assistant")])
+        .unwrap();
     assert_eq!(db.load_session_body("s3").unwrap().len(), 2);
 
     // ── 子代理：保存 → 读回 ──
@@ -394,7 +428,8 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
     assert_eq!(loaded[0].allowed_write_paths_json, None);
 
     // ── 待处理输入 ──
-    db.save_pending_input("p2", "s1", Some("r-new"), r#"{"type":"text"}"#).unwrap();
+    db.save_pending_input("p2", "s1", Some("r-new"), r#"{"type":"text"}"#)
+        .unwrap();
     let inputs = db.load_pending_inputs("s1").unwrap();
     assert_eq!(inputs.len(), 2, "旧 p1 + 新 p2");
     assert!(db.delete_pending_input("p2").unwrap());
@@ -402,7 +437,10 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
 
     // ── 元数据 ──
     db.set_session_meta("upgraded_at", "t1").unwrap();
-    assert_eq!(db.get_session_meta("upgraded_at").unwrap().as_deref(), Some("t1"));
+    assert_eq!(
+        db.get_session_meta("upgraded_at").unwrap().as_deref(),
+        Some("t1")
+    );
 
     // ── 孤儿清理（宽限期显式归零保证确定性）──
     db.set_session_meta("orphan_grace_ms", "0").unwrap();
@@ -415,7 +453,11 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
     assert_eq!(db.list_sessions().unwrap().len(), 0);
     assert!(db.load_session_body("s1").unwrap().is_empty());
     assert!(db.load_session_agents("s1").unwrap().is_empty());
-    assert_eq!(db.query_events("s1", 0, None).unwrap().len(), 0, "events FK 级联");
+    assert_eq!(
+        db.query_events("s1", 0, None).unwrap().len(),
+        0,
+        "events FK 级联"
+    );
     assert!(db.get_run("r1").unwrap().is_none(), "runs FK 级联");
     assert!(db.get_failure().is_none(), "全部 API 无失败闩");
 }
@@ -462,11 +504,19 @@ fn upgrade_e2e_backup_contains_pre_migration_data() {
     // 备份 = 迁移前快照（可回滚）：user_version=3、events 仍含 AUTOINCREMENT id、
     // metadata 表仍在、数据（含孤儿）完整
     let bak = Connection::open(path).unwrap();
-    let uv: i32 = bak.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+    let uv: i32 = bak
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
     assert_eq!(uv, 3, "备份在 v4 迁移前");
     let events_cols = table_columns(&bak, "events");
-    assert!(events_cols.contains(&"id".to_string()), "备份 events 仍是旧形态");
-    assert!(table_columns(&bak, "metadata").contains(&"key".to_string()), "备份含 metadata");
+    assert!(
+        events_cols.contains(&"id".to_string()),
+        "备份 events 仍是旧形态"
+    );
+    assert!(
+        table_columns(&bak, "metadata").contains(&"key".to_string()),
+        "备份含 metadata"
+    );
     assert_eq!(count_rows(&bak, "events"), 5, "备份含全部事件（含孤儿）");
     assert_eq!(count_rows(&bak, "sessions"), 3);
 }
@@ -499,19 +549,32 @@ fn upgrade_e2e_import_from_localstorage_after_upgrade() {
     bodies.insert("ls-s1".to_string(), body);
 
     let stats = db
-        .import_from_localstorage(&index, bodies, HashMap::new(), Some("ls-s1"), &["工作".to_string()])
+        .import_from_localstorage(
+            &index,
+            bodies,
+            HashMap::new(),
+            Some("ls-s1"),
+            &["工作".to_string()],
+        )
         .unwrap();
     assert_eq!(stats.sessions, 1);
     assert_eq!(stats.messages, 1);
 
     let sessions = db.list_sessions().unwrap();
     assert_eq!(sessions.len(), 4, "升级后导入新增会话");
-    assert_eq!(db.load_session_body("ls-s1").unwrap()[0].text.as_deref(), Some("来自 localStorage"));
+    assert_eq!(
+        db.load_session_body("ls-s1").unwrap()[0].text.as_deref(),
+        Some("来自 localStorage")
+    );
     assert_eq!(
         db.get_session_meta("active_session_id").unwrap().as_deref(),
         Some("ls-s1")
     );
-    assert!(db.get_session_meta("folder_order").unwrap().unwrap().contains("工作"));
+    assert!(db
+        .get_session_meta("folder_order")
+        .unwrap()
+        .unwrap()
+        .contains("工作"));
 }
 
 /// 测试样本消息/代理构造（本文件内小助手，避免引入新依赖）。

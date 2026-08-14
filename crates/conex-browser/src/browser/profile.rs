@@ -47,10 +47,8 @@ pub fn data_root() -> Result<PathBuf, ProcessError> {
     let dir = dirs::data_dir();
     #[cfg(target_os = "linux")]
     let dir = dirs::data_local_dir();
-    dir.ok_or_else(|| {
-        ProcessError::Internal("无法定位平台数据根（data_root）".to_string())
-    })
-    .map(|p| p.join(APP_DIR_NAME))
+    dir.ok_or_else(|| ProcessError::Internal("无法定位平台数据根（data_root）".to_string()))
+        .map(|p| p.join(APP_DIR_NAME))
 }
 
 /// 浏览器统一根：`<data_root>/conex/browser/`（R-2）。
@@ -81,8 +79,9 @@ pub fn ephemeral_dir(root: &Path, token: &SessionToken) -> PathBuf {
 /// 创建会话临时 profile 目录（§4.2：create_dir_all；目录名 = 会话 uuid，天然唯一）。
 pub fn create_ephemeral(root: &Path, token: &SessionToken) -> Result<PathBuf, ProcessError> {
     let dir = ephemeral_dir(root, token);
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| ProcessError::Internal(format!("创建临时 profile 失败 {}：{e}", dir.display())))?;
+    std::fs::create_dir_all(&dir).map_err(|e| {
+        ProcessError::Internal(format!("创建临时 profile 失败 {}：{e}", dir.display()))
+    })?;
     Ok(dir)
 }
 
@@ -264,14 +263,14 @@ pub async fn import_copy(
                     "来源浏览器正在运行（PID {pid}），请关闭来源浏览器后再导入"
                 )));
             }
-                    LockState::Stale { .. } => {
-                        // stale 锁自愈：删除后继续（§4.5；豁免删除禁令：stale 锁为
-                        // 崩溃残留的自家运行期标记文件，直删语义与 R-2 一致）
-                        #[allow(clippy::disallowed_methods)]
-                        {
-                            let _ = std::fs::remove_file(source_user_data.join("SingletonLock"));
-                        }
-                    }
+            LockState::Stale { .. } => {
+                // stale 锁自愈：删除后继续（§4.5；豁免删除禁令：stale 锁为
+                // 崩溃残留的自家运行期标记文件，直删语义与 R-2 一致）
+                #[allow(clippy::disallowed_methods)]
+                {
+                    let _ = std::fs::remove_file(source_user_data.join("SingletonLock"));
+                }
+            }
             LockState::Absent => {}
         }
     }
@@ -334,8 +333,8 @@ fn copy_tree(
             src.display()
         ));
     }
-    for entry in std::fs::read_dir(src)
-        .map_err(|e| format!("读源目录 {} 失败：{e}", src.display()))?
+    for entry in
+        std::fs::read_dir(src).map_err(|e| format!("读源目录 {} 失败：{e}", src.display()))?
     {
         let entry = entry.map_err(|e| format!("读条目失败：{e}"))?;
         *nodes += 1;
@@ -369,8 +368,7 @@ fn copy_tree(
                 continue;
             }
             let dest_dir = dest.join(&name);
-            std::fs::create_dir_all(&dest_dir)
-                .map_err(|e| format!("创建目标子目录失败：{e}"))?;
+            std::fs::create_dir_all(&dest_dir).map_err(|e| format!("创建目标子目录失败：{e}"))?;
             copy_tree(&src_path, &dest_dir, report, depth + 1, nodes)?;
         } else if file_type.is_file() {
             if IMPORT_EXCLUDE_COMPONENTS.contains(&name_str.as_ref()) {
@@ -433,8 +431,12 @@ pub fn sweep_orphans(sessions_root: &Path, older_than: Duration) -> Vec<PathBuf>
         if matches!(detect_singleton_lock(&path), LockState::Alive { .. }) {
             continue;
         }
-        let Ok(meta) = std::fs::metadata(&path) else { continue };
-        let Ok(modified) = meta.modified() else { continue };
+        let Ok(meta) = std::fs::metadata(&path) else {
+            continue;
+        };
+        let Ok(modified) = meta.modified() else {
+            continue;
+        };
         if modified < cutoff {
             match std::fs::remove_dir_all(&path) {
                 Ok(()) => {
@@ -611,10 +613,7 @@ mod tests {
         assert!(dest.join("Local State").is_file());
         assert!(dest.join("Preferences").is_file());
         for excl in IMPORT_EXCLUDE_COMPONENTS {
-            assert!(
-                !dest.join(excl).exists(),
-                "排除项不得落副本：{excl}"
-            );
+            assert!(!dest.join(excl).exists(), "排除项不得落副本：{excl}");
         }
         assert!(!dest.join("SingletonLock").exists(), "瞬态锁不得复制");
         assert!(!dest.join("LOCK").exists());
@@ -674,15 +673,21 @@ mod tests {
             detect_singleton_lock(dir.path()),
             LockState::Stale { pid: 4294967294 }
         );
-        std::fs::write(dir.path().join("SingletonLock"), std::process::id().to_string())
-            .expect("锁");
+        std::fs::write(
+            dir.path().join("SingletonLock"),
+            std::process::id().to_string(),
+        )
+        .expect("锁");
         assert!(matches!(
             detect_singleton_lock(dir.path()),
             LockState::Alive { .. }
         ));
         // 非法内容 → Stale
         std::fs::write(dir.path().join("SingletonLock"), b"not-a-pid").expect("锁");
-        assert!(matches!(detect_singleton_lock(dir.path()), LockState::Stale { .. }));
+        assert!(matches!(
+            detect_singleton_lock(dir.path()),
+            LockState::Stale { .. }
+        ));
     }
 
     /// profile 名消毒（路径分隔符/`..` 注入）。
@@ -737,7 +742,10 @@ mod tests {
         set_dir_mtime_old(&orphan);
 
         let removed = sweep_orphans(&root, Duration::from_secs(2 * 24 * 3600));
-        assert!(!removed.contains(&live), "活跃会话不得被清扫（M10）：{removed:?}");
+        assert!(
+            !removed.contains(&live),
+            "活跃会话不得被清扫（M10）：{removed:?}"
+        );
         assert!(removed.contains(&orphan), "无锁孤儿应照常清扫：{removed:?}");
         assert!(live.exists(), "活跃会话目录必须保留");
         assert!(!orphan.exists(), "孤儿应被删除");
@@ -765,11 +773,7 @@ mod tests {
         std::fs::write(outside.join("secret.txt"), b"s").expect("外部文件");
         symlink(&outside, src_profile.join("outside")).expect("外部目录链接");
         // 指向源外的文件链接
-        symlink(
-            outside.join("secret.txt"),
-            src_profile.join("secret-link"),
-        )
-        .expect("外部文件链接");
+        symlink(outside.join("secret.txt"), src_profile.join("secret-link")).expect("外部文件链接");
 
         let dest = dir.path().join("managed-out");
         let report = import_copy(&src_root, "Default", &dest, true)
@@ -780,7 +784,10 @@ mod tests {
         // 三类链接一律未复制（不跟随）
         assert!(!dest.join("self").exists(), "自环链接不得复制");
         assert!(!dest.join("outside").exists(), "外部目录链接不得复制");
-        assert!(!dest.join("outside").join("secret.txt").exists(), "外部目录内容不得进入副本");
+        assert!(
+            !dest.join("outside").join("secret.txt").exists(),
+            "外部目录内容不得进入副本"
+        );
         assert!(!dest.join("secret-link").exists(), "外部文件链接不得复制");
         // 链接计入 skipped
         assert!(report.skipped >= 3, "3 个链接应计入 skipped：{report:?}");
@@ -831,9 +838,7 @@ mod tests {
         // SAFETY：SetFileAttributesW 标准 API；wide 为 NUL 结尾的宽字符串
         unsafe { SetFileAttributesW(wide.as_ptr(), FILE_ATTRIBUTE_NORMAL) };
         let past = std::time::SystemTime::now() - Duration::from_secs(2 * 24 * 3600);
-        let since_epoch = past
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("时间");
+        let since_epoch = past.duration_since(std::time::UNIX_EPOCH).expect("时间");
         let ft_100ns = since_epoch.as_nanos() as i64 / 100;
         let filetime = FILETIME {
             dwLowDateTime: ft_100ns as u32,
@@ -875,7 +880,10 @@ mod tests {
     fn default_data_root_resolves() {
         let root = data_root().expect("数据根可定位");
         assert!(root.is_absolute());
-        assert!(root.ends_with(APP_DIR_NAME), "应用目录名统一 conex：{root:?}");
+        assert!(
+            root.ends_with(APP_DIR_NAME),
+            "应用目录名统一 conex：{root:?}"
+        );
     }
 
     /// 目录布局常量回归（R-2 分层）。
@@ -885,16 +893,24 @@ mod tests {
         assert_eq!(root, Path::new("C:\\data").join("browser"));
         assert_eq!(sessions_root(&root), root.join("sessions"));
         assert_eq!(managed_root(&root), root.join("managed"));
-        assert_eq!(trash_root(Path::new("C:\\data")), Path::new("C:\\data").join("trash"));
+        assert_eq!(
+            trash_root(Path::new("C:\\data")),
+            Path::new("C:\\data").join("trash")
+        );
     }
 
     /// 导入失败：源 profile 不存在 → ImportFailed。
     #[tokio::test]
     async fn import_missing_source_profile() {
         let dir = tempfile::tempdir().expect("临时目录");
-        let err = import_copy(&dir.path().join("src"), "Default", &dir.path().join("out"), true)
-            .await
-            .expect_err("应失败");
+        let err = import_copy(
+            &dir.path().join("src"),
+            "Default",
+            &dir.path().join("out"),
+            true,
+        )
+        .await
+        .expect_err("应失败");
         assert!(matches!(err, ProcessError::ImportFailed(_)));
     }
 }

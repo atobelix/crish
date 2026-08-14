@@ -23,7 +23,10 @@ pub(super) fn build_idempotency_context(
         run_id: ctx.run_id.clone(),
         session_id: ctx.session_id.clone(),
         tool_name: tool_name.to_string(),
-        snapshot_tag: args.get("snapshotTag").and_then(Value::as_str).map(String::from),
+        snapshot_tag: args
+            .get("snapshotTag")
+            .and_then(Value::as_str)
+            .map(String::from),
         extra_key_material: path_existence_markers(ctx, args),
     }
 }

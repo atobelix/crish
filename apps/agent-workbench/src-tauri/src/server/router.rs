@@ -32,20 +32,19 @@
 use std::sync::Arc;
 
 use axum::{
-    Json,
     extract::{FromRequest, Path, RawQuery, Request, State},
     http::{StatusCode, Uri},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use conex_types::device::commands::{
     SettingsConfirmParams, SettingsConfirmResult, TaskOutputParams, TaskOutputResult,
 };
-use conex_types::device::version::PAGE_SIZE_MAX;
 #[cfg(test)]
 use conex_types::device::version::PAGE_SIZE_DEFAULT;
+use conex_types::device::version::PAGE_SIZE_MAX;
 use conex_types::device::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, AssetKind,
     AssetUrlParams, AssetUrlResult, CancelRunParams, CancelRunResult, DenyParams, DeviceErrorCode,
@@ -60,7 +59,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::server::backend::{ApiBackend, SettingsUpdateParams};
-use crate::server::{ServerError, ServerState, now_ms};
+use crate::server::{now_ms, ServerError, ServerState};
 
 /// 服务自报路由（免鉴权）
 pub const INFO_PATH: &str = "/v1/info";
@@ -183,17 +182,13 @@ pub struct HelloInfo {
 }
 
 /// 全局时钟响应头注入中间件（为所有 HTTP 响应注入 X-Server-Time-Ms，使客户端能自愈时钟偏差）
-pub async fn inject_server_time_header(
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn inject_server_time_header(request: Request, next: Next) -> Response {
     let now = now_ms();
     let mut response = next.run(request).await;
     if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
-        response.headers_mut().insert(
-            crate::server::auth::SERVER_TIME_HEADER,
-            val,
-        );
+        response
+            .headers_mut()
+            .insert(crate::server::auth::SERVER_TIME_HEADER, val);
     }
     response
 }
@@ -206,7 +201,10 @@ pub fn build_router(state: ServerState) -> Router {
     let info = Router::new()
         .route(INFO_PATH, get(handle_info))
         .route(HELLO_PATH, get(handle_hello))
-        .route(PAIR_PATH, post(crate::server::pair_endpoint::handle_rest_pair));
+        .route(
+            PAIR_PATH,
+            post(crate::server::pair_endpoint::handle_rest_pair),
+        );
     // WS 事件端点（R1-05）：handler 内自鉴权（Bearer 头或 ?token= 双通道，
     // D2 §10.1）——不进 require_bearer_token 中间件组（浏览器 WS 无法携带
     // 自定义头，且 401 响应会破坏升级握手语义）
@@ -234,7 +232,10 @@ pub fn build_router(state: ServerState) -> Router {
         .route(APPROVAL_DENY_PATH, post(handle_deny))
         .route(APPROVALS_PENDING_PATH, get(handle_approvals_pending))
         .route(APPROVALS_HISTORY_PATH, get(handle_approvals_history))
-        .route(SETTINGS_PATH, get(handle_settings_get).put(handle_settings_set))
+        .route(
+            SETTINGS_PATH,
+            get(handle_settings_get).put(handle_settings_set),
+        )
         // ── R2-12c 新增面（C21/C22 文件域 + C30/C31 设置域）──
         .route(SEARCH_FILES_PATH, get(handle_search_files))
         .route(ASSET_URL_PATH, get(handle_asset_url))
@@ -362,7 +363,9 @@ async fn handle_list_tasks(
     State(state): State<ServerState>,
 ) -> Result<Json<ListTasksResult>, ServerError> {
     let backend = require_backend(&state)?;
-    Ok(Json(backend.list_background_tasks(ListTasksParams {}).await?))
+    Ok(Json(
+        backend.list_background_tasks(ListTasksParams {}).await?,
+    ))
 }
 
 /// GET /v1/tasks/{id}/output：C07 任务输出补取（afterLine 偏移分页）
@@ -457,7 +460,11 @@ async fn handle_run_cancel(
         .and_then(serde_json::Value::as_str)
         .map(str::to_string);
     let backend = require_backend(&state)?;
-    Ok(Json(backend.cancel_run(CancelRunParams { run_id, reason }).await?))
+    Ok(Json(
+        backend
+            .cancel_run(CancelRunParams { run_id, reason })
+            .await?,
+    ))
 }
 
 /// POST /v1/approval/{toolCallId}/approve：C11 审批批准（body = {runId?}；
@@ -473,7 +480,14 @@ async fn handle_approve(
         .and_then(serde_json::Value::as_str)
         .map(str::to_string);
     let backend = require_backend(&state)?;
-    Ok(Json(backend.approve(ApproveParams { tool_call_id, run_id }).await?))
+    Ok(Json(
+        backend
+            .approve(ApproveParams {
+                tool_call_id,
+                run_id,
+            })
+            .await?,
+    ))
 }
 
 /// POST /v1/approval/{toolCallId}/deny：C12 审批拒绝（body = {runId?, reason?}；
@@ -553,7 +567,9 @@ async fn handle_settings_get(
             .filter(|key| !key.is_empty())
             .collect::<Vec<_>>()
     });
-    Ok(Json(backend.settings_get(GetSettingsParams { keys }).await?))
+    Ok(Json(
+        backend.settings_get(GetSettingsParams { keys }).await?,
+    ))
 }
 
 /// PUT /v1/settings：C29 非敏感配置更新（body = SettingsUpdateParams；
@@ -659,13 +675,13 @@ where
         let bytes = axum::body::to_bytes(req.into_body(), JSON_BODY_LIMIT)
             .await
             .map_err(|e| {
-                ServerError::protocol(
-                    DeviceErrorCode::CmdInvalid,
-                    format!("读取请求体失败：{e}"),
-                )
+                ServerError::protocol(DeviceErrorCode::CmdInvalid, format!("读取请求体失败：{e}"))
             })?;
         let value: T = serde_json::from_slice(&bytes).map_err(|e| {
-            ServerError::protocol(DeviceErrorCode::CmdInvalid, format!("请求体 JSON 非法：{e}"))
+            ServerError::protocol(
+                DeviceErrorCode::CmdInvalid,
+                format!("请求体 JSON 非法：{e}"),
+            )
         })?;
         Ok(Self(value))
     }
@@ -717,9 +733,9 @@ pub(crate) fn error_response(err: &ServerError) -> Response {
 /// 取命令后端（None = 服务未注入 CoreStateBackend → internal 500 诚实
 /// 降级，不 panic；R1-04 在 main.rs 装配面注入）
 fn require_backend(state: &ServerState) -> Result<Arc<dyn ApiBackend>, ServerError> {
-    state
-        .backend()
-        .ok_or_else(|| ServerError::internal("服务命令后端未接线（CoreStateBackend 由 R1-04 注入）"))
+    state.backend().ok_or_else(|| {
+        ServerError::internal("服务命令后端未接线（CoreStateBackend 由 R1-04 注入）")
+    })
 }
 
 /// 归一化 maxEvents：缺省 200，夹紧 [1, 1000]（对齐
@@ -873,12 +889,14 @@ fn invalid_query_encoding(raw: &str) -> ServerError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::auth::{TokenStore, sha256_hex};
+    use crate::server::auth::{sha256_hex, TokenStore};
     use crate::server::{ServerConfig, ServerHandle};
     use axum::body::Body;
     use axum::extract::ConnectInfo;
     use conex_types::device::commands::{SettingsConfirmAction, SettingsConfirmStatus};
-    use conex_types::device::{CommandSurface, FileSearchHit, ManifestEntry, RunTaskParams, RunTaskResult};
+    use conex_types::device::{
+        CommandSurface, FileSearchHit, ManifestEntry, RunTaskParams, RunTaskResult,
+    };
     use conex_types::SessionIndexEntry;
     use std::net::SocketAddr;
     use tower::ServiceExt;
@@ -900,9 +918,8 @@ mod tests {
         let config = ServerConfig::new(std::env::temp_dir());
         let handle = ServerHandle::new(config, "127.0.0.1:0".parse().expect("固定测试地址"));
         let seq = TOKEN_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tokens = TokenStore::new(
-            std::env::temp_dir().join(format!("pairing-router-test-{seq}.json")),
-        );
+        let tokens =
+            TokenStore::new(std::env::temp_dir().join(format!("pairing-router-test-{seq}.json")));
         ServerState::new(&handle, tokens, backend)
     }
 
@@ -1317,10 +1334,7 @@ mod tests {
             })
         }
 
-        async fn run_task(
-            &self,
-            params: RunTaskParams,
-        ) -> Result<RunTaskResult, ServerError> {
+        async fn run_task(&self, params: RunTaskParams) -> Result<RunTaskResult, ServerError> {
             self.fail()?;
             // R1-10 T-08：记录远程申报的权限模式（装配面降级断言用）
             *self.last_run_permission_mode.lock().unwrap() = params.permission_mode;
@@ -1489,7 +1503,9 @@ mod tests {
             params: SettingsUpdateParams,
         ) -> Result<conex_types::device::GetSettingsResult, ServerError> {
             self.fail()?;
-            if params.credential_mode.is_some() || params.endpoint.is_some() || params.stream.is_some()
+            if params.credential_mode.is_some()
+                || params.endpoint.is_some()
+                || params.stream.is_some()
             {
                 return Err(Self::invalid(
                     "credentialMode / endpoint / stream 不在 REST 非敏感配置更新面（mock）",
@@ -1601,9 +1617,7 @@ mod tests {
             Some(Arc::new(MockBackend::new()));
         let state = ServerState::new(
             &handle,
-            TokenStore::new(
-                std::env::temp_dir().join("pairing-router-inject-test.json"),
-            ),
+            TokenStore::new(std::env::temp_dir().join("pairing-router-inject-test.json")),
             backend,
         );
         assert!(state.backend().is_some(), "backend 注入后应可读取");
@@ -1634,7 +1648,9 @@ mod tests {
         assert_eq!(info["pairingActive"].as_bool(), Some(false));
         assert!(info["port"].is_u64(), "port 必须存在");
         assert!(info["serverTimeMs"].is_u64(), "serverTimeMs 必须存在");
-        let caps = info["capabilities"].as_object().expect("capabilities 必须为对象");
+        let caps = info["capabilities"]
+            .as_object()
+            .expect("capabilities 必须为对象");
         assert_eq!(caps.len(), 17, "能力位必须 17 位全表");
     }
 
@@ -1651,7 +1667,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(response.headers().contains_key(crate::server::auth::SERVER_TIME_HEADER));
+        assert!(response
+            .headers()
+            .contains_key(crate::server::auth::SERVER_TIME_HEADER));
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -1674,7 +1692,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-        assert!(response.headers().contains_key(crate::server::auth::SERVER_TIME_HEADER));
+        assert!(response
+            .headers()
+            .contains_key(crate::server::auth::SERVER_TIME_HEADER));
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -1699,7 +1719,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(response.headers().contains_key(crate::server::auth::SERVER_TIME_HEADER));
+        assert!(response
+            .headers()
+            .contains_key(crate::server::auth::SERVER_TIME_HEADER));
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -1776,7 +1798,9 @@ mod tests {
                 "{label} {uri} 无令牌直连必须 401"
             );
             assert!(
-                response.headers().contains_key(crate::server::auth::SERVER_TIME_HEADER),
+                response
+                    .headers()
+                    .contains_key(crate::server::auth::SERVER_TIME_HEADER),
                 "{label} 401 响应头必须携带 X-Server-Time-Ms"
             );
             let body: ErrorBody = serde_json::from_value(json_body(response).await)
@@ -1799,17 +1823,32 @@ mod tests {
         let forged = "f".repeat(64);
         let forged_hash = sha256_hex(forged.as_bytes());
         for expected in 1..=3 {
-            let response = app.clone().oneshot(authed_get(STATUS_PATH, &forged)).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(authed_get(STATUS_PATH, &forged))
+                .await
+                .unwrap();
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             let body: ErrorBody = serde_json::from_value(json_body(response).await)
                 .expect("401 载荷必须可反序列化为 ErrorBody");
             assert_eq!(body.code, DeviceErrorCode::AuthBadSignature);
-            let count = state.tokens().lock().unwrap().auth_failure_count(&forged_hash);
-            assert_eq!(count, expected, "第 {expected} 次伪造直连后失败计数应为 {expected}");
+            let count = state
+                .tokens()
+                .lock()
+                .unwrap()
+                .auth_failure_count(&forged_hash);
+            assert_eq!(
+                count, expected,
+                "第 {expected} 次伪造直连后失败计数应为 {expected}"
+            );
         }
         // 合法令牌随后可正常通过（伪造尝试不影响合法路径）
         let raw = issue_token(&state);
-        let response = app.clone().oneshot(authed_get(STATUS_PATH, &raw)).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(authed_get(STATUS_PATH, &raw))
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
@@ -1825,12 +1864,20 @@ mod tests {
         let app = build_router(state.clone());
 
         // 撤销前：旧令牌连接成功
-        let before = app.clone().oneshot(authed_get(STATUS_PATH, &raw)).await.unwrap();
+        let before = app
+            .clone()
+            .oneshot(authed_get(STATUS_PATH, &raw))
+            .await
+            .unwrap();
         assert_eq!(before.status(), StatusCode::OK, "撤销前旧令牌应可连");
 
         // 撤销（注册表删除）→ 旧令牌重连请求被拒
         assert!(state.tokens().lock().unwrap().revoke(&hash));
-        let after = app.clone().oneshot(authed_get(STATUS_PATH, &raw)).await.unwrap();
+        let after = app
+            .clone()
+            .oneshot(authed_get(STATUS_PATH, &raw))
+            .await
+            .unwrap();
         assert_eq!(
             after.status(),
             StatusCode::UNAUTHORIZED,
@@ -1931,10 +1978,7 @@ mod tests {
         let state = test_state_with(Some(MockBackend::new()));
         let token = issue_token(&state);
         let app = build_router(state);
-        let response = app
-            .oneshot(authed_get("/v1/status", &token))
-            .await
-            .unwrap();
+        let response = app.oneshot(authed_get("/v1/status", &token)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let body = json_body(response).await;
         assert_eq!(body["initialized"], true);
@@ -2009,7 +2053,10 @@ mod tests {
         let app = build_router(state);
         // afterSequence=2 开区间 + maxEvents=2 → 取 [3,4]，hasMore
         let response = app
-            .oneshot(authed_get("/v1/sessions/s-1/events?afterSequence=2&maxEvents=2", &token))
+            .oneshot(authed_get(
+                "/v1/sessions/s-1/events?afterSequence=2&maxEvents=2",
+                &token,
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -2028,7 +2075,10 @@ mod tests {
         let token = issue_token(&state);
         let app = build_router(state);
         let response = app
-            .oneshot(authed_get("/v1/sessions/s-1/events?afterSequence=4&maxEvents=10", &token))
+            .oneshot(authed_get(
+                "/v1/sessions/s-1/events?afterSequence=4&maxEvents=10",
+                &token,
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -2062,7 +2112,10 @@ mod tests {
         let app = build_router(state);
         // maxEvents=10000 夹紧到 1000（对齐 normalize_max_events，不报错）
         let response = app
-            .oneshot(authed_get("/v1/sessions/s-1/events?maxEvents=10000", &token))
+            .oneshot(authed_get(
+                "/v1/sessions/s-1/events?maxEvents=10000",
+                &token,
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -2078,7 +2131,10 @@ mod tests {
         let app = build_router(state);
         // 游标越过尾部 → 空页，nextAfterSequence 保持入参（对齐 EventPage）
         let response = app
-            .oneshot(authed_get("/v1/sessions/s-1/events?afterSequence=99", &token))
+            .oneshot(authed_get(
+                "/v1/sessions/s-1/events?afterSequence=99",
+                &token,
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -2108,19 +2164,31 @@ mod tests {
         let token = issue_token(&state);
         let app = build_router(state);
         for (uri, label) in [
-            ("/v1/sessions/s-1/events?afterSequence=abc", "afterSequence 非数字"),
-            ("/v1/sessions/s-1/events?afterSequence=-5", "afterSequence 负值"),
+            (
+                "/v1/sessions/s-1/events?afterSequence=abc",
+                "afterSequence 非数字",
+            ),
+            (
+                "/v1/sessions/s-1/events?afterSequence=-5",
+                "afterSequence 负值",
+            ),
             ("/v1/sessions/s-1/events?maxEvents=-5", "maxEvents 负值"),
-            ("/v1/sessions/s-1/events?direction=sideways", "direction 非法"),
+            (
+                "/v1/sessions/s-1/events?direction=sideways",
+                "direction 非法",
+            ),
         ] {
-            let response = app
-                .clone()
-                .oneshot(authed_get(uri, &token))
-                .await
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{label} 必须 400");
+            let response = app.clone().oneshot(authed_get(uri, &token)).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{label} 必须 400"
+            );
             let body = json_body(response).await;
-            assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
+            assert_eq!(
+                body["code"], "cmd.invalid",
+                "{label} 错误码应为 cmd.invalid"
+            );
         }
     }
 
@@ -2133,7 +2201,10 @@ mod tests {
         let app = build_router(state);
         let response = app
             .clone()
-            .oneshot(authed_get("/v1/runs/r-1/events?afterSequence=0&maxEvents=3", &token))
+            .oneshot(authed_get(
+                "/v1/runs/r-1/events?afterSequence=0&maxEvents=3",
+                &token,
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -2177,17 +2248,17 @@ mod tests {
         let state = test_state_with(Some(MockBackend::new()));
         let token = issue_token(&state);
         let app = build_router(state);
-        let response = app
-            .oneshot(authed_get("/v1/tasks", &token))
-            .await
-            .unwrap();
+        let response = app.oneshot(authed_get("/v1/tasks", &token)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let body = json_body(response).await;
         assert_eq!(body["tasks"].as_array().unwrap().len(), 2);
         assert_eq!(body["tasks"][0]["taskId"], "t-1");
         assert_eq!(body["tasks"][0]["status"], "running");
         assert_eq!(body["tasks"][1]["status"], "completed");
-        assert!(body["tasks"][0].get("output").is_none(), "列表不携带输出内容");
+        assert!(
+            body["tasks"][0].get("output").is_none(),
+            "列表不携带输出内容"
+        );
     }
 
     // ── R1-03 只读面：C07 任务输出补取 ──
@@ -2200,7 +2271,10 @@ mod tests {
         // afterLine 偏移分页
         let response = app
             .clone()
-            .oneshot(authed_get("/v1/tasks/t-1/output?maxLines=10&afterLine=5", &token))
+            .oneshot(authed_get(
+                "/v1/tasks/t-1/output?maxLines=10&afterLine=5",
+                &token,
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -2306,10 +2380,7 @@ mod tests {
         let state = test_state();
         let token = issue_token(&state);
         let app = build_router(state);
-        let response = app
-            .oneshot(authed_get("/v1/status", &token))
-            .await
-            .unwrap();
+        let response = app.oneshot(authed_get("/v1/status", &token)).await.unwrap();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let body = json_body(response).await;
         assert_eq!(body["code"], "internal");
@@ -2330,13 +2401,12 @@ mod tests {
         assert_eq!(body["code"], "internal");
 
         // engine 未就绪 → 409（D2 §8.1.2 映射）
-        let state = test_state_with(Some(MockBackend::failing(DeviceErrorCode::CmdEngineNotReady)));
+        let state = test_state_with(Some(MockBackend::failing(
+            DeviceErrorCode::CmdEngineNotReady,
+        )));
         let token = issue_token(&state);
         let app = build_router(state);
-        let response = app
-            .oneshot(authed_get("/v1/status", &token))
-            .await
-            .unwrap();
+        let response = app.oneshot(authed_get("/v1/status", &token)).await.unwrap();
         assert_eq!(response.status(), StatusCode::CONFLICT);
         let body = json_body(response).await;
         assert_eq!(body["code"], "cmd.engine_not_ready");
@@ -2363,9 +2433,7 @@ mod tests {
             ("POST", PAUSE_AUTOMATION_PATH, "pause automation"),
         ] {
             // 路径参数用具体值（{id} 段占位符不可直接请求）
-            let uri = path
-                .replace("{id}", "r-1")
-                .replace("{toolCallId}", "tc-9");
+            let uri = path.replace("{id}", "r-1").replace("{toolCallId}", "tc-9");
             let request = if method == "GET" {
                 axum::http::Request::builder()
                     .uri(&uri)
@@ -2483,17 +2551,18 @@ mod tests {
                     axum::http::Request::builder()
                         .uri(RUNS_PATH)
                         .method("POST")
-                        .header(
-                            axum::http::header::AUTHORIZATION,
-                            format!("Bearer {token}"),
-                        )
+                        .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
                         .header(axum::http::header::CONTENT_TYPE, "application/json")
                         .body(Body::from(payload.to_string()))
                         .unwrap(),
                 )
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "载荷 {payload:?} 必须 400");
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "载荷 {payload:?} 必须 400"
+            );
             let body = json_body(response).await;
             assert_eq!(body["code"], "cmd.invalid");
         }
@@ -2806,9 +2875,16 @@ mod tests {
                 .oneshot(authed_body("PUT", SETTINGS_PATH, &token, payload))
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{label} 必须 400");
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{label} 必须 400"
+            );
             let body = json_body(response).await;
-            assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
+            assert_eq!(
+                body["code"], "cmd.invalid",
+                "{label} 错误码应为 cmd.invalid"
+            );
         }
     }
 
@@ -2874,16 +2950,22 @@ mod tests {
         for (uri, label) in [
             ("/v1/search/files", "query 缺失"),
             ("/v1/search/files?query=%20%20", "query 空白"),
-            ("/v1/search/files?query=main&maxResults=abc", "maxResults 非数字"),
+            (
+                "/v1/search/files?query=main&maxResults=abc",
+                "maxResults 非数字",
+            ),
         ] {
-            let response = app
-                .clone()
-                .oneshot(authed_get(uri, &token))
-                .await
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{label} 必须 400");
+            let response = app.clone().oneshot(authed_get(uri, &token)).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{label} 必须 400"
+            );
             let body = json_body(response).await;
-            assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
+            assert_eq!(
+                body["code"], "cmd.invalid",
+                "{label} 错误码应为 cmd.invalid"
+            );
         }
     }
 
@@ -2895,7 +2977,10 @@ mod tests {
         let token = issue_token(&state);
         let app = build_router(state);
         let response = app
-            .oneshot(authed_get("/v1/assets/url?path=docs%2Fx.png&kind=image", &token))
+            .oneshot(authed_get(
+                "/v1/assets/url?path=docs%2Fx.png&kind=image",
+                &token,
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
@@ -2912,16 +2997,22 @@ mod tests {
         let app = build_router(state);
         for (uri, label) in [
             ("/v1/assets/url?path=docs%2Fx.png", "kind 缺失"),
-            ("/v1/assets/url?path=docs%2Fx.png&kind=sideways", "kind 非法"),
+            (
+                "/v1/assets/url?path=docs%2Fx.png&kind=sideways",
+                "kind 非法",
+            ),
         ] {
-            let response = app
-                .clone()
-                .oneshot(authed_get(uri, &token))
-                .await
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{label} 必须 400");
+            let response = app.clone().oneshot(authed_get(uri, &token)).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{label} 必须 400"
+            );
             let body = json_body(response).await;
-            assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
+            assert_eq!(
+                body["code"], "cmd.invalid",
+                "{label} 错误码应为 cmd.invalid"
+            );
         }
     }
 
@@ -2947,10 +3038,7 @@ mod tests {
         assert_eq!(body["reason"], "mock 回执");
         let received = mock.last_settings_confirm.lock().unwrap().clone().unwrap();
         assert_eq!(received.confirm_request_id, "req-1");
-        assert_eq!(
-            received.action,
-            SettingsConfirmAction::Withdraw
-        );
+        assert_eq!(received.action, SettingsConfirmAction::Withdraw);
     }
 
     /// C30：body 非法（缺 confirmRequestId / action 枚举非法）→ 400 cmd.invalid
@@ -2960,8 +3048,14 @@ mod tests {
         let token = issue_token(&state);
         let app = build_router(state);
         for (payload, label) in [
-            (serde_json::json!({ "action": "query" }), "缺 confirmRequestId"),
-            (serde_json::json!({ "confirmRequestId": "req-1", "action": "sideways" }), "action 非法"),
+            (
+                serde_json::json!({ "action": "query" }),
+                "缺 confirmRequestId",
+            ),
+            (
+                serde_json::json!({ "confirmRequestId": "req-1", "action": "sideways" }),
+                "action 非法",
+            ),
             (serde_json::json!("not-an-object"), "非对象 body"),
         ] {
             let response = app
@@ -2969,9 +3063,16 @@ mod tests {
                 .oneshot(authed_body("POST", SETTINGS_CONFIRM_PATH, &token, payload))
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{label} 必须 400");
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{label} 必须 400"
+            );
             let body = json_body(response).await;
-            assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
+            assert_eq!(
+                body["code"], "cmd.invalid",
+                "{label} 错误码应为 cmd.invalid"
+            );
         }
     }
 
@@ -3003,7 +3104,12 @@ mod tests {
         );
         // 缺省 durationSec → 透传 None（后端按缺省 3600 处理）
         let response = app
-            .oneshot(authed_body("POST", PAUSE_AUTOMATION_PATH, &token, serde_json::json!({})))
+            .oneshot(authed_body(
+                "POST",
+                PAUSE_AUTOMATION_PATH,
+                &token,
+                serde_json::json!({}),
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -3017,7 +3123,10 @@ mod tests {
         let token = issue_token(&state);
         let app = build_router(state);
         for (payload, label) in [
-            (serde_json::json!({ "durationSec": "abc" }), "durationSec 非数字"),
+            (
+                serde_json::json!({ "durationSec": "abc" }),
+                "durationSec 非数字",
+            ),
             (serde_json::json!("not-an-object"), "非对象 body"),
         ] {
             let response = app
@@ -3025,9 +3134,16 @@ mod tests {
                 .oneshot(authed_body("POST", PAUSE_AUTOMATION_PATH, &token, payload))
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{label} 必须 400");
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{label} 必须 400"
+            );
             let body = json_body(response).await;
-            assert_eq!(body["code"], "cmd.invalid", "{label} 错误码应为 cmd.invalid");
+            assert_eq!(
+                body["code"], "cmd.invalid",
+                "{label} 错误码应为 cmd.invalid"
+            );
         }
     }
 
@@ -3035,7 +3151,12 @@ mod tests {
     /// （白名单是命令执行面唯一真源——端点与白名单漂移即红）
     #[test]
     fn r2_12_endpoints_registered_in_whitelist() {
-        for command in ["searchFiles", "assetUrl", "settingsConfirm", "pauseAutomation"] {
+        for command in [
+            "searchFiles",
+            "assetUrl",
+            "settingsConfirm",
+            "pauseAutomation",
+        ] {
             assert!(
                 crate::server::remote_whitelist::is_remote_command_whitelisted(command),
                 "命令 {command} 必须登记于远程白名单（R2-12c 新端点）"
@@ -3128,7 +3249,10 @@ mod tests {
         }
     }
 
-    fn g5_recording_bridge() -> (crate::core_event_bridge::EventBridge, Arc<G5RecordingEmitter>) {
+    fn g5_recording_bridge() -> (
+        crate::core_event_bridge::EventBridge,
+        Arc<G5RecordingEmitter>,
+    ) {
         let emitter = Arc::new(G5RecordingEmitter::default());
         let bridge = crate::core_event_bridge::EventBridge::new(
             "workbench-run-event",
@@ -3192,7 +3316,10 @@ mod tests {
             conex_types::events::SecurityAuditOperation::RemoteSourceAttempt
         );
         assert_eq!(targets, vec!["config_secret_reveal".to_string()]);
-        assert_eq!(decision, conex_types::events::SecurityAuditDecision::Blocked);
+        assert_eq!(
+            decision,
+            conex_types::events::SecurityAuditDecision::Blocked
+        );
         // 白名单内命令名放行（无 Err 无审计）
         assert!(ensure_command_execution_allowed(&state, "runTask").is_ok());
         assert_eq!(emitter.0.lock().unwrap().len(), 1, "放行路径不得发射审计");
@@ -3241,7 +3368,10 @@ mod tests {
                 operation,
                 conex_types::events::SecurityAuditOperation::RemoteSourceAttempt
             );
-            assert_eq!(decision, conex_types::events::SecurityAuditDecision::Blocked);
+            assert_eq!(
+                decision,
+                conex_types::events::SecurityAuditDecision::Blocked
+            );
         }
     }
 
@@ -3331,8 +3461,10 @@ mod tests {
         let handle = ServerHandle::new(config, "127.0.0.1:0".parse().expect("固定测试地址"));
         let tokens = Arc::new(std::sync::Mutex::new(TokenStore::new(file)));
         let ws_registry = Arc::new(crate::server::ws::WsRegistry::new());
-        let coordinator =
-            Arc::new(crate::server::pairing::PairingCoordinator::new(tokens, ws_registry));
+        let coordinator = Arc::new(crate::server::pairing::PairingCoordinator::new(
+            tokens,
+            ws_registry,
+        ));
         let state = ServerState::new(
             &handle,
             TokenStore::new(handle.config().pairing_file_path.clone()),
@@ -3451,7 +3583,10 @@ mod tests {
         for _ in 0..4 {
             let response = app
                 .clone()
-                .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" })))
+                .oneshot(plain_post(
+                    PAIR_PATH,
+                    serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" }),
+                ))
                 .await
                 .unwrap();
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -3459,7 +3594,10 @@ mod tests {
         // 第 5 次错误：计数达上限（仍 401，计数语义）
         let response = app
             .clone()
-            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" })))
+            .oneshot(plain_post(
+                PAIR_PATH,
+                serde_json::json!({ "code": "CXN-AAAA-BBBB-CCCC" }),
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -3501,7 +3639,10 @@ mod tests {
         activate_pairing(&coordinator); // 即使有活跃码也拒绝（开关优先）
         let app = build_router(state);
         let response = app
-            .oneshot(plain_post(PAIR_PATH, serde_json::json!({ "code": "CXN-7K4P-Q2MB-9XRT" })))
+            .oneshot(plain_post(
+                PAIR_PATH,
+                serde_json::json!({ "code": "CXN-7K4P-Q2MB-9XRT" }),
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -3526,7 +3667,11 @@ mod tests {
                 .oneshot(plain_post(PAIR_PATH, body))
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "body={body_label}");
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "body={body_label}"
+            );
         }
     }
 

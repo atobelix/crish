@@ -179,13 +179,17 @@ async fn resolve_inner(
             return Err(ProcessError::NoBrowser(probes));
         }
         BackendOverride::SystemChrome => {
-            if let Some(backend) = first_existing(ProbeSource::SystemChrome, chrome_candidates, &mut probes) {
+            if let Some(backend) =
+                first_existing(ProbeSource::SystemChrome, chrome_candidates, &mut probes)
+            {
                 return Ok(BackendResolution { backend, probes });
             }
             return Err(ProcessError::NoBrowser(probes));
         }
         BackendOverride::SystemEdge => {
-            if let Some(backend) = first_existing(ProbeSource::SystemEdge, edge_candidates, &mut probes) {
+            if let Some(backend) =
+                first_existing(ProbeSource::SystemEdge, edge_candidates, &mut probes)
+            {
                 return Ok(BackendResolution { backend, probes });
             }
             return Err(ProcessError::NoBrowser(probes));
@@ -218,7 +222,8 @@ async fn resolve_inner(
         }
     }
     // 3. 系统 Chrome
-    if let Some(backend) = first_existing(ProbeSource::SystemChrome, chrome_candidates, &mut probes) {
+    if let Some(backend) = first_existing(ProbeSource::SystemChrome, chrome_candidates, &mut probes)
+    {
         return Ok(BackendResolution { backend, probes });
     }
     // 4. 系统 Edge
@@ -282,7 +287,10 @@ mod platform {
         if let Some(la) = std::env::var_os("LOCALAPPDATA") {
             v.push(
                 std::path::PathBuf::from(la)
-                    .join("Google").join("Chrome").join("Application").join("chrome.exe"),
+                    .join("Google")
+                    .join("Chrome")
+                    .join("Application")
+                    .join("chrome.exe"),
             );
         }
         v.push(std::path::PathBuf::from(
@@ -306,7 +314,10 @@ mod platform {
         if let Some(la) = std::env::var_os("LOCALAPPDATA") {
             v.push(
                 std::path::PathBuf::from(la)
-                    .join("Microsoft").join("Edge").join("Application").join("msedge.exe"),
+                    .join("Microsoft")
+                    .join("Edge")
+                    .join("Application")
+                    .join("msedge.exe"),
             );
         }
         v
@@ -351,10 +362,15 @@ mod platform {
 
     /// 系统 Chrome 候选：chromium 系列最后（协议漂移面最大）。
     pub fn chrome_candidates() -> Vec<std::path::PathBuf> {
-        ["google-chrome", "google-chrome-stable", "chromium-browser", "chromium"]
-            .iter()
-            .filter_map(|n| which(n))
-            .collect()
+        [
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium-browser",
+            "chromium",
+        ]
+        .iter()
+        .filter_map(|n| which(n))
+        .collect()
     }
 
     /// 系统 Edge 候选。
@@ -384,7 +400,11 @@ mod tests {
     fn path_tables_shape() {
         #[cfg(windows)]
         {
-            assert_eq!(platform::chrome_candidates().len(), 3, "Windows Chrome 3 项（LOCALAPPDATA 优先）");
+            assert_eq!(
+                platform::chrome_candidates().len(),
+                3,
+                "Windows Chrome 3 项（LOCALAPPDATA 优先）"
+            );
             assert_eq!(platform::edge_candidates().len(), 3);
         }
         #[cfg(target_os = "macos")]
@@ -439,9 +459,15 @@ mod tests {
         let root = browser_root(dir.path());
         let chrome = vec![tmp_bin(dir.path(), "sys/chrome.exe")];
         let edge = vec![tmp_bin(dir.path(), "sys/msedge.exe")];
-        let res = resolve_inner(&root, &chrome, &edge, BackendOverride::Auto, &ResolveOptions::default())
-            .await
-            .expect("应命中 Chrome");
+        let res = resolve_inner(
+            &root,
+            &chrome,
+            &edge,
+            BackendOverride::Auto,
+            &ResolveOptions::default(),
+        )
+        .await
+        .expect("应命中 Chrome");
         assert!(matches!(res.backend, Backend::SystemChrome { .. }));
         assert_eq!(res.probes.len(), 2, "CfT 缺失 + Chrome 命中");
     }
@@ -452,9 +478,15 @@ mod tests {
         let dir = tempfile::tempdir().expect("临时目录");
         let root = browser_root(dir.path());
         let edge = vec![tmp_bin(dir.path(), "sys/msedge.exe")];
-        let res = resolve_inner(&root, &[], &edge, BackendOverride::Auto, &ResolveOptions::default())
-            .await
-            .expect("应命中 Edge");
+        let res = resolve_inner(
+            &root,
+            &[],
+            &edge,
+            BackendOverride::Auto,
+            &ResolveOptions::default(),
+        )
+        .await
+        .expect("应命中 Edge");
         assert!(matches!(res.backend, Backend::SystemEdge { .. }));
     }
 
@@ -468,13 +500,16 @@ mod tests {
             dir.path().join("c2.exe"),
             dir.path().join("c3.exe"),
         ];
-        let edge = vec![
-            dir.path().join("e1.exe"),
-            dir.path().join("e2.exe"),
-        ];
-        let err = resolve_inner(&root, &chrome, &edge, BackendOverride::Auto, &ResolveOptions::default())
-            .await
-            .expect_err("应全失败");
+        let edge = vec![dir.path().join("e1.exe"), dir.path().join("e2.exe")];
+        let err = resolve_inner(
+            &root,
+            &chrome,
+            &edge,
+            BackendOverride::Auto,
+            &ResolveOptions::default(),
+        )
+        .await
+        .expect_err("应全失败");
         match err {
             ProcessError::NoBrowser(probes) => {
                 assert_eq!(probes.len(), 6, "全部候选进入诊断清单");
@@ -483,15 +518,24 @@ mod tests {
                     "失败候选必须携带原因"
                 );
                 assert_eq!(
-                    probes.iter().filter(|p| p.source == ProbeSource::SystemChrome).count(),
+                    probes
+                        .iter()
+                        .filter(|p| p.source == ProbeSource::SystemChrome)
+                        .count(),
                     3
                 );
                 assert_eq!(
-                    probes.iter().filter(|p| p.source == ProbeSource::SystemEdge).count(),
+                    probes
+                        .iter()
+                        .filter(|p| p.source == ProbeSource::SystemEdge)
+                        .count(),
                     2
                 );
                 assert_eq!(
-                    probes.iter().filter(|p| p.source == ProbeSource::CftCache).count(),
+                    probes
+                        .iter()
+                        .filter(|p| p.source == ProbeSource::CftCache)
+                        .count(),
                     1
                 );
             }
@@ -539,7 +583,9 @@ mod tests {
     #[test]
     fn expected_browser_from_backend() {
         let res = BackendResolution {
-            backend: Backend::SystemChrome { path: PathBuf::from("x") },
+            backend: Backend::SystemChrome {
+                path: PathBuf::from("x"),
+            },
             probes: vec![],
         };
         let expected = res.expected_browser();
@@ -547,7 +593,9 @@ mod tests {
         assert_eq!(expected.min_major, Some(MIN_CHROMIUM_MAJOR));
 
         let edge = BackendResolution {
-            backend: Backend::SystemEdge { path: PathBuf::from("x") },
+            backend: Backend::SystemEdge {
+                path: PathBuf::from("x"),
+            },
             probes: vec![],
         };
         assert_eq!(
@@ -562,9 +610,15 @@ mod tests {
         let dir = tempfile::tempdir().expect("临时目录");
         let root = browser_root(dir.path());
         let chrome = vec![tmp_bin(dir.path(), "sys/chrome.exe")];
-        let res = resolve_inner(&root, &chrome, &[], BackendOverride::Auto, &ResolveOptions::default())
-            .await
-            .expect("命中");
+        let res = resolve_inner(
+            &root,
+            &chrome,
+            &[],
+            BackendOverride::Auto,
+            &ResolveOptions::default(),
+        )
+        .await
+        .expect("命中");
         assert_eq!(res.probes.len(), 2, "CfT 缺失项 + Chrome 命中项");
         assert!(res.probes[0].reason.is_some(), "缺失项带原因");
         assert!(res.probes[1].reason.is_none(), "命中项 reason=None");
@@ -585,9 +639,13 @@ mod tests {
         std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
         std::fs::write(&bin, b"fake").expect("二进制");
 
-        let res = resolve_backend(dir.path(), BackendOverride::Auto, &ResolveOptions::default())
-            .await
-            .expect("公开入口应命中 CfT");
+        let res = resolve_backend(
+            dir.path(),
+            BackendOverride::Auto,
+            &ResolveOptions::default(),
+        )
+        .await
+        .expect("公开入口应命中 CfT");
         match res.backend {
             Backend::ChromeForTesting { version, path } => {
                 assert_eq!(version, "153.0.1.2");
@@ -604,12 +662,19 @@ mod tests {
     #[tokio::test]
     async fn resolve_backend_entry_contract_any_environment() {
         let dir = tempfile::tempdir().expect("临时目录");
-        let res = resolve_backend(dir.path(), BackendOverride::Auto, &ResolveOptions::default())
-            .await;
+        let res = resolve_backend(
+            dir.path(),
+            BackendOverride::Auto,
+            &ResolveOptions::default(),
+        )
+        .await;
         match res {
             Ok(res) => {
                 assert!(
-                    matches!(res.backend, Backend::SystemChrome { .. } | Backend::SystemEdge { .. }),
+                    matches!(
+                        res.backend,
+                        Backend::SystemChrome { .. } | Backend::SystemEdge { .. }
+                    ),
                     "无 CfT 缓存时只能命中系统浏览器：{:?}",
                     res.backend
                 );
@@ -644,9 +709,15 @@ mod tests {
         let root = browser_root(dir.path());
         let chrome = vec![tmp_bin(dir.path(), "sys/chrome.exe")];
         let edge = vec![tmp_bin(dir.path(), "sys/msedge.exe")];
-        let res = resolve_inner(&root, &chrome, &edge, BackendOverride::SystemEdge, &ResolveOptions::default())
-            .await
-            .expect("应命中 Edge");
+        let res = resolve_inner(
+            &root,
+            &chrome,
+            &edge,
+            BackendOverride::SystemEdge,
+            &ResolveOptions::default(),
+        )
+        .await
+        .expect("应命中 Edge");
         assert!(matches!(res.backend, Backend::SystemEdge { .. }));
         assert_eq!(res.probes.len(), 1, "仅 Edge 被探测（不经过 CfT/Chrome）");
         assert_eq!(res.probes[0].source, ProbeSource::SystemEdge);
@@ -705,7 +776,9 @@ mod tests {
     #[test]
     fn backend_debug_redacts_paths() {
         let secret_path = "C:\\Users\\secret-user\\AppData\\Local\\chrome.exe";
-        let backend = Backend::SystemChrome { path: PathBuf::from(secret_path) };
+        let backend = Backend::SystemChrome {
+            path: PathBuf::from(secret_path),
+        };
         let debug = format!("{backend:?}");
         assert!(!debug.contains("secret-user"), "Debug 不得含路径：{debug}");
         assert!(!debug.contains("chrome.exe"), "Debug 不得含文件名：{debug}");
@@ -719,7 +792,10 @@ mod tests {
             }],
         };
         let debug = format!("{resolution:?}");
-        assert!(!debug.contains("secret-user"), "Resolution Debug 不得含路径：{debug}");
+        assert!(
+            !debug.contains("secret-user"),
+            "Resolution Debug 不得含路径：{debug}"
+        );
         assert!(debug.contains("probes: 1"), "候选仅统计数量：{debug}");
     }
 }

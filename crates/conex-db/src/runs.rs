@@ -158,13 +158,7 @@ impl LocalDb {
                 cursor = COALESCE(?4, cursor),
                 updated_at = ?5
              WHERE run_id = ?1",
-            rusqlite::params![
-                run_id,
-                status.as_str(),
-                end_reason,
-                cursor,
-                now_millis()
-            ],
+            rusqlite::params![run_id, status.as_str(), end_reason, cursor, now_millis()],
         )
         .map_err(|e| self.latch_error("update_run_status", e))?;
         Ok(())
@@ -261,7 +255,18 @@ impl LocalDb {
             )
             .optional()
             .map_err(|e| self.latch_error("get_run_usage", e))?;
-        let Some((prompt, completion, total, cache_read, cache_write, cache_miss, sample_count, missed, warm_until_ms)) = row else {
+        let Some((
+            prompt,
+            completion,
+            total,
+            cache_read,
+            cache_write,
+            cache_miss,
+            sample_count,
+            missed,
+            warm_until_ms,
+        )) = row
+        else {
             return Ok(None);
         };
         if sample_count <= 0 {
@@ -365,7 +370,10 @@ impl LocalDb {
             kind: DbFailureKind::Lock,
         })?;
         let deleted = conn
-            .execute("DELETE FROM pending_inputs WHERE id = ?1", rusqlite::params![id])
+            .execute(
+                "DELETE FROM pending_inputs WHERE id = ?1",
+                rusqlite::params![id],
+            )
             .map_err(|e| self.latch_error("delete_pending_input", e))?;
         Ok(deleted > 0)
     }

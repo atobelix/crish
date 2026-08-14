@@ -82,10 +82,11 @@ impl RecursionGuardRejection {
                 "递归深度超限（maxDepth={max}，当前 {current}）：请减少递归层级，\
                  或把任务拆给同级子代理并行处理"
             ),
-            Self::NestingDenied { .. } =>
+            Self::NestingDenied { .. } => {
                 "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。\
                  请通过消息/上报向主 Agent 请求派发。"
-                    .to_string(),
+                    .to_string()
+            }
             Self::SiblingsExceeded { current, max } => format!(
                 "兄弟并发超限（maxSiblings={max}，当前 {current}）：请减少并发/合并任务，\
                  等待部分子代理完成后重试"
@@ -94,9 +95,9 @@ impl RecursionGuardRejection {
                 "全局并发超限（maxConcurrent={max}，当前 {current}）：请减少并发/合并任务，\
                  等待部分子代理完成后重试"
             ),
-            Self::DeadlockDetected { target_session_id } => format!(
-                "子代理死锁：目标会话已在祖先链上（{target_session_id}）：请终止循环调用链"
-            ),
+            Self::DeadlockDetected { target_session_id } => {
+                format!("子代理死锁：目标会话已在祖先链上（{target_session_id}）：请终止循环调用链")
+            }
         }
     }
 }
@@ -160,7 +161,10 @@ pub struct DeadlockCheckInput {
 /// 祖先链死锁检查：目标会话已在祖先链上 → 拒绝（防把祖先会话再 fork
 /// 成子会话形成环）；复杂度 O(depth)。
 pub fn check_ancestor_chain(input: &DeadlockCheckInput) -> Result<(), RecursionGuardRejection> {
-    if input.ancestor_session_ids.contains(&input.target_session_id) {
+    if input
+        .ancestor_session_ids
+        .contains(&input.target_session_id)
+    {
         return Err(RecursionGuardRejection::DeadlockDetected {
             target_session_id: input.target_session_id.clone(),
         });

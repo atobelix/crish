@@ -174,7 +174,10 @@ impl EventSink for EventBridgeSink {
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or_default()
                     .to_string(),
-                silence_ms: payload.get("silenceMs").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                silence_ms: payload
+                    .get("silenceMs")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0),
                 last_output_at_ms: payload
                     .get("lastOutputAtMs")
                     .and_then(serde_json::Value::as_u64)

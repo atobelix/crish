@@ -121,8 +121,7 @@ impl MockServer {
                                     match reply {
                                         MockReply::Ok(result) => {
                                             if let Some(id) = id {
-                                                let mut msg =
-                                                    json!({ "id": id, "result": result });
+                                                let mut msg = json!({ "id": id, "result": result });
                                                 if let Some(s) = v["sessionId"].as_str() {
                                                     msg["sessionId"] = Value::String(s.to_string());
                                                 }

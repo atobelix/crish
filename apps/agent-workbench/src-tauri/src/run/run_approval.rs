@@ -69,7 +69,8 @@ pub(crate) struct ApprovalGateImpl {
     /// 收口流携带持久化序列）
     pub(crate) broadcast: Box<dyn Fn(AgentEvent) + Send + Sync>,
     /// 待审批集合：tool_call_id → 决策通道（I-02 校验依据）
-    pub(crate) pending: std::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<ApprovalDecision>>>,
+    pub(crate) pending:
+        std::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<ApprovalDecision>>>,
     /// 待审批请求元信息（R1-04：与 [Self::pending] 同生命周期，见
     /// [PendingRequestMeta]——request 登记、resolve 清除）
     pub(crate) pending_meta: std::sync::Mutex<HashMap<String, PendingRequestMeta>>,
@@ -289,7 +290,9 @@ impl ApprovalGate for ApprovalGateImpl {
                     requester_run_id: requester.map(|r| r.run_id.clone()),
                     reason: requester.and_then(|r| r.reason.clone()),
                     arbiter: match arbiter {
-                        session_loop::approval_router::Arbiter::MainAgent => "main-agent".to_string(),
+                        session_loop::approval_router::Arbiter::MainAgent => {
+                            "main-agent".to_string()
+                        }
                         session_loop::approval_router::Arbiter::User => "user".to_string(),
                     },
                     requested_at_ms: crate::server::now_ms(),
@@ -308,7 +311,6 @@ impl ApprovalGate for ApprovalGateImpl {
         }
     }
 }
-
 
 // ── 命令：core_approve_tool / core_deny_tool ──────────────────────
 
@@ -514,30 +516,34 @@ pub(crate) fn list_pending_approvals_impl(state: &CoreRunState) -> Vec<PendingAp
         .unwrap_or_else(|e| e.into_inner())
         .values()
         .flat_map(|active| {
-            active.approval.pending_requests().into_iter().map(move |(tool_call_id, meta)| {
-                // 危险级别在字段 move 前计算（tool_name 随后移入结构体）
-                let danger_level = derive_danger_level(&meta.tool_name, &meta.param_keys);
-                PendingApproval {
-                    request_id: format!("approval-{tool_call_id}"),
-                    tool_call_id,
-                    tool_name: meta.tool_name,
-                    summary: Some(meta.summary),
-                    cwd: Some(meta.cwd),
-                    session_id: Some(meta.session_id),
-                    run_id: Some(active.run_id.clone()),
-                    requester_run_id: meta.requester_run_id,
-                    reason: meta.reason,
-                    arbiter: if meta.arbiter == "main-agent" {
-                        Arbiter::MainAgent
-                    } else {
-                        Arbiter::User
-                    },
-                    requested_at: meta.requested_at_ms,
-                    expires_at: meta.requested_at_ms + APPROVAL_TIMEOUT.as_millis() as u64,
-                    danger_level,
-                    param_keys: Some(meta.param_keys),
-                }
-            })
+            active
+                .approval
+                .pending_requests()
+                .into_iter()
+                .map(move |(tool_call_id, meta)| {
+                    // 危险级别在字段 move 前计算（tool_name 随后移入结构体）
+                    let danger_level = derive_danger_level(&meta.tool_name, &meta.param_keys);
+                    PendingApproval {
+                        request_id: format!("approval-{tool_call_id}"),
+                        tool_call_id,
+                        tool_name: meta.tool_name,
+                        summary: Some(meta.summary),
+                        cwd: Some(meta.cwd),
+                        session_id: Some(meta.session_id),
+                        run_id: Some(active.run_id.clone()),
+                        requester_run_id: meta.requester_run_id,
+                        reason: meta.reason,
+                        arbiter: if meta.arbiter == "main-agent" {
+                            Arbiter::MainAgent
+                        } else {
+                            Arbiter::User
+                        },
+                        requested_at: meta.requested_at_ms,
+                        expires_at: meta.requested_at_ms + APPROVAL_TIMEOUT.as_millis() as u64,
+                        danger_level,
+                        param_keys: Some(meta.param_keys),
+                    }
+                })
         })
         .collect()
 }
@@ -591,7 +597,12 @@ pub(crate) async fn approval_history_impl(
     // 会话范围：显式 sessionId → 单会话；缺省 → 全部会话索引
     let session_ids: Vec<String> = match session_id {
         Some(id) if !id.trim().is_empty() => vec![id.trim().to_string()],
-        _ => db.list_sessions().map_err(map_db_failure)?.into_iter().map(|s| s.id).collect(),
+        _ => db
+            .list_sessions()
+            .map_err(map_db_failure)?
+            .into_iter()
+            .map(|s| s.id)
+            .collect(),
     };
     // 逐会话拉取 approval-resolved 事件行（(sequence, created_at, payload)；
     // created_at 为 ISO 字符串列，跨会话排序按字典序 = 时间序）
@@ -614,7 +625,9 @@ pub(crate) async fn approval_history_impl(
     rows.sort_by(|a, b| a.1.cmp(&b.1));
     let has_more = rows.len() > limit;
     let page = rows.into_iter().take(limit).collect::<Vec<_>>();
-    let next_after_sequence = page.last().map(|(sequence, _, _)| (*sequence).max(0) as u64);
+    let next_after_sequence = page
+        .last()
+        .map(|(sequence, _, _)| (*sequence).max(0) as u64);
     let items = page
         .into_iter()
         .filter_map(|(sequence, _, payload)| {
@@ -622,8 +635,9 @@ pub(crate) async fn approval_history_impl(
                 .get("toolCallId")
                 .and_then(serde_json::Value::as_str)?
                 .to_string();
-            let decision = serde_json::from_value(payload.get("decision").cloned().unwrap_or_default())
-                .unwrap_or(conex_types::events::ApprovalDecision::Expired);
+            let decision =
+                serde_json::from_value(payload.get("decision").cloned().unwrap_or_default())
+                    .unwrap_or(conex_types::events::ApprovalDecision::Expired);
             let resolved_at = payload
                 .get("timestamp")
                 .and_then(serde_json::Value::as_str)
@@ -694,4 +708,3 @@ pub(crate) async fn emit_approval_resolved(
         }
     }
 }
-

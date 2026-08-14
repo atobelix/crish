@@ -208,10 +208,7 @@ impl WsBroadcast {
 
     /// 当前订阅者数量
     pub fn subscriber_count(&self) -> usize {
-        self.subscribers
-            .lock()
-            .map(|map| map.len())
-            .unwrap_or(0)
+        self.subscribers.lock().map(|map| map.len()).unwrap_or(0)
     }
 
     /// 全局累计丢帧数（丢帧可观测，S-8 哲学）
@@ -246,7 +243,10 @@ impl WsBroadcast {
         };
         let mut dropped = 0u64;
         for entry in subscribers.values() {
-            if !entry.filter.matches(&meta.event_type, meta.session_id.as_deref()) {
+            if !entry
+                .filter
+                .matches(&meta.event_type, meta.session_id.as_deref())
+            {
                 continue;
             }
             dropped += enqueue(entry, &meta, payload);
@@ -597,15 +597,24 @@ mod tests {
     /// 过滤器纯语义：会话命中 + 全局白名单命中 + 无会话事件仅全局可收
     #[test]
     fn filter_matches_semantics() {
-        let filter = SubscriptionFilter::new(
-            ["s1".to_string()],
-            ["security-audit".to_string()],
-        );
+        let filter = SubscriptionFilter::new(["s1".to_string()], ["security-audit".to_string()]);
         assert!(filter.matches("agent-start", Some("s1")), "订阅会话应命中");
-        assert!(!filter.matches("agent-start", Some("s2")), "非订阅会话不命中");
-        assert!(!filter.matches("agent-start", None), "无会话事件不命中会话订阅");
-        assert!(filter.matches("security-audit", Some("s3")), "白名单类型命中");
-        assert!(filter.matches("security-audit", None), "白名单类型无会话也命中");
+        assert!(
+            !filter.matches("agent-start", Some("s2")),
+            "非订阅会话不命中"
+        );
+        assert!(
+            !filter.matches("agent-start", None),
+            "无会话事件不命中会话订阅"
+        );
+        assert!(
+            filter.matches("security-audit", Some("s3")),
+            "白名单类型命中"
+        );
+        assert!(
+            filter.matches("security-audit", None),
+            "白名单类型无会话也命中"
+        );
         assert!(!filter.matches("message-delta", None), "白名单外类型不命中");
         assert!(!filter.is_empty(), "非空过滤器");
         assert!(SubscriptionFilter::default().is_empty(), "缺省为空过滤器");
@@ -619,13 +628,19 @@ mod tests {
             .subscribe("conn-a", session_sub(&["s1"]))
             .expect("注册成功");
 
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(1)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(1)),
+        );
         let event = rx.try_recv().expect("订阅会话事件应送达");
         assert_eq!(event.event_type, "agent-start");
         assert_eq!(event.session_id.as_deref(), Some("s1"));
         assert_eq!(event.sequence, Some(1));
 
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s2"), Some(2)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s2"), Some(2)),
+        );
         assert!(rx.try_recv().is_none(), "非订阅会话事件不应送达");
     }
 
@@ -641,13 +656,19 @@ mod tests {
             .expect("注册成功");
 
         // 白名单类型 → 送达（会话归属无关）
-        fanout.emit("workbench-run-event", &payload_of(task_completed("s9"), Some(1)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(task_completed("s9"), Some(1)),
+        );
         let event = rx.try_recv().expect("白名单类型事件应送达");
         assert_eq!(event.event_type, "task-completed");
         assert_eq!(event.session_id.as_deref(), Some("s9"));
 
         // 白名单外类型 → 不收（即便会话归属在订阅范围之外也不相关）
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s9"), Some(2)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s9"), Some(2)),
+        );
         assert!(rx.try_recv().is_none(), "白名单外类型不应送达");
     }
 
@@ -658,7 +679,10 @@ mod tests {
         let rx = fanout
             .subscribe("conn-c", SubscriptionFilter::default())
             .expect("注册成功");
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(1)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(1)),
+        );
         assert!(rx.try_recv().is_none(), "空过滤器不应收到任何事件");
     }
 
@@ -713,12 +737,24 @@ mod tests {
             .expect("注册成功");
 
         // 队列 [delta, delta, critical]（满）
-        fanout.emit("workbench-run-event", &payload_of(task_output("s1"), Some(1)));
-        fanout.emit("workbench-run-event", &payload_of(task_output("s1"), Some(2)));
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(3)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(task_output("s1"), Some(1)),
+        );
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(task_output("s1"), Some(2)),
+        );
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(3)),
+        );
 
         // 新 Soft：驱逐最旧 Delta 腾位
-        fanout.emit("workbench-run-event", &payload_of(task_suspicious("s1"), Some(4)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(task_suspicious("s1"), Some(4)),
+        );
         assert_eq!(rx.dropped(), 1, "被驱逐的旧 Delta 计入丢帧");
         assert_eq!(rx.pending(), 3);
         let events = drain(&rx);
@@ -735,16 +771,29 @@ mod tests {
             .expect("注册成功");
 
         // 队列 [soft, delta]（满）
-        fanout.emit("workbench-run-event", &payload_of(task_suspicious("s1"), Some(1)));
-        fanout.emit("workbench-run-event", &payload_of(task_output("s1"), Some(2)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(task_suspicious("s1"), Some(1)),
+        );
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(task_output("s1"), Some(2)),
+        );
 
         // 新 Critical：驱逐最旧 Soft 腾位
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(3)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(3)),
+        );
         assert_eq!(rx.dropped(), 1, "被驱逐的 Soft 计入丢帧");
         assert_eq!(rx.pending(), 2);
         let events = drain(&rx);
         let types: Vec<&str> = events.iter().map(|e| e.event_type.as_str()).collect();
-        assert_eq!(types, ["task-output", "agent-start"], "Soft 被驱逐、Critical 必达");
+        assert_eq!(
+            types,
+            ["task-output", "agent-start"],
+            "Soft 被驱逐、Critical 必达"
+        );
     }
 
     /// 队列全 Critical 时新 Critical 超限接受（必达语义：绝不丢）
@@ -755,9 +804,18 @@ mod tests {
             .subscribe("conn-g", session_sub(&["s1"]))
             .expect("注册成功");
 
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(1)));
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(2)));
-        fanout.emit("workbench-run-event", &payload_of(task_completed("s1"), Some(3)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(1)),
+        );
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(2)),
+        );
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(task_completed("s1"), Some(3)),
+        );
 
         assert_eq!(rx.dropped(), 0, "Critical 不丢帧");
         assert_eq!(rx.pending(), 3, "Critical 超限接受");
@@ -790,12 +848,18 @@ mod tests {
             .subscribe("conn-y", session_sub(&["s1"]))
             .expect("注册成功");
 
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(1)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(1)),
+        );
         assert!(rx.try_recv().is_some(), "注销前应送达");
 
         fanout.unsubscribe("conn-y");
         assert_eq!(fanout.subscriber_count(), 0, "注册表应移除该连接");
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(2)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(2)),
+        );
         assert!(rx.try_recv().is_none(), "注销后不应再送达");
     }
 
@@ -803,7 +867,10 @@ mod tests {
     #[test]
     fn publish_without_subscribers_is_noop() {
         let fanout = FanOutEmitter::new(vec![]);
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(1)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(1)),
+        );
         assert_eq!(fanout.subscriber_count(), 0);
         assert_eq!(fanout.dropped_total(), 0);
     }
@@ -841,7 +908,10 @@ mod tests {
             Arc::new(PanickingEmitter),
             Arc::clone(&recording) as Arc<dyn Emitter>,
         ]);
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(1)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(1)),
+        );
         assert_eq!(recording.calls().len(), 1, "panic 发射器之后仍应继续分发");
     }
 
@@ -887,7 +957,10 @@ mod tests {
             .subscribe("conn-m", session_sub(&["s1"]))
             .expect("注册成功");
 
-        fanout.emit("workbench-run-event", &payload_of(task_output("s1"), Some(3)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(task_output("s1"), Some(3)),
+        );
         let event = rx.try_recv().expect("应收到事件");
         assert_eq!(event.event_type, "task-output");
         assert_eq!(event.session_id.as_deref(), Some("s1"));
@@ -910,7 +983,10 @@ mod tests {
         });
         // 让 drain 任务先进入等待
         tokio::task::yield_now().await;
-        fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(1)));
+        fanout.emit(
+            "workbench-run-event",
+            &payload_of(agent_start("s1"), Some(1)),
+        );
         let event_type = task.await.expect("drain 任务不应 panic");
         assert_eq!(event_type, "agent-start");
     }
@@ -919,7 +995,10 @@ mod tests {
     fn broadcast_new_and_receiver_conn_id_smoke() {
         let broadcast = WsBroadcast::new();
         let rx = broadcast
-            .register("conn-test-id", SubscriptionFilter::session_subscribe(["s1".to_string()]))
+            .register(
+                "conn-test-id",
+                SubscriptionFilter::session_subscribe(["s1".to_string()]),
+            )
             .expect("register");
         assert_eq!(rx.conn_id(), "conn-test-id");
     }

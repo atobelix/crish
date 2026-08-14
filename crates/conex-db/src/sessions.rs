@@ -293,7 +293,8 @@ impl LocalDb {
             .map_err(|e| self.latch_error("cleanup_orphan_delete_all", e))?;
         } else {
             // 构造 IN (?, ?, ...) 占位符
-            let placeholders: Vec<String> = (0..active_ids.len()).map(|_| "?".to_string()).collect();
+            let placeholders: Vec<String> =
+                (0..active_ids.len()).map(|_| "?".to_string()).collect();
             let sql = format!(
                 "DELETE FROM sessions WHERE id NOT IN ({}) AND updated_at < ?{} AND {protected}",
                 placeholders.join(", "),

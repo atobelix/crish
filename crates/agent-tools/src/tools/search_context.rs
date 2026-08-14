@@ -143,7 +143,10 @@ impl Tool for SearchContextTool {
                     h.generation, h.height, h.dropped_count, h.state
                 ));
                 lines.push(format!("  {frag}"));
-                lines.push(format!("  恢复: decompress_context(blockId=\"{}\")", h.block_id));
+                lines.push(format!(
+                    "  恢复: decompress_context(blockId=\"{}\")",
+                    h.block_id
+                ));
                 lines.push(String::new());
             }
             lines.join("\n")
@@ -252,7 +255,10 @@ mod tests {
         ]));
         let tool = SearchContextTool::new();
         let out = tool
-            .execute(&ctx_with_store(&ws, Some(store)), json!({ "query": "fizz" }))
+            .execute(
+                &ctx_with_store(&ws, Some(store)),
+                json!({ "query": "fizz" }),
+            )
             .await
             .unwrap();
         let hits = out["hits"].as_array().unwrap();
@@ -261,7 +267,10 @@ mod tests {
         assert_eq!(hits[0]["droppedCount"], 3);
         assert_eq!(hits[0]["state"], "committed");
         let text = out["text"].as_str().unwrap();
-        assert!(text.contains("decompress_context(blockId=\"cb-1-1\")"), "恢复指引: {text}");
+        assert!(
+            text.contains("decompress_context(blockId=\"cb-1-1\")"),
+            "恢复指引: {text}"
+        );
         assert!(text.contains("generation: 1"));
     }
 
@@ -326,8 +335,10 @@ mod tests {
     #[tokio::test]
     async fn search_no_hits_empty_result() {
         let ws = TempWorkspace::new("sctx_miss");
-        let store: Arc<dyn CompressionContextStore> =
-            Arc::new(FakeCompressionStore::new(vec![("cb-1".to_string(), "x".to_string())]));
+        let store: Arc<dyn CompressionContextStore> = Arc::new(FakeCompressionStore::new(vec![(
+            "cb-1".to_string(),
+            "x".to_string(),
+        )]));
         let tool = SearchContextTool::new();
         let out = tool
             .execute(&ctx_with_store(&ws, Some(store)), json!({ "query": "zzz" }))
@@ -348,7 +359,10 @@ mod tests {
         let tool = SearchContextTool::new();
         // limit=1000 钳制到 100（Fake 后端 take(limit)，钳制生效则恒 ≤100）
         let out = tool
-            .execute(&ctx_with_store(&ws, Some(store)), json!({ "query": "needle", "limit": 1000 }))
+            .execute(
+                &ctx_with_store(&ws, Some(store)),
+                json!({ "query": "needle", "limit": 1000 }),
+            )
             .await
             .unwrap();
         assert_eq!(out["hits"].as_array().unwrap().len(), 100);
@@ -396,8 +410,7 @@ mod tests {
     #[tokio::test]
     async fn search_cross_session_rejected() {
         let ws = TempWorkspace::new("sctx_session");
-        let store: Arc<dyn CompressionContextStore> =
-            Arc::new(FakeCompressionStore::new(vec![]));
+        let store: Arc<dyn CompressionContextStore> = Arc::new(FakeCompressionStore::new(vec![]));
         let tool = SearchContextTool::new();
         let err = tool
             .execute(
@@ -413,8 +426,10 @@ mod tests {
     #[tokio::test]
     async fn search_default_session_is_current() {
         let ws = TempWorkspace::new("sctx_cur");
-        let store: Arc<dyn CompressionContextStore> =
-            Arc::new(FakeCompressionStore::new(vec![("cb-1".to_string(), "x".to_string())]));
+        let store: Arc<dyn CompressionContextStore> = Arc::new(FakeCompressionStore::new(vec![(
+            "cb-1".to_string(),
+            "x".to_string(),
+        )]));
         let tool = SearchContextTool::new();
         // mock 会话 id 固定 "mock-session"；显式传当前会话 → 放行
         let out = tool

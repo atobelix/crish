@@ -39,8 +39,7 @@ pub async fn execute_with_output_policy(
     if policy.idempotency {
         if let Some(guard) = guard {
             let idem_ctx = build_idempotency_context(ctx, tool.name(), &args);
-            if let IdempotencyDecision::Deduplicated { key } =
-                guard.check(&idem_ctx, &args).await?
+            if let IdempotencyDecision::Deduplicated { key } = guard.check(&idem_ctx, &args).await?
             {
                 let output = serde_json::json!({
                     "text": format!("Tool call already executed; skipped re-execution (key: {key})"),
@@ -114,8 +113,7 @@ pub async fn execute_stream_with_output_policy(
     if policy.idempotency {
         if let Some(guard) = guard {
             let idem_ctx = build_idempotency_context(ctx, tool.name(), &args);
-            if let IdempotencyDecision::Deduplicated { key } =
-                guard.check(&idem_ctx, &args).await?
+            if let IdempotencyDecision::Deduplicated { key } = guard.check(&idem_ctx, &args).await?
             {
                 let output = serde_json::json!({
                     "text": format!("Tool call already executed; skipped re-execution (key: {key})"),

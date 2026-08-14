@@ -7,6 +7,7 @@
 
 use super::tests::{event_frame, parse_all, stop_of};
 use super::*;
+use crate::events::stream_error_kind;
 use serde_json::json;
 
 // ── usage 分片补全（02 §六.6：Anthropic 分片补全）──
@@ -125,6 +126,53 @@ fn parse_anthropic_usage_accepts_snake_alternates() {
     assert_eq!(usage.total_tokens, Some(9), "显式 total 优先于重算");
 }
 
+/// T3.4（G1-d）reasoning 拆分：兼容网关经 `output_tokens_details.reasoning_tokens`
+/// 显式上报思考计数时，`reasoning_tokens` 不再恒 None（从 completion 侧拆分解析）。
+/// Anthropic 官方 wire 不单独报告思考，缺省保持 None（不伪造拆分）。
+#[test]
+fn parse_anthropic_usage_reasoning_from_nested_details() {
+    let usage = parse_anthropic_usage(Some(&json!({
+        "input_tokens": 100,
+        "output_tokens": 60,
+        "output_tokens_details": { "reasoning_tokens": 25 },
+    })))
+    .expect("解析成功");
+    assert_eq!(usage.reasoning_tokens, Some(25), "嵌套 details.reasoning_tokens");
+    // completion 保留总输出（含思考），reasoning 不把思考从 completion 扣走（对齐 pi-ai）
+    assert_eq!(usage.completion_tokens, Some(60));
+    assert_eq!(usage.reasoning_tokens, Some(25));
+}
+
+/// T3.4（G1-d）reasoning 别名链：顶层 `reasoning_tokens` / `thinking_tokens` 兜底于
+/// 嵌套 details 之后；官方 wire 缺省 → 保持 None。
+#[test]
+fn parse_anthropic_usage_reasoning_alias_fallback() {
+    // 顶层 reasoning_tokens 别名
+    let usage = parse_anthropic_usage(Some(&json!({
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "reasoning_tokens": 4,
+    })))
+    .expect("解析成功");
+    assert_eq!(usage.reasoning_tokens, Some(4), "顶层 reasoning_tokens 别名");
+
+    // 顶层 thinking_tokens 别名兜底
+    let usage = parse_anthropic_usage(Some(&json!({
+        "input_tokens": 10,
+        "thinking_tokens": 3,
+    })))
+    .expect("解析成功");
+    assert_eq!(usage.reasoning_tokens, Some(3), "顶层 thinking_tokens 别名");
+
+    // 官方 wire 无思考字段 → 保持 None（不伪造拆分）
+    let usage = parse_anthropic_usage(Some(&json!({
+        "input_tokens": 10,
+        "output_tokens": 5,
+    })))
+    .expect("解析成功");
+    assert_eq!(usage.reasoning_tokens, None, "官方 wire 缺省保持 None");
+}
+
 #[test]
 fn parse_anthropic_usage_empty_returns_none() {
     assert!(parse_anthropic_usage(None).is_none());
@@ -149,6 +197,7 @@ fn empty_stream_produces_error_stop() {
             reason: StopReason::Error,
             error,
             usage,
+            error_kind: _,
         } => {
             assert_eq!(
                 error.as_deref(),
@@ -169,6 +218,7 @@ fn message_stop_alone_prevents_empty_stream_error() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -231,6 +281,7 @@ fn error_frame_terminates_immediately() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: Some("overloaded_error: 过载".into()),
+            error_kind: Some(stream_error_kind("overloaded_error: 过载")),
             usage: None,
         }
     );

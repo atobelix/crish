@@ -77,9 +77,11 @@ impl MemoryNoteBackend {
                     "append_to_block: no target block".into(),
                 ));
             };
-            let block = doc.blocks.iter_mut().find(|b| b.id == tid).ok_or_else(|| {
-                NoteBackendError::NotFound(format!("block not found: {tid}"))
-            })?;
+            let block = doc
+                .blocks
+                .iter_mut()
+                .find(|b| b.id == tid)
+                .ok_or_else(|| NoteBackendError::NotFound(format!("block not found: {tid}")))?;
             if !block.text.is_empty() && !req.markdown.is_empty() {
                 block.text.push('\n');
             }

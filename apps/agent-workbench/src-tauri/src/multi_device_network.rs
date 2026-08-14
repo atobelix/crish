@@ -106,20 +106,15 @@ fn kind_to_profile(kind: NetworkKind) -> &'static str {
 /// 引导文案（G-4 规格文案，UI 直接渲染）。
 fn hint_for(kind: NetworkKind) -> String {
     match kind {
-        NetworkKind::Public => {
-            "当前为公用网络，请切换到专用网络后重试；若手机仍无法连接，\
+        NetworkKind::Public => "当前为公用网络，请切换到专用网络后重试；若手机仍无法连接，\
              请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。"
-                .to_string()
-        }
+            .to_string(),
         NetworkKind::Private | NetworkKind::Domain => {
-            "手机无法连接时请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。"
-                .to_string()
+            "手机无法连接时请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。".to_string()
         }
-        NetworkKind::Unknown => {
-            "未能识别当前网络类型。若手机无法连接，请检查 Windows 防火墙是否\
+        NetworkKind::Unknown => "未能识别当前网络类型。若手机无法连接，请检查 Windows 防火墙是否\
              放行专用网络，并关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。"
-                .to_string()
-        }
+            .to_string(),
     }
 }
 
@@ -173,14 +168,33 @@ mod nlm_com {
     #[repr(C)]
     pub struct INetworkListManagerVtbl {
         // IUnknown
-        pub query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        pub query_interface:
+            unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
         pub add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
         pub release: unsafe extern "system" fn(*mut c_void) -> u32,
         // IDispatch
         pub get_type_info_count: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
-        pub get_type_info: unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
-        pub get_ids_of_names: unsafe extern "system" fn(*mut c_void, *const GUID, *const *const u16, u32, u32, *mut i32) -> i32,
-        pub invoke: unsafe extern "system" fn(*mut c_void, i32, *const GUID, u32, u16, *mut c_void, *mut c_void, *mut c_void, *mut u32) -> i32,
+        pub get_type_info:
+            unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
+        pub get_ids_of_names: unsafe extern "system" fn(
+            *mut c_void,
+            *const GUID,
+            *const *const u16,
+            u32,
+            u32,
+            *mut i32,
+        ) -> i32,
+        pub invoke: unsafe extern "system" fn(
+            *mut c_void,
+            i32,
+            *const GUID,
+            u32,
+            u16,
+            *mut c_void,
+            *mut c_void,
+            *mut c_void,
+            *mut u32,
+        ) -> i32,
         // INetworkListManager
         pub get_networks: unsafe extern "system" fn(*mut c_void, u32, *mut *mut c_void) -> i32,
     }
@@ -188,14 +202,33 @@ mod nlm_com {
     #[repr(C)]
     pub struct IEnumNetworksVtbl {
         // IUnknown
-        pub query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        pub query_interface:
+            unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
         pub add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
         pub release: unsafe extern "system" fn(*mut c_void) -> u32,
         // IDispatch
         pub get_type_info_count: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
-        pub get_type_info: unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
-        pub get_ids_of_names: unsafe extern "system" fn(*mut c_void, *const GUID, *const *const u16, u32, u32, *mut i32) -> i32,
-        pub invoke: unsafe extern "system" fn(*mut c_void, i32, *const GUID, u32, u16, *mut c_void, *mut c_void, *mut c_void, *mut u32) -> i32,
+        pub get_type_info:
+            unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
+        pub get_ids_of_names: unsafe extern "system" fn(
+            *mut c_void,
+            *const GUID,
+            *const *const u16,
+            u32,
+            u32,
+            *mut i32,
+        ) -> i32,
+        pub invoke: unsafe extern "system" fn(
+            *mut c_void,
+            i32,
+            *const GUID,
+            u32,
+            u16,
+            *mut c_void,
+            *mut c_void,
+            *mut c_void,
+            *mut u32,
+        ) -> i32,
         // IEnumNetworks
         pub get_new_enum: unsafe extern "system" fn(*mut c_void, *mut *mut c_void) -> i32,
         pub next: unsafe extern "system" fn(*mut c_void, u32, *mut *mut c_void, *mut u32) -> i32,
@@ -204,14 +237,33 @@ mod nlm_com {
     #[repr(C)]
     pub struct INetworkVtbl {
         // IUnknown
-        pub query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        pub query_interface:
+            unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
         pub add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
         pub release: unsafe extern "system" fn(*mut c_void) -> u32,
         // IDispatch
         pub get_type_info_count: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
-        pub get_type_info: unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
-        pub get_ids_of_names: unsafe extern "system" fn(*mut c_void, *const GUID, *const *const u16, u32, u32, *mut i32) -> i32,
-        pub invoke: unsafe extern "system" fn(*mut c_void, i32, *const GUID, u32, u16, *mut c_void, *mut c_void, *mut c_void, *mut u32) -> i32,
+        pub get_type_info:
+            unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
+        pub get_ids_of_names: unsafe extern "system" fn(
+            *mut c_void,
+            *const GUID,
+            *const *const u16,
+            u32,
+            u32,
+            *mut i32,
+        ) -> i32,
+        pub invoke: unsafe extern "system" fn(
+            *mut c_void,
+            i32,
+            *const GUID,
+            u32,
+            u16,
+            *mut c_void,
+            *mut c_void,
+            *mut c_void,
+            *mut u32,
+        ) -> i32,
         // INetwork
         pub get_name: unsafe extern "system" fn(*mut c_void, *mut *mut u16) -> i32,
         pub set_name: unsafe extern "system" fn(*mut c_void, *const u16) -> i32,
@@ -219,8 +271,10 @@ mod nlm_com {
         pub set_description: unsafe extern "system" fn(*mut c_void, *const u16) -> i32,
         pub get_network_id: unsafe extern "system" fn(*mut c_void, *mut GUID) -> i32,
         pub get_domain_type: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
-        pub get_network_connections: unsafe extern "system" fn(*mut c_void, *mut *mut c_void) -> i32,
-        pub get_time_created_and_connected: unsafe extern "system" fn(*mut c_void, *mut u32, *mut u32, *mut u32, *mut u32) -> i32,
+        pub get_network_connections:
+            unsafe extern "system" fn(*mut c_void, *mut *mut c_void) -> i32,
+        pub get_time_created_and_connected:
+            unsafe extern "system" fn(*mut c_void, *mut u32, *mut u32, *mut u32, *mut u32) -> i32,
         pub is_connected_to_internet: unsafe extern "system" fn(*mut c_void, *mut i16) -> i32,
         pub is_connected: unsafe extern "system" fn(*mut c_void, *mut i16) -> i32,
         pub get_category: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
@@ -245,7 +299,8 @@ mod nlm_com {
             if hr == S_OK && !p_mgr.is_null() {
                 let vtbl = *(p_mgr as *const *const INetworkListManagerVtbl);
                 let mut p_enum: *mut c_void = std::ptr::null_mut();
-                let hr_enum = ((*vtbl).get_networks)(p_mgr, NLM_ENUM_NETWORK_CONNECTED, &mut p_enum);
+                let hr_enum =
+                    ((*vtbl).get_networks)(p_mgr, NLM_ENUM_NETWORK_CONNECTED, &mut p_enum);
 
                 if hr_enum == S_OK && !p_enum.is_null() {
                     let enum_vtbl = *(p_enum as *const *const IEnumNetworksVtbl);
@@ -291,7 +346,7 @@ fn read_profile_categories() -> Vec<u32> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::{ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
     use windows_sys::Win32::System::Registry::{
-        HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW,
+        RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, HKEY, HKEY_LOCAL_MACHINE, KEY_READ,
     };
 
     const PROFILES_SUBKEY: &str =
@@ -360,11 +415,14 @@ fn read_profile_categories() -> Vec<u32> {
 
 /// 读取单个 profile 的 Category 值（REG_DWORD）；任一环节失败返回 None。
 #[cfg(windows)]
-fn read_category(profiles: windows_sys::Win32::System::Registry::HKEY, profile_name: &str) -> Option<u32> {
+fn read_category(
+    profiles: windows_sys::Win32::System::Registry::HKEY,
+    profile_name: &str,
+) -> Option<u32> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::ERROR_SUCCESS;
     use windows_sys::Win32::System::Registry::{
-        HKEY, KEY_READ, REG_DWORD, REG_VALUE_TYPE, RegCloseKey, RegOpenKeyExW, RegQueryValueExW,
+        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, KEY_READ, REG_DWORD, REG_VALUE_TYPE,
     };
 
     let to_wide = |s: &str| -> Vec<u16> {
@@ -473,9 +531,7 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
             let o = v4.octets();
-            o[0] == 10
-                || (o[0] == 172 && (16..=31).contains(&o[1]))
-                || (o[0] == 192 && o[1] == 168)
+            o[0] == 10 || (o[0] == 172 && (16..=31).contains(&o[1])) || (o[0] == 192 && o[1] == 168)
         }
         std::net::IpAddr::V6(v6) => (v6.segments()[0] & 0xfe00) == 0xfc00,
     }
@@ -502,7 +558,10 @@ fn is_usable_lan_ip(ip: &std::net::IpAddr) -> bool {
             std::net::IpAddr::V6(v6) => (v6.segments()[0] & 0xffc0) == 0xfe80,
         }
     }
-    ip.is_ipv4() && !ip.is_loopback() && !ip.is_unspecified() && !is_link_local(ip)
+    ip.is_ipv4()
+        && !ip.is_loopback()
+        && !ip.is_unspecified()
+        && !is_link_local(ip)
         && !ip.is_multicast()
 }
 
@@ -576,8 +635,7 @@ mod windows_ip_enum {
     /// # Safety
     /// lpSockaddr 由系统填充且长度字段约束为完整 sockaddr，类型按 sin_family 判定。
     unsafe fn sockaddr_to_ipv4(sa: &SOCKET_ADDRESS) -> Option<IpAddr> {
-        if sa.lpSockaddr.is_null()
-            || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN>() as i32
+        if sa.lpSockaddr.is_null() || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN>() as i32
         {
             return None;
         }
@@ -648,8 +706,14 @@ mod tests {
 
         let private = hint_for(NetworkKind::Private);
         let domain = hint_for(NetworkKind::Domain);
-        assert!(private.contains("关闭路由器客户端隔离"), "专用网络提示 AP 隔离");
-        assert!(!private.contains("切换到专用网络"), "专用网络不重复提示切换");
+        assert!(
+            private.contains("关闭路由器客户端隔离"),
+            "专用网络提示 AP 隔离"
+        );
+        assert!(
+            !private.contains("切换到专用网络"),
+            "专用网络不重复提示切换"
+        );
         assert_eq!(private, domain, "专用与域提示文案一致");
 
         let unknown = hint_for(NetworkKind::Unknown);
@@ -661,7 +725,13 @@ mod tests {
     #[test]
     fn private_ip_classification() {
         use std::net::IpAddr;
-        for s in ["10.0.0.1", "172.16.0.1", "192.168.1.5", "fc00::1", "fd12::1"] {
+        for s in [
+            "10.0.0.1",
+            "172.16.0.1",
+            "192.168.1.5",
+            "fc00::1",
+            "fd12::1",
+        ] {
             let ip: IpAddr = s.parse().expect("测试 IP 合法");
             assert!(is_private_ip(&ip), "{s} 应为私有网段");
         }
@@ -677,7 +747,13 @@ mod tests {
         use std::net::IpAddr;
         let ok: IpAddr = "192.168.1.5".parse().expect("合法 IP");
         assert!(is_usable_lan_ip(&ok));
-        for s in ["127.0.0.1", "0.0.0.0", "169.254.1.1", "224.0.0.1", "fe80::1"] {
+        for s in [
+            "127.0.0.1",
+            "0.0.0.0",
+            "169.254.1.1",
+            "224.0.0.1",
+            "fe80::1",
+        ] {
             let ip: IpAddr = s.parse().expect("测试 IP 合法");
             assert!(!is_usable_lan_ip(&ip), "{s} 不应可直连");
         }
@@ -689,11 +765,17 @@ mod tests {
     fn network_env_info_is_well_formed() {
         let info = network_env_info();
         assert!(
-            matches!(info.profile.as_str(), "public" | "private" | "domain" | "unknown"),
+            matches!(
+                info.profile.as_str(),
+                "public" | "private" | "domain" | "unknown"
+            ),
             "profile 必须为四态之一：{}",
             info.profile
         );
-        assert!(!info.usable_ips.is_empty(), "IP 列表不应为空（空网络含占位）");
+        assert!(
+            !info.usable_ips.is_empty(),
+            "IP 列表不应为空（空网络含占位）"
+        );
         assert!(!info.hint.is_empty(), "引导文案不应为空");
         // 排序不变量：推荐 IP（默认路由）恒在首位——除非列表为占位
         if info.usable_ips.len() > 1 {

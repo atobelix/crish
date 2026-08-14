@@ -1,9 +1,6 @@
 use conex_types::CoreError;
 use serde::{Deserialize, Serialize};
-use std::{
-    env,
-    path::PathBuf,
-};
+use std::{env, path::PathBuf};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]

@@ -94,7 +94,9 @@ impl TaskEventConsumer {
         // 3. 终态事件 → 归组唤醒入队（案 A）
         if matches!(
             event,
-            AgentEvent::TaskCompleted { .. } | AgentEvent::TaskFailed { .. } | AgentEvent::TaskKilled { .. }
+            AgentEvent::TaskCompleted { .. }
+                | AgentEvent::TaskFailed { .. }
+                | AgentEvent::TaskKilled { .. }
         ) {
             self.enqueue_wake_summary(event);
         }
@@ -236,7 +238,11 @@ mod tests {
 
     /// 测试装配：内存桥（记录发射器）+ 真实 PendingMessageQueue（30 文档
     /// 测试可信标准：队列用真实实现，仅出站边界用替身）。
-    fn consumer() -> (TaskEventConsumer, Arc<RecordingEmitter>, Arc<Mutex<PendingMessageQueue>>) {
+    fn consumer() -> (
+        TaskEventConsumer,
+        Arc<RecordingEmitter>,
+        Arc<Mutex<PendingMessageQueue>>,
+    ) {
         let emitter = Arc::new(RecordingEmitter::default());
         let bridge = EventBridge::new(
             "workbench-run-event",
@@ -311,7 +317,11 @@ mod tests {
             .iter()
             .map(|(_, p)| parse_envelope(p))
             .collect();
-        assert_eq!(envelopes.len(), 2, "started + completed 各直发一条 security-audit");
+        assert_eq!(
+            envelopes.len(),
+            2,
+            "started + completed 各直发一条 security-audit"
+        );
         for envelope in &envelopes {
             assert_eq!(envelope.type_name(), "security-audit");
             let AgentEvent::SecurityAudit {
@@ -325,7 +335,11 @@ mod tests {
             };
             assert_eq!(*operation, SecurityAuditOperation::CommandExec);
             assert_eq!(targets[0], "t-1", "targets 承载任务 id（审计可检索）");
-            assert_eq!(*decision, SecurityAuditDecision::Approved, "启动/成功 → approved");
+            assert_eq!(
+                *decision,
+                SecurityAuditDecision::Approved,
+                "启动/成功 → approved"
+            );
         }
     }
 
@@ -364,12 +378,13 @@ mod tests {
             .iter()
             .map(|(_, p)| parse_envelope(p))
             .collect();
-        assert_eq!(envelopes.len(), 2, "started + completed 各直发一条 security-audit");
+        assert_eq!(
+            envelopes.len(),
+            2,
+            "started + completed 各直发一条 security-audit"
+        );
         for envelope in &envelopes {
-            let AgentEvent::SecurityAudit {
-                tool_call_id, ..
-            } = &envelope.event
-            else {
+            let AgentEvent::SecurityAudit { tool_call_id, .. } = &envelope.event else {
                 panic!("应为 security-audit 变体");
             };
             assert!(
@@ -407,6 +422,10 @@ mod tests {
 
         let queue = queue.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(queue.len(), 1);
-        assert_eq!(queue.peek().unwrap().text, "任务 t-k 已被终止", "killed 摘要快照");
+        assert_eq!(
+            queue.peek().unwrap().text,
+            "任务 t-k 已被终止",
+            "killed 摘要快照"
+        );
     }
 }

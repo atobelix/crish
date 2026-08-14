@@ -91,8 +91,6 @@ mod bg_task;
 mod bg_writer;
 
 pub(crate) use bg_commands::{
-    workbench_cancel_background_task, workbench_get_background_task_output,
-    workbench_list_background_tasks, workbench_send_input,
     // Tauri 宏生成的 __cmd__ / __tauri_command_name_ 符号随命令函数同模块
     // （bg_commands），main.rs invoke_handler 经 background:: 路径引用需要
     // 一并 re-export（SR-05 拆分断链修复 · 2026-08-14）。
@@ -104,6 +102,10 @@ pub(crate) use bg_commands::{
     __tauri_command_name_workbench_get_background_task_output,
     __tauri_command_name_workbench_list_background_tasks,
     __tauri_command_name_workbench_send_input,
+    workbench_cancel_background_task,
+    workbench_get_background_task_output,
+    workbench_list_background_tasks,
+    workbench_send_input,
 };
 pub(crate) use bg_registry::BackgroundTaskRegistry;
 

@@ -145,8 +145,8 @@ pub(crate) fn spawn_pty_gc_loop(_app: AppHandle) -> tauri::async_runtime::JoinHa
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::session::PtyLivenessState;
+    use super::*;
     use std::collections::HashSet;
     use std::io::{Read, Write};
 
@@ -301,4 +301,3 @@ mod tests {
         assert_eq!(session.state(), PtyLivenessState::Detached);
     }
 }
-

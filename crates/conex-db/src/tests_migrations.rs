@@ -128,7 +128,10 @@ fn import_from_localstorage_json_array_body() {
         db.get_session_meta("active_session_id").unwrap().as_deref(),
         Some("s1")
     );
-    let folder = db.get_session_meta("folder_order").unwrap().expect("folder_order");
+    let folder = db
+        .get_session_meta("folder_order")
+        .unwrap()
+        .expect("folder_order");
     assert!(folder.contains("work"));
 }
 
@@ -212,7 +215,9 @@ impl Drop for TempV5Db {
 }
 
 fn table_columns_v5(conn: &Connection, table: &str) -> Vec<String> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})")).unwrap();
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .unwrap();
     stmt.query_map([], |r| r.get::<_, String>(1))
         .unwrap()
         .filter_map(|c| c.ok())
@@ -379,9 +384,16 @@ fn usage_json_column_read_write_roundtrip() {
     )
     .unwrap();
     let raw: Option<String> = conn
-        .query_row("SELECT usage_json FROM session_messages WHERE id='m1'", [], |r| r.get(0))
+        .query_row(
+            "SELECT usage_json FROM session_messages WHERE id='m1'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
-    assert_eq!(raw.as_deref(), Some(r#"{"promptTokens":12000,"cacheReadTokens":9000}"#));
+    assert_eq!(
+        raw.as_deref(),
+        Some(r#"{"promptTokens":12000,"cacheReadTokens":9000}"#)
+    );
 
     // 缺省行（无 usage 快照）→ NULL，读取兼容
     conn.execute(
@@ -391,7 +403,11 @@ fn usage_json_column_read_write_roundtrip() {
     )
     .unwrap();
     let raw2: Option<String> = conn
-        .query_row("SELECT usage_json FROM session_messages WHERE id='m2'", [], |r| r.get(0))
+        .query_row(
+            "SELECT usage_json FROM session_messages WHERE id='m2'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(raw2, None, "无 usage 行读回 NULL");
 }
@@ -407,7 +423,8 @@ fn save_load_session_body_usage_roundtrip() {
     with_usage.usage = Some(usage_json.to_string());
     let mut without_usage = sample_message("m2", "user", 200);
     without_usage.usage = None;
-    db.save_session_body("s1", &[with_usage, without_usage]).unwrap();
+    db.save_session_body("s1", &[with_usage, without_usage])
+        .unwrap();
 
     let loaded = db.load_session_body("s1").unwrap();
     assert_eq!(loaded.len(), 2);
@@ -421,7 +438,8 @@ fn append_session_messages_usage_roundtrip() {
     // append 路径同样写 usage_json 列
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
-    db.save_session_body("s1", &[sample_message("m1", "user", 1)]).unwrap();
+    db.save_session_body("s1", &[sample_message("m1", "user", 1)])
+        .unwrap();
 
     let mut m2 = sample_message("m2", "assistant", 2);
     m2.usage = Some(r#"{"promptTokens":9000,"cacheReadTokens":8000}"#.to_string());
@@ -444,7 +462,8 @@ fn load_session_body_usage_none_for_legacy_rows() {
     // 旧库行（v5 之前无 usage_json 列值）→ 列 NULL → usage None，兼容不炸
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
-    db.save_session_body("s1", &[sample_message("m1", "user", 1)]).unwrap();
+    db.save_session_body("s1", &[sample_message("m1", "user", 1)])
+        .unwrap();
 
     // 直接以旧形态 SQL 补插一行（不携带 usage_json 列）
     let conn = db.conn.lock().unwrap();
@@ -466,7 +485,8 @@ fn load_session_body_usage_none_for_legacy_rows() {
 fn save_run_usage_write_read_roundtrip() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "S").unwrap();
-    db.insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 3).unwrap();
+    db.insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 3)
+        .unwrap();
 
     let stats = RunCacheStats {
         prompt_tokens: 12000,
@@ -498,7 +518,10 @@ fn save_run_usage_write_read_roundtrip() {
     assert_eq!(got.write_ratio, None);
 
     // 覆盖写（幂等 UPDATE）
-    let stats2 = RunCacheStats { sample_count: 5, ..stats };
+    let stats2 = RunCacheStats {
+        sample_count: 5,
+        ..stats
+    };
     db.save_run_usage("r1", stats2).unwrap();
     assert_eq!(db.get_run_usage("r1").unwrap().unwrap().sample_count, 5);
 }
@@ -508,7 +531,8 @@ fn save_run_usage_missing_row_silently_skipped() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "S").unwrap();
     // 缺行：UPDATE 命中 0 行，静默跳过（不报错）
-    db.save_run_usage("no-such-run", RunCacheStats::default()).unwrap();
+    db.save_run_usage("no-such-run", RunCacheStats::default())
+        .unwrap();
     assert!(db.get_run_usage("no-such-run").unwrap().is_none());
 }
 
@@ -518,7 +542,8 @@ fn get_run_usage_none_for_legacy_rows() {
     // → sample_count == 0 → None（前端隐藏而非 0% 误导）
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "S").unwrap();
-    db.insert_run("r1", "s1", RunStatus::Completed, None, 0).unwrap();
+    db.insert_run("r1", "s1", RunStatus::Completed, None, 0)
+        .unwrap();
     assert!(db.get_run_usage("r1").unwrap().is_none());
 }
 
@@ -526,7 +551,8 @@ fn get_run_usage_none_for_legacy_rows() {
 fn save_run_usage_warm_until_none_roundtrip() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "S").unwrap();
-    db.insert_run("r1", "s1", RunStatus::Running, None, 1).unwrap();
+    db.insert_run("r1", "s1", RunStatus::Running, None, 1)
+        .unwrap();
     let stats = RunCacheStats {
         sample_count: 1,
         warm_until_ms: None,
@@ -568,7 +594,10 @@ fn fresh_db_includes_v9_columns() {
     assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
     let conn = db.conn.lock().unwrap();
     let event_cols = table_columns_v5(&conn, "events");
-    assert!(event_cols.contains(&"run_id".to_string()), "新库 events 缺 run_id 列");
+    assert!(
+        event_cols.contains(&"run_id".to_string()),
+        "新库 events 缺 run_id 列"
+    );
     let agent_cols = table_columns_v5(&conn, "session_agents");
     assert!(
         agent_cols.contains(&"sub_session_id".to_string()),

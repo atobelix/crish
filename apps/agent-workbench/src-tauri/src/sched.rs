@@ -145,9 +145,9 @@ impl SchedulerError {
     pub(crate) fn message(&self) -> String {
         match self {
             Self::InvalidExpression(detail) => format!("cron 表达式非法：{detail}"),
-            Self::NoNextFire(expression) => format!(
-                "cron 表达式 {expression} 无未来触发时刻（如 2 月 30 日），拒绝注册"
-            ),
+            Self::NoNextFire(expression) => {
+                format!("cron 表达式 {expression} 无未来触发时刻（如 2 月 30 日），拒绝注册")
+            }
             Self::IdNotFound => "cron 任务不存在或已停止".to_string(),
         }
     }
@@ -395,7 +395,9 @@ impl SchedStore for LocalDbSchedStore {
         if !index.iter().any(|id| id == &task.cron_id) {
             index.push(task.cron_id.clone());
             if let Ok(json) = serde_json::to_string(&index) {
-                let _ = self.db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, &json);
+                let _ = self
+                    .db
+                    .set_session_meta(SESSION_META_SCHED_INDEX_KEY, &json);
             }
         }
     }
@@ -481,9 +483,9 @@ impl SchedulerRegistry {
         // 2. 首次触发时刻（从当前时刻之后第一个命中；无命中如 2 月 30 日
         //    → 结构化错误拒绝注册，不落库）
         let now = now_ms();
-        let next_fire_at_ms = schedule.next_fire_after(now).ok_or_else(|| {
-            SchedulerError::NoNextFire(input.expression.clone())
-        })?;
+        let next_fire_at_ms = schedule
+            .next_fire_after(now)
+            .ok_or_else(|| SchedulerError::NoNextFire(input.expression.clone()))?;
         // 3. id 分配（cron-<seq>；恢复时 fetch_max 推进防撞号）
         let seq = self.seq.fetch_add(1, Ordering::SeqCst);
         let cron_id = format!("{CRON_ID_PREFIX}{seq}");
@@ -507,7 +509,13 @@ impl SchedulerRegistry {
             .tasks
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .insert(cron_id.clone(), CronEntry { task, sleep_task: handle });
+            .insert(
+                cron_id.clone(),
+                CronEntry {
+                    task,
+                    sleep_task: handle,
+                },
+            );
         tracing::info!(
             target: "sched",
             cron_id = %cron_id,
@@ -585,7 +593,13 @@ impl SchedulerRegistry {
                 .tasks
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .insert(task.cron_id.clone(), CronEntry { task, sleep_task: handle });
+                .insert(
+                    task.cron_id.clone(),
+                    CronEntry {
+                        task,
+                        sleep_task: handle,
+                    },
+                );
         }
     }
 
@@ -740,7 +754,13 @@ async fn fire_cron(
                 Some(entry) => entry.sleep_task = handle,
                 // restore 补发路径：表内无条目，直接挂载
                 None if allow_rebuild_without_entry => {
-                    map.insert(task.cron_id.clone(), CronEntry { task, sleep_task: handle });
+                    map.insert(
+                        task.cron_id.clone(),
+                        CronEntry {
+                            task,
+                            sleep_task: handle,
+                        },
+                    );
                 }
                 _ => handle.abort(), // 已被取消/移除 → 不重建（防复活）
             }
@@ -748,9 +768,8 @@ async fn fire_cron(
         }
     }
     // 段 1：同步触发核心（幂等守卫 / 事件 / 计数 / 落库）
-    let outcome = match std::panic::catch_unwind(AssertUnwindSafe(|| {
-        fire_once(&components, &task)
-    })) {
+    let outcome = match std::panic::catch_unwind(AssertUnwindSafe(|| fire_once(&components, &task)))
+    {
         Ok(Some(outcome)) => outcome,
         Ok(None) => return, // 幂等 / 竞态守卫命中：本次触发跳过
         Err(panic) => {
@@ -788,9 +807,11 @@ async fn fire_cron(
             None => false,
         };
         if !launched {
-            components
-                .pending
-                .enqueue_steering(&outcome.task.cron_id, fire_text, outcome.fired_at_ms);
+            components.pending.enqueue_steering(
+                &outcome.task.cron_id,
+                fire_text,
+                outcome.fired_at_ms,
+            );
         }
     } else {
         components
@@ -971,7 +992,10 @@ mod tests {
 
     impl EventSink for ProbeEvents {
         fn emit(&self, event: CronEvent) {
-            self.emitted.lock().unwrap_or_else(|e| e.into_inner()).push(event);
+            self.emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(event);
         }
     }
 
@@ -988,7 +1012,10 @@ mod tests {
             if self.fail {
                 return false;
             }
-            self.prompts.lock().unwrap_or_else(|e| e.into_inner()).push(prompt);
+            self.prompts
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(prompt);
             true
         }
     }
@@ -996,7 +1023,10 @@ mod tests {
     /// 队列快照（消费式读取：dequeue_all 取空队列；同一测试多处断言
     /// 须分别重取——每次读取独立快照，前一次读取不残留）
     fn snapshot_queue(queue: &Arc<Mutex<PendingMessageQueue>>) -> Vec<SteeringInputEntry> {
-        queue.lock().unwrap_or_else(|e| e.into_inner()).dequeue_all()
+        queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .dequeue_all()
     }
 
     /// 非消费式队列长度（wait_until 轮询条件用——不取空队列）
@@ -1102,7 +1132,13 @@ mod tests {
         let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(emitted.len(), 1);
         match &emitted[0] {
-            CronEvent::Fired { cron_id: id, prompt, expression, iteration, fired_at_ms } => {
+            CronEvent::Fired {
+                cron_id: id,
+                prompt,
+                expression,
+                iteration,
+                fired_at_ms,
+            } => {
                 assert_eq!(id, &cron_id);
                 assert_eq!(prompt, "检查编译结果");
                 assert_eq!(expression, "* * * * *");
@@ -1154,7 +1190,9 @@ mod tests {
             Some(steering_group_id("cron-0").as_str())
         );
         assert!(
-            entries[0].text.contains("cron cron-0 已达最大触发次数 2，已停止"),
+            entries[0]
+                .text
+                .contains("cron cron-0 已达最大触发次数 2，已停止"),
             "完成通知文本：{}",
             entries[0].text
         );
@@ -1235,7 +1273,14 @@ mod tests {
         assert_eq!(entries.len(), 1, "max 停止后应仅完成通知");
         assert!(entries[0].text.contains("已达最大触发次数 1，已停止"));
         // CronFired 事件照常发射（数据面）
-        assert_eq!(events.emitted.lock().unwrap_or_else(|e| e.into_inner()).len(), 1);
+        assert_eq!(
+            events
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            1
+        );
     }
 
     /// launcher 未接线（装配未完成）→ daemon 触发降级为 steering 注入
@@ -1269,7 +1314,11 @@ mod tests {
         )
         .await;
         let entries = snapshot_queue(&pending);
-        assert_eq!(entries.len(), 1, "launcher 未接线应降级为 steering 条目（同组替换）");
+        assert_eq!(
+            entries.len(),
+            1,
+            "launcher 未接线应降级为 steering 条目（同组替换）"
+        );
         assert_eq!(
             entries[0].group_id.as_deref(),
             Some(steering_group_id("cron-0").as_str())
@@ -1281,7 +1330,12 @@ mod tests {
         );
         // 每次触发照常发射事件（数据面）
         assert!(
-            events.emitted.lock().unwrap_or_else(|e| e.into_inner()).len() >= 2,
+            events
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                >= 2,
             "持续触发应发射多条 CronFired"
         );
     }
@@ -1292,7 +1346,10 @@ mod tests {
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
         let pending = Arc::new(QueuePendingSink::new(Arc::clone(&queue)));
         let events = Arc::new(ProbeEvents::default());
-        let launcher = Arc::new(ProbeLauncher { fail: true, ..Default::default() });
+        let launcher = Arc::new(ProbeLauncher {
+            fail: true,
+            ..Default::default()
+        });
         let store = MemorySchedStore::shared();
         let registry = Arc::new(SchedulerRegistry::new(
             Arc::clone(&pending) as Arc<dyn PendingSink>,
@@ -1329,14 +1386,22 @@ mod tests {
         .await;
         // 启动失败 → 降级 steering 条目（文本 = prompt + 唤醒模板）
         let entries = snapshot_queue(&queue);
-        assert_eq!(entries.len(), 1, "启动失败应降级为 steering 条目（同组替换）");
+        assert_eq!(
+            entries.len(),
+            1,
+            "启动失败应降级为 steering 条目（同组替换）"
+        );
         assert!(
             entries[0].text.contains("守护进程检查（cron cron-0 第"),
             "降级条目文本应含 prompt 与唤醒模板：{}",
             entries[0].text
         );
         // launcher 未被记录成功拉起
-        assert!(launcher.prompts.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
+        assert!(launcher
+            .prompts
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty());
     }
 
     /// 重启恢复：注册 → 模拟重启（重建注册表共享 store）→ next_fire_at
@@ -1387,7 +1452,10 @@ mod tests {
                 persisted[0].next_fire_at_ms, next_fire_at_snapshot,
                 "重启恢复应保留 next_fire_at_ms"
             );
-            assert!(registry.has_active(), "未到期任务恢复后应为活跃（sleep 已重建）");
+            assert!(
+                registry.has_active(),
+                "未到期任务恢复后应为活跃（sleep 已重建）"
+            );
             (registry, queue, events)
         };
         // 触发恰好一次（max=1 → 停止；等观测状态而非固定 sleep）
@@ -1417,7 +1485,14 @@ mod tests {
             "恢复触发收口应为完成通知：{}",
             entries[0].text
         );
-        assert_eq!(events_b.emitted.lock().unwrap_or_else(|e| e.into_inner()).len(), 1);
+        assert_eq!(
+            events_b
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            1
+        );
         let persisted = store.load_all();
         assert_eq!(persisted[0].fired_count, 1);
         assert!(!persisted[0].enabled);
@@ -1440,7 +1515,11 @@ mod tests {
             "enabled=false 的声明恢复后不得重复触发"
         );
         assert!(
-            events_c.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            events_c
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
             "enabled=false 的声明恢复后不得重复发射"
         );
         assert!(!registry_c.has_active());
@@ -1471,7 +1550,10 @@ mod tests {
         assert!(store.load_all().is_empty(), "非法注册不得落库");
         assert!(!registry.has_active(), "非法注册不得产生活跃条目");
         // 错误码结构化（命令面映射用）
-        assert_eq!(SchedulerError::InvalidExpression("x".into()).code(), codes::TOOL_INVALID_INPUT);
+        assert_eq!(
+            SchedulerError::InvalidExpression("x".into()).code(),
+            codes::TOOL_INVALID_INPUT
+        );
         assert_eq!(SchedulerError::IdNotFound.code(), codes::COMMON_NOT_FOUND);
     }
 
@@ -1489,12 +1571,13 @@ mod tests {
         assert!(cancelled);
         // 触发窗口内不得注入（sleep 已 abort）
         tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(snapshot_queue(&pending).is_empty(), "取消后不得有触发条目");
         assert!(
-            snapshot_queue(&pending).is_empty(),
-            "取消后不得有触发条目"
-        );
-        assert!(
-            events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            events
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
             "取消后不得发射事件"
         );
         let persisted = store.load_all();
@@ -1580,7 +1663,11 @@ mod tests {
         // 暂停窗口内（150ms）：不得有任何触发痕迹
         tokio::time::sleep(Duration::from_millis(150)).await;
         assert!(
-            events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            events
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
             "暂停窗口内不得发射 CronFired"
         );
         assert!(
@@ -1588,7 +1675,10 @@ mod tests {
             "暂停窗口内不得注入 steering 条目"
         );
         let persisted = store.load_all();
-        assert_eq!(persisted[0].fired_count, 0, "暂停窗口内 fired_count 不得推进");
+        assert_eq!(
+            persisted[0].fired_count, 0,
+            "暂停窗口内 fired_count 不得推进"
+        );
         assert!(persisted[0].enabled, "暂停不得禁用任务");
         // 暂停结束后：恢复触发（max=2 → 两次触发后停止）
         let events_cond = Arc::clone(&events);
@@ -1744,7 +1834,10 @@ mod tests {
                 persisted[0].next_fire_at_ms, next_fire_at_snapshot,
                 "重启恢复应保留 next_fire_at_ms"
             );
-            assert!(registry.has_active(), "未到期任务恢复后应为活跃（sleep 已重建）");
+            assert!(
+                registry.has_active(),
+                "未到期任务恢复后应为活跃（sleep 已重建）"
+            );
             (registry, queue, events)
         };
         // 触发恰好一次（max=1 → 停止；等观测状态而非固定 sleep）
@@ -1774,7 +1867,14 @@ mod tests {
             "恢复触发收口应为完成通知：{}",
             entries[0].text
         );
-        assert_eq!(events_b.emitted.lock().unwrap_or_else(|e| e.into_inner()).len(), 1);
+        assert_eq!(
+            events_b
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            1
+        );
         let persisted = LocalDbSchedStore::new(db.clone()).load_all();
         assert_eq!(persisted[0].fired_count, 1);
         assert!(!persisted[0].enabled);
@@ -1797,7 +1897,11 @@ mod tests {
                 "enabled=false 的声明恢复后不得重复触发"
             );
             assert!(
-                events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+                events
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .is_empty(),
                 "enabled=false 的声明恢复后不得重复发射"
             );
             assert!(!registry.has_active());

@@ -67,9 +67,7 @@ pub(crate) fn computer_estop(
 ///
 /// 契约：`{ enabled, mode: "idle"|"browser"|"desktop", reason? }`。
 #[tauri::command]
-pub(crate) fn computer_status(
-    slot: State<'_, Arc<ComputerSlot>>,
-) -> Result<StatusPayload, String> {
+pub(crate) fn computer_status(slot: State<'_, Arc<ComputerSlot>>) -> Result<StatusPayload, String> {
     Ok(slot.status())
 }
 
@@ -84,9 +82,9 @@ mod tests {
     /// 构造内存库槽（真实读写面；命令契约断言不依赖 Tauri 真 app）。
     fn mock_slot() -> Arc<ComputerSlot> {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
-        Arc::new(ComputerSlot::new(Arc::new(
-            LocalDbComputerMetaStore::new(db),
-        )))
+        Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
+            db,
+        ))))
     }
 
     fn mock_app(slot: &Arc<ComputerSlot>) -> tauri::App<tauri::test::MockRuntime> {
@@ -102,7 +100,10 @@ mod tests {
         let slot = mock_slot();
         let app = mock_app(&slot);
         let out = computer_session_enable(app.state::<Arc<ComputerSlot>>()).expect("开启不应失败");
-        assert_eq!(serde_json::to_value(&out).expect("序列化"), json!({ "enabled": true }));
+        assert_eq!(
+            serde_json::to_value(&out).expect("序列化"),
+            json!({ "enabled": true })
+        );
     }
 
     /// disable 契约：载荷 `{ enabled: false }`（幂等——未开启时停用不报错）。
@@ -111,12 +112,19 @@ mod tests {
         let slot = mock_slot();
         let app = mock_app(&slot);
         let out = computer_session_disable(app.state::<Arc<ComputerSlot>>()).expect("停用不应失败");
-        assert_eq!(serde_json::to_value(&out).expect("序列化"), json!({ "enabled": false }));
+        assert_eq!(
+            serde_json::to_value(&out).expect("序列化"),
+            json!({ "enabled": false })
+        );
         // 开启后停用：仍返回 { enabled: false } 并落盘
         slot.enable().expect("开启不应失败");
         let app2 = mock_app(&slot);
-        let out = computer_session_disable(app2.state::<Arc<ComputerSlot>>()).expect("停用不应失败");
-        assert_eq!(serde_json::to_value(&out).expect("序列化"), json!({ "enabled": false }));
+        let out =
+            computer_session_disable(app2.state::<Arc<ComputerSlot>>()).expect("停用不应失败");
+        assert_eq!(
+            serde_json::to_value(&out).expect("序列化"),
+            json!({ "enabled": false })
+        );
         let status = slot.status();
         assert!(!status.enabled);
     }
@@ -127,12 +135,21 @@ mod tests {
         let slot = mock_slot();
         slot.enable().expect("开启不应失败");
         let app = mock_app(&slot);
-        let out = computer_estop(Some("用户点击急停".to_string()), app.state::<Arc<ComputerSlot>>())
-            .expect("急停不应失败");
-        assert_eq!(serde_json::to_value(&out).expect("序列化"), json!({ "stopped": true }));
+        let out = computer_estop(
+            Some("用户点击急停".to_string()),
+            app.state::<Arc<ComputerSlot>>(),
+        )
+        .expect("急停不应失败");
+        assert_eq!(
+            serde_json::to_value(&out).expect("序列化"),
+            json!({ "stopped": true })
+        );
         assert!(slot.stop().stopped(), "急停旗必须置位");
         let status = slot.status();
-        assert!(!status.enabled, "急停后开启态必须关闭（恢复需重新显式开启）");
+        assert!(
+            !status.enabled,
+            "急停后开启态必须关闭（恢复需重新显式开启）"
+        );
         assert_eq!(status.mode, "idle");
     }
 
@@ -170,9 +187,9 @@ mod tests {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
         db.set_session_meta(conex_computer::security::COMPUTER_USE_ENABLED_KEY, "true")
             .expect("预置开启标记");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(
-            LocalDbComputerMetaStore::new(db),
-        )));
+        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
+            db,
+        ))));
         let app = mock_app(&slot);
         let out = computer_status(app.state::<Arc<ComputerSlot>>()).expect("状态查询不应失败");
         assert_eq!(
@@ -213,7 +230,8 @@ mod tests {
         }
         let slot = Arc::new(ComputerSlot::from_store(Arc::new(FailingStore)));
         let app = mock_app(&slot);
-        let err = computer_session_enable(app.state::<Arc<ComputerSlot>>()).expect_err("落盘失败必须报错");
+        let err = computer_session_enable(app.state::<Arc<ComputerSlot>>())
+            .expect_err("落盘失败必须报错");
         assert!(
             err.starts_with("tool.computer.not_ready:"),
             "not_ready 错误码前缀：{err}"
@@ -243,6 +261,10 @@ mod tests {
         computer_session_disable(app2.state::<Arc<ComputerSlot>>()).expect("停用不应失败");
         let events = events.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events.len(), 2, "开启 + 停用各广播一次（命令面不重复发射）");
-        assert!(events[0].starts_with("computer://state-changed:"), "事件名：{}", events[0]);
+        assert!(
+            events[0].starts_with("computer://state-changed:"),
+            "事件名：{}",
+            events[0]
+        );
     }
 }

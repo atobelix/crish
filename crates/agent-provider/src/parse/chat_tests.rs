@@ -3,7 +3,7 @@
 //! 原 chat.rs `mod tests` 整段搬入，零删除零合并；测试名与断言形状不变。
 
 use super::*;
-use crate::events::{ProviderStreamEvent, StopReason};
+use crate::events::{stream_error_kind, ProviderStreamEvent, StopReason};
 use crate::sse::frame::SseFrame;
 use conex_types::tool::ProviderDiagnosticPhase;
 use serde_json::{json, Value};
@@ -62,6 +62,7 @@ fn text_delta_from_content() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -142,6 +143,7 @@ fn tool_calls_in_delta_are_collected_and_flushed() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::ToolCall,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -276,6 +278,7 @@ fn frame_without_choice_and_no_delta_still_reads_finish_reason() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Length,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -467,6 +470,7 @@ fn error_frame_terminates_immediately_with_stop_error() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: Some("模型超载".into()),
+            error_kind: Some(stream_error_kind("模型超载")),
             usage: None,
         }
     );
@@ -561,6 +565,7 @@ fn finish_reason_null_keeps_previous_value() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Length,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -594,6 +599,7 @@ fn ru06_missing_name_reports_diagnostic_at_flush() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -611,6 +617,7 @@ fn ru08_forces_tool_call_when_finish_reason_missing() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::ToolCall,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -630,6 +637,7 @@ fn ru08_forces_tool_call_when_finish_reason_is_stop_or_length() {
             &ProviderStreamEvent::Stop {
                 reason: StopReason::ToolCall,
                 error: None,
+                error_kind: None,
                 usage: None,
             },
             "finish_reason={finish} 时应强制 tool-call",
@@ -649,6 +657,7 @@ fn ru08_keeps_error_reason_when_tool_calls_present() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -679,6 +688,7 @@ fn ru09_diagnostic_when_finish_reason_tool_calls_but_zero_captured() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::ToolCall,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -724,6 +734,7 @@ fn empty_stream_produces_only_stop() {
         vec![ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }]
     );

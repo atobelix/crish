@@ -25,8 +25,7 @@ use tokio::time::Duration;
 
 use super::shell_exec::terminate_process_tree;
 use super::shell_invoke::{
-    base64_encode, build_shell_invocation, build_windows_powershell_script, parse_mode,
-    ShellMode,
+    base64_encode, build_shell_invocation, build_windows_powershell_script, parse_mode, ShellMode,
 };
 use super::shell_output::{clamp_output_bytes, format_command_result, high_output_suggestion};
 
@@ -142,7 +141,10 @@ async fn shell_echo_succeeds() {
     } else {
         "echo hello-shell"
     };
-    let out = t.execute(&ctx(&ws), json!({ "command": command })).await.unwrap();
+    let out = t
+        .execute(&ctx(&ws), json!({ "command": command }))
+        .await
+        .unwrap();
     assert_eq!(out["timedOut"], false);
     assert_eq!(out["exitCode"], 0);
     let stdout = out["stdout"].as_str().unwrap();
@@ -168,7 +170,10 @@ async fn shell_newline_wrapped_rm_blocked() {
     let ws = TempWorkspace::new("shell_newline_blocked");
     let t = tool();
     let err = t
-        .execute(&ctx(&ws), json!({ "command": "printf x\n/bin/rm -rf -- /" }))
+        .execute(
+            &ctx(&ws),
+            json!({ "command": "printf x\n/bin/rm -rf -- /" }),
+        )
         .await
         .unwrap_err();
     assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
@@ -179,7 +184,10 @@ async fn shell_approval_command_requires_approval() {
     let ws = TempWorkspace::new("shell_approval");
     let t = tool();
     let err = t
-        .execute(&ctx(&ws), json!({ "command": "git push --force origin main" }))
+        .execute(
+            &ctx(&ws),
+            json!({ "command": "git push --force origin main" }),
+        )
         .await
         .unwrap_err();
     assert_eq!(err.code(), TOOL_REQUIRES_APPROVAL);
@@ -207,13 +215,19 @@ async fn shell_cwd_must_be_valid() {
     let ws = TempWorkspace::new("shell_cwd");
     let t = tool();
     let err = t
-        .execute(&ctx(&ws), json!({ "command": "echo hi", "cwd": "no/such/dir" }))
+        .execute(
+            &ctx(&ws),
+            json!({ "command": "echo hi", "cwd": "no/such/dir" }),
+        )
         .await
         .unwrap_err();
     assert!(err.to_string().contains("not a directory"));
     // 越界 cwd 拒绝
     let err = t
-        .execute(&ctx(&ws), json!({ "command": "echo hi", "cwd": "../outside" }))
+        .execute(
+            &ctx(&ws),
+            json!({ "command": "echo hi", "cwd": "../outside" }),
+        )
         .await
         .unwrap_err();
     assert_eq!(err.code(), "tool.path_escape");
@@ -223,7 +237,10 @@ async fn shell_cwd_must_be_valid() {
 async fn shell_exit_code_captured() {
     let ws = TempWorkspace::new("shell_exit");
     let t = tool();
-    let out = t.execute(&ctx(&ws), json!({ "command": "exit 42" })).await.unwrap();
+    let out = t
+        .execute(&ctx(&ws), json!({ "command": "exit 42" }))
+        .await
+        .unwrap();
     assert_eq!(out["exitCode"], 42);
     assert!(out["text"].as_str().unwrap().contains("(exit 42)"));
 }
@@ -266,9 +283,15 @@ fn clamp_output_caps_at_limit() {
 fn format_result_annotations() {
     assert_eq!(format_command_result("out", "", Some(0), false), "out");
     assert_eq!(format_command_result("", "", Some(0), false), "(无输出)");
-    assert_eq!(format_command_result("out", "", Some(3), false), "out\n\n(exit 3)");
+    assert_eq!(
+        format_command_result("out", "", Some(3), false),
+        "out\n\n(exit 3)"
+    );
     assert_eq!(format_command_result("", "", Some(3), false), "(exit 3)");
-    assert_eq!(format_command_result("out", "", None, true), "out\n\n(命令超时)");
+    assert_eq!(
+        format_command_result("out", "", None, true),
+        "out\n\n(命令超时)"
+    );
 }
 
 // ===== I2-S4：删除形态重定向（rm/del/Remove-Item/git rm → trash 服务）=====
@@ -289,12 +312,17 @@ async fn delete_shape_redirected_to_trash_not_executed() {
     assert_eq!(out["redirected"], true);
     assert_eq!(out["redirect"]["kind"], "delete-redirect");
     // 目标未物理删除（原路径消失 = 已移入回收站），回收站产生条目
-    assert!(!ws.path().join("tmp/foo.txt").exists(), "原路径消失（已移入回收站）");
+    assert!(
+        !ws.path().join("tmp/foo.txt").exists(),
+        "原路径消失（已移入回收站）"
+    );
     let entries = TrashService::new(trash.path()).list();
     assert_eq!(entries.len(), 1, "必须产生 trash entry");
     assert_eq!(out["trashEntries"][0]["entryId"], entries[0].id);
     // 可恢复：恢复后字节一致
-    TrashService::new(trash.path()).restore(&entries[0].id).unwrap();
+    TrashService::new(trash.path())
+        .restore(&entries[0].id)
+        .unwrap();
     assert_eq!(ws.read_file("tmp/foo.txt"), "doomed");
 }
 
@@ -313,10 +341,7 @@ async fn git_status_executes_normally() {
         "非删除命令结果不得带重定向标记"
     );
     assert_eq!(out["timedOut"], false);
-    assert!(
-        out["exitCode"].is_number(),
-        "git 应真实执行并产生退出码"
-    );
+    assert!(out["exitCode"].is_number(), "git 应真实执行并产生退出码");
 }
 
 /// 删除形态全变体：rm / del / Remove-Item / git rm 一律重定向
@@ -363,7 +388,10 @@ async fn compound_chain_with_delete_intercepted() {
     assert!(err.to_string().contains("复合命令链"));
     assert!(err.to_string().contains("delete_file"));
     // 链未执行：文件仍在、回收站无条目
-    assert!(ws.path().join("x.txt").exists(), "整链拦截后不得删除任何文件");
+    assert!(
+        ws.path().join("x.txt").exists(),
+        "整链拦截后不得删除任何文件"
+    );
     assert_eq!(TrashService::new(trash.path()).list().len(), 0);
 }
 
@@ -376,12 +404,18 @@ async fn indirect_delete_wrapper_intercepted() {
     let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
 
     let err = t
-        .execute(&ctx(&ws), json!({ "command": "bash -c 'rm -rf tmp/foo.txt'" }))
+        .execute(
+            &ctx(&ws),
+            json!({ "command": "bash -c 'rm -rf tmp/foo.txt'" }),
+        )
         .await
         .unwrap_err();
     assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
     assert!(err.to_string().contains("间接执行"));
-    assert!(ws.path().join("tmp/foo.txt").exists(), "间接执行删除形态不得执行");
+    assert!(
+        ws.path().join("tmp/foo.txt").exists(),
+        "间接执行删除形态不得执行"
+    );
     assert_eq!(TrashService::new(trash.path()).list().len(), 0);
 }
 
@@ -454,7 +488,10 @@ async fn delete_redirect_carries_impact_audit() {
     assert_eq!(impact["flagged"], false);
     // 审计字段：重定向 kind / 引导 / 回收站条目
     assert_eq!(out["redirect"]["kind"], "delete-redirect");
-    assert!(out["redirect"]["guidance"].as_str().unwrap().contains("delete_file"));
+    assert!(out["redirect"]["guidance"]
+        .as_str()
+        .unwrap()
+        .contains("delete_file"));
     assert_eq!(out["trashEntries"].as_array().unwrap().len(), 1);
     assert!(out["text"].as_str().unwrap().contains("trash_restore"));
 }
@@ -499,7 +536,10 @@ async fn delete_redirect_emits_security_audit_event() {
             );
             assert_eq!(impact.file_count, 2);
             assert_eq!(impact.total_size_bytes, 8);
-            assert_eq!(decision, &conex_types::events::SecurityAuditDecision::Redirected);
+            assert_eq!(
+                decision,
+                &conex_types::events::SecurityAuditDecision::Redirected
+            );
         }
         other => panic!("应为 security-audit，实际 {}", other.type_name()),
     }
@@ -532,7 +572,9 @@ async fn delete_intercept_emits_blocked_audit() {
         "rm C:\\Users\\x\\Desktop\\f.txt",
     ] {
         assert!(
-            t.execute(&ctx(&ws), json!({ "command": cmd })).await.is_err(),
+            t.execute(&ctx(&ws), json!({ "command": cmd }))
+                .await
+                .is_err(),
             "命令 {cmd:?} 应被拦截"
         );
     }
@@ -602,7 +644,10 @@ async fn rejected_delete_produces_no_trash_entries() {
     let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
 
     for cmd in ["echo hi && rm a.txt", "rm *.txt"] {
-        assert!(t.execute(&ctx(&ws), json!({ "command": cmd })).await.is_err());
+        assert!(t
+            .execute(&ctx(&ws), json!({ "command": cmd }))
+            .await
+            .is_err());
     }
     assert_eq!(TrashService::new(trash.path()).list().len(), 0);
     assert!(ws.path().join("a.txt").exists());
@@ -675,7 +720,10 @@ async fn shell_streaming_no_pipe_deadlock() {
         )
         .await
         .unwrap();
-    assert_eq!(out["timedOut"], false, "1MB 输出不得 30s 内超时（管道写满死锁）");
+    assert_eq!(
+        out["timedOut"], false,
+        "1MB 输出不得 30s 内超时（管道写满死锁）"
+    );
     assert_eq!(out["truncated"], false);
     let stdout = out["stdout"].as_str().unwrap();
     assert_eq!(
@@ -726,11 +774,10 @@ impl RecordingBackgroundManager {
 
 #[async_trait]
 impl BackgroundTaskManager for RecordingBackgroundManager {
-    async fn adopt(
-        &self,
-        req: BackgroundAdoptRequest,
-    ) -> Result<BackgroundTaskRef, ToolError> {
-        let n = self.next_task_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    async fn adopt(&self, req: BackgroundAdoptRequest) -> Result<BackgroundTaskRef, ToolError> {
+        let n = self
+            .next_task_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let task_id = format!("task-{n}");
         self.adopts.lock().unwrap().push(AdoptRecord {
             command: req.command,
@@ -745,10 +792,7 @@ impl BackgroundTaskManager for RecordingBackgroundManager {
         })
     }
 
-    async fn list(
-        &self,
-        _include_finished: bool,
-    ) -> Result<Vec<BackgroundTaskInfo>, ToolError> {
+    async fn list(&self, _include_finished: bool) -> Result<Vec<BackgroundTaskInfo>, ToolError> {
         Ok(Vec::new())
     }
 
@@ -844,7 +888,10 @@ async fn background_window_expired_adopts_once() {
         "logPath 应含 taskId"
     );
     assert!(
-        out["text"].as_str().unwrap().contains(&format!("task {task_id}")),
+        out["text"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("task {task_id}")),
         "text 应提示任务 id"
     );
     // adopt 恰好一次，参数正确
@@ -853,7 +900,10 @@ async fn background_window_expired_adopts_once() {
     assert_eq!(reqs[0].cwd, ws.path().join("sub"), "adopt 参数 cwd 正确");
     assert!(!reqs[0].is_daemon, "auto-background 非 daemon");
     assert!(reqs[0].resource_monitor, "resourceMonitor 透传");
-    assert_eq!(reqs[0].owner_run_id, None, "R-AB1 不携带 run 关联（R-AB3 接线）");
+    assert_eq!(
+        reqs[0].owner_run_id, None,
+        "R-AB1 不携带 run 关联（R-AB3 接线）"
+    );
     assert!(reqs[0].command.len() <= 64, "命令摘要前 64 字符");
 }
 
@@ -965,7 +1015,10 @@ async fn shell_output_full_log_saved() {
         .await
         .unwrap();
     assert_eq!(out["truncated"], true, "1MB 输出应判定截断");
-    let log_path = out["logPath"].as_str().expect("截断应回填 logPath").to_string();
+    let log_path = out["logPath"]
+        .as_str()
+        .expect("截断应回填 logPath")
+        .to_string();
     let file_bytes = std::fs::read(&log_path).expect("完整日志文件应存在");
     assert_eq!(
         file_bytes.iter().filter(|&&b| b == b'y').count(),
@@ -1002,7 +1055,10 @@ async fn shell_output_spill_failure_degrades() {
         .await
         .unwrap();
     assert_eq!(out["truncated"], true);
-    assert!(out.get("logPath").is_none(), "写盘失败应无 logPath（不失败不 panic）");
+    assert!(
+        out.get("logPath").is_none(),
+        "写盘失败应无 logPath（不失败不 panic）"
+    );
     assert_eq!(out["timedOut"], false, "命令仍成功执行");
 }
 
@@ -1101,10 +1157,7 @@ async fn shell_git_dash_c_not_blocked() {
         .await
         .unwrap();
     assert_eq!(out["timedOut"], false);
-    assert!(
-        out["exitCode"].is_number(),
-        "git -C 形态不得被 cd 拦截误伤"
-    );
+    assert!(out["exitCode"].is_number(), "git -C 形态不得被 cd 拦截误伤");
 }
 
 /// 冻结接口 #3（conex-sandbox T-AB-05 语义层）：cd / Set-Location / sl /
@@ -1305,8 +1358,14 @@ async fn stream_budget_stops_progress_and_marks_truncation() {
     assert!(pushed <= 2048, "已推字节不得超过预算：{pushed}");
     // 截断标记 + 排空语义：结果截断、无超时、与 execute 逐字节一致
     assert_eq!(out["truncated"], true, "结果须标记 truncation");
-    assert_eq!(out["timedOut"], false, "预算截断不得触发超时（管道持续排空）");
-    assert!(out["stdout"].as_str().unwrap().contains("[output truncated"));
+    assert_eq!(
+        out["timedOut"], false,
+        "预算截断不得触发超时（管道持续排空）"
+    );
+    assert!(out["stdout"]
+        .as_str()
+        .unwrap()
+        .contains("[output truncated"));
     for key in ["stdout", "stderr", "exitCode", "timedOut", "truncated"] {
         assert_eq!(out[key], legacy[key], "字段 {key} 须与 execute 一致");
     }
@@ -1437,7 +1496,10 @@ async fn stream_non_sync_mode_falls_back_to_execute() {
     let (_, terminal) = collect_stream(t.execute_stream(&ctx, args).await).await;
     let out = terminal.expect("回落路径不得失败");
     for key in ["stdout", "exitCode", "timedOut", "mode", "text"] {
-        assert_eq!(out[key], legacy[key], "回落路径字段 {key} 须与 execute 一致");
+        assert_eq!(
+            out[key], legacy[key],
+            "回落路径字段 {key} 须与 execute 一致"
+        );
     }
     assert!(out.get("taskId").is_none(), "窗口内完成不得产生 taskId");
 }

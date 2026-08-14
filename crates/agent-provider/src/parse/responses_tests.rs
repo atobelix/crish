@@ -1,7 +1,8 @@
 //! responses.rs 测试旁挂（SR-06e · 拆分 · ≠ EL；经父模 `#[path]` 接线，非直接 mod）
 //! 原 responses.rs `mod tests` 整段搬入，零删除零合并；测试名与断言形状不变。
 use super::*;
-use crate::events::{ProviderStreamEvent, StopReason};
+use conex_types::ProviderErrorKind;
+use crate::events::{stream_error_kind, ProviderStreamEvent, StopReason};
 use crate::sse::frame::SseFrame;
 use serde_json::json;
 /// 便捷构造：处理一帧并立即 finish，返回全部事件
@@ -72,6 +73,7 @@ fn text_delta_from_output_text() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -152,6 +154,7 @@ fn function_call_via_arguments_delta_append() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::ToolCall,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -186,6 +189,7 @@ fn function_call_item_done_emits_when_arguments_ready() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::ToolCall,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -263,6 +267,7 @@ fn tool_call_without_name_never_emits() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -306,6 +311,7 @@ fn terminal_status_mapping_table() {
             &ProviderStreamEvent::Stop {
                 reason: expected,
                 error: None,
+                error_kind: None,
                 usage: None,
             },
             "{event_type} status={status} 映射错误"
@@ -322,6 +328,7 @@ fn terminal_status_missing_maps_to_stop() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -342,6 +349,7 @@ fn incomplete_with_tool_call_forces_tool_call() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::ToolCall,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -360,6 +368,7 @@ fn failed_terminal_carries_error_message() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: Some("模型拒绝".into()),
+            error_kind: Some(ProviderErrorKind::Unknown),
             usage: None,
         }
     );
@@ -426,6 +435,7 @@ fn error_frame_terminates_immediately() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: Some("上下文超长".into()),
+            error_kind: Some(stream_error_kind("上下文超长")),
             usage: None,
         }
     );

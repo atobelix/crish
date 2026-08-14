@@ -287,9 +287,8 @@ impl Command {
 }
 
 /// 在途幂等合并表（IdKey → 结果广播；并发同键共享同一 pending）。
-type InFlightMap = Arc<
-    std::sync::Mutex<HashMap<IdKey, tokio::sync::broadcast::Sender<Result<Value, CdpError>>>>,
->;
+type InFlightMap =
+    Arc<std::sync::Mutex<HashMap<IdKey, tokio::sync::broadcast::Sender<Result<Value, CdpError>>>>>;
 
 /// 在途幂等守卫：结果发布 + 完成/取消时从合并表移除（Drop 同步清理）。
 struct InFlightGuard {
@@ -363,9 +362,7 @@ impl CommandSender {
                     duration_ms: None,
                     snapshot_version: 0,
                 });
-                return Err(CdpError::CapabilityDenied {
-                    method: cmd.method,
-                });
+                return Err(CdpError::CapabilityDenied { method: cmd.method });
             }
         }
 
@@ -446,7 +443,9 @@ impl CommandSender {
                     duration_ms: None,
                     snapshot_version: 0,
                 });
-                let err = Err(CdpError::ApprovalDenied { reason: denied.reason });
+                let err = Err(CdpError::ApprovalDenied {
+                    reason: denied.reason,
+                });
                 if let Some(g) = guard.as_mut() {
                     g.publish(err.clone());
                 }
@@ -589,8 +588,14 @@ impl AttachCdpProxy {
                 let events_conn = events.resubscribe();
                 let shutdown_conn = shutdown_task.clone();
                 let handle = tokio::spawn(async move {
-                    handle_attach_connection(ws, sender_conn, caps_conn, events_conn, shutdown_conn)
-                        .await;
+                    handle_attach_connection(
+                        ws,
+                        sender_conn,
+                        caps_conn,
+                        events_conn,
+                        shutdown_conn,
+                    )
+                    .await;
                 });
                 conn_tasks_task
                     .lock()
@@ -742,9 +747,7 @@ fn cdp_error_to_wire(err: &CdpError) -> (i64, String) {
         CdpError::Protocol { message, .. }
         | CdpError::Internal { message, .. }
         | CdpError::Serialize { message, .. } => (-32603, message.clone()),
-        CdpError::DomainUnavailable { method } => {
-            (-32601, format!("域/方法不支持[{method}]"))
-        }
+        CdpError::DomainUnavailable { method } => (-32601, format!("域/方法不支持[{method}]")),
         CdpError::BadParams { message, .. } => (-32602, message.clone()),
         CdpError::Server { code, message } => (*code, message.clone()),
         CdpError::ContextGone { message, .. } => (-32000, message.clone()),
@@ -757,9 +760,7 @@ fn cdp_error_to_wire(err: &CdpError) -> (i64, String) {
         CdpError::ApprovalDenied { reason } => (-32000, reason.clone()),
         CdpError::NotReady(detail) => (-32000, format!("浏览器恢复中：{detail}")),
         CdpError::NoActiveTab => (-32000, "无活动标签会话".to_string()),
-        CdpError::NoSuchTab { tab_id } => {
-            (-32000, format!("标签 {tab_id} 不存在或已关闭"))
-        }
+        CdpError::NoSuchTab { tab_id } => (-32000, format!("标签 {tab_id} 不存在或已关闭")),
     }
 }
 
@@ -798,10 +799,7 @@ mod tests {
             }
         }
         fn set_caps(&self, caps: ReadonlyCaps) {
-            *self
-                .caps
-                .lock()
-                .unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(caps));
+            *self.caps.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(caps));
         }
         fn record(&self, step: &str) {
             self.order
@@ -818,10 +816,7 @@ mod tests {
     impl CommandPolicyHooks for RecordingHooks {
         async fn idempotent(&self, _key: &IdKey) -> Option<Result<Value, CdpError>> {
             self.record("idempotent");
-            let delay = *self
-                .cache_delay
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
+            let delay = *self.cache_delay.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(d) = delay {
                 tokio::time::sleep(d).await;
             }
@@ -855,17 +850,12 @@ mod tests {
             self.token.clone()
         }
         fn attach_caps(&self) -> Option<Arc<ReadonlyCaps>> {
-            self.caps
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .clone()
+            self.caps.lock().unwrap_or_else(|p| p.into_inner()).clone()
         }
     }
 
     /// 组装：mock 服务端 + 直连 client 通道 + 记录钩子。
-    async fn setup(
-        approve_ok: bool,
-    ) -> (MockServer, Arc<CdpClient>, Arc<RecordingHooks>) {
+    async fn setup(approve_ok: bool) -> (MockServer, Arc<CdpClient>, Arc<RecordingHooks>) {
         let mock = MockServer::spawn().await;
         let client = Arc::new(
             crate::cdp::client::CdpClient::connect(&mock.url("/devtools/browser/sender"))
@@ -880,7 +870,10 @@ mod tests {
     #[tokio::test]
     async fn sender_pipeline_hooks_order() {
         let (mut mock, client, hooks) = setup(true).await;
-        mock.set_auto_reply("Runtime.evaluate", MockReply::Ok(json!({ "result": { "value": 1 } })));
+        mock.set_auto_reply(
+            "Runtime.evaluate",
+            MockReply::Ok(json!({ "result": { "value": 1 } })),
+        );
         let channel: Arc<dyn CommandChannel> = client;
         let sender = CommandSender::new(channel, hooks.clone());
 
@@ -918,7 +911,9 @@ mod tests {
             .expect_err("急停应拒绝新命令");
         assert!(matches!(
             err,
-            CdpError::Cancelled { reason: CancelReason::EmergencyStop }
+            CdpError::Cancelled {
+                reason: CancelReason::EmergencyStop
+            }
         ));
         assert_eq!(mock.commands_seen(), 0, "急停命令不得发送到线上");
     }
@@ -942,7 +937,9 @@ mod tests {
         let err = task.await.expect("任务失败").expect_err("应被取消");
         assert!(matches!(
             err,
-            CdpError::Cancelled { reason: CancelReason::Aborted }
+            CdpError::Cancelled {
+                reason: CancelReason::Aborted
+            }
         ));
         // pending 清理（PendingGuard Drop 同步移除）
         assert_eq!(client.pending_len().await, 0, "取消后 pending 必须清零");
@@ -956,14 +953,24 @@ mod tests {
         let sender = CommandSender::new(channel, hooks.clone());
 
         let err = sender
-            .execute(Command::new("Input.insertText").params(json!({ "text": "x" })).dangerous())
+            .execute(
+                Command::new("Input.insertText")
+                    .params(json!({ "text": "x" }))
+                    .dangerous(),
+            )
             .await
             .expect_err("应被拒绝");
         assert!(matches!(err, CdpError::ApprovalDenied { .. }));
         assert_eq!(mock.commands_seen(), 0, "拒绝的命令不得发送到线上");
         let steps = hooks.steps();
-        assert!(steps.contains(&"audit:denied".to_string()), "应有 Denied 审计，实际 {steps:?}");
-        assert!(!steps.contains(&"audit:before".to_string()), "拒绝后不得有 before 审计");
+        assert!(
+            steps.contains(&"audit:denied".to_string()),
+            "应有 Denied 审计，实际 {steps:?}"
+        );
+        assert!(
+            !steps.contains(&"audit:before".to_string()),
+            "拒绝后不得有 before 审计"
+        );
     }
 
     /// 验收 9.1-24：同 IdKey 在途合并，仅一次 WS 发送
@@ -1014,10 +1021,8 @@ mod tests {
             .idempotent_cached
             .lock()
             .unwrap_or_else(|p| p.into_inner()) = Some(Ok(json!({ "cached": true })));
-        *hooks
-            .cache_delay
-            .lock()
-            .unwrap_or_else(|p| p.into_inner()) = Some(Duration::from_millis(80));
+        *hooks.cache_delay.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(Duration::from_millis(80));
         let channel: Arc<dyn CommandChannel> = client;
         let sender = Arc::new(CommandSender::new(channel, hooks.clone()));
 
@@ -1040,10 +1045,7 @@ mod tests {
 
         let r1 = t1.await.expect("任务 A 失败");
         let r2 = t2.await.expect("任务 B 失败");
-        assert_eq!(
-            r1.as_ref().expect("A 应收到缓存结果")["cached"],
-            true
-        );
+        assert_eq!(r1.as_ref().expect("A 应收到缓存结果")["cached"], true);
         assert_eq!(
             r2.as_ref().expect("B 应收到缓存结果而非 Cancelled（H3）")["cached"],
             true,
@@ -1081,7 +1083,10 @@ mod tests {
         assert_eq!(mock.commands_seen(), 0, "拒绝的命令不得发送到线上");
         let steps = hooks.steps();
         assert_eq!(
-            steps.iter().filter(|s| s.as_str() == "audit:blocked").count(),
+            steps
+                .iter()
+                .filter(|s| s.as_str() == "audit:blocked")
+                .count(),
             4,
             "每条拒绝应有一条 Blocked 审计，实际 {steps:?}"
         );
@@ -1110,9 +1115,18 @@ mod tests {
         assert_eq!(result["data"], "base64");
         assert_eq!(mock.commands_seen(), 1, "放行的命令应恰好发送一次");
         let steps = hooks.steps();
-        assert!(steps.contains(&"audit:before".to_string()), "应有 before 审计");
-        assert!(steps.contains(&"audit:after".to_string()), "应有 after 审计");
-        assert!(!steps.contains(&"audit:blocked".to_string()), "放行命令不得有 Blocked 审计");
+        assert!(
+            steps.contains(&"audit:before".to_string()),
+            "应有 before 审计"
+        );
+        assert!(
+            steps.contains(&"audit:after".to_string()),
+            "应有 after 审计"
+        );
+        assert!(
+            !steps.contains(&"audit:blocked".to_string()),
+            "放行命令不得有 Blocked 审计"
+        );
     }
 
     /// 隔离断言：无能力集注入（默认 None）时正常 browser_* 工具面不受影响——
@@ -1120,7 +1134,10 @@ mod tests {
     #[tokio::test]
     async fn sender_without_caps_normal_tool_surface_unaffected() {
         let (mock, client, hooks) = setup(true).await;
-        mock.set_auto_reply("Runtime.evaluate", MockReply::Ok(json!({ "result": { "value": 1 } })));
+        mock.set_auto_reply(
+            "Runtime.evaluate",
+            MockReply::Ok(json!({ "result": { "value": 1 } })),
+        );
         // hooks 默认无能力集（RecordingHooks::new 不 set_caps）
         let channel: Arc<dyn CommandChannel> = client;
         let sender = CommandSender::new(channel, hooks.clone());
@@ -1198,7 +1215,8 @@ mod tests {
             .await
             .expect("命令发送失败");
         let resp = ws.next().await.expect("读响应失败").expect("帧错误");
-        let v: Value = serde_json::from_str(resp.to_text().expect("非文本帧")).expect("响应解析失败");
+        let v: Value =
+            serde_json::from_str(resp.to_text().expect("非文本帧")).expect("响应解析失败");
         assert_eq!(v["id"], id, "响应 id 必须回显请求 id");
         v
     }
@@ -1236,12 +1254,12 @@ mod tests {
     async fn attach_proxy_denies_eval_input_cookie_navigation_create() {
         let (mock, proxy, hooks) = proxy_setup().await;
         for (i, method) in [
-            "Runtime.evaluate",          // 求值类（evaluate_script 工具）
-            "Input.dispatchMouseEvent",  // 交互注入（click 工具）
-            "Input.dispatchKeyEvent",    // 交互注入（type 工具）
-            "Network.getAllCookies",     // cookie 全量读取
-            "Page.navigate",             // 导航
-            "Target.createTarget",       // 新建标签（写入面）
+            "Runtime.evaluate",         // 求值类（evaluate_script 工具）
+            "Input.dispatchMouseEvent", // 交互注入（click 工具）
+            "Input.dispatchKeyEvent",   // 交互注入（type 工具）
+            "Network.getAllCookies",    // cookie 全量读取
+            "Page.navigate",            // 导航
+            "Target.createTarget",      // 新建标签（写入面）
         ]
         .iter()
         .enumerate()
@@ -1296,7 +1314,10 @@ mod tests {
             .expect("外部客户端连接会话面失败")
             .0;
         let commands = [
-            ("DOMSnapshot.captureSnapshot", json!({ "computedStyles": ["color"] })),
+            (
+                "DOMSnapshot.captureSnapshot",
+                json!({ "computedStyles": ["color"] }),
+            ),
             ("Page.captureScreenshot", json!({ "format": "png" })),
             ("Runtime.enable", json!({})),
             ("Network.enable", json!({})),
@@ -1343,8 +1364,14 @@ mod tests {
             .0;
         let commands = [
             ("Target.getTargets", json!({})),
-            ("Target.attachToTarget", json!({ "targetId": "T1", "flatten": true })),
-            ("Target.setAutoAttach", json!({ "autoAttach": true, "flatten": true })),
+            (
+                "Target.attachToTarget",
+                json!({ "targetId": "T1", "flatten": true }),
+            ),
+            (
+                "Target.setAutoAttach",
+                json!({ "autoAttach": true, "flatten": true }),
+            ),
             ("Target.detachFromTarget", json!({ "sessionId": "S1" })),
         ];
         for (i, (method, params)) in commands.iter().enumerate() {
@@ -1358,7 +1385,11 @@ mod tests {
             let v: Value =
                 serde_json::from_str(resp.to_text().expect("非文本帧")).expect("响应解析失败");
             assert_eq!(v["id"], i + 1);
-            assert!(v.get("error").is_none(), "会话建立命令 {} 不应被拦截：{v}", commands[i as usize].0);
+            assert!(
+                v.get("error").is_none(),
+                "会话建立命令 {} 不应被拦截：{v}",
+                commands[i as usize].0
+            );
         }
         // 回传的 sessionId 透传（attachToTarget 响应含 S1）
         assert_eq!(mock.commands_seen(), 4);
@@ -1373,42 +1404,51 @@ mod tests {
             .await
             .expect("外部客户端连接会话面失败");
 
-        mock.send_event("Runtime.consoleAPICalled", json!({ "type": "log" }), Some("S1"));
+        mock.send_event(
+            "Runtime.consoleAPICalled",
+            json!({ "type": "log" }),
+            Some("S1"),
+        );
         mock.send_event(
             "Network.requestWillBeSent",
             json!({ "requestId": "1" }),
             Some("S1"),
         );
         mock.send_event("Page.frameNavigated", json!({ "frame": {} }), None);
-        mock.send_event("Runtime.exceptionThrown", json!({ "exception": {} }), Some("S1"));
+        mock.send_event(
+            "Runtime.exceptionThrown",
+            json!({ "exception": {} }),
+            Some("S1"),
+        );
 
         let read_event = async |ws: &mut tokio_tungstenite::WebSocketStream<
             tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >| -> Value {
+        >|
+               -> Value {
             loop {
-                let msg = tokio::time::timeout(
-                    std::time::Duration::from_secs(2),
-                    ws.next(),
-                )
-                .await
-                .expect("等待白名单事件超时")
-                .expect("连接关闭")
-                .expect("帧错误");
+                let msg = tokio::time::timeout(std::time::Duration::from_secs(2), ws.next())
+                    .await
+                    .expect("等待白名单事件超时")
+                    .expect("连接关闭")
+                    .expect("帧错误");
                 if let Message::Text(t) = msg {
                     return serde_json::from_str(&t).expect("事件解析失败");
                 }
             }
         };
         let e1 = read_event(&mut ws).await;
-        assert_eq!(e1["method"], "Runtime.consoleAPICalled", "console 面事件应透传");
+        assert_eq!(
+            e1["method"], "Runtime.consoleAPICalled",
+            "console 面事件应透传"
+        );
         let e2 = read_event(&mut ws).await;
-        assert_eq!(e2["method"], "Network.requestWillBeSent", "network 面事件应透传");
+        assert_eq!(
+            e2["method"], "Network.requestWillBeSent",
+            "network 面事件应透传"
+        );
         // 非白名单事件不透传：短暂窗口后不应有第三个事件
-        let got_third = tokio::time::timeout(
-            std::time::Duration::from_millis(150),
-            ws.next(),
-        )
-        .await;
+        let got_third =
+            tokio::time::timeout(std::time::Duration::from_millis(150), ws.next()).await;
         assert!(
             got_third.is_err(),
             "非白名单事件（frameNavigated/exceptionThrown）不得透传，实际 {:?}",
@@ -1420,8 +1460,9 @@ mod tests {
     // 运行：`cargo test -p conex-browser --lib cdp::sender::tests::real_chrome_attach_proxy_intercepts_like_mcp -- --ignored --nocapture`
     // 环境变量：`CONEX_TEST_CHROME` 覆盖 Chrome 路径（缺省探测系统安装路径）。
 
-    type TestWs =
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+    type TestWs = tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >;
 
     /// 探测 Chrome 可执行文件（CONEX_TEST_CHROME 优先，其次常见安装路径）。
     fn find_chrome() -> PathBuf {
@@ -1457,10 +1498,7 @@ mod tests {
     // spawn 仅拉起受管 Chrome 实例（固定启动参数，无用户自由参数），
     // 调用方保证 kill + wait 清理——对齐 mcp_attach.rs 既有豁免先例。
     #[allow(clippy::disallowed_methods)]
-    fn spawn_managed_instance(
-        chrome: &Path,
-        profile: &Path,
-    ) -> (std::process::Child, u16, String) {
+    fn spawn_managed_instance(chrome: &Path, profile: &Path) -> (std::process::Child, u16, String) {
         let mut child = std::process::Command::new(chrome)
             .arg("--remote-debugging-port=0")
             .arg(format!("--user-data-dir={}", profile.display()))
@@ -1535,8 +1573,16 @@ mod tests {
         let mut out = String::new();
         for b in s.bytes() {
             match b {
-                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b','
-                | b':' | b'/' => out.push(b as char),
+                b'A'..=b'Z'
+                | b'a'..=b'z'
+                | b'0'..=b'9'
+                | b'-'
+                | b'_'
+                | b'.'
+                | b'~'
+                | b','
+                | b':'
+                | b'/' => out.push(b as char),
                 _ => out.push_str(&format!("%{b:02X}")),
             }
         }

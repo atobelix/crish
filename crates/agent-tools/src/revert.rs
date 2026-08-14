@@ -83,12 +83,21 @@ impl RevertTarget {
         }
         let (target_ref, pathspecs) = match sub.as_str() {
             // git reset [--hard] <ref>：取第一个非选项参数（未指定 → HEAD）
-            "reset" => (rest.iter().find(|a| !a.starts_with('-')).cloned(), Vec::new()),
+            "reset" => (
+                rest.iter().find(|a| !a.starts_with('-')).cloned(),
+                Vec::new(),
+            ),
             // git checkout <旧ref>：语义层已保证是 7+ 位全 hex 的旧 ref
             //（分支名不落入 GitRevertShape，见 semantics classify_git_revert）
-            "checkout" => (rest.iter().find(|a| !a.starts_with('-')).cloned(), Vec::new()),
+            "checkout" => (
+                rest.iter().find(|a| !a.starts_with('-')).cloned(),
+                Vec::new(),
+            ),
             // git revert --no-commit <commit>
-            "revert" => (rest.iter().find(|a| !a.starts_with('-')).cloned(), Vec::new()),
+            "revert" => (
+                rest.iter().find(|a| !a.starts_with('-')).cloned(),
+                Vec::new(),
+            ),
             // git restore --source=<ref> [pathspec...]（--source 空格形式兼容）
             "restore" => {
                 let mut target: Option<String> = None;
@@ -421,7 +430,8 @@ impl RevertPolicy {
 
 /// 可读数量描述（未知 → 「未知」）
 fn describe_optional(v: Option<u64>) -> String {
-    v.map(|v| v.to_string()).unwrap_or_else(|| "未知".to_string())
+    v.map(|v| v.to_string())
+        .unwrap_or_else(|| "未知".to_string())
 }
 
 /// C4 连续回退计数快照（04 C4：`revert_streak_count` / `revert_last_at`；
@@ -596,15 +606,14 @@ mod tests {
         let t = RevertTarget::from_segment(&seg("git", &["stash", "drop"])).unwrap();
         assert_eq!(t.subcommand, "stash");
 
-        let t = RevertTarget::from_segment(&seg("git", &["revert", "--no-commit", "abc1234"])).unwrap();
+        let t =
+            RevertTarget::from_segment(&seg("git", &["revert", "--no-commit", "abc1234"])).unwrap();
         assert_eq!(t.target_ref.as_deref(), Some("abc1234"));
 
         // restore --source= 等号形式 + 路径
-        let t = RevertTarget::from_segment(&seg(
-            "git",
-            &["restore", "--source=HEAD~3", "src/main.rs"],
-        ))
-        .unwrap();
+        let t =
+            RevertTarget::from_segment(&seg("git", &["restore", "--source=HEAD~3", "src/main.rs"]))
+                .unwrap();
         assert_eq!(t.target_ref.as_deref(), Some("HEAD~3"));
         assert_eq!(t.pathspecs, vec!["src/main.rs".to_string()]);
         // restore --source 空格形式
@@ -634,13 +643,15 @@ mod tests {
     #[test]
     fn semantic_assessor_estimates() {
         let a = SemanticRevertAssessor;
-        let restore = RevertTarget::from_command_line("git restore --source=HEAD~3 a.rs b.rs").unwrap();
+        let restore =
+            RevertTarget::from_command_line("git restore --source=HEAD~3 a.rs b.rs").unwrap();
         let area = a.assess(&restore);
         assert_eq!(area.file_count, Some(2));
         assert!(area.cross_directory, "两个路径估算为跨目录");
         assert_eq!(area.ref_age_seconds, None);
 
-        let single = RevertTarget::from_command_line("git restore --source=HEAD~3 src/main.rs").unwrap();
+        let single =
+            RevertTarget::from_command_line("git restore --source=HEAD~3 src/main.rs").unwrap();
         let area = a.assess(&single);
         assert_eq!(area.file_count, Some(1));
         assert!(!area.cross_directory);
@@ -680,7 +691,8 @@ mod tests {
         assert!(!overridden_policy.needs_approval(&area(Some(25), None, None)));
 
         // 非法值忽略保留默认
-        let bad = RevertThresholds::from_session_meta(&[(SESSION_META_KEY_REVERT_MAX_FILES, "abc")]);
+        let bad =
+            RevertThresholds::from_session_meta(&[(SESSION_META_KEY_REVERT_MAX_FILES, "abc")]);
         assert_eq!(bad.max_files, 10);
     }
 
@@ -690,7 +702,11 @@ mod tests {
     fn gate_verdict_small_vs_large_and_modes() {
         let small = policy_with(area(Some(3), None, None));
         let large = policy_with(area(Some(25), None, None));
-        for mode in [PermissionMode::Ask, PermissionMode::FullAccess, PermissionMode::Plan] {
+        for mode in [
+            PermissionMode::Ask,
+            PermissionMode::FullAccess,
+            PermissionMode::Plan,
+        ] {
             assert_eq!(
                 small.gate_verdict_command("git checkout abc1234", mode),
                 None,
@@ -796,6 +812,9 @@ mod tests {
         assert_eq!(SESSION_META_KEY_REVERT_STREAK_LAST_AT, "revert_last_at");
         assert_eq!(SESSION_META_KEY_REVERT_MAX_FILES, "revert_max_files");
         assert_eq!(SESSION_META_KEY_REVERT_MAX_LINES, "revert_max_lines");
-        assert_eq!(SESSION_META_KEY_REVERT_MAX_REF_AGE_HOURS, "revert_max_ref_age_hours");
+        assert_eq!(
+            SESSION_META_KEY_REVERT_MAX_REF_AGE_HOURS,
+            "revert_max_ref_age_hours"
+        );
     }
 }

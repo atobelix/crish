@@ -34,6 +34,11 @@ pub fn anthropic_stop_reason_to_stop(reason: Option<&str>) -> StopReason {
 ///
 /// - `input_tokens` ?? `prompt_tokens` → prompt；`output_tokens` ?? `completion_tokens` → completion
 /// - `cache_read_input_tokens` → cacheRead；`cache_creation_input_tokens` → cacheWrite
+/// - `reasoning_tokens`（T3.4 G1-d）：`output_tokens_details.reasoning_tokens`（嵌套，对齐
+///   chat/responses 约定）→ 顶层 `reasoning_tokens` → 顶层 `thinking_tokens`。Anthropic 官方
+///   wire 不单独报告思考 token（output_tokens 已含思考，T3.4 归一语义不把 reasoning 从
+///   completion 中减去，completion 保留总输出）；仅当 Anthropic 兼容网关/代理显式上报
+///   思考计数时，本字段非 None。官方 wire 缺省时保持 None（从 completion 中拆分取不到）。
 /// - `total_tokens` ??（prompt/completion 任一存在时的和）
 /// - Anthropic wire 不直接报告 miss（P2 §3.3 D：miss 由 Excluded 口径推导），`cache_miss_tokens` 恒 None
 /// - 全空返回 None（304-306）；非对象入参返回 None
@@ -45,6 +50,11 @@ pub fn parse_anthropic_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
         .or_else(|| finite_u64(usage.get("completion_tokens")));
     let cache_read_tokens = finite_u64(usage.get("cache_read_input_tokens"));
     let cache_write_tokens = finite_u64(usage.get("cache_creation_input_tokens"));
+    // reasoning 链（T3.4 G1-d）：嵌套 details.reasoning_tokens 优先，其次顶层 reasoning_tokens /
+    // thinking_tokens 别名——仅兼容网关显式报告思考计数时非 None
+    let reasoning_tokens = nested_finite_u64(usage, "output_tokens_details", "reasoning_tokens")
+        .or_else(|| finite_u64(usage.get("reasoning_tokens")))
+        .or_else(|| finite_u64(usage.get("thinking_tokens")));
     let total_tokens = finite_u64(usage.get("total_tokens")).or_else(|| {
         if prompt_tokens.is_some() || completion_tokens.is_some() {
             Some(prompt_tokens.unwrap_or(0) + completion_tokens.unwrap_or(0))
@@ -56,6 +66,7 @@ pub fn parse_anthropic_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
         && completion_tokens.is_none()
         && cache_read_tokens.is_none()
         && cache_write_tokens.is_none()
+        && reasoning_tokens.is_none()
         && total_tokens.is_none()
     {
         return None;
@@ -67,7 +78,7 @@ pub fn parse_anthropic_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
         cache_read_tokens,
         cache_write_tokens,
         cache_miss_tokens: None,
-        reasoning_tokens: None,
+        reasoning_tokens,
     })
 }
 
@@ -137,4 +148,13 @@ pub(super) fn finite_u64(value: Option<&Value>) -> Option<u64> {
             .filter(|f| f.is_finite() && *f >= 0.0)
             .map(|f| f as u64)
     })
+}
+
+/// 从 usage 的嵌套 details 对象中取数值字段（T3.4 G1-d 的 reasoning 链用：
+/// `output_tokens_details.reasoning_tokens`，对齐 chat/responses 的 details 形状）
+fn nested_finite_u64(usage: &Map<String, Value>, detail_key: &str, field: &str) -> Option<u64> {
+    usage
+        .get(detail_key)
+        .and_then(Value::as_object)
+        .and_then(|details| finite_u64(details.get(field)))
 }

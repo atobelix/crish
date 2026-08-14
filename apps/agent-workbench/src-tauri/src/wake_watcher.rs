@@ -73,9 +73,8 @@ fn now_ms() -> u64 {
 /// 拉起器（拉 run 的注入接口；生产 = 壳层包装
 /// `spawn_idle_resume_run(state, session_id, Vec::new())`，测试 = 替身
 /// 计数——避免本模块直接依赖 core_run_commands）
-pub(crate) type WakeLauncher = Arc<
-    dyn Fn(String) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync,
->;
+pub(crate) type WakeLauncher =
+    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 /// watcher 配置（首轮延迟 / 周期 / 最小间隔 / 空转上限 / 时钟均可注入
 /// 便于测试，对齐 WatchdogOptions 模式 watchdog.rs:151-171）
@@ -209,19 +208,13 @@ impl WakeWatcher {
 
     /// 标记用户显式停止（指定时刻；测试与壳层接线共用）
     pub(crate) fn set_user_stopped_at(&self, at_ms: u64) {
-        *self
-            .user_stopped
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some(at_ms);
+        *self.user_stopped.lock().unwrap_or_else(|e| e.into_inner()) = Some(at_ms);
     }
 
     /// 清除用户停止标记（壳层用户新 run 装配成功后调用；清除后 watcher
     /// 恢复自动拉起语义）
     pub(crate) fn clear_user_stopped(&self) {
-        *self
-            .user_stopped
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = None;
+        *self.user_stopped.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// 用户停止标记是否存在（会话级；测试与壳层查询面共用）
@@ -272,9 +265,7 @@ impl WakeWatcher {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         if let Some(last) = *last {
-            if now_ms.saturating_sub(last)
-                < self.options.min_launch_interval.as_millis() as u64
-            {
+            if now_ms.saturating_sub(last) < self.options.min_launch_interval.as_millis() as u64 {
                 return false;
             }
         }
@@ -413,7 +404,11 @@ mod tests {
         assert_eq!(launches.load(Ordering::SeqCst), 0, "有活动 run 不应拉起");
         active.store(false, Ordering::SeqCst);
         watcher.tick().await;
-        assert_eq!(launches.load(Ordering::SeqCst), 1, "活动 run 消失后恢复拉起");
+        assert_eq!(
+            launches.load(Ordering::SeqCst),
+            1,
+            "活动 run 消失后恢复拉起"
+        );
     }
 
     /// user_stopped 标记存在 → 不拉起；用户新 run 清除后恢复
@@ -465,7 +460,11 @@ mod tests {
         ));
         enqueue_entry(&queue);
         watcher.tick().await;
-        assert_eq!(launches.load(Ordering::SeqCst), 1, "streak=4 < max=5 应放行");
+        assert_eq!(
+            launches.load(Ordering::SeqCst),
+            1,
+            "streak=4 < max=5 应放行"
+        );
     }
 
     /// 最小拉 run 间隔：上次拉起 < min_launch_interval → 跳过；到达后放行
@@ -509,17 +508,10 @@ mod tests {
         assert!(watcher.start(&runtime), "首次启动");
         // 首轮延迟 100ms 内：不应拉起
         tokio::time::sleep(Duration::from_millis(40)).await;
-        assert_eq!(
-            launches.load(Ordering::SeqCst),
-            0,
-            "首轮延迟内不应拉起"
-        );
+        assert_eq!(launches.load(Ordering::SeqCst), 0, "首轮延迟内不应拉起");
         // 延迟过后：周期扫描拉起
         tokio::time::sleep(Duration::from_millis(120)).await;
-        assert!(
-            launches.load(Ordering::SeqCst) >= 1,
-            "首轮延迟后应拉起"
-        );
+        assert!(launches.load(Ordering::SeqCst) >= 1, "首轮延迟后应拉起");
         assert!(watcher.stop(), "停止周期任务");
     }
 

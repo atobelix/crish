@@ -264,8 +264,7 @@ impl Transport {
         expected: &ExpectedBrowser,
     ) -> Result<Arc<CdpClient>, BrowserError> {
         let client = Arc::new(
-            CdpClient::connect_with_config(&endpoint.url(), ConnectConfig::default())
-                .await?,
+            CdpClient::connect_with_config(&endpoint.url(), ConnectConfig::default()).await?,
         );
         // 身份校验：getVersion 回包与预期比对（5s 超时）
         let ver: BrowserVersionResult = match tokio::time::timeout(
@@ -275,12 +274,9 @@ impl Transport {
         .await
         {
             Err(_) => return Err(BrowserError::HandshakeTimeout),
-            Ok(Err(e)) => {
-                return Err(BrowserError::Connect(format!("身份校验命令失败：{e}")))
-            }
-            Ok(Ok(v)) => serde_json::from_value::<BrowserVersionResult>(v).map_err(|e| {
-                BrowserError::Connect(format!("getVersion 回包解析失败：{e}"))
-            })?,
+            Ok(Err(e)) => return Err(BrowserError::Connect(format!("身份校验命令失败：{e}"))),
+            Ok(Ok(v)) => serde_json::from_value::<BrowserVersionResult>(v)
+                .map_err(|e| BrowserError::Connect(format!("getVersion 回包解析失败：{e}")))?,
         };
 
         if let Some(prefix) = &expected.product_prefix {
@@ -304,10 +300,7 @@ impl Transport {
             if major != 0 && major < min {
                 return Err(BrowserError::VerifyMismatch {
                     expected: format!("Chrome >= {min}"),
-                    actual: ver
-                        .product
-                        .clone()
-                        .unwrap_or_else(|| major.to_string()),
+                    actual: ver.product.clone().unwrap_or_else(|| major.to_string()),
                 });
             }
         }
@@ -386,7 +379,11 @@ impl crate::cdp::sender::CommandChannel for Transport {
     ) -> Result<(), CdpError> {
         let client = self.shared.lock().as_ref().cloned();
         match client {
-            Some(client) => client.send_command_no_wait(method, params, session_id).await,
+            Some(client) => {
+                client
+                    .send_command_no_wait(method, params, session_id)
+                    .await
+            }
             None => Err(CdpError::ConnectionLost),
         }
     }
@@ -593,7 +590,11 @@ mod tests {
         )
         .await
         .expect("建连失败");
-        assert_eq!(runs.load(Ordering::SeqCst), 0, "connect 不执行恢复（订阅时序铁律）");
+        assert_eq!(
+            runs.load(Ordering::SeqCst),
+            0,
+            "connect 不执行恢复（订阅时序铁律）"
+        );
         let handle = transport._supervisor.abort_handle();
         drop(transport);
         let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
@@ -922,8 +923,16 @@ mod tests {
             let restored = restored_epoch.expect("第 {cycle} 轮必须广播 ConnectionRestored");
             let reset = reset_epoch.expect("第 {cycle} 轮必须广播 VersionReset");
             // 单调性：epoch 逐轮 +1（reset 后 = cycle；restored 携带前置值 = cycle-1）
-            assert_eq!(reset, u64::from(cycle), "global_epoch 必须严格单调递增：第 {cycle} 轮");
-            assert_eq!(restored, u64::from(cycle) - 1, "ConnectionRestored 携带重置前 epoch");
+            assert_eq!(
+                reset,
+                u64::from(cycle),
+                "global_epoch 必须严格单调递增：第 {cycle} 轮"
+            );
+            assert_eq!(
+                restored,
+                u64::from(cycle) - 1,
+                "ConnectionRestored 携带重置前 epoch"
+            );
             assert!(transport.is_ready(), "每轮恢复完成后必须重新可用");
         }
         // 最终收敛（精确计数，防重连风暴失控）

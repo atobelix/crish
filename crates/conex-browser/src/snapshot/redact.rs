@@ -45,9 +45,7 @@ pub fn is_sensitive_input(tag: &str, attributes: &[(String, String)]) -> bool {
     }
     // D1：type=password（属性值先 trim——`type="password "` 尾随空白不得绕过，
     // M6-1；与下方 autocomplete 分支的 trim 口径一致）
-    if attr_value(attributes, "type")
-        .is_some_and(|v| v.trim().eq_ignore_ascii_case("password"))
-    {
+    if attr_value(attributes, "type").is_some_and(|v| v.trim().eq_ignore_ascii_case("password")) {
         return true;
     }
     // D2：autocomplete 敏感项
@@ -115,17 +113,12 @@ pub fn redact_ax_property(name: &str) -> bool {
 pub fn redact_fragment(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
     // 文本形态 value=… 或 JSON 形态 "value":… / "value" :…
-    let has_value = lower.contains("value=")
-        || lower.contains("\"value\":")
-        || lower.contains("\"value\" :");
+    let has_value =
+        lower.contains("value=") || lower.contains("\"value\":") || lower.contains("\"value\" :");
     if has_value {
-        let password_semantics = PASSWORD_TYPE_PATTERNS
-            .iter()
-            .any(|p| lower.contains(p))
+        let password_semantics = PASSWORD_TYPE_PATTERNS.iter().any(|p| lower.contains(p))
             || (lower.contains("autocomplete")
-                && SENSITIVE_AUTOCOMPLETE
-                    .iter()
-                    .any(|s| lower.contains(s)));
+                && SENSITIVE_AUTOCOMPLETE.iter().any(|s| lower.contains(s)));
         if password_semantics {
             return REDACTED.to_string();
         }
@@ -147,8 +140,9 @@ const PASSWORD_TYPE_PATTERNS: [&str; 5] = [
 /// 供快照文档携带密码标记（`SnapshotDocument.password_backend_ids`），工具面
 /// `is_password` 输入目标判定（密码框走 insertText/只比对长度不回读明文）与
 /// 脱敏共用同一敏感判定出口，杜绝两处判定口径漂移。
-pub fn sensitive_input_backend_ids(roots: &[crate::snapshot::collect::EnhancedNode])
-    -> std::collections::HashSet<i64> {
+pub fn sensitive_input_backend_ids(
+    roots: &[crate::snapshot::collect::EnhancedNode],
+) -> std::collections::HashSet<i64> {
     fn walk(
         node: &crate::snapshot::collect::EnhancedNode,
         out: &mut std::collections::HashSet<i64>,
@@ -188,10 +182,15 @@ mod tests {
         assert_eq!(safe_value("input", &a).as_deref(), Some(REDACTED));
         let r = redact_attributes(&a);
         assert_eq!(
-            r.iter().find(|(k, _)| k == "value").map(|(_, v)| v.as_str()),
+            r.iter()
+                .find(|(k, _)| k == "value")
+                .map(|(_, v)| v.as_str()),
             Some(REDACTED)
         );
-        assert!(!r.iter().any(|(_, v)| v == "s3cret"), "密码明文不得流入输出");
+        assert!(
+            !r.iter().any(|(_, v)| v == "s3cret"),
+            "密码明文不得流入输出"
+        );
     }
 
     /// D1 大小写：`type="Password"` 同样敏感。
@@ -230,7 +229,10 @@ mod tests {
     /// D2 多 token 变体：`autocomplete="current-password new-password"` 任一命中即敏感。
     #[test]
     fn redact_autocomplete_multi_token() {
-        let a = attrs(&[("autocomplete", "current-password new-password"), ("value", "v")]);
+        let a = attrs(&[
+            ("autocomplete", "current-password new-password"),
+            ("value", "v"),
+        ]);
         assert!(is_sensitive_input("input", &a));
     }
 
@@ -254,11 +256,14 @@ mod tests {
         ]);
         let r = redact_attributes(&a);
         assert!(
-            r.iter().any(|(k, v)| k == "placeholder" && v == "请输入密码"),
+            r.iter()
+                .any(|(k, v)| k == "placeholder" && v == "请输入密码"),
             "占位提示语无泄密面，不得误伤"
         );
         assert!(r.iter().any(|(k, v)| k == "title" && v == "提示"));
-        assert!(r.iter().any(|(k, v)| k == "aria-label" && v == "密码输入框"));
+        assert!(r
+            .iter()
+            .any(|(k, v)| k == "aria-label" && v == "密码输入框"));
         assert!(
             r.iter().any(|(k, v)| k == "value" && v == "[REDACTED]"),
             "value 仍应脱敏"
@@ -319,7 +324,9 @@ mod tests {
         let a = attrs(&[("type", "password"), ("placeholder", "密码")]);
         let r = redact_attributes(&a);
         assert_eq!(
-            r.iter().find(|(k, _)| k == "value").map(|(_, v)| v.as_str()),
+            r.iter()
+                .find(|(k, _)| k == "value")
+                .map(|(_, v)| v.as_str()),
             Some(REDACTED)
         );
     }
@@ -382,13 +389,19 @@ mod tests {
             EnhancedNode::element("input", 2)
                 .attr("type", "text")
                 .attr("autocomplete", "current-password"),
-            EnhancedNode::element("form", 3).push(EnhancedNode::element("input", 4)
-                .attr("type", "password ")
-                .push(EnhancedNode::text_node("掩码文本", 5))),
+            EnhancedNode::element("form", 3).push(
+                EnhancedNode::element("input", 4)
+                    .attr("type", "password ")
+                    .push(EnhancedNode::text_node("掩码文本", 5)),
+            ),
             EnhancedNode::element("input", 6).attr("type", "text"),
         ];
         let sensitive = sensitive_input_backend_ids(&roots);
-        assert_eq!(sensitive, [1, 2, 4].into_iter().collect(), "敏感集合应含 password/autocomplete 输入");
+        assert_eq!(
+            sensitive,
+            [1, 2, 4].into_iter().collect(),
+            "敏感集合应含 password/autocomplete 输入"
+        );
         assert!(!sensitive.contains(&3), "容器不敏感");
         assert!(!sensitive.contains(&5), "文本节点不敏感");
         assert!(!sensitive.contains(&6), "普通 text 输入不敏感");

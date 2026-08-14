@@ -174,11 +174,7 @@ mod tests {
 
         // 组已消亡：killpg(pgid, 0) 存活探测返回 ESRCH
         let probe = unsafe { libc::killpg(child, 0) };
-        assert_eq!(
-            probe,
-            -1,
-            "杀组后进程组应不存在（killpg 探测应为 -1）"
-        );
+        assert_eq!(probe, -1, "杀组后进程组应不存在（killpg 探测应为 -1）");
         assert_eq!(
             std::io::Error::last_os_error().raw_os_error(),
             Some(libc::ESRCH),

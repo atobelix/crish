@@ -112,6 +112,32 @@ function stripControlChars(s: string): string {
 }
 
 /**
+ * 解码属性值中的 HTML 实体与控制字符，用于二次安全判定（防御 jav&#x61;script: 等混淆）
+ */
+export function decodeAndNormalizeAttr(val: string): string {
+  if (!val) return '';
+  return stripControlChars(
+    val
+      .replace(/&#x([0-9a-fA-F]+);?/g, (_, hex) => {
+        try {
+          return String.fromCharCode(parseInt(hex, 16));
+        } catch {
+          return '';
+        }
+      })
+      .replace(/&#([0-9]+);?/g, (_, dec) => {
+        try {
+          return String.fromCharCode(parseInt(dec, 10));
+        } catch {
+          return '';
+        }
+      })
+      .replace(/&[a-zA-Z]+;/g, '')
+      .trim()
+  );
+}
+
+/**
  * 检查 URL 协议是否安全。
  *
  * 允许：http:, https:, mailto:, tel:, 相对路径（/, ./, ../, 锚点 #）
@@ -121,14 +147,19 @@ export function isSafeUrl(url: string): boolean {
   if (!url) return false;
   const trimmed = stripControlChars(url.trim());
 
-  // 检查是否包含实体编码混淆的协议头（如 jav&#x09;ascript:）
+  // 检查是否包含实体编码混淆的协议头（如 jav&#x09;ascript: / jav&#x61;script:）
+  const decoded = decodeAndNormalizeAttr(trimmed).toLowerCase();
   const normalized = trimmed.replace(/&#[xX]?[0-9a-fA-F]+;/g, '').toLowerCase();
 
   if (
     normalized.startsWith('javascript:') ||
     normalized.startsWith('vbscript:') ||
     normalized.startsWith('data:text/html') ||
-    normalized.startsWith('data:image/svg+xml')
+    normalized.startsWith('data:image/svg+xml') ||
+    decoded.startsWith('javascript:') ||
+    decoded.startsWith('vbscript:') ||
+    decoded.startsWith('data:text/html') ||
+    decoded.startsWith('data:image/svg+xml')
   ) {
     return false;
   }
@@ -160,13 +191,18 @@ export function isSafeSrc(src: string, allowDataImage = true): boolean {
   if (!src) return false;
   const trimmed = stripControlChars(src.trim());
   const lower = trimmed.toLowerCase();
+  const decoded = decodeAndNormalizeAttr(trimmed).toLowerCase();
 
   // 严格拦截危险伪协议与 SVG 数据 URI（SVG 具备脚本执行与 XSS 能力）
   if (
     lower.startsWith('javascript:') ||
     lower.startsWith('vbscript:') ||
     lower.startsWith('data:text/html') ||
-    lower.startsWith('data:image/svg+xml')
+    lower.startsWith('data:image/svg+xml') ||
+    decoded.startsWith('javascript:') ||
+    decoded.startsWith('vbscript:') ||
+    decoded.startsWith('data:text/html') ||
+    decoded.startsWith('data:image/svg+xml')
   ) {
     return false;
   }
@@ -224,10 +260,17 @@ export function sanitizeHtml(
     .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '');
 
-  // 2. 正则逐个处理 HTML 标签（正确处理属性引号内包含的 < > 字符）
+  // 2. 核心加固：识别并安全转义任何末尾未闭合的标签残片（如 `<img src=x onerror=alert(1)`）
+  const unclosedTrailingTagRegex =
+    /<([a-zA-Z0-9:-]+)(?:[^>"']|"[^"]*"|'[^']*')*$/g;
+  cleaned = cleaned.replace(unclosedTrailingTagRegex, (unclosed) => {
+    return escapeHtml(unclosed);
+  });
+
+  // 3. 正则逐个处理 HTML 标签（正确处理属性引号内包含的 < > 字符）
   const tagRegex = /<\/?([a-zA-Z0-9:-]+)((?:[^"'>]|"[^"]*"|'[^']*')*)\/?>/g;
 
-  return cleaned.replace(
+  const result = cleaned.replace(
     tagRegex,
     (fullMatch, rawTagName: string, rawAttrs: string) => {
       const tagName = rawTagName.toLowerCase();
@@ -272,11 +315,17 @@ export function sanitizeHtml(
           continue;
         }
 
-        // 检查 href / src 安全性
+        // 检查 href / src 安全性（包含反转义二次校验）
         if (attrName === 'href') {
-          if (!isSafeUrl(attrVal)) continue;
+          const normalizedVal = decodeAndNormalizeAttr(attrVal);
+          if (!isSafeUrl(attrVal) || !isSafeUrl(normalizedVal)) continue;
         } else if (attrName === 'src') {
-          if (!isSafeSrc(attrVal, allowDataImages)) continue;
+          const normalizedVal = decodeAndNormalizeAttr(attrVal);
+          if (
+            !isSafeSrc(attrVal, allowDataImages) ||
+            !isSafeSrc(normalizedVal, allowDataImages)
+          )
+            continue;
         }
 
         if (tagName === 'a' && attrName === 'target' && attrVal === '_blank') {
@@ -315,4 +364,7 @@ export function sanitizeHtml(
         : `<${tagName}${attrString}>`;
     }
   );
+
+  // 4. 清理残留的孤立未闭合尖括号
+  return result.replace(/<(?![a-zA-Z0-9/:-])/g, '&lt;');
 }

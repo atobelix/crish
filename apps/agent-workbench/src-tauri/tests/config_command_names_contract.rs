@@ -23,11 +23,7 @@ use command_manifest::COMMAND_MANIFEST;
 
 /// 取 manifest 全量命令名（去重校验由内联测试锚定，此处直接收集）
 fn manifest_names() -> Vec<&'static str> {
-    COMMAND_MANIFEST
-        .commands
-        .iter()
-        .map(|c| c.name)
-        .collect()
+    COMMAND_MANIFEST.commands.iter().map(|c| c.name).collect()
 }
 
 /// F5 终态名（冻结 v1）：config 族 8 条全部登记且已接线

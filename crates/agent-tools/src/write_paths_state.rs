@@ -11,11 +11,11 @@
 //!   （写类工具执行前先越权检查、再冲突声明，一先一后串行叠加）。
 //! 诚实边界：仅结构拆分，互斥语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 
-use super::TOOL_WRITE_PATH_CONFLICT;
 use super::write_paths_validate::{
     check_write_allowance, paths_overlap_normalized, validate_write_path, WriteAllowanceError,
     WritePathPolicy,
 };
+use super::TOOL_WRITE_PATH_CONFLICT;
 use crate::context::ToolContext;
 use crate::definition::ToolError;
 use crate::tools::epoch_millis;
@@ -327,7 +327,9 @@ pub(crate) fn check_write_allowance_for_ctx(
 }
 
 /// 锁读取助手：中毒恢复（A 模式，PE-07 T07.6：记录错误、取回内值继续，不 panic）
-fn lock_inner(inner: &Mutex<Vec<WritePathClaim>>) -> std::sync::MutexGuard<'_, Vec<WritePathClaim>> {
+fn lock_inner(
+    inner: &Mutex<Vec<WritePathClaim>>,
+) -> std::sync::MutexGuard<'_, Vec<WritePathClaim>> {
     inner.lock().unwrap_or_else(|e| {
         tracing::error!("写路径注册表锁中毒，按恢复模式继续：{e}");
         e.into_inner()

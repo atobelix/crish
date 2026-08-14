@@ -1046,8 +1046,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("创建临时目录");
         let material =
             load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
-        let name =
-            rustls::pki_types::ServerName::try_from("crish-remote").expect("常量域名恒合法");
+        let name = rustls::pki_types::ServerName::try_from("crish-remote").expect("常量域名恒合法");
         let now = rustls::pki_types::UnixTime::now();
         // 正确指纹 → 放行。
         let ok_verifier = FingerprintVerifier::new(material.ca_fingerprint().to_string());
@@ -1107,7 +1106,10 @@ mod tests {
             "错误指纹必须握手失败（T-03）"
         );
         let right = client_config_with_pin(material.ca_fingerprint().to_string());
-        assert!(try_handshake_with(&material, right).await, "正确指纹必须握手成功");
+        assert!(
+            try_handshake_with(&material, right).await,
+            "正确指纹必须握手成功"
+        );
     }
 
     #[tokio::test]
@@ -1174,10 +1176,7 @@ mod tests {
         let material =
             load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
         let config = material.server_config().expect("装配 ServerConfig");
-        assert!(
-            !config.ticketer.enabled(),
-            "会话复用票据必须禁用（TLS-07）"
-        );
+        assert!(!config.ticketer.enabled(), "会话复用票据必须禁用（TLS-07）");
     }
 
     #[cfg(unix)]

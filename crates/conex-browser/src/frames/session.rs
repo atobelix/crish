@@ -471,7 +471,8 @@ impl ScreencastSession {
                 if self.config.static_fallback_enabled
                     && self.status() == ScreencastStatus::Starting
                 {
-                    self.static_ctrl.enter(&format!("startScreencast 失败：{e}"));
+                    self.static_ctrl
+                        .enter(&format!("startScreencast 失败：{e}"));
                     self.set_status(ScreencastStatus::Active);
                     return Ok(());
                 }
@@ -798,9 +799,7 @@ async fn restart_screencast(
             // U-3 降级：重启失败且启用静态降级 → 保持 1fps 轮询（跨重连持续
             // 供帧——恢复条件取舍：保持降级直到显式 stop/start 重试，或下一次
             // 重连重启成功时切回；不自动反复探测 screencast 可用性）
-            if config.static_fallback_enabled
-                && *status_tx.borrow() == ScreencastStatus::Starting
-            {
+            if config.static_fallback_enabled && *status_tx.borrow() == ScreencastStatus::Starting {
                 static_ctrl.enter(&format!("startScreencast 重启失败：{e}"));
                 let _ = status_tx.send(ScreencastStatus::Active);
             } else {

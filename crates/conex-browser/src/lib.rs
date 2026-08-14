@@ -40,10 +40,6 @@ pub use import::ImportService;
 
 pub use action::evaluate::EvaluateRequest;
 pub use action::gate::{DomainGate, GateDenial};
-pub use gate::{
-    blocked_urls, FormalDomainGate, GateClock, HostResolver, SetBlockedSender, SystemClock,
-    SystemResolver, TransportGate, REBINDING_WINDOW,
-};
 pub use action::keyboard::KeySpec;
 pub use action::locate::{Located, ResolvedPoint, ViewportSize};
 pub use action::ops::{BrowserPageOps, BrowserSnapshotStore, Delay, PageOps, TokioDelay};
@@ -53,6 +49,10 @@ pub use action::{
     ActionError, ActionErrorKind, ActionExecutor, ActionOptions, ActionRequest, ActionSuccess,
     ElementMeta, ElementRef, MouseButton, PathBufLike, Primitive, ScrollDir, SnapshotStore,
     ACTION_TOTAL_TIMEOUT, MAX_ATTEMPTS, TYPE_CHUNK_SIZE,
+};
+pub use gate::{
+    blocked_urls, FormalDomainGate, GateClock, HostResolver, SetBlockedSender, SystemClock,
+    SystemResolver, TransportGate, REBINDING_WINDOW,
 };
 
 pub use browser::args::EngineMode;
@@ -80,28 +80,26 @@ pub use cdp::probe::{
     MIN_CHROMIUM_MAJOR, PROBE_BUDGET,
 };
 pub use cdp::sender::{
-    ApprovalDenied, AuditPhase, BrowserAuditEvent, CancellationToken, Command, CommandChannel,
-    CommandPolicyHooks, CommandSender, CdpCommandView, IdKey, DEFAULT_TIMEOUT,
+    ApprovalDenied, AuditPhase, BrowserAuditEvent, CancellationToken, CdpCommandView, Command,
+    CommandChannel, CommandPolicyHooks, CommandSender, IdKey, DEFAULT_TIMEOUT,
 };
 pub use cdp::transport::{
     backoff_base, backoff_delay, CdpEndpoint, ConnectionState, ExpectedBrowser, RestoreHook,
     Transport, RECONNECT_REPORT_FAILURES, VERIFY_TIMEOUT,
 };
 pub use cdp::types::{CdpEvent, CdpMessage};
-pub use cdp::version::{
-    Stale, TabId, VersionTracker, VERSION_BUMP_COALESCE, VERSION_RESET_DELTA,
-};
+pub use cdp::version::{Stale, TabId, VersionTracker, VERSION_BUMP_COALESCE, VERSION_RESET_DELTA};
 pub use snapshot::budget::{
     BudgetConfig, HARD_TIMEOUT, MAX_OUTPUT_BYTES, MAX_RAW_PAYLOAD_BYTES, MAX_SELECTOR_INDICES,
     MAX_TEXT_LEN, MAX_TREE_NODES, P95_TARGET, SNAPSHOT_CACHE_TOTAL_BYTES,
 };
 pub use snapshot::collect::{
     AxInfo, AxProperties, Bounds, CdpCollector, CollectedData, EnhancedNode, FixtureCollector,
-    FrameMarker, StyleInfo, SnapshotCollector,
+    FrameMarker, SnapshotCollector, StyleInfo,
 };
 pub use snapshot::{
-    BlindZoneKind, BlindZoneStats, CaptureStateKind, NodeRef, SerializeOptions, SnapshotDocument,
-    SnapshotError, SnapshotManager, SnapshotMeta, SimplifiedNode,
+    BlindZoneKind, BlindZoneStats, CaptureStateKind, NodeRef, SerializeOptions, SimplifiedNode,
+    SnapshotDocument, SnapshotError, SnapshotManager, SnapshotMeta,
 };
 
 use crate::cdp::bus::{FRAME_CHANNEL_CAPACITY, TYPED_CHANNEL_CAPACITY};
@@ -182,7 +180,11 @@ async fn restore_session(
 
     // 3. 会话重建 + 4. 域重 enable（先 live 探测，防 Memory-Saver 挂起）
     let mut tabs = Vec::new();
-    for info in targets.target_infos.iter().filter(|t| t.target_type == "page") {
+    for info in targets
+        .target_infos
+        .iter()
+        .filter(|t| t.target_type == "page")
+    {
         let attach: AttachToTargetResult = client
             .send_command(
                 TARGET_ATTACH_TO_TARGET,
@@ -207,7 +209,10 @@ async fn restore_session(
         });
         if !renderer_responds(client, &attach.session_id).await {
             // Memory-Saver 挂起标签跳过 enable（恢复后由工具层 liveness 复活路径接管）
-            tracing::warn!("会话 {} 无响应（Memory-Saver），跳过 enable", attach.session_id);
+            tracing::warn!(
+                "会话 {} 无响应（Memory-Saver），跳过 enable",
+                attach.session_id
+            );
             continue;
         }
         enable_domains(client, &attach.session_id)
@@ -215,7 +220,11 @@ async fn restore_session(
             .map_err(|e| BrowserError::Restore(format!("enable 序列失败：{e}")))?;
         // 5. 拦截恢复：window.open 收口重挂（best-effort）
         let _ = client
-            .send_command(PAGE_SET_WINDOW_OPEN_HANDLER, Some(json!({})), Some(&attach.session_id))
+            .send_command(
+                PAGE_SET_WINDOW_OPEN_HANDLER,
+                Some(json!({})),
+                Some(&attach.session_id),
+            )
             .await;
     }
 
@@ -389,9 +398,7 @@ impl BrowserSession {
                         // 由 SessionAttached 重新登记（首次附着者胜语义对新生会话
                         // 同样成立；避免陈旧会话滞留导致动作路由到死会话）
                         Ok(BrowserEvent::ConnectionLost { .. }) => {
-                            tabs.lock()
-                                .unwrap_or_else(|p| p.into_inner())
-                                .clear();
+                            tabs.lock().unwrap_or_else(|p| p.into_inner()).clear();
                         }
                         Ok(_) => {}
                         Err(_) => break,
@@ -553,9 +560,8 @@ impl BrowserSession {
                 ENABLE_TIMEOUT,
             )
             .await?;
-        let attach: AttachToTargetResult = serde_json::from_value(value).map_err(|e| {
-            BrowserError::Internal(format!("attachToTarget 结果解析失败：{e}"))
-        })?;
+        let attach: AttachToTargetResult = serde_json::from_value(value)
+            .map_err(|e| BrowserError::Internal(format!("attachToTarget 结果解析失败：{e}")))?;
         enable_domains(self.transport.as_ref(), &attach.session_id)
             .await
             .map_err(|e| {
@@ -650,7 +656,10 @@ impl BrowserSession {
     /// 构建真实采集快照管理器（维度 13：CdpCollector + 版本源绑定；
     /// 引擎侧 `Arc<BrowserSession>` 后调用；预算可按 T-6 定制，
     /// `budgets.cross_origin_iframes`（U-4 二期开关）随构造传入采集器）。
-    pub fn snapshot_manager(self: &Arc<Self>, budgets: crate::snapshot::BudgetConfig) -> SnapshotManager {
+    pub fn snapshot_manager(
+        self: &Arc<Self>,
+        budgets: crate::snapshot::BudgetConfig,
+    ) -> SnapshotManager {
         SnapshotManager::new(
             self.version.clone(),
             Arc::new(crate::snapshot::collect::CdpCollector::new(
@@ -684,10 +693,7 @@ impl BrowserSession {
         accept: bool,
         prompt_text: Option<&str>,
     ) -> Result<(), CdpError> {
-        let session = self
-            .dialogs
-            .open_session()
-            .ok_or(CdpError::NoActiveTab)?;
+        let session = self.dialogs.open_session().ok_or(CdpError::NoActiveTab)?;
         self.dialogs
             .handle(&session, accept, prompt_text, self.transport.as_ref())
             .await
@@ -759,28 +765,43 @@ mod tests {
     /// 恢复流程所需的 mock 自动应答全表。
     fn restore_reply_map() -> Vec<(&'static str, MockReply)> {
         vec![
-            (BROWSER_GET_VERSION, MockReply::Ok(json!({
-                "protocolVersion": "1.3",
-                "product": "Chrome/131.0.6778.204",
-                "revision": "@abc",
-                "userAgent": "ua",
-                "jsVersion": "13.1.71"
-            }))),
+            (
+                BROWSER_GET_VERSION,
+                MockReply::Ok(json!({
+                    "protocolVersion": "1.3",
+                    "product": "Chrome/131.0.6778.204",
+                    "revision": "@abc",
+                    "userAgent": "ua",
+                    "jsVersion": "13.1.71"
+                })),
+            ),
             (TARGET_SET_DISCOVER_TARGETS, MockReply::Ok(json!({}))),
-            (TARGET_GET_TARGETS, MockReply::Ok(json!({
-                "targetInfos": [
-                    { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
-                ]
-            }))),
-            (TARGET_ATTACH_TO_TARGET, MockReply::Ok(json!({ "sessionId": "S1" }))),
+            (
+                TARGET_GET_TARGETS,
+                MockReply::Ok(json!({
+                    "targetInfos": [
+                        { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
+                    ]
+                })),
+            ),
+            (
+                TARGET_ATTACH_TO_TARGET,
+                MockReply::Ok(json!({ "sessionId": "S1" })),
+            ),
             (PAGE_ENABLE, MockReply::Ok(json!({}))),
             (PAGE_SET_LIFECYCLE_EVENTS_ENABLED, MockReply::Ok(json!({}))),
             (RUNTIME_ENABLE, MockReply::Ok(json!({}))),
             (DOM_ENABLE, MockReply::Ok(json!({}))),
             (NETWORK_ENABLE, MockReply::Ok(json!({}))),
             (NETWORK_SET_BLOCKED_URLS, MockReply::Ok(json!({}))),
-            (RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, MockReply::Ok(json!({}))),
-            (RUNTIME_EVALUATE, MockReply::Ok(json!({ "result": { "value": 1 } }))),
+            (
+                RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER,
+                MockReply::Ok(json!({})),
+            ),
+            (
+                RUNTIME_EVALUATE,
+                MockReply::Ok(json!({ "result": { "value": 1 } })),
+            ),
             (PAGE_SET_WINDOW_OPEN_HANDLER, MockReply::Ok(json!({}))),
             (PAGE_HANDLE_JAVASCRIPT_DIALOG, MockReply::Ok(json!({}))),
         ]
@@ -877,13 +898,16 @@ mod tests {
         assert!(session.validate_snapshot(&"T1".to_string(), 1).is_err());
 
         // 命令往返（经统一发送层）
-        mock.set_auto_reply("Browser.getVersion", MockReply::Ok(json!({
-            "protocolVersion": "1.3",
-            "product": "Chrome/131.0.6778.204",
-            "revision": "@abc",
-            "userAgent": "ua",
-            "jsVersion": "13.1.71"
-        })));
+        mock.set_auto_reply(
+            "Browser.getVersion",
+            MockReply::Ok(json!({
+                "protocolVersion": "1.3",
+                "product": "Chrome/131.0.6778.204",
+                "revision": "@abc",
+                "userAgent": "ua",
+                "jsVersion": "13.1.71"
+            })),
+        );
         let ver: Value = session
             .send_browser::<Value>("Browser.getVersion", json!({}))
             .await
@@ -906,7 +930,11 @@ mod tests {
             .handle_dialog(true, None)
             .await
             .expect("对话框应答失败");
-        mock.send_event("Page.javascriptDialogClosed", json!({ "result": true }), Some("S1"));
+        mock.send_event(
+            "Page.javascriptDialogClosed",
+            json!({ "result": true }),
+            Some("S1"),
+        );
         // DialogClosed 恒推进（to:4）
         wait_for(&mut rx, |ev| {
             matches!(ev, BrowserEvent::VersionAdvanced { tab_id, to: 4, .. } if tab_id == "T1")
@@ -1010,10 +1038,7 @@ mod tests {
         }
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
         while session.tab_session("T1").is_none() || session.tab_session("T2").is_none() {
-            assert!(
-                tokio::time::Instant::now() < deadline,
-                "双标签路由未就绪"
-            );
+            assert!(tokio::time::Instant::now() < deadline, "双标签路由未就绪");
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         // 未附着/已销毁标签 → None（目标过期语义）
@@ -1035,11 +1060,8 @@ mod tests {
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
         let mut saw_iframe = false;
         while tokio::time::Instant::now() < deadline {
-            if let Ok(ev) = tokio::time::timeout(
-                std::time::Duration::from_millis(50),
-                iframe_rx.recv(),
-            )
-            .await
+            if let Ok(ev) =
+                tokio::time::timeout(std::time::Duration::from_millis(50), iframe_rx.recv()).await
             {
                 if matches!(ev, Ok(BrowserEvent::SessionAttached { session, .. }) if session == "S1-iframe")
                 {
@@ -1050,7 +1072,10 @@ mod tests {
         }
         assert!(saw_iframe, "iframe 附着事件应到达");
         let t1 = session.tab_session("T1").expect("T1 应可路由");
-        assert_eq!(t1.session, "S1", "iframe 会话不得顶替主 frame 会话（首次附着者胜）");
+        assert_eq!(
+            t1.session, "S1",
+            "iframe 会话不得顶替主 frame 会话（首次附着者胜）"
+        );
 
         // activate_tab：显式切换活动标签（activateTarget 无 SessionAttached）
         session.activate_tab("T2").expect("切换 T2 应成功");
@@ -1107,11 +1132,11 @@ mod tests {
         .expect("建连失败");
 
         // 新标签专用会话（区别于恢复路径 attach 的 S1）
-        mock.set_auto_reply("Target.attachToTarget", MockReply::Ok(json!({ "sessionId": "S9" })));
-        let attached = session
-            .attach_tab("T9")
-            .await
-            .expect("attach_tab 应成功");
+        mock.set_auto_reply(
+            "Target.attachToTarget",
+            MockReply::Ok(json!({ "sessionId": "S9" })),
+        );
+        let attached = session.attach_tab("T9").await.expect("attach_tab 应成功");
         assert_eq!(attached.target_id, "T9");
         assert_eq!(attached.session, "S9");
 
@@ -1120,9 +1145,7 @@ mod tests {
         // resume（enable 均绑定新标签会话 S9，顺序对齐恢复路径）
         let attach_cmd = loop {
             let cmd = mock.next_command().await;
-            if cmd["method"] == "Target.attachToTarget"
-                && cmd["params"]["targetId"] == "T9"
-            {
+            if cmd["method"] == "Target.attachToTarget" && cmd["params"]["targetId"] == "T9" {
                 break cmd;
             }
         };
@@ -1225,11 +1248,8 @@ mod tests {
             if saw_lost && saw_restored {
                 break;
             }
-            if let Ok(ev) = tokio::time::timeout(
-                std::time::Duration::from_millis(50),
-                conn_rx.recv(),
-            )
-            .await
+            if let Ok(ev) =
+                tokio::time::timeout(std::time::Duration::from_millis(50), conn_rx.recv()).await
             {
                 match ev {
                     Ok(BrowserEvent::ConnectionLost { .. }) => saw_lost = true,

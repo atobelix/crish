@@ -143,11 +143,21 @@ impl Coalescer {
                         );
                         let cmd = if action == "down" {
                             InputCmd::MousePress {
-                                x, y, button, buttons, click_count, modifiers,
+                                x,
+                                y,
+                                button,
+                                buttons,
+                                click_count,
+                                modifiers,
                             }
                         } else {
                             InputCmd::MouseRelease {
-                                x, y, button, buttons, click_count, modifiers,
+                                x,
+                                y,
+                                button,
+                                buttons,
+                                click_count,
+                                modifiers,
                             }
                         };
                         out.push(cmd);
@@ -219,7 +229,12 @@ impl Coalescer {
     fn flush(&mut self) -> Vec<InputCmd> {
         match self.pending.take() {
             Some(PendingInput::Move {
-                x, y, button, buttons, click_count: _, modifiers,
+                x,
+                y,
+                button,
+                buttons,
+                click_count: _,
+                modifiers,
             }) => {
                 vec![InputCmd::MouseMove {
                     x,
@@ -230,7 +245,12 @@ impl Coalescer {
                 }]
             }
             Some(PendingInput::Wheel {
-                x, y, delta_x, delta_y, buttons, modifiers,
+                x,
+                y,
+                delta_x,
+                delta_y,
+                buttons,
+                modifiers,
             }) => {
                 vec![InputCmd::Wheel {
                     x,
@@ -248,8 +268,24 @@ impl Coalescer {
     /// 合并高频事件（move 覆写 / wheel 累加；PendingInput 互斥同槽位）。
     fn merge(&mut self, pending: PendingInput) {
         // wheel 同窗累加（delta 累加；坐标/位掩码取最新）
-        if let PendingInput::Wheel { x, y, delta_x, delta_y, buttons, modifiers } = pending {
-            if let Some(PendingInput::Wheel { delta_x: px, delta_y: py, x: qx, y: qy, buttons: qb, modifiers: qm }) = self.pending.as_mut() {
+        if let PendingInput::Wheel {
+            x,
+            y,
+            delta_x,
+            delta_y,
+            buttons,
+            modifiers,
+        } = pending
+        {
+            if let Some(PendingInput::Wheel {
+                delta_x: px,
+                delta_y: py,
+                x: qx,
+                y: qy,
+                buttons: qb,
+                modifiers: qm,
+            }) = self.pending.as_mut()
+            {
                 *px += delta_x;
                 *py += delta_y;
                 *qx = x;
@@ -258,7 +294,14 @@ impl Coalescer {
                 *qm = modifiers;
                 return;
             }
-            self.pending = Some(PendingInput::Wheel { x, y, delta_x, delta_y, buttons, modifiers });
+            self.pending = Some(PendingInput::Wheel {
+                x,
+                y,
+                delta_x,
+                delta_y,
+                buttons,
+                modifiers,
+            });
             return;
         }
         self.pending = Some(pending);
@@ -474,7 +517,13 @@ mod tests {
         let cmds = c.flush();
         assert_eq!(cmds.len(), 1, "5 次 move 必须合并为 1 次派发");
         match &cmds[0] {
-            InputCmd::MouseMove { x, y, button, buttons, .. } => {
+            InputCmd::MouseMove {
+                x,
+                y,
+                button,
+                buttons,
+                ..
+            } => {
                 assert_eq!(*x, 4.0, "取最后一次坐标");
                 assert_eq!(*y, 4.0);
                 assert_eq!(*button, InputButton::Left);
@@ -495,7 +544,8 @@ mod tests {
         assert_eq!(
             cmds[0],
             InputCmd::MouseMove {
-                x: 10.0, y: 20.0,
+                x: 10.0,
+                y: 20.0,
                 button: InputButton::Left,
                 buttons: 1,
                 modifiers: 0,
@@ -505,9 +555,11 @@ mod tests {
         assert_eq!(
             cmds[1],
             InputCmd::MousePress {
-                x: 10.0, y: 20.0,
+                x: 10.0,
+                y: 20.0,
                 button: InputButton::Left,
-                buttons: 1, click_count: 1,
+                buttons: 1,
+                click_count: 1,
                 modifiers: 0,
             },
             "再派发 press"
@@ -543,7 +595,13 @@ mod tests {
         let cmds = c.flush();
         assert_eq!(cmds.len(), 1, "3 次 wheel 必须合并为 1 次注入");
         match &cmds[0] {
-            InputCmd::Wheel { delta_x, delta_y, modifiers, buttons, .. } => {
+            InputCmd::Wheel {
+                delta_x,
+                delta_y,
+                modifiers,
+                buttons,
+                ..
+            } => {
                 assert_eq!(*delta_x, 30.0, "deltaX 累加");
                 assert_eq!(*delta_y, -60.0, "deltaY 累加");
                 assert_eq!(*modifiers, 2, "modifiers 取最新（ctrl 缩放语义保留）");
@@ -560,8 +618,14 @@ mod tests {
         let mut cmds = c.route(&BrowserInputEvent {
             kind: InputEventKind::Key,
             action: Some("down".to_string()),
-            x: None, y: None, button: None, buttons: None, click_count: None,
-            delta_x: None, delta_y: None, modifiers: Some(2),
+            x: None,
+            y: None,
+            button: None,
+            buttons: None,
+            click_count: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: Some(2),
             key: Some("a".to_string()),
             code: Some("KeyA".to_string()),
             text: Some("a".to_string()),
@@ -573,8 +637,14 @@ mod tests {
         cmds.extend(c.route(&BrowserInputEvent {
             kind: InputEventKind::Key,
             action: Some("up".to_string()),
-            x: None, y: None, button: None, buttons: None, click_count: None,
-            delta_x: None, delta_y: None, modifiers: Some(0),
+            x: None,
+            y: None,
+            button: None,
+            buttons: None,
+            click_count: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: Some(0),
             key: Some("a".to_string()),
             code: Some("KeyA".to_string()),
             text: None,
@@ -586,12 +656,21 @@ mod tests {
         cmds.extend(c.route(&BrowserInputEvent {
             kind: InputEventKind::Text,
             action: None,
-            x: None, y: None, button: None, buttons: None, click_count: None,
-            delta_x: None, delta_y: None, modifiers: None,
-            key: None, code: None,
+            x: None,
+            y: None,
+            button: None,
+            buttons: None,
+            click_count: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
             text: Some("你好".to_string()),
-            windows_virtual_key_code: None, native_virtual_key_code: None,
-            auto_repeat: None, location: None,
+            windows_virtual_key_code: None,
+            native_virtual_key_code: None,
+            auto_repeat: None,
+            location: None,
         }));
         assert_eq!(cmds.len(), 3, "离散事件直通不合并");
         assert_eq!(
@@ -621,7 +700,9 @@ mod tests {
         );
         assert_eq!(
             cmds[2],
-            InputCmd::Text { text: "你好".to_string() }
+            InputCmd::Text {
+                text: "你好".to_string()
+            }
         );
     }
 
@@ -632,11 +713,21 @@ mod tests {
         let cmds = c.route(&BrowserInputEvent {
             kind: InputEventKind::Text,
             action: None,
-            x: None, y: None, button: None, buttons: None, click_count: None,
-            delta_x: None, delta_y: None, modifiers: None,
-            key: None, code: None, text: Some("".to_string()),
-            windows_virtual_key_code: None, native_virtual_key_code: None,
-            auto_repeat: None, location: None,
+            x: None,
+            y: None,
+            button: None,
+            buttons: None,
+            click_count: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
+            text: Some("".to_string()),
+            windows_virtual_key_code: None,
+            native_virtual_key_code: None,
+            auto_repeat: None,
+            location: None,
         });
         assert!(cmds.is_empty(), "空文本不得注入");
     }
@@ -657,7 +748,11 @@ mod tests {
         assert_eq!(map_button(Some("middle")), InputButton::Middle);
         assert_eq!(map_button(Some("back")), InputButton::Back);
         assert_eq!(map_button(Some("forward")), InputButton::Forward);
-        assert_eq!(map_button(Some("joystick")), InputButton::None, "非法值收敛 none");
+        assert_eq!(
+            map_button(Some("joystick")),
+            InputButton::None,
+            "非法值收敛 none"
+        );
         assert_eq!(map_button(None), InputButton::None);
     }
 

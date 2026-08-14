@@ -133,10 +133,9 @@ pub async fn note_send_to_note(req: NoteSendToNoteArgs) -> Result<JsonValue, Cor
     };
     // B2：同步核心段（intent 幂等 + SQLite 事务）在 blocking 线程执行
     let handle = tokio::runtime::Handle::current();
-    let joined = tokio::task::spawn_blocking(move || {
-        handle.block_on(backend.apply_md_fragment(apply_req))
-    })
-    .await;
+    let joined =
+        tokio::task::spawn_blocking(move || handle.block_on(backend.apply_md_fragment(apply_req)))
+            .await;
     let result = match joined {
         Ok(r) => r,
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(

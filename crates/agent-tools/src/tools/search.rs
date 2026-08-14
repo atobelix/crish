@@ -219,7 +219,11 @@ impl Tool for GrepSearchTool {
             }
         }
 
-        let result_count = if match_per_line { matches.len() } else { files.len() };
+        let result_count = if match_per_line {
+            matches.len()
+        } else {
+            files.len()
+        };
         let count_label = if match_per_line { "matches" } else { "files" };
         let header = format!(
             "query: {query}\nroot: {root_display}\n{count_label}: {result_count}\nvisitedFiles: {visited_files}\n{}---",
@@ -377,10 +381,7 @@ fn walk_files(
             if pattern.contains('/') {
                 glob_match(pattern, &rel_str)
             } else {
-                glob_match(
-                    pattern,
-                    rel_str.rsplit('/').next().unwrap_or(&rel_str),
-                )
+                glob_match(pattern, rel_str.rsplit('/').next().unwrap_or(&rel_str))
             }
         }) {
             continue;
@@ -391,10 +392,7 @@ fn walk_files(
             let matched = if pattern.contains('/') {
                 glob_match(pattern, &rel_str)
             } else {
-                glob_match(
-                    pattern,
-                    rel_str.rsplit('/').next().unwrap_or(&rel_str),
-                )
+                glob_match(pattern, rel_str.rsplit('/').next().unwrap_or(&rel_str))
             };
             if !matched {
                 continue;
@@ -445,7 +443,8 @@ impl FuzzyFindTool {
         Self {
             def: ToolDefinition {
                 name: "fuzzy_find".to_string(),
-                description: "按文件名模糊匹配查找工作区文件（子序列打分），返回候选文件列表。".to_string(),
+                description: "按文件名模糊匹配查找工作区文件（子序列打分），返回候选文件列表。"
+                    .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -482,9 +481,7 @@ impl Tool for FuzzyFindTool {
         let query = require_string(&args, "query")?;
         let path_str = optional_string(&args, "path").unwrap_or_else(|| ".".to_string());
         let root = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
-        let limit = optional_u64(&args, "limit")
-            .unwrap_or(20)
-            .min(100) as usize;
+        let limit = optional_u64(&args, "limit").unwrap_or(20).min(100) as usize;
         let case_sensitive = optional_bool(&args, "caseSensitive").unwrap_or(false);
 
         let root_str = root.to_string_lossy().into_owned();
@@ -540,7 +537,10 @@ mod tests {
 
     fn sample_workspace() -> TempWorkspace {
         let ws = TempWorkspace::new("search");
-        ws.write_file("src/main.rs", "fn main() {\n    let needle = 42;\n    println!(\"needle found\");\n}\n");
+        ws.write_file(
+            "src/main.rs",
+            "fn main() {\n    let needle = 42;\n    println!(\"needle found\");\n}\n",
+        );
         ws.write_file("src/lib.rs", "pub fn helper() {\n    needle\n}\n");
         ws.write_file("README.md", "no match here\n");
         ws.write_file("node_modules/pkg/index.js", "needle in node_modules\n");
@@ -553,7 +553,10 @@ mod tests {
     async fn grep_finds_matches_with_line_column() {
         let ws = sample_workspace();
         let tool = GrepSearchTool::new();
-        let out = tool.execute(&mock_ctx(&ws), json!({ "query": "needle" })).await.unwrap();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "query": "needle" }))
+            .await
+            .unwrap();
         // main.rs 命中 2 行 + lib.rs 1 行 + data.json 1 行 = 4
         assert_eq!(out["matchCount"], 4);
         assert_eq!(out["visitedFiles"], 4);
@@ -592,7 +595,10 @@ mod tests {
         let ws = sample_workspace();
         let tool = GrepSearchTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "query": r"needle\s+found", "regex": true }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": r"needle\s+found", "regex": true }),
+            )
             .await
             .unwrap();
         assert_eq!(out["matchCount"], 1);
@@ -606,7 +612,10 @@ mod tests {
         assert_eq!(out["matchCount"], 0);
         // 大小写不敏感模式有命中
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "query": "needle", "caseSensitive": false }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": "needle", "caseSensitive": false }),
+            )
             .await
             .unwrap();
         assert_eq!(out["matchCount"], 4);
@@ -632,7 +641,10 @@ mod tests {
         let ws = sample_workspace();
         let tool = GrepSearchTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "query": "needle", "glob": "src/**" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": "needle", "glob": "src/**" }),
+            )
             .await
             .unwrap();
         // src 下全部命中：main.rs 2 + lib.rs 1 + data.json 1 = 4
@@ -647,7 +659,10 @@ mod tests {
         }
         let tool = GrepSearchTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "query": "needle", "maxMatches": 3 }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": "needle", "maxMatches": 3 }),
+            )
             .await
             .unwrap();
         assert_eq!(out["matchCount"], 3);
@@ -737,7 +752,10 @@ mod tests {
         ws.write_file("c.txt", "nothing here\n");
         let tool = GrepSearchTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "query": "needle", "matchPerLine": false }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": "needle", "matchPerLine": false }),
+            )
             .await
             .unwrap();
         // 同文件多命中只出现一次：a.txt（2 行）+ b.txt（1 行）= 2 个文件
@@ -810,7 +828,10 @@ mod tests {
         }
         let tool = GrepSearchTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "query": "needle", "maxMatches": 1 }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": "needle", "maxMatches": 1 }),
+            )
             .await
             .unwrap();
         assert_eq!(out["truncated"], true);

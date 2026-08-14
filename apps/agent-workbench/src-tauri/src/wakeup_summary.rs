@@ -64,7 +64,11 @@ pub fn wakeup_summary(event: &AgentEvent, ctx: &SummaryCtx) -> String {
     match event {
         // 子代理完成：模板「子代理 <role>（<id>）已完成：<status>」；
         // role 来自 ctx（事件无 role 字段），status 取中文状态词
-        AgentEvent::SubagentEnded { subagent_id, status, .. } => {
+        AgentEvent::SubagentEnded {
+            subagent_id,
+            status,
+            ..
+        } => {
             let role_part = match &ctx.subagent_role {
                 Some(role) => format!("{role}（{subagent_id}）"),
                 None => subagent_id.clone(),
@@ -79,7 +83,12 @@ pub fn wakeup_summary(event: &AgentEvent, ctx: &SummaryCtx) -> String {
         // run 终态：模板「任务 <id> 已运行 <duration>，退出码 <code>」；
         // 时长 = 事件时刻 − run 开始时刻（ctx），退出码缺省降级为
         // 「已结束（<终态>）」
-        AgentEvent::RunTerminal { run_id, timestamp, terminal, .. } => {
+        AgentEvent::RunTerminal {
+            run_id,
+            timestamp,
+            terminal,
+            ..
+        } => {
             let mut segments = vec![format!("任务 {run_id}")];
             if let Some(started) = ctx.run_started_at_ms {
                 let ended = iso8601_to_epoch_millis(timestamp);
@@ -95,7 +104,9 @@ pub fn wakeup_summary(event: &AgentEvent, ctx: &SummaryCtx) -> String {
             segments.join("，")
         }
         // 定时器到期：模板「<prompt>（定时器 <id> 已到期）」
-        AgentEvent::TimerFired { timer_id, prompt, .. } => {
+        AgentEvent::TimerFired {
+            timer_id, prompt, ..
+        } => {
             format!("{prompt}（定时器 {timer_id} 已到期）")
         }
         // 后台任务完成（AB 方案事件）：模板「任务 <id> 已运行 <duration>，
@@ -278,7 +289,10 @@ mod tests {
         let summary = wakeup_summary(&event, &SummaryCtx::default());
         assert!(summary.contains("sa-1"), "应含子代理 id，实际：{summary}");
         assert!(summary.contains("失败"), "应含失败状态，实际：{summary}");
-        assert!(!summary.contains("（"), "无角色时应省略括号段，实际：{summary}");
+        assert!(
+            !summary.contains("（"),
+            "无角色时应省略括号段，实际：{summary}"
+        );
     }
 
     /// TimerFired → 摘要含 prompt 与 timer-id（任务书断言）
@@ -291,8 +305,14 @@ mod tests {
             fired_at_ms: 1_704_067_200_000,
         };
         let summary = wakeup_summary(&event, &SummaryCtx::default());
-        assert!(summary.contains("请检查任务进度"), "应含 prompt，实际：{summary}");
-        assert!(summary.contains("timer-1"), "应含定时器 id，实际：{summary}");
+        assert!(
+            summary.contains("请检查任务进度"),
+            "应含 prompt，实际：{summary}"
+        );
+        assert!(
+            summary.contains("timer-1"),
+            "应含定时器 id，实际：{summary}"
+        );
         assert!(summary.contains("已到期"), "应含到期语义，实际：{summary}");
     }
 
@@ -309,9 +329,15 @@ mod tests {
             fired_at_ms: 1_704_067_200_000,
         };
         let summary = wakeup_summary(&event, &SummaryCtx::default());
-        assert!(summary.contains("每周一提醒"), "应含 prompt，实际：{summary}");
+        assert!(
+            summary.contains("每周一提醒"),
+            "应含 prompt，实际：{summary}"
+        );
         assert!(summary.contains("cron-1"), "应含 cron id，实际：{summary}");
-        assert!(summary.contains("第 3 次触发"), "应含第 N 次触发，实际：{summary}");
+        assert!(
+            summary.contains("第 3 次触发"),
+            "应含第 N 次触发，实际：{summary}"
+        );
     }
 
     /// RunTerminal（ctx 齐全）→ 含 run id、已运行时长与退出码
@@ -326,7 +352,10 @@ mod tests {
         };
         let summary = wakeup_summary(&event, &ctx(None, Some(1_704_067_200_000), Some(0), None));
         assert!(summary.contains("run-1"), "应含 run id，实际：{summary}");
-        assert!(summary.contains("已运行 40 秒"), "应含时长，实际：{summary}");
+        assert!(
+            summary.contains("已运行 40 秒"),
+            "应含时长，实际：{summary}"
+        );
         assert!(summary.contains("退出码 0"), "应含退出码，实际：{summary}");
     }
 
@@ -342,8 +371,14 @@ mod tests {
         };
         let summary = wakeup_summary(&event, &SummaryCtx::default());
         assert!(summary.contains("run-2"), "应含 run id，实际：{summary}");
-        assert!(summary.contains("已结束（失败）"), "应降级为终态，实际：{summary}");
-        assert!(!summary.contains("已运行"), "缺省不应含时长，实际：{summary}");
+        assert!(
+            summary.contains("已结束（失败）"),
+            "应降级为终态，实际：{summary}"
+        );
+        assert!(
+            !summary.contains("已运行"),
+            "缺省不应含时长，实际：{summary}"
+        );
     }
 
     /// 后台任务完成 → 含任务 id、时长、累积行数与最近输出
@@ -356,12 +391,20 @@ mod tests {
             duration_ms: 150_000,
             line_count: 120,
         };
-        let summary =
-            wakeup_summary(&event, &ctx(None, None, None, Some(1_704_067_260_000)));
+        let summary = wakeup_summary(&event, &ctx(None, None, None, Some(1_704_067_260_000)));
         assert!(summary.contains("task-1"), "应含任务 id，实际：{summary}");
-        assert!(summary.contains("已运行 2 分 30 秒"), "应含时长，实际：{summary}");
-        assert!(summary.contains("日志已累积 120 行"), "应含行数，实际：{summary}");
-        assert!(summary.contains("最近输出 00:01:00"), "应含最近输出，实际：{summary}");
+        assert!(
+            summary.contains("已运行 2 分 30 秒"),
+            "应含时长，实际：{summary}"
+        );
+        assert!(
+            summary.contains("日志已累积 120 行"),
+            "应含行数，实际：{summary}"
+        );
+        assert!(
+            summary.contains("最近输出 00:01:00"),
+            "应含最近输出，实际：{summary}"
+        );
     }
 
     /// 后台任务完成（ctx 缺省）→ 省略「最近输出」片段，不 panic
@@ -376,8 +419,14 @@ mod tests {
         };
         let summary = wakeup_summary(&event, &SummaryCtx::default());
         assert!(summary.contains("task-2"), "应含任务 id，实际：{summary}");
-        assert!(summary.contains("已运行 45 秒"), "应含时长，实际：{summary}");
-        assert!(!summary.contains("最近输出"), "缺省不应含最近输出，实际：{summary}");
+        assert!(
+            summary.contains("已运行 45 秒"),
+            "应含时长，实际：{summary}"
+        );
+        assert!(
+            !summary.contains("最近输出"),
+            "缺省不应含最近输出，实际：{summary}"
+        );
     }
 
     /// 未覆盖事件 → 通用回退「收到事件 <type>」，不 panic（任务书断言）

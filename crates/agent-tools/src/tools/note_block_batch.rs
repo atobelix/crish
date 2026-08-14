@@ -136,9 +136,7 @@ pub(crate) fn parse_block_ops(args: &JsonValue) -> Result<Vec<NoteBlockOp>, Tool
         let op_s = item
             .get("op")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                ToolError::invalid_input(format!("ops[{i}].op must be a string"))
-            })?;
+            .ok_or_else(|| ToolError::invalid_input(format!("ops[{i}].op must be a string")))?;
         let op = NoteBlockOpKind::parse(op_s).map_err(|e| ToolError::invalid_input(e.message()))?;
         let id = item
             .get("id")

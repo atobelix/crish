@@ -61,9 +61,19 @@ fn settle_denied_closes_pending() {
         panic!("应 Pending");
     };
     let verdict = gate
-        .settle(id, Approval::Denied { reason: "用户拒绝".into() })
+        .settle(
+            id,
+            Approval::Denied {
+                reason: "用户拒绝".into(),
+            },
+        )
         .expect("拒绝裁决应成功");
-    assert_eq!(verdict, Approval::Denied { reason: "用户拒绝".into() });
+    assert_eq!(
+        verdict,
+        Approval::Denied {
+            reason: "用户拒绝".into()
+        }
+    );
     assert_eq!(gate.pending(), None);
 }
 
@@ -106,7 +116,8 @@ fn settle_constraints() {
         Err(ApprovalError::NoSuchApproval(id + 100))
     );
     // 正常裁决后重复注入同一 id → AlreadySettled（一次一票）
-    gate.settle(id, Approval::Denied { reason: "r".into() }).unwrap();
+    gate.settle(id, Approval::Denied { reason: "r".into() })
+        .unwrap();
     assert_eq!(
         gate.settle(id, Approval::Granted),
         Err(ApprovalError::AlreadySettled)
@@ -177,8 +188,12 @@ fn estop_during_pending_only_accepts_deny() {
         Err(ApprovalError::Stopped),
         "急停后禁止放行裁决"
     );
-    let verdict = gate
-        .settle(id, Approval::Denied { reason: "急停取消审批".into() });
+    let verdict = gate.settle(
+        id,
+        Approval::Denied {
+            reason: "急停取消审批".into(),
+        },
+    );
     assert!(
         matches!(verdict, Ok(Approval::Denied { .. })),
         "急停后拒绝裁决可收口（不留悬挂审批），实得 {verdict:?}"
@@ -213,7 +228,13 @@ fn estop_deny_then_reset_leaves_no_dangling() {
         panic!("应 Pending");
     };
     stop.panel_stop();
-    gate.settle(id, Approval::Denied { reason: "急停".into() }).unwrap();
+    gate.settle(
+        id,
+        Approval::Denied {
+            reason: "急停".into(),
+        },
+    )
+    .unwrap();
     stop.reset();
     assert_eq!(gate.pending(), None, "复位后不得有悬挂审批");
     let Approval::Pending { id: id2 } = gate.require_approval(type_request()) else {
@@ -247,7 +268,12 @@ fn concurrent_require_exactly_one_pending() {
     // 收口：对在途 Pending 注入拒绝裁决（避免悬挂，同时验证竞态产物可裁决）
     let gate = Arc::try_unwrap(gate).expect("引用计数应归零");
     let (id, _) = gate.pending().expect("应存在在途审批");
-    gate.settle(id, Approval::Denied { reason: "并发测试收口".into() })
-        .expect("并发测试的 Pending 应可裁决");
+    gate.settle(
+        id,
+        Approval::Denied {
+            reason: "并发测试收口".into(),
+        },
+    )
+    .expect("并发测试的 Pending 应可裁决");
     assert_eq!(gate.pending(), None);
 }

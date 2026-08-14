@@ -7,15 +7,15 @@
 
 use super::ProcessTreeKiller;
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+};
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
     SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
 use windows_sys::Win32::System::Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME};
-use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Thread32First, Thread32Next, THREADENTRY32, TH32CS_SNAPTHREAD,
-};
 
 /// 杀树模式（attach 失败自动降级 taskkill）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -277,11 +277,7 @@ fn taskkill(pid: u32) -> Result<(), String> {
 /// 同步等待 PID 进程对象回收（best-effort：超时静默返回）。
 /// 终结请求成功后，进程对象需待内核完成删除（含最后句柄关闭）；
 /// 此窗口内 `is_pid_alive` 短暂为真属正常，调用方应以轮询而非单点断言判定。
-fn wait_pid_gone(
-    pid: u32,
-    window: std::time::Duration,
-    interval: std::time::Duration,
-) {
+fn wait_pid_gone(pid: u32, window: std::time::Duration, interval: std::time::Duration) {
     let deadline = std::time::Instant::now() + window;
     while std::time::Instant::now() < deadline {
         if !crate::browser::profile::is_pid_alive(pid) {

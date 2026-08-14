@@ -30,7 +30,9 @@ fn claim_and_release_roundtrip() {
     let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
     assert!(reg.active_claims().is_empty());
 
-    let guard = reg.claim_one("runA", "src/lib.rs", ClaimMode::Write).unwrap();
+    let guard = reg
+        .claim_one("runA", "src/lib.rs", ClaimMode::Write)
+        .unwrap();
     assert_eq!(reg.active_claims().len(), 1);
     let claim = &reg.active_claims()[0];
     assert_eq!(claim.holder, "runA");
@@ -58,7 +60,11 @@ fn release_holder_idempotent() {
     let _g2 = reg.claim_one("runA", "a.txt", ClaimMode::Write).unwrap();
     let _g3 = reg.claim_one("runB", "b.txt", ClaimMode::Write).unwrap();
     reg.release_holder("runB");
-    let holders: Vec<String> = reg.active_claims().iter().map(|c| c.holder.clone()).collect();
+    let holders: Vec<String> = reg
+        .active_claims()
+        .iter()
+        .map(|c| c.holder.clone())
+        .collect();
     assert_eq!(holders, ["runA".to_string()]);
 }
 
@@ -69,14 +75,18 @@ fn overlaps_prefix_dir_vs_file_conflict() {
     let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
     // A 声明目录 a/b/，B 声明其下文件 → 冲突
     let _a = reg.claim_one("runA", "a/b", ClaimMode::Write).unwrap();
-    let err = reg.claim_one("runB", "a/b/c.txt", ClaimMode::Write).unwrap_err();
+    let err = reg
+        .claim_one("runB", "a/b/c.txt", ClaimMode::Write)
+        .unwrap_err();
     assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT);
     assert!(err.to_string().contains("runA"), "冲突信息必须含占用者");
     assert!(err.to_string().contains("write"), "冲突信息必须含模式");
     assert!(err.to_string().contains("有效期至"), "冲突信息必须含时间");
     drop(_a);
     // 反向：A 声明文件，B 声明其父目录 → 同样冲突
-    let _a = reg.claim_one("runA", "a/b/c.txt", ClaimMode::Write).unwrap();
+    let _a = reg
+        .claim_one("runA", "a/b/c.txt", ClaimMode::Write)
+        .unwrap();
     let err = reg.claim_one("runB", "a/b", ClaimMode::Write).unwrap_err();
     assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT);
 }
@@ -87,7 +97,9 @@ fn overlaps_same_path_conflict() {
     ws.write_file("x.txt", "x");
     let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
     let _a = reg.claim_one("runA", "x.txt", ClaimMode::Delete).unwrap();
-    let err = reg.claim_one("runB", "x.txt", ClaimMode::Write).unwrap_err();
+    let err = reg
+        .claim_one("runB", "x.txt", ClaimMode::Write)
+        .unwrap_err();
     assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT);
 }
 
@@ -110,9 +122,17 @@ fn overlaps_case_insensitive_on_windows() {
     let ws = TempWorkspace::new("wp_case");
     ws.write_file("Src/File.txt", "x");
     let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
-    let _a = reg.claim_one("runA", "src/file.txt", ClaimMode::Write).unwrap();
-    let err = reg.claim_one("runB", "SRC/FILE.TXT", ClaimMode::Write).unwrap_err();
-    assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT, "Windows 语义大小写折叠");
+    let _a = reg
+        .claim_one("runA", "src/file.txt", ClaimMode::Write)
+        .unwrap();
+    let err = reg
+        .claim_one("runB", "SRC/FILE.TXT", ClaimMode::Write)
+        .unwrap_err();
+    assert_eq!(
+        err.code(),
+        TOOL_WRITE_PATH_CONFLICT,
+        "Windows 语义大小写折叠"
+    );
 }
 
 #[test]
@@ -121,7 +141,8 @@ fn same_holder_reclaim_and_extension_allowed() {
     let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
     let _a = reg.claim_one("runA", "src", ClaimMode::Write).unwrap();
     // 同持有者声明自身路径内的文件：不冲突（子代理可写自己声明范围内）
-    reg.claim_one("runA", "src/lib.rs", ClaimMode::Write).unwrap();
+    reg.claim_one("runA", "src/lib.rs", ClaimMode::Write)
+        .unwrap();
     // 同持有者重复声明同路径：去重续期（只留一条）
     let g = reg.claim_one("runA", "src", ClaimMode::Write).unwrap();
     let claims = reg.active_claims();
@@ -138,7 +159,9 @@ fn expired_claim_released_automatically() {
     let ws = TempWorkspace::new("wp_expire");
     let reg = Arc::new(WritePathRegistry::with_ttl("s1", ws.path(), 100));
     let _a = reg.claim_one("runA", "a.txt", ClaimMode::Write).unwrap();
-    let err = reg.claim_one("runB", "a.txt", ClaimMode::Write).unwrap_err();
+    let err = reg
+        .claim_one("runB", "a.txt", ClaimMode::Write)
+        .unwrap_err();
     assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT, "未到期必须冲突");
     // 显式时钟推进：到期清扫（不依赖真实 sleep）
     let now = epoch_millis(Some(SystemTime::now()));
@@ -162,7 +185,9 @@ fn glob_and_workspace_escape_rejected() {
     let ws = TempWorkspace::new("wp_validate");
     let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
     // glob 拒绝
-    let err = reg.claim_one("runA", "src/*.rs", ClaimMode::Write).unwrap_err();
+    let err = reg
+        .claim_one("runA", "src/*.rs", ClaimMode::Write)
+        .unwrap_err();
     assert_eq!(err.code(), "tool.invalid_input");
     assert!(err.to_string().contains("通配符"));
     // 工作区外绝对路径拒绝
@@ -172,10 +197,13 @@ fn glob_and_workspace_escape_rejected() {
         .unwrap_err();
     assert_eq!(err.code(), "tool.path_escape");
     // `..` 越界拒绝
-    let err = reg.claim_one("runA", "../escape.txt", ClaimMode::Write).unwrap_err();
+    let err = reg
+        .claim_one("runA", "../escape.txt", ClaimMode::Write)
+        .unwrap_err();
     assert_eq!(err.code(), "tool.path_escape");
     // 不存在的目标允许声明（写新文件场景）
-    reg.claim_one("runA", "new/dir/fresh.txt", ClaimMode::Write).unwrap();
+    reg.claim_one("runA", "new/dir/fresh.txt", ClaimMode::Write)
+        .unwrap();
 }
 
 #[test]
@@ -190,7 +218,9 @@ fn check_conflict_reports_structured_info() {
     assert_eq!(conflict.requested_path, ws.path().join("docs/readme.md"));
     assert!(conflict.conflicting.expires_at_ms > 0);
     // 同持有者预检不命中
-    assert!(reg.check_conflict("runA", &ws.path().join("docs/readme.md")).is_none());
+    assert!(reg
+        .check_conflict("runA", &ws.path().join("docs/readme.md"))
+        .is_none());
 }
 
 #[tokio::test]
@@ -202,7 +232,9 @@ async fn concurrent_two_holders_same_file_one_rejected() {
     let reg_b = Arc::clone(&reg);
     let t1 = tokio::spawn(async move {
         // 子代理 A 声明并持有 100ms（模拟写文件过程）
-        let guard = reg_a.claim_one("runA", "shared.txt", ClaimMode::Write).unwrap();
+        let guard = reg_a
+            .claim_one("runA", "shared.txt", ClaimMode::Write)
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         drop(guard);
         true
@@ -210,7 +242,9 @@ async fn concurrent_two_holders_same_file_one_rejected() {
     let t2 = tokio::spawn(async move {
         // 子代理 B 稍后尝试声明同一文件 → 必须被拒绝
         tokio::time::sleep(Duration::from_millis(20)).await;
-        reg_b.claim_one("runB", "shared.txt", ClaimMode::Write).is_err()
+        reg_b
+            .claim_one("runB", "shared.txt", ClaimMode::Write)
+            .is_err()
     });
     let (r1, r2) = tokio::join!(t1, t2);
     assert!(r1.unwrap(), "A 应成功完成");
@@ -277,9 +311,12 @@ async fn write_file_own_holder_allowed_within_declared_paths() {
         ..create_mock_tool_context()
     };
     let tool = WriteFileTool::new();
-    tool.execute(&ctx_a, json!({ "path": "src/main.rs", "content": "fn main() {}" }))
-        .await
-        .unwrap();
+    tool.execute(
+        &ctx_a,
+        json!({ "path": "src/main.rs", "content": "fn main() {}" }),
+    )
+    .await
+    .unwrap();
     assert!(ws.path().join("src/main.rs").is_file());
 }
 
@@ -309,9 +346,15 @@ fn allowance_matches_prefix_and_rejects_outside() {
     assert!(!err.allowed.is_empty(), "载荷必须含允许范围提示");
     let tool_err = err.into_tool_error();
     assert_eq!(tool_err.code(), codes::TOOL_WRITE_NOT_ALLOWED);
-    assert!(tool_err.to_string().contains("src/main.rs"), "消息须含目标路径");
+    assert!(
+        tool_err.to_string().contains("src/main.rs"),
+        "消息须含目标路径"
+    );
     assert!(tool_err.to_string().contains("docs"), "消息须含允许范围");
-    assert!(tool_err.to_string().contains("主 agent"), "消息须含申请指引");
+    assert!(
+        tool_err.to_string().contains("主 agent"),
+        "消息须含申请指引"
+    );
 }
 
 /// 前缀边界：a/b 与 a/bc 不误匹配（组件边界）、a/b 与 a/b/c.txt 命中
@@ -363,17 +406,19 @@ fn from_entries_empty_unrestricted_and_bad_entries_rejected() {
         WritePathPolicy::Unrestricted,
         "空条目列表 = 不做路径限制（REQ-D04）"
     );
-    let err = WritePathPolicy::from_entries(ws.path(), vec!["docs/*.md".to_string()])
-        .unwrap_err();
+    let err = WritePathPolicy::from_entries(ws.path(), vec!["docs/*.md".to_string()]).unwrap_err();
     assert_eq!(err.code(), "tool.invalid_input", "glob 条目必须拒绝");
-    let err = WritePathPolicy::from_entries(ws.path(), vec!["../outside".to_string()])
-        .unwrap_err();
+    let err = WritePathPolicy::from_entries(ws.path(), vec!["../outside".to_string()]).unwrap_err();
     assert_eq!(err.code(), "tool.path_escape", "越界条目必须拒绝");
     let policy = WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap();
     let WritePathPolicy::Allowed(paths) = policy else {
         panic!("非空条目必须为 Allowed");
     };
-    assert_eq!(paths, vec![ws.path().join("docs")], "条目必须解析为绝对路径");
+    assert_eq!(
+        paths,
+        vec![ws.path().join("docs")],
+        "条目必须解析为绝对路径"
+    );
 }
 
 /// 注册表策略载体：with_write_policy 装配 / 缺省不装配
@@ -397,11 +442,9 @@ fn registry_policy_roundtrip() {
 #[tokio::test]
 async fn write_file_respects_hard_sandbox() {
     let ws = TempWorkspace::new("wp_sandbox");
-    let registry = Arc::new(
-        WritePathRegistry::new("s1", ws.path()).with_write_policy(
-            WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap(),
-        ),
-    );
+    let registry = Arc::new(WritePathRegistry::new("s1", ws.path()).with_write_policy(
+        WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap(),
+    ));
     let ctx = ToolContext {
         workspace_root: ws.path().clone(),
         write_claims: Some(Arc::clone(&registry)),
@@ -416,7 +459,10 @@ async fn write_file_respects_hard_sandbox() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), codes::TOOL_WRITE_NOT_ALLOWED);
-    assert!(!ws.path().join("src/main.rs").exists(), "越权拒绝时不得写盘");
+    assert!(
+        !ws.path().join("src/main.rs").exists(),
+        "越权拒绝时不得写盘"
+    );
     // 白名单内写 docs/a.md → 放行
     tool.execute(&ctx, json!({ "path": "docs/a.md", "content": "x" }))
         .await
@@ -429,13 +475,13 @@ async fn write_file_respects_hard_sandbox() {
 #[tokio::test]
 async fn sandbox_and_conflict_serial_stack() {
     let ws = TempWorkspace::new("wp_sandbox_serial");
-    let registry = Arc::new(
-        WritePathRegistry::new("s1", ws.path()).with_write_policy(
-            WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap(),
-        ),
-    );
+    let registry = Arc::new(WritePathRegistry::new("s1", ws.path()).with_write_policy(
+        WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap(),
+    ));
     // 子代理 A 长期声明 docs/（白名单内，占用者 B 的互斥面）
-    let _a_guard = registry.claim_one("runA", "docs", ClaimMode::Write).unwrap();
+    let _a_guard = registry
+        .claim_one("runA", "docs", ClaimMode::Write)
+        .unwrap();
     let ctx_b = ToolContext {
         workspace_root: ws.path().clone(),
         write_claims: Some(Arc::clone(&registry)),
@@ -471,9 +517,12 @@ async fn sandbox_and_conflict_serial_stack() {
 async fn unwired_policy_context_no_enforcement() {
     let ws = TempWorkspace::new("wp_policy_unwired");
     let tool = WriteFileTool::new();
-    tool.execute(&mock_ctx(&ws), json!({ "path": "anywhere.txt", "content": "hi" }))
-        .await
-        .unwrap();
+    tool.execute(
+        &mock_ctx(&ws),
+        json!({ "path": "anywhere.txt", "content": "hi" }),
+    )
+    .await
+    .unwrap();
     assert_eq!(ws.read_file("anywhere.txt"), "hi");
     // 注册表接线但未装配策略：同样不强制
     let registry = Arc::new(WritePathRegistry::new("s1", ws.path()));

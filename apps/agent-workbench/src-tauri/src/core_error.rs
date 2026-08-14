@@ -43,9 +43,7 @@ pub fn map_store_err(err: orchestrator::persist::StoreError) -> CoreError {
 pub fn map_run_err(err: orchestrator::run::RunError) -> CoreError {
     use orchestrator::run::RunError;
     match err {
-        RunError::Transition(e) => {
-            CoreError::InvalidInput(format!("run 状态机拒绝转移：{e}"))
-        }
+        RunError::Transition(e) => CoreError::InvalidInput(format!("run 状态机拒绝转移：{e}")),
         RunError::TerminalImmutable => {
             CoreError::InvalidInput("run 已到终态，拒绝再转移".to_string())
         }
@@ -93,13 +91,14 @@ mod tests {
 
     #[test]
     fn map_run_err_store_delegates_to_io() {
-        let err = orchestrator::run::RunError::Store(StoreError::new(
-            "update_run_status",
-            "run 不存在",
-        ));
+        let err =
+            orchestrator::run::RunError::Store(StoreError::new("update_run_status", "run 不存在"));
         match map_run_err(err) {
             CoreError::Io(detail) => {
-                assert!(detail.contains("store.update_run_status"), "detail: {detail}");
+                assert!(
+                    detail.contains("store.update_run_status"),
+                    "detail: {detail}"
+                );
             }
             other => panic!("expected Io, got {other:?}"),
         }
@@ -128,7 +127,10 @@ mod tests {
             core_error_code(&CoreError::NotFound("x".into())),
             codes::COMMON_NOT_FOUND
         );
-        assert_eq!(core_error_code(&CoreError::Cancelled), codes::RUNTIME_ABORTED);
+        assert_eq!(
+            core_error_code(&CoreError::Cancelled),
+            codes::RUNTIME_ABORTED
+        );
         assert_eq!(
             core_error_code(&CoreError::Internal("x".into())),
             codes::COMMON_UNKNOWN

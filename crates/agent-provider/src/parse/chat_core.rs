@@ -9,7 +9,8 @@ use conex_types::tool::{ProviderDiagnostic, ProviderDiagnosticPhase};
 use serde_json::Value;
 
 use crate::events::{
-    ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser,
+    stream_error_kind, ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError,
+    StreamParser,
 };
 use crate::sse::frame::SseFrame;
 
@@ -68,11 +69,13 @@ impl ChatCompletionsParser {
         };
         let mut events = Vec::new();
 
-        // 1. 错误帧 → 立即终止（02 §2.2 步骤 2）
+        // 1. 错误帧 → 立即终止（02 §2.2 步骤 2）；error_kind 按错误帧文案分类
         if let Some(error) = provider_body_error(&payload) {
+            let kind = stream_error_kind(&error);
             events.push(ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some(error),
+                error_kind: Some(kind),
                 usage: None,
             });
             self.stream.extend(events.clone())?;
@@ -216,6 +219,7 @@ impl ChatCompletionsParser {
         events.push(ProviderStreamEvent::Stop {
             reason: stop_reason,
             error: None,
+            error_kind: None,
             usage: self.usage.clone(),
         });
 

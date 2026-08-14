@@ -46,12 +46,30 @@ const ERR_WORKSPACE_NOT_GRANTED: &str = "workspace_not_granted";
 
 /// 子命令白名单（15 项，首参必须精确匹配）
 const ALLOWED_SUBCOMMANDS: &[&str] = &[
-    "status", "diff", "add", "reset", "checkout", "clean", "commit", "push", "branch",
-    "restore", "mv", "rm", "stash", "log", "rev-parse",
+    "status",
+    "diff",
+    "add",
+    "reset",
+    "checkout",
+    "clean",
+    "commit",
+    "push",
+    "branch",
+    "restore",
+    "mv",
+    "rm",
+    "stash",
+    "log",
+    "rev-parse",
 ];
 
 /// 逐子命令允许 flag 集（`--` 分隔符之前；精确匹配）
-const FLAGS_STATUS: &[&str] = &["--porcelain=v1", "-b", "--untracked-files=normal", "--no-color"];
+const FLAGS_STATUS: &[&str] = &[
+    "--porcelain=v1",
+    "-b",
+    "--untracked-files=normal",
+    "--no-color",
+];
 const FLAGS_DIFF: &[&str] = &["--no-color", "--no-ext-diff", "--cached"];
 const FLAGS_ADD: &[&str] = &["-A"];
 const FLAGS_RESET: &[&str] = &[];
@@ -265,12 +283,14 @@ fn resolve_git_cwd<R: tauri::Runtime>(
         return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: cwd is empty"));
     }
     if cwd.contains('\0') {
-        return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: cwd contains NUL byte"));
+        return Err(format!(
+            "{ERR_WORKSPACE_NOT_GRANTED}: cwd contains NUL byte"
+        ));
     }
     let path = Path::new(cwd);
-    let canonical = path.canonicalize().map_err(|e| {
-        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve cwd `{cwd}`: {e}")
-    })?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve cwd `{cwd}`: {e}"))?;
     if !canonical.is_dir() {
         return Err(format!(
             "{ERR_WORKSPACE_NOT_GRANTED}: cwd is not a directory: `{cwd}`"
@@ -308,7 +328,9 @@ fn validate_git_args(git_args: &[String]) -> Result<Vec<String>, String> {
         ));
     }
     if subcommand.contains('\0') || subcommand.len() > MAX_ARG_LEN {
-        return Err(format!("{ERR_ARG_NOT_ALLOWED}: subcommand too long or contains NUL"));
+        return Err(format!(
+            "{ERR_ARG_NOT_ALLOWED}: subcommand too long or contains NUL"
+        ));
     }
 
     let spec = spec_for(subcommand).expect("whitelist implies spec exists");
@@ -476,10 +498,7 @@ fn is_valid_branch_name(name: &str) -> bool {
 /// - 孤立 refspec（`main:` 的 dst 为空，语义含糊一律拒绝）；
 /// - 非 heads 目标面（`refs/tags/...` 等，push 只开放分支面）。
 fn is_valid_push_refspec(name: &str) -> bool {
-    if name.is_empty()
-        || name.len() > MAX_ARG_LEN
-        || name.starts_with('+')
-        || name.starts_with(':')
+    if name.is_empty() || name.len() > MAX_ARG_LEN || name.starts_with('+') || name.starts_with(':')
     {
         return false;
     }
@@ -560,8 +579,21 @@ mod tests {
         assert_eq!(
             ALLOWED_SUBCOMMANDS,
             &[
-                "status", "diff", "add", "reset", "checkout", "clean", "commit", "push",
-                "branch", "restore", "mv", "rm", "stash", "log", "rev-parse",
+                "status",
+                "diff",
+                "add",
+                "reset",
+                "checkout",
+                "clean",
+                "commit",
+                "push",
+                "branch",
+                "restore",
+                "mv",
+                "rm",
+                "stash",
+                "log",
+                "rev-parse",
             ]
         );
     }
@@ -569,7 +601,11 @@ mod tests {
     /// T07.3 用例 1：`["add","--","x;calc.exe"]` → 通过校验且路径字面量化。
     #[test]
     fn literal_pathspec_prefix_added_after_separator() {
-        let args = vec!["add".to_string(), "--".to_string(), "x;calc.exe".to_string()];
+        let args = vec![
+            "add".to_string(),
+            "--".to_string(),
+            "x;calc.exe".to_string(),
+        ];
         let validated = validate_git_args(&args).expect("valid");
         assert_eq!(validated, vec!["add", "--", ":(literal)x;calc.exe"]);
     }
@@ -584,11 +620,7 @@ mod tests {
             "%USERPROFILE%",
             "x;calc.exe",
         ] {
-            let args = vec![
-                "add".to_string(),
-                "--".to_string(),
-                name.to_string(),
-            ];
+            let args = vec!["add".to_string(), "--".to_string(), name.to_string()];
             let validated = validate_git_args(&args).expect("valid");
             assert_eq!(validated[2], format!(":(literal){name}"));
         }
@@ -633,11 +665,7 @@ mod tests {
     #[test]
     fn pathspec_magic_prefixes_rejected() {
         for name in [":(top)", ":!glob", ":(exclude)secret", "^foo"] {
-            let args = vec![
-                "add".to_string(),
-                "--".to_string(),
-                name.to_string(),
-            ];
+            let args = vec!["add".to_string(), "--".to_string(), name.to_string()];
             let err = validate_git_args(&args).expect_err("magic pathspec must be rejected");
             assert!(err.starts_with(ERR_ARG_NOT_ALLOWED), "err: {err}");
         }
@@ -675,7 +703,11 @@ mod tests {
                 "origin".to_string(),
                 "+main".to_string(),
             ],
-            vec!["push".to_string(), "origin".to_string(), "+main:main".to_string()],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "+main:main".to_string(),
+            ],
         ] {
             let err = validate_git_args(&args).expect_err("+refspec（force）必须拒绝");
             assert!(err.starts_with(ERR_ARG_NOT_ALLOWED), "err: {err}");
@@ -693,8 +725,16 @@ mod tests {
                 ":refs/heads/x".to_string(),
             ],
             vec!["push".to_string(), ":refs/heads/x".to_string()],
-            vec!["push".to_string(), "origin".to_string(), ":main".to_string()],
-            vec!["push".to_string(), "origin".to_string(), "main:".to_string()],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                ":main".to_string(),
+            ],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "main:".to_string(),
+            ],
             // 攻击性复核：非 heads 目标面（tag/remote 面）与多冒号畸形 refspec
             vec![
                 "push".to_string(),
@@ -706,7 +746,11 @@ mod tests {
                 "origin".to_string(),
                 "main:refs/remotes/origin/main".to_string(),
             ],
-            vec!["push".to_string(), "origin".to_string(), "a:b:c".to_string()],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "a:b:c".to_string(),
+            ],
             // 数量上限：3 个位置参数拒绝
             vec![
                 "push".to_string(),
@@ -727,7 +771,11 @@ mod tests {
             vec!["push".to_string()],
             vec!["push".to_string(), "origin".to_string()],
             vec!["push".to_string(), "origin".to_string(), "main".to_string()],
-            vec!["push".to_string(), "origin".to_string(), "main:main".to_string()],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "main:main".to_string(),
+            ],
             vec![
                 "push".to_string(),
                 "origin".to_string(),
@@ -760,7 +808,14 @@ mod tests {
     fn frontend_git_invocations_pass() {
         let cases: Vec<Vec<&str>> = vec![
             vec!["status", "--porcelain=v1", "-b", "--untracked-files=normal"],
-            vec!["diff", "--no-color", "--no-ext-diff", "--cached", "--", "src/main.rs"],
+            vec![
+                "diff",
+                "--no-color",
+                "--no-ext-diff",
+                "--cached",
+                "--",
+                "src/main.rs",
+            ],
             vec!["diff", "--no-color", "--no-ext-diff", "--", "a/b.txt"],
             vec!["add", "-A"],
             vec!["add", "--", "src/new.rs"],
@@ -777,9 +832,8 @@ mod tests {
         ];
         for case in cases {
             let args: Vec<String> = case.iter().map(|s| s.to_string()).collect();
-            let validated = validate_git_args(&args).unwrap_or_else(|e| {
-                panic!("case {case:?} must pass, got: {e}")
-            });
+            let validated = validate_git_args(&args)
+                .unwrap_or_else(|e| panic!("case {case:?} must pass, got: {e}"));
             // 路径参数必须全部字面量化
             if let Some(idx) = validated.iter().position(|a| a == "--") {
                 for path in &validated[idx + 1..] {
@@ -848,7 +902,10 @@ mod tests {
             Some(expected_kind),
             "错误必须按 CoreError {{kind,detail}} 协议序列化（当前形态 {json}），detail 应含 {detail_hint}"
         );
-        let detail = json.get("detail").and_then(|v| v.as_str()).unwrap_or_default();
+        let detail = json
+            .get("detail")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
         assert!(
             detail.contains(detail_hint),
             "detail 应保留 {detail_hint} 文案：{detail}"

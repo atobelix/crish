@@ -21,7 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::security::{PASSWORD_PLACEHOLDER, redact_password_field};
+use crate::security::{redact_password_field, PASSWORD_PLACEHOLDER};
 
 /// 树遍历最大深度(04 §2 S2-5:深度受限 6 层,根为第 0 层)
 pub const MAX_TREE_DEPTH: usize = 6;
@@ -198,7 +198,8 @@ pub trait PerceptionSource {
     fn snapshot(&self) -> Result<PerceptionSnapshot, PerceptionError>;
     /// 命中检测(物理坐标):返回命中元素(含抑制后的名称/值);
     /// 未命中(桌面外 / 无元素)返回 `None`
-    fn element_from_point(&self, x: i32, y: i32) -> Result<Option<PerceptionNode>, PerceptionError>;
+    fn element_from_point(&self, x: i32, y: i32)
+        -> Result<Option<PerceptionNode>, PerceptionError>;
 }
 
 /// 纯函数:原始节点树 → 感知快照。
@@ -274,7 +275,10 @@ fn convert_node(raw: &RawNode, depth: usize, budget: &mut NodeBudget) -> Percept
 fn suppress(raw: &RawNode) -> (String, String) {
     if raw.is_password {
         // IsPassword 判定优先信号:内容不落,仅占位符
-        (PASSWORD_PLACEHOLDER.to_string(), PASSWORD_PLACEHOLDER.to_string())
+        (
+            PASSWORD_PLACEHOLDER.to_string(),
+            PASSWORD_PLACEHOLDER.to_string(),
+        )
     } else {
         // 键名模式脱敏(security.rs 登记表:password/passwd/pwd/secret/token)
         let name = redact_password_field(&raw.name).to_string();
@@ -329,19 +333,17 @@ impl UiaPerception {
     /// 由调用方保证同线程使用)。
     #[allow(unsafe_code)]
     pub fn new() -> Result<Self, PerceptionError> {
-        use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance, CoInitializeEx, COINIT_MULTITHREADED};
-        use windows::Win32::UI::Accessibility::{
-            CUIAutomation, IUIAutomation,
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
         };
+        use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
         unsafe {
             // COM 线程模型:MTA(与主线程共容;失败如已初始化/模式冲突 → 继续)
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-            let automation: IUIAutomation = CoCreateInstance(
-                &CUIAutomation,
-                None,
-                CLSCTX_INPROC_SERVER,
-            )
-            .map_err(|e| PerceptionError::Init(format!("CoCreateInstance CUIAutomation: {e}")))?;
+            let automation: IUIAutomation =
+                CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).map_err(|e| {
+                    PerceptionError::Init(format!("CoCreateInstance CUIAutomation: {e}"))
+                })?;
             let condition = automation
                 .CreateTrueCondition()
                 .map_err(|e| PerceptionError::Init(format!("CreateTrueCondition: {e}")))?;
@@ -390,15 +392,12 @@ impl UiaPerception {
             // 名称(容错:元素销毁/提权拒绝 → 空)
             let name = el.CurrentName().map(|b| b.to_string()).unwrap_or_default();
             // IsPassword 判定优先信号(判定为真则不再读值)
-            let is_password = el
-                .CurrentIsPassword()
-                .map(|b| b.as_bool())
-                .unwrap_or(false);
+            let is_password = el.CurrentIsPassword().map(|b| b.as_bool()).unwrap_or(false);
             let mut value = String::new();
             if !is_password {
                 // ValuePattern 值(不支持 ValuePattern → 空)
-                if let Ok(pattern) = el
-                    .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
+                if let Ok(pattern) =
+                    el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
                 {
                     value = pattern
                         .CurrentValue()
@@ -486,13 +485,10 @@ impl PerceptionSource for UiaPerception {
         use windows::Win32::UI::Accessibility::IUIAutomationElement;
         unsafe {
             // 活动窗口:GetFocusedElement → 上溯至顶层窗口(父链顶端)
-            let focused = self
-                .automation
-                .GetFocusedElement()
-                .map_err(|e| {
-                    tracing::debug!(error = %e, "GetFocusedElement 失败(无活动窗口)");
-                    PerceptionError::NoActiveWindow
-                })?;
+            let focused = self.automation.GetFocusedElement().map_err(|e| {
+                tracing::debug!(error = %e, "GetFocusedElement 失败(无活动窗口)");
+                PerceptionError::NoActiveWindow
+            })?;
             let mut root_el: IUIAutomationElement = focused;
             while let Some(parent) = self.parent_of(&root_el) {
                 root_el = parent;
@@ -503,7 +499,11 @@ impl PerceptionSource for UiaPerception {
     }
 
     #[allow(unsafe_code)]
-    fn element_from_point(&self, x: i32, y: i32) -> Result<Option<PerceptionNode>, PerceptionError> {
+    fn element_from_point(
+        &self,
+        x: i32,
+        y: i32,
+    ) -> Result<Option<PerceptionNode>, PerceptionError> {
         use windows::Win32::Foundation::POINT;
         unsafe {
             let el = self
@@ -619,12 +619,22 @@ mod tests {
     fn build_snapshot_parses_fixture_tree() {
         // 窗口 → [标题栏, 编辑框(普通), 按钮],编辑框带子节点(光标等)
         let root = RawNode::new("window", "测试窗口", "", Rect::new(0, 0, 800, 600))
-            .push(RawNode::new("title_bar", "测试窗口", "", Rect::new(0, 0, 800, 40)))
+            .push(RawNode::new(
+                "title_bar",
+                "测试窗口",
+                "",
+                Rect::new(0, 0, 800, 40),
+            ))
             .push(
                 RawNode::new("edit", "输入框", "hello", Rect::new(10, 50, 500, 90))
                     .push(RawNode::new("text", "光标", "", Rect::new(10, 50, 12, 90))),
             )
-            .push(RawNode::new("button", "确定", "", Rect::new(700, 50, 780, 90)));
+            .push(RawNode::new(
+                "button",
+                "确定",
+                "",
+                Rect::new(700, 50, 780, 90),
+            ));
         let snap = build_snapshot(&root);
         assert_eq!(snap.node_count, 5);
         assert!(!snap.truncated);
@@ -712,12 +722,14 @@ mod tests {
 
     #[test]
     fn element_at_point_hit_and_miss() {
-        let root = RawNode::new("window", "w", "", Rect::new(0, 0, 800, 600))
-            .push(RawNode::new("title_bar", "w", "", Rect::new(0, 0, 800, 40)))
-            .push(
-                RawNode::new("pane", "内容", "", Rect::new(0, 40, 400, 600))
-                    .push(RawNode::new("button", "保存", "", Rect::new(100, 100, 200, 150))),
-            );
+        let root =
+            RawNode::new("window", "w", "", Rect::new(0, 0, 800, 600))
+                .push(RawNode::new("title_bar", "w", "", Rect::new(0, 0, 800, 40)))
+                .push(
+                    RawNode::new("pane", "内容", "", Rect::new(0, 40, 400, 600)).push(
+                        RawNode::new("button", "保存", "", Rect::new(100, 100, 200, 150)),
+                    ),
+                );
         let snap = build_snapshot(&root);
         // 命中最深层:按钮内部 → 按钮
         let hit = element_at_point(&snap.root, 150, 120).expect("按钮内应命中");

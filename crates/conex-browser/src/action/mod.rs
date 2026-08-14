@@ -372,10 +372,7 @@ impl ActionExecutor {
                     return Ok(success);
                 }
                 ActionOutcome::Retryable(err) | ActionOutcome::Fatal(err) => {
-                    match self
-                        .handle_retry(&mut retry, &mut req, err)
-                        .await
-                    {
+                    match self.handle_retry(&mut retry, &mut req, err).await {
                         RetryFlow::Continue => {}
                         RetryFlow::Done(result) => return result,
                     }
@@ -385,11 +382,7 @@ impl ActionExecutor {
     }
 
     /// 单次尝试（不做重试）：门禁 → 版本 → abort → 定位 → 派发 → 后置复核。
-    async fn run_once(
-        &self,
-        req: &ActionRequest,
-        attempt: u32,
-    ) -> ActionOutcome {
+    async fn run_once(&self, req: &ActionRequest, attempt: u32) -> ActionOutcome {
         // ① 门禁（动作检查点：scheme → IP 字面量 → 解析级校验由维度 17 §4.3 全流程实现）
         let url = match self.ops.current_url().await {
             Ok(url) => url,
@@ -397,8 +390,7 @@ impl ActionExecutor {
         };
         if let Err(denial) = self.gate.check(&url) {
             return ActionOutcome::Fatal(
-                ActionError::new(ActionErrorKind::GateDenied, denial.reason)
-                    .with_attempt(attempt),
+                ActionError::new(ActionErrorKind::GateDenied, denial.reason).with_attempt(attempt),
             );
         }
         // ② 版本校验（R-1 契约；VersionReset 后旧版本一律 Stale，U-2）
@@ -417,7 +409,8 @@ impl ActionExecutor {
         // ③ abort 检查（用户接管/令牌吊销；检查而非获取，T-8）
         if self.abort.is_cancelled() {
             return ActionOutcome::Fatal(
-                ActionError::new(ActionErrorKind::Aborted, "用户接管/令牌吊销").with_attempt(attempt),
+                ActionError::new(ActionErrorKind::Aborted, "用户接管/令牌吊销")
+                    .with_attempt(attempt),
             );
         }
         // ④ 定位（快照索引 → backendNodeId → 前端树/坐标，§3）
@@ -435,7 +428,10 @@ impl ActionExecutor {
             Err(err) => return self.label(err.with_attempt(attempt)),
         };
         // ⑤ 派发（CDP 命令序列，表 2-1）
-        let payload = match self.dispatch(&req.primitive, located.as_ref(), is_password).await {
+        let payload = match self
+            .dispatch(&req.primitive, located.as_ref(), is_password)
+            .await
+        {
             Ok(payload) => payload,
             Err(err) => return self.label(err.with_attempt(attempt)),
         };
@@ -497,10 +493,7 @@ impl ActionExecutor {
                 self.opts.scroll_retries,
             )
             .await?;
-            Ok(Some(Located::Point {
-                backend,
-                point,
-            }))
+            Ok(Some(Located::Point { backend, point }))
         } else if needs_scroll_point(primitive) {
             // 元素级滚动：scrollIntoViewIfNeeded → 取 box → 容器内偏移量滚轮（§3.2）
             let viewport = self.ops.viewport().await?;
@@ -511,10 +504,7 @@ impl ActionExecutor {
                 self.opts.scroll_retries,
             )
             .await?;
-            Ok(Some(Located::Point {
-                backend,
-                point,
-            }))
+            Ok(Some(Located::Point { backend, point }))
         } else {
             let node_id = locate::resolve_node_id(self.ops.as_ref(), backend).await?;
             Ok(Some(Located::Node { backend, node_id }))
@@ -666,8 +656,11 @@ impl ActionExecutor {
                     let wait = self
                         .wait_for(
                             WaitCondition::Element { index },
-                            WaitOptions::for_condition(&WaitCondition::Element { index }, req.tab_id.clone())
-                                .with_timeout_ms(self.opts.not_interactive_wait_ms),
+                            WaitOptions::for_condition(
+                                &WaitCondition::Element { index },
+                                req.tab_id.clone(),
+                            )
+                            .with_timeout_ms(self.opts.not_interactive_wait_ms),
                         )
                         .await;
                     match wait {
@@ -737,10 +730,7 @@ impl ActionExecutor {
         let version = self.snapshot.take_snapshot(&req.tab_id).await?;
         req.snapshot_version = version;
         match req.element.map(|el| el.index) {
-            Some(index) => match self
-                .snapshot
-                .element_by_index(&req.tab_id, version, index)
-            {
+            Some(index) => match self.snapshot.element_by_index(&req.tab_id, version, index) {
                 Some(meta) => {
                     req.element = Some(ElementRef {
                         index,
@@ -750,9 +740,7 @@ impl ActionExecutor {
                 }
                 None => Ok(RetryFlow::Done(Err(ActionError::new(
                     ActionErrorKind::InvalidInput,
-                    format!(
-                        "索引 [{index}] 在新快照（v{version}）中不存在（元素已消失，E2E-10）"
-                    ),
+                    format!("索引 [{index}] 在新快照（v{version}）中不存在（元素已消失，E2E-10）"),
                 )))),
             },
             None => Ok(RetryFlow::Continue),
@@ -1096,7 +1084,12 @@ mod tests {
     fn exec_with(
         ops: MockOps,
         snapshot: MockSnapshotStore,
-    ) -> (ActionExecutor, MockOps, MockSnapshotStore, CancellationToken) {
+    ) -> (
+        ActionExecutor,
+        MockOps,
+        MockSnapshotStore,
+        CancellationToken,
+    ) {
         let token = CancellationToken::new();
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
@@ -1132,14 +1125,20 @@ mod tests {
         let token = CancellationToken::new();
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(gate);
-        let err = executor.execute(click_req(1, 11)).await.expect_err("门禁应拒绝");
+        let err = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect_err("门禁应拒绝");
         assert_eq!(err.kind, ActionErrorKind::GateDenied);
         assert!(ops.count(MockOp::CurrentUrl) >= 1, "门禁前应取当前 URL");
         assert_eq!(ops.count(MockOp::PushNodes), 0, "门禁拒绝不得派发定位");
@@ -1150,17 +1149,19 @@ mod tests {
     #[tokio::test]
     async fn gate_unwired_returns_error() {
         let ops = MockOps::new();
-        let snapshot = MockSnapshotStore::with_elements(1, &[ElementMeta {
-            backend_node_id: 11,
-            is_password: false,
-        }]);
-        let token = CancellationToken::new();
-        let executor = ActionExecutor::new(
-            Arc::new(ops.clone()),
-            Arc::new(snapshot),
-            token,
+        let snapshot = MockSnapshotStore::with_elements(
+            1,
+            &[ElementMeta {
+                backend_node_id: 11,
+                is_password: false,
+            }],
         );
-        let err = executor.execute(click_req(1, 11)).await.expect_err("未接线应报错");
+        let token = CancellationToken::new();
+        let executor = ActionExecutor::new(Arc::new(ops.clone()), Arc::new(snapshot), token);
+        let err = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect_err("未接线应报错");
         assert_eq!(err.kind, ActionErrorKind::GateDenied);
         assert!(err.message.contains("未接线"));
     }
@@ -1169,13 +1170,14 @@ mod tests {
     #[tokio::test]
     async fn version_invalid_retakes_and_succeeds() {
         let snapshot = MockSnapshotStore::new(1); // 兜底索引表注入在下方
-        // 新快照 v2 上索引 0 存在（重定位到新 backendNodeId 21）
-        snapshot
-            .state
-            .lock()
-            .unwrap()
-            .elements
-            .insert(2, vec![ElementMeta { backend_node_id: 21, is_password: false }]);
+                                                  // 新快照 v2 上索引 0 存在（重定位到新 backendNodeId 21）
+        snapshot.state.lock().unwrap().elements.insert(
+            2,
+            vec![ElementMeta {
+                backend_node_id: 21,
+                is_password: false,
+            }],
+        );
         let (executor, ops, snapshot, _t) = exec_with(MockOps::new(), snapshot);
         let success = executor
             .execute(click_req(0, 11))
@@ -1186,7 +1188,9 @@ mod tests {
         // 重派发发生在新 backend 21 的坐标上：box(121) 中心 (250, 25)
         let moved = ops.calls_of(MockOp::MouseEvent);
         assert!(
-            moved.iter().any(|c| c.detail.contains("mouseMoved") && c.detail.contains("x=250")),
+            moved
+                .iter()
+                .any(|c| c.detail.contains("mouseMoved") && c.detail.contains("x=250")),
             "应在新元素坐标派发：{:?}",
             moved
         );
@@ -1219,18 +1223,23 @@ mod tests {
     async fn node_stale_exhaustion_escalates() {
         let (executor, ops, _snapshot, _t) = exec_with(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         // pushNodes 恒 NodeStale（元素反复重建）
-        ops.state
-            .lock()
-            .unwrap()
-            .persist_errors
-            .insert(MockOp::PushNodes, ActionError::new(ActionErrorKind::NodeStale, "push 空"));
-        let err = executor.execute(click_req(1, 11)).await.expect_err("应耗尽");
+        ops.state.lock().unwrap().persist_errors.insert(
+            MockOp::PushNodes,
+            ActionError::new(ActionErrorKind::NodeStale, "push 空"),
+        );
+        let err = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect_err("应耗尽");
         assert_eq!(err.kind, ActionErrorKind::NodeStale);
         assert_eq!(err.attempt, 3, "attempt 应停在 3（计入上限，R-8）");
         assert!(err.escalate, "NodeStale 耗尽应升级（T-10）");
@@ -1253,32 +1262,48 @@ mod tests {
         }
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token.clone(),
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        let err = executor.execute(click_req(1, 11)).await.expect_err("应中止");
+        let err = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect_err("应中止");
         assert_eq!(err.kind, ActionErrorKind::Aborted, "接管应立即中止");
         // 中止发生在重试决策入口（首轮 NodeStale 之后），未发起任何重试（不计入，R-8）
         assert_eq!(err.attempt, 1);
         assert_eq!(ops.count(MockOp::MouseEvent), 0, "中止后不得派发");
-        assert_eq!(ops.count(MockOp::PushNodes), 1, "仅首轮定位发生过（重试轮被中止拦截）");
+        assert_eq!(
+            ops.count(MockOp::PushNodes),
+            1,
+            "仅首轮定位发生过（重试轮被中止拦截）"
+        );
         // 额度未耗尽：新令牌 + 同一 mock（队列已清空）→ 完整动作应成功
         let executor2 = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             CancellationToken::new(),
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        let success = executor2.execute(click_req(1, 11)).await.expect("额度应完好");
+        let success = executor2
+            .execute(click_req(1, 11))
+            .await
+            .expect("额度应完好");
         assert!(!success.navigated);
     }
 
@@ -1287,10 +1312,13 @@ mod tests {
     async fn total_timeout_fires_on_hang() {
         let ops = MockOps::new();
         ops.state.lock().unwrap().hang.insert(MockOp::MouseEvent);
-        let snapshot = MockSnapshotStore::with_elements(1, &[ElementMeta {
-            backend_node_id: 11,
-            is_password: false,
-        }]);
+        let snapshot = MockSnapshotStore::with_elements(
+            1,
+            &[ElementMeta {
+                backend_node_id: 11,
+                is_password: false,
+            }],
+        );
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
             Arc::new(snapshot),
@@ -1301,7 +1329,10 @@ mod tests {
             total_timeout: Duration::from_millis(50),
             ..ActionOptions::default()
         });
-        let err = executor.execute(click_req(1, 11)).await.expect_err("挂起应超时");
+        let err = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect_err("挂起应超时");
         assert_eq!(err.kind, ActionErrorKind::Timeout);
         assert!(err.message.contains("总预算"));
     }
@@ -1313,12 +1344,18 @@ mod tests {
         ops.state.lock().unwrap().url_after_mouse = Some("https://next.example".to_string());
         let (executor, _ops, _snap, _t) = exec_with(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
-        let success = executor.execute(click_req(1, 11)).await.expect("点击应成功");
+        let success = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect("点击应成功");
         assert!(success.navigated, "URL 变化应标记导航");
         assert_eq!(success.url_after.as_deref(), Some("https://next.example"));
     }
@@ -1332,14 +1369,20 @@ mod tests {
         let token = CancellationToken::new();
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(gate);
-        let err = executor.execute(click_req(1, 11)).await.expect_err("门禁复核应拦截");
+        let err = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect_err("门禁复核应拦截");
         assert_eq!(err.kind, ActionErrorKind::GateDenied);
         assert!(err.message.contains("已回退"));
         assert_eq!(ops.count(MockOp::GoBack), 1, "应触发回退");
@@ -1354,13 +1397,19 @@ mod tests {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
                 element: None,
-                primitive: Primitive::Click { button: MouseButton::Left, count: 1 },
+                primitive: Primitive::Click {
+                    button: MouseButton::Left,
+                    count: 1,
+                },
             },
             // backendNodeId 非正数
             ActionRequest {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
-                element: Some(ElementRef { index: 0, backend_node_id: -1 }),
+                element: Some(ElementRef {
+                    index: 0,
+                    backend_node_id: -1,
+                }),
                 primitive: Primitive::Hover,
             },
             // click count 非法（0 / 3）
@@ -1371,25 +1420,40 @@ mod tests {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
                 element: None,
-                primitive: Primitive::Scroll { dir: ScrollDir::Down, amount: -100 },
+                primitive: Primitive::Scroll {
+                    dir: ScrollDir::Down,
+                    amount: -100,
+                },
             },
             ActionRequest {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
                 element: None,
-                primitive: Primitive::Scroll { dir: ScrollDir::Down, amount: 0 },
+                primitive: Primitive::Scroll {
+                    dir: ScrollDir::Down,
+                    amount: 0,
+                },
             },
             // type 空串且无提交键 / 超长
             ActionRequest {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
-                element: Some(ElementRef { index: 0, backend_node_id: 11 }),
-                primitive: Primitive::Type { text: String::new(), submit_key: None },
+                element: Some(ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                }),
+                primitive: Primitive::Type {
+                    text: String::new(),
+                    submit_key: None,
+                },
             },
             ActionRequest {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
-                element: Some(ElementRef { index: 0, backend_node_id: 11 }),
+                element: Some(ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                }),
                 primitive: Primitive::Type {
                     text: "x".repeat(MAX_TYPE_CHARS + 1),
                     submit_key: None,
@@ -1399,7 +1463,10 @@ mod tests {
             ActionRequest {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
-                element: Some(ElementRef { index: 0, backend_node_id: 11 }),
+                element: Some(ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                }),
                 primitive: Primitive::Type {
                     text: "a".to_string(),
                     submit_key: Some("BogusKey".to_string()),
@@ -1410,14 +1477,21 @@ mod tests {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
                 element: None,
-                primitive: Primitive::Key { keys: "Bogus+Key".to_string() },
+                primitive: Primitive::Key {
+                    keys: "Bogus+Key".to_string(),
+                },
             },
             // select 空值
             ActionRequest {
                 tab_id: "t1".to_string(),
                 snapshot_version: 1,
-                element: Some(ElementRef { index: 0, backend_node_id: 11 }),
-                primitive: Primitive::SelectOption { value: String::new() },
+                element: Some(ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                }),
+                primitive: Primitive::SelectOption {
+                    value: String::new(),
+                },
             },
             // evaluate 空表达式 / 超硬限
             ActionRequest {
@@ -1443,41 +1517,63 @@ mod tests {
         ];
         let (executor, ops, _snap, _t) = exec_with(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         for req in cases {
-            let err = executor
-                .execute(req)
-                .await
-                .expect_err("非法参数应被拒绝");
-            assert_eq!(err.kind, ActionErrorKind::InvalidInput, "消息：{}", err.message);
+            let err = executor.execute(req).await.expect_err("非法参数应被拒绝");
+            assert_eq!(
+                err.kind,
+                ActionErrorKind::InvalidInput,
+                "消息：{}",
+                err.message
+            );
         }
         // 非法参数全部在派发前拦截（零 CDP 调用）
         let s = ops.state.lock().unwrap();
-        assert_eq!(s.calls.len(), 0, "非法参数不得产生任何 CDP 调用：{:?}", s.calls);
+        assert_eq!(
+            s.calls.len(),
+            0,
+            "非法参数不得产生任何 CDP 调用：{:?}",
+            s.calls
+        );
     }
 
     fn click_with_count(count: u8) -> ActionRequest {
         ActionRequest {
             tab_id: "t1".to_string(),
             snapshot_version: 1,
-            element: Some(ElementRef { index: 0, backend_node_id: 11 }),
-            primitive: Primitive::Click { button: MouseButton::Left, count },
+            element: Some(ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            }),
+            primitive: Primitive::Click {
+                button: MouseButton::Left,
+                count,
+            },
         }
     }
 
     /// R-1：动作执行成功 → 版本即时 +1（note_action_done）。
     #[tokio::test]
     async fn action_success_bumps_version() {
-        let snapshot = MockSnapshotStore::with_elements(1, &[ElementMeta {
-            backend_node_id: 11,
-            is_password: false,
-        }]);
+        let snapshot = MockSnapshotStore::with_elements(
+            1,
+            &[ElementMeta {
+                backend_node_id: 11,
+                is_password: false,
+            }],
+        );
         let (executor, _ops, snapshot, _t) = exec_with(MockOps::new(), snapshot);
-        executor.execute(click_req(1, 11)).await.expect("点击应成功");
+        executor
+            .execute(click_req(1, 11))
+            .await
+            .expect("点击应成功");
         assert_eq!(
             snapshot.state.lock().unwrap().bumps,
             vec!["t1".to_string()],
@@ -1491,25 +1587,46 @@ mod tests {
         let ops = MockOps::new();
         ops.state.lock().unwrap().fail_queue.push_back((
             MockOp::MouseEvent,
-            ActionError::new(ActionErrorKind::ContextGone, "Execution context was destroyed"),
+            ActionError::new(
+                ActionErrorKind::ContextGone,
+                "Execution context was destroyed",
+            ),
         ));
         let delay = Arc::new(RecordingDelay::new());
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             CancellationToken::new(),
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(delay.clone());
-        let success = executor.execute(click_req(1, 11)).await.expect("竞态延迟后应成功");
+        let success = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect("竞态延迟后应成功");
         assert!(!success.navigated);
-        assert_eq!(delay.durations(), vec![Duration::from_millis(RETRY_DELAY_MS)], "延迟 300ms 恰一次");
-        assert_eq!(ops.count(MockOp::MouseEvent), 1 + 3, "首轮 moved 失败 + 重派发完整序列");
+        assert_eq!(
+            delay.durations(),
+            vec![Duration::from_millis(RETRY_DELAY_MS)],
+            "延迟 300ms 恰一次"
+        );
+        assert_eq!(
+            ops.count(MockOp::MouseEvent),
+            1 + 3,
+            "首轮 moved 失败 + 重派发完整序列"
+        );
         // 重快照未发生（版本未变，原 backendNodeId 重派发）
-        assert_eq!(ops.count(MockOp::PushNodes), 2, "两轮定位（同 backendNodeId）");
+        assert_eq!(
+            ops.count(MockOp::PushNodes),
+            2,
+            "两轮定位（同 backendNodeId）"
+        );
     }
 
     /// TargetClosed（§5.1）：延迟 → 目标存活 → 重快照重定位 → 成功。
@@ -1522,18 +1639,28 @@ mod tests {
         ));
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             CancellationToken::new(),
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        let success = executor.execute(click_req(1, 11)).await.expect("目标存活应重试成功");
+        let success = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect("目标存活应重试成功");
         assert!(!success.navigated);
         assert_eq!(ops.count(MockOp::TargetAlive), 1, "存活校验恰一次");
-        assert_eq!(ops.count(MockOp::MouseEvent), 1 + 3, "首轮失败 + 重派发完整序列");
+        assert_eq!(
+            ops.count(MockOp::MouseEvent),
+            1 + 3,
+            "首轮失败 + 重派发完整序列"
+        );
     }
 
     /// TargetClosed（§5.1）：延迟 → 目标已销毁 → 致命（不无限重试）。
@@ -1550,18 +1677,28 @@ mod tests {
         }
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             CancellationToken::new(),
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        let err = executor.execute(click_req(1, 11)).await.expect_err("目标销毁应致命");
+        let err = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect_err("目标销毁应致命");
         assert_eq!(err.kind, ActionErrorKind::TargetClosed);
         assert!(err.message.contains("已销毁"));
-        assert_eq!(ops.count(MockOp::MouseEvent), 1, "仅首轮 moved（不做第二次点击）");
+        assert_eq!(
+            ops.count(MockOp::MouseEvent),
+            1,
+            "仅首轮 moved（不做第二次点击）"
+        );
     }
 
     /// ConnectionLost（R-9）：等恢复事件 → 重试 ≤1 次（不消耗额度）→ 成功。
@@ -1574,18 +1711,32 @@ mod tests {
         ));
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             CancellationToken::new(),
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        let success = executor.execute(click_req(1, 11)).await.expect("恢复后应重试成功");
+        let success = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect("恢复后应重试成功");
         assert!(!success.navigated);
-        assert_eq!(ops.count(MockOp::AwaitConnectionRestored), 1, "等待恢复事件恰一次");
-        assert_eq!(ops.count(MockOp::MouseEvent), 1 + 3, "首轮失败 + 恢复后重派发");
+        assert_eq!(
+            ops.count(MockOp::AwaitConnectionRestored),
+            1,
+            "等待恢复事件恰一次"
+        );
+        assert_eq!(
+            ops.count(MockOp::MouseEvent),
+            1 + 3,
+            "首轮失败 + 恢复后重派发"
+        );
     }
 
     /// ConnectionLost 恢复超时（R-9）：恢复窗口内无事件 → 致命。
@@ -1602,10 +1753,13 @@ mod tests {
         }
         let executor = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             CancellationToken::new(),
         )
         .with_gate(Arc::new(AllowGate))
@@ -1614,8 +1768,15 @@ mod tests {
             ..ActionOptions::default()
         })
         .with_delay(Arc::new(RecordingDelay::new()));
-        let err = executor.execute(click_req(1, 11)).await.expect_err("恢复超时应致命");
+        let err = executor
+            .execute(click_req(1, 11))
+            .await
+            .expect_err("恢复超时应致命");
         assert_eq!(err.kind, ActionErrorKind::ConnectionLost);
-        assert_eq!(ops.count(MockOp::AwaitConnectionRestored), 1, "恢复后重试 ≤1 次");
+        assert_eq!(
+            ops.count(MockOp::AwaitConnectionRestored),
+            1,
+            "恢复后重试 ≤1 次"
+        );
     }
 }

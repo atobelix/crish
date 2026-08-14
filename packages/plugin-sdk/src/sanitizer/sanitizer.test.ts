@@ -189,5 +189,39 @@ describe('HTML Sanitizer & XSS Defense', () => {
       expect(clean).toContain('<i>italic</i>');
       expect(clean).toContain('<code>code</code>');
     });
+
+    it('XSS-01: 末尾未闭合标签残片安全转义 (防 DOM 自动闭合执行)', () => {
+      const unclosedImg = '<img src=x onerror=alert(1)';
+      const cleanImg = sanitizeHtml(unclosedImg);
+      expect(cleanImg).not.toContain('<img');
+      expect(cleanImg).toBe('&lt;img src=x onerror=alert(1)');
+
+      const unclosedA = '<a href="javascript:alert(1)"';
+      const cleanA = sanitizeHtml(unclosedA);
+      expect(cleanA).not.toContain('<a');
+      expect(cleanA).toBe('&lt;a href=&quot;javascript:alert(1)&quot;');
+
+      const unclosedSvg = '<svg onload=alert(1)';
+      const cleanSvg = sanitizeHtml(unclosedSvg);
+      expect(cleanSvg).not.toContain('<svg');
+      expect(cleanSvg).toBe('&lt;svg onload=alert(1)');
+    });
+
+    it('XSS-02: 实体编码伪协议二次反转义拦截 (jav&#x61;script:)', () => {
+      const entityHref = '<a href="jav&#x61;script:alert(1)">Click</a>';
+      const cleanHref = sanitizeHtml(entityHref);
+      expect(cleanHref).not.toContain('href=');
+      expect(cleanHref).toContain('Click');
+
+      const entitySrc = '<img src="jav&#x61;script:alert(1)">';
+      const cleanSrc = sanitizeHtml(entitySrc);
+      expect(cleanSrc).not.toContain('src=');
+    });
+
+    it('XSS-03: 孤立未闭合尖括号转义', () => {
+      const raw = 'Math: a < b and c > d';
+      const clean = sanitizeHtml(raw);
+      expect(clean).toBe('Math: a &lt; b and c > d');
+    });
   });
 });

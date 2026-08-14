@@ -77,9 +77,8 @@ where
     F: Future<Output = Result<serde_json::Value, ToolError>> + Send + 'static,
 {
     let progress = progress.map(ToolStreamItem::Progress);
-    let terminal = futures_util::stream::once(async move {
-        ToolStreamItem::Terminal(terminal.await)
-    });
+    let terminal =
+        futures_util::stream::once(async move { ToolStreamItem::Terminal(terminal.await) });
     Box::pin(progress.chain(terminal))
 }
 
@@ -116,8 +115,12 @@ mod tests {
     async fn with_progress_emits_progress_then_terminal_last() {
         // 流形状：Progress 序列在前，Terminal 恒为末项
         let progress = futures_util::stream::iter(vec![
-            ToolProgress::Text { text: "第一块".to_string() },
-            ToolProgress::Text { text: "第二块".to_string() },
+            ToolProgress::Text {
+                text: "第一块".to_string(),
+            },
+            ToolProgress::Text {
+                text: "第二块".to_string(),
+            },
         ]);
         let terminal = async { Ok(json!({ "final": true })) };
         let mut stream = with_progress(progress, terminal);
@@ -140,10 +143,9 @@ mod tests {
     #[tokio::test]
     async fn with_progress_zero_progress_still_terminal() {
         // 零 Progress 的退化形状：仍恰好一个 Terminal 恒为末项
-        let mut stream = with_progress(
-            futures_util::stream::empty::<ToolProgress>(),
-            async { Ok(json!({ "final": true })) },
-        );
+        let mut stream = with_progress(futures_util::stream::empty::<ToolProgress>(), async {
+            Ok(json!({ "final": true }))
+        });
         let t = stream.next().await.unwrap();
         assert!(t.is_terminal());
         assert!(stream.next().await.is_none());
@@ -154,10 +156,9 @@ mod tests {
         // 终值任务返回 Err 时透传，仍为末项
         let err = ToolError::execution_failed("t", "模拟失败");
         let err_task = err.clone();
-        let mut stream = with_progress(
-            futures_util::stream::empty::<ToolProgress>(),
-            async move { Err(err_task) },
-        );
+        let mut stream = with_progress(futures_util::stream::empty::<ToolProgress>(), async move {
+            Err(err_task)
+        });
         match stream.next().await.unwrap() {
             ToolStreamItem::Terminal(Err(e)) => assert_eq!(e, err),
             _ => panic!("应为 Terminal(Err)"),
@@ -167,7 +168,9 @@ mod tests {
     #[test]
     fn tool_progress_serde_kind_tag() {
         // 序列化 tag="kind" snake_case（对齐 grok 语义，供出站事件映射）
-        let text = ToolProgress::Text { text: "hi".to_string() };
+        let text = ToolProgress::Text {
+            text: "hi".to_string(),
+        };
         let v = serde_json::to_value(&text).unwrap();
         assert_eq!(v["kind"], "text");
         assert_eq!(v["text"], "hi");

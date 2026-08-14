@@ -90,8 +90,10 @@ fn grace_period_constant_is_five_minutes() {
 #[test]
 fn orphan_within_grace_period_is_preserved() {
     let db = LocalDb::open_in_memory().unwrap();
-    db.upsert_session_entry(&entry("recent", now_ms() - 60_000)).unwrap();
-    db.upsert_session_entry(&entry("old", now_ms() - 2 * ORPHAN_GRACE_MS)).unwrap();
+    db.upsert_session_entry(&entry("recent", now_ms() - 60_000))
+        .unwrap();
+    db.upsert_session_entry(&entry("old", now_ms() - 2 * ORPHAN_GRACE_MS))
+        .unwrap();
     // keepIds 另含一个保留目标（非孤儿）
     db.upsert_session_entry(&entry("keep", now_ms())).unwrap();
 
@@ -121,7 +123,8 @@ fn grace_period_configurable_via_session_meta() {
     let db = LocalDb::open_in_memory().unwrap();
     db.set_session_meta(ORPHAN_GRACE_MS_KEY, "0").unwrap();
     // 1 分钟前的会话：默认宽限期（5 分钟）内应保留，配置为 0 后应删除
-    db.upsert_session_entry(&entry("recent", now_ms() - 60_000)).unwrap();
+    db.upsert_session_entry(&entry("recent", now_ms() - 60_000))
+        .unwrap();
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
@@ -148,8 +151,10 @@ fn keep_ids_preserved_beyond_grace_period() {
 #[test]
 fn empty_keep_still_applies_grace() {
     let db = LocalDb::open_in_memory().unwrap();
-    db.upsert_session_entry(&entry("recent", now_ms() - 60_000)).unwrap();
-    db.upsert_session_entry(&entry("old", now_ms() - 2 * ORPHAN_GRACE_MS)).unwrap();
+    db.upsert_session_entry(&entry("recent", now_ms() - 60_000))
+        .unwrap();
+    db.upsert_session_entry(&entry("old", now_ms() - 2 * ORPHAN_GRACE_MS))
+        .unwrap();
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
@@ -167,8 +172,11 @@ fn empty_keep_still_applies_grace() {
 fn engine_subagent_session_never_deleted_by_cleanup() {
     let db = LocalDb::open_in_memory().unwrap();
     // 超宽限期的引擎子代理会话（永不被前端 keepIds 覆盖）
-    db.upsert_session_entry(&engine_entry("sub-sess-1-0", now_ms() - 10 * ORPHAN_GRACE_MS))
-        .unwrap();
+    db.upsert_session_entry(&engine_entry(
+        "sub-sess-1-0",
+        now_ms() - 10 * ORPHAN_GRACE_MS,
+    ))
+    .unwrap();
     // 超宽限期的普通孤儿会话（应正常被清理）
     db.upsert_session_entry(&entry("stale-user", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
@@ -185,14 +193,20 @@ fn engine_subagent_session_never_deleted_by_cleanup() {
 #[test]
 fn engine_subagent_session_preserved_with_partial_keep() {
     let db = LocalDb::open_in_memory().unwrap();
-    db.upsert_session_entry(&engine_entry("sub-sess-2-0", now_ms() - 10 * ORPHAN_GRACE_MS))
-        .unwrap();
+    db.upsert_session_entry(&engine_entry(
+        "sub-sess-2-0",
+        now_ms() - 10 * ORPHAN_GRACE_MS,
+    ))
+    .unwrap();
     db.upsert_session_entry(&entry("user-old", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
     // boot 窗口新建的会话（前端唯一可见）
-    db.upsert_session_entry(&entry("new-user", now_ms())).unwrap();
+    db.upsert_session_entry(&entry("new-user", now_ms()))
+        .unwrap();
 
-    let deleted = db.cleanup_orphan_sessions(&["new-user".to_string()]).unwrap();
+    let deleted = db
+        .cleanup_orphan_sessions(&["new-user".to_string()])
+        .unwrap();
 
     assert_eq!(deleted, 1, "仅超宽限期的普通孤儿被删");
     assert_remaining_ids(&db, &["sub-sess-2-0", "new-user"]);
@@ -206,11 +220,14 @@ fn session_with_active_run_preserved() {
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&entry("run-active", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
-    db.insert_run("r1", "run-active", RunStatus::Running, None, 1).unwrap();
+    db.insert_run("r1", "run-active", RunStatus::Running, None, 1)
+        .unwrap();
     db.upsert_session_entry(&entry("run-done", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
-    db.insert_run("r2", "run-done", RunStatus::Completed, Some("stop"), 3).unwrap();
-    db.upsert_session_entry(&entry("idle", now_ms() - 10 * ORPHAN_GRACE_MS)).unwrap();
+    db.insert_run("r2", "run-done", RunStatus::Completed, Some("stop"), 3)
+        .unwrap();
+    db.upsert_session_entry(&entry("idle", now_ms() - 10 * ORPHAN_GRACE_MS))
+        .unwrap();
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
@@ -224,10 +241,14 @@ fn session_with_queued_run_preserved() {
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&entry("run-queued", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
-    db.insert_run("r3", "run-queued", RunStatus::Queued, None, 0).unwrap();
-    db.upsert_session_entry(&entry("stale", now_ms() - 10 * ORPHAN_GRACE_MS)).unwrap();
+    db.insert_run("r3", "run-queued", RunStatus::Queued, None, 0)
+        .unwrap();
+    db.upsert_session_entry(&entry("stale", now_ms() - 10 * ORPHAN_GRACE_MS))
+        .unwrap();
 
-    let deleted = db.cleanup_orphan_sessions(&["run-queued".to_string()]).unwrap();
+    let deleted = db
+        .cleanup_orphan_sessions(&["run-queued".to_string()])
+        .unwrap();
 
     assert_eq!(deleted, 1, "仅 stale 被清理");
     assert_remaining_ids(&db, &["run-queued"]);
@@ -241,7 +262,8 @@ fn self_heal_row_within_grace_preserved() {
     let db = LocalDb::open_in_memory().unwrap();
     // 模拟 self_heal_then_save_body 的自愈行（insert_session 落库）
     db.insert_session("self-heal", "").unwrap();
-    db.upsert_session_entry(&entry("old", now_ms() - 2 * ORPHAN_GRACE_MS)).unwrap();
+    db.upsert_session_entry(&entry("old", now_ms() - 2 * ORPHAN_GRACE_MS))
+        .unwrap();
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
@@ -260,14 +282,18 @@ fn cleanup_preserves_session_with_unconsumed_pending() {
     // 超宽限期 + 不在 keepIds（最严路径：空 keepIds）
     db.upsert_session_entry(&entry("pending-s1", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
-    db.save_pending_input("p1", "pending-s1", None, "{}").unwrap();
+    db.save_pending_input("p1", "pending-s1", None, "{}")
+        .unwrap();
     // 对照：无 pending 的陈旧会话仍应被清理（防护不误伤正常清理）
     db.upsert_session_entry(&entry("idle", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-    assert_eq!(deleted, 1, "仅无 pending 的陈旧会话被清理，pending 未决会话豁免");
+    assert_eq!(
+        deleted, 1,
+        "仅无 pending 的陈旧会话被清理，pending 未决会话豁免"
+    );
     assert_remaining_ids(&db, &["pending-s1"]);
     assert_eq!(
         db.load_pending_inputs("pending-s1").unwrap().len(),
@@ -284,7 +310,8 @@ fn cleanup_preserves_session_with_inflight_run() {
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&entry("s1", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
-    db.insert_run("r1", "s1", RunStatus::Running, None, 1).unwrap();
+    db.insert_run("r1", "s1", RunStatus::Running, None, 1)
+        .unwrap();
     db.append_event("s1", 1, "agent-start", "{}", None).unwrap();
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
@@ -305,8 +332,10 @@ fn cleanup_preserves_session_with_inflight_run() {
 #[test]
 fn cleanup_preserves_inflight_run_within_grace() {
     let db = LocalDb::open_in_memory().unwrap();
-    db.upsert_session_entry(&entry("recent-run", now_ms() - 60_000)).unwrap();
-    db.insert_run("r2", "recent-run", RunStatus::Running, None, 1).unwrap();
+    db.upsert_session_entry(&entry("recent-run", now_ms() - 60_000))
+        .unwrap();
+    db.insert_run("r2", "recent-run", RunStatus::Running, None, 1)
+        .unwrap();
 
     let deleted = db.cleanup_orphan_sessions(&["other".to_string()]).unwrap();
 
@@ -322,7 +351,8 @@ fn cleanup_preserves_session_with_intermediate_run_statuses() {
         let db = LocalDb::open_in_memory().unwrap();
         db.upsert_session_entry(&entry("mid-run", now_ms() - 10 * ORPHAN_GRACE_MS))
             .unwrap();
-        db.insert_run("r-mid", "mid-run", status.clone(), None, 2).unwrap();
+        db.insert_run("r-mid", "mid-run", status.clone(), None, 2)
+            .unwrap();
 
         let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 

@@ -25,7 +25,7 @@
 
 use crate::snapshot::budget::{BudgetConfig, TruncationInfo, TruncationKind};
 use crate::snapshot::collect::{Bounds, EnhancedNode, FrameMarker};
-use crate::snapshot::interactive::{decide, Decision, DecisionCache, DecideCtx};
+use crate::snapshot::interactive::{decide, DecideCtx, Decision, DecisionCache};
 use crate::snapshot::redact;
 use std::collections::{HashMap, HashSet};
 
@@ -59,8 +59,8 @@ pub const SKIP_TAGS: &[&str] = &["style", "script", "head", "meta", "link", "tit
 
 /// void 元素（序列化自闭合 `/>`）。
 pub const VOID_TAGS: &[&str] = &[
-    "input", "br", "img", "hr", "link", "meta", "area", "base", "col", "embed", "source",
-    "track", "wbr",
+    "input", "br", "img", "hr", "link", "meta", "area", "base", "col", "embed", "source", "track",
+    "wbr",
 ];
 
 /// 日期/时间输入 → ISO 格式提示（§3.2：HTML5 输入必须 ISO 格式，模型最易错点）。
@@ -379,9 +379,9 @@ fn build_subtree(
     // —— 视口外折叠（可滚动容器内元素保留，滚动可达，§2.3）——
     if !node.is_text() && !in_scrollable {
         if let Some(vp) = opts.viewport {
-            let outside = node
-                .bounds
-                .is_some_and(|b| b.y > vp.y + vp.height + crate::snapshot::collect::VIEWPORT_THRESHOLD);
+            let outside = node.bounds.is_some_and(|b| {
+                b.y > vp.y + vp.height + crate::snapshot::collect::VIEWPORT_THRESHOLD
+            });
             if outside {
                 let n = subtree_size(node);
                 let hint = hint_node(
@@ -507,7 +507,9 @@ fn build_subtree(
             state.note_truncation(TruncationKind::Elements);
             children.push(hint_node(
                 child.backend_node_id,
-                Some(format!("... ({dropped_interactive} more interactive elements)")),
+                Some(format!(
+                    "... ({dropped_interactive} more interactive elements)"
+                )),
             ));
             break;
         }
@@ -734,7 +736,10 @@ fn render_attrs(node: &EnhancedNode, tag: &str) -> Vec<(String, String)> {
                 .collect();
             let mut s = preview.join("|");
             if options.len() > SELECT_OPTIONS_PREVIEW {
-                s.push_str(&format!("|...({} more)", options.len() - SELECT_OPTIONS_PREVIEW));
+                s.push_str(&format!(
+                    "|...({} more)",
+                    options.len() - SELECT_OPTIONS_PREVIEW
+                ));
             }
             out.push(("options".to_string(), s));
         }
@@ -818,10 +823,7 @@ fn apply_covered(roots: &mut [SimplifiedNode], covered: &HashSet<i64>) {
 }
 
 fn apply_covered_node(node: &mut SimplifiedNode, covered: &HashSet<i64>) {
-    if covered.contains(&node.backend_node_id)
-        && node.tag.is_some()
-        && !is_form_control(node)
-    {
+    if covered.contains(&node.backend_node_id) && node.tag.is_some() && !is_form_control(node) {
         // 文本节点与表单控件不因遮盖而删除（弹窗/下拉遮罩下保留原文，不给索引）
         node.covered = true;
     }
@@ -1127,8 +1129,12 @@ fn wrapped_control_probe(node: &EnhancedNode) -> (bool, bool) {
         return (false, false);
     }
     let by_label_for = tag == "label" && node.get_attr("for").is_some();
-    let is_control =
-        |n: &EnhancedNode| matches!(n.tag.as_deref(), Some("input") | Some("select") | Some("textarea"));
+    let is_control = |n: &EnhancedNode| {
+        matches!(
+            n.tag.as_deref(),
+            Some("input") | Some("select") | Some("textarea")
+        )
+    };
     // ≤2 层：直接子或孙
     let direct = node.children.iter().any(&is_control);
     let grand = node
@@ -1249,8 +1255,14 @@ Search the web: 示例搜索结果页
         assert_eq!(out.selector_map[&101].backend_node_id, 101);
         assert_eq!(out.selector_map[&106].backend_node_id, 106);
         assert_eq!(out.selector_map[&107].backend_node_id, 107);
-        assert!(!out.selector_map.contains_key(&111), "iframe 占位不分配索引（U-4）");
-        assert!(!out.selector_map.contains_key(&112), "canvas 盲区不分配索引");
+        assert!(
+            !out.selector_map.contains_key(&111),
+            "iframe 占位不分配索引（U-4）"
+        );
+        assert!(
+            !out.selector_map.contains_key(&112),
+            "canvas 盲区不分配索引"
+        );
 
         // 盲区统计（V4）：canvas=1、unoperable=1（closed shadow 降级）
         assert_eq!(out.blind_zone.canvas, 1);
@@ -1281,10 +1293,8 @@ Search the web: 示例搜索结果页
         for v in first.selector_map.values() {
             previous.insert(v.backend_node_id);
         }
-        let second = build_and_serialize(
-            &fixture,
-            &opts(&budgets, &previous).with_incremental(true),
-        );
+        let second =
+            build_and_serialize(&fixture, &opts(&budgets, &previous).with_incremental(true));
         // 索引稳定：同一元素仍 [101]（索引 = backendNodeId 本身）
         assert!(second.text.contains("[101]<input name=q"));
         // 无新增元素 → 无 * 标记
@@ -1297,10 +1307,8 @@ Search the web: 示例搜索结果页
                 .push(EnhancedNode::text_node("新按钮", 301))
                 .bounds(0.0, 400.0, 100.0, 36.0),
         );
-        let third = build_and_serialize(
-            &extended,
-            &opts(&budgets, &previous).with_incremental(true),
-        );
+        let third =
+            build_and_serialize(&extended, &opts(&budgets, &previous).with_incremental(true));
         assert!(
             third.text.contains("*[300]<button>新按钮</button>"),
             "新增元素应带 * 前缀：\n{}",
@@ -1308,13 +1316,19 @@ Search the web: 示例搜索结果页
         );
         // 版本不连续（previous 为空）→ 全量视角，无 * 标记
         let fresh = build_and_serialize(&extended, &opts(&budgets, &HashSet::new()));
-        assert!(!fresh.text.contains('*'), "无前驱时不得有 * 标记（全量视角）");
+        assert!(
+            !fresh.text.contains('*'),
+            "无前驱时不得有 * 标记（全量视角）"
+        );
     }
 
     /// 预算 1（深度）：超深子树折叠为「被截可交互元素计数」提示行。
     #[test]
     fn budget_depth_folds_deep_subtree() {
-        let budgets = BudgetConfig { max_depth: 3, ..BudgetConfig::active() };
+        let budgets = BudgetConfig {
+            max_depth: 3,
+            ..BudgetConfig::active()
+        };
         // 构造深层嵌套链，最深层有按钮（折叠后应提示 1 个被截可交互元素）
         let mut cur = EnhancedNode::element("div", 1)
             .bounds(0.0, 0.0, 100.0, 100.0)
@@ -1365,20 +1379,21 @@ Search the web: 示例搜索结果页
     /// 预算 3（文本）：单行/属性值超限截断并追加 …。
     #[test]
     fn budget_text_truncates_long_lines() {
-        let budgets = BudgetConfig { max_text_len: 10, ..BudgetConfig::active() };
+        let budgets = BudgetConfig {
+            max_text_len: 10,
+            ..BudgetConfig::active()
+        };
         let long = "很长的描述文本超过十个字符的长度限制";
-        let root = EnhancedNode::element("div", 1).bounds(0.0, 0.0, 500.0, 100.0).push(
-            EnhancedNode::element("button", 2)
-                .attr("title", long)
-                .bounds(0.0, 0.0, 100.0, 36.0)
-                .push(EnhancedNode::text_node(long, 3)),
-        );
+        let root = EnhancedNode::element("div", 1)
+            .bounds(0.0, 0.0, 500.0, 100.0)
+            .push(
+                EnhancedNode::element("button", 2)
+                    .attr("title", long)
+                    .bounds(0.0, 0.0, 100.0, 36.0)
+                    .push(EnhancedNode::text_node(long, 3)),
+            );
         let out = build_and_serialize(&[root], &opts(&budgets, &HashSet::new()));
-        assert!(
-            out.text.contains('…'),
-            "截断应追加 … 后缀：\n{}",
-            out.text
-        );
+        assert!(out.text.contains('…'), "截断应追加 … 后缀：\n{}", out.text);
         let long_prefix = long.chars().take(15).collect::<String>();
         assert!(!out.text.contains(&long_prefix), "超长文本不应完整出现");
         let t = out.truncation.expect("文本截断应有 TruncationInfo");
@@ -1426,7 +1441,10 @@ Search the web: 示例搜索结果页
         }
         let out = build_and_serialize(&[root], &opts(&budgets, &HashSet::new()));
         assert!(out.text.len() <= 200 + 64, "输出应被输出预算截断");
-        assert!(out.text.contains("truncated by output budget"), "应有输出预算截断标记");
+        assert!(
+            out.text.contains("truncated by output budget"),
+            "应有输出预算截断标记"
+        );
         let t = out.truncation.expect("输出截断应有 TruncationInfo");
         assert_eq!(t.truncated_by, TruncationKind::Output);
     }
@@ -1494,7 +1512,10 @@ Search the web: 示例搜索结果页
                     .push(EnhancedNode::text_node("控制\u{0001}字符\u{0008}扫描", 7)),
             );
         let out = build_and_serialize(&[root], &opts(&budgets, &HashSet::new()));
-        assert!(out.text.contains("中文按钮😀👍"), "emoji 代理对不得破坏结构");
+        assert!(
+            out.text.contains("中文按钮😀👍"),
+            "emoji 代理对不得破坏结构"
+        );
         assert!(out.text.contains("零宽"));
         assert!(out.text.contains("字符") && out.text.contains("测试"));
         assert!(out.text.contains("扫描"), "控制字符不破坏行结构");
@@ -1533,11 +1554,15 @@ Search the web: 示例搜索结果页
             &opts(&budgets, &HashSet::new()).with_incremental(true),
         );
         assert!(
-            out.text.contains("options=\"北京|上海|深圳|广州|...(3 more)\""),
+            out.text
+                .contains("options=\"北京|上海|深圳|广州|...(3 more)\""),
             "select 展开应前 4 项 + 省略计数（值含空格加引号）：\n{}",
             out.text
         );
-        assert!(out.text.contains("format=YYYY-MM-DD"), "日期输入应附 ISO 格式提示");
+        assert!(
+            out.text.contains("format=YYYY-MM-DD"),
+            "日期输入应附 ISO 格式提示"
+        );
         // 复合组件恒标记新增（*）
         assert!(out.text.contains("*[1]<select"), "select 为复合组件恒 new");
     }
@@ -1584,13 +1609,32 @@ Search the web: 示例搜索结果页
         let mut o = opts(&budgets, &previous);
         o.paint_filter = true;
         o.paint_orders = &[
-            (10, Bounds { x: 0.0, y: 0.0, width: 200.0, height: 40.0 }),
-            (20, Bounds { x: 0.0, y: 0.0, width: 200.0, height: 40.0 }),
+            (
+                10,
+                Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 200.0,
+                    height: 40.0,
+                },
+            ),
+            (
+                20,
+                Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 200.0,
+                    height: 40.0,
+                },
+            ),
         ];
         let out = build_and_serialize(&[root], &o);
         // 被覆盖按钮：保留文本行但无索引
         assert!(out.text.contains("被遮挡按钮"), "被遮盖节点保留文本行");
-        assert!(!out.selector_map.contains_key(&10), "被遮盖节点不给交互索引");
+        assert!(
+            !out.selector_map.contains_key(&10),
+            "被遮盖节点不给交互索引"
+        );
     }
 
     /// 索引合成：负 backendNodeId（closed shadow 内部无 id）不进入索引；
@@ -1629,11 +1673,13 @@ Search the web: 示例搜索结果页
                     .bounds(0.0, 40.0, 100.0, 30.0),
             )
             .push(
-                EnhancedNode::element("svg", 4).bounds(0.0, 80.0, 100.0, 100.0).push(
-                    EnhancedNode::element("path", 5)
-                        .svg_child()
-                        .bounds(0.0, 80.0, 100.0, 100.0),
-                ),
+                EnhancedNode::element("svg", 4)
+                    .bounds(0.0, 80.0, 100.0, 100.0)
+                    .push(
+                        EnhancedNode::element("path", 5)
+                            .svg_child()
+                            .bounds(0.0, 80.0, 100.0, 100.0),
+                    ),
             );
         let out = build_and_serialize(&[root], &opts(&budgets, &HashSet::new()));
         assert_eq!(out.selector_map.len(), 0, "隐藏/禁用/装饰 SVG 一律不索引");
@@ -1650,11 +1696,15 @@ Search the web: 示例搜索结果页
         let root = EnhancedNode::element("div", 1)
             .bounds(0.0, 0.0, 500.0, 500.0)
             .push(
-                EnhancedNode::element("button", 2)
-                    .bounds(0.0, 5000.0, 100.0, 30.0), // 远超出视口
+                EnhancedNode::element("button", 2).bounds(0.0, 5000.0, 100.0, 30.0), // 远超出视口
             );
         let mut o = opts(&budgets, &previous);
-        o.viewport = Some(Bounds { x: 0.0, y: 0.0, width: 1280.0, height: 800.0 });
+        o.viewport = Some(Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 1280.0,
+            height: 800.0,
+        });
         let out = build_and_serialize(&[root], &o);
         assert!(
             out.text.contains("more elements - scroll to reveal"),
@@ -1665,10 +1715,7 @@ Search the web: 示例搜索结果页
         let scroller = EnhancedNode::element("div", 1)
             .scrollable()
             .bounds(0.0, 0.0, 500.0, 500.0)
-            .push(
-                EnhancedNode::element("button", 2)
-                    .bounds(0.0, 5000.0, 100.0, 30.0),
-            );
+            .push(EnhancedNode::element("button", 2).bounds(0.0, 5000.0, 100.0, 30.0));
         let out2 = build_and_serialize(&[scroller], &o);
         assert!(
             out2.text.contains("[2]<button"),

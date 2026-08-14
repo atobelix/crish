@@ -165,7 +165,10 @@ pub enum KillResult {
     /// 成功终止（via_force=两阶段升级）
     Killed { task_id: String, via_force: bool },
     /// 进程已不存在（自然退出）
-    AlreadyExited { task_id: String, exit_code: Option<i32> },
+    AlreadyExited {
+        task_id: String,
+        exit_code: Option<i32>,
+    },
     /// 终止失败附原因
     Failed { task_id: String, reason: String },
 }

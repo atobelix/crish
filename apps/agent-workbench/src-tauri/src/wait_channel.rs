@@ -44,8 +44,9 @@ use agent_tools::tools::subagent::SubagentState;
 use agent_tools::tools::wait_subagents::{
     dispatch_outputs_value, parse_dispatch_outputs, wait_for_terminal_events, DispatchDeclaration,
     SubagentOutput, SubagentTerminalEvent, SubagentWaitChannel, SubagentWaitError,
-    SubagentWaitResult, SubagentWaitStatus, DISPATCH_META_KEY_AGENTS, DISPATCH_META_KEY_DISPATCHED_AT,
-    DISPATCH_META_KEY_MODE, DISPATCH_META_KEY_OUTPUTS, DISPATCH_META_KEY_WAIT_MS,
+    SubagentWaitResult, SubagentWaitStatus, DISPATCH_META_KEY_AGENTS,
+    DISPATCH_META_KEY_DISPATCHED_AT, DISPATCH_META_KEY_MODE, DISPATCH_META_KEY_OUTPUTS,
+    DISPATCH_META_KEY_WAIT_MS,
 };
 use async_trait::async_trait;
 use conex_db::LocalDb;
@@ -125,13 +126,19 @@ impl MemoryWaitStore {
 
 impl WaitStore for MemoryWaitStore {
     fn load_all(&self) -> Vec<DispatchDeclaration> {
-        self.declarations.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.declarations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     fn save(&self, declaration: &DispatchDeclaration) {
         let mut list = self.declarations.lock().unwrap_or_else(|e| e.into_inner());
         // 幂等：同一分发时刻的声明覆盖（同一次 wait 调用重复持久化）
-        if let Some(slot) = list.iter_mut().find(|d| d.dispatched_at_ms == declaration.dispatched_at_ms) {
+        if let Some(slot) = list
+            .iter_mut()
+            .find(|d| d.dispatched_at_ms == declaration.dispatched_at_ms)
+        {
             *slot = declaration.clone();
         } else {
             list.push(declaration.clone());
@@ -159,7 +166,10 @@ impl WaitStore for MemoryWaitStore {
     }
 
     fn load_outputs(&self) -> HashMap<String, Vec<SubagentOutput>> {
-        self.outputs.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.outputs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 
@@ -194,7 +204,9 @@ impl WaitStore for LocalDbWaitStore {
         .into_iter()
         .filter_map(|k| self.db.get_session_meta(k).ok().flatten().map(|v| (k, v)))
         .collect();
-        DispatchDeclaration::from_meta_pairs(pairs).into_iter().collect()
+        DispatchDeclaration::from_meta_pairs(pairs)
+            .into_iter()
+            .collect()
     }
 
     fn save(&self, declaration: &DispatchDeclaration) {
@@ -249,7 +261,10 @@ impl MemoryAgentSource {
 
 impl SubagentStatusSource for MemoryAgentSource {
     fn load_agents(&self) -> Vec<SessionAgent> {
-        self.agents.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.agents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 
@@ -337,9 +352,7 @@ impl EventStreamBroadcast {
 }
 
 /// 从 [AgentEvent] 提取终态事件字段（仅 SubagentEnded；其余返回 None）
-fn terminal_event_fields(
-    event: &AgentEvent,
-) -> Option<(String, SubagentState, Option<String>)> {
+fn terminal_event_fields(event: &AgentEvent) -> Option<(String, SubagentState, Option<String>)> {
     let AgentEvent::SubagentEnded {
         subagent_id,
         status,
@@ -473,10 +486,7 @@ impl SubagentWaitChannel for WaitChannel {
                     status: state,
                     summary: row.summary.clone(),
                     elapsed_ms,
-                    terminal: matches!(
-                        state,
-                        SubagentState::Completed | SubagentState::Failed
-                    ),
+                    terminal: matches!(state, SubagentState::Completed | SubagentState::Failed),
                 }
             })
             .collect())
@@ -544,8 +554,8 @@ impl SubagentWaitChannel for WaitChannel {
 mod tests {
     use super::*;
     use agent_tools::tools::wait_subagents::{
-        dispatch_outputs_value, parse_dispatch_outputs, WaitMode, DISPATCH_META_KEY_MODE,
-        DISPATCH_META_KEY_OUTPUTS, SubagentOutput,
+        dispatch_outputs_value, parse_dispatch_outputs, SubagentOutput, WaitMode,
+        DISPATCH_META_KEY_MODE, DISPATCH_META_KEY_OUTPUTS,
     };
     use conex_types::events::AgentEvent;
     use session_loop::control::ControlKind;
@@ -740,14 +750,20 @@ mod tests {
         );
         // 损坏 / 缺失键值 → 空表（parse 容错，重启恢复不 panic）
         assert!(parse_dispatch_outputs(None).is_empty(), "缺失键 → 空表");
-        assert!(parse_dispatch_outputs(Some("not-json")).is_empty(), "损坏值 → 空表");
+        assert!(
+            parse_dispatch_outputs(Some("not-json")).is_empty(),
+            "损坏值 → 空表"
+        );
     }
 
     /// 未落库 / 空清单 → 空表（fail-open，不 panic）
     #[test]
     fn memory_wait_store_load_outputs_fail_open_empty() {
         let store = MemoryWaitStore::new();
-        assert!(store.load_outputs().is_empty(), "未落库 → 空表（fail-open）");
+        assert!(
+            store.load_outputs().is_empty(),
+            "未落库 → 空表（fail-open）"
+        );
         store
             .save_outputs(&HashMap::new())
             .expect("空清单落库应成功");
@@ -789,7 +805,11 @@ mod tests {
         assert!(!result.timed_out, "事件到达不应超时");
         assert_eq!(result.agents.len(), 2, "状态摘要按入参顺序");
         assert_eq!(result.agents[0].status, SubagentState::Completed);
-        assert_eq!(result.agents[1].status, SubagentState::Failed, "cancelled 归一 failed");
+        assert_eq!(
+            result.agents[1].status,
+            SubagentState::Failed,
+            "cancelled 归一 failed"
+        );
         assert!(result.agents[0].terminal && result.agents[1].terminal);
         // 订阅生命周期：wait 返回后接收端 drop → 广播自动断流
         assert_eq!(
@@ -818,7 +838,11 @@ mod tests {
         .expect("wait_for_terminal 不应报错");
         assert!(result.timed_out, "不发射事件 → timed_out");
         assert!(!result.all_terminal);
-        assert_eq!(result.agents[0].status, SubagentState::Running, "未完成保持 running");
+        assert_eq!(
+            result.agents[0].status,
+            SubagentState::Running,
+            "未完成保持 running"
+        );
         assert!(!result.agents[0].terminal);
         // 订阅生命周期：超时返回后同样断流
         assert_eq!(stream.subscriber_count(), 0, "超时返回后订阅应已取消");
@@ -860,10 +884,7 @@ mod tests {
             Some("subagent_inject:sa-1"),
             "reason 携带可观测标识"
         );
-        let message = intents[0]
-            .message
-            .as_ref()
-            .expect("注入意图必须携带消息");
+        let message = intents[0].message.as_ref().expect("注入意图必须携带消息");
         let text = message.blocks.iter().find_map(|b| match b {
             conex_types::message::AgentMessageBlock::Text { text } => Some(text.as_str()),
             _ => None,
@@ -888,17 +909,30 @@ mod tests {
             agent_row("sa-3", "running", 3_000),
         ]);
         let statuses = channel
-            .snapshot(&["sa-1".to_string(), "sa-2".to_string(), "sa-3".to_string(), "sa-9".to_string()])
+            .snapshot(&[
+                "sa-1".to_string(),
+                "sa-2".to_string(),
+                "sa-3".to_string(),
+                "sa-9".to_string(),
+            ])
             .await
             .expect("snapshot 不应报错");
         assert_eq!(statuses.len(), 4, "按入参顺序返回");
         assert_eq!(statuses[0].status, SubagentState::Completed);
         assert!(statuses[0].terminal);
-        assert_eq!(statuses[1].status, SubagentState::Failed, "stopped 归一 failed");
+        assert_eq!(
+            statuses[1].status,
+            SubagentState::Failed,
+            "stopped 归一 failed"
+        );
         assert!(statuses[1].terminal);
         assert_eq!(statuses[2].status, SubagentState::Running);
         assert!(!statuses[2].terminal);
-        assert_eq!(statuses[3].status, SubagentState::Running, "行缺失 fail-open");
+        assert_eq!(
+            statuses[3].status,
+            SubagentState::Running,
+            "行缺失 fail-open"
+        );
         assert!(!statuses[3].terminal);
     }
 
@@ -973,7 +1007,10 @@ mod tests {
             store
                 .save_outputs(&second_outputs)
                 .expect("空清单覆盖落库应成功");
-            assert!(store.load_outputs().is_empty(), "整表覆盖语义（旧条目清除）");
+            assert!(
+                store.load_outputs().is_empty(),
+                "整表覆盖语义（旧条目清除）"
+            );
             store.save_outputs(&outputs).expect("重新落库应成功");
             // 模拟重启：新实例读同一 db → 完全恢复（D4 §3.8 ③）
             let recovered = LocalDbWaitStore::new(db.clone());
@@ -991,7 +1028,10 @@ mod tests {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
         let store = LocalDbWaitStore::new(db.clone());
         assert!(store.load_all().is_empty(), "空库 → 空声明集（fail-open）");
-        assert!(store.load_outputs().is_empty(), "空库 → 空产出表（fail-open）");
+        assert!(
+            store.load_outputs().is_empty(),
+            "空库 → 空产出表（fail-open）"
+        );
         // 仅 mode 键存在（其余关键键缺失）→ 解析失败返回空
         let _ = db.set_session_meta(DISPATCH_META_KEY_MODE, "await-all");
         assert!(store.load_all().is_empty(), "关键键缺失 → 空声明集");

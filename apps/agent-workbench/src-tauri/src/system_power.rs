@@ -107,8 +107,8 @@ mod platform {
 
     use super::{ResumeAction, SystemPowerMonitor};
     use windows_sys::Win32::System::Power::{
-        DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, PowerRegisterSuspendResumeNotification,
-        PowerUnregisterSuspendResumeNotification,
+        PowerRegisterSuspendResumeNotification, PowerUnregisterSuspendResumeNotification,
+        DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         DEVICE_NOTIFY_CALLBACK, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND,
@@ -227,11 +227,7 @@ mod tests {
     }
 
     /// 构造记录器与两个 mock 动作（rebind 记录参数；kick 计数并返回）
-    fn recorder() -> (
-        Arc<Mutex<Recorder>>,
-        impl Fn(bool),
-        impl Fn() -> usize,
-    ) {
+    fn recorder() -> (Arc<Mutex<Recorder>>, impl Fn(bool), impl Fn() -> usize) {
         let inner = Arc::new(Mutex::new(Recorder {
             rebinds: Vec::new(),
             kicks: 0,
@@ -265,7 +261,10 @@ mod tests {
         let recovered = run_resume_recovery(false, &rebind, &kick);
         assert!(!recovered, "loopback 态不应执行恢复");
         assert!(
-            log.lock().unwrap_or_else(|e| e.into_inner()).rebinds.is_empty(),
+            log.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .rebinds
+                .is_empty(),
             "loopback 态不得触发重绑"
         );
         assert_eq!(log.lock().unwrap_or_else(|e| e.into_inner()).kicks, 0);
@@ -320,7 +319,10 @@ mod tests {
         };
         assert!(super::platform::is_resume_event(PBT_APMRESUMEAUTOMATIC));
         assert!(super::platform::is_resume_event(PBT_APMRESUMESUSPEND));
-        assert!(!super::platform::is_resume_event(PBT_APMSUSPEND), "挂起不触发恢复");
+        assert!(
+            !super::platform::is_resume_event(PBT_APMSUSPEND),
+            "挂起不触发恢复"
+        );
         assert!(!super::platform::is_resume_event(0));
         assert!(!super::platform::is_resume_event(u32::MAX));
     }

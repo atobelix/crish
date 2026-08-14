@@ -168,10 +168,7 @@ mod tests {
         let tool = BlockMoveTool::new();
         let ctx = create_mock_tool_context();
         let out = tool
-            .execute(
-                &ctx,
-                serde_json::json!({ "doc_id": "d", "id": "b1" }),
-            )
+            .execute(&ctx, serde_json::json!({ "doc_id": "d", "id": "b1" }))
             .await
             .unwrap();
         assert_eq!(out["ok"], false);

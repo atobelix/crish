@@ -381,8 +381,7 @@ impl ApprovalGate {
         if matches!(verdict, Approval::Pending { .. }) {
             return Err(ApprovalError::InvalidVerdict);
         }
-        if self.stop.as_ref().is_some_and(|s| s.stopped()) && matches!(verdict, Approval::Granted)
-        {
+        if self.stop.as_ref().is_some_and(|s| s.stopped()) && matches!(verdict, Approval::Granted) {
             return Err(ApprovalError::Stopped);
         }
         let mut state = self.state.lock().expect("审批门锁损坏");
@@ -402,20 +401,12 @@ impl ApprovalGate {
 
     /// 在途审批（None = 无等待中的审批）
     pub fn pending(&self) -> Option<(u64, ApprovalRequest)> {
-        self.state
-            .lock()
-            .expect("审批门锁损坏")
-            .in_flight
-            .clone()
+        self.state.lock().expect("审批门锁损坏").in_flight.clone()
     }
 
     /// 最近一次完成裁决（裁决 id + 载荷 + 结果）
     pub fn last_verdict(&self) -> Option<(u64, ApprovalRequest, Approval)> {
-        self.state
-            .lock()
-            .expect("审批门锁损坏")
-            .last
-            .clone()
+        self.state.lock().expect("审批门锁损坏").last.clone()
     }
 }
 

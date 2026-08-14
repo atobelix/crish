@@ -82,6 +82,13 @@ export function isLowSurrogate(code: number): boolean {
 }
 
 /**
+ * 检测字符编码是否为代理项 (Surrogate: 0xD800 - 0xDFFF)
+ */
+export function isSurrogateCodePoint(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdfff;
+}
+
+/**
  * 检测 UTF-16 偏移量是否落在代理项对的内部（即低位代理项起始位置）
  */
 export function isInsideSurrogatePair(
@@ -128,17 +135,21 @@ export function alignToSurrogateBoundaryCeil(
 
 /**
  * 将 JS UTF-16 Code Unit 偏移精确转换为 Unicode 标量偏移（对齐 Rust chars().count()）
- * 单遍线性扫描，正确合并 High + Low Surrogate Pair
+ * 单遍线性扫描，正确合并 High + Low Surrogate Pair。
+ * 若传入落在代理项中间的偏移，统一执行 Floor 对齐（向下对齐至高位代理项起点），确保双向互逆单射。
  */
 export function utf16OffsetToUnicodeScalar(
   text: string,
   offsetU16: Utf16CodeUnitOffset | number
 ): UnicodeScalarOffset {
   let scalarCount = 0;
-  const limit = Math.min(
+  const rawLimit = Math.min(
     Math.max(0, Math.floor(offsetU16 as number)),
     text.length
   );
+  // Floor 对齐：若 rawLimit 落在低位代理项上（代理项中间），向前回退 1 单元
+  const limit = isInsideSurrogatePair(text, rawLimit) ? rawLimit - 1 : rawLimit;
+
   for (let i = 0; i < limit;) {
     const code = text.charCodeAt(i);
     // 检测是否为完整的代理项对
@@ -191,6 +202,13 @@ export function unicodeScalarLength(text: string): UnicodeScalarOffset {
 }
 
 /**
+ * 计算字符串的 Unicode 标量总数（等价于 unicodeScalarLength，兼容既有命名）
+ */
+export function countUnicodeScalars(text: string): number {
+  return utf16OffsetToUnicodeScalar(text, text.length) as number;
+}
+
+/**
  * 计算字符串的总 UTF-16 长度（`text.length`）
  */
 export function utf16Length(text: string): Utf16CodeUnitOffset {
@@ -220,3 +238,6 @@ export function unicodeScalarRangeToUtf16Range(
   const e = unicodeScalarToUtf16Offset(text, rangeScalar[1]);
   return [s, e];
 }
+
+export type { DiffReplaceResult } from './diff';
+export { diffToReplace } from './diff';

@@ -157,7 +157,10 @@ impl CredentialStore {
         }
     }
 
-    pub(crate) fn persistence_for_key(&self, source: super::resolution::ApiKeySource) -> CredentialPersistence {
+    pub(crate) fn persistence_for_key(
+        &self,
+        source: super::resolution::ApiKeySource,
+    ) -> CredentialPersistence {
         match source {
             super::resolution::ApiKeySource::RuntimeUpdate => {
                 if self.mode == CredentialStoreMode::Os && !self.unavailable {
@@ -234,10 +237,7 @@ fn secret_status(
 ///
 /// 返回 `{ ok, profileId, hasKey, apiKeyLast4, persistence }`；成功日志只记 last4（K-05）。
 #[tauri::command]
-pub(crate) fn config_secret_set(
-    profile_id: String,
-    api_key: String,
-) -> Result<Value, CoreError> {
+pub(crate) fn config_secret_set(profile_id: String, api_key: String) -> Result<Value, CoreError> {
     let path = profile_secret_path(&profile_id).map_err(profile_id_err)?;
     let key = normalize_config_value(api_key);
     if key.is_empty() {

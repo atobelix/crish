@@ -6,9 +6,12 @@
 //! 类型约束（02 §六.9）：每流恰好一个 `stop`，且 stop 之后不得再有任何事件；
 //! 由 [StreamParser] 状态机包装器保证——收到第二个 stop 返回错误。
 
+use conex_types::error::ProviderErrorKind;
 use conex_types::tool::ProviderDiagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::error::classify_provider_error;
 
 /// stop 原因（02 §1.1：stop|tool-call|length|error）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,6 +31,16 @@ pub enum StopReason {
 ///
 /// 字段序列化为 camelCase（promptTokens/completionTokens/…）；wire 层的
 /// `prompt_tokens??input_tokens` 归一（02 §2.5）由解析层负责，本类型不感知。
+///
+/// T3.4（G1-d）归一化口径裁决：`prompt_tokens` **保持 provider 原始上报值**
+/// （不做 cached/write 减法改写），与 session-loop `stream.rs` 的 ProviderUsage
+/// 语义一致；归一化 `input = prompt - cached_read - cache_write` 作为派生量
+/// 在 usage 聚合层经 [ProviderUsage::cache_breakdown] 收敛（C9 口径真源）——
+/// Included 轨（chat/responses）下 `CacheBreakdown.miss` 即归一 input；
+/// Excluded 轨（anthropic/gemini）下 `miss = prompt`、`input_total = prompt + read + write`。
+/// reasoning 已从 completion 侧独立解析（各轨 parser 填入 reasoning_tokens），
+/// completion_tokens 保留总输出（含思考），归一不把 reasoning 从 completion 减去
+/// （对齐 pi-ai parseChunkUsage：output 保留 completion 总量）。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderUsage {
@@ -251,9 +264,32 @@ pub enum ProviderStreamEvent {
         /// 错误文案（reason=error 时携带）
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        /// 错误分类（reason=error 时携带；G1-c / 轮次 3 T3.3）
+        ///
+        /// 流中错误经统一分类管线归类后的 [ProviderErrorKind] 13 类：
+        /// - 读取错误（error 帧 / 传输 / 超时）→ 按 [classify_provider_error] 分类；
+        /// - 解析层保护错误（空流 / 无终态帧 / invalid-stream）→ [ProviderErrorKind::Unknown]
+        ///   （不可重试语义保持）；
+        /// - 无错误（stop/tool-call/length）→ None。
+        ///
+        /// Option + `#[serde(default)]`：缺省为 None，既有消费方（session-loop stream.rs
+        /// :149-162、适配层 to_loop_event）编译与 wire 形状不受影响，对接时透传。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error_kind: Option<ProviderErrorKind>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         usage: Option<ProviderUsage>,
     },
+}
+
+/// 流中错误的 error_kind 分类（G1-c / 轮次 3 T3.3；Stop 事件构造点统一入口）
+///
+/// - 提供方 error 帧文案（读取/服务端错误）→ 走 [classify_provider_error] 统一分类
+///   管线（消息模式兜底），与 consume 侧任务书 D7 §3.7 的 metadata.providerErrorKind
+///   分类同源镜像，保证 Stop.error_kind 与消费侧分类一致；
+/// - 解析层保护错误（空流、无终态帧等）不调用本函数，由构造点直接给
+///   [ProviderErrorKind::Unknown]。
+pub fn stream_error_kind(message: &str) -> ProviderErrorKind {
+    classify_provider_error(None, Some(message), None, None).kind()
 }
 
 /// 流状态（[StreamParser] 内部状态机）
@@ -343,6 +379,7 @@ mod tests {
         ProviderStreamEvent::Stop {
             reason,
             error: None,
+            error_kind: None,
             usage: None,
         }
     }
@@ -503,6 +540,85 @@ mod tests {
         }
     }
 
+    /// G1-c（T3.3）：无错误的 Stop → error_kind 缺省 None，wire 上省略（向后兼容）
+    #[test]
+    fn stop_without_error_kind_is_none_and_omitted() {
+        let event = ProviderStreamEvent::Stop {
+            reason: StopReason::Stop,
+            error: None,
+            error_kind: None,
+            usage: None,
+        };
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({ "type": "stop", "reason": "stop" }),
+            "无错误的 Stop 不应携带 errorKind 字段"
+        );
+        // 反向：缺 errorKind 字段的 Stop JSON 能按 Option 缺省反序列化成功
+        let back: ProviderStreamEvent =
+            serde_json::from_str(r#"{"type":"stop","reason":"stop"}"#).unwrap();
+        assert!(matches!(back, ProviderStreamEvent::Stop { .. }));
+    }
+
+    /// G1-c（T3.3）：error_kind wire 名称为 camelCase errorKind、值为 kebab-case 13 类
+    #[test]
+    fn stop_error_kind_wire_name_and_values() {
+        for kind in [
+            ProviderErrorKind::Unknown,
+            ProviderErrorKind::Timeout,
+            ProviderErrorKind::Network,
+            ProviderErrorKind::Aborted,
+            ProviderErrorKind::RateLimit,
+            ProviderErrorKind::ServerError,
+        ] {
+            let event = ProviderStreamEvent::Stop {
+                reason: StopReason::Error,
+                error: Some("err".into()),
+                error_kind: Some(kind),
+                usage: None,
+            };
+            let value = serde_json::to_value(&event).unwrap();
+            assert_eq!(value["reason"], "error");
+            assert!(value.get("errorKind").is_some(), "error_kind 应序列化");
+            // roundtrip 后 error_kind 还原
+            let back: ProviderStreamEvent = serde_json::from_value(value.clone()).unwrap();
+            let ProviderStreamEvent::Stop {
+                error_kind, ..
+            } = back
+            else {
+                panic!("应为 Stop");
+            };
+            assert_eq!(error_kind, Some(kind), "roundtrip 后 error_kind 应还原");
+        }
+    }
+
+    /// G1-c（T3.3）：流中读取/服务端错误文案 → 走 classify_provider_error 分类
+    #[test]
+    fn stream_error_kind_classifies_read_error() {
+        assert_eq!(
+            stream_error_kind("rate limit exceeded: please retry after 5s"),
+            ProviderErrorKind::RateLimit
+        );
+        assert_eq!(
+            stream_error_kind("the server is overloaded, try again later"),
+            ProviderErrorKind::ServerError
+        );
+        assert_eq!(
+            stream_error_kind("request timed out after 30 seconds"),
+            ProviderErrorKind::Timeout
+        );
+        assert_eq!(
+            stream_error_kind("fetch failed: the connection was reset"),
+            ProviderErrorKind::Network
+        );
+        // 不可分类文案兜底 Unknown（不可重试语义保持）
+        assert_eq!(
+            stream_error_kind("provider emitted a brand-new opaque message"),
+            ProviderErrorKind::Unknown
+        );
+    }
+
     #[test]
     fn usage_serializes_camel_case() {
         let usage = ProviderUsage {
@@ -543,6 +659,7 @@ mod tests {
         let event = ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: Some("boom".into()),
+            error_kind: Some(ProviderErrorKind::Unknown),
             usage: Some(ProviderUsage {
                 prompt_tokens: Some(1),
                 ..ProviderUsage::default()
@@ -550,6 +667,7 @@ mod tests {
         };
         let value = serde_json::to_value(&event).unwrap();
         assert_eq!(value["error"], "boom");
+        assert_eq!(value["errorKind"], "unknown");
         assert_eq!(value["usage"]["promptTokens"], 1);
     }
 

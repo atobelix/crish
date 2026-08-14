@@ -133,8 +133,8 @@ pub use intent::{
     RunTerminationSource,
 };
 pub use online::{
-    device_activity, is_device_online, DeviceActivity, DevicePresenceSource,
-    MemoryPresenceSource, PRESENCE_TIMEOUT_MS,
+    device_activity, is_device_online, DeviceActivity, DevicePresenceSource, MemoryPresenceSource,
+    PRESENCE_TIMEOUT_MS,
 };
 pub use pending::{approval_id_for, PendingApprovalStore, StoredPendingApproval};
 pub use pusher::{
@@ -147,17 +147,15 @@ pub use quiet::{
 };
 pub use scenes::SceneId;
 pub use schema::{
-    message_from_decision, scene_category, scene_channel_id, scene_collapse_key,
-    scene_event_type, scene_target, ws_push_body, PushMessage, PushTarget, PUSH_SCHEMA_VERSION,
-    WS_PUSH_KIND,
+    message_from_decision, scene_category, scene_channel_id, scene_collapse_key, scene_event_type,
+    scene_target, ws_push_body, PushMessage, PushTarget, PUSH_SCHEMA_VERSION, WS_PUSH_KIND,
 };
 pub use throttle::{ThrottleDecision, ThrottleLimits, ThrottleTracker};
 pub use vendor::{
     ladder_delay_or, next_retry_delay, send_pending_batch, APNsCredentials, ApnsSender,
-    CredentialsProvider, DeviceResolver, EnvCredentialsProvider, HMSCredentials,
-    HmsSender, HmsTokenCache, MemoryDeviceResolver, PendingBatchReport, VendorDevice,
-    VendorError, VendorNotification, VendorPlatform, VendorPushChannel, VendorSendOutcome,
-    RETRY_LADDER_DELAYS,
+    CredentialsProvider, DeviceResolver, EnvCredentialsProvider, HMSCredentials, HmsSender,
+    HmsTokenCache, MemoryDeviceResolver, PendingBatchReport, VendorDevice, VendorError,
+    VendorNotification, VendorPlatform, VendorPushChannel, VendorSendOutcome, RETRY_LADDER_DELAYS,
 };
 
 /// 推送级别（D7 §3.1 四级定义中的前三级；P3 = 不推，由 `push_intent` 返回 None 表达）。

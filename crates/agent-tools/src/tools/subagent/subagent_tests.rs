@@ -6,9 +6,9 @@
 #![allow(clippy::disallowed_methods)]
 
 use super::*;
-use async_trait::async_trait;
 use crate::context::{AskChannel, AskDecision};
 use crate::definition::ToolError;
+use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -105,7 +105,6 @@ impl AskChannel for RecordingAskChannel {
         Ok(self.decision.clone())
     }
 }
-
 
 // ── 落库链路（conex-db dev-dependency，I3-S7 同款接线模式）────
 
@@ -231,9 +230,10 @@ impl DbSpawner {
             // 随 spawn 请求落库（model_override 扩展点预留不落库）
             task_type: req.task_type.map(|t| t.as_str().to_string()),
             display_label: req.display_label.clone(),
-            allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
-                serde_json::to_string(paths).expect("路径白名单序列化不应失败")
-            }),
+            allowed_write_paths_json: req
+                .allowed_write_paths
+                .as_ref()
+                .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
             // v9 新列（D-02 LK-04 并行契约）：测试替身行无子会话映射
             sub_session_id: None,
         }
@@ -325,11 +325,7 @@ impl SubagentSpawner for DbSpawner {
     }
 }
 
-fn request(
-    prompt: &str,
-    parent_session: &str,
-    parent_run: Option<&str>,
-) -> SubagentSpawnRequest {
+fn request(prompt: &str, parent_session: &str, parent_run: Option<&str>) -> SubagentSpawnRequest {
     SubagentSpawnRequest {
         agent_id: None,
         prompt: prompt.to_string(),
@@ -353,15 +349,15 @@ fn request(
 
 // ── 子域接线（SD-47 同款 `#[path]` 旁挂）──────────────────────────
 
-#[path = "subagent_tests_tool.rs"]
-mod tool_tests;
-#[path = "subagent_tests_batch.rs"]
-mod batch_tests;
-#[path = "subagent_tests_guard.rs"]
-mod guard_tests;
-#[path = "subagent_tests_filter.rs"]
-mod filter_tests;
-#[path = "subagent_tests_db.rs"]
-mod db_tests;
 #[path = "subagent_tests_atomic.rs"]
 mod atomic_tests;
+#[path = "subagent_tests_batch.rs"]
+mod batch_tests;
+#[path = "subagent_tests_db.rs"]
+mod db_tests;
+#[path = "subagent_tests_filter.rs"]
+mod filter_tests;
+#[path = "subagent_tests_guard.rs"]
+mod guard_tests;
+#[path = "subagent_tests_tool.rs"]
+mod tool_tests;

@@ -3,10 +3,10 @@
 //! 错误统一 `CoreError`（IPC 面唯一协议）：内部 `HostOpenerError` 经
 //! `to_core_error` 映射后上抛；红线拦截（PermissionDenied）→ `InvalidInput`。
 
-pub(crate) mod types;
 pub(crate) mod discovery;
-pub(crate) mod resolve;
 pub(crate) mod execute;
+pub(crate) mod resolve;
+pub(crate) mod types;
 
 use conex_types::CoreError;
 
@@ -85,12 +85,9 @@ mod tests {
 
     #[test]
     fn unavailable_editor_candidates_report_reason_without_blocking_discovery() {
-        let discovered = super::discovery::discover_host_openers_with(
-            None,
-            env_lookup(&[]),
-            exists_lookup(&[]),
-        )
-        .expect("host opener discovery");
+        let discovered =
+            super::discovery::discover_host_openers_with(None, env_lookup(&[]), exists_lookup(&[]))
+                .expect("host opener discovery");
         let editor = discovered
             .iter()
             .find(|opener| opener.id == "cursor")

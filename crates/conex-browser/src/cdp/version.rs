@@ -105,14 +105,11 @@ impl VersionTracker {
             return;
         };
         // tab 解析优先级：事件自带 tab（TargetDestroyed）→ 会话映射 → 会话兜底
-        let tab = spec
-            .tab
-            .clone()
-            .or_else(|| {
-                spec.session
-                    .as_ref()
-                    .map(|s| self.tab_of(s).unwrap_or_else(|| s.clone()))
-            });
+        let tab = spec.tab.clone().or_else(|| {
+            spec.session
+                .as_ref()
+                .map(|s| self.tab_of(s).unwrap_or_else(|| s.clone()))
+        });
         let Some(tab) = tab else {
             return;
         };
@@ -160,7 +157,9 @@ impl VersionTracker {
         }
         let epoch = self.epoch.fetch_add(1, Ordering::Relaxed) + 1;
         let _ = self.watch_tx.send(inner.tabs.clone());
-        let _ = self.bus_tx.send(BrowserEvent::VersionReset { epoch, reason });
+        let _ = self
+            .bus_tx
+            .send(BrowserEvent::VersionReset { epoch, reason });
     }
 
     /// 版本跟踪器自身 Lagged 的重对齐（U-2）：全量失效 + epoch 跳变。
@@ -529,7 +528,11 @@ mod tests {
 
         // 窗口到期后不得重复提交
         tokio::time::sleep(Duration::from_millis(550)).await;
-        assert_eq!(tracker.snapshot_version("tab-1"), 2, "窗口已清，不得重复提交");
+        assert_eq!(
+            tracker.snapshot_version("tab-1"),
+            2,
+            "窗口已清，不得重复提交"
+        );
     }
 
     /// 验收 9.1-18：console/network/滚动/心跳 → 版本不变
@@ -636,7 +639,10 @@ mod tests {
 
         tracker.bump("tab-1", VersionReason::ActionDone);
         assert!(tracker.validate_snapshot("tab-1", 1).is_ok());
-        assert!(tracker.validate_snapshot("tab-1", 0).is_err(), "旧版本应 Stale");
+        assert!(
+            tracker.validate_snapshot("tab-1", 0).is_err(),
+            "旧版本应 Stale"
+        );
         // 先消费 bump 的 VersionAdvanced
         let _ = rx.recv().await.expect("应广播 VersionAdvanced");
 
@@ -671,13 +677,20 @@ mod tests {
         // 计数严格按标签独立
         assert_eq!(tracker.snapshot_version("tab-1"), 3);
         assert_eq!(tracker.snapshot_version("tab-2"), 2);
-        assert_eq!(tracker.snapshot_version("tab-未出现"), 0, "未出现标签不得有版本");
+        assert_eq!(
+            tracker.snapshot_version("tab-未出现"),
+            0,
+            "未出现标签不得有版本"
+        );
         // 广播的 VersionAdvanced 必须携带各自 tab_id（跨标签不串号）
         let mut advanced = 0;
         for _ in 0..5 {
             match rx.recv().await {
                 Ok(BrowserEvent::VersionAdvanced { tab_id, .. }) => {
-                    assert!(tab_id == "tab-1" || tab_id == "tab-2", "tab_id 必须正确：{tab_id}");
+                    assert!(
+                        tab_id == "tab-1" || tab_id == "tab-2",
+                        "tab_id 必须正确：{tab_id}"
+                    );
                     advanced += 1;
                 }
                 other => panic!("应收到 VersionAdvanced：{other:?}"),
@@ -715,7 +728,11 @@ mod tests {
             accepted: true,
         });
         assert_eq!(tracker.snapshot_version("tab-1"), 4);
-        assert_eq!(tracker.snapshot_version("tab-2"), 1, "s1 对话框不得污染 tab-2");
+        assert_eq!(
+            tracker.snapshot_version("tab-2"),
+            1,
+            "s1 对话框不得污染 tab-2"
+        );
 
         // 顺序 DOM 窗口：窗口各自闭合后，两标签各推进一次（跨标签互不合并）
         tracker.on_event(&dom_event("s1"));
@@ -741,11 +758,19 @@ mod tests {
     async fn version_target_destroyed_cross_tab() {
         let (tracker, _bus) = test_tracker(VERSION_BUMP_COALESCE);
         tracker.bump("tab-1", VersionReason::InputInjected);
-        tracker.on_event(&BrowserEvent::TargetDestroyed { target_id: "tab-2".to_string() });
-        assert_eq!(tracker.snapshot_version("tab-1"), 1, "tab-2 关闭不得推进 tab-1");
+        tracker.on_event(&BrowserEvent::TargetDestroyed {
+            target_id: "tab-2".to_string(),
+        });
+        assert_eq!(
+            tracker.snapshot_version("tab-1"),
+            1,
+            "tab-2 关闭不得推进 tab-1"
+        );
         assert_eq!(tracker.snapshot_version("tab-2"), 1, "tab-2 关闭即时 +1");
         // 再关 tab-1 → 各自 +1（独立计数链）
-        tracker.on_event(&BrowserEvent::TargetDestroyed { target_id: "tab-1".to_string() });
+        tracker.on_event(&BrowserEvent::TargetDestroyed {
+            target_id: "tab-1".to_string(),
+        });
         assert_eq!(tracker.snapshot_version("tab-1"), 2);
         assert_eq!(tracker.snapshot_version("tab-2"), 1);
     }
@@ -761,11 +786,19 @@ mod tests {
         // iframe 导航（归窗口）→ 提交后落在 tab-1
         tracker.on_event(&nav_event("s-iframe", false));
         tokio::time::sleep(Duration::from_millis(80)).await;
-        assert_eq!(tracker.snapshot_version("tab-1"), 1, "iframe 会话导航累计到同一标签");
+        assert_eq!(
+            tracker.snapshot_version("tab-1"),
+            1,
+            "iframe 会话导航累计到同一标签"
+        );
         // 主 frame 导航（即时面）→ 同一标签再 +1
         tracker.on_event(&nav_event("s-main", true));
         assert_eq!(tracker.snapshot_version("tab-1"), 2);
-        assert_eq!(tracker.snapshot_version("tab-2"), 0, "未登记会话不得产生版本");
+        assert_eq!(
+            tracker.snapshot_version("tab-2"),
+            0,
+            "未登记会话不得产生版本"
+        );
     }
 
     /// validate_snapshot 的 per-tab 独立性：一标签的推进不使另一标签的合法版本失效。
@@ -779,7 +812,10 @@ mod tests {
         assert!(tracker.validate_snapshot("tab-1", 2).is_ok());
         assert!(tracker.validate_snapshot("tab-1", 1).is_err());
         // tab-2 当前 1：tab-1 的推进不影响它
-        assert!(tracker.validate_snapshot("tab-2", 1).is_ok(), "tab-1 推进不得失效 tab-2");
+        assert!(
+            tracker.validate_snapshot("tab-2", 1).is_ok(),
+            "tab-1 推进不得失效 tab-2"
+        );
         assert!(tracker.validate_snapshot("tab-2", 0).is_err());
     }
 
@@ -802,14 +838,21 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(80)).await;
         assert_eq!(tracker.snapshot_version("tab-1"), 1, "tab-1 窗口独立提交");
-        assert_eq!(tracker.snapshot_version("tab-2"), 1, "tab-2 窗口独立提交（H2：不得被吞掉）");
+        assert_eq!(
+            tracker.snapshot_version("tab-2"),
+            1,
+            "tab-2 窗口独立提交（H2：不得被吞掉）"
+        );
 
         // 恰好两个 VersionAdvanced，各自携带正确的 tab_id
         let mut advanced = 0;
         for _ in 0..2 {
             match rx.recv().await {
                 Ok(BrowserEvent::VersionAdvanced { tab_id, .. }) => {
-                    assert!(tab_id == "tab-1" || tab_id == "tab-2", "tab_id 必须正确：{tab_id}");
+                    assert!(
+                        tab_id == "tab-1" || tab_id == "tab-2",
+                        "tab_id 必须正确：{tab_id}"
+                    );
                     advanced += 1;
                 }
                 other => panic!("应收到 VersionAdvanced：{other:?}"),

@@ -38,7 +38,8 @@ use crate::summary_document::validate_summary_document;
 pub const SUMMARY_TEMPLATE_HEADER: &str = "## 压缩摘要";
 
 /// 五字段清单（固定顺序；校验与提示词均以此为准）
-pub const SUMMARY_TEMPLATE_FIELDS: [&str; 5] = ["任务目标", "已完成", "待办", "关键决策", "文件清单"];
+pub const SUMMARY_TEMPLATE_FIELDS: [&str; 5] =
+    ["任务目标", "已完成", "待办", "关键决策", "文件清单"];
 
 /// 无内容字段的占位写法（模板语义：字段不得省略）
 pub const SUMMARY_EMPTY_FIELD_MARKER: &str = "(none)";
@@ -89,7 +90,10 @@ pub fn validate_structured_summary(text: &str) -> Result<(), String> {
     let mut missing: Vec<&str> = Vec::new();
     for field in SUMMARY_TEMPLATE_FIELDS {
         let prefix = format!("- {field}：");
-        if !text.lines().any(|line| line.trim_start().starts_with(&prefix)) {
+        if !text
+            .lines()
+            .any(|line| line.trim_start().starts_with(&prefix))
+        {
             missing.push(field);
         }
     }
@@ -111,8 +115,7 @@ fn render_message_text(message: &AgentMessage) -> String {
             AgentMessageBlock::ToolCall(call) => {
                 out.push_str(&format!(
                     "\n[工具调用] {} 入参：{}",
-                    call.tool_name,
-                    call.input
+                    call.tool_name, call.input
                 ));
             }
             AgentMessageBlock::ToolResult {
@@ -557,10 +560,7 @@ mod tests {
                 state.last = Some(clone);
                 item
             } else {
-                state
-                    .last
-                    .clone()
-                    .expect("脚本必须至少有一项且已被消费")
+                state.last.clone().expect("脚本必须至少有一项且已被消费")
             }
         }
     }
@@ -605,7 +605,8 @@ mod tests {
         let no_header = five_field_summary().replace(SUMMARY_TEMPLATE_HEADER, "## 摘要");
         assert!(validate_structured_summary(&no_header).is_err());
         // 缺一个字段
-        let no_file_list = five_field_summary().replace("- 文件清单：crates/conex-compaction/src/lib.rs", "");
+        let no_file_list =
+            five_field_summary().replace("- 文件清单：crates/conex-compaction/src/lib.rs", "");
         let err = validate_structured_summary(&no_file_list).unwrap_err();
         assert!(err.contains("文件清单"), "缺项说明须点名缺失字段：{err}");
         // 空字符串
@@ -691,7 +692,10 @@ mod tests {
     #[test]
     fn acceptable_summary_accepts_valid_template_and_schema_json() {
         let summary = five_field_summary();
-        assert!(is_degenerate_summary(&summary, 500), "模板文档通常短于 500 字符");
+        assert!(
+            is_degenerate_summary(&summary, 500),
+            "模板文档通常短于 500 字符"
+        );
         assert!(is_acceptable_summary(&summary, 500), "结构完整即视为有效");
         // Schema V1 JSON：短而完整（12 required 字段）不得被字符下限拒绝
         let json = serde_json::json!({
@@ -919,18 +923,41 @@ mod tests {
     #[test]
     fn retry_guard_wrapper_success_into_engine() {
         let guard = RetryGuardSummarizer::new(
-            Box::new(ScriptedSummarizer::new(vec![Ok(summary_doc_json("实现双阈值压缩"))])),
+            Box::new(ScriptedSummarizer::new(vec![Ok(summary_doc_json(
+                "实现双阈值压缩",
+            ))])),
             SummaryRetryPolicy::default(),
             empty_wait(),
         );
         let engine = CompactionEngine::new(0);
         let messages = vec![
-            amsg("u1", AgentMessageRole::User, "2026-08-04T10:00:00.000Z", vec![text_block(&"长".repeat(100))]),
-            amsg("a1", AgentMessageRole::Assistant, "2026-08-04T10:00:01.000Z", vec![text_block(&"长".repeat(100))]),
-            amsg("u2", AgentMessageRole::User, "2026-08-04T10:00:02.000Z", vec![text_block("keep")]),
-            amsg("a2", AgentMessageRole::Assistant, "2026-08-04T10:00:03.000Z", vec![text_block("keep")]),
+            amsg(
+                "u1",
+                AgentMessageRole::User,
+                "2026-08-04T10:00:00.000Z",
+                vec![text_block(&"长".repeat(100))],
+            ),
+            amsg(
+                "a1",
+                AgentMessageRole::Assistant,
+                "2026-08-04T10:00:01.000Z",
+                vec![text_block(&"长".repeat(100))],
+            ),
+            amsg(
+                "u2",
+                AgentMessageRole::User,
+                "2026-08-04T10:00:02.000Z",
+                vec![text_block("keep")],
+            ),
+            amsg(
+                "a2",
+                AgentMessageRole::Assistant,
+                "2026-08-04T10:00:03.000Z",
+                vec![text_block("keep")],
+            ),
         ];
-        let keep = crate::count_agent_message_tokens(&messages[2]) + crate::count_agent_message_tokens(&messages[3]);
+        let keep = crate::count_agent_message_tokens(&messages[2])
+            + crate::count_agent_message_tokens(&messages[3]);
         let policy = CompactionPolicy {
             keep_recent_tokens: keep,
             min_recent_turns: 1,
@@ -942,14 +969,20 @@ mod tests {
         assert!(plan.summary.contains("## Goal"));
         assert!(plan.summary.contains("实现双阈值压缩"));
         // 摘要消息入对话（system 后、保留段前）
-        assert!(plan.messages.iter().any(|m| m.id.starts_with("compacted-summary")));
+        assert!(plan
+            .messages
+            .iter()
+            .any(|m| m.id.starts_with("compacted-summary")));
         // metadata 快照：LLM 成功 → committed
         let summary_msg = plan
             .messages
             .iter()
             .find(|m| m.id.starts_with("compacted-summary"))
             .expect("摘要消息须入对话");
-        assert_eq!(summary_msg.metadata.as_ref().unwrap()["summary"]["state"], "committed");
+        assert_eq!(
+            summary_msg.metadata.as_ref().unwrap()["summary"]["state"],
+            "committed"
+        );
         // last_outcome 留痕（成功、无降级）
         let outcome = guard.last_outcome().expect("护栏须记录最近一次结果");
         assert!(!outcome.degraded);
@@ -971,12 +1004,33 @@ mod tests {
         );
         let engine = CompactionEngine::new(0);
         let messages = vec![
-            amsg("u1", AgentMessageRole::User, "2026-08-04T10:00:00.000Z", vec![text_block(&"长".repeat(100))]),
-            amsg("a1", AgentMessageRole::Assistant, "2026-08-04T10:00:01.000Z", vec![text_block(&"长".repeat(100))]),
-            amsg("u2", AgentMessageRole::User, "2026-08-04T10:00:02.000Z", vec![text_block("keep")]),
-            amsg("a2", AgentMessageRole::Assistant, "2026-08-04T10:00:03.000Z", vec![text_block("keep")]),
+            amsg(
+                "u1",
+                AgentMessageRole::User,
+                "2026-08-04T10:00:00.000Z",
+                vec![text_block(&"长".repeat(100))],
+            ),
+            amsg(
+                "a1",
+                AgentMessageRole::Assistant,
+                "2026-08-04T10:00:01.000Z",
+                vec![text_block(&"长".repeat(100))],
+            ),
+            amsg(
+                "u2",
+                AgentMessageRole::User,
+                "2026-08-04T10:00:02.000Z",
+                vec![text_block("keep")],
+            ),
+            amsg(
+                "a2",
+                AgentMessageRole::Assistant,
+                "2026-08-04T10:00:03.000Z",
+                vec![text_block("keep")],
+            ),
         ];
-        let keep = crate::count_agent_message_tokens(&messages[2]) + crate::count_agent_message_tokens(&messages[3]);
+        let keep = crate::count_agent_message_tokens(&messages[2])
+            + crate::count_agent_message_tokens(&messages[3]);
         let policy = CompactionPolicy {
             keep_recent_tokens: keep,
             min_recent_turns: 1,
@@ -1004,18 +1058,46 @@ mod tests {
     #[test]
     fn covers_up_to_turn_counts_dropped_user_turns() {
         let dropped = vec![
-            amsg("s1", AgentMessageRole::System, "2026-08-04T10:00:00.000Z", vec![text_block("system")]),
-            amsg("u1", AgentMessageRole::User, "2026-08-04T10:00:01.000Z", vec![text_block("第一轮")]),
-            amsg("a1", AgentMessageRole::Assistant, "2026-08-04T10:00:02.000Z", vec![text_block("答复一")]),
-            amsg("u2", AgentMessageRole::User, "2026-08-04T10:00:03.000Z", vec![text_block("第二轮")]),
-            amsg("a2", AgentMessageRole::Assistant, "2026-08-04T10:00:04.000Z", vec![text_block("答复二")]),
+            amsg(
+                "s1",
+                AgentMessageRole::System,
+                "2026-08-04T10:00:00.000Z",
+                vec![text_block("system")],
+            ),
+            amsg(
+                "u1",
+                AgentMessageRole::User,
+                "2026-08-04T10:00:01.000Z",
+                vec![text_block("第一轮")],
+            ),
+            amsg(
+                "a1",
+                AgentMessageRole::Assistant,
+                "2026-08-04T10:00:02.000Z",
+                vec![text_block("答复一")],
+            ),
+            amsg(
+                "u2",
+                AgentMessageRole::User,
+                "2026-08-04T10:00:03.000Z",
+                vec![text_block("第二轮")],
+            ),
+            amsg(
+                "a2",
+                AgentMessageRole::Assistant,
+                "2026-08-04T10:00:04.000Z",
+                vec![text_block("答复二")],
+            ),
         ];
         // 丢弃段含 u1/a1/u2/a2 → 覆盖到第 2 轮
         assert_eq!(covers_up_to_turn_for_dropped(&flat(&dropped)), Some(2));
         // 丢弃段无用户消息 → None
-        let no_user = vec![
-            amsg("a1", AgentMessageRole::Assistant, "2026-08-04T10:00:00.000Z", vec![text_block("x")]),
-        ];
+        let no_user = vec![amsg(
+            "a1",
+            AgentMessageRole::Assistant,
+            "2026-08-04T10:00:00.000Z",
+            vec![text_block("x")],
+        )];
         assert_eq!(covers_up_to_turn_for_dropped(&flat(&no_user)), None);
         assert_eq!(covers_up_to_turn_for_dropped(&[]), None);
     }
@@ -1024,8 +1106,18 @@ mod tests {
     #[test]
     fn compaction_event_details_payload_shape() {
         let dropped = vec![
-            amsg("u1", AgentMessageRole::User, "2026-08-04T10:00:00.000Z", vec![text_block("第一轮")]),
-            amsg("a1", AgentMessageRole::Assistant, "2026-08-04T10:00:01.000Z", vec![text_block("答复")]),
+            amsg(
+                "u1",
+                AgentMessageRole::User,
+                "2026-08-04T10:00:00.000Z",
+                vec![text_block("第一轮")],
+            ),
+            amsg(
+                "a1",
+                AgentMessageRole::Assistant,
+                "2026-08-04T10:00:01.000Z",
+                vec![text_block("答复")],
+            ),
         ];
         let value = compaction_event_details(&flat(&dropped), true, 3);
         let map = value.as_object().expect("载荷必须是 JSON 对象");
@@ -1037,7 +1129,8 @@ mod tests {
         let value = compaction_event_details(&[], false, 1);
         assert_eq!(value.get("coversUpToTurn"), Some(&serde_json::Value::Null));
         // 序列化回环稳定（camelCase 字段名）
-        let roundtrip: serde_json::Value = serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
+        let roundtrip: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
         assert_eq!(roundtrip, value);
     }
 

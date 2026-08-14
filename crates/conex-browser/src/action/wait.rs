@@ -81,9 +81,7 @@ pub fn poll_interval_ms(cond: &WaitCondition, opts: &WaitOptions) -> u32 {
         return opts.poll_ms;
     }
     match cond {
-        WaitCondition::Element { .. } => {
-            POLL_ELEMENT_FLOOR_MS.max(SNAPSHOT_POLL_BUDGET_MS)
-        }
+        WaitCondition::Element { .. } => POLL_ELEMENT_FLOOR_MS.max(SNAPSHOT_POLL_BUDGET_MS),
         WaitCondition::NetworkIdle { .. } => POLL_NETWORK_MS,
         WaitCondition::Text(_) | WaitCondition::Url { .. } => POLL_TEXT_MS,
     }
@@ -143,9 +141,7 @@ pub async fn wait_for(
 /// NetworkIdle 静默窗口的轮询次数折算（quiet_ms / poll_ms，至少 1）。
 fn quiet_polls_for(cond: &WaitCondition, poll_ms: u32) -> u32 {
     match cond {
-        WaitCondition::NetworkIdle { quiet_ms } => {
-            ((*quiet_ms).max(1) / poll_ms.max(1)).max(1)
-        }
+        WaitCondition::NetworkIdle { quiet_ms } => ((*quiet_ms).max(1) / poll_ms.max(1)).max(1),
         _ => 0,
     }
 }
@@ -182,12 +178,16 @@ async fn poll_condition(
         }
         WaitCondition::Element { index } => {
             // 快照重拍轮询（T-7）；重拍失败（预算超限）→ 按超时处理（§6.2）
-            let version = exec.snapshot.take_snapshot(&opts.tab_id).await.map_err(|e| {
-                ActionError::new(
-                    ActionErrorKind::Timeout,
-                    format!("wait_for 元素快照重拍失败：{}", e.message),
-                )
-            })?;
+            let version = exec
+                .snapshot
+                .take_snapshot(&opts.tab_id)
+                .await
+                .map_err(|e| {
+                    ActionError::new(
+                        ActionErrorKind::Timeout,
+                        format!("wait_for 元素快照重拍失败：{}", e.message),
+                    )
+                })?;
             let Some(meta) = exec
                 .snapshot
                 .element_by_index(&opts.tab_id, version, *index)
@@ -216,10 +216,10 @@ async fn poll_condition(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::action::mocks::*;
     use crate::action::{ActionExecutor, ElementMeta};
     use crate::cdp::sender::CancellationToken;
+    use async_trait::async_trait;
     use std::sync::Arc;
 
     fn exec_with(
@@ -228,13 +228,9 @@ mod tests {
     ) -> (ActionExecutor, MockOps, Arc<RecordingDelay>) {
         let token = CancellationToken::new();
         let delay = Arc::new(RecordingDelay::new());
-        let exec = ActionExecutor::new(
-            Arc::new(ops.clone()),
-            Arc::new(snapshot),
-            token,
-        )
-        .with_gate(Arc::new(AllowGate))
-        .with_delay(delay.clone());
+        let exec = ActionExecutor::new(Arc::new(ops.clone()), Arc::new(snapshot), token)
+            .with_gate(Arc::new(AllowGate))
+            .with_delay(delay.clone());
         (exec, ops, delay)
     }
 
@@ -248,9 +244,12 @@ mod tests {
         let ops = MockOps::new();
         ops.state.lock().unwrap().text_match = true;
         let (exec, _ops, _delay) = exec_with(ops, MockSnapshotStore::new(1));
-        exec.wait_for(WaitCondition::Text("你好".to_string()), opts(&WaitCondition::Text("你好".to_string())))
-            .await
-            .expect("文本应命中");
+        exec.wait_for(
+            WaitCondition::Text("你好".to_string()),
+            opts(&WaitCondition::Text("你好".to_string())),
+        )
+        .await
+        .expect("文本应命中");
     }
 
     /// 文本超时：恒 false → Timeout。
@@ -270,11 +269,20 @@ mod tests {
         let ops = MockOps::new();
         ops.state.lock().unwrap().url = "https://example.com/login?next=/home".to_string();
         let (exec, ops, _delay) = exec_with(ops, MockSnapshotStore::new(1));
-        exec.wait_for(WaitCondition::Url { contains: "/home".to_string() }, opts(&WaitCondition::Url { contains: "/home".to_string() }))
-            .await
-            .expect("URL 子串应命中");
+        exec.wait_for(
+            WaitCondition::Url {
+                contains: "/home".to_string(),
+            },
+            opts(&WaitCondition::Url {
+                contains: "/home".to_string(),
+            }),
+        )
+        .await
+        .expect("URL 子串应命中");
         // 非命中 → 超时
-        let cond = WaitCondition::Url { contains: "other".to_string() };
+        let cond = WaitCondition::Url {
+            contains: "other".to_string(),
+        };
         let mut options = opts(&cond);
         options = options.with_timeout_ms(10).with_poll_ms(5);
         let err = exec.wait_for(cond, options).await.expect_err("应超时");
@@ -290,10 +298,7 @@ mod tests {
         let cond = WaitCondition::NetworkIdle { quiet_ms: 30 };
         let mut options = opts(&cond);
         options = options.with_timeout_ms(5000).with_poll_ms(10);
-        let result = exec
-            .wait_for(cond, options)
-            .await
-            .expect("应命中空闲");
+        let result = exec.wait_for(cond, options).await.expect("应命中空闲");
         assert!(!result.navigated);
         // 3 次连续零在途轮询 → 2 次轮询间隔（第 3 次命中）
         assert_eq!(delay.durations().len(), 2, "应轮询 3 次（2 间隔 + 命中）");
@@ -305,10 +310,13 @@ mod tests {
     async fn element_condition_hit() {
         let (exec, _ops, _delay) = exec_with(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let cond = WaitCondition::Element { index: 0 };
         let mut options = opts(&cond);
@@ -319,17 +327,26 @@ mod tests {
     /// 元素中途版本失效：重拍失败（快照预算超限）→ 按超时处理（§6.2）。
     #[tokio::test]
     async fn element_condition_snapshot_failure_timeout() {
-        let snapshot = MockSnapshotStore::with_elements(1, &[ElementMeta {
-            backend_node_id: 11,
-            is_password: false,
-        }]);
-        snapshot.state.lock().unwrap().take_errors.push_back(
-            ActionError::new(ActionErrorKind::Timeout, "快照重拍超时"),
+        let snapshot = MockSnapshotStore::with_elements(
+            1,
+            &[ElementMeta {
+                backend_node_id: 11,
+                is_password: false,
+            }],
         );
+        snapshot
+            .state
+            .lock()
+            .unwrap()
+            .take_errors
+            .push_back(ActionError::new(ActionErrorKind::Timeout, "快照重拍超时"));
         let (exec, _ops, _delay) = exec_with(MockOps::new(), snapshot);
         let cond = WaitCondition::Element { index: 0 };
         let options = opts(&cond);
-        let err = exec.wait_for(cond, options).await.expect_err("重拍失败应按超时");
+        let err = exec
+            .wait_for(cond, options)
+            .await
+            .expect_err("重拍失败应按超时");
         assert_eq!(err.kind, ActionErrorKind::Timeout);
     }
 
@@ -369,14 +386,14 @@ mod tests {
     #[test]
     fn text_poll_injection_roundtrip() {
         let cases = [
-            r#"a"b"#,               // 双引号
-            r#"a\b"#,               // 反斜杠
-            "line1\nline2\t\"x\"",  // 换行/制表
-            r#"${alert(1)}"#,       // 模板插值尝试
+            r#"a"b"#,                                // 双引号
+            r#"a\b"#,                                // 反斜杠
+            "line1\nline2\t\"x\"",                   // 换行/制表
+            r#"${alert(1)}"#,                        // 模板插值尝试
             r#"</script><script>alert(1)</script>"#, // JS 片段
-            r#"', alert(1), '"#,    // 引号逃逸尝试
-            r#"")); eval("pwned"); //"#, // 括号逃逸
-            "中文\n'\"\\",           // 中文 + 转义混排
+            r#"', alert(1), '"#,                     // 引号逃逸尝试
+            r#"")); eval("pwned"); //"#,             // 括号逃逸
+            "中文\n'\"\\",                           // 中文 + 转义混排
         ];
         for input in cases {
             let expr = text_poll_expression(input);
@@ -403,10 +420,20 @@ mod tests {
     /// 模板结构红线：占位符唯一、无反引号、无 eval/Function 形态。
     #[test]
     fn text_poll_template_structure() {
-        assert_eq!(TEXT_POLL_TEMPLATE.matches("%PARAM%").count(), 1, "占位符唯一");
-        assert!(!TEXT_POLL_TEMPLATE.contains('`'), "禁止反引号模板串（模板插值惰性面）");
+        assert_eq!(
+            TEXT_POLL_TEMPLATE.matches("%PARAM%").count(),
+            1,
+            "占位符唯一"
+        );
+        assert!(
+            !TEXT_POLL_TEMPLATE.contains('`'),
+            "禁止反引号模板串（模板插值惰性面）"
+        );
         assert!(!TEXT_POLL_TEMPLATE.contains("eval"), "模板不含 eval");
-        assert!(!TEXT_POLL_TEMPLATE.contains("new Function"), "模板不含构造面");
+        assert!(
+            !TEXT_POLL_TEMPLATE.contains("new Function"),
+            "模板不含构造面"
+        );
         // 序列化注入结果中 `${` 只能出现在双引号字面量内（模板无反引号 → 惰性）
         let expr = text_poll_expression(r#"${x}"#);
         assert!(expr.contains(r#""${x}""#), "模板插值应原样留在字面量内");
@@ -416,13 +443,24 @@ mod tests {
     /// 轮询间隔定值（T-7）：Element = max(200, 快照预算)；Text/Url = 100ms。
     #[test]
     fn poll_interval_defaults() {
-        let opts = WaitOptions::for_condition(&WaitCondition::Element { index: 0 }, "t1".to_string());
-        assert_eq!(poll_interval_ms(&WaitCondition::Element { index: 0 }, &opts), 2000);
-        let opts = WaitOptions::for_condition(&WaitCondition::Text("x".to_string()), "t1".to_string());
-        assert_eq!(poll_interval_ms(&WaitCondition::Text("x".to_string()), &opts), 100);
+        let opts =
+            WaitOptions::for_condition(&WaitCondition::Element { index: 0 }, "t1".to_string());
+        assert_eq!(
+            poll_interval_ms(&WaitCondition::Element { index: 0 }, &opts),
+            2000
+        );
+        let opts =
+            WaitOptions::for_condition(&WaitCondition::Text("x".to_string()), "t1".to_string());
+        assert_eq!(
+            poll_interval_ms(&WaitCondition::Text("x".to_string()), &opts),
+            100
+        );
         // 显式覆盖优先
         let opts = opts.with_poll_ms(77);
-        assert_eq!(poll_interval_ms(&WaitCondition::Text("x".to_string()), &opts), 77);
+        assert_eq!(
+            poll_interval_ms(&WaitCondition::Text("x".to_string()), &opts),
+            77
+        );
     }
 
     /// 超时默认值（§6.2）：Element/Text 10s；NetworkIdle/Url 30s。
@@ -430,11 +468,20 @@ mod tests {
     fn wait_timeout_defaults() {
         let el = WaitOptions::for_condition(&WaitCondition::Element { index: 0 }, "t1".to_string());
         assert_eq!(el.timeout_ms, 10_000);
-        let text = WaitOptions::for_condition(&WaitCondition::Text("x".to_string()), "t1".to_string());
+        let text =
+            WaitOptions::for_condition(&WaitCondition::Text("x".to_string()), "t1".to_string());
         assert_eq!(text.timeout_ms, 10_000);
-        let idle = WaitOptions::for_condition(&WaitCondition::NetworkIdle { quiet_ms: 500 }, "t1".to_string());
+        let idle = WaitOptions::for_condition(
+            &WaitCondition::NetworkIdle { quiet_ms: 500 },
+            "t1".to_string(),
+        );
         assert_eq!(idle.timeout_ms, 30_000);
-        let url = WaitOptions::for_condition(&WaitCondition::Url { contains: "x".to_string() }, "t1".to_string());
+        let url = WaitOptions::for_condition(
+            &WaitCondition::Url {
+                contains: "x".to_string(),
+            },
+            "t1".to_string(),
+        );
         assert_eq!(url.timeout_ms, 30_000);
     }
 
@@ -461,15 +508,41 @@ mod tests {
             POLL_ELEMENT_FLOOR_MS.max(SNAPSHOT_POLL_BUDGET_MS),
             "Element 间隔 = max(200ms, 快照预算)"
         );
-        let idle = WaitOptions::for_condition(&WaitCondition::NetworkIdle { quiet_ms: 500 }, "t1".to_string());
-        assert_eq!(poll_interval_ms(&WaitCondition::NetworkIdle { quiet_ms: 500 }, &idle), POLL_NETWORK_MS);
-        let text = WaitOptions::for_condition(&WaitCondition::Text("x".to_string()), "t1".to_string());
-        assert_eq!(poll_interval_ms(&WaitCondition::Text("x".to_string()), &text), POLL_TEXT_MS);
-        let url = WaitOptions::for_condition(&WaitCondition::Url { contains: "x".to_string() }, "t1".to_string());
-        assert_eq!(poll_interval_ms(&WaitCondition::Url { contains: "x".to_string() }, &url), POLL_TEXT_MS);
+        let idle = WaitOptions::for_condition(
+            &WaitCondition::NetworkIdle { quiet_ms: 500 },
+            "t1".to_string(),
+        );
+        assert_eq!(
+            poll_interval_ms(&WaitCondition::NetworkIdle { quiet_ms: 500 }, &idle),
+            POLL_NETWORK_MS
+        );
+        let text =
+            WaitOptions::for_condition(&WaitCondition::Text("x".to_string()), "t1".to_string());
+        assert_eq!(
+            poll_interval_ms(&WaitCondition::Text("x".to_string()), &text),
+            POLL_TEXT_MS
+        );
+        let url = WaitOptions::for_condition(
+            &WaitCondition::Url {
+                contains: "x".to_string(),
+            },
+            "t1".to_string(),
+        );
+        assert_eq!(
+            poll_interval_ms(
+                &WaitCondition::Url {
+                    contains: "x".to_string()
+                },
+                &url
+            ),
+            POLL_TEXT_MS
+        );
         // 显式覆盖（注入时钟入口）优先于条件默认
         let overridden = text.clone().with_poll_ms(77);
-        assert_eq!(poll_interval_ms(&WaitCondition::Text("x".to_string()), &overridden), 77);
+        assert_eq!(
+            poll_interval_ms(&WaitCondition::Text("x".to_string()), &overridden),
+            77
+        );
     }
 
     /// Text 超时路径的逐轮间隔记录：每次 sleep 都精确等于默认 100ms
@@ -484,7 +557,9 @@ mod tests {
         let durations = delay.durations();
         assert!(!durations.is_empty(), "超时前必须至少发起一次轮询");
         assert!(
-            durations.iter().all(|d| *d == Duration::from_millis(POLL_TEXT_MS as u64)),
+            durations
+                .iter()
+                .all(|d| *d == Duration::from_millis(POLL_TEXT_MS as u64)),
             "Text 每轮间隔必须为默认 100ms：{durations:?}"
         );
     }
@@ -496,7 +571,10 @@ mod tests {
         let (exec, _ops, delay) = exec_with(MockOps::new(), MockSnapshotStore::new(1));
         let cond = WaitCondition::Element { index: 99 };
         let options = WaitOptions::for_condition(&cond, "t1".to_string()).with_timeout_ms(30);
-        let err = exec.wait_for(cond, options).await.expect_err("索引不存在应超时");
+        let err = exec
+            .wait_for(cond, options)
+            .await
+            .expect_err("索引不存在应超时");
         assert_eq!(err.kind, ActionErrorKind::Timeout);
         let durations = delay.durations();
         assert!(!durations.is_empty());
@@ -532,7 +610,9 @@ mod tests {
 
     impl TakeThenFailStore {
         fn new() -> Self {
-            TakeThenFailStore { takes: std::sync::atomic::AtomicU8::new(0) }
+            TakeThenFailStore {
+                takes: std::sync::atomic::AtomicU8::new(0),
+            }
         }
 
         fn take_count(&self) -> u8 {
@@ -546,7 +626,11 @@ mod tests {
             0
         }
 
-        fn validate_snapshot(&self, _tab_id: &TabId, _version: u64) -> Result<(), crate::cdp::version::Stale> {
+        fn validate_snapshot(
+            &self,
+            _tab_id: &TabId,
+            _version: u64,
+        ) -> Result<(), crate::cdp::version::Stale> {
             Ok(())
         }
 
@@ -562,7 +646,12 @@ mod tests {
             }
         }
 
-        fn element_by_index(&self, _tab_id: &TabId, _version: u64, _index: usize) -> Option<ElementMeta> {
+        fn element_by_index(
+            &self,
+            _tab_id: &TabId,
+            _version: u64,
+            _index: usize,
+        ) -> Option<ElementMeta> {
             None
         }
 
@@ -584,7 +673,10 @@ mod tests {
         .with_delay(delay.clone());
         let cond = WaitCondition::Element { index: 0 };
         let options = WaitOptions::for_condition(&cond, "t1".to_string()).with_timeout_ms(60_000);
-        let err = exec.wait_for(cond, options).await.expect_err("重拍失败应按超时");
+        let err = exec
+            .wait_for(cond, options)
+            .await
+            .expect_err("重拍失败应按超时");
         assert_eq!(err.kind, ActionErrorKind::Timeout);
         assert_eq!(store.take_count(), 2, "首轮成功后第二轮失败");
         let durations = delay.durations();
@@ -607,13 +699,18 @@ mod tests {
             s.elements.insert(1, Vec::new());
             s.elements.insert(
                 2,
-                vec![ElementMeta { backend_node_id: 11, is_password: false }],
+                vec![ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
             );
         }
         let (exec, _ops, delay) = exec_with(MockOps::new(), snapshot.clone());
         let cond = WaitCondition::Element { index: 0 };
         let options = WaitOptions::for_condition(&cond, "t1".to_string()).with_timeout_ms(60_000);
-        exec.wait_for(cond, options).await.expect("版本推进后元素应命中");
+        exec.wait_for(cond, options)
+            .await
+            .expect("版本推进后元素应命中");
         assert_eq!(snapshot.take_count(), 2, "首轮未命中 + 次轮命中");
         let durations = delay.durations();
         assert_eq!(durations.len(), 1, "仅一次未命中间隔");
@@ -628,17 +725,29 @@ mod tests {
     #[tokio::test]
     async fn element_box_invalid_mid_wait_recovers() {
         let ops = MockOps::new();
-        ops.state.lock().unwrap_or_else(|p| p.into_inner()).fail_queue.push_back((
-            MockOp::BoxModel,
-            ActionError::new(ActionErrorKind::NodeStale, "box 计算失败（中途失效）"),
-        ));
+        ops.state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .fail_queue
+            .push_back((
+                MockOp::BoxModel,
+                ActionError::new(ActionErrorKind::NodeStale, "box 计算失败（中途失效）"),
+            ));
         let (exec, _ops, delay) = exec_with(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta { backend_node_id: 11, is_password: false }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let cond = WaitCondition::Element { index: 0 };
         let options = WaitOptions::for_condition(&cond, "t1".to_string()).with_timeout_ms(60_000);
-        exec.wait_for(cond, options).await.expect("box 恢复后应命中");
+        exec.wait_for(cond, options)
+            .await
+            .expect("box 恢复后应命中");
         let durations = delay.durations();
         assert_eq!(durations.len(), 1, "一次失败 + 一次成功 = 一个间隔");
         assert_eq!(
@@ -651,16 +760,24 @@ mod tests {
     #[tokio::test]
     async fn network_idle_poll_records_interval() {
         let ops = MockOps::new();
-        ops.state.lock().unwrap_or_else(|p| p.into_inner()).in_flight = 3;
+        ops.state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .in_flight = 3;
         let (exec, _ops, delay) = exec_with(ops, MockSnapshotStore::new(1));
         let cond = WaitCondition::NetworkIdle { quiet_ms: 500 };
         let options = WaitOptions::for_condition(&cond, "t1".to_string()).with_timeout_ms(30);
-        let err = exec.wait_for(cond, options).await.expect_err("在途不清零应超时");
+        let err = exec
+            .wait_for(cond, options)
+            .await
+            .expect_err("在途不清零应超时");
         assert_eq!(err.kind, ActionErrorKind::Timeout);
         let durations = delay.durations();
         assert!(!durations.is_empty());
         assert!(
-            durations.iter().all(|d| *d == Duration::from_millis(POLL_NETWORK_MS as u64)),
+            durations
+                .iter()
+                .all(|d| *d == Duration::from_millis(POLL_NETWORK_MS as u64)),
             "NetworkIdle 每轮间隔必须为 50ms：{durations:?}"
         );
     }

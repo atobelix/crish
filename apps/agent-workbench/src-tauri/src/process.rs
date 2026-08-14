@@ -110,7 +110,8 @@ pub(crate) async fn workbench_run_shell(
     let (program, args, shell_label) = build_shell_invocation(&command)?;
 
     // 2. 二次 AST 语法校验（Secondary AST Gate）：落地执行前杜绝参数逃逸与组装后 Redline 注入
-    let secondary_verdict = gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
+    let secondary_verdict =
+        gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
     if secondary_verdict == conex_sandbox::gatekeeper::GatekeeperResult::Blocked {
         return Err(CoreError::InvalidInput(
             "Command payload violates safety redline on secondary inspection".to_string(),
@@ -212,7 +213,9 @@ fn resolve_shell_cwd(cwd: Option<&str>) -> Result<PathBuf, CoreError> {
         if p.is_dir() {
             return Ok(p);
         }
-        return Err(CoreError::InvalidInput(format!("cwd is not a directory: {raw}")));
+        return Err(CoreError::InvalidInput(format!(
+            "cwd is not a directory: {raw}"
+        )));
     }
     // 回落到 monorepo 根或当前进程目录
     if let Ok(app) = crate::host_paths::app_dir() {
@@ -266,7 +269,9 @@ fn resolve_system_powershell() -> Result<String, CoreError> {
     if which_on_path("powershell.exe") {
         return Ok("powershell.exe".into());
     }
-    Err(CoreError::Internal("system powershell.exe not found".into()))
+    Err(CoreError::Internal(
+        "system powershell.exe not found".into(),
+    ))
 }
 
 fn which_on_path(name: &str) -> bool {
@@ -546,7 +551,8 @@ fn assign_process_to_job(
 
     // SAFETY: hJob 与 processHandle 由调用方保证有效
     unsafe {
-        if AssignProcessToJobObject(job, child_handle as windows_sys::Win32::Foundation::HANDLE) == 0
+        if AssignProcessToJobObject(job, child_handle as windows_sys::Win32::Foundation::HANDLE)
+            == 0
         {
             return Err(
                 "AssignProcessToJobObject failed: unable to assign child to job".to_string(),
@@ -723,7 +729,11 @@ mod tests {
                 timeout_ms: Some(5000),
             };
             let res = workbench_run_shell(req).await;
-            assert!(res.is_err(), "Expected workbench_run_shell to block `{}`", cmd);
+            assert!(
+                res.is_err(),
+                "Expected workbench_run_shell to block `{}`",
+                cmd
+            );
             let err = res.unwrap_err();
             match err {
                 CoreError::InvalidInput(msg) => {
@@ -753,7 +763,11 @@ mod tests {
                 timeout_ms: Some(5000),
             };
             let res = workbench_run_shell(req).await;
-            assert!(res.is_err(), "Expected dangerous command `{}` to require approval", cmd);
+            assert!(
+                res.is_err(),
+                "Expected dangerous command `{}` to require approval",
+                cmd
+            );
             let err = res.unwrap_err();
             match err {
                 CoreError::InvalidInput(msg) => {
@@ -784,12 +798,18 @@ mod tests {
                 timeout_ms: Some(5000),
             };
             let res = workbench_run_shell(req).await;
-            assert!(res.is_err(), "Expected obfuscated redline `{}` to be blocked", cmd);
+            assert!(
+                res.is_err(),
+                "Expected obfuscated redline `{}` to be blocked",
+                cmd
+            );
             let err = res.unwrap_err();
             match err {
                 CoreError::InvalidInput(msg) => {
                     assert!(
-                        msg.contains("InvalidCommand") || msg.contains("safety redline") || msg.contains("safety red-line"),
+                        msg.contains("InvalidCommand")
+                            || msg.contains("safety redline")
+                            || msg.contains("safety red-line"),
                         "detail should block for `{cmd}`: {msg}"
                     );
                 }
@@ -801,18 +821,17 @@ mod tests {
     #[tokio::test]
     async fn test_workbench_run_shell_escalates_outside_workspace() {
         // Normal command with an explicit out-of-workspace cwd -> escalated to RequiresApproval -> InvalidInput
-        let cwd_outside = if cfg!(windows) {
-            "C:\\Windows"
-        } else {
-            "/etc"
-        };
+        let cwd_outside = if cfg!(windows) { "C:\\Windows" } else { "/etc" };
         let req = WorkbenchRunShellRequest {
             command: "git status".to_string(),
             cwd: Some(cwd_outside.to_string()),
             timeout_ms: Some(5000),
         };
         let res = workbench_run_shell(req).await;
-        assert!(res.is_err(), "Expected out of workspace command to fail-closed");
+        assert!(
+            res.is_err(),
+            "Expected out of workspace command to fail-closed"
+        );
         let err = res.unwrap_err();
         match err {
             CoreError::InvalidInput(msg) => {
@@ -958,7 +977,9 @@ mod tests {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::JobObjects::IsProcessInJob;
-        use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
 
         init_daemon_job_object().expect("daemon job init");
         init_pty_job_object().expect("pty job init");

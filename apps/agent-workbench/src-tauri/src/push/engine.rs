@@ -124,15 +124,15 @@ pub struct PushDecisionEngine {
 impl PushDecisionEngine {
     /// 用配置构造（默认内存去重后端）
     pub fn new(cfg: EngineConfig) -> Self {
-        Self::with_dedupe_backend(
-            cfg,
-            Box::new(super::dedupe::MemoryDedupeBackend::new()),
-        )
+        Self::with_dedupe_backend(cfg, Box::new(super::dedupe::MemoryDedupeBackend::new()))
     }
 
     /// 用配置 + 自定义去重后端构造（R3-01a 补强：注入模式——SQLite 后端
     /// 经此装配，审批键持久化；与 [super::dedupe::DedupeState] 注入同 trait）
-    pub fn with_dedupe_backend(cfg: EngineConfig, backend: Box<dyn super::dedupe::DedupeBackend>) -> Self {
+    pub fn with_dedupe_backend(
+        cfg: EngineConfig,
+        backend: Box<dyn super::dedupe::DedupeBackend>,
+    ) -> Self {
         Self {
             dedupe: DedupeState::new(backend, cfg.dedupe_ttl_ms),
             coalesce: CoalesceState::new(cfg.windows),
@@ -149,7 +149,12 @@ impl PushDecisionEngine {
     ///
     /// 返回 `Vec` 语义：多数事件 0..=1 条决策；`tool-batch-end`（P3 事件，
     /// 审批批次关闭信号）可产出 1 条合并决策。
-    pub fn decide(&mut self, event: &AgentEvent, ctx: &PushIntentCtx, now_ms: u64) -> Vec<PushDecision> {
+    pub fn decide(
+        &mut self,
+        event: &AgentEvent,
+        ctx: &PushIntentCtx,
+        now_ms: u64,
+    ) -> Vec<PushDecision> {
         // S8e 事件流观察（R3-01a 补强）：task-started 登记任务归属 run；
         // run-terminal 登记 run 终止来源（供 task-killed 精确来源判定）
         if let AgentEvent::TaskStarted {
@@ -192,7 +197,8 @@ impl PushDecisionEngine {
             _ => None,
         };
 
-        let Some(intent) = super::intent::push_intent_with_kill_source(event, ctx, kill_source) else {
+        let Some(intent) = super::intent::push_intent_with_kill_source(event, ctx, kill_source)
+        else {
             return Vec::new();
         };
 
@@ -212,7 +218,11 @@ impl PushDecisionEngine {
         // 2. 静默时段（P0 仍发 / P1 折叠 / P2 不推）
         match quiet_hours_policy(intent.level, now_ms, &self.quiet_cfg) {
             QuietPolicy::InQuietSkip => {
-                return vec![self.decision_from_intent(&intent, false, DecisionOutcome::QuietSkipped)];
+                return vec![self.decision_from_intent(
+                    &intent,
+                    false,
+                    DecisionOutcome::QuietSkipped,
+                )];
             }
             QuietPolicy::InQuietFoldNight => {
                 // 夜间摘要折叠（R3-01a 补强）：P1 折叠条目入累积桶，
@@ -238,7 +248,11 @@ impl PushDecisionEngine {
         //    close_run 产物统一处理，避免「先记录后复查」自抑制）
         if intent.scene != SceneId::RunCompleted {
             if !self.dedupe.check_and_record(&intent.dedupe_key, now_ms) {
-                return vec![self.decision_from_intent(&intent, false, DecisionOutcome::DedupeSuppressed)];
+                return vec![self.decision_from_intent(
+                    &intent,
+                    false,
+                    DecisionOutcome::DedupeSuppressed,
+                )];
             }
         }
 
@@ -260,7 +274,9 @@ impl PushDecisionEngine {
                 return Vec::new();
             }
             SceneId::RunCompleted => {
-                let merged = self.coalesce.close_run(self.pending_from(&intent, ctx, now_ms));
+                let merged = self
+                    .coalesce
+                    .close_run(self.pending_from(&intent, ctx, now_ms));
                 // 合并形态补记原事件键（防同一 run-terminal 重放二次下发）
                 if merged.count > 1 {
                     self.dedupe.check_and_record(&intent.dedupe_key, now_ms);
@@ -272,7 +288,8 @@ impl PushDecisionEngine {
 
         // 5. 单条直发（S4 记录 run-failed 时刻，供 S10a 抑制）
         if intent.scene == SceneId::RunFailed {
-            self.run_failed_at.insert(intent.payload.biz_key.clone(), now_ms);
+            self.run_failed_at
+                .insert(intent.payload.biz_key.clone(), now_ms);
             self.prune_run_failed(now_ms);
         }
         self.finalize_intent(&intent, now_ms)
@@ -547,7 +564,9 @@ mod tests {
         let mut engine = PushDecisionEngine::default();
         // 审批入桶（累积族）
         assert!(engine.decide(&approval("tc-1"), &ctx(), T0).is_empty());
-        assert!(engine.decide(&approval("tc-2"), &ctx(), T0 + 100).is_empty());
+        assert!(engine
+            .decide(&approval("tc-2"), &ctx(), T0 + 100)
+            .is_empty());
         // tool-batch-end 关闭信号 → 合并出桶
         let out = engine.decide(&batch_end(), &ctx(), T0 + 200);
         assert_eq!(out.len(), 1);
@@ -557,7 +576,9 @@ mod tests {
         assert_eq!(decision.level, PushLevel::P0Critical);
         assert_eq!(decision.severity, PushSeverity::Critical);
         assert_eq!(decision.outcome, DecisionOutcome::Coalesced);
-        assert!(decision.dedupe_key.starts_with("merged:approval-requested:s-7:"));
+        assert!(decision
+            .dedupe_key
+            .starts_with("merged:approval-requested:s-7:"));
     }
 
     #[test]
@@ -594,7 +615,11 @@ mod tests {
         let mut engine = PushDecisionEngine::default();
 
         // P1 run 完成 → 折叠夜间摘要
-        let out = engine.decide(&run_terminal("run-1", RunTerminalStatus::Completed), &ctx(), quiet_ms);
+        let out = engine.decide(
+            &run_terminal("run-1", RunTerminalStatus::Completed),
+            &ctx(),
+            quiet_ms,
+        );
         assert_eq!(out[0].outcome, DecisionOutcome::FoldedToNightSummary);
         assert!(!out[0].deliver);
 
@@ -633,7 +658,11 @@ mod tests {
     fn run_failed_suppresses_runtime_error_30min() {
         let mut engine = PushDecisionEngine::default();
         // run 失败（P0 直发）
-        let failed = engine.decide(&run_terminal("run-42", RunTerminalStatus::Failed), &ctx(), T0);
+        let failed = engine.decide(
+            &run_terminal("run-42", RunTerminalStatus::Failed),
+            &ctx(),
+            T0,
+        );
         assert!(failed[0].deliver);
         // 30min 内的 runtime-error → 抑制（避免与 S4 双推）
         let err = engine.decide(&runtime_error(), &ctx_run("run-42"), T0 + 10 * 60_000);
@@ -649,21 +678,35 @@ mod tests {
         let mut engine = PushDecisionEngine::default();
         engine.decide(&subagent_completed("sa-1"), &ctx_run("run-42"), T0);
         engine.decide(&subagent_completed("sa-2"), &ctx_run("run-42"), T0 + 100);
-        let out = engine.decide(&run_terminal("run-42", RunTerminalStatus::Completed), &ctx(), T0 + 30_000);
+        let out = engine.decide(
+            &run_terminal("run-42", RunTerminalStatus::Completed),
+            &ctx(),
+            T0 + 30_000,
+        );
         assert_eq!(out.len(), 1);
         let decision = &out[0];
         assert!(decision.deliver);
         assert_eq!(decision.scene, SceneId::RunCompleted);
         assert_eq!(decision.outcome, DecisionOutcome::Coalesced);
-        assert!(decision.dedupe_key.starts_with("merged:run-completed:run-42:"));
+        assert!(decision
+            .dedupe_key
+            .starts_with("merged:run-completed:run-42:"));
     }
 
     #[test]
     fn run_completed_replay_suppressed() {
         let mut engine = PushDecisionEngine::default();
-        engine.decide(&run_terminal("run-1", RunTerminalStatus::Completed), &ctx(), T0);
+        engine.decide(
+            &run_terminal("run-1", RunTerminalStatus::Completed),
+            &ctx(),
+            T0,
+        );
         // 重放同一事件 → 去重抑制（单条形态键 = 原事件键）
-        let replay = engine.decide(&run_terminal("run-1", RunTerminalStatus::Completed), &ctx(), T0 + 1_000);
+        let replay = engine.decide(
+            &run_terminal("run-1", RunTerminalStatus::Completed),
+            &ctx(),
+            T0 + 1_000,
+        );
         assert_eq!(replay[0].outcome, DecisionOutcome::DedupeSuppressed);
     }
 
@@ -771,9 +814,15 @@ mod tests {
         // （即使 Windows 两阶段升级 via_force=true——精确来源覆盖近似）
         let mut engine = PushDecisionEngine::default();
         engine.decide(&task_started("t-3", "run-42"), &ctx(), T0);
-        engine.decide(&run_terminal("run-42", RunTerminalStatus::Cancelled), &ctx(), T0 + 1_000);
+        engine.decide(
+            &run_terminal("run-42", RunTerminalStatus::Cancelled),
+            &ctx(),
+            T0 + 1_000,
+        );
         assert!(
-            engine.decide(&task_killed("t-3", true), &ctx(), T0 + 2_000).is_empty(),
+            engine
+                .decide(&task_killed("t-3", true), &ctx(), T0 + 2_000)
+                .is_empty(),
             "用户取消 run 后的任务 kill 不推（来源精确判定覆盖 via_force）"
         );
 
@@ -781,7 +830,11 @@ mod tests {
         // （即使优雅形态 via_force=false——来源判定优先）
         let mut engine = PushDecisionEngine::default();
         engine.decide(&task_started("t-4", "run-43"), &ctx(), T0);
-        engine.decide(&run_terminal("run-43", RunTerminalStatus::Failed), &ctx(), T0 + 1_000);
+        engine.decide(
+            &run_terminal("run-43", RunTerminalStatus::Failed),
+            &ctx(),
+            T0 + 1_000,
+        );
         let out = engine.decide(&task_killed("t-4", false), &ctx(), T0 + 2_000);
         assert_eq!(out.len(), 1);
         assert!(out[0].deliver);
@@ -792,7 +845,9 @@ mod tests {
         let mut fallback = PushDecisionEngine::default();
         fallback.decide(&task_started("t-5", "run-44"), &ctx(), T0);
         assert!(
-            fallback.decide(&task_killed("t-5", false), &ctx(), T0 + 2_000).is_empty(),
+            fallback
+                .decide(&task_killed("t-5", false), &ctx(), T0 + 2_000)
+                .is_empty(),
             "来源未知 + 优雅 → 不推（回退近似）"
         );
         let forced = fallback.decide(&task_killed("t-5", true), &ctx(), T0 + 3_000);
@@ -804,7 +859,11 @@ mod tests {
     fn s8e_run_completed_then_task_killed_pushes() {
         let mut engine = PushDecisionEngine::default();
         engine.decide(&task_started("t-6", "run-50"), &ctx(), T0);
-        engine.decide(&run_terminal("run-50", RunTerminalStatus::Completed), &ctx(), T0 + 1_000);
+        engine.decide(
+            &run_terminal("run-50", RunTerminalStatus::Completed),
+            &ctx(),
+            T0 + 1_000,
+        );
         let out = engine.decide(&task_killed("t-6", true), &ctx(), T0 + 2_000);
         assert_eq!(out.len(), 1);
         assert!(out[0].deliver);
@@ -821,15 +880,25 @@ mod tests {
         let midnight = T0 + 12 * 3_600_000 + 30 * 60_000; // 08-10 00:30（跨午夜静默内）
 
         // P1 run 完成 ×2（一个跨午夜）→ 折叠
-        let out1 = engine.decide(&run_terminal("run-1", RunTerminalStatus::Completed), &ctx(), evening);
+        let out1 = engine.decide(
+            &run_terminal("run-1", RunTerminalStatus::Completed),
+            &ctx(),
+            evening,
+        );
         assert_eq!(out1[0].outcome, DecisionOutcome::FoldedToNightSummary);
-        let out2 = engine.decide(&run_terminal("run-2", RunTerminalStatus::Completed), &ctx(), midnight);
+        let out2 = engine.decide(
+            &run_terminal("run-2", RunTerminalStatus::Completed),
+            &ctx(),
+            midnight,
+        );
         assert_eq!(out2[0].outcome, DecisionOutcome::FoldedToNightSummary);
         assert_eq!(engine.folded_len(), 2);
 
         // 07:30 静默结束出桶：跨午夜两条目同属一夜（窗口起始日键）
         let take_at = T0 + 19 * 3_600_000 + 30 * 60_000; // 08-10 07:30
-        let summary = engine.take_night_summary(take_at).expect("有折叠条目应合成");
+        let summary = engine
+            .take_night_summary(take_at)
+            .expect("有折叠条目应合成");
         assert_eq!(summary.date, "2026-08-09");
         assert_eq!(summary.total, 2);
         assert_eq!(summary.body, "夜间完成 2 项：任务完成 ×2");
@@ -851,7 +920,11 @@ mod tests {
         assert_eq!(engine.folded_len(), 0);
 
         // P1 run 完成 → 折叠
-        engine.decide(&run_terminal("run-1", RunTerminalStatus::Completed), &ctx(), quiet_ms);
+        engine.decide(
+            &run_terminal("run-1", RunTerminalStatus::Completed),
+            &ctx(),
+            quiet_ms,
+        );
         assert_eq!(engine.folded_len(), 1);
 
         // P2 缓存告警 → 静默跳过，不进折叠桶
@@ -879,7 +952,11 @@ mod tests {
     fn night_summary_buckets_by_window_start_day() {
         let mut engine = PushDecisionEngine::default();
         // 第一夜 23:00（08-09）
-        engine.decide(&run_terminal("run-1", RunTerminalStatus::Completed), &ctx(), T0 + 11 * 3_600_000);
+        engine.decide(
+            &run_terminal("run-1", RunTerminalStatus::Completed),
+            &ctx(),
+            T0 + 11 * 3_600_000,
+        );
         let first = engine
             .take_night_summary(T0 + 19 * 3_600_000 + 30 * 60_000)
             .expect("第一夜摘要");
@@ -888,7 +965,11 @@ mod tests {
 
         // 第二夜 23:00（08-10）
         let next_evening = T0 + 35 * 3_600_000; // 08-10 23:00
-        engine.decide(&run_terminal("run-2", RunTerminalStatus::Completed), &ctx(), next_evening);
+        engine.decide(
+            &run_terminal("run-2", RunTerminalStatus::Completed),
+            &ctx(),
+            next_evening,
+        );
         let second = engine
             .take_night_summary(next_evening + 8 * 3_600_000 + 30 * 60_000)
             .expect("第二夜摘要");
@@ -901,7 +982,9 @@ mod tests {
     #[test]
     fn night_summary_empty_take_returns_none() {
         let mut engine = PushDecisionEngine::default();
-        assert!(engine.take_night_summary(T0 + 19 * 3_600_000 + 30 * 60_000).is_none());
+        assert!(engine
+            .take_night_summary(T0 + 19 * 3_600_000 + 30 * 60_000)
+            .is_none());
         assert_eq!(engine.folded_len(), 0);
     }
 

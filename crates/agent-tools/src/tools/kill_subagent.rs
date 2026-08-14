@@ -176,7 +176,8 @@ mod tests {
 
     impl std::fmt::Debug for RecordingKillChannel {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("RecordingKillChannel").finish_non_exhaustive()
+            f.debug_struct("RecordingKillChannel")
+                .finish_non_exhaustive()
         }
     }
 
@@ -213,14 +214,11 @@ mod tests {
             subagent_id: &str,
             reason: &str,
         ) -> Result<KillSubagentToolResult, String> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push((
-                    session_id.to_string(),
-                    subagent_id.to_string(),
-                    reason.to_string(),
-                ));
+            self.calls.lock().unwrap().push((
+                session_id.to_string(),
+                subagent_id.to_string(),
+                reason.to_string(),
+            ));
             self.result.lock().unwrap().clone()
         }
     }
@@ -234,10 +232,7 @@ mod tests {
             KillOutcomeKind::Killed,
         )));
         let ctx = create_mock_tool_context();
-        let err = tool
-            .execute(&ctx, serde_json::json!({}))
-            .await
-            .unwrap_err();
+        let err = tool.execute(&ctx, serde_json::json!({})).await.unwrap_err();
         assert_eq!(err.code(), codes::TOOL_INVALID_INPUT);
         let err = tool
             .execute(&ctx, serde_json::json!({ "subagentId": "  " }))
@@ -313,7 +308,8 @@ mod tests {
     /// 已终态幂等路径：outcome=alreadyTerminal、无投递标记
     #[tokio::test]
     async fn already_terminal_envelope() {
-        let channel = RecordingKillChannel::ok("sub-1", Some("run-1"), KillOutcomeKind::AlreadyTerminal);
+        let channel =
+            RecordingKillChannel::ok("sub-1", Some("run-1"), KillOutcomeKind::AlreadyTerminal);
         let tool = KillSubagentTool::with_channel(Some(channel));
         let ctx = create_mock_tool_context();
         let out = tool

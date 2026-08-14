@@ -15,9 +15,10 @@
 //!    - 任何读取（`get_blob`）若命中处于软删除隔离期的 Blob，
 //!      原子清除 `marked_for_delete_at = NULL` 恢复为正常状态。
 
-use super::schema::create_cas_schema;
+use super::schema::create_v5_schema;
 use super::{DbFailure, DbFailureKind, LocalDb};
 use rusqlite::{params, Connection, OptionalExtension};
+use sha2::{Digest, Sha256};
 
 /// 默认软删除隔离期：7 天（7 * 86400 秒）。
 pub const DEFAULT_QUARANTINE_SECS: i64 = 7 * 86400;
@@ -62,14 +63,23 @@ impl CasGcConfig {
     }
     /// 7 天隔离期 + 0 秒新建宽限（用于即时进入软删除隔离期，但保留 7 天不物理清除）
     pub fn zero_grace() -> Self {
-        Self { quarantine_duration_secs: DEFAULT_QUARANTINE_SECS, creation_grace_secs: 0 }
+        Self {
+            quarantine_duration_secs: DEFAULT_QUARANTINE_SECS,
+            creation_grace_secs: 0,
+        }
     }
     /// 0 秒隔离期 + 0 秒宽限（用于测试两阶段全链路即时物理清理）
     pub fn immediate_purge() -> Self {
-        Self { quarantine_duration_secs: 0, creation_grace_secs: 0 }
+        Self {
+            quarantine_duration_secs: 0,
+            creation_grace_secs: 0,
+        }
     }
     pub fn with_quarantine_secs(quarantine_secs: i64) -> Self {
-        Self { quarantine_duration_secs: quarantine_secs, creation_grace_secs: 0 }
+        Self {
+            quarantine_duration_secs: quarantine_secs,
+            creation_grace_secs: 0,
+        }
     }
 }
 
@@ -85,61 +95,16 @@ pub struct GcScanStats {
     pub purged_hashes: Vec<String>,
 }
 
-/// 计算内容的 SHA-256 16进制小写哈希（纯 Rust 零外部依赖实现）。
+/// 计算内容的 SHA-256 16进制小写哈希（基于标准 sha2 crate 与 hex 编码）。
 pub fn compute_sha256_hex(bytes: &[u8]) -> String {
-    let mut h: [u32; 8] = [
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
-    ];
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-    ];
-    let bit_len = (bytes.len() as u64) * 8;
-    let mut msg = bytes.to_vec();
-    msg.push(0x80);
-    while (msg.len() % 64) != 56 { msg.push(0x00); }
-    msg.extend_from_slice(&bit_len.to_be_bytes());
-
-    for chunk in msg.chunks_exact(64) {
-        let mut w = [0u32; 64];
-        for i in 0..16 { w[i] = u32::from_be_bytes(chunk[i * 4..(i + 1) * 4].try_into().unwrap()); }
-        for i in 16..64 {
-            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
-            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16].wrapping_add(s0).wrapping_add(w[i - 7]).wrapping_add(s1);
-        }
-        let (mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh) =
-            (h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
-        for i in 0..64 {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ ((!e) & g);
-            let t1 = hh.wrapping_add(s1).wrapping_add(ch).wrapping_add(K[i]).wrapping_add(w[i]);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let t2 = s0.wrapping_add(maj);
-            hh = g; g = f; f = e; e = d.wrapping_add(t1);
-            d = c; c = b; b = a; a = t1.wrapping_add(t2);
-        }
-        h[0] = h[0].wrapping_add(a); h[1] = h[1].wrapping_add(b);
-        h[2] = h[2].wrapping_add(c); h[3] = h[3].wrapping_add(d);
-        h[4] = h[4].wrapping_add(e); h[5] = h[5].wrapping_add(f);
-        h[6] = h[6].wrapping_add(g); h[7] = h[7].wrapping_add(hh);
-    }
-    let mut out = String::with_capacity(64);
-    for val in h { out.push_str(&format!("{val:08x}")); }
-    out
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
 }
 
 /// 确保 CAS 表结构就绪（幂等创建）。
 pub fn ensure_cas_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
-    conn.execute_batch(create_cas_schema())
+    conn.execute_batch(create_v5_schema())
 }
 
 // ===== LocalDb CAS GC 方法面 =====
@@ -206,7 +171,12 @@ impl LocalDb {
         pin_blob_conn(&conn, hash, pinned).map_err(|e| self.latch_error("pin_blob", e))
     }
 
-    pub fn link_block_attachment(&self, doc_id: &str, block_id: &str, hash: &str) -> Result<(), DbFailure> {
+    pub fn link_block_attachment(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+        hash: &str,
+    ) -> Result<(), DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
@@ -215,7 +185,12 @@ impl LocalDb {
             .map_err(|e| self.latch_error("link_block_attachment", e))
     }
 
-    pub fn unlink_block_attachment(&self, doc_id: &str, block_id: &str, hash: &str) -> Result<bool, DbFailure> {
+    pub fn unlink_block_attachment(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+        hash: &str,
+    ) -> Result<bool, DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
@@ -224,7 +199,11 @@ impl LocalDb {
             .map_err(|e| self.latch_error("unlink_block_attachment", e))
     }
 
-    pub fn list_block_attachments(&self, doc_id: &str, block_id: &str) -> Result<Vec<String>, DbFailure> {
+    pub fn list_block_attachments(
+        &self,
+        doc_id: &str,
+        block_id: &str,
+    ) -> Result<Vec<String>, DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
@@ -233,7 +212,12 @@ impl LocalDb {
             .map_err(|e| self.latch_error("list_block_attachments", e))
     }
 
-    pub fn link_snapshot_attachment(&self, doc_id: &str, snapshot_id: &str, blob_hash: &str) -> Result<(), DbFailure> {
+    pub fn link_snapshot_attachment(
+        &self,
+        doc_id: &str,
+        snapshot_id: &str,
+        blob_hash: &str,
+    ) -> Result<(), DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
@@ -242,7 +226,12 @@ impl LocalDb {
             .map_err(|e| self.latch_error("link_snapshot_attachment", e))
     }
 
-    pub fn link_undo_blob(&self, session_id: &str, undo_step_id: &str, blob_hash: &str) -> Result<(), DbFailure> {
+    pub fn link_undo_blob(
+        &self,
+        session_id: &str,
+        undo_step_id: &str,
+        blob_hash: &str,
+    ) -> Result<(), DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
@@ -268,7 +257,11 @@ impl LocalDb {
             kind: DbFailureKind::Lock,
         })?;
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM blob_cas WHERE marked_for_delete_at IS NOT NULL", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM blob_cas WHERE marked_for_delete_at IS NOT NULL",
+                [],
+                |r| r.get(0),
+            )
             .map_err(|e| self.latch_error("count_quarantined_blobs", e))?;
         Ok(count as usize)
     }
@@ -282,7 +275,10 @@ impl LocalDb {
             .map_err(|e| self.latch_error("mark_quarantine_orphans", e))
     }
 
-    pub fn purge_expired_quarantined(&self, config: &CasGcConfig) -> Result<Vec<String>, DbFailure> {
+    pub fn purge_expired_quarantined(
+        &self,
+        config: &CasGcConfig,
+    ) -> Result<Vec<String>, DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
@@ -332,7 +328,9 @@ pub fn get_blob_conn(conn: &Connection, hash: &str) -> Result<Option<Vec<u8>>, r
         )
         .optional()?;
 
-    let Some((bytes, marked_for_delete_at)) = row else { return Ok(None); };
+    let Some((bytes, marked_for_delete_at)) = row else {
+        return Ok(None);
+    };
     if marked_for_delete_at.is_some() {
         conn.execute(
             "UPDATE blob_cas SET marked_for_delete_at = NULL, updated_at = datetime('now') WHERE hash = ?1",
@@ -370,7 +368,9 @@ pub fn get_blob_meta_conn(
         )
         .optional()?;
 
-    let Some(mut meta) = row else { return Ok(None); };
+    let Some(mut meta) = row else {
+        return Ok(None);
+    };
     if heal_on_read && meta.marked_for_delete_at.is_some() {
         conn.execute(
             "UPDATE blob_cas SET marked_for_delete_at = NULL, updated_at = datetime('now') WHERE hash = ?1",
@@ -439,7 +439,9 @@ pub fn list_block_attachments_conn(
     )?;
     let rows = stmt.query_map(params![doc_id, block_id], |r| r.get::<_, String>(0))?;
     let mut out = Vec::new();
-    for r in rows { out.push(r?); }
+    for r in rows {
+        out.push(r?);
+    }
     Ok(out)
 }
 
@@ -507,7 +509,9 @@ pub fn mark_quarantine_orphans_conn(
     )?;
     let rows = stmt.query_map(params![grace_param], |r| r.get::<_, String>(0))?;
     let mut candidate_hashes = Vec::new();
-    for r in rows { candidate_hashes.push(r?); }
+    for r in rows {
+        candidate_hashes.push(r?);
+    }
     drop(stmt);
 
     let mut marked = Vec::new();
@@ -520,7 +524,9 @@ pub fn mark_quarantine_orphans_conn(
             "#,
             params![hash],
         )?;
-        if count > 0 { marked.push(hash); }
+        if count > 0 {
+            marked.push(hash);
+        }
     }
     Ok(marked)
 }
@@ -532,7 +538,7 @@ pub fn purge_expired_quarantined_conn(
     let quarantine_param = format!("-{} seconds", config.quarantine_duration_secs);
     let mut stmt = conn.prepare(
         r#"
-        SELECT b.hash FROM blob_cas b
+        SELECT b.hash, b.path, b.storage_type FROM blob_cas b
         WHERE
             b.marked_for_delete_at IS NOT NULL
             AND b.marked_for_delete_at <= datetime('now', ?1)
@@ -551,16 +557,44 @@ pub fn purge_expired_quarantined_conn(
             )
         "#,
     )?;
-    let rows = stmt.query_map(params![quarantine_param], |r| r.get::<_, String>(0))?;
+    let rows = stmt.query_map(params![quarantine_param], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })?;
     let mut to_purge = Vec::new();
-    for r in rows { to_purge.push(r?); }
+    let mut files_to_delete = Vec::new();
+    for r in rows {
+        let (hash, path, storage_type) = r?;
+        if storage_type != "inline" && !path.trim().is_empty() {
+            files_to_delete.push(path);
+        }
+        to_purge.push(hash);
+    }
     drop(stmt);
 
     let mut purged = Vec::new();
     for hash in to_purge {
         let count = conn.execute("DELETE FROM blob_cas WHERE hash = ?1", params![hash])?;
-        if count > 0 { purged.push(hash); }
+        if count > 0 {
+            purged.push(hash);
+        }
     }
+
+    // 物理 unlink 孤儿外置文件，彻底根除外置文件物理泄漏
+    for file_path in files_to_delete {
+        let p = std::path::Path::new(&file_path);
+        if p.exists() {
+            if let Err(e) = std::fs::remove_file(p) {
+                tracing::warn!(target: "conex_db", "CAS GC 物理删除外置文件失败 `{file_path}`: {e}");
+            } else {
+                tracing::info!(target: "conex_db", "CAS GC 物理删除外置文件成功 `{file_path}`");
+            }
+        }
+    }
+
     Ok(purged)
 }
 
@@ -568,8 +602,12 @@ pub fn run_cas_gc_conn(
     conn: &Connection,
     config: &CasGcConfig,
 ) -> Result<GcScanStats, rusqlite::Error> {
-    let total_blobs_scanned: i64 = conn.query_row("SELECT COUNT(*) FROM blob_cas", [], |r| r.get(0))?;
-    let pinned_protected: i64 = conn.query_row("SELECT COUNT(*) FROM blob_cas WHERE pinned = 1", [], |r| r.get(0))?;
+    let total_blobs_scanned: i64 =
+        conn.query_row("SELECT COUNT(*) FROM blob_cas", [], |r| r.get(0))?;
+    let pinned_protected: i64 =
+        conn.query_row("SELECT COUNT(*) FROM blob_cas WHERE pinned = 1", [], |r| {
+            r.get(0)
+        })?;
     let quarantined_hashes = mark_quarantine_orphans_conn(conn, config)?;
     let purged_hashes = purge_expired_quarantined_conn(conn, config)?;
 

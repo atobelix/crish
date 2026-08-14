@@ -9,7 +9,7 @@
 //! 上移至 conex-types（`conex_types::impact`），本模块重导出以保持既有
 //! 消费方 API（`conex_fs::impact::ImpactAssessment`）不变。
 
-pub use conex_types::impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};
+pub use conex_types::impact::{ImpactAssessment, IMPACT_FLAG_FILE_THRESHOLD};
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -235,8 +235,7 @@ mod tests {
             let a = assess(&[d.0.clone()]);
             // 递归层（walk_dir）的 symlink 指向祖先目录：不得无限递归
             assert_eq!(
-                a.file_count,
-                2,
+                a.file_count, 2,
                 "sub 内 symlink 指向祖先：inner.txt + loop 共 2 条"
             );
         }

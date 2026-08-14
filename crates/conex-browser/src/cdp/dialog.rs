@@ -38,7 +38,10 @@ pub const DIALOG_AUTO_DISMISS_TIMEOUT: Duration = Duration::from_secs(30);
 pub enum DialogState {
     #[default]
     None,
-    Open { info: DialogInfo, opened_at_ms: u64 },
+    Open {
+        info: DialogInfo,
+        opened_at_ms: u64,
+    },
 }
 
 /// 探针超时诊断（§7.1 阻塞识别：对话框未决 ≠ 标签卡死）。
@@ -60,10 +63,7 @@ pub struct DialogRegistry {
 }
 
 impl DialogRegistry {
-    pub fn new(
-        timeout: Duration,
-        auto_dismiss: Arc<dyn Fn(&str) + Send + Sync>,
-    ) -> Self {
+    pub fn new(timeout: Duration, auto_dismiss: Arc<dyn Fn(&str) + Send + Sync>) -> Self {
         DialogRegistry {
             states: Arc::new(Mutex::new(HashMap::new())),
             timeout,
@@ -83,10 +83,13 @@ impl DialogRegistry {
                     .unwrap_or(0);
                 {
                     let mut states = self.states.lock().unwrap_or_else(|p| p.into_inner());
-                    states.insert(info.session.clone(), DialogState::Open {
-                        info: info.clone(),
-                        opened_at_ms,
-                    });
+                    states.insert(
+                        info.session.clone(),
+                        DialogState::Open {
+                            info: info.clone(),
+                            opened_at_ms,
+                        },
+                    );
                 }
                 self.spawn_timeout(info.session.clone(), gen);
             }
@@ -143,7 +146,12 @@ impl DialogRegistry {
             params["promptText"] = json!(text);
         }
         channel
-            .send_command(PAGE_HANDLE_JAVASCRIPT_DIALOG, Some(params), Some(session), Duration::from_secs(5))
+            .send_command(
+                PAGE_HANDLE_JAVASCRIPT_DIALOG,
+                Some(params),
+                Some(session),
+                Duration::from_secs(5),
+            )
             .await
             .map(|_| {
                 // 命令成功 → 状态机收敛（Chrome 的 javascriptDialogClosed 事件随后也会到达，
@@ -162,7 +170,10 @@ impl DialogRegistry {
             tokio::time::sleep(timeout).await;
             // 仅当代次匹配（对话框未被动处理）时自愈
             let still_open = matches!(
-                states.lock().unwrap_or_else(|p| p.into_inner()).get(&session),
+                states
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(&session),
                 Some(DialogState::Open { .. })
             );
             if !still_open {
@@ -219,10 +230,7 @@ impl WindowOpenPolicy {
 
 /// 从 URL 提取 host（纯字符串解析，不做 DNS；解析层校验属维度 17 解析级检查点 R-11）。
 fn extract_host(url: &str) -> Option<String> {
-    let rest = url
-        .split_once("://")
-        .map(|(_, r)| r)
-        .unwrap_or(url);
+    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     if authority.is_empty() {
         return None;
@@ -337,23 +345,41 @@ mod tests {
         // 黑名单命中 → Deny
         assert_eq!(
             policy.evaluate("https://evil.example.com/path?x=1"),
-            WindowOpenDecision::Deny { reason: "域名门禁命中：evil.example.com".to_string() }
+            WindowOpenDecision::Deny {
+                reason: "域名门禁命中：evil.example.com".to_string()
+            }
         );
         assert_eq!(
             policy.evaluate("https://sub.spy.example"),
-            WindowOpenDecision::Deny { reason: "域名门禁命中：*.spy.example".to_string() }
+            WindowOpenDecision::Deny {
+                reason: "域名门禁命中：*.spy.example".to_string()
+            }
         );
         // R-7：*.example.com 不含根域 → spy.example 根域放行
-        assert_eq!(policy.evaluate("https://spy.example"), WindowOpenDecision::AllowAsTab);
+        assert_eq!(
+            policy.evaluate("https://spy.example"),
+            WindowOpenDecision::AllowAsTab
+        );
         // 未命中 → AllowAsTab（默认转标签页）
-        assert_eq!(policy.evaluate("https://good.example.com/x"), WindowOpenDecision::AllowAsTab);
+        assert_eq!(
+            policy.evaluate("https://good.example.com/x"),
+            WindowOpenDecision::AllowAsTab
+        );
         // 端口/IPv6 形态
         assert_eq!(
             policy.evaluate("http://evil.example.com:8080/"),
-            WindowOpenDecision::Deny { reason: "域名门禁命中：evil.example.com".to_string() }
+            WindowOpenDecision::Deny {
+                reason: "域名门禁命中：evil.example.com".to_string()
+            }
         );
         // 非法 URL → Deny
-        assert!(matches!(policy.evaluate(""), WindowOpenDecision::Deny { .. }));
-        assert!(matches!(policy.evaluate("   "), WindowOpenDecision::Deny { .. }));
+        assert!(matches!(
+            policy.evaluate(""),
+            WindowOpenDecision::Deny { .. }
+        ));
+        assert!(matches!(
+            policy.evaluate("   "),
+            WindowOpenDecision::Deny { .. }
+        ));
     }
 }

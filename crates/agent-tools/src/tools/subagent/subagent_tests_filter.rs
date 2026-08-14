@@ -23,7 +23,10 @@ fn filter_removes_run_subagent_keeps_wait_subagents() {
         vec!["read_file", "wait_subagents", "shell_command", "write_file"],
         "run_subagent 必须剔除，wait_subagents 与其它工具保留"
     );
-    assert!(!out.contains(&"run_subagent"), "剔除后不得残留 run_subagent");
+    assert!(
+        !out.contains(&"run_subagent"),
+        "剔除后不得残留 run_subagent"
+    );
 }
 
 #[test]
@@ -168,7 +171,10 @@ fn status_read_stopped_normalizes_to_failed() {
         SubagentState::from_db_status("stopped"),
         SubagentState::Failed
     );
-    assert_eq!(SubagentState::from_db_status("failed"), SubagentState::Failed);
+    assert_eq!(
+        SubagentState::from_db_status("failed"),
+        SubagentState::Failed
+    );
     assert_eq!(
         SubagentState::from_db_status("running"),
         SubagentState::Running
@@ -183,9 +189,7 @@ fn status_read_stopped_normalizes_to_failed() {
         assert!(
             matches!(
                 state,
-                SubagentState::Running
-                    | SubagentState::Completed
-                    | SubagentState::Failed
+                SubagentState::Running | SubagentState::Completed | SubagentState::Failed
             ),
             "读回 {db} 归一后必须 ∈ TS 状态集"
         );
@@ -231,4 +235,3 @@ fn forgery_boundary_not_duplicated() {
     assert_eq!(once, twice, "边界声明必须幂等，不重复追加");
     assert_eq!(once.matches(FORGERY_BOUNDARY_NOTICE).count(), 1);
 }
-

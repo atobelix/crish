@@ -26,12 +26,11 @@ impl LocalDb {
         active_id: Option<&str>,
         folder_order: &[String],
     ) -> Result<ImportStats, DbFailure> {
-        let entries: Vec<SessionIndexEntry> = serde_json::from_str(index_json).map_err(|e| {
-            DbFailure {
+        let entries: Vec<SessionIndexEntry> =
+            serde_json::from_str(index_json).map_err(|e| DbFailure {
                 message: format!("import_from_localstorage: parse index failed: {e}"),
                 kind: DbFailureKind::ImportIndexParse,
-            }
-        })?;
+            })?;
 
         let mut conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),

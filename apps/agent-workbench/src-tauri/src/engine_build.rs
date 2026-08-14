@@ -27,14 +27,14 @@ use agent_tools::tools::set_timer::TimerChannel;
 use agent_tools::tools::wait_subagents::SubagentWaitChannel;
 use async_trait::async_trait;
 use conex_db::LocalDb;
-use conex_types::denied_stats::DeniedStats;
-use conex_types::events::{AgentEvent, MissAttribution, RunCacheStats};
-use conex_types::message::AgentMessage;
-use conex_types::response::ClassifiedStreamError;
 use conex_telemetry::cache::{
     cold_cache_check, is_cold, CacheBaseline, RequestSignature, WARN_MISSED_COST_USD,
     WARN_MISSED_TOKENS,
 };
+use conex_types::denied_stats::DeniedStats;
+use conex_types::events::{AgentEvent, MissAttribution, RunCacheStats};
+use conex_types::message::AgentMessage;
+use conex_types::response::ClassifiedStreamError;
 use orchestrator::PendingMessageQueue;
 use session_loop::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest};
 use session_loop::{
@@ -45,8 +45,8 @@ use session_loop::{
 use super::engine_audit::{RoutingAuditSink, WaitDispatchStore};
 use super::engine_channels::ContinuityChannelBoard;
 use super::engine_provider::{
-    build_http_client, bundled_catalog, load_provider_endpoint, EngineProviderConfig,
-    HttpProviderCall, now_iso_utc,
+    build_http_client, bundled_catalog, load_provider_endpoint, now_iso_utc, EngineProviderConfig,
+    HttpProviderCall,
 };
 use crate::fs_commands::skills::RustSkill;
 use crate::timers::{
@@ -57,7 +57,6 @@ use crish_agent_workbench::wait_channel::{
     ControlBusResolver, EventStreamBroadcast, LocalDbWaitStore, MemoryAgentSource, MemoryWaitStore,
     SubagentStatusSource, WaitChannel, WaitStore,
 };
-
 
 /// 毒丸恢复计数（B1-5 观测化：构建面 8 处锁中毒恢复次数——EngineHandle
 /// provider / provider_config / ready_reason / cache_sessions 四锁；对齐
@@ -70,7 +69,6 @@ static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
 pub(crate) fn build_poison_recovery_count() -> u64 {
     POISON_RECOVERIES.load(Ordering::Relaxed)
 }
-
 
 /// 引擎句柄（B6.4：provider 生效配置 + 工具注册表 + engineReady）
 ///
@@ -188,7 +186,6 @@ impl EngineHandle {
         Self::build(background_manager, subagent_spawner, mcp_attach_allowed, db)
     }
 
-
     /// 引擎装配主路径（new / new_with_spawner / 测试注入构造共用；
     /// `mcp_attach_allowed` 由生产入口从 [BrowserToolsConfig] 读取、
     /// 测试入口直接注入；`db` 为 timer/sched/wait 三 store 真适配的
@@ -214,8 +211,7 @@ impl EngineHandle {
         let timer_event_sink = Arc::new(AgentEventSink::new());
         // 显式 trait 化（先 clone 出 Arc<AgentEventSink> 再经赋值 unsize
         // 强转——Arc::clone 泛型推断无法经引用反向强转）
-        let timer_event_sink_trait: Arc<dyn crate::timers::EventSink> =
-            timer_event_sink.clone();
+        let timer_event_sink_trait: Arc<dyn crate::timers::EventSink> = timer_event_sink.clone();
         // 装配分支（LocalDb 真适配 / 内存回退）经 dyn TimerStore 收口
         let timer_store: Arc<dyn crate::timers::TimerStore> = match &db {
             Some(db) => Arc::new(LocalDbTimerStore::new(db.clone())),
@@ -332,9 +328,7 @@ impl EngineHandle {
             // 装配收口（T-CF-10）：BuiltinToolConfig 全字段显式注入后改走
             // register_builtin_tools_with_config（现状默认注册处）；未装配
             // 字段保持 Default（None 语义，工具返回 common.unsupported 降级）
-            subagent_wait_channel: Some(
-                Arc::clone(&wait_channel) as Arc<dyn SubagentWaitChannel>
-            ),
+            subagent_wait_channel: Some(Arc::clone(&wait_channel) as Arc<dyn SubagentWaitChannel>),
             // T-D-13：子代理 spawn 通道注入（None = run_subagent 返回
             // common.unsupported；生产装配点 = CoreRunState 构造 spawner 后
             // 经 new_with_spawner 传入）
@@ -342,12 +336,8 @@ impl EngineHandle {
             // 审计 01 W1（任务连续性推进轮）：kill_subagent / send_message
             // 三通道注入板卡（延迟绑定——真实现经 finalize_continuity_channels
             // 绑定；未绑定 = 通道返回结构化未绑定错误，行为与装配前一致）
-            subagent_kill_channel: Some(
-                Arc::clone(&continuity) as Arc<dyn SubagentKillChannel>
-            ),
-            subagent_inject_channel: Some(
-                Arc::clone(&continuity) as Arc<dyn SubagentInjectChannel>
-            ),
+            subagent_kill_channel: Some(Arc::clone(&continuity) as Arc<dyn SubagentKillChannel>),
+            subagent_inject_channel: Some(Arc::clone(&continuity) as Arc<dyn SubagentInjectChannel>),
             main_agent_message_channel: Some(
                 Arc::clone(&continuity) as Arc<dyn MainAgentMessageChannel>
             ),
@@ -383,8 +373,9 @@ impl EngineHandle {
         let browser_slot = Arc::new(
             crate::browser::BrowserSlot::new().with_mcp_attach_allowed(mcp_attach_allowed),
         );
-        let browser_ops: Arc<dyn conex_browser_tools::session::SessionOps> =
-            Arc::new(crate::browser::LazySessionOps::new(Arc::clone(&browser_slot)));
+        let browser_ops: Arc<dyn conex_browser_tools::session::SessionOps> = Arc::new(
+            crate::browser::LazySessionOps::new(Arc::clone(&browser_slot)),
+        );
         if let Err(error) = conex_browser_tools::register_browser_tools(
             &mut registry,
             conex_browser_tools::BrowserToolsConfig {
@@ -452,7 +443,6 @@ impl EngineHandle {
         }
     }
 
-
     /// engineReady（provider 配置齐备即可发起调用）
     pub(crate) fn ready(&self) -> bool {
         self.ready.load(Ordering::SeqCst)
@@ -511,8 +501,10 @@ impl EngineHandle {
     pub(crate) fn reload_provider(&self) {
         let (provider, ready, ready_reason, provider_config) = match load_provider_endpoint() {
             Some(config) => {
-                let provider: Arc<dyn ProviderCall> =
-                    Arc::new(HttpProviderCall::new(self.http_client.clone(), config.clone()));
+                let provider: Arc<dyn ProviderCall> = Arc::new(HttpProviderCall::new(
+                    self.http_client.clone(),
+                    config.clone(),
+                ));
                 (Some(provider), true, None, Some(config))
             }
             None => {
@@ -720,7 +712,11 @@ impl EngineHandle {
                 format!(
                     "- {}{}（{}）：{}\n{}",
                     skill.name(),
-                    if skill.is_system() { "（系统）" } else { "" },
+                    if skill.is_system() {
+                        "（系统）"
+                    } else {
+                        ""
+                    },
                     skill.scope(),
                     skill.description(),
                     skill.content()
@@ -804,18 +800,15 @@ impl EngineHandle {
         stats: &RunCacheStats,
         model: &str,
     ) {
-        let mut sessions = self
-            .cache_sessions
-            .lock()
-            .unwrap_or_else(|e| {
-                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
-                tracing::error!(
-                    target: "engine",
-                    "EngineHandle cache_sessions 锁中毒，按恢复模式继续：{e}"
-                );
-                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
-                e.into_inner()
-            });
+        let mut sessions = self.cache_sessions.lock().unwrap_or_else(|e| {
+            // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+            tracing::error!(
+                target: "engine",
+                "EngineHandle cache_sessions 锁中毒，按恢复模式继续：{e}"
+            );
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
         let state = sessions.entry(session_id.to_string()).or_default();
         state.last_stats = Some(*stats);
         state.last_model = Some(model.to_string());
@@ -851,7 +844,9 @@ pub(crate) fn assemble_scheduler_registry(
         None => crate::sched::MemorySchedStore::shared(),
     };
     let registry = Arc::new(crate::sched::SchedulerRegistry::new(
-        Arc::new(crate::sched::QueuePendingSink::new(Arc::clone(timer_steering_queue))),
+        Arc::new(crate::sched::QueuePendingSink::new(Arc::clone(
+            timer_steering_queue,
+        ))),
         scheduler_event_sink,
         sched_store,
         None,
@@ -1161,8 +1156,11 @@ impl ContextInjector {
     /// 注入段类型序列（按冻结顺序；顺序契约断言入口，M11 复用）
     #[allow(dead_code)] // M11 重注入断言消费（本域测试先行断言，见轮末接线）
     pub(crate) fn kinds(&self) -> Vec<ContextInjectionKind> {
-        let mut kinds: Vec<ContextInjectionKind> =
-            self.injections.iter().map(|injection| injection.kind).collect();
+        let mut kinds: Vec<ContextInjectionKind> = self
+            .injections
+            .iter()
+            .map(|injection| injection.kind)
+            .collect();
         kinds.sort();
         kinds
     }
@@ -1263,7 +1261,8 @@ pub(crate) const SUBAGENT_ROLE_CONSTRAINT_TITLE: &str = "子代理角色约束";
 /// 文案如需调整，必须同步更新测试断言与 T-D-02 的结构化错误文案
 /// （两者表述一致，防模型混淆）。
 #[allow(dead_code)] // F11 T-D-13 接线：spawn 装配路径消费（本文件测试先行断言）
-pub(crate) const SUBAGENT_ROLE_CONSTRAINT_CONTENT: &str = "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。\
+pub(crate) const SUBAGENT_ROLE_CONSTRAINT_CONTENT: &str =
+    "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。\
      如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。";
 
 /// T-D-03：向 [ContextInjector] 追加「子代理角色约束」注入段（System 段）。
@@ -1570,7 +1569,9 @@ impl SessionLoopProducer {
                 .cache_tracking
                 .as_ref()
                 .map_or(("auto", ""), |c| (c.provider.as_str(), c.model.as_str()));
-            if let Some(alert) = waste_alert_event(&self.session_id, stats, model_switched, vendor, model) {
+            if let Some(alert) =
+                waste_alert_event(&self.session_id, stats, model_switched, vendor, model)
+            {
                 if let Some(sink) = &self.delta_sink {
                     sink.push(alert);
                 }
@@ -1581,20 +1582,31 @@ impl SessionLoopProducer {
 
     /// 当前模型标识（缓存测量装配 / 模型切换检测用；未启用测量 → None）
     fn current_model(&self) -> Option<&str> {
-        self.cache_tracking.as_ref().map(|config| config.model.as_str())
+        self.cache_tracking
+            .as_ref()
+            .map(|config| config.model.as_str())
     }
 
     /// 模型切换检测（上一 run model ≠ 当前 model）
     fn detect_model_switch(&self) -> bool {
-        model_switched(self.cache_session.last_model.as_deref(), self.current_model())
+        model_switched(
+            self.cache_session.last_model.as_deref(),
+            self.current_model(),
+        )
     }
 
     /// 冷缓存预警（run 启动前；实时轨 DeltaSink 发一次）
     fn emit_cold_cache_warning_if_cold(&self) {
         let Some(sink) = &self.delta_sink else { return };
-        let Some(config) = &self.cache_tracking else { return };
-        let Some(last) = &self.cache_session.last_stats else { return };
-        if let Some(event) = cold_cache_warning_event(&self.session_id, config, last, unix_millis_now()) {
+        let Some(config) = &self.cache_tracking else {
+            return;
+        };
+        let Some(last) = &self.cache_session.last_stats else {
+            return;
+        };
+        if let Some(event) =
+            cold_cache_warning_event(&self.session_id, config, last, unix_millis_now())
+        {
             sink.push(event);
         }
     }

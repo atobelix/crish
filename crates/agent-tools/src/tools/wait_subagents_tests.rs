@@ -578,8 +578,7 @@ async fn primitive_no_timeout_waits_until_stream_closed_or_all_terminal() {
     drop(tx);
     // 无超时 + 流关闭：返回当前态（fail-open 不 panic）
     let result =
-        wait_for_terminal_events(&["sub-1".to_string(), "sub-2".to_string()], rx, None, 0)
-            .await;
+        wait_for_terminal_events(&["sub-1".to_string(), "sub-2".to_string()], rx, None, 0).await;
     assert!(!result.all_terminal);
     assert!(!result.timed_out);
     assert_eq!(result.agents[1].status, SubagentState::Running);
@@ -698,8 +697,7 @@ fn declaration_remaining_wait_computation() {
 fn declaration_from_meta_pairs_fail_open() {
     // 关键键缺失 / 非法 → None（不 panic）
     assert!(
-        DispatchDeclaration::from_meta_pairs([("dispatch_mode", "timer".to_string())])
-            .is_none()
+        DispatchDeclaration::from_meta_pairs([("dispatch_mode", "timer".to_string())]).is_none()
     );
     let bad = vec![
         ("dispatch_mode", "timer".to_string()),
@@ -854,7 +852,9 @@ fn output_files_collected_from_write_claims() {
     let _a = registry
         .claim_one("sub-1", "01-kernel-analysis.md", ClaimMode::Write)
         .unwrap();
-    let _b = registry.claim_one("sub-1", "docs", ClaimMode::Write).unwrap();
+    let _b = registry
+        .claim_one("sub-1", "docs", ClaimMode::Write)
+        .unwrap();
     // 其他持有者 / 删除模式声明 → 不得混入产出清单
     let _c = registry
         .claim_one("sub-2", "04-other-holder.md", ClaimMode::Write)
@@ -863,12 +863,7 @@ fn output_files_collected_from_write_claims() {
         .claim_one("sub-3", "99-delete-mode.md", ClaimMode::Delete)
         .unwrap();
 
-    let files = collect_subagent_output_files(
-        Some(&registry),
-        "sub-1",
-        root,
-        Some("sub-1 完成"),
-    );
+    let files = collect_subagent_output_files(Some(&registry), "sub-1", root, Some("sub-1 完成"));
     let paths = files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>();
     assert_eq!(
         paths,
@@ -891,7 +886,9 @@ fn output_files_summary_falls_back_to_first_line() {
     std::fs::write(root.join("a.md"), "# 标题\n\n正文第二行").unwrap();
     std::fs::write(root.join("empty.md"), "").unwrap();
     let registry = Arc::new(WritePathRegistry::new("s1", root));
-    let _a = registry.claim_one("sub-1", "a.md", ClaimMode::Write).unwrap();
+    let _a = registry
+        .claim_one("sub-1", "a.md", ClaimMode::Write)
+        .unwrap();
     let _b = registry
         .claim_one("sub-1", "empty.md", ClaimMode::Write)
         .unwrap();
@@ -909,7 +906,9 @@ fn output_files_skip_deleted_paths() {
     let root = ws.path();
     std::fs::write(root.join("gone.md"), "已删除").unwrap();
     let registry = Arc::new(WritePathRegistry::new("s1", root));
-    let _a = registry.claim_one("sub-1", "gone.md", ClaimMode::Write).unwrap();
+    let _a = registry
+        .claim_one("sub-1", "gone.md", ClaimMode::Write)
+        .unwrap();
     std::fs::remove_file(root.join("gone.md")).unwrap();
     let files = collect_subagent_output_files(Some(&registry), "sub-1", root, None);
     assert!(files.is_empty(), "删除后的路径不得出现在产出清单");
@@ -985,10 +984,7 @@ async fn await_all_envelope_output_files_empty_when_unwired() {
         .await
         .unwrap();
     assert_eq!(out["agents"][0]["outputFiles"].as_array().unwrap().len(), 0);
-    assert!(
-        channel.output_persists().is_empty(),
-        "无产出不得触发持久化"
-    );
+    assert!(channel.output_persists().is_empty(), "无产出不得触发持久化");
 }
 
 // ── dispatch_outputs 持久化 JSON：往返与旧数据兼容 ─────────────
@@ -1030,8 +1026,14 @@ fn dispatch_outputs_value_roundtrip() {
 #[test]
 fn dispatch_outputs_parse_tolerant_for_old_data() {
     assert!(parse_dispatch_outputs(None).is_empty(), "旧格式无该键 → 空");
-    assert!(parse_dispatch_outputs(Some("not-json")).is_empty(), "损坏 JSON → 空");
-    assert!(parse_dispatch_outputs(Some("[1, 2]")).is_empty(), "非对象 → 空");
+    assert!(
+        parse_dispatch_outputs(Some("not-json")).is_empty(),
+        "损坏 JSON → 空"
+    );
+    assert!(
+        parse_dispatch_outputs(Some("[1, 2]")).is_empty(),
+        "非对象 → 空"
+    );
     assert!(parse_dispatch_outputs(Some("{}")).is_empty(), "空对象 → 空");
 }
 

@@ -141,9 +141,10 @@ impl ToolMiddleware for BackupMiddleware {
                 });
             }
         };
-        let root = self.trash_root.clone().unwrap_or_else(|| {
-            ws_root.join(crate::tools::delete::DEFAULT_TRASH_DIR_NAME)
-        });
+        let root = self
+            .trash_root
+            .clone()
+            .unwrap_or_else(|| ws_root.join(crate::tools::delete::DEFAULT_TRASH_DIR_NAME));
         let service = TrashService::new(root);
         match service.snapshot(&target) {
             Ok(entry) => {
@@ -200,11 +201,7 @@ mod tests {
             })
         }
 
-        async fn execute(
-            &self,
-            _ctx: &ToolContext,
-            _args: Value,
-        ) -> Result<Value, ToolError> {
+        async fn execute(&self, _ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
             self.executed.fetch_add(1, Ordering::SeqCst);
             Ok(serde_json::json!({ "ok": true }))
         }
@@ -233,7 +230,10 @@ mod tests {
     fn default_backup_tools_covers_write_and_multi_replace() {
         // 名单登记护栏（T-EG-02）：写类工具必须声明写前快照
         let names = default_backup_tools();
-        assert!(names.contains(&"write_file".to_string()), "write_file 必须在备份名单");
+        assert!(
+            names.contains(&"write_file".to_string()),
+            "write_file 必须在备份名单"
+        );
         assert!(
             names.contains(&"multi_replace_file_content".to_string()),
             "multi_replace_file_content 必须在备份名单"
@@ -249,10 +249,17 @@ mod tests {
         let (tool, _) = write_tool();
 
         let r = mw
-            .before_execute(&tool, json!({ "path": "a.txt", "content": "new" }), &mw_ctx(&ws))
+            .before_execute(
+                &tool,
+                json!({ "path": "a.txt", "content": "new" }),
+                &mw_ctx(&ws),
+            )
             .await
             .unwrap();
-        assert!(matches!(r, BeforeExecuteResult::Proceed { .. }), "快照成功应放行");
+        assert!(
+            matches!(r, BeforeExecuteResult::Proceed { .. }),
+            "快照成功应放行"
+        );
 
         // 快照登记出现条目（模式 snapshot），原路径未被修改（复制语义）
         let svc = TrashService::new(trash.path());
@@ -272,7 +279,11 @@ mod tests {
 
         // 目标原不存在 → nil-content 快照，仍放行（写新文件不被误拦）
         let r = mw
-            .before_execute(&tool, json!({ "path": "fresh.txt", "content": "x" }), &mw_ctx(&ws))
+            .before_execute(
+                &tool,
+                json!({ "path": "fresh.txt", "content": "x" }),
+                &mw_ctx(&ws),
+            )
             .await
             .unwrap();
         assert!(matches!(r, BeforeExecuteResult::Proceed { .. }));
@@ -299,12 +310,19 @@ mod tests {
         let (tool, executed) = write_tool();
 
         let r = mw
-            .before_execute(&tool, json!({ "path": ".crish-trash/x.txt", "content": "y" }), &mw_ctx(&ws))
+            .before_execute(
+                &tool,
+                json!({ "path": ".crish-trash/x.txt", "content": "y" }),
+                &mw_ctx(&ws),
+            )
             .await
             .unwrap();
         match r {
             BeforeExecuteResult::Block { reason } => {
-                assert!(reason.contains("备份失败"), "Block 文案应带失败原因：{reason}");
+                assert!(
+                    reason.contains("备份失败"),
+                    "Block 文案应带失败原因：{reason}"
+                );
             }
             BeforeExecuteResult::Proceed { .. } => panic!("备份失败必须阻止执行"),
         }
@@ -322,13 +340,23 @@ mod tests {
         let (tool, executed) = write_tool();
 
         let r = mw
-            .before_execute(&tool, json!({ "path": "a.txt", "content": "v2" }), &mw_ctx(&ws))
+            .before_execute(
+                &tool,
+                json!({ "path": "a.txt", "content": "v2" }),
+                &mw_ctx(&ws),
+            )
             .await
             .unwrap();
-        assert!(matches!(r, BeforeExecuteResult::Proceed { .. }), "备份成功应放行");
+        assert!(
+            matches!(r, BeforeExecuteResult::Proceed { .. }),
+            "备份成功应放行"
+        );
         // 放行后工具可正常执行
         let _ = tool
-            .execute(&crate::context::create_mock_tool_context(), json!({ "path": "a.txt" }))
+            .execute(
+                &crate::context::create_mock_tool_context(),
+                json!({ "path": "a.txt" }),
+            )
             .await
             .unwrap();
         assert_eq!(executed.load(Ordering::SeqCst), 1);
@@ -364,10 +392,7 @@ mod tests {
         let ws = TempWorkspace::new("bw_del");
         ws.write_file("a.txt", "x");
         let trash = TempWorkspace::new("bw_del_trash");
-        let mw = BackupMiddleware::new(
-            Some(trash.path().clone()),
-            vec!["delete_file".to_string()],
-        );
+        let mw = BackupMiddleware::new(Some(trash.path().clone()), vec!["delete_file".to_string()]);
         let tool = TestWriteTool {
             name: "delete_file".to_string(),
             executed: Arc::new(AtomicUsize::new(0)),
@@ -410,7 +435,11 @@ mod tests {
         let (tool, _) = write_tool();
 
         let r = mw
-            .before_execute(&tool, json!({ "path": "doc.txt", "content": "bad" }), &mw_ctx(&ws))
+            .before_execute(
+                &tool,
+                json!({ "path": "doc.txt", "content": "bad" }),
+                &mw_ctx(&ws),
+            )
             .await
             .unwrap();
         assert!(matches!(r, BeforeExecuteResult::Proceed { .. }));

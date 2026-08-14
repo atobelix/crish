@@ -25,11 +25,10 @@
 use crate::context::{AskDecision, ToolContext};
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::note_backend::{
-    apply_result_json, backend_err_to_tool_err, NoteApplyMdRequest, NoteApplyMode,
-    NoteBackendError,
+    apply_result_json, backend_err_to_tool_err, NoteApplyMdRequest, NoteApplyMode, NoteBackendError,
 };
-use crate::tools::{optional_string, require_string};
 use crate::tools::note_query_blocks::NOTE_BACKEND_UNWIRED;
+use crate::tools::{optional_string, require_string};
 use async_trait::async_trait;
 use serde_json::Value as JsonValue;
 
@@ -121,12 +120,12 @@ pub(crate) fn parse_apply_mode(args: &JsonValue) -> Result<NoteApplyMode, ToolEr
 
 /// markdown 允许空串（与 require_string 非空不同）
 pub(crate) fn require_markdown(args: &JsonValue) -> Result<String, ToolError> {
-    let value = args.get("markdown").ok_or_else(|| {
-        ToolError::invalid_input("markdown must be a string")
-    })?;
-    let s = value.as_str().ok_or_else(|| {
-        ToolError::invalid_input("markdown must be a string")
-    })?;
+    let value = args
+        .get("markdown")
+        .ok_or_else(|| ToolError::invalid_input("markdown must be a string"))?;
+    let s = value
+        .as_str()
+        .ok_or_else(|| ToolError::invalid_input("markdown must be a string"))?;
     if s.chars().any(|c| {
         matches!(
             c,
@@ -215,10 +214,7 @@ mod tests {
         assert!(tool.definition().dangerous);
         let ctx = create_mock_tool_context();
         let out = tool
-            .execute(
-                &ctx,
-                serde_json::json!({ "doc_id": "d", "markdown": "hi" }),
-            )
+            .execute(&ctx, serde_json::json!({ "doc_id": "d", "markdown": "hi" }))
             .await
             .unwrap();
         assert_eq!(out["ok"], false);
@@ -363,10 +359,7 @@ mod tests {
         let tool = DocumentApplyMdTool::new();
         let ctx = create_mock_tool_context();
         let out = tool
-            .execute(
-                &ctx,
-                serde_json::json!({ "doc_id": "d", "markdown": "hi" }),
-            )
+            .execute(&ctx, serde_json::json!({ "doc_id": "d", "markdown": "hi" }))
             .await
             .unwrap();
         assert_eq!(out["ok"], false);
@@ -429,7 +422,10 @@ mod tests {
             .unwrap();
         assert_eq!(o["ok"], true);
         assert!(
-            o["outline"].as_array().map(|a| a.is_empty()).unwrap_or(true),
+            o["outline"]
+                .as_array()
+                .map(|a| a.is_empty())
+                .unwrap_or(true),
             "拒绝后不得有块：{:?}",
             o
         );

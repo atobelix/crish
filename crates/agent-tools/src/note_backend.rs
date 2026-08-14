@@ -54,9 +54,9 @@ pub use crate::note_types::{
     NoteBlockBatchRequest, NoteBlockBatchResult, NoteBlockDeleteRequest, NoteBlockDeleteResult,
     NoteBlockInsertRequest, NoteBlockInsertResult, NoteBlockMoveRequest, NoteBlockMoveResult,
     NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview, NoteBlockSetAttrRequest,
-    NoteBlockSetAttrResult, NoteBlockUpdateRequest, NoteBlockUpdateResult,
-    NoteLossyItem, NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit,
-    NoteQueryBlocksParams, NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
+    NoteBlockSetAttrResult, NoteBlockUpdateRequest, NoteBlockUpdateResult, NoteLossyItem,
+    NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
+    NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };
 
 // ==================== NoteBackend trait ====================
@@ -133,10 +133,7 @@ pub trait NoteBackend: Send + Sync + Debug {
         &self,
         req: NoteBlockInsertRequest,
     ) -> Result<NoteBlockInsertResult, NoteBackendError> {
-        let kind = req
-            .kind
-            .clone()
-            .unwrap_or_else(|| "paragraph".to_string());
+        let kind = req.kind.clone().unwrap_or_else(|| "paragraph".to_string());
         let batch = self
             .apply_block_ops(NoteBlockBatchRequest {
                 doc_id: req.doc_id,
@@ -155,13 +152,9 @@ pub trait NoteBackend: Send + Sync + Debug {
                 force_execution_unknown: false,
             })
             .await?;
-        let block_id = batch
-            .block_ids
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                NoteBackendError::ApplyFailed("block_insert produced no block_id".into())
-            })?;
+        let block_id = batch.block_ids.into_iter().next().ok_or_else(|| {
+            NoteBackendError::ApplyFailed("block_insert produced no block_id".into())
+        })?;
         Ok(NoteBlockInsertResult { block_id, kind })
     }
 
@@ -191,11 +184,7 @@ pub trait NoteBackend: Send + Sync + Debug {
                 force_execution_unknown: false,
             })
             .await?;
-        let id = batch
-            .block_ids
-            .into_iter()
-            .next()
-            .unwrap_or(fallback_id);
+        let id = batch.block_ids.into_iter().next().unwrap_or(fallback_id);
         Ok(NoteBlockUpdateResult { id })
     }
 
@@ -225,11 +214,7 @@ pub trait NoteBackend: Send + Sync + Debug {
                 force_execution_unknown: false,
             })
             .await?;
-        let id = batch
-            .block_ids
-            .into_iter()
-            .next()
-            .unwrap_or(fallback_id);
+        let id = batch.block_ids.into_iter().next().unwrap_or(fallback_id);
         Ok(NoteBlockDeleteResult { id })
     }
 
@@ -259,11 +244,7 @@ pub trait NoteBackend: Send + Sync + Debug {
                 force_execution_unknown: false,
             })
             .await?;
-        let id = batch
-            .block_ids
-            .into_iter()
-            .next()
-            .unwrap_or(fallback_id);
+        let id = batch.block_ids.into_iter().next().unwrap_or(fallback_id);
         Ok(NoteBlockMoveResult { id })
     }
 
@@ -293,11 +274,7 @@ pub trait NoteBackend: Send + Sync + Debug {
                 force_execution_unknown: false,
             })
             .await?;
-        let id = batch
-            .block_ids
-            .into_iter()
-            .next()
-            .unwrap_or(fallback_id);
+        let id = batch.block_ids.into_iter().next().unwrap_or(fallback_id);
         Ok(NoteBlockSetAttrResult { id })
     }
 }

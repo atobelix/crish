@@ -8,9 +8,7 @@
 
 use std::sync::{Arc, Barrier};
 
-use conex_computer::activation::{
-    ActivationError, ActivationGate, CleanupAction, SessionMode,
-};
+use conex_computer::activation::{ActivationError, ActivationGate, CleanupAction, SessionMode};
 
 /// 状态机操作(全迁移表用例的操作维度)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,15 +45,55 @@ fn drive_to(gate: &ActivationGate, mode: SessionMode) {
 fn activation_state_machine_full_transition_table() {
     let cases: [(SessionMode, Op, bool, SessionMode); 9] = [
         // (初始态, 操作, 期望成功?, 期望终态)
-        (SessionMode::Idle, Op::RequestBrowser, true, SessionMode::BrowserActive),
-        (SessionMode::Idle, Op::RequestDesktop, true, SessionMode::DesktopActive),
+        (
+            SessionMode::Idle,
+            Op::RequestBrowser,
+            true,
+            SessionMode::BrowserActive,
+        ),
+        (
+            SessionMode::Idle,
+            Op::RequestDesktop,
+            true,
+            SessionMode::DesktopActive,
+        ),
         (SessionMode::Idle, Op::Release, true, SessionMode::Idle),
-        (SessionMode::BrowserActive, Op::RequestBrowser, true, SessionMode::BrowserActive),
-        (SessionMode::BrowserActive, Op::RequestDesktop, false, SessionMode::BrowserActive),
-        (SessionMode::BrowserActive, Op::Release, true, SessionMode::Idle),
-        (SessionMode::DesktopActive, Op::RequestDesktop, true, SessionMode::DesktopActive),
-        (SessionMode::DesktopActive, Op::RequestBrowser, false, SessionMode::DesktopActive),
-        (SessionMode::DesktopActive, Op::Release, true, SessionMode::Idle),
+        (
+            SessionMode::BrowserActive,
+            Op::RequestBrowser,
+            true,
+            SessionMode::BrowserActive,
+        ),
+        (
+            SessionMode::BrowserActive,
+            Op::RequestDesktop,
+            false,
+            SessionMode::BrowserActive,
+        ),
+        (
+            SessionMode::BrowserActive,
+            Op::Release,
+            true,
+            SessionMode::Idle,
+        ),
+        (
+            SessionMode::DesktopActive,
+            Op::RequestDesktop,
+            true,
+            SessionMode::DesktopActive,
+        ),
+        (
+            SessionMode::DesktopActive,
+            Op::RequestBrowser,
+            false,
+            SessionMode::DesktopActive,
+        ),
+        (
+            SessionMode::DesktopActive,
+            Op::Release,
+            true,
+            SessionMode::Idle,
+        ),
     ];
     for (idx, (init, op, expect_ok, expect_final)) in cases.into_iter().enumerate() {
         let gate = ActivationGate::new();
@@ -95,7 +133,11 @@ fn request_desktop_rejected_while_browser_active_with_exclusive_semantics() {
         err.to_string().contains("tool.session.exclusive"),
         "错误码缺失: {err}"
     );
-    assert_eq!(gate.current(), SessionMode::BrowserActive, "被拒后状态不得改变");
+    assert_eq!(
+        gate.current(),
+        SessionMode::BrowserActive,
+        "被拒后状态不得改变"
+    );
 }
 
 /// 互斥拒绝镜像:Desktop 活跃时 request_browser 拒绝
@@ -283,7 +325,10 @@ fn cleanup_plan_contract_full_matrix() {
     let desktop_clean = ActivationGate::desktop_cleanup();
     assert_eq!(
         desktop_clean,
-        vec![CleanupAction::DesktopInputReset, CleanupAction::DesktopSuspend]
+        vec![
+            CleanupAction::DesktopInputReset,
+            CleanupAction::DesktopSuspend
+        ]
     );
 
     let cases: Vec<(SessionMode, SessionMode, Vec<CleanupAction>)> = vec![
@@ -291,11 +336,27 @@ fn cleanup_plan_contract_full_matrix() {
         (SessionMode::Idle, SessionMode::Idle, Vec::new()),
         (SessionMode::Idle, SessionMode::BrowserActive, Vec::new()),
         (SessionMode::Idle, SessionMode::DesktopActive, Vec::new()),
-        (SessionMode::BrowserActive, SessionMode::BrowserActive, Vec::new()),
-        (SessionMode::BrowserActive, SessionMode::DesktopActive, browser_clean.clone()),
+        (
+            SessionMode::BrowserActive,
+            SessionMode::BrowserActive,
+            Vec::new(),
+        ),
+        (
+            SessionMode::BrowserActive,
+            SessionMode::DesktopActive,
+            browser_clean.clone(),
+        ),
         (SessionMode::BrowserActive, SessionMode::Idle, browser_clean),
-        (SessionMode::DesktopActive, SessionMode::DesktopActive, Vec::new()),
-        (SessionMode::DesktopActive, SessionMode::BrowserActive, desktop_clean.clone()),
+        (
+            SessionMode::DesktopActive,
+            SessionMode::DesktopActive,
+            Vec::new(),
+        ),
+        (
+            SessionMode::DesktopActive,
+            SessionMode::BrowserActive,
+            desktop_clean.clone(),
+        ),
         (SessionMode::DesktopActive, SessionMode::Idle, desktop_clean),
     ];
     for (idx, (init, target, expect)) in cases.into_iter().enumerate() {

@@ -147,12 +147,15 @@ pub fn parse_key_sequence(keys: &str) -> Result<KeySequence, String> {
     let mut modifiers: Vec<KeySpec> = Vec::new();
     let mut main: Option<KeySpec> = None;
     for token in tokens {
-        let spec = lookup_key(token).or_else(|| char_spec(token)).ok_or_else(|| {
-            format!("非法键名：{token}")
-        })?;
+        let spec = lookup_key(token)
+            .or_else(|| char_spec(token))
+            .ok_or_else(|| format!("非法键名：{token}"))?;
         if spec.modifier_mask != 0 {
             // 修饰键去重（重复按下无意义）
-            if !modifiers.iter().any(|m| m.modifier_mask == spec.modifier_mask) {
+            if !modifiers
+                .iter()
+                .any(|m| m.modifier_mask == spec.modifier_mask)
+            {
                 modifiers.push(spec);
             }
         } else if main.is_none() {
@@ -291,7 +294,10 @@ fn char_event(text: &str) -> DispatchKeyEventParams {
 /// 修饰键（防逻辑卡键）——整段按下序列包在 async 块中，释放循环在其后无条件执行。
 pub async fn dispatch_key(exec: &ActionExecutor, keys: &str) -> Result<(), ActionError> {
     let sequence = parse_key_sequence(keys).map_err(|e| {
-        ActionError::new(ActionErrorKind::InvalidInput, format!("非法键名：{keys}（{e}）"))
+        ActionError::new(
+            ActionErrorKind::InvalidInput,
+            format!("非法键名：{keys}（{e}）"),
+        )
     })?;
     let mut mask = 0;
     let press_result: Result<(), ActionError> = async {
@@ -334,12 +340,7 @@ pub async fn dispatch_key(exec: &ActionExecutor, keys: &str) -> Result<(), Actio
         mask &= !modifier.modifier_mask;
         let _ = exec
             .ops
-            .key_event(key_up(
-                &modifier.name,
-                &modifier.code,
-                mask,
-                modifier.vk,
-            ))
+            .key_event(key_up(&modifier.name, &modifier.code, mask, modifier.vk))
             .await;
     }
     press_result
@@ -417,9 +418,7 @@ async fn dispatch_char(exec: &ActionExecutor, c: char) -> Result<(), ActionError
             format!("字符 {c:?} 不在可注入面（应走 insertText 路径）"),
         )
     })?;
-    exec.ops
-        .key_event(key_down(&name, &code, 0, vk))
-        .await?;
+    exec.ops.key_event(key_down(&name, &code, 0, vk)).await?;
     exec.ops.key_event(char_event(&name)).await?;
     exec.ops.key_event(key_up(&name, &code, 0, vk)).await?;
     Ok(())
@@ -452,14 +451,10 @@ async fn verify_progress(
 }
 
 /// 回读固定模板（只读 activeElement；无模型输入，R-5 纪律）。
-pub(crate) const ACTIVE_VALUE_TEMPLATE: &str =
-    r#"(() => { const el = document.activeElement; if (!el) return ""; if ("value" in el) return String(el.value); return el.innerText || ""; })()"#;
+pub(crate) const ACTIVE_VALUE_TEMPLATE: &str = r#"(() => { const el = document.activeElement; if (!el) return ""; if ("value" in el) return String(el.value); return el.innerText || ""; })()"#;
 
 /// focus 派发（DOM.focus，无坐标路径）。
-pub async fn dispatch_focus(
-    exec: &ActionExecutor,
-    node_id: i64,
-) -> Result<(), ActionError> {
+pub async fn dispatch_focus(exec: &ActionExecutor, node_id: i64) -> Result<(), ActionError> {
     exec.ops.focus_node(node_id).await?;
     Ok(())
 }
@@ -507,13 +502,9 @@ mod tests {
     ) -> (ActionExecutor, MockOps, Arc<RecordingDelay>) {
         let token = CancellationToken::new();
         let delay = Arc::new(RecordingDelay::new());
-        let exec = ActionExecutor::new(
-            Arc::new(ops.clone()),
-            Arc::new(snapshot),
-            token,
-        )
-        .with_gate(Arc::new(AllowGate))
-        .with_delay(delay.clone());
+        let exec = ActionExecutor::new(Arc::new(ops.clone()), Arc::new(snapshot), token)
+            .with_gate(Arc::new(AllowGate))
+            .with_delay(delay.clone());
         (exec, ops, delay)
     }
 
@@ -521,13 +512,53 @@ mod tests {
     #[test]
     fn key_map_full_coverage() {
         let names = [
-            "Enter", "Tab", "Escape", "Space", "Backspace", "Delete", "Insert", "Home",
-            "End", "PageUp", "PageDown", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown",
-            "Shift", "Control", "Alt", "Meta",
-            "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-            "Numpad0", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6",
-            "Numpad7", "Numpad8", "Numpad9", "NumpadAdd", "NumpadSubtract", "NumpadMultiply",
-            "NumpadDivide", "NumpadDecimal", ";",
+            "Enter",
+            "Tab",
+            "Escape",
+            "Space",
+            "Backspace",
+            "Delete",
+            "Insert",
+            "Home",
+            "End",
+            "PageUp",
+            "PageDown",
+            "ArrowLeft",
+            "ArrowUp",
+            "ArrowRight",
+            "ArrowDown",
+            "Shift",
+            "Control",
+            "Alt",
+            "Meta",
+            "F1",
+            "F2",
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7",
+            "F8",
+            "F9",
+            "F10",
+            "F11",
+            "F12",
+            "Numpad0",
+            "Numpad1",
+            "Numpad2",
+            "Numpad3",
+            "Numpad4",
+            "Numpad5",
+            "Numpad6",
+            "Numpad7",
+            "Numpad8",
+            "Numpad9",
+            "NumpadAdd",
+            "NumpadSubtract",
+            "NumpadMultiply",
+            "NumpadDivide",
+            "NumpadDecimal",
+            ";",
         ];
         assert_eq!(KEY_MAP.len(), names.len(), "映射表条目与键名表一致");
         for name in names {
@@ -568,7 +599,10 @@ mod tests {
         assert!(parse_key_sequence("").is_err());
         assert!(parse_key_sequence("BogusKey").is_err());
         assert!(parse_key_sequence("Control+A+B").is_err(), "多个主键非法");
-        assert!(parse_key_sequence("Control+").is_ok(), "Control+ 尾随 + 为字面加号");
+        assert!(
+            parse_key_sequence("Control+").is_ok(),
+            "Control+ 尾随 + 为字面加号"
+        );
     }
 
     /// 组合键掩码序列（§4.3）：Control+A → down(2) → down(2)/char/up(2) → up(0)。
@@ -576,10 +610,13 @@ mod tests {
     async fn key_modifier_mask_sequence() {
         let (exec, ops, _delay) = executor(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         exec.key(&"t1".to_string(), 1, "Control+A")
             .await
@@ -587,11 +624,31 @@ mod tests {
         let events = ops.calls_of(MockOp::KeyEvent);
         let summary: Vec<String> = events.iter().map(|c| c.detail.clone()).collect();
         assert_eq!(events.len(), 5, "down(Ctrl) down(A) char(A) up(A) up(Ctrl)");
-        assert!(summary[0].contains("keyDown key=\"Control\"") && summary[0].contains("mods=2"), "{}", summary[0]);
-        assert!(summary[1].contains("keyDown key=\"A\"") && summary[1].contains("mods=2"), "{}", summary[1]);
-        assert!(summary[2].contains("char") && summary[2].contains("text=\"A\""), "{}", summary[2]);
-        assert!(summary[3].contains("keyUp key=\"A\"") && summary[3].contains("mods=2"), "{}", summary[3]);
-        assert!(summary[4].contains("keyUp key=\"Control\"") && summary[4].contains("mods=0"), "{}", summary[4]);
+        assert!(
+            summary[0].contains("keyDown key=\"Control\"") && summary[0].contains("mods=2"),
+            "{}",
+            summary[0]
+        );
+        assert!(
+            summary[1].contains("keyDown key=\"A\"") && summary[1].contains("mods=2"),
+            "{}",
+            summary[1]
+        );
+        assert!(
+            summary[2].contains("char") && summary[2].contains("text=\"A\""),
+            "{}",
+            summary[2]
+        );
+        assert!(
+            summary[3].contains("keyUp key=\"A\"") && summary[3].contains("mods=2"),
+            "{}",
+            summary[3]
+        );
+        assert!(
+            summary[4].contains("keyUp key=\"Control\"") && summary[4].contains("mods=0"),
+            "{}",
+            summary[4]
+        );
     }
 
     /// 多修饰键掩码序列：Control+Shift+A → 2/10/10/10/8/0（逆序释放）。
@@ -599,10 +656,13 @@ mod tests {
     async fn key_multi_modifier_release_order() {
         let (exec, ops, _delay) = executor(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         exec.key(&"t1".to_string(), 1, "Control+Shift+A")
             .await
@@ -614,11 +674,18 @@ mod tests {
             .collect();
         assert_eq!(summary.len(), 7);
         assert!(summary[0].contains("keyDown key=\"Control\"") && summary[0].contains("mods=2"));
-        assert!(summary[1].contains("keyDown key=\"Shift\"") && summary[1].contains("mods=10"), "{}", summary[1]);
+        assert!(
+            summary[1].contains("keyDown key=\"Shift\"") && summary[1].contains("mods=10"),
+            "{}",
+            summary[1]
+        );
         assert!(summary[2].contains("keyDown key=\"A\"") && summary[2].contains("mods=10"));
         assert!(summary[3].contains("char") && summary[3].contains("text=\"A\""));
         assert!(summary[4].contains("keyUp key=\"A\"") && summary[4].contains("mods=10"));
-        assert!(summary[5].contains("keyUp key=\"Shift\"") && summary[5].contains("mods=2"), "逆序释放 Shift（Control 仍按下）");
+        assert!(
+            summary[5].contains("keyUp key=\"Shift\"") && summary[5].contains("mods=2"),
+            "逆序释放 Shift（Control 仍按下）"
+        );
         assert!(summary[6].contains("keyUp key=\"Control\"") && summary[6].contains("mods=0"));
     }
 
@@ -634,15 +701,21 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        let err = exec.key(&"t1".to_string(), 1, "Control+Shift+A").await.expect_err("应失败");
+        let err = exec
+            .key(&"t1".to_string(), 1, "Control+Shift+A")
+            .await
+            .expect_err("应失败");
         assert_eq!(err.kind, ActionErrorKind::ContextGone);
         let summary: Vec<String> = ops
             .calls_of(MockOp::KeyEvent)
@@ -654,12 +727,14 @@ mod tests {
         // 每次尝试的末尾两条必须是修饰键释放（try/finally 兜底，防逻辑卡键）
         for base in [0usize, 3, 6] {
             assert!(
-                summary[base + 1].contains("keyUp key=\"Shift\"") && summary[base + 1].contains("mods=2"),
+                summary[base + 1].contains("keyUp key=\"Shift\"")
+                    && summary[base + 1].contains("mods=2"),
                 "{}",
                 summary[base + 1]
             );
             assert!(
-                summary[base + 2].contains("keyUp key=\"Control\"") && summary[base + 2].contains("mods=0"),
+                summary[base + 2].contains("keyUp key=\"Control\"")
+                    && summary[base + 2].contains("mods=0"),
                 "{}",
                 summary[base + 2]
             );
@@ -671,20 +746,33 @@ mod tests {
     async fn key_single_enter() {
         let (exec, ops, _delay) = executor(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
-        exec.key(&"t1".to_string(), 1, "Enter").await.expect("单键应成功");
+        exec.key(&"t1".to_string(), 1, "Enter")
+            .await
+            .expect("单键应成功");
         let summary: Vec<String> = ops
             .calls_of(MockOp::KeyEvent)
             .iter()
             .map(|c| c.detail.clone())
             .collect();
         assert_eq!(summary.len(), 2, "down + up");
-        assert!(summary[0].contains("keyDown key=\"Enter\"") && summary[0].contains("mods=0") && summary[0].contains("vk=13"));
-        assert!(summary[1].contains("keyUp key=\"Enter\"") && summary[1].contains("mods=0") && summary[1].contains("vk=13"));
+        assert!(
+            summary[0].contains("keyDown key=\"Enter\"")
+                && summary[0].contains("mods=0")
+                && summary[0].contains("vk=13")
+        );
+        assert!(
+            summary[1].contains("keyUp key=\"Enter\"")
+                && summary[1].contains("mods=0")
+                && summary[1].contains("vk=13")
+        );
     }
 
     /// type 分块边界（§4.1）：49/50 单块零延迟；51 两块一次 12ms 节流。
@@ -692,30 +780,45 @@ mod tests {
     async fn type_chunk_boundaries() {
         let (exec, ops, delay) = executor(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
-        let el = ElementRef { index: 0, backend_node_id: 11 };
+        let el = ElementRef {
+            index: 0,
+            backend_node_id: 11,
+        };
         let tab = "t1".to_string();
         // 49 字符：1 块，无节流
-        exec.type_text(&tab, 1, el, &"a".repeat(49), None).await.expect("49 应成功");
+        exec.type_text(&tab, 1, el, &"a".repeat(49), None)
+            .await
+            .expect("49 应成功");
         assert_eq!(ops.count(MockOp::KeyEvent), 49 * 3, "49 字符三事件");
         assert!(delay.durations().is_empty(), "49 字符不应有块间延迟");
         assert_eq!(ops.count(MockOp::FocusNode), 1, "type 先 focus");
         assert_eq!(ops.count(MockOp::Evaluate), 0, "单块无回读");
 
         // 50 字符：1 块，无节流
-        exec.type_text(&tab, 1, el, &"a".repeat(50), None).await.expect("50 应成功");
+        exec.type_text(&tab, 1, el, &"a".repeat(50), None)
+            .await
+            .expect("50 应成功");
         assert_eq!(ops.count(MockOp::KeyEvent), (49 + 50) * 3);
         assert!(delay.durations().is_empty());
 
         // 51 字符：2 块，恰 1 次 12ms 节流 + 回读
-        exec.type_text(&tab, 1, el, &"a".repeat(51), None).await.expect("51 应成功");
+        exec.type_text(&tab, 1, el, &"a".repeat(51), None)
+            .await
+            .expect("51 应成功");
         assert_eq!(ops.count(MockOp::KeyEvent), (49 + 50 + 51) * 3);
         assert_eq!(delay.durations().len(), 1, "恰 1 次块间节流");
-        assert_eq!(delay.durations()[0], Duration::from_millis(TYPE_CHUNK_DELAY_MS));
+        assert_eq!(
+            delay.durations()[0],
+            Duration::from_millis(TYPE_CHUNK_DELAY_MS)
+        );
     }
 
     /// F1 回归：ASCII 输入插入载体唯一——keyDown 不得携带 text（text 只能由
@@ -726,15 +829,21 @@ mod tests {
     async fn type_ascii_insert_carrier_unique() {
         let (exec, ops, _delay) = executor(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         exec.type_text(
             &"t1".to_string(),
             1,
-            ElementRef { index: 0, backend_node_id: 11 },
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
             "demo",
             None,
         )
@@ -744,7 +853,12 @@ mod tests {
         assert_eq!(events.len(), 12, "4 字符 × 三事件");
         let mut carriers: Vec<String> = Vec::new();
         for call in &events {
-            let text_field = call.detail.split("text=").nth(1).unwrap_or_default().to_string();
+            let text_field = call
+                .detail
+                .split("text=")
+                .nth(1)
+                .unwrap_or_default()
+                .to_string();
             if !text_field.starts_with("\"\"") {
                 assert!(
                     call.detail.starts_with("char"),
@@ -790,18 +904,34 @@ mod tests {
     async fn type_chunk_delay_value() {
         let (exec, _ops, delay) = executor(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         // 120 字符 → 3 块 → 2 次节流
-        exec.type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, &"x".repeat(120), None)
-            .await
-            .expect("120 应成功");
+        exec.type_text(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            &"x".repeat(120),
+            None,
+        )
+        .await
+        .expect("120 应成功");
         assert_eq!(delay.durations().len(), 2);
         for d in delay.durations() {
-            assert_eq!(d, Duration::from_millis(TYPE_CHUNK_DELAY_MS), "块间节流定值 12ms");
+            assert_eq!(
+                d,
+                Duration::from_millis(TYPE_CHUNK_DELAY_MS),
+                "块间节流定值 12ms"
+            );
         }
     }
 
@@ -814,22 +944,41 @@ mod tests {
         ops.state.lock().unwrap().cancel_after_char = Some((50, token.clone()));
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
         let err = exec
-            .type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, &"a".repeat(60), None)
+            .type_text(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                &"a".repeat(60),
+                None,
+            )
             .await
             .expect_err("分块间应中断");
         assert_eq!(err.kind, ActionErrorKind::Aborted);
-        assert_eq!(ops.count(MockOp::KeyEvent), 50 * 3, "第 1 块完整保留（已输入部分）");
+        assert_eq!(
+            ops.count(MockOp::KeyEvent),
+            50 * 3,
+            "第 1 块完整保留（已输入部分）"
+        );
         // 块间回读校验可能已做补差（第 1 块收尾），但第 2 块零注入（E2E-17）
-        assert!(ops.count(MockOp::InsertText) <= 1, "第 2 块不得注入（补差最多 1 次）");
+        assert!(
+            ops.count(MockOp::InsertText) <= 1,
+            "第 2 块不得注入（补差最多 1 次）"
+        );
     }
 
     /// 回读校验补差（§4.4）：页面吞字符 → insertText 补缺失片段。
@@ -840,14 +989,26 @@ mod tests {
         ops.state.lock().unwrap().active_value = String::new();
         let (exec, ops, _delay) = executor(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
-        exec.type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, &"a".repeat(51), None)
-            .await
-            .expect("补差后应成功");
+        exec.type_text(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            &"a".repeat(51),
+            None,
+        )
+        .await
+        .expect("补差后应成功");
         let inserts: Vec<String> = ops
             .calls_of(MockOp::InsertText)
             .iter()
@@ -868,13 +1029,25 @@ mod tests {
         ops.state.lock().unwrap().active_value = "junk-diverged".to_string();
         let (exec, ops, _delay) = executor(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let err = exec
-            .type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, &"a".repeat(120), None)
+            .type_text(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                &"a".repeat(120),
+                None,
+            )
             .await
             .expect_err("连续 2 块失败应中断");
         assert_eq!(err.kind, ActionErrorKind::NotInteractive);
@@ -886,14 +1059,26 @@ mod tests {
     async fn type_password_readback_length_only() {
         let ops = MockOps::new();
         ops.state.lock().unwrap().active_value = "x".repeat(100);
-        let snapshot = MockSnapshotStore::with_elements(1, &[ElementMeta {
-            backend_node_id: 11,
-            is_password: true,
-        }]);
+        let snapshot = MockSnapshotStore::with_elements(
+            1,
+            &[ElementMeta {
+                backend_node_id: 11,
+                is_password: true,
+            }],
+        );
         let (exec, ops, _delay) = executor(ops, snapshot);
-        exec.type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, &"a".repeat(120), None)
-            .await
-            .expect("长度一致应通过");
+        exec.type_text(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            &"a".repeat(120),
+            None,
+        )
+        .await
+        .expect("长度一致应通过");
         // 120 字符 → 3 块 → 2 次回读；密码回读无明文补差
         assert_eq!(ops.count(MockOp::InsertText), 0, "密码路径不补明文");
     }
@@ -906,17 +1091,33 @@ mod tests {
         // 页面掩码态：回读值恒为掩码字符（"x"×100）——若走明文前缀比对，
         // 两次回读必失配 → NotInteractive 中断；成功即证明仅长度比对（M2）
         ops.state.lock().unwrap().active_value = "x".repeat(100);
-        let snapshot = MockSnapshotStore::with_elements(1, &[ElementMeta {
-            backend_node_id: 11,
-            is_password: true,
-        }]);
+        let snapshot = MockSnapshotStore::with_elements(
+            1,
+            &[ElementMeta {
+                backend_node_id: 11,
+                is_password: true,
+            }],
+        );
         let (exec, ops, _delay) = executor(ops, snapshot);
         let text = "密码输入测试".repeat(10); // 100 个中文字符 → 2 整块
-        exec.type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, &text, None)
-            .await
-            .expect("密码框中文输入应成功（insertText + 长度比对）");
+        exec.type_text(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            &text,
+            None,
+        )
+        .await
+        .expect("密码框中文输入应成功（insertText + 长度比对）");
         assert_eq!(ops.count(MockOp::KeyEvent), 0, "CJK 不走逐字符三事件");
-        assert_eq!(ops.count(MockOp::InsertText), 2, "两整块 insertText（IME 路径）");
+        assert_eq!(
+            ops.count(MockOp::InsertText),
+            2,
+            "两整块 insertText（IME 路径）"
+        );
     }
 
     /// CJK 整块 insertText（IME 路径，§4.4）：中文 60 字符 → 2 块 insertText + 1 次补差。
@@ -924,18 +1125,34 @@ mod tests {
     async fn type_cjk_uses_insert_text() {
         let (exec, ops, _delay) = executor(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let text = "中文输入测试".repeat(10); // 60 个中文字符
-        exec.type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, &text, None)
-            .await
-            .expect("中文输入应成功");
+        exec.type_text(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            &text,
+            None,
+        )
+        .await
+        .expect("中文输入应成功");
         assert_eq!(ops.count(MockOp::KeyEvent), 0, "CJK 不走逐字符三事件");
         // 块 1(50) + 块间补差(50) + 块 2(10) = 3 次 insertText
-        assert_eq!(ops.count(MockOp::InsertText), 3, "整块 insertText（2 块 + 1 补差）");
+        assert_eq!(
+            ops.count(MockOp::InsertText),
+            3,
+            "整块 insertText（2 块 + 1 补差）"
+        );
     }
 
     /// submit_key：末尾按键。
@@ -943,14 +1160,26 @@ mod tests {
     async fn type_submit_key_pressed() {
         let (exec, ops, _delay) = executor(
             MockOps::new(),
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
-        exec.type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, "hello", Some("Enter"))
-            .await
-            .expect("提交键应成功");
+        exec.type_text(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            "hello",
+            Some("Enter"),
+        )
+        .await
+        .expect("提交键应成功");
         let summary: Vec<String> = ops
             .calls_of(MockOp::KeyEvent)
             .iter()
@@ -966,18 +1195,33 @@ mod tests {
         ops.state.lock().unwrap().select_return = "value2".to_string();
         let (exec, ops, _delay) = executor(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let success = exec
-            .select_option(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, "value2")
+            .select_option(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                "value2",
+            )
             .await
             .expect("选中应成功");
         assert_eq!(success.payload.as_ref().unwrap()["selected"], "value2");
         let calls = ops.calls_of(MockOp::CallFunctionOn);
-        assert!(calls[0].detail.contains("this.options"), "固定模板设值：{}", calls[0].detail);
+        assert!(
+            calls[0].detail.contains("this.options"),
+            "固定模板设值：{}",
+            calls[0].detail
+        );
         assert!(
             calls[0].detail.contains("args=[String(\"value2\")]"),
             "参数应为原始值（call_function_on 统一包装，禁二次包装，联调 E3 根因）：{}",
@@ -991,13 +1235,24 @@ mod tests {
         let ops = MockOps::new(); // select_return 默认空串 ≠ value2
         let (exec, _ops, _delay) = executor(
             ops,
-            MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }]),
+            MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            ),
         );
         let err = exec
-            .select_option(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, "value2")
+            .select_option(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                "value2",
+            )
             .await
             .expect_err("回读不符应失败");
         assert_eq!(err.kind, ActionErrorKind::Timeout);

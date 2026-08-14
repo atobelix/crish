@@ -12,8 +12,11 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
+use conex_types::error::ProviderErrorKind;
+
 use crate::events::{
-    ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser,
+    stream_error_kind, ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError,
+    StreamParser,
 };
 use crate::sse::frame::SseFrame;
 
@@ -111,9 +114,11 @@ impl AnthropicParser {
         if event_type == "error" {
             let error = anthropic_payload_error(payload)
                 .unwrap_or_else(|| "Anthropic streaming error".to_string());
+            let kind = stream_error_kind(&error);
             events.push(ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some(error),
+                error_kind: Some(kind),
                 usage: self.usage.clone(),
             });
             self.stream.extend(events.clone())?;
@@ -254,18 +259,21 @@ impl AnthropicParser {
         self.pending_tools.clear();
 
         // 空流保护（198-205）：无内容事件且无 message_stop 且无 usage → error
+        // （解析层保护错误 → error_kind=Unknown，不可重试语义保持）
         if !self.emitted_content && !self.saw_message_stop && self.usage.is_none() {
             events.push(ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some(
                     "Anthropic streaming response completed without content events".to_string(),
                 ),
+                error_kind: Some(ProviderErrorKind::Unknown),
                 usage: None,
             });
         } else {
             events.push(ProviderStreamEvent::Stop {
                 reason: self.stop_reason,
                 error: None,
+                error_kind: None,
                 usage: self.usage.clone(),
             });
         }

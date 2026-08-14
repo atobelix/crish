@@ -171,20 +171,14 @@ pub fn write_tool_names() -> Vec<&'static str> {
 
 /// 效果是否「纯本地只读」（可 plan Allow）
 fn effects_are_local_read_only(effects: &[ActionEffect]) -> bool {
-    !effects.is_empty()
-        && effects
-            .iter()
-            .all(|e| matches!(e, ActionEffect::LocalRead))
+    !effects.is_empty() && effects.iter().all(|e| matches!(e, ActionEffect::LocalRead))
 }
 
 /// 是否含出站 / 计费维
 fn effects_need_extra_confirm(effects: &[ActionEffect]) -> bool {
-    effects.iter().any(|e| {
-        matches!(
-            e,
-            ActionEffect::DataEgress | ActionEffect::ExternalCost
-        )
-    })
+    effects
+        .iter()
+        .any(|e| matches!(e, ActionEffect::DataEgress | ActionEffect::ExternalCost))
 }
 
 /// **表驱动**判定：safeActions × Effects × Source × PermissionMode
@@ -214,9 +208,7 @@ pub fn decide_from_matrix(
     if effects_need_extra_confirm(row.effects) {
         return Some(match mode {
             PermissionMode::Plan => PermissionVerdict::Deny,
-            PermissionMode::Ask | PermissionMode::FullAccess => {
-                PermissionVerdict::NeedsApproval
-            }
+            PermissionMode::Ask | PermissionMode::FullAccess => PermissionVerdict::NeedsApproval,
         });
     }
 
@@ -334,11 +326,7 @@ mod tests {
             Some(PermissionVerdict::NeedsApproval)
         );
         assert_eq!(
-            decide_from_matrix(
-                "block_insert",
-                ActionSource::Plugin,
-                PermissionMode::Plan
-            ),
+            decide_from_matrix("block_insert", ActionSource::Plugin, PermissionMode::Plan),
             Some(PermissionVerdict::Deny)
         );
     }

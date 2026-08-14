@@ -59,14 +59,31 @@ pub struct SemanticAnalysis {
 
 /// 间接执行命令名（小写）
 const INDIRECT_COMMANDS: &[&str] = &[
-    "eval", "source", ".", "bash", "sh", "cmd", "pwsh", "powershell", "sudo", "xargs", "node",
-    "python", "python3", "find", "foreach-object", "iex", "invoke-expression", "start-process",
+    "&",
+    "eval",
+    "source",
+    ".",
+    "bash",
+    "sh",
+    "cmd",
+    "pwsh",
+    "powershell",
+    "sudo",
+    "xargs",
+    "node",
+    "python",
+    "python3",
+    "find",
+    "foreach-object",
+    "iex",
+    "invoke-expression",
+    "start-process",
+    "invoke-command",
+    "icm",
 ];
 
 /// 删除形态命令名（小写）
-const DELETE_COMMANDS: &[&str] = &[
-    "rm", "rmdir", "del", "erase", "rd", "remove-item", "git",
-];
+const DELETE_COMMANDS: &[&str] = &["rm", "rmdir", "del", "erase", "rd", "remove-item", "git"];
 
 /// cd 形态命令名（小写，T-AB-05 禁 cd 语义层）：
 /// Windows cmd 的 cd（含 cd /d、cd ..）、PowerShell 的 Set-Location 及其别名
@@ -76,15 +93,35 @@ const CD_COMMANDS: &[&str] = &["cd", "set-location", "sl", "pushd", "popd"];
 
 /// 危险形态命令名（小写，红线段对象）
 const DANGEROUS_COMMANDS: &[&str] = &[
-    "mkfs", "mkfs.ext2", "mkfs.ext3", "mkfs.ext4", "mkfs.xfs", "mkfs.btrfs", "format-volume",
-    "clear-disk", "format", "dd", "stop-computer", "restart-computer",
+    "mkfs",
+    "mkfs.ext2",
+    "mkfs.ext3",
+    "mkfs.ext4",
+    "mkfs.xfs",
+    "mkfs.btrfs",
+    "format-volume",
+    "clear-disk",
+    "format",
+    "dd",
+    "stop-computer",
+    "restart-computer",
 ];
 
 /// 红线命令名（小写，确定性毁灭目标——S2 红线清单：mkfs/设备写入/盘符格式化/系统关机，
 /// 与 01 方案 S2 红线清单及 workbench `*_blocks_eleven_red_line_targets` 测试对齐）
 const REDLINE_COMMANDS: &[&str] = &[
-    "mkfs", "mkfs.ext2", "mkfs.ext3", "mkfs.ext4", "mkfs.xfs", "mkfs.btrfs", "format-volume",
-    "clear-disk", "format", "dd", "stop-computer", "restart-computer",
+    "mkfs",
+    "mkfs.ext2",
+    "mkfs.ext3",
+    "mkfs.ext4",
+    "mkfs.xfs",
+    "mkfs.btrfs",
+    "format-volume",
+    "clear-disk",
+    "format",
+    "dd",
+    "stop-computer",
+    "restart-computer",
 ];
 
 /// 解析命令行：拆分复合命令，逐段分析。
@@ -92,8 +129,9 @@ pub fn analyze(command_line: &str) -> SemanticAnalysis {
     analyze_depth(command_line, 0)
 }
 
-/// 包裹内容递归分析的深度上限（PS-01 T1.2，R2 修订）：
-/// 深度 >16 层 → 段整体 Redline（超限不再递归，杜绝 ReDoS / 栈溢出）。
+/// 包裹内容与间接递归分析的深度上限熔断（AST-04 / 加固项 10）：
+/// 深度 >= 5 层 → 直接将命令判定为 Dangerous 熔断，杜绝 ReDoS / 栈溢出与深层穿透。
+pub const MAX_RECURSION_DEPTH: usize = 5;
 const MAX_WRAP_DEPTH: usize = 16;
 
 /// 超限兜底分析结果：整体 Redline、无段（R2：深度 >16 → Redline）。
@@ -107,9 +145,20 @@ fn redline_only_analysis() -> SemanticAnalysis {
     }
 }
 
-/// 带包裹深度的分析入口（PS-01 T1.2）：根调用 depth=0，
+/// 递归超限熔断结果：整体 Dangerous（AST-04 / 加固项 10）。
+fn dangerous_fallback_analysis() -> SemanticAnalysis {
+    SemanticAnalysis {
+        segments: Vec::new(),
+        overall_class: CommandClass::Dangerous,
+        delete_targets: Vec::new(),
+        git_revert_forms: Vec::new(),
+        has_indirect_delete: false,
+    }
+}
+
+/// 带包裹深度的分析入口（PS-01 T1.2 / AST-04）：根调用 depth=0，
 /// 命令替换/反引号/scriptblock 包裹内容递归时 depth 逐层递增，
-/// 超过 MAX_WRAP_DEPTH 即整体 Redline。
+/// 超过 MAX_WRAP_DEPTH 即整体 Redline 阻断。
 fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
     if depth > MAX_WRAP_DEPTH {
         return redline_only_analysis();
@@ -130,12 +179,24 @@ fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
             targets: Vec::new(),
         };
 
-        // I2-S4：间接执行内层删除形态标记（bash -c 'rm x' / xargs rm 等——
+        // 间接执行内层递归与删除形态标记（bash -c 'rm x' / & cmd /c rmdir / xargs rm 等——
         // 外层命令无法安全解析内层目标，命令面据此拦截 + 引导，防包裹绕过）
-        if INDIRECT_COMMANDS.contains(&normalized.as_str())
-            && analyze_indirect(&seg).overall_class == CommandClass::DeleteShape
-        {
-            has_indirect_delete = true;
+        if INDIRECT_COMMANDS.contains(&normalized.as_str()) || segment.class == CommandClass::Indirect {
+            let inner = analyze_indirect_depth(&seg, depth + 1);
+            if inner.overall_class == CommandClass::DeleteShape || inner.has_indirect_delete {
+                has_indirect_delete = true;
+            }
+            if inner.overall_class == CommandClass::Redline {
+                segment.class = CommandClass::Redline;
+            }
+            if inner.overall_class == CommandClass::Dangerous && segment.class != CommandClass::Redline {
+                segment.class = CommandClass::Dangerous;
+            }
+            for t in inner.delete_targets {
+                if !delete_targets.contains(&t) {
+                    delete_targets.push(t);
+                }
+            }
         }
 
         if is_delete_command(&normalized) {
@@ -544,8 +605,8 @@ pub fn analyze_token_danger(token: &str) -> Option<CommandClass> {
 
 /// 分析段内语法特征与间接/反射执行（AST 门禁）
 pub fn analyze_segment_ast(command: &str, args: &[String], depth: usize) -> CommandClass {
-    if depth > MAX_WRAP_DEPTH {
-        return CommandClass::Redline; // 深度防爆守卫
+    if depth >= MAX_RECURSION_DEPTH {
+        return CommandClass::Dangerous; // 深度防爆熔断
     }
 
     // 1. 检查首 Token 与所有参数的危险反射特征
@@ -613,16 +674,15 @@ pub fn analyze_segment_ast(command: &str, args: &[String], depth: usize) -> Comm
 /// cmd.exe / del.exe 等 Windows 可执行文件形态一并命中既有清单）。
 fn normalize_command(command: &str) -> String {
     let trimmed = command.trim();
-    let name = if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+    let name = if (trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2)
+        || (trimmed.starts_with('\'') && trimmed.ends_with('\'') && trimmed.len() >= 2)
+    {
         &trimmed[1..trimmed.len() - 1]
     } else {
         trimmed
     };
     // 去路径前缀（支持 / 与 \）
-    let base = name
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(name);
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
     // 去 .exe 扩展名（大小写不敏感）：扩展名剥除后再小写归一，
     // 使 powershell.exe / cmd.exe / del.exe 与 INDIRECT_COMMANDS / DELETE_COMMANDS 对齐
     let stem = {
@@ -646,6 +706,9 @@ fn normalize_command(command: &str) -> String {
     if lower == "%" {
         return "foreach-object".to_string();
     }
+    if lower == "icm" {
+        return "invoke-command".to_string();
+    }
     lower
 }
 
@@ -662,10 +725,20 @@ fn classify_delete_command(command: &str, args: &[String]) -> Option<CommandClas
         return None;
     }
     let targets = extract_delete_targets(command, args);
-    if command == "rm" || command == "rmdir" || command == "del" || command == "erase" || command == "rd" || command == "remove-item" {
+    if command == "rm"
+        || command == "rmdir"
+        || command == "del"
+        || command == "erase"
+        || command == "rd"
+        || command == "remove-item"
+    {
         // Windows 风格参数（rd /s /q、del /f /q）与 Unix 风格（-r -f）都算
-        let win_recursive = args.iter().any(|a| a.eq_ignore_ascii_case("/s") || a.eq_ignore_ascii_case("/S"));
-        let win_force = args.iter().any(|a| a.eq_ignore_ascii_case("/q") || a.eq_ignore_ascii_case("/f"));
+        let win_recursive = args
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case("/s") || a.eq_ignore_ascii_case("/S"));
+        let win_force = args
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case("/q") || a.eq_ignore_ascii_case("/f"));
         let recursive = has_recursive(args) || win_recursive;
         let force = has_force(args) || win_force;
         if targets.iter().any(|t| is_root_target(t)) && (recursive || force) {
@@ -688,8 +761,7 @@ fn classify_delete_command(command: &str, args: &[String]) -> Option<CommandClas
 const PRINT_WHITELIST: &[&str] = &["echo", "write-output", "printf", "cat", "grep", "type"];
 
 fn scan_ps_command_tokens(command: &str, args: &[String]) -> Option<CommandClass> {
-    let is_assignment =
-        command.starts_with('$') && args.first().map(|a| a == "=").unwrap_or(false);
+    let is_assignment = command.starts_with('$') && args.first().map(|a| a == "=").unwrap_or(false);
     let is_known = INDIRECT_COMMANDS.contains(&command)
         || DELETE_COMMANDS.contains(&command)
         || CD_COMMANDS.contains(&command)
@@ -713,6 +785,17 @@ fn scan_ps_command_tokens(command: &str, args: &[String]) -> Option<CommandClass
             return classify_delete_command(&cand, &rest);
         }
         if INDIRECT_COMMANDS.contains(&cand.as_str()) {
+            let sub_line = args[start + i..].join(" ");
+            let inner_analysis = analyze_depth(&sub_line, 1);
+            if inner_analysis.overall_class == CommandClass::Redline {
+                return Some(CommandClass::Redline);
+            }
+            if inner_analysis.overall_class == CommandClass::Dangerous {
+                return Some(CommandClass::Dangerous);
+            }
+            if inner_analysis.overall_class == CommandClass::DeleteShape || inner_analysis.has_indirect_delete {
+                return Some(CommandClass::Indirect);
+            }
             return Some(CommandClass::Indirect);
         }
     }
@@ -784,9 +867,21 @@ fn extract_delete_targets(command: &str, args: &[String]) -> Vec<String> {
         if a.starts_with("C:") || a.starts_with('C') && a.len() >= 2 && a.as_bytes()[1] == b':' {
             // Windows 盘符路径
             targets.push(a.clone());
-        } else if a.starts_with('/') || a.starts_with("./") || a.starts_with("../") || a == "." || a == ".." || a == "~" {
+        } else if a.starts_with('/')
+            || a.starts_with("./")
+            || a.starts_with("../")
+            || a == "."
+            || a == ".."
+            || a == "~"
+        {
             targets.push(a.clone());
-        } else if command == "rm" || command == "rmdir" || command == "del" || command == "erase" || command == "rd" || command == "remove-item" {
+        } else if command == "rm"
+            || command == "rmdir"
+            || command == "del"
+            || command == "erase"
+            || command == "rd"
+            || command == "remove-item"
+        {
             // 无前缀的普通路径（rm foo.txt）
             targets.push(a.clone());
         }
@@ -802,9 +897,7 @@ fn is_root_target(target: &str) -> bool {
     }
     // Windows 盘符根：恰好 "C:\" / "C:/" / "C:"（后面不能再有路径成分）
     let lower = normalized.to_lowercase();
-    if lower.len() >= 2
-        && lower.as_bytes()[0].is_ascii_alphabetic()
-        && lower.as_bytes()[1] == b':'
+    if lower.len() >= 2 && lower.as_bytes()[0].is_ascii_alphabetic() && lower.as_bytes()[1] == b':'
     {
         if lower.len() == 2 {
             return true;
@@ -821,24 +914,72 @@ fn is_root_target(target: &str) -> bool {
 /// 短选项归一：-r/-R 与 --recursive 等价；-f 与 --force 等价。
 fn has_recursive(args: &[String]) -> bool {
     args.iter().any(|a| {
-        a == "-r" || a == "-R" || a == "--recursive" || a == "-rf" || a == "-fr" || a == "-rF"
+        a == "-r"
+            || a == "-R"
+            || a == "--recursive"
+            || a == "-rf"
+            || a == "-fr"
+            || a == "-rF"
             || (a.starts_with('-') && a.len() > 1 && a[1..].chars().any(|c| c == 'r' || c == 'R'))
     })
 }
 
 fn has_force(args: &[String]) -> bool {
     args.iter().any(|a| {
-        a == "-f" || a == "--force" || a == "-rf" || a == "-fr" || a == "-fR" || a == "-rF"
+        a == "-f"
+            || a == "--force"
+            || a == "-rf"
+            || a == "-fr"
+            || a == "-fR"
+            || a == "-rF"
             || (a.starts_with('-') && a.len() > 1 && a[1..].chars().any(|c| c == 'f'))
     })
 }
 
 /// 递归分析间接执行的内层命令内容。
-fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
+pub fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
+    analyze_indirect_depth(segment_raw, 0)
+}
+
+pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalysis {
+    if depth >= MAX_RECURSION_DEPTH {
+        return dangerous_fallback_analysis();
+    }
     // 提取 -c 之后的字符串参数作为内层命令
     let (command, args) = split_command_args(segment_raw);
     let normalized = normalize_command(&command);
     let inner = match normalized.as_str() {
+        "&" => {
+            if args.is_empty() {
+                None
+            } else {
+                let inner_line = args.join(" ");
+                Some(inner_line)
+            }
+        }
+        "invoke-command" | "icm" => {
+            let mut inner: Option<String> = None;
+            let mut iter = args.iter();
+            while let Some(a) = iter.next() {
+                if a.eq_ignore_ascii_case("-ScriptBlock") || a.eq_ignore_ascii_case("-Command") {
+                    let rest: Vec<&String> = iter.by_ref().collect();
+                    if !rest.is_empty() {
+                        let joined = rest
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        inner = Some(strip_scriptblock_braces(&joined));
+                    }
+                    break;
+                }
+            }
+            if inner.is_none() && !args.is_empty() {
+                let joined = args.join(" ");
+                inner = Some(strip_scriptblock_braces(&joined));
+            }
+            inner
+        }
         "bash" | "sh" | "cmd" | "pwsh" | "powershell" | "node" | "python" | "python3" => {
             // PS-01 T1.3（R1 ④ 盲区）/ Unit 5.1：-EncodedCommand / -enc / -e / -enco / /e: 等
             // base64 编码隐藏形态全变形泛化拦截。
@@ -856,7 +997,12 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
                 if a == "-c" || a == "-Command" || a == "/c" {
                     let rest: Vec<&String> = iter.by_ref().collect();
                     if !rest.is_empty() {
-                        inner = Some(rest.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" "));
+                        inner = Some(
+                            rest.iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                        );
                     }
                     break;
                 }
@@ -897,7 +1043,10 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
             let mut inner: Option<String> = None;
             let mut iter = args.iter();
             while let Some(a) = iter.next() {
-                if a == "-ArgumentList" || a == "-Argument" || a == "-Args" {
+                if a.eq_ignore_ascii_case("-ArgumentList")
+                    || a.eq_ignore_ascii_case("-Argument")
+                    || a.eq_ignore_ascii_case("-Args")
+                {
                     let rest: Vec<&String> = iter.by_ref().collect();
                     if !rest.is_empty() {
                         let joined = rest
@@ -980,7 +1129,7 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
     };
 
     match inner {
-        Some(inner_cmd) if !inner_cmd.trim().is_empty() => analyze(&inner_cmd),
+        Some(inner_cmd) if !inner_cmd.trim().is_empty() => analyze_depth(&inner_cmd, depth + 1),
         _ => SemanticAnalysis {
             segments: Vec::new(),
             overall_class: CommandClass::Normal,
@@ -1013,18 +1162,13 @@ fn classify(command: &str, args: &[String], segment_raw: &str) -> CommandClass {
 
 /// 带包裹深度的单段分类（PS-01 T1.2，R1 ② 盲区）：
 /// 包裹提取分支在删除形态分支之前插入，按 D6 升级规则判定。
-fn classify_depth(
-    command: &str,
-    args: &[String],
-    segment_raw: &str,
-    depth: usize,
-) -> CommandClass {
+fn classify_depth(command: &str, args: &[String], segment_raw: &str, depth: usize) -> CommandClass {
     // 0. 命令替换/scriptblock 包裹内容递归（PS-01 T1.2）：
     //    `echo "$(rm -rf -- /)"` / 反引号 / `{ … }` 提取内容逐个递归分析，
     //    内层升级规则（D6）：Redline → 段 Redline；DeleteShape → 段
     //    DeleteShape（删除接管语义保持）；Dangerous → 段 Dangerous。
-    //    不引入新 CommandClass。深度超限（>16）由 analyze_depth 入口
-    //    统一拦截（R2 修订：>16 → Redline），本层只判断是否继续提取。
+    //    不引入新 CommandClass。深度超限（>=5）由 analyze_depth 入口
+    //    统一拦截，本层只判断是否继续提取。
     //    间接命令（INDIRECT_COMMANDS）跳过本分支：其 scriptblock 包裹
     //    已由 analyze_indirect 既有路径递归（12-T-PD-04 契约——ForEach-
     //    Object { Remove-Item $_ } 保持 Indirect + has_indirect_delete，
@@ -1054,14 +1198,17 @@ fn classify_depth(
 
     // 1. 间接执行：先递归分析内层
     if INDIRECT_COMMANDS.contains(&command) {
-        let inner = analyze_indirect(segment_raw);
+        let inner = analyze_indirect_depth(segment_raw, depth + 1);
         if inner.overall_class == CommandClass::Redline {
             return CommandClass::Redline;
         }
-        if inner.overall_class == CommandClass::Dangerous || inner.overall_class == CommandClass::GitRevertShape {
+        if inner.overall_class == CommandClass::Dangerous {
+            return CommandClass::Dangerous;
+        }
+        if inner.overall_class == CommandClass::GitRevertShape {
             return CommandClass::Indirect;
         }
-        if inner.overall_class == CommandClass::DeleteShape {
+        if inner.overall_class == CommandClass::DeleteShape || inner.has_indirect_delete {
             return CommandClass::Indirect;
         }
         if !inner.segments.is_empty() {
@@ -1271,7 +1418,10 @@ mod tests {
     fn indirect_sudo_bash_c_recursive() {
         let a = analyze("sudo bash -c 'rm -rf /'");
         assert_eq!(a.overall_class, CommandClass::Redline);
-        assert!(a.segments[0].class == CommandClass::Redline || a.segments[0].class == CommandClass::Indirect);
+        assert!(
+            a.segments[0].class == CommandClass::Redline
+                || a.segments[0].class == CommandClass::Indirect
+        );
     }
 
     #[test]
@@ -1596,7 +1746,10 @@ mod tests {
         let a = analyze("git rm file.txt");
         assert_eq!(a.overall_class, CommandClass::DeleteShape);
         assert!(a.delete_targets.contains(&"file.txt".to_string()));
-        assert!(a.git_revert_forms.is_empty(), "git rm 属删除形态，不计入回退清单");
+        assert!(
+            a.git_revert_forms.is_empty(),
+            "git rm 属删除形态，不计入回退清单"
+        );
         assert!(!a.has_indirect_delete);
     }
 
@@ -1653,7 +1806,10 @@ mod tests {
 
     #[test]
     fn powershell_cd_family_detected() {
-        assert_eq!(analyze("Set-Location D:\\code").overall_class, CommandClass::CdShape);
+        assert_eq!(
+            analyze("Set-Location D:\\code").overall_class,
+            CommandClass::CdShape
+        );
         assert_eq!(analyze("sl sub").overall_class, CommandClass::CdShape);
         assert_eq!(analyze("pushd sub").overall_class, CommandClass::CdShape);
         assert_eq!(analyze("popd").overall_class, CommandClass::CdShape);
@@ -1669,9 +1825,18 @@ mod tests {
     #[test]
     fn non_stateful_forms_not_detected() {
         // 不依赖进程内目录状态的形态：git -C / npm --prefix / python -m
-        assert_eq!(analyze("git -C src status").overall_class, CommandClass::Normal);
-        assert_eq!(analyze("npm --prefix ./sub run build").overall_class, CommandClass::Normal);
-        assert_eq!(analyze("python -m pip install x").overall_class, CommandClass::Normal);
+        assert_eq!(
+            analyze("git -C src status").overall_class,
+            CommandClass::Normal
+        );
+        assert_eq!(
+            analyze("npm --prefix ./sub run build").overall_class,
+            CommandClass::Normal
+        );
+        assert_eq!(
+            analyze("python -m pip install x").overall_class,
+            CommandClass::Normal
+        );
     }
 
     #[test]
@@ -1780,7 +1945,10 @@ mod tests {
         let a = analyze("rd /s /q C:\\x");
         assert_eq!(a.delete_targets, vec!["C:\\x".to_string()]);
         // 开关仍参与递归/强制判定：rd /s /q C:\ 维持红线（:806 锚点口径不回归）
-        assert_eq!(analyze("rd /s /q C:\\").overall_class, CommandClass::Redline);
+        assert_eq!(
+            analyze("rd /s /q C:\\").overall_class,
+            CommandClass::Redline
+        );
         let c = analyze("del /f /q C:\\x\\a.txt");
         assert_eq!(c.delete_targets, vec!["C:\\x\\a.txt".to_string()]);
         // Unix 绝对路径不受影响：/tmp/x 仍入 targets
@@ -1917,7 +2085,9 @@ mod tests {
         assert!(is_ps_encoded_command_flag("-enc"));
         assert!(is_ps_encoded_command_flag("/e:cgBtACAALQByAGYAIAAvAA=="));
         assert!(is_ps_encoded_command_flag("-e:cgBtACAALQByAGYAIAAvAA=="));
-        assert!(is_ps_encoded_command_flag("-EncodedCommand=cgBtACAALQByAGYAIAAvAA=="));
+        assert!(is_ps_encoded_command_flag(
+            "-EncodedCommand=cgBtACAALQByAGYAIAAvAA=="
+        ));
         assert!(is_ps_encoded_command_flag("/encodedcommand"));
 
         // 负例
@@ -1995,5 +2165,39 @@ mod tests {
                 "混淆/反射命令不能被误判为 Normal: {cmd}"
             );
         }
+    }
+
+    #[test]
+    fn test_powershell_call_operator_and_indirect_semantics() {
+        let indirect_delete_cases = [
+            "& cmd /c rmdir /s /q D:\\old",
+            "& 'cmd' /c rmdir /s /q D:\\old",
+            "& \"cmd.exe\" /c rmdir /s /q D:\\old",
+            "& bash -c 'rm -rf /tmp/test'",
+            "& bash -c 'rm /tmp/x'",
+            "& pwsh -Command \"Remove-Item -Recurse -Force D:\\data\"",
+            "& cmd /c Remove-Item D:\\file.txt",
+            "Invoke-Command -ScriptBlock { Remove-Item -Recurse D:\\old }",
+            "icm -ScriptBlock { rm /tmp/x }",
+        ];
+
+        for cmd in indirect_delete_cases {
+            let sem = analyze(cmd);
+            assert!(
+                sem.has_indirect_delete
+                    || sem.overall_class == CommandClass::DeleteShape
+                    || sem.overall_class == CommandClass::Redline,
+                "命令 {cmd} 必须识别为间接删除或删除形态或红线, 实际: {sem:?}"
+            );
+        }
+
+        // 6 层嵌套间接调用触发 MAX_RECURSION_DEPTH = 5 深度熔断
+        let deep_nested = "Invoke-Command { Invoke-Command { Invoke-Command { Invoke-Command { Invoke-Command { Invoke-Command { echo deep } } } } } }";
+        let sem_deep = analyze(deep_nested);
+        assert_eq!(
+            sem_deep.overall_class,
+            CommandClass::Dangerous,
+            "6层嵌套间接调用必须触发深度熔断 Dangerous"
+        );
     }
 }

@@ -36,12 +36,10 @@ pub mod shell;
 
 pub use bridge::{
     adapt_call_result, adapt_tool_list, mcp_tool_name, sanitize_id_part, McpClientBridge,
-    McpServerRuntimeState, McpServerSession, McpToolAdapter, McpToolInfo,
-    DEFAULT_MCP_CALL_TIMEOUT, DEFAULT_MCP_INIT_TIMEOUT, DEFAULT_MCP_LIST_TIMEOUT,
+    McpServerRuntimeState, McpServerSession, McpToolAdapter, McpToolInfo, DEFAULT_MCP_CALL_TIMEOUT,
+    DEFAULT_MCP_INIT_TIMEOUT, DEFAULT_MCP_LIST_TIMEOUT,
 };
-pub use servers::{
-    McpConfigPersistence, McpServerConfig, McpServerStore, McpTransport,
-};
+pub use servers::{McpConfigPersistence, McpServerConfig, McpServerStore, McpTransport};
 pub use shell::{McpRegistryShell, W4D_MCP_SHELL_PACKAGE_ID};
 
 /// 插件 MCP server 注册入口（E5：shared-types `PluginMcpDeclaration`
@@ -75,7 +73,10 @@ pub async fn register_plugin_server(
             .ok_or_else(|| {
                 ToolError::new(
                     codes::MCP_CONNECTION_FAILED,
-                    format!("MCP server {} 工具适配器缺失：{}", config.server_id, def.name),
+                    format!(
+                        "MCP server {} 工具适配器缺失：{}",
+                        config.server_id, def.name
+                    ),
                 )
             })?;
         registry.register_runtime(adapter).map_err(|e| {

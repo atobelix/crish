@@ -81,15 +81,25 @@ describe('diffToReplace - Surrogate Aware & Scalar Calculations', () => {
       expect(unicodeScalarToUtf16Offset(text, -1)).toBe(0);
       expect(unicodeScalarToUtf16Offset(text, 100)).toBe(4);
     });
+
+    it('代理项中间偏移 Floor 对齐互逆性', () => {
+      const text = 'A🎉B'; // 'A'(0), High(1), Low(2), 'B'(3)
+      // 传入中间偏移 2（落在高位与低位之间），Floor 对齐到 1
+      const scalarFromMid = utf16OffsetToUnicodeScalar(text, 2);
+      expect(scalarFromMid).toBe(1);
+      const backU16 = unicodeScalarToUtf16Offset(text, scalarFromMid);
+      expect(backU16).toBe(1);
+    });
   });
 
   describe('diffToReplace 比对算子', () => {
     it('相同字符串返回空替换', () => {
       const res = diffToReplace('Hello', 'Hello');
-      expect(res.start).toBe(0);
-      expect(res.end).toBe(0);
+      expect(res.startU16).toBe(0);
+      expect(res.endU16).toBe(0);
       expect(res.startScalar).toBe(0);
       expect(res.endScalar).toBe(0);
+      expect(res.replacement).toBe('');
       expect(res.insert).toBe('');
       expect(res.oldScalarLength).toBe(5);
       expect(res.newScalarLength).toBe(5);
@@ -97,8 +107,9 @@ describe('diffToReplace - Surrogate Aware & Scalar Calculations', () => {
 
     it('普通 ASCII 文本中间插入', () => {
       const res = diffToReplace('Hello World', 'Hello Brave World');
-      expect(res.start).toBe(6);
-      expect(res.end).toBe(6);
+      expect(res.startU16).toBe(6);
+      expect(res.endU16).toBe(6);
+      expect(res.replacement).toBe('Brave ');
       expect(res.insert).toBe('Brave ');
       expect(res.startScalar).toBe(6);
       expect(res.endScalar).toBe(6);
@@ -106,9 +117,12 @@ describe('diffToReplace - Surrogate Aware & Scalar Calculations', () => {
 
     it('普通 ASCII 文本删除', () => {
       const res = diffToReplace('Hello Brave World', 'Hello World');
-      expect(res.start).toBe(6);
-      expect(res.end).toBe(12);
+      expect(res.startU16).toBe(6);
+      expect(res.endU16).toBe(12);
+      expect(res.replacement).toBe('');
       expect(res.insert).toBe('');
+      expect(res.startScalar).toBe(6);
+      expect(res.endScalar).toBe(12);
     });
 
     it('Emoji 替换绝不断裂代理项 (🎉 -> 🎊)', () => {
@@ -120,15 +134,18 @@ describe('diffToReplace - Surrogate Aware & Scalar Calculations', () => {
       const res = diffToReplace(oldText, newText);
 
       // start 必须在 🎉 之前 (index 1)，end 必须在 🎉 之后 (index 3)
-      expect(res.start).toBe(1);
-      expect(res.end).toBe(3);
+      expect(res.startU16).toBe(1);
+      expect(res.endU16).toBe(3);
+      expect(res.replacement).toBe('🎊');
       expect(res.insert).toBe('🎊');
       expect(res.startScalar).toBe(1);
       expect(res.endScalar).toBe(2);
 
       // 验证替换后的字符串与 newText 严格一致
       const reconstructed =
-        oldText.slice(0, res.start) + res.insert + oldText.slice(res.end);
+        oldText.slice(0, res.startU16) +
+        res.replacement +
+        oldText.slice(res.endU16);
       expect(reconstructed).toBe(newText);
     });
 
@@ -137,12 +154,15 @@ describe('diffToReplace - Surrogate Aware & Scalar Calculations', () => {
       const newText = 'A🎉Hello';
 
       const res = diffToReplace(oldText, newText);
-      expect(res.start).toBe(0);
-      expect(res.end).toBe(0);
+      expect(res.startU16).toBe(0);
+      expect(res.endU16).toBe(0);
+      expect(res.replacement).toBe('A');
       expect(res.insert).toBe('A');
 
       const reconstructed =
-        oldText.slice(0, res.start) + res.insert + oldText.slice(res.end);
+        oldText.slice(0, res.startU16) +
+        res.replacement +
+        oldText.slice(res.endU16);
       expect(reconstructed).toBe(newText);
     });
 
@@ -151,21 +171,25 @@ describe('diffToReplace - Surrogate Aware & Scalar Calculations', () => {
       const newText = '👨‍👩‍👧‍👦Doc';
 
       const res = diffToReplace(oldText, newText);
-      expect(res.start).toBe(11);
-      expect(res.end).toBe(15);
+      expect(res.startU16).toBe(11);
+      expect(res.endU16).toBe(15);
       expect(res.startScalar).toBe(7);
       expect(res.endScalar).toBe(11);
+      expect(res.replacement).toBe('Doc');
       expect(res.insert).toBe('Doc');
 
       const reconstructed =
-        oldText.slice(0, res.start) + res.insert + oldText.slice(res.end);
+        oldText.slice(0, res.startU16) +
+        res.replacement +
+        oldText.slice(res.endU16);
       expect(reconstructed).toBe(newText);
     });
 
     it('从空文本到包含 Emoji 的文本', () => {
       const res = diffToReplace('', '🎉Hello🚀');
-      expect(res.start).toBe(0);
-      expect(res.end).toBe(0);
+      expect(res.startU16).toBe(0);
+      expect(res.endU16).toBe(0);
+      expect(res.replacement).toBe('🎉Hello🚀');
       expect(res.insert).toBe('🎉Hello🚀');
       expect(res.oldScalarLength).toBe(0);
       expect(res.newScalarLength).toBe(7);
@@ -173,8 +197,9 @@ describe('diffToReplace - Surrogate Aware & Scalar Calculations', () => {
 
     it('全部删除至空文本', () => {
       const res = diffToReplace('🎉Hello🚀', '');
-      expect(res.start).toBe(0);
-      expect(res.end).toBe(9); // 2 + 5 + 2 = 9
+      expect(res.startU16).toBe(0);
+      expect(res.endU16).toBe(9); // 2 + 5 + 2 = 9
+      expect(res.replacement).toBe('');
       expect(res.insert).toBe('');
       expect(res.oldScalarLength).toBe(7);
       expect(res.newScalarLength).toBe(0);

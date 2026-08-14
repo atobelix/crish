@@ -215,7 +215,10 @@ mod tests {
         assert!(!off.cross_origin_iframes, "显式关闭保持 false");
         // 派生预算不改变采集开关（活跃/非活跃是输出面预算，跨域采集配置独立）
         assert!(
-            BudgetConfig::active().with_cross_origin_iframes(true).inactive().cross_origin_iframes,
+            BudgetConfig::active()
+                .with_cross_origin_iframes(true)
+                .inactive()
+                .cross_origin_iframes,
             "非活跃派生应保留开启状态"
         );
         assert!(
@@ -224,7 +227,10 @@ mod tests {
         );
         // scaled（测试构造辅助）经 ..*self 继承
         assert!(
-            BudgetConfig::active().with_cross_origin_iframes(true).scaled(10, 10).cross_origin_iframes,
+            BudgetConfig::active()
+                .with_cross_origin_iframes(true)
+                .scaled(10, 10)
+                .cross_origin_iframes,
             "scaled 派生应保留开启状态"
         );
         // Default 实现同 active
@@ -265,7 +271,10 @@ mod tests {
         );
         // 显式关闭
         assert!(
-            !BudgetConfig::active().with_full_payload(true).with_full_payload(false).include_dom_rects,
+            !BudgetConfig::active()
+                .with_full_payload(true)
+                .with_full_payload(false)
+                .include_dom_rects,
             "显式关闭后恢复最小面"
         );
     }

@@ -136,8 +136,14 @@ mod tests {
     /// 刚收到帧（在线判定核心语义：活动刷新即在线）
     #[test]
     fn recently_active_is_online() {
-        assert!(is_device_online(T0, T0, PRESENCE_TIMEOUT_MS), "刚活动 = 在线");
-        assert!(is_device_online(T0 - 1_000, T0, PRESENCE_TIMEOUT_MS), "1s 前活动 = 在线");
+        assert!(
+            is_device_online(T0, T0, PRESENCE_TIMEOUT_MS),
+            "刚活动 = 在线"
+        );
+        assert!(
+            is_device_online(T0 - 1_000, T0, PRESENCE_TIMEOUT_MS),
+            "1s 前活动 = 在线"
+        );
     }
 
     /// 超时边界：恰好超时窗口（30s）→ 离线（严格小于语义）
@@ -156,14 +162,23 @@ mod tests {
     /// 超时后离线；自定义窗口可注入（测试可控）
     #[test]
     fn stale_frame_is_offline() {
-        assert!(!is_device_online(T0 - 60_000, T0, PRESENCE_TIMEOUT_MS), "60s 无帧 = 离线");
-        assert!(!is_device_online(T0 - 10_000, T0, 5_000), "自定义窗口 5s：10s 前 = 离线");
+        assert!(
+            !is_device_online(T0 - 60_000, T0, PRESENCE_TIMEOUT_MS),
+            "60s 无帧 = 离线"
+        );
+        assert!(
+            !is_device_online(T0 - 10_000, T0, 5_000),
+            "自定义窗口 5s：10s 前 = 离线"
+        );
     }
 
     /// 时钟回拨收敛为在线（saturating_sub 防下溢）
     #[test]
     fn clock_rewind_stays_online() {
-        assert!(is_device_online(T0 + 60_000, T0, PRESENCE_TIMEOUT_MS), "时钟回拨不误判离线");
+        assert!(
+            is_device_online(T0 + 60_000, T0, PRESENCE_TIMEOUT_MS),
+            "时钟回拨不误判离线"
+        );
     }
 
     /// 内存状态源：追加 / 覆盖 / 触摸 / 替换
@@ -179,7 +194,10 @@ mod tests {
         // touch 刷新活动（离线设备转在线）
         source.touch("tok-b", T0 - 1_000);
         let devices = source.connected_devices();
-        let b = devices.iter().find(|d| d.device_key == "tok-b").expect("B 在表内");
+        let b = devices
+            .iter()
+            .find(|d| d.device_key == "tok-b")
+            .expect("B 在表内");
         assert_eq!(b.last_frame_at_ms, T0 - 1_000);
 
         // 重复 device_key 覆盖（每设备一主连接语义）

@@ -79,19 +79,19 @@ pub fn open_at(path: impl AsRef<Path>) -> Result<SharedNoteRuntime, String> {
     let path = path.as_ref().to_path_buf();
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                format!(
-                    "创建 workspace.db 父目录失败 ({}): {e}",
-                    parent.display()
-                )
-            })?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("创建 workspace.db 父目录失败 ({}): {e}", parent.display()))?;
         }
     }
     // LR-T1：生产打开路径只构造 Store。失败向上返回，调用方不 install。
-    let store_backend = Arc::new(StoreNoteBackend::open(&path).map_err(|e| {
-        format!("打开 workspace.db 失败 ({}): {e}", path.display())
-    })?);
-    Ok(SharedNoteRuntime { store_backend, path })
+    let store_backend = Arc::new(
+        StoreNoteBackend::open(&path)
+            .map_err(|e| format!("打开 workspace.db 失败 ({}): {e}", path.display()))?,
+    );
+    Ok(SharedNoteRuntime {
+        store_backend,
+        path,
+    })
 }
 
 /// 全局安装槽：setup 一次；测试可经 [`install`] 覆盖。
@@ -103,9 +103,7 @@ fn global_slot() -> &'static RwLock<Option<SharedNoteRuntime>> {
 
 /// 安装共享句柄（覆盖已有；生产 setup 调用一次）。
 pub fn install(runtime: SharedNoteRuntime) {
-    let mut guard = global_slot()
-        .write()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut guard = global_slot().write().unwrap_or_else(|e| e.into_inner());
     *guard = Some(runtime);
 }
 
@@ -160,9 +158,7 @@ pub fn install_for_test(path: impl AsRef<Path>) -> Result<SharedNoteRuntime, Str
 mod tests {
     // LR-T1：本模组测走 `open_at` → Store；未安装时 try_* = None。≠ 关 EL-05。
     use super::*;
-    use agent_tools::note_backend::{
-        NoteApplyMdRequest, NoteApplyMode, NoteQueryBlocksParams,
-    };
+    use agent_tools::note_backend::{NoteApplyMdRequest, NoteApplyMode, NoteQueryBlocksParams};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 

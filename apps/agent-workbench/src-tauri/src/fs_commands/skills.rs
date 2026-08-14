@@ -67,7 +67,10 @@ fn parse_frontmatter(content: &str) -> (std::collections::HashMap<String, String
             for line in raw_fm.lines() {
                 if let Some((key, val)) = line.split_once(':') {
                     let k = key.trim().to_string();
-                    let v = val.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
+                    let v = val
+                        .trim()
+                        .trim_matches(|c| c == '"' || c == '\'')
+                        .to_string();
                     data.insert(k, v);
                 }
             }
@@ -303,7 +306,11 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
     // 附加目录：每个必须 ⊆ 已授权根，否则整体拒绝
     for dir in extra_dirs {
         let path = canonicalize_within_roots(&dir, &roots).map_err(CoreError::InvalidInput)?;
-        let scope = if path.is_absolute() { "global" } else { "project" };
+        let scope = if path.is_absolute() {
+            "global"
+        } else {
+            "project"
+        };
         discover_in_dir_rust(&path, scope, 0, false, &mut skills);
     }
 
@@ -313,12 +320,14 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
 /// canonicalize 后校验 ∈ 已授权根（任一即可）；失败 → `workspace_not_granted`。
 fn canonicalize_within_roots(path: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
     if path.contains('\0') {
-        return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"));
+        return Err(format!(
+            "{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"
+        ));
     }
     let p = Path::new(path);
-    let canonical = p.canonicalize().map_err(|e| {
-        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve path `{path}`: {e}")
-    })?;
+    let canonical = p
+        .canonicalize()
+        .map_err(|e| format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve path `{path}`: {e}"))?;
     if roots
         .iter()
         .any(|root| crate::fs_commands::types::path_is_same_or_child(&canonical, root))

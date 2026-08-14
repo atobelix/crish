@@ -21,10 +21,8 @@ struct TempDb {
 impl TempDb {
     fn new(name: &str) -> Self {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "conex-migration-{name}-{}-{n}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("conex-migration-{name}-{}-{n}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("sessions.db");
         let _ = std::fs::remove_file(&path);
@@ -74,7 +72,9 @@ fn backup_files(db_path: &Path) -> Vec<(i32, PathBuf)> {
 }
 
 fn table_columns(conn: &Connection, table: &str) -> Vec<String> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})")).unwrap();
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .unwrap();
     stmt.query_map([], |r| r.get::<_, String>(1))
         .unwrap()
         .filter_map(|c| c.ok())
@@ -92,7 +92,9 @@ fn table_sql(conn: &Connection, table: &str) -> String {
 }
 
 fn has_fk(conn: &Connection, table: &str) -> bool {
-    let mut stmt = conn.prepare(&format!("PRAGMA foreign_key_list({table})")).unwrap();
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA foreign_key_list({table})"))
+        .unwrap();
     let mut rows = stmt.query([]).unwrap();
     rows.next().unwrap().is_some()
 }
@@ -592,8 +594,17 @@ fn assert_v4_state(db: &LocalDb, temp: &TempDb) {
     );
     // events：组合主键（无 id 列）+ FK
     let events_cols = table_columns(&conn, "events");
-    assert!(!events_cols.contains(&"id".to_string()), "AUTOINCREMENT id 已删除（P14）");
-    for c in ["session_id", "sequence", "event_type", "payload", "created_at"] {
+    assert!(
+        !events_cols.contains(&"id".to_string()),
+        "AUTOINCREMENT id 已删除（P14）"
+    );
+    for c in [
+        "session_id",
+        "sequence",
+        "event_type",
+        "payload",
+        "created_at",
+    ] {
         assert!(events_cols.contains(&c.to_string()), "events 缺列 {c}");
     }
     assert!(has_fk(&conn, "events"), "events 有 sessions FK（P03）");
@@ -608,7 +619,10 @@ fn assert_v4_state(db: &LocalDb, temp: &TempDb) {
     assert_eq!(meta_exists, 0, "metadata 死表已删除");
     // runs / pending_inputs FK
     assert!(has_fk(&conn, "runs"), "runs 有 sessions FK");
-    assert!(has_fk(&conn, "pending_inputs"), "pending_inputs 有 sessions FK");
+    assert!(
+        has_fk(&conn, "pending_inputs"),
+        "pending_inputs 有 sessions FK"
+    );
     // session_messages.updated_at（D4 乐观锁预留）
     assert!(table_columns(&conn, "session_messages").contains(&"updated_at".to_string()));
     // session_sequence 存在（T08.12）
@@ -616,7 +630,10 @@ fn assert_v4_state(db: &LocalDb, temp: &TempDb) {
     // 备份文件存在
     let backups = backup_files(temp.path());
     assert!(!backups.is_empty(), "DROP 前备份文件必须存在");
-    assert!(backups.len() <= 2, "备份最多保留最近 2 份，实际: {backups:?}");
+    assert!(
+        backups.len() <= 2,
+        "备份最多保留最近 2 份，实际: {backups:?}"
+    );
 }
 
 #[test]
@@ -630,21 +647,31 @@ fn v1_fixture_upgrades_to_v4_data_preserved() {
     // 数据保留：sessions（id/title/created_at 拷贝）+ messages + agents + events + runs + pending
     let conn = Connection::open(temp.path()).unwrap();
     let (title, created_at): (String, i64) = conn
-        .query_row("SELECT title, created_at FROM sessions WHERE id='s1'", [], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
+        .query_row(
+            "SELECT title, created_at FROM sessions WHERE id='s1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .unwrap();
     assert_eq!(title, "V1 会话", "v1 标题保留");
     assert_eq!(created_at, 2000, "created_at 保留");
     assert_eq!(count_rows(&conn, "session_messages"), 1);
     assert_eq!(count_rows(&conn, "session_agents"), 1);
-    assert_eq!(count_rows(&conn, "session_agent_messages"), 1, "v3 重建拷贝 agent 消息");
+    assert_eq!(
+        count_rows(&conn, "session_agent_messages"),
+        1,
+        "v3 重建拷贝 agent 消息"
+    );
     assert_eq!(count_rows(&conn, "events"), 2, "v4 重建拷贝事件");
     assert_eq!(count_rows(&conn, "runs"), 1);
     assert_eq!(count_rows(&conn, "pending_inputs"), 1);
     // 触发器重建后 message_count 维护正常
     let mc: i64 = conn
-        .query_row("SELECT message_count FROM sessions WHERE id='s1'", [], |r| r.get(0))
+        .query_row(
+            "SELECT message_count FROM sessions WHERE id='s1'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(mc, 1, "触发器在 v2 重建后仍工作");
 }
@@ -663,10 +690,16 @@ fn v2_fixture_adds_check_and_upgrades_to_v4() {
         table_sql(&conn, "session_agent_messages").contains("CHECK (status IN"),
         "v2→v3 重建补 CHECK"
     );
-    assert_eq!(count_rows(&conn, "session_agent_messages"), 1, "重建拷贝数据");
+    assert_eq!(
+        count_rows(&conn, "session_agent_messages"),
+        1,
+        "重建拷贝数据"
+    );
     assert_eq!(count_rows(&conn, "sessions"), 1);
     let folder: String = conn
-        .query_row("SELECT folder FROM sessions WHERE id='s1'", [], |r| r.get(0))
+        .query_row("SELECT folder FROM sessions WHERE id='s1'", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(folder, "工作", "v2 已有 folder 不被覆盖");
     assert_eq!(count_rows(&conn, "events"), 1);
@@ -683,9 +716,17 @@ fn v3_fixture_production_shape_upgrades_to_v4() {
     let conn = Connection::open(temp.path()).unwrap();
     // 数据保留（含孤儿过滤）
     assert_eq!(count_rows(&conn, "sessions"), 1);
-    assert_eq!(count_rows(&conn, "events"), 2, "孤儿事件（ghost 会话）被过滤，正常事件保留");
+    assert_eq!(
+        count_rows(&conn, "events"),
+        2,
+        "孤儿事件（ghost 会话）被过滤，正常事件保留"
+    );
     assert_eq!(count_rows(&conn, "runs"), 1, "孤儿 run 被过滤");
-    assert_eq!(count_rows(&conn, "pending_inputs"), 1, "孤儿 pending 被过滤");
+    assert_eq!(
+        count_rows(&conn, "pending_inputs"),
+        1,
+        "孤儿 pending 被过滤"
+    );
     // 孤儿丢弃可观测
     let orphans: String = conn
         .query_row(
@@ -730,7 +771,10 @@ fn legacy_v3_without_runs_tables_upgrades_and_preserves_data() {
 
     // 缺失表被补齐为 v4/v5 终态（runs/pending_inputs 带 FK）
     assert!(has_fk(&conn, "runs"), "runs 补齐且带 sessions FK");
-    assert!(has_fk(&conn, "pending_inputs"), "pending_inputs 补齐且带 sessions FK");
+    assert!(
+        has_fk(&conn, "pending_inputs"),
+        "pending_inputs 补齐且带 sessions FK"
+    );
     assert!(table_columns(&conn, "session_sequence").contains(&"session_id".to_string()));
 }
 
@@ -790,13 +834,25 @@ fn backup_file_contains_pre_migration_data() {
     assert_eq!(*v, 4);
 
     let bak = Connection::open(path).unwrap();
-    let uv: i32 = bak.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+    let uv: i32 = bak
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
     assert_eq!(uv, 3, "备份快照在 v4 迁移前（user_version=3）");
     let events_cols = table_columns(&bak, "events");
-    assert!(events_cols.contains(&"id".to_string()), "备份中 events 仍是旧形态（含 id）");
-    assert_eq!(count_rows(&bak, "events"), 3, "备份含迁移前全部事件（含孤儿）");
+    assert!(
+        events_cols.contains(&"id".to_string()),
+        "备份中 events 仍是旧形态（含 id）"
+    );
+    assert_eq!(
+        count_rows(&bak, "events"),
+        3,
+        "备份含迁移前全部事件（含孤儿）"
+    );
     assert_eq!(count_rows(&bak, "sessions"), 1);
-    assert!(table_columns(&bak, "metadata").contains(&"key".to_string()), "备份含 metadata 表");
+    assert!(
+        table_columns(&bak, "metadata").contains(&"key".to_string()),
+        "备份含 metadata 表"
+    );
 }
 
 #[test]
@@ -860,13 +916,20 @@ fn v5_fixture_upgrades_to_v6_new_columns_read_write_idempotent() {
     build_v5_fixture(&temp);
 
     let db = LocalDb::open(temp.path()).unwrap();
-    assert_eq!(db.user_version().unwrap(), LATEST_VERSION, "v5 → v6 升级完成");
+    assert_eq!(
+        db.user_version().unwrap(),
+        LATEST_VERSION,
+        "v5 → v6 升级完成"
+    );
 
     // 新列存在（v6 纯 ADD COLUMN，幂等 col-check）
     let conn = Connection::open(temp.path()).unwrap();
     let agent_cols = table_columns(&conn, "session_agents");
     for c in ["task_type", "display_label", "allowed_write_paths_json"] {
-        assert!(agent_cols.contains(&c.to_string()), "session_agents 缺 v6 新列 {c}");
+        assert!(
+            agent_cols.contains(&c.to_string()),
+            "session_agents 缺 v6 新列 {c}"
+        );
     }
     // 旧库数据保留（旧行新列为 NULL）
     assert_eq!(count_rows(&conn, "session_agents"), 1);
@@ -905,7 +968,10 @@ fn v5_fixture_upgrades_to_v6_new_columns_read_write_idempotent() {
     );
     let again = db2.load_session_agents("s1").unwrap();
     assert_eq!(again[0].display_label.as_deref(), Some("Rust 内核分析师"));
-    assert_eq!(again[0].allowed_write_paths_json.as_deref(), Some(r#"["docs/notes"]"#));
+    assert_eq!(
+        again[0].allowed_write_paths_json.as_deref(),
+        Some(r#"["docs/notes"]"#)
+    );
 }
 
 // ══════════ v8→v9：事件 run 归属列 + session_agents.sub_session_id（D-01 DM-01）══════════
@@ -980,7 +1046,11 @@ fn migrate_v8_to_v9_adds_run_id_and_sub_session_id_preserves_data() {
 
     let db = LocalDb::open(temp.path()).unwrap();
     assert!(db.get_failure().is_none(), "v8→v9 升级无失败闩");
-    assert_eq!(db.user_version().unwrap(), LATEST_VERSION, "v8 → v9 升级完成");
+    assert_eq!(
+        db.user_version().unwrap(),
+        LATEST_VERSION,
+        "v8 → v9 升级完成"
+    );
     assert_eq!(
         db.get_session_meta("schema_version").unwrap().as_deref(),
         Some(SCHEMA_VERSION_STRING),
@@ -1057,7 +1127,10 @@ fn migrate_v8_to_v9_idempotent_rerun() {
     );
     let agent_cols = table_columns(&conn, "session_agents");
     assert_eq!(
-        agent_cols.iter().filter(|c| c.as_str() == "sub_session_id").count(),
+        agent_cols
+            .iter()
+            .filter(|c| c.as_str() == "sub_session_id")
+            .count(),
         1,
         "sub_session_id 列唯一"
     );
@@ -1065,7 +1138,11 @@ fn migrate_v8_to_v9_idempotent_rerun() {
     // 二次 open：幂等跳过（col-check 命中列已存在）
     let db2 = LocalDb::open(temp.path()).unwrap();
     assert!(db2.get_failure().is_none(), "幂等重跑无失败闩");
-    assert_eq!(db2.user_version().unwrap(), LATEST_VERSION, "二次 open 版本稳定");
+    assert_eq!(
+        db2.user_version().unwrap(),
+        LATEST_VERSION,
+        "二次 open 版本稳定"
+    );
     let conn2 = Connection::open(temp.path()).unwrap();
     assert_eq!(
         table_columns(&conn2, "events"),
@@ -1082,11 +1159,7 @@ fn migrate_v8_to_v9_idempotent_rerun() {
         db2.get_session_meta("schema_version").unwrap().as_deref(),
         Some(SCHEMA_VERSION_STRING)
     );
-    assert_eq!(
-        backup_files(temp.path()).len(),
-        0,
-        "二次 open 不产生新备份"
-    );
+    assert_eq!(backup_files(temp.path()).len(), 0, "二次 open 不产生新备份");
 }
 
 // ══════════ 11-T2 迁移备份时序确定化（checkpoint + 版本事务前备份）══════════
@@ -1105,7 +1178,8 @@ fn backup_content_deterministic_golden_bytes() {
     let pre_bytes = {
         let conn = Connection::open(temp.path()).unwrap();
         conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
-        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .unwrap();
         std::fs::read(temp.path()).unwrap()
     };
 
@@ -1157,7 +1231,11 @@ fn backup_includes_uncheckpointed_wal_data() {
     // 备份 = 迁移前完整旧库：含 WAL 中追加的会话（修复前会缺失）
     let bak = Connection::open(path).unwrap();
     assert_eq!(count_rows(&bak, "sessions"), 2, "备份含 WAL 追加会话 s2");
-    assert_eq!(count_rows(&bak, "events"), 3, "备份含迁移前全部事件（含孤儿）");
+    assert_eq!(
+        count_rows(&bak, "events"),
+        3,
+        "备份含迁移前全部事件（含孤儿）"
+    );
     let uv: i32 = bak
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
@@ -1188,12 +1266,17 @@ fn every_backup_user_version_is_previous_version() {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, v - 1,
+            uv,
+            v - 1,
             ".bak-v{v} 必须是 v{} 形态（本版本迁移前快照）",
             v - 1
         );
         // 备份可正常打开且含迁移前数据
-        assert_eq!(count_rows(&bak, "sessions"), 1, ".bak-v{v} 含迁移前会话数据");
+        assert_eq!(
+            count_rows(&bak, "sessions"),
+            1,
+            ".bak-v{v} 含迁移前会话数据"
+        );
     }
 }
 
@@ -1210,7 +1293,11 @@ fn backup_failure_warns_and_continues_migration() {
     let db = LocalDb::open(temp.path()).unwrap();
 
     // 版本升级不被中断（user_version 达最新）
-    assert_eq!(db.user_version().unwrap(), LATEST_VERSION, "备份失败不得阻断迁移");
+    assert_eq!(
+        db.user_version().unwrap(),
+        LATEST_VERSION,
+        "备份失败不得阻断迁移"
+    );
 
     // 告警落痕：session_meta 可观测键（含版本号）
     let alert = db.get_session_meta("migration_backup_failed").unwrap();
@@ -1219,7 +1306,11 @@ fn backup_failure_warns_and_continues_migration() {
 
     // 迁移本身正常完成：孤儿事件被过滤、数据可用
     let conn = Connection::open(temp.path()).unwrap();
-    assert_eq!(count_rows(&conn, "events"), 2, "v3→v4 迁移正常完成（孤儿过滤）");
+    assert_eq!(
+        count_rows(&conn, "events"),
+        2,
+        "v3→v4 迁移正常完成（孤儿过滤）"
+    );
     assert_eq!(count_rows(&conn, "sessions"), 1);
 }
 
@@ -1415,7 +1506,11 @@ fn migration_v3_to_v4_crash_rerun_self_heals() {
 
     // 断言 5：重开幂等（第二次 open 也成功、版本稳定、数据稳定）
     let db2 = LocalDb::open(temp.path()).unwrap();
-    assert_eq!(db2.user_version().unwrap(), LATEST_VERSION, "二次 open 幂等");
+    assert_eq!(
+        db2.user_version().unwrap(),
+        LATEST_VERSION,
+        "二次 open 幂等"
+    );
     let conn = Connection::open(temp.path()).unwrap();
     assert_eq!(count_rows(&conn, "sessions"), 1);
     assert_eq!(count_rows(&conn, "session_messages"), 1);
@@ -1433,7 +1528,11 @@ fn migration_normal_v3_upgrade_still_works() {
 
     let conn = Connection::open(temp.path()).unwrap();
     assert_eq!(count_rows(&conn, "sessions"), 1);
-    assert_eq!(count_rows(&conn, "events"), 2, "孤儿事件被过滤，正常事件保留");
+    assert_eq!(
+        count_rows(&conn, "events"),
+        2,
+        "孤儿事件被过滤，正常事件保留"
+    );
     assert_eq!(count_rows(&conn, "runs"), 1, "孤儿 run 被过滤");
     assert!(table_columns(&conn, "session_messages").contains(&"updated_at".to_string()));
     assert!(table_columns(&conn, "session_agents").contains(&"task_type".to_string()));

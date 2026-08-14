@@ -37,9 +37,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use super::super::intent::PayloadDigest;
 use super::super::pusher::{PendingDelivery, PushDispatcher};
 use super::super::{PushLevel, PushSeverity};
-use super::super::intent::PayloadDigest;
 use super::{
     VendorDevice, VendorNotification, VendorPlatform, VendorPushChannel, VendorSendOutcome,
 };
@@ -73,13 +73,20 @@ impl MemoryDeviceResolver {
 
     /// 移除设备（DeviceNotRegistered 清理语义的测试面）
     pub fn remove(&self, device_key: &str) {
-        self.devices.lock().expect("内存注册表锁").remove(device_key);
+        self.devices
+            .lock()
+            .expect("内存注册表锁")
+            .remove(device_key);
     }
 }
 
 impl DeviceResolver for MemoryDeviceResolver {
     fn resolve(&self, device_key: &str) -> Option<VendorDevice> {
-        self.devices.lock().expect("内存注册表锁").get(device_key).cloned()
+        self.devices
+            .lock()
+            .expect("内存注册表锁")
+            .get(device_key)
+            .cloned()
     }
 }
 
@@ -117,9 +124,16 @@ pub fn level_from_severity(severity: PushSeverity) -> PushLevel {
 /// 从跳转目标参数提取主业务键（toolCallId/runId/subagentId/taskId/
 /// timerId/cronId 白名单键；未命中回退去重键——跳转最小集，D7 §6.3）
 fn biz_key_from_target(params: &serde_json::Value) -> Option<String> {
-    ["toolCallId", "runId", "subagentId", "taskId", "timerId", "cronId"]
-        .into_iter()
-        .find_map(|key| params.get(key).and_then(|v| v.as_str()).map(str::to_string))
+    [
+        "toolCallId",
+        "runId",
+        "subagentId",
+        "taskId",
+        "timerId",
+        "cronId",
+    ]
+    .into_iter()
+    .find_map(|key| params.get(key).and_then(|v| v.as_str()).map(str::to_string))
 }
 
 /// 待发条目 → 厂商通知（[PushMessage] → [VendorNotification] 接线映射，
@@ -162,7 +176,9 @@ fn vendor_channel_for<'a>(
     channels: &'a [Arc<dyn VendorPushChannel>],
 ) -> Option<&'a Arc<dyn VendorPushChannel>> {
     let wanted = vendor_id_for(device.platform);
-    channels.iter().find(|channel| channel.vendor_id() == wanted)
+    channels
+        .iter()
+        .find(|channel| channel.vendor_id() == wanted)
 }
 
 /// 周期消费一批 pending（[PushDispatcher::take_pending] → 厂商发送 →
@@ -266,7 +282,6 @@ pub async fn send_pending_batch(
 mod tests {
     use super::super::VendorError;
     use super::*;
-    use async_trait::async_trait;
     use crate::push::pusher::{PushChannel, PushChannelError};
     use crate::push::schema::{message_from_decision, PushMessage};
     use crate::push::{
@@ -274,6 +289,7 @@ mod tests {
         online::MemoryPresenceSource,
         scenes::SceneId,
     };
+    use async_trait::async_trait;
 
     // ── 测试替身 ──
 
@@ -293,7 +309,10 @@ mod tests {
             &self,
             notification: &VendorNotification,
         ) -> Result<VendorSendOutcome, VendorError> {
-            assert!(!notification.device.push_token.is_empty(), "通知必带设备 token");
+            assert!(
+                !notification.device.push_token.is_empty(),
+                "通知必带设备 token"
+            );
             Ok(self.outcome.clone())
         }
     }
@@ -311,11 +330,7 @@ mod tests {
         let devices: Vec<_> = device_keys
             .iter()
             .map(|key| {
-                crate::push::online::device_activity(
-                    *key,
-                    "测试设备",
-                    1_784_078_400_000 - 60_000,
-                )
+                crate::push::online::device_activity(*key, "测试设备", 1_784_078_400_000 - 60_000)
             })
             .collect();
         presence.set_devices(devices);
@@ -408,7 +423,12 @@ mod tests {
         assert_eq!(dispatcher.pending_len(), 1, "保留回队列");
 
         // 装配后下一轮可送达
-        let report = send_pending_batch(&dispatcher, &resolver, &[channel("apns", VendorSendOutcome::Delivered)]).await;
+        let report = send_pending_batch(
+            &dispatcher,
+            &resolver,
+            &[channel("apns", VendorSendOutcome::Delivered)],
+        )
+        .await;
         assert_eq!(report.delivered, 1);
         assert_eq!(dispatcher.pending_len(), 0);
     }
@@ -443,7 +463,12 @@ mod tests {
         assert_eq!(dispatcher.pending_len(), 1, "可重试 → 保留");
 
         // 下一轮送达（通道恢复正常）
-        let report = send_pending_batch(&dispatcher, &resolver, &[channel("apns", VendorSendOutcome::Delivered)]).await;
+        let report = send_pending_batch(
+            &dispatcher,
+            &resolver,
+            &[channel("apns", VendorSendOutcome::Delivered)],
+        )
+        .await;
         assert_eq!(report.delivered, 1);
         assert_eq!(dispatcher.pending_len(), 0);
     }
@@ -492,10 +517,7 @@ mod tests {
                 "apns"
             }
 
-            async fn send(
-                &self,
-                _: &VendorNotification,
-            ) -> Result<VendorSendOutcome, VendorError> {
+            async fn send(&self, _: &VendorNotification) -> Result<VendorSendOutcome, VendorError> {
                 Err(VendorError::Build("测试构造错误".to_string()))
             }
         }
@@ -543,11 +565,17 @@ mod tests {
 
         // 逐条结果验证：重试/清理/永久各移出/保留语义
         for (key, outcome, expect_len) in [
-            ("tok-retry", VendorSendOutcome::FailedRetryable { retry_after: None }, 1usize),
+            (
+                "tok-retry",
+                VendorSendOutcome::FailedRetryable { retry_after: None },
+                1usize,
+            ),
             ("tok-prune", VendorSendOutcome::DeviceNotRegistered, 0usize),
             (
                 "tok-permanent",
-                VendorSendOutcome::FailedPermanent { reason: "x".to_string() },
+                VendorSendOutcome::FailedPermanent {
+                    reason: "x".to_string(),
+                },
                 0usize,
             ),
         ] {
@@ -555,12 +583,10 @@ mod tests {
             push_and_mark(&dispatcher, key);
             let resolver = MemoryDeviceResolver::new();
             resolver.register(key, ios_device(key, "t"));
-            let report = send_pending_batch(&dispatcher, &resolver, &[channel("apns", outcome.clone())]).await;
-            assert_eq!(
-                dispatcher.pending_len(),
-                expect_len,
-                "结果 {outcome:?}"
-            );
+            let report =
+                send_pending_batch(&dispatcher, &resolver, &[channel("apns", outcome.clone())])
+                    .await;
+            assert_eq!(dispatcher.pending_len(), expect_len, "结果 {outcome:?}");
             let _ = report;
         }
     }
@@ -605,7 +631,10 @@ mod tests {
         assert_eq!(notification.digest.detail.as_deref(), Some("任务运行失败"));
         assert_eq!(notification.digest.digest.as_deref(), Some("provider 401"));
         assert_eq!(notification.digest.session_id, "s-7");
-        assert_eq!(notification.digest.biz_key, "run-42", "params.runId → bizKey");
+        assert_eq!(
+            notification.digest.biz_key, "run-42",
+            "params.runId → bizKey"
+        );
     }
 
     /// 映射回退：title/body 未渲染（copy.rs 未接线）→ 缺省标题 + 空正文
@@ -636,17 +665,32 @@ mod tests {
             marked_at_ms: 1_784_078_400_000,
         };
         let notification = notification_from_pending(&delivery, ios_device("tok-1", "t"));
-        assert_eq!(notification.digest.detail, None, "title 未渲染 → detail None");
+        assert_eq!(
+            notification.digest.detail, None,
+            "title 未渲染 → detail None"
+        );
         assert_eq!(notification.digest.digest, None);
-        assert_eq!(notification.digest.biz_key, "tc-9f3a", "params.toolCallId → bizKey");
+        assert_eq!(
+            notification.digest.biz_key, "tc-9f3a",
+            "params.toolCallId → bizKey"
+        );
         assert_eq!(notification.dedupe_key, "approval-requested:tc-9f3a");
     }
 
     /// severity → 级别映射全矩阵
     #[test]
     fn level_from_severity_matrix() {
-        assert_eq!(level_from_severity(PushSeverity::Critical), PushLevel::P0Critical);
-        assert_eq!(level_from_severity(PushSeverity::Important), PushLevel::P1Important);
-        assert_eq!(level_from_severity(PushSeverity::Normal), PushLevel::P2Collapsible);
+        assert_eq!(
+            level_from_severity(PushSeverity::Critical),
+            PushLevel::P0Critical
+        );
+        assert_eq!(
+            level_from_severity(PushSeverity::Important),
+            PushLevel::P1Important
+        );
+        assert_eq!(
+            level_from_severity(PushSeverity::Normal),
+            PushLevel::P2Collapsible
+        );
     }
 }

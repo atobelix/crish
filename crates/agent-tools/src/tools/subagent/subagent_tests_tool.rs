@@ -84,7 +84,10 @@ async fn tool_parses_optional_args_into_request() {
     );
     assert_eq!(req.description.as_deref(), Some("调研模块 A"));
     assert_eq!(req.mode.as_deref(), Some("research"));
-    assert_eq!(req.parent_session_id, "parent-sess", "父会话 = 工具执行会话");
+    assert_eq!(
+        req.parent_session_id, "parent-sess",
+        "父会话 = 工具执行会话"
+    );
     assert!(req.parent_run_id.is_none(), "父 run 由引擎侧补齐");
     // 出站信封
     assert_eq!(out["subagentId"], "sub-1");
@@ -319,7 +322,10 @@ async fn tool_parses_task_type_write_paths_and_display_label() {
     assert_eq!(req.task_type, Some(TaskType::Implementation));
     assert_eq!(
         req.allowed_write_paths,
-        Some(vec![PathBuf::from("crates/foo"), PathBuf::from("docs/notes")])
+        Some(vec![
+            PathBuf::from("crates/foo"),
+            PathBuf::from("docs/notes")
+        ])
     );
     assert_eq!(req.display_label.as_deref(), Some("实现工程师"));
     // 全构造点 model_override 显式 None（编译器强制断言）
@@ -414,4 +420,3 @@ async fn tool_without_spawner_returns_structured_unavailable() {
     assert_eq!(err.code(), "common.unsupported");
     assert!(err.to_string().contains("未接线"));
 }
-

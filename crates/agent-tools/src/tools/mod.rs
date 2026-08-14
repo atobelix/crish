@@ -291,7 +291,9 @@ pub(crate) fn require_string(args: &serde_json::Value, key: &str) -> Result<Stri
 
 /// 可选字符串入参
 pub(crate) fn optional_string(args: &serde_json::Value, key: &str) -> Option<String> {
-    args.get(key).and_then(serde_json::Value::as_str).map(String::from)
+    args.get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(String::from)
 }
 
 /// 可选布尔入参
@@ -320,9 +322,7 @@ pub(crate) fn resolve_workspace_path(
     input: &str,
 ) -> Result<PathBuf, ToolError> {
     if input.trim().is_empty() {
-        return Err(ToolError::invalid_input(
-            "path must be a non-empty string",
-        ));
+        return Err(ToolError::invalid_input("path must be a non-empty string"));
     }
     if input.chars().any(|c| c.is_control()) {
         return Err(ToolError::invalid_input(format!(
@@ -1020,6 +1020,9 @@ mod tests {
             .execute(&ctx, serde_json::json!({ "path": "note.txt" }))
             .await
             .unwrap();
-        assert!(out["text"].as_str().unwrap().contains("hello from registry"));
+        assert!(out["text"]
+            .as_str()
+            .unwrap()
+            .contains("hello from registry"));
     }
 }

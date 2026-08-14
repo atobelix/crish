@@ -11,9 +11,7 @@
 
 use std::sync::Arc;
 
-use conex_shared::gate::{
-    ActionTarget, ActionTargetGate, TargetDenial, TargetDenialKind,
-};
+use conex_shared::gate::{ActionTarget, ActionTargetGate, TargetDenial, TargetDenialKind};
 
 use crate::action::gate::DomainGate;
 
@@ -73,15 +71,18 @@ mod tests {
     /// Url 目标拒绝映射：DomainGate 拒绝 → Whitelist 分类 + 目标串/原因保留。
     #[test]
     fn url_denied_maps_whitelist_kind() {
-        let gate = BrowserTargetGate::new(Arc::new(DenyGate::new(vec![
-            "evil.example".to_string(),
-        ])));
+        let gate =
+            BrowserTargetGate::new(Arc::new(DenyGate::new(vec!["evil.example".to_string()])));
         let err = gate
             .check(&ActionTarget::Url("https://evil.example.com".to_string()))
             .expect_err("应拒绝");
         assert_eq!(err.kind, TargetDenialKind::Whitelist);
         assert_eq!(err.target, "https://evil.example.com");
-        assert!(err.reason.contains("黑名单命中"), "原因透传：{}", err.reason);
+        assert!(
+            err.reason.contains("黑名单命中"),
+            "原因透传：{}",
+            err.reason
+        );
     }
 
     /// Window 形态：目标类型不适用（Other），展示串为「标题 (进程)」。
@@ -114,8 +115,7 @@ mod tests {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<Box<dyn ActionTargetGate>>();
 
-        let gate: Box<dyn ActionTargetGate> =
-            Box::new(BrowserTargetGate::new(Arc::new(AllowGate)));
+        let gate: Box<dyn ActionTargetGate> = Box::new(BrowserTargetGate::new(Arc::new(AllowGate)));
         assert!(gate
             .check(&ActionTarget::Url("https://a.example".to_string()))
             .is_ok());

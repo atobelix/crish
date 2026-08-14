@@ -101,7 +101,9 @@ pub(crate) enum WorkflowScheduleWire {
 impl WorkflowScheduleWire {
     /// 从命令入参 JSON 解析（未知类型返回中文错误，不让 serde 英文文案裸奔）
     fn parse(value: &serde_json::Value) -> Result<Self, String> {
-        let obj = value.as_object().ok_or_else(|| "调度配置无效".to_string())?;
+        let obj = value
+            .as_object()
+            .ok_or_else(|| "调度配置无效".to_string())?;
         let t = obj
             .get("type")
             .and_then(|v| v.as_str())
@@ -137,15 +139,10 @@ impl WorkflowScheduleWire {
                     .or_else(|| obj.get("minutes"))
                     .and_then(|v| v.as_u64());
                 match raw {
-                    Some(n) if n >= 1 && n <= INTERVAL_MINUTES_MAX => {
-                        Ok(Self::IntervalMinutes {
-                            interval_minutes: n,
-                        })
-                    }
-                    _ => Err(format!(
-                        "间隔分钟须为 1–{} 的整数",
-                        INTERVAL_MINUTES_MAX
-                    )),
+                    Some(n) if n >= 1 && n <= INTERVAL_MINUTES_MAX => Ok(Self::IntervalMinutes {
+                        interval_minutes: n,
+                    }),
+                    _ => Err(format!("间隔分钟须为 1–{} 的整数", INTERVAL_MINUTES_MAX)),
                 }
             }
             "cron" => {
@@ -163,9 +160,10 @@ impl WorkflowScheduleWire {
                     expression: normalized,
                 })
             }
-            "weekly" | "fileWatch" | "onFileChange" => {
-                Err(format!("引擎暂不支持「{}」调度，请改用「每天」或「间隔分钟」", t))
-            }
+            "weekly" | "fileWatch" | "onFileChange" => Err(format!(
+                "引擎暂不支持「{}」调度，请改用「每天」或「间隔分钟」",
+                t
+            )),
             _ => Err(format!("不支持的调度类型：{}", t)),
         }
     }
@@ -438,7 +436,9 @@ impl WorkflowStore for SessionMetaWorkflowStore {
 
     fn save(&self, workflow: &StoredWorkflow) {
         if let Ok(json) = serde_json::to_string(workflow) {
-            let _ = self.db.set_session_meta(&store_key(&workflow.cron_id), &json);
+            let _ = self
+                .db
+                .set_session_meta(&store_key(&workflow.cron_id), &json);
         }
         // 索引追加（已存在则不动，保持创建顺序稳定）
         let mut index: Vec<String> = self
@@ -584,10 +584,7 @@ impl WorkflowCommandState {
     /// pending_queue 同一 Arc 实例，消除 A5-H01a 队列双实例——触发注入
     /// 落真实队列，idle 续 run 消费唤醒；注册表委托槽初始为空，经
     /// [WorkflowBackend::set_registry] 注入共享实例，见模块头「委托边界」）
-    pub(crate) fn new(
-        db: LocalDb,
-        steering_queue: Arc<Mutex<PendingMessageQueue>>,
-    ) -> Self {
+    pub(crate) fn new(db: LocalDb, steering_queue: Arc<Mutex<PendingMessageQueue>>) -> Self {
         Self {
             backend: Arc::new(WorkflowBackend::new(
                 Arc::new(SessionMetaWorkflowStore::new(db)),
@@ -649,7 +646,10 @@ impl WorkflowBackend {
 
     /// 委托注册表当前句柄
     fn registry(&self) -> Option<Arc<SchedulerRegistry>> {
-        self.registry.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.registry
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// 创建 workflow（名称/提示词/调度三校验 → 表达式转换 → 落库；
@@ -684,10 +684,7 @@ impl WorkflowBackend {
                     max_iterations: None,
                     is_daemon: false,
                 };
-                let cron_id = registry
-                    .register(input)
-                    .await
-                    .map_err(map_scheduler_err)?;
+                let cron_id = registry.register(input).await.map_err(map_scheduler_err)?;
                 // manual（无表达式）不经注册表：命令层独立 id 分配
                 let now = now_ms();
                 let workflow = StoredWorkflow {
@@ -791,9 +788,7 @@ impl WorkflowBackend {
     ) -> Result<WorkflowView, CoreError> {
         let all = self.store.load_all();
         let Some(mut workflow) = all.into_iter().find(|w| w.cron_id == cron_id) else {
-            return Err(CoreError::NotFound(format!(
-                "workflow {cron_id} 不存在"
-            )));
+            return Err(CoreError::NotFound(format!("workflow {cron_id} 不存在")));
         };
         if let Some(name) = patch.name {
             let name = name.trim().to_string();
@@ -852,10 +847,7 @@ impl WorkflowBackend {
                     max_iterations: workflow.max_iterations,
                     is_daemon: workflow.is_daemon,
                 };
-                let new_id = registry
-                    .register(input)
-                    .await
-                    .map_err(map_scheduler_err)?;
+                let new_id = registry.register(input).await.map_err(map_scheduler_err)?;
                 let now = now_ms();
                 // 元数据迁移到新 id（旧键残留孤儿，见 store 注记）
                 self.store.remove(&old_id);
@@ -871,21 +863,12 @@ impl WorkflowBackend {
     /// 删除 workflow（委托激活时经注册表 cancel 停调度；清单移除，
     /// 运行历史保留）
     pub(crate) async fn delete(&self, cron_id: &str) -> Result<(), CoreError> {
-        let exists = self
-            .store
-            .load_all()
-            .iter()
-            .any(|w| w.cron_id == cron_id);
+        let exists = self.store.load_all().iter().any(|w| w.cron_id == cron_id);
         if !exists {
-            return Err(CoreError::NotFound(format!(
-                "workflow {cron_id} 不存在"
-            )));
+            return Err(CoreError::NotFound(format!("workflow {cron_id} 不存在")));
         }
         if let Some(registry) = self.registry() {
-            registry
-                .cancel(cron_id)
-                .await
-                .map_err(map_scheduler_err)?;
+            registry.cancel(cron_id).await.map_err(map_scheduler_err)?;
         }
         self.store.remove(cron_id);
         tracing::info!(target: "workflow", cron_id, "workflow 已删除");
@@ -900,9 +883,7 @@ impl WorkflowBackend {
     pub(crate) fn trigger(&self, cron_id: &str) -> Result<TriggerResult, CoreError> {
         let all = self.store.load_all();
         let Some(mut workflow) = all.into_iter().find(|w| w.cron_id == cron_id) else {
-            return Err(CoreError::NotFound(format!(
-                "workflow {cron_id} 不存在"
-            )));
+            return Err(CoreError::NotFound(format!("workflow {cron_id} 不存在")));
         };
         if !workflow.enabled {
             return Err(CoreError::InvalidInput(format!(
@@ -990,9 +971,9 @@ fn map_scheduler_err(err: crate::sched::SchedulerError) -> CoreError {
         crate::sched::SchedulerError::InvalidExpression(detail) => {
             CoreError::InvalidInput(format!("cron 表达式非法：{detail}"))
         }
-        crate::sched::SchedulerError::NoNextFire(expression) => CoreError::InvalidInput(
-            format!("cron 表达式 {expression} 无未来触发时刻（如 2 月 30 日），拒绝注册"),
-        ),
+        crate::sched::SchedulerError::NoNextFire(expression) => CoreError::InvalidInput(format!(
+            "cron 表达式 {expression} 无未来触发时刻（如 2 月 30 日），拒绝注册"
+        )),
         crate::sched::SchedulerError::IdNotFound => {
             CoreError::NotFound("cron 任务不存在或已停止".to_string())
         }
@@ -1200,7 +1181,11 @@ mod tests {
             )
             .await
             .expect("创建应成功");
-        assert!(view.id.starts_with("cron-"), "id 应为 cron-<seq>：{}", view.id);
+        assert!(
+            view.id.starts_with("cron-"),
+            "id 应为 cron-<seq>：{}",
+            view.id
+        );
         assert_eq!(view.name, "每日检查");
         assert_eq!(view.prompt, "检查仓库状态");
         assert!(view.enabled);

@@ -8,9 +8,7 @@
 
 use std::io::Cursor;
 
-use xcap::image::{
-    imageops, DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage,
-};
+use xcap::image::{imageops, DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 
 use crate::coord::{choose_target, ScaleSpec};
 
@@ -109,14 +107,8 @@ pub fn layout_from_raw(monitors: &[RawMonitor]) -> Option<DesktopLayout> {
     }
     let min_x = monitors.iter().map(|m| m.x).min()?;
     let min_y = monitors.iter().map(|m| m.y).min()?;
-    let max_x = monitors
-        .iter()
-        .map(|m| m.x + m.w as i32)
-        .max()?;
-    let max_y = monitors
-        .iter()
-        .map(|m| m.y + m.h as i32)
-        .max()?;
+    let max_x = monitors.iter().map(|m| m.x + m.w as i32).max()?;
+    let max_y = monitors.iter().map(|m| m.y + m.h as i32).max()?;
     let phys_w = (max_x - min_x) as u32;
     let phys_h = (max_y - min_y) as u32;
     let (tw, th) = choose_target(phys_w, phys_h);
@@ -154,11 +146,8 @@ pub fn compose_scale_encode(
     layout: &DesktopLayout,
 ) -> Result<Vec<u8>, String> {
     let (tw, th) = choose_target(layout.phys_w, layout.phys_h);
-    let mut canvas = ImageBuffer::from_pixel(
-        layout.phys_w,
-        layout.phys_h,
-        Rgba([0u8, 0u8, 0u8, 255u8]),
-    );
+    let mut canvas =
+        ImageBuffer::from_pixel(layout.phys_w, layout.phys_h, Rgba([0u8, 0u8, 0u8, 255u8]));
     for (x, y, img) in frames {
         let dx = (x - layout.origin_x) as i64;
         let dy = (y - layout.origin_y) as i64;
@@ -223,9 +212,7 @@ impl ScreenCapture {
                 Err(e) => {
                     tracing::warn!(attempt, error = %e, "截屏失败,重试");
                     last_err = Some(e);
-                    std::thread::sleep(std::time::Duration::from_millis(
-                        CAPTURE_RETRY_DELAY_MS,
-                    ));
+                    std::thread::sleep(std::time::Duration::from_millis(CAPTURE_RETRY_DELAY_MS));
                 }
             }
         }
@@ -245,8 +232,11 @@ impl ScreenCapture {
             let img = m
                 .capture_image()
                 .map_err(|e| format!("捕获显示器失败: {e}"))?;
-            frames.push((m.x().map_err(|e| format!("读取显示器 x 失败: {e}"))?, 
-                         m.y().map_err(|e| format!("读取显示器 y 失败: {e}"))?, img));
+            frames.push((
+                m.x().map_err(|e| format!("读取显示器 x 失败: {e}"))?,
+                m.y().map_err(|e| format!("读取显示器 y 失败: {e}"))?,
+                img,
+            ));
         }
         let png = compose_scale_encode(&frames, &self.layout)?;
         let (tw, th) = choose_target(self.layout.phys_w, self.layout.phys_h);
@@ -299,8 +289,22 @@ mod tests {
     fn layout_dual_monitor_negative_origin() {
         // 双屏负坐标:[-1920,0,1920,1080] + [0,0,1920,1080]
         let raw = vec![
-            RawMonitor { id: 1, x: -1920, y: 0, w: 1920, h: 1080, dpi_scale: 1.0 },
-            RawMonitor { id: 2, x: 0, y: 0, w: 1920, h: 1080, dpi_scale: 1.0 },
+            RawMonitor {
+                id: 1,
+                x: -1920,
+                y: 0,
+                w: 1920,
+                h: 1080,
+                dpi_scale: 1.0,
+            },
+            RawMonitor {
+                id: 2,
+                x: 0,
+                y: 0,
+                w: 1920,
+                h: 1080,
+                dpi_scale: 1.0,
+            },
         ];
         let layout = layout_from_raw(&raw).expect("布局构造失败");
         assert_eq!(layout.origin_x, -1920);
@@ -322,8 +326,22 @@ mod tests {
     fn compose_scale_encode_roundtrip() {
         // 双屏并排 800×1000(总 1600×1000,ratio 1.6 → WXGA 1280×800 缩放命中)
         let raw = vec![
-            RawMonitor { id: 1, x: -800, y: 0, w: 800, h: 1000, dpi_scale: 1.0 },
-            RawMonitor { id: 2, x: 0, y: 0, w: 800, h: 1000, dpi_scale: 1.0 },
+            RawMonitor {
+                id: 1,
+                x: -800,
+                y: 0,
+                w: 800,
+                h: 1000,
+                dpi_scale: 1.0,
+            },
+            RawMonitor {
+                id: 2,
+                x: 0,
+                y: 0,
+                w: 800,
+                h: 1000,
+                dpi_scale: 1.0,
+            },
         ];
         let layout = layout_from_raw(&raw).expect("布局构造失败");
         assert_eq!(layout.to_scale_spec().target_w, 1280);
@@ -345,14 +363,27 @@ mod tests {
         let rgb = decoded.to_rgb8();
         let left = rgb.get_pixel(320, 400);
         let right = rgb.get_pixel(960, 400);
-        assert!(left.0[0] > 200 && left.0[1] < 60, "左半应偏红, 实得 {left:?}");
-        assert!(right.0[1] > 200 && right.0[0] < 60, "右半应偏绿, 实得 {right:?}");
+        assert!(
+            left.0[0] > 200 && left.0[1] < 60,
+            "左半应偏红, 实得 {left:?}"
+        );
+        assert!(
+            right.0[1] > 200 && right.0[0] < 60,
+            "右半应偏绿, 实得 {right:?}"
+        );
     }
 
     #[test]
     fn compose_scale_encode_no_scale_keeps_size() {
         // 超宽不缩放:合成尺寸 = 物理尺寸
-        let raw = vec![RawMonitor { id: 1, x: 0, y: 0, w: 3440, h: 1440, dpi_scale: 1.0 }];
+        let raw = vec![RawMonitor {
+            id: 1,
+            x: 0,
+            y: 0,
+            w: 3440,
+            h: 1440,
+            dpi_scale: 1.0,
+        }];
         let layout = layout_from_raw(&raw).expect("布局构造失败");
         assert_eq!(layout.to_scale_spec().target_w, 3440);
         let img = ImageBuffer::from_pixel(3440, 1440, Rgba([10u8, 20u8, 30u8, 255u8]));
@@ -364,7 +395,14 @@ mod tests {
     #[test]
     fn tempfile_png_persist_roundtrip() {
         // 编码产物落盘(与面板/审计落盘面同构)可读回
-        let raw = vec![RawMonitor { id: 1, x: 0, y: 0, w: 1600, h: 1000, dpi_scale: 1.0 }];
+        let raw = vec![RawMonitor {
+            id: 1,
+            x: 0,
+            y: 0,
+            w: 1600,
+            h: 1000,
+            dpi_scale: 1.0,
+        }];
         let layout = layout_from_raw(&raw).expect("布局构造失败");
         let img = ImageBuffer::from_pixel(1600, 1000, Rgba([7u8, 8u8, 9u8, 255u8]));
         let png = compose_scale_encode(&[(0, 0, img)], &layout).expect("合成失败");

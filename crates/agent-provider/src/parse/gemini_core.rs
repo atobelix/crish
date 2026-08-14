@@ -8,8 +8,11 @@
 
 use serde_json::Value;
 
+use conex_types::error::ProviderErrorKind;
+
 use crate::events::{
-    ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser,
+    stream_error_kind, ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError,
+    StreamParser,
 };
 use crate::sse::frame::SseFrame;
 
@@ -95,9 +98,11 @@ impl GeminiParser {
 
         // 顶层 error 对象（部分代理 / API 错误帧，48-58）→ 立即终止
         if let Some(error) = gemini_payload_error(payload) {
+            let kind = stream_error_kind(&error);
             events.push(ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some(error),
+                error_kind: Some(kind),
                 usage: self.usage.clone(),
             });
             self.stream.extend(events.clone())?;
@@ -110,9 +115,11 @@ impl GeminiParser {
             if !has_candidates(payload) {
                 let block_usage =
                     parse_gemini_usage(payload.get("usageMetadata")).or_else(|| self.usage.clone());
+                let kind = stream_error_kind(&block);
                 events.push(ProviderStreamEvent::Stop {
                     reason: StopReason::Error,
                     error: Some(block),
+                    error_kind: Some(kind),
                     usage: block_usage,
                 });
                 self.stream.extend(events.clone())?;
@@ -229,12 +236,14 @@ impl GeminiParser {
             self.stop_reason = StopReason::ToolCall;
         }
         // 空流保护（162-169）：无内容事件且无终态帧且无 usage → error
+        // （解析层保护错误 → error_kind=Unknown，不可重试语义保持）
         if !self.emitted_content && !self.saw_terminal && self.usage.is_none() {
             events.push(ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some(
                     "Gemini streaming response completed without content events".to_string(),
                 ),
+                error_kind: Some(ProviderErrorKind::Unknown),
                 usage: None,
             });
         } else {
@@ -247,6 +256,11 @@ impl GeminiParser {
             events.push(ProviderStreamEvent::Stop {
                 reason: self.stop_reason,
                 error,
+                error_kind: match self.stream_error.as_deref() {
+                    Some(err) => Some(stream_error_kind(err)),
+                    // 正常终态（stop/tool-call/length）无错误分类
+                    None => None,
+                },
                 usage: self.usage.clone(),
             });
         }

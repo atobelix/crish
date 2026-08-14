@@ -31,11 +31,7 @@
 use crate::permission::{PermissionMode, PermissionVerdict};
 
 /// 笔记只读工具（safe：任意权限模式 Allow，含 plan）
-pub const NOTE_SAFE_TOOLS: &[&str] = &[
-    "query_blocks",
-    "document_outline",
-    "document_get_md",
-];
+pub const NOTE_SAFE_TOOLS: &[&str] = &["query_blocks", "document_outline", "document_get_md"];
 
 /// 笔记写工具（dangerous：plan Deny / ask NeedsApproval / full Allow）
 ///
@@ -160,14 +156,18 @@ mod tests {
         register_builtin_tools(&mut reg).expect("register builtins");
 
         for name in NOTE_SAFE_TOOLS {
-            let t = reg.get(name).unwrap_or_else(|| panic!("missing safe tool {name}"));
+            let t = reg
+                .get(name)
+                .unwrap_or_else(|| panic!("missing safe tool {name}"));
             assert!(
                 !t.definition().dangerous,
                 "safe 工具 {name} 不得 dangerous=true"
             );
         }
         for name in NOTE_WRITE_TOOLS {
-            let t = reg.get(name).unwrap_or_else(|| panic!("missing write tool {name}"));
+            let t = reg
+                .get(name)
+                .unwrap_or_else(|| panic!("missing write tool {name}"));
             assert!(
                 t.definition().dangerous,
                 "写工具 {name} 必须 dangerous=true（plan Deny / ask 审批）"

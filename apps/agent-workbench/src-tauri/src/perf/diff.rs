@@ -155,9 +155,10 @@ pub(crate) fn parse_unified_diff(input: &str) -> Result<DiffParseResult, String>
                             Some((r.parse().ok()?, 1))
                         }
                     };
-                    if let (Some(old_range), Some(new_range)) =
-                        (parts.first().and_then(|p| parse_range(p)), parts.get(1).and_then(|p| parse_range(p)))
-                    {
+                    if let (Some(old_range), Some(new_range)) = (
+                        parts.first().and_then(|p| parse_range(p)),
+                        parts.get(1).and_then(|p| parse_range(p)),
+                    ) {
                         if let Some(hunk) = current_hunk.take() {
                             hunks.push(hunk);
                         }
@@ -246,15 +247,24 @@ pub(crate) fn parse_unified_diff(input: &str) -> Result<DiffParseResult, String>
 }
 
 fn count_additions(lines: &[DiffLine]) -> u64 {
-    lines.iter().filter(|l| matches!(l.kind, DiffLineKind::Addition)).count() as u64
+    lines
+        .iter()
+        .filter(|l| matches!(l.kind, DiffLineKind::Addition))
+        .count() as u64
 }
 
 fn count_deletions(lines: &[DiffLine]) -> u64 {
-    lines.iter().filter(|l| matches!(l.kind, DiffLineKind::Deletion)).count() as u64
+    lines
+        .iter()
+        .filter(|l| matches!(l.kind, DiffLineKind::Deletion))
+        .count() as u64
 }
 
 fn count_context(lines: &[DiffLine]) -> u64 {
-    lines.iter().filter(|l| matches!(l.kind, DiffLineKind::Context)).count() as u64
+    lines
+        .iter()
+        .filter(|l| matches!(l.kind, DiffLineKind::Context))
+        .count() as u64
 }
 
 pub(crate) fn parse_diff_truncated(input: &str, max_lines: Option<u32>) -> DiffResult {

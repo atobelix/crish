@@ -107,23 +107,23 @@ impl WorkspaceFsGuard {
         Self::new(host_paths::workspace_root(&app_dir))
     }
 
-/// 严格构造：canonicalize 失败即拒绝（不裸用传入根，P-02 关闭）；
-/// Windows 下剥离 `\\?\` 前缀，保证跨会话路径比较一致。
-pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
-    let p = root.as_ref();
-    let canonical = p.canonicalize().map_err(|e| {
-        FileCommandError::new(
-            ERR_INTERNAL,
-            format!(
-                "Workspace root is unreachable and cannot be used: `{}` ({e})",
-                p.display()
-            ),
-        )
-    })?;
-    Ok(Self {
-        root: strip_verbatim_prefix(&canonical),
-    })
-}
+    /// 严格构造：canonicalize 失败即拒绝（不裸用传入根，P-02 关闭）；
+    /// Windows 下剥离 `\\?\` 前缀，保证跨会话路径比较一致。
+    pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
+        let p = root.as_ref();
+        let canonical = p.canonicalize().map_err(|e| {
+            FileCommandError::new(
+                ERR_INTERNAL,
+                format!(
+                    "Workspace root is unreachable and cannot be used: `{}` ({e})",
+                    p.display()
+                ),
+            )
+        })?;
+        Ok(Self {
+            root: strip_verbatim_prefix(&canonical),
+        })
+    }
 
     // G11a 备注：root() 非 test 构建无 bin 消费者（守卫内部用 self.root
     // 字段，命令面不读根路径），workspace.rs 测试逐条断言——dead_code 静音。
@@ -133,7 +133,10 @@ pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
         &self.root
     }
 
-    pub(crate) fn resolve_existing(&self, requested_path: &str) -> Result<PathBuf, FileCommandError> {
+    pub(crate) fn resolve_existing(
+        &self,
+        requested_path: &str,
+    ) -> Result<PathBuf, FileCommandError> {
         let requested = Path::new(requested_path);
         let candidate = if requested.as_os_str().is_empty() {
             self.root.clone()
@@ -161,7 +164,10 @@ pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
         Ok(canonical)
     }
 
-    pub(crate) fn resolve_for_write(&self, requested_path: &str) -> Result<PathBuf, FileCommandError> {
+    pub(crate) fn resolve_for_write(
+        &self,
+        requested_path: &str,
+    ) -> Result<PathBuf, FileCommandError> {
         let requested = Path::new(requested_path);
         if requested.as_os_str().is_empty() {
             return Err(FileCommandError::new(ERR_NOT_FILE, "Path is empty."));
@@ -173,7 +179,9 @@ pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
         };
 
         if candidate.exists() {
-            let canonical = candidate.canonicalize().unwrap_or_else(|_| candidate.clone());
+            let canonical = candidate
+                .canonicalize()
+                .unwrap_or_else(|_| candidate.clone());
             if !path_is_same_or_child(&canonical, &self.root) {
                 return Err(FileCommandError::new(
                     ERR_OUTSIDE_WORKSPACE,

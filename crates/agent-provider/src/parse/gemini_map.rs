@@ -65,6 +65,10 @@ pub fn gemini_finish_reason_to_stop(
 ///   `totalCachedTokens` ?? `total_cached_tokens` 别名（camel/snake 双形）回退于其后
 ///   （00-catalog 第 8.2 节：隐式缓存计量字段为 total_cached_tokens，P2 步骤 1b）
 /// - `thoughtsTokenCount` ?? `thoughts_token_count` → reasoningTokens
+/// - cacheWrite（T3.4 G1-d）：Gemini 官方 wire 不单列写缓存字段，但兼容网关可能上报
+///   `cacheWriteTokenCount` / `cacheWriteTokens`（camel/snake 双形，嵌套 `cache` details
+///   的 `writeTokenCount` 别名优先）。官方 wire 缺省保持 None（pi-ai google-generative-ai.js:165
+///   恒 0 同向——真实 Gemini 无独立写缓存计数）。
 /// - `totalTokenCount` ?? `total_token_count` ??（prompt/completion 任一存在时的和）
 /// - 全空返回 None（361-369）；非对象入参返回 None
 pub fn parse_gemini_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
@@ -79,6 +83,12 @@ pub fn parse_gemini_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
         .or_else(|| finite_u64(usage.get("cached_content_token_count")))
         .or_else(|| finite_u64(usage.get("totalCachedTokens")))
         .or_else(|| finite_u64(usage.get("total_cached_tokens")));
+    // write 链（T3.4 G1-d）：嵌套 cache.writeTokenCount 优先，其次顶层 camel/snake 双形别名
+    let cache_write_tokens = nested_finite_u64(usage, "cache", "writeTokenCount")
+        .or_else(|| finite_u64(usage.get("cacheWriteTokenCount")))
+        .or_else(|| finite_u64(usage.get("cacheWriteTokens")))
+        .or_else(|| finite_u64(usage.get("cache_write_token_count")))
+        .or_else(|| finite_u64(usage.get("cache_write_tokens")));
     let reasoning_tokens = finite_u64(usage.get("thoughtsTokenCount"))
         .or_else(|| finite_u64(usage.get("thoughts_token_count")));
     let total_tokens = finite_u64(usage.get("totalTokenCount"))
@@ -93,6 +103,7 @@ pub fn parse_gemini_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
     if prompt_tokens.is_none()
         && completion_tokens.is_none()
         && cache_read_tokens.is_none()
+        && cache_write_tokens.is_none()
         && reasoning_tokens.is_none()
         && total_tokens.is_none()
     {
@@ -103,8 +114,8 @@ pub fn parse_gemini_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
         completion_tokens,
         total_tokens,
         cache_read_tokens,
-        // Gemini 无直接报告 miss 的字段：miss 由 cache_breakdown 按 Excluded 口径推导
-        cache_write_tokens: None,
+        // write（T3.4 G1-d）：兼容网关显式上报时才非 None；真实 Gemini 无独立写缓存计数
+        cache_write_tokens,
         cache_miss_tokens: None,
         reasoning_tokens,
     })
@@ -212,4 +223,13 @@ pub(super) fn finite_u64(value: Option<&Value>) -> Option<u64> {
             .filter(|f| f.is_finite() && *f >= 0.0)
             .map(|f| f as u64)
     })
+}
+
+/// 从 usage 的嵌套 details 对象中取数值字段（T3.4 G1-d 的 cache-write 链用：
+/// `cache.writeTokenCount`，兼容网关显式上报）
+fn nested_finite_u64(usage: &Map<String, Value>, detail_key: &str, field: &str) -> Option<u64> {
+    usage
+        .get(detail_key)
+        .and_then(Value::as_object)
+        .and_then(|details| finite_u64(details.get(field)))
 }

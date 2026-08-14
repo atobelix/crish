@@ -33,7 +33,10 @@ fn three_sources_share_single_flag() {
     assert!(stop.stopped(), "全局急停必须置旗");
     assert_eq!(
         stop.records(),
-        vec![StopRecord { source: StopSource::Global, seq: 1 }]
+        vec![StopRecord {
+            source: StopSource::Global,
+            seq: 1
+        }]
     );
 
     stop.hotkey_trigger();
@@ -218,5 +221,8 @@ fn idle_and_estop_independent() {
     stop.panel_stop();
     assert!(stop.stopped());
     timeout.record_activity();
-    assert!(!timeout.tick(), "活动刷新后挂起判定解除（引擎侧另行处置急停）");
+    assert!(
+        !timeout.tick(),
+        "活动刷新后挂起判定解除（引擎侧另行处置急停）"
+    );
 }

@@ -513,23 +513,27 @@ mod tests {
     #[test]
     fn default_resolves_chat_completions_endpoint() {
         let dir = temp_dir("default-endpoint");
-        let store = test_store(&dir);
-        let resolved = store.resolve_default().expect("解析");
-        // 00 D3：端点未显式指定时恒为 chat-completions。
-        assert_eq!(resolved.endpoint, Endpoint::ChatCompletions);
-        assert!(resolved.stream);
-        assert_eq!(resolved.provider_id, "openai-compatible");
-        assert_eq!(resolved.api_key_source, ApiKeySource::Unset);
-        assert!(resolved.api_key.is_none());
+        with_env(&[], || {
+            let store = test_store(&dir);
+            let resolved = store.resolve_default().expect("解析");
+            // 00 D3：端点未显式指定时恒为 chat-completions。
+            assert_eq!(resolved.endpoint, Endpoint::ChatCompletions);
+            assert!(resolved.stream);
+            assert_eq!(resolved.provider_id, "openai-compatible");
+            assert_eq!(resolved.api_key_source, ApiKeySource::Unset);
+            assert!(resolved.api_key.is_none());
+        });
     }
 
     #[test]
     fn explicit_persisted_endpoint_wins_over_default() {
         let dir = temp_dir("explicit-endpoint");
-        let mut store = test_store(&dir);
-        store.config_mut(DEFAULT_PROVIDER_ID).endpoint = Some(Endpoint::Responses);
-        let resolved = store.resolve_default().expect("解析");
-        assert_eq!(resolved.endpoint, Endpoint::Responses);
+        with_env(&[], || {
+            let mut store = test_store(&dir);
+            store.config_mut(DEFAULT_PROVIDER_ID).endpoint = Some(Endpoint::Responses);
+            let resolved = store.resolve_default().expect("解析");
+            assert_eq!(resolved.endpoint, Endpoint::Responses);
+        });
     }
 
     // ── env 覆盖层 ──

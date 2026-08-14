@@ -575,10 +575,7 @@ mod tests {
     }
 
     impl BookmarkSink for MockBookmarkSink {
-        fn write_bookmarks(
-            &mut self,
-            rows: &[PersistedBookmark],
-        ) -> Result<(u64, u64), String> {
+        fn write_bookmarks(&mut self, rows: &[PersistedBookmark]) -> Result<(u64, u64), String> {
             let mut inserted = 0u64;
             let mut skipped = 0u64;
             for row in rows {
@@ -599,10 +596,7 @@ mod tests {
     struct FailingBookmarkSink;
 
     impl BookmarkSink for FailingBookmarkSink {
-        fn write_bookmarks(
-            &mut self,
-            _rows: &[PersistedBookmark],
-        ) -> Result<(u64, u64), String> {
+        fn write_bookmarks(&mut self, _rows: &[PersistedBookmark]) -> Result<(u64, u64), String> {
             Err("写入失败".to_string())
         }
     }
@@ -630,16 +624,23 @@ mod tests {
         }"#;
         let report = parse_bookmarks(json, &opts(100)).expect("解析");
         let mut sink = MockBookmarkSink::default();
-        let stats = persist_bookmarks(&report.items, &mut sink, "chrome/Default", 42).expect("落库");
+        let stats =
+            persist_bookmarks(&report.items, &mut sink, "chrome/Default", 42).expect("落库");
         assert_eq!(stats.inserted, 3);
         assert_eq!(stats.skipped_dupes, 0);
         assert_eq!(sink.rows.len(), 3);
         // 注入元数据 + 路径链逐元素保留
-        let a = sink.rows.get(&("https://a.example.com".to_string(), "A".to_string())).expect("A 行");
+        let a = sink
+            .rows
+            .get(&("https://a.example.com".to_string(), "A".to_string()))
+            .expect("A 行");
         assert_eq!(a.folder_path, vec![ROOT_NAME_BOOKMARK_BAR]);
         assert_eq!(a.source, "chrome/Default");
         assert_eq!(a.imported_at, 42);
-        let c = sink.rows.get(&("https://c.example.com".to_string(), "C".to_string())).expect("C 行");
+        let c = sink
+            .rows
+            .get(&("https://c.example.com".to_string(), "C".to_string()))
+            .expect("C 行");
         assert_eq!(c.folder_path, vec![ROOT_NAME_OTHER]);
     }
 
@@ -661,7 +662,8 @@ mod tests {
         let report = parse_bookmarks(json, &opts(100)).expect("解析");
         let mut sink = MockBookmarkSink::default();
         persist_bookmarks(&report.items, &mut sink, "chrome/Default", 42).expect("首次落库");
-        let stats = persist_bookmarks(&report.items, &mut sink, "edge/Profile 1", 43).expect("重导");
+        let stats =
+            persist_bookmarks(&report.items, &mut sink, "edge/Profile 1", 43).expect("重导");
         assert_eq!(stats.inserted, 0, "同键全部跳过");
         assert_eq!(stats.skipped_dupes, 2);
         assert_eq!(sink.rows.len(), 2, "mock 行数不变");

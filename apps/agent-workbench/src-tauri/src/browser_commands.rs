@@ -79,10 +79,8 @@ use crate::browser::panel_input::BrowserInputEvent;
 use crate::browser::{BrowserSlot, StartPayload, StatusPayload};
 use crate::core_run_commands::CoreRunState;
 use conex_browser::cdp::domains::Cookie as CdpCookie;
-use conex_browser::import::bookmarks::{
-    parse_bookmarks, persist_bookmarks, BookmarksOptions,
-};
-use conex_browser::import::history::{read_history, persist_history, HistoryOptions};
+use conex_browser::import::bookmarks::{parse_bookmarks, persist_bookmarks, BookmarksOptions};
+use conex_browser::import::history::{persist_history, read_history, HistoryOptions};
 use conex_browser::import::storage_state::{
     build_import_plan, export_origins_from_cookies, export_storage_state,
     export_storage_state_with_origins, inject_origin_scripts, parse_storage_state,
@@ -272,7 +270,9 @@ pub(crate) async fn browser_export_storage_state(
             .map_err(|e| invalid_input(e.to_string()))?
     } else {
         // 通道不可用（未连接/无活动标签）→ not_ready（storage 命令不触发惰性启动）
-        let channel = slot(core.inner()).local_storage_channel().map_err(not_ready)?;
+        let channel = slot(core.inner())
+            .local_storage_channel()
+            .map_err(not_ready)?;
         export_storage_state_with_origins(
             &cookies,
             &origins,
@@ -360,14 +360,18 @@ pub(crate) async fn browser_import_storage_state(
     let mut injected_scripts = 0usize;
     let mut injected_items = 0usize;
     if !plan.origin_scripts.is_empty() {
-        let channel = slot(core.inner()).local_storage_channel().map_err(not_ready)?;
-        let stats = inject_origin_scripts(channel.as_ref(), &plan).await.map_err(|e| {
-            match e {
-                // 防御性再检失败（非法 origin）：输入面错误
-                StorageStateError::InvalidOrigin { .. } => invalid_input(e.to_string()),
-                other => format!("localStorage 注入失败：{other}"),
-            }
-        })?;
+        let channel = slot(core.inner())
+            .local_storage_channel()
+            .map_err(not_ready)?;
+        let stats = inject_origin_scripts(channel.as_ref(), &plan)
+            .await
+            .map_err(|e| {
+                match e {
+                    // 防御性再检失败（非法 origin）：输入面错误
+                    StorageStateError::InvalidOrigin { .. } => invalid_input(e.to_string()),
+                    other => format!("localStorage 注入失败：{other}"),
+                }
+            })?;
         injected_scripts = stats.scripts;
         injected_items = stats.items;
     }
@@ -395,7 +399,11 @@ pub(crate) async fn browser_import_storage_state(
 fn verify_cookie_injection(plan: &ImportPlan, read_back: &[CdpCookie]) -> Vec<String> {
     let mut missing = Vec::new();
     for c in &plan.cookies {
-        let domain = c.domain.as_deref().unwrap_or_default().trim_start_matches('.');
+        let domain = c
+            .domain
+            .as_deref()
+            .unwrap_or_default()
+            .trim_start_matches('.');
         let path = c.path.as_deref().unwrap_or_default();
         let matched = read_back.iter().any(|rc| {
             rc.domain.trim_start_matches('.') == domain
@@ -601,9 +609,7 @@ mod tests {
         let bridge = EventBridge::new("test", Arc::new(TestEmitter(Arc::new(Default::default()))));
         Arc::new(CoreRunState::new(
             Arc::new(InMemoryStore::new()),
-            Arc::new(SnapshotFileStore::new(
-                temp.path().join("snapshot.json"),
-            )),
+            Arc::new(SnapshotFileStore::new(temp.path().join("snapshot.json"))),
             bridge,
             Arc::new(StatusDiagnostics::new()),
             None,
@@ -688,7 +694,10 @@ mod tests {
 
     /// 注入 mock storage 发送面（命令层断言面；未注入时槽为未连接面）。
     fn inject_mock(state: &Arc<CoreRunState>, mock: MockStorageOps) {
-        state.engine().browser_slot().inject_storage_ops(Arc::new(mock));
+        state
+            .engine()
+            .browser_slot()
+            .inject_storage_ops(Arc::new(mock));
     }
 
     /// localStorage 注入通道调用记录（§5.3 注入执行面断言：调用序与参数）。
@@ -716,24 +725,19 @@ mod tests {
     impl MockLocalStorageChannel {
         /// 预设某 origin 的 localStorage 读取结果（导出聚合断言，P1-3）。
         fn with_items(self, origin: &str, items: Vec<(&str, &str)>) -> Self {
-            self.items
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .insert(
-                    origin.to_string(),
-                    items
-                        .into_iter()
-                        .map(|(k, v)| (k.to_string(), v.to_string()))
-                        .collect(),
-                );
+            self.items.lock().unwrap_or_else(|p| p.into_inner()).insert(
+                origin.to_string(),
+                items
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            );
             self
         }
     }
 
     #[async_trait]
-    impl conex_browser::import::storage_state::LocalStorageChannel
-        for MockLocalStorageChannel
-    {
+    impl conex_browser::import::storage_state::LocalStorageChannel for MockLocalStorageChannel {
         async fn add_init_script(
             &self,
             source: &str,
@@ -836,8 +840,7 @@ mod tests {
             "origins 面由 cookie domain 推导（同域去重）"
         );
         assert_eq!(
-            v["origins"][0]["origin"],
-            "https://example.com",
+            v["origins"][0]["origin"], "https://example.com",
             "任一 secure cookie → https + 去前导点"
         );
         assert_eq!(
@@ -853,8 +856,14 @@ mod tests {
         assert_eq!(v["cookies"][0]["httpOnly"], true);
         assert_eq!(v["cookies"][0]["secure"], true);
         assert_eq!(v["cookies"][0]["sameSite"], "Lax");
-        assert_eq!(v["cookies"][1]["expires"], 1_750_000_000, "持久 cookie 原值");
-        assert!(v["cookies"][1].get("sameSite").is_none(), "非法/缺失 sameSite 省略");
+        assert_eq!(
+            v["cookies"][1]["expires"], 1_750_000_000,
+            "持久 cookie 原值"
+        );
+        assert!(
+            v["cookies"][1].get("sameSite").is_none(),
+            "非法/缺失 sameSite 省略"
+        );
     }
 
     /// J1b：导出需显式授权——authorized=false 直接拒绝（**不执行实读**，
@@ -888,7 +897,10 @@ mod tests {
             "未授权不得执行实读（零副作用）"
         );
         assert!(
-            channel_calls.lock().unwrap_or_else(|p| p.into_inner()).is_empty(),
+            channel_calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_empty(),
             "未授权不得经 localStorage 通道执行任何读取（零副作用）"
         );
     }
@@ -929,9 +941,12 @@ mod tests {
         let state_ref = app.state::<Arc<CoreRunState>>();
 
         // cookie 实读面成功（会话存储面 mock），但 localStorage 通道未注入
-        inject_mock(&state, MockStorageOps::new(vec![cdp_cookie(|c| {
-            c.domain = "example.com".to_string();
-        })]));
+        inject_mock(
+            &state,
+            MockStorageOps::new(vec![cdp_cookie(|c| {
+                c.domain = "example.com".to_string();
+            })]),
+        );
 
         let err = browser_export_storage_state(true, state_ref)
             .await
@@ -982,12 +997,14 @@ mod tests {
         assert_eq!(v["cookies"].as_array().map(Vec::len), Some(2));
         let origins = v["origins"].as_array().expect("origins 数组");
         assert_eq!(origins.len(), 2);
-        assert_eq!(origins[0]["origin"], "http://example.org", "字典序：http 在前");
+        assert_eq!(
+            origins[0]["origin"], "http://example.org",
+            "字典序：http 在前"
+        );
         assert_eq!(origins[0]["localStorage"][0]["name"], "token");
         assert_eq!(origins[0]["localStorage"][0]["value"], "abc");
         assert_eq!(
-            origins[1]["origin"],
-            "https://example.com",
+            origins[1]["origin"], "https://example.com",
             "secure cookie → https（前导点去除）"
         );
         assert_eq!(origins[1]["localStorage"][0]["name"], "theme");
@@ -1170,11 +1187,15 @@ mod tests {
         let missing = verify_cookie_injection(&plan, &read_back);
         assert_eq!(missing.len(), 2, "value 改写 + 缺失均须报告：{missing:?}");
         assert!(
-            missing.iter().any(|k| k.contains("a") && k.contains("example.com")),
+            missing
+                .iter()
+                .any(|k| k.contains("a") && k.contains("example.com")),
             "a 键须在缺失清单：{missing:?}"
         );
         assert!(
-            missing.iter().any(|k| k.contains("b") && k.contains("example.org")),
+            missing
+                .iter()
+                .any(|k| k.contains("b") && k.contains("example.org")),
             "b 键须在缺失清单：{missing:?}"
         );
     }
@@ -1353,7 +1374,8 @@ mod tests {
             .expect("mock app");
         let state_ref = app.state::<Arc<CoreRunState>>();
 
-        let status = browser_status(app.handle().clone(), state_ref.clone()).expect("status 不应失败");
+        let status =
+            browser_status(app.handle().clone(), state_ref.clone()).expect("status 不应失败");
         assert_eq!(status.state, "idle", "从未启动 = idle");
         assert_eq!(
             serde_json::to_value(&status).unwrap(),
@@ -1361,14 +1383,18 @@ mod tests {
             "url 缺省不落键（契约形状）"
         );
 
-        let stopped = browser_stop(None, state_ref.clone()).await.expect("未启动 stop 应幂等");
+        let stopped = browser_stop(None, state_ref.clone())
+            .await
+            .expect("未启动 stop 应幂等");
         assert_eq!(
             serde_json::to_value(&stopped).unwrap(),
             json!({ "state": "stopped" })
         );
 
         // 评审 F3：force 急停参数显式传递亦收敛（未启动幂等安全面）
-        let stopped = browser_stop(Some(true), state_ref).await.expect("force stop 应幂等");
+        let stopped = browser_stop(Some(true), state_ref)
+            .await
+            .expect("force stop 应幂等");
         assert_eq!(
             serde_json::to_value(&stopped).unwrap(),
             json!({ "state": "stopped" })
@@ -1398,7 +1424,10 @@ mod tests {
         }))
         .expect("载荷反序列化");
         let result = browser_input(evt, state_ref.clone()).await;
-        assert!(result.is_ok(), "no-wait：路由后立即返回 Ok，不得因会话缺失失败");
+        assert!(
+            result.is_ok(),
+            "no-wait：路由后立即返回 Ok，不得因会话缺失失败"
+        );
 
         let key_evt = serde_json::from_value(json!({
             "kind": "key",
@@ -1493,13 +1522,9 @@ mod tests {
             matches!(&calls[1], ChannelCall::SetItem { origin, key, value }
                 if origin == "https://example.com" && key == "theme" && value == "dark")
         );
-        assert!(
-            matches!(&calls[2], ChannelCall::SetItem { origin, key, .. }
-                if origin == "https://example.com" && key == "token")
-        );
-        assert!(
-            matches!(&calls[3], ChannelCall::InitScript(s) if s.contains("sub.example.org"))
-        );
+        assert!(matches!(&calls[2], ChannelCall::SetItem { origin, key, .. }
+                if origin == "https://example.com" && key == "token"));
+        assert!(matches!(&calls[3], ChannelCall::InitScript(s) if s.contains("sub.example.org")));
         assert!(
             matches!(&calls[4], ChannelCall::SetItem { origin, key, value }
                 if origin == "https://sub.example.org" && key == "k" && value == "v")
@@ -1690,7 +1715,10 @@ mod tests {
             .await
             .expect("列表不应失败");
         assert_eq!(rows.len(), 3);
-        assert_eq!(rows[0].url, "https://h0.example.com", "visited_at 倒序（最近在前）");
+        assert_eq!(
+            rows[0].url, "https://h0.example.com",
+            "visited_at 倒序（最近在前）"
+        );
         assert_eq!(rows[0].title.as_deref(), Some("H0"));
         assert_eq!(rows[0].source, "manual/history", "来源标识固定");
         // since 过滤（严格大于）+ limit 截断

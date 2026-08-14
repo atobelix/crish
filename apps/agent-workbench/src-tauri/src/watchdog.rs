@@ -135,16 +135,16 @@ impl MemoryDispatchStore {
     /// 写入声明（测试注入与 wait 通道落库共用；幂等覆盖）
     #[allow(dead_code)] // R-CF3：wait 通道落库接线后移除
     pub(crate) fn set_declarations(&self, declarations: Vec<DispatchDeclaration>) {
-        *self
-            .declarations
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = declarations;
+        *self.declarations.lock().unwrap_or_else(|e| e.into_inner()) = declarations;
     }
 }
 
 impl DispatchStore for MemoryDispatchStore {
     fn load_declarations(&self) -> Vec<DispatchDeclaration> {
-        self.declarations.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.declarations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     fn clear_declarations(&self) {
@@ -267,32 +267,36 @@ impl Watchdog {
 
         // §6.2 真实子代理状态过滤与元数据闭环核销：
         // 过滤非运行态子代理，消除虚假超时报警风暴
-        let active_declarations: Vec<DispatchDeclaration> = if let Some(ref source) = self.agents_source {
-            let agents = source.load_agents();
-            if agents.is_empty() {
-                // fail-open：状态源暂无记录时保留既有声明
-                declarations
+        let active_declarations: Vec<DispatchDeclaration> =
+            if let Some(ref source) = self.agents_source {
+                let agents = source.load_agents();
+                if agents.is_empty() {
+                    // fail-open：状态源暂无记录时保留既有声明
+                    declarations
+                } else {
+                    declarations
+                        .into_iter()
+                        .filter(|decl| {
+                            // 若声明中任一子代理仍处于运行态（running/pending/started），保留声明；
+                            // 若声明内全部子代理均已终态（completed/failed/stopped），则过滤该声明
+                            decl.subagent_ids.iter().any(|id| {
+                                match agents
+                                    .iter()
+                                    .find(|a| &a.id == id || &a.subagent_run_id == id)
+                                {
+                                    Some(agent) => {
+                                        let s = agent.status.to_ascii_lowercase();
+                                        s == "running" || s == "pending" || s == "started"
+                                    }
+                                    None => true, // fail-open: 未知状态视为活跃
+                                }
+                            })
+                        })
+                        .collect()
+                }
             } else {
                 declarations
-                    .into_iter()
-                    .filter(|decl| {
-                        // 若声明中任一子代理仍处于运行态（running/pending/started），保留声明；
-                        // 若声明内全部子代理均已终态（completed/failed/stopped），则过滤该声明
-                        decl.subagent_ids.iter().any(|id| {
-                            match agents.iter().find(|a| &a.id == id || &a.subagent_run_id == id) {
-                                Some(agent) => {
-                                    let s = agent.status.to_ascii_lowercase();
-                                    s == "running" || s == "pending" || s == "started"
-                                }
-                                None => true, // fail-open: 未知状态视为活跃
-                            }
-                        })
-                    })
-                    .collect()
-            }
-        } else {
-            declarations
-        };
+            };
 
         if active_declarations.is_empty() {
             // 所有历史分发的子代理均已完成或失败，核销 store 历史声明，消除误报风暴
@@ -324,10 +328,7 @@ impl Watchdog {
         let target = active_declarations
             .iter()
             .max_by_key(|d| d.dispatched_at_ms)?;
-        *self
-            .last_fired_ms
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some(now_ms);
+        *self.last_fired_ms.lock().unwrap_or_else(|e| e.into_inner()) = Some(now_ms);
         Some(self.build_steering_entry(target, now_ms))
     }
 
@@ -474,10 +475,7 @@ mod tests {
     async fn watchdog_no_fire_when_events_recent() {
         let (watchdog, queue, store, last_wakeup, clock) = test_watchdog();
         let base = clock.load(Ordering::Relaxed);
-        store.set_declarations(vec![declaration(
-            "sa-1",
-            base.saturating_sub(30 * 60_000),
-        )]);
+        store.set_declarations(vec![declaration("sa-1", base.saturating_sub(30 * 60_000))]);
         last_wakeup.mark_wakeup_at(base.saturating_sub(60_000));
         watchdog.tick().await;
         assert!(
@@ -507,14 +505,15 @@ mod tests {
         watchdog.tick().await;
         let first = drain_entries(&queue);
         assert_eq!(first.len(), 1);
-        assert!(first[0].text.contains("15 分钟"), "首次触发时长：{}", first[0].text);
+        assert!(
+            first[0].text.contains("15 分钟"),
+            "首次触发时长：{}",
+            first[0].text
+        );
         // t0 + 60s：下一周期，未再失联 N 分钟 → 不重复
         clock.fetch_add(60_000, Ordering::Relaxed);
         watchdog.tick().await;
-        assert!(
-            drain_entries(&queue).is_empty(),
-            "触发后 60s 不应重复触发"
-        );
+        assert!(drain_entries(&queue).is_empty(), "触发后 60s 不应重复触发");
         // t0 + 11 分钟：再次失联 N 分钟 → 重新触发（同组替换，仍一条，
         // 时长更新为 26 分钟）
         clock.fetch_add(10 * 60_000, Ordering::Relaxed);
@@ -621,7 +620,8 @@ mod tests {
                 Arc::new(|| 0),
                 options,
             )
-            .with_agents_source(Arc::clone(&agent_source) as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+            .with_agents_source(Arc::clone(&agent_source)
+                as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
         );
 
         // 注入 11 分钟前的分发声明
@@ -662,7 +662,8 @@ mod tests {
                 Arc::new(|| 0),
                 options,
             )
-            .with_agents_source(Arc::clone(&agent_source) as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+            .with_agents_source(Arc::clone(&agent_source)
+                as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
         );
 
         store.set_declarations(vec![declaration(
@@ -695,7 +696,8 @@ mod tests {
                 Arc::new(|| 0),
                 options,
             )
-            .with_agents_source(Arc::clone(&agent_source) as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+            .with_agents_source(Arc::clone(&agent_source)
+                as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
         );
 
         store.set_declarations(vec![declaration(
@@ -712,4 +714,3 @@ mod tests {
         );
     }
 }
-

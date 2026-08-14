@@ -38,10 +38,7 @@ use axum::{
 };
 use conex_types::device::{DeviceErrorCode, ErrorBody, PairHello};
 
-use super::{
-    limiter::PairRateOutcome,
-    now_ms, pairing::PairingCoordinator, ServerState,
-};
+use super::{limiter::PairRateOutcome, now_ms, pairing::PairingCoordinator, ServerState};
 
 /// 固定桌面标识占位（R2 设备注册表接入前；mock 同款占位哲学）
 pub const DESKTOP_ID: &str = "crish-desktop";
@@ -312,10 +309,7 @@ mod tests {
     }
 
     /// 指定来源的配对请求（每 IP 限速测试用）
-    fn pair_request_from(
-        body: serde_json::Value,
-        addr: SocketAddr,
-    ) -> axum::http::Request<Body> {
+    fn pair_request_from(body: serde_json::Value, addr: SocketAddr) -> axum::http::Request<Body> {
         let mut request = axum::http::Request::builder()
             .uri("/v1/pair")
             .method("POST")
@@ -450,12 +444,7 @@ mod tests {
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
         // 锁定期内正确码 → 409 + pair.too_many_attempts
-        let response = call_handler(
-            &state,
-            test_addr(),
-            serde_json::json!({ "code": code }),
-        )
-        .await;
+        let response = call_handler(&state, test_addr(), serde_json::json!({ "code": code })).await;
         assert_eq!(response.status(), StatusCode::CONFLICT);
         let body = json_body(response).await;
         assert_eq!(body["code"], "pair.too_many_attempts");
@@ -500,11 +489,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         let body = json_body(response).await;
         assert_eq!(body["code"], "cmd.too_many_requests");
-        assert_eq!(
-            state.pair_limiter().audit_rejected(),
-            1,
-            "超限必须审计 +1"
-        );
+        assert_eq!(state.pair_limiter().audit_rejected(), 1, "超限必须审计 +1");
         assert_eq!(
             state.pair_limiter().count_for(addr.ip()),
             10,
@@ -548,19 +533,18 @@ mod tests {
             "IP-A 第 11 次必须 429"
         );
         // IP-B 首次请求：必须到达业务面（200/401/409 均可，绝不 429）
-        let response = call_handler(
-            &state,
-            addr_b,
-            serde_json::json!({ "code": code }),
-        )
-        .await;
+        let response = call_handler(&state, addr_b, serde_json::json!({ "code": code })).await;
         assert_ne!(
             response.status(),
             StatusCode::TOO_MANY_REQUESTS,
             "IP-B 独立桶不受 IP-A 限速影响"
         );
         assert_eq!(state.pair_limiter().count_for(addr_b.ip()), 1);
-        assert_eq!(state.pair_limiter().audit_rejected(), 1, "IP-B 放行不产生审计");
+        assert_eq!(
+            state.pair_limiter().audit_rejected(),
+            1,
+            "IP-B 放行不产生审计"
+        );
     }
 
     /// 成功也计入窗口：1 次成功（200）后窗口计数 = 1——防「配对成功换新
@@ -569,12 +553,7 @@ mod tests {
     async fn successful_pairing_consumes_window_quota() {
         let (state, coordinator) = test_state();
         let code = activate(&coordinator);
-        let response = call_handler(
-            &state,
-            test_addr(),
-            serde_json::json!({ "code": code }),
-        )
-        .await;
+        let response = call_handler(&state, test_addr(), serde_json::json!({ "code": code })).await;
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
             state.pair_limiter().count_for(test_ip()),
@@ -640,12 +619,8 @@ mod tests {
     /// pair.hello 载荷非法 → Err(CmdInvalid)；协调器未装配 → Err(Internal)
     #[test]
     fn pair_hello_invalid_payload_and_unwired_coordinator() {
-        let err = handle_pair_hello(
-            &serde_json::json!({ "deviceName": "x" }),
-            None,
-            now_ms(),
-        )
-        .expect_err("协调器未装配必须 Err(Internal)");
+        let err = handle_pair_hello(&serde_json::json!({ "deviceName": "x" }), None, now_ms())
+            .expect_err("协调器未装配必须 Err(Internal)");
         assert_eq!(err.0, DeviceErrorCode::Internal);
         // 载荷缺 code → CmdInvalid
         let (state, coordinator) = test_state();

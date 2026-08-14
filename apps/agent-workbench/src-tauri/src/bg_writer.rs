@@ -231,10 +231,7 @@ pub(crate) async fn finish_task(
     // 1) 日志文件 sync（退出后文件可读）
     state.log.sync();
     // 2) 收口子进程（wait）
-    let child = child
-        .lock()
-        .map(|mut guard| guard.take())
-        .unwrap_or(None);
+    let child = child.lock().map(|mut guard| guard.take()).unwrap_or(None);
     let (task_state, exit_code) = match child {
         Some(mut child) => match child.wait().await {
             Ok(status) => {

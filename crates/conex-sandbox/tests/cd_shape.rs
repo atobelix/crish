@@ -36,7 +36,10 @@ fn set_location_and_sl_hit_cd_shape() {
     assert_eq!(a.overall_class, CommandClass::CdShape);
     assert_eq!(root_classify(&segs(&["sl sub"])), RootClass::CdShape);
     // PowerShell 别名大小写不敏感（归一化处理）
-    assert_eq!(root_classify(&segs(&["SET-LOCATION sub"])), RootClass::CdShape);
+    assert_eq!(
+        root_classify(&segs(&["SET-LOCATION sub"])),
+        RootClass::CdShape
+    );
 }
 
 #[test]
@@ -52,8 +55,14 @@ fn pushd_and_popd_hit_cd_shape() {
 #[test]
 fn git_dash_c_not_cd_shape() {
     // git -C 不依赖进程内目录状态，不命中
-    assert_eq!(analyze("git -C src status").overall_class, CommandClass::Normal);
-    assert_eq!(root_classify(&segs(&["git -C src status"])), RootClass::Normal);
+    assert_eq!(
+        analyze("git -C src status").overall_class,
+        CommandClass::Normal
+    );
+    assert_eq!(
+        root_classify(&segs(&["git -C src status"])),
+        RootClass::Normal
+    );
 }
 
 #[test]
@@ -66,7 +75,10 @@ fn npm_prefix_and_python_m_not_cd_shape() {
         analyze("python -m pip install x").overall_class,
         CommandClass::Normal
     );
-    assert_eq!(root_classify(&segs(&["npm --prefix ./sub run build"])), RootClass::Normal);
+    assert_eq!(
+        root_classify(&segs(&["npm --prefix ./sub run build"])),
+        RootClass::Normal
+    );
 }
 
 #[test]
@@ -98,7 +110,10 @@ fn cd_chain_with_delete_both_hit() {
         root_classify(&segs(&["cd x", "rm -rf y"])),
         RootClass::DeleteShape
     );
-    assert_eq!(root_classify(&segs(&["cd x && rm -rf y"])), RootClass::DeleteShape);
+    assert_eq!(
+        root_classify(&segs(&["cd x && rm -rf y"])),
+        RootClass::DeleteShape
+    );
     // 删除在前的链同样删除优先
     assert_eq!(
         root_classify(&segs(&["rm -f tmp/f", "cd x"])),
@@ -110,7 +125,10 @@ fn cd_chain_with_delete_both_hit() {
 fn cd_chain_without_delete_overall_cd() {
     let a = analyze("cd sub && git status");
     assert_eq!(a.overall_class, CommandClass::CdShape);
-    assert_eq!(root_classify(&segs(&["cd sub", "git status"])), RootClass::CdShape);
+    assert_eq!(
+        root_classify(&segs(&["cd sub", "git status"])),
+        RootClass::CdShape
+    );
 }
 
 #[test]
@@ -129,7 +147,10 @@ fn s2_s6_delete_shape_regression() {
     // 红线：rm -rf / 100% 拦截
     assert_eq!(analyze("rm -rf /").overall_class, CommandClass::Redline);
     // -- 变体归删除形态（S4 重定向）
-    assert_eq!(analyze("rm -rf -- ./").overall_class, CommandClass::DeleteShape);
+    assert_eq!(
+        analyze("rm -rf -- ./").overall_class,
+        CommandClass::DeleteShape
+    );
     // PowerShell 删除形态
     assert_eq!(
         analyze("Remove-Item -LiteralPath 'C:\\x\\y.txt' -Force").overall_class,
@@ -140,14 +161,20 @@ fn s2_s6_delete_shape_regression() {
     assert_eq!(a.overall_class, CommandClass::DeleteShape);
     assert!(a.delete_targets.contains(&"file.txt".to_string()));
     // 回退形态与普通命令不受影响
-    assert_eq!(analyze("git reset --hard HEAD~5").overall_class, CommandClass::GitRevertShape);
+    assert_eq!(
+        analyze("git reset --hard HEAD~5").overall_class,
+        CommandClass::GitRevertShape
+    );
     assert_eq!(analyze("git status").overall_class, CommandClass::Normal);
     // 间接执行删除标记（I2-S4）不受影响
     let b = analyze("bash -c 'rm -rf tmp/foo'");
     assert!(b.has_indirect_delete);
     assert_eq!(b.overall_class, CommandClass::Indirect);
     // 间接执行红线升级不受影响
-    assert_eq!(analyze("sudo bash -c 'rm -rf /'").overall_class, CommandClass::Redline);
+    assert_eq!(
+        analyze("sudo bash -c 'rm -rf /'").overall_class,
+        CommandClass::Redline
+    );
     // 根目录删除不会因 cd 新增变体误判为 cd 形态
     assert_ne!(analyze("rm -rf /").overall_class, CommandClass::CdShape);
 }

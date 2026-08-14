@@ -4,10 +4,10 @@
 //! mod tests;`（非直接 `mod`，无孤儿）。用例形状与拆分前完全一致（零删除、
 //! 零合并）；诚实边界句全保留。
 
-use super::*;
 use super::note_commands_apply::{NoteApplyOpsArgs, NoteSendToNoteArgs};
 use super::note_commands_hydrate::NoteHydrateDocumentArgs;
 use super::note_commands_mirror::{NoteDetectMirrorArgs, NoteImportMirrorArgs};
+use super::*;
 use agent_tools::note_backend::{NoteApplyMdRequest, NoteApplyMode, NoteQueryBlocksParams};
 use conex_note_runtime::{HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS};
 use serde_json::json;
@@ -22,9 +22,7 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn temp_install() -> (MutexGuard<'static, ()>, std::path::PathBuf) {
-    let guard = TEST_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     let dir = std::env::temp_dir().join(format!(
         "workbench-note-cmd-{}-{}-{}",
@@ -68,7 +66,10 @@ async fn command_apply_and_query_roundtrip() {
     .await
     .unwrap();
     assert_eq!(q["ok"], true);
-    assert!(q["blocks"].as_array().map(|a| !a.is_empty()).unwrap_or(true));
+    assert!(q["blocks"]
+        .as_array()
+        .map(|a| !a.is_empty())
+        .unwrap_or(true));
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -272,7 +273,10 @@ async fn note_document_hydrate_projection_shape() {
     assert_eq!(empty_doc["ok"], true);
     assert_eq!(empty_doc["source"], "tauri-ipc");
     assert_eq!(empty_doc["hydrate_path"], HYDRATE_PATH_DOC_SESSION);
-    assert_eq!(empty_doc["blocks"].as_array().map(|a| a.len()).unwrap_or(1), 0);
+    assert_eq!(
+        empty_doc["blocks"].as_array().map(|a| a.len()).unwrap_or(1),
+        0
+    );
 
     let bad = note_document_hydrate(NoteHydrateDocumentArgs {
         doc_id: "  ".into(),

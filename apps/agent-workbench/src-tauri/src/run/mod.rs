@@ -28,17 +28,19 @@ pub(crate) use std::time::Duration;
 
 pub(crate) use agent_provider::request::build_system_prompt;
 pub(crate) use agent_tools::audit::{AuditSink, SecurityAuditSink};
-pub(crate) use agent_tools::backup::BackupMiddleware;
 pub(crate) use agent_tools::background::{
     BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef, LogSlice,
     TaskState,
 };
+pub(crate) use agent_tools::backup::BackupMiddleware;
 pub(crate) use agent_tools::context::ExploreDocsQuotaContext;
 pub(crate) use agent_tools::definition::ToolError;
 // 审计 01 W1（任务连续性推进轮）：kill_subagent / send_message 三通道
 // 生产实现（CoreRunState 契约面；经 ContinuityStateAdapter Weak 适配
 // 注入引擎 ContinuityChannelBoard）
-pub(crate) use agent_tools::tools::kill_subagent::{KillOutcomeKind, KillSubagentToolResult, SubagentKillChannel};
+pub(crate) use agent_tools::tools::kill_subagent::{
+    KillOutcomeKind, KillSubagentToolResult, SubagentKillChannel,
+};
 pub(crate) use agent_tools::tools::send_message::{
     MainAgentMessageChannel, MainMessageRing, SubagentInjectChannel,
 };
@@ -54,39 +56,41 @@ pub(crate) use conex_compaction::count_tokens;
 pub(crate) use conex_compaction::compaction::StubPolicy;
 // E2 F5（分阶段总结壳层接线）：里程碑判定纯函数 + Schema 构造 + checkpoint
 // 载荷转换 + 配置解析（stage_summary.rs 轮 1 已落地，本面只读调用）
-pub(crate) use session_loop::r#loop::stage_summary::{
-    DEFAULT_COMPACT_STAGE_RATIOS, StageSummaryDocument, StageSummaryRange,
-    build_stage_summary_document, next_pending_milestone, stage_ratios_from_session_meta,
-    stage_summary_to_checkpoint_payload, stage_summary_to_markdown, stage_tier,
-};
 pub(crate) use conex_types::device::{
     ApprovalChannel as RemoteApprovalChannel, ApprovalHistoryItem, ApprovalHistoryResult, Arbiter,
     PendingApproval,
 };
+pub(crate) use conex_types::error::ProviderErrorKind;
 pub(crate) use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
     RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
     SubagentEventKind,
 };
-pub(crate) use conex_types::error::ProviderErrorKind;
 pub(crate) use conex_types::impact::ImpactAssessment;
 pub(crate) use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+pub(crate) use session_loop::r#loop::stage_summary::{
+    build_stage_summary_document, next_pending_milestone, stage_ratios_from_session_meta,
+    stage_summary_to_checkpoint_payload, stage_summary_to_markdown, stage_tier,
+    StageSummaryDocument, StageSummaryRange, DEFAULT_COMPACT_STAGE_RATIOS,
+};
 // E2 F4：压缩记录（context-compression-end 载荷）+ Manual 触发/原因变体 +
 // 块语义 details 构造（orchestrator::blocks 消费面，blocks.rs:96-137）
+pub(crate) use conex_types::session::AgentEndReason;
 pub(crate) use conex_types::tool::{
     compaction_block_details, ContextCompressionReason, ContextCompressionRecord,
     ContextCompressionTrigger,
 };
-pub(crate) use conex_types::session::AgentEndReason;
 pub(crate) use conex_types::{codes, ContextBudget, CrishError, CrishErrorPayload, HistoryMessage};
 pub(crate) use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
 pub(crate) use orchestrator::persist::{SessionSequencer, Store};
 pub(crate) use orchestrator::recovery::{
     backoff_delay_ms, fingerprint, is_transient_kind, RecoveryAction, RecoveryBudget,
     RecoveryCoordinator, RecoveryError, RecoveryOutcome, RecoveryRetryPolicy, RecoveryStore,
-    RECOVER_EPISODES_KEY, RECOVER_GROUP_PREFIX, RECOVER_MAX_EPISODES_KEY, RunFailureContext,
+    RunFailureContext, RECOVER_EPISODES_KEY, RECOVER_GROUP_PREFIX, RECOVER_MAX_EPISODES_KEY,
 };
-pub(crate) use orchestrator::restore::{RestoreManager, RestoreMode, RestoreOutcome, SnapshotStore, StateSnapshot};
+pub(crate) use orchestrator::restore::{
+    RestoreManager, RestoreMode, RestoreOutcome, SnapshotStore, StateSnapshot,
+};
 pub(crate) use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
 pub(crate) use orchestrator::session::{SessionRecord, SessionTree};
 pub(crate) use orchestrator::subagent_events::{
@@ -95,29 +99,31 @@ pub(crate) use orchestrator::subagent_events::{
 pub(crate) use orchestrator::{
     assess_round, GoalDecision, GoalState, PendingMessageQueue, RoundInput, ToolCallStamp,
 };
-pub(crate) use session_loop::hydrate::hydrate_history;
 pub(crate) use session_loop::approval_router::{
-    classify_source, route_approval, route_approval_guarded, arbiter_metadata,
+    arbiter_metadata, classify_source, route_approval, route_approval_guarded,
 };
+pub(crate) use session_loop::hydrate::hydrate_history;
 pub(crate) use session_loop::tool_events::{ApprovalDecision, ApprovalRequester};
 pub(crate) use session_loop::{
-    AbortSignal, ApprovalGate, ControlBus, DeltaSink, EscapeWatchConfig, EscapeWatchHandle,
-    EscapeWatchInjector, PermissionMode, RegistryBackedDetector, RunOutcome, SessionLoopOptions,
-    SummaryDispatchConfig, ToolBatchOptions, spawn_escape_watch,
+    spawn_escape_watch, AbortSignal, ApprovalGate, ControlBus, DeltaSink, EscapeWatchConfig,
+    EscapeWatchHandle, EscapeWatchInjector, PermissionMode, RegistryBackedDetector, RunOutcome,
+    SessionLoopOptions, SummaryDispatchConfig, ToolBatchOptions,
 };
 
 pub(crate) use crate::core_error::CoreError;
 pub(crate) use crate::core_event_bridge::{EmitReport, EventBridge};
-pub(crate) use crate::core_query_commands::{BackgroundTasksSummary, RestoreStatus, RunUsage, SnapshotStatus};
+pub(crate) use crate::core_query_commands::{
+    BackgroundTasksSummary, RestoreStatus, RunUsage, SnapshotStatus,
+};
 // 审计 01 W1：ControlBusResolver 契约（库目标 wait_channel 定义；引擎
 // WaitChannel 的 inject 面与 send_message 子代理注入共用同一解析器）
-pub(crate) use crish_agent_workbench::wait_channel::ControlBusResolver;
 pub(crate) use crate::engine::{
-    BridgeDeltaSink, BufferedRunEventBridge, ContextInjection, ContextInjectionKind, ContextInjector,
-    EngineHandle, SessionLoopProducer,
+    BridgeDeltaSink, BufferedRunEventBridge, ContextInjection, ContextInjectionKind,
+    ContextInjector, EngineHandle, SessionLoopProducer,
 };
 pub(crate) use crate::status_diagnostics::StatusDiagnostics;
 pub(crate) use crate::task_event_consumer::TaskEventConsumer;
+pub(crate) use crish_agent_workbench::wait_channel::ControlBusResolver;
 
 // ── 顶层常量（原 core_run_commands.rs 128-212；分域注记，聚合后各模可见）──
 

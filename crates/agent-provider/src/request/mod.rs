@@ -40,7 +40,10 @@ pub use build_anthropic::{
 };
 pub use build_gemini::{build_gemini_request_body, gemini_request_headers, GeminiRequestOptions};
 pub use cache::{
-    CacheCapability, CacheControl, CacheKey, CacheMechanism, CacheRetention, TtlBucket,
+    affinity_header, allocate_breakpoints, apply_cache_controls, build_cache_policy,
+    cache_control_for_ttl, infer_cache_capability, retention_wire_value, text_to_parts_with_cc,
+    BreakpointPlan, CacheCapability, CacheControl, CacheKey, CacheMechanism, CachePolicy,
+    CacheRetention, PromptCacheMode, PromptCacheOptions, TtlBucket, CACHE_CAPABILITY_TABLE,
     OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH,
 };
 pub use capability::{describe_model, ModelCapability};

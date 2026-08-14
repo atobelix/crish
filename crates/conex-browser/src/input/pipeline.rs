@@ -575,7 +575,10 @@ mod tests {
             if let Ok(BrowserEvent::ConnectionLost { .. }) = rx.try_recv() {
                 break;
             }
-            assert!(tokio::time::Instant::now() < deadline, "应广播 ConnectionLost");
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "应广播 ConnectionLost"
+            );
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         let err = pipeline

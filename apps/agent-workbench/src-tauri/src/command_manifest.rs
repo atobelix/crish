@@ -195,18 +195,18 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("browser_start", "browser", "engine", true),
         entry("browser_stop", "browser", "engine", true),
         entry("browser_status", "browser", "engine", true),
-entry("browser_input", "browser", "engine", true),
-entry("browser_start_frames", "browser", "engine", true),
-entry("browser_stop_frames", "browser", "engine", true),
-entry("browser_frame_status", "browser", "engine", true),
-entry("browser_export_storage_state", "browser", "engine", true),
-entry("browser_import_storage_state", "browser", "engine", true),
-// ── G-4 收尾：书签/历史导入（03-方案 §4.2 U4；conex-db 目标表
-//    imported_bookmarks/imported_history，落库编排见 browser_import_sinks）──
-entry("browser_import_bookmarks", "browser", "engine", true),
-entry("browser_import_history", "browser", "engine", true),
-entry("browser_list_bookmarks", "browser", "engine", true),
-entry("browser_list_history", "browser", "engine", true),
+        entry("browser_input", "browser", "engine", true),
+        entry("browser_start_frames", "browser", "engine", true),
+        entry("browser_stop_frames", "browser", "engine", true),
+        entry("browser_frame_status", "browser", "engine", true),
+        entry("browser_export_storage_state", "browser", "engine", true),
+        entry("browser_import_storage_state", "browser", "engine", true),
+        // ── G-4 收尾：书签/历史导入（03-方案 §4.2 U4；conex-db 目标表
+        //    imported_bookmarks/imported_history，落库编排见 browser_import_sinks）──
+        entry("browser_import_bookmarks", "browser", "engine", true),
+        entry("browser_import_history", "browser", "engine", true),
+        entry("browser_list_bookmarks", "browser", "engine", true),
+        entry("browser_list_history", "browser", "engine", true),
         // ── 电脑操作会话命令（06 遗留⑨：computer_session_enable/disable、
         //    computer_estop、computer_status；代理到 ComputerSlot，
         //    状态事件 computer://state-changed）──
@@ -268,30 +268,33 @@ mod tests {
     /// 四命令（browser_import/list_bookmarks/history）追加后 104 → 108；
     /// Round7 note_* 三命令追加后 108 → 111；D4a 五命令
     /// （resume_subagent/kill_all/kill_subagent + core_resume_run/
-     /// core_compact_now 登记先行）追加后 111 → 116；
-     /// note_document_hydrate 追加后 116 → 117；
-     /// note_detect_mirror_drift + note_import_mirror_proposal 后 117 → 119；
-     /// note_apply_ops（CONN-B3）后 119 → 120；
-     /// 电脑操作四命令（computer_session_* / computer_estop / computer_status）
-     /// 追加后 120 → 124；E2 F4 core_compact_now 接线 114 → 119（登记先行 6 → 5）；
-     /// F-03（DM-07）core_read_run_events 恢复激活 124 → 125（注册面 119 → 120）。
-     #[test]
-     fn manifest_count_matches_registered_surface() {
-         let total = COMMAND_MANIFEST.commands.len();
-         let registered = COMMAND_MANIFEST
-             .commands
-             .iter()
-             .filter(|c| c.registered)
-             .count();
-         let pending = total - registered;
-         assert!(pending > 0, "登记先行必须 > 0");
-         assert_eq!(
+    /// core_compact_now 登记先行）追加后 111 → 116；
+    /// note_document_hydrate 追加后 116 → 117；
+    /// note_detect_mirror_drift + note_import_mirror_proposal 后 117 → 119；
+    /// note_apply_ops（CONN-B3）后 119 → 120；
+    /// 电脑操作四命令（computer_session_* / computer_estop / computer_status）
+    /// 追加后 120 → 124；E2 F4 core_compact_now 接线 114 → 119（登记先行 6 → 5）；
+    /// F-03（DM-07）core_read_run_events 恢复激活 124 → 125（注册面 119 → 120）。
+    #[test]
+    fn manifest_count_matches_registered_surface() {
+        let total = COMMAND_MANIFEST.commands.len();
+        let registered = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .filter(|c| c.registered)
+            .count();
+        let pending = total - registered;
+        assert!(pending > 0, "登记先行必须 > 0");
+        assert_eq!(
              total, 125,
              "总数 125（电脑操作四命令 + note_apply_ops + mirror + hydrate + D4a + core_read_run_events 恢复，与前端同步）"
          );
-         assert_eq!(registered, 120, "注册面 120（含 core_compact_now 已接线 + core_read_run_events 恢复激活）");
-         assert_eq!(pending, 5, "登记先行 5");
-     }
+        assert_eq!(
+            registered, 120,
+            "注册面 120（含 core_compact_now 已接线 + core_read_run_events 恢复激活）"
+        );
+        assert_eq!(pending, 5, "登记先行 5");
+    }
 
     /// 命令名唯一（重复名会破坏前端清单校验）。
     #[test]
@@ -343,7 +346,10 @@ mod tests {
             "workbench_list_workspaces",
             "workbench_dev_mcp_enabled",
         ] {
-            assert!(!by_name[name].registered, "{name} 未接线应 registered=false");
+            assert!(
+                !by_name[name].registered,
+                "{name} 未接线应 registered=false"
+            );
         }
     }
 
@@ -364,10 +370,7 @@ mod tests {
         ];
         for ghost in ghosts {
             assert!(
-                !COMMAND_MANIFEST
-                    .commands
-                    .iter()
-                    .any(|c| c.name == ghost),
+                !COMMAND_MANIFEST.commands.iter().any(|c| c.name == ghost),
                 "幽灵命令 {ghost} 严禁登记 manifest"
             );
         }
@@ -480,7 +483,10 @@ mod tests {
             .unwrap_or_else(|| panic!("get_flow_snapshot 必须登记 manifest（T-D-12）"));
         assert_eq!(entry.family, "session", "get_flow_snapshot 属 session 族");
         assert_eq!(entry.surface, "engine", "get_flow_snapshot 属引擎契约面");
-        assert!(entry.registered, "get_flow_snapshot 已接线应 registered=true");
+        assert!(
+            entry.registered,
+            "get_flow_snapshot 已接线应 registered=true"
+        );
     }
 
     /// D4a：子代理显式恢复与关闭命令双端登记（D4 §1.2 A5）——三条命令
@@ -505,10 +511,16 @@ mod tests {
         let compact = by_name
             .get("core_compact_now")
             .unwrap_or_else(|| panic!("core_compact_now 必须登记 manifest（E2 扩展）"));
-        assert!(compact.registered, "core_compact_now 已接线应 registered=true");
+        assert!(
+            compact.registered,
+            "core_compact_now 已接线应 registered=true"
+        );
         let resume = by_name
             .get("core_resume_run")
             .unwrap_or_else(|| panic!("core_resume_run 必须登记 manifest（登记先行）"));
-        assert!(!resume.registered, "core_resume_run 登记先行应 registered=false");
+        assert!(
+            !resume.registered,
+            "core_resume_run 登记先行应 registered=false"
+        );
     }
 }

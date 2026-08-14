@@ -105,7 +105,10 @@ pub(crate) fn is_steering_message(message: &AgentMessage) -> bool {
 pub(crate) fn last_assistant_provider_signal(
     messages: &[Arc<AgentMessage>],
 ) -> Option<LastAssistantSignal> {
-    let last = messages.iter().rev().find(|m| m.role == AgentMessageRole::Assistant)?;
+    let last = messages
+        .iter()
+        .rev()
+        .find(|m| m.role == AgentMessageRole::Assistant)?;
     let is_plain_text = last.tool_calls().next().is_none() && !last.text().is_empty();
     let (kind, retryable) = provider_signal_metadata(last.metadata.as_ref());
     Some(LastAssistantSignal {
@@ -127,9 +130,7 @@ pub(crate) fn provider_signal_metadata(
         .get("providerErrorKind")
         .and_then(|v| v.as_str())
         .and_then(|s| serde_json::from_str::<ProviderErrorKind>(&format!("\"{s}\"")).ok());
-    let retryable = meta
-        .get("providerErrorRetryable")
-        .and_then(|v| v.as_bool());
+    let retryable = meta.get("providerErrorRetryable").and_then(|v| v.as_bool());
     (kind, retryable)
 }
 
@@ -179,7 +180,10 @@ pub(crate) fn extract_goal_round_signals(messages: &[Arc<AgentMessage>]) -> Goal
 
 /// D5 §3.7：续轮注入文本构造（主源 = goal 前缀，增强 = nextSteps；
 /// 模板对齐 buildGoalModePrefix，goalModeController.ts:74-95）
-pub(crate) fn build_goal_continuation_prompt(goal_state: &GoalState, next_steps: &[String]) -> String {
+pub(crate) fn build_goal_continuation_prompt(
+    goal_state: &GoalState,
+    next_steps: &[String],
+) -> String {
     let round = goal_state.current_round + 1;
     let mut text = format!(
         "[目标模式 · 系统指令]\n\
@@ -189,10 +193,7 @@ pub(crate) fn build_goal_continuation_prompt(goal_state: &GoalState, next_steps:
          请工作直至目标实质完成；不要半途停下或只列计划而不执行。\n\
          请在回复中维护 markdown 任务清单（`- [ ]` / `- [x]`），便于进度同步。\n\
          若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。",
-        goal_state.goal,
-        round,
-        goal_state.max_rounds,
-        goal_state.max_rounds
+        goal_state.goal, round, goal_state.max_rounds, goal_state.max_rounds
     );
     if !next_steps.is_empty() {
         text.push_str("\n上轮进度小结（供续接）：\n");
@@ -341,8 +342,14 @@ impl CoreRunState {
             stalled_delta: assessment.stalled_delta,
             evidence: signals.tool_success_count.to_string(),
         };
-        emit_envelope_event(&active.queue, &active.bridge, &active.run_id, &active.session_id, event)
-            .await;
+        emit_envelope_event(
+            &active.queue,
+            &active.bridge,
+            &active.run_id,
+            &active.session_id,
+            event,
+        )
+        .await;
         // EV-07：收口决策补发 goal-continuation-decided（Completed →
         // action=complete、Blocked → action=blocked、NoProgress →
         // action=stop；reason = reason_detail 区分；Continue 由 idle 续轮
@@ -387,10 +394,7 @@ impl CoreRunState {
         let fp = fp.to_string();
         let limit_key = limit_key.to_string();
         tokio::task::spawn_blocking(move || {
-            let raw = db
-                .get_session_meta(RECOVER_EPISODES_KEY)
-                .ok()
-                .flatten();
+            let raw = db.get_session_meta(RECOVER_EPISODES_KEY).ok().flatten();
             let limit = db
                 .get_session_meta(&limit_key)
                 .ok()
@@ -417,10 +421,7 @@ impl CoreRunState {
                 .set_session_meta(RECOVER_EPISODES_KEY, &budget.to_json())
                 .is_err()
             {
-                return EpisodeConsume::Denied {
-                    count,
-                    max: limit,
-                };
+                return EpisodeConsume::Denied { count, max: limit };
             }
             EpisodeConsume::Consumed(count)
         })
@@ -566,11 +567,7 @@ impl CoreRunState {
             Ok(RecoveryOutcome {
                 action: RecoveryAction::AutoRetry { delay, .. },
                 ..
-            }) => Some(RecoveryPlan::AutoRetry {
-                delay,
-                ctx,
-                coord,
-            }),
+            }) => Some(RecoveryPlan::AutoRetry { delay, ctx, coord }),
             Ok(_) => None,
             Err(error) => {
                 tracing::warn!(
@@ -616,7 +613,12 @@ impl CoreRunState {
         if let Some(db) = self.local_db() {
             let run_id = ctx.subagent_run_id.clone();
             match tokio::task::spawn_blocking(move || {
-                db.update_run_status(&run_id, conex_db::RunStatus::Failed, Some("recovery-retry"), None)
+                db.update_run_status(
+                    &run_id,
+                    conex_db::RunStatus::Failed,
+                    Some("recovery-retry"),
+                    None,
+                )
             })
             .await
             {
@@ -655,9 +657,7 @@ impl CoreRunState {
                     timestamp: crate::engine::now_iso_utc(),
                     attempt: retries,
                     delay_ms: delay.as_millis() as u64,
-                    budget_remaining: self
-                        .ladder1_max_retries_config()
-                        .saturating_sub(retries),
+                    budget_remaining: self.ladder1_max_retries_config().saturating_sub(retries),
                     from_run_id: ctx.subagent_run_id.clone(),
                     new_run_id: spawned.subagent_run_id.clone(),
                 };
@@ -731,15 +731,17 @@ impl CoreRunState {
         let Some(db) = self.local_db() else {
             return;
         };
-        let emitter = SubagentEventEmitter::new(Arc::new(
-            orchestrator::persist::LocalDbStore::new(db),
-        ));
+        let emitter =
+            SubagentEventEmitter::new(Arc::new(orchestrator::persist::LocalDbStore::new(db)));
         let emit_ctx = SubagentEmitContext {
             session_id: cfg.parent_session_id.clone(),
             parent_run_id: String::new(),
         };
         let mut turn = 0u32;
-        for message in messages.iter().filter(|m| m.role == AgentMessageRole::Assistant) {
+        for message in messages
+            .iter()
+            .filter(|m| m.role == AgentMessageRole::Assistant)
+        {
             turn += 1;
             let truncated: String = message
                 .text()
@@ -810,4 +812,3 @@ pub(crate) fn production_resume_launcher() -> ResumeLauncher {
     });
     launcher
 }
-

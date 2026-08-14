@@ -12,10 +12,7 @@ pub(crate) fn parse_md_lines(markdown: &str) -> Vec<(String, String, u32)> {
             continue;
         }
         if let Some(level) = parse_atx_heading(trimmed) {
-            let title = trimmed
-                .trim_start_matches('#')
-                .trim()
-                .to_string();
+            let title = trimmed.trim_start_matches('#').trim().to_string();
             out.push(("heading".to_string(), title, level));
         } else {
             out.push(("paragraph".to_string(), trimmed.to_string(), 0));

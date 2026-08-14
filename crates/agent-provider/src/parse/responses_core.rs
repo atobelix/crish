@@ -7,7 +7,11 @@
 
 use serde_json::{Map, Value};
 
-use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError};
+use conex_types::error::ProviderErrorKind;
+
+use crate::events::{
+    stream_error_kind, ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError,
+};
 use crate::sse::frame::SseFrame;
 
 use super::super::chat::parse_usage;
@@ -70,9 +74,11 @@ impl ResponsesParser {
                 .or_else(|| string_field(payload.get("message")).map(str::to_owned))
                 .or_else(|| string_field(payload.get("code")).map(str::to_owned))
                 .unwrap_or_else(|| "Responses stream emitted an error event".to_string());
+            let kind = stream_error_kind(&error);
             events.push(ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some(error),
+                error_kind: Some(kind),
                 usage: self.usage.clone(),
             });
             self.stream.extend(events.clone())?;
@@ -181,12 +187,14 @@ impl ResponsesParser {
         }
         if !self.saw_terminal {
             // 无终态事件即流结束 → error（invalid-stream，218-229）
+            // （解析层保护错误 → error_kind=Unknown，不可重试语义保持）
             events.push(ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some(
                     "[invalid-stream] Responses stream ended without a terminal response event"
                         .to_string(),
                 ),
+                error_kind: Some(ProviderErrorKind::Unknown),
                 usage: self.usage.clone(),
             });
         } else {
@@ -197,6 +205,12 @@ impl ResponsesParser {
                     self.final_reason
                 },
                 error: self.final_error.clone(),
+                // error_kind 跟随 error 文案存在与否：有错误按统一管线分类，
+                // 无错误（stop/tool-call/length）为 None（G1-c）
+                error_kind: match &self.final_error {
+                    Some(err) => Some(stream_error_kind(err)),
+                    None => None,
+                },
                 usage: self.usage.clone(),
             });
         }

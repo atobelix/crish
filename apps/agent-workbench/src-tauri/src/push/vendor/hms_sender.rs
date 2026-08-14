@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use super::credentials::{CredentialsProvider, EnvCredentialsProvider};
 use super::hms::{
     build_hms_send_request_at, build_hms_token_request_at, parse_hms_send_response,
-    parse_hms_token_response, HMS_SEND_BASE_URL, HMS_TOKEN_URL, HmsToken,
+    parse_hms_token_response, HmsToken, HMS_SEND_BASE_URL, HMS_TOKEN_URL,
 };
 use super::{
     HMSCredentials, VendorError, VendorNotification, VendorPushChannel, VendorSendOutcome,
@@ -127,7 +127,9 @@ impl HmsSender {
         http: reqwest::Client,
         provider: &dyn CredentialsProvider,
     ) -> Option<Self> {
-        provider.hms().map(|credentials| Self::new(http, credentials))
+        provider
+            .hms()
+            .map(|credentials| Self::new(http, credentials))
     }
 
     /// 注入 token 端点 URL（测试用：本地 mock；生产走 [new]/[from_env]）
@@ -181,9 +183,10 @@ impl HmsSender {
     /// 换 AT（缓存有效复用；否则 POST token 端点 → 解析 → 缓存）
     async fn ensure_token(&self, now_secs: u64) -> Result<String, VendorError> {
         {
-            let cache = self.cache.lock().map_err(|_| {
-                VendorError::Crypto("HMS AT 缓存锁损坏".to_string())
-            })?;
+            let cache = self
+                .cache
+                .lock()
+                .map_err(|_| VendorError::Crypto("HMS AT 缓存锁损坏".to_string()))?;
             if let Some(cached) = cache.as_ref() {
                 if cached.fresh(now_secs) {
                     return Ok(cached.access_token().to_string());
@@ -200,9 +203,7 @@ impl HmsSender {
             .timeout(Duration::from_secs(HMS_SEND_TIMEOUT_SECS))
             .send()
             .await
-            .map_err(|error| {
-                VendorError::Transport(format!("HMS token 端点不可达：{error}"))
-            })?;
+            .map_err(|error| VendorError::Transport(format!("HMS token 端点不可达：{error}")))?;
         let status = response.status().as_u16();
         let body = response.text().await.unwrap_or_default();
         if !(200..300).contains(&status) {
@@ -211,9 +212,10 @@ impl HmsSender {
             )));
         }
         let token = parse_hms_token_response(&body)?;
-        let mut cache = self.cache.lock().map_err(|_| {
-            VendorError::Crypto("HMS AT 缓存锁损坏".to_string())
-        })?;
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| VendorError::Crypto("HMS AT 缓存锁损坏".to_string()))?;
         *cache = Some(HmsTokenCache::new(now_secs, token.clone()));
         Ok(token.access_token)
     }
@@ -280,9 +282,9 @@ impl VendorPushChannel for HmsSender {
 mod tests {
     use super::*;
     use crate::push::intent::PayloadDigest;
-    use crate::push::PushLevel;
     use crate::push::vendor::test_support::{start_mock_server, MockResponse, MockRoute};
     use crate::push::vendor::{VendorDevice, VendorPlatform};
+    use crate::push::PushLevel;
 
     fn credentials() -> HMSCredentials {
         HMSCredentials {
@@ -339,7 +341,10 @@ mod tests {
         requests: &'a [crate::push::vendor::test_support::RequestRecord],
         frag: &'a str,
     ) -> Vec<&'a crate::push::vendor::test_support::RequestRecord> {
-        requests.iter().filter(|request| request.path.contains(frag)).collect()
+        requests
+            .iter()
+            .filter(|request| request.path.contains(frag))
+            .collect()
     }
 
     /// AT 缓存纯函数边界：有效期 - 余量前复用，之后换发
@@ -364,7 +369,10 @@ mod tests {
         assert!(hms_auth_failure(401, ""));
         assert!(hms_auth_failure(200, r#"{"code":"80100002"}"#));
         assert!(hms_auth_failure(200, r#"{"code":"80100003"}"#));
-        assert!(!hms_auth_failure(200, r#"{"code":"80100013"}"#), "appId 不存在，换 AT 无济于事");
+        assert!(
+            !hms_auth_failure(200, r#"{"code":"80100013"}"#),
+            "appId 不存在，换 AT 无济于事"
+        );
         assert!(!hms_auth_failure(200, r#"{"code":"80000000"}"#));
         assert!(!hms_auth_failure(200, "not json"));
     }
@@ -386,7 +394,10 @@ mod tests {
         let sender = sender_against(mock.addr);
         let t0 = 1_786_214_400;
 
-        let outcome = sender.send_at(&notification("hms-tok-1"), t0).await.expect("首次发送");
+        let outcome = sender
+            .send_at(&notification("hms-tok-1"), t0)
+            .await
+            .expect("首次发送");
         assert_eq!(outcome, VendorSendOutcome::Delivered);
 
         // 第一次发送：token 请求（表单含凭据）+ 发送请求（Bearer AT）
@@ -412,10 +423,17 @@ mod tests {
         }
 
         // 同一时刻第二次发送：AT 缓存命中 → 不再请求 token 端点
-        let outcome = sender.send_at(&notification("hms-tok-2"), t0).await.expect("复用发送");
+        let outcome = sender
+            .send_at(&notification("hms-tok-2"), t0)
+            .await
+            .expect("复用发送");
         assert_eq!(outcome, VendorSendOutcome::Delivered);
         let requests = mock.requests.lock().unwrap();
-        assert_eq!(requests_by_path(&requests, "/token").len(), 1, "缓存命中不再换发");
+        assert_eq!(
+            requests_by_path(&requests, "/token").len(),
+            1,
+            "缓存命中不再换发"
+        );
         assert_eq!(requests_by_path(&requests, "messages:send").len(), 2);
     }
 
@@ -436,9 +454,15 @@ mod tests {
         let sender = sender_against(mock.addr);
         let t0 = 1_786_214_400;
 
-        sender.send_at(&notification("hms-tok-1"), t0).await.expect("首次发送");
+        sender
+            .send_at(&notification("hms-tok-1"), t0)
+            .await
+            .expect("首次发送");
         // 跨过有效期 → 换发
-        sender.send_at(&notification("hms-tok-2"), t0 + 3600).await.expect("换发后发送");
+        sender
+            .send_at(&notification("hms-tok-2"), t0 + 3600)
+            .await
+            .expect("换发后发送");
         let requests = mock.requests.lock().unwrap();
         assert_eq!(requests_by_path(&requests, "/token").len(), 2, "到期换发");
         assert_eq!(requests_by_path(&requests, "messages:send").len(), 2);
@@ -455,7 +479,11 @@ mod tests {
             MockRoute {
                 path_frag: "messages:send",
                 responses: &[
-                    MockResponse { status: "401 Unauthorized", body: "", headers: &[] },
+                    MockResponse {
+                        status: "401 Unauthorized",
+                        body: "",
+                        headers: &[],
+                    },
                     SEND_OK,
                 ],
             },
@@ -463,11 +491,22 @@ mod tests {
         .await;
         let sender = sender_against(mock.addr);
 
-        let outcome = sender.send_at(&notification("hms-tok-1"), 1_786_214_400).await.expect("发送");
+        let outcome = sender
+            .send_at(&notification("hms-tok-1"), 1_786_214_400)
+            .await
+            .expect("发送");
         assert_eq!(outcome, VendorSendOutcome::Delivered, "换发后重试成功");
         let requests = mock.requests.lock().unwrap();
-        assert_eq!(requests_by_path(&requests, "/token").len(), 2, "换发两次 AT");
-        assert_eq!(requests_by_path(&requests, "messages:send").len(), 2, "发送 + 重试一次");
+        assert_eq!(
+            requests_by_path(&requests, "/token").len(),
+            2,
+            "换发两次 AT"
+        );
+        assert_eq!(
+            requests_by_path(&requests, "messages:send").len(),
+            2,
+            "发送 + 重试一次"
+        );
     }
 
     /// 响应码 80100002（AT 无效）→ 换发重试（HTTP 层 401 同语义的另一形态）
@@ -492,8 +531,15 @@ mod tests {
         ])
         .await;
         let sender = sender_against(mock.addr);
-        let outcome = sender.send_at(&notification("hms-tok-1"), 1_786_214_400).await.expect("发送");
-        assert_eq!(outcome, VendorSendOutcome::Delivered, "80100002 → 换发重试成功");
+        let outcome = sender
+            .send_at(&notification("hms-tok-1"), 1_786_214_400)
+            .await
+            .expect("发送");
+        assert_eq!(
+            outcome,
+            VendorSendOutcome::Delivered,
+            "80100002 → 换发重试成功"
+        );
     }
 
     /// token 无效码 → DeviceNotRegistered（注册表清理语义）
@@ -515,7 +561,10 @@ mod tests {
         ])
         .await;
         let sender = sender_against(mock.addr);
-        let outcome = sender.send_at(&notification("hms-tok-1"), 1_786_214_400).await.expect("发送");
+        let outcome = sender
+            .send_at(&notification("hms-tok-1"), 1_786_214_400)
+            .await
+            .expect("发送");
         assert_eq!(outcome, VendorSendOutcome::DeviceNotRegistered);
     }
 
@@ -529,12 +578,19 @@ mod tests {
             },
             MockRoute {
                 path_frag: "messages:send",
-                responses: &[MockResponse { status: "429 Too Many Requests", body: "", headers: &[] }],
+                responses: &[MockResponse {
+                    status: "429 Too Many Requests",
+                    body: "",
+                    headers: &[],
+                }],
             },
         ])
         .await;
         let sender = sender_against(mock.addr);
-        let outcome = sender.send_at(&notification("hms-tok-1"), 1_786_214_400).await.expect("发送");
+        let outcome = sender
+            .send_at(&notification("hms-tok-1"), 1_786_214_400)
+            .await
+            .expect("发送");
         assert_eq!(
             outcome,
             VendorSendOutcome::RateLimited { retry_after: None }
@@ -544,11 +600,16 @@ mod tests {
     /// 传输错误（连接拒绝）→ FailedRetryable（重推阶梯兜底，不崩溃）
     #[tokio::test]
     async fn transport_error_maps_to_retryable() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("绑定");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定");
         let addr = listener.local_addr().expect("地址");
         drop(listener);
         let sender = sender_against(addr);
-        let outcome = sender.send_at(&notification("hms-tok-1"), 1_786_214_400).await.expect("不抛错");
+        let outcome = sender
+            .send_at(&notification("hms-tok-1"), 1_786_214_400)
+            .await
+            .expect("不抛错");
         assert_eq!(
             outcome,
             VendorSendOutcome::FailedRetryable { retry_after: None }

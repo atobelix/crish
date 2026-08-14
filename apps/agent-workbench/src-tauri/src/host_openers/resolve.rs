@@ -7,9 +7,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::host_openers::types::{
-    host_opener_diagnostic, host_opener_error, HostOpenerDiagnostic, HostOpenerError,
-    HostOpenerKind, HostOpenTarget, HostOpenTargetKind, OpenerCandidate, ResolvedOpenerCommand,
-    ResolvedOpenTarget,
+    host_opener_diagnostic, host_opener_error, HostOpenTarget, HostOpenTargetKind,
+    HostOpenerDiagnostic, HostOpenerError, HostOpenerKind, OpenerCandidate, ResolvedOpenTarget,
+    ResolvedOpenerCommand,
 };
 
 pub(crate) fn resolve_candidate_command(

@@ -65,7 +65,8 @@ pub(crate) fn append_jsonl_lines(path: &Path, lines: &[String], flush: bool) -> 
     }
 
     if flush {
-        file.sync_all().map_err(|e| format!("Failed to sync file: {e}"))?;
+        file.sync_all()
+            .map_err(|e| format!("Failed to sync file: {e}"))?;
     }
 
     Ok(())
@@ -73,7 +74,10 @@ pub(crate) fn append_jsonl_lines(path: &Path, lines: &[String], flush: bool) -> 
 
 // 测试专用：同 JsonlReadResult。
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn read_jsonl(path: &Path, max_records: Option<usize>) -> Result<JsonlReadResult, String> {
+pub(crate) fn read_jsonl(
+    path: &Path,
+    max_records: Option<usize>,
+) -> Result<JsonlReadResult, String> {
     let file = File::open(path).map_err(|e| format!("Failed to open JSONL file: {e}"))?;
     let reader = BufReader::new(file);
     let max = max_records.unwrap_or(usize::MAX);
@@ -132,7 +136,9 @@ pub(crate) fn write_jsonl(
     if append {
         let lines: Vec<String> = records
             .iter()
-            .map(|r| serde_json::to_string(r).map_err(|e| format!("Failed to serialize record: {e}")))
+            .map(|r| {
+                serde_json::to_string(r).map_err(|e| format!("Failed to serialize record: {e}"))
+            })
             .collect::<Result<Vec<_>, String>>()?;
         append_jsonl_lines(path, &lines, false)?;
 
@@ -160,10 +166,7 @@ pub(crate) fn write_jsonl(
         records_written += 1;
     }
 
-    let bytes_written = file
-        .metadata()
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let bytes_written = file.metadata().map(|m| m.len()).unwrap_or(0);
 
     Ok(JsonlWriteResult {
         path: path.to_string_lossy().to_string(),
@@ -175,7 +178,11 @@ pub(crate) fn write_jsonl(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{env, fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        env, fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn temp_dir() -> PathBuf {
         let nanos = SystemTime::now()
@@ -240,8 +247,11 @@ mod tests {
     fn handle_malformed_lines() {
         let dir = temp_dir();
         let path = dir.join("malformed.jsonl");
-        fs::write(&path, "{\"valid\": true}\nnot-json\n{\"also\": \"valid\"}\n")
-            .expect("write malformed");
+        fs::write(
+            &path,
+            "{\"valid\": true}\nnot-json\n{\"also\": \"valid\"}\n",
+        )
+        .expect("write malformed");
 
         let read = read_jsonl(&path, None).expect("read");
         assert_eq!(read.records.len(), 2);

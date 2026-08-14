@@ -318,7 +318,9 @@ impl TimerStore for LocalDbTimerStore {
     fn save(&self, declaration: &TimerDeclaration) {
         // upsert 键值 + 索引幂等追加（对齐 workflow_commands.rs:439-457）
         if let Ok(json) = serde_json::to_string(declaration) {
-            let _ = self.db.set_session_meta(&store_key(&declaration.timer_id), &json);
+            let _ = self
+                .db
+                .set_session_meta(&store_key(&declaration.timer_id), &json);
         }
         let mut index: Vec<String> = self
             .db
@@ -330,7 +332,9 @@ impl TimerStore for LocalDbTimerStore {
         if !index.iter().any(|id| id == &declaration.timer_id) {
             index.push(declaration.timer_id.clone());
             if let Ok(json) = serde_json::to_string(&index) {
-                let _ = self.db.set_session_meta(SESSION_META_TIMER_INDEX_KEY, &json);
+                let _ = self
+                    .db
+                    .set_session_meta(SESSION_META_TIMER_INDEX_KEY, &json);
             }
         }
     }
@@ -574,7 +578,10 @@ impl TimerRegistry {
             self.timers
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .insert(declaration.timer_id.clone(), TimerEntry { declaration, task });
+                .insert(
+                    declaration.timer_id.clone(),
+                    TimerEntry { declaration, task },
+                );
             tracing::info!(
                 target: "timers",
                 timer_id = %handle.timer_id,
@@ -707,7 +714,15 @@ impl TimerRegistry {
                 interval.tick().await;
             }
             let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                fire_timer(&timers, &early_exit, &pending, &events, &store, &now, &declaration);
+                fire_timer(
+                    &timers,
+                    &early_exit,
+                    &pending,
+                    &events,
+                    &store,
+                    &now,
+                    &declaration,
+                );
             }));
             if let Err(panic) = outcome {
                 tracing::error!(
@@ -856,7 +871,10 @@ mod tests {
 
     impl EventSink for ProbeEvents {
         fn emit(&self, event: TimerEvent) {
-            self.emitted.lock().unwrap_or_else(|e| e.into_inner()).push(event);
+            self.emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(event);
         }
     }
 
@@ -889,7 +907,10 @@ mod tests {
     /// 消费式队列快照（dequeue_all 取走全部条目；同测试多处断言时
     /// 须分别重新取快照——对齐真实队列 replaceOrEnqueue 语义）
     fn queue_snapshot(queue: &Arc<Mutex<PendingMessageQueue>>) -> Vec<SteeringInputEntry> {
-        queue.lock().unwrap_or_else(|e| e.into_inner()).dequeue_all()
+        queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .dequeue_all()
     }
 
     /// 队列当前条目数（非消费；poll_until 轮询条件用）
@@ -964,7 +985,11 @@ mod tests {
             "未到期不得注入 steering 条目"
         );
         assert!(
-            events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            events
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
             "未到期不得发射 TimerFired"
         );
         // 推进时钟越过到期点（expires_at = 注册时钟 + 1s）→ 轮询任务
@@ -1006,19 +1031,13 @@ mod tests {
             .register(1, "不应到期".to_string(), TimerCondition::Never)
             .await
             .expect("注册应成功");
-        let cancelled = registry
-            .cancel(&handle.timer_id)
-            .await
-            .expect("取消应成功");
+        let cancelled = registry.cancel(&handle.timer_id).await.expect("取消应成功");
         assert!(cancelled);
         // 推进时钟越过到期点 + 100ms 收口窗：abort 生效则无到期条目
         // （推进是必须的——防「未 abort 而时钟未到」的假绿）
         clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(
-            queue_snapshot(&queue).is_empty(),
-            "取消后不得有到期条目"
-        );
+        assert!(queue_snapshot(&queue).is_empty(), "取消后不得有到期条目");
         let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(emitted.len(), 1);
         assert!(matches!(
@@ -1069,14 +1088,18 @@ mod tests {
                 "阶段 A：未到期不得注入 steering 条目"
             );
             assert!(
-                events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+                events
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .is_empty(),
                 "阶段 A：未到期不得发射 TimerFired"
             );
             (registry, queue, events)
         };
         drop(registry_a); // 模拟重启（注册表消亡，store 残留；残留 fire
                           // 任务仅向自己的探针发射，不污染阶段 B 断言）
-        // 阶段 B：restore 扫描重建 → 推进时钟 → 恰好注入一条
+                          // 阶段 B：restore 扫描重建 → 推进时钟 → 恰好注入一条
         let (_registry_b, queue_b, events_b) = {
             let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
             let events = Arc::new(ProbeEvents::default());
@@ -1125,7 +1148,11 @@ mod tests {
             "fired=true 的声明恢复后不得重复注入"
         );
         assert!(
-            events_c.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            events_c
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
             "fired=true 的声明恢复后不得重复发射"
         );
     }
@@ -1136,23 +1163,32 @@ mod tests {
     async fn timer_registry_conflict_rejected() {
         let (registry, _, _, _, _) = test_registry();
         let first = registry
-            .register(1, "第一次".to_string(), TimerCondition::Task("task-42".to_string()))
+            .register(
+                1,
+                "第一次".to_string(),
+                TimerCondition::Task("task-42".to_string()),
+            )
             .await
             .expect("首次注册应成功");
         let second = registry
-            .register(2, "第二次".to_string(), TimerCondition::Task("task-42".to_string()))
+            .register(
+                2,
+                "第二次".to_string(),
+                TimerCondition::Task("task-42".to_string()),
+            )
             .await;
         assert!(
             matches!(&second, Err(TimerError::Conflict(message)) if message.contains("task-42") && message.contains(&first.timer_id)),
             "同 sender 重复注册应返回 Conflict：{second:?}"
         );
         // 取消后同 sender 再注册成功
-        registry
-            .cancel(&first.timer_id)
-            .await
-            .expect("取消应成功");
+        registry.cancel(&first.timer_id).await.expect("取消应成功");
         let third = registry
-            .register(2, "第三次".to_string(), TimerCondition::Task("task-42".to_string()))
+            .register(
+                2,
+                "第三次".to_string(),
+                TimerCondition::Task("task-42".to_string()),
+            )
             .await;
         assert!(third.is_ok(), "取消后同 sender 应可再注册：{third:?}");
     }
@@ -1225,7 +1261,11 @@ mod tests {
     async fn timer_condition_task_cancels_only_target() {
         let (registry, queue, _, _, clock) = test_registry();
         let handle = registry
-            .register(1, "task 条件".to_string(), TimerCondition::Task("task-42".to_string()))
+            .register(
+                1,
+                "task 条件".to_string(),
+                TimerCondition::Task("task-42".to_string()),
+            )
             .await
             .expect("注册应成功");
         // task-99 终态 → 不取消，推进时钟 → 到期恰好注入一条
@@ -1239,13 +1279,21 @@ mod tests {
                 entries[0].group_id.as_deref(),
                 Some(steering_group_id(&handle.timer_id).as_str())
             );
-            assert!(entries[0].text.contains("已到期"), "应为到期条目：{}", entries[0].text);
+            assert!(
+                entries[0].text.contains("已到期"),
+                "应为到期条目：{}",
+                entries[0].text
+            );
         }
         // 目标 sender 终态 → 取消且无到期注入（锁守卫已随块结束释放——
         // 不得跨 await 持有：cancel_early_exit 的 steering 注入会再锁同一
         // pending 表，std Mutex 不可重入）
         let handle_b = registry
-            .register(1, "task 条件二".to_string(), TimerCondition::Task("task-42".to_string()))
+            .register(
+                1,
+                "task 条件二".to_string(),
+                TimerCondition::Task("task-42".to_string()),
+            )
             .await
             .expect("注册应成功");
         registry.on_event(&subagent_ended("task-42")).await;
@@ -1265,11 +1313,19 @@ mod tests {
     async fn timer_condition_conflict_rejected() {
         let (registry, _, _, _, _) = test_registry();
         registry
-            .register(1, "第一".to_string(), TimerCondition::Task("task-42".to_string()))
+            .register(
+                1,
+                "第一".to_string(),
+                TimerCondition::Task("task-42".to_string()),
+            )
             .await
             .expect("首次注册应成功");
         let second = registry
-            .register(1, "第二".to_string(), TimerCondition::Task("task-42".to_string()))
+            .register(
+                1,
+                "第二".to_string(),
+                TimerCondition::Task("task-42".to_string()),
+            )
             .await;
         assert!(
             matches!(&second, Err(TimerError::Conflict(message)) if message.contains("task-42")),
@@ -1278,9 +1334,16 @@ mod tests {
         // 取消后重新注册成功
         let active = registry.list_active().await;
         assert_eq!(active.len(), 1);
-        registry.cancel(&active[0].timer_id).await.expect("取消应成功");
+        registry
+            .cancel(&active[0].timer_id)
+            .await
+            .expect("取消应成功");
         let third = registry
-            .register(1, "第三".to_string(), TimerCondition::Task("task-42".to_string()))
+            .register(
+                1,
+                "第三".to_string(),
+                TimerCondition::Task("task-42".to_string()),
+            )
             .await;
         assert!(third.is_ok(), "取消后应可再注册：{third:?}");
         // Any 条件不参与冲突表：task-42 活跃期间注册 Any 不冲突
@@ -1290,7 +1353,11 @@ mod tests {
         assert!(any.is_ok(), "Any 条件不参与冲突表：{any:?}");
         // 不同 sender 互不冲突
         let other = registry
-            .register(1, "另一 sender".to_string(), TimerCondition::Task("task-99".to_string()))
+            .register(
+                1,
+                "另一 sender".to_string(),
+                TimerCondition::Task("task-99".to_string()),
+            )
             .await;
         assert!(other.is_ok(), "不同 sender 应互不冲突：{other:?}");
     }
@@ -1340,7 +1407,9 @@ mod tests {
         // 无 early-exit 类取消事件
         let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
         assert!(
-            emitted.iter().all(|e| matches!(e, TimerEvent::Fired { .. })),
+            emitted
+                .iter()
+                .all(|e| matches!(e, TimerEvent::Fired { .. })),
             "不应发射早退取消事件：{emitted:?}"
         );
     }
@@ -1453,7 +1522,11 @@ mod tests {
                 "阶段 A：未到期不得注入 steering 条目"
             );
             assert!(
-                events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+                events
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .is_empty(),
                 "阶段 A：未到期不得发射 TimerFired"
             );
         }
@@ -1504,7 +1577,11 @@ mod tests {
                 "fired=true 的声明恢复后不得重复注入"
             );
             assert!(
-                events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+                events
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .is_empty(),
                 "fired=true 的声明恢复后不得重复发射"
             );
         }

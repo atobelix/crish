@@ -1,5 +1,5 @@
 use crate::fs_commands::types::{
-    file_too_large_error, FileCommandError, WriteFileContentResult, WorkspaceFsGuard,
+    file_too_large_error, FileCommandError, WorkspaceFsGuard, WriteFileContentResult,
     ERR_FILE_EXISTS, ERR_WRITE_FILE, MAX_TEXT_FILE_BYTES,
 };
 
@@ -43,11 +43,13 @@ pub(crate) fn write_file_content_with_guard(
         }
     }
     if content.len() > MAX_TEXT_FILE_BYTES {
-        return Err(file_too_large_error(content.len() as u64, MAX_TEXT_FILE_BYTES));
+        return Err(file_too_large_error(
+            content.len() as u64,
+            MAX_TEXT_FILE_BYTES,
+        ));
     }
-    std::fs::write(&file_path, content.as_bytes()).map_err(|e| {
-        FileCommandError::new(ERR_WRITE_FILE, format!("Failed to write file: {e}"))
-    })?;
+    std::fs::write(&file_path, content.as_bytes())
+        .map_err(|e| FileCommandError::new(ERR_WRITE_FILE, format!("Failed to write file: {e}")))?;
     Ok(WriteFileContentResult {
         path: file_path.to_string_lossy().to_string(),
         bytes_written: content.len(),

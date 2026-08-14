@@ -400,18 +400,20 @@ impl Tool for ShellCommandTool {
 //   shell_output（输出读取 / 累积 / 结果构造 / 落盘）
 // 测试整体外置 shell_tests.rs（#[path] 接线，零删除）。
 // 诚实边界：仅结构拆分，语义零改动（≠ EL-01…10 / ≠ 打开完成 / ≠ 结构债清零）。
-#[path = "shell_invoke.rs"]
-mod shell_invoke;
-#[path = "shell_redirect.rs"]
-mod shell_redirect;
 #[path = "shell_exec.rs"]
 mod shell_exec;
+#[path = "shell_invoke.rs"]
+mod shell_invoke;
 #[path = "shell_output.rs"]
 mod shell_output;
+#[path = "shell_redirect.rs"]
+mod shell_redirect;
 
-use shell_invoke::{parse_mode, ShellMode};
-use shell_redirect::{emit_blocked_audit, gate_path, intercept_cd_shape, redirect_or_intercept_delete};
 use shell_exec::{run_command_maybe_background, run_command_streaming};
+use shell_invoke::{parse_mode, ShellMode};
+use shell_redirect::{
+    emit_blocked_audit, gate_path, intercept_cd_shape, redirect_or_intercept_delete,
+};
 
 #[cfg(test)]
 #[path = "shell_tests.rs"]

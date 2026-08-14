@@ -80,18 +80,13 @@ pub fn validate_summary_document(
     }
     let value: serde_json::Value =
         serde_json::from_str(json).map_err(|_| SummaryDocError::InvalidJson)?;
-    let object = value
-        .as_object()
-        .ok_or(SummaryDocError::InvalidJson)?;
+    let object = value.as_object().ok_or(SummaryDocError::InvalidJson)?;
     for field in SUMMARY_REQUIRED_FIELDS {
         if !object.contains_key(field) {
             return Err(SummaryDocError::MissingField(field));
         }
     }
-    if object
-        .get("droppedIds")
-        .is_none_or(|v| !v.is_array())
-    {
+    if object.get("droppedIds").is_none_or(|v| !v.is_array()) {
         return Err(SummaryDocError::NotArray("droppedIds"));
     }
     Ok(value)
@@ -319,8 +314,8 @@ fn extract_generation(text: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_legacy_summary, summary_to_markdown, validate_summary_document,
-        SummaryDocError, SUMMARY_REQUIRED_FIELDS,
+        parse_legacy_summary, summary_to_markdown, validate_summary_document, SummaryDocError,
+        SUMMARY_REQUIRED_FIELDS,
     };
 
     /// 合法 V1 文档（含 structured 扩展与 custom 自由键）
@@ -358,8 +353,7 @@ mod tests {
 
     #[test]
     fn validate_accepts_legal_document_with_custom_extensions() {
-        let doc = validate_summary_document(&valid_doc_json(), 4096)
-            .expect("合法文档必须通过校验");
+        let doc = validate_summary_document(&valid_doc_json(), 4096).expect("合法文档必须通过校验");
         // custom 自由扩展不阻碍（additionalProperties: true）
         assert_eq!(doc["custom"]["agentNotes"], "任意扩展");
         assert_eq!(doc["schemaVersion"], 1);
@@ -369,8 +363,8 @@ mod tests {
     fn validate_rejects_missing_required_field() {
         let mut doc = valid_doc();
         doc.as_object_mut().unwrap().remove("criticalContext");
-        let err = validate_summary_document(&serde_json::to_string(&doc).unwrap(), 4096)
-            .unwrap_err();
+        let err =
+            validate_summary_document(&serde_json::to_string(&doc).unwrap(), 4096).unwrap_err();
         assert_eq!(err, SummaryDocError::MissingField("criticalContext"));
         // required 清单与方案一致
         assert!(SUMMARY_REQUIRED_FIELDS.contains(&"goal"));
@@ -381,8 +375,8 @@ mod tests {
     fn validate_rejects_non_array_dropped_ids() {
         let mut doc = valid_doc();
         doc["droppedIds"] = serde_json::json!("u1");
-        let err = validate_summary_document(&serde_json::to_string(&doc).unwrap(), 4096)
-            .unwrap_err();
+        let err =
+            validate_summary_document(&serde_json::to_string(&doc).unwrap(), 4096).unwrap_err();
         assert_eq!(err, SummaryDocError::NotArray("droppedIds"));
     }
 
@@ -392,7 +386,10 @@ mod tests {
         let bytes = json.len();
         assert_eq!(
             validate_summary_document(&json, bytes - 1).unwrap_err(),
-            SummaryDocError::TooLarge { bytes, max: bytes - 1 }
+            SummaryDocError::TooLarge {
+                bytes,
+                max: bytes - 1
+            }
         );
         assert_eq!(
             validate_summary_document("not json", 4096).unwrap_err(),

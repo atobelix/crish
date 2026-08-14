@@ -7,6 +7,8 @@
 
 use super::tests::{parse_all, stop_of};
 use super::*;
+use crate::events::stream_error_kind;
+use conex_types::error::ProviderErrorKind;
 use serde_json::json;
 
 // ── usage 逐帧合并（02 §六.6：Gemini 逐帧合并）──
@@ -159,6 +161,41 @@ fn parse_gemini_usage_accepts_total_cached_tokens_alias() {
     );
 }
 
+/// T3.4（G1-d）cache-write 推导：兼容网关经 `cache.writeTokenCount` 或顶层
+/// camel/snake 双形别名显式上报时，`cache_write_tokens` 不再恒 None。
+/// 真实 Gemini 官方 wire 无独立写缓存计数（pi-ai google-generative-ai.js:165 恒 0），
+/// 缺省保持 None（Excluded 口径下 miss=prompt、input_total=prompt+read+write 派生不受影响）。
+#[test]
+fn parse_gemini_usage_cache_write_from_nested_details() {
+    let usage = parse_gemini_usage(Some(&json!({
+        "promptTokenCount": 40,
+        "cachedContentTokenCount": 6,
+        "cache": { "writeTokenCount": 4 },
+    })))
+    .expect("解析成功");
+    assert_eq!(
+        usage.cache_write_tokens,
+        Some(4),
+        "嵌套 cache.writeTokenCount 优先"
+    );
+}
+
+/// T3.4（G1-d）cache-write 别名链 + 官方缺省保持 None
+#[test]
+fn parse_gemini_usage_cache_write_alias_fallback() {
+    let cases = [
+        (json!({ "cacheWriteTokenCount": 5 }), Some(5)),
+        (json!({ "cacheWriteTokens": 7 }), Some(7)),
+        (json!({ "cache_write_token_count": 9 }), Some(9)),
+        (json!({ "cache_write_tokens": 11 }), Some(11)),
+        (json!({ "promptTokenCount": 40 }), None),
+    ];
+    for (usage_json, expected) in cases {
+        let usage = parse_gemini_usage(Some(&usage_json)).expect("解析成功");
+        assert_eq!(usage.cache_write_tokens, expected, "usage={usage_json}");
+    }
+}
+
 #[test]
 fn parse_gemini_usage_empty_returns_none() {
     assert!(parse_gemini_usage(None).is_none());
@@ -183,6 +220,7 @@ fn block_reason_without_candidates_errors() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: Some("Gemini prompt blocked (SAFETY): 含违禁内容".into()),
+            error_kind: Some(ProviderErrorKind::Unknown),
             usage: None,
         }
     );
@@ -218,6 +256,7 @@ fn block_reason_with_candidates_is_not_an_error() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -238,6 +277,7 @@ fn unspecified_block_reason_is_ignored() {
             &ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some("Gemini streaming response completed without content events".into()),
+                error_kind: Some(ProviderErrorKind::Unknown),
                 usage: None,
             },
             "{data} 应走空流保护而非阻断"
@@ -255,6 +295,7 @@ fn empty_stream_produces_error_stop() {
             reason: StopReason::Error,
             error,
             usage,
+            error_kind: _,
         } => {
             assert_eq!(
                 error.as_deref(),
@@ -276,6 +317,7 @@ fn usage_only_stream_is_not_an_error() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: Some(ProviderUsage {
                 prompt_tokens: Some(5),
                 total_tokens: Some(5),
@@ -316,6 +358,7 @@ fn non_object_parts_and_candidates_are_skipped() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -345,6 +388,7 @@ fn error_frame_terminates_immediately() {
             &ProviderStreamEvent::Stop {
                 reason: StopReason::Error,
                 error: Some(expected.into()),
+                error_kind: Some(stream_error_kind(expected)),
                 usage: None,
             },
             "{data}"

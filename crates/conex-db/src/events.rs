@@ -58,16 +58,19 @@ impl LocalDb {
 
         let limit_value = limit.unwrap_or(i64::MAX);
         let events = stmt
-            .query_map(rusqlite::params![session_id, after_sequence, limit_value], |row| {
-                Ok(StoredEvent {
-                    session_id: row.get(0)?,
-                    sequence: row.get(1)?,
-                    event_type: row.get(2)?,
-                    payload: row.get(3)?,
-                    run_id: row.get(4)?,
-                    created_at: row.get(5)?,
-                })
-            })
+            .query_map(
+                rusqlite::params![session_id, after_sequence, limit_value],
+                |row| {
+                    Ok(StoredEvent {
+                        session_id: row.get(0)?,
+                        sequence: row.get(1)?,
+                        event_type: row.get(2)?,
+                        payload: row.get(3)?,
+                        run_id: row.get(4)?,
+                        created_at: row.get(5)?,
+                    })
+                },
+            )
             .map_err(|e| self.latch_error("query_events_map", e))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| self.latch_error("query_events_collect", e))?;

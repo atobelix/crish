@@ -67,7 +67,11 @@ pub fn is_quiet(now_ms: u64, cfg: &QuietHoursConfig) -> bool {
 }
 
 /// 静默时段策略（M8 §3.4.3：P0 仍发 / P1 折叠 / P2 不推；非静默全发）
-pub fn quiet_hours_policy(level: super::PushLevel, now_ms: u64, cfg: &QuietHoursConfig) -> QuietPolicy {
+pub fn quiet_hours_policy(
+    level: super::PushLevel,
+    now_ms: u64,
+    cfg: &QuietHoursConfig,
+) -> QuietPolicy {
     if !is_quiet(now_ms, cfg) {
         return QuietPolicy::OutsideDeliver;
     }
@@ -180,16 +184,8 @@ pub fn compose_night_summary(items: &[NightSummaryItem], cfg: &QuietHoursConfig)
         }
     }
     let total = groups.iter().map(|g| g.count).sum();
-    let first_at_ms = items
-        .iter()
-        .map(|i| i.occurred_at_ms)
-        .min()
-        .unwrap_or(0);
-    let last_at_ms = items
-        .iter()
-        .map(|i| i.occurred_at_ms)
-        .max()
-        .unwrap_or(0);
+    let first_at_ms = items.iter().map(|i| i.occurred_at_ms).min().unwrap_or(0);
+    let last_at_ms = items.iter().map(|i| i.occurred_at_ms).max().unwrap_or(0);
     let date = items
         .first()
         .map(|i| night_summary_date(i.occurred_at_ms, cfg))
@@ -309,8 +305,8 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::PushLevel;
+    use super::*;
 
     /// 基准时刻：2026-08-10 12:00:00 UTC（中午，非静默；日分 = 720）
     const NOON_UTC_MS: u64 = 1_786_276_800_000;
@@ -331,12 +327,27 @@ mod tests {
         assert_eq!(DEFAULT_QUIET_END_MINUTES, 450); // 07:30
 
         // 静默内：23:00、00:30、07:29
-        assert!(is_quiet(NOON_UTC_MS + 11 * HOUR_MS, &QuietHoursConfig::default()));
-        assert!(is_quiet(NOON_UTC_MS + 12 * HOUR_MS + 30 * 60_000, &QuietHoursConfig::default()));
-        assert!(is_quiet(NOON_UTC_MS + 19 * HOUR_MS + 29 * 60_000, &QuietHoursConfig::default()));
+        assert!(is_quiet(
+            NOON_UTC_MS + 11 * HOUR_MS,
+            &QuietHoursConfig::default()
+        ));
+        assert!(is_quiet(
+            NOON_UTC_MS + 12 * HOUR_MS + 30 * 60_000,
+            &QuietHoursConfig::default()
+        ));
+        assert!(is_quiet(
+            NOON_UTC_MS + 19 * HOUR_MS + 29 * 60_000,
+            &QuietHoursConfig::default()
+        ));
         // 静默外：07:30（结束边界）、22:29、12:00
-        assert!(!is_quiet(NOON_UTC_MS + 19 * HOUR_MS + 30 * 60_000, &QuietHoursConfig::default()));
-        assert!(!is_quiet(NOON_UTC_MS + 10 * HOUR_MS + 29 * 60_000, &QuietHoursConfig::default()));
+        assert!(!is_quiet(
+            NOON_UTC_MS + 19 * HOUR_MS + 30 * 60_000,
+            &QuietHoursConfig::default()
+        ));
+        assert!(!is_quiet(
+            NOON_UTC_MS + 10 * HOUR_MS + 29 * 60_000,
+            &QuietHoursConfig::default()
+        ));
         assert!(!is_quiet(NOON_UTC_MS, &QuietHoursConfig::default()));
     }
 
@@ -384,7 +395,11 @@ mod tests {
     #[test]
     fn policy_outside_quiet_delivers_all() {
         let noon = cfg_at(12 * 60);
-        for level in [PushLevel::P0Critical, PushLevel::P1Important, PushLevel::P2Collapsible] {
+        for level in [
+            PushLevel::P0Critical,
+            PushLevel::P1Important,
+            PushLevel::P2Collapsible,
+        ] {
             assert_eq!(
                 quiet_hours_policy(level, NOON_UTC_MS, &noon),
                 QuietPolicy::OutsideDeliver
@@ -412,19 +427,34 @@ mod tests {
     fn night_summary_date_keys_to_window_start_day() {
         let cfg = QuietHoursConfig::default();
         // 静默窗内：23:00（起始日当天）与次日 00:30 / 07:30（跨午夜后半段）
-        assert_eq!(night_summary_date(NOON_UTC_MS + 11 * HOUR_MS, &cfg), "2026-08-09");
-        assert_eq!(night_summary_date(NOON_UTC_MS + 12 * HOUR_MS + 30 * 60_000, &cfg), "2026-08-09");
-        assert_eq!(night_summary_date(NOON_UTC_MS + 19 * HOUR_MS + 30 * 60_000, &cfg), "2026-08-09");
+        assert_eq!(
+            night_summary_date(NOON_UTC_MS + 11 * HOUR_MS, &cfg),
+            "2026-08-09"
+        );
+        assert_eq!(
+            night_summary_date(NOON_UTC_MS + 12 * HOUR_MS + 30 * 60_000, &cfg),
+            "2026-08-09"
+        );
+        assert_eq!(
+            night_summary_date(NOON_UTC_MS + 19 * HOUR_MS + 30 * 60_000, &cfg),
+            "2026-08-09"
+        );
         // 静默结束后的白天：仍归属刚结束的那一夜（起始日）
         assert_eq!(night_summary_date(NOON_UTC_MS, &cfg), "2026-08-08");
-        assert_eq!(night_summary_date(NOON_UTC_MS + 9 * HOUR_MS, &cfg), "2026-08-08");
+        assert_eq!(
+            night_summary_date(NOON_UTC_MS + 9 * HOUR_MS, &cfg),
+            "2026-08-08"
+        );
         // 东八区：UTC 12:00 = 本地 20:00（非静默，归属前一夜）；+3h = 本地 23:00（今日窗口）
         let east8 = QuietHoursConfig {
             timezone_offset_minutes: 480,
             ..QuietHoursConfig::default()
         };
         assert_eq!(night_summary_date(NOON_UTC_MS, &east8), "2026-08-08");
-        assert_eq!(night_summary_date(NOON_UTC_MS + 3 * HOUR_MS, &east8), "2026-08-09");
+        assert_eq!(
+            night_summary_date(NOON_UTC_MS + 3 * HOUR_MS, &east8),
+            "2026-08-09"
+        );
     }
 
     /// 合成边界：空列表 → 零统计（调用方通常应跳过生成，函数不 panic）
@@ -497,14 +527,20 @@ mod tests {
         assert_eq!(summary.groups.len(), 2);
         assert_eq!(summary.first_at_ms, evening);
         assert_eq!(summary.last_at_ms, after_midnight);
-        assert_eq!(summary.body, "夜间完成 2 项：定时器 timer-1 已到期、任务 run-7 已取消");
+        assert_eq!(
+            summary.body,
+            "夜间完成 2 项：定时器 timer-1 已到期、任务 run-7 已取消"
+        );
     }
 
     /// 单条/多条形态：单条带业务键样本，多条 ×N 计数
     #[test]
     fn compose_single_vs_many_clause_forms() {
         let at = NOON_UTC_MS + 11 * HOUR_MS;
-        let single = compose_night_summary(&[item(SceneId::TaskCompleted, "t-1", at)], &QuietHoursConfig::default());
+        let single = compose_night_summary(
+            &[item(SceneId::TaskCompleted, "t-1", at)],
+            &QuietHoursConfig::default(),
+        );
         assert_eq!(single.body, "夜间完成 1 项：任务 t-1 已完成");
 
         let many = compose_night_summary(

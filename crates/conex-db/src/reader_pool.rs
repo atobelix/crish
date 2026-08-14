@@ -148,10 +148,11 @@ impl ReaderPool {
 
             // 配置 busy_timeout 与只读优化 PRAGMA
             let busy_ms = config.busy_timeout.as_millis() as u64;
-            conn.busy_timeout(config.busy_timeout).map_err(|e| DbFailure {
-                message: format!("failed to set busy_timeout on reader #{id}: {e}"),
-                kind: DbFailureKind::Other(format!("busy_timeout_{busy_ms}ms")),
-            })?;
+            conn.busy_timeout(config.busy_timeout)
+                .map_err(|e| DbFailure {
+                    message: format!("failed to set busy_timeout on reader #{id}: {e}"),
+                    kind: DbFailureKind::Other(format!("busy_timeout_{busy_ms}ms")),
+                })?;
 
             for pragma in &config.custom_pragmas {
                 conn.execute_batch(pragma).map_err(|e| DbFailure {

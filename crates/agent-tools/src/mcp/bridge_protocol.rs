@@ -124,7 +124,10 @@ pub(crate) fn parse_tool_info(value: &Value) -> Result<McpToolInfo, ToolError> {
 /// - text 内容（全部 text 段拼接）→ 写入 text 字段
 /// - 原始 content / isError 原样透传，供上层展示
 pub fn adapt_call_result(result: &Value, display_name: &str) -> Result<Value, ToolError> {
-    let is_error = result.get("isError").and_then(Value::as_bool).unwrap_or(false);
+    let is_error = result
+        .get("isError")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     if is_error {
         let detail = extract_text_content(result);
         let detail = if detail.is_empty() {

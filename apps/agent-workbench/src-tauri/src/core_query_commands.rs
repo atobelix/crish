@@ -878,11 +878,17 @@ mod tests {
         assert_eq!(json["engineReady"], true);
         assert_eq!(json["searchIndexReady"], true);
         assert_eq!(json["dbReady"], true);
-        assert_eq!(json["compactionReady"], false, "未接线压缩 = false（诚实化）");
+        assert_eq!(
+            json["compactionReady"], false,
+            "未接线压缩 = false（诚实化）"
+        );
         // providerStatus（PE-01 T01.1）
         assert_eq!(json["providerStatus"]["hasApiKey"], false);
         assert_eq!(json["providerStatus"]["credentialMode"], "direct");
-        assert!(json["providerStatus"].get("model").is_none(), "None 字段跳过");
+        assert!(
+            json["providerStatus"].get("model").is_none(),
+            "None 字段跳过"
+        );
         // PE-04 增量
         assert_eq!(json["logLevel"], "info");
         assert_eq!(json["logDir"], r"C:\logs");
@@ -903,7 +909,10 @@ mod tests {
         assert_eq!(json["backgroundTasks"]["activeCount"], 3);
         assert_eq!(json["backgroundTasks"]["daemonCount"], 1);
         assert_eq!(json["backgroundTasks"]["lastFinished"]["taskId"], "task-9");
-        assert_eq!(json["backgroundTasks"]["lastFinished"]["status"], "completed");
+        assert_eq!(
+            json["backgroundTasks"]["lastFinished"]["status"],
+            "completed"
+        );
         assert_eq!(
             json["backgroundTasks"]["lastFinished"]["finishedAtMs"],
             1_700_000_000_003_i64
@@ -980,7 +989,10 @@ mod tests {
         assert_eq!(json["initialized"], false);
         assert_eq!(json["providerStatus"]["hasApiKey"], serde_json::Value::Null);
         assert_eq!(json["diagnostics"], serde_json::json!([]));
-        assert!(json.get("lastError").is_none(), "无错误记录时 lastError 缺省");
+        assert!(
+            json.get("lastError").is_none(),
+            "无错误记录时 lastError 缺省"
+        );
         assert_eq!(json["restore"]["state"], "pending");
         assert!(json["restore"].get("lastSequence").is_none());
         assert_eq!(json["snapshot"]["generation"], 0);
@@ -1239,7 +1251,10 @@ mod tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(stats.typed, 2);
         assert_eq!(parsed[0].1["runId"], "r-c1", "payload 缺 runId → 列兜底");
-        assert_eq!(parsed[1].1["runId"], "r-payload", "payload 有 runId → 列不覆盖");
+        assert_eq!(
+            parsed[1].1["runId"], "r-payload",
+            "payload 有 runId → 列不覆盖"
+        );
     }
 
     /// DM-07 P3 收口（态 3）：fallback 合成 runId 取值顺序 = payload runId

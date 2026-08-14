@@ -242,11 +242,7 @@ pub fn message_from_decision(
 /// auth）由 R1 连接面（ws.rs outbound_frame）构造，不在此重复）
 pub fn ws_push_body(message: &PushMessage) -> EventsPush {
     EventsPush {
-        session_id: message
-            .target
-            .session_id
-            .clone()
-            .unwrap_or_default(),
+        session_id: message.target.session_id.clone().unwrap_or_default(),
         preview: false,
         event: serde_json::to_value(message).expect("PushMessage 必须可序列化为 JSON"),
     }
@@ -299,7 +295,11 @@ mod tests {
         assert_eq!(message.target.screen, "session");
         assert_eq!(message.target.session_id.as_deref(), Some("s-7"));
         assert_eq!(message.target.params, json!({ "runId": "run-42" }));
-        assert_eq!(message.data, json!({}), "本任务 data 为空（事件全量接线轮注入）");
+        assert_eq!(
+            message.data,
+            json!({}),
+            "本任务 data 为空（事件全量接线轮注入）"
+        );
         assert_eq!(message.title, None, "copy.rs 未交付 → title 待渲染");
         assert_eq!(message.body, None, "copy.rs 未交付 → body 待渲染");
     }
@@ -447,8 +447,7 @@ mod tests {
             "\"normal\""
         );
         // 反序列化 roundtrip
-        let back: PushSeverity =
-            serde_json::from_str("\"critical\"").expect("可反序列化");
+        let back: PushSeverity = serde_json::from_str("\"critical\"").expect("可反序列化");
         assert_eq!(back, PushSeverity::Critical);
         // 级别 → severity 语义一致（mod.rs 映射）
         assert_eq!(PushLevel::P0Critical.severity(), PushSeverity::Critical);
@@ -477,7 +476,10 @@ mod tests {
         assert_eq!(json["target"]["sessionId"], "s-7");
         assert_eq!(json["target"]["params"]["runId"], "run-42");
         assert_eq!(json["data"], json!({}));
-        assert!(json.get("title").is_none(), "title 缺省跳过（待 copy 渲染）");
+        assert!(
+            json.get("title").is_none(),
+            "title 缺省跳过（待 copy 渲染）"
+        );
         assert!(json.get("body").is_none(), "body 缺省跳过（待 copy 渲染）");
 
         // roundtrip 还原
@@ -521,7 +523,10 @@ mod tests {
         // 帧 JSON 形状（camelCase；kind 常量）
         let json = serde_json::to_value(&body).expect("可序列化");
         assert_eq!(json["sessionId"], "s-7");
-        assert!(json.get("preview").is_none(), "preview=false 由 skip_false 在 wire 上省略");
+        assert!(
+            json.get("preview").is_none(),
+            "preview=false 由 skip_false 在 wire 上省略"
+        );
         assert_eq!(json["event"]["id"], "push-000001");
         assert_eq!(WS_PUSH_KIND, "events.push");
     }

@@ -165,14 +165,23 @@ mod tests {
         assert_eq!(config.bind_mode, BindMode::Loopback);
         assert!(!config.pairing_enabled);
         // D5 D-01 / 红线 1：服务默认关闭（enabled=false 时不 bind 任何端口）
-        assert!(!config.multi_device_enabled, "多端服务默认必须关闭（零默认暴露面）");
+        assert!(
+            !config.multi_device_enabled,
+            "多端服务默认必须关闭（零默认暴露面）"
+        );
         // TLS 默认关闭（既有明文测试与 loopback 联调面兼容；生产装配层
         // 按 D5 D-02a 显式开启 wss 强制）
         assert!(!config.tls_enabled, "TLS 默认必须关闭");
-        assert!(config.tls_cert_dir.is_none(), "证书目录默认跟随 config_dir()/multi-device/");
+        assert!(
+            config.tls_cert_dir.is_none(),
+            "证书目录默认跟随 config_dir()/multi-device/"
+        );
         assert_eq!(config.bind_host(), LOOPBACK_HOST);
         assert_eq!(
-            config.pairing_file_path.file_name().and_then(|n| n.to_str()),
+            config
+                .pairing_file_path
+                .file_name()
+                .and_then(|n| n.to_str()),
             Some(PAIRING_FILE_NAME)
         );
     }
@@ -180,7 +189,10 @@ mod tests {
     #[test]
     fn new_config_joins_pairing_file_in_dir() {
         let config = ServerConfig::new("C:\\test\\cfg");
-        assert_eq!(config.pairing_file_path, PathBuf::from("C:\\test\\cfg\\pairing.json"));
+        assert_eq!(
+            config.pairing_file_path,
+            PathBuf::from("C:\\test\\cfg\\pairing.json")
+        );
     }
 
     #[test]

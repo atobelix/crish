@@ -201,7 +201,15 @@ mod tests {
         db.save_session_agents(
             session_id,
             &[
-                agent("a1", "run-1", "running", session_id, None, None, vec![msg("m1", "user", 1)]),
+                agent(
+                    "a1",
+                    "run-1",
+                    "running",
+                    session_id,
+                    None,
+                    None,
+                    vec![msg("m1", "user", 1)],
+                ),
                 agent(
                     "a2",
                     "run-2",
@@ -221,8 +229,24 @@ mod tests {
         db.save_session_agents(
             session_id,
             &[
-                agent("a1", "run-1", "running", session_id, None, None, vec![msg("m1", "user", 1)]),
-                agent("a2", "run-2", "running", session_id, None, None, vec![msg("m2", "assistant", 2)]),
+                agent(
+                    "a1",
+                    "run-1",
+                    "running",
+                    session_id,
+                    None,
+                    None,
+                    vec![msg("m1", "user", 1)],
+                ),
+                agent(
+                    "a2",
+                    "run-2",
+                    "running",
+                    session_id,
+                    None,
+                    None,
+                    vec![msg("m2", "assistant", 2)],
+                ),
             ],
         )
         .unwrap();
@@ -245,7 +269,10 @@ mod tests {
 
         let rows = db.load_session_agents("s1").unwrap();
         assert!(rows.iter().all(|r| r.status == "failed"), "全部归一 failed");
-        assert!(rows.iter().all(|r| r.ended_at == Some(999)), "ended_at 落库");
+        assert!(
+            rows.iter().all(|r| r.ended_at == Some(999)),
+            "ended_at 落库"
+        );
         assert!(
             db.load_running_session_agents().unwrap().is_empty(),
             "归一后无 running 残留（幂等，重复 restore 不再命中）"
@@ -294,7 +321,11 @@ mod tests {
         let rows = db.load_session_agents("s1").unwrap();
         let a2 = rows.iter().find(|a| a.id == "a2").unwrap();
         assert_eq!(a2.status, "failed");
-        assert_eq!(a2.ended_at, Some(200), "已 ended 行 ended_at 保留（COALESCE）");
+        assert_eq!(
+            a2.ended_at,
+            Some(200),
+            "已 ended 行 ended_at 保留（COALESCE）"
+        );
 
         // ended_at=None 也不覆盖既有值
         let affected = db
@@ -332,7 +363,10 @@ mod tests {
 
         let rows = db.load_session_agents("s1").unwrap();
         let a1 = rows.iter().find(|a| a.id == "a1").unwrap();
-        assert_eq!(a1.subagent_path_json.as_deref(), Some(r#"["root","leaf-1"]"#));
+        assert_eq!(
+            a1.subagent_path_json.as_deref(),
+            Some(r#"["root","leaf-1"]"#)
+        );
         assert_eq!(a1.status, "running", "路径更新不动 status");
         assert_eq!(a1.ended_at, None);
         assert_eq!(a1.messages[0].id, "m1", "路径更新不动 messages");
@@ -360,7 +394,15 @@ mod tests {
     fn upsert_inserts_and_updates_preserving_messages() {
         let db = LocalDb::open_in_memory().unwrap();
         db.upsert_session_entry(&session_entry("s1")).unwrap();
-        let row = agent("a1", "run-1", "running", "s1", None, None, vec![msg("m1", "user", 1)]);
+        let row = agent(
+            "a1",
+            "run-1",
+            "running",
+            "s1",
+            None,
+            None,
+            vec![msg("m1", "user", 1)],
+        );
         // 首写经 save（消息随行）；后续引擎写一律走 upsert
         db.save_session_agents("s1", &[row.clone()]).unwrap();
 
@@ -377,14 +419,20 @@ mod tests {
         assert_eq!(rows.len(), 1, "同 PK upsert 不新增行");
         assert_eq!(rows[0].status, "completed", "列值被覆盖");
         assert_eq!(rows[0].ended_at, Some(500));
-        assert_eq!(rows[0].subagent_path_json.as_deref(), Some(r#"["root","leaf-1"]"#));
+        assert_eq!(
+            rows[0].subagent_path_json.as_deref(),
+            Some(r#"["root","leaf-1"]"#)
+        );
         assert_eq!(rows[0].task_type.as_deref(), Some("analysis"));
         assert_eq!(rows[0].messages.len(), 1, "messages 保留（级联未触发）");
         assert_eq!(rows[0].messages[0].id, "m1");
 
         // v6 三列随行（display_label / 写路径白名单读回）
         assert_eq!(rows[0].display_label.as_deref(), Some("标签-a1"));
-        assert_eq!(rows[0].allowed_write_paths_json.as_deref(), Some(r#"["docs/notes"]"#));
+        assert_eq!(
+            rows[0].allowed_write_paths_json.as_deref(),
+            Some(r#"["docs/notes"]"#)
+        );
 
         // 幂等：再次 upsert 同 PK 仍单行
         db.upsert_session_agent(&updated).unwrap();
@@ -420,7 +468,11 @@ mod tests {
         db.upsert_session_agent(&updated).unwrap();
 
         let rows = db.load_session_agents("s1").unwrap();
-        assert_eq!(rows[0].messages.len(), 2, "级联清空不触发（禁止 REPLACE 回归）");
+        assert_eq!(
+            rows[0].messages.len(),
+            2,
+            "级联清空不触发（禁止 REPLACE 回归）"
+        );
         assert_eq!(rows[0].messages[0].id, "m1");
         assert_eq!(rows[0].messages[1].id, "m2");
     }
@@ -481,7 +533,9 @@ mod tests {
         db.upsert_session_agent(&new_row).unwrap();
 
         // 后 kill（对目标行逐条单行更新：a3 已是 running，一并命中）
-        let targets = db.load_session_agents_by_parent_status("s1", "running").unwrap();
+        let targets = db
+            .load_session_agents_by_parent_status("s1", "running")
+            .unwrap();
         assert_eq!(targets.len(), 3, "目标 = 三个 running 行（含 spawn 行）");
         for target in &targets {
             db.update_session_agent_status("s1", &target.subagent_run_id, "failed", Some(999))

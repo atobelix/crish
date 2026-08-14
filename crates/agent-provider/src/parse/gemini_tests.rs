@@ -6,6 +6,7 @@
 //! （parse_all / stop_of）在此定义（pub(super)），供 [super::tests_usage] 复用。
 
 use super::*;
+use conex_types::error::ProviderErrorKind;
 use serde_json::json;
 
 /// 便捷构造：处理一帧并立即 finish，返回全部事件
@@ -71,6 +72,7 @@ fn text_parts_yield_text_deltas() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -156,6 +158,7 @@ fn function_call_part_emits_full_tool_call() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::ToolCall,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -190,6 +193,7 @@ fn function_call_without_name_is_dropped() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -386,6 +390,7 @@ fn later_finish_reason_overrides_earlier() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Stop,
             error: None,
+            error_kind: None,
             usage: None,
         }
     );
@@ -399,6 +404,7 @@ fn error_finish_reason_carries_message() {
         &ProviderStreamEvent::Stop {
             reason: StopReason::Error,
             error: Some("Gemini finishReason: SAFETY".into()),
+            error_kind: Some(ProviderErrorKind::Unknown),
             usage: None,
         }
     );

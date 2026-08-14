@@ -46,6 +46,7 @@
     "check:desktop": "npm --workspace @crish/crish-desktop run typecheck && npm run check:ui-layer && npm run check:line-counts && npm run check:swallowed-errors-frontend",
     "check:ui-layer": "node scripts/check-ui-layer.mjs",
     "check:line-counts": "node scripts/check-line-counts.mjs --all",
+    "check:conflict-markers": "node scripts/check-conflict-markers.mjs",
     "check:swallowed-errors-frontend": "node scripts/check-swallowed-errors-frontend.mjs --report",
     "check:css-encoding": "node scripts/check-css-encoding.mjs --whitelist-dirty-check",
     "check:chunk-cycles": "node scripts/check-chunk-cycles.mjs",

@@ -99,11 +99,7 @@ pub trait ExploreDocsQuotaStore: Send + Sync + std::fmt::Debug {
     fn snapshot(&self, session_id: &str) -> ExploreDocsQuotaSnapshot;
     /// 消耗一次配额（+1 并记录最近消耗者；返回新快照）。
     /// 失败返回错误文案（调用方按执行失败处理，不 panic）。
-    fn consume(
-        &self,
-        session_id: &str,
-        run_id: &str,
-    ) -> Result<ExploreDocsQuotaSnapshot, String>;
+    fn consume(&self, session_id: &str, run_id: &str) -> Result<ExploreDocsQuotaSnapshot, String>;
 
     /// 原子「检查 + 消耗」（F3 #9 TOCTOU 根因修复）：上限内原子占用一份
     /// 配额——并发调用只放行恰好 `quota` 份，超限返回错误文案。
@@ -120,7 +116,10 @@ pub trait ExploreDocsQuotaStore: Send + Sync + std::fmt::Debug {
     ) -> Result<ExploreDocsQuotaSnapshot, String> {
         let snapshot = self.snapshot(session_id);
         if snapshot.consumed >= quota {
-            return Err(format!("配额已用尽（consumed={}，quota={quota}）", snapshot.consumed));
+            return Err(format!(
+                "配额已用尽（consumed={}，quota={quota}）",
+                snapshot.consumed
+            ));
         }
         self.consume(session_id, run_id)
     }
@@ -166,11 +165,7 @@ impl ExploreDocsQuotaStore for InMemoryExploreDocsQuotaStore {
         map.get(session_id).cloned().unwrap_or_default()
     }
 
-    fn consume(
-        &self,
-        session_id: &str,
-        run_id: &str,
-    ) -> Result<ExploreDocsQuotaSnapshot, String> {
+    fn consume(&self, session_id: &str, run_id: &str) -> Result<ExploreDocsQuotaSnapshot, String> {
         let mut map = self.inner.lock().unwrap_or_else(|e| {
             tracing::error!("探索文档配额消耗 inner 锁中毒，按恢复模式继续：{e}");
             POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
@@ -239,11 +234,9 @@ impl ExploreDocsQuotaError {
     /// 结构化错误文案（04 C5 验收 1/2 断言对象：含配额语义与回报指引）
     pub fn message(&self) -> String {
         match self {
-            Self::NotGranted => {
-                "探索类 agent 未获主 agent 分配的文档配额凭证：如需产出文档，\
+            Self::NotGranted => "探索类 agent 未获主 agent 分配的文档配额凭证：如需产出文档，\
                  请把发现以消息形式回报主 agent，由主 agent 分配后重试"
-                    .to_string()
-            }
+                .to_string(),
             Self::Exhausted { consumed, quota } => {
                 format!(
                     "探索类 agent 文档配额已用尽（quota={quota}，本会话已消耗 {consumed}）：\
@@ -318,8 +311,8 @@ pub fn quota_context_for_spawn(
 ) -> Option<ExploreDocsQuotaContext> {
     // 探索类判定以能力模式为准（任务卡）；researcher 角色未配 read-only 时
     // 同样视为探索类（04 文档口径），两者取或
-    let explore = is_explore_class(capability_mode)
-        || matches!(role, Some(SubagentRole::Researcher));
+    let explore =
+        is_explore_class(capability_mode) || matches!(role, Some(SubagentRole::Researcher));
     if !explore {
         return None;
     }
@@ -337,9 +330,7 @@ pub fn quota_context_for_spawn(
 ///
 /// 返回 Err = 拒绝执行（结构化错误含配额语义）；Ok = 放行（写盘成功后
 /// 调用方须经 [consume_explore_docs_quota] 计数）。
-pub fn guard_explore_docs_write(
-    ctx: &ToolContext,
-) -> Result<(), ToolError> {
+pub fn guard_explore_docs_write(ctx: &ToolContext) -> Result<(), ToolError> {
     let Some(quota) = &ctx.explore_docs_quota else {
         return Ok(());
     };
@@ -374,7 +365,9 @@ pub fn consume_explore_docs_quota(ctx: &ToolContext) {
 /// 的 [QuotaReservation::release] 补偿回滚。
 ///
 /// 未装配（非探索类 / 主 agent）→ 返回 None（不占用）。
-pub fn reserve_explore_docs_quota(ctx: &ToolContext) -> Result<Option<QuotaReservation>, ToolError> {
+pub fn reserve_explore_docs_quota(
+    ctx: &ToolContext,
+) -> Result<Option<QuotaReservation>, ToolError> {
     let Some(quota) = &ctx.explore_docs_quota else {
         return Ok(None);
     };
@@ -394,7 +387,14 @@ pub fn reserve_explore_docs_quota(ctx: &ToolContext) -> Result<Option<QuotaReser
         .map_err(|e| {
             // 错误码复用 Exhausted 语义（code=TOOL_EXECUTION_FAILED）；
             // 文案由 store 原子返回（含真实 consumed 值）
-            ToolError::new(ExploreDocsQuotaError::Exhausted { consumed: 0, quota: quota.quota }.code(), e)
+            ToolError::new(
+                ExploreDocsQuotaError::Exhausted {
+                    consumed: 0,
+                    quota: quota.quota,
+                }
+                .code(),
+                e,
+            )
         })?;
     Ok(Some(QuotaReservation {
         quota: Some(ExploreDocsQuotaContextRef {
@@ -529,7 +529,11 @@ mod tests {
             self.snapshot.clone()
         }
 
-        fn consume(&self, session_id: &str, run_id: &str) -> Result<ExploreDocsQuotaSnapshot, String> {
+        fn consume(
+            &self,
+            session_id: &str,
+            run_id: &str,
+        ) -> Result<ExploreDocsQuotaSnapshot, String> {
             self.consumed_runs
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
@@ -576,23 +580,27 @@ mod tests {
     fn quota_context_assembly_only_for_explore_class() {
         let store: Arc<dyn ExploreDocsQuotaStore> = Arc::new(InMemoryExploreDocsQuotaStore::new());
         // read-only → 装配（含 researcher 角色兼容）
-        assert!(
-            quota_context_for_spawn(
-                Some(SubagentCapabilityMode::ReadOnly),
-                Some(SubagentRole::Researcher),
-                "s1",
-                "r1",
-                true,
-                1,
-                Some(Arc::clone(&store)),
-            )
-            .is_some()
-        );
+        assert!(quota_context_for_spawn(
+            Some(SubagentCapabilityMode::ReadOnly),
+            Some(SubagentRole::Researcher),
+            "s1",
+            "r1",
+            true,
+            1,
+            Some(Arc::clone(&store)),
+        )
+        .is_some());
         // researcher 角色未配 read-only → 仍视为探索类（04 文档口径）
-        assert!(
-            quota_context_for_spawn(None, Some(SubagentRole::Researcher), "s1", "r1", true, 1, Some(Arc::clone(&store)))
-                .is_some()
-        );
+        assert!(quota_context_for_spawn(
+            None,
+            Some(SubagentRole::Researcher),
+            "s1",
+            "r1",
+            true,
+            1,
+            Some(Arc::clone(&store))
+        )
+        .is_some());
         // 非探索类 → 不装配
         for mode in [
             Some(SubagentCapabilityMode::ReadWrite),
@@ -655,7 +663,10 @@ mod tests {
             consumed: 0,
             last_consumer_run_id: None,
         };
-        assert!(check_explore_docs_write(true, &zero, 1).is_ok(), "第 1 份放行");
+        assert!(
+            check_explore_docs_write(true, &zero, 1).is_ok(),
+            "第 1 份放行"
+        );
         let one = ExploreDocsQuotaSnapshot {
             consumed: 1,
             last_consumer_run_id: Some("run-1".to_string()),
@@ -680,8 +691,14 @@ mod tests {
             consumed: 1,
             last_consumer_run_id: None,
         };
-        assert!(check_explore_docs_write(true, &one, 2).is_ok(), "quota=2 放行第 2 份");
-        assert!(check_explore_docs_write(true, &one, 1).is_err(), "quota=1 拒绝");
+        assert!(
+            check_explore_docs_write(true, &one, 2).is_ok(),
+            "quota=2 放行第 2 份"
+        );
+        assert!(
+            check_explore_docs_write(true, &one, 1).is_err(),
+            "quota=1 拒绝"
+        );
     }
 
     // ── 工具接线（WriteFileTool 集成）──
@@ -694,9 +711,17 @@ mod tests {
         let tool = crate::tools::fs::WriteFileTool::new();
 
         // 无凭证：拒绝，文件不落盘
-        let ctx = quota_ctx(ws.path(), false, 1, Arc::new(InMemoryExploreDocsQuotaStore::new()));
+        let ctx = quota_ctx(
+            ws.path(),
+            false,
+            1,
+            Arc::new(InMemoryExploreDocsQuotaStore::new()),
+        );
         let err = tool
-            .execute(&ctx, serde_json::json!({ "path": "doc1.md", "content": "发现" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "path": "doc1.md", "content": "发现" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.execution_failed");
@@ -705,10 +730,18 @@ mod tests {
 
         // 持凭证 + 内存计数存储：第 1 份成功，第 2 份拒绝
         let store = Arc::new(InMemoryExploreDocsQuotaStore::new());
-        let ctx = quota_ctx(ws.path(), true, 1, Arc::clone(&store) as Arc<dyn ExploreDocsQuotaStore>);
-        tool.execute(&ctx, serde_json::json!({ "path": "doc1.md", "content": "发现" }))
-            .await
-            .unwrap();
+        let ctx = quota_ctx(
+            ws.path(),
+            true,
+            1,
+            Arc::clone(&store) as Arc<dyn ExploreDocsQuotaStore>,
+        );
+        tool.execute(
+            &ctx,
+            serde_json::json!({ "path": "doc1.md", "content": "发现" }),
+        )
+        .await
+        .unwrap();
         assert!(ws.path().join("doc1.md").exists(), "第 1 份应写盘成功");
         assert_eq!(
             store.snapshot("sess-q").consumed,
@@ -717,7 +750,10 @@ mod tests {
         );
 
         let err = tool
-            .execute(&ctx, serde_json::json!({ "path": "doc2.md", "content": "更多" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "path": "doc2.md", "content": "更多" }),
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("配额已用尽"));
@@ -725,7 +761,10 @@ mod tests {
 
         // 最近消耗者 run 信息记录
         let snapshot = store.snapshot("sess-q");
-        assert_eq!(snapshot.last_consumer_run_id.as_deref(), Some("run-researcher"));
+        assert_eq!(
+            snapshot.last_consumer_run_id.as_deref(),
+            Some("run-researcher")
+        );
     }
 
     /// 04 C5 验收 4：非探索类（无配额上下文）不受配额限制——写盘照常
@@ -737,9 +776,12 @@ mod tests {
             workspace_root: ws.path().clone(),
             ..create_mock_tool_context() // 无配额上下文
         };
-        tool.execute(&ctx, serde_json::json!({ "path": "x.md", "content": "普通" }))
-            .await
-            .unwrap();
+        tool.execute(
+            &ctx,
+            serde_json::json!({ "path": "x.md", "content": "普通" }),
+        )
+        .await
+        .unwrap();
         assert!(ws.path().join("x.md").is_file(), "非探索类写盘不受配额限制");
     }
 
@@ -748,14 +790,25 @@ mod tests {
     async fn failed_write_does_not_consume_quota() {
         let ws = TempWorkspace::new("quota_fail");
         let store = Arc::new(FixedSnapshotStore::with_consumed(0));
-        let ctx = quota_ctx(ws.path(), true, 1, Arc::clone(&store) as Arc<dyn ExploreDocsQuotaStore>);
+        let ctx = quota_ctx(
+            ws.path(),
+            true,
+            1,
+            Arc::clone(&store) as Arc<dyn ExploreDocsQuotaStore>,
+        );
         let tool = crate::tools::fs::WriteFileTool::new();
         let err = tool
-            .execute(&ctx, serde_json::json!({ "path": "../escape.md", "content": "x" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "path": "../escape.md", "content": "x" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.path_escape");
-        assert!(store.consumed_runs.lock().unwrap().is_empty(), "失败不得计数");
+        assert!(
+            store.consumed_runs.lock().unwrap().is_empty(),
+            "失败不得计数"
+        );
     }
 
     /// F3 盲区 #8：并行写文档配额竞争（wait_subagents 同轮多写形态）——
@@ -808,9 +861,15 @@ mod tests {
         let r1 = t1.join().expect("线程 1 不应 panic");
         let r2 = t2.join().expect("线程 2 不应 panic");
         let ok_count = [r1.is_ok(), r2.is_ok()].iter().filter(|o| **o).count();
-        assert_eq!(ok_count, 1, "quota=1 并发双写必须恰好一份成功（修复前双写：红）");
+        assert_eq!(
+            ok_count, 1,
+            "quota=1 并发双写必须恰好一份成功（修复前双写：红）"
+        );
         let err = r1.err().or(r2.err()).expect("并发双写应有失败侧");
-        assert!(err.to_string().contains("配额"), "失败侧应为配额拒绝：{err}");
+        assert!(
+            err.to_string().contains("配额"),
+            "失败侧应为配额拒绝：{err}"
+        );
         // 仅一份文档落盘 + 计数恰为 1（配额不超限）
         let files = ["doc1.md", "doc2.md"]
             .iter()
@@ -837,7 +896,10 @@ mod tests {
 
         // 写向目录 → reserve 已占用、std::fs::write 失败 → Drop release
         let err = tool
-            .execute(&ctx, serde_json::json!({ "path": "subdir", "content": "x" }))
+            .execute(
+                &ctx,
+                serde_json::json!({ "path": "subdir", "content": "x" }),
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("write_file"), "写盘失败：{err}");
@@ -848,9 +910,12 @@ mod tests {
         );
 
         // 回滚后合法写仍可执行（quota=1 仍可用）
-        tool.execute(&ctx, serde_json::json!({ "path": "doc.md", "content": "ok" }))
-            .await
-            .unwrap();
+        tool.execute(
+            &ctx,
+            serde_json::json!({ "path": "doc.md", "content": "ok" }),
+        )
+        .await
+        .unwrap();
         assert!(ws.path().join("doc.md").is_file());
         assert_eq!(store.snapshot("sess-q").consumed, 1);
     }
@@ -875,11 +940,7 @@ mod tests {
             joined.contains("inner 锁中毒"),
             "应捕获锁中毒 error 日志：\n{joined}"
         );
-        assert_eq!(
-            poison_recovery_count(),
-            before + 1,
-            "毒化恢复计数应 +1"
-        );
+        assert_eq!(poison_recovery_count(), before + 1, "毒化恢复计数应 +1");
     }
 
     // ── 持久化格式与键编码 ──
@@ -898,9 +959,18 @@ mod tests {
             "序列化 ↔ 解析往返一致"
         );
         // 容错：None / 损坏 / 缺字段 → 零消耗默认，不 panic
-        assert_eq!(parse_explore_docs_consumed(None), ExploreDocsQuotaSnapshot::default());
-        assert_eq!(parse_explore_docs_consumed(Some("not-json{")), ExploreDocsQuotaSnapshot::default());
-        assert_eq!(parse_explore_docs_consumed(Some("{}")), ExploreDocsQuotaSnapshot::default());
+        assert_eq!(
+            parse_explore_docs_consumed(None),
+            ExploreDocsQuotaSnapshot::default()
+        );
+        assert_eq!(
+            parse_explore_docs_consumed(Some("not-json{")),
+            ExploreDocsQuotaSnapshot::default()
+        );
+        assert_eq!(
+            parse_explore_docs_consumed(Some("{}")),
+            ExploreDocsQuotaSnapshot::default()
+        );
     }
 
     #[test]
@@ -931,7 +1001,10 @@ mod tests {
         );
         let raised = explore_docs_credential_section(2);
         assert!(raised.contains("本会话最多 2 份"));
-        let normalize = |s: String| s.replace("本会话最多 1 份", "本会话最多 {n} 份").replace("本会话最多 2 份", "本会话最多 {n} 份");
+        let normalize = |s: String| {
+            s.replace("本会话最多 1 份", "本会话最多 {n} 份")
+                .replace("本会话最多 2 份", "本会话最多 {n} 份")
+        };
         assert_eq!(
             normalize(section),
             normalize(raised),

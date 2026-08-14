@@ -23,10 +23,10 @@
 //!   客户端桥（bridge，外→内并入 registry）、**同一 registry 外壳**（shell，
 //!   内→外 tools/list|call；笔记工具同池可见）。**≠** 生产 MCP 全网关；**≠ EL**
 
-pub mod context;
 pub mod audit;
 pub mod background;
 pub mod backup;
+pub mod context;
 // T-40（记忆韧性轮次 5）：压缩块只读访问契约（CompressionContextStore
 // trait + BlockHit/BlockContent）——agent-tools 定义、引擎侧（conex-db /
 // orchestrator）实现注入；search_context / decompress_context 消费本契约，
@@ -40,12 +40,12 @@ pub mod compression_store;
 // block_update / block_delete / block_move / block_set_attr 消费本契约，
 // 生产代码保持叶子依赖（不引入 doc-collab/store）
 // **≠ EL-05**；不宣称 Store 后端完成
-mod note_types;
-mod note_md_parse;
-mod note_plan_ops;
-mod note_backend_json;
-mod note_memory;
 pub mod note_backend;
+mod note_backend_json;
+mod note_md_parse;
+mod note_memory;
+mod note_plan_ops;
+mod note_types;
 // W4-B/F：笔记工具审批名单（safe / write × plan|ask|full）
 pub mod note_permission;
 // W4-F：safeActions × Effects × Source **表驱动**矩阵起点（A-AGT-06）
@@ -56,30 +56,30 @@ pub mod note_action_matrix;
 pub mod note_w6e_skeleton;
 // W4-C Strict 方向：扩展宿主 contribute View 轨 + 拒写句柄（投影-only）
 // ≠ EL-07 满关；≠ A-EXT 全表；Memory 禁关生产；不回退 W4-B/F / W6-E-S
-pub mod note_w4c_contribute;
 pub mod definition;
-pub mod explore_quota;
 pub mod executor;
+pub mod explore_quota;
 pub mod idempotency;
 pub mod mcp;
 pub mod middleware;
+pub mod note_w4c_contribute;
 pub mod output;
 pub mod permission;
 pub mod readonly;
 pub mod registry;
 pub mod revert;
 pub mod revert_guard;
-pub mod subagent_inject;
 pub mod streaming;
+pub mod subagent_inject;
 pub mod tools;
 pub mod write_paths;
 
+pub use audit::{
+    security_audit_event, AuditSink, NoopAuditSink, RecordingAuditSink, SecurityAuditSink,
+};
 pub use context::{
     create_mock_tool_context, AbortToken, AskCallback, AskChannel, AskDecision, NoopAskChannel,
     ToolContext,
-};
-pub use audit::{
-    security_audit_event, AuditSink, NoopAuditSink, RecordingAuditSink, SecurityAuditSink,
 };
 // T-AB-02（后台任务契约，冻结接口 #1/#2）：trait 与数据结构导出——
 // 壳层（A3 注册表）与 R-AB2 工具面按冻结形状消费
@@ -94,12 +94,7 @@ pub use executor::{
 };
 // S1（TOOLS-01 §3.1.3）：流式输出协议冻结面——ToolStream 类型签名与
 // ToolStreamItem/ToolProgress 形状，消费方（执行器/A2 事件映射）按此导入
-pub use streaming::{
-    terminal_only, with_progress, ContentBlock, ToolProgress, ToolStream, ToolStreamItem,
-};
-pub use permission::{
-    decide, decide_command_with_revert, PermissionMode, PermissionVerdict,
-};
+pub use backup::{default_backup_tools, BackupMiddleware, BUILTIN_BACKUP_TOOLS};
 pub use idempotency::{
     domain_for, execution_key, IdempotencyContext, IdempotencyDecision, IdempotencyStore,
     ToolIdempotencyGuard,
@@ -112,7 +107,10 @@ pub use middleware::{
     AfterExecuteResult, BeforeExecuteResult, MiddlewareTimeoutConfig, ToolExecutionContext,
     ToolMiddleware,
 };
-pub use backup::{default_backup_tools, BackupMiddleware, BUILTIN_BACKUP_TOOLS};
+pub use permission::{decide, decide_command_with_revert, PermissionMode, PermissionVerdict};
+pub use streaming::{
+    terminal_only, with_progress, ContentBlock, ToolProgress, ToolStream, ToolStreamItem,
+};
 // T06.3 Q18：RecordingMiddleware / RecordingRecord 仅测试使用（生产零
 // 引用），导出面标注 #[cfg(test)]
 #[cfg(test)]
@@ -141,39 +139,39 @@ pub use revert_guard::{
 // 注入段）：注入内容模块——started_at 注入段 / 续跑不刷新解析 / git 回退
 // 指引固定文案 / ref 年代判定 / 注释保留固定文案，经 M1 注入点只读挂载
 // （engine.rs build_context 主体归 C10，M4 不并写）
-pub use subagent_inject::{
-    comment_preservation_section, git_revert_caution_section, iso8601_from_epoch_ms,
-    ref_older_than_threshold, resolve_started_at, started_at_section, subagent_session_injections,
-    COMMENT_PRESERVATION_TITLE, DEFAULT_REF_AGE_THRESHOLD_HOURS, DYNAMIC_MARKER,
-    REVERT_CAUTION_TITLE, STARTED_AT_SECTION_TITLE,
+pub use note_action_matrix::{
+    decide_from_matrix, has_local_write, is_matrix_safe, lookup_action, plan_denies_matrix_tool,
+    safe_tool_names, write_tool_names, ActionEffect, ActionSource, NoteActionRow,
+    NOTE_ACTION_MATRIX,
 };
 pub use note_backend::{
     apply_result_json, block_batch_result_json, MemoryNoteBackend, NoteApplyMdRequest,
     NoteApplyMdResult, NoteApplyMode, NoteBackend, NoteBackendError, NoteBackendHandle,
     NoteBatchTokens, NoteBlockBatchRequest, NoteBlockBatchResult, NoteBlockDeleteRequest,
     NoteBlockDeleteResult, NoteBlockInsertRequest, NoteBlockInsertResult, NoteBlockMoveRequest,
-    NoteBlockMoveResult, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview,
-    NoteBlockSetAttrRequest, NoteBlockSetAttrResult, NoteBlockUpdateRequest,
-    NoteBlockUpdateResult,
-    NoteLossyItem, NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit,
-    NoteQueryBlocksParams, NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
+    NoteBlockMoveResult, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview, NoteBlockSetAttrRequest,
+    NoteBlockSetAttrResult, NoteBlockUpdateRequest, NoteBlockUpdateResult, NoteLossyItem,
+    NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
+    NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };
 pub use note_permission::{
     decide_note_tool, is_note_safe_tool, is_note_tool, is_note_write_tool, plan_denies_note_tool,
     NOTE_SAFE_TOOLS, NOTE_WRITE_TOOLS,
 };
-pub use note_action_matrix::{
-    decide_from_matrix, has_local_write, is_matrix_safe, lookup_action, plan_denies_matrix_tool,
-    safe_tool_names, write_tool_names, ActionEffect, ActionSource, NoteActionRow,
-    NOTE_ACTION_MATRIX,
+pub use subagent_inject::{
+    comment_preservation_section, git_revert_caution_section, iso8601_from_epoch_ms,
+    ref_older_than_threshold, resolve_started_at, started_at_section, subagent_session_injections,
+    COMMENT_PRESERVATION_TITLE, DEFAULT_REF_AGE_THRESHOLD_HOURS, DYNAMIC_MARKER,
+    REVERT_CAUTION_TITLE, STARTED_AT_SECTION_TITLE,
 };
 // W6-E-S Skeleton 导出（压测夹具 + 恶意扩展门闸；≠ EL-05 / ≠ W6-E Strict）
 pub use note_w6e_skeleton::{
     build_stress_insert_ops, find_forbidden_write_handle, malicious_gate_to_backend_err,
     plugin_full_needs_approval_for_write, plugin_plan_denies_note_write,
-    reject_malicious_extension_payload, thousand_batch_apply_request, thousand_batch_dry_run_request,
-    FORBIDDEN_WRITE_HANDLE_KEYS, MALICIOUS_EXTENSION_FORBIDDEN_WRITE, MaliciousExtensionGate,
-    W6E_SKELETON_PACKAGE_ID, W6E_S_NOT_CLOSING, W6E_S_THOUSAND_BATCH_COUNT,
+    reject_malicious_extension_payload, thousand_batch_apply_request,
+    thousand_batch_dry_run_request, MaliciousExtensionGate, FORBIDDEN_WRITE_HANDLE_KEYS,
+    MALICIOUS_EXTENSION_FORBIDDEN_WRITE, W6E_SKELETON_PACKAGE_ID, W6E_S_NOT_CLOSING,
+    W6E_S_THOUSAND_BATCH_COUNT,
 };
 // W4-C Strict 方向导出（View 轨注册 + 拒写句柄；≠ EL-07 / ≠ A-EXT 全表）
 pub use note_w4c_contribute::{
@@ -183,9 +181,7 @@ pub use note_w4c_contribute::{
     CONTRIBUTE_KINDS, CONTRIBUTE_MUTATE_DENIED, REQUIRED_CONTRIBUTE_PERMISSION, W4C_NOT_CLOSING,
     W4C_PACKAGE_ID,
 };
-pub use tools::{
-    register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,
-};
+pub use tools::{register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig};
 // T-CF-05（G5 契约面 / REQ-C01）：定时器契约导出——引擎侧 TimerRegistry
 // 适配（T-CF-06）与注册面按冻结形状消费；工具类本身为 crate 内注册面专用
 // （对齐 wait_subagents / subagent 先例，不导出）。[TimerCondition] /
@@ -194,9 +190,7 @@ pub use tools::{
 pub use tools::set_timer::{TimerChannel, TimerError, MAX_TIMER_DURATION_SECONDS};
 // I4-M3（写路径互斥与只读裁剪）：write_paths 引擎级互斥 + readonly 只读
 // 子代理工具集裁剪；claim_write_guard 为 crate 内部工具接线助手，不导出
-pub use readonly::{
-    filter_readonly_registry, READONLY_TOOL_NAMES, WRITE_TOOL_NAMES,
-};
+pub use readonly::{filter_readonly_registry, READONLY_TOOL_NAMES, WRITE_TOOL_NAMES};
 pub use write_paths::{
     validate_write_path, ClaimMode, WriteClaimGuard, WritePathClaim, WritePathConflict,
     WritePathRegistry, DEFAULT_CLAIM_TTL_MS,

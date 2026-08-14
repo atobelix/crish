@@ -213,7 +213,11 @@ pub trait PageOps: Send + Sync {
     async fn create_isolated_world(&self) -> Result<String, ActionError>;
     /// Runtime.evaluate 于隔离世界执行（17 §3.2：awaitPromise/2s 超时/userGesture=false/
     /// returnByValue=true；返回纯 JSON 拷贝；`__crish_read` 代理由建世界时注入）。
-    async fn evaluate_isolated(&self, world_id: &str, expression: &str) -> Result<Value, ActionError>;
+    async fn evaluate_isolated(
+        &self,
+        world_id: &str,
+        expression: &str,
+    ) -> Result<Value, ActionError>;
     /// 在途请求数（wait_for NetworkIdle 条件）。
     async fn network_in_flight(&self) -> Result<usize, ActionError>;
     /// DOM.setFileInputFiles（上传直接路径，§9.1 4a）。
@@ -377,7 +381,10 @@ impl BrowserPageOps {
             .params(params)
             .with_session(session)
             .with_timeout(timeout);
-        self.session.send(command).await.map_err(|e| map_cdp_error(e, method))
+        self.session
+            .send(command)
+            .await
+            .map_err(|e| map_cdp_error(e, method))
     }
 }
 
@@ -406,7 +413,10 @@ impl PageOps for BrowserPageOps {
             .send(CDP_PAGE_GET_LAYOUT_METRICS, json!({}), CMD_TIMEOUT)
             .await?;
         let metrics: GetLayoutMetricsResult = serde_json::from_value(value).map_err(|e| {
-            ActionError::new(ActionErrorKind::ContextGone, format!("布局度量解析失败：{e}"))
+            ActionError::new(
+                ActionErrorKind::ContextGone,
+                format!("布局度量解析失败：{e}"),
+            )
         })?;
         Ok(ViewportSize {
             width: metrics.layout_viewport.viewport_width(),
@@ -434,7 +444,11 @@ impl PageOps for BrowserPageOps {
 
     async fn box_model(&self, node_id: i64) -> Result<BoxModel, ActionError> {
         let value = self
-            .send(CDP_DOM_GET_BOX_MODEL, json!({ "nodeId": node_id }), CMD_TIMEOUT)
+            .send(
+                CDP_DOM_GET_BOX_MODEL,
+                json!({ "nodeId": node_id }),
+                CMD_TIMEOUT,
+            )
             .await?;
         serde_json::from_value(value)
             .map_err(|e| {
@@ -464,7 +478,11 @@ impl PageOps for BrowserPageOps {
 
     async fn resolve_node(&self, node_id: i64) -> Result<String, ActionError> {
         let value = self
-            .send(CDP_DOM_RESOLVE_NODE, json!({ "nodeId": node_id }), CMD_TIMEOUT)
+            .send(
+                CDP_DOM_RESOLVE_NODE,
+                json!({ "nodeId": node_id }),
+                CMD_TIMEOUT,
+            )
             .await?;
         let resolved: crate::cdp::domains::ResolveNodeResult = serde_json::from_value(value)
             .map_err(|e| {
@@ -585,8 +603,8 @@ impl PageOps for BrowserPageOps {
         let tree_value = self
             .send(CDP_PAGE_GET_FRAME_TREE, json!({}), CMD_TIMEOUT)
             .await?;
-        let tree: crate::cdp::domains::GetFrameTreeResult =
-            serde_json::from_value(tree_value).map_err(|e| {
+        let tree: crate::cdp::domains::GetFrameTreeResult = serde_json::from_value(tree_value)
+            .map_err(|e| {
                 ActionError::new(
                     ActionErrorKind::Unsupported,
                     format!("getFrameTree 结果解析失败：{e}"),
@@ -602,13 +620,13 @@ impl PageOps for BrowserPageOps {
                 CMD_TIMEOUT,
             )
             .await?;
-        let world: crate::cdp::domains::CreateIsolatedWorldResult =
-            serde_json::from_value(value).map_err(|e| {
-                ActionError::new(
-                    ActionErrorKind::Unsupported,
-                    format!("createIsolatedWorld 结果解析失败：{e}"),
-                )
-            })?;
+        let world: crate::cdp::domains::CreateIsolatedWorldResult = serde_json::from_value(value)
+            .map_err(|e| {
+            ActionError::new(
+                ActionErrorKind::Unsupported,
+                format!("createIsolatedWorld 结果解析失败：{e}"),
+            )
+        })?;
         let context_id = world.execution_context_id;
 
         // 缺陷 B（17 §3.2 与 §3.1 断裂面）：建世界后先注入只读白名单代理——
@@ -629,8 +647,8 @@ impl PageOps for BrowserPageOps {
                 CMD_TIMEOUT,
             )
             .await?;
-        let evaluated: crate::cdp::domains::EvaluateResult =
-            serde_json::from_value(injected).map_err(|e| {
+        let evaluated: crate::cdp::domains::EvaluateResult = serde_json::from_value(injected)
+            .map_err(|e| {
                 ActionError::new(
                     ActionErrorKind::Unsupported,
                     format!("代理注入结果解析失败：{e}"),
@@ -645,10 +663,14 @@ impl PageOps for BrowserPageOps {
         Ok(context_id.to_string())
     }
 
-    async fn evaluate_isolated(&self, world_id: &str, expression: &str) -> Result<Value, ActionError> {
-        let context_id: i64 = world_id.parse().map_err(|_| {
-            ActionError::new(ActionErrorKind::Unsupported, "非法隔离世界标识")
-        })?;
+    async fn evaluate_isolated(
+        &self,
+        world_id: &str,
+        expression: &str,
+    ) -> Result<Value, ActionError> {
+        let context_id: i64 = world_id
+            .parse()
+            .map_err(|_| ActionError::new(ActionErrorKind::Unsupported, "非法隔离世界标识"))?;
         let value = self
             .send(
                 CDP_RUNTIME_EVALUATE,
@@ -718,7 +740,10 @@ impl PageOps for BrowserPageOps {
             if remaining.is_zero() {
                 return Err(ActionError::new(
                     ActionErrorKind::Timeout,
-                    format!("等待 Page.fileChooserOpened 超时（{}ms）", timeout.as_millis()),
+                    format!(
+                        "等待 Page.fileChooserOpened 超时（{}ms）",
+                        timeout.as_millis()
+                    ),
                 ));
             }
             match tokio::time::timeout(remaining, rx.recv()).await {
@@ -735,7 +760,10 @@ impl PageOps for BrowserPageOps {
                 Err(_) => {
                     return Err(ActionError::new(
                         ActionErrorKind::Timeout,
-                        format!("等待 Page.fileChooserOpened 超时（{}ms）", timeout.as_millis()),
+                        format!(
+                            "等待 Page.fileChooserOpened 超时（{}ms）",
+                            timeout.as_millis()
+                        ),
                     ))
                 }
             }
@@ -750,7 +778,10 @@ impl PageOps for BrowserPageOps {
             if remaining.is_zero() {
                 return Err(ActionError::new(
                     ActionErrorKind::ConnectionLost,
-                    format!("等待 ConnectionRestored 超时（{}s，恢复窗口 R-9）", timeout.as_secs()),
+                    format!(
+                        "等待 ConnectionRestored 超时（{}s，恢复窗口 R-9）",
+                        timeout.as_secs()
+                    ),
                 ));
             }
             match tokio::time::timeout(remaining, rx.recv()).await {
@@ -765,7 +796,10 @@ impl PageOps for BrowserPageOps {
                 Err(_) => {
                     return Err(ActionError::new(
                         ActionErrorKind::ConnectionLost,
-                        format!("等待 ConnectionRestored 超时（{}s，恢复窗口 R-9）", timeout.as_secs()),
+                        format!(
+                            "等待 ConnectionRestored 超时（{}s，恢复窗口 R-9）",
+                            timeout.as_secs()
+                        ),
                     ))
                 }
             }
@@ -773,8 +807,7 @@ impl PageOps for BrowserPageOps {
     }
 
     async fn go_back(&self) -> Result<(), ActionError> {
-        self.send(CDP_PAGE_GO_BACK, json!({}), CMD_TIMEOUT)
-            .await?;
+        self.send(CDP_PAGE_GO_BACK, json!({}), CMD_TIMEOUT).await?;
         Ok(())
     }
 
@@ -850,10 +883,9 @@ impl SnapshotStore for BrowserSnapshotStore {
                     ActionErrorKind::VersionInvalid,
                     format!("重快照版本竞态（M-5）：{stale:?}"),
                 ),
-                other => ActionError::new(
-                    ActionErrorKind::NodeStale,
-                    format!("重快照失败：{other}"),
-                ),
+                other => {
+                    ActionError::new(ActionErrorKind::NodeStale, format!("重快照失败：{other}"))
+                }
             })?;
         Ok(doc.meta.snapshot_version)
     }
@@ -875,20 +907,13 @@ impl SnapshotStore for BrowserSnapshotStore {
 
 /// 会话解析辅助（引擎侧注入的简单实现样例：活动标签兜底）。
 pub fn session_for_active(session: Arc<BrowserSession>) -> SessionResolver {
-    Arc::new(move |_tab_id: &TabId| {
-        session
-            .current_session()
-            .ok()
-            .map(|r| r.session.clone())
-    })
+    Arc::new(move |_tab_id: &TabId| session.current_session().ok().map(|r| r.session.clone()))
 }
 
 /// 会话解析辅助（P1 多标签）：按 tab_id（targetId 语义）经 `tab_session`
 /// 路由到对应 CDP 会话——重快照/动作路由与工具面 `resolve_tab` 同一口径。
 pub fn session_for_tab(session: Arc<BrowserSession>) -> SessionResolver {
-    Arc::new(move |tab_id: &TabId| {
-        session.tab_session(tab_id).map(|r| r.session)
-    })
+    Arc::new(move |tab_id: &TabId| session.tab_session(tab_id).map(|r| r.session))
 }
 
 #[cfg(test)]
@@ -949,7 +974,10 @@ mod tests {
                 },
                 ActionErrorKind::ApprovalDenied,
             ),
-            (CdpError::NotReady("重启中".to_string()), ActionErrorKind::TargetRestarting),
+            (
+                CdpError::NotReady("重启中".to_string()),
+                ActionErrorKind::TargetRestarting,
+            ),
             (CdpError::NoActiveTab, ActionErrorKind::TargetClosed),
             (
                 CdpError::Server {
@@ -996,11 +1024,7 @@ mod tests {
         ];
         for (cdp, expected) in cases {
             let mapped = map_cdp_error(cdp, "test");
-            assert_eq!(
-                mapped.kind, expected,
-                "分类不符：{}",
-                mapped.message
-            );
+            assert_eq!(mapped.kind, expected, "分类不符：{}", mapped.message);
             assert!(mapped.cdp_raw.is_some(), "应携带 CDP 错误原文");
         }
     }
@@ -1101,10 +1125,13 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
-        mock.set_auto_reply("Page.getNavigationHistory", MockReply::Ok(json!({
-            "entries": [ { "id": 1, "url": "https://b.example/", "title": "B" } ],
-            "currentIndex": 0
-        })));
+        mock.set_auto_reply(
+            "Page.getNavigationHistory",
+            MockReply::Ok(json!({
+                "entries": [ { "id": 1, "url": "https://b.example/", "title": "B" } ],
+                "currentIndex": 0
+            })),
+        );
         // 绑定 T2 会话（S2）：命令必须路由到 S2
         let ops = BrowserPageOps::new(session.clone()).with_session("S2".to_string());
         let url = ops.current_url().await.expect("绑定会话命令应成功");
@@ -1121,7 +1148,10 @@ mod tests {
 
         // 未绑定的 ops 走活动标签（向后兼容兜底）
         let fallback = BrowserPageOps::new(session.clone());
-        let _ = fallback.current_url().await.expect("活动标签兜底命令应成功");
+        let _ = fallback
+            .current_url()
+            .await
+            .expect("活动标签兜底命令应成功");
         let cmd3 = mock.expect_command("Page.getNavigationHistory").await;
         assert_eq!(cmd3["sessionId"], "S1", "未绑定 ops 走活动标签会话");
     }
@@ -1129,27 +1159,39 @@ mod tests {
     /// 会话恢复所需 mock 自动应答全表（与 lib.rs 会话面集成测试同源）。
     fn restore_reply_map() -> Vec<(&'static str, MockReply)> {
         vec![
-            ("Browser.getVersion", MockReply::Ok(json!({
-                "protocolVersion": "1.3",
-                "product": "Chrome/151.0.7922.72",
-                "revision": "@abc",
-                "userAgent": "ua",
-                "jsVersion": "13.1.71"
-            }))),
+            (
+                "Browser.getVersion",
+                MockReply::Ok(json!({
+                    "protocolVersion": "1.3",
+                    "product": "Chrome/151.0.7922.72",
+                    "revision": "@abc",
+                    "userAgent": "ua",
+                    "jsVersion": "13.1.71"
+                })),
+            ),
             ("Target.setDiscoverTargets", MockReply::Ok(json!({}))),
-            ("Target.getTargets", MockReply::Ok(json!({
-                "targetInfos": [
-                    { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
-                ]
-            }))),
-            ("Target.attachToTarget", MockReply::Ok(json!({ "sessionId": "S1" }))),
+            (
+                "Target.getTargets",
+                MockReply::Ok(json!({
+                    "targetInfos": [
+                        { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
+                    ]
+                })),
+            ),
+            (
+                "Target.attachToTarget",
+                MockReply::Ok(json!({ "sessionId": "S1" })),
+            ),
             ("Page.enable", MockReply::Ok(json!({}))),
             ("Page.setLifecycleEventsEnabled", MockReply::Ok(json!({}))),
             ("Runtime.enable", MockReply::Ok(json!({}))),
             ("DOM.enable", MockReply::Ok(json!({}))),
             ("Network.enable", MockReply::Ok(json!({}))),
             ("Runtime.runIfWaitingForDebugger", MockReply::Ok(json!({}))),
-            ("Runtime.evaluate", MockReply::Ok(json!({ "result": { "value": 1 } }))),
+            (
+                "Runtime.evaluate",
+                MockReply::Ok(json!({ "result": { "value": 1 } })),
+            ),
             ("Page.setWindowOpenHandler", MockReply::Ok(json!({}))),
         ]
     }
@@ -1159,54 +1201,66 @@ mod tests {
     /// M2：INPUT 节点带 type=password 属性，用于密码标记断言）。
     fn collector_reply_map() -> Vec<(&'static str, MockReply)> {
         vec![
-            ("DOMSnapshot.captureSnapshot", MockReply::Ok(json!({
-                "strings": [
-                    "data:text/html;charset=utf-8,page",
-                    "联调测试页",
-                    "#document", "HTML", "HEAD", "BODY", "INPUT",
-                    "id", "name", "BUTTON", "中文按钮", "#text", "DIV", "out", "初始文本",
-                    "type", "password"
-                ],
-                "documents": [{
-                    "documentURL": 0,
-                    "title": 1,
-                    "nodes": {
-                        "attributes": [[], [], [], [7, 8, 15, 16], [], [7, 13], []],
-                        "backendNodeId": [2, 3, 4, 1, 6, 5, 7],
-                        "contentDocumentIndex": { "index": [], "value": [] },
-                        "currentSourceURL": { "index": [], "value": [] },
-                        "inputChecked": { "index": [] },
-                        "inputValue": { "index": [3], "value": [-1] },
-                        "isClickable": { "index": [3, 4] },
-                        "nodeName": [2, 3, 5, 6, 9, 12, 11],
-                        "nodeType": [9, 1, 1, 1, 1, 1, 3],
-                        "nodeValue": [-1, -1, -1, -1, -1, -1, 14],
-                        "optionSelected": { "index": [] },
-                        "originURL": { "index": [], "value": [] },
-                        "parentIndex": [-1, 0, 1, 2, 2, 2, 5],
-                        "pseudoIdentifier": { "index": [], "value": [] },
-                        "pseudoType": { "index": [], "value": [] },
-                        "shadowRootType": { "index": [], "value": [] },
-                        "textValue": { "index": [], "value": [] }
-                    },
-                    "layout": {
-                        "nodeIndex": [0, 1, 2, 3, 4, 5, 6],
-                        "bounds": [
-                            [0, 0, 1262, 624], [8, 8, 1246, 608], [8, 8, 1246, 600],
-                            [8, 8, 177, 21], [185, 8, 100, 30], [8, 100, 64, 24], [8, 124, 60, 20]
-                        ]
-                    }
-                }]
-            }))),
-            ("DOM.getDocument", MockReply::Ok(json!({
-                "root": { "nodeId": 1, "backendNodeId": 1, "nodeType": 9, "nodeName": "#document", "attributes": [], "children": [] }
-            }))),
-            ("Page.getLayoutMetrics", MockReply::Ok(json!({
-                "layoutViewport": { "pageX": 0, "pageY": 0, "clientWidth": 1262, "clientHeight": 624 },
-                "visualViewport": { "offsetX": 0, "offsetY": 0, "pageX": 0, "pageY": 0, "clientWidth": 1262, "clientHeight": 624, "scale": 1 },
-                "contentSize": { "x": 0, "y": 0, "width": 1262, "height": 624 }
-            }))),
-            ("Accessibility.getFullAXTree", MockReply::Ok(json!({ "nodes": [] }))),
+            (
+                "DOMSnapshot.captureSnapshot",
+                MockReply::Ok(json!({
+                    "strings": [
+                        "data:text/html;charset=utf-8,page",
+                        "联调测试页",
+                        "#document", "HTML", "HEAD", "BODY", "INPUT",
+                        "id", "name", "BUTTON", "中文按钮", "#text", "DIV", "out", "初始文本",
+                        "type", "password"
+                    ],
+                    "documents": [{
+                        "documentURL": 0,
+                        "title": 1,
+                        "nodes": {
+                            "attributes": [[], [], [], [7, 8, 15, 16], [], [7, 13], []],
+                            "backendNodeId": [2, 3, 4, 1, 6, 5, 7],
+                            "contentDocumentIndex": { "index": [], "value": [] },
+                            "currentSourceURL": { "index": [], "value": [] },
+                            "inputChecked": { "index": [] },
+                            "inputValue": { "index": [3], "value": [-1] },
+                            "isClickable": { "index": [3, 4] },
+                            "nodeName": [2, 3, 5, 6, 9, 12, 11],
+                            "nodeType": [9, 1, 1, 1, 1, 1, 3],
+                            "nodeValue": [-1, -1, -1, -1, -1, -1, 14],
+                            "optionSelected": { "index": [] },
+                            "originURL": { "index": [], "value": [] },
+                            "parentIndex": [-1, 0, 1, 2, 2, 2, 5],
+                            "pseudoIdentifier": { "index": [], "value": [] },
+                            "pseudoType": { "index": [], "value": [] },
+                            "shadowRootType": { "index": [], "value": [] },
+                            "textValue": { "index": [], "value": [] }
+                        },
+                        "layout": {
+                            "nodeIndex": [0, 1, 2, 3, 4, 5, 6],
+                            "bounds": [
+                                [0, 0, 1262, 624], [8, 8, 1246, 608], [8, 8, 1246, 600],
+                                [8, 8, 177, 21], [185, 8, 100, 30], [8, 100, 64, 24], [8, 124, 60, 20]
+                            ]
+                        }
+                    }]
+                })),
+            ),
+            (
+                "DOM.getDocument",
+                MockReply::Ok(json!({
+                    "root": { "nodeId": 1, "backendNodeId": 1, "nodeType": 9, "nodeName": "#document", "attributes": [], "children": [] }
+                })),
+            ),
+            (
+                "Page.getLayoutMetrics",
+                MockReply::Ok(json!({
+                    "layoutViewport": { "pageX": 0, "pageY": 0, "clientWidth": 1262, "clientHeight": 624 },
+                    "visualViewport": { "offsetX": 0, "offsetY": 0, "pageX": 0, "pageY": 0, "clientWidth": 1262, "clientHeight": 624, "scale": 1 },
+                    "contentSize": { "x": 0, "y": 0, "width": 1262, "height": 624 }
+                })),
+            ),
+            (
+                "Accessibility.getFullAXTree",
+                MockReply::Ok(json!({ "nodes": [] })),
+            ),
         ]
     }
 
@@ -1314,14 +1368,38 @@ mod tests {
                 "注入脚本应暴露白名单方法 {method}"
             );
         }
-        assert!(CRISH_READ_INJECTION.contains("Object.defineProperty"), "应经 defineProperty 挂载");
-        assert!(CRISH_READ_INJECTION.contains("globalThis"), "应挂载世界全局");
-        assert!(CRISH_READ_INJECTION.contains("writable: false"), "代理应不可写");
-        assert!(CRISH_READ_INJECTION.contains("configurable: false"), "代理应不可配置");
-        assert!(CRISH_READ_INJECTION.contains("constructor"), "应含 constructor 链检查语义");
-        assert!(CRISH_READ_INJECTION.contains("__proto__"), "应含 __proto__ 检查语义");
-        assert!(CRISH_READ_INJECTION.contains("deepJSON"), "应含纯 JSON 深拷贝");
-        assert!(CRISH_READ_INJECTION.contains("is read-only"), "应含只读拒绝语义");
+        assert!(
+            CRISH_READ_INJECTION.contains("Object.defineProperty"),
+            "应经 defineProperty 挂载"
+        );
+        assert!(
+            CRISH_READ_INJECTION.contains("globalThis"),
+            "应挂载世界全局"
+        );
+        assert!(
+            CRISH_READ_INJECTION.contains("writable: false"),
+            "代理应不可写"
+        );
+        assert!(
+            CRISH_READ_INJECTION.contains("configurable: false"),
+            "代理应不可配置"
+        );
+        assert!(
+            CRISH_READ_INJECTION.contains("constructor"),
+            "应含 constructor 链检查语义"
+        );
+        assert!(
+            CRISH_READ_INJECTION.contains("__proto__"),
+            "应含 __proto__ 检查语义"
+        );
+        assert!(
+            CRISH_READ_INJECTION.contains("deepJSON"),
+            "应含纯 JSON 深拷贝"
+        );
+        assert!(
+            CRISH_READ_INJECTION.contains("is read-only"),
+            "应含只读拒绝语义"
+        );
     }
 
     /// 缺陷 A+B 回归（K7 e2e，Chrome 151）：建世界命令序列与参数——
@@ -1382,14 +1460,20 @@ mod tests {
 
         let ops = BrowserPageOps::new(session.clone());
         let world = ops.create_isolated_world().await.expect("建世界失败");
-        assert_eq!(world, "42", "应返回 createIsolatedWorld 的 executionContextId");
+        assert_eq!(
+            world, "42",
+            "应返回 createIsolatedWorld 的 executionContextId"
+        );
 
         // 命令序列收集：仅关注建世界三连（跳过连接期其余命令；
         // 注入 evaluate 以表达式含 __crish_read 与连接期探针 "1" 区分）
         let mut seq: Vec<(String, Value)> = Vec::new();
         let collect = tokio::time::Instant::now() + Duration::from_secs(3);
         while seq.len() < 3 {
-            assert!(tokio::time::Instant::now() < collect, "建世界命令序列未收齐：{seq:?}");
+            assert!(
+                tokio::time::Instant::now() < collect,
+                "建世界命令序列未收齐：{seq:?}"
+            );
             let cmd = tokio::time::timeout(Duration::from_millis(1000), mock.next_command())
                 .await
                 .expect("等待命令超时");
@@ -1398,7 +1482,10 @@ mod tests {
                 && cmd["params"]["expression"]
                     .as_str()
                     .is_some_and(|e| e.contains("__crish_read"));
-            if matches!(method.as_str(), "Page.getFrameTree" | "Page.createIsolatedWorld") || is_injection
+            if matches!(
+                method.as_str(),
+                "Page.getFrameTree" | "Page.createIsolatedWorld"
+            ) || is_injection
             {
                 seq.push((method, cmd));
             }
@@ -1406,12 +1493,21 @@ mod tests {
 
         // 顺序：getFrameTree → createIsolatedWorld → 注入 evaluate（缺陷 A/B 硬断言）
         assert_eq!(seq[0].0, "Page.getFrameTree", "应先取主 frame：{seq:?}");
-        assert_eq!(seq[1].0, "Page.createIsolatedWorld", "再建隔离世界：{seq:?}");
+        assert_eq!(
+            seq[1].0, "Page.createIsolatedWorld",
+            "再建隔离世界：{seq:?}"
+        );
         assert_eq!(seq[2].0, "Runtime.evaluate", "建世界后注入代理：{seq:?}");
         // 建世界参数：Page 域 + frameId（主 frame）+ worldName 保留
         let create = &seq[1].1;
-        assert_eq!(create["params"]["frameId"], "FRAME-MAIN", "frameId 应为主 frame");
-        assert_eq!(create["params"]["worldName"], ISOLATED_WORLD_NAME, "worldName 应保留");
+        assert_eq!(
+            create["params"]["frameId"], "FRAME-MAIN",
+            "frameId 应为主 frame"
+        );
+        assert_eq!(
+            create["params"]["worldName"], ISOLATED_WORLD_NAME,
+            "worldName 应保留"
+        );
         // 注入参数：同一 world（contextId 与建世界返回值一致）
         let inject = &seq[2].1;
         assert_eq!(inject["params"]["contextId"], 42, "注入应在新建世界执行");
@@ -1419,7 +1515,9 @@ mod tests {
         assert_eq!(inject["params"]["returnByValue"], true);
         assert_eq!(inject["params"]["timeout"], 2000);
         // 注入脚本本体断言（代理定义存在性）
-        let expr = inject["params"]["expression"].as_str().expect("注入表达式缺失");
+        let expr = inject["params"]["expression"]
+            .as_str()
+            .expect("注入表达式缺失");
         assert!(expr.contains("__crish_read"), "注入脚本应定义 __crish_read");
         assert!(expr.contains("attr"), "注入脚本应含 attr 方法");
         assert!(expr.contains("rect"), "注入脚本应含 rect 方法");
@@ -1444,7 +1542,10 @@ mod tests {
         );
         mock.set_auto_reply(
             "Page.createIsolatedWorld",
-            MockReply::Error { code: -32601, message: "Method not found".to_string() },
+            MockReply::Error {
+                code: -32601,
+                message: "Method not found".to_string(),
+            },
         );
         let session = Arc::new(
             crate::BrowserSession::connect(
@@ -1475,8 +1576,11 @@ mod tests {
 
         let ops = BrowserPageOps::new(session.clone());
         let err = ops.create_isolated_world().await.expect_err("应返回错误");
-        assert_eq!(err.kind, ActionErrorKind::Unsupported, "建世界失败应归 Unsupported");
+        assert_eq!(
+            err.kind,
+            ActionErrorKind::Unsupported,
+            "建世界失败应归 Unsupported"
+        );
         assert!(err.cdp_raw.is_some(), "应携带 CDP 错误原文");
     }
 }
-

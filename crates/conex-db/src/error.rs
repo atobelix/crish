@@ -68,8 +68,7 @@ impl std::fmt::Display for DbFailure {
 /// cause 链保留底层分类）。
 impl From<DbFailure> for CrishError {
     fn from(failure: DbFailure) -> Self {
-        CrishError::new(codes::STORE_WRITE_FAILED, failure.message.clone()).with_metadata(
-            serde_json::json!({ "dbKind": failure.kind.as_str() }),
-        )
+        CrishError::new(codes::STORE_WRITE_FAILED, failure.message.clone())
+            .with_metadata(serde_json::json!({ "dbKind": failure.kind.as_str() }))
     }
 }

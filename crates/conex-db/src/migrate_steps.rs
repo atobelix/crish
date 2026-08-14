@@ -18,12 +18,13 @@ pub(crate) fn migrate_v1_to_v2(tx: &rusqlite::Transaction<'_>) -> Result<(), rus
         .query_map([], |r| r.get::<_, String>(1))?
         .filter_map(|r| r.ok())
         .collect();
-    let add = |tx: &rusqlite::Transaction<'_>, col: &str, ddl: &str| -> Result<(), rusqlite::Error> {
-        if !cols.iter().any(|c| c == col) {
-            tx.execute_batch(&format!("ALTER TABLE sessions ADD COLUMN {ddl};"))?;
-        }
-        Ok(())
-    };
+    let add =
+        |tx: &rusqlite::Transaction<'_>, col: &str, ddl: &str| -> Result<(), rusqlite::Error> {
+            if !cols.iter().any(|c| c == col) {
+                tx.execute_batch(&format!("ALTER TABLE sessions ADD COLUMN {ddl};"))?;
+            }
+            Ok(())
+        };
     add(tx, "folder", "folder TEXT NOT NULL DEFAULT '常规会话'")?;
     add(tx, "is_pinned", "is_pinned INTEGER NOT NULL DEFAULT 0")?;
     add(tx, "is_archived", "is_archived INTEGER NOT NULL DEFAULT 0")?;
@@ -78,14 +79,15 @@ pub(crate) fn migrate_v3_to_v4(tx: &rusqlite::Transaction<'_>) -> Result<(), rus
     // 无条件查询 → `no such table: runs` 迁移崩溃、DB 打不开降级内存库）。
     // 缺失时按 v3 老 DDL 创建（无 FK 形态），再走下方重建逻辑幂等推进；
     // 已有表时跳过（对齐 session_sequence 的 col-check 幂等模式）。
-    let table_exists = |tx: &rusqlite::Transaction<'_>, name: &str| -> Result<bool, rusqlite::Error> {
-        let n: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
-            [name],
-            |r| r.get(0),
-        )?;
-        Ok(n > 0)
-    };
+    let table_exists =
+        |tx: &rusqlite::Transaction<'_>, name: &str| -> Result<bool, rusqlite::Error> {
+            let n: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                [name],
+                |r| r.get(0),
+            )?;
+            Ok(n > 0)
+        };
     if !table_exists(tx, "runs")? {
         tx.execute_batch(
             "CREATE TABLE runs (
@@ -243,11 +245,23 @@ pub(crate) fn migrate_v4_to_v5(tx: &rusqlite::Transaction<'_>) -> Result<(), rus
         Ok(())
     };
     add_run_col("prompt_tokens", "prompt_tokens INTEGER NOT NULL DEFAULT 0")?;
-    add_run_col("completion_tokens", "completion_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col(
+        "completion_tokens",
+        "completion_tokens INTEGER NOT NULL DEFAULT 0",
+    )?;
     add_run_col("total_tokens", "total_tokens INTEGER NOT NULL DEFAULT 0")?;
-    add_run_col("cache_read_tokens", "cache_read_tokens INTEGER NOT NULL DEFAULT 0")?;
-    add_run_col("cache_write_tokens", "cache_write_tokens INTEGER NOT NULL DEFAULT 0")?;
-    add_run_col("cache_miss_tokens", "cache_miss_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col(
+        "cache_read_tokens",
+        "cache_read_tokens INTEGER NOT NULL DEFAULT 0",
+    )?;
+    add_run_col(
+        "cache_write_tokens",
+        "cache_write_tokens INTEGER NOT NULL DEFAULT 0",
+    )?;
+    add_run_col(
+        "cache_miss_tokens",
+        "cache_miss_tokens INTEGER NOT NULL DEFAULT 0",
+    )?;
     add_run_col("sample_count", "sample_count INTEGER NOT NULL DEFAULT 0")?;
     add_run_col("missed_tokens", "missed_tokens INTEGER NOT NULL DEFAULT 0")?;
     add_run_col("warm_until_ms", "warm_until_ms INTEGER")?;
@@ -290,10 +304,7 @@ pub(crate) fn migrate_v5_to_v6(tx: &rusqlite::Transaction<'_>) -> Result<(), rus
     };
     add_agent_col("task_type", "task_type TEXT")?;
     add_agent_col("display_label", "display_label TEXT")?;
-    add_agent_col(
-        "allowed_write_paths_json",
-        "allowed_write_paths_json TEXT",
-    )?;
+    add_agent_col("allowed_write_paths_json", "allowed_write_paths_json TEXT")?;
     Ok(())
 }
 

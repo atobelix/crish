@@ -271,7 +271,10 @@ mod tests {
     /// 构造测试桥（记录发射器 + 通道名）
     fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
         let emitter = Arc::new(RecordingEmitter::default());
-        let bridge = EventBridge::new("workbench-run-event", Arc::clone(&emitter) as Arc<dyn Emitter>);
+        let bridge = EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn Emitter>,
+        );
         (bridge, emitter)
     }
 
@@ -359,7 +362,11 @@ mod tests {
         assert_eq!(report.emitted, 1);
         assert_eq!(emitter.calls().len(), 1, "原通道照常发射");
         assert_eq!(fanout.calls().len(), 1, "扇出通道应收到同一条事件");
-        assert_eq!(emitter.calls()[0], fanout.calls()[0], "双通道载荷逐字节一致");
+        assert_eq!(
+            emitter.calls()[0],
+            fanout.calls()[0],
+            "双通道载荷逐字节一致"
+        );
     }
 
     /// §6.1 旁路事件监听器接线测试（如 TimerRegistry::on_event 早退唤醒）
@@ -405,4 +412,3 @@ mod tests {
         assert_eq!(*counter2.lock().unwrap(), 2);
     }
 }
-

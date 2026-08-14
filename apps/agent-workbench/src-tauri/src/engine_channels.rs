@@ -23,16 +23,15 @@ use agent_tools::tools::send_message::{
 };
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use conex_types::tool::SystemPromptWireMode;
+use crish_agent_workbench::wait_channel::ControlBusResolver;
 use session_loop::provider::DeltaSink;
 use session_loop::ControlBus;
-use crish_agent_workbench::wait_channel::ControlBusResolver;
 
 use super::engine_build::EngineHandle;
 use super::engine_provider::{chat_provider_url, user_message, EngineProviderConfig};
 use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::timers::AgentEventSink;
-
 
 /// 毒丸恢复计数（B1-5 观测化：通道面 9 处锁中毒恢复次数——板卡四通道
 /// 绑定/读取 + 缓冲事件桥 buffer 锁；对齐 registry.rs / note_memory.rs
@@ -44,7 +43,6 @@ static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
 pub(crate) fn channels_poison_recovery_count() -> u64 {
     POISON_RECOVERIES.load(Ordering::Relaxed)
 }
-
 
 /// 会话级 Summarizer 工厂（T-43，00-plan §10 轮次 6 / 04 §9.4 T16；评审
 /// 01 P1-2「补壳层/接线任务」）
@@ -203,9 +201,12 @@ impl conex_compaction::Summarizer for ProviderSummarizer {
             .map_err(|error| format!("摘要请求线程启动失败：{error}"))?;
         // recv 超时兜底（线程内 reqwest 超时保证 ≤60s 自终止；超时返回后
         // 句柄 drop 分离线程，不 join 阻塞）
-        let inner = rx
-            .recv_timeout(SUMMARY_HTTP_RECV_TIMEOUT)
-            .map_err(|_| format!("摘要 HTTP 调用超时（>{:?} 无响应）", SUMMARY_HTTP_RECV_TIMEOUT))?;
+        let inner = rx.recv_timeout(SUMMARY_HTTP_RECV_TIMEOUT).map_err(|_| {
+            format!(
+                "摘要 HTTP 调用超时（>{:?} 无响应）",
+                SUMMARY_HTTP_RECV_TIMEOUT
+            )
+        })?;
         let _ = thread;
         inner
     }
@@ -241,9 +242,7 @@ fn summary_content_from_response(text: &str) -> Option<String> {
 /// - 摘要输出预算默认 [conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT]（1024，
 ///   与 CompactionPolicy 默认同源；session_meta 覆盖经 policy 面生效，引擎
 ///   侧字节预算校验兜底）。
-pub(crate) fn production_summarizer_factory(
-    engine: Arc<EngineHandle>,
-) -> SummarizerFactory {
+pub(crate) fn production_summarizer_factory(engine: Arc<EngineHandle>) -> SummarizerFactory {
     Box::new(move |_session_id: &str| {
         let config = engine.provider_config()?;
         let client = engine.http_client();
@@ -285,7 +284,8 @@ pub(crate) struct ContinuityChannelBoard {
 
 impl std::fmt::Debug for ContinuityChannelBoard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ContinuityChannelBoard").finish_non_exhaustive()
+        f.debug_struct("ContinuityChannelBoard")
+            .finish_non_exhaustive()
     }
 }
 
@@ -430,7 +430,9 @@ impl SubagentInjectChannel for ContinuityChannelBoard {
             })
             .clone()
         else {
-            return Err("send_message 子代理注入通道未绑定（引擎装配与 finalize 之间窗口）".to_string());
+            return Err(
+                "send_message 子代理注入通道未绑定（引擎装配与 finalize 之间窗口）".to_string(),
+            );
         };
         channel.inject(subagent_id, message).await
     }
@@ -458,7 +460,9 @@ impl MainAgentMessageChannel for ContinuityChannelBoard {
             })
             .clone()
         else {
-            return Err("send_message 主 agent 消息通道未绑定（引擎装配与 finalize 之间窗口）".to_string());
+            return Err(
+                "send_message 主 agent 消息通道未绑定（引擎装配与 finalize 之间窗口）".to_string(),
+            );
         };
         channel.deliver_self(session_id, message, ring).await
     }
@@ -554,7 +558,8 @@ pub(crate) fn warn_slow_event_serialize(run_id: &str, event_type: &str, elapsed:
 /// - [Self::flush]：冲刷本 run 缓冲并发射（顺序保持，载荷直接 emit）。
 impl std::fmt::Debug for BufferedRunEventBridge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BufferedRunEventBridge").finish_non_exhaustive()
+        f.debug_struct("BufferedRunEventBridge")
+            .finish_non_exhaustive()
     }
 }
 

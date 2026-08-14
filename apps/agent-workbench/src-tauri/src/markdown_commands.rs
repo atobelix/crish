@@ -55,11 +55,9 @@ pub async fn md_render_batch(texts: Vec<String>) -> Result<Vec<String>, CoreErro
 #[allow(dead_code)]
 #[tauri::command(rename = "core_md_render_stream")]
 pub async fn md_render_stream(text: String, stream_mode: bool) -> Result<String, CoreError> {
-    tokio::task::spawn_blocking(move || {
-        conex_markdown::render_markdown_stream(&text, stream_mode)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("md_render_stream join: {e}")))
+    tokio::task::spawn_blocking(move || conex_markdown::render_markdown_stream(&text, stream_mode))
+        .await
+        .map_err(|e| CoreError::Internal(format!("md_render_stream join: {e}")))
 }
 
 /// 代码高亮（不包 `<code>` 标签，仅返回内部 HTML 片段）。
@@ -71,11 +69,9 @@ pub async fn md_render_stream(text: String, stream_mode: bool) -> Result<String,
 /// wire 名 = `core_highlight_code`（T03.4 更名 core_*）。
 #[tauri::command(rename = "core_highlight_code")]
 pub async fn highlight_code(code: String, lang: Option<String>) -> Result<String, CoreError> {
-    tokio::task::spawn_blocking(move || {
-        conex_markdown::highlight_code(&code, lang.as_deref())
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("highlight_code join: {e}")))
+    tokio::task::spawn_blocking(move || conex_markdown::highlight_code(&code, lang.as_deref()))
+        .await
+        .map_err(|e| CoreError::Internal(format!("highlight_code join: {e}")))
 }
 
 /// 清空 markdown 渲染缓存与代码高亮缓存。

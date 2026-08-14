@@ -24,8 +24,8 @@
 
 use super::super::PushLevel;
 use super::{HMSCredentials, VendorError, VendorNotification, VendorSendOutcome};
-use crate::push::vendor::apns::{APNS_BODY_MAX_CHARS, APNS_DEFAULT_TITLE, APNS_TITLE_MAX_CHARS};
 use crate::push::vendor::apns::truncate_chars;
+use crate::push::vendor::apns::{APNS_BODY_MAX_CHARS, APNS_DEFAULT_TITLE, APNS_TITLE_MAX_CHARS};
 
 /// AGC OAuth2 token 端点（D7 §5.2.2-4）
 pub const HMS_TOKEN_URL: &str = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
@@ -85,7 +85,10 @@ pub fn parse_hms_token_response(body: &str) -> Result<HmsToken, VendorError> {
         .get("access_token")
         .and_then(|v| v.as_str())
         .ok_or_else(|| VendorError::Parse("HMS token 响应缺 access_token".to_string()))?;
-    let expires_in_secs = value.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(3600);
+    let expires_in_secs = value
+        .get("expires_in")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(3600);
     Ok(HmsToken {
         access_token: access_token.to_string(),
         expires_in_secs,
@@ -121,12 +124,7 @@ pub fn build_hms_send_request(
     access_token: &str,
     notification: &VendorNotification,
 ) -> Result<HmsSendRequest, VendorError> {
-    build_hms_send_request_at(
-        credentials,
-        access_token,
-        notification,
-        HMS_SEND_BASE_URL,
-    )
+    build_hms_send_request_at(credentials, access_token, notification, HMS_SEND_BASE_URL)
 }
 
 /// 指定发送基址的请求构造（发送器内部路径；测试注入本地端点）
@@ -140,7 +138,11 @@ pub(crate) fn build_hms_send_request_at(
         return Err(VendorError::Build("HMS 设备 token 为空".to_string()));
     }
     let title = truncate_chars(
-        notification.digest.detail.as_deref().unwrap_or(APNS_DEFAULT_TITLE),
+        notification
+            .digest
+            .detail
+            .as_deref()
+            .unwrap_or(APNS_DEFAULT_TITLE),
         APNS_TITLE_MAX_CHARS,
     );
     let body = truncate_chars(
@@ -200,7 +202,12 @@ pub fn parse_hms_send_response(status: u16, body: &str) -> VendorSendOutcome {
     }
     let code = serde_json::from_str::<serde_json::Value>(body)
         .ok()
-        .and_then(|value| value.get("code").and_then(|c| c.as_str()).map(str::to_string))
+        .and_then(|value| {
+            value
+                .get("code")
+                .and_then(|c| c.as_str())
+                .map(str::to_string)
+        })
         .unwrap_or_default();
     match code.as_str() {
         HMS_SEND_SUCCESS_CODE => VendorSendOutcome::Delivered,
@@ -384,7 +391,10 @@ mod tests {
     #[test]
     fn send_response_matrix() {
         let ok = r#"{"code":"80000000","msg":"Success","requestId":"r1"}"#;
-        assert_eq!(parse_hms_send_response(200, ok), VendorSendOutcome::Delivered);
+        assert_eq!(
+            parse_hms_send_response(200, ok),
+            VendorSendOutcome::Delivered
+        );
 
         let bad_token = r#"{"code":"80300010","msg":"Invalid token","requestId":"r2"}"#;
         assert_eq!(

@@ -215,9 +215,21 @@ pub(crate) mod tests {
     #[test]
     fn jpeg_dimensions_rejects_non_jpeg() {
         assert_eq!(jpeg_dimensions(b"not a jpeg"), None);
-        assert_eq!(jpeg_dimensions(&[0xFF, 0xD8, 0xFF, 0xD9]), None, "EOI 先于 SOF → None");
-        assert_eq!(jpeg_dimensions(&[0xFF, 0xD8, 0xFF, 0xC0]), None, "SOF 段截断 → None");
-        assert_eq!(jpeg_dimensions(&[0x00, 0x01, 0x02, 0x03]), None, "无 SOI → None");
+        assert_eq!(
+            jpeg_dimensions(&[0xFF, 0xD8, 0xFF, 0xD9]),
+            None,
+            "EOI 先于 SOF → None"
+        );
+        assert_eq!(
+            jpeg_dimensions(&[0xFF, 0xD8, 0xFF, 0xC0]),
+            None,
+            "SOF 段截断 → None"
+        );
+        assert_eq!(
+            jpeg_dimensions(&[0x00, 0x01, 0x02, 0x03]),
+            None,
+            "无 SOI → None"
+        );
     }
 
     /// 填充字节防御面：段后连续 0xFF 再 SOF（非法但不应误判/误读）。
@@ -238,6 +250,9 @@ pub(crate) mod tests {
         let encoded = base64::engine::general_purpose::STANDARD.encode(&jpeg);
         assert_eq!(decode_base64_jpeg(&encoded).unwrap(), jpeg);
         assert!(decode_base64_jpeg("!!!not-base64!!!").is_err());
-        assert!(decode_base64_jpeg("").is_ok(), "空串可解码为空字节（由调用方尺寸兜底）");
+        assert!(
+            decode_base64_jpeg("").is_ok(),
+            "空串可解码为空字节（由调用方尺寸兜底）"
+        );
     }
 }

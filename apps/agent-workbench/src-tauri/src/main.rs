@@ -31,9 +31,9 @@
 //!   （ServerLifecycle 槽）+ [CoreRunState::save_snapshot_blocking]（独立线程）。
 
 mod background;
-mod buffer;
 mod browser;
 mod browser_commands;
+mod buffer;
 // 浏览器书签/历史落库适配（3 方案 U4：browser_import_sinks.rs 由浏览器
 // 阵营交付，main.rs mod 声明缺失导致 crate 编译中断——R1-11 装配面顺手补齐）
 mod browser_import_sinks;
@@ -41,16 +41,15 @@ mod catalog_commands;
 mod command_manifest;
 // 电脑操作会话槽（06 遗留⑨：ComputerSlot 命令面托管 + 工具装配接线面，
 // 接线点登记见 computer/mod.rs 模块头）
+mod commands;
 mod computer;
 mod computer_commands;
-mod commands;
 mod config;
 mod core_commands;
 mod core_error;
 mod core_event_bridge;
 mod core_query_commands;
 mod core_run_commands;
-mod task_event_consumer;
 mod dev_mcp;
 mod engine;
 mod fs_commands;
@@ -58,6 +57,7 @@ mod git;
 mod host_openers;
 mod host_paths;
 mod markdown_commands;
+mod task_event_consumer;
 // 多端互通模块族（R1-06：TLS + 自签证书 + 指纹固定，multi_device/tls.rs；
 // R1-07：配对命令面，multi_device_commands.rs；R1-09：单实例锁，
 // single_instance.rs——G-2 桌面多实例端口竞争）
@@ -78,20 +78,20 @@ mod resource;
 // 见 push_wiring.rs 模块头注记）
 mod push_wiring;
 
-mod session_commands;
-mod server;
 #[path = "server/core_backend.rs"]
 pub(crate) mod core_backend;
+mod server;
+mod session_commands;
 mod single_instance;
 mod status_diagnostics;
 // T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
 // 与 core_run_commands / engine 同目标，互引 crate:: 内部路径）
+mod sched;
 mod subagent_spawner;
 mod system_power;
 mod timers;
-mod sched;
-mod workflow_commands;
 mod wakeup_summary;
+mod workflow_commands;
 
 mod watchdog;
 // D6-②：无人值守唤醒 watcher（wake_watcher.rs 模块本体，任务连续性
@@ -103,9 +103,9 @@ mod watchdog;
 //   has_active_run = active_runs 锁内同会话扫描；empty_streak =
 //   resume_empty_streak 只读；launcher = spawn_idle_resume_run 包装；
 // - user_stopped：run_control L2/L3 路径 set、用户新 run 装配 clear。
+mod outputs_config;
 mod wake_watcher;
 mod workspace;
-mod outputs_config;
 // C3 交付物(任务连续性测试基建):可脚本化 mock SSE/HTTP server——
 // 响应序列(429+Retry-After / 5xx / 发数据后断流 / 正常流)按请求序号
 // 消费,记录请求供断言;供 D1/D2/D3/D5 壳层测试共用(cfg(test) 仅测试面,
@@ -147,30 +147,63 @@ command_registry![
     ("workbench_run_shell", process::workbench_run_shell),
     // T-AB-08：后台任务查询面恢复（B01/B02；list/get_output/cancel 三命令，
     // 形状对齐前端 backgroundTasksApi.ts 解析层）
-    ("workbench_list_background_tasks", background::workbench_list_background_tasks),
-    ("workbench_get_background_task_output", background::workbench_get_background_task_output),
-    ("workbench_cancel_background_task", background::workbench_cancel_background_task),
+    (
+        "workbench_list_background_tasks",
+        background::workbench_list_background_tasks
+    ),
+    (
+        "workbench_get_background_task_output",
+        background::workbench_get_background_task_output
+    ),
+    (
+        "workbench_cancel_background_task",
+        background::workbench_cancel_background_task
+    ),
     // T-AB-20：后台任务 stdin 注入（sendBackgroundTaskInput 等待的命令面；
     // F3 T-AB-19 顺手注册，参数 camelCase taskId/text/appendNewline）
     ("workbench_send_input", background::workbench_send_input),
     // PE-07 T07.3（C-02/C-03/C-04）：git 参数数组执行 + 参数 schema 白名单
     ("workbench_git_run", git::workbench_git_run),
-    ("workbench_fs_delete_file", fs_commands::workbench_fs_delete_file),
+    (
+        "workbench_fs_delete_file",
+        fs_commands::workbench_fs_delete_file
+    ),
     ("workbench_pty_create", pty::workbench_pty_create),
     ("workbench_pty_write", pty::workbench_pty_write),
     ("workbench_pty_resize", pty::workbench_pty_resize),
     ("workbench_pty_kill", pty::workbench_pty_kill),
-    ("workbench_list_host_openers", host_openers::workbench_list_host_openers),
-    ("workbench_open_host_target", host_openers::workbench_open_host_target),
-    ("workbench_open_path_default", host_openers::workbench_open_path_default),
-    ("workbench_list_file_openers", host_openers::workbench_list_file_openers),
+    (
+        "workbench_list_host_openers",
+        host_openers::workbench_list_host_openers
+    ),
+    (
+        "workbench_open_host_target",
+        host_openers::workbench_open_host_target
+    ),
+    (
+        "workbench_open_path_default",
+        host_openers::workbench_open_path_default
+    ),
+    (
+        "workbench_list_file_openers",
+        host_openers::workbench_list_file_openers
+    ),
     // T-F 06：fs 四命令经 `#[tauri::command(rename = "workbench_*")]` 对齐
     // wire 键（元组名 = manifest 登记名 = wire 键逐字一致，分裂已消除）
     ("workbench_select_folder", fs_commands::select_folder),
     ("workbench_list_directory", fs_commands::list_directory),
-    ("workbench_read_file_content", fs_commands::read_file_content),
-    ("workbench_write_file_content", fs_commands::write_file_content),
-    ("workbench_discover_skills", fs_commands::workbench_discover_skills),
+    (
+        "workbench_read_file_content",
+        fs_commands::read_file_content
+    ),
+    (
+        "workbench_write_file_content",
+        fs_commands::write_file_content
+    ),
+    (
+        "workbench_discover_skills",
+        fs_commands::workbench_discover_skills
+    ),
     ("workbench_http_request", commands::workbench_http_request),
     ("workbench_apply_update", commands::workbench_apply_update),
     // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
@@ -183,23 +216,44 @@ command_registry![
     ("config_profile_apply", config::config_profile_apply),
     ("config_secret_reveal", config::config_secret_reveal),
     // ── G03 产出根配置（T-EG-12：agentOutputsRoot 全局设置 + 校验）──
-    ("config_get_outputs_root", outputs_config::config_get_outputs_root),
-    ("config_set_outputs_root", outputs_config::config_set_outputs_root),
+    (
+        "config_get_outputs_root",
+        outputs_config::config_get_outputs_root
+    ),
+    (
+        "config_set_outputs_root",
+        outputs_config::config_set_outputs_root
+    ),
     // ── 工具旧组（E1，§2.2-E）──
     ("core_check_command", core_commands::core_check_command),
     ("core_search_files", core_commands::core_search_files),
-    ("core_rebuild_search_index", core_commands::core_rebuild_search_index),
-    ("core_compact_messages", core_commands::core_compact_messages),
+    (
+        "core_rebuild_search_index",
+        core_commands::core_rebuild_search_index
+    ),
+    (
+        "core_compact_messages",
+        core_commands::core_compact_messages
+    ),
     ("core_count_tokens", core_commands::core_count_tokens),
     ("core_compute_diff", core_commands::core_compute_diff),
     // ── 查询与运行（A/B，§2.2）──
     ("core_get_status", core_query_commands::core_get_status),
-    ("core_get_run_snapshot", core_query_commands::core_get_run_snapshot),
-    ("core_read_session_events", core_query_commands::core_read_session_events),
+    (
+        "core_get_run_snapshot",
+        core_query_commands::core_get_run_snapshot
+    ),
+    (
+        "core_read_session_events",
+        core_query_commands::core_read_session_events
+    ),
     // F-03（DM-07）：core_read_run_events IPC 面恢复激活（T-F 06 退役登记
     // 撤销；实现委托 read_run_events_impl，与 server 直调体同源——manifest
     // registered=true + 注册面一致性测试两侧必须同步）
-    ("core_read_run_events", core_query_commands::core_read_run_events),
+    (
+        "core_read_run_events",
+        core_query_commands::core_read_run_events
+    ),
     ("core_run_task", core_run_commands::core_run_task),
     ("core_run_control", core_run_commands::core_run_control),
     // E2 F4（07 §3 卡 C）：手动压缩（slash /compact → 引擎命令；registered
@@ -209,17 +263,41 @@ command_registry![
     ("core_approve_tool", core_run_commands::core_approve_tool),
     ("core_deny_tool", core_run_commands::core_deny_tool),
     // ── 多端互通配对面（R1-07：四件套）──
-    ("multi_device_pair_start", multi_device_commands::multi_device_pair_start),
-    ("multi_device_pair_status", multi_device_commands::multi_device_pair_status),
-    ("multi_device_pair_cancel", multi_device_commands::multi_device_pair_cancel),
-    ("multi_device_list_devices", multi_device_commands::multi_device_list_devices),
-    ("multi_device_revoke_device", multi_device_commands::multi_device_revoke_device),
-    ("multi_device_rename_device", multi_device_commands::multi_device_rename_device),
+    (
+        "multi_device_pair_start",
+        multi_device_commands::multi_device_pair_start
+    ),
+    (
+        "multi_device_pair_status",
+        multi_device_commands::multi_device_pair_status
+    ),
+    (
+        "multi_device_pair_cancel",
+        multi_device_commands::multi_device_pair_cancel
+    ),
+    (
+        "multi_device_list_devices",
+        multi_device_commands::multi_device_list_devices
+    ),
+    (
+        "multi_device_revoke_device",
+        multi_device_commands::multi_device_revoke_device
+    ),
+    (
+        "multi_device_rename_device",
+        multi_device_commands::multi_device_rename_device
+    ),
     // R1-09 G-4：网络环境检测（注册表网络配置文件 + 可直连 IP + 引导文案）
-    ("multi_device_network_info", multi_device_commands::multi_device_network_info),
+    (
+        "multi_device_network_info",
+        multi_device_commands::multi_device_network_info
+    ),
     // R1-11 G-1：多端服务总开关（D5 D-01 红线 1——enabled=false 时
     // 不 bind 任何端口；状态衔接 multi_device_pair_status）
-    ("multi_device_set_enabled", multi_device_commands::multi_device_set_enabled),
+    (
+        "multi_device_set_enabled",
+        multi_device_commands::multi_device_set_enabled
+    ),
     // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),
@@ -228,14 +306,26 @@ command_registry![
     ("save_session_agents", session_commands::save_session_agents),
     ("get_session_meta", session_commands::get_session_meta),
     ("set_session_meta", session_commands::set_session_meta),
-    ("cleanup_orphan_sessions", session_commands::cleanup_orphan_sessions),
-    ("import_from_localstorage", session_commands::import_from_localstorage),
-    ("upsert_session_entry", session_commands::upsert_session_entry),
+    (
+        "cleanup_orphan_sessions",
+        session_commands::cleanup_orphan_sessions
+    ),
+    (
+        "import_from_localstorage",
+        session_commands::import_from_localstorage
+    ),
+    (
+        "upsert_session_entry",
+        session_commands::upsert_session_entry
+    ),
     // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时不调用，
     // 只读通用面保留无害）
     ("get_flow_snapshot", session_commands::get_flow_snapshot),
     // G03 会话级产出根覆盖（T-EG-12：session_meta `{session_id}:output_root`）
-    ("set_session_output_root", outputs_config::set_session_output_root),
+    (
+        "set_session_output_root",
+        outputs_config::set_session_output_root
+    ),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族；实现函数在
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render", markdown_commands::md_render),
@@ -248,8 +338,14 @@ command_registry![
     ("core_detect_encoding", core_commands::core_detect_encoding),
     ("core_decode_text", core_commands::core_decode_text),
     ("core_parse_diff", core_commands::core_parse_diff),
-    ("core_messages_to_jsonl", core_commands::core_messages_to_jsonl),
-    ("core_jsonl_to_messages", core_commands::core_jsonl_to_messages),
+    (
+        "core_messages_to_jsonl",
+        core_commands::core_messages_to_jsonl
+    ),
+    (
+        "core_jsonl_to_messages",
+        core_commands::core_jsonl_to_messages
+    ),
     ("core_text_encode", core_commands::core_text_encode),
     ("core_jsonl_append", core_commands::core_jsonl_append),
     // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh）──
@@ -276,31 +372,73 @@ command_registry![
     ("browser_stop", browser_commands::browser_stop),
     ("browser_status", browser_commands::browser_status),
     ("browser_input", browser_commands::browser_input),
-    ("browser_start_frames", browser_commands::browser_start_frames),
+    (
+        "browser_start_frames",
+        browser_commands::browser_start_frames
+    ),
     ("browser_stop_frames", browser_commands::browser_stop_frames),
-    ("browser_frame_status", browser_commands::browser_frame_status),
-    ("browser_export_storage_state", browser_commands::browser_export_storage_state),
-    ("browser_import_storage_state", browser_commands::browser_import_storage_state),
+    (
+        "browser_frame_status",
+        browser_commands::browser_frame_status
+    ),
+    (
+        "browser_export_storage_state",
+        browser_commands::browser_export_storage_state
+    ),
+    (
+        "browser_import_storage_state",
+        browser_commands::browser_import_storage_state
+    ),
     // ── G-4 收尾：书签/历史导入（03-方案 §4.2 U4；落库编排经
     //    browser_import_sinks 适配，SharedDb 目标表面）──
-    ("browser_import_bookmarks", browser_commands::browser_import_bookmarks),
-    ("browser_import_history", browser_commands::browser_import_history),
-    ("browser_list_bookmarks", browser_commands::browser_list_bookmarks),
-    ("browser_list_history", browser_commands::browser_list_history),
+    (
+        "browser_import_bookmarks",
+        browser_commands::browser_import_bookmarks
+    ),
+    (
+        "browser_import_history",
+        browser_commands::browser_import_history
+    ),
+    (
+        "browser_list_bookmarks",
+        browser_commands::browser_list_bookmarks
+    ),
+    (
+        "browser_list_history",
+        browser_commands::browser_list_history
+    ),
     // ── 电脑操作会话命令（06 遗留⑨：会话开关 + 急停 + 状态；代理到
     //    ComputerSlot，状态事件 computer://state-changed）──
-    ("computer_session_enable", computer_commands::computer_session_enable),
-    ("computer_session_disable", computer_commands::computer_session_disable),
+    (
+        "computer_session_enable",
+        computer_commands::computer_session_enable
+    ),
+    (
+        "computer_session_disable",
+        computer_commands::computer_session_disable
+    ),
     ("computer_estop", computer_commands::computer_estop),
     ("computer_status", computer_commands::computer_status),
     // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
-    ("note_document_apply_md", note_commands::note_document_apply_md),
+    (
+        "note_document_apply_md",
+        note_commands::note_document_apply_md
+    ),
     ("note_query_blocks", note_commands::note_query_blocks),
     ("note_send_to_note", note_commands::note_send_to_note),
-    ("note_document_hydrate", note_commands::note_document_hydrate),
+    (
+        "note_document_hydrate",
+        note_commands::note_document_hydrate
+    ),
     // A-INV-02 / W2-E 产品 IPC：detect + import 提案（不 apply；X-05；≠ EL-03）
-    ("note_detect_mirror_drift", note_commands::note_detect_mirror_drift),
-    ("note_import_mirror_proposal", note_commands::note_import_mirror_proposal),
+    (
+        "note_detect_mirror_drift",
+        note_commands::note_detect_mirror_drift
+    ),
+    (
+        "note_import_mirror_proposal",
+        note_commands::note_import_mirror_proposal
+    ),
     // CONN-B3：collab wire JSON → DocSession::apply（产品 slash 写锥 IPC）
     ("note_apply_ops", note_commands::note_apply_ops),
     // ── D4a 命令面：子代理显式恢复与关闭（D4 §3.1/§3.2/§3.5）。
@@ -326,9 +464,7 @@ pub(crate) mod lifecycle_commands {
     /// - InvalidState → `CoreError::InvalidInput`（参数或状态非法）；
     /// - PersistFailed → `CoreError::Io`（落库失败，detail 保留操作语义）；
     /// - Recovery → 按恢复域错误分类映射（预算耗尽等保持可观测）。
-    fn map_lifecycle_err(
-        err: orchestrator::lifecycle::LifecycleError,
-    ) -> core_error::CoreError {
+    fn map_lifecycle_err(err: orchestrator::lifecycle::LifecycleError) -> core_error::CoreError {
         use orchestrator::lifecycle::LifecycleError;
         match err {
             LifecycleError::NotFound { message } => core_error::CoreError::NotFound(message),
@@ -359,17 +495,15 @@ pub(crate) mod lifecycle_commands {
         subagent_id: String,
         reason: Option<String>,
     ) -> Result<orchestrator::lifecycle::KillSubagentResult, core_error::CoreError> {
-        let service = state.lifecycle_service().ok_or_else(|| {
-            core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
-        })?;
+        let service = state
+            .lifecycle_service()
+            .ok_or_else(|| core_error::CoreError::internal("LocalDb 不可用（测试替身 store）"))?;
         let reason = reason.unwrap_or_default();
         tokio::task::spawn_blocking(move || {
             service.kill_subagent(&session_id, &subagent_id, &reason)
         })
         .await
-        .map_err(|e| {
-            core_error::CoreError::internal(format!("kill_subagent 阻塞任务失败：{e}"))
-        })?
+        .map_err(|e| core_error::CoreError::internal(format!("kill_subagent 阻塞任务失败：{e}")))?
         .map_err(map_lifecycle_err)
     }
 
@@ -381,9 +515,9 @@ pub(crate) mod lifecycle_commands {
         session_id: String,
         reason: Option<String>,
     ) -> Result<orchestrator::lifecycle::KillAllOutcome, core_error::CoreError> {
-        let service = state.lifecycle_service().ok_or_else(|| {
-            core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
-        })?;
+        let service = state
+            .lifecycle_service()
+            .ok_or_else(|| core_error::CoreError::internal("LocalDb 不可用（测试替身 store）"))?;
         let reason = reason.unwrap_or_default();
         tokio::task::spawn_blocking(move || service.kill_all(&session_id, &reason))
             .await
@@ -418,9 +552,9 @@ pub(crate) mod lifecycle_commands {
         subagent_id: String,
         prompt: Option<String>,
     ) -> Result<orchestrator::lifecycle::ResumeOutcome, core_error::CoreError> {
-        let service = state.lifecycle_service().ok_or_else(|| {
-            core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
-        })?;
+        let service = state
+            .lifecycle_service()
+            .ok_or_else(|| core_error::CoreError::internal("LocalDb 不可用（测试替身 store）"))?;
         // ① 同步准备段（F2-27：同步 SQLite 面经 spawn_blocking）
         let prepared = {
             let service = service.clone();
@@ -443,13 +577,14 @@ pub(crate) mod lifecycle_commands {
             let mut coordinator = coord.lock().unwrap_or_else(|e| e.into_inner());
             // 锁内 block_on（D3 模式扩展；block_on 线程持有 runtime context，
             // fork 链 await 的任务由 worker 池执行，无死锁面）
-            tokio::runtime::Handle::current()
-                .block_on(service.resume_with_prepared(&mut coordinator, &session_id, prepared))
+            tokio::runtime::Handle::current().block_on(service.resume_with_prepared(
+                &mut coordinator,
+                &session_id,
+                prepared,
+            ))
         })
         .await
-        .map_err(|e| {
-            core_error::CoreError::internal(format!("resume fork 段阻塞任务失败：{e}"))
-        })?
+        .map_err(|e| core_error::CoreError::internal(format!("resume fork 段阻塞任务失败：{e}")))?
         .map_err(map_lifecycle_err)
     }
 }
@@ -457,24 +592,24 @@ pub(crate) mod lifecycle_commands {
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info
 /// （PE-04 T04.1-1：非法值由 conex-telemetry 内部回退 info）。
 fn log_level_from_env() -> String {
-    std::env::var("CRISH_LOG_LEVEL")
-        .unwrap_or_else(|_| {
-            if cfg!(debug_assertions) {
-                "debug".to_string()
-            } else {
-                "info".to_string()
-            }
-        })
+    std::env::var("CRISH_LOG_LEVEL").unwrap_or_else(|_| {
+        if cfg!(debug_assertions) {
+            "debug".to_string()
+        } else {
+            "info".to_string()
+        }
+    })
 }
 
 /// 打开会话数据库（`app_dir()/sessions.db`；失败降级内存库 + 记录诊断）。
-fn open_session_db(diagnostics: &status_diagnostics::StatusDiagnostics) -> session_commands::SharedDb {
+fn open_session_db(
+    diagnostics: &status_diagnostics::StatusDiagnostics,
+) -> session_commands::SharedDb {
     let open_file = || -> Result<session_commands::SharedDb, String> {
         let app_dir = crate::host_paths::app_dir().map_err(|e| e.to_string())?;
         let db_path = app_dir.join("sessions.db");
-        let db = conex_db::LocalDb::open(&db_path).map_err(|e| {
-            format!("{}: {}", e.kind, e.message)
-        })?;
+        let db =
+            conex_db::LocalDb::open(&db_path).map_err(|e| format!("{}: {}", e.kind, e.message))?;
         tracing::info!(target: "db", path = %db_path.display(), "会话数据库已打开");
         Ok(session_commands::SharedDb::new(db))
     };
@@ -490,8 +625,7 @@ fn open_session_db(diagnostics: &status_diagnostics::StatusDiagnostics) -> sessi
                 "[DB] 打开 sessions.db 失败，降级为内存库"
             );
             diagnostics.record("db", false, Some(format!("sessions.db 打开失败：{error}")));
-            let mem = conex_db::LocalDb::open_in_memory()
-                .expect("in-memory DB must always open");
+            let mem = conex_db::LocalDb::open_in_memory().expect("in-memory DB must always open");
             let shared = session_commands::SharedDb::new(mem);
             shared.set_ready(false);
             shared
@@ -1193,8 +1327,7 @@ mod tests {
             .collect();
         let actual: HashSet<&str> = COMMAND_REGISTRY_NAMES.iter().copied().collect();
         assert_eq!(
-            actual,
-            manifest_registered,
+            actual, manifest_registered,
             "注册面必须与 manifest registered=true 一致"
         );
     }
@@ -1339,10 +1472,7 @@ mod tests {
         // 关闭 → 停服：句柄取走 + serve 收尾 → 端口释放
         service.set_enabled(false).await.expect("关闭必须成功");
         assert!(!service.enabled());
-        assert!(
-            port_is_free(19082).await,
-            "关闭后端口必须释放（无监听）"
-        );
+        assert!(port_is_free(19082).await, "关闭后端口必须释放（无监听）");
         assert!(
             service
                 .lifecycle

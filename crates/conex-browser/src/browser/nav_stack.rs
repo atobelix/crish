@@ -94,7 +94,10 @@ impl NavStack {
         };
         match Self::from_json(&String::from_utf8_lossy(&bytes)) {
             Ok(s) => Ok(Some(s)),
-            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())),
+            Err(e) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                e.to_string(),
+            )),
         }
     }
 }
@@ -132,7 +135,10 @@ mod tests {
         let json = r#"{"tabs":[{"url":"https://x.example/","pinned":false},{"url":"https://y.example/","pinned":false}],"active":1}"#;
         let stack = NavStack::from_json(json).expect("解析");
         assert_eq!(stack.active, 1);
-        assert_eq!(stack.active_entry().unwrap().url.as_str(), "https://y.example/");
+        assert_eq!(
+            stack.active_entry().unwrap().url.as_str(),
+            "https://y.example/"
+        );
         assert_eq!(stack.tabs[0].url.as_str(), "https://x.example/");
     }
 

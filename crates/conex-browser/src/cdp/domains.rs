@@ -1477,7 +1477,11 @@ mod tests {
             session_id: Value::from(1),
         };
         let v = serde_json::to_value(&p).expect("序列化失败");
-        assert_eq!(v["sessionId"], Value::from(1), "数字形态保持数字（Chrome 151 校验类型）");
+        assert_eq!(
+            v["sessionId"],
+            Value::from(1),
+            "数字形态保持数字（Chrome 151 校验类型）"
+        );
     }
 
     /// SetCookieParam wire 序列化回归（N2 缺陷：可选字段 None 曾输出 null，
@@ -1614,10 +1618,9 @@ mod tests {
     /// 跨域递归依赖：owner 定位 + pierce 帧集合筛选）。
     #[test]
     fn frame_owner_and_document_frame_id_parse() {
-        let owner: GetFrameOwnerResult = serde_json::from_str(
-            r#"{"backendNodeId":101,"nodeId":3}"#,
-        )
-        .expect("getFrameOwner 结果解析失败");
+        let owner: GetFrameOwnerResult =
+            serde_json::from_str(r#"{"backendNodeId":101,"nodeId":3}"#)
+                .expect("getFrameOwner 结果解析失败");
         assert_eq!(owner.backend_node_id, Some(101));
         assert_eq!(owner.node_id, 3);
         // backendNodeId 缺失形态（协议宽松面）
@@ -1691,10 +1694,9 @@ mod tests {
         assert_eq!(v["storageId"]["securityOrigin"], "https://example.com");
         assert_eq!(v["key"], "k");
 
-        let r: GetDOMStorageItemsResult = serde_json::from_str(
-            r#"{"entries":[["theme","dark"],["k","v1"],["odd"]]}"#,
-        )
-        .expect("结果解析失败");
+        let r: GetDOMStorageItemsResult =
+            serde_json::from_str(r#"{"entries":[["theme","dark"],["k","v1"],["odd"]]}"#)
+                .expect("结果解析失败");
         assert_eq!(r.entries.len(), 3);
         assert_eq!(
             r.entries[0],

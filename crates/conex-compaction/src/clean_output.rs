@@ -309,10 +309,7 @@ mod tests {
     #[test]
     fn folds_duplicate_lines_with_marker() {
         let result = clean("x\nx\nx\ny\n\nz\nz\nz\nz");
-        assert_eq!(
-            result.cleaned,
-            "x\n… 重复 2 行 …\ny\n\nz\n… 重复 3 行 …"
-        );
+        assert_eq!(result.cleaned, "x\n… 重复 2 行 …\ny\n\nz\n… 重复 3 行 …");
         assert!(result.rules_applied.contains(&"R4 重复行折叠"));
         assert_eq!(duplicate_fold_marker(2), "… 重复 2 行 …");
         // 恰好 2 连续不折叠
@@ -386,8 +383,14 @@ mod tests {
         let raw = format!("\x1b[33m{}\x1b[0m\n\n\n{}", long_code, raw_json);
 
         let result = clean_output(&raw, &opts);
-        assert!(result.cleaned.contains(long_code), "wire_safe 绝不截断长代码行");
-        assert!(result.cleaned.contains(raw_json), "wire_safe 绝不折叠多行 JSON");
+        assert!(
+            result.cleaned.contains(long_code),
+            "wire_safe 绝不截断长代码行"
+        );
+        assert!(
+            result.cleaned.contains(raw_json),
+            "wire_safe 绝不折叠多行 JSON"
+        );
         assert!(!result.cleaned.contains("\x1b"), "wire_safe 剥离 ANSI 颜色");
         assert_eq!(result.cleaned, format!("{}\n\n{}", long_code, raw_json));
     }
@@ -400,4 +403,3 @@ mod tests {
         assert_eq!(result.cleaned, "prefixmidsuffix");
     }
 }
-

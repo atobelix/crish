@@ -233,7 +233,10 @@ impl BackgroundTaskManager for RunAwareBackgroundManager {
         }
     }
 
-    async fn status(&self, task_id: &str) -> Result<agent_tools::background::BackgroundTaskStatus, ToolError> {
+    async fn status(
+        &self,
+        task_id: &str,
+    ) -> Result<agent_tools::background::BackgroundTaskStatus, ToolError> {
         match &self.inner {
             Some(manager) => manager.status(task_id).await,
             None => Err(ToolError::new(
@@ -718,7 +721,8 @@ pub(crate) fn map_trash_err(err: &anyhow::Error) -> CoreError {
     let msg = err.to_string();
     if msg.contains("不存在") || msg.contains("缺失") {
         CoreError::NotFound(msg)
-    } else if msg.contains("非法条目") || msg.contains("拒绝覆盖") || msg.contains("校验失败") {
+    } else if msg.contains("非法条目") || msg.contains("拒绝覆盖") || msg.contains("校验失败")
+    {
         CoreError::InvalidInput(msg)
     } else {
         CoreError::Io(msg)
@@ -925,4 +929,3 @@ pub(crate) fn now_iso_utc() -> String {
     let (year, month, day) = civil_from_days((secs / 86400) as i64);
     format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
 }
-

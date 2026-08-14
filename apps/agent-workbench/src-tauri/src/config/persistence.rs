@@ -102,9 +102,7 @@ pub(crate) fn sanitize_profile_secret_id(profile_id: &str) -> Result<String, Str
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(
-            "profileId must be ASCII alphanumeric, '-' or '_' only".to_string(),
-        );
+        return Err("profileId must be ASCII alphanumeric, '-' or '_' only".to_string());
     }
     Ok(id.to_string())
 }

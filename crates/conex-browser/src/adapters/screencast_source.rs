@@ -19,14 +19,12 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use conex_shared::frame::{
-    Frame, FrameFormat, FramePolicy, FrameRate, FrameSource, FrameSourceError,
-    FrameSourceStatus, FrameStream,
+    Frame, FrameFormat, FramePolicy, FrameRate, FrameSource, FrameSourceError, FrameSourceStatus,
+    FrameStream,
 };
 
 use crate::frames::FrameReceiver;
-use crate::frames::{
-    FpsLevel, FrameOut, ScreencastError, ScreencastSession, ScreencastStatus,
-};
+use crate::frames::{FpsLevel, FrameOut, ScreencastError, ScreencastSession, ScreencastStatus};
 
 /// 同步回显帧等待上限（防帧泵停滞时挂死调用方；正常 ack pacing 下帧间隔
 /// ≤ 125ms（Base 档），2s 为宽松防御界）。
@@ -84,12 +82,8 @@ fn to_fps_level(rate: FrameRate) -> FpsLevel {
 fn map_screencast_error(e: ScreencastError) -> FrameSourceError {
     match e {
         ScreencastError::AlreadyActive => FrameSourceError::AlreadyActive,
-        ScreencastError::NoActiveSession => {
-            FrameSourceError::Failed("无活动标签会话".to_string())
-        }
-        ScreencastError::Command(ce) => {
-            FrameSourceError::Failed(format!("CDP 命令失败：{ce}"))
-        }
+        ScreencastError::NoActiveSession => FrameSourceError::Failed("无活动标签会话".to_string()),
+        ScreencastError::Command(ce) => FrameSourceError::Failed(format!("CDP 命令失败：{ce}")),
     }
 }
 
@@ -129,9 +123,7 @@ impl FrameSource for CdpScreencastSource {
         rx.recv_timeout(SYNC_FRAME_TIMEOUT)
             .await
             .map(Self::convert)
-            .ok_or_else(|| {
-                FrameSourceError::Failed("等待同步回显帧超时（帧泵无产出）".to_string())
-            })
+            .ok_or_else(|| FrameSourceError::Failed("等待同步回显帧超时（帧泵无产出）".to_string()))
     }
 
     fn set_frame_policy(&self, policy: FramePolicy) {
@@ -440,7 +432,11 @@ mod tests {
             format: FrameFormat::Png,
             quality: None,
         });
-        assert_eq!(source.session().fps_level(), FpsLevel::Burst, "Burst → Burst");
+        assert_eq!(
+            source.session().fps_level(),
+            FpsLevel::Burst,
+            "Burst → Burst"
+        );
 
         // Low → Base；quality 忽略
         source.set_frame_policy(FramePolicy {
@@ -474,7 +470,10 @@ mod tests {
                 message: "screencast not supported".to_string(),
             },
         );
-        source.start(default_policy()).await.expect("降级接管应返回 Ok");
+        source
+            .start(default_policy())
+            .await
+            .expect("降级接管应返回 Ok");
         assert_eq!(
             source.status(),
             FrameSourceStatus::Active,

@@ -107,7 +107,10 @@ async fn tool_batch_rejects_unknown_enum_in_task_item() {
     assert!(err.to_string().contains("未知能力模式"));
     // 条目缺 prompt / prompt 为空 → 拒绝
     let err = tool
-        .execute(&ctx, serde_json::json!({ "tasks": [{ "role": "researcher" }] }))
+        .execute(
+            &ctx,
+            serde_json::json!({ "tasks": [{ "role": "researcher" }] }),
+        )
         .await
         .unwrap_err();
     assert_eq!(err.code(), "tool.invalid_input");
@@ -145,7 +148,10 @@ async fn tool_batch_dispatches_three_tasks_in_order() {
     // 条目字段逐条装配
     assert_eq!(requests[0].role, Some(SubagentRole::Researcher));
     assert_eq!(requests[0].display_label.as_deref(), Some("调研员"));
-    assert_eq!(requests[1].capability_mode, Some(SubagentCapabilityMode::ReadOnly));
+    assert_eq!(
+        requests[1].capability_mode,
+        Some(SubagentCapabilityMode::ReadOnly)
+    );
     assert_eq!(requests[1].description.as_deref(), Some("调研 B"));
     assert_eq!(requests[2].role, None, "条目缺省字段 = None");
     // 父会话 = 工具执行会话；流程关联/扩展点恒 None
@@ -232,7 +238,10 @@ async fn flow_correlation_fields_echo_through_spawner() {
         Some("node-gate"),
         "请求必须携带流程节点 id"
     );
-    assert!(spawner.requests()[0].is_composite, "请求必须携带综合节点标记");
+    assert!(
+        spawner.requests()[0].is_composite,
+        "请求必须携带综合节点标记"
+    );
 }
 
 // ── LK-02 工具直调真键（parent_tool_call_id = ctx.tool_call_id）──────
@@ -302,4 +311,3 @@ async fn tool_direct_path_without_tool_call_id_keeps_none() {
         "非工具上下文不得编造调用 id"
     );
 }
-

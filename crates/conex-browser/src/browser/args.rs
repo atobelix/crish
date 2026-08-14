@@ -120,7 +120,10 @@ pub fn build_args(inputs: &ArgInputs<'_>) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
     args.push("--remote-debugging-port=0".to_string()); // 1 随机端口（内核分配，D-9）
     args.push("--remote-debugging-address=127.0.0.1".to_string()); // 2 显式 loopback
-    args.push(format!("--user-data-dir={}", inputs.user_data_dir.display())); // 3 独立 profile
+    args.push(format!(
+        "--user-data-dir={}",
+        inputs.user_data_dir.display()
+    )); // 3 独立 profile
     match inputs.mode {
         EngineMode::HeadlessNew => {
             args.push("--headless=new".to_string()); // 4 无窗口渲染
@@ -158,7 +161,7 @@ pub fn build_args(inputs: &ArgInputs<'_>) -> Vec<String> {
         args.push("--use-mock-keychain".to_string());
     }
     args.push("--no-pings".to_string()); // 24
-    // headless 恒定追加：渲染兼容参数（§3.3），无 GPU 环境防静默崩溃
+                                         // headless 恒定追加：渲染兼容参数（§3.3），无 GPU 环境防静默崩溃
     if inputs.mode == EngineMode::HeadlessNew {
         args.push("--enable-unsafe-swiftshader".to_string());
     }
@@ -391,7 +394,10 @@ mod tests {
         assert!(!joined.contains("--headless=new"));
         assert!(joined.contains("--window-position=-32000,-32000"));
         assert!(joined.contains("--window-size=1280,720"));
-        assert!(!joined.contains("--enable-unsafe-swiftshader"), "headed 模式无 swiftshader");
+        assert!(
+            !joined.contains("--enable-unsafe-swiftshader"),
+            "headed 模式无 swiftshader"
+        );
     }
 
     /// WebRTC 收紧：仅 restrict_webrtc=true 时出现，且位于末尾（防覆盖）。
@@ -414,7 +420,10 @@ mod tests {
     #[test]
     fn adaptive_flags_passthrough() {
         let args = build_args(&base_inputs());
-        assert!(!args.join(" ").contains("--no-sandbox"), "桌面首发默认不加降级开关");
+        assert!(
+            !args.join(" ").contains("--no-sandbox"),
+            "桌面首发默认不加降级开关"
+        );
         let adaptive = vec![
             "--no-sandbox".to_string(),
             "--disable-dev-shm-usage".to_string(),
@@ -434,7 +443,9 @@ mod tests {
         let mut inputs = base_inputs();
         inputs.extra_args = &extra;
         let args = build_args(&inputs);
-        assert!(args.join(" ").contains("--autoplay-policy=no-user-gesture-required"));
+        assert!(args
+            .join(" ")
+            .contains("--autoplay-policy=no-user-gesture-required"));
     }
 
     /// 参数顺序：预置参数在最前，WebRTC 置后，环境自适应介于其间。

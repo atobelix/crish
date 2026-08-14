@@ -243,7 +243,13 @@ mod tests {
         }
     }
 
-    fn assert_copy(scene: SceneId, digest: Option<&str>, detail: Option<&str>, title: &str, body: &str) {
+    fn assert_copy(
+        scene: SceneId,
+        digest: Option<&str>,
+        detail: Option<&str>,
+        title: &str,
+        body: &str,
+    ) {
         let copy = render_copy(scene, &payload("run-42", digest, detail));
         assert_eq!(copy.title, title, "场景 {scene:?} 标题");
         assert_eq!(copy.body, body, "场景 {scene:?} 正文");
@@ -265,10 +271,7 @@ mod tests {
     /// toolName 不在载荷，按 toolCallId 降级
     #[test]
     fn s2_approval_expired_copy() {
-        let copy = render_copy(
-            SceneId::ApprovalExpired,
-            &payload("tc-9f3a", None, None),
-        );
+        let copy = render_copy(SceneId::ApprovalExpired, &payload("tc-9f3a", None, None));
         assert_eq!(copy.title, "审批已过期");
         assert_eq!(copy.body, "审批（tc-9f3a）等待超时，已自动拒绝");
     }
@@ -276,7 +279,13 @@ mod tests {
     /// S3/S4/S5 run 终态：样例对齐（S4 正文 = `{runId}：{error}`）
     #[test]
     fn s3_s4_s5_run_terminal_copy() {
-        assert_copy(SceneId::RunCompleted, None, None, "任务已完成", "任务 run-42 已完成");
+        assert_copy(
+            SceneId::RunCompleted,
+            None,
+            None,
+            "任务已完成",
+            "任务 run-42 已完成",
+        );
         assert_copy(
             SceneId::RunFailed,
             Some("provider 返回 401，API 密钥可能已失效"),
@@ -284,7 +293,13 @@ mod tests {
             "任务运行失败",
             "run-42：provider 返回 401，API 密钥可能已失效",
         );
-        assert_copy(SceneId::RunCancelled, None, None, "任务已取消", "任务 run-42 已被取消");
+        assert_copy(
+            SceneId::RunCancelled,
+            None,
+            None,
+            "任务已取消",
+            "任务 run-42 已被取消",
+        );
     }
 
     /// S6/S7 子代理终态：样例对齐（role 不在载荷降级省略；summary 存在追加）
@@ -312,7 +327,13 @@ mod tests {
     /// S8 任务域：S8c 样例逐字对齐（「任务 t-12 疑似卡死（120 秒无输出）」）
     #[test]
     fn s8_task_domain_copy() {
-        assert_copy(SceneId::TaskStarted, Some("npm run build"), None, "后台任务已启动", "npm run build");
+        assert_copy(
+            SceneId::TaskStarted,
+            Some("npm run build"),
+            None,
+            "后台任务已启动",
+            "npm run build",
+        );
         assert_copy(
             SceneId::TaskCompleted,
             None,
@@ -322,7 +343,10 @@ mod tests {
         );
         let copy = render_copy(SceneId::TaskSuspicious, &payload("t-12", Some("120"), None));
         assert_eq!(copy.title, "任务疑似卡死");
-        assert_eq!(copy.body, "任务 t-12 疑似卡死（120 秒无输出）", "D7 §3.3.13 S8c 样例逐字对齐");
+        assert_eq!(
+            copy.body, "任务 t-12 疑似卡死（120 秒无输出）",
+            "D7 §3.3.13 S8c 样例逐字对齐"
+        );
         assert_copy(
             SceneId::TaskFailed,
             Some("构建报错"),
@@ -330,17 +354,32 @@ mod tests {
             "后台任务异常退出",
             "任务 run-42 异常退出（exit code 1）",
         );
-        assert_copy(SceneId::TaskKilled, None, None, "任务已终止", "任务 run-42 已被终止");
+        assert_copy(
+            SceneId::TaskKilled,
+            None,
+            None,
+            "任务已终止",
+            "任务 run-42 已被终止",
+        );
     }
 
     /// S9 定时器/cron：样例对齐（S9a 逐字；S9b 第 n 次触发取自 iteration）
     #[test]
     fn s9_timer_cron_copy() {
-        let copy = render_copy(SceneId::TimerFired, &payload("timer-1", Some("请检查任务进度"), None));
+        let copy = render_copy(
+            SceneId::TimerFired,
+            &payload("timer-1", Some("请检查任务进度"), None),
+        );
         assert_eq!(copy.title, "定时器提醒");
-        assert_eq!(copy.body, "请检查任务进度（定时器 timer-1 已到期）", "D7 §3.3.13 S9a 样例逐字对齐");
+        assert_eq!(
+            copy.body, "请检查任务进度（定时器 timer-1 已到期）",
+            "D7 §3.3.13 S9a 样例逐字对齐"
+        );
 
-        let copy = render_copy(SceneId::CronFired, &payload("cron-2", Some("日报"), Some("iteration 3")));
+        let copy = render_copy(
+            SceneId::CronFired,
+            &payload("cron-2", Some("日报"), Some("iteration 3")),
+        );
         assert_eq!(copy.body, "日报（cron cron-2 第 3 次触发）");
 
         // iteration 缺失：不残留占位
@@ -351,7 +390,13 @@ mod tests {
     /// S10 异常域：标题承载场景语义，正文 = error/reason
     #[test]
     fn s10_runtime_copy() {
-        assert_copy(SceneId::RuntimeError, Some("provider 5xx"), None, "运行异常", "provider 5xx");
+        assert_copy(
+            SceneId::RuntimeError,
+            Some("provider 5xx"),
+            None,
+            "运行异常",
+            "provider 5xx",
+        );
         assert_copy(
             SceneId::InterventionRequired,
             Some("缺少 API 密钥"),
@@ -364,7 +409,10 @@ mod tests {
     /// S11 安全拦截：样例「拦截删除操作」——操作 wire → 中文映射
     #[test]
     fn s11_security_copy_operation_map() {
-        let copy = render_copy(SceneId::SecurityBlocked, &payload("tc-9f4b", Some("Delete"), None));
+        let copy = render_copy(
+            SceneId::SecurityBlocked,
+            &payload("tc-9f4b", Some("Delete"), None),
+        );
         assert_eq!(copy.title, "安全拦截");
         assert_eq!(copy.body, "拦截删除操作", "D7 §3.3.13 S11 样例对齐");
         for (wire, expected) in [
@@ -378,7 +426,10 @@ mod tests {
             assert_eq!(copy.body, format!("拦截{expected}操作"), "操作 {wire}");
         }
         // 未知操作：保留原串（枚举冻结护栏）
-        let copy = render_copy(SceneId::SecurityBlocked, &payload("tc-1", Some("FutureOp"), None));
+        let copy = render_copy(
+            SceneId::SecurityBlocked,
+            &payload("tc-1", Some("FutureOp"), None),
+        );
         assert_eq!(copy.body, "拦截FutureOp操作");
     }
 
@@ -386,10 +437,16 @@ mod tests {
     /// 千分位为示意，按载荷原值渲染；cost 缺失降级
     #[test]
     fn s12_cache_waste_copy() {
-        let copy = render_copy(SceneId::CacheWasteAlert, &payload("run-42", Some("24000"), Some("0.12")));
+        let copy = render_copy(
+            SceneId::CacheWasteAlert,
+            &payload("run-42", Some("24000"), Some("0.12")),
+        );
         assert_eq!(copy.title, "缓存浪费告警");
         assert_eq!(copy.body, "本次运行浪费约 24000 token（约 $0.12）");
-        let copy = render_copy(SceneId::CacheWasteAlert, &payload("run-42", Some("24000"), None));
+        let copy = render_copy(
+            SceneId::CacheWasteAlert,
+            &payload("run-42", Some("24000"), None),
+        );
         assert_eq!(copy.body, "本次运行浪费约 24000 token");
     }
 
@@ -398,12 +455,20 @@ mod tests {
     #[test]
     fn all_scenes_render_without_placeholder_leak() {
         let cases: Vec<(SceneId, Option<&str>, Option<&str>)> = vec![
-            (SceneId::ApprovalRequested, Some("执行部署脚本"), Some("bash")),
+            (
+                SceneId::ApprovalRequested,
+                Some("执行部署脚本"),
+                Some("bash"),
+            ),
             (SceneId::ApprovalExpired, None, None),
             (SceneId::RunCompleted, None, None),
             (SceneId::RunFailed, Some("provider 401"), None),
             (SceneId::RunCancelled, None, None),
-            (SceneId::SubagentCompleted, Some("已产出缺口分析 5 页"), None),
+            (
+                SceneId::SubagentCompleted,
+                Some("已产出缺口分析 5 页"),
+                None,
+            ),
             (SceneId::SubagentFailed, Some("工具执行超时"), None),
             (SceneId::TaskStarted, Some("npm run build"), None),
             (SceneId::TaskCompleted, None, Some("exit code 0")),

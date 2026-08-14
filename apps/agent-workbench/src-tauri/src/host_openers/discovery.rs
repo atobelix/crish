@@ -11,10 +11,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::host_openers::resolve::{resolve_candidate_command, unavailable_diagnostic, unavailable_reason};
+use crate::host_openers::resolve::{
+    resolve_candidate_command, unavailable_diagnostic, unavailable_reason,
+};
 use crate::host_openers::types::{
-    host_opener_diagnostic, host_opener_error, HostOpener, HostOpenerAvailability,
-    HostOpenerError, HostOpenerKind, OpenerCandidate,
+    host_opener_diagnostic, host_opener_error, HostOpener, HostOpenerAvailability, HostOpenerError,
+    HostOpenerKind, OpenerCandidate,
 };
 
 pub(crate) fn discover_host_openers() -> Result<Vec<HostOpener>, HostOpenerError> {
@@ -178,7 +180,9 @@ fn path_dirs(path_env: Option<OsString>) -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-pub(crate) fn opener_candidates(env_var: &impl Fn(&str) -> Option<OsString>) -> Vec<OpenerCandidate> {
+pub(crate) fn opener_candidates(
+    env_var: &impl Fn(&str) -> Option<OsString>,
+) -> Vec<OpenerCandidate> {
     let mut candidates = Vec::new();
     candidates.push(system_file_manager_candidate(env_var));
     candidates.extend(editor_candidates(env_var));

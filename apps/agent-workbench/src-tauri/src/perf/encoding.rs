@@ -75,8 +75,7 @@ fn decode_to_utf8(data: &[u8], encoding_hint: Option<&str>) -> Result<String, St
             .ok_or_else(|| format!("Unsupported encoding: {hint}"))?,
         None => {
             let detected = detect_encoding(data);
-            Encoding::for_label(detected.encoding.as_bytes())
-                .unwrap_or(UTF_8)
+            Encoding::for_label(detected.encoding.as_bytes()).unwrap_or(UTF_8)
         }
     };
     let (cow, _encoding_used, _had_errors) = encoding.decode(data);
@@ -107,9 +106,8 @@ pub(crate) fn perf_encoding_decode(
 
 /// Encode UTF-8 string to target encoding bytes.
 fn encode_from_utf8(text: &str, target_encoding: &str) -> Result<Vec<u8>, String> {
-    let encoding = Encoding::for_label(target_encoding.as_bytes()).ok_or_else(|| {
-        format!("Unsupported encoding: {target_encoding}")
-    })?;
+    let encoding = Encoding::for_label(target_encoding.as_bytes())
+        .ok_or_else(|| format!("Unsupported encoding: {target_encoding}"))?;
     let (cow, _, _) = encoding.encode(text);
     Ok(cow.into_owned())
 }
@@ -213,10 +211,7 @@ mod tests {
     #[test]
     fn test_decode_command_with_encoding() {
         let data = b"hello";
-        let result = perf_encoding_decode(
-            data.to_vec(),
-            Some("utf-8".to_string()),
-        ).unwrap();
+        let result = perf_encoding_decode(data.to_vec(), Some("utf-8".to_string())).unwrap();
         assert_eq!(result, "hello");
     }
 

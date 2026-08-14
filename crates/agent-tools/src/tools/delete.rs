@@ -12,7 +12,7 @@
 //! 输出含 `entryId`（TrashEntry id）供后续恢复（trash_restore 引擎命令消费），
 //! 并明示 `recoverable: app-trash` 可恢复路径类型与降级状态。
 
-use crate::audit::{NoopAuditSink, SecurityAuditSink, security_audit_event};
+use crate::audit::{security_audit_event, NoopAuditSink, SecurityAuditSink};
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{display_path, optional_bool, require_string, resolve_workspace_path};
@@ -241,7 +241,13 @@ async fn execute_delete(
         "删除接管审计：目标已移入回收站（可恢复）"
     );
 
-    Ok(delete_output(&entry, &display, service.root(), backup, impact))
+    Ok(delete_output(
+        &entry,
+        &display,
+        service.root(),
+        backup,
+        impact,
+    ))
 }
 
 /// 结构化输出：TrashEntry 全字段 + 展示路径 + 可恢复路径类型 + 影响面 + 文本摘要
@@ -365,11 +371,17 @@ mod tests {
     async fn delete_tools_marked_dangerous() {
         let file_tool = DeleteFileTool::new(None);
         assert_eq!(file_tool.name(), "delete_file");
-        assert!(file_tool.definition().dangerous, "delete_file 必须 dangerous=true");
+        assert!(
+            file_tool.definition().dangerous,
+            "delete_file 必须 dangerous=true"
+        );
 
         let dir_tool = DeleteDirTool::new(None);
         assert_eq!(dir_tool.name(), "delete_dir");
-        assert!(dir_tool.definition().dangerous, "delete_dir 必须 dangerous=true");
+        assert!(
+            dir_tool.definition().dangerous,
+            "delete_dir 必须 dangerous=true"
+        );
     }
 
     #[tokio::test]
@@ -397,7 +409,10 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.path_escape");
-        assert!(ws.path().join("a.txt").exists(), "越界拒绝时不得删除任何文件");
+        assert!(
+            ws.path().join("a.txt").exists(),
+            "越界拒绝时不得删除任何文件"
+        );
     }
 
     #[tokio::test]
@@ -457,7 +472,9 @@ mod tests {
     #[tokio::test]
     async fn delete_emits_security_audit_event() {
         use crate::audit::RecordingAuditSink;
-        use conex_types::events::{SecurityAuditDecision as Decision, SecurityAuditOperation as Op};
+        use conex_types::events::{
+            SecurityAuditDecision as Decision, SecurityAuditOperation as Op,
+        };
         use conex_types::AgentEvent;
 
         let ws = TempWorkspace::new("del_audit");

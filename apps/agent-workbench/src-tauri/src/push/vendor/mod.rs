@@ -345,14 +345,16 @@ mod tests {
     /// 异步块内的 trait 方法调用（经 `dyn` 对象验证 object-safety）
     #[tokio::test]
     async fn trait_contract_mock_passes_outcome_through() {
-        let channel: std::sync::Arc<dyn VendorPushChannel> = std::sync::Arc::new(
-            MockVendorChannel {
+        let channel: std::sync::Arc<dyn VendorPushChannel> =
+            std::sync::Arc::new(MockVendorChannel {
                 vendor_id: "apns",
                 outcome: VendorSendOutcome::Delivered,
-            },
-        );
+            });
         assert_eq!(channel.vendor_id(), "apns");
-        let out = channel.send(&notification("tok-1")).await.expect("mock 不失败");
+        let out = channel
+            .send(&notification("tok-1"))
+            .await
+            .expect("mock 不失败");
         assert_eq!(out, VendorSendOutcome::Delivered);
     }
 
@@ -379,11 +381,20 @@ mod tests {
             (VendorSendOutcome::DeviceNotRegistered, false),
         ];
         for (outcome, retryable) in cases {
-            let channel: std::sync::Arc<dyn VendorPushChannel> = std::sync::Arc::new(
-                MockVendorChannel { vendor_id: "hms", outcome: outcome.clone() },
+            let channel: std::sync::Arc<dyn VendorPushChannel> =
+                std::sync::Arc::new(MockVendorChannel {
+                    vendor_id: "hms",
+                    outcome: outcome.clone(),
+                });
+            let out = channel
+                .send(&notification("tok-2"))
+                .await
+                .expect("mock 不失败");
+            assert_eq!(
+                out.is_retryable(),
+                retryable,
+                "is_retryable 语义：{outcome:?}"
             );
-            let out = channel.send(&notification("tok-2")).await.expect("mock 不失败");
-            assert_eq!(out.is_retryable(), retryable, "is_retryable 语义：{outcome:?}");
         }
     }
 
@@ -613,10 +624,7 @@ pub(crate) mod test_support {
             response.body.len(),
             response.body
         ));
-        stream
-            .write_all(text.as_bytes())
-            .await
-            .expect("写响应");
+        stream.write_all(text.as_bytes()).await.expect("写响应");
         let _ = stream.flush().await;
     }
 
@@ -627,8 +635,16 @@ pub(crate) mod test_support {
         let mock = start_mock_server(&[MockRoute {
             path_frag: "/ping",
             responses: &[
-                MockResponse { status: "200 OK", body: "one", headers: &[] },
-                MockResponse { status: "202 Accepted", body: "two", headers: &[] },
+                MockResponse {
+                    status: "200 OK",
+                    body: "one",
+                    headers: &[],
+                },
+                MockResponse {
+                    status: "202 Accepted",
+                    body: "two",
+                    headers: &[],
+                },
             ],
         }])
         .await;

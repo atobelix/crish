@@ -9,9 +9,9 @@
 //!
 //! 锁纪律（31-security-baseline B8）：本模块无锁；结构体字段不含敏感面。
 
+use crate::browser::discover::BackendResolution;
 use crate::browser::nav_stack::TabEntry;
 use crate::browser::state::{BrowserState, CrashReason};
-use crate::browser::discover::BackendResolution;
 
 /// 进程生命周期事件（订阅面）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +40,9 @@ impl ProcessEvent {
     /// 后端摘要（doctor/面板展示：`CfT(151.0.7922.77)` / `SystemChrome` / `SystemEdge`）。
     pub fn backend_summary(&self) -> Option<String> {
         match self {
-            ProcessEvent::StateChanged { backend: Some(b), .. } => Some(b.summary()),
+            ProcessEvent::StateChanged {
+                backend: Some(b), ..
+            } => Some(b.summary()),
             _ => None,
         }
     }
@@ -96,7 +98,9 @@ mod tests {
         };
         assert_eq!(cft.summary(), "CfT(151.0.7922.77)");
         let edge = BackendResolution {
-            backend: Backend::SystemEdge { path: PathBuf::from("x") },
+            backend: Backend::SystemEdge {
+                path: PathBuf::from("x"),
+            },
             probes: vec![],
         };
         assert_eq!(edge.summary(), "SystemEdge");
@@ -112,7 +116,11 @@ mod tests {
         };
         assert!(matches!(
             ev,
-            ProcessEvent::CrashRestarting { restarts: 2, nav_tabs: 3, .. }
+            ProcessEvent::CrashRestarting {
+                restarts: 2,
+                nav_tabs: 3,
+                ..
+            }
         ));
     }
 }

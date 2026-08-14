@@ -8,10 +8,10 @@
 //! Message（文本 + 思考块）+ 每流恰好一个 Stop + usage 逐字段透传
 //! （cached/reasoning）。
 //!
-//! 验收口径对齐 R1 小结 C5 契约登记：usage 归一化（`input = prompt -
-//! cached - write`、reasoning 从 completion 拆分）由 R3 T3.4 实现，本单元
-//! 以**现状逐字段透传**为准，并把未拆分项（gemini cache_write 无直报字段）
-//! 记录为 R3 承接。
+//! 验收口径：T3.4（G1-d）落地后，usage 归一化形状（`input = prompt - cached -
+//! write`、reasoning 从 completion 拆分）在 usage 聚合层派生（C9 口径）；本单元
+//! mock 显式上报 cache-write（兼容网关经 `cache.writeTokenCount`/camel 别名）并
+//! 断言其透传。真实 Gemini 官方 wire 无独立写缓存计数，缺省保持 None。
 
 mod common;
 
@@ -48,13 +48,15 @@ async fn gemini_full_stream_usage_pass_through() {
     let server = MockServer::start(|_request| {
         MockResponse::Sse {
             frames: vec![
-                // 帧 1：思考部分 + usageMetadata（cached + reasoning 累计值）
+                // 帧 1：思考部分 + usageMetadata（cached + reasoning + cache-write 累计值）
+                // T3.4（G1-d）：兼容网关经 camel 别名 cacheWriteTokenCount 上报写缓存
                 MockFrame::data(
                     json!({
                         "candidates": [{ "content": { "parts": [{ "text": "推理中", "thought": true }] } }],
                         "usageMetadata": {
                             "promptTokenCount": 40,
                             "cachedContentTokenCount": 6,
+                            "cacheWriteTokenCount": 4,
                             "thoughtsTokenCount": 15,
                         },
                     })
@@ -116,9 +118,11 @@ async fn gemini_full_stream_usage_pass_through() {
     assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
     assert_eq!(result.metadata["providerFinishReason"], "stop");
 
-    // ── usage 现状逐字段透传断言（R1 C5 口径；归一拆分由 R3 T3.4 实现）──
+    // ── usage 透传断言（T3.4 G1-d：prompt 保留原始 promptTokenCount，cached/write
+    //    独立单列，reasoning 独立解析；归一 `input=prompt-cached-write` 由
+    //    ProviderUsage::cache_breakdown 在聚合层派生）──
     let usage = &result.metadata["usage"];
-    // prompt = promptTokenCount（现状透传 prompt，不拆 cached/write ——缺口 R3）
+    // prompt = promptTokenCount（Excluded 归一在聚合层派生，此处保留原始值）
     assert_eq!(usage["promptTokens"], 40);
     assert_eq!(usage["completionTokens"], 9);
     // total 重算（40+9=49；merge_usage_shards 恒由合并结果重算）
@@ -127,12 +131,11 @@ async fn gemini_full_stream_usage_pass_through() {
     assert_eq!(usage["cacheReadTokens"], 6);
     // reasoning（thoughtsTokenCount）透传
     assert_eq!(usage["reasoningTokens"], 15);
-    // ⚠ cache_write：gemini 解析器当前不解析写缓存字段
-    // （gemini_map.rs 恒置 cache_write_tokens: None，miss 按 Excluded 口径推导）——R3 T3.4 承接
+    // T3.4（G1-d）：cache-write 不再恒 None——兼容网关经 camel 别名
+    // cacheWriteTokenCount 上报时透传；真实 Gemini 官方 wire 无独立写缓存计数，缺省 None
     assert_eq!(
-        usage.get("cacheWriteTokens"),
-        None,
-        "gemini 现状不透传 cacheWriteTokens（R3 T3.4 归一实现前）"
+        usage["cacheWriteTokens"], 4,
+        "gemini 兼容网关上报 cache-write 时应透传（T3.4 G1-d）"
     );
 }
 

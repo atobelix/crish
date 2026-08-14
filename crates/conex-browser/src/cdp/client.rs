@@ -241,7 +241,10 @@ impl CdpClient {
             }
             // reader 退出 = 连接丢失：清空全部 pending（await 方立即 channel-closed，
             // 不等 30s 超时），并通知 keepalive 停止
-            pending_clone.lock().unwrap_or_else(|p| p.into_inner()).clear();
+            pending_clone
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clear();
             let _ = cancel_tx.send(true);
             let _ = lost_tx_clone.send(true);
         });
@@ -477,9 +480,8 @@ mod tests {
         let _ = mock; // 不回包（Silent 默认）
 
         // select 抢断：sleep 分支先完成 → send_command future 被同步 drop
-        let mut send = Box::pin(
-            client.send_command("Page.navigate", Some(json!({ "url": "x" })), None),
-        );
+        let mut send =
+            Box::pin(client.send_command("Page.navigate", Some(json!({ "url": "x" })), None));
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_millis(50)) => {}
             _ = &mut send => panic!("不应收到响应"),
@@ -561,11 +563,7 @@ mod tests {
             let client = client.clone();
             handles.push(tokio::spawn(async move {
                 client
-                    .send_command(
-                        "Runtime.evaluate",
-                        Some(json!({ "expression": i })),
-                        None,
-                    )
+                    .send_command("Runtime.evaluate", Some(json!({ "expression": i })), None)
                     .await
             }));
         }
@@ -585,7 +583,10 @@ mod tests {
                 .expect_err("连接关闭后应报 ConnectionLost");
             assert!(matches!(err, CdpError::ConnectionLost), "实际错误：{err}");
         }
-        assert!(tokio::time::Instant::now() < deadline, "断线必须即刻返回，不等超时");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "断线必须即刻返回，不等超时"
+        );
         assert_eq!(client.pending_len().await, 0);
     }
 
@@ -606,7 +607,11 @@ mod tests {
         .expect("建连失败");
         let mut lost = client.lost();
         // 对抗性超大载荷：4096B 单帧超出 1024B 帧上限
-        mock.send_event("Page.oversized", json!({ "payload": "x".repeat(4096) }), None);
+        mock.send_event(
+            "Page.oversized",
+            json!({ "payload": "x".repeat(4096) }),
+            None,
+        );
         wait_lost(&mut lost, "超大帧应触发连接断开（超限报错）").await;
     }
 
@@ -626,7 +631,11 @@ mod tests {
         .await
         .expect("建连失败");
         let mut lost = client.lost();
-        mock.send_event("Page.oversized", json!({ "payload": "x".repeat(4096) }), None);
+        mock.send_event(
+            "Page.oversized",
+            json!({ "payload": "x".repeat(4096) }),
+            None,
+        );
         wait_lost(&mut lost, "累计消息超限应触发连接断开").await;
     }
 

@@ -11,10 +11,8 @@
 //!   （pair.hello / challenge / verify / ok 密钥交换链）归 R1-07；
 //!   本包实现：数据模型 + CSPRNG 生成 + 校验判定状态机。
 
-use conex_types::device::{PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH, PairCode};
-use conex_types::device::version::{
-    PAIR_CODE_TTL_MS, PAIR_MAX_ACTIVE, PAIR_MAX_ATTEMPTS,
-};
+use conex_types::device::version::{PAIR_CODE_TTL_MS, PAIR_MAX_ACTIVE, PAIR_MAX_ATTEMPTS};
+use conex_types::device::{PairCode, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH};
 
 use crate::server::ServerError;
 
@@ -274,15 +272,14 @@ pub fn generate_pair_code() -> Result<PairCode, ServerError> {
     for byte in bytes {
         raw.push(alphabet[(byte as usize) % alphabet.len()] as char);
     }
-    PairCode::normalize(&raw)
-        .map_err(|e| ServerError::internal(format!("配对码生成自检失败：{e}")))
+    PairCode::normalize(&raw).map_err(|e| ServerError::internal(format!("配对码生成自检失败：{e}")))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use conex_types::device::pair::PAIR_CODE_SEPARATOR;
-    use conex_types::device::{PAIR_CODE_PREFIX, PairCodeError};
+    use conex_types::device::{PairCodeError, PAIR_CODE_PREFIX};
 
     /// 生成一个可用测试码（任意固定 12 字符合法码）
     fn sample_code() -> PairCode {
@@ -382,7 +379,10 @@ mod tests {
             assert!(!record.is_locked(1_000 + i), "第 {i} 次失败不应锁定");
         }
         // 第 5 次错误 → 进入冷却
-        assert_eq!(machine.verify("AAAAAAAAAAAA", 1_005), VerifyOutcome::WrongCode);
+        assert_eq!(
+            machine.verify("AAAAAAAAAAAA", 1_005),
+            VerifyOutcome::WrongCode
+        );
         let record = machine.codes().iter().find(|r| r.code == code).unwrap();
         assert_eq!(record.failed_attempts, PAIR_MAX_ATTEMPTS);
         assert!(record.is_locked(1_005));
@@ -415,11 +415,21 @@ mod tests {
         let code = machine.start(1_000).unwrap();
         // 4 次错误：仅计数，不销毁
         for i in 1..=4 {
-            assert_eq!(machine.verify("AAAAAAAAAAAA", 1_000 + i), VerifyOutcome::WrongCode);
-            assert_eq!(machine.failed_attempts(), i as u32, "第 {i} 次失败后计数应为 {i}");
+            assert_eq!(
+                machine.verify("AAAAAAAAAAAA", 1_000 + i),
+                VerifyOutcome::WrongCode
+            );
+            assert_eq!(
+                machine.failed_attempts(),
+                i as u32,
+                "第 {i} 次失败后计数应为 {i}"
+            );
         }
         // 第 5 次错误：锁定 + 销毁（冷却 5 分钟）
-        assert_eq!(machine.verify("AAAAAAAAAAAA", 1_005), VerifyOutcome::WrongCode);
+        assert_eq!(
+            machine.verify("AAAAAAAAAAAA", 1_005),
+            VerifyOutcome::WrongCode
+        );
         {
             let record = machine.codes().iter().find(|r| r.code == code).unwrap();
             assert!(record.destroyed, "第 5 次失败必须销毁配对会话");
@@ -448,10 +458,16 @@ mod tests {
         // 销毁后状态面：无活跃码（code_remaining_ms None / failed_attempts 0）
         assert_eq!(machine.active_code(after_cooldown), None, "销毁后无活跃码");
         assert_eq!(machine.active_code_remaining_ms(after_cooldown), None);
-        assert_eq!(machine.failed_attempts(), 0, "销毁后失败计数归零（重新配对语义）");
+        assert_eq!(
+            machine.failed_attempts(),
+            0,
+            "销毁后失败计数归零（重新配对语义）"
+        );
 
         // 重新开启配对：新码可签发；销毁的旧记录被 purge 出表（永不复活）
-        let new_code = machine.start(after_cooldown + 1).expect("新配对码必须可签发");
+        let new_code = machine
+            .start(after_cooldown + 1)
+            .expect("新配对码必须可签发");
         assert_ne!(new_code, code, "重新配对必须换新码");
         assert!(
             !machine.codes().iter().any(|r| r.code == code),
@@ -479,7 +495,10 @@ mod tests {
         );
         // 未开启配对 → NotAwaiting
         let mut idle = PairStateMachine::new();
-        assert_eq!(idle.verify("7K4PQ2MB9XRT", 1_000), VerifyOutcome::NotAwaiting);
+        assert_eq!(
+            idle.verify("7K4PQ2MB9XRT", 1_000),
+            VerifyOutcome::NotAwaiting
+        );
         // KeyVerify 阶段（校验通过后）不再接受输入
         let mut after = PairStateMachine::new();
         let code = after.start(1_000).unwrap();
@@ -494,7 +513,10 @@ mod tests {
         machine.cancel();
         assert_eq!(machine.state(), PairState::Idle);
         assert!(machine.codes().is_empty());
-        assert_eq!(machine.verify("7K4PQ2MB9XRT", 2_000), VerifyOutcome::NotAwaiting);
+        assert_eq!(
+            machine.verify("7K4PQ2MB9XRT", 2_000),
+            VerifyOutcome::NotAwaiting
+        );
     }
 
     #[test]

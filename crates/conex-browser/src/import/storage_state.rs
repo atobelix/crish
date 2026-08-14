@@ -1245,13 +1245,9 @@ mod tests {
             matches!(&calls[1], ChannelCall::SetItem { origin, key, value }
                 if origin == "https://example.com" && key == "theme" && value == "dark")
         );
-        assert!(
-            matches!(&calls[2], ChannelCall::SetItem { origin, key, .. }
-                if origin == "https://example.com" && key == "token")
-        );
-        assert!(
-            matches!(&calls[3], ChannelCall::InitScript(s) if s.contains("sub.example.org"))
-        );
+        assert!(matches!(&calls[2], ChannelCall::SetItem { origin, key, .. }
+                if origin == "https://example.com" && key == "token"));
+        assert!(matches!(&calls[3], ChannelCall::InitScript(s) if s.contains("sub.example.org")));
         assert!(
             matches!(&calls[4], ChannelCall::SetItem { origin, key, value }
                 if origin == "https://sub.example.org" && key == "k" && value == "v")
@@ -1297,8 +1293,12 @@ mod tests {
         let channel = RecordingChannel::default();
         let json = r#"{"cookies":[],"origins":[{"origin":"https://example.com","localStorage":[{"name":"theme","value":"dark"}]}]}"#;
         let plan = build_import_plan(&parse_storage_state(json).expect("解析"));
-        inject_origin_scripts(&channel, &plan).await.expect("首次导入");
-        inject_origin_scripts(&channel, &plan).await.expect("重复导入（同值）");
+        inject_origin_scripts(&channel, &plan)
+            .await
+            .expect("首次导入");
+        inject_origin_scripts(&channel, &plan)
+            .await
+            .expect("重复导入（同值）");
         let set_values = |channel: &RecordingChannel| -> Vec<String> {
             channel
                 .calls
@@ -1321,7 +1321,9 @@ mod tests {
         // 变更值重导 → 覆盖语义（最后一次值胜）
         let json2 = r#"{"cookies":[],"origins":[{"origin":"https://example.com","localStorage":[{"name":"theme","value":"light"}]}]}"#;
         let plan2 = build_import_plan(&parse_storage_state(json2).expect("解析"));
-        inject_origin_scripts(&channel, &plan2).await.expect("覆盖导入");
+        inject_origin_scripts(&channel, &plan2)
+            .await
+            .expect("覆盖导入");
         assert_eq!(
             set_values(&channel),
             vec!["dark", "dark", "light"],
@@ -1509,16 +1511,24 @@ mod tests {
         let json = r#"{"cookies":[],"origins":[{"origin":"https://example.com","localStorage":[{"name":"theme","value":"dark"},{"name":"token","value":"abc"}]}]}"#;
         let plan = build_import_plan(&parse_storage_state(json).expect("解析"));
         inject_origin_scripts(&channel, &plan).await.expect("注入");
-        let cmd = mock.expect_command("Page.addScriptToEvaluateOnNewDocument").await;
+        let cmd = mock
+            .expect_command("Page.addScriptToEvaluateOnNewDocument")
+            .await;
         assert_eq!(cmd["sessionId"], "S1");
         assert!(
-            cmd["params"]["source"].as_str().unwrap().contains("window.location.origin"),
+            cmd["params"]["source"]
+                .as_str()
+                .unwrap()
+                .contains("window.location.origin"),
             "脚本须含 origin 守卫"
         );
         let cmd = mock.expect_command("DOMStorage.enable").await;
         assert_eq!(cmd["sessionId"], "S1");
         let cmd = mock.expect_command("DOMStorage.setDOMStorageItem").await;
-        assert_eq!(cmd["params"]["storageId"]["securityOrigin"], "https://example.com");
+        assert_eq!(
+            cmd["params"]["storageId"]["securityOrigin"],
+            "https://example.com"
+        );
         assert_eq!(cmd["params"]["storageId"]["isLocalStorage"], true);
         assert_eq!(cmd["params"]["key"], "theme");
         assert_eq!(cmd["params"]["value"], "dark");
@@ -1531,17 +1541,17 @@ mod tests {
             .expect("读取");
         assert_eq!(origins[0].local_storage[0].name, "k");
         let cmd = mock.expect_command("DOMStorage.getDOMStorageItems").await;
-        assert_eq!(cmd["params"]["storageId"]["securityOrigin"], "https://example.com");
+        assert_eq!(
+            cmd["params"]["storageId"]["securityOrigin"],
+            "https://example.com"
+        );
         assert_eq!(cmd["params"]["storageId"]["isLocalStorage"], true);
 
         // enable 惰性一次：全部预期命令已消费，队列无残留（不得重复 enable）
         assert!(
-            tokio::time::timeout(
-                std::time::Duration::from_millis(300),
-                mock.next_command(),
-            )
-            .await
-            .is_err(),
+            tokio::time::timeout(std::time::Duration::from_millis(300), mock.next_command(),)
+                .await
+                .is_err(),
             "命令队列应已消费完毕（DOMStorage.enable 惰性一次）"
         );
         session.shutdown().await;
@@ -1576,27 +1586,39 @@ mod tests {
     /// 会话恢复所需 mock 自动应答全表（与 ops.rs 测试同源）。
     fn restore_reply_map() -> Vec<(&'static str, MockReply)> {
         vec![
-            ("Browser.getVersion", MockReply::Ok(json!({
-                "protocolVersion": "1.3",
-                "product": "Chrome/151.0.7922.72",
-                "revision": "@abc",
-                "userAgent": "ua",
-                "jsVersion": "13.1.71"
-            }))),
+            (
+                "Browser.getVersion",
+                MockReply::Ok(json!({
+                    "protocolVersion": "1.3",
+                    "product": "Chrome/151.0.7922.72",
+                    "revision": "@abc",
+                    "userAgent": "ua",
+                    "jsVersion": "13.1.71"
+                })),
+            ),
             ("Target.setDiscoverTargets", MockReply::Ok(json!({}))),
-            ("Target.getTargets", MockReply::Ok(json!({
-                "targetInfos": [
-                    { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
-                ]
-            }))),
-            ("Target.attachToTarget", MockReply::Ok(json!({ "sessionId": "S1" }))),
+            (
+                "Target.getTargets",
+                MockReply::Ok(json!({
+                    "targetInfos": [
+                        { "targetId": "T1", "type": "page", "title": "A", "url": "https://a.example" }
+                    ]
+                })),
+            ),
+            (
+                "Target.attachToTarget",
+                MockReply::Ok(json!({ "sessionId": "S1" })),
+            ),
             ("Page.enable", MockReply::Ok(json!({}))),
             ("Page.setLifecycleEventsEnabled", MockReply::Ok(json!({}))),
             ("Runtime.enable", MockReply::Ok(json!({}))),
             ("DOM.enable", MockReply::Ok(json!({}))),
             ("Network.enable", MockReply::Ok(json!({}))),
             ("Runtime.runIfWaitingForDebugger", MockReply::Ok(json!({}))),
-            ("Runtime.evaluate", MockReply::Ok(json!({ "result": { "value": 1 } }))),
+            (
+                "Runtime.evaluate",
+                MockReply::Ok(json!({ "result": { "value": 1 } })),
+            ),
             ("Page.setWindowOpenHandler", MockReply::Ok(json!({}))),
         ]
     }

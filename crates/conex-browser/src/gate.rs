@@ -270,12 +270,12 @@ fn v4_mapped_of(ip: &Ipv6Addr) -> Option<Ipv4Addr> {
     }
 }
 
-/// IPv4 段 → URL 阻断模式（§4.3 传输层：/8 单模式；细段逐 /16 通配展开）。
+/// IPv4 段 → URL 阻断模式（§4.3 传输层：/8 单模式；细段逐 /16 通配展开，双协议 http/https 阻断）。
 fn ipv4_blocked_patterns(net: &Ipv4Addr, prefix: u8) -> Vec<String> {
     let first = u32::from(*net);
     let a = (first >> 24) as u8;
     if prefix <= 8 {
-        return vec![format!("http://{a}.*")];
+        return vec![format!("http://{a}.*"), format!("https://{a}.*")];
     }
     let host_bits = 32 - prefix as u32;
     let mask = (1u32 << host_bits) - 1;
@@ -283,19 +283,22 @@ fn ipv4_blocked_patterns(net: &Ipv4Addr, prefix: u8) -> Vec<String> {
     let b_first = ((first >> 16) & 0xFF) as u8;
     let b_last = ((end >> 16) & 0xFF) as u8;
     (b_first..=b_last)
-        .map(|b| format!("http://{a}.{b}.*"))
+        .flat_map(|b| vec![format!("http://{a}.{b}.*"), format!("https://{a}.{b}.*")])
         .collect()
 }
 
 /// IPv6 段 → URL 阻断模式（§4.3 传输层：精确 /128、IPv4 映射 /96 特例、
-/// 其余按 4-bit 边界展开为前缀通配）。
+/// 其余按 4-bit 边界展开为前缀通配，双协议 http/https 阻断）。
 fn ipv6_blocked_patterns(net: &Ipv6Addr, prefix: u8) -> Vec<String> {
     let value = u128::from(*net);
     if prefix == 128 {
-        return vec![format!("http://[{net}]*")];
+        return vec![format!("http://[{net}]*"), format!("https://[{net}]*")];
     }
     if prefix == 96 && (value >> 32) == 0xffff {
-        return vec!["http://[::ffff:*".to_string()];
+        return vec![
+            "http://[::ffff:*".to_string(),
+            "https://[::ffff:*".to_string(),
+        ];
     }
     // 非精确段：固定完整 nibble 前缀 + 次 nibble 范围通配
     let free_bits_in_nibble = (4 - prefix % 4) % 4;
@@ -308,13 +311,18 @@ fn ipv6_blocked_patterns(net: &Ipv6Addr, prefix: u8) -> Vec<String> {
     };
     let base_nibble = (value >> (128 - full_fixed_bits as u32 - 4)) & 0xF;
     (0..count)
-        .map(|i| format!("http://[{prefix_hex}{:x}*", (base_nibble as u32) + i))
+        .flat_map(|i| {
+            vec![
+                format!("http://[{prefix_hex}{:x}*", (base_nibble as u32) + i),
+                format!("https://[{prefix_hex}{:x}*", (base_nibble as u32) + i),
+            ]
+        })
         .collect()
 }
 
 /// 传输层阻断模式程序化生成（§4.3 传输层，R-11）：保留/内网段全部
 /// IPv4/IPv6 段的 URL 形态 + 云元数据端点（`169.254.169.254`）显式阻断
-/// + 链路本地（`169.254.0.0/16`）。纯函数，单测覆盖与段表一致。
+/// + 链路本地（`169.254.0.0/16`），全覆盖 http 与 https 双协议。
 pub fn blocked_urls() -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for (net, prefix) in IPV4_SEGMENTS {
@@ -325,6 +333,7 @@ pub fn blocked_urls() -> Vec<String> {
     }
     // 云元数据端点显式阻断（§4.3；虽已含于 169.254.0.0/16，显式声明便于审计）
     out.push("http://169.254.169.254/*".to_string());
+    out.push("https://169.254.169.254/*".to_string());
     out.sort();
     out.dedup();
     out
@@ -379,10 +388,7 @@ impl TransportGate {
     /// iframe 导航订阅兜底（§4.3 传输层订阅面）：`BrowserEvent::NavigationStarted`
     /// （11 §5.1 含 frame）到达时对新建/导航 frame 重新应用——清单为会话级，
     /// 重挂幂等，覆盖主 URL 不变的 iframe 内网导航请求。
-    pub async fn on_frame_navigated(
-        &self,
-        sender: &dyn SetBlockedSender,
-    ) -> Result<(), CdpError> {
+    pub async fn on_frame_navigated(&self, sender: &dyn SetBlockedSender) -> Result<(), CdpError> {
         self.apply(sender).await
     }
 }
@@ -411,7 +417,10 @@ impl std::fmt::Debug for FormalDomainGate {
             .field("allowlist", &self.allowlist)
             .field("blocklist", &self.blocklist)
             .field("fail_closed_resolve", &self.fail_closed_resolve)
-            .field("window_entries", &self.window.lock().map(|w| w.len()).unwrap_or(0))
+            .field(
+                "window_entries",
+                &self.window.lock().map(|w| w.len()).unwrap_or(0),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -450,13 +459,7 @@ impl FormalDomainGate {
         blocklist: &[String],
         clock: Arc<dyn GateClock>,
     ) -> Result<Self, String> {
-        Self::with_parts(
-            allowlist,
-            blocklist,
-            Arc::new(SystemResolver),
-            true,
-            clock,
-        )
+        Self::with_parts(allowlist, blocklist, Arc::new(SystemResolver), true, clock)
     }
 
     /// 全参数构造（内部聚合）。
@@ -883,7 +886,10 @@ mod tests {
 
         let g = gate(&["example.com"], &[]);
         assert!(g.check("https://example.com/").is_ok());
-        assert!(g.check("https://www.example.com/").is_ok(), "根域条目含子域");
+        assert!(
+            g.check("https://www.example.com/").is_ok(),
+            "根域条目含子域"
+        );
         assert!(denied(&g, "https://evil-example.com/").is_some());
         assert!(denied(&g, "https://example.com.evil.com/").is_some());
 
@@ -936,18 +942,15 @@ mod tests {
             Ok(vec!["93.184.216.34".parse().unwrap()]),
             Ok(vec!["10.0.0.1".parse().unwrap()]),
         ]));
-        let g = FormalDomainGate::with_parts(
-            &[],
-            &[],
-            resolver.clone(),
-            true,
-            clock.clone(),
-        )
-        .unwrap();
+        let g =
+            FormalDomainGate::with_parts(&[], &[], resolver.clone(), true, clock.clone()).unwrap();
 
         // 首次校验：公网 IP → 放行，窗口起点记录
         assert!(g.check("https://example.com/").is_ok());
-        assert!(g.within_rebinding_window("example.com"), "校验通过后进入 60s 窗口");
+        assert!(
+            g.within_rebinding_window("example.com"),
+            "校验通过后进入 60s 窗口"
+        );
         assert_eq!(resolver.call_count(), 1);
 
         // 窗口内第二次校验（时钟推进 30s < 60s）：解析器再次被调用（每动作一次），
@@ -955,7 +958,11 @@ mod tests {
         clock.advance(30_000);
         let reason = denied(&g, "https://example.com/").expect("重绑定应被拦截");
         assert!(reason.contains("SSRF"), "说明：{reason}");
-        assert_eq!(resolver.call_count(), 2, "窗口内每动作一次重新解析（无结果缓存）");
+        assert_eq!(
+            resolver.call_count(),
+            2,
+            "窗口内每动作一次重新解析（无结果缓存）"
+        );
     }
 
     /// R-11 §4.3 步骤 4：窗口过期——60s 后条目清除，重新按常规路径全量校验；
@@ -964,14 +971,7 @@ mod tests {
     fn rebinding_window_expires_after_60s() {
         let clock = Arc::new(MockClock::default());
         let resolver = Arc::new(MultiIpResolver(vec!["93.184.216.34".parse().unwrap()]));
-        let g = FormalDomainGate::with_parts(
-            &[],
-            &[],
-            resolver,
-            true,
-            clock.clone(),
-        )
-        .unwrap();
+        let g = FormalDomainGate::with_parts(&[], &[], resolver, true, clock.clone()).unwrap();
         assert!(g.check("https://example.com/").is_ok());
         assert!(g.within_rebinding_window("example.com"));
         // 窗口内仍有效
@@ -979,10 +979,16 @@ mod tests {
         assert!(g.within_rebinding_window("example.com"));
         // 过期：60s 边界外窗口关闭
         clock.advance(2_000);
-        assert!(!g.within_rebinding_window("example.com"), "60s 后窗口应关闭");
+        assert!(
+            !g.within_rebinding_window("example.com"),
+            "60s 后窗口应关闭"
+        );
         // 过期后再次校验：按常规路径重新全量校验（仍放行公网）
         assert!(g.check("https://example.com/").is_ok());
-        assert!(g.within_rebinding_window("example.com"), "新校验重新开启窗口");
+        assert!(
+            g.within_rebinding_window("example.com"),
+            "新校验重新开启窗口"
+        );
     }
 
     /// R-11 传输层：段表程序化生成——清单覆盖全部保留段（IPv4/IPv6 逐段抽样
@@ -1023,32 +1029,45 @@ mod tests {
             assert!(urls.iter().any(|p| p == &expected), "应含条目：{expected}");
         }
 
-        // 段内抽样 glob 命中
+        // 段内抽样 glob 命中 (涵盖 http 与 https 双协议)
         let matches = |ip_url: &str| urls.iter().any(|p| glob_match(p, ip_url));
         for sample in [
             "http://10.1.2.3/x",
+            "https://10.1.2.3/x",
             "http://172.16.0.1/",
+            "https://172.16.0.1/",
             "http://172.31.255.255/",
+            "https://172.31.255.255/",
             "http://192.168.100.1:8080/",
+            "https://192.168.100.1:8080/",
             "http://169.254.169.254/latest/meta-data/",
+            "https://169.254.169.254/latest/meta-data/",
             "http://100.64.0.1/",
+            "https://100.64.0.1/",
             "http://100.127.255.255/",
             "http://198.19.1.1/",
             "http://0.0.0.0/",
             "http://127.0.0.1/",
+            "https://127.0.0.1/",
             "http://[::1]/",
+            "https://[::1]/",
             "http://[fc00::1]/",
+            "https://[fc00::1]/",
             "http://[fdff::1]/",
             "http://[fe80::1]/",
+            "https://[fe80::1]/",
             "http://[febf::1]/",
             "http://[::ffff:10.0.0.1]/",
+            "https://[::ffff:10.0.0.1]/",
         ] {
             assert!(matches(sample), "段内地址应被阻断清单覆盖：{sample}");
         }
         // 公网/段外抽样不命中
         for sample in [
             "http://8.8.8.8/",
+            "https://8.8.8.8/",
             "http://1.1.1.1/",
+            "https://1.1.1.1/",
             "http://172.15.0.1/",
             "http://172.32.0.1/",
             "http://100.63.0.1/",
@@ -1057,6 +1076,7 @@ mod tests {
             "http://198.20.0.1/",
             "http://169.253.0.1/",
             "http://[2001:4860:4860::8888]/",
+            "https://[2001:4860:4860::8888]/",
             "http://[2606:2800::1]/",
             "http://[fec0::1]/",
         ] {
@@ -1099,7 +1119,10 @@ mod tests {
         let params = gate.to_params();
         let v = serde_json::to_value(&params).expect("序列化失败");
         assert_eq!(v["urls"], serde_json::json!(gate.patterns()));
-        assert_eq!(v["urls"].as_array().map(Vec::len), Some(gate.patterns().len()));
+        assert_eq!(
+            v["urls"].as_array().map(Vec::len),
+            Some(gate.patterns().len())
+        );
 
         // apply：经 mock 发送面下发阻断清单
         let sender = RecordingSender::default();
@@ -1143,7 +1166,10 @@ mod tests {
     #[async_trait]
     impl SetBlockedSender for RecordingSender {
         async fn set_blocked_urls(&self, urls: &[String]) -> Result<(), CdpError> {
-            self.calls.lock().unwrap_or_else(|p| p.into_inner()).push(urls.to_vec());
+            self.calls
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(urls.to_vec());
             Ok(())
         }
     }
@@ -1164,8 +1190,12 @@ mod tests {
         assert!(ipv6_reserved(&"fc00::1".parse::<Ipv6Addr>().unwrap()));
         assert!(ipv6_reserved(&"fdff::1".parse::<Ipv6Addr>().unwrap()));
         assert!(ipv6_reserved(&"fe80::1".parse::<Ipv6Addr>().unwrap()));
-        assert!(ipv6_reserved(&"::ffff:10.0.0.1".parse::<Ipv6Addr>().unwrap()));
-        assert!(!ipv6_reserved(&"2001:4860:4860::8888".parse::<Ipv6Addr>().unwrap()));
+        assert!(ipv6_reserved(
+            &"::ffff:10.0.0.1".parse::<Ipv6Addr>().unwrap()
+        ));
+        assert!(!ipv6_reserved(
+            &"2001:4860:4860::8888".parse::<Ipv6Addr>().unwrap()
+        ));
         assert!(!ipv6_reserved(&"fec0::1".parse::<Ipv6Addr>().unwrap()));
     }
 

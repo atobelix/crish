@@ -70,9 +70,9 @@ impl BlockSetAttrTool {
 
 /// attrs：对象，或可解析为对象的 JSON 字符串
 fn require_attrs(args: &JsonValue) -> Result<Map<String, JsonValue>, ToolError> {
-    let value = args.get("attrs").ok_or_else(|| {
-        ToolError::invalid_input("attrs must be an object or JSON object string")
-    })?;
+    let value = args
+        .get("attrs")
+        .ok_or_else(|| ToolError::invalid_input("attrs must be an object or JSON object string"))?;
     match value {
         JsonValue::Object(map) => Ok(map.clone()),
         JsonValue::String(s) => {

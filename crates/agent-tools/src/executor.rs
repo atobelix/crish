@@ -12,15 +12,15 @@
 //! 测试整体外置 `executor_tests.rs`（`#[path]` 旁挂，零删除）。
 //! 诚实边界：仅结构拆分，语义零改动（≠ EL-01…10 / ≠ 结构债清零）。
 
-#[path = "executor_types.rs"]
-mod executor_types;
 #[path = "executor_idem.rs"]
 mod executor_idem;
 #[path = "executor_run.rs"]
 mod executor_run;
+#[path = "executor_types.rs"]
+mod executor_types;
 
-pub use executor_types::{ExecutorContext, ToolExecutionPolicy, ToolResult};
 pub use executor_run::{execute_stream_with_output_policy, execute_with_output_policy};
+pub use executor_types::{ExecutorContext, ToolExecutionPolicy, ToolResult};
 
 // 测试旁挂（executor_tests.rs）经 `use super::*` 消费以下符号面，
 // 故仅在 cfg(test) 下声明，避免主构建 unused import 告警。

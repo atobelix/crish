@@ -1,12 +1,8 @@
-use std::{
-    fs::File,
-    io::Read,
-    path::Path,
-};
+use std::{fs::File, io::Read, path::Path};
 
 use crate::fs_commands::types::{
     file_too_large_error, FileCommandError, ReadFileContentResult, ReadPolicy, WorkspaceFsGuard,
-    ERR_BINARY_FILE, ERR_NOT_FILE, ERR_READ_FILE, ERR_UNSUPPORTED_ENCODING, BINARY_SCAN_BYTES,
+    BINARY_SCAN_BYTES, ERR_BINARY_FILE, ERR_NOT_FILE, ERR_READ_FILE, ERR_UNSUPPORTED_ENCODING,
     READ_CHUNK_BYTES,
 };
 

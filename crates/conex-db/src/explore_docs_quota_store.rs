@@ -19,8 +19,8 @@
 //! （配额 None = 主 agent 不受约束；配额由会话级共享，多 run 累计）。
 
 use agent_tools::explore_quota::{
-    ExploreDocsQuotaSnapshot, ExploreDocsQuotaStore, SESSION_META_KEY_EXPLORE_DOCS_CONSUMED,
     explore_docs_consumed_value, parse_explore_docs_consumed, session_meta_key_of,
+    ExploreDocsQuotaSnapshot, ExploreDocsQuotaStore, SESSION_META_KEY_EXPLORE_DOCS_CONSUMED,
 };
 
 use crate::LocalDb;
@@ -57,11 +57,7 @@ impl ExploreDocsQuotaStore for SessionMetaExploreDocsQuotaStore {
         parse_explore_docs_consumed(value.as_deref())
     }
 
-    fn consume(
-        &self,
-        session_id: &str,
-        run_id: &str,
-    ) -> Result<ExploreDocsQuotaSnapshot, String> {
+    fn consume(&self, session_id: &str, run_id: &str) -> Result<ExploreDocsQuotaSnapshot, String> {
         let key = session_meta_key_of(session_id, SESSION_META_KEY_EXPLORE_DOCS_CONSUMED);
         // 读改写：当前快照 +1（saturating_add 防溢出回绕）并登记最近
         // 消耗者；落库失败返回错误文案（调用方按执行失败处理，不 panic）
@@ -127,9 +123,7 @@ mod tests {
     #![allow(clippy::disallowed_methods)]
 
     use super::*;
-    use agent_tools::explore_quota::{
-        SESSION_META_KEY_EXPLORE_DOCS_QUOTA, session_meta_key_of,
-    };
+    use agent_tools::explore_quota::{session_meta_key_of, SESSION_META_KEY_EXPLORE_DOCS_QUOTA};
 
     /// 临时文件库（重启恢复用例：重建连接模拟跨进程重启）
     struct TempQuotaDb {
@@ -172,12 +166,18 @@ mod tests {
         let store = SessionMetaExploreDocsQuotaStore::new(db);
 
         // 未消耗：零消耗默认
-        assert_eq!(store.snapshot("sess-1"), ExploreDocsQuotaSnapshot::default());
+        assert_eq!(
+            store.snapshot("sess-1"),
+            ExploreDocsQuotaSnapshot::default()
+        );
 
         // consume：+1 并记录最近消耗者
         let snap = store.consume("sess-1", "run-researcher-1").unwrap();
         assert_eq!(snap.consumed, 1);
-        assert_eq!(snap.last_consumer_run_id.as_deref(), Some("run-researcher-1"));
+        assert_eq!(
+            snap.last_consumer_run_id.as_deref(),
+            Some("run-researcher-1")
+        );
 
         // 再次消耗（同会话累计）；续跑共享同一配额
         let snap = store.consume("sess-1", "run-researcher-2").unwrap();
@@ -236,10 +236,7 @@ mod tests {
         .expect("写入损坏值");
 
         let snap = store.snapshot("sess-1");
-        assert_eq!(
-            snap.consumed, 0,
-            "损坏值按零消耗容错（不 panic）"
-        );
+        assert_eq!(snap.consumed, 0, "损坏值按零消耗容错（不 panic）");
         assert_eq!(snap.last_consumer_run_id, None);
 
         // 缺字段（合法 JSON 但无 consumed 字段）同样容错

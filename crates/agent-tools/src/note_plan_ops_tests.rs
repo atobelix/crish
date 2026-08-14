@@ -58,9 +58,7 @@ fn plan_block_ops_previous_not_found() {
 /// plan 成功 + apply：insert 落盘；失败路径不调用 apply
 #[test]
 fn plan_and_apply_insert_commits() {
-    let mut doc = MemDoc {
-        blocks: seed_p1(),
-    };
+    let mut doc = MemDoc { blocks: seed_p1() };
     let ops = [NoteBlockOp {
         op: NoteBlockOpKind::Insert,
         id: Some("p2".into()),

@@ -254,15 +254,10 @@ impl LocalDb {
             kind: DbFailureKind::Lock,
         })?;
         let mut stmt = conn
-            .prepare(&format!(
-                "{BLOCK_SELECT_SQL} AND block_id = ?2"
-            ))
+            .prepare(&format!("{BLOCK_SELECT_SQL} AND block_id = ?2"))
             .map_err(|e| self.latch_error("get_block_prepare", e))?;
         let mut rows = stmt
-            .query_map(
-                rusqlite::params![session_id, block_id],
-                block_from_row,
-            )
+            .query_map(rusqlite::params![session_id, block_id], block_from_row)
             .map_err(|e| self.latch_error("get_block_query", e))?;
         match rows.next() {
             Some(Ok(row)) => Ok(Some(row)),
@@ -294,7 +289,8 @@ impl LocalDb {
                  ORDER BY generation DESC, sequence DESC
                  LIMIT ?2"
             ))
-            .map_err(|e| self.latch_error("list_blocks_prepare", e))?;        let rows = stmt
+            .map_err(|e| self.latch_error("list_blocks_prepare", e))?;
+        let rows = stmt
             .query_map(
                 rusqlite::params![session_id, limit.map(|l| l as i64).unwrap_or(i64::MAX)],
                 block_from_row,
@@ -367,8 +363,8 @@ fn now_ms() -> i64 {
 /// 行 → 结构映射（dropped_message_ids JSON 反序列化；state 字面量宽松解析）。
 fn block_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CompactionBlockRow> {
     let dropped_json: String = row.get(5)?;
-    let dropped_message_ids: Vec<String> = serde_json::from_str(&dropped_json)
-        .unwrap_or_else(|_| Vec::new());
+    let dropped_message_ids: Vec<String> =
+        serde_json::from_str(&dropped_json).unwrap_or_else(|_| Vec::new());
     Ok(CompactionBlockRow {
         session_id: row.get(0)?,
         block_id: row.get(1)?,
@@ -435,7 +431,10 @@ mod tests {
         assert_eq!(BlockState::from_db_str("committed"), BlockState::Committed);
         assert_eq!(BlockState::from_db_str("retired"), BlockState::Retired);
         // 未知字面量宽松降级（旧代码读新库不炸）
-        assert_eq!(BlockState::from_db_str("future-state"), BlockState::Awaiting);
+        assert_eq!(
+            BlockState::from_db_str("future-state"),
+            BlockState::Awaiting
+        );
     }
 
     #[test]
@@ -444,9 +443,15 @@ mod tests {
         let row = sample_row("s1", "compacted-summary-1-1", 1);
         db.insert_block(&row).unwrap();
 
-        let loaded = db.get_block("s1", "compacted-summary-1-1").unwrap().unwrap();
+        let loaded = db
+            .get_block("s1", "compacted-summary-1-1")
+            .unwrap()
+            .unwrap();
         assert_eq!(loaded, row);
-        assert_eq!(loaded.dropped_message_ids, vec!["u1".to_string(), "a1".to_string()]);
+        assert_eq!(
+            loaded.dropped_message_ids,
+            vec!["u1".to_string(), "a1".to_string()]
+        );
         assert_eq!(loaded.generation, 1);
         assert_eq!(loaded.state, BlockState::Awaiting);
         assert_eq!(loaded.schema_version, BLOCK_SCHEMA_VERSION);
@@ -505,7 +510,8 @@ mod tests {
     fn list_blocks_orders_by_generation_desc() {
         let db = LocalDb::open_in_memory().unwrap();
         for gen in [3u32, 1, 2] {
-            db.insert_block(&sample_row("s1", &format!("b{gen}"), gen)).unwrap();
+            db.insert_block(&sample_row("s1", &format!("b{gen}"), gen))
+                .unwrap();
         }
         let blocks = db.list_blocks("s1", None).unwrap();
         let gens: Vec<u32> = blocks.iter().map(|b| b.generation).collect();
@@ -521,7 +527,8 @@ mod tests {
         // 模拟 v6 库被新代码读（R12/P2-1）：v7 库上删除块表 → 表缺失形态
         let db = LocalDb::open_in_memory().unwrap();
         let conn = db.conn.lock().unwrap();
-        conn.execute_batch("DROP TABLE compression_blocks;").unwrap();
+        conn.execute_batch("DROP TABLE compression_blocks;")
+            .unwrap();
         drop(conn);
 
         // 查询面：空集 / Ok(None)，不 SQL 报错
@@ -542,8 +549,10 @@ mod tests {
         let db = LocalDb::open_in_memory().unwrap();
         db.insert_session("s1", "s1").unwrap();
         assert_eq!(db.count_compression_events("s1").unwrap(), 0);
-        db.append_event("s1", 1, "context-compression-end", "{}", None).unwrap();
-        db.append_event("s1", 2, "context-compression-end", "{}", None).unwrap();
+        db.append_event("s1", 1, "context-compression-end", "{}", None)
+            .unwrap();
+        db.append_event("s1", 2, "context-compression-end", "{}", None)
+            .unwrap();
         db.append_event("s1", 3, "message-end", "{}", None).unwrap();
         assert_eq!(db.count_compression_events("s1").unwrap(), 2);
         // 会话隔离

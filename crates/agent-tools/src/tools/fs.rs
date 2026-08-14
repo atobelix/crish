@@ -92,8 +92,7 @@ impl Tool for ReadFileTool {
         let start_line = parse_line_arg(&args, "startLine", false)?.unwrap_or(1);
         let end_line_arg = parse_line_arg(&args, "endLine", false)?;
         let content_offset = parse_line_arg(&args, "contentOffset", true)?.unwrap_or(0);
-        let max_lines =
-            parse_line_arg(&args, "maxLines", false)?.unwrap_or(DEFAULT_READ_MAX_LINES);
+        let max_lines = parse_line_arg(&args, "maxLines", false)?.unwrap_or(DEFAULT_READ_MAX_LINES);
         let max_bytes = parse_line_arg(&args, "maxBytes", false)?.unwrap_or(self.max_bytes);
         if let Some(end_line) = end_line_arg {
             if start_line > end_line {
@@ -343,9 +342,8 @@ impl Tool for WriteFileTool {
 
         conex_fs::path_utils::ensure_parent_dir(&file_path)
             .map_err(|e| ToolError::execution_failed("write_file", format!("{display}: {e}")))?;
-        std::fs::write(&file_path, &bytes).map_err(|e| {
-            ToolError::execution_failed("write_file", format!("{display}: {e}"))
-        })?;
+        std::fs::write(&file_path, &bytes)
+            .map_err(|e| ToolError::execution_failed("write_file", format!("{display}: {e}")))?;
         // 写盘成功：提交占用（Drop 不再回滚）
         if let Some(mut r) = reservation {
             r.commit();
@@ -464,7 +462,9 @@ struct DirEntry {
 
 /// 统计目录直接子项数；read_dir 失败返回 -1（T-CF-03 宽容语义）
 fn count_direct_children(dir: &Path) -> i64 {
-    std::fs::read_dir(dir).map(|rd| rd.count() as i64).unwrap_or(-1)
+    std::fs::read_dir(dir)
+        .map(|rd| rd.count() as i64)
+        .unwrap_or(-1)
 }
 
 /// 列目录工具：返回条目清单（name/type/isFile/isDirectory/size/mtime）
@@ -477,7 +477,9 @@ impl ListDirTool {
         Self {
             def: ToolDefinition {
                 name: "list_dir".to_string(),
-                description: "列出工作区目录下的文件与文件夹条目，含相对路径（path）与目录子项数（count）。".to_string(),
+                description:
+                    "列出工作区目录下的文件与文件夹条目，含相对路径（path）与目录子项数（count）。"
+                        .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -521,9 +523,8 @@ impl Tool for ListDirTool {
         }
 
         let mut items: Vec<DirEntry> = Vec::new();
-        let entries = std::fs::read_dir(&dir).map_err(|e| {
-            ToolError::execution_failed("list_dir", format!("{display}: {e}"))
-        })?;
+        let entries = std::fs::read_dir(&dir)
+            .map_err(|e| ToolError::execution_failed("list_dir", format!("{display}: {e}")))?;
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
             let meta = entry.metadata();
@@ -561,7 +562,9 @@ impl Tool for ListDirTool {
             });
         }
         // 对齐 TS：按 kind 名称 + 条目名排序（directory < file < other）
-        items.sort_by(|a, b| format!("{}:{}", a.kind, a.name).cmp(&format!("{}:{}", b.kind, b.name)));
+        items.sort_by(|a, b| {
+            format!("{}:{}", a.kind, a.name).cmp(&format!("{}:{}", b.kind, b.name))
+        });
 
         let text = if items.is_empty() {
             "(empty directory)".to_string()
@@ -696,7 +699,10 @@ mod tests {
         let ws = TempWorkspace::new("fs_read");
         ws.write_file("a.txt", "hello\nworld\n");
         let tool = ReadFileTool::new(None);
-        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "a.txt" })).await.unwrap();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "a.txt" }))
+            .await
+            .unwrap();
         assert_eq!(out["kind"], "file");
         assert_eq!(out["bytes"], 12);
         assert_eq!(out["truncated"], false);
@@ -713,7 +719,10 @@ mod tests {
         let ws = TempWorkspace::new("fs_trunc");
         ws.write_file("big.txt", "hello world\nsecond line");
         let tool = ReadFileTool::new(Some(14));
-        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "big.txt" })).await.unwrap();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "big.txt" }))
+            .await
+            .unwrap();
         assert_eq!(out["truncated"], true);
         assert_eq!(out["shownChars"], 11);
         assert_eq!(out["totalChars"], 23);
@@ -731,7 +740,10 @@ mod tests {
         let ws = TempWorkspace::new("fs_line_boundary");
         ws.write_file("long.txt", "a".repeat(10_000).as_str());
         let tool = ReadFileTool::new(Some(100));
-        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "long.txt" })).await.unwrap();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "long.txt" }))
+            .await
+            .unwrap();
         assert_eq!(out["truncated"], true);
         assert_eq!(out["shownChars"], 0);
         assert_eq!(out["totalChars"], 10_000);
@@ -761,8 +773,14 @@ mod tests {
         let ws = TempWorkspace::new("fs_err");
         ws.write_file("a.txt", "hello");
         let tool = ReadFileTool::new(None);
-        assert!(tool.execute(&mock_ctx(&ws), json!({ "path": "nope.txt" })).await.is_err());
-        let err = tool.execute(&mock_ctx(&ws), json!({ "path": "." })).await.unwrap_err();
+        assert!(tool
+            .execute(&mock_ctx(&ws), json!({ "path": "nope.txt" }))
+            .await
+            .is_err());
+        let err = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "." }))
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("directory"));
     }
 
@@ -774,7 +792,10 @@ mod tests {
         let p = ws.path().join("bin.bin");
         std::fs::write(&p, [0u8, 1u8, 2u8]).unwrap();
         let tool = ReadFileTool::new(None);
-        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "bin.bin" })).await.unwrap();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "bin.bin" }))
+            .await
+            .unwrap();
         assert_eq!(out["binary"], true);
         assert_eq!(out["bytes"], 3);
         assert_eq!(out["size"], 3);
@@ -787,11 +808,17 @@ mod tests {
     async fn read_file_line_range_returns_exact_window() {
         // 20 行文件，startLine=3/endLine=5 只返回 3~5 行（1-indexed 闭区间）
         let ws = TempWorkspace::new("fs_line_range");
-        let content = (1..=20).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let content = (1..=20)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         ws.write_file("r.txt", content.as_str());
         let tool = ReadFileTool::new(None);
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "r.txt", "startLine": 3, "endLine": 5 }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "r.txt", "startLine": 3, "endLine": 5 }),
+            )
             .await
             .unwrap();
         assert_eq!(out["startLine"], 3);
@@ -809,10 +836,16 @@ mod tests {
     async fn read_file_line_range_clamped_to_max_lines() {
         // 1000 行缺省参数：只返回 800 行，content_truncated=true 且 nextContentOffset=800
         let ws = TempWorkspace::new("fs_line_max");
-        let content = (1..=1000).map(|i| format!("line {i:04}")).collect::<Vec<_>>().join("\n");
+        let content = (1..=1000)
+            .map(|i| format!("line {i:04}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         ws.write_file("m.txt", content.as_str());
         let tool = ReadFileTool::new(None);
-        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "m.txt" })).await.unwrap();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "m.txt" }))
+            .await
+            .unwrap();
         assert_eq!(out["content_truncated"], true);
         assert_eq!(out["nextContentOffset"], 800);
         assert_eq!(out["truncated"], false);
@@ -829,7 +862,10 @@ mod tests {
     async fn read_file_content_offset_resumes() {
         // maxLines=5 读两次（第二次 contentOffset=5）：两次正文拼接 === 全文，无行被切半
         let ws = TempWorkspace::new("fs_offset");
-        let content = (1..=10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let content = (1..=10)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         ws.write_file("o.txt", content.as_str());
         let tool = ReadFileTool::new(None);
         let first = tool
@@ -839,7 +875,10 @@ mod tests {
         assert_eq!(first["content_truncated"], true);
         assert_eq!(first["nextContentOffset"], 5);
         let second = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "o.txt", "maxLines": 5, "contentOffset": 5 }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "o.txt", "maxLines": 5, "contentOffset": 5 }),
+            )
             .await
             .unwrap();
         assert_eq!(second["content_truncated"], false);
@@ -860,7 +899,10 @@ mod tests {
         std::fs::write(&p, bytes).unwrap();
         let tool = ReadFileTool::new(None);
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "u.txt", "startLine": 2, "endLine": 3 }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "u.txt", "startLine": 2, "endLine": 3 }),
+            )
             .await
             .unwrap();
         assert_eq!(out["encoding"], "utf-16le");
@@ -874,12 +916,18 @@ mod tests {
     #[tokio::test]
     async fn read_file_line_range_edge_cases() {
         let ws = TempWorkspace::new("fs_range_edge");
-        let content = (1..=10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let content = (1..=10)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         ws.write_file("e.txt", content.as_str());
         let tool = ReadFileTool::new(None);
         // startLine > endLine：结构化入参错误
         let err = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "e.txt", "startLine": 5, "endLine": 3 }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "e.txt", "startLine": 5, "endLine": 3 }),
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("startLine"));
@@ -895,7 +943,10 @@ mod tests {
         assert!(out["hint"].as_str().unwrap().contains("超出文件末尾"));
         // contentOffset 超出文件：空 + nextContentOffset = 总行数
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "e.txt", "contentOffset": 500 }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "e.txt", "contentOffset": 500 }),
+            )
             .await
             .unwrap();
         assert_eq!(out["nextContentOffset"], 10);
@@ -905,7 +956,10 @@ mod tests {
             .await
             .is_err());
         assert!(tool
-            .execute(&mock_ctx(&ws), json!({ "path": "e.txt", "contentOffset": "x" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "e.txt", "contentOffset": "x" })
+            )
             .await
             .is_err());
     }
@@ -915,7 +969,10 @@ mod tests {
         let ws = TempWorkspace::new("fs_write");
         let tool = WriteFileTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "sub/dir/b.txt", "content": "你好 rust" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "sub/dir/b.txt", "content": "你好 rust" }),
+            )
             .await
             .unwrap();
         assert_eq!(out["path"], "sub/dir/b.txt");
@@ -937,15 +994,21 @@ mod tests {
     async fn write_file_supports_encodings() {
         let ws = TempWorkspace::new("fs_enc");
         let tool = WriteFileTool::new();
-        tool.execute(&mock_ctx(&ws), json!({ "path": "u16.txt", "content": "hi", "encoding": "utf-16le" }))
-            .await
-            .unwrap();
+        tool.execute(
+            &mock_ctx(&ws),
+            json!({ "path": "u16.txt", "content": "hi", "encoding": "utf-16le" }),
+        )
+        .await
+        .unwrap();
         let bytes = std::fs::read(ws.path().join("u16.txt")).unwrap();
         assert!(bytes.starts_with(&[0xFF, 0xFE]));
         // 不传编码时按 BOM 续写原编码（目标已存在 → 显式 overwrite=true）
-        tool.execute(&mock_ctx(&ws), json!({ "path": "u16.txt", "content": "yo", "overwrite": true }))
-            .await
-            .unwrap();
+        tool.execute(
+            &mock_ctx(&ws),
+            json!({ "path": "u16.txt", "content": "yo", "overwrite": true }),
+        )
+        .await
+        .unwrap();
         let bytes = std::fs::read(ws.path().join("u16.txt")).unwrap();
         assert!(bytes.starts_with(&[0xFF, 0xFE]));
     }
@@ -960,22 +1023,38 @@ mod tests {
         ws.write_file("keep.txt", "original");
         let tool = WriteFileTool::new();
         let err = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "keep.txt", "content": "replaced" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "keep.txt", "content": "replaced" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), TOOL_FILE_EXISTS);
         assert!(err.to_string().contains("keep.txt"));
-        assert!(err.to_string().contains("overwrite=true"), "错误文案须指引 AI 显式传参");
-        assert_eq!(ws.read_file("keep.txt"), "original", "拒绝时文件字节必须不变");
+        assert!(
+            err.to_string().contains("overwrite=true"),
+            "错误文案须指引 AI 显式传参"
+        );
+        assert_eq!(
+            ws.read_file("keep.txt"),
+            "original",
+            "拒绝时文件字节必须不变"
+        );
         // 显式 overwrite=false 同样拒绝
         let err = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "keep.txt", "content": "x", "overwrite": false }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "keep.txt", "content": "x", "overwrite": false }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), TOOL_FILE_EXISTS);
         // 非布尔 overwrite：结构化入参错误
         let err = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "keep.txt", "content": "x", "overwrite": "yes" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "keep.txt", "content": "x", "overwrite": "yes" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.invalid_input");
@@ -988,7 +1067,10 @@ mod tests {
         ws.write_file("ov.txt", "old");
         let tool = WriteFileTool::new();
         let out = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "ov.txt", "content": "new", "overwrite": true }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "ov.txt", "content": "new", "overwrite": true }),
+            )
             .await
             .unwrap();
         assert_eq!(out["path"], "ov.txt");
@@ -1005,9 +1087,12 @@ mod tests {
         tool.execute(&mock_ctx(&ws), json!({ "path": "n1.txt", "content": "a" }))
             .await
             .unwrap();
-        tool.execute(&mock_ctx(&ws), json!({ "path": "n2.txt", "content": "b", "overwrite": false }))
-            .await
-            .unwrap();
+        tool.execute(
+            &mock_ctx(&ws),
+            json!({ "path": "n2.txt", "content": "b", "overwrite": false }),
+        )
+        .await
+        .unwrap();
         assert_eq!(ws.read_file("n1.txt"), "a");
         assert_eq!(ws.read_file("n2.txt"), "b");
     }
@@ -1017,12 +1102,18 @@ mod tests {
         let ws = TempWorkspace::new("fs_werr");
         let tool = WriteFileTool::new();
         let err = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "../evil.txt", "content": "x" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "../evil.txt", "content": "x" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.path_escape");
         let err = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "a.txt", "content": "x", "encoding": "latin1" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "a.txt", "content": "x", "encoding": "latin1" }),
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("encoding"));
@@ -1079,14 +1170,14 @@ mod tests {
         }
         let tool = WriteFileTool::new();
         let err = tool
-            .execute(&mock_ctx(&ws), json!({ "path": "link/new.txt", "content": "pwned" }))
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "link/new.txt", "content": "pwned" }),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.path_escape");
-        assert!(
-            !outside.join("new.txt").exists(),
-            "拒绝后不得在根外落盘"
-        );
+        assert!(!outside.join("new.txt").exists(), "拒绝后不得在根外落盘");
         let _ = std::fs::remove_dir_all(&outside);
     }
 
@@ -1174,13 +1265,19 @@ mod tests {
         let ws = TempWorkspace::new("fs_stat");
         ws.write_file("a.txt", "hello");
         let tool = FileStatTool::new();
-        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "a.txt" })).await.unwrap();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "a.txt" }))
+            .await
+            .unwrap();
         assert_eq!(out["isFile"], true);
         assert_eq!(out["type"], "file");
         assert_eq!(out["size"], 5);
         assert!(out["mtime"].as_i64().unwrap() > 0);
 
-        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "." })).await.unwrap();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "." }))
+            .await
+            .unwrap();
         assert_eq!(out["isDirectory"], true);
     }
 
@@ -1188,6 +1285,9 @@ mod tests {
     async fn file_stat_missing_errors() {
         let ws = TempWorkspace::new("fs_staterr");
         let tool = FileStatTool::new();
-        assert!(tool.execute(&mock_ctx(&ws), json!({ "path": "ghost.txt" })).await.is_err());
+        assert!(tool
+            .execute(&mock_ctx(&ws), json!({ "path": "ghost.txt" }))
+            .await
+            .is_err());
     }
 }

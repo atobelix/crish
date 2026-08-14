@@ -53,12 +53,13 @@ pub fn is_internal_atomic_transient_path(path: &Path) -> bool {
     let lower = file_name.to_lowercase();
     lower.starts_with(".conex-tmp-")
         || lower.starts_with(".conex-bak-")
-        || lower.contains(".tmp.")
-        || lower.contains(".bak.")
-        || lower.ends_with(".tmp")
-        || lower.ends_with(".bak")
-        || lower.ends_with(".crish-tmp")
+        || lower.starts_with(".agent-tmp-")
+        || lower.starts_with(".crish-tmp-")
+        || lower.starts_with(".crish-tmp")
+        || lower.contains(".conex-tmp-")
+        || lower.contains(".conex-bak-")
         || lower.contains(".agent-tmp-")
+        || lower.contains(".crish-tmp-")
 }
 
 /// 底层自然过滤器（watcher_filter）：供 OS watcher 过滤内部瞬态文件
@@ -353,7 +354,8 @@ impl WatcherState {
         let mut inner = lock_pending(&self.pending_removes);
         let hit = inner.iter().position(|pr| {
             let age = now - pr.occurred_at_ms;
-            age >= 0 && age <= self.rename_window_ms
+            age >= 0
+                && age <= self.rename_window_ms
                 && pr.path.parent().map(Path::to_path_buf) == parent
         });
         if let Some(idx) = hit {
@@ -410,9 +412,7 @@ impl WatcherState {
         let rel_norm = rel
             .to_string_lossy()
             .replace(['/', '\\'], &MAIN_SEP.to_string());
-        self.excludes_glob
-            .iter()
-            .any(|g| glob_match(g, &rel_norm))
+        self.excludes_glob.iter().any(|g| glob_match(g, &rel_norm))
     }
 }
 
@@ -494,7 +494,9 @@ fn strip_verbatim(p: &Path) -> PathBuf {
 /// 去尾部分隔符，与 write_paths 的 normalize_for_compare 同语义
 /// （跨平台确定性一致）
 fn normalize_for_compare(p: &Path) -> String {
-    let mut s = p.to_string_lossy().replace(['/', '\\'], &MAIN_SEP.to_string());
+    let mut s = p
+        .to_string_lossy()
+        .replace(['/', '\\'], &MAIN_SEP.to_string());
     #[cfg(windows)]
     {
         s = s.to_lowercase();
@@ -517,10 +519,7 @@ pub fn glob_match(pattern: &str, path: &str) -> bool {
         .split(['/', '\\'])
         .filter(|s| !s.is_empty())
         .collect();
-    let path_segs: Vec<&str> = path
-        .split(['/', '\\'])
-        .filter(|s| !s.is_empty())
-        .collect();
+    let path_segs: Vec<&str> = path.split(['/', '\\']).filter(|s| !s.is_empty()).collect();
     // `**` 出现在模式末尾（无尾段）视为整树匹配
     if pat_segs == ["**"] {
         return true;
@@ -595,13 +594,18 @@ mod tests {
     fn start_fast(
         ws: &TempWorkspace,
         exclude: Vec<PathBuf>,
-    ) -> (WorkspaceWatcher, tokio::sync::mpsc::Receiver<FileChangeEvent>) {
-        WorkspaceWatcher::start_with_window(ws.path(), exclude, 300)
-            .expect("watcher 启动失败")
+    ) -> (
+        WorkspaceWatcher,
+        tokio::sync::mpsc::Receiver<FileChangeEvent>,
+    ) {
+        WorkspaceWatcher::start_with_window(ws.path(), exclude, 300).expect("watcher 启动失败")
     }
 
     /// 轮询收集接收端事件直到超时（notify 回调异步到达）
-    fn drain(rx: &mut tokio::sync::mpsc::Receiver<FileChangeEvent>, timeout_ms: u64) -> Vec<FileChangeEvent> {
+    fn drain(
+        rx: &mut tokio::sync::mpsc::Receiver<FileChangeEvent>,
+        timeout_ms: u64,
+    ) -> Vec<FileChangeEvent> {
         let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
         let mut out = Vec::new();
         while std::time::Instant::now() < deadline {
@@ -670,10 +674,7 @@ mod tests {
         // 排除目录内写文件：不产事件
         ws.write_file("vendor/lib.js", "x");
         let events = drain(&mut rx, 500);
-        assert!(
-            events.is_empty(),
-            "排除目录必须不产事件：{events:?}"
-        );
+        assert!(events.is_empty(), "排除目录必须不产事件：{events:?}");
 
         // 排除目录外照常产出
         ws.write_file("src/lib.js", "x");
@@ -697,7 +698,11 @@ mod tests {
         match events.iter().find(|e| e.kind == ChangeKind::Renamed) {
             Some(ev) => {
                 assert_eq!(ev.path, ws.path().join("b.txt"), "to 必须为新路径");
-                assert_eq!(ev.from.as_deref(), Some(ws.path().join("a.txt").as_path()), "from 必须为源路径");
+                assert_eq!(
+                    ev.from.as_deref(),
+                    Some(ws.path().join("a.txt").as_path()),
+                    "from 必须为源路径"
+                );
             }
             None => {
                 // Windows 实测偏差：若 rename 拆成独立 Remove+Create 且
@@ -748,10 +753,7 @@ mod tests {
         watcher.stop();
         ws.write_file("c.txt", "x");
         let events = drain(&mut rx, 500);
-        assert!(
-            events.is_empty(),
-            "停止后必须无事件：{events:?}"
-        );
+        assert!(events.is_empty(), "停止后必须无事件：{events:?}");
     }
 
     #[cfg(windows)]
@@ -867,15 +869,20 @@ mod tests {
     fn watcher_filter_filters_transient_atomic_files() {
         assert!(watcher_filter(Path::new(".conex-tmp-doc-1234.tmp")));
         assert!(watcher_filter(Path::new(".conex-bak-doc-1234.bak")));
-        assert!(watcher_filter(Path::new("c:/workspace/.conex-tmp-main-1-2.tmp")));
-        assert!(watcher_filter(Path::new("c:/workspace/.conex-bak-main-1-2.bak")));
-        assert!(watcher_filter(Path::new("c:/workspace/doc.md.tmp.1234")));
-        assert!(watcher_filter(Path::new("c:/workspace/doc.md.bak.1234")));
-        assert!(watcher_filter(Path::new("c:/workspace/file.tmp")));
-        assert!(watcher_filter(Path::new("c:/workspace/file.bak")));
-        assert!(watcher_filter(Path::new("c:/workspace/file.crish-tmp")));
-        assert!(watcher_filter(Path::new("c:/workspace/file.agent-tmp-123-1")));
+        assert!(watcher_filter(Path::new(
+            "c:/workspace/.conex-tmp-main-1-2.tmp"
+        )));
+        assert!(watcher_filter(Path::new(
+            "c:/workspace/.conex-bak-main-1-2.bak"
+        )));
+        assert!(watcher_filter(Path::new(
+            "c:/workspace/file.agent-tmp-123-1"
+        )));
+        assert!(watcher_filter(Path::new("c:/workspace/.crish-tmp-456")));
 
+        // 用户工程普通 .tmp / .bak / 源码等不得被过滤
+        assert!(!watcher_filter(Path::new("c:/workspace/file.tmp")));
+        assert!(!watcher_filter(Path::new("c:/workspace/file.bak")));
         assert!(!watcher_filter(Path::new("c:/workspace/doc.md")));
         assert!(!watcher_filter(Path::new("c:/workspace/src/lib.rs")));
         assert!(!watcher_filter(Path::new("c:/workspace/README.md")));

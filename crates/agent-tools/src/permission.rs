@@ -229,11 +229,26 @@ mod tests {
     fn from_engine_str_matches_frontend_alias_table() {
         // ask 族（deep / unattended / auto 均塌缩 ask，安全默认）
         assert_eq!(PermissionMode::from_engine_str(None), PermissionMode::Ask);
-        assert_eq!(PermissionMode::from_engine_str(Some("ask")), PermissionMode::Ask);
-        assert_eq!(PermissionMode::from_engine_str(Some("deep")), PermissionMode::Ask);
-        assert_eq!(PermissionMode::from_engine_str(Some("unattended")), PermissionMode::Ask);
-        assert_eq!(PermissionMode::from_engine_str(Some("auto")), PermissionMode::Ask);
-        assert_eq!(PermissionMode::from_engine_str(Some("garbage")), PermissionMode::Ask);
+        assert_eq!(
+            PermissionMode::from_engine_str(Some("ask")),
+            PermissionMode::Ask
+        );
+        assert_eq!(
+            PermissionMode::from_engine_str(Some("deep")),
+            PermissionMode::Ask
+        );
+        assert_eq!(
+            PermissionMode::from_engine_str(Some("unattended")),
+            PermissionMode::Ask
+        );
+        assert_eq!(
+            PermissionMode::from_engine_str(Some("auto")),
+            PermissionMode::Ask
+        );
+        assert_eq!(
+            PermissionMode::from_engine_str(Some("garbage")),
+            PermissionMode::Ask
+        );
         // full 族
         assert_eq!(
             PermissionMode::from_engine_str(Some("full-access")),
@@ -248,7 +263,10 @@ mod tests {
             PermissionMode::FullAccess
         );
         // plan 族
-        assert_eq!(PermissionMode::from_engine_str(Some("plan")), PermissionMode::Plan);
+        assert_eq!(
+            PermissionMode::from_engine_str(Some("plan")),
+            PermissionMode::Plan
+        );
         assert_eq!(
             PermissionMode::from_engine_str(Some("read-only")),
             PermissionMode::Plan
@@ -389,12 +407,22 @@ mod tests {
     #[test]
     fn decide_command_non_redline_dangerous_allowed_in_full_access() {
         assert_eq!(
-            decide_command("mkfs.ext4 /dev/sdb", true, false, PermissionMode::FullAccess),
+            decide_command(
+                "mkfs.ext4 /dev/sdb",
+                true,
+                false,
+                PermissionMode::FullAccess
+            ),
             PermissionVerdict::Deny,
             "mkfs 写设备属红线（确定性毁灭目标），full-access 下也必须 Deny"
         );
         assert_eq!(
-            decide_command("rm -rf ./local-dir", true, false, PermissionMode::FullAccess),
+            decide_command(
+                "rm -rf ./local-dir",
+                true,
+                false,
+                PermissionMode::FullAccess
+            ),
             PermissionVerdict::Allow,
             "删除形态（非红线目标）在 full-access 下按既有矩阵放行"
         );

@@ -47,15 +47,15 @@ impl RecordingAuditSink {
 
     /// 已收集的审计事件（按发射顺序）
     pub fn emitted(&self) -> Vec<AgentEvent> {
-        self.emitted.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.emitted
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// 已收集事件的类型名列表（`security-audit` 断言用）
     pub fn type_names(&self) -> Vec<&'static str> {
-        self.emitted()
-            .iter()
-            .map(AgentEvent::type_name)
-            .collect()
+        self.emitted().iter().map(AgentEvent::type_name).collect()
     }
 }
 
@@ -209,10 +209,7 @@ mod tests {
             SecurityAuditDecision::Blocked,
             None,
         ));
-        assert_eq!(
-            sink.type_names(),
-            vec!["security-audit", "security-audit"]
-        );
+        assert_eq!(sink.type_names(), vec!["security-audit", "security-audit"]);
         assert_eq!(sink.emitted().len(), 2);
     }
 
@@ -221,10 +218,7 @@ mod tests {
         // G10：统计型 sink 只对 denied 决策计数，其余决策转发不计数
         let inner = Arc::new(RecordingAuditSink::new());
         let stats = Arc::new(DeniedStats::new());
-        let sink = CountingAuditSink::new(
-            Arc::clone(&inner) as AuditSink,
-            Arc::clone(&stats),
-        );
+        let sink = CountingAuditSink::new(Arc::clone(&inner) as AuditSink, Arc::clone(&stats));
         sink.emit(&security_audit_event(
             "s1",
             SecurityAuditOperation::Delete,

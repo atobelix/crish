@@ -99,10 +99,7 @@ impl SessionHistoryCache {
 ///    截掉，结果在截断区必然紧随其调用，故只可能落在窗口起点）或携带
 ///    孤儿 ToolCall 的 assistant 上（wire 400 风险，与 [ensure_safe_prefix]
 ///    同语义；前端载荷仅 user/assistant 且单条自包含，无此步骤）。
-pub(crate) fn truncate_history_with_anchor(
-    messages: &mut Vec<HistoryMessage>,
-    max_tokens: usize,
-) {
+pub(crate) fn truncate_history_with_anchor(messages: &mut Vec<HistoryMessage>, max_tokens: usize) {
     let total: usize = messages.iter().map(estimate_history_tokens).sum();
     if messages.is_empty() || total <= max_tokens {
         return;
@@ -156,7 +153,11 @@ pub(crate) fn estimate_history_tokens(entry: &HistoryMessage) -> usize {
     } else {
         entry.text.as_deref().map(count_tokens).unwrap_or(0)
             + entry.thinking.as_deref().map(count_tokens).unwrap_or(0)
-            + entry.tool_calls_json.as_deref().map(count_tokens).unwrap_or(0)
+            + entry
+                .tool_calls_json
+                .as_deref()
+                .map(count_tokens)
+                .unwrap_or(0)
             + entry
                 .tool_call_results_json
                 .as_deref()
@@ -368,7 +369,9 @@ pub(crate) fn civil_from_days(z: i64) -> (i64, u32, u32) {
 ///
 /// DEEPCHECK-01 P0：读回前同样按「锚点 + token 预算」截断（与 store 写入
 /// 语义对齐的防御性一致性；正常路径 store 已截断，此处幂等）。
-pub(crate) fn cached_history_to_conversation(entries: Vec<HistoryMessage>) -> Vec<Arc<AgentMessage>> {
+pub(crate) fn cached_history_to_conversation(
+    entries: Vec<HistoryMessage>,
+) -> Vec<Arc<AgentMessage>> {
     let mut entries = entries;
     truncate_history_with_anchor(&mut entries, SESSION_HISTORY_TOKEN_BUDGET);
     entries
@@ -505,4 +508,3 @@ pub(crate) fn compaction_policy_from_session_meta(
     }
     policy
 }
-

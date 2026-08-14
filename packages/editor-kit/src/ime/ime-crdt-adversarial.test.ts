@@ -262,23 +262,26 @@ describe('Unit 7.3: IME 协同对抗与并发 CRDT 极限实证', () => {
 
           // 断言替换边界绝不切断 Emoji 代理项
           if (
-            diffResult.start > 0 &&
-            diffResult.start < currentDocText.length
+            diffResult.startU16 > 0 &&
+            diffResult.startU16 < currentDocText.length
           ) {
             expect(
-              isLowSurrogate(currentDocText.charCodeAt(diffResult.start))
+              isLowSurrogate(currentDocText.charCodeAt(diffResult.startU16))
             ).toBe(false);
           }
-          if (diffResult.end > 0 && diffResult.end <= currentDocText.length) {
+          if (
+            diffResult.endU16 > 0 &&
+            diffResult.endU16 <= currentDocText.length
+          ) {
             expect(
-              isHighSurrogate(currentDocText.charCodeAt(diffResult.end - 1))
+              isHighSurrogate(currentDocText.charCodeAt(diffResult.endU16 - 1))
             ).toBe(false);
           }
 
           // 验证 Unicode 标量偏移与 UTF-16 偏移单射一致
           const recomputedScalarStart = utf16OffsetToUnicodeScalar(
             currentDocText,
-            diffResult.start
+            diffResult.startU16
           );
           expect(recomputedScalarStart).toBe(diffResult.startScalar);
 
@@ -286,7 +289,7 @@ describe('Unit 7.3: IME 协同对抗与并发 CRDT 极限实证', () => {
             currentDocText,
             diffResult.startScalar
           );
-          expect(recomputedU16Start).toBe(diffResult.start);
+          expect(recomputedU16Start).toBe(diffResult.startU16);
 
           currentDocText = newDocText;
           assertNoSurrogatePairTearing(

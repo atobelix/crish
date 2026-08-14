@@ -57,13 +57,19 @@ pub const INLINE_EVENT_ATTRS: &[&str] = &[
 
 /// SVG 子元素默认装饰名单（P6；SVG 根 svg 保留，含显式交互信号的走 S8 放行）。
 pub const SVG_DECORATIVE_TAGS: &[&str] = &[
-    "path", "rect", "g", "circle", "use", "defs", "line", "polyline", "polygon", "ellipse",
-    "text", "tspan", "image", "symbol", "mask", "marker", "pattern", "clippath",
+    "path", "rect", "g", "circle", "use", "defs", "line", "polyline", "polygon", "ellipse", "text",
+    "tspan", "image", "symbol", "mask", "marker", "pattern", "clippath",
 ];
 
 /// 搜索类模式标记（M2；class/id/data-* 属性小写化后子串匹配）。
 pub const SEARCH_PATTERNS: &[&str] = &[
-    "search", "magnify", "glass", "lookup", "find", "query", "searchbox",
+    "search",
+    "magnify",
+    "glass",
+    "lookup",
+    "find",
+    "query",
+    "searchbox",
 ];
 
 /// 交互类 data-* 前缀（S8 显式交互 SVG / M3 图标按钮共用）。
@@ -192,7 +198,9 @@ impl<'a> DecideCtx<'a> {
 
     /// 交互角色判定（S3 属性 / S4 AX 共用）。
     fn role_is_interactive(role: &str) -> bool {
-        INTERACTIVE_ROLES.iter().any(|r| r.eq_ignore_ascii_case(role))
+        INTERACTIVE_ROLES
+            .iter()
+            .any(|r| r.eq_ignore_ascii_case(role))
     }
 
     /// 搜索模式命中（M2：class/id/data-* 属性小写化子串匹配）。
@@ -215,7 +223,9 @@ impl<'a> DecideCtx<'a> {
     fn interactive_data_attr(&self) -> bool {
         self.attributes.iter().any(|(k, _)| {
             let lower = k.to_ascii_lowercase();
-            INTERACTIVE_DATA_PREFIXES.iter().any(|p| lower.starts_with(p))
+            INTERACTIVE_DATA_PREFIXES
+                .iter()
+                .any(|p| lower.starts_with(p))
         })
     }
 
@@ -256,7 +266,10 @@ fn p_layer(ctx: &DecideCtx) -> Option<Decision> {
     }
     // P3：隐藏（含祖先隐藏沿链传播；例外 input[type=file] 强制可见）
     let hidden = ctx.ancestor_hidden || ctx.styles.is_hidden();
-    let file_input = ctx.tag == "input" && ctx.attr("type").is_some_and(|t| t.eq_ignore_ascii_case("file"));
+    let file_input = ctx.tag == "input"
+        && ctx
+            .attr("type")
+            .is_some_and(|t| t.eq_ignore_ascii_case("file"));
     if hidden && !file_input {
         return Some(Decision::Excluded(Excluded::P3Hidden));
     }
@@ -308,7 +321,9 @@ fn s_layer(ctx: &DecideCtx) -> Option<Decision> {
     // S4：AX role ∈ 交互角色集（含 menubar/tree/grid 扩展）
     if let Some(role) = ctx.ax.role.as_deref() {
         if DecideCtx::role_is_interactive(role)
-            || AX_EXTENDED_ROLES.iter().any(|r| r.eq_ignore_ascii_case(role))
+            || AX_EXTENDED_ROLES
+                .iter()
+                .any(|r| r.eq_ignore_ascii_case(role))
         {
             return Some(Decision::Interactive(RuleHit::S4AxRole));
         }
@@ -322,15 +337,11 @@ fn s_layer(ctx: &DecideCtx) -> Option<Decision> {
         return Some(Decision::Interactive(RuleHit::S6InlineEvent));
     }
     // S7：大 iframe（宽高均 > 100px）
-    if ctx.tag == "iframe"
-        && ctx.bounds.is_some_and(|b| b.is_big_iframe())
-    {
+    if ctx.tag == "iframe" && ctx.bounds.is_some_and(|b| b.is_big_iframe()) {
         return Some(Decision::Interactive(RuleHit::S7BigIframe));
     }
     // S8：显式交互 SVG（唯一 SVG 放行口）
-    if ctx.in_svg
-        && (ctx.has_attr("onclick") || ctx.interactive_data_attr())
-    {
+    if ctx.in_svg && (ctx.has_attr("onclick") || ctx.interactive_data_attr()) {
         return Some(Decision::Interactive(RuleHit::S8ExplicitSvg));
     }
     None
@@ -428,12 +439,7 @@ impl DecisionCache {
 
 /// 子树探测（≤ max_depth 层）是否存在满足谓词的节点（M1/W2 探测辅助；
 /// 深度限制防深层遍历爆炸；递归以引用传递回调避免类型级递归）。
-pub fn subtree_probe<N, F, P>(
-    root: &N,
-    max_depth: usize,
-    children_of: &F,
-    pred: &P,
-) -> bool
+pub fn subtree_probe<N, F, P>(root: &N, max_depth: usize, children_of: &F, pred: &P) -> bool
 where
     F: Fn(&N) -> &[N],
     P: Fn(&N) -> bool,
@@ -495,7 +501,17 @@ mod tests {
     fn p2_root_tags_excluded() {
         let a = attrs(&[]);
         assert_eq!(
-            decide(&ctx("html", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 100.0, height: 100.0 }))),
+            decide(&ctx(
+                "html",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 100.0
+                })
+            )),
             Decision::Excluded(Excluded::P2RootTag)
         );
         assert!(matches!(
@@ -511,7 +527,17 @@ mod tests {
         let mut s = visible();
         s.display = Some("none".into());
         assert_eq!(
-            decide(&ctx("button", &a, s, Some(Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 }))),
+            decide(&ctx(
+                "button",
+                &a,
+                s,
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0
+                })
+            )),
             Decision::Excluded(Excluded::P3Hidden)
         );
         let mut s = visible();
@@ -523,7 +549,17 @@ mod tests {
         let mut s = visible();
         s.opacity = Some(0.0);
         assert_eq!(
-            decide(&ctx("button", &a, s, Some(Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 }))),
+            decide(&ctx(
+                "button",
+                &a,
+                s,
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0
+                })
+            )),
             Decision::Excluded(Excluded::P3Hidden)
         );
         let mut c = ctx("button", &a, visible(), None);
@@ -538,7 +574,17 @@ mod tests {
         let mut s = visible();
         s.opacity = Some(0.0);
         assert_eq!(
-            decide(&ctx("input", &a, s, Some(Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 }))),
+            decide(&ctx(
+                "input",
+                &a,
+                s,
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0
+                })
+            )),
             Decision::Interactive(RuleHit::S2NativeTag),
             "隐藏 file input 是功能元素，强制可见（§2.3 例外）"
         );
@@ -549,22 +595,50 @@ mod tests {
     fn p4_disabled_excluded() {
         let a = attrs(&[("disabled", "")]);
         assert_eq!(
-            decide(&ctx("button", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 }))),
+            decide(&ctx(
+                "button",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0
+                })
+            )),
             Decision::Excluded(Excluded::P4Disabled)
         );
         let a = attrs(&[("aria-disabled", "true")]);
         assert!(matches!(
-            decide(&ctx("button", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 }))),
+            decide(&ctx(
+                "button",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0
+                })
+            )),
             Decision::Excluded(Excluded::P4Disabled)
         ));
-        let mut ax = AxInfo { present: true, ..AxInfo::default() };
+        let mut ax = AxInfo {
+            present: true,
+            ..AxInfo::default()
+        };
         ax.properties.disabled = true;
         let a = attrs(&[]);
         let c = DecideCtx {
             tag: "button",
             attributes: &a,
             ax: &ax,
-                        bounds: Some(Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 }),
+            bounds: Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            }),
             ..ctx("button", &a, visible(), None)
         };
         assert_eq!(decide(&c), Decision::Excluded(Excluded::P4Disabled));
@@ -573,13 +647,22 @@ mod tests {
     /// P5：AX ignored 装饰性节点排除。
     #[test]
     fn p5_ax_ignored_excluded() {
-        let ax = AxInfo { present: true, ignored: true, ..AxInfo::default() };
+        let ax = AxInfo {
+            present: true,
+            ignored: true,
+            ..AxInfo::default()
+        };
         let a = attrs(&[]);
         let c = DecideCtx {
             tag: "div",
             attributes: &a,
             ax: &ax,
-                        bounds: Some(Bounds { x: 0.0, y: 0.0, width: 10.0, height: 10.0 }),
+            bounds: Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            }),
             ..ctx("div", &a, visible(), None)
         };
         assert_eq!(decide(&c), Decision::Excluded(Excluded::P5AxIgnored));
@@ -589,15 +672,45 @@ mod tests {
     #[test]
     fn p6_svg_decorative_and_s8_explicit() {
         let a = attrs(&[]);
-        let mut c = ctx("path", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 20.0, height: 20.0 }));
+        let mut c = ctx(
+            "path",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 20.0,
+                height: 20.0,
+            }),
+        );
         c.in_svg = true;
         assert_eq!(decide(&c), Decision::Excluded(Excluded::P6SvgChild));
         // svg 根自身（in_svg=false）不排除
-        let c = ctx("svg", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 20.0, height: 20.0 }));
+        let c = ctx(
+            "svg",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 20.0,
+                height: 20.0,
+            }),
+        );
         assert_eq!(decide(&c), Decision::NotInteractive);
         // S8：SVG 子树中带交互 data-* 放行（onclick 会被 S6 先行命中）
         let a = attrs(&[("data-action", "zoom")]);
-        let mut c = ctx("g", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 20.0, height: 20.0 }));
+        let mut c = ctx(
+            "g",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 20.0,
+                height: 20.0,
+            }),
+        );
         c.in_svg = true;
         assert_eq!(decide(&c), Decision::Interactive(RuleHit::S8ExplicitSvg));
     }
@@ -608,11 +721,31 @@ mod tests {
     fn zero_size_excluded() {
         let a = attrs(&[]);
         assert_eq!(
-            decide(&ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 0.0, height: 10.0 }))),
+            decide(&ctx(
+                "div",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.0,
+                    height: 10.0
+                })
+            )),
             Decision::Excluded(Excluded::ZeroSize)
         );
         // 可滚动零尺寸：不作零尺寸排除（§2.3「且无滚动内容」），W2 命中
-        let mut c = ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 0.0, height: 10.0 }));
+        let mut c = ctx(
+            "div",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 10.0,
+            }),
+        );
         c.is_scrollable = true;
         assert_eq!(
             decide(&c),
@@ -625,9 +758,26 @@ mod tests {
     #[test]
     fn s2_native_tags() {
         let a = attrs(&[]);
-        for tag in ["button", "input", "select", "textarea", "a", "details", "summary", "option", "optgroup"] {
-            let c = ctx(tag, &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }));
-            assert_eq!(decide(&c), Decision::Interactive(RuleHit::S2NativeTag), "标签 {tag} 应命中 S2");
+        for tag in [
+            "button", "input", "select", "textarea", "a", "details", "summary", "option",
+            "optgroup",
+        ] {
+            let c = ctx(
+                tag,
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0,
+                }),
+            );
+            assert_eq!(
+                decide(&c),
+                Decision::Interactive(RuleHit::S2NativeTag),
+                "标签 {tag} 应命中 S2"
+            );
         }
     }
 
@@ -636,13 +786,33 @@ mod tests {
     fn s3_role_attribute() {
         let a = attrs(&[("role", "button")]);
         assert_eq!(
-            decide(&ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }))),
+            decide(&ctx(
+                "div",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0
+                })
+            )),
             Decision::Interactive(RuleHit::S3RoleAttr)
         );
         for role in ["checkbox", "combobox", "tab", "textbox", "searchbox"] {
             let a = attrs(&[("role", role)]);
             assert_eq!(
-                decide(&ctx("span", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }))),
+                decide(&ctx(
+                    "span",
+                    &a,
+                    visible(),
+                    Some(Bounds {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 50.0,
+                        height: 20.0
+                    })
+                )),
                 Decision::Interactive(RuleHit::S3RoleAttr),
                 "role={role} 应命中 S3"
             );
@@ -663,7 +833,12 @@ mod tests {
                 tag: "div",
                 attributes: &a,
                 ax: &ax,
-                                bounds: Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }),
+                bounds: Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0,
+                }),
                 ..ctx("div", &a, visible(), None)
             };
             assert_eq!(
@@ -678,8 +853,19 @@ mod tests {
     #[test]
     fn s5_ax_properties() {
         let a = attrs(&[]);
-        for prop in ["focusable", "editable", "checked", "expanded", "pressed", "required", "autocomplete"] {
-            let mut ax = AxInfo { present: true, ..AxInfo::default() };
+        for prop in [
+            "focusable",
+            "editable",
+            "checked",
+            "expanded",
+            "pressed",
+            "required",
+            "autocomplete",
+        ] {
+            let mut ax = AxInfo {
+                present: true,
+                ..AxInfo::default()
+            };
             match prop {
                 "focusable" => ax.properties.focusable = true,
                 "editable" => ax.properties.editable = true,
@@ -694,10 +880,19 @@ mod tests {
                 tag: "div",
                 attributes: &a,
                 ax: &ax,
-                                bounds: Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }),
+                bounds: Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0,
+                }),
                 ..ctx("div", &a, visible(), None)
             };
-            assert_eq!(decide(&c), Decision::Interactive(RuleHit::S5AxProperty), "{prop} 应命中 S5");
+            assert_eq!(
+                decide(&c),
+                Decision::Interactive(RuleHit::S5AxProperty),
+                "{prop} 应命中 S5"
+            );
         }
     }
 
@@ -706,12 +901,32 @@ mod tests {
     fn s6_inline_events() {
         let a = attrs(&[("onclick", "fn()")]);
         assert_eq!(
-            decide(&ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }))),
+            decide(&ctx(
+                "div",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0
+                })
+            )),
             Decision::Interactive(RuleHit::S6InlineEvent)
         );
         let a = attrs(&[("tabindex", "0")]);
         assert_eq!(
-            decide(&ctx("span", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }))),
+            decide(&ctx(
+                "span",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0
+                })
+            )),
             Decision::Interactive(RuleHit::S6InlineEvent)
         );
     }
@@ -720,37 +935,88 @@ mod tests {
     #[test]
     fn s7_big_iframe() {
         let a = attrs(&[]);
-        let big = Bounds { x: 0.0, y: 0.0, width: 300.0, height: 200.0 };
+        let big = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 300.0,
+            height: 200.0,
+        };
         assert_eq!(
             decide(&ctx("iframe", &a, visible(), Some(big))),
             Decision::Interactive(RuleHit::S7BigIframe)
         );
-        let small = Bounds { x: 0.0, y: 0.0, width: 50.0, height: 30.0 };
-        assert_eq!(decide(&ctx("iframe", &a, visible(), Some(small))), Decision::NotInteractive);
+        let small = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 50.0,
+            height: 30.0,
+        };
+        assert_eq!(
+            decide(&ctx("iframe", &a, visible(), Some(small))),
+            Decision::NotInteractive
+        );
     }
 
     /// M1：label/span 包裹表单控件通过；label[for]（M0）跳过。
     #[test]
     fn m1_wrapped_control() {
         let a = attrs(&[]);
-        let mut c = ctx("label", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 100.0, height: 30.0 }));
+        let mut c = ctx(
+            "label",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 30.0,
+            }),
+        );
         c.wrapped_control = true;
         assert_eq!(decide(&c), Decision::Interactive(RuleHit::M1Wrapped));
         // M0：label[for] 不判可交互（点击代理到目标控件）
         let a = attrs(&[("for", "target")]);
-        let mut c = ctx("label", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 100.0, height: 30.0 }));
+        let mut c = ctx(
+            "label",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 30.0,
+            }),
+        );
         c.wrapped_control = true;
         c.wrapped_by_label_for = true;
-        assert_eq!(decide(&c), Decision::NotInteractive, "label[for] 防双激活（M0）");
+        assert_eq!(
+            decide(&c),
+            Decision::NotInteractive,
+            "label[for] 防双激活（M0）"
+        );
     }
 
     /// M2：搜索类模式（class/id/data-* 子串匹配）。
     #[test]
     fn m2_search_pattern() {
-        for (k, v) in [("class", "search-btn"), ("id", "searchBox"), ("data-action", "search")] {
+        for (k, v) in [
+            ("class", "search-btn"),
+            ("id", "searchBox"),
+            ("data-action", "search"),
+        ] {
             let a = attrs(&[(k, v)]);
             assert_eq!(
-                decide(&ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 80.0, height: 30.0 }))),
+                decide(&ctx(
+                    "div",
+                    &a,
+                    visible(),
+                    Some(Bounds {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 80.0,
+                        height: 30.0
+                    })
+                )),
                 Decision::Interactive(RuleHit::M2SearchPattern),
                 "{k}={v} 应命中 M2"
             );
@@ -762,22 +1028,65 @@ mod tests {
     fn m3_icon_button() {
         let a = attrs(&[("aria-label", "搜索图标")]);
         assert_eq!(
-            decide(&ctx("button", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 20.0, height: 20.0 }))),
+            decide(&ctx(
+                "button",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 20.0,
+                    height: 20.0
+                })
+            )),
             Decision::Interactive(RuleHit::S2NativeTag),
             "button 走 S2；M3 面向 div/span 形态"
         );
         let a = attrs(&[("aria-label", "搜索图标")]);
         assert_eq!(
-            decide(&ctx("span", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 20.0, height: 20.0 }))),
+            decide(&ctx(
+                "span",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 20.0,
+                    height: 20.0
+                })
+            )),
             Decision::Interactive(RuleHit::M3IconButton)
         );
         // 无交互类属性不命中
         let a = attrs(&[]);
-        assert_eq!(decide(&ctx("span", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 20.0, height: 20.0 }))), Decision::NotInteractive);
+        assert_eq!(
+            decide(&ctx(
+                "span",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 20.0,
+                    height: 20.0
+                })
+            )),
+            Decision::NotInteractive
+        );
         // 超出图标尺寸不命中
         let a = attrs(&[("aria-label", "x")]);
         assert_eq!(
-            decide(&ctx("span", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 200.0, height: 200.0 }))),
+            decide(&ctx(
+                "span",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 200.0,
+                    height: 200.0
+                })
+            )),
             Decision::NotInteractive
         );
     }
@@ -789,7 +1098,17 @@ mod tests {
         s.cursor = Some("pointer".into());
         let a = attrs(&[]);
         assert_eq!(
-            decide(&ctx("div", &a, s, Some(Bounds { x: 0.0, y: 0.0, width: 80.0, height: 30.0 }))),
+            decide(&ctx(
+                "div",
+                &a,
+                s,
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 80.0,
+                    height: 30.0
+                })
+            )),
             Decision::Interactive(RuleHit::W1CursorPointer)
         );
     }
@@ -798,19 +1117,59 @@ mod tests {
     #[test]
     fn w2_scroll_container() {
         let a = attrs(&[]);
-        let mut c = ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 200.0, height: 300.0 }));
+        let mut c = ctx(
+            "div",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 300.0,
+            }),
+        );
         c.is_scrollable = true;
-        assert_eq!(decide(&c), Decision::Interactive(RuleHit::W2ScrollContainer));
+        assert_eq!(
+            decide(&c),
+            Decision::Interactive(RuleHit::W2ScrollContainer)
+        );
         c.subtree_has_interactive = true;
-        assert_eq!(decide(&c), Decision::NotInteractive, "有交互后代时 W2 不命中");
+        assert_eq!(
+            decide(&c),
+            Decision::NotInteractive,
+            "有交互后代时 W2 不命中"
+        );
         // dropdown 容器无条件可交互（role=listbox 会被 S3 先行命中，此处以
         // class 模式验证 W2 dropdown 路径）
         let a = attrs(&[("class", "dropdown-menu")]);
-        let c = ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 200.0, height: 300.0 }));
-        assert_eq!(decide(&c), Decision::Interactive(RuleHit::W2ScrollContainer));
+        let c = ctx(
+            "div",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 300.0,
+            }),
+        );
+        assert_eq!(
+            decide(&c),
+            Decision::Interactive(RuleHit::W2ScrollContainer)
+        );
         // role=listbox：S3 优先级高于 W2（S 层任一命中即通过）
         let a = attrs(&[("role", "listbox")]);
-        let c = ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 200.0, height: 300.0 }));
+        let c = ctx(
+            "div",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 300.0,
+            }),
+        );
         assert_eq!(decide(&c), Decision::Interactive(RuleHit::S3RoleAttr));
     }
 
@@ -818,9 +1177,23 @@ mod tests {
     #[test]
     fn s1_listener_channel_gated() {
         let a = attrs(&[]);
-        let mut c = ctx("div", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }));
+        let mut c = ctx(
+            "div",
+            &a,
+            visible(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 50.0,
+                height: 20.0,
+            }),
+        );
         c.has_click_listener = true;
-        assert_eq!(decide(&c), Decision::NotInteractive, "通道默认关闭，S1 不生效");
+        assert_eq!(
+            decide(&c),
+            Decision::NotInteractive,
+            "通道默认关闭，S1 不生效"
+        );
         c.listener_channel_enabled = true;
         assert_eq!(decide(&c), Decision::Interactive(RuleHit::S1Listener));
     }
@@ -830,14 +1203,34 @@ mod tests {
     fn priority_p_over_s_over_mw() {
         let a = attrs(&[("disabled", ""), ("class", "search-btn")]);
         assert_eq!(
-            decide(&ctx("button", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }))),
+            decide(&ctx(
+                "button",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0
+                })
+            )),
             Decision::Excluded(Excluded::P4Disabled),
             "P 层否决优先于一切正信号"
         );
         // S2 命中时不再看 M/W
         let a = attrs(&[("class", "search-btn")]);
         assert_eq!(
-            decide(&ctx("button", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }))),
+            decide(&ctx(
+                "button",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0
+                })
+            )),
             Decision::Interactive(RuleHit::S2NativeTag)
         );
     }
@@ -847,7 +1240,19 @@ mod tests {
     fn decision_cache_reuses() {
         let mut cache = DecisionCache::new();
         let a = attrs(&[]);
-        let r1 = cache.get_or_else("s1", 42, || decide(&ctx("button", &a, visible(), Some(Bounds { x: 0.0, y: 0.0, width: 50.0, height: 20.0 }))));
+        let r1 = cache.get_or_else("s1", 42, || {
+            decide(&ctx(
+                "button",
+                &a,
+                visible(),
+                Some(Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 50.0,
+                    height: 20.0,
+                }),
+            ))
+        });
         assert!(matches!(r1, Decision::Interactive(_)));
         let r2 = cache.get_or_else("s1", 42, || panic!("不应重复计算"));
         assert_eq!(r1, r2);
@@ -855,7 +1260,10 @@ mod tests {
         let hits_before = cache.hit_ratio();
         // 不同会话（跨域 id 复用防护）不命中
         let _ = cache.get_or_else("s2", 42, || Decision::NotInteractive);
-        assert!(cache.hit_ratio() < hits_before || cache.hit_ratio() < 1.0, "跨会话不命中缓存");
+        assert!(
+            cache.hit_ratio() < hits_before || cache.hit_ratio() < 1.0,
+            "跨会话不命中缓存"
+        );
     }
 
     /// 子树探测：≤ max_depth 层内查找（M1/W2 探测语义）。
@@ -869,7 +1277,10 @@ mod tests {
             id: 1,
             kids: vec![T {
                 id: 2,
-                kids: vec![T { id: 3, kids: vec![] }],
+                kids: vec![T {
+                    id: 3,
+                    kids: vec![],
+                }],
             }],
         };
         // 闭包输出生命周期无法与输入绑定（elision 推断为新生命周期），

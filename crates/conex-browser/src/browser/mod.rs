@@ -41,7 +41,9 @@ pub mod state;
 use crate::browser::active_port::{wait_active_port, StderrRing};
 use crate::browser::args::{build_args, ArgInputs, EngineMode};
 use crate::browser::cft::DownloadOpts;
-use crate::browser::discover::{resolve_backend, BackendOverride, BackendResolution, CandidateProbe, ResolveOptions};
+use crate::browser::discover::{
+    resolve_backend, BackendOverride, BackendResolution, CandidateProbe, ResolveOptions,
+};
 use crate::browser::endpoint::{CdpEndpoint, SessionToken};
 use crate::browser::events::ProcessEvent;
 use crate::browser::nav_stack::NavStack;
@@ -241,7 +243,12 @@ struct ManagedProcess {
 
 impl ManagedProcess {
     /// 迁移 child 进后台等待任务，返回 (任务, 剩余句柄)。
-    fn wait_task(mut self) -> (tokio::task::JoinHandle<Option<std::process::ExitStatus>>, Self) {
+    fn wait_task(
+        mut self,
+    ) -> (
+        tokio::task::JoinHandle<Option<std::process::ExitStatus>>,
+        Self,
+    ) {
         let mut child = self
             .child
             .take()
@@ -513,7 +520,9 @@ impl BrowserManager {
         // 在守卫作用域之外——MutexGuard 跨 await 非 Send，tokio::spawn 亦不
         // 可用（调用方断言 stop 返回时清理已完成，异步派发有竞态））
         enum StopStep {
-            NoDriver { leftover: Option<std::path::PathBuf> },
+            NoDriver {
+                leftover: Option<std::path::PathBuf>,
+            },
             WaitDriver(Option<tokio::task::JoinHandle<()>>),
         }
         let step = {
@@ -572,11 +581,7 @@ impl BrowserManager {
             match g.machine.state() {
                 BrowserState::Crashed { .. } => return Ok(()),
                 BrowserState::Stopped => g.last_config.clone(),
-                _ => {
-                    return Err(ProcessError::Internal(
-                        "浏览器运行中，无需重启".to_string(),
-                    ))
-                }
+                _ => return Err(ProcessError::Internal("浏览器运行中，无需重启".to_string())),
             }
         };
         if let Some(config) = config {
@@ -746,7 +751,8 @@ impl BrowserManager {
         // 导航栈恢复（崩溃重启保留 nav_stack.json 落盘，U-7）
         let profile_dir = self.lock().profile_dir.clone();
         if let Some(dir) = profile_dir {
-            if let Ok(Some(nav)) = NavStack::load(&dir.join(crate::browser::profile::NAV_STACK_FILE))
+            if let Ok(Some(nav)) =
+                NavStack::load(&dir.join(crate::browser::profile::NAV_STACK_FILE))
             {
                 self.lock().nav = nav;
             }
@@ -873,11 +879,8 @@ impl BrowserManager {
                     }
                     {
                         let mut g = self.lock();
-                        g.machine.on(
-                            StateEvent::RestartTick,
-                            Instant::now(),
-                            &self.budget(),
-                        );
+                        g.machine
+                            .on(StateEvent::RestartTick, Instant::now(), &self.budget());
                     }
                     let (_r, backend) = self.emit_snapshot();
                     self.emit(ProcessEvent::StateChanged {
@@ -907,11 +910,8 @@ impl BrowserManager {
                 Err(e) => {
                     let transition = {
                         let mut g = self.lock();
-                        g.machine.on(
-                            StateEvent::LaunchFailed,
-                            Instant::now(),
-                            &self.budget(),
-                        )
+                        g.machine
+                            .on(StateEvent::LaunchFailed, Instant::now(), &self.budget())
                     };
                     match transition {
                         Transition::RetryLaunch { attempt } => {
@@ -925,9 +925,7 @@ impl BrowserManager {
                             tokio::time::sleep(self.tuning.launch_retry_delay).await;
                             // 重试间隔内可被停止意图打断
                             if self.lock().pending_stop.is_some() {
-                                return Err(ProcessError::Internal(
-                                    "启动中被停止".to_string(),
-                                ));
+                                return Err(ProcessError::Internal("启动中被停止".to_string()));
                             }
                         }
                         Transition::GiveUp => return Err(e),
@@ -995,7 +993,10 @@ impl BrowserManager {
         // attach 失败已内部降级 taskkill（不阻断启动）
         let _ = killer.attach(&mut child);
         let pid = child.id().unwrap_or(0);
-        tracing::debug!("浏览器进程已派生（backend={} pid={pid}）", backend.summary());
+        tracing::debug!(
+            "浏览器进程已派生（backend={} pid={pid}）",
+            backend.summary()
+        );
         // 3. stderr 环形缓冲（后台读取，失败路径诊断）
         let stderr = Arc::new(tokio::sync::Mutex::new(StderrRing::new(20)));
         if let Some(mut pipe) = child.stderr.take() {
@@ -1081,11 +1082,8 @@ impl BrowserManager {
             g.close_sender.clone()
         };
         if let Some(sender) = sender {
-            let sent = tokio::time::timeout(
-                BROWSER_CLOSE_SEND_TIMEOUT,
-                sender.send_browser_close(),
-            )
-            .await;
+            let sent =
+                tokio::time::timeout(BROWSER_CLOSE_SEND_TIMEOUT, sender.send_browser_close()).await;
             match sent {
                 Ok(Ok(())) => tracing::debug!("优雅停止：Browser.close 已发送"),
                 Ok(Err(e)) => {
@@ -1107,8 +1105,11 @@ impl BrowserManager {
         let graceful = self.lock().pending_stop.take().unwrap_or(true);
         let transition = {
             let mut g = self.lock();
-            g.machine
-                .on(StateEvent::Stop { graceful }, Instant::now(), &self.budget())
+            g.machine.on(
+                StateEvent::Stop { graceful },
+                Instant::now(),
+                &self.budget(),
+            )
         };
         let mut force_killed = false;
         match transition {
@@ -1210,8 +1211,11 @@ impl BrowserManager {
     async fn abort_during_launch(&self) {
         {
             let mut g = self.lock();
-            g.machine
-                .on(StateEvent::Stop { graceful: true }, Instant::now(), &self.budget());
+            g.machine.on(
+                StateEvent::Stop { graceful: true },
+                Instant::now(),
+                &self.budget(),
+            );
         }
         self.cleanup_profile().await;
         let (restarts, backend) = self.emit_snapshot();
@@ -1493,7 +1497,10 @@ mod tests {
         mgr.register_close_sender(recorder.clone());
         mgr.clear_close_sender();
         mgr.send_browser_close_gracefully().await;
-        assert!(recorder.recorded().is_empty(), "清空后不得再发 Browser.close");
+        assert!(
+            recorder.recorded().is_empty(),
+            "清空后不得再发 Browser.close"
+        );
     }
 
     /// 假浏览器 .bat harness 生命周期测试（32 评审 P1-1 修复）：
@@ -1510,75 +1517,75 @@ mod tests {
 
         /// 快速 tuning（测试用）。
         fn fast_tuning() -> LaunchTuning {
-        LaunchTuning {
-            poll_interval: Duration::from_millis(20),
-            poll_timeout: Duration::from_secs(3),
-            launch_retry_delay: Duration::from_millis(30),
-            crash_backoff: Duration::from_millis(60),
-            crash_window: Duration::from_secs(30),
-            crash_max_restarts: 3,
-            wait_or_kill: Duration::from_millis(300),
-        }
-    }
-
-    /// 测试数据根 + 管理器（含空格路径守卫：.bat 假浏览器参数解析不兼容空格）。
-    struct Harness {
-        dir: tempfile::TempDir,
-        manager: BrowserManager,
-    }
-
-    impl Harness {
-        fn new() -> Option<Self> {
-            let dir = tempfile::tempdir().expect("临时目录");
-            if dir.path().to_string_lossy().contains(' ') {
-                // 32 评审 F6（P2-7）：%TEMP% 含空格（如用户名含空格）时 .bat 假
-                // 浏览器参数解析不兼容——显式报告跳过原因，避免覆盖静默丢失
-                eprintln!(
-                    "跳过 .bat harness 测试：临时目录路径含空格（{}）",
-                    dir.path().display()
-                );
-                return None;
-            }
-            Some(Harness {
-                manager: BrowserManager::with_tuning(dir.path().to_path_buf(), fast_tuning()),
-                dir,
-            })
-        }
-
-        /// 放置 CfT 缓存假二进制（仅满足 discover 命中，实际 spawn 走 binary_override）。
-        fn fake_cft_binary(&self) {
-            let root = browser_root(self.dir.path());
-            let dir = root.join("browsers").join("chrome-151.0.7922.77");
-            std::fs::create_dir_all(&dir).expect("缓存目录");
-            let rel = crate::browser::cft::binary_rel_path().expect("平台路径");
-            let bin = dir.join(rel);
-            std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
-            std::fs::write(bin, b"placeholder").expect("写入假二进制占位");
-        }
-
-        /// 写入假浏览器 .bat 脚本（spawn 经 LaunchConfig.binary_override 注入）。
-        fn fake_browser(&self, script: &str) -> PathBuf {
-            let p = self.dir.path().join("fake-browser.bat");
-            std::fs::write(&p, script).expect("写入假浏览器脚本");
-            p
-        }
-
-        /// 标准测试配置：CfT 缓存（discover 命中）+ 假浏览器脚本（spawn 注入）。
-        fn config(&self, script: &str) -> LaunchConfig {
-            self.fake_cft_binary();
-            LaunchConfig {
-                binary_override: Some(self.fake_browser(script)),
-                ..Default::default()
+            LaunchTuning {
+                poll_interval: Duration::from_millis(20),
+                poll_timeout: Duration::from_secs(3),
+                launch_retry_delay: Duration::from_millis(30),
+                crash_backoff: Duration::from_millis(60),
+                crash_window: Duration::from_secs(30),
+                crash_max_restarts: 3,
+                wait_or_kill: Duration::from_millis(300),
             }
         }
-    }
 
-    /// 假浏览器脚本：写 DevToolsActivePort 后常驻（正常启动）。
-    /// 注意：Rust 传给 cmd 的参数带引号（`"--user-data-dir=C:\..."` 单 token），
-    /// 手动调用时可能不带引号（`=` 被 for 拆成两 token）；`%%~a` 去引号 +
-    /// 双形态解析（前缀匹配 / NEXT 取下一 token）兜底两种传参。
-    fn script_ok() -> String {
-        "@echo off\r\n\
+        /// 测试数据根 + 管理器（含空格路径守卫：.bat 假浏览器参数解析不兼容空格）。
+        struct Harness {
+            dir: tempfile::TempDir,
+            manager: BrowserManager,
+        }
+
+        impl Harness {
+            fn new() -> Option<Self> {
+                let dir = tempfile::tempdir().expect("临时目录");
+                if dir.path().to_string_lossy().contains(' ') {
+                    // 32 评审 F6（P2-7）：%TEMP% 含空格（如用户名含空格）时 .bat 假
+                    // 浏览器参数解析不兼容——显式报告跳过原因，避免覆盖静默丢失
+                    eprintln!(
+                        "跳过 .bat harness 测试：临时目录路径含空格（{}）",
+                        dir.path().display()
+                    );
+                    return None;
+                }
+                Some(Harness {
+                    manager: BrowserManager::with_tuning(dir.path().to_path_buf(), fast_tuning()),
+                    dir,
+                })
+            }
+
+            /// 放置 CfT 缓存假二进制（仅满足 discover 命中，实际 spawn 走 binary_override）。
+            fn fake_cft_binary(&self) {
+                let root = browser_root(self.dir.path());
+                let dir = root.join("browsers").join("chrome-151.0.7922.77");
+                std::fs::create_dir_all(&dir).expect("缓存目录");
+                let rel = crate::browser::cft::binary_rel_path().expect("平台路径");
+                let bin = dir.join(rel);
+                std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
+                std::fs::write(bin, b"placeholder").expect("写入假二进制占位");
+            }
+
+            /// 写入假浏览器 .bat 脚本（spawn 经 LaunchConfig.binary_override 注入）。
+            fn fake_browser(&self, script: &str) -> PathBuf {
+                let p = self.dir.path().join("fake-browser.bat");
+                std::fs::write(&p, script).expect("写入假浏览器脚本");
+                p
+            }
+
+            /// 标准测试配置：CfT 缓存（discover 命中）+ 假浏览器脚本（spawn 注入）。
+            fn config(&self, script: &str) -> LaunchConfig {
+                self.fake_cft_binary();
+                LaunchConfig {
+                    binary_override: Some(self.fake_browser(script)),
+                    ..Default::default()
+                }
+            }
+        }
+
+        /// 假浏览器脚本：写 DevToolsActivePort 后常驻（正常启动）。
+        /// 注意：Rust 传给 cmd 的参数带引号（`"--user-data-dir=C:\..."` 单 token），
+        /// 手动调用时可能不带引号（`=` 被 for 拆成两 token）；`%%~a` 去引号 +
+        /// 双形态解析（前缀匹配 / NEXT 取下一 token）兜底两种传参。
+        fn script_ok() -> String {
+            "@echo off\r\n\
          setlocal enabledelayedexpansion\r\n\
          set PROFILE=\r\n\
          set NEXT=0\r\n\
@@ -1597,12 +1604,12 @@ mod tests {
          :loop\r\n\
          ping -n 2 127.0.0.1 >nul\r\n\
          goto loop\r\n"
-            .to_string()
-    }
+                .to_string()
+        }
 
-    /// 假浏览器脚本：写端口后约 1s 崩溃退出（退出码 1）。
-    fn script_crash() -> String {
-        "@echo off\r\n\
+        /// 假浏览器脚本：写端口后约 1s 崩溃退出（退出码 1）。
+        fn script_crash() -> String {
+            "@echo off\r\n\
          setlocal enabledelayedexpansion\r\n\
          set PROFILE=\r\n\
          set NEXT=0\r\n\
@@ -1620,146 +1627,152 @@ mod tests {
          >> \"!PROFILE!\\DevToolsActivePort\" echo /devtools/browser/fake-session-uuid\r\n\
          ping -n 2 127.0.0.1 >nul\r\n\
          exit /b 1\r\n"
-            .to_string()
-    }
+                .to_string()
+        }
 
-    /// 假浏览器脚本：立即退出（提前退出诊断）。
-    fn script_early_exit() -> String {
-        "@echo off\r\nexit /b 7\r\n".to_string()
-    }
+        /// 假浏览器脚本：立即退出（提前退出诊断）。
+        fn script_early_exit() -> String {
+            "@echo off\r\nexit /b 7\r\n".to_string()
+        }
 
-    /// 事件流采集：订阅并收集指定数量的 StateChanged 状态序列。
-    async fn collect_states(
-        rx: &mut broadcast::Receiver<ProcessEvent>,
-        count: usize,
-    ) -> Vec<BrowserState> {
-        let mut out = Vec::new();
-        let deadline = std::time::Instant::now() + Duration::from_secs(25);
-        while out.len() < count {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            let ev = tokio::time::timeout(remaining, rx.recv())
-                .await
-                .expect("等待事件超时")
-                .expect("通道关闭");
-            if let ProcessEvent::StateChanged { state, .. } = ev {
-                out.push(state);
+        /// 事件流采集：订阅并收集指定数量的 StateChanged 状态序列。
+        async fn collect_states(
+            rx: &mut broadcast::Receiver<ProcessEvent>,
+            count: usize,
+        ) -> Vec<BrowserState> {
+            let mut out = Vec::new();
+            let deadline = std::time::Instant::now() + Duration::from_secs(25);
+            while out.len() < count {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                let ev = tokio::time::timeout(remaining, rx.recv())
+                    .await
+                    .expect("等待事件超时")
+                    .expect("通道关闭");
+                if let ProcessEvent::StateChanged { state, .. } = ev {
+                    out.push(state);
+                }
             }
+            out
         }
-        out
-    }
 
-    /// 完整生命周期：Stopped→Launching→Running→Stopping→Stopped（事件序断言）。
-    #[tokio::test]
-    async fn full_cycle_transitions() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        let mut rx = mgr.subscribe();
-        let report = mgr.start(cfg).await.expect("启动");
-        assert!(matches!(report.state, BrowserState::Running));
-        assert!(report.profile_dir.exists());
-        let states = collect_states(&mut rx, 2).await;
-        assert!(matches!(states[0], BrowserState::Launching { attempt: 1 }));
-        assert!(matches!(states[1], BrowserState::Running));
-        // 端点私有通道可用（不进报告/事件）
-        let ep = mgr.endpoint().expect("端点应就绪");
-        assert_eq!(ep.port, 38689);
-        // 停止
-        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        assert!(!report.profile_dir.exists(), "会话结束直删 profile");
-        let tail = collect_states(&mut rx, 2).await;
-        assert!(matches!(tail[0], BrowserState::Stopping { graceful: true }));
-        assert!(matches!(tail[1], BrowserState::Stopped));
-    }
-
-    /// 启动重试耗尽 → GiveUp + LaunchEarlyExit（§6.2 第 4 行 + §6.5 诊断）。
-    #[tokio::test]
-    async fn launch_retry_then_fail() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_early_exit());
-        let mgr = h.manager.clone();
-        let mut rx = mgr.subscribe();
-        let err = mgr.start(cfg).await.expect_err("3 次重试后必须失败");
-        match err {
-            ProcessError::LaunchEarlyExit { exit_code: 7, .. } => {}
-            other => panic!("应为 LaunchEarlyExit(7)，实际：{other:?}"),
+        /// 完整生命周期：Stopped→Launching→Running→Stopping→Stopped（事件序断言）。
+        #[tokio::test]
+        async fn full_cycle_transitions() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            let mut rx = mgr.subscribe();
+            let report = mgr.start(cfg).await.expect("启动");
+            assert!(matches!(report.state, BrowserState::Running));
+            assert!(report.profile_dir.exists());
+            let states = collect_states(&mut rx, 2).await;
+            assert!(matches!(states[0], BrowserState::Launching { attempt: 1 }));
+            assert!(matches!(states[1], BrowserState::Running));
+            // 端点私有通道可用（不进报告/事件）
+            let ep = mgr.endpoint().expect("端点应就绪");
+            assert_eq!(ep.port, 38689);
+            // 停止
+            let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            assert!(!report.profile_dir.exists(), "会话结束直删 profile");
+            let tail = collect_states(&mut rx, 2).await;
+            assert!(matches!(tail[0], BrowserState::Stopping { graceful: true }));
+            assert!(matches!(tail[1], BrowserState::Stopped));
         }
-        // 事件序：Launching{1} → Launching{2} → Launching{3} → Stopped
-        let states = collect_states(&mut rx, 4).await;
-        assert!(matches!(states[0], BrowserState::Launching { attempt: 1 }));
-        assert!(matches!(states[1], BrowserState::Launching { attempt: 2 }));
-        assert!(matches!(states[2], BrowserState::Launching { attempt: 3 }));
-        assert!(matches!(states[3], BrowserState::Stopped));
-        assert_eq!(mgr.status().state, BrowserState::Stopped);
-    }
 
-    /// 崩溃自愈：Running → 崩溃 → 重启 → Running（NavStack 保留，profile 未删）。
-    #[tokio::test]
-    async fn crash_restart_preserves_nav() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_crash());
-        let mgr = h.manager.clone();
-        let mut rx = mgr.subscribe();
-        let report = mgr.start(cfg).await.expect("启动");
-        let profile_dir = report.profile_dir.clone();
-        // 注入导航栈（模拟维度 11 回写）
-        let mut nav = NavStack::new();
-        nav.push(url::Url::parse("https://a.example").unwrap(), false);
-        nav.push(url::Url::parse("https://b.example").unwrap(), true);
-        nav.set_active(1);
-        mgr.set_nav(nav.clone());
-        // 事件序：Launching{1} → Running → Launching{1}(重启) → Running(restarts=1)
-        let states = collect_states(&mut rx, 4).await;
-        assert!(matches!(states[2], BrowserState::Launching { attempt: 1 }), "{states:?}");
-        assert!(matches!(states[3], BrowserState::Running), "{states:?}");
-        // 重启后导航栈保留（U-7：快照由本模块保留，恢复编排归维度 15）
-        assert_eq!(mgr.nav_stack(), nav, "崩溃重启必须保留导航栈");
-        assert_eq!(mgr.status().restarts, 1);
-        assert!(profile_dir.exists(), "崩溃重启复用 profile，不删除");
-        // 停止收尾
-        mgr.stop(StopReason::Force).await.expect("停止");
-        assert!(!profile_dir.exists(), "停止后直删");
-    }
-
-    /// 崩溃循环：30s 窗口内 3 次重启上限 → CrashLoopDetected 终态（保留 profile）。
-    #[tokio::test]
-    async fn crash_loop_aborts_after_3() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_crash());
-        let mgr = h.manager.clone();
-        let mut rx = mgr.subscribe();
-        let report = mgr.start(cfg).await.expect("启动");
-        let profile_dir = report.profile_dir.clone();
-        // 等终态：4 次崩溃 → CrashAbort → Stopped + CrashLoopDetected
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
-        loop {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            let ev = tokio::time::timeout(remaining, rx.recv())
-                .await
-                .expect("等待终态超时")
-                .expect("通道关闭");
-            if let ProcessEvent::StateChanged {
-                state: BrowserState::Stopped,
-                error: Some(e),
-                ..
-            } = ev
-            {
-                assert!(e.contains("崩溃重启超限"), "{e}");
-                break;
+        /// 启动重试耗尽 → GiveUp + LaunchEarlyExit（§6.2 第 4 行 + §6.5 诊断）。
+        #[tokio::test]
+        async fn launch_retry_then_fail() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_early_exit());
+            let mgr = h.manager.clone();
+            let mut rx = mgr.subscribe();
+            let err = mgr.start(cfg).await.expect_err("3 次重试后必须失败");
+            match err {
+                ProcessError::LaunchEarlyExit { exit_code: 7, .. } => {}
+                other => panic!("应为 LaunchEarlyExit(7)，实际：{other:?}"),
             }
+            // 事件序：Launching{1} → Launching{2} → Launching{3} → Stopped
+            let states = collect_states(&mut rx, 4).await;
+            assert!(matches!(states[0], BrowserState::Launching { attempt: 1 }));
+            assert!(matches!(states[1], BrowserState::Launching { attempt: 2 }));
+            assert!(matches!(states[2], BrowserState::Launching { attempt: 3 }));
+            assert!(matches!(states[3], BrowserState::Stopped));
+            assert_eq!(mgr.status().state, BrowserState::Stopped);
         }
-        assert_eq!(mgr.status().state, BrowserState::Stopped);
-        assert!(profile_dir.exists(), "崩溃放弃保留导航栈数据（§6.2），停止时才清理");
-        // 停止（清理遗留 profile）
-        mgr.stop(StopReason::Graceful).await.expect("停止");
-        assert!(!profile_dir.exists(), "停止后清理");
-    }
 
-    /// 假浏览器脚本：写 DevToolsActivePort 后约 1s 自行退出（退出码 0）。
-    /// 用于回归：优雅停止窗口内进程自然退出（wait_task 分支先到）。
-    fn script_self_exit() -> String {
-        "@echo off\r\n\
+        /// 崩溃自愈：Running → 崩溃 → 重启 → Running（NavStack 保留，profile 未删）。
+        #[tokio::test]
+        async fn crash_restart_preserves_nav() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_crash());
+            let mgr = h.manager.clone();
+            let mut rx = mgr.subscribe();
+            let report = mgr.start(cfg).await.expect("启动");
+            let profile_dir = report.profile_dir.clone();
+            // 注入导航栈（模拟维度 11 回写）
+            let mut nav = NavStack::new();
+            nav.push(url::Url::parse("https://a.example").unwrap(), false);
+            nav.push(url::Url::parse("https://b.example").unwrap(), true);
+            nav.set_active(1);
+            mgr.set_nav(nav.clone());
+            // 事件序：Launching{1} → Running → Launching{1}(重启) → Running(restarts=1)
+            let states = collect_states(&mut rx, 4).await;
+            assert!(
+                matches!(states[2], BrowserState::Launching { attempt: 1 }),
+                "{states:?}"
+            );
+            assert!(matches!(states[3], BrowserState::Running), "{states:?}");
+            // 重启后导航栈保留（U-7：快照由本模块保留，恢复编排归维度 15）
+            assert_eq!(mgr.nav_stack(), nav, "崩溃重启必须保留导航栈");
+            assert_eq!(mgr.status().restarts, 1);
+            assert!(profile_dir.exists(), "崩溃重启复用 profile，不删除");
+            // 停止收尾
+            mgr.stop(StopReason::Force).await.expect("停止");
+            assert!(!profile_dir.exists(), "停止后直删");
+        }
+
+        /// 崩溃循环：30s 窗口内 3 次重启上限 → CrashLoopDetected 终态（保留 profile）。
+        #[tokio::test]
+        async fn crash_loop_aborts_after_3() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_crash());
+            let mgr = h.manager.clone();
+            let mut rx = mgr.subscribe();
+            let report = mgr.start(cfg).await.expect("启动");
+            let profile_dir = report.profile_dir.clone();
+            // 等终态：4 次崩溃 → CrashAbort → Stopped + CrashLoopDetected
+            let deadline = std::time::Instant::now() + Duration::from_secs(30);
+            loop {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                let ev = tokio::time::timeout(remaining, rx.recv())
+                    .await
+                    .expect("等待终态超时")
+                    .expect("通道关闭");
+                if let ProcessEvent::StateChanged {
+                    state: BrowserState::Stopped,
+                    error: Some(e),
+                    ..
+                } = ev
+                {
+                    assert!(e.contains("崩溃重启超限"), "{e}");
+                    break;
+                }
+            }
+            assert_eq!(mgr.status().state, BrowserState::Stopped);
+            assert!(
+                profile_dir.exists(),
+                "崩溃放弃保留导航栈数据（§6.2），停止时才清理"
+            );
+            // 停止（清理遗留 profile）
+            mgr.stop(StopReason::Graceful).await.expect("停止");
+            assert!(!profile_dir.exists(), "停止后清理");
+        }
+
+        /// 假浏览器脚本：写 DevToolsActivePort 后约 1s 自行退出（退出码 0）。
+        /// 用于回归：优雅停止窗口内进程自然退出（wait_task 分支先到）。
+        fn script_self_exit() -> String {
+            "@echo off\r\n\
          setlocal enabledelayedexpansion\r\n\
          set PROFILE=\r\n\
          set NEXT=0\r\n\
@@ -1777,14 +1790,14 @@ mod tests {
          >> \"!PROFILE!\\DevToolsActivePort\" echo /devtools/browser/fake-session-uuid\r\n\
          ping -n 2 127.0.0.1 >nul\r\n\
          exit /b 0\r\n"
-            .to_string()
-    }
+                .to_string()
+        }
 
-    /// 假浏览器脚本：写 DevToolsActivePort 后循环检查 close 标志文件，出现
-    /// 即退出（退出码 0）。G-9 回归：Browser.close 发送后进程自然退出的
-    /// 可观测路径（.bat 轮询粒度 ~1s，等待窗口须大于一轮轮询）。
-    fn script_close_exit() -> String {
-        "@echo off\r\n\
+        /// 假浏览器脚本：写 DevToolsActivePort 后循环检查 close 标志文件，出现
+        /// 即退出（退出码 0）。G-9 回归：Browser.close 发送后进程自然退出的
+        /// 可观测路径（.bat 轮询粒度 ~1s，等待窗口须大于一轮轮询）。
+        fn script_close_exit() -> String {
+            "@echo off\r\n\
          setlocal enabledelayedexpansion\r\n\
          set PROFILE=\r\n\
          set NEXT=0\r\n\
@@ -1804,510 +1817,523 @@ mod tests {
          if exist \"!PROFILE!\\close-flag\" exit /b 0\r\n\
          ping -n 2 127.0.0.1 >nul\r\n\
          goto loop\r\n"
-            .to_string()
-    }
-
-    /// 回归（联调 E5 根因）：优雅停止窗口内进程**自行退出**（wait_task 分支先到）
-    /// 时不得二次 poll 已完成的 JoinHandle——tokio 对已完成句柄的再次 poll 直接
-    /// panic「JoinHandle polled after completion」，旧实现导致驱动任务崩溃、
-    /// 状态卡在 Stopping。wait_or_kill 放大到 5s 确保 wait_task（~1s）先到。
-    #[tokio::test]
-    async fn graceful_stop_waits_natural_exit_without_double_poll() {
-        let Some(h) = Harness::new() else { return };
-        let root = tempfile::tempdir().expect("临时目录");
-        // CfT 缓存假二进制（discover 命中，root 与管理器同源）
-        let cache_dir = root.path().join("browsers").join("chrome-151.0.7922.77");
-        std::fs::create_dir_all(&cache_dir).expect("缓存目录");
-        let rel = crate::browser::cft::binary_rel_path().expect("平台路径");
-        let bin = cache_dir.join(rel);
-        std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
-        std::fs::write(bin, b"placeholder").expect("写入占位");
-        let tuning = LaunchTuning {
-            wait_or_kill: Duration::from_secs(5),
-            ..fast_tuning()
-        };
-        let mgr = BrowserManager::with_tuning(root.path().to_path_buf(), tuning);
-        let cfg = LaunchConfig {
-            binary_override: Some(h.fake_browser(&script_self_exit())),
-            ..Default::default()
-        };
-        let report = mgr.start(cfg).await.expect("启动");
-        // 立即优雅停止：进程在 wait_or_kill(5s) 窗口内自行退出（~1s）
-        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
-        assert!(
-            matches!(stop.state, BrowserState::Stopped),
-            "进程自然退出后应收敛 Stopped（不得卡 Stopping）：{:?}",
-            stop.state
-        );
-        assert!(!stop.force_killed, "自然退出不应走杀树兜底");
-        assert!(!report.profile_dir.exists(), "停止后直删");
-    }
-
-    /// 优雅停止超时 → 杀树（wait_or_kill 注入 300ms；§6.3 第 2 步）。
-    #[tokio::test]
-    async fn graceful_stop_timeout_force_kills() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        let report = mgr.start(cfg).await.expect("启动");
-        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
-        // 假浏览器永不退出 → wait_or_kill 超时 → 杀树兜底
-        assert!(stop.force_killed, "优雅等待超时必须走杀树：{stop:?}");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        assert!(stop.profile_removed);
-        assert!(!report.profile_dir.exists(), "停止后直删");
-    }
-
-    // —— G-9：优雅停止先发 Browser.close 的完整停止路径（.bat harness）——
-
-    /// G-9：Graceful 停止先发 `Browser.close` → 假浏览器收到标志后自然退出 →
-    /// 不杀树。wait_or_kill 放大到 5s：.bat 轮询粒度 ~1s，等待窗口须覆盖
-    /// 一轮以上轮询。
-    #[tokio::test]
-    async fn graceful_stop_sends_close_then_natural_exit() {
-        let Some(h) = Harness::new() else { return };
-        let root = tempfile::tempdir().expect("临时目录");
-        // CfT 缓存假二进制（discover 命中，root 与管理器同源）
-        let cache_dir = root.path().join("browsers").join("chrome-151.0.7922.77");
-        std::fs::create_dir_all(&cache_dir).expect("缓存目录");
-        let rel = crate::browser::cft::binary_rel_path().expect("平台路径");
-        let bin = cache_dir.join(rel);
-        std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
-        std::fs::write(bin, b"placeholder").expect("写入占位");
-        let tuning = LaunchTuning {
-            wait_or_kill: Duration::from_secs(5),
-            ..fast_tuning()
-        };
-        let mgr = BrowserManager::with_tuning(root.path().to_path_buf(), tuning);
-        let cfg = LaunchConfig {
-            binary_override: Some(h.fake_browser(&script_close_exit())),
-            ..Default::default()
-        };
-        let report = mgr.start(cfg).await.expect("启动");
-        // 登记发送面：发送 Browser.close 时写 close 标志（触发假浏览器自然退出）
-        let recorder = Arc::new(RecordingClose {
-            exit_flag: Some(report.profile_dir.join("close-flag")),
-            ..Default::default()
-        });
-        mgr.register_close_sender(recorder.clone());
-        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
-        assert_eq!(
-            recorder.recorded(),
-            vec![crate::cdp::domains::names::BROWSER_CLOSE],
-            "Graceful 停止必须先发 Browser.close"
-        );
-        assert!(
-            matches!(stop.state, BrowserState::Stopped),
-            "自然退出后应收敛 Stopped：{:?}",
-            stop.state
-        );
-        assert!(!stop.force_killed, "Browser.close 后自然退出不应杀树");
-        assert!(!report.profile_dir.exists(), "停止后直删");
-    }
-
-    /// G-9：`Browser.close` 发出后进程不退出 → wait_or_kill 超时仍杀树兜底。
-    #[tokio::test]
-    async fn graceful_stop_close_timeout_still_force_kills() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_close_exit());
-        let mgr = h.manager.clone();
-        let report = mgr.start(cfg).await.expect("启动");
-        // 只记录不写标志：close 发出后假浏览器仍常驻 → 超时杀树
-        let recorder = Arc::new(RecordingClose::default());
-        mgr.register_close_sender(recorder.clone());
-        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
-        assert_eq!(
-            recorder.recorded(),
-            vec![crate::cdp::domains::names::BROWSER_CLOSE],
-            "必须先发 Browser.close 再进入等待窗口"
-        );
-        assert!(stop.force_killed, "close 后超时仍须杀树兜底：{stop:?}");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        assert!(!report.profile_dir.exists(), "停止后直删");
-    }
-
-    /// G-9：无会话登记 → 保持既有语义——不发 Browser.close，wait_or_kill
-    /// 超时杀树（graceful_stop_timeout_force_kills 的无会话显式化）。
-    #[tokio::test]
-    async fn graceful_stop_no_session_falls_back_to_kill() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        let report = mgr.start(cfg).await.expect("启动");
-        let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
-        assert!(stop.force_killed, "无会话：wait_or_kill 超时杀树：{stop:?}");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        assert!(!report.profile_dir.exists(), "停止后直删");
-    }
-
-    /// G-9：`Browser.close` 发送失败（无连接/拒绝）→ 不 panic，直接走既有
-    /// wait_or_kill 超时杀树兜底。
-    #[tokio::test]
-    async fn graceful_stop_close_send_failure_falls_back() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        let report = mgr.start(cfg).await.expect("启动");
-        let recorder = Arc::new(RecordingClose {
-            fail: true,
-            ..Default::default()
-        });
-        mgr.register_close_sender(recorder.clone());
-        let stop = mgr
-            .stop(StopReason::Graceful)
-            .await
-            .expect("发送失败不得 panic/挂死");
-        assert_eq!(
-            recorder.recorded(),
-            vec![crate::cdp::domains::names::BROWSER_CLOSE]
-        );
-        assert!(stop.force_killed, "发送失败走既有超时杀树兜底：{stop:?}");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        assert!(!report.profile_dir.exists(), "停止后直删");
-    }
-
-    /// G-9：强制停止不发 `Browser.close`（直接杀树语义不变）。
-    #[tokio::test]
-    async fn force_stop_does_not_send_browser_close() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        let _ = mgr.start(cfg).await.expect("启动");
-        let recorder = Arc::new(RecordingClose::default());
-        mgr.register_close_sender(recorder.clone());
-        let stop = mgr.stop(StopReason::Force).await.expect("停止");
-        assert!(stop.force_killed);
-        assert!(
-            recorder.recorded().is_empty(),
-            "强制停止不得发 Browser.close"
-        );
-    }
-
-    /// start 幂等（§4.5）：Running 中重复 start 返回当前快照，不重复 spawn。
-    #[tokio::test]
-    async fn start_idempotent() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        let first = mgr.start(cfg.clone()).await.expect("首次启动");
-        let second = mgr.start(cfg).await.expect("幂等启动");
-        assert_eq!(second.profile_dir, first.profile_dir);
-        assert!(matches!(second.state, BrowserState::Running));
-        mgr.stop(StopReason::Force).await.expect("停止");
-    }
-
-    /// 停止报告与状态一致性。
-    #[tokio::test]
-    async fn stop_report_consistent() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        let _ = mgr.start(cfg).await.expect("启动");
-        let stop = mgr.stop(StopReason::Force).await.expect("停止");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        assert_eq!(mgr.status().state, BrowserState::Stopped);
-    }
-
-    /// 受管 profile：启动后停止不删除（用户资产保留；删除经 trash，维度 16）。
-    #[tokio::test]
-    async fn managed_profile_kept_on_stop() {
-        let Some(h) = Harness::new() else { return };
-        // 源 profile fixture
-        let src_root = h.dir.path().join("src-user-data");
-        std::fs::create_dir_all(src_root.join("Default")).expect("目录");
-        std::fs::write(src_root.join("Local State"), b"{}").expect("写入");
-        std::fs::write(src_root.join("Default").join("Preferences"), b"pref").expect("写入");
-        let cfg = LaunchConfig {
-            profile: ProfileSpec::Imported {
-                source_user_data: src_root,
-                source_profile: "Default".to_string(),
-                profile_name: "我的Profile".to_string(),
-            },
-            binary_override: Some(h.fake_browser(&script_ok())),
-            ..Default::default()
-        };
-        h.fake_cft_binary();
-        let mgr = h.manager.clone();
-        let report = mgr.start(cfg).await.expect("启动");
-        assert!(report.profile_dir.exists());
-        assert!(report.profile_dir.join("Preferences").is_file());
-        let managed = report.profile_dir.clone();
-        let stop = mgr.stop(StopReason::Force).await.expect("停止");
-        assert!(!stop.profile_removed, "受管 profile 不随会话直删");
-        assert!(managed.exists(), "受管 profile 停止后保留（删除经 trash，维度 16）");
-        // trash 清理验证（模拟维度 16 流程）
-        let trash = h.dir.path().join("trash");
-        crate::browser::profile::trash_managed(&managed, &trash).expect("入回收站");
-        assert!(!managed.exists());
-    }
-
-    /// 评审 F1 加固（32 评审 F1 高 flake 清单）：进程存活探测以「PID + 创建
-    /// 时间 + 退出码」三因子判定——taskkill 成功后进程对象可能因句柄未关而
-    /// 短暂存留（OpenProcess 仍可成功），退出码区分「仍在运行（STILL_ACTIVE）」
-    /// 与「已终止待回收」；创建时间排除 PID 复用误判（驱动自愈不断派生新进程）。
-    #[allow(unsafe_code)]
-    fn process_creation_time(pid: u32) -> Option<u64> {
-        use windows_sys::Win32::Foundation::CloseHandle;
-        use windows_sys::Win32::System::Threading::{
-            GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-        };
-        // SAFETY：OpenProcess/GetProcessTimes/CloseHandle 标准 API；句柄用完
-        // 即关；取不到（进程已消失/权限拒绝）一律返回 None，错误路径不 panic
-        unsafe {
-            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-            if handle.is_null() {
-                return None;
-            }
-            let mut created = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
-            let mut exit = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
-            let mut kernel = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
-            let mut user = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
-            let ok = GetProcessTimes(handle, &mut created, &mut exit, &mut kernel, &mut user) != 0;
-            CloseHandle(handle);
-            if !ok {
-                return None;
-            }
-            Some(((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
+                .to_string()
         }
-    }
 
-    /// 进程状态探测：None = 进程对象已消失；Some(StillRunning) = 正在运行；
-    /// Some(Terminated(code)) = 已终止但对象未回收（句柄存留）。
-    #[allow(unsafe_code)]
-    fn process_state(pid: u32) -> Option<Result<u32, ()>> {
-        use windows_sys::Win32::Foundation::CloseHandle;
-        use windows_sys::Win32::System::Threading::{
-            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-        };
-        // SAFETY：标准 API；句柄用完即关；错误路径不 panic
-        unsafe {
-            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-            if handle.is_null() {
-                return None;
-            }
-            let mut code: u32 = 0;
-            let ok = GetExitCodeProcess(handle, &mut code) != 0;
-            CloseHandle(handle);
-            if !ok {
-                return None;
-            }
-            if code == 259 {
-                Some(Err(())) // STILL_ACTIVE
-            } else {
-                Some(Ok(code))
-            }
+        /// 回归（联调 E5 根因）：优雅停止窗口内进程**自行退出**（wait_task 分支先到）
+        /// 时不得二次 poll 已完成的 JoinHandle——tokio 对已完成句柄的再次 poll 直接
+        /// panic「JoinHandle polled after completion」，旧实现导致驱动任务崩溃、
+        /// 状态卡在 Stopping。wait_or_kill 放大到 5s 确保 wait_task（~1s）先到。
+        #[tokio::test]
+        async fn graceful_stop_waits_natural_exit_without_double_poll() {
+            let Some(h) = Harness::new() else { return };
+            let root = tempfile::tempdir().expect("临时目录");
+            // CfT 缓存假二进制（discover 命中，root 与管理器同源）
+            let cache_dir = root.path().join("browsers").join("chrome-151.0.7922.77");
+            std::fs::create_dir_all(&cache_dir).expect("缓存目录");
+            let rel = crate::browser::cft::binary_rel_path().expect("平台路径");
+            let bin = cache_dir.join(rel);
+            std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
+            std::fs::write(bin, b"placeholder").expect("写入占位");
+            let tuning = LaunchTuning {
+                wait_or_kill: Duration::from_secs(5),
+                ..fast_tuning()
+            };
+            let mgr = BrowserManager::with_tuning(root.path().to_path_buf(), tuning);
+            let cfg = LaunchConfig {
+                binary_override: Some(h.fake_browser(&script_self_exit())),
+                ..Default::default()
+            };
+            let report = mgr.start(cfg).await.expect("启动");
+            // 立即优雅停止：进程在 wait_or_kill(5s) 窗口内自行退出（~1s）
+            let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+            assert!(
+                matches!(stop.state, BrowserState::Stopped),
+                "进程自然退出后应收敛 Stopped（不得卡 Stopping）：{:?}",
+                stop.state
+            );
+            assert!(!stop.force_killed, "自然退出不应走杀树兜底");
+            assert!(!report.profile_dir.exists(), "停止后直删");
         }
-    }
 
-    /// 评审 F6 回归（31-评审-接线与集成）：Drop 时 inner 锁被其他线程持有
-    /// （try_lock 失败短窗）——旧实现静默跳过杀树导致浏览器进程泄漏；现实现
-    /// spawn 阻塞兜底线程收尸（锁释放后立即 kill_sync）。预占锁后 Drop 管理器，
-    /// 释放锁 → 兜底线程收尸 → 进程必须终结。
-    ///
-    /// 评审 F1 加固：并行 harness 负载下（驱动崩溃自愈持续派生新进程，Windows
-    /// PID 分配器复用模式下新进程可能复用刚释放的 PID）纯 PID 存活探测会把
-    /// 复用进程误判为原进程仍存活（窗口放大反而提高误判率）——改用「创建
-    /// 时间 + 退出码」三因子判定：创建时间不一致 = PID 已复用（原进程已死）；
-    /// GetExitCodeProcess 区分 STILL_ACTIVE（仍在运行）与已终止待回收对象。
-    #[tokio::test]
-    async fn drop_kills_via_fallback_when_inner_locked() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        let _ = mgr.start(cfg).await.expect("启动");
-        let pid = mgr
-            .inner
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .last_pid
-            .expect("启动后必有 pid");
-        // 记录原进程创建时间（PID 复用判定基准）
-        let creation = process_creation_time(pid).expect("启动后进程必存在");
-        // 预占锁：模拟极端竞争窗口（其他线程持锁期间 Drop 发生）
-        let held = Arc::clone(&mgr.inner);
-        let guard = held.lock().unwrap_or_else(|p| p.into_inner());
-        drop(mgr); // try_lock 失败 → spawn 兜底线程
-        drop(guard); // 释放锁 → 兜底线程收尸
-        // 轮询等待进程终结（kill_sync 内部已带 2s 回收等待；轮询兜底调度竞态；
-        // 窗口 25s：并行 harness 负载下 taskkill 排队可致单点等待超时，32 评审
-        // F1/F2 窗口放大建议）。判定：仅当「创建时间一致且 STILL_ACTIVE」
-        // 才视为原进程仍在——排除 PID 复用与已终止对象存留两种误判。
-        let deadline = std::time::Instant::now() + Duration::from_secs(25);
-        while std::time::Instant::now() < deadline {
-            let alive = process_creation_time(pid).is_some_and(|t| t == creation)
-                && process_state(pid) == Some(Err(()));
-            if !alive {
-                // 收尾：显式停止（driver 可能已把被杀判定为崩溃并重启新进程，
-                // stop(Force) 置意图让驱动收敛，防测试残留僵尸进程）
-                let _ = h.manager.stop(StopReason::Force).await;
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+        /// 优雅停止超时 → 杀树（wait_or_kill 注入 300ms；§6.3 第 2 步）。
+        #[tokio::test]
+        async fn graceful_stop_timeout_force_kills() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            let report = mgr.start(cfg).await.expect("启动");
+            let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+            // 假浏览器永不退出 → wait_or_kill 超时 → 杀树兜底
+            assert!(stop.force_killed, "优雅等待超时必须走杀树：{stop:?}");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            assert!(stop.profile_removed);
+            assert!(!report.profile_dir.exists(), "停止后直删");
         }
-        panic!("Drop 兜底杀树未生效（PID {pid} 仍存活）");
-    }
 
-    /// 回归（F6 修复暴露的停止信号竞态）：崩溃自愈的 relaunch 窗口内调用
-    /// stop() 必须收敛——旧实现 watch 信号发往无接收者的旧通道即丢失（驱动
-    /// 处于退避/重启/启动轮询中，新 stop_rx 未挂接），驱动永不收敛、
-    /// stop() 永久挂死（drop_kills 测试实测 90s+）；现实现 PortReady 后
-    /// 复查 pending_stop，stop() 有界返回（本用例任意交错时序均收敛，
-    /// 未修复实现下 10s 超时即失败）。
-    #[tokio::test]
-    async fn stop_during_crash_relaunch_converges() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_crash());
-        let mgr = h.manager.clone();
-        let mut rx = mgr.subscribe();
-        let _ = mgr.start(cfg).await.expect("启动");
-        // 等首个 CrashRestarting 事件（崩溃已检测，驱动进入退避/重启窗口）
-        let deadline = std::time::Instant::now() + Duration::from_secs(20);
-        loop {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            let ev = tokio::time::timeout(remaining, rx.recv())
+        // —— G-9：优雅停止先发 Browser.close 的完整停止路径（.bat harness）——
+
+        /// G-9：Graceful 停止先发 `Browser.close` → 假浏览器收到标志后自然退出 →
+        /// 不杀树。wait_or_kill 放大到 5s：.bat 轮询粒度 ~1s，等待窗口须覆盖
+        /// 一轮以上轮询。
+        #[tokio::test]
+        async fn graceful_stop_sends_close_then_natural_exit() {
+            let Some(h) = Harness::new() else { return };
+            let root = tempfile::tempdir().expect("临时目录");
+            // CfT 缓存假二进制（discover 命中，root 与管理器同源）
+            let cache_dir = root.path().join("browsers").join("chrome-151.0.7922.77");
+            std::fs::create_dir_all(&cache_dir).expect("缓存目录");
+            let rel = crate::browser::cft::binary_rel_path().expect("平台路径");
+            let bin = cache_dir.join(rel);
+            std::fs::create_dir_all(bin.parent().expect("父目录")).expect("目录");
+            std::fs::write(bin, b"placeholder").expect("写入占位");
+            let tuning = LaunchTuning {
+                wait_or_kill: Duration::from_secs(5),
+                ..fast_tuning()
+            };
+            let mgr = BrowserManager::with_tuning(root.path().to_path_buf(), tuning);
+            let cfg = LaunchConfig {
+                binary_override: Some(h.fake_browser(&script_close_exit())),
+                ..Default::default()
+            };
+            let report = mgr.start(cfg).await.expect("启动");
+            // 登记发送面：发送 Browser.close 时写 close 标志（触发假浏览器自然退出）
+            let recorder = Arc::new(RecordingClose {
+                exit_flag: Some(report.profile_dir.join("close-flag")),
+                ..Default::default()
+            });
+            mgr.register_close_sender(recorder.clone());
+            let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+            assert_eq!(
+                recorder.recorded(),
+                vec![crate::cdp::domains::names::BROWSER_CLOSE],
+                "Graceful 停止必须先发 Browser.close"
+            );
+            assert!(
+                matches!(stop.state, BrowserState::Stopped),
+                "自然退出后应收敛 Stopped：{:?}",
+                stop.state
+            );
+            assert!(!stop.force_killed, "Browser.close 后自然退出不应杀树");
+            assert!(!report.profile_dir.exists(), "停止后直删");
+        }
+
+        /// G-9：`Browser.close` 发出后进程不退出 → wait_or_kill 超时仍杀树兜底。
+        #[tokio::test]
+        async fn graceful_stop_close_timeout_still_force_kills() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_close_exit());
+            let mgr = h.manager.clone();
+            let report = mgr.start(cfg).await.expect("启动");
+            // 只记录不写标志：close 发出后假浏览器仍常驻 → 超时杀树
+            let recorder = Arc::new(RecordingClose::default());
+            mgr.register_close_sender(recorder.clone());
+            let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+            assert_eq!(
+                recorder.recorded(),
+                vec![crate::cdp::domains::names::BROWSER_CLOSE],
+                "必须先发 Browser.close 再进入等待窗口"
+            );
+            assert!(stop.force_killed, "close 后超时仍须杀树兜底：{stop:?}");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            assert!(!report.profile_dir.exists(), "停止后直删");
+        }
+
+        /// G-9：无会话登记 → 保持既有语义——不发 Browser.close，wait_or_kill
+        /// 超时杀树（graceful_stop_timeout_force_kills 的无会话显式化）。
+        #[tokio::test]
+        async fn graceful_stop_no_session_falls_back_to_kill() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            let report = mgr.start(cfg).await.expect("启动");
+            let stop = mgr.stop(StopReason::Graceful).await.expect("停止");
+            assert!(stop.force_killed, "无会话：wait_or_kill 超时杀树：{stop:?}");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            assert!(!report.profile_dir.exists(), "停止后直删");
+        }
+
+        /// G-9：`Browser.close` 发送失败（无连接/拒绝）→ 不 panic，直接走既有
+        /// wait_or_kill 超时杀树兜底。
+        #[tokio::test]
+        async fn graceful_stop_close_send_failure_falls_back() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            let report = mgr.start(cfg).await.expect("启动");
+            let recorder = Arc::new(RecordingClose {
+                fail: true,
+                ..Default::default()
+            });
+            mgr.register_close_sender(recorder.clone());
+            let stop = mgr
+                .stop(StopReason::Graceful)
                 .await
-                .expect("等待崩溃事件超时")
-                .expect("通道关闭");
-            if matches!(ev, ProcessEvent::CrashRestarting { .. }) {
-                break;
+                .expect("发送失败不得 panic/挂死");
+            assert_eq!(
+                recorder.recorded(),
+                vec![crate::cdp::domains::names::BROWSER_CLOSE]
+            );
+            assert!(stop.force_killed, "发送失败走既有超时杀树兜底：{stop:?}");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            assert!(!report.profile_dir.exists(), "停止后直删");
+        }
+
+        /// G-9：强制停止不发 `Browser.close`（直接杀树语义不变）。
+        #[tokio::test]
+        async fn force_stop_does_not_send_browser_close() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            let _ = mgr.start(cfg).await.expect("启动");
+            let recorder = Arc::new(RecordingClose::default());
+            mgr.register_close_sender(recorder.clone());
+            let stop = mgr.stop(StopReason::Force).await.expect("停止");
+            assert!(stop.force_killed);
+            assert!(
+                recorder.recorded().is_empty(),
+                "强制停止不得发 Browser.close"
+            );
+        }
+
+        /// start 幂等（§4.5）：Running 中重复 start 返回当前快照，不重复 spawn。
+        #[tokio::test]
+        async fn start_idempotent() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            let first = mgr.start(cfg.clone()).await.expect("首次启动");
+            let second = mgr.start(cfg).await.expect("幂等启动");
+            assert_eq!(second.profile_dir, first.profile_dir);
+            assert!(matches!(second.state, BrowserState::Running));
+            mgr.stop(StopReason::Force).await.expect("停止");
+        }
+
+        /// 停止报告与状态一致性。
+        #[tokio::test]
+        async fn stop_report_consistent() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            let _ = mgr.start(cfg).await.expect("启动");
+            let stop = mgr.stop(StopReason::Force).await.expect("停止");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            assert_eq!(mgr.status().state, BrowserState::Stopped);
+        }
+
+        /// 受管 profile：启动后停止不删除（用户资产保留；删除经 trash，维度 16）。
+        #[tokio::test]
+        async fn managed_profile_kept_on_stop() {
+            let Some(h) = Harness::new() else { return };
+            // 源 profile fixture
+            let src_root = h.dir.path().join("src-user-data");
+            std::fs::create_dir_all(src_root.join("Default")).expect("目录");
+            std::fs::write(src_root.join("Local State"), b"{}").expect("写入");
+            std::fs::write(src_root.join("Default").join("Preferences"), b"pref").expect("写入");
+            let cfg = LaunchConfig {
+                profile: ProfileSpec::Imported {
+                    source_user_data: src_root,
+                    source_profile: "Default".to_string(),
+                    profile_name: "我的Profile".to_string(),
+                },
+                binary_override: Some(h.fake_browser(&script_ok())),
+                ..Default::default()
+            };
+            h.fake_cft_binary();
+            let mgr = h.manager.clone();
+            let report = mgr.start(cfg).await.expect("启动");
+            assert!(report.profile_dir.exists());
+            assert!(report.profile_dir.join("Preferences").is_file());
+            let managed = report.profile_dir.clone();
+            let stop = mgr.stop(StopReason::Force).await.expect("停止");
+            assert!(!stop.profile_removed, "受管 profile 不随会话直删");
+            assert!(
+                managed.exists(),
+                "受管 profile 停止后保留（删除经 trash，维度 16）"
+            );
+            // trash 清理验证（模拟维度 16 流程）
+            let trash = h.dir.path().join("trash");
+            crate::browser::profile::trash_managed(&managed, &trash).expect("入回收站");
+            assert!(!managed.exists());
+        }
+
+        /// 评审 F1 加固（32 评审 F1 高 flake 清单）：进程存活探测以「PID + 创建
+        /// 时间 + 退出码」三因子判定——taskkill 成功后进程对象可能因句柄未关而
+        /// 短暂存留（OpenProcess 仍可成功），退出码区分「仍在运行（STILL_ACTIVE）」
+        /// 与「已终止待回收」；创建时间排除 PID 复用误判（驱动自愈不断派生新进程）。
+        #[allow(unsafe_code)]
+        fn process_creation_time(pid: u32) -> Option<u64> {
+            use windows_sys::Win32::Foundation::CloseHandle;
+            use windows_sys::Win32::System::Threading::{
+                GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            };
+            // SAFETY：OpenProcess/GetProcessTimes/CloseHandle 标准 API；句柄用完
+            // 即关；取不到（进程已消失/权限拒绝）一律返回 None，错误路径不 panic
+            unsafe {
+                let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+                if handle.is_null() {
+                    return None;
+                }
+                let mut created = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
+                let mut exit = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
+                let mut kernel = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
+                let mut user = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
+                let ok =
+                    GetProcessTimes(handle, &mut created, &mut exit, &mut kernel, &mut user) != 0;
+                CloseHandle(handle);
+                if !ok {
+                    return None;
+                }
+                Some(((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
             }
         }
-        // 略过退避（60ms），让 stop() 落在 launch_with_retries 的 relaunch 窗口
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        // 修复语义：stop() 有界收敛（旧实现此窗口内停止信号丢失 → 永久挂死）
-        let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
-            .await
-            .expect("stop() 必须在 relaunch 窗口内有界收敛（停止信号不得丢失）")
-            .expect("停止失败");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        assert_eq!(mgr.status().state, BrowserState::Stopped);
-    }
 
-    /// 等待终态事件（Stopped + error 含 "panic"；M5 回归共用，事件等待替代
-    /// 裸 sleep——事件由 on_driver_panic 在全部收敛动作完成后广播，收到即
-    /// 一切就绪，无竞态）。
-    async fn wait_terminal_panic_event(rx: &mut broadcast::Receiver<ProcessEvent>) -> String {
-        tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                let ev = rx.recv().await.expect("通道关闭");
-                if let ProcessEvent::StateChanged {
-                    state: BrowserState::Stopped,
-                    error: Some(e),
-                    ..
-                } = ev
-                {
-                    return e;
+        /// 进程状态探测：None = 进程对象已消失；Some(StillRunning) = 正在运行；
+        /// Some(Terminated(code)) = 已终止但对象未回收（句柄存留）。
+        #[allow(unsafe_code)]
+        fn process_state(pid: u32) -> Option<Result<u32, ()>> {
+            use windows_sys::Win32::Foundation::CloseHandle;
+            use windows_sys::Win32::System::Threading::{
+                GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            };
+            // SAFETY：标准 API；句柄用完即关；错误路径不 panic
+            unsafe {
+                let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+                if handle.is_null() {
+                    return None;
+                }
+                let mut code: u32 = 0;
+                let ok = GetExitCodeProcess(handle, &mut code) != 0;
+                CloseHandle(handle);
+                if !ok {
+                    return None;
+                }
+                if code == 259 {
+                    Some(Err(())) // STILL_ACTIVE
+                } else {
+                    Some(Ok(code))
                 }
             }
-        })
-        .await
-        .expect("等待终态事件超时（驱动 panic 未广播终态）")
-    }
-
-    /// M5 回归（评审 29 §M5）：驱动任务**启动路径** panic（PreReady 注入）。
-    /// 旧实现：panic 后状态卡死非 Stopped、driver 句柄残留、stop() 报告错误
-    /// 状态、后续 start() 幂等分支永久返回陈旧报告。新实现（catch_unwind
-    /// 外包）：状态可达终态 Stopped、终态事件已广播（error 带 panic 原因）、
-    /// stop() 有界收敛（10s 超时上限，旧实现此场景 stop() 挂死）、后续
-    /// start() 可重新启动（可恢复性）。
-    #[tokio::test]
-    async fn driver_panic_before_ready_converges_and_recovers() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        mgr.inject_driver_panic(DriverPanicPoint::PreReady);
-        let mut rx = mgr.subscribe();
-        // first_tx 随 panic unwind 丢弃 → 通道断开 → start() 返回内部错误
-        let err = mgr
-            .start(cfg.clone())
-            .await
-            .expect_err("驱动 panic 后 start() 必须返回错误");
-        assert!(matches!(err, ProcessError::Internal(_)), "{err:?}");
-        // 终态事件已广播（reason=panic）
-        let terminal = wait_terminal_panic_event(&mut rx).await;
-        assert!(terminal.contains("panic"), "终态事件必须带 panic 原因：{terminal}");
-        // 状态可达终态
-        assert_eq!(mgr.status().state, BrowserState::Stopped);
-        // stop() 有界收敛（驱动句柄已清，不得永久 await）
-        let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
-            .await
-            .expect("stop() 必须在驱动 panic 后有界收敛（不得永久 await）")
-            .expect("停止失败");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        // 可恢复性：panic 收敛后重新启动成功
-        let report = mgr.start(cfg).await.expect("驱动 panic 后必须可重新启动");
-        assert!(matches!(report.state, BrowserState::Running));
-        mgr.stop(StopReason::Force).await.expect("停止");
-    }
-
-    /// M5 回归（评审 29 §M5）：驱动任务**运行期** panic（PostReady 注入）。
-    /// 此刻浏览器进程已派生（假浏览器常驻）、endpoint/last_pid/stop_tx 全部
-    /// 就绪：panic 后必须 ① 兜底杀树（驱动栈 killer 已随 unwind 丢失，按
-    /// last_pid 终结，防孤儿进程泄漏）② 端点/句柄清理 ③ 终态收敛 + 广播
-    /// ④ 可重新启动。进程终结判定复用 F1 三因子（创建时间 + STILL_ACTIVE），
-    /// 排除并行负载下 PID 复用误判；进程对象已回收（创建时间不可见）视为
-    /// 已终结。
-    #[tokio::test]
-    async fn driver_panic_after_ready_converges_and_kills() {
-        let Some(h) = Harness::new() else { return };
-        let cfg = h.config(&script_ok());
-        let mgr = h.manager.clone();
-        mgr.inject_driver_panic(DriverPanicPoint::PostReady);
-        let mut rx = mgr.subscribe();
-        // first_tx 先于注入点送达 → start() 正常返回 Running
-        let report = mgr
-            .start(cfg.clone())
-            .await
-            .expect("启动（注入点在首启报告送达之后）");
-        assert!(matches!(report.state, BrowserState::Running));
-        // 终态事件已广播（处理器先杀树→收敛→清残留→再广播，事件到达即就绪）
-        let terminal = wait_terminal_panic_event(&mut rx).await;
-        assert!(terminal.contains("panic"), "终态事件必须带 panic 原因：{terminal}");
-        // 注入点记录的进程 PID（panic 前落盘，事件到达后读取无竞态）
-        let pid = mgr
-            .inner
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .panic_probe_pid
-            .expect("PostReady 注入必须记录进程 PID");
-        // 兜底杀树生效：进程不得仍存活（F1 三因子；已回收视为已终结）
-        let creation = process_creation_time(pid);
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        loop {
-            let alive = creation.is_some_and(|t| process_creation_time(pid) == Some(t))
-                && process_state(pid) == Some(Err(()));
-            if !alive {
-                break;
-            }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "驱动 panic 兜底杀树未生效（PID {pid} 仍存活）"
-            );
-            tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        // 状态可达终态 + 会话残留清理
-        assert_eq!(mgr.status().state, BrowserState::Stopped);
-        assert!(mgr.endpoint().is_none(), "panic 后端点必须清空（私有通道不残留）");
-        // stop() 有界收敛（驱动句柄已清，不得永久 await）
-        let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
-            .await
-            .expect("stop() 必须在驱动 panic 后有界收敛（不得永久 await）")
-            .expect("停止失败");
-        assert!(matches!(stop.state, BrowserState::Stopped));
-        // 可恢复性：panic 收敛后重新启动成功
-        let report2 = mgr.start(cfg).await.expect("驱动 panic 后必须可重新启动");
-        assert!(matches!(report2.state, BrowserState::Running));
-        mgr.stop(StopReason::Force).await.expect("停止");
-    }
 
-    /// 评审 H6 回归（29-评审-代码质量与安全）：并发 start() 只启动一个浏览器
-    /// 进程。假浏览器脚本每次被 spawn 向 profile 内追加一行计数（spawn 次数
-    /// 可证）；双启竞态（旧实现无临界区互斥）下两个 start() 各自建 profile、
-    /// 各自 spawn 驱动 → 计数 2 且 profile 目录不一致，本用例必失败。
-    #[tokio::test]
-    async fn concurrent_start_spawns_single_process() {
-        let Some(h) = Harness::new() else { return };
-        let script = "\
+        /// 评审 F6 回归（31-评审-接线与集成）：Drop 时 inner 锁被其他线程持有
+        /// （try_lock 失败短窗）——旧实现静默跳过杀树导致浏览器进程泄漏；现实现
+        /// spawn 阻塞兜底线程收尸（锁释放后立即 kill_sync）。预占锁后 Drop 管理器，
+        /// 释放锁 → 兜底线程收尸 → 进程必须终结。
+        ///
+        /// 评审 F1 加固：并行 harness 负载下（驱动崩溃自愈持续派生新进程，Windows
+        /// PID 分配器复用模式下新进程可能复用刚释放的 PID）纯 PID 存活探测会把
+        /// 复用进程误判为原进程仍存活（窗口放大反而提高误判率）——改用「创建
+        /// 时间 + 退出码」三因子判定：创建时间不一致 = PID 已复用（原进程已死）；
+        /// GetExitCodeProcess 区分 STILL_ACTIVE（仍在运行）与已终止待回收对象。
+        #[tokio::test]
+        async fn drop_kills_via_fallback_when_inner_locked() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            let _ = mgr.start(cfg).await.expect("启动");
+            let pid = mgr
+                .inner
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .last_pid
+                .expect("启动后必有 pid");
+            // 记录原进程创建时间（PID 复用判定基准）
+            let creation = process_creation_time(pid).expect("启动后进程必存在");
+            // 预占锁：模拟极端竞争窗口（其他线程持锁期间 Drop 发生）
+            let held = Arc::clone(&mgr.inner);
+            let guard = held.lock().unwrap_or_else(|p| p.into_inner());
+            drop(mgr); // try_lock 失败 → spawn 兜底线程
+            drop(guard); // 释放锁 → 兜底线程收尸
+                         // 轮询等待进程终结（kill_sync 内部已带 2s 回收等待；轮询兜底调度竞态；
+                         // 窗口 25s：并行 harness 负载下 taskkill 排队可致单点等待超时，32 评审
+                         // F1/F2 窗口放大建议）。判定：仅当「创建时间一致且 STILL_ACTIVE」
+                         // 才视为原进程仍在——排除 PID 复用与已终止对象存留两种误判。
+            let deadline = std::time::Instant::now() + Duration::from_secs(25);
+            while std::time::Instant::now() < deadline {
+                let alive = process_creation_time(pid).is_some_and(|t| t == creation)
+                    && process_state(pid) == Some(Err(()));
+                if !alive {
+                    // 收尾：显式停止（driver 可能已把被杀判定为崩溃并重启新进程，
+                    // stop(Force) 置意图让驱动收敛，防测试残留僵尸进程）
+                    let _ = h.manager.stop(StopReason::Force).await;
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            panic!("Drop 兜底杀树未生效（PID {pid} 仍存活）");
+        }
+
+        /// 回归（F6 修复暴露的停止信号竞态）：崩溃自愈的 relaunch 窗口内调用
+        /// stop() 必须收敛——旧实现 watch 信号发往无接收者的旧通道即丢失（驱动
+        /// 处于退避/重启/启动轮询中，新 stop_rx 未挂接），驱动永不收敛、
+        /// stop() 永久挂死（drop_kills 测试实测 90s+）；现实现 PortReady 后
+        /// 复查 pending_stop，stop() 有界返回（本用例任意交错时序均收敛，
+        /// 未修复实现下 10s 超时即失败）。
+        #[tokio::test]
+        async fn stop_during_crash_relaunch_converges() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_crash());
+            let mgr = h.manager.clone();
+            let mut rx = mgr.subscribe();
+            let _ = mgr.start(cfg).await.expect("启动");
+            // 等首个 CrashRestarting 事件（崩溃已检测，驱动进入退避/重启窗口）
+            let deadline = std::time::Instant::now() + Duration::from_secs(20);
+            loop {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                let ev = tokio::time::timeout(remaining, rx.recv())
+                    .await
+                    .expect("等待崩溃事件超时")
+                    .expect("通道关闭");
+                if matches!(ev, ProcessEvent::CrashRestarting { .. }) {
+                    break;
+                }
+            }
+            // 略过退避（60ms），让 stop() 落在 launch_with_retries 的 relaunch 窗口
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            // 修复语义：stop() 有界收敛（旧实现此窗口内停止信号丢失 → 永久挂死）
+            let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
+                .await
+                .expect("stop() 必须在 relaunch 窗口内有界收敛（停止信号不得丢失）")
+                .expect("停止失败");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            assert_eq!(mgr.status().state, BrowserState::Stopped);
+        }
+
+        /// 等待终态事件（Stopped + error 含 "panic"；M5 回归共用，事件等待替代
+        /// 裸 sleep——事件由 on_driver_panic 在全部收敛动作完成后广播，收到即
+        /// 一切就绪，无竞态）。
+        async fn wait_terminal_panic_event(rx: &mut broadcast::Receiver<ProcessEvent>) -> String {
+            tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    let ev = rx.recv().await.expect("通道关闭");
+                    if let ProcessEvent::StateChanged {
+                        state: BrowserState::Stopped,
+                        error: Some(e),
+                        ..
+                    } = ev
+                    {
+                        return e;
+                    }
+                }
+            })
+            .await
+            .expect("等待终态事件超时（驱动 panic 未广播终态）")
+        }
+
+        /// M5 回归（评审 29 §M5）：驱动任务**启动路径** panic（PreReady 注入）。
+        /// 旧实现：panic 后状态卡死非 Stopped、driver 句柄残留、stop() 报告错误
+        /// 状态、后续 start() 幂等分支永久返回陈旧报告。新实现（catch_unwind
+        /// 外包）：状态可达终态 Stopped、终态事件已广播（error 带 panic 原因）、
+        /// stop() 有界收敛（10s 超时上限，旧实现此场景 stop() 挂死）、后续
+        /// start() 可重新启动（可恢复性）。
+        #[tokio::test]
+        async fn driver_panic_before_ready_converges_and_recovers() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            mgr.inject_driver_panic(DriverPanicPoint::PreReady);
+            let mut rx = mgr.subscribe();
+            // first_tx 随 panic unwind 丢弃 → 通道断开 → start() 返回内部错误
+            let err = mgr
+                .start(cfg.clone())
+                .await
+                .expect_err("驱动 panic 后 start() 必须返回错误");
+            assert!(matches!(err, ProcessError::Internal(_)), "{err:?}");
+            // 终态事件已广播（reason=panic）
+            let terminal = wait_terminal_panic_event(&mut rx).await;
+            assert!(
+                terminal.contains("panic"),
+                "终态事件必须带 panic 原因：{terminal}"
+            );
+            // 状态可达终态
+            assert_eq!(mgr.status().state, BrowserState::Stopped);
+            // stop() 有界收敛（驱动句柄已清，不得永久 await）
+            let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
+                .await
+                .expect("stop() 必须在驱动 panic 后有界收敛（不得永久 await）")
+                .expect("停止失败");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            // 可恢复性：panic 收敛后重新启动成功
+            let report = mgr.start(cfg).await.expect("驱动 panic 后必须可重新启动");
+            assert!(matches!(report.state, BrowserState::Running));
+            mgr.stop(StopReason::Force).await.expect("停止");
+        }
+
+        /// M5 回归（评审 29 §M5）：驱动任务**运行期** panic（PostReady 注入）。
+        /// 此刻浏览器进程已派生（假浏览器常驻）、endpoint/last_pid/stop_tx 全部
+        /// 就绪：panic 后必须 ① 兜底杀树（驱动栈 killer 已随 unwind 丢失，按
+        /// last_pid 终结，防孤儿进程泄漏）② 端点/句柄清理 ③ 终态收敛 + 广播
+        /// ④ 可重新启动。进程终结判定复用 F1 三因子（创建时间 + STILL_ACTIVE），
+        /// 排除并行负载下 PID 复用误判；进程对象已回收（创建时间不可见）视为
+        /// 已终结。
+        #[tokio::test]
+        async fn driver_panic_after_ready_converges_and_kills() {
+            let Some(h) = Harness::new() else { return };
+            let cfg = h.config(&script_ok());
+            let mgr = h.manager.clone();
+            mgr.inject_driver_panic(DriverPanicPoint::PostReady);
+            let mut rx = mgr.subscribe();
+            // first_tx 先于注入点送达 → start() 正常返回 Running
+            let report = mgr
+                .start(cfg.clone())
+                .await
+                .expect("启动（注入点在首启报告送达之后）");
+            assert!(matches!(report.state, BrowserState::Running));
+            // 终态事件已广播（处理器先杀树→收敛→清残留→再广播，事件到达即就绪）
+            let terminal = wait_terminal_panic_event(&mut rx).await;
+            assert!(
+                terminal.contains("panic"),
+                "终态事件必须带 panic 原因：{terminal}"
+            );
+            // 注入点记录的进程 PID（panic 前落盘，事件到达后读取无竞态）
+            let pid = mgr
+                .inner
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .panic_probe_pid
+                .expect("PostReady 注入必须记录进程 PID");
+            // 兜底杀树生效：进程不得仍存活（F1 三因子；已回收视为已终结）
+            let creation = process_creation_time(pid);
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            loop {
+                let alive = creation.is_some_and(|t| process_creation_time(pid) == Some(t))
+                    && process_state(pid) == Some(Err(()));
+                if !alive {
+                    break;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "驱动 panic 兜底杀树未生效（PID {pid} 仍存活）"
+                );
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            // 状态可达终态 + 会话残留清理
+            assert_eq!(mgr.status().state, BrowserState::Stopped);
+            assert!(
+                mgr.endpoint().is_none(),
+                "panic 后端点必须清空（私有通道不残留）"
+            );
+            // stop() 有界收敛（驱动句柄已清，不得永久 await）
+            let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
+                .await
+                .expect("stop() 必须在驱动 panic 后有界收敛（不得永久 await）")
+                .expect("停止失败");
+            assert!(matches!(stop.state, BrowserState::Stopped));
+            // 可恢复性：panic 收敛后重新启动成功
+            let report2 = mgr.start(cfg).await.expect("驱动 panic 后必须可重新启动");
+            assert!(matches!(report2.state, BrowserState::Running));
+            mgr.stop(StopReason::Force).await.expect("停止");
+        }
+
+        /// 评审 H6 回归（29-评审-代码质量与安全）：并发 start() 只启动一个浏览器
+        /// 进程。假浏览器脚本每次被 spawn 向 profile 内追加一行计数（spawn 次数
+        /// 可证）；双启竞态（旧实现无临界区互斥）下两个 start() 各自建 profile、
+        /// 各自 spawn 驱动 → 计数 2 且 profile 目录不一致，本用例必失败。
+        #[tokio::test]
+        async fn concurrent_start_spawns_single_process() {
+            let Some(h) = Harness::new() else { return };
+            let script = "\
 @echo off\r\n\
 setlocal enabledelayedexpansion\r\n\
 set PROFILE=\r\n\
@@ -2328,42 +2354,45 @@ if not defined PROFILE exit /b 9\r\n\
 :loop\r\n\
 ping -n 2 127.0.0.1 >nul\r\n\
 goto loop\r\n";
-        let cfg = h.config(script);
-        let mgr = h.manager.clone();
-        // 两个 start() 并发（tokio::join! 同帧启动，强制竞争临界区）
-        let (a, b) = tokio::join!(mgr.start(cfg.clone()), mgr.start(cfg));
-        let a = a.expect("并发启动 A 应成功");
-        let b = b.expect("并发启动 B 应成功（幂等分支返回当前报告）");
-        assert!(
-            matches!(b.state, BrowserState::Running | BrowserState::Launching { .. }),
-            "幂等报告状态应为运行中/启动中：{:?}",
-            b.state
-        );
-        assert_eq!(
-            a.profile_dir, b.profile_dir,
-            "并发 start 只允许建一个 profile（双启会各建各的目录）"
-        );
-        // 计数文件写入晚于 DevToolsActivePort（.bat 顺序写），wait_active_port
-        // 在端口文件可见后即返回——并行负载下 .bat 可能被调度打断，计数文件
-        // 尚不可读；A3 模式：轮询等待就绪，替代单点断言。
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        let count = loop {
-            match std::fs::read_to_string(a.profile_dir.join("spawn-count.txt")) {
-                Ok(s) => break s.lines().count(),
-                Err(_) => {
-                    assert!(
-                        std::time::Instant::now() < deadline,
-                        "spawn-count.txt 未就绪（启动是否成功？）"
-                    );
-                    tokio::time::sleep(Duration::from_millis(25)).await;
+            let cfg = h.config(script);
+            let mgr = h.manager.clone();
+            // 两个 start() 并发（tokio::join! 同帧启动，强制竞争临界区）
+            let (a, b) = tokio::join!(mgr.start(cfg.clone()), mgr.start(cfg));
+            let a = a.expect("并发启动 A 应成功");
+            let b = b.expect("并发启动 B 应成功（幂等分支返回当前报告）");
+            assert!(
+                matches!(
+                    b.state,
+                    BrowserState::Running | BrowserState::Launching { .. }
+                ),
+                "幂等报告状态应为运行中/启动中：{:?}",
+                b.state
+            );
+            assert_eq!(
+                a.profile_dir, b.profile_dir,
+                "并发 start 只允许建一个 profile（双启会各建各的目录）"
+            );
+            // 计数文件写入晚于 DevToolsActivePort（.bat 顺序写），wait_active_port
+            // 在端口文件可见后即返回——并行负载下 .bat 可能被调度打断，计数文件
+            // 尚不可读；A3 模式：轮询等待就绪，替代单点断言。
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            let count = loop {
+                match std::fs::read_to_string(a.profile_dir.join("spawn-count.txt")) {
+                    Ok(s) => break s.lines().count(),
+                    Err(_) => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "spawn-count.txt 未就绪（启动是否成功？）"
+                        );
+                        tokio::time::sleep(Duration::from_millis(25)).await;
+                    }
                 }
-            }
-        };
-        assert_eq!(
-            count, 1,
-            "并发 start 只允许启动一个浏览器进程（计数 {count}）"
-        );
-        mgr.stop(StopReason::Force).await.expect("停止");
-    }
+            };
+            assert_eq!(
+                count, 1,
+                "并发 start 只允许启动一个浏览器进程（计数 {count}）"
+            );
+            mgr.stop(StopReason::Force).await.expect("停止");
+        }
     } // mod harness（`#[cfg(windows)]` 门控，32 评审 P1-1）
 }

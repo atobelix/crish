@@ -146,11 +146,9 @@ impl PairingCoordinator {
     pub fn start_pairing(&self, now_ms: u64) -> Result<PairStartResult, ServerError> {
         let mut pair = self.pair.lock().unwrap_or_else(|e| e.into_inner());
         let code = match pair.state() {
-            PairState::WaitingInput | PairState::KeyVerify | PairState::Establishing => {
-                pair.active_code(now_ms).unwrap_or_else(|| {
-                    pair.start(now_ms).expect("重新生成配对码不应失败")
-                })
-            }
+            PairState::WaitingInput | PairState::KeyVerify | PairState::Establishing => pair
+                .active_code(now_ms)
+                .unwrap_or_else(|| pair.start(now_ms).expect("重新生成配对码不应失败")),
             _ => pair.start(now_ms)?,
         };
         *self
@@ -199,7 +197,12 @@ impl PairingCoordinator {
 
     /// 移动端配对校验入口（服务端 /v1/pair 与命令面共用）：
     /// 校验通过 → 签发令牌 → 保持 Lan（配对即授权）；失败按状态机计次。
-    pub fn complete_pairing(&self, input: &str, label: &str, now_ms: u64) -> Result<String, ServerError> {
+    pub fn complete_pairing(
+        &self,
+        input: &str,
+        label: &str,
+        now_ms: u64,
+    ) -> Result<String, ServerError> {
         let mut pair = self.pair.lock().unwrap_or_else(|e| e.into_inner());
         match pair.verify(input, now_ms) {
             VerifyOutcome::Success => {
@@ -215,13 +218,22 @@ impl PairingCoordinator {
                     .unwrap_or_else(|e| e.into_inner()) = true;
                 Ok(raw)
             }
-            VerifyOutcome::WrongCode => Err(ServerError::protocol(DeviceErrorCode::PairInvalidCode, "配对码错误")),
-            VerifyOutcome::Expired => Err(ServerError::protocol(DeviceErrorCode::PairExpired, "配对码已过期")),
+            VerifyOutcome::WrongCode => Err(ServerError::protocol(
+                DeviceErrorCode::PairInvalidCode,
+                "配对码错误",
+            )),
+            VerifyOutcome::Expired => Err(ServerError::protocol(
+                DeviceErrorCode::PairExpired,
+                "配对码已过期",
+            )),
             VerifyOutcome::Locked => Err(ServerError::protocol(
                 DeviceErrorCode::PairTooManyAttempts,
                 "失败次数过多，请稍后再试",
             )),
-            VerifyOutcome::Used => Err(ServerError::protocol(DeviceErrorCode::PairUsed, "配对码已被使用")),
+            VerifyOutcome::Used => Err(ServerError::protocol(
+                DeviceErrorCode::PairUsed,
+                "配对码已被使用",
+            )),
             // R1-10 T-05：5 次爆破失败 → 配对会话销毁；冷却结束后正确码
             // 也永久失效，客户端必须重新开启配对
             VerifyOutcome::Destroyed => Err(ServerError::protocol(
@@ -232,7 +244,10 @@ impl PairingCoordinator {
                 DeviceErrorCode::PairInvalidCode,
                 "当前未处于配对状态",
             )),
-            VerifyOutcome::InvalidFormat => Err(ServerError::protocol(DeviceErrorCode::PairInvalidCode, "配对码格式无效")),
+            VerifyOutcome::InvalidFormat => Err(ServerError::protocol(
+                DeviceErrorCode::PairInvalidCode,
+                "配对码格式无效",
+            )),
         }
     }
 
@@ -242,10 +257,7 @@ impl PairingCoordinator {
     /// 令牌全部失效后 REST 鉴权自然 401；重新开启配对签发全新令牌。
     pub fn cancel_pairing(&self) {
         self.revoke_all();
-        self.pair
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .cancel();
+        self.pair.lock().unwrap_or_else(|e| e.into_inner()).cancel();
     }
 
     /// 撤销指定设备：令牌失效 → 落盘 → WS 踢出；其余设备仍在则保持 Lan。
@@ -262,7 +274,13 @@ impl PairingCoordinator {
             self.ws_registry.kick_by_token_hash(hash, "token-revoked");
         }
         // 全部撤销后回 Loopback（关闭配对态）
-        if self.tokens.lock().unwrap_or_else(|e| e.into_inner()).token_count() == 0 {
+        if self
+            .tokens
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .token_count()
+            == 0
+        {
             *self
                 .pairing_enabled
                 .lock()
@@ -409,9 +427,7 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
             let o = v4.octets();
-            o[0] == 10
-                || (o[0] == 172 && (16..=31).contains(&o[1]))
-                || (o[0] == 192 && o[1] == 168)
+            o[0] == 10 || (o[0] == 172 && (16..=31).contains(&o[1])) || (o[0] == 192 && o[1] == 168)
         }
         std::net::IpAddr::V6(v6) => (v6.segments()[0] & 0xfe00) == 0xfc00,
     }
@@ -429,7 +445,10 @@ fn is_usable_lan_ip(ip: &std::net::IpAddr) -> bool {
             std::net::IpAddr::V6(v6) => (v6.segments()[0] & 0xffc0) == 0xfe80,
         }
     }
-    ip.is_ipv4() && !ip.is_loopback() && !ip.is_unspecified() && !is_link_local(ip)
+    ip.is_ipv4()
+        && !ip.is_loopback()
+        && !ip.is_unspecified()
+        && !is_link_local(ip)
         && !ip.is_multicast()
 }
 
@@ -519,7 +538,8 @@ mod windows_ip_enum {
     /// # Safety
     /// lpSockaddr 由系统填充且长度字段约束为完整 sockaddr，类型按 sin_family 判定。
     unsafe fn sockaddr_to_ipv4(sa: &SOCKET_ADDRESS) -> Option<IpAddr> {
-        if sa.lpSockaddr.is_null() || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN>() as i32 {
+        if sa.lpSockaddr.is_null() || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN>() as i32
+        {
             return None;
         }
         if *(sa.lpSockaddr as *const u16) != AF_INET {
@@ -527,13 +547,17 @@ mod windows_ip_enum {
         }
         let sin = &*(sa.lpSockaddr as *const SOCKADDR_IN);
         // sin_addr 以网络字节序存储：from_be 还原内存字节序
-        Some(IpAddr::V4(Ipv4Addr::from(u32::from_be(sin.sin_addr.S_un.S_addr))))
+        Some(IpAddr::V4(Ipv4Addr::from(u32::from_be(
+            sin.sin_addr.S_un.S_addr,
+        ))))
     }
 
     /// 备用：SOCKADDR_IN6 读取（保留给未来 v6 监听支持；当前未用）
     #[allow(dead_code)]
     unsafe fn sockaddr_to_ipv6(sa: &SOCKET_ADDRESS) -> Option<IpAddr> {
-        if sa.lpSockaddr.is_null() || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN6>() as i32 {
+        if sa.lpSockaddr.is_null()
+            || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN6>() as i32
+        {
             return None;
         }
         if *(sa.lpSockaddr as *const u16) == AF_INET {
@@ -570,17 +594,17 @@ mod tests {
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         let unique = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let tokens = Arc::new(Mutex::new(TokenStore::new(
-            std::env::temp_dir().join(format!(
-                "pairing-test-{}-{unique}.json",
-                std::process::id()
-            )),
+            std::env::temp_dir().join(format!("pairing-test-{}-{unique}.json", std::process::id())),
         )));
         let ws = Arc::new(WsRegistry::new());
         let coordinator = Arc::new(PairingCoordinator::new(tokens, ws.clone()));
         let rebinds = Arc::new(Mutex::new(Vec::new()));
         let hook_rebinds = rebinds.clone();
         coordinator.set_rebind_hook(Arc::new(move |lan: bool| {
-            hook_rebinds.lock().unwrap_or_else(|e| e.into_inner()).push(lan);
+            hook_rebinds
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(lan);
         }));
         coordinator.set_port(8765);
         (coordinator, ws, rebinds)
@@ -612,9 +636,15 @@ mod tests {
         assert!(!result.firewall_hint.is_empty() || !cfg!(windows));
 
         // G-4 网络检测字段：推荐 IP 与二维码内嵌同源；集合非空；类别枚举合法
-        assert!(result.qr.contains(&result.recommended_ip), "二维码内嵌推荐 IP");
+        assert!(
+            result.qr.contains(&result.recommended_ip),
+            "二维码内嵌推荐 IP"
+        );
         assert!(!result.local_ips.is_empty(), "本机 IP 集合不应为空");
-        assert!(result.local_ips.contains(&result.recommended_ip), "推荐 IP 应在集合内");
+        assert!(
+            result.local_ips.contains(&result.recommended_ip),
+            "推荐 IP 应在集合内"
+        );
         assert!(
             matches!(
                 result.network_profile,
@@ -628,19 +658,33 @@ mod tests {
         assert_eq!(status.state, "waiting-input");
         assert_eq!(status.bind_mode, "lan");
         assert!(status.code_remaining_ms.is_some());
-        assert_eq!(*rebinds.lock().unwrap_or_else(|e| e.into_inner()), vec![true]);
+        assert_eq!(
+            *rebinds.lock().unwrap_or_else(|e| e.into_inner()),
+            vec![true]
+        );
     }
 
     #[test]
     fn classify_private_vs_public_ip() {
         use std::net::IpAddr;
         let private_ips = [
-            "10.0.0.1", "10.255.255.255", "172.16.0.1", "172.31.255.255", "192.168.1.5",
-            "fc00::1", "fd12:3456::1",
+            "10.0.0.1",
+            "10.255.255.255",
+            "172.16.0.1",
+            "172.31.255.255",
+            "192.168.1.5",
+            "fc00::1",
+            "fd12:3456::1",
         ];
         let public_ips = [
-            "8.8.8.8", "100.64.0.1", "172.15.255.255", "172.32.0.1", "192.169.0.1",
-            "2001:4860:4860::8888", "169.254.1.1", "127.0.0.1",
+            "8.8.8.8",
+            "100.64.0.1",
+            "172.15.255.255",
+            "172.32.0.1",
+            "192.169.0.1",
+            "2001:4860:4860::8888",
+            "169.254.1.1",
+            "127.0.0.1",
         ];
         for s in private_ips {
             let ip: IpAddr = s.parse().expect("测试 IP 合法");
@@ -678,7 +722,10 @@ mod tests {
 
         // 无私有 IP 时回退任意非回环 IPv4
         let only_public = vec!["8.8.8.8".to_string(), "127.0.0.1".to_string()];
-        assert_eq!(pick_recommended_ip(&only_public).as_deref(), Some("8.8.8.8"));
+        assert_eq!(
+            pick_recommended_ip(&only_public).as_deref(),
+            Some("8.8.8.8")
+        );
 
         // 全部不可用 → None
         let none = vec!["127.0.0.1".to_string(), "0.0.0.0".to_string()];
@@ -713,7 +760,10 @@ mod tests {
 
         // 配对即授权：保持 Lan，不触发回环重绑
         assert!(coordinator.pairing_enabled());
-        assert_eq!(*rebinds.lock().unwrap_or_else(|e| e.into_inner()), vec![true]);
+        assert_eq!(
+            *rebinds.lock().unwrap_or_else(|e| e.into_inner()),
+            vec![true]
+        );
     }
 
     #[test]
@@ -781,7 +831,9 @@ mod tests {
         );
 
         // 重新开启配对：新码签发成功，且能完成配对
-        let restart = coordinator.start_pairing(after_cooldown + 1).expect("重新开启配对必须成功");
+        let restart = coordinator
+            .start_pairing(after_cooldown + 1)
+            .expect("重新开启配对必须成功");
         assert_ne!(restart.code, code, "重新配对必须换新码");
         let raw = coordinator
             .complete_pairing(&restart.code, "fresh-device", after_cooldown + 2)
@@ -800,7 +852,10 @@ mod tests {
         assert!(!coordinator.pairing_enabled());
         assert_eq!(coordinator.status(now).state, "idle");
         assert_eq!(coordinator.status(now).bind_mode, "loopback");
-        assert_eq!(*rebinds.lock().unwrap_or_else(|e| e.into_inner()), vec![true, false]);
+        assert_eq!(
+            *rebinds.lock().unwrap_or_else(|e| e.into_inner()),
+            vec![true, false]
+        );
     }
 
     /// G-4（R1-11 验收缺口修复）：关闭配对 = 撤销全部设备（D2 §5.4 关闭
@@ -868,7 +923,10 @@ mod tests {
         coordinator.revoke_all();
         assert!(coordinator.list_devices().is_empty());
         assert!(!coordinator.pairing_enabled());
-        assert_eq!(*rebinds.lock().unwrap_or_else(|e| e.into_inner()), vec![true, false]);
+        assert_eq!(
+            *rebinds.lock().unwrap_or_else(|e| e.into_inner()),
+            vec![true, false]
+        );
     }
 
     #[test]

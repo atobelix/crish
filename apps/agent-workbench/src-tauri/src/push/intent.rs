@@ -136,10 +136,7 @@ pub fn run_terminal_source(terminal: RunTerminalStatus) -> RunTerminationSource 
 /// | EngineTerminated | 任意 | 推 | 系统/watchdog 强制 kill |
 /// | None（来源未知） | false | 不推 | 回退 R3-01a 近似：优雅 kill 视为用户主动 |
 /// | None（来源未知） | true | 推 | 回退 R3-01a 近似：强制 kill 视为系统行为 |
-pub fn task_killed_should_push(
-    source: Option<RunTerminationSource>,
-    via_force: bool,
-) -> bool {
+pub fn task_killed_should_push(source: Option<RunTerminationSource>, via_force: bool) -> bool {
     match source {
         Some(RunTerminationSource::UserKilled) => false,
         Some(RunTerminationSource::EngineTerminated) => true,
@@ -675,8 +672,8 @@ mod tests {
         SubagentEventPayload, ToolMetadata,
     };
     // AgentEndReason 定义于 session 域（events.rs 仅私有导入，外部不可达）
-    use conex_types::session::AgentEndReason;
     use conex_types::impact::ImpactAssessment;
+    use conex_types::session::AgentEndReason;
 
     fn ctx() -> PushIntentCtx {
         PushIntentCtx::default()
@@ -748,8 +745,11 @@ mod tests {
 
     #[test]
     fn s1_approval_requested_p0() {
-        let intent = push_intent(&approval_requested("tc-9f3a", "bash", "执行部署脚本"), &ctx())
-            .expect("S1 必须推");
+        let intent = push_intent(
+            &approval_requested("tc-9f3a", "bash", "执行部署脚本"),
+            &ctx(),
+        )
+        .expect("S1 必须推");
         assert_eq!(intent.scene, SceneId::ApprovalRequested);
         assert_eq!(intent.level, PushLevel::P0Critical);
         assert_eq!(intent.dedupe_key, "approval-requested:tc-9f3a");
@@ -794,9 +794,11 @@ mod tests {
 
     #[test]
     fn s3_run_completed_p1() {
-        let intent =
-            push_intent(&run_terminal("run-42", RunTerminalStatus::Completed, None), &ctx())
-                .expect("S3 必须推");
+        let intent = push_intent(
+            &run_terminal("run-42", RunTerminalStatus::Completed, None),
+            &ctx(),
+        )
+        .expect("S3 必须推");
         assert_eq!(intent.scene, SceneId::RunCompleted);
         assert_eq!(intent.level, PushLevel::P1Important);
         assert_eq!(intent.dedupe_key, "run-terminal:run-42");
@@ -818,9 +820,11 @@ mod tests {
 
     #[test]
     fn s5_run_cancelled_p1() {
-        let intent =
-            push_intent(&run_terminal("run-42", RunTerminalStatus::Cancelled, None), &ctx())
-                .expect("S5 必须推");
+        let intent = push_intent(
+            &run_terminal("run-42", RunTerminalStatus::Cancelled, None),
+            &ctx(),
+        )
+        .expect("S5 必须推");
         assert_eq!(intent.scene, SceneId::RunCancelled);
         assert_eq!(intent.level, PushLevel::P1Important);
         assert_eq!(intent.dedupe_key, "run-terminal:run-42:cancelled");
@@ -962,11 +966,23 @@ mod tests {
     #[test]
     fn s8e_kill_source_matrix() {
         // 来源精确判定优先于 via_force：用户 kill 即使两阶段升级强制也不推
-        assert!(!task_killed_should_push(Some(RunTerminationSource::UserKilled), true));
-        assert!(!task_killed_should_push(Some(RunTerminationSource::UserKilled), false));
+        assert!(!task_killed_should_push(
+            Some(RunTerminationSource::UserKilled),
+            true
+        ));
+        assert!(!task_killed_should_push(
+            Some(RunTerminationSource::UserKilled),
+            false
+        ));
         // 系统/watchdog：来源=引擎终止恒推
-        assert!(task_killed_should_push(Some(RunTerminationSource::EngineTerminated), true));
-        assert!(task_killed_should_push(Some(RunTerminationSource::EngineTerminated), false));
+        assert!(task_killed_should_push(
+            Some(RunTerminationSource::EngineTerminated),
+            true
+        ));
+        assert!(task_killed_should_push(
+            Some(RunTerminationSource::EngineTerminated),
+            false
+        ));
         // 来源未知：回退 R3-01a via_force 近似
         assert!(!task_killed_should_push(None, false));
         assert!(task_killed_should_push(None, true));
@@ -1113,8 +1129,7 @@ mod tests {
             error: "provider 429 限流".to_string(),
             retryable: Some(true),
         };
-        let intent =
-            push_intent(&event, &ctx_with_run("run-42")).expect("S10a 必须推");
+        let intent = push_intent(&event, &ctx_with_run("run-42")).expect("S10a 必须推");
         assert_eq!(intent.scene, SceneId::RuntimeError);
         assert_eq!(intent.level, PushLevel::P0Critical);
         assert_eq!(intent.dedupe_key, "runtime-error:run-42");
@@ -1164,9 +1179,11 @@ mod tests {
             envelope_run_id: None,
             sequence: Some(112),
         };
-        let fallback =
-            push_intent(&security_audit(SecurityAuditDecision::Blocked, None), &seq_ctx)
-                .expect("S11 sequence 回退");
+        let fallback = push_intent(
+            &security_audit(SecurityAuditDecision::Blocked, None),
+            &seq_ctx,
+        )
+        .expect("S11 sequence 回退");
         assert_eq!(fallback.dedupe_key, "security-audit:seq:112");
 
         // 不推子集：approved/denied/redirected/restored
@@ -1374,7 +1391,13 @@ mod tests {
 
     #[test]
     fn dedupe_key_format() {
-        assert_eq!(dedupe_key("approval-requested", "tc-1"), "approval-requested:tc-1");
-        assert_eq!(dedupe_key("run-terminal", "run-42:failed"), "run-terminal:run-42:failed");
+        assert_eq!(
+            dedupe_key("approval-requested", "tc-1"),
+            "approval-requested:tc-1"
+        );
+        assert_eq!(
+            dedupe_key("run-terminal", "run-42:failed"),
+            "run-terminal:run-42:failed"
+        );
     }
 }

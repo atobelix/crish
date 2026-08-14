@@ -127,13 +127,7 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
             let notifier = notifier.clone();
             async move {
                 let state = forward_streams(
-                    &info,
-                    &preview,
-                    stdout,
-                    stderr,
-                    &log_path,
-                    &meta_path,
-                    &notifier,
+                    &info, &preview, stdout, stderr, &log_path, &meta_path, &notifier,
                 )
                 .await;
                 finish_task(
@@ -193,10 +187,7 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
         // 线程的到达时序——每次 list 前清一遍到期终态条目（n ≤ 200，代价 O(n)）。
         // 已归档条目自此不可见（list/status/read_log 均 NotFound 附归档指引）。
         self.archive_expired();
-        let tasks = self
-            .tasks
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
+        let tasks = self.tasks.lock().unwrap_or_else(|p| p.into_inner());
         let now = now_millis() as u64;
         let mut out: Vec<BackgroundTaskInfo> = Vec::with_capacity(tasks.len());
         for handle in tasks.values() {
@@ -226,15 +217,9 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
     /// 无需额外 await writer JoinHandle（屏障即终态翻转本身）。
     async fn status(&self, task_id: &str) -> Result<BackgroundTaskStatus, ToolError> {
         let handle = self.get_handle(task_id)?;
-        let info = handle
-            .info
-            .read()
-            .unwrap_or_else(|p| p.into_inner());
+        let info = handle.info.read().unwrap_or_else(|p| p.into_inner());
         let tail = {
-            let preview = handle
-                .preview
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
+            let preview = handle.preview.lock().unwrap_or_else(|p| p.into_inner());
             preview.tail_lines(20).join("\n")
         };
         let now = now_millis() as u64;
@@ -245,10 +230,7 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
         // 终止诊断留痕（T-AB-11：kill 两阶段留痕；透传冻结字段
         // termination_diagnostics）
         let termination_diagnostics = {
-            let guard = handle
-                .diagnostics
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
+            let guard = handle.diagnostics.lock().unwrap_or_else(|p| p.into_inner());
             guard.clone()
         };
         // 摘要模板（REQ-A05；R-AB3 唤醒注入消费，先经 trace 留痕）
@@ -290,10 +272,7 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
     ) -> Result<LogSlice, ToolError> {
         let handle = self.get_handle(task_id)?;
         let (log_path, total_lines) = {
-            let guard = handle
-                .info
-                .read()
-                .unwrap_or_else(|p| p.into_inner());
+            let guard = handle.info.read().unwrap_or_else(|p| p.into_inner());
             (PathBuf::from(guard.log_path.clone()), guard.line_count)
         };
         if max_lines == 0 {

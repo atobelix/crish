@@ -12,11 +12,11 @@
 //! cargo test -p conex-computer --test perception_source -- --ignored --nocapture
 //! ```
 
-use conex_computer::perception::{
-    MAX_TREE_DEPTH, MAX_TREE_NODES, PerceptionError, PerceptionNode, PerceptionSnapshot,
-    PerceptionSource, RawNode, Rect, build_snapshot, element_at_point,
-};
 use conex_computer::perception::EMPTY_RECT;
+use conex_computer::perception::{
+    build_snapshot, element_at_point, PerceptionError, PerceptionNode, PerceptionSnapshot,
+    PerceptionSource, RawNode, Rect, MAX_TREE_DEPTH, MAX_TREE_NODES,
+};
 use conex_computer::security::{PASSWORD_PLACEHOLDER, PASSWORD_REDACTION_PLACEHOLDER};
 
 // ===== fixture 构造 =====
@@ -24,28 +24,64 @@ use conex_computer::security::{PASSWORD_PLACEHOLDER, PASSWORD_REDACTION_PLACEHOL
 /// 记事本形态 fixture:窗口 → 标题栏/菜单栏/编辑区(带文本值)
 fn notepad_fixture() -> RawNode {
     RawNode::new("window", "无标题 - 记事本", "", Rect::new(0, 0, 800, 600))
-        .push(RawNode::new("title_bar", "无标题 - 记事本", "", Rect::new(0, 0, 800, 40)))
+        .push(RawNode::new(
+            "title_bar",
+            "无标题 - 记事本",
+            "",
+            Rect::new(0, 0, 800, 40),
+        ))
         .push(
             RawNode::new("menu_bar", "菜单栏", "", Rect::new(0, 40, 800, 56))
-                .push(RawNode::new("menu_item", "文件", "", Rect::new(0, 40, 60, 56)))
-                .push(RawNode::new("menu_item", "编辑", "", Rect::new(60, 40, 120, 56))),
+                .push(RawNode::new(
+                    "menu_item",
+                    "文件",
+                    "",
+                    Rect::new(0, 40, 60, 56),
+                ))
+                .push(RawNode::new(
+                    "menu_item",
+                    "编辑",
+                    "",
+                    Rect::new(60, 40, 120, 56),
+                )),
         )
-        .push(RawNode::new("edit", "文本编辑器", "你好,世界", Rect::new(0, 56, 800, 600)))
+        .push(RawNode::new(
+            "edit",
+            "文本编辑器",
+            "你好,世界",
+            Rect::new(0, 56, 800, 600),
+        ))
 }
 
 /// 含密码框的登录窗口 fixture
 fn login_fixture() -> RawNode {
     RawNode::new("window", "登录", "", Rect::new(100, 100, 500, 400))
-        .push(RawNode::new("text", "用户名", "user1", Rect::new(120, 140, 300, 160)))
+        .push(RawNode::new(
+            "text",
+            "用户名",
+            "user1",
+            Rect::new(120, 140, 300, 160),
+        ))
         .push(
-            RawNode::new("edit", "userInput", "alice", Rect::new(120, 170, 300, 200))
-                .push(RawNode::new("text", "", "alice", Rect::new(120, 170, 300, 200))),
+            RawNode::new("edit", "userInput", "alice", Rect::new(120, 170, 300, 200)).push(
+                RawNode::new("text", "", "alice", Rect::new(120, 170, 300, 200)),
+            ),
         )
         .push(
-            RawNode::new("edit", "passInput", "s3cret-pass-xyz", Rect::new(120, 210, 300, 240))
-                .with_password(),
+            RawNode::new(
+                "edit",
+                "passInput",
+                "s3cret-pass-xyz",
+                Rect::new(120, 210, 300, 240),
+            )
+            .with_password(),
         )
-        .push(RawNode::new("button", "登录", "", Rect::new(200, 300, 300, 340)))
+        .push(RawNode::new(
+            "button",
+            "登录",
+            "",
+            Rect::new(200, 300, 300, 340),
+        ))
 }
 
 /// mock 感知源(注入 fixture 树;命中检测 = 纯函数 [`element_at_point`] 语义)
@@ -91,8 +127,7 @@ fn snapshot_parses_fixture_tree_full() {
     assert_eq!(snap.root.name, "无标题 - 记事本");
     assert_eq!(snap.root.rect, Rect::new(0, 0, 800, 600));
     assert_eq!(
-        snap.node_count,
-        6,
+        snap.node_count, 6,
         "窗口 + 标题栏 + 菜单栏 + 2 菜单项 + 编辑框 = 6"
     );
     assert!(!snap.truncated);
@@ -133,7 +168,11 @@ fn depth_truncation_caps_at_max() {
     let snap = build_snapshot(&root);
     assert!(snap.truncated);
     // 根为第 0 层;最大保留深度 = MAX_TREE_DEPTH(第 6 层节点的子不再展开)
-    assert_eq!(snap.node_count, MAX_TREE_DEPTH + 1, "保留 0..=6 层共 7 节点");
+    assert_eq!(
+        snap.node_count,
+        MAX_TREE_DEPTH + 1,
+        "保留 0..=6 层共 7 节点"
+    );
     // 逐层下探:每层保留 1 个子节点,直至深度 MAX_TREE_DEPTH 的节点
     let mut node = &snap.root;
     for i in 0..MAX_TREE_DEPTH {
@@ -198,7 +237,12 @@ fn keyname_pattern_redaction_covers_values() {
         .push(RawNode::new("edit", "API Key", "token-abc", EMPTY_RECT))
         .push(RawNode::new("edit", "旧密码", "old-pwd-1", EMPTY_RECT))
         .push(RawNode::new("edit", "正常字段", "可见内容", EMPTY_RECT))
-        .push(RawNode::new("edit", "PasswordConfirm", "pw123456", EMPTY_RECT));
+        .push(RawNode::new(
+            "edit",
+            "PasswordConfirm",
+            "pw123456",
+            EMPTY_RECT,
+        ));
     let snap = build_snapshot(&root);
     let kids = &snap.root.children;
     // name 不含键名模式 → 原文保留;value 含 token → 脱敏
@@ -246,8 +290,14 @@ fn element_from_point_hits_deepest() {
 fn element_from_point_misses_outside() {
     let source = MockSource::new(notepad_fixture());
     // 窗口外 → 未命中
-    assert!(source.element_from_point(900, 700).expect("查询失败").is_none());
-    assert!(source.element_from_point(-5, -5).expect("查询失败").is_none());
+    assert!(source
+        .element_from_point(900, 700)
+        .expect("查询失败")
+        .is_none());
+    assert!(source
+        .element_from_point(-5, -5)
+        .expect("查询失败")
+        .is_none());
 }
 
 #[test]
@@ -297,7 +347,9 @@ fn no_active_window_returns_error() {
     }
     assert_eq!(NoFocus.snapshot(), Err(PerceptionError::NoActiveWindow));
     // 错误文案带可读语义
-    assert!(PerceptionError::NoActiveWindow.to_string().contains("无活动窗口"));
+    assert!(PerceptionError::NoActiveWindow
+        .to_string()
+        .contains("无活动窗口"));
 }
 
 #[test]

@@ -113,8 +113,12 @@ pub async fn dispatch_mouse_click(
     let count = i32::from(count);
     exec.ops.mouse_event(moved(point.x, point.y, 0)).await?;
     for click_count in 1..=count {
-        exec.ops.mouse_event(pressed(point.x, point.y, button, click_count)).await?;
-        exec.ops.mouse_event(released(point.x, point.y, button, click_count)).await?;
+        exec.ops
+            .mouse_event(pressed(point.x, point.y, button, click_count))
+            .await?;
+        exec.ops
+            .mouse_event(released(point.x, point.y, button, click_count))
+            .await?;
     }
     Ok(())
 }
@@ -219,22 +223,38 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        exec.click(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, MouseButton::Left, 1)
-            .await
-            .expect("点击应成功");
+        exec.click(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            MouseButton::Left,
+            1,
+        )
+        .await
+        .expect("点击应成功");
         let events = ops.calls_of(MockOp::MouseEvent);
         assert_eq!(events.len(), 3);
         assert!(events[0].detail.contains("mouseMoved x=50 y=25"));
-        assert!(events[1].detail.contains("mousePressed x=50 y=25 button=left count=1"));
-        assert!(events[2].detail.contains("mouseReleased x=50 y=25 button=left count=1"));
+        assert!(events[1]
+            .detail
+            .contains("mousePressed x=50 y=25 button=left count=1"));
+        assert!(events[2]
+            .detail
+            .contains("mouseReleased x=50 y=25 button=left count=1"));
     }
 
     /// 双击：两次按下/释放序列，clickCount 透传 1/2。
@@ -244,21 +264,36 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        exec.click(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, MouseButton::Left, 2)
-            .await
-            .expect("双击应成功");
+        exec.click(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            MouseButton::Left,
+            2,
+        )
+        .await
+        .expect("双击应成功");
         let events = ops.calls_of(MockOp::MouseEvent);
         assert_eq!(events.len(), 5, "moved + 2×(pressed+released)");
         assert!(events[1].detail.contains("count=1"));
-        assert!(events[3].detail.contains("count=2"), "双击第二次 clickCount=2");
+        assert!(
+            events[3].detail.contains("count=2"),
+            "双击第二次 clickCount=2"
+        );
     }
 
     /// 右键：button=right（contextmenu 语义）。
@@ -268,17 +303,29 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        exec.click(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, MouseButton::Right, 1)
-            .await
-            .expect("右键应成功");
+        exec.click(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            MouseButton::Right,
+            1,
+        )
+        .await
+        .expect("右键应成功");
         let events = ops.calls_of(MockOp::MouseEvent);
         assert!(events[1].detail.contains("button=right"));
     }
@@ -290,17 +337,27 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
-        exec.hover(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 })
-            .await
-            .expect("hover 应成功");
+        exec.hover(
+            &"t1".to_string(),
+            1,
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+        )
+        .await
+        .expect("hover 应成功");
         let events = ops.calls_of(MockOp::MouseEvent);
         assert_eq!(events.len(), 1);
         assert!(events[0].detail.contains("mouseMoved"));
@@ -313,10 +370,13 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
@@ -324,8 +384,14 @@ mod tests {
         exec.drag(
             &"t1".to_string(),
             1,
-            ElementRef { index: 0, backend_node_id: 11 },
-            ElementRef { index: 1, backend_node_id: 21 },
+            ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            },
+            ElementRef {
+                index: 1,
+                backend_node_id: 21,
+            },
         )
         .await
         .expect("拖拽应成功");
@@ -333,12 +399,20 @@ mod tests {
         assert_eq!(events.len(), 1 + 8 + 1, "press + 8 步 + release");
         assert!(events[0].detail.contains("mousePressed x=50 y=25"));
         // 第 1 步 = 1/8 插值：from(50,25) → to(250,25)
-        assert!(events[1].detail.contains("mouseMoved x=75 y=25"), "{}", events[1].detail);
+        assert!(
+            events[1].detail.contains("mouseMoved x=75 y=25"),
+            "{}",
+            events[1].detail
+        );
         // 第 8 步 = 终点 (250,25)
         assert!(events[8].detail.contains("mouseMoved x=250 y=25"));
         assert!(events[9].detail.contains("mouseReleased x=250 y=25"));
         // 拖拽中保持 buttons=1
-        assert!(events[4].detail.contains("buttons=1"), "{}", events[4].detail);
+        assert!(
+            events[4].detail.contains("buttons=1"),
+            "{}",
+            events[4].detail
+        );
     }
 
     /// 页面级滚动：视口中心 + deltaY（down 正 / up 负）。
@@ -348,10 +422,13 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
@@ -363,11 +440,19 @@ mod tests {
         assert_eq!(events.len(), 1);
         // 视口 1280x720 → 中心 (640, 360)；wheel 方向：down → deltaY 正
         let d = &events[0].detail;
-        assert!(d.contains("mouseWheel") && d.contains("x=640") && d.contains("y=360") && d.contains("deltaY=800"), "{d}");
+        assert!(
+            d.contains("mouseWheel")
+                && d.contains("x=640")
+                && d.contains("y=360")
+                && d.contains("deltaY=800"),
+            "{d}"
+        );
         exec.scroll(&"t1".to_string(), 1, ScrollDir::Up, 200, None)
             .await
             .expect("上滚应成功");
-        assert!(ops.calls_of(MockOp::MouseEvent)[1].detail.contains("deltaY=-200"));
+        assert!(ops.calls_of(MockOp::MouseEvent)[1]
+            .detail
+            .contains("deltaY=-200"));
     }
 
     /// 元素级滚动：容器内注入点滚轮（Left → deltaX 正）。
@@ -377,10 +462,13 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
@@ -390,14 +478,23 @@ mod tests {
             1,
             ScrollDir::Left,
             300,
-            Some(ElementRef { index: 0, backend_node_id: 11 }),
+            Some(ElementRef {
+                index: 0,
+                backend_node_id: 11,
+            }),
         )
         .await
         .expect("元素滚动应成功");
         let events = ops.calls_of(MockOp::MouseEvent);
         assert_eq!(events.len(), 1);
         let d = &events[0].detail;
-        assert!(d.contains("mouseWheel") && d.contains("x=50") && d.contains("y=25") && d.contains("deltaX=300"), "{d}");
+        assert!(
+            d.contains("mouseWheel")
+                && d.contains("x=50")
+                && d.contains("y=25")
+                && d.contains("deltaX=300"),
+            "{d}"
+        );
         // 元素 box 可见时无需 scrollIntoViewIfNeeded（§3.2 仅 box 无效时触发）
         assert_eq!(ops.count(MockOp::ScrollIntoView), 0);
     }
@@ -410,16 +507,28 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
         .with_delay(Arc::new(RecordingDelay::new()));
         let err = exec
-            .click(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, MouseButton::Left, 1)
+            .click(
+                &"t1".to_string(),
+                1,
+                ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                },
+                MouseButton::Left,
+                1,
+            )
             .await
             .expect_err("应失败");
         assert_eq!(err.kind, ActionErrorKind::NodeStale);
@@ -430,21 +539,27 @@ mod tests {
     #[tokio::test]
     async fn element_scroll_not_interactive() {
         let ops = MockOps::new();
-        ops.state.lock().unwrap().box_models.insert(111, crate::cdp::domains::BoxModel {
-            content: vec![2000.0, 0.0, 2100.0, 0.0, 2100.0, 50.0, 2000.0, 50.0],
-            padding: vec![],
-            border: vec![],
-            margin: vec![],
-            width: 100,
-            height: 50,
-        });
+        ops.state.lock().unwrap().box_models.insert(
+            111,
+            crate::cdp::domains::BoxModel {
+                content: vec![2000.0, 0.0, 2100.0, 0.0, 2100.0, 50.0, 2000.0, 50.0],
+                padding: vec![],
+                border: vec![],
+                margin: vec![],
+                width: 100,
+                height: 50,
+            },
+        );
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         )
         .with_gate(Arc::new(AllowGate))
@@ -459,14 +574,21 @@ mod tests {
                 1,
                 ScrollDir::Down,
                 100,
-                Some(ElementRef { index: 0, backend_node_id: 11 }),
+                Some(ElementRef {
+                    index: 0,
+                    backend_node_id: 11,
+                }),
             )
             .await
             .expect_err("应 NotInteractive");
         // 等待可见超时仍归类 NotInteractive（§5.1），额度内两轮定位
         assert_eq!(err.kind, ActionErrorKind::NotInteractive);
         assert_eq!(ops.count(MockOp::MouseEvent), 0, "不可见不得派发滚轮");
-        assert_eq!(ops.count(MockOp::ScrollIntoView), 4, "两轮定位 × 各 2 次滚动重试");
+        assert_eq!(
+            ops.count(MockOp::ScrollIntoView),
+            4,
+            "两轮定位 × 各 2 次滚动重试"
+        );
     }
 
     /// 派发中点坐标与插值数学的独立校验（直接调用 dispatch_drag）。
@@ -476,10 +598,13 @@ mod tests {
         let token = CancellationToken::new();
         let exec = ActionExecutor::new(
             Arc::new(ops.clone()),
-            Arc::new(MockSnapshotStore::with_elements(1, &[ElementMeta {
-                backend_node_id: 11,
-                is_password: false,
-            }])),
+            Arc::new(MockSnapshotStore::with_elements(
+                1,
+                &[ElementMeta {
+                    backend_node_id: 11,
+                    is_password: false,
+                }],
+            )),
             token,
         );
         dispatch_drag(&exec, &point(0.0, 0.0), &point(80.0, 0.0))

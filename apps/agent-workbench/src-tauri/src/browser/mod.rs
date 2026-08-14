@@ -88,7 +88,9 @@ use crate::core_event_bridge::Emitter;
 use agent_tools::definition::ToolError;
 use async_trait::async_trait;
 use conex_browser::action::gate::{DomainGate, GateDenial};
-use conex_browser::action::{ActionRequest, ActionSuccess, ElementMeta, WaitCondition, WaitOptions};
+use conex_browser::action::{
+    ActionRequest, ActionSuccess, ElementMeta, WaitCondition, WaitOptions,
+};
 use conex_browser::browser::profile::data_root;
 use conex_browser::browser::state::BrowserState;
 use conex_browser::cdp::domains::{
@@ -96,15 +98,17 @@ use conex_browser::cdp::domains::{
 };
 use conex_browser::cdp::sender::CancellationToken;
 use conex_browser::cdp::transport::ExpectedBrowser;
-use conex_browser::snapshot::budget::BudgetConfig;
 use conex_browser::import::storage_state::{LocalStorageChannel, SessionLocalStorageChannel};
+use conex_browser::snapshot::budget::BudgetConfig;
 use conex_browser::{
     BrowserManager, BrowserSession, CrashReason, LaunchConfig, ProcessEvent, SessionRef, StopReason,
 };
 use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
 use conex_browser_tools::gate::MvpDomainGate;
 use conex_browser_tools::policy::AllowAllPolicy;
-use conex_browser_tools::session::{ConsoleEntry, NetworkEntry, RealSession, SessionOps, SnapshotView};
+use conex_browser_tools::session::{
+    ConsoleEntry, NetworkEntry, RealSession, SessionOps, SnapshotView,
+};
 use frame_stream::{FrameStreamController, FrameStreamState};
 use mcp_attach::McpAttachEndpoint;
 use panel_input::{BrowserInputEvent, PanelInputRouter};
@@ -256,10 +260,7 @@ impl BrowserSlot {
     fn from_parts(manager: Option<Arc<BrowserManager>>, launch: LaunchConfig) -> Self {
         let estop_flag = Arc::new(AtomicBool::new(false));
         let estop = CancellationToken::new();
-        let policy = Arc::new(AllowAllPolicy::new(
-            Arc::clone(&estop_flag),
-            estop.clone(),
-        ));
+        let policy = Arc::new(AllowAllPolicy::new(Arc::clone(&estop_flag), estop.clone()));
         let gate: Arc<dyn DomainGate> = match MvpDomainGate::new(&[], &[]) {
             Ok(g) => Arc::new(g),
             Err(error) => {
@@ -352,11 +353,7 @@ impl BrowserSlot {
     /// 触发 estop（run 级强停 / 用户接管）：取消在途 CDP 命令（逐 id）+
     /// 急停旗置位（新命令拒绝）；急停旗随下一启动周期复位。
     pub(crate) fn cancel_estop(&self) {
-        let token = self
-            .estop
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone();
+        let token = self.estop.lock().unwrap_or_else(|p| p.into_inner()).clone();
         token.cancel();
         self.estop_flag.store(true, Ordering::SeqCst);
         tracing::debug!(target: "browser", "浏览器 estop 触发（在途 CDP 命令取消 + 新命令拒绝）");
@@ -440,11 +437,7 @@ impl BrowserSlot {
     }
 
     /// 停止主路径（被 [Self::stop] 硬超时包裹）。
-    async fn stop_inner(
-        &self,
-        manager: &Arc<BrowserManager>,
-        force: bool,
-    ) -> Result<(), String> {
+    async fn stop_inner(&self, manager: &Arc<BrowserManager>, force: bool) -> Result<(), String> {
         if force {
             // 急停：不等会话锁（launching 中连接/启动持锁至多首启超时 ~40s），
             // try_lock 尽力丢弃会话后立即走强制杀树路径
@@ -459,7 +452,11 @@ impl BrowserSlot {
         // 停止帧流（无订阅者语义：停流 = 不再下行；帧泵随会话断开自然收尾）
         self.frames.unsubscribe().await;
         self.drop_raw_session();
-        let reason = if force { StopReason::Force } else { StopReason::Graceful };
+        let reason = if force {
+            StopReason::Force
+        } else {
+            StopReason::Graceful
+        };
         manager
             .stop(reason)
             .await
@@ -537,7 +534,9 @@ impl BrowserSlot {
                 };
                 Ok(Arc::clone(rs))
             }
-            other => Err(format!("浏览器恢复中（进程状态：{other:?}，R-9 恢复期 gating）")),
+            other => Err(format!(
+                "浏览器恢复中（进程状态：{other:?}，R-9 恢复期 gating）"
+            )),
         }
     }
 
@@ -646,9 +645,9 @@ impl BrowserSlot {
         {
             return Ok(injected);
         }
-        let session = self.raw_session_sync().ok_or_else(|| {
-            "浏览器未连接（请先 browser_start 后再导入登录态）".to_string()
-        })?;
+        let session = self
+            .raw_session_sync()
+            .ok_or_else(|| "浏览器未连接（请先 browser_start 后再导入登录态）".to_string())?;
         let channel = SessionLocalStorageChannel::for_active(session)
             .map_err(|e| format!("localStorage 注入通道不可用：{e}"))?;
         Ok(Arc::new(channel))
@@ -733,7 +732,11 @@ impl BrowserSlot {
 
     /// 会话存在且端点匹配（快速路径判定）。
     fn has_session_matching(&self, manager: &BrowserManager) -> bool {
-        let present = self.session.try_lock().map(|g| g.is_some()).unwrap_or(false);
+        let present = self
+            .session
+            .try_lock()
+            .map(|g| g.is_some())
+            .unwrap_or(false);
         present && self.endpoint_matches(manager)
     }
 
@@ -802,8 +805,10 @@ impl BrowserSlot {
                 .await
                 .map_err(|e| format!("浏览器会话连接失败：{e}（可稍后重试）"))?,
         );
-        *self.connected_endpoint.lock().unwrap_or_else(|p| p.into_inner()) =
-            Some(endpoint.url());
+        *self
+            .connected_endpoint
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(endpoint.url());
         *self.raw_session.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&session));
         // N6（G-9 遗留接线落地）：会话建立 → register_session——管理器持
         // Arc<BrowserSession> 作为优雅停止的 Browser.close 发送面（G-9）。
@@ -845,8 +850,7 @@ impl BrowserSlot {
     fn drop_raw_session(&self) {
         *self.raw_session.lock().unwrap_or_else(|p| p.into_inner()) = None;
         // J1b：会话失效 → storage 发送面换回未连接（陈旧会话不得滞留）
-        *self.storage_ops.lock().unwrap_or_else(|p| p.into_inner()) =
-            Arc::new(UnwiredStorageOps);
+        *self.storage_ops.lock().unwrap_or_else(|p| p.into_inner()) = Arc::new(UnwiredStorageOps);
         self.frames.release_session();
         self.input.clear_pipeline();
     }
@@ -1112,18 +1116,23 @@ impl SessionOps for LazySessionOps {
         self.session()?.element_meta(tab_id, version, index)
     }
 
-    async fn execute_action(&self, req: ActionRequest) -> Result<ActionSuccess, conex_browser::action::ActionError> {
-        self.ensure_ready()
-            .await
-            .map_err(|e| conex_browser::action::ActionError::new(
+    async fn execute_action(
+        &self,
+        req: ActionRequest,
+    ) -> Result<ActionSuccess, conex_browser::action::ActionError> {
+        self.ensure_ready().await.map_err(|e| {
+            conex_browser::action::ActionError::new(
                 conex_browser::action::ActionErrorKind::ConnectionLost,
                 e,
-            ))?;
+            )
+        })?;
         self.session()
-            .map_err(|e| conex_browser::action::ActionError::new(
-                conex_browser::action::ActionErrorKind::ConnectionLost,
-                e.to_string(),
-            ))?
+            .map_err(|e| {
+                conex_browser::action::ActionError::new(
+                    conex_browser::action::ActionErrorKind::ConnectionLost,
+                    e.to_string(),
+                )
+            })?
             .execute_action(req)
             .await
     }
@@ -1133,17 +1142,19 @@ impl SessionOps for LazySessionOps {
         cond: WaitCondition,
         opts: WaitOptions,
     ) -> Result<ActionSuccess, conex_browser::action::ActionError> {
-        self.ensure_ready()
-            .await
-            .map_err(|e| conex_browser::action::ActionError::new(
+        self.ensure_ready().await.map_err(|e| {
+            conex_browser::action::ActionError::new(
                 conex_browser::action::ActionErrorKind::ConnectionLost,
                 e,
-            ))?;
+            )
+        })?;
         self.session()
-            .map_err(|e| conex_browser::action::ActionError::new(
-                conex_browser::action::ActionErrorKind::ConnectionLost,
-                e.to_string(),
-            ))?
+            .map_err(|e| {
+                conex_browser::action::ActionError::new(
+                    conex_browser::action::ActionErrorKind::ConnectionLost,
+                    e.to_string(),
+                )
+            })?
             .wait_for(cond, opts)
             .await
     }
@@ -1212,13 +1223,22 @@ mod tests {
     /// crashed/error；降级槽恒 error）。
     #[test]
     fn panel_state_mapping_table() {
-        assert_eq!(panel_state_str(&BrowserState::Stopped, false, false), "idle");
-        assert_eq!(panel_state_str(&BrowserState::Stopped, true, false), "stopped");
+        assert_eq!(
+            panel_state_str(&BrowserState::Stopped, false, false),
+            "idle"
+        );
+        assert_eq!(
+            panel_state_str(&BrowserState::Stopped, true, false),
+            "stopped"
+        );
         assert_eq!(
             panel_state_str(&BrowserState::Launching { attempt: 1 }, false, false),
             "launching"
         );
-        assert_eq!(panel_state_str(&BrowserState::Running, false, false), "running");
+        assert_eq!(
+            panel_state_str(&BrowserState::Running, false, false),
+            "running"
+        );
         assert_eq!(
             panel_state_str(&BrowserState::Stopping { graceful: true }, false, false),
             "stopping"
@@ -1235,8 +1255,14 @@ mod tests {
             "crashed"
         );
         // 降级槽：任何进程状态均 error
-        assert_eq!(panel_state_str(&BrowserState::Running, false, true), "error");
-        assert_eq!(panel_state_str(&BrowserState::Stopped, false, true), "error");
+        assert_eq!(
+            panel_state_str(&BrowserState::Running, false, true),
+            "error"
+        );
+        assert_eq!(
+            panel_state_str(&BrowserState::Stopped, false, true),
+            "error"
+        );
     }
 
     /// 降级槽（manager=None）：status/start/ensure_ready/readiness 全部
@@ -1601,11 +1627,7 @@ mod tests {
 
         let slot = Arc::new(BrowserSlot::from_parts(None, LaunchConfig::default()));
         // 未连接面：错误文案指向 browser_start（辅助通道须显式启动）
-        let err = slot
-            .storage_ops()
-            .get_all_cookies()
-            .await
-            .unwrap_err();
+        let err = slot.storage_ops().get_all_cookies().await.unwrap_err();
         assert!(err.contains("未连接"), "未连接文案：{err}");
         // 注入 mock → 取到注入实现
         slot.inject_storage_ops(Arc::new(EchoOps));
@@ -1776,8 +1798,9 @@ mod tests {
                 return;
             }
             // CfT 缓存占位（discover 命中；实际 spawn 走 binary_override）
-            let cache =
-                browser_root(dir.path()).join("browsers").join("chrome-151.0.7922.77");
+            let cache = browser_root(dir.path())
+                .join("browsers")
+                .join("chrome-151.0.7922.77");
             std::fs::create_dir_all(&cache).expect("缓存目录");
             let rel = binary_rel_path().expect("平台路径");
             let bin = cache.join(rel);

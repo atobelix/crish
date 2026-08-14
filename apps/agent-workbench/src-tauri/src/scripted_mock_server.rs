@@ -435,8 +435,7 @@ mod server_tests {
     /// 便捷构造一条 chat-completions content delta 帧(与 agent-provider
     /// 测试域 `chat_ok_frames` 同 wire 格式)
     fn content_frame(text: &str) -> String {
-        json!({"choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]})
-            .to_string()
+        json!({"choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]}).to_string()
     }
 
     /// POST JSON 请求(返回原始响应供断言)
@@ -451,9 +450,7 @@ mod server_tests {
     }
 
     /// 增量收集响应体直至流结束或出错(断流断言用)
-    async fn drain_stream(
-        response: reqwest::Response,
-    ) -> (String, &'static str) {
+    async fn drain_stream(response: reqwest::Response) -> (String, &'static str) {
         let mut received = String::new();
         let mut stream = response.bytes_stream();
         loop {
@@ -486,11 +483,17 @@ mod server_tests {
         assert_eq!(server.consumed(), 3, "脚本按请求序号消费 3 步");
         let statuses: Vec<u16> = captured.iter().map(|c| c.response_status).collect();
         assert_eq!(statuses, vec![500, 502, 200], "响应状态按脚本顺序记录");
-        assert!(captured[0].path.starts_with("/v1/chat/completions"), "URL 路径记录");
+        assert!(
+            captured[0].path.starts_with("/v1/chat/completions"),
+            "URL 路径记录"
+        );
         assert_eq!(captured[0].method, "POST", "HTTP 方法记录");
         assert!(captured[0].body_contains("你好"), "请求体记录");
         assert_eq!(
-            captured[0].header("content-type").map(str::to_lowercase).as_deref(),
+            captured[0]
+                .header("content-type")
+                .map(str::to_lowercase)
+                .as_deref(),
             Some("application/json"),
             "请求头记录(大小写不敏感查找)"
         );
@@ -525,7 +528,11 @@ mod server_tests {
             .headers()
             .get("retry-after")
             .map(|v| v.to_str().expect("ASCII 头值").to_string());
-        assert_eq!(retry_after.as_deref(), Some("30"), "429 必须带 retry-after 头");
+        assert_eq!(
+            retry_after.as_deref(),
+            Some("30"),
+            "429 必须带 retry-after 头"
+        );
     }
 
     /// 正常流:全部帧按 SSE wire 格式(data: 前缀)发送 + 正常收尾
@@ -559,7 +566,10 @@ mod server_tests {
         let (received, outcome) = drain_stream(response).await;
         assert!(received.contains("半截"), "已产出的帧内容保留: {received}");
         assert!(!received.contains("[DONE]"), "断流后的帧不出现");
-        assert_eq!(outcome, "err", "chunked 未收尾 → 流以错误终止(Network 分类面)");
+        assert_eq!(
+            outcome, "err",
+            "chunked 未收尾 → 流以错误终止(Network 分类面)"
+        );
     }
 
     /// 未产出断流:零帧数据即截断(客户端「未产出可重发」语义的 wire 面)
@@ -586,15 +596,13 @@ mod server_tests {
 mod integration_tests {
     use super::*;
     use crate::core_event_bridge::EventBridge;
-    use crate::core_run_commands::{
-        run_task_impl, BackoffDelayFn, CoreRunState, RunTaskOptions,
-    };
+    use crate::core_run_commands::{run_task_impl, BackoffDelayFn, CoreRunState, RunTaskOptions};
     use crate::engine::{EngineProviderConfig, HttpProviderCall};
     use crate::status_diagnostics::StatusDiagnostics;
     use agent_provider::config::Endpoint;
     use conex_db::LocalDb;
-    use conex_types::SessionIndexEntry;
     use conex_types::message::AgentMessage;
+    use conex_types::SessionIndexEntry;
     use orchestrator::persist::LocalDbStore;
     use orchestrator::restore::{SnapshotFileStore, SnapshotStore};
     use serde_json::json;
@@ -657,12 +665,11 @@ mod integration_tests {
         db.upsert_session_entry(&session_entry("s1"))
             .expect("会话条目");
         let seq = SNAPSHOT_SEQ.fetch_add(1, Ordering::Relaxed);
-        let snapshots: Arc<dyn SnapshotStore> = Arc::new(SnapshotFileStore::new(
-            std::env::temp_dir().join(format!(
+        let snapshots: Arc<dyn SnapshotStore> =
+            Arc::new(SnapshotFileStore::new(std::env::temp_dir().join(format!(
                 "conex_c3_mock_{}_{seq}_snapshot.json",
                 std::process::id()
-            )),
-        ));
+            ))));
         let bridge = EventBridge::new("workbench-run-event", Arc::new(IgnoreEmitter));
         let state = Arc::new(CoreRunState::new(
             Arc::new(LocalDbStore::new(db.clone())),
@@ -710,9 +717,7 @@ mod integration_tests {
     async fn wait_run_agent_end_reason(db: &LocalDb, session_id: &str, window: Duration) -> String {
         let deadline = tokio::time::Instant::now() + window;
         loop {
-            let events = db
-                .query_events(session_id, 0, Some(500))
-                .expect("事件查询");
+            let events = db.query_events(session_id, 0, Some(500)).expect("事件查询");
             for event in &events {
                 if event.event_type != "agent-end" {
                     continue;
@@ -821,19 +826,19 @@ mod integration_tests {
         // 退避键装配:内核 750ms×2^(n-1)/8s 封顶/60s 预算(生产装配同键)
         db.set_session_meta(RETRY_BACKOFF_KEY, "[750,8000,60000]")
             .expect("退避键写入");
-        run_task_impl(
-            Arc::clone(&state),
-            test_options("c3-429", "s1", "任务"),
-        )
-        .await
-        .expect("run 发起成功");
+        run_task_impl(Arc::clone(&state), test_options("c3-429", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
         let reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
         assert_eq!(reason, "stop", "429 重试后正常完成收场");
         let captured = server.wait_for(2).await;
         assert_eq!(captured.len(), 2, "429 后恰好重试 1 次");
         assert_eq!(captured[0].response_status, 429, "首请求 → 429");
         assert_eq!(captured[1].response_status, 200, "重试请求 → 200");
-        let wait_ms = captured[1].arrived_at.duration_since(captured[0].arrived_at).as_millis();
+        let wait_ms = captured[1]
+            .arrived_at
+            .duration_since(captured[0].arrived_at)
+            .as_millis();
         assert!(
             wait_ms >= 1900,
             "重试等待 ≥Retry-After(2s):实际 {wait_ms}ms(max(750,2000)=2000ms)"
@@ -876,12 +881,9 @@ mod integration_tests {
         db.set_session_meta(RETRY_BACKOFF_KEY, "[750,8000,60000]")
             .expect("退避键写入");
         let started = tokio::time::Instant::now();
-        run_task_impl(
-            Arc::clone(&state),
-            test_options("c3-5xx", "s1", "任务"),
-        )
-        .await
-        .expect("run 发起成功");
+        run_task_impl(Arc::clone(&state), test_options("c3-5xx", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
         let reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
         assert_eq!(reason, "stop", "5xx 重试耗尽前成功收场");
         let captured = server.wait_for(4).await;
@@ -905,11 +907,8 @@ mod integration_tests {
     #[tokio::test]
     async fn mock_stream_cut_after_data_partial_preserved_with_kind() {
         clear_proxy_env();
-        let server = ScriptedMockServer::start(vec![ScriptStep::sse_cut(
-            ok_frames("半截输出"),
-            1,
-        )])
-        .await;
+        let server =
+            ScriptedMockServer::start(vec![ScriptStep::sse_cut(ok_frames("半截输出"), 1)]).await;
         let provider = HttpProviderCall::new(
             reqwest::Client::new(),
             EngineProviderConfig {
@@ -928,12 +927,9 @@ mod integration_tests {
         state.set_resume_backoff(Some(zero_backoff));
         let counter = Arc::new(AtomicU64::new(0));
         state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
-        run_task_impl(
-            Arc::clone(&state),
-            test_options("c3-cut", "s1", "任务"),
-        )
-        .await
-        .expect("run 发起成功");
+        run_task_impl(Arc::clone(&state), test_options("c3-cut", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
         // 部分保留断流:正常 Stop 收场(非 Error fatal)
         let reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
         assert_eq!(reason, "stop", "部分保留断流以 Stop 正常收场");
@@ -986,19 +982,19 @@ mod integration_tests {
         state.run_restore().await;
         db.set_session_meta(RETRY_BACKOFF_KEY, "[750,8000,60000]")
             .expect("退避键写入");
-        run_task_impl(
-            Arc::clone(&state),
-            test_options("c3-cut0", "s1", "任务"),
-        )
-        .await
-        .expect("run 发起成功");
+        run_task_impl(Arc::clone(&state), test_options("c3-cut0", "s1", "任务"))
+            .await
+            .expect("run 发起成功");
         let reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
         assert_eq!(reason, "stop", "未产出断流重试后正常完成收场");
         let captured = server.wait_for(2).await;
         assert_eq!(captured.len(), 2, "未产出断流 → 重试 1 次(共 2 请求)");
         assert_eq!(captured[0].response_status, 200, "断流请求仍先回 200 头");
         assert_eq!(captured[1].response_status, 200, "重试请求 → 200 正常流");
-        let wait_ms = captured[1].arrived_at.duration_since(captured[0].arrived_at).as_millis();
+        let wait_ms = captured[1]
+            .arrived_at
+            .duration_since(captured[0].arrived_at)
+            .as_millis();
         assert!(
             wait_ms >= 650,
             "未产出断流重试等待退避 750ms:实际 {wait_ms}ms"

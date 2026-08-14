@@ -275,14 +275,34 @@ mod tests {
         let cases = [
             (ActionErrorKind::VersionInvalid, RetryStrategy::Retake, true),
             (ActionErrorKind::NodeStale, RetryStrategy::Retake, true),
-            (ActionErrorKind::TargetClosed, RetryStrategy::DelayThenRetake, true),
-            (ActionErrorKind::ContextGone, RetryStrategy::DelayThenRetry, true),
-            (ActionErrorKind::NotInteractive, RetryStrategy::WaitVisible, true),
+            (
+                ActionErrorKind::TargetClosed,
+                RetryStrategy::DelayThenRetake,
+                true,
+            ),
+            (
+                ActionErrorKind::ContextGone,
+                RetryStrategy::DelayThenRetry,
+                true,
+            ),
+            (
+                ActionErrorKind::NotInteractive,
+                RetryStrategy::WaitVisible,
+                true,
+            ),
             (ActionErrorKind::Timeout, RetryStrategy::WaitThenRetry, true),
             // R-9：断连恢复后重试不计入额度
-            (ActionErrorKind::ConnectionLost, RetryStrategy::AwaitConnection, false),
+            (
+                ActionErrorKind::ConnectionLost,
+                RetryStrategy::AwaitConnection,
+                false,
+            ),
             // R-9：进程重启中由工具层 gating 拦截，原语层致命
-            (ActionErrorKind::TargetRestarting, RetryStrategy::Fatal, false),
+            (
+                ActionErrorKind::TargetRestarting,
+                RetryStrategy::Fatal,
+                false,
+            ),
             // R-8：用户接管吊销不计入额度
             (ActionErrorKind::Aborted, RetryStrategy::Abort, false),
             (ActionErrorKind::GateDenied, RetryStrategy::Fatal, false),
@@ -306,8 +326,14 @@ mod tests {
         let err = err_of(ActionErrorKind::NodeStale);
         let first = state.decide(&err);
         let second = state.decide(&err);
-        assert!(matches!(first, RetryDecision::Retake), "第 1 次尝试失败 → 重试");
-        assert!(matches!(second, RetryDecision::Retake), "第 2 次尝试失败 → 重试");
+        assert!(
+            matches!(first, RetryDecision::Retake),
+            "第 1 次尝试失败 → 重试"
+        );
+        assert!(
+            matches!(second, RetryDecision::Retake),
+            "第 2 次尝试失败 → 重试"
+        );
         assert_eq!(state.consumed, 2, "重试次数 = max-1");
         // 第 3 次尝试（attempt=3）的错误 → 耗尽升级
         let stop = state.decide(&err);
@@ -350,7 +376,10 @@ mod tests {
         assert_eq!(state.consumed, 2, "两阶段各计入一次额度");
         // 第 3 次尝试的错误 → 耗尽（两阶段循环受 3 次尝试上限约束）
         let third = state.decide(&err);
-        assert!(matches!(third, RetryDecision::Stop(_)), "3 次尝试后不再循环");
+        assert!(
+            matches!(third, RetryDecision::Stop(_)),
+            "3 次尝试后不再循环"
+        );
     }
 
     /// Timeout 两阶段（§5.1）：首轮等待 → 重试 1 次 → 致命。
@@ -425,16 +454,28 @@ mod tests {
     fn aborted_after_consumption_keeps_quota() {
         let mut state = RetryState::new(3);
         // 已消耗 1 次（NodeStale），随后 Aborted → 不计入，剩余额度不变
-        assert!(matches!(state.decide(&err_of(ActionErrorKind::NodeStale)), RetryDecision::Retake));
+        assert!(matches!(
+            state.decide(&err_of(ActionErrorKind::NodeStale)),
+            RetryDecision::Retake
+        ));
         assert_eq!(state.consumed, 1);
         let stop = state.decide(&err_of(ActionErrorKind::Aborted));
         assert!(matches!(stop, RetryDecision::Stop(_)));
         assert_eq!(state.consumed, 1, "Aborted 不计入额度（R-8）");
         // 新一轮动作（新 RetryState）额度完好：第 1/2 次尝试失败可重试
         let mut fresh = RetryState::new(3);
-        assert!(matches!(fresh.decide(&err_of(ActionErrorKind::NodeStale)), RetryDecision::Retake));
-        assert!(matches!(fresh.decide(&err_of(ActionErrorKind::NodeStale)), RetryDecision::Retake));
-        assert!(matches!(fresh.decide(&err_of(ActionErrorKind::NodeStale)), RetryDecision::Stop(_)));
+        assert!(matches!(
+            fresh.decide(&err_of(ActionErrorKind::NodeStale)),
+            RetryDecision::Retake
+        ));
+        assert!(matches!(
+            fresh.decide(&err_of(ActionErrorKind::NodeStale)),
+            RetryDecision::Retake
+        ));
+        assert!(matches!(
+            fresh.decide(&err_of(ActionErrorKind::NodeStale)),
+            RetryDecision::Stop(_)
+        ));
         assert_eq!(fresh.consumed, 2, "重试次数 = max-1");
     }
 }

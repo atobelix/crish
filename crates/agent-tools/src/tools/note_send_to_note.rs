@@ -120,9 +120,7 @@ impl Tool for SendToNoteTool {
         let mode = parse_apply_mode(&args)?;
         let origin = optional_string(&args, "origin").unwrap_or_else(|| "agent".to_string());
         if origin != "user" && origin != "agent" {
-            return Err(ToolError::invalid_input(
-                "origin must be 'user' or 'agent'",
-            ));
+            return Err(ToolError::invalid_input("origin must be 'user' or 'agent'"));
         }
         let batch_id = optional_string(&args, "batch_id");
 

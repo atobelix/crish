@@ -162,7 +162,8 @@ mod tests {
     /// ws 串同源）；开关开 + 无端点 → 结构化 `tool.browser.not_ready`。
     #[test]
     fn guard_allowed_exposes_endpoint_when_ready() {
-        let ep = attach_exposure_decision(true, Some(&sample_endpoint())).expect("开启且就绪应放行");
+        let ep =
+            attach_exposure_decision(true, Some(&sample_endpoint())).expect("开启且就绪应放行");
         assert_eq!(ep.port, 41352);
         assert_eq!(ep.browser_url, "http://127.0.0.1:41352");
         assert_eq!(
@@ -223,10 +224,17 @@ mod tests {
         assert_eq!(win.command, "cmd");
         assert_eq!(
             win.args,
-            ["/c", "npx", "-y", "chrome-devtools-mcp", "--browserUrl", url]
-                .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>()
+            [
+                "/c",
+                "npx",
+                "-y",
+                "chrome-devtools-mcp",
+                "--browserUrl",
+                url
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
         );
         win.validate().expect("Windows 形态配置应合法");
         let unix = mcp_attach_server_config("browser-mcp", url, false);

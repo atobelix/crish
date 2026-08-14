@@ -141,23 +141,18 @@ impl McpServerSession {
 
     /// 退出原因（未退出为 None）
     pub fn exit_reason(&self) -> Option<String> {
-        self.exit_reason
-            .lock()
-            .unwrap_or_else(recover_lock)
-            .clone()
+        self.exit_reason.lock().unwrap_or_else(recover_lock).clone()
     }
 
     /// stderr 尾部（最近若干行，诊断用）
     pub fn stderr_tail(&self) -> Vec<String> {
-        self.stderr_tail
-            .lock()
-            .unwrap_or_else(recover_lock)
-            .clone()
+        self.stderr_tail.lock().unwrap_or_else(recover_lock).clone()
     }
 
     /// 设置运行状态（原子写）
     pub(crate) fn set_state(&self, state: McpServerRuntimeState) {
-        self.state.store(runtime_state_code(state), Ordering::SeqCst);
+        self.state
+            .store(runtime_state_code(state), Ordering::SeqCst);
     }
 
     /// 标记会话已退出（崩溃 / 被停止；幂等）
@@ -172,9 +167,7 @@ impl McpServerSession {
             }
         }
         self.state.store(STATE_EXITED, Ordering::SeqCst);
-        let pending = std::mem::take(
-            &mut *self.pending.lock().unwrap_or_else(recover_lock),
-        );
+        let pending = std::mem::take(&mut *self.pending.lock().unwrap_or_else(recover_lock));
         drop(pending);
     }
 
@@ -206,7 +199,10 @@ impl McpServerSession {
         let mut child = command.spawn().map_err(|e| {
             ToolError::new(
                 codes::MCP_CONNECTION_FAILED,
-                format!("启动 MCP server {} 失败（command={}）：{e}", config.server_id, config.command),
+                format!(
+                    "启动 MCP server {} 失败（command={}）：{e}",
+                    config.server_id, config.command
+                ),
             )
         })?;
         let stdin = child
@@ -309,20 +305,14 @@ impl McpServerSession {
             })
         };
         if let Err(e) = written {
-            self.pending
-                .lock()
-                .unwrap_or_else(recover_lock)
-                .remove(&id);
+            self.pending.lock().unwrap_or_else(recover_lock).remove(&id);
             return Err(e);
         }
         match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(response)) => response_result(&self.server_id, response),
             Ok(Err(_)) => Err(self.unavailable_error()),
             Err(_) => {
-                self.pending
-                    .lock()
-                    .unwrap_or_else(recover_lock)
-                    .remove(&id);
+                self.pending.lock().unwrap_or_else(recover_lock).remove(&id);
                 Err(ToolError::new(
                     codes::RUNTIME_TIMEOUT,
                     format!("MCP 请求超时（{}ms）：{}", timeout.as_millis(), method),
@@ -335,7 +325,11 @@ impl McpServerSession {
     ///
     /// `pub(crate)`：`bridge_registry` 的 start 握手（notifications/initialized）
     /// 经此。
-    pub(crate) async fn send_notification(&self, method: &str, params: Value) -> Result<(), ToolError> {
+    pub(crate) async fn send_notification(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<(), ToolError> {
         if !self.is_running() {
             return Err(self.unavailable_error());
         }
@@ -390,14 +384,19 @@ impl McpServerSession {
 
     /// 枚举远端工具（tools/list）
     pub(crate) async fn list_tools_remote(&self) -> Result<Vec<McpToolInfo>, ToolError> {
-        let result = self.request("tools/list", json!({}), DEFAULT_MCP_LIST_TIMEOUT).await?;
+        let result = self
+            .request("tools/list", json!({}), DEFAULT_MCP_LIST_TIMEOUT)
+            .await?;
         let tools = result
             .get("tools")
             .and_then(Value::as_array)
             .ok_or_else(|| {
                 ToolError::new(
                     codes::MCP_PROTOCOL_VIOLATION,
-                    format!("MCP server {} 的 tools/list 响应缺少 tools 数组", self.server_id),
+                    format!(
+                        "MCP server {} 的 tools/list 响应缺少 tools 数组",
+                        self.server_id
+                    ),
                 )
             })?;
         tools.iter().map(parse_tool_info).collect()

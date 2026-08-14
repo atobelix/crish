@@ -16,8 +16,7 @@ use std::sync::Arc;
 
 use super::wait_defs::{
     collect_subagent_output_files, now_millis, DispatchDeclaration, SubagentOutput,
-    SubagentWaitChannel, SubagentWaitResult, WaitMode, DEFAULT_TIMER_WAIT_MS,
-    MAX_WAIT_TIMEOUT_MS,
+    SubagentWaitChannel, SubagentWaitResult, WaitMode, DEFAULT_TIMER_WAIT_MS, MAX_WAIT_TIMEOUT_MS,
 };
 
 /// wait_subagents 工具：三模式调度等待（await-all / timer / parallel-work）

@@ -54,10 +54,10 @@ mod wait_tool;
 
 pub use wait_defs::{
     collect_subagent_output_files, dispatch_outputs_value, parse_dispatch_outputs,
-    DEFAULT_TIMER_WAIT_MS, DISPATCH_META_KEY_AGENTS, DISPATCH_META_KEY_DISPATCHED_AT,
-    DISPATCH_META_KEY_MODE, DISPATCH_META_KEY_OUTPUTS, DISPATCH_META_KEY_WAIT_MS,
-    MAX_WAIT_TIMEOUT_MS, DispatchDeclaration, SubagentOutput, SubagentWaitChannel,
-    SubagentWaitError, SubagentWaitResult, SubagentWaitStatus, WaitMode,
+    DispatchDeclaration, SubagentOutput, SubagentWaitChannel, SubagentWaitError,
+    SubagentWaitResult, SubagentWaitStatus, WaitMode, DEFAULT_TIMER_WAIT_MS,
+    DISPATCH_META_KEY_AGENTS, DISPATCH_META_KEY_DISPATCHED_AT, DISPATCH_META_KEY_MODE,
+    DISPATCH_META_KEY_OUTPUTS, DISPATCH_META_KEY_WAIT_MS, MAX_WAIT_TIMEOUT_MS,
 };
 pub use wait_events::{wait_for_terminal_events, SubagentTerminalEvent};
 pub(crate) use wait_tool::WaitSubagentsTool;

@@ -10,7 +10,9 @@
 
 use super::migrate_steps::*;
 use super::schema::{create_v1_schema, create_v5_schema};
-use super::{DbFailure, DbFailureKind, LocalDb, BACKUP_KEEP, LATEST_VERSION, SCHEMA_VERSION_STRING};
+use super::{
+    DbFailure, DbFailureKind, LocalDb, BACKUP_KEEP, LATEST_VERSION, SCHEMA_VERSION_STRING,
+};
 use std::path::Path;
 
 impl LocalDb {
@@ -142,9 +144,7 @@ impl LocalDb {
         let path: Option<std::path::PathBuf> = conn
             .path()
             .map(std::path::PathBuf::from)
-            .filter(|p| {
-                p != Path::new(":memory:") && !p.as_os_str().is_empty()
-            });
+            .filter(|p| p != Path::new(":memory:") && !p.as_os_str().is_empty());
         let start_version = if current == 0 { 1 } else { current };
 
         for version in (start_version + 1)..=LATEST_VERSION {

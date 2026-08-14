@@ -40,24 +40,17 @@ pub enum Located {
 /// 遮挡检测固定模板（参数仅 x/y 数字，经序列化注入；目标元素经 objectId 绑定 `this`）。
 /// 注意：必须是普通函数（`Runtime.callFunctionOn` 仅对普通函数绑定 objectId 的
 /// `this`，箭头函数取词法 `this`=window → `this.contains` 抛 TypeError，联调 E3 根因）。
-const OCCLUSION_TEMPLATE: &str =
-    r#"function(x, y) { const el = document.elementFromPoint(x, y); return el === this || this.contains(el); }"#;
+const OCCLUSION_TEMPLATE: &str = r#"function(x, y) { const el = document.elementFromPoint(x, y); return el === this || this.contains(el); }"#;
 
 /// 无坐标路径定位（§3.1：push 取 nodeId；空 nodeIds → NodeStale）。
-pub async fn resolve_node_id(
-    ops: &dyn PageOps,
-    backend_node_id: i64,
-) -> Result<i64, ActionError> {
+pub async fn resolve_node_id(ops: &dyn PageOps, backend_node_id: i64) -> Result<i64, ActionError> {
     let ids = ops.push_nodes(&[backend_node_id]).await?;
-    ids.first()
-        .copied()
-        .filter(|id| *id > 0)
-        .ok_or_else(|| {
-            ActionError::new(
-                ActionErrorKind::NodeStale,
-                "pushNodesByBackendIdsToFrontend 返回空 nodeIds（节点已过期）",
-            )
-        })
+    ids.first().copied().filter(|id| *id > 0).ok_or_else(|| {
+        ActionError::new(
+            ActionErrorKind::NodeStale,
+            "pushNodesByBackendIdsToFrontend 返回空 nodeIds（节点已过期）",
+        )
+    })
 }
 
 /// 坐标路径定位（§3.2/§3.3/§3.4）：push → box → 中心点 → 遮挡检测。
@@ -130,7 +123,10 @@ pub async fn resolve_scroll_point(
 ///
 /// `content` 为 8 个数字 = 4 个点（左上/右上/右下/左下）；中心取对边中点；
 /// 注入点必须落在 `[0, viewport.w/h)` 内；四角共点（零尺寸）视为不可见。
-pub fn click_point_from_model(model: &crate::cdp::domains::BoxModel, viewport: &ViewportSize) -> Option<ResolvedPoint> {
+pub fn click_point_from_model(
+    model: &crate::cdp::domains::BoxModel,
+    viewport: &ViewportSize,
+) -> Option<ResolvedPoint> {
     let content = &model.content;
     if content.len() < 8 {
         return None;
@@ -187,7 +183,10 @@ mod tests {
     /// §3.3 中心点计算与视口裁剪/零尺寸判定。
     #[test]
     fn click_point_calculation() {
-        let viewport = ViewportSize { width: 1280.0, height: 720.0 };
+        let viewport = ViewportSize {
+            width: 1280.0,
+            height: 720.0,
+        };
         let model = box_at(10.0, 20.0, 100.0, 50.0);
         let pt = click_point_from_model(&model, &viewport).expect("应算出中心");
         assert_eq!(pt.x, 60.0);
@@ -235,7 +234,10 @@ mod tests {
     #[tokio::test]
     async fn resolve_point_ok() {
         let ops = MockOps::new();
-        let viewport = ViewportSize { width: 1280.0, height: 720.0 };
+        let viewport = ViewportSize {
+            width: 1280.0,
+            height: 720.0,
+        };
         let pt = resolve_click_point(&ops, 11, &viewport, 2)
             .await
             .expect("应解析出注入点");
@@ -248,7 +250,10 @@ mod tests {
     async fn box_model_failure_is_node_stale() {
         let ops = MockOps::new();
         ops.state.lock().unwrap().box_models.remove(&111);
-        let viewport = ViewportSize { width: 1280.0, height: 720.0 };
+        let viewport = ViewportSize {
+            width: 1280.0,
+            height: 720.0,
+        };
         let err = resolve_click_point(&ops, 11, &viewport, 2)
             .await
             .expect_err("应 NodeStale");
@@ -260,11 +265,15 @@ mod tests {
     async fn offscreen_scroll_retries_then_not_interactive() {
         let ops = MockOps::new();
         // box 在视口外（x=2000）→ scrollIntoView 后（mock 位置不变）仍不可见
-        ops.state.lock().unwrap().box_models.insert(
-            111,
-            box_at(2000.0, 0.0, 100.0, 50.0),
-        );
-        let viewport = ViewportSize { width: 1280.0, height: 720.0 };
+        ops.state
+            .lock()
+            .unwrap()
+            .box_models
+            .insert(111, box_at(2000.0, 0.0, 100.0, 50.0));
+        let viewport = ViewportSize {
+            width: 1280.0,
+            height: 720.0,
+        };
         let err = resolve_click_point(&ops, 11, &viewport, 2)
             .await
             .expect_err("应 NotInteractive");
@@ -277,7 +286,10 @@ mod tests {
     async fn occluded_is_not_interactive() {
         let ops = MockOps::new();
         ops.state.lock().unwrap().occlusion = false;
-        let viewport = ViewportSize { width: 1280.0, height: 720.0 };
+        let viewport = ViewportSize {
+            width: 1280.0,
+            height: 720.0,
+        };
         let err = resolve_click_point(&ops, 11, &viewport, 2)
             .await
             .expect_err("应 NotInteractive");

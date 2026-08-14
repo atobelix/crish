@@ -15,8 +15,8 @@
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::note_backend::NoteBackendError;
-use crate::tools::require_string;
 use crate::tools::note_query_blocks::NOTE_BACKEND_UNWIRED;
+use crate::tools::require_string;
 use async_trait::async_trait;
 
 /// `document_get_md` 工具（dangerous=false，只读，进子 agent 只读集）
@@ -96,9 +96,7 @@ impl Tool for DocumentGetMdTool {
 mod tests {
     use super::*;
     use crate::context::create_mock_tool_context;
-    use crate::note_backend::{
-        MemoryNoteBackend, NoteApplyMdRequest, NoteApplyMode, NoteBackend,
-    };
+    use crate::note_backend::{MemoryNoteBackend, NoteApplyMdRequest, NoteApplyMode, NoteBackend};
     use std::sync::Arc;
 
     #[tokio::test]
@@ -120,10 +118,7 @@ mod tests {
     async fn document_get_md_requires_doc_id() {
         let tool = DocumentGetMdTool::new();
         let ctx = create_mock_tool_context();
-        let err = tool
-            .execute(&ctx, serde_json::json!({}))
-            .await
-            .unwrap_err();
+        let err = tool.execute(&ctx, serde_json::json!({})).await.unwrap_err();
         assert_eq!(err.code(), "tool.invalid_input");
     }
 

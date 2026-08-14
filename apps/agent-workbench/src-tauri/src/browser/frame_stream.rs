@@ -133,7 +133,11 @@ impl FrameStreamController {
     ///
     /// 懒创建 ScreencastSession（P1-A 帧泵；独占消费帧通道）+ start() +
     /// 单飞转发任务（sink 消费端一次取走）。
-    pub(crate) async fn subscribe(self: &Arc<Self>, raw_session: Arc<BrowserSession>, channel: Channel<Response>) {
+    pub(crate) async fn subscribe(
+        self: &Arc<Self>,
+        raw_session: Arc<BrowserSession>,
+        channel: Channel<Response>,
+    ) {
         // 替换既有订阅者：退订旧流（旧 channel 释放 → JS 端收到 end）
         self.unsubscribe().await;
         *self.channel.lock().unwrap_or_else(|p| p.into_inner()) = Some(channel);
@@ -270,7 +274,10 @@ impl FrameStreamController {
             Err(error) => {
                 // 通道失效（webview 关闭/前端已退订）→ 停止（资源纪律）
                 tracing::warn!(target: "browser", error = %error, "帧通道失效（停止转发）");
-                self.set_state(FrameStreamState::Stopped, Some(format!("帧通道失效：{error}")));
+                self.set_state(
+                    FrameStreamState::Stopped,
+                    Some(format!("帧通道失效：{error}")),
+                );
                 false
             }
         }
@@ -345,9 +352,18 @@ mod tests {
     /// 帧状态序列化契约（starting/active/stopped 小写）。
     #[test]
     fn frame_state_serde_contract() {
-        assert_eq!(serde_json::to_string(&FrameStreamState::Starting).unwrap(), "\"starting\"");
-        assert_eq!(serde_json::to_string(&FrameStreamState::Active).unwrap(), "\"active\"");
-        assert_eq!(serde_json::to_string(&FrameStreamState::Stopped).unwrap(), "\"stopped\"");
+        assert_eq!(
+            serde_json::to_string(&FrameStreamState::Starting).unwrap(),
+            "\"starting\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FrameStreamState::Active).unwrap(),
+            "\"active\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FrameStreamState::Stopped).unwrap(),
+            "\"stopped\""
+        );
         assert_eq!(FrameStreamState::Active.as_str(), "active");
     }
 
@@ -369,13 +385,12 @@ mod tests {
         let logs = Arc::new(std::sync::Mutex::new(Vec::new()));
         ctrl.attach_emitter(Arc::new(TestEmitter(Arc::clone(&logs))));
         let (sent_tx, sent_rx) = std_mpsc::channel();
-        *ctrl.channel.lock().unwrap_or_else(|p| p.into_inner()) = Some(Channel::new(
-            move |body: tauri::ipc::InvokeResponseBody| {
+        *ctrl.channel.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(Channel::new(move |body: tauri::ipc::InvokeResponseBody| {
                 sent_tx
                     .send(body)
                     .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("测试通道已关闭")))
-            },
-        ));
+            }));
         let ok = ctrl.forward_one(FrameOut {
             seq: 1,
             width: 800,
@@ -383,7 +398,9 @@ mod tests {
             data: vec![0xAB; 64],
         });
         assert!(ok, "有订阅者必须下行成功");
-        let body = sent_rx.recv_timeout(Duration::from_secs(2)).expect("帧必须下行");
+        let body = sent_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("帧必须下行");
         let bytes = match body {
             tauri::ipc::InvokeResponseBody::Raw(b) => b,
             other => panic!("载荷必须为 Raw：{other:?}"),
@@ -395,7 +412,9 @@ mod tests {
         assert_eq!(ctrl.state(), FrameStreamState::Active, "首帧下行转 active");
         let log = logs.lock().unwrap_or_else(|p| p.into_inner());
         assert!(
-            log.iter().any(|s| s.contains("browser://frame-state-changed") && s.contains("\"state\":\"active\"")),
+            log.iter()
+                .any(|s| s.contains("browser://frame-state-changed")
+                    && s.contains("\"state\":\"active\"")),
             "必须发射 active 事件：{log:?}"
         );
     }
