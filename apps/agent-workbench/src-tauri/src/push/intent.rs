@@ -623,7 +623,6 @@ pub fn push_intent_with_kill_source(
         | AgentEvent::ToolEnd { .. }
         | AgentEvent::ToolBatchStart { .. }
         | AgentEvent::ToolBatchEnd { .. }
-        | AgentEvent::ToolInputRepaired { .. }
         | AgentEvent::ContextCompressionStart { .. }
         | AgentEvent::ContextCompressionEnd { .. }
         | AgentEvent::ProviderDiagnostic { .. }
@@ -644,7 +643,18 @@ pub fn push_intent_with_kill_source(
         | AgentEvent::RecoveryBudgetDenied { .. }
         | AgentEvent::GoalRoundStarted { .. }
         | AgentEvent::GoalRoundCompleted { .. }
-        | AgentEvent::GoalContinuationDecided { .. } => None,
+        | AgentEvent::GoalContinuationDecided { .. }
+        // D-03 观测补全九事件（全 Delta 可丢级观测，桌面观测面，
+        // 不产生推送意图——tool-input-repaired 已核销删除）
+        | AgentEvent::SteeringEvaluated { .. }
+        | AgentEvent::ControlIntent { .. }
+        | AgentEvent::HookOutcome { .. }
+        | AgentEvent::SummaryBackground { .. }
+        | AgentEvent::StageSummaryMilestone { .. }
+        | AgentEvent::NudgeEnqueued { .. }
+        | AgentEvent::RecoveryAcknowledged { .. }
+        | AgentEvent::RecoveryRetryAttempted { .. }
+        | AgentEvent::ProviderRequestAnchored { .. } => None,
     }
 }
 
@@ -1218,13 +1228,17 @@ mod tests {
                 turn_index: 1,
                 timestamp: "t".to_string(),
                 tool_call_count: 0,
+                usage: None,
             },
-            AgentEvent::ToolInputRepaired {
+            AgentEvent::SteeringEvaluated {
                 session_id: "s-7".to_string(),
                 timestamp: "t".to_string(),
-                tool_call_id: "tc-1".to_string(),
-                tool_name: "bash".to_string(),
-                notes: vec![],
+                phase: "empty-response".to_string(),
+                hit_strategies: vec![],
+                steering_count_before: 0,
+                steering_count_after: 0,
+                budget_remaining: None,
+                reset: false,
             },
             AgentEvent::ContextCompressionStart {
                 session_id: "s-7".to_string(),

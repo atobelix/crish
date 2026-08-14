@@ -1,19 +1,21 @@
 //! 事件 schema 版本化兼容测试（PE-03 T03.10 / PE-12 T12.5/T12.6）
 //!
 //! 覆盖：
-//! - v1 golden fixture（tests/fixtures/events-v1/，49 事件每类 ≥1 条，无
+//! - v1 golden fixture（tests/fixtures/events-v1/，57 事件每类 ≥1 条，无
 //!   schemaVersion 的 v1 形状）反序列化全部成功，schemaVersion 缺省补 1；
 //! - 关键字段抽查（含旧 RuntimeError `error: String` 形态）；
 //! - 完整信封帧（runId/sequence）解析；
 //! - 新信封序列化恒带 `schemaVersion: 1`；未来版本号透传不丢弃；
-//! - 变体数一致性断言：49 == 本清单 == 33-event-schema-changelog.md v1 表登记数
+//! - 变体数一致性断言：57 == 本清单 == 33-event-schema-changelog.md v1 表登记数
 //!   （新增事件类型必须同步登记 changelog + 本清单 + fixtures，T12.6 门禁；
 //!   2026-08-03 P5 S3 兼容新增 cache-* 三事件，24 → 27；I2-S8 新增
 //!   security-audit，27 → 28；I5-M7 新增 subagent 域三事件，28 → 31；
 //!   2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38；
 //!   2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40；
 //!   同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41；
-//!   2026-08-11 D8 恢复域 + goal 域兼容新增 8 事件，41 → 49）；
+//!   2026-08-11 D8 恢复域 + goal 域兼容新增 8 事件，41 → 49；
+//!   2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除 + 9 新观测事件，
+//!   49 → 57）；
 //! - 缓存测量域三变体（P5 S3 §3.1.3）serde roundtrip / camelCase / 缺省字段；
 //! - 任务域七变体（T-AB-17，01 方案 §4.5 冻结契约）serde roundtrip /
 //!   camelCase / 缺省字段 / 信封 schemaVersion。
@@ -26,12 +28,14 @@ use serde_json::{json, Value};
 /// 统一 fixture 访问辅助（T11.3 golden 规范：tests/common/mod.rs 单一实现）
 mod common;
 
-/// v1 基线 49 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁；
+/// v1 基线 57 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁；
 /// 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38，登记于 changelog §四
 /// 1.4 行；2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40，登记于
 /// changelog §四 1.5 行；同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41，
 /// 登记于 changelog §四 1.6 行；2026-08-11 D8 恢复域 + goal 域兼容新增
-/// 8 事件，41 → 49，登记于 changelog §四 1.9 行；原 `v1_baseline_has_exactly_31_event_types` /
+/// 8 事件，41 → 49，登记于 changelog §四 1.9 行；2026-08-14 D-03 契约窗口
+/// tool-input-repaired 核销删除 + 9 新观测事件，49 → 57，登记于 changelog
+/// §四 1.10 行；原 `v1_baseline_has_exactly_31_event_types` /
 /// `v1_baseline_has_exactly_38_event_types` / `v1_baseline_has_exactly_40_event_types` /
 /// `v1_baseline_has_exactly_41_event_types` 断言随基线演进改名并同步更新——
 /// 旧名即留痕，见测试体注释）
@@ -48,7 +52,6 @@ const V1_EVENT_TYPES: &[&str] = &[
     "tool-end",
     "tool-batch-start",
     "tool-batch-end",
-    "tool-input-repaired",
     "context-compression-start",
     "context-compression-end",
     "provider-diagnostic",
@@ -93,29 +96,42 @@ const V1_EVENT_TYPES: &[&str] = &[
     "goal-round-started",
     "goal-round-completed",
     "goal-continuation-decided",
+    // D-03 观测补全域（契约窗口兼容新增，2026-08-14；登记于 changelog §四
+    // 1.10 行；tool-input-repaired 核销删除已同步移除）
+    "steering-evaluated",
+    "control-intent",
+    "hook-outcome",
+    "summary-background",
+    "stage-summary-milestone",
+    "nudge-enqueued",
+    "recovery-acknowledged",
+    "recovery-retry-attempted",
+    "provider-request-anchored",
 ];
 
 // ── 1. 变体数一致性：49 清单 ↔ fixtures ↔ changelog ──
 
-/// v1 基线必须为 49 事件（41 基线 + D8 恢复域 + goal 域 8 事件）。
+/// v1 基线必须为 57 事件（49 基线 + D-03 契约窗口 9 新观测事件 -
+/// tool-input-repaired 核销）。
 ///
 /// 原断言名 `v1_baseline_has_exactly_31_event_types`（2026-08-03 冻结 31
 /// 事件基线）、`v1_baseline_has_exactly_38_event_types`（2026-08-04 任务域
 /// 演进）、`v1_baseline_has_exactly_40_event_types`（2026-08-05 定时器域
 /// 演进）与 `v1_baseline_has_exactly_41_event_types`（2026-08-05 cron 域
-/// 演进）随基线演进改名升级——基线演进留痕：28 → 31 → 38 → 40 → 41 → 49
-/// 一路只增不减，均为 minor 兼容新增（旧解析器对未知 `type` 静默忽略，信封
-/// schemaVersion 恒 1 不变）。
+/// 演进）随基线演进改名升级——基线演进留痕：28 → 31 → 38 → 40 → 41 → 49 → 57
+/// 一路只增不减（49 → 57 为 D-03 契约窗口净增 8：tool-input-repaired 核销
+/// 删除 + 9 新观测事件），均为 minor 兼容新增（旧解析器对未知 `type` 静默
+/// 忽略，信封 schemaVersion 恒 1 不变）。
 #[test]
-fn v1_baseline_has_exactly_49_event_types() {
-    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（49）
+fn v1_baseline_has_exactly_57_event_types() {
+    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（57）
     assert_eq!(
         V1_EVENT_TYPES.len(),
-        49,
-        "v1 基线必须是 49 事件（41 基线 + D8 恢复域 + goal 域 8 事件）"
+        57,
+        "v1 基线必须是 57 事件（49 基线 + D-03 九观测事件 - tool-input-repaired 核销）"
     );
     let unique: std::collections::HashSet<&&str> = V1_EVENT_TYPES.iter().collect();
-    assert_eq!(unique.len(), 49, "清单内事件名不得重复");
+    assert_eq!(unique.len(), 57, "清单内事件名不得重复");
 }
 
 #[test]

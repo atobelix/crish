@@ -35,7 +35,6 @@ fn event_session_id_mut(event: &mut AgentEvent) -> Option<&mut String> {
         AgentEvent::ToolEnd { session_id, .. } => Some(session_id),
         AgentEvent::ToolBatchStart { session_id, .. } => Some(session_id),
         AgentEvent::ToolBatchEnd { session_id, .. } => Some(session_id),
-        AgentEvent::ToolInputRepaired { session_id, .. } => Some(session_id),
         AgentEvent::ContextCompressionStart { session_id, .. } => Some(session_id),
         AgentEvent::ContextCompressionEnd { session_id, .. } => Some(session_id),
         AgentEvent::ProviderDiagnostic { session_id, .. } => Some(session_id),
@@ -84,6 +83,17 @@ fn event_session_id_mut(event: &mut AgentEvent) -> Option<&mut String> {
         AgentEvent::GoalRoundStarted { .. }
         | AgentEvent::GoalRoundCompleted { .. }
         | AgentEvent::GoalContinuationDecided { .. } => None,
+        // D-03 观测补全九事件（2026-08-14 契约窗口：均携带 sessionId，
+        // 全 Delta 可丢级；归一化注入语义与既有事件一致）
+        AgentEvent::SteeringEvaluated { session_id, .. } => Some(session_id),
+        AgentEvent::ControlIntent { session_id, .. } => Some(session_id),
+        AgentEvent::HookOutcome { session_id, .. } => Some(session_id),
+        AgentEvent::SummaryBackground { session_id, .. } => Some(session_id),
+        AgentEvent::StageSummaryMilestone { session_id, .. } => Some(session_id),
+        AgentEvent::NudgeEnqueued { session_id, .. } => Some(session_id),
+        AgentEvent::RecoveryAcknowledged { session_id, .. } => Some(session_id),
+        AgentEvent::RecoveryRetryAttempted { session_id, .. } => Some(session_id),
+        AgentEvent::ProviderRequestAnchored { session_id, .. } => Some(session_id),
     }
 }
 
@@ -353,6 +363,7 @@ mod tests {
                 turn_index: 0,
                 timestamp: TS.into(),
                 tool_call_count: 0,
+                usage: None,
             },
             AgentEvent::MessageStart {
                 session_id: "s".into(),
@@ -374,6 +385,7 @@ mod tests {
                 batch_id: "b".into(),
                 call: batch_call(),
                 timestamp: TS.into(),
+                turn_index: None,
             },
             AgentEvent::ToolUpdate {
                 session_id: "s".into(),
@@ -387,6 +399,9 @@ mod tests {
                 batch_id: "b".into(),
                 result: batch_result(),
                 timestamp: TS.into(),
+                attempt: None,
+                deduplicated: None,
+                executed_input: None,
             },
             AgentEvent::ToolBatchStart {
                 session_id: "s".into(),
@@ -401,12 +416,17 @@ mod tests {
                 timestamp: TS.into(),
                 calls: vec![batch_result()],
             },
-            AgentEvent::ToolInputRepaired {
+            // D-03 观测补全事件代表（tool-input-repaired 已核销删除，
+            // 以同 Delta 级观测事件占位非终态断言位）
+            AgentEvent::SteeringEvaluated {
                 session_id: "s".into(),
                 timestamp: TS.into(),
-                tool_call_id: "tc".into(),
-                tool_name: "read_file".into(),
-                notes: vec![],
+                phase: "empty-response".into(),
+                hit_strategies: vec![],
+                steering_count_before: 0,
+                steering_count_after: 0,
+                budget_remaining: None,
+                reset: false,
             },
             AgentEvent::ContextCompressionStart {
                 session_id: "s".into(),

@@ -41,7 +41,7 @@ pub use events::{
     EVENT_ENVELOPE_SCHEMA_VERSION, EventPolicy, MissAttribution, PermissionBehavior,
     PermissionDecision, PermissionRequest, PersistenceDecision, RunCacheStats, RunTerminalStatus,
     SecurityAuditDecision, SecurityAuditOperation, SubagentEndStatus, SubagentEventKind,
-    SubagentEventPayload, ToolMetadata,
+    SubagentEventPayload, ToolMetadata, TurnUsage,
 };
 pub use history::HistoryMessage;
 pub use impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};

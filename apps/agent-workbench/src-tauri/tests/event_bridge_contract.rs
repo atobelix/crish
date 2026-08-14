@@ -185,12 +185,16 @@ fn envelope_keys_injected_on_every_event() {
             batch_id: "b1".into(),
             call: batch_call(),
             timestamp: TS.into(),
+            turn_index: None,
         },
         AgentEvent::ToolEnd {
             session_id: "s1".into(),
             batch_id: "b1".into(),
             result: batch_result(),
             timestamp: TS.into(),
+            attempt: None,
+            deduplicated: None,
+            executed_input: None,
         },
         AgentEvent::ApprovalRequested {
             session_id: "s1".into(),
@@ -322,6 +326,7 @@ fn tool_start_call_contract() {
                 batch_id: "b1".into(),
                 call: batch_call(),
                 timestamp: TS.into(),
+                turn_index: None,
             },
             Some("r1".into()),
             Some(1),
@@ -346,6 +351,9 @@ fn tool_end_result_contract() {
                 batch_id: "b1".into(),
                 result: batch_result(),
                 timestamp: TS.into(),
+                attempt: None,
+                deduplicated: None,
+                executed_input: None,
             },
             Some("r1".into()),
             Some(1),
@@ -499,17 +507,18 @@ fn agent_end_reason_and_error() {
 
 #[test]
 fn no_error_envelope_variant_in_event_set() {
-    // AgentEvent 24 变体穷举 type_name 白名单——不存在 error 信封变体
-    // （IPC 模式失败收口走 run-terminal(failed)，30 号清单 §4.1-13 记录）
+    // AgentEvent 24 事件基线穷举 type_name 白名单——不存在 error 信封变体
+    // （IPC 模式失败收口走 run-terminal(failed)，30 号清单 §4.1-13 记录）。
+    // 2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除，基线 24 → 23。
     let names: Vec<&str> = vec![
         "agent-start", "agent-end", "turn-start", "turn-end", "message-start", "message-delta",
         "message-end", "tool-start", "tool-update", "tool-end", "tool-batch-start",
-        "tool-batch-end", "tool-input-repaired", "context-compression-start",
+        "tool-batch-end", "context-compression-start",
         "context-compression-end", "provider-diagnostic", "runtime-error", "runtime-steering",
         "runtime-intervention-required", "approval-requested", "approval-resolved",
         "checkpoint-created", "checkpoint-restored", "run-terminal",
     ];
-    assert_eq!(names.len(), 24, "24 事件基线（33-event-schema-changelog.md v1 表）");
+    assert_eq!(names.len(), 23, "24 事件基线（tool-input-repaired 核销后为 23）");
     assert!(!names.contains(&"error"), "error 信封不是域事件");
 }
 
@@ -535,6 +544,7 @@ fn schema_version_always_injected_as_one() {
             batch_id: "b1".into(),
             call: batch_call(),
             timestamp: TS.into(),
+            turn_index: None,
         },
         AgentEvent::ApprovalResolved {
             session_id: "s1".into(),

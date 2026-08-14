@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 49 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 57 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
 //! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
 //! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
@@ -184,7 +184,7 @@ pub enum SubagentEndStatus {
 /// terminal 必达」落地；先例：buffer.rs DropClass 两级——非 delta 全 Critical）
 ///
 /// - [BackpressureLevel::Delta]：增量可丢（message-delta、subagent-event 的
-///   progress 类），非持久化不阻塞 drive loop；
+///   progress 类、D-03 观测补全九事件），非持久化不阻塞 drive loop；
 /// - [BackpressureLevel::Soft]：尽力投递（subagent-event 的 message/tool 类），
 ///   可丢弃重发；
 /// - [BackpressureLevel::Critical]：必达（subagent-started/subagent-ended、
@@ -353,7 +353,27 @@ pub enum MissAttribution {
     Unknown,
 }
 
-/// 49 种域事件（tagged enum，双端契约唯一事实源）
+/// 单轮 usage 载荷（EV-11/D-03：`turn-end.usage` 可选字段；跨 run 可比——
+/// 与 RunCacheStats 同为 token 计数基元，六字段全 u64 必填，缺省整帧
+/// 省略；前端按字段白名单消费，缺省视为无 usage 数据）
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnUsage {
+    /// 输入 token
+    pub prompt_tokens: u64,
+    /// 输出 token
+    pub completion_tokens: u64,
+    /// 总 token
+    pub total_tokens: u64,
+    /// 缓存命中读取 token
+    pub cache_read_tokens: u64,
+    /// 缓存写入 token
+    pub cache_write_tokens: u64,
+    /// 未命中输入 token
+    pub cache_miss_tokens: u64,
+}
+
+/// 57 种域事件（tagged enum，双端契约唯一事实源）
 ///
 /// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
 /// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
@@ -362,6 +382,12 @@ pub enum MissAttribution {
 /// 38 → 40；同日 T-CF-08 cron 域兼容新增 1 变体（cron-fired），40 → 41；
 /// 2026-08-11 任务连续性方案恢复域 + goal 域兼容新增 8 变体
 /// （recovery-* ×5 + goal-* ×3），41 → 49（D8 事件登记，编号 42-49）。
+/// 2026-08-14 D-03 契约窗口（事件面补全与原子要素）：tool-input-repaired
+/// 核销删除（生产零发射死契约，观测需求由 tool-start 实际入参字段承载）+
+/// 兼容新增 9 变体（steering-evaluated/control-intent/hook-outcome/
+/// summary-background/stage-summary-milestone/nudge-enqueued/
+/// recovery-acknowledged/recovery-retry-attempted/provider-request-anchored，
+/// 全 Delta 可丢级观测事件），49 → 57（编号 50-58）。
 ///
 /// 跨进程序列化是主用途，事件按值短暂传递，变体间内存差异非热点，
 /// 故不装箱（装箱会破坏调用方 API 形态），显式允许 large_enum_variant。
@@ -398,13 +424,16 @@ pub enum AgentEvent {
         turn_index: u32,
         timestamp: String,
     },
-    /// 一轮结束（toolCallCount 供观测）
+    /// 一轮结束（toolCallCount 供观测；usage 可选——EV-11 每 turn usage
+    /// 载荷，旧帧缺省 None 向后兼容）
     #[serde(rename = "turn-end", rename_all = "camelCase")]
     TurnEnd {
         session_id: String,
         turn_index: u32,
         timestamp: String,
         tool_call_count: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<TurnUsage>,
     },
 
     // ── Message 域（03 §1.3，前端强依赖）──
@@ -435,13 +464,17 @@ pub enum AgentEvent {
     },
 
     // ── Tool 域（03 §1.4，前端强依赖）──
-    /// 单工具调用开始（硬依赖 03 §5.1-7：call.id/toolName）
+    /// 单工具调用开始（硬依赖 03 §5.1-7：call.id/toolName；turn_index 可选——
+    /// EV-09/EV-11 工具事件与 message-end.turnIndex 对齐的轮次关联键，
+    /// 旧帧缺省 None 向后兼容）
     #[serde(rename = "tool-start", rename_all = "camelCase")]
     ToolStart {
         session_id: String,
         batch_id: String,
         call: ToolBatchCall,
         timestamp: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn_index: Option<u32>,
     },
     /// 工具执行进度增量（预留：tool-args-delta 增量参数流）
     #[serde(rename = "tool-update", rename_all = "camelCase")]
@@ -452,13 +485,22 @@ pub enum AgentEvent {
         update: ToolProgressUpdate,
         timestamp: String,
     },
-    /// 单工具调用结束（硬依赖 03 §5.1-8：result.id/toolCallId/output/isError）
+    /// 单工具调用结束（硬依赖 03 §5.1-8：result.id/toolCallId/output/isError；
+    /// attempt/deduplicated/executed_input 可选——EV-09/EV-11 工具原子要素：
+    /// 审批重试 attempt 链、批内去重标记、中间件改写后的实际执行入参
+    /// （与 tool-start.call.input 展示原始入参对照），旧帧缺省向后兼容）
     #[serde(rename = "tool-end", rename_all = "camelCase")]
     ToolEnd {
         session_id: String,
         batch_id: String,
         result: ToolBatchResult,
         timestamp: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        attempt: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        deduplicated: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        executed_input: Option<serde_json::Value>,
     },
     /// 工具批量开始（前端显式 ignore）
     #[serde(rename = "tool-batch-start", rename_all = "camelCase")]
@@ -476,15 +518,6 @@ pub enum AgentEvent {
         batch_id: String,
         timestamp: String,
         calls: Vec<ToolBatchResult>,
-    },
-    /// 工具入参修复记录（validation/repair 流程）
-    #[serde(rename = "tool-input-repaired", rename_all = "camelCase")]
-    ToolInputRepaired {
-        session_id: String,
-        timestamp: String,
-        tool_call_id: String,
-        tool_name: String,
-        notes: Vec<String>,
     },
 
     // ── 压缩域（03 §1.6）──
@@ -999,7 +1032,8 @@ pub enum AgentEvent {
     /// orchestration.ts:38-44；prompt 为续轮注入文本）
     #[serde(rename = "goal-continuation-decided", rename_all = "camelCase")]
     GoalContinuationDecided {
-        /// 决策动作（continue/complete/stop 等）
+        /// 决策动作（continue/complete/stop 等；String 承载，兼容旧帧
+        /// 恒 continue——D-03 EV-07 语义对齐后支持完整决策集）
         action: String,
         /// 决策原因
         reason: String,
@@ -1012,6 +1046,154 @@ pub enum AgentEvent {
         /// 附加详情（可选）
         #[serde(default, skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
+    },
+
+    // ── D-03 事件面补全域（2026-08-14 契约窗口：全 Delta 可丢级观测事件，
+    //     不落库不阻塞主链；编号 50-58，按窗口任务清单声明序追加）──
+
+    /// steering 评估过程（EV-03：evaluate 命中/跳过 + 计数重置；hitStrategies
+    /// 命中策略名列表，空 = 无动作；reset 标志 = 本评估伴随计数重置）
+    #[serde(rename = "steering-evaluated", rename_all = "camelCase")]
+    SteeringEvaluated {
+        session_id: String,
+        timestamp: String,
+        /// "empty-response" | "after-tools"
+        phase: String,
+        /// 命中策略名列表（空 = 无动作）
+        hit_strategies: Vec<String>,
+        /// steering 计数（评估前）
+        steering_count_before: u32,
+        /// steering 计数（评估后）
+        steering_count_after: u32,
+        /// max_steering_budget 剩余
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        budget_remaining: Option<u32>,
+        /// 本评估伴随计数重置
+        reset: bool,
+    },
+    /// 控制总线意图两态（EV-04：入队 enqueued / 消费 consumed；intent_id
+    /// 为两态配对键）
+    #[serde(rename = "control-intent", rename_all = "camelCase")]
+    ControlIntent {
+        session_id: String,
+        timestamp: String,
+        /// soft-inject | cooperative-stop | force-cancel
+        kind: String,
+        /// 入队/消费两态配对键
+        intent_id: String,
+        /// 发起方
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<String>,
+        /// cooperative_stop 透出 reason
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        /// enqueued | consumed
+        state: String,
+    },
+    /// hook 执行结果聚合（EV-05：dispatch 单点每批次一次，不逐 hook 发；
+    /// outcome=blocked/timeout 与 ok/failed 可辨，blocked 带原因）
+    #[serde(rename = "hook-outcome", rename_all = "camelCase")]
+    HookOutcome {
+        session_id: String,
+        timestamp: String,
+        /// tool.pre | turn.end | model.beforeRequest | model.afterResponse |
+        /// subagent.start | subagent.end
+        hook_type: String,
+        /// ok | blocked | failed | timeout
+        outcome: String,
+        /// 触发 hook 名
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hook_name: Option<String>,
+        /// 拦截原因（outcome=blocked 时）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blocked_reason: Option<String>,
+    },
+    /// 摘要后台生命周期（EV-06：spawned/attempt/success/failure/give-up
+    /// 单事件多 phase；attempt 序号单调；放弃带原因）
+    #[serde(rename = "summary-background", rename_all = "camelCase")]
+    SummaryBackground {
+        session_id: String,
+        timestamp: String,
+        /// spawned | attempt | success | failure | give-up
+        phase: String,
+        /// 尝试序号（spawned=1，单调递增）
+        attempt: u32,
+        /// 退避/放弃原因
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        /// 关联 compacted-summary-<id>
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message_id: Option<String>,
+    },
+    /// 阶段总结里程碑（EV-07：evaluate_stage_milestones 达标/Summarizer
+    /// 调用/产出/落库各一态；tier=stage-N）
+    #[serde(rename = "stage-summary-milestone", rename_all = "camelCase")]
+    StageSummaryMilestone {
+        session_id: String,
+        timestamp: String,
+        /// reached | summarizing | produced | persisted
+        milestone_type: String,
+        /// stage-N
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tier: Option<String>,
+        /// 里程碑索引
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        milestone_index: Option<u32>,
+    },
+    /// nudge 入队动作（EV-08：PendingNudgeChannel 入队；overwrote = 容量满
+    /// 覆盖最旧）
+    #[serde(rename = "nudge-enqueued", rename_all = "camelCase")]
+    NudgeEnqueued {
+        session_id: String,
+        timestamp: String,
+        /// 入队原因
+        reason: String,
+        /// followUp | pending
+        target_ring: String,
+        /// 容量满覆盖最旧
+        overwrote: bool,
+    },
+    /// 阶梯 2 通知确认（EV-08：recovery.rs acknowledge 处）
+    #[serde(rename = "recovery-acknowledged", rename_all = "camelCase")]
+    RecoveryAcknowledged {
+        session_id: String,
+        timestamp: String,
+        /// 被确认的通知 id
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        notification_id: Option<String>,
+        /// 子代理 run id
+        subagent_run_id: String,
+    },
+    /// 阶梯 1 自动重试（EV-08 G-20：重派成功留痕；from_run_id/new_run_id
+    /// 结构化 run 关联最小面）
+    #[serde(rename = "recovery-retry-attempted", rename_all = "camelCase")]
+    RecoveryRetryAttempted {
+        session_id: String,
+        timestamp: String,
+        /// 尝试次数
+        attempt: u32,
+        /// 重试间隔（毫秒）
+        delay_ms: u64,
+        /// 剩余重试预算
+        budget_remaining: u32,
+        /// 原 run id
+        from_run_id: String,
+        /// 重派后的新 run id
+        new_run_id: String,
+    },
+    /// provider 请求锚点（EV-13：build_request 请求发出点；支撑请求总等待/
+    /// 首字节延迟测量——turn-start 是会话循环侧时间，无请求构造锚点）
+    #[serde(rename = "provider-request-anchored", rename_all = "camelCase")]
+    ProviderRequestAnchored {
+        session_id: String,
+        timestamp: String,
+        /// 当前轮次序号
+        turn_index: u32,
+        /// 当前模型名
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+        /// 请求发出时刻（epoch 毫秒）
+        request_started_at_ms: u64,
     },
 }
 
@@ -1035,7 +1217,7 @@ macro_rules! engine_event_type_names {
         }
 
         impl AgentEvent {
-            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-49 一一对应）
+            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-57 一一对应）
             pub const ALL_TYPE_NAMES: &'static [&'static str] = &[$($name),+];
         }
     };
@@ -1054,7 +1236,6 @@ engine_event_type_names! {
     ToolEnd => "tool-end",
     ToolBatchStart => "tool-batch-start",
     ToolBatchEnd => "tool-batch-end",
-    ToolInputRepaired => "tool-input-repaired",
     ContextCompressionStart => "context-compression-start",
     ContextCompressionEnd => "context-compression-end",
     ProviderDiagnostic => "provider-diagnostic",
@@ -1091,6 +1272,15 @@ engine_event_type_names! {
     GoalRoundStarted => "goal-round-started",
     GoalRoundCompleted => "goal-round-completed",
     GoalContinuationDecided => "goal-continuation-decided",
+    SteeringEvaluated => "steering-evaluated",
+    ControlIntent => "control-intent",
+    HookOutcome => "hook-outcome",
+    SummaryBackground => "summary-background",
+    StageSummaryMilestone => "stage-summary-milestone",
+    NudgeEnqueued => "nudge-enqueued",
+    RecoveryAcknowledged => "recovery-acknowledged",
+    RecoveryRetryAttempted => "recovery-retry-attempted",
+    ProviderRequestAnchored => "provider-request-anchored",
 }
 
 /// 单一事件策略（D-04 PC-05：分类唯一事实源）——同一 match 产出
@@ -1113,6 +1303,11 @@ engine_event_type_names! {
 /// - timer-cancelled = Soft + **NoPersist** + Critical（PC-01 定案）；
 /// - task 终态 4（started/completed/failed/killed）= Critical + Persist +
 ///   Critical（PC-02 定案，D-01 规范化落库点）；
+/// - D-03 观测补全 9 事件（steering-evaluated/control-intent/hook-outcome/
+///   summary-background/stage-summary-milestone/nudge-enqueued/
+///   recovery-acknowledged/recovery-retry-attempted/provider-request-anchored）
+///   = Delta + **NoPersist** + Critical（2026-08-14 契约窗口：可追溯性不
+///   阻塞主链，增量可丢不落库；桥缓冲不丢）；
 /// - 其余 Critical 族（agent/turn/tool/message-end/审批/审计/subagent
 ///   started-ended/goal/recovery/run-terminal 等）= Critical + Persist + Critical。
 pub fn event_policy(event: &AgentEvent) -> EventPolicy {
@@ -1187,6 +1382,25 @@ pub fn event_policy(event: &AgentEvent) -> EventPolicy {
         | AgentEvent::GoalContinuationDecided { .. } => EventPolicy::new(
             BackpressureLevel::Critical,
             PersistenceDecision::Persist,
+            DropClass::Critical,
+        ),
+        // D-03 观测补全事件（2026-08-14 契约窗口：steering-evaluated /
+        // control-intent / hook-outcome / summary-background /
+        // stage-summary-milestone / nudge-enqueued / recovery-acknowledged /
+        // recovery-retry-attempted / provider-request-anchored 九事件）：
+        // 全 Delta + NoPersist + Critical（可追溯性不阻塞主链——增量可丢、
+        // 不落库；桥缓冲不丢，实时面尽力送达）
+        AgentEvent::SteeringEvaluated { .. }
+        | AgentEvent::ControlIntent { .. }
+        | AgentEvent::HookOutcome { .. }
+        | AgentEvent::SummaryBackground { .. }
+        | AgentEvent::StageSummaryMilestone { .. }
+        | AgentEvent::NudgeEnqueued { .. }
+        | AgentEvent::RecoveryAcknowledged { .. }
+        | AgentEvent::RecoveryRetryAttempted { .. }
+        | AgentEvent::ProviderRequestAnchored { .. } => EventPolicy::new(
+            BackpressureLevel::Delta,
+            PersistenceDecision::NoPersist,
             DropClass::Critical,
         ),
         // 其余 Critical 族（agent/turn/tool/message-end/审批/审计/

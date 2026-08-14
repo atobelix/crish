@@ -1,4 +1,4 @@
-//! B1.5 序列化契约测试：49 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
+//! B1.5 序列化契约测试：57 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
 //!
 //! 穷举清单与 [AgentEvent::ALL_TYPE_NAMES]（引擎事件名宏同源生成）动态对照，
 //! 新增事件变体在两处登记后本测试自动纳入，不再硬编码事件数。
@@ -13,7 +13,7 @@ use conex_types::{
     RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
     SubagentEndStatus, SubagentEventKind, SubagentEventPayload, ToolArtifactKind,
     ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory, ToolConcurrency,
-    ToolMetadata, ToolOutput, ToolProgressUpdate,
+    ToolMetadata, ToolOutput, ToolProgressUpdate, TurnUsage,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -236,11 +236,23 @@ fn run_cache_stats_fixture() -> RunCacheStats {
     }
 }
 
-/// 49 种域事件各构造一个实例，顺序与 [AgentEvent::ALL_TYPE_NAMES] 一一对应
+/// turn 级 usage 样本（EV-11/D-03：`turn-end.usage` 六字段全 u64）
+fn turn_usage() -> TurnUsage {
+    TurnUsage {
+        prompt_tokens: 800,
+        completion_tokens: 120,
+        total_tokens: 920,
+        cache_read_tokens: 150,
+        cache_write_tokens: 30,
+        cache_miss_tokens: 650,
+    }
+}
+
+/// 57 种域事件各构造一个实例，顺序与 [AgentEvent::ALL_TYPE_NAMES] 一一对应
 /// （03 §1.1-1.6 全清单 + P5 S3 缓存测量域三事件 + I2-S8 安全审计域 +
 /// I5-M7 子代理域三事件 + T-AB-17 任务域七事件 + T-CF-04 定时器域两事件 +
-/// T-CF-08 cron 域一事件 + D8 恢复域五事件 + goal 域三事件；
-/// 全量穷举不再按域豁免）
+/// T-CF-08 cron 域一事件 + D8 恢复域五事件 + goal 域三事件 +
+/// D-03 观测补全九事件；全量穷举不再按域豁免）
 fn all_events() -> Vec<AgentEvent> {
     let s = "s1".to_string();
     vec![
@@ -264,6 +276,8 @@ fn all_events() -> Vec<AgentEvent> {
             turn_index: 1,
             timestamp: TS.into(),
             tool_call_count: 2,
+            // EV-11/D-03：usage 可选载荷（新帧携带）
+            usage: Some(turn_usage()),
         },
         AgentEvent::MessageStart {
             session_id: s.clone(),
@@ -285,6 +299,8 @@ fn all_events() -> Vec<AgentEvent> {
             batch_id: "b1".into(),
             call: batch_call(),
             timestamp: TS.into(),
+            // EV-09/EV-11：轮次关联键（新帧携带）
+            turn_index: Some(1),
         },
         AgentEvent::ToolUpdate {
             session_id: s.clone(),
@@ -298,6 +314,10 @@ fn all_events() -> Vec<AgentEvent> {
             batch_id: "b1".into(),
             result: batch_result(),
             timestamp: TS.into(),
+            // EV-09/EV-11：工具原子要素（新帧携带；审批重试/去重/改写入参）
+            attempt: Some(1),
+            deduplicated: Some(false),
+            executed_input: Some(json!({ "path": "a.txt" })),
         },
         AgentEvent::ToolBatchStart {
             session_id: s.clone(),
@@ -311,13 +331,6 @@ fn all_events() -> Vec<AgentEvent> {
             batch_id: "b1".into(),
             timestamp: TS.into(),
             calls: vec![batch_result()],
-        },
-        AgentEvent::ToolInputRepaired {
-            session_id: s.clone(),
-            timestamp: TS.into(),
-            tool_call_id: "tc-1".into(),
-            tool_name: "read_file".into(),
-            notes: vec!["补全必填入参 path".into()],
         },
         AgentEvent::ContextCompressionStart {
             session_id: s.clone(),
@@ -594,6 +607,79 @@ fn all_events() -> Vec<AgentEvent> {
             progress_signature: Some("sig-1".to_string()),
             detail: None,
         },
+        // D-03 观测补全九事件（2026-08-14 契约窗口，全 Delta 可丢级；
+        // 与 ALL_TYPE_NAMES 声明序尾部一一对应）
+        AgentEvent::SteeringEvaluated {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            phase: "empty-response".to_string(),
+            hit_strategies: vec!["no-tool-calls".to_string()],
+            steering_count_before: 1,
+            steering_count_after: 2,
+            budget_remaining: Some(3),
+            reset: false,
+        },
+        AgentEvent::ControlIntent {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            kind: "cooperative-stop".to_string(),
+            intent_id: "ci-1".to_string(),
+            source: Some("user".to_string()),
+            reason: Some("用户主动停止".to_string()),
+            state: "consumed".to_string(),
+        },
+        AgentEvent::HookOutcome {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            hook_type: "tool.pre".to_string(),
+            outcome: "blocked".to_string(),
+            hook_name: Some("deny-shell".to_string()),
+            blocked_reason: Some("红线拦截".to_string()),
+        },
+        AgentEvent::SummaryBackground {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            phase: "success".to_string(),
+            attempt: 2,
+            reason: None,
+            message_id: Some("compacted-summary-1".to_string()),
+        },
+        AgentEvent::StageSummaryMilestone {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            milestone_type: "produced".to_string(),
+            tier: Some("stage-1".to_string()),
+            milestone_index: Some(0),
+        },
+        AgentEvent::NudgeEnqueued {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            reason: "stalled-no-progress".to_string(),
+            target_ring: "followUp".to_string(),
+            overwrote: true,
+        },
+        AgentEvent::RecoveryAcknowledged {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            notification_id: Some("n-1".to_string()),
+            subagent_run_id: "sr-1".to_string(),
+        },
+        AgentEvent::RecoveryRetryAttempted {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            attempt: 2,
+            delay_ms: 5_000,
+            budget_remaining: 1,
+            from_run_id: "run-1".to_string(),
+            new_run_id: "run-2".to_string(),
+        },
+        AgentEvent::ProviderRequestAnchored {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            turn_index: 1,
+            model: Some("deepseek-v4-flash".to_string()),
+            request_started_at_ms: 1_785_456_000_000,
+        },
     ]
 }
 
@@ -849,6 +935,7 @@ fn tool_start_hard_dependency_call_id_and_tool_name() {
         batch_id: "b1".into(),
         call: batch_call(),
         timestamp: TS.into(),
+        turn_index: None,
     };
     let json = serde_json::to_value(&event).unwrap();
     assert_eq!(json["call"]["id"], "tc-1");
@@ -856,6 +943,8 @@ fn tool_start_hard_dependency_call_id_and_tool_name() {
     assert_eq!(json["call"]["input"]["path"], "a.txt");
     assert_eq!(json["call"]["category"], "filesystem");
     assert_eq!(json["call"]["concurrency"], "parallel");
+    // D-03（EV-09/EV-11）：turnIndex 可选——None 省略，旧帧形状不变
+    assert!(json.get("turnIndex").is_none(), "turn_index=None 不得序列化 turnIndex 键");
 }
 
 #[test]
@@ -866,6 +955,9 @@ fn tool_end_hard_dependency_result_fields() {
         batch_id: "b1".into(),
         result: batch_result(),
         timestamp: TS.into(),
+        attempt: None,
+        deduplicated: None,
+        executed_input: None,
     };
     let json = serde_json::to_value(&event).unwrap();
     assert_eq!(json["result"]["id"], "tc-1");
@@ -873,6 +965,11 @@ fn tool_end_hard_dependency_result_fields() {
     assert_eq!(json["result"]["output"]["text"], "文件内容");
     assert_eq!(json["result"]["isError"], false);
     assert_eq!(json["result"]["durationMs"], 12);
+    // D-03（EV-09/EV-11）：attempt/deduplicated/executedInput 可选——
+    // None 省略，旧帧形状不变
+    assert!(json.get("attempt").is_none(), "attempt=None 不得序列化 attempt 键");
+    assert!(json.get("deduplicated").is_none(), "deduplicated=None 不得序列化");
+    assert!(json.get("executedInput").is_none(), "executedInput=None 不得序列化");
 }
 
 #[test]
@@ -982,9 +1079,122 @@ fn turn_events_camel_case_fields() {
         turn_index: 3,
         timestamp: TS.into(),
         tool_call_count: 2,
+        usage: None,
     })
     .unwrap();
     assert_eq!(end["toolCallCount"], 2);
+    // D-03（EV-13）：usage 可选——None 省略，旧帧形状不变
+    assert!(end.get("usage").is_none(), "usage=None 不得序列化 usage 键");
+}
+
+/// D-03 契约窗口：turn-end.usage 载荷 roundtrip + 旧帧缺省兼容
+#[test]
+fn turn_end_usage_roundtrip_and_old_frame_compat() {
+    let with_usage = AgentEvent::TurnEnd {
+        session_id: "s1".into(),
+        turn_index: 1,
+        timestamp: TS.into(),
+        tool_call_count: 2,
+        usage: Some(turn_usage()),
+    };
+    let json = serde_json::to_value(&with_usage).unwrap();
+    assert_eq!(json["usage"]["promptTokens"], 800);
+    assert_eq!(json["usage"]["completionTokens"], 120);
+    assert_eq!(json["usage"]["totalTokens"], 920);
+    assert_eq!(json["usage"]["cacheReadTokens"], 150);
+    assert_eq!(json["usage"]["cacheWriteTokens"], 30);
+    assert_eq!(json["usage"]["cacheMissTokens"], 650);
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, with_usage, "turn-end usage roundtrip 保真");
+
+    // 旧帧（无 usage 键）反序列化 → None（serde default 补位，向后兼容）
+    let old = json!({
+        "type": "turn-end",
+        "sessionId": "s1",
+        "turnIndex": 1,
+        "timestamp": TS,
+        "toolCallCount": 2,
+    });
+    let parsed: AgentEvent = serde_json::from_value(old).unwrap();
+    match parsed {
+        AgentEvent::TurnEnd { usage, .. } => {
+            assert_eq!(usage, None, "旧帧缺 usage → None")
+        }
+        other => panic!("期望 turn-end，实际 {other:?}"),
+    }
+}
+
+/// D-03 契约窗口：tool-start.turnIndex / tool-end 原子要素旧帧缺省兼容
+#[test]
+fn tool_events_new_optional_fields_default_to_none_on_old_frames() {
+    let old_start = json!({
+        "type": "tool-start",
+        "sessionId": "s1",
+        "batchId": "b1",
+        "call": {
+            "id": "tc-1",
+            "toolName": "read_file",
+            "summary": "读取",
+            "input": { "path": "a.txt" },
+            "category": "filesystem",
+            "concurrency": "parallel"
+        },
+        "timestamp": TS,
+    });
+    let parsed: AgentEvent = serde_json::from_value(old_start).unwrap();
+    match parsed {
+        AgentEvent::ToolStart { turn_index, .. } => {
+            assert_eq!(turn_index, None, "旧帧缺 turnIndex → None")
+        }
+        other => panic!("期望 tool-start，实际 {other:?}"),
+    }
+
+    let old_end = json!({
+        "type": "tool-end",
+        "sessionId": "s1",
+        "batchId": "b1",
+        "result": {
+            "id": "tc-1",
+            "toolName": "read_file",
+            "output": { "text": "内容" },
+            "isError": false,
+            "durationMs": 1
+        },
+        "timestamp": TS,
+    });
+    let parsed: AgentEvent = serde_json::from_value(old_end).unwrap();
+    match parsed {
+        AgentEvent::ToolEnd {
+            attempt,
+            deduplicated,
+            executed_input,
+            ..
+        } => {
+            assert_eq!(attempt, None, "旧帧缺 attempt → None");
+            assert_eq!(deduplicated, None, "旧帧缺 deduplicated → None");
+            assert_eq!(executed_input, None, "旧帧缺 executedInput → None");
+        }
+        other => panic!("期望 tool-end，实际 {other:?}"),
+    }
+}
+
+/// D-03（EV-07 语义对齐）：goal-continuation-decided.action 为 String 承载
+/// continue/complete/stop 完整决策集（旧帧 continue 兼容，零契约变更）
+#[test]
+fn goal_continuation_action_supports_complete_and_stop() {
+    for action in ["continue", "complete", "stop"] {
+        let event = AgentEvent::GoalContinuationDecided {
+            action: action.to_string(),
+            reason: "goal-evaluated".to_string(),
+            prompt: None,
+            progress_signature: None,
+            detail: None,
+        };
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["action"], action, "action={action} 直通");
+        let back: AgentEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(back, event, "action={action} roundtrip 保真");
+    }
 }
 
 #[test]
@@ -1063,18 +1273,6 @@ fn tool_batch_and_compression_events_camel_case_fields() {
     .unwrap();
     assert_eq!(update["toolCallId"], "tc-1");
     assert_eq!(update["update"]["metadata"]["kind"], "tool-args-delta");
-
-    let repaired = serde_json::to_value(AgentEvent::ToolInputRepaired {
-        session_id: "s1".into(),
-        timestamp: TS.into(),
-        tool_call_id: "tc-1".into(),
-        tool_name: "read_file".into(),
-        notes: vec!["补全必填入参 path".into()],
-    })
-    .unwrap();
-    assert_eq!(repaired["toolCallId"], "tc-1");
-    assert_eq!(repaired["toolName"], "read_file");
-    assert_eq!(repaired["notes"][0], "补全必填入参 path");
 
     let compress_start = serde_json::to_value(AgentEvent::ContextCompressionStart {
         session_id: "s1".into(),

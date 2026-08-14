@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "protocolVersion": 1,
   "messageCount": 103,
-  "description": "多端互通跨端协议注册表（单一真源：docs/multi-device/plans/M6-protocol-messages.md §10 JSON Schema + D3-protocol.md §5 信封 / §4 配对 / §6 错误码 / §10 版本化）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs（R0-03 泛化为多注册表分发，按 contract 字段区分 engine-events / device-protocol）消费，产出 packages/shared-types/src/generated/device/**。禁止手改：任何修改必须同步 crates/conex-types/src/device/**（R0-02b 并行编写）并通过 registry_drift 双护栏（R0-05 扩展）；kind/错误码/能力位全量均被护栏锁定。kind 数 103 = remote 37 + result 37 + events 11 + stream 4 + pair 4 + auth 3 + device 4 + heartbeat 2 + error 1（M6 §1.1 内部账目；auth.rotate 为可选扩展，见 extensions，不计入 103）。事件体不重新生成：41 变体字段树以 contracts/engine-events.json 为真源（事件跨端载荷 = AgentEventEnvelope 扁平 JSON 原样透传，D3 §1.3 原则 1），本表 events 段仅登记逐事件的跨端双面策略（M6 §5）。命令参数/响应与既有 Tauri 命令 serde camelCase 契约逐字节同构（M6 §2.4 原则 1），不造第二套 DTO。",
+  "description": "多端互通跨端协议注册表（单一真源：docs/multi-device/plans/M6-protocol-messages.md §10 JSON Schema + D3-protocol.md §5 信封 / §4 配对 / §6 错误码 / §10 版本化）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs（R0-03 泛化为多注册表分发，按 contract 字段区分 engine-events / device-protocol）消费，产出 packages/shared-types/src/generated/device/**。禁止手改：任何修改必须同步 crates/conex-types/src/device/**（R0-02b 并行编写）并通过 registry_drift 双护栏（R0-05 扩展）；kind/错误码/能力位全量均被护栏锁定。kind 数 103 = remote 37 + result 37 + events 11 + stream 4 + pair 4 + auth 3 + device 4 + heartbeat 2 + error 1（M6 §1.1 内部账目；auth.rotate 为可选扩展，见 extensions，不计入 103）。事件体不重新生成：57 变体字段树以 contracts/engine-events.json 为真源（2026-08-14 D-03 契约窗口：tool-input-repaired 核销 + 9 新观测事件，49 → 57）（事件跨端载荷 = AgentEventEnvelope 扁平 JSON 原样透传，D3 §1.3 原则 1），本表 events 段仅登记逐事件的跨端双面策略（M6 §5）。命令参数/响应与既有 Tauri 命令 serde camelCase 契约逐字节同构（M6 §2.4 原则 1），不造第二套 DTO。",
   "extensions": [
     {
       "kind": "auth.rotate",
@@ -3100,16 +3100,6 @@
     },
     {
       "id": 13,
-      "type": "tool-input-repaired",
-      "strategy": "tuple",
-      "realtime": { "push": true, "backpressure": "critical" },
-      "sync": false,
-      "pushLevel": "none",
-      "consumption": "F3 已判 I 类；元组",
-      "redact": "fail-closed 元组"
-    },
-    {
-      "id": 14,
       "type": "context-compression-start",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3119,7 +3109,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 15,
+      "id": 14,
       "type": "context-compression-end",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3129,7 +3119,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 16,
+      "id": 15,
       "type": "provider-diagnostic",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3139,7 +3129,7 @@
       "redact": "fail-closed 元组（诊断细节不下发）"
     },
     {
-      "id": 17,
+      "id": 16,
       "type": "runtime-error",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3150,7 +3140,7 @@
       "redact": "error 保留（≤512 字符截断）"
     },
     {
-      "id": 18,
+      "id": 17,
       "type": "runtime-steering",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3160,7 +3150,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 19,
+      "id": 18,
       "type": "runtime-intervention-required",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3171,7 +3161,7 @@
       "redact": "choices[] / message / reason 保留（候选动作展示必需）"
     },
     {
-      "id": 20,
+      "id": 19,
       "type": "approval-requested",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3182,7 +3172,7 @@
       "redact": "request.parameters 全量删除，保留参数键名列表 keys[] + summary；cwd/toolName/summary/toolCallId/requesterRunId/reason 保留（隐私红线，D6 §7.4）"
     },
     {
-      "id": 21,
+      "id": 20,
       "type": "approval-resolved",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3193,7 +3183,7 @@
       "redact": "回显决策（approved/denied/expired），无敏感参数"
     },
     {
-      "id": 22,
+      "id": 21,
       "type": "checkpoint-created",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3203,7 +3193,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 23,
+      "id": 22,
       "type": "checkpoint-restored",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3213,7 +3203,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 24,
+      "id": 23,
       "type": "run-terminal",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3224,7 +3214,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 25,
+      "id": 24,
       "type": "cache-stats-updated",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3234,7 +3224,7 @@
       "redact": "展示级数据，无敏感字段"
     },
     {
-      "id": 26,
+      "id": 25,
       "type": "cache-waste-alert",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3245,7 +3235,7 @@
       "redact": "展示级数据，无敏感字段"
     },
     {
-      "id": 27,
+      "id": 26,
       "type": "cold-cache-warning",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3256,7 +3246,7 @@
       "redact": "展示级数据，无敏感字段"
     },
     {
-      "id": 28,
+      "id": 27,
       "type": "security-audit",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3267,7 +3257,7 @@
       "redact": "targets 每路径截 120 字符、条目 ≤ 20；impact 保留（计数型）"
     },
     {
-      "id": 29,
+      "id": 28,
       "type": "subagent-started",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3277,7 +3267,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 30,
+      "id": 29,
       "type": "subagent-event",
       "strategy": "redacted",
       "realtime": {
@@ -3295,7 +3285,7 @@
       "redact": "实时面按 kind 放行（message/tool 摘要 200 字符）；progress 可丢；同步面不参与"
     },
     {
-      "id": 31,
+      "id": 30,
       "type": "subagent-ended",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3306,7 +3296,7 @@
       "redact": "summary 保留；无敏感字段"
     },
     {
-      "id": 32,
+      "id": 31,
       "type": "task-started",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3317,7 +3307,7 @@
       "redact": "command 摘要保留；无敏感字段"
     },
     {
-      "id": 33,
+      "id": 32,
       "type": "task-output",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3327,7 +3317,7 @@
       "redact": "实时面增量放行（桌面转发器节流 60ms 合并）；同步面不参与（C07 补取）"
     },
     {
-      "id": 34,
+      "id": 33,
       "type": "task-heartbeat",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3337,7 +3327,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 35,
+      "id": 34,
       "type": "task-suspicious",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "soft" },
@@ -3348,7 +3338,7 @@
       "redact": "silenceMs/lastOutputAtMs 保留"
     },
     {
-      "id": 36,
+      "id": 35,
       "type": "task-completed",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3359,7 +3349,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 37,
+      "id": 36,
       "type": "task-failed",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3370,7 +3360,7 @@
       "redact": "tail 只传前 5 行 + 总行数（tail 全量永不同步，完整输出经 C07 按需拉取）"
     },
     {
-      "id": 38,
+      "id": 37,
       "type": "task-killed",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3381,7 +3371,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 39,
+      "id": 38,
       "type": "timer-fired",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3392,7 +3382,7 @@
       "redact": "prompt 保留（超 200 字符截断）"
     },
     {
-      "id": 40,
+      "id": 39,
       "type": "timer-cancelled",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "soft" },
@@ -3402,7 +3392,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 41,
+      "id": 40,
       "type": "cron-fired",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3413,7 +3403,7 @@
       "redact": "prompt 保留（超 200 字符截断）"
     },
     {
-      "id": 42,
+      "id": 41,
       "type": "recovery-escalated",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3424,7 +3414,7 @@
       "redact": "观测字段保留（kind/retries/elapsedMs/detail）；无正文敏感"
     },
     {
-      "id": 43,
+      "id": 42,
       "type": "recovery-steering",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3435,7 +3425,7 @@
       "redact": "观测字段保留（fingerprint/retries/remainingStatus/pending）"
     },
     {
-      "id": 44,
+      "id": 43,
       "type": "recovery-fork",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3446,7 +3436,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 45,
+      "id": 44,
       "type": "recovery-report",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3457,7 +3447,7 @@
       "redact": "suggestion 保留（≤512 截断）；无 attempts 明细"
     },
     {
-      "id": 46,
+      "id": 45,
       "type": "recovery-budget-denied",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3468,7 +3458,7 @@
       "redact": "观测字段保留（fingerprint/count/max）"
     },
     {
-      "id": 47,
+      "id": 46,
       "type": "goal-round-started",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3479,7 +3469,7 @@
       "redact": "goal 文本摘要（首 200 字符）"
     },
     {
-      "id": 48,
+      "id": 47,
       "type": "goal-round-completed",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3490,7 +3480,7 @@
       "redact": "观测字段保留（decision/reasonDetail/evidence 摘要 200 字符）"
     },
     {
-      "id": 49,
+      "id": 48,
       "type": "goal-continuation-decided",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3499,6 +3489,105 @@
       "pushNote": "D8 登记；prompt 为续轮注入文本（任务级内容）——fail-closed 元组兜底，对齐 runtime-steering",
       "consumption": "桌面 goal 投影过渡（decideGoalContinuation 兼容）",
       "redact": "fail-closed 元组（type/sequence/schemaVersion/sessionId + redacted:true）"
+    },
+    {
+      "id": 49,
+      "type": "steering-evaluated",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢），移动端不消费",
+      "consumption": "桌面 steering 过程观测（phase/hitStrategies/counts）",
+      "redact": "观测字段保留（phase/hitStrategies/budgetRemaining）；无正文敏感"
+    },
+    {
+      "id": 50,
+      "type": "control-intent",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢）",
+      "consumption": "桌面控制总线意图观测（kind/intentId/state）",
+      "redact": "观测字段保留（kind/intentId/source/reason/state）；无正文敏感"
+    },
+    {
+      "id": 51,
+      "type": "hook-outcome",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢）",
+      "consumption": "桌面 hook 执行结果观测（outcome/blockedReason）",
+      "redact": "hookName/blockedReason 保留（≤512 截断）；无正文敏感"
+    },
+    {
+      "id": 52,
+      "type": "summary-background",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢）",
+      "consumption": "桌面摘要后台生命周期观测（phase/attempt）",
+      "redact": "观测字段保留（phase/attempt/reason）；无正文敏感"
+    },
+    {
+      "id": 53,
+      "type": "stage-summary-milestone",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢）",
+      "consumption": "桌面阶段总结里程碑观测（milestoneType/tier）",
+      "redact": "观测字段保留（milestoneType/tier）；无正文敏感"
+    },
+    {
+      "id": 54,
+      "type": "nudge-enqueued",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢）",
+      "consumption": "桌面 nudge 留痕观测（reason/targetRing/overwrote）",
+      "redact": "观测字段保留（reason/targetRing/overwrote）；无正文敏感"
+    },
+    {
+      "id": 55,
+      "type": "recovery-acknowledged",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢）",
+      "consumption": "桌面恢复通知确认观测（notificationId/subagentRunId）",
+      "redact": "观测字段保留（notificationId/subagentRunId）；无正文敏感"
+    },
+    {
+      "id": 56,
+      "type": "recovery-retry-attempted",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢）",
+      "consumption": "桌面恢复阶梯 1 重试观测（attempt/delayMs/budgetRemaining/fromRunId/newRunId）",
+      "redact": "观测字段保留（attempt/delayMs/budgetRemaining/fromRunId/newRunId）；无正文敏感"
+    },
+    {
+      "id": 57,
+      "type": "provider-request-anchored",
+      "strategy": "redacted",
+      "realtime": { "push": true, "backpressure": "delta" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "D-03 登记；桌面观测面（Delta 可丢）",
+      "consumption": "桌面 provider 请求锚点观测（turnIndex/model/requestStartedAtMs）",
+      "redact": "观测字段保留（turnIndex/model/requestStartedAtMs）；无正文敏感"
     }
   ],
   "stream": {

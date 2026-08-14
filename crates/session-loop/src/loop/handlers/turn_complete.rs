@@ -43,6 +43,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         turn_index: ctx.turn_index,
         timestamp: crate::steering::now_iso_utc(),
         tool_call_count: ctx.tool_call_count,
+        // D-03 契约窗口（EV-13）：turn 级 usage 载荷——接线轮注入真值，
+        // 当前保持 None
+        usage: None,
     });
 
     // 2. abort 检查 → FINISH + aborted（01 §2.9 步骤 2）

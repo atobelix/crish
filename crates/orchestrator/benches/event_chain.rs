@@ -79,6 +79,7 @@ fn build_outcome(text_size: usize) -> RunOutcome {
             batch_id: "batch-1".to_string(),
             call: tool_call(i),
             timestamp: ts(),
+            turn_index: None,
         });
         events.push(AgentEvent::ToolEnd {
             session_id: session_id.to_string(),
@@ -95,6 +96,9 @@ fn build_outcome(text_size: usize) -> RunOutcome {
                 duration_ms: 3,
             },
             timestamp: ts(),
+            attempt: None,
+            deduplicated: None,
+            executed_input: None,
         });
     }
     // 大消息正文（1KB / 10KB）
@@ -114,6 +118,7 @@ fn build_outcome(text_size: usize) -> RunOutcome {
         turn_index: 0,
         tool_call_count: 20,
         timestamp: ts(),
+        usage: None,
     });
     events.push(AgentEvent::AgentEnd {
         session_id: session_id.to_string(),

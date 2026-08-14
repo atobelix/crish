@@ -239,6 +239,9 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         concurrency: *concurrency,
                     },
                     timestamp: crate::steering::now_iso_utc(),
+                    // D-03 契约窗口（EV-11）：轮次关联键，翻译层注入
+                    // turn_index——接线轮补真值，当前保持 None
+                    turn_index: None,
                 });
             }
             ToolEvent::ApprovalRequested {
@@ -335,6 +338,12 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         duration_ms: *duration_ms,
                     },
                     timestamp: crate::steering::now_iso_utc(),
+                    // D-03 契约窗口（EV-11）：工具原子要素（审批重试 attempt/
+                    // 批内去重/中间件改写后实际入参）——接线轮补真值，
+                    // 当前保持 None
+                    attempt: None,
+                    deduplicated: None,
+                    executed_input: None,
                 });
             }
             ToolEvent::BatchEnd { batch_id: id } => {
