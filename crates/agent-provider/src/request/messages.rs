@@ -28,8 +28,11 @@ use conex_types::tool::SystemPromptWireMode;
 use serde_json::{json, Map, Value};
 
 use crate::request::cache::CacheControl;
+use crate::request::compat::empty_content_wire_value;
 use crate::request::schema::canonical_json_string;
 
+#[path = "messages_compat.rs"]
+mod messages_compat;
 #[path = "messages_content.rs"]
 mod messages_content;
 
@@ -38,6 +41,9 @@ pub use messages_content::{
     normalize_content_parts, sanitize_tool_call_id, stringify_tool_output, strip_inline_data_urls,
     system_prompt_as_user_prefix, thought_content, user_message_content,
 };
+// G5-compat 序列化消费辅助（R2 T2.2/T2.3）：WireCompat 上下文 + 模型级判定
+// （is_deepseek / resolve_system_role / deepseek_tool_call_reasoning）
+pub use messages_compat::{deepseek_tool_call_reasoning, resolve_system_role, WireCompat};
 
 /// reasoningContentMode（对齐 OpenAICompatibleReasoningContentMode；默认 omit）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -153,7 +159,15 @@ impl ChatMessage {
                 );
             }
             None => {
-                message.insert("content".to_string(), Value::Null);
+                // G5-b（T2.2）：空 content 序列化 `""`（非 `null`）——消费
+                // empty_content_wire_value（R1 T1.7）；对齐 DSH serialize.ts:95
+                // 「Text-less turns send "" — NEVER null」、pi-ai
+                // openai-completions.js:836-839。当前 None 仅出现在空文本
+                // assistant 消息（纯思考轮 / 纯工具调用轮），此处统一回写 ""。
+                message.insert(
+                    "content".to_string(),
+                    json!(empty_content_wire_value(&self.role)),
+                );
             }
         }
         if let Some(tool_call_id) = &self.tool_call_id {
@@ -219,10 +233,44 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
     reasoning_content_mode: ReasoningContentMode,
     wire_mode: SystemPromptWireMode,
 ) -> Vec<ChatMessage> {
+    // 既有四参入口（build_chat.rs / deepseek_invariants / 全部既有测试）保持
+    // 语义不变：缺省 [WireCompat]（非 DeepSeek、无 developer role）→ 默认轨
+    // wire 字节与现状逐字节一致。compat 消费面由 [to_chat_messages_with_compat]
+    // 承载（R3 适配层接线时切换入口，本入口不动）。
+    to_chat_messages_with_compat(
+        system_prompt,
+        messages,
+        reasoning_content_mode,
+        wire_mode,
+        WireCompat::default(),
+    )
+}
+
+/// [to_chat_messages] 的 compat 消费面（G5-a/G5-b · T2.2/T2.3）
+///
+/// 在既有四参语义上叠加 [WireCompat] 驱动的两处模型级序列化行为：
+/// - **reasoning_content 模型级强制键（T2.2）**：[WireCompat::is_deepseek]
+///   为真且 assistant 带 tool_calls 的回合 → 必带 `reasoning_content` 键（无
+///   思考时空串兜底，对齐 DSH serialize.ts:99 的 tool-call 回合必带语义；
+///   [ReasoningContentMode] 恒被覆盖，Omit 亦强制）；DeepSeek 纯思考轮
+///   （无 tool_calls）→ 带思考时保留（不强加键）；非 DeepSeek → 不改写，
+///   保持既有 mode 语义。
+/// - **system → developer role（T2.3）**：system 消息接入 [resolve_developer_role]
+///   ——openrouter + `anthropic/`|`openai/` 前缀模型 + reasoning → `role:"developer"`，
+///   否则 `role:"system"`（chat 轨；user-prefix 模式恒 `role:"user"` 不改写）。
+///
+/// 缺省 [WireCompat] 时与 [to_chat_messages] 完全等价（逐字节一致）。
+pub fn to_chat_messages_with_compat<M: Borrow<AgentMessage>>(
+    system_prompt: Option<&str>,
+    messages: &[M],
+    reasoning_content_mode: ReasoningContentMode,
+    wire_mode: SystemPromptWireMode,
+    compat: WireCompat<'_>,
+) -> Vec<ChatMessage> {
     let mut result = Vec::new();
     if let Some(prompt) = system_prompt {
         if !prompt.trim().is_empty() {
-            result.push(system_prompt_message(prompt, wire_mode));
+            result.push(system_prompt_message(prompt, wire_mode, compat));
         }
     }
     for message_ref in messages {
@@ -273,7 +321,23 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
                         _ => None,
                     })
                     .collect();
+                let has_tool_call = !tool_calls.is_empty();
                 let reasoning = reasoning_content_object(message, reasoning_content_mode);
+                // G5-b（T2.2）：reasoning_content 模型级强制键（判定与取值在
+                // [messages_compat::deepseek_tool_call_reasoning]，本处仅消费）。
+                // DeepSeek 厂商 + 带 tool_calls 的回合 → 必带键（有思考回传思考、
+                // 无思考空串兜底，对齐 DSH serialize.ts:99 tool-call 回合必带
+                // passback 语义）；DeepSeek 纯思考轮（无 tool_calls）→ 带思考时
+                // 保留、不强加键；非 DeepSeek → 不改写（保持既有
+                // [ReasoningContentMode] 语义，deepseek_invariants 的
+                // Require/Omit 边界钉死不破坏）。
+                let reasoning = match deepseek_tool_call_reasoning(&compat, has_tool_call, message)
+                {
+                    // DeepSeek tool-call 回合 → 强制键取值（已有思考回传、空串兜底）
+                    Some(forced) => Some(forced),
+                    // 其余（非 DeepSeek / 纯思考轮）→ 沿用既有 mode 语义（不改写）
+                    None => reasoning,
+                };
                 if content.is_empty() && tool_calls.is_empty() && reasoning.is_none() {
                     continue;
                 }
@@ -307,7 +371,7 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
                 });
             }
             AgentMessageRole::System => {
-                result.push(system_prompt_message(&message.text(), wire_mode));
+                result.push(system_prompt_message(&message.text(), wire_mode, compat));
             }
             AgentMessageRole::User => {
                 result.push(ChatMessage {
@@ -455,10 +519,20 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
 }
 
 /// system 提示词 wire 化：user-prefix 模式改写 role 与文案（02 §六.11）
-fn system_prompt_message(prompt: &str, wire_mode: SystemPromptWireMode) -> ChatMessage {
+///
+/// G5-a（T2.3）：NativeSystemRole 分支接入 [resolve_system_role]——openrouter +
+/// `anthropic/`|`openai/` 前缀模型 + reasoning → `role:"developer"`，否则
+/// `role:"system"`（chat 轨）。缺省 [WireCompat]（supports_reasoning=false →
+/// 恒 `false`）时 role 恒 `"system"`，与既有字节一致；user-prefix 分支恒
+/// `role:"user"`，不参与 developer 判定。
+fn system_prompt_message(
+    prompt: &str,
+    wire_mode: SystemPromptWireMode,
+    compat: WireCompat<'_>,
+) -> ChatMessage {
     match wire_mode {
         SystemPromptWireMode::NativeSystemRole => ChatMessage {
-            role: "system".to_string(),
+            role: resolve_system_role(&compat).to_string(),
             content: Some(ChatContent::Text(prompt.to_string())),
             tool_call_id: None,
             reasoning_content: None,

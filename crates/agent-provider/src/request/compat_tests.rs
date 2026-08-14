@@ -62,7 +62,11 @@ fn max_tokens_gateway_via_base_url_is_max_tokens() {
 fn max_tokens_openai_official_is_max_completion_tokens() {
     // 主控勘误验收断言：base_url 含 openai.com（OpenAI 官方）→ MaxCompletionTokens
     assert_eq!(
-        resolve_max_tokens_field("openai", "gpt-5", "https://api.openai.com/v1/chat/completions"),
+        resolve_max_tokens_field(
+            "openai",
+            "gpt-5",
+            "https://api.openai.com/v1/chat/completions"
+        ),
         MaxTokensField::MaxCompletionTokens
     );
 }

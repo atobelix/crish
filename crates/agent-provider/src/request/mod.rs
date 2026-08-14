@@ -15,7 +15,10 @@
 //!   empty_content_wire_value，R1 T1.7；消费接线归 R3 T3.6 / R2 T2.2-T2.3）
 
 pub mod build;
+pub mod build_anthropic;
+pub mod build_gemini;
 pub mod cache;
+pub mod capability;
 pub mod compat;
 pub mod messages;
 pub mod schema;
@@ -31,10 +34,16 @@ pub use build::{
     build_chat_completions_request_body, build_responses_request_body, build_system_prompt,
     resolve_endpoint, ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,
 };
+pub use build_anthropic::{
+    anthropic_request_headers, build_anthropic_request_body, AnthropicRequestOptions,
+    ANTHROPIC_VERSION,
+};
+pub use build_gemini::{build_gemini_request_body, gemini_request_headers, GeminiRequestOptions};
 pub use cache::{
     CacheCapability, CacheControl, CacheKey, CacheMechanism, CacheRetention, TtlBucket,
     OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH,
 };
+pub use capability::{describe_model, ModelCapability};
 pub use compat::{empty_content_wire_value, resolve_developer_role, resolve_max_tokens_field};
 pub use messages::{
     stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages,
