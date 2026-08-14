@@ -54,34 +54,24 @@
 | src/wait_channel.rs         | 1008 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 | src/workflow_commands.rs    | 1708 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 
-### crates/agent-provider（15）
+### crates/agent-provider（7）
 
 | 文件                   | 行数 | 类型 | 登记理由 | 拆分时限     |
 | ---------------------- | ---- | ---- | -------- | ------------ |
 | src/config.rs          | 671  | mod  | 存量登记 | 后续轮次评估 |
 | src/consume/mod.rs     | 614  | mod  | 存量登记 | 后续轮次评估 |
 | src/credentials.rs     | 646  | mod  | 存量登记 | 后续轮次评估 |
-| src/error.rs           | 1059 | mod  | 存量登记 | 后续轮次评估 |
 | src/events.rs          | 770  | mod  | 存量登记 | 后续轮次评估 |
 | src/models/behavior.rs | 849  | mod  | 存量登记 | 后续轮次评估 |
-| src/parse/anthropic.rs | 1070 | mod  | 存量登记 | 后续轮次评估 |
-| src/parse/chat.rs      | 1043 | mod  | 存量登记 | 后续轮次评估 |
-| src/parse/gemini.rs    | 1144 | mod  | 存量登记 | 后续轮次评估 |
-| src/parse/responses.rs | 1046 | mod  | 存量登记 | 后续轮次评估 |
-| src/request/build.rs   | 932  | mod  | 存量登记 | 后续轮次评估 |
 | src/request/schema.rs  | 685  | mod  | 存量登记 | 后续轮次评估 |
-| src/request/vendor.rs  | 1015 | mod  | 存量登记 | 后续轮次评估 |
-| src/retry.rs           | 1197 | mod  | 存量登记 | 后续轮次评估 |
 | src/sse/reader.rs      | 768  | mod  | 存量登记 | 后续轮次评估 |
 
-### crates/agent-tools（16）
+### crates/agent-tools（13）
 
 | 文件                         | 行数 | 类型 | 登记理由                                         | 拆分时限                                             |
 | ---------------------------- | ---- | ---- | ------------------------------------------------ | ---------------------------------------------------- |
-| src/executor.rs              | 1304 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/explore_quota.rs         | 614  | mod  | 存量登记                                         | 后续轮次评估                                         |
 | src/idempotency.rs           | 637  | mod  | 存量登记                                         | 后续轮次评估                                         |
-| src/mcp/bridge.rs            | 1185 | mod  | 存量登记                                         | 后续轮次评估                                         |
 | src/permission.rs            | 607  | mod  | 存量登记                                         | 后续轮次评估                                         |
 | src/revert.rs                | 801  | mod  | 存量登记                                         | 后续轮次评估                                         |
 | src/revert_guard.rs          | 661  | mod  | 存量登记                                         | 后续轮次评估                                         |
@@ -93,7 +83,6 @@
 | src/tools/replace.rs         | 1196 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/search.rs          | 844  | mod  | SR-06 批① 覆盖只登记（刚过线但 >700 不拆）       | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/shell_tests.rs     | 1462 | mod  | 测试旁挂（SR-06a-2 shell.rs 拆分产物，测试外置） | SR-06 批① shell 域收尾：测试再外置拆分 ≤600 移除登记 |
-| src/write_paths.rs           | 649  | mod  | 存量登记                                         | 后续轮次评估                                         |
 
 ### crates/conex-browser（23 · 2026-08-13 G-02 批② 新增登记）
 
@@ -292,6 +281,16 @@ CI 以脚本实时输出为准。
   `core_run_commands_tests.rs` 9359（git ?? 在途，SR-01 core_run 并行域新增测试文件，随 core_run 拆分一并处理）。
   新登记注记 5 禁词自查 0 命中（禁词表见 D-01 详案 §G-02 验收③）。
 
+- 2026-08-13（轮 7 · G-00 复拍 + SR-06h 余项清理，见 `execution/09-G00复拍.md`）：
+  **清理 11 条已回落登记**（实测 ≤600 不再需要豁免，全部真跑确认后精确 edit 移除）：
+  agent-provider `error.rs`（实测 386）/ `parse/anthropic.rs`（57）/ `parse/chat.rs`（33）/
+  `parse/gemini.rs`（49）/ `parse/responses.rs`（104，SR-06e 拆分完成）/ `request/build.rs`（142）/
+  `request/vendor.rs`（394）/ `retry.rs`（40）；agent-tools `executor.rs`（40，SR-06a 拆分完成）/
+  `mcp/bridge.rs`（45）/ `write_paths.rs`（84）。正文表 agent-provider 15→7、agent-tools 16→13；
+  标记区 142→131。**脚本提示第 12 条 `note_commands.rs`（实测 105）不在本批清理范围**——登记时限为
+  「SR-06 批⑥→B2→CT-01 串行链完成后移除」，B2 未派（轮 6 汇总 §四 待处理 3），留待链尾收口。
+  清理后 FAIL 29 不变（= 并行域未登记 16 + 已登记回涨 13），`--check-format` exit 0（131 条）。
+
 <!-- BASELINE_START -->
 
 apps/agent-workbench/src-tauri/src/browser/mod.rs 1826
@@ -329,28 +328,18 @@ apps/agent-workbench/src-tauri/src/workspace.rs 718
 crates/agent-provider/src/config.rs 671
 crates/agent-provider/src/consume/mod.rs 811
 crates/agent-provider/src/credentials.rs 647
-crates/agent-provider/src/error.rs 1063
 crates/agent-provider/src/events.rs 770
 crates/agent-provider/src/models/behavior.rs 849
 crates/agent-provider/src/models/catalog_tests.rs 968
-crates/agent-provider/src/parse/anthropic.rs 1070
-crates/agent-provider/src/parse/chat.rs 1043
 crates/agent-provider/src/parse/chat_tests.rs 709
-crates/agent-provider/src/parse/gemini.rs 1144
-crates/agent-provider/src/parse/responses.rs 1046
-crates/agent-provider/src/request/build.rs 1228
 crates/agent-provider/src/request/cache_tests.rs 928
 crates/agent-provider/src/request/messages_tests.rs 908
 crates/agent-provider/src/request/schema.rs 685
-crates/agent-provider/src/request/vendor.rs 1015
-crates/agent-provider/src/retry.rs 1238
 crates/agent-provider/src/sse/frame.rs 626
 crates/agent-provider/src/sse/reader.rs 768
-crates/agent-tools/src/executor.rs 1304
 crates/agent-tools/src/executor_tests.rs 1020
 crates/agent-tools/src/explore_quota.rs 948
 crates/agent-tools/src/idempotency.rs 792
-crates/agent-tools/src/mcp/bridge.rs 1185
 crates/agent-tools/src/permission.rs 771
 crates/agent-tools/src/revert.rs 801
 crates/agent-tools/src/revert_guard.rs 661
@@ -363,7 +352,6 @@ crates/agent-tools/src/tools/replace.rs 1196
 crates/agent-tools/src/tools/search.rs 844
 crates/agent-tools/src/tools/shell_tests.rs 1462
 crates/agent-tools/src/tools/wait_subagents_tests.rs 1098
-crates/agent-tools/src/write_paths.rs 1034
 crates/conex-compaction/src/ai_summary.rs 1055
 crates/conex-compaction/src/lib.rs 2647
 crates/conex-browser/src/action/keyboard.rs 1006
