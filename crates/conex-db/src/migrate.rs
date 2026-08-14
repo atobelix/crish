@@ -1,5 +1,6 @@
-//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v8，PE-08 T08.7 + P5 §3.1.4
-//! 及 T-D-07 v6 新列 + T-15 v7 compression_blocks 单表 + v8 浏览器导入目标表）。逐版本独立事务、
+//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v9，PE-08 T08.7 + P5 §3.1.4
+//! 及 T-D-07 v6 新列 + T-15 v7 compression_blocks 单表 + v8 浏览器导入目标表 +
+//! v9 事件 run 归属列）。逐版本独立事务、
 //! 幂等可重试；DROP 前备份采用
 //! 「事务前 checkpoint + 备份」时序（[backup_before_drop]，见 [migrate]）：
 //! 版本升级事务 commit 之前先 `PRAGMA wal_checkpoint(TRUNCATE)` 固化旧库到
@@ -149,12 +150,12 @@ impl LocalDb {
             // 备份时序（11-T2 确定化）：版本事务 commit 之前执行
             // 「checkpoint(TRUNCATE) → 拷贝备份」。TRUNCATE 后 WAL 清空、
             // 主文件 = 完整旧库态，拷贝内容确定（与 autocheckpoint 偶然时机无关）。
-            // v5/v6 纯 ADD COLUMN、v7/v8 纯新建表（均无 DROP）：跳过备份，
+            // v5/v6/v9 纯 ADD COLUMN、v7/v8 纯新建表（均无 DROP）：跳过备份，
             // 保持「DROP 前备份」语义。
             // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
-            // 锚定 v3→v4 只产 .bak-v4，v5/v6/v7/v8 不额外产生备份）
+            // 锚定 v3→v4 只产 .bak-v4，v5/v6/v7/v8/v9 不额外产生备份）
             if let Some(p) = &path {
-                if !(5..=8).contains(&version) {
+                if !(5..=9).contains(&version) {
                     // checkpoint 失败 → 备份内容不确定，按备份失败处理：
                     // 告警 + 跳过本次备份，不阻断迁移（裁定案）
                     if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
@@ -180,6 +181,7 @@ impl LocalDb {
                 6 => migrate_v5_to_v6(&tx),
                 7 => migrate_v6_to_v7(&tx),
                 8 => migrate_v7_to_v8(&tx),
+                9 => migrate_v8_to_v9(&tx),
                 _ => unreachable!(),
             };
             if let Err(e) = step_result {
@@ -604,4 +606,47 @@ fn migrate_v7_to_v8(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Erro
         CREATE INDEX IF NOT EXISTS idx_imported_history_url
             ON imported_history (url);",
     )
+}
+
+/// v8 → v9：事件 run 归属第一类数据 + session_agents 子会话列（agent 循环
+/// 全链路可追溯性战役 D-01 DM-01；runs.model 列本战役不建，主控裁决 F-02）。
+///
+/// 纯 ADD COLUMN + 索引（无 DROP、无重建），col-check 幂等（对齐 v5→v6 模式，
+/// migrate.rs:500-523，含表缺失守卫）：
+/// - `events.run_id TEXT`：run 归属列（查询权威；可 NULL = 会话域/未知归属，
+///   **存量行不回填**——诚实未知，DM-02 写面起新行显式写列）；
+/// - `idx_events_run ON events(session_id, run_id, sequence)`：按 run 过滤
+///   O(log n) 直达 + limit 下推（DM-07 读面消费）；
+/// - `session_agents.sub_session_id TEXT NOT NULL DEFAULT ''`：子会话归属列
+///   （D-02 LK-04 主控代收列定义，旧行自动补空串；读写面轮 3 实现）。
+fn migrate_v8_to_v9(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    let has_events: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_events > 0 {
+        let event_cols = table_columns(tx, "events")?;
+        if !event_cols.iter().any(|c| c == "run_id") {
+            tx.execute_batch("ALTER TABLE events ADD COLUMN run_id TEXT;")?;
+        }
+        tx.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_events_run
+                ON events(session_id, run_id, sequence);",
+        )?;
+    }
+    let has_agents: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_agents'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_agents > 0 {
+        let agent_cols = table_columns(tx, "session_agents")?;
+        if !agent_cols.iter().any(|c| c == "sub_session_id") {
+            tx.execute_batch(
+                "ALTER TABLE session_agents ADD COLUMN sub_session_id TEXT NOT NULL DEFAULT '';",
+            )?;
+        }
+    }
+    Ok(())
 }

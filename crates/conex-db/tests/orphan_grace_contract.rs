@@ -285,7 +285,7 @@ fn cleanup_preserves_session_with_inflight_run() {
     db.upsert_session_entry(&entry("s1", now_ms() - 10 * ORPHAN_GRACE_MS))
         .unwrap();
     db.insert_run("r1", "s1", RunStatus::Running, None, 1).unwrap();
-    db.append_event("s1", 1, "agent-start", "{}").unwrap();
+    db.append_event("s1", 1, "agent-start", "{}", None).unwrap();
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 

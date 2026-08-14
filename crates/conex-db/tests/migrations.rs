@@ -908,6 +908,187 @@ fn v5_fixture_upgrades_to_v6_new_columns_read_write_idempotent() {
     assert_eq!(again[0].allowed_write_paths_json.as_deref(), Some(r#"["docs/notes"]"#));
 }
 
+// ══════════ v8→v9：事件 run 归属列 + session_agents.sub_session_id（D-01 DM-01）══════════
+
+/// v8 fixture：目标形态库（user_version=8）——events 尚无 run_id 列、
+/// session_agents 尚无 sub_session_id 列（v9 待加），其余表缺省由迁移收尾的
+/// ensure（create_v5_schema，IF NOT EXISTS）补建。仅构造最小会话面
+/// （sessions / events / session_agents / session_meta + 数据行），验证
+/// v8→v9 的纯 ADD COLUMN 幂等路径、存量行不回填 run_id（诚实未知）、
+/// sub_session_id 补默认空串、idx_events_run 索引落位、无备份产生。
+fn build_v8_fixture(db: &TempDb) {
+    let conn = Connection::open(db.path()).unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+    conn.execute_batch(
+        "CREATE TABLE sessions (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '',
+            timestamp TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            message_count INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT 0
+        ) WITHOUT ROWID;
+        CREATE TABLE events (
+            session_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            payload TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (session_id, sequence),
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        ) WITHOUT ROWID;
+        CREATE TABLE session_agents (
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            agent_id TEXT NOT NULL,
+            subagent_run_id TEXT NOT NULL,
+            parent_session_id TEXT NOT NULL,
+            parent_run_id TEXT NOT NULL,
+            parent_tool_call_id TEXT,
+            description TEXT NOT NULL DEFAULT '',
+            mode TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL CHECK (status IN ('running','completed','failed','stopped')),
+            summary TEXT,
+            started_at INTEGER NOT NULL,
+            ended_at INTEGER,
+            depth INTEGER DEFAULT 0,
+            subagent_path_json TEXT,
+            task_type TEXT,
+            display_label TEXT,
+            allowed_write_paths_json TEXT,
+            PRIMARY KEY (session_id, agent_id)
+        ) WITHOUT ROWID;
+        CREATE TABLE session_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+        INSERT INTO sessions (id, title, updated_at, created_at)
+            VALUES ('s1', 'V8 会话', 2000, 3000);
+        INSERT INTO events (session_id, sequence, event_type, payload) VALUES ('s1', 1, 'agent-start', '{}');
+        INSERT INTO events (session_id, sequence, event_type, payload) VALUES ('s1', 2, 'run-terminal', '{}');
+        INSERT INTO session_agents (session_id, agent_id, subagent_run_id, parent_session_id,
+            parent_run_id, description, mode, status, started_at, depth)
+            VALUES ('s1', 'a1', 'r-a1', 's1', 'p1', '探索', 'explore', 'completed', 1100, 1);
+        PRAGMA user_version = 8;",
+    )
+    .unwrap();
+}
+
+/// v9 迁移主验收：v8 旧库升级后 user_version=9、run_id / sub_session_id 列在场、
+/// idx_events_run 索引在场、存量数据保留、存量行 run_id 不回填（NULL）、
+/// sub_session_id 补默认空串、schema_version meta='9'、纯 ADD COLUMN 不产备份。
+#[test]
+fn migrate_v8_to_v9_adds_run_id_and_sub_session_id_preserves_data() {
+    let temp = TempDb::new("v8");
+    build_v8_fixture(&temp);
+
+    let db = LocalDb::open(temp.path()).unwrap();
+    assert!(db.get_failure().is_none(), "v8→v9 升级无失败闩");
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION, "v8 → v9 升级完成");
+    assert_eq!(
+        db.get_session_meta("schema_version").unwrap().as_deref(),
+        Some(SCHEMA_VERSION_STRING),
+        "schema_version meta 收敛到最新"
+    );
+
+    let conn = Connection::open(temp.path()).unwrap();
+    // 新列在场
+    let event_cols = table_columns(&conn, "events");
+    assert!(
+        event_cols.contains(&"run_id".to_string()),
+        "events 缺 v9 新列 run_id"
+    );
+    let agent_cols = table_columns(&conn, "session_agents");
+    assert!(
+        agent_cols.contains(&"sub_session_id".to_string()),
+        "session_agents 缺 v9 新列 sub_session_id"
+    );
+    // idx_events_run 索引在场
+    let idx_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_events_run'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(idx_count, 1, "idx_events_run 索引必须存在");
+
+    // 存量数据保留
+    assert_eq!(count_rows(&conn, "sessions"), 1, "会话保留");
+    assert_eq!(count_rows(&conn, "events"), 2, "事件保留");
+    assert_eq!(count_rows(&conn, "session_agents"), 1, "子代理保留");
+    let title: String = conn
+        .query_row("SELECT title FROM sessions WHERE id='s1'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(title, "V8 会话", "会话标题保留");
+
+    // 存量行：run_id 不回填（诚实未知 → NULL）；sub_session_id 补默认空串
+    let null_run_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM events WHERE run_id IS NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(null_run_rows, 2, "存量事件 run_id 一律 NULL（不回填）");
+    let sub_session: String = conn
+        .query_row(
+            "SELECT sub_session_id FROM session_agents WHERE agent_id='a1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(sub_session, "", "存量行 sub_session_id 补默认空串");
+
+    // v9 纯 ADD COLUMN + 索引（无 DROP）：不产生备份
+    assert_eq!(backup_files(temp.path()).len(), 0, "v9 不产生备份");
+}
+
+/// v9 幂等重跑：二次 open 不重复加列、不报错、版本与数据稳定、无新备份。
+#[test]
+fn migrate_v8_to_v9_idempotent_rerun() {
+    let temp = TempDb::new("v8-idem");
+    build_v8_fixture(&temp);
+
+    let db1 = LocalDb::open(temp.path()).unwrap();
+    assert_eq!(db1.user_version().unwrap(), LATEST_VERSION);
+    let conn = Connection::open(temp.path()).unwrap();
+    let event_cols = table_columns(&conn, "events");
+    assert_eq!(
+        event_cols.iter().filter(|c| c.as_str() == "run_id").count(),
+        1,
+        "run_id 列唯一"
+    );
+    let agent_cols = table_columns(&conn, "session_agents");
+    assert_eq!(
+        agent_cols.iter().filter(|c| c.as_str() == "sub_session_id").count(),
+        1,
+        "sub_session_id 列唯一"
+    );
+
+    // 二次 open：幂等跳过（col-check 命中列已存在）
+    let db2 = LocalDb::open(temp.path()).unwrap();
+    assert!(db2.get_failure().is_none(), "幂等重跑无失败闩");
+    assert_eq!(db2.user_version().unwrap(), LATEST_VERSION, "二次 open 版本稳定");
+    let conn2 = Connection::open(temp.path()).unwrap();
+    assert_eq!(
+        table_columns(&conn2, "events"),
+        event_cols,
+        "二次 open 列清单不变（无重复 ADD COLUMN）"
+    );
+    assert_eq!(
+        table_columns(&conn2, "session_agents"),
+        agent_cols,
+        "二次 open 列清单不变"
+    );
+    assert_eq!(count_rows(&conn2, "events"), 2, "数据稳定");
+    assert_eq!(
+        db2.get_session_meta("schema_version").unwrap().as_deref(),
+        Some(SCHEMA_VERSION_STRING)
+    );
+    assert_eq!(
+        backup_files(temp.path()).len(),
+        0,
+        "二次 open 不产生新备份"
+    );
+}
+
 // ══════════ 11-T2 迁移备份时序确定化（checkpoint + 版本事务前备份）══════════
 
 /// 黄金字节对比：备份内容与「迁移前显式 checkpoint(TRUNCATE) 后」主文件

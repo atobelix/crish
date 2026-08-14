@@ -106,10 +106,13 @@ pub(crate) fn create_v1_schema() -> &'static str {
     "#
 }
 
-/// v5 目标 schema 全量 DDL（PE-08 T08.7 + P5 §3.1.4 T-39 + T-D-07 v6 新列）。
+/// v5 目标 schema 全量 DDL（PE-08 T08.7 + P5 §3.1.4 T-39 + T-D-07 v6 新列 +
+/// 战役 v9 列：events.run_id + session_agents.sub_session_id）。
 ///
 /// 结构要点：
 /// - events：组合主键 `(session_id, sequence)` + FK，无 AUTOINCREMENT id 列（P14）；
+///   v9 新增 `run_id TEXT` 列（run 归属查询权威，可 NULL；新库 ensure 路径直接
+///   建出含列结构，v9 col-check 对已含列新库自然跳过，幂等闭环）；
 /// - runs / pending_inputs：FK 到 sessions（孤儿行迁移时过滤）；
 /// - runs：v5 新增 run 级 usage/cache 列（P5 §3.1.4，`save_run_usage` 写入面；
 ///   hit_ratio/write_ratio 可派生不落库，warm_until_ms NULL 兼容）；
@@ -117,7 +120,9 @@ pub(crate) fn create_v1_schema() -> &'static str {
 /// - session_sequence：会话级 sequence 原子分配表（T08.12）；
 /// - metadata 旧表不创建（v4 删除）；
 /// - session_agents：v6 新增 `task_type` / `display_label` / `allowed_write_paths_json`
-///   （T-D-07 定义扩展落库；model_override 扩展点预留不落库）。
+///   （T-D-07 定义扩展落库；model_override 扩展点预留不落库）；
+///   v9 新增 `sub_session_id TEXT NOT NULL DEFAULT ''`（D-02 LK-04 主控代收列定义，
+///   读写面轮 3 实现）。
 pub(crate) fn create_v5_schema() -> &'static str {
     r#"
     CREATE TABLE IF NOT EXISTS sessions (
@@ -143,6 +148,7 @@ pub(crate) fn create_v5_schema() -> &'static str {
         sequence INTEGER NOT NULL,
         event_type TEXT NOT NULL,
         payload TEXT NOT NULL DEFAULT '{}',
+        run_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         PRIMARY KEY (session_id, sequence),
         FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -225,6 +231,7 @@ pub(crate) fn create_v5_schema() -> &'static str {
         task_type TEXT,
         display_label TEXT,
         allowed_write_paths_json TEXT,
+        sub_session_id TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (session_id, agent_id)
     ) WITHOUT ROWID;
 

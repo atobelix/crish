@@ -114,7 +114,7 @@ fn stress_append_5000_events_timing_and_integrity() {
 
     let started = Instant::now();
     for seq in 1..=5000i64 {
-        db.append_event("s1", seq, "agent-start", &format!(r#"{{"seq":{seq}}}"#))
+        db.append_event("s1", seq, "agent-start", &format!(r#"{{"seq":{seq}}}"#), None)
             .expect("追加事件不应失败");
     }
     let elapsed = started.elapsed();
@@ -151,7 +151,7 @@ fn stress_wal_concurrent_appends_and_upserts() {
     // 预写一条触发 WAL 边车文件（随后验证 journal_mode）。
     // 注意：query_events 的 after_sequence=0 语义为 `sequence > 0`，
     // 预热行序列号须落在线程区间之外（线程写 1..=4000，预热用 4001）
-    db.append_event("s1", 4001, "warmup", "{}").expect("预热写入");
+    db.append_event("s1", 4001, "warmup", "{}", None).expect("预热写入");
 
     let mut handles = Vec::new();
     for t in 0..8u64 {
@@ -165,6 +165,7 @@ fn stress_wal_concurrent_appends_and_upserts() {
                     seq as i64,
                     "agent-start",
                     &format!(r#"{{"t":{t},"i":{i}}}"#),
+                    None,
                 )
                 .expect("并发追加不应失败");
             }

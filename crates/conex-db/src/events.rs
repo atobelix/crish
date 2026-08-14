@@ -5,12 +5,18 @@ use super::{DbFailure, DbFailureKind, LocalDb};
 
 impl LocalDb {
     /// Append an event to a session.
+    ///
+    /// `run_id` 为 run 归属（列级权威；None = 会话域事件，如空闲态事件）。
+    /// `created_at` 由 INSERT 显式写毫秒精度时间戳（`%Y-%m-%d %H:%M:%S.%f`，
+    /// R-08/G-06），不再依赖列 DEFAULT `datetime('now')`（秒级）；存量行
+    /// 不回写，DEFAULT 仅作兜底。
     pub fn append_event(
         &self,
         session_id: &str,
         sequence: i64,
         event_type: &str,
         payload: &str,
+        run_id: Option<&str>,
     ) -> Result<(), DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
@@ -18,8 +24,9 @@ impl LocalDb {
         })?;
 
         conn.execute(
-            "INSERT INTO events (session_id, sequence, event_type, payload) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![session_id, sequence, event_type, payload],
+            "INSERT INTO events (session_id, sequence, event_type, payload, run_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, strftime('%Y-%m-%d %H:%M:%f','now'))",
+            rusqlite::params![session_id, sequence, event_type, payload, run_id],
         )
         .map_err(|e| self.latch_error("append_event", e))?;
 
@@ -43,7 +50,7 @@ impl LocalDb {
 
         let mut stmt = conn
             .prepare(
-                "SELECT session_id, sequence, event_type, payload, created_at
+                "SELECT session_id, sequence, event_type, payload, run_id, created_at
                  FROM events WHERE session_id = ?1 AND sequence > ?2
                  ORDER BY sequence ASC LIMIT ?3",
             )
@@ -57,12 +64,61 @@ impl LocalDb {
                     sequence: row.get(1)?,
                     event_type: row.get(2)?,
                     payload: row.get(3)?,
-                    created_at: row.get(4)?,
+                    run_id: row.get(4)?,
+                    created_at: row.get(5)?,
                 })
             })
             .map_err(|e| self.latch_error("query_events_map", e))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| self.latch_error("query_events_collect", e))?;
+
+        Ok(events)
+    }
+
+    /// 按 run 归属过滤查询会话内事件（SQL 下推，走 idx_events_run 索引）：
+    /// `WHERE session_id = ?1 AND run_id = ?2 AND sequence > ?3 ORDER BY
+    /// sequence ASC LIMIT ?4`——after 开区间（> after），limit 直下推。
+    ///
+    /// run_id 为 NULL 的行（会话域事件）恒不命中本查询（SQL NULL 比较
+    /// 语义）；按会话全量读取请用 [Self::query_events]。
+    pub fn query_events_by_run(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        after_sequence: i64,
+        limit: Option<i64>,
+    ) -> Result<Vec<StoredEvent>, DbFailure> {
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT session_id, sequence, event_type, payload, run_id, created_at
+                 FROM events WHERE session_id = ?1 AND run_id = ?2 AND sequence > ?3
+                 ORDER BY sequence ASC LIMIT ?4",
+            )
+            .map_err(|e| self.latch_error("query_events_by_run_prepare", e))?;
+
+        let limit_value = limit.unwrap_or(i64::MAX);
+        let events = stmt
+            .query_map(
+                rusqlite::params![session_id, run_id, after_sequence, limit_value],
+                |row| {
+                    Ok(StoredEvent {
+                        session_id: row.get(0)?,
+                        sequence: row.get(1)?,
+                        event_type: row.get(2)?,
+                        payload: row.get(3)?,
+                        run_id: row.get(4)?,
+                        created_at: row.get(5)?,
+                    })
+                },
+            )
+            .map_err(|e| self.latch_error("query_events_by_run_map", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| self.latch_error("query_events_by_run_collect", e))?;
 
         Ok(events)
     }
@@ -127,5 +183,7 @@ pub struct StoredEvent {
     pub sequence: i64,
     pub event_type: String,
     pub payload: String,
+    /// run 归属（列级权威；None = 会话域事件或存量未归属行）
+    pub run_id: Option<String>,
     pub created_at: String,
 }

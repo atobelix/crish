@@ -542,9 +542,9 @@ mod tests {
         let db = LocalDb::open_in_memory().unwrap();
         db.insert_session("s1", "s1").unwrap();
         assert_eq!(db.count_compression_events("s1").unwrap(), 0);
-        db.append_event("s1", 1, "context-compression-end", "{}").unwrap();
-        db.append_event("s1", 2, "context-compression-end", "{}").unwrap();
-        db.append_event("s1", 3, "message-end", "{}").unwrap();
+        db.append_event("s1", 1, "context-compression-end", "{}", None).unwrap();
+        db.append_event("s1", 2, "context-compression-end", "{}", None).unwrap();
+        db.append_event("s1", 3, "message-end", "{}", None).unwrap();
         assert_eq!(db.count_compression_events("s1").unwrap(), 2);
         // 会话隔离
         assert_eq!(db.count_compression_events("s2").unwrap(), 0);

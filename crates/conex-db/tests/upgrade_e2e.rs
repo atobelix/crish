@@ -373,7 +373,7 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
     assert_eq!(db.reserve_sequence("s3").unwrap(), 42, "seed 抬高不回退");
 
     // ── 事件：升级后追加 + 查询 ──
-    db.append_event("s1", 4, "run-terminal", r#"{"reason":"ok"}"#).unwrap();
+    db.append_event("s1", 4, "run-terminal", r#"{"reason":"ok"}"#, None).unwrap();
     let after = db.query_events("s1", 3, None).unwrap();
     assert_eq!(after.len(), 1);
     assert_eq!(after[0].sequence, 4);
