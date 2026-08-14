@@ -15,6 +15,7 @@
 //!   [infer_thinking_capability] 最长前缀推断
 //! - [vendor_wire]：effort/intensity → 厂商原生 wire 值换算（budget_tokens /
 //!   thinking_level / effort 归一化与 adaptive 辅助）
+//!
 //! 枚举面（ReasoningVendor/ReasoningEffort/ReasoningEffortFormat/ThinkingIntensity/
 //! ReasoningFormat/ThinkingCapability/NO_THINKING）与 vendor 推断/注入入口
 //! 保持本文件单定义，消费方 import 路径不变。

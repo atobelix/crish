@@ -10,6 +10,7 @@
 //! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 error_tests.rs）：
 //! - [error_classify]：消息模式检测辅助（error-classifier.ts 各正则的 Rust 形态，
 //!   classify_provider_error 的兜底判定面）
+//!
 //! 错误类型面（ProviderError 与四个来源细分枚举）为错误类型集中面，
 //! 消费方按 ProviderError 模式匹配/透传的路径不变，保持本文件单定义。
 
