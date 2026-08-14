@@ -15,6 +15,7 @@ import type { ReconnectProjection } from '@/network/ReconnectingWsClient';
 import type { WsPhase } from '@/domain/pure/selectors';
 import { FeedBridge, type ListSessionsRepository } from './feedBridge';
 import { TerminalWiring } from './terminalWiring';
+import { PushWiring } from '@/notifications/pushConsumer';
 
 export interface ObservationWiringOptions {
   /** 网关地址（wss://host:8765） */
@@ -34,6 +35,8 @@ export interface ObservationWiring {
   bridge: FeedBridge;
   /** 终端面接线（设备帧 → terminalStore 实时镜像；R2-14 部分 3） */
   terminal: TerminalWiring;
+  /** 推送消费接线（events.push 推送载荷 → 通知层分发；R3-04 部分 2） */
+  push: PushWiring;
   /** 主动重连（连接死/离线时用户点重试，M4 §3.7 ConnectionBanner） */
   reconnect: () => void;
 }
@@ -51,6 +54,9 @@ export function startObservationWiring(
   // 终端面接线并挂（与 FeedBridge 同构：events.push → terminalStore 镜像 + 配对生命周期全清）
   const terminal = new TerminalWiring({ gateway });
   terminal.attach();
+  // 推送消费接线并挂（events.push 推送载荷 → 通知层：前台 ingest / 后台系统通知 + 去重）
+  const push = new PushWiring({ gateway });
+  push.attach();
   const client = new ReconnectingWsClient({
     url: opts.url,
     ...(opts.token !== undefined ? { token: opts.token } : {}),
@@ -64,6 +70,7 @@ export function startObservationWiring(
     client,
     bridge,
     terminal,
+    push,
     reconnect: () => client.connect(),
   };
 }
@@ -94,5 +101,6 @@ export function resetObservationWiringForTest(): void {
   singleton?.client.disconnect();
   singleton?.bridge.detach();
   singleton?.terminal.detach();
+  singleton?.push.detach();
   singleton = null;
 }

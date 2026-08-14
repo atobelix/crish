@@ -30,6 +30,18 @@ export type {
   ObservationWiringOptions,
 } from './observationWiring';
 export {
+  PushWiring,
+  PresentedKeyTracker,
+  presentSystemPushAsync,
+  parsePushEvent,
+  recognizePushPayload,
+  routePresentation,
+} from '@/notifications/pushConsumer';
+export type {
+  PushWiringOptions,
+  PresentationChannel,
+} from '@/notifications/pushConsumer';
+export {
   ApprovalBridge,
   startApprovalWiring,
   ensureApprovalWiring,

@@ -4,6 +4,7 @@ import type { FileEntry } from '@/domain/types/domain';
 import { useFilesVm } from '@/adapters/viewmodels/useFilesVm';
 import { useFilePreviewVm } from '@/adapters/viewmodels/useFilePreviewVm';
 import { useTheme } from '@/adapters/platform/theme';
+import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 import {
   FileBrowser,
   FilePreview,
@@ -34,6 +35,7 @@ export default function FilesScreen() {
           testID="files-workspace-button"
           accessibilityRole="button"
           accessibilityLabel="切换工作区"
+          hitSlop={dualHitSlop(36)}
           onPress={() => {
             vm.openWorkspaceList();
             setWorkspaceOpen(true);

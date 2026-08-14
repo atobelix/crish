@@ -89,4 +89,15 @@ export {
   pushToNotificationInput,
 } from './foreground';
 export { handleNotificationResponse, buildDeepLinkRoute } from './deepLink';
+export {
+  parsePushEvent,
+  recognizePushPayload,
+  presentSystemPushAsync,
+  PresentedKeyTracker,
+  presentedPushKeys,
+  routePresentation,
+  PushWiring,
+  PRESENT_DEDUP_TTL_MS,
+} from './pushConsumer';
+export type { PushWiringOptions, PresentationChannel } from './pushConsumer';
 export type { PushMessage, PushTarget } from './types';

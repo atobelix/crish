@@ -65,7 +65,8 @@ function asNumber(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-const TARGET_ID_PARAM_KEYS = [
+/** 目标定位参数白名单（target.params → 系统通知 data 扁平字段；pushConsumer 复用） */
+export const TARGET_ID_PARAM_KEYS = [
   'toolCallId',
   'runId',
   'taskId',

@@ -33,6 +33,7 @@ const mockNotificationsApi = {
   })),
   setNotificationChannelAsync: jest.fn(async () => null),
   setNotificationHandler: jest.fn(),
+  scheduleNotificationAsync: jest.fn(async () => 'mock-notification-id'),
   addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   addNotificationResponseReceivedListener: jest.fn(() => ({
     remove: jest.fn(),
