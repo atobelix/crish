@@ -72,7 +72,13 @@ impl ToolExecutor {
             (Some(gate), true) => match verdict {
                 PermissionVerdict::Allow => {
                     let (r, extra) = self
-                        .execute_single_with_retry(call, ctx, options, abort, Some(Arc::clone(gate)))
+                        .execute_single_with_retry(
+                            call,
+                            ctx,
+                            options,
+                            abort,
+                            Some(Arc::clone(gate)),
+                        )
                         .await;
                     events.extend(extra);
                     r
@@ -110,7 +116,13 @@ impl ToolExecutor {
                         ),
                         ApprovalWaitOutcome::Decision(ApprovalDecision::Approved) => {
                             let (r, extra) = self
-                                .execute_single_with_retry(call, ctx, options, abort, Some(Arc::clone(gate)))
+                                .execute_single_with_retry(
+                                    call,
+                                    ctx,
+                                    options,
+                                    abort,
+                                    Some(Arc::clone(gate)),
+                                )
                                 .await;
                             events.extend(extra);
                             r
@@ -169,7 +181,11 @@ impl ToolExecutor {
             },
         };
         if self.result_is_fatal(call, &r) {
-            *fatal = Some(r.error_message.clone().unwrap_or_else(|| "tool failed".into()));
+            *fatal = Some(
+                r.error_message
+                    .clone()
+                    .unwrap_or_else(|| "tool failed".into()),
+            );
         }
         events.push(ToolEvent::ToolEnd {
             call_id: call.id.clone(),
@@ -261,9 +277,7 @@ impl ToolExecutor {
                 .workspace_root
                 .clone()
                 .or_else(|| ctx.cwd.clone().map(PathBuf::from))
-                .unwrap_or_else(|| {
-                    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-                }),
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
             // I4-M3：写路径互斥注册表——会话级装配（与 workspace_root 同源，
             // 由 AgentSessionLoop::with_options 创建并经 ToolExecCtx 注入；
             // None = 写工具不强制互斥，测试与直连场景向后兼容）
@@ -686,7 +700,8 @@ impl ToolExecutor {
                 let (kind, msg) = classify_tool_error(&err);
                 // EV-09（D-03）：执行失败耗时真实化（duration_ms = 实际
                 // 执行时长；实际入参 = 中间件改写后入参）
-                let mut r = ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg, duration_ms);
+                let mut r =
+                    ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg, duration_ms);
                 r.attempt = attempt;
                 r.executed_input = Some(exec_input.clone());
                 r.occurred_at_ms = Some(occurred_at_ms);
@@ -731,8 +746,9 @@ impl ToolExecutor {
             PermissionVerdict::Deny => (denied_result(call, options), extra),
             PermissionVerdict::Allow => {
                 // full-access：自动放行，直接重试执行一次（attempt 2）
-                let (r2, extra2) =
-                    self.execute_single(call, ctx, options, abort, approval, 2).await;
+                let (r2, extra2) = self
+                    .execute_single(call, ctx, options, abort, approval, 2)
+                    .await;
                 (r2, [extra, extra2].concat())
             }
             PermissionVerdict::NeedsApproval => match approval {

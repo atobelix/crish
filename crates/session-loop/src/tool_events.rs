@@ -290,7 +290,12 @@ impl ClassifiedToolResult {
     }
 
     /// 便捷构造：成功结果
-    pub fn ok(id: impl Into<String>, tool_name: impl Into<String>, output: Value, duration_ms: u64) -> Self {
+    pub fn ok(
+        id: impl Into<String>,
+        tool_name: impl Into<String>,
+        output: Value,
+        duration_ms: u64,
+    ) -> Self {
         Self {
             id: id.into(),
             tool_name: tool_name.into(),

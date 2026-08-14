@@ -103,10 +103,7 @@ pub const DEFAULT_RETRY_GUARD_WINDOW_MS: u64 = 1_800_000;
 /// - 单个数值（退避基数）→ 退化为单元素序列；
 /// - 其余形态 → 回退 [SUMMARY_BACKOFF_MS]。
 impl SummaryDispatchConfig {
-    pub fn from_session_meta(
-        meta: impl Fn(&str) -> Option<String>,
-        max_attempts: u32,
-    ) -> Self {
+    pub fn from_session_meta(meta: impl Fn(&str) -> Option<String>, max_attempts: u32) -> Self {
         let backoff_ms = meta(META_KEY_SUMMARY_BACKOFF_MS)
             .as_deref()
             .and_then(parse_backoff_ms)
@@ -148,13 +145,21 @@ fn parse_backoff_ms(raw: &str) -> Option<Vec<u64>> {
                     .into_iter()
                     .filter_map(|item| item.as_u64().filter(|v| *v > 0))
                     .collect();
-                if parsed.is_empty() { None } else { Some(parsed) }
+                if parsed.is_empty() {
+                    None
+                } else {
+                    Some(parsed)
+                }
             }
             serde_json::Value::Number(n) => n.as_u64().filter(|v| *v > 0).map(|v| vec![v]),
             _ => None,
         }
     } else if let Ok(v) = trimmed.parse::<u64>() {
-        if v > 0 { Some(vec![v]) } else { None }
+        if v > 0 {
+            Some(vec![v])
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -165,7 +170,10 @@ fn parse_backoff_ms(raw: &str) -> Option<Vec<u64>> {
 /// （conex-compaction）已删 AgentMessage 面 L1（R-E），运行时双态切换
 /// 需引擎支持，V1 不接线（只文档化读取面），预留给 V2。
 pub fn summary_l1_placeholder(meta: impl Fn(&str) -> Option<String>) -> bool {
-    matches!(meta(META_KEY_SUMMARY_L1_PLACEHOLDER).as_deref(), Some("true" | "1"))
+    matches!(
+        meta(META_KEY_SUMMARY_L1_PLACEHOLDER).as_deref(),
+        Some("true" | "1")
+    )
 }
 
 /// 摘要任务完成结果（V1 经回调透传给壳层；轮次 6 落 compression_blocks 表）
@@ -481,10 +489,7 @@ impl SummaryDispatch {
     /// `compact_summary_retry_window_ms` 两新键注入）。F3 用户消息边界
     /// 被动触发点同样经本方法持有同一护栏实例（run 级面）。
     pub fn set_retry_guard(&self, config: SummaryRetryGuardConfig) {
-        *self
-            .retry_gate
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = SummaryRetryGate::new(config);
+        *self.retry_gate.lock().unwrap_or_else(|e| e.into_inner()) = SummaryRetryGate::new(config);
     }
 
     /// 单飞 spawn：存活任务存在 → 忽略新 spawn（返回 false）；否则启动
@@ -552,9 +557,7 @@ impl SummaryDispatch {
         // episode 尝试次数进窗口，再透传业务回调（None = 只记账）
         let gate_for_cb = Arc::clone(&self.retry_gate);
         let recorder: SummaryOutcomeCallback = Box::new(move |outcome: SummaryDispatchOutcome| {
-            let mut gate = gate_for_cb
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
+            let mut gate = gate_for_cb.lock().unwrap_or_else(|e| e.into_inner());
             gate.record_episode(outcome.attempts, crate::steering::unix_millis() as u64);
             drop(gate);
             if let Some(callback) = on_done {
@@ -734,16 +737,12 @@ pub(crate) async fn run_summary_task(
 
 /// 单次摘要调用（墙钟上限内；阻塞调用经 spawn_blocking 承接——trait 为
 /// 同步签名，真实实现可能涉及网络往返，不占用主循环 worker）
-async fn summarize_once(
-    task: &SummaryDispatchTask,
-    max_wall_ms: u64,
-) -> Result<String, String> {
+async fn summarize_once(task: &SummaryDispatchTask, max_wall_ms: u64) -> Result<String, String> {
     let summarizer = task.summarizer.clone();
     let dropped = task.dropped.clone();
     let existing = task.existing.clone();
-    let call = tokio::task::spawn_blocking(move || {
-        summarizer.summarize(&dropped, existing.as_deref())
-    });
+    let call =
+        tokio::task::spawn_blocking(move || summarizer.summarize(&dropped, existing.as_deref()));
     match tokio::time::timeout(Duration::from_millis(max_wall_ms), call).await {
         Ok(Ok(Ok(text))) => Ok(text),
         Ok(Ok(Err(err))) => Err(err),
@@ -804,10 +803,7 @@ mod tests {
         .to_string()
     }
 
-    fn task_with(
-        summarizer: Arc<dyn Summarizer>,
-        block_id: &str,
-    ) -> SummaryDispatchTask {
+    fn task_with(summarizer: Arc<dyn Summarizer>, block_id: &str) -> SummaryDispatchTask {
         SummaryDispatchTask {
             session_id: "s1".to_string(),
             block_id: block_id.to_string(),
@@ -882,20 +878,35 @@ mod tests {
                 outcomes.lock().unwrap().push(o);
             }) as SummaryOutcomeCallback
         };
-        assert!(dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-1"), Some(cb)));
+        assert!(dispatch.try_spawn(
+            task_with(summarizer.clone(), "compacted-summary-1-1"),
+            Some(cb)
+        ));
         // 等任务完成（退避 1ms×1 + 调用耗时）
         tokio::time::sleep(Duration::from_millis(200)).await;
         let done = outcomes.lock().unwrap().clone();
         assert_eq!(done.len(), 1, "回调必须恰好收到一次结果");
         let outcome = &done[0];
         assert_eq!(outcome.state, SummaryState::Committed);
-        assert_eq!(outcome.attempts, 2, "首次重试即成功：attempts = 同步1 + 后台1");
+        assert_eq!(
+            outcome.attempts, 2,
+            "首次重试即成功：attempts = 同步1 + 后台1"
+        );
         assert_eq!(outcome.block_id, "compacted-summary-1-1");
         // 渲染 = 确定性 md 投影（R-G 语源）
-        let markdown = outcome.rendered_markdown.as_deref().expect("必须有 md 渲染");
+        let markdown = outcome
+            .rendered_markdown
+            .as_deref()
+            .expect("必须有 md 渲染");
         assert!(markdown.contains("修复构建"), "md 渲染含 goal 文本");
-        let json = outcome.summary_json.as_deref().expect("必须有 JSON 规范文档");
-        assert!(validate_summary_document(json, 4096).is_ok(), "回调 JSON 必须合法");
+        let json = outcome
+            .summary_json
+            .as_deref()
+            .expect("必须有 JSON 规范文档");
+        assert!(
+            validate_summary_document(json, 4096).is_ok(),
+            "回调 JSON 必须合法"
+        );
     }
 
     /// E2 F2 层 1（低功耗模式）：episode 耗尽（attempts = 4 = 同步 1 +
@@ -918,7 +929,10 @@ mod tests {
             }) as SummaryOutcomeCallback
         };
         // 第一段：episode 1 全部失败 → 耗尽待重试（不 retired）
-        assert!(dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-1"), Some(cb)));
+        assert!(dispatch.try_spawn(
+            task_with(summarizer.clone(), "compacted-summary-1-1"),
+            Some(cb)
+        ));
         tokio::time::sleep(Duration::from_millis(300)).await;
         let done = outcomes.lock().unwrap().clone();
         assert_eq!(done.len(), 1);
@@ -927,7 +941,10 @@ mod tests {
             SummaryState::Awaiting,
             "episode 耗尽不 retired：块保持 awaiting（低功耗待重试，非永驻）"
         );
-        assert_eq!(done[0].attempts, 4, "episode 耗尽：attempts = 同步1 + 退避重试3");
+        assert_eq!(
+            done[0].attempts, 4,
+            "episode 耗尽：attempts = 同步1 + 退避重试3"
+        );
         assert_eq!(done[0].summary_json, None);
         let calls = summarizer.calls.lock().unwrap().clone();
         assert_eq!(calls.len(), 3, "后台只重试 3 次（上限 4 含同步）");
@@ -974,7 +991,10 @@ mod tests {
                 outcomes.lock().unwrap().push(o);
             }) as SummaryOutcomeCallback
         };
-        assert!(dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-1"), Some(cb)));
+        assert!(dispatch.try_spawn(
+            task_with(summarizer.clone(), "compacted-summary-1-1"),
+            Some(cb)
+        ));
         tokio::time::sleep(Duration::from_millis(300)).await;
         let done = outcomes.lock().unwrap().clone();
         assert_eq!(done.len(), 1);
@@ -1042,7 +1062,10 @@ mod tests {
         assert_eq!(jittered_ms(100, 0.0), 100);
         // 有 jitter 时结果在 [base×0.8, base×1.2] 内
         let jittered = jittered_ms(100, 0.2);
-        assert!((80..=120).contains(&jittered), "jitter 幅度钳制 ±20%：{jittered}");
+        assert!(
+            (80..=120).contains(&jittered),
+            "jitter 幅度钳制 ±20%：{jittered}"
+        );
     }
 
     /// 单飞状态恢复：任务完成后可再 spawn（同 run 二次压缩续试）
@@ -1130,10 +1153,22 @@ mod tests {
     /// L1 回退开关读取面（V1 启动级配置：只读取不接线，默认新 stub）
     #[test]
     fn l1_placeholder_switch_parses_meta() {
-        assert!(!summary_l1_placeholder(meta_map(&[])), "缺省 = 新 stub 语义");
-        assert!(!summary_l1_placeholder(meta_map(&[(META_KEY_SUMMARY_L1_PLACEHOLDER, "false")])));
-        assert!(summary_l1_placeholder(meta_map(&[(META_KEY_SUMMARY_L1_PLACEHOLDER, "true")])));
-        assert!(summary_l1_placeholder(meta_map(&[(META_KEY_SUMMARY_L1_PLACEHOLDER, "1")])));
+        assert!(
+            !summary_l1_placeholder(meta_map(&[])),
+            "缺省 = 新 stub 语义"
+        );
+        assert!(!summary_l1_placeholder(meta_map(&[(
+            META_KEY_SUMMARY_L1_PLACEHOLDER,
+            "false"
+        )])));
+        assert!(summary_l1_placeholder(meta_map(&[(
+            META_KEY_SUMMARY_L1_PLACEHOLDER,
+            "true"
+        )])));
+        assert!(summary_l1_placeholder(meta_map(&[(
+            META_KEY_SUMMARY_L1_PLACEHOLDER,
+            "1"
+        )])));
     }
 
     // ── E2 F2 层 1 低功耗护栏（窗口累计 + 窗口过期重置）──────────────
@@ -1142,8 +1177,14 @@ mod tests {
     #[test]
     fn retry_guard_defaults_match_plan() {
         let config = SummaryRetryGuardConfig::default();
-        assert_eq!(config.max_attempts, 8, "compact_summary_max_attempts 默认 8");
-        assert_eq!(config.retry_window_ms, 1_800_000, "compact_summary_retry_window_ms 默认 30min");
+        assert_eq!(
+            config.max_attempts, 8,
+            "compact_summary_max_attempts 默认 8"
+        );
+        assert_eq!(
+            config.retry_window_ms, 1_800_000,
+            "compact_summary_retry_window_ms 默认 30min"
+        );
         // 与单 episode 上限（4）区分：护栏是跨 episode 累计，不允许相等混淆
         assert_ne!(config.max_attempts, MAX_SUMMARY_ATTEMPTS);
     }
@@ -1176,7 +1217,10 @@ mod tests {
         gate.record_episode(1, 100);
         assert_eq!(gate.attempts_in_window(), 3);
         // t=200（窗口内）：累计 3 >= 3 → 拒绝（停止重试）
-        assert!(!gate.try_begin_episode(200), "窗口内达上限必须拒绝新 episode");
+        assert!(
+            !gate.try_begin_episode(200),
+            "窗口内达上限必须拒绝新 episode"
+        );
         // t=999（窗口内）：仍拒绝
         assert!(!gate.try_begin_episode(999), "窗口过期前持续拒绝");
         // t=1000（窗口过期）：重置计数 → 放行（窗口内 0 次被动触发 → 重置）
@@ -1200,7 +1244,10 @@ mod tests {
         gate.record_episode(2, 600);
         assert_eq!(gate.attempts_in_window(), 2, "过期窗口的旧计数必须丢弃");
         // 窗口起点随记账滑动到 600：t=1000（400ms 后）仍在窗口内 → 放行
-        assert!(gate.try_begin_episode(1_000), "窗口未过期（600+500 > 1000）→ 放行");
+        assert!(
+            gate.try_begin_episode(1_000),
+            "窗口未过期（600+500 > 1000）→ 放行"
+        );
         // t=1200（600+500 之后）：窗口过期 → 计数重置（0 < 5）→ 仍放行
         assert!(gate.try_begin_episode(1_200), "窗口过期 → 计数重置后可再试");
         assert_eq!(gate.attempts_in_window(), 0, "窗口过期重置后计数归零");
@@ -1214,7 +1261,10 @@ mod tests {
             retry_window_ms: 60_000,
         });
         assert!(!gate.try_begin_episode(0), "0 = 禁用摘要重试（恒拒绝）");
-        assert!(!gate.try_begin_episode(70_000), "窗口过期也不放行（0 上限）");
+        assert!(
+            !gate.try_begin_episode(70_000),
+            "窗口过期也不放行（0 上限）"
+        );
     }
 
     /// 调度器集成：窗口护栏拒绝 spawn——episode 1 耗尽（4 次尝试）→ 护栏
@@ -1241,7 +1291,10 @@ mod tests {
             }) as SummaryOutcomeCallback
         };
         assert!(
-            dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-1"), Some(cb)),
+            dispatch.try_spawn(
+                task_with(summarizer.clone(), "compacted-summary-1-1"),
+                Some(cb)
+            ),
             "episode 1（累计 0 < 2）必须放行"
         );
         tokio::time::sleep(Duration::from_millis(300)).await;
@@ -1267,8 +1320,14 @@ mod tests {
             (META_KEY_SUMMARY_RETRY_WINDOW_MS, "120000"),
         ]);
         let config = SummaryRetryGuardConfig::from_session_meta(meta);
-        assert_eq!(config.max_attempts, 6, "compact_summary_max_attempts 自定义");
-        assert_eq!(config.retry_window_ms, 120_000, "compact_summary_retry_window_ms 自定义");
+        assert_eq!(
+            config.max_attempts, 6,
+            "compact_summary_max_attempts 自定义"
+        );
+        assert_eq!(
+            config.retry_window_ms, 120_000,
+            "compact_summary_retry_window_ms 自定义"
+        );
     }
 
     /// 护栏 session_meta 读取面：键缺失 / 非法 → 缺省兜底（不 panic）
@@ -1306,7 +1365,10 @@ mod tests {
             }
         }
         fn events(&self) -> Vec<AgentEvent> {
-            self.events.lock().unwrap_or_else(|e| e.into_inner()).clone()
+            self.events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
         }
     }
     impl SummaryBackgroundSink for RecordingSummarySink {
@@ -1324,7 +1386,10 @@ mod tests {
             .iter()
             .filter_map(|e| match e {
                 AgentEvent::SummaryBackground {
-                    phase, attempt, reason, ..
+                    phase,
+                    attempt,
+                    reason,
+                    ..
                 } => Some((phase.clone(), *attempt, reason.clone())),
                 _ => None,
             })
@@ -1398,7 +1463,10 @@ mod tests {
         assert_eq!(give_up.0, "give-up");
         assert_eq!(give_up.1, 4, "give-up attempt = MAX_SUMMARY_ATTEMPTS");
         let reason = give_up.2.as_deref().expect("give-up 必须带原因");
-        assert!(reason.contains("MAX_SUMMARY_ATTEMPTS=4"), "give-up 原因含触顶口径：{reason}");
+        assert!(
+            reason.contains("MAX_SUMMARY_ATTEMPTS=4"),
+            "give-up 原因含触顶口径：{reason}"
+        );
         // 每次 failure 带失败原因（区分「正在补」各次失败可查）
         for failure in phases.iter().filter(|(p, _, _)| p == "failure") {
             assert!(failure.2.is_some(), "failure 必须带原因");
@@ -1446,7 +1514,11 @@ mod tests {
             "窗口内累计达护栏上限 → 拒绝"
         );
         let after = summary_phases(&sink.events());
-        assert_eq!(after.len(), before.len() + 1, "被拒触发必须补发一条 give-up");
+        assert_eq!(
+            after.len(),
+            before.len() + 1,
+            "被拒触发必须补发一条 give-up"
+        );
         let denied = after.last().expect("最后一条为 give-up");
         assert_eq!(denied.0, "give-up");
         assert_eq!(denied.1, 4, "give-up attempt = 窗口内已累计尝试数");

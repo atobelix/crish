@@ -328,6 +328,9 @@ fn build_request(state: &LoopState) -> ProviderRequest<'_> {
         max_tokens: Some(clamp_request_max_tokens(state)),
         system_prompt: state.options.system_prompt.as_deref(),
         session_id: Some(state.machine.context().session_id.clone()),
+        // T3.1：接线归 T3.2 适配层消费，本构造点暂填 None（提供方默认，
+        // 缺省不携带思考参数，与旧版 wire 逐字节一致）
+        reasoning_effort: None,
     }
 }
 

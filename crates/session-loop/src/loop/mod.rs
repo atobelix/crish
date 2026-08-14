@@ -31,24 +31,24 @@
 
 mod end;
 mod handlers;
-/// 摘要后台调度（T-33，轮次 4）：run 内单飞面。pub 导出——会话级协调器
-/// （T-42）与壳层回调接线（orchestrator 块表推进）消费同一任务类型面。
-pub mod summary_dispatch;
-/// 会话级摘要协调器（T-42，00-plan §6.5 R-I）：跨 run 单飞容器 +
-/// 全局并发上限；注册表由壳层 CoreRunState 持有（与 SessionHistoryCache
-/// 同生命周期）。pub 导出——壳层装配面（T-43/T-44）消费。
-pub mod summary_coordinator;
 /// 分阶段总结（E2 F5）独立面：里程碑判定 + Schema 构造 + checkpoint
 /// 载荷转换 + 终结摘要素材继承链 + 配置解析辅助。pub 导出——壳层
 /// （core_run_commands.rs 触发/注入点）后续批次接线消费。
 pub mod stage_summary;
+/// 会话级摘要协调器（T-42，00-plan §6.5 R-I）：跨 run 单飞容器 +
+/// 全局并发上限；注册表由壳层 CoreRunState 持有（与 SessionHistoryCache
+/// 同生命周期）。pub 导出——壳层装配面（T-43/T-44）消费。
+pub mod summary_coordinator;
+/// 摘要后台调度（T-33，轮次 4）：run 内单飞面。pub 导出——会话级协调器
+/// （T-42）与壳层回调接线（orchestrator 块表推进）消费同一任务类型面。
+pub mod summary_dispatch;
 
+#[path = "loop_exec.rs"]
+mod exec;
 #[path = "loop_options.rs"]
 mod options;
 #[path = "loop_runner.rs"]
 mod runner;
-#[path = "loop_exec.rs"]
-mod exec;
 
 #[cfg(test)]
 mod invariants;

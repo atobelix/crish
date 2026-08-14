@@ -113,7 +113,12 @@ impl ProviderUsage {
             CacheAccounting::Included => prompt,
             CacheAccounting::Excluded => prompt.saturating_add(read).saturating_add(write),
         };
-        Some(CacheBreakdown { read, write, miss, input_total })
+        Some(CacheBreakdown {
+            read,
+            write,
+            miss,
+            input_total,
+        })
     }
 }
 
@@ -283,7 +288,11 @@ impl Aggregate {
                 self.thought.push_str(&text);
                 self.thought_blocks.push(ThoughtBlock { text, redacted });
             }
-            ProviderStreamEvent::ToolCall { id, tool_name, input } => {
+            ProviderStreamEvent::ToolCall {
+                id,
+                tool_name,
+                input,
+            } => {
                 self.tool_calls.push(ToolCallBlock {
                     id: id.unwrap_or_else(|| format!("call_{}", self.tool_calls.len())),
                     tool_name,
@@ -293,7 +302,12 @@ impl Aggregate {
             ProviderStreamEvent::ProviderDiagnostic { diagnostic } => {
                 self.diagnostics.push(diagnostic);
             }
-            ProviderStreamEvent::Stop { reason, error, error_kind, usage } => {
+            ProviderStreamEvent::Stop {
+                reason,
+                error,
+                error_kind,
+                usage,
+            } => {
                 self.finish_reason = Some(reason);
                 if reason == StopReason::Error {
                     self.error = Some(error.unwrap_or_else(|| "provider 流异常终止".to_string()));
@@ -454,10 +468,16 @@ fn build_message_metadata(
     accounting: CacheAccounting,
 ) -> Value {
     let mut metadata = serde_json::Map::new();
-    metadata.insert("stopReason".to_string(), Value::String(stop_reason.as_str().to_string()));
+    metadata.insert(
+        "stopReason".to_string(),
+        Value::String(stop_reason.as_str().to_string()),
+    );
     metadata.insert("text".to_string(), Value::String(aggregate.text.clone()));
     if !aggregate.thought.is_empty() {
-        metadata.insert("thought".to_string(), Value::String(aggregate.thought.clone()));
+        metadata.insert(
+            "thought".to_string(),
+            Value::String(aggregate.thought.clone()),
+        );
     }
     if !aggregate.thought_blocks.is_empty() {
         metadata.insert(
@@ -466,7 +486,10 @@ fn build_message_metadata(
         );
     }
     if let Some(usage) = &aggregate.usage {
-        metadata.insert("usage".to_string(), serde_json::to_value(usage).unwrap_or_default());
+        metadata.insert(
+            "usage".to_string(),
+            serde_json::to_value(usage).unwrap_or_default(),
+        );
         // cacheBreakdown：流收口处按口径派生的缓存拆分（P2 §3.3 D 事件/遥测
         // 输出字段；prompt 缺失时无输入侧数据可派，省略不写）
         if let Some(breakdown) = usage.cache_breakdown(accounting) {
@@ -491,8 +514,7 @@ fn build_message_metadata(
         if let Some(kind) = aggregate.error_kind {
             metadata.insert(
                 "providerErrorKind".to_string(),
-                serde_json::to_value(kind)
-                    .unwrap_or_else(|_| Value::String("unknown".to_string())),
+                serde_json::to_value(kind).unwrap_or_else(|_| Value::String("unknown".to_string())),
             );
             metadata.insert(
                 "providerErrorRetryable".to_string(),
@@ -516,13 +538,19 @@ pub fn reannotate_aborted(mut consumed: ConsumeResult) -> ConsumeResult {
         ProviderOutput::Message { .. } => {
             match consumed.metadata.as_object_mut() {
                 Some(metadata) => {
-                    metadata.insert("stopReason".to_string(), Value::String("aborted".to_string()));
+                    metadata.insert(
+                        "stopReason".to_string(),
+                        Value::String("aborted".to_string()),
+                    );
                     metadata.insert("aborted".to_string(), Value::Bool(true));
                 }
                 // 防御性兜底：Message 正常聚合必带 metadata 对象
                 None => {
                     let mut metadata = serde_json::Map::new();
-                    metadata.insert("stopReason".to_string(), Value::String("aborted".to_string()));
+                    metadata.insert(
+                        "stopReason".to_string(),
+                        Value::String("aborted".to_string()),
+                    );
                     metadata.insert("aborted".to_string(), Value::Bool(true));
                     consumed.metadata = Value::Object(metadata);
                 }
@@ -615,7 +643,10 @@ mod tests {
     #[test]
     fn error_stop_without_kind_omits_classification_fields() {
         let result = consume(
-            vec![ProviderStreamEvent::text("部分内容"), ProviderStreamEvent::stop(StopReason::Error)],
+            vec![
+                ProviderStreamEvent::text("部分内容"),
+                ProviderStreamEvent::stop(StopReason::Error),
+            ],
             false,
         );
         assert_eq!(result.metadata["providerError"], "provider 流异常终止");
@@ -654,7 +685,10 @@ mod tests {
     #[test]
     fn length_stop_yields_message_with_length() {
         let result = consume(
-            vec![ProviderStreamEvent::text("长回复"), ProviderStreamEvent::stop(StopReason::Length)],
+            vec![
+                ProviderStreamEvent::text("长回复"),
+                ProviderStreamEvent::stop(StopReason::Length),
+            ],
             false,
         );
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Length));
@@ -665,7 +699,11 @@ mod tests {
     fn tool_call_collected_at_stream_end() {
         let result = consume(
             vec![
-                ProviderStreamEvent::tool_call(None, "read_file", serde_json::json!({"path": "/tmp/a"})),
+                ProviderStreamEvent::tool_call(
+                    None,
+                    "read_file",
+                    serde_json::json!({"path": "/tmp/a"}),
+                ),
                 ProviderStreamEvent::text("调用后的话"),
                 ProviderStreamEvent::stop(StopReason::Stop),
             ],
@@ -733,7 +771,10 @@ mod tests {
         let incremental = builder.finish(false);
         assert_eq!(incremental, full, "增量聚合与全量聚合等价");
         assert_eq!(incremental.response.text(), "你好");
-        assert!(matches!(incremental.stop_reason(), Some(ConsumeStopReason::Stop)));
+        assert!(matches!(
+            incremental.stop_reason(),
+            Some(ConsumeStopReason::Stop)
+        ));
     }
 
     /// T09.1：ConsumeBuilder 空构建器 is_empty 判定（流中错误归属输入）
@@ -771,7 +812,10 @@ mod tests {
     /// metadata 派生 cacheBreakdown，键为 camelCase（inputTotal）
     #[test]
     fn metadata_cache_breakdown_included_default() {
-        let result = consume(vec![ProviderStreamEvent::text("你好"), stop_with_usage(None)], false);
+        let result = consume(
+            vec![ProviderStreamEvent::text("你好"), stop_with_usage(None)],
+            false,
+        );
         let breakdown = result
             .metadata
             .get("cacheBreakdown")
@@ -779,11 +823,18 @@ mod tests {
             .clone();
         assert_eq!(breakdown["read"], 70);
         assert_eq!(breakdown["write"], 10);
-        assert_eq!(breakdown["miss"], 20, "Included：miss = prompt - read - write");
-        assert_eq!(breakdown["inputTotal"], 100, "Included：inputTotal = prompt");
+        assert_eq!(
+            breakdown["miss"], 20,
+            "Included：miss = prompt - read - write"
+        );
+        assert_eq!(
+            breakdown["inputTotal"], 100,
+            "Included：inputTotal = prompt"
+        );
         // 恒等式（C9）：input_total = miss + read + write
         assert_eq!(
-            breakdown["miss"].as_u64().unwrap() + breakdown["read"].as_u64().unwrap()
+            breakdown["miss"].as_u64().unwrap()
+                + breakdown["read"].as_u64().unwrap()
                 + breakdown["write"].as_u64().unwrap(),
             breakdown["inputTotal"].as_u64().unwrap()
         );
@@ -799,7 +850,10 @@ mod tests {
         let result = builder.finish(false);
         let breakdown = result.metadata["cacheBreakdown"].clone();
         assert_eq!(breakdown["miss"], 100, "Excluded：miss = prompt");
-        assert_eq!(breakdown["inputTotal"], 180, "Excluded：inputTotal = prompt + read + write");
+        assert_eq!(
+            breakdown["inputTotal"], 180,
+            "Excluded：inputTotal = prompt + read + write"
+        );
         assert_eq!(breakdown["read"], 70);
         assert_eq!(breakdown["write"], 10);
     }
@@ -835,21 +889,35 @@ mod tests {
             ],
             false,
         );
-        assert!(result.metadata.get("cacheBreakdown").is_none(), "prompt 缺失不派生");
+        assert!(
+            result.metadata.get("cacheBreakdown").is_none(),
+            "prompt 缺失不派生"
+        );
         assert!(result.metadata.get("usage").is_some(), "usage 原样保留");
     }
 
     /// T-16：无 usage 的 Stop → 不写 cacheBreakdown
     #[test]
     fn metadata_omits_cache_breakdown_without_usage() {
-        let result = consume(vec![ProviderStreamEvent::text("你好"), ProviderStreamEvent::stop(StopReason::Stop)], false);
+        let result = consume(
+            vec![
+                ProviderStreamEvent::text("你好"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            false,
+        );
         assert!(result.metadata.get("cacheBreakdown").is_none());
     }
 
     /// T-16：CacheBreakdown 序列化形状（camelCase，与 agent-provider 同形）
     #[test]
     fn cache_breakdown_serializes_camel_case() {
-        let breakdown = CacheBreakdown { read: 1, write: 2, miss: 3, input_total: 6 };
+        let breakdown = CacheBreakdown {
+            read: 1,
+            write: 2,
+            miss: 3,
+            input_total: 6,
+        };
         let value = serde_json::to_value(breakdown).unwrap();
         assert_eq!(
             value,

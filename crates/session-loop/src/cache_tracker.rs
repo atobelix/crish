@@ -141,8 +141,7 @@ impl CacheStatsTracker {
 
     /// 从配置构造（LoopState 构造与 run 起始复位共用入口）
     pub fn from_config(config: &CacheTrackingConfig) -> Self {
-        Self::new(config.provider.clone(), config.model.clone())
-            .with_ttl(config.ttl_seconds)
+        Self::new(config.provider.clone(), config.model.clone()).with_ttl(config.ttl_seconds)
     }
 
     /// 设置缓存 TTL（秒；0 = 未知 / 无缓存）
@@ -391,7 +390,8 @@ impl CacheStatsTracker {
 
     /// 当前是否已冷（`now` 超过温暖截止；无基线 / TTL 未知 → false）
     pub fn is_cold(&self, now_ms: u64) -> bool {
-        self.warm_until_ms(now_ms).map_or(false, |warm| is_cold(now_ms, warm))
+        self.warm_until_ms(now_ms)
+            .map_or(false, |warm| is_cold(now_ms, warm))
     }
 
     /// 当前基线（只读；run 收口后 engine 层据此持久化跨 run 基线，T-40）
@@ -425,8 +425,11 @@ impl CacheStatsTracker {
             warm_until_ms: self
                 .baseline
                 .as_ref()
-                .and_then(|b| (self.ttl_seconds > 0)
-                    .then(|| u64::try_from(warm_until(b.completed_at_ms, self.ttl_seconds)).ok()))
+                .and_then(|b| {
+                    (self.ttl_seconds > 0).then(|| {
+                        u64::try_from(warm_until(b.completed_at_ms, self.ttl_seconds)).ok()
+                    })
+                })
                 .flatten(),
         }
     }
@@ -441,7 +444,11 @@ impl CacheStatsTracker {
     ///    断裂判定（cacheRead 骤降 >5% 且 >2000 token）或命中率低于 85%
     ///    → `LowRead`；其余 `Unknown`（`Cold` 只在无基线时出现——此时
     ///    detect 不计 miss，故不产出）。
-    fn classify_miss(&self, breakdown: &CacheBreakdownMath, completed_at_ms: u64) -> MissAttribution {
+    fn classify_miss(
+        &self,
+        breakdown: &CacheBreakdownMath,
+        completed_at_ms: u64,
+    ) -> MissAttribution {
         let baseline = self.baseline.as_ref();
         // 1. 压缩代数变化（正常不可达的防御分支）
         if let Some(b) = baseline {
@@ -460,7 +467,10 @@ impl CacheStatsTracker {
             baseline.map(|b| &b.signature)
         };
         let default_signature = RequestSignature::default();
-        let cur_signature = self.pending_signature.as_ref().unwrap_or(&default_signature);
+        let cur_signature = self
+            .pending_signature
+            .as_ref()
+            .unwrap_or(&default_signature);
         let reason = classify(
             prev_signature,
             cur_signature,
@@ -496,11 +506,7 @@ impl CacheStatsTracker {
     /// 可能解释；Claude Code 两阶段口径，[`MissDetector::is_break`]）。
     ///
     /// 无基线（首轮 / 压缩后）→ false（无 prev_read 可比较）。
-    fn is_break_signal(
-        &self,
-        baseline: Option<&CacheBaseline>,
-        cur: &CacheBreakdownMath,
-    ) -> bool {
+    fn is_break_signal(&self, baseline: Option<&CacheBaseline>, cur: &CacheBreakdownMath) -> bool {
         let Some(b) = baseline else {
             return false;
         };
@@ -578,10 +584,17 @@ fn block_hash(block: &AgentMessageBlock, out: &mut Vec<u8>) {
             out.push(0);
             // 入参 JSON（serde_json::Value 为 BTreeMap 键序 → 序列化确定）
             out.extend_from_slice(
-                serde_json::to_string(&call.input).unwrap_or_default().as_bytes(),
+                serde_json::to_string(&call.input)
+                    .unwrap_or_default()
+                    .as_bytes(),
             );
         }
-        AgentMessageBlock::ToolResult { tool_call_id, tool_name, output, is_error } => {
+        AgentMessageBlock::ToolResult {
+            tool_call_id,
+            tool_name,
+            output,
+            is_error,
+        } => {
             out.extend_from_slice(b"tool-result\0");
             out.extend_from_slice(tool_call_id.as_bytes());
             out.push(0);
@@ -620,10 +633,7 @@ pub(crate) fn build_request_signature(
     let system_hash = fnv1a(system.unwrap_or("").as_bytes());
     let tools_hash = tools_hash(tools);
     let message_hashes: Vec<u64> = messages.iter().map(|m| message_hash(m)).collect();
-    let messages_hash = message_hashes
-        .iter()
-        .copied()
-        .fold(0, fnv1a_mix);
+    let messages_hash = message_hashes.iter().copied().fold(0, fnv1a_mix);
     RequestSignature {
         system_hash,
         tools_hash,
@@ -644,7 +654,9 @@ mod tests {
             id: id.to_string(),
             role,
             created_at: created_at.to_string(),
-            blocks: vec![AgentMessageBlock::Text { text: text.to_string() }],
+            blocks: vec![AgentMessageBlock::Text {
+                text: text.to_string(),
+            }],
             metadata: Some(serde_json::json!({ "usage": { "promptTokens": 100 } })),
             client_message_id: Some("cm".to_string()),
             content: Some(text.to_string()),
@@ -696,17 +708,35 @@ mod tests {
         let other_text = build_request_signature(
             Some("sys"),
             &tools(),
-            &[msg("m1", AgentMessageRole::User, "你好啊", "2026-01-01T00:00:00Z")],
+            &[msg(
+                "m1",
+                AgentMessageRole::User,
+                "你好啊",
+                "2026-01-01T00:00:00Z",
+            )],
         );
         assert_ne!(base.messages_hash, other_text.messages_hash);
         assert_ne!(base.message_hashes[0], other_text.message_hashes[0]);
         // 前缀对比：第二条消息被改写 → 前缀被改
-        let m2 = msg("m2", AgentMessageRole::Assistant, "回复", "2026-01-01T00:00:00Z");
+        let m2 = msg(
+            "m2",
+            AgentMessageRole::Assistant,
+            "回复",
+            "2026-01-01T00:00:00Z",
+        );
         let with_m2 = build_request_signature(Some("sys"), &tools(), &[m.clone(), m2.clone()]);
         let rewritten = build_request_signature(
             Some("sys"),
             &tools(),
-            &[m.clone(), msg("m2", AgentMessageRole::Assistant, "改写", "2026-01-01T00:00:00Z")],
+            &[
+                m.clone(),
+                msg(
+                    "m2",
+                    AgentMessageRole::Assistant,
+                    "改写",
+                    "2026-01-01T00:00:00Z",
+                ),
+            ],
         );
         assert!(with_m2.messages_prefix_changed(&rewritten));
     }
@@ -745,9 +775,13 @@ mod tests {
     fn record_usage_aggregates_run_stats() {
         let mut t = tracker(0);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 7_000, 1_000, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 7_000, 1_000, None), 100, 10_100, 1_000)
+            .is_none());
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(20_000, 15_000, 2_000, None), 200, 20_200, 2_000).is_none());
+        assert!(t
+            .record_usage(scalars(20_000, 15_000, 2_000, None), 200, 20_200, 2_000)
+            .is_none());
         let stats = t.finish();
         assert_eq!(stats.sample_count, 2);
         assert_eq!(stats.prompt_tokens, 30_000);
@@ -779,7 +813,9 @@ mod tests {
     fn record_usage_prefix_changed_attribution() {
         let mut t = tracker(60);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         // 第二轮：system 变化 + read 降到 2000（missed = min(10000,10000) - 2000）
         t.capture_signature(Some("sys2"), &tools(), &[]);
         let miss = t
@@ -797,7 +833,9 @@ mod tests {
     fn record_usage_model_switch_still_counts_miss() {
         let mut t = tracker(60);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         t.on_model_switch();
         t.capture_signature(Some("sys"), &tools(), &[]);
         let miss = t
@@ -814,7 +852,9 @@ mod tests {
     fn record_usage_ttl_expired_attribution() {
         let mut t = tracker(60);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         t.capture_signature(Some("sys"), &tools(), &[]);
         // idle = 69_000 ≥ 60_000 → Expired；read 骤降到 0 但 TTL 判定优先
         let miss = t
@@ -828,7 +868,9 @@ mod tests {
     fn record_usage_zero_read_and_low_read_fallback() {
         let mut t = tracker(60);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         t.capture_signature(Some("sys"), &tools(), &[]);
         let zero_read = t
             .record_usage(scalars(10_000, 0, 0, None), 100, 10_100, 2_000)
@@ -836,7 +878,9 @@ mod tests {
         assert_eq!(zero_read.attribution, MissAttribution::ZeroRead);
         let mut t = tracker(60);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         t.capture_signature(Some("sys"), &tools(), &[]);
         // 命中率 10% < 85% 且 read > 0 → low-read
         let low_read = t
@@ -861,7 +905,11 @@ mod tests {
         let miss = t
             .record_usage(scalars(40_000, 37_900, 0, None), 100, 40_100, 2_000)
             .expect("超过噪声地板必须计 miss");
-        assert_eq!(miss.attribution, MissAttribution::LowRead, "断裂信号强制 LowRead");
+        assert_eq!(
+            miss.attribution,
+            MissAttribution::LowRead,
+            "断裂信号强制 LowRead"
+        );
         assert_eq!(miss.missed_tokens, 2_100);
         // 对照：下降 1500 token（3.75% < 5%）且命中率 96.25% ≥ 85% → 不强判
         let mut t2 = tracker(60);
@@ -873,7 +921,11 @@ mod tests {
         let miss = t2
             .record_usage(scalars(40_000, 38_500, 0, None), 100, 40_100, 2_000)
             .expect("超过噪声地板必须计 miss");
-        assert_eq!(miss.attribution, MissAttribution::Unknown, "未达断裂阈值不强判");
+        assert_eq!(
+            miss.attribution,
+            MissAttribution::Unknown,
+            "未达断裂阈值不强判"
+        );
     }
 
     /// 噪声地板与 reportedCache 粘性：missed ≤ 1024 不计；从未报告过缓存活动不计
@@ -881,18 +933,25 @@ mod tests {
     fn record_usage_respects_noise_floor_and_sticky_flag() {
         let mut t = tracker(60);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         t.capture_signature(Some("sys"), &tools(), &[]);
         // missed = 1024 恰好等于地板 → 不计
-        assert!(t.record_usage(scalars(10_000, 8_976, 0, None), 100, 10_100, 2_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_976, 0, None), 100, 10_100, 2_000)
+            .is_none());
         t.capture_signature(Some("sys"), &tools(), &[]);
         // 从未报告过缓存（首轮 read/write 全 0）→ 粘性挡下
         let mut t2 = tracker(60);
         t2.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t2.record_usage(scalars(10_000, 0, 0, None), 100, 10_100, 1_000).is_none());
+        assert!(t2
+            .record_usage(scalars(10_000, 0, 0, None), 100, 10_100, 1_000)
+            .is_none());
         t2.capture_signature(Some("sys"), &tools(), &[]);
         assert!(
-            t2.record_usage(scalars(10_000, 0, 0, None), 100, 10_100, 2_000).is_none(),
+            t2.record_usage(scalars(10_000, 0, 0, None), 100, 10_100, 2_000)
+                .is_none(),
             "从未报告过缓存活动 → 不计 miss"
         );
     }
@@ -907,7 +966,9 @@ mod tests {
     fn on_compaction_invalidates_baseline_and_bumps_generation() {
         let mut t = tracker(60);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         assert!(t.baseline().is_some(), "首轮后基线必须建立");
         t.on_compaction();
         assert!(t.baseline().is_none(), "压缩后基线必须作废");
@@ -1073,7 +1134,9 @@ mod tests {
     fn finish_reports_warm_until_and_cold_check() {
         let mut t = tracker(60);
         t.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         // 温暖截止 = 1000 + 60s × 1000 = 61_000
         assert_eq!(t.warm_until_ms(0), Some(61_000));
         assert!(!t.is_cold(61_000), "恰好等于截止仍温暖");
@@ -1086,7 +1149,9 @@ mod tests {
         // TTL 未知（0）→ 不判定（P3 查询失败不提示）
         let mut t2 = tracker(0);
         t2.capture_signature(Some("sys"), &tools(), &[]);
-        assert!(t2.record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000).is_none());
+        assert!(t2
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
         assert_eq!(t2.warm_until_ms(0), None);
         assert!(!t2.is_cold(u64::MAX));
         assert!(t2.cold_cache_check(u64::MAX).is_none());

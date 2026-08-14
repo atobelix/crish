@@ -21,16 +21,15 @@
 //!      [maybe_compact_preflight]；边界压缩已消耗单 run 计数时自然跳过）；
 //!   6. TURN_PREPARED → streaming。
 
+use crate::steering::SteeringPhase;
 use conex_types::events::AgentEvent;
 use conex_types::message::AgentMessage;
 use conex_types::session::AgentSessionEvent as E;
-use crate::steering::SteeringPhase;
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    assert_timeline_injection_hygiene, check_control, dispatch,
-    maybe_compact_preflight, maybe_compact_user_boundary, record_message,
-    steering_context, HandlerOutcome, LoopState,
+    assert_timeline_injection_hygiene, check_control, dispatch, maybe_compact_preflight,
+    maybe_compact_user_boundary, record_message, steering_context, HandlerOutcome, LoopState,
 };
 use super::super::LoopError;
 
@@ -99,8 +98,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
                 continue;
             }
             let session_id = state.machine.context().session_id.clone();
-            let applied =
-                state.steering.apply(&actions, &session_id, &mut state.conversation);
+            let applied = state
+                .steering
+                .apply(&actions, &session_id, &mut state.conversation);
             state.events.extend(applied.events);
             if applied.intervention_required {
                 // 裁决（00 D6 / 01 §五.4）：intervention 事件照发，
@@ -286,7 +286,9 @@ mod tests {
         let record = record.expect("超阈值必须发生边界压缩");
         assert_eq!(record.trigger, ContextCompressionTrigger::UserMessage);
         assert!(
-            !record.compressed_message_ids.contains(&"user-1".to_string()),
+            !record
+                .compressed_message_ids
+                .contains(&"user-1".to_string()),
             "用户消息绝不在 dropped_ids"
         );
         assert!(

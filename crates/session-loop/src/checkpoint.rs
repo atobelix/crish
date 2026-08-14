@@ -31,10 +31,19 @@ mod tests {
         let section = checkpoint_prompt_section();
         assert!(section.contains(CHECKPOINT_MARKER), "声明主前缀");
         assert!(section.contains(CONEX_CHECKPOINT_MARKER), "声明别名前缀");
-        assert!(section.contains("存在 checkpoint 时优先恢复"), "优先恢复语义");
-        assert!(section.contains("先消费检查点摘要与目标剩余部分"), "恢复输入语义");
+        assert!(
+            section.contains("存在 checkpoint 时优先恢复"),
+            "优先恢复语义"
+        );
+        assert!(
+            section.contains("先消费检查点摘要与目标剩余部分"),
+            "恢复输入语义"
+        );
         assert!(section.contains("由引擎采集"), "采集只读边界");
-        assert!(section.contains("system 消息永不进入检查点内容"), "system 永不参与");
+        assert!(
+            section.contains("system 消息永不进入检查点内容"),
+            "system 永不参与"
+        );
         assert!(section.contains("\"target\""), "载荷形状含目标字段");
         assert!(section.contains("\"next\""), "载荷形状含下一步字段");
     }

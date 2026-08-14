@@ -25,8 +25,8 @@ use conex_types::tool::ToolOutput;
 
 use crate::steering::nudge::build_steering_message;
 use crate::steering::{
-    DEFAULT_INTERVENTION_MESSAGE, SteeringAction, SteeringContext, SteeringPhase, SteeringReason,
-    SteeringStrategy,
+    SteeringAction, SteeringContext, SteeringPhase, SteeringReason, SteeringStrategy,
+    DEFAULT_INTERVENTION_MESSAGE,
 };
 
 /// 最大连续工具错误数（默认 2，对齐 TS recovery-steering-strategy.ts:41）
@@ -272,10 +272,10 @@ fn exit_code_from_text(text: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use crate::steering::testutil::{
         assistant_with_tool_calls, tool_result, tool_result_json, user,
     };
+    use serde_json::json;
 
     fn context<'a>(
         messages: &'a [Arc<AgentMessage>],
@@ -326,7 +326,10 @@ mod tests {
         assert_eq!(message.role, AgentMessageRole::System);
         assert!(!message.text().is_empty());
         let metadata = message.metadata.as_ref().expect("注入消息须带元数据");
-        assert_eq!(metadata.get("kind").and_then(|k| k.as_str()), Some("runtime-steering"));
+        assert_eq!(
+            metadata.get("kind").and_then(|k| k.as_str()),
+            Some("runtime-steering")
+        );
         assert_eq!(
             metadata.get("reason").and_then(|r| r.as_str()),
             Some("empty-response")
@@ -394,7 +397,10 @@ mod tests {
     #[test]
     fn after_tools_without_loop_returns_none() {
         let strategy = RecoverySteeringStrategy::default();
-        let messages = arc_messages(vec![user("hi"), assistant_with_tool_calls(&[("read", json!({}))])]);
+        let messages = arc_messages(vec![
+            user("hi"),
+            assistant_with_tool_calls(&[("read", json!({}))]),
+        ]);
         assert!(strategy
             .evaluate(SteeringPhase::AfterTools, &context(&messages, 0))
             .is_none());
@@ -412,7 +418,10 @@ mod tests {
             "1 次错误 < 阈值 2 不触发"
         );
 
-        let two_errors = arc_messages(vec![tool_result("boom-1", true), tool_result("boom-2", true)]);
+        let two_errors = arc_messages(vec![
+            tool_result("boom-1", true),
+            tool_result("boom-2", true),
+        ]);
         let (message, reason) = inject_of(
             strategy
                 .evaluate(SteeringPhase::AfterTools, &context(&two_errors, 0))
@@ -454,9 +463,12 @@ mod tests {
             tool_result_json(true, serde_json::json!({"softDeny": true})),
             tool_result_json(true, serde_json::json!({"softDeny": true})),
         ]);
-        assert!(strategy
-            .evaluate(SteeringPhase::AfterTools, &context(&messages, 0))
-            .is_none(), "softDeny 不构成错误环");
+        assert!(
+            strategy
+                .evaluate(SteeringPhase::AfterTools, &context(&messages, 0))
+                .is_none(),
+            "softDeny 不构成错误环"
+        );
     }
 
     /// json 退出码判定失败：非零算失败、零不算
@@ -478,9 +490,12 @@ mod tests {
             tool_result_json(false, serde_json::json!({"exitCode": 0})),
             tool_result_json(false, serde_json::json!({"exitCode": 0})),
         ]);
-        assert!(strategy
-            .evaluate(SteeringPhase::AfterTools, &context(&zero, 0))
-            .is_none(), "退出码 0 非失败");
+        assert!(
+            strategy
+                .evaluate(SteeringPhase::AfterTools, &context(&zero, 0))
+                .is_none(),
+            "退出码 0 非失败"
+        );
     }
 
     /// 文本 `Exit code: N` 判定失败（大小写不敏感）
@@ -526,12 +541,14 @@ mod tests {
         assert_eq!(reason, SteeringReason::ToolErrors);
 
         // 反向：非法段后跟合法零 → 不触发（continue 后正确归零）
-        let invalid_then_zero = arc_messages(vec![
-            tool_result("exit code: unknown\nexit code: 0", false),
-        ]);
-        assert!(strategy
-            .evaluate(SteeringPhase::AfterTools, &context(&invalid_then_zero, 0))
-            .is_none(), "非法段后合法零退出码不触发");
+        let invalid_then_zero =
+            arc_messages(vec![tool_result("exit code: unknown\nexit code: 0", false)]);
+        assert!(
+            strategy
+                .evaluate(SteeringPhase::AfterTools, &context(&invalid_then_zero, 0))
+                .is_none(),
+            "非法段后合法零退出码不触发"
+        );
     }
 
     /// 重复调用环边界 N-1/N：同签名 2 次不触发、3 次触发（默认阈值 3）
@@ -544,9 +561,12 @@ mod tests {
             ("read", input.clone()),
             ("read", input.clone()),
         ])]);
-        assert!(strategy
-            .evaluate(SteeringPhase::AfterTools, &context(&twice_same, 0))
-            .is_none(), "2 次 < 阈值 3 不触发");
+        assert!(
+            strategy
+                .evaluate(SteeringPhase::AfterTools, &context(&twice_same, 0))
+                .is_none(),
+            "2 次 < 阈值 3 不触发"
+        );
 
         let three_same = arc_messages(vec![assistant_with_tool_calls(&[
             ("read", input.clone()),
@@ -592,9 +612,12 @@ mod tests {
             assistant_with_tool_calls(&[("search", input.clone())]),
             assistant_with_tool_calls(&[("search", input.clone())]),
         ]);
-        assert!(strategy
-            .evaluate(SteeringPhase::AfterTools, &context(&messages, 0))
-            .is_none(), "user 边界截断累计");
+        assert!(
+            strategy
+                .evaluate(SteeringPhase::AfterTools, &context(&messages, 0))
+                .is_none(),
+            "user 边界截断累计"
+        );
 
         // 去掉 user：3 次连续累计触发
         let messages = arc_messages(vec![
@@ -617,16 +640,22 @@ mod tests {
             user("user again"),
             tool_result("boom-3", true),
         ]);
-        assert!(strategy
-            .evaluate(SteeringPhase::AfterTools, &context(&messages, 0))
-            .is_none(), "user 边界截断错误环检测");
+        assert!(
+            strategy
+                .evaluate(SteeringPhase::AfterTools, &context(&messages, 0))
+                .is_none(),
+            "user 边界截断错误环检测"
+        );
     }
 
     /// after-tools 预算耗尽：检测到环仍返回 intervention-required（D9）
     #[test]
     fn after_tools_budget_exhausted_intervenes_with_detected_reason() {
         let strategy = RecoverySteeringStrategy::default();
-        let messages = arc_messages(vec![tool_result("boom-1", true), tool_result("boom-2", true)]);
+        let messages = arc_messages(vec![
+            tool_result("boom-1", true),
+            tool_result("boom-2", true),
+        ]);
         let action = strategy
             .evaluate(SteeringPhase::AfterTools, &context(&messages, 1))
             .expect("检测到环且预算耗尽应干预");
@@ -646,7 +675,10 @@ mod tests {
             max_steering_messages: Some(3),
             ..Default::default()
         });
-        let messages = arc_messages(vec![tool_result("boom-1", true), tool_result("boom-2", true)]);
+        let messages = arc_messages(vec![
+            tool_result("boom-1", true),
+            tool_result("boom-2", true),
+        ]);
         let (message, _) = inject_of(
             strategy
                 .evaluate(SteeringPhase::AfterTools, &context(&messages, 2))

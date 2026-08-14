@@ -80,7 +80,7 @@ pub(crate) async fn handle(
 mod tests {
     use super::*;
     use crate::r#loop::handlers::LoopState;
-    use crate::r#loop::{DEFAULT_MAX_TOKENS, SessionLoopOptions};
+    use crate::r#loop::{SessionLoopOptions, DEFAULT_MAX_TOKENS};
     use crate::steering::{
         RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
     };
@@ -125,20 +125,26 @@ mod tests {
         let mut state = streaming_state();
         state.options.length_upgrade_limit = 30;
         // 第一次：升级（1/2）
-        let o1 = handle(&mut state, Some(ConsumeStopReason::Length)).await.unwrap();
+        let o1 = handle(&mut state, Some(ConsumeStopReason::Length))
+            .await
+            .unwrap();
         assert!(o1.end.is_none());
         assert_eq!(state.length_upgrades, 1);
         assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 2);
         re_enter_streaming(&mut state);
         // 第二次：升级（2/2）
-        let o2 = handle(&mut state, Some(ConsumeStopReason::Length)).await.unwrap();
+        let o2 = handle(&mut state, Some(ConsumeStopReason::Length))
+            .await
+            .unwrap();
         assert!(o2.end.is_none());
         assert_eq!(state.length_upgrades, 2);
         assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 4);
         re_enter_streaming(&mut state);
         // 第三次：配置 30 也按阶梯上限 2 计——不翻倍，走 continue-nudge 上限
         // （默认 1）再试一次后正常收场（length 截断不视为错误）
-        let o3 = handle(&mut state, Some(ConsumeStopReason::Length)).await.unwrap();
+        let o3 = handle(&mut state, Some(ConsumeStopReason::Length))
+            .await
+            .unwrap();
         assert!(
             o3.end.is_none(),
             "第 3 次应进入 continue-nudge 重试（非第 3 次 length 升级，红）"

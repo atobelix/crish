@@ -352,9 +352,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         ApprovalDecision::Denied { .. } => {
                             conex_types::events::ApprovalDecision::Denied
                         }
-                        ApprovalDecision::Expired => {
-                            conex_types::events::ApprovalDecision::Expired
-                        }
+                        ApprovalDecision::Expired => conex_types::events::ApprovalDecision::Expired,
                     },
                     timestamp: crate::steering::now_iso_utc(),
                 });

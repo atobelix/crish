@@ -102,11 +102,7 @@ impl ApprovalChannel {
 
 #[async_trait]
 impl AskChannel for ApprovalChannel {
-    async fn ask(
-        &self,
-        tool_name: &str,
-        args: &Value,
-    ) -> Result<AskDecision, ToolError> {
+    async fn ask(&self, tool_name: &str, args: &Value) -> Result<AskDecision, ToolError> {
         // 1. 记录 approval-requested（先发后等防死锁，01 §五.8；gate 实现方
         //    负责实时广播，本记录进入批事件流供持久化翻译）
         self.recorded
@@ -261,7 +257,10 @@ mod tests {
         });
         let (ch, _token) = channel(gate, None);
         let decision = ch
-            .ask("shell_command", &serde_json::json!({ "command": "git push" }))
+            .ask(
+                "shell_command",
+                &serde_json::json!({ "command": "git push" }),
+            )
             .await
             .unwrap();
         assert_eq!(decision, AskDecision::Allowed);
@@ -301,13 +300,7 @@ mod tests {
             task_type: None,
             reason: Some("需要写入报告目录".into()),
         };
-        let ch = ApprovalChannel::new(
-            gate,
-            "c1",
-            None,
-            token,
-            Some(requester.clone()),
-        );
+        let ch = ApprovalChannel::new(gate, "c1", None, token, Some(requester.clone()));
         let decision = ch
             .ask("write_file", &serde_json::json!({ "path": "r.md" }))
             .await
@@ -350,10 +343,7 @@ mod tests {
                 reason: None,
             }),
         );
-        let denied = ch
-            .ask("write_file", &serde_json::json!({}))
-            .await
-            .unwrap();
+        let denied = ch.ask("write_file", &serde_json::json!({})).await.unwrap();
         match denied {
             AskDecision::Denied { reason } => {
                 assert!(reason.contains("主 agent 拒绝"), "reason: {reason}");
@@ -424,9 +414,8 @@ mod tests {
             consulted: Arc::new(AtomicUsize::new(0)),
         });
         let (ch, token) = channel(gate, None);
-        let handle = tokio::spawn(async move {
-            ch.ask("shell_command", &serde_json::json!({})).await
-        });
+        let handle =
+            tokio::spawn(async move { ch.ask("shell_command", &serde_json::json!({})).await });
         // 等待 gate 被问询（审批挂起中）后触发 abort_token
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
         token.abort();
@@ -448,9 +437,8 @@ mod tests {
         });
         let signal = AbortSignal::new();
         let (ch, _token) = channel(gate, Some(signal.clone()));
-        let handle = tokio::spawn(async move {
-            ch.ask("shell_command", &serde_json::json!({})).await
-        });
+        let handle =
+            tokio::spawn(async move { ch.ask("shell_command", &serde_json::json!({})).await });
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
         signal.abort();
         release.notify_waiters();

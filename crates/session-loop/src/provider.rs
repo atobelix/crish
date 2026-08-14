@@ -32,6 +32,50 @@ use futures::Stream;
 
 use crate::stream::ProviderStreamEvent;
 
+/// 思考档位（T3.1 本地等价层，对齐 agent-provider::request::vendor::ReasoningEffort）
+///
+/// session-loop 按任务书 B3.4 第 5 点约束**不直接依赖 agent-provider**
+/// （provider 解耦用 trait，HTTP/传输层不进入本 crate）。本枚举与
+/// agent-provider 的 [ReasoningEffort] **逐字面等价**（相同的变体与
+/// [`as_str`] 映射），供 [ProviderRequest] 携带思考参数，真实适配层
+/// （B4/B6 集成时）按其 vendor 规范化消费——wire 逐字节不变。
+///
+/// 语义登记（契约，T3.2 适配层消费）：`None` = 提供方默认（不携带思考参数）；
+/// `Some(Off)` = 显式关闭；`Some(High/Max/...)` = 显式档位。**只增不减**——
+/// 各变体字符串与 agent-provider 完全一致（`off/auto/minimal/low/medium/high/
+/// xhigh/max`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReasoningEffort {
+    /// 关闭思考参数
+    Off,
+    #[default]
+    Auto,
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
+    /// 最高档位
+    Max,
+}
+
+impl ReasoningEffort {
+    /// wire 字面（与 agent-provider::ReasoningEffort::as_str 逐字面一致，
+    /// 真实适配层可直接据此做 vendor 规范化映射）
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Auto => "auto",
+            Self::Minimal => "minimal",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
+}
+
 /// 流条目别名（冻结 v1，AU-04 F1 / PE-02 §3.1.1）
 ///
 /// 条目本身是 [Result]：`Ok` 携带单条事件，`Err` 为流中错误
@@ -88,6 +132,15 @@ pub struct ProviderRequest<'a> {
     /// 接线（engine.rs 适配层注入，P2 步骤 4b）归 T-17，本任务只完成
     /// 契约字段与登记；构造点一律先填 None 保持既有调用兼容。
     pub session_id: Option<String>,
+    /// 本次调用的思考档位（T3.1 契约字段，复用本模块本地等价枚举
+    /// [ReasoningEffort]，映射 agent-provider::request::vendor::ReasoningEffort）。
+    ///
+    /// 语义登记（T3.2 适配层消费）：`None` = 提供方默认（**不携带**思考参数，
+    /// wire 不含 reasoning_effort）；`Some(Off)` = 显式关闭；`Some(High/Max/...)`
+    /// = 显式档位。真实适配层消费本字段构造 provider 请求体，wire 逐字节
+    /// 对齐 agent-provider 的 vendor 规范化。接线归 T3.2，构造点暂填 None
+    /// 保持既有调用行为不变（缺省 None 与旧版逐字节一致）。
+    pub reasoning_effort: Option<ReasoningEffort>,
 }
 
 /// 工具定义的最小消费面（真实适配层据此构建 provider 请求体）
@@ -136,4 +189,29 @@ pub trait ProviderCall: Send + Sync {
         &self,
         request: &ProviderRequest<'a>,
     ) -> Result<ProviderEventStream, ClassifiedStreamError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ReasoningEffort;
+
+    /// T3.1 契约登记锁：ReasoningEffort wire 字面与
+    /// agent-provider::request::vendor::ReasoningEffort::as_str 逐字面一致
+    /// （真实适配层据此做 vendor 规范化映射，wire 逐字节不变）。
+    #[test]
+    fn reasoning_effort_wire_literals_align_with_agent_provider() {
+        let literals = [
+            (ReasoningEffort::Off, "off"),
+            (ReasoningEffort::Auto, "auto"),
+            (ReasoningEffort::Minimal, "minimal"),
+            (ReasoningEffort::Low, "low"),
+            (ReasoningEffort::Medium, "medium"),
+            (ReasoningEffort::High, "high"),
+            (ReasoningEffort::Xhigh, "xhigh"),
+            (ReasoningEffort::Max, "max"),
+        ];
+        for (variant, expected) in &literals {
+            assert_eq!(variant.as_str(), *expected, "wire 字面与 agent-provider 对齐");
+        }
+    }
 }

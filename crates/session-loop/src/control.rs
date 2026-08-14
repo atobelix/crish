@@ -73,9 +73,7 @@ impl ControlKind {
     /// steer / follow_up / soft_inject 三运行时变体；其余一一对应）
     pub fn as_event_kind(&self) -> &'static str {
         match self {
-            ControlKind::SoftInject | ControlKind::Steer | ControlKind::FollowUp => {
-                "soft-inject"
-            }
+            ControlKind::SoftInject | ControlKind::Steer | ControlKind::FollowUp => "soft-inject",
             ControlKind::CooperativeStop => "cooperative-stop",
             ControlKind::ForceCancel => "force-cancel",
             ControlKind::Continue => "continue",
@@ -85,7 +83,10 @@ impl ControlKind {
 
 /// L1 注入类 kind（写入 input queue 的某一环）
 pub fn is_l1_inject_kind(kind: ControlKind) -> bool {
-    matches!(kind, ControlKind::SoftInject | ControlKind::Steer | ControlKind::FollowUp)
+    matches!(
+        kind,
+        ControlKind::SoftInject | ControlKind::Steer | ControlKind::FollowUp
+    )
 }
 
 /// follow_up → followUp 环；soft_inject / steer → steer 环；其余无环
@@ -256,7 +257,9 @@ impl ControlBus {
         let kind = input.kind;
         self.seq += 1;
         let intent = ControlIntent {
-            id: input.id.unwrap_or_else(|| format!("ctrl-{}-{}", now_millis(), self.seq)),
+            id: input
+                .id
+                .unwrap_or_else(|| format!("ctrl-{}-{}", now_millis(), self.seq)),
             kind,
             level: input.level.unwrap_or_else(|| level_for_kind(kind)),
             created_at: input.created_at.unwrap_or_else(now_millis),
@@ -480,9 +483,7 @@ mod tests {
             id: format!("m-{text}"),
             role: conex_types::message::AgentMessageRole::User,
             created_at: "2026-01-01T00:00:00Z".into(),
-            blocks: vec![conex_types::message::AgentMessageBlock::Text {
-                text: text.into(),
-            }],
+            blocks: vec![conex_types::message::AgentMessageBlock::Text { text: text.into() }],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -493,7 +494,8 @@ mod tests {
     #[test]
     fn request_normalizes_id_level_created_at() {
         let mut bus = ControlBus::new();
-        let intent = bus.request_force_cancel(Some("user hit stop".to_string()), Some("ui".to_string()));
+        let intent =
+            bus.request_force_cancel(Some("user hit stop".to_string()), Some("ui".to_string()));
         assert!(!intent.id.is_empty(), "id 由总线补齐");
         assert_eq!(intent.level, ControlLevel::L3);
         assert!(intent.created_at > 0, "createdAt 由总线补齐");
@@ -523,7 +525,10 @@ mod tests {
         assert_eq!(level_for_kind(ControlKind::SoftInject), ControlLevel::L1);
         assert_eq!(level_for_kind(ControlKind::Steer), ControlLevel::L1);
         assert_eq!(level_for_kind(ControlKind::FollowUp), ControlLevel::L1);
-        assert_eq!(level_for_kind(ControlKind::CooperativeStop), ControlLevel::L2);
+        assert_eq!(
+            level_for_kind(ControlKind::CooperativeStop),
+            ControlLevel::L2
+        );
         assert_eq!(level_for_kind(ControlKind::ForceCancel), ControlLevel::L3);
     }
 
@@ -625,7 +630,9 @@ mod tests {
         let mut bus = ControlBus::new();
         bus.request_cooperative_stop(None, None);
         match bus.drain_as_action() {
-            ControlDrainAction::CooperativeStop { pending_messages, .. } => {
+            ControlDrainAction::CooperativeStop {
+                pending_messages, ..
+            } => {
                 assert!(pending_messages.is_empty());
             }
             other => panic!("应为 CooperativeStop，实际 {other:?}"),
@@ -677,10 +684,8 @@ mod tests {
         assert!(bus.take_trace().is_empty(), "continue 不得记录轨迹");
         // L2 协作停止：reason/source 随轨迹保留（cooperative_stop 的
         // reason 不再丢弃，EV-04 验收）
-        let stop = bus.request_cooperative_stop(
-            Some("用户协作停止".to_string()),
-            Some("ui".to_string()),
-        );
+        let stop =
+            bus.request_cooperative_stop(Some("用户协作停止".to_string()), Some("ui".to_string()));
         let l1 = bus.request_steer(msg("提示"), Some("subagent_inject:sub-1".into()), None);
         let trace = bus.take_trace();
         assert_eq!(trace.len(), 2, "两条非 continue 意图入队轨迹");
@@ -703,7 +708,10 @@ mod tests {
         assert_eq!(ControlKind::SoftInject.as_event_kind(), "soft-inject");
         assert_eq!(ControlKind::Steer.as_event_kind(), "soft-inject");
         assert_eq!(ControlKind::FollowUp.as_event_kind(), "soft-inject");
-        assert_eq!(ControlKind::CooperativeStop.as_event_kind(), "cooperative-stop");
+        assert_eq!(
+            ControlKind::CooperativeStop.as_event_kind(),
+            "cooperative-stop"
+        );
         assert_eq!(ControlKind::ForceCancel.as_event_kind(), "force-cancel");
         assert_eq!(ControlKind::Continue.as_event_kind(), "continue");
     }
@@ -799,7 +807,10 @@ mod tests {
         let intent = bus.request_subagent_force_cancel("run-9", Some("kill_all"));
         assert_eq!(intent.kind, ControlKind::ForceCancel);
         assert_eq!(intent.level, ControlLevel::L3);
-        assert_eq!(intent.reason.as_deref(), Some("subagent_force_cancel:run-9"));
+        assert_eq!(
+            intent.reason.as_deref(),
+            Some("subagent_force_cancel:run-9")
+        );
         assert_eq!(intent.source.as_deref(), Some("kill_all"));
         match bus.drain_as_action() {
             ControlDrainAction::ForceCancel { reason, .. } => {

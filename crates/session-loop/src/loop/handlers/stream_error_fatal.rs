@@ -7,8 +7,8 @@ use conex_types::response::ClassifiedStreamError;
 use conex_types::session::AgentSessionEvent as E;
 
 use super::super::super::end::{EndDecision, ProviderErrorSummary};
-use super::super::{dispatch, HandlerOutcome, LoopState};
 use super::super::super::LoopError;
+use super::super::{dispatch, HandlerOutcome, LoopState};
 /// 重试/恢复均失败 → PROVIDER_ERROR + endReason=error（01 §1.6 四事件）；
 /// D1 §3.4：填充 terminal_provider_error（converge 移交 RunOutcome.provider_error，
 /// D2/D3 恢复面消费）
@@ -50,7 +50,10 @@ pub(crate) fn fatal_provider_error(
     state.events.push(AgentEvent::RuntimeError {
         session_id: state.machine.context().session_id.clone(),
         timestamp: crate::steering::now_iso_utc(),
-        error: format!("{:?}: {}{}", classified.kind, classified.message, compression_note),
+        error: format!(
+            "{:?}: {}{}",
+            classified.kind, classified.message, compression_note
+        ),
         retryable: Some(classified.retryable),
     });
     // PROVIDER_ERROR：streaming → turn-complete（endReason=error）
@@ -76,15 +79,15 @@ fn compression_fatal_note(state: &LoopState, kind: ProviderErrorKind) -> String 
     let tokens_after = last_compression_tokens_after(state);
     match kind {
         ProviderErrorKind::PayloadTooLarge => match tokens_after {
-            Some(tokens) => format!(
-                "；payload 过大且压缩后（{tokens} token）仍超限，直接终止（不再重试）"
-            ),
+            Some(tokens) => {
+                format!("；payload 过大且压缩后（{tokens} token）仍超限，直接终止（不再重试）")
+            }
             None => "；payload 过大且无压缩恢复路径，直接终止（不再重试）".to_string(),
         },
         ProviderErrorKind::ContextLengthExceeded => match tokens_after {
-            Some(tokens) => format!(
-                "；压缩阶梯用尽后仍超限（压缩后 {tokens} token）——单条消息过大或窗口过小"
-            ),
+            Some(tokens) => {
+                format!("；压缩阶梯用尽后仍超限（压缩后 {tokens} token）——单条消息过大或窗口过小")
+            }
             None => String::new(),
         },
         _ => String::new(),
@@ -95,9 +98,10 @@ fn compression_fatal_note(state: &LoopState, kind: ProviderErrorKind) -> String 
 /// 压缩发生在 fatal 前的阶梯内——本 run 事件已含 ContextCompressionEnd）
 fn last_compression_tokens_after(state: &LoopState) -> Option<u64> {
     state.events.iter().rev().find_map(|e| match e {
-        AgentEvent::ContextCompressionEnd { result: Some(record), .. } => {
-            Some(record.tokens_after)
-        }
+        AgentEvent::ContextCompressionEnd {
+            result: Some(record),
+            ..
+        } => Some(record.tokens_after),
         _ => None,
     })
 }

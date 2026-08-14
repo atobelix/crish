@@ -27,8 +27,8 @@ use conex_types::response::ClassifiedStreamError;
 use conex_types::session::AgentEndReason;
 use conex_types::tool::ToolOutput;
 use session_loop::{
-    AgentSessionLoop, ControlKind, ControlLevel, ProviderCall, ProviderEventStream,
-    ProviderRequest, ProviderStreamEvent, StopReason, SessionLoopOptions, TestProvider, TestTool,
+    AgentSessionLoop, ControlKind, ControlLevel, ProviderCall, ProviderEventStream, ProviderRequest,
+    ProviderStreamEvent, ReasoningEffort, SessionLoopOptions, StopReason, TestProvider, TestTool,
 };
 
 /// 构造用户消息
@@ -75,10 +75,7 @@ impl ProviderCall for ArcTestProvider {
 
 /// 构造带 Arc 替身 + 工具注册表的循环（调用方保留 `handle` 供 run 后
 /// 查询请求记录，与收口对话做 `Arc::ptr_eq`）
-fn loop_with_arc(
-    handle: Arc<TestProvider>,
-    tools: Vec<Arc<TestTool>>,
-) -> AgentSessionLoop {
+fn loop_with_arc(handle: Arc<TestProvider>, tools: Vec<Arc<TestTool>>) -> AgentSessionLoop {
     let mut registry = ToolRegistry::new();
     for tool in tools {
         registry.register(tool).expect("注册测试工具");
@@ -186,15 +183,21 @@ async fn full_turn_with_tool_execution_then_final_reply() {
         .iter()
         .find(|m| m.role == AgentMessageRole::Tool)
         .expect("应有工具结果消息");
-    let AgentMessageBlock::ToolResult { is_error, output, .. } = &tool_result.blocks[0] else {
+    let AgentMessageBlock::ToolResult {
+        is_error, output, ..
+    } = &tool_result.blocks[0]
+    else {
         panic!("工具消息应有 tool-result 块");
     };
     assert!(!is_error);
-    assert_eq!(output, &ToolOutput {
-        text: None,
-        json: Some(serde_json::json!({"ok": true})),
-        artifacts: None,
-    });
+    assert_eq!(
+        output,
+        &ToolOutput {
+            text: None,
+            json: Some(serde_json::json!({"ok": true})),
+            artifacts: None,
+        }
+    );
     // 最终回复
     let final_text = outcome
         .messages
@@ -210,11 +213,7 @@ async fn full_turn_with_tool_execution_then_final_reply() {
 async fn tool_result_leads_to_next_turn() {
     let provider = TestProvider::with_scripts(vec![
         vec![
-            ProviderStreamEvent::tool_call(
-                Some("call_t1".into()),
-                "t1",
-                serde_json::json!({}),
-            ),
+            ProviderStreamEvent::tool_call(Some("call_t1".into()), "t1", serde_json::json!({})),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         vec![
@@ -229,7 +228,11 @@ async fn tool_result_leads_to_next_turn() {
 
     assert_eq!(outcome.reason, AgentEndReason::Stop);
     // 两轮：第 1 轮工具 + 第 2 轮文字；provider 调用 2 次
-    assert_eq!(outcome.messages.len(), 4, "user + assistant(tool) + tool-result + assistant(text)");
+    assert_eq!(
+        outcome.messages.len(),
+        4,
+        "user + assistant(tool) + tool-result + assistant(text)"
+    );
     // turn-start/turn-end 各 2 次（两轮）
     let turn_starts = outcome
         .events
@@ -281,10 +284,10 @@ async fn empty_response_injects_steering_then_recovers() {
         .expect("应有 steering 注入消息");
     assert!(injected.text().contains("运行期纠偏"));
     // runtime-steering 事件照发
-    assert!(outcome.events.iter().any(|e| matches!(
-        e,
-        conex_types::events::AgentEvent::RuntimeSteering { .. }
-    )));
+    assert!(outcome
+        .events
+        .iter()
+        .any(|e| matches!(e, conex_types::events::AgentEvent::RuntimeSteering { .. })));
     // 恢复后的最终回复
     let final_text = outcome
         .messages
@@ -346,10 +349,10 @@ async fn steering_disabled_empty_response_stops_without_steering() {
         Some("steering 已禁用，空响应无法恢复")
     );
     // 无注入、无 intervention、无 steering 事件
-    assert!(!outcome.events.iter().any(|e| matches!(
-        e,
-        conex_types::events::AgentEvent::RuntimeSteering { .. }
-    )));
+    assert!(!outcome
+        .events
+        .iter()
+        .any(|e| matches!(e, conex_types::events::AgentEvent::RuntimeSteering { .. })));
     assert!(!outcome.events.iter().any(|e| matches!(
         e,
         conex_types::events::AgentEvent::RuntimeInterventionRequired { .. }
@@ -360,7 +363,10 @@ async fn steering_disabled_empty_response_stops_without_steering() {
         .iter()
         .filter(|e| matches!(e, conex_types::events::AgentEvent::TurnStart { .. }))
         .count();
-    assert_eq!(turn_starts, 1, "steering 禁用时 empty-response 不得重进 provider");
+    assert_eq!(
+        turn_starts, 1,
+        "steering 禁用时 empty-response 不得重进 provider"
+    );
 }
 
 /// T06.2.1（Q03）：steering_enabled=false 时 prepare_turn 不评估——
@@ -370,20 +376,12 @@ async fn steering_disabled_prepare_turn_skips_evaluation() {
     let provider = TestProvider::with_scripts(vec![
         // 第 1 轮：工具失败
         vec![
-            ProviderStreamEvent::tool_call(
-                Some("call_f1".into()),
-                "fail",
-                serde_json::json!({}),
-            ),
+            ProviderStreamEvent::tool_call(Some("call_f1".into()), "fail", serde_json::json!({})),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         // 第 2 轮：再失败（形成连续错误，开启 steering 时第 3 轮注入）
         vec![
-            ProviderStreamEvent::tool_call(
-                Some("call_f2".into()),
-                "fail",
-                serde_json::json!({}),
-            ),
+            ProviderStreamEvent::tool_call(Some("call_f2".into()), "fail", serde_json::json!({})),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         // 第 3 轮：正常回复收场
@@ -412,10 +410,10 @@ async fn steering_disabled_prepare_turn_skips_evaluation() {
                 == Some("runtime-steering")
     }));
     // 无 steering / intervention 事件
-    assert!(!outcome.events.iter().any(|e| matches!(
-        e,
-        conex_types::events::AgentEvent::RuntimeSteering { .. }
-    )));
+    assert!(!outcome
+        .events
+        .iter()
+        .any(|e| matches!(e, conex_types::events::AgentEvent::RuntimeSteering { .. })));
     assert!(!outcome.events.iter().any(|e| matches!(
         e,
         conex_types::events::AgentEvent::RuntimeInterventionRequired { .. }
@@ -444,7 +442,10 @@ async fn payload_too_large_ends_with_error_without_retry() {
         .iter()
         .filter(|e| matches!(e, conex_types::events::AgentEvent::TurnStart { .. }))
         .count();
-    assert_eq!(turn_starts, 1, "PayloadTooLarge 直接 fatal，不得重进 provider 循环");
+    assert_eq!(
+        turn_starts, 1,
+        "PayloadTooLarge 直接 fatal，不得重进 provider 循环"
+    );
     // runtime-error 事件附注「无压缩恢复路径」（T06.2.2 文案补充）
     assert!(outcome.events.iter().any(|e| matches!(
         e,
@@ -647,7 +648,10 @@ async fn cooperative_stop_ends_with_stopped() {
     // D1：独立 reason stopped，既不是 aborted 也不是 error
     assert_eq!(outcome.reason, AgentEndReason::Stopped);
     assert!(
-        !matches!(outcome.reason, AgentEndReason::Aborted | AgentEndReason::Error),
+        !matches!(
+            outcome.reason,
+            AgentEndReason::Aborted | AgentEndReason::Error
+        ),
         "协作停止不是取消也不是错误"
     );
     // 已产出内容保留
@@ -665,11 +669,7 @@ async fn max_turns_ends_with_independent_budget_reason() {
     // 脚本 1：工具调用（第 1 轮）；脚本 2：文字（第 2 轮将触发 max-turns）
     let provider = TestProvider::with_scripts(vec![
         vec![
-            ProviderStreamEvent::tool_call(
-                Some("call_m".into()),
-                "mt",
-                serde_json::json!({}),
-            ),
+            ProviderStreamEvent::tool_call(Some("call_m".into()), "mt", serde_json::json!({})),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         vec![
@@ -679,28 +679,29 @@ async fn max_turns_ends_with_independent_budget_reason() {
     ]);
     let mut registry = ToolRegistry::new();
     registry
-        .register(Arc::new(TestTool::new("mt", serde_json::json!({"ok": true}))))
+        .register(Arc::new(TestTool::new(
+            "mt",
+            serde_json::json!({"ok": true}),
+        )))
         .expect("注册");
-    let mut loop_ = AgentSessionLoop::new(
-        "sess-1",
-        "run-1",
-        1,
-        Box::new(provider),
-        Arc::new(registry),
-    );
+    let mut loop_ =
+        AgentSessionLoop::new("sess-1", "run-1", 1, Box::new(provider), Arc::new(registry));
 
     let outcome = loop_.run(user("多轮任务")).await;
 
     assert_eq!(outcome.reason, AgentEndReason::MaxTurns);
     assert!(
-        !matches!(outcome.reason, AgentEndReason::Error | AgentEndReason::Aborted),
+        !matches!(
+            outcome.reason,
+            AgentEndReason::Error | AgentEndReason::Aborted
+        ),
         "max-turns 是独立预算 reason（01 §1.5）"
     );
     // 观测到 runtime-error 事件（retryable=true 可测，01 §2.10）
-    assert!(outcome.events.iter().any(|e| matches!(
-        e,
-        conex_types::events::AgentEvent::RuntimeError { .. }
-    )));
+    assert!(outcome
+        .events
+        .iter()
+        .any(|e| matches!(e, conex_types::events::AgentEvent::RuntimeError { .. })));
 }
 
 /// provider error（无内容）→ 瞬态重试 → 成功（01 §2.5 步骤 2）
@@ -764,7 +765,9 @@ async fn abort_during_retry_ladder_skips_remaining_requests() {
     // Q41（T11.7.2）：虚拟时间护栏——替身内 sleep(300) 与测试等待全部虚拟化
     let _time = TimePauseGuard::new();
     let calls = Arc::new(Mutex::new(0usize));
-    let provider = RetryFailProvider { calls: calls.clone() };
+    let provider = RetryFailProvider {
+        calls: calls.clone(),
+    };
     let mut loop_ = AgentSessionLoop::new(
         "sess-1",
         "run-1",
@@ -870,11 +873,7 @@ async fn length_ladder_upgrades_max_tokens_and_retries() {
 async fn tool_error_is_not_fatal_by_default() {
     // 第一轮：工具 fail 报错；第二轮：模型只回文字正常收场
     let provider = TestProvider::new(vec![
-        ProviderStreamEvent::tool_call(
-            Some("call_fail".into()),
-            "fail",
-            serde_json::json!({}),
-        ),
+        ProviderStreamEvent::tool_call(Some("call_fail".into()), "fail", serde_json::json!({})),
         ProviderStreamEvent::stop(StopReason::Stop),
         // 第二轮：读工具结果后正常结束
         ProviderStreamEvent::text("已处理工具错误，继续完成"),
@@ -899,21 +898,17 @@ async fn tool_error_is_not_fatal_by_default() {
     };
     assert!(is_error);
     // 无致命 runtime-error 事件
-    assert!(!outcome.events.iter().any(|e| matches!(
-        e,
-        conex_types::events::AgentEvent::RuntimeError { .. }
-    )));
+    assert!(!outcome
+        .events
+        .iter()
+        .any(|e| matches!(e, conex_types::events::AgentEvent::RuntimeError { .. })));
 }
 
 /// 工具标记 fatalOnError → 工具错误致命 → ERROR → error 收场（01 §2.8 步骤 6）
 #[tokio::test]
 async fn fatal_tool_error_ends_with_error() {
     let provider = TestProvider::new(vec![
-        ProviderStreamEvent::tool_call(
-            Some("call_fail".into()),
-            "fail",
-            serde_json::json!({}),
-        ),
+        ProviderStreamEvent::tool_call(Some("call_fail".into()), "fail", serde_json::json!({})),
         ProviderStreamEvent::stop(StopReason::Stop),
     ]);
     let tool = Arc::new(TestTool::with_error("fail", "boom").with_fatal_on_error());
@@ -934,10 +929,10 @@ async fn fatal_tool_error_ends_with_error() {
     };
     assert!(is_error);
     // runtime-error 事件（致命路径）
-    assert!(outcome.events.iter().any(|e| matches!(
-        e,
-        conex_types::events::AgentEvent::RuntimeError { .. }
-    )));
+    assert!(outcome
+        .events
+        .iter()
+        .any(|e| matches!(e, conex_types::events::AgentEvent::RuntimeError { .. })));
 }
 
 /// L3 force_cancel（经控制总线）→ aborted 收场
@@ -955,7 +950,9 @@ async fn force_cancel_via_bus_ends_aborted() {
 
     let handle = tokio::spawn(async move { loop_.run(user("跑起来")).await });
     tokio::time::advance(Duration::from_millis(80)).await;
-    bus.lock().unwrap().request_force_cancel(Some("用户强停".into()), Some("ui".into()));
+    bus.lock()
+        .unwrap()
+        .request_force_cancel(Some("用户强停".into()), Some("ui".into()));
     // 越过 provider 栅栏（300ms 虚拟停顿），loop 才读到取消并收场
     tokio::time::advance(Duration::from_millis(300)).await;
     let outcome = handle.await.expect("run 不应 panic");
@@ -977,6 +974,7 @@ async fn test_provider_records_requests() {
         max_tokens: Some(8192),
         system_prompt: None,
         session_id: None,
+        reasoning_effort: None,
     };
     let mut stream = provider.stream(&request).await.expect("脚本调用成功");
     let mut events = Vec::new();
@@ -992,6 +990,66 @@ async fn test_provider_records_requests() {
         r.messages.iter().map(|m| m.text()).collect()
     });
     assert_eq!(requests[0].max_tokens, Some(8192));
+}
+
+/// T3.1 契约测钉：ProviderRequest.reasoning_effort 字段语义——
+/// 显式 `Some(档位)` 经 TestProvider 请求快照完整透传；缺省 `None` 时
+/// 快照为 None（适配层见 None 不携带思考参数，与旧版 wire 逐字节一致）。
+#[tokio::test]
+async fn reasoning_effort_field_propagates_through_request() {
+    // 1) 显式 Some(ReasoningEffort::High)：快照捕获同一档位
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::text("思考档位透传"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]);
+    let messages = vec![Arc::new(user("请求"))];
+    let request = session_loop::ProviderRequest {
+        messages: &messages,
+        tools: vec![],
+        max_tokens: Some(2048),
+        system_prompt: None,
+        session_id: None,
+        reasoning_effort: Some(ReasoningEffort::High),
+    };
+    let mut stream = provider.stream(&request).await.expect("脚本调用成功");
+    while let Some(item) = futures::StreamExt::next(&mut stream).await {
+        item.expect("脚本替身不产出流中错误");
+    }
+    let requests = provider.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].reasoning_effort,
+        Some(ReasoningEffort::High),
+        "Some(档位) 必须完整透传到请求快照"
+    );
+    assert_eq!(
+        provider.request_reasoning_effort(0),
+        Some(ReasoningEffort::High),
+        "TestProvider 访问器返回与请求承载一致"
+    );
+
+    // 2) 缺省 None（旧版构造形态：字段不携带思考参数）：快照为 None
+    let provider_none = TestProvider::new(vec![
+        ProviderStreamEvent::text("缺省无思考"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]);
+    let request_none = session_loop::ProviderRequest {
+        messages: &messages,
+        tools: vec![],
+        max_tokens: Some(2048),
+        system_prompt: None,
+        session_id: None,
+        reasoning_effort: None,
+    };
+    let mut stream = provider_none.stream(&request_none).await.expect("脚本调用成功");
+    while let Some(item) = futures::StreamExt::next(&mut stream).await {
+        item.expect("脚本替身不产出流中错误");
+    }
+    assert_eq!(
+        provider_none.request_reasoning_effort(0),
+        None,
+        "缺省 None 时适配层见 None，不携带思考参数（与旧版一致）"
+    );
 }
 
 /// S5 契约测钉（D-02）：build_request 注入真实 session_id——构造 loop 时
@@ -1067,7 +1125,11 @@ async fn long_conversation_request_and_record_are_zero_copy() {
     let history: Vec<AgentMessage> = (0..100u32)
         .map(|i| AgentMessage {
             id: format!("hist-{i}"),
-            role: if i % 2 == 0 { AgentMessageRole::User } else { AgentMessageRole::Assistant },
+            role: if i % 2 == 0 {
+                AgentMessageRole::User
+            } else {
+                AgentMessageRole::Assistant
+            },
             created_at: "2026-01-01T00:00:00Z".into(),
             blocks: vec![AgentMessageBlock::Text {
                 text: format!("历史消息 {i}"),
@@ -1180,11 +1242,7 @@ async fn cross_run_continuation_via_with_initial_conversation() {
 async fn tool_only_turn_then_reply() {
     let provider = TestProvider::with_scripts(vec![
         vec![
-            ProviderStreamEvent::tool_call(
-                Some("call_b".into()),
-                "t1",
-                serde_json::json!({}),
-            ),
+            ProviderStreamEvent::tool_call(Some("call_b".into()), "t1", serde_json::json!({})),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         vec![
@@ -1215,12 +1273,18 @@ async fn control_bus_levels_and_kinds() {
     let bus = session_loop::ControlBus::new();
     let _ = bus;
     // 语义已由 control.rs 单测覆盖；此处仅确认公开 API 可达
-    assert_eq!(session_loop::level_for_kind(ControlKind::ForceCancel), ControlLevel::L3);
+    assert_eq!(
+        session_loop::level_for_kind(ControlKind::ForceCancel),
+        ControlLevel::L3
+    );
     assert_eq!(
         session_loop::level_for_kind(ControlKind::CooperativeStop),
         ControlLevel::L2
     );
-    assert_eq!(session_loop::level_for_kind(ControlKind::SoftInject), ControlLevel::L1);
+    assert_eq!(
+        session_loop::level_for_kind(ControlKind::SoftInject),
+        ControlLevel::L1
+    );
 }
 
 /// F1 盲区 7 / F2-04：空响应 + abort 竞速——abort 到达后不得执行策略
@@ -1237,8 +1301,8 @@ async fn control_bus_levels_and_kinds() {
 async fn abort_during_empty_response_skips_steering_injection() {
     // Q41（T11.7.2）：虚拟时间护栏
     let _time = TimePauseGuard::new();
-    let provider = TestProvider::new(vec![ProviderStreamEvent::stop(StopReason::Stop)])
-        .with_pause(0, 300);
+    let provider =
+        TestProvider::new(vec![ProviderStreamEvent::stop(StopReason::Stop)]).with_pause(0, 300);
     let mut loop_ = loop_with(provider, vec![]);
     let abort = loop_.abort_signal();
 
@@ -1263,10 +1327,10 @@ async fn abort_during_empty_response_skips_steering_injection() {
         "abort 后不得执行 steering 注入（F2-04：abort 后副作用）"
     );
     // 无 runtime-steering / intervention 事件
-    assert!(!outcome.events.iter().any(|e| matches!(
-        e,
-        conex_types::events::AgentEvent::RuntimeSteering { .. }
-    )));
+    assert!(!outcome
+        .events
+        .iter()
+        .any(|e| matches!(e, conex_types::events::AgentEvent::RuntimeSteering { .. })));
 }
 
 /// F1 盲区 5：空工具注册表 + 模型产出工具调用 → NotFound 非致命喂回 →
@@ -1277,7 +1341,11 @@ async fn empty_tool_registry_unknown_call_fed_back_and_continues() {
     let provider = TestProvider::with_scripts(vec![
         // 第 1 次：调用不存在的工具
         vec![
-            ProviderStreamEvent::tool_call(Some("call_ghost".into()), "ghost_tool", serde_json::json!({})),
+            ProviderStreamEvent::tool_call(
+                Some("call_ghost".into()),
+                "ghost_tool",
+                serde_json::json!({}),
+            ),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         // 第 2 次：喂回 NotFound 后模型正常回复
@@ -1300,12 +1368,18 @@ async fn empty_tool_registry_unknown_call_fed_back_and_continues() {
         .iter()
         .find(|m| m.role == AgentMessageRole::Tool)
         .expect("未知工具也应产出 tool-result 消息");
-    let AgentMessageBlock::ToolResult { is_error, output, .. } = &tool_msg.blocks[0] else {
+    let AgentMessageBlock::ToolResult {
+        is_error, output, ..
+    } = &tool_msg.blocks[0]
+    else {
         panic!("工具消息应有 tool-result 块");
     };
     assert!(*is_error, "未知工具结果应为错误形态");
     let text = output.text.as_deref().expect("NotFound 应有文本文案");
-    assert!(text.contains("unknown tool"), "文案应含 unknown tool：{text}");
+    assert!(
+        text.contains("unknown tool"),
+        "文案应含 unknown tool：{text}"
+    );
     // 续轮：最终助手消息存在（模型对喂回结果正常收尾）
     let final_text = outcome
         .messages
@@ -1327,11 +1401,13 @@ async fn empty_tool_registry_unknown_call_fed_back_and_continues() {
 /// 收场（不升级重试；0 = 不允许任何重试）
 #[tokio::test]
 async fn transient_retry_limit_zero_fails_immediately() {
-    let provider_handle = Arc::new(TestProvider::new(vec![
-        ProviderStreamEvent::text("不应到达"),
-        ProviderStreamEvent::stop(StopReason::Stop),
-    ])
-    .with_error(classified(ProviderErrorKind::RateLimit)));
+    let provider_handle = Arc::new(
+        TestProvider::new(vec![
+            ProviderStreamEvent::text("不应到达"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ])
+        .with_error(classified(ProviderErrorKind::RateLimit)),
+    );
     let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
     loop_ = loop_.with_options(SessionLoopOptions {
         transient_retry_limit: 0,
@@ -1347,18 +1423,24 @@ async fn transient_retry_limit_zero_fails_immediately() {
     );
     assert!(outcome.error.is_some());
     // 无任何重试（provider 仅调用 1 次）
-    assert_eq!(provider_handle.call_count(), 1, "retry limit 0 不得发起任何重试");
+    assert_eq!(
+        provider_handle.call_count(),
+        1,
+        "retry limit 0 不得发起任何重试"
+    );
 }
 
 /// F1 盲区 4：`length_upgrade_limit = 0` 边界——首次 ContextLengthExceeded
 /// 即 error 收场（长度阶梯不允许任何升级；默认无压缩预算 → 无恢复路径）
 #[tokio::test]
 async fn length_upgrade_limit_zero_fails_immediately() {
-    let provider_handle = Arc::new(TestProvider::new(vec![
-        ProviderStreamEvent::text("不应到达"),
-        ProviderStreamEvent::stop(StopReason::Stop),
-    ])
-    .with_error(classified(ProviderErrorKind::ContextLengthExceeded)));
+    let provider_handle = Arc::new(
+        TestProvider::new(vec![
+            ProviderStreamEvent::text("不应到达"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ])
+        .with_error(classified(ProviderErrorKind::ContextLengthExceeded)),
+    );
     let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
     loop_ = loop_.with_options(SessionLoopOptions {
         length_upgrade_limit: 0,
@@ -1374,7 +1456,11 @@ async fn length_upgrade_limit_zero_fails_immediately() {
     );
     assert!(outcome.error.is_some());
     // 无升级重试（provider 仅调用 1 次）
-    assert_eq!(provider_handle.call_count(), 1, "length limit 0 不得发起任何升级重试");
+    assert_eq!(
+        provider_handle.call_count(),
+        1,
+        "length limit 0 不得发起任何升级重试"
+    );
 }
 
 // ── EV-08：孤儿 turn-start 修复（「turn 对恒成对」不变量）───────────────
@@ -1510,11 +1596,7 @@ async fn turn_pair_invariant_cooperative_stop() {
 #[tokio::test]
 async fn turn_pair_invariant_fatal_tool_error() {
     let provider = TestProvider::new(vec![
-        ProviderStreamEvent::tool_call(
-            Some("call_fail".into()),
-            "fail",
-            serde_json::json!({}),
-        ),
+        ProviderStreamEvent::tool_call(Some("call_fail".into()), "fail", serde_json::json!({})),
         ProviderStreamEvent::stop(StopReason::Stop),
     ]);
     let tool = Arc::new(TestTool::with_error("fail", "boom").with_fatal_on_error());
@@ -1534,11 +1616,13 @@ async fn turn_pair_invariant_fatal_tool_error() {
 /// → 孤儿 turn-start；converge 兜底闭合）
 #[tokio::test]
 async fn turn_pair_invariant_transient_fatal_no_retry() {
-    let provider_handle = Arc::new(TestProvider::new(vec![
-        ProviderStreamEvent::text("不应到达"),
-        ProviderStreamEvent::stop(StopReason::Stop),
-    ])
-    .with_error(classified(ProviderErrorKind::RateLimit)));
+    let provider_handle = Arc::new(
+        TestProvider::new(vec![
+            ProviderStreamEvent::text("不应到达"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ])
+        .with_error(classified(ProviderErrorKind::RateLimit)),
+    );
     let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
     loop_ = loop_.with_options(SessionLoopOptions {
         transient_retry_limit: 0,
@@ -1578,7 +1662,11 @@ async fn turn_pair_invariant_normal_stop() {
             _ => None,
         })
         .collect();
-    assert_eq!(starts, vec![1], "首轮 turn-start 轮次为 1（TURN_PREPARED 递增后）");
+    assert_eq!(
+        starts,
+        vec![1],
+        "首轮 turn-start 轮次为 1（TURN_PREPARED 递增后）"
+    );
 }
 
 /// EV-11（D-03 EV-13）S5 测钉：provider 请求锚点——请求发出 → 事件序列含
@@ -1626,7 +1714,12 @@ async fn provider_request_anchored_carries_turn_model_and_precedes_delta() {
                 request_started_at_ms,
                 timestamp,
                 ..
-            } => Some((*turn_index, model.clone(), *request_started_at_ms, timestamp.clone())),
+            } => Some((
+                *turn_index,
+                model.clone(),
+                *request_started_at_ms,
+                timestamp.clone(),
+            )),
             _ => None,
         })
         .collect();
@@ -1730,13 +1823,10 @@ async fn turn_end_carries_turn_usage_from_provider() {
     ]);
     let mut loop2 = loop_with(provider2, vec![]);
     let outcome2 = loop2.run(user("验证")).await;
-    let usage2 = outcome2
-        .events
-        .iter()
-        .find_map(|e| match e {
-            AgentEvent::TurnEnd { usage, .. } => usage.clone(),
-            _ => None,
-        });
+    let usage2 = outcome2.events.iter().find_map(|e| match e {
+        AgentEvent::TurnEnd { usage, .. } => usage.clone(),
+        _ => None,
+    });
     assert!(
         outcome2
             .events
@@ -1744,7 +1834,10 @@ async fn turn_end_carries_turn_usage_from_provider() {
             .any(|e| matches!(e, AgentEvent::TurnEnd { .. })),
         "run 必须发射 turn-end"
     );
-    assert_eq!(usage2, None, "provider 未报告 usage 时 TurnEnd.usage 保持 None");
+    assert_eq!(
+        usage2, None,
+        "provider 未报告 usage 时 TurnEnd.usage 保持 None"
+    );
 }
 
 /// ISO8601（`YYYY-MM-DDTHH:MM:SS.mmmZ`，now_iso_utc 固定格式）→ epoch 毫秒
@@ -1779,7 +1872,13 @@ where
     for tool in tools {
         registry.register(tool).expect("注册测试工具");
     }
-    AgentSessionLoop::new("sess-1", "run-1", 16, Box::new(provider), Arc::new(registry))
+    AgentSessionLoop::new(
+        "sess-1",
+        "run-1",
+        16,
+        Box::new(provider),
+        Arc::new(registry),
+    )
 }
 
 /// 慢速失败工具（EV-09 测钉）：执行 50ms 后抛错——失败路径 duration_ms
@@ -1878,7 +1977,10 @@ async fn empty_response_emits_steering_evaluated_event() {
     });
     let (phase, hits, before, after, budget) = evaluate_evt.expect("必须有 evaluate 变体");
     assert_eq!(phase, "empty-response");
-    assert!(hits.contains(&"recovery".to_string()), "命中策略含 recovery");
+    assert!(
+        hits.contains(&"recovery".to_string()),
+        "命中策略含 recovery"
+    );
     assert_eq!(*before, 0);
     assert_eq!(*after, 1, "潜在计数含本次注入预占");
     // budget_remaining = max_steering_budget − 实际计数（评估时 apply 未
@@ -2084,7 +2186,11 @@ async fn batch_tool_events_carry_summary_calls_and_turn_index() {
         .collect();
     assert_eq!(starts.len(), 2);
     for (turn_index, _, id) in &starts {
-        assert_eq!(*turn_index, Some(1u32), "tool-start.turn_index = 当前轮次（{id}）");
+        assert_eq!(
+            *turn_index,
+            Some(1u32),
+            "tool-start.turn_index = 当前轮次（{id}）"
+        );
     }
     let end_timestamps: Vec<String> = outcome
         .events
@@ -2141,13 +2247,7 @@ async fn control_intent_emits_enqueued_and_consumed() {
     assert_eq!(outcome.reason, AgentEndReason::Stopped);
 
     // S5 测钉：control-intent 两态配对断言
-    let intents: Vec<(
-        String,
-        String,
-        Option<String>,
-        Option<String>,
-        String,
-    )> = outcome
+    let intents: Vec<(String, String, Option<String>, Option<String>, String)> = outcome
         .events
         .iter()
         .filter_map(|e| match e {
@@ -2188,5 +2288,9 @@ async fn control_intent_emits_enqueued_and_consumed() {
         Some("用户协作停止"),
         "cooperative_stop 的 reason 不再丢弃"
     );
-    assert_eq!(consumed.3.as_deref(), Some("用户协作停止"), "consumed 同样携带 reason");
+    assert_eq!(
+        consumed.3.as_deref(),
+        Some("用户协作停止"),
+        "consumed 同样携带 reason"
+    );
 }

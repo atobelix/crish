@@ -17,7 +17,9 @@ use agent_tools::definition::{Tool, ToolDefinition};
 use agent_tools::registry::ToolRegistry;
 use conex_types::tool::{ToolBatchCall, ToolCategory, ToolConcurrency};
 use criterion::{criterion_group, criterion_main, Criterion};
-use session_loop::tool_events::{ApprovalDecision, ApprovalGate, ApprovalRequester, ToolBatchOptions};
+use session_loop::tool_events::{
+    ApprovalDecision, ApprovalGate, ApprovalRequester, ToolBatchOptions,
+};
 use session_loop::tool_exec::{ToolExecCtx, ToolExecutor};
 
 /// 慢工具（50ms 模拟真实 I/O 工具；输出小）
@@ -154,13 +156,8 @@ fn bench_tool_batch(c: &mut Criterion) {
                     ..ToolBatchOptions::default()
                 };
                 let gate = Arc::new(InstantApprovalGate);
-                let outcome = rt.block_on(executor.execute_batch(
-                    &calls,
-                    &ctx,
-                    Some(gate),
-                    &options,
-                    None,
-                ));
+                let outcome =
+                    rt.block_on(executor.execute_batch(&calls, &ctx, Some(gate), &options, None));
                 criterion::black_box(&outcome);
             },
             criterion::BatchSize::SmallInput,

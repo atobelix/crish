@@ -10,10 +10,10 @@ use conex_types::response::ClassifiedStreamError;
 use conex_types::session::AgentSessionEvent as E;
 use conex_types::tool::{ProviderDiagnostic, ProviderDiagnosticPhase};
 
-use super::fatal::fatal_provider_error;
-use super::super::{dispatch, HandlerOutcome, LoopState};
-use super::super::streaming::streaming_aborted;
 use super::super::super::{LoopError, RetryBackoffConfig};
+use super::super::streaming::streaming_aborted;
+use super::super::{dispatch, HandlerOutcome, LoopState};
+use super::fatal::fatal_provider_error;
 /// 首次退避基数（D1 §3.1.1，镜像 agent-provider retry.rs:48 /
 /// orchestrator recovery.rs:116；测试锁定防漂移）
 pub(crate) const RETRY_BACKOFF_BASE_MS: u64 = 750;
@@ -121,7 +121,13 @@ pub(crate) async fn transient_retry(
         let delay = match &state.retry_delay {
             Some(f) => f(attempt, classified.retry_after_ms),
             None => match state.options.retry_backoff {
-                Some(cfg) => match retry_delay_ms(&cfg, classified.kind, attempt, classified.retry_after_ms, elapsed_ms) {
+                Some(cfg) => match retry_delay_ms(
+                    &cfg,
+                    classified.kind,
+                    attempt,
+                    classified.retry_after_ms,
+                    elapsed_ms,
+                ) {
                     Some(d) => d,
                     // 预算耗尽（规则 R3/R4）：不进重试直接 fatal，不消耗次数
                     None => return fatal_provider_error(state, classified),
@@ -145,10 +151,22 @@ pub(crate) async fn transient_retry(
             }
         }
         state.transient_retries += 1;
-        tracing::info!(attempt = state.transient_retries, limit, delay_ms = delay.as_millis(), "瞬态错误重试");
+        tracing::info!(
+            attempt = state.transient_retries,
+            limit,
+            delay_ms = delay.as_millis(),
+            "瞬态错误重试"
+        );
         // 重试诊断（D1 §3.1.5，用户约束 A/C）：phase=Retry 事件兼作临时
         // 通知数据源（前端老虎机滚动 1/N→N/N）；不进对话上下文、AI 不可见
-        emit_retry_diagnostic(state, classified, state.transient_retries, limit, delay, classified.retry_after_ms);
+        emit_retry_diagnostic(
+            state,
+            classified,
+            state.transient_retries,
+            limit,
+            delay,
+            classified.retry_after_ms,
+        );
         dispatch(state, E::NoProgressContinue)?;
         return Ok(HandlerOutcome::continue_run());
     }

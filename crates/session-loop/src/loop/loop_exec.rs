@@ -40,10 +40,8 @@ impl AgentSessionLoop {
             );
         }
         // 每 run 全新状态机（会话 / 对话 / 输入队列跨 run 持久）
-        self.state.machine = crate::state::AgentSessionMachine::new(
-            self.session_id.clone(),
-            self.max_turns,
-        );
+        self.state.machine =
+            crate::state::AgentSessionMachine::new(self.session_id.clone(), self.max_turns);
         // F2-02：max_turns=0 边界——预算不允许任何轮次，run 起始显式收场
         // （修复前首轮完整执行后 turn_index(1) >= 0 恒真才收场：用户消息已
         // 消费、provider 已调用，「max_turns=0 = 不允许任何轮次」语义失效）。
@@ -110,7 +108,9 @@ impl AgentSessionLoop {
         self.state.input_queue.enqueue_force(input);
         self.spawn_pending_input_save(&input_snapshot);
         if let Err(err) = handlers::dispatch(&mut self.state, E::Initialized) {
-            return self.converge(EndDecision::error(&self.state, err.message())).await;
+            return self
+                .converge(EndDecision::error(&self.state, err.message()))
+                .await;
         }
         self.state.events.push(AgentEvent::AgentStart {
             session_id: self.session_id.clone(),

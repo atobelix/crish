@@ -14,9 +14,7 @@ use conex_types::message::AgentMessage;
 
 use crate::cache_tracker::build_tracker;
 use crate::provider::{DeltaSink, ProviderCall};
-use crate::steering::{
-    RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
-};
+use crate::steering::{RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions};
 use crate::tool_events::{ApprovalGate, ToolBatchOptions};
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
 use crate::undeclared_detector::RegistryBackedDetector;
@@ -85,19 +83,19 @@ impl AgentSessionLoop {
                 session_id: session_id.clone(),
                 cwd: None,
                 workspace_root: None,
-            // I4-M3 / I6-M11 C5：写路径注册表与配额上下文装配在
-            // with_options（总接线点 T-EG-06），构造期保持 None
-            // （未装配 = 写工具不强制互斥 / 不检查配额，向后兼容）
-            write_claims: None,
-            explore_docs_quota: None,
-            // T-D-14：父 run 归属随 with_options 装配（构造期 None =
-            // 主 agent run，审批裁决者 = 用户，现状行为）
-            parent_run_id: None,
-            // T-EG-08：产出目录解析器随 with_options 装配（构造期 None）
-            output_dir: None,
-            // Round6 / W4-E：笔记后端随 with_options 装配（构造期 None）
-            note_backend: None,
-        },
+                // I4-M3 / I6-M11 C5：写路径注册表与配额上下文装配在
+                // with_options（总接线点 T-EG-06），构造期保持 None
+                // （未装配 = 写工具不强制互斥 / 不检查配额，向后兼容）
+                write_claims: None,
+                explore_docs_quota: None,
+                // T-D-14：父 run 归属随 with_options 装配（构造期 None =
+                // 主 agent run，审批裁决者 = 用户，现状行为）
+                parent_run_id: None,
+                // T-EG-08：产出目录解析器随 with_options 装配（构造期 None）
+                output_dir: None,
+                // Round6 / W4-E：笔记后端随 with_options 装配（构造期 None）
+                note_backend: None,
+            },
             tool_options: ToolBatchOptions::default(),
             approval: None,
             delta_sink: None,
@@ -129,9 +127,7 @@ impl AgentSessionLoop {
             .workspace_root
             .clone()
             .or_else(|| options.cwd.clone().map(PathBuf::from))
-            .unwrap_or_else(|| {
-                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-            });
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
         // 写路径互斥注册表（I4-M3）：显式注入 → 复用 tool_ctx 既有 →
         // 按根新建（会话级，与工作区根同源——工具执行面与 ESC 判定器
         // 共享同一实例）
@@ -146,9 +142,9 @@ impl AgentSessionLoop {
         // 已挂载 RegistryBackedDetector——run 内工具写路径声明即视为已
         // 声明覆盖（审计静默跳过），声明释放后恢复未声明上报
         if let Some(config) = options.escape_watch.take() {
-            options.escape_watch = Some(config.with_detector(Arc::new(
-                RegistryBackedDetector::new(Arc::clone(&registry)),
-            )));
+            options.escape_watch = Some(
+                config.with_detector(Arc::new(RegistryBackedDetector::new(Arc::clone(&registry)))),
+            );
         }
         // 探索类文档配额上下文（I6-M11 C5）：经 tool_ctx 透传工具执行面；
         // None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
@@ -156,15 +152,12 @@ impl AgentSessionLoop {
         // T-EG-08 REQ-G01：产出目录解析服务——显式注入 → 自动装配
         //（OutputWorkspace + InMemory store，工作区根同源；会话内幂等，
         // 目录名首次 resolve 冻结；生产持久化后端 F11 由壳层注入）
-        let output_dir = options
-            .output_dir
-            .clone()
-            .unwrap_or_else(|| {
-                Arc::new(agent_tools::tools::output_dir::OutputWorkspace::new(
-                    self.tool_ctx.workspace_root.clone().unwrap_or_default(),
-                    Arc::new(agent_tools::tools::output_dir::InMemoryOutputDirStore::new()),
-                ))
-            });
+        let output_dir = options.output_dir.clone().unwrap_or_else(|| {
+            Arc::new(agent_tools::tools::output_dir::OutputWorkspace::new(
+                self.tool_ctx.workspace_root.clone().unwrap_or_default(),
+                Arc::new(agent_tools::tools::output_dir::InMemoryOutputDirStore::new()),
+            ))
+        });
         self.tool_ctx.output_dir = Some(output_dir);
         // T-D-14 权限传递层：父 run 归属经 tool_ctx 透传执行器（审批请求
         // 来源判定与裁决者路由依据；None = 主 agent run）

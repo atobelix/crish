@@ -145,7 +145,9 @@ fn synthesize_blocks(entry: &HistoryMessage) -> Vec<AgentMessageBlock> {
     let mut blocks: Vec<AgentMessageBlock> = Vec::new();
     if let Some(text) = entry.text.as_deref() {
         if !text.is_empty() {
-            blocks.push(AgentMessageBlock::Text { text: text.to_string() });
+            blocks.push(AgentMessageBlock::Text {
+                text: text.to_string(),
+            });
         }
     }
     if let Some(thinking) = entry.thinking.as_deref() {
@@ -310,7 +312,10 @@ fn joined_text(blocks: &[AgentMessageBlock]) -> String {
 /// 的稳定锚点恒为会话首条 user 消息），锚点永不因截断消失，跨 run 请求
 /// 前缀保持字节稳定。
 fn truncate_to_last_user(messages: &mut Vec<Arc<AgentMessage>>) {
-    match messages.iter().rposition(|message| message.role == AgentMessageRole::User) {
+    match messages
+        .iter()
+        .rposition(|message| message.role == AgentMessageRole::User)
+    {
         Some(last_user) => messages.truncate(last_user + 1),
         None => messages.clear(),
     }
@@ -377,7 +382,9 @@ mod tests {
         // 正文块 + content 兜底
         assert_eq!(
             hydrated[0].blocks,
-            vec![AgentMessageBlock::Text { text: "你好".into() }]
+            vec![AgentMessageBlock::Text {
+                text: "你好".into()
+            }]
         );
         assert_eq!(hydrated[0].content.as_deref(), Some("你好"));
         assert_eq!(hydrated[1].content.as_deref(), Some("回复"));
@@ -461,7 +468,12 @@ mod tests {
 
     #[test]
     fn blocks_json_parsed_as_agent_blocks_preferred() {
-        let mut h = msg("m1", "assistant", Some("合成文本不应出现"), Some("completed"));
+        let mut h = msg(
+            "m1",
+            "assistant",
+            Some("合成文本不应出现"),
+            Some("completed"),
+        );
         h.blocks_json = Some(
             r#"[{"type":"text","text":"块保真"},{"type":"thought","text":"思考","redacted":true}]"#
                 .into(),
@@ -484,7 +496,9 @@ mod tests {
         let hydrated = hydrate_history(vec![h]);
         assert_eq!(
             hydrated[0].blocks,
-            vec![AgentMessageBlock::Text { text: "正文".into() }]
+            vec![AgentMessageBlock::Text {
+                text: "正文".into()
+            }]
         );
     }
 
@@ -507,7 +521,8 @@ mod tests {
             r#"[{"id":"c1","name":"read_file","arguments":"{\"path\":\"a.txt\"}","status":"success"}]"#
                 .into(),
         );
-        h.tool_call_results_json = Some(r#"[{"id":"c1","output":"file content","isError":false}]"#.into());
+        h.tool_call_results_json =
+            Some(r#"[{"id":"c1","output":"file content","isError":false}]"#.into());
         let history = vec![h, msg("tail", "user", Some("确认"), None)];
         let hydrated = hydrate_history(history);
         let blocks = &hydrated[0].blocks;
@@ -532,9 +547,8 @@ mod tests {
     fn raw_arguments_wrapped_as_string_value() {
         // arguments 不是合法 JSON（原始参数串）→ 原样包为字符串 Value（信息不丢）
         let mut h = msg("m1", "assistant", None, None);
-        h.tool_calls_json = Some(
-            r#"[{"id":"c1","name":"shell","arguments":"npm run dev"}]"#.into(),
-        );
+        h.tool_calls_json =
+            Some(r#"[{"id":"c1","name":"shell","arguments":"npm run dev"}]"#.into());
         let history = vec![h, msg("tail", "user", Some("确认"), None)];
         let hydrated = hydrate_history(history);
         assert!(matches!(
@@ -665,14 +679,22 @@ mod tests {
         assert_eq!(ids(&hydrate_history(history)), ["bad", "bad2", "ok"]);
         assert_eq!(
             hydrate_history(vec![bad2])[0].blocks,
-            vec![AgentMessageBlock::Text { text: "工具部分跳过".into() }]
+            vec![AgentMessageBlock::Text {
+                text: "工具部分跳过".into()
+            }]
         );
     }
 
     #[test]
     fn created_at_derived_from_epoch_millis() {
         // 锚点：civil_from_days(20665) = 2026-07-31（steering 测试同源锚点）
-        assert_eq!(iso8601_from_epoch_millis(1_785_456_000_000), "2026-07-31T00:00:00.000Z");
-        assert_eq!(iso8601_from_epoch_millis(1_785_456_000_123), "2026-07-31T00:00:00.123Z");
+        assert_eq!(
+            iso8601_from_epoch_millis(1_785_456_000_000),
+            "2026-07-31T00:00:00.000Z"
+        );
+        assert_eq!(
+            iso8601_from_epoch_millis(1_785_456_000_123),
+            "2026-07-31T00:00:00.123Z"
+        );
     }
 }

@@ -14,7 +14,7 @@
 //! 故 dispatch 只需接收事件本身，无需单独的 payload 参数。
 
 use conex_types::session::{AgentSessionContext, AgentSessionEvent, AgentSessionState};
-use conex_types::transition::{TransitionError, apply_transition};
+use conex_types::transition::{apply_transition, TransitionError};
 
 /// 会话状态机实例
 ///
@@ -100,7 +100,9 @@ impl AgentSessionMachine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::session::{AgentEndReason as R, AgentSessionEvent as E, AgentSessionState as S};
+    use conex_types::session::{
+        AgentEndReason as R, AgentSessionEvent as E, AgentSessionState as S,
+    };
 
     fn machine() -> AgentSessionMachine {
         AgentSessionMachine::new("sess-1", 16)
@@ -451,10 +453,17 @@ mod tests {
             goto(&mut m, S::TurnComplete);
             assert!(matches!(
                 m.dispatch(E::Error),
-                Err(TransitionError::Undefined { state: S::TurnComplete, event: E::Error })
+                Err(TransitionError::Undefined {
+                    state: S::TurnComplete,
+                    event: E::Error
+                })
             ));
             assert_eq!(m.state(), S::TurnComplete);
-            assert_eq!(m.context().end_reason, R::Stop, "失败时 endReason 不得被 patch");
+            assert_eq!(
+                m.context().end_reason,
+                R::Stop,
+                "失败时 endReason 不得被 patch"
+            );
         }
         // 其余状态抽样：未定义组合必须显式失败且状态不变
         for (target, event) in [
@@ -580,9 +589,7 @@ mod tests {
             for event in all_events() {
                 let mut m = machine();
                 goto(&mut m, state);
-                if m.dispatch(event).is_ok()
-                    && m.context().end_reason == R::Error
-                {
+                if m.dispatch(event).is_ok() && m.context().end_reason == R::Error {
                     error_terminals += 1;
                     assert!(
                         matches!(

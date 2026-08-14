@@ -145,7 +145,10 @@ async fn two_turn_tool_loop_keeps_request_prefix_byte_stable() {
     let tools0 = tools_bytes(&requests[0].tools);
     let tools1 = tools_bytes(&requests[1].tools);
     assert_eq!(tools0, tools1, "两轮请求 tools 数组序列化字节必须一致");
-    assert_eq!(requests[0].tools, requests[1].tools, "两轮请求 tools 内容一致");
+    assert_eq!(
+        requests[0].tools, requests[1].tools,
+        "两轮请求 tools 内容一致"
+    );
 
     // 快照必须等于注册表 list_definitions 的按名排序导出（确定性真源）
     let mut registry = ToolRegistry::new();
@@ -168,7 +171,11 @@ async fn two_turn_tool_loop_keeps_request_prefix_byte_stable() {
     );
     // messages[1..] 为追加段（assistant 工具调用 + 工具结果）
     assert_eq!(requests[0].messages.len(), 1, "第一轮对话仅用户消息");
-    assert_eq!(requests[1].messages.len(), 3, "第二轮 = 用户 + 工具调用 + 工具结果");
+    assert_eq!(
+        requests[1].messages.len(),
+        3,
+        "第二轮 = 用户 + 工具调用 + 工具结果"
+    );
 }
 
 /// E2-2：同配置跨 run，system 段字节一致。
@@ -232,8 +239,16 @@ async fn system_prompt_stable_across_runs_same_settings() {
     );
 
     // 前缀复用：第二轮请求完整携带第一轮对话（同一 Arc，无改写）
-    assert_eq!(requests[0].messages.len(), 1, "第一轮请求 = 仅用户消息（回复在请求后 commit）");
-    assert_eq!(requests[1].messages.len(), 3, "第二轮 = 第一轮 2 条 + 新用户消息");
+    assert_eq!(
+        requests[0].messages.len(),
+        1,
+        "第一轮请求 = 仅用户消息（回复在请求后 commit）"
+    );
+    assert_eq!(
+        requests[1].messages.len(),
+        3,
+        "第二轮 = 第一轮 2 条 + 新用户消息"
+    );
     assert!(
         Arc::ptr_eq(&requests[0].messages[0], &requests[1].messages[0]),
         "两轮请求首条用户消息为同一 Arc（无改写）"

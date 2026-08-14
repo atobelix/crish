@@ -16,7 +16,9 @@ use async_trait::async_trait;
 use conex_types::message::AgentMessage;
 use conex_types::response::ClassifiedStreamError;
 
-use crate::provider::{ProviderCall, ProviderEventStream, ProviderRequest, ToolSchema};
+use crate::provider::{
+    ProviderCall, ProviderEventStream, ProviderRequest, ReasoningEffort, ToolSchema,
+};
 use crate::stream::{ProviderStreamEvent, StopReason};
 
 /// 脚本化测试 provider（05 §4.1/4.6 蓝本）
@@ -51,7 +53,10 @@ impl TestProvider {
     /// T06.3 Q20：构造期校验脚本非空——`stream()` 时按调用序号取脚本、
     /// 超出取最后一份（`last()` 必成功），避免延迟 panic。
     pub fn new(script: Vec<ProviderStreamEvent>) -> Self {
-        assert!(!script.is_empty(), "TestProvider 脚本至少一份（构造期校验）");
+        assert!(
+            !script.is_empty(),
+            "TestProvider 脚本至少一份（构造期校验）"
+        );
         Self {
             scripts: vec![script],
             error: None,
@@ -67,7 +72,10 @@ impl TestProvider {
     ///
     /// T06.3 Q20：构造期校验脚本数组非空（对齐 [Self::new]）。
     pub fn with_scripts(scripts: Vec<Vec<ProviderStreamEvent>>) -> Self {
-        assert!(!scripts.is_empty(), "TestProvider 脚本数组至少一份（构造期校验）");
+        assert!(
+            !scripts.is_empty(),
+            "TestProvider 脚本数组至少一份（构造期校验）"
+        );
         Self {
             scripts,
             error: None,
@@ -132,7 +140,10 @@ impl TestProvider {
     /// （[crate::r#loop::RunOutcome::messages]）逐条 `Arc::ptr_eq` 即证明
     /// 请求构建 0 深拷贝（旧形态每轮 `conversation.clone()` 每次都是新分配）。
     pub fn request_message_arcs(&self, n: usize) -> Vec<Arc<AgentMessage>> {
-        self.requests().get(n).map(|r| r.messages.clone()).unwrap_or_default()
+        self.requests()
+            .get(n)
+            .map(|r| r.messages.clone())
+            .unwrap_or_default()
     }
 
     /// 第 n 次请求的 max_tokens
@@ -150,6 +161,12 @@ impl TestProvider {
     /// 真实会话 ID，请求快照逐一对齐 [ProviderRequest] 字段）
     pub fn request_session_id(&self, n: usize) -> Option<String> {
         self.requests().get(n).and_then(|r| r.session_id.clone())
+    }
+
+    /// 第 n 次请求的思考档位（T3.1 契约测钉断言用：透传 Some 变体 / None
+    /// 缺省，与 [ProviderRequest.reasoning_effort] 逐一对齐）
+    pub fn request_reasoning_effort(&self, n: usize) -> Option<ReasoningEffort> {
+        self.requests().get(n).and_then(|r| r.reasoning_effort)
     }
 }
 
@@ -277,6 +294,9 @@ pub struct RequestSnapshot {
     /// 本次调用 session_id（S5 接线后断言：build_request 注入真实值，
     /// 缓存键会话维度来源）
     pub session_id: Option<String>,
+    /// 本次调用的思考档位（T3.1：ProviderRequest.reasoning_effort 的快照面，
+    /// 供断言透传与 None 缺省语义）
+    pub reasoning_effort: Option<ReasoningEffort>,
 }
 
 impl RequestSnapshot {
@@ -288,6 +308,7 @@ impl RequestSnapshot {
             max_tokens: request.max_tokens,
             system_prompt: request.system_prompt.map(str::to_string),
             session_id: request.session_id.clone(),
+            reasoning_effort: request.reasoning_effort,
         }
     }
 }

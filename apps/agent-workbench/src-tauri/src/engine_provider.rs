@@ -7,9 +7,8 @@
 //! （`engine_provider/` 子模，测试旁挂 `engine_provider_tests.rs`）：
 //! - [connection]：连接配置 + HTTP 客户端；[timestamp]：ISO8601 + 消息 id；
 //! - [protocol]：协议路由单一真源消费 + 四态解析器选择 + 目录查询
-//!   + maxTokensField 决议（T3.6/C5 消费）；
-//! - [headers]：按协议请求头组装 + 会话亲和头族 seam（T3.5/G1-e）；
-//!   [thinking]：思考档位映射；[stream]：流状态机。
+//!   + maxTokensField 决议（T3.6/C5）；[headers]：请求头组装
+//!   + 会话亲和头族 seam（T3.5/G1-e）；[thinking]：思考档位映射；[stream]：流状态机。
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分；四协议路由/思考档位为 R3 T3.2 新增，
 //! URL/body/parser 收敛于同一 [protocol::effective_protocol]）。
 
@@ -135,10 +134,9 @@ impl HttpProviderCall {
         self
     }
 
-    /// chat-completions 请求选项（对话无关字段；模型 / max_tokens 透传）。
-    /// R3 T3.2：思考档位（series 级）消费——`ProviderRequest.reasoning_effort`
-    /// 经 [thinking::to_provider_effort] 注入 `ChatCompletionsRequestOptions
-    /// ::reasoning_effort`；None（既有调用方）不携带（字节与 P2 前一致）。
+    /// chat-completions 请求选项（模型 / max_tokens 透传；思考档位 series 级
+    /// 消费经 [thinking::to_provider_effort]；maxTokensField 经
+    /// [protocol::max_tokens_field]（T3.6/C5）；None 思考档位不携带字节）。
     /// `reasoning_content`：DeepSeek 恒 Require，其余厂商 Omit。
     pub(crate) fn request_options(
         &self,
@@ -261,8 +259,7 @@ impl HttpProviderCall {
         headers::request_headers_for(&self.config, WireProtocol::Chat, policy, None, None)
     }
 
-    /// 按 wire 协议组装完整请求头（四轨同轨；R3 T3.2 接线 + G1-e/T3.5
-    /// 会话亲和头族 seam——`request.session_id` 非空时经 headers.rs seam 注入）。
+    /// 组装完整请求头（四轨同轨；会话亲和头族 seam T3.5 注入 session_id）。
     pub(crate) fn request_headers_for(
         &self,
         protocol: WireProtocol,

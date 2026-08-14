@@ -21,8 +21,7 @@ use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
 use session_loop::{
-    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamEvent,
-    StopReason,
+    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamEvent, StopReason,
 };
 
 /// 慢速流替身：按脚本逐条延时产出（首 token 500ms，总时长 5s）
@@ -73,11 +72,26 @@ impl DeltaSink for TimedDeltaSink {
 /// 慢速流脚本：首 token 500ms 后逐 token 产出，Stop 收尾，总时长 ≈ 5s
 fn slow_script() -> Vec<(Duration, ProviderStreamEvent)> {
     vec![
-        (Duration::from_millis(500), ProviderStreamEvent::text("第一个 token")),
-        (Duration::from_millis(1125), ProviderStreamEvent::text("，第二个")),
-        (Duration::from_millis(1125), ProviderStreamEvent::text("，第三个")),
-        (Duration::from_millis(1125), ProviderStreamEvent::text("，第四个")),
-        (Duration::from_millis(1125), ProviderStreamEvent::stop(StopReason::Stop)),
+        (
+            Duration::from_millis(500),
+            ProviderStreamEvent::text("第一个 token"),
+        ),
+        (
+            Duration::from_millis(1125),
+            ProviderStreamEvent::text("，第二个"),
+        ),
+        (
+            Duration::from_millis(1125),
+            ProviderStreamEvent::text("，第三个"),
+        ),
+        (
+            Duration::from_millis(1125),
+            ProviderStreamEvent::text("，第四个"),
+        ),
+        (
+            Duration::from_millis(1125),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ),
     ]
 }
 
@@ -166,10 +180,7 @@ async fn first_delta_reaches_sink_under_600ms_with_slow_stream() {
 
     // 300ms 内部基准（F1 记录项，不作断言）：流产出 → 事件桥的
     // Rust 侧处理耗时（next() + delta 构造 + sink.push）
-    let produced = first_produced
-        .lock()
-        .unwrap()
-        .expect("首条事件应已产出");
+    let produced = first_produced.lock().unwrap().expect("首条事件应已产出");
     let processing = arrival.duration_since(produced);
     println!(
         "[T09.7 首 token 内部基准] 流产出 → 事件桥到达处理耗时 {processing:?}（目标 ≤ 300ms，仅记录）"

@@ -14,8 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agent_provider::request::{
-    build_chat_completions_request_body, ChatCompletionsRequestOptions, MaxTokensField,
-    RequestBuildContext,
+    build_chat_completions_request_body, ChatCompletionsRequestOptions, RequestBuildContext,
 };
 use agent_tools::tools::kill_subagent::{KillSubagentToolResult, SubagentKillChannel};
 use agent_tools::tools::send_message::{
@@ -28,7 +27,7 @@ use session_loop::provider::DeltaSink;
 use session_loop::ControlBus;
 
 use super::engine_build::EngineHandle;
-use super::engine_provider::{chat_provider_url, user_message, EngineProviderConfig};
+use super::engine_provider::{chat_provider_url, max_tokens_field, user_message, EngineProviderConfig};
 use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::timers::AgentEventSink;
@@ -125,7 +124,7 @@ impl ProviderSummarizer {
             // 非流式：一次收全响应，同步面逐字节解析
             stream: Some(false),
             max_tokens: Some(self.max_summary_tokens as u64),
-            max_tokens_field: Some(MaxTokensField::MaxTokens),
+            max_tokens_field: Some(max_tokens_field(&self.config)),
             // C14：None = 完全不参与缓存（无 prompt_cache_key / 断点 /
             // 会话亲和键），请求体不含任何 cache 键
             cache: None,

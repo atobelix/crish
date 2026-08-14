@@ -51,9 +51,7 @@ fn user(text: &str) -> AgentMessage {
         id: format!("user-{text}"),
         role: AgentMessageRole::User,
         created_at: "2026-01-01T00:00:00Z".into(),
-        blocks: vec![AgentMessageBlock::Text {
-            text: text.into(),
-        }],
+        blocks: vec![AgentMessageBlock::Text { text: text.into() }],
         metadata: None,
         client_message_id: None,
         content: None,
@@ -162,7 +160,10 @@ async fn stress_long_session_100_messages() {
         elapsed < Duration::from_secs(5),
         "100 消息长会话 run 超时（宽松上界）：{elapsed:?}"
     );
-    println!("[stress] 100 消息长会话 run 耗时：{elapsed:?}，收口消息 {} 条", outcome.messages.len());
+    println!(
+        "[stress] 100 消息长会话 run 耗时：{elapsed:?}，收口消息 {} 条",
+        outcome.messages.len()
+    );
 }
 
 /// 长会话 1000 条消息：耗时上界（宽松）+ 零拷贝断言（P3 优化的核心场景）
@@ -182,14 +183,21 @@ async fn stress_long_session_1000_messages() {
     let elapsed = started.elapsed();
 
     assert_eq!(outcome.reason, AgentEndReason::Stop);
-    assert_eq!(outcome.messages.len(), 1002, "1000 条历史 + user + assistant");
+    assert_eq!(
+        outcome.messages.len(),
+        1002,
+        "1000 条历史 + user + assistant"
+    );
     assert_request_chain_zero_copy(&provider, 0, &outcome.messages, 1001);
     assert_event_record_zero_copy(&outcome);
     assert!(
         elapsed < Duration::from_secs(20),
         "1000 消息长会话 run 超时（宽松上界）：{elapsed:?}"
     );
-    println!("[stress] 1000 消息长会话 run 耗时：{elapsed:?}，收口消息 {} 条", outcome.messages.len());
+    println!(
+        "[stress] 1000 消息长会话 run 耗时：{elapsed:?}，收口消息 {} 条",
+        outcome.messages.len()
+    );
 }
 
 /// 长会话 5000 条消息：报告模式——只统计耗时不断言上界（机器无关），
@@ -234,7 +242,11 @@ async fn stress_long_session_multi_run_continuation() {
     let mut prev: Option<Vec<Arc<AgentMessage>>> = None;
     for round in 0..40u32 {
         let outcome = loop_.run(user(&format!("第 {round} 轮"))).await;
-        assert_eq!(outcome.reason, AgentEndReason::Stop, "第 {round} 轮应以 stop 收场");
+        assert_eq!(
+            outcome.reason,
+            AgentEndReason::Stop,
+            "第 {round} 轮应以 stop 收场"
+        );
 
         // 第 2 轮起：请求快照必须包含上一轮全部消息，且逐条同一 Arc 实例
         if let Some(prev_messages) = &prev {

@@ -241,8 +241,9 @@ impl Default for SessionLoopOptions {
             // BackupMiddleware::with_defaults(None)，trash_root=None 执行期
             // 回退工作区 `.crish-trash`（与删除工具兜底同源）。壳层装配
             // 时可在 options 侧整体替换（如 core_run_commands.rs）。
-            tool_middleware: vec![Arc::new(BackupMiddleware::with_defaults(None))
-                as Arc<dyn ToolMiddleware>],
+            tool_middleware: vec![
+                Arc::new(BackupMiddleware::with_defaults(None)) as Arc<dyn ToolMiddleware>
+            ],
             hooks: None,
             system_prompt: None,
             // P4 阶段 2-2/3-2：预算与压缩配置全部缺省 None/1——未配置即现状

@@ -25,7 +25,7 @@ use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::AgentEvent;
 
 use crate::input::{AgentInputQueue, InputEnqueueMode};
-use crate::steering::{SteeringReason, now_iso_utc, unix_millis};
+use crate::steering::{now_iso_utc, unix_millis, SteeringReason};
 
 /// 通道容量（对齐 TS SteeringInputQueue 默认 50）
 pub const DEFAULT_PENDING_NUDGE_CAPACITY: usize = 50;
@@ -112,7 +112,9 @@ pub(crate) fn diagnostic_message(text: &str) -> AgentMessage {
         id: new_message_id("diagnostic"),
         role: AgentMessageRole::System,
         created_at: now_iso_utc(),
-        blocks: vec![AgentMessageBlock::Text { text: text.to_string() }],
+        blocks: vec![AgentMessageBlock::Text {
+            text: text.to_string(),
+        }],
         metadata: Some(serde_json::json!({ "kind": "diagnostic" })),
         client_message_id: None,
         content: None,
@@ -337,7 +339,10 @@ mod tests {
         for text in &texts {
             assert!(!text.is_empty());
             assert!(text.contains('中') || text.contains("纠偏"), "含中文提示");
-            assert!(text.contains("Runtime steering"), "含英文对照（对齐 TS 文案）");
+            assert!(
+                text.contains("Runtime steering"),
+                "含英文对照（对齐 TS 文案）"
+            );
         }
     }
 
@@ -348,9 +353,18 @@ mod tests {
         assert!(message.id.starts_with("steering-"));
         assert!(!message.text().is_empty());
         let metadata = message.metadata.as_ref().expect("注入消息须带元数据");
-        assert_eq!(metadata.get("kind").and_then(|k| k.as_str()), Some("runtime-steering"));
-        assert_eq!(metadata.get("reason").and_then(|r| r.as_str()), Some("tool-loop"));
-        assert_eq!(metadata.get("steeringCount").and_then(|c| c.as_u64()), Some(2));
+        assert_eq!(
+            metadata.get("kind").and_then(|k| k.as_str()),
+            Some("runtime-steering")
+        );
+        assert_eq!(
+            metadata.get("reason").and_then(|r| r.as_str()),
+            Some("tool-loop")
+        );
+        assert_eq!(
+            metadata.get("steeringCount").and_then(|c| c.as_u64()),
+            Some(2)
+        );
     }
 
     /// 通道基础语义：入队/预览/清空/取出（FIFO）
@@ -361,11 +375,18 @@ mod tests {
         channel.enqueue_reason(SteeringReason::EmptyResponse);
         channel.enqueue_reason(SteeringReason::ToolErrors);
         assert_eq!(channel.len(), 2);
-        assert_eq!(channel.peek().expect("队首").reason, SteeringReason::EmptyResponse);
+        assert_eq!(
+            channel.peek().expect("队首").reason,
+            SteeringReason::EmptyResponse
+        );
 
         let drained = channel.drain_all();
         assert_eq!(drained.len(), 2);
-        assert_eq!(drained[0].reason, SteeringReason::EmptyResponse, "FIFO 顺序");
+        assert_eq!(
+            drained[0].reason,
+            SteeringReason::EmptyResponse,
+            "FIFO 顺序"
+        );
         assert_eq!(drained[1].reason, SteeringReason::ToolErrors);
         assert!(!channel.has_pending());
         assert_eq!(channel.drain_all().len(), 0, "取空后为空");
@@ -380,7 +401,11 @@ mod tests {
         channel.enqueue_reason(SteeringReason::ToolLoop);
         assert_eq!(channel.len(), 2);
         let drained = channel.drain_all();
-        assert_eq!(drained[0].reason, SteeringReason::ToolErrors, "最旧的空响应被覆盖");
+        assert_eq!(
+            drained[0].reason,
+            SteeringReason::ToolErrors,
+            "最旧的空响应被覆盖"
+        );
         assert_eq!(drained[1].reason, SteeringReason::ToolLoop);
     }
 
@@ -406,7 +431,11 @@ mod tests {
         let message = queue.dequeue().expect("promote 后可消费");
         assert_eq!(message.role, AgentMessageRole::User);
         assert_eq!(
-            message.metadata.as_ref().and_then(|m| m.get("kind")).and_then(|k| k.as_str()),
+            message
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("kind"))
+                .and_then(|k| k.as_str()),
             Some("nudge")
         );
         assert!(message.text().contains("Runtime steering"));
@@ -439,7 +468,10 @@ mod tests {
         assert_eq!(message.text(), nudge.text);
         let metadata = message.metadata.as_ref().expect("须带元数据");
         assert_eq!(metadata.get("kind").and_then(|k| k.as_str()), Some("nudge"));
-        assert_eq!(metadata.get("reason").and_then(|r| r.as_str()), Some("tool-errors"));
+        assert_eq!(
+            metadata.get("reason").and_then(|r| r.as_str()),
+            Some("tool-errors")
+        );
     }
 
     /// 按原因撤销（去重防重复提示）
@@ -453,14 +485,20 @@ mod tests {
         let removed = channel.withdraw_reason(SteeringReason::EmptyResponse);
         assert_eq!(removed.len(), 2, "同名原因全部撤销");
         assert_eq!(channel.len(), 1);
-        assert_eq!(channel.peek().expect("剩余").reason, SteeringReason::ToolLoop);
+        assert_eq!(
+            channel.peek().expect("剩余").reason,
+            SteeringReason::ToolLoop
+        );
 
         // 用谓词撤销接口同样可用
         channel.enqueue_reason(SteeringReason::EmptyResponse);
         let removed = channel.withdraw(|n| n.reason == SteeringReason::EmptyResponse);
         assert_eq!(removed.len(), 1);
         assert_eq!(channel.len(), 1, "剩余的 ToolLoop 不被误删");
-        assert_eq!(channel.peek().expect("剩余").reason, SteeringReason::ToolLoop);
+        assert_eq!(
+            channel.peek().expect("剩余").reason,
+            SteeringReason::ToolLoop
+        );
     }
 
     /// clear 清空通道

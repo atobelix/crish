@@ -135,7 +135,10 @@ async fn d1_cooperative_stop_ends_stopped_no_auto_continuation() {
     assert_eq!(end, AgentEndReason::Stopped);
     // 反向：非 aborted 非 error（runtime 旧行为 = aborted 不复现）
     assert!(
-        !matches!(outcome.reason, AgentEndReason::Aborted | AgentEndReason::Error),
+        !matches!(
+            outcome.reason,
+            AgentEndReason::Aborted | AgentEndReason::Error
+        ),
         "协作停止不是取消也不是错误"
     );
     // 反向：run 终态不触发自动续轮——本 run 内仅 1 次 TurnStart（无续轮）
@@ -285,10 +288,7 @@ async fn d4_self_termination_diagnostic_does_not_fail_run() {
         ProviderStreamEvent::ProviderDiagnostic {
             diagnostic: ProviderDiagnostic {
                 phase: ProviderDiagnosticPhase::StreamEnd,
-                reason: Some(format!(
-                    "agent-self-terminated:{}",
-                    serialized
-                )),
+                reason: Some(format!("agent-self-terminated:{}", serialized)),
                 ..ProviderDiagnostic::default()
             },
         },
@@ -315,7 +315,10 @@ async fn d4_self_termination_diagnostic_does_not_fail_run() {
         })
         .expect("应有 provider-diagnostic 事件");
     assert!(
-        diag.reason.as_deref().unwrap_or("").contains("agent-self-terminated"),
+        diag.reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("agent-self-terminated"),
         "诊断载荷应含自终止标记"
     );
     // 正向：run 正常 stop 收场（诊断不使 run 失败）
@@ -323,7 +326,10 @@ async fn d4_self_termination_diagnostic_does_not_fail_run() {
     assert!(outcome.error.is_none());
     // 反向：旧行为自终止以 runtime-error（retryable:true）事件表达——
     // 现在不产生 runtime-error，也不以 error 收场（D4 非 error 语义）
-    assert!(!has_runtime_error(&outcome.events), "自终止诊断不得以 runtime-error 发出");
+    assert!(
+        !has_runtime_error(&outcome.events),
+        "自终止诊断不得以 runtime-error 发出"
+    );
     // 反向：诊断载荷不含 error/reason 收场字段（纯观测数据）
     let keys: Vec<String> = serialized
         .as_object()
@@ -332,7 +338,9 @@ async fn d4_self_termination_diagnostic_does_not_fail_run() {
         .cloned()
         .collect();
     assert!(
-        !keys.iter().any(|k| k.contains("error") || k.contains("reason")),
+        !keys
+            .iter()
+            .any(|k| k.contains("error") || k.contains("reason")),
         "诊断载荷无收场裁决字段"
     );
 }
@@ -388,7 +396,10 @@ async fn d5_text_with_error_stop_ends_as_message_not_error() {
         Some("stop"),
         "stopReason 不应被 error 污染"
     );
-    assert!(!has_runtime_error(&outcome.events), "文字+error 路径不发 runtime-error");
+    assert!(
+        !has_runtime_error(&outcome.events),
+        "文字+error 路径不发 runtime-error"
+    );
 }
 
 // ── D6：empty-response 预算内重试、耗尽 stop 收场 ──
@@ -429,7 +440,10 @@ async fn d6_empty_response_retry_within_budget_then_recover() {
     assert_eq!(final_text.text(), "抱歉，我重新回答了。");
     // 反向：第 1 次空响应不以 error / aborted 收场
     assert!(
-        !matches!(outcome.reason, AgentEndReason::Error | AgentEndReason::Aborted),
+        !matches!(
+            outcome.reason,
+            AgentEndReason::Error | AgentEndReason::Aborted
+        ),
         "预算内空响应重试不得以 error 收场"
     );
 }
@@ -538,7 +552,11 @@ async fn d8_run_never_injects_nudge_nudge_goes_to_next_user_message() {
         .iter()
         .find(|m| m.id == nudge_message.id)
         .expect("nudge 应被消费进对话");
-    assert_eq!(consumed.role, AgentMessageRole::User, "nudge 必须是用户消息");
+    assert_eq!(
+        consumed.role,
+        AgentMessageRole::User,
+        "nudge 必须是用户消息"
+    );
     assert_eq!(
         consumed
             .metadata
@@ -602,7 +620,10 @@ async fn d9_budget_exhausted_forbids_inject_and_ends_stop() {
     assert_ne!(injected_steering_count(&outcome.messages), 2);
     assert!(outcome.error.is_none());
     assert!(
-        !matches!(outcome.reason, AgentEndReason::Error | AgentEndReason::Aborted),
+        !matches!(
+            outcome.reason,
+            AgentEndReason::Error | AgentEndReason::Aborted
+        ),
         "预算耗尽不得以 error/aborted 收场"
     );
 }
@@ -626,7 +647,10 @@ async fn d10_steering_count_single_source_in_apply_no_dead_check() {
     let outcome = loop_.run(user("回答我")).await;
 
     // 正向：耗尽在第 2 次空响应真实触发（预算检查读到的是 apply 后的真实计数）
-    assert_eq!(outcome.steering_count, 1, "计数唯一增量点在 apply（inject-message）");
+    assert_eq!(
+        outcome.steering_count, 1,
+        "计数唯一增量点在 apply（inject-message）"
+    );
     assert!(
         outcome.diagnostic.is_some(),
         "第 2 次空响应即耗尽——若为恒 0 死检查则永远不会耗尽"

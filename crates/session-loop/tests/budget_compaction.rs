@@ -57,7 +57,9 @@ fn big_conversation() -> Vec<Arc<AgentMessage>> {
                     AgentMessageRole::Assistant
                 },
                 created_at: "2026-08-03T10:00:00.000Z".to_string(),
-                blocks: vec![AgentMessageBlock::Text { text: "字".repeat(5_000) }],
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "字".repeat(5_000),
+                }],
                 metadata: None,
                 client_message_id: None,
                 content: None,
@@ -93,7 +95,10 @@ impl ProviderCall for ArcTestProvider {
 /// 从事件列表取压缩记录（断言辅助）
 fn find_compression_record(events: &[AgentEvent]) -> Option<ContextCompressionRecord> {
     events.iter().find_map(|e| match e {
-        AgentEvent::ContextCompressionEnd { result: Some(record), .. } => Some(record.clone()),
+        AgentEvent::ContextCompressionEnd {
+            result: Some(record),
+            ..
+        } => Some(record.clone()),
         _ => None,
     })
 }
@@ -133,22 +138,41 @@ async fn preflight_compaction_triggers_and_broadcasts_events() {
         .filter(|e| matches!(e, AgentEvent::ContextCompressionEnd { .. }))
         .count();
     assert_eq!(starts, 1, "预检压缩必须广播 start 事件");
-    assert_eq!(ends, 1, "预检压缩必须广播 end 事件（单 run 上限内只压缩一次）");
+    assert_eq!(
+        ends, 1,
+        "预检压缩必须广播 end 事件（单 run 上限内只压缩一次）"
+    );
 
     // End 载荷 = CompactionPlan 字段（触发点 threshold / token 数 / id 清单）
     let record = find_compression_record(&outcome.events).expect("End 必须携带 record");
-    assert!(record.tokens_after < record.tokens_before, "压缩后 token 必须减少");
-    assert_eq!(record.compressed_message_ids.len(), 6, "丢弃 6 条消息（默认策略保留段从 m6 起）");
+    assert!(
+        record.tokens_after < record.tokens_before,
+        "压缩后 token 必须减少"
+    );
+    assert_eq!(
+        record.compressed_message_ids.len(),
+        6,
+        "丢弃 6 条消息（默认策略保留段从 m6 起）"
+    );
     assert_eq!(record.first_kept_message_id.as_deref(), Some("m6"));
-    assert_eq!(record.trigger, conex_types::tool::ContextCompressionTrigger::Threshold);
+    assert_eq!(
+        record.trigger,
+        conex_types::tool::ContextCompressionTrigger::Threshold
+    );
 
     // 对话替换：摘要占位（compacted-summary 前缀）+ 保留段 + 本轮回复
     assert!(
-        outcome.messages.iter().any(|m| m.id.starts_with("compacted-summary")),
+        outcome
+            .messages
+            .iter()
+            .any(|m| m.id.starts_with("compacted-summary")),
         "压缩后对话必须含摘要占位消息"
     );
     assert!(
-        outcome.messages.iter().any(|m| m.id == "m6" && m.role == AgentMessageRole::User),
+        outcome
+            .messages
+            .iter()
+            .any(|m| m.id == "m6" && m.role == AgentMessageRole::User),
         "保留段首条（m6）必须保留"
     );
 }
@@ -190,7 +214,10 @@ async fn max_tokens_clamped_by_estimate_without_compaction() {
     let requests = provider.requests();
     assert_eq!(requests.len(), 1);
     let max_tokens = requests[0].max_tokens.expect("请求必须带 max_tokens");
-    assert_eq!(max_tokens, 4902, "max_tokens 必须被钳到 window - estimate - safety");
+    assert_eq!(
+        max_tokens, 4902,
+        "max_tokens 必须被钳到 window - estimate - safety"
+    );
 }
 
 /// 下限保护：可用输出预算低于下限（256）→ 不钳制（保持 8192，只记录）
@@ -221,7 +248,11 @@ async fn max_tokens_not_clamped_below_floor() {
 
     // 估算 55000 ≥ 窗口 10000 → 可用预算 = 0 低于下限 → 不钳制
     let requests = provider.requests();
-    assert_eq!(requests[0].max_tokens, Some(8192), "低于下限不钳制（保持现状值）");
+    assert_eq!(
+        requests[0].max_tokens,
+        Some(8192),
+        "低于下限不钳制（保持现状值）"
+    );
 }
 
 /// 不触发：小对话估算远低于阈值 → 无压缩事件、max_tokens 原值透传
@@ -245,15 +276,17 @@ async fn preflight_skipped_under_threshold_in_full_run() {
     assert_eq!(outcome.reason, AgentEndReason::Stop);
 
     assert!(
-        outcome
-            .events
-            .iter()
-            .all(|e| !matches!(e, AgentEvent::ContextCompressionStart { .. }
-                | AgentEvent::ContextCompressionEnd { .. })),
+        outcome.events.iter().all(|e| !matches!(
+            e,
+            AgentEvent::ContextCompressionStart { .. } | AgentEvent::ContextCompressionEnd { .. }
+        )),
         "估算低于阈值不得触发压缩事件"
     );
     // 钳制不生效：估算 ≈ 10 → 可用 = 64000-10-4096 ≥ 8192 → 原值
     let requests = provider.requests();
     assert_eq!(requests[0].max_tokens, Some(8192));
-    assert_eq!(requests[0].max_tokens, Some(session_loop::r#loop::DEFAULT_MAX_TOKENS));
+    assert_eq!(
+        requests[0].max_tokens,
+        Some(session_loop::r#loop::DEFAULT_MAX_TOKENS)
+    );
 }

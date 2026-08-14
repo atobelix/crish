@@ -77,9 +77,18 @@ mod tests {
         let _g = registry.claim_one("runA", "src", ClaimMode::Write).unwrap();
         let detector = RegistryBackedDetector::new(registry);
 
-        assert!(detector.is_declared(&event_at("src/lib.rs", &ws)), "声明目录必须命中子文件");
-        assert!(detector.is_declared(&event_at("src/deep/main.rs", &ws)), "声明目录必须命中深层子文件");
-        assert!(detector.is_declared(&event_at("src", &ws)), "声明目录自身事件必须命中");
+        assert!(
+            detector.is_declared(&event_at("src/lib.rs", &ws)),
+            "声明目录必须命中子文件"
+        );
+        assert!(
+            detector.is_declared(&event_at("src/deep/main.rs", &ws)),
+            "声明目录必须命中深层子文件"
+        );
+        assert!(
+            detector.is_declared(&event_at("src", &ws)),
+            "声明目录自身事件必须命中"
+        );
     }
 
     #[test]
@@ -88,9 +97,14 @@ mod tests {
         let ws = TempWorkspace::new("det_same");
         ws.write_file("x.txt", "x");
         let registry = Arc::new(WritePathRegistry::new("s1", ws.path()));
-        let _g = registry.claim_one("runA", "x.txt", ClaimMode::Write).unwrap();
+        let _g = registry
+            .claim_one("runA", "x.txt", ClaimMode::Write)
+            .unwrap();
         let detector = RegistryBackedDetector::new(registry);
-        assert!(detector.is_declared(&event_at("x.txt", &ws)), "同路径必须命中");
+        assert!(
+            detector.is_declared(&event_at("x.txt", &ws)),
+            "同路径必须命中"
+        );
     }
 
     #[test]
@@ -99,16 +113,26 @@ mod tests {
         let ws = TempWorkspace::new("det_sib");
         ws.write_file("a/x.txt", "x");
         let registry = Arc::new(WritePathRegistry::new("s1", ws.path()));
-        let _g = registry.claim_one("runA", "a/x.txt", ClaimMode::Write).unwrap();
+        let _g = registry
+            .claim_one("runA", "a/x.txt", ClaimMode::Write)
+            .unwrap();
         let detector = RegistryBackedDetector::new(registry);
-        assert!(!detector.is_declared(&event_at("a/y.txt", &ws)), "兄弟文件不得命中");
+        assert!(
+            !detector.is_declared(&event_at("a/y.txt", &ws)),
+            "兄弟文件不得命中"
+        );
 
         // 组件边界：声明 a/b 不命中 a/bc.txt（前缀必须在组件边界）
         let ws2 = TempWorkspace::new("det_bound");
         let registry2 = Arc::new(WritePathRegistry::new("s1", ws2.path()));
-        let _g2 = registry2.claim_one("runA", "a/b", ClaimMode::Write).unwrap();
+        let _g2 = registry2
+            .claim_one("runA", "a/b", ClaimMode::Write)
+            .unwrap();
         let detector2 = RegistryBackedDetector::new(registry2);
-        assert!(!detector2.is_declared(&event_at("a/bc.txt", &ws2)), "组件边界外不得命中");
+        assert!(
+            !detector2.is_declared(&event_at("a/bc.txt", &ws2)),
+            "组件边界外不得命中"
+        );
     }
 
     #[test]
@@ -117,16 +141,27 @@ mod tests {
         let ws = TempWorkspace::new("det_none");
         let registry = Arc::new(WritePathRegistry::new("s1", ws.path()));
         let detector = RegistryBackedDetector::new(registry);
-        assert!(!detector.is_declared(&event_at("anything.txt", &ws)), "无声明必须未声明");
+        assert!(
+            !detector.is_declared(&event_at("anything.txt", &ws)),
+            "无声明必须未声明"
+        );
 
         // 守卫 Drop 释放后：声明消失，同路径变为未声明
         let registry = Arc::new(WritePathRegistry::new("s1", ws.path()));
-        let guard = registry.claim_one("runA", "x.txt", ClaimMode::Write).unwrap();
+        let guard = registry
+            .claim_one("runA", "x.txt", ClaimMode::Write)
+            .unwrap();
         let detector = RegistryBackedDetector::new(registry);
         ws.write_file("x.txt", "x");
-        assert!(detector.is_declared(&event_at("x.txt", &ws)), "持守卫期必须声明");
+        assert!(
+            detector.is_declared(&event_at("x.txt", &ws)),
+            "持守卫期必须声明"
+        );
         drop(guard);
-        assert!(!detector.is_declared(&event_at("x.txt", &ws)), "守卫释放后必须未声明");
+        assert!(
+            !detector.is_declared(&event_at("x.txt", &ws)),
+            "守卫释放后必须未声明"
+        );
     }
 
     #[cfg(windows)]
@@ -137,7 +172,9 @@ mod tests {
         let ws = TempWorkspace::new("det_case");
         ws.write_file("Src/File.txt", "x");
         let registry = Arc::new(WritePathRegistry::new("s1", ws.path()));
-        let _g = registry.claim_one("runA", "src/File.txt", ClaimMode::Write).unwrap();
+        let _g = registry
+            .claim_one("runA", "src/File.txt", ClaimMode::Write)
+            .unwrap();
         let detector = RegistryBackedDetector::new(registry);
         assert!(
             detector.is_declared(&event_at("SRC/file.txt", &ws)),

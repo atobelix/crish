@@ -6,13 +6,13 @@ use conex_types::response::ClassifiedStreamError;
 use conex_types::session::AgentSessionEvent as E;
 use conex_types::tool::{ContextCompressionReason, ContextCompressionTrigger};
 
-use super::fatal::fatal_provider_error;
+use super::super::super::LoopError;
+use super::super::streaming::streaming_aborted;
 use super::super::{
     apply_compaction, compaction_shape_ok, dispatch, CompactionTriggerInfo, HandlerOutcome,
     LoopState,
 };
-use super::super::streaming::streaming_aborted;
-use super::super::super::LoopError;
+use super::fatal::fatal_provider_error;
 /// 溢出压缩阶梯重试上限（E2 F2 层 2 / D1 §3.5.1：1→2，替代 pi
 /// `_overflowRecoveryAttempted` 单次语义——压缩后仍超限时重试第二次是
 /// 真实恢复：第二次重试前 keep_recent_tokens 阶梯下调（20K→12K→8K，
@@ -39,7 +39,10 @@ pub(crate) const MAX_LENGTH_UPGRADES: u32 = 2;
 /// length 恢复阶梯：max_tokens 翻倍升级（8192→16384→32768，上限 2 次）；
 /// 用尽后接压缩阶梯（P4 §3.5）——输入超限维度，对齐 pi「溢出 → 压缩 →
 /// 重试一次」
-pub(crate) async fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError) -> Result<HandlerOutcome, LoopError> {
+pub(crate) async fn length_ladder(
+    state: &mut LoopState,
+    classified: &ClassifiedStreamError,
+) -> Result<HandlerOutcome, LoopError> {
     // Q40（T09.9）：每级决策前查 abort——已取消不再发起 length 升级重试
     if state.abort_signal.is_aborted() {
         return streaming_aborted(state);
@@ -135,13 +138,12 @@ pub(crate) async fn compression_ladder(
     // E2 F1 L3：LLM 摘要强制——豁免（compact_allow_stub_fallback /
     // !compact_require_llm 任一放行）→ StubAllowed 降级 stub；默认
     // LlmRequired → 无 Summarizer/摘要失败不落 stub、标记 llm_unavailable
-    let stub_policy = if state.options.compact_allow_stub_fallback
-        || !state.options.compact_require_llm
-    {
-        conex_compaction::compaction::StubPolicy::StubAllowed
-    } else {
-        conex_compaction::compaction::StubPolicy::LlmRequired
-    };
+    let stub_policy =
+        if state.options.compact_allow_stub_fallback || !state.options.compact_require_llm {
+            conex_compaction::compaction::StubPolicy::StubAllowed
+        } else {
+            conex_compaction::compaction::StubPolicy::LlmRequired
+        };
     let mut plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
         budget_tokens as usize,
@@ -171,7 +173,9 @@ pub(crate) async fn compression_ladder(
             m.role != conex_types::message::AgentMessageRole::System
                 && !m.id.starts_with("compacted-summary")
         }) {
-            if plan.messages[first_non_summary_idx].role != conex_types::message::AgentMessageRole::User {
+            if plan.messages[first_non_summary_idx].role
+                != conex_types::message::AgentMessageRole::User
+            {
                 let non_user_tokens = conex_compaction::count_agent_message_tokens(
                     &plan.messages[first_non_summary_idx],
                 );
@@ -185,7 +189,9 @@ pub(crate) async fn compression_ladder(
                     state.summarizer.as_deref(),
                     stub_policy,
                 );
-                if compaction_shape_ok(&tighter_plan.messages) && !tighter_plan.dropped_ids.is_empty() {
+                if compaction_shape_ok(&tighter_plan.messages)
+                    && !tighter_plan.dropped_ids.is_empty()
+                {
                     plan = tighter_plan;
                 }
             }

@@ -61,4 +61,4 @@ pub(crate) fn tool_progress_update(p: &ToolProgress) -> Option<ToolProgressUpdat
         }),
         ToolProgress::Content { .. } => None,
     }
-}
+}

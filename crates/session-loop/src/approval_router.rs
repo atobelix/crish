@@ -187,10 +187,7 @@ mod tests {
     /// 父 run 缺失 → 主 agent（无父 run 兜底 User 的前置分类）
     #[test]
     fn classify_no_parent_is_main_agent() {
-        assert_eq!(
-            classify_source("run-main", None),
-            ApprovalSource::MainAgent
-        );
+        assert_eq!(classify_source("run-main", None), ApprovalSource::MainAgent);
         // 空串父 run（flow_graph planner_run_id 缺省）同样兜底主 agent
         assert_eq!(
             classify_source("run-x", Some("")),
@@ -215,10 +212,7 @@ mod tests {
     /// MainAgent → User（现状不变，既有 UI 审批流程全绿）
     #[test]
     fn route_main_agent_to_user() {
-        assert_eq!(
-            route_approval(&ApprovalSource::MainAgent),
-            Arbiter::User
-        );
+        assert_eq!(route_approval(&ApprovalSource::MainAgent), Arbiter::User);
     }
 
     /// Subagent → MainAgent（新默认）
@@ -278,10 +272,7 @@ mod tests {
         )
         .expect("有父 run 必构造请求方");
         assert_eq!(requester.run_id, "run-sub-1");
-        assert_eq!(
-            requester.reason.as_deref(),
-            Some("需要写入报告目录")
-        );
+        assert_eq!(requester.reason.as_deref(), Some("需要写入报告目录"));
         // task_type 注入面缺省 None（T-D-13 spawner 补齐）
         assert_eq!(requester.task_type, None);
     }
@@ -289,14 +280,8 @@ mod tests {
     /// 主 agent run（无父 run / 空父 run）→ None（现状：裁决者 = 用户）
     #[test]
     fn requester_none_for_main_agent_context() {
-        assert_eq!(
-            requester_from_context("run-main", None, None),
-            None
-        );
-        assert_eq!(
-            requester_from_context("run-main", Some(""), None),
-            None
-        );
+        assert_eq!(requester_from_context("run-main", None, None), None);
+        assert_eq!(requester_from_context("run-main", Some(""), None), None);
     }
 
     // ── 理由提取 ──
@@ -313,7 +298,10 @@ mod tests {
             Some("需要推送分支到远端")
         );
         assert_eq!(approval_reason_from_args(&serde_json::json!({})), None);
-        assert_eq!(approval_reason_from_args(&serde_json::json!({ APPROVAL_REASON_ARG_KEY: 42 })), None);
+        assert_eq!(
+            approval_reason_from_args(&serde_json::json!({ APPROVAL_REASON_ARG_KEY: 42 })),
+            None
+        );
         // 保留键不影响普通工具参数读取
         assert_eq!(args["command"], "git push");
     }

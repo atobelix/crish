@@ -4,12 +4,10 @@
 //! 仿 shell.rs/subagent.rs 测试旁挂先例）
 
 use super::*;
+use crate::r#loop::SessionLoopOptions;
+use crate::steering::{RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions};
 use agent_tools::registry::ToolRegistry;
 use conex_types::tool::ToolProgressUpdate;
-use crate::r#loop::SessionLoopOptions;
-use crate::steering::{
-    RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
-};
 
 /// 构造最小 LoopState（emit_tool_events 单测驱动）
 fn state() -> LoopState {
@@ -202,10 +200,7 @@ fn approval_resolved_expired_maps_to_agent_event() {
             assert_eq!(session_id, "sess-1");
             assert_eq!(tool_call_id, "c1");
             assert_eq!(request_id, &None);
-            assert_eq!(
-                decision,
-                &conex_types::events::ApprovalDecision::Expired
-            );
+            assert_eq!(decision, &conex_types::events::ApprovalDecision::Expired);
             assert!(!timestamp.is_empty());
         }
         other => panic!("应映射为 AgentEvent::ApprovalResolved，实际 {other:?}"),

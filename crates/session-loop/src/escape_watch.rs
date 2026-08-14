@@ -37,10 +37,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use agent_tools::audit::{AuditSink, security_audit_event};
+use agent_tools::audit::{security_audit_event, AuditSink};
 use conex_fs::watch::{ChangeKind, FileChangeEvent, UndeclaredWrite, WorkspaceWatcher};
 use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
-use conex_types::impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};
+use conex_types::impact::{ImpactAssessment, IMPACT_FLAG_FILE_THRESHOLD};
 
 use crate::undeclared_detector::UndeclaredWriteDetector;
 
@@ -444,8 +444,7 @@ fn emit_report(config: &EscapeWatchConfig, report: &UndeclaredWrite) {
 /// 归因报告 → 影响面载荷（file_count 承载聚合数；跨目录与谨慎标记
 /// 按变更清单计算；大小/目录数为 0——监视事件无字节级信息，诚实兜底）
 fn impact_for(report: &UndeclaredWrite) -> ImpactAssessment {
-    let parents: HashSet<Option<&Path>> =
-        report.changes.iter().map(|c| c.path.parent()).collect();
+    let parents: HashSet<Option<&Path>> = report.changes.iter().map(|c| c.path.parent()).collect();
     ImpactAssessment {
         file_count: report.file_count as u64,
         total_size_bytes: 0,
@@ -476,9 +475,16 @@ pub fn build_escape_injection_text(report: &UndeclaredWrite, root: &Path) -> Str
     let path_part = if rel_paths.len() <= 3 {
         rel_paths.join("、")
     } else {
-        format!("{} 等 {} 个文件", rel_paths[..3].join("、"), rel_paths.len())
+        format!(
+            "{} 等 {} 个文件",
+            rel_paths[..3].join("、"),
+            rel_paths.len()
+        )
     };
-    format!("检测到工具外写入：{path_part}（run {} 期间）", report.run_id)
+    format!(
+        "检测到工具外写入：{path_part}（run {} 期间）",
+        report.run_id
+    )
 }
 
 #[cfg(test)]
@@ -507,10 +513,7 @@ mod tests {
 
     impl RecordingInjector {
         fn texts(&self) -> Vec<String> {
-            self.texts
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone()
+            self.texts.lock().unwrap_or_else(|e| e.into_inner()).clone()
         }
     }
 
@@ -584,7 +587,11 @@ mod tests {
         agg.push(&event_at("b.txt", &ws, 1));
         agg.push(&event_at("a.txt", &ws, 2));
         let report = agg.take_report().expect("有聚合必有报告");
-        let paths: Vec<String> = report.changes.iter().map(|c| c.path.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        let paths: Vec<String> = report
+            .changes
+            .iter()
+            .map(|c| c.path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
         assert_eq!(paths, vec!["b.txt", "a.txt"], "按首现顺序输出");
     }
 
@@ -594,7 +601,10 @@ mod tests {
         let ws = TempWorkspace::new("esc_agg_destr");
         let mut agg = EscapeAggregator::new("s1", "r1");
         agg.push(&event_at("a.txt", &ws, 1));
-        assert!(!agg.take_report().expect("报告").has_destructive, "纯新建非破坏性");
+        assert!(
+            !agg.take_report().expect("报告").has_destructive,
+            "纯新建非破坏性"
+        );
 
         agg.push(&FileChangeEvent {
             path: ws.path().join("a.txt"),
@@ -734,8 +744,9 @@ mod tests {
     async fn consume_batch_limit_splits_reports() {
         let ws = TempWorkspace::new("esc_int_batch");
         let sink = Arc::new(RecordingAuditSink::new());
-        let config = EscapeWatchConfig::new(ws.path(), "s1", "r-int-3", Arc::clone(&sink) as AuditSink)
-            .with_limits(2, 60_000);
+        let config =
+            EscapeWatchConfig::new(ws.path(), "s1", "r-int-3", Arc::clone(&sink) as AuditSink)
+                .with_limits(2, 60_000);
         let mut handle = spawn_escape_watch(ws.path(), config).expect("监视启动成功");
 
         for rel in ["a.txt", "b.txt", "c.txt"] {
@@ -811,7 +822,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(300)).await;
         handle.shutdown().await;
 
-        assert!(sink.emitted().is_empty(), "声明覆盖事件必须静默：{:?}", sink.emitted());
+        assert!(
+            sink.emitted().is_empty(),
+            "声明覆盖事件必须静默：{:?}",
+            sink.emitted()
+        );
     }
 
     /// 静态排除清单：排除目录（node_modules/target）内写入不产事件
@@ -827,7 +842,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(400)).await;
         handle.shutdown().await;
 
-        assert!(sink.emitted().is_empty(), "排除目录必须不产事件：{:?}", sink.emitted());
+        assert!(
+            sink.emitted().is_empty(),
+            "排除目录必须不产事件：{:?}",
+            sink.emitted()
+        );
     }
 
     /// 排除清单内容对齐 REQ §3.4（静态排除表）

@@ -43,8 +43,8 @@ pub mod escape_watch;
 pub mod hooks;
 pub mod hydrate;
 pub mod input;
-pub mod provider;
 pub mod r#loop;
+pub mod provider;
 pub mod safe_point;
 pub mod state;
 pub mod steering;
@@ -57,20 +57,20 @@ pub mod undeclared_detector;
 pub use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 pub use approval::ApprovalChannel;
 pub use approval_router::{
-    APPROVAL_REASON_ARG_KEY, ARBITER_WIRE_MAIN_AGENT, ARBITER_WIRE_USER, ApprovalSource, Arbiter,
     approval_reason_from_args, arbiter_metadata, classify_source, relay_denied_message,
-    requester_from_context, route_approval, route_approval_guarded,
+    requester_from_context, route_approval, route_approval_guarded, ApprovalSource, Arbiter,
+    APPROVAL_REASON_ARG_KEY, ARBITER_WIRE_MAIN_AGENT, ARBITER_WIRE_USER,
 };
 pub use cache_tracker::{CacheMiss, CacheStatsTracker, CacheTrackingConfig};
 
 pub use control::{
-    level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput,
-    ControlKind, ControlLevel,
+    level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput, ControlKind,
+    ControlLevel,
 };
 pub use escape_watch::{
-    EscapeAggregator, EscapeWatchConfig, EscapeWatchHandle, EscapeWatchInjector,
     build_escape_injection_text, escape_exclude_paths, spawn_escape_watch,
-    spawn_escape_watch_consumer,
+    spawn_escape_watch_consumer, EscapeAggregator, EscapeWatchConfig, EscapeWatchHandle,
+    EscapeWatchInjector,
 };
 pub use hooks::{
     HookAction, HookDispatchOutcome, HookError, HookEvent, HookEventKind, HookFailStrategy,
@@ -81,7 +81,8 @@ pub use input::{
     RingBuffer, INPUT_QUEUE_CAPACITY,
 };
 pub use provider::{
-    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamItem, ToolSchema,
+    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamItem,
+    ReasoningEffort, ToolSchema,
 };
 pub use r#loop::{
     AgentSessionLoop, EndDecision, RecoveryDecision, RecoveryHook, RunOutcome, SessionLoopOptions,
@@ -90,19 +91,18 @@ pub use r#loop::{
 // T-33/T-42：摘要后台调度类型面（run 级 dispatch + 会话级协调器/注册表 +
 // 配置面键）——壳层装配（T-43/T-44）与 orchestrator 回调落库消费
 pub use r#loop::summary_coordinator::{
-    MAX_CONCURRENT_SUMMARY_TASKS, SessionSummaryCoordinator,
-    SessionSummaryCoordinatorRegistry,
+    SessionSummaryCoordinator, SessionSummaryCoordinatorRegistry, MAX_CONCURRENT_SUMMARY_TASKS,
 };
 pub use r#loop::summary_dispatch::{
-    DEFAULT_RETRY_GUARD_MAX_ATTEMPTS, DEFAULT_RETRY_GUARD_WINDOW_MS,
-    LOOP_SUMMARY_MAX_WALL_MS, MAX_SUMMARY_ATTEMPTS, META_KEY_SUMMARY_BACKOFF_MS,
-    META_KEY_SUMMARY_L1_PLACEHOLDER, META_KEY_SUMMARY_MAX_ATTEMPTS,
-    META_KEY_SUMMARY_RETRY_WINDOW_MS, META_KEY_SUMMARY_WALL_MS, SUMMARY_BACKOFF_MS,
-    SUMMARY_JITTER_RATIO, SummaryBackgroundSink, SummaryBackgroundSinkRef, SummaryDispatch,
+    summary_l1_placeholder, SummaryBackgroundSink, SummaryBackgroundSinkRef, SummaryDispatch,
     SummaryDispatchConfig, SummaryDispatchOutcome, SummaryDispatchTask, SummaryOutcomeCallback,
-    SummaryRetryGate, SummaryRetryGuardConfig, summary_l1_placeholder,
+    SummaryRetryGate, SummaryRetryGuardConfig, DEFAULT_RETRY_GUARD_MAX_ATTEMPTS,
+    DEFAULT_RETRY_GUARD_WINDOW_MS, LOOP_SUMMARY_MAX_WALL_MS, MAX_SUMMARY_ATTEMPTS,
+    META_KEY_SUMMARY_BACKOFF_MS, META_KEY_SUMMARY_L1_PLACEHOLDER, META_KEY_SUMMARY_MAX_ATTEMPTS,
+    META_KEY_SUMMARY_RETRY_WINDOW_MS, META_KEY_SUMMARY_WALL_MS, SUMMARY_BACKOFF_MS,
+    SUMMARY_JITTER_RATIO,
 };
-pub use safe_point::{AbortSignal, ControlAction, apply_safe_point_control};
+pub use safe_point::{apply_safe_point_control, AbortSignal, ControlAction};
 pub use state::AgentSessionMachine;
 pub use steering::{
     AppliedResult, PendingNudge, PendingNudgeChannel, RecoverySteeringStrategy,
@@ -110,13 +110,13 @@ pub use steering::{
     SteeringCoordinator, SteeringCoordinatorOptions, SteeringPhase, SteeringReason,
 };
 pub use stream::{
-    ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, ProviderUsage,
-    StopReason, consume,
+    consume, ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, ProviderUsage,
+    StopReason,
 };
 pub use testing::{TestProvider, TestTool};
 pub use tool_events::{
     ApprovalDecision, ApprovalGate, ApprovalRequester, ClassifiedToolResult, FailStrategy,
     ToolBatchOptions, ToolErrorKind, ToolEvent,
 };
-pub use tool_exec::{ToolExecCtx, ToolExecutor, ToolBatchOutcome};
+pub use tool_exec::{ToolBatchOutcome, ToolExecCtx, ToolExecutor};
 pub use undeclared_detector::{RegistryBackedDetector, UndeclaredWriteDetector};

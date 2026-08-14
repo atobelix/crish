@@ -226,10 +226,7 @@ impl SessionSummaryCoordinator {
     /// 写入最近完成结果（任务收尾经默认回调 / per-trigger 回调落库后，
     /// 会话元数据快照保持最终态供查询——测试断言 / 审计 / 前端挂账）
     fn record_outcome(&self, outcome: SummaryDispatchOutcome) {
-        *self
-            .last_outcome
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some(outcome);
+        *self.last_outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(outcome);
     }
 }
 
@@ -456,21 +453,30 @@ mod tests {
         // run 1：get_or_create 触发（任务存活）
         let coordinator = registry.get_or_create("s1", fast_config());
         assert!(
-            coordinator.try_trigger(task_with(summarizer.clone(), "s1", "compacted-summary-1-1"), None),
+            coordinator.try_trigger(
+                task_with(summarizer.clone(), "s1", "compacted-summary-1-1"),
+                None
+            ),
             "首次触发必须 spawn"
         );
         // run 2 模拟：再次 get_or_create（同一 Arc——跨 run 单飞状态延续）
         let same = registry.get_or_create("s1", fast_config());
         assert!(Arc::ptr_eq(&coordinator, &same), "同会话必须返回同一协调器");
         assert!(
-            !same.try_trigger(task_with(summarizer.clone(), "s1", "compacted-summary-1-2"), None),
+            !same.try_trigger(
+                task_with(summarizer.clone(), "s1", "compacted-summary-1-2"),
+                None
+            ),
             "任务存活期跨 run 触发被去重（会话级单飞）"
         );
         // 等首任务完成（退避 1ms + 调用）
         tokio::time::sleep(Duration::from_millis(200)).await;
         // 任务完成后：新触发放行（续试）
         assert!(
-            same.try_trigger(task_with(summarizer.clone(), "s1", "compacted-summary-1-2"), None),
+            same.try_trigger(
+                task_with(summarizer.clone(), "s1", "compacted-summary-1-2"),
+                None
+            ),
             "任务完成后可再触发"
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -539,7 +545,11 @@ mod tests {
         assert_eq!(b_outcome.session_id, "b");
         assert_eq!(a_outcome.block_id, "ca");
         assert_eq!(b_outcome.block_id, "cb");
-        assert_eq!(a_outcome.state, SummaryState::Committed, "a 成功（好摘要器）");
+        assert_eq!(
+            a_outcome.state,
+            SummaryState::Committed,
+            "a 成功（好摘要器）"
+        );
         assert_eq!(
             b_outcome.state,
             SummaryState::Awaiting,
@@ -573,8 +583,14 @@ mod tests {
         assert_eq!(done.len(), 1, "回调必须恰好收到一次结果");
         assert_eq!(done[0].state, SummaryState::Committed);
         assert_eq!(done[0].block_id, "compacted-summary-1-1");
-        assert!(done[0].summary_json.is_some(), "committed 携带 JSON 规范文档");
-        assert!(done[0].rendered_markdown.is_some(), "committed 携带 md 渲染");
+        assert!(
+            done[0].summary_json.is_some(),
+            "committed 携带 JSON 规范文档"
+        );
+        assert!(
+            done[0].rendered_markdown.is_some(),
+            "committed 携带 md 渲染"
+        );
         // 会话元数据快照同步
         let snapshot = coordinator.last_outcome().expect("会话元数据快照");
         assert_eq!(snapshot.state, SummaryState::Committed);
@@ -654,7 +670,9 @@ mod tests {
         });
         let coordinator = registry.get_or_create("s1", fast_config());
         // 任务存活期间再次触发被去重 → 无事件（非放弃）
-        assert!(coordinator.try_trigger(task_with(good.clone(), "s1", "compacted-summary-1-1"), None));
+        assert!(
+            coordinator.try_trigger(task_with(good.clone(), "s1", "compacted-summary-1-1"), None)
+        );
         let phases_after_first = sink.phases();
         assert_eq!(phases_after_first.len(), 1, "存活期去重不发事件");
         assert_eq!(phases_after_first[0], "spawned", "触发成功必须发射 spawned");

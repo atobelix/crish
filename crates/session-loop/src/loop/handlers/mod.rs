@@ -61,8 +61,7 @@ pub(crate) fn new_message_id(prefix: &str) -> String {
 
 /// 重试等待延迟注入函数（D1 §3.1.2 注入面签名：本次尝试序号、Retry-After
 /// 毫秒 → 等待时长；测试注入确定性延迟，零真实等待不依赖 tokio pause）
-pub(crate) type RetryDelayFn =
-    Box<dyn Fn(u32, Option<u64>) -> std::time::Duration + Send + Sync>;
+pub(crate) type RetryDelayFn = Box<dyn Fn(u32, Option<u64>) -> std::time::Duration + Send + Sync>;
 
 /// 主循环可变状态（各 handler 的共享载体）
 pub(crate) struct LoopState {
@@ -200,10 +199,7 @@ impl LoopState {
         // 退避参数；测试注入快速序列）；run 起始不复位（单飞句柄跨 run
         // 保留——存活任务阻塞新 spawn，会话级单飞语义在 loop 实例内成立）
         let summary_dispatch = Arc::new(crate::r#loop::summary_dispatch::SummaryDispatch::new(
-            options
-                .summary_dispatch
-                .clone()
-                .unwrap_or_default(),
+            options.summary_dispatch.clone().unwrap_or_default(),
         ));
         // 会话级协调器（T-42）：构造期从 options 派生（壳层装配；None =
         // 回退 run 级 dispatch）——协调器由注册表持有，LoopState 只借用
@@ -475,13 +471,12 @@ pub(crate) async fn compact_with_llm_guard(
     policy: &conex_compaction::CompactionPolicy,
     info: &CompactionTriggerInfo,
 ) -> bool {
-    let stub_policy = if state.options.compact_allow_stub_fallback
-        || !state.options.compact_require_llm
-    {
-        StubPolicy::StubAllowed
-    } else {
-        StubPolicy::LlmRequired
-    };
+    let stub_policy =
+        if state.options.compact_allow_stub_fallback || !state.options.compact_require_llm {
+            StubPolicy::StubAllowed
+        } else {
+            StubPolicy::LlmRequired
+        };
     let engine = CompactionEngine::new(0);
     let plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
@@ -505,7 +500,9 @@ pub(crate) async fn compact_with_llm_guard(
             timestamp: crate::steering::now_iso_utc(),
             reason: "LLM 摘要不可用，压缩等待 LLM 可用".to_string(),
             choices: vec!["等待 LLM 摘要可用后自动压缩".to_string()],
-            message: "上下文已超窗但 LLM 摘要不可用——未压缩（禁止纯丢弃式线性压缩），等待 LLM 可用后重试".to_string(),
+            message:
+                "上下文已超窗但 LLM 摘要不可用——未压缩（禁止纯丢弃式线性压缩），等待 LLM 可用后重试"
+                    .to_string(),
         });
         return false;
     }
@@ -543,11 +540,7 @@ fn maybe_retry_pending_summary(state: &mut LoopState) {
         return;
     };
     // 块已不在对话（摘要成功替换 / 清理）→ 不再待重试
-    if !state
-        .conversation
-        .iter()
-        .any(|m| m.id == pending.block_id)
-    {
+    if !state.conversation.iter().any(|m| m.id == pending.block_id) {
         return;
     }
     let Some(summarizer) = state.summarizer.clone() else {
@@ -678,13 +671,16 @@ pub(crate) async fn apply_compaction(
     let prev_block_id = if plan.fold_chain_prev > 0 {
         Some(format!(
             "compacted-summary-{}-{}",
-            plan.generation,
-            plan.fold_chain_prev
+            plan.generation, plan.fold_chain_prev
         ))
     } else {
         None
     };
-    let summary_state = if plan.summary_is_llm { "committed" } else { "awaiting" };
+    let summary_state = if plan.summary_is_llm {
+        "committed"
+    } else {
+        "awaiting"
+    };
     // 压缩后签名（system + 链哈希；链 = 链消息的投影签名——稳定前缀
     // 身份，评审 02 §3.1「链是前缀内的稳定区段」）
     let boundary_hash = {
@@ -715,7 +711,11 @@ pub(crate) async fn apply_compaction(
                 .filter(|m| m.id.starts_with("compacted-summary"))
                 .filter_map(|m| {
                     let text = m.text();
-                    if text.is_empty() { None } else { Some(text) }
+                    if text.is_empty() {
+                        None
+                    } else {
+                        Some(text)
+                    }
                 })
                 .next_back();
             let max_bytes = state
@@ -997,7 +997,10 @@ pub(crate) fn assert_timeline_injection_hygiene(conversation: &[Arc<AgentMessage
 /// 点（预检 / 溢出阶梯）对压缩产物（plan.messages）检查，违规即跳过
 /// 压缩 + warn（引擎层保持纯算法不感知 wire 协议形状）。
 pub(crate) fn compaction_shape_ok(conversation: &[Arc<AgentMessage>]) -> bool {
-    if conversation.iter().any(|m| m.role == AgentMessageRole::System) {
+    if conversation
+        .iter()
+        .any(|m| m.role == AgentMessageRole::System)
+    {
         return true;
     }
     match conversation
@@ -1025,9 +1028,10 @@ pub(crate) fn assert_conversation_head_tail(conversation: &[Arc<AgentMessage>]) 
         return;
     }
     // 首条约束：跳过 system + 链后的首条必须为 user
-    if let Some(idx) = conversation.iter().position(|m| {
-        m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary")
-    }) {
+    if let Some(idx) = conversation
+        .iter()
+        .position(|m| m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary"))
+    {
         debug_assert_eq!(
             conversation[idx].role,
             AgentMessageRole::User,
@@ -1530,7 +1534,9 @@ mod tests {
         // 透明：用户消息未参与压缩（未入对话），append 后恒在对话尾部
         let record = compression_record(&state).expect("必须携带压缩记录");
         assert!(
-            !record.compressed_message_ids.contains(&"user-hold".to_string()),
+            !record
+                .compressed_message_ids
+                .contains(&"user-hold".to_string()),
             "用户消息绝不在 dropped_ids"
         );
     }
@@ -1681,7 +1687,9 @@ mod tests {
         }
         let calls = Arc::new(std::sync::Mutex::new(0usize));
         let state = test_state(SessionLoopOptions {
-            summarizer: Some(Arc::new(AlwaysFailSummarizer { calls: calls.clone() })),
+            summarizer: Some(Arc::new(AlwaysFailSummarizer {
+                calls: calls.clone(),
+            })),
             // 豁免开启（E2 F1 L3）：同步摘要失败 → 降级 stub（awaiting 块），
             // 供被动摘要重试点消费（F1 强制默认路径下失败不落 stub）
             compact_allow_stub_fallback: true,
@@ -1737,10 +1745,7 @@ mod tests {
             !maybe_compact_user_boundary(&mut state).await,
             "未超阈值不压缩"
         );
-        assert_eq!(
-            state.compactions_this_run, 1,
-            "被动重试不消耗压缩计数"
-        );
+        assert_eq!(state.compactions_this_run, 1, "被动重试不消耗压缩计数");
         // 等被动重试任务完成（退避 1ms×3 + 调用）
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         let total = *calls.lock().unwrap();
@@ -1897,7 +1902,12 @@ mod tests {
         // 与压缩后对话同输入投影（system=None、tools 空、messages=对话）
         let post_compaction = state.conversation.clone();
         assert!(
-            state.cache_tracker.as_ref().unwrap().rebuild_signature().is_some(),
+            state
+                .cache_tracker
+                .as_ref()
+                .unwrap()
+                .rebuild_signature()
+                .is_some(),
             "apply_compaction 必须捕获压缩后重建签名（T-31）"
         );
         // 压缩后首轮：重建签名与捕获签名同输入 → Identical（追加区豁免）；
@@ -2053,7 +2063,11 @@ mod tests {
         let conv = vec![
             msg(AgentMessageRole::User, None, "之前的对话"),
             msg(AgentMessageRole::Assistant, None, "回复"),
-            msg(AgentMessageRole::User, Some("timeline"), "当前时间：2026-08-03 18:00:00\n继续"),
+            msg(
+                AgentMessageRole::User,
+                Some("timeline"),
+                "当前时间：2026-08-03 18:00:00\n继续",
+            ),
         ];
         assert_timeline_injection_hygiene(&conv);
     }
@@ -2079,7 +2093,11 @@ mod tests {
         // 时间线标记落在对话末尾 system 角色（越界注入）→ 拒绝
         let conv = vec![
             msg(AgentMessageRole::User, None, "对话"),
-            msg(AgentMessageRole::System, Some("timeline"), "时间线注入进 system"),
+            msg(
+                AgentMessageRole::System,
+                Some("timeline"),
+                "时间线注入进 system",
+            ),
         ];
         assert_timeline_injection_hygiene(&conv);
     }
@@ -2133,7 +2151,10 @@ mod tests {
         ]));
         // 空 / 全链 → 拒绝（无可压缩内容，调用方跳过压缩）
         assert!(!compaction_shape_ok(&[]));
-        assert!(!compaction_shape_ok(&[msg("s1", AgentMessageRole::Assistant)]));
+        assert!(!compaction_shape_ok(&[msg(
+            "s1",
+            AgentMessageRole::Assistant
+        )]));
     }
 
     /// T-36 引擎兜底（预检路径）：无 system 会话中压缩产物链后首条为
@@ -2228,7 +2249,9 @@ mod tests {
             }
         }
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let summarizer = Arc::new(FailsThenSucceeds { calls: calls.clone() });
+        let summarizer = Arc::new(FailsThenSucceeds {
+            calls: calls.clone(),
+        });
         let mut state = test_state(SessionLoopOptions {
             summarizer: Some(summarizer.clone()),
             // 快速退避注入（单飞任务 1ms 后即重试，测试等 300ms 收口）
@@ -2266,10 +2289,16 @@ mod tests {
             "首块 prevBlockId = None（fold_chain_prev=0）"
         );
         assert!(
-            details.get("droppedAtMs").and_then(|v| v.as_i64()).is_some(),
+            details
+                .get("droppedAtMs")
+                .and_then(|v| v.as_i64())
+                .is_some(),
             "droppedAtMs 必须为 epoch 毫秒"
         );
-        assert_eq!(details.get("summaryState"), Some(&serde_json::json!("awaiting")));
+        assert_eq!(
+            details.get("summaryState"),
+            Some(&serde_json::json!("awaiting"))
+        );
         // 2) cache_boundary 非 None + stable_prefix_hash（system+链签名）
         let boundary = record
             .cache_boundary

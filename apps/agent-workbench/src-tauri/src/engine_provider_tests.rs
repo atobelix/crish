@@ -13,10 +13,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use agent_provider::config::Endpoint;
+use agent_provider::events::ProviderStreamEvent as WireEvent;
 use agent_provider::request::WireProtocol;
 use agent_provider::sse::SseFrame;
+use conex_types::error::ProviderErrorKind;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use session_loop::provider::{ProviderRequest, ReasoningEffort as LoopEffort};
+use session_loop::stream::{ProviderStreamEvent, StopReason as LoopStopReason};
 
 /// 构造测试用配置（可指定 base_url / model / endpoint）
 fn config(base_url: &str, model: &str, endpoint: Endpoint) -> EngineProviderConfig {
@@ -284,4 +287,190 @@ fn inv07_strict_alternation_preserves_user_assistant() {
     assert_eq!(wire.len(), 2);
     assert_eq!(wire[0]["role"], "user");
     assert_eq!(wire[1]["role"], "assistant");
+}
+
+/// 构造带 session_id 的请求（T3.5 会话亲和头 seam 测试用）
+fn request_with_session<'a>(
+    context: &'a [Arc<AgentMessage>],
+    session_id: Option<&'a str>,
+) -> ProviderRequest<'a> {
+    ProviderRequest {
+        messages: context,
+        tools: Vec::new(),
+        max_tokens: Some(1024),
+        system_prompt: Some("你是助手。"),
+        session_id: session_id.map(str::to_string),
+        reasoning_effort: None,
+    }
+}
+
+// ── 验收 T3.5：会话亲和头族 seam（G1-e） ─────────────────────────
+
+/// 请求头（chat 轨）在 session_id 非空时注入会话亲和头；为空不注入。
+/// 断言经真实 `request_headers_for`（thread request.session_id）。
+#[test]
+fn session_head_injected_when_session_id_present() {
+    let call = call_for("https://api.example.com/v1", "gpt-5", Endpoint::ChatCompletions);
+    let messages = vec![user_msg("你好")];
+
+    // 非空 session_id → 注入 x-deepseek-harness-session-id
+    let request = request_with_session(&messages, Some("ses-123"));
+    let headers = call.request_headers_for(WireProtocol::Chat, &request);
+    assert!(
+        headers
+            .iter()
+            .any(|(name, value)| *name == "x-deepseek-harness-session-id" && value == "ses-123"),
+        "session_id 非空应注入会话亲和头：{headers:?}"
+    );
+
+    // None → 不注入（对齐 options.sessionId !== undefined 守卫）
+    let request = request_with_session(&messages, None);
+    let headers = call.request_headers_for(WireProtocol::Chat, &request);
+    assert!(
+        !headers
+            .iter()
+            .any(|(name, _)| *name == "x-deepseek-harness-session-id"),
+        "session_id 为空不得注入会话亲和头：{headers:?}"
+    );
+
+    // 空白串也视为不注入（trim 守卫）
+    let request = request_with_session(&messages, Some("   "));
+    let headers = call.request_headers_for(WireProtocol::Chat, &request);
+    assert!(
+        !headers
+            .iter()
+            .any(|(name, _)| *name == "x-deepseek-harness-session-id"),
+        "空白 session_id 不得注入会话亲和头"
+    );
+}
+
+/// 既有亲和头（Grok → x-grok-conv-id）与会话亲和头族可并存（seam 不破坏既有）。
+#[test]
+fn session_head_coexists_with_grok_affinity_header() {
+    // Grok 由 model 前缀推断（catalog 真源；base_url 占位 api.example.com）
+    let call = call_for("https://api.example.com/v1", "grok-4.5", Endpoint::ChatCompletions);
+    let messages = vec![user_msg("你好")];
+    let request = request_with_session(&messages, Some("ses-abc"));
+    let headers = call.request_headers_for(WireProtocol::Chat, &request);
+
+    // 会话亲和头族注入
+    assert!(
+        headers
+            .iter()
+            .any(|(name, value)| *name == "x-deepseek-harness-session-id" && value == "ses-abc"),
+        "Grok 轨应注入会话亲和头"
+    );
+    // 既有 x-grok-conv-id 保留（cache 亲和头）
+    assert!(
+        headers.iter().any(|(name, _)| *name == "x-grok-conv-id"),
+        "Grok 既有 x-grok-conv-id 必须保留：{headers:?}"
+    );
+    // Authorization 恒在
+    assert!(headers.iter().any(|(name, _)| *name == "Authorization"));
+}
+
+// ── 验收 T3.6：maxTokensField 消费接线（M3 / C5） ─────────────────
+
+/// 会话亲和头与会话亲和头族不进入请求体（不破坏序列化契约）——
+/// chat 轨请求体不含任何 x-* 会话头。
+#[test]
+fn session_heads_never_in_request_body() {
+    let call = call_for("https://api.example.com/v1", "gpt-5", Endpoint::ChatCompletions);
+    let messages = vec![user_msg("你好")];
+    let request = request_with_session(&messages, Some("ses-123"));
+    let body = call.request_body_for(WireProtocol::Chat, &request);
+    let keys: Vec<&str> = body
+        .as_object()
+        .expect("body 为对象")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert!(
+        !keys.iter().any(|k| k.starts_with("x-")),
+        "会话亲和头不得进入请求体：{body}"
+    );
+}
+
+/// moonshot 配置 → chat 请求体用 `max_tokens` 字段（C5 旧式网关轨）。
+#[test]
+fn max_tokens_field_moonshot_uses_max_tokens() {
+    let call = call_for("https://api.moonshot.cn/v1", "kimi-k2", Endpoint::ChatCompletions);
+    let messages = vec![user_msg("你好")];
+    let request = single_user_request(&messages, None);
+    let body = call.request_body_for(WireProtocol::Chat, &request);
+    assert_eq!(body["max_tokens"], 1024, "moonshot 写 max_tokens：{body}");
+    assert!(
+        body.get("max_completion_tokens").is_none(),
+        "moonshot 不得写 max_completion_tokens：{body}"
+    );
+}
+
+/// openai.com / o 系列模型 → chat 请求体用 `max_completion_tokens` 字段。
+#[test]
+fn max_tokens_field_openai_o_series_uses_max_completion_tokens() {
+    let messages = vec![user_msg("你好")];
+
+    // 官方 openai.com baseUrl
+    let official = call_for(
+        "https://api.openai.com/v1",
+        "gpt-5",
+        Endpoint::ChatCompletions,
+    );
+    let body = official.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
+    assert_eq!(body["max_completion_tokens"], 1024, "openai.com 写 max_completion_tokens：{body}");
+    assert!(
+        body.get("max_tokens").is_none(),
+        "official 不得写 max_tokens：{body}"
+    );
+
+    // o 系列模型名（baseUrl 占位非 openai.com）
+    let o_series = call_for("https://api.example.com/v1", "o4-mini", Endpoint::ChatCompletions);
+    let body2 = o_series.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
+    assert_eq!(body2["max_completion_tokens"], 1024, "o 系列写 max_completion_tokens：{body2}");
+    assert!(
+        body2.get("max_tokens").is_none(),
+        "o 系列不得写 max_tokens：{body2}"
+    );
+}
+
+/// 默认 openai-compatible（deepseek 等）→ chat 请求体用 `max_tokens`（字节兼容）。
+#[test]
+fn max_tokens_field_default_uses_max_tokens() {
+    let call = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::ChatCompletions);
+    let messages = vec![user_msg("你好")];
+    let request = single_user_request(&messages, None);
+    let body = call.request_body_for(WireProtocol::Chat, &request);
+    assert_eq!(body["max_tokens"], 1024, "默认 openai-compatible 写 max_tokens：{body}");
+    assert!(
+        body.get("max_completion_tokens").is_none(),
+        "默认轨不得写 max_completion_tokens：{body}"
+    );
+}
+
+// ── 验收 T3.2 遗留：Stop.error_kind 透传 ──────────────────────────
+
+/// 携带 error_kind 的 Stop 事件 → to_loop_event 后 session-loop 侧
+/// error_kind 透传（agent-provider 与 session-loop 同用 conex_types
+/// ::error::ProviderErrorKind，直接类型透传，无 13 类字面映射）。
+#[test]
+fn stop_error_kind_passes_through_to_loop_event() {
+    let wire = WireEvent::Stop {
+        reason: agent_provider::events::StopReason::Error,
+        error: Some("provider 过载".to_string()),
+        error_kind: Some(ProviderErrorKind::RateLimit),
+        usage: None,
+    };
+    match to_loop_event(wire) {
+        ProviderStreamEvent::Stop {
+            reason,
+            error_kind,
+            error,
+            ..
+        } => {
+            assert_eq!(reason, LoopStopReason::Error);
+            assert_eq!(error_kind, Some(ProviderErrorKind::RateLimit), "error_kind 应透传");
+            assert_eq!(error.as_deref(), Some("provider 过载"));
+        }
+        other => panic!("期望 Stop，得到 {other:?}"),
+    }
 }

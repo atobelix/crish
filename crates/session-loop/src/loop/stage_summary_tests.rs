@@ -12,7 +12,10 @@ fn sample_document(stage_index: u32) -> serde_json::Value {
         generation: 1,
         goal: "实现分阶段总结".to_string(),
         constraints: vec!["每阶梯只触发一次".to_string()],
-        progress: vec!["里程碑判定已落地".to_string(), "Schema 构造已落地".to_string()],
+        progress: vec![
+            "里程碑判定已落地".to_string(),
+            "Schema 构造已落地".to_string(),
+        ],
         decisions: vec!["系统段注入为主选".to_string()],
         next_steps: vec!["接线 run 收口触发".to_string()],
         critical_context: "estimate/window 双源口径".to_string(),
@@ -28,7 +31,10 @@ fn sample_document(stage_index: u32) -> serde_json::Value {
 
 #[test]
 fn parse_stage_ratios_accepts_json_array() {
-    assert_eq!(parse_stage_ratios("[0.4,0.6,0.8]"), Some(vec![0.4, 0.6, 0.8]));
+    assert_eq!(
+        parse_stage_ratios("[0.4,0.6,0.8]"),
+        Some(vec![0.4, 0.6, 0.8])
+    );
     assert_eq!(parse_stage_ratios("[0.5]"), Some(vec![0.5]), "单阶梯可配");
 }
 
@@ -45,7 +51,10 @@ fn parse_stage_ratios_filters_invalid_items() {
         Some(vec![0.4, 0.6])
     );
     // 乱序 → 升序归一（判定遍历确定性）
-    assert_eq!(parse_stage_ratios("[0.8,0.4,0.6]"), Some(vec![0.4, 0.6, 0.8]));
+    assert_eq!(
+        parse_stage_ratios("[0.8,0.4,0.6]"),
+        Some(vec![0.4, 0.6, 0.8])
+    );
     // 重复 → 去重
     assert_eq!(parse_stage_ratios("[0.4,0.4,0.6]"), Some(vec![0.4, 0.6]));
 }
@@ -60,7 +69,11 @@ fn parse_stage_ratios_malformed_falls_back() {
 
 #[test]
 fn stage_ratios_from_session_meta_fail_open() {
-    assert_eq!(stage_ratios_from_session_meta(|_| None), None, "键缺失 → None");
+    assert_eq!(
+        stage_ratios_from_session_meta(|_| None),
+        None,
+        "键缺失 → None"
+    );
     assert_eq!(
         stage_ratios_from_session_meta(|k| if k == META_KEY_STAGE_RATIOS {
             Some("[0.4,0.6,0.8]".to_string())
@@ -135,7 +148,11 @@ fn estimate_ratio_window_zero_never_triggers() {
     assert_eq!(estimate_ratio(0, 0), 0.0, "窗口 0 → 0.0（永不触发）");
     assert_eq!(estimate_ratio(40, 100), 0.4);
     assert_eq!(estimate_ratio(80, 100), 0.8);
-    assert_eq!(estimate_ratio(120, 100), 1.2, "超窗比例放行（≥ 阈值即可触发）");
+    assert_eq!(
+        estimate_ratio(120, 100),
+        1.2,
+        "超窗比例放行（≥ 阈值即可触发）"
+    );
 }
 
 // ── 已触发状态容器 ─────────────────────────────────────────────
@@ -157,7 +174,10 @@ fn milestone_state_marks_and_queries() {
         None
     );
     // 0.9 达标 → 触发 0.8（唯一未触发阶梯，升序遍历跳过已触发项）
-    assert_eq!(next_pending_milestone(0.9, &ratios, state.triggered()), Some(2));
+    assert_eq!(
+        next_pending_milestone(0.9, &ratios, state.triggered()),
+        Some(2)
+    );
 }
 
 // ── Schema 构造（07 §4.4 测试 2：Schema V1 合法 JSON）──────────
@@ -170,9 +190,15 @@ fn stage_summary_document_is_valid_schema_v1() {
     validate_summary_document(&json, 4096).expect("阶段总结必须过 Schema V1 校验");
     assert_eq!(doc["schemaVersion"], 1);
     assert_eq!(doc["tier"], "stage-1", "tier 标记 stage-N");
-    assert!(doc["droppedIds"].as_array().unwrap().is_empty(), "droppedIds 空数组（无损）");
+    assert!(
+        doc["droppedIds"].as_array().unwrap().is_empty(),
+        "droppedIds 空数组（无损）"
+    );
     assert_eq!(doc["height"], 1);
-    assert_eq!(doc["range"]["startMessageId"], "m1", "custom range 覆盖消息 id 区间");
+    assert_eq!(
+        doc["range"]["startMessageId"], "m1",
+        "custom range 覆盖消息 id 区间"
+    );
     assert_eq!(doc["range"]["messageCount"], 40);
     // 阶段下标 → tier 命名
     assert_eq!(stage_tier(0), "stage-1");
@@ -209,7 +235,11 @@ fn stage_summary_document_without_range_omits_key() {
 fn stage_summary_markdown_is_deterministic_with_tier() {
     let doc = sample_document(0);
     let first = stage_summary_to_markdown(&doc);
-    assert_eq!(first, stage_summary_to_markdown(&doc), "同文档同输出（稳定化）");
+    assert_eq!(
+        first,
+        stage_summary_to_markdown(&doc),
+        "同文档同输出（稳定化）"
+    );
     assert!(first.starts_with("## 阶段性总结（stage-1）"), "tier 标注头");
     assert!(first.contains("## Goal"), "骨架节复用 Schema V1 渲染");
     assert!(first.contains("实现分阶段总结"));
@@ -226,13 +256,19 @@ fn checkpoint_payload_maps_stage_summary_fields() {
     let payload = stage_summary_to_checkpoint_payload(&doc);
     assert_eq!(payload.target, "实现分阶段总结", "target ← goal");
     assert_eq!(
-        payload.summary,
-        "[stage-1] 里程碑判定已落地；Schema 构造已落地",
+        payload.summary, "[stage-1] 里程碑判定已落地；Schema 构造已落地",
         "summary ← [tier] + progress 拼接"
     );
-    assert_eq!(payload.completed, vec!["里程碑判定已落地", "Schema 构造已落地"], "completed ← progress");
+    assert_eq!(
+        payload.completed,
+        vec!["里程碑判定已落地", "Schema 构造已落地"],
+        "completed ← progress"
+    );
     assert_eq!(payload.next, vec!["接线 run 收口触发"], "next ← nextSteps");
-    assert!(payload.files.is_empty(), "files 空（无损快照不携带文件清单）");
+    assert!(
+        payload.files.is_empty(),
+        "files 空（无损快照不携带文件清单）"
+    );
     assert!(payload.timestamp.is_none(), "timestamp 由采集端补");
 }
 
@@ -261,11 +297,18 @@ fn checkpoint_payload_handles_empty_progress() {
 fn existing_text_inherits_goal_and_next_steps_deterministically() {
     let doc = sample_document(2);
     let first = stage_summary_to_existing_text(&doc);
-    assert_eq!(first, stage_summary_to_existing_text(&doc), "existing 素材确定性");
+    assert_eq!(
+        first,
+        stage_summary_to_existing_text(&doc),
+        "existing 素材确定性"
+    );
     assert!(first.contains("[stage-3 阶段总结]"));
     assert!(first.contains("目标：实现分阶段总结"), "goal 继承");
     assert!(first.contains("已完成：里程碑判定已落地"), "progress 继承");
-    assert!(first.contains("下一步：接线 run 收口触发"), "nextSteps 继承");
+    assert!(
+        first.contains("下一步：接线 run 收口触发"),
+        "nextSteps 继承"
+    );
 }
 
 #[test]

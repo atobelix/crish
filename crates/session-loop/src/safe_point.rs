@@ -17,16 +17,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use conex_types::checkpoint::{
-    CHECKPOINT_MARKER, CONEX_CHECKPOINT_MARKER, CheckpointError, CheckpointPayload,
+    CheckpointError, CheckpointPayload, CHECKPOINT_MARKER, CONEX_CHECKPOINT_MARKER,
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 #[cfg(test)]
 use conex_types::session::AgentEndReason;
 use tokio::sync::Notify;
 
-use crate::control::{ControlBus, ControlDrainAction};
 #[cfg(test)]
-use crate::control::{RingChoice, inject_ring_for_kind};
+use crate::control::{inject_ring_for_kind, RingChoice};
+use crate::control::{ControlBus, ControlDrainAction};
 
 /// 简易中止信号（对齐 TS AbortSignal 的 is_aborted 语义）
 ///
@@ -78,9 +78,7 @@ impl AbortSignal {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ControlAction {
     /// L3 强停：可立即中断流（endReason = aborted）
-    ForceCancel {
-        reason: Option<String>,
-    },
+    ForceCancel { reason: Option<String> },
     /// L2 协作停止：等安全点推 SM 到 done，不 abort（endReason = stopped，D1）
     CooperativeStop {
         reason: Option<String>,
@@ -177,7 +175,9 @@ pub fn write_inject_messages(
             }
             n
         }
-        ControlAction::CooperativeStop { pending_messages, .. } => {
+        ControlAction::CooperativeStop {
+            pending_messages, ..
+        } => {
             // stop 路径：默认入 steer（下一次 run 可立刻看到），不拆 followUp
             let n = pending_messages.len();
             for m in pending_messages {
@@ -209,9 +209,7 @@ pub fn ring_for_kind(kind: crate::control::ControlKind) -> Option<RingChoice> {
 /// - 命中标记行但载荷解析失败 → Err（损坏降级信号，不 panic，调用方
 ///   降级普通会话并通知主 agent「检查点失效」）；
 /// - 无标记行 → Ok(None)（现状，不启用优先恢复）。
-pub fn parse_checkpoint_marker(
-    text: &str,
-) -> Result<Option<CheckpointPayload>, CheckpointError> {
+pub fn parse_checkpoint_marker(text: &str) -> Result<Option<CheckpointPayload>, CheckpointError> {
     for raw_line in text.lines() {
         let line = raw_line.trim();
         let payload = if let Some(rest) = line.strip_prefix(CHECKPOINT_MARKER) {
@@ -280,7 +278,7 @@ pub fn collect_checkpoint_from_messages(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::control::{ControlKind, ControlIntentInput};
+    use crate::control::{ControlIntentInput, ControlKind};
     use crate::input::AgentInputQueue;
     use crate::state::AgentSessionMachine;
     use conex_types::message::AgentMessageRole;
@@ -291,9 +289,7 @@ mod tests {
             id: format!("m-{text}"),
             role: AgentMessageRole::User,
             created_at: "2026-01-01T00:00:00Z".into(),
-            blocks: vec![conex_types::message::AgentMessageBlock::Text {
-                text: text.into(),
-            }],
+            blocks: vec![conex_types::message::AgentMessageBlock::Text { text: text.into() }],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -341,7 +337,11 @@ mod tests {
             other => panic!("应为 CooperativeStop，实际 {other:?}"),
         }
         assert_eq!(action.end_reason(), Some(AgentEndReason::Stopped));
-        assert_ne!(action.end_reason(), Some(AgentEndReason::Aborted), "协作停止不是取消");
+        assert_ne!(
+            action.end_reason(),
+            Some(AgentEndReason::Aborted),
+            "协作停止不是取消"
+        );
     }
 
     /// soft_inject 只读消费（不打断流）：end_reason = None
@@ -387,7 +387,10 @@ mod tests {
         bus.request_cooperative_stop(None, None);
         bus.request_force_cancel(Some("L3".to_string()), None);
         let action = apply_safe_point_control(&mut bus, None).expect("应有动作");
-        assert!(matches!(action, ControlAction::ForceCancel { .. }), "force 优先");
+        assert!(
+            matches!(action, ControlAction::ForceCancel { .. }),
+            "force 优先"
+        );
     }
 
     /// 注入落环：steer → steer 环、followUp → followUp 环（对齐 control-check.test.ts:39/53）
@@ -498,9 +501,7 @@ mod tests {
             id: format!("a-{text}"),
             role: AgentMessageRole::Assistant,
             created_at: "2026-01-01T00:00:00Z".into(),
-            blocks: vec![conex_types::message::AgentMessageBlock::Text {
-                text: text.into(),
-            }],
+            blocks: vec![conex_types::message::AgentMessageBlock::Text { text: text.into() }],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -512,9 +513,7 @@ mod tests {
             id: format!("s-{text}"),
             role: AgentMessageRole::System,
             created_at: "2026-01-01T00:00:00Z".into(),
-            blocks: vec![conex_types::message::AgentMessageBlock::Text {
-                text: text.into(),
-            }],
+            blocks: vec![conex_types::message::AgentMessageBlock::Text { text: text.into() }],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -581,7 +580,10 @@ mod tests {
     /// 无标记行 → Ok(None)（现状，不启用优先恢复）
     #[test]
     fn parse_checkpoint_marker_no_marker_returns_none() {
-        assert_eq!(parse_checkpoint_marker("普通对话内容，没有检查点。").unwrap(), None);
+        assert_eq!(
+            parse_checkpoint_marker("普通对话内容，没有检查点。").unwrap(),
+            None
+        );
         assert_eq!(parse_checkpoint_marker("").unwrap(), None);
     }
 

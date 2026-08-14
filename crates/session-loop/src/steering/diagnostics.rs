@@ -80,8 +80,7 @@ mod tests {
             }),
             "camelCase 字段名与 01 D4 一致"
         );
-        let back: SelfTerminationDiagnostic =
-            serde_json::from_value(json).expect("反序列化");
+        let back: SelfTerminationDiagnostic = serde_json::from_value(json).expect("反序列化");
         assert_eq!(back, diagnostic);
     }
 
@@ -89,7 +88,10 @@ mod tests {
     #[test]
     fn new_sets_promised_tools_without_call_to_zero() {
         let diagnostic = SelfTerminationDiagnostic::new(3, 2, 16);
-        assert_eq!(diagnostic.promised_tools_without_call, 0, "D2 删除计数后为 0");
+        assert_eq!(
+            diagnostic.promised_tools_without_call, 0,
+            "D2 删除计数后为 0"
+        );
         assert_eq!(diagnostic.tool_call_count, 3);
         assert_eq!(diagnostic.turn_index, 2);
         assert_eq!(diagnostic.max_turns, 16);
@@ -108,14 +110,11 @@ mod tests {
     fn payload_is_pure_diagnostic_data() {
         let diagnostic = SelfTerminationDiagnostic::new(1, 3, 16);
         let json = serde_json::to_value(diagnostic).expect("序列化");
-        let keys: Vec<String> = json
-            .as_object()
-            .expect("对象")
-            .keys()
-            .cloned()
-            .collect();
+        let keys: Vec<String> = json.as_object().expect("对象").keys().cloned().collect();
         assert!(
-            !keys.iter().any(|k| k.contains("error") || k.contains("reason")),
+            !keys
+                .iter()
+                .any(|k| k.contains("error") || k.contains("reason")),
             "诊断载荷无 error/reason 字段（不参与收场裁决）"
         );
     }

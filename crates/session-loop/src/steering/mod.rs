@@ -358,8 +358,8 @@ impl SteeringCoordinator {
                     });
                 }
                 SteeringAction::EmitDiagnostic { diagnostic, reason } => {
-                    let text = serde_json::to_string(diagnostic)
-                        .unwrap_or_else(|_| "{}".to_string());
+                    let text =
+                        serde_json::to_string(diagnostic).unwrap_or_else(|_| "{}".to_string());
                     events.push(AgentEvent::RuntimeSteering {
                         session_id: session_id.to_string(),
                         timestamp: now_iso_utc(),
@@ -484,12 +484,12 @@ pub(crate) fn iso_from_epoch_ms(ms: u64) -> String {
 
 pub use diagnostics::SelfTerminationDiagnostic;
 pub use nudge::{
-    PendingNudge, PendingNudgeChannel, build_steering_message, runtime_steering_text,
+    build_steering_message, runtime_steering_text, PendingNudge, PendingNudgeChannel,
     DEFAULT_PENDING_NUDGE_CAPACITY,
 };
 pub use strategy::{
-    RecoverySteeringStrategy, RecoverySteeringStrategyOptions, detect_recent_tool_error_loop,
-    detect_repeated_tool_call_loop, DEFAULT_MAX_CONSECUTIVE_TOOL_ERRORS,
+    detect_recent_tool_error_loop, detect_repeated_tool_call_loop, RecoverySteeringStrategy,
+    RecoverySteeringStrategyOptions, DEFAULT_MAX_CONSECUTIVE_TOOL_ERRORS,
     DEFAULT_MAX_REPEATED_TOOL_CALLS, DEFAULT_MAX_STEERING_MESSAGES,
 };
 
@@ -575,7 +575,11 @@ mod tests {
             .apply(&actions, "sess-1", &mut conversation)
             .events
             .len();
-        assert_eq!(coordinator.get_steering_count(), 1, "apply inject-message 后计数 +1");
+        assert_eq!(
+            coordinator.get_steering_count(),
+            1,
+            "apply inject-message 后计数 +1"
+        );
         assert_eq!(conversation.len(), 1, "注入消息已 append 进对话");
     }
 
@@ -606,11 +610,7 @@ mod tests {
         // 预算耗尽：第 4 次 inject-message 被跳过（D9 禁止超预算注入）——
         // 不静默跳过，改产 budget-exhausted 诊断事件（T06.3 Q08 接线）
         let actions = coordinator.evaluate(SteeringPhase::EmptyResponse, &empty_context());
-        assert_eq!(
-            actions.len(),
-            1,
-            "预算耗尽应产出诊断事件而非空（Q32 修复）"
-        );
+        assert_eq!(actions.len(), 1, "预算耗尽应产出诊断事件而非空（Q32 修复）");
         assert!(matches!(
             actions.as_slice(),
             [SteeringAction::EmitDiagnostic { reason, .. }]
@@ -726,10 +726,7 @@ mod tests {
         match &actions[0] {
             SteeringAction::EmitDiagnostic { reason, diagnostic } => {
                 assert_eq!(reason, "steering-budget-exhausted");
-                assert_eq!(
-                    diagnostic.get("budget").and_then(|b| b.as_u64()),
-                    Some(1)
-                );
+                assert_eq!(diagnostic.get("budget").and_then(|b| b.as_u64()), Some(1));
                 assert_eq!(
                     diagnostic.get("steeringCount").and_then(|c| c.as_u64()),
                     Some(1)
@@ -741,7 +738,11 @@ mod tests {
         let result = coordinator.apply(&actions, "sess-1", &mut conversation);
         assert!(!result.intervention_required);
         assert_eq!(coordinator.get_steering_count(), 1, "诊断不消耗预算");
-        assert_eq!(conversation.len(), 1, "诊断不修改对话（首轮注入的消息保留）");
+        assert_eq!(
+            conversation.len(),
+            1,
+            "诊断不修改对话（首轮注入的消息保留）"
+        );
         let steering = result
             .events
             .iter()
@@ -777,7 +778,9 @@ mod tests {
             .evaluate(SteeringPhase::EmptyResponse, &empty_context())
             .is_empty());
         assert_eq!(
-            coordinator.evaluate(SteeringPhase::AfterTools, &empty_context()).len(),
+            coordinator
+                .evaluate(SteeringPhase::AfterTools, &empty_context())
+                .len(),
             1
         );
     }
@@ -804,16 +807,18 @@ mod tests {
         assert_eq!(coordinator.get_steering_count(), 1);
 
         // 预算耗尽：不再注入——改产 EmitDiagnostic（T06.3 Q32：不静默跳过）
-        let actions = coordinator
-            .evaluate(SteeringPhase::EmptyResponse, &empty_context());
+        let actions = coordinator.evaluate(SteeringPhase::EmptyResponse, &empty_context());
         assert_eq!(actions.len(), 1);
-        assert!(matches!(
-            &actions[0],
-            SteeringAction::EmitDiagnostic {
-                reason,
-                ..
-            } if reason == "steering-budget-exhausted"
-        ), "预算耗尽应产出 budget-exhausted 诊断而非注入");
+        assert!(
+            matches!(
+                &actions[0],
+                SteeringAction::EmitDiagnostic {
+                    reason,
+                    ..
+                } if reason == "steering-budget-exhausted"
+            ),
+            "预算耗尽应产出 budget-exhausted 诊断而非注入"
+        );
 
         coordinator.reset();
         assert_eq!(coordinator.get_steering_count(), 0);
@@ -848,7 +853,10 @@ mod tests {
         assert_eq!(actions.len(), 1);
         assert!(matches!(
             actions[0],
-            SteeringAction::InterventionRequired { reason: SteeringReason::EmptyResponse, .. }
+            SteeringAction::InterventionRequired {
+                reason: SteeringReason::EmptyResponse,
+                ..
+            }
         ));
         let result = coordinator.apply(&actions, "sess-1", &mut conversation);
         assert!(result.intervention_required, "intervention 事件照发");
@@ -880,11 +888,18 @@ mod tests {
         let result = coordinator.apply(&actions, "sess-1", &mut Vec::new());
         match &result.events[0] {
             AgentEvent::RuntimeInterventionRequired {
-                choices, message, reason, ..
+                choices,
+                message,
+                reason,
+                ..
             } => {
                 assert_eq!(
                     choices,
-                    &vec!["rollback".to_string(), "pause".to_string(), "user-instruction".to_string()]
+                    &vec![
+                        "rollback".to_string(),
+                        "pause".to_string(),
+                        "user-instruction".to_string()
+                    ]
                 );
                 assert_eq!(message, "stop repeating");
                 assert_eq!(reason, "tool-loop");
@@ -950,7 +965,8 @@ mod tests {
         assert_eq!(coordinator.budget_remaining(), 2);
 
         // 未关注阶段：空命中轨迹（hit 空、计数不变）
-        let (actions, trace) = coordinator.evaluate_traced(SteeringPhase::AfterTools, &empty_context());
+        let (actions, trace) =
+            coordinator.evaluate_traced(SteeringPhase::AfterTools, &empty_context());
         assert!(actions.is_empty());
         assert!(trace.hit_strategies.is_empty());
         assert_eq!(trace.steering_count_before, 1);
@@ -1084,9 +1100,7 @@ mod tests {
 /// 测试共享构造器（仅测试编译目标）
 #[cfg(test)]
 pub(crate) mod testutil {
-    use conex_types::message::{
-        AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock,
-    };
+    use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
     use conex_types::tool::ToolOutput;
 
     /// 用户消息
@@ -1109,11 +1123,15 @@ pub(crate) mod testutil {
 
     /// 工具结果消息（json 输出 + 错误标志）
     pub(crate) fn tool_result_json(is_error: bool, json: serde_json::Value) -> AgentMessage {
-        tool_result_output("", is_error, ToolOutput {
-            text: None,
-            json: Some(json),
-            artifacts: None,
-        })
+        tool_result_output(
+            "",
+            is_error,
+            ToolOutput {
+                text: None,
+                json: Some(json),
+                artifacts: None,
+            },
+        )
     }
 
     fn tool_result_output(text: &str, is_error: bool, output: ToolOutput) -> AgentMessage {

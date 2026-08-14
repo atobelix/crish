@@ -27,12 +27,12 @@ use super::super::handlers::{HandlerOutcome, LoopState};
 use super::super::LoopError;
 use super::streaming::streaming_aborted;
 
-#[path = "stream_error_retry.rs"]
-mod retry;
-#[path = "stream_error_recover.rs"]
-mod recover;
 #[path = "stream_error_fatal.rs"]
 mod fatal;
+#[path = "stream_error_recover.rs"]
+mod recover;
+#[path = "stream_error_retry.rs"]
+mod retry;
 
 // 公共面 re-export（外部经 stream_error::* 引用不 break：no_tool_calls.rs
 // 的 MAX_LENGTH_UPGRADES、loop options 装配的 MAX_OVERFLOW_COMPRESSION_RETRIES、

@@ -96,8 +96,16 @@ impl ToolExecutor {
     /// Deny），面积小 → 按既有矩阵。红线语义仍由工具内门禁 100% 拦截
     /// （S2），本层不重复。审批人 = 用户：NeedsApproval 走既有
     /// ApprovalGate 链路等待用户裁决，主 Agent 仅转呈。
-    pub(crate) fn call_verdict(&self, call: &ToolBatchCall, options: &ToolBatchOptions) -> PermissionVerdict {
-        if let Some(command) = call.input.get("command").and_then(serde_json::Value::as_str) {
+    pub(crate) fn call_verdict(
+        &self,
+        call: &ToolBatchCall,
+        options: &ToolBatchOptions,
+    ) -> PermissionVerdict {
+        if let Some(command) = call
+            .input
+            .get("command")
+            .and_then(serde_json::Value::as_str)
+        {
             let mode = options.permission_mode.unwrap_or_default();
             if let Some(verdict) = self.revert_policy.gate_verdict_command(command, mode) {
                 return verdict;
@@ -120,7 +128,11 @@ impl ToolExecutor {
     /// （有父 run 归属）→ Some（`run_id` = 子代理 run id，申请理由从工具
     /// 入参保留键 [crate::approval_router::APPROVAL_REASON_ARG_KEY] 提取）；
     /// 主 agent run（无父 run 归属）→ None（裁决者 = 用户，既有流程不变）。
-    pub(crate) fn approval_requester_for(&self, ctx: &ToolExecCtx, args: &Value) -> Option<ApprovalRequester> {
+    pub(crate) fn approval_requester_for(
+        &self,
+        ctx: &ToolExecCtx,
+        args: &Value,
+    ) -> Option<ApprovalRequester> {
         requester_from_context(
             &ctx.run_id,
             ctx.parent_run_id.as_deref(),
@@ -133,7 +145,11 @@ impl ToolExecutor {
     /// 无限等待），拒绝结果带面积摘要与替代路径指引；非回退门禁项保持
     /// 既有通用文案。
     pub(crate) fn revert_refusal_message(&self, call: &ToolBatchCall) -> String {
-        if let Some(command) = call.input.get("command").and_then(serde_json::Value::as_str) {
+        if let Some(command) = call
+            .input
+            .get("command")
+            .and_then(serde_json::Value::as_str)
+        {
             if let Some(msg) = self.revert_policy.refusal_message(command) {
                 return msg;
             }
@@ -142,7 +158,8 @@ impl ToolExecutor {
     }
 }
 
-pub(crate) fn classify_tool_error(err: &ToolError) -> (ToolErrorKind, String) {    let code = err.code();
+pub(crate) fn classify_tool_error(err: &ToolError) -> (ToolErrorKind, String) {
+    let code = err.code();
     let message = err.to_string();
     let kind = match code {
         "tool.not_found" => ToolErrorKind::NotFound,
@@ -156,7 +173,10 @@ pub(crate) fn classify_tool_error(err: &ToolError) -> (ToolErrorKind, String) { 
     (kind, message)
 }
 
-pub(crate) fn denied_result(call: &ToolBatchCall, options: &ToolBatchOptions) -> ClassifiedToolResult {
+pub(crate) fn denied_result(
+    call: &ToolBatchCall,
+    options: &ToolBatchOptions,
+) -> ClassifiedToolResult {
     let mode = options
         .permission_mode
         .unwrap_or(PermissionMode::Ask)
@@ -219,4 +239,4 @@ pub(crate) fn mark_rest_cancelled(
             0,
         ));
     }
-}
+}

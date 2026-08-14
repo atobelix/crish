@@ -176,7 +176,11 @@ async fn multi_replace_conflict_via_wired_ctx() {
         .execute(&ctx_b, golden_args("src/component.ts"))
         .await
         .unwrap_err();
-    assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT_CODE, "冲突必须返回专用错误码");
+    assert_eq!(
+        err.code(),
+        TOOL_WRITE_PATH_CONFLICT_CODE,
+        "冲突必须返回专用错误码"
+    );
     assert!(err.to_string().contains("runA"), "错误必须说明谁占用");
     assert_eq!(
         ws.read_file("src/component.ts"),
@@ -209,7 +213,9 @@ async fn multi_replace_conflict_through_engine_executor() {
     // 会话级注册表（对齐 T-EG-06 装配契约：与 workspace_root 同源）
     let registry = Arc::new(WritePathRegistry::new("sess-1", ws.path()));
     // 子代理 A 长期声明 docs/（前缀语义：docs/readme.md 在声明范围内）
-    let _a_guard = registry.claim_one("runA", "docs", ClaimMode::Write).unwrap();
+    let _a_guard = registry
+        .claim_one("runA", "docs", ClaimMode::Write)
+        .unwrap();
     let exec = ToolExecutor::new(builtin_registry());
 
     let args = json!({
@@ -260,9 +266,8 @@ async fn multi_replace_snapshot_and_restore_force_roundtrip() {
     ws.write_file("doc.txt", "good version\n");
     // 中间件链：默认备份名单（write_file + multi_replace_file_content，
     // backup.rs:45-50）；trash_root=None → 执行期回退工作区 .crish-trash
-    let exec = ToolExecutor::new(builtin_registry()).with_middleware(vec![Arc::new(
-        BackupMiddleware::with_defaults(None),
-    )]);
+    let exec = ToolExecutor::new(builtin_registry())
+        .with_middleware(vec![Arc::new(BackupMiddleware::with_defaults(None))]);
 
     // 本次 multi_replace 即「写坏」动作：把好版本替换为坏版本
     let args = json!({
@@ -287,11 +292,19 @@ async fn multi_replace_snapshot_and_restore_force_roundtrip() {
     let entries = svc.list();
     assert_eq!(entries.len(), 1, "multi_replace 写前必须登记一份快照");
     assert_eq!(entries[0].mode, EntryMode::Snapshot, "写前备份为快照模式");
-    assert_eq!(ws.read_file("doc.txt"), "bad version\n", "工具已覆盖写入坏版本");
+    assert_eq!(
+        ws.read_file("doc.txt"),
+        "bad version\n",
+        "工具已覆盖写入坏版本"
+    );
 
     // 覆盖式恢复（快照条目专用 restore_force）：内容还原 + 登记清除
     svc.restore_force(&entries[0].id).unwrap();
-    assert_eq!(ws.read_file("doc.txt"), "good version\n", "restore_force 必须还原快照内容");
+    assert_eq!(
+        ws.read_file("doc.txt"),
+        "good version\n",
+        "restore_force 必须还原快照内容"
+    );
     assert!(svc.list().is_empty(), "恢复后登记清除");
 }
 
@@ -313,7 +326,13 @@ async fn multi_replace_second_call_deduplicated() {
 
     // 第一次调用：真正执行，三块全部生效
     let first = exec
-        .execute_batch(&[mrepl_call("c1", golden_args("src/component.ts"))], &ctx, None, &opts, None)
+        .execute_batch(
+            &[mrepl_call("c1", golden_args("src/component.ts"))],
+            &ctx,
+            None,
+            &opts,
+            None,
+        )
         .await;
     assert!(first.results[0].is_ok(), "第一次调用应执行成功");
     assert_eq!(first.results[0].output["chunksApplied"], 3);
@@ -321,13 +340,25 @@ async fn multi_replace_second_call_deduplicated() {
 
     // 第二次调用（同 chunk 集合）：幂等去重，不再执行
     let second = exec
-        .execute_batch(&[mrepl_call("c2", golden_args("src/component.ts"))], &ctx, None, &opts, None)
+        .execute_batch(
+            &[mrepl_call("c2", golden_args("src/component.ts"))],
+            &ctx,
+            None,
+            &opts,
+            None,
+        )
         .await;
     let r = &second.results[0];
     assert!(r.is_ok(), "去重仍按成功收场");
-    assert_eq!(r.output["json"]["deduplicated"], true, "输出必须带 deduplicated 标记");
+    assert_eq!(
+        r.output["json"]["deduplicated"], true,
+        "输出必须带 deduplicated 标记"
+    );
     assert!(
-        r.output["text"].as_str().unwrap().contains("skipped re-execution"),
+        r.output["text"]
+            .as_str()
+            .unwrap()
+            .contains("skipped re-execution"),
         "输出文本必须说明跳过重执行"
     );
     // 文件内容保持第一次的结果（未被二次改写）
@@ -365,9 +396,19 @@ async fn multi_replace_rejects_exhausted_quota_via_wired_ctx() {
         .execute(&ctx, golden_args("src/component.ts"))
         .await
         .unwrap_err();
-    assert_eq!(err.code(), "tool.execution_failed", "配额拒绝复用执行失败码");
-    assert!(err.to_string().contains("配额已用尽"), "错误必须指明配额语义");
-    assert!(err.to_string().contains("回报主 agent"), "错误必须含回报指引");
+    assert_eq!(
+        err.code(),
+        "tool.execution_failed",
+        "配额拒绝复用执行失败码"
+    );
+    assert!(
+        err.to_string().contains("配额已用尽"),
+        "错误必须指明配额语义"
+    );
+    assert!(
+        err.to_string().contains("回报主 agent"),
+        "错误必须含回报指引"
+    );
     assert_eq!(
         ws.read_file("src/component.ts"),
         COMPONENT_TS_INITIAL,

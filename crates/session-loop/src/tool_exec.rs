@@ -61,19 +61,21 @@ use crate::tool_events::{
 use agent_tools::context::{
     AbortToken, AskCallback, ExploreDocsQuotaContext, NoopAskChannel, ToolContext,
 };
-use agent_tools::note_backend::NoteBackendHandle;
 use agent_tools::definition::ToolError;
-use agent_tools::executor::{execute_stream_with_output_policy, ExecutorContext, ToolExecutionPolicy};
+use agent_tools::executor::{
+    execute_stream_with_output_policy, ExecutorContext, ToolExecutionPolicy,
+};
 use agent_tools::idempotency::ToolIdempotencyGuard;
-use agent_tools::write_paths::WritePathRegistry;
 use agent_tools::middleware::{
     AfterExecuteResult, BeforeExecuteResult, MiddlewareTimeoutConfig, ToolExecutionContext,
     ToolMiddleware,
 };
+use agent_tools::note_backend::NoteBackendHandle;
 use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::revert::RevertPolicy;
 use agent_tools::streaming::ToolProgress;
+use agent_tools::write_paths::WritePathRegistry;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency, ToolProgressUpdate};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -106,8 +108,7 @@ pub struct ToolExecCtx {
     pub explore_docs_quota: Option<ExploreDocsQuotaContext>,
     /// 产出目录解析器（G01：resolve_output_dir 工具后端；None = 未装配，
     /// 工具返回 common.unsupported——与 subagent_spawner 接线模式同款）
-    pub output_dir:
-        Option<Arc<dyn agent_tools::tools::output_dir::OutputDirResolver>>,
+    pub output_dir: Option<Arc<dyn agent_tools::tools::output_dir::OutputDirResolver>>,
     /// 笔记后端（Round6 / W4-E：`query_blocks` / `document_outline` /
     /// `document_apply_md` / `send_to_note` 真管线；None = 未接线，工具
     /// 返回 `note_backend_unwired` 占位——允许 Option 透传，结构字段须存在
@@ -173,20 +174,20 @@ impl ParallelExecObs {
 // 文件定义，调用方路径零改动。
 #[path = "exec_batch.rs"]
 mod exec_batch;
+#[path = "exec_middleware.rs"]
+mod exec_middleware;
 #[path = "exec_single.rs"]
 mod exec_single;
 #[path = "exec_verdict.rs"]
 mod exec_verdict;
-#[path = "exec_middleware.rs"]
-mod exec_middleware;
 
 // 内部面 re-export：子模块与测试经 `use super::*` 消费（公开 API 不变）
 pub(crate) use exec_batch::DEFAULT_MAX_PARALLEL;
-pub(crate) use exec_verdict::{
-    ApprovalWaitOutcome, approval_wait, classify_tool_error, denied_message, denied_result,
-    mark_rest_cancelled,
-};
 pub(crate) use exec_middleware::{run_hook_with_timeout, tool_progress_update};
+pub(crate) use exec_verdict::{
+    approval_wait, classify_tool_error, denied_message, denied_result, mark_rest_cancelled,
+    ApprovalWaitOutcome,
+};
 
 /// 工具批处理执行器
 pub struct ToolExecutor {

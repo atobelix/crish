@@ -213,7 +213,9 @@ impl AgentInputQueue {
     /// 不取出 followUp — 须在 idle 安全点经 drain_follow_up /
     /// promote_follow_up 消费。
     pub fn dequeue(&mut self) -> Option<AgentMessage> {
-        self.force_items.shift().or_else(|| self.steer_items.shift())
+        self.force_items
+            .shift()
+            .or_else(|| self.steer_items.shift())
     }
 
     /// 仅取出 force 消息（streaming 中断路径）
@@ -338,9 +340,7 @@ mod tests {
             id: format!("m-{text}"),
             role: conex_types::message::AgentMessageRole::User,
             created_at: "2026-01-01T00:00:00Z".into(),
-            blocks: vec![conex_types::message::AgentMessageBlock::Text {
-                text: text.into(),
-            }],
+            blocks: vec![conex_types::message::AgentMessageBlock::Text { text: text.into() }],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -475,7 +475,11 @@ mod tests {
         }
         // 满容量后恰好覆盖 1 条（最旧 msg-0）
         assert_eq!(q.len(), INPUT_QUEUE_CAPACITY);
-        assert_eq!(q.peek().expect("队首").text(), "msg-1", "最旧的 msg-0 被覆盖");
+        assert_eq!(
+            q.peek().expect("队首").text(),
+            "msg-1",
+            "最旧的 msg-0 被覆盖"
+        );
         assert_eq!(
             input_overwrite_count(),
             before + 1,

@@ -64,7 +64,6 @@ impl ToolExecutor {
         self.idempotency.is_some()
     }
 
-
     /// 注入中间件链（替换现有链；空链 = 不启用）。
     ///
     /// 链在审批通过（或无需审批）后、工具执行前运行 before_execute，
@@ -149,8 +148,7 @@ impl ToolExecutor {
             batch_id: batch_id.clone(),
             count: calls.len(),
         }];
-        let mut results: Vec<Option<ClassifiedToolResult>> =
-            calls.iter().map(|_| None).collect();
+        let mut results: Vec<Option<ClassifiedToolResult>> = calls.iter().map(|_| None).collect();
         let mut fatal: Option<String> = None;
 
         // 分组：Parallel 组可并行；Sequential/Exclusive 顺序执行
@@ -175,7 +173,16 @@ impl ToolExecutor {
             if group.len() == 1 {
                 let idx = group[0];
                 let r = self
-                    .execute_one(calls, idx, ctx, approval.clone(), options, abort, &mut events, &mut fatal)
+                    .execute_one(
+                        calls,
+                        idx,
+                        ctx,
+                        approval.clone(),
+                        options,
+                        abort,
+                        &mut events,
+                        &mut fatal,
+                    )
                     .await;
                 results[idx] = Some(r);
                 if fatal.is_some() && options.fail_strategy == FailStrategy::CancelSiblings {
@@ -443,7 +450,11 @@ impl ToolExecutor {
         debug_assert!(results.iter().all(Option::is_some));
         let results = results
             .into_iter()
-            .map(|r| r.unwrap_or_else(|| ClassifiedToolResult::error("", "", ToolErrorKind::Cancelled, "cancelled", 0)))
+            .map(|r| {
+                r.unwrap_or_else(|| {
+                    ClassifiedToolResult::error("", "", ToolErrorKind::Cancelled, "cancelled", 0)
+                })
+            })
             .collect();
 
         ToolBatchOutcome {

@@ -154,10 +154,7 @@ pub enum HookEvent {
     /// session.end：hooks.ts SessionEndPayload（最小子集 sessionId）
     SessionEnd { session_id: String },
     /// turn.start：hooks.ts TurnStartPayload（sessionId/turnIndex）
-    TurnStart {
-        session_id: String,
-        turn_index: u32,
-    },
+    TurnStart { session_id: String, turn_index: u32 },
     /// turn.end：hooks.ts TurnEndPayload（outcome 由调用方按收场推导）
     TurnEnd {
         session_id: String,
@@ -477,9 +474,8 @@ impl HookRegistry {
         // matcher 校验（非法正则拒绝注册）
         let matcher = match &options.matcher {
             Some(pattern) => Some(
-                Regex::new(pattern).map_err(|e| {
-                    HookError::new(format!("非法 matcher 正则 '{pattern}'：{e}"))
-                })?,
+                Regex::new(pattern)
+                    .map_err(|e| HookError::new(format!("非法 matcher 正则 '{pattern}'：{e}")))?,
             ),
             None => None,
         };
@@ -543,14 +539,11 @@ impl HookRegistry {
     /// 每批次发射一次 AgentEvent::HookOutcome；不接线 = 无观测事件，
     /// dispatch 语义完全不变（纯观测，HookEvent 插件通道不受影响）。
     pub fn set_outcome_sink(&self, sink: Arc<dyn Fn(AgentEvent) + Send + Sync>) {
-        *self
-            .outcome_sink
-            .write()
-            .unwrap_or_else(|e| {
-                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续接线
-                tracing::error!("hook 观测出口写锁中毒，按恢复模式继续：{e}");
-                e.into_inner()
-            }) = Some(sink);
+        *self.outcome_sink.write().unwrap_or_else(|e| {
+            // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续接线
+            tracing::error!("hook 观测出口写锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        }) = Some(sink);
     }
 
     /// hook-outcome 聚合发射（dispatch 单点，D-03 EV-05）。
@@ -563,13 +556,12 @@ impl HookRegistry {
         event: &HookEvent,
         result: &Result<HookDispatchOutcome, HookError>,
     ) {
-        let sink = self
-            .outcome_sink
-            .read()
-            .unwrap_or_else(|e| e.into_inner());
+        let sink = self.outcome_sink.read().unwrap_or_else(|e| e.into_inner());
         let Some(sink) = sink.as_ref() else { return };
         let (outcome, hook_name, blocked_reason) = match result {
-            Ok(o) if o.blocked.is_some() => ("blocked", o.blocked_handler.clone(), o.blocked.clone()),
+            Ok(o) if o.blocked.is_some() => {
+                ("blocked", o.blocked_handler.clone(), o.blocked.clone())
+            }
             Ok(o) if o.timeouts > 0 => ("timeout", o.first_failed_handler.clone(), None),
             Ok(o) if o.failed_handlers > 0 => ("failed", o.first_failed_handler.clone(), None),
             Ok(_) => ("ok", None, None),
@@ -628,7 +620,8 @@ impl HookRegistry {
             // timeout 竞速窗口（超时 = 虚拟失败）
             let action = match timeout_ms {
                 Some(ms) => {
-                    match tokio::time::timeout(Duration::from_millis(ms), handler.handle(event)).await
+                    match tokio::time::timeout(Duration::from_millis(ms), handler.handle(event))
+                        .await
                     {
                         Ok(result) => result,
                         Err(_elapsed) => {
@@ -637,11 +630,7 @@ impl HookRegistry {
                             if outcome.first_failed_handler.is_none() {
                                 outcome.first_failed_handler = Some(handler.name().to_string());
                             }
-                            let message = format!(
-                                "hook {} 超时（{}ms）",
-                                handler.name(),
-                                ms
-                            );
+                            let message = format!("hook {} 超时（{}ms）", handler.name(), ms);
                             tracing::warn!(
                                 hook = %handler.name(),
                                 event = %event.kind(),
@@ -651,8 +640,13 @@ impl HookRegistry {
                             // tool.pre 超时固定降级放行（kimi runner.ts:117）；
                             // 其余事件按失败策略处置
                             if event.kind() == HookEventKind::ToolPre {
-                                self.emit_error_event(event, &message, error_eventing, &mut outcome)
-                                    .await;
+                                self.emit_error_event(
+                                    event,
+                                    &message,
+                                    error_eventing,
+                                    &mut outcome,
+                                )
+                                .await;
                                 continue;
                             }
                             if let Some(propagated) = self
@@ -737,18 +731,21 @@ impl HookRegistry {
         match strategy {
             HookFailStrategy::Swallow => {
                 outcome.failed_handlers += 1;
-                self.emit_error_event(event, &message, error_eventing, outcome).await;
+                self.emit_error_event(event, &message, error_eventing, outcome)
+                    .await;
                 None
             }
             HookFailStrategy::Log => {
                 tracing::warn!(hook = %handler.name(), event = %event.kind(), error = %err, "hook 失败（log 策略）");
                 outcome.failed_handlers += 1;
-                self.emit_error_event(event, &message, error_eventing, outcome).await;
+                self.emit_error_event(event, &message, error_eventing, outcome)
+                    .await;
                 None
             }
             HookFailStrategy::Propagate => {
                 // 错误事件化先行（诊断事件不因 propagate 丢失）
-                self.emit_error_event(event, &message, error_eventing, outcome).await;
+                self.emit_error_event(event, &message, error_eventing, outcome)
+                    .await;
                 let mut hook_err = HookError::new(format!(
                     "hook {} 失败（propagate）：{}",
                     handler.name(),
@@ -776,7 +773,10 @@ impl HookRegistry {
             return;
         }
         // 重入护栏：error.occurred 分派期间不再触发错误事件
-        if self.error_eventing.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        if self
+            .error_eventing
+            .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
             return;
         }
         let error_event = HookEvent::ErrorOccurred {
@@ -840,10 +840,7 @@ mod tests {
         }
 
         fn kinds(&self) -> Vec<HookEventKind> {
-            self.seen
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone()
+            self.seen.lock().unwrap_or_else(|e| e.into_inner()).clone()
         }
     }
 
@@ -891,10 +888,22 @@ mod tests {
         let a = Arc::new(SpyHandler::new("a", None));
         let b = Arc::new(SpyHandler::new("b", None));
         let other = Arc::new(SpyHandler::new("other", None));
-        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, Arc::clone(&a) as Arc<dyn HookHandler>);
-        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, Arc::clone(&b) as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            Arc::clone(&a) as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            Arc::clone(&b) as Arc<dyn HookHandler>,
+        );
         // 不匹配事件种类的 handler 不收到
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, other as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            other as Arc<dyn HookHandler>,
+        );
 
         let outcome = registry.dispatch(&turn_end()).await.unwrap();
         assert!(outcome.blocked.is_none());
@@ -915,8 +924,16 @@ mod tests {
             }),
         ));
         let after = Arc::new(SpyHandler::new("after", None));
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, blocker as Arc<dyn HookHandler>);
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, Arc::clone(&after) as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            blocker as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            Arc::clone(&after) as Arc<dyn HookHandler>,
+        );
 
         let outcome = registry.dispatch(&tool_pre()).await.unwrap();
         assert_eq!(outcome.blocked.as_deref(), Some("策略禁止"));
@@ -935,12 +952,24 @@ mod tests {
             }),
         ));
         let after = Arc::new(SpyHandler::new("after", None));
-        registry.register_observe(HookEventKind::ToolPre, HookFailStrategy::Swallow, blocker as Arc<dyn HookHandler>);
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, Arc::clone(&after) as Arc<dyn HookHandler>);
+        registry.register_observe(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            blocker as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            Arc::clone(&after) as Arc<dyn HookHandler>,
+        );
 
         let outcome = registry.dispatch(&tool_pre()).await.unwrap();
         assert!(outcome.blocked.is_none(), "observe 模式 Block 不得阻止执行");
-        assert_eq!(after.kinds(), vec![HookEventKind::ToolPre], "observe 不中断分派");
+        assert_eq!(
+            after.kinds(),
+            vec![HookEventKind::ToolPre],
+            "observe 不中断分派"
+        );
     }
 
     /// 非 tool.pre 事件的 Block 按观察忽略（不停止分派）
@@ -953,7 +982,11 @@ mod tests {
                 reason: "不应生效".into(),
             }),
         ));
-        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, blocker as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            blocker as Arc<dyn HookHandler>,
+        );
         let outcome = registry.dispatch(&turn_end()).await.unwrap();
         assert!(outcome.blocked.is_none());
     }
@@ -964,12 +997,24 @@ mod tests {
         let registry = HookRegistry::new();
         let fail = Arc::new(SpyHandler::failing("fail", "boom"));
         let ok = Arc::new(SpyHandler::new("ok", None));
-        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, fail as Arc<dyn HookHandler>);
-        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, Arc::clone(&ok) as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            fail as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            Arc::clone(&ok) as Arc<dyn HookHandler>,
+        );
 
         let outcome = registry.dispatch(&turn_end()).await.unwrap();
         assert_eq!(outcome.failed_handlers, 1);
-        assert_eq!(ok.kinds(), vec![HookEventKind::TurnEnd], "swallow 后继续分派");
+        assert_eq!(
+            ok.kinds(),
+            vec![HookEventKind::TurnEnd],
+            "swallow 后继续分派"
+        );
     }
 
     /// 失败策略 log：handler 失败记录后继续分派（failed_handlers 计数）
@@ -978,8 +1023,16 @@ mod tests {
         let registry = HookRegistry::new();
         let fail = Arc::new(SpyHandler::failing("fail", "boom"));
         let ok = Arc::new(SpyHandler::new("ok", None));
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Log, fail as Arc<dyn HookHandler>);
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Log, Arc::clone(&ok) as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Log,
+            fail as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Log,
+            Arc::clone(&ok) as Arc<dyn HookHandler>,
+        );
 
         let outcome = registry.dispatch(&tool_pre()).await.unwrap();
         assert_eq!(outcome.failed_handlers, 1);
@@ -992,8 +1045,16 @@ mod tests {
         let registry = HookRegistry::new();
         let fail = Arc::new(SpyHandler::failing("fail", "boom"));
         let after = Arc::new(SpyHandler::new("after", None));
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Propagate, fail as Arc<dyn HookHandler>);
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, Arc::clone(&after) as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Propagate,
+            fail as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            Arc::clone(&after) as Arc<dyn HookHandler>,
+        );
 
         let err = registry.dispatch(&tool_pre()).await.unwrap_err();
         assert!(err.message.contains("boom"));
@@ -1009,7 +1070,11 @@ mod tests {
         assert_eq!(outcome.failed_handlers, 0);
 
         let other = Arc::new(SpyHandler::new("other", None));
-        registry.register(HookEventKind::ToolPost, HookFailStrategy::Swallow, other as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPost,
+            HookFailStrategy::Swallow,
+            other as Arc<dyn HookHandler>,
+        );
         // ToolPost 注册不匹配 TurnEnd 事件
         let outcome = registry.dispatch(&turn_end()).await.unwrap();
         assert!(outcome.blocked.is_none());
@@ -1021,7 +1086,11 @@ mod tests {
     async fn tool_post_payload_carries_output_and_flags() {
         let registry = HookRegistry::new();
         let spy = Arc::new(SpyHandler::new("spy", None));
-        registry.register(HookEventKind::ToolPost, HookFailStrategy::Swallow, Arc::clone(&spy) as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPost,
+            HookFailStrategy::Swallow,
+            Arc::clone(&spy) as Arc<dyn HookHandler>,
+        );
         registry
             .dispatch(&HookEvent::ToolPost {
                 session_id: "s1".into(),
@@ -1063,7 +1132,11 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(spy.kinds(), vec![HookEventKind::ToolPre], "fs_read 必须匹配 ^fs_");
+        assert_eq!(
+            spy.kinds(),
+            vec![HookEventKind::ToolPre],
+            "fs_read 必须匹配 ^fs_"
+        );
 
         // 不匹配的工具名跳过
         registry
@@ -1098,7 +1171,11 @@ mod tests {
             )
             .unwrap();
         registry.dispatch(&turn_end()).await.unwrap();
-        assert_eq!(spy.kinds(), vec![HookEventKind::TurnEnd], "非 tool 事件忽略 matcher");
+        assert_eq!(
+            spy.kinds(),
+            vec![HookEventKind::TurnEnd],
+            "非 tool 事件忽略 matcher"
+        );
     }
 
     /// 非法 matcher 正则注册即拒（HookError）
@@ -1126,14 +1203,13 @@ mod tests {
     async fn tool_pre_timeout_degrades_to_allow_with_error_event() {
         let registry = HookRegistry::new();
         let errors = Arc::new(std::sync::Mutex::new(Vec::new()));
-        registry
-            .register_observe(
-                HookEventKind::ErrorOccurred,
-                HookFailStrategy::Swallow,
-                Arc::new(ErrorSpy {
-                    seen: errors.clone(),
-                }) as Arc<dyn HookHandler>,
-            );
+        registry.register_observe(
+            HookEventKind::ErrorOccurred,
+            HookFailStrategy::Swallow,
+            Arc::new(ErrorSpy {
+                seen: errors.clone(),
+            }) as Arc<dyn HookHandler>,
+        );
         let slow = Arc::new(SpyHandler::slow("slow", 50));
         registry
             .register_with(
@@ -1155,7 +1231,11 @@ mod tests {
         assert_eq!(outcome.error_events, 1, "超时失败必须广播 error.occurred");
         let errs = errors.lock().unwrap();
         assert_eq!(errs.len(), 1, "error.occurred handler 必须收到诊断事件");
-        assert!(errs[0].contains("超时"), "诊断事件必须含超时文案：{}", errs[0]);
+        assert!(
+            errs[0].contains("超时"),
+            "诊断事件必须含超时文案：{}",
+            errs[0]
+        );
     }
 
     /// handler Err（swallow）→ 广播 error.occurred 诊断事件（错误事件化）
@@ -1166,7 +1246,9 @@ mod tests {
         registry.register_observe(
             HookEventKind::ErrorOccurred,
             HookFailStrategy::Swallow,
-            Arc::new(ErrorSpy { seen: errors.clone() }) as Arc<dyn HookHandler>,
+            Arc::new(ErrorSpy {
+                seen: errors.clone(),
+            }) as Arc<dyn HookHandler>,
         );
         registry.register(
             HookEventKind::TurnEnd,
@@ -1216,12 +1298,10 @@ mod tests {
         dedup.dedup();
         assert_eq!(dedup.len(), 14, "as_str() 必须无重复");
         // 与 TS 侧 HOOK_EVENT_NAMES 字面量比对（从 hooks.ts 文件读取）
-        let hooks_ts = std::fs::read_to_string(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../packages/shared-types/src/hooks.ts"
-            ),
-        )
+        let hooks_ts = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../packages/shared-types/src/hooks.ts"
+        ))
         .unwrap_or_else(|e| panic!("读取 hooks.ts 失败：{e}"));
         // 提取 HOOK_EVENT_NAMES 数组内全部字符串字面量
         let start = hooks_ts
@@ -1232,15 +1312,18 @@ mod tests {
         for cap in slice
             .lines()
             .take_while(|l| !l.trim_start().starts_with("] as const"))
-            .filter_map(|l| l.trim().strip_prefix('\'').and_then(|r| r.split('\'').next()))
+            .filter_map(|l| {
+                l.trim()
+                    .strip_prefix('\'')
+                    .and_then(|r| r.split('\'').next())
+            })
         {
             ts_names.push(cap.to_string());
         }
         names.sort();
         ts_names.sort();
         assert_eq!(
-            names,
-            ts_names,
+            names, ts_names,
             "HookEventKind::as_str() 与 hooks.ts HOOK_EVENT_NAMES 必须一一对应（I7-M13 冻结）"
         );
     }
@@ -1267,21 +1350,66 @@ mod tests {
             HookEventKind::SubagentEnd,
         ];
         for kind in kinds {
-            registry.register_observe(kind, HookFailStrategy::Swallow, Arc::clone(&spy) as Arc<dyn HookHandler>);
+            registry.register_observe(
+                kind,
+                HookFailStrategy::Swallow,
+                Arc::clone(&spy) as Arc<dyn HookHandler>,
+            );
         }
 
         let events = vec![
-            HookEvent::SessionStart { session_id: "s1".into() },
-            HookEvent::SessionEnd { session_id: "s1".into() },
-            HookEvent::TurnStart { session_id: "s1".into(), turn_index: 1 },
-            HookEvent::ToolError { session_id: "s1".into(), tool_name: "x".into(), error: "boom".into() },
-            HookEvent::ContextCompactStart { session_id: "s1".into(), trigger: "threshold".into(), tokens_before: 100 },
-            HookEvent::ContextCompactEnd { session_id: "s1".into(), aborted: false, kept_message_count: 5, compaction_id: "c1".into() },
-            HookEvent::ErrorOccurred { session_id: "s1".into(), error: "boom".into(), retryable: false },
-            HookEvent::ModelBeforeRequest { session_id: "s1".into(), provider_id: Some("deepseek".into()), model: Some("v4".into()) },
-            HookEvent::ModelAfterResponse { session_id: "s1".into(), provider_id: None, model: None, ok: true },
-            HookEvent::SubagentStart { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), role: Some("researcher".into()) },
-            HookEvent::SubagentEnd { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), reason: Some("completed".into()) },
+            HookEvent::SessionStart {
+                session_id: "s1".into(),
+            },
+            HookEvent::SessionEnd {
+                session_id: "s1".into(),
+            },
+            HookEvent::TurnStart {
+                session_id: "s1".into(),
+                turn_index: 1,
+            },
+            HookEvent::ToolError {
+                session_id: "s1".into(),
+                tool_name: "x".into(),
+                error: "boom".into(),
+            },
+            HookEvent::ContextCompactStart {
+                session_id: "s1".into(),
+                trigger: "threshold".into(),
+                tokens_before: 100,
+            },
+            HookEvent::ContextCompactEnd {
+                session_id: "s1".into(),
+                aborted: false,
+                kept_message_count: 5,
+                compaction_id: "c1".into(),
+            },
+            HookEvent::ErrorOccurred {
+                session_id: "s1".into(),
+                error: "boom".into(),
+                retryable: false,
+            },
+            HookEvent::ModelBeforeRequest {
+                session_id: "s1".into(),
+                provider_id: Some("deepseek".into()),
+                model: Some("v4".into()),
+            },
+            HookEvent::ModelAfterResponse {
+                session_id: "s1".into(),
+                provider_id: None,
+                model: None,
+                ok: true,
+            },
+            HookEvent::SubagentStart {
+                parent_session_id: "p1".into(),
+                subagent_session_id: "a1".into(),
+                role: Some("researcher".into()),
+            },
+            HookEvent::SubagentEnd {
+                parent_session_id: "p1".into(),
+                subagent_session_id: "a1".into(),
+                reason: Some("completed".into()),
+            },
         ];
         for event in &events {
             registry.dispatch(event).await.unwrap();
@@ -1335,7 +1463,10 @@ mod tests {
     // ── D-03 EV-05：hook-outcome 观测镜像（dispatch 单点聚合）──
 
     /// 接线观测出口的测试辅助：捕获 hook-outcome 事件列表
-    fn sink_capture() -> (Arc<dyn Fn(AgentEvent) + Send + Sync>, Arc<std::sync::Mutex<Vec<AgentEvent>>>) {
+    fn sink_capture() -> (
+        Arc<dyn Fn(AgentEvent) + Send + Sync>,
+        Arc<std::sync::Mutex<Vec<AgentEvent>>>,
+    ) {
         let captured = Arc::new(std::sync::Mutex::new(Vec::new()));
         let sink: Arc<dyn Fn(AgentEvent) + Send + Sync> = Arc::new({
             let captured = Arc::clone(&captured);
@@ -1347,7 +1478,9 @@ mod tests {
     }
 
     /// 提取捕获列表中的 hook-outcome 事件（断言辅助）
-    fn take_hook_outcomes(captured: &Arc<std::sync::Mutex<Vec<AgentEvent>>>) -> Vec<(String, String, Option<String>, Option<String>)> {
+    fn take_hook_outcomes(
+        captured: &Arc<std::sync::Mutex<Vec<AgentEvent>>>,
+    ) -> Vec<(String, String, Option<String>, Option<String>)> {
         captured
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1377,7 +1510,11 @@ mod tests {
         let (sink, captured) = sink_capture();
         registry.set_outcome_sink(sink);
         let spy = Arc::new(SpyHandler::new("spy", None));
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, spy as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            spy as Arc<dyn HookHandler>,
+        );
 
         let outcome = registry.dispatch(&tool_pre()).await.unwrap();
         assert!(outcome.blocked.is_none());
@@ -1402,7 +1539,11 @@ mod tests {
                 reason: "策略禁止".into(),
             }),
         ));
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, blocker as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            blocker as Arc<dyn HookHandler>,
+        );
 
         let outcome = registry.dispatch(&tool_pre()).await.unwrap();
         assert_eq!(outcome.blocked.as_deref(), Some("策略禁止"));
@@ -1411,8 +1552,16 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].0, "tool.pre");
         assert_eq!(events[0].1, "blocked");
-        assert_eq!(events[0].2.as_deref(), Some("blocker"), "hook_name 必须为阻止 handler 名");
-        assert_eq!(events[0].3.as_deref(), Some("策略禁止"), "blocked 必须带原因");
+        assert_eq!(
+            events[0].2.as_deref(),
+            Some("blocker"),
+            "hook_name 必须为阻止 handler 名"
+        );
+        assert_eq!(
+            events[0].3.as_deref(),
+            Some("策略禁止"),
+            "blocked 必须带原因"
+        );
     }
 
     /// 失败 handler（swallow）→ 也发 hook-outcome(outcome=failed)，hook_name 可辨
@@ -1423,8 +1572,16 @@ mod tests {
         registry.set_outcome_sink(sink);
         let fail = Arc::new(SpyHandler::failing("fail", "boom"));
         let ok = Arc::new(SpyHandler::new("ok", None));
-        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, fail as Arc<dyn HookHandler>);
-        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, Arc::clone(&ok) as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            fail as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            Arc::clone(&ok) as Arc<dyn HookHandler>,
+        );
 
         let outcome = registry.dispatch(&turn_end()).await.unwrap();
         assert_eq!(outcome.failed_handlers, 1);
@@ -1432,7 +1589,11 @@ mod tests {
         assert_eq!(events.len(), 1, "失败批次仍只发一条聚合事件");
         assert_eq!(events[0].0, "turn.end");
         assert_eq!(events[0].1, "failed");
-        assert_eq!(events[0].2.as_deref(), Some("fail"), "hook_name 必须为失败 handler 名");
+        assert_eq!(
+            events[0].2.as_deref(),
+            Some("fail"),
+            "hook_name 必须为失败 handler 名"
+        );
     }
 
     /// 超时 handler（timeout_ms 注入）→ outcome=timeout 可辨（与 failed 区分）
@@ -1471,7 +1632,11 @@ mod tests {
         let (sink, captured) = sink_capture();
         registry.set_outcome_sink(sink);
         let fail = Arc::new(SpyHandler::failing("fail", "boom"));
-        registry.register(HookEventKind::ToolPre, HookFailStrategy::Propagate, fail as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Propagate,
+            fail as Arc<dyn HookHandler>,
+        );
 
         let err = registry.dispatch(&tool_pre()).await.unwrap_err();
         assert!(err.message.contains("boom"));
@@ -1497,14 +1662,35 @@ mod tests {
             HookEventKind::SubagentStart,
             HookEventKind::SubagentEnd,
         ] {
-            registry.register_observe(kind, HookFailStrategy::Swallow, Arc::clone(&spy) as Arc<dyn HookHandler>);
+            registry.register_observe(
+                kind,
+                HookFailStrategy::Swallow,
+                Arc::clone(&spy) as Arc<dyn HookHandler>,
+            );
         }
 
         let events = vec![
-            HookEvent::ModelBeforeRequest { session_id: "s1".into(), provider_id: Some("deepseek".into()), model: Some("v4".into()) },
-            HookEvent::ModelAfterResponse { session_id: "s1".into(), provider_id: None, model: None, ok: true },
-            HookEvent::SubagentStart { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), role: Some("researcher".into()) },
-            HookEvent::SubagentEnd { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), reason: Some("completed".into()) },
+            HookEvent::ModelBeforeRequest {
+                session_id: "s1".into(),
+                provider_id: Some("deepseek".into()),
+                model: Some("v4".into()),
+            },
+            HookEvent::ModelAfterResponse {
+                session_id: "s1".into(),
+                provider_id: None,
+                model: None,
+                ok: true,
+            },
+            HookEvent::SubagentStart {
+                parent_session_id: "p1".into(),
+                subagent_session_id: "a1".into(),
+                role: Some("researcher".into()),
+            },
+            HookEvent::SubagentEnd {
+                parent_session_id: "p1".into(),
+                subagent_session_id: "a1".into(),
+                reason: Some("completed".into()),
+            },
         ];
         for event in &events {
             registry.dispatch(event).await.unwrap();
@@ -1514,7 +1700,12 @@ mod tests {
         let types: Vec<&str> = outcomes.iter().map(|o| o.0.as_str()).collect();
         assert_eq!(
             types,
-            vec!["model.beforeRequest", "model.afterResponse", "subagent.start", "subagent.end"],
+            vec![
+                "model.beforeRequest",
+                "model.afterResponse",
+                "subagent.start",
+                "subagent.end"
+            ],
             "四变体 hook_type 载荷必须对应事件种类"
         );
         assert!(outcomes.iter().all(|o| o.1 == "ok"));
@@ -1525,7 +1716,11 @@ mod tests {
     async fn hook_outcome_absent_without_sink() {
         let registry = HookRegistry::new();
         let spy = Arc::new(SpyHandler::new("spy", None));
-        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, spy as Arc<dyn HookHandler>);
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            spy as Arc<dyn HookHandler>,
+        );
         let outcome = registry.dispatch(&turn_end()).await.unwrap();
         assert!(outcome.blocked.is_none());
         assert_eq!(outcome.failed_handlers, 0);

@@ -19,7 +19,7 @@
 //! summary / existing 素材）均为**确定性序列化**——同文档同输出、无时间戳、
 //! 无随机量，使触发后的新前缀可重复命中 provider 缓存。
 
-use conex_compaction::summary_document::{SUMMARY_SCHEMA_VERSION, summary_to_markdown};
+use conex_compaction::summary_document::{summary_to_markdown, SUMMARY_SCHEMA_VERSION};
 use conex_types::checkpoint::CheckpointPayload;
 
 /// 默认里程碑阶梯（E2 §7.1：`compact_stage_ratios` 默认 [0.4, 0.6, 0.8]；
@@ -82,9 +82,7 @@ pub fn parse_stage_ratios(raw: &str) -> Option<Vec<f64>> {
 ///
 /// 宽容 fail-open：键缺失 → None（调用方回退默认阶梯）；键存在但解析
 /// 失败 → warn 留痕 + None（不 panic、不阻断 run 装配）。
-pub fn stage_ratios_from_session_meta(
-    meta: impl Fn(&str) -> Option<String>,
-) -> Option<Vec<f64>> {
+pub fn stage_ratios_from_session_meta(meta: impl Fn(&str) -> Option<String>) -> Option<Vec<f64>> {
     let raw = meta(META_KEY_STAGE_RATIOS)?;
     let parsed = parse_stage_ratios(&raw);
     if parsed.is_none() {
@@ -212,10 +210,7 @@ pub fn build_stage_summary_document(input: &StageSummaryDocument) -> serde_json:
 /// 阶段总结 md 渲染（确定性投影：同文档同输出、无时间戳；骨架节复用
 /// Schema V1 渲染面，另加 tier 标注头——系统提示词段注入 / 观测展示用）。
 pub fn stage_summary_to_markdown(doc: &serde_json::Value) -> String {
-    let tier = doc
-        .get("tier")
-        .and_then(|v| v.as_str())
-        .unwrap_or("stage");
+    let tier = doc.get("tier").and_then(|v| v.as_str()).unwrap_or("stage");
     let mut out = String::new();
     out.push_str(&format!("## 阶段性总结（{tier}）\n"));
     out.push_str(&summary_to_markdown(doc));
@@ -249,10 +244,7 @@ pub fn stage_summary_inheritance(doc: &serde_json::Value) -> StageSummaryInherit
 /// 迭代合并——阶段总结产出 progress/nextSteps 被终结摘要继承）。
 pub fn stage_summary_to_existing_text(doc: &serde_json::Value) -> String {
     let inherited = stage_summary_inheritance(doc);
-    let tier = doc
-        .get("tier")
-        .and_then(|v| v.as_str())
-        .unwrap_or("stage");
+    let tier = doc.get("tier").and_then(|v| v.as_str()).unwrap_or("stage");
     let mut out = String::new();
     out.push_str(&format!("[{tier} 阶段总结]\n"));
     if let Some(goal) = inherited.goal {
@@ -287,12 +279,15 @@ pub fn stage_summary_to_checkpoint_payload(doc: &serde_json::Value) -> Checkpoin
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let progress: Vec<String> = string_array(doc, "progress").into_iter().map(str::to_string).collect();
-    let next_steps: Vec<String> = string_array(doc, "nextSteps").into_iter().map(str::to_string).collect();
-    let tier = doc
-        .get("tier")
-        .and_then(|v| v.as_str())
-        .unwrap_or("stage");
+    let progress: Vec<String> = string_array(doc, "progress")
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let next_steps: Vec<String> = string_array(doc, "nextSteps")
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let tier = doc.get("tier").and_then(|v| v.as_str()).unwrap_or("stage");
     let summary = if progress.is_empty() {
         format!("[{tier}] 阶段无进展记录")
     } else {
@@ -312,12 +307,7 @@ pub fn stage_summary_to_checkpoint_payload(doc: &serde_json::Value) -> Checkpoin
 fn string_array<'a>(doc: &'a serde_json::Value, key: &str) -> Vec<&'a str> {
     doc.get(key)
         .and_then(|v| v.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str())
-                .collect()
-        })
+        .map(|items| items.iter().filter_map(|item| item.as_str()).collect())
         .unwrap_or_default()
 }
 

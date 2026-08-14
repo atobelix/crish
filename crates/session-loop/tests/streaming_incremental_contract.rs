@@ -60,6 +60,7 @@ async fn deltas_flow_incrementally_then_exactly_one_stop() {
         max_tokens: None,
         system_prompt: None,
         session_id: None,
+        reasoning_effort: None,
     };
     let mut stream = provider.stream(&request).await.expect("流前不应有错误");
     let mut items = Vec::new();
@@ -135,6 +136,7 @@ async fn mid_stream_error_ends_stream_after_content() {
         max_tokens: None,
         system_prompt: None,
         session_id: None,
+        reasoning_effort: None,
     };
     let mut stream = provider.stream(&request).await.expect("流前不应有错误");
     let mut items = Vec::new();
@@ -444,7 +446,9 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
         .collect();
     assert_eq!(sink_blocks.len(), 3, "实时轨逐事件收到全部 3 条 delta");
     assert!(matches!(sink_blocks[0], AgentMessageBlock::Text { text } if text == "你"));
-    assert!(matches!(sink_blocks[1], AgentMessageBlock::Thought { text, redacted } if text == "思考中" && *redacted == Some(true)));
+    assert!(
+        matches!(sink_blocks[1], AgentMessageBlock::Thought { text, redacted } if text == "思考中" && *redacted == Some(true))
+    );
     assert!(matches!(sink_blocks[2], AgentMessageBlock::Text { text } if text == "好"));
 
     // 收口轨：user 消息（start/end 成对无 delta）+ assistant 消息
@@ -460,7 +464,10 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
         })
         .collect();
     // 收口 delta 按消息 block 构建：thought 块 + 整段正文块（2 条）
-    assert_eq!(positions, vec!["start", "end", "start", "delta", "delta", "end"]);
+    assert_eq!(
+        positions,
+        vec!["start", "end", "start", "delta", "delta", "end"]
+    );
 
     // message_id 对齐：实时 delta / message-start / message-end 同一 id
     // （user 消息成对在前，assistant 消息族从首个 assistant-start 起）
@@ -473,7 +480,11 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
             _ => {}
         }
     }
-    assert_eq!(ids.len(), 6, "user 对 + assistant 族（start/delta/delta/end）");
+    assert_eq!(
+        ids.len(),
+        6,
+        "user 对 + assistant 族（start/delta/delta/end）"
+    );
     let first_assistant = ids[2].clone();
     assert!(
         ids[2..].iter().all(|id| *id == first_assistant),
@@ -502,9 +513,7 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
     let mut end_turns: Vec<u32> = Vec::new();
     for event in &outcome.events {
         if let AgentEvent::MessageEnd { turn_index, .. } = event {
-            end_turns.push(
-                turn_index.expect("收口 message-end 必须携带 turnIndex（G4）"),
-            );
+            end_turns.push(turn_index.expect("收口 message-end 必须携带 turnIndex（G4）"));
         }
     }
     assert_eq!(
@@ -520,7 +529,10 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
             _ => None,
         })
         .expect("首轮应有 turn-start");
-    assert_eq!(start_turn, 1, "assistant message-end turnIndex 与 turn-start 同值");
+    assert_eq!(
+        start_turn, 1,
+        "assistant message-end turnIndex 与 turn-start 同值"
+    );
 }
 
 /// T09.1 双轨：未注入 DeltaSink 时收口序列仍完整（message-end 必达——
