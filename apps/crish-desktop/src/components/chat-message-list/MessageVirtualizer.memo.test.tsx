@@ -14,11 +14,11 @@
 import React from 'react';
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { MessageVirtualizer } from './MessageVirtualizer';
 import {
-  MessageVirtualizer,
   MEMO_COMPARE_FIELDS,
   messageVirtualizerPropsEqual,
-} from './MessageVirtualizer';
+} from './messageVirtualizerMemo';
 import {
   assistantRowPropsEqual,
   MEMO_COMPARE_FIELDS as ROW_MEMO_COMPARE_FIELDS,
@@ -40,7 +40,10 @@ function msg(id: string, text: string): SessionMessage {
   } as SessionMessage;
 }
 
-function createProps(messages: SessionMessage[], visibleMessages: SessionMessage[]) {
+function createProps(
+  messages: SessionMessage[],
+  visibleMessages: SessionMessage[]
+) {
   return {
     messages,
     visibleMessages,
@@ -116,9 +119,7 @@ describe('MessageVirtualizer memo 契约（F7-F16）', () => {
     expect(container.textContent).toContain('内容乙');
     // 消费方缓存 visibleMessages 引用（如 useMemo 命中）时，
     // messages 身份变化也须触发重渲染（契约：messages 是身份信号）
-    rerender(
-      <MessageVirtualizer {...createProps(second, first)} />
-    );
+    rerender(<MessageVirtualizer {...createProps(second, first)} />);
     expect(container.textContent).toContain('内容乙');
   });
 });

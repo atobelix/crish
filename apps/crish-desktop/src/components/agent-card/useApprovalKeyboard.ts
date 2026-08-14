@@ -87,19 +87,32 @@ export function useApprovalKeyboard({
   }, [rootRef, confirmArmed]);
 
   // 4. Enter 快捷键：武装状态下触发允许，未武装时武装。
-  // 注意：textarea 内 Enter 仍换行（不阻止默认行为），仅在卡片内或按钮焦点时触发。
+  // 注意：textarea 与 contentEditable 内 Enter 仍换行（不阻止默认行为），仅在卡片内或按钮焦点时触发。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Enter') return;
       const target = e.target as HTMLElement | null;
-      if (target?.tagName === 'TEXTAREA') return;
+      if (!rootRef.current || !rootRef.current.contains(target)) return;
+      if (
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable ||
+        target?.contentEditable === 'true' ||
+        target?.contentEditable === '' ||
+        Boolean(
+          target?.closest?.(
+            '[contenteditable="true"], [contenteditable=""], [contenteditable]:not([contenteditable="false"])'
+          )
+        )
+      ) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       onEnterAllowRef.current();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, []);
+  }, [rootRef]);
 
   // 5. 武装后把焦点移到主允许按钮，降低误触其它控件概率
   useEffect(() => {

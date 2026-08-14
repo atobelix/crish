@@ -34,9 +34,14 @@ vi.mock('./chatBridge', () => chatBridgeMock);
 
 function makeToolCall(
   id: string,
-  overrides: Partial<MessageToolCall> = {},
+  overrides: Partial<MessageToolCall> = {}
 ): MessageToolCall {
-  return { id, name: 'shell_command', status: 'pending_approval', ...overrides };
+  return {
+    id,
+    name: 'shell_command',
+    status: 'pending_approval',
+    ...overrides,
+  };
 }
 
 function pendingMsg(id: string, toolCalls: MessageToolCall[]): SessionMessage {
@@ -72,9 +77,7 @@ function readTool(sid: string, msgId: string, toolId: string) {
 function renderApproval(sid: string) {
   const toast = vi.fn();
   const utils = renderHook(() => {
-    const sess = useLayoutStore
-      .getState()
-      .sessions.find((s) => s.id === sid);
+    const sess = useLayoutStore.getState().sessions.find((s) => s.id === sid);
     return useChatApprovalHandlers({
       activeSessionId: sid,
       messages: sess?.messages ?? [],
@@ -221,7 +224,9 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
   });
 
   it('approve 发送失败：回滚 error + toast', async () => {
-    chatBridgeMock.engineApproveTool.mockRejectedValueOnce(new Error('send-fail'));
+    chatBridgeMock.engineApproveTool.mockRejectedValueOnce(
+      new Error('send-fail')
+    );
     const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
     const { result, toast } = renderApproval(sid);
 
@@ -251,13 +256,94 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
     expect(toast).toHaveBeenCalledWith('拒绝未送达，请重试');
   });
 
+  it('approve 异步失败时若已被并发更新至 success 终态，防倒退守卫拦截 error 覆写', async () => {
+    let rejectPromise: ((err: Error) => void) | undefined;
+    chatBridgeMock.engineApproveTool.mockImplementationOnce(
+      () =>
+        new Promise((_, rej) => {
+          rejectPromise = rej;
+        })
+    );
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result, toast } = renderApproval(sid);
+
+    act(() => {
+      result.current.handleApprovalAllow('tc-1', 'm1');
+    });
+
+    expect(result.current.isToolBusy?.('tc-1')).toBe(true);
+
+    // 模拟在请求飞行期间，外部事件已将状态推进至 success
+    useLayoutStore.setState((st) => {
+      const tc = st.sessions
+        .find((s) => s.id === sid)
+        ?.messages.find((m) => m.id === 'm1')
+        ?.toolCalls?.find((t) => t.id === 'tc-1');
+      if (tc) {
+        tc.status = 'success';
+        tc.output = '已完成真实输出';
+      }
+    });
+
+    // 触发延迟 reject
+    await act(async () => {
+      rejectPromise?.(new Error('late error'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // 状态防倒退守卫：保持 success 与实际输出，不被 error 覆写
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('success');
+    expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('已完成真实输出');
+    expect(toast).not.toHaveBeenCalled();
+    expect(result.current.approvalBusy).toBe(false);
+  });
+
+  it('deny 异步失败时若已被并发更新至 running 态，防倒退守卫拦截 pending 覆写', async () => {
+    let rejectPromise: ((err: Error) => void) | undefined;
+    chatBridgeMock.engineDenyTool.mockImplementationOnce(
+      () =>
+        new Promise((_, rej) => {
+          rejectPromise = rej;
+        })
+    );
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result, toast } = renderApproval(sid);
+
+    act(() => {
+      result.current.handleApprovalDeny('tc-1', 'm1');
+    });
+
+    // 模拟在请求飞行期间，外部事件已将状态推进至 running
+    useLayoutStore.setState((st) => {
+      const tc = st.sessions
+        .find((s) => s.id === sid)
+        ?.messages.find((m) => m.id === 'm1')
+        ?.toolCalls?.find((t) => t.id === 'tc-1');
+      if (tc) {
+        tc.status = 'running';
+        tc.output = '并发已执行';
+      }
+    });
+
+    // 触发延迟 reject
+    await act(async () => {
+      rejectPromise?.(new Error('late error'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // 状态防倒退守卫：保持 running，不被 pending_approval 覆写
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('running');
+    expect(toast).not.toHaveBeenCalled();
+    expect(result.current.approvalBusy).toBe(false);
+  });
+
   it('approvalBusy 期间重复点击被忽略（防双发）', async () => {
     let release: (() => void) | undefined;
     chatBridgeMock.engineApproveTool.mockImplementationOnce(
       () =>
         new Promise<void>((res) => {
           release = res;
-        }),
+        })
     );
     const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
     const { result } = renderApproval(sid);

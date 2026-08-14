@@ -25,6 +25,9 @@
 | **测试资产删除 (Asset Deletion)**                        | 擅自删除 `tests/`、`reference/` 下的任何历史测试用例或 Spec 文件。                                                                             | 严格执行「测试资产保护铁律」，删除存量测试直接判定为系统破坏行为。                              |
 | **Mock 沙箱伪装验收 (Mock Impersonation)**               | 在隔离的假数据/Mock 会话上截图或测试，伪装真机 WebView2 验收通过。                                                                             | UI 与 IPC 验收必须针对真实的 `http://127.0.0.1:9222` WebView2 与真实 SQLite DB。                |
 | **任务缩水与偷工减料 (Scope Shrinking)**                 | 因超时或复杂，擅自将方案中的要求砍成「简化版/MVP 版/后续再做」。                                                                               | 严格执行《反退避全文》效果锁（Effect Lock），任务范围无权自行降级。                             |
+| **全局事件侵入式监听 (Global Event Intrusion)**          | 在 `window` 捕获阶段注册事件未做作用域限制，侵入全局用户交互上下文（如拦截外部输入框 Enter）。                                                 | 必须实施严格的 DOM 包含性校验（`rootRef.current?.contains(target)`），杜绝全局劫持。            |
+| **组件模块混合导出 (Component Mixed Export)**            | 在 UI 组件文件中混合导出纯计算函数/类型/常量，破坏 Vite React Fast Refresh 边界并引发行数超标。                                                | 纯函数与常量必须物理拆包至独立 `*Memo.ts` 或 `*Types.ts` 文件，组件只导出组件。                 |
+| **闭包参数静态捕获 (Stale Closure Property Binding)**    | 在长周期或高频定时器闭包中使用初次捕获的静态属性而非动态时间戳计算状态。                                                                       | 必须记录绝对目标截止时间戳 `endTime = Date.now() + ms` 进行无状态差量动态计算。                 |
 
 ---
 

@@ -12,7 +12,7 @@
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 默认双开 poll+OS · ≠ 重做 E2′ 策略
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React from 'react';
@@ -277,10 +277,24 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
     expect(bridge).toMatch(/if\s*\(\s*!decision\.ok\s*\)/);
     expect(bridge).toMatch(/decision_blocked/);
 
-    const backend = readFileSync(
-      join(REPO, 'apps/agent-workbench/src-tauri/src/note_commands.rs'),
-      'utf8'
+    const mirrorPath = join(
+      REPO,
+      'apps/agent-workbench/src-tauri/src/note_commands_mirror.rs'
     );
+    const applyPath = join(
+      REPO,
+      'apps/agent-workbench/src-tauri/src/note_commands_apply.rs'
+    );
+    const legacyPath = join(
+      REPO,
+      'apps/agent-workbench/src-tauri/src/note_commands.rs'
+    );
+    const backendPath = existsSync(mirrorPath)
+      ? mirrorPath
+      : existsSync(applyPath)
+        ? applyPath
+        : legacyPath;
+    const backend = readFileSync(backendPath, 'utf8');
     expect(backend).toMatch(/silent_overwrite_blocked/);
     expect(backend).toMatch(/unpushed_op_count\s*>\s*0/);
   });

@@ -9,7 +9,10 @@ import {
   toolHasDisplayableResult,
   toolHumanLabel,
 } from './toolCardPresenter';
-import type { AssistantTimelineItem, ToolRenderItem } from './toolPresentationTypes';
+import type {
+  AssistantTimelineItem,
+  ToolRenderItem,
+} from './toolPresentationTypes';
 
 function statusRank(s: MessageToolCall['status']): number {
   if (s === 'success') return 4;
@@ -22,16 +25,20 @@ function statusRank(s: MessageToolCall['status']): number {
  * 规范化助手消息时间线：blocks 与 toolCalls 对齐，保证可交错渲染。
  * live / hydrate / 持久化共用，避免各写一套顺序。
  */
-export function normalizeAssistantTimeline(msg: SessionMessage): SessionMessage {
+export function normalizeAssistantTimeline(
+  msg: SessionMessage
+): SessionMessage {
   if (msg.sender !== 'assistant') return msg;
   const tools = [...(msg.toolCalls || [])];
   const toolIds = new Set(tools.map((t) => t.id));
   let blocks = [...(msg.blocks || [])].filter(
-    (b) => b.type !== 'tool_call' || (b.id != null && toolIds.has(b.id)),
+    (b) => b.type !== 'tool_call' || (b.id != null && toolIds.has(b.id))
   );
 
   const inBlocks = new Set(
-    blocks.filter((b) => b.type === 'tool_call' && b.id).map((b) => b.id as string),
+    blocks
+      .filter((b) => b.type === 'tool_call' && b.id)
+      .map((b) => b.id as string)
   );
   const missing = tools.filter((t) => !inBlocks.has(t.id));
 
@@ -49,7 +56,9 @@ export function normalizeAssistantTimeline(msg: SessionMessage): SessionMessage 
           .trim();
       blocks = [
         ...tools.map((t) => ({ type: 'tool_call' as const, id: t.id })),
-        ...(textContent ? [{ type: 'text' as const, content: textContent }] : []),
+        ...(textContent
+          ? [{ type: 'text' as const, content: textContent }]
+          : []),
       ];
     } else {
       // 有交错：缺失的 tool 插在最后一个 text 之前，或末尾
@@ -60,8 +69,15 @@ export function normalizeAssistantTimeline(msg: SessionMessage): SessionMessage 
           break;
         }
       }
-      const inject = missing.map((t) => ({ type: 'tool_call' as const, id: t.id }));
-      blocks = [...blocks.slice(0, insertAt), ...inject, ...blocks.slice(insertAt)];
+      const inject = missing.map((t) => ({
+        type: 'tool_call' as const,
+        id: t.id,
+      }));
+      blocks = [
+        ...blocks.slice(0, insertAt),
+        ...inject,
+        ...blocks.slice(insertAt),
+      ];
     }
   }
 
@@ -78,7 +94,9 @@ export function normalizeAssistantTimeline(msg: SessionMessage): SessionMessage 
 }
 
 /** 仅按 id 合并状态；同命令多次调用保留多行 */
-export function dedupeToolCalls(toolCalls: MessageToolCall[]): MessageToolCall[] {
+export function dedupeToolCalls(
+  toolCalls: MessageToolCall[]
+): MessageToolCall[] {
   const byId = new Map<string, MessageToolCall>();
   const order: string[] = [];
   for (const tc of toolCalls) {
@@ -94,29 +112,43 @@ export function dedupeToolCalls(toolCalls: MessageToolCall[]): MessageToolCall[]
         ...prev,
         ...tc,
         arguments: tc.arguments || prev.arguments,
-        ...(tc.explanation || prev.explanation ? { explanation: tc.explanation || prev.explanation } : {}),
-        ...(tc.output || prev.output ? { output: tc.output || prev.output } : {}),
+        ...(tc.explanation || prev.explanation
+          ? { explanation: tc.explanation || prev.explanation }
+          : {}),
+        ...(tc.output || prev.output
+          ? { output: tc.output || prev.output }
+          : {}),
       });
     } else if (statusRank(tc.status) === statusRank(prev.status)) {
       byId.set(tc.id, {
         ...prev,
         ...tc,
         arguments: tc.arguments || prev.arguments,
-        ...(tc.output || prev.output ? { output: tc.output || prev.output } : {}),
+        ...(tc.output || prev.output
+          ? { output: tc.output || prev.output }
+          : {}),
       });
     } else {
       byId.set(tc.id, {
         ...prev,
         arguments: prev.arguments || tc.arguments,
-        ...(prev.explanation || tc.explanation ? { explanation: prev.explanation || tc.explanation } : {}),
-        ...(prev.output || tc.output ? { output: prev.output || tc.output } : {}),
+        ...(prev.explanation || tc.explanation
+          ? { explanation: prev.explanation || tc.explanation }
+          : {}),
+        ...(prev.output || tc.output
+          ? { output: prev.output || tc.output }
+          : {}),
       });
     }
   }
-  return order.map((id) => byId.get(id)!).filter((tc) => tc && !isInterruptedTool(tc));
+  return order
+    .map((id) => byId.get(id)!)
+    .filter((tc) => tc && !isInterruptedTool(tc));
 }
 
-export function buildToolRenderItems(toolCalls: MessageToolCall[]): ToolRenderItem[] {
+export function buildToolRenderItems(
+  toolCalls: MessageToolCall[]
+): ToolRenderItem[] {
   const visible = dedupeToolCalls(toolCalls);
   const out: ToolRenderItem[] = [];
   let buf: MessageToolCall[] = [];
@@ -145,7 +177,11 @@ export function buildToolRenderItems(toolCalls: MessageToolCall[]): ToolRenderIt
       continue;
     }
     // 有实质输出的查看类单独成行，避免「组折叠藏结果」
-    if (isInspectTool(tc) && !toolHasDisplayableResult(tc) && tc.status !== 'running') {
+    if (
+      isInspectTool(tc) &&
+      !toolHasDisplayableResult(tc) &&
+      tc.status !== 'running'
+    ) {
       buf.push(tc);
     } else if (isInspectTool(tc) && tc.status === 'running') {
       buf.push(tc);
@@ -165,7 +201,9 @@ export function buildToolRenderItems(toolCalls: MessageToolCall[]): ToolRenderIt
  * 构建交错时间线。
  * blocks 可用时按 blocks 顺序；否则工具在前、正文在后。
  */
-export function buildAssistantTimeline(msg: SessionMessage): AssistantTimelineItem[] {
+export function buildAssistantTimeline(
+  msg: SessionMessage
+): AssistantTimelineItem[] {
   try {
     const tools = msg.toolCalls || [];
     const toolsById = new Map(tools.map((t) => [t.id, t]));
@@ -190,7 +228,8 @@ export function buildAssistantTimeline(msg: SessionMessage): AssistantTimelineIt
         if (b.type === 'text') {
           flushTools();
           const c = b.content || '';
-          if (c.trim()) items.push({ kind: 'text', content: c, key: `text-${xi++}` });
+          if (c.trim())
+            items.push({ kind: 'text', content: c, key: `text-${xi++}` });
         } else if (b.type === 'tool_call' && b.id) {
           const tc = toolsById.get(b.id);
           if (tc) {
@@ -203,7 +242,8 @@ export function buildAssistantTimeline(msg: SessionMessage): AssistantTimelineIt
       const orphan = tools.filter((t) => !used.has(t.id));
       if (orphan.length) {
         const rendered = buildToolRenderItems(orphan);
-        if (rendered.length) items.push({ kind: 'tools', items: rendered, key: 'tools-orphan' });
+        if (rendered.length)
+          items.push({ kind: 'tools', items: rendered, key: 'tools-orphan' });
       }
       if (!items.some((i) => i.kind === 'text') && (msg.text || '').trim()) {
         items.push({ kind: 'text', content: msg.text || '', key: 'text-full' });
@@ -213,7 +253,8 @@ export function buildAssistantTimeline(msg: SessionMessage): AssistantTimelineIt
 
     if (tools.length) {
       const rendered = buildToolRenderItems(tools);
-      if (rendered.length) items.push({ kind: 'tools', items: rendered, key: `tools-0` });
+      if (rendered.length)
+        items.push({ kind: 'tools', items: rendered, key: `tools-0` });
     }
     if ((msg.text || '').trim()) {
       items.push({ kind: 'text', content: msg.text || '', key: 'text-0' });
@@ -271,6 +312,13 @@ export function timelineSignature(msg: SessionMessage): string {
     a: tc.arguments,
     e: tc.explanation,
   }));
+  if (blocks.length === 0) {
+    return JSON.stringify({
+      b: blocksProj,
+      t: toolsProj,
+      hasText: Boolean((msg.text || '').trim()),
+    });
+  }
   return JSON.stringify({ b: blocksProj, t: toolsProj });
 }
 
@@ -282,7 +330,7 @@ export function timelineSignature(msg: SessionMessage): string {
 export function buildAssistantTimelineCached(
   msg: SessionMessage,
   prevSig: string | null,
-  prevTimeline: AssistantTimelineItem[] | null,
+  prevTimeline: AssistantTimelineItem[] | null
 ): { sig: string; timeline: AssistantTimelineItem[] } {
   const sig = timelineSignature(msg);
   if (sig === prevSig && prevTimeline) {

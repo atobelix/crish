@@ -15,6 +15,15 @@ export interface SessionsAwareState {
   sessionsById: Record<string, unknown>;
 }
 
+export function isSessionsAwareState(s: unknown): s is SessionsAwareState {
+  return (
+    typeof s === 'object' &&
+    s !== null &&
+    'sessions' in s &&
+    Array.isArray((s as { sessions: unknown }).sessions)
+  );
+}
+
 function buildSessionsMap(
   sessions: ReadonlyArray<{ id: string }>
 ): Record<string, unknown> {
@@ -40,7 +49,10 @@ function sessionsIdKey(sessions: ReadonlyArray<{ id: string }>): string {
   return key;
 }
 
-type AnySet = (partial: unknown, replace?: boolean) => void;
+type SetStateFn<S> = (
+  partial: S | Partial<S> | ((state: S) => S | Partial<S> | void),
+  replace?: boolean
+) => void;
 
 export const withAutoIndex =
   <
@@ -51,31 +63,22 @@ export const withAutoIndex =
     config: StateCreator<S, Mps, Mcs>
   ): StateCreator<S, Mps, Mcs> =>
   (set, get, api) => {
-    let prevSessions: ReadonlyArray<unknown> | null = null;
-    const rawSet = set as never as AnySet;
+    let prevSessions: ReadonlyArray<{ id: string }> | null = null;
+    const rawSet = set as unknown as SetStateFn<S>;
 
-    const setWithIndex: AnySet = (partial, replace) => {
+    const setWithIndex: SetStateFn<S> = (partial, replace) => {
       // 1. 函数形式的 partial（例如未经 immer 或手写函数派发）
       if (typeof partial === 'function') {
         rawSet((state: S) => {
-          const fn = partial as (s: S) => Partial<S> | S | void;
-          const produced = fn(state);
+          const produced = partial(state);
           const next =
-            produced != null && typeof produced === 'object'
-              ? (produced as S)
-              : state;
+            produced != null && typeof produced === 'object' ? produced : state;
 
-          if (
-            !next ||
-            !Array.isArray((next as unknown as SessionsAwareState).sessions)
-          ) {
+          if (!isSessionsAwareState(next)) {
             return produced;
           }
-          const nextSessions = (next as unknown as SessionsAwareState).sessions;
-          if (
-            nextSessions === prevSessions &&
-            (next as unknown as SessionsAwareState).sessionsById
-          ) {
+          const nextSessions = next.sessions;
+          if (nextSessions === prevSessions && next.sessionsById) {
             return produced;
           }
           prevSessions = nextSessions;
@@ -91,18 +94,14 @@ export const withAutoIndex =
       if (partial != null && typeof partial === 'object') {
         // 若设置 replace === true
         if (replace) {
-          const nextState = partial as unknown as SessionsAwareState;
-          if (nextState && Array.isArray(nextState.sessions)) {
-            if (
-              nextState.sessions !== prevSessions ||
-              !nextState.sessionsById
-            ) {
-              prevSessions = nextState.sessions;
+          if (isSessionsAwareState(partial)) {
+            if (partial.sessions !== prevSessions || !partial.sessionsById) {
+              prevSessions = partial.sessions;
               rawSet(
                 {
                   ...partial,
-                  sessionsById: buildSessionsMap(nextState.sessions),
-                },
+                  sessionsById: buildSessionsMap(partial.sessions),
+                } as S,
                 true
               );
               return;
@@ -113,21 +112,20 @@ export const withAutoIndex =
         }
 
         // replace 为 false 或 undefined 的常规合并更新
-        if ('sessions' in partial) {
-          const nextSessions = (partial as unknown as SessionsAwareState)
-            .sessions;
-          if (Array.isArray(nextSessions)) {
-            if (nextSessions !== prevSessions || !('sessionsById' in partial)) {
-              prevSessions = nextSessions;
-              rawSet(
-                {
-                  ...partial,
-                  sessionsById: buildSessionsMap(nextSessions),
-                },
-                false
-              );
-              return;
-            }
+        if (isSessionsAwareState(partial)) {
+          if (
+            partial.sessions !== prevSessions ||
+            !('sessionsById' in partial)
+          ) {
+            prevSessions = partial.sessions;
+            rawSet(
+              {
+                ...partial,
+                sessionsById: buildSessionsMap(partial.sessions),
+              } as S,
+              false
+            );
+            return;
           }
         }
       }
@@ -136,15 +134,14 @@ export const withAutoIndex =
       rawSet(partial, replace);
     };
 
-    const store = config(setWithIndex as never as typeof set, get, api);
+    const store = config(setWithIndex as unknown as typeof set, get, api);
 
-    const seed = store as (S & SessionsAwareState) | undefined;
-    if (seed && Array.isArray(seed.sessions)) {
-      prevSessions = seed.sessions;
-      if (!seed.sessionsById || Object.keys(seed.sessionsById).length === 0) {
+    if (isSessionsAwareState(store)) {
+      prevSessions = store.sessions;
+      if (!store.sessionsById || Object.keys(store.sessionsById).length === 0) {
         return {
           ...store,
-          sessionsById: buildSessionsMap(seed.sessions),
+          sessionsById: buildSessionsMap(store.sessions),
         };
       }
     }
