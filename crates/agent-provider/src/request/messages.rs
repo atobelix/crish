@@ -192,6 +192,10 @@ fn reasoning_content_object(message: &AgentMessage, mode: ReasoningContentMode) 
     }
 }
 
+/// Wire 层安全占位文本常量（中性系统提示词；防止模型上游连续 Assistant 报 HTTP 400 错误）
+pub const WIRE_CONTINUATION_NOTE: &str =
+    "[System Note: The following is a continuation of previous output.]";
+
 /// toChatMessages（对齐 `model:openai-request-build.ts:485-579`；02 §二.6:134-140、§六.11）
 ///
 /// systemPrompt 非空时前置 system 消息（user-prefix 模式改写为 user 角色 + 前缀文案）；
@@ -256,6 +260,22 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
                 if content.is_empty() && tool_calls.is_empty() && reasoning.is_none() {
                     continue;
                 }
+
+                // 【Wire-Only 角色交替防 400 投影层】
+                // 检查输出流前驱项：若前驱亦为 assistant，瞬态注入 user 占位消息
+                if let Some(prev) = result.last() {
+                    if prev.role == "assistant" {
+                        result.push(ChatMessage {
+                            role: "user".to_string(),
+                            content: Some(ChatContent::Text(WIRE_CONTINUATION_NOTE.to_string())),
+                            tool_call_id: None,
+                            reasoning_content: None,
+                            tool_calls: Vec::new(),
+                            cache_control: None,
+                        });
+                    }
+                }
+
                 result.push(ChatMessage {
                     role: "assistant".to_string(),
                     content: if content.is_empty() {
@@ -346,6 +366,21 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
                 if content.is_empty() && !has_tool_call && reasoning.is_none() {
                     continue;
                 }
+
+                // 【Wire-Only 角色交替防 400 投影层】
+                // 检查输出流前驱项：若前驱亦为 assistant message，瞬态注入 user 占位 item
+                if let Some(prev) = result.last() {
+                    if prev.get("type").and_then(|t| t.as_str()) == Some("message")
+                        && prev.get("role").and_then(|r| r.as_str()) == Some("assistant")
+                    {
+                        result.push(json!({
+                            "type": "message",
+                            "role": "user",
+                            "content": WIRE_CONTINUATION_NOTE,
+                        }));
+                    }
+                }
+
                 // reasoning item 先于 message item（对齐 OpenAI response.output 顺序）
                 if let Some(thought) = reasoning {
                     result.push(json!({ "type": "reasoning", "content": thought }));

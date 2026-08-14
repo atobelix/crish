@@ -138,10 +138,13 @@ impl RunStateMachine {
     pub fn transition(&mut self, event: RunLifecycleEvent) -> Result<RunStatus, TransitionError> {
         let next = match (&self.state, event) {
             (RunStatus::Queued, RunLifecycleEvent::Start) => RunStatus::Initializing,
+            (RunStatus::Queued, RunLifecycleEvent::CancelRequested) => RunStatus::Cancelling,
+            (RunStatus::Queued, RunLifecycleEvent::CancelConfirmed) => RunStatus::Cancelled,
             (RunStatus::Queued, RunLifecycleEvent::ForceInterrupt) => RunStatus::Failed,
             (RunStatus::Initializing, RunLifecycleEvent::RuntimeReady) => RunStatus::Running,
             (RunStatus::Initializing, RunLifecycleEvent::InitError) => RunStatus::Failed,
             (RunStatus::Initializing, RunLifecycleEvent::CancelRequested) => RunStatus::Cancelling,
+            (RunStatus::Initializing, RunLifecycleEvent::CancelConfirmed) => RunStatus::Cancelled,
             (RunStatus::Initializing, RunLifecycleEvent::ForceInterrupt) => RunStatus::Failed,
             (RunStatus::Running, RunLifecycleEvent::ApprovalRequested) => RunStatus::AwaitingApproval,
             (RunStatus::Running, RunLifecycleEvent::AgentStop) => RunStatus::Completing,
@@ -575,7 +578,10 @@ fn terminal_path(from: RunStatus, terminal: RunTerminalStatus) -> Result<Vec<Run
             })),
         },
         RunTerminalStatus::Cancelled => match from {
-            RunStatus::Running | RunStatus::AwaitingApproval => Ok(vec![
+            RunStatus::Queued
+            | RunStatus::Initializing
+            | RunStatus::Running
+            | RunStatus::AwaitingApproval => Ok(vec![
                 RunLifecycleEvent::CancelRequested,
                 RunLifecycleEvent::CancelConfirmed,
             ]),

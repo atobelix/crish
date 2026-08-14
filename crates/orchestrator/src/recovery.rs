@@ -269,6 +269,8 @@ pub struct RecoveryCoordinator {
     budget: RecoveryBudget,
     /// 阶梯 3 fork 记录（`recover_forks` 落库，幂等依据）
     forks: Vec<ForkRecord>,
+    /// 并发 Fork 防重占位表（TOCTOU 保护：(fingerprint:from_run_id) 集合）
+    in_flight_forks: std::collections::HashSet<String>,
     /// 阶梯 2 通知（`recover_notifications` 落库）
     notifications: Vec<RecoveryNotification>,
     /// 阶梯 4 需用户介入标记（`recover_needs_user` 落库，UI 可观察）
@@ -307,6 +309,7 @@ impl RecoveryCoordinator {
             policy,
             budget,
             forks,
+            in_flight_forks: std::collections::HashSet::new(),
             notifications,
             needs_user,
         })
@@ -480,6 +483,39 @@ impl RecoveryCoordinator {
                 },
             });
         }
+        // TOCTOU 锁保护：并发 Fork 防重占位
+        let in_flight_key = format!("{}:{}", fp, ctx.subagent_run_id);
+        if !self.in_flight_forks.insert(in_flight_key.clone()) {
+            if let Some(existing) = self
+                .forks
+                .iter()
+                .find(|f| f.fingerprint == fp && f.from_run_id == ctx.subagent_run_id)
+            {
+                return Ok(RecoveryOutcome {
+                    ladder: RecoveryLadder::Ladder3Fork,
+                    action: RecoveryAction::Forked {
+                        record: existing.clone(),
+                    },
+                });
+            }
+            return Err(RecoveryError::InvalidState {
+                message: format!(
+                    "子代理 run {} 正在进行并发 fork 恢复中，拒绝重复触发",
+                    ctx.subagent_run_id
+                ),
+            });
+        }
+
+        let res = self.fork_and_reassign_inner(ctx, fp).await;
+        self.in_flight_forks.remove(&in_flight_key);
+        res
+    }
+
+    async fn fork_and_reassign_inner(
+        &mut self,
+        ctx: &RunFailureContext,
+        fp: String,
+    ) -> Result<RecoveryOutcome, RecoveryError> {
         // 预算制：超预算禁止自动恢复，直接阶梯 4
         if !self.budget.can_recover(&fp) {
             self.store.append_event(

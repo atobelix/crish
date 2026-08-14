@@ -469,7 +469,7 @@ pub(crate) async fn maybe_compact_user_boundary(state: &mut LoopState) -> bool {
 ///   事件）。
 ///
 /// 返回是否实际发生了压缩。
-async fn compact_with_llm_guard(
+pub(crate) async fn compact_with_llm_guard(
     state: &mut LoopState,
     budget_tokens: u32,
     policy: &conex_compaction::CompactionPolicy,
@@ -1265,6 +1265,7 @@ mod tests {
                 ..Default::default()
             }),
             max_auto_compactions_per_run: 1,
+            summarizer: Some(Arc::new(StubSummaryGuard)),
             ..Default::default()
         }
     }
@@ -1597,7 +1598,10 @@ mod tests {
     /// runtime-intervention-required 事件（07 方案 §2.4 断言 2）
     #[tokio::test]
     async fn user_boundary_llm_unavailable_skips_but_sends_message() {
-        let mut state = test_state(budgeted_options());
+        let mut state = test_state(SessionLoopOptions {
+            summarizer: None,
+            ..budgeted_options()
+        });
         state.conversation = big_conversation();
         assert!(
             !maybe_compact_user_boundary(&mut state).await,
@@ -1614,6 +1618,7 @@ mod tests {
         );
         // 豁免开启（compact_allow_stub_fallback=true）→ 降级 stub 压缩完成
         let mut state = test_state(SessionLoopOptions {
+            summarizer: None,
             compact_allow_stub_fallback: true,
             ..budgeted_options()
         });
@@ -1629,10 +1634,7 @@ mod tests {
     /// 预检可再试（07 方案 §2.1 / E2 §4.3 优先级表）
     #[tokio::test]
     async fn user_boundary_compaction_consumes_shared_run_limit() {
-        let mut state = test_state(SessionLoopOptions {
-            summarizer: Some(Arc::new(StubSummaryGuard)),
-            ..budgeted_options()
-        });
+        let mut state = test_state(budgeted_options());
         state.conversation = big_conversation();
         assert!(maybe_compact_user_boundary(&mut state).await);
         assert_eq!(state.compactions_this_run, 1);
@@ -1643,14 +1645,14 @@ mod tests {
             "边界压缩后预检因计数封顶跳过"
         );
         // 反向：边界未压缩（LLM 不可用）不消耗计数 → 预检可再试
-        let mut state = test_state(budgeted_options());
+        let mut state = test_state(SessionLoopOptions {
+            summarizer: None,
+            ..budgeted_options()
+        });
         state.conversation = big_conversation();
         assert!(!maybe_compact_user_boundary(&mut state).await);
         assert_eq!(state.compactions_this_run, 0);
-        let mut state = test_state(SessionLoopOptions {
-            summarizer: Some(Arc::new(StubSummaryGuard)),
-            ..budgeted_options()
-        });
+        let mut state = test_state(budgeted_options());
         state.conversation = big_conversation();
         assert!(
             maybe_compact_preflight(&mut state).await,
@@ -2012,6 +2014,7 @@ mod tests {
                     calls: Arc::new(Mutex::new(Vec::new())),
                     fail: true,
                 })),
+                compact_allow_stub_fallback: true,
                 ..budgeted_options()
             });
             state.conversation = big_conversation();
@@ -2240,6 +2243,7 @@ mod tests {
                 model: "deepseek-v4-flash".into(),
                 ttl_seconds: 60,
             }),
+            compact_allow_stub_fallback: true,
             ..budgeted_options()
         });
         state.conversation = big_conversation();

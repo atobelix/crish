@@ -142,7 +142,7 @@ pub(crate) async fn compression_ladder(
     } else {
         conex_compaction::compaction::StubPolicy::LlmRequired
     };
-    let plan = engine.compact_agent_messages_with_stub_policy(
+    let mut plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
         budget_tokens as usize,
         &policy,
@@ -165,9 +165,32 @@ pub(crate) async fn compression_ladder(
         return fatal_provider_error(state, classified);
     }
     // T-36 引擎兜底（评审 02 P1-7）：压缩产物的协议形状护栏——无 system
-    // 且链后首条非 user → 跳过压缩 + warn（压缩后 wire 首条非 user →
-    // provider 400；保持原请求体重试必再超 → 直接 fatal，语义与
-    // dropped 为空路径一致）
+    // 且链后首条非 user → 若 cut 落在 assistant 上，尝试更紧凑保留预算收敛至 user 头部
+    if !compaction_shape_ok(&plan.messages) {
+        if let Some(first_non_summary_idx) = plan.messages.iter().position(|m| {
+            m.role != conex_types::message::AgentMessageRole::System
+                && !m.id.starts_with("compacted-summary")
+        }) {
+            if plan.messages[first_non_summary_idx].role != conex_types::message::AgentMessageRole::User {
+                let non_user_tokens = conex_compaction::count_agent_message_tokens(
+                    &plan.messages[first_non_summary_idx],
+                );
+                let tighter_keep = policy.keep_recent_tokens.saturating_sub(non_user_tokens);
+                let mut tighter_policy = policy.clone();
+                tighter_policy.keep_recent_tokens = tighter_keep;
+                let tighter_plan = engine.compact_agent_messages_with_stub_policy(
+                    &state.conversation,
+                    budget_tokens as usize,
+                    &tighter_policy,
+                    state.summarizer.as_deref(),
+                    stub_policy,
+                );
+                if compaction_shape_ok(&tighter_plan.messages) && !tighter_plan.dropped_ids.is_empty() {
+                    plan = tighter_plan;
+                }
+            }
+        }
+    }
     if !compaction_shape_ok(&plan.messages) {
         tracing::warn!(
             session_id = %state.machine.context().session_id,

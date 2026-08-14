@@ -37,6 +37,18 @@ impl Default for CleanupOptions {
     }
 }
 
+impl CleanupOptions {
+    /// Wire 协议投影层专用配置：纯净脱色、收敛空行、绝不截断代码与 JSON
+    pub fn wire_safe() -> Self {
+        Self {
+            max_line_width: 0,
+            collapse_empty_lines: true,
+            collapse_duplicate_lines: false,
+            compact_json: false,
+        }
+    }
+}
+
 /// 清洗结果（规则命中记录 + token 收益）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CleanupResult {
@@ -63,6 +75,7 @@ pub fn duplicate_fold_marker(folded_away: usize) -> String {
 /// R1：ANSI/控制字符剥离（字节安全状态机）
 ///
 /// - `ESC [ ... m|k|H|J`（CSI）与 `ESC ] ... BEL`（OSC）序列整体剥离；
+/// - CSI 支持 ECMA-48 全终结符（0x40..=0x7E）与 64 字节长度保护；
 /// - C0 控制字符除 `\n` `\r` `\t` 外剥离（含 DEL 0x7F）；
 /// - 嵌套 ESC 按新序列重新进入 Esc 态；序列未终结时后续字节一并剥离。
 ///
@@ -73,7 +86,7 @@ fn strip_control_bytes(input: &str) -> String {
     enum State {
         Normal,
         Esc,
-        Csi,
+        Csi(usize),
         Osc,
     }
     let mut state = State::Normal;
@@ -86,13 +99,16 @@ fn strip_control_bytes(input: &str) -> String {
         }
         match state {
             State::Esc => match b {
-                b'[' => state = State::Csi,
+                b'[' => state = State::Csi(0),
                 b']' => state = State::Osc,
                 _ => state = State::Normal,
             },
-            State::Csi => {
-                if matches!(b, b'm' | b'k' | b'H' | b'J') {
+            State::Csi(len) => {
+                // ECMA-48 CSI 终结符为 0x40..=0x7E，带 64 字节长度上限保护
+                if (0x40..=0x7E).contains(&b) || len >= 64 {
                     state = State::Normal;
+                } else {
+                    state = State::Csi(len + 1);
                 }
             }
             State::Osc => {
@@ -361,4 +377,27 @@ mod tests {
         // 清洗后 ≤ 原始
         assert!(result.cleaned_bytes <= result.original_bytes);
     }
+
+    #[test]
+    fn wire_safe_never_truncates_lines_or_modifies_json() {
+        let opts = CleanupOptions::wire_safe();
+        let long_code = "fn very_long_identifier_that_spans_more_than_one_hundred_and_twenty_characters_in_a_single_line_of_rust_code() -> bool { true }";
+        let raw_json = "{\n  \"nested\": {\n    \"key\": \"value\"\n  }\n}";
+        let raw = format!("\x1b[33m{}\x1b[0m\n\n\n{}", long_code, raw_json);
+
+        let result = clean_output(&raw, &opts);
+        assert!(result.cleaned.contains(long_code), "wire_safe 绝不截断长代码行");
+        assert!(result.cleaned.contains(raw_json), "wire_safe 绝不折叠多行 JSON");
+        assert!(!result.cleaned.contains("\x1b"), "wire_safe 剥离 ANSI 颜色");
+        assert_eq!(result.cleaned, format!("{}\n\n{}", long_code, raw_json));
+    }
+
+    #[test]
+    fn strips_all_ecma48_csi_commands() {
+        // \x1b[2J (erase display), \x1b[1;1H (cursor home), \x1b[?25h (show cursor), \x1b[10C (cursor forward)
+        let raw = "prefix\x1b[2Jmid\x1b[1;1H\x1b[?25h\x1b[10Csuffix";
+        let result = clean(raw);
+        assert_eq!(result.cleaned, "prefixmidsuffix");
+    }
 }
+

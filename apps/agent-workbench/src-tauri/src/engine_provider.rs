@@ -8,10 +8,10 @@
 //! [to_loop_event] 等）。
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分，不关任何 EL；仅搬移不改语义）。
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
 use agent_provider::config::Endpoint;
@@ -352,6 +352,32 @@ pub(crate) fn effective_context_window(config: &EngineProviderConfig) -> Option<
 /// - 返回流为 `'static`：请求体在返回流之前同步序列化完毕。
 ///
 /// usage 口径（P2 §3.3 D，T-16 交付 usage_accounting setter）：本适配层只走
+/// 全局会话 Abort 信号注册表（支持全链路 Abort 强穿透，消灭僵尸请求与 SSE 流）
+static SESSION_ABORT_REGISTRY: OnceLock<RwLock<HashMap<String, session_loop::AbortSignal>>> = OnceLock::new();
+
+fn session_abort_registry() -> &'static RwLock<HashMap<String, session_loop::AbortSignal>> {
+    SESSION_ABORT_REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// 注册会话的 AbortSignal（供外部生命周期挂载）
+pub fn register_session_abort_signal(session_id: impl Into<String>, signal: session_loop::AbortSignal) {
+    if let Ok(mut reg) = session_abort_registry().write() {
+        reg.insert(session_id.into(), signal);
+    }
+}
+
+/// 注销会话的 AbortSignal
+pub fn unregister_session_abort_signal(session_id: &str) {
+    if let Ok(mut reg) = session_abort_registry().write() {
+        reg.remove(session_id);
+    }
+}
+
+/// 获取会话的 AbortSignal
+pub fn get_session_abort_signal(session_id: &str) -> Option<session_loop::AbortSignal> {
+    session_abort_registry().read().ok()?.get(session_id).cloned()
+}
+
 /// chat-completions 兼容线（OpenAI 系 Included 语义——prompt_tokens 已含缓存），
 /// 消费侧 [session_loop::stream::ConsumeBuilder] 默认 Included 即正确，无需显式
 /// 传参；未来 Anthropic Messages / Gemini 原生适配层接线时必须显式传
@@ -367,6 +393,8 @@ pub(crate) struct HttpProviderCall {
     first_byte_timeout: Option<Duration>,
     /// 流块间空闲超时
     idle_timeout: Option<Duration>,
+    /// 显式注入的 AbortSignal（可选覆盖；缺省按 request.session_id 查全局注册表）
+    abort_signal: Option<session_loop::AbortSignal>,
 }
 
 impl HttpProviderCall {
@@ -377,7 +405,14 @@ impl HttpProviderCall {
             config,
             first_byte_timeout: Some(DEFAULT_FIRST_BYTE_TIMEOUT),
             idle_timeout: Some(DEFAULT_IDLE_TIMEOUT),
+            abort_signal: None,
         }
+    }
+
+    /// 注入专用 AbortSignal（测试与独立调用场景）
+    pub(crate) fn with_abort_signal(mut self, signal: session_loop::AbortSignal) -> Self {
+        self.abort_signal = Some(signal);
+        self
     }
 
     /// chat-completions 请求选项（对话无关字段；模型 / max_tokens 透传）
@@ -486,26 +521,57 @@ impl ProviderCall for HttpProviderCall {
         let body = self.request_body(&options, &context);
         let url = provider_url(&self.config);
 
-        // 2. HTTP 请求（共享连接池；传输层错误分类后上抛）
+        // 2. HTTP 请求（共享连接池；接入 tokio::select! 强打断竞速）
         // G1 遗留 1：亲和头合并进基础请求头（request_headers = Authorization
         // 固定头 + affinity_http_headers 追加，build.rs 消费点）——Grok
         // x-grok-conv-id 粘性路由头随请求真实发出；其余厂商零新增头。
+        let abort_signal = self.abort_signal.clone().or_else(|| {
+            request.session_id.as_deref().and_then(get_session_abort_signal)
+        });
+
         let mut request_builder = self.client.post(&url);
         for (name, value) in self.request_headers(options.cache.as_ref()) {
             request_builder = request_builder.header(name, value);
         }
-        let response = match request_builder.json(&body).send().await {
-            Ok(response) => response,
-            Err(error) => {
-                // 流前传输错误（reqwest 层）：分类后上抛（02 §四.1）
-                let source = source_from_reqwest_error(&error);
-                return Err(to_classified(classify_provider_error(
-                    None,
-                    None,
-                    Some(source),
-                    None,
-                )));
+
+        let response = match &abort_signal {
+            Some(signal) => {
+                tokio::select! {
+                    biased;
+                    _ = signal.wait_aborted() => {
+                        return Err(ClassifiedStreamError {
+                            kind: ProviderErrorKind::Aborted,
+                            message: "Request aborted by user before HTTP response headers received".to_string(),
+                            retryable: false,
+                            retry_after_ms: None,
+                        });
+                    }
+                    res = request_builder.json(&body).send() => match res {
+                        Ok(response) => response,
+                        Err(error) => {
+                            let source = source_from_reqwest_error(&error);
+                            return Err(to_classified(classify_provider_error(
+                                None,
+                                None,
+                                Some(source),
+                                None,
+                            )));
+                        }
+                    },
+                }
             }
+            None => match request_builder.json(&body).send().await {
+                Ok(response) => response,
+                Err(error) => {
+                    let source = source_from_reqwest_error(&error);
+                    return Err(to_classified(classify_provider_error(
+                        None,
+                        None,
+                        Some(source),
+                        None,
+                    )));
+                }
+            },
         };
 
         // 非 2xx：读 body → 分类（含 Retry-After 头；流前错误，未产出事件）
@@ -529,8 +595,20 @@ impl ProviderCall for HttpProviderCall {
             return Err(to_classified(classified));
         }
 
-        // 3. 增量帧流 → 逐帧解析 → 逐事件产出（T09.1.2 步骤 2：unfold 状态机）
-        let (_abort_flag, abort_handle) = AbortFlag::new();
+        // 3. 增量帧流 → 逐帧解析 → 逐事件产出（T09.1.2 步骤 2：注入真实 AbortHandle 强打断）
+        let (abort_flag, abort_handle) = AbortFlag::new();
+        if let Some(signal) = &abort_signal {
+            if signal.is_aborted() {
+                abort_flag.abort();
+            } else {
+                let sig = signal.clone();
+                let flag = abort_flag.clone();
+                tokio::spawn(async move {
+                    sig.wait_aborted().await;
+                    flag.abort();
+                });
+            }
+        }
         let read_options = StreamReadOptions {
             first_byte_timeout: self.first_byte_timeout,
             idle_timeout: self.idle_timeout,

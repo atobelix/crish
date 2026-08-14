@@ -906,3 +906,110 @@ fn responses_input_tool_call_id_sanitized() {
     );
     assert_eq!(items[0]["call_id"], "a_b_c");
 }
+
+// ── Wire-Only 角色交替防 400 投影层测试 ──
+
+#[test]
+fn consecutive_assistant_messages_inject_wire_continuation_note_in_chat_messages() {
+    // 连续 Assistant 消息：中间瞬态注入 User 占位消息，避免 Anthropic/OpenAI 400 报错
+    let messages = to_chat_messages(
+        None,
+        &[
+            user_msg(vec![text_block("问题 1")]),
+            assistant_msg(vec![text_block("第一段回复")]),
+            assistant_msg(vec![text_block("第二段回复")]),
+        ],
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    assert_eq!(messages.len(), 4);
+    assert_text_content(&messages, 0, "user", "问题 1");
+    assert_text_content(&messages, 1, "assistant", "第一段回复");
+    assert_text_content(&messages, 2, "user", WIRE_CONTINUATION_NOTE);
+    assert_text_content(&messages, 3, "assistant", "第二段回复");
+}
+
+#[test]
+fn multiple_consecutive_assistants_inject_alternating_notes() {
+    let messages = to_chat_messages(
+        None,
+        &[
+            assistant_msg(vec![text_block("段落 1")]),
+            assistant_msg(vec![text_block("段落 2")]),
+            assistant_msg(vec![text_block("段落 3")]),
+        ],
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    assert_eq!(messages.len(), 5);
+    assert_text_content(&messages, 0, "assistant", "段落 1");
+    assert_text_content(&messages, 1, "user", WIRE_CONTINUATION_NOTE);
+    assert_text_content(&messages, 2, "assistant", "段落 2");
+    assert_text_content(&messages, 3, "user", WIRE_CONTINUATION_NOTE);
+    assert_text_content(&messages, 4, "assistant", "段落 3");
+}
+
+#[test]
+fn alternating_user_assistant_does_not_inject_extra_notes() {
+    let messages = to_chat_messages(
+        None,
+        &[
+            user_msg(vec![text_block("问题 1")]),
+            assistant_msg(vec![text_block("回答 1")]),
+            user_msg(vec![text_block("问题 2")]),
+            assistant_msg(vec![text_block("回答 2")]),
+        ],
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    assert_eq!(messages.len(), 4);
+    assert_text_content(&messages, 0, "user", "问题 1");
+    assert_text_content(&messages, 1, "assistant", "回答 1");
+    assert_text_content(&messages, 2, "user", "问题 2");
+    assert_text_content(&messages, 3, "assistant", "回答 2");
+}
+
+#[test]
+fn consecutive_assistant_messages_inject_wire_continuation_note_in_responses_items() {
+    let items = to_responses_input_items(
+        &[
+            user_msg(vec![text_block("问题")]),
+            assistant_msg(vec![text_block("回复 A")]),
+            assistant_msg(vec![text_block("回复 B")]),
+        ],
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    assert_eq!(items.len(), 4);
+    assert_eq!(items[0]["role"], "user");
+    assert_eq!(items[0]["content"], "问题");
+    assert_eq!(items[1]["role"], "assistant");
+    assert_eq!(items[1]["content"], "回复 A");
+    assert_eq!(items[2]["role"], "user");
+    assert_eq!(items[2]["content"], WIRE_CONTINUATION_NOTE);
+    assert_eq!(items[3]["role"], "assistant");
+    assert_eq!(items[3]["content"], "回复 B");
+}
+
+#[test]
+fn domain_messages_remain_100_percent_pure_and_unmodified() {
+    // 领域消息原序列保持纯净（0 假消息注入领域模型）
+    let domain_messages = vec![
+        user_msg(vec![text_block("用户指令")]),
+        assistant_msg(vec![text_block("历史摘要（role=Assistant）")]),
+        assistant_msg(vec![text_block("新回复（role=Assistant）")]),
+    ];
+    let wire_messages = to_chat_messages(
+        None,
+        &domain_messages,
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    // Wire 包含 4 条（插入了 1 条瞬态 user 占位）
+    assert_eq!(wire_messages.len(), 4);
+    // 领域消息切片仍仅有 3 条，内容与角色 100% 原始未变
+    assert_eq!(domain_messages.len(), 3);
+    assert_eq!(domain_messages[0].role, AgentMessageRole::User);
+    assert_eq!(domain_messages[1].role, AgentMessageRole::Assistant);
+    assert_eq!(domain_messages[2].role, AgentMessageRole::Assistant);
+}

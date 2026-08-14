@@ -71,7 +71,7 @@ fn compression_fatal_note(state: &LoopState, kind: ProviderErrorKind) -> String 
     // 未发生压缩，压缩后 token 附注无意义，无压缩恢复路径说明会让用户
     // 误以为压缩路径缺省未配置）
     if state.overflow_llm_unavailable {
-        return "；LLM 摘要不可用，溢出未压缩——直接终止（不再重试）".to_string();
+        return "；LLM 不可用，溢出未压缩——直接终止（不再重试）".to_string();
     }
     let tokens_after = last_compression_tokens_after(state);
     match kind {

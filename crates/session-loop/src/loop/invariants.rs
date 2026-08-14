@@ -54,6 +54,7 @@ fn budgeted_options() -> SessionLoopOptions {
             ..Default::default()
         }),
         max_auto_compactions_per_run: 1,
+        compact_allow_stub_fallback: true,
         ..Default::default()
     }
 }

@@ -113,6 +113,7 @@ async fn preflight_compaction_triggers_and_broadcasts_events() {
     .with_options(SessionLoopOptions {
         context_budget: Some(default_budget()),
         compaction_policy: Some(default_policy()),
+        compact_allow_stub_fallback: true,
         ..Default::default()
     })
     .with_initial_conversation_arc(big_conversation());
