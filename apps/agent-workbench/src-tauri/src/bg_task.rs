@@ -6,10 +6,11 @@
 use crate::process::now_millis;
 use agent_tools::background::{
     BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef,
-    BackgroundTaskStatus, LogSlice, TaskState,
+    BackgroundTaskStatus, KillResult, LogSlice, TaskState,
 };
 use agent_tools::definition::ToolError;
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::process::ChildStdin;
 use tokio::sync::Mutex as TokioMutex;
@@ -385,4 +386,8 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
         }
     }
 
+    /// 两阶段终止（委托 bg_kill::kill_task 内部实现）
+    async fn kill(&self, task_id: &str) -> Result<KillResult, ToolError> {
+        super::bg_kill::kill_task(self, task_id).await
+    }
 }

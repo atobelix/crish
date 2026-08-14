@@ -80,6 +80,8 @@ mod push_wiring;
 
 mod session_commands;
 mod server;
+#[path = "server/core_backend.rs"]
+pub(crate) mod core_backend;
 mod single_instance;
 mod status_diagnostics;
 // T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
@@ -850,7 +852,7 @@ fn main() {
                 // 路径，relPath 剥离依据；注册表未托管 / 根不可达 → 不注入
                 // 根，relPath 回退原路径，search_files 本身不受影响）
                 let mut backend =
-                    server::core_backend::CoreStateBackend::new(Arc::clone(&core_state))
+                    core_backend::CoreStateBackend::new(Arc::clone(&core_state))
                         .with_search_index_ready(search_index_ready)
                         .with_compaction_ready(compaction_ready)
                         .with_search_state(Arc::clone(&search_state));

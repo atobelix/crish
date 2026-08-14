@@ -293,6 +293,12 @@ impl ComputerSlot {
                     "电脑操作重复开启（命令面按幂等吸收，状态机仍严格）"
                 );
             }
+            Err(EnablementError::NotEnabled) => {
+                tracing::warn!(
+                    target: "computer",
+                    "电脑操作开启异常：NotEnabled"
+                );
+            }
         }
         self.persist(true)?;
         self.emit(&StateChangePayload {

@@ -35,14 +35,14 @@ export type SetMultiSelectedOptions = {
    * 是否把 head（列表末项）同步为 chrome 焦点。
    * 默认 true：多选后焦点落在扩展端，便于键盘/批量 op 回落。
    */
-  focusHead?: boolean;
+  focusHead?: boolean | undefined;
   /**
    * 显式指定 anchor；缺省 = 列表首项。
    * 须在 multi 列表内（或会被钳到首/末）。
    */
-  anchorBlockId?: BlockId | null;
+  anchorBlockId?: BlockId | null | undefined;
   /** 显式 head；缺省 = 列表末项 */
-  headBlockId?: BlockId | null;
+  headBlockId?: BlockId | null | undefined;
 };
 
 export type ClearMultiOptions = {
@@ -50,7 +50,7 @@ export type ClearMultiOptions = {
    * 清空多选时是否一并清焦点。
    * 默认 false：保留 focusedBlockId（A-SIL 噪声仅清 multi 高亮）。
    */
-  clearFocus?: boolean;
+  clearFocus?: boolean | undefined;
 };
 
 export type SetFocusedOptions = {
@@ -59,12 +59,12 @@ export type SetFocusedOptions = {
    * 默认 true：单点焦点与块多选互斥（后写焦点覆盖 multi）。
    * false：保留 multi 高亮（仅移动 focusedBlockId）。
    */
-  clearMultiIfOutside?: boolean;
+  clearMultiIfOutside?: boolean | undefined;
   /**
    * 焦点落在 multi **之内**时是否把 head 更新为该块。
    * 默认 true。
    */
-  updateHeadIfInside?: boolean;
+  updateHeadIfInside?: boolean | undefined;
 };
 
 export type BlockSelectionBridgeOptions = {
@@ -72,10 +72,10 @@ export type BlockSelectionBridgeOptions = {
    * 块文档序（逻辑 id）；`selectBlockRange` 用其展开连续区间。
    * 可后续 `setBlockOrder` 更新；缺省时空 range 仅选端点。
    */
-  blockOrder?: readonly BlockId[];
+  blockOrder?: readonly BlockId[] | undefined;
   /**
    * 可选：镜像块多选到 editor-kit SelectionStore（`setBlockMulti`）。
    * 文本 caret/range **不**由本桥写入。
    */
-  selectionStore?: SelectionStore;
+  selectionStore?: SelectionStore | undefined;
 };

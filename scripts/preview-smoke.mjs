@@ -1,8 +1,7 @@
+/* global document */
 /* R2-4 C2 preview 冒烟：vite preview + 抽样 lazy 点渲染断言（无 console error） */
 import { chromium } from '@playwright/test';
-import { execSync } from 'node:child_process';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
 
 const PORT = 4173;
 const BASE = `http://localhost:${PORT}`;

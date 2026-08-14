@@ -79,6 +79,7 @@ mod tests {
     use crate::computer::{ComputerMetaStore, LocalDbComputerMetaStore};
     use conex_db::LocalDb;
     use serde_json::json;
+    use tauri::Manager;
 
     /// 构造内存库槽（真实读写面；命令契约断言不依赖 Tauri 真 app）。
     fn mock_slot() -> Arc<ComputerSlot> {
@@ -88,22 +89,19 @@ mod tests {
         )))
     }
 
-    /// 经 Tauri mock app 取 `State<Arc<ComputerSlot>>`（对齐 browser_commands
-    /// 测试范式；命令函数签名原样调用）。
-    fn state_ref(slot: &Arc<ComputerSlot>) -> State<'_, Arc<ComputerSlot>> {
-        use tauri::Manager as _;
-        let app = tauri::test::mock_builder()
+    fn mock_app(slot: &Arc<ComputerSlot>) -> tauri::App<tauri::test::MockRuntime> {
+        tauri::test::mock_builder()
             .manage(Arc::clone(slot))
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .expect("mock app 构造应成功");
-        app.state::<Arc<ComputerSlot>>()
+            .expect("mock app 构造应成功")
     }
 
     /// enable 契约：载荷 `{ enabled: true }`（序列化形状与前端逐字一致）。
     #[test]
     fn enable_returns_contract_payload() {
         let slot = mock_slot();
-        let out = computer_session_enable(state_ref(&slot)).expect("开启不应失败");
+        let app = mock_app(&slot);
+        let out = computer_session_enable(app.state::<Arc<ComputerSlot>>()).expect("开启不应失败");
         assert_eq!(serde_json::to_value(&out).expect("序列化"), json!({ "enabled": true }));
     }
 
@@ -111,11 +109,13 @@ mod tests {
     #[test]
     fn disable_returns_contract_payload_idempotent() {
         let slot = mock_slot();
-        let out = computer_session_disable(state_ref(&slot)).expect("停用不应失败");
+        let app = mock_app(&slot);
+        let out = computer_session_disable(app.state::<Arc<ComputerSlot>>()).expect("停用不应失败");
         assert_eq!(serde_json::to_value(&out).expect("序列化"), json!({ "enabled": false }));
         // 开启后停用：仍返回 { enabled: false } 并落盘
         slot.enable().expect("开启不应失败");
-        let out = computer_session_disable(state_ref(&slot)).expect("停用不应失败");
+        let app2 = mock_app(&slot);
+        let out = computer_session_disable(app2.state::<Arc<ComputerSlot>>()).expect("停用不应失败");
         assert_eq!(serde_json::to_value(&out).expect("序列化"), json!({ "enabled": false }));
         let status = slot.status();
         assert!(!status.enabled);
@@ -126,7 +126,8 @@ mod tests {
     fn estop_returns_contract_payload_with_reason() {
         let slot = mock_slot();
         slot.enable().expect("开启不应失败");
-        let out = computer_estop(Some("用户点击急停".to_string()), state_ref(&slot))
+        let app = mock_app(&slot);
+        let out = computer_estop(Some("用户点击急停".to_string()), app.state::<Arc<ComputerSlot>>())
             .expect("急停不应失败");
         assert_eq!(serde_json::to_value(&out).expect("序列化"), json!({ "stopped": true }));
         assert!(slot.stop().stopped(), "急停旗必须置位");
@@ -140,7 +141,8 @@ mod tests {
     #[test]
     fn status_reports_disabled_idle_shape() {
         let slot = mock_slot();
-        let out = computer_status(state_ref(&slot)).expect("状态查询不应失败");
+        let app = mock_app(&slot);
+        let out = computer_status(app.state::<Arc<ComputerSlot>>()).expect("状态查询不应失败");
         assert_eq!(
             serde_json::to_value(&out).expect("序列化"),
             json!({ "enabled": false, "mode": "idle" }),
@@ -153,7 +155,8 @@ mod tests {
     fn status_reports_enabled_desktop_after_enable() {
         let slot = mock_slot();
         slot.enable().expect("开启不应失败");
-        let out = computer_status(state_ref(&slot)).expect("状态查询不应失败");
+        let app = mock_app(&slot);
+        let out = computer_status(app.state::<Arc<ComputerSlot>>()).expect("状态查询不应失败");
         assert_eq!(
             serde_json::to_value(&out).expect("序列化"),
             json!({ "enabled": true, "mode": "desktop" })
@@ -170,7 +173,8 @@ mod tests {
         let slot = Arc::new(ComputerSlot::new(Arc::new(
             LocalDbComputerMetaStore::new(db),
         )));
-        let out = computer_status(state_ref(&slot)).expect("状态查询不应失败");
+        let app = mock_app(&slot);
+        let out = computer_status(app.state::<Arc<ComputerSlot>>()).expect("状态查询不应失败");
         assert_eq!(
             serde_json::to_value(&out).expect("序列化"),
             json!({ "enabled": true, "mode": "desktop" })
@@ -185,7 +189,8 @@ mod tests {
         slot.activation()
             .request_browser()
             .expect("浏览器激活应成功");
-        let err = computer_session_enable(state_ref(&slot)).expect_err("必须拒绝");
+        let app = mock_app(&slot);
+        let err = computer_session_enable(app.state::<Arc<ComputerSlot>>()).expect_err("必须拒绝");
         assert!(
             err.starts_with("tool.session.exclusive:"),
             "互斥错误码前缀：{err}"
@@ -207,7 +212,8 @@ mod tests {
             }
         }
         let slot = Arc::new(ComputerSlot::from_store(Arc::new(FailingStore)));
-        let err = computer_session_enable(state_ref(&slot)).expect_err("落盘失败必须报错");
+        let app = mock_app(&slot);
+        let err = computer_session_enable(app.state::<Arc<ComputerSlot>>()).expect_err("落盘失败必须报错");
         assert!(
             err.starts_with("tool.computer.not_ready:"),
             "not_ready 错误码前缀：{err}"
@@ -231,9 +237,10 @@ mod tests {
         let slot = mock_slot();
         let events = Arc::new(std::sync::Mutex::new(Vec::new()));
         slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&events))));
-        let state = state_ref(&slot);
-        computer_session_enable(state).expect("开启不应失败");
-        computer_session_disable(state_ref(&slot)).expect("停用不应失败");
+        let app1 = mock_app(&slot);
+        computer_session_enable(app1.state::<Arc<ComputerSlot>>()).expect("开启不应失败");
+        let app2 = mock_app(&slot);
+        computer_session_disable(app2.state::<Arc<ComputerSlot>>()).expect("停用不应失败");
         let events = events.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events.len(), 2, "开启 + 停用各广播一次（命令面不重复发射）");
         assert!(events[0].starts_with("computer://state-changed:"), "事件名：{}", events[0]);

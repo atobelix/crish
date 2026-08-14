@@ -329,9 +329,9 @@ function validateDeviceRegistry(reg, engineReg) {
     }
   });
 
-  // events：41 条、编号连续、策略合法，且与 engine 注册表 41 变体同名同序
-  if (!Array.isArray(reg.events) || reg.events.length !== 41) {
-    fail(`device registry must declare 41 events, got ${reg.events.length}`);
+  // events：编号连续、策略合法，且与 engine 注册表变体同名同序
+  if (!Array.isArray(reg.events) || reg.events.length !== engineReg.events.length) {
+    fail(`device registry must declare ${engineReg.events.length} events, got ${reg.events.length}`);
   }
   const engineTypes = engineReg.events.map((ev) => ev.type);
   reg.events.forEach((ev, idx) => {
@@ -431,12 +431,17 @@ function emitTypes(reg, header) {
 
   for (const [name, spec] of Object.entries(reg.types)) {
     if (spec.kind === "struct") {
-      lines.push(`export interface ${name} {`);
-      for (const f of spec.fields) {
-        lines.push(`  ${f.name}${f.required ? "" : "?"}: ${tsTypeName(f.type)};`);
+      if (spec.fields.length === 0) {
+        lines.push(`export type ${name} = Record<string, never>;`);
+        lines.push("");
+      } else {
+        lines.push(`export interface ${name} {`);
+        for (const f of spec.fields) {
+          lines.push(`  ${f.name}${f.required ? "" : "?"}: ${tsTypeName(f.type)};`);
+        }
+        lines.push("}");
+        lines.push("");
       }
-      lines.push("}");
-      lines.push("");
     } else if (spec.kind === "tagged") {
       const variantTypes = [];
       for (const v of spec.variants) {
@@ -1113,8 +1118,6 @@ function emitDeviceParser(reg) {
   for (const m of reg.messages) {
     if (!bodyTypes.includes(m.rustVariant)) bodyTypes.push(m.rustVariant);
   }
-  const remoteKinds = reg.kinds.filter((k) => k.family === "remote").map((k) => k.kind);
-  const resultKinds = reg.kinds.filter((k) => k.family === "result").map((k) => k.kind);
 
   const importedTypes = new Set(
     [...bodyTypes, ...Object.keys(reg.types), ...Object.keys(reg.enums)].filter(

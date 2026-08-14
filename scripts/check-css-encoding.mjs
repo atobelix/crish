@@ -76,7 +76,6 @@ function saveWhitelist(wl) {
 
 const violations = []; // {path, line, msg, layer, whitelisted?}
 const whitelist = loadWhitelist();
-const hitsByFile = {};
 
 const walk = (dir) => {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

@@ -6,7 +6,7 @@
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================
 
-import type { EngineEvent, EngineAgentStartEvent, EngineAgentEndEvent, EngineTurnStartEvent, EngineTurnEndEvent, EngineMessageStartEvent, EngineMessageDeltaEvent, EngineMessageEndEvent, EngineToolStartEvent, EngineToolUpdateEvent, EngineToolEndEvent, EngineToolBatchStartEvent, EngineToolBatchEndEvent, EngineToolInputRepairedEvent, EngineContextCompressionStartEvent, EngineContextCompressionEndEvent, EngineProviderDiagnosticEvent, EngineRuntimeErrorEvent, EngineRuntimeSteeringEvent, EngineRuntimeInterventionRequiredEvent, EngineApprovalRequestedEvent, EngineApprovalResolvedEvent, EngineCheckpointCreatedEvent, EngineCheckpointRestoredEvent, EngineRunTerminalEvent, EngineCacheStatsUpdatedEvent, EngineCacheWasteAlertEvent, EngineColdCacheWarningEvent, EngineSecurityAuditEvent, EngineSubagentStartedEvent, EngineSubagentEventEvent, EngineSubagentEndedEvent, EngineTaskStartedEvent, EngineTaskOutputEvent, EngineTaskHeartbeatEvent, EngineTaskSuspiciousEvent, EngineTaskCompletedEvent, EngineTaskFailedEvent, EngineTaskKilledEvent, EngineTimerFiredEvent, EngineTimerCancelledEvent, EngineCronFiredEvent } from "./events";
+import type { EngineEvent, EngineAgentStartEvent, EngineAgentEndEvent, EngineTurnStartEvent, EngineTurnEndEvent, EngineMessageStartEvent, EngineMessageDeltaEvent, EngineMessageEndEvent, EngineToolStartEvent, EngineToolUpdateEvent, EngineToolEndEvent, EngineToolBatchStartEvent, EngineToolBatchEndEvent, EngineContextCompressionStartEvent, EngineContextCompressionEndEvent, EngineProviderDiagnosticEvent, EngineRuntimeErrorEvent, EngineRuntimeSteeringEvent, EngineRuntimeInterventionRequiredEvent, EngineApprovalRequestedEvent, EngineApprovalResolvedEvent, EngineCheckpointCreatedEvent, EngineCheckpointRestoredEvent, EngineRunTerminalEvent, EngineCacheStatsUpdatedEvent, EngineCacheWasteAlertEvent, EngineColdCacheWarningEvent, EngineSecurityAuditEvent, EngineSubagentStartedEvent, EngineSubagentEventEvent, EngineSubagentEndedEvent, EngineTaskStartedEvent, EngineTaskOutputEvent, EngineTaskHeartbeatEvent, EngineTaskSuspiciousEvent, EngineTaskCompletedEvent, EngineTaskFailedEvent, EngineTaskKilledEvent, EngineTimerFiredEvent, EngineTimerCancelledEvent, EngineCronFiredEvent, EngineRecoveryEscalatedEvent, EngineRecoverySteeringEvent, EngineRecoveryForkEvent, EngineRecoveryReportEvent, EngineRecoveryBudgetDeniedEvent, EngineGoalRoundStartedEvent, EngineGoalRoundCompletedEvent, EngineGoalContinuationDecidedEvent, EngineSteeringEvaluatedEvent, EngineControlIntentEvent, EngineHookOutcomeEvent, EngineSummaryBackgroundEvent, EngineStageSummaryMilestoneEvent, EngineNudgeEnqueuedEvent, EngineRecoveryAcknowledgedEvent, EngineRecoveryRetryAttemptedEvent, EngineProviderRequestAnchoredEvent } from "./events";
 import type { AgentMessage, AgentMessageBlock, AgentMessageBlockText, AgentMessageBlockThought, AgentMessageBlockToolCall, AgentMessageBlockToolResult, ToolOutput, ToolArtifact, ToolBatchCall, ToolBatchResult, ToolProgressUpdate, ProviderDiagnostic, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, ToolMetadata, PermissionRequest, ContextCompressionPolicyMetadata, ContextCompressionHandoffMetadata, ContextCompressionCacheBoundaryMetadata, ContextCompressionRecord, RunCacheStats, ImpactAssessment, SubagentEventPayload, AgentMessageRole, AgentEndReason, RunTerminalStatus, ApprovalDecision, ToolCategory, ToolConcurrency, ToolArtifactKind, ProviderDiagnosticPhase, SystemPromptWireMode, ProviderErrorKind, RuntimeCheckpointKind, ContextCompressionTrigger, ContextCompressionReason, ContextCompressionPolicyTier, ContextCompressionPolicyAction, CompressionCacheInvalidation, MissAttribution, SecurityAuditOperation, SecurityAuditDecision, SubagentEventKind, SubagentEndStatus } from "./types";
 import { AGENT_MESSAGE_ROLE_VALUES, AGENT_END_REASON_VALUES, RUN_TERMINAL_STATUS_VALUES, APPROVAL_DECISION_VALUES, TOOL_CATEGORY_VALUES, TOOL_CONCURRENCY_VALUES, TOOL_ARTIFACT_KIND_VALUES, PROVIDER_DIAGNOSTIC_PHASE_VALUES, SYSTEM_PROMPT_WIRE_MODE_VALUES, PROVIDER_ERROR_KIND_VALUES, RUNTIME_CHECKPOINT_KIND_VALUES, CONTEXT_COMPRESSION_TRIGGER_VALUES, CONTEXT_COMPRESSION_REASON_VALUES, CONTEXT_COMPRESSION_POLICY_TIER_VALUES, CONTEXT_COMPRESSION_POLICY_ACTION_VALUES, COMPRESSION_CACHE_INVALIDATION_VALUES, MISS_ATTRIBUTION_VALUES, SECURITY_AUDIT_OPERATION_VALUES, SECURITY_AUDIT_DECISION_VALUES, SUBAGENT_EVENT_KIND_VALUES, SUBAGENT_END_STATUS_VALUES } from "./types";
 import type { JsonValue } from "../../primitive-types";
@@ -1163,29 +1163,6 @@ export function parseEngineToolBatchEndEvent(v: unknown): ParseResult<EngineTool
   });
 }
 
-export function parseEngineToolInputRepairedEvent(v: unknown): ParseResult<EngineToolInputRepairedEvent> {
-  if (!isRecord(v)) return parseErr("EngineToolInputRepairedEvent: payload must be an object");
-  if (v["type"] !== "tool-input-repaired") return parseErr("EngineToolInputRepairedEvent: type mismatch");
-  const sessionId = reqField(v, "sessionId", checkString);
-  if (!sessionId.ok) return sessionId;
-  const timestamp = reqField(v, "timestamp", checkString);
-  if (!timestamp.ok) return timestamp;
-  const toolCallId = reqField(v, "toolCallId", checkString);
-  if (!toolCallId.ok) return toolCallId;
-  const toolName = reqField(v, "toolName", checkString);
-  if (!toolName.ok) return toolName;
-  const notes = reqField(v, "notes", (x) => parseArrayOf(x, checkString));
-  if (!notes.ok) return notes;
-  return parseOk({
-    type: "tool-input-repaired",
-    sessionId: sessionId.data,
-    timestamp: timestamp.data,
-    toolCallId: toolCallId.data,
-    toolName: toolName.data,
-    notes: notes.data,
-  });
-}
-
 export function parseEngineContextCompressionStartEvent(v: unknown): ParseResult<EngineContextCompressionStartEvent> {
   if (!isRecord(v)) return parseErr("EngineContextCompressionStartEvent: payload must be an object");
   if (v["type"] !== "context-compression-start") return parseErr("EngineContextCompressionStartEvent: type mismatch");
@@ -1806,6 +1783,445 @@ export function parseEngineCronFiredEvent(v: unknown): ParseResult<EngineCronFir
   });
 }
 
+export function parseEngineRecoveryEscalatedEvent(v: unknown): ParseResult<EngineRecoveryEscalatedEvent> {
+  if (!isRecord(v)) return parseErr("EngineRecoveryEscalatedEvent: payload must be an object");
+  if (v["type"] !== "recovery-escalated") return parseErr("EngineRecoveryEscalatedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const subagentRunId = optField(v, "subagentRunId", checkString);
+  if (!subagentRunId.ok) return subagentRunId;
+  const kind = reqField(v, "kind", checkString);
+  if (!kind.ok) return kind;
+  const retries = reqField(v, "retries", checkInteger);
+  if (!retries.ok) return retries;
+  const elapsedMs = reqField(v, "elapsedMs", checkInteger);
+  if (!elapsedMs.ok) return elapsedMs;
+  const detail = optField(v, "detail", checkString);
+  if (!detail.ok) return detail;
+  return parseOk({
+    type: "recovery-escalated",
+    sessionId: sessionId.data,
+    ...(subagentRunId.data !== undefined ? { subagentRunId: subagentRunId.data } : {}),
+    kind: kind.data,
+    retries: retries.data,
+    elapsedMs: elapsedMs.data,
+    ...(detail.data !== undefined ? { detail: detail.data } : {}),
+  });
+}
+
+export function parseEngineRecoverySteeringEvent(v: unknown): ParseResult<EngineRecoverySteeringEvent> {
+  if (!isRecord(v)) return parseErr("EngineRecoverySteeringEvent: payload must be an object");
+  if (v["type"] !== "recovery-steering") return parseErr("EngineRecoverySteeringEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const subagentId = reqField(v, "subagentId", checkString);
+  if (!subagentId.ok) return subagentId;
+  const subagentRunId = reqField(v, "subagentRunId", checkString);
+  if (!subagentRunId.ok) return subagentRunId;
+  const fingerprint = reqField(v, "fingerprint", checkString);
+  if (!fingerprint.ok) return fingerprint;
+  const retries = reqField(v, "retries", checkInteger);
+  if (!retries.ok) return retries;
+  const remainingStatus = reqField(v, "remainingStatus", checkString);
+  if (!remainingStatus.ok) return remainingStatus;
+  const pending = reqField(v, "pending", checkBoolean);
+  if (!pending.ok) return pending;
+  const createdAtMs = reqField(v, "createdAtMs", checkInteger);
+  if (!createdAtMs.ok) return createdAtMs;
+  return parseOk({
+    type: "recovery-steering",
+    sessionId: sessionId.data,
+    subagentId: subagentId.data,
+    subagentRunId: subagentRunId.data,
+    fingerprint: fingerprint.data,
+    retries: retries.data,
+    remainingStatus: remainingStatus.data,
+    pending: pending.data,
+    createdAtMs: createdAtMs.data,
+  });
+}
+
+export function parseEngineRecoveryForkEvent(v: unknown): ParseResult<EngineRecoveryForkEvent> {
+  if (!isRecord(v)) return parseErr("EngineRecoveryForkEvent: payload must be an object");
+  if (v["type"] !== "recovery-fork") return parseErr("EngineRecoveryForkEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const fingerprint = reqField(v, "fingerprint", checkString);
+  if (!fingerprint.ok) return fingerprint;
+  const subagentId = reqField(v, "subagentId", checkString);
+  if (!subagentId.ok) return subagentId;
+  const fromRunId = reqField(v, "fromRunId", checkString);
+  if (!fromRunId.ok) return fromRunId;
+  const fromLeafId = reqField(v, "fromLeafId", checkString);
+  if (!fromLeafId.ok) return fromLeafId;
+  const newRunId = reqField(v, "newRunId", checkString);
+  if (!newRunId.ok) return newRunId;
+  const newLeafId = reqField(v, "newLeafId", checkString);
+  if (!newLeafId.ok) return newLeafId;
+  const contextMode = reqField(v, "contextMode", checkString);
+  if (!contextMode.ok) return contextMode;
+  return parseOk({
+    type: "recovery-fork",
+    sessionId: sessionId.data,
+    fingerprint: fingerprint.data,
+    subagentId: subagentId.data,
+    fromRunId: fromRunId.data,
+    fromLeafId: fromLeafId.data,
+    newRunId: newRunId.data,
+    newLeafId: newLeafId.data,
+    contextMode: contextMode.data,
+  });
+}
+
+export function parseEngineRecoveryReportEvent(v: unknown): ParseResult<EngineRecoveryReportEvent> {
+  if (!isRecord(v)) return parseErr("EngineRecoveryReportEvent: payload must be an object");
+  if (v["type"] !== "recovery-report") return parseErr("EngineRecoveryReportEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const subagentId = reqField(v, "subagentId", checkString);
+  if (!subagentId.ok) return subagentId;
+  const subagentRunId = reqField(v, "subagentRunId", checkString);
+  if (!subagentRunId.ok) return subagentRunId;
+  const stuckAtMs = reqField(v, "stuckAtMs", checkInteger);
+  if (!stuckAtMs.ok) return stuckAtMs;
+  const suggestion = reqField(v, "suggestion", checkString);
+  if (!suggestion.ok) return suggestion;
+  return parseOk({
+    type: "recovery-report",
+    sessionId: sessionId.data,
+    subagentId: subagentId.data,
+    subagentRunId: subagentRunId.data,
+    stuckAtMs: stuckAtMs.data,
+    suggestion: suggestion.data,
+  });
+}
+
+export function parseEngineRecoveryBudgetDeniedEvent(v: unknown): ParseResult<EngineRecoveryBudgetDeniedEvent> {
+  if (!isRecord(v)) return parseErr("EngineRecoveryBudgetDeniedEvent: payload must be an object");
+  if (v["type"] !== "recovery-budget-denied") return parseErr("EngineRecoveryBudgetDeniedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const subagentRunId = optField(v, "subagentRunId", checkString);
+  if (!subagentRunId.ok) return subagentRunId;
+  const fingerprint = reqField(v, "fingerprint", checkString);
+  if (!fingerprint.ok) return fingerprint;
+  const count = reqField(v, "count", checkInteger);
+  if (!count.ok) return count;
+  const max = reqField(v, "max", checkInteger);
+  if (!max.ok) return max;
+  return parseOk({
+    type: "recovery-budget-denied",
+    sessionId: sessionId.data,
+    ...(subagentRunId.data !== undefined ? { subagentRunId: subagentRunId.data } : {}),
+    fingerprint: fingerprint.data,
+    count: count.data,
+    max: max.data,
+  });
+}
+
+export function parseEngineGoalRoundStartedEvent(v: unknown): ParseResult<EngineGoalRoundStartedEvent> {
+  if (!isRecord(v)) return parseErr("EngineGoalRoundStartedEvent: payload must be an object");
+  if (v["type"] !== "goal-round-started") return parseErr("EngineGoalRoundStartedEvent: type mismatch");
+  const round = reqField(v, "round", checkInteger);
+  if (!round.ok) return round;
+  const maxRounds = reqField(v, "maxRounds", checkInteger);
+  if (!maxRounds.ok) return maxRounds;
+  const goal = reqField(v, "goal", checkString);
+  if (!goal.ok) return goal;
+  return parseOk({
+    type: "goal-round-started",
+    round: round.data,
+    maxRounds: maxRounds.data,
+    goal: goal.data,
+  });
+}
+
+export function parseEngineGoalRoundCompletedEvent(v: unknown): ParseResult<EngineGoalRoundCompletedEvent> {
+  if (!isRecord(v)) return parseErr("EngineGoalRoundCompletedEvent: payload must be an object");
+  if (v["type"] !== "goal-round-completed") return parseErr("EngineGoalRoundCompletedEvent: type mismatch");
+  const round = reqField(v, "round", checkInteger);
+  if (!round.ok) return round;
+  const toolCallCount = reqField(v, "toolCallCount", checkInteger);
+  if (!toolCallCount.ok) return toolCallCount;
+  const toolSuccessCount = reqField(v, "toolSuccessCount", checkInteger);
+  if (!toolSuccessCount.ok) return toolSuccessCount;
+  const messageCount = reqField(v, "messageCount", checkInteger);
+  if (!messageCount.ok) return messageCount;
+  const decision = reqField(v, "decision", checkString);
+  if (!decision.ok) return decision;
+  const reasonDetail = reqField(v, "reasonDetail", checkString);
+  if (!reasonDetail.ok) return reasonDetail;
+  const stalledDelta = reqField(v, "stalledDelta", checkInteger);
+  if (!stalledDelta.ok) return stalledDelta;
+  const evidence = reqField(v, "evidence", checkString);
+  if (!evidence.ok) return evidence;
+  return parseOk({
+    type: "goal-round-completed",
+    round: round.data,
+    toolCallCount: toolCallCount.data,
+    toolSuccessCount: toolSuccessCount.data,
+    messageCount: messageCount.data,
+    decision: decision.data,
+    reasonDetail: reasonDetail.data,
+    stalledDelta: stalledDelta.data,
+    evidence: evidence.data,
+  });
+}
+
+export function parseEngineGoalContinuationDecidedEvent(v: unknown): ParseResult<EngineGoalContinuationDecidedEvent> {
+  if (!isRecord(v)) return parseErr("EngineGoalContinuationDecidedEvent: payload must be an object");
+  if (v["type"] !== "goal-continuation-decided") return parseErr("EngineGoalContinuationDecidedEvent: type mismatch");
+  const action = reqField(v, "action", checkString);
+  if (!action.ok) return action;
+  const reason = reqField(v, "reason", checkString);
+  if (!reason.ok) return reason;
+  const prompt = optField(v, "prompt", checkString);
+  if (!prompt.ok) return prompt;
+  const progressSignature = optField(v, "progressSignature", checkString);
+  if (!progressSignature.ok) return progressSignature;
+  const detail = optField(v, "detail", checkString);
+  if (!detail.ok) return detail;
+  return parseOk({
+    type: "goal-continuation-decided",
+    action: action.data,
+    reason: reason.data,
+    ...(prompt.data !== undefined ? { prompt: prompt.data } : {}),
+    ...(progressSignature.data !== undefined ? { progressSignature: progressSignature.data } : {}),
+    ...(detail.data !== undefined ? { detail: detail.data } : {}),
+  });
+}
+
+export function parseEngineSteeringEvaluatedEvent(v: unknown): ParseResult<EngineSteeringEvaluatedEvent> {
+  if (!isRecord(v)) return parseErr("EngineSteeringEvaluatedEvent: payload must be an object");
+  if (v["type"] !== "steering-evaluated") return parseErr("EngineSteeringEvaluatedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const phase = reqField(v, "phase", checkString);
+  if (!phase.ok) return phase;
+  const hitStrategies = reqField(v, "hitStrategies", (x) => parseArrayOf(x, checkString));
+  if (!hitStrategies.ok) return hitStrategies;
+  const steeringCountBefore = reqField(v, "steeringCountBefore", checkInteger);
+  if (!steeringCountBefore.ok) return steeringCountBefore;
+  const steeringCountAfter = reqField(v, "steeringCountAfter", checkInteger);
+  if (!steeringCountAfter.ok) return steeringCountAfter;
+  const budgetRemaining = optField(v, "budgetRemaining", checkInteger);
+  if (!budgetRemaining.ok) return budgetRemaining;
+  const reset = reqField(v, "reset", checkBoolean);
+  if (!reset.ok) return reset;
+  return parseOk({
+    type: "steering-evaluated",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    phase: phase.data,
+    hitStrategies: hitStrategies.data,
+    steeringCountBefore: steeringCountBefore.data,
+    steeringCountAfter: steeringCountAfter.data,
+    ...(budgetRemaining.data !== undefined ? { budgetRemaining: budgetRemaining.data } : {}),
+    reset: reset.data,
+  });
+}
+
+export function parseEngineControlIntentEvent(v: unknown): ParseResult<EngineControlIntentEvent> {
+  if (!isRecord(v)) return parseErr("EngineControlIntentEvent: payload must be an object");
+  if (v["type"] !== "control-intent") return parseErr("EngineControlIntentEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const kind = reqField(v, "kind", checkString);
+  if (!kind.ok) return kind;
+  const intentId = reqField(v, "intentId", checkString);
+  if (!intentId.ok) return intentId;
+  const source = optField(v, "source", checkString);
+  if (!source.ok) return source;
+  const reason = optField(v, "reason", checkString);
+  if (!reason.ok) return reason;
+  const state = reqField(v, "state", checkString);
+  if (!state.ok) return state;
+  return parseOk({
+    type: "control-intent",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    kind: kind.data,
+    intentId: intentId.data,
+    ...(source.data !== undefined ? { source: source.data } : {}),
+    ...(reason.data !== undefined ? { reason: reason.data } : {}),
+    state: state.data,
+  });
+}
+
+export function parseEngineHookOutcomeEvent(v: unknown): ParseResult<EngineHookOutcomeEvent> {
+  if (!isRecord(v)) return parseErr("EngineHookOutcomeEvent: payload must be an object");
+  if (v["type"] !== "hook-outcome") return parseErr("EngineHookOutcomeEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const hookType = reqField(v, "hookType", checkString);
+  if (!hookType.ok) return hookType;
+  const outcome = reqField(v, "outcome", checkString);
+  if (!outcome.ok) return outcome;
+  const hookName = optField(v, "hookName", checkString);
+  if (!hookName.ok) return hookName;
+  const blockedReason = optField(v, "blockedReason", checkString);
+  if (!blockedReason.ok) return blockedReason;
+  return parseOk({
+    type: "hook-outcome",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    hookType: hookType.data,
+    outcome: outcome.data,
+    ...(hookName.data !== undefined ? { hookName: hookName.data } : {}),
+    ...(blockedReason.data !== undefined ? { blockedReason: blockedReason.data } : {}),
+  });
+}
+
+export function parseEngineSummaryBackgroundEvent(v: unknown): ParseResult<EngineSummaryBackgroundEvent> {
+  if (!isRecord(v)) return parseErr("EngineSummaryBackgroundEvent: payload must be an object");
+  if (v["type"] !== "summary-background") return parseErr("EngineSummaryBackgroundEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const phase = reqField(v, "phase", checkString);
+  if (!phase.ok) return phase;
+  const attempt = reqField(v, "attempt", checkInteger);
+  if (!attempt.ok) return attempt;
+  const reason = optField(v, "reason", checkString);
+  if (!reason.ok) return reason;
+  const messageId = optField(v, "messageId", checkString);
+  if (!messageId.ok) return messageId;
+  return parseOk({
+    type: "summary-background",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    phase: phase.data,
+    attempt: attempt.data,
+    ...(reason.data !== undefined ? { reason: reason.data } : {}),
+    ...(messageId.data !== undefined ? { messageId: messageId.data } : {}),
+  });
+}
+
+export function parseEngineStageSummaryMilestoneEvent(v: unknown): ParseResult<EngineStageSummaryMilestoneEvent> {
+  if (!isRecord(v)) return parseErr("EngineStageSummaryMilestoneEvent: payload must be an object");
+  if (v["type"] !== "stage-summary-milestone") return parseErr("EngineStageSummaryMilestoneEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const milestoneType = reqField(v, "milestoneType", checkString);
+  if (!milestoneType.ok) return milestoneType;
+  const tier = optField(v, "tier", checkString);
+  if (!tier.ok) return tier;
+  const milestoneIndex = optField(v, "milestoneIndex", checkInteger);
+  if (!milestoneIndex.ok) return milestoneIndex;
+  return parseOk({
+    type: "stage-summary-milestone",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    milestoneType: milestoneType.data,
+    ...(tier.data !== undefined ? { tier: tier.data } : {}),
+    ...(milestoneIndex.data !== undefined ? { milestoneIndex: milestoneIndex.data } : {}),
+  });
+}
+
+export function parseEngineNudgeEnqueuedEvent(v: unknown): ParseResult<EngineNudgeEnqueuedEvent> {
+  if (!isRecord(v)) return parseErr("EngineNudgeEnqueuedEvent: payload must be an object");
+  if (v["type"] !== "nudge-enqueued") return parseErr("EngineNudgeEnqueuedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const reason = reqField(v, "reason", checkString);
+  if (!reason.ok) return reason;
+  const targetRing = reqField(v, "targetRing", checkString);
+  if (!targetRing.ok) return targetRing;
+  const overwrote = reqField(v, "overwrote", checkBoolean);
+  if (!overwrote.ok) return overwrote;
+  return parseOk({
+    type: "nudge-enqueued",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    reason: reason.data,
+    targetRing: targetRing.data,
+    overwrote: overwrote.data,
+  });
+}
+
+export function parseEngineRecoveryAcknowledgedEvent(v: unknown): ParseResult<EngineRecoveryAcknowledgedEvent> {
+  if (!isRecord(v)) return parseErr("EngineRecoveryAcknowledgedEvent: payload must be an object");
+  if (v["type"] !== "recovery-acknowledged") return parseErr("EngineRecoveryAcknowledgedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const notificationId = optField(v, "notificationId", checkString);
+  if (!notificationId.ok) return notificationId;
+  const subagentRunId = reqField(v, "subagentRunId", checkString);
+  if (!subagentRunId.ok) return subagentRunId;
+  return parseOk({
+    type: "recovery-acknowledged",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    ...(notificationId.data !== undefined ? { notificationId: notificationId.data } : {}),
+    subagentRunId: subagentRunId.data,
+  });
+}
+
+export function parseEngineRecoveryRetryAttemptedEvent(v: unknown): ParseResult<EngineRecoveryRetryAttemptedEvent> {
+  if (!isRecord(v)) return parseErr("EngineRecoveryRetryAttemptedEvent: payload must be an object");
+  if (v["type"] !== "recovery-retry-attempted") return parseErr("EngineRecoveryRetryAttemptedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const attempt = reqField(v, "attempt", checkInteger);
+  if (!attempt.ok) return attempt;
+  const delayMs = reqField(v, "delayMs", checkInteger);
+  if (!delayMs.ok) return delayMs;
+  const budgetRemaining = reqField(v, "budgetRemaining", checkInteger);
+  if (!budgetRemaining.ok) return budgetRemaining;
+  const fromRunId = reqField(v, "fromRunId", checkString);
+  if (!fromRunId.ok) return fromRunId;
+  const newRunId = reqField(v, "newRunId", checkString);
+  if (!newRunId.ok) return newRunId;
+  return parseOk({
+    type: "recovery-retry-attempted",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    attempt: attempt.data,
+    delayMs: delayMs.data,
+    budgetRemaining: budgetRemaining.data,
+    fromRunId: fromRunId.data,
+    newRunId: newRunId.data,
+  });
+}
+
+export function parseEngineProviderRequestAnchoredEvent(v: unknown): ParseResult<EngineProviderRequestAnchoredEvent> {
+  if (!isRecord(v)) return parseErr("EngineProviderRequestAnchoredEvent: payload must be an object");
+  if (v["type"] !== "provider-request-anchored") return parseErr("EngineProviderRequestAnchoredEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  const turnIndex = reqField(v, "turnIndex", checkInteger);
+  if (!turnIndex.ok) return turnIndex;
+  const model = optField(v, "model", checkString);
+  if (!model.ok) return model;
+  const requestStartedAtMs = reqField(v, "requestStartedAtMs", checkInteger);
+  if (!requestStartedAtMs.ok) return requestStartedAtMs;
+  return parseOk({
+    type: "provider-request-anchored",
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    turnIndex: turnIndex.data,
+    ...(model.data !== undefined ? { model: model.data } : {}),
+    requestStartedAtMs: requestStartedAtMs.data,
+  });
+}
+
 export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
   if (!isRecord(v)) return parseErr("engine event must be an object");
   const t = v["type"];
@@ -1823,7 +2239,6 @@ export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
     case "tool-end": return parseEngineToolEndEvent(v);
     case "tool-batch-start": return parseEngineToolBatchStartEvent(v);
     case "tool-batch-end": return parseEngineToolBatchEndEvent(v);
-    case "tool-input-repaired": return parseEngineToolInputRepairedEvent(v);
     case "context-compression-start": return parseEngineContextCompressionStartEvent(v);
     case "context-compression-end": return parseEngineContextCompressionEndEvent(v);
     case "provider-diagnostic": return parseEngineProviderDiagnosticEvent(v);
@@ -1852,6 +2267,23 @@ export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
     case "timer-fired": return parseEngineTimerFiredEvent(v);
     case "timer-cancelled": return parseEngineTimerCancelledEvent(v);
     case "cron-fired": return parseEngineCronFiredEvent(v);
+    case "recovery-escalated": return parseEngineRecoveryEscalatedEvent(v);
+    case "recovery-steering": return parseEngineRecoverySteeringEvent(v);
+    case "recovery-fork": return parseEngineRecoveryForkEvent(v);
+    case "recovery-report": return parseEngineRecoveryReportEvent(v);
+    case "recovery-budget-denied": return parseEngineRecoveryBudgetDeniedEvent(v);
+    case "goal-round-started": return parseEngineGoalRoundStartedEvent(v);
+    case "goal-round-completed": return parseEngineGoalRoundCompletedEvent(v);
+    case "goal-continuation-decided": return parseEngineGoalContinuationDecidedEvent(v);
+    case "steering-evaluated": return parseEngineSteeringEvaluatedEvent(v);
+    case "control-intent": return parseEngineControlIntentEvent(v);
+    case "hook-outcome": return parseEngineHookOutcomeEvent(v);
+    case "summary-background": return parseEngineSummaryBackgroundEvent(v);
+    case "stage-summary-milestone": return parseEngineStageSummaryMilestoneEvent(v);
+    case "nudge-enqueued": return parseEngineNudgeEnqueuedEvent(v);
+    case "recovery-acknowledged": return parseEngineRecoveryAcknowledgedEvent(v);
+    case "recovery-retry-attempted": return parseEngineRecoveryRetryAttemptedEvent(v);
+    case "provider-request-anchored": return parseEngineProviderRequestAnchoredEvent(v);
     default: return parseErr("unknown engine event type '" + t + "'");
   }
 }

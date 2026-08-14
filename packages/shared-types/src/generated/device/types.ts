@@ -406,8 +406,7 @@ export interface ListSessionsResult {
   sessions: SessionIndexEntry[];
 }
 
-export interface ListTasksParams {
-}
+export type ListTasksParams = Record<string, never>;
 
 export interface ListTasksResult {
   tasks: JsonValue[];
@@ -435,16 +434,14 @@ export interface FlowSnapshotResult {
   flow: JsonValue;
 }
 
-export interface ListCommandsParams {
-}
+export type ListCommandsParams = Record<string, never>;
 
 export interface ListCommandsResult {
   contractVersion: string;
   commands: ManifestEntry[];
 }
 
-export interface SearchIndexParams {
-}
+export type SearchIndexParams = Record<string, never>;
 
 export interface SearchIndexResult {
   ready: boolean;
@@ -560,8 +557,7 @@ export interface WorkspaceEntry {
   reachable?: boolean;
 }
 
-export interface ListWorkspacesParams {
-}
+export type ListWorkspacesParams = Record<string, never>;
 
 export interface ListWorkspacesResult {
   workspaces: WorkspaceEntry[];
@@ -707,8 +703,7 @@ export interface PauseAutomationResult {
   pausedUntil: number;
 }
 
-export interface PresenceParams {
-}
+export type PresenceParams = Record<string, never>;
 
 export interface PresenceResult {
   desktopOnline: boolean;
@@ -728,8 +723,7 @@ export interface DeviceEntry {
   needsReauth?: boolean;
 }
 
-export interface ListDevicesParams {
-}
+export type ListDevicesParams = Record<string, never>;
 
 export interface ListDevicesResult {
   devices: DeviceEntry[];
@@ -744,16 +738,14 @@ export interface RevokeDeviceParams {
   deviceId: string;
 }
 
-export interface PairStateParams {
-}
+export type PairStateParams = Record<string, never>;
 
 export interface PairStateResult {
   state: PairState;
   desktopId?: string;
 }
 
-export interface UnlinkParams {
-}
+export type UnlinkParams = Record<string, never>;
 
 export interface UnlinkResult {
   ok: boolean;

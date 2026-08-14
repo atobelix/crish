@@ -19,6 +19,7 @@
 //! agent-workbench / 迁移测试 / upgrade_e2e）保持兼容。
 
 mod agents;
+mod agents_ops;
 mod blocks;
 mod error;
 mod events;
@@ -27,6 +28,7 @@ mod import;
 mod imported;
 mod messages;
 mod migrate;
+mod migrate_steps;
 mod runs;
 mod schema;
 mod sessions;
@@ -144,3 +146,5 @@ impl LocalDb {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_migrations;

@@ -296,8 +296,8 @@ export class BlockSelectionBridge {
         anchorBlockId:
           this.anchorBlockId && next.includes(this.anchorBlockId)
             ? this.anchorBlockId
-            : next[0],
-        headBlockId: next[next.length - 1],
+            : (next[0] ?? null),
+        headBlockId: next[next.length - 1] ?? null,
       });
     }
     const next = [...cur, blockId];

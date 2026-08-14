@@ -16,23 +16,27 @@ export type PluginTrustLevel = 'restricted' | 'full';
 export type HookHandlerType = 'sync' | 'async';
 
 /**
- * 权限粒度（禁令 18 合并规则，共 11 项——与 plugin-sdk 运行时契约对齐；
+ * 权限粒度（禁令 18 合并规则 + D6 笔记/View 轨增量 + M4 note:extend，共 15 项——与 plugin-sdk 运行时契约对齐；
  * I8-E2 收敛：以 plugin-sdk 的 PLUGIN_PERMISSIONS 为真源：
  * file:read+file:write→file:access，shell:execute→tool:execute，
  * tool:register 独立权限、hook observe/on 独立两权限等）
  */
 export type PluginPermission =
-  | 'file:access'
-  | 'tool:execute'
-  | 'tool:register'
-  | 'mcp:connect'
-  | 'network:connect'
-  | 'session:read'
-  | 'session:write'
-  | 'env:read'
-  | 'hook:observe'
-  | 'hook:intercept'
-  | 'plugin:manage';
+  | 'file:access' // 文件读写（合并 file:read + file:write）
+  | 'tool:execute' // 工具执行（含 shell，合并 shell:execute / subprocess.spawn）
+  | 'tool:register' // 注册新工具
+  | 'mcp:connect' // 连接 MCP 服务器
+  | 'network:connect' // 网络出站连接
+  | 'session:read' // 读取会话上下文（合并 system.info）
+  | 'session:write' // 写入会话上下文（合并 env.write）
+  | 'env:read' // 读取环境变量
+  | 'hook:observe' // 注册 observe 处理器（只读容错，禁令 14）
+  | 'hook:intercept' // 注册 on 处理器（可返回控制信号，禁令 14）
+  | 'plugin:manage' // 管理其他插件（启用/禁用/卸载，合并 plugin.load）
+  | 'ui:contribute' // View 轨 contribute points（slash/widget/blockView/keymap）
+  | 'note:read' // 笔记只读（投影/查询；无写权威）
+  | 'note:write' // 笔记写工具（仍走 RS 事务 + 审批；禁止 DOM/盘旁路）
+  | 'note:extend'; // 扩展 known flavour（registerFlavour；投影-only，无写权威）
 
 /** 入口点声明（main 为相对插件根目录路径；动态 import 后须导出 activate） */
 export interface PluginEntrypoints {
@@ -110,7 +114,7 @@ export interface PluginActivationApi {
   /** 注册 MCP 服务器（禁令 13，通过 agent-mcp 的 registerPluginServer 入口） */
   readonly registerMcpServer: (
     name: string,
-    declaration: PluginMcpDeclaration,
+    declaration: PluginMcpDeclaration
   ) => void;
 }
 
@@ -186,12 +190,7 @@ export interface SessionContextSnapshot {
 
 /** 插件状态机（与 plugin-sdk registry/plugin-state.ts 同构；类型层契约） */
 export type PluginState =
-  | 'discovered'
-  | 'loading'
-  | 'loaded'
-  | 'active'
-  | 'inactive'
-  | 'error';
+  'discovered' | 'loading' | 'loaded' | 'active' | 'inactive' | 'error';
 
 /** 插件状态条目（类型层契约，供 agent-core 引用） */
 export interface PluginStateEntryLike {

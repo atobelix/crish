@@ -201,10 +201,23 @@ pub(crate) async fn decide_idle_resume(
             } else {
                 None
             };
-            // D5 §3.9：goal-continuation-decided（命中 goal_pending、注入
-            // 拼接处发射；envelope 通道）
+            // D5 §3.9 / EV-07：goal-continuation-decided（命中 goal_pending、
+            // 注入拼接处发射；action=continue，round = 下一轮序号 = 评估前
+            // current_round + 1，与注入 prompt 的轮次一致；envelope 通道）
             if goal_pending {
-                emit_goal_continuation_decided(active, &goal_state, goal_text.clone()).await;
+                let next_round = goal_state
+                    .as_ref()
+                    .map(|goal| goal.current_round + 1)
+                    .unwrap_or(1);
+                emit_goal_continuation_decided(
+                    active,
+                    goal_state.as_ref(),
+                    "continue",
+                    "needs-continuation",
+                    next_round,
+                    goal_text.clone(),
+                )
+                .await;
             }
             let inject = if queue_pending {
                 let mut queue = state
@@ -395,22 +408,34 @@ pub(crate) fn goal_continue_message(_session_id: &str, text: String) -> AgentMes
     }
 }
 
-/// D5 §3.9：goal-continuation-decided 发射（命中 goal_pending、注入拼接
-/// 处；载荷对齐 TS GoalContinuationDecision：action/reason/prompt/
-/// progressSignature/detail）
+/// D5 §3.9 / EV-07：goal-continuation-decided 发射（载荷对齐 TS
+/// GoalContinuationDecision：action/reason/prompt/progressSignature/detail）。
+///
+/// action 语义对齐（不再恒 continue）：Continue 决策 → "continue"（idle
+/// 续轮判定处发射）；收口决策补发（[assess_goal_round]）→ Completed 决策
+/// = "complete"、Blocked = "blocked"、NoProgress = "stop"（reason 区分）。
+/// 与 goal-round-completed.decision 的语义边界：goal-round-completed 是
+/// 每轮收口必发的轮次账本事件，goal-continuation-decided 是续轮/收口决策
+/// 的观测镜像（决策全集覆盖，action 值域对齐 TS GoalContinuationDecision
+/// continue/complete/blocked/stop）。
+///
+/// round = 本轮序号（与 goal-round-completed.round 同源：评估前
+/// current_round + 1）；事件变体无 round 字段（契约面已锁定），round 经
+/// detail 内嵌 "round=N" 透出。
 pub(crate) async fn emit_goal_continuation_decided(
     active: &ActiveRun,
-    goal_state: &Option<GoalState>,
+    goal_state: Option<&GoalState>,
+    action: &str,
+    reason: &str,
+    round: u32,
     prompt: Option<String>,
 ) {
     let event = AgentEvent::GoalContinuationDecided {
-        action: "continue".to_string(),
-        reason: "needs-continuation".to_string(),
+        action: action.to_string(),
+        reason: reason.to_string(),
         prompt,
-        progress_signature: goal_state
-            .as_ref()
-            .and_then(|goal| goal.progress_signature.clone()),
-        detail: None,
+        progress_signature: goal_state.and_then(|goal| goal.progress_signature.clone()),
+        detail: Some(format!("round={round}")),
     };
     emit_envelope_event(&active.queue, &active.bridge, &active.run_id, &active.session_id, event)
         .await;
@@ -563,19 +588,62 @@ pub(crate) fn with_session_tree<R>(
 /// - Ok(None) → 无标记行，现状；
 /// - Err → 对话内坏标记行：视为无 checkpoint，warn + 不写 + 不阻断
 ///   （§3.5 采集侧降级——该标记行是模型输出噪音，不中止 run 生命周期）。
-pub(crate) fn collect_checkpoint_on_close(state: &CoreRunState, session_id: &str, outcome: &RunOutcome) {
+///
+/// EV-02（D-03 R-15）：写叶子成功 → 发射 checkpoint-created（载荷 =
+/// [conex_types::tool::RuntimeCheckpointRecord]，复用既有变体；Persistent
+/// 级随收口落库）；Corrupt 只 warn 不发；Absent 不发。仅加观测，写面
+/// 行为不变。
+pub(crate) async fn collect_checkpoint_on_close(
+    state: &CoreRunState,
+    session_id: &str,
+    outcome: &RunOutcome,
+    queue: &Arc<tokio::sync::Mutex<EventQueue>>,
+    bridge: &Arc<BufferedRunEventBridge>,
+    run_id: &str,
+) {
     // 采集 API 收具体消息（非引用）——收口处一次 clone，与
     // to_history_messages 的收口克隆同频（每 run 一次，可接受）
     let messages: Vec<AgentMessage> = outcome.messages.iter().map(|m| m.as_ref().clone()).collect();
     match session_loop::safe_point::collect_checkpoint_from_messages(&messages) {
         Ok(Some(payload)) => {
-            let written = with_session_tree(state, session_id, |tree| {
+            // 写面闭包返回「写成功时的叶子 id」（EV-02：created 事件载荷
+            // id 锚点，与注入面 restored 的 checkpoint_id 配对）
+            let leaf_id = with_session_tree(state, session_id, |tree| {
                 let Some(leaf_id) = tree.current_leaf_id().map(str::to_string) else {
-                    return false;
+                    return None;
                 };
-                tree.set_leaf_checkpoint(&leaf_id, &payload).is_ok()
+                tree.set_leaf_checkpoint(&leaf_id, &payload)
+                    .ok()
+                    .map(|_| leaf_id)
             });
-            if !written.unwrap_or(false) {
+            if let Some(leaf_id) = leaf_id.flatten() {
+                // EV-02：写叶子成功 → checkpoint-created（metadata 承载
+                // CheckpointPayload 全文，字段保真不丢失）
+                let record = conex_types::tool::RuntimeCheckpointRecord {
+                    id: leaf_id,
+                    kind: conex_types::tool::RuntimeCheckpointKind::WorkspaceCheckpoint,
+                    label: payload.target.clone(),
+                    tool_call_id: String::new(),
+                    tool_name: "session-checkpoint".to_string(),
+                    artifact_uri: None,
+                    manifest_path: None,
+                    snapshot_path: None,
+                    source_path: None,
+                    metadata: serde_json::to_value(&payload).ok(),
+                };
+                emit_envelope_event(
+                    queue,
+                    bridge,
+                    run_id,
+                    session_id,
+                    AgentEvent::CheckpointCreated {
+                        session_id: session_id.to_string(),
+                        timestamp: crate::engine::now_iso_utc(),
+                        checkpoint: record,
+                    },
+                )
+                .await;
+            } else {
                 tracing::warn!(
                     target: "run",
                     session_id,
@@ -597,10 +665,46 @@ pub(crate) fn collect_checkpoint_on_close(state: &CoreRunState, session_id: &str
 /// 三态分发——Present → 「上次检查点」摘要段（summary 截断 ≤500 字符，
 /// completed/next 各 ≤5 项，§8 决策 4）；Corrupt → 降级提示不阻断；
 /// Absent / 无树 → 空串（行为与现状一致，无 checkpoint 不注入）。
-pub(crate) fn checkpoint_injection_section(state: &CoreRunState, session_id: &str) -> String {
-    let checkpoint = with_session_tree(state, session_id, |tree| tree.read_leaf_checkpoint(None));
+///
+/// EV-02（D-03 R-15）：Present 分支注入命中 → 发射 checkpoint-restored
+/// （载荷 = [conex_types::tool::RuntimeCheckpointRestoreRecord]，复用既有
+/// 变体；会话域事件——EventQueue run_id=None 构造，落库 run_id 列与信封
+/// runId 均 None，对齐 EventQueue「None = 会话域/空闲态事件」头注）；
+/// Corrupt 只 warn 不发；Absent 不发。仅加观测，注入面行为不变。
+pub(crate) async fn checkpoint_injection_section(state: &CoreRunState, session_id: &str) -> String {
+    let (leaf_id, checkpoint) = with_session_tree(state, session_id, |tree| {
+        (
+            tree.current_leaf_id().map(str::to_string),
+            tree.read_leaf_checkpoint(None),
+        )
+    })
+    .unwrap_or((None, conex_types::LeafCheckpointState::Absent));
     match checkpoint {
-        Some(conex_types::LeafCheckpointState::Present(payload)) => {
+        conex_types::LeafCheckpointState::Present(payload) => {
+            // EV-02：恢复注入命中 → checkpoint-restored（record.checkpoint_id
+            // = 叶子 id，与 created 事件的 record.id 配对；restored = 检查点
+            // 涉及文件清单；metadata 承载载荷全文）
+            if let Some(checkpoint_id) = leaf_id {
+                let record = conex_types::tool::RuntimeCheckpointRestoreRecord {
+                    checkpoint_id,
+                    tool_call_id: String::new(),
+                    tool_name: "session-checkpoint".to_string(),
+                    restored: payload.files.clone(),
+                    deleted: Vec::new(),
+                    skipped: Vec::new(),
+                    metadata: serde_json::to_value(&payload).ok(),
+                };
+                emit_session_domain_event(
+                    state,
+                    session_id,
+                    AgentEvent::CheckpointRestored {
+                        session_id: session_id.to_string(),
+                        timestamp: crate::engine::now_iso_utc(),
+                        restore: record,
+                    },
+                )
+                .await;
+            }
             let completed = join_limited(&payload.completed, CHECKPOINT_LIST_ITEMS_MAX, "、");
             let next = join_limited(&payload.next, CHECKPOINT_LIST_ITEMS_MAX, "、");
             format!(
@@ -611,7 +715,7 @@ pub(crate) fn checkpoint_injection_section(state: &CoreRunState, session_id: &st
                 if next.is_empty() { "(无)".to_string() } else { next },
             )
         }
-        Some(conex_types::LeafCheckpointState::Corrupt(message)) => {
+        conex_types::LeafCheckpointState::Corrupt(message) => {
             tracing::warn!(
                 target: "run",
                 session_id,
@@ -621,6 +725,26 @@ pub(crate) fn checkpoint_injection_section(state: &CoreRunState, session_id: &st
             "(检查点损坏已忽略，按对话历史继续)".to_string()
         }
         _ => String::new(),
+    }
+}
+
+/// EV-02（D-03 R-15）：会话域事件发射（无 run 归属上下文——idle 续
+/// run 拉起的恢复注入发生在 run 边界，旧 run 已收口、新 run 未装配，
+/// 均无活动通道；EventQueue run_id=None 构造 = 会话域事件，落库
+/// run_id 列与信封 runId 均 None）。持久化事件随 queue.push 落库
+/// （Persistent 语义），发射失败静默（观测面不阻断注入）。
+pub(crate) async fn emit_session_domain_event(
+    state: &CoreRunState,
+    session_id: &str,
+    event: AgentEvent,
+) {
+    let base = state.base_sequence_for(session_id).await;
+    let mut queue = EventQueue::new(Arc::clone(&state.store), base, None);
+    if let Ok(sequenced) = queue.push(session_id, event).await {
+        let bridge = BufferedRunEventBridge::new(state.bridge.clone(), "session-event");
+        let envelope = AgentEventEnvelope::new(sequenced.event, None, Some(sequenced.sequence));
+        bridge.emit(&envelope);
+        bridge.flush();
     }
 }
 
@@ -787,6 +911,33 @@ pub(crate) fn stage_doc_string_array(doc: &serde_json::Value, key: &str) -> Vec<
         .unwrap_or_default()
 }
 
+/// EV-07：stage-summary-milestone 发射单点（[evaluate_stage_milestones]
+/// 各态调用；milestone_type = reached/summarizing/produced/persisted，
+/// Delta 可丢观测事件，不进主链；Summarizer 缺失时止于 reached——
+/// 「达标但不可产出」可辨）。
+async fn emit_stage_summary_milestone(
+    active: &ActiveRun,
+    session_id: &str,
+    milestone_type: &str,
+    tier: &str,
+    milestone_index: u32,
+) {
+    emit_envelope_event(
+        &active.queue,
+        &active.bridge,
+        &active.run_id,
+        session_id,
+        AgentEvent::StageSummaryMilestone {
+            session_id: session_id.to_string(),
+            timestamp: crate::engine::now_iso_utc(),
+            milestone_type: milestone_type.to_string(),
+            tier: Some(tier.to_string()),
+            milestone_index: Some(milestone_index),
+        },
+    )
+    .await;
+}
+
 /// F5 §6.2/07 §4.1：run 收口里程碑评估（触发点 = run 收口，Stop 收场路径）。
 ///
 /// - 输入：当前对话（outcome.messages）+ 会话级已触发集合（session_meta）；
@@ -800,9 +951,12 @@ pub(crate) fn stage_doc_string_array(doc: &serde_json::Value, key: &str) -> Vec<
 ///   （下轮收口重试，与 F2 层 1「被动重试」同向）；标记在产出成功后写入
 ///   （防「假触发」）；
 /// - 每阶梯只触发一次：已触发集合跨 run 持久（session_meta 键），新 run
-///   重新评估时更高阶梯达标才补触发（重复触发抑制，07 §4.4 测试 1）。
+///   重新评估时更高阶梯达标才补触发（重复触发抑制，07 §4.4 测试 1）；
+/// - EV-07 观测面：达标（reached）/Summarizer 调用（summarizing）/产出
+///   （produced）/落库（persisted）各一态 stage-summary-milestone 事件。
 pub(crate) async fn evaluate_stage_milestones(
     state: &Arc<CoreRunState>,
+    active: &ActiveRun,
     session_id: &str,
     messages: &[Arc<AgentMessage>],
 ) {
@@ -833,6 +987,8 @@ pub(crate) async fn evaluate_stage_milestones(
     let Some(index) = next_pending_milestone(ratio, &ratios, &triggered) else {
         return;
     };
+    // EV-07：里程碑达标（reached）
+    emit_stage_summary_milestone(active, session_id, "reached", &stage_tier(index), index).await;
     // 触发：Summarizer 解析（F1 L1：无 Summarizer → 不产出、不标记）
     let Some(summarizer) = state.summarizer_for(session_id) else {
         tracing::warn!(
@@ -843,6 +999,9 @@ pub(crate) async fn evaluate_stage_milestones(
         );
         return;
     };
+    // EV-07：Summarizer 调用（summarizing）
+    emit_stage_summary_milestone(active, session_id, "summarizing", &stage_tier(index), index)
+        .await;
     // 完整对话 → 阶段总结（Summarizer 为同步 trait，ProviderSummarizer
     // 内部专用线程异步——收口 async 面经 spawn_blocking 隔离阻塞，与
     // save_run_usage 先例同纪律）
@@ -888,6 +1047,8 @@ pub(crate) async fn evaluate_stage_milestones(
         }
     };
     let tier = stage_tier(index);
+    // EV-07：阶段总结产出（Schema V1 校验通过，produced）
+    emit_stage_summary_milestone(active, session_id, "produced", &tier, index).await;
     let stage_doc = build_stage_summary_document(&StageSummaryDocument {
         stage_index: index,
         block_id: format!("stage-summary-{}", index + 1),
@@ -923,6 +1084,8 @@ pub(crate) async fn evaluate_stage_milestones(
     next_triggered.dedup();
     save_stage_triggered(state, session_id, &next_triggered);
     append_stage_summary(state, session_id, &tier, &markdown);
+    // EV-07：阶段总结落库（触发标记 + 存储写入完成，persisted）
+    emit_stage_summary_milestone(active, session_id, "persisted", &tier, index).await;
     // checkpoint 落载荷（set_leaf_checkpoint；无树/无叶子 → 跳过不阻断，
     // 与 collect_checkpoint_on_close 同语义）
     let payload = stage_summary_to_checkpoint_payload(&stage_doc);
@@ -968,7 +1131,7 @@ pub(crate) async fn spawn_idle_resume_run(
     // 降级提示；Absent 不追加，行为与现状一致；不 panic、不阻断拉起。
     // 注入仅发生在中断恢复/新 run 拉起场景：该场景 run 上下文本就是
     // 重建态，前缀缓存必然失效，接受前缀变更（约束 B 权衡注记）
-    let checkpoint_section = checkpoint_injection_section(&state, &session_id);
+    let checkpoint_section = checkpoint_injection_section(&state, &session_id).await;
     if !checkpoint_section.is_empty() {
         if !text.is_empty() {
             text.push_str("\n\n");
@@ -1093,8 +1256,17 @@ pub(crate) async fn drive_run_loop(
     // drive_outcome 前——outcome.messages 仍在手，借用完成后即 move；
     // finalize_failed 防御路径跳过并注释——drive 失败消息未消费属极
     // 罕见，跳过可接受，D7 §8 决策 3）。采集侧损坏 warn + 不写 + 不
-    // 阻断（§3.5 降级）；子代理会话无树自动跳过（R8）──
-    collect_checkpoint_on_close(&state, &session_id, &outcome);
+    // 阻断（§3.5 降级）；子代理会话无树自动跳过（R8）。EV-02：写叶子
+    // 成功经 active 通道发射 checkpoint-created（Persistent 随收口落库）──
+    collect_checkpoint_on_close(
+        &state,
+        &session_id,
+        &outcome,
+        &active.queue,
+        &active.bridge,
+        &run_id,
+    )
+    .await;
 
     // ── E2 F5（07 §4 卡 D）：run 收口里程碑评估——对话长度达
     // compact_stage_ratios 阈值（默认 40/60/80%）时经 Summarizer 对完整
@@ -1103,7 +1275,7 @@ pub(crate) async fn drive_run_loop(
     // 持久）。子代理 run 不评估（一次性任务，无里程碑语义——与 goal
     // 收口评估同守卫）──
     if active.subagent.is_none() {
-        evaluate_stage_milestones(&state, &session_id, &outcome.messages).await;
+        evaluate_stage_milestones(&state, &active, &session_id, &outcome.messages).await;
     }
 
     // T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②）：
@@ -1266,7 +1438,7 @@ pub(crate) async fn drive_run_loop(
         //     不消费 Episode、无 steering）──
         if let Some(plan) = recovery_plan {
             state
-                .execute_subagent_recovery(&session_id, &cfg, plan)
+                .execute_subagent_recovery(&session_id, &cfg, plan, &active)
                 .await;
         }
     }
@@ -1397,6 +1569,6 @@ pub(crate) async fn drive_run_loop(
 /// 外层与测试经此引用）
 pub(crate) use idle_resume::{
     EpisodeConsume, ResumeLauncher, WakeSourceCheck, assemble_system_prompt_with_stages,
-    drive_run_loop,
+    drive_run_loop, emit_goal_continuation_decided,
 };
 

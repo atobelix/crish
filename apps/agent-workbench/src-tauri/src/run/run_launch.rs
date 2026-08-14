@@ -358,6 +358,7 @@ pub(crate) async fn run_task_impl(
     let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
         state.store.clone(),
         base,
+        Some(run_id.clone()),
     )));
 
     // 本 run 的缓冲事件桥（gate 广播 / delta sink / 收口 emit 共用）
@@ -1137,6 +1138,7 @@ pub(crate) async fn compact_now_impl(
     let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
         state.store.clone(),
         state.base_sequence_for(session_id).await,
+        None,
     )));
     let bridge = state.event_bridge();
     let now_iso = crate::engine::now_iso_utc();

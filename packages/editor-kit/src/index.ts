@@ -59,6 +59,7 @@ export {
   type PinViolationCode,
   type PinResult,
   type PinInput,
+  type ScrollUnmountPlan,
 } from './viewport/pin';
 
 // Diff

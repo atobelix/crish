@@ -59,12 +59,21 @@ function makeEnv() {
     tryResumeFinish,
     client,
   };
-  return { env, state, callbacks, approvalFlow, finish, tryResumeFinish, client };
+  return {
+    env,
+    state,
+    callbacks,
+    approvalFlow,
+    finish,
+    tryResumeFinish,
+    client,
+  };
 }
 
 /** 锁定无副作用：全部回调、finish、tryResumeFinish、client.send 未调用，状态与审批机不变 */
 function expectNoSideEffects(env: HandlerEnv): void {
-  const { callbacks, approvalFlow, finish, tryResumeFinish, client, state } = env;
+  const { callbacks, approvalFlow, finish, tryResumeFinish, client, state } =
+    env;
   for (const [, cb] of Object.entries(callbacks)) {
     expect(cb).not.toHaveBeenCalled();
   }
@@ -88,7 +97,9 @@ function expectNoSideEffects(env: HandlerEnv): void {
   });
 }
 
-function expectDispatchLenientNoSideEffects(payload: Record<string, unknown>): void {
+function expectDispatchLenientNoSideEffects(
+  payload: Record<string, unknown>
+): void {
   const { env } = makeEnv();
   const parsed = parseBridgeEvent(payload);
   expect(parsed.ok).toBe(true);
@@ -100,12 +111,23 @@ function expectDispatchLenientNoSideEffects(payload: Record<string, unknown>): v
 describe('显式空实现 handler 无副作用锁定（审计行为级补位）', () => {
   const cases: Array<{ name: string; payload: Record<string, unknown> }> = [
     { name: 'agent-start', payload: { type: 'agent-start' } },
-    { name: 'message-start', payload: { type: 'message-start', message: { role: 'assistant' } } },
+    {
+      name: 'message-start',
+      payload: { type: 'message-start', message: { role: 'assistant' } },
+    },
     { name: 'turn-start', payload: { type: 'turn-start', turnIndex: 1 } },
-    { name: 'turn-end', payload: { type: 'turn-end', turnIndex: 1, toolCallCount: 2 } },
+    {
+      name: 'turn-end',
+      payload: { type: 'turn-end', turnIndex: 1, toolCallCount: 2 },
+    },
     {
       name: 'tool-update',
-      payload: { type: 'tool-update', batchId: 'b-1', toolCallId: 't-1', update: { text: 'x' } },
+      payload: {
+        type: 'tool-update',
+        batchId: 'b-1',
+        toolCallId: 't-1',
+        update: { text: 'x' },
+      },
     },
     {
       name: 'tool-batch-start（携带 calls 也不消费）',
@@ -129,39 +151,76 @@ describe('显式空实现 handler 无副作用锁定（审计行为级补位）'
       payload: {
         type: 'tool-batch-end',
         batchId: 'b-3',
-        calls: [{ id: 'r-1', toolName: 'shell_command', output: 'done', isError: false, durationMs: 1 }],
+        calls: [
+          {
+            id: 'r-1',
+            toolName: 'shell_command',
+            output: 'done',
+            isError: false,
+            durationMs: 1,
+          },
+        ],
       },
     },
     {
-      name: 'tool-input-repaired',
-      payload: { type: 'tool-input-repaired', toolCallId: 't-2', toolName: 'shell_command', notes: ['补全参数'] },
-    },
-    {
       name: 'context-compression-start',
-      payload: { type: 'context-compression-start', reason: 'token-budget', tokensBefore: 1000 },
+      payload: {
+        type: 'context-compression-start',
+        reason: 'token-budget',
+        tokensBefore: 1000,
+      },
     },
     {
       name: 'context-compression-end',
-      payload: { type: 'context-compression-end', aborted: false, result: { trigger: 'manual', reason: 'budget' } },
+      payload: {
+        type: 'context-compression-end',
+        aborted: false,
+        result: { trigger: 'manual', reason: 'budget' },
+      },
     },
     {
       name: 'checkpoint-created',
       payload: {
         type: 'checkpoint-created',
-        checkpoint: { id: 'cp-1', kind: 'workspace-checkpoint', label: 'l', toolCallId: 't-3', toolName: 'write_file' },
+        checkpoint: {
+          id: 'cp-1',
+          kind: 'workspace-checkpoint',
+          label: 'l',
+          toolCallId: 't-3',
+          toolName: 'write_file',
+        },
       },
     },
     {
       name: 'checkpoint-restored',
       payload: {
         type: 'checkpoint-restored',
-        restore: { checkpointId: 'cp-1', toolCallId: 't-4', toolName: 'write_file', restored: ['a.txt'], deleted: [], skipped: [] },
+        restore: {
+          checkpointId: 'cp-1',
+          toolCallId: 't-4',
+          toolName: 'write_file',
+          restored: ['a.txt'],
+          deleted: [],
+          skipped: [],
+        },
       },
     },
-    { name: 'runtime-steering', payload: { type: 'runtime-steering', reason: 'overlap', message: { role: 'assistant' } } },
+    {
+      name: 'runtime-steering',
+      payload: {
+        type: 'runtime-steering',
+        reason: 'overlap',
+        message: { role: 'assistant' },
+      },
+    },
     {
       name: 'runtime-intervention-required',
-      payload: { type: 'runtime-intervention-required', reason: 'low-quality', choices: ['retry', 'abort'], message: 'm' },
+      payload: {
+        type: 'runtime-intervention-required',
+        reason: 'low-quality',
+        choices: ['retry', 'abort'],
+        message: 'm',
+      },
     },
   ];
 
@@ -176,7 +235,16 @@ describe('显式空实现 handler 无副作用锁定（审计行为级补位）'
     const parsed = parseBridgeEvent({
       type: 'tool-batch-start',
       batchId: 'b-2',
-      calls: [{ id: 'c-1', toolName: 'shell_command', summary: 'ls', input: {}, category: 'terminal', concurrency: 'sequential' }],
+      calls: [
+        {
+          id: 'c-1',
+          toolName: 'shell_command',
+          summary: 'ls',
+          input: {},
+          category: 'terminal',
+          concurrency: 'sequential',
+        },
+      ],
     });
     expect(parsed.ok).toBe(true);
     if (parsed.ok !== true) throw new Error(parsed.error);
@@ -189,13 +257,19 @@ describe('显式空实现 handler 无副作用锁定（审计行为级补位）'
   });
 });
 
-describe('provider-diagnostic 行为：记可观测日志，不触碰状态与回调', () => {  it('宽容形态 diagnostic 载荷经分派只触发 console.warn（scope=provider-diagnostic）', () => {
+describe('provider-diagnostic 行为：记可观测日志，不触碰状态与回调', () => {
+  it('宽容形态 diagnostic 载荷经分派只触发 console.warn（scope=provider-diagnostic）', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const { env } = makeEnv();
       const parsed = parseBridgeEvent({
         type: 'provider-diagnostic',
-        diagnostic: { phase: 'request', providerId: 'openai', status: 429, retryable: true },
+        diagnostic: {
+          phase: 'request',
+          providerId: 'openai',
+          status: 429,
+          retryable: true,
+        },
       });
       expect(parsed.ok).toBe(true);
       if (parsed.ok !== true) throw new Error(parsed.error);
@@ -215,7 +289,10 @@ describe('provider-diagnostic 行为：记可观测日志，不触碰状态与�
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const { env } = makeEnv();
-      const parsed = parseBridgeEvent({ type: 'provider-diagnostic', data: { phase: 'connect', endpoint: 'https://x' } });
+      const parsed = parseBridgeEvent({
+        type: 'provider-diagnostic',
+        data: { phase: 'connect', endpoint: 'https://x' },
+      });
       expect(parsed.ok).toBe(true);
       if (parsed.ok !== true) throw new Error(parsed.error);
       dispatchEvent(env, parsed.data);
@@ -275,15 +352,24 @@ describe('onMessageEnd 终态权威 + turnIndex 分段（G3/G4 / 04 §5.1-2、§
 
   it('同 turn 重复 message-end（重发）：幂等覆盖，不重复追加', () => {
     const { env, state, callbacks } = makeEnv();
-    dispatchMessageEnd(env, { turnIndex: 1, message: assistantMessage('第一轮') });
-    dispatchMessageEnd(env, { turnIndex: 1, message: assistantMessage('第一轮') });
+    dispatchMessageEnd(env, {
+      turnIndex: 1,
+      message: assistantMessage('第一轮'),
+    });
+    dispatchMessageEnd(env, {
+      turnIndex: 1,
+      message: assistantMessage('第一轮'),
+    });
     expect(state.assistantText).toBe('第一轮');
     expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
   });
 
   it('同 turn 修订 message-end：终态权威覆盖该段，不追加', () => {
     const { env, state, callbacks } = makeEnv();
-    dispatchMessageEnd(env, { turnIndex: 1, message: assistantMessage('第一轮') });
+    dispatchMessageEnd(env, {
+      turnIndex: 1,
+      message: assistantMessage('第一轮'),
+    });
     dispatchMessageEnd(env, {
       turnIndex: 1,
       message: assistantMessage('第一轮（修订）'),

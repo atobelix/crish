@@ -11,6 +11,14 @@
 //! - [push]：push-core 推送决策引擎（R3-01，纯函数决策面：push_intent /
 //!   去重 / 合并 / 静默 / 节流 + 13 场景登记；无 I/O）。发送与装配
 //!   （R3-02 WS 直推 / R3-03 厂商通道）不在本模块。
+//! - [core_event_bridge]：事件发射契约（[core_event_bridge::Emitter] +
+//!   [core_event_bridge::EventBridge]，零 crate:: 内部引用，可独立编译）——
+//!   R3-02 [push::pusher::PushAwareEmitter] 经 lib 侧该模块解析
+//!   `crate::core_event_bridge::Emitter`；bin 目标（main.rs）保留自己的
+//!   同名模块副本（装配侧不变），两侧互不干扰。
 
+pub mod core_event_bridge;
+pub mod multi_device;
 pub mod push;
+pub mod server;
 pub mod wait_channel;

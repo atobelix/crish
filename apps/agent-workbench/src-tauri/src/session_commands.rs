@@ -930,6 +930,7 @@ mod tests {
             task_type: Some("analysis".to_string()),
             display_label: None,
             allowed_write_paths_json: None,
+            sub_session_id: None,
         }
     }
 
@@ -1005,18 +1006,21 @@ mod tests {
                     node_id: "t1".into(),
                     subagent_run_id: Some("run-1".into()),
                     subagent_id: Some("a-run-1".into()),
+                    subagent_session_id: None,
                     wakeup_sent: false,
                 },
                 FlowNodeRuntime {
                     node_id: "t2".into(),
                     subagent_run_id: Some("run-2".into()),
                     subagent_id: Some("a-run-2".into()),
+                    subagent_session_id: None,
                     wakeup_sent: false,
                 },
                 FlowNodeRuntime {
                     node_id: "t3".into(),
                     subagent_run_id: Some("run-3".into()),
                     subagent_id: Some("a-run-3".into()),
+                    subagent_session_id: None,
                     wakeup_sent: false,
                 },
                 // t4：run 映射存在但 session_agents 无行 → fail-open 按失败处理
@@ -1024,6 +1028,7 @@ mod tests {
                     node_id: "t4".into(),
                     subagent_run_id: Some("run-4".into()),
                     subagent_id: None,
+                    subagent_session_id: None,
                     wakeup_sent: false,
                 },
             ],
@@ -1104,6 +1109,7 @@ mod tests {
                 node_id: "a".into(),
                 subagent_run_id: Some("run-a".into()),
                 subagent_id: Some("a-run-a".into()),
+                subagent_session_id: None,
                 wakeup_sent: false,
             }],
         );
@@ -1156,6 +1162,7 @@ mod tests {
                 node_id: "a".into(),
                 subagent_run_id: Some("run-a".into()),
                 subagent_id: Some("a-run-a".into()),
+                subagent_session_id: None,
                 wakeup_sent: false,
             }],
         );
@@ -1224,12 +1231,14 @@ mod tests {
                     node_id: "a".into(),
                     subagent_run_id: Some("run-a".into()),
                     subagent_id: Some("a-run-a".into()),
+                    subagent_session_id: None,
                     wakeup_sent: false,
                 },
                 FlowNodeRuntime {
                     node_id: "d".into(),
                     subagent_run_id: Some("run-d".into()),
                     subagent_id: Some("a-run-d".into()),
+                    subagent_session_id: None,
                     wakeup_sent: false,
                 },
             ],

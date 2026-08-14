@@ -3,7 +3,9 @@
 //! 接线：background.rs `mod bg_commands;`。
 
 use crate::core_error::CoreError;
-use agent_tools::background::{BackgroundTaskInfo, BackgroundTaskStatus, KillResult, TaskState};
+use agent_tools::background::{
+    BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskStatus, KillResult, TaskState,
+};
 use agent_tools::definition::ToolError;
 use conex_types::error::codes;
 use serde::Serialize;

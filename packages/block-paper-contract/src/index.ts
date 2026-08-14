@@ -97,3 +97,7 @@ export {
   requiredWireFields,
   assertWireFieldsPresent,
 } from './opsWire';
+
+// 坐标系（UTF-16 vs Unicode Scalar 标量品牌类型与构造器）
+export type { Utf16CodeUnitOffset, UnicodeScalarOffset } from './coordinates';
+export { createUtf16Offset, createUnicodeOffset } from './coordinates';

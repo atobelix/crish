@@ -100,18 +100,22 @@
 //! ## 临时过渡允许（对齐 wakeup_summary.rs 先例）
 //!
 //! 本模块 R3-01 交付决策面、R3-02 交付直推通道；R3-02 接线轮已把挂点 /
-//! 适配 / 直推落地（main.rs + bin 侧 push_wiring.rs 消费）。仍无调用点的
-//! R3-03 面（vendor 厂商通道、take_pending 消费、with_copy 文案填充）与
-//! SQLite 持久化待接线，暂时保留 dead_code；R3-03 落地即移除本属性
-//! （不允许长期保留）。
+//! 适配 / 直推落地（main.rs + bin 侧 push_wiring.rs 消费）。R3-03b 已交付
+//! 真实发送（[vendor::ApnsSender]/[vendor::HmsSender]）与消费链路
+//! （[vendor::send_pending_batch] + [pusher::PushDispatcher::requeue_pending]）；
+//! 仍待装配轮的面：周期 drain 挂点（main.rs）、`push_devices` 表解析
+//! （[vendor::DeviceResolver] 生产实现）、with_copy 文案填充与 SQLite 持久化，
+//! 期间保留 dead_code 豁免；装配轮落地即移除本属性（不允许长期保留）。
 
 #![allow(dead_code)]
 
 mod coalesce;
+mod copy;
 mod dedupe;
 mod engine;
 mod intent;
 mod online;
+mod pending;
 mod pusher;
 mod quiet;
 mod scenes;
@@ -120,6 +124,7 @@ mod throttle;
 mod vendor;
 
 pub use coalesce::{CoalesceState, CoalesceWindows, MergedPush, PendingPush};
+pub use copy::{message_with_copy, render_copy, CopyText};
 pub use dedupe::{DedupeBackend, DedupeState, MemoryDedupeBackend, SqliteDedupeBackend};
 pub use engine::{DecisionOutcome, PushDecision, PushDecisionEngine};
 pub use intent::{
@@ -131,6 +136,7 @@ pub use online::{
     device_activity, is_device_online, DeviceActivity, DevicePresenceSource,
     MemoryPresenceSource, PRESENCE_TIMEOUT_MS,
 };
+pub use pending::{approval_id_for, PendingApprovalStore, StoredPendingApproval};
 pub use pusher::{
     DispatchReport, PendingDelivery, PushAwareEmitter, PushChannel, PushChannelError,
     PushDispatcher,
@@ -147,7 +153,9 @@ pub use schema::{
 };
 pub use throttle::{ThrottleDecision, ThrottleLimits, ThrottleTracker};
 pub use vendor::{
-    ladder_delay_or, next_retry_delay, APNsCredentials, HMSCredentials, VendorDevice,
+    ladder_delay_or, next_retry_delay, send_pending_batch, APNsCredentials, ApnsSender,
+    CredentialsProvider, DeviceResolver, EnvCredentialsProvider, HMSCredentials,
+    HmsSender, HmsTokenCache, MemoryDeviceResolver, PendingBatchReport, VendorDevice,
     VendorError, VendorNotification, VendorPlatform, VendorPushChannel, VendorSendOutcome,
     RETRY_LADDER_DELAYS,
 };

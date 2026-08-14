@@ -1,3 +1,4 @@
+/* global document, getComputedStyle, matchMedia */
 /* 样式检查截图脚本：连 5175 截取关键界面到 scratch/ui-shots/ */
 import { chromium } from '@playwright/test';
 

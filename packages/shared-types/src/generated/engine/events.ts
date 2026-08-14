@@ -102,15 +102,6 @@ export interface EngineToolBatchEndEvent {
   calls: ToolBatchResult[];
 }
 
-export interface EngineToolInputRepairedEvent {
-  type: "tool-input-repaired";
-  sessionId: string;
-  timestamp: string;
-  toolCallId: string;
-  toolName: string;
-  notes: string[];
-}
-
 export interface EngineContextCompressionStartEvent {
   type: "context-compression-start";
   sessionId: string;
@@ -355,9 +346,178 @@ export interface EngineCronFiredEvent {
   firedAtMs: number;
 }
 
-export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolUpdateEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineToolInputRepairedEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent | EngineCacheStatsUpdatedEvent | EngineCacheWasteAlertEvent | EngineColdCacheWarningEvent | EngineSecurityAuditEvent | EngineSubagentStartedEvent | EngineSubagentEventEvent | EngineSubagentEndedEvent | EngineTaskStartedEvent | EngineTaskOutputEvent | EngineTaskHeartbeatEvent | EngineTaskSuspiciousEvent | EngineTaskCompletedEvent | EngineTaskFailedEvent | EngineTaskKilledEvent | EngineTimerFiredEvent | EngineTimerCancelledEvent | EngineCronFiredEvent;
+export interface EngineRecoveryEscalatedEvent {
+  type: "recovery-escalated";
+  sessionId: string;
+  subagentRunId?: string;
+  kind: string;
+  retries: number;
+  elapsedMs: number;
+  detail?: string;
+}
 
-export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-update","tool-end","tool-batch-start","tool-batch-end","tool-input-repaired","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal","cache-stats-updated","cache-waste-alert","cold-cache-warning","security-audit","subagent-started","subagent-event","subagent-ended","task-started","task-output","task-heartbeat","task-suspicious","task-completed","task-failed","task-killed","timer-fired","timer-cancelled","cron-fired"] as const;
+export interface EngineRecoverySteeringEvent {
+  type: "recovery-steering";
+  sessionId: string;
+  subagentId: string;
+  subagentRunId: string;
+  fingerprint: string;
+  retries: number;
+  remainingStatus: string;
+  pending: boolean;
+  createdAtMs: number;
+}
+
+export interface EngineRecoveryForkEvent {
+  type: "recovery-fork";
+  sessionId: string;
+  fingerprint: string;
+  subagentId: string;
+  fromRunId: string;
+  fromLeafId: string;
+  newRunId: string;
+  newLeafId: string;
+  contextMode: string;
+}
+
+export interface EngineRecoveryReportEvent {
+  type: "recovery-report";
+  sessionId: string;
+  subagentId: string;
+  subagentRunId: string;
+  stuckAtMs: number;
+  suggestion: string;
+}
+
+export interface EngineRecoveryBudgetDeniedEvent {
+  type: "recovery-budget-denied";
+  sessionId: string;
+  subagentRunId?: string;
+  fingerprint: string;
+  count: number;
+  max: number;
+}
+
+export interface EngineGoalRoundStartedEvent {
+  type: "goal-round-started";
+  round: number;
+  maxRounds: number;
+  goal: string;
+}
+
+export interface EngineGoalRoundCompletedEvent {
+  type: "goal-round-completed";
+  round: number;
+  toolCallCount: number;
+  toolSuccessCount: number;
+  messageCount: number;
+  decision: string;
+  reasonDetail: string;
+  stalledDelta: number;
+  evidence: string;
+}
+
+export interface EngineGoalContinuationDecidedEvent {
+  type: "goal-continuation-decided";
+  action: string;
+  reason: string;
+  prompt?: string;
+  progressSignature?: string;
+  detail?: string;
+}
+
+export interface EngineSteeringEvaluatedEvent {
+  type: "steering-evaluated";
+  sessionId: string;
+  timestamp: string;
+  phase: string;
+  hitStrategies: string[];
+  steeringCountBefore: number;
+  steeringCountAfter: number;
+  budgetRemaining?: number;
+  reset: boolean;
+}
+
+export interface EngineControlIntentEvent {
+  type: "control-intent";
+  sessionId: string;
+  timestamp: string;
+  kind: string;
+  intentId: string;
+  source?: string;
+  reason?: string;
+  state: string;
+}
+
+export interface EngineHookOutcomeEvent {
+  type: "hook-outcome";
+  sessionId: string;
+  timestamp: string;
+  hookType: string;
+  outcome: string;
+  hookName?: string;
+  blockedReason?: string;
+}
+
+export interface EngineSummaryBackgroundEvent {
+  type: "summary-background";
+  sessionId: string;
+  timestamp: string;
+  phase: string;
+  attempt: number;
+  reason?: string;
+  messageId?: string;
+}
+
+export interface EngineStageSummaryMilestoneEvent {
+  type: "stage-summary-milestone";
+  sessionId: string;
+  timestamp: string;
+  milestoneType: string;
+  tier?: string;
+  milestoneIndex?: number;
+}
+
+export interface EngineNudgeEnqueuedEvent {
+  type: "nudge-enqueued";
+  sessionId: string;
+  timestamp: string;
+  reason: string;
+  targetRing: string;
+  overwrote: boolean;
+}
+
+export interface EngineRecoveryAcknowledgedEvent {
+  type: "recovery-acknowledged";
+  sessionId: string;
+  timestamp: string;
+  notificationId?: string;
+  subagentRunId: string;
+}
+
+export interface EngineRecoveryRetryAttemptedEvent {
+  type: "recovery-retry-attempted";
+  sessionId: string;
+  timestamp: string;
+  attempt: number;
+  delayMs: number;
+  budgetRemaining: number;
+  fromRunId: string;
+  newRunId: string;
+}
+
+export interface EngineProviderRequestAnchoredEvent {
+  type: "provider-request-anchored";
+  sessionId: string;
+  timestamp: string;
+  turnIndex: number;
+  model?: string;
+  requestStartedAtMs: number;
+}
+
+export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolUpdateEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent | EngineCacheStatsUpdatedEvent | EngineCacheWasteAlertEvent | EngineColdCacheWarningEvent | EngineSecurityAuditEvent | EngineSubagentStartedEvent | EngineSubagentEventEvent | EngineSubagentEndedEvent | EngineTaskStartedEvent | EngineTaskOutputEvent | EngineTaskHeartbeatEvent | EngineTaskSuspiciousEvent | EngineTaskCompletedEvent | EngineTaskFailedEvent | EngineTaskKilledEvent | EngineTimerFiredEvent | EngineTimerCancelledEvent | EngineCronFiredEvent | EngineRecoveryEscalatedEvent | EngineRecoverySteeringEvent | EngineRecoveryForkEvent | EngineRecoveryReportEvent | EngineRecoveryBudgetDeniedEvent | EngineGoalRoundStartedEvent | EngineGoalRoundCompletedEvent | EngineGoalContinuationDecidedEvent | EngineSteeringEvaluatedEvent | EngineControlIntentEvent | EngineHookOutcomeEvent | EngineSummaryBackgroundEvent | EngineStageSummaryMilestoneEvent | EngineNudgeEnqueuedEvent | EngineRecoveryAcknowledgedEvent | EngineRecoveryRetryAttemptedEvent | EngineProviderRequestAnchoredEvent;
+
+export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-update","tool-end","tool-batch-start","tool-batch-end","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal","cache-stats-updated","cache-waste-alert","cold-cache-warning","security-audit","subagent-started","subagent-event","subagent-ended","task-started","task-output","task-heartbeat","task-suspicious","task-completed","task-failed","task-killed","timer-fired","timer-cancelled","cron-fired","recovery-escalated","recovery-steering","recovery-fork","recovery-report","recovery-budget-denied","goal-round-started","goal-round-completed","goal-continuation-decided","steering-evaluated","control-intent","hook-outcome","summary-background","stage-summary-milestone","nudge-enqueued","recovery-acknowledged","recovery-retry-attempted","provider-request-anchored"] as const;
 export type EngineEventType = (typeof ENGINE_EVENT_TYPES)[number];
 
 export const ENGINE_EVENT_BACKPRESSURE = {
@@ -373,7 +533,6 @@ export const ENGINE_EVENT_BACKPRESSURE = {
   "tool-end": "critical",
   "tool-batch-start": "critical",
   "tool-batch-end": "critical",
-  "tool-input-repaired": "critical",
   "context-compression-start": "critical",
   "context-compression-end": "critical",
   "provider-diagnostic": "critical",
@@ -401,7 +560,24 @@ export const ENGINE_EVENT_BACKPRESSURE = {
   "task-killed": "critical",
   "timer-fired": "critical",
   "timer-cancelled": "soft",
-  "cron-fired": "critical"
+  "cron-fired": "critical",
+  "recovery-escalated": "critical",
+  "recovery-steering": "critical",
+  "recovery-fork": "critical",
+  "recovery-report": "critical",
+  "recovery-budget-denied": "critical",
+  "goal-round-started": "critical",
+  "goal-round-completed": "critical",
+  "goal-continuation-decided": "critical",
+  "steering-evaluated": "delta",
+  "control-intent": "delta",
+  "hook-outcome": "delta",
+  "summary-background": "delta",
+  "stage-summary-milestone": "delta",
+  "nudge-enqueued": "delta",
+  "recovery-acknowledged": "delta",
+  "recovery-retry-attempted": "delta",
+  "provider-request-anchored": "delta"
 } as const;
 export type EngineEventBackpressure = (typeof ENGINE_EVENT_BACKPRESSURE)[EngineEventType];
 

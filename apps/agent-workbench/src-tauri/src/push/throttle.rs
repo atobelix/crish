@@ -216,7 +216,9 @@ mod tests {
         let mut tracker = ThrottleTracker::default();
         tracker.check("s-7", T0);
         tracker.check("s-7", T0 + 60_000);
-        tracker.prune(T0 + 120_000);
+        // 10min 窗口从最早条目起算：+661s 后两个条目均已过期
+        // （60s 条目满 601s、最早条目满 661s——否则 10min 窗口清不空）
+        tracker.prune(T0 + 661_000);
         assert!(tracker.device_minute.is_empty(), "分钟窗口应清空");
         assert!(tracker.session_10min.is_empty(), "10 分钟窗口应清空");
     }

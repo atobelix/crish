@@ -1,3 +1,4 @@
+/* global window, document, getComputedStyle */
 /* 样式退化数据审计：采集关键 UI 元素计算样式 + 布局异常信号（无图片依赖） */
 import { chromium } from '@playwright/test';
 

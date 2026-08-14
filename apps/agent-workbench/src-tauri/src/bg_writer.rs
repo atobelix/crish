@@ -5,7 +5,7 @@
 use crate::process::now_millis;
 use crate::resource::TaskNotifier;
 use agent_tools::background::{BackgroundTaskInfo, TaskState};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
@@ -32,7 +32,7 @@ async fn read_buf<R: AsyncBufRead + Unpin>(
 }
 
 /// 转发循环的收尾状态（转交 finish_task 消费）
-struct LogState {
+pub(crate) struct LogState {
     log: LogWriter,
     checkpoints: Vec<CheckpointEntry>,
     rotated: bool,

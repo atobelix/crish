@@ -57,10 +57,3 @@ export function onToolBatchEnd(
 ): void {
   // tool-batch-end 原实现直接 return：显式空实现
 }
-
-export function onToolInputRepaired(
-  _env: HandlerEnv,
-  _envelope: EngineEnvelope<'tool-input-repaired'>
-): void {
-  // tool-input-repaired 暂无 UI 落地：显式空实现
-}

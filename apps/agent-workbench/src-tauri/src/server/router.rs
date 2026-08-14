@@ -127,7 +127,7 @@ fn ensure_command_execution_allowed(
     if crate::server::remote_whitelist::is_remote_command_whitelisted(command) {
         return Ok(());
     }
-    crate::server::core_backend::emit_remote_source_attempt_audit(
+    crate::server::remote_whitelist::emit_remote_source_attempt_audit(
         state.audit_bridge().as_ref(),
         command,
     );
@@ -673,7 +673,7 @@ fn secret_command_hit(uri: &Uri) -> Option<&'static str> {
 /// 敏感形态打码；未接线时降级纯结构化日志）
 async fn handle_not_found(State(state): State<ServerState>, uri: Uri) -> Response {
     if let Some(command) = secret_command_hit(&uri) {
-        crate::server::core_backend::emit_remote_source_attempt_audit(
+        crate::server::remote_whitelist::emit_remote_source_attempt_audit(
             state.audit_bridge().as_ref(),
             command,
         );
@@ -861,6 +861,7 @@ mod tests {
     use crate::server::{ServerConfig, ServerHandle};
     use axum::body::Body;
     use axum::extract::ConnectInfo;
+    use conex_types::device::commands::{SettingsConfirmAction, SettingsConfirmStatus};
     use conex_types::device::{CommandSurface, FileSearchHit, ManifestEntry, RunTaskParams, RunTaskResult};
     use conex_types::SessionIndexEntry;
     use std::net::SocketAddr;
@@ -2937,6 +2938,7 @@ mod tests {
         let token = issue_token(&state);
         let app = build_router(state);
         let response = app
+            .clone()
             .oneshot(authed_body(
                 "POST",
                 PAUSE_AUTOMATION_PATH,
@@ -3062,7 +3064,7 @@ mod tests {
         let clean: Uri = "/v1/status".parse().unwrap();
         assert_eq!(secret_command_hit(&clean), None, "非密钥路径不得命中");
         let marker =
-            crate::server::core_backend::remote_source_attempt_marker("config_secret_reveal");
+            crate::server::remote_whitelist::remote_source_attempt_marker("config_secret_reveal");
         assert!(marker.contains("operation=remote-source-attempt"));
         assert!(marker.contains("command=config_secret_reveal"));
         assert!(marker.contains("decision=blocked"));

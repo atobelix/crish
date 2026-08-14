@@ -942,6 +942,7 @@ mod tests {
             status: conex_types::events::SubagentEndStatus::Completed,
             summary: None,
             ended_at: "2026-08-05T00:00:00.000Z".to_string(),
+            subagent_session_id: None,
         }
     }
 

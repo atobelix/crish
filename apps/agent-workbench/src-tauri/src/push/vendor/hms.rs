@@ -48,13 +48,21 @@ pub struct HmsTokenRequest {
 
 /// AT 换发请求构造（client credentials 模式；纯函数）
 pub fn build_hms_token_request(credentials: &HMSCredentials) -> HmsTokenRequest {
+    build_hms_token_request_at(credentials, HMS_TOKEN_URL)
+}
+
+/// 指定 token 端点 URL 的请求构造（发送器内部路径；测试注入本地端点）
+pub(crate) fn build_hms_token_request_at(
+    credentials: &HMSCredentials,
+    token_url: &str,
+) -> HmsTokenRequest {
     let body = url::form_urlencoded::Serializer::new(String::new())
         .append_pair("grant_type", "client_credentials")
         .append_pair("client_id", &credentials.app_id)
         .append_pair("client_secret", &credentials.app_secret)
         .finish();
     HmsTokenRequest {
-        url: HMS_TOKEN_URL.to_string(),
+        url: token_url.to_string(),
         content_type: "application/x-www-form-urlencoded",
         body,
     }
@@ -113,6 +121,21 @@ pub fn build_hms_send_request(
     access_token: &str,
     notification: &VendorNotification,
 ) -> Result<HmsSendRequest, VendorError> {
+    build_hms_send_request_at(
+        credentials,
+        access_token,
+        notification,
+        HMS_SEND_BASE_URL,
+    )
+}
+
+/// 指定发送基址的请求构造（发送器内部路径；测试注入本地端点）
+pub(crate) fn build_hms_send_request_at(
+    credentials: &HMSCredentials,
+    access_token: &str,
+    notification: &VendorNotification,
+    send_base_url: &str,
+) -> Result<HmsSendRequest, VendorError> {
     if notification.device.push_token.is_empty() {
         return Err(VendorError::Build("HMS 设备 token 为空".to_string()));
     }
@@ -146,7 +169,7 @@ pub fn build_hms_send_request(
         },
     });
     Ok(HmsSendRequest {
-        url: format!("{HMS_SEND_BASE_URL}/v1/{}/messages:send", credentials.app_id),
+        url: format!("{send_base_url}/v1/{}/messages:send", credentials.app_id),
         authorization: format!("Bearer {access_token}"),
         body: message,
     })

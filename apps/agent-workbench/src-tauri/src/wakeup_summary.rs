@@ -256,6 +256,7 @@ mod tests {
             status,
             summary: Some("已完成调研".to_string()),
             ended_at: "2024-01-01T00:00:00.000Z".to_string(),
+            subagent_session_id: None,
         }
     }
 

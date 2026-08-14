@@ -516,7 +516,7 @@ pub struct ConnSnapshot {
 /// pub(crate)：R3-02 [WsRegistry::attach_outbound] 公开签名携带
 /// `mpsc::Sender<Outbound>`——bin 测试目标按 lib 可见性检查
 /// （private-in-public），保持 crate 内可见即可满足
-pub(crate) enum Outbound {
+pub enum Outbound {
     /// 文本帧（信封 JSON）或控制帧（Ping/Pong）
     Frame(axum::extract::ws::Message),
     /// 连接侧主动关闭（sender task 收尾并注销）

@@ -52,7 +52,8 @@ function metaValue(md: string, fieldLabel: string): string | null {
     'i'
   );
   const m = md.match(re);
-  return m ? m[1].trim() : null;
+  const val = m?.[1];
+  return val ? val.trim() : null;
 }
 
 describe('W6-C-S · perf-baseline 文档断言', () => {

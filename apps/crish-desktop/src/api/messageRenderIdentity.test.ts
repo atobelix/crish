@@ -22,7 +22,9 @@ function stripComments(src: string): string {
 
 describe('Chat list React key audit (static source)', () => {
   it('MessageVirtualizer keys rows by msg.id, not index', () => {
-    const src = readSrc('../components/chat-message-list/MessageVirtualizer.tsx');
+    const src = readSrc(
+      '../components/chat-message-list/MessageVirtualizer.tsx'
+    );
     const code = stripComments(src);
 
     // 正锁：AppErrorBoundary key={msg.id}
@@ -30,13 +32,17 @@ describe('Chat list React key audit (static source)', () => {
     // 高度稳定键 data-vindex={msg.id}
     expect(src).toMatch(/data-vindex=\{msg\.id\}/);
     // 禁：map 回调用 index 作 key
-    expect(code).not.toMatch(/\.map\(\([^)]*index[^)]*\)\s*=>[\s\S]{0,200}key=\{index\}/);
+    expect(code).not.toMatch(
+      /\.map\(\([^)]*index[^)]*\)\s*=>[\s\S]{0,200}key=\{index\}/
+    );
     expect(code).not.toMatch(/key=\{i\}/);
     expect(code).not.toMatch(/key=\{virtualIndex\}/);
   });
 
   it('virtualizer RO height cache uses messageId (data-vindex), not numeric index', () => {
-    const src = readSrc('../components/chat-message-list/MessageVirtualizer.tsx');
+    const src = readSrc(
+      '../components/chat-message-list/MessageVirtualizer.tsx'
+    );
     // 注释与实现双锁
     expect(src).toMatch(/data-vindex/);
     expect(src).toMatch(/setActual\(msgId/);
@@ -46,7 +52,9 @@ describe('Chat list React key audit (static source)', () => {
     const src = readSrc('../components/chat-message/MessageContent.tsx');
     const code = stripComments(src);
     expect(code).toMatch(/key=\{item\.key\}/);
-    expect(code).not.toMatch(/timeline\.map\([^)]*index[^)]*\)\s*=>[\s\S]{0,120}key=\{index\}/);
+    expect(code).not.toMatch(
+      /timeline\.map\([^)]*index[^)]*\)\s*=>[\s\S]{0,120}key=\{index\}/
+    );
   });
 
   it('S4.4 stream path: no dual streamText sub (row thinking / content body)', () => {
@@ -89,15 +97,22 @@ describe('stream / final single-row identity (static + pure)', () => {
     // 实现：updateMessageText(sessionId, messageId, …)
     expect(src).toMatch(/updateMessageText\(\s*sessionId,\s*messageId/);
     // 本文件内 commit 路径不得 addMessage
-    const commitFn = src.slice(src.indexOf('export function commitStreamToSession'));
-    const body = commitFn.slice(0, commitFn.indexOf('export function snapshotStreamTextToSession'));
+    const commitFn = src.slice(
+      src.indexOf('export function commitStreamToSession')
+    );
+    const body = commitFn.slice(
+      0,
+      commitFn.indexOf('export function snapshotStreamTextToSession')
+    );
     expect(body).not.toMatch(/\baddMessage\b/);
   });
 
-  it('useStreamCallbacks creates one assistant id and reuses it through complete', () => {
-    const src = readSrc('../hooks/chat-stream/useStreamCallbacks.ts');
+  it('useRunStreamingAssistant creates one assistant id and reuses it through complete', () => {
+    const src = readSrc('../hooks/chat-stream/useRunStreamingAssistant.ts');
     // 单次 mint
-    expect(src).toMatch(/const assistantMsgId = generateMessageId\('assistant'\)/);
+    expect(src).toMatch(
+      /const assistantMsgId = generateMessageId\('assistant'\)/
+    );
     // 热路径写 streamingStore，按同一 id
     expect(src).toMatch(/setStreamText\(sid,\s*assistantMsgId/);
     // 终态 commit 同一 id
@@ -106,7 +121,9 @@ describe('stream / final single-row identity (static + pure)', () => {
     const onCompleteIdx = src.indexOf('onComplete:');
     expect(onCompleteIdx).toBeGreaterThan(0);
     const onCompleteSlice = src.slice(onCompleteIdx, onCompleteIdx + 3500);
-    expect(onCompleteSlice).not.toMatch(/addMessage\([^)]*sender:\s*'assistant'/);
+    expect(onCompleteSlice).not.toMatch(
+      /addMessage\([^)]*sender:\s*'assistant'/
+    );
     expect(onCompleteSlice).not.toMatch(/generateMessageId\('assistant'\)/);
   });
 

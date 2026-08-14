@@ -443,6 +443,12 @@ export interface SessionAgent {
   depth?: number | undefined;
   /** 从根 agent 到当前 agent 的 id 路径链（含自身），用于树结构追踪 */
   subagentPath?: string[] | undefined;
+  /** 错误分类标签（kebab-case，如 provider-error / timeout） */
+  errorKind?: string | undefined;
+  /** 已重试次数 */
+  retries?: number | undefined;
+  /** 是否需要用户人工介入 */
+  needsUser?: boolean | undefined;
 }
 
 /**
@@ -481,6 +487,12 @@ export interface SessionAgentPatch {
    *   - 调用方应仅在 onRunMeta 路径写入；重复写入以最后一次为准（daemon runId 不会变更）
    */
   subagentRunId?: string;
+  /** 错误分类标签（kebab-case，如 provider-error / timeout） */
+  errorKind?: string;
+  /** 已重试次数 */
+  retries?: number;
+  /** 是否需要用户人工介入 */
+  needsUser?: boolean;
 }
 
 /** /goal 任务清单项（与 TasksCard `- [ ]` 解析对齐） */
@@ -503,6 +515,7 @@ export interface SessionGoalMode {
   maxIterations?: number;
   /** 绑定任务板：续写时注入未完成项；助手 checklist 回写进度 */
   tasks?: SessionGoalTask[];
+  status?: 'active' | 'completed' | 'blocked' | undefined;
 }
 
 /**
@@ -604,7 +617,12 @@ export interface DropPreviewState {
 // 此前经 '../store/layoutStore' 等直引的类型在此集中 re-export，
 // 避免 components 触碰 store 内部模块路径。
 
-export type { LayoutLeaf, LayoutNode, FlatBranch, DropDirection } from './layout-tree/types';
+export type {
+  LayoutLeaf,
+  LayoutNode,
+  FlatBranch,
+  DropDirection,
+} from './layout-tree/types';
 export type { Rect } from './layout-tree/dropDetection';
 export type { LayoutStore } from './layoutStore';
 export type { DraggedTabState } from './workspaceStore';

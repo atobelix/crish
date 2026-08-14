@@ -2623,6 +2623,102 @@
         })
     }
 
+    /// EV-08（G-20）：阶梯 1 重派成功 → recovery-retry-attempted 事件带
+    /// from_run_id/new_run_id 结构化关联（重试无事件 + 无关联缺陷闭合）。
+    ///
+    /// 直接驱动 [execute_subagent_recovery]（AutoRetry 计划 + 记录型
+    /// spawner——经 subagent_state_with_providers 装配真实引擎 + LocalDb，
+    /// 重派新 run 真实 spawn 成功路径；延迟注入 ZERO 跳过真实退避 sleep）。
+    #[tokio::test]
+    async fn ladder1_respawn_emits_retry_attempted_event() {
+        let main = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("占位。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let sub = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("重派子代理占位。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _main, _sub, emitter) =
+            subagent_state_with_providers(main, sub, "deepseek-v4-flash");
+        state.run_restore().await;
+
+        // 原 run 失败上下文（瞬态网络错误，预算内 → AutoRetry）
+        let session_id = "sess-main";
+        let cfg = crate::subagent_spawner::SubagentRunConfig {
+            subagent_id: "sub-l1".to_string(),
+            subagent_run_id: "run-l1-orig".to_string(),
+            parent_session_id: session_id.to_string(),
+            task_type: None,
+            allowed_write_paths: None,
+            output_dir: None,
+            started_at_ms: 1_000,
+        };
+        let coord = state
+            .coordinator_for(session_id)
+            .expect("LocalDb 路径协调器可用");
+        let ctx = RunFailureContext {
+            subagent_id: "sub-l1".to_string(),
+            subagent_run_id: "run-l1-orig".to_string(),
+            task: "任务".to_string(),
+            error_kind: ProviderErrorKind::Network,
+            retries: 0,
+            retry_elapsed_ms: 0,
+            produced_content: false,
+            from_leaf_id: None,
+            started_at_ms: 1_000,
+            inject_bytes: 0,
+            window_bytes: 0,
+        };
+        let plan = RecoveryPlan::AutoRetry {
+            delay: Duration::ZERO,
+            ctx,
+            coord,
+        };
+        let active = build_active_run(&state, session_id, "run-l1-orig").await;
+        state
+            .execute_subagent_recovery(session_id, &cfg, plan, &active)
+            .await;
+
+        // 事件断言：recovery-retry-attempted 载荷含 from/new run id
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let payloads = emitter.0.lock().unwrap().clone();
+            if let Some(hit) = payloads
+                .iter()
+                .find(|p| p.contains("recovery-retry-attempted"))
+            {
+                let value: serde_json::Value = serde_json::from_str(hit).expect("载荷 JSON");
+                assert_eq!(value["type"], "recovery-retry-attempted");
+                assert_eq!(value["sessionId"], session_id);
+                assert_eq!(value["fromRunId"], "run-l1-orig", "原 run id");
+                let new_run_id = value["newRunId"]
+                    .as_str()
+                    .expect("newRunId 非空")
+                    .to_string();
+                assert_ne!(new_run_id, "run-l1-orig", "新 run id 与原 run 不同");
+                assert!(value["attempt"].as_u64().is_some(), "attempt 计数存在");
+                assert!(value["delayMs"].as_u64().is_some(), "delay 存在");
+                assert!(value["budgetRemaining"].as_u64().is_some(), "剩余预算存在");
+                // 新 run 行落库（真实 spawn 产物）
+                let rows = db.load_session_agents(session_id).expect("读行");
+                assert!(
+                    rows.iter().any(|r| r.subagent_run_id == new_run_id),
+                    "重派新 run 行存在：{new_run_id}"
+                );
+                break;
+            }
+            drop(payloads);
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "recovery-retry-attempted 未在窗口内发射"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 重派的新 run 收口（真实 spawn 的异步 run；不遗留活动任务）
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
+    }
+
     /// 测试生产者：返回预置收口结果（驱动 drive_run_loop 一次终态）
     struct TestProducer {
         outcome: RunOutcome,
@@ -3568,6 +3664,7 @@
             task_type: None,
             display_label: None,
             allowed_write_paths_json: None,
+            sub_session_id: None,
         })
         .expect("session_agents 行落库");
         let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
@@ -5622,10 +5719,179 @@
         );
     }
 
+    // ── EV-02（D-03 R-15）：checkpoint-created / checkpoint-restored 接线 ──
+
+    /// EV-02：run 级 checkpoint 事件通道（记录桥 + EventQueue；EventQueue
+    /// run_id 构造期绑定，对齐 drive_run_loop 的 active 通道装配面）
+    fn checkpoint_run_event_channel(
+        state: &CoreRunState,
+    ) -> (
+        Arc<tokio::sync::Mutex<EventQueue>>,
+        Arc<BufferedRunEventBridge>,
+        Arc<RecordingEmitter>,
+        String,
+    ) {
+        let (bridge, emitter) = recording_bridge();
+        let bridge = Arc::new(BufferedRunEventBridge::new(bridge, "run-1".to_string()));
+        let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
+            state.store.clone(),
+            0,
+            Some("run-1".to_string()),
+        )));
+        (queue, bridge, emitter, "run-1".to_string())
+    }
+
+    /// EV-02 验收①：checkpoint 写叶子成功 → checkpoint-created 发射（载荷
+    /// record 非空；B1 三要素：正常返回 + 捕获断言 + 计数/序列校验）
+    #[tokio::test]
+    async fn checkpoint_created_event_emitted_on_write() {
+        let (state, _registry) = state_with_background();
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let outcome = RunOutcome {
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block(
+                    "已完成首步。\nCHECKPOINT: {\"target\":\"目标T\",\"summary\":\"摘要S\",\"files\":[\"a.txt\"]}",
+                )],
+            ))],
+            ..canned_outcome()
+        };
+        let (queue, bridge, emitter, run_id) = checkpoint_run_event_channel(&state);
+        collect_checkpoint_on_close(&state, "s1", &outcome, &queue, &bridge, &run_id).await;
+        // 捕获断言：恰好 1 条 checkpoint-created，载荷 record 非空
+        let payloads = emitter.0.lock().unwrap().clone();
+        assert_eq!(payloads.len(), 1, "写成功应恰好发射 1 条 checkpoint-created");
+        let v: serde_json::Value = serde_json::from_str(&payloads[0]).expect("信封为合法 JSON");
+        assert_eq!(v["type"], "checkpoint-created");
+        assert_eq!(v["sessionId"], "s1");
+        assert_eq!(v["runId"], "run-1");
+        assert!(v["checkpoint"].is_object(), "载荷 checkpoint.record 非空");
+        assert_eq!(v["checkpoint"]["id"], "leaf-1");
+        assert_eq!(v["checkpoint"]["label"], "目标T");
+        assert_eq!(v["checkpoint"]["kind"], "workspace-checkpoint");
+        assert!(v["checkpoint"]["metadata"].is_object(), "metadata 承载载荷全文");
+        // 计数/序列校验：Persistent 随收口落库，run_id 列绑定 run
+        let events = state.store.query_events("s1", 0, None).await.unwrap();
+        assert_eq!(events.len(), 1, "checkpoint-created 随收口落库");
+        assert_eq!(events[0].event_type, "checkpoint-created");
+        assert_eq!(events[0].run_id.as_deref(), Some("run-1"));
+        assert_eq!(events[0].sequence, 1, "会话级序列单调分配");
+    }
+
+    /// EV-02 验收②：恢复注入 Present 分支命中 → checkpoint-restored 发射
+    /// （载荷 restore 非空；会话域事件——落库 run_id 列为 None）
+    #[tokio::test]
+    async fn checkpoint_restored_event_emitted_on_present_inject() {
+        let (state, _registry) = state_with_background();
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
+        tree.set_leaf_checkpoint(
+            "leaf-1",
+            &conex_types::CheckpointPayload {
+                target: "目标A".to_string(),
+                summary: "摘要B".to_string(),
+                timestamp: None,
+                completed: vec!["步骤1".to_string()],
+                files: vec!["a.txt".to_string()],
+                next: vec!["下一步1".to_string()],
+            },
+        )
+        .expect("写入检查点");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        // 注入面行为不变（恢复文本正常返回）
+        let section = checkpoint_injection_section(&state, "s1").await;
+        assert!(section.contains("目标A"), "注入文本含目标（行为不变）");
+        assert!(section.contains("步骤1"), "已完成清单入注入");
+        // 捕获断言：落库 1 条 checkpoint-restored（会话域通道）
+        let events = state.store.query_events("s1", 0, None).await.unwrap();
+        assert_eq!(events.len(), 1, "Present 注入应恰好落库 1 条 checkpoint-restored");
+        assert_eq!(events[0].event_type, "checkpoint-restored");
+        assert!(events[0].run_id.is_none(), "会话域事件 run_id 列为 None");
+        assert_eq!(events[0].sequence, 1, "会话级序列单调分配");
+        let v: serde_json::Value = serde_json::from_str(&events[0].payload).unwrap();
+        assert!(v["restore"].is_object(), "载荷 restore 非空");
+        assert_eq!(v["restore"]["checkpointId"], "leaf-1");
+        assert_eq!(v["restore"]["restored"][0], "a.txt");
+    }
+
+    /// EV-02 验收③：Corrupt 只 warn 不发 / Absent 不发（B1 三要素：正常
+    /// 返回 + 捕获断言 + 零事件计数校验；写面与注入面各自验证）
+    #[tokio::test]
+    async fn checkpoint_corrupt_absent_emits_no_event() {
+        // 写面：坏标记行 → 采集损坏降级，零事件
+        let (state, _registry) = state_with_background();
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let outcome = RunOutcome {
+            messages: vec![Arc::new(amsg(
+                "m1",
+                AgentMessageRole::Assistant,
+                vec![text_block("CHECKPOINT: {坏 JSON 载荷")],
+            ))],
+            ..canned_outcome()
+        };
+        let (queue, bridge, emitter, run_id) = checkpoint_run_event_channel(&state);
+        collect_checkpoint_on_close(&state, "s1", &outcome, &queue, &bridge, &run_id).await;
+        let payloads = emitter.0.lock().unwrap().clone();
+        assert!(payloads.is_empty(), "Corrupt 写面零事件");
+        // 注入面：坏载荷叶子 → 降级提示正常返回，零事件
+        let record = SessionRecord {
+            session_id: "s1".to_string(),
+            current_leaf_id: Some("leaf-1".to_string()),
+            branches: vec![orchestrator::session::SessionTreeEntry::node(
+                "leaf-1",
+                None,
+                serde_json::json!({ "checkpoint": "not-a-checkpoint-object" }),
+            )],
+            context_meta: None,
+        };
+        let tree = SessionTree::from_session_record(record).expect("坏载荷树重建");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        let section = checkpoint_injection_section(&state, "s1").await;
+        assert!(section.contains("检查点损坏已忽略"), "注入面正常返回降级提示");
+        let events = state.store.query_events("s1", 0, None).await.unwrap();
+        assert!(events.is_empty(), "Corrupt 路径零事件落库");
+        // Absent：空树（无叶子）→ 注入空串，零事件
+        let (state2, _registry2) = state_with_background();
+        let empty_tree = SessionTree::new("s1");
+        state2
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(empty_tree)));
+        assert_eq!(
+            checkpoint_injection_section(&state2, "s1").await,
+            String::new(),
+            "Absent 不注入"
+        );
+        let events2 = state2.store.query_events("s1", 0, None).await.unwrap();
+        assert!(events2.is_empty(), "Absent 路径零事件落库");
+    }
+
     /// D7 §3.1 采集接线：对话含 CHECKPOINT 标记行 → 收口后叶子 payload
     /// 含 checkpoint 键（target/summary 保真，验收 A4 前半）
-    #[test]
-    fn checkpoint_collected_written_on_close() {
+    #[tokio::test]
+    async fn checkpoint_collected_written_on_close() {
         let (state, _registry) = state_with_background();
         let mut tree = SessionTree::new("s1");
         tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
@@ -5644,7 +5910,8 @@
             ))],
             ..canned_outcome()
         };
-        collect_checkpoint_on_close(&state, "s1", &outcome);
+        let (queue, bridge, _emitter, run_id) = checkpoint_run_event_channel(&state);
+        collect_checkpoint_on_close(&state, "s1", &outcome, &queue, &bridge, &run_id).await;
         let trees = state.session_trees.lock().unwrap();
         let tree = trees.get("s1").unwrap().lock().unwrap();
         match tree.read_leaf_checkpoint(None) {
@@ -5660,8 +5927,8 @@
 
     /// D7 §3.5 采集侧损坏降级：对话含坏标记行（命中前缀 + 坏 JSON）→
     /// 收口不 panic、叶子不写入、不阻断（验收 A2）
-    #[test]
-    fn checkpoint_collect_corrupt_degrades() {
+    #[tokio::test]
+    async fn checkpoint_collect_corrupt_degrades() {
         let (state, _registry) = state_with_background();
         let mut tree = SessionTree::new("s1");
         tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
@@ -5678,7 +5945,8 @@
             ))],
             ..canned_outcome()
         };
-        collect_checkpoint_on_close(&state, "s1", &outcome);
+        let (queue, bridge, _emitter, run_id) = checkpoint_run_event_channel(&state);
+        collect_checkpoint_on_close(&state, "s1", &outcome, &queue, &bridge, &run_id).await;
         let trees = state.session_trees.lock().unwrap();
         let tree = trees.get("s1").unwrap().lock().unwrap();
         assert_eq!(
@@ -5690,8 +5958,8 @@
 
     /// D7 §3.2 注入：Present 三态分发——有效载荷 → 注入文本含「上次检查点」
     /// 与 target/summary/completed/next（验收 A1）
-    #[test]
-    fn checkpoint_injection_present_contains_summary() {
+    #[tokio::test]
+    async fn checkpoint_injection_present_contains_summary() {
         let (state, _registry) = state_with_background();
         let mut tree = SessionTree::new("s1");
         tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
@@ -5712,7 +5980,7 @@
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
-        let section = checkpoint_injection_section(&state, "s1");
+        let section = checkpoint_injection_section(&state, "s1").await;
         assert!(section.contains("[检查点摘要]"), "摘要段标题");
         assert!(section.contains("目标A"), "目标入注入");
         assert!(section.contains("摘要B"), "摘要入注入");
@@ -5721,8 +5989,8 @@
     }
 
     /// D7 §3.2 注入：Absent（无检查点 / 无叶子）→ 空串（行为与现状一致）
-    #[test]
-    fn checkpoint_injection_absent_empty() {
+    #[tokio::test]
+    async fn checkpoint_injection_absent_empty() {
         let (state, _registry) = state_with_background();
         let tree = SessionTree::new("s1");
         state
@@ -5731,7 +5999,7 @@
             .unwrap_or_else(|e| e.into_inner())
             .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
         assert_eq!(
-            checkpoint_injection_section(&state, "s1"),
+            checkpoint_injection_section(&state, "s1").await,
             String::new(),
             "无检查点 → 不注入"
         );
@@ -5739,8 +6007,8 @@
 
     /// D7 §3.2/§3.5 注入：Corrupt（载荷不可解析）→ 降级提示文本，run 照常
     /// 拉起（不 panic、不阻断；验收 A2 读侧）
-    #[test]
-    fn checkpoint_injection_corrupt_hint() {
+    #[tokio::test]
+    async fn checkpoint_injection_corrupt_hint() {
         let (state, _registry) = state_with_background();
         // 直接构造坏载荷叶子（绕过类型安全的 set_leaf_checkpoint）
         let record = SessionRecord {
@@ -5759,7 +6027,7 @@
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
-        let section = checkpoint_injection_section(&state, "s1");
+        let section = checkpoint_injection_section(&state, "s1").await;
         assert!(
             section.contains("检查点损坏已忽略"),
             "损坏降级提示入注入（run 照常拉起）"
@@ -5767,8 +6035,8 @@
     }
 
     /// D7 §8 决策 4：摘要超长 → 截断 ≤500 字符 + 省略号（注入长度护栏）
-    #[test]
-    fn checkpoint_injection_summary_truncated() {
+    #[tokio::test]
+    async fn checkpoint_injection_summary_truncated() {
         let (state, _registry) = state_with_background();
         let long_summary = "x".repeat(600);
         let mut tree = SessionTree::new("s1");
@@ -5790,7 +6058,7 @@
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
-        let section = checkpoint_injection_section(&state, "s1");
+        let section = checkpoint_injection_section(&state, "s1").await;
         assert!(
             section.contains(&"x".repeat(500)),
             "摘要保留前 500 字符"
@@ -5804,8 +6072,8 @@
     }
 
     /// D7 §8 决策 4：completed/next 各 ≤5 项（清单项上限护栏）
-    #[test]
-    fn checkpoint_injection_list_items_limited() {
+    #[tokio::test]
+    async fn checkpoint_injection_list_items_limited() {
         let (state, _registry) = state_with_background();
         let mut tree = SessionTree::new("s1");
         tree.append("leaf-1", serde_json::json!({})).expect("追加叶子");
@@ -5827,7 +6095,7 @@
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
-        let section = checkpoint_injection_section(&state, "s1");
+        let section = checkpoint_injection_section(&state, "s1").await;
         assert!(section.contains("步骤0"), "前 5 项保留");
         assert!(section.contains("步骤4"));
         assert!(!section.contains("步骤5"), "第 6 项起省略");
@@ -5836,8 +6104,8 @@
 
     /// D7 采集写面：子代理会话（sub-sess-*）无树 → 采集自动跳过（R8：
     /// 不建占位树）
-    #[test]
-    fn checkpoint_collect_skips_without_tree() {
+    #[tokio::test]
+    async fn checkpoint_collect_skips_without_tree() {
         let (state, _registry) = state_with_background();
         let outcome = RunOutcome {
             messages: vec![Arc::new(amsg(
@@ -5847,12 +6115,16 @@
             ))],
             ..canned_outcome()
         };
-        // 无 panic、无写面副作用
-        collect_checkpoint_on_close(&state, "sub-sess-1-1", &outcome);
+        // 无 panic、无写面副作用、零事件
+        let (queue, bridge, emitter, run_id) = checkpoint_run_event_channel(&state);
+        collect_checkpoint_on_close(&state, "sub-sess-1-1", &outcome, &queue, &bridge, &run_id)
+            .await;
         assert!(
             state.session_trees.lock().unwrap().is_empty(),
             "无树会话不建占位树"
         );
+        let payloads = emitter.0.lock().unwrap().clone();
+        assert!(payloads.is_empty(), "无树跳过 → 零事件");
     }
 
     // ======================================================================
@@ -6290,7 +6562,6 @@
             role: None,
             capability_mode: None,
             allowed_tools: None,
-            timeout_ms: None,
             description: None,
             mode: None,
             parent_session_id: "sess-main".to_string(),
@@ -6464,7 +6735,6 @@
             role: None,
             capability_mode: None,
             allowed_tools: None,
-            timeout_ms: None,
             description: None,
             mode: None,
             parent_session_id: "sess-main".to_string(),
@@ -6668,7 +6938,7 @@
         // permissionMode=full-access（移动端申报）→ 装配面降级 ask +
         // remote-mode-downgrade 审计标记
         use crate::server::backend::ApiBackend;
-        let backend = crate::server::core_backend::CoreStateBackend::new(Arc::clone(&state));
+        let backend = crate::core_backend::CoreStateBackend::new(Arc::clone(&state));
         backend
             .run_task(conex_types::device::RunTaskParams {
                 session_id: Some("sess-main".to_string()),
@@ -6738,6 +7008,7 @@
                 task_type: None,
                 display_label: None,
                 allowed_write_paths_json: None,
+                sub_session_id: None,
             });
             db.save_session_agents("sess-main", &rows).unwrap();
         }
@@ -6797,6 +7068,7 @@
             task_type: None,
             display_label: None,
             allowed_write_paths_json: None,
+            sub_session_id: None,
         });
         db.save_session_agents("sess-main", &ghost_rows).unwrap();
         let again = service.kill_all("sess-main", "test-kill-2").expect("kill_all 应成功");
@@ -7727,8 +7999,8 @@
     /// 30-P4 验收（E2E-6）：timer/cron 到期事件经 drain 转发到事件桥——
     /// 真实引擎装配（经 CoreRunState）→ 定时器到期缓冲 TimerFired / cron
     /// 触发缓冲 CronFired → forward helper（main.rs drain 任务同一转发
-    /// 路径）→ workbench-run-event 信封（runId/sequence 不注入，字段级
-    /// 断言）——A10 N-05 缓冲事件不再终老
+    /// 路径）→ workbench-run-event 信封（R-22 伪 runId 注入 timer-<id>/
+    /// cron-<id>、sequence 不注入，字段级断言）——A10 N-05 缓冲事件不再终老
     #[tokio::test]
     async fn timer_and_cron_events_drain_forwarded_e2e() {
         let (bridge, emitter) = recording_bridge();
@@ -7767,7 +8039,11 @@
         let first: serde_json::Value =
             serde_json::from_str(&payloads[0]).expect("载荷应为合法 JSON");
         assert_eq!(first["type"], "timer-fired");
-        assert!(first.get("runId").is_none(), "timer 事件不得注入 runId");
+        assert_eq!(
+            first["runId"],
+            format!("timer-{}", handle.timer_id),
+            "R-22 伪 runId：timer-加timerId（生产 handle 端到端验证）"
+        );
         assert!(first.get("sequence").is_none(), "timer 事件不得注入 sequence");
         assert_eq!(first["sessionId"], "");
         assert_eq!(first["prompt"], "e2e6 定时器");
@@ -7797,7 +8073,11 @@
         let second: serde_json::Value =
             serde_json::from_str(&payloads[1]).expect("载荷应为合法 JSON");
         assert_eq!(second["type"], "cron-fired");
-        assert!(second.get("runId").is_none(), "cron 事件不得注入 runId");
+        assert_eq!(
+            second["runId"],
+            format!("cron-{cron_id}"),
+            "R-22 伪 runId：cron-加cronId（生产 id 端到端验证）"
+        );
         assert!(second.get("sequence").is_none(), "cron 事件不得注入 sequence");
         assert_eq!(second["cronId"], cron_id);
         assert_eq!(second["prompt"], "e2e6 cron");
@@ -9041,6 +9321,7 @@
             task_type: None,
             display_label: None,
             allowed_write_paths_json: None,
+            sub_session_id: None,
         };
         db.upsert_session_agent(&row).expect("行落库");
         let subagent_run = insert_continuity_run(
@@ -9304,8 +9585,9 @@
             .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
         // 15 条 ≈ 30k token（任意窗口下比例 ∈ [0.06, 0.47] → 命中 stage-1）
         let messages = big_llm_conversation(15);
+        let active = build_active_run(&state, "s1", "run-s1").await;
 
-        evaluate_stage_milestones(&state, "s1", &messages).await;
+        evaluate_stage_milestones(&state, &active, "s1", &messages).await;
         assert_eq!(
             stage_triggered_indices(&state, "s1"),
             vec![0],
@@ -9328,13 +9610,228 @@
             }
         }
         // 重复触发抑制：同比例再评估 → 不新增总结、不重复标记
-        evaluate_stage_milestones(&state, "s1", &messages).await;
+        evaluate_stage_milestones(&state, &active, "s1", &messages).await;
         assert_eq!(
             stored_stage_summaries(&state, "s1").len(),
             1,
             "重复评估不新增（每阶梯只触发一次）"
         );
         assert_eq!(stage_triggered_indices(&state, "s1"), vec![0], "标记幂等");
+    }
+
+    /// EV-07 测试辅助：带记录型事件桥的 CoreRunState（LocalDb 内存库 +
+    /// 独立诊断 + 快照存储；调用方继续配置 ratios / summarizer / tree /
+    /// goal_state 键）
+    fn core_state_with_emitter(db: LocalDb) -> (Arc<CoreRunState>, Arc<RecordingEmitter>) {
+        let (bridge, emitter) = recording_bridge();
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_core_state_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        (
+            Arc::new(CoreRunState::new(
+                store,
+                snapshots,
+                bridge,
+                Arc::new(StatusDiagnostics::new()),
+                None,
+            )),
+            emitter,
+        )
+    }
+
+    /// EV-07：阶段里程碑达标全链路（注入 Summarizer stub）→
+    /// stage-summary-milestone 四态依次发射（reached → summarizing →
+    /// produced → persisted），载荷 tier=stage-N / milestoneIndex=0
+    #[tokio::test]
+    async fn stage_milestone_emits_milestone_events() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.set_session_meta("compact_stage_ratios", "[0.001, 0.999]")
+            .unwrap();
+        let (state, emitter) = core_state_with_emitter(db);
+        inject_fake_summarizer(&state);
+        // 会话树（checkpoint 落载荷面）
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-1", serde_json::json!({}))
+            .expect("追加叶子");
+        state
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("s1".to_string(), Arc::new(Mutex::new(tree)));
+        // 15 条 ≈ 30k token（任意窗口下比例 ∈ [0.06, 0.47] → 命中 stage-1）
+        let messages = big_llm_conversation(15);
+        let active = build_active_run(&state, "s1", "run-s1").await;
+        evaluate_stage_milestones(&state, &active, "s1", &messages).await;
+        // 事件载荷（envelope 手工合并扁平 JSON：type 与变体字段同层）
+        let payloads = emitter.0.lock().unwrap().clone();
+        let milestones: Vec<(String, String, u32)> = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .filter(|v| v["type"].as_str() == Some("stage-summary-milestone"))
+            .filter_map(|v| {
+                let milestone_type = v["milestoneType"].as_str()?.to_string();
+                let tier = v["tier"].as_str()?.to_string();
+                let index = v["milestoneIndex"].as_u64()? as u32;
+                Some((milestone_type, tier, index))
+            })
+            .collect();
+        let types: Vec<&str> = milestones.iter().map(|m| m.0.as_str()).collect();
+        assert_eq!(
+            types,
+            vec!["reached", "summarizing", "produced", "persisted"],
+            "四态依次发射（达标 → Summarizer 调用 → 产出 → 落库）"
+        );
+        assert_eq!(milestones[0].1, "stage-1", "tier = stage-N");
+        assert_eq!(milestones[0].2, 0, "里程碑索引 0（stage-1 首阶梯）");
+        // 既有语义不回归：触发标记 + 阶段总结落库照常
+        assert_eq!(stage_triggered_indices(&state, "s1"), vec![0], "stage-1 已触发");
+        assert_eq!(stored_stage_summaries(&state, "s1").len(), 1, "产出 1 条");
+    }
+
+    /// EV-07：Summarizer 缺失 → 仅 reached（无 summarizing/produced/
+    /// persisted——「达标但不可产出」事件面可辨）
+    #[tokio::test]
+    async fn stage_milestone_without_summarizer_emits_only_reached() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.set_session_meta("compact_stage_ratios", "[0.001, 0.999]")
+            .unwrap();
+        let (state, emitter) = core_state_with_emitter(db);
+        // 不注入 Summarizer（F1 L1：无 Summarizer → 不产出、不标记）
+        let messages = big_llm_conversation(15);
+        let active = build_active_run(&state, "s1", "run-s1").await;
+        evaluate_stage_milestones(&state, &active, "s1", &messages).await;
+        let payloads = emitter.0.lock().unwrap().clone();
+        let types: Vec<String> = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .filter(|v| v["type"].as_str() == Some("stage-summary-milestone"))
+            .filter_map(|v| v["milestoneType"].as_str().map(String::from))
+            .collect();
+        assert_eq!(
+            types,
+            vec!["reached".to_string()],
+            "Summarizer 缺失止于 reached"
+        );
+        assert!(stage_triggered_indices(&state, "s1").is_empty(), "不标记");
+    }
+
+    /// EV-07：goal 收口决策补发——L1 checklist 全勾（Completed）→
+    /// goal-continuation-decided action=complete、reason=goal-completed、
+    /// detail 携带 round（与 goal-round-completed.round 同源）
+    #[tokio::test]
+    async fn goal_continuation_decided_completed_action_is_complete() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &GoalState::new("修复目标", 12, 2).to_json(),
+        )
+        .expect("goal_state 预置");
+        let (state, emitter) = core_state_with_emitter(db);
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let signals = GoalRoundSignals {
+            assistant_text: "- [x] 完成的任务\n- [x] 收尾任务".to_string(),
+            tool_calls: Vec::new(),
+            tool_success_count: 0,
+            tool_call_count: 0,
+            message_count: 2,
+        };
+        state
+            .assess_goal_round(&active, AgentEndReason::Stop, &signals, None)
+            .await;
+        let payloads = emitter.0.lock().unwrap().clone();
+        let decided = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .find(|v| v["type"].as_str() == Some("goal-continuation-decided"))
+            .expect("goal-continuation-decided 应发射");
+        assert_eq!(
+            decided["action"], "complete",
+            "Completed 决策 action=complete（不再恒 continue）"
+        );
+        assert_eq!(decided["reason"], "goal-completed", "reason=goal-completed");
+        assert_eq!(decided["detail"], "round=1", "detail 携带 round（首轮）");
+    }
+
+    /// EV-07：goal 收口决策补发——MaxTurns 收场（reason 门禁 Blocked）→
+    /// action=blocked、reason=max-turns
+    #[tokio::test]
+    async fn goal_continuation_decided_blocked_action_is_blocked() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &GoalState::new("修复目标", 12, 2).to_json(),
+        )
+        .expect("goal_state 预置");
+        let (state, emitter) = core_state_with_emitter(db);
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let signals = GoalRoundSignals {
+            assistant_text: String::new(),
+            tool_calls: Vec::new(),
+            tool_success_count: 0,
+            tool_call_count: 0,
+            message_count: 1,
+        };
+        state
+            .assess_goal_round(&active, AgentEndReason::MaxTurns, &signals, None)
+            .await;
+        let payloads = emitter.0.lock().unwrap().clone();
+        let decided = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .find(|v| v["type"].as_str() == Some("goal-continuation-decided"))
+            .expect("goal-continuation-decided 应发射");
+        assert_eq!(
+            decided["action"], "blocked",
+            "Blocked 决策 action=blocked（不再恒 continue）"
+        );
+        assert_eq!(decided["reason"], "max-turns", "reason=max-turns（区分阻断源）");
+        assert_eq!(decided["detail"], "round=1", "detail 携带 round");
+    }
+
+    /// EV-07：goal 收口决策补发——无 checklist/DONE 且无工具轮（stalled
+    /// 递增未达阈值 → NoProgress）→ action=stop、reason=stop
+    #[tokio::test]
+    async fn goal_continuation_decided_no_progress_action_is_stop() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.set_session_meta(
+            orchestrator::goal_state::GOAL_STATE_KEY,
+            &GoalState::new("修复目标", 12, 2).to_json(),
+        )
+        .expect("goal_state 预置");
+        let (state, emitter) = core_state_with_emitter(db);
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let signals = GoalRoundSignals {
+            assistant_text: "这轮没有实质进展".to_string(),
+            tool_calls: Vec::new(),
+            tool_success_count: 0,
+            tool_call_count: 0,
+            message_count: 1,
+        };
+        state
+            .assess_goal_round(&active, AgentEndReason::Stop, &signals, None)
+            .await;
+        let payloads = emitter.0.lock().unwrap().clone();
+        let decided = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .find(|v| v["type"].as_str() == Some("goal-continuation-decided"))
+            .expect("goal-continuation-decided 应发射");
+        assert_eq!(
+            decided["action"], "stop",
+            "NoProgress 决策 action=stop（不再恒 continue）"
+        );
+        assert_eq!(decided["reason"], "stop", "reason=stop（stalled 累计中）");
+        assert_eq!(decided["detail"], "round=1", "detail 携带 round");
     }
 
     /// F5：系统提示词段注入——build_system_prompt 输出后拼接「阶段总结」段；

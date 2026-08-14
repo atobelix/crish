@@ -22,7 +22,7 @@ describe('useVirtualScroll — ids→syncOrder (layout phase, no clear)', () => 
     const { result, rerender } = renderHook(
       ({ ids, itemCount }: { ids: string[]; itemCount: number }) =>
         useVirtualScroll({ ids, itemCount, fallbackHeight: 100 }),
-      { initialProps: { ids: ['m2', 'm3', 'm4'], itemCount: 3 } },
+      { initialProps: { ids: ['m2', 'm3', 'm4'], itemCount: 3 } }
     );
 
     // Seed measured heights for the current window
@@ -41,9 +41,11 @@ describe('useVirtualScroll — ids→syncOrder (layout phase, no clear)', () => 
     rerender({ ids: expanded, itemCount: 5 });
 
     expect(syncSpy).toHaveBeenCalled();
-    expect(syncSpy.mock.calls.some((c) => c[0] === expanded || equalArr(c[0], expanded))).toBe(
-      true,
-    );
+    expect(
+      syncSpy.mock.calls.some(
+        (c) => c[0] === expanded || equalArr(c[0], expanded)
+      )
+    ).toBe(true);
     expect(clearSpy).not.toHaveBeenCalled();
 
     // Layout phase completed: order length === ids.length === itemCount
@@ -68,7 +70,7 @@ describe('useVirtualScroll — ids→syncOrder (layout phase, no clear)', () => 
     const { result, rerender } = renderHook(
       ({ ids, itemCount }: { ids: string[]; itemCount: number }) =>
         useVirtualScroll({ ids, itemCount, fallbackHeight: 80 }),
-      { initialProps: { ids: ['a', 'b'], itemCount: 2 } },
+      { initialProps: { ids: ['a', 'b'], itemCount: 2 } }
     );
 
     result.current.manager.setActual('a', 50);
@@ -90,7 +92,7 @@ describe('useVirtualScroll — ids→syncOrder (layout phase, no clear)', () => 
     const { result, rerender } = renderHook(
       ({ ids, itemCount }: { ids: string[]; itemCount: number }) =>
         useVirtualScroll({ ids, itemCount, fallbackHeight: 100 }),
-      { initialProps: { ids: ['a', 'b'], itemCount: 2 } },
+      { initialProps: { ids: ['a', 'b'], itemCount: 2 } }
     );
 
     const clearSpy = vi.spyOn(result.current.manager, 'clear');
@@ -113,7 +115,7 @@ describe('useVirtualScroll — ids→syncOrder (layout phase, no clear)', () => 
     const { result, rerender } = renderHook(
       ({ ids, itemCount }: { ids: string[]; itemCount: number }) =>
         useVirtualScroll({ ids, itemCount, fallbackHeight: 100 }),
-      { initialProps: { ids: stableIds, itemCount: 2 } },
+      { initialProps: { ids: stableIds, itemCount: 2 } }
     );
 
     const syncSpy = vi.spyOn(result.current.manager, 'syncOrder');
@@ -130,7 +132,7 @@ describe('useVirtualScroll — ids→syncOrder (layout phase, no clear)', () => 
     const { result, rerender } = renderHook(
       ({ ids, itemCount }: { ids: string[]; itemCount: number }) =>
         useVirtualScroll({ ids, itemCount, fallbackHeight: 100 }),
-      { initialProps: { ids: ['s1-m0', 's1-m1'], itemCount: 2 } },
+      { initialProps: { ids: ['s1-m0', 's1-m1'], itemCount: 2 } }
     );
 
     result.current.manager.setActual('s1-m0', 110);
@@ -150,15 +152,20 @@ describe('useVirtualScroll — ids→syncOrder (layout phase, no clear)', () => 
 
 describe('useVirtualScroll source — layout phase lock', () => {
   it('auto ids→syncOrder uses useLayoutEffect (not paint-after useEffect)', () => {
-    const src = readFileSync(resolve(here, './useVirtualScroll.ts'), 'utf8').replace(/\r\n/g, '\n');
+    const src = readFileSync(
+      resolve(here, './useVirtualScroll.ts'),
+      'utf8'
+    ).replace(/\r\n/g, '\n');
 
     // Positive: layout-phase auto sync block
     expect(src).toMatch(
-      /useLayoutEffect\(\(\)\s*=>\s*\{[\s\S]*?manager\.syncOrder\(ids\)[\s\S]*?\},\s*\[manager,\s*ids\]\)/,
+      /useLayoutEffect\(\(\)\s*=>\s*\{[\s\S]*?manager\.syncOrder\(ids\)[\s\S]*?\},\s*\[manager,\s*ids\]\)/
     );
 
     // Negative: do not use useEffect for manager.syncOrder(ids)
-    const useEffectBlocks = src.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?\}\s*,\s*\[[^\]]*?\]\)/g) ?? [];
+    const useEffectBlocks =
+      src.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?\}\s*,\s*\[[^\]]*?\]\)/g) ??
+      [];
     for (const block of useEffectBlocks) {
       expect(block.includes('manager.syncOrder')).toBe(false);
     }
@@ -169,14 +176,15 @@ describe('ChatMessageList height lifecycle contract (static source)', () => {
   it('has no startIndex + clearHeights wired in the same Effect', () => {
     const src = readFileSync(
       resolve(here, '../components/chat-message-list/MessageVirtualizer.tsx'),
-      'utf8',
+      'utf8'
     ).replace(/\r\n/g, '\n');
 
     // Remove comments to avoid false positive comment matches
     const codeOnly = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
 
     // Forbid clearHeights appearing in an effect body/deps window with messageWindow.startIndex
-    const effectBlocks = codeOnly.match(/use(?:Layout)?Effect\([\s\S]*?\);\s*\n/g) ?? [];
+    const effectBlocks =
+      codeOnly.match(/use(?:Layout)?Effect\([\s\S]*?\);\s*\n/g) ?? [];
     for (const block of effectBlocks) {
       const hasClear = block.includes('clearHeights');
       const hasStartIndex = block.includes('startIndex');
@@ -184,7 +192,8 @@ describe('ChatMessageList height lifecycle contract (static source)', () => {
     }
 
     // No effect dependency array listing both startIndex and clearHeights
-    const effectCallRegex = /use(?:Layout)?Effect\(\s*\(\)\s*=>\s*\{[\s\S]*?\}\s*,\s*(\[[^\]]*?\])\s*\)/g;
+    const effectCallRegex =
+      /use(?:Layout)?Effect\(\s*\(\)\s*=>\s*\{[\s\S]*?\}\s*,\s*(\[[^\]]*?\])\s*\)/g;
     let match: RegExpExecArray | null;
     while ((match = effectCallRegex.exec(codeOnly)) !== null) {
       const depArrayStr = match[1] ?? '';
@@ -194,46 +203,40 @@ describe('ChatMessageList height lifecycle contract (static source)', () => {
     }
 
     // Positive lock: session switch still clears heights
-    expect(src).toMatch(/clearHeights[\s\S]{0,300}?activeSessionId|activeSessionId[\s\S]{0,300}?clearHeights/);
+    expect(src).toMatch(
+      /clearHeights[\s\S]{0,300}?activeSessionId|activeSessionId[\s\S]{0,300}?clearHeights/
+    );
     // Positive lock: window pan / expand relies on syncOrder (comment or hook path)
     expect(src).toMatch(/useVirtualScroll|syncOrder/);
   });
 });
 
 function equalArr(a: unknown, b: string[]): boolean {
-  return Array.isArray(a) && a.length === b.length && a.every((v, i) => v === b[i]);
+  return (
+    Array.isArray(a) && a.length === b.length && a.every((v, i) => v === b[i])
+  );
 }
 
 describe('T4.1（R-04）：setActual 同值跳过不触发 actualTick', () => {
   it('同高度重复 setActual：manager.setActual 不被调用（入 pending 前短路）', async () => {
     const { result } = renderHook(() =>
-      useVirtualScroll({ ids: ['a'], itemCount: 1, fallbackHeight: 100 }),
+      useVirtualScroll({ ids: ['a'], itemCount: 1, fallbackHeight: 100 })
     );
     act(() => {
       result.current.manager.setActual('a', 50);
     });
     expect(result.current.manager.getActualHeight('a')).toBe(50);
     const setActualSpy = vi.spyOn(result.current.manager, 'setActual');
-    let tick = 0;
-    const { result: r2 } = renderHook(() =>
-      useVirtualScroll({ ids: ['a'], itemCount: 1, fallbackHeight: 100 }),
-    );
-    void r2;
     // 同值 setActual（RO 重复回调场景）→ pending 短路，manager 零调用
     act(() => {
       result.current.setActual('a', 50);
     });
     expect(setActualSpy).not.toHaveBeenCalled();
-    void tick;
   });
 
-    expect(result.current.manager.getActualHeight('a')).toBe(200);
-    expect(result.current.manager.getTotalHeight(2)).toBe(250);
-  });
-});
   it('异值 setActual：进入 pending（rAF 异步 flush）；同值短路不重复入队', () => {
     const { result } = renderHook(() =>
-      useVirtualScroll({ ids: ['a', 'b'], itemCount: 2, fallbackHeight: 100 }),
+      useVirtualScroll({ ids: ['a', 'b'], itemCount: 2, fallbackHeight: 100 })
     );
     act(() => {
       result.current.manager.setActual('a', 50);

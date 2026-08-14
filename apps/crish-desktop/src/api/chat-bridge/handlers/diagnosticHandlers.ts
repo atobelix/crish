@@ -8,12 +8,33 @@ import { surfaceStreamFailure } from '../BridgeErrorPolicy';
 import { logInternalError } from '../../userFacingErrors';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
+import { useContinuityUiStore } from '../../continuity/continuityUiStore';
 
 export function onProviderDiagnostic(
-  env: HandlerEnv,
+  _env: HandlerEnv,
   envelope: EngineEnvelope<'provider-diagnostic'>
 ): void {
-  logInternalError('provider-diagnostic', envelope.event.diagnostic ?? envelope.raw.data);
+  const diag =
+    envelope.event.diagnostic ??
+    (envelope.raw.data as typeof envelope.event.diagnostic);
+  logInternalError('provider-diagnostic', diag);
+
+  const sessionId = String(
+    envelope.event.sessionId ?? envelope.raw.sessionId ?? ''
+  ).trim();
+  if (!sessionId || !diag) return;
+
+  if (diag.phase === 'retry') {
+    const attempt =
+      typeof diag.attempt === 'number' ? diag.attempt : Number(diag.attempt);
+    if (Number.isFinite(attempt) && attempt > 0) {
+      const maxAttempts =
+        typeof diag.maxAttempts === 'number' ? diag.maxAttempts : undefined;
+      useContinuityUiStore
+        .getState()
+        .applyRetryNotice(sessionId, attempt, maxAttempts);
+    }
+  }
 }
 
 export function onRuntimeError(
@@ -21,7 +42,12 @@ export function onRuntimeError(
   envelope: EngineEnvelope<'runtime-error'>
 ): void {
   const { event, raw } = envelope;
-  surfaceStreamFailure(event.error ?? raw.data, 'runtime-error', env.callbacks, env.runId);
+  surfaceStreamFailure(
+    event.error ?? raw.data,
+    'runtime-error',
+    env.callbacks,
+    env.runId
+  );
 }
 
 export function onRuntimeSteering(

@@ -593,6 +593,7 @@ mod tests {
             status,
             summary: Some(format!("{subagent_id} 完成")),
             ended_at: "2026-08-05T00:00:00.000Z".to_string(),
+            subagent_session_id: None,
         }
     }
 
@@ -616,6 +617,7 @@ mod tests {
             task_type: None,
             display_label: None,
             allowed_write_paths_json: None,
+            sub_session_id: None,
         }
     }
 

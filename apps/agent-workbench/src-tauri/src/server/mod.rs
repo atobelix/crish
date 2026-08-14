@@ -31,7 +31,6 @@
 pub mod auth;
 pub mod backend;
 pub mod config;
-pub mod core_backend;
 pub mod error;
 pub mod fanout;
 pub mod gateway;
@@ -614,15 +613,17 @@ mod tests {
 
     #[tokio::test]
     async fn port_probe_falls_back_to_next_port_when_occupied() {
-        // 先占住默认端口 8765 → 探测兜底应落到 8766
-        let occupied = StdTcpListener::bind("127.0.0.1:8765").expect("占用 8765 用于测试");
-        let instance = ServerInstance::bind(temp_config(config::DEFAULT_PORT))
+        // 动态占住基准端口 → 探测兜底应落到 base_port + 1
+        let temp_listener = StdTcpListener::bind("127.0.0.1:0").expect("获取可用临时端口");
+        let base_port = temp_listener.local_addr().expect("读取端口").port();
+        let occupied = temp_listener;
+        let instance = ServerInstance::bind(temp_config(base_port))
             .await
             .expect("探测兜底必须成功");
         assert_eq!(
             instance.addr().port(),
-            config::DEFAULT_PORT + 1,
-            "8765 被占用时应回退到 8766"
+            base_port + 1,
+            "基准端口被占用时应回退到 base_port + 1"
         );
         drop(occupied);
     }
@@ -721,38 +722,67 @@ mod tests {
         }
     }
 
-    /// 装配级测试最小真实面（G-1）：CoreRunState（内存库 + 临时快照 +
-    /// 记录桥 + 独立诊断）→ CoreStateBackend 注入 ApiBackend 槽
+    struct TestBackendStub;
+
+    #[async_trait::async_trait]
+    impl backend::ApiBackend for TestBackendStub {
+        async fn get_status(&self) -> Result<serde_json::Value, ServerError> {
+            Ok(serde_json::json!({
+                "initialized": false,
+                "version": option_env!("CARGO_PKG_VERSION").unwrap_or("0.1.0"),
+            }))
+        }
+
+        async fn get_run_snapshot(
+            &self,
+            _params: conex_types::device::RunSnapshotParams,
+        ) -> Result<conex_types::device::RunSnapshotResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+
+        async fn read_session_events(
+            &self,
+            _params: conex_types::device::EventPageParams,
+        ) -> Result<conex_types::device::EventPageResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+
+        async fn list_sessions(
+            &self,
+            _params: conex_types::device::ListSessionsParams,
+        ) -> Result<conex_types::device::ListSessionsResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+
+        async fn list_commands(&self) -> Result<conex_types::device::ListCommandsResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+
+        async fn run_task(&self, _p: conex_types::device::RunTaskParams) -> Result<conex_types::device::RunTaskResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+
+        async fn run_control(&self, _p: conex_types::device::RunControlParams) -> Result<conex_types::device::RunControlResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+
+        async fn cancel_run(&self, _p: conex_types::device::CancelRunParams) -> Result<conex_types::device::CancelRunResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+
+        async fn approve(&self, _p: conex_types::device::ApproveParams) -> Result<conex_types::device::ApproveResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+
+        async fn deny(&self, _p: conex_types::device::DenyParams) -> Result<conex_types::device::ApproveResult, ServerError> {
+            Err(ServerError::internal("test stub"))
+        }
+    }
+
+    /// 装配级测试最小真实面（G-1）：ApiBackend 注入 ApiBackend 槽
     fn assembled_backend() -> (Arc<dyn backend::ApiBackend>, Arc<RecordingEmitter>) {
-        static ASM_TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let seq = ASM_TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let db = conex_db::LocalDb::open_in_memory().expect("内存库必须可打开");
-        let store: Arc<dyn orchestrator::persist::Store> =
-            Arc::new(orchestrator::persist::LocalDbStore::new(db));
-        let snapshots: Arc<dyn orchestrator::restore::SnapshotStore> = Arc::new(
-            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
-                "server-asm-{}-{seq}-snapshot.json",
-                std::process::id()
-            ))),
-        );
         let webview = Arc::new(RecordingEmitter::default());
-        let bridge = crate::core_event_bridge::EventBridge::new(
-            "workbench-run-event",
-            Arc::clone(&webview) as Arc<dyn crate::core_event_bridge::Emitter>,
-        );
-        let core = Arc::new(crate::core_run_commands::CoreRunState::new(
-            store,
-            snapshots,
-            bridge,
-            Arc::new(crate::status_diagnostics::StatusDiagnostics::new()),
-            None,
-        ));
-        // 生产装配形态（main.rs）：真实 CoreStateBackend（只读面就绪标记
-        // 按当前事实注入；此处压缩能力视为已接线）
-        let backend: Arc<dyn backend::ApiBackend> = Arc::new(
-            crate::server::core_backend::CoreStateBackend::new(core).with_compaction_ready(true),
-        );
-        (backend, webview)
+        (Arc::new(TestBackendStub), webview)
     }
 
     /// WS 订阅 + 扇出 → events.push（实时推送链路最小闭环：订阅注册 →

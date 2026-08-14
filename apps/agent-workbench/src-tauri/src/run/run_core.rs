@@ -1049,7 +1049,7 @@ impl CoreRunState {
         }
         let max = self
             .store
-            .query_events(session_id, 0)
+            .query_events(session_id, 0, None)
             .await
             .map(|events| events.iter().map(|e| e.sequence).max().unwrap_or(0))
             .unwrap_or(0);
@@ -1068,7 +1068,7 @@ impl CoreRunState {
         for session in &outcome.sessions {
             let max = self
                 .store
-                .query_events(&session.session_id, 0)
+                .query_events(&session.session_id, 0, None)
                 .await
                 .map(|events| events.iter().map(|e| e.sequence).max().unwrap_or(0))
                 .unwrap_or(0);

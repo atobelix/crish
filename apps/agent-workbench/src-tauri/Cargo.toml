@@ -73,6 +73,10 @@ conex-telemetry = { path = "../../../crates/conex-telemetry" }
 # 27 接线方案 S3/S6：浏览器进程管理（conex-browser）+ 工具族/门禁（conex-browser-tools）
 conex-browser = { path = "../../../crates/conex-browser" }
 conex-browser-tools = { path = "../../../crates/conex-browser-tools" }
+# 06 遗留⑨：电脑操作会话槽（ComputerSlot 守卫装配 + register_computer_tools 后置注册；
+# 吞并幽灵引用补全时同步补回依赖，模块见 src/computer/mod.rs）
+conex-computer = { path = "../../../crates/conex-computer" }
+conex-computer-tools = { path = "../../../crates/conex-computer-tools" }
 # Interactive terminal (Windows ConPTY / Unix PTY)
 portable-pty = "0.9"
 # 多端互通 R1-06（TLS + 自签证书 + 指纹固定，multi_device/tls.rs）：

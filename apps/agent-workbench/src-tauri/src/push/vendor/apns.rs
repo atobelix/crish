@@ -175,7 +175,11 @@ pub struct ApnsAps {
 /// `crish.*` 自定义载荷（跳转最小集，D7 §6.3 白名单：
 /// 不上送工具参数全文/对话正文；screen 等字段由接线轮经
 /// [crate::push::schema::PushMessage] 的 target 注入）
+///
+/// wire 键 camelCase（对齐 D7 §3.3.13 样例的 `crish.*` 形状：
+/// `schemaVersion/eventType/dedupeKey/target` 同为 camelCase）。
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ApnsCrish {
     /// 会话 id（白名单字段）
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -257,24 +261,37 @@ pub struct ApnsSendRequest {
 /// 请求构造：`POST /3/device/{token}`（HTTP/2）+ JWT 认证头 + 载荷体。
 ///
 /// 纯函数（不发送）；设备 token 为空返回 [VendorError::Build]。
+/// 主机由 `credentials.sandbox` 决定（[APNS_PROD_HOST] / [APNS_SANDBOX_HOST]）；
+/// 发送器（[crate::push::vendor::apns_sender::ApnsSender]）走
+/// [build_apns_send_request_at] 以便测试注入本地端点。
 pub fn build_apns_send_request(
     credentials: &APNsCredentials,
     notification: &VendorNotification,
     jwt: &str,
 ) -> Result<ApnsSendRequest, VendorError> {
-    if notification.device.push_token.is_empty() {
-        return Err(VendorError::Build("APNs 设备 token 为空".to_string()));
-    }
     let host = if credentials.sandbox {
         APNS_SANDBOX_HOST
     } else {
         APNS_PROD_HOST
     };
+    build_apns_send_request_at(credentials, notification, jwt, &format!("https://{host}"))
+}
+
+/// 指定基址的请求构造（发送器内部路径；测试注入 `http://127.0.0.1:<port>`）
+pub(crate) fn build_apns_send_request_at(
+    credentials: &APNsCredentials,
+    notification: &VendorNotification,
+    jwt: &str,
+    base_url: &str,
+) -> Result<ApnsSendRequest, VendorError> {
+    if notification.device.push_token.is_empty() {
+        return Err(VendorError::Build("APNs 设备 token 为空".to_string()));
+    }
     let payload = apns_payload(notification);
     let body = serde_json::to_vec(&payload)
         .map_err(|e| VendorError::Build(format!("APNs 载荷序列化失败：{e}")))?;
     Ok(ApnsSendRequest {
-        url: format!("https://{host}/3/device/{}", notification.device.push_token),
+        url: format!("{base_url}/3/device/{}", notification.device.push_token),
         authorization: format!("bearer {jwt}"),
         apns_push_type: "alert",
         apns_priority: 10,

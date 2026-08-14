@@ -2542,6 +2542,7 @@ mod wait_wiring_tests {
             status: SubagentEndStatus::Completed,
             summary: Some("完成".to_string()),
             ended_at: now_iso_utc(),
+            subagent_session_id: None,
         });
         let out = tokio::time::timeout(Duration::from_secs(5), wait_task)
             .await
@@ -2840,12 +2841,13 @@ mod event_drain_tests {
         (bridge, emitter)
     }
 
-    /// 定时器缓冲事件 → forward helper → 信封形状断言：runId/sequence
-    /// 不注入（None）、事件体字段级断言（timerId/prompt/firedAtMs 与
-    /// timer-cancelled 的 reason/cancelledAtMs）；二次转发空缓冲返回 0
+    /// 定时器缓冲事件 → forward helper → 信封形状断言：R-22 伪 runId
+    /// 注入（timer-fired → runId="timer-<timerId>"、timer-cancelled 同形）、
+    /// sequence 不注入（None）；事件体字段级断言（timerId/prompt/firedAtMs
+    /// 与 timer-cancelled 的 reason/cancelledAtMs）；二次转发空缓冲返回 0
     /// （Vec::take 语义，不重复转发）。
     #[test]
-    fn drain_forward_emits_envelopes_without_runid() {
+    fn drain_forward_emits_envelopes_with_pseudo_runid() {
         let sink = AgentEventSink::new();
         TimerEventSinkTrait::emit(
             &sink,
@@ -2871,11 +2873,15 @@ mod event_drain_tests {
         for (channel, _) in &calls {
             assert_eq!(channel, "workbench-run-event");
         }
-        // 信封顶层形状：type 正确、无 runId/sequence、schemaVersion=1
+        // 信封顶层形状：type 正确、伪 runId 注入、无 sequence、schemaVersion=1
         let first: serde_json::Value =
             serde_json::from_str(&calls[0].1).expect("载荷应为合法 JSON");
         assert_eq!(first["type"], "timer-fired");
-        assert!(first.get("runId").is_none(), "timer 事件不得注入 runId");
+        assert_eq!(
+            first["runId"],
+            "timer-timer-0",
+            "R-22 伪 runId：timer-加timerId（timer_id 已含前缀，字面拼接，对齐 F6:34 先例）"
+        );
         assert!(first.get("sequence").is_none(), "timer 事件不得注入 sequence");
         assert_eq!(first["schemaVersion"], 1);
         assert_eq!(first["sessionId"], "");
@@ -2885,6 +2891,7 @@ mod event_drain_tests {
         let second: serde_json::Value =
             serde_json::from_str(&calls[1].1).expect("载荷应为合法 JSON");
         assert_eq!(second["type"], "timer-cancelled");
+        assert_eq!(second["runId"], "timer-timer-1", "timer-cancelled 同形注入伪 runId");
         assert_eq!(second["timerId"], "timer-1");
         assert_eq!(second["reason"], "early-exit");
         assert_eq!(second["cancelledAtMs"], 1_700_000_000_456_u64);
@@ -2898,9 +2905,10 @@ mod event_drain_tests {
 
     /// cron 缓冲事件 → forward helper → 信封形状断言（cron-fired 单臂：
     /// conex-types 仅 CronFired 变体，字段 cronId/prompt/expression/
-    /// iteration/firedAtMs 字段级断言；runId/sequence 不注入）。
+    /// iteration/firedAtMs 字段级断言；R-22 伪 runId 注入
+    /// runId="cron-<cronId>"，sequence 不注入）。
     #[test]
-    fn drain_forward_scheduler_emits_envelopes_without_runid() {
+    fn drain_forward_scheduler_emits_envelopes_with_pseudo_runid() {
         let sink = crate::sched::SchedEventSink::new();
         SchedEventSinkTrait::emit(
             &sink,
@@ -2921,7 +2929,11 @@ mod event_drain_tests {
         let payload: serde_json::Value =
             serde_json::from_str(&calls[0].1).expect("载荷应为合法 JSON");
         assert_eq!(payload["type"], "cron-fired");
-        assert!(payload.get("runId").is_none(), "cron 事件不得注入 runId");
+        assert_eq!(
+            payload["runId"],
+            "cron-cron-0",
+            "R-22 伪 runId：cron-加cronId（cron_id 已含前缀，字面拼接，对齐 F6:34 先例）"
+        );
         assert!(payload.get("sequence").is_none(), "cron 事件不得注入 sequence");
         assert_eq!(payload["schemaVersion"], 1);
         assert_eq!(payload["cronId"], "cron-0");
@@ -2985,8 +2997,9 @@ mod event_drain_tests {
             .await
             .expect("cron 注册应成功");
         tokio::time::sleep(Duration::from_millis(300)).await;
-        // 转发路径端到端：经访问器取走生产缓冲 → 真实桥信封（runId
-        // 不注入）；payload 字段级断言即「同一缓冲实例」的功能性证明
+        // 转发路径端到端：经访问器取走生产缓冲 → 真实桥信封（R-22 伪
+        // runId 注入 cron-<cronId>）；payload 字段级断言即「同一缓冲
+        // 实例」的功能性证明
         let (bridge, emitter) = recording_bridge();
         let forwarded = forward_drained_scheduler_events(&engine.scheduler_event_sink(), &bridge);
         assert_eq!(forwarded, 1, "cron 触发事件应经访问器转发到真实桥");
@@ -2996,7 +3009,11 @@ mod event_drain_tests {
         assert_eq!(payload["cronId"], cron_id);
         assert_eq!(payload["prompt"], "drain cron 检查");
         assert_eq!(payload["iteration"], 1);
-        assert!(payload.get("runId").is_none(), "cron 事件不得注入 runId");
+        assert_eq!(
+            payload["runId"],
+            format!("cron-{cron_id}"),
+            "R-22 伪 runId：cron-加cronId（生产 id 端到端验证）"
+        );
         // drain 已取走 → 缓冲为空（Vec::take 语义，不重复转发）
         assert!(
             engine.scheduler_event_sink().drain().is_empty(),

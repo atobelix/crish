@@ -76,7 +76,7 @@ for (const file of target) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (DEF_LINE_RE.test(line)) continue;
-    const replaced = line.replace(MIX_RE, (full, pct, baseMix) => {
+    const replaced = line.replace(MIX_RE, (full, pct) => {
       const token = MAP[pct];
       if (!token) return full;
       total += 1;

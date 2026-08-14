@@ -41,11 +41,10 @@ export class HeightMap {
   /** 可选：blockId → 序列 index（折叠/结构变更时由调用方维护） */
   private idToIndex = new Map<string, number>();
   private indexToId: (string | undefined)[] = [];
+  private readonly defaultEstimatePx: number;
 
-  constructor(
-    count = 0,
-    private readonly defaultEstimatePx: number = DEFAULT_ESTIMATE_PX
-  ) {
+  constructor(count = 0, defaultEstimatePx: number = DEFAULT_ESTIMATE_PX) {
+    this.defaultEstimatePx = defaultEstimatePx;
     if (count > 0) {
       this.resize(count, defaultEstimatePx);
     }

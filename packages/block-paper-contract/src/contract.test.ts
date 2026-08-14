@@ -10,6 +10,8 @@ import {
   asFlavourRegistration,
   EDITOR_SURFACES,
   isSendToNoteIntent,
+  createUtf16Offset,
+  createUnicodeOffset,
 } from './index';
 import {
   queryToolMeta,
@@ -66,5 +68,20 @@ describe('@crish/block-paper-contract', () => {
     expect(isSendToNoteIntent(sampleSendToNoteIntent)).toBe(true);
     expect(sampleSendToNoteIntent.source).not.toHaveProperty('lines');
     expect(sampleSendToNoteIntent.source.markdown).toContain('smoke');
+  });
+
+  it('coordinates 构造器正确创建 Branded Offset 并拦截非法输入', () => {
+    const utf16 = createUtf16Offset(42);
+    expect(utf16).toBe(42);
+    const unicode = createUnicodeOffset(108);
+    expect(unicode).toBe(108);
+
+    expect(() => createUtf16Offset(-1)).toThrow(TypeError);
+    expect(() => createUtf16Offset(1.5)).toThrow(TypeError);
+    expect(() => createUtf16Offset(Infinity)).toThrow(TypeError);
+
+    expect(() => createUnicodeOffset(-5)).toThrow(TypeError);
+    expect(() => createUnicodeOffset(3.14)).toThrow(TypeError);
+    expect(() => createUnicodeOffset(NaN)).toThrow(TypeError);
   });
 });

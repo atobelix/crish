@@ -41,10 +41,10 @@ export type ProviderErrorKind = (typeof PROVIDER_ERROR_KIND_VALUES)[number];
 export const RUNTIME_CHECKPOINT_KIND_VALUES = ["workspace-checkpoint","git-checkpoint","file-snapshot"] as const;
 export type RuntimeCheckpointKind = (typeof RUNTIME_CHECKPOINT_KIND_VALUES)[number];
 
-export const CONTEXT_COMPRESSION_TRIGGER_VALUES = ["auto","preflight","manual","threshold","overflow","idle","incomplete","handoff"] as const;
+export const CONTEXT_COMPRESSION_TRIGGER_VALUES = ["auto","usermessage","stage","preflight","manual","threshold","overflow","idle","incomplete","handoff"] as const;
 export type ContextCompressionTrigger = (typeof CONTEXT_COMPRESSION_TRIGGER_VALUES)[number];
 
-export const CONTEXT_COMPRESSION_REASON_VALUES = ["manual","threshold","overflow","idle","incomplete","handoff"] as const;
+export const CONTEXT_COMPRESSION_REASON_VALUES = ["manual","usermessage","stage","threshold","overflow","idle","incomplete","handoff"] as const;
 export type ContextCompressionReason = (typeof CONTEXT_COMPRESSION_REASON_VALUES)[number];
 
 export const CONTEXT_COMPRESSION_POLICY_TIER_VALUES = ["manual","proactive","recovery","background","handoff"] as const;
@@ -59,7 +59,7 @@ export type CompressionCacheInvalidation = (typeof COMPRESSION_CACHE_INVALIDATIO
 export const MISS_ATTRIBUTION_VALUES = ["model-switch","compaction","prefix-changed","idle-ttl-expired","cold","zero-read","low-read","unknown"] as const;
 export type MissAttribution = (typeof MISS_ATTRIBUTION_VALUES)[number];
 
-export const SECURITY_AUDIT_OPERATION_VALUES = ["delete","trash-restore","trash-purge","git-revert","command-exec","undeclared-write"] as const;
+export const SECURITY_AUDIT_OPERATION_VALUES = ["delete","trash-restore","trash-purge","git-revert","command-exec","undeclared-write","remote-source-attempt","remote-mode-downgrade","remote-only"] as const;
 export type SecurityAuditOperation = (typeof SECURITY_AUDIT_OPERATION_VALUES)[number];
 
 export const SECURITY_AUDIT_DECISION_VALUES = ["blocked","approved","denied","redirected","restored","purged"] as const;

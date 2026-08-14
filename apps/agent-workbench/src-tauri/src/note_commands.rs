@@ -89,6 +89,24 @@ pub use note_commands_mirror::{
     note_detect_mirror_drift, note_import_mirror_proposal, NoteDetectMirrorArgs,
     NoteImportMirrorArgs,
 };
+// SR-06f 拆分补完：tauri 宏生成的 invoke 包装符号（`__cmd__*`）与命令名
+// 常量（`__tauri_command_name_*`）随命令定义于三个子模块，`generate_handler!`
+// 从注册路径（main.rs command_registry! 的 `note_commands::*`）所在模块
+// 解析包装符号——门面必须透出，否则 bin 编译失败（de8e744e 欠验债，
+// 此处补闭环；零逻辑改动）。
+pub use note_commands_apply::{
+    __cmd__note_apply_ops, __cmd__note_document_apply_md, __cmd__note_send_to_note,
+    __tauri_command_name_note_apply_ops, __tauri_command_name_note_document_apply_md,
+    __tauri_command_name_note_send_to_note,
+};
+pub use note_commands_hydrate::{
+    __cmd__note_document_hydrate, __cmd__note_query_blocks,
+    __tauri_command_name_note_document_hydrate, __tauri_command_name_note_query_blocks,
+};
+pub use note_commands_mirror::{
+    __cmd__note_detect_mirror_drift, __cmd__note_import_mirror_proposal,
+    __tauri_command_name_note_detect_mirror_drift, __tauri_command_name_note_import_mirror_proposal,
+};
 
 /// 命令层同步 smoke 助手（测试 / 非 Tauri 路径）：apply 后返回结果。
 #[cfg(test)]

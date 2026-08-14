@@ -119,6 +119,48 @@ async fn send_rejects_empty_intent() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// B2 慢盘注入：慢 apply（400ms 延迟在 spawn_blocking 闭包内执行，占用阻塞
+/// 线程池）期间，单 worker runtime 的 async ticker（10ms × 5 ≈ 50ms）仍推进。
+/// 阈值 200ms（Windows 定时器粒度 ~15.6ms，5 拍最坏 ~80ms，余量充足）；
+/// 若退化为同步直调，worker 被占满，ticker 只能等 400ms 延迟结束。
+/// 对齐 persist.rs:972 `local_db_store_slow_append_does_not_block_worker`。
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn slow_apply_core_does_not_block_async_worker() {
+    let (_guard, dir) = temp_install();
+    super::note_commands_apply::TEST_APPLY_DELAY_MS.store(400, Ordering::SeqCst);
+
+    let slow = tokio::spawn(async {
+        let req = NoteApplyMdRequest {
+            doc_id: "slow-doc".into(),
+            markdown: "slow disk body".into(),
+            parent_id: None,
+            after_block_id: None,
+            mode: NoteApplyMode::ApplyMdFragment,
+            intent_id: None,
+            batch_id: None,
+            message_id: None,
+            origin: Some("user".into()),
+        };
+        note_document_apply_md(req).await.expect("apply");
+    });
+    let ticker = tokio::spawn(async {
+        let t0 = std::time::Instant::now();
+        for _ in 0..5 {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        t0.elapsed()
+    });
+    slow.await.unwrap();
+    let elapsed = ticker.await.unwrap();
+    super::note_commands_apply::TEST_APPLY_DELAY_MS.store(0, Ordering::SeqCst);
+    assert!(
+        elapsed < std::time::Duration::from_millis(200),
+        "慢核心应占用阻塞线程池而非 tokio worker，ticker 被阻塞: {elapsed:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// CONN-B3：collab wire insert → note_apply_ops → rev/applied 可观测。
 ///
 /// **≠ EL-01**；本命令可测 **≠** A-BLK 全表 e2e。

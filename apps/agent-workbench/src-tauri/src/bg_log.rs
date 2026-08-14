@@ -10,6 +10,10 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+// SR-05 拆分接线：file_info/read_chunk 已迁入 perf::fs（bg_log 原实现
+// 迁移点；import 同步补全）
+use crate::perf::fs::{file_info, read_chunk};
+
 // ============================================================================
 // 常量（T-AB-09 日志生命周期参数）
 // ============================================================================

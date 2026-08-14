@@ -343,6 +343,30 @@ impl CoreRunState {
         };
         emit_envelope_event(&active.queue, &active.bridge, &active.run_id, &active.session_id, event)
             .await;
+        // EV-07：收口决策补发 goal-continuation-decided（Completed →
+        // action=complete、Blocked → action=blocked、NoProgress →
+        // action=stop；reason = reason_detail 区分；Continue 由 idle 续轮
+        // 判定发射，防同轮双发；NoGoal 早退不补发）。与
+        // goal-round-completed.decision 语义边界：轮次账本事件（每轮必发）
+        // vs 决策观测事件（决策全集镜像，action 值域对齐 TS
+        // GoalContinuationDecision continue/complete/blocked/stop）。
+        let continuation_action = match assessment.decision {
+            GoalDecision::Completed => Some("complete"),
+            GoalDecision::Blocked => Some("blocked"),
+            GoalDecision::NoProgress => Some("stop"),
+            GoalDecision::Continue | GoalDecision::NoGoal => None,
+        };
+        if let Some(action) = continuation_action {
+            emit_goal_continuation_decided(
+                active,
+                Some(&advanced),
+                action,
+                &assessment.reason_detail,
+                current.current_round + 1,
+                None,
+            )
+            .await;
+        }
     }
 }
 
@@ -435,7 +459,6 @@ impl CoreRunState {
             role: None,
             capability_mode: None,
             allowed_tools: None,
-            timeout_ms: None,
             description: Some("恢复阶梯 1 重派（C7，承接同一目标）".to_string()),
             mode: Some("recovery-retry".to_string()),
             parent_session_id: cfg.parent_session_id.clone(),
@@ -574,11 +597,16 @@ impl CoreRunState {
     /// 不消费 Episode、无 steering）→ 计数 +1；spawn 失败（含 16/16/1
     /// 守卫拒绝）→ 计数推满 + retries 推满重入 escalate（阶梯 2 通知，
     /// 不静默、无假重试）。
+    ///
+    /// EV-08（G-20）：重派成功处发射 `recovery-retry-attempted`——每次
+    /// 阶梯 1 重试有事件，且 from_run_id → new_run_id 结构化关联（重试
+    /// 无事件 + 无结构化关联缺陷闭合）。
     pub(crate) async fn execute_subagent_recovery(
         &self,
         session_id: &str,
         cfg: &crate::subagent_spawner::SubagentRunConfig,
         plan: RecoveryPlan,
+        active: &ActiveRun,
     ) {
         let RecoveryPlan::AutoRetry { delay, ctx, coord } = plan;
         // 退避（async sleep 不阻塞 tokio worker）
@@ -618,6 +646,29 @@ impl CoreRunState {
         match self.subagent_spawner.spawn(&request).await {
             Ok(spawned) => {
                 let retries = self.bump_ladder1_retry(session_id, &fp);
+                // EV-08（G-20）：阶梯 1 重派留痕——每次重试有事件，且
+                // from_run_id → new_run_id 结构化关联（修复「重试无事件 +
+                // 无结构化关联」；attempt = 本次重派序号；budget_remaining
+                // = 剩余重试预算）
+                let retry_event = AgentEvent::RecoveryRetryAttempted {
+                    session_id: session_id.to_string(),
+                    timestamp: crate::engine::now_iso_utc(),
+                    attempt: retries,
+                    delay_ms: delay.as_millis() as u64,
+                    budget_remaining: self
+                        .ladder1_max_retries_config()
+                        .saturating_sub(retries),
+                    from_run_id: ctx.subagent_run_id.clone(),
+                    new_run_id: spawned.subagent_run_id.clone(),
+                };
+                emit_envelope_event(
+                    &active.queue,
+                    &active.bridge,
+                    &spawned.subagent_run_id,
+                    session_id,
+                    retry_event,
+                )
+                .await;
                 tracing::info!(
                     target: "run",
                     session_id,

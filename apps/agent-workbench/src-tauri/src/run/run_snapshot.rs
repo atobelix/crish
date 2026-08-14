@@ -300,7 +300,7 @@ impl CoreRunState {
         for session in &sessions {
             let events = self
                 .store
-                .query_events(&session.session_id, 0)
+                .query_events(&session.session_id, 0, None)
                 .await
                 .map_err(|e| e.to_string())?;
             let session_max = events.iter().map(|e| e.sequence).max().unwrap_or(0);

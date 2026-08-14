@@ -211,12 +211,23 @@ impl CoalesceState {
     pub fn close_run(&mut self, pending: PendingPush) -> MergedPush {
         let bucket_key = format!("subagent:{}", pending.group_key);
         let mut merged = if let Some(bucket) = self.buckets.remove(&bucket_key) {
+            let group = bucket.group_key_of();
             if pending.arrived_at_ms.saturating_sub(bucket.first.arrived_at_ms)
                 < self.windows.subagent_run_terminal_ms
             {
-                let mut m = bucket.merged(bucket.items.len() + 1);
+                // 子代理数 + run 本体（items 不含首条，故 +2）
+                let mut m = bucket.merged(bucket.items.len() + 2);
                 m.session_id = pending.session_id.clone();
                 m.last_at_ms = pending.arrived_at_ms;
+                // 投递形态为 run-completed：去重键首段同步（M8 §3.4.1
+                // {eventType}:{业务键}；桶键首段是 subagent-completed，
+                // 残留会导致「run 完成合并」键形不一致）
+                m.dedupe_key = format!(
+                    "merged:{}:{}:{}",
+                    SceneId::RunCompleted.as_str(),
+                    group,
+                    m.first_at_ms
+                );
                 m
             } else {
                 // 桶已超出窗口：先产出子代理合并，再单条产 run
@@ -299,7 +310,8 @@ impl CoalesceState {
                         scene: pending.scene,
                         session_id: first.session_id.clone(),
                         first,
-                        items: vec![pending],
+                        // 首条只存 first，不重复进 items（否则 count 双计）
+                        items: Vec::new(),
                         window_ms,
                     },
                 );
@@ -465,7 +477,9 @@ mod tests {
         let mut state = CoalesceState::default();
         state.push(pending(SceneId::CronFired, "s-7", "cron-1", 1_000));
         state.push(pending(SceneId::CronFired, "s-7", "cron-2", 2_000));
-        let out = state.flush(601_000);
+        // cron-2 于 2_000 入桶：flush 须晚于首条 + 10min 窗口（602_000
+        // 时 cron-1 已过期 601s、cron-2 恰满 600s）
+        let out = state.flush(602_000);
         assert_eq!(out.len(), 2, "不同 cron 独立成桶");
     }
 

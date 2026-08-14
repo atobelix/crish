@@ -23,7 +23,6 @@ import {
   onToolEnd,
   onToolBatchStart,
   onToolBatchEnd,
-  onToolInputRepaired,
 } from './toolHandlers';
 import {
   onAgentStart,
@@ -69,11 +68,67 @@ import {
   onTimerCancelled,
   onCronFired,
 } from './taskEventHandlers';
+import {
+  onGoalRoundStarted,
+  onGoalRoundCompleted,
+  onGoalContinuationDecided,
+  onRecoveryEscalated,
+  onRecoverySteering,
+  onRecoveryFork,
+  onRecoveryReport,
+  onRecoveryBudgetDenied,
+} from './continuityHandlers';
 
 export type EngineHandler<ET extends EngineEventType> = (
   env: HandlerEnv,
   envelope: EngineEnvelope<ET>
 ) => void;
+
+// 观测与中控增强域（D-03 观测九事件显式空实现）
+export function onSteeringEvaluated(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'steering-evaluated'>
+): void {}
+
+export function onControlIntent(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'control-intent'>
+): void {}
+
+export function onHookOutcome(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'hook-outcome'>
+): void {}
+
+export function onSummaryBackground(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'summary-background'>
+): void {}
+
+export function onStageSummaryMilestone(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'stage-summary-milestone'>
+): void {}
+
+export function onNudgeEnqueued(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'nudge-enqueued'>
+): void {}
+
+export function onRecoveryAcknowledged(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'recovery-acknowledged'>
+): void {}
+
+export function onRecoveryRetryAttempted(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'recovery-retry-attempted'>
+): void {}
+
+export function onProviderRequestAnchored(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'provider-request-anchored'>
+): void {}
 
 export const engineDispatchTable: {
   [ET in EngineEventType]: EngineHandler<ET>;
@@ -90,7 +145,6 @@ export const engineDispatchTable: {
   'tool-end': onToolEnd,
   'tool-batch-start': onToolBatchStart,
   'tool-batch-end': onToolBatchEnd,
-  'tool-input-repaired': onToolInputRepaired,
   'context-compression-start': onContextCompressionStart,
   'context-compression-end': onContextCompressionEnd,
   'provider-diagnostic': onProviderDiagnostic,
@@ -114,9 +168,12 @@ export const engineDispatchTable: {
   // 优先生成解析器——完整信封带 sessionId 时走 engine 分支，宽容形态
   // （缺 sessionId 等）走 legacy 分支；两分支都转发 legacy handler
   // （消费 raw 原始信封，subagentHandlers.ts），保证行为一致）
-  'subagent-started': onSubagentStarted as unknown as EngineHandler<'subagent-started'>,
-  'subagent-event': onSubagentEvent as unknown as EngineHandler<'subagent-event'>,
-  'subagent-ended': onSubagentEnded as unknown as EngineHandler<'subagent-ended'>,
+  'subagent-started':
+    onSubagentStarted as unknown as EngineHandler<'subagent-started'>,
+  'subagent-event':
+    onSubagentEvent as unknown as EngineHandler<'subagent-event'>,
+  'subagent-ended':
+    onSubagentEnded as unknown as EngineHandler<'subagent-ended'>,
   // 任务域七事件（F3 T-AB-17 数据面；UI 展示层轮询策略下显式空实现，
   // 事件驱动刷新接线待后续轮——taskEventHandlers.ts）
   'task-started': onTaskStarted,
@@ -131,6 +188,25 @@ export const engineDispatchTable: {
   'timer-cancelled': onTimerCancelled,
   // Cron 域（F9 T-CF-08 数据面；唤醒走 steering 面，前端显式空实现）
   'cron-fired': onCronFired,
+  // 连续性与恢复域（D8 §3.7）
+  'recovery-escalated': onRecoveryEscalated,
+  'recovery-steering': onRecoverySteering,
+  'recovery-fork': onRecoveryFork,
+  'recovery-report': onRecoveryReport,
+  'recovery-budget-denied': onRecoveryBudgetDenied,
+  'goal-round-started': onGoalRoundStarted,
+  'goal-round-completed': onGoalRoundCompleted,
+  'goal-continuation-decided': onGoalContinuationDecided,
+  // 观测与中控增强域（D-03）
+  'steering-evaluated': onSteeringEvaluated,
+  'control-intent': onControlIntent,
+  'hook-outcome': onHookOutcome,
+  'summary-background': onSummaryBackground,
+  'stage-summary-milestone': onStageSummaryMilestone,
+  'nudge-enqueued': onNudgeEnqueued,
+  'recovery-acknowledged': onRecoveryAcknowledged,
+  'recovery-retry-attempted': onRecoveryRetryAttempted,
+  'provider-request-anchored': onProviderRequestAnchored,
 };
 
 type LegacyHandler = (env: HandlerEnv, envelope: LegacyEnvelope) => void;

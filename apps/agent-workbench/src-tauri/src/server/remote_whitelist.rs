@@ -30,6 +30,148 @@
 //!   （D5 §4.5「设备管理与服务配置命令（admin 面，仅桌面端）」）；
 //! - 任何以明文返回密钥/令牌/配对码的命令。
 
+use conex_types::events::{
+    AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation,
+};
+use conex_types::impact::ImpactAssessment;
+use crate::core_event_bridge::EventBridge;
+
+/// remote-mode-downgrade 审计标记常量（D5 §8.2）
+pub(crate) const REMOTE_MODE_DOWNGRADE_AUDIT_MARKER: &str = "remote-mode-downgrade";
+
+/// remote-only 审计标记（D5 §4.4）
+pub(crate) const REMOTE_ONLY_AUDIT_MARKER: &str = "remote-only";
+
+/// 远程审批双轨路由
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteApprovalRoute {
+    Dual,
+    RemoteOnly,
+}
+
+pub(crate) fn route_remote_approval(desktop_user_present: bool) -> RemoteApprovalRoute {
+    if desktop_user_present {
+        RemoteApprovalRoute::Dual
+    } else {
+        RemoteApprovalRoute::RemoteOnly
+    }
+}
+
+pub(crate) fn combine_dual_decisions(mobile_approved: bool, desktop_approved: bool) -> bool {
+    mobile_approved && desktop_approved
+}
+
+pub(crate) fn remote_source_attempt_marker(command: &str) -> String {
+    format!("operation=remote-source-attempt;command={command};decision=blocked")
+}
+
+fn now_iso_utc() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs();
+    let millis = now.subsec_millis();
+    let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
+    let (year, month, day) = civil_from_days((secs / 86400) as i64);
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
+}
+
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (y + if m <= 2 { 1 } else { 0 }, m, d)
+}
+
+fn remote_audit_event(
+    session_id: &str,
+    operation: SecurityAuditOperation,
+    targets: Vec<String>,
+    decision: SecurityAuditDecision,
+    permission_mode: Option<String>,
+) -> AgentEvent {
+    let now = now_iso_utc();
+    AgentEvent::SecurityAudit {
+        session_id: session_id.to_string(),
+        timestamp: now,
+        operation,
+        targets,
+        impact: ImpactAssessment::default(),
+        decision,
+        permission_mode,
+        tool_call_id: None,
+    }
+}
+
+fn emit_remote_audit(
+    bridge: Option<&EventBridge>,
+    session_id: &str,
+    operation: SecurityAuditOperation,
+    targets: Vec<String>,
+    decision: SecurityAuditDecision,
+    permission_mode: Option<String>,
+) {
+    tracing::info!(
+        target: "security.audit",
+        kind = "remote-action",
+        operation = ?operation,
+        decision = ?decision,
+        targets = ?targets,
+        session_id,
+        "远程动作审计（结构化日志 + SecurityAudit 事件双写）"
+    );
+    let Some(bridge) = bridge else {
+        return;
+    };
+    let envelope = AgentEventEnvelope::new(
+        remote_audit_event(session_id, operation, targets, decision, permission_mode),
+        None,
+        None,
+    );
+    bridge.emit_envelope(&envelope);
+}
+
+pub(crate) fn emit_remote_mode_downgrade_audit(
+    bridge: Option<&EventBridge>,
+    run_id: &str,
+    session_id: &str,
+) {
+    emit_remote_audit(
+        bridge,
+        session_id,
+        SecurityAuditOperation::RemoteModeDowngrade,
+        vec![run_id.to_string()],
+        SecurityAuditDecision::Blocked,
+        Some("full-access".to_string()),
+    );
+}
+
+pub(crate) fn emit_remote_source_attempt_audit(bridge: Option<&EventBridge>, command: &str) {
+    let redacted = conex_telemetry::redact::redact_text(command);
+    emit_remote_audit(
+        bridge,
+        "",
+        SecurityAuditOperation::RemoteSourceAttempt,
+        vec![redacted.clone()],
+        SecurityAuditDecision::Blocked,
+        None,
+    );
+    tracing::info!(
+        target: "security.audit",
+        kind = "remote-command",
+        operation = "remote-source-attempt",
+        command = %redacted,
+        decision = "blocked",
+        "远程来源触达被禁命令面（白名单拒绝 + 审计标记，敏感形态已打码）"
+    );
+}
+
 /// 远程命令能力分级（M6 §4 功能域；D5 §4.1 observe/approve/operate 语义
 /// 在注册表声明所需能力级——本表先冻结命令面真源，能力门禁由网关装配
 /// 层按 §4.2 矩阵执行）

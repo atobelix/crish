@@ -9,6 +9,7 @@ import {
   ensureComposingPinned,
   filterUnmountCandidates,
   PinViolationError,
+  planScrollUnmount,
   validatePinSnapshot,
 } from './pin';
 
@@ -124,5 +125,48 @@ describe('assertUnmountAllowed', () => {
       'filter'
     );
     expect(allowed.sort()).toEqual(['a', 'b']);
+  });
+});
+
+describe('planScrollUnmount (DOM Pinning & IME Protection)', () => {
+  it('候选集模式：拦截 IME 组合态正在输入的块与焦点块，保持 DOM Pinning', () => {
+    const pinned = buildPinSet({
+      focusId: 'focus-node',
+      composingIds: ['ime-active'],
+    });
+    const plan = planScrollUnmount(
+      ['node-1', 'ime-active', 'node-2', 'focus-node', 'node-3'],
+      {
+        focusId: 'focus-node',
+        composingIds: ['ime-active'],
+        pinned,
+      }
+    );
+
+    expect(plan.retained.sort()).toEqual(['focus-node', 'ime-active'].sort());
+    expect(plan.allowed.sort()).toEqual(['node-1', 'node-2', 'node-3'].sort());
+  });
+
+  it('DOM PinMap 模式：将 activeId 标记为 retained，其余节点允许卸载', () => {
+    const pinMap = new Map<string, HTMLElement>();
+    const dummyEl = {} as HTMLElement;
+    pinMap.set('dom-1', dummyEl);
+    pinMap.set('dom-composing', dummyEl);
+    pinMap.set('dom-3', dummyEl);
+
+    const plan = planScrollUnmount(pinMap, 'dom-composing');
+    expect(plan.retained).toEqual(['dom-composing']);
+    expect(plan.allowed.sort()).toEqual(['dom-1', 'dom-3'].sort());
+  });
+
+  it('DOM PinMap 模式：未传入 activeId 时所有节点均可安全卸载', () => {
+    const pinMap = new Map<string, HTMLElement>();
+    const dummyEl = {} as HTMLElement;
+    pinMap.set('dom-1', dummyEl);
+    pinMap.set('dom-2', dummyEl);
+
+    const plan = planScrollUnmount(pinMap);
+    expect(plan.retained).toEqual([]);
+    expect(plan.allowed.sort()).toEqual(['dom-1', 'dom-2'].sort());
   });
 });

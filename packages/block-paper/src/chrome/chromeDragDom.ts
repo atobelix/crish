@@ -48,7 +48,7 @@ export type DropLineTarget = {
 export type DragPreviewState = {
   sourceBlockId: BlockId;
   /** 可选预览标签（如块摘要） */
-  label?: string;
+  label?: string | undefined;
 };
 
 /**
@@ -58,13 +58,13 @@ export type DragPreviewState = {
 export type DragPointerShape = {
   phase: 'down' | 'move' | 'up' | 'cancel';
   /** down：拖拽源块（通常为把手所属行） */
-  sourceBlockId?: BlockId;
+  sourceBlockId?: BlockId | undefined;
   /** move：当前悬停目标块（null = 离开列表） */
-  overBlockId?: BlockId | null;
+  overBlockId?: BlockId | null | undefined;
   /** move：落点边（默认 before） */
-  side?: DropLineSide | null;
+  side?: DropLineSide | null | undefined;
   /** 可选预览标签 */
-  label?: string;
+  label?: string | undefined;
 };
 
 // ---------------------------------------------------------------------------
@@ -196,8 +196,12 @@ export function reduceDragPointerShape(
     case 'down': {
       const src = shape.sourceBlockId;
       if (!src || !hasBlock(src)) return session;
+      const dragState: DragPreviewState = { sourceBlockId: src };
+      if (shape.label !== undefined) {
+        dragState.label = shape.label;
+      }
       return {
-        dragState: { sourceBlockId: src, label: shape.label },
+        dragState,
         dropTarget: session.dropTarget,
       };
     }

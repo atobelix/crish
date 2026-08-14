@@ -13,6 +13,84 @@ import { generateMessageId } from '../../utils/generateMessageId';
 import type { SessionMessage, SessionGoalMode } from '../../store/types';
 import { getCompositionRoot } from '../../app/compositionRoot';
 
+export type GoalRoundEvent =
+  | {
+      type: 'goal-round-started';
+      round: number;
+      maxRounds: number;
+      goal: string;
+    }
+  | {
+      type: 'goal-round-completed';
+      round: number;
+      decision: string;
+      reasonDetail?: string;
+      stalledDelta?: number;
+    }
+  | {
+      type: 'goal-continuation-decided';
+      action: string;
+      reason?: string;
+    };
+
+export function goalDecisionToStatus(
+  decision: string
+): 'active' | 'completed' | 'blocked' | undefined {
+  const d = String(decision ?? '')
+    .toLowerCase()
+    .replace(/[-_]/g, '');
+  if (d === 'completed' || d === 'done') return 'completed';
+  if (d === 'blocked' || d === 'noprogress' || d === 'nogoal') return 'blocked';
+  if (d === 'continue' || d === 'inprogress') return undefined;
+  return undefined;
+}
+
+export function isGoalDecisionTerminal(decision: string): boolean {
+  const s = goalDecisionToStatus(decision);
+  if (s === 'completed' || s === 'blocked') return true;
+  const d = String(decision ?? '')
+    .toLowerCase()
+    .replace(/[-_]/g, '');
+  return d === 'nogoal';
+}
+
+export function applyGoalRoundEventToGoalMode(
+  current: SessionGoalMode | null | undefined,
+  event: GoalRoundEvent
+): SessionGoalMode | null {
+  if (!current) return null;
+  if (event.type === 'goal-round-started') {
+    return {
+      ...current,
+      active: true,
+      iteration: Math.max(0, event.round - 1),
+      maxIterations: event.maxRounds,
+      status: 'active',
+      goal: event.goal || current.goal,
+    };
+  }
+  if (event.type === 'goal-round-completed') {
+    const status = goalDecisionToStatus(event.decision);
+    const next: SessionGoalMode = {
+      ...current,
+      iteration: Math.max(0, event.round - 1),
+    };
+    if (status) {
+      next.status = status;
+    } else {
+      delete next.status;
+    }
+    return next;
+  }
+  if (event.type === 'goal-continuation-decided') {
+    const a = String(event.action ?? '').toLowerCase();
+    if (a === 'complete') return { ...current, status: 'completed' };
+    if (a === 'block') return { ...current, status: 'blocked' };
+    if (a === 'continue') return { ...current, status: 'active' };
+  }
+  return current;
+}
+
 function syncGoalTasksFromAssistantText(
   sid: string,
   assistantText: string,
@@ -26,7 +104,7 @@ function syncGoalTasksFromAssistantText(
 
 export function useGoalMode(
   streamManagerRef: MutableRefObject<SessionStreamManager | null>,
-  onShowToast: (message: string) => void,
+  onShowToast: (message: string) => void
 ): {
   maybeContinueGoalMode: (sid: string, assistantMsgId: string) => boolean;
   drainQueuedAfterComplete: (sid: string) => void;
