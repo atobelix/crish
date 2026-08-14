@@ -442,3 +442,111 @@ async fn ladder3_spawn_failure_escalates() {
         0
     );
 }
+
+// ── DM-05 直写路径规范化：payload 顶层 type 键 ──────────────────
+
+/// DM-05：恢复域六直写点 payload 全部补顶层 type 键（与 event_type 列
+/// 一致，读侧 D8 fallback 可路由）；typed 路径（escalated / budget-denied）
+/// 字段形状与 conex-types 注册表（engine-events.json id 42/46）对齐；
+/// 镜像路径（steering / fork / report）字段保真不丢失（errorKind /
+/// createdAtMs / attempts 为 typed 变体形状之外的超集字段，降级保真）
+#[tokio::test]
+async fn recovery_event_payload_type_tagged() {
+    let (env, mut coordinator) = env();
+    // 阶梯 2 路径：escalated + steering
+    let failure_ctx = ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000);
+    coordinator
+        .on_subagent_run_failure(&failure_ctx)
+        .await
+        .unwrap();
+    // 阶梯 3 fork 路径（同指纹三次 fork 耗尽预算 limit=3）
+    coordinator.fork_and_reassign(&failure_ctx).await.unwrap();
+    for i in 1..=2 {
+        let fork_ctx = ctx(
+            &format!("run-fork-{i}"),
+            ProviderErrorKind::ServerError,
+            4,
+            61_000,
+        );
+        coordinator.fork_and_reassign(&fork_ctx).await.unwrap();
+    }
+    // 预算耗尽：fork 路径 budget-denied + report
+    coordinator
+        .fork_and_reassign(&ctx("run-fork-3", ProviderErrorKind::ServerError, 4, 61_000))
+        .await
+        .unwrap();
+    // 预算耗尽：on_subagent_run_failure 路径 budget-denied + report
+    coordinator
+        .on_subagent_run_failure(&ctx("run-9", ProviderErrorKind::Network, 4, 61_000))
+        .await
+        .unwrap();
+
+    let events = env.store.events();
+    // 六直写点留痕 = escalated×2 + steering + fork×3 + denied×2 +
+    // report×2（run-9 阶梯 1 上行先写 escalated 再预算拒绝，共 10 条）
+    assert_eq!(events.len(), 10, "六直写点全部留痕");
+    for (_, event_type, payload) in &events {
+        let value: serde_json::Value = serde_json::from_str(payload)
+            .unwrap_or_else(|e| panic!("{event_type} payload 非法 JSON：{e}"));
+        assert_eq!(
+            value["type"].as_str(),
+            Some(event_type.as_str()),
+            "{event_type} payload 顶层 type 键须与事件类型一致"
+        );
+    }
+    let payload_of = |event_type: &str| {
+        events
+            .iter()
+            .find(|(_, t, _)| t == event_type)
+            .unwrap()
+            .2
+            .clone()
+    };
+    // typed 路径（engine-events.json id 42）：字段形状与注册表对齐
+    let escalated: serde_json::Value =
+        serde_json::from_str(&payload_of(RECOVER_ESCALATED_EVENT)).unwrap();
+    assert_eq!(escalated["sessionId"], "s1");
+    assert_eq!(escalated["subagentRunId"], "run-1");
+    assert_eq!(escalated["retries"], 5);
+    assert_eq!(escalated["elapsedMs"], 61_000);
+    assert!(escalated.get("kind").is_some());
+    // typed 路径（engine-events.json id 46）：budget-denied 双路径同形
+    // （fork 路径 run-fork-3 + failure 路径 run-9）
+    let denied: Vec<serde_json::Value> = events
+        .iter()
+        .filter(|(_, t, _)| t == RECOVER_BUDGET_DENIED_EVENT)
+        .map(|(_, _, p)| serde_json::from_str(p).unwrap())
+        .collect();
+    assert_eq!(denied.len(), 2, "budget-denied 双路径各一");
+    for d in &denied {
+        assert_eq!(d["count"], 3);
+        assert_eq!(d["max"], 3);
+        assert_eq!(d["sessionId"], "s1");
+        assert!(d.get("fingerprint").is_some());
+    }
+    let denied_ids: Vec<Option<&str>> = denied
+        .iter()
+        .map(|d| d["subagentRunId"].as_str())
+        .collect();
+    assert_eq!(
+        denied_ids,
+        vec![Some("run-fork-3"), Some("run-9")],
+        "fork 路径 + failure 路径 subagentRunId 各一"
+    );
+    // 镜像路径保真（typed 变体无 errorKind/createdAtMs/attempts 字段，
+    // 降级为镜像 + type 键，字段不丢失）
+    let steering: serde_json::Value =
+        serde_json::from_str(&payload_of(RECOVER_STEERING_EVENT)).unwrap();
+    assert_eq!(
+        steering["errorKind"], "server-error",
+        "steering 镜像保真 errorKind"
+    );
+    assert_eq!(steering["subagentRunId"], "run-1");
+    let fork: serde_json::Value = serde_json::from_str(&payload_of(RECOVER_FORK_EVENT)).unwrap();
+    assert!(fork.get("createdAtMs").is_some(), "fork 镜像保真 createdAtMs");
+    let report: serde_json::Value = serde_json::from_str(&payload_of(RECOVER_REPORT_EVENT)).unwrap();
+    assert!(
+        report.get("attempts").is_some(),
+        "report 镜像保真 attempts（typed 变体不含该字段）"
+    );
+}

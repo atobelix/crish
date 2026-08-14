@@ -152,7 +152,10 @@ impl RecoveryStore for DbStore {
             .map_err(|e| RecoveryError::PersistFailed {
                 message: e.to_string(),
             })?;
-        conex_db::LocalDb::append_event(&self.db, session_id, sequence, event_type, payload)
+        // DM-02：conex-db append_event 已加 run_id 列参数；RecoveryStore
+        // trait 签名本波不变（DM-05 裁决）——此处恒传 None，recovery-* 行的
+        // 列级 run 归属待 DM-05 合并时补透传（对齐 recovery_store.rs 实现）
+        conex_db::LocalDb::append_event(&self.db, session_id, sequence, event_type, payload, None)
             .map_err(|e| RecoveryError::PersistFailed {
                 message: e.to_string(),
             })

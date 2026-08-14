@@ -68,11 +68,15 @@ impl RecoveryStore for LocalDb {
                 .map_err(|e| RecoveryError::PersistFailed {
                     message: e.to_string(),
                 })?;
-        conex_db::LocalDb::append_event(self, session_id, sequence, event_type, payload).map_err(
-            |e| RecoveryError::PersistFailed {
+        // DM-05：conex-db append_event 签名已加 run_id 列参数（DM-02 落地）。
+        // RecoveryStore trait 签名本波不变（DM-05 派单裁决：禁改 trait，
+        // 主控协调合并）——此处恒传 None，recovery-* 行的 run_id 列暂不
+        // 归属（读侧经 payload subagentRunId/type 路由；列级归属待主控
+        // 合并时补 run_id 参数透传）
+        conex_db::LocalDb::append_event(self, session_id, sequence, event_type, payload, None)
+            .map_err(|e| RecoveryError::PersistFailed {
                 message: e.to_string(),
-            },
-        )
+            })
     }
 
     fn update_run_status(

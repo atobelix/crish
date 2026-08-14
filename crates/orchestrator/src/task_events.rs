@@ -441,7 +441,8 @@ impl TaskAuditAccumulator {
         store: Arc<dyn Store>,
         session_id: &str,
     ) -> Result<usize, PersistError> {
-        let mut queue = EventQueue::new(store, 1);
+        // D-01 DM-04：任务域审计事件无 run 归属（队列绑 None = 会话域）
+        let mut queue = EventQueue::new(store, 1, None);
         let mut count = 0;
         for record in &self.records {
             queue

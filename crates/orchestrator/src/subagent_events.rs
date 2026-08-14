@@ -185,7 +185,12 @@ impl SubagentEventEmitter {
         ctx: &SubagentEmitContext,
         info: &SubagentStartedInfo,
     ) -> Result<SequencedEvent, PersistError> {
-        let mut queue = EventQueue::new(self.store.clone(), 1);
+        // D-01 DM-04：队列构造期绑定父 run 归属（空则 None = 会话域）
+        let mut queue = EventQueue::new(
+            self.store.clone(),
+            1,
+            (!ctx.parent_run_id.is_empty()).then(|| ctx.parent_run_id.clone()),
+        );
         queue
             .push(&ctx.session_id, build_subagent_started(ctx, info))
             .await
@@ -198,7 +203,12 @@ impl SubagentEventEmitter {
         ctx: &SubagentEmitContext,
         info: &SubagentEventInfo,
     ) -> Result<SequencedEvent, PersistError> {
-        let mut queue = EventQueue::new(self.store.clone(), 1);
+        // D-01 DM-04：队列构造期绑定父 run 归属（空则 None = 会话域）
+        let mut queue = EventQueue::new(
+            self.store.clone(),
+            1,
+            (!ctx.parent_run_id.is_empty()).then(|| ctx.parent_run_id.clone()),
+        );
         queue
             .push(&ctx.session_id, build_subagent_event(ctx, info))
             .await
@@ -210,7 +220,12 @@ impl SubagentEventEmitter {
         ctx: &SubagentEmitContext,
         info: &SubagentEndedInfo,
     ) -> Result<SequencedEvent, PersistError> {
-        let mut queue = EventQueue::new(self.store.clone(), 1);
+        // D-01 DM-04：队列构造期绑定父 run 归属（空则 None = 会话域）
+        let mut queue = EventQueue::new(
+            self.store.clone(),
+            1,
+            (!ctx.parent_run_id.is_empty()).then(|| ctx.parent_run_id.clone()),
+        );
         queue
             .push(&ctx.session_id, build_subagent_ended(ctx, info))
             .await
@@ -430,6 +445,39 @@ mod tests {
         let stored = mem.events();
         assert_eq!(stored.len(), 2, "Soft 类事件落库");
         assert!(stored.iter().all(|e| e.event_type == "subagent-event"));
+    }
+
+    /// D-01 DM-04 验收锚：subagent 事件落库 run_id 列 == parent_run_id
+    /// （信封 runId 与列值同源，防双写漂移；父 run 归属语义 01 §2.6-②）
+    #[tokio::test]
+    async fn eventqueue_subagent_events_parent_run() {
+        let mem = Arc::new(InMemoryStore::new());
+        let store: Arc<dyn Store> = mem.clone();
+        let emitter = SubagentEventEmitter::new(store);
+
+        emitter.emit_started(&ctx(), &started_info()).await.unwrap();
+        emitter
+            .emit_ended(&ctx(), &ended_info(SubagentEndStatus::Completed))
+            .await
+            .unwrap();
+
+        let stored = mem.events();
+        assert_eq!(stored.len(), 2, "started/ended 均落库");
+        for row in &stored {
+            assert_eq!(
+                row.run_id.as_deref(),
+                Some("run-main"),
+                "subagent 事件 run_id 列 == parent_run_id"
+            );
+            let envelope: conex_types::events::AgentEventEnvelope =
+                serde_json::from_str(&row.payload).unwrap();
+            assert_eq!(
+                envelope.run_id.as_deref(),
+                Some("run-main"),
+                "信封 runId == parent_run_id（与列同源）"
+            );
+            assert_eq!(envelope.sequence, Some(row.sequence), "信封 sequence == 行 sequence");
+        }
     }
 
     #[tokio::test]

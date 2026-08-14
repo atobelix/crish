@@ -83,7 +83,9 @@ fn store_error_code(kind: &str) -> Option<&'static str> {
             Some(codes::EVENT_STORE_APPEND_FAILED)
         }
         // 读路径 → event_store.read_failed
-        "query_events" | "query_runs" | "load_pending_inputs" => Some(codes::EVENT_STORE_READ_FAILED),
+        "query_events" | "query_events_by_run" | "query_runs" | "load_pending_inputs" => {
+            Some(codes::EVENT_STORE_READ_FAILED)
+        }
         // 待处理输入写路径 → store.write_failed
         "save_pending_input" | "delete_pending_input" => Some(codes::STORE_WRITE_FAILED),
         _ => None,
@@ -107,7 +109,7 @@ impl std::error::Error for StoreError {}
 /// 存储操作结果
 pub type StoreResult<T> = Result<T, StoreError>;
 
-/// 已持久化的事件行（query_events 返回）
+/// 已持久化的事件行（query_events / query_events_by_run 返回）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersistedEvent {
     /// 会话标识
@@ -118,6 +120,11 @@ pub struct PersistedEvent {
     pub event_type: String,
     /// 事件 JSON 载荷
     pub payload: String,
+    /// run 归属（列级权威，随 SELECT 列集带出；None = 会话域事件）
+    pub run_id: Option<String>,
+    /// 落库时间（毫秒精度，随 SELECT 列集带出；仅展示不作排序键，
+    /// 排序唯一依据 = sequence）
+    pub created_at: String,
 }
 
 /// 事件存储连接抽象（run 记录 + 事件流）
@@ -155,17 +162,39 @@ pub trait Store: Send + Sync {
     /// max(sequence)+1 对齐初值；MAX 语义幂等，与取号路径的隐式对齐互为兜底）
     async fn seed_sequence(&self, session_id: &str, next_sequence: u64) -> StoreResult<()>;
 
-    /// 追加一条持久化事件（会话内 sequence 唯一）
+    /// 追加一条持久化事件（会话内 sequence 唯一；run_id = run 归属，
+    /// None = 会话域事件，如空闲态）
     async fn append_event(
         &self,
         session_id: &str,
         sequence: u64,
         event_type: &str,
         payload: &str,
+        run_id: Option<&str>,
     ) -> StoreResult<()>;
 
-    /// 查询会话内 after_sequence 之后的事件（按 sequence 升序）
-    async fn query_events(&self, session_id: &str, after_sequence: u64) -> StoreResult<Vec<PersistedEvent>>;
+    /// 查询会话内 after_sequence 之后的事件（按 sequence 升序）。
+    ///
+    /// `limit` 为 SQL 层 LIMIT 下推（None = 无限制，兼容旧调用面）。
+    async fn query_events(
+        &self,
+        session_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>>;
+
+    /// 按 run 归属过滤查询会话内事件（DM-07 按 run 读取用；LocalDb 面
+    /// SQL 下推走 idx_events_run 索引，InMemory 面内存过滤等价）。
+    ///
+    /// `after_sequence` 开区间（> after）；`limit` 直下推；run_id 为
+    /// NULL 的会话域事件恒不命中。
+    async fn query_events_by_run(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>>;
 
     /// 查询全部 run 记录（重启恢复扫描用，B4.3；按创建时间升序）
     async fn query_runs(&self) -> StoreResult<Vec<StoredRun>>;
@@ -260,6 +289,21 @@ fn db_err(operation: &str, failure: DbFailure) -> StoreError {
     };
     let message = failure.message.clone();
     StoreError::with_cause(kind, message, failure)
+}
+
+/// 把 conex-db 的 [conex_db::StoredEvent] 行映射为 [PersistedEvent]
+/// （随 SELECT 列集带出 run_id / created_at，读面列权威，DM-03）。
+fn map_stored_events(rows: Vec<conex_db::StoredEvent>) -> Vec<PersistedEvent> {
+    rows.into_iter()
+        .map(|row| PersistedEvent {
+            session_id: row.session_id,
+            sequence: row.sequence as u64,
+            event_type: row.event_type,
+            payload: row.payload,
+            run_id: row.run_id,
+            created_at: row.created_at,
+        })
+        .collect()
 }
 
 /// 内存实现（测试用）
@@ -449,6 +493,7 @@ impl Store for InMemoryStore {
         sequence: u64,
         event_type: &str,
         payload: &str,
+        run_id: Option<&str>,
     ) -> StoreResult<()> {
         // 模拟慢 store 的持久化耗时（delta 路径不会走到这里）
         let delay = self
@@ -486,11 +531,18 @@ impl Store for InMemoryStore {
             sequence,
             event_type: event_type.to_string(),
             payload: payload.to_string(),
+            run_id: run_id.map(str::to_string),
+            created_at: now_ms().to_string(),
         });
         Ok(())
     }
 
-    async fn query_events(&self, session_id: &str, after_sequence: u64) -> StoreResult<Vec<PersistedEvent>> {
+    async fn query_events(
+        &self,
+        session_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>> {
         let guard = self
             .inner
             .lock()
@@ -502,6 +554,37 @@ impl Store for InMemoryStore {
             .cloned()
             .collect();
         events.sort_by_key(|e| e.sequence);
+        if let Some(limit) = limit {
+            events.truncate(limit as usize);
+        }
+        Ok(events)
+    }
+
+    async fn query_events_by_run(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        let mut events: Vec<PersistedEvent> = guard
+            .events
+            .iter()
+            .filter(|e| {
+                e.session_id == session_id
+                    && e.run_id.as_deref() == Some(run_id)
+                    && e.sequence > after_sequence
+            })
+            .cloned()
+            .collect();
+        events.sort_by_key(|e| e.sequence);
+        if let Some(limit) = limit {
+            events.truncate(limit as usize);
+        }
         Ok(events)
     }
 
@@ -677,6 +760,7 @@ impl Store for LocalDbStore {
         sequence: u64,
         event_type: &str,
         payload: &str,
+        run_id: Option<&str>,
     ) -> StoreResult<()> {
         let db = self.db.clone();
         #[cfg(test)]
@@ -684,32 +768,62 @@ impl Store for LocalDbStore {
         let session_id = session_id.to_string();
         let event_type = event_type.to_string();
         let payload = payload.to_string();
+        let run_id = run_id.map(str::to_string);
         blocking_db_call("append_event", move || {
             #[cfg(test)]
             if append_delay_ms > 0 {
                 std::thread::sleep(std::time::Duration::from_millis(append_delay_ms));
             }
-            db.append_event(&session_id, sequence as i64, &event_type, &payload)
+            db.append_event(
+                &session_id,
+                sequence as i64,
+                &event_type,
+                &payload,
+                run_id.as_deref(),
+            )
         })
         .await
     }
 
-    async fn query_events(&self, session_id: &str, after_sequence: u64) -> StoreResult<Vec<PersistedEvent>> {
+    async fn query_events(
+        &self,
+        session_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>> {
         let db = self.db.clone();
         let session_id = session_id.to_string();
         let rows = blocking_db_call("query_events", move || {
-            db.query_events(&session_id, after_sequence as i64, None)
+            db.query_events(
+                &session_id,
+                after_sequence as i64,
+                limit.map(|limit| limit as i64),
+            )
         })
         .await?;
-        Ok(rows
-            .into_iter()
-            .map(|row| PersistedEvent {
-                session_id: row.session_id,
-                sequence: row.sequence as u64,
-                event_type: row.event_type,
-                payload: row.payload,
-            })
-            .collect())
+        Ok(map_stored_events(rows))
+    }
+
+    async fn query_events_by_run(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>> {
+        let db = self.db.clone();
+        let session_id = session_id.to_string();
+        let run_id = run_id.to_string();
+        let rows = blocking_db_call("query_events_by_run", move || {
+            db.query_events_by_run(
+                &session_id,
+                &run_id,
+                after_sequence as i64,
+                limit.map(|limit| limit as i64),
+            )
+        })
+        .await?;
+        Ok(map_stored_events(rows))
     }
 
     async fn query_runs(&self) -> StoreResult<Vec<StoredRun>> {
@@ -823,7 +937,7 @@ mod tests {
             store.seed_sequence("s1", 10).await.unwrap();
             assert_eq!(store.reserve_sequence("s1").await.unwrap(), 10);
             // 已落库事件（未预热）：首次取号按 max+1 对齐
-            store.append_event("s3", 42, "a", "{}").await.unwrap();
+            store.append_event("s3", 42, "a", "{}", None).await.unwrap();
             assert_eq!(store.reserve_sequence("s3").await.unwrap(), 43);
             // store 彻底损坏：取号同样失败（写失败 latch）
             store.fail_all_appends("disk is read-only");
@@ -838,8 +952,8 @@ mod tests {
         let store = InMemoryStore::new();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            store.append_event("s1", 1, "agent-start", "{}").await.unwrap();
-            let err = store.append_event("s1", 1, "agent-end", "{}").await.unwrap_err();
+            store.append_event("s1", 1, "agent-start", "{}", None).await.unwrap();
+            let err = store.append_event("s1", 1, "agent-end", "{}", None).await.unwrap_err();
             assert_eq!(err.kind, "append_event");
             assert!(err.message.contains("sequence"));
         });
@@ -850,9 +964,9 @@ mod tests {
         let store = InMemoryStore::new();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            store.append_event("s1", 1, "a", "{}").await.unwrap();
+            store.append_event("s1", 1, "a", "{}", None).await.unwrap();
             store.fail_all_appends("disk is read-only");
-            let err = store.append_event("s1", 2, "b", "{}").await.unwrap_err();
+            let err = store.append_event("s1", 2, "b", "{}", None).await.unwrap_err();
             assert_eq!(err.message, "disk is read-only");
 
             let stored = store.events();
@@ -861,13 +975,109 @@ mod tests {
             // 一次性故障：消费一条后恢复正常（无 fail_all 干扰）
             let single = InMemoryStore::new();
             single.fail_next_append("一次故障");
-            let err2 = single.append_event("s1", 1, "c", "{}").await.unwrap_err();
+            let err2 = single.append_event("s1", 1, "c", "{}", None).await.unwrap_err();
             assert_eq!(err2.message, "一次故障");
-            single.append_event("s1", 1, "c", "{}").await.unwrap();
+            single.append_event("s1", 1, "c", "{}", None).await.unwrap();
 
-            let stored2 = store.query_events("s1", 0).await.unwrap();
+            let stored2 = store.query_events("s1", 0, None).await.unwrap();
             assert_eq!(stored2.len(), 1, "fail_all 下所有追加都失败");
         });
+    }
+
+    /// DM-03：InMemoryStore query_events limit 内存切片语义——与 SQL 层
+    /// LIMIT 等价（排序后截断）。
+    #[test]
+    fn in_memory_store_query_events_limit_slices() {
+        let store = InMemoryStore::new();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            for seq in 1..=5u64 {
+                store.append_event("s1", seq, "a", "{}", None).await.unwrap();
+            }
+            let limited = store.query_events("s1", 0, Some(3)).await.unwrap();
+            assert_eq!(limited.len(), 3, "limit 生效");
+            assert_eq!(limited[0].sequence, 1);
+            assert_eq!(limited[2].sequence, 3);
+            let unlimited = store.query_events("s1", 0, None).await.unwrap();
+            assert_eq!(unlimited.len(), 5, "None 等价无限制");
+        });
+    }
+
+    /// DM-03：InMemoryStore query_events_by_run——按 run 归属内存过滤等价
+    /// （run_id 匹配 + after 开区间 + limit）。
+    #[test]
+    fn in_memory_store_query_events_by_run_filters() {
+        let store = InMemoryStore::new();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            store.append_event("s1", 1, "agent-start", "{}", Some("r1")).await.unwrap();
+            store.append_event("s1", 2, "agent-start", "{}", Some("r2")).await.unwrap();
+            store.append_event("s1", 3, "agent-end", "{}", Some("r1")).await.unwrap();
+            store.append_event("s1", 4, "idle", "{}", None).await.unwrap();
+
+            // 交错 run 只返本 run，按 sequence 升序
+            let r1 = store.query_events_by_run("s1", "r1", 0, None).await.unwrap();
+            assert_eq!(r1.len(), 2, "只返 r1 事件");
+            assert_eq!(r1[0].sequence, 1);
+            assert_eq!(r1[1].sequence, 3);
+            assert_eq!(r1[1].event_type, "agent-end");
+            // after 开区间（> after）
+            let r1_after = store.query_events_by_run("s1", "r1", 1, None).await.unwrap();
+            assert_eq!(r1_after.len(), 1);
+            assert_eq!(r1_after[0].sequence, 3);
+            // limit 生效
+            let r1_limited = store.query_events_by_run("s1", "r1", 0, Some(1)).await.unwrap();
+            assert_eq!(r1_limited.len(), 1);
+            assert_eq!(r1_limited[0].sequence, 1);
+            // 不存在的 run → 空
+            assert!(store.query_events_by_run("s1", "nope", 0, None).await.unwrap().is_empty());
+            // run_id=NULL 会话域事件不命中 by_run，但按会话查询命中
+            let all = store.query_events("s1", 0, None).await.unwrap();
+            assert_eq!(all.len(), 4, "会话查询含 NULL run_id 行");
+        });
+    }
+
+    /// DM-03：InMemoryStore run_id 写入回读 roundtrip（PersistedEvent.run_id）。
+    #[test]
+    fn in_memory_store_append_event_run_id_roundtrip() {
+        let store = InMemoryStore::new();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            store.append_event("s1", 1, "agent-start", "{}", Some("r1")).await.unwrap();
+            store.append_event("s1", 2, "idle", "{}", None).await.unwrap();
+            let events = store.query_events("s1", 0, None).await.unwrap();
+            assert_eq!(events[0].run_id.as_deref(), Some("r1"));
+            assert_eq!(events[1].run_id, None);
+        });
+    }
+
+    /// DM-03：LocalDbStore query_events_by_run 端到端（SQLite 层过滤，
+    /// 依赖 DM-01 v9 run_id 列）。
+    #[tokio::test]
+    async fn local_db_store_query_events_by_run_roundtrip() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store = LocalDbStore::new(db);
+        store.append_event("s1", 1, "agent-start", "{}", Some("r1")).await.unwrap();
+        store.append_event("s1", 2, "agent-start", "{}", Some("r2")).await.unwrap();
+        store.append_event("s1", 3, "agent-end", "{}", Some("r1")).await.unwrap();
+        store.append_event("s1", 4, "idle", "{}", None).await.unwrap();
+
+        // SQL 层过滤：交错 run 只返本 run，按 sequence 升序
+        let r1 = store.query_events_by_run("s1", "r1", 0, None).await.unwrap();
+        assert_eq!(r1.len(), 2);
+        assert_eq!(r1[0].sequence, 1);
+        assert_eq!(r1[1].sequence, 3);
+        assert_eq!(r1[1].run_id.as_deref(), Some("r1"), "读面携带 run_id 列");
+        // limit 下推生效
+        let limited = store.query_events_by_run("s1", "r1", 0, Some(1)).await.unwrap();
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].sequence, 1);
+        // 会话查询含全部（含 NULL run_id 行），run_id 随行带出
+        let all = store.query_events("s1", 0, None).await.unwrap();
+        assert_eq!(all.len(), 4);
+        assert_eq!(all[3].run_id, None);
+        assert!(!all[0].created_at.is_empty(), "created_at 随 SELECT 列集带出");
     }
 
     #[test]
@@ -887,15 +1097,15 @@ mod tests {
                 .update_run_status("r1", RunStatus::Running, None, None)
                 .await
                 .unwrap();
-            store.append_event("s1", 1, "agent-start", "{}").await.unwrap();
-            store.append_event("s1", 2, "agent-end", "{}").await.unwrap();
+            store.append_event("s1", 1, "agent-start", "{}", None).await.unwrap();
+            store.append_event("s1", 2, "agent-end", "{}", None).await.unwrap();
             // T08.4：终态写点携带 cursor
             store
                 .update_run_status("r1", RunStatus::Completed, Some("stop"), Some(2))
                 .await
                 .unwrap();
 
-            let events = store.query_events("s1", 0).await.unwrap();
+            let events = store.query_events("s1", 0, None).await.unwrap();
             assert_eq!(events.len(), 2);
             assert_eq!(events[0].sequence, 1);
             assert_eq!(events[1].event_type, "agent-end");
@@ -933,13 +1143,13 @@ mod tests {
             handles.push(tokio::spawn(async move {
                 for seq in 1..=20u64 {
                     store
-                        .append_event("s1", i * 100 + seq, "agent-start", "{}")
+                        .append_event("s1", i * 100 + seq, "agent-start", "{}", None)
                         .await
                         .unwrap();
                 }
                 // 并发期间查询：至少能看到自己的 20 条（无死锁即可，
                 // 总数由任务全部完成后的一次权威查询断言）
-                let events = store.query_events("s1", 0).await.unwrap();
+                let events = store.query_events("s1", 0, None).await.unwrap();
                 assert!(events.len() >= 20, "并发查询应至少读到本路事件");
             }));
         }
@@ -956,7 +1166,7 @@ mod tests {
             handle.await.unwrap();
         }
         // 全部完成后权威断言：160 条事件、序列号唯一
-        let events = store.query_events("s1", 0).await.unwrap();
+        let events = store.query_events("s1", 0, None).await.unwrap();
         assert_eq!(events.len(), 160, "8 路 × 20 条事件全部落库且无重复");
         let mut sequences: Vec<u64> = events.iter().map(|e| e.sequence).collect();
         sequences.sort_unstable();
@@ -978,7 +1188,7 @@ mod tests {
 
         let slow = store.clone();
         let append = tokio::spawn(async move {
-            slow.append_event("s1", 1, "agent-start", "{}").await.unwrap();
+            slow.append_event("s1", 1, "agent-start", "{}", None).await.unwrap();
         });
         // 计时任务：10ms × 5 ≈ 50ms，应在 400ms 慢盘调用期间完成。
         // 阈值 200ms：Windows 定时器粒度 ~15.6ms（5 拍最坏 ~80ms，余量充足）；
@@ -999,7 +1209,7 @@ mod tests {
             ticker_elapsed.as_millis()
         );
         // 慢盘 append 本身也正确落库
-        let events = store.query_events("s1", 0).await.unwrap();
+        let events = store.query_events("s1", 0, None).await.unwrap();
         assert_eq!(events.len(), 1);
     }
 
@@ -1019,6 +1229,7 @@ mod tests {
             ("seed_sequence", codes::EVENT_STORE_APPEND_FAILED),
             // 读路径 → event_store.read_failed
             ("query_events", codes::EVENT_STORE_READ_FAILED),
+            ("query_events_by_run", codes::EVENT_STORE_READ_FAILED),
             ("query_runs", codes::EVENT_STORE_READ_FAILED),
             ("load_pending_inputs", codes::EVENT_STORE_READ_FAILED),
             // 待处理输入写路径 → store.write_failed

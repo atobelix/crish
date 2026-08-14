@@ -142,7 +142,7 @@ async fn drive(text_size: usize) {
     let store: Arc<dyn Store> = Arc::new(InMemoryStore::new());
     let manager = RunManager::new(store.clone());
     let mut run = manager.start_run("s1", "r1").await.expect("启动 run");
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
     let outcome = build_outcome(text_size);
     let result = drive_outcome(&mut run, &mut queue, outcome).await.expect("驱动");
     assert_eq!(result.terminal_status, RunTerminalStatus::Completed);
@@ -188,7 +188,7 @@ fn bench_event_chain(c: &mut Criterion) {
                 (store, event)
             },
             |(store, event)| {
-                let mut queue = rt.block_on(async { EventQueue::new(store.clone(), 1) });
+                let mut queue = rt.block_on(async { EventQueue::new(store.clone(), 1, None) });
                 rt.block_on(async { queue.push("s1", event).await })
                     .expect("入队");
             },

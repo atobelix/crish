@@ -36,6 +36,9 @@ conex-test-utils = { path = "../conex-test-utils" }
 # multi_agent.rs 端到端链路（I7-M12）：压缩环节经 conex-compaction
 # CompactionEngine::compact_agent_messages 契约面（链路测试域消费）
 conex-compaction = { path = "../conex-compaction" }
+# DM-08（G-29）对账测试：crash_consistency.rs LogCapture warn 捕获
+# （tracing::subscriber::set_default + fmt writer，对齐 observability.rs）
+tracing-subscriber = { workspace = true }
 
 [[bench]]
 name = "event_chain"

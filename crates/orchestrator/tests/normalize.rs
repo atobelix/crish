@@ -28,7 +28,7 @@ async fn driven_events_get_run_and_session_injected() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("sess-1", "run-9").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let result = orchestrator::events::drive_outcome(
         &mut run,
@@ -97,7 +97,7 @@ async fn run_terminal_is_the_only_terminal_event_in_driven_stream() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_terminal_judge").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let result = orchestrator::events::drive_outcome(
         &mut run,
@@ -139,7 +139,7 @@ async fn cooperative_stop_maps_completed_and_does_not_auto_continue() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_coop_normalize").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     // L2 协作停止：安全点以 stopped 收场（未请求取消，run 层面即 completed）
     let result = orchestrator::events::drive_outcome(

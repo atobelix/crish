@@ -66,6 +66,7 @@ use std::time::Duration;
 
 use agent_tools::tools::subagent::{SubagentSpawnRequest, SubagentSpawner, SubagentState};
 use conex_types::error::ProviderErrorKind;
+use conex_types::events::AgentEvent;
 
 use crate::now_ms;
 use crate::session::SessionTree;
@@ -129,6 +130,40 @@ pub const RECOVER_FORK_EVENT: &str = "recovery-fork";
 pub const RECOVER_REPORT_EVENT: &str = "recovery-report";
 /// Episode 预算耗尽拒绝留痕
 pub const RECOVER_BUDGET_DENIED_EVENT: &str = "recovery-budget-denied";
+
+// ── DM-05 直写路径规范化（D-01 轮 2）：recovery-* 事件 payload 统一
+//    带顶层 type 键——读侧 D8 fallback 合成 wire 时以 type 路由事件种类
+//    （G-20 读侧可见性）；背压语义不变（Critical 落库必达）────────────
+
+/// typed 序列化：经 AgentEvent 枚举变体（serde tag="type" 自动产出
+/// 顶层 type 键），字段形状与 conex-types 注册表（engine-events.json
+/// id 42/46）严格一致。
+fn serialize_recovery_typed(event: &AgentEvent) -> Result<String, RecoveryError> {
+    serde_json::to_string(event).map_err(|e| RecoveryError::InvalidState {
+        message: format!("恢复事件序列化失败：{e}"),
+    })
+}
+
+/// 降级路径（规范化镜像构造函数）：payload 保留既有字段镜像并补顶层
+/// type 键。用于镜像字段超出 typed 变体形状的场景（steering 的
+/// errorKind / fork 的 createdAtMs / report 的 attempts——AgentEvent
+/// 枚举变体无对应字段，typed 序列化会丢字段，故镜像保真降级；契约
+/// 保真清单登记：DM-05 降级 3 处，字段形状为镜像超集 + type 键）。
+fn serialize_recovery_mirror(
+    event_type: &str,
+    value: &serde_json::Value,
+) -> Result<String, RecoveryError> {
+    let mut value = value.clone();
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "type".to_string(),
+            serde_json::Value::String(event_type.to_string()),
+        );
+    }
+    serde_json::to_string(&value).map_err(|e| RecoveryError::InvalidState {
+        message: format!("恢复事件序列化失败：{e}"),
+    })
+}
 
 // ── 阶梯 1：自动重试（镜像 agent-provider/retry.rs，B2.7）──────────
 
@@ -324,18 +359,19 @@ impl RecoveryCoordinator {
                 });
             }
             Ladder1Decision::Escalate { reason } => {
-                // 升级留痕（阶梯 1 → 阶梯 2 的边界证据）
+                // 升级留痕（阶梯 1 → 阶梯 2 的边界证据；DM-05 typed
+                // 序列化：字段形状与 engine-events.json id 42 对齐，
+                // serde 自动产出顶层 type 键）
                 self.store.append_event(
                     &self.session_id,
                     RECOVER_ESCALATED_EVENT,
-                    &serde_json::to_string(&serde_json::json!({
-                        "subagentRunId": ctx.subagent_run_id,
-                        "kind": format!("{reason:?}"),
-                        "retries": ctx.retries,
-                        "elapsedMs": ctx.retry_elapsed_ms,
-                    }))
-                    .map_err(|e| RecoveryError::InvalidState {
-                        message: format!("升级事件序列化失败：{e}"),
+                    &serialize_recovery_typed(&AgentEvent::RecoveryEscalated {
+                        session_id: self.session_id.clone(),
+                        subagent_run_id: Some(ctx.subagent_run_id.clone()),
+                        kind: format!("{reason:?}"),
+                        retries: ctx.retries,
+                        elapsed_ms: ctx.retry_elapsed_ms,
+                        detail: None,
                     })?,
                 )?;
             }
@@ -347,14 +383,14 @@ impl RecoveryCoordinator {
             self.store.append_event(
                 &self.session_id,
                 RECOVER_BUDGET_DENIED_EVENT,
-                &serde_json::to_string(&serde_json::json!({
-                    "subagentRunId": ctx.subagent_run_id,
-                    "fingerprint": fp,
-                    "count": self.budget.count(&fp),
-                    "max": self.budget.limit(),
-                }))
-                .map_err(|e| RecoveryError::InvalidState {
-                    message: format!("预算拒绝事件序列化失败：{e}"),
+                // DM-05 typed 序列化：字段形状与 engine-events.json id 46
+                // 对齐（subagentRunId 本路径恒 Some——子代理侧发射方）
+                &serialize_recovery_typed(&AgentEvent::RecoveryBudgetDenied {
+                    session_id: self.session_id.clone(),
+                    subagent_run_id: Some(ctx.subagent_run_id.clone()),
+                    fingerprint: fp.clone(),
+                    count: self.budget.count(&fp),
+                    max: self.budget.limit(),
                 })?,
             )?;
             // G10 月度统计收集点：恢复预算 denied 计数（进程级累计，
@@ -395,13 +431,17 @@ impl RecoveryCoordinator {
             .retain(|n| n.subagent_run_id != notification.subagent_run_id);
         self.notifications.push(notification.clone());
         self.persist_notifications()?;
-        // 事件留痕
+        // 事件留痕（DM-05 降级路径：RecoveryNotification 镜像 + 顶层
+        // type 键——errorKind 字段超出 typed 变体形状，镜像保真不丢失）
+        let payload_value = serde_json::to_value(&notification).map_err(|e| {
+            RecoveryError::InvalidState {
+                message: format!("steering 事件序列化失败：{e}"),
+            }
+        })?;
         self.store.append_event(
             &self.session_id,
             RECOVER_STEERING_EVENT,
-            &serde_json::to_string(&notification).map_err(|e| RecoveryError::InvalidState {
-                message: format!("steering 事件序列化失败：{e}"),
-            })?,
+            &serialize_recovery_mirror(RECOVER_STEERING_EVENT, &payload_value)?,
         )?;
         Ok(RecoveryOutcome {
             ladder: RecoveryLadder::Ladder2MainAgent,
@@ -440,14 +480,14 @@ impl RecoveryCoordinator {
             self.store.append_event(
                 &self.session_id,
                 RECOVER_BUDGET_DENIED_EVENT,
-                &serde_json::to_string(&serde_json::json!({
-                    "subagentRunId": ctx.subagent_run_id,
-                    "fingerprint": fp,
-                    "count": self.budget.count(&fp),
-                    "max": self.budget.limit(),
-                }))
-                .map_err(|e| RecoveryError::InvalidState {
-                    message: format!("预算拒绝事件序列化失败：{e}"),
+                // DM-05 typed 序列化：字段形状与 engine-events.json id 46
+                // 对齐（fork 路径同 on_subagent_run_failure 路径形状）
+                &serialize_recovery_typed(&AgentEvent::RecoveryBudgetDenied {
+                    session_id: self.session_id.clone(),
+                    subagent_run_id: Some(ctx.subagent_run_id.clone()),
+                    fingerprint: fp.clone(),
+                    count: self.budget.count(&fp),
+                    max: self.budget.limit(),
                 })?,
             )?;
             return self.report_to_user(ctx);
@@ -551,12 +591,17 @@ impl RecoveryCoordinator {
         self.forks.push(record.clone());
         self.persist_forks()?;
         self.persist_budget()?;
+        // DM-05 降级路径：ForkRecord 镜像 + 顶层 type 键（createdAtMs
+        // 超出 typed 变体形状，镜像保真不丢失）
+        let payload_value = serde_json::to_value(&record).map_err(|e| {
+            RecoveryError::InvalidState {
+                message: format!("fork 事件序列化失败：{e}"),
+            }
+        })?;
         self.store.append_event(
             &self.session_id,
             RECOVER_FORK_EVENT,
-            &serde_json::to_string(&record).map_err(|e| RecoveryError::InvalidState {
-                message: format!("fork 事件序列化失败：{e}"),
-            })?,
+            &serialize_recovery_mirror(RECOVER_FORK_EVENT, &payload_value)?,
         )?;
         Ok(RecoveryOutcome {
             ladder: RecoveryLadder::Ladder3Fork,
@@ -587,12 +632,18 @@ impl RecoveryCoordinator {
             self.needs_user.push(ctx.subagent_run_id.clone());
             self.persist_needs_user()?;
         }
+        // DM-05 降级路径：UserReport 镜像 + 顶层 type 键（attempts 尝试
+        // 明细超出 typed 变体形状——注册表明确「attempts 不在事件面」，
+        // 镜像保真不丢失，读侧仍可聚合）
+        let payload_value = serde_json::to_value(&report).map_err(|e| {
+            RecoveryError::InvalidState {
+                message: format!("上报事件序列化失败：{e}"),
+            }
+        })?;
         self.store.append_event(
             &self.session_id,
             RECOVER_REPORT_EVENT,
-            &serde_json::to_string(&report).map_err(|e| RecoveryError::InvalidState {
-                message: format!("上报事件序列化失败：{e}"),
-            })?,
+            &serialize_recovery_mirror(RECOVER_REPORT_EVENT, &payload_value)?,
         )?;
         Ok(RecoveryOutcome {
             ladder: RecoveryLadder::Ladder4User,

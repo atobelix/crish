@@ -215,7 +215,7 @@ mod tests {
         let db = LocalDb::open_in_memory().unwrap();
         db.insert_session(session_id, session_id).unwrap();
         for seq in 1..=compression_events {
-            db.append_event(session_id, seq as i64, "context-compression-end", "{}")
+            db.append_event(session_id, seq as i64, "context-compression-end", "{}", None)
                 .unwrap();
         }
         db
@@ -281,7 +281,7 @@ mod tests {
         );
 
         // 第二次压缩事件落库（drive 路径语义：事件先落库再写块）
-        db.append_event("s1", 2, "context-compression-end", "{}").unwrap();
+        db.append_event("s1", 2, "context-compression-end", "{}", None).unwrap();
         let second = compression_event(plain_record("compacted-summary-1-2", vec!["u2"]));
         persist_compression_block(store.as_ref(), "s1", &second, 20)
             .await

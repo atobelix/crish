@@ -9,7 +9,7 @@ use conex_types::events::AgentEvent;
 
 use super::{
     CANCEL_INTERRUPTED_ERROR, INTERRUPTED_ERROR, INTERRUPTED_REASON,
-    RestoreError, RestoreMode, RestoreOutcome, RUN_INTERRUPTED_EVENT,
+    ReconcileConflict, RestoreError, RestoreMode, RestoreOutcome, RUN_INTERRUPTED_EVENT,
 };
 use crate::persist::{Store, StoreError};
 use crate::session::{CONTEXT_COMPRESSION_END_EVENT, SESSION_LEAF_MOVED_EVENT, SessionRecord};
@@ -90,7 +90,20 @@ impl RestoreManager {
                 error: error.to_string(),
                 timestamp: now_ms(),
             };
-            let payload = serde_json::to_string(&record).map_err(|e| {
+            // DM-05：payload 补顶层 type 键——run-interrupted 非 AgentEvent
+            // 枚举成员（不扩枚举，保持自定义审计事件形态），读侧 D8
+            // fallback 以 type 键路由；InterruptedRun 自身带 runId/sessionId
+            // 字段，归属可还原
+            let mut payload = serde_json::to_value(&record).map_err(|e| {
+                RestoreError::new("serialize_interrupted", e.to_string())
+            })?;
+            if let Some(obj) = payload.as_object_mut() {
+                obj.insert(
+                    "type".to_string(),
+                    serde_json::Value::String(RUN_INTERRUPTED_EVENT.to_string()),
+                );
+            }
+            let payload = serde_json::to_string(&payload).map_err(|e| {
                 RestoreError::new("serialize_interrupted", e.to_string())
             })?;
             let sequence = next_sequence(store, &run.session_id).await?;
@@ -105,8 +118,16 @@ impl RestoreManager {
                     Some(cursor as i64),
                 )
                 .await?;
+            // DM-05：落库 run_id 列 = 被打断 run 的真实 run_id（DM-03
+            // Store::append_event 签名已落地；读侧按 run 查询可命中）
             store
-                .append_event(&run.session_id, sequence, RUN_INTERRUPTED_EVENT, &payload)
+                .append_event(
+                    &run.session_id,
+                    sequence,
+                    RUN_INTERRUPTED_EVENT,
+                    &payload,
+                    Some(&run.run_id),
+                )
                 .await?;
             run.status = db_status;
             run.end_reason = Some(INTERRUPTED_REASON.to_string());
@@ -156,6 +177,25 @@ impl RestoreManager {
                     }
                 }
             }
+        }
+
+        // 3c. G-29 终态矛盾对账（DM-08）：只读校验 events 表 run-terminal
+        // 与 runs 记录终态的矛盾，显式上报（tracing::warn + outcome 计数），
+        // **不自动修正**（不翻写 runs 表、不改事件——修正语义归恢复策略
+        // 后续裁决）。注意：打断循环已就地更新 run.status（failed/cancelled），
+        // 对账看到的是打断后终态——「事件说 completed、记录说 failed」矛盾
+        // 即在本步暴露。
+        let reconcile_conflicts =
+            reconcile_terminal_conflicts(store, &runs).await?;
+        for conflict in &reconcile_conflicts {
+            tracing::warn!(
+                target: "restore",
+                run_id = %conflict.run_id,
+                session_id = %conflict.session_id,
+                event_terminal = %conflict.event_terminal,
+                record_status = %conflict.record_status,
+                "G-29 终态矛盾对账：事件流 run-terminal 与 runs 记录终态矛盾（只上报不修正）"
+            );
         }
 
         // 4. 会话记录组装（快照会话 ∪ run 派生会话）
@@ -208,7 +248,7 @@ impl RestoreManager {
             } else {
                 0
             };
-            let events = store.query_events(&session.session_id, base).await?;
+            let events = store.query_events(&session.session_id, base, None).await?;
             for event in &events {
                 last_sequence = last_sequence.max(event.sequence);
                 if event.event_type == SESSION_LEAF_MOVED_EVENT {
@@ -246,6 +286,7 @@ impl RestoreManager {
                 .as_ref()
                 .map(|snap| snap.generation)
                 .unwrap_or(0),
+            reconcile_conflicts,
         })
     }
 }
@@ -278,13 +319,79 @@ pub(crate) fn is_inflight(status: RunStatus) -> bool {
 
 /// 会话内下一个可用序列号（恢复审计事件续接用）
 async fn next_sequence(store: &dyn Store, session_id: &str) -> Result<u64, StoreError> {
-    let events = store.query_events(session_id, 0).await?;
+    // limit=None：全量读取取 max（DM-03 签名已加 limit 参数，无限制
+    // 等价旧语义）
+    let events = store.query_events(session_id, 0, None).await?;
     Ok(events
         .iter()
         .map(|event| event.sequence)
         .max()
         .unwrap_or(0)
         + 1)
+}
+
+/// G-29 终态矛盾对账（DM-08）：只读校验 events 表 run-terminal 与 runs
+/// 记录终态的矛盾（**只上报不修正**——不翻写 runs 表、不改事件）。
+///
+/// 语义（对账范围刻意收敛，防误报）：
+/// - **事件说终态、记录说失败/取消**：runs 终态字面量为 failed / cancelled
+///   （含本次被打断的 run）但 events 存在该 run 的 run-terminal 事件 →
+///   事件流已完成收口、记录却为失败/取消，矛盾；
+/// - **记录说完成、事件无终态**：runs 终态字面量为 completed 但 events
+///   无该 run 的 run-terminal 事件 → 记录说完成、事件流无终态，矛盾；
+/// - **不检查 failed 的「无 terminal」反向**：写失败收场
+///   （event-store-write-failed，T12.7）合法无 run-terminal 事件，不误报；
+/// - **不检查 cancelled 的「无 terminal」反向**：取消路径终态事件面未
+///   定（cancel.rs 域），避免误报；
+/// - **不检查 Unknown 字面量**：诚实未知（裁决 D3），不臆断。
+///
+/// 每个 run 一次 `query_events_by_run`（run 事件全量，limit=None——run 首
+/// 事件是 agent-start 而非 run-terminal，limit=1 会截断漏检；run 事件数
+/// 通常远小于会话全量，restore 为冷启动路径可接受），restore 整体
+/// O(runs × run 事件数) 只读查询。
+async fn reconcile_terminal_conflicts(
+    store: &dyn Store,
+    runs: &[conex_db::StoredRun],
+) -> Result<Vec<ReconcileConflict>, StoreError> {
+    let mut conflicts = Vec::new();
+    for run in runs {
+        let events = store
+            .query_events_by_run(&run.session_id, &run.run_id, 0, None)
+            .await?;
+        let terminal = events
+            .iter()
+            .find(|e| e.event_type == "run-terminal")
+            .map(|e| e.payload.as_str());
+        let has_terminal = terminal.is_some();
+        // 事件流终态字面量：payload terminal 键优先，解析失败回退事件类型名
+        let event_terminal = || {
+            terminal
+                .and_then(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+                .and_then(|v| {
+                    v.get("terminal")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| "run-terminal".to_string())
+        };
+        let mismatch = match &run.status {
+            // 事件说终态、记录说失败/取消 → 矛盾
+            RunStatus::Failed | RunStatus::Cancelled => has_terminal,
+            // 记录说完成、事件流无终态 → 矛盾
+            RunStatus::Completed => !has_terminal,
+            // Unknown / 中间态：打断语义已处理，对账不介入
+            _ => false,
+        };
+        if mismatch {
+            conflicts.push(ReconcileConflict {
+                run_id: run.run_id.clone(),
+                session_id: run.session_id.clone(),
+                event_terminal: event_terminal(),
+                record_status: run.status.as_str().to_string(),
+            });
+        }
+    }
+    Ok(conflicts)
 }
 
 /// blocked 类终态 reason（B4.5 goal 语义：goal-blocked / goal-max-rounds /

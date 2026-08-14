@@ -19,11 +19,12 @@
 
 use std::sync::Arc;
 
-use conex_types::events::{AgentEvent, RunTerminalStatus};
+use conex_types::events::{AgentEvent, AgentEventEnvelope, RunTerminalStatus};
 use conex_types::session::AgentEndReason;
 use session_loop::RunOutcome;
 
 use crate::blocks::persist_compression_block;
+use crate::normalize::normalize_envelope;
 use crate::persist::{SessionSequencer, Store, StoreError};
 use crate::run::{
     EVENT_STORE_WRITE_FAILED_REASON, RunError, RunHandle, map_outcome_to_terminal,
@@ -110,19 +111,27 @@ pub struct EventQueue {
     /// 最近一次已分配序列的本地镜像（next_sequence 访问器与 store 损坏
     /// 时的兜底取值）
     last_reserved: u64,
+    /// run 归属（构造期绑定，不可变；None = 会话域/空闲态事件，
+    /// D-01 R-02：写面注入 = 构造期绑定，非 push 逐次传参）
+    run_id: Option<String>,
 }
 
 impl EventQueue {
     /// 新建队列（base_sequence 为期望的首事件序列）。
     ///
+    /// `run_id` 为构造期绑定的 run 归属（None = 会话域事件，如空闲态
+    /// compact-now / task 域审计事件）：所有落库事件的信封 runId 与
+    /// events.run_id 列均以该值为准（goal-* 轮次域事件特判除外）。
+    ///
     /// T08.12 起**实际分配由 store 端会话级原子计数器决定**（防同会话
     /// 并发 run 取到相同序列），base 仅作本地镜像初值；events.rs 测试内
     /// `run.cursor + 1` 构造模式为**测试专用**（保留兼容，生产路径经
     /// base_sequence_for 预热后首事件仍命中该值）。
-    pub fn new(store: Arc<dyn Store>, base_sequence: u64) -> Self {
+    pub fn new(store: Arc<dyn Store>, base_sequence: u64, run_id: Option<String>) -> Self {
         Self {
             sequencer: SessionSequencer::new(store),
             last_reserved: base_sequence.saturating_sub(1),
+            run_id,
         }
     }
 
@@ -139,6 +148,47 @@ impl EventQueue {
     /// 会话级分配器（T08.8 seed 预热 / 校准入口）
     pub fn sequencer(&self) -> &SessionSequencer {
         &self.sequencer
+    }
+
+    /// goal-* 三事件归**轮次域**（D-01 R-06，裁决 C-2 采纳 04 PC-07）：
+    /// 不归任何 run，落库 run_id 列与信封 runId 均置 None，run 查询
+    /// 天然不命中。
+    fn is_round_domain_event(event: &AgentEvent) -> bool {
+        matches!(
+            event,
+            AgentEvent::GoalRoundStarted { .. }
+                | AgentEvent::GoalRoundCompleted { .. }
+                | AgentEvent::GoalContinuationDecided { .. }
+        )
+    }
+
+    /// 落库信封统一构造（D-01 DM-04：normalize_envelope 真接线点——
+    /// 名义统一注入点 → 实际注入点，消灭与实现的漂移）。
+    ///
+    /// 返回（有效 run_id 列值，完整信封）：信封 runId/sequence 经
+    /// normalize_envelope 注入（与广播 wire 同构扁平 JSON），goal-*
+    /// 轮次域事件信封 runId 与列值均置 None。
+    fn persist_envelope(
+        &self,
+        session_id: &str,
+        sequence: u64,
+        event: &AgentEvent,
+    ) -> (Option<String>, AgentEventEnvelope) {
+        let effective_run_id = if Self::is_round_domain_event(event) {
+            None
+        } else {
+            self.run_id.as_deref()
+        };
+        let envelope = normalize_envelope(
+            AgentEventEnvelope::new(
+                event.clone(),
+                effective_run_id.map(str::to_string),
+                Some(sequence),
+            ),
+            effective_run_id,
+            session_id,
+        );
+        (effective_run_id.map(str::to_string), envelope)
     }
 
     /// 从会话级原子计数器取号（T08.12）；store 损坏时以本地镜像 +1 兜底，
@@ -186,13 +236,14 @@ impl EventQueue {
             });
         }
         let event_type = event_type_name(&event);
-        let payload = serde_json::to_string(&event).map_err(|err| PersistError {
+        let (run_id, envelope) = self.persist_envelope(session_id, sequence, &event);
+        let payload = serde_json::to_string(&envelope).map_err(|err| PersistError {
             sequence,
             event_type: event_type.to_string(),
             error: StoreError::new("serialize_event", err.to_string()),
         })?;
         self.store()
-            .append_event(session_id, sequence, event_type, &payload)
+            .append_event(session_id, sequence, event_type, &payload, run_id.as_deref())
             .await
             .map_err(|error| PersistError {
                 sequence,
@@ -218,11 +269,12 @@ impl EventQueue {
             Err(_) => self.last_reserved,
         };
         let event_type = event_type_name(&event);
-        let payload = serde_json::to_string(&event).ok();
+        let (run_id, envelope) = self.persist_envelope(session_id, sequence, &event);
+        let payload = serde_json::to_string(&envelope).ok();
         let persisted = match payload {
             Some(payload) => self
                 .store()
-                .append_event(session_id, sequence, event_type, &payload)
+                .append_event(session_id, sequence, event_type, &payload, run_id.as_deref())
                 .await
                 .is_ok(),
             None => false,
@@ -243,11 +295,12 @@ impl EventQueue {
         sequence: u64,
     ) -> SequencedEvent {
         let event_type = event_type_name(&event);
-        let payload = serde_json::to_string(&event).ok();
+        let (run_id, envelope) = self.persist_envelope(session_id, sequence, &event);
+        let payload = serde_json::to_string(&envelope).ok();
         let persisted = match payload {
             Some(payload) => self
                 .store()
-                .append_event(session_id, sequence, event_type, &payload)
+                .append_event(session_id, sequence, event_type, &payload, run_id.as_deref())
                 .await
                 .is_ok(),
             None => false,
@@ -639,7 +692,7 @@ mod tests {
     #[tokio::test]
     async fn queue_assigns_continuous_sequences_and_splits_persistence() {
         let (mem, store) = setup();
-        let mut queue = EventQueue::new(store, 1);
+        let mut queue = EventQueue::new(store, 1, None);
 
         let mut sequences = Vec::new();
         sequences.push(queue.push("s1", agent_start()).await.unwrap());
@@ -673,7 +726,7 @@ mod tests {
     async fn queue_persistent_events_wait_for_store() {
         let (mem, store) = setup();
         mem.set_append_delay(Duration::from_millis(40));
-        let mut queue = EventQueue::new(store, 1);
+        let mut queue = EventQueue::new(store, 1, None);
 
         // 持久化事件同步等待落库（慢 store 40ms/条 × 3 条 ≈ 120ms）
         let started = Instant::now();
@@ -699,7 +752,7 @@ mod tests {
 
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_delta").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let mut events = vec![agent_start()];
         for i in 0..120 {
@@ -749,7 +802,7 @@ mod tests {
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_main").await.unwrap();
         assert_eq!(run.status, conex_db::RunStatus::Running);
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let result = drive_outcome(
             &mut run,
@@ -775,7 +828,7 @@ mod tests {
         let (mem, store) = setup();
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_approval").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         // 审批挂起：awaiting-approval 中间态（05 §5.4 run::approval）
         run.request_approval(store.as_ref()).await.unwrap();
@@ -803,7 +856,7 @@ mod tests {
         let engine = TestEngine::new(true);
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_coop").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let path = run
             .cancel_run(
@@ -841,7 +894,7 @@ mod tests {
         let engine = TestEngine::new(true);
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_force").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let path = run
             .cancel_run(CancelMode::Force, Some(&engine), "ui-force", store.as_ref())
@@ -872,7 +925,7 @@ mod tests {
         let engine = TestEngine::new(false);
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_fallback").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let path = run
             .cancel_run(
@@ -908,7 +961,7 @@ mod tests {
         mem.fail_all_appends("disk is read-only");
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_fail").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let result = drive_outcome(
             &mut run,
@@ -944,7 +997,7 @@ mod tests {
         let (mem, store) = setup();
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_terminal_once").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let result = drive_outcome(
             &mut run,
@@ -975,7 +1028,7 @@ mod tests {
         let (_mem, store) = setup();
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_max_turns").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let result = drive_outcome(
             &mut run,
@@ -996,7 +1049,7 @@ mod tests {
         let (mem, store) = setup();
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_error").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let result = drive_outcome(
             &mut run,
@@ -1024,7 +1077,7 @@ mod tests {
 
         // R1：agent-start=1，agent-end=2，run-terminal=3
         let mut run = manager.start_run("s1", "r1").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
         let result = drive_outcome(
             &mut run,
             &mut queue,
@@ -1037,7 +1090,7 @@ mod tests {
 
         // R2：序列续接（会话内全局单调，跨 run 不重置——Q24/T08.12）
         let mut run2 = manager.start_run("s1", "r2").await.unwrap();
-        let mut queue2 = EventQueue::new(store.clone(), run2.cursor + 1);
+        let mut queue2 = EventQueue::new(store.clone(), run2.cursor + 1, None);
         let result2 = drive_outcome(
             &mut run2,
             &mut queue2,
@@ -1063,7 +1116,7 @@ mod tests {
         let (mem, store) = setup();
         let store_b = store.clone();
         let run_a = tokio::spawn(async move {
-            let mut queue = EventQueue::new(store, 1);
+            let mut queue = EventQueue::new(store, 1, None);
             let mut seqs = Vec::new();
             for _ in 0..50 {
                 seqs.push(queue.push("s1", message_end()).await.unwrap().sequence);
@@ -1071,7 +1124,7 @@ mod tests {
             seqs
         });
         let run_b = tokio::spawn(async move {
-            let mut queue = EventQueue::new(store_b, 1);
+            let mut queue = EventQueue::new(store_b, 1, None);
             let mut seqs = Vec::new();
             for _ in 0..50 {
                 seqs.push(queue.push("s1", message_end()).await.unwrap().sequence);
@@ -1101,7 +1154,7 @@ mod tests {
         mem.fail_next_append("一次失败");
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_hole").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let result = drive_outcome(
             &mut run,
@@ -1136,7 +1189,7 @@ mod tests {
         let (mem, store) = setup();
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_session_map").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let result = drive_outcome(
             &mut run,
@@ -1229,7 +1282,7 @@ mod tests {
         let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_compact").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
         let record = conex_types::tool::ContextCompressionRecord {
             id: "compacted-summary-1-1".to_string(),
@@ -1330,7 +1383,7 @@ mod tests {
         };
 
         let mut run = manager.start_run("s1", "r_c1").await.unwrap();
-        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
         drive_outcome(
             &mut run,
             &mut queue,
@@ -1342,7 +1395,7 @@ mod tests {
 
         // 再次驱动同内容事件（模拟重放）：同 block_id 不产生第二行
         let mut run2 = manager.start_run("s1", "r_c2").await.unwrap();
-        let mut queue2 = EventQueue::new(store.clone(), run2.cursor + 1);
+        let mut queue2 = EventQueue::new(store.clone(), run2.cursor + 1, None);
         drive_outcome(
             &mut run2,
             &mut queue2,
@@ -1351,5 +1404,151 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(db.count_blocks("s1").unwrap(), 1, "同 block_id 重放不重复行");
+    }
+
+    // ── D-01 DM-04：run 归属列 + 信封落库 + goal-* 轮次域 ──
+
+    /// D-01 DM-04 验收锚：落库行 run_id 列 == 构造绑定值 && payload 为
+    /// 完整信封（runId/sequence/schemaVersion 齐全）且信封 runId == 列值
+    /// （列 + 信封并用不变量：同一注入点产出，防双写漂移，01 §2.1）
+    #[tokio::test]
+    async fn eventqueue_envelope_matches_column() {
+        let (mem, store) = setup();
+        let mut queue = EventQueue::new(store, 1, Some("r-main".to_string()));
+        queue.push("s1", agent_start()).await.unwrap();
+
+        let stored = mem.events();
+        assert_eq!(stored.len(), 1);
+        let row = &stored[0];
+        assert_eq!(row.run_id.as_deref(), Some("r-main"), "列值 = 构造绑定值");
+        let envelope: AgentEventEnvelope =
+            serde_json::from_str(&row.payload).expect("落库 payload 应为完整信封 JSON");
+        assert_eq!(envelope.run_id.as_deref(), Some("r-main"), "信封 runId == 列值");
+        assert_eq!(envelope.sequence, Some(1), "信封携带 sequence");
+        assert_eq!(envelope.schema_version, 1, "信封携带 schemaVersion");
+        let wire = serde_json::to_value(&envelope).unwrap();
+        assert_eq!(wire["type"], "agent-start");
+        assert_eq!(wire["sessionId"], "s1", "事件体 sessionId 在场（与广播 wire 同构）");
+    }
+
+    /// D-01 DM-04 验收锚：绑 None 落库 = 会话域事件——按 run 查询不命中、
+    /// 按会话查询命中（事件行 run_id 列 NULL）
+    #[tokio::test]
+    async fn eventqueue_nomaster_event_run_id_none() {
+        let (mem, store) = setup();
+        let mut queue = EventQueue::new(store.clone(), 1, None);
+        queue.push("s1", agent_start()).await.unwrap();
+
+        let stored = mem.events();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].run_id, None, "绑 None → 列值 NULL");
+        let envelope: AgentEventEnvelope = serde_json::from_str(&stored[0].payload).unwrap();
+        assert_eq!(envelope.run_id, None, "信封无 runId");
+
+        let by_run = store
+            .query_events_by_run("s1", "any-run", 0, None)
+            .await
+            .unwrap();
+        assert!(by_run.is_empty(), "会话域事件不命中 run 查询");
+        let by_session = store.query_events("s1", 0, None).await.unwrap();
+        assert_eq!(by_session.len(), 1, "按会话查询命中");
+    }
+
+    /// D-01 DM-04 验收锚：goal-* 轮次域（R-06）——三事件落库行 run_id 列
+    /// NULL 且 payload 信封 runId 为 None（不归任何 run，run 查询天然不命中）
+    #[tokio::test]
+    async fn eventqueue_goal_event_round_domain() {
+        let (mem, store) = setup();
+        let mut queue = EventQueue::new(store.clone(), 1, Some("r-goal".to_string()));
+
+        let goal_events = [
+            AgentEvent::GoalRoundStarted {
+                round: 1,
+                max_rounds: 3,
+                goal: "调研 X".to_string(),
+            },
+            AgentEvent::GoalRoundCompleted {
+                round: 1,
+                tool_call_count: 2,
+                tool_success_count: 2,
+                message_count: 3,
+                decision: "Continue".to_string(),
+                reason_detail: "继续".to_string(),
+                stalled_delta: 0,
+                evidence: String::new(),
+            },
+            AgentEvent::GoalContinuationDecided {
+                action: "continue".to_string(),
+                reason: "继续".to_string(),
+                prompt: None,
+                progress_signature: None,
+                detail: None,
+            },
+        ];
+        for (index, event) in goal_events.into_iter().enumerate() {
+            let sequence = queue.push("s1", event).await.unwrap().sequence;
+            let stored = mem.events();
+            let row = stored
+                .iter()
+                .find(|e| e.sequence == sequence)
+                .expect("goal 事件应落库");
+            assert_eq!(row.run_id, None, "goal-* 列 run_id = NULL（轮次域）");
+            let envelope: AgentEventEnvelope = serde_json::from_str(&row.payload).unwrap();
+            assert_eq!(envelope.run_id, None, "goal-* 信封无 runId");
+            assert_eq!(envelope.sequence, Some(sequence));
+            assert_eq!(index as u64 + 1, sequence, "goal 三事件顺序落库");
+        }
+
+        // run 查询不含 goal-*（列 NULL 不命中）；按会话查询命中
+        let by_run = store
+            .query_events_by_run("s1", "r-goal", 0, None)
+            .await
+            .unwrap();
+        assert!(by_run.is_empty(), "轮次域事件不命中 run 查询");
+        let by_session = store.query_events("s1", 0, None).await.unwrap();
+        assert_eq!(by_session.len(), 3, "按会话查询命中（会话域可见）");
+    }
+
+    /// D-01 DM-04 验收锚：normalize_envelope 语义在落库面生效——事件体空
+    /// sessionId 被补全、run-terminal 事件体空 runId 被补齐（normalize.rs
+    /// :99-131 语义从「仅测试调用的名义注入点」变为实际落库注入点）
+    #[tokio::test]
+    async fn eventqueue_normalize_envelope_wired_on_persist() {
+        let (mem, store) = setup();
+        let mut queue = EventQueue::new(store, 1, Some("r-main".to_string()));
+
+        // 事件体空 sessionId → normalize 补会话
+        let mut start = agent_start();
+        if let AgentEvent::AgentStart { session_id, .. } = &mut start {
+            session_id.clear();
+        }
+        queue.push("s1", start).await.unwrap();
+        let row = &mem.events()[0];
+        let envelope: AgentEventEnvelope = serde_json::from_str(&row.payload).unwrap();
+        match &envelope.event {
+            AgentEvent::AgentStart { session_id, .. } => {
+                assert_eq!(session_id, "s1", "事件体空 sessionId 被补全");
+            }
+            other => panic!("事件类型不符：{other:?}"),
+        }
+
+        // run-terminal 事件体空 runId → normalize 用队列绑定 runId 补齐
+        let terminal = AgentEvent::RunTerminal {
+            session_id: "s1".to_string(),
+            run_id: String::new(),
+            timestamp: ts(),
+            terminal: RunTerminalStatus::Completed,
+            error: None,
+        };
+        queue.push("s1", terminal).await.unwrap();
+        let row = &mem.events()[1];
+        let envelope: AgentEventEnvelope = serde_json::from_str(&row.payload).unwrap();
+        assert_eq!(envelope.run_id.as_deref(), Some("r-main"), "信封 runId 在场");
+        match &envelope.event {
+            AgentEvent::RunTerminal { run_id, .. } => {
+                assert_eq!(run_id, "r-main", "终态事件体 runId 补齐（03 §5.1-16）");
+            }
+            other => panic!("事件类型不符：{other:?}"),
+        }
     }
 }
