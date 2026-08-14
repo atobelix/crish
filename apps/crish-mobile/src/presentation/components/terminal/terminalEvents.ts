@@ -7,12 +7,12 @@
 // - 页面只有 runId 深链参数：跨 eventStore 全部会话窗口展平后按 runId 过滤
 //   （seq 升序稳定排序，M6 §8.3 顺序契约），不依赖会话归属。
 import {
-  readRecord,
   readString,
   stableSortBySeq,
   type EventWindow,
   type FeedEntry,
 } from '@/domain/store/eventReducers';
+import { terminalChunkOfFrame } from '@/domain/pure/terminalChunks';
 
 /**
  * 跨会话窗口展平 + runId 过滤 + seq 升序（终端页与 run 状态共用数据面）。
@@ -37,21 +37,11 @@ export function entriesOfRun(
 export function collectRunTerminalChunks(
   entries: readonly FeedEntry[]
 ): string[] {
+  // 逐帧抽取委托 domain/pure/terminalChunks（R2-14 部分 3 提取，与 wiring 层共用同一语义）
   const chunks: string[] = [];
   for (const entry of entries) {
-    if (entry.type === 'tool-update') {
-      // update.text（S1 协议，tool_events.rs:1424-1445）；tool-args-delta 入参预览不进终端
-      const update = readRecord(entry['update']);
-      if (!update) continue;
-      const meta = readRecord(update['metadata']);
-      const kind = meta ? readString(meta, 'kind') : undefined;
-      if (kind === 'tool-args-delta') continue;
-      const text = readString(update, 'text');
-      if (text !== undefined) chunks.push(text);
-    } else if (entry.type === 'task-output') {
-      const line = readString(entry, 'line') ?? readString(entry, 'chunk');
-      if (line !== undefined) chunks.push(line);
-    }
+    const chunk = terminalChunkOfFrame(entry);
+    if (chunk !== undefined) chunks.push(chunk);
   }
   return chunks;
 }

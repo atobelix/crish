@@ -11,6 +11,7 @@ import { FlatList } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import type { FeedEntry, EventWindow } from '@/domain/store/eventReducers';
 import { eventStore } from '@/domain/store/eventStore';
+import { terminalStore } from '@/domain/store/terminalStore';
 import TerminalScreen from './terminalScreen';
 
 function makeEntry(
@@ -43,6 +44,7 @@ const ESC_RE = new RegExp(String.fromCharCode(27));
 
 beforeEach(() => {
   eventStore.setState({ windows: {}, network: 'live' });
+  terminalStore.setState({ runs: {} });
 });
 
 describe('终端页 ANSI 解析渲染（R2UX-05-07 白名单剥离后渲染）', () => {
@@ -190,5 +192,72 @@ describe('终端页空态（M4 §5.9）', () => {
     expect(
       screen.getByText('该 run 的工具流式输出与任务输出会实时显示在这里')
     ).toBeTruthy();
+  });
+});
+
+describe('终端页数据源：terminalStore 实时镜像优先（R2-14 部分 3 接线消费）', () => {
+  it('terminalStore 有该 run 缓冲（活动 run 流式 ingest）→ 优先渲染镜像行', async () => {
+    const spy = jest
+      .spyOn(FlatList.prototype, 'scrollToEnd')
+      .mockImplementation(() => {});
+    try {
+      terminalStore.getState().ingestLines('run-1', 'live line\n');
+      await render(<TerminalScreen runId="run-1" />);
+      expect(screen.getByText('live line')).toBeTruthy();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('镜像与事件流并存时镜像优先（接线层 ingest 为权威 live 面）', async () => {
+    const spy = jest
+      .spyOn(FlatList.prototype, 'scrollToEnd')
+      .mockImplementation(() => {});
+    try {
+      terminalStore.getState().ingestLines('run-1', 'live line\n');
+      eventStore.setState({
+        windows: { 's-1': windowOf([toolUpdate('from events\n')]) },
+      });
+      await render(<TerminalScreen runId="run-1" />);
+      expect(screen.getByText('live line')).toBeTruthy();
+      expect(screen.queryByText('from events')).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('terminalStore 无缓冲（历史 run / 收口释放 / 未接线）→ 回落事件流重建', async () => {
+    const spy = jest
+      .spyOn(FlatList.prototype, 'scrollToEnd')
+      .mockImplementation(() => {});
+    try {
+      eventStore.setState({
+        windows: { 's-1': windowOf([toolUpdate('from events\n')]) },
+      });
+      await render(<TerminalScreen runId="run-1" />);
+      expect(screen.getByText('from events')).toBeTruthy();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('run-terminal 收口释放后回落事件流（收口后历史完整面由 eventStore 承载）', async () => {
+    const spy = jest
+      .spyOn(FlatList.prototype, 'scrollToEnd')
+      .mockImplementation(() => {});
+    try {
+      terminalStore.getState().ingestLines('run-1', 'live line\n');
+      terminalStore.getState().resetRun('run-1');
+      eventStore.setState({
+        windows: {
+          's-1': windowOf([toolUpdate('from events\n')]),
+        },
+      });
+      await render(<TerminalScreen runId="run-1" />);
+      expect(screen.getByText('from events')).toBeTruthy();
+      expect(screen.queryByText('live line')).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

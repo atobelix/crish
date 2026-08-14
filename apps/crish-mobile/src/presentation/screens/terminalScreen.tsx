@@ -1,12 +1,14 @@
 // 终端只读页（R2-05 部分 3：app/terminal/[runId] 深链目标，F3 §4 / M4 §4.2 规则 3）
-// - 接线：跨 eventStore 全部会话窗口按 runId 过滤（entriesOfRun），tool-update
-//   tool-progress 文本 + task-output 行 → 行缓冲（5000 行环形 + ANSI 白名单，R2UX-05-07）；
+// - 数据源（R2-14 部分 3 接线消费）：terminalStore 有该 run 实时镜像（接线层 ingestLines
+//   活动 run 流式输出）→ 优先渲染；无镜像（历史 run / run-terminal 收口释放 / 未接线的
+//   重连间隙）→ 回落跨 eventStore 窗口重建（entriesOfRun 过滤 + collectRunTerminalChunks，
+//   完整历史 R2-05c 现状保持）；
 // - run 状态条（F1 §4.3 状态条数据面）：agent-start → 运行中 / run-terminal → 收口
 //   （已完成·已取消·失败，失败附 error 摘要，F3 §3.3.3）；无事件 → 未知态（诚实化）；
 // - 自动滚底跟随（R2UX-05-03）+ 「回到底部」悬浮条（F3 §4.3）；
 // - 空态（M4 §5.9）：无终端行 → 主文案 + 副文案；
 // - onBack 由路由注入（页面不依赖 expo-router）。
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme, type ThemeTokens } from '@/adapters/platform/theme';
 import { useEventStore } from '@/adapters/hooks/useAppStore';
@@ -16,6 +18,8 @@ import {
   appendTerminalChunk,
   terminalLinesOf,
 } from '@/presentation/components/terminal/terminalLineBuffer';
+import { terminalStore } from '@/domain/store/terminalStore';
+import { terminalViewOf } from '@/domain/store/terminalReducers';
 import {
   collectRunTerminalChunks,
   deriveRunStatus,
@@ -51,7 +55,16 @@ export default function TerminalScreen({ runId, onBack }: TerminalScreenProps) {
   const [follow, setFollow] = useState(true);
   const listRef = useRef<FlatList<string> | null>(null);
 
-  // 数据面：跨窗口按 runId 过滤 → 终端文本块 → 行缓冲（环形裁剪/ANSI 白名单在缓冲层）
+  // 实时镜像数据面（R2-14 部分 3）：terminalStore 订阅（zustand vanilla subscribe +
+  // useSyncExternalStore 直绑，不依赖 useAppStore 扩展）；有 run 缓冲 → 优先渲染，
+  // 无缓冲 → 回落事件流重建（下方 buffer/fallback 路径）。
+  const runs = useSyncExternalStore(
+    terminalStore.subscribe,
+    () => terminalStore.getState().runs
+  );
+  const liveView = terminalViewOf(runs, runId);
+
+  // 回落数据面：跨窗口按 runId 过滤 → 终端文本块 → 行缓冲（环形裁剪/ANSI 白名单在缓冲层）
   const entries = useMemo(() => entriesOfRun(windows, runId), [windows, runId]);
   const status = useMemo(
     () => deriveRunStatus(entries, runId),
@@ -64,7 +77,13 @@ export default function TerminalScreen({ runId, onBack }: TerminalScreenProps) {
     }
     return state;
   }, [entries]);
-  const { lines, startIndex } = terminalLinesOf(buffer);
+  const { lines: fallbackLines, startIndex: fallbackStartIndex } =
+    terminalLinesOf(buffer);
+  const lines = liveView ? liveView.lines : fallbackLines;
+  const startIndex = liveView ? liveView.startIndex : fallbackStartIndex;
+  const truncatedCount = liveView
+    ? liveView.truncatedCount
+    : buffer.truncatedCount;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
@@ -118,7 +137,7 @@ export default function TerminalScreen({ runId, onBack }: TerminalScreenProps) {
       <TerminalView
         lines={lines}
         startIndex={startIndex}
-        truncatedCount={buffer.truncatedCount}
+        truncatedCount={truncatedCount}
         follow={follow}
         onFollowChange={setFollow}
         listRef={listRef}

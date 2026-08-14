@@ -8,6 +8,15 @@ export {
 export type { FeedBridgeOptions, ListSessionsRepository } from './feedBridge';
 export { dispatchIngestActions } from './ingestRouter';
 export type { IngestDispatchOptions } from './ingestRouter';
+export {
+  TerminalWiring,
+  mapTerminalFrame,
+  dispatchTerminalActions,
+} from './terminalWiring';
+export type {
+  TerminalWiringOptions,
+  TerminalIngestAction,
+} from './terminalWiring';
 export { devicePresenceStore } from './devicePresenceStore';
 export type { DevicePresenceState } from './devicePresenceStore';
 export {
