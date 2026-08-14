@@ -525,6 +525,8 @@ fn subagent_started_event() -> AgentEvent {
         description: Some("调研子代理".into()),
         mode: Some("research".into()),
         parent_tool_call_id: Some("tc-1".into()),
+        // D-02 LK-04：跨会话导航键（新帧携带）
+        subagent_session_id: Some("sub-sess-1".into()),
     }
 }
 
@@ -561,11 +563,13 @@ fn subagent_started_roundtrip_and_camel_case() {
         description: None,
         mode: None,
         parent_tool_call_id: None,
+        subagent_session_id: None,
     })
     .unwrap();
     assert!(slim.get("description").is_none(), "None 可选字段必须省略");
     assert!(slim.get("mode").is_none(), "None 可选字段必须省略");
     assert!(slim.get("parentToolCallId").is_none(), "None 可选字段必须省略");
+    assert!(slim.get("subagentSessionId").is_none(), "None 可选字段必须省略");
 }
 
 #[test]
@@ -646,6 +650,8 @@ fn subagent_ended_roundtrip_and_status_wire_values() {
         status: SubagentEndStatus::Cancelled,
         summary: Some("被用户终止".into()),
         ended_at: TS.into(),
+        // D-02 LK-04：跨会话导航键（新帧携带）
+        subagent_session_id: Some("sub-sess-1".into()),
     };
     assert_eq!(event.type_name(), "subagent-ended");
     let json = serde_json::to_value(&event).unwrap();

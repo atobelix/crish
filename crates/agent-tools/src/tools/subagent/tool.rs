@@ -67,10 +67,6 @@ impl RunSubagentTool {
                             "items": { "type": "string" },
                             "description": "允许调用的工具白名单（可选裁剪；缺省继承父代理全部工具）"
                         },
-                        "timeoutMs": {
-                            "type": "number",
-                            "description": "单次执行超时毫秒数（可选，缺省不限制）"
-                        },
                         "description": {
                             "type": "string",
                             "description": "子代理描述（可选，展示用）"
@@ -96,7 +92,7 @@ impl RunSubagentTool {
                         },
                         "tasks": {
                             "type": "array",
-                            "description": "批量派发（与 prompt 互斥，二选一）：一次创建 N 个并行子代理（无依赖平铺并行，REQ-D02 语义）；原子性——任一守卫拒绝整体失败零 run。条目字段：prompt（必填）/ role / displayLabel / capabilityMode / timeoutMs / description",
+                            "description": "批量派发（与 prompt 互斥，二选一）：一次创建 N 个并行子代理（无依赖平铺并行，REQ-D02 语义）；原子性——任一守卫拒绝整体失败零 run。条目字段：prompt（必填）/ role / displayLabel / capabilityMode / description",
                             "items": {
                                 "type": "object",
                                 "properties": {
@@ -117,10 +113,6 @@ impl RunSubagentTool {
                                         "type": "string",
                                         "enum": ["read-only", "read-write", "execute", "all"],
                                         "description": "能力模式（可选，控制实际权限；read-only 裁剪工具集）"
-                                    },
-                                    "timeoutMs": {
-                                        "type": "number",
-                                        "description": "单次执行超时毫秒数（可选，缺省不限制）"
                                     },
                                     "description": {
                                         "type": "string",
@@ -145,7 +137,7 @@ impl RunSubagentTool {
     /// → 结果数组信封（顺序与入参一致，每条 subagentId/subagentRunId/
     /// sessionId/status/summary/displayLabel）。
     ///
-    /// 顶层单发参数（agentId/role/capabilityMode/allowedTools/timeoutMs/
+    /// 顶层单发参数（agentId/role/capabilityMode/allowedTools/
     /// description/mode/taskType/allowedWritePaths/displayLabel）在批量模式下
     /// 不适用（以 tasks 条目内字段为准），显式给出即结构化拒绝（与
     /// prompt+tasks 互斥同一「防歧义」语义）。
@@ -160,7 +152,6 @@ impl RunSubagentTool {
             "role",
             "capabilityMode",
             "allowedTools",
-            "timeoutMs",
             "description",
             "mode",
             "taskType",
@@ -170,7 +161,7 @@ impl RunSubagentTool {
             if args.get(key).is_some() {
                 return Err(ToolError::invalid_input(format!(
                     "批量派发（tasks）下顶层参数 {key} 不适用：请在 tasks 条目内配置\
-                     （role/capabilityMode/displayLabel/timeoutMs/description）"
+                     （role/capabilityMode/displayLabel/description）"
                 )));
             }
         }
@@ -190,7 +181,6 @@ impl RunSubagentTool {
                 role: task.role,
                 capability_mode: task.capability_mode,
                 allowed_tools: None,
-                timeout_ms: task.timeout_ms,
                 description: task.description.clone(),
                 mode: None,
                 parent_session_id: ctx.session_id.clone(),
@@ -232,7 +222,7 @@ impl RunSubagentTool {
 // ── 批量派发解析（T-D-06：tasks 数组）────────────────────────────
 
 /// 批量任务条目（tasks 数组元素，字段对齐方案 schema：prompt/role/
-/// displayLabel/capabilityMode/timeoutMs/description）
+/// displayLabel/capabilityMode/description）
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BatchTaskArg {
     /// 任务目标（必填）
@@ -243,8 +233,6 @@ struct BatchTaskArg {
     capability_mode: Option<SubagentCapabilityMode>,
     /// 角色展示标签（可选，仅展示）
     display_label: Option<String>,
-    /// 单次执行超时毫秒（可选）
-    timeout_ms: Option<u64>,
     /// 描述（可选，展示用）
     description: Option<String>,
 }
@@ -289,7 +277,6 @@ fn parse_tasks(args: &Value) -> Result<Option<Vec<BatchTaskArg>>, ToolError> {
             .get("displayLabel")
             .and_then(Value::as_str)
             .map(str::to_string);
-        let timeout_ms = obj.get("timeoutMs").and_then(Value::as_u64);
         let description = obj
             .get("description")
             .and_then(Value::as_str)
@@ -299,7 +286,6 @@ fn parse_tasks(args: &Value) -> Result<Option<Vec<BatchTaskArg>>, ToolError> {
             role,
             capability_mode,
             display_label,
-            timeout_ms,
             description,
         });
     }
@@ -352,7 +338,7 @@ impl Tool for RunSubagentTool {
                 "prompt contains invalid control characters",
             ));
         }
-        // 入参解析：role/capabilityMode/allowedTools/timeoutMs 可选
+        // 入参解析：role/capabilityMode/allowedTools 可选
         let agent_id = crate::tools::optional_string(&args, "agentId");
         let role = match crate::tools::optional_string(&args, "role") {
             Some(raw) => Some(SubagentRole::parse(&raw).ok_or_else(|| {
@@ -383,7 +369,6 @@ impl Tool for RunSubagentTool {
             ),
             None => None,
         };
-        let timeout_ms = crate::tools::optional_u64(&args, "timeoutMs");
         let description = crate::tools::optional_string(&args, "description");
         let mode = crate::tools::optional_string(&args, "mode");
         let task_type = match crate::tools::optional_string(&args, "taskType") {
@@ -425,7 +410,6 @@ impl Tool for RunSubagentTool {
             role,
             capability_mode,
             allowed_tools,
-            timeout_ms,
             description,
             mode,
             parent_session_id: ctx.session_id.clone(),

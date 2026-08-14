@@ -43,6 +43,7 @@ use agent_tools::tools::subagent::{
 };
 use async_trait::async_trait;
 use conex_db::LocalDb;
+use conex_types::events::SubagentEndStatus;
 use conex_types::SessionAgent;
 use orchestrator::persist::LocalDbStore;
 use orchestrator::steering_queue::{PendingMessageQueue, SteeringInputEntry};
@@ -382,16 +383,28 @@ impl SubagentSpawnerImpl {
             // 启动失败：行归一 failed（防僵尸 running 行；产出保留语义同
             // kill_all 归一）——灾难性失败路径，守卫「零 run」不适用；
             // 单行定点写（11-T3）：只动本行，缺行静默（失败仍上抛）
-            let db = self.db.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(db) = db.as_ref() {
-                let _ = db.update_session_agent_status(
-                    &req.parent_session_id,
-                    &subagent_run_id,
-                    SubagentState::Failed.to_db_status(),
-                    Some(now_ms()),
-                );
+            {
+                let db = self.db.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(db) = db.as_ref() {
+                    let _ = db.update_session_agent_status(
+                        &req.parent_session_id,
+                        &subagent_run_id,
+                        SubagentState::Failed.to_db_status(),
+                        Some(now_ms()),
+                    );
+                }
             }
-            drop(db);
+            // LK-07 R-14：启动失败补发 subagent-ended(status=failed)——行已
+            // 归一 failed 但事件链为空（「行存在但无终态事件」断链消除）；
+            // 发射失败仅告警（错误上抛不阻塞，与 started 发射面同语义）
+            self.emit_launch_failed_ended(
+                req,
+                parent_run.as_deref(),
+                &subagent_id,
+                &subagent_run_id,
+                &session_id,
+            )
+            .await;
             return Err(SubagentSpawnError::SpawnFailed(error.to_string()));
         }
 
@@ -494,6 +507,44 @@ impl SubagentSpawnerImpl {
                 subagent_run_id,
                 error = %error,
                 "subagent-started 发射失败（不阻塞 spawn）"
+            );
+        }
+    }
+
+    /// 发射 subagent-ended(status=failed)（LK-07 R-14：spawn 启动失败补发
+    /// ——行已归一 failed 但事件链为空，补发使「行存在但无终态事件」的
+    /// 断链消除）。信封对齐收口面（runId=父 run、subagent_session_id=
+    /// 子会话 id）；发射失败仅告警（错误上抛不阻塞）。
+    async fn emit_launch_failed_ended(
+        &self,
+        req: &SubagentSpawnRequest,
+        parent_run: Option<&str>,
+        subagent_id: &str,
+        subagent_run_id: &str,
+        sub_session_id: &str,
+    ) {
+        let Some(db) = self.db.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
+            return;
+        };
+        let ctx = SubagentEmitContext {
+            session_id: req.parent_session_id.clone(),
+            parent_run_id: parent_run.unwrap_or_default().to_string(),
+        };
+        let info = SubagentEndedInfo {
+            subagent_id: subagent_id.to_string(),
+            subagent_run_id: subagent_run_id.to_string(),
+            status: SubagentEndStatus::Failed,
+            summary: Some("子代理启动失败".to_string()),
+            subagent_session_id: Some(sub_session_id.to_string()),
+        };
+        let emitter = SubagentEventEmitter::new(Arc::new(LocalDbStore::new(db)));
+        if let Err(error) = emitter.emit_ended(&ctx, &info).await {
+            tracing::warn!(
+                target: "subagent_spawner",
+                event = "emit_launch_failed_ended_failed",
+                subagent_run_id,
+                error = %error,
+                "spawn 失败补发 subagent-ended 落库失败（仅告警）"
             );
         }
     }
@@ -602,31 +653,61 @@ impl SubagentSpawnerImpl {
             session_id: cfg.parent_session_id.clone(),
             parent_run_id: parent_run.clone().unwrap_or_default(),
         };
+        // LK-07 R-14：双发幂等——kill 命令面已直发 ended(cancelled)（lifecycle
+        // kill_all/kill_subagent）时，本收口兜底不再重复发射（同一父 run 归
+        // 属性查询 events 表；query_events_by_run 走 idx_events_run 索引，
+        // 终态低频可接受）。flow 路径不查（事件由 FlowScheduler 发射）。
+        let already_ended = if flow_node_id.is_none() {
+            let db = self.db.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            match db {
+                Some(db) => {
+                    let parent = parent_run.clone().unwrap_or_default();
+                    if parent.is_empty() {
+                        false
+                    } else {
+                        db.query_events_by_run(&cfg.parent_session_id, &parent, 0, Some(200))
+                            .map(|rows| {
+                                rows.iter().any(|e| e.event_type == "subagent-ended")
+                            })
+                            .unwrap_or(false)
+                    }
+                }
+                None => false,
+            }
+        } else {
+            false
+        };
         let event = if flow_node_id.is_none() {
-            let emitted = {
-                let db = self.db.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                match db {
-                    Some(db) => {
-                        let emitter =
-                            SubagentEventEmitter::new(Arc::new(LocalDbStore::new(db)));
-                        match emitter.emit_ended(&emit_ctx, &info).await {
-                            Ok(sequenced) => Some(sequenced.event),
-                            Err(error) => {
-                                tracing::warn!(
-                                    target: "subagent_spawner",
-                                    event = "emit_ended_failed",
-                                    subagent_run_id = %run_id,
-                                    error = %error,
-                                    "subagent-ended 发射失败（wait 通道仍 feed 兜底）"
-                                );
-                                None
+            if already_ended {
+                // kill 已直发 ended：跳过落库发射（wait 通道仍以本地副本
+                // feed 兜底，订阅者收口不丢）
+                build_subagent_ended(&emit_ctx, &info)
+            } else {
+                let emitted = {
+                    let db = self.db.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                    match db {
+                        Some(db) => {
+                            let emitter =
+                                SubagentEventEmitter::new(Arc::new(LocalDbStore::new(db)));
+                            match emitter.emit_ended(&emit_ctx, &info).await {
+                                Ok(sequenced) => Some(sequenced.event),
+                                Err(error) => {
+                                    tracing::warn!(
+                                        target: "subagent_spawner",
+                                        event = "emit_ended_failed",
+                                        subagent_run_id = %run_id,
+                                        error = %error,
+                                        "subagent-ended 发射失败（wait 通道仍 feed 兜底）"
+                                    );
+                                    None
+                                }
                             }
                         }
+                        None => None,
                     }
-                    None => None,
-                }
-            };
-            emitted.unwrap_or_else(|| build_subagent_ended(&emit_ctx, &info))
+                };
+                emitted.unwrap_or_else(|| build_subagent_ended(&emit_ctx, &info))
+            }
         } else {
             // flow 路径：事件由 FlowScheduler 收口发射；本处仅构造副本供
             // wait 通道 feed 与 steering 摘要（不落库不双发）
@@ -959,7 +1040,6 @@ mod tests {
             role: Some(SubagentRole::Researcher),
             capability_mode: None,
             allowed_tools: None,
-            timeout_ms: None,
             description: Some("调研".to_string()),
             mode: Some("research".to_string()),
             parent_session_id: "sess-main".to_string(),
@@ -1699,5 +1779,123 @@ mod tests {
             rows[0].description, "调研",
             "非 flow 路径 description 原样保留（接线不破坏既有语义）"
         );
+    }
+
+    // ── LK-07（R-14 死路径收口：spawn 失败补 ended(failed) + 双发幂等）──
+
+    /// spawn 启动失败补发 subagent-ended(status=failed)：行已归一 failed
+    /// 但事件链为空（「行存在但无终态事件」断链）——launch 失败后事件表
+    /// 必须含 failed 终态（信封 runId = 父 run）
+    #[tokio::test]
+    async fn spawn_launch_failure_emits_ended_failed() {
+        let launcher = Arc::new(RecordingLauncher::failing());
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&conex_types::SessionIndexEntry {
+            id: "sess-main".to_string(),
+            title: "主会话".to_string(),
+            folder: String::new(),
+            is_pinned: false,
+            is_archived: false,
+            branch_parent_id: None,
+            timestamp: "2026-08-05T00:00:00.000Z".to_string(),
+            updated_at: 1,
+            message_count: 0,
+            pinned_message_ids: None,
+            engine_cursor: Some(0),
+            engine_last_run_id: Some("run-main".to_string()),
+            hydrated_from_engine: Some(true),
+        })
+        .unwrap();
+        let spawner = Arc::new(SubagentSpawnerImpl::new());
+        spawner.init(
+            Some(Arc::clone(&launcher) as Arc<dyn SubagentRunLauncher>),
+            Some(db.clone()),
+            None,
+            None,
+        );
+        spawner.register_run("run-main", "sess-main", None);
+        spawner.set_current_run("sess-main", "run-main");
+
+        let err = spawner
+            .spawn(&request("调研", None))
+            .await
+            .expect_err("启动失败必须上抛 SpawnFailed");
+        assert!(matches!(err, SubagentSpawnError::SpawnFailed(_)));
+
+        // 事件链补齐：行 failed + ended(failed) 落库（此前断链——有行无事件）
+        let rows = db.load_session_agents("sess-main").unwrap();
+        assert_eq!(rows[0].status, "failed");
+        let events = db.query_events("sess-main", 0, Some(100)).expect("事件查询");
+        let ended: Vec<_> = events
+            .iter()
+            .filter(|e| e.event_type == "subagent-ended")
+            .collect();
+        assert_eq!(ended.len(), 1, "启动失败补发 ended(failed)");
+        assert!(
+            ended[0].payload.contains("\"status\":\"failed\""),
+            "failed 终态：{}",
+            ended[0].payload
+        );
+        assert_eq!(
+            ended[0].run_id.as_deref(),
+            Some("run-main"),
+            "信封 runId = 父 run"
+        );
+    }
+
+    /// 双发幂等（LK-07 R-14）：kill 命令面已直发 ended(cancelled)（lifecycle
+    /// kill_all/kill_subagent 落库）后，run 收口兜底 on_subagent_terminal
+    /// 不再重复发射 ended——按「同一父 run 归属性已落库 subagent-ended」
+    /// 跳过落库发射（wait 通道仍以本地副本 feed）
+    #[tokio::test]
+    async fn terminal_skips_ended_when_kill_already_emitted() {
+        let (spawner, _, db, stream, _) = test_rig();
+        setup_main_run(&spawner);
+        let mut rx = stream.subscribe();
+
+        let result = spawner
+            .spawn(&request("调研", None))
+            .await
+            .expect("spawn 应成功");
+
+        // 模拟 kill 直发（lifecycle emit_killed_ended 同构）：父 run 归属
+        // 落一条 subagent-ended(cancelled)
+        let seq = db.reserve_sequence("sess-main").unwrap();
+        db.append_event(
+            "sess-main",
+            seq,
+            "subagent-ended",
+            r#"{"type":"subagent-ended","runId":"run-main","status":"cancelled"}"#,
+            Some("run-main"),
+        )
+        .expect("kill 直发落库");
+
+        // 收口兜底：kill 已直发 → 不再落库发射（双发消灭）
+        let cfg = SubagentRunConfig {
+            subagent_id: result.subagent_id.clone(),
+            subagent_run_id: result.subagent_run_id.clone(),
+            parent_session_id: "sess-main".to_string(),
+            task_type: None,
+            allowed_write_paths: None,
+            output_dir: None,
+            started_at_ms: 1,
+        };
+        spawner
+            .on_subagent_terminal(&cfg, SubagentState::Completed)
+            .await;
+
+        let events = db.query_events("sess-main", 0, Some(100)).expect("事件查询");
+        let ended: Vec<_> = events
+            .iter()
+            .filter(|e| e.event_type == "subagent-ended")
+            .collect();
+        assert_eq!(ended.len(), 1, "kill 直发后收口兜底不重复发 ended");
+
+        // wait 通道仍收到终态（订阅者收口不丢）
+        let terminal = tokio::time::timeout(std::time::Duration::from_secs(3), rx.recv())
+            .await
+            .expect("wait 通道事件应在窗口内到达")
+            .expect("通道未关闭");
+        assert_eq!(terminal.subagent_id, result.subagent_id);
     }
 }

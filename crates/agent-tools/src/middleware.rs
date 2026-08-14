@@ -286,6 +286,8 @@ mod tests {
             compression_store: None,
             // W4-A/B：中间件执行路径不接线笔记后端
             note_backend: None,
+            // D-02 LK-01：中间件直连路径无工具调用上下文（None）
+            tool_call_id: None,
         };
         let mut current = input;
         for m in chain {

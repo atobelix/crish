@@ -399,6 +399,7 @@ fn delete_session_cascades() {
             task_type: None,
             display_label: None,
             allowed_write_paths_json: None,
+            sub_session_id: None,
         }],
     )
     .unwrap();
@@ -435,6 +436,7 @@ fn save_and_load_session_agents() {
             task_type: Some("analysis".into()),
             display_label: Some("Rust 内核分析师".into()),
             allowed_write_paths_json: Some(r#"["docs/notes"]"#.into()),
+            sub_session_id: Some("sub-sess-0-1".into()),
         },
         SessionAgent {
             id: "a2".into(),
@@ -454,6 +456,7 @@ fn save_and_load_session_agents() {
             task_type: Some("implementation".into()),
             display_label: None,
             allowed_write_paths_json: None,
+            sub_session_id: None,
         },
     ];
     db.save_session_agents("s1", &agents).unwrap();
@@ -475,6 +478,13 @@ fn save_and_load_session_agents() {
     assert_eq!(loaded[1].task_type.as_deref(), Some("implementation"));
     assert_eq!(loaded[1].display_label, None, "未声明的列为 None");
     assert_eq!(loaded[1].allowed_write_paths_json, None);
+    // D-02 LK-04 v9 列读写（sub_session_id 读回；未声明 = None）
+    assert_eq!(
+        loaded[0].sub_session_id.as_deref(),
+        Some("sub-sess-0-1"),
+        "sub_session_id 随行读回"
+    );
+    assert_eq!(loaded[1].sub_session_id, None, "未声明子会话映射 = None");
 }
 
 #[test]

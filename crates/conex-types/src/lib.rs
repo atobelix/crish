@@ -568,6 +568,14 @@ mod tests {
         let back: SessionAgent = serde_json::from_str(&json).unwrap();
         assert_eq!(agent, back);
         assert_eq!(back.messages.len(), 1);
+        // D-02 LK-04 S5 测钉：wire 键 camelCase 显式断言（subSessionId 键名
+        // 契约锚——前端行级反查依赖该键，防 rename 漂移）
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            value["subSessionId"], "sub-sess-0-1",
+            "SessionAgent wire 键必须为 camelCase subSessionId"
+        );
+        assert_eq!(value["parentToolCallId"], "tc-1", "既有 camelCase 键不回归");
         // 缺省兼容：旧载荷无新字段 → 反序列化为 None
         let legacy = r#"{"id":"a1","subagentRunId":"r1","parentSessionId":"s1",
                          "parentRunId":"p1","description":"","mode":"",

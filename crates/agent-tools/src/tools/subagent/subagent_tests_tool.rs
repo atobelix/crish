@@ -65,7 +65,6 @@ async fn tool_parses_optional_args_into_request() {
                 "role": "researcher",
                 "capabilityMode": "read-only",
                 "allowedTools": ["read_file", "grep_search"],
-                "timeoutMs": 120_000,
                 "description": "调研模块 A",
                 "mode": "research"
             }),
@@ -83,7 +82,6 @@ async fn tool_parses_optional_args_into_request() {
         req.allowed_tools,
         Some(vec!["read_file".to_string(), "grep_search".to_string()])
     );
-    assert_eq!(req.timeout_ms, Some(120_000));
     assert_eq!(req.description.as_deref(), Some("调研模块 A"));
     assert_eq!(req.mode.as_deref(), Some("research"));
     assert_eq!(req.parent_session_id, "parent-sess", "父会话 = 工具执行会话");

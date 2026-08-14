@@ -297,6 +297,7 @@ impl MockEngine {
             description: req.description.clone(),
             mode: req.mode.clone(),
             parent_tool_call_id: req.parent_tool_call_id.clone(),
+            subagent_session_id: Some(result.session_id.clone()),
         };
         let ctx = SubagentEmitContext {
             session_id: req.parent_session_id.clone(),
@@ -325,6 +326,7 @@ impl MockEngine {
             subagent_run_id: run_id.to_string(),
             status,
             summary: Some("链路终态摘要".to_string()),
+            subagent_session_id: None,
         };
         let ctx = SubagentEmitContext {
             session_id: self.sched.session_id().to_string(),
@@ -368,6 +370,7 @@ impl MockEngine {
             subagent_run_id: run_id.to_string(),
             status,
             summary: Some("链路终态摘要".to_string()),
+            subagent_session_id: None,
         };
         let ctx = SubagentEmitContext {
             session_id: self.sched.session_id().to_string(),
@@ -480,6 +483,15 @@ impl RecoveryStore for MemRecoveryStore {
         _path_json: &str,
     ) -> Result<(), RecoveryError> {
         Ok(())
+    }
+
+    fn get_subagent_parent_tool_call_id(
+        &self,
+        _session_id: &str,
+        _subagent_run_id: &str,
+    ) -> Result<Option<String>, RecoveryError> {
+        // LK-02：multi_agent 链路断言面不测 fork 键传播，恒 None 即可
+        Ok(None)
     }
 }
 
@@ -598,7 +610,6 @@ async fn full_chain_dependency_graph_to_reinjection() {
         role: None,
         capability_mode: None,
         allowed_tools: None,
-        timeout_ms: None,
         description: Some("直调子代理".to_string()),
         mode: Some("research".to_string()),
         parent_session_id: session_id.to_string(),
@@ -838,7 +849,6 @@ async fn chain_event_envelopes_carry_subagent_identity() {
         role: None,
         capability_mode: None,
         allowed_tools: None,
-        timeout_ms: None,
         description: Some("信封子代理".to_string()),
         mode: Some("solve".to_string()),
         parent_session_id: session_id.to_string(),

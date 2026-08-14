@@ -435,6 +435,8 @@ fn all_events() -> Vec<AgentEvent> {
             description: Some("调研子代理".into()),
             mode: Some("research".into()),
             parent_tool_call_id: Some("tc-1".into()),
+            // D-02 LK-04：跨会话导航键（新帧携带；穷举 roundtrip 自动纳入）
+            subagent_session_id: Some("sub-sess-1".into()),
         },
         AgentEvent::SubagentEvent {
             session_id: "s1".to_string(),
@@ -452,6 +454,8 @@ fn all_events() -> Vec<AgentEvent> {
             status: SubagentEndStatus::Completed,
             summary: Some("完成调研".into()),
             ended_at: TS.into(),
+            // D-02 LK-04：跨会话导航键（新帧携带；穷举 roundtrip 自动纳入）
+            subagent_session_id: Some("sub-sess-1".into()),
         },
         // T-AB-17：任务域七事件（01 方案 §4.5 冻结契约）
         AgentEvent::TaskStarted {
@@ -647,6 +651,97 @@ fn type_name_matches_serde_tag_for_all_variants() {
             "type_name 与序列化 tag 不一致（变体 {}）",
             tag
         );
+    }
+}
+
+// ── 2. D-02 LK-04：subagent_session_id 跨会话导航键契约 ──
+
+/// 旧帧（无 subagentSessionId 键）可解析为 None——serde default 向后
+/// 兼容，schema_version 不升；解析后 roundtrip 序列化不产生该键
+/// （skip_serializing_if 纪律）
+#[test]
+fn subagent_session_id_old_frame_parses_to_none() {
+    // 旧帧：无 subagentSessionId（LK-04 字段落地前的历史事件体）
+    let old_started = json!({
+        "type": "subagent-started",
+        "sessionId": "s1",
+        "subagentId": "sa-1",
+        "subagentRunId": "sr-1",
+        "role": "researcher",
+        "capabilityMode": "readonly",
+        "startedAt": TS,
+        "parentToolCallId": "tc-1",
+    });
+    let parsed: AgentEvent = serde_json::from_value(old_started).unwrap();
+    match parsed {
+        AgentEvent::SubagentStarted {
+            subagent_session_id,
+            ..
+        } => assert_eq!(subagent_session_id, None, "旧帧缺省 subagentSessionId → None"),
+        other => panic!("type 判别错误：{}", other.type_name()),
+    }
+
+    let old_ended = json!({
+        "type": "subagent-ended",
+        "sessionId": "s1",
+        "subagentId": "sa-1",
+        "subagentRunId": "sr-1",
+        "status": "completed",
+        "endedAt": TS,
+    });
+    let parsed: AgentEvent = serde_json::from_value(old_ended).unwrap();
+    match &parsed {
+        AgentEvent::SubagentEnded {
+            subagent_session_id,
+            ..
+        } => assert_eq!(subagent_session_id, &None, "旧帧缺省 subagentSessionId → None"),
+        other => panic!("type 判别错误：{}", other.type_name()),
+    }
+
+    // None 回写不产生该键（skip_serializing_if = Option::is_none）
+    let back = serde_json::to_value(&parsed).unwrap();
+    assert!(
+        back.get("subagentSessionId").is_none(),
+        "None 时序列化必须省略 subagentSessionId"
+    );
+}
+
+/// 新帧（带 subagentSessionId）：roundtrip 不丢 + camelCase 键名 +
+/// 与行级 sub_session_id 同值（反向导航键三处同源的第一段锚）
+#[test]
+fn subagent_session_id_new_frame_roundtrip_preserved() {
+    for event in [
+        AgentEvent::SubagentStarted {
+            session_id: "s1".to_string(),
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            role: "researcher".to_string(),
+            capability_mode: "readonly".to_string(),
+            started_at: TS.into(),
+            description: Some("调研子代理".into()),
+            mode: Some("research".into()),
+            parent_tool_call_id: Some("tc-1".into()),
+            subagent_session_id: Some("sub-sess-1".into()),
+        },
+        AgentEvent::SubagentEnded {
+            session_id: "s1".to_string(),
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            status: SubagentEndStatus::Completed,
+            summary: Some("完成调研".into()),
+            ended_at: TS.into(),
+            subagent_session_id: Some("sub-sess-1".into()),
+        },
+    ] {
+        let wire = event.type_name();
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["type"], wire, "顶层 type 必须为 {wire}");
+        assert_eq!(
+            json["subagentSessionId"], "sub-sess-1",
+            "{wire} 必须携带 camelCase 键 subagentSessionId"
+        );
+        let back: AgentEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(back, event, "{wire} roundtrip 保真（含 subagentSessionId）");
     }
 }
 

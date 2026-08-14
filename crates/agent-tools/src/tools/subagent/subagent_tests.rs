@@ -336,7 +336,6 @@ fn request(
         role: None,
         capability_mode: None,
         allowed_tools: None,
-        timeout_ms: None,
         description: None,
         mode: None,
         parent_session_id: parent_session.to_string(),

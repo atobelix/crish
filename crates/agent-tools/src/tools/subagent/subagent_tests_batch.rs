@@ -62,7 +62,7 @@ async fn tool_batch_rejects_top_level_single_params() {
     for (key, value) in [
         ("agentId", serde_json::json!("def-x")),
         ("role", serde_json::json!("researcher")),
-        ("timeoutMs", serde_json::json!(30_000)),
+        ("capabilityMode", serde_json::json!("read-only")),
     ] {
         let mut args = serde_json::json!({ "tasks": [{ "prompt": "任务" }] });
         args[key] = value;
@@ -130,7 +130,7 @@ async fn tool_batch_dispatches_three_tasks_in_order() {
             serde_json::json!({
                 "tasks": [
                     { "prompt": "任务 A", "role": "researcher", "displayLabel": "调研员" },
-                    { "prompt": "任务 B", "capabilityMode": "read-only", "timeoutMs": 120_000, "description": "调研 B" },
+                    { "prompt": "任务 B", "capabilityMode": "read-only", "description": "调研 B" },
                     { "prompt": "任务 C" }
                 ]
             }),
@@ -146,7 +146,6 @@ async fn tool_batch_dispatches_three_tasks_in_order() {
     assert_eq!(requests[0].role, Some(SubagentRole::Researcher));
     assert_eq!(requests[0].display_label.as_deref(), Some("调研员"));
     assert_eq!(requests[1].capability_mode, Some(SubagentCapabilityMode::ReadOnly));
-    assert_eq!(requests[1].timeout_ms, Some(120_000));
     assert_eq!(requests[1].description.as_deref(), Some("调研 B"));
     assert_eq!(requests[2].role, None, "条目缺省字段 = None");
     // 父会话 = 工具执行会话；流程关联/扩展点恒 None

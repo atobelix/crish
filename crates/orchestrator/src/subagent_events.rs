@@ -27,11 +27,17 @@
 //! 序列语义：经 [EventQueue] 推送（store 端会话级原子计数器取号，T08.12），
 //! 会话内全局单调；runId（父 run）由信封 emit 层注入（03 §5.3-2），本模块
 //! 只推事件体，`parent_run_id` 经 [SubagentEmitContext] 随调用携带。
+//!
+//! 广播（D-02 LK-05，主控裁决 F-01）：`subagent-started` / `subagent-ended`
+//! 落库成功后经 [SubagentEventBroadcaster] 槽广播（**先落库后广播**，
+//! runId=父 run，与 progress 同轨对称；广播失败不回滚落库）。广播槽为
+//! 可选接线（None = 只落库不广播）；壳层经 [SubagentEventEmitter::with_broadcast]
+//! 注入事件桥实现（PC-03 禁止项：orchestrator 不依赖壳层桥）。
 
 use std::sync::Arc;
 
 use conex_types::events::{
-    AgentEvent, SubagentEndStatus, SubagentEventKind, SubagentEventPayload,
+    AgentEvent, AgentEventEnvelope, SubagentEndStatus, SubagentEventKind, SubagentEventPayload,
 };
 
 use crate::events::{EventQueue, PersistError, SequencedEvent};
@@ -173,6 +179,18 @@ pub fn build_subagent_ended(ctx: &SubagentEmitContext, info: &SubagentEndedInfo)
     }
 }
 
+/// 广播接收器（壳层事件桥接线面；None = 只落库不广播——编排纯逻辑域零广播）。
+///
+/// D-02 LK-05（主控裁决 F-01 归位）：`subagent-started` / `subagent-ended`
+/// 落库成功后经本槽广播（**先落库后广播**，runId=父 run，与 progress 同轨
+/// 对称）；广播失败仅告警、**不回滚落库**（Critical 必达语义不动）。
+/// 壳层实现把信封经事件桥（EventBridge）发射；orchestrator 不依赖壳层桥
+/// （PC-03 禁止项：广播必须壳层接线）。
+pub trait SubagentEventBroadcaster: Send + Sync {
+    /// 广播一条已落库事件的信封（Err = 广播失败，调用方仅告警不阻断）
+    fn broadcast(&self, envelope: &AgentEventEnvelope) -> Result<(), String>;
+}
+
 /// 子代理事件发射器（唯一发射方落地；经 [EventQueue] 推送）
 ///
 /// 每次发射自建 [EventQueue]（store 端会话级原子计数器取号，T08.12：
@@ -183,12 +201,46 @@ pub fn build_subagent_ended(ctx: &SubagentEmitContext, info: &SubagentEndedInfo)
 /// 「事件只观测不阻塞编排」，记录日志继续）。
 pub struct SubagentEventEmitter {
     store: Arc<dyn Store>,
+    /// 广播槽（LK-05：壳层事件桥接线；None = 只落库不广播）
+    broadcast: Option<Arc<dyn SubagentEventBroadcaster>>,
 }
 
 impl SubagentEventEmitter {
     /// 新建发射器（共享 store；序列由 store 端原子计数器保证）
     pub fn new(store: Arc<dyn Store>) -> Self {
-        Self { store }
+        Self {
+            store,
+            broadcast: None,
+        }
+    }
+
+    /// 挂载广播槽（LK-05：壳层注入事件桥；None 默认 = 只落库不广播）
+    pub fn with_broadcast(mut self, broadcast: Arc<dyn SubagentEventBroadcaster>) -> Self {
+        self.broadcast = Some(broadcast);
+        self
+    }
+
+    /// LK-05：落库成功后补广播（**先落库后广播**——顺序约束，广播失败
+    /// 不回滚落库）。信封 runId = 父 run（与 progress 同轨对称；空父 run
+    /// 置 None，前端回退 env.runId）；sequence 随落库序列同源。
+    fn broadcast_after_persist(&self, ctx: &SubagentEmitContext, sequenced: &SequencedEvent) {
+        let Some(broadcast) = &self.broadcast else {
+            return;
+        };
+        let envelope = AgentEventEnvelope::new(
+            sequenced.event.clone(),
+            (!ctx.parent_run_id.is_empty()).then(|| ctx.parent_run_id.clone()),
+            Some(sequenced.sequence),
+        );
+        if let Err(error) = broadcast.broadcast(&envelope) {
+            tracing::warn!(
+                target: "subagent_events",
+                event = "broadcast_failed",
+                parent_run_id = %ctx.parent_run_id,
+                error = %error,
+                "subagent 事件广播失败（先落库后广播：落库已成功，不回滚）"
+            );
+        }
     }
 
     /// spawn 成功发射 `subagent-started`（Critical 必达落库）
@@ -203,9 +255,12 @@ impl SubagentEventEmitter {
             1,
             (!ctx.parent_run_id.is_empty()).then(|| ctx.parent_run_id.clone()),
         );
-        queue
+        let sequenced = queue
             .push(&ctx.session_id, build_subagent_started(ctx, info))
-            .await
+            .await?;
+        // LK-05：先落库后广播（广播失败不回滚落库）
+        self.broadcast_after_persist(ctx, &sequenced);
+        Ok(sequenced)
     }
 
     /// 运行中发射 `subagent-event`（progress=Delta 不落库不阻塞；
@@ -238,9 +293,12 @@ impl SubagentEventEmitter {
             1,
             (!ctx.parent_run_id.is_empty()).then(|| ctx.parent_run_id.clone()),
         );
-        queue
+        let sequenced = queue
             .push(&ctx.session_id, build_subagent_ended(ctx, info))
-            .await
+            .await?;
+        // LK-05：先落库后广播（广播失败不回滚落库）
+        self.broadcast_after_persist(ctx, &sequenced);
+        Ok(sequenced)
     }
 }
 
@@ -276,7 +334,10 @@ pub(crate) fn started_info_from_spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_tools::tools::subagent::SubagentState;
+    use agent_tools::tools::subagent::{
+        SubagentCapabilityMode, SubagentRole, SubagentSpawnRequest, SubagentSpawnResult,
+        SubagentState,
+    };
     use conex_types::events::{event_backpressure, BackpressureLevel};
     use crate::persist::InMemoryStore;
 
@@ -309,6 +370,102 @@ mod tests {
             summary: Some("完成".to_string()),
             subagent_session_id: Some("sub-sess-1".to_string()),
         }
+    }
+
+    // ── D-02 LK-04：started_info_from_spawn 透传链（S5 测钉）──
+
+    fn spawn_request(parent_tool_call_id: Option<String>) -> SubagentSpawnRequest {
+        SubagentSpawnRequest {
+            agent_id: None,
+            prompt: "调研模块 A".to_string(),
+            role: Some(SubagentRole::Researcher),
+            capability_mode: Some(SubagentCapabilityMode::ReadOnly),
+            allowed_tools: None,
+            description: Some("调研子代理".to_string()),
+            mode: Some("research".to_string()),
+            parent_session_id: "sess-main".to_string(),
+            parent_run_id: Some("run-main".to_string()),
+            parent_tool_call_id,
+            flow_node_id: None,
+            is_composite: false,
+            task_type: None,
+            allowed_write_paths: None,
+            display_label: None,
+            model_override: None,
+        }
+    }
+
+    fn spawn_result() -> SubagentSpawnResult {
+        SubagentSpawnResult {
+            subagent_id: "sub-1".to_string(),
+            subagent_run_id: "sub-run-1".to_string(),
+            session_id: "sub-sess-1".to_string(),
+            status: SubagentState::Running,
+            summary: None,
+            flow_node_id: None,
+            display_label: None,
+        }
+    }
+
+    /// S5 测钉（D-02 LK-04）：started_info_from_spawn 填值断言——
+    /// subagent_session_id == result.session_id（spawner 与 flow 两路径
+    /// 共用装配点）；parent_tool_call_id / description / mode 自 request
+    /// 透传；role/capability_mode 缺省 researcher/read-write（前端缺省对齐）
+    #[test]
+    fn started_info_from_spawn_fills_values() {
+        let info = started_info_from_spawn(
+            &spawn_request(Some("call-lk08-1".to_string())),
+            &spawn_result(),
+        );
+        // 子会话 id：result 信封装配（导航键第一段）
+        assert_eq!(
+            info.subagent_session_id.as_deref(),
+            Some("sub-sess-1"),
+            "subagent_session_id 必须取 result.session_id"
+        );
+        // 父工具调用 id：request 透传（LK-02 真键）
+        assert_eq!(
+            info.parent_tool_call_id.as_deref(),
+            Some("call-lk08-1"),
+            "parent_tool_call_id 必须自 request 透传"
+        );
+        // id / 描述 / 模式 / 角色 / 能力模式
+        assert_eq!(info.subagent_id, "sub-1");
+        assert_eq!(info.subagent_run_id, "sub-run-1");
+        assert_eq!(info.description.as_deref(), Some("调研子代理"));
+        assert_eq!(info.mode.as_deref(), Some("research"));
+        assert_eq!(info.role, "researcher");
+        assert_eq!(info.capability_mode, "read-only");
+    }
+
+    /// S5 测钉（D-02 LK-04）：无父工具调用上下文 → parent_tool_call_id
+    /// 保持 None（flow 路径定案：链路键 = flow_node_id，不编造 id）
+    #[test]
+    fn started_info_from_spawn_keeps_none_without_tool_call() {
+        let info = started_info_from_spawn(&spawn_request(None), &spawn_result());
+        assert!(info.parent_tool_call_id.is_none(), "无工具调用上下文保持 None");
+        assert_eq!(
+            info.subagent_session_id.as_deref(),
+            Some("sub-sess-1"),
+            "子会话 id 独立于工具调用链（flow 路径同样携带）"
+        );
+    }
+
+    /// S5 测钉（D-02 LK-04）：started_info_from_spawn → build_subagent_started
+    /// 全链透传——事件体 wire 键 subagentSessionId == result.session_id
+    #[test]
+    fn started_info_from_spawn_reaches_event_wire() {
+        let info = started_info_from_spawn(
+            &spawn_request(Some("call-lk08-1".to_string())),
+            &spawn_result(),
+        );
+        let event = build_subagent_started(&ctx(), &info);
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(
+            value["subagentSessionId"], "sub-sess-1",
+            "事件体 wire 键 subagentSessionId 必须携带子会话 id"
+        );
+        assert_eq!(value["parentToolCallId"], "call-lk08-1");
     }
 
     // ── 信封对齐（subagentHandlers.ts 消费字段逐一在场）──

@@ -1030,7 +1030,6 @@ impl FlowScheduler {
                     role: None,
                     capability_mode: None,
                     allowed_tools: None,
-                    timeout_ms: None,
                     description: None,
                     mode: None,
                     parent_session_id: self.session_id.clone(),

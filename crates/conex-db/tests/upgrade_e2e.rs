@@ -551,5 +551,6 @@ fn sample_agent(id: &str) -> SessionAgent {
         task_type: Some("analysis".to_string()),
         display_label: Some("测试分析师".to_string()),
         allowed_write_paths_json: None,
+        sub_session_id: Some("sub-sess-0-1".to_string()),
     }
 }

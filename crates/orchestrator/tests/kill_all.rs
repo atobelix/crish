@@ -122,6 +122,8 @@ impl SubagentSpawner for DbSpawner {
             allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
                 serde_json::to_string(paths).expect("路径白名单序列化不应失败")
             }),
+            // D-02 LK-04 v9 列：测试域无子会话映射（None）
+            sub_session_id: None,
         });
         self.db
             .save_session_agents(&self.session_id, &agents)
@@ -226,6 +228,7 @@ fn agent_row(
         task_type: None,
         display_label: None,
         allowed_write_paths_json: None,
+        sub_session_id: None,
     }
 }
 
@@ -463,6 +466,7 @@ impl orchestrator::lifecycle::ForceCancelSink for SpawnDuringCancelSink {
             task_type: None,
             display_label: None,
             allowed_write_paths_json: None,
+            sub_session_id: None,
         };
         self.db.upsert_session_agent(&row).unwrap();
         true
@@ -915,6 +919,344 @@ async fn resume_running_target_delivers_force_cancel_first() {
     assert_eq!(original.status, "failed", "running 目标 resume 后原 run 置 failed");
 }
 
+// ── kill_subagent（D4 §3.2：单目标终止）───────────────────────────
+
+/// 主场景（T3）：双 running 行 A/B，只 kill A → A: outcome=killed、
+/// L3 意图恰 1 条、行 failed、ended_at 补齐;B: 行仍 running、零意图
+#[tokio::test]
+async fn kill_subagent_terminates_only_target() {
+    let session_id = "s-kill-sub";
+    let db = Arc::new(LocalDb::open_in_memory().unwrap());
+    db.insert_session(session_id, "主会话").unwrap();
+    let now = now_ms();
+    let rows = vec![
+        agent_row(
+            "sub-a", "run-a", "running", now, session_id, None, vec![user_msg("产出 A")],
+        ),
+        agent_row(
+            "sub-b", "run-b", "running", now, session_id, None, vec![user_msg("产出 B")],
+        ),
+    ];
+    db.save_session_agents(session_id, &rows).unwrap();
+
+    let sink = RecordingCancelSink::new(true);
+    let service = SubagentLifecycleService::new(db.clone(), sink.clone());
+    let result = service
+        .kill_subagent(session_id, "sub-a", "已超时")
+        .expect("kill_subagent 应成功");
+    assert_eq!(result.subagent_id, "sub-a");
+    assert_eq!(result.subagent_run_id, "run-a");
+    assert_eq!(result.outcome, "killed");
+    assert!(result.force_cancel_delivered, "活动 run 存在 → L3 实际投递");
+
+    // 只投递 A 一次（reason 携带可观测标识）
+    let calls = sink.calls();
+    assert_eq!(calls.len(), 1, "只停目标，B 零意图");
+    assert_eq!(calls[0].0, "run-a");
+    assert_eq!(calls[0].1, "已超时", "reason 透传");
+
+    // A 行归一 failed + ended_at 补齐；B 行仍 running
+    let rows = db.load_session_agents(session_id).unwrap();
+    let by_id = |id: &str| rows.iter().find(|a| a.id == id).unwrap();
+    assert_eq!(by_id("sub-a").status, "failed");
+    assert!(by_id("sub-a").ended_at.is_some(), "A ended_at 补齐");
+    assert_eq!(by_id("sub-b").status, "running", "B 不受影响");
+    assert!(by_id("sub-b").ended_at.is_none());
+    assert_eq!(by_id("sub-a").messages.len(), 1, "产出保留");
+}
+
+/// 已终态幂等（T4）：行 failed 再 kill → already_terminal、无投递、
+/// ended_at 不被覆写（审计事实保真）；缺行 → NotFound
+#[tokio::test]
+async fn kill_subagent_already_terminal_is_idempotent() {
+    let session_id = "s-kill-term";
+    let db = Arc::new(LocalDb::open_in_memory().unwrap());
+    db.insert_session(session_id, "主会话").unwrap();
+    let now = now_ms();
+    let rows = vec![agent_row(
+        "sub-1",
+        "run-1",
+        "failed",
+        now,
+        session_id,
+        None,
+        vec![user_msg("产出 1")],
+    )];
+    db.save_session_agents(session_id, &rows).unwrap();
+    // kill 前快照（行已有 ended_at = started_at + 10_000；update 语义 =
+    // COALESCE(ended_at, ?)，非 NULL 不覆写——kill 前后必须逐字节一致）
+    let before = db.load_session_agents(session_id).unwrap();
+    let pinned = before[0].ended_at;
+    assert!(pinned.is_some(), "预置行应已带 ended_at");
+
+    let sink = RecordingCancelSink::new(true);
+    let service = SubagentLifecycleService::new(db.clone(), sink.clone());
+    let result = service
+        .kill_subagent(session_id, "sub-1", "kill_subagent")
+        .unwrap();
+    assert_eq!(result.outcome, "already_terminal", "非 running 幂等 no-op");
+    assert!(!result.force_cancel_delivered, "不投递 L3");
+    assert!(sink.calls().is_empty(), "已终态零投递");
+    let rows = db.load_session_agents(session_id).unwrap();
+    assert_eq!(
+        rows[0].ended_at, pinned,
+        "ended_at 不被覆写（已终态审计事实保真）"
+    );
+
+    // 缺行 → NotFound
+    let err = service
+        .kill_subagent(session_id, "sub-missing", "kill_subagent")
+        .unwrap_err();
+    assert!(
+        matches!(err, LifecycleError::NotFound { .. }),
+        "缺行应 NotFound：{err:?}"
+    );
+}
+
+/// 未投递汇总（T5）：行 running 但引擎无活动 run 实例（投递替身 false）→
+/// outcome=killed、force_cancel_delivered=false、行仍归一 failed
+#[tokio::test]
+async fn kill_subagent_undelivered_still_normalizes_row() {
+    let session_id = "s-kill-undel";
+    let db = Arc::new(LocalDb::open_in_memory().unwrap());
+    db.insert_session(session_id, "主会话").unwrap();
+    let now = now_ms();
+    let rows = vec![agent_row(
+        "sub-1", "run-1", "running", now, session_id, None, vec![user_msg("产出 1")],
+    )];
+    db.save_session_agents(session_id, &rows).unwrap();
+
+    // 投递替身：引擎无该 run 运行实例
+    let sink = RecordingCancelSink::new(false);
+    let service = SubagentLifecycleService::new(db.clone(), sink.clone());
+    let result = service
+        .kill_subagent(session_id, "sub-1", "kill_subagent")
+        .unwrap();
+    assert_eq!(result.outcome, "killed");
+    assert!(!result.force_cancel_delivered, "无运行实例 → 未投递");
+    let rows = db.load_session_agents(session_id).unwrap();
+    assert_eq!(rows[0].status, "failed", "行仍归一 failed（服务侧收口）");
+    assert!(rows[0].ended_at.is_some());
+}
+
+// ── prepare_resume（D4 §3.5：同步准备段拆分）───────────────────────
+
+/// T6：prepare_resume 同步段 ctx 构造——task=首条 user 消息（derive_task
+/// 语义）、from_leaf_id=路径末元素、inject/window 字节正确
+#[tokio::test]
+async fn prepare_resume_builds_context_synchronously() {
+    let session_id = "s-prep";
+    let env = resume_env(session_id);
+    let started_at = now_ms() - 1_000;
+    env.db
+        .save_session_agents(
+            session_id,
+            &[
+                agent_row(
+                    "sub-1", "run-1", "failed", started_at, session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#),
+                    vec![user_msg("完成模块 A"), assistant_msg(&"X".repeat(20))],
+                ),
+                agent_row(
+                    "sub-2", "run-2", "failed", started_at, session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"Y".repeat(100))],
+                ),
+            ],
+        )
+        .unwrap();
+    let service = service(&env, &RecordingCancelSink::new(true));
+
+    let ctx = service
+        .prepare_resume(session_id, "sub-1", None)
+        .expect("prepare_resume 应成功");
+    assert_eq!(ctx.subagent_id, "sub-1");
+    assert_eq!(ctx.subagent_run_id, "run-1");
+    assert_eq!(ctx.task, "完成模块 A", "task = 首条 user 消息（derive_task 语义）");
+    assert_eq!(ctx.from_leaf_id.as_deref(), Some("leaf-1"), "路径末元素");
+    assert_eq!(ctx.started_at_ms, started_at);
+    // inject = 该 run 消息字节（user 14 + assistant 20 = 34）;
+    // window = 全会话子代理消息字节（34 + 100 = 134）
+    assert_eq!(ctx.inject_bytes, 34);
+    assert_eq!(ctx.window_bytes, 134);
+    // 显式 prompt 覆盖缺省任务
+    let ctx = service
+        .prepare_resume(session_id, "sub-1", Some("新任务"))
+        .unwrap();
+    assert_eq!(ctx.task, "新任务", "显式 prompt 优先");
+}
+
+/// running 目标 prepare_resume：先投递 L3 强停（kill-for-resume）——
+/// 强停发生在同步准备段内（命令层两段式时序保证）
+#[tokio::test]
+async fn prepare_resume_delivers_force_cancel_for_running_target() {
+    let session_id = "s-prep-running";
+    let env = resume_env(session_id);
+    let started_at = now_ms() - 1_000;
+    env.db
+        .save_session_agents(
+            session_id,
+            &[agent_row(
+                "sub-1", "run-1", "running", started_at, session_id,
+                Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+            )],
+        )
+        .unwrap();
+    let sink = RecordingCancelSink::new(true);
+    let service = service(&env, &sink);
+    let ctx = service
+        .prepare_resume(session_id, "sub-1", None)
+        .unwrap();
+    let calls = sink.calls();
+    assert_eq!(calls.len(), 1, "running 目标在准备段投递 kill-for-resume");
+    assert_eq!(calls[0].0, "run-1");
+    assert_eq!(calls[0].1, "resume-subagent");
+    assert_eq!(ctx.subagent_run_id, "run-1");
+}
+
+/// prepare_resume 错误面：缺行 NotFound / 无路径 InvalidState /
+/// 无消息且无 prompt InvalidState（与 resume 一致，错误在同步段即返回）
+#[tokio::test]
+async fn prepare_resume_errors_structured() {
+    let session_id = "s-prep-err";
+    let env = resume_env(session_id);
+    let started_at = now_ms() - 1_000;
+    env.db
+        .save_session_agents(
+            session_id,
+            &[
+                agent_row(
+                    "sub-1", "run-1", "failed", started_at, session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                ),
+                agent_row(
+                    "sub-2", "run-2", "failed", started_at, session_id, None,
+                    vec![user_msg("完成模块 B")],
+                ),
+                agent_row(
+                    "sub-3", "run-3", "failed", started_at, session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#), vec![],
+                ),
+            ],
+        )
+        .unwrap();
+    let service = service(&env, &RecordingCancelSink::new(true));
+
+    let err = service.prepare_resume(session_id, "sub-unknown", None).unwrap_err();
+    assert!(matches!(err, LifecycleError::NotFound { .. }));
+    let err = service.prepare_resume(session_id, "sub-2", None).unwrap_err();
+    assert!(matches!(err, LifecycleError::InvalidState { .. }));
+    let err = service.prepare_resume(session_id, "sub-3", None).unwrap_err();
+    assert!(matches!(err, LifecycleError::InvalidState { .. }));
+    // 缺消息但给 prompt → 成功（显式 prompt 兜底）
+    service
+        .prepare_resume(session_id, "sub-3", Some("显式任务"))
+        .expect("缺消息 + 显式 prompt 应可准备");
+}
+
+/// W3 契约：row.messages → HistoryMessage 保真映射（subagent_history）
+#[tokio::test]
+async fn subagent_history_maps_messages_faithfully() {
+    use conex_types::HistoryMessage;
+    let now = now_ms();
+    let row = agent_row(
+        "sub-1",
+        "run-1",
+        "failed",
+        now,
+        "sess",
+        None,
+        vec![
+            SessionMessage {
+                id: "m1".to_string(),
+                sender: "user".to_string(),
+                text: Some("任务".to_string()),
+                thinking: Some("思考".to_string()),
+                timestamp: now,
+                status: Some("completed".to_string()),
+                stream_text_offset: None,
+                thinking_time: None,
+                tool_calls_json: Some(r#"[{"id":"c1"}]"#.to_string()),
+                blocks_json: Some(r#"[{"type":"text","text":"任务"}]"#.to_string()),
+                tool_call_results_json: Some(r#"[{"callId":"c1"}]"#.to_string()),
+                usage: None,
+            },
+            SessionMessage {
+                id: "m2".to_string(),
+                sender: "assistant".to_string(),
+                text: Some("产出".to_string()),
+                thinking: None,
+                timestamp: now + 1,
+                status: None,
+                stream_text_offset: None,
+                thinking_time: None,
+                tool_calls_json: None,
+                blocks_json: None,
+                tool_call_results_json: None,
+                usage: None,
+            },
+        ],
+    );
+    let history: Vec<HistoryMessage> = orchestrator::lifecycle::subagent_history(&row);
+    assert_eq!(history.len(), 2, "消息 1:1 映射");
+    assert_eq!(history[0].id, "m1");
+    assert_eq!(history[0].sender, "user");
+    assert_eq!(history[0].text.as_deref(), Some("任务"));
+    assert_eq!(history[0].thinking.as_deref(), Some("思考"));
+    assert_eq!(history[0].status.as_deref(), Some("completed"));
+    assert_eq!(history[0].tool_calls_json.as_deref(), Some(r#"[{"id":"c1"}]"#));
+    assert_eq!(history[0].blocks_json.as_deref(), Some(r#"[{"type":"text","text":"任务"}]"#));
+    assert_eq!(history[0].tool_call_results_json.as_deref(), Some(r#"[{"callId":"c1"}]"#));
+    assert_eq!(history[0].timestamp, now);
+    assert_eq!(history[1].id, "m2");
+    assert_eq!(history[1].thinking, None, "可选字段缺失 → None");
+    assert_eq!(history[1].tool_calls_json, None);
+    // 空消息 → 空 history
+    let empty = agent_row("sub-2", "run-2", "failed", now, "sess", None, vec![]);
+    assert!(orchestrator::lifecycle::subagent_history(&empty).is_empty());
+}
+
+/// 两段式等价性：resume（一次式）与 prepare_resume + resume_with_prepared
+/// （命令层两段式）产出同一 ForkRecord（fork 指纹同源 → 幂等短路）
+#[tokio::test]
+async fn resume_two_stage_equivalent_to_one_shot() {
+    let session_id = "s-two-stage";
+    let mut env = resume_env(session_id);
+    let started_at = now_ms() - 1_000;
+    env.db
+        .save_session_agents(
+            session_id,
+            &[
+                agent_row(
+                    "sub-1", "run-1", "failed", started_at, session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#), vec![user_msg("完成模块 A")],
+                ),
+                agent_row(
+                    "sub-2", "run-2", "failed", started_at, session_id,
+                    Some(r#"["leaf-root","leaf-1"]"#), vec![assistant_msg(&"X".repeat(200))],
+                ),
+            ],
+        )
+        .unwrap();
+    let service = service(&env, &RecordingCancelSink::new(true));
+
+    // 两段式：prepare_resume（同步）→ resume_with_prepared（async）
+    let ctx = service.prepare_resume(session_id, "sub-1", None).unwrap();
+    let out = service
+        .resume_with_prepared(&mut env.coordinator, session_id, ctx)
+        .await
+        .unwrap();
+    let ResumeOutcome::Forked(record) = out else {
+        panic!("期望 Forked");
+    };
+    assert_eq!(record.from_run_id, "run-1");
+    assert_eq!(record.new_run_id, "spawn-run-0");
+    // 原 run 行归一 failed（resume_with_prepared 内部完成）
+    let rows = env.db.load_session_agents(session_id).unwrap();
+    let original = rows.iter().find(|a| a.id == "sub-1").unwrap();
+    assert_eq!(original.status, "failed");
+    assert!(original.ended_at.is_some());
+}
+
 /// 结构化错误：未知子代理 / 无工作流路径 / 无法推断任务
 #[tokio::test]
 async fn resume_errors_structured() {
@@ -973,4 +1315,132 @@ async fn resume_errors_structured() {
     );
     // 全部错误路径不产生 spawn
     assert!(env.spawner.requests().is_empty(), "错误路径零 spawn");
+}
+
+// ── LK-07（R-14 死路径收口：kill 直发 ended(cancelled) + derive_task 改源）──
+
+/// kill_all 直发 subagent-ended(status=cancelled)：批量终止后事件流含
+/// cancelled 终态（Cancelled 成生产真值——此前引擎侧生产不可达，前端
+/// stopped 映射恒空转）；信封 runId = 父 run（DM-04 归属性统一）
+#[tokio::test]
+async fn kill_all_emits_ended_cancelled_events() {
+    let session_id = "s-kill-cancelled";
+    let db = Arc::new(LocalDb::open_in_memory().unwrap());
+    db.insert_session(session_id, "主会话").unwrap();
+    let now = now_ms();
+    let rows = vec![
+        agent_row("sub-1", "run-1", "running", now, session_id, None, vec![]),
+        agent_row("sub-2", "run-2", "running", now, session_id, None, vec![]),
+    ];
+    db.save_session_agents(session_id, &rows).unwrap();
+
+    let sink = RecordingCancelSink::new(true);
+    let service = SubagentLifecycleService::new(db.clone(), sink.clone());
+    let outcome = service.kill_all(session_id, "kill_all").unwrap();
+    assert_eq!(outcome.terminated.len(), 2, "两条 running 全部终止");
+
+    // 事件流：每条 running 行一条 subagent-ended(status=cancelled)
+    let events = db.query_events(session_id, 0, Some(100)).expect("事件查询");
+    let ended: Vec<_> = events
+        .iter()
+        .filter(|e| e.event_type == "subagent-ended")
+        .collect();
+    assert_eq!(ended.len(), 2, "kill_all 逐条直发 ended");
+    for row in &events {
+        assert!(
+            row.payload.contains("\"status\":\"cancelled\""),
+            "cancelled 成生产真值：{}",
+            row.payload
+        );
+        assert_eq!(
+            row.run_id.as_deref(),
+            Some("planner-1"),
+            "信封 runId = 父 run（与 spawner 发射面归属性一致）"
+        );
+    }
+}
+
+/// kill_subagent 直发 ended(cancelled)：单目标终止后事件流含 cancelled；
+/// 已终态幂等路径不发射（审计事实保真，无重复 ended）
+#[tokio::test]
+async fn kill_subagent_emits_ended_cancelled_event() {
+    let session_id = "s-kill-sub-cancelled";
+    let db = Arc::new(LocalDb::open_in_memory().unwrap());
+    db.insert_session(session_id, "主会话").unwrap();
+    let now = now_ms();
+    let rows = vec![
+        agent_row("sub-a", "run-a", "running", now, session_id, None, vec![]),
+        agent_row("sub-b", "run-b", "failed", now, session_id, None, vec![]),
+    ];
+    db.save_session_agents(session_id, &rows).unwrap();
+
+    let sink = RecordingCancelSink::new(true);
+    let service = SubagentLifecycleService::new(db.clone(), sink.clone());
+    let result = service
+        .kill_subagent(session_id, "sub-a", "kill_subagent")
+        .expect("kill_subagent 应成功");
+    assert_eq!(result.outcome, "killed");
+
+    let events = db.query_events(session_id, 0, Some(100)).expect("事件查询");
+    let ended: Vec<_> = events
+        .iter()
+        .filter(|e| e.event_type == "subagent-ended")
+        .collect();
+    assert_eq!(ended.len(), 1, "仅 running 目标直发 ended");
+    assert!(
+        ended[0].payload.contains("run-a"),
+        "事件指向目标子代理：{}",
+        ended[0].payload
+    );
+    assert!(ended[0].payload.contains("\"status\":\"cancelled\""));
+
+    // 已终态幂等：再次 kill → already_terminal，无新增 ended（不覆写审计事实）
+    let again = service
+        .kill_subagent(session_id, "sub-a", "kill_subagent")
+        .expect("幂等 no-op");
+    assert_eq!(again.outcome, "already_terminal");
+    let events_after = db.query_events(session_id, 0, Some(100)).expect("事件查询");
+    let ended_after: Vec<_> = events_after
+        .iter()
+        .filter(|e| e.event_type == "subagent-ended")
+        .collect();
+    assert_eq!(ended_after.len(), 1, "幂等路径不重复发 ended");
+}
+
+/// resume 任务推断改源（LK-07 R-14）：行 messages 恒空（原「恒空 messages
+/// 列」假承诺形态）但子代理独立会话（sub_session_id）有 user 消息 →
+/// prepare_resume 从真实持久化轨（session_messages）推断任务成功
+#[tokio::test]
+async fn resume_derives_task_from_subagent_session() {
+    let session_id = "s-task-src";
+    let mut env = resume_env(session_id);
+    // 子代理独立会话落 user 消息（真实持久化轨：子代理 run 消息链路；
+    // session_messages FK 要求会话已注册）
+    let sub_sess = "sub-sess-lk07";
+    env.db.insert_session(sub_sess, "子代理会话").unwrap();
+    env.db
+        .save_session_body(sub_sess, &[user_msg("完成模块 X")])
+        .unwrap();
+    // 行：messages 恒空（假承诺形态）+ 携带子会话 id（LK-04 落库）+ fork
+    // 路径（resume 仅 fork 链可用，树含 leaf-root → leaf-1）
+    let mut row = agent_row(
+        "sub-1",
+        "run-1",
+        "failed",
+        now_ms() - 1_000,
+        session_id,
+        Some(r#"["leaf-root","leaf-1"]"#),
+        vec![],
+    );
+    row.sub_session_id = Some(sub_sess.to_string());
+    env.db.save_session_agents(session_id, &[row]).unwrap();
+
+    let service = service(&env, &RecordingCancelSink::new(true));
+    let ctx = service
+        .prepare_resume(session_id, "sub-1", None)
+        .expect("任务推断应成功（子会话消息轨）");
+    assert_eq!(
+        ctx.task, "完成模块 X",
+        "任务来自子代理独立会话消息（真实持久化轨）"
+    );
 }

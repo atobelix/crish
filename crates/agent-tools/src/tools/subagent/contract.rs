@@ -64,8 +64,6 @@ pub struct SubagentSpawnRequest {
     pub capability_mode: Option<SubagentCapabilityMode>,
     /// 允许的工具白名单（可选裁剪；None = 继承父代理全部工具）
     pub allowed_tools: Option<Vec<String>>,
-    /// 单次执行超时（毫秒，可选；0/缺省 = 不限制）
-    pub timeout_ms: Option<u64>,
     /// 描述（落 session_agents.description）
     pub description: Option<String>,
     /// 模式（research/research_single/solve/write，落 session_agents.mode）
