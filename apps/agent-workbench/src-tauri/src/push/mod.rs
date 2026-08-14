@@ -1,15 +1,18 @@
-//! push-core 推送决策引擎（R3-01 · 纯函数决策面）
+//! push-core 推送决策引擎（R3-01 · 纯函数决策面）+ 直推通道（R3-02）
 //!
 //! 规格真源：
 //! - `docs/multi-device/plans/D7-push-notifications.md`（§3 场景清单 / §3.4 防打扰 /
 //!   §6.1 push_intent 链路 / §6.2 PushMessage schema / §7.4 跳转映射 / §7.7 通知渠道）；
 //! - `docs/multi-device/plans/M8-push-release.md`（§3.2.3 场景级别唯一真源 /
-//!   §3.4 决策引擎实现规范：去重两级 / 合并窗口 / 静默时段 / 节流护栏）；
-//! - `docs/multi-device/Z0-master-plan.md` §9.5（R3-01 任务包）与 §9.9（验收锚点）。
+//!   §3.4 决策引擎实现规范：去重两级 / 合并窗口 / 静默时段 / 节流护栏；
+//!   裁决修正 2：在线直推并入协议面 `events.push`）；
+//! - `docs/multi-device/Z0-master-plan.md` §9.5（R3-01 / R3-02 任务包）与 §9.9（验收锚点）。
 //!
-//! 本模块只做**决策**（无 I/O）：纯输入事件 → 推送决策。发送（WS 直推 R3-02、
-//! 厂商通道 R3-03）不在此处；文案渲染（title/body）由后续 `push/copy.rs`
-//! 消费 [PayloadDigest] 完成。
+//! 职责分层：
+//! - **决策面（R3-01，无 I/O）**：纯输入事件 → 推送决策
+//!   （[intent] → [dedupe] → [coalesce] → [quiet] → [throttle] → [engine]）；
+//! - **直推通道（R3-02）**：[online] 设备在线判定 + [schema] PushMessage
+//!   载荷映射 + [pusher] PushAwareEmitter 挂点 / 在线直推 / 离线 pending。
 //!
 //! 决策管线（对齐 D7 §6.1）：
 //!
@@ -69,21 +72,29 @@
 //! ## 与 R3-02 / R3-03 的接口注记
 //!
 //! - **装配**：`PushDecisionEngine` 挂在 `core_event_bridge.rs` 的
-//!   `PushAwareEmitter` 旁路（D7 §9.2 方案 a），`decide()` 逐事件调用；
+//!   `PushAwareEmitter` 旁路（D7 §9.2 方案 a；R3-02 [pusher] 已交付挂点
+//!   装饰器 + 分发器，main.rs 接线留 R3 接线轮），`decide()` 逐事件调用；
 //!   合并桶经 `flush()` 周期 drain（对齐 main.rs:430-441 的 500ms drain 先例）。
 //! - **事件信封**：`AgentEventEnvelope.run_id`（events.rs:1109）注入
 //!   [intent::PushIntentCtx::envelope_run_id]（缓存/审计/运行异常等事件体无
 //!   runId 字段，去重键需要）。
 //! - **审批持久化**：S1/S2 去重键与重推阶梯（15min → 60min → 每小时×5，M8 §3.4.4）
 //!   必须落 SQLite `push_pending_approvals`/`push_events_dedupe`（D7 §8.2）；
-//!   本任务交付 [dedupe::DedupeBackend] 接口与内存实现，SQLite 后端 R3-02/03 接线。
-//! - **输出消费**：deliver=true 的决策 → R3-02 WS 直推 / R3-03 厂商发送器；
-//!   [PayloadDigest] 是 `push/copy.rs` 文案渲染的输入契约（title/body 渲染不在本任务）。
+//!   [dedupe::DedupeBackend] 接口与内存实现已交付，SQLite 后端 R3-02/03 接线。
+//! - **输出消费（R3-02 直推通道）**：deliver=true 的决策 →
+//!   [pusher::PushDispatcher]：在线设备经 [pusher::PushChannel] WS 直推
+//!   （帧 kind = `events.push`，[schema::WS_PUSH_KIND]，M8 裁决修正 2）；
+//!   离线设备标记 [pusher::PendingDelivery]（内存队列，[pusher::PushDispatcher::
+//!   take_pending] 由 R3-03 厂商发送器消费）；在线判定见 [online]。
+//! - **载荷**：[engine::PushDecision] → [schema::PushMessage]（D7 §6.2 schema
+//!   v1）映射由 [schema::message_from_decision] 承担；title/body 文案渲染
+//!   （push/copy.rs，D7 §6.5）不在 R3-02，映射置 None 由接线轮经
+//!   [schema::PushMessage::with_copy] 填充。
 //!
 //! ## 临时过渡允许（对齐 wakeup_summary.rs 先例）
 //!
-//! 本模块 R3-01 交付决策面，R3-02/03 接线前无调用点，暂时允许 dead_code；
-//! 接线落地即移除本属性（不允许长期保留）。
+//! 本模块 R3-01 交付决策面、R3-02 交付直推通道，R3 接线轮接线前无调用点，
+//! 暂时允许 dead_code；接线落地即移除本属性（不允许长期保留）。
 
 #![allow(dead_code)]
 
@@ -91,17 +102,39 @@ mod coalesce;
 mod dedupe;
 mod engine;
 mod intent;
+mod online;
+mod pusher;
 mod quiet;
 mod scenes;
+mod schema;
 mod throttle;
+mod vendor;
 
 pub use coalesce::{CoalesceState, CoalesceWindows, MergedPush, PendingPush};
 pub use dedupe::{DedupeBackend, DedupeState, MemoryDedupeBackend};
 pub use engine::{DecisionOutcome, PushDecision, PushDecisionEngine};
 pub use intent::{ApprovalPushRef, PayloadDigest, PushIntent, PushIntentCtx};
+pub use online::{
+    device_activity, is_device_online, DeviceActivity, DevicePresenceSource,
+    MemoryPresenceSource, PRESENCE_TIMEOUT_MS,
+};
+pub use pusher::{
+    DispatchReport, PendingDelivery, PushAwareEmitter, PushChannel, PushChannelError,
+    PushDispatcher,
+};
 pub use quiet::{QuietHoursConfig, QuietPolicy, DEFAULT_QUIET_END_MINUTES, DEFAULT_QUIET_START_MINUTES};
 pub use scenes::SceneId;
+pub use schema::{
+    message_from_decision, scene_category, scene_channel_id, scene_collapse_key,
+    scene_event_type, scene_target, ws_push_body, PushMessage, PushTarget, PUSH_SCHEMA_VERSION,
+    WS_PUSH_KIND,
+};
 pub use throttle::{ThrottleDecision, ThrottleLimits, ThrottleTracker};
+pub use vendor::{
+    ladder_delay_or, next_retry_delay, APNsCredentials, HMSCredentials, VendorDevice,
+    VendorError, VendorNotification, VendorPlatform, VendorPushChannel, VendorSendOutcome,
+    RETRY_LADDER_DELAYS,
+};
 
 /// 推送级别（D7 §3.1 四级定义中的前三级；P3 = 不推，由 `push_intent` 返回 None 表达）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,7 +168,11 @@ impl PushLevel {
 }
 
 /// 推送严重度（D7 §6.2 severity 字段；移动端据此决定横幅/静音）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// serde wire 值（schema severity 字段）：critical / important / normal——
+/// 与 [PushLevel] 的 `severity()` 映射同口径，序列化经 schema.rs 消费。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PushSeverity {
     /// P0：critical
     Critical,

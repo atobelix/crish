@@ -572,10 +572,18 @@ impl ApiBackend for CoreStateBackend {
     /// C10 搜索索引就绪状态（ready/state 子集；全文搜索不暴露，
     /// M6 §4.1.10；就绪事实由装配面注入）
     async fn get_search_index(&self) -> Result<SearchIndexResult, ServerError> {
-        Ok(SearchIndexResult {
-            ready: self.search_index_ready,
-            state: None,
-        })
+        // C21 接线后：注入的共享搜索状态为实时事实源（命令面重建索引 →
+        // 本端点立即可见，与 core_get_status 同源）；未注入时回退装配面
+        // 注入的就绪快照（启动时空索引 → false 诚实降级）
+        let ready = match &self.search_state {
+            Some(state) => state
+                .files
+                .read()
+                .map(|files| !files.is_empty())
+                .unwrap_or(false),
+            None => self.search_index_ready,
+        };
+        Ok(SearchIndexResult { ready, state: None })
     }
 
     // ── F5 会话域 / F2 审批域 / F6 设置域写面（R1-04 真实直调）──
@@ -1493,6 +1501,70 @@ mod tests {
             .await
             .expect_err("未接线应拒绝");
         assert_eq!(err.device_code(), DeviceErrorCode::CmdEngineNotReady);
+    }
+
+    /// C21 装配语义（R2-12c → C21 收尾）：with_search_state 注入后，后端与
+    /// 命令面共享同一实例——空索引 → 空命中（而非 engine_not_ready）；
+    /// 索引经共享状态原子交换重建后，search_files / get_search_index
+    /// 立即可见（装配生产可用的关键性质；main.rs ⑪a 注入路径的等价验证）
+    #[tokio::test]
+    async fn r2_12_search_files_sees_live_index_through_shared_state() {
+        let state = Arc::new(crate::core_commands::SharedSearchState {
+            files: std::sync::RwLock::new(Arc::new(Vec::new())),
+        });
+        let backend =
+            CoreStateBackend::new(r2_test_core_state()).with_search_state(Arc::clone(&state));
+
+        // ① 装配后空索引：搜索成功返回空命中，不报 engine_not_ready；
+        //    get_search_index 就绪事实与索引同源（空 → false）
+        let empty = backend
+            .search_files(SearchFilesParams {
+                query: "main".to_string(),
+                root: None,
+                max_results: None,
+            })
+            .await
+            .expect("装配后空索引不报错");
+        assert!(
+            empty.results.is_empty(),
+            "空索引 → 空命中：{:?}",
+            empty.results
+        );
+        assert!(
+            !backend
+                .get_search_index()
+                .await
+                .expect("search index 查询")
+                .ready,
+            "空索引 → ready=false（实时事实源）"
+        );
+
+        // ② 命令面重建（原子交换 Arc）→ 同一实例立即生效
+        *state.files.write().unwrap() = Arc::new(vec![
+            "C:/proj/src/main.rs".to_string(),
+            "C:/proj/README.md".to_string(),
+        ]);
+        let hits = backend
+            .search_files(SearchFilesParams {
+                query: "main".to_string(),
+                root: None,
+                max_results: None,
+            })
+            .await
+            .expect("重建后应命中");
+        assert_eq!(hits.results.len(), 1, "重建后经共享实例立即可见");
+        assert_eq!(
+            hits.results[0].rel_path, "C:/proj/src/main.rs",
+            "未注入根时 relPath 回退原路径"
+        );
+        assert!(
+            backend
+                .get_search_index()
+                .await
+                .expect("search index 查询")
+                .ready,
+            "重建后 ready=true（实时事实源）"
+        );
     }
 
     /// C21：maxResults 钳制 [1, 100]（注册表桌面端钳制）

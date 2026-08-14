@@ -90,6 +90,10 @@ time = "0.3"
 x509-parser = "0.16"
 fs2 = "0.4"
 thiserror.workspace = true
+# R3-03 推送厂商通道：APNs .p8 AuthKey ES256 签名（JWT 头）——ring 0.17
+# 已在锁文件（rustls/rcgen 传递依赖），直接声明复用，不新增锁文件条目；
+# 用 ECDSA_P256_SHA256_FIXED_SIGNING 直出 JWT 所需裸 r||s 签名（RFC 7518）
+ring = "0.17"
 
 [target.'cfg(windows)'.dependencies]
 # Win32_UI_Shell / Win32_UI_WindowsAndMessaging：P1-S5 host_openers 默认关联

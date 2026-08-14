@@ -123,11 +123,14 @@ impl Default for SharedCompactionState {
 // ===== 旧 6 命令（E1 工具组，错误协议 CoreError）=====
 
 /// 模糊搜索文件索引（query + limit；索引为空返回空列表，不报错）。
+///
+/// 托管形态：`State<'_, Arc<SharedSearchState>>`（main.rs manage Arc——
+/// C21 接线：本地服务后端经 Arc clone 共享同一实例，索引重建立即可见）。
 #[tauri::command]
 pub async fn core_search_files(
     query: String,
     limit: Option<usize>,
-    state: State<'_, SharedSearchState>,
+    state: State<'_, Arc<SharedSearchState>>,
 ) -> Result<Vec<FileHit>, CoreError> {
     let query = query.trim().to_string();
     if query.is_empty() {
@@ -173,7 +176,7 @@ pub async fn core_search_files(
 pub async fn core_rebuild_search_index<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     root: String,
-    state: State<'_, SharedSearchState>,
+    state: State<'_, Arc<SharedSearchState>>,
 ) -> Result<RebuildSearchIndexResponse, CoreError> {
     let root = root.trim().to_string();
     if root.is_empty() {
@@ -640,14 +643,15 @@ mod tests {
         }
     }
 
-    /// 构造 mock app：托管 SharedSearchState + 仅授权 auth_root 的注册表。
+    /// 构造 mock app：托管 SharedSearchState（Arc 形态，对齐 main.rs ⑤）+
+    /// 仅授权 auth_root 的注册表。
     fn mock_app_with_registry(
-        state: SharedSearchState,
+        state: Arc<SharedSearchState>,
         reg: WorkspaceRegistry,
     ) -> tauri::App<tauri::test::MockRuntime> {
         tauri::test::mock_builder()
             .manage(reg)
-            .manage(state)
+            .manage(Arc::clone(&state))
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .expect("mock app")
     }
@@ -707,12 +711,12 @@ mod tests {
     #[test]
     fn search_validation_rejects_empty_query() {
         use tauri::Manager as _;
-        let state = SharedSearchState::new();
+        let state = Arc::new(SharedSearchState::new());
         let app = tauri::test::mock_builder()
-            .manage(state)
+            .manage(Arc::clone(&state))
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .expect("mock app");
-        let state = app.state::<SharedSearchState>();
+        let state = app.state::<Arc<SharedSearchState>>();
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -736,9 +740,9 @@ mod tests {
         fs::create_dir_all(&outside_root).expect("create outside root");
         fs::write(outside_root.join("b.txt"), "y").expect("write b");
 
-        let state = SharedSearchState::new();
+        let state = Arc::new(SharedSearchState::new());
         let app = mock_app_with_registry(state, registry_authorizing(&temp, &auth_root));
-        let state = app.state::<SharedSearchState>();
+        let state = app.state::<Arc<SharedSearchState>>();
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -784,9 +788,9 @@ mod tests {
         fs::write(auth_root.join("a.txt"), "x").expect("write a");
         fs::write(sub.join("b.txt"), "y").expect("write b");
 
-        let state = SharedSearchState::new();
+        let state = Arc::new(SharedSearchState::new());
         let app = mock_app_with_registry(state, registry_authorizing(&temp, &auth_root));
-        let state = app.state::<SharedSearchState>();
+        let state = app.state::<Arc<SharedSearchState>>();
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -811,9 +815,9 @@ mod tests {
         let auth_root = temp.path().join("auth");
         fs::create_dir_all(&auth_root).expect("create auth root");
 
-        let state = SharedSearchState::new();
+        let state = Arc::new(SharedSearchState::new());
         let app = mock_app_with_registry(state, registry_authorizing(&temp, &auth_root));
-        let state = app.state::<SharedSearchState>();
+        let state = app.state::<Arc<SharedSearchState>>();
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
