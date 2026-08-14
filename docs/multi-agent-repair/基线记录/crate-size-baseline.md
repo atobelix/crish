@@ -424,4 +424,8 @@ crates/session-loop/src/steering/mod.rs 884
 crates/session-loop/src/steering/strategy.rs 665
 crates/session-loop/src/stream.rs 860
 crates/session-loop/src/tool_exec_tests.rs 3233
+apps/agent-workbench/src-tauri/src/core_run_commands_tests.rs 9043
+apps/agent-workbench/src-tauri/src/engine_build.rs 1510
+apps/agent-workbench/src-tauri/src/engine_channels.rs 655
+apps/agent-workbench/src-tauri/src/engine_provider.rs 676
 <!-- BASELINE_END -->
