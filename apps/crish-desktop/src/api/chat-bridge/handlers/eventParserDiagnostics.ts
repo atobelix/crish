@@ -12,16 +12,26 @@ import type {
   SecurityAuditDecision,
   ImpactAssessment,
   AgentMessage,
+  AgentMessageRole,
+  ProviderDiagnosticPhase,
+  ProviderErrorKind,
+  SystemPromptWireMode,
 } from '../../../../../../packages/shared-types/src/generated/engine';
 import {
   MISS_ATTRIBUTION_VALUES,
   SECURITY_AUDIT_OPERATION_VALUES,
   SECURITY_AUDIT_DECISION_VALUES,
+  PROVIDER_DIAGNOSTIC_PHASE_VALUES,
+  PROVIDER_ERROR_KIND_VALUES,
+  SYSTEM_PROMPT_WIRE_MODE_VALUES,
+  AGENT_MESSAGE_ROLE_VALUES,
 } from '../../../../../../packages/shared-types/src/generated/engine';
+import type { JsonValue } from '../../../../../../packages/shared-types/src/primitive-types';
 import {
   alt,
   emptyAgentMessage,
   isRecord,
+  normalizeDeltaBlock,
   num,
   str,
   strArray,
@@ -91,16 +101,196 @@ function normalizeImpact(rawImpact: unknown): ImpactAssessment {
   };
 }
 
+function isProviderDiagnosticPhase(v: unknown): v is ProviderDiagnosticPhase {
+  return (
+    typeof v === 'string' &&
+    (PROVIDER_DIAGNOSTIC_PHASE_VALUES as readonly string[]).includes(v)
+  );
+}
+
+function isProviderErrorKind(v: unknown): v is ProviderErrorKind {
+  return (
+    typeof v === 'string' &&
+    (PROVIDER_ERROR_KIND_VALUES as readonly string[]).includes(v)
+  );
+}
+
+function isSystemPromptWireMode(v: unknown): v is SystemPromptWireMode {
+  return (
+    typeof v === 'string' &&
+    (SYSTEM_PROMPT_WIRE_MODE_VALUES as readonly string[]).includes(v)
+  );
+}
+
+function isAgentMessageRole(v: unknown): v is AgentMessageRole {
+  return (
+    typeof v === 'string' &&
+    (AGENT_MESSAGE_ROLE_VALUES as readonly string[]).includes(v)
+  );
+}
+
+/**
+ * 消息体属性安全提取适配器：彻底消除 as unknown as AgentMessage 二次强转。
+ */
+export function normalizeAgentMessage(rawMsg: unknown): AgentMessage {
+  if (!isRecord(rawMsg)) return emptyAgentMessage();
+  const id = str(rawMsg.id);
+  const rawRole = rawMsg.role;
+  const role: AgentMessageRole = isAgentMessageRole(rawRole)
+    ? rawRole
+    : 'assistant';
+  const createdAt = str(
+    alt(rawMsg, 'createdAt', 'created_at') ?? rawMsg.timestamp
+  );
+  const blocks = Array.isArray(rawMsg.blocks)
+    ? rawMsg.blocks.map(normalizeDeltaBlock)
+    : [];
+  return { id, role, createdAt, blocks };
+}
+
+/**
+ * 提供商诊断数据类型安全属性提取适配器：彻底消除 as unknown as ProviderDiagnostic 二次强转。
+ */
+export function normalizeProviderDiagnostic(
+  rawDiag: unknown
+): ProviderDiagnostic {
+  const r = isRecord(rawDiag) ? rawDiag : {};
+  const rawPhase = alt(r, 'phase', 'code');
+  const phase: ProviderDiagnosticPhase = isProviderDiagnosticPhase(rawPhase)
+    ? rawPhase
+    : 'request-start';
+
+  const diag: ProviderDiagnostic = { phase };
+
+  const providerId = str(alt(r, 'providerId', 'provider_id'));
+  if (providerId) diag.providerId = providerId;
+
+  const endpoint = str(r.endpoint);
+  if (endpoint) diag.endpoint = endpoint;
+
+  const url = str(r.url);
+  if (url) diag.url = url;
+
+  const attempt = num(r.attempt);
+  if (attempt !== undefined) diag.attempt = attempt;
+
+  const maxAttempts = num(alt(r, 'maxAttempts', 'max_attempts'));
+  if (maxAttempts !== undefined) diag.maxAttempts = maxAttempts;
+
+  const elapsedMs = num(alt(r, 'elapsedMs', 'elapsed_ms'));
+  if (elapsedMs !== undefined) diag.elapsedMs = elapsedMs;
+
+  const status = num(r.status);
+  if (status !== undefined) diag.status = status;
+
+  const statusText = str(alt(r, 'statusText', 'status_text'));
+  if (statusText) diag.statusText = statusText;
+
+  if (typeof r.retryable === 'boolean') diag.retryable = r.retryable;
+
+  const reason = str(r.reason ?? r.message);
+  if (reason) diag.reason = reason;
+
+  const rawErrorKind = alt(r, 'errorKind', 'error_kind');
+  if (isProviderErrorKind(rawErrorKind)) {
+    diag.errorKind = rawErrorKind;
+  }
+
+  const retryAfterMs = num(alt(r, 'retryAfterMs', 'retry_after_ms'));
+  if (retryAfterMs !== undefined) diag.retryAfterMs = retryAfterMs;
+
+  const chunks = num(r.chunks);
+  if (chunks !== undefined) diag.chunks = chunks;
+
+  const bytes = num(r.bytes);
+  if (bytes !== undefined) diag.bytes = bytes;
+
+  if (
+    r.headers !== undefined &&
+    (isRecord(r.headers) || Array.isArray(r.headers))
+  ) {
+    diag.headers = r.headers as JsonValue;
+  }
+
+  const configuredModel = str(
+    alt(r, 'configuredModel', 'configured_model') ?? r.model
+  );
+  if (configuredModel) diag.configuredModel = configuredModel;
+
+  const actualModel = str(alt(r, 'actualModel', 'actual_model'));
+  if (actualModel) diag.actualModel = actualModel;
+
+  if (typeof r.modelMismatch === 'boolean')
+    diag.modelMismatch = r.modelMismatch;
+  else if (typeof r.model_mismatch === 'boolean')
+    diag.modelMismatch = r.model_mismatch;
+
+  if (typeof r.streamRequested === 'boolean')
+    diag.streamRequested = r.streamRequested;
+  else if (typeof r.stream_requested === 'boolean')
+    diag.streamRequested = r.stream_requested;
+
+  const rawWireMode = alt(r, 'systemPromptWireMode', 'system_prompt_wire_mode');
+  if (isSystemPromptWireMode(rawWireMode)) {
+    diag.systemPromptWireMode = rawWireMode;
+  }
+
+  if (typeof r.hasSystemRole === 'boolean')
+    diag.hasSystemRole = r.hasSystemRole;
+  else if (typeof r.has_system_role === 'boolean')
+    diag.hasSystemRole = r.has_system_role;
+
+  if (typeof r.systemPromptPresent === 'boolean')
+    diag.systemPromptPresent = r.systemPromptPresent;
+  else if (typeof r.system_prompt_present === 'boolean')
+    diag.systemPromptPresent = r.system_prompt_present;
+
+  const systemMessageCount = num(
+    alt(r, 'systemMessageCount', 'system_message_count')
+  );
+  if (systemMessageCount !== undefined)
+    diag.systemMessageCount = systemMessageCount;
+
+  const rewrittenSystemMessageCount = num(
+    alt(r, 'rewrittenSystemMessageCount', 'rewritten_system_message_count')
+  );
+  if (rewrittenSystemMessageCount !== undefined)
+    diag.rewrittenSystemMessageCount = rewrittenSystemMessageCount;
+
+  const messageCount = num(alt(r, 'messageCount', 'message_count'));
+  if (messageCount !== undefined) diag.messageCount = messageCount;
+
+  const toolCount = num(alt(r, 'toolCount', 'tool_count'));
+  if (toolCount !== undefined) diag.toolCount = toolCount;
+
+  if (r.messageRoleCounts !== undefined && isRecord(r.messageRoleCounts)) {
+    diag.messageRoleCounts = r.messageRoleCounts as JsonValue;
+  } else if (
+    r.message_role_counts !== undefined &&
+    isRecord(r.message_role_counts)
+  ) {
+    diag.messageRoleCounts = r.message_role_counts as JsonValue;
+  }
+
+  if (r.partial !== undefined) {
+    diag.partial = r.partial as JsonValue;
+  }
+
+  return diag;
+}
+
 export const DIAGNOSTIC_NORMALIZERS: Record<string, Normalizer> = {
   'provider-diagnostic': (raw) => ({
     type: 'provider-diagnostic',
     sessionId: str(raw.sessionId),
     timestamp: str(raw.timestamp),
-    diagnostic: (isRecord(raw.diagnostic)
-      ? raw.diagnostic
-      : isRecord(raw.data)
-        ? raw.data
-        : {}) as unknown as ProviderDiagnostic,
+    diagnostic: normalizeProviderDiagnostic(
+      isRecord(raw.diagnostic)
+        ? raw.diagnostic
+        : isRecord(raw.data)
+          ? raw.data
+          : {}
+    ),
   }),
   'runtime-error': (raw) => ({
     type: 'runtime-error',
@@ -117,7 +307,7 @@ export const DIAGNOSTIC_NORMALIZERS: Record<string, Normalizer> = {
     timestamp: str(raw.timestamp),
     reason: str(raw.reason),
     message: isRecord(raw.message)
-      ? (raw.message as unknown as AgentMessage)
+      ? normalizeAgentMessage(raw.message)
       : emptyAgentMessage(),
   }),
   'runtime-intervention-required': (raw) => ({

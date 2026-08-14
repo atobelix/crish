@@ -19,8 +19,6 @@ import {
   resolveStreamSessionId,
   canStreamLocalSession,
   isLiveStreamRun,
-  scheduleFinalMarkdownHtml,
-  buildTerminalToolPatches,
 } from './helpers';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
@@ -39,17 +37,17 @@ import {
   handleRunError,
 } from './streamCallbacksEvents';
 import {
-  commitRunCompletion,
-  decideEmptyRunNotice,
-  finalizeAssistantMessageText,
-  finalizeRunCompletionStatuses,
   buildGoalStreamOptions,
   createToolPatchQueue,
   createCompleteHandler,
   type StreamRunState,
 } from './streamCallbacksInternals';
-import { applyRunUsageSnapshot } from './streamCallbacksUsage';
-import type { SessionMessage } from '../../store/layoutStore';
+import {
+  handleStreamConflict,
+  createFinalHtmlScheduler,
+  handleThinkingResetOnChunk,
+  executeStreamCompletion,
+} from './streamExecutionHelper';
 
 export function useRunStreamingAssistant(
   options: UseChatStreamOptions,
@@ -85,24 +83,7 @@ export function useRunStreamingAssistant(
       );
       if (!sid || !canStreamLocalSession(sid, !!getSessionById(sid))) return;
 
-      const prevStream = streamManagerRef.current?.get(sid);
-      if (prevStream) {
-        try {
-          const st = getCompositionRoot().layout.getState();
-          const userMsg = getSessionById(sid)?.messages?.find(
-            (m: SessionMessage) => m.id === userMsgId
-          );
-          if (userMsg?.sender === 'user' && userMsg.status === 'processing') {
-            st.setSessionMessageStatus(sid, userMsgId, 'queued');
-          }
-        } catch {
-          /* ignore */
-        }
-        console.warn(
-          '[runStreamingAssistant] refuse start while stream live (L1 follow_up, no abort)',
-          sid,
-          userMsgId
-        );
+      if (handleStreamConflict(sid, userMsgId, streamManagerRef.current)) {
         return;
       }
 
@@ -115,7 +96,6 @@ export function useRunStreamingAssistant(
       let runEndedWithNetworkError = false;
       let localRunId: string | null = null;
       let streamedFullText = '';
-      let finalHtmlScheduled = false;
       const state: StreamRunState = { runClosed: false, draining: false };
       let completed = false;
 
@@ -140,72 +120,34 @@ export function useRunStreamingAssistant(
         toolCalls: [],
       });
 
-      const scheduleRunFinalHtml = (fullText: string) => {
-        if (finalHtmlScheduled || !(fullText || '').trim()) return;
-        finalHtmlScheduled = true;
-        scheduleFinalMarkdownHtml(sid, assistantMsgId, fullText, {
-          preCleaned: true,
-        });
-      };
+      const scheduleRunFinalHtml = createFinalHtmlScheduler(
+        sid,
+        assistantMsgId
+      );
 
       const finishComplete = () => {
         if (completed) return;
         completed = true;
-        markStreamingActive(false);
-        flushStreamBatchers();
-        const { committedText, elapsed, asst } = commitRunCompletion({
+        executeStreamCompletion({
           sid,
+          userMsgId,
           assistantMsgId,
           buffer,
           streamedFullText,
           startTime,
-          runId: localRunId,
-          gotRealText,
-        });
-        decideEmptyRunNotice({
-          asst,
-          committedText,
+          localRunId,
           gotRealText,
           runEndedWithNetworkError,
           pushRunNotice,
           dismissTransientRunNotice,
-        });
-        const toolPatches = buildTerminalToolPatches(
-          asst?.toolCalls,
-          'complete'
-        );
-        if (toolPatches.length) {
-          getCompositionRoot()
-            .layout.getState()
-            .applyToolCallPatches(sid, assistantMsgId, toolPatches);
-        }
-        finalizeAssistantMessageText({
-          sid,
-          assistantMsgId,
-          committedText,
-          streamedFullText,
           scheduleRunFinalHtml,
           thinkingBatcher: thinkingBatcherRef.current,
+          flushStreamBatchers,
+          generationMapRef,
+          state,
+          maybeContinueGoalMode,
+          drainQueuedAfterComplete,
         });
-        finalizeRunCompletionStatuses({
-          sid,
-          userMsgId,
-          assistantMsgId,
-          elapsed,
-          runId: localRunId,
-        });
-        generationMapRef.current.delete(sid);
-        state.runClosed = true;
-        state.draining = false;
-        void applyRunUsageSnapshot({
-          runId: localRunId,
-          sid,
-          userMsgId,
-          assistantMsgId,
-        });
-        if (!maybeContinueGoalMode(sid, assistantMsgId)) {
-          drainQueuedAfterComplete(sid);
-        }
       };
 
       const buffer = new StreamRenderBuffer();
@@ -359,20 +301,11 @@ export function useRunStreamingAssistant(
                 streamedFullText
               );
             }
-            const cur = getSessionById(sid)?.messages?.find(
-              (m: SessionMessage) => m.id === assistantMsgId
+            handleThinkingResetOnChunk(
+              sid,
+              assistantMsgId,
+              thinkingBatcherRef.current
             );
-            if (
-              cur?.thinking === '正在处理…' ||
-              cur?.thinking === '正在思考中...'
-            ) {
-              thinkingBatcherRef.current?.drop(
-                streamBatchKey(sid, assistantMsgId)
-              );
-              getCompositionRoot()
-                .layout.getState()
-                .updateMessageThinking(sid, assistantMsgId, '');
-            }
           },
           onRunError: (message, kind, detail) => {
             if (!assertLive()) return;
@@ -389,7 +322,7 @@ export function useRunStreamingAssistant(
               flushStreamBatchers,
               refs: {
                 renderBuffer: renderBufferRef.current,
-                streamManager: streamManagerRef.current!,
+                streamManager: streamManagerRef.current ?? undefined,
                 generationMap: generationMapRef.current,
               },
             });

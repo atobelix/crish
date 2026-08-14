@@ -827,8 +827,6 @@ pub mod compaction {
                     cut,
                     budget_tokens,
                     policy,
-                    summarizer,
-                    stub_policy,
                     &block_id,
                 );
             }
@@ -862,7 +860,6 @@ pub mod compaction {
         /// 1. 尝试更紧凑的截断点（放宽 min_recent_turns 下限至 1 或 0），丢弃更多历史；
         /// 2. 若依然超预算（如单条巨型工具输出），对保留段中的超大 ToolResult 实施紧急截断，
         ///    保证最终输出严格收敛于预算之内。
-        #[allow(clippy::too_many_arguments)]
         fn apply_emergency_preflight(
             &self,
             result: &mut Vec<Arc<AgentMessage>>,
@@ -871,8 +868,6 @@ pub mod compaction {
             initial_cut: usize,
             budget_tokens: usize,
             policy: &CompactionPolicy,
-            _summarizer: Option<&dyn Summarizer>,
-            _stub_policy: StubPolicy,
             block_id: &str,
         ) -> u64 {
             let summary_pos = result
@@ -1016,8 +1011,6 @@ pub mod compaction {
                     0,
                     budget_tokens,
                     policy,
-                    summarizer,
-                    StubPolicy::StubAllowed,
                     &block_id,
                 );
                 plan.tokens_after = new_tokens;

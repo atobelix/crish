@@ -66,6 +66,8 @@ impl InFlightExportGuard {
     pub const DEFAULT_TTL: Duration = Duration::from_millis(1000);
     /// 瞬态缺失容忍窗口（300ms）
     pub const TRANSIENT_DELETION_TOLERANCE: Duration = Duration::from_millis(300);
+    /// 自动清理触发容量阈值（64 条目）
+    pub const AUTO_SWEEP_THRESHOLD: usize = 64;
 
     /// 创建新的守卫实例
     pub fn new() -> Self {
@@ -75,12 +77,15 @@ impl InFlightExportGuard {
         }
     }
 
-    /// 登记导出落盘，分配代际令牌
+    /// 登记导出落盘，分配代际令牌（容量超阈值时自动清理过期条目，彻底根除无界膨胀隐患）
     pub fn register(&self, path: &Path, expected_hash: &str, rev: i64) -> u64 {
         let key = guard_path_key(path);
         let token = self.generation_counter.fetch_add(1, Ordering::SeqCst);
         let now = Instant::now();
         let mut map = self.entries.write().unwrap_or_else(|p| p.into_inner());
+        if map.len() > Self::AUTO_SWEEP_THRESHOLD {
+            map.retain(|_, entry| entry.expiry > now);
+        }
         map.insert(
             key,
             InFlightEntry {
@@ -319,5 +324,42 @@ mod tests {
         guard.sweep_expired();
         let map = guard.entries.read().unwrap();
         assert!(map.is_empty());
+    }
+
+    #[test]
+    fn auto_sweep_on_register_exceeding_threshold() {
+        let guard = InFlightExportGuard::new();
+        // 注册 AUTO_SWEEP_THRESHOLD + 5 个条目
+        for i in 0..(InFlightExportGuard::AUTO_SWEEP_THRESHOLD + 5) {
+            let p = format!("c:/workspace/mirrors/doc-sweep-{i}.md");
+            guard.register(Path::new(&p), &format!("hash_{i}"), i as i64);
+        }
+
+        // 手动将前 50 个条目的过期时间设为过去
+        {
+            let mut map = guard.entries.write().unwrap();
+            let mut count = 0;
+            for entry in map.values_mut() {
+                if count < 50 {
+                    entry.expiry = Instant::now() - Duration::from_millis(50);
+                    count += 1;
+                }
+            }
+        }
+
+        // 此时 map 中有 AUTO_SWEEP_THRESHOLD + 5 个条目（> 64）
+        assert_eq!(
+            guard.entries.read().unwrap().len(),
+            InFlightExportGuard::AUTO_SWEEP_THRESHOLD + 5
+        );
+
+        // 再次 register 新条目，将触发 map.len() > 64 的自动清理
+        let p_new = "c:/workspace/mirrors/doc-sweep-trigger.md";
+        guard.register(Path::new(p_new), "hash_trigger", 999);
+
+        // 过期的 50 个条目已被自动清除，当前剩余条目数应为 (AUTO_SWEEP_THRESHOLD + 5 - 50 + 1)
+        let expected_remaining = InFlightExportGuard::AUTO_SWEEP_THRESHOLD + 5 - 50 + 1;
+        assert_eq!(guard.entries.read().unwrap().len(), expected_remaining);
+        assert!(guard.is_in_flight(Path::new(p_new)));
     }
 }

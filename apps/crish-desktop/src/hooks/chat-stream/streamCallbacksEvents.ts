@@ -249,7 +249,7 @@ export function handleRunError(opts: {
   flushStreamBatchers: () => void;
   refs: {
     renderBuffer: StreamRenderBuffer | null;
-    streamManager: SessionStreamManager;
+    streamManager?: SessionStreamManager | null;
     generationMap: Map<string, number>;
   };
 }): { hadNetworkError: boolean } {
@@ -334,7 +334,7 @@ export function handleRunError(opts: {
   //（避免残余文本被 gen 守卫丢弃），再按 complete 同语义删 gen
   //（entry 匹配守卫：被新 run 接管时不误删新 run 的 generationMap）
   refs.renderBuffer?.flush(false);
-  const errCur = refs.streamManager.get(sid);
+  const errCur = refs.streamManager?.get(sid);
   if (errCur?.assistantMsgId === assistantMsgId) {
     refs.generationMap.delete(sid);
   }

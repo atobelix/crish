@@ -300,7 +300,7 @@ export function createCompleteHandler(opts: {
   const onComplete = () => {
     if (state.runClosed) return;
     if (
-      !isLiveStreamRun(refs.streamManagerRef.current!.get(sid), assistantMsgId)
+      !isLiveStreamRun(refs.streamManagerRef.current?.get(sid), assistantMsgId)
     ) {
       state.runClosed = true;
       // Replaced by a newer run — that run owns streamingActive; do not clear.
@@ -314,9 +314,9 @@ export function createCompleteHandler(opts: {
     // streamManager entry 同步释放：L1 follow_up 拒绝窗口以 streamManager
     // 为门，drain 期间新发送可入队不误拒；generationMap 保留到
     // finishComplete（drain 中间帧需通过 myGen 守卫）。
-    const curStream = refs.streamManagerRef.current!.get(sid);
+    const curStream = refs.streamManagerRef.current?.get(sid);
     if (curStream?.assistantMsgId === assistantMsgId) {
-      refs.streamManagerRef.current!.delete(sid);
+      refs.streamManagerRef.current?.delete(sid);
     }
     const hadPending = buffer.bufferedLength() > 0;
     // 预算式收口（T2.1 flushFinal）：≤2 帧同步刷完（isFinal 帧同步到达 →
