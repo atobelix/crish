@@ -39,8 +39,8 @@ pub fn anthropic_stop_reason_to_stop(reason: Option<&str>) -> StopReason {
 /// - 全空返回 None（304-306）；非对象入参返回 None
 pub fn parse_anthropic_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
     let usage = raw?.as_object()?;
-    let prompt_tokens = finite_u64(usage.get("input_tokens"))
-        .or_else(|| finite_u64(usage.get("prompt_tokens")));
+    let prompt_tokens =
+        finite_u64(usage.get("input_tokens")).or_else(|| finite_u64(usage.get("prompt_tokens")));
     let completion_tokens = finite_u64(usage.get("output_tokens"))
         .or_else(|| finite_u64(usage.get("completion_tokens")));
     let cache_read_tokens = finite_u64(usage.get("cache_read_input_tokens"));
@@ -113,7 +113,9 @@ pub fn anthropic_payload_error(payload: &Map<String, Value>) -> Option<String> {
 
 /// 非空字符串字段
 pub(super) fn non_empty_string(value: Option<&Value>) -> Option<&str> {
-    value.and_then(Value::as_str).filter(|text| !text.is_empty())
+    value
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
 }
 
 /// 字符串字段

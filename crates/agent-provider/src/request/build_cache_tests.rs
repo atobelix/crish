@@ -4,14 +4,14 @@
 //! 断点施加 / Auto 零参数回归护栏），零删除零合并；测试名与断言形状不变。
 //! 公共构造（cache_policy / baseline_context 等）复用 build_tests_common.rs。
 
-use super::*;
 use super::test_common::*;
+use super::*;
 
-use conex_types::message::AgentMessage;
 use crate::request::cache::{
     BreakpointPlan, CacheMechanism, CacheRetention, PromptCacheMode, PromptCacheOptions, TtlBucket,
 };
 use crate::request::schema::canonical_json_string;
+use conex_types::message::AgentMessage;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -67,7 +67,10 @@ fn cache_injects_prompt_cache_key_and_retention() {
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     assert_eq!(body["prompt_cache_key"], "ses-abc");
     assert_eq!(body["prompt_cache_retention"], "in_memory");
-    assert!(body.get("prompt_cache_options").is_none(), "默认不发 options");
+    assert!(
+        body.get("prompt_cache_options").is_none(),
+        "默认不发 options"
+    );
 
     // retention=Long → wire 值 "24h"
     let opts = ChatCompletionsRequestOptions {
@@ -96,13 +99,20 @@ fn cache_injects_prompt_cache_options() {
         TtlBucket::FiveMinutes,
         None,
     );
-    policy.prompt_cache_options =
-        Some(PromptCacheOptions { mode: PromptCacheMode::Explicit });
-    let opts = ChatCompletionsRequestOptions { cache: Some(policy), ..base_opts() };
+    policy.prompt_cache_options = Some(PromptCacheOptions {
+        mode: PromptCacheMode::Explicit,
+    });
+    let opts = ChatCompletionsRequestOptions {
+        cache: Some(policy),
+        ..base_opts()
+    };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     assert_eq!(body["prompt_cache_options"], json!({ "mode": "explicit" }));
     assert!(body.get("prompt_cache_key").is_none());
-    assert!(body.get("prompt_cache_retention").is_none(), "none 档不发 retention");
+    assert!(
+        body.get("prompt_cache_retention").is_none(),
+        "none 档不发 retention"
+    );
 }
 
 #[test]
@@ -112,16 +122,26 @@ fn cache_none_omits_all_cache_keys() {
     // （P2 §5.1 DeepSeek 省略；对齐 deepseek-reasonix-cache-analysis.md:111-112）
     let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("你好"))];
     let context = baseline_context(&messages);
-    let opts = ChatCompletionsRequestOptions { cache: None, ..base_opts() };
+    let opts = ChatCompletionsRequestOptions {
+        cache: None,
+        ..base_opts()
+    };
     let body = build_chat_completions_request_body(&opts, &context);
-    for key in ["prompt_cache_key", "prompt_cache_retention", "prompt_cache_options"] {
+    for key in [
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "prompt_cache_options",
+    ] {
         assert!(body.get(key).is_none(), "cache=None 不得注入 {key}");
     }
     let wire_messages = body["messages"].as_array().expect("messages 数组");
     for message in wire_messages {
         assert!(message.get("cache_control").is_none(), "消息不得携带断点");
     }
-    assert_eq!(wire_messages[1]["content"], "你好", "无断点 → content 保持 string 形态");
+    assert_eq!(
+        wire_messages[1]["content"], "你好",
+        "无断点 → content 保持 string 形态"
+    );
     let tools = body["tools"].as_array().expect("tools 数组");
     for tool in tools {
         assert!(tool.get("cache_control").is_none(), "工具不得附加断点");
@@ -189,7 +209,11 @@ fn explicit_breakpoints_placed_on_wire_messages_and_last_tool() {
         json!({ "type": "ephemeral" })
     );
     // Explicit 机制不发顶层键
-    for key in ["prompt_cache_key", "prompt_cache_retention", "prompt_cache_options"] {
+    for key in [
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "prompt_cache_options",
+    ] {
         assert!(body.get(key).is_none(), "Explicit 机制不得注入 {key}");
     }
     // tools 级：仅最后一个工具附加（tools 层级锚点）
@@ -227,8 +251,14 @@ fn affinity_http_headers_consumes_policy_header() {
     assert_eq!(affinity_http_headers(None), Vec::new());
     // 亲和头不影响请求体字节（HTTP 头不在 body 内，回归护栏）
     let body = build_chat_completions_request_body(
-        &ChatCompletionsRequestOptions { cache: Some(policy), ..base_opts() },
+        &ChatCompletionsRequestOptions {
+            cache: Some(policy),
+            ..base_opts()
+        },
         &RequestBuildContext::default(),
     );
-    assert!(body.get("x-grok-conv-id").is_none(), "请求体不得携带 HTTP 头");
+    assert!(
+        body.get("x-grok-conv-id").is_none(),
+        "请求体不得携带 HTTP 头"
+    );
 }

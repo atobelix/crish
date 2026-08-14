@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use conex_types::tool::{ProviderDiagnostic, ProviderDiagnosticPhase};
-use futures_util::Stream;
 use futures_util::stream::unfold as stream_unfold;
+use futures_util::Stream;
 use tokio::sync::watch;
 
 use super::frame::{SseFrame, SseFrameError, SseParser};

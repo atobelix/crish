@@ -39,9 +39,7 @@ fn row1_abort() {
         classify(None, Some("request cancelled"), None),
         ProviderError::Aborted
     );
-    assert!(
-        !classify(None, None, Some(ProviderSourceError::Aborted)).is_retryable()
-    );
+    assert!(!classify(None, None, Some(ProviderSourceError::Aborted)).is_retryable());
 }
 
 /// 第 2 行：HTTP 413 → PayloadTooLarge（不可重试）
@@ -72,7 +70,12 @@ fn row3_gateway_challenge() {
 fn row4_auth() {
     for status in [401, 403] {
         let error = classify(Some(status), None, None);
-        assert_eq!(error, ProviderError::Auth { status: Some(status) });
+        assert_eq!(
+            error,
+            ProviderError::Auth {
+                status: Some(status)
+            }
+        );
         assert!(!error.is_retryable());
     }
     for body in [
@@ -111,7 +114,9 @@ fn row6_endpoint_unavailable() {
         let error = classify(Some(status), None, None);
         assert_eq!(
             error,
-            ProviderError::EndpointUnavailable { status: Some(status) }
+            ProviderError::EndpointUnavailable {
+                status: Some(status)
+            }
         );
         assert!(!error.is_retryable());
     }
@@ -126,7 +131,12 @@ fn row7_context_length_exceeded() {
             Some("context_length_exceeded: maximum context length is 128000 tokens"),
             None,
         );
-        assert_eq!(error, ProviderError::ContextLength { status: Some(status) });
+        assert_eq!(
+            error,
+            ProviderError::ContextLength {
+                status: Some(status)
+            }
+        );
         assert!(error.is_retryable(), "分类层 context_length 标记可重试");
     }
     // 消息模式兜底（无状态码或非 400/422 状态）
@@ -180,12 +190,19 @@ fn row9_rate_limit() {
     assert!(error.is_retryable());
     // 无 Retry-After 头也可分类
     let error = classify(Some(429), None, None);
-    assert_eq!(error, ProviderError::RateLimit {
-        status: Some(429),
-        retry_after: None,
-    });
+    assert_eq!(
+        error,
+        ProviderError::RateLimit {
+            status: Some(429),
+            retry_after: None,
+        }
+    );
     // 消息模式兜底
-    for body in ["rate limit exceeded", "RateLimitReached", "too many requests"] {
+    for body in [
+        "rate limit exceeded",
+        "RateLimitReached",
+        "too many requests",
+    ] {
         let error = classify(None, Some(body), None);
         assert_eq!(error.kind(), Kind::RateLimit, "body: {body}");
     }
@@ -196,7 +213,12 @@ fn row9_rate_limit() {
 fn row10_server_error() {
     for status in [500, 502, 503, 504, 520, 522, 523, 524] {
         let error = classify(Some(status), None, None);
-        assert_eq!(error, ProviderError::Server { status: Some(status) });
+        assert_eq!(
+            error,
+            ProviderError::Server {
+                status: Some(status)
+            }
+        );
         assert!(error.is_retryable());
     }
 }
@@ -217,7 +239,10 @@ fn row10_server_error_by_message() {
         assert_eq!(error.kind(), Kind::ServerError, "body: {body}");
     }
     // 整词边界：5023 不应命中 502
-    assert_eq!(classify(None, Some("code 5023"), None).kind(), Kind::Unknown);
+    assert_eq!(
+        classify(None, Some("code 5023"), None).kind(),
+        Kind::Unknown
+    );
 }
 
 /// 第 11 行：超时 → Timeout（可重试）
@@ -371,7 +396,9 @@ fn stream_protocol_errors_classify_as_network() {
     let error = classify(
         None,
         None,
-        Some(ProviderSourceError::StreamProtocol(StreamErrorKind::InvalidUtf8)),
+        Some(ProviderSourceError::StreamProtocol(
+            StreamErrorKind::InvalidUtf8,
+        )),
     );
     assert_eq!(error.kind(), Kind::Network);
 }
@@ -401,9 +428,7 @@ fn sse_read_error_source_mapping() {
     );
     assert_eq!(
         source_from_sse_read_error(&SseReadError::<MockError>::Frame(
-            SseFrameError::MalformedSseFrame {
-                raw: "{bad".into()
-            }
+            SseFrameError::MalformedSseFrame { raw: "{bad".into() }
         )),
         ProviderSourceError::StreamProtocol(StreamErrorKind::MalformedFrame)
     );
@@ -499,18 +524,14 @@ fn retryable_matrix_matches_default_retryable() {
     }
     .is_retryable());
     assert!(ProviderError::Server { status: None }.is_retryable());
-    assert!(
-        ProviderError::Timeout {
-            kind: TimeoutKind::Request
-        }
-        .is_retryable()
-    );
-    assert!(
-        ProviderError::Network {
-            source_kind: NetworkSourceKind::Connection
-        }
-        .is_retryable()
-    );
+    assert!(ProviderError::Timeout {
+        kind: TimeoutKind::Request
+    }
+    .is_retryable());
+    assert!(ProviderError::Network {
+        source_kind: NetworkSourceKind::Connection
+    }
+    .is_retryable());
     assert!(ProviderError::ContextLength { status: None }.is_retryable());
     for error in [
         ProviderError::Aborted,
@@ -535,7 +556,10 @@ fn retryable_matrix_matches_default_retryable() {
 #[test]
 fn to_crish_error_uses_existing_codes() {
     let cases = [
-        (ProviderError::Auth { status: Some(401) }, codes::PROVIDER_AUTH),
+        (
+            ProviderError::Auth { status: Some(401) },
+            codes::PROVIDER_AUTH,
+        ),
         (
             ProviderError::RateLimit {
                 status: None,
@@ -543,7 +567,10 @@ fn to_crish_error_uses_existing_codes() {
             },
             codes::PROVIDER_RATE_LIMIT,
         ),
-        (ProviderError::Server { status: None }, codes::PROVIDER_SERVER),
+        (
+            ProviderError::Server { status: None },
+            codes::PROVIDER_SERVER,
+        ),
         (
             ProviderError::Timeout {
                 kind: TimeoutKind::Request,

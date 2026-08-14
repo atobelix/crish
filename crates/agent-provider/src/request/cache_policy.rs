@@ -11,8 +11,8 @@
 use serde_json::Value;
 
 use super::{
-    ANTHROPIC_BREAKPOINT_CAP, BreakpointPlan, CacheCapability, CacheKey, CacheMechanism,
-    CacheRetention, TtlBucket,
+    BreakpointPlan, CacheCapability, CacheKey, CacheMechanism, CacheRetention, TtlBucket,
+    ANTHROPIC_BREAKPOINT_CAP,
 };
 use crate::models::{
     cache_behavior_for, infer_vendor, session_affinity_headers, CacheBehavior, CacheTtl,
@@ -28,7 +28,11 @@ use crate::models::{
 /// 三锚点模型需求至多 3（tools + system + messages 各 1）恒 ≤ 4，超限为
 /// 防御性路径；内部 [super::allocate_breakpoints_with_cap] 暴露预算参数，供超限
 /// 测试与未来多工具/多消息断点扩展复用同一层级分配逻辑。
-pub fn allocate_breakpoints(tools_count: usize, has_system: bool, messages: bool) -> BreakpointPlan {
+pub fn allocate_breakpoints(
+    tools_count: usize,
+    has_system: bool,
+    messages: bool,
+) -> BreakpointPlan {
     allocate_breakpoints_with_cap(ANTHROPIC_BREAKPOINT_CAP, tools_count, has_system, messages)
 }
 
@@ -138,7 +142,11 @@ pub fn build_cache_policy(
         Some(catalog) => {
             let vendor = infer_vendor(&url, &model_lower);
             let behavior = cache_behavior_for(Some(catalog), vendor, &model_lower);
-            (capability_from_behavior(&behavior), behavior, behavior.omit_cache_control)
+            (
+                capability_from_behavior(&behavior),
+                behavior,
+                behavior.omit_cache_control,
+            )
         }
         None => {
             let capability = infer_cache_capability(base_url, model);
@@ -148,8 +156,7 @@ pub fn build_cache_policy(
             // G2：会话亲和头数据源 = 行为矩阵（models/cache_key.rs 数据表），
             // 兜底路径取矩阵默认行（与兜底表转录自同一 P3 §3.2.2 矩阵；Grok
             // 无 catalog 时同样注入 x-grok-conv-id，两路径行为一致）
-            let behavior =
-                cache_behavior_for(None, infer_vendor(&url, &model_lower), &model_lower);
+            let behavior = cache_behavior_for(None, infer_vendor(&url, &model_lower), &model_lower);
             (capability, behavior, omit)
         }
     };
@@ -301,7 +308,9 @@ fn capability_from_behavior(behavior: &CacheBehavior) -> CacheCapability {
 /// extra.cache.enabled 覆盖判定（缺省 true；false = 完全不参与缓存）
 fn overrides_disabled(overrides: Option<&Value>) -> bool {
     matches!(
-        overrides.and_then(|v| v.get("enabled")).and_then(Value::as_bool),
+        overrides
+            .and_then(|v| v.get("enabled"))
+            .and_then(Value::as_bool),
         Some(false)
     )
 }
@@ -588,8 +597,7 @@ pub fn infer_cache_capability(base_url: Option<&str>, model: Option<&str>) -> Ca
     // ── model 前缀最长命中（CACHE_CAPABILITY_TABLE）──
     let mut best: Option<&(&str, CacheCapability)> = None;
     for entry in CACHE_CAPABILITY_TABLE {
-        if model.starts_with(entry.0)
-            && best.is_none_or(|current| entry.0.len() > current.0.len())
+        if model.starts_with(entry.0) && best.is_none_or(|current| entry.0.len() > current.0.len())
         {
             best = Some(entry);
         }

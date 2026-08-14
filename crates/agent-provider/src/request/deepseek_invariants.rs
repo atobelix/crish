@@ -33,7 +33,9 @@ use crate::request::tools::ToolDefinition;
 // ── 便捷构造（只读复用既有测试模式，messages.rs/build.rs 同款）──
 
 fn text_block(text: &str) -> AgentMessageBlock {
-    AgentMessageBlock::Text { text: text.to_string() }
+    AgentMessageBlock::Text {
+        text: text.to_string(),
+    }
 }
 
 fn message(role: AgentMessageRole, blocks: Vec<AgentMessageBlock>) -> AgentMessage {
@@ -148,7 +150,13 @@ fn deepseek_any_combination_yields_none_policy() {
     }
     // 无 model（None 形态）
     assert_eq!(
-        build_cache_policy(None, Some("https://api.deepseek.com"), None, Some("ses-1"), None),
+        build_cache_policy(
+            None,
+            Some("https://api.deepseek.com"),
+            None,
+            Some("ses-1"),
+            None
+        ),
         None
     );
     // 即使 extra.cache 显式开启也省略（omit 优先于覆盖，P3 §3.2.2 Deepseek 行）
@@ -209,8 +217,15 @@ fn deepseek_request_body_never_contains_cache_control_key() {
         );
     }
     // 顶层无任何缓存键（prompt_cache_key / retention / options 一并省略）
-    for key in ["prompt_cache_key", "prompt_cache_retention", "prompt_cache_options"] {
-        assert!(body.get(key).is_none(), "DeepSeek 请求体不得注入顶层键 {key}");
+    for key in [
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "prompt_cache_options",
+    ] {
+        assert!(
+            body.get(key).is_none(),
+            "DeepSeek 请求体不得注入顶层键 {key}"
+        );
     }
 }
 
@@ -314,7 +329,12 @@ fn deepseek_matrix_omits_cache_control_and_forbids_cache_key_together() {
     // 恒同时成立（P3 §3.2.2 Deepseek 行 + ⑤ 验收 2；矩阵是唯一数据真源 C2）。
     // 语义：断点强制省略（官方忽略 cache_control）且官方不支持 prompt_cache_key
     // （vendor-cache-gaps.md:104），两开关互为补充，任何一侧翻转都必须同步审视。
-    for model in ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "unknown-model"] {
+    for model in [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-chat",
+        "unknown-model",
+    ] {
         let behavior = cache_behavior_for(None, VendorId::Deepseek, model);
         assert!(
             behavior.omit_cache_control,
@@ -325,7 +345,10 @@ fn deepseek_matrix_omits_cache_control_and_forbids_cache_key_together() {
             "DeepSeek 行（model={model}）必须恒不注入 prompt_cache_key"
         );
         assert!(!behavior.supports_cache_control, "DeepSeek 行不支持断点");
-        assert!(behavior.auto_cache && behavior.supports_prompt_caching, "自动缓存轨在");
+        assert!(
+            behavior.auto_cache && behavior.supports_prompt_caching,
+            "自动缓存轨在"
+        );
         assert_eq!(behavior.default_ttl, Some(crate::models::CacheTtl::Short));
     }
     // 内置 catalog 路径（模型级覆盖不翻转 omit/键开关）同样联动成立

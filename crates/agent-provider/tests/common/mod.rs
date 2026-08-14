@@ -40,9 +40,9 @@ pub struct RecordedRequest {
 impl RecordedRequest {
     /// 按名称（大小写不敏感）取首个请求头值
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.iter().find_map(|(n, v)| {
-            n.eq_ignore_ascii_case(name).then_some(v.as_str())
-        })
+        self.headers
+            .iter()
+            .find_map(|(n, v)| n.eq_ignore_ascii_case(name).then_some(v.as_str()))
     }
 
     /// 请求体是否包含指定子串
@@ -94,9 +94,7 @@ pub enum MockResponse {
         interrupt_after: Option<usize>,
     },
     /// 先发若干 SSE 帧，随后静默挂起（模拟流中途停顿，配合 abort/超时测试）
-    SseThenHang {
-        frames: Vec<MockFrame>,
-    },
+    SseThenHang { frames: Vec<MockFrame> },
     /// 只发响应头后挂起（模拟挂起流，配合首字节超时/abort 测试）
     Hang,
 }
@@ -142,10 +140,7 @@ impl MockServer {
 
     /// 已记录请求的快照（按到达顺序）
     pub fn requests(&self) -> Vec<RecordedRequest> {
-        self.requests
-            .lock()
-            .expect("请求记录锁")
-            .clone()
+        self.requests.lock().expect("请求记录锁").clone()
     }
 
     /// 等待至少 n 个请求到达后返回快照（重试类测试的同步栅栏）
@@ -157,10 +152,7 @@ impl MockServer {
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        panic!(
-            "等待 {n} 个请求超时，当前仅 {} 个",
-            self.requests().len()
-        );
+        panic!("等待 {n} 个请求超时，当前仅 {} 个", self.requests().len());
     }
 }
 
@@ -360,11 +352,7 @@ pub async fn fetch_plain(
 }
 
 /// POST JSON 请求并读取完整 SSE 流（断言 2xx；双段超时给足余量）
-pub async fn fetch_sse(
-    addr: SocketAddr,
-    path: &str,
-    body: serde_json::Value,
-) -> StreamReadOutput {
+pub async fn fetch_sse(addr: SocketAddr, path: &str, body: serde_json::Value) -> StreamReadOutput {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("http://{addr}{path}"))

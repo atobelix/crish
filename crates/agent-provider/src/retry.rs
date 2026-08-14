@@ -25,8 +25,8 @@ mod retry_decision;
 mod retry_stream;
 
 pub use retry_decision::{
-    choose_retry_delay_ms, parse_retry_after_ms, retry_delay_ms, should_retry, MAX_RETRY_AFTER_MS,
-    RetryDecision, RetryPolicy, RetryState,
+    choose_retry_delay_ms, parse_retry_after_ms, retry_delay_ms, should_retry, RetryDecision,
+    RetryPolicy, RetryState, MAX_RETRY_AFTER_MS,
 };
 pub use retry_stream::{
     provider_stream, provider_stream_with_observer, RetrySleeper, StreamAttempt, TokioSleeper,

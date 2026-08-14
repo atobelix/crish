@@ -151,7 +151,12 @@ impl ProviderUsage {
             CacheAccounting::Included => prompt,
             CacheAccounting::Excluded => prompt.saturating_add(read).saturating_add(write),
         };
-        Some(CacheBreakdown { read, write, miss, input_total })
+        Some(CacheBreakdown {
+            read,
+            write,
+            miss,
+            input_total,
+        })
     }
 }
 
@@ -527,7 +532,10 @@ mod tests {
             ..ProviderUsage::default()
         };
         let value = serde_json::to_value(&usage).unwrap();
-        assert!(value.get("cacheMissTokens").is_none(), "None 的 cacheMissTokens 应省略");
+        assert!(
+            value.get("cacheMissTokens").is_none(),
+            "None 的 cacheMissTokens 应省略"
+        );
     }
 
     #[test]
@@ -611,7 +619,11 @@ mod tests {
 
     // ---- cache_breakdown：两种口径 + miss 优先值 + 钳 0（P2 §3.3 D、§5.1 测试组） ----
 
-    fn usage_with_parts(prompt: Option<u64>, read: Option<u64>, write: Option<u64>) -> ProviderUsage {
+    fn usage_with_parts(
+        prompt: Option<u64>,
+        read: Option<u64>,
+        write: Option<u64>,
+    ) -> ProviderUsage {
         ProviderUsage {
             prompt_tokens: prompt,
             cache_read_tokens: read,
@@ -627,7 +639,12 @@ mod tests {
         let breakdown = usage.cache_breakdown(CacheAccounting::Included).unwrap();
         assert_eq!(
             breakdown,
-            CacheBreakdown { read: 70, write: 10, miss: 20, input_total: 100 }
+            CacheBreakdown {
+                read: 70,
+                write: 10,
+                miss: 20,
+                input_total: 100
+            }
         );
     }
 
@@ -638,7 +655,12 @@ mod tests {
         let breakdown = usage.cache_breakdown(CacheAccounting::Excluded).unwrap();
         assert_eq!(
             breakdown,
-            CacheBreakdown { read: 70, write: 10, miss: 100, input_total: 180 }
+            CacheBreakdown {
+                read: 70,
+                write: 10,
+                miss: 100,
+                input_total: 180
+            }
         );
     }
 
@@ -648,11 +670,21 @@ mod tests {
         let usage = usage_with_parts(Some(100), None, None);
         assert_eq!(
             usage.cache_breakdown(CacheAccounting::Included).unwrap(),
-            CacheBreakdown { read: 0, write: 0, miss: 100, input_total: 100 }
+            CacheBreakdown {
+                read: 0,
+                write: 0,
+                miss: 100,
+                input_total: 100
+            }
         );
         assert_eq!(
             usage.cache_breakdown(CacheAccounting::Excluded).unwrap(),
-            CacheBreakdown { read: 0, write: 0, miss: 100, input_total: 100 }
+            CacheBreakdown {
+                read: 0,
+                write: 0,
+                miss: 100,
+                input_total: 100
+            }
         );
     }
 
@@ -665,11 +697,21 @@ mod tests {
         };
         assert_eq!(
             usage.cache_breakdown(CacheAccounting::Included).unwrap(),
-            CacheBreakdown { read: 70, write: 10, miss: 15, input_total: 100 }
+            CacheBreakdown {
+                read: 70,
+                write: 10,
+                miss: 15,
+                input_total: 100
+            }
         );
         assert_eq!(
             usage.cache_breakdown(CacheAccounting::Excluded).unwrap(),
-            CacheBreakdown { read: 70, write: 10, miss: 15, input_total: 180 }
+            CacheBreakdown {
+                read: 70,
+                write: 10,
+                miss: 15,
+                input_total: 180
+            }
         );
     }
 
@@ -679,7 +721,12 @@ mod tests {
         let usage = usage_with_parts(Some(10), Some(15), Some(5));
         assert_eq!(
             usage.cache_breakdown(CacheAccounting::Included).unwrap(),
-            CacheBreakdown { read: 15, write: 5, miss: 0, input_total: 10 }
+            CacheBreakdown {
+                read: 15,
+                write: 5,
+                miss: 0,
+                input_total: 10
+            }
         );
     }
 
@@ -699,7 +746,11 @@ mod tests {
         let prev = usage_with_parts(Some(100), Some(50), Some(20));
         let next = usage_with_parts(Some(0), Some(60), Some(0));
         let merged = merge_usage_shards(&prev, &next);
-        assert_eq!(merged.prompt_tokens, Some(100), "next 传 0 不应覆盖 prev 的 100");
+        assert_eq!(
+            merged.prompt_tokens,
+            Some(100),
+            "next 传 0 不应覆盖 prev 的 100"
+        );
         assert_eq!(merged.cache_read_tokens, Some(60), "read 取较大值");
         assert_eq!(merged.cache_write_tokens, Some(20), "write 取较大值");
     }
@@ -719,7 +770,10 @@ mod tests {
         assert_eq!(merged.cache_miss_tokens, Some(30), "miss 取较大值");
 
         let next_lower = usage_with_parts(Some(80), None, None);
-        assert_eq!(merge_usage_shards(&prev, &next_lower).prompt_tokens, Some(100));
+        assert_eq!(
+            merge_usage_shards(&prev, &next_lower).prompt_tokens,
+            Some(100)
+        );
     }
 
     #[test]

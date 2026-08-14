@@ -3,10 +3,10 @@
 //! 原 chat.rs `mod tests` 整段搬入，零删除零合并；测试名与断言形状不变。
 
 use super::*;
-use serde_json::{json, Value};
-use conex_types::tool::ProviderDiagnosticPhase;
 use crate::events::{ProviderStreamEvent, StopReason};
 use crate::sse::frame::SseFrame;
+use conex_types::tool::ProviderDiagnosticPhase;
+use serde_json::{json, Value};
 
 /// 便捷构造：处理一帧并立即 finish，返回全部事件
 fn parse_all(frames: Vec<&str>) -> Vec<ProviderStreamEvent> {
@@ -57,11 +57,14 @@ fn text_delta_from_content() {
         })
         .collect();
     assert_eq!(texts, vec!["你好", "，世界"]);
-    assert_eq!(stop_of(&events), &ProviderStreamEvent::Stop {
-        reason: StopReason::Stop,
-        error: None,
-        usage: None,
-    });
+    assert_eq!(
+        stop_of(&events),
+        &ProviderStreamEvent::Stop {
+            reason: StopReason::Stop,
+            error: None,
+            usage: None,
+        }
+    );
 }
 
 #[test]
@@ -88,7 +91,10 @@ fn thought_delta_priority_reasoning_content_thinking_thinking_delta() {
         }
     );
 
-    let events = parse_all(vec![&delta_frame(json!({ "thinking_delta": "td1" }), Value::Null)]);
+    let events = parse_all(vec![&delta_frame(
+        json!({ "thinking_delta": "td1" }),
+        Value::Null,
+    )]);
     assert_eq!(
         events[0],
         ProviderStreamEvent::ThoughtDelta {
@@ -101,7 +107,10 @@ fn thought_delta_priority_reasoning_content_thinking_thinking_delta() {
 #[test]
 fn empty_content_and_thought_are_ignored() {
     // 空串内容不产出事件（对齐 TS `length > 0` 判定）
-    let events = parse_all(vec![&delta_frame(json!({ "content": "", "reasoning_content": "" }), Value::Null)]);
+    let events = parse_all(vec![&delta_frame(
+        json!({ "content": "", "reasoning_content": "" }),
+        Value::Null,
+    )]);
     assert_eq!(events.len(), 1, "仅剩 stop");
     assert!(matches!(events[0], ProviderStreamEvent::Stop { .. }));
 }
@@ -128,11 +137,14 @@ fn tool_calls_in_delta_are_collected_and_flushed() {
             input: json!({ "path": "/a" }),
         }
     );
-    assert_eq!(stop_of(&events), &ProviderStreamEvent::Stop {
-        reason: StopReason::ToolCall,
-        error: None,
-        usage: None,
-    });
+    assert_eq!(
+        stop_of(&events),
+        &ProviderStreamEvent::Stop {
+            reason: StopReason::ToolCall,
+            error: None,
+            usage: None,
+        }
+    );
 }
 
 #[test]
@@ -150,11 +162,14 @@ fn legacy_function_call_in_delta_is_collected() {
         .filter(|event| matches!(event, ProviderStreamEvent::ToolCall { .. }))
         .collect();
     assert_eq!(tool_calls.len(), 1);
-    assert_eq!(tool_calls[0], &ProviderStreamEvent::ToolCall {
-        id: Some("call_0".into()),
-        tool_name: "read_file".into(),
-        input: json!({ "path": "/a" }),
-    });
+    assert_eq!(
+        tool_calls[0],
+        &ProviderStreamEvent::ToolCall {
+            id: Some("call_0".into()),
+            tool_name: "read_file".into(),
+            input: json!({ "path": "/a" }),
+        }
+    );
 }
 
 #[test]
@@ -181,11 +196,14 @@ fn tool_calls_in_choice_message_emit_immediately() {
         .filter(|event| matches!(event, ProviderStreamEvent::ToolCall { .. }))
         .collect();
     assert_eq!(tool_calls.len(), 1);
-    assert_eq!(tool_calls[0], &ProviderStreamEvent::ToolCall {
-        id: Some("call_msg".into()),
-        tool_name: "read_file".into(),
-        input: json!({ "path": "/b" }),
-    });
+    assert_eq!(
+        tool_calls[0],
+        &ProviderStreamEvent::ToolCall {
+            id: Some("call_msg".into()),
+            tool_name: "read_file".into(),
+            input: json!({ "path": "/b" }),
+        }
+    );
     // 无 delta 时 message.content 兜底为正文
     assert!(events.iter().any(|event| matches!(
         event,
@@ -215,24 +233,32 @@ fn tool_calls_on_choice_top_level_are_collected() {
         .filter(|event| matches!(event, ProviderStreamEvent::ToolCall { .. }))
         .collect();
     assert_eq!(tool_calls.len(), 1);
-    assert_eq!(tool_calls[0], &ProviderStreamEvent::ToolCall {
-        id: Some("call_flat".into()),
-        tool_name: "read_file".into(),
-        input: json!({ "path": "/c" }),
-    });
+    assert_eq!(
+        tool_calls[0],
+        &ProviderStreamEvent::ToolCall {
+            id: Some("call_flat".into()),
+            tool_name: "read_file".into(),
+            input: json!({ "path": "/c" }),
+        }
+    );
 }
 
 #[test]
 fn frame_without_choice_is_skipped_but_usage_still_applies() {
     // 仅无 choice 才跳过；usage 解析在 choice 判定之前（02 §2.2 步骤 2→3 顺序）
     let data = r#"{"id":"chatcmpl-2","usage":{"prompt_tokens":11,"total_tokens":22}}"#;
-    let events = parse_all(vec![data, &delta_frame(json!({ "content": "正文" }), json!("stop"))]);
+    let events = parse_all(vec![
+        data,
+        &delta_frame(json!({ "content": "正文" }), json!("stop")),
+    ]);
     assert!(events.iter().any(|event| matches!(
         event,
         ProviderStreamEvent::TextDelta { text } if text == "正文"
     )));
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(11));
             assert_eq!(usage.total_tokens, Some(22));
         }
@@ -282,7 +308,9 @@ fn usage_override_later_frame_wins() {
     let usage2 = r#"{"choices":[{"index":0,"delta":{"content":"y"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}"#;
     let events = parse_all(vec![usage1, usage2]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(10));
             assert_eq!(usage.completion_tokens, Some(20));
             assert_eq!(usage.total_tokens, Some(30));
@@ -303,7 +331,9 @@ fn usage_accepts_alternate_fields_and_details() {
     }}"#;
     let events = parse_all(vec![data]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(5));
             assert_eq!(usage.completion_tokens, Some(7));
             assert_eq!(usage.cache_read_tokens, Some(3));
@@ -327,7 +357,11 @@ fn parse_usage_deepseek_top_level_hit_miss_shape() {
     })))
     .expect("解析成功");
     assert_eq!(usage.cache_read_tokens, Some(60), "顶层 hit 优先（A1-04）");
-    assert_eq!(usage.cache_miss_tokens, Some(40), "顶层 miss 直接取服务端报告值");
+    assert_eq!(
+        usage.cache_miss_tokens,
+        Some(40),
+        "顶层 miss 直接取服务端报告值"
+    );
 }
 
 #[test]
@@ -341,8 +375,16 @@ fn parse_usage_kimi_top_level_cached_tokens_shape() {
         "cache_write_tokens": 7,
     })))
     .expect("解析成功");
-    assert_eq!(usage.cache_read_tokens, Some(55), "顶层 cached_tokens（Kimi）");
-    assert_eq!(usage.cache_write_tokens, Some(7), "顶层 cache_write_tokens 别名");
+    assert_eq!(
+        usage.cache_read_tokens,
+        Some(55),
+        "顶层 cached_tokens（Kimi）"
+    );
+    assert_eq!(
+        usage.cache_write_tokens,
+        Some(7),
+        "顶层 cache_write_tokens 别名"
+    );
 }
 
 #[test]
@@ -363,7 +405,11 @@ fn parse_usage_openai_details_shape_with_write_aliases() {
         },
     })))
     .expect("解析成功");
-    assert_eq!(usage.cache_read_tokens, Some(45), "details.cached_tokens 先于顶层 cached_tokens");
+    assert_eq!(
+        usage.cache_read_tokens,
+        Some(45),
+        "details.cached_tokens 先于顶层 cached_tokens"
+    );
     assert_eq!(
         usage.cache_write_tokens,
         Some(9),
@@ -376,8 +422,14 @@ fn parse_usage_write_alias_fallback_chain() {
     // write 链回退顺序（P2 §3.3 D）：details.cache_creation_tokens →
     // details.cache_creation_input_tokens（百炼）→ 顶层 cache_creation_tokens
     let cases = [
-        (json!({ "prompt_tokens_details": { "cache_creation_tokens": 6 } }), Some(6)),
-        (json!({ "prompt_tokens_details": { "cache_creation_input_tokens": 8 } }), Some(8)),
+        (
+            json!({ "prompt_tokens_details": { "cache_creation_tokens": 6 } }),
+            Some(6),
+        ),
+        (
+            json!({ "prompt_tokens_details": { "cache_creation_input_tokens": 8 } }),
+            Some(8),
+        ),
         (json!({ "cache_creation_tokens": 10 }), Some(10)),
         (json!({ "prompt_tokens": 5 }), None),
     ];
@@ -393,7 +445,9 @@ fn usage_rejects_non_finite_values() {
     let data = r#"{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":"1e3","completion_tokens":null,"total_tokens":3}}"#;
     let events = parse_all(vec![data]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, None, "非数值应忽略");
             assert_eq!(usage.completion_tokens, None, "null 应忽略");
             assert_eq!(usage.total_tokens, Some(3));
@@ -432,7 +486,11 @@ fn error_frame_variants_error_message_error_description_code() {
     for (data, expected) in cases {
         let events = parse_all(vec![data]);
         match stop_of(&events) {
-            ProviderStreamEvent::Stop { reason: StopReason::Error, error: Some(error), .. } => {
+            ProviderStreamEvent::Stop {
+                reason: StopReason::Error,
+                error: Some(error),
+                ..
+            } => {
                 assert_eq!(error, expected);
             }
             other => panic!("{data} 期望错误 stop，得到：{other:?}"),
@@ -599,7 +657,10 @@ fn ru08_keeps_error_reason_when_tool_calls_present() {
 #[test]
 fn ru09_diagnostic_when_finish_reason_tool_calls_but_zero_captured() {
     // RU-09：finish_reason=tool_calls 但零捕获 → 诊断（含 pendingCount）
-    let events = parse_all(vec![&delta_frame(json!({ "content": "纯文字" }), json!("tool_calls"))]);
+    let events = parse_all(vec![&delta_frame(
+        json!({ "content": "纯文字" }),
+        json!("tool_calls"),
+    )]);
     let diagnostics: Vec<&ProviderStreamEvent> = events
         .iter()
         .filter(|event| matches!(event, ProviderStreamEvent::ProviderDiagnostic { .. }))

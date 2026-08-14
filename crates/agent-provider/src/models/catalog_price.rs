@@ -68,8 +68,7 @@ pub(crate) fn tier_for_tokens(
     input_tokens: u64,
 ) -> Option<&TieredPriceTier> {
     tiers?.iter().find(|tier| {
-        input_tokens >= tier.min_tokens
-            && tier.max_tokens.is_none_or(|max| input_tokens < max)
+        input_tokens >= tier.min_tokens && tier.max_tokens.is_none_or(|max| input_tokens < max)
     })
 }
 

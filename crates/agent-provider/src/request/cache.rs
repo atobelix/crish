@@ -31,9 +31,7 @@ pub use cache_policy::{
     affinity_header, allocate_breakpoints, build_cache_policy, infer_cache_capability,
     retention_wire_value, CachePolicy, PromptCacheMode, PromptCacheOptions, CACHE_CAPABILITY_TABLE,
 };
-pub use cache_wire::{
-    apply_cache_controls, cache_control_for_ttl, text_to_parts_with_cc,
-};
+pub use cache_wire::{apply_cache_controls, cache_control_for_ttl, text_to_parts_with_cc};
 
 /// 缓存保留档位（对齐 pi 的 CacheRetention 三档，pi-cache-analysis.md:126-131）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -99,7 +97,10 @@ impl CacheKey {
             return None;
         }
         Some(Self(
-            trimmed.chars().take(OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH).collect(),
+            trimmed
+                .chars()
+                .take(OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH)
+                .collect(),
         ))
     }
 }

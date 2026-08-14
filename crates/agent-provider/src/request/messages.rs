@@ -33,11 +33,11 @@ use crate::request::schema::canonical_json_string;
 #[path = "messages_content.rs"]
 mod messages_content;
 
-pub use messages_content::{
-    normalize_content_parts, sanitize_tool_call_id, stringify_tool_output,
-    strip_inline_data_urls, system_prompt_as_user_prefix, thought_content, user_message_content,
-};
 pub(crate) use messages_content::responses_input_content;
+pub use messages_content::{
+    normalize_content_parts, sanitize_tool_call_id, stringify_tool_output, strip_inline_data_urls,
+    system_prompt_as_user_prefix, thought_content, user_message_content,
+};
 
 /// reasoningContentMode（对齐 OpenAICompatibleReasoningContentMode；默认 omit）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -72,14 +72,20 @@ pub enum ChatContentPart {
         /// Anthropic 系块级断点标记（仅 Some 时序列化，见 to_value）
         cache_control: Option<CacheControl>,
     },
-    ImageUrl { url: String, detail: Option<String> },
+    ImageUrl {
+        url: String,
+        detail: Option<String>,
+    },
 }
 
 impl ChatContentPart {
     /// 序列化为 wire part（cache_control 仅 Some 时输出 `"cache_control"` 键）
     pub fn to_value(&self) -> Value {
         match self {
-            ChatContentPart::Text { text, cache_control } => {
+            ChatContentPart::Text {
+                text,
+                cache_control,
+            } => {
                 let mut part = Map::new();
                 part.insert("type".to_string(), json!("text"));
                 part.insert("text".to_string(), json!(text));
@@ -140,7 +146,10 @@ impl ChatMessage {
             Some(ChatContent::Parts(parts)) => {
                 message.insert(
                     "content".to_string(),
-                    json!(parts.iter().map(ChatContentPart::to_value).collect::<Vec<_>>()),
+                    json!(parts
+                        .iter()
+                        .map(ChatContentPart::to_value)
+                        .collect::<Vec<_>>()),
                 );
             }
             None => {
@@ -221,11 +230,19 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
         match message.role {
             AgentMessageRole::Tool => {
                 for block in &message.blocks {
-                    if let AgentMessageBlock::ToolResult { tool_call_id, output, .. } = block {
+                    if let AgentMessageBlock::ToolResult {
+                        tool_call_id,
+                        output,
+                        ..
+                    } = block
+                    {
                         // T-34（R-J）：wire 投影面统一清洗（默认 CleanupOptions；
                         // 确定性 + 幂等——历史回放与新增同路径；消息本体 raw 不变，
                         // 落库/事件/工具返回不受影响，评审 02 §3.4 / 00-plan §8.2）
-                        let cleaned = clean_output(&stringify_tool_output(output), &CleanupOptions::default());
+                        let cleaned = clean_output(
+                            &stringify_tool_output(output),
+                            &CleanupOptions::default(),
+                        );
                         result.push(ChatMessage {
                             role: "tool".to_string(),
                             content: Some(ChatContent::Text(cleaned.cleaned)),
@@ -337,10 +354,17 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
         match message.role {
             AgentMessageRole::Tool => {
                 for block in &message.blocks {
-                    if let AgentMessageBlock::ToolResult { tool_call_id, output, .. } = block {
+                    if let AgentMessageBlock::ToolResult {
+                        tool_call_id,
+                        output,
+                        ..
+                    } = block
+                    {
                         // T-34（R-J）：与 chat 轨 tool 消息同口径清洗（确定性 + 幂等）
-                        let cleaned =
-                            clean_output(&stringify_tool_output(output), &CleanupOptions::default());
+                        let cleaned = clean_output(
+                            &stringify_tool_output(output),
+                            &CleanupOptions::default(),
+                        );
                         result.push(json!({
                             "type": "function_call_output",
                             "call_id": sanitize_tool_call_id(tool_call_id),

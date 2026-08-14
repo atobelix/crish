@@ -80,7 +80,10 @@ pub fn to_cache_aware_tool(tool: &ToolDefinition, ttl: Option<TtlBucket>) -> Val
     let mut value = to_openai_tool(tool);
     if let Some(ttl) = ttl {
         if let Some(obj) = value.as_object_mut() {
-            obj.insert("cache_control".to_string(), cache_control_for_ttl(ttl).to_value());
+            obj.insert(
+                "cache_control".to_string(),
+                cache_control_for_ttl(ttl).to_value(),
+            );
         }
     }
     value
@@ -106,7 +109,9 @@ pub fn to_chat_tool_choice(choice: &ToolChoice) -> Value {
         ToolChoice::Auto => json!("auto"),
         ToolChoice::None => json!("none"),
         ToolChoice::Required => json!("required"),
-        ToolChoice::Function { name } => json!({ "type": "function", "function": { "name": name } }),
+        ToolChoice::Function { name } => {
+            json!({ "type": "function", "function": { "name": name } })
+        }
     }
 }
 
@@ -143,8 +148,7 @@ mod tests {
 
     /// 规范化后的参数字节（canonicalize_schema 产出 R2.9 键序对象；
     /// canonical_json_string / wire 序列化为键字典序 → 字典序字节）
-    const CANONICAL_PARAMETERS_BYTES: &str =
-        r#"{"properties":{"msg":{"type":"string"},"zeta":{"type":"string"}},"required":["msg","zeta"],"type":"object"}"#;
+    const CANONICAL_PARAMETERS_BYTES: &str = r#"{"properties":{"msg":{"type":"string"},"zeta":{"type":"string"}},"required":["msg","zeta"],"type":"object"}"#;
 
     #[test]
     fn openai_tool_shape() {
@@ -228,9 +232,14 @@ mod tests {
     fn chat_tool_choice_variants() {
         assert_eq!(to_chat_tool_choice(&ToolChoice::Auto), json!("auto"));
         assert_eq!(to_chat_tool_choice(&ToolChoice::None), json!("none"));
-        assert_eq!(to_chat_tool_choice(&ToolChoice::Required), json!("required"));
         assert_eq!(
-            to_chat_tool_choice(&ToolChoice::Function { name: "read_file".into() }),
+            to_chat_tool_choice(&ToolChoice::Required),
+            json!("required")
+        );
+        assert_eq!(
+            to_chat_tool_choice(&ToolChoice::Function {
+                name: "read_file".into()
+            }),
             json!({ "type": "function", "function": { "name": "read_file" } })
         );
     }
@@ -239,7 +248,9 @@ mod tests {
     fn responses_tool_choice_variants() {
         assert_eq!(to_responses_tool_choice(&ToolChoice::Auto), json!("auto"));
         assert_eq!(
-            to_responses_tool_choice(&ToolChoice::Function { name: "read_file".into() }),
+            to_responses_tool_choice(&ToolChoice::Function {
+                name: "read_file".into()
+            }),
             json!({ "type": "function", "name": "read_file" })
         );
     }
@@ -259,7 +270,9 @@ mod tests {
         // ttl=None → 输出与 to_openai_tool 逐字节一致（无缓存回归护栏）
         let tool = tool("echo");
         assert_eq!(to_cache_aware_tool(&tool, None), to_openai_tool(&tool));
-        assert!(to_cache_aware_tool(&tool, None).get("cache_control").is_none());
+        assert!(to_cache_aware_tool(&tool, None)
+            .get("cache_control")
+            .is_none());
     }
 
     #[test]
@@ -296,7 +309,13 @@ mod tests {
         let value = to_cache_aware_tool(&tool("echo"), Some(TtlBucket::FiveMinutes));
         let obj = value.as_object().expect("工具对象");
         let keys: Vec<&String> = obj.keys().collect();
-        assert!(keys.contains(&&"cache_control".to_string()), "顶层键：{keys:?}");
-        assert_eq!(obj.get("function").and_then(|v| v.get("cache_control")), None);
+        assert!(
+            keys.contains(&&"cache_control".to_string()),
+            "顶层键：{keys:?}"
+        );
+        assert_eq!(
+            obj.get("function").and_then(|v| v.get("cache_control")),
+            None
+        );
     }
 }

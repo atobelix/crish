@@ -8,7 +8,9 @@
 
 use serde_json::Value;
 
-use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser};
+use crate::events::{
+    ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser,
+};
 use crate::sse::frame::SseFrame;
 
 use super::gemini_map::{
@@ -73,7 +75,10 @@ impl GeminiParser {
     ///
     /// 分帧层（sse/frame.rs）已保证 data 为合法 JSON 对象或 `[DONE]` 哨兵；
     /// 此处防御性解析失败仅跳过不炸流。
-    pub fn push_frame(&mut self, frame: &SseFrame) -> Result<Vec<ProviderStreamEvent>, StreamParseError> {
+    pub fn push_frame(
+        &mut self,
+        frame: &SseFrame,
+    ) -> Result<Vec<ProviderStreamEvent>, StreamParseError> {
         if self.terminated {
             return Ok(Vec::new());
         }
@@ -173,7 +178,9 @@ impl GeminiParser {
                                     .get("args")
                                     .filter(|value| !value.is_null())
                                     .or_else(|| {
-                                        function_call.get("arguments").filter(|value| !value.is_null())
+                                        function_call
+                                            .get("arguments")
+                                            .filter(|value| !value.is_null())
                                     }),
                             );
                             let id = string_field(function_call.get("id"))

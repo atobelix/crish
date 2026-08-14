@@ -48,9 +48,7 @@ async fn provider_stream_retries_then_succeeds() {
     let policy = default_policy();
     let attempts = Arc::new(AtomicU32::new(0));
     let counter = attempts.clone();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let frames = provider_stream(&policy, &mut sleeper, &mut state, move || {
         let counter = counter.clone();
@@ -88,9 +86,7 @@ async fn provider_stream_no_retry_on_non_retryable() {
     let policy = default_policy();
     let attempts = Arc::new(AtomicU32::new(0));
     let counter = attempts.clone();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let error = provider_stream(&policy, &mut sleeper, &mut state, move || {
         let counter = counter.clone();
@@ -119,9 +115,7 @@ async fn provider_stream_stops_after_max_retries() {
     };
     let attempts = Arc::new(AtomicU32::new(0));
     let counter = attempts.clone();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let error = provider_stream(&policy, &mut sleeper, &mut state, move || {
         let counter = counter.clone();
@@ -150,9 +144,7 @@ async fn provider_stream_no_retry_after_content_produced() {
     let policy = default_policy();
     let attempts = Arc::new(AtomicU32::new(0));
     let counter = attempts.clone();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let error = provider_stream(&policy, &mut sleeper, &mut state, move || {
         let counter = counter.clone();
@@ -177,9 +169,7 @@ async fn provider_stream_no_retry_after_content_produced() {
 #[tokio::test]
 async fn provider_stream_abort_propagates() {
     let policy = default_policy();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let error = provider_stream(&policy, &mut sleeper, &mut state, || async {
         StreamAttempt {
@@ -199,9 +189,7 @@ async fn provider_stream_abort_propagates() {
 async fn tokio_sleeper_abort_interrupts_delay() {
     let (flag, abort) = AbortFlag::new();
     let mut sleeper = TokioSleeper::new(abort);
-    let handle = tokio::spawn(async move {
-        sleeper.sleep(Duration::from_secs(60)).await
-    });
+    let handle = tokio::spawn(async move { sleeper.sleep(Duration::from_secs(60)).await });
     tokio::time::sleep(Duration::from_millis(50)).await;
     flag.abort();
     let error = handle.await.unwrap().unwrap_err();
@@ -292,9 +280,7 @@ async fn observer_emits_before_and_after_per_attempt() {
     let observer = RecordingObserver::new();
     let attempts = Arc::new(AtomicU32::new(0));
     let counter = attempts.clone();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let result = provider_stream_with_observer(
         &policy,
@@ -327,7 +313,11 @@ async fn observer_emits_before_and_after_per_attempt() {
     let (before, after) = observer.events();
     // 3 次尝试：before-request 各一次（attempt 1/2/3），after-response 各一次
     assert_eq!(before, vec![1, 2, 3], "请求前每次尝试发射且 attempt 递增");
-    assert_eq!(after, vec![false, false, true], "响应后每次尝试发射（ok 标记）");
+    assert_eq!(
+        after,
+        vec![false, false, true],
+        "响应后每次尝试发射（ok 标记）"
+    );
     // 发射顺序保证：before 先于对应 after（成对配对）
     assert_eq!(before.len(), after.len(), "before/after 必须成对");
 }
@@ -337,9 +327,7 @@ async fn observer_emits_before_and_after_per_attempt() {
 async fn observer_single_attempt_on_success() {
     let policy = default_policy();
     let observer = RecordingObserver::new();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let result = provider_stream_with_observer(
         &policy,
@@ -368,9 +356,7 @@ async fn observer_single_attempt_on_success() {
 async fn observer_non_retryable_single_pair() {
     let policy = default_policy();
     let observer = RecordingObserver::new();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let error = provider_stream_with_observer(
         &policy,
@@ -397,25 +383,18 @@ async fn observer_non_retryable_single_pair() {
 #[tokio::test]
 async fn without_observer_emits_nothing() {
     let policy = default_policy();
-    let mut sleeper = MockSleeper {
-        sleeps: Vec::new(),
-    };
+    let mut sleeper = MockSleeper { sleeps: Vec::new() };
     let mut state = RetryState::new();
     let observer: Option<&dyn ModelRequestObserver> = None;
-    let result = provider_stream_with_observer(
-        &policy,
-        &mut sleeper,
-        &mut state,
-        observer,
-        || async {
+    let result =
+        provider_stream_with_observer(&policy, &mut sleeper, &mut state, observer, || async {
             StreamAttempt {
                 frames: vec![],
                 error: None,
                 produced_content: false,
             }
-        },
-    )
-    .await
-    .unwrap();
+        })
+        .await
+        .unwrap();
     assert!(result.is_empty());
 }

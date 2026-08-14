@@ -2,8 +2,8 @@
 //!
 //! 原 cache.rs `mod tests` 整段搬入，零删除零合并；测试名与断言形状不变。
 
-use super::*;
 use super::cache_policy::allocate_breakpoints_with_cap;
+use super::*;
 use crate::models::{cache_behavior_for, ModelCatalog, ModelCatalogEntry, VendorId};
 
 // ── CacheRetention ──
@@ -56,7 +56,10 @@ fn cache_key_empty_returns_none() {
 #[test]
 fn cache_control_to_value_shapes() {
     // wire 值形态（P2 §3.1.1）
-    assert_eq!(CacheControl::Ephemeral.to_value(), json!({ "type": "ephemeral" }));
+    assert_eq!(
+        CacheControl::Ephemeral.to_value(),
+        json!({ "type": "ephemeral" })
+    );
     assert_eq!(
         CacheControl::Ephemeral1h.to_value(),
         json!({ "type": "ephemeral", "ttl": "1h" })
@@ -73,9 +76,21 @@ fn cache_control_to_value_shapes() {
 fn breakpoint_plan_has_any() {
     // 全 false → false；任一开启 → true（T-15 注入前快速短路）
     assert!(!BreakpointPlan::default().has_any());
-    assert!(BreakpointPlan { tools: true, ..Default::default() }.has_any());
-    assert!(BreakpointPlan { system: true, ..Default::default() }.has_any());
-    assert!(BreakpointPlan { messages: true, ..Default::default() }.has_any());
+    assert!(BreakpointPlan {
+        tools: true,
+        ..Default::default()
+    }
+    .has_any());
+    assert!(BreakpointPlan {
+        system: true,
+        ..Default::default()
+    }
+    .has_any());
+    assert!(BreakpointPlan {
+        messages: true,
+        ..Default::default()
+    }
+    .has_any());
 }
 
 #[test]
@@ -83,22 +98,41 @@ fn allocate_breakpoints_four_quadrants() {
     // 预算四象限：仅 tools / 仅 system / 仅 messages / 全有
     assert_eq!(
         allocate_breakpoints(2, false, false),
-        BreakpointPlan { tools: true, system: false, messages: false }
+        BreakpointPlan {
+            tools: true,
+            system: false,
+            messages: false
+        }
     );
     assert_eq!(
         allocate_breakpoints(0, true, false),
-        BreakpointPlan { tools: false, system: true, messages: false }
+        BreakpointPlan {
+            tools: false,
+            system: true,
+            messages: false
+        }
     );
     assert_eq!(
         allocate_breakpoints(0, false, true),
-        BreakpointPlan { tools: false, system: false, messages: true }
+        BreakpointPlan {
+            tools: false,
+            system: false,
+            messages: true
+        }
     );
     assert_eq!(
         allocate_breakpoints(1, true, true),
-        BreakpointPlan { tools: true, system: true, messages: true }
+        BreakpointPlan {
+            tools: true,
+            system: true,
+            messages: true
+        }
     );
     // 全无 → 零断点
-    assert_eq!(allocate_breakpoints(0, false, false), BreakpointPlan::default());
+    assert_eq!(
+        allocate_breakpoints(0, false, false),
+        BreakpointPlan::default()
+    );
 }
 
 #[test]
@@ -106,12 +140,29 @@ fn allocate_breakpoints_drops_tail_when_over_cap() {
     // 超限丢尾不报错（P2 §5.1：cap=1 只保 tools；层级 tools→system→messages，
     // 超限先丢 messages 尾部，对齐 opencode anthropic-messages.ts:511-514）
     let plan = allocate_breakpoints_with_cap(1, 1, true, true);
-    assert_eq!(plan, BreakpointPlan { tools: true, system: false, messages: false });
+    assert_eq!(
+        plan,
+        BreakpointPlan {
+            tools: true,
+            system: false,
+            messages: false
+        }
+    );
     // cap=2：tools + system 保，messages 丢
     let plan = allocate_breakpoints_with_cap(2, 1, true, true);
-    assert_eq!(plan, BreakpointPlan { tools: true, system: true, messages: false });
+    assert_eq!(
+        plan,
+        BreakpointPlan {
+            tools: true,
+            system: true,
+            messages: false
+        }
+    );
     // cap=0（极端）→ 全丢不 panic
-    assert_eq!(allocate_breakpoints_with_cap(0, 1, true, true), BreakpointPlan::default());
+    assert_eq!(
+        allocate_breakpoints_with_cap(0, 1, true, true),
+        BreakpointPlan::default()
+    );
     // 默认入口恒 cap=4：三锚点需求 ≤ 3 全分配
     assert!(allocate_breakpoints(1, true, true).has_any());
 }
@@ -121,7 +172,10 @@ fn allocate_breakpoints_drops_tail_when_over_cap() {
 #[test]
 fn retention_wire_value_mapping() {
     // OpenAI 官方值域（P2 §3.2 / 00-catalog §2.1）
-    assert_eq!(retention_wire_value(CacheRetention::Short), Some("in_memory"));
+    assert_eq!(
+        retention_wire_value(CacheRetention::Short),
+        Some("in_memory")
+    );
     assert_eq!(retention_wire_value(CacheRetention::Long), Some("24h"));
     assert_eq!(retention_wire_value(CacheRetention::None), None);
 }
@@ -298,8 +352,14 @@ fn build_cache_policy_key_injects_cache_key() {
 #[test]
 fn build_cache_policy_key_without_session_id_returns_none() {
     // 无会话 ID → 无键可发 → 整体不注入（P2 §3.2 步骤 4：session_id?）
-    assert_eq!(build_cache_policy(None, None, Some("gpt-4o"), None, None), None);
-    assert_eq!(build_cache_policy(None, None, Some("gpt-4o"), Some("   "), None), None);
+    assert_eq!(
+        build_cache_policy(None, None, Some("gpt-4o"), None, None),
+        None
+    );
+    assert_eq!(
+        build_cache_policy(None, None, Some("gpt-4o"), Some("   "), None),
+        None
+    );
 }
 
 #[test]
@@ -346,7 +406,9 @@ fn build_cache_policy_gpt56_none_emits_explicit_options() {
     .expect("5.6+ none 档应发 explicit options");
     assert_eq!(
         policy.prompt_cache_options,
-        Some(PromptCacheOptions { mode: PromptCacheMode::Explicit })
+        Some(PromptCacheOptions {
+            mode: PromptCacheMode::Explicit
+        })
     );
     assert_eq!(policy.cache_key, None);
     assert_eq!(policy.retention, CacheRetention::None);
@@ -404,7 +466,13 @@ fn build_cache_policy_catalog_drives_deepseek_omit() {
     // 整个 cache 参数组不出现；无 catalog 兜底（vendor 推断直判）同语义
     let catalog = ModelCatalog::bundled();
     assert_eq!(
-        build_cache_policy(Some(&catalog), None, Some("deepseek-v4-flash"), Some("ses-1"), None),
+        build_cache_policy(
+            Some(&catalog),
+            None,
+            Some("deepseek-v4-flash"),
+            Some("ses-1"),
+            None
+        ),
         None
     );
     assert_eq!(
@@ -427,16 +495,27 @@ fn build_cache_policy_catalog_drives_deepseek_omit() {
 fn build_cache_policy_catalog_drives_minimax_m2_breakpoints() {
     // MiniMax M2.x 经 catalog：系列表 minimax-m2 开主动缓存 → Explicit 断点注入
     let catalog = ModelCatalog::bundled();
-    let policy =
-        build_cache_policy(Some(&catalog), None, Some("minimax-m2-7"), Some("ses-1"), None)
-            .expect("M2-7 经 catalog 应启用显式断点注入");
+    let policy = build_cache_policy(
+        Some(&catalog),
+        None,
+        Some("minimax-m2-7"),
+        Some("ses-1"),
+        None,
+    )
+    .expect("M2-7 经 catalog 应启用显式断点注入");
     assert_eq!(policy.mechanism, CacheMechanism::Explicit);
     assert_eq!(policy.breakpoints, Some(BreakpointPlan::default()));
     assert_eq!(policy.ttl, TtlBucket::FiveMinutes);
     assert_eq!(policy.cache_key, None);
     // M3 经 catalog：系列表关主动缓存 → Auto 零参数（隐式缓存不发任何字段）
-    let m3 = build_cache_policy(Some(&catalog), None, Some("minimax-m3"), Some("ses-1"), None)
-        .expect("M3 经 catalog 应为 Auto 零参数");
+    let m3 = build_cache_policy(
+        Some(&catalog),
+        None,
+        Some("minimax-m3"),
+        Some("ses-1"),
+        None,
+    )
+    .expect("M3 经 catalog 应为 Auto 零参数");
     assert_eq!(m3.mechanism, CacheMechanism::Auto);
     assert_eq!(m3.breakpoints, None);
     assert_eq!(m3.cache_key, None);
@@ -447,9 +526,14 @@ fn build_cache_policy_catalog_drives_minimax_m2_breakpoints() {
 fn build_cache_policy_catalog_drives_grok_key() {
     // Grok 经 catalog：supports_prompt_cache_key → Key 键路由（会话 ID 派生键）
     let catalog = ModelCatalog::bundled();
-    let policy =
-        build_cache_policy(Some(&catalog), None, Some("grok-4.5"), Some("ses-grok"), None)
-            .expect("Grok 经 catalog 应走键路由");
+    let policy = build_cache_policy(
+        Some(&catalog),
+        None,
+        Some("grok-4.5"),
+        Some("ses-grok"),
+        None,
+    )
+    .expect("Grok 经 catalog 应走键路由");
     assert_eq!(policy.mechanism, CacheMechanism::Key);
     assert_eq!(policy.cache_key, Some(CacheKey("ses-grok".to_string())));
     assert_eq!(policy.retention, CacheRetention::Short);
@@ -476,9 +560,14 @@ fn build_cache_policy_anthropic_catalog_path_enables_one_hour_bucket() {
     assert_eq!(policy.mechanism, CacheMechanism::Explicit);
     assert_eq!(policy.retention, CacheRetention::Long);
     assert_eq!(policy.ttl, TtlBucket::OneHour);
-    let policy =
-        build_cache_policy(Some(&catalog), None, Some("claude-opus-4-5"), Some("ses-1"), None)
-            .expect("Anthropic catalog 路径应启用显式断点注入");
+    let policy = build_cache_policy(
+        Some(&catalog),
+        None,
+        Some("claude-opus-4-5"),
+        Some("ses-1"),
+        None,
+    )
+    .expect("Anthropic catalog 路径应启用显式断点注入");
     assert_eq!(policy.ttl, TtlBucket::FiveMinutes);
 }
 
@@ -500,10 +589,18 @@ fn build_cache_policy_anthropic_catalog_1h_entry_sets_long_retention() {
             ..Default::default()
         },
     );
-    let catalog = ModelCatalog { entries, version: 0 };
-    let policy =
-        build_cache_policy(Some(&catalog), None, Some("claude-long-1h"), Some("ses-1"), None)
-            .expect("1h 条目应启用显式断点注入");
+    let catalog = ModelCatalog {
+        entries,
+        version: 0,
+    };
+    let policy = build_cache_policy(
+        Some(&catalog),
+        None,
+        Some("claude-long-1h"),
+        Some("ses-1"),
+        None,
+    )
+    .expect("1h 条目应启用显式断点注入");
     assert_eq!(policy.mechanism, CacheMechanism::Explicit);
     assert_eq!(policy.retention, CacheRetention::Long);
     assert_eq!(policy.ttl, TtlBucket::OneHour);
@@ -552,9 +649,14 @@ fn build_cache_policy_grok_injects_affinity_header() {
     }
     // 超长会话 ID：header 值恰好 64 码点（含多字节尾字符）
     let long = format!("{}尾", "g".repeat(63));
-    let policy =
-        build_cache_policy(Some(&catalog), None, Some("grok-4.5"), Some(long.as_str()), None)
-            .expect("Grok 应走键路由");
+    let policy = build_cache_policy(
+        Some(&catalog),
+        None,
+        Some("grok-4.5"),
+        Some(long.as_str()),
+        None,
+    )
+    .expect("Grok 应走键路由");
     let header = policy.affinity_header.expect("Grok 必须注入亲和头");
     assert_eq!(header.0, "x-grok-conv-id");
     assert_eq!(header.1.chars().count(), 64);
@@ -599,9 +701,14 @@ fn build_cache_policy_catalog_unknown_model_conservative() {
     );
     // 已知厂商但目录未收录的模型：保持 vendor 默认行为（目录缺失 ≠ 全关；
     // 如 OpenAI 未知系列按 vendor 默认行走键路由）
-    let policy =
-        build_cache_policy(Some(&catalog), None, Some("gpt-8-future"), Some("ses-1"), None)
-            .expect("已知厂商未知模型应保持 vendor 默认行为");
+    let policy = build_cache_policy(
+        Some(&catalog),
+        None,
+        Some("gpt-8-future"),
+        Some("ses-1"),
+        None,
+    )
+    .expect("已知厂商未知模型应保持 vendor 默认行为");
     assert_eq!(policy.mechanism, CacheMechanism::Key);
 }
 
@@ -627,16 +734,15 @@ fn wire_message(role: &str, text: &str) -> ChatMessage {
 }
 
 /// 断言文本消息内容被改写为携带断点的 parts 形态
-fn assert_text_part_with_cc(
-    message: &ChatMessage,
-    expected_text: &str,
-    expected_cc: CacheControl,
-) {
+fn assert_text_part_with_cc(message: &ChatMessage, expected_text: &str, expected_cc: CacheControl) {
     match &message.content {
         Some(ChatContent::Parts(parts)) => {
             assert_eq!(parts.len(), 1, "改写为单文本块 parts 形态");
             match &parts[0] {
-                ChatContentPart::Text { text, cache_control } => {
+                ChatContentPart::Text {
+                    text,
+                    cache_control,
+                } => {
                     assert_eq!(text, expected_text);
                     assert_eq!(*cache_control, Some(expected_cc));
                 }
@@ -650,8 +756,14 @@ fn assert_text_part_with_cc(
 #[test]
 fn cache_control_for_ttl_mapping() {
     // TTL 桶 → 块级断点值（Anthropic 系 wire 值映射）
-    assert_eq!(cache_control_for_ttl(TtlBucket::FiveMinutes), CacheControl::Ephemeral);
-    assert_eq!(cache_control_for_ttl(TtlBucket::OneHour), CacheControl::Ephemeral1h);
+    assert_eq!(
+        cache_control_for_ttl(TtlBucket::FiveMinutes),
+        CacheControl::Ephemeral
+    );
+    assert_eq!(
+        cache_control_for_ttl(TtlBucket::OneHour),
+        CacheControl::Ephemeral1h
+    );
 }
 
 #[test]
@@ -690,8 +802,14 @@ fn text_to_parts_with_cc_builds_part_with_cc() {
 #[test]
 fn apply_cache_controls_plan_all_false_leaves_bytes_unchanged() {
     // plan 全 false → 零报告、无任何改写（请求字节与未施加时完全一致）
-    let mut messages = vec![wire_message("system", "系统指令"), wire_message("user", "你好")];
-    let before = messages.iter().map(ChatMessage::to_value).collect::<Vec<_>>();
+    let mut messages = vec![
+        wire_message("system", "系统指令"),
+        wire_message("user", "你好"),
+    ];
+    let before = messages
+        .iter()
+        .map(ChatMessage::to_value)
+        .collect::<Vec<_>>();
     let report = apply_cache_controls(
         &mut messages,
         &BreakpointPlan::default(),
@@ -699,7 +817,10 @@ fn apply_cache_controls_plan_all_false_leaves_bytes_unchanged() {
         false,
     );
     assert_eq!(report, BreakpointReport::default());
-    let after = messages.iter().map(ChatMessage::to_value).collect::<Vec<_>>();
+    let after = messages
+        .iter()
+        .map(ChatMessage::to_value)
+        .collect::<Vec<_>>();
     assert_eq!(before, after, "plan 全 false 不得改动任何消息字节");
 }
 
@@ -707,19 +828,37 @@ fn apply_cache_controls_plan_all_false_leaves_bytes_unchanged() {
 fn apply_cache_controls_system_anchor_rewrites_first_system_message() {
     // system 锚点：首条 role=system 消息改写为 parts 形态并挂断点；
     // 其余消息不受影响（改写只发生在被打断点处）
-    let mut messages = vec![wire_message("system", "系统指令"), wire_message("user", "你好")];
+    let mut messages = vec![
+        wire_message("system", "系统指令"),
+        wire_message("user", "你好"),
+    ];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { system: true, ..Default::default() },
+        &BreakpointPlan {
+            system: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 1, dropped: 0 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 1,
+            dropped: 0
+        }
+    );
     assert_text_part_with_cc(&messages[0], "系统指令", CacheControl::Ephemeral);
-    assert_eq!(messages[1].content, Some(ChatContent::Text("你好".to_string())));
+    assert_eq!(
+        messages[1].content,
+        Some(ChatContent::Text("你好".to_string()))
+    );
     // wire 形状：content[0].cache_control = {"type":"ephemeral"}
     let value = messages[0].to_value();
-    assert_eq!(value["content"][0]["cache_control"], json!({ "type": "ephemeral" }));
+    assert_eq!(
+        value["content"][0]["cache_control"],
+        json!({ "type": "ephemeral" })
+    );
 }
 
 #[test]
@@ -731,17 +870,29 @@ fn apply_cache_controls_system_anchor_falls_back_to_first_user_message() {
     ];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { system: true, ..Default::default() },
+        &BreakpointPlan {
+            system: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 1, dropped: 0 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 1,
+            dropped: 0
+        }
+    );
     assert_text_part_with_cc(
         &messages[0],
         "System instructions for this run:\n\n全局提示",
         CacheControl::Ephemeral,
     );
-    assert_eq!(messages[1].content, Some(ChatContent::Text("你好".to_string())));
+    assert_eq!(
+        messages[1].content,
+        Some(ChatContent::Text("你好".to_string()))
+    );
 }
 
 #[test]
@@ -755,13 +906,28 @@ fn apply_cache_controls_messages_anchor_part_level_on_last_user() {
     ];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { messages: true, ..Default::default() },
+        &BreakpointPlan {
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 1, dropped: 0 });
-    assert_eq!(messages[0].content, Some(ChatContent::Text("第一问".to_string())));
-    assert_eq!(messages[1].content, Some(ChatContent::Text("回复".to_string())));
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 1,
+            dropped: 0
+        }
+    );
+    assert_eq!(
+        messages[0].content,
+        Some(ChatContent::Text("第一问".to_string()))
+    );
+    assert_eq!(
+        messages[1].content,
+        Some(ChatContent::Text("回复".to_string()))
+    );
     assert_text_part_with_cc(&messages[2], "第二问", CacheControl::Ephemeral);
 }
 
@@ -772,11 +938,20 @@ fn apply_cache_controls_messages_anchor_prefers_last_tool_message() {
     let mut messages = vec![wire_message("user", "查一下"), wire_message("tool", "结果")];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { messages: true, ..Default::default() },
+        &BreakpointPlan {
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 1, dropped: 0 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 1,
+            dropped: 0
+        }
+    );
     assert_text_part_with_cc(&messages[1], "结果", CacheControl::Ephemeral);
 }
 
@@ -787,13 +962,25 @@ fn apply_cache_controls_message_level_used_when_supported() {
     let mut messages = vec![wire_message("user", "你好")];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { messages: true, ..Default::default() },
+        &BreakpointPlan {
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         true,
     );
-    assert_eq!(report, BreakpointReport { placed: 1, dropped: 0 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 1,
+            dropped: 0
+        }
+    );
     assert_eq!(messages[0].cache_control, Some(CacheControl::Ephemeral));
-    assert_eq!(messages[0].content, Some(ChatContent::Text("你好".to_string())));
+    assert_eq!(
+        messages[0].content,
+        Some(ChatContent::Text("你好".to_string()))
+    );
     let value = messages[0].to_value();
     assert_eq!(value["cache_control"], json!({ "type": "ephemeral" }));
     assert_eq!(value["content"], "你好");
@@ -805,11 +992,20 @@ fn apply_cache_controls_ttl_one_hour_maps_to_ephemeral1h() {
     let mut messages = vec![wire_message("user", "你好")];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { messages: true, ..Default::default() },
+        &BreakpointPlan {
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::OneHour,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 1, dropped: 0 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 1,
+            dropped: 0
+        }
+    );
     assert_text_part_with_cc(&messages[0], "你好", CacheControl::Ephemeral1h);
     let value = messages[0].to_value();
     assert_eq!(
@@ -828,7 +1024,10 @@ fn apply_cache_controls_parts_content_marks_last_text_block() {
                 url: "https://example.com/a.png".to_string(),
                 detail: None,
             },
-            ChatContentPart::Text { text: "看图说话".to_string(), cache_control: None },
+            ChatContentPart::Text {
+                text: "看图说话".to_string(),
+                cache_control: None,
+            },
         ])),
         tool_call_id: None,
         reasoning_content: None,
@@ -837,16 +1036,31 @@ fn apply_cache_controls_parts_content_marks_last_text_block() {
     }];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { messages: true, ..Default::default() },
+        &BreakpointPlan {
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 1, dropped: 0 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 1,
+            dropped: 0
+        }
+    );
     match &messages[0].content {
         Some(ChatContent::Parts(parts)) => {
-            assert!(matches!(parts[0], ChatContentPart::ImageUrl { .. }), "图片块原样保留");
+            assert!(
+                matches!(parts[0], ChatContentPart::ImageUrl { .. }),
+                "图片块原样保留"
+            );
             match &parts[1] {
-                ChatContentPart::Text { text, cache_control } => {
+                ChatContentPart::Text {
+                    text,
+                    cache_control,
+                } => {
                     assert_eq!(text, "看图说话");
                     assert_eq!(*cache_control, Some(CacheControl::Ephemeral));
                 }
@@ -864,13 +1078,26 @@ fn apply_cache_controls_unplaceable_anchor_counts_dropped() {
     let mut messages = vec![wire_message("assistant", "回复")];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { system: true, messages: true, ..Default::default() },
+        &BreakpointPlan {
+            system: true,
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 0, dropped: 2 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 0,
+            dropped: 2
+        }
+    );
     // 消息未被改动
-    assert_eq!(messages[0].content, Some(ChatContent::Text("回复".to_string())));
+    assert_eq!(
+        messages[0].content,
+        Some(ChatContent::Text("回复".to_string()))
+    );
 }
 
 #[test]
@@ -886,11 +1113,20 @@ fn apply_cache_controls_content_none_counts_dropped() {
     }];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { messages: true, ..Default::default() },
+        &BreakpointPlan {
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 0, dropped: 1 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 0,
+            dropped: 1
+        }
+    );
 }
 
 #[test]
@@ -900,11 +1136,21 @@ fn apply_cache_controls_same_anchor_not_double_placed() {
     let mut messages = vec![wire_message("user", "你好")];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { system: true, messages: true, ..Default::default() },
+        &BreakpointPlan {
+            system: true,
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 1, dropped: 0 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 1,
+            dropped: 0
+        }
+    );
 }
 
 #[test]
@@ -917,12 +1163,25 @@ fn apply_cache_controls_three_anchors_all_placed() {
     ];
     let report = apply_cache_controls(
         &mut messages,
-        &BreakpointPlan { system: true, messages: true, ..Default::default() },
+        &BreakpointPlan {
+            system: true,
+            messages: true,
+            ..Default::default()
+        },
         TtlBucket::FiveMinutes,
         false,
     );
-    assert_eq!(report, BreakpointReport { placed: 2, dropped: 0 });
+    assert_eq!(
+        report,
+        BreakpointReport {
+            placed: 2,
+            dropped: 0
+        }
+    );
     assert_text_part_with_cc(&messages[0], "系统指令", CacheControl::Ephemeral);
-    assert_eq!(messages[1].content, Some(ChatContent::Text("查一下".to_string())));
+    assert_eq!(
+        messages[1].content,
+        Some(ChatContent::Text("查一下".to_string()))
+    );
     assert_text_part_with_cc(&messages[2], "结果", CacheControl::Ephemeral);
 }

@@ -5,8 +5,8 @@
 //! 正常流/工具调用/finishReason 域见 gemini_tests.rs；共享便捷函数
 //! （parse_all / stop_of）由 [super::tests] 提供。
 
-use super::*;
 use super::tests::{parse_all, stop_of};
+use super::*;
 use serde_json::json;
 
 // ── usage 逐帧合并（02 §六.6：Gemini 逐帧合并）──
@@ -21,13 +21,20 @@ fn usage_merged_across_frames() {
     let frame2 = serde_json::to_string(&json!({
         "candidates": [{ "content": { "parts": [{ "text": "b" }] }, "finishReason": "STOP" }],
         "usageMetadata": { "promptTokenCount": 10, "candidatesTokenCount": 20 },
-    })).expect("序列化");
+    }))
+    .expect("序列化");
     let events = parse_all(vec![&frame1, &frame2]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(10));
             assert_eq!(usage.completion_tokens, Some(20));
-            assert_eq!(usage.total_tokens, Some(30), "next 显式 total（累计值）优先");
+            assert_eq!(
+                usage.total_tokens,
+                Some(30),
+                "next 显式 total（累计值）优先"
+            );
             assert_eq!(usage.cache_read_tokens, Some(4), "帧 1 字段回退保留");
             assert_eq!(usage.reasoning_tokens, Some(3), "帧 1 字段回退保留");
         }
@@ -122,14 +129,22 @@ fn parse_gemini_usage_accepts_total_cached_tokens_alias() {
         "totalCachedTokens": 4,
     })))
     .expect("解析成功");
-    assert_eq!(usage.cache_read_tokens, Some(4), "camel 形 totalCachedTokens");
+    assert_eq!(
+        usage.cache_read_tokens,
+        Some(4),
+        "camel 形 totalCachedTokens"
+    );
 
     let usage = parse_gemini_usage(Some(&json!({
         "promptTokenCount": 10,
         "total_cached_tokens": 3,
     })))
     .expect("解析成功");
-    assert_eq!(usage.cache_read_tokens, Some(3), "snake 形 total_cached_tokens");
+    assert_eq!(
+        usage.cache_read_tokens,
+        Some(3),
+        "snake 形 total_cached_tokens"
+    );
 
     let usage = parse_gemini_usage(Some(&json!({
         "promptTokenCount": 10,
@@ -137,7 +152,11 @@ fn parse_gemini_usage_accepts_total_cached_tokens_alias() {
         "total_cached_tokens": 3,
     })))
     .expect("解析成功");
-    assert_eq!(usage.cache_read_tokens, Some(6), "cachedContentTokenCount 优先于别名");
+    assert_eq!(
+        usage.cache_read_tokens,
+        Some(6),
+        "cachedContentTokenCount 优先于别名"
+    );
 }
 
 #[test]
@@ -145,7 +164,10 @@ fn parse_gemini_usage_empty_returns_none() {
     assert!(parse_gemini_usage(None).is_none());
     assert!(parse_gemini_usage(Some(&Value::Null)).is_none());
     assert!(parse_gemini_usage(Some(&json!("usage"))).is_none());
-    assert!(parse_gemini_usage(Some(&json!({}))).is_none(), "全空字段返回 None");
+    assert!(
+        parse_gemini_usage(Some(&json!({}))).is_none(),
+        "全空字段返回 None"
+    );
     assert!(parse_gemini_usage(Some(&json!({ "promptTokenCount": 1 }))).is_some());
 }
 
@@ -171,7 +193,11 @@ fn block_reason_without_message_uses_reason_only() {
     let data = r#"{"promptFeedback":{"block_reason":"OTHER"}}"#;
     let events = parse_all(vec![data]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { reason: StopReason::Error, error: Some(error), .. } => {
+        ProviderStreamEvent::Stop {
+            reason: StopReason::Error,
+            error: Some(error),
+            ..
+        } => {
             assert_eq!(error, "Gemini prompt blocked: OTHER");
         }
         other => panic!("期望阻断 error stop，得到：{other:?}"),
@@ -184,7 +210,8 @@ fn block_reason_with_candidates_is_not_an_error() {
     let data = serde_json::to_string(&json!({
         "candidates": [{ "content": { "parts": [{ "text": "x" }] }, "finishReason": "STOP" }],
         "promptFeedback": { "blockReason": "SAFETY" },
-    })).expect("序列化");
+    }))
+    .expect("序列化");
     let events = parse_all(vec![&data]);
     assert_eq!(
         stop_of(&events),
@@ -224,7 +251,11 @@ fn empty_stream_produces_error_stop() {
     let events = parse_all(vec![]);
     assert_eq!(events.len(), 1);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { reason: StopReason::Error, error, usage } => {
+        ProviderStreamEvent::Stop {
+            reason: StopReason::Error,
+            error,
+            usage,
+        } => {
             assert_eq!(
                 error.as_deref(),
                 Some("Gemini streaming response completed without content events")
@@ -273,7 +304,8 @@ fn non_object_parts_and_candidates_are_skipped() {
             "not-an-object",
             { "content": { "parts": [42, { "text": "正文" }] }, "finishReason": "STOP" },
         ],
-    })).expect("序列化");
+    }))
+    .expect("序列化");
     let events = parse_all(vec![&data]);
     assert!(events.iter().any(|event| matches!(
         event,
@@ -294,8 +326,14 @@ fn non_object_parts_and_candidates_are_skipped() {
 #[test]
 fn error_frame_terminates_immediately() {
     let cases = [
-        (r#"{"error":{"status":"INVALID_ARGUMENT","message":"参数错"}}"#, "INVALID_ARGUMENT: 参数错"),
-        (r#"{"error":{"code":403,"message":"无权限"}}"#, "403: 无权限"),
+        (
+            r#"{"error":{"status":"INVALID_ARGUMENT","message":"参数错"}}"#,
+            "INVALID_ARGUMENT: 参数错",
+        ),
+        (
+            r#"{"error":{"code":403,"message":"无权限"}}"#,
+            "403: 无权限",
+        ),
         (r#"{"error":{"message":"仅消息"}}"#, "仅消息"),
         (r#"{"error":{"status":"UNAVAILABLE"}}"#, "UNAVAILABLE"),
         (r#"{"error":"字符串错误"}"#, "字符串错误"),

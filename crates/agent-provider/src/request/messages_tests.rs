@@ -53,7 +53,10 @@ fn tool_result_block(tool_call_id: &str, output: ToolOutput) -> AgentMessageBloc
 /// 断言消息 role 与 content（字符串形态）
 fn assert_text_content(messages: &[ChatMessage], index: usize, role: &str, content: &str) {
     assert_eq!(messages[index].role, role);
-    assert_eq!(messages[index].content, Some(ChatContent::Text(content.to_string())));
+    assert_eq!(
+        messages[index].content,
+        Some(ChatContent::Text(content.to_string()))
+    );
 }
 
 // ── 角色映射与内容 ──
@@ -65,10 +68,7 @@ fn roles_map_to_wire() {
         &[
             user_msg(vec![text_block("你好")]),
             assistant_msg(vec![text_block("回复")]),
-            message(
-                AgentMessageRole::System,
-                vec![text_block("系统指令")],
-            ),
+            message(AgentMessageRole::System, vec![text_block("系统指令")]),
             message(
                 AgentMessageRole::Tool,
                 vec![tool_result_block("call_1", ToolOutput::text("结果"))],
@@ -84,7 +84,10 @@ fn roles_map_to_wire() {
     // tool 结果消息
     assert_eq!(messages[3].role, "tool");
     assert_eq!(messages[3].tool_call_id.as_deref(), Some("call_1"));
-    assert_eq!(messages[3].content, Some(ChatContent::Text("结果".to_string())));
+    assert_eq!(
+        messages[3].content,
+        Some(ChatContent::Text("结果".to_string()))
+    );
     assert_eq!(messages[3].tool_calls, Vec::<Value>::new());
 }
 
@@ -118,7 +121,10 @@ fn user_prefix_rewrites_system_prompt_and_system_messages() {
     // 02 §六.11：user-prefix wireMode 改写 role 与文案
     let messages = to_chat_messages(
         Some("全局提示词"),
-        &[message(AgentMessageRole::System, vec![text_block("消息内系统指令")])],
+        &[message(
+            AgentMessageRole::System,
+            vec![text_block("消息内系统指令")],
+        )],
         ReasoningContentMode::Omit,
         SystemPromptWireMode::UserPrefix,
     );
@@ -126,12 +132,16 @@ fn user_prefix_rewrites_system_prompt_and_system_messages() {
     assert_eq!(messages[0].role, "user");
     assert_eq!(
         messages[0].content,
-        Some(ChatContent::Text("System instructions for this run:\n\n全局提示词".to_string()))
+        Some(ChatContent::Text(
+            "System instructions for this run:\n\n全局提示词".to_string()
+        ))
     );
     assert_eq!(messages[1].role, "user");
     assert_eq!(
         messages[1].content,
-        Some(ChatContent::Text("System instructions for this run:\n\n消息内系统指令".to_string()))
+        Some(ChatContent::Text(
+            "System instructions for this run:\n\n消息内系统指令".to_string()
+        ))
     );
 }
 
@@ -147,11 +157,14 @@ fn system_prompt_as_user_prefix_trims_input() {
 fn each_tool_result_block_becomes_tool_message() {
     let blocks = vec![
         tool_result_block("call_1", ToolOutput::text("结果一")),
-        tool_result_block("call_2", ToolOutput {
-            text: None,
-            json: Some(json!({ "ok": true })),
-            artifacts: None,
-        }),
+        tool_result_block(
+            "call_2",
+            ToolOutput {
+                text: None,
+                json: Some(json!({ "ok": true })),
+                artifacts: None,
+            },
+        ),
     ];
     let messages = to_chat_messages(
         None,
@@ -161,7 +174,10 @@ fn each_tool_result_block_becomes_tool_message() {
     );
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0].tool_call_id.as_deref(), Some("call_1"));
-    assert_eq!(messages[0].content, Some(ChatContent::Text("结果一".to_string())));
+    assert_eq!(
+        messages[0].content,
+        Some(ChatContent::Text("结果一".to_string()))
+    );
     assert_eq!(messages[1].tool_call_id.as_deref(), Some("call_2"));
     assert_eq!(
         messages[1].content,
@@ -215,12 +231,21 @@ fn wire_tool_output_is_cleaned() {
     };
     // R1：ANSI 剥离（正文保留）
     assert!(!wire.contains('\x1b'), "ANSI 序列必须剥离：{wire}");
-    assert!(wire.contains("error: build failed"), "ANSI 包裹的正文剥离后保留");
+    assert!(
+        wire.contains("error: build failed"),
+        "ANSI 包裹的正文剥离后保留"
+    );
     // R3：连续空行合并
     assert!(!wire.contains("\n\n\n"), "连续空行必须合并：{wire}");
     // R4：重复行折叠（3+ 连续相等行 → 标记）
-    assert!(!wire.contains("warning: unused\nwarning: unused\nwarning: unused"), "重复行必须折叠");
-    assert!(wire.contains("… 重复 2 行 …"), "重复行折叠标记必须出现：{wire}");
+    assert!(
+        !wire.contains("warning: unused\nwarning: unused\nwarning: unused"),
+        "重复行必须折叠"
+    );
+    assert!(
+        wire.contains("… 重复 2 行 …"),
+        "重复行折叠标记必须出现：{wire}"
+    );
     // R5：超长行截断（默认 120 字符 + 省略号）
     assert!(
         wire.lines().all(|l| l.chars().count() <= 120),
@@ -249,10 +274,16 @@ fn wire_cleaning_is_deterministic_and_byte_stable() {
         ReasoningContentMode::Omit,
         SystemPromptWireMode::NativeSystemRole,
     );
-    assert_eq!(first, second, "同输入两次 wire 投影必须字节一致（确定性 + 幂等）");
+    assert_eq!(
+        first, second,
+        "同输入两次 wire 投影必须字节一致（确定性 + 幂等）"
+    );
     let ser_first = serde_json::to_string(&first[0].to_value()).expect("序列化");
     let ser_second = serde_json::to_string(&second[0].to_value()).expect("序列化");
-    assert_eq!(ser_first, ser_second, "序列化字节必须一致（历史回放与新增同路径）");
+    assert_eq!(
+        ser_first, ser_second,
+        "序列化字节必须一致（历史回放与新增同路径）"
+    );
 }
 
 /// T-34（R-J）：消息本体保持 raw——清洗只发生在 wire 投影面，落库/
@@ -293,7 +324,10 @@ fn assistant_message_carries_tool_calls() {
         SystemPromptWireMode::NativeSystemRole,
     );
     assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].content, Some(ChatContent::Text("正文".to_string())));
+    assert_eq!(
+        messages[0].content,
+        Some(ChatContent::Text("正文".to_string()))
+    );
     assert_eq!(messages[0].tool_calls.len(), 1);
     let call = &messages[0].tool_calls[0];
     assert_eq!(call["id"], "call_1");
@@ -306,7 +340,11 @@ fn assistant_message_carries_tool_calls() {
 fn assistant_without_content_emits_null_content() {
     let messages = to_chat_messages(
         None,
-        &[assistant_msg(vec![tool_call_block("call_1", "noop", json!({}))])],
+        &[assistant_msg(vec![tool_call_block(
+            "call_1",
+            "noop",
+            json!({}),
+        )])],
         ReasoningContentMode::Omit,
         SystemPromptWireMode::NativeSystemRole,
     );
@@ -407,7 +445,11 @@ fn tool_call_ids_are_sanitized_on_wire() {
     // assistant 分支：tool_calls[].id 消毒
     let messages = to_chat_messages(
         None,
-        &[assistant_msg(vec![tool_call_block("call 1/2", "noop", json!({}))])],
+        &[assistant_msg(vec![tool_call_block(
+            "call 1/2",
+            "noop",
+            json!({}),
+        )])],
         ReasoningContentMode::Omit,
         SystemPromptWireMode::NativeSystemRole,
     );
@@ -433,7 +475,11 @@ fn tool_call_arguments_canonical_serialization() {
     let input = json!({ "path": "/a", "options": { "z": 1, "a": 2 } });
     let messages = to_chat_messages(
         None,
-        &[assistant_msg(vec![tool_call_block("call_1", "read_file", input.clone())])],
+        &[assistant_msg(vec![tool_call_block(
+            "call_1",
+            "read_file",
+            input.clone(),
+        )])],
         ReasoningContentMode::Omit,
         SystemPromptWireMode::NativeSystemRole,
     );
@@ -464,7 +510,10 @@ fn tool_call_arguments_canonical_serialization() {
         messages[0].tool_calls[1]["function"]["arguments"],
         "不同插入序的等价对象必须序列化为相同字节"
     );
-    assert_eq!(messages[0].tool_calls[0]["function"]["arguments"], r#"{"a":2,"b":1}"#);
+    assert_eq!(
+        messages[0].tool_calls[0]["function"]["arguments"],
+        r#"{"a":2,"b":1}"#
+    );
 }
 
 // ── P1：reasoning_content Require 键存在性 ──
@@ -553,7 +602,10 @@ fn user_content_parts_used_when_image_present() {
     assert_eq!(
         messages[0].content,
         Some(ChatContent::Parts(vec![
-            ChatContentPart::Text { text: "看图说话".to_string(), cache_control: None },
+            ChatContentPart::Text {
+                text: "看图说话".to_string(),
+                cache_control: None
+            },
             ChatContentPart::ImageUrl {
                 url: "https://example.com/a.png".to_string(),
                 detail: Some("high".to_string()),
@@ -562,7 +614,10 @@ fn user_content_parts_used_when_image_present() {
     );
     let value = messages[0].to_value();
     assert_eq!(value["content"][0]["type"], "text");
-    assert_eq!(value["content"][1]["image_url"]["url"], "https://example.com/a.png");
+    assert_eq!(
+        value["content"][1]["image_url"]["url"],
+        "https://example.com/a.png"
+    );
 }
 
 #[test]
@@ -622,7 +677,10 @@ fn strip_inline_data_urls_keeps_plain_text() {
     assert_eq!(strip_inline_data_urls(""), "");
     assert_eq!(strip_inline_data_urls("没有图片"), "没有图片");
     // 非 base64 的 data url 原样保留
-    assert_eq!(strip_inline_data_urls("data:text/plain;charset=utf-8,hi"), "data:text/plain;charset=utf-8,hi");
+    assert_eq!(
+        strip_inline_data_urls("data:text/plain;charset=utf-8,hi"),
+        "data:text/plain;charset=utf-8,hi"
+    );
 }
 
 #[test]
@@ -658,7 +716,10 @@ fn wire_user(content: &str) -> ChatMessage {
 #[test]
 fn text_part_cache_control_omitted_when_none() {
     // None → 序列化省略 cache_control 键（与 P2 前 wire 字节一致）
-    let part = ChatContentPart::Text { text: "hi".to_string(), cache_control: None };
+    let part = ChatContentPart::Text {
+        text: "hi".to_string(),
+        cache_control: None,
+    };
     assert_eq!(part.to_value(), json!({ "type": "text", "text": "hi" }));
 }
 
@@ -688,7 +749,10 @@ fn text_part_cache_control_serialized_when_some() {
 fn message_cache_control_omitted_when_none() {
     // 消息级 None → 不输出 cache_control 键
     let value = wire_user("hi").to_value();
-    assert!(value.get("cache_control").is_none(), "None 不得输出 cache_control 键");
+    assert!(
+        value.get("cache_control").is_none(),
+        "None 不得输出 cache_control 键"
+    );
 }
 
 #[test]
@@ -703,8 +767,11 @@ fn message_cache_control_serialized_when_some() {
 #[test]
 fn with_cache_control_helpers() {
     // part 级：文本 part 挂断点；非文本 part 原样返回自身
-    let part = ChatContentPart::Text { text: "hi".to_string(), cache_control: None }
-        .with_cache_control(CacheControl::Ephemeral);
+    let part = ChatContentPart::Text {
+        text: "hi".to_string(),
+        cache_control: None,
+    }
+    .with_cache_control(CacheControl::Ephemeral);
     assert_eq!(
         part,
         ChatContentPart::Text {

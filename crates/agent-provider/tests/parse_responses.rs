@@ -115,23 +115,21 @@ async fn responses_end_to_end() {
 /// 终态 status=incomplete → stopReason=length（02 §二.4 终态映射表）
 #[tokio::test(flavor = "multi_thread")]
 async fn incomplete_terminal_maps_to_length() {
-    let server = MockServer::start(|_request| {
-        MockResponse::Sse {
-            frames: vec![
-                MockFrame::data(
-                    json!({ "type": "response.output_text.delta", "delta": "半截" }).to_string(),
-                ),
-                MockFrame::data(
-                    json!({
-                        "type": "response.incomplete",
-                        "response": { "status": "incomplete" },
-                    })
-                    .to_string(),
-                ),
-                MockFrame::data("[DONE]"),
-            ],
-            interrupt_after: None,
-        }
+    let server = MockServer::start(|_request| MockResponse::Sse {
+        frames: vec![
+            MockFrame::data(
+                json!({ "type": "response.output_text.delta", "delta": "半截" }).to_string(),
+            ),
+            MockFrame::data(
+                json!({
+                    "type": "response.incomplete",
+                    "response": { "status": "incomplete" },
+                })
+                .to_string(),
+            ),
+            MockFrame::data("[DONE]"),
+        ],
+        interrupt_after: None,
     })
     .await;
 

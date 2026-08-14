@@ -110,16 +110,14 @@ async fn gemini_end_to_end() {
 /// 阻断：promptFeedback.blockReason 且无 candidates → error stop
 #[tokio::test(flavor = "multi_thread")]
 async fn prompt_blocked_produces_error_stop() {
-    let server = MockServer::start(|_request| {
-        MockResponse::Sse {
-            frames: vec![MockFrame::data(
-                json!({
-                    "promptFeedback": { "blockReason": "SAFETY", "blockReasonMessage": "含违禁内容" },
-                })
-                .to_string(),
-            )],
-            interrupt_after: None,
-        }
+    let server = MockServer::start(|_request| MockResponse::Sse {
+        frames: vec![MockFrame::data(
+            json!({
+                "promptFeedback": { "blockReason": "SAFETY", "blockReasonMessage": "含违禁内容" },
+            })
+            .to_string(),
+        )],
+        interrupt_after: None,
     })
     .await;
 
@@ -135,5 +133,7 @@ async fn prompt_blocked_produces_error_stop() {
     let ProviderOutput::StreamError { classified } = &result.response else {
         panic!("阻断应产出 StreamError，得到 {:?}", result.response);
     };
-    assert!(classified.message.contains("Gemini prompt blocked (SAFETY)"));
+    assert!(classified
+        .message
+        .contains("Gemini prompt blocked (SAFETY)"));
 }

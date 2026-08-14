@@ -164,20 +164,154 @@ impl ModelCatalog {
         rejected
     }
 
-    /// 单条覆盖项应用（键级白名单校验 → 整项 serde 解析 → 身份定位 → 字段合并）。
-    fn apply_override_item(&mut self, item: &serde_json::Value) -> Result<(), CatalogError> {
-        let obj = item.as_object().ok_or_else(|| {
-            CatalogError::InvalidOverride("覆盖项必须是 JSON 对象".to_string())
-        })?;
-        // 键级白名单：身份键 model/provider/vendor 只用于定位，其余必须命中白名单
-        for key in obj.keys() {
-            if !matches!(key.as_str(), "model" | "provider" | "vendor")
-                && !OVERRIDE_WHITELIST.contains(&key.as_str())
-                && !OVERRIDE_BOOL_FIELDS.iter().any(|(k, _, _)| *k == key)
-            {
-                return Err(CatalogError::ForbiddenField(key.clone()));
+    /// 某 provider 路由的 models 列表整体替换（对齐 DSH profile `models` 语义）。
+    ///
+    /// 语义：声明列表后，该路由（`entry.provider == provider`）**只服务列表内模型**——
+    /// 列表未点名的既有本路由条目一律移除；未调用本入口（未声明）时原 catalog 全量
+    /// 服务。与 [Self::upsert_from_scan]（逐条扫描合并）/ [Self::with_overrides]
+    /// （条目覆盖白名单）三模式并存、互不干扰，且不受对方先执行顺序影响。
+    ///
+    /// 覆盖项校验沿用既有白名单纪律（[OVERRIDE_WHITELIST] / [OVERRIDE_BOOL_FIELDS]）：
+    /// - 项必须是对象，`vendor` + `model` 必填作身份键（定义服务模型）；`provider`
+    ///   出现时**必须等于路由参数**（禁改 provider 键）；白名单外字段整项拒绝；
+    /// - 模型身份键（model/provider/vendor）只用于定位/定义，禁止借替换改名或跨路由
+    ///   挪动——`vendor::model` 键已被**其它 provider 路由**占用时拒绝（防键冲突）；
+    /// - 全量校验先行，任一项非法 → 整体返回 [CatalogError]，目录零改动（对齐 DSH
+    ///   "拒绝而不是跳过"）；成功则已变更（新增/合并字段/移除未点名旧条目）版本号 +1。
+    ///
+    /// 返回：成功 = 变更后版本号；失败 = `CatalogError`（ForbiddenField /
+    /// InvalidOverride，目录未变化）。
+    pub fn replace_models(
+        &mut self,
+        provider: &str,
+        models: &[serde_json::Value],
+    ) -> Result<u64, CatalogError> {
+        let provider = provider.trim();
+        if provider.is_empty() {
+            return Err(CatalogError::InvalidOverride(
+                "replace_models provider 不能为空".to_string(),
+            ));
+        }
+
+        // ── 阶段一：全量解析 + 校验（任一项非法即整体拒绝，目录零改动）──
+        // 每项预解析为 (键, 解析条目, 原对象)，原对象仅供能力位"键显式出现"判定。
+        let mut items: Vec<(
+            String,
+            ModelCatalogEntry,
+            serde_json::Map<String, serde_json::Value>,
+        )> = Vec::with_capacity(models.len());
+        let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for item in models {
+            let obj = item.as_object().ok_or_else(|| {
+                CatalogError::InvalidOverride("模型项必须是 JSON 对象".to_string())
+            })?;
+            validate_override_keys(obj)?;
+            let parsed: ModelCatalogEntry = serde_json::from_value(item.clone())
+                .map_err(|e| CatalogError::InvalidOverride(e.to_string()))?;
+            if parsed.vendor.trim().is_empty() || parsed.model.trim().is_empty() {
+                return Err(CatalogError::InvalidOverride(
+                    "模型项缺少 vendor/model 身份键".to_string(),
+                ));
+            }
+            if !parsed.provider.trim().is_empty() && parsed.provider.trim() != provider {
+                return Err(CatalogError::ForbiddenField("provider".to_string()));
+            }
+            let key = ModelCatalogEntry::key(&parsed.vendor, &parsed.model);
+            // 重复声明同一 vendor::model → 列表歧义，拒绝
+            if !seen.insert(key.clone()) {
+                return Err(CatalogError::InvalidOverride(format!(
+                    "重复声明模型键：{key}"
+                )));
+            }
+            // 键已被其它 provider 路由占用 → 防键冲突（禁改 vendor 挪动条目）
+            if let Some(existing) = self.entries.get(&key) {
+                if existing.provider != provider {
+                    return Err(CatalogError::ForbiddenField("provider".to_string()));
+                }
+            }
+            items.push((key, parsed, obj.clone()));
+        }
+
+        // ── 阶段二：应用（已全量校验通过，绝无失败分支）──
+        let allowed: std::collections::BTreeSet<String> =
+            items.iter().map(|(k, _, _)| k.clone()).collect();
+        let mut changed = false;
+
+        // 1) 移除本路由未列入 allowed 的既有条目（只服务列表内模型）
+        let provider_owned: Vec<String> = self
+            .entries
+            .iter()
+            .filter(|(k, e)| e.provider == provider && !allowed.contains(*k))
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in provider_owned {
+            self.entries.remove(&key);
+            changed = true;
+        }
+
+        // 2) 逐项应用（既有条目字段合并 / 新建默认条目 + 白名单覆盖）
+        for (key, parsed, obj) in &items {
+            let existed = self.entries.contains_key(key);
+            let pre = self.entries.get(key).cloned();
+            let entry = self
+                .entries
+                .entry(key.clone())
+                .or_insert_with(|| ModelCatalogEntry {
+                    model: parsed.model.clone(),
+                    provider: provider.to_string(),
+                    vendor: parsed.vendor.clone(),
+                    ..Default::default()
+                });
+            // 白名单字段合併（语义同 apply_override_item；缺失字段 = 不动）
+            if let Some(value) = parsed.context_window {
+                entry.context_window = Some(value);
+            }
+            if let Some(value) = parsed.max_output_tokens {
+                entry.max_output_tokens = Some(value);
+            }
+            if let Some(value) = parsed.input_price {
+                entry.input_price = Some(value);
+            }
+            if let Some(value) = parsed.output_price {
+                entry.output_price = Some(value);
+            }
+            if let Some(value) = parsed.cache_read_price {
+                entry.cache_read_price = Some(value);
+            }
+            if let Some(value) = parsed.cache_write_price {
+                entry.cache_write_price = Some(value);
+            }
+            if let Some(value) = parsed.cache_write_price_5m {
+                entry.cache_write_price_5m = Some(value);
+            }
+            if let Some(value) = parsed.cache_write_price_1h {
+                entry.cache_write_price_1h = Some(value);
+            }
+            if let Some(value) = parsed.storage_price_per_1m_hour {
+                entry.storage_price_per_1m_hour = Some(value);
+            }
+            if let Some(value) = parsed.prompt_cache_min_tokens {
+                entry.prompt_cache_min_tokens = Some(value);
+            }
+            apply_bool_fields(entry, parsed, obj);
+            if !existed || pre.as_ref() != Some(entry) {
+                changed = true;
             }
         }
+
+        if changed {
+            self.version += 1;
+        }
+        Ok(self.version)
+    }
+
+    /// 单条覆盖项应用（键级白名单校验 → 整项 serde 解析 → 身份定位 → 字段合并）。
+    fn apply_override_item(&mut self, item: &serde_json::Value) -> Result<(), CatalogError> {
+        let obj = item
+            .as_object()
+            .ok_or_else(|| CatalogError::InvalidOverride("覆盖项必须是 JSON 对象".to_string()))?;
+        // 键级白名单：身份键 model/provider/vendor 只用于定位，其余必须命中白名单
+        validate_override_keys(obj)?;
         // 整项 serde 解析：字段类型错误（窗口为字符串等）→ InvalidOverride
         let patch: ModelCatalogEntry = serde_json::from_value(item.clone())
             .map_err(|e| CatalogError::InvalidOverride(e.to_string()))?;
@@ -228,11 +362,7 @@ impl ModelCatalog {
             entry.prompt_cache_min_tokens = Some(value);
         }
         // 能力位：键显式出现才应用（支持显式 false 关闭；缺失 = 不动）
-        for (wire_key, read, write) in OVERRIDE_BOOL_FIELDS {
-            if obj.contains_key(*wire_key) {
-                write(entry, read(&patch));
-            }
-        }
+        apply_bool_fields(entry, &patch, obj);
         Ok(())
     }
 }
@@ -265,14 +395,85 @@ type BoolFieldAccessor = (
 ///
 /// 显式出现才应用（`{"supportsVision": false}` 可关闭能力位；键缺失 = 不动）。
 const OVERRIDE_BOOL_FIELDS: &[BoolFieldAccessor] = &[
-        ("supportsCacheControl", |e| e.supports_cache_control, |e, v| e.supports_cache_control = v),
-        ("supportsPromptCaching", |e| e.supports_prompt_caching, |e, v| e.supports_prompt_caching = v),
-        ("supportsResponses", |e| e.supports_responses, |e, v| e.supports_responses = v),
-        ("supportsReasoning", |e| e.supports_reasoning, |e, v| e.supports_reasoning = v),
-        ("supportsReasoningEffort", |e| e.supports_reasoning_effort, |e, v| e.supports_reasoning_effort = v),
-        ("supportsVision", |e| e.supports_vision, |e, v| e.supports_vision = v),
-        ("supportsFunctionCalling", |e| e.supports_function_calling, |e, v| e.supports_function_calling = v),
-        ("supportsParallelFunctionCalling", |e| e.supports_parallel_function_calling, |e, v| e.supports_parallel_function_calling = v),
-        ("supportsSystemMessages", |e| e.supports_system_messages, |e, v| e.supports_system_messages = v),
-        ("supportsResponseSchema", |e| e.supports_response_schema, |e, v| e.supports_response_schema = v),
-    ];
+    (
+        "supportsCacheControl",
+        |e| e.supports_cache_control,
+        |e, v| e.supports_cache_control = v,
+    ),
+    (
+        "supportsPromptCaching",
+        |e| e.supports_prompt_caching,
+        |e, v| e.supports_prompt_caching = v,
+    ),
+    (
+        "supportsResponses",
+        |e| e.supports_responses,
+        |e, v| e.supports_responses = v,
+    ),
+    (
+        "supportsReasoning",
+        |e| e.supports_reasoning,
+        |e, v| e.supports_reasoning = v,
+    ),
+    (
+        "supportsReasoningEffort",
+        |e| e.supports_reasoning_effort,
+        |e, v| e.supports_reasoning_effort = v,
+    ),
+    (
+        "supportsVision",
+        |e| e.supports_vision,
+        |e, v| e.supports_vision = v,
+    ),
+    (
+        "supportsFunctionCalling",
+        |e| e.supports_function_calling,
+        |e, v| e.supports_function_calling = v,
+    ),
+    (
+        "supportsParallelFunctionCalling",
+        |e| e.supports_parallel_function_calling,
+        |e, v| e.supports_parallel_function_calling = v,
+    ),
+    (
+        "supportsSystemMessages",
+        |e| e.supports_system_messages,
+        |e, v| e.supports_system_messages = v,
+    ),
+    (
+        "supportsResponseSchema",
+        |e| e.supports_response_schema,
+        |e, v| e.supports_response_schema = v,
+    ),
+];
+
+/// 键级白名单校验：身份键 model/provider/vendor 只用于定位，其余键必须命中
+/// 覆盖白名单（[OVERRIDE_WHITELIST]）或能力位表（[OVERRIDE_BOOL_FIELDS]）；
+/// 命中失败 → [CatalogError::ForbiddenField]。
+fn validate_override_keys(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), CatalogError> {
+    for key in obj.keys() {
+        if !matches!(key.as_str(), "model" | "provider" | "vendor")
+            && !OVERRIDE_WHITELIST.contains(&key.as_str())
+            && !OVERRIDE_BOOL_FIELDS.iter().any(|(k, _, _)| *k == key)
+        {
+            return Err(CatalogError::ForbiddenField(key.clone()));
+        }
+    }
+    Ok(())
+}
+
+/// 能力位应用：键显式出现才应用（支持显式 false 关闭；键缺失 = 不动），
+/// 由 `obj` 判定显式性、`patch` 取新值写回 `entry`。
+fn apply_bool_fields(
+    entry: &mut ModelCatalogEntry,
+    patch: &ModelCatalogEntry,
+    obj: &serde_json::Map<String, serde_json::Value>,
+) {
+    for (wire_key, read, write) in OVERRIDE_BOOL_FIELDS {
+        if obj.contains_key(*wire_key) {
+            write(entry, read(patch));
+        }
+    }
+}

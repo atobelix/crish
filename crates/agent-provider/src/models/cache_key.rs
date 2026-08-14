@@ -68,20 +68,15 @@ pub fn session_affinity_headers(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::behavior::{cache_behavior_for, VendorId};
+    use super::*;
 
     // ── derive_prompt_cache_key：等价委托（C4）──
 
     #[test]
     fn derive_prompt_cache_key_matches_truth_source_exactly() {
         // C4 等价委托钉死：与请求构造面真源逐字节一致（防双实现漂移）
-        let samples: &[&str] = &[
-            "ses-abc",
-            "  trimmed  ",
-            "中文会话🙂",
-            &"x".repeat(100),
-        ];
+        let samples: &[&str] = &["ses-abc", "  trimmed  ", "中文会话🙂", &"x".repeat(100)];
         for sample in samples {
             assert_eq!(
                 derive_prompt_cache_key(sample),
@@ -154,7 +149,10 @@ mod tests {
         assert_eq!(behavior.conv_header_name, Some("x-dashscope-session-cache"));
         assert_eq!(
             session_affinity_headers(&behavior, "ses-1"),
-            vec![("x-dashscope-session-cache".to_string(), "enable".to_string())]
+            vec![(
+                "x-dashscope-session-cache".to_string(),
+                "enable".to_string()
+            )]
         );
         // 空会话 ID → 不注入
         assert!(session_affinity_headers(&behavior, "").is_empty());

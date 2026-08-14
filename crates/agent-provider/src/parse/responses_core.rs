@@ -33,7 +33,10 @@ impl ResponsesParser {
     ///
     /// 分帧层（sse/frame.rs）已保证 data 为合法 JSON 对象或 `[DONE]` 哨兵；
     /// 此处防御性解析失败仅跳过不炸流。
-    pub fn push_frame(&mut self, frame: &SseFrame) -> Result<Vec<ProviderStreamEvent>, StreamParseError> {
+    pub fn push_frame(
+        &mut self,
+        frame: &SseFrame,
+    ) -> Result<Vec<ProviderStreamEvent>, StreamParseError> {
         if self.terminated {
             return Ok(Vec::new());
         }
@@ -230,7 +233,9 @@ fn response_error(payload: &Map<String, Value>) -> Option<String> {
 
 /// 非空字符串字段
 fn non_empty_string(value: Option<&Value>) -> Option<&str> {
-    value.and_then(Value::as_str).filter(|text| !text.is_empty())
+    value
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
 }
 
 /// 字符串字段

@@ -50,7 +50,11 @@ async fn serve_sse_chunked_delayed(
                     tokio::time::sleep(delay).await;
                 }
             }
-            let framed = format!("{:x}\r\n{}\r\n", chunk.len(), String::from_utf8_lossy(chunk));
+            let framed = format!(
+                "{:x}\r\n{}\r\n",
+                chunk.len(),
+                String::from_utf8_lossy(chunk)
+            );
             let _ = socket.write_all(framed.as_bytes()).await;
         }
         let _ = socket.write_all(b"0\r\n\r\n").await;
@@ -118,7 +122,10 @@ async fn first_text_delta_arrives_under_1000ms_from_slow_mock_sse() {
             StreamFrameEvent::Frame(frame) => {
                 first_frame_at.get_or_insert(now);
                 for event in parser.push_frame(&frame).expect("解析帧") {
-                    if matches!(event, agent_provider::events::ProviderStreamEvent::TextDelta { .. }) {
+                    if matches!(
+                        event,
+                        agent_provider::events::ProviderStreamEvent::TextDelta { .. }
+                    ) {
                         first_event_at.get_or_insert(now);
                         delta_count += 1;
                     }
@@ -130,7 +137,10 @@ async fn first_text_delta_arrives_under_1000ms_from_slow_mock_sse() {
         }
     }
     for event in parser.finish().expect("收尾解析") {
-        if matches!(event, agent_provider::events::ProviderStreamEvent::TextDelta { .. }) {
+        if matches!(
+            event,
+            agent_provider::events::ProviderStreamEvent::TextDelta { .. }
+        ) {
             first_event_at.get_or_insert(Instant::now());
             delta_count += 1;
         }

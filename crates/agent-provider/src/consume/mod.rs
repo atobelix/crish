@@ -150,7 +150,11 @@ impl Aggregate {
                 self.thought.push_str(&text);
                 self.thought_blocks.push(ThoughtBlock { text, redacted });
             }
-            ProviderStreamEvent::ToolCall { id, tool_name, input } => {
+            ProviderStreamEvent::ToolCall {
+                id,
+                tool_name,
+                input,
+            } => {
                 // 低级契约的 tool-call 即完整调用（02 §六.9），对应合同级 phase='end'，
                 // 满足「仅 phase=end 的 tool-call 收集」（02 §一.3：86-99）
                 self.tool_calls.push(ToolCallBlock {
@@ -166,12 +170,15 @@ impl Aggregate {
             // 不参与聚合——消费面在 I8 钩子桥（model.beforeRequest / afterResponse）
             ProviderStreamEvent::BeforeRequest { .. }
             | ProviderStreamEvent::AfterResponse { .. } => {}
-            ProviderStreamEvent::Stop { reason, error, usage } => {
+            ProviderStreamEvent::Stop {
+                reason,
+                error,
+                usage,
+            } => {
                 self.finish_reason = Some(reason);
                 if reason == StopReason::Error {
                     // error stop 即「流中曾有 error」（02 §一.3：102-116）
-                    self.error =
-                        Some(error.unwrap_or_else(|| "provider 流异常终止".to_string()));
+                    self.error = Some(error.unwrap_or_else(|| "provider 流异常终止".to_string()));
                 }
                 if let Some(usage) = usage {
                     self.usage = Some(usage);
@@ -179,8 +186,7 @@ impl Aggregate {
             }
         }
         // F3-05：正文/思考任一超限即标记（不静默截断）
-        self.text.len() > MAX_AGGREGATE_TEXT_BYTES
-            || self.thought.len() > MAX_AGGREGATE_TEXT_BYTES
+        self.text.len() > MAX_AGGREGATE_TEXT_BYTES || self.thought.len() > MAX_AGGREGATE_TEXT_BYTES
     }
 }
 
@@ -319,7 +325,10 @@ fn build_message_metadata(
     );
     metadata.insert("text".to_string(), Value::String(aggregate.text.clone()));
     if !aggregate.thought.is_empty() {
-        metadata.insert("thought".to_string(), Value::String(aggregate.thought.clone()));
+        metadata.insert(
+            "thought".to_string(),
+            Value::String(aggregate.thought.clone()),
+        );
     }
     if !aggregate.thought_blocks.is_empty() {
         metadata.insert(
@@ -442,7 +451,10 @@ mod tests {
     #[test]
     fn text_then_error_stop_yields_message() {
         let result = consume(
-            vec![text_delta("你好"), stop_with(StopReason::Error, Some("boom"), None)],
+            vec![
+                text_delta("你好"),
+                stop_with(StopReason::Error, Some("boom"), None),
+            ],
             false,
         );
         assert_eq!(result.response, ProviderOutput::message("你好", vec![]));
@@ -481,7 +493,11 @@ mod tests {
         let result = consume(
             vec![
                 text_delta("部分输出"),
-                stop_with(StopReason::Error, Some("invalid api key: authentication failed"), None),
+                stop_with(
+                    StopReason::Error,
+                    Some("invalid api key: authentication failed"),
+                    None,
+                ),
             ],
             false,
         );
@@ -544,10 +560,14 @@ mod tests {
             panic!("应为 StreamError，得到 {:?}", result.response);
         };
         assert_eq!(
-            classified.kind, ProviderErrorKind::RateLimit,
+            classified.kind,
+            ProviderErrorKind::RateLimit,
             "流内限流文案必须分类为 RateLimit（F3 #4）"
         );
-        assert!(classified.retryable, "流内限流未产出内容应可重试（02 §6.7）");
+        assert!(
+            classified.retryable,
+            "流内限流未产出内容应可重试（02 §6.7）"
+        );
     }
 
     /// F3 盲区 #4：流内 error 帧携带 5xx 文案（overloaded_error 等网关形态）
@@ -566,7 +586,8 @@ mod tests {
             panic!("应为 StreamError，得到 {:?}", result.response);
         };
         assert_eq!(
-            classified.kind, ProviderErrorKind::ServerError,
+            classified.kind,
+            ProviderErrorKind::ServerError,
             "流内 5xx 文案必须分类为 ServerError（F3 #4）"
         );
         assert!(classified.retryable);
@@ -595,7 +616,10 @@ mod tests {
     #[test]
     fn abort_with_content_keeps_partial_message() {
         let result = consume(vec![text_delta("已流出的部分")], true);
-        assert_eq!(result.response, ProviderOutput::message("已流出的部分", vec![]));
+        assert_eq!(
+            result.response,
+            ProviderOutput::message("已流出的部分", vec![])
+        );
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Aborted));
         assert_eq!(result.metadata["aborted"], true);
     }
@@ -731,7 +755,10 @@ mod tests {
             ..ProviderUsage::default()
         };
         let result = consume(
-            vec![text_delta("x"), stop_with(StopReason::ToolCall, None, Some(usage))],
+            vec![
+                text_delta("x"),
+                stop_with(StopReason::ToolCall, None, Some(usage)),
+            ],
             false,
         );
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::ToolCall));
@@ -744,7 +771,10 @@ mod tests {
     #[test]
     fn abort_with_content_keeps_provider_error_annotation() {
         let result = consume(
-            vec![text_delta("部分"), stop_with(StopReason::Error, Some("boom"), None)],
+            vec![
+                text_delta("部分"),
+                stop_with(StopReason::Error, Some("boom"), None),
+            ],
             true,
         );
         assert_eq!(result.response.text(), "部分");
@@ -760,9 +790,7 @@ mod tests {
     fn aggregate_text_over_cap_yields_explicit_stream_error() {
         let chunk = "a".repeat(1024 * 1024);
         // 65 MiB > 64 MiB 上限（字面量构造，红阶段不依赖尚未实现的常量）
-        let events = (0..65)
-            .map(|_| text_delta(&chunk))
-            .collect::<Vec<_>>();
+        let events = (0..65).map(|_| text_delta(&chunk)).collect::<Vec<_>>();
         let result = consume(events, false);
         let ProviderOutput::StreamError { classified } = &result.response else {
             panic!("超限应显式错误收场，得到 {:?}", result.response);
@@ -786,10 +814,7 @@ mod tests {
             .chain(std::iter::once(stop(StopReason::Stop)))
             .collect::<Vec<_>>();
         let result = consume(events, false);
-        assert!(
-            result.response.is_message(),
-            "未超上限必须正常产出 Message"
-        );
+        assert!(result.response.is_message(), "未超上限必须正常产出 Message");
         assert_eq!(result.response.text().len(), 63 * chunk.len());
     }
 

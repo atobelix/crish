@@ -5,8 +5,8 @@
 //! 正常流/thinking/工具调用/stop_reason 域见 anthropic_tests.rs；共享便捷函数
 //! （parse_all / event_frame / stop_of）由 [super::tests] 提供。
 
-use super::*;
 use super::tests::{event_frame, parse_all, stop_of};
+use super::*;
 use serde_json::json;
 
 // ── usage 分片补全（02 §六.6：Anthropic 分片补全）──
@@ -15,14 +15,19 @@ use serde_json::json;
 fn usage_merged_across_message_start_and_message_delta() {
     // message_start 只带 input；message_delta 只带 output → 合并且 total 重算
     let events = parse_all(vec![
-        &event_frame("message_start", json!({
-            "message": { "usage": { "input_tokens": 100, "cache_read_input_tokens": 40, "cache_creation_input_tokens": 10 } },
-        })),
+        &event_frame(
+            "message_start",
+            json!({
+                "message": { "usage": { "input_tokens": 100, "cache_read_input_tokens": 40, "cache_creation_input_tokens": 10 } },
+            }),
+        ),
         &event_frame("message_delta", json!({ "usage": { "output_tokens": 60 } })),
         &event_frame("message_stop", json!({})),
     ]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(100));
             assert_eq!(usage.completion_tokens, Some(60));
             assert_eq!(usage.total_tokens, Some(160), "total 由合并后重算");
@@ -38,17 +43,29 @@ fn usage_next_zero_does_not_override_prev_input() {
     // 分片合并 max 语义：message_delta 传 0 不覆盖 message_start 的完整 input
     // （P2 §3.3 D；共享函数 merge_usage_shards 已钉死纯函数级用例，此处走真实帧路径再钉一层）
     let events = parse_all(vec![
-        &event_frame("message_start", json!({
-            "message": { "usage": { "input_tokens": 100, "cache_read_input_tokens": 40 } },
-        })),
-        &event_frame("message_delta", json!({
-            "usage": { "input_tokens": 0, "output_tokens": 60 },
-        })),
+        &event_frame(
+            "message_start",
+            json!({
+                "message": { "usage": { "input_tokens": 100, "cache_read_input_tokens": 40 } },
+            }),
+        ),
+        &event_frame(
+            "message_delta",
+            json!({
+                "usage": { "input_tokens": 0, "output_tokens": 60 },
+            }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
-            assert_eq!(usage.prompt_tokens, Some(100), "next 传 0 不覆盖 prev 的 100");
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
+            assert_eq!(
+                usage.prompt_tokens,
+                Some(100),
+                "next 传 0 不覆盖 prev 的 100"
+            );
             assert_eq!(usage.cache_read_tokens, Some(40), "read 同理防 0 覆盖");
             assert_eq!(usage.completion_tokens, Some(60));
             assert_eq!(usage.total_tokens, Some(160), "total 由合并后重算");
@@ -69,7 +86,11 @@ fn usage_preserves_explicit_total_when_fields_missing() {
         ..ProviderUsage::default()
     };
     let merged = merge_anthropic_usage(Some(&base), &next);
-    assert_eq!(merged.total_tokens, Some(50), "无 prompt/completion 时保留显式 total");
+    assert_eq!(
+        merged.total_tokens,
+        Some(50),
+        "无 prompt/completion 时保留显式 total"
+    );
     assert_eq!(merged.cache_read_tokens, Some(5));
 }
 
@@ -109,7 +130,10 @@ fn parse_anthropic_usage_empty_returns_none() {
     assert!(parse_anthropic_usage(None).is_none());
     assert!(parse_anthropic_usage(Some(&Value::Null)).is_none());
     assert!(parse_anthropic_usage(Some(&json!("usage"))).is_none());
-    assert!(parse_anthropic_usage(Some(&json!({}))).is_none(), "全空字段返回 None");
+    assert!(
+        parse_anthropic_usage(Some(&json!({}))).is_none(),
+        "全空字段返回 None"
+    );
     assert!(parse_anthropic_usage(Some(&json!({ "input_tokens": 1 }))).is_some());
 }
 
@@ -121,7 +145,11 @@ fn empty_stream_produces_error_stop() {
     let events = parse_all(vec![]);
     assert_eq!(events.len(), 1);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { reason: StopReason::Error, error, usage } => {
+        ProviderStreamEvent::Stop {
+            reason: StopReason::Error,
+            error,
+            usage,
+        } => {
             assert_eq!(
                 error.as_deref(),
                 Some("Anthropic streaming response completed without content events")
@@ -149,13 +177,18 @@ fn message_stop_alone_prevents_empty_stream_error() {
 #[test]
 fn usage_only_stream_is_not_an_error() {
     // 无内容但有 usage → 不算空流（198 判定）；message_start 即带 usage
-    let events = parse_all(vec![
-        &event_frame("message_start", json!({
+    let events = parse_all(vec![&event_frame(
+        "message_start",
+        json!({
             "message": { "usage": { "input_tokens": 5 } },
-        })),
-    ]);
+        }),
+    )]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { reason: StopReason::Stop, usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            reason: StopReason::Stop,
+            usage: Some(usage),
+            ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(5));
         }
         other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
@@ -190,7 +223,9 @@ fn noise_frames_are_ignored() {
 
 #[test]
 fn error_frame_terminates_immediately() {
-    let events = parse_all(vec![r#"{"type":"error","error":{"type":"overloaded_error","message":"过载"}}"#]);
+    let events = parse_all(vec![
+        r#"{"type":"error","error":{"type":"overloaded_error","message":"过载"}}"#,
+    ]);
     assert_eq!(
         stop_of(&events),
         &ProviderStreamEvent::Stop {
@@ -211,19 +246,32 @@ fn error_frame_variants() {
         (r#"{"type":"error","message":"顶层消息"}"#, "顶层消息"),
         (r#"{"type":"error"}"#, "Anthropic streaming error"),
         // 非 error 帧的顶层 message 不视为错误
-        (r#"{"type":"message_start","message":{"usage":{"input_tokens":1}}}"#, "no-error"),
+        (
+            r#"{"type":"message_start","message":{"usage":{"input_tokens":1}}}"#,
+            "no-error",
+        ),
     ];
     for (data, expected) in cases {
         let events = parse_all(vec![data]);
         if expected == "no-error" {
-            assert!(events.iter().all(|event| !matches!(
-                event,
-                ProviderStreamEvent::Stop { reason: StopReason::Error, .. }
-            )), "{data} 不应判定为错误帧");
+            assert!(
+                events.iter().all(|event| !matches!(
+                    event,
+                    ProviderStreamEvent::Stop {
+                        reason: StopReason::Error,
+                        ..
+                    }
+                )),
+                "{data} 不应判定为错误帧"
+            );
             continue;
         }
         match stop_of(&events) {
-            ProviderStreamEvent::Stop { reason: StopReason::Error, error: Some(error), .. } => {
+            ProviderStreamEvent::Stop {
+                reason: StopReason::Error,
+                error: Some(error),
+                ..
+            } => {
                 assert_eq!(error, expected, "{data}");
             }
             other => panic!("{data} 期望错误 stop，得到：{other:?}"),

@@ -212,8 +212,14 @@ fn function_call_id_present_is_used() {
 #[test]
 fn function_call_ids_increment_without_explicit_id() {
     let events = parse_all(vec![
-        &part_frame(json!({ "functionCall": { "name": "a", "args": {} } }), Value::Null),
-        &part_frame(json!({ "functionCall": { "name": "b", "args": {} } }), Value::Null),
+        &part_frame(
+            json!({ "functionCall": { "name": "a", "args": {} } }),
+            Value::Null,
+        ),
+        &part_frame(
+            json!({ "functionCall": { "name": "b", "args": {} } }),
+            Value::Null,
+        ),
     ]);
     let ids: Vec<Option<&str>> = events
         .iter()
@@ -271,7 +277,11 @@ fn function_call_args_non_object_wrap_in_value() {
             _ => None,
         })
         .collect();
-    assert_eq!(inputs[0], json!({ "value": [1, 2] }), "非对象参数包裹 {{value}}");
+    assert_eq!(
+        inputs[0],
+        json!({ "value": [1, 2] }),
+        "非对象参数包裹 {{value}}"
+    );
     assert_eq!(inputs[1], json!({}), "args 缺失 → {{}}");
 }
 
@@ -283,14 +293,46 @@ fn finish_reason_mapping_table() {
         (Some("STOP"), None, StopReason::Stop),
         (Some("END_TURN"), None, StopReason::Stop),
         (Some("MAX_TOKENS"), None, StopReason::Length),
-        (Some("SAFETY"), Some("Gemini finishReason: SAFETY"), StopReason::Error),
-        (Some("RECITATION"), Some("Gemini finishReason: RECITATION"), StopReason::Error),
-        (Some("BLOCKLIST"), Some("Gemini finishReason: BLOCKLIST"), StopReason::Error),
-        (Some("PROHIBITED_CONTENT"), Some("Gemini finishReason: PROHIBITED_CONTENT"), StopReason::Error),
-        (Some("SPII"), Some("Gemini finishReason: SPII"), StopReason::Error),
-        (Some("IMAGE_SAFETY"), Some("Gemini finishReason: IMAGE_SAFETY"), StopReason::Error),
-        (Some("MALFORMED_FUNCTION_CALL"), Some("Gemini finishReason: MALFORMED_FUNCTION_CALL"), StopReason::Error),
-        (Some("OTHER"), Some("Gemini finishReason: OTHER"), StopReason::Error),
+        (
+            Some("SAFETY"),
+            Some("Gemini finishReason: SAFETY"),
+            StopReason::Error,
+        ),
+        (
+            Some("RECITATION"),
+            Some("Gemini finishReason: RECITATION"),
+            StopReason::Error,
+        ),
+        (
+            Some("BLOCKLIST"),
+            Some("Gemini finishReason: BLOCKLIST"),
+            StopReason::Error,
+        ),
+        (
+            Some("PROHIBITED_CONTENT"),
+            Some("Gemini finishReason: PROHIBITED_CONTENT"),
+            StopReason::Error,
+        ),
+        (
+            Some("SPII"),
+            Some("Gemini finishReason: SPII"),
+            StopReason::Error,
+        ),
+        (
+            Some("IMAGE_SAFETY"),
+            Some("Gemini finishReason: IMAGE_SAFETY"),
+            StopReason::Error,
+        ),
+        (
+            Some("MALFORMED_FUNCTION_CALL"),
+            Some("Gemini finishReason: MALFORMED_FUNCTION_CALL"),
+            StopReason::Error,
+        ),
+        (
+            Some("OTHER"),
+            Some("Gemini finishReason: OTHER"),
+            StopReason::Error,
+        ),
         (Some("SOMETHING_NEW"), None, StopReason::Stop),
         (None, None, StopReason::Stop),
         (Some(""), None, StopReason::Stop),
@@ -299,7 +341,11 @@ fn finish_reason_mapping_table() {
     for (reason, expected_error, expected) in cases {
         let mapped = gemini_finish_reason_to_stop(reason, false);
         assert_eq!(mapped.0, expected, "finishReason={reason:?} 映射错误");
-        assert_eq!(mapped.1.as_deref(), expected_error, "finishReason={reason:?} 文案错误");
+        assert_eq!(
+            mapped.1.as_deref(),
+            expected_error,
+            "finishReason={reason:?} 文案错误"
+        );
     }
 }
 

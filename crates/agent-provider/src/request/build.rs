@@ -32,17 +32,17 @@ pub use build_chat::build_chat_completions_request_body;
 pub use build_responses::{affinity_http_headers, build_responses_request_body};
 
 #[cfg(test)]
-#[path = "build_tests_common.rs"]
-mod test_common;
+#[path = "build_cache_tests.rs"]
+mod cache_tests;
 #[cfg(test)]
 #[path = "build_chat_tests.rs"]
 mod chat_tests;
 #[cfg(test)]
-#[path = "build_cache_tests.rs"]
-mod cache_tests;
-#[cfg(test)]
 #[path = "build_responses_tests.rs"]
 mod responses_tests;
+#[cfg(test)]
+#[path = "build_tests_common.rs"]
+mod test_common;
 
 /// maxTokens 字段名（对齐 OpenAICompatibleMaxTokensField）
 // G2 允许理由（clippy::enum_variant_names）：变体名按协议源命名对齐

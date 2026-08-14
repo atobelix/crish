@@ -91,11 +91,14 @@ impl ToolCallCollector {
             .and_then(Value::as_u64)
             .map(|index| index as usize)
             .unwrap_or_else(|| self.pending.len());
-        let entry = self.pending.entry(index).or_insert_with(|| PendingToolCall {
-            id: format!("call_{index}"),
-            name: None,
-            arguments_text: String::new(),
-        });
+        let entry = self
+            .pending
+            .entry(index)
+            .or_insert_with(|| PendingToolCall {
+                id: format!("call_{index}"),
+                name: None,
+                arguments_text: String::new(),
+            });
         // id 覆盖式（02 §2.3:101）
         if let Some(id) = string_field(record.get("id")) {
             entry.id = id.to_owned();
@@ -225,10 +228,7 @@ mod tests {
         assert_eq!(flush.calls.len(), 2);
         assert_eq!(flush.calls[0].tool_name, "read_file");
         // 同一 index 的 arguments 追加式拼接后整体解析
-        assert_eq!(
-            flush.calls[0].input,
-            json!({ "path": "/a", "mode": "r" })
-        );
+        assert_eq!(flush.calls[0].input, json!({ "path": "/a", "mode": "r" }));
         assert_eq!(flush.calls[1].tool_name, "write_file");
         assert_eq!(flush.calls[1].id.as_deref(), Some("call_b"));
         assert!(flush.diagnostics.is_empty());
@@ -293,7 +293,11 @@ mod tests {
         collector.merge(&raw_call(0, "c1", "first", "{}"));
         collector.merge(&raw_call(1, "c2", "second", "{}"));
         let flush = collector.finish();
-        let names: Vec<&str> = flush.calls.iter().map(|call| call.tool_name.as_str()).collect();
+        let names: Vec<&str> = flush
+            .calls
+            .iter()
+            .map(|call| call.tool_name.as_str())
+            .collect();
         assert_eq!(names, vec!["first", "second", "third"]);
     }
 
@@ -301,7 +305,8 @@ mod tests {
     fn missing_name_reports_diagnostic_not_silent_drop() {
         // RU-06：缺 function.name 上报 invalid-tool-call 诊断，不静默丢弃（02 §五 #4）
         let mut collector = ToolCallCollector::new();
-        collector.merge(&json!({ "index": 0, "id": "call_no_name", "function": { "arguments": "{}" } }));
+        collector
+            .merge(&json!({ "index": 0, "id": "call_no_name", "function": { "arguments": "{}" } }));
         collector.merge(&raw_call(1, "call_ok", "read_file", "{}"));
         let flush = collector.finish();
         assert_eq!(flush.calls.len(), 1);
@@ -334,7 +339,10 @@ mod tests {
     #[test]
     fn parse_arguments_object_passes_through() {
         let input = r#"{"path":"/a","recursive":true}"#;
-        assert_eq!(parse_arguments(input), json!({ "path": "/a", "recursive": true }));
+        assert_eq!(
+            parse_arguments(input),
+            json!({ "path": "/a", "recursive": true })
+        );
     }
 
     #[test]
@@ -388,7 +396,10 @@ mod tests {
         let mut collector = ToolCallCollector::new();
         assert!(!collector.has_named_calls());
         collector.merge(&json!({ "index": 0, "id": "c0", "function": { "arguments": "{}" } }));
-        assert!(!collector.has_named_calls(), "仅缺 name 的 pending 不算捕获");
+        assert!(
+            !collector.has_named_calls(),
+            "仅缺 name 的 pending 不算捕获"
+        );
         collector.merge(&json!({ "index": 0, "function": { "name": "read_file" } }));
         assert!(collector.has_named_calls());
     }

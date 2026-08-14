@@ -4,8 +4,8 @@
 //! 请求体形状 / compactObject / reasoning-thinking / 自适应思考 / wire-mode / endpoint
 //! 兜底），零删除零合并；测试名与断言形状不变。公共构造复用 build_tests_common.rs。
 
-use super::*;
 use super::test_common::*;
+use super::*;
 
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::ToolOutput;
@@ -82,7 +82,15 @@ fn body_shape_with_all_fields() {
 #[test]
 fn compact_object_omits_none_fields() {
     let body = build_chat_completions_request_body(&base_opts(), &RequestBuildContext::default());
-    for key in ["temperature", "top_p", "max_tokens", "reasoning_effort", "tools", "tool_choice", "stream"] {
+    for key in [
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "reasoning_effort",
+        "tools",
+        "tool_choice",
+        "stream",
+    ] {
         assert!(
             body.get(key).is_none(),
             "None 字段 {key} 不应出现在请求体中：{body}"
@@ -101,7 +109,10 @@ fn stream_false_omits_stream_options() {
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     assert_eq!(body["stream"], false);
-    assert!(body.get("stream_options").is_none(), "非流式不带 include_usage");
+    assert!(
+        body.get("stream_options").is_none(),
+        "非流式不带 include_usage"
+    );
 }
 
 #[test]
@@ -135,7 +146,9 @@ fn tool_choice_explicit_function() {
         ..RequestBuildContext::default()
     };
     let opts = ChatCompletionsRequestOptions {
-        tool_choice: Some(ToolChoice::Function { name: "read_file".to_string() }),
+        tool_choice: Some(ToolChoice::Function {
+            name: "read_file".to_string(),
+        }),
         ..base_opts()
     };
     let body = build_chat_completions_request_body(&opts, &context);
@@ -168,7 +181,10 @@ fn thinking_intensity_overrides_legacy_reasoning_fields() {
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     // legacy reasoning_effort=high 被 thinkingIntensity 清除后重新注入 medium
-    assert_eq!(body["reasoning_effort"], "medium", "deepseek → reasoning_effort");
+    assert_eq!(
+        body["reasoning_effort"], "medium",
+        "deepseek → reasoning_effort"
+    );
 
     let opts = ChatCompletionsRequestOptions {
         thinking_intensity: Some(ThinkingIntensity::High),
@@ -187,7 +203,10 @@ fn thinking_intensity_overrides_legacy_reasoning_fields() {
         ..ChatCompletionsRequestOptions::default()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
-    assert_eq!(body["generation_config"], json!({ "thinking_level": "high" }));
+    assert_eq!(
+        body["generation_config"],
+        json!({ "thinking_level": "high" })
+    );
 }
 
 #[test]
@@ -292,7 +311,10 @@ fn adaptive_anthropic_legacy_effort_injects_adaptive_shape() {
         ..ChatCompletionsRequestOptions::default()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
-    assert_eq!(body["thinking"], json!({ "type": "enabled", "budget_tokens": 4096 }));
+    assert_eq!(
+        body["thinking"],
+        json!({ "type": "enabled", "budget_tokens": 4096 })
+    );
     assert!(body.get("effort").is_none(), "旧代际不注入顶层 effort");
 }
 
@@ -311,7 +333,10 @@ fn adaptive_legacy_effort_cleared_by_thinking_intensity() {
         body["thinking"],
         json!({ "type": "adaptive", "display": "summarized" })
     );
-    assert_eq!(body["effort"], "medium", "thinkingIntensity 覆盖后 effort 应为新档位");
+    assert_eq!(
+        body["effort"], "medium",
+        "thinkingIntensity 覆盖后 effort 应为新档位"
+    );
 }
 
 #[test]
@@ -336,9 +361,18 @@ fn wire_mode_user_prefix_is_honored() {
 #[test]
 fn resolve_endpoint_defaults_to_chat_completions() {
     assert_eq!(resolve_endpoint(None), Endpoint::ChatCompletions);
-    assert_eq!(resolve_endpoint(Some(Endpoint::Auto)), Endpoint::ChatCompletions);
-    assert_eq!(resolve_endpoint(Some(Endpoint::ChatCompletions)), Endpoint::ChatCompletions);
-    assert_eq!(resolve_endpoint(Some(Endpoint::Responses)), Endpoint::Responses);
+    assert_eq!(
+        resolve_endpoint(Some(Endpoint::Auto)),
+        Endpoint::ChatCompletions
+    );
+    assert_eq!(
+        resolve_endpoint(Some(Endpoint::ChatCompletions)),
+        Endpoint::ChatCompletions
+    );
+    assert_eq!(
+        resolve_endpoint(Some(Endpoint::Responses)),
+        Endpoint::Responses
+    );
 }
 
 #[test]

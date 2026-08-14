@@ -19,9 +19,10 @@
 //! - [catalog_override]：扫描合并与覆盖变更面（ScannedCapabilities / ScannedModel /
 //!   OVERRIDE_WHITELIST + upsert_from_scan / with_overrides）
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
+use serde::de::Visitor;
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 #[path = "catalog_override.rs"]
@@ -30,8 +31,70 @@ mod catalog_override;
 mod catalog_price;
 
 pub use catalog_override::{ScannedCapabilities, ScannedModel};
-pub use catalog_price::{PeakPricingSchedule, PriceDerivation, TieredPriceTier};
 pub(crate) use catalog_price::{peak_pricing_2x_at, tier_for_tokens};
+pub use catalog_price::{PeakPricingSchedule, PriceDerivation, TieredPriceTier};
+
+/// 模型级档位 → Option<wire 拼写> 映射载体（G2 数据载体层契约）：
+///
+/// - **键** = 规范思考档位（如 "low"/"medium"/"high"/"max"）；
+/// - **值** = `Some(wire 拼写)` 提供该档（值可与键相同，也可为 G6 wire 改名，
+///   如 `{"medium":"high"}`）；`None` = 隐藏不支持档（参与「不支持」归一化/拒绝，不进白名单）。
+///
+/// 语义对齐 pi-ai `thinkingLevelMap`，由 [ModelCatalogEntry::wire_effort_for] /
+/// [ModelCatalogEntry::offered_levels] 消费（R4 T4.2 模型级改名消费入口）。
+pub type TierEffortMap = BTreeMap<String, Option<String>>;
+
+/// `reasoning_effort_tiers` / `thinking_level_map` 的 serde 反序列化：
+/// 兼容三形（向后兼容优先，缺省 None 经 `#[serde(default)]` 兜底不触发本函数）：
+/// - `null` → None；
+/// - 旧 `["low","medium"]` 数组 → 各档位 wire 拼写同键（旧版 `Vec<String>` 行为逐字段不变）；
+/// - `{"low":null,"medium":"high"}` 对象 → 直译（Some=wire / None=隐藏）。
+fn deserialize_tier_map<'de, D>(deserializer: D) -> Result<Option<TierEffortMap>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct TierMapVisitor;
+    impl<'de> Visitor<'de> for TierMapVisitor {
+        type Value = Option<TierEffortMap>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("null / 档位字符串数组 / {档位: null 或 wire 字符串} 对象")
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        /// 旧 `Vec<String>` 形式：`["low","medium"]` → 各档位 wire 拼写同键。
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut map = BTreeMap::new();
+            while let Some(tier) = seq.next_element::<String>()? {
+                map.insert(tier.clone(), Some(tier));
+            }
+            Ok(if map.is_empty() { None } else { Some(map) })
+        }
+
+        /// 新映射形式：`{"low":null,"medium":"high"}`，直译。
+        fn visit_map<A>(self, mut access: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::MapAccess<'de>,
+        {
+            let mut map = BTreeMap::new();
+            while let Some((tier, wire)) = access.next_entry::<String, Option<String>>()? {
+                map.insert(tier, wire);
+            }
+            Ok(if map.is_empty() { None } else { Some(map) })
+        }
+    }
+    deserializer.deserialize_any(TierMapVisitor)
+}
 
 /// 模型目录条目（一个 provider 通道下一个模型的完整元数据）
 ///
@@ -42,6 +105,8 @@ pub(crate) use catalog_price::{peak_pricing_2x_at, tier_for_tokens};
 /// 已从结构移除（03 §7.1 迁移表 #17/#18：长上下文档迁入 `tieredPricing`）；
 /// v1 旧 JSON 中的这些键由 serde 忽略，仍可正常解析（兼容不炸）。
 /// 全部字段提供 Default（`#[serde(default)]`），缺字段条目可解析（A3 P2-10 由测试钉死）。
+/// G2 扩展：`reasoning_effort_tiers` 升级为 [TierEffortMap]（档位→wire 映射载体），
+/// 新增并列字段 `thinking_level_map`（pi-ai 语义，与前者同构）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ModelCatalogEntry {
@@ -137,8 +202,23 @@ pub struct ModelCatalogEntry {
     pub supports_reasoning: bool,
     /// 是否接受 reasoning_effort 参数（OpenAI/DeepSeek/Qwen/GLM/Kimi 原生格式）
     pub supports_reasoning_effort: bool,
-    /// effort 档位白名单（qwen3.8-max ["low","medium","xhigh"]）
-    pub reasoning_effort_tiers: Option<Vec<String>>,
+    /// 模型级档位白名单 + wire 拼写映射（键=规范档位；值=Some(wire 拼写) 提供该档 /
+    /// None=隐藏不支持档）。G2 模型级档位载体：从旧 `Vec<String>` 白名单扩展为
+    /// 「档位 → Option<wire 拼写>」映射，同时承载白名单与 G6 wire 改名。
+    ///
+    /// serde 兼容三形：`null`/缺省 → None；旧 `["low","medium","xhigh"]` 数组 →
+    /// 各档位 wire 拼写同规范名（向后兼容）；`{"low":null,"medium":"high"}` 对象 →
+    /// 直译（Some=wire 拼写改名 / None=隐藏）。消费侧经 [ModelCatalogEntry::wire_effort_for]
+    /// / [ModelCatalogEntry::offered_levels] 查询（R4 T4.2 模型级改名消费入口）。
+    #[serde(default, deserialize_with = "deserialize_tier_map")]
+    pub reasoning_effort_tiers: Option<TierEffortMap>,
+    /// pi-ai thinkingLevelMap 语义载体（键=规范档位；值=Some(wire 拼写)/None=隐藏不支持档），
+    /// 与 [Self::reasoning_effort_tiers] 同构（数据源 pi-ai 每模型 `thinkingLevelMap`，
+    /// 如 deepseek-v4-flash `{"minimal":null,...,"high":"high","max":"max"}`）。
+    /// 消费查询与 reasoning_effort_tiers 合一：[ModelCatalogEntry::wire_effort_for]
+    /// 优先查本字段，未命中回落 reasoning_effort_tiers；向后兼容优先（新增字段，缺省 None）。
+    #[serde(default, deserialize_with = "deserialize_tier_map")]
+    pub thinking_level_map: Option<TierEffortMap>,
     pub supports_vision: bool,
     pub supports_function_calling: bool,
     pub supports_parallel_function_calling: bool,
@@ -175,6 +255,43 @@ impl ModelCatalogEntry {
     /// 目录条目键（"{vendor}::{model}"，与 [ModelCatalog] 内部键格式一致）
     fn key(vendor: &str, model: &str) -> String {
         format!("{vendor}::{model}")
+    }
+
+    /// 模型级档位 → wire 拼写查询（G2 载体消费；供 R4 T4.2 模型级 wire 改名消费）。
+    ///
+    /// 合并语义（向后兼容优先、pi-ai 更细者优先）：
+    /// `thinking_level_map` 优先命中 → 回车；未命中回落 `reasoning_effort_tiers`；
+    /// 两字段均未收录该档 → None。仅返回**提供（Some）**档位的 wire 拼写；
+    /// 隐藏档（None 值）与未收录档一律返回 None（参与「不支持」归一化/拒绝）。
+    ///
+    /// 返回的 wire 拼写可与键同名（常规）或改名（G6，如 `{"medium":"high"}` → "high"）。
+    pub fn wire_effort_for(&self, level: &str) -> Option<&str> {
+        if let Some(map) = &self.thinking_level_map {
+            if let Some(wire) = map.get(level) {
+                return wire.as_deref();
+            }
+        }
+        self.reasoning_effort_tiers
+            .as_ref()
+            .and_then(|map| map.get(level))
+            .and_then(|wire| wire.as_deref())
+    }
+
+    /// 提供档位集合（wire 拼写为 Some=提供的档位）：跨 `thinking_level_map` 与
+    /// `reasoning_effort_tiers` 并集，字典序返回。隐藏档（None 值）不入集。
+    /// 供「模型能力描述」只读接口（R2 T2.4）暴露稳定档位集（前端档位面板唯一数据源）。
+    pub fn offered_levels(&self) -> Vec<String> {
+        let mut levels = BTreeSet::new();
+        for map in [&self.thinking_level_map, &self.reasoning_effort_tiers] {
+            if let Some(map) = map {
+                for (level, wire) in map {
+                    if wire.is_some() {
+                        levels.insert(level.clone());
+                    }
+                }
+            }
+        }
+        levels.into_iter().collect()
     }
 }
 
@@ -223,7 +340,10 @@ impl ModelCatalog {
     pub fn bundled() -> Self {
         let file: ModelCatalogFile = serde_json::from_str(include_str!("catalog.json"))
             .expect("内置 catalog.json 必须可解析（serde 全量解析测试钉死转录错误）");
-        Self { entries: file.entries, version: 0 }
+        Self {
+            entries: file.entries,
+            version: 0,
+        }
     }
 
     /// 当前版本号（下游 memoize 失效键；内置表为 0，T-24 覆盖/合并时 bump）
@@ -253,12 +373,14 @@ impl ModelCatalog {
 
     /// 便捷：上下文窗口钳制（P4/压缩层消费；窗口缺失 → None）
     pub fn context_window_for(&self, vendor: &str, model: &str) -> Option<u64> {
-        self.lookup(vendor, model).and_then(|entry| entry.context_window)
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.context_window)
     }
 
     /// 便捷：输出上限
     pub fn max_output_for(&self, vendor: &str, model: &str) -> Option<u64> {
-        self.lookup(vendor, model).and_then(|entry| entry.max_output_tokens)
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.max_output_tokens)
     }
 
     /// 便捷：最低可缓存前缀（条目缺失或未收录 → 回退 1024，
@@ -285,44 +407,47 @@ impl ModelCatalog {
 
     /// 便捷：未缓存输入价（per_1M）
     pub fn input_price_for(&self, vendor: &str, model: &str) -> Option<f64> {
-        self.lookup(vendor, model).and_then(|entry| entry.input_price)
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.input_price)
     }
 
     /// 便捷：输出价（per_1M）
     pub fn output_price_for(&self, vendor: &str, model: &str) -> Option<f64> {
-        self.lookup(vendor, model).and_then(|entry| entry.output_price)
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.output_price)
     }
 
     /// 便捷：缓存命中价（per_1M）
     pub fn cache_read_price_for(&self, vendor: &str, model: &str) -> Option<f64> {
-        self.lookup(vendor, model).and_then(|entry| entry.cache_read_price)
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.cache_read_price)
     }
 
     /// 便捷：通用写价（per_1M）。语义 = 条目 `cacheWritePrice`；Anthropic 系无
     /// 通用写价只有 5m/1h 双档时兜底 `cacheWritePrice5m`（对齐前端费率表
     /// `writePerMTok` 规则：cacheWritePrice ?? cacheWritePrice5m ?? 0，03 §8.2）。
     pub fn cache_write_price_for(&self, vendor: &str, model: &str) -> Option<f64> {
-        self.lookup(vendor, model).and_then(|entry| {
-            entry
-                .cache_write_price
-                .or(entry.cache_write_price_5m)
-        })
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.cache_write_price.or(entry.cache_write_price_5m))
     }
 
     /// 便捷：Anthropic 5m 档写价（per_1M）
     pub fn cache_write_price_5m_for(&self, vendor: &str, model: &str) -> Option<f64> {
-        self.lookup(vendor, model).and_then(|entry| entry.cache_write_price_5m)
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.cache_write_price_5m)
     }
 
     /// 便捷：Anthropic 1h 档写价（per_1M）
     pub fn cache_write_price_1h_for(&self, vendor: &str, model: &str) -> Option<f64> {
-        self.lookup(vendor, model).and_then(|entry| entry.cache_write_price_1h)
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.cache_write_price_1h)
     }
 
     /// 便捷：写免费显式位（v2 三态语义：true = 写免费；false = 有写价或未收录；
     /// 未知模型保守 false）
     pub fn cache_write_free_for(&self, vendor: &str, model: &str) -> bool {
-        self.lookup(vendor, model).is_some_and(|entry| entry.cache_write_free)
+        self.lookup(vendor, model)
+            .is_some_and(|entry| entry.cache_write_free)
     }
 
     /// 便捷：计价币种（USD / CNY；未知模型 = None，禁止隐式 USD）

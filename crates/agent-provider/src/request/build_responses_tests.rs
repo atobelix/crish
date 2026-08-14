@@ -5,12 +5,12 @@
 //! max_output_tokens 形状 / 工具循环 items / user-prefix / 缓存与 chat 专有字段不注入），
 //! 零删除零合并；测试名与断言形状不变。公共构造复用 build_tests_common.rs。
 
-use super::*;
 use super::test_common::*;
+use super::*;
 
+use crate::request::cache::{CacheMechanism, CacheRetention, TtlBucket};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::ToolOutput;
-use crate::request::cache::{CacheMechanism, CacheRetention, TtlBucket};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -153,7 +153,10 @@ fn responses_body_user_prefix_system_prompt() {
         wire_mode: SystemPromptWireMode::UserPrefix,
     };
     let body = build_responses_request_body(&base_opts(), &context);
-    assert!(body.get("instructions").is_none(), "UserPrefix 模式不得发 instructions");
+    assert!(
+        body.get("instructions").is_none(),
+        "UserPrefix 模式不得发 instructions"
+    );
     assert_eq!(body["input"][0]["type"], "message");
     assert_eq!(body["input"][0]["role"], "user");
     assert_eq!(
@@ -184,11 +187,18 @@ fn responses_body_cache_policy_never_injected() {
         ..RequestBuildContext::default()
     };
     let body = build_responses_request_body(&opts, &context);
-    for key in ["prompt_cache_key", "prompt_cache_retention", "prompt_cache_options"] {
+    for key in [
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "prompt_cache_options",
+    ] {
         assert!(body.get(key).is_none(), "Responses 轨不得注入 {key}");
     }
     for item in body["input"].as_array().expect("input 数组") {
-        assert!(item.get("cache_control").is_none(), "input item 不得携带断点");
+        assert!(
+            item.get("cache_control").is_none(),
+            "input item 不得携带断点"
+        );
     }
 }
 
@@ -207,7 +217,16 @@ fn responses_body_omits_chat_specific_fields() {
         ..RequestBuildContext::default()
     };
     let body = build_responses_request_body(&opts, &context);
-    for key in ["reasoning_effort", "thinking", "effort", "generation_config", "stream_options"] {
-        assert!(body.get(key).is_none(), "Responses 轨不得注入 chat 专有字段 {key}");
+    for key in [
+        "reasoning_effort",
+        "thinking",
+        "effort",
+        "generation_config",
+        "stream_options",
+    ] {
+        assert!(
+            body.get(key).is_none(),
+            "Responses 轨不得注入 chat 专有字段 {key}"
+        );
     }
 }

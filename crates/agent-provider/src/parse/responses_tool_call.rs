@@ -21,7 +21,8 @@ impl ResponsesParser {
         let record = item?.as_object()?;
         if string_field(record.get("type")) != Some("function_call") {
             return None;
-        }        let item_id = string_field(record.get("id"));
+        }
+        let item_id = string_field(record.get("id"));
         let call_id = string_field(record.get("call_id"));
         // key 兜底链：findKey ?? item_id ?? call_id ?? `response_call_{n}`（298-303）
         let key = self
@@ -68,7 +69,11 @@ impl ResponsesParser {
     ///
     /// `append=true`（delta 帧）追加拼接；`append=false`（done 帧）整体替换。
     /// 找不到 key（item_id/call_id 均缺失且无法定位）→ 无操作（325-326）。
-    pub(super) fn merge_arguments(&mut self, payload: &Map<String, Value>, append: bool) -> Option<usize> {
+    pub(super) fn merge_arguments(
+        &mut self,
+        payload: &Map<String, Value>,
+        append: bool,
+    ) -> Option<usize> {
         let item_id = string_field(payload.get("item_id"));
         let call_id = string_field(payload.get("call_id"));
         let index = match self.find_pending(item_id, call_id) {
@@ -90,8 +95,8 @@ impl ResponsesParser {
             }
         };
         // arguments ?? delta（333-335）
-        let arguments_text = string_field(payload.get("arguments"))
-            .or_else(|| string_field(payload.get("delta")));
+        let arguments_text =
+            string_field(payload.get("arguments")).or_else(|| string_field(payload.get("delta")));
         if let Some(arguments_text) = arguments_text {
             let call = &mut self.pending[index];
             if append {
@@ -106,7 +111,11 @@ impl ResponsesParser {
     /// 定位已有 pending（对齐 findResponseToolCallKey 342-355）
     ///
     /// 顺序：key==item_id → key==call_id → 扫 call_id 字段。
-    pub(super) fn find_pending(&self, item_id: Option<&str>, call_id: Option<&str>) -> Option<usize> {
+    pub(super) fn find_pending(
+        &self,
+        item_id: Option<&str>,
+        call_id: Option<&str>,
+    ) -> Option<usize> {
         if let Some(item_id) = item_id {
             if let Some(index) = self.pending.iter().position(|call| call.key == item_id) {
                 return Some(index);

@@ -12,14 +12,16 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
-use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser};
+use crate::events::{
+    ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser,
+};
 use crate::sse::frame::SseFrame;
 
+use super::super::tool_call::parse_arguments;
 use super::anthropic_map::{
     anthropic_payload_error, anthropic_stop_reason_to_stop, merge_anthropic_usage,
     non_empty_string, number_field, parse_anthropic_usage, string_field,
 };
-use super::super::tool_call::parse_arguments;
 
 /// pending 中的一条 tool_use 块（对齐 TS PendingToolUse 14-18）
 #[derive(Debug, Clone)]
@@ -85,7 +87,10 @@ impl AnthropicParser {
     ///
     /// 分帧层（sse/frame.rs）已保证 data 为合法 JSON 对象或 `[DONE]` 哨兵；
     /// 此处防御性解析失败仅跳过不炸流。
-    pub fn push_frame(&mut self, frame: &SseFrame) -> Result<Vec<ProviderStreamEvent>, StreamParseError> {
+    pub fn push_frame(
+        &mut self,
+        frame: &SseFrame,
+    ) -> Result<Vec<ProviderStreamEvent>, StreamParseError> {
         if self.terminated {
             return Ok(Vec::new());
         }
@@ -204,8 +209,9 @@ impl AnthropicParser {
                 if let Some(delta) = payload.get("delta").and_then(Value::as_object) {
                     // TS 判定为 `stop_reason !== undefined`：字段存在即映射（含 null → stop）
                     if delta.get("stop_reason").is_some() {
-                        self.stop_reason =
-                            anthropic_stop_reason_to_stop(delta.get("stop_reason").and_then(Value::as_str));
+                        self.stop_reason = anthropic_stop_reason_to_stop(
+                            delta.get("stop_reason").and_then(Value::as_str),
+                        );
                     }
                 }
                 // message_start 带 input_tokens，message_delta 通常只带 output_tokens → 合并（169-175）

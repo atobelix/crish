@@ -39,8 +39,10 @@ pub fn finish_reason_to_stop(reason: Option<&str>) -> StopReason {
 pub fn parse_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
     let usage = raw?.as_object()?;
     let prompt_details = nested_details(usage, &["prompt_tokens_details", "input_tokens_details"]);
-    let completion_details =
-        nested_details(usage, &["completion_tokens_details", "output_tokens_details"]);
+    let completion_details = nested_details(
+        usage,
+        &["completion_tokens_details", "output_tokens_details"],
+    );
     // hit 链：顶层 prompt_cache_hit_tokens（DeepSeek）→ details.cached_tokens →
     // 顶层 cached_tokens（Kimi），顺序与 P6 R4 一致（A1-04：顶层 hit 优先）
     let cache_read_tokens = finite_u64(usage.get("prompt_cache_hit_tokens"))
@@ -49,7 +51,11 @@ pub fn parse_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
     // write 链：details 三别名 → 顶层 cache_write_tokens → 顶层 cache_creation_tokens
     let cache_write_tokens = details_alias(
         prompt_details,
-        &["cache_write_tokens", "cache_creation_tokens", "cache_creation_input_tokens"],
+        &[
+            "cache_write_tokens",
+            "cache_creation_tokens",
+            "cache_creation_input_tokens",
+        ],
     )
     .or_else(|| finite_u64(usage.get("cache_write_tokens")))
     .or_else(|| finite_u64(usage.get("cache_creation_tokens")));
@@ -110,7 +116,9 @@ fn finite_u64(value: Option<&Value>) -> Option<u64> {
 
 /// 非空字符串字段
 pub(super) fn non_empty_string(value: Option<&Value>) -> Option<&str> {
-    value.and_then(Value::as_str).filter(|text| !text.is_empty())
+    value
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
 }
 
 /// 字符串字段

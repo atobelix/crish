@@ -19,7 +19,10 @@ use super::{ChatContent, ChatContentPart};
 
 /// systemPromptAsUserPrefix（对齐 `model:openai-request-build.ts:71-73`）
 pub fn system_prompt_as_user_prefix(system_prompt: &str) -> String {
-    format!("System instructions for this run:\n\n{}", system_prompt.trim())
+    format!(
+        "System instructions for this run:\n\n{}",
+        system_prompt.trim()
+    )
 }
 
 /// 思考内容（thought blocks 拼接，缺省回退 metadata.thought；thoughtContent）
@@ -188,7 +191,10 @@ pub fn user_message_content(message: &AgentMessage) -> ChatContent {
             ChatContentPart::Text { text, .. } => {
                 let cleaned = strip_inline_data_urls(&text).trim().to_string();
                 if !cleaned.is_empty() {
-                    out.push(ChatContentPart::Text { text: cleaned, cache_control: None });
+                    out.push(ChatContentPart::Text {
+                        text: cleaned,
+                        cache_control: None,
+                    });
                     saw_text = true;
                 }
             }
@@ -198,7 +204,13 @@ pub fn user_message_content(message: &AgentMessage) -> ChatContent {
     if !saw_text {
         let fallback = strip_inline_data_urls(&message.text()).trim().to_string();
         if !fallback.is_empty() {
-            out.insert(0, ChatContentPart::Text { text: fallback, cache_control: None });
+            out.insert(
+                0,
+                ChatContentPart::Text {
+                    text: fallback,
+                    cache_control: None,
+                },
+            );
         }
     }
     if out.is_empty() {
@@ -213,7 +225,13 @@ pub fn user_message_content(message: &AgentMessage) -> ChatContent {
 /// 请求 400 且前缀漂移；幂等（已合法字符不变，历史字节不回改）。
 pub fn sanitize_tool_call_id(id: &str) -> String {
     id.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -221,12 +239,9 @@ pub fn sanitize_tool_call_id(id: &str) -> String {
 pub(crate) fn responses_input_content(content: &ChatContent) -> Value {
     match content {
         ChatContent::Text(text) => json!(text),
-        ChatContent::Parts(parts) => json!(
-            parts
-                .iter()
-                .map(responses_input_part)
-                .collect::<Vec<_>>()
-        ),
+        ChatContent::Parts(parts) => {
+            json!(parts.iter().map(responses_input_part).collect::<Vec<_>>())
+        }
     }
 }
 

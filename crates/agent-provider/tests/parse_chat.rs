@@ -97,12 +97,10 @@ async fn chat_completions_end_to_end() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].method, "POST");
     assert_eq!(requests[0].path, "/v1/chat/completions");
-    assert!(
-        requests[0]
-            .header("content-type")
-            .unwrap_or("")
-            .contains("application/json")
-    );
+    assert!(requests[0]
+        .header("content-type")
+        .unwrap_or("")
+        .contains("application/json"));
     assert!(requests[0].body.contains("读一下文件"));
 
     // 全链路：解析 + 消费

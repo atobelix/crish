@@ -170,11 +170,9 @@ async fn anthropic_end_to_end() {
 /// 空流保护：无内容/无 message_stop/无 usage → error stop
 #[tokio::test(flavor = "multi_thread")]
 async fn empty_stream_produces_error_stop() {
-    let server = MockServer::start(|_request| {
-        MockResponse::Sse {
-            frames: vec![MockFrame::data("[DONE]")],
-            interrupt_after: None,
-        }
+    let server = MockServer::start(|_request| MockResponse::Sse {
+        frames: vec![MockFrame::data("[DONE]")],
+        interrupt_after: None,
     })
     .await;
 

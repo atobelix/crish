@@ -303,7 +303,9 @@ mod tests {
     async fn stream_frames_yields_frames_incrementally() {
         // 3 个分块：首帧后延迟再发后续帧（总时长 ≈ 200ms），首帧应立即可用
         let body_chunks = vec![
-            "data: {\"role\":\"assistant\",\"content\":\"你好\"}\n\n".as_bytes().to_vec(),
+            "data: {\"role\":\"assistant\",\"content\":\"你好\"}\n\n"
+                .as_bytes()
+                .to_vec(),
             "data: {\"content\":\"，世界\"}\n\n".as_bytes().to_vec(),
             "data: [DONE]\n\n".as_bytes().to_vec(),
         ];
@@ -403,7 +405,10 @@ mod tests {
             }
         }
         assert_eq!(frames.len(), 2);
-        assert_eq!(data_of(&frames, 0), "{\"role\":\"assistant\",\"content\":\"你好\"}");
+        assert_eq!(
+            data_of(&frames, 0),
+            "{\"role\":\"assistant\",\"content\":\"你好\"}"
+        );
         assert_eq!(data_of(&frames, 1), "{\"content\":\"世界\"}");
     }
 }

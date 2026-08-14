@@ -2,8 +2,8 @@
 //!
 //! 原 catalog.rs `mod tests` 整段搬入，零删除零合并；测试名与断言形状不变。
 
-use super::*;
 use super::catalog_price::{beijing_minutes_of, parse_date_utc_epoch, window_contains};
+use super::*;
 
 /// 内置表 serde 全量解析 + 键与条目身份字段一致（防转录漂移）+ 各厂商条目数钉死
 ///
@@ -13,7 +13,11 @@ use super::catalog_price::{beijing_minutes_of, parse_date_utc_epoch, window_cont
 #[test]
 fn catalog_json_parses_fully_and_keys_match_entries() {
     let catalog = ModelCatalog::bundled();
-    assert!(catalog.entries.len() >= 100, "内置条目数 = {}", catalog.entries.len());
+    assert!(
+        catalog.entries.len() >= 100,
+        "内置条目数 = {}",
+        catalog.entries.len()
+    );
     for (key, entry) in &catalog.entries {
         assert_eq!(
             *key,
@@ -85,7 +89,9 @@ fn lookup_strips_version_suffix() {
     assert_eq!(entry.model, "deepseek-v4-flash");
     assert_eq!(entry.cache_read_price, Some(0.0028));
     // 长日期形态（-YYYYMMDD）同样逐级剥离
-    assert!(catalog.lookup("deepseek", "deepseek-v4-flash-20250826").is_some());
+    assert!(catalog
+        .lookup("deepseek", "deepseek-v4-flash-20250826")
+        .is_some());
 }
 
 /// 未知模型 / 未知 vendor → None
@@ -93,7 +99,9 @@ fn lookup_strips_version_suffix() {
 fn lookup_unknown_model_and_vendor_yield_none() {
     let catalog = ModelCatalog::bundled();
     assert!(catalog.lookup("deepseek", "unknown-model").is_none());
-    assert!(catalog.lookup("unknown-vendor", "deepseek-v4-flash").is_none());
+    assert!(catalog
+        .lookup("unknown-vendor", "deepseek-v4-flash")
+        .is_none());
     assert!(catalog.lookup("unknown-vendor", "whatever").is_none());
 }
 
@@ -110,7 +118,10 @@ fn lookup_falls_back_to_vendor_default_entry() {
             ..Default::default()
         },
     );
-    let catalog = ModelCatalog { entries, version: 0 };
+    let catalog = ModelCatalog {
+        entries,
+        version: 0,
+    };
     assert!(catalog.lookup("acme", "anything-at-all").is_some());
     // 未配置 vendor 默认条目的厂商 → None
     assert!(catalog.lookup("other", "anything-at-all").is_none());
@@ -138,7 +149,10 @@ fn lookup_prefers_exact_over_vendor_default() {
             ..Default::default()
         },
     );
-    let catalog = ModelCatalog { entries, version: 0 };
+    let catalog = ModelCatalog {
+        entries,
+        version: 0,
+    };
     assert_eq!(catalog.lookup("acme", "special").unwrap().model, "special");
 }
 
@@ -146,8 +160,7 @@ fn lookup_prefers_exact_over_vendor_default() {
 #[test]
 fn entry_with_missing_fields_parses_with_defaults() {
     let minimal = r#"{"model":"x","provider":"p","vendor":"v"}"#;
-    let entry: ModelCatalogEntry =
-        serde_json::from_str(minimal).expect("缺字段条目必须可解析");
+    let entry: ModelCatalogEntry = serde_json::from_str(minimal).expect("缺字段条目必须可解析");
     assert_eq!(entry.model, "x");
     assert_eq!(entry.context_window, None);
     assert_eq!(entry.prompt_cache_min_tokens, None);
@@ -187,7 +200,10 @@ fn convenience_queries_respect_catalog_and_defaults() {
         catalog.prompt_cache_min_tokens_for("deepseek", "deepseek-v4-flash"),
         1024
     );
-    assert_eq!(catalog.prompt_cache_min_tokens_for("nobody", "whatever"), 1024);
+    assert_eq!(
+        catalog.prompt_cache_min_tokens_for("nobody", "whatever"),
+        1024
+    );
     // 缓存资格：内置开启；未知模型保守关闭
     assert!(catalog.supports_prompt_caching_for("anthropic", "claude-sonnet-4-5"));
     assert!(!catalog.supports_prompt_caching_for("nobody", "whatever"));
@@ -197,11 +213,19 @@ fn convenience_queries_respect_catalog_and_defaults() {
     assert!(!catalog.supports_responses_for("nobody", "whatever"));
     // 币种转录：Kimi 为 CNY、Anthropic 为 USD
     assert_eq!(
-        catalog.lookup("kimi", "kimi-k3").unwrap().currency.as_deref(),
+        catalog
+            .lookup("kimi", "kimi-k3")
+            .unwrap()
+            .currency
+            .as_deref(),
         Some("CNY")
     );
     assert_eq!(
-        catalog.lookup("anthropic", "claude-sonnet-5").unwrap().currency.as_deref(),
+        catalog
+            .lookup("anthropic", "claude-sonnet-5")
+            .unwrap()
+            .currency
+            .as_deref(),
         Some("USD")
     );
     // 内置表版本号从 0 起（T-24 覆盖/合并时 bump）
@@ -287,9 +311,14 @@ fn with_overrides_rejects_forbidden_model_key() {
     assert_eq!(catalog.version(), version, "全部被拒不得 bump");
     // 未被借覆盖新增条目：entries 无该精确键（lookup 的版本后缀兜底命中
     // 的是内置基础条目，不代表覆盖生效）
-    assert!(!catalog.entries.contains_key("deepseek::deepseek-v4-flash-9999"));
+    assert!(!catalog
+        .entries
+        .contains_key("deepseek::deepseek-v4-flash-9999"));
     assert_eq!(
-        catalog.lookup("deepseek", "deepseek-v4-flash-9999").unwrap().model,
+        catalog
+            .lookup("deepseek", "deepseek-v4-flash-9999")
+            .unwrap()
+            .model,
         "deepseek-v4-flash",
         "仅兜底命中内置基础条目，未新增/改名"
     );
@@ -302,7 +331,10 @@ fn with_overrides_rejects_forbidden_model_key() {
     })]);
     assert_eq!(rejected, 1);
     assert_eq!(
-        catalog.lookup("deepseek", "deepseek-v4-flash").unwrap().provider,
+        catalog
+            .lookup("deepseek", "deepseek-v4-flash")
+            .unwrap()
+            .provider,
         "deepseek",
         "provider 不得被覆盖"
     );
@@ -327,7 +359,11 @@ fn with_overrides_rejects_non_whitelisted_fields_per_item() {
     assert_eq!(rejected, 1, "白名单外字段必须拒绝该项");
     let flash = catalog.lookup("deepseek", "deepseek-v4-flash").unwrap();
     assert_eq!(flash.context_window, Some(1_000_000), "被拒项不得部分生效");
-    assert_eq!(flash.mode.as_deref(), Some("both"), "白名单外字段不动（内置值保留）");
+    assert_eq!(
+        flash.mode.as_deref(),
+        Some("both"),
+        "白名单外字段不动（内置值保留）"
+    );
 
     // 字段类型错误（窗口为字符串）→ 拒绝
     let rejected = catalog.with_overrides(&[serde_json::json!({
@@ -357,7 +393,10 @@ fn with_overrides_partial_batch_keeps_applied_items() {
     assert_eq!(rejected, 1, "仅非法项被拒");
     assert_eq!(catalog.version(), 1, "合法项生效 bump 一次");
     assert_eq!(
-        catalog.lookup("deepseek", "deepseek-v4-flash").unwrap().context_window,
+        catalog
+            .lookup("deepseek", "deepseek-v4-flash")
+            .unwrap()
+            .context_window,
         Some(200_000)
     );
 }
@@ -394,8 +433,14 @@ fn upsert_from_scan_merges_window_and_caps_but_keeps_prices() {
     assert_eq!(flash.output_price, Some(0.28));
     // 缓存语义不被覆盖（扫描无缓存字段）
     assert!(flash.supports_prompt_caching);
-    assert_eq!(flash.prompt_cache_min_tokens, None, "扫描不携带最低缓存前缀");
-    assert_eq!(catalog.prompt_cache_min_tokens_for("deepseek", "deepseek-v4-flash"), 1024);
+    assert_eq!(
+        flash.prompt_cache_min_tokens, None,
+        "扫描不携带最低缓存前缀"
+    );
+    assert_eq!(
+        catalog.prompt_cache_min_tokens_for("deepseek", "deepseek-v4-flash"),
+        1024
+    );
 }
 
 /// 未收录模型按猜测新建（vendor 缺省回退 provider）；重复合并幂等（不再 bump）
@@ -436,10 +481,291 @@ fn upsert_from_scan_empty_or_blank_keeps_version() {
     let version = catalog.version();
     assert_eq!(catalog.upsert_from_scan("p", &[]), version);
     assert_eq!(
-        catalog.upsert_from_scan("p", &[ScannedModel { model: "  ".to_string(), ..Default::default() }]),
+        catalog.upsert_from_scan(
+            "p",
+            &[ScannedModel {
+                model: "  ".to_string(),
+                ..Default::default()
+            }]
+        ),
         version
     );
     assert_eq!(catalog.version(), version);
+}
+
+// ===== T1.5 / G3-d：models 整体替换双模式（replace_models）=====
+
+/// 声明列表后该路由只服务列表内模型：未点名 deepseek 路由条目被移除、
+/// `lookup` 对未点名 deepseek 模型返回 None；其它 provider 路由不受影响；version +1。
+#[test]
+fn replace_models_narrows_route_to_declared_list() {
+    let mut catalog = ModelCatalog::bundled();
+    let before = catalog.version();
+    // deepseek 内置 2 条（deepseek-v4-flash / deepseek-v4-pro）；声明只保留 flash
+    let new_version = catalog
+        .replace_models(
+            "deepseek",
+            &[serde_json::json!({
+                "vendor": "deepseek",
+                "model": "deepseek-v4-flash",
+                "contextWindow": 200_000,
+            })],
+        )
+        .expect("合法 models 列表必须生效");
+    assert_eq!(new_version, before + 1, "替换必须 bump 版本号");
+
+    // 该路由只服务列表内模型
+    let deepseek_keys: Vec<String> = catalog
+        .entries
+        .iter()
+        .filter(|(_, e)| e.provider == "deepseek")
+        .map(|(k, _)| k.clone())
+        .collect();
+    assert_eq!(
+        deepseek_keys,
+        vec!["deepseek::deepseek-v4-flash".to_string()],
+        "路由只服务列表内模型"
+    );
+    // 未点名模型 lookup 返回 None（无 vendor 默认兜底）
+    assert!(
+        catalog.lookup("deepseek", "deepseek-v4-pro").is_none(),
+        "未点名模型不再服务"
+    );
+    assert!(
+        !catalog.entries.contains_key("deepseek::deepseek-v4-pro"),
+        "未点名旧条目必须被移除"
+    );
+    // 列表内模型可服务，且白名单字段生效
+    let flash = catalog.lookup("deepseek", "deepseek-v4-flash").unwrap();
+    assert_eq!(flash.context_window, Some(200_000));
+
+    // 其它 provider 路由不受影响（未声明全量保留）
+    let anthropic_count = catalog
+        .entries
+        .iter()
+        .filter(|(_, e)| e.provider == "anthropic")
+        .count();
+    assert!(
+        anthropic_count > 0,
+        "anthropic 路由全量保留，条数 = {anthropic_count}"
+    );
+}
+
+/// 未声明 replace 的提供方保持原 catalog 全量服务，即"未声明时全量"基线
+/// 不受其它路由替换影响。
+#[test]
+fn replace_models_unlisted_provider_keeps_full_catalog() {
+    let mut catalog = ModelCatalog::bundled();
+    let before = catalog.version();
+    // 只对 deepseek 声明，openai 路由未声明
+    catalog
+        .replace_models(
+            "deepseek",
+            &[serde_json::json!({
+                "vendor": "deepseek",
+                "model": "deepseek-v4-flash",
+            })],
+        )
+        .expect("合法替换必须生效");
+    assert_eq!(catalog.version(), before + 1);
+    // openai 全量保留（内置 34 条）
+    let openai_count = catalog
+        .entries
+        .iter()
+        .filter(|(_, e)| e.provider == "openai")
+        .count();
+    assert_eq!(openai_count, 34, "未声明 replace 的 openai 保持全量");
+    // openai 模型仍可服务
+    assert!(catalog.lookup("openai", "gpt-4o").is_some());
+}
+
+/// 三模式并存互不干扰：replace（整体替换）之后与 upsert_from_scan（逐条扫描合并）、
+/// with_overrides（条目覆盖白名单）叠加，各模式语义 preserve，未声明路由不被打乱。
+#[test]
+fn replace_models_coexists_with_upsert_and_overrides() {
+    let mut catalog = ModelCatalog::bundled();
+    // 1) replace：deepseek 路由收窄到 flash
+    catalog
+        .replace_models(
+            "deepseek",
+            &[serde_json::json!({
+                "vendor": "deepseek",
+                "model": "deepseek-v4-flash",
+            })],
+        )
+        .expect("replace 生效");
+    // 2) 对列表内模型再做逐条扫描合并（upsert 模式）：窗口被运行时覆盖
+    catalog.upsert_from_scan(
+        "deepseek",
+        &[ScannedModel {
+            model: "deepseek-v4-flash".to_string(),
+            vendor: Some("deepseek".to_string()),
+            context_window: Some(64_000),
+            max_output_tokens: None,
+            capabilities: None,
+        }],
+    );
+    // 3) 对列表内模型再做条目覆盖（with_overrides 模式）：价格覆盖
+    let rejected = catalog.with_overrides(&[serde_json::json!({
+        "vendor": "deepseek",
+        "model": "deepseek-v4-flash",
+        "cacheReadPrice": 0.0005,
+    })]);
+    assert_eq!(rejected, 0, "三模式并存：覆盖项应生效");
+
+    // 三模式叠加结果仍只服务列表内模型，且两种"就地"模式都各自生效
+    let flash = catalog.lookup("deepseek", "deepseek-v4-flash").unwrap();
+    assert_eq!(flash.context_window, Some(64_000), "upsert 覆盖窗口生效");
+    assert_eq!(flash.cache_read_price, Some(0.0005), "覆盖价格生效");
+    assert!(
+        catalog.lookup("deepseek", "deepseek-v4-pro").is_none(),
+        "replace 收窄仍保持"
+    );
+    // 未参与任何声明的路由保持全量
+    assert!(catalog.lookup("qwen", "qwen3-8-max").is_some());
+}
+
+/// 白名单纪律：替换项含禁改键 → 拒绝（CatalogError::ForbiddenField），目录零改动。
+/// 场景：provider 与路由不一致、白名单外字段、vendor::model 键被其它路由占用、重复声明。
+#[test]
+fn replace_models_rejects_forbidden_identity_keys_atomically() {
+    // (a) provider 与路由参数不一致（禁改 provider 键）
+    let mut catalog = ModelCatalog::bundled();
+    let version = catalog.version();
+    let err = catalog
+        .replace_models(
+            "deepseek",
+            &[serde_json::json!({
+                "vendor": "deepseek",
+                "model": "deepseek-v4-flash",
+                "provider": "openai",
+            })],
+        )
+        .unwrap_err();
+    let is_provider_forbidden = matches!(&err, CatalogError::ForbiddenField(f) if f == "provider");
+    assert!(
+        is_provider_forbidden,
+        "provider 键与路由不一致必须拒绝，got {err:?}"
+    );
+    assert_eq!(catalog.version(), version, "整体拒绝不得 bump");
+    assert!(
+        catalog.lookup("deepseek", "deepseek-v4-pro").is_some(),
+        "目录零改动"
+    );
+
+    // (b) 白名单外字段（mode）→ 拒绝
+    let err = catalog
+        .replace_models(
+            "deepseek",
+            &[serde_json::json!({
+                "vendor": "deepseek",
+                "model": "deepseek-v4-flash",
+                "mode": "responses",
+            })],
+        )
+        .unwrap_err();
+    assert!(
+        matches!(err, CatalogError::ForbiddenField(..)),
+        "白名单外字段必须拒绝，got {err:?}"
+    );
+    assert_eq!(catalog.version(), version);
+
+    // (c) vendor::model 键已被其它 provider 路由占用（防键冲突 / 禁改 vendor 挪动）
+    // openai 内置条目 key = openai::gpt-4o；试图在 deepseek 路由下声明它 → 拒绝
+    let err = catalog
+        .replace_models(
+            "deepseek",
+            &[serde_json::json!({
+                "vendor": "openai",
+                "model": "gpt-4o",
+            })],
+        )
+        .unwrap_err();
+    let is_forbidden = matches!(&err, CatalogError::ForbiddenField(..));
+    assert!(is_forbidden, "跨路由占用必须拒绝，got {err:?}");
+    assert_eq!(catalog.version(), version);
+
+    // (d) 重复声明同一 model 键 → InvalidOverride，整体拒绝
+    let err = catalog
+        .replace_models(
+            "deepseek",
+            &[
+                serde_json::json!({ "vendor": "deepseek", "model": "deepseek-v4-flash" }),
+                serde_json::json!({ "vendor": "deepseek", "model": "deepseek-v4-flash" }),
+            ],
+        )
+        .unwrap_err();
+    assert!(
+        matches!(err, CatalogError::InvalidOverride(..)),
+        "重复模型键必须拒绝，got {err:?}"
+    );
+    assert_eq!(catalog.version(), version, "整体拒绝不得 bump");
+
+    // (e) 空 provider → InvalidOverride
+    let err = catalog.replace_models("   ", &[]).unwrap_err();
+    assert!(matches!(err, CatalogError::InvalidOverride(..)));
+}
+
+/// 替换支持新建模型（声明为默认条目）并合并白名单字段；version +1 精确断言（memoize 失效）。
+#[test]
+fn replace_models_creates_new_models_and_bumps_version_once() {
+    let mut catalog = ModelCatalog::bundled();
+    let before = catalog.version();
+    let new_version = catalog
+        .replace_models(
+            "deepseek",
+            &[
+                serde_json::json!({
+                    "vendor": "deepseek",
+                    "model": "deepseek-v4-flash",
+                }),
+                serde_json::json!({
+                    "vendor": "deepseek",
+                    "model": "gateway-new-7b",
+                    "contextWindow": 32_000,
+                    "maxOutputTokens": 8_000,
+                    "cacheReadPrice": 0.001,
+                    "supportsVision": true,
+                }),
+            ],
+        )
+        .expect("合法列表必须生效");
+    assert_eq!(new_version, before + 1, "一次变更只 bump 一次");
+    // 列表内 flash 保留（身份沿用）
+    let flash = catalog.lookup("deepseek", "deepseek-v4-flash").unwrap();
+    assert_eq!(flash.provider, "deepseek");
+    // 新建模型：身份 + 白名单覆盖生效，vendor 默认兜底可命中
+    let created = catalog.lookup("deepseek", "gateway-new-7b").unwrap();
+    assert_eq!(created.provider, "deepseek");
+    assert_eq!(created.vendor, "deepseek");
+    assert_eq!(created.context_window, Some(32_000));
+    assert_eq!(created.max_output_tokens, Some(8_000));
+    assert_eq!(created.cache_read_price, Some(0.001));
+    assert!(created.supports_vision, "能力位显式 true 生效");
+    // 未点名的 old model 移除
+    assert!(catalog.lookup("deepseek", "deepseek-v4-pro").is_none());
+
+    // 幂等：相同的 replace 再执行不产生变更 → 版本不变
+    let again = catalog
+        .replace_models(
+            "deepseek",
+            &[
+                serde_json::json!({
+                    "vendor": "deepseek",
+                    "model": "deepseek-v4-flash",
+                }),
+                serde_json::json!({
+                    "vendor": "deepseek",
+                    "model": "gateway-new-7b",
+                    "contextWindow": 32_000,
+                    "maxOutputTokens": 8_000,
+                    "cacheReadPrice": 0.001,
+                    "supportsVision": true,
+                }),
+            ],
+        )
+        .expect("重复替换仍合法");
+    assert_eq!(again, new_version, "无变更不得重复 bump");
 }
 
 /// 全量快照：按键序返回、条目数与内部一致、不泄露内部可变性
@@ -544,8 +870,7 @@ fn v2_entry_serde_roundtrip_full_fields() {
         "retired": false,
         "deprecationDate": null
     }"#;
-    let entry: ModelCatalogEntry =
-        serde_json::from_str(raw).expect("v2 全字段条目必须可解析");
+    let entry: ModelCatalogEntry = serde_json::from_str(raw).expect("v2 全字段条目必须可解析");
     // 标识 / 窗口
     assert_eq!(entry.id.as_deref(), Some("glm-5v-turbo"));
     assert_eq!(entry.api_model.as_deref(), Some("glm-5v-turbo"));
@@ -560,15 +885,24 @@ fn v2_entry_serde_roundtrip_full_fields() {
     assert!(entry.cache_write_free);
     // 扩展价格：存储费 / 推导 / 峰谷 / 长度分档
     assert_eq!(entry.storage_price_per_1m_hour, Some(0.0));
-    assert_eq!(entry.storage_price_free_until.as_deref(), Some("2026-08-31"));
+    assert_eq!(
+        entry.storage_price_free_until.as_deref(),
+        Some("2026-08-31")
+    );
     assert_eq!(entry.price_status.as_deref(), Some("derived"));
     let derivation = entry.derivation.as_ref().expect("derivation 必须存在");
     assert_eq!(derivation.cache_read_factor, Some(0.1));
     assert_eq!(derivation.cache_write_factor, Some(1.25));
     assert_eq!(derivation.implicit_cache_read_factor, Some(0.2));
-    let schedule = entry.peak_pricing_schedule.as_ref().expect("峰谷时段必须存在");
+    let schedule = entry
+        .peak_pricing_schedule
+        .as_ref()
+        .expect("峰谷时段必须存在");
     assert_eq!(schedule.windows, vec!["09:00-12:00".to_string()]);
-    let tiers = entry.tiered_pricing.as_ref().expect("tieredPricing 必须存在");
+    let tiers = entry
+        .tiered_pricing
+        .as_ref()
+        .expect("tieredPricing 必须存在");
     assert_eq!(tiers.len(), 1);
     assert_eq!(tiers[0].min_tokens, 32_000);
     assert_eq!(tiers[0].max_tokens, None);
@@ -583,16 +917,21 @@ fn v2_entry_serde_roundtrip_full_fields() {
         Some(&["5m".to_string(), "1h".to_string()][..])
     );
     assert_eq!(
-        entry.reasoning_effort_tiers.as_deref(),
-        Some(&["low".to_string(), "medium".to_string(), "xhigh".to_string()][..])
+        entry.reasoning_effort_tiers,
+        Some(BTreeMap::from([
+            ("low".to_string(), Some("low".to_string())),
+            ("medium".to_string(), Some("medium".to_string())),
+            ("xhigh".to_string(), Some("xhigh".to_string())),
+        ])),
+        "旧 Vec 数组形式解析后每档 wire 拼写同规范名（G2 载体向后兼容逐字段不变）"
     );
+    // 往返：序列化后重新解析必须一致（含嵌套结构）
     assert!(entry.supports_pdf_input);
     assert_eq!(entry.data_source.as_deref(), Some("official"));
     assert_eq!(entry.promo_expires_at.as_deref(), Some("2026-08-31"));
     // 往返：序列化后重新解析必须一致（含嵌套结构）
     let serialized = serde_json::to_string(&entry).expect("必须可序列化");
-    let reparsed: ModelCatalogEntry =
-        serde_json::from_str(&serialized).expect("往返必须可解析");
+    let reparsed: ModelCatalogEntry = serde_json::from_str(&serialized).expect("往返必须可解析");
     assert_eq!(reparsed, entry);
 }
 
@@ -701,8 +1040,14 @@ fn v2_file_wrapper_serde_roundtrip() {
 fn v2_price_queries_hit_bundled_and_default_to_none_or_false() {
     let catalog = ModelCatalog::bundled();
     // 基础四价命中
-    assert_eq!(catalog.input_price_for("deepseek", "deepseek-v4-flash"), Some(0.14));
-    assert_eq!(catalog.output_price_for("deepseek", "deepseek-v4-flash"), Some(0.28));
+    assert_eq!(
+        catalog.input_price_for("deepseek", "deepseek-v4-flash"),
+        Some(0.14)
+    );
+    assert_eq!(
+        catalog.output_price_for("deepseek", "deepseek-v4-flash"),
+        Some(0.28)
+    );
     assert_eq!(
         catalog.cache_read_price_for("deepseek", "deepseek-v4-flash"),
         Some(0.0028)
@@ -727,7 +1072,10 @@ fn v2_price_queries_hit_bundled_and_default_to_none_or_false() {
     );
     // 币种 / 存储费 / 价格形态（v2 全量转录后 priceStatus 显式 official）
     assert_eq!(catalog.currency_for("kimi", "kimi-k3"), Some("CNY"));
-    assert_eq!(catalog.currency_for("anthropic", "claude-sonnet-5"), Some("USD"));
+    assert_eq!(
+        catalog.currency_for("anthropic", "claude-sonnet-5"),
+        Some("USD")
+    );
     assert_eq!(
         catalog.storage_price_per_1m_hour_for("gemini", "gemini-3-1-pro-preview"),
         Some(4.5)
@@ -753,20 +1101,26 @@ fn v2_price_queries_hit_bundled_and_default_to_none_or_false() {
 fn tiered_tier_for_hits_half_open_ranges() {
     let catalog = ModelCatalog::bundled();
     // 首档（基础四价）：32K 以下无档命中
-    assert!(catalog.tiered_tier_for("qwen", "qwen3-max", 31_999).is_none());
+    assert!(catalog
+        .tiered_tier_for("qwen", "qwen3-max", 31_999)
+        .is_none());
     // 档 1：[32K, 128K)
     let tier1 = catalog
         .tiered_tier_for("qwen", "qwen3-max", 32_000)
         .expect("32K 必须命中档 1");
     assert_eq!(tier1.min_tokens, 32_000);
     assert_eq!(tier1.max_tokens, Some(128_000));
-    assert!(catalog.tiered_tier_for("qwen", "qwen3-max", 127_999).is_some());
+    assert!(catalog
+        .tiered_tier_for("qwen", "qwen3-max", 127_999)
+        .is_some());
     // 档 2：[128K, ∞) 无上界
     let tier2 = catalog
         .tiered_tier_for("qwen", "qwen3-max", 128_000)
         .expect("128K 必须命中档 2");
     assert_eq!(tier2.max_tokens, None);
-    assert!(catalog.tiered_tier_for("qwen", "qwen3-max", 1_000_000).is_some());
+    assert!(catalog
+        .tiered_tier_for("qwen", "qwen3-max", 1_000_000)
+        .is_some());
 }
 
 /// 分档四价：档内覆盖价生效，未覆盖字段沿用基础价（Gemini ≥200K 2x 档）
@@ -809,7 +1163,10 @@ fn tiered_price_queries_apply_tier_overrides() {
 fn tiered_write_price_tier_override() {
     let catalog = ModelCatalog::bundled();
     // qwen3-max 基础写价 3.125；档 [128K,∞) 覆盖 8.75
-    assert_eq!(catalog.cache_write_price_for("qwen", "qwen3-max"), Some(3.125));
+    assert_eq!(
+        catalog.cache_write_price_for("qwen", "qwen3-max"),
+        Some(3.125)
+    );
     assert_eq!(
         catalog.cache_write_price_for_tokens("qwen", "qwen3-max", 31_999),
         Some(3.125),
@@ -840,7 +1197,10 @@ fn tiered_queries_fallback_to_base_prices_when_no_tiers() {
     );
     assert!(!catalog.is_long_context_for(vendor, model, 1_000_000));
     // 未知模型 → None / false
-    assert_eq!(catalog.input_price_for_tokens("nobody", "whatever", 10), None);
+    assert_eq!(
+        catalog.input_price_for_tokens("nobody", "whatever", 10),
+        None
+    );
     assert!(!catalog.is_long_context_for("nobody", "whatever", 10));
 }
 
@@ -965,4 +1325,199 @@ fn parse_date_utc_epoch_arithmetic() {
         },
         BASE_UTC_2026_01_01
     ));
+}
+
+// ===== T1.1 (G2)：模型级档位映射载体 =====
+
+/// 旧 Vec 数组形式（`["low","medium","xhigh"]`）解析 → 映射载体，各档 wire 拼写
+/// 同规范名（向后兼容逐字段不变）；缺失/null → None
+#[test]
+fn t11_legacy_vec_tiers_parse_to_identity_map() {
+    // 数组形式
+    let entry: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
+        "model": "qwen3-8-max",
+        "provider": "dashscope",
+        "vendor": "qwen",
+        "supportsReasoningEffort": true,
+        "reasoningEffortTiers": ["low", "medium", "xhigh"],
+    }))
+    .expect("旧 Vec 数组形式必须可解析");
+    assert_eq!(
+        entry.reasoning_effort_tiers,
+        Some(BTreeMap::from([
+            ("low".to_string(), Some("low".to_string())),
+            ("medium".to_string(), Some("medium".to_string())),
+            ("xhigh".to_string(), Some("xhigh".to_string())),
+        ]))
+    );
+    // 每档 wire 拼写 = 规范名
+    assert_eq!(entry.wire_effort_for("low"), Some("low"));
+    assert_eq!(entry.wire_effort_for("medium"), Some("medium"));
+    assert_eq!(entry.wire_effort_for("xhigh"), Some("xhigh"));
+    assert_eq!(
+        entry.offered_levels(),
+        vec!["low".to_string(), "medium".to_string(), "xhigh".to_string()]
+    );
+
+    // null 与缺省 → None
+    let null_entry: ModelCatalogEntry =
+        serde_json::from_value(serde_json::json!({ "reasoningEffortTiers": null }))
+            .expect("null 必须解析为 None");
+    assert_eq!(null_entry.reasoning_effort_tiers, None);
+
+    // 缺省（default 兜底）→ None
+    let default_entry: ModelCatalogEntry =
+        serde_json::from_value(serde_json::json!({ "model": "x" })).expect("缺省必须可解析");
+    assert_eq!(default_entry.reasoning_effort_tiers, None);
+}
+
+/// 新映射形式（`{"low":null,"medium":"high"}`）serde roundtrip，含 None 隐藏项
+#[test]
+fn t11_map_tiers_roundtrip_with_hidden_items() {
+    let raw = r#"{
+        "model": "glm-5.2",
+        "provider": "zai",
+        "vendor": "glm",
+        "reasoningEffortTiers": {"low": null, "medium": "high", "high": "high", "max": "max"},
+        "thinkingLevelMap": {"minimal": null, "low": null, "medium": "high", "max": null}
+    }"#;
+    let entry: ModelCatalogEntry = serde_json::from_str(raw).expect("新映射形式必须可解析");
+    // reasoning_effort_tiers：Some=wire 提供 / None=隐藏
+    assert_eq!(
+        entry.reasoning_effort_tiers,
+        Some(BTreeMap::from([
+            ("low".to_string(), None),
+            ("medium".to_string(), Some("high".to_string())),
+            ("high".to_string(), Some("high".to_string())),
+            ("max".to_string(), Some("max".to_string())),
+        ]))
+    );
+    // thinking_level_map：独立字段，语义同构
+    assert_eq!(
+        entry.thinking_level_map,
+        Some(BTreeMap::from([
+            ("minimal".to_string(), None),
+            ("low".to_string(), None),
+            ("medium".to_string(), Some("high".to_string())),
+            ("max".to_string(), None),
+        ]))
+    );
+    // roundtrip：序列化后重新解析必须逐位一致（含 None 隐藏项）
+    let serialized = serde_json::to_string(&entry).expect("必须可序列化");
+    let reparsed: ModelCatalogEntry =
+        serde_json::from_str(&serialized).expect("roundtrip 必须可解析");
+    assert_eq!(reparsed, entry);
+
+    // 隐藏档（None）不进入提供档集；提供的档并集字典序。
+    // thinking_level_map 提供 medium（max/low/minimal 均隐藏）；
+    // reasoning_effort_tiers 提供 medium/high/max（low 隐藏）
+    // → 并集 {medium, high, max} 字典序；两字段均隐藏/无的档不入集。
+    assert_eq!(
+        entry.offered_levels(),
+        vec!["high".to_string(), "max".to_string(), "medium".to_string()]
+    );
+}
+
+/// 查询辅助 wire_effort_for：改名映射返回改名后 wire；隐藏档（None 值）与未收录档返回 None
+///
+/// 注意：R4 T4.2「改名 wire」消费正是 `{medium:"high"}` → wire 字节 "high"。
+#[test]
+fn t11_wire_effort_for_rename_and_hidden() {
+    // 改名映射（独立 reasoning_effort_tiers 改名场景）
+    let renamed: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
+        "reasoningEffortTiers": {"medium": "high", "low": "low"},
+    }))
+    .expect("改名映射必须可解析");
+    assert_eq!(
+        renamed.wire_effort_for("medium"),
+        Some("high"),
+        "改名映射返回 wire 拼写"
+    );
+    assert_eq!(
+        renamed.wire_effort_for("low"),
+        Some("low"),
+        "同名档原样返回"
+    );
+    assert_eq!(renamed.wire_effort_for("high"), None, "未收录档 → None");
+
+    // 隐藏档（None 值）：wire_effort_for 返回 None，offered_levels 不含该档
+    let hidden: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
+        "thinkingLevelMap": {"minimal": null, "low": null, "high": "high", "max": "max"},
+    }))
+    .expect("含隐藏档映射必须可解析");
+    assert_eq!(
+        hidden.wire_effort_for("minimal"),
+        None,
+        "隐藏档（None 值）→ None"
+    );
+    assert_eq!(
+        hidden.wire_effort_for("low"),
+        None,
+        "隐藏档（None 值）→ None"
+    );
+    assert_eq!(
+        hidden.wire_effort_for("high"),
+        Some("high"),
+        "提供档返回 wire"
+    );
+    assert_eq!(
+        hidden.offered_levels(),
+        vec!["high".to_string(), "max".to_string()]
+    );
+}
+
+/// 查询辅助融合 two 字段：thinking_level_map 优先，reasoning_effort_tiers 回落
+#[test]
+fn t11_wire_effort_for_falls_back_across_fields() {
+    let entry: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
+        // thinkingLevelMap 只提供 high/max 且 maximal 改名；tiers 提供 low/medium
+        "reasoningEffortTiers": {"low": "low", "medium": "medium", "high": "high"},
+        "thinkingLevelMap": {"minimal": null, "medium": "high", "high": "high", "max": "max"},
+    }))
+    .expect("必须可解析");
+    // thinking_level_map 命中优先
+    assert_eq!(
+        entry.wire_effort_for("medium"),
+        Some("high"),
+        "thinkingLevelMap 改名优先"
+    );
+    // 未命中 thinking_level_map → 回落 reasoning_effort_tiers
+    assert_eq!(
+        entry.wire_effort_for("low"),
+        Some("low"),
+        "回落 reasoning_effort_tiers"
+    );
+    // reasoning_effort_tiers 未收录的 max，thinking_level_map 提供
+    assert_eq!(entry.wire_effort_for("max"), Some("max"));
+    // thinking_level_map 里 minimal 隐藏，且两字段均无 → None
+    assert_eq!(entry.wire_effort_for("minimal"), None);
+    assert_eq!(
+        entry.wire_effort_for("bogus"),
+        None,
+        "两字段均未收录 → None"
+    );
+    // offered_levels 并集：low / medium / high / max（隐藏档 minimal 不入集）
+    assert_eq!(
+        entry.offered_levels(),
+        vec![
+            "high".to_string(),
+            "low".to_string(),
+            "max".to_string(),
+            "medium".to_string()
+        ]
+    );
+}
+
+/// 空数组 / 空对象 → None（无提供档位），与"空 = 未提供"语义一致
+#[test]
+fn t11_empty_tier_map_is_none() {
+    let empty_arr: ModelCatalogEntry =
+        serde_json::from_value(serde_json::json!({ "reasoningEffortTiers": [] }))
+            .expect("空数组必须可解析");
+    assert_eq!(empty_arr.reasoning_effort_tiers, None, "空数组 → None");
+    let empty_obj: ModelCatalogEntry =
+        serde_json::from_value(serde_json::json!({ "thinkingLevelMap": {} }))
+            .expect("空对象必须可解析");
+    assert_eq!(empty_obj.thinking_level_map, None, "空对象 → None");
+    assert!(empty_obj.offered_levels().is_empty());
 }

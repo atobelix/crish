@@ -336,13 +336,16 @@ pub fn infer_vendor(base_url: &str, model: &str) -> VendorId {
     if url.contains("x.ai") || url.contains("grok") || model.starts_with("grok") {
         return VendorId::Grok;
     }
-    if url.contains("kimi") || url.contains("moonshot")
+    if url.contains("kimi")
+        || url.contains("moonshot")
         || model.starts_with("kimi")
         || model.starts_with("moonshot")
     {
         return VendorId::Kimi;
     }
-    if url.contains("z.ai") || url.contains("bigmodel") || url.contains("glm")
+    if url.contains("z.ai")
+        || url.contains("bigmodel")
+        || url.contains("glm")
         || model.starts_with("glm")
     {
         return VendorId::Glm;
@@ -377,8 +380,18 @@ impl SeriesOverrides {
 static MODEL_SERIES_CACHE_BEHAVIOR: &[(&str, SeriesOverrides)] = &[
     // ── MiniMax：M3 仅被动自动缓存（vendor-cache-gaps.md:186）；
     //    M2.x 有 Anthropic 式主动缓存（4 断点 / 20 块回溯）──
-    ("minimax-m3", SeriesOverrides { active_cache: Some(false) }),
-    ("minimax-m2", SeriesOverrides { active_cache: Some(true) }),
+    (
+        "minimax-m3",
+        SeriesOverrides {
+            active_cache: Some(false),
+        },
+    ),
+    (
+        "minimax-m2",
+        SeriesOverrides {
+            active_cache: Some(true),
+        },
+    ),
     // ── Kimi 现行推理旗舰（§5.1；防"仅 kimi 前缀"式判定缺口）──
     ("kimi-k3", SeriesOverrides::none()),
     ("kimi-k2.7", SeriesOverrides::none()),
@@ -405,8 +418,7 @@ fn series_overrides(model: &str) -> Option<SeriesOverrides> {
     let lower = model.to_ascii_lowercase();
     let mut best: Option<&(&str, SeriesOverrides)> = None;
     for entry in MODEL_SERIES_CACHE_BEHAVIOR {
-        if lower.starts_with(entry.0)
-            && best.is_none_or(|current| entry.0.len() > current.0.len())
+        if lower.starts_with(entry.0) && best.is_none_or(|current| entry.0.len() > current.0.len())
         {
             best = Some(entry);
         }
@@ -416,10 +428,16 @@ fn series_overrides(model: &str) -> Option<SeriesOverrides> {
 
 /// 应用系列覆盖（断点预算随主动缓存开关联动）
 fn apply_series_overrides(behavior: &mut CacheBehavior, model: &str) {
-    let Some(overrides) = series_overrides(model) else { return };
+    let Some(overrides) = series_overrides(model) else {
+        return;
+    };
     if let Some(active) = overrides.active_cache {
         behavior.supports_cache_control = active;
-        behavior.breakpoint_max = if active { Some(SERIES_BREAKPOINT_MAX) } else { None };
+        behavior.breakpoint_max = if active {
+            Some(SERIES_BREAKPOINT_MAX)
+        } else {
+            None
+        };
     }
 }
 
@@ -437,7 +455,10 @@ fn apply_catalog_overrides(behavior: &mut CacheBehavior, entry: &ModelCatalogEnt
     }
     // cache_type "automatic"（v1 值域）/ "auto"（v2 值域）/ "both" 表示存在自动
     // 缓存轨（数据：catalog.json；v2 值域更名 automatic → auto，双形态都匹配）
-    if matches!(entry.cache_type.as_deref(), Some("automatic" | "auto" | "both")) {
+    if matches!(
+        entry.cache_type.as_deref(),
+        Some("automatic" | "auto" | "both")
+    ) {
         behavior.auto_cache = true;
     }
     if entry.supports_implicit_caching {
@@ -488,13 +509,25 @@ mod tests {
 
     #[test]
     fn infer_vendor_by_base_url_keyword() {
-        assert_eq!(infer_vendor("https://api.anthropic.com", ""), VendorId::Anthropic);
-        assert_eq!(infer_vendor("https://api.deepseek.com", ""), VendorId::Deepseek);
-        assert_eq!(infer_vendor("https://api.minimaxi.com", ""), VendorId::MiniMax);
+        assert_eq!(
+            infer_vendor("https://api.anthropic.com", ""),
+            VendorId::Anthropic
+        );
+        assert_eq!(
+            infer_vendor("https://api.deepseek.com", ""),
+            VendorId::Deepseek
+        );
+        assert_eq!(
+            infer_vendor("https://api.minimaxi.com", ""),
+            VendorId::MiniMax
+        );
         assert_eq!(infer_vendor("https://api.openai.com", ""), VendorId::Openai);
         assert_eq!(infer_vendor("https://api.kimi.com", ""), VendorId::Kimi);
         // 月之暗面旧域名（platform.moonshot.cn）同样命中
-        assert_eq!(infer_vendor("https://platform.moonshot.cn", ""), VendorId::Kimi);
+        assert_eq!(
+            infer_vendor("https://platform.moonshot.cn", ""),
+            VendorId::Kimi
+        );
         assert_eq!(infer_vendor("https://api.x.ai", ""), VendorId::Grok);
         assert_eq!(
             infer_vendor("https://generativelanguage.googleapis.com", ""),
@@ -752,7 +785,10 @@ mod tests {
         assert_eq!(CacheTtl::Hour.seconds(), 3600);
         assert_eq!(CacheTtl::Day.seconds(), 86400);
         assert_eq!(serde_json::to_string(&CacheTtl::Short).unwrap(), "\"5m\"");
-        assert_eq!(serde_json::to_string(&CacheTtl::HalfHour).unwrap(), "\"30m\"");
+        assert_eq!(
+            serde_json::to_string(&CacheTtl::HalfHour).unwrap(),
+            "\"30m\""
+        );
         assert_eq!(serde_json::to_string(&CacheTtl::Hour).unwrap(), "\"1h\"");
         assert_eq!(serde_json::to_string(&CacheTtl::Day).unwrap(), "\"24h\"");
         assert_eq!(CacheTtl::parse("5m"), Some(CacheTtl::Short));
@@ -772,15 +808,13 @@ mod tests {
     /// v1 旧 JSON 的 "automatic" 兼容保留（catalog.json 现为 v1 数据）
     #[test]
     fn catalog_override_cache_type_auto_and_automatic_both_enable_auto_cache() {
-        let make = |cache_type: &str| {
-            ModelCatalogEntry {
-                model: "m".to_string(),
-                provider: "p".to_string(),
-                vendor: "v".to_string(),
-                supports_prompt_caching: true,
-                cache_type: Some(cache_type.to_string()),
-                ..Default::default()
-            }
+        let make = |cache_type: &str| ModelCatalogEntry {
+            model: "m".to_string(),
+            provider: "p".to_string(),
+            vendor: "v".to_string(),
+            supports_prompt_caching: true,
+            cache_type: Some(cache_type.to_string()),
+            ..Default::default()
         };
         for value in ["auto", "automatic", "both"] {
             // Qwen 直连 vendor 默认 auto_cache=false（保守），由目录覆盖开启
@@ -815,7 +849,10 @@ mod tests {
         assert!(!behavior.supports_prompt_cache_key);
         apply_catalog_overrides(&mut behavior, &entry);
         assert!(behavior.supports_prompt_cache_key);
-        assert!(behavior.auto_cache, "supportsImplicitCaching=true 必须开启自动轨");
+        assert!(
+            behavior.auto_cache,
+            "supportsImplicitCaching=true 必须开启自动轨"
+        );
         // 显式 false（缺省）不改变 vendor 真源（OpenAI 行 key 默认 true）
         let entry_off = ModelCatalogEntry {
             model: "m".to_string(),
@@ -841,7 +878,11 @@ mod tests {
             ..Default::default()
         };
         let mut behavior = cache_behavior_for(None, VendorId::Openai, "gpt-5.6-x");
-        assert_eq!(behavior.default_ttl, Some(CacheTtl::Short), "目录覆盖前 = vendor 默认");
+        assert_eq!(
+            behavior.default_ttl,
+            Some(CacheTtl::Short),
+            "目录覆盖前 = vendor 默认"
+        );
         apply_catalog_overrides(&mut behavior, &entry);
         assert_eq!(behavior.default_ttl, Some(CacheTtl::HalfHour));
         assert_eq!(behavior.default_ttl.unwrap().seconds(), 1800);

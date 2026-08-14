@@ -11,13 +11,17 @@
 //! - [tools]：ToolDefinition → OpenAI tools 格式与 tool_choice
 //! - [cache]：缓存参数载体与键派生（CacheRetention/TtlBucket/CacheControl/CacheKey/
 //!   CacheMechanism/CacheCapability，P2 §3.1；断点分配与 wire 注入 T-13b）
+//! - [compat]：G5 compat 纯函数面（resolve_max_tokens_field / resolve_developer_role /
+//!   empty_content_wire_value，R1 T1.7；消费接线归 R3 T3.6 / R2 T2.2-T2.3）
 
 pub mod build;
 pub mod cache;
+pub mod compat;
 pub mod messages;
 pub mod schema;
 pub mod tools;
 pub mod vendor;
+pub mod wire_protocol;
 
 // DeepSeek 请求体不变量测试钉死（T-22，P3 步骤 4；只读既有源码，只挂测试）
 #[cfg(test)]
@@ -31,6 +35,7 @@ pub use cache::{
     CacheCapability, CacheControl, CacheKey, CacheMechanism, CacheRetention, TtlBucket,
     OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH,
 };
+pub use compat::{empty_content_wire_value, resolve_developer_role, resolve_max_tokens_field};
 pub use messages::{
     stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages,
     to_responses_input_items, ChatContent, ChatContentPart, ChatMessage, ReasoningContentMode,
@@ -43,7 +48,8 @@ pub use tools::{
 pub use vendor::{
     effort_to_budget_tokens, effort_to_gemini_thinking_level, infer_reasoning_vendor,
     infer_thinking_capability, normalize_reasoning_effort, normalize_thinking_intensity,
-    reasoning_effort_headers, reasoning_effort_object, resolve_thinking_params,
-    ReasoningEffort, ReasoningEffortFormat, ReasoningFormat, ReasoningVendor,
-    ThinkingCapability, ThinkingIntensity, NO_THINKING,
+    reasoning_effort_headers, reasoning_effort_object, resolve_thinking_params, ReasoningEffort,
+    ReasoningEffortFormat, ReasoningFormat, ReasoningVendor, ThinkingCapability, ThinkingIntensity,
+    NO_THINKING,
 };
+pub use wire_protocol::{resolve_wire_protocol, WireProtocol};

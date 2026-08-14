@@ -54,25 +54,40 @@ fn tool_calls_of(events: &[ProviderStreamEvent]) -> Vec<&ProviderStreamEvent> {
 /// 典型正常流：message_start → text 块 delta → message_delta → message_stop
 fn normal_text_stream() -> Vec<String> {
     vec![
-        event_frame("message_start", json!({
-            "message": { "usage": { "input_tokens": 11 } },
-        })),
-        event_frame("content_block_start", json!({
-            "index": 0,
-            "content_block": { "type": "text" },
-        })),
-        event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "text_delta", "text": "你好" },
-        })),
-        event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "text_delta", "text": "，世界" },
-        })),
-        event_frame("message_delta", json!({
-            "delta": { "stop_reason": "end_turn" },
-            "usage": { "output_tokens": 7 },
-        })),
+        event_frame(
+            "message_start",
+            json!({
+                "message": { "usage": { "input_tokens": 11 } },
+            }),
+        ),
+        event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": { "type": "text" },
+            }),
+        ),
+        event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "text_delta", "text": "你好" },
+            }),
+        ),
+        event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "text_delta", "text": "，世界" },
+            }),
+        ),
+        event_frame(
+            "message_delta",
+            json!({
+                "delta": { "stop_reason": "end_turn" },
+                "usage": { "output_tokens": 7 },
+            }),
+        ),
         event_frame("message_stop", json!({})),
     ]
 }
@@ -114,19 +129,31 @@ fn normal_text_stream_flow() {
 fn thinking_delta_yields_thought_without_redacted() {
     // thinking_delta → thought-delta，不标 redacted（02 §1.4）
     let events = parse_all(vec![
-        &event_frame("content_block_start", json!({
-            "index": 0,
-            "content_block": { "type": "thinking" },
-        })),
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "thinking_delta", "thinking": "让我想想" },
-        })),
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "thinking_delta", "thinking": "再想想" },
-        })),
-        &event_frame("message_delta", json!({ "delta": { "stop_reason": "end_turn" } })),
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": { "type": "thinking" },
+            }),
+        ),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "thinking_delta", "thinking": "让我想想" },
+            }),
+        ),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "thinking_delta", "thinking": "再想想" },
+            }),
+        ),
+        &event_frame(
+            "message_delta",
+            json!({ "delta": { "stop_reason": "end_turn" } }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     let thoughts: Vec<&ProviderStreamEvent> = events
@@ -149,10 +176,13 @@ fn thinking_delta_yields_thought_without_redacted() {
 fn thinking_field_compat_variant() {
     // 兼容：delta 无 type 但带 thinking 字段（对齐 TS `typeof delta.thinking === 'string'`）
     let events = parse_all(vec![
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "thinking": "兼容字段" },
-        })),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "thinking": "兼容字段" },
+            }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     assert!(events.iter().any(|event| matches!(
@@ -164,10 +194,13 @@ fn thinking_field_compat_variant() {
 #[test]
 fn empty_text_delta_is_ignored() {
     let events = parse_all(vec![
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "text_delta", "text": "" },
-        })),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "text_delta", "text": "" },
+            }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     assert_eq!(events.len(), 1, "空 delta 不产出事件，仅剩 stop");
@@ -180,20 +213,32 @@ fn empty_text_delta_is_ignored() {
 fn tool_use_with_input_json_delta_chunks() {
     // 半 JSON 在 JSON 边界处切分跨帧追加（对齐 TS 126-137 的 `+=` 拼接）
     let events = parse_all(vec![
-        &event_frame("content_block_start", json!({
-            "index": 0,
-            "content_block": { "type": "tool_use", "id": "toolu_1", "name": "read_file" },
-        })),
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "input_json_delta", "partial_json": r#"{"path":"/a""# },
-        })),
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "input_json_delta", "partial_json": r#","mode":"r"}"# },
-        })),
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": { "type": "tool_use", "id": "toolu_1", "name": "read_file" },
+            }),
+        ),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "input_json_delta", "partial_json": r#"{"path":"/a""# },
+            }),
+        ),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "input_json_delta", "partial_json": r#","mode":"r"}"# },
+            }),
+        ),
         &event_frame("content_block_stop", json!({ "index": 0 })),
-        &event_frame("message_delta", json!({ "delta": { "stop_reason": "tool_use" } })),
+        &event_frame(
+            "message_delta",
+            json!({ "delta": { "stop_reason": "tool_use" } }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     let tool_calls = tool_calls_of(&events);
@@ -220,14 +265,20 @@ fn tool_use_with_input_json_delta_chunks() {
 fn tool_use_half_json_chunk_fails_gracefully_with_raw_fallback() {
     // 半 JSON 分片拼接后仍无法解析 → `__rawArguments` 兜底（对齐 parseArguments 335-349）
     let events = parse_all(vec![
-        &event_frame("content_block_start", json!({
-            "index": 0,
-            "content_block": { "type": "tool_use", "id": "toolu_9", "name": "read_file" },
-        })),
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "input_json_delta", "partial_json": "{\"未闭合" },
-        })),
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": { "type": "tool_use", "id": "toolu_9", "name": "read_file" },
+            }),
+        ),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "input_json_delta", "partial_json": "{\"未闭合" },
+            }),
+        ),
         &event_frame("content_block_stop", json!({ "index": 0 })),
         &event_frame("message_stop", json!({})),
     ]);
@@ -246,14 +297,20 @@ fn tool_use_half_json_chunk_fails_gracefully_with_raw_fallback() {
 fn tool_use_without_name_is_not_emitted() {
     // pending 无 name → content_block_stop 不 emit（对齐 TS 145 判定）
     let events = parse_all(vec![
-        &event_frame("content_block_start", json!({
-            "index": 0,
-            "content_block": { "type": "tool_use", "id": "toolu_1" },
-        })),
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "input_json_delta", "partial_json": "{}" },
-        })),
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": { "type": "tool_use", "id": "toolu_1" },
+            }),
+        ),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "input_json_delta", "partial_json": "{}" },
+            }),
+        ),
         &event_frame("content_block_stop", json!({ "index": 0 })),
         &event_frame("message_stop", json!({})),
     ]);
@@ -263,10 +320,13 @@ fn tool_use_without_name_is_not_emitted() {
 #[test]
 fn missing_tool_use_id_falls_back_to_toolu_index() {
     let events = parse_all(vec![
-        &event_frame("content_block_start", json!({
-            "index": 3,
-            "content_block": { "type": "tool_use", "name": "read_file" },
-        })),
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 3,
+                "content_block": { "type": "tool_use", "name": "read_file" },
+            }),
+        ),
         &event_frame("content_block_stop", json!({ "index": 3 })),
         &event_frame("message_stop", json!({})),
     ]);
@@ -274,7 +334,11 @@ fn missing_tool_use_id_falls_back_to_toolu_index() {
     assert_eq!(tool_calls.len(), 1);
     match tool_calls[0] {
         ProviderStreamEvent::ToolCall { id, .. } => {
-            assert_eq!(id.as_deref(), Some("toolu_3"), "id 缺失兜底 toolu_{{index}}");
+            assert_eq!(
+                id.as_deref(),
+                Some("toolu_3"),
+                "id 缺失兜底 toolu_{{index}}"
+            );
         }
         _ => unreachable!("已过滤"),
     }
@@ -284,14 +348,20 @@ fn missing_tool_use_id_falls_back_to_toolu_index() {
 fn unfinished_tool_use_is_flushed_defensively() {
     // 流结束未见 content_block_stop → 防御性 flush（185-196）
     let events = parse_all(vec![
-        &event_frame("content_block_start", json!({
-            "index": 0,
-            "content_block": { "type": "tool_use", "id": "toolu_1", "name": "read_file" },
-        })),
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "input_json_delta", "partial_json": r#"{"path":"/a"}"# },
-        })),
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": { "type": "tool_use", "id": "toolu_1", "name": "read_file" },
+            }),
+        ),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "input_json_delta", "partial_json": r#"{"path":"/a"}"# },
+            }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     let tool_calls = tool_calls_of(&events);
@@ -309,23 +379,35 @@ fn unfinished_tool_use_is_flushed_defensively() {
 #[test]
 fn multiple_tool_uses_emit_in_index_order() {
     let events = parse_all(vec![
-        &event_frame("content_block_start", json!({
-            "index": 1,
-            "content_block": { "type": "tool_use", "id": "toolu_b", "name": "second" },
-        })),
-        &event_frame("content_block_start", json!({
-            "index": 0,
-            "content_block": { "type": "tool_use", "id": "toolu_a", "name": "first" },
-        })),
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "input_json_delta", "partial_json": "{}" },
-        })),
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 1,
+                "content_block": { "type": "tool_use", "id": "toolu_b", "name": "second" },
+            }),
+        ),
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": { "type": "tool_use", "id": "toolu_a", "name": "first" },
+            }),
+        ),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "input_json_delta", "partial_json": "{}" },
+            }),
+        ),
         &event_frame("content_block_stop", json!({ "index": 0 })),
-        &event_frame("content_block_delta", json!({
-            "index": 1,
-            "delta": { "type": "input_json_delta", "partial_json": "{}" },
-        })),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 1,
+                "delta": { "type": "input_json_delta", "partial_json": "{}" },
+            }),
+        ),
         &event_frame("content_block_stop", json!({ "index": 1 })),
         &event_frame("message_stop", json!({})),
     ]);
@@ -364,11 +446,17 @@ fn stop_reason_mapping_table() {
 #[test]
 fn max_tokens_stop_reason_yields_length() {
     let events = parse_all(vec![
-        &event_frame("content_block_delta", json!({
-            "index": 0,
-            "delta": { "type": "text_delta", "text": "截断前的正文" },
-        })),
-        &event_frame("message_delta", json!({ "delta": { "stop_reason": "max_tokens" } })),
+        &event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "text_delta", "text": "截断前的正文" },
+            }),
+        ),
+        &event_frame(
+            "message_delta",
+            json!({ "delta": { "stop_reason": "max_tokens" } }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     assert_eq!(
@@ -384,7 +472,10 @@ fn max_tokens_stop_reason_yields_length() {
 #[test]
 fn refusal_stop_reason_yields_error() {
     let events = parse_all(vec![
-        &event_frame("message_delta", json!({ "delta": { "stop_reason": "refusal" } })),
+        &event_frame(
+            "message_delta",
+            json!({ "delta": { "stop_reason": "refusal" } }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     assert_eq!(
@@ -401,8 +492,14 @@ fn refusal_stop_reason_yields_error() {
 fn stop_reason_later_frame_overrides() {
     // message_delta 覆盖式：后到的 stop_reason 覆盖先前（163-168）
     let events = parse_all(vec![
-        &event_frame("message_delta", json!({ "delta": { "stop_reason": "end_turn" } })),
-        &event_frame("message_delta", json!({ "delta": { "stop_reason": "max_tokens" } })),
+        &event_frame(
+            "message_delta",
+            json!({ "delta": { "stop_reason": "end_turn" } }),
+        ),
+        &event_frame(
+            "message_delta",
+            json!({ "delta": { "stop_reason": "max_tokens" } }),
+        ),
         &event_frame("message_stop", json!({})),
     ]);
     assert_eq!(

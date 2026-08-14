@@ -73,7 +73,10 @@ async fn system_role_rejected_then_user_prefix_rewrite_retries() {
         ReasoningContentMode::Omit,
         SystemPromptWireMode::NativeSystemRole,
     );
-    assert_eq!(native[0].role, "system", "native 模式应产出 system role 消息");
+    assert_eq!(
+        native[0].role, "system",
+        "native 模式应产出 system role 消息"
+    );
     let (status, body, _) =
         common::fetch_plain(server.addr, "/v1/chat/completions", request_body(&native)).await;
     assert_eq!(status, 400, "服务端应拒绝 system role");

@@ -11,12 +11,14 @@ use crate::config::Endpoint;
 
 use super::{ChatCompletionsRequestOptions, RequestBuildContext};
 use crate::request::cache::{
-    apply_cache_controls, allocate_breakpoints, retention_wire_value, BreakpointPlan,
+    allocate_breakpoints, apply_cache_controls, retention_wire_value, BreakpointPlan,
     CacheMechanism,
 };
 use crate::request::messages::{to_chat_messages, ChatMessage, ReasoningContentMode};
 use crate::request::tools::{to_cache_aware_tool, to_chat_tool_choice, ToolChoice};
-use crate::request::vendor::{infer_thinking_capability, reasoning_effort_object, resolve_thinking_params};
+use crate::request::vendor::{
+    infer_thinking_capability, reasoning_effort_object, resolve_thinking_params,
+};
 
 /// 构建 chat-completions 请求体（compactObject 等价：None 字段一律省略，02 §二.6:132）
 pub fn build_chat_completions_request_body(
@@ -59,7 +61,13 @@ pub fn build_chat_completions_request_body(
     if let Some(intensity) = opts.thinking_intensity {
         let capability = infer_thinking_capability(opts.model.as_deref().unwrap_or(""));
         let params = resolve_thinking_params(&capability, intensity, Endpoint::ChatCompletions);
-        for key in ["reasoning_effort", "reasoning", "thinking", "generation_config", "effort"] {
+        for key in [
+            "reasoning_effort",
+            "reasoning",
+            "thinking",
+            "generation_config",
+            "effort",
+        ] {
             body.remove(key);
         }
         merge_object(&mut body, &params);
@@ -141,7 +149,11 @@ pub fn build_chat_completions_request_body(
                 .map(|(index, tool)| {
                     to_cache_aware_tool(
                         tool,
-                        if index + 1 == context.tools.len() { last_ttl } else { None },
+                        if index + 1 == context.tools.len() {
+                            last_ttl
+                        } else {
+                            None
+                        },
                     )
                 })
                 .collect::<Vec<_>>()),
@@ -154,7 +166,10 @@ pub fn build_chat_completions_request_body(
 
     // stream 非 false 时必带 include_usage（02 §二.6:132；`model:provider-openai-chat.ts:77`）
     if opts.stream != Some(false) {
-        body.insert("stream_options".to_string(), json!({ "include_usage": true }));
+        body.insert(
+            "stream_options".to_string(),
+            json!({ "include_usage": true }),
+        );
     }
 
     Value::Object(body)

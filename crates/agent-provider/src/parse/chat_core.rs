@@ -8,13 +8,15 @@
 use conex_types::tool::{ProviderDiagnostic, ProviderDiagnosticPhase};
 use serde_json::Value;
 
-use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser};
+use crate::events::{
+    ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser,
+};
 use crate::sse::frame::SseFrame;
 
+use super::super::tool_call::{parse_full_tool_call, ToolCallCollector};
 use super::chat_mapping::{
     finish_reason_to_stop, non_empty_string, parse_usage, provider_body_error,
 };
-use super::super::tool_call::{parse_full_tool_call, ToolCallCollector};
 
 /// chat-completions 流解析器（SseFrame → ProviderStreamEvent 序列）
 #[derive(Debug, Default)]
@@ -51,7 +53,10 @@ impl ChatCompletionsParser {
     ///
     /// 分帧层（sse/frame.rs）已保证 data 为合法 JSON 对象或 `[DONE]` 哨兵；
     /// `[DONE]` 由读取层消费（reader.rs），此处防御性解析失败仅跳过不炸流。
-    pub fn push_frame(&mut self, frame: &SseFrame) -> Result<Vec<ProviderStreamEvent>, StreamParseError> {
+    pub fn push_frame(
+        &mut self,
+        frame: &SseFrame,
+    ) -> Result<Vec<ProviderStreamEvent>, StreamParseError> {
         if self.terminated {
             return Ok(Vec::new());
         }
@@ -117,7 +122,9 @@ impl ChatCompletionsParser {
                 }
             }
             // legacy 兼容：delta.function_call（单对象，OpenAI 旧版格式）
-            if let Some(function_call) = delta.get("function_call").filter(|value| value.is_object()) {
+            if let Some(function_call) =
+                delta.get("function_call").filter(|value| value.is_object())
+            {
                 self.collector.merge(function_call);
             }
         }

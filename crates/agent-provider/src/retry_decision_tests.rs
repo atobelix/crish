@@ -81,10 +81,7 @@ async fn should_retry_decision_table() {
             },
             false,
         ),
-        (
-            ProviderError::PayloadTooLarge { status: Some(413) },
-            false,
-        ),
+        (ProviderError::PayloadTooLarge { status: Some(413) }, false),
         (ProviderError::GatewayChallenge { status: None }, false),
         (ProviderError::Quota { status: Some(402) }, false),
         (
@@ -141,30 +138,26 @@ async fn max_retries_limit() {
         .map(|decision| decision.attempt),
         Some(2)
     );
-    assert!(
-        should_retry(
-            &error,
-            &policy,
-            &RetryState {
-                retries: 2,
-                started_at: state.started_at
-            }
-        )
-        .is_none()
-    );
+    assert!(should_retry(
+        &error,
+        &policy,
+        &RetryState {
+            retries: 2,
+            started_at: state.started_at
+        }
+    )
+    .is_none());
     // max_retries=0（默认）：显式开启才重试
     let policy = RetryPolicy::default();
-    assert!(
-        should_retry(
-            &error,
-            &policy,
-            &RetryState {
-                retries: 0,
-                started_at: state.started_at
-            }
-        )
-        .is_none()
-    );
+    assert!(should_retry(
+        &error,
+        &policy,
+        &RetryState {
+            retries: 0,
+            started_at: state.started_at
+        }
+    )
+    .is_none());
 }
 
 // ── Retry-After 与预算 ──
@@ -199,14 +192,8 @@ fn parse_retry_after_seconds() {
         parse_retry_after_ms(Some("30"), now),
         Some(Duration::from_secs(30))
     );
-    assert_eq!(
-        parse_retry_after_ms(Some("0"), now),
-        Some(Duration::ZERO)
-    );
-    assert_eq!(
-        parse_retry_after_ms(Some("-5"), now),
-        Some(Duration::ZERO)
-    );
+    assert_eq!(parse_retry_after_ms(Some("0"), now), Some(Duration::ZERO));
+    assert_eq!(parse_retry_after_ms(Some("-5"), now), Some(Duration::ZERO));
     // 小数秒（TS Number 语义）
     assert_eq!(
         parse_retry_after_ms(Some("1.5"), now),
@@ -264,30 +251,21 @@ fn parse_retry_after_http_date() {
 fn retry_after_extreme_http_date_year_does_not_overflow() {
     let now = SystemTime::now();
     // IMF-fixdate：year = i64::MAX（provider 可控头部，审计样本）
-    let imf = parse_retry_after_ms(
-        Some("Sun, 06 Nov 9223372036854775807 08:49:37 GMT"),
-        now,
-    );
+    let imf = parse_retry_after_ms(Some("Sun, 06 Nov 9223372036854775807 08:49:37 GMT"), now);
     assert_eq!(
         imf,
         Some(Duration::from_millis(MAX_RETRY_AFTER_MS)),
         "极端年份必须钳到 5 分钟上限且不 panic（修复前溢出 panic，红）"
     );
     // asctime 变体同样防护
-    let asctime = parse_retry_after_ms(
-        Some("Sun Nov  6 08:49:37 9223372036854775807"),
-        now,
-    );
+    let asctime = parse_retry_after_ms(Some("Sun Nov  6 08:49:37 9223372036854775807"), now);
     assert_eq!(
         asctime,
         Some(Duration::from_millis(MAX_RETRY_AFTER_MS)),
         "asctime 极端年份同样不 panic 且钳到上限"
     );
     // 负向极端年份（远早于 1970）→ 已过时间 → 0，不 panic
-    let past = parse_retry_after_ms(
-        Some("Sun, 06 Nov -9223372036854775808 08:49:37 GMT"),
-        now,
-    );
+    let past = parse_retry_after_ms(Some("Sun, 06 Nov -9223372036854775808 08:49:37 GMT"), now);
     assert_eq!(past, Some(Duration::ZERO), "负向极端年份视为已过 → 0");
 }
 
@@ -302,21 +280,41 @@ async fn total_budget_exhaustion_stops_retry() {
     let error = server_error();
     let started_at = tokio::time::Instant::now();
     // t=0：预算充足
-    let decision = should_retry(&error, &policy, &RetryState { retries: 0, started_at })
-        .expect("预算内应可重试");
+    let decision = should_retry(
+        &error,
+        &policy,
+        &RetryState {
+            retries: 0,
+            started_at,
+        },
+    )
+    .expect("预算内应可重试");
     assert_eq!(decision.remaining_budget_ms, 10_000);
     assert_eq!(decision.delay, Duration::from_millis(750));
     // t=9.5s：剩余 500ms，等待被钳到剩余预算
     tokio::time::advance(Duration::from_millis(9_500)).await;
-    let decision = should_retry(&error, &policy, &RetryState { retries: 0, started_at })
-        .expect("预算内应可重试");
+    let decision = should_retry(
+        &error,
+        &policy,
+        &RetryState {
+            retries: 0,
+            started_at,
+        },
+    )
+    .expect("预算内应可重试");
     assert_eq!(decision.remaining_budget_ms, 500);
     assert_eq!(decision.delay, Duration::from_millis(500));
     // t=10s：预算耗尽 → None
     tokio::time::advance(Duration::from_millis(500)).await;
-    assert!(
-        should_retry(&error, &policy, &RetryState { retries: 0, started_at }).is_none()
-    );
+    assert!(should_retry(
+        &error,
+        &policy,
+        &RetryState {
+            retries: 0,
+            started_at
+        }
+    )
+    .is_none());
 }
 
 // ── 测试辅助：epoch → HTTP-date 文本（与 parse_http_date 互逆）──
@@ -339,7 +337,11 @@ fn civil_from_epoch(epoch: i64) -> (i64, i64, i64, i64, i64, i64, i64) {
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let month_prime = (5 * day_of_year + 2) / 153;
     let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
-    let month = if month_prime < 10 { month_prime + 3 } else { month_prime - 9 };
+    let month = if month_prime < 10 {
+        month_prime + 3
+    } else {
+        month_prime - 9
+    };
     let year = if month <= 2 { year + 1 } else { year };
     (
         year,

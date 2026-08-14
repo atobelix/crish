@@ -193,7 +193,9 @@ pub fn normalize_function_args(raw: Option<&Value>) -> Value {
 
 /// 非空字符串字段
 pub(super) fn non_empty_string(value: Option<&Value>) -> Option<&str> {
-    value.and_then(Value::as_str).filter(|text| !text.is_empty())
+    value
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
 }
 
 /// 字符串字段

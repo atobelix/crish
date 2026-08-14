@@ -166,7 +166,10 @@ async fn abort_without_content_yields_stream_error() {
     };
     let result = consume(events, true);
     let ProviderOutput::StreamError { classified } = &result.response else {
-        panic!("无内容 abort 应产出 StreamError，得到 {:?}", result.response);
+        panic!(
+            "无内容 abort 应产出 StreamError，得到 {:?}",
+            result.response
+        );
     };
     assert_eq!(classified.kind, ProviderErrorKind::Aborted);
     assert!(!classified.retryable);

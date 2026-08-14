@@ -149,9 +149,7 @@ mod tests {
     /// 每 vendor 默认档断言（无 catalog 时；Qwen/Auto → None）
     #[test]
     fn vendor_defaults_without_catalog() {
-        let ttl = |vendor: VendorId, model: &str| {
-            cache_ttl_for_provider_model(None, vendor, model)
-        };
+        let ttl = |vendor: VendorId, model: &str| cache_ttl_for_provider_model(None, vendor, model);
         assert_eq!(
             ttl(VendorId::Deepseek, "deepseek-v4-flash"),
             Some(CacheTtl::Short)
@@ -162,8 +160,14 @@ mod tests {
         );
         assert_eq!(ttl(VendorId::Kimi, "kimi-k3"), Some(CacheTtl::Short));
         assert_eq!(ttl(VendorId::Grok, "grok-4.5"), Some(CacheTtl::Short));
-        assert_eq!(ttl(VendorId::MiniMax, "minimax-m2-7"), Some(CacheTtl::Short));
-        assert_eq!(ttl(VendorId::Gemini, "gemini-3-6-flash"), Some(CacheTtl::Short));
+        assert_eq!(
+            ttl(VendorId::MiniMax, "minimax-m2-7"),
+            Some(CacheTtl::Short)
+        );
+        assert_eq!(
+            ttl(VendorId::Gemini, "gemini-3-6-flash"),
+            Some(CacheTtl::Short)
+        );
         assert_eq!(ttl(VendorId::Glm, "glm-5"), Some(CacheTtl::Short));
         assert_eq!(ttl(VendorId::Dashscope, "qwen3-max"), Some(CacheTtl::Short));
         // Qwen 官方直连未实测 → 保守 None（与 T-19 矩阵 QWEN 行一致）

@@ -26,9 +26,9 @@ mod error_classify;
 
 use error_classify::{
     contains_abort_words, detect_auth_message, detect_context_length_exceeded,
-    detect_network_message, detect_quota_message, detect_rate_limit_message,
-    detect_server_message, detect_timeout_message, is_server_status,
-    looks_like_gateway_challenge, looks_like_payload_too_large_message,
+    detect_network_message, detect_quota_message, detect_rate_limit_message, detect_server_message,
+    detect_timeout_message, is_server_status, looks_like_gateway_challenge,
+    looks_like_payload_too_large_message,
 };
 
 /// 超时位置（02 §六.2：first-byte 与 idle 超时独立可配；请求级超时来自 reqwest）
@@ -93,36 +93,24 @@ pub enum ProviderError {
     Aborted,
     /// 第 2 行：HTTP 413 请求体过大（payload_too_large），不可重试
     #[error("请求体过大（HTTP {status:?}）")]
-    PayloadTooLarge {
-        status: Option<u16>,
-    },
+    PayloadTooLarge { status: Option<u16> },
     /// 第 3 行：Cloudflare 质询（cf_chl / just a moment 等），不可重试
     #[error("Cloudflare 质询拦截（gateway-challenge）")]
-    GatewayChallenge {
-        status: Option<u16>,
-    },
+    GatewayChallenge { status: Option<u16> },
     /// 第 4 行：HTTP 401/403 或 unauthorized/forbidden/invalid api key，不可重试
     /// （某些网关 403 是 key 无效，与 401 同判为 auth，02 §四）
     #[error("鉴权失败（HTTP {status:?}）")]
-    Auth {
-        status: Option<u16>,
-    },
+    Auth { status: Option<u16> },
     /// 第 5 行：HTTP 402 或 insufficient quota/out of credits，不可重试
     #[error("配额耗尽（HTTP {status:?}）")]
-    Quota {
-        status: Option<u16>,
-    },
+    Quota { status: Option<u16> },
     /// 第 6 行：HTTP 404/405/415 端点不可用，不可重试
     #[error("端点不可用（HTTP {status:?}）")]
-    EndpointUnavailable {
-        status: Option<u16>,
-    },
+    EndpointUnavailable { status: Option<u16> },
     /// 第 7 行：HTTP 400/422 且上下文超长（分类层标记可重试，02 §4.2 第 7 行；
     /// 但重试循环不直接重试——由上层压缩处理，见 retry::should_retry）
     #[error("上下文超长（HTTP {status:?}）")]
-    ContextLength {
-        status: Option<u16>,
-    },
+    ContextLength { status: Option<u16> },
     /// 第 8 行：HTTP 400/422 其余（含 payload too large 消息），不可重试
     #[error("非法请求：{message}")]
     InvalidRequest {
@@ -138,29 +126,19 @@ pub enum ProviderError {
     },
     /// 第 10 行：HTTP 500/502/503/504/520/522/523/524 等，可重试
     #[error("服务端错误（HTTP {status:?}）")]
-    Server {
-        status: Option<u16>,
-    },
+    Server { status: Option<u16> },
     /// 第 11 行：超时（first-byte / idle / 请求级），可重试
     #[error("请求超时（{kind:?}）")]
-    Timeout {
-        kind: TimeoutKind,
-    },
+    Timeout { kind: TimeoutKind },
     /// 第 12 行：传输层错误（连接失败/流中断，02 §五 #11 裁决必须可重试）
     #[error("传输层错误（{source_kind:?}）")]
-    Network {
-        source_kind: NetworkSourceKind,
-    },
+    Network { source_kind: NetworkSourceKind },
     /// 流协议错误（分帧/解码失败，invalid-stream；归 Network 语义可重试）
     #[error("流协议错误（{kind:?}）")]
-    Stream {
-        kind: StreamErrorKind,
-    },
+    Stream { kind: StreamErrorKind },
     /// 第 13 行：兜底未知错误，不可重试
     #[error("未知 Provider 错误：{message}")]
-    Unknown {
-        message: String,
-    },
+    Unknown { message: String },
 }
 
 impl ProviderError {
@@ -263,7 +241,10 @@ pub fn classify_provider_error(
     // 8. HTTP 429 → rate-limit + Retry-After（:192-199）
     if status == Some(429) {
         let retry_after = parse_retry_after_ms(retry_after_header, SystemTime::now());
-        return ProviderError::RateLimit { status, retry_after };
+        return ProviderError::RateLimit {
+            status,
+            retry_after,
+        };
     }
     // 9. transport 源（runtime:error-classifier.ts:119-131；02 §五 #11 必须可重试）
     match source {

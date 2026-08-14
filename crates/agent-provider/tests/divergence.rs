@@ -11,7 +11,7 @@
 //! request::vendor），不引入新依赖。
 
 use agent_provider::config::Endpoint;
-use agent_provider::request::{ReasoningVendor, infer_reasoning_vendor, resolve_endpoint};
+use agent_provider::request::{infer_reasoning_vendor, resolve_endpoint, ReasoningVendor};
 
 // ── 00 D3：endpoint 默认 chat-completions ──
 
@@ -22,7 +22,10 @@ fn endpoint_defaults_to_chat_completions() {
     // 未显式指定 → chat-completions
     assert_eq!(resolve_endpoint(None), Endpoint::ChatCompletions);
     // auto 退化 → chat-completions（02 §五 #1 裁决：当前实现恒退化）
-    assert_eq!(resolve_endpoint(Some(Endpoint::Auto)), Endpoint::ChatCompletions);
+    assert_eq!(
+        resolve_endpoint(Some(Endpoint::Auto)),
+        Endpoint::ChatCompletions
+    );
     // 显式指定仍生效（默认只在未指定时兜底）
     assert_eq!(
         resolve_endpoint(Some(Endpoint::Responses)),

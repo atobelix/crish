@@ -1,9 +1,9 @@
 //! responses.rs 测试旁挂（SR-06e · 拆分 · ≠ EL；经父模 `#[path]` 接线，非直接 mod）
 //! 原 responses.rs `mod tests` 整段搬入，零删除零合并；测试名与断言形状不变。
 use super::*;
-use serde_json::json;
 use crate::events::{ProviderStreamEvent, StopReason};
 use crate::sse::frame::SseFrame;
+use serde_json::json;
 /// 便捷构造：处理一帧并立即 finish，返回全部事件
 fn parse_all(frames: Vec<&str>) -> Vec<ProviderStreamEvent> {
     let mut parser = ResponsesParser::new();
@@ -53,8 +53,10 @@ fn terminal_frame(event_type: &str, status: &str) -> String {
 #[test]
 fn text_delta_from_output_text() {
     let events = parse_all(vec![
-        &serde_json::to_string(&json!({ "type": "response.output_text.delta", "delta": "你好" })).expect("序列化"),
-        &serde_json::to_string(&json!({ "type": "response.output_text.delta", "delta": "，世界" })).expect("序列化"),
+        &serde_json::to_string(&json!({ "type": "response.output_text.delta", "delta": "你好" }))
+            .expect("序列化"),
+        &serde_json::to_string(&json!({ "type": "response.output_text.delta", "delta": "，世界" }))
+            .expect("序列化"),
         &terminal_frame("response.completed", "completed"),
     ]);
     let texts: Vec<&str> = events
@@ -79,9 +81,16 @@ fn text_delta_from_output_text() {
 fn reasoning_delta_yields_redacted_thought() {
     // 三种 reasoning delta 均 → thought-delta{redacted:true}（02 §六.10）
     let events = parse_all(vec![
-        &serde_json::to_string(&json!({ "type": "response.reasoning_summary_text.delta", "delta": "摘要" })).expect("序列化"),
-        &serde_json::to_string(&json!({ "type": "response.reasoning_text.delta", "delta": "推理" })).expect("序列化"),
-        &serde_json::to_string(&json!({ "type": "response.reasoning.delta", "delta": "再想" })).expect("序列化"),
+        &serde_json::to_string(
+            &json!({ "type": "response.reasoning_summary_text.delta", "delta": "摘要" }),
+        )
+        .expect("序列化"),
+        &serde_json::to_string(
+            &json!({ "type": "response.reasoning_text.delta", "delta": "推理" }),
+        )
+        .expect("序列化"),
+        &serde_json::to_string(&json!({ "type": "response.reasoning.delta", "delta": "再想" }))
+            .expect("序列化"),
         &terminal_frame("response.completed", "completed"),
     ]);
     let thoughts: Vec<&ProviderStreamEvent> = events
@@ -104,7 +113,8 @@ fn reasoning_delta_yields_redacted_thought() {
 #[test]
 fn empty_delta_is_ignored() {
     let events = parse_all(vec![
-        &serde_json::to_string(&json!({ "type": "response.output_text.delta", "delta": "" })).expect("序列化"),
+        &serde_json::to_string(&json!({ "type": "response.output_text.delta", "delta": "" }))
+            .expect("序列化"),
         &terminal_frame("response.completed", "completed"),
     ]);
     assert_eq!(events.len(), 1, "空 delta 不产出事件，仅剩 stop");
@@ -363,9 +373,14 @@ fn stream_without_terminal_event_errors() {
     let events = parse_all(vec![&serde_json::to_string(&json!({
         "type": "response.output_text.delta",
         "delta": "正文",
-    })).expect("序列化")]);
+    }))
+    .expect("序列化")]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { reason: StopReason::Error, error, .. } => {
+        ProviderStreamEvent::Stop {
+            reason: StopReason::Error,
+            error,
+            ..
+        } => {
             assert_eq!(
                 error.as_deref(),
                 Some("[invalid-stream] Responses stream ended without a terminal response event")
@@ -380,7 +395,10 @@ fn empty_stream_without_terminal_errors() {
     let events = parse_all(vec![]);
     assert_eq!(events.len(), 1);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { reason: StopReason::Error, .. } => {}
+        ProviderStreamEvent::Stop {
+            reason: StopReason::Error,
+            ..
+        } => {}
         other => panic!("期望 error stop，得到：{other:?}"),
     }
 }
@@ -419,12 +437,19 @@ fn error_frame_falls_back_to_message_and_code() {
     let cases = [
         (r#"{"type":"error","message":"m1"}"#, "m1"),
         (r#"{"type":"error","code":"c2"}"#, "c2"),
-        (r#"{"type":"error"}"#, "Responses stream emitted an error event"),
+        (
+            r#"{"type":"error"}"#,
+            "Responses stream emitted an error event",
+        ),
     ];
     for (data, expected) in cases {
         let events = parse_all(vec![data]);
         match stop_of(&events) {
-            ProviderStreamEvent::Stop { reason: StopReason::Error, error: Some(error), .. } => {
+            ProviderStreamEvent::Stop {
+                reason: StopReason::Error,
+                error: Some(error),
+                ..
+            } => {
                 assert_eq!(error, expected);
             }
             other => panic!("{data} 期望错误 stop，得到：{other:?}"),
@@ -466,15 +491,23 @@ fn usage_override_later_frame_wins() {
         "type": "response.output_text.delta",
         "delta": "a",
         "usage": { "input_tokens": 1, "output_tokens": 2, "total_tokens": 3 },
-    })).expect("序列化");
+    }))
+    .expect("序列化");
     let second = serde_json::to_string(&json!({
         "type": "response.output_text.delta",
         "delta": "b",
         "usage": { "input_tokens": 10, "output_tokens": 20, "total_tokens": 30 },
-    })).expect("序列化");
-    let events = parse_all(vec![&first, &second, &terminal_frame("response.completed", "completed")]);
+    }))
+    .expect("序列化");
+    let events = parse_all(vec![
+        &first,
+        &second,
+        &terminal_frame("response.completed", "completed"),
+    ]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(10));
             assert_eq!(usage.completion_tokens, Some(20));
             assert_eq!(usage.total_tokens, Some(30));
@@ -490,17 +523,21 @@ fn terminal_frame_usage_overrides() {
         "type": "response.output_text.delta",
         "delta": "a",
         "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 },
-    })).expect("序列化");
+    }))
+    .expect("序列化");
     let terminal = serde_json::to_string(&json!({
         "type": "response.completed",
         "response": {
             "status": "completed",
             "usage": { "input_tokens": 5, "output_tokens": 7, "total_tokens": 12 },
         },
-    })).expect("序列化");
+    }))
+    .expect("序列化");
     let events = parse_all(vec![&early, &terminal]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(5));
             assert_eq!(usage.completion_tokens, Some(7));
             assert_eq!(usage.total_tokens, Some(12));
@@ -521,7 +558,9 @@ fn usage_accepts_chat_style_fields_and_details() {
     }}}"#;
     let events = parse_all(vec![data]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, Some(5));
             assert_eq!(usage.completion_tokens, Some(7));
             assert_eq!(usage.cache_read_tokens, Some(3));
@@ -545,10 +584,20 @@ fn usage_receives_cache_hit_write_miss_aliases() {
     }}}"#;
     let events = parse_all(vec![data]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
-            assert_eq!(usage.cache_read_tokens, Some(70), "顶层 hit 优先于 details（A1-04）");
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
+            assert_eq!(
+                usage.cache_read_tokens,
+                Some(70),
+                "顶层 hit 优先于 details（A1-04）"
+            );
             assert_eq!(usage.cache_miss_tokens, Some(30), "顶层 miss 透传");
-            assert_eq!(usage.cache_write_tokens, Some(10), "details.cache_write_tokens 别名");
+            assert_eq!(
+                usage.cache_write_tokens,
+                Some(10),
+                "details.cache_write_tokens 别名"
+            );
         }
         other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
     }
@@ -563,7 +612,9 @@ fn usage_rejects_non_finite_values() {
     }}}"#;
     let events = parse_all(vec![data]);
     match stop_of(&events) {
-        ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+        ProviderStreamEvent::Stop {
+            usage: Some(usage), ..
+        } => {
             assert_eq!(usage.prompt_tokens, None, "非数值应忽略");
             assert_eq!(usage.completion_tokens, None, "null 应忽略");
             assert_eq!(usage.total_tokens, Some(3));

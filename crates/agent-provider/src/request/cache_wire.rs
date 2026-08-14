@@ -71,7 +71,9 @@ pub fn apply_cache_controls(
 
     // messages 锚点：最后一条 role=user / role=tool 消息
     let messages_index = if plan.messages {
-        messages.iter().rposition(|m| m.role == "user" || m.role == "tool")
+        messages
+            .iter()
+            .rposition(|m| m.role == "user" || m.role == "tool")
     } else {
         None
     };
@@ -119,13 +121,10 @@ fn apply_part_level_cc(message: &mut ChatMessage, cc: CacheControl) -> bool {
             true
         }
         Some(ChatContent::Parts(mut parts)) => {
-            let cacheable = parts
-                .iter_mut()
-                .rev()
-                .find_map(|part| match part {
-                    ChatContentPart::Text { cache_control, .. } => Some(cache_control),
-                    _ => None,
-                });
+            let cacheable = parts.iter_mut().rev().find_map(|part| match part {
+                ChatContentPart::Text { cache_control, .. } => Some(cache_control),
+                _ => None,
+            });
             match cacheable {
                 Some(part_cc) => {
                     *part_cc = Some(cc);

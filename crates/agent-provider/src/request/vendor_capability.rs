@@ -5,7 +5,7 @@
 //! 最长前缀命中）与 [infer_thinking_capability] 推断入口。
 //! 门面（request/vendor.rs）re-export [infer_thinking_capability]，对外路径不变。
 
-use super::{NO_THINKING, ReasoningFormat, ReasoningVendor, ThinkingCapability, ThinkingIntensity};
+use super::{ReasoningFormat, ReasoningVendor, ThinkingCapability, ThinkingIntensity, NO_THINKING};
 
 // ── 模型系列能力映射表（对齐 shared:thinking-intensity.ts:80-127，最长前缀命中）──
 
@@ -160,8 +160,7 @@ pub fn infer_thinking_capability(model: &str) -> ThinkingCapability {
     let lower = model.to_ascii_lowercase();
     let mut best: Option<&(&str, ThinkingCapability)> = None;
     for entry in MODEL_SERIES_CAPABILITIES {
-        if lower.starts_with(entry.0)
-            && best.is_none_or(|current| entry.0.len() > current.0.len())
+        if lower.starts_with(entry.0) && best.is_none_or(|current| entry.0.len() > current.0.len())
         {
             best = Some(entry);
         }

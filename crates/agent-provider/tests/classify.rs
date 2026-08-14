@@ -12,9 +12,9 @@ use agent_provider::error::{
     classify_provider_error, source_from_reqwest_error, source_from_sse_read_error,
     NetworkSourceKind, ProviderError, ProviderSourceError,
 };
-use conex_types::error::ProviderErrorKind;
 use agent_provider::sse::{AbortFlag, StreamReadOptions};
 use common::{MockFrame, MockResponse, MockServer};
+use conex_types::error::ProviderErrorKind;
 use serde_json::json;
 
 /// 起一个返回固定状态码 + 响应头/体的 mock，并完成一次 POST
@@ -41,8 +41,8 @@ async fn plain_response(
 /// HTTP 401 → Auth（第 4 行，不可重试）
 #[tokio::test(flavor = "multi_thread")]
 async fn status_401_maps_to_auth() {
-    let (status, body, _) = plain_response(401, r#"{"error":{"message":"unauthorized"}}"#, vec![])
-        .await;
+    let (status, body, _) =
+        plain_response(401, r#"{"error":{"message":"unauthorized"}}"#, vec![]).await;
     let error = classify_provider_error(Some(status), Some(&body), None, None);
     assert_eq!(error, ProviderError::Auth { status: Some(401) });
     assert!(!error.is_retryable());
@@ -52,8 +52,8 @@ async fn status_401_maps_to_auth() {
 /// HTTP 403 → Auth（403 网关 key 无效同判）
 #[tokio::test(flavor = "multi_thread")]
 async fn status_403_maps_to_auth() {
-    let (status, body, _) = plain_response(403, r#"{"error":{"message":"forbidden"}}"#, vec![])
-        .await;
+    let (status, body, _) =
+        plain_response(403, r#"{"error":{"message":"forbidden"}}"#, vec![]).await;
     let error = classify_provider_error(Some(status), Some(&body), None, None);
     assert_eq!(error, ProviderError::Auth { status: Some(403) });
     assert!(!error.is_retryable());
@@ -72,12 +72,7 @@ async fn status_429_maps_to_rate_limit_with_retry_after() {
         .get("retry-after")
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
-    let error = classify_provider_error(
-        Some(status),
-        Some(&body),
-        None,
-        retry_after.as_deref(),
-    );
+    let error = classify_provider_error(Some(status), Some(&body), None, retry_after.as_deref());
     match error {
         ProviderError::RateLimit {
             status,
@@ -101,10 +96,7 @@ async fn status_400_context_length_maps_to_context_length() {
     )
     .await;
     let error = classify_provider_error(Some(status), Some(&body), None, None);
-    assert_eq!(
-        error,
-        ProviderError::ContextLength { status: Some(400) }
-    );
+    assert_eq!(error, ProviderError::ContextLength { status: Some(400) });
     assert!(error.is_retryable(), "分类层 context_length 标记可重试");
 }
 

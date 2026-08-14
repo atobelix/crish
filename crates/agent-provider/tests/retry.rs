@@ -12,10 +12,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_provider::error::{
-    classify_provider_error, source_from_reqwest_error, source_from_sse_read_error,
-    ProviderError,
+    classify_provider_error, source_from_reqwest_error, source_from_sse_read_error, ProviderError,
 };
-use agent_provider::retry::{provider_stream, RetryPolicy, RetryState, StreamAttempt, TokioSleeper};
+use agent_provider::retry::{
+    provider_stream, RetryPolicy, RetryState, StreamAttempt, TokioSleeper,
+};
 use agent_provider::sse::{AbortFlag, ChunkReader};
 use common::{MockFrame, MockResponse, MockServer};
 use conex_test_utils::clock::TimePauseGuard;
@@ -223,10 +224,7 @@ async fn server_errors_stop_after_max_retries() {
     .await
     .expect_err("5xx 连续应最终报错");
 
-    assert!(matches!(
-        error,
-        ProviderError::Server { status: Some(503) }
-    ));
+    assert!(matches!(error, ProviderError::Server { status: Some(503) }));
     assert_eq!(counter.load(Ordering::SeqCst), 3, "初始 1 次 + 2 次重试");
     assert_eq!(state.retries, 2);
 }
@@ -287,10 +285,7 @@ async fn retry_budget_exhaustion_stops_retrying() {
         }
     };
 
-    assert!(matches!(
-        error,
-        ProviderError::Server { status: Some(500) }
-    ));
+    assert!(matches!(error, ProviderError::Server { status: Some(500) }));
     let count = counter.load(Ordering::SeqCst);
     assert_eq!(
         count, 3,
@@ -362,10 +357,6 @@ async fn mid_stream_disconnect_after_content_is_not_retried() {
     .expect_err("内容已产出后的中断应上抛而非重试");
 
     assert!(matches!(error, ProviderError::Network { .. }));
-    assert_eq!(
-        counter.load(Ordering::SeqCst),
-        1,
-        "已产出内容不得再重试"
-    );
+    assert_eq!(counter.load(Ordering::SeqCst), 1, "已产出内容不得再重试");
     assert_eq!(state.retries, 0);
 }
