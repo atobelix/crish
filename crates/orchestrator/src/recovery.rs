@@ -543,6 +543,23 @@ impl RecoveryCoordinator {
             )?
         };
         // 新 run 启动（spawner 契约：守卫校验 + 落库 + 独立 run，引擎侧实现）
+        // LK-02：fork 前反查原 run 的 session_agents 行，传播其
+        // parent_tool_call_id（链路键随 fork 延续，行 + 事件体真值）；
+        // 查不到（行不存在 → None）/查询失败（降级 None）均不阻断
+        // fork——键是观测增强而非前置条件，失败留告警不静默
+        let parent_tool_call_id = self
+            .store
+            .get_subagent_parent_tool_call_id(&self.session_id, &ctx.subagent_run_id)
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    target: "recovery",
+                    event = "fork_parent_tool_call_lookup_failed",
+                    subagent_run_id = %ctx.subagent_run_id,
+                    error = %e,
+                    "fork 反查父工具调用 id 失败，按 None 传播"
+                );
+                None
+            });
         let request = SubagentSpawnRequest {
             agent_id: None,
             prompt: ctx.task.clone(),
@@ -554,7 +571,8 @@ impl RecoveryCoordinator {
             mode: None,
             parent_session_id: self.session_id.clone(),
             parent_run_id: None,
-            parent_tool_call_id: None,
+            // LK-02：fork 传播原行键（反查见上；查不到保持 None）
+            parent_tool_call_id,
             flow_node_id: None,
             is_composite: false,
             // T-D-07 定义扩展：恢复 fork 路径不携带任务类型/写路径/标签

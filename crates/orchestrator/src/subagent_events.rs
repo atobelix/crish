@@ -66,6 +66,9 @@ pub struct SubagentStartedInfo {
     pub mode: Option<String>,
     /// 父 run 发起 spawn 的工具调用 id
     pub parent_tool_call_id: Option<String>,
+    /// 子会话 id（D-02 LK-04 跨会话导航键：父会话三事件视图 → 子会话
+    /// 事件流；None = 发射面未接线/旧帧，前端回退行级反查）
+    pub subagent_session_id: Option<String>,
 }
 
 /// `subagent-event` 载荷（event 为结构化负载，前端整体透传）
@@ -93,6 +96,9 @@ pub struct SubagentEndedInfo {
     pub status: SubagentEndStatus,
     /// 收尾摘要（可选）
     pub summary: Option<String>,
+    /// 子会话 id（D-02 LK-04 跨会话导航键：SubagentEnded(subagent_run_id)
+    /// → 子会话事件流 / session_agents 行反查；None = 发射面未接线/旧帧）
+    pub subagent_session_id: Option<String>,
 }
 
 impl SubagentEndedInfo {
@@ -114,6 +120,10 @@ impl SubagentEndedInfo {
             subagent_run_id: subagent_run_id.into(),
             status,
             summary: None,
+            // D-02 LK-04：子会话 id 由发射方装配（spawner 反查 runs 注册表
+            // 后置赋值）；本构造点缺省 None，避免 from_subagent_state 签名
+            // 携带非状态语义参数
+            subagent_session_id: None,
         }
     }
 }
@@ -133,6 +143,7 @@ pub fn build_subagent_started(
         description: info.description.clone(),
         mode: info.mode.clone(),
         parent_tool_call_id: info.parent_tool_call_id.clone(),
+        subagent_session_id: info.subagent_session_id.clone(),
     }
 }
 
@@ -158,6 +169,7 @@ pub fn build_subagent_ended(ctx: &SubagentEmitContext, info: &SubagentEndedInfo)
         status: info.status,
         summary: info.summary.clone(),
         ended_at: now_iso_utc(),
+        subagent_session_id: info.subagent_session_id.clone(),
     }
 }
 
@@ -255,6 +267,9 @@ pub(crate) fn started_info_from_spawn(
         description: request.description.clone(),
         mode: request.mode.clone(),
         parent_tool_call_id: request.parent_tool_call_id.clone(),
+        // D-02 LK-04：子会话 id 由 spawn 结果信封装配（result.session_id =
+        // sub-sess-{depth}-{n}，spawner 与 flow 两路径共用）
+        subagent_session_id: Some(result.session_id.clone()),
     }
 }
 
@@ -282,6 +297,7 @@ mod tests {
             description: Some("调研模块 A".to_string()),
             mode: Some("research".to_string()),
             parent_tool_call_id: Some("call_1".to_string()),
+            subagent_session_id: Some("sub-sess-1".to_string()),
         }
     }
 
@@ -291,6 +307,7 @@ mod tests {
             subagent_run_id: "sub-run-1".to_string(),
             status,
             summary: Some("完成".to_string()),
+            subagent_session_id: Some("sub-sess-1".to_string()),
         }
     }
 

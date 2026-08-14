@@ -16,6 +16,9 @@ use conex_types::{SessionAgent, SessionMessage};
 /// session_agents 行 → SessionAgent 映射（全量加载与查询扩展共用，
 /// 唯一真源，防两份查询口径漂移）
 fn map_agent_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionAgent> {
+    // sub_session_id（v9 列；SELECT 自 agent_id 起 17 列，本列 = 位置索引 16；
+    // 列定义 NOT NULL DEFAULT ''，空串归一为 None——与「无子会话映射」同义）
+    let sub_session_id: Option<String> = row.get(16)?;
     Ok(SessionAgent {
         id: row.get(0)?,
         subagent_run_id: row.get(1)?,
@@ -35,6 +38,7 @@ fn map_agent_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionAgent> {
         task_type: row.get(13)?,
         display_label: row.get(14)?,
         allowed_write_paths_json: row.get(15)?,
+        sub_session_id: sub_session_id.filter(|s| !s.is_empty()),
         messages: Vec::new(),
     })
 }
@@ -52,7 +56,8 @@ impl LocalDb {
                 "SELECT agent_id, subagent_run_id, parent_session_id, parent_run_id,
                         parent_tool_call_id, description, mode, status, summary,
                         started_at, ended_at, depth, subagent_path_json,
-                        task_type, display_label, allowed_write_paths_json
+                        task_type, display_label, allowed_write_paths_json,
+                        sub_session_id
                  FROM session_agents
                  WHERE session_id = ?1
                  ORDER BY started_at ASC, agent_id ASC",
@@ -123,7 +128,8 @@ impl LocalDb {
                 "SELECT agent_id, subagent_run_id, parent_session_id, parent_run_id,
                         parent_tool_call_id, description, mode, status, summary,
                         started_at, ended_at, depth, subagent_path_json,
-                        task_type, display_label, allowed_write_paths_json
+                        task_type, display_label, allowed_write_paths_json,
+                        sub_session_id
                  FROM session_agents
                  WHERE parent_session_id = ?1 AND status = ?2
                  ORDER BY started_at ASC, agent_id ASC",
@@ -216,8 +222,9 @@ impl LocalDb {
                     session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
                     parent_tool_call_id, description, mode, status, summary,
                     started_at, ended_at, depth, subagent_path_json,
-                    task_type, display_label, allowed_write_paths_json
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                    task_type, display_label, allowed_write_paths_json,
+                    sub_session_id
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 rusqlite::params![
                     session_id,
                     agent.id,
@@ -236,6 +243,7 @@ impl LocalDb {
                     agent.task_type,
                     agent.display_label,
                     agent.allowed_write_paths_json,
+                    agent.sub_session_id.clone().unwrap_or_default(),
                 ],
             )
             .map_err(|e| self.latch_error("save_session_agents_insert", e))?;
@@ -326,10 +334,10 @@ impl LocalDb {
         .map_err(|e| self.latch_error("update_session_agent_path", e))
     }
 
-    /// 单行 upsert（spawn 落库用）。全 17 列 `INSERT ... ON CONFLICT(session_id,
+    /// 单行 upsert（spawn 落库用）。全 18 列 `INSERT ... ON CONFLICT(session_id,
     /// agent_id) DO UPDATE SET`（v6 三列 task_type / display_label /
-    /// allowed_write_paths_json 随行），字段集与 [Self::save_session_agents]
-    /// 列清单严格一致（map_agent_row 双向核对）。
+    /// allowed_write_paths_json + v9 sub_session_id 随行），字段集与
+    /// [Self::save_session_agents] 列清单严格一致（map_agent_row 双向核对）。
     ///
     /// 关键：**禁止 INSERT OR REPLACE**——REPLACE 语义 = DELETE + INSERT，
     /// PK 冲突会删除旧行并触发 session_agent_messages 的 FK 级联清空该 agent
@@ -344,8 +352,9 @@ impl LocalDb {
                 session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
                 parent_tool_call_id, description, mode, status, summary,
                 started_at, ended_at, depth, subagent_path_json,
-                task_type, display_label, allowed_write_paths_json
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                task_type, display_label, allowed_write_paths_json,
+                sub_session_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
             ON CONFLICT(session_id, agent_id) DO UPDATE SET
                 subagent_run_id = excluded.subagent_run_id,
                 parent_session_id = excluded.parent_session_id,
@@ -361,7 +370,8 @@ impl LocalDb {
                 subagent_path_json = excluded.subagent_path_json,
                 task_type = excluded.task_type,
                 display_label = excluded.display_label,
-                allowed_write_paths_json = excluded.allowed_write_paths_json",
+                allowed_write_paths_json = excluded.allowed_write_paths_json,
+                sub_session_id = excluded.sub_session_id",
             rusqlite::params![
                 row.parent_session_id,
                 row.id,
@@ -380,6 +390,7 @@ impl LocalDb {
                 row.task_type,
                 row.display_label,
                 row.allowed_write_paths_json,
+                row.sub_session_id.clone().unwrap_or_default(),
             ],
         )
         .map_err(|e| self.latch_error("upsert_session_agent", e))?;
@@ -451,6 +462,7 @@ mod tests {
             task_type: Some(format!("task-{id}")),
             display_label: Some(format!("标签-{id}")),
             allowed_write_paths_json: Some(r#"["docs/notes"]"#.to_string()),
+            sub_session_id: None,
         }
     }
 
@@ -813,8 +825,7 @@ mod tests {
     /// 起的子代理及其消息不丢。防未来把前端 SESSION_AGENTS_SAVE_CAP 下沉
     /// 到 Rust 造成静默截断回归。
     #[test]
-    fn save_session_agents_does_not_truncate_over_cap() {
-        let db = LocalDb::open_in_memory().unwrap();
+    fn save_session_agents_does_not_truncate_over_cap() {        let db = LocalDb::open_in_memory().unwrap();
         db.upsert_session_entry(&session_entry("s1")).unwrap();
 
         // 45 条 > 前端软上限 40：Rust 侧应全量保存
@@ -842,5 +853,58 @@ mod tests {
         assert_eq!(by_id("a44").messages[0].id, "m44");
         assert_eq!(by_id("a0").messages[0].id, "m0");
         assert_eq!(by_id("a40").messages[0].id, "m40", "第 41 个起的子代理消息随行");
+    }
+
+    /// D-02 LK-04 v9 列读写 roundtrip：save/load 与 upsert/load 双面均不丢
+    /// sub_session_id（map_agent_row 位置索引 17 适配）；None → 落库空串，
+    /// 读回归一 None（无子会话映射语义）；查询扩展面（kill_all 过滤面）
+    /// 同样带回该列
+    #[test]
+    fn sub_session_id_roundtrip_via_save_and_upsert() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&session_entry("s1")).unwrap();
+
+        // save 面：带子会话 id 的行随行落库、读回一致
+        let mut row = agent("a1", "run-1", "running", "s1", None, None, Vec::new());
+        row.sub_session_id = Some("sub-sess-1-1".to_string());
+        db.save_session_agents("s1", &[row.clone()]).unwrap();
+        let loaded = db.load_session_agents("s1").unwrap();
+        assert_eq!(
+            loaded[0].sub_session_id.as_deref(),
+            Some("sub-sess-1-1"),
+            "save/load roundtrip 不丢 sub_session_id"
+        );
+
+        // upsert 面：ON CONFLICT DO UPDATE 覆盖列值同样读回一致
+        let mut updated = row.clone();
+        updated.sub_session_id = Some("sub-sess-1-2".to_string());
+        db.upsert_session_agent(&updated).unwrap();
+        let loaded = db.load_session_agents("s1").unwrap();
+        assert_eq!(
+            loaded[0].sub_session_id.as_deref(),
+            Some("sub-sess-1-2"),
+            "upsert/load roundtrip 不丢 sub_session_id"
+        );
+
+        // 查询扩展面（kill_all 过滤面）：按父会话 + 状态过滤同样带回该列
+        let by_status = db
+            .load_session_agents_by_parent_status("s1", "running")
+            .unwrap();
+        assert_eq!(
+            by_status[0].sub_session_id.as_deref(),
+            Some("sub-sess-1-2"),
+            "查询扩展面带回 sub_session_id"
+        );
+
+        // None → 落库空串（NOT NULL DEFAULT '' 兜底），读回归一 None
+        let mut bare = agent("a2", "run-2", "running", "s1", None, None, Vec::new());
+        bare.sub_session_id = None;
+        db.upsert_session_agent(&bare).unwrap();
+        let loaded = db.load_session_agents("s1").unwrap();
+        let a2 = loaded.iter().find(|a| a.id == "a2").unwrap();
+        assert_eq!(
+            a2.sub_session_id, None,
+            "None 落库空串读回归一 None（无子会话映射）"
+        );
     }
 }

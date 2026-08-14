@@ -365,6 +365,11 @@ impl SubagentSpawnerImpl {
                             context_window: None,
                             parent_run_id: parent_run.clone(),
                             subagent_config: Some(config.clone()),
+                            // D5 §3.1：子代理 run 非 goal 模式，goal 三字段
+                            // 恒 None（SR-02 新增字段，机械补齐）
+                            visible_goal: None,
+                            max_rounds: None,
+                            max_stalled_rounds: None,
                         })
                         .await
                 }
@@ -426,8 +431,14 @@ impl SubagentSpawnerImpl {
         // 5. subagent-started 发射（M14 唯一发射方：FlowScheduler 路径已接，
         //    工具直调路径由本 spawner 发射——事件只观测不阻塞，失败仅告警）
         if req.flow_node_id.is_none() {
-            self.emit_started(req, parent_run.as_deref(), &subagent_id, &subagent_run_id)
-                .await;
+            self.emit_started(
+                req,
+                parent_run.as_deref(),
+                &subagent_id,
+                &subagent_run_id,
+                &session_id,
+            )
+            .await;
         }
 
         Ok(SubagentSpawnResult {
@@ -449,6 +460,7 @@ impl SubagentSpawnerImpl {
         parent_run: Option<&str>,
         subagent_id: &str,
         subagent_run_id: &str,
+        subagent_session_id: &str,
     ) {
         let Some(db) = self.db.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
             return;
@@ -470,6 +482,9 @@ impl SubagentSpawnerImpl {
             description: req.description.clone(),
             mode: req.mode.clone(),
             parent_tool_call_id: req.parent_tool_call_id.clone(),
+            // D-02 LK-04：子会话 id 透传（跨会话导航键：父会话三事件视图
+            // → 子会话事件流）
+            subagent_session_id: Some(subagent_session_id.to_string()),
         };
         let emitter = SubagentEventEmitter::new(Arc::new(LocalDbStore::new(db)));
         if let Err(error) = emitter.emit_started(&ctx, &info).await {
@@ -520,10 +535,14 @@ impl SubagentSpawnerImpl {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(&run_id);
-        self.runs
+        // D-02 LK-04：runs 注册表反查子会话 id（run 记录携带子代理会话；
+        // remove 取出即释放，供 subagent-ended 反向导航键装配）
+        let sub_session_id = self
+            .runs
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .remove(&run_id);
+            .remove(&run_id)
+            .map(|record| record.session_id);
 
         // 2. 行终态更新（status/ended_at；产出保留——summary/messages 原样）
         {
@@ -571,11 +590,14 @@ impl SubagentSpawnerImpl {
         // 3. subagent-ended 事件：flow 路径由 FlowScheduler 发射（本 spawner
         //    不双发）；工具直调路径（无 flow 关联）由本 spawner 发射（M14
         //    唯一发射方）——Critical 必达落库 + wait 通道 feed + steering
-        let info = SubagentEndedInfo::from_subagent_state(
+        let mut info = SubagentEndedInfo::from_subagent_state(
             cfg.subagent_id.clone(),
             run_id.clone(),
             state,
         );
+        // D-02 LK-04：后置赋值子会话 id（runs 注册表反查；None = 注册表
+        // 无记录/未接线，前端回退行级反查）
+        info.subagent_session_id = sub_session_id;
         let emit_ctx = SubagentEmitContext {
             session_id: cfg.parent_session_id.clone(),
             parent_run_id: parent_run.clone().unwrap_or_default(),
@@ -666,7 +688,7 @@ impl SubagentSpawnerImpl {
         req: &SubagentSpawnRequest,
         subagent_id: &str,
         subagent_run_id: &str,
-        _session_id: &str,
+        session_id: &str,
         depth: usize,
         now: i64,
     ) -> SessionAgent {
@@ -708,6 +730,9 @@ impl SubagentSpawnerImpl {
             allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
                 serde_json::to_string(paths).expect("路径白名单序列化不应失败")
             }),
+            // D-02 LK-04：子会话 id 随行落库（v9 新列；反向导航键——子会话
+            // 事件流 → session_agents 行反查，`sub-sess-{depth}-{n}`）
+            sub_session_id: Some(session_id.to_string()),
         }
     }
 
@@ -993,6 +1018,28 @@ mod tests {
             serde_json::from_str(row.allowed_write_paths_json.as_deref().unwrap()).unwrap();
         assert_eq!(paths, vec!["docs/"]);
         assert!(row.started_at > 0);
+        // D-02 LK-04：反向导航键行级落库（子会话 id = sub-sess-{depth}-{n}）
+        assert_eq!(
+            row.sub_session_id.as_deref(),
+            Some(result.session_id.as_str()),
+            "行 sub_session_id == 子会话 id（子会话 → session_agents 行反查）"
+        );
+
+        // D-02 LK-04：subagent-started 事件体信封携带子会话 id（跨会话导航
+        // 键：父会话三事件视图 → 子会话事件流）
+        let events = db.query_events("sess-main", 0, Some(100)).expect("事件查询");
+        let started: Vec<_> = events
+            .iter()
+            .filter(|e| e.event_type == "subagent-started")
+            .collect();
+        assert_eq!(started.len(), 1, "subagent-started 必达落库");
+        let started_value: serde_json::Value =
+            serde_json::from_str(&started[0].payload).expect("payload 应为 JSON");
+        assert_eq!(
+            started_value["subagentSessionId"].as_str(),
+            Some(result.session_id.as_str()),
+            "started 事件体信封 subagentSessionId == 子会话 id"
+        );
 
         // 独立 run 启动：launcher 收到 subagent_config（task_type / started_at
         // / parent_run_id 透传；产出目录缺省 None）

@@ -236,3 +236,71 @@ async fn flow_correlation_fields_echo_through_spawner() {
     assert!(spawner.requests()[0].is_composite, "请求必须携带综合节点标记");
 }
 
+// ── LK-02 工具直调真键（parent_tool_call_id = ctx.tool_call_id）──────
+
+#[tokio::test]
+async fn tool_direct_path_propagates_tool_call_id() {
+    // LK-02 S5 测钉：工具直调路径 parent_tool_call_id = ctx.tool_call_id
+    // 真键（exec_single 注入；行 + 事件体链路自动透传）
+    let spawner = Arc::new(RecordingSpawner::ok());
+    let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+    let ctx = ToolContext {
+        tool_call_id: Some("call-lk02-1".to_string()),
+        ..create_mock_tool_context()
+    };
+    tool.execute(&ctx, serde_json::json!({ "prompt": "任务" }))
+        .await
+        .unwrap();
+    let requests = spawner.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].parent_tool_call_id.as_deref(),
+        Some("call-lk02-1"),
+        "工具直调必须携带 ctx.tool_call_id 真键"
+    );
+}
+
+#[tokio::test]
+async fn tool_batch_path_propagates_tool_call_id_to_each_request() {
+    // LK-02 S5 测钉（批量路径）：tasks 逐条请求均携带 ctx.tool_call_id
+    let spawner = Arc::new(RecordingSpawner::ok());
+    let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+    let ctx = ToolContext {
+        tool_call_id: Some("call-lk02-batch".to_string()),
+        ..create_mock_tool_context()
+    };
+    tool.execute(
+        &ctx,
+        serde_json::json!({
+            "tasks": [{ "prompt": "任务 A" }, { "prompt": "任务 B" }]
+        }),
+    )
+    .await
+    .unwrap();
+    let requests = spawner.requests();
+    assert_eq!(requests.len(), 2);
+    for req in &requests {
+        assert_eq!(
+            req.parent_tool_call_id.as_deref(),
+            Some("call-lk02-batch"),
+            "批量路径每条请求都必须携带真键"
+        );
+    }
+}
+
+#[tokio::test]
+async fn tool_direct_path_without_tool_call_id_keeps_none() {
+    // LK-02 诚实边界：非工具上下文（ctx.tool_call_id = None）→ 请求
+    // parent_tool_call_id = None（不编造 id）
+    let spawner = Arc::new(RecordingSpawner::ok());
+    let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+    let ctx = create_mock_tool_context();
+    tool.execute(&ctx, serde_json::json!({ "prompt": "任务" }))
+        .await
+        .unwrap();
+    assert!(
+        spawner.requests()[0].parent_tool_call_id.is_none(),
+        "非工具上下文不得编造调用 id"
+    );
+}
+

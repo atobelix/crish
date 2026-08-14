@@ -668,6 +668,11 @@ pub enum AgentEvent {
         /// 父 run 发起 spawn 的工具调用 id
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_tool_call_id: Option<String>,
+        /// 子会话 id（D-02 LK-04 跨会话导航键：父会话三事件视图 → 子会话
+        /// 事件流；`sub-sess-{depth}-{n}`，spawner 发射面透传；None = 旧帧 /
+        /// 发射面未接线，前端回退 session_agents.sub_session_id 行级反查）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent_session_id: Option<String>,
     },
     /// 子代理过程事件（event 为结构化负载，前端整体透传给 onSubagentEvent；
     /// 背压分级随 kind：progress=Delta、message/tool=Soft）
@@ -691,6 +696,11 @@ pub enum AgentEvent {
         summary: Option<String>,
         /// ISO8601 时间戳
         ended_at: String,
+        /// 子会话 id（D-02 LK-04 跨会话导航键：SubagentEnded(subagent_run_id)
+        /// → 子会话事件流 / session_agents 行反查；None = 旧帧，前端回退
+        /// 行级反查）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent_session_id: Option<String>,
     },
 
     // ── 任务域（T-AB-17：AB 命令执行与后台任务，01 方案 §4.5 七事件冻结

@@ -422,6 +422,10 @@ pub struct FlowNodeRuntime {
     /// 关联的子代理 id（M14：subagent-ended 发射需要；spawn 成功时记录）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent_id: Option<String>,
+    /// 子会话 id（D-02 LK-04：spawn 结果信封 session_id，subagent-ended
+    /// 发射透传反向导航键）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_session_id: Option<String>,
     /// 合成唤醒已发出（幂等：同节点只唤醒一次，防 gate 死观测）
     #[serde(default)]
     pub wakeup_sent: bool,
@@ -433,6 +437,7 @@ impl FlowNodeRuntime {
             node_id,
             subagent_run_id: None,
             subagent_id: None,
+            subagent_session_id: None,
             wakeup_sent: false,
         }
     }
@@ -686,10 +691,11 @@ pub const FLOW_ON_FAILED_KEY: &str = "flow_on_failed";
 pub const FLOW_RESERVED_KEY: &str = "flow_reserved";
 /// 预算已释放计数键
 pub const FLOW_RELEASED_KEY: &str = "flow_released";
-/// 全局并发上限键（默认 RecursionGuardConfig.max_concurrent = 12，
-/// T-D-06 上限 12 对齐，跟随 DEFAULT_RECURSION_GUARD）
+/// 全局并发上限键（默认 RecursionGuardConfig.max_concurrent = 16，
+/// 2026-08-11 用户裁决 12→16，跟随 DEFAULT_RECURSION_GUARD）
 pub const FLOW_MAX_CONCURRENT_KEY: &str = "flow_max_concurrent";
-/// 兄弟并发上限键（默认 RecursionGuardConfig.max_siblings = 5）
+/// 兄弟并发上限键（默认 RecursionGuardConfig.max_siblings = 16，
+/// 2026-08-11 用户裁决 12→16，同父上限 = 全局上限）
 pub const FLOW_MAX_SIBLINGS_KEY: &str = "flow_max_siblings";
 /// 综合节点自动排队开关键（默认 true；false = 观测态只发唤醒事件）
 pub const FLOW_AUTO_COMPOSITE_KEY: &str = "flow_auto_composite";
@@ -1001,9 +1007,9 @@ impl FlowScheduler {
                 // 节点），maxDepth=1 下嵌套拒绝（NestingDenied）按「新会话
                 // 深度 > 1」判定——流程快照深度 1 恒在界限内，不受嵌套禁止
                 // 影响；预算维度（siblings/concurrent）照常作为预算门。
-                // T-D-06 确认：预算默认值跟随 DEFAULT_RECURSION_GUARD
-                // （max_concurrent 6→12 自动生效，meta 未配置 flow_max_concurrent
-                // 时按 12 预算）；批量派发（spawn_many，无依赖平铺并行）与
+                // 2026-08-11 用户裁决确认：预算默认值跟随 DEFAULT_RECURSION_GUARD
+                // （max_concurrent 12→16 自动生效，meta 未配置 flow_max_concurrent
+                // 时按 16 预算）；批量派发（spawn_many，无依赖平铺并行）与
                 // DAG 调度器并存——流程节点仍逐条经 spawn 启动（预算 reserve
                 // 逐节点判定，语义不变），批量原子性由 spawner 层承担，不改变
                 // 本模块的预算判定行为。
@@ -1029,6 +1035,10 @@ impl FlowScheduler {
                     mode: None,
                     parent_session_id: self.session_id.clone(),
                     parent_run_id: self.planner_run_id.clone(),
+                    // LK-02 定案：flow 路径链路键 = flow_node_id（下字段已填
+                    // 并落库 session_agents.description 载体）；parent_tool_call_id
+                    // 恒 None——调度驱动无父工具调用，语义正确非欠接线，
+                    // 禁止虚构 id 填充
                     parent_tool_call_id: None,
                     flow_node_id: Some(node_id.clone()),
                     is_composite: node.is_composite,
@@ -1051,6 +1061,9 @@ impl FlowScheduler {
                                 .entry(node_id.clone())
                                 .or_insert_with(|| FlowNodeRuntime::new(node_id.clone()));
                             runtime.subagent_run_id = Some(result.subagent_run_id.clone());
+                            // D-02 LK-04：子会话 id 落 runtime（ended 发射
+                            // 透传反向导航键；与 spawner 行级同源）
+                            runtime.subagent_session_id = Some(result.session_id.clone());
                         }
                         // D4 双防线①（T3.4）：spawn 状态持久化前置——run 已由
                         // spawner 落库 session_agents，这里在**任何 await 之前**
@@ -1200,6 +1213,12 @@ impl FlowScheduler {
                 .get(&node_id)
                 .and_then(|r| r.subagent_id.clone())
                 .unwrap_or_else(|| subagent_run_id.to_string());
+            // D-02 LK-04：子会话 id 透传（spawn 成功时落 runtime；None =
+            // 运行时映射缺失，前端回退行级反查）
+            let subagent_session_id = self
+                .runtime
+                .get(&node_id)
+                .and_then(|r| r.subagent_session_id.clone());
             let status = match next {
                 FlowNodeState::Completed => SubagentEndStatus::Completed,
                 _ => SubagentEndStatus::Failed,
@@ -1212,6 +1231,7 @@ impl FlowScheduler {
                         subagent_run_id: subagent_run_id.to_string(),
                         status,
                         summary: None,
+                        subagent_session_id,
                     },
                 )
                 .await

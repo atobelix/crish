@@ -39,6 +39,15 @@ pub trait RecoveryStore: Send + Sync {
         subagent_run_id: &str,
         path_json: &str,
     ) -> Result<(), RecoveryError>;
+    /// 反查子代理行的父工具调用 id（LK-02：fork 传播原行键）。
+    ///
+    /// 行不存在返回 None；查询失败返回 Err（调用方降级 None 不阻断
+    /// fork）——键是观测增强而非 fork 前置条件。
+    fn get_subagent_parent_tool_call_id(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+    ) -> Result<Option<String>, RecoveryError>;
 }
 
 impl RecoveryStore for LocalDb {
@@ -131,6 +140,24 @@ impl RecoveryStore for LocalDb {
             });
         }
         Ok(())
+    }
+
+    fn get_subagent_parent_tool_call_id(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+    ) -> Result<Option<String>, RecoveryError> {
+        // LK-02：经 conex-db 既有接口（load_session_agents）反查原行
+        // parent_tool_call_id——不新增库方法（恢复域纪律）；行缺失按
+        // None 返回（观测增强，不阻断 fork）
+        let agents = conex_db::LocalDb::load_session_agents(self, session_id)
+            .map_err(|e| RecoveryError::PersistFailed {
+                message: e.to_string(),
+            })?;
+        Ok(agents
+            .iter()
+            .find(|a| a.subagent_run_id == subagent_run_id)
+            .and_then(|a| a.parent_tool_call_id.clone()))
     }
 }
 

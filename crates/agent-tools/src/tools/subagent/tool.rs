@@ -195,7 +195,9 @@ impl RunSubagentTool {
                 mode: None,
                 parent_session_id: ctx.session_id.clone(),
                 parent_run_id: None,
-                parent_tool_call_id: None,
+                // LK-02：工具直调真键——携带本次工具调用 id（exec_single
+                // 注入；None = 非工具上下文）
+                parent_tool_call_id: ctx.tool_call_id.clone(),
                 // 工具直调路径不携带流程关联（C6 调度器经 spawner 直接 spawn）
                 flow_node_id: None,
                 is_composite: false,
@@ -428,7 +430,9 @@ impl Tool for RunSubagentTool {
             mode,
             parent_session_id: ctx.session_id.clone(),
             parent_run_id: None,
-            parent_tool_call_id: None,
+            // LK-02：工具直调真键——携带本次工具调用 id（exec_single
+            // 注入；None = 非工具上下文）
+            parent_tool_call_id: ctx.tool_call_id.clone(),
             // 工具直调路径不携带流程关联（C6 调度器经 spawner 直接 spawn）
             flow_node_id: None,
             is_composite: false,

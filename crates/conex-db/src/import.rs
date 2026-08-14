@@ -137,8 +137,9 @@ impl LocalDb {
                         "INSERT INTO session_agents (
                             session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
                             parent_tool_call_id, description, mode, status, summary,
-                            started_at, ended_at, depth, subagent_path_json
-                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                            started_at, ended_at, depth, subagent_path_json,
+                            sub_session_id
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                         rusqlite::params![
                             entry.id,
                             agent.id,
@@ -154,6 +155,7 @@ impl LocalDb {
                             agent.ended_at,
                             agent.depth,
                             agent.subagent_path_json,
+                            agent.sub_session_id.clone().unwrap_or_default(),
                         ],
                     )
                     .map_err(|e| self.latch_error("import_insert_agent", e))?;

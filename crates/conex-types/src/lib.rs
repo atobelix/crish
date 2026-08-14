@@ -232,6 +232,11 @@ pub struct SessionAgent {
     /// 显式写路径白名单（JSON 字符串数组，硬沙箱消费输入，T-D-07；v6 新列）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_write_paths_json: Option<String>,
+    /// 子会话 id（D-02 LK-04 反向导航键：`sub-sess-{depth}-{n}` 命名，
+    /// spawner 落库；子会话行经本列反查 session_agents 行——parent_run_id /
+    /// parent_tool_call_id 回父会话；v9 新列，旧行空串/未接线 = None）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_session_id: Option<String>,
 }
 
 /// 会话索引条目（对齐 SessionIndexEntry in sessionPersistenceTypes.ts L20-36）
@@ -557,6 +562,7 @@ mod tests {
             task_type: Some("analysis".into()),
             display_label: Some("Rust 内核分析师".into()),
             allowed_write_paths_json: Some(r#"["docs/notes"]"#.into()),
+            sub_session_id: Some("sub-sess-0-1".into()),
         };
         let json = serde_json::to_string(&agent).unwrap();
         let back: SessionAgent = serde_json::from_str(&json).unwrap();
@@ -570,6 +576,7 @@ mod tests {
         assert_eq!(old.task_type, None);
         assert_eq!(old.display_label, None);
         assert_eq!(old.allowed_write_paths_json, None);
+        assert_eq!(old.sub_session_id, None, "旧载荷无 subSessionId → None");
     }
 
     #[test]

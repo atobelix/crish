@@ -234,6 +234,8 @@ impl DbSpawner {
             allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
                 serde_json::to_string(paths).expect("路径白名单序列化不应失败")
             }),
+            // v9 新列（D-02 LK-04 并行契约）：测试替身行无子会话映射
+            sub_session_id: None,
         }
     }
 }
