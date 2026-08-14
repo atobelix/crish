@@ -75,12 +75,19 @@
 // BackgroundTaskRegistry）即契约的实现面。
 // ============================================================================
 
+#[path = "bg_commands.rs"]
 mod bg_commands;
+#[path = "bg_events.rs"]
 mod bg_events;
+#[path = "bg_kill.rs"]
 mod bg_kill;
+#[path = "bg_log.rs"]
 mod bg_log;
+#[path = "bg_registry.rs"]
 mod bg_registry;
+#[path = "bg_task.rs"]
 mod bg_task;
+#[path = "bg_writer.rs"]
 mod bg_writer;
 
 pub(crate) use crate::core_error::CoreError;
@@ -102,6 +109,17 @@ pub(crate) use bg_commands::{
     workbench_cancel_background_task, workbench_get_background_task_output,
     workbench_list_background_tasks, workbench_send_input, BackgroundTaskListResponse,
     BackgroundTaskOutputResponse, BackgroundTaskWire,
+    // Tauri 宏生成的 __cmd__ / __tauri_command_name_ 符号随命令函数同模块
+    // （bg_commands），main.rs invoke_handler 经 background:: 路径引用需要
+    // 一并 re-export（SR-05 拆分断链修复 · 2026-08-14）。
+    __cmd__workbench_cancel_background_task,
+    __cmd__workbench_get_background_task_output,
+    __cmd__workbench_list_background_tasks,
+    __cmd__workbench_send_input,
+    __tauri_command_name_workbench_cancel_background_task,
+    __tauri_command_name_workbench_get_background_task_output,
+    __tauri_command_name_workbench_list_background_tasks,
+    __tauri_command_name_workbench_send_input,
 };
 pub(crate) use bg_events::{EventBridgeSink, SamplerFn, SuspiciousDebounce};
 pub(crate) use bg_log::{read_meta, strip_log_prefix};
