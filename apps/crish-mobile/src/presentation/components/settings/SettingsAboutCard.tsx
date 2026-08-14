@@ -4,7 +4,9 @@
 //   （脱敏短显：desktopId 前 4 位，对齐 F6 §6.5 设备 ID 短显精神）+ getSettings
 //   镜像摘要（权限模式/信任命令数，只读展示不改——F6 §8.1 手机端禁止改权限）；
 // - 四态：loading（菊花）/ loaded（数据）/ error（错误文案 + 重试）/ disconnected
-//   （「未连接」禁用态，任务书）；idle 不渲染细节。
+//   （「未连接」禁用态，任务书）；idle 不渲染细节；
+// - 热区（R2-16 §3.2 第 7 项修复）：重试钮视觉 minHeight 28 → HitSlop 补足
+//   （iOS 44 / Android 48 双轨）。
 import {
   ActivityIndicator,
   Pressable,
@@ -18,6 +20,7 @@ import type {
   SettingsMirror,
 } from '@/adapters/viewmodels/useSettingsVm';
 import { useAppTheme } from '@/adapters/settings/themeProjection';
+import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 export interface SettingsAboutCardProps {
   status: AboutStatus;
@@ -79,6 +82,7 @@ export default function SettingsAboutCard({
               accessibilityRole="button"
               accessibilityLabel="重试获取桌面连接信息"
               onPress={onRefresh}
+              hitSlop={dualHitSlop(28)}
               style={({ pressed }) => [
                 styles.retry,
                 { borderColor: theme.colorError },

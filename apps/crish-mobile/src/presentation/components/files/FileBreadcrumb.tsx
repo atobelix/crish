@@ -3,11 +3,13 @@
 //   各层目录名（路径叶名）；当前层高亮（selected 语义态）；
 // - 点击段 → 截断导航栈到该深度（jumpTo，VM 层循环 goBack）；
 // - 返回键 [←]：根层禁用（canGoBack=false），X4-6 手势返回一致性；
-// - 44pt 触控热区（M4 §3.4 / R2UX-06-08）。
+// - 44pt 触控热区（M4 §3.4 / R2UX-06-08）；返回键视觉 36×36 → HitSlop 补足
+//   （R2-16 §3.2 第 4 项修复：iOS 44 / Android 48 双轨）。
 import { memo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { workspaceNameOf } from '@/adapters/wiring/filesWiring';
+import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 /** 段标签：根 = 工作区名（缺省「根目录」）；其余 = 路径叶名 */
 export function segmentLabel(
@@ -48,6 +50,7 @@ export const FileBreadcrumb = memo(function FileBreadcrumb({
         accessibilityState={{ disabled: !backEnabled }}
         disabled={!backEnabled}
         onPress={onBack}
+        hitSlop={dualHitSlop(36, 36)}
         style={({ pressed }) => [
           styles.back,
           { borderColor: theme.hairlineStrong },

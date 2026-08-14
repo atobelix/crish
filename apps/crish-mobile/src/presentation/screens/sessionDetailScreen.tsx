@@ -4,7 +4,9 @@
 //   上翻超 40dp 暂停跟随，页面浮出「回到底部」悬浮条，点击恢复吸底）；
 // - 未读清零（F5 §6.3）：详情打开且跟随底部 → sessionStore.markRead(sessionId, lastSeq)；
 // - 空态由 EventFeed 承接（M4 §5.9 文案）；「只看当前 run」以最近 agent-start 的 runId 为准；
-// - onBack 由路由注入（页面不依赖 expo-router，组件测试可直接挂载）。
+// - onBack 由路由注入（页面不依赖 expo-router，组件测试可直接挂载）；
+// - 热区（R2-16 §3.2 第 8 项修复）：「回到底部」悬浮条视觉 minHeight 36 → HitSlop 补足
+//   （iOS 44 / Android 48 双轨）。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
@@ -12,6 +14,7 @@ import { useEventStore, useSessionStore } from '@/adapters/hooks/useAppStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import { readString, type FeedEntry } from '@/domain/store/eventReducers';
 import { EventFeed } from '@/presentation/components/blocks/EventFeed';
+import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 /** 会话状态文案（F1 §4.4 活动判定：活动 run / 待审批 → 活动态） */
 export function sessionStatusLabel(summary: {
@@ -137,6 +140,7 @@ export default function SessionDetailScreen({
             listRef.current?.scrollToEnd({ animated: true });
             setFollow(true);
           }}
+          hitSlop={dualHitSlop(36)}
           style={[styles.followBar, { backgroundColor: theme.bgElevated }]}
         >
           <Text style={[styles.followText, { color: theme.textPrimary }]}>

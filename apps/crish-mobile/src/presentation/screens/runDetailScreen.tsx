@@ -9,13 +9,16 @@
 // - 终端入口：跳转 terminal/[runId]（onOpenTerminal 由路由注入）；
 // - 空态（F1 §4.7 / M4 §5.9）：run 无任何事件 → 占位「该 run 暂无事件」
 //   （run 不存在或事件尚未同步，诚实化不伪造数据）；
-// - onBack / onOpenTerminal 由路由注入（页面不依赖 expo-router，组件测试直挂）。
+// - onBack / onOpenTerminal 由路由注入（页面不依赖 expo-router，组件测试直挂）；
+// - 热区（R2-16 §3.2 第 8/9 项修复）：「回到底部」悬浮条 36、终端入口行 40 →
+//   HitSlop 补足（iOS 44 / Android 48 双轨）。
 import { useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { useEventStore, useSessionStore } from '@/adapters/hooks/useAppStore';
 import type { FeedEntry } from '@/domain/store/eventReducers';
 import { formatFeedTime } from '@/presentation/components/blocks/EventRow';
+import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 import {
   deriveRunStatus,
   entriesOfRun,
@@ -131,6 +134,7 @@ export default function RunDetailScreen({
               accessibilityRole="button"
               accessibilityLabel="查看终端输出"
               onPress={onOpenTerminal}
+              hitSlop={dualHitSlop(40)}
               style={({ pressed }) => [
                 styles.terminalRow,
                 { borderColor: theme.hairline },
@@ -174,6 +178,7 @@ export default function RunDetailScreen({
             listRef.current?.scrollToEnd({ animated: true });
             setFollow(true);
           }}
+          hitSlop={dualHitSlop(36)}
           style={[styles.followBar, { backgroundColor: theme.bgElevated }]}
         >
           <Text style={[styles.followText, { color: theme.textPrimary }]}>

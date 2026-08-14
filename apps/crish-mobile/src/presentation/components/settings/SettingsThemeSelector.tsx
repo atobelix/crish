@@ -2,7 +2,8 @@
 // - 分段式三选（chips 行内切换，M4 §6.1 分段控件）；选中态 = 绿底绿字双通道
 //   （颜色 + accessibilityState.selected，M4 §6.5 状态表达双通道）；
 // - 模式文案/顺序单一真源：THEME_MODES / THEME_MODE_LABELS（themeProjection）；
-// - 切换即时生效（themeModeStore → useAppTheme 投影 token，设置页与后续全局一致）。
+// - 切换即时生效（themeModeStore → useAppTheme 投影 token，设置页与后续全局一致）；
+// - 热区（R2-16 §3.2 第 1 项修复）：视觉 minHeight 44（下限）+ Android HitSlop 补 48。
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   THEME_MODES,
@@ -10,6 +11,7 @@ import {
   useAppTheme,
   type ThemeMode,
 } from '@/adapters/settings/themeProjection';
+import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 export interface SettingsThemeSelectorProps {
   value: ThemeMode;
@@ -45,6 +47,7 @@ export default function SettingsThemeSelector({
             accessibilityLabel={`${THEME_MODE_LABELS[mode]}${active ? '（当前）' : ''}`}
             accessibilityState={{ selected: active }}
             onPress={() => onChange(mode)}
+            hitSlop={dualHitSlop(44)}
             style={({ pressed }) => [
               styles.option,
               {
@@ -81,7 +84,7 @@ const styles = StyleSheet.create({
   },
   option: {
     flex: 1,
-    minHeight: 36,
+    minHeight: 44,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',

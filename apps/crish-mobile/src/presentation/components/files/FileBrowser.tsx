@@ -17,6 +17,7 @@ import { useTheme } from '@/adapters/platform/theme';
 import { mapFilesErrorCode } from './fileMeta';
 import { FileBreadcrumb } from './FileBreadcrumb';
 import { FileRow } from './FileRow';
+import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 // ── 四态派生（纯函数导出供单测，R2UX-06-07） ─────────────────────────────
 
@@ -85,6 +86,7 @@ function SortBar({
             accessibilityState={{ selected: active }}
             accessibilityLabel={`按${opt.label}排序`}
             onPress={() => onSortChange(opt.mode)}
+            hitSlop={dualHitSlop(32)}
             style={({ pressed }) => [
               styles.chip,
               {
@@ -111,6 +113,7 @@ function SortBar({
         accessibilityRole="button"
         accessibilityLabel={`列表密度 ${density}，点击切换`}
         onPress={() => onDensityChange(nextDensity(density))}
+        hitSlop={dualHitSlop(32)}
         style={({ pressed }) => [
           styles.chip,
           { borderColor: theme.hairlineStrong },
@@ -156,6 +159,7 @@ function StateView({
           accessibilityRole="button"
           accessibilityLabel="重新连接"
           onPress={onRetryConnect}
+          hitSlop={dualHitSlop(40)}
           style={({ pressed }) => [
             styles.stateButton,
             { borderColor: theme.colorSuccess },
@@ -184,6 +188,7 @@ function StateView({
           accessibilityRole="button"
           accessibilityLabel="重试"
           onPress={onRetry}
+          hitSlop={dualHitSlop(40)}
           style={({ pressed }) => [
             styles.stateButton,
             { borderColor: theme.colorSuccess },
@@ -219,6 +224,7 @@ function StateView({
         accessibilityRole="button"
         accessibilityLabel="刷新"
         onPress={onRefresh}
+        hitSlop={dualHitSlop(40)}
         style={({ pressed }) => [
           styles.stateButton,
           { borderColor: theme.colorSuccess },

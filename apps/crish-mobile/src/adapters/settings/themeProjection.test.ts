@@ -1,7 +1,9 @@
-// themeProjection 测试（R2-06，R2UX-06-05 深色模式三选）：
+// themeProjection 测试（R2-06，R2UX-06-05 深色模式三选；R2-05 双轨收敛兼容层）：
 // 存储默认/切换 / projectThemeTokens 投影 / token 键集合完整性（浅深两套）
+// 兼容层语义（R2-05）：useAppTheme 与 useTheme 同源（re-export 同一实现），
+// 存储面已下沉 platform/theme.ts，本文件 import 面不变即验证兼容层完整。
 import { act, renderHook } from '@testing-library/react-native';
-import { darkTokens, lightTokens } from '@/adapters/platform/theme';
+import { darkTokens, lightTokens, useTheme } from '@/adapters/platform/theme';
 import {
   projectThemeTokens,
   resetThemeModeForTest,
@@ -67,6 +69,19 @@ describe('useAppTheme', () => {
   it('深色模式返回深色 token 表', async () => {
     themeModeStore.getState().setMode('dark');
     const { result } = await renderHook(() => useAppTheme());
+    expect(result.current).toBe(darkTokens);
+  });
+
+  it('useAppTheme 与 useTheme 同源（R2-05 双轨收敛，函数恒等）', () => {
+    expect(useAppTheme).toBe(useTheme);
+  });
+
+  it('三选切换驱动 useAppTheme 变化（与 useTheme 一致）', async () => {
+    const { result } = await renderHook(() => useAppTheme());
+    expect(result.current).toBe(lightTokens);
+    await act(async () => {
+      themeModeStore.getState().setMode('dark');
+    });
     expect(result.current).toBe(darkTokens);
   });
 });

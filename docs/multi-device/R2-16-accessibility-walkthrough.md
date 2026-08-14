@@ -465,5 +465,26 @@ console.log('=== LIGHT ===');for(const[n,f,b]of pairs)console.log(n+' = '+ratio(
 | 版本 | 日期       | 变更                                                                                                                                                                                 |
 | ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | v1.0 | 2026-08-14 | 初稿：三部分走查清单（动态字体 12 屏 + 深色三选/token + TalkBack/热区/对比度）；基于代码实读标注 R-D1~~16、R-T1~~4、W-1~9；对比度 18 组 token 计算值 + 复算脚本；执行留 R2-16 联调轮 |
+| v1.1 | 2026-08-14 | 热区修复落地记录（R2-05 部分 10）：§3.2 表 1-11 全部修复，dualHitSlop 双轨工具（iOS 44 / Android 48）+ 11 处命中区断言测试（详见下方「§3.2 热区修复记录」）                          |
+
+### §3.2 热区修复记录（R2-05 部分 10 实现轮，2026-08-14）
+
+> 实现：`apps/crish-mobile/src/presentation/` + `app/(tabs)/files.tsx`（最小改动）；工具 `src/presentation/components/ui/hitTargets.ts`（`dualHitSlop`，A1 裁决双轨：44 视觉下限 + Android HitSlop 48；单边扩展 = ceil((目标−视觉)/2)，全向达标返回 undefined）。测试：11 处命中区断言（组件测试 + `hitTargets.test.ts` 工具单测，jest-expo 默认 iOS 断言 44，Android 分支断言 48）。
+
+| #   | 组件（§3.2 表项）                                              | 修复方式                                 | iOS hitSlop / 尺寸  | 断言位置                           |
+| --- | -------------------------------------------------------------- | ---------------------------------------- | ------------------- | ---------------------------------- |
+| 1   | 主题三选 option（SettingsThemeSelector）                       | 视觉 minHeight 36→44 + `dualHitSlop(44)` | 视觉 44（iOS 免补） | SettingsThemeSelector.test.tsx     |
+| 2   | 文件排序/密度 chips（FileBrowser）                             | `dualHitSlop(32)`（视觉不变）            | 全向补 6            | FileBrowser.test.tsx               |
+| 3   | 文件四态按钮（FileBrowser 重连/重试/刷新）                     | `dualHitSlop(40)`（视觉不变）            | 全向补 2            | FileBrowser.test.tsx               |
+| 4   | 面包屑返回键（FileBreadcrumb 36×36）                           | `dualHitSlop(36,36)`（视觉不变）         | 全向补 4            | FileBreadcrumb.test.tsx            |
+| 5   | 工作区弹层关闭钮（WorkspaceSwitcher 32×32）                    | `dualHitSlop(32,32)`（视觉不变）         | 全向补 6            | WorkspaceSwitcher.test.tsx         |
+| 6   | 工作区重试钮（WorkspaceSwitcher 40）                           | `dualHitSlop(40)`（视觉不变）            | 全向补 2            | WorkspaceSwitcher.test.tsx         |
+| 7   | 关于卡重试钮（SettingsAboutCard 28）                           | `dualHitSlop(28)`（视觉不变）            | 全向补 8            | SettingsAboutCard.test.tsx（新增） |
+| 8   | 三处「回到底部」悬浮条（sessionDetail / runDetail / terminal） | `dualHitSlop(36)`（视觉不变）            | 全向补 4            | 三屏组件测试（悬浮条出现后断言）   |
+| 9   | run 终端入口行（runDetailScreen 40）                           | `dualHitSlop(40)`（视觉不变）            | 全向补 2            | runDetailScreen.test.tsx           |
+| 10  | QuickRunPanel 会话 chips（36）                                 | `dualHitSlop(36)`（视觉不变）            | 全向补 4            | QuickRunPanel.test.tsx             |
+| 11  | 文件页工作区按钮（(tabs)/files.tsx 36）                        | `dualHitSlop(36)`（视觉不变）            | 全向补 4            | app/(tabs)/files.test.tsx（新增）  |
+
+**状态**：11 处全部修复 + 断言测试落地；`npx jest` 132 套件 1991 通过（1 失败为并行域在途 `src/notifications/payload.test.ts`，非本轮改动）；`tsc --noEmit` 本域 0 错误（全仓 29 错误均在并行域在途测试文件，见 R2-05 部分 10 汇报）。Android 48 双轨由 `hitTargets.test.ts` 分支断言覆盖（`Platform.OS` 切换），组件测试断言 iOS 值。
 
 _文档结束。本清单为 R2-16 真机走查准备产出：只读代码 + 文档，未修改任何源文件/测试文件。执行需 R2-16 联调轮（模拟器就绪 + E2E-1 前置完成）；凡清单标注「上报主控」项，执行轮汇总实际表现后提交裁决。_

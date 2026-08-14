@@ -5,7 +5,9 @@
 // - 行：工作区名（路径叶名）+ 完整路径 + 当前活动标记（F4 §6.1 卡片信息）；
 //   点击 → onSelect(root)（切换由 VM 执行：switchWorkspace → resetWorkspace）；
 // - 切换中禁用（switchingWorkspace busy，F2 §9.3-3 防双点）；
-// - 空态：无已授权工作区 → 「请先在桌面端添加项目工作区」（F4 §6.1 引导）。
+// - 空态：无已授权工作区 → 「请先在桌面端添加项目工作区」（F4 §6.1 引导）；
+// - 热区（R2-16 §3.2 第 5/6 项修复）：关闭钮视觉 32×32、重试钮 40 → HitSlop 补足
+//   （iOS 44 / Android 48 双轨）。
 import {
   FlatList,
   Modal,
@@ -19,6 +21,7 @@ import type { WorkspacesStatus } from '@/adapters/viewmodels/useFilesVm';
 import { workspaceNameOf } from '@/adapters/wiring/filesWiring';
 import { useTheme } from '@/adapters/platform/theme';
 import { mapFilesErrorCode } from './fileMeta';
+import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 export interface WorkspaceSwitcherProps {
   workspaces: readonly WorkspaceEntry[] | null;
@@ -90,6 +93,7 @@ export function WorkspaceSwitcher({
             accessibilityRole="button"
             accessibilityLabel="关闭"
             onPress={onClose}
+            hitSlop={dualHitSlop(32, 32)}
             style={({ pressed }) => [
               styles.closeBtn,
               { borderColor: theme.hairlineStrong },
@@ -118,6 +122,7 @@ export function WorkspaceSwitcher({
               accessibilityRole="button"
               accessibilityLabel="重试"
               onPress={onRetry}
+              hitSlop={dualHitSlop(40)}
               style={({ pressed }) => [
                 styles.retryButton,
                 { borderColor: theme.colorSuccess },
