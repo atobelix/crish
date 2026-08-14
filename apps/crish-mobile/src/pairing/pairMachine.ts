@@ -95,6 +95,11 @@ export type PairEvent =
       ttl: number;
       token: string;
       /**
+       * 桌面证书指纹（D3 §4.6 可选扩展：pair.ok 载荷 tlsFingerprint；
+       * 透传到 result 供接线层收口持久化——当前桌面不下发则省略）。
+       */
+      tlsFingerprint?: string;
+      /**
        * 密钥派生注入（R2-03 部分 2 接线点）：paired 前派生 token_key
        * 输出给连接层（signer.ts SignContext.tokenKey 注入点——接线层
        * 把 sessionKeys 持久化后构造签名器）。缺省不派生（旧行为）。
@@ -225,6 +230,9 @@ export function reducePairState(
         desktopId: event.desktopId,
         ttl: event.ttl,
         token: event.token,
+        ...(event.tlsFingerprint !== undefined
+          ? { tlsFingerprint: event.tlsFingerprint }
+          : {}),
       };
       if (event.deriveKeys) {
         // R2-03 部分 2：paired 前派生 token_key（密钥材料 = 本地密钥对 +

@@ -93,11 +93,6 @@ pub fn classify_network_categories(categories: &[u32]) -> NetworkKind {
     }
 }
 
-/// 兼容别名：委托 [classify_network_categories]
-pub fn classify_category(categories: &[u32]) -> NetworkKind {
-    classify_network_categories(categories)
-}
-
 /// 网络类别 → wire 字符串（前端按此渲染徽标与提示）。
 fn kind_to_profile(kind: NetworkKind) -> &'static str {
     match kind {
@@ -619,18 +614,18 @@ mod tests {
     /// 网络类别聚合：空集合 → 未知；单类别直判；Fail-Closed（公网优先，min() 聚合）；异常值按公用 fail-closed。
     #[test]
     fn classify_category_resolves_trust_level() {
-        assert_eq!(classify_category(&[]), NetworkKind::Unknown);
-        assert_eq!(classify_category(&[0]), NetworkKind::Public);
-        assert_eq!(classify_category(&[1]), NetworkKind::Private);
-        assert_eq!(classify_category(&[2]), NetworkKind::Domain);
+        assert_eq!(classify_network_categories(&[]), NetworkKind::Unknown);
+        assert_eq!(classify_network_categories(&[0]), NetworkKind::Public);
+        assert_eq!(classify_network_categories(&[1]), NetworkKind::Private);
+        assert_eq!(classify_network_categories(&[2]), NetworkKind::Domain);
         // Fail-Closed 铁律：公用 + 专用 → 公用（任何公网均视为公用）
-        assert_eq!(classify_category(&[0, 1]), NetworkKind::Public);
-        assert_eq!(classify_category(&[0, 2]), NetworkKind::Public);
+        assert_eq!(classify_network_categories(&[0, 1]), NetworkKind::Public);
+        assert_eq!(classify_network_categories(&[0, 2]), NetworkKind::Public);
         // 专用 + 域 → 专用（Private 1 优先于 Domain 2）
-        assert_eq!(classify_category(&[1, 2]), NetworkKind::Private);
+        assert_eq!(classify_network_categories(&[1, 2]), NetworkKind::Private);
         // 异常值（>2）按公用处理（fail-closed：提示最安全）
-        assert_eq!(classify_category(&[9]), NetworkKind::Public);
-        assert_eq!(classify_category(&[3, 4]), NetworkKind::Public);
+        assert_eq!(classify_network_categories(&[9]), NetworkKind::Public);
+        assert_eq!(classify_network_categories(&[3, 4]), NetworkKind::Public);
     }
 
     /// wire 字符串映射（前端徽标/提示消费）。

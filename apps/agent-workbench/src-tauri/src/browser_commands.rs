@@ -627,10 +627,6 @@ mod tests {
                 get_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             }
         }
-
-        fn get_calls(&self) -> usize {
-            self.get_calls.load(std::sync::atomic::Ordering::SeqCst)
-        }
     }
 
     #[async_trait]
@@ -719,7 +715,7 @@ mod tests {
 
     impl MockLocalStorageChannel {
         /// 预设某 origin 的 localStorage 读取结果（导出聚合断言，P1-3）。
-        fn with_items(mut self, origin: &str, items: Vec<(&str, &str)>) -> Self {
+        fn with_items(self, origin: &str, items: Vec<(&str, &str)>) -> Self {
             self.items
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())

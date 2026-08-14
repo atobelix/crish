@@ -740,6 +740,41 @@ async fn ladder3_fork_propagates_parent_tool_call_id_in_sqlite() {
     );
 }
 
+/// LK-02 S5 测钉（内存 Mock 态）：InMemoryRecoveryStore 预置 parent_tool_call_id 传播验证
+#[tokio::test]
+async fn ladder3_fork_propagates_parent_tool_call_id_in_memory() {
+    let store = InMemoryRecoveryStore::new();
+    store.seed_parent_tool_call("run-1", Some("call-orig-mem".to_string()));
+    let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+    let tree = Arc::new(Mutex::new(SessionTree::new("s1")));
+    tree.lock()
+        .unwrap()
+        .append("leaf-a", serde_json::json!({ "text": "root" }))
+        .unwrap();
+    let spawner = RecordingSpawner::new();
+    let mut coordinator = RecoveryCoordinator::new(
+        "s1",
+        store.clone(),
+        queue.clone(),
+        tree.clone(),
+        spawner.clone(),
+        retry_policy(),
+    )
+    .expect("协调器构造失败");
+
+    let outcome = coordinator
+        .fork_and_reassign(&failure_ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000))
+        .await
+        .expect("fork 应成功");
+    assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
+    let requests = spawner.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].parent_tool_call_id.as_deref(),
+        Some("call-orig-mem")
+    );
+}
+
 /// LK-02 S5 测钉（无行态，真实 sqlite）：原 run 在 session_agents 无行
 /// → fork 照常成功且请求 parent_tool_call_id = None（键缺失不阻断恢复）
 #[tokio::test]

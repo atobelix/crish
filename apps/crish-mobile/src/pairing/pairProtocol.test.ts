@@ -1,10 +1,13 @@
 // 配对协议层单测（D3 §4.8 / device-protocol.json PairHello / pair_endpoint.rs
 // 对拍）：hello 构造（标准化/注入/兜底/截断）、deviceId 生成、ok 解析
-// （token 扩展）、error 解析（pair.* 错误码映射 + unknown 兜底 + 形状拒绝）
+// （token 扩展 + tlsFingerprint 扩展）、指纹一致性校验（D3 §4.6 证书固定
+// 最小面）、error 解析（pair.* 错误码映射 + unknown 兜底 + 形状拒绝）
 
 import {
   buildPairHello,
+  checkHostFingerprint,
   generateDeviceId,
+  isValidTlsFingerprint,
   parsePairError,
   parsePairOk,
 } from './pairProtocol';
@@ -148,6 +151,96 @@ describe('parsePairOk（ok 帧：wire 骨架 + token 明文扩展）', () => {
     expect(parsePairOk({ desktopId: 'd', ttl: 86400, token: 42 }).ok).toBe(
       false
     );
+  });
+});
+
+describe('parsePairOk 指纹扩展（D3 §4.6 tlsFingerprint）', () => {
+  const FP_A = 'ab'.repeat(32); // 64 位 hex（桌面 spki_sha256_hex 形态）
+
+  it('载荷含 tlsFingerprint（桌面端未来 ok 下发路径）→ 透传结果', () => {
+    const r = parsePairOk({
+      desktopId: 'd',
+      ttl: 60,
+      token: 't',
+      tlsFingerprint: FP_A,
+    });
+    expect(r).toEqual({
+      ok: true,
+      data: { desktopId: 'd', ttl: 60, token: 't', tlsFingerprint: FP_A },
+    });
+  });
+
+  it('缺省 / 空串 / 非字符串 → 不携带字段（当前桌面不下发，宽容不报错）', () => {
+    const absent = parsePairOk({ desktopId: 'd', ttl: 60, token: 't' });
+    expect(absent.ok).toBe(true);
+    if (absent.ok) expect('tlsFingerprint' in absent.data).toBe(false);
+    const empty = parsePairOk({
+      desktopId: 'd',
+      ttl: 60,
+      token: 't',
+      tlsFingerprint: '',
+    });
+    if (empty.ok) expect('tlsFingerprint' in empty.data).toBe(false);
+    const nonString = parsePairOk({
+      desktopId: 'd',
+      ttl: 60,
+      token: 't',
+      tlsFingerprint: 42,
+    });
+    if (nonString.ok) expect('tlsFingerprint' in nonString.data).toBe(false);
+  });
+});
+
+describe('证书指纹校验（D3 §4.6 应用层固定最小面）', () => {
+  const FP_A = 'ab'.repeat(32);
+  const FP_B = 'cd'.repeat(32);
+
+  it('指纹格式：64 位 hex 通过（大小写均可）；长度/字符越界拒绝', () => {
+    expect(isValidTlsFingerprint(FP_A)).toBe(true);
+    expect(isValidTlsFingerprint('AB'.repeat(32))).toBe(true);
+    expect(isValidTlsFingerprint('ab'.repeat(31))).toBe(false);
+    expect(isValidTlsFingerprint('g'.repeat(64))).toBe(false);
+    expect(isValidTlsFingerprint('')).toBe(false);
+  });
+
+  it('无历史存储值（首次配对）→ no-stored 放行', () => {
+    expect(checkHostFingerprint(undefined, FP_A)).toEqual({
+      ok: true,
+      defense: 'no-stored',
+    });
+    expect(checkHostFingerprint('', FP_A)).toEqual({
+      ok: true,
+      defense: 'no-stored',
+    });
+  });
+
+  it('有存储值但桌面未下发（当前简化链缺口）→ no-delivered 放行', () => {
+    expect(checkHostFingerprint(FP_A, undefined)).toEqual({
+      ok: true,
+      defense: 'no-delivered',
+    });
+  });
+
+  it('两者齐备且一致（大小写不敏感）→ verified', () => {
+    expect(checkHostFingerprint(FP_A, FP_A)).toEqual({
+      ok: true,
+      defense: 'verified',
+    });
+    expect(checkHostFingerprint('AB'.repeat(32), FP_A)).toEqual({
+      ok: true,
+      defense: 'verified',
+    });
+    expect(checkHostFingerprint(` ${FP_A} `, FP_A)).toEqual({
+      ok: true,
+      defense: 'verified',
+    });
+  });
+
+  it('不一致（证书轮换 / 本地篡改）→ mismatch 拒绝（失败关闭）', () => {
+    expect(checkHostFingerprint(FP_A, FP_B)).toEqual({
+      ok: false,
+      defense: 'mismatch',
+    });
   });
 });
 

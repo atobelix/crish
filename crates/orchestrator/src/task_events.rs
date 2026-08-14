@@ -242,10 +242,11 @@ impl TaskAuditResult {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TaskAuditOperator {
-    /// AI 工具调用（携带工具调用 id，审计可回溯）
+    /// AI 工具调用（携带工具调用 id，审计可回溯；LK-03 空串消解：
+    /// 有工具调用上下文传真值 / 无上下文置 None，禁空串）
     AiTool {
-        /// 工具调用 id
-        tool_call_id: String,
+        /// 工具调用 id（工具发起时真值；无工具调用上下文时为 None，非空串）
+        tool_call_id: Option<String>,
     },
     /// 用户命令（任务由用户命令行发起）
     UserCommand,
@@ -288,11 +289,12 @@ pub fn task_audit_decision(result: TaskAuditResult) -> SecurityAuditDecision {
 ///
 /// 形态对齐 agent-tools shell.rs 红线拦截先例（operation=command-exec，
 /// targets 承载命令文本）：本模块 targets 承载**任务 id**（审计面板按
-/// 任务检索）、tool_call_id 承载 AI 工具调用 id（用户命令时为 None）、
-/// impact 为空影响面（任务域无文件影响面语义）。
+/// 任务检索）、tool_call_id 承载 AI 工具调用 id（工具发起传真值 /
+/// 无工具调用上下文 None，禁空串；用户命令时为 None）、impact 为空
+/// 影响面（任务域无文件影响面语义）。
 pub fn build_task_audit_event(session_id: &str, record: &TaskAuditRecord) -> AgentEvent {
     let tool_call_id = match &record.operator {
-        TaskAuditOperator::AiTool { tool_call_id } => Some(tool_call_id.clone()),
+        TaskAuditOperator::AiTool { tool_call_id } => tool_call_id.clone(),
         TaskAuditOperator::UserCommand => None,
     };
     AgentEvent::SecurityAudit {
@@ -696,7 +698,7 @@ mod tests {
     fn audit_records_started_completed_killed_counts() {
         let mut acc = TaskAuditAccumulator::new();
         let ai = TaskAuditOperator::AiTool {
-            tool_call_id: "tc-1".into(),
+            tool_call_id: Some("tc-1".into()),
         };
         assert!(acc.push(&started("t-1", "run-main"), ai.clone()));
         assert!(acc.push(&completed("t-1", 0), ai.clone()));
@@ -723,7 +725,7 @@ mod tests {
     fn audit_same_task_same_result_replaces_in_place() {
         let mut acc = TaskAuditAccumulator::new();
         let ai = TaskAuditOperator::AiTool {
-            tool_call_id: "tc-1".into(),
+            tool_call_id: Some("tc-1".into()),
         };
         acc.push(&started("t-1", "run-main"), ai.clone());
         // 同任务两次 completed（如重试后成功）：只留一条，防无限增长
@@ -757,7 +759,7 @@ mod tests {
         acc.push(
             &started("t-1", "run-main"),
             TaskAuditOperator::AiTool {
-                tool_call_id: "tc-9".into(),
+                tool_call_id: Some("tc-9".into()),
             },
         );
         acc.push(&failed("t-1", 2), TaskAuditOperator::UserCommand);

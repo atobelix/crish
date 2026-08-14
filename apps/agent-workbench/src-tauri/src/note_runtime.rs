@@ -161,7 +161,7 @@ mod tests {
     // LR-T1：本模组测走 `open_at` → Store；未安装时 try_* = None。≠ 关 EL-05。
     use super::*;
     use agent_tools::note_backend::{
-        NoteApplyMdRequest, NoteApplyMode, NoteBackend as _, NoteQueryBlocksParams,
+        NoteApplyMdRequest, NoteApplyMode, NoteQueryBlocksParams,
     };
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};

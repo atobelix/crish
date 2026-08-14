@@ -296,11 +296,13 @@ impl PairRateLimiter {
     }
 
     /// 审计计数：超限拒绝次数（拒绝路径被刷也计入——可见性锚）
+    #[cfg(test)]
     pub fn audit_rejected(&self) -> u64 {
         self.rejected.load(Ordering::Relaxed)
     }
 
     /// 指定源 IP 当前窗口内计数（未命中过 → 0）
+    #[cfg(test)]
     pub fn count_for(&self, ip: std::net::IpAddr) -> usize {
         lock(&self.buckets)
             .get(&ip)

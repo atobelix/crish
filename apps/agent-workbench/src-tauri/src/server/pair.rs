@@ -24,9 +24,6 @@ pub const PAIR_LOCK_COOLDOWN_MS: u64 = 300_000;
 
 /// 配对状态机状态（D3 §4.2：Idle → WaitingInput → KeyVerify →
 /// Establishing → Established）
-// R1-02 备注：状态机全路径由单测覆盖；非测试构建消费方为 R1-07
-// （配对 GUI 命令 / POST /v1/pair）——dead_code 静音
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PairState {
     /// 未在配对
@@ -42,8 +39,6 @@ pub enum PairState {
 }
 
 /// 配对码校验结果
-// R1-02 备注：R1-07 配对流程消费——dead_code 静音（测试构建保持检查）
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerifyOutcome {
     /// 校验通过（码一次性作废，状态机进入 KeyVerify）
@@ -66,8 +61,6 @@ pub enum VerifyOutcome {
 }
 
 /// 配对码记录（生成即入表；TTL / 失败计数 / 一次性语义）
-// R1-02 备注：R1-07 配对流程消费——dead_code 静音（测试构建保持检查）
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PairCodeRecord {
     /// 已标准化的 12 字符码
@@ -90,22 +83,17 @@ pub struct PairCodeRecord {
 
 impl PairCodeRecord {
     /// 是否已过期
-    // R1-02 备注：R1-07 消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_expired(&self, now_ms: u64) -> bool {
         now_ms >= self.expires_at_ms
     }
 
     /// 是否处于冷却锁定
-    // R1-02 备注：R1-07 消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_locked(&self, now_ms: u64) -> bool {
         self.locked_until_ms > now_ms
     }
 
     /// 剩余尝试次数
-    // R1-02 备注：R1-07 UI 展示消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn remaining_attempts(&self) -> u32 {
         PAIR_MAX_ATTEMPTS.saturating_sub(self.failed_attempts)
     }
@@ -143,30 +131,23 @@ impl Default for PairStateMachine {
 
 impl PairStateMachine {
     /// 新建状态机（Idle）
-    // R1-02 备注：R1-07 消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 当前状态
-    // R1-02 备注：R1-07 消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn state(&self) -> PairState {
         self.state
     }
 
     /// 活跃配对码记录（生成后未过期未使用）
-    // R1-02 备注：R1-07 消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn codes(&self) -> &[PairCodeRecord] {
         &self.codes
     }
 
     /// 开始配对：清理过期码 → 生成新码入表（并发活跃码 ≤3，超限返回
     /// 错误）→ 进入 WaitingInput 并返回 CXN 码（供 UI 展示 / 二维码）
-    // R1-02 备注：R1-07 配对模式消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn start(&mut self, now_ms: u64) -> Result<PairCode, ServerError> {
         self.codes
             .retain(|record| !record.is_expired(now_ms) && !record.consumed && !record.destroyed);
@@ -191,8 +172,6 @@ impl PairStateMachine {
 
     /// 校验配对码（D3 §4.1 语义：输入容错标准化 → 匹配 → 一次性 / 状态 /
     /// TTL / 锁定 → 通过则码作废并进入 KeyVerify）
-    // R1-02 备注：R1-07 配对流程消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn verify(&mut self, input: &str, now_ms: u64) -> VerifyOutcome {
         let code = match PairCode::normalize(input) {
             Ok(code) => code,
@@ -236,9 +215,17 @@ impl PairStateMachine {
         VerifyOutcome::Success
     }
 
+    /// 进入链路建立中（密钥交换完成后调用）
+    pub fn advance_establishing(&mut self) {
+        self.state = PairState::Establishing;
+    }
+
+    /// 进入已建立态（配对全链路建立成功）
+    pub fn advance_established(&mut self) {
+        self.state = PairState::Established;
+    }
+
     /// 关闭配对（清空码表回 Idle；关闭配对时的令牌撤销在 auth.rs）
-    // R1-02 备注：R1-07 关闭配对消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn cancel(&mut self) {
         self.codes.clear();
         self.state = PairState::Idle;
@@ -515,5 +502,31 @@ mod tests {
         // 与 conex-types 既有用例交叉锚定（含 L 的码合法）
         assert!(PairCode::is_valid("CXN-7K4P-Q2MB-9XRT"));
         assert_eq!(sample_code().as_str(), "7K4PQ2MB9XRT");
+    }
+
+    #[test]
+    fn pair_state_variants_and_remaining_attempts() {
+        let mut machine = PairStateMachine::new();
+        assert_eq!(machine.state(), PairState::Idle);
+        machine.advance_establishing();
+        assert_eq!(machine.state(), PairState::Establishing);
+        machine.advance_established();
+        assert_eq!(machine.state(), PairState::Established);
+
+        let mut machine = PairStateMachine::new();
+        let code = machine.start(1_000).unwrap();
+        let record = machine.codes().first().unwrap();
+        assert_eq!(record.remaining_attempts(), 5);
+        let wrong = if code.as_str() == "7K4PQ2MB9XRT" {
+            "CXN-AAAA-BBBB-CCCC"
+        } else {
+            "CXN-7K4P-Q2MB-9XRT"
+        };
+        let outcome = machine.verify(wrong, 1_500);
+        assert_eq!(outcome, VerifyOutcome::WrongCode);
+        let record = machine.codes().first().unwrap();
+        assert_eq!(record.remaining_attempts(), 4);
+        machine.cancel();
+        assert_eq!(machine.state(), PairState::Idle);
     }
 }

@@ -15,6 +15,14 @@
 //   sending-hello → 合成 onHelloAck（无 remotePub）→ onPairOk **不注入** deriveKeys
 //   （pairMachine 兼容路径：paired 但 sessionKeys=null）→ tokenKey 回退 pair.ok
 //   明文 token（当前桌面不验签，D3 完整链落地后由派生值替换）；
+// - 证书指纹链路（D3 §4.6 证书固定，AU5 S-1 最小面）：pair.challenge 的
+//   tlsFingerprint（权威载体）→ pendingHostFingerprint；pair.ok 扩展字段可补充
+//   （双信道齐备时要求一致，冲突 → pairing.fingerprint_mismatch 拒绝）；收口时
+//   与 secure-store 已存 host_fingerprint 位做一致性校验（checkHostFingerprint：
+//   防本地篡改 / 捕获证书轮换），通过后写入凭据落位。**缺口记录**：当前桌面
+//   简化链不下发 challenge → 指纹实际拿不到，host_fingerprint 位暂空（诚实边界，
+//   见 pairProtocol.ts 文件头）；RN WebSocket 不暴露证书（ReconnectingWsClient
+//   工厂只收 url）→ TLS 层真钉扎需原生模块（超范围注记，排期见汇报）；
 // - 错误路径：派生失败 → pairMachine error 态（pair.key_agreement_failed，可重试）；
 //   持久化失败 → 错误上报且**不产生连接**；配对期传输失败 → pairing.transport_failed
 //   上报；会话重连失败由 connectionStore 相位投影承载（本层只读引用
@@ -37,7 +45,12 @@ import {
   type PairMachineState,
 } from '@/pairing/pairMachine';
 import type { PairOkResult } from '@/pairing/pairProtocol';
-import { parsePairError, parsePairOk } from '@/pairing/pairProtocol';
+import {
+  checkHostFingerprint,
+  isValidTlsFingerprint,
+  parsePairError,
+  parsePairOk,
+} from '@/pairing/pairProtocol';
 import { base64Encode, derivePairingKeys } from '@/pairing/crypto/keyAgreement';
 import { noblePrimitives } from '@/pairing/crypto/noblePrimitives';
 import type { KeyPrimitives, LocalKeys } from '@/pairing/crypto/primitives';
@@ -66,6 +79,7 @@ import {
   type AuthPersist,
 } from '@/domain/store/authStore';
 import {
+  KEYS,
   clearPairing,
   loadPairingCredential,
   savePairingCredential,
@@ -328,6 +342,9 @@ export class PairingWiring {
   private machine: PairMachineState = { ...PAIR_INITIAL_STATE };
   /** 最近一次接线层错误（机器 error 态 + 本地错误；UI 诊断展示） */
   private lastError: PairingWiringError | null = null;
+  /** 配对期已收的桌面证书指纹（D3 §4.6：pair.challenge 权威载体；pair.ok
+   *  扩展可补充；收口时与存储位一致性校验后落位 secure-store host_fingerprint） */
+  private pendingHostFingerprint: string | null = null;
   /** 配对期连接（无 token 无签名；配对成功/重置时关闭） */
   private pairingClient: ReconnectingWsClient | null = null;
   /** 配对期网关退订 */
@@ -458,6 +475,7 @@ export class PairingWiring {
    */
   beginPairing(input: PairingInput): PairingStartResult {
     this.lastError = null;
+    this.pendingHostFingerprint = null; // 新配对：指纹从零捕获
     const host = input.host.trim();
     if (host.length === 0) {
       return { ok: false, error: '主机不能为空' };
@@ -653,7 +671,12 @@ export class PairingWiring {
 
   // ── 配对帧消费（pair.challenge / pair.ok / error）─────────────────────────
 
-  /** pair.challenge（完整链，D3 §4.8 step 2）：桌面公钥 → onHelloAck 存 remotePub */
+  /**
+   * pair.challenge（完整链，D3 §4.8 step 2）：桌面公钥 → onHelloAck 存 remotePub；
+   * tlsFingerprint（D3 §4.6 证书固定权威载体，生成解析器必填字段）→ 捕获到
+   * pendingHostFingerprint（当前桌面简化链不下发 challenge → 指纹暂空，缺口记录
+   * 见文件头注释）。
+   */
   private handleChallenge(frame: InboundEnvelope): void {
     if (this.machine.state !== 'sending-hello') return; // 乱序/重复挑战忽略
     const parsed = parsePairChallenge(frame.body);
@@ -664,6 +687,9 @@ export class PairingWiring {
         retryable: true,
       });
       return;
+    }
+    if (parsed.data.tlsFingerprint.length > 0) {
+      this.pendingHostFingerprint = parsed.data.tlsFingerprint;
     }
     this.dispatch({ type: 'onHelloAck', remotePub: parsed.data.desktopPub });
   }
@@ -693,12 +719,32 @@ export class PairingWiring {
       });
       return;
     }
+    // 双信道指纹冲突（D3 §4.6）：pair.ok 扩展下发与 pair.challenge 权威载体
+    // 齐备但不一致 → 失败关闭（协议自相矛盾，拒绝完成配对，不产生连接）
+    const okFingerprint = parsed.data.tlsFingerprint ?? null;
+    if (
+      okFingerprint !== null &&
+      this.pendingHostFingerprint !== null &&
+      !checkHostFingerprint(this.pendingHostFingerprint, okFingerprint).ok
+    ) {
+      this.reportError({
+        code: 'pairing.fingerprint_mismatch',
+        message: 'pair.challenge 与 pair.ok 下发的证书指纹不一致，拒绝完成配对',
+        retryable: false,
+      });
+      authStore.getState().setPairingMeta({ stage: 'failed' });
+      this.closePairingConnection();
+      return;
+    }
     const hasRemotePub = s.pendingRemotePub !== null;
     const next = reducePairState(s, {
       type: 'onPairOk',
       desktopId: parsed.data.desktopId,
       ttl: parsed.data.ttl,
       token: parsed.data.token,
+      ...(parsed.data.tlsFingerprint !== undefined
+        ? { tlsFingerprint: parsed.data.tlsFingerprint }
+        : {}),
       ...(hasRemotePub ? { deriveKeys: this.deriveKeys } : {}),
     });
     this.machine = next;
@@ -745,11 +791,39 @@ export class PairingWiring {
     const deviceId = hello.deviceId;
     const tokenKey = s.sessionKeys?.tokenKey ?? ok.token; // 简化链回退
     const refreshKey = s.sessionKeys?.refreshKey ?? ok.token;
+    // ── 证书指纹收口（D3 §4.6 证书固定最小面）：下发值 = ok 扩展 ?? challenge
+    // 权威载体；格式非法（非 64 位 hex）→ 放弃钉扎（缺口记录，不阻断配对）；
+    // 与已存储 host_fingerprint 位比对（checkHostFingerprint：防本地篡改/
+    // 捕获证书轮换）——mismatch → 失败关闭：不持久化、不连接（失败关闭语义）。
+    const delivered =
+      ok.tlsFingerprint ?? this.pendingHostFingerprint ?? undefined;
+    const fingerprint =
+      delivered !== undefined && isValidTlsFingerprint(delivered)
+        ? delivered.trim().toLowerCase()
+        : undefined;
+    if (delivered !== undefined && fingerprint === undefined) {
+      console.warn(
+        '[PairingWiring] 桌面下发证书指纹格式非法（需 64 位 hex），放弃钉扎（缺口记录）'
+      );
+    }
+    const storedFingerprint = await this.driver.getItem(KEYS.HOST_FINGERPRINT);
+    if (!checkHostFingerprint(storedFingerprint ?? undefined, fingerprint).ok) {
+      this.reportError({
+        code: 'pairing.fingerprint_mismatch',
+        message:
+          '配对载荷证书指纹与已存储指纹不一致（证书轮换/本地篡改），拒绝完成配对',
+        retryable: false,
+      });
+      authStore.getState().setPairingMeta({ stage: 'failed' });
+      this.closePairingConnection();
+      return; // 指纹不一致：不持久化、不连接
+    }
     const cred: PairingCredential = {
       tokenKey,
       refreshKey,
       deviceKeypairPriv: base64Encode(localKeys.longTerm.privateKey),
       deviceKeypairPub: base64Encode(localKeys.longTerm.publicKey),
+      ...(fingerprint !== undefined ? { hostFingerprint: fingerprint } : {}),
     };
     const meta: AuthIdentityMeta = {
       deviceId,

@@ -360,6 +360,7 @@ fn session_abort_registry() -> &'static RwLock<HashMap<String, session_loop::Abo
 }
 
 /// 注册会话的 AbortSignal（供外部生命周期挂载）
+#[cfg(test)]
 pub fn register_session_abort_signal(session_id: impl Into<String>, signal: session_loop::AbortSignal) {
     if let Ok(mut reg) = session_abort_registry().write() {
         reg.insert(session_id.into(), signal);
@@ -367,6 +368,7 @@ pub fn register_session_abort_signal(session_id: impl Into<String>, signal: sess
 }
 
 /// 注销会话的 AbortSignal
+#[cfg(test)]
 pub fn unregister_session_abort_signal(session_id: &str) {
     if let Ok(mut reg) = session_abort_registry().write() {
         reg.remove(session_id);
@@ -394,7 +396,7 @@ pub(crate) struct HttpProviderCall {
     /// 流块间空闲超时
     idle_timeout: Option<Duration>,
     /// 显式注入的 AbortSignal（可选覆盖；缺省按 request.session_id 查全局注册表）
-    abort_signal: Option<session_loop::AbortSignal>,
+    pub(crate) abort_signal: Option<session_loop::AbortSignal>,
 }
 
 impl HttpProviderCall {
@@ -410,6 +412,7 @@ impl HttpProviderCall {
     }
 
     /// 注入专用 AbortSignal（测试与独立调用场景）
+    #[cfg(test)]
     pub(crate) fn with_abort_signal(mut self, signal: session_loop::AbortSignal) -> Self {
         self.abort_signal = Some(signal);
         self

@@ -32,7 +32,6 @@ use tauri::AppHandle;
 
 #[cfg(test)]
 pub(crate) use session::next_pty_id;
-pub use session::PtyLivenessState;
 
 const MAX_WRITE_BYTES: usize = 64 * 1024;
 
@@ -125,10 +124,10 @@ pub(crate) fn kill_all_sessions() {
 }
 
 /// 启动后台 30s 周期 PTY GC 协程，回收超期游离会话（>2h 无输出）与 Dead 会话
-#[allow(dead_code)]
-pub(crate) fn spawn_pty_gc_loop(_app: AppHandle) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
+pub(crate) fn spawn_pty_gc_loop(_app: AppHandle) -> tauri::async_runtime::JoinHandle<()> {
+    tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        interval.tick().await;
         loop {
             interval.tick().await;
             let now = crate::server::now_ms();
@@ -147,9 +146,9 @@ pub(crate) fn spawn_pty_gc_loop(_app: AppHandle) -> tokio::task::JoinHandle<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::session::PtyLivenessState;
     use std::collections::HashSet;
     use std::io::{Read, Write};
-    use std::sync::{atomic::Ordering, Mutex};
 
     #[derive(Debug)]
     struct NoopKiller;

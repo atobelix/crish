@@ -16,48 +16,30 @@ use session_loop::provider::ProviderStreamItem;
 use session_loop::TestProvider;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agent_provider::config::Endpoint;
-use agent_provider::error::{
-    classify_provider_error, source_from_reqwest_error, source_from_sse_read_error,
-};
-use agent_provider::models::{
-    cache_ttl_for_provider_model, infer_vendor, CacheTtl, ModelCatalog,
-};
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
-use agent_provider::parse::chat::ChatCompletionsParser;
 use agent_provider::parse::responses::ResponsesParser;
-use agent_provider::request::cache::{build_cache_policy, CachePolicy};
-use agent_provider::request::build::affinity_http_headers;
 use agent_provider::request::{
-    build_chat_completions_request_body, build_responses_request_body, infer_reasoning_vendor,
-    ChatCompletionsRequestOptions, MaxTokensField, ReasoningContentMode, ReasoningVendor,
-    RequestBuildContext, ToolDefinition as WireToolDefinition,
+    build_chat_completions_request_body, ReasoningContentMode,
 };
-use agent_provider::sse::{AbortFlag, SseFrame, StreamDiagnosticContext, StreamReadOptions};
-use agent_provider::transport::{stream_frames, StreamFrameEvent};
+use agent_provider::sse::SseFrame;
 use agent_tools::audit::{AuditSink, SecurityAuditSink};
-use agent_tools::background::BackgroundTaskManager;
-use agent_tools::definition::{ToolDefinition, ToolError};
-use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
+use agent_tools::definition::ToolDefinition;
+use agent_tools::mcp::McpServerConfig;
 use agent_tools::registry::ToolRegistry;
 // 审计 01 W1（任务连续性方案推进轮）：kill_subagent / send_message 生产
 // 通道装配——三通道契约经本文件 ContinuityChannelBoard 延迟绑定注入
-use agent_tools::tools::kill_subagent::{KillSubagentToolResult, SubagentKillChannel};
-use agent_tools::tools::send_message::{MainAgentMessageChannel, MainMessageRing, SubagentInjectChannel};
+use agent_tools::tools::send_message::{MainAgentMessageChannel, SubagentInjectChannel};
 use agent_tools::tools::set_timer::TimerChannel;
-use agent_tools::tools::wait_subagents::{DispatchDeclaration, SubagentWaitChannel};
+use agent_tools::tools::wait_subagents::DispatchDeclaration;
 // R-CF3 装配收口（T-CF-10）：wait 通道契约与适配器经库目标引入
 // （wait_channel.rs 是库模块，bin 目标自动依赖同包 lib）
-use crish_agent_workbench::wait_channel::{
-    ControlBusResolver, EventStreamBroadcast, LocalDbWaitStore, MemoryAgentSource, MemoryWaitStore,
-    SubagentStatusSource, WaitChannel, WaitStore,
-};
+use crish_agent_workbench::wait_channel::ControlBusResolver;
 use async_trait::async_trait;
 use conex_db::LocalDb;
 use conex_types::denied_stats::DeniedStats;
@@ -67,12 +49,8 @@ use conex_types::events::{
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
-use conex_types::tool::SystemPromptWireMode;
-use conex_telemetry::cache::{
-    cold_cache_check, is_cold, CacheBaseline, RequestSignature, WARN_MISSED_COST_USD,
-    WARN_MISSED_TOKENS,
-};
-use futures_util::{Stream, StreamExt};
+use conex_telemetry::cache::WARN_MISSED_TOKENS;
+use futures_util::StreamExt;
 use orchestrator::PendingMessageQueue;
 use session_loop::provider::{
     DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest,
@@ -81,17 +59,12 @@ use session_loop::stream::{
     ProviderStreamEvent, ProviderUsage, StopReason as LoopStopReason,
 };
 use session_loop::{
-    AbortSignal, AgentSessionLoop, ApprovalGate, CacheTrackingConfig, ControlBus, RunOutcome,
-    SessionLoopOptions, ToolBatchOptions,
+    CacheTrackingConfig, SessionLoopOptions, ToolBatchOptions,
 };
 
-use crate::buffer::{drop_class_of, EventBuffer};
-use crate::core_event_bridge::{EmitReport, EventBridge};
+use crate::core_event_bridge::EventBridge;
 use crate::fs_commands::skills::RustSkill;
-use crate::timers::{
-    AgentEventSink, LocalDbTimerStore, MemoryTimerStore, QueuePendingSink, TimerRegistry,
-};
-use crate::watchdog::{LastWakeupTracker, Watchdog, WatchdogOptions};
+use crate::timers::AgentEventSink;
 
 
     /// ISO8601 时间戳形状（毫秒精度 + Z 后缀）
@@ -3771,5 +3744,44 @@ mod s3_hotspot_tests {
                 .unwrap_or_else(|e| e.into_inner())
                 .push((channel.to_string(), payload.to_string()));
         }
+    }
+
+    #[test]
+    fn session_abort_signal_registry_lifecycle() {
+        let signal = session_loop::AbortSignal::new();
+        register_session_abort_signal("sess-abort-test", signal.clone());
+        assert!(get_session_abort_signal("sess-abort-test").is_some());
+        unregister_session_abort_signal("sess-abort-test");
+        assert!(get_session_abort_signal("sess-abort-test").is_none());
+
+        let config = EngineProviderConfig {
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "sk-test".to_string(),
+            model: "gpt-4o".to_string(),
+            endpoint: agent_provider::config::Endpoint::ChatCompletions,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        let call = HttpProviderCall::new(reqwest::Client::new(), config)
+            .with_abort_signal(signal);
+        assert!(call.abort_signal.is_some());
+    }
+
+    #[test]
+    fn buffered_run_event_bridge_with_trace_id_smoke() {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let bridge = EventBridge::new("workbench-run-event", emitter);
+        let buffered = BufferedRunEventBridge::new(bridge, "run-trace-test")
+            .with_trace_id(Some("trace-abc".to_string()));
+        let env = AgentEventEnvelope::new(
+            AgentEvent::AgentStart {
+                session_id: "s-trace-test".to_string(),
+                timestamp: "2026-08-14T00:00:00Z".to_string(),
+            },
+            Some("run-trace-test".to_string()),
+            None,
+        );
+        buffered.emit(&env);
+        buffered.flush();
     }
 }

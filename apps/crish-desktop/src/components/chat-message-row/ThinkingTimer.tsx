@@ -20,20 +20,16 @@ export const ThinkingTimer: React.FC<ThinkingTimerProps> = React.memo(
         return;
       }
       setSeconds(0);
+      const startTime = Date.now();
       const id = window.setInterval(() => {
-        setSeconds((s) => s + 1);
+        setSeconds(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
       }, 1000);
       return () => window.clearInterval(id);
     }, [isLive]);
 
     if (!isLive) return null;
 
-    return (
-      <span className={styles.thinkingSec}>
-        {' '}
-        · {seconds}s
-      </span>
-    );
+    return <span className={styles.thinkingSec}> · {seconds}s</span>;
   }
 );
 

@@ -18,6 +18,7 @@ use agent_tools::note_backend::{
 use conex_types::CoreError;
 use serde::Deserialize;
 use serde_json::{json, Value as JsonValue};
+#[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::note_runtime;

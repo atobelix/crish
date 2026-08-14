@@ -488,3 +488,24 @@ async fn note_import_mirror_proposal_ipc_blocks_silent_overwrite() {
 
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[tokio::test]
+async fn test_apply_md_for_test_direct_smoke() {
+    let (_guard, dir) = temp_install();
+    let res = apply_md_for_test(NoteApplyMdRequest {
+        doc_id: "test-direct-smoke".into(),
+        markdown: "# Direct Smoke Test\n\ncontent".into(),
+        parent_id: None,
+        after_block_id: None,
+        mode: NoteApplyMode::ApplyMdFragment,
+        intent_id: None,
+        batch_id: None,
+        message_id: None,
+        origin: None,
+    })
+    .await
+    .expect("apply_md_for_test 应成功");
+    assert_eq!(res.inserted, 2);
+    assert_eq!(res.block_ids.len(), 2);
+    let _ = std::fs::remove_dir_all(dir);
+}

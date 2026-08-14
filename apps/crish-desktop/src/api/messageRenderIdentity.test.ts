@@ -109,6 +109,10 @@ describe('stream / final single-row identity (static + pure)', () => {
 
   it('useRunStreamingAssistant creates one assistant id and reuses it through complete', () => {
     const src = readSrc('../hooks/chat-stream/useRunStreamingAssistant.ts');
+    const helperSrc = readSrc('../hooks/chat-stream/streamExecutionHelper.ts');
+    const internalsSrc = readSrc(
+      '../hooks/chat-stream/streamCallbacksInternals.ts'
+    );
     // 单次 mint
     expect(src).toMatch(
       /const assistantMsgId = generateMessageId\('assistant'\)/
@@ -116,15 +120,12 @@ describe('stream / final single-row identity (static + pure)', () => {
     // 热路径写 streamingStore，按同一 id
     expect(src).toMatch(/setStreamText\(sid,\s*assistantMsgId/);
     // 终态 commit 同一 id
-    expect(src).toMatch(/commitStreamToSession\(sid,\s*assistantMsgId/);
-    // onComplete 不得再次 addMessage 助手
-    const onCompleteIdx = src.indexOf('onComplete:');
-    expect(onCompleteIdx).toBeGreaterThan(0);
-    const onCompleteSlice = src.slice(onCompleteIdx, onCompleteIdx + 3500);
-    expect(onCompleteSlice).not.toMatch(
-      /addMessage\([^)]*sender:\s*'assistant'/
+    expect(internalsSrc).toMatch(
+      /commitStreamToSession\(sid,\s*assistantMsgId/
     );
-    expect(onCompleteSlice).not.toMatch(/generateMessageId\('assistant'\)/);
+    // finish / helper 不得再次 addMessage 助手
+    expect(helperSrc).not.toMatch(/addMessage\([^)]*sender:\s*'assistant'/);
+    expect(helperSrc).not.toMatch(/generateMessageId\('assistant'\)/);
   });
 
   it('pure: duplicate assistant ids would fail listDuplicateMessageIds', () => {

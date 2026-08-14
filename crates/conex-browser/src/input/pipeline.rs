@@ -14,6 +14,16 @@
 //! - **与 AI 动作共用（§4.1 单通道）**：复用 BrowserSession 统一发送层
 //!   （approval/audit/abort 同一管线）；吊销链（维度 15 Coordinator）与输入
 //!   互不阻塞（M-1：no-wait 不阻塞吊销，吊销不串行化输入）；
+//! - **800ms 稳定窗语义落点（T-12，审计 A P1-2）**：`TOKEN_MIN_STABLE_WINDOW`
+//!   （维度 15，800ms，统一常量）由**前端 panelStatusMachine 接管显示态**
+//!   （panelStatusMachine.ts:30 `TOKEN_MIN_STABLE_WINDOW_MS` + usePanelStatus
+//!   800ms 过渡定时，U-9）承担；**吊销执行面**由引擎 estop/abort 承担
+//!   （cdp/sender.rs 五段管线②急停旗拒绝新命令 + abort_token 取消在途，
+//!   M-2）；本管线注入即 bump 版本推进（R-1/U-1，快照失效感知层）。MVP
+//!   粗粒度协同（22 §8.2 M8：动作前快照校验 + 用户可停）**无独立令牌稳定
+//!   窗**；若未来实现维度 15 Coordinator 令牌机制（collab/token.rs 设计：
+//!   TokenHolder/RevokeSource/稳定窗去抖），扩展点 = 本管线注入成功处
+//!   （`consumer_loop` bump 点）挂吊销回调，M-1 不阻塞约束不变。
 //! - 键盘归一化：用户路径 key/code/VK 直取浏览器事件（§3.3）；AI 路径键名
 //!   查表复用 `action/keyboard.rs::lookup_key`（见 mod.rs 测试断言）。
 

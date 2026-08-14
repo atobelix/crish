@@ -55,7 +55,7 @@ pub const KICK_REASON_WAKE: &str = "wake-rebind";
 /// 非 Windows 为无字段空壳，[start] 返回 None）
 pub struct SystemPowerMonitor {
     #[cfg(windows)]
-    registration: platform::PowerRegistration,
+    _registration: platform::PowerRegistration,
 }
 
 /// 启动电源监视（全进程单例：仅 main.rs setup 装配一次；Windows 注册
@@ -168,7 +168,7 @@ mod platform {
         }
         tracing::info!(target: "system-power", "电源监视已注册（Suspend/Resume 回调）");
         Some(SystemPowerMonitor {
-            registration: PowerRegistration {
+            _registration: PowerRegistration {
                 handle: registration as isize,
             },
         })

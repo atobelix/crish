@@ -44,12 +44,15 @@
 //! 责任面），命令面不自行复位。
 
 use crate::core_event_bridge::Emitter;
+#[cfg(test)]
 use agent_tools::definition::ToolError;
+#[cfg(test)]
 use agent_tools::registry::ToolRegistry;
 use conex_computer::activation::{ActivationError, ActivationGate, SessionMode};
 use conex_computer::security::COMPUTER_USE_ENABLED_KEY;
 use conex_computer::{ApprovalGate, EmergencyStop, EnableSource, EnablementError, SessionEnablement};
 use conex_computer_tools::session::ComputerOps;
+#[cfg(test)]
 use conex_computer_tools::{register_computer_tools, ComputerToolsConfig};
 use conex_db::LocalDb;
 use serde::Serialize;
@@ -176,12 +179,12 @@ pub(crate) struct ComputerSlot {
     /// 会话互斥门（S3：与浏览器共享，两向生效；桌面态 = 本会话活跃）
     activation: Arc<ActivationGate>,
     /// 全动作审批门（04 §4.2；工具注册配置注入 + 引擎审批传输面）
-    approval: Arc<ApprovalGate>,
+    _approval: Arc<ApprovalGate>,
     /// 三级急停旗（04 §4.3；面板/热键/全局共用同一旗）
     stop: Arc<EmergencyStop>,
     /// 真实会话注入面（接线点② engine 注入 RealComputerSession；未注入时
     /// 工具面 not_ready——守卫① 语义）
-    session: Mutex<Option<Arc<dyn ComputerOps>>>,
+    _session: Mutex<Option<Arc<dyn ComputerOps>>>,
     /// 惰性恢复完成标志（幂等一次性；构造不读库）
     restored: AtomicBool,
     /// 事件发射器（`computer://state-changed`；挂接幂等，可重复 attach）
@@ -200,9 +203,9 @@ impl ComputerSlot {
             meta,
             enablement: Arc::new(SessionEnablement::new()),
             activation: Arc::new(ActivationGate::new()),
-            approval: Arc::new(ApprovalGate::new()),
+            _approval: Arc::new(ApprovalGate::new()),
             stop: Arc::new(EmergencyStop::new()),
-            session: Mutex::new(None),
+            _session: Mutex::new(None),
             restored: AtomicBool::new(false),
             emitter: Mutex::new(None),
         }
@@ -215,33 +218,34 @@ impl ComputerSlot {
     }
 
     /// 会话互斥门共享实例（接线点③：浏览器线经同一门做互斥守卫）。
+    #[cfg(test)]
     pub(crate) fn activation(&self) -> Arc<ActivationGate> {
         Arc::clone(&self.activation)
     }
 
     /// 开启状态机实例（引擎侧审计 / 工具装配判据消费面）。
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn enablement(&self) -> Arc<SessionEnablement> {
         Arc::clone(&self.enablement)
     }
 
     /// 审批门实例（引擎侧审批传输面：AskDecision 映射 → `settle` 收口）。
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn approval(&self) -> Arc<ApprovalGate> {
-        Arc::clone(&self.approval)
+        Arc::clone(&self._approval)
     }
 
     /// 急停旗实例（引擎侧急停链接线：热键/全局触发源共享同一旗）。
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn stop(&self) -> Arc<EmergencyStop> {
         Arc::clone(&self.stop)
     }
 
     /// 注入真实会话（接线点②：engine 装配 `RealComputerSession`；
     /// 未注入时工具面 `tool.computer.not_ready`——守卫①）。
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn set_session(&self, session: Arc<dyn ComputerOps>) {
-        *self.session.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
+        *self._session.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     }
 
     /// 惰性恢复：首次访问从 session_meta 恢复开启态（幂等一次性；构造不读库）。
@@ -262,12 +266,12 @@ impl ComputerSlot {
         self.enablement.restore_from_session_meta(enabled);
         if enabled {
             let _ = self.activation.request_desktop();
+            self.emit(&StateChangePayload {
+                enabled: Some(enabled),
+                mode: Some(mode_str(self.activation.current())),
+                reason: None,
+            });
         }
-        self.emit(&StateChangePayload {
-            enabled: Some(enabled),
-            mode: Some(mode_str(self.activation.current())),
-            reason: None,
-        });
     }
 
     /// 显式开启（04 §4.1：仅用户显式操作；Agent 无权自开）。
@@ -366,15 +370,16 @@ impl ComputerSlot {
     /// 挂载判据：`SessionEnablement::tool_mount_allowed()` 为真才注册；
     /// 未开启 / 未注入 → **零注册返回 Ok**（安全默认，工具不存在）。
     /// 幂等：同名已注册跳过不报冲突（06 文档 §3.2）。
+    #[cfg(test)]
     pub(crate) fn register_tools(&self, registry: &mut ToolRegistry) -> Result<(), ToolError> {
         self.ensure_restored();
         register_computer_tools(
             registry,
             ComputerToolsConfig {
-                session: self.session.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+                session: self._session.lock().unwrap_or_else(|e| e.into_inner()).clone(),
                 enablement: Some(Arc::clone(&self.enablement)),
                 activation: Some(Arc::clone(&self.activation)),
-                approval: Some(Arc::clone(&self.approval)),
+                approval: Some(Arc::clone(&self._approval)),
                 stop: Some(Arc::clone(&self.stop)),
             },
         )
@@ -409,6 +414,7 @@ impl ComputerSlot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use conex_computer::perception::{PerceptionError, PerceptionSnapshot};
     use conex_computer::StopSource;
     use conex_computer_tools::ALL_TOOL_NAMES;
 
@@ -416,11 +422,11 @@ mod tests {
     struct TestEmitter(Arc<Mutex<Vec<String>>>);
 
     impl Emitter for TestEmitter {
-        fn emit(&self, channel: &str, payload: &str) {
+        fn emit(&self, _channel: &str, payload: &str) {
             self.0
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .push(format!("{channel}:{payload}"));
+                .push(payload.to_string());
         }
     }
 
@@ -684,5 +690,45 @@ mod tests {
             "错误串：{}",
             err.as_command_err()
         );
+    }
+
+    #[test]
+    fn accessors_and_session_injection_smoke() {
+        use async_trait::async_trait;
+        let (slot, _db) = in_memory_slot();
+        let act = slot.activation();
+        assert_eq!(act.current(), SessionMode::Idle);
+        let en = slot.enablement();
+        assert!(!en.enabled());
+        let _appr = slot.approval();
+        let _st = slot.stop();
+
+        struct DummyOps;
+        #[async_trait]
+        impl ComputerOps for DummyOps {
+            fn readiness(&self) -> Result<(), String> {
+                Ok(())
+            }
+            async fn dispatch(
+                &self,
+                _action: &conex_computer::Action,
+            ) -> Result<conex_computer::ActionResult, conex_computer::SessionError> {
+                Err(conex_computer::SessionError::Inject("dummy".into()))
+            }
+            async fn screenshot(
+                &self,
+            ) -> Result<conex_computer::CapturedFrame, conex_computer::SessionError> {
+                Err(conex_computer::SessionError::Capture("dummy".into()))
+            }
+            async fn snapshot(
+                &self,
+            ) -> Result<PerceptionSnapshot, PerceptionError> {
+                Err(PerceptionError::NoActiveWindow)
+            }
+            fn perception_version(&self) -> u64 {
+                0
+            }
+        }
+        slot.set_session(Arc::new(DummyOps));
     }
 }

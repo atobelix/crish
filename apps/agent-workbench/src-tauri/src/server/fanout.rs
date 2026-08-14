@@ -140,8 +140,6 @@ pub struct WsBroadcast {
 }
 
 /// 单个订阅条目（连接级缓冲队列 + 消费唤醒）
-// R1-01 备注：R1-05 WS drain task 消费——dead_code 静音
-#[cfg_attr(not(test), allow(dead_code))]
 struct SubscriberEntry {
     /// 连接 id（注册表键）
     conn_id: String,
@@ -157,10 +155,9 @@ struct SubscriberEntry {
     dropped: AtomicU64,
 }
 
-// R1-01 备注：经 FanOutEmitter 装配后由 R1-05 消费——dead_code 静音
-#[cfg_attr(not(test), allow(dead_code))]
 impl WsBroadcast {
     /// 新建广播器（默认连接缓冲容量 [CONN_QUEUE_CAPACITY]）
+    #[cfg(test)]
     pub fn new() -> Self {
         Self::with_capacity(CONN_QUEUE_CAPACITY)
     }
@@ -916,5 +913,14 @@ mod tests {
         fanout.emit("workbench-run-event", &payload_of(agent_start("s1"), Some(1)));
         let event_type = task.await.expect("drain 任务不应 panic");
         assert_eq!(event_type, "agent-start");
+    }
+
+    #[test]
+    fn broadcast_new_and_receiver_conn_id_smoke() {
+        let broadcast = WsBroadcast::new();
+        let rx = broadcast
+            .register("conn-test-id", SubscriptionFilter::session_subscribe(["s1".to_string()]))
+            .expect("register");
+        assert_eq!(rx.conn_id(), "conn-test-id");
     }
 }

@@ -58,7 +58,7 @@ describe('ApprovalAskCard pending 渲染', () => {
 
     // aria-labelledby（标题）优先于 aria-label，可访问名取标题正文
     expect(
-      screen.getByRole('region', { name: '是否允许执行 git commit？' }),
+      screen.getByRole('region', { name: '是否允许执行 git commit？' })
     ).toBeInTheDocument();
     expect(screen.getByText('等待中')).toBeInTheDocument();
     expect(screen.getByText('是否允许执行 git commit？')).toBeInTheDocument();
@@ -66,7 +66,9 @@ describe('ApprovalAskCard pending 渲染', () => {
     expect(screen.getByLabelText('补充说明（可选）')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '允许' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '拒绝此操作' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: '允许并记住命令前缀' })).toBeEnabled();
+    expect(
+      screen.getByRole('button', { name: '允许并记住命令前缀' })
+    ).toBeEnabled();
   });
 
   it('无二次确认：单击允许即提交（onAllow）', () => {
@@ -113,12 +115,16 @@ describe('ApprovalAskCard 二次确认（requiresDoubleConfirm）', () => {
   it('首次点击武装（不提交），二次点击提交', () => {
     const { props } = renderCard({ riskMeta: DOUBLE_META });
 
-    const armBtn = screen.getByRole('button', { name: '准备允许（需再次确认）' });
+    const armBtn = screen.getByRole('button', {
+      name: '准备允许（需再次确认）',
+    });
     fireEvent.click(armBtn);
 
     // 武装态：data-confirm-armed + 按钮文案切换为「再次确认允许」+ 状态文本
     expect(screen.getByText('再次确认')).toBeInTheDocument();
-    expect(screen.getByText('高风险操作：再点一次「允许」才会执行（Esc 取消准备）')).toBeInTheDocument();
+    expect(
+      screen.getByText('高风险操作：再点一次「允许」才会执行（Esc 取消准备）')
+    ).toBeInTheDocument();
     const commitBtn = screen.getByRole('button', { name: '再次确认允许' });
     expect(commitBtn).toHaveAttribute('data-armed', 'true');
     expect(commitBtn).toHaveAttribute('aria-pressed', 'true');
@@ -132,12 +138,16 @@ describe('ApprovalAskCard 二次确认（requiresDoubleConfirm）', () => {
   it('武装后 Esc 取消准备：不提交，再点允许重新武装', () => {
     const { props } = renderCard({ riskMeta: DOUBLE_META });
 
-    fireEvent.click(screen.getByRole('button', { name: '准备允许（需再次确认）' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: '准备允许（需再次确认）' })
+    );
     fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(props.onAllow).not.toHaveBeenCalled();
     // 解除武装：回到「准备允许」文案
-    const armBtn = screen.getByRole('button', { name: '准备允许（需再次确认）' });
+    const armBtn = screen.getByRole('button', {
+      name: '准备允许（需再次确认）',
+    });
     expect(armBtn).not.toHaveAttribute('data-armed');
 
     fireEvent.click(armBtn);
@@ -148,7 +158,9 @@ describe('ApprovalAskCard 二次确认（requiresDoubleConfirm）', () => {
   it('二次确认 + 记住：两步提交走 onAllowRemember', () => {
     const { props } = renderCard({ riskMeta: DOUBLE_META });
 
-    fireEvent.click(screen.getByRole('button', { name: '记住并准备允许（需再次确认）' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: '记住并准备允许（需再次确认）' })
+    );
     expect(screen.getByText('再次确认（将记住）')).toBeInTheDocument();
     expect(props.onAllowRemember).not.toHaveBeenCalled();
 
@@ -160,8 +172,12 @@ describe('ApprovalAskCard 二次确认（requiresDoubleConfirm）', () => {
   it('武装态 Enter 快捷键触发提交（非 textarea 焦点）', () => {
     const { props } = renderCard({ riskMeta: DOUBLE_META });
 
-    fireEvent.click(screen.getByRole('button', { name: '准备允许（需再次确认）' }));
-    fireEvent.keyDown(window, { key: 'Enter' });
+    const armBtn = screen.getByRole('button', {
+      name: '准备允许（需再次确认）',
+    });
+    fireEvent.click(armBtn);
+    const armedBtn = screen.getByRole('button', { name: '再次确认允许' });
+    fireEvent.keyDown(armedBtn, { key: 'Enter' });
 
     expect(props.onAllow).toHaveBeenCalledTimes(1);
   });
@@ -169,28 +185,31 @@ describe('ApprovalAskCard 二次确认（requiresDoubleConfirm）', () => {
   it('toolId 切换解除武装（防跨审批残留）', () => {
     const { props, rerender } = renderCard({ riskMeta: DOUBLE_META });
 
-    fireEvent.click(screen.getByRole('button', { name: '准备允许（需再次确认）' }));
-    expect(screen.getByRole('button', { name: '再次确认允许' })).toHaveAttribute(
-      'data-armed',
-      'true',
+    fireEvent.click(
+      screen.getByRole('button', { name: '准备允许（需再次确认）' })
     );
+    expect(
+      screen.getByRole('button', { name: '再次确认允许' })
+    ).toHaveAttribute('data-armed', 'true');
 
     rerender(<ApprovalAskCard {...props} toolId="tc-2" />);
-    expect(screen.getByRole('button', { name: '准备允许（需再次确认）' })).not.toHaveAttribute(
-      'data-armed',
-    );
+    expect(
+      screen.getByRole('button', { name: '准备允许（需再次确认）' })
+    ).not.toHaveAttribute('data-armed');
     expect(props.onAllow).not.toHaveBeenCalled();
   });
 
   it('父级 busy（已提交）后复位解除武装', () => {
     const { props, rerender } = renderCard({ riskMeta: DOUBLE_META });
 
-    fireEvent.click(screen.getByRole('button', { name: '准备允许（需再次确认）' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: '准备允许（需再次确认）' })
+    );
     rerender(<ApprovalAskCard {...props} busy />);
 
-    expect(screen.getByRole('button', { name: '准备允许（需再次确认）' })).not.toHaveAttribute(
-      'data-armed',
-    );
+    expect(
+      screen.getByRole('button', { name: '准备允许（需再次确认）' })
+    ).not.toHaveAttribute('data-armed');
   });
 });
 
@@ -198,7 +217,9 @@ describe('ApprovalAskCard busy 与超时', () => {
   it('busy：按钮全部禁用，点击不触发回调', () => {
     const { props } = renderCard({ busy: true, riskMeta: DOUBLE_META });
 
-    const allowBtn = screen.getByRole('button', { name: '准备允许（需再次确认）' });
+    const allowBtn = screen.getByRole('button', {
+      name: '准备允许（需再次确认）',
+    });
     const denyBtn = screen.getByRole('button', { name: '拒绝此操作' });
     const rememberBtn = screen.getByRole('button', {
       name: '记住并准备允许（需再次确认）',

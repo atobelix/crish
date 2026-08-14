@@ -870,6 +870,54 @@ impl Store for LocalDbStore {
     }
 }
 
+// ── EV-12 输入留痕：session-loop PendingInputStore 适配 ────────────────
+//
+// session-loop 不直接持 DB 连接——经本适配把 `Store` 的 pending_inputs
+// 数据面暴露给 `AgentSessionLoop`（enqueue 写点 / 消费删点 fail-open，
+// spawn_blocking 纪律由 Store 实现侧承担，与 save_run_usage 同）。
+
+#[async_trait]
+impl session_loop::input::PendingInputStore for LocalDbStore {
+    async fn save_pending_input(
+        &self,
+        id: &str,
+        session_id: &str,
+        run_id: Option<&str>,
+        payload: &str,
+    ) -> Result<(), String> {
+        <Self as Store>::save_pending_input(self, id, session_id, run_id, payload)
+            .await
+            .map_err(|e| e.message)
+    }
+
+    async fn delete_pending_input(&self, id: &str) -> Result<bool, String> {
+        <Self as Store>::delete_pending_input(self, id)
+            .await
+            .map_err(|e| e.message)
+    }
+}
+
+#[async_trait]
+impl session_loop::input::PendingInputStore for InMemoryStore {
+    async fn save_pending_input(
+        &self,
+        id: &str,
+        session_id: &str,
+        run_id: Option<&str>,
+        payload: &str,
+    ) -> Result<(), String> {
+        <Self as Store>::save_pending_input(self, id, session_id, run_id, payload)
+            .await
+            .map_err(|e| e.message)
+    }
+
+    async fn delete_pending_input(&self, id: &str) -> Result<bool, String> {
+        <Self as Store>::delete_pending_input(self, id)
+            .await
+            .map_err(|e| e.message)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -404,15 +404,13 @@ pub struct ServerState {
     config: ServerConfig,
     actual_addr: SocketAddr,
     tokens: Arc<Mutex<auth::TokenStore>>,
-    // R1-02 备注：R1-03 CoreStateBackend 注入——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     backend: Option<Arc<dyn backend::ApiBackend>>,
     /// WS 连接注册表（R1-05：连接上限 / 踢出 / 订阅管理，D2 §10.5）
     ws_registry: Arc<ws::WsRegistry>,
     /// 连接限流器（R1-10：D5 §7.2 每设备 2 / 总量 8 并发上限状态机 +
     /// 审计计数；D-1 裁决：生产并发面由 ws.rs 注册表踢旧承担，本限流器
     /// 为测试面 + R2 装配预留）
-    conn_limiter: Arc<limiter::ConnectionLimiter>,
+    _conn_limiter: Arc<limiter::ConnectionLimiter>,
     /// 配对请求限速器（R1 收口：POST /v1/pair 每源 IP 10 次/分钟，
     /// D2 §12.4 限速口径——AU4 问题 #1；pair_endpoint 消费）
     pair_limiter: Arc<limiter::PairRateLimiter>,
@@ -428,7 +426,7 @@ pub struct ServerState {
     /// 与命令面 / main.rs 装配共用同一 Arc 实例；None = 未装配，配对入口
     /// 返回 503 诚实降级）
     pairing: Option<Arc<pairing::PairingCoordinator>>,
-    started_at_ms: u64,
+    _started_at_ms: u64,
 }
 
 impl ServerState {
@@ -444,12 +442,12 @@ impl ServerState {
             tokens: Arc::new(Mutex::new(tokens)),
             backend,
             ws_registry: Arc::new(ws::WsRegistry::new()),
-            conn_limiter: Arc::new(limiter::ConnectionLimiter::new()),
+            _conn_limiter: Arc::new(limiter::ConnectionLimiter::new()),
             pair_limiter: Arc::new(limiter::PairRateLimiter::new()),
             event_stream: None,
             audit_bridge: None,
             pairing: None,
-            started_at_ms: now_ms(),
+            _started_at_ms: now_ms(),
         }
     }
 
@@ -547,12 +545,9 @@ impl ServerState {
 
     /// 连接限流器（R1-10：D5 §7.2 每设备 2 / 总量 8 并发上限；D-1 裁决：
     /// 生产并发面由 ws.rs 注册表踢旧承担，本限流器为测试面 + R2 装配
-    /// 预留，测试直接消费）
-    // 备注：D-1 裁决后生产接线由 ws.rs 承担——dead_code 静音（测试构建
-    // 保持检查）
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn conn_limiter(&self) -> Arc<limiter::ConnectionLimiter> {
-        Arc::clone(&self.conn_limiter)
+        Arc::clone(&self._conn_limiter)
     }
 
     /// 配对请求限速器（R1 收口：POST /v1/pair 每源 IP 10 次/分钟，
@@ -568,17 +563,14 @@ impl ServerState {
 
     /// 注入事件扇出源（R1-01 装配点：main.rs 构造 FanOutEmitter 后注入；
     /// 测试注入空发射器）
-    // R1-01 备注：main.rs 装配消费——dead_code 静音（测试构建保持检查）
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn set_event_stream(&mut self, stream: Option<Arc<fanout::FanOutEmitter>>) {
         self.event_stream = stream;
     }
 
     /// 服务启动时刻（epoch ms；R1-03 /v1/status 消费）
-    // R1-02 备注：R1-03 状态面消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn started_at_ms(&self) -> u64 {
-        self.started_at_ms
+        self._started_at_ms
     }
 }
 
@@ -1372,5 +1364,17 @@ mod tests {
         harness.handle.shutdown();
         let result = harness.task.await.expect("serve 任务不应 panic");
         assert!(result.is_ok(), "serve 应正常退出：{result:?}");
+    }
+
+    #[test]
+    fn server_state_accessors_smoke() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = ServerConfig::new(dir.path());
+        let handle = ServerHandle::new(config.clone(), "127.0.0.1:0".parse().unwrap());
+        let tokens = auth::TokenStore::new(config.pairing_file_path.clone());
+        let state = ServerState::new(&handle, tokens, None);
+        assert!(state.started_at_ms() > 0);
+        let _limiter = state.conn_limiter();
+        let _pair_limiter = state.pair_limiter();
     }
 }

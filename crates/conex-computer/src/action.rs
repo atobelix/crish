@@ -1574,7 +1574,7 @@ mod tests {
     #[cfg(windows)]
     fn adversarial_computer_estop_5ms_response() {
         use crate::action::inject::{run_steps_guarded, InjectStep};
-        use crate::security::{EmergencyStop, StopSource};
+        use crate::security::EmergencyStop;
         use std::sync::Arc;
 
         let stop = Arc::new(EmergencyStop::new());

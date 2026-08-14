@@ -307,6 +307,7 @@ impl PanelInputRouter {
     }
 
     /// 管线是否已接线（browser_input 命令面可据此判断注入面可用）。
+    #[cfg(test)]
     pub(crate) fn pipeline_wired(&self) -> bool {
         self.pipeline
             .lock()

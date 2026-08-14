@@ -374,6 +374,7 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
 /// 目标路径以 UTF-16 宽字符参数直传；返回 Err(String) 携带失败原因
 /// （ShellExecuteW 返回值 < 32 为错误码，>32 为成功句柄）。
 #[cfg(windows)]
+#[allow(unsafe_code)]
 fn open_with_shell_execute(target: &str) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::UI::Shell::ShellExecuteW;

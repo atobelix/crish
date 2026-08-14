@@ -134,7 +134,7 @@ function extractFrontendInvokeNames(): {
   // 命令形态前缀：抽取到的字面量必须是命令名形态（tauriInvoke.ts 内部
   // `invoke(cmd, args)` 变量参数调用、`status: 'ok'` 等通用字符串不是命令）
   const COMMAND_PREFIX_RE =
-    /^(core_|workbench_|config_|multi_device_|browser_|note_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-)/;
+    /^(core_|workbench_|config_|multi_device_|browser_|note_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-|computer_|kill_|resume_)/;
   const constRe = /\bconst\s+[A-Z][A-Z0-9_]*\s*=\s*'([a-z][a-z0-9_-]*)'/g;
   const templateRe =
     /\b(invoke|invokeTyped|invokeResult|invokeCmd|transport\.request|transport\.send)\s*\(\s*`/g;
@@ -198,6 +198,8 @@ const GHOST_EXEMPTIONS: ReadonlySet<string> = new Set([
   // core_highlight_code：rustCore.highlightCode wrapper 已删（无生产消费），
   // 命令注册保留供路径 A 恢复（接线时移除本豁免）
   'core_highlight_code',
+  // ── 多端与查询面（F-03 DM-07 恢复激活，供多端与调试消费）──
+  'core_read_run_events',
   // ── 登记先行面（有真实消费意图但未接线，接线后移除豁免）──
   // config_get_outputs_root / config_set_outputs_root / set_session_output_root：
   // G03 产出根两级配置（T-EG-12），前端设置面接线中（agentOutputsRoot 设置项）

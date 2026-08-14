@@ -65,7 +65,7 @@ async fn full_lifecycle_queued_to_completed_emits_terminal_sequence() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_main").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     // 运行时产出：agent-start → 120…，此处用最小序列
     let result = drive_outcome_wrap(
@@ -165,7 +165,7 @@ async fn delta_streams_do_not_block_drive_loop_on_slow_store() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_delta").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let mut events = vec![agent_start("s1")];
     for i in 0..120 {
@@ -210,7 +210,7 @@ async fn max_turns_ends_failed_with_message() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_max_turns").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let result = drive_outcome_wrap(
         &mut run,
@@ -243,7 +243,7 @@ async fn error_outcome_ends_failed_preserving_message() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_error").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let result = drive_outcome_wrap(
         &mut run,
@@ -281,7 +281,7 @@ async fn store_write_failure_fails_run_without_replayable_history() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_store_fail").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let result = drive_outcome_wrap(
         &mut run,

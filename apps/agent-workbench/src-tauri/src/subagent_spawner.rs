@@ -1219,64 +1219,64 @@ mod tests {
     async fn spawn_siblings_exceeded() {
         let (spawner, _, db, _, _) = test_rig();
         setup_main_run(&spawner);
-        // 预置 5 个未终态兄弟（全部成功）
-        for i in 0..5 {
+        // 预置 16 个未终态兄弟（全部成功）
+        for i in 0..16 {
             let mut req = request(&format!("任务 {i}"), None);
             req.parent_run_id = Some("run-main".to_string());
-            let _ = spawner.spawn(&req).await.expect("前 5 个应成功");
+            let _ = spawner.spawn(&req).await.expect("前 16 个应成功");
         }
-        // 第 6 个：快照 = 已有 5（不含本次）→ 5 ≤ 5 放行（冻结语义）
-        let sixth = spawner
-            .spawn(&request("第 6 个", None))
+        // 第 17 个：快照 = 已有 16（不含本次）→ 16 ≤ 16 放行（冻结语义）
+        let seventeenth = spawner
+            .spawn(&request("第 17 个", None))
             .await
-            .expect("快照不含本次请求：已有 5 时第 6 个放行");
-        let _ = sixth;
-        // 第 7 个：快照 = 6 > maxSiblings=5 → 拒绝（零 run）
+            .expect("快照不含本次请求：已有 16 时第 17 个放行");
+        let _ = seventeenth;
+        // 第 18 个：快照 = 17 > maxSiblings=16 → 拒绝（零 run）
         let err = spawner
-            .spawn(&request("第 7 个", None))
+            .spawn(&request("第 18 个", None))
             .await
             .expect_err("兄弟并发超限必须拒绝");
         match &err {
             SubagentSpawnError::GuardRejected(rejection) => {
                 assert!(matches!(
                     rejection,
-                    RecursionGuardRejection::SiblingsExceeded { current: 6, max: 5 }
+                    RecursionGuardRejection::SiblingsExceeded { current: 17, max: 16 }
                 ));
             }
             other => panic!("必须为 GuardRejected(SiblingsExceeded)，实际 {other:?}"),
         }
-        assert_eq!(db.load_session_agents("sess-main").unwrap().len(), 6, "拒绝零 run");
+        assert_eq!(db.load_session_agents("sess-main").unwrap().len(), 17, "拒绝零 run");
     }
 
-    /// 全局并发超限（maxConcurrent=12，快照不含本次请求的冻结语义）
+    /// 全局并发超限（maxConcurrent=16，快照不含本次请求的冻结语义）
     #[tokio::test]
     async fn spawn_concurrent_exceeded() {
         let (spawner, _, db, _, _) = test_rig();
-        // 12 个并发子代理（不同父 run 也可计数——全局预算）
-        for i in 0..12 {
+        // 16 个并发子代理（不同父 run 也可计数——全局预算）
+        for i in 0..16 {
             let mut req = request(&format!("任务 {i}"), None);
             req.parent_run_id = Some(format!("run-{i}"));
             let _ = spawner.spawn(&req).await.expect("预算内应成功");
         }
-        // 第 13 个：快照 = 已有 12（不含本次）→ 12 ≤ 12 放行（冻结语义）
-        let thirteenth = spawner
-            .spawn(&request("第 13 个", None))
+        // 第 17 个：快照 = 已有 16（不含本次）→ 16 ≤ 16 放行（冻结语义）
+        let seventeenth = spawner
+            .spawn(&request("第 17 个", None))
             .await
-            .expect("快照不含本次请求：已有 12 时第 13 个放行");
-        let _ = thirteenth;
-        // 第 14 个：快照 = 13 > 12 → 拒绝（零 run）
+            .expect("快照不含本次请求：已有 16 时第 17 个放行");
+        let _ = seventeenth;
+        // 第 18 个：快照 = 17 > 16 → 拒绝（零 run）
         let err = spawner
-            .spawn(&request("第 14 个", None))
+            .spawn(&request("第 18 个", None))
             .await
             .expect_err("全局并发超限必须拒绝");
         assert!(matches!(
             err,
             SubagentSpawnError::GuardRejected(RecursionGuardRejection::ConcurrentExceeded {
-                current: 13,
-                max: 12
+                current: 17,
+                max: 16
             })
         ));
-        assert_eq!(db.load_session_agents("sess-main").unwrap().len(), 13, "拒绝零 run");
+        assert_eq!(db.load_session_agents("sess-main").unwrap().len(), 17, "拒绝零 run");
     }
 
     // ── 批量派发（T-D-06：前瞻快照统一守卫原子语义）───────────────
@@ -1318,8 +1318,8 @@ mod tests {
     async fn spawn_many_guard_rejection_zero_run() {
         let (spawner, launcher, db, _, _) = test_rig();
         setup_main_run(&spawner);
-        // 预占预算：11 个并发 + 批量 3 个（11+3 > 12 → 拒绝）
-        for i in 0..11 {
+        // 预占预算：15 个并发 + 批量 3 个（15+3 = 18 > 16 → 拒绝）
+        for i in 0..15 {
             let mut req = request(&format!("任务 {i}"), None);
             req.parent_run_id = Some(format!("run-{i}"));
             let _ = spawner.spawn(&req).await.expect("预算内应成功");

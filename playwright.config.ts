@@ -9,6 +9,10 @@
  *   test:e2e:native`，PS-02 T2.1 起归属 vitest.config.ts 独立 native-smoke
  *   项目），不属 Playwright 面 —— testIgnore 排除，
  *   避免 `npx playwright test` 误扫 vitest spec；
+ * - `webview/` 子目录为真 WebView 载体（CONN-01，需 dev:workbench 的
+ *   WebView2 带 9222）—— 独立 config `tests/e2e/webview/playwright.config.ts`
+ *   运行（project e2e-webview，`npm run test:e2e:webview`），根 config
+ *   testIgnore 排除，避免 L2 中层误扫需真 Tauri 的 spec；
  * - visual 回归收敛到 `apps/crish-desktop/playwright.config.ts`（testDir
  *   限 `tests/visual`），本 config 不再扫描 app 目录，职责单一。
  *
@@ -26,8 +30,9 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
-  // vitest spec（进程级冒烟）不归 Playwright 管
-  testIgnore: /tauri-native-smoke\.spec\.ts$/,
+  // vitest spec（进程级冒烟）与真 WebView 载体（webview/，独立 config）
+  // 不归本 config 管
+  testIgnore: [/tauri-native-smoke\.spec\.ts$/, /webview\//],
   fullyParallel: true,
   // 并发收敛（tiptap 接线后冷编译回归记录 2026-08-07）：fullyParallel 下 26 用例
   // 同时触发 vite 首屏编译，早期页面 bundle 未就绪 → 白屏（sidebar/chat-input 缺失）。

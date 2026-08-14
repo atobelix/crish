@@ -18,7 +18,11 @@ import {
   resolveTauriCommand,
   shapeTauriPayload,
 } from './commandMap';
-import { BUILTIN_COMMAND_MANIFEST, resetCommandManifestForTests, type CommandManifest } from './commandManifest';
+import {
+  BUILTIN_COMMAND_MANIFEST,
+  resetCommandManifestForTests,
+  type CommandManifest,
+} from './commandManifest';
 import { logger } from '../../services/LoggerService';
 
 /** 构造最小 mock 清单（registered 名集合自定，模拟 Rust 真源不同注册面） */
@@ -43,12 +47,17 @@ describe('commandMap', () => {
     it('命令名直放行（清单 registered 内，取代前缀正则 / RUN_LIFECYCLE_COMMANDS 白名单）', () => {
       // 查询类
       expect(resolveTauriCommand('core_get_status')).toBe('core_get_status');
-      expect(resolveTauriCommand('core_get_run_snapshot')).toBe('core_get_run_snapshot');
-      // T-F 06 退役：core_read_run_events 已随命令退役（被 core_read_session_events 取代）
-      expect(resolveTauriCommand('core_read_run_events')).toBeNull();
-      expect(resolveTauriCommand('core_read_session_events')).toBe('core_read_session_events');
+      // F-03（DM-07）：core_read_run_events 恢复激活（与 Rust command_manifest 120 注册面对齐）
+      expect(resolveTauriCommand('core_read_run_events')).toBe(
+        'core_read_run_events'
+      );
+      expect(resolveTauriCommand('core_read_session_events')).toBe(
+        'core_read_session_events'
+      );
       // 审批类
-      expect(resolveTauriCommand('core_approve_tool')).toBe('core_approve_tool');
+      expect(resolveTauriCommand('core_approve_tool')).toBe(
+        'core_approve_tool'
+      );
       expect(resolveTauriCommand('core_deny_tool')).toBe('core_deny_tool');
       // 壳命令（F5 终态名）
       expect(resolveTauriCommand('config_update')).toBe('config_update');
@@ -57,8 +66,12 @@ describe('commandMap', () => {
       expect(resolveTauriCommand('core_run_task')).toBe('core_run_task');
       expect(resolveTauriCommand('core_run_control')).toBe('core_run_control');
       // 其他注册面命令名直放行
-      expect(resolveTauriCommand('core_list_commands')).toBe('core_list_commands');
-      expect(resolveTauriCommand('workbench_pty_create')).toBe('workbench_pty_create');
+      expect(resolveTauriCommand('core_list_commands')).toBe(
+        'core_list_commands'
+      );
+      expect(resolveTauriCommand('workbench_pty_create')).toBe(
+        'workbench_pty_create'
+      );
     });
 
     it('WS 时代 type 已删除（T18）：一律 null（显式 missing，不再有映射层）', () => {
@@ -116,10 +129,14 @@ describe('commandMap', () => {
 
     it('白名单无遗漏：每个命令名都在内置清单 registered 内且可解析', () => {
       const registered = new Set(
-        BUILTIN_COMMAND_MANIFEST.commands.filter((c) => c.registered).map((c) => c.name),
+        BUILTIN_COMMAND_MANIFEST.commands
+          .filter((c) => c.registered)
+          .map((c) => c.name)
       );
       for (const cmd of COMMAND_NAME_ALLOWLIST) {
-        expect(registered.has(cmd), `${cmd} 必须在内置清单 registered 内`).toBe(true);
+        expect(registered.has(cmd), `${cmd} 必须在内置清单 registered 内`).toBe(
+          true
+        );
         expect(resolveTauriCommand(cmd), cmd).toBe(cmd);
       }
     });
@@ -130,12 +147,14 @@ describe('commandMap', () => {
           ['core_get_run_snapshot', true],
           ['config_update', true],
           ['list_sessions', true],
-        ]),
+        ])
       );
       // 'core_get_status' 不在 mock 清单中 → null
       expect(resolveTauriCommand('core_get_status')).toBeNull();
       // 清单内命令正常解析
-      expect(resolveTauriCommand('core_get_run_snapshot')).toBe('core_get_run_snapshot');
+      expect(resolveTauriCommand('core_get_run_snapshot')).toBe(
+        'core_get_run_snapshot'
+      );
       expect(resolveTauriCommand('list_sessions')).toBe('list_sessions');
       // 直接命令名同理
       expect(resolveTauriCommand('core_run_task')).toBeNull();
@@ -146,7 +165,7 @@ describe('commandMap', () => {
         makeManifest([
           ['core_get_status', true],
           ['config_update', false],
-        ]),
+        ])
       );
       expect(resolveTauriCommand('config_update')).toBeNull();
       expect(resolveTauriCommand('core_get_status')).toBe('core_get_status');
@@ -160,7 +179,7 @@ describe('commandMap', () => {
       expect(
         logger
           .getRecentLogs()
-          .some((e) => e.level === 'warn' && e.msg.includes('幽灵条目')),
+          .some((e) => e.level === 'warn' && e.msg.includes('幽灵条目'))
       ).toBe(false);
     });
 
@@ -170,7 +189,7 @@ describe('commandMap', () => {
         makeManifest([
           ['core_get_run_snapshot', true],
           ['list_sessions', true],
-        ]),
+        ])
       );
       checkCommandMapConsistency();
       const warns = logger
@@ -183,10 +202,17 @@ describe('commandMap', () => {
   describe('shapeTauriPayload（payload 整形）', () => {
     it('config_update 剥离 type 字段 + apiKey（K-05：明文 key 不走 config_update 通道）', () => {
       expect(
-        shapeTauriPayload('config_update', { type: 'config_update', model: 'm1', apiKey: 'k' }),
+        shapeTauriPayload('config_update', {
+          type: 'config_update',
+          model: 'm1',
+          apiKey: 'k',
+        })
       ).toEqual({ model: 'm1' });
       expect(
-        shapeTauriPayload('config_update', { type: 'config_update', baseUrl: 'https://x' }),
+        shapeTauriPayload('config_update', {
+          type: 'config_update',
+          baseUrl: 'https://x',
+        })
       ).toEqual({ baseUrl: 'https://x' });
     });
 

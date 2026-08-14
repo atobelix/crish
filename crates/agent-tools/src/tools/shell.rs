@@ -248,6 +248,31 @@ impl ShellCommandTool {
                 ),
             )));
         }
+        // I2-S4：删除形态重定向——semantics 判定 DeleteShape 的命令不再直接
+        // 执行，改走删除接管接口（trash 服务，移入回收站可恢复）；复合链 /
+        // 间接执行包裹删除形态整链拦截 + 引导。红线（Redline）已由上方门禁
+        // 100% 拦截（S2），此处只处理删除形态。
+        let analysis = conex_sandbox::semantics::analyze(&command);
+        if analysis.overall_class == CommandClass::DeleteShape || analysis.has_indirect_delete {
+            return Prepared::Done(redirect_or_intercept_delete(
+                &analysis,
+                &command,
+                workspace_root,
+                &cwd,
+                self.trash_root.clone(),
+                ctx,
+                Arc::clone(&self.audit_sink),
+            ));
+        }
+
+        // T-AB-04：第五项「cd 形态」拦截（判定优先级：门禁 → 删除形态 →
+        // cd 形态 → 审批 → 执行；`cd x && rm -rf y` 同时命中时删除形态已先行拦截，
+        // 此处只处理残留的 cd 形态）——纯 cd 命令结构化错误（tool.cd_blocked），
+        // 复合链含 cd 段整链拦截 + 引导（链内其他段依赖目录状态，不代为执行）。
+        if let Some(err) = intercept_cd_shape(&analysis, &command) {
+            return Prepared::Done(Err(err));
+        }
+
         if verdict == GatekeeperResult::RequiresApproval {
             // R4 T10：经 ctx.ask 审批通道发起真实审批——approval-requested
             // 事件由通道侧记录并广播，等待用户裁决（abort 可取消）；
@@ -272,31 +297,6 @@ impl ShellCommandTool {
                     )));
                 }
             }
-        }
-
-        // I2-S4：删除形态重定向——semantics 判定 DeleteShape 的命令不再直接
-        // 执行，改走删除接管接口（trash 服务，移入回收站可恢复）；复合链 /
-        // 间接执行包裹删除形态整链拦截 + 引导。红线（Redline）已由上方门禁
-        // 100% 拦截（S2），此处只处理删除形态。
-        let analysis = conex_sandbox::semantics::analyze(&command);
-        if analysis.overall_class == CommandClass::DeleteShape || analysis.has_indirect_delete {
-            return Prepared::Done(redirect_or_intercept_delete(
-                &analysis,
-                &command,
-                workspace_root,
-                &cwd,
-                self.trash_root.clone(),
-                ctx,
-                Arc::clone(&self.audit_sink),
-            ));
-        }
-
-        // T-AB-04：第五项「cd 形态」拦截（判定优先级：门禁 → 删除形态 →
-        // cd 形态 → 执行；`cd x && rm -rf y` 同时命中时删除形态已先行拦截，
-        // 此处只处理残留的 cd 形态）——纯 cd 命令结构化错误（tool.cd_blocked），
-        // 复合链含 cd 段整链拦截 + 引导（链内其他段依赖目录状态，不代为执行）。
-        if let Some(err) = intercept_cd_shape(&analysis, &command) {
-            return Prepared::Done(Err(err));
         }
 
         // 执行上下文：三模式（manager 优先读会话级 ToolContext.background，

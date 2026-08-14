@@ -1413,7 +1413,7 @@ async fn kill_subagent_emits_ended_cancelled_event() {
 #[tokio::test]
 async fn resume_derives_task_from_subagent_session() {
     let session_id = "s-task-src";
-    let mut env = resume_env(session_id);
+    let env = resume_env(session_id);
     // 子代理独立会话落 user 消息（真实持久化轨：子代理 run 消息链路；
     // session_messages FK 要求会话已注册）
     let sub_sess = "sub-sess-lk07";

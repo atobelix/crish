@@ -36,31 +36,7 @@ use conex_types::events::{
 use conex_types::impact::ImpactAssessment;
 use crate::core_event_bridge::EventBridge;
 
-/// remote-mode-downgrade 审计标记常量（D5 §8.2）
-pub(crate) const REMOTE_MODE_DOWNGRADE_AUDIT_MARKER: &str = "remote-mode-downgrade";
-
-/// remote-only 审计标记（D5 §4.4）
-pub(crate) const REMOTE_ONLY_AUDIT_MARKER: &str = "remote-only";
-
-/// 远程审批双轨路由
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RemoteApprovalRoute {
-    Dual,
-    RemoteOnly,
-}
-
-pub(crate) fn route_remote_approval(desktop_user_present: bool) -> RemoteApprovalRoute {
-    if desktop_user_present {
-        RemoteApprovalRoute::Dual
-    } else {
-        RemoteApprovalRoute::RemoteOnly
-    }
-}
-
-pub(crate) fn combine_dual_decisions(mobile_approved: bool, desktop_approved: bool) -> bool {
-    mobile_approved && desktop_approved
-}
-
+#[cfg(test)]
 pub(crate) fn remote_source_attempt_marker(command: &str) -> String {
     format!("operation=remote-source-attempt;command={command};decision=blocked")
 }
@@ -135,21 +111,6 @@ fn emit_remote_audit(
         None,
     );
     bridge.emit_envelope(&envelope);
-}
-
-pub(crate) fn emit_remote_mode_downgrade_audit(
-    bridge: Option<&EventBridge>,
-    run_id: &str,
-    session_id: &str,
-) {
-    emit_remote_audit(
-        bridge,
-        session_id,
-        SecurityAuditOperation::RemoteModeDowngrade,
-        vec![run_id.to_string()],
-        SecurityAuditDecision::Blocked,
-        Some("full-access".to_string()),
-    );
 }
 
 pub(crate) fn emit_remote_source_attempt_audit(bridge: Option<&EventBridge>, command: &str) {
@@ -243,6 +204,7 @@ pub const REMOTE_COMMAND_WHITELIST: &[RemoteCommandEntry] = &[
 ];
 
 /// 白名单条目总数（M6 §4 C01-C32 冻结口径：32 条）
+#[cfg(test)]
 pub const REMOTE_COMMAND_WHITELIST_LEN: usize = REMOTE_COMMAND_WHITELIST.len();
 
 /// 判定纯函数：命令名 ∈ 白名单 → 放行（D5 §4.5「命令名 ∈ 白名单 →
@@ -255,6 +217,7 @@ pub fn is_remote_command_whitelisted(command: &str) -> bool {
 }
 
 /// 命令功能域类别（None = 不在白名单；能力分级声明的查询入口）
+#[cfg(test)]
 pub fn remote_command_category(command: &str) -> Option<RemoteCommandCategory> {
     REMOTE_COMMAND_WHITELIST
         .iter()

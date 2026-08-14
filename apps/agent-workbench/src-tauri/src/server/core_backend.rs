@@ -114,8 +114,6 @@ impl CoreStateBackend {
 
     /// 注入 C21 搜索索引根（R2-12c：索引构建时的 canonical 工作区根；
     /// relPath 剥离依据——与 with_search_state 配套注入）
-    // R2-12c 备注：main.rs 装配面消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_search_root(mut self, root: impl Into<String>) -> Self {
         self.search_root = Some(root.into());
         self
@@ -124,8 +122,7 @@ impl CoreStateBackend {
     /// 全局事件桥（R1-11：remote-* 审计事件发射通道；main.rs 装配面经此
     /// 挂接 ServerState.audit_bridge——router 白名单拒绝分支（remote-source-
     /// attempt）与 run 装配面（remote-mode-downgrade）共用同一桥实例）
-    // R1-11 备注：main.rs 装配消费——dead_code 静音
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn event_bridge(&self) -> EventBridge {
         self.core.event_bridge()
     }
@@ -205,6 +202,7 @@ pub(crate) fn apply_remote_mode(requested: Option<PermissionMode>) -> (Option<Pe
 /// R1-10 结构化日志先行，R1-11 D-5 收口后经
 /// [emit_remote_mode_downgrade_audit] 双写升级为 AgentEvent::SecurityAudit
 /// 事件发射——标记载荷形状不变，测试锁定）
+#[cfg(test)]
 pub(crate) const REMOTE_MODE_DOWNGRADE_AUDIT_MARKER: &str = "remote-mode-downgrade";
 
 /// remote-* 审计事件构造（R1-11 D-5 收口：D5 §6.2 载荷形状——operation +
@@ -288,6 +286,7 @@ pub(crate) fn emit_remote_mode_downgrade_audit(
 /// - 桌面不在场（无人值守）→ 移动端单一确认（[RemoteApprovalRoute::RemoteOnly]），
 ///   审计标记 remote-only（事后追责可区分单方批准与双轨批准）。
 /// 「桌面在场」判定由引擎侧装配注入，缺省 false = 保守模式（D5 §4.4）。
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RemoteApprovalRoute {
     /// 双轨确认：移动端 + 桌面端弹窗（任一方拒绝即拒绝）
@@ -297,10 +296,12 @@ pub(crate) enum RemoteApprovalRoute {
 }
 
 /// remote-only 审计标记（D5 §4.4：区分「手机端单方批准」与「双轨批准」）
+#[cfg(test)]
 pub(crate) const REMOTE_ONLY_AUDIT_MARKER: &str = "remote-only";
 
 /// 双轨裁决路由纯函数（R1-10 T-14：desktop_user_present 由装配面注入，
 /// 缺省 false = 无人值守按 remote-only 处理）
+#[cfg(test)]
 pub(crate) fn route_remote_approval(desktop_user_present: bool) -> RemoteApprovalRoute {
     if desktop_user_present {
         RemoteApprovalRoute::Dual
@@ -310,43 +311,9 @@ pub(crate) fn route_remote_approval(desktop_user_present: bool) -> RemoteApprova
 }
 
 /// 双轨裁决合成（R1-10 T-14：任一方拒绝即拒绝——仅双方均批准才放行）
+#[cfg(test)]
 pub(crate) fn combine_dual_decisions(mobile_approved: bool, desktop_approved: bool) -> bool {
     mobile_approved && desktop_approved
-}
-
-/// remote-source-attempt 审计标记载荷（R1-10 T-07 / D5 §4.5 第三层：
-/// 密钥命令面触达；规范载荷 = operation + 命令名 + blocked 决策——测试
-/// 锁定标记形状，发射侧（router 白名单拒绝分支）携带同一内容）
-pub(crate) fn remote_source_attempt_marker(command: &str) -> String {
-    format!(
-        "operation=remote-source-attempt;command={command};decision=blocked"
-    )
-}
-
-/// 发射 remote-source-attempt 审计（R1-10 T-07 → R1-11 事件级：远程来源
-/// 触达被禁命令面；双写：结构化日志 + SecurityAudit(remote-source-attempt)，
-/// targets 承载命令名、decision 恒 blocked——D5 §6.2 载荷形状；命令串
-/// 中的敏感形态（令牌 / 配对码 / provider key）经
-/// [conex_telemetry::redact::redact_text] 打码后再入事件与日志——红线 7
-/// 「remote-* 审计打码」断言锚（T-06 零明文口径同源））
-pub(crate) fn emit_remote_source_attempt_audit(bridge: Option<&EventBridge>, command: &str) {
-    let redacted = conex_telemetry::redact::redact_text(command);
-    emit_remote_audit(
-        bridge,
-        "",
-        SecurityAuditOperation::RemoteSourceAttempt,
-        vec![redacted.clone()],
-        SecurityAuditDecision::Blocked,
-        None,
-    );
-    tracing::info!(
-        target: "security.audit",
-        kind = "remote-command",
-        operation = "remote-source-attempt",
-        command = %redacted,
-        decision = "blocked",
-        "远程来源触达被禁命令面（白名单拒绝 + 审计标记，敏感形态已打码）"
-    );
 }
 
 /// 发射 remote-only 审计（D5 §4.4：桌面不在场时移动端单方批准——审计
@@ -354,7 +321,7 @@ pub(crate) fn emit_remote_source_attempt_audit(bridge: Option<&EventBridge>, com
 /// SecurityAudit(remote-only)，decision 取 approved 语义：单方批准已
 /// 放行。装配点 = R2 远程网关双轨裁决落地面（当前无生产调用，测试直
 /// 接覆盖事件形状））
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) fn emit_remote_only_audit(bridge: Option<&EventBridge>, session_id: &str) {
     emit_remote_audit(
         bridge,
@@ -982,6 +949,9 @@ fn resolve_deny_run_id(core: &CoreRunState, params: &DenyParams) -> Result<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server::remote_whitelist::{
+        emit_remote_source_attempt_audit, remote_source_attempt_marker,
+    };
 
     // ── R1-10 T-08：远程权限模式上限（D5 §4.6.1 / §9.2 矩阵）──
 
@@ -1747,6 +1717,7 @@ mod tests {
         };
         state.engine().inject_provider_for_test(routed, config);
         state.run_restore().await;
+        state.local_db().expect("local_db").insert_session("s1", "s1").expect("创建测试会话");
 
         let backend = CoreStateBackend::new(Arc::clone(&state));
         let result = backend
@@ -1819,5 +1790,21 @@ mod tests {
             })
             .await;
         assert!(cancelled.is_ok(), "取消 run 收尾：{cancelled:?}");
+    }
+
+    #[test]
+    fn remote_approval_helpers_and_bridge_smoke() {
+        let (bridge, _emitter) = recording_bridge();
+        assert_eq!(route_remote_approval(true), RemoteApprovalRoute::Dual);
+        assert_eq!(route_remote_approval(false), RemoteApprovalRoute::RemoteOnly);
+        assert!(combine_dual_decisions(true, true));
+        assert!(!combine_dual_decisions(true, false));
+        assert!(!combine_dual_decisions(false, true));
+        assert_eq!(REMOTE_MODE_DOWNGRADE_AUDIT_MARKER, "remote-mode-downgrade");
+        assert_eq!(REMOTE_ONLY_AUDIT_MARKER, "remote-only");
+        emit_remote_only_audit(Some(&bridge), "sess-test");
+
+        let backend = CoreStateBackend::new(r2_test_core_state());
+        let _eb = backend.event_bridge();
     }
 }

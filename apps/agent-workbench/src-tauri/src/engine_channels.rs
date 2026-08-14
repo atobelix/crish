@@ -28,7 +28,7 @@ use session_loop::ControlBus;
 use crish_agent_workbench::wait_channel::ControlBusResolver;
 
 use super::engine_build::EngineHandle;
-use super::engine_provider::{chat_provider_url, user_message, EngineProviderConfig, now_iso_utc};
+use super::engine_provider::{chat_provider_url, user_message, EngineProviderConfig};
 use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::timers::AgentEventSink;
@@ -592,6 +592,7 @@ impl BufferedRunEventBridge {
     /// （core_run 域切分）并行域收口后接线**（2026-08-14 主控裁决顺延）。
     /// 本桥字段/builder/emit 注入面已就绪，无 trace 配置的桥零开销
     /// （None 分支直通，与接线前行为一致）。
+    #[cfg(test)]
     pub(crate) fn with_trace_id(mut self, trace_id: Option<String>) -> Self {
         self.trace_id = trace_id;
         self

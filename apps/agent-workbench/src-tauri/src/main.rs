@@ -829,6 +829,9 @@ fn main() {
             // 幂等，restore 完成与否均可启动）
             core_state.spawn_snapshot_loop();
 
+            // PTY 30s 周期 GC 协程：回收超期游离会话（>2h 无输出）与 Dead 会话
+            pty::spawn_pty_gc_loop(app.handle().clone());
+
             // setup 完成标记（PE-01 T01.2：initialized 如实反映）
             core_state.mark_initialized();
 

@@ -193,6 +193,7 @@ impl WakeWatcher {
     }
 
     /// 周期任务是否运行中（start 幂等 / stop 生效的观测面）
+    #[cfg(test)]
     pub(crate) fn is_running(&self) -> bool {
         self.task
             .lock()
@@ -200,8 +201,8 @@ impl WakeWatcher {
             .is_some()
     }
 
-    /// 标记用户显式停止（壳层 run_control L2/L3 路径调用；标记后 watcher
-    /// 不再拉起，直到 [Self::clear_user_stopped]——用户新 run 装配清除）
+    /// 标记用户显式停止（测试与调试入口）
+    #[cfg(test)]
     pub(crate) fn set_user_stopped(&self) {
         self.set_user_stopped_at(now_ms());
     }
@@ -535,6 +536,10 @@ mod tests {
         assert!(!watcher.is_running(), "停止后不再运行");
         assert!(!watcher.stop(), "重复停止返回 false");
         assert!(watcher.start(&runtime), "停止后可再启动");
+        watcher.set_user_stopped();
+        assert!(watcher.is_user_stopped());
+        watcher.clear_user_stopped();
+        assert!(!watcher.is_user_stopped());
         watcher.stop();
     }
 }

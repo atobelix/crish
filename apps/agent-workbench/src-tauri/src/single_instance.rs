@@ -145,6 +145,7 @@ mod tests {
     ///   （插件第二实例判定依据，逐字对齐）；
     /// - 全部句柄关闭后（模拟首实例退出）→ 同名锁可重新创建。
     #[cfg(windows)]
+    #[allow(unsafe_code)]
     #[test]
     fn named_mutex_second_acquire_fails_then_reacquire_after_release() {
         use std::sync::mpsc;

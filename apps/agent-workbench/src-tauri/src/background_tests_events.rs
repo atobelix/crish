@@ -12,9 +12,12 @@
 //   tasklist / kill -0 存活探测辅助，T-AB-06/07 验收），非产品执行面；
 //   测试 mod 内 allow + 理由（裁决 D8 背书）。
 #![allow(clippy::disallowed_methods)]
+use super::bg_commands::build_list_response;
+use super::bg_events::EventBridgeSink;
 use super::tests::*;
 use super::tests_resource::adopt_request_monitored;
-use super::*;
+use crate::core_event_bridge::EventBridge;
+use agent_tools::BackgroundTaskManager;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

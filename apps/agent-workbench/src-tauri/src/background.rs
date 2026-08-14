@@ -90,25 +90,9 @@ mod bg_task;
 #[path = "bg_writer.rs"]
 mod bg_writer;
 
-pub(crate) use crate::core_error::CoreError;
-pub(crate) use crate::core_event_bridge::EventBridge;
-pub(crate) use crate::resource::{
-    cpu_percent_from_delta, judge_health, sample_usage, EventSink, ProcessHealth, RawUsage,
-    ResourceMonitorConfig, TaskNotifier,
-};
-pub(crate) use agent_tools::background::{
-    BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef,
-    BackgroundTaskStatus, KillResult, LogSlice, ResourceSample, TaskState,
-};
-pub(crate) use agent_tools::definition::ToolError;
-pub(crate) use conex_types::error::codes;
-pub(crate) use conex_types::events::{AgentEvent, AgentEventEnvelope};
-
 pub(crate) use bg_commands::{
-    build_list_response, build_output_response, build_send_input_response,
     workbench_cancel_background_task, workbench_get_background_task_output,
-    workbench_list_background_tasks, workbench_send_input, BackgroundTaskListResponse,
-    BackgroundTaskOutputResponse, BackgroundTaskWire,
+    workbench_list_background_tasks, workbench_send_input,
     // Tauri 宏生成的 __cmd__ / __tauri_command_name_ 符号随命令函数同模块
     // （bg_commands），main.rs invoke_handler 经 background:: 路径引用需要
     // 一并 re-export（SR-05 拆分断链修复 · 2026-08-14）。
@@ -121,10 +105,7 @@ pub(crate) use bg_commands::{
     __tauri_command_name_workbench_list_background_tasks,
     __tauri_command_name_workbench_send_input,
 };
-pub(crate) use bg_events::{EventBridgeSink, SamplerFn, SuspiciousDebounce};
-pub(crate) use bg_log::{read_meta, strip_log_prefix};
-pub(crate) use bg_registry::{BackgroundTaskRegistry, MAX_BACKGROUND_TASKS};
-pub(crate) use bg_task::task_summary;
+pub(crate) use bg_registry::BackgroundTaskRegistry;
 
 #[cfg(test)]
 #[path = "background_tests.rs"]

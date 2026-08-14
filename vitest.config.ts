@@ -96,6 +96,7 @@ export default defineConfig({
             'tests/fuzz/**/*.test.ts',
             'tests/race/**/*.test.ts',
             'tests/recovery/**/*.test.ts',
+            'tests/stress/**/*.test.ts',
             'apps/crish-desktop/tests/**/*.test.ts',
           ],
           exclude: ['**/node_modules/**', '**/dist/**'],

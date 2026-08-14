@@ -27,7 +27,7 @@ async fn l2_cooperative_cancel_injects_without_hard_abort() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_coop").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let path = run
         .cancel_run(
@@ -83,7 +83,7 @@ async fn l3_force_cancel_hard_aborts_and_ends_cancelled() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_force").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let path = run
         .cancel_run(CancelMode::Force, Some(&engine), "ui-force", store.as_ref())
@@ -122,7 +122,7 @@ async fn cooperative_cancel_falls_back_to_force_without_l2_support() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_fallback").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     let path = run
         .cancel_run(
@@ -179,7 +179,7 @@ async fn terminal_run_rejects_cancel() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_terminal_cancel").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     orchestrator::events::drive_outcome(
         &mut run,
@@ -217,7 +217,7 @@ async fn l2_then_natural_stop_still_ends_cancelled() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_coop_stop").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     run.cancel_run(
         CancelMode::Cooperative,

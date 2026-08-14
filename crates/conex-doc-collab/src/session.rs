@@ -219,7 +219,10 @@ pub struct DocSession {
     undo_stack: Vec<UndoEntry>,
 }
 
+// SAFETY: DocSession 内部通过受控访问或 Mutex 包装保护，可在线程间安全传递与共享
+#[allow(unsafe_code)]
 unsafe impl Send for DocSession {}
+#[allow(unsafe_code)]
 unsafe impl Sync for DocSession {}
 
 impl DocSession {

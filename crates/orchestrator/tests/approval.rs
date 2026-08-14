@@ -52,7 +52,7 @@ async fn approved_run_resumes_and_completes() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_approve_ok").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     run.request_approval(store.as_ref()).await.unwrap();
     run.resolve_approval(store.as_ref()).await.unwrap();
@@ -94,7 +94,7 @@ async fn denied_approval_resumes_and_completes() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_denied").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     // 运行时挂起审批
     run.request_approval(store.as_ref()).await.unwrap();
@@ -144,7 +144,7 @@ async fn cancel_while_awaiting_approval_ends_cancelled() {
     let manager = RunManager::new(store.clone());
 
     let mut run = manager.start_run("s1", "r_approval_cancel").await.unwrap();
-    let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+    let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
 
     run.request_approval(store.as_ref()).await.unwrap();
     assert_eq!(run.status, RunStatus::AwaitingApproval);

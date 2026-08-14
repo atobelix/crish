@@ -46,7 +46,7 @@
 
 use agent_tools::note_backend::NoteBackendError;
 #[cfg(test)]
-use agent_tools::note_backend::{NoteApplyMdRequest, NoteApplyMdResult, NoteBackend as _};
+use agent_tools::note_backend::{NoteApplyMdRequest, NoteApplyMdResult};
 use serde_json::{json, Value as JsonValue};
 #[cfg(test)]
 use crate::note_runtime;
@@ -81,13 +81,11 @@ mod note_commands_mirror;
 
 // 公开 API 保持：main.rs `command_registry!` 引用的 7 个命令路径不变
 pub use note_commands_apply::{
-    note_apply_ops, note_document_apply_md, note_send_to_note, NoteApplyOpsArgs,
-    NoteSendToNoteArgs,
+    note_apply_ops, note_document_apply_md, note_send_to_note,
 };
-pub use note_commands_hydrate::{note_document_hydrate, note_query_blocks, NoteHydrateDocumentArgs};
+pub use note_commands_hydrate::{note_document_hydrate, note_query_blocks};
 pub use note_commands_mirror::{
-    note_detect_mirror_drift, note_import_mirror_proposal, NoteDetectMirrorArgs,
-    NoteImportMirrorArgs,
+    note_detect_mirror_drift, note_import_mirror_proposal,
 };
 // SR-06f 拆分补完：tauri 宏生成的 invoke 包装符号（`__cmd__*`）与命令名
 // 常量（`__tauri_command_name_*`）随命令定义于三个子模块，`generate_handler!`

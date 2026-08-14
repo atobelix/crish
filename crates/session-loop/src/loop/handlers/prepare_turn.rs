@@ -24,15 +24,13 @@
 use conex_types::events::AgentEvent;
 use conex_types::message::AgentMessage;
 use conex_types::session::AgentSessionEvent as E;
-use conex_types::tool::{ContextCompressionReason, ContextCompressionTrigger};
-
 use crate::steering::SteeringPhase;
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    assert_timeline_injection_hygiene, check_control, compact_with_llm_guard, dispatch,
-    estimate_context, maybe_compact_preflight, maybe_compact_user_boundary, record_message,
-    steering_context, CompactionTriggerInfo, HandlerOutcome, LoopState,
+    assert_timeline_injection_hygiene, check_control, dispatch,
+    maybe_compact_preflight, maybe_compact_user_boundary, record_message,
+    steering_context, HandlerOutcome, LoopState,
 };
 use super::super::LoopError;
 

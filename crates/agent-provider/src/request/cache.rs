@@ -19,14 +19,7 @@
 
 use serde_json::{json, Value};
 
-/// 测试专用接线：旁挂测试（cache_tests.rs）经 `use super::*` 消费以下符号，
-/// 门面自身不使用（pub(crate) 不扩大对外 API；非 test 构建下允许 unused）。
-#[cfg_attr(not(test), allow(unused_imports))]
-pub(crate) use crate::models::{
-    cache_behavior_for, infer_vendor, session_affinity_headers, CacheBehavior, CacheTtl,
-    ModelCatalog, VendorId,
-};
-#[cfg_attr(not(test), allow(unused_imports))]
+#[cfg(test)]
 pub(crate) use crate::request::messages::{ChatContent, ChatContentPart, ChatMessage};
 
 #[path = "cache_policy.rs"]

@@ -757,7 +757,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     saveSessionBody('old', [baseMsg({ id: 'm', sender: 'user', text: 'x' })]);
     await persistAllSessions([], '', []);
     expect(loadSessionIndex()).toEqual([]);
-    expect(loadSessionBody('old')).toEqual([]);
+    // N1-2 守卫：空 keep 不清除 LS 正文镜像（防 boot 窗口误删），但索引已清空，hydrate 不会凭空恢复会话
     expect(loadActiveSessionId()).toBeNull();
     const h = hydrateSessionsFromDisk();
     expect(h.sessions).toEqual([]);
@@ -793,15 +793,15 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
       title: 'Keep',
       messages: [baseMsg({ id: 'mr', sender: 'user', text: 'real body' })],
     });
-    await persistAllSessions(
-      [draft, real],
-      PENDING_DRAFT_SESSION_ID,
-      [DEFAULT_SESSION_FOLDER]
-    );
+    await persistAllSessions([draft, real], PENDING_DRAFT_SESSION_ID, [
+      DEFAULT_SESSION_FOLDER,
+    ]);
 
     expect(loadSessionIndex().map((e) => e.id)).toEqual(['keep-real']);
     expect(loadSessionBody(PENDING_DRAFT_SESSION_ID)).toEqual([]);
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + PENDING_DRAFT_SESSION_ID)).toBeNull();
+    expect(
+      localStorage.getItem(SESSION_BODY_PREFIX + PENDING_DRAFT_SESSION_ID)
+    ).toBeNull();
     expect(loadActiveSessionId()).toBeNull();
     expect(loadSessionBody('keep-real')).toHaveLength(1);
   });

@@ -4910,6 +4910,7 @@ dependencies = [
  "conex-test-utils",
  "conex-types",
  "criterion",
+ "rusqlite",
  "serde",
  "serde_json",
  "session-loop",

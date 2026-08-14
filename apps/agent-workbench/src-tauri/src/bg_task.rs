@@ -12,7 +12,6 @@ use agent_tools::definition::ToolError;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, RwLock};
-use tokio::process::ChildStdin;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::bg_events::spawn_resource_monitor_loop;

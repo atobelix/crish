@@ -18,16 +18,6 @@ pub(crate) struct ProviderFailStreak {
 }
 
 impl ProviderFailStreak {
-    /// 首次失败（count=1 起）
-    pub(crate) fn first_failure(now_ms: u64) -> Self {
-        Self {
-            count: 1,
-            first_fail_at_ms: now_ms as i64,
-            last_fail_at_ms: now_ms as i64,
-            window_ms: PROVIDER_FAIL_WINDOW_MS_DEFAULT,
-        }
-    }
-
     /// 清零形态（成功面，C3）
     pub(crate) fn cleared(now_ms: u64) -> Self {
         Self {

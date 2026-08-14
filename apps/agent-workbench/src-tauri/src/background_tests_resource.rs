@@ -15,6 +15,8 @@
 #![allow(clippy::disallowed_methods)]
 use super::tests::*;
 use super::*;
+use crate::resource::ProcessHealth;
+pub(crate) use super::bg_events::SuspiciousDebounce;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::path::PathBuf;
@@ -256,16 +258,15 @@ async fn resource_samples_persisted() {
     // 条数随时间增长（F-009 flaky 根因同族：固定 sleep(1000) 在负载
     // 下采样循环可能未达 2 拍 → 改轮询观测状态，8s 上限充足）
     let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
-    let mut second_count = first_count;
-    loop {
+    let second_count = loop {
         let raw = std::fs::read_to_string(&samples_path).expect("读 samples");
-        second_count = raw.lines().filter(|l| !l.is_empty()).count();
-        if second_count > first_count {
-            break;
+        let count = raw.lines().filter(|l| !l.is_empty()).count();
+        if count > first_count {
+            break count;
         }
         assert!(tokio::time::Instant::now() < deadline, "采样条数迟迟不增长");
         tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    };
     assert!(
         second_count > first_count,
         "采样条数应随时间增长：{first_count} -> {second_count}"

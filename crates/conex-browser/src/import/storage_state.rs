@@ -16,8 +16,10 @@
 //!   securityOrigin 按 origin 守卫校验，拒绝非法 origin）；发送层经
 //!   [`LocalStorageChannel`] 抽象（真实实现 [`SessionLocalStorageChannel`]，
 //!   测试 mock 断言 wire 参数）。
-//! - **导出聚合**（§5.2 可选）：[`collect_local_storage`]——`DOMStorage.getDOMStorageItems`
-//!   按 origin 读取（带守卫），经 [`export_storage_state_with_origins`] 并入导出面。
+//! - **导出聚合**（§5.2）：[`collect_local_storage`]——`DOMStorage.getDOMStorageItems`
+//!   按 origin 读取（带守卫），经 [`export_storage_state_with_origins`] 并入导出面；
+//!   origin 清单由 [`export_origins_from_cookies`] 从 cookie domain 推导
+//!   （协议按 secure 标志，读取前 origin 守卫过滤）。
 //! - **幂等**：同 (domain, name, path) 去重（**覆盖语义**，最后一次出现者胜）；
 //!   会话 cookie（expires ≤ 0）导入时**移除 expires 字段**（§5.1 归一化，
 //!   对照 storage_state_watchdog.py:252-264 的归一化处理）。
@@ -656,6 +658,37 @@ pub async fn export_storage_state_with_origins(
     let mut state = StorageState::from_cdp_cookies(cookies);
     state.origins = collect_local_storage(channel, origins).await?;
     Ok(state)
+}
+
+/// 由 cookie domain 推导导出 origins 清单（§5.2 导出聚合的 origin 来源）：
+/// 每个唯一 host 一个 origin——协议取 https（该 host 存在 secure cookie 时）
+/// 否则 http（secure cookie 仅出现在 https 页面，纯非 secure cookie 多为
+/// http 本地开发面，按此判定可对齐 localStorage 实际存放 origin）；
+/// 前导点去除（domain cookie）；无法构成合法 http(s) origin 的 host 跳过
+/// （与读取前 origin 守卫同一 [`validate_origin`] 口径，防异常 domain 污染
+/// localStorage 跨站读取面）。输出按字典序保证确定性（HashMap 无序遍历
+/// 不得泄漏到 JSON 形状）。空 cookie 列表 → 空 origins。
+pub fn export_origins_from_cookies(cookies: &[CdpCookie]) -> Vec<String> {
+    let mut by_host: HashMap<String, bool> = HashMap::new();
+    for c in cookies {
+        let host = c.domain.trim_start_matches('.');
+        let secure = by_host.entry(host.to_string()).or_insert(false);
+        *secure = *secure || c.secure;
+    }
+    let mut origins: Vec<String> = by_host
+        .into_iter()
+        .filter_map(|(host, secure)| {
+            let scheme = if secure { "https" } else { "http" };
+            let origin = format!("{scheme}://{host}");
+            if validate_origin(&origin).is_ok() {
+                Some(origin)
+            } else {
+                None
+            }
+        })
+        .collect();
+    origins.sort();
+    origins
 }
 
 /// sameSite 归一化：`Strict`/`Lax`/`None`（大小写容错）；
@@ -1378,6 +1411,51 @@ mod tests {
         assert_eq!(state.cookies.len(), 1);
         assert_eq!(state.origins.len(), 1);
         assert_eq!(state.origins[0].local_storage[0].name, "theme");
+    }
+
+    /// 导出 origins 推导（§5.2 聚合来源）：唯一 host 一个 origin、协议按
+    /// secure 标志（任一 secure cookie → https）、前导点去除、非法 host
+    /// 跳过、输出字典序确定。
+    #[test]
+    fn export_origins_from_cookies_derives() {
+        let cookies = vec![
+            cdp_cookie(|c| {
+                c.domain = ".example.com".to_string();
+                c.secure = true;
+            }),
+            cdp_cookie(|c| {
+                c.domain = "example.com".to_string();
+                c.secure = false; // 同 host 混合 → 任一 secure 即 https
+            }),
+            cdp_cookie(|c| {
+                c.domain = "example.org".to_string();
+                c.secure = false; // 纯非 secure → http
+            }),
+            cdp_cookie(|c| {
+                c.domain = "exa mple.com".to_string(); // 含空格 → 无法构成合法 origin
+            }),
+            cdp_cookie(|c| {
+                c.domain = "".to_string(); // 空 host → 跳过
+            }),
+            cdp_cookie(|c| {
+                c.domain = "localhost".to_string();
+                c.secure = false;
+            }),
+        ];
+        let origins = export_origins_from_cookies(&cookies);
+        assert_eq!(
+            origins,
+            vec![
+                "http://example.org".to_string(),
+                "http://localhost".to_string(),
+                "https://example.com".to_string(),
+            ],
+            "去点 + secure 判定 + 非法跳过 + 字典序"
+        );
+        assert!(
+            export_origins_from_cookies(&[]).is_empty(),
+            "空 cookie 列表 → 空 origins"
+        );
     }
 
     /// 真实通道 wire 参数（mock 发送面）：addInitScript 源、DOMStorage.enable

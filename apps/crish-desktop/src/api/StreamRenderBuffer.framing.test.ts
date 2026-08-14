@@ -228,15 +228,17 @@ describe('flushFinal 预算式收口（T2.1，08-detail 3.1）', () => {
     expect(frames[frames.length - 1]!.delta).toBe('a'.repeat(64));
   });
 
-  it('无残余时 flushFinal 不产出帧（幂等，无副作用）', () => {
+  it('无残余时 flushFinal 产出终态空帧（终态补偿）且后续幂等', () => {
     const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
     const frames: RenderFrame[] = [];
     buf.onFrame = (f) => frames.push(f);
 
     buf.flushFinal();
-    expect(frames).toHaveLength(0);
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.isFinal).toBe(true);
+    expect(frames[0]!.delta).toBe('');
     buf.flushFinal();
-    expect(frames).toHaveLength(0);
+    expect(frames).toHaveLength(1);
   });
 
   it('flushFinal 后 push 不再接收（final 标记生效）', () => {

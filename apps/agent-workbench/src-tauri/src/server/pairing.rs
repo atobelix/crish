@@ -16,6 +16,7 @@
 
 use std::sync::{Arc, Mutex};
 
+#[cfg(test)]
 use conex_types::device::PairCode;
 
 use super::auth::TokenStore;
@@ -202,9 +203,11 @@ impl PairingCoordinator {
         let mut pair = self.pair.lock().unwrap_or_else(|e| e.into_inner());
         match pair.verify(input, now_ms) {
             VerifyOutcome::Success => {
+                pair.advance_establishing();
                 let mut tokens = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
                 let raw = tokens.issue(label, now_ms)?;
                 tokens.save()?;
+                pair.advance_established();
                 // 配对即授权：保持 Lan（移动端持续可连）
                 *self
                     .pairing_enabled
@@ -308,6 +311,7 @@ impl PairingCoordinator {
     }
 
     /// 令牌哈希列表（撤销全链用）
+    #[cfg(test)]
     pub fn token_hashes(&self) -> Vec<String> {
         self.tokens
             .lock()
@@ -541,6 +545,7 @@ mod windows_ip_enum {
 }
 
 /// 生成器别名（对拍/测试引用）
+#[cfg(test)]
 pub fn qr_data_for(code: &PairCode, host: &str, port: u16) -> String {
     format!("crish-pair://{}@{host}:{port}", code.display())
 }
@@ -879,5 +884,14 @@ mod tests {
         assert!(coordinator.revoke_device(&hash));
         assert!(!coordinator.revoke_device(&hash), "重复撤销返回 false");
         assert!(coordinator.list_devices().is_empty());
+    }
+
+    #[test]
+    fn qr_data_for_smoke() {
+        let code = PairCode::normalize("CXN-7K4P-Q2MB-9XRT").unwrap();
+        assert_eq!(
+            qr_data_for(&code, "192.168.1.5", 8765),
+            "crish-pair://CXN-7K4P-Q2MB-9XRT@192.168.1.5:8765"
+        );
     }
 }

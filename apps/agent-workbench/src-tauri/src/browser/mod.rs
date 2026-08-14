@@ -612,6 +612,7 @@ impl BrowserSlot {
     }
 
     /// 面板输入路由（P1-B1 命令面访问器）。
+    #[cfg(test)]
     pub(crate) fn input(&self) -> Arc<PanelInputRouter> {
         Arc::clone(&self.input)
     }
@@ -1832,6 +1833,13 @@ mod tests {
                 1,
                 "停止收尾必须清空发送面：不得向已死会话重复发送"
             );
+        }
+
+        #[tokio::test]
+        async fn input_accessor_smoke() {
+            let slot = Arc::new(BrowserSlot::from_parts(None, LaunchConfig::default()));
+            let inp = slot.input();
+            assert!(!inp.pipeline_wired());
         }
     }
 }

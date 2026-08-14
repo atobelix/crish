@@ -33,7 +33,9 @@ pub struct TextHost {
 }
 
 // Yrs 内部在无 sync feature 时未对 closure 标记 Send/Sync，但 TextHost 仅在单一线程或持锁时访问，可安全在线程间传递
+#[allow(unsafe_code)]
 unsafe impl Send for TextHost {}
+#[allow(unsafe_code)]
 unsafe impl Sync for TextHost {}
 
 

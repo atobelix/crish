@@ -57,11 +57,17 @@ import {
   sessionLastActivityMs,
   sessionListTimeTickMs,
 } from './sessionTime';
-import type { SessionAgent, SessionMessage, SessionState } from '../store/types';
+import type {
+  SessionAgent,
+  SessionMessage,
+  SessionState,
+} from '../store/types';
 
 // ── helpers ────────────────────────────────────────────────────────────
 
-function msg(partial: Partial<SessionMessage> & { id: string }): SessionMessage {
+function msg(
+  partial: Partial<SessionMessage> & { id: string }
+): SessionMessage {
   return {
     sender: 'user',
     text: '',
@@ -84,7 +90,9 @@ function agent(partial: Partial<SessionAgent> & { id: string }): SessionAgent {
   } as SessionAgent;
 }
 
-function session(partial: Partial<SessionState> & { id: string }): SessionState {
+function session(
+  partial: Partial<SessionState> & { id: string }
+): SessionState {
   return {
     title: 't',
     folder: '对话',
@@ -154,8 +162,14 @@ describe('sessionTime — 对抗性测试', () => {
       const s = session({
         id: 'sess-1712345678901',
         timestamp: '刚刚',
-        messages: [null as unknown as SessionMessage, null as unknown as SessionMessage],
-        agents: [null as unknown as SessionAgent, null as unknown as SessionAgent],
+        messages: [
+          null as unknown as SessionMessage,
+          null as unknown as SessionMessage,
+        ],
+        agents: [
+          null as unknown as SessionAgent,
+          null as unknown as SessionAgent,
+        ],
       });
       expect(() => sessionLastActivityMs(s)).not.toThrow();
       expect(sessionLastActivityMs(s)).toBe(1712345678901);
@@ -168,15 +182,11 @@ describe('sessionTime — 对抗性测试', () => {
   describe('ST4: coerceSessionTimestamp null 安全', () => {
     it('ST4（已修复）: messages 含 null 条目跳过，不崩溃', () => {
       const before = Date.now();
-      const result = coerceSessionTimestamp(
-        'sess-no-epoch',
-        '刚刚',
-        [
-          null as unknown as { timestamp?: number },
-          { timestamp: 1_700_000_000_000 },
-          null as unknown as { timestamp?: number },
-        ],
-      );
+      const result = coerceSessionTimestamp('sess-no-epoch', '刚刚', [
+        null as unknown as { timestamp?: number },
+        { timestamp: 1_700_000_000_000 },
+        null as unknown as { timestamp?: number },
+      ]);
       // 跳过 null 后取 1700000000000 → ISO
       expect(result).toBe(new Date(1_700_000_000_000).toISOString());
       // 验证未取当前时间（说明跳过 null 后取到了真实消息时间）
@@ -186,11 +196,10 @@ describe('sessionTime — 对抗性测试', () => {
     });
 
     it('messages 全 null → 回落到 id epoch', () => {
-      const result = coerceSessionTimestamp(
-        'sess-1712345678901',
-        '刚刚',
-        [null as unknown as { timestamp?: number }, null as unknown as { timestamp?: number }],
-      );
+      const result = coerceSessionTimestamp('sess-1712345678901', '刚刚', [
+        null as unknown as { timestamp?: number },
+        null as unknown as { timestamp?: number },
+      ]);
       expect(result).toBe(new Date(1712345678901).toISOString());
     });
   });
@@ -248,7 +257,9 @@ describe('sessionTime — 对抗性测试', () => {
         null as unknown as SessionState,
       ];
       expect(() => sessionListTimeTickMs(sessions, now)).not.toThrow();
-      expect(sessionListTimeTickMs(sessions, now)).toBe(SESSION_LIST_TICK_SLOW_MS);
+      expect(sessionListTimeTickMs(sessions, now)).toBe(
+        SESSION_LIST_TICK_SLOW_MS
+      );
     });
   });
 
@@ -289,7 +300,9 @@ describe('sessionTime — 对抗性测试', () => {
 
     it('branch 风格 id 解析', () => {
       expect(msFromSessionId('sess-branch-1712345678901')).toBe(1712345678901);
-      expect(msFromSessionId('sess-branch-1712345678901-x')).toBe(1712345678901);
+      expect(msFromSessionId('sess-branch-1712345678901-x')).toBe(
+        1712345678901
+      );
     });
 
     it('非字符串 / 空串 / 无匹配返回 0', () => {
@@ -395,18 +408,18 @@ describe('sessionTime — 对抗性测试', () => {
       expect(formatRelativeActivity(exactly, now)).toBe('刚刚');
       const oneMore = now + SESSION_LIST_CLOCK_SKEW_MS + 1;
       expect(formatRelativeActivity(oneMore, now)).toBe(
-        formatAbsoluteCalendarDate(oneMore, now),
+        formatAbsoluteCalendarDate(oneMore, now)
       );
     });
 
     it('ST13（设计观察）: d = JUST_NOW 恰好相等 → 「1分钟前」（边界不含）', () => {
       // d < JUST_NOW → 「刚刚」；d = JUST_NOW 不满足 < → 「1分钟前」
       expect(formatRelativeActivity(now - SESSION_LIST_JUST_NOW_MS, now)).toBe(
-        '1分钟前',
+        '1分钟前'
       );
-      expect(formatRelativeActivity(now - SESSION_LIST_JUST_NOW_MS + 1, now)).toBe(
-        '刚刚',
-      );
+      expect(
+        formatRelativeActivity(now - SESSION_LIST_JUST_NOW_MS + 1, now)
+      ).toBe('刚刚');
     });
 
     it('ST14（设计观察）: msUntilRelativeLabelChange 对 d 恰好处于桶边界返回 0', () => {
@@ -508,32 +521,34 @@ describe('sessionTime — 对抗性测试', () => {
     });
 
     it('ST25（设计观察）: messages timestamp=Infinity 跳过，回落到 id', () => {
-      const result = coerceSessionTimestamp(
-        'sess-1712345678901',
-        '刚刚',
-        [{ timestamp: Number.POSITIVE_INFINITY }, { timestamp: -1 }],
-      );
+      const result = coerceSessionTimestamp('sess-1712345678901', '刚刚', [
+        { timestamp: Number.POSITIVE_INFINITY },
+        { timestamp: -1 },
+      ]);
       // 全部 messages 失效 → 回落到 id epoch
       expect(result).toBe(new Date(1712345678901).toISOString());
     });
 
     it('messages 含 NaN 与负数时间戳 → 跳过，回落到 id', () => {
-      const result = coerceSessionTimestamp(
-        'sess-1712345678901',
-        '刚刚',
-        [{ timestamp: NaN }, { timestamp: -100 }, { timestamp: 0 }],
-      );
+      const result = coerceSessionTimestamp('sess-1712345678901', '刚刚', [
+        { timestamp: NaN },
+        { timestamp: -100 },
+        { timestamp: 0 },
+      ]);
       expect(result).toBe(new Date(1712345678901).toISOString());
     });
 
     it('stored 是合法 ISO → 规范化为 ISO', () => {
-      const result = coerceSessionTimestamp('sess-x', '2024-01-02T03:04:05.000Z');
+      const result = coerceSessionTimestamp(
+        'sess-x',
+        '2024-01-02T03:04:05.000Z'
+      );
       expect(result).toBe('2024-01-02T03:04:05.000Z');
     });
 
     it('stored 是数字串 → 转 ISO', () => {
       expect(coerceSessionTimestamp('sess-x', '1712345678901')).toBe(
-        new Date(1712345678901).toISOString(),
+        new Date(1712345678901).toISOString()
       );
     });
 
@@ -550,25 +565,25 @@ describe('sessionTime — 对抗性测试', () => {
 
     it('stored 是坏字面量 → 走 messages/id 回落', () => {
       expect(coerceSessionTimestamp('sess-1712345678901', '刚刚', [])).toBe(
-        new Date(1712345678901).toISOString(),
+        new Date(1712345678901).toISOString()
       );
       expect(coerceSessionTimestamp('sess-1712345678901', '恢复', [])).toBe(
-        new Date(1712345678901).toISOString(),
+        new Date(1712345678901).toISOString()
       );
       expect(coerceSessionTimestamp('sess-1712345678901', '刚才', [])).toBe(
-        new Date(1712345678901).toISOString(),
+        new Date(1712345678901).toISOString()
       );
     });
 
     it('stored 是空白 → 走 messages/id 回落', () => {
       expect(coerceSessionTimestamp('sess-1712345678901', '   ', [])).toBe(
-        new Date(1712345678901).toISOString(),
+        new Date(1712345678901).toISOString()
       );
       expect(coerceSessionTimestamp('sess-1712345678901', '', [])).toBe(
-        new Date(1712345678901).toISOString(),
+        new Date(1712345678901).toISOString()
       );
       expect(coerceSessionTimestamp('sess-1712345678901', null, [])).toBe(
-        new Date(1712345678901).toISOString(),
+        new Date(1712345678901).toISOString()
       );
     });
 
@@ -607,11 +622,15 @@ describe('sessionTime — 对抗性测试', () => {
 
     it('近未来漂移：等到 activity 进入过去 + JUST_NOW', () => {
       const ahead = now + 3_000;
-      expect(msUntilRelativeLabelChange(ahead, now)).toBe(3_000 + SESSION_LIST_JUST_NOW_MS);
+      expect(msUntilRelativeLabelChange(ahead, now)).toBe(
+        3_000 + SESSION_LIST_JUST_NOW_MS
+      );
     });
 
     it('刚过去 d=0：等 JUST_NOW 边界', () => {
-      expect(msUntilRelativeLabelChange(now, now)).toBe(SESSION_LIST_JUST_NOW_MS);
+      expect(msUntilRelativeLabelChange(now, now)).toBe(
+        SESSION_LIST_JUST_NOW_MS
+      );
     });
 
     it('d=JUST_NOW-1：等 1ms 到边界', () => {
@@ -622,7 +641,9 @@ describe('sessionTime — 对抗性测试', () => {
     it('d=JUST_NOW：进入分钟桶，等 120_000 - JUST_NOW', () => {
       const activity = now - SESSION_LIST_JUST_NOW_MS;
       // d=45000 < 120_000 → 返回 120_000 - 45_000 = 75_000
-      expect(msUntilRelativeLabelChange(activity, now)).toBe(120_000 - SESSION_LIST_JUST_NOW_MS);
+      expect(msUntilRelativeLabelChange(activity, now)).toBe(
+        120_000 - SESSION_LIST_JUST_NOW_MS
+      );
     });
 
     it('小时桶：d=3_600_000 → 下一桶 2h', () => {
@@ -669,7 +690,9 @@ describe('sessionTime — 对抗性测试', () => {
           messages: [msg({ id: 'm', timestamp: far })],
         }),
       ];
-      expect(sessionListTimeTickMs(sessions, now)).toBe(SESSION_LIST_TICK_SLOW_MS);
+      expect(sessionListTimeTickMs(sessions, now)).toBe(
+        SESSION_LIST_TICK_SLOW_MS
+      );
     });
 
     it('ST18（设计观察）: activity 刚好 = now + CLOCK_SKEW 仍计入 tick 计算', () => {
@@ -712,7 +735,9 @@ describe('sessionTime — 对抗性测试', () => {
         }),
       ];
       const tick = sessionListTimeTickMs(sessions, now);
-      expect(tick).toBeLessThanOrEqual(SESSION_LIST_JUST_NOW_MS - 40_000 + 50 + 1);
+      expect(tick).toBeLessThanOrEqual(
+        SESSION_LIST_JUST_NOW_MS - 40_000 + 50 + 1
+      );
       expect(tick).toBeGreaterThanOrEqual(SESSION_LIST_TICK_MIN_MS);
     });
 
@@ -727,7 +752,9 @@ describe('sessionTime — 对抗性测试', () => {
       ];
       // act <= now 且 now - act > 3_600_000 → continue（跳过贴边）
       // hasRecentSessionActivity 返回 false → tick = slow
-      expect(sessionListTimeTickMs(sessions, now)).toBe(SESSION_LIST_TICK_SLOW_MS);
+      expect(sessionListTimeTickMs(sessions, now)).toBe(
+        SESSION_LIST_TICK_SLOW_MS
+      );
     });
 
     it('混入 null session 不影响其他会话的 tick 计算', () => {
@@ -755,7 +782,9 @@ describe('sessionTime — 对抗性测试', () => {
       const now = 1_000_000_000_000;
       const ms = Number.MAX_SAFE_INTEGER;
       // ms > now + CLOCK_SKEW → 绝对日期
-      expect(formatRelativeActivity(ms, now)).toBe(formatAbsoluteCalendarDate(ms, now));
+      expect(formatRelativeActivity(ms, now)).toBe(
+        formatAbsoluteCalendarDate(ms, now)
+      );
     });
 
     it('ms = 0 返回空串', () => {
@@ -808,14 +837,14 @@ describe('sessionTime — 对抗性测试', () => {
     });
 
     it('同年 → M/D', () => {
-      const now = Date.UTC(2024, 5, 15);
-      const sameYear = Date.UTC(2024, 0, 3);
+      const now = new Date(2024, 5, 15).getTime();
+      const sameYear = new Date(2024, 0, 3).getTime();
       expect(formatAbsoluteCalendarDate(sameYear, now)).toBe('1/3');
     });
 
     it('跨年 → Y/M/D', () => {
-      const now = Date.UTC(2024, 5, 15);
-      const otherYear = Date.UTC(2020, 0, 3);
+      const now = new Date(2024, 5, 15).getTime();
+      const otherYear = new Date(2020, 0, 3).getTime();
       expect(formatAbsoluteCalendarDate(otherYear, now)).toBe('2020/1/3');
     });
   });
@@ -893,7 +922,10 @@ describe('sessionTime — 对抗性测试', () => {
       const s = session({
         id: 'sess-1712345678901',
         timestamp: '刚刚',
-        messages: [null as unknown as SessionMessage, null as unknown as SessionMessage],
+        messages: [
+          null as unknown as SessionMessage,
+          null as unknown as SessionMessage,
+        ],
       });
       // msgs.length=2，last=msgs[1]=null，last?.timestamp=undefined → ts=0
       // 回落到 stored / id
@@ -906,7 +938,10 @@ describe('sessionTime — 对抗性测试', () => {
         id: 'sess-1712345678901',
         timestamp: '刚刚',
         messages: [],
-        agents: [null as unknown as SessionAgent, null as unknown as SessionAgent],
+        agents: [
+          null as unknown as SessionAgent,
+          null as unknown as SessionAgent,
+        ],
       });
       expect(() => sessionActivityShellMs(s)).not.toThrow();
       expect(sessionActivityShellMs(s)).toBe(1712345678901);

@@ -43,6 +43,7 @@ mod engine_channels;
 #[path = "engine_provider.rs"]
 mod engine_provider;
 
+#[cfg(test)]
 pub(crate) use engine_audit::*;
 pub(crate) use engine_build::*;
 pub(crate) use engine_channels::*;

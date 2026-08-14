@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const RUST_KIND_SRC_REL =
-  'crates/session-loop/src/loop/handlers/stream_error.rs';
+  'crates/session-loop/src/loop/handlers/stream_error_fatal.rs';
 
 function locateRepoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -59,10 +59,7 @@ const RUST_KIND_COUNT = 13;
 /** 唯一豁免：unknown 兜底码（注释理由见文件头；断言其被兜底路径处理） */
 const EXEMPT_KINDS: readonly string[] = ['unknown'];
 
-import {
-  classifyErrorDomain,
-  classifySoftFailure,
-} from './userFacingErrors';
+import { classifyErrorDomain, classifySoftFailure } from './userFacingErrors';
 
 describe('T-F 06 kebab 错误码双向漂移（Rust kind_str ↔ 前端码表）', () => {
   const rust = rustKebabKinds().sort();
@@ -87,7 +84,9 @@ describe('T-F 06 kebab 错误码双向漂移（Rust kind_str ↔ 前端码表）
     }
     const covered = new Set([...softKinds, ...domains]);
     // 唯一豁免 unknown 从缺码清单排除（兜底码，断言二验证其被兜底路径处理）
-    const missing = rust.filter((k) => !covered.has(k) && !EXEMPT_KINDS.includes(k));
+    const missing = rust.filter(
+      (k) => !covered.has(k) && !EXEMPT_KINDS.includes(k)
+    );
     expect(
       missing,
       `前端码表缺码：${missing.join(', ')}（Rust kind_str 新增/改名未同步）`
@@ -96,7 +95,9 @@ describe('T-F 06 kebab 错误码双向漂移（Rust kind_str ↔ 前端码表）
     // 文本正则/兜底分类；classifyErrorDomain 回落文本正则）——不豁免则断言
     // 一红；豁免滥用（多豁免）则下条断言红。
     expect(softKinds.has('unknown') || domains.has('unknown')).toBe(false);
-    expect([...softKinds, ...domains].filter((k) => !rust.includes(k))).toEqual([]);
+    expect([...softKinds, ...domains].filter((k) => !rust.includes(k))).toEqual(
+      []
+    );
   });
 
   it('断言二：unknown 豁免为唯一豁免（其余 12 码全部登记）', () => {
@@ -113,18 +114,36 @@ describe('T-F 06 kebab 错误码双向漂移（Rust kind_str ↔ 前端码表）
   });
 
   it('断言三：context-length-exceeded 有专属分类（不再回落文本正则）', () => {
-    expect(classifySoftFailure('provider 错误（context-length-exceeded）：tokens 超限')).toBe(
-      'context',
-    );
-    expect(classifyErrorDomain('provider 错误（context-length-exceeded）：tokens 超限')).toBe('S5');
+    expect(
+      classifySoftFailure(
+        'provider 错误（context-length-exceeded）：tokens 超限'
+      )
+    ).toBe('context');
+    expect(
+      classifyErrorDomain(
+        'provider 错误（context-length-exceeded）：tokens 超限'
+      )
+    ).toBe('S5');
   });
 
   it('断言四：aborted → ended（S6）；payload-too-large / invalid-request → provider_fault（S5）', () => {
-    expect(classifySoftFailure('provider 错误（aborted）：user cancelled')).toBe('ended');
-    expect(classifyErrorDomain('provider 错误（aborted）：user cancelled')).toBe('S6');
-    expect(classifySoftFailure('provider 错误（payload-too-large）：too big')).toBe('provider_fault');
-    expect(classifyErrorDomain('provider 错误（payload-too-large）：too big')).toBe('S5');
-    expect(classifySoftFailure('provider 错误（invalid-request）：bad schema')).toBe('provider_fault');
-    expect(classifyErrorDomain('provider 错误（invalid-request）：bad schema')).toBe('S5');
+    expect(
+      classifySoftFailure('provider 错误（aborted）：user cancelled')
+    ).toBe('ended');
+    expect(
+      classifyErrorDomain('provider 错误（aborted）：user cancelled')
+    ).toBe('S6');
+    expect(
+      classifySoftFailure('provider 错误（payload-too-large）：too big')
+    ).toBe('provider_fault');
+    expect(
+      classifyErrorDomain('provider 错误（payload-too-large）：too big')
+    ).toBe('S5');
+    expect(
+      classifySoftFailure('provider 错误（invalid-request）：bad schema')
+    ).toBe('provider_fault');
+    expect(
+      classifyErrorDomain('provider 错误（invalid-request）：bad schema')
+    ).toBe('S5');
   });
 });

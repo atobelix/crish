@@ -158,6 +158,8 @@ impl SubagentSpawner for RecordingSpawner {
                 allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
                     serde_json::to_string(paths).expect("路径白名单序列化不应失败")
                 }),
+                // D-02 LK-04：子会话 id 随行（与结果信封 session_id 同源）
+                sub_session_id: Some(format!("sess-{n}")),
             });
             db.save_session_agents(&self.session_id, &agents)
                 .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
@@ -254,16 +256,16 @@ async fn dependent_starts_only_after_prerequisite_completed() {
     assert_eq!(spawner.requests().len(), 2, "全程只 spawn 两个节点");
 }
 
-// ── 并发上限（04 C6 验收 2：10 个 parallel 峰值 ≤ maxConcurrent）──
+// ── 并发上限（04 C6 验收 2：20 个 parallel 峰值 ≤ maxConcurrent）──
 
 #[tokio::test]
 async fn parallel_burst_peak_respects_max_concurrent_event_driven() {
     let (mut sched, spawner, _meta) = harness();
-    let tasks: Vec<FlowNode> = (0..10).map(|i| node(&format!("n{i}"), &[])).collect();
+    let tasks: Vec<FlowNode> = (0..20).map(|i| node(&format!("n{i}"), &[])).collect();
     let adv = sched.declare_flow(&decl(tasks)).await.unwrap();
-    assert_eq!(adv.started.len(), 6, "并发峰值 ≤ maxConcurrent=6");
-    assert_eq!(spawner.requests().len(), 6);
-    assert_eq!(sched.budget_in_flight(), 6);
+    assert_eq!(adv.started.len(), 17, "快照不含本次请求：in_flight 到 16 后第 17 个放行、第 18 个被拒");
+    assert_eq!(spawner.requests().len(), 17);
+    assert_eq!(sched.budget_in_flight(), 17);
     // 事件驱动不轮询：完成一个 → 终态事件内部立即补位一个
     let first_run = adv.started[0].subagent_run_id.clone();
     let adv2 = sched
@@ -271,14 +273,14 @@ async fn parallel_burst_peak_respects_max_concurrent_event_driven() {
         .await
         .unwrap();
     assert_eq!(adv2.started.len(), 1, "终态事件即时补位（不轮询）");
-    assert_eq!(spawner.requests().len(), 7);
-    assert!(sched.budget_in_flight() <= 6, "在途峰值不超过预算");
-    // 逐个完成 → 剩余节点全部补位，峰值全程 ≤ 6
+    assert_eq!(spawner.requests().len(), 18);
+    assert!(sched.budget_in_flight() <= 17, "在途峰值不超过预算");
+    // 逐个完成 → 剩余节点全部补位，峰值全程 ≤ 17
     let mut run_queue: Vec<String> = adv.started.iter().map(|s| s.subagent_run_id.clone()).collect();
     run_queue.push(adv2.started[0].subagent_run_id.clone());
     let mut in_flight_peak = sched.budget_in_flight();
     let mut cursor = 0usize;
-    while spawner.requests().len() < 10 {
+    while spawner.requests().len() < 20 {
         let finished = run_queue[cursor].clone();
         let adv_n = sched
             .on_subagent_terminal(&finished, SubagentState::Completed)
@@ -288,8 +290,8 @@ async fn parallel_burst_peak_respects_max_concurrent_event_driven() {
         run_queue.extend(adv_n.started.iter().map(|s| s.subagent_run_id.clone()));
         cursor += 1;
     }
-    assert_eq!(spawner.requests().len(), 10, "10 个 parallel 任务全部启动");
-    assert!(in_flight_peak <= 6, "并发峰值全程 ≤ maxConcurrent");
+    assert_eq!(spawner.requests().len(), 20, "20 个 parallel 任务全部启动");
+    assert!(in_flight_peak <= 17, "并发峰值全程 ≤ maxConcurrent");
 }
 
 // ── parallel 同级串行约束（裁决 D2：同级 = 同 depends_on 集合）───
@@ -812,19 +814,19 @@ async fn attach_run_requires_all_prerequisites_completed() {
 async fn attach_run_rejected_when_budget_full() {
     let (mut sched, _spawner, meta) = harness();
     meta.set_meta(FLOW_AUTO_COMPOSITE_KEY, "false").unwrap();
-    // 6 个并行普通节点 + 1 个综合节点（全部无前置 → gate 立即就绪）
-    let mut tasks: Vec<FlowNode> = (0..6).map(|i| node(&format!("n{i}"), &[])).collect();
+    // 17 个并行普通节点 + 1 个综合节点（全部无前置 → gate 立即就绪）
+    let mut tasks: Vec<FlowNode> = (0..17).map(|i| node(&format!("n{i}"), &[])).collect();
     let mut gate = node("gate", &[]);
     gate.is_composite = true;
     tasks.push(gate);
     let adv = sched.declare_flow(&decl(tasks)).await.unwrap();
-    assert_eq!(adv.started.len(), 6, "普通节点占满预算");
+    assert_eq!(adv.started.len(), 17, "普通节点占满预算");
     assert_eq!(adv.wakeups.len(), 1, "gate 就绪唤醒");
-    // 预算满（in_flight=6，maxSiblings=5）：挂接外部 run 被拒（复用
+    // 预算满（in_flight=17，maxSiblings=16）：挂接外部 run 被拒（复用
     // RecursionGuard 判定，错误携带超限类别）
     let err = sched.attach_run("gate", "ext-1").unwrap_err();
     assert!(
-        matches!(err, FlowError::BudgetExceeded { kind, current: 6, max: 5 } if matches!(kind, orchestrator::flow_graph::BudgetExceededKind::Siblings)),
+        matches!(err, FlowError::BudgetExceeded { kind, current: 17, max: 16 } if matches!(kind, orchestrator::flow_graph::BudgetExceededKind::Siblings)),
         "预算满挂接被拒：{err:?}"
     );
     // 完成一个普通节点 → 槽位释放 → 挂接成功
@@ -1069,4 +1071,29 @@ async fn without_emitter_no_subagent_events() {
         .await
         .unwrap();
     assert!(mem.events().is_empty(), "未挂载发射器不得产生任何事件");
+}
+
+// ── LK-02 flow 路径链路键定案（parent_tool_call_id 恒 None）───────
+
+/// LK-02 S5 测钉：flow 路径 spawn 请求 parent_tool_call_id 恒 None——
+/// 链路键 = flow_node_id（调度驱动无父工具调用，语义正确非欠接线，
+/// 禁止虚构 id 填充）
+#[tokio::test]
+async fn flow_spawn_request_parent_tool_call_id_none() {
+    let (mut sched, spawner, _meta) = harness();
+    sched
+        .declare_flow(&decl(vec![node("a", &[])]))
+        .await
+        .expect("DAG 声明应接受");
+    let requests = spawner.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].flow_node_id.as_deref(),
+        Some("a"),
+        "flow 路径链路键 = flow_node_id"
+    );
+    assert!(
+        requests[0].parent_tool_call_id.is_none(),
+        "flow 路径 parent_tool_call_id 恒 None（语义正确非欠接线）"
+    );
 }

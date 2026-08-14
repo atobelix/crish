@@ -78,7 +78,7 @@ pub(crate) struct KillSubagentTool {
 
 impl KillSubagentTool {
     /// 新建工具（终止通道未接线；测试与未集成环境返回结构化不可用错误）
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
         Self::with_channel(None)
     }
@@ -249,7 +249,7 @@ mod tests {
     /// 未接线通道 → common.unsupported（零副作用）
     #[tokio::test]
     async fn unwired_channel_returns_unsupported() {
-        let tool = KillSubagentTool::with_channel(None);
+        let tool = KillSubagentTool::new();
         let ctx = create_mock_tool_context();
         let err = tool
             .execute(&ctx, serde_json::json!({ "subagentId": "sub-1" }))

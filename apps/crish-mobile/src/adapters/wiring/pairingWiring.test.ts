@@ -803,6 +803,197 @@ describe('接线装配面（订阅快照 / 状态拒绝）', () => {
   });
 });
 
+describe('证书指纹链路（D3 §4.6：配对载荷下发 → secure-store host_fingerprint 位）', () => {
+  const FP_A = 'ab'.repeat(32); // 64 位 hex（桌面 spki_sha256_hex 形态）
+  const FP_B = 'cd'.repeat(32);
+
+  it('完整链：pair.challenge tlsFingerprint（权威载体）→ 配对成功写入 host_fingerprint 位', async () => {
+    const h = makeHarness();
+    h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
+    h.sockets[0]!.onopen!();
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.challenge', {
+        challenge: 'ch-1',
+        desktopPub: pushDesktopPub(),
+        desktopId: 'crish-desktop',
+        tlsFingerprint: FP_A,
+      })
+    );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok-abc',
+      })
+    );
+    await flush();
+    expect(h.wiring.getMachineState().state).toBe('paired');
+    expect(await h.driver.getItem(KEYS.HOST_FINGERPRINT)).toBe(FP_A);
+  });
+
+  it('简化链且 pair.ok 扩展携带指纹 → 同样落位（桌面端未来 ok 下发路径）', async () => {
+    const h = makeHarness();
+    h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
+    h.sockets[0]!.onopen!();
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok-plain',
+        tlsFingerprint: FP_A,
+      })
+    );
+    await flush();
+    expect(h.wiring.getMachineState().state).toBe('paired');
+    expect(await h.driver.getItem(KEYS.HOST_FINGERPRINT)).toBe(FP_A);
+  });
+
+  it('简化链且不下发指纹（当前桌面现状）→ host_fingerprint 位保持空（缺口记录）', async () => {
+    const h = makeHarness();
+    h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
+    h.sockets[0]!.onopen!();
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok-plain',
+      })
+    );
+    await flush();
+    expect(h.wiring.getMachineState().state).toBe('paired');
+    expect(await h.driver.getItem(KEYS.HOST_FINGERPRINT)).toBeNull();
+  });
+
+  it('重配对证书轮换：已存储指纹与本次下发不一致 → pairing.fingerprint_mismatch，不覆盖不连接', async () => {
+    const driver = new InMemorySecureStore();
+    await savePairingCredential(driver, {
+      tokenKey: 'tk-old',
+      refreshKey: 'rk-old',
+      deviceKeypairPriv: 'priv-old',
+      deviceKeypairPub: 'pub-old',
+      hostFingerprint: FP_A,
+    });
+    const sessionCtxs: PairingSessionContext[] = [];
+    const errors: PairingWiringError[] = [];
+    const sockets: MockSocket[] = [];
+    const wiring = track(
+      startPairingWiring({
+        driver,
+        factory: () => {
+          const socket = makeSocket();
+          sockets.push(socket);
+          return socket;
+        },
+        connectSession: (ctx) => {
+          sessionCtxs.push(ctx);
+        },
+        onError: (e) => {
+          errors.push(e);
+        },
+      })
+    );
+    wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
+    sockets[0]!.onopen!();
+    wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.challenge', {
+        challenge: 'ch-1',
+        desktopPub: pushDesktopPub(),
+        desktopId: 'crish-desktop',
+        tlsFingerprint: FP_B,
+      })
+    );
+    wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok-new',
+      })
+    );
+    await flush();
+    expect(errors[0]?.code).toBe('pairing.fingerprint_mismatch');
+    expect(errors[0]?.retryable).toBe(false); // 安全不一致：不可重试
+    expect(sessionCtxs).toHaveLength(0); // 不产生连接
+    expect(await driver.getItem(KEYS.HOST_FINGERPRINT)).toBe(FP_A); // 不覆盖旧值
+    expect(sockets[0]!.closed).toBe(true); // 配对期连接已断开
+  });
+
+  it('pair.challenge 与 pair.ok 双信道指纹冲突 → 拒绝完成配对（fingerprint_mismatch）', async () => {
+    const h = makeHarness();
+    h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
+    h.sockets[0]!.onopen!();
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.challenge', {
+        challenge: 'ch-1',
+        desktopPub: pushDesktopPub(),
+        desktopId: 'crish-desktop',
+        tlsFingerprint: FP_A,
+      })
+    );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok',
+        tlsFingerprint: FP_B,
+      })
+    );
+    await flush();
+    expect(h.errors[0]?.code).toBe('pairing.fingerprint_mismatch');
+    expect(h.wiring.getMachineState().state).toBe('waiting-verify'); // 未进入 paired
+    expect(h.sessionCtxs).toHaveLength(0);
+    expect(await h.driver.getItem(KEYS.HOST_FINGERPRINT)).toBeNull();
+  });
+
+  it('双信道齐备且一致 → 正常落位（verified 不冲突）', async () => {
+    const h = makeHarness();
+    h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
+    h.sockets[0]!.onopen!();
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.challenge', {
+        challenge: 'ch-1',
+        desktopPub: pushDesktopPub(),
+        desktopId: 'crish-desktop',
+        tlsFingerprint: FP_A,
+      })
+    );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok',
+        tlsFingerprint: FP_A,
+      })
+    );
+    await flush();
+    expect(h.wiring.getMachineState().state).toBe('paired');
+    expect(await h.driver.getItem(KEYS.HOST_FINGERPRINT)).toBe(FP_A);
+  });
+
+  it('非法格式指纹（非 64 位 hex）→ 放弃钉扎（缺口记录）但不阻断配对', async () => {
+    const h = makeHarness();
+    h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
+    h.sockets[0]!.onopen!();
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.challenge', {
+        challenge: 'ch-1',
+        desktopPub: pushDesktopPub(),
+        desktopId: 'crish-desktop',
+        tlsFingerprint: 'not-a-fingerprint',
+      })
+    );
+    h.wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'crish-desktop',
+        ttl: 86400,
+        token: 'tok',
+      })
+    );
+    await flush();
+    expect(h.wiring.getMachineState().state).toBe('paired');
+    expect(await h.driver.getItem(KEYS.HOST_FINGERPRINT)).toBeNull();
+  });
+});
+
 describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联调豁免）', () => {
   afterEach(() => {
     delete process.env.EXPO_PUBLIC_ENGINE_TLS;

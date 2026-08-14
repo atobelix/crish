@@ -2949,18 +2949,17 @@
         // 日志增长断言条件化（F-009 flaky 根因：固定 sleep(1200) 在负载
         // 下 writer 转发可能延迟 → 改轮询观测状态，8s 上限充足）
         let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
-        let mut s2 = s1;
-        loop {
-            s2 = registry.status(&adopted.task_id).await.expect("status");
-            if s2.line_count > lines_before {
-                break;
+        let s2 = loop {
+            let s = registry.status(&adopted.task_id).await.expect("status");
+            if s.line_count > lines_before {
+                break s;
             }
             assert!(
                 tokio::time::Instant::now() < deadline,
                 "run 终态后日志迟迟不累积"
             );
             tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+        };
         assert!(
             s2.line_count > lines_before,
             "run 终态后日志必须持续累积：{lines_before} -> {}",

@@ -39,6 +39,7 @@ conex-compaction = { path = "../conex-compaction" }
 # DM-08（G-29）对账测试：crash_consistency.rs LogCapture warn 捕获
 # （tracing::subscriber::set_default + fmt writer，对齐 observability.rs）
 tracing-subscriber = { workspace = true }
+rusqlite = { workspace = true }
 
 [[bench]]
 name = "event_chain"

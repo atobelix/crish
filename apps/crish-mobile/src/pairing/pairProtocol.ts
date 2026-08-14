@@ -9,6 +9,12 @@
 // - pair.ok 的 token 扩展：桌面端 pair_endpoint.rs pair_ok_body 在 D3 PairOk
 //   {desktopId, ttl} 之外附加 token 明文（R1-11 任务书要求 ok 含 token；
 //   生成解析器对未知字段宽松，对拍不受影响）；
+// - 证书指纹（D3 §4.6 证书固定）：tlsFingerprint 的**权威载体 = pair.challenge**
+//   （生成面 PairChallenge 必填字段，桌面自签证书 SHA-256(SPKI) 小写 hex 64
+//   位，desktop multi_device/tls.rs spki_sha256_hex）；pair.ok 上预留可选扩展
+//   字段（与 token 同模式，桌面端未来可附加下发）。**缺口记录**：当前桌面
+//   pair_endpoint.rs 简化链（hello → ok 直接完成）不发送 pair.challenge，
+//   指纹实际未下发——移动端 host_fingerprint 位暂空（AU5 S-1 修复的诚实边界）；
 // - error 帧：ErrorBody（D3 §6.2 设备错误码），pair.* 错误码映射见
 //   pairProtocolErrorKind 的注册表对应关系（errors.ts DEVICE_ERROR_PROTOCOL）。
 //
@@ -120,12 +126,16 @@ export function buildPairHello(
  */
 export interface PairOkResult extends PairOk {
   token: string;
+  /** 桌面证书指纹（可选扩展：D3 §4.6 权威载体是 pair.challenge；pair.ok
+   *  附加下发是预留路径——当前桌面两处均不下发，见文件头缺口记录） */
+  tlsFingerprint?: string;
 }
 
 /**
  * 解析 pair.ok 帧载荷：骨架（desktopId/ttl）复用生成解析器 parsePairOk
  * （组合纪律：不重写 wire 校验），token 从附加字段提取（缺失 → 错误——
- * 桌面端简化链承诺 ok 含 token 明文）。
+ * 桌面端简化链承诺 ok 含 token 明文）；tlsFingerprint 可选（缺失/空串/非
+ * 字符串 → 不携带，宽容不报错——当前桌面不下发，语义与缺口记录一致）。
  */
 export function parsePairOk(body: unknown): ParseResult<PairOkResult> {
   const wire = parseWirePairOk(body);
@@ -137,7 +147,65 @@ export function parsePairOk(body: unknown): ParseResult<PairOkResult> {
   if (typeof token !== 'string' || token.length === 0) {
     return parseErr('pair.ok 缺少 token 明文（桌面端 pair_ok_body 扩展字段）');
   }
+  const fingerprint = record['tlsFingerprint'];
+  if (typeof fingerprint === 'string' && fingerprint.length > 0) {
+    return parseOk({ ...wire.data, token, tlsFingerprint: fingerprint });
+  }
   return parseOk({ ...wire.data, token });
+}
+
+// ── 证书指纹（D3 §4.6：应用层固定最小面）───────────────────────────────────
+
+/**
+ * 桌面自签证书指纹格式（desktop multi_device/tls.rs spki_sha256_hex）：
+ * SHA-256(SubjectPublicKeyInfo) 小写 hex，64 字符（tls.rs:712 断言长度 64）。
+ * 配对载荷（pair.challenge 必填 / pair.ok 扩展）携带该指纹，移动端持久化到
+ * secure-store host_fingerprint 位（证书固定信任锚）。
+ */
+export const TLS_FINGERPRINT_RE = /^[0-9a-f]{64}$/i;
+
+/** 指纹格式校验（桌面 spki_sha256_hex 形态；格式不符 → 不可钉扎，诚实放弃） */
+export function isValidTlsFingerprint(value: string): boolean {
+  return TLS_FINGERPRINT_RE.test(value);
+}
+
+/**
+ * 指纹一致性校验结果（应用层比对：配对期下发值 vs 存储值）。
+ * RN WebSocket 不暴露证书、无信任注入面（ReconnectingWsClient 工厂只收
+ * url），TLS 层真钉扎不可达——最小正确防御面 = 对本机存储值与配对载荷
+ * 下发值的一致性做比对（防本地篡改 / 捕获证书轮换），见 checkHostFingerprint。
+ */
+export type FingerprintCheck =
+  /** 两值一致（大小写不敏感，桌面输出小写 hex） */
+  | { ok: true; defense: 'verified' }
+  /** 无历史存储值（首次配对，无可防御面） */
+  | { ok: true; defense: 'no-stored' }
+  /** 桌面未下发指纹（当前简化链缺口）——无法钉扎，不阻断配对 */
+  | { ok: true; defense: 'no-delivered' }
+  /** 不一致（证书轮换/本地篡改）→ 拒绝（失败关闭） */
+  | { ok: false; defense: 'mismatch' };
+
+/**
+ * 指纹一致性校验（纯函数，O(1) 无副作用）：
+ * stored = secure-store host_fingerprint 位（历史配对存储）；
+ * delivered = 本次配对载荷下发的指纹（challenge 权威载体 ?? ok 扩展）。
+ * 判定顺序：无存储 → no-stored；有存储无下发 → no-delivered（缺口放行）；
+ * 两者齐备 → 大小写不敏感比对，一致 verified / 不一致 mismatch。
+ */
+export function checkHostFingerprint(
+  stored: string | undefined,
+  delivered: string | undefined
+): FingerprintCheck {
+  if (!stored || stored.length === 0) {
+    return { ok: true, defense: 'no-stored' };
+  }
+  if (!delivered || delivered.length === 0) {
+    return { ok: true, defense: 'no-delivered' };
+  }
+  const same = stored.trim().toLowerCase() === delivered.trim().toLowerCase();
+  return same
+    ? { ok: true, defense: 'verified' }
+    : { ok: false, defense: 'mismatch' };
 }
 
 /** 配对流程领域错误类别（由 wire 错误码映射，D3 §6.2 pair.* 全表） */

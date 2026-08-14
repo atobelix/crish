@@ -737,6 +737,8 @@ impl SubagentSpawner for DbSpawner {
             allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
                 serde_json::to_string(paths).expect("路径白名单序列化不应失败")
             }),
+            // D-02 LK-04 v9 列：测试域无子会话映射（None）
+            sub_session_id: None,
         });
         self.db
             .save_session_agents(&self.session_id, &agents)
