@@ -8,11 +8,14 @@
 //   缺关键字段视为非 crish 推送丢弃 + 留痕（M8 升级矩阵：未知 kind 丢弃不报错）；
 // - 前台呈现决策（SDK 57 setNotificationHandler）：恒不弹系统通知——在线时桌面端
 //   不发厂商通道（D7 §4.3-2），到达前台的厂商消息即「在线判定切换竞态」，按
-//   shouldShowBanner:false 抑制，避免双通知；未来 P0 横幅策略在此函数内扩展。
+//   shouldShowBanner:false 抑制，避免双通知；未来 P0 横幅策略在此函数内扩展；
+// - Expo Go 降级（P0-1 DEF-5）：expo-notifications 经 expoNotificationsFacade 安全
+//   包装（动态加载 + 调用容错）——系统通知面不可用 → handler 安装/监听注册为空
+//   操作，应用内 ingest 恒保留，不抛错不阻塞启动。
 import {
-  setNotificationHandler,
-  addNotificationReceivedListener,
-} from 'expo-notifications';
+  addNotificationReceivedListenerSafe,
+  setNotificationHandlerSafe,
+} from './expoNotificationsFacade';
 import { notificationStore } from '@/domain/store/notificationStore';
 import type { NotificationInput } from '@/domain/store/notificationReducers';
 import type { PushMessage } from './types';
@@ -36,9 +39,9 @@ export function decideForegroundPresentation(): ForegroundPresentation {
   };
 }
 
-/** 安装前台 handler（setNotificationHandler；幂等覆盖） */
-export function installForegroundHandler(): void {
-  setNotificationHandler({
+/** 安装前台 handler（setNotificationHandler；幂等覆盖；系统通知面不可用 → 空操作） */
+export async function installForegroundHandler(): Promise<void> {
+  await setNotificationHandlerSafe({
     handleNotification: async () => decideForegroundPresentation(),
   });
 }
@@ -139,11 +142,13 @@ export function ingestPushIntoStore(push: PushMessage, nowMs?: number): void {
   notificationStore.getState().ingest(pushToNotificationInput(push), nowMs);
 }
 
-/** 订阅系统通知到达（前台/后台进程存活时）；返回退订函数 */
-export function subscribeSystemNotificationReceived(): () => void {
-  const sub = addNotificationReceivedListener((notification) => {
+/** 订阅系统通知到达（前台/后台进程存活时）；返回退订函数（降级 → 空操作退订） */
+export async function subscribeSystemNotificationReceived(): Promise<
+  () => void
+> {
+  const dispose = await addNotificationReceivedListenerSafe((notification) => {
     const push = normalizeSystemNotification(notification);
     if (push) ingestPushIntoStore(push);
   });
-  return () => sub.remove();
+  return dispose ?? (() => {});
 }

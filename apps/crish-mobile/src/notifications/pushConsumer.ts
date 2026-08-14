@@ -14,9 +14,12 @@
 //   离开配对态清表（新配对会话允许重呈现）；
 // - 点击链路：系统通知 content.data 写扁平白名单字段（对齐 normalizeSystemNotification
 //   消费面）——点击后 handleNotificationResponse 归一 → 幂等 ingest → markRead → 深链导航
-//   （deepLink.ts 已交付，无需重做）。
+//   （deepLink.ts 已交付，无需重做）；
+// - Expo Go 降级（P0-1 DEF-5）：expo-notifications 经 expoNotificationsFacade 安全
+//   包装（动态加载 + 调用容错）——系统通知面不可用 → 后台呈现返回空串（不呈现），
+//   应用内 ingest 恒保留（分发降级为仅应用内），不抛错不阻塞连接。
 import { AppState, type AppStateStatus } from 'react-native';
-import { scheduleNotificationAsync } from 'expo-notifications';
+import { scheduleNotificationAsyncSafe } from './expoNotificationsFacade';
 import { WsGateway } from '@/network/WsGateway';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
 import { authStore } from '@/domain/store/authStore';
@@ -147,11 +150,13 @@ export function pushSystemNotificationData(
  * 后台/最小化系统通知：立即呈现（trigger 为 ChannelAwareTriggerInput——Android 走
  * 归一四类渠道（Z0 §7.4），iOS 无渠道概念按即时 trigger 呈现）。
  * 返回通知标识（expo 生成 id；测试断言入口）。
+ * Expo Go 降级（P0-1 DEF-5）：系统通知面不可用 → 返回空串标识（不呈现——
+ * 应用内 ingest 由 handleFrame 先行完成，恒保留；去重登记不撤，与「无呈现」语义一致）。
  */
 export async function presentSystemPushAsync(
   push: PushMessage
 ): Promise<string> {
-  return scheduleNotificationAsync({
+  const id = await scheduleNotificationAsyncSafe({
     content: {
       title: push.title,
       body: push.body,
@@ -159,6 +164,7 @@ export async function presentSystemPushAsync(
     },
     trigger: { channelId: channelIdOf(push.channelId) },
   });
+  return id ?? '';
 }
 
 // ── 双通道去重表（同 dedupeKey 只呈现一条，D7 §6.4-2 / §3.4.1） ─────────────

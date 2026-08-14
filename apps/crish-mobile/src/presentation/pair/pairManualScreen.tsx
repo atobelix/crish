@@ -1,7 +1,9 @@
 // 手动配对页（D4 §5.1 / R2-03 部分 3）：主机 IP + CXN 配对码 → 接线层配对
-// - 配对码输入实时格式化（CXN-XXXX-XXXX-XXXX 展示形态，formatPairCodeDraft——
-//   前缀剥离与 cxnCode.normalizePairCode 同语义：清理后 >12 位且以 CXN 起头
-//   才剥；原始输入保留，提交由接线层 normalizePairCode 权威校验）；
+// - 配对码输入实时格式化（CXN-XXXX-XXXX-XXXX 展示形态，formatPairCodeDraft）；
+//   受控闭环（DEF-1/2 修复）：onChangeText 收到的展示值经 extractCodeFromDraft
+//   反向提取原始码（剥 CXN- 前缀/分隔符/空白 + 大写）再 setCodeRaw，避免前缀
+//   与分隔符混入原始码导致逐字符输入污染；提交由接线层 normalizePairCode
+//   权威校验（12 位规范码入参，无需再次剥前缀）；
 // - 实时校验：normalizePairCode（提示仅非法且非空时展示，不打扰输入）；
 // - 提交：pairingWiring.beginPairing({host, code})——本地校验/状态拒绝同步
 //   返回 ok:false → 错误文案映射（可改码重试）；成功后接线层收口
@@ -27,6 +29,7 @@ import {
   View,
 } from 'react-native';
 import {
+  extractCodeFromDraft,
   normalizePairCode,
   PAIR_CODE_GROUP_SIZE,
   PAIR_CODE_LENGTH,
@@ -108,7 +111,8 @@ export function pairFailureText(snap: PairingSnapshot): string | null {
  * - 大写 + 过滤非法字符 + 分组 4 位加分隔符，长度截断 12 位；
  * - 前缀剥离与 cxnCode.normalizePairCode 同语义：清理后 >12 位且以 CXN
  *   起头才剥（12 位裸码以 CXN 起头属正常码，不剥）；
- * - 仅展示形态；原始输入保留，提交时 normalizePairCode 权威校验。
+ * - 仅展示形态；原始码经 extractCodeFromDraft 反向提取（输入闭环逆函数），
+ *   提交时 normalizePairCode 权威校验。
  */
 export function formatPairCodeDraft(raw: string): string {
   const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -295,7 +299,7 @@ export default function PairManualScreen({
           placeholder="配对码（CXN-XXXX-XXXX-XXXX）"
           placeholderTextColor={theme.textTertiary}
           value={formatPairCodeDraft(codeRaw)}
-          onChangeText={setCodeRaw}
+          onChangeText={(text) => setCodeRaw(extractCodeFromDraft(text))}
           onFocus={() => setFocusedField('code')}
           onBlur={() => setFocusedField(null)}
           maxLength={PAIR_CODE_DISPLAY_MAX_LENGTH}

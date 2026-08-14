@@ -1,4 +1,8 @@
 // Android 通道四类单测（R3-04）：定义完整性 / D7 七渠道归一 / 注册调用面
+// - importance 以语义键断言（max/high/low，对齐 D7 §7.7；注册时经
+//   expoNotificationsFacade 映射 expo AndroidImportance 数值——P0-1 DEF-5 降级面）；
+// - 降级路径（系统通知面不可用 → registerChannelsAsync 跳过建渠道返回 0）
+//   在 degraded.test.ts（模块工厂抛错模拟 Expo Go）。
 import {
   AndroidImportance,
   setNotificationChannelAsync,
@@ -8,7 +12,15 @@ import {
   channelIdOf,
   channelInputOf,
   registerChannelsAsync,
+  type ChannelImportanceKey,
 } from './channels';
+
+/** 语义键 → mock 模块的 AndroidImportance 数值（断言注册实参） */
+const IMPORTANCE_VALUE: Record<ChannelImportanceKey, number> = {
+  max: AndroidImportance.MAX,
+  high: AndroidImportance.HIGH,
+  low: AndroidImportance.LOW,
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -25,14 +37,14 @@ describe('四通道定义（Z0 §7.4：approval/run/security/general）', () => 
     expect(new Set(NOTIFICATION_CHANNELS.map((c) => c.id)).size).toBe(4);
   });
 
-  it('importance 对齐 D7 §7.7：approval/security MAX，run HIGH，general LOW', () => {
+  it('importance 对齐 D7 §7.7：approval/security max，run high，general low', () => {
     const byId = Object.fromEntries(
       NOTIFICATION_CHANNELS.map((c) => [c.id, c])
     ) as Record<string, (typeof NOTIFICATION_CHANNELS)[number]>;
-    expect(byId.approval!.importance).toBe(AndroidImportance.MAX);
-    expect(byId.security!.importance).toBe(AndroidImportance.MAX);
-    expect(byId.run!.importance).toBe(AndroidImportance.HIGH);
-    expect(byId.general!.importance).toBe(AndroidImportance.LOW);
+    expect(byId.approval!.importance).toBe('max');
+    expect(byId.security!.importance).toBe('max');
+    expect(byId.run!.importance).toBe('high');
+    expect(byId.general!.importance).toBe('low');
   });
 
   it('审批渠道带震动模式（D7 §7.7「可全屏/震动」），其余渠道不设', () => {
@@ -78,7 +90,7 @@ describe('registerChannelsAsync（注册调用面）', () => {
     for (const def of NOTIFICATION_CHANNELS) {
       expect(setNotificationChannelAsync).toHaveBeenCalledWith(
         def.id,
-        channelInputOf(def)
+        channelInputOf(def, IMPORTANCE_VALUE[def.importance])
       );
     }
     const approvalArgs = (

@@ -75,7 +75,7 @@ describe('decideForegroundPresentation（前台不弹系统通知）', () => {
 
 describe('installForegroundHandler（SDK 57 setNotificationHandler）', () => {
   it('安装 handler，handleNotification 返回不弹系统通知决策', async () => {
-    installForegroundHandler();
+    await installForegroundHandler();
     expect(setNotificationHandler).toHaveBeenCalledTimes(1);
     const handler = (setNotificationHandler as jest.Mock).mock.calls[0][0];
     await expect(handler.handleNotification({})).resolves.toEqual({
@@ -227,12 +227,12 @@ describe('normalizeSystemNotification（厂商通道 data 白名单扁平字段 
 });
 
 describe('subscribeSystemNotificationReceived（系统通知 → app 内同步）', () => {
-  it('注册监听；到达 → 归一 → 入 store；非 crish 忽略；退订移除', () => {
+  it('注册监听；到达 → 归一 → 入 store；非 crish 忽略；退订移除', async () => {
     const sub = { remove: jest.fn() };
     (addNotificationReceivedListener as jest.Mock).mockImplementation(
       () => sub
     );
-    const dispose = subscribeSystemNotificationReceived();
+    const dispose = await subscribeSystemNotificationReceived();
     const listener = (addNotificationReceivedListener as jest.Mock).mock
       .calls[0][0];
 

@@ -647,7 +647,9 @@ fn main() {
                     .join("pairing.json"),
             );
             // G-1：WS 注册表保留 Arc 副本（唤醒恢复「已有 WS 踢重连」消费；
-            // 与协调器内部持有的是同一实例）
+            // 与协调器内部持有的是同一实例；P2-5 裁决后同时注入
+            // MultiDeviceService.ws_registry——路由层 / push presence /
+            // 直投 / 撤销踢链全链共享同一实例）
             let ws_registry = Arc::new(crate::server::ws::WsRegistry::new());
             let pairing = Arc::new(crate::server::pairing::PairingCoordinator::new(
                 std::sync::Arc::new(std::sync::Mutex::new(pairing_tokens)),
@@ -662,9 +664,9 @@ fn main() {
             // 推送装配（D7 §9.2 方案 a）：PushAwareEmitter 装饰内层发射器
             // （转发原通道不变 + 旁路 push-core 决策与双轨分发——在线 WS
             // 直推 / 离线 pending 内存队列，R3-03 厂商发送器消费）。在线
-            // 判定与直投数据源 = 既有共享 WsRegistry（与配对协调器同一
-            // 实例，见 ⑤b——ServerState 路由层为独立注册表实例，属既有
-            // 装配口径，连接面共享接线待主控裁决）；适配层在
+            // 判定与直投数据源 = 共享 WsRegistry（与配对协调器同一实例，
+            // 见 ⑤b；P2-5 裁决后路由层 ServerState 亦注入该共享实例——
+            // 连接面全链统一，presence/直投/撤销观察真实连接）；适配层在
             // push_wiring.rs（Emitter 双向桥 + WsRegistry 适配 + 直投）
             let browser_emitter_handle = app_handle.clone();
             let push_dispatcher = Arc::new(crish_agent_workbench::push::PushDispatcher::new(
@@ -868,6 +870,9 @@ fn main() {
                     fanout: Some(fanout),
                     audit_bridge: Some(bridge),
                     pairing: Arc::clone(&pairing),
+                    // P2-5 连接面共享接线：同一共享注册表注入路由层（与
+                    // push presence / 直投 / 配对协调器 / 唤醒踢链同实例）
+                    ws_registry: Arc::clone(&ws_registry),
                     base: server::config::ServerConfig::default(),
                     // D5 D-01：服务默认关闭（enabled=false 时 restart_server
                     // 不 bind 任何端口——红线 1「无任何端口监听」可验证）
@@ -1016,6 +1021,10 @@ pub(crate) struct MultiDeviceService {
     audit_bridge: Option<core_event_bridge::EventBridge>,
     /// 配对协调器（实际端口经 set_port 注入；重绑钩子已装配）
     pairing: Arc<server::pairing::PairingCoordinator>,
+    /// WS 连接注册表（P2-5 连接面共享接线：与配对协调器 / push presence /
+    /// 直投同一实例——restart_server 注入 ServerState，路由层升级注册即
+    /// 进入共享注册表，presence 与撤销踢链观察真实连接）
+    ws_registry: Arc<server::ws::WsRegistry>,
     /// 服务配置模板（端口 / 令牌路径；enabled 与 bind_mode 按当前态派生）
     base: server::config::ServerConfig,
     /// 服务总开关（D5 D-01 红线 1：enabled=false 时不 bind 任何端口）
@@ -1133,6 +1142,9 @@ async fn restart_server(mut config: server::ServerConfig, service: &MultiDeviceS
                 // R1-11 G-2：配对协调器接入路由层（REST /v1/pair + WS pair
                 // 消息链；与命令面同一 Arc 实例）
                 Some(Arc::clone(&service.pairing)),
+                // P2-5 连接面共享接线：路由层注册表 = 装配面共享注册表
+                //（与 push presence / 直投 / 配对协调器 / 唤醒踢链同一实例）
+                Some(Arc::clone(&service.ws_registry)),
             );
             let serve_task = tauri::async_runtime::spawn(async move {
                 if let Err(error) = instance.serve(router).await {
@@ -1229,7 +1241,10 @@ mod tests {
             )),
         )));
         let ws_registry = Arc::new(server::ws::WsRegistry::new());
-        let pairing = Arc::new(server::pairing::PairingCoordinator::new(tokens, ws_registry));
+        let pairing = Arc::new(server::pairing::PairingCoordinator::new(
+            tokens,
+            Arc::clone(&ws_registry),
+        ));
         let mut base = server::config::ServerConfig::new(std::env::temp_dir());
         base.port = port;
         // wss 强制（装配层语义）：restart_server 在 enabled=true 时置
@@ -1245,6 +1260,7 @@ mod tests {
             fanout: None,
             audit_bridge: None,
             pairing,
+            ws_registry,
             base,
             enabled: Arc::new(std::sync::atomic::AtomicBool::new(enabled)),
         })

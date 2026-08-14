@@ -25,6 +25,8 @@ import type { PairingController } from './pairingBootstrap';
 
 const HOST = '10.0.2.2';
 const CODE = 'CXN-7K4P-Q2MB-9XRT';
+/** 展示形态剥离前缀/分隔符后的 12 位规范码（输入闭环提取产物） */
+const CODE_RAW = '7K4PQ2MB9XRT';
 
 interface FakeHarness {
   controller: PairingController;
@@ -191,7 +193,7 @@ describe('PairManualScreen 输入校验与提交', () => {
     ).toBe(false);
   });
 
-  it('提交 → beginPairing({host, code}) 原样入参（接线层标准化）', async () => {
+  it('提交 → beginPairing({host, code}) 12 位规范码入参（展示前缀/分隔符已剥离）', async () => {
     const { controller, begin } = makeFakeController();
     await render(
       <PairManualScreen controller={controller} onBack={jest.fn()} />
@@ -200,7 +202,8 @@ describe('PairManualScreen 输入校验与提交', () => {
 
     await fireEvent.press(screen.getByTestId('pair-connect'));
     expect(begin).toHaveBeenCalledTimes(1);
-    expect(begin).toHaveBeenCalledWith({ host: HOST, code: CODE });
+    // DEF-1/2 修复：受控闭环反向提取后，code 为 12 位裸码（无 CXN- 前缀/分隔符）
+    expect(begin).toHaveBeenCalledWith({ host: HOST, code: CODE_RAW });
   });
 
   it('本地拒绝（ok:false）→ 错误文案展示，可改码重试', async () => {
@@ -220,6 +223,91 @@ describe('PairManualScreen 输入校验与提交', () => {
     // 重试：再次提交仍可调用 beginPairing
     await fireEvent.press(screen.getByTestId('pair-connect'));
     expect(begin).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('PairManualScreen DEF-1/2 输入污染回归（受控闭环反向提取）', () => {
+  it('逐字符输入完整码 → 每帧展示正确，12 位裸码收束（无 CXN- 前缀/分隔符污染）', async () => {
+    const { controller, begin } = makeFakeController();
+    await render(
+      <PairManualScreen controller={controller} onBack={jest.fn()} />
+    );
+    const input = screen.getByTestId('pair-code-input');
+    const keystrokes = 'KC5QBNTVWH9L'.split('');
+    const expectedDisplays = [
+      'CXN-K',
+      'CXN-KC',
+      'CXN-KC5',
+      'CXN-KC5Q',
+      'CXN-KC5Q-B',
+      'CXN-KC5Q-BN',
+      'CXN-KC5Q-BNT',
+      'CXN-KC5Q-BNTV',
+      'CXN-KC5Q-BNTV-W',
+      'CXN-KC5Q-BNTV-WH',
+      'CXN-KC5Q-BNTV-WH9',
+      'CXN-KC5Q-BNTV-WH9L',
+    ];
+    for (let i = 0; i < keystrokes.length; i += 1) {
+      // 原生输入帧 = 当前展示值 + 新字符（真实用户逐字符输入）
+      await fireEvent.changeText(input, `${input.props.value}${keystrokes[i]}`);
+      expect(input.props.value).toBe(expectedDisplays[i]);
+    }
+    // 提交 → 接线层收到 12 位规范码
+    await fireEvent.changeText(screen.getByTestId('pair-host-input'), HOST);
+    await fireEvent.press(screen.getByTestId('pair-connect'));
+    expect(begin).toHaveBeenCalledWith({ host: HOST, code: 'KC5QBNTVWH9L' });
+  });
+
+  it('单帧粘贴完整展示形态（DEF-2 粘贴主路径）→ 显示不变形', async () => {
+    const { controller, begin } = makeFakeController();
+    await render(
+      <PairManualScreen controller={controller} onBack={jest.fn()} />
+    );
+    const input = screen.getByTestId('pair-code-input');
+
+    await fireEvent.changeText(input, 'CXN-KC5Q-BNTV-WH9L');
+    expect(input.props.value).toBe('CXN-KC5Q-BNTV-WH9L');
+
+    await fireEvent.changeText(screen.getByTestId('pair-host-input'), HOST);
+    await fireEvent.press(screen.getByTestId('pair-connect'));
+    expect(begin).toHaveBeenCalledWith({ host: HOST, code: 'KC5QBNTVWH9L' });
+  });
+
+  it('中途删除字符（退格）→ 提取结果同步收缩，不回灌前缀', async () => {
+    const { controller } = makeFakeController();
+    await render(
+      <PairManualScreen controller={controller} onBack={jest.fn()} />
+    );
+    const input = screen.getByTestId('pair-code-input');
+
+    await fireEvent.changeText(input, 'CXN-KC5Q-B');
+    expect(input.props.value).toBe('CXN-KC5Q-B');
+    // 退格 → 原生文本 = 展示值去尾字符
+    await fireEvent.changeText(input, 'CXN-KC5Q-');
+    expect(input.props.value).toBe('CXN-KC5Q');
+    await fireEvent.changeText(input, 'CXN-K');
+    expect(input.props.value).toBe('CXN-K');
+    await fireEvent.changeText(input, '');
+    expect(input.props.value).toBe('');
+  });
+
+  it('12 位裸码以 CXN 起头（正常码）→ 反向提取不误剥前缀', async () => {
+    const { controller, begin } = makeFakeController();
+    await render(
+      <PairManualScreen controller={controller} onBack={jest.fn()} />
+    );
+    const input = screen.getByTestId('pair-code-input');
+
+    // 裸码 CXN7K4PQ2MB9 → 展示 CXN-CXN7-K4PQ-2MB9；再次回传展示值 → 仍还原为裸码
+    await fireEvent.changeText(input, 'CXN7K4PQ2MB9');
+    expect(input.props.value).toBe('CXN-CXN7-K4PQ-2MB9');
+    await fireEvent.changeText(input, input.props.value);
+    expect(input.props.value).toBe('CXN-CXN7-K4PQ-2MB9');
+
+    await fireEvent.changeText(screen.getByTestId('pair-host-input'), HOST);
+    await fireEvent.press(screen.getByTestId('pair-connect'));
+    expect(begin).toHaveBeenCalledWith({ host: HOST, code: 'CXN7K4PQ2MB9' });
   });
 });
 

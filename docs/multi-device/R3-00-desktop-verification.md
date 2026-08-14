@@ -292,3 +292,107 @@ cargo test --workspace
 - 工作区：并行阵营活跃（构建锁竞争：`Blocking waiting for file lock on package cache/build directory`）；两次 lib/bin 运行间 session-loop 错误数 12→8（在途落地证据）
 - **零修改声明**：本 v2 轮次未修改任何源文件/测试文件/Cargo 文件；仅更新本文档
 - 编码：本文档中文 UTF-8 无 BOM（edit 工具写入）
+
+---
+
+# v3（2026-08-14 · R1 测试面补跑——session-loop 收口后刷新）
+
+> 触发：并行阵营 session-loop 契约扩展（D-03）**已收口**——v2 记录的 8 错消失（`cargo check -p session-loop` 实测 exit 0）。本 v3 节按任务书补跑 R1 全链命令（bin check / bin test / server_integration），R1 域由 v2 的文件级核对升级为**编译级正面验证**。
+> 执行纪律：只运行命令与记录，未修改任何源码/测试文件；并行阵营文件零触碰。
+> 日志：`%TEMP%\opencode\r3-00-v3-{bin-check,server-int,session-loop}.log`
+
+## v3.0 结论摘要（本次快照）
+
+| 面           | 命令                                                               | 结果                | 说明                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| session-loop | `cargo check -p session-loop`                                      | ✅ **绿（exit 0）** | v2 的 8 错全部清零——`ClassifiedToolResult::error` 第 5 参、`ToolEvent` 新字段消费点已跟随；**契约扩展收口确认**                                        |
+| bin 面       | `cargo check -p crish-agent-workbench --bin crish-agent-workbench` | ❌ **红 21 错误**   | 上游依赖已全绿，错误全部回到 workbench 自身装配域：bg 15 / run 5 / computer 1；**R1 server 域 0 错（编译级正面验证）、note 域 0 错（v1 的 7 错清零）** |
+| bin 测试     | `cargo test ... --bin`（未跑）                                     | ❌ **不可运行**     | bin 编译失败 → R1 server 59 个内联测试仍无法运行；但阻塞源已从「上游 session-loop」变为「workbench bin 自身 bg/run/computer 域」                       |
+| 集成面       | `cargo test -p crish-agent-workbench --test server_integration`    | ❌ **红/阻塞 4+21** | 依赖链已通（session-loop 绿）；失败 = 测试自身 4 错（server 未登记入 lib，R1 交付侧登记缺口仍在）+ bin 连带 21 错                                      |
+| **R1 域**    | 编译级正面验证（bin check 已深入 workbench 自身域）                | ✅ **0 错（7/7）**  | d7eb5d52 修复经编译器正面确认：backend/core_backend/router 三文件无任何错误；v2 的文件级核对 → 本次编译级验证                                          |
+| workspace 面 | 未单独跑（bin check 已验证依赖链）；session-loop 已绿              | —                   | v2 唯一失败成员已收口；workbench bin 为当前唯一阻塞点                                                                                                  |
+
+**一句话结论**：**session-loop 契约扩展已收口**（上游 8 错清零，`ClassifiedToolResult::error` 第 5 参 / `ToolEvent` 新字段消费点全部跟随）；R1 server 域 7 错修复（d7eb5d52）经**编译级正面验证 0 错**。但 bin 目标仍被并行阵营 workbench 装配域 21 错阻塞（bg 15 / run 5 / computer 1）→ R1 59 内联测试 + server_integration 集成契约仍不可运行。**本战役不再被上游依赖拦死**，阻塞源为 workbench bin 自身域 + server 入 lib 登记缺口（R1 交付侧 1 项）。
+
+## v3.1 session-loop 收口确认（v2 §2.2 的 8 错对照）
+
+| v2 错误                                            | v2 位置                                         | 当前状态                                                     | 核对 |
+| -------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ | ---- |
+| E0061×4（`ClassifiedToolResult::error` 缺第 5 参） | exec_batch.rs:396,445 / exec_verdict.rs:164,206 | 已消失（`cargo check -p session-loop` exit 0，独立编译通过） | ✅   |
+| E0027×2（`ToolEvent::ToolStart/ToolEnd` 缺新字段） | loop/handlers/executing_tools.rs:223,314        | 已消失                                                       | ✅   |
+| E0063×2（构造 `ToolEvent` 缺字段）                 | exec_verdict.rs:189,197                         | 已消失                                                       | ✅   |
+
+**证据链**：`cargo check -p session-loop` → exit 0、无 error 输出；bin check 的 21 错全部位于 workbench 自身源码（`apps/agent-workbench/src-tauri/src/**`），无任何 session-loop / crates 上游错误——依赖树已全绿。
+
+## v3.2 bin 面 21 错误分类（本次快照）
+
+| 类别               | 数量 | 位置                                                                     | 根因                                                                                                                             |
+| ------------------ | ---- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| E0425 函数未找到   | 4    | `bg_log.rs:413,427,430,505`                                              | `file_info`/`read_chunk` 未导入（应为 `crate::perf::fs::*`）——bg 域，同 v1 未动                                                  |
+| E0433 符号未解析   | 2    | `bg_task.rs:48`（Ordering）、`bg_writer.rs:326`（PathBuf）               | 缺原子/路径导入——bg 域，同 v1 未动                                                                                               |
+| E0119 冲突实现     | 1    | `bg_task.rs:37`                                                          | `BackgroundTaskRegistry` 对 `BackgroundTaskManager` 重复 impl——bg 域，同 v1 未动                                                 |
+| E0599 方法未找到   | 4    | `bg_commands.rs:97,107,143,156`                                          | `list`/`status`/`kill`/`send_input` 不可用（trait 冲突致方法不可见）——bg 域，同 v1 未动                                          |
+| E0282 类型标注缺失 | 4    | `bg_commands.rs:97,107,143,155`                                          | 方法不可见连带——bg 域                                                                                                            |
+| E0061 参数个数     | 5    | `run_core.rs:1052,1071`、`run_launch.rs:358,1137`、`run_snapshot.rs:303` | orchestrator 恢复域 API 漂移：`query_events` 第 3 参 `Option<u64>` ×4、`EventQueue::new` 增 `run_id` ×1——run 域，非 R1/R3 交付域 |
+| E0004 非穷尽 match | 1    | `computer/mod.rs:288`                                                    | `EnablementError::NotEnabled` 未覆盖——computer 域，并行阵营新写（v1 曾 4-7 错，现收敛至 1）                                      |
+
+**合计 21 错**。与 v1（43 错）/ v2（上游 8 错拦死、自身面不可见）对比：
+
+| 域           | v1（2026-08-14 首记） | v2（session-loop 在途） | v3（本次）      | 结论                                        |
+| ------------ | --------------------- | ----------------------- | --------------- | ------------------------------------------- |
+| session-loop | —                     | 8 错拦死全链            | **0（绿）**     | ✅ **收口**                                 |
+| R1 server    | 7                     | 0（文件级核对）         | **0（编译级）** | ✅ **d7eb5d52 生效，正面验证**              |
+| note         | 7                     | 不可见                  | **0**           | ✅ 并行阵营 note re-export 已收口           |
+| computer     | 4–7                   | 不可见                  | **1**           | 🔄 收敛中（仅剩 E0004×1）                   |
+| bg           | 15                    | 不可见                  | **15**          | ⚠️ 未动（冲突 impl + 导入缺口）             |
+| run          | 6                     | 不可见                  | **5**           | 🔄 收敛中（`run_resume.rs:438` E0560 已消） |
+
+## v3.3 集成面（`--test server_integration`，R1-11 集成契约）
+
+**命令**：`cargo test -p crish-agent-workbench --test server_integration` → 编译失败（exit 101）。
+
+失败清单（该测试自身 4 错，与 v1 §3.1 完全一致——**模块登记缺口仍未修复**）：
+
+- `tests/server_integration.rs:44` E0433：`could not find server in crish_agent_workbench`
+- `tests/server_integration.rs:45` E0433：同上（pairing）
+- `tests/server_integration.rs:46` E0433 + E0432：同上（router）
+
+**根因**：`src/lib.rs` 仅登记 3 个模块（`core_event_bridge`/`push`/`wait_channel`），**`server` 模块未登记进 lib**（server 全部模块只在 bin 侧 main.rs 声明）。此为 R1 交付侧 T-CF-10 装配收口的**唯一剩余登记缺口**（v2 §2.4 已标注）。
+
+连带：cargo test 构建集合包含 bin 单元测试目标 → bin 的 21 错（v3.2）一并阻塞该测试目标。
+
+**注意**：与 v2 相比，本次失败已**越过上游依赖**——失败发生在 workbench 自身编译阶段，修复 bin 21 错 + lib.rs 登记 server 后即可真跑。
+
+## v3.4 建议补跑命令清单（v3 更新）
+
+阻塞源 = workbench bin 自身域（bg 15 / run 5 / computer 1）+ server 入 lib 登记缺口（R1 交付侧）。按依赖顺序：
+
+```bash
+# 1) bin 面编译恢复（前置门禁——bg/run/computer 3 域收口）
+cargo check -p crish-agent-workbench --bin crish-agent-workbench
+
+# 2) R1 全量 bin 测试（server/pairing/router/ws 等 59 内联测试 + 全部 bin 单元测试）
+cargo test -p crish-agent-workbench --bin
+
+# 3) 集成面：R1-11 server_integration（需先修 §3.1 登记缺口：lib.rs 登记 server 模块）
+cargo test -p crish-agent-workbench --test server_integration
+
+# 4) 其余集成测试
+cargo test -p crish-agent-workbench --test event_bridge_contract --test config_command_names_contract
+
+# 5) lib 回归（192/192 基线）
+cargo test -p crish-agent-workbench --lib
+
+# 6) workspace 全量
+cargo check --workspace --keep-going
+cargo test --workspace
+```
+
+**与 v2 清单差异**：#0（session-loop 上游）已解除，**不再需要**；剩余修复项均为 workbench 侧：bg 15 错（并行阵营）、run 5 错（引擎 API 漂移同步）、computer 1 错（并行阵营收尾）、**lib.rs 登记 server 模块（R1 交付侧，本战役唯一剩余项）**。
+
+## v3.5 环境与纪律声明
+
+- 平台：Windows；命令统一经 **pwsh 7** 执行；日志：`%TEMP%\opencode\r3-00-v3-{bin-check,server-int,session-loop}.log`
+- 工作区：并行阵营活跃（git status 40+ 未提交改动）；本次验证未出现构建锁等待（会话短暂）
+- **零修改声明**：本 v3 轮次未修改任何源文件/测试文件/Cargo 文件；仅更新本文档（docs 域）
+- 编码：本文档中文 UTF-8 无 BOM（edit 工具写入）

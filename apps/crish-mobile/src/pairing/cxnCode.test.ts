@@ -3,6 +3,7 @@
 // 长度错误、前缀误剥防护、display 回显、生成（字符集/格式/注入随机源）
 
 import {
+  extractCodeFromDraft,
   formatPairCode,
   generatePairCode,
   isValidPairCode,
@@ -63,6 +64,70 @@ describe('normalizePairCode（pair.rs PairCode::normalize 语义对拍）', () =
     expect(isValidPairCode('CXN-7K4P-Q2MB-9XRT')).toBe(true);
     expect(isValidPairCode('not-a-code')).toBe(false);
     expect(isValidPairCode('')).toBe(false);
+  });
+});
+
+describe('extractCodeFromDraft（展示值 → 原始码草稿，DEF-1/2 输入闭环逆函数）', () => {
+  it('逐字符输入序列：展示值 + 新字符每帧反向提取，12 位码零污染收束', () => {
+    // DEF-1/2 复现序列（KC5QBNTVWH9L）：每帧原生文本 = 当前展示值 + 新字符；
+    // 提取后 codeRaw 必须始终等于已输入前缀（无 CXN- 前缀/分隔符污染）
+    const keystrokes = 'KC5QBNTVWH9L'.split('');
+    const expectedRaw = [
+      'K',
+      'KC',
+      'KC5',
+      'KC5Q',
+      'KC5QB',
+      'KC5QBN',
+      'KC5QBNT',
+      'KC5QBNTV',
+      'KC5QBNTVW',
+      'KC5QBNTVWH',
+      'KC5QBNTVWH9',
+      'KC5QBNTVWH9L',
+    ];
+    let display = '';
+    for (let i = 0; i < keystrokes.length; i += 1) {
+      display = `${display}${keystrokes[i]}`;
+      expect(extractCodeFromDraft(display)).toBe(expectedRaw[i]);
+    }
+  });
+
+  it('单帧完整展示形态（粘贴主路径）→ 12 位裸码', () => {
+    expect(extractCodeFromDraft('CXN-KC5Q-BNTV-WH9L')).toBe('KC5QBNTVWH9L');
+    expect(extractCodeFromDraft('CXN-7K4P-Q2MB-9XRT')).toBe('7K4PQ2MB9XRT');
+  });
+
+  it('无前缀裸码 → 原样返回（12 位截断）', () => {
+    expect(extractCodeFromDraft('KC5QBNTVWH9L')).toBe('KC5QBNTVWH9L');
+    expect(extractCodeFromDraft('KC5QBNTVWH9LXYZ')).toBe('KC5QBNTVWH9L');
+  });
+
+  it('大小写归一：小写输入 → 大写 12 位码', () => {
+    expect(extractCodeFromDraft('cxn-kc5q-bntv-wh9l')).toBe('KC5QBNTVWH9L');
+    expect(extractCodeFromDraft('kc5qbntvwh9l')).toBe('KC5QBNTVWH9L');
+  });
+
+  it('分隔符变体：空格/下划线/点等非字母数字一律剔除', () => {
+    expect(extractCodeFromDraft('KC5Q BNTV WH9L')).toBe('KC5QBNTVWH9L');
+    expect(extractCodeFromDraft('KC5Q_BNTV.WH9L')).toBe('KC5QBNTVWH9L');
+  });
+
+  it('无分隔符前缀变体（>12 位以 CXN 起头）→ 剥裸前缀', () => {
+    // 与 normalizePairCode 同规则：>12 位且以 CXN 起头才剥（无分隔符粘贴）
+    expect(extractCodeFromDraft('CXNKC5QBNTVWH9L')).toBe('KC5QBNTVWH9L');
+  });
+
+  it('前缀误剥防护：12 位裸码以 CXN 起头属正常码，不剥', () => {
+    // "CXN" + 9 位合法字符 = 12 位裸码（正常码），CXN- 展示前缀才剥
+    expect(extractCodeFromDraft('CXN7K4PQ2MB9')).toBe('CXN7K4PQ2MB9');
+    expect(extractCodeFromDraft('CXN-CXN7-K4PQ-2MB9')).toBe('CXN7K4PQ2MB9');
+  });
+
+  it('空输入/纯分隔符 → 空串', () => {
+    expect(extractCodeFromDraft('')).toBe('');
+    expect(extractCodeFromDraft('CXN-')).toBe('');
+    expect(extractCodeFromDraft('---')).toBe('');
   });
 });
 

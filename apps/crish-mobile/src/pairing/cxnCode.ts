@@ -67,6 +67,31 @@ export function isValidPairCode(input: string): boolean {
 }
 
 /**
+ * 从输入框显示值反向提取原始配对码草稿（formatPairCodeDraft 的输入侧逆函数）：
+ * 受控组件闭环（DEF-1/2 修复）：value=formatPairCodeDraft(codeRaw) 时，原生输入
+ * 每帧回调的文本是「展示值 + 新字符」（如 'CXN-KC5Q-B'），直接回存 setCodeRaw
+ * 会把 CXN- 前缀与分隔符混入原始码（'CXN-C7' → 'CXNC7' → 分组错乱）。本函数
+ * 将显示值还原为纯码：大写 → 剥展示前缀 `CXN-`（展示形态非空时恒带此前缀，
+ * 剥除安全；裸码以 CXN 起头属正常码不剥——展示前缀恒带分隔符，二者可区分）
+ * → 去分隔符与空白 → 长度 > 12 且以 CXN 起头才剥裸前缀（与 normalizePairCode
+ * 同规则，容粘贴'无分隔符前缀'变体）→ 截断 12 位。宽松不校验（草稿态；
+ * 提交时 normalizePairCode 权威校验）。
+ */
+export function extractCodeFromDraft(text: string): string {
+  const upper = text.toUpperCase();
+  const withoutDisplayPrefix = upper.startsWith(PAIR_CODE_PREFIX)
+    ? upper.slice(PAIR_CODE_PREFIX.length)
+    : upper;
+  // 与 formatPairCodeDraft 同清洗：仅保留 A-Z0-9（分隔符/空白/其它符号一律剔除）
+  const cleaned = withoutDisplayPrefix.replace(/[^A-Z0-9]/g, '');
+  const body =
+    cleaned.length > PAIR_CODE_LENGTH && cleaned.startsWith('CXN')
+      ? cleaned.slice('CXN'.length)
+      : cleaned;
+  return body.slice(0, PAIR_CODE_LENGTH);
+}
+
+/**
  * 人读回显形态（带前缀与分组分隔符）：12 位码 → CXN-XXXX-XXXX-XXXX。
  * 入参为标准化后的 12 位码（未标准化输入先经 normalizePairCode）。
  */

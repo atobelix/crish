@@ -240,7 +240,10 @@ impl ServerInstance {
     /// 文同一 EventBridge 实例，main.rs 装配面经
     /// CoreStateBackend::event_bridge 注入；None = 未接线降级结构化日志）；
     /// pairing 为 R1-11 G-2 配对协调器（REST /v1/pair + WS pair 消息链消费，
-    /// 命令面同一 Arc 实例；None = 配对入口 503 诚实降级）
+    /// 命令面同一 Arc 实例；None = 配对入口 503 诚实降级）；
+    /// ws_registry 为 P2-5 连接面共享注册表（装配面 ⑤b 与 push presence /
+    /// 直投 / 配对协调器同一 Arc 实例——注入后路由层 WS 升级注册进入
+    /// 共享注册表；None = 保持 ServerState 自建实例，兼容既有测试）
     /// ——生产装配（main.rs）注入真实后端与扇出器）
     pub fn router(
         &self,
@@ -248,9 +251,13 @@ impl ServerInstance {
         fanout: Option<Arc<fanout::FanOutEmitter>>,
         audit_bridge: Option<crate::core_event_bridge::EventBridge>,
         pairing: Option<Arc<pairing::PairingCoordinator>>,
+        ws_registry: Option<Arc<ws::WsRegistry>>,
     ) -> Router {
         let tokens = auth::TokenStore::load(&self.handle.config.pairing_file_path);
         let mut state = ServerState::new(&self.handle, tokens, backend);
+        if let Some(registry) = ws_registry {
+            state = state.with_ws_registry(registry);
+        }
         state.set_event_stream(fanout);
         if let Some(bridge) = audit_bridge {
             state = state.with_audit_bridge(bridge);
@@ -528,6 +535,17 @@ impl ServerState {
         Arc::clone(&self.ws_registry)
     }
 
+    /// 注入外部 WS 连接注册表（P2-5 连接面共享接线：生产装配面将 ⑤b 共享
+    /// 注册表——与 push presence / 直投 / 配对协调器同一 Arc 实例——接入
+    /// 路由层；注入后路由层 WS 升级注册即进入共享注册表，presence 与撤销
+    /// 踢链观察真实连接；未注入保持自建实例，兼容既有测试与独立装配）
+    // R3 后续任务备注：main.rs 装配消费——dead_code 静音
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn with_ws_registry(mut self, registry: Arc<ws::WsRegistry>) -> Self {
+        self.ws_registry = registry;
+        self
+    }
+
     /// 连接限流器（R1-10：D5 §7.2 每设备 2 / 总量 8 并发上限；D-1 裁决：
     /// 生产并发面由 ws.rs 注册表踢旧承担，本限流器为测试面 + R2 装配
     /// 预留，测试直接消费）
@@ -652,7 +670,7 @@ mod tests {
         let instance = ServerInstance::bind(temp_config(0)).await.expect("绑定失败");
         let addr = instance.addr();
         let handle = instance.handle().clone();
-        let router = instance.router(None, None, None, None);
+        let router = instance.router(None, None, None, None, None);
         let task = tokio::spawn(async move { instance.serve(router).await });
 
         // 轮询等待服务就绪并请求 /v1/info（真实监听 + HTTP 往返）
@@ -842,7 +860,7 @@ mod tests {
         let instance = ServerInstance::bind(config).await.expect("绑定失败");
         let addr = instance.addr();
         let handle = instance.handle().clone();
-        let router = instance.router(Some(backend), Some(Arc::clone(&fanout)), None, None);
+        let router = instance.router(Some(backend), Some(Arc::clone(&fanout)), None, None, None);
         let task = tokio::spawn(async move { instance.serve(router).await });
 
         // 就绪轮询
@@ -918,7 +936,7 @@ mod tests {
         let instance = ServerInstance::bind(temp_config(0)).await.expect("绑定失败");
         let addr = instance.addr();
         let handle = instance.handle().clone();
-        let router = instance.router(None, Some(fanout), None, None);
+        let router = instance.router(None, Some(fanout), None, None, None);
         let task = tokio::spawn(async move { instance.serve(router).await });
         // 等服务就绪
         let url = format!("http://{addr}/v1/info");
@@ -928,6 +946,117 @@ mod tests {
             }
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
+        handle.shutdown();
+        let result = task.await.expect("serve 任务不应 panic");
+        assert!(result.is_ok(), "serve 应正常退出：{result:?}");
+    }
+
+    // ── P2-5 连接面共享接线（with_ws_registry 注入：路由层注册表 =
+    //    装配面共享注册表，push presence / 直投 / 撤销踢链观察真实连接）──
+
+    /// 注入语义单元：注入后 ServerState 使用外部注册表（同一 Arc 实例），
+    /// 未注入保持自建（与外部实例不同——兼容既有独立装配与测试）；可
+    /// 反复注入（每次覆盖为新实例）。
+    #[test]
+    fn with_ws_registry_replaces_self_built_instance() {
+        let handle = ServerHandle::new(temp_config(0), "127.0.0.1:0".parse().expect("固定地址"));
+        let external = Arc::new(ws::WsRegistry::new());
+        let state = ServerState::new(
+            &handle,
+            auth::TokenStore::new(temp_config(0).pairing_file_path),
+            None,
+        );
+        assert!(
+            !Arc::ptr_eq(&state.ws_registry(), &external),
+            "未注入必须保持自建实例（与外部实例不同）"
+        );
+        let injected = state.with_ws_registry(Arc::clone(&external));
+        assert!(
+            Arc::ptr_eq(&injected.ws_registry(), &external),
+            "注入后必须使用外部实例（连接面共享接线）"
+        );
+        let another = Arc::new(ws::WsRegistry::new());
+        let reinjected = injected.with_ws_registry(Arc::clone(&another));
+        assert!(
+            Arc::ptr_eq(&reinjected.ws_registry(), &another),
+            "反复注入必须覆盖为新实例"
+        );
+    }
+
+    /// P2-5 构造测试（注入注册表 → 路由升级/注册 → 共享注册表查询到连接）：
+    /// 注入外部注册表后，路由层 WS 连接注册进**共享**注册表（令牌哈希
+    /// 主键 + 设备标签 + 已认证——撤销踢链可命中）；连接关闭后注销
+    /// （断线清理经共享注册表一致生效）。
+    #[tokio::test]
+    async fn injected_shared_registry_sees_route_upgrade_connections() {
+        // 外部共享注册表（模拟装配面 ⑤b：push presence / 配对协调器同实例）
+        let shared = Arc::new(ws::WsRegistry::new());
+
+        // 临时令牌库（pairing.json 预签发，鉴权面走真实 TokenStore 文件）
+        let dir = tempfile::tempdir().expect("临时目录必须可创建");
+        let mut config = ServerConfig::new(dir.path());
+        config.port = 0;
+        let token = {
+            let mut store = auth::TokenStore::new(config.pairing_file_path.clone());
+            store.issue("p2-5-device", now_ms()).expect("签发必须成功")
+        };
+
+        let instance = ServerInstance::bind(config).await.expect("绑定失败");
+        let addr = instance.addr();
+        let handle = instance.handle().clone();
+        // 装配面注入共享注册表（router 第五参 = P2-5 接线点）
+        let router = instance.router(None, None, None, None, Some(Arc::clone(&shared)));
+        let task = tokio::spawn(async move { instance.serve(router).await });
+
+        // 就绪轮询
+        let info_url = format!("http://{addr}/v1/info");
+        for _ in 0..50 {
+            if reqwest::get(&info_url).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+
+        // 路由升级（真实 handle_socket 路径：鉴权 → 注册 → mark_authenticated）
+        let ws_url = format!("ws://{addr}/v1/events?token={token}");
+        let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)
+            .await
+            .expect("WS 升级必须成功");
+
+        // 共享注册表必须可见该连接（轮询等待注册——升级回执先于注册完成）
+        let token_hash = auth::sha256_hex(token.as_bytes());
+        let mut registered = false;
+        for _ in 0..100 {
+            let activities = shared.device_activities();
+            if activities.len() == 1 && activities[0].0 == token_hash {
+                registered = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(registered, "注入后路由连接必须注册进共享注册表");
+        let activities = shared.device_activities();
+        assert_eq!(activities.len(), 1);
+        assert_eq!(activities[0].0, token_hash, "注册表主键 = 令牌哈希");
+        assert_eq!(activities[0].1, "p2-5-device", "设备标签来自令牌库记录");
+        let snapshot = shared.snapshot();
+        assert_eq!(snapshot.len(), 1, "共享注册表快照必须含路由连接");
+        assert!(
+            shared.is_authenticated(snapshot[0].conn_id),
+            "正常升级连接必须已认证（撤销踢链可命中）"
+        );
+
+        // 断线 → 注销（共享注册表清空；轮询等待 sender task 收尾）
+        let _ = ws.close(None).await;
+        for _ in 0..100 {
+            if shared.count() == 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert_eq!(shared.count(), 0, "断线清理必须经共享注册表一致生效");
+
+        // 优雅关停
         handle.shutdown();
         let result = task.await.expect("serve 任务不应 panic");
         assert!(result.is_ok(), "serve 应正常退出：{result:?}");
@@ -964,7 +1093,7 @@ mod tests {
         let instance = ServerInstance::bind(config).await.expect("TLS 实例绑定必须成功");
         let addr = instance.addr();
         let handle = instance.handle().clone();
-        let router = instance.router(None, None, None, None);
+        let router = instance.router(None, None, None, None, None);
         let task = tokio::spawn(async move { instance.serve(router).await });
         // 读取 CA 材料（与实例同目录，bind 返回后文件锁已释放可重载；
         // reload_keeps_fingerprint 保证同一证书文件不被重写）

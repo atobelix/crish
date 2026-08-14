@@ -12,10 +12,11 @@
 //   notificationPermissionStore.getState().request()；init 只 refresh 不弹窗。
 //
 // 顺序铁律（D7 §7.5 / M8 §4.2.3）：① 建渠道 → ② 权限 → ③ 前台 handler → ④ 监听。
-import {
-  addNotificationResponseReceivedListener,
-  getLastNotificationResponseAsync,
-} from 'expo-notifications';
+// Expo Go 降级（P0-1 DEF-5）：expo-notifications 无任何静态 import——全部经
+// expoNotificationsFacade 运行时动态加载 + 能力探测；系统通知面不可用（Expo Go
+// SDK 53+ 移除 push 原生模块，模块求值即抛错——曾致 12 路由 missing default export
+// 启动即崩，R2-16-acceptance-execution.md §9-14）→ 跳过系统面整体装配，保留
+// 应用内通知，不抛错不阻塞启动。
 import { registerChannelsAsync } from './channels';
 import { notificationPermissionStore } from './permissions';
 import type { NotificationPermissionStatus } from './permissions';
@@ -24,6 +25,11 @@ import {
   subscribeSystemNotificationReceived,
 } from './foreground';
 import { handleNotificationResponse } from './deepLink';
+import {
+  addNotificationResponseReceivedListenerSafe,
+  getLastNotificationResponseAsyncSafe,
+  hasPushModule,
+} from './expoNotificationsFacade';
 
 export interface NotificationLayerOptions {
   /** 深链导航注入（expo-router router.push 包装；缺省不导航仅已读） */
@@ -37,10 +43,23 @@ export interface NotificationLayerHandle {
   dispose: () => void;
 }
 
-/** 通知层初始化：建渠道 → 权限查询 → 前台 handler → 系统通知监听 → 冷启动深链 */
+/** 通知层初始化：能力探测 → 建渠道 → 权限查询 → 前台 handler → 监听 → 冷启动深链 */
 export async function initNotificationLayer(
   opts: NotificationLayerOptions = {}
 ): Promise<NotificationLayerHandle> {
+  // 能力探测（P0-1 DEF-5）：Expo Go 下 expo-notifications 模块求值即抛错——
+  // 不可用 → 跳过系统通知面整体装配（建渠道/权限/监听/深链），仅保留应用内通知
+  const pushAvailable = await hasPushModule();
+  if (!pushAvailable) {
+    console.warn(
+      '[notifications] 系统通知面不可用（Expo Go 环境）——降级为应用内通知 only'
+    );
+    return {
+      permissionStatus: 'undetermined',
+      dispose: () => {},
+    };
+  }
+
   // ① 渠道先建（权限弹窗前置条件，幂等）→ ② 权限查询（不弹窗，冷启动不打扰）
   await registerChannelsAsync();
   const permissionStatus = await notificationPermissionStore
@@ -48,27 +67,26 @@ export async function initNotificationLayer(
     .refresh();
 
   // ③ 前台 handler：不弹系统通知（app 内已展示，双通道去重）
-  installForegroundHandler();
+  await installForegroundHandler();
 
   // ④ 监听：系统通知到达 → app 内同步；点击 → 深链导航
-  const disposeReceived = subscribeSystemNotificationReceived();
-  const responseSub = addNotificationResponseReceivedListener((response) => {
-    handleNotificationResponse(response, opts.navigate);
-  });
+  const disposeReceived = await subscribeSystemNotificationReceived();
+  const disposeResponse = await addNotificationResponseReceivedListenerSafe(
+    (response) => {
+      handleNotificationResponse(response, opts.navigate);
+    }
+  );
 
   // 冷启动深链（D7 §7.3 / M8 §4.1.1 respond）：被通知点击拉起时补处理
-  try {
-    const last = await getLastNotificationResponseAsync();
-    if (last) handleNotificationResponse(last, opts.navigate);
-  } catch {
-    // 非原生环境（Web/模拟器）不支持 → 尽力而为，静默不阻塞启动
-  }
+  // （尽力而为：原生面不支持/失败 → 安全包装回退 null，静默不阻塞启动）
+  const last = await getLastNotificationResponseAsyncSafe();
+  if (last) handleNotificationResponse(last, opts.navigate);
 
   return {
     permissionStatus,
     dispose: () => {
       disposeReceived();
-      responseSub.remove();
+      disposeResponse?.();
     },
   };
 }
