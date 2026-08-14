@@ -5,8 +5,8 @@
 //! - **≠ A-INV-02 产品 UI**；**≠ EL-03**。
 //! - 仅 detect **≠** 产品三路对话框满关。
 
-use super::{StoreError, WorkspaceStore, content_hash};
-use rusqlite::{OptionalExtension, params};
+use super::{content_hash, InFlightSuppressVerdict, StoreError, WorkspaceStore};
+use rusqlite::{params, OptionalExtension};
 use std::path::{Path, PathBuf};
 
 // ─── 分类 / 报告 ──────────────────────────────────────────────────────────
@@ -133,7 +133,7 @@ impl WorkspaceStore {
 
         let path = PathBuf::from(&meta.path);
         let file_exists = path.is_file();
-        let (file_hash, mirror_changed) = if file_exists {
+        let (file_hash, mut mirror_changed) = if file_exists {
             let bytes = std::fs::read(&path)?;
             let hash = content_hash(&bytes);
             let changed = if meta.content_hash.is_empty() {
@@ -148,11 +148,27 @@ impl WorkspaceStore {
             (None, true) // 文件消失也算 mirror 侧异常
         };
 
+        // 检查在途导出守卫状态机（INV-STORE-01：零假漂移与瞬态假删除压制）
+        let verdict = self.export_guard.check_and_suppress(&path, file_hash.as_deref());
+        let effective_file_exists = match verdict {
+            InFlightSuppressVerdict::SuppressTransientDeletion => {
+                // 瞬态重命名期间物理文件微秒级不存在，压制假删除
+                mirror_changed = false;
+                true
+            }
+            InFlightSuppressVerdict::SuppressMatched => {
+                // 命中在途守卫且内容 Hash 匹配，压制自发事件
+                mirror_changed = false;
+                file_exists
+            }
+            InFlightSuppressVerdict::PassThrough => file_exists,
+        };
+
         let last_export_rev = meta.last_export_rev as u64;
         // 权威前进：rev 相对 last_export_rev 不一致（pending_lag 与 note_authority_advanced 同源）
         let authority_changed = authority_rev != last_export_rev;
 
-        let class = if !file_exists {
+        let class = if !effective_file_exists {
             MirrorDriftClass::MissingFile
         } else {
             match (mirror_changed, authority_changed) {

@@ -21,23 +21,40 @@
 mod agents;
 mod agents_ops;
 mod blocks;
+pub mod cas_gc;
 mod error;
 mod events;
+pub mod group_commit;
 mod explore_docs_quota_store;
 mod import;
 mod imported;
+pub mod lease_guard;
 mod messages;
 mod migrate;
 mod migrate_steps;
+pub mod reader_pool;
 mod runs;
 mod schema;
 mod sessions;
 
 pub use blocks::{BlockState, CompactionBlockRow, BLOCK_SCHEMA_VERSION};
+pub use cas_gc::{compute_sha256_hex, CasBlobRow, CasGcConfig, GcScanStats};
 pub use error::{DbFailure, DbFailureKind};
 pub use events::StoredEvent;
 pub use explore_docs_quota_store::SessionMetaExploreDocsQuotaStore;
+pub use group_commit::{
+    DbWriteHandle, GroupCommitConfig, GroupCommitStats, DEFAULT_GROUP_COMMIT_CHANNEL_CAPACITY,
+    DEFAULT_GROUP_COMMIT_MAX_BATCH, DEFAULT_GROUP_COMMIT_TIMEOUT_MS,
+};
 pub use imported::{ImportedBookmarkRow, ImportedHistoryRow, ImportedWriteStats, IMPORT_BATCH_SIZE};
+pub use lease_guard::{
+    generate_lease_id, ActiveBlobLease, BlobLeaseGuard, DEFAULT_LEASE_DURATION,
+    DEFAULT_LEASE_DURATION_SECS,
+};
+pub use reader_pool::{
+    PooledReader, ReaderPool, ReaderPoolConfig, ReaderPoolStats, DEFAULT_MAX_WAIT_TIMEOUT_MS,
+    DEFAULT_READER_POOL_SIZE, DEFAULT_SQLITE_BUSY_TIMEOUT_MS,
+};
 pub use runs::{ParseRunStatusError, PendingInput, RunStatus, StoredRun};
 
 use rusqlite::Connection;
@@ -148,3 +165,8 @@ impl LocalDb {
 mod tests;
 #[cfg(test)]
 mod tests_migrations;
+#[cfg(test)]
+mod tests_concurrency;
+#[cfg(test)]
+mod tests_cas_gc;
+

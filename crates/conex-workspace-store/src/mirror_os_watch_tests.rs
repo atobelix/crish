@@ -6,7 +6,7 @@
 use super::path::paths_equal_for_mirror;
 use super::*;
 use crate::mirror::{MirrorDriftClass, MirrorWatchHandle};
-use crate::WorkspaceStore;
+use crate::{InFlightSuppressVerdict, WorkspaceStore};
 use conex_doc_collab::{BlockId, BlockKind, BlockNode, BlockProps, BlockTree};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -275,5 +275,94 @@ fn mirror_os_watch_missing_parent_errors() {
         }
         other => panic!("期望 InvalidPath，got {other}"),
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 验证 InFlightExportGuard 与 detect 状态机联动：自发落盘事件 100% 压制
+#[test]
+fn in_flight_guard_suppresses_self_export_events() {
+    let dir = temp_dir();
+    let db = dir.join("workspace.db");
+    let mirror_root = dir.join("mirrors");
+    let store = WorkspaceStore::open(&db).unwrap();
+    let tree = sample_tree("guard test content");
+
+    let exported_path = store
+        .export_md_mirror("doc-guard-test", &tree, 1, &mirror_root)
+        .unwrap();
+
+    // 刚落盘完成时，处于 InFlight 保护期（1000ms TTL 内）
+    assert!(store.export_guard().is_in_flight(&exported_path));
+
+    // detect_mirror_drift 判定无漂移
+    let report = store.detect_mirror_drift("doc-guard-test", 1).unwrap();
+    assert_eq!(
+        report.class,
+        MirrorDriftClass::None,
+        "自发落盘后在途守卫必须压制自发事件"
+    );
+    assert!(!report.mirror_changed);
+
+    // 模拟 OS Watcher 收到该文件的自发事件
+    let ev = MirrorOsEvent {
+        path: exported_path.clone(),
+        kind: MirrorOsEventKind::Modified,
+    };
+    let hit = detect_if_os_event_hits_mirror(&store, "doc-guard-test", 1, &ev)
+        .unwrap()
+        .expect("自发事件仍命中对应 mirror path");
+    assert_eq!(
+        hit.class,
+        MirrorDriftClass::None,
+        "自发事件分类必须为 None"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 验证 Windows 3 阶段原子写瞬态重命名缺失时的 SuppressTransientDeletion 机制
+#[test]
+fn in_flight_guard_suppresses_transient_deletion() {
+    let dir = temp_dir();
+    let db = dir.join("workspace.db");
+    let mirror_root = dir.join("mirrors");
+    let store = WorkspaceStore::open(&db).unwrap();
+    let final_path = mirror_root.join("doc-transient.md");
+
+    // 手动模拟写入初期（Writing 阶段）登记
+    let _token = store.export_guard().register(&final_path, "expected_hash_val", 1);
+
+    // 在 Writing 阶段且物理文件尚不存在（瞬态间隙）-> check_and_suppress 必须返回 SuppressTransientDeletion
+    let verdict = store.export_guard().check_and_suppress(&final_path, None);
+    assert_eq!(verdict, InFlightSuppressVerdict::SuppressTransientDeletion);
+    assert!(verdict.is_suppressed());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 验证多次导出落盘无 `.tmp` 或 `.bak` 残留
+#[test]
+fn export_md_mirror_leaves_no_transient_files() {
+    let dir = temp_dir();
+    let db = dir.join("workspace.db");
+    let mirror_root = dir.join("mirrors");
+    let store = WorkspaceStore::open(&db).unwrap();
+
+    for i in 1..=5 {
+        let tree = sample_tree(&format!("content version {i}"));
+        store
+            .export_md_mirror("doc-clean", &tree, i, &mirror_root)
+            .unwrap();
+    }
+
+    // 检查目录中除最终 .md 文件外无任何 .tmp / .bak 残留
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&mirror_root).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        files.push(name);
+    }
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0], "doc-clean.md");
+
     let _ = std::fs::remove_dir_all(&dir);
 }

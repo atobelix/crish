@@ -44,6 +44,29 @@ pub enum ChangeKind {
     Renamed,
 }
 
+/// 判定路径是否属于系统内部原子落盘的临时/备份文件或瞬态文件
+#[inline]
+pub fn is_internal_atomic_transient_path(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    let lower = file_name.to_lowercase();
+    lower.starts_with(".conex-tmp-")
+        || lower.starts_with(".conex-bak-")
+        || lower.contains(".tmp.")
+        || lower.contains(".bak.")
+        || lower.ends_with(".tmp")
+        || lower.ends_with(".bak")
+        || lower.ends_with(".crish-tmp")
+        || lower.contains(".agent-tmp-")
+}
+
+/// 底层自然过滤器（watcher_filter）：供 OS watcher 过滤内部瞬态文件
+#[inline]
+pub fn watcher_filter(path: &Path) -> bool {
+    is_internal_atomic_transient_path(path)
+}
+
 /// 单条工作区文件变更（watcher 产出，判定前）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -348,8 +371,11 @@ impl WatcherState {
         }
     }
 
-    /// 发射 Renamed（from → to；两路径同源时跳过，防自循环事件）
+    /// 发射 Renamed（from → to；两路径同源时跳过，防自循环事件；瞬态文件排除）
     fn emit_renamed(&mut self, from: &Path, to: &Path, now: i64) {
+        if self.is_excluded(from) || self.is_excluded(to) {
+            return;
+        }
         let from = normalize_abs_path(from);
         let to = normalize_abs_path(to);
         if from == to {
@@ -368,8 +394,11 @@ impl WatcherState {
         let _ = self.tx.try_send(ev);
     }
 
-    /// 排除判定：绝对路径命中排除根（组件级前缀）或排除 glob 即排除
+    /// 排除判定：内部瞬态文件过滤、绝对路径命中排除根（组件级前缀）或排除 glob 即排除
     fn is_excluded(&self, path: &Path) -> bool {
+        if watcher_filter(path) {
+            return true;
+        }
         let np = normalize_for_compare(path);
         for e in &self.exclude {
             let ne = normalize_for_compare(e);
@@ -802,5 +831,23 @@ mod tests {
         assert_eq!(json["hasDestructive"], true);
         let back: UndeclaredWrite = serde_json::from_value(json).unwrap();
         assert_eq!(back, report);
+    }
+
+    #[test]
+    fn watcher_filter_filters_transient_atomic_files() {
+        assert!(watcher_filter(Path::new(".conex-tmp-doc-1234.tmp")));
+        assert!(watcher_filter(Path::new(".conex-bak-doc-1234.bak")));
+        assert!(watcher_filter(Path::new("c:/workspace/.conex-tmp-main-1-2.tmp")));
+        assert!(watcher_filter(Path::new("c:/workspace/.conex-bak-main-1-2.bak")));
+        assert!(watcher_filter(Path::new("c:/workspace/doc.md.tmp.1234")));
+        assert!(watcher_filter(Path::new("c:/workspace/doc.md.bak.1234")));
+        assert!(watcher_filter(Path::new("c:/workspace/file.tmp")));
+        assert!(watcher_filter(Path::new("c:/workspace/file.bak")));
+        assert!(watcher_filter(Path::new("c:/workspace/file.crish-tmp")));
+        assert!(watcher_filter(Path::new("c:/workspace/file.agent-tmp-123-1")));
+
+        assert!(!watcher_filter(Path::new("c:/workspace/doc.md")));
+        assert!(!watcher_filter(Path::new("c:/workspace/src/lib.rs")));
+        assert!(!watcher_filter(Path::new("c:/workspace/README.md")));
     }
 }

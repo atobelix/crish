@@ -61,6 +61,7 @@
 
 mod cas;
 mod fts;
+mod in_flight_guard;
 mod migrate;
 mod mirror;
 mod mirror_detect;
@@ -75,6 +76,9 @@ mod refs;
 
 pub use cas::{content_hash, get_blob_conn, put_blob_conn};
 pub use fts::{BlockHit, ReindexBlockOpts};
+pub use in_flight_guard::{
+    InFlightEntry, InFlightExportGuard, InFlightPhase, InFlightSuppressVerdict,
+};
 pub use migrate::migrate;
 pub use mirror::{
     poll_mirror_once, ConflictBlockInfo, ImportMirrorOpts, ImportMirrorResult, MirrorDriftClass,
@@ -111,7 +115,7 @@ pub(crate) use mirror_export::safe_doc_id;
 use conex_doc_collab::PersistError;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 /// pending updates 达到该条数时自动触发 snapshot 合并（与 snapshot_tick 并列）。
@@ -157,6 +161,8 @@ pub struct WorkspaceStore {
     path: PathBuf,
     /// 子模块 `impl WorkspaceStore` 写路径共用（crate 内可见）。
     pub(crate) conn: Mutex<Connection>,
+    /// 导出落盘在途守卫（代际令牌 + 1000ms 自然 TTL + 瞬态假删除压制）
+    pub export_guard: Arc<InFlightExportGuard>,
 }
 
 impl WorkspaceStore {
@@ -171,7 +177,19 @@ impl WorkspaceStore {
         Ok(Self {
             path,
             conn: Mutex::new(conn),
+            export_guard: Arc::new(InFlightExportGuard::new()),
         })
+    }
+
+    /// 获取关联的导出在途守卫
+    pub fn export_guard(&self) -> &Arc<InFlightExportGuard> {
+        &self.export_guard
+    }
+
+    /// 注入自定义在途守卫实例
+    pub fn with_export_guard(mut self, guard: Arc<InFlightExportGuard>) -> Self {
+        self.export_guard = guard;
+        self
     }
 
     pub fn path(&self) -> &Path {

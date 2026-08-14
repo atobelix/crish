@@ -1,0 +1,361 @@
+//! SQLite Single Writer Actor 与 5ms/50-item 组提交管道 (Group Commit).
+//!
+//! 在高并发多 Agent / 多任务场景下，频繁的短事务写入会导致激烈的锁竞争与大量的磁盘 fsync。
+//! 本模块实现 Single Writer Actor 模型：
+//! 1. 所有写操作通过 `tokio::sync::mpsc` 发送至独占的写入者处理循环；
+//! 2. 写入者在收到首个任务后，在 5ms 窗口内至多聚合 50 个写入请求作为一个批次；
+//! 3. 批次使用单一 `BEGIN IMMEDIATE ... COMMIT` 事务包裹，内部通过 `SAVEPOINT` 隔离单项错误；
+//! 4. 将高频单条提交的 I/O 放大降低一个数量级，同时消除多线程写锁争用与死锁风险。
+
+use crate::error::{DbFailure, DbFailureKind};
+use std::any::Any;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::{mpsc, oneshot};
+
+/// 默认组提交窗口等待时长（5ms）
+pub const DEFAULT_GROUP_COMMIT_TIMEOUT_MS: u64 = 5;
+/// 默认最大批次容量（50 条）
+pub const DEFAULT_GROUP_COMMIT_MAX_BATCH: usize = 50;
+/// 默认写请求通道容量（1024 条）
+pub const DEFAULT_GROUP_COMMIT_CHANNEL_CAPACITY: usize = 1024;
+
+/// 组提交管道配置
+#[derive(Debug, Clone)]
+pub struct GroupCommitConfig {
+    /// 批次聚合等待超时（默认 5ms）
+    pub batch_timeout: Duration,
+    /// 单事务最大聚合条数（默认 50）
+    pub max_batch_size: usize,
+    /// 写入通道缓冲区深度（默认 1024）
+    pub channel_capacity: usize,
+}
+
+impl Default for GroupCommitConfig {
+    fn default() -> Self {
+        Self {
+            batch_timeout: Duration::from_millis(DEFAULT_GROUP_COMMIT_TIMEOUT_MS),
+            max_batch_size: DEFAULT_GROUP_COMMIT_MAX_BATCH,
+            channel_capacity: DEFAULT_GROUP_COMMIT_CHANNEL_CAPACITY,
+        }
+    }
+}
+
+/// 组提交运行期统计指标快照
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GroupCommitStats {
+    /// 累计处理的写操作总数
+    pub total_operations: u64,
+    /// 累计提交的批次总数
+    pub total_batches: u64,
+    /// 历史观察到的最大单批聚合量
+    pub max_batch_size_seen: usize,
+    /// 单项或批次级执行失败总数
+    pub total_errors: u64,
+}
+
+#[derive(Default)]
+struct StatsInner {
+    total_operations: AtomicU64,
+    total_batches: AtomicU64,
+    max_batch_size_seen: AtomicUsize,
+    total_errors: AtomicU64,
+}
+
+impl StatsInner {
+    fn record_batch(&self, batch_size: usize) {
+        self.total_operations
+            .fetch_add(batch_size as u64, Ordering::Relaxed);
+        self.total_batches.fetch_add(1, Ordering::Relaxed);
+        self.max_batch_size_seen
+            .fetch_max(batch_size, Ordering::Relaxed);
+    }
+
+    fn record_error(&self) {
+        self.total_errors.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> GroupCommitStats {
+        GroupCommitStats {
+            total_operations: self.total_operations.load(Ordering::Relaxed),
+            total_batches: self.total_batches.load(Ordering::Relaxed),
+            max_batch_size_seen: self.max_batch_size_seen.load(Ordering::Relaxed),
+            total_errors: self.total_errors.load(Ordering::Relaxed),
+        }
+    }
+}
+
+type AnySendResult = Result<Box<dyn Any + Send>, DbFailure>;
+type BoxedWriteFn = Box<dyn FnOnce(&mut rusqlite::Connection) -> AnySendResult + Send>;
+
+struct WriteTask {
+    op: BoxedWriteFn,
+    respond_to: oneshot::Sender<AnySendResult>,
+}
+
+/// SQLite 专用单写句柄 (Single Writer Handle)
+///
+/// 具备轻量 Clone 能力，可安全跨线程 / 异步任务分发。
+#[derive(Clone)]
+pub struct DbWriteHandle {
+    sender: mpsc::Sender<WriteTask>,
+    stats: Arc<StatsInner>,
+}
+
+impl DbWriteHandle {
+    /// 创建并启动组提交 Single Writer Actor。
+    ///
+    /// 接收一个专有的 SQLite 写连接所有权，并在后台 Tokio 任务中循环批处理。
+    pub fn spawn(conn: rusqlite::Connection, config: GroupCommitConfig) -> Self {
+        let (sender, receiver) = mpsc::channel(config.channel_capacity);
+        let stats = Arc::new(StatsInner::default());
+        let stats_clone = Arc::clone(&stats);
+
+        tokio::spawn(async move {
+            run_actor_loop(conn, receiver, config, stats_clone).await;
+        });
+
+        Self { sender, stats }
+    }
+
+    /// 在专有的独立 OS 线程中启动 Single Writer Actor（隔绝通用异步运行时抖动）。
+    pub fn spawn_dedicated_thread(
+        conn: rusqlite::Connection,
+        config: GroupCommitConfig,
+        thread_name: Option<&str>,
+    ) -> Self {
+        let (sender, receiver) = mpsc::channel(config.channel_capacity);
+        let stats = Arc::new(StatsInner::default());
+        let stats_clone = Arc::clone(&stats);
+        let name = thread_name.unwrap_or("conex-sqlite-writer").to_string();
+
+        std::thread::Builder::new()
+            .name(name)
+            .spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to create dedicated runtime for DbWriteActor");
+                rt.block_on(run_actor_loop(conn, receiver, config, stats_clone));
+            })
+            .expect("failed to spawn dedicated OS thread for DbWriteActor");
+
+        Self { sender, stats }
+    }
+
+    /// 异步提交写操作闭包并等待批提交结果。
+    pub async fn write<F, R>(&self, f: F) -> Result<R, DbFailure>
+    where
+        F: FnOnce(&mut rusqlite::Connection) -> Result<R, DbFailure> + Send + 'static,
+        R: Send + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+        let task = WriteTask {
+            op: Box::new(move |conn| {
+                f(conn).map(|r| Box::new(r) as Box<dyn Any + Send>)
+            }),
+            respond_to: tx,
+        };
+
+        self.sender.send(task).await.map_err(|_| DbFailure {
+            message: "Single writer actor channel is closed".to_string(),
+            kind: DbFailureKind::Other("writer_closed".to_string()),
+        })?;
+
+        let res = rx.await.map_err(|_| DbFailure {
+            message: "Single writer actor dropped response channel".to_string(),
+            kind: DbFailureKind::Other("channel_dropped".to_string()),
+        })??;
+
+        match res.downcast::<R>() {
+            Ok(val) => Ok(*val),
+            Err(_) => Err(DbFailure {
+                message: "Internal error: downcast write result failed".to_string(),
+                kind: DbFailureKind::Other("downcast_failed".to_string()),
+            }),
+        }
+    }
+
+    /// 快捷辅助函数：在写连接上执行单条 SQL 语句。
+    pub async fn execute<P>(&self, sql: &'static str, params: P) -> Result<usize, DbFailure>
+    where
+        P: rusqlite::Params + Clone + Send + 'static,
+    {
+        self.write(move |conn| {
+            conn.execute(sql, params).map_err(|e| DbFailure {
+                message: format!("execute failed: {e}"),
+                kind: DbFailureKind::Other(e.to_string()),
+            })
+        })
+        .await
+    }
+
+    /// 获取当前统计指标快照。
+    pub fn stats(&self) -> GroupCommitStats {
+        self.stats.snapshot()
+    }
+
+    /// 检查写通道是否已关闭。
+    pub fn is_closed(&self) -> bool {
+        self.sender.is_closed()
+    }
+}
+
+async fn run_actor_loop(
+    mut conn: rusqlite::Connection,
+    mut receiver: mpsc::Receiver<WriteTask>,
+    config: GroupCommitConfig,
+    stats: Arc<StatsInner>,
+) {
+    let mut batch = Vec::with_capacity(config.max_batch_size);
+
+    loop {
+        let first_task = match receiver.recv().await {
+            Some(task) => task,
+            None => break, // 通道关闭，正常退出
+        };
+
+        batch.push(first_task);
+
+        // 5ms / 50-item 窗口聚合
+        let deadline = tokio::time::Instant::now() + config.batch_timeout;
+        while batch.len() < config.max_batch_size {
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                break;
+            }
+            let remaining = deadline - now;
+            match tokio::time::timeout(remaining, receiver.recv()).await {
+                Ok(Some(task)) => batch.push(task),
+                Ok(None) => break,
+                Err(_) => break, // 5ms 超时到达
+            }
+        }
+
+        process_batch(&mut conn, &mut batch, &stats);
+        batch.clear();
+    }
+}
+
+fn process_batch(
+    conn: &mut rusqlite::Connection,
+    batch: &mut Vec<WriteTask>,
+    stats: &StatsInner,
+) {
+    if batch.is_empty() {
+        return;
+    }
+    let batch_len = batch.len();
+    stats.record_batch(batch_len);
+
+    if batch_len == 1 {
+        // 单条快速路径：直接事务
+        let task = batch.remove(0);
+        let res = match conn.execute_batch("BEGIN IMMEDIATE;") {
+            Ok(()) => {
+                let op_res = (task.op)(conn);
+                match op_res {
+                    Ok(val) => match conn.execute_batch("COMMIT;") {
+                        Ok(()) => Ok(val),
+                        Err(e) => {
+                            let _ = conn.execute_batch("ROLLBACK;");
+                            Err(DbFailure {
+                                message: format!("commit failed: {e}"),
+                                kind: DbFailureKind::Other("commit_failed".to_string()),
+                            })
+                        }
+                    },
+                    Err(err) => {
+                        let _ = conn.execute_batch("ROLLBACK;");
+                        Err(err)
+                    }
+                }
+            }
+            Err(e) => Err(DbFailure {
+                message: format!("begin immediate failed: {e}"),
+                kind: DbFailureKind::Other("begin_failed".to_string()),
+            }),
+        };
+
+        if res.is_err() {
+            stats.record_error();
+        }
+        let _ = task.respond_to.send(res);
+        return;
+    }
+
+    // 多条组提交路径：使用 SAVEPOINT 隔离每个任务，最外层统一 COMMIT
+    if let Err(e) = conn.execute_batch("BEGIN IMMEDIATE;") {
+        let err = DbFailure {
+            message: format!("group commit begin immediate failed: {e}"),
+            kind: DbFailureKind::Other("begin_failed".to_string()),
+        };
+        stats.record_error();
+        for task in batch.drain(..) {
+            let _ = task.respond_to.send(Err(err.clone()));
+        }
+        return;
+    }
+
+    let mut pending_responses = Vec::with_capacity(batch_len);
+
+    for (idx, task) in batch.drain(..).enumerate() {
+        let sp_name = format!("gc_sp_{idx}");
+        let sp_begin = format!("SAVEPOINT {sp_name};");
+        let sp_release = format!("RELEASE {sp_name};");
+        let sp_rollback = format!("ROLLBACK TO {sp_name};");
+
+        if let Err(e) = conn.execute_batch(&sp_begin) {
+            let err = DbFailure {
+                message: format!("savepoint begin failed: {e}"),
+                kind: DbFailureKind::Other("savepoint_failed".to_string()),
+            };
+            stats.record_error();
+            pending_responses.push((task.respond_to, Err(err)));
+            continue;
+        }
+
+        let op_res = (task.op)(conn);
+        match op_res {
+            Ok(val) => {
+                if let Err(e) = conn.execute_batch(&sp_release) {
+                    let err = DbFailure {
+                        message: format!("savepoint release failed: {e}"),
+                        kind: DbFailureKind::Other("savepoint_release_failed".to_string()),
+                    };
+                    stats.record_error();
+                    pending_responses.push((task.respond_to, Err(err)));
+                } else {
+                    pending_responses.push((task.respond_to, Ok(val)));
+                }
+            }
+            Err(err) => {
+                stats.record_error();
+                let _ = conn.execute_batch(&sp_rollback);
+                let _ = conn.execute_batch(&sp_release);
+                pending_responses.push((task.respond_to, Err(err)));
+            }
+        }
+    }
+
+    // 统一提交批次内所有成功项
+    match conn.execute_batch("COMMIT;") {
+        Ok(()) => {
+            for (resp, res) in pending_responses {
+                let _ = resp.send(res);
+            }
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            stats.record_error();
+            let err = DbFailure {
+                message: format!("group commit batch COMMIT failed: {e}"),
+                kind: DbFailureKind::Other("batch_commit_failed".to_string()),
+            };
+            for (resp, _) in pending_responses {
+                let _ = resp.send(Err(err.clone()));
+            }
+        }
+    }
+}

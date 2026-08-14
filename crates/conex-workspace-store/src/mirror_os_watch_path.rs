@@ -9,7 +9,24 @@ use notify::EventKind;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-/// 将 notify 事件归一为 (路径, 种类)；Access/Any/Other 丢弃。
+/// 判定路径是否属于系统内部原子落盘的临时/备份文件
+#[inline]
+pub(super) fn is_internal_atomic_transient_path(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    let lower = file_name.to_lowercase();
+    lower.starts_with(".conex-tmp-")
+        || lower.starts_with(".conex-bak-")
+        || lower.contains(".tmp.")
+        || lower.contains(".bak.")
+        || lower.ends_with(".tmp")
+        || lower.ends_with(".bak")
+        || lower.ends_with(".crish-tmp")
+        || lower.contains(".agent-tmp-")
+}
+
+/// 将 notify 事件归一为 (路径, 种类)；Access/Any/Other 及内部瞬态文件丢弃。
 pub(super) fn classify_notify_event(event: &notify::Event) -> Vec<(PathBuf, MirrorOsEventKind)> {
     let kind = match event.kind {
         EventKind::Create(_) => MirrorOsEventKind::Created,
@@ -24,12 +41,16 @@ pub(super) fn classify_notify_event(event: &notify::Event) -> Vec<(PathBuf, Mirr
         | EventKind::Modify(ModifyKind::Any)
         | EventKind::Modify(ModifyKind::Other) => MirrorOsEventKind::Modified,
         EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
-            // from + to：分别标 Removed / Created
+            // from + to：分别标 Removed / Created（过滤瞬态内部文件）
             if event.paths.len() >= 2 {
-                return vec![
-                    (event.paths[0].clone(), MirrorOsEventKind::Removed),
-                    (event.paths[1].clone(), MirrorOsEventKind::Created),
-                ];
+                let mut out = Vec::new();
+                if !is_internal_atomic_transient_path(&event.paths[0]) {
+                    out.push((event.paths[0].clone(), MirrorOsEventKind::Removed));
+                }
+                if !is_internal_atomic_transient_path(&event.paths[1]) {
+                    out.push((event.paths[1].clone(), MirrorOsEventKind::Created));
+                }
+                return out;
             }
             MirrorOsEventKind::RescanHint
         }
@@ -39,10 +60,18 @@ pub(super) fn classify_notify_event(event: &notify::Event) -> Vec<(PathBuf, Mirr
             return Vec::new();
         }
     };
-    event.paths.iter().map(|p| (p.clone(), kind)).collect()
+    event
+        .paths
+        .iter()
+        .filter(|p| !is_internal_atomic_transient_path(p))
+        .map(|p| (p.clone(), kind))
+        .collect()
 }
 
 pub(super) fn interest_allows(interest: &HashSet<String>, path: &Path) -> bool {
+    if is_internal_atomic_transient_path(path) {
+        return false;
+    }
     if interest.is_empty() {
         return true;
     }

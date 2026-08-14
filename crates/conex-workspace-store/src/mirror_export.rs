@@ -27,9 +27,11 @@ impl WorkspaceStore {
     /// 将 `tree` 序列化为 Conex-MD 并原子写入 `mirror_root/{safe_doc_id}.md`。
     ///
     /// - 内容来自 [`serialize_tree`]（含 `<!--c:UUID-->` 块 ID 注释）
-    /// - 原子写：tmp + rename（Windows 上若目标已存在先 remove）
+    /// - 登记守卫：[`InFlightExportGuard::register`] 分配代际令牌
+    /// - Windows 3 阶段原子写：写入临时文件 `.tmp` -> `sync_all` -> 备份重命名 `.bak` -> 重命名提交 -> 异常原子回滚
     /// - 更新 `mirror_meta`：`last_export_rev = rev`、`pending_lag = 0`、
     ///   `content_hash`（SHA-256）+ `file_mtime_ms`（供 [`Self::detect_mirror_drift`]）
+    /// - 标记提交：[`InFlightExportGuard::mark_committed`]（保留 1000ms 自然 TTL 淘汰，彻底废除即时 unregister）
     ///
     /// **勿**将写出路径作为工具默认读源（见模块不变量）。
     pub fn export_md_mirror(
@@ -46,22 +48,70 @@ impl WorkspaceStore {
         let md = serialize_tree(tree);
         let hash = content_hash(md.as_bytes());
 
-        // 原子写：先写临时文件再 rename 到目标
-        let tmp_name = format!(
-            "{safe}.md.tmp.{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        );
+        // 1. 登记落盘守卫，获取代际令牌（初始进入 Writing 阶段，容忍 300ms 瞬态文件缺失）
+        let token = self.export_guard.register(&final_path, &hash, rev as i64);
+
+        // 2. Windows 3 阶段原子写状态机
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp_name = format!(".conex-tmp-{safe}-{pid}-{nanos}.tmp");
+        let bak_name = format!(".conex-bak-{safe}-{pid}-{nanos}.bak");
         let tmp_path = mirror_root.join(tmp_name);
-        std::fs::write(&tmp_path, md.as_bytes())?;
-        // Windows：目标存在时 rename 会失败，先删再换
-        if final_path.exists() {
-            let _ = std::fs::remove_file(&final_path);
+        let bak_path = mirror_root.join(bak_name);
+
+        // Phase 1: 写入临时文件并强刷盘 (sync_all)
+        let write_res = (|| -> std::io::Result<()> {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp_path)?;
+            f.write_all(md.as_bytes())?;
+            f.sync_all()?;
+            drop(f);
+            Ok(())
+        })();
+
+        if let Err(e) = write_res {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(StoreError::Io(e));
         }
-        std::fs::rename(&tmp_path, &final_path)?;
+
+        // Phase 2: 若原目标文件存在，安全备份重命名为 .bak
+        let mut has_backup = false;
+        if final_path.exists() {
+            #[cfg(windows)]
+            if let Ok(meta) = std::fs::metadata(&final_path) {
+                let mut perms = meta.permissions();
+                if perms.readonly() {
+                    perms.set_readonly(false);
+                    let _ = std::fs::set_permissions(&final_path, perms);
+                }
+            }
+
+            if let Err(e) = std::fs::rename(&final_path, &bak_path) {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(StoreError::Io(e));
+            }
+            has_backup = true;
+        }
+
+        // Phase 3: 重命名临时文件至 final_path（提交），失败则触发原子回滚
+        if let Err(e) = std::fs::rename(&tmp_path, &final_path) {
+            let _ = std::fs::remove_file(&tmp_path);
+            if has_backup && bak_path.exists() {
+                let _ = std::fs::rename(&bak_path, &final_path);
+            }
+            return Err(StoreError::Io(e));
+        }
+
+        // 提交成功：尽力清理备份文件
+        if has_backup {
+            let _ = std::fs::remove_file(&bak_path);
+        }
 
         let mtime = file_mtime_ms(&final_path);
         let path_str = final_path.to_string_lossy().to_string();
@@ -87,6 +137,9 @@ impl WorkspaceStore {
             "#,
             params![doc_id, path_str, rev_i, hash, mtime],
         )?;
+
+        // 3. 标记守卫进入 Committed 阶段（依靠 1000ms 自然 TTL 淘汰，彻底废除即时 unregister）
+        self.export_guard.mark_committed(&final_path, token);
 
         Ok(final_path)
     }

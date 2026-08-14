@@ -1,14 +1,19 @@
 //! conex-fs —— 文件系统安全工具域
 //!
+//! - `atomic_write`：Windows 3 阶段原子写（tmp -> sync_all -> bak -> rename -> rollback，Round-3）
 //! - `path_utils`：路径安全（safe_canonicalize / compute_file_hash / ensure_parent_dir）
 //! - `trash`：回收站服务（删除接管统一接口，I2-S3）
 //! - `impact`：删除影响面评估（I2-S8：文件数 / 大小 / 跨目录预检）
 //! - `watch`：工作区文件监视（T-ESC-01：脚本逃逸追踪数据面——notify 8 封装
-//!   事件流 + Rename 聚合 + 排除清单，供 session-loop 判定面消费）
+//!   事件流 + Rename 聚合 + 排除清单 + 内部瞬态文件自然过滤，供 session-loop 判定面消费）
 
+pub mod atomic_write;
 pub mod impact;
 pub mod trash;
 pub mod watch;
+
+pub use atomic_write::{atomic_write, atomic_write_file, AtomicWriteState, AtomicWriteTx};
+pub use watch::{is_internal_atomic_transient_path, watcher_filter};
 
 pub mod path_utils {
     use anyhow::{bail, Result};
