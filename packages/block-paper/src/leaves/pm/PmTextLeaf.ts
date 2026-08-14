@@ -3,6 +3,7 @@
  *
  * - 活动叶持有 `EditorState`（prosemirror-state）
  * - 本地编辑 / `dispatchTransaction` → 产出与 plain 叶一致的 `TextEditIntent`
+ * - 源头强制调用标量坐标单射转换，消除 Emoji / 代理项 Off-by-4 漂移
  * - composing 纪律对齐 `TextLeafModel`：合成期不发 Intent，end 时 flush
  * - Intent 默认可走 **mock sink**（本包合法）；**禁止**默认绑 `DocSession::apply`
  *
@@ -19,10 +20,12 @@
 
 import { EditorState, type Transaction } from 'prosemirror-state';
 import type { Node as PmNode } from 'prosemirror-model';
-import type {
-  BlockId,
-  IntentId,
-  TextEditIntent,
+import {
+  type BlockId,
+  type IntentId,
+  type TextEditIntent,
+  asUtf16Offset,
+  utf16OffsetToUnicodeScalar,
 } from '@crish/block-paper-contract';
 import { nextIntentId } from '../../intentId';
 import {
@@ -32,6 +35,9 @@ import {
   textOffsetToPmPos,
   pmPosToTextOffset,
 } from './schema';
+import { diffToReplace } from './diffToReplace';
+
+export { diffToReplace };
 
 // ---------------------------------------------------------------------------
 // 类型
@@ -55,46 +61,6 @@ export type PmTextLeafOptions = {
    */
   state?: EditorState;
 };
-
-// ---------------------------------------------------------------------------
-// 工具：两串 → 单区间替换（UTF-16）
-// ---------------------------------------------------------------------------
-
-/**
- * 将 oldText → newText 收敛为单次 range 替换（最长公共前后缀）。
- * 用于多 step 事务或 composition flush 的 Intent 形状。
- */
-export function diffToReplace(
-  oldText: string,
-  newText: string
-): { start: number; end: number; insert: string } {
-  if (oldText === newText) {
-    return { start: 0, end: 0, insert: '' };
-  }
-  let start = 0;
-  const minLen = Math.min(oldText.length, newText.length);
-  while (
-    start < minLen &&
-    oldText.charCodeAt(start) === newText.charCodeAt(start)
-  ) {
-    start += 1;
-  }
-  let endOld = oldText.length;
-  let endNew = newText.length;
-  while (
-    endOld > start &&
-    endNew > start &&
-    oldText.charCodeAt(endOld - 1) === newText.charCodeAt(endNew - 1)
-  ) {
-    endOld -= 1;
-    endNew -= 1;
-  }
-  return {
-    start,
-    end: endOld,
-    insert: newText.slice(start, endNew),
-  };
-}
 
 // ---------------------------------------------------------------------------
 // PmTextLeaf
@@ -151,6 +117,11 @@ export class PmTextLeaf {
   /** 当前活动叶 EditorState（真 prosemirror-state） */
   getState(): EditorState {
     return this.state;
+  }
+
+  /** 显式采纳外部推进的合法 EditorState，杜绝状态脱节（对齐 PLAN-ROUND-3-03 §3.4） */
+  adoptState(nextState: EditorState): void {
+    this.state = nextState;
   }
 
   /** 当前 PM doc 节点 */
@@ -247,10 +218,23 @@ export class PmTextLeaf {
 
     // 优先：单 Replace 语义从 mapping 取；失败则 diff
     const fromStep = replaceFromFirstStep(tr, oldText);
-    const { start, end, insert } = fromStep ?? diffToReplace(oldText, newText);
+    if (fromStep) {
+      return this.buildTextEditIntent(
+        fromStep.start,
+        fromStep.end,
+        fromStep.insert,
+        oldText
+      );
+    }
 
-    // 无实质变更（极少：等价替换）仍产出，便于 sink 审计
-    return this.buildTextEditIntent(start, end, insert);
+    const diff = diffToReplace(oldText, newText);
+    return {
+      type: 'text_edit',
+      blockId: this.blockId,
+      range: [diff.startScalar, diff.endScalar],
+      insert: diff.insert,
+      intentId: this.createIntentId(),
+    };
   }
 
   // -----------------------------------------------------------------------
@@ -315,7 +299,7 @@ export class PmTextLeaf {
     this.compositionReplaceEnd = null;
     this.preCompositionText = null;
 
-    return this.buildTextEditIntent(anchor, replaceEnd, insert);
+    return this.buildTextEditIntent(anchor, replaceEnd, insert, pre);
   }
 
   /** 取消 composition：回滚到合成前文本，不发 Intent */
@@ -339,14 +323,22 @@ export class PmTextLeaf {
   // -----------------------------------------------------------------------
 
   private buildTextEditIntent(
-    start: number,
-    end: number,
-    insert: string
+    startU16: number,
+    endU16: number,
+    insert: string,
+    baseText?: string
   ): TextEditIntent {
+    const text = baseText ?? this.getText();
+    const startScalar = utf16OffsetToUnicodeScalar(
+      text,
+      asUtf16Offset(startU16)
+    );
+    const endScalar = utf16OffsetToUnicodeScalar(text, asUtf16Offset(endU16));
+
     return {
       type: 'text_edit',
       blockId: this.blockId,
-      range: [start, end],
+      range: [startScalar, endScalar],
       insert,
       intentId: this.createIntentId(),
     };

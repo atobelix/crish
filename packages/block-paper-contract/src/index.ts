@@ -98,6 +98,22 @@ export {
   assertWireFieldsPresent,
 } from './opsWire';
 
-// 坐标系（UTF-16 vs Unicode Scalar 标量品牌类型与构造器）
+// 坐标系（UTF-16 vs Unicode Scalar 标量品牌类型与双向单射转换）
 export type { Utf16CodeUnitOffset, UnicodeScalarOffset } from './coordinates';
-export { createUtf16Offset, createUnicodeOffset } from './coordinates';
+export {
+  asUtf16Offset,
+  asUnicodeScalarOffset,
+  createUtf16Offset,
+  createUnicodeOffset,
+  isHighSurrogate,
+  isLowSurrogate,
+  isInsideSurrogatePair,
+  alignToSurrogateBoundaryFloor,
+  alignToSurrogateBoundaryCeil,
+  utf16OffsetToUnicodeScalar,
+  unicodeScalarToUtf16Offset,
+  unicodeScalarLength,
+  utf16Length,
+  utf16RangeToUnicodeScalarRange,
+  unicodeScalarRangeToUtf16Range,
+} from './coordinates';

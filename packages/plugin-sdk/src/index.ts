@@ -68,3 +68,23 @@ export {
   PLUGIN_TRUST_LEVELS,
   PLUGIN_ORIGINS,
 } from './manifest';
+
+// ─── 沙箱安全与 XML / HTML 净化面 ────
+export {
+  escapeXml,
+  unescapeXml,
+  sanitizeXmlTagName,
+  sanitizeXmlAttributes,
+  defangSystemTags,
+  wrapInXmlSandbox,
+  formatSkillOutput,
+  escapeHtml,
+  stripHtml,
+  isSafeUrl,
+  isSafeSrc,
+  sanitizeHtml,
+  DEFAULT_ALLOWED_TAGS,
+  DEFAULT_GLOBAL_ATTRS,
+  DEFAULT_TAG_SPECIFIC_ATTRS,
+  type SanitizeHtmlOptions,
+} from './sanitizer';

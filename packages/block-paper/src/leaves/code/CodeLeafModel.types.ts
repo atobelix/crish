@@ -13,10 +13,12 @@
  * - **≠** 占 W3-E 首批；**≠** 改 flavour / fence 映射
  */
 
-import type {
-  BlockId,
-  IntentId,
-  TextEditIntent,
+import {
+  type BlockId,
+  type IntentId,
+  type TextEditIntent,
+  asUtf16Offset,
+  utf16OffsetToUnicodeScalar,
 } from '@crish/block-paper-contract';
 import type { CodeLeafHost } from './CodeLeafHost';
 
@@ -89,18 +91,22 @@ export function resolveFlag(v: boolean | (() => boolean) | undefined): boolean {
   return Boolean(v);
 }
 
-/** 装配一条 `text_edit`（不改缓冲、不判只读） */
+/** 装配一条 `text_edit`（在源头将 UTF-16 坐标无损转换为 Unicode 标量坐标） */
 export function buildCodeTextEditIntent(
   blockId: BlockId,
-  start: number,
-  end: number,
+  startU16: number,
+  endU16: number,
   insert: string,
-  intentId: IntentId
+  intentId: IntentId,
+  baseContent?: string
 ): TextEditIntent {
+  const text = baseContent ?? '';
+  const startScalar = utf16OffsetToUnicodeScalar(text, asUtf16Offset(startU16));
+  const endScalar = utf16OffsetToUnicodeScalar(text, asUtf16Offset(endU16));
   return {
     type: 'text_edit',
     blockId,
-    range: [start, end],
+    range: [startScalar, endScalar],
     insert,
     intentId,
   };

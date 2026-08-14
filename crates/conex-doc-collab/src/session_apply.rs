@@ -249,7 +249,8 @@ impl DocSession {
 
         // G-HYD-1：结构 bytes = 整树可逆 CDCS snapshot（非 rev LE 占位）
         // P-H2：此处 Err → 外层回滚树/文本/rev
-        self.emit_commit(origin, tx_id, rev, &text_payloads)?;
+        // CT-01：期望 = increment 前 rev（rev - 1）；陈旧写 → Conflict → 外层整批回滚
+        self.emit_commit(origin, tx_id, rev, Some(rev - 1), &text_payloads)?;
 
         Ok(DocEvent::Projection {
             diff: ProjectionDiff {

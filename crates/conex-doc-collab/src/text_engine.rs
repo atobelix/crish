@@ -15,14 +15,54 @@ use crate::block_id::BlockId;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
+use yrs::undo::{Options as UndoOptions, UndoManager};
 use yrs::updates::decoder::Decode;
+use yrs::Origin as YrsOrigin;
 use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 /// H1 / A-MEM-01 默认热集上界。
 pub const DEFAULT_MAX_HOT: usize = 512;
 
 /// 根类型名：每叶子块独占一个 `Doc`，根 Text 固定名。
-const ROOT_TEXT: &str = "t";
+pub const ROOT_TEXT: &str = "t";
+
+/// 叶子块热态运行时：包含 Doc 实例与原生因果 UndoManager。
+pub struct TextHost {
+    pub undo_mgr: UndoManager<()>,
+    pub doc: Doc,
+}
+
+// Yrs 内部在无 sync feature 时未对 closure 标记 Send/Sync，但 TextHost 仅在单一线程或持锁时访问，可安全在线程间传递
+unsafe impl Send for TextHost {}
+unsafe impl Sync for TextHost {}
+
+
+impl TextHost {
+    pub fn new() -> Self {
+        let doc = Doc::new();
+        let text = doc.get_or_insert_text(ROOT_TEXT);
+        let mut options = UndoOptions::default();
+        options.capture_timeout_millis = 0;
+        let undo_mgr = UndoManager::<()>::with_scope_and_options(&doc, &text, options);
+        Self { undo_mgr, doc }
+    }
+
+    pub fn from_update(update_bytes: &[u8]) -> Result<Self, TextEngineError> {
+        let doc = Doc::new();
+        if !update_bytes.is_empty() {
+            let update = Update::decode_v1(update_bytes)
+                .map_err(|e| TextEngineError::UpdateDecode(e.to_string()))?;
+            doc.transact_mut()
+                .apply_update(update)
+                .map_err(|e| TextEngineError::UpdateApply(e.to_string()))?;
+        }
+        let text = doc.get_or_insert_text(ROOT_TEXT);
+        let mut options = UndoOptions::default();
+        options.capture_timeout_millis = 0;
+        let undo_mgr = UndoManager::<()>::with_scope_and_options(&doc, &text, options);
+        Ok(Self { undo_mgr, doc })
+    }
+}
 
 /// 文本引擎配置。
 #[derive(Debug, Clone)]
@@ -51,15 +91,17 @@ pub enum TextEngineError {
     UpdateApply(String),
 }
 
-/// 叶子文本引擎：热 Doc 表 + 全量快照 + pin/LRU。
+/// 叶子文本引擎：热 Doc 表 + 全量快照 + 冷藏二进制 + pin/LRU。
 ///
 /// 不对外暴露 `yrs::Doc` / `TextRef`。
 pub struct TextEngine {
     max_hot: usize,
     /// 所有已登记叶子的当前文本快照（冷热均可读）。
     snapshots: HashMap<BlockId, Arc<str>>,
-    /// 热态：活动 yrs Doc（内含 YText）。
-    hot: HashMap<BlockId, Doc>,
+    /// 冷藏块的全量因果 StateVector update 二进制（冷藏无损唤醒，根除 Duplicate Glitch）。
+    cold_updates: HashMap<BlockId, Vec<u8>>,
+    /// 热态：活动 TextHost（内含 yrs Doc 与 UndoManager）。
+    hot: HashMap<BlockId, TextHost>,
     /// pin：焦点/composing 等，LRU 驱逐时跳过。
     pinned: HashSet<BlockId>,
     /// 最近 touch：front=最旧，back=最新（仅含当前热块）。
@@ -77,6 +119,7 @@ impl TextEngine {
         Self {
             max_hot: config.max_hot.max(1),
             snapshots: HashMap::new(),
+            cold_updates: HashMap::new(),
             hot: HashMap::new(),
             pinned: HashSet::new(),
             lru: VecDeque::new(),
@@ -101,7 +144,7 @@ impl TextEngine {
     }
 
     pub fn is_registered(&self, id: BlockId) -> bool {
-        self.snapshots.contains_key(&id)
+        self.snapshots.contains_key(&id) || self.cold_updates.contains_key(&id)
     }
 
     /// Insert 叶子：登记空快照，默认 **冷**（不占热槽，直至 touch/edit）。
@@ -113,53 +156,72 @@ impl TextEngine {
     pub fn init_block_with_text(&mut self, id: BlockId, text: impl Into<String>) {
         let s: String = text.into();
         self.snapshots.insert(id, Arc::from(s.as_str()));
+        self.cold_updates.remove(&id);
         // 若已热，同步重写 YText
         if self.hot.contains_key(&id) {
             self.rewrite_hot_from_snapshot(id);
         }
     }
 
-    /// 确保块处于热态；必要时从快照 rehydrate。
+    /// 带冷藏二进制 update 登记（hydrate / 增量回放用）。
+    pub fn init_block_with_cold_update(
+        &mut self,
+        id: BlockId,
+        text: impl Into<String>,
+        update_bytes: Vec<u8>,
+    ) {
+        let s: String = text.into();
+        self.snapshots.insert(id, Arc::from(s.as_str()));
+        self.cold_updates.insert(id, update_bytes);
+        if self.hot.contains_key(&id) {
+            self.hot.remove(&id);
+            let _ = self.ensure_hot(id);
+        }
+    }
+
+    /// 确保块处于热态；优先从 cold_updates 二进制中无损还原，否则从快照 rehydrate。
     pub fn ensure_hot(&mut self, id: BlockId) -> Result<(), TextEngineError> {
-        if !self.snapshots.contains_key(&id) {
+        if !self.snapshots.contains_key(&id) && !self.cold_updates.contains_key(&id) {
             return Err(TextEngineError::NotRegistered(id.to_string()));
         }
         if self.hot.contains_key(&id) {
             self.touch_lru(id);
             return Ok(());
         }
-        let snap = self
-            .snapshots
-            .get(&id)
-            .cloned()
-            .unwrap_or_else(|| Arc::from(""));
-        let doc = Doc::new();
-        {
-            let text = doc.get_or_insert_text(ROOT_TEXT);
-            let mut txn = doc.transact_mut();
+
+        // 1. 优先从 cold_updates 二进制中无损还原
+        let host = if let Some(cold_bytes) = self.cold_updates.remove(&id) {
+            TextHost::from_update(&cold_bytes)?
+        } else if let Some(snap) = self.snapshots.get(&id).cloned() {
+            let host = TextHost::new();
             if !snap.is_empty() {
-                text.insert(&mut txn, 0, snap.as_ref());
+                let text = host.doc.get_or_insert_text(ROOT_TEXT);
+                text.insert(&mut host.doc.transact_mut(), 0, snap.as_ref());
             }
-        }
-        self.hot.insert(id, doc);
+            host
+        } else {
+            TextHost::new()
+        };
+
+        self.hot.insert(id, host);
         self.touch_lru(id);
         self.evict_cold_if_needed();
+
         // 驱逐不应打掉刚 touch 的 id（其在 LRU 最末）；若 max_hot=1 且自 pin 冲突则可能，再 ensure 一次
         if !self.hot.contains_key(&id) {
-            let snap = self
-                .snapshots
-                .get(&id)
-                .cloned()
-                .unwrap_or_else(|| Arc::from(""));
-            let doc = Doc::new();
-            {
-                let text = doc.get_or_insert_text(ROOT_TEXT);
-                let mut txn = doc.transact_mut();
+            let host = if let Some(cold_bytes) = self.cold_updates.remove(&id) {
+                TextHost::from_update(&cold_bytes)?
+            } else if let Some(snap) = self.snapshots.get(&id).cloned() {
+                let host = TextHost::new();
                 if !snap.is_empty() {
-                    text.insert(&mut txn, 0, snap.as_ref());
+                    let text = host.doc.get_or_insert_text(ROOT_TEXT);
+                    text.insert(&mut host.doc.transact_mut(), 0, snap.as_ref());
                 }
-            }
-            self.hot.insert(id, doc);
+                host
+            } else {
+                TextHost::new()
+            };
+            self.hot.insert(id, host);
             self.touch_lru(id);
             // 此时若仍超限，只能牺牲更旧的非 pin
             self.evict_cold_if_needed();
@@ -201,9 +263,9 @@ impl TextEngine {
 
     /// 冷热均可读（A-MEM-02）。
     pub fn read_text(&self, id: BlockId) -> String {
-        if let Some(doc) = self.hot.get(&id) {
-            let text = doc.get_or_insert_text(ROOT_TEXT);
-            return text.get_string(&doc.transact());
+        if let Some(host) = self.hot.get(&id) {
+            let text = host.doc.get_or_insert_text(ROOT_TEXT);
+            return text.get_string(&host.doc.transact());
         }
         self.snapshots
             .get(&id)
@@ -228,15 +290,18 @@ impl TextEngine {
         insert: &str,
     ) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
-        let doc = self
+        let host = self
             .hot
-            .get(&id)
+            .get_mut(&id)
             .expect("ensure_hot 后必热");
-        let text = doc.get_or_insert_text(ROOT_TEXT);
-        let current = text.get_string(&doc.transact());
+        let text = host.doc.get_or_insert_text(ROOT_TEXT);
+        let current = {
+            let txn = host.doc.transact();
+            text.get_string(&txn)
+        };
         let (byte_start, remove_len) = char_range_to_bytes(&current, start, end)?;
         {
-            let mut txn = doc.transact_mut();
+            let mut txn = host.doc.transact_mut();
             if remove_len > 0 {
                 text.remove_range(&mut txn, byte_start, remove_len);
             }
@@ -244,7 +309,10 @@ impl TextEngine {
                 text.insert(&mut txn, byte_start, insert);
             }
         }
-        let new_text = text.get_string(&doc.transact());
+        let new_text = {
+            let txn = host.doc.transact();
+            text.get_string(&txn)
+        };
         self.snapshots.insert(id, Arc::from(new_text.as_str()));
         self.touch_lru(id);
         self.evict_cold_if_needed();
@@ -260,36 +328,100 @@ impl TextEngine {
         bytes: &[u8],
     ) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
-        let doc = self
+        let host = self
             .hot
-            .get(&id)
+            .get_mut(&id)
             .expect("ensure_hot 后必热");
         {
-            let mut txn = doc.transact_mut();
+            let remote_origin = YrsOrigin::from("remote");
+            let mut txn = host.doc.transact_mut_with(remote_origin);
             let update = Update::decode_v1(bytes)
                 .map_err(|e| TextEngineError::UpdateDecode(e.to_string()))?;
             txn.apply_update(update)
                 .map_err(|e| TextEngineError::UpdateApply(e.to_string()))?;
         }
-        let text = doc.get_or_insert_text(ROOT_TEXT);
-        let new_text = text.get_string(&doc.transact());
+        let text = host.doc.get_or_insert_text(ROOT_TEXT);
+        let new_text = {
+            let txn = host.doc.transact();
+            text.get_string(&txn)
+        };
         self.snapshots.insert(id, Arc::from(new_text.as_str()));
         self.touch_lru(id);
         self.evict_cold_if_needed();
         Ok(new_text)
     }
 
-    /// 导出该块当前热 Doc 全量 state 为 update v1（冷块返回 None，调用方应先 ensure_hot 或只写快照标记）。
+    /// 导出该块当前状态为 update v1。热块取实时编码，冷块取已冷藏的二进制。
     pub fn encode_state_update(&self, id: BlockId) -> Option<Vec<u8>> {
-        let doc = self.hot.get(&id)?;
-        let txn = doc.transact();
-        Some(txn.encode_state_as_update_v1(&StateVector::default()))
+        if let Some(host) = self.hot.get(&id) {
+            let bytes = {
+                let txn = host.doc.transact();
+                txn.encode_state_as_update_v1(&StateVector::default())
+            };
+            Some(bytes)
+        } else {
+            self.cold_updates.get(&id).cloned()
+        }
     }
 
-    /// 删块：释放热槽与快照（A-INV-09c）。
+    /// 执行指定块的文本级 CRDT 原生因果撤销（UndoManager）。
+    /// 仅回退属于本地 Client 的变更，不伤害并发远端协作者的文本。
+    pub fn undo_text(&mut self, id: BlockId) -> Result<String, TextEngineError> {
+        self.ensure_hot(id)?;
+        let current = {
+            let host = self
+                .hot
+                .get_mut(&id)
+                .expect("ensure_hot 后必热");
+            let _ = host.undo_mgr.undo_blocking();
+            let text = host.doc.get_or_insert_text(ROOT_TEXT);
+            let txn = host.doc.transact();
+            text.get_string(&txn)
+        };
+        self.snapshots.insert(id, Arc::from(current.as_str()));
+        self.touch_lru(id);
+        self.evict_cold_if_needed();
+        Ok(current)
+    }
+
+    /// 执行指定块的文本级 CRDT 原生因果重做（UndoManager）。
+    pub fn redo_text(&mut self, id: BlockId) -> Result<String, TextEngineError> {
+        self.ensure_hot(id)?;
+        let current = {
+            let host = self
+                .hot
+                .get_mut(&id)
+                .expect("ensure_hot 后必热");
+            let _ = host.undo_mgr.redo_blocking();
+            let text = host.doc.get_or_insert_text(ROOT_TEXT);
+            let txn = host.doc.transact();
+            text.get_string(&txn)
+        };
+        self.snapshots.insert(id, Arc::from(current.as_str()));
+        self.touch_lru(id);
+        self.evict_cold_if_needed();
+        Ok(current)
+    }
+
+    pub fn can_undo_text(&self, id: BlockId) -> bool {
+        self.hot
+            .get(&id)
+            .map(|h| h.undo_mgr.can_undo())
+            .unwrap_or(false)
+    }
+
+    pub fn can_redo_text(&self, id: BlockId) -> bool {
+        self.hot
+            .get(&id)
+            .map(|h| h.undo_mgr.can_redo())
+            .unwrap_or(false)
+    }
+
+    /// 删块：释放热槽、快照与冷藏二进制（A-INV-09c）。
     pub fn release_block(&mut self, id: BlockId) {
         self.hot.remove(&id);
         self.snapshots.remove(&id);
+        self.cold_updates.remove(&id);
         self.pinned.remove(&id);
         self.lru.retain(|x| *x != id);
     }
@@ -312,48 +444,58 @@ impl TextEngine {
     }
 
     fn evict_one(&mut self, id: BlockId) {
-        if let Some(doc) = self.hot.remove(&id) {
-            let text = doc.get_or_insert_text(ROOT_TEXT);
-            let s = text.get_string(&doc.transact());
+        if let Some(host) = self.hot.remove(&id) {
+            let (s, state_update) = {
+                let text = host.doc.get_or_insert_text(ROOT_TEXT);
+                let txn = host.doc.transact();
+                let s = text.get_string(&txn);
+                let state_update = txn.encode_state_as_update_v1(&StateVector::default());
+                (s, state_update)
+            };
             self.snapshots.insert(id, Arc::from(s.as_str()));
+            self.cold_updates.insert(id, state_update);
         }
         self.lru.retain(|x| *x != id);
     }
+
+
 
     #[allow(dead_code)] // init_block_with_text 热路径
     fn rewrite_hot_from_snapshot(&mut self, id: BlockId) {
         let Some(snap) = self.snapshots.get(&id).cloned() else {
             return;
         };
-        // 丢弃旧 Doc，用快照重建：冷后细粒度 yrs 击键史可截断（实现细节，≠ A-MEM-04 契约关闭）
         self.hot.remove(&id);
-        let doc = Doc::new();
+        let host = TextHost::new();
         {
-            let text = doc.get_or_insert_text(ROOT_TEXT);
-            let mut txn = doc.transact_mut();
+            let text = host.doc.get_or_insert_text(ROOT_TEXT);
+            let mut txn = host.doc.transact_mut();
             if !snap.is_empty() {
                 text.insert(&mut txn, 0, snap.as_ref());
             }
         }
-        self.hot.insert(id, doc);
+        self.hot.insert(id, host);
         self.touch_lru(id);
     }
 
     // ─── P-H2 内存快照（方案 A：apply 前 Structure+Text 可恢复）──────────
 
-    /// 捕获当前文本引擎可恢复检查点（纯文本权威 + pin/热集合）。
-    ///
-    /// `yrs::Doc` 非 Clone：回滚后按 plain text rehydrate 热块；
-    /// **read_text / 登记集合 ≡ 检查点时刻**（P-H2 / A-INV-09a）。
+    /// 捕获当前文本引擎可恢复检查点（纯文本权威 + 冷藏二进制 + pin/热集合）。
     pub(crate) fn checkpoint(&self) -> TextEngineCheckpoint {
         let mut texts = HashMap::with_capacity(self.snapshots.len());
+        let mut cold_updates = self.cold_updates.clone();
         for &id in self.snapshots.keys() {
-            // 热块以 Doc 实读为准（与 snapshots 同步，防御漂移）
             texts.insert(id, self.read_text(id));
+            if let Some(host) = self.hot.get(&id) {
+                let txn = host.doc.transact();
+                let bytes = txn.encode_state_as_update_v1(&StateVector::default());
+                cold_updates.insert(id, bytes);
+            }
         }
         TextEngineCheckpoint {
             max_hot: self.max_hot,
             texts,
+            cold_updates,
             pinned: self.pinned.clone(),
             was_hot: self.hot.keys().copied().collect(),
         }
@@ -362,8 +504,14 @@ impl TextEngine {
     /// 从检查点整表替换引擎状态（P-H2 回滚）。
     pub(crate) fn restore(&mut self, cp: TextEngineCheckpoint) {
         *self = TextEngine::with_max_hot(cp.max_hot);
+        for (id, bytes) in cp.cold_updates {
+            let text = cp.texts.get(&id).cloned().unwrap_or_default();
+            self.init_block_with_cold_update(id, text, bytes);
+        }
         for (id, text) in cp.texts {
-            self.init_block_with_text(id, text);
+            if !self.is_registered(id) {
+                self.init_block_with_text(id, text);
+            }
         }
         for id in &cp.pinned {
             self.pin(*id);
@@ -381,10 +529,12 @@ pub(crate) struct TextEngineCheckpoint {
     max_hot: usize,
     /// 全部已登记块的 plain text（冷热均可读权威）。
     texts: HashMap<BlockId, String>,
+    cold_updates: HashMap<BlockId, Vec<u8>>,
     pinned: HashSet<BlockId>,
     /// 检查点时刻处于热态的块 id（恢复后 rehydrate）。
     was_hot: HashSet<BlockId>,
 }
+
 
 /// char 闭开区间 → UTF-8 字节起点与删除字节长度。
 fn char_range_to_bytes(s: &str, start: u32, end: u32) -> Result<(u32, u32), TextEngineError> {
@@ -603,14 +753,125 @@ mod tests {
     }
 
     #[test]
-    fn char_offset_multibyte() {
+    fn test_undo_manager_methods() {
+        let doc = Doc::new();
+        let text = doc.get_or_insert_text(ROOT_TEXT);
+        let mut undo_mgr =
+            UndoManager::<()>::with_scope_and_options(&doc, &text, UndoOptions::default());
+        {
+            let mut txn = doc.transact_mut();
+            text.insert(&mut txn, 0, "hello");
+        }
+        assert_eq!(text.get_string(&doc.transact()), "hello");
+        let u_res = undo_mgr.undo_blocking();
+        assert!(u_res);
+        assert_eq!(text.get_string(&doc.transact()), "");
+        let r_res = undo_mgr.redo_blocking();
+        assert!(r_res);
+        assert_eq!(text.get_string(&doc.transact()), "hello");
+    }
+
+    #[test]
+    fn test_texthost_drop() {
+        let host = TextHost::new();
+        drop(host);
+    }
+
+
+    /// CRDT 因果撤销测试：并发远端编辑不受本地 Undo 破坏
+    #[test]
+    fn test_causal_undo_preserves_concurrent_remote_insert() {
         let mut eng = TextEngine::with_max_hot(4);
         let id = BlockId::new();
         eng.init_block(id);
-        eng.apply_edit(id, 0, 0, "你好").unwrap();
-        eng.apply_edit(id, 1, 1, "，").unwrap();
-        assert_eq!(eng.read_text(id), "你，好");
-        eng.apply_edit(id, 1, 2, "").unwrap();
-        assert_eq!(eng.read_text(id), "你好");
+
+        // 本地 Client A 插入 "Hello "
+        eng.apply_edit(id, 0, 0, "Hello ").unwrap();
+        assert_eq!(eng.read_text(id), "Hello ");
+
+        // 远端 Client B 在空文本基础上插入 "World "
+        let remote_doc = Doc::new();
+        {
+            let r_text = remote_doc.get_or_insert_text(ROOT_TEXT);
+            let mut r_txn = remote_doc.transact_mut();
+            r_text.insert(&mut r_txn, 0, "World ");
+        }
+        let remote_update = remote_doc
+            .transact()
+            .encode_state_as_update_v1(&StateVector::default());
+
+        // Client A 合入远端 update
+        let merged = eng.apply_remote_update(id, &remote_update).unwrap();
+        assert!(merged.contains("Hello ") && merged.contains("World "));
+
+        // Client A 触发文本因果撤销：仅撤销本地 "Hello "，远端 "World " 100% 保持！
+        let undone = eng.undo_text(id).unwrap();
+        assert_eq!(undone, "World ", "远端并发文字必须完整保留，零削字零截断");
+
+        // Client A 重做：恢复 "Hello "
+        let redone = eng.redo_text(id).unwrap();
+        assert!(redone.contains("Hello ") && redone.contains("World "));
+    }
+
+    /// 冷藏二进制 StateVector 保持与无损唤醒（彻底根除 Duplicate Glitch）
+    #[test]
+    fn test_cold_updates_preserves_crdt_binary_identity() {
+        let mut eng = TextEngine::with_max_hot(1);
+        let a = BlockId::new();
+        let b = BlockId::new();
+        eng.init_block(a);
+        eng.init_block(b);
+
+        // 在 a 上编辑
+        eng.apply_edit(a, 0, 0, "Initial ").unwrap();
+        eng.apply_edit(a, 8, 8, "Text").unwrap();
+        assert_eq!(eng.read_text(a), "Initial Text");
+
+        // 编辑 b 挤出 a 到冷藏态
+        eng.apply_edit(b, 0, 0, "Block B").unwrap();
+        assert!(!eng.is_hot(a), "块 a 必须进入冷藏态");
+        assert_eq!(eng.read_text(a), "Initial Text", "冷块文本可读");
+
+        // 导出 a 的 update 并在远端追加
+        let snap_update = eng.encode_state_update(a).expect("冷块可导出 update");
+        let remote = Doc::new();
+        {
+            let u = Update::decode_v1(&snap_update).unwrap();
+            remote.transact_mut().apply_update(u).unwrap();
+            let t = remote.get_or_insert_text(ROOT_TEXT);
+            t.insert(&mut remote.transact_mut(), 12, " Extended");
+        }
+        let remote_update = remote
+            .transact()
+            .encode_state_as_update_v1(&StateVector::default());
+
+        // 对冷块 a 合入远端增量
+        let updated = eng.apply_remote_update(a, &remote_update).unwrap();
+        assert_eq!(updated, "Initial Text Extended");
+        assert_eq!(eng.read_text(a), "Initial Text Extended");
+    }
+
+    /// 多字节与 Emoji 字符的原生因果撤销
+    #[test]
+    fn test_multibyte_and_emoji_causal_undo() {
+        let mut eng = TextEngine::with_max_hot(4);
+        let id = BlockId::new();
+        eng.init_block(id);
+
+        eng.apply_edit(id, 0, 0, "你好🎉").unwrap();
+        assert_eq!(eng.read_text(id), "你好🎉");
+
+        eng.apply_edit(id, 3, 3, "世界👨‍👩‍👧‍👦").unwrap();
+        assert_eq!(eng.read_text(id), "你好🎉世界👨‍👩‍👧‍👦");
+
+        let undone = eng.undo_text(id).unwrap();
+        assert_eq!(undone, "你好🎉");
+
+        let redone = eng.redo_text(id).unwrap();
+        assert_eq!(redone, "你好🎉世界👨‍👩‍👧‍👦");
     }
 }
+
+
+
+

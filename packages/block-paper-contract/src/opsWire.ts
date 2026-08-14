@@ -14,6 +14,7 @@
  */
 
 import type { BlockId } from './block-id';
+import type { UnicodeScalarOffset } from './coordinates';
 
 // ---------------------------------------------------------------------------
 // BlockKind / BlockProps wire（对齐 ir.rs serde）
@@ -74,9 +75,9 @@ export type CollabDeleteOpWire = {
 export type CollabTextEditOpWire = {
   op: 'text_edit';
   id: BlockId;
-  /** Unicode 标量（char）偏移 */
-  start: number;
-  end: number;
+  /** Unicode 标量（char）偏移量（对齐 Rust chars().count()） */
+  start: UnicodeScalarOffset | number;
+  end: UnicodeScalarOffset | number;
   insert: string;
 };
 

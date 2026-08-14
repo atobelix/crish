@@ -3,6 +3,10 @@
 //! A-COL-04（origin 过滤）/ A-MEM-04（跨冷 undo）/ A-INV-09c 后半（删块 undo 恢复）。
 use super::super::*;
 use super::*;
+use crate::text_engine::ROOT_TEXT;
+use yrs::{ReadTxn, Text, Transact};
+
+
 
     // ─── W1-U · Undo v1（A-COL-04 / A-MEM-04 / A-INV-09c 后半）────────
 
@@ -339,3 +343,96 @@ use super::*;
         assert_eq!(s.tree().nodes.len(), nodes);
         assert!(s.tree().nodes.contains_key(&id));
     }
+
+    /// 会话级 CRDT 文本撤销/重做与 CAS 修订号推进
+    #[test]
+    fn session_crdt_text_undo_and_redo_with_rev_cas() {
+        let mut s = DocSession::new("session-text-undo");
+        let id = BlockId::new();
+
+        // 插入块并编辑
+        s.apply(
+            Origin::User,
+            &[
+                Op::Insert {
+                    id,
+                    parent: None,
+                    order: "a0".into(),
+                    kind: BlockKind::Paragraph,
+                    props: BlockProps::default(),
+                },
+                Op::TextEdit {
+                    id,
+                    start: 0,
+                    end: 0,
+                    insert: "First Line".into(),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(s.read_text(&id), "First Line");
+        assert!(s.can_text_undo(id));
+
+        let rev_before_undo = s.rev();
+        // 执行 text_undo
+        let undone_text = s.text_undo(id).unwrap();
+        assert_eq!(undone_text, "");
+        assert_eq!(s.read_text(&id), "");
+        assert_eq!(s.rev(), rev_before_undo + 1, "text_undo 推进单调 rev");
+        assert!(s.can_text_redo(id));
+
+        // 执行 text_redo
+        let redone_text = s.text_redo(id).unwrap();
+        assert_eq!(redone_text, "First Line");
+        assert_eq!(s.read_text(&id), "First Line");
+        assert_eq!(s.rev(), rev_before_undo + 2, "text_redo 推进单调 rev");
+    }
+
+    /// 会话级并发远端编辑与原生因果撤销交叉验证
+    #[test]
+    fn session_crdt_concurrent_text_undo_preserves_remote_edits() {
+        let mut s = DocSession::new("session-concurrent-undo");
+        let id = BlockId::new();
+
+        // 本地 Client A 插入并编辑
+        s.apply(
+            Origin::User,
+            &[
+                Op::Insert {
+                    id,
+                    parent: None,
+                    order: "a0".into(),
+                    kind: BlockKind::Paragraph,
+                    props: BlockProps::default(),
+                },
+                Op::TextEdit {
+                    id,
+                    start: 0,
+                    end: 0,
+                    insert: "Client A Content ".into(),
+                },
+            ],
+        )
+        .unwrap();
+
+        // 模拟远端 Client B 在独立 Doc 上生成并发编辑
+        let remote_doc = yrs::Doc::new();
+        {
+            let t = remote_doc.get_or_insert_text(ROOT_TEXT);
+            let mut txn = remote_doc.transact_mut();
+            t.insert(&mut txn, 0, "Client B Content ");
+        }
+        let remote_bytes = remote_doc
+            .transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default());
+
+        // 本地合入远端增量
+        s.apply_remote_text_update(id, &remote_bytes).unwrap();
+        let merged = s.read_text(&id);
+        assert!(merged.contains("Client A Content ") && merged.contains("Client B Content "));
+
+        // 本地触发 text_undo：仅撤销 Client A 的内容，Client B 100% 保持！
+        let undone = s.text_undo(id).unwrap();
+        assert_eq!(undone, "Client B Content ", "远端协作者内容绝不受损");
+    }
+

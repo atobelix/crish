@@ -517,7 +517,6 @@ describe('ContributePointRegistry - registerFlavour (M4)', () => {
     const r = reg.registerFlavour(
       flavourDef({
         id: 'def.allowed',
-        allowedContribute: undefined,
       })
     );
     expect(r.ok).toBe(true);
@@ -582,9 +581,9 @@ describe('ContributePointRegistry - registerFlavour (M4)', () => {
     expect(list.map((f) => f.id)).toEqual(['a.f', 'z.f']);
     for (const d of list) {
       expect(Object.isFrozen(d)).toBe(true);
-      expect((d as Record<string, unknown>).store).toBeUndefined();
-      expect((d as Record<string, unknown>).applyOp).toBeUndefined();
-      expect((d as Record<string, unknown>).write).toBeUndefined();
+      expect((d as unknown as Record<string, unknown>).store).toBeUndefined();
+      expect((d as unknown as Record<string, unknown>).applyOp).toBeUndefined();
+      expect((d as unknown as Record<string, unknown>).write).toBeUndefined();
     }
     expect(reg.getFlavour('z.f')?.schema).toEqual({ hasText: true });
     expect(reg.getFlavour('nope')).toBeUndefined();
@@ -710,7 +709,7 @@ describe('ContributePointRegistry - 恶意扩展与投影-only', () => {
       assertViewDescriptorShape(d);
       for (const k of forbidden) {
         expect(Object.prototype.hasOwnProperty.call(d, k)).toBe(false);
-        expect((d as Record<string, unknown>)[k]).toBeUndefined();
+        expect((d as unknown as Record<string, unknown>)[k]).toBeUndefined();
       }
     }
   });
@@ -737,8 +736,10 @@ describe('ContributePointRegistry - 恶意扩展与投影-only', () => {
     );
     const d = reg.list('slash_item')[0];
     expect(d?.permissions).toContain('note:write');
-    expect((d as Record<string, unknown>).store).toBeUndefined();
-    expect((d as Record<string, unknown>).getWriteStore).toBeUndefined();
+    expect((d as unknown as Record<string, unknown>).store).toBeUndefined();
+    expect(
+      (d as unknown as Record<string, unknown>).getWriteStore
+    ).toBeUndefined();
   });
 });
 

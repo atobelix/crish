@@ -3,6 +3,7 @@
  *
  * 对齐：
  * - W0 Intent：`text_edit`（blockId + range + insert + intentId）
+ * - 源头强制调用标量坐标单射转换，消除 Emoji / 代理项 Off-by-4 漂移
  * - A-IME：composing 期本地缓冲可更新，**不**立刻下发 Intent；end 时 flush
  * - 写路径：Intent → sink → RS apply；**禁止** serialize(DOM) 持久化
  *
@@ -11,10 +12,12 @@
  * **≠ W3-D** 真 apply 终局。
  */
 
-import type {
-  BlockId,
-  IntentId,
-  TextEditIntent,
+import {
+  type BlockId,
+  type IntentId,
+  type TextEditIntent,
+  asUtf16Offset,
+  utf16OffsetToUnicodeScalar,
 } from '@crish/block-paper-contract';
 // SD-05：id 生成在中性 `intentId.ts`；本文件 re-export 保持 leaves 既有 import 路径
 import { nextIntentId } from '../intentId';
@@ -140,26 +143,27 @@ export class TextLeafModel {
    * - **非 composing**：返回新 `TextEditIntent`（intentId 新生成）
    * - **composing**：仅更新缓冲，返回 `null`（不发 Intent；由 flush 提交）
    *
-   * range 坐标为 JS string 索引（UTF-16 code unit）；与 IME 矩阵最终钉死一致。
+   * range 坐标源头强制转换为 UnicodeScalarOffset 标量值。
    */
   applyLocalEdit(
     start: number,
     end: number,
     insert: string
   ): TextEditIntent | null {
-    const len = this.text.length;
+    const oldText = this.text;
+    const len = oldText.length;
     const s = clampOffset(start, 0, len);
     const e = clampOffset(end, s, len);
     const ins = insert ?? '';
 
-    this.text = this.text.slice(0, s) + ins + this.text.slice(e);
+    this.text = oldText.slice(0, s) + ins + oldText.slice(e);
 
     if (this.composing) {
       // 合成期：本地预览可改，不发结构/文本 Intent
       return null;
     }
 
-    return this.buildTextEditIntent(s, e, ins);
+    return this.buildTextEditIntent(s, e, ins, oldText);
   }
 
   // -----------------------------------------------------------------------
@@ -229,7 +233,7 @@ export class TextLeafModel {
 
     // 无变更（空插入且 range 空）仍产出 Intent，便于 sink 审计；
     // 宿主可按需去重。此处始终产出，保证 flush 可测。
-    return this.buildTextEditIntent(anchor, replaceEnd, insert);
+    return this.buildTextEditIntent(anchor, replaceEnd, insert, pre);
   }
 
   /**
@@ -251,14 +255,22 @@ export class TextLeafModel {
   // -----------------------------------------------------------------------
 
   private buildTextEditIntent(
-    start: number,
-    end: number,
-    insert: string
+    startU16: number,
+    endU16: number,
+    insert: string,
+    baseText?: string
   ): TextEditIntent {
+    const text = baseText ?? this.text;
+    const startScalar = utf16OffsetToUnicodeScalar(
+      text,
+      asUtf16Offset(startU16)
+    );
+    const endScalar = utf16OffsetToUnicodeScalar(text, asUtf16Offset(endU16));
+
     return {
       type: 'text_edit',
       blockId: this.blockId,
-      range: [start, end],
+      range: [startScalar, endScalar],
       insert,
       intentId: this.createIntentId(),
     };

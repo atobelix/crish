@@ -219,6 +219,9 @@ pub struct DocSession {
     undo_stack: Vec<UndoEntry>,
 }
 
+unsafe impl Send for DocSession {}
+unsafe impl Sync for DocSession {}
+
 impl DocSession {
     pub fn new(doc_id: impl Into<String>) -> Self {
         Self {

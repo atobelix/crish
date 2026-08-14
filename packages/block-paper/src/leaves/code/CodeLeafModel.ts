@@ -266,7 +266,8 @@ export class CodeLeafModel {
       };
     }
 
-    const len = this.content.length;
+    const oldContent = this.content;
+    const len = oldContent.length;
     if (
       !Number.isFinite(start) ||
       !Number.isFinite(end) ||
@@ -288,7 +289,7 @@ export class CodeLeafModel {
     const e = clampOffset(end, s, len);
     const ins = insert ?? '';
 
-    this.content = this.content.slice(0, s) + ins + this.content.slice(e);
+    this.content = oldContent.slice(0, s) + ins + oldContent.slice(e);
     this.host?.setContent(this.content);
 
     if (this.composing || resolveFlag(this.externalIsComposing)) {
@@ -302,7 +303,8 @@ export class CodeLeafModel {
         s,
         e,
         ins,
-        this.createIntentId()
+        this.createIntentId(),
+        oldContent
       ),
       content: this.content,
     };
@@ -374,7 +376,8 @@ export class CodeLeafModel {
       anchor,
       replaceEnd,
       insert,
-      this.createIntentId()
+      this.createIntentId(),
+      pre
     );
   }
 

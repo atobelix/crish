@@ -56,10 +56,12 @@ impl DocSession {
         }];
 
         // 统一 commit 面：结构可逆 + 文本 update
+        // CT-01：期望 = increment 前 rev（rev - 1）；陈旧会话远端合入被 Conflict 拦截
         self.emit_commit(
             Origin::Remote,
             tx_id,
             rev,
+            Some(rev - 1),
             &[TextUpdatePayload {
                 block_id: id,
                 bytes: bytes.to_vec(),
@@ -109,7 +111,9 @@ impl DocSession {
         self.last_text_updates = Vec::new();
 
         // 结构 snapshot 已含 text_snapshot；文本 update 可空
-        if let Err(e) = self.emit_commit(Origin::System, tx_id, rev, &[]) {
+        // CT-01：undo 期望 = rev_before（发起 undo 前的会话 rev）；
+        // 另一会话已写 → Conflict 拦截（undo 必须基于最新权威），失败走 P-H2 回滚
+        if let Err(e) = self.emit_commit(Origin::System, tx_id, rev, Some(rev_before), &[]) {
             self.restore_memory_snapshot(pre_undo);
             self.undo_stack.push(entry);
             return Err(UndoError::Persist(e.to_string()));
@@ -130,4 +134,96 @@ impl DocSession {
             },
         })
     }
+
+    /// 块文本级 CRDT 原生因果撤销（委托 Yrs UndoManager）。
+    ///
+    /// - 仅回退属于本地 Client 的文字变更，完全不伤害并发远端协作者插入的文本；
+    /// - rev 单调 +1 并走统一 commit 面（CT-01 CAS 保护）；
+    /// - P-H2 快照回滚防御。
+    pub fn text_undo(&mut self, id: BlockId) -> Result<String, ApplyError> {
+        if !self.tree.nodes.contains_key(&id) {
+            return Err(ApplyError::NotFound(id.to_string()));
+        }
+        let pre = self.capture_memory_snapshot();
+        let rev_before = self.rev;
+
+        let new_text = match self.text_engine.undo_text(id) {
+            Ok(t) => t,
+            Err(e) => return Err(e.into()),
+        };
+        if let Some(n) = self.tree.nodes.get_mut(&id) {
+            n.text_snapshot = Some(new_text.clone());
+        }
+        self.rev = rev_before.saturating_add(1);
+        let rev = self.rev;
+
+        let tx = TxGuard::begin();
+        let tx_id = tx.id();
+        self.last_tx_id = Some(tx_id);
+        let text_payloads = match self.text_engine.encode_state_update(id) {
+            Some(bytes) => vec![TextUpdatePayload {
+                block_id: id,
+                bytes,
+            }],
+            None => vec![],
+        };
+        self.last_text_updates = text_payloads.clone();
+
+        // 统一 commit 面：期望 = increment 前 rev（rev_before）
+        if let Err(e) = self.emit_commit(Origin::User, tx_id, rev, Some(rev_before), &text_payloads) {
+            self.restore_memory_snapshot(pre);
+            return Err(e);
+        }
+        tx.commit();
+        Ok(new_text)
+    }
+
+    /// 块文本级 CRDT 原生因果重做（委托 Yrs UndoManager）。
+    pub fn text_redo(&mut self, id: BlockId) -> Result<String, ApplyError> {
+        if !self.tree.nodes.contains_key(&id) {
+            return Err(ApplyError::NotFound(id.to_string()));
+        }
+        let pre = self.capture_memory_snapshot();
+        let rev_before = self.rev;
+
+        let new_text = match self.text_engine.redo_text(id) {
+            Ok(t) => t,
+            Err(e) => return Err(e.into()),
+        };
+        if let Some(n) = self.tree.nodes.get_mut(&id) {
+            n.text_snapshot = Some(new_text.clone());
+        }
+        self.rev = rev_before.saturating_add(1);
+        let rev = self.rev;
+
+        let tx = TxGuard::begin();
+        let tx_id = tx.id();
+        self.last_tx_id = Some(tx_id);
+        let text_payloads = match self.text_engine.encode_state_update(id) {
+            Some(bytes) => vec![TextUpdatePayload {
+                block_id: id,
+                bytes,
+            }],
+            None => vec![],
+        };
+        self.last_text_updates = text_payloads.clone();
+
+        if let Err(e) = self.emit_commit(Origin::User, tx_id, rev, Some(rev_before), &text_payloads) {
+            self.restore_memory_snapshot(pre);
+            return Err(e);
+        }
+        tx.commit();
+        Ok(new_text)
+    }
+
+    /// 是否可执行块文本级撤销。
+    pub fn can_text_undo(&self, id: BlockId) -> bool {
+        self.text_engine.can_undo_text(id)
+    }
+
+    /// 是否可执行块文本级重做。
+    pub fn can_text_redo(&self, id: BlockId) -> bool {
+        self.text_engine.can_redo_text(id)
+    }
 }
+

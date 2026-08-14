@@ -45,7 +45,7 @@ export {
   type HeightSlot,
 } from './viewport/HeightMap';
 
-// pin
+// Pin & DOM Pinning
 export {
   buildPinSet,
   ensureComposingPinned,
@@ -62,7 +62,12 @@ export {
   type ScrollUnmountPlan,
 } from './viewport/pin';
 
-// Diff
+export {
+  DomPinningRegistry,
+  type RemovalFilterResult,
+} from './viewport/domPinning';
+
+// Diff & Coordinates
 export {
   applyProjectionDiff,
   createDiffApplyState,
@@ -71,6 +76,17 @@ export {
   type ApplyDiffStats,
   type ApplyDiffResult,
 } from './diff/applyProjectionDiff';
+
+export {
+  diffToReplace,
+  isHighSurrogate,
+  isLowSurrogate,
+  isSurrogateCodePoint,
+  utf16OffsetToUnicodeScalar,
+  unicodeScalarToUtf16Offset,
+  countUnicodeScalars,
+  type DiffReplaceResult,
+} from './diff/diffToReplace';
 
 // Selection（W3-B）
 export {
@@ -103,6 +119,13 @@ export {
   type ImeRemotePatchRejectCode,
   type ImeRemoteMergeStrategy,
 } from './ime/ImeMachine';
+
+export {
+  CompositionPatchBuffer,
+  type BufferedPatch,
+  type BufferedPatchType,
+  type PatchInterceptResult,
+} from './ime/CompositionPatchBuffer';
 
 export {
   guardStructureIntent,

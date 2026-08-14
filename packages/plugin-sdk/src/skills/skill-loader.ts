@@ -36,6 +36,7 @@ import type {
   PluginSkill,
   SkillDiagnostic,
 } from './skill-types';
+import { formatSkillOutput } from '../sanitizer';
 
 const DEFAULT_MAX_SKILL_BYTES = 512 * 1024;
 const MAX_SKILL_NAME_LENGTH = 64;
@@ -71,7 +72,7 @@ export class SkillLoader {
    */
   async loadFromDirectory(
     skillsDir: string,
-    options: LoadSkillsOptions = {},
+    options: LoadSkillsOptions = {}
   ): Promise<LoadSkillsResult> {
     const result: MutableLoadSkillsResult = { skills: [], diagnostics: [] };
     const maxBytes = normalizeMaxBytes(options.maxSkillBytes);
@@ -83,7 +84,7 @@ export class SkillLoader {
    * 技能 → 工具转换。
    *
    * 将 SKILL.md 内容包装为 ToolDefinition，供 api.registerTool() 注册。
-   * 工具执行时返回 SKILL.md 正文 + 用户输入，由 LLM 按指令操作。
+   * 工具执行时返回经过 XML 沙箱隔离的 SKILL.md 正文 + 用户输入。
    *
    * @param skill 已加载的技能
    * @returns 工具定义（含 execute 函数）
@@ -103,16 +104,12 @@ export class SkillLoader {
       },
       async execute(
         input: JsonObject,
-        _ctx: ToolExecutionContext,
+        _ctx: ToolExecutionContext
       ): Promise<ToolOutput> {
         const userInput = readStringField(input, 'input');
-        const header = `# Skill: ${skill.name}`;
-        const body = skill.content;
-        const tail =
-          userInput !== undefined
-            ? `\n\n## User Input\n${userInput}`
-            : '\n\n## User Input\n(none)';
-        return { text: `${header}\n\n${body}${tail}` };
+        return {
+          text: formatSkillOutput(skill.name, skill.content, userInput),
+        };
       },
     };
   }
@@ -123,7 +120,7 @@ export class SkillLoader {
     dir: string,
     result: MutableLoadSkillsResult,
     includeRootMarkdown: boolean,
-    maxBytes: number,
+    maxBytes: number
   ): Promise<void> {
     let entries: PluginFsEntry[];
     try {
@@ -132,7 +129,7 @@ export class SkillLoader {
       result.diagnostics.push(
         diagnostic('error', 'skill-directory-unreadable', dir, [
           `Failed to read skill directory: ${dir}`,
-        ]),
+        ])
       );
       return;
     }
@@ -142,7 +139,7 @@ export class SkillLoader {
       const skill = await this.loadSkillFile(
         join(dir, 'SKILL.md'),
         result,
-        maxBytes,
+        maxBytes
       );
       if (skill) {
         result.skills.push(skill);
@@ -171,7 +168,7 @@ export class SkillLoader {
   private async loadSkillFile(
     filePath: string,
     result: MutableLoadSkillsResult,
-    maxBytes: number,
+    maxBytes: number
   ): Promise<PluginSkill | null> {
     let content: string;
     try {
@@ -180,7 +177,7 @@ export class SkillLoader {
         result.diagnostics.push(
           diagnostic('warning', 'skill-file-not-file', filePath, [
             'Skill path is not a file.',
-          ]),
+          ])
         );
         return null;
       }
@@ -188,7 +185,7 @@ export class SkillLoader {
         result.diagnostics.push(
           diagnostic('warning', 'skill-file-too-large', filePath, [
             `Skill file exceeds ${maxBytes} bytes.`,
-          ]),
+          ])
         );
         return null;
       }
@@ -197,7 +194,7 @@ export class SkillLoader {
         result.diagnostics.push(
           diagnostic('warning', 'skill-file-binary', filePath, [
             'Skill file is binary.',
-          ]),
+          ])
         );
         return null;
       }
@@ -206,7 +203,7 @@ export class SkillLoader {
       result.diagnostics.push(
         diagnostic('warning', 'skill-file-unreadable', filePath, [
           `Failed to read skill file: ${filePath}`,
-        ]),
+        ])
       );
       return null;
     }
@@ -216,7 +213,7 @@ export class SkillLoader {
       result.diagnostics.push(
         diagnostic('warning', 'skill-frontmatter-malformed', filePath, [
           'SKILL.md frontmatter is malformed or missing closing delimiter.',
-        ]),
+        ])
       );
       return null;
     }
@@ -232,19 +229,19 @@ export class SkillLoader {
     const description = stringField(
       fm,
       'description',
-      firstMarkdownSentence(parsed.body) ?? name,
+      firstMarkdownSentence(parsed.body) ?? name
     );
 
     const nameErrors = validateSkillName(name);
     for (const msg of nameErrors) {
       result.diagnostics.push(
-        diagnostic('warning', 'skill-name-invalid', filePath, [msg]),
+        diagnostic('warning', 'skill-name-invalid', filePath, [msg])
       );
     }
     const descErrors = validateSkillDescription(description);
     for (const msg of descErrors) {
       result.diagnostics.push(
-        diagnostic('warning', 'skill-description-invalid', filePath, [msg]),
+        diagnostic('warning', 'skill-description-invalid', filePath, [msg])
       );
     }
 
@@ -302,7 +299,7 @@ export async function loadSkillsIntoRegistry(
   loader: SkillLoader,
   skillsDir: string,
   registerTool: (definition: ToolDefinition) => void,
-  options: LoadSkillsOptions = {},
+  options: LoadSkillsOptions = {}
 ): Promise<LoadSkillsResult> {
   const result = await loader.loadFromDirectory(skillsDir, options);
   for (const skill of result.skills) {
@@ -403,7 +400,7 @@ function validateSkillName(name: string): string[] {
   }
   if (!/^[a-z0-9-]+$/.test(name)) {
     errors.push(
-      'Skill name must use lowercase letters, numbers, and hyphens only.',
+      'Skill name must use lowercase letters, numbers, and hyphens only.'
     );
   }
   if (name.startsWith('-') || name.endsWith('-')) {
@@ -428,7 +425,7 @@ function validateSkillDescription(description: string): string[] {
 }
 
 function parseScope(
-  value: FrontmatterValue | undefined,
+  value: FrontmatterValue | undefined
 ): PluginSkill['scope'] | undefined {
   if (value === 'global' || value === 'project' || value === 'workspace') {
     return value;
@@ -437,7 +434,7 @@ function parseScope(
 }
 
 function parseActivation(
-  value: FrontmatterValue | undefined,
+  value: FrontmatterValue | undefined
 ): PluginSkill['activation'] | undefined {
   if (value === 'enabled' || value === 'recommended' || value === 'disabled') {
     return value;
@@ -446,7 +443,7 @@ function parseActivation(
 }
 
 function parseRunAs(
-  value: FrontmatterValue | undefined,
+  value: FrontmatterValue | undefined
 ): PluginSkill['runAs'] | undefined {
   if (typeof value !== 'string') return undefined;
   const lower = value.toLowerCase();
@@ -457,7 +454,7 @@ function parseRunAs(
 }
 
 function parseInvocation(
-  value: FrontmatterValue | undefined,
+  value: FrontmatterValue | undefined
 ): PluginSkill['invocation'] | undefined {
   if (typeof value !== 'string') return undefined;
   const lower = value.toLowerCase();
@@ -481,13 +478,17 @@ function stringList(value: FrontmatterValue | undefined): string[] {
 function stringField(
   data: Record<string, FrontmatterValue>,
   key: string,
-  fallback: string,
+  fallback: string
 ): string {
   const value = data[key];
   if (typeof value === 'string') {
     return value;
   }
-  if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    typeof value[0] === 'string'
+  ) {
     return value[0];
   }
   return fallback;
@@ -520,7 +521,7 @@ function diagnostic(
   severity: SkillDiagnostic['severity'],
   code: SkillDiagnostic['code'],
   path: string,
-  messageParts: readonly string[],
+  messageParts: readonly string[]
 ): SkillDiagnostic {
   return {
     severity,
