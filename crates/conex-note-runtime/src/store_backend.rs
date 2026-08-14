@@ -48,6 +48,82 @@ pub(crate) fn poison_recovery_count() -> u64 {
     POISON_RECOVERIES.load(Ordering::Relaxed)
 }
 
+/// S3 长锁等待告警阈值（毫秒）：per-doc 锁等待常态为 µs 级；
+/// 超 10ms 视为争抢异常（B3 细锁后多 doc 互不串行，等待只来自同 doc 争抢）。
+pub(crate) const SLOW_LOCK_WAIT_WARN_MS: u64 = 10;
+
+/// S3 全文序列化告警阈值（毫秒）：`document_to_md` 全树转 MD 常态为 ms 级；
+/// 超 100ms 视为异常（超大文档 / 设备负载异常）。
+pub(crate) const SLOW_FULLTEXT_SERIALIZE_WARN_MS: u64 = 100;
+
+/// S3 长锁等待 / 全文序列化探针（性能热点②-长锁等待 + ①-全文序列化）。
+///
+/// 使用形态（**锁内零新增**）：
+/// ```text
+/// let mut probe = SlowPathProbe::start(doc_id);  // 获取点前发起计时（锁外）
+/// let session = arc.lock()...;                   // 既有获取（锁形态变化不失效）
+/// probe.finish_lock();                           // acquire 返回后立即结束（仅时钟读）
+/// ```
+/// 阈值告警在守卫析构（锁释放后）由 [Drop] 发出——告警/日志路径**不在**锁内
+/// 执行（对齐 REV-02「计数路径不在热路径锁内执行」人工核验项）；计时起点
+/// 声明先于守卫 → 析构晚于守卫（Rust 局部变量逆序析构），保证告警在锁释放后。
+pub(crate) struct SlowPathProbe<'a> {
+    doc_id: &'a str,
+    started: std::time::Instant,
+    lock_wait: Option<Duration>,
+    serialize_wait: Option<Duration>,
+}
+
+impl<'a> SlowPathProbe<'a> {
+    /// 获取点前发起计时（锁外）。
+    pub(crate) fn start(doc_id: &'a str) -> Self {
+        Self {
+            doc_id,
+            started: std::time::Instant::now(),
+            lock_wait: None,
+            serialize_wait: None,
+        }
+    }
+
+    /// acquire 返回后立即调用：结束锁等待计时（锁内零新增——仅一次时钟读）。
+    pub(crate) fn finish_lock(&mut self) {
+        self.lock_wait = Some(self.started.elapsed());
+    }
+
+    /// 记录全文序列化耗时（序列化本身是锁内既有工作；此处仅记录时钟读，
+    /// 告警经 [Drop] 在锁释放后发出）。
+    pub(crate) fn record_serialize(&mut self, elapsed: Duration) {
+        self.serialize_wait = Some(elapsed);
+    }
+}
+
+impl Drop for SlowPathProbe<'_> {
+    fn drop(&mut self) {
+        if let Some(wait) = self.lock_wait {
+            let ms = wait.as_millis() as u64;
+            if ms >= SLOW_LOCK_WAIT_WARN_MS {
+                tracing::warn!(
+                    target: "conex_note_runtime",
+                    doc_id = %self.doc_id,
+                    lock_wait_ms = ms,
+                    "store per-doc 锁等待慢于阈值（S3 长锁等待热点）"
+                );
+            }
+        }
+        if let Some(wait) = self.serialize_wait {
+            let ms = wait.as_millis() as u64;
+            if ms >= SLOW_FULLTEXT_SERIALIZE_WARN_MS {
+                tracing::warn!(
+                    target: "conex_note_runtime",
+                    doc_id = %self.doc_id,
+                    serialize_ms = ms,
+                    "全文序列化慢于阈值（S3 慢序列化热点）"
+                );
+            }
+        }
+    }
+}
+
 /// 真实笔记后端：SharedWorkspaceStore + 进程内 DocSession 表 + intent 幂等。
 ///
 /// # 不变量
@@ -209,13 +285,18 @@ impl NoteBackend for StoreNoteBackend {
                 .get(doc_id)
                 .cloned();
             if let Some(arc) = arc {
+                // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+                let mut probe = SlowPathProbe::start(doc_id);
                 let session = arc.lock().unwrap_or_else(|e| {
                     // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
                     tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
                     POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                     e.into_inner()
                 });
-                return Ok(Self::build_outline_from_session(&session, max_depth));
+                probe.finish_lock();
+                let outline = Self::build_outline_from_session(&session, max_depth);
+                drop(session);
+                return Ok(outline);
             }
         }
         self.build_outline_from_store(doc_id, max_depth)

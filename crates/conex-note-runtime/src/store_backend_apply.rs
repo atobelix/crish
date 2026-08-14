@@ -17,7 +17,7 @@ use agent_tools::note_backend::{NoteBackendError, NoteBlockBatchRequest, NoteBlo
 use conex_workspace_store::commit_ops;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::store_backend::{map_commit_err, origin_from_str, StoreNoteBackend};
+use crate::store_backend::{map_commit_err, origin_from_str, SlowPathProbe, StoreNoteBackend};
 use crate::store_plan_ops::plan_block_ops_to_collab;
 
 /// 毒丸恢复计数（B1-1 观测化：本文件 per-doc 锁中毒恢复次数；
@@ -70,23 +70,30 @@ impl StoreNoteBackend {
         let origin = origin_from_str(origin);
         // B3：per-doc 锁——doc 锁持写全程（ensure 在 map 锁短临界内完成）
         let arc = self.session_handle(doc_id)?;
+        // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+        let mut probe = SlowPathProbe::start(doc_id);
         let mut session = arc.lock().unwrap_or_else(|e| {
             // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
             tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
             POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
             e.into_inner()
         });
+        probe.finish_lock();
         if ops.is_empty() {
-            return Ok(ApplyCollabOpsOutcome {
+            let outcome = ApplyCollabOpsOutcome {
                 rev: session.rev(),
                 applied: 0,
-            });
+            };
+            drop(session);
+            return Ok(outcome);
         }
         commit_ops(&mut session, &self.store, origin, &ops).map_err(map_commit_err)?;
-        Ok(ApplyCollabOpsOutcome {
+        let outcome = ApplyCollabOpsOutcome {
             rev: session.rev(),
             applied: ops.len() as u32,
-        })
+        };
+        drop(session);
+        Ok(outcome)
     }
 
     /// W4-F 余量：Store 真路径批 apply 块 ops（由 trait 委托）。
@@ -116,12 +123,15 @@ impl StoreNoteBackend {
         let origin = origin_from_str(req.origin.as_deref());
         // B3：per-doc 锁——plan + dry_run/commit 全程持 doc 锁（原子性不变）
         let arc = self.session_handle(&req.doc_id)?;
+        // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+        let mut probe = SlowPathProbe::start(&req.doc_id);
         let mut session = arc.lock().unwrap_or_else(|e| {
             // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
             tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
             POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
             e.into_inner()
         });
+        probe.finish_lock();
 
         let plan = plan_block_ops_to_collab(&session, &req.ops)?;
         let applied = plan.previews.len() as u32;

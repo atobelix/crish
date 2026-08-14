@@ -51,21 +51,36 @@ describe('StreamRenderBuffer', () => {
   });
 
   it('should handle nlIndex truncation with surrogate pairs', () => {
-    const result = flushFrame(['hello 😀 world'], 7, performance.now() + 1000, false);
+    const result = flushFrame(
+      ['hello 😀 world'],
+      7,
+      performance.now() + 1000,
+      false
+    );
     expect(result.batch).toEqual(['hello ']);
     expect(result.remaining).toEqual(['😀 world']);
   });
 
   it('should handle deadline truncation with surrogate pairs', () => {
     // Expired deadline forces batching to stop after the first chunk without breaking the next surrogate chunk
-    const result = flushFrame(['hello ', '😀 world'], 100, performance.now() - 10, false);
+    const result = flushFrame(
+      ['hello ', '😀 world'],
+      100,
+      performance.now() - 10,
+      false
+    );
     expect(result.batch).toEqual(['hello ']);
     expect(result.remaining).toEqual(['😀 world']);
   });
 
   it('frames carry html as string and chunkUpdates as empty array', () => {
     const buf = new StreamRenderBuffer();
-    const frames: { full: string; html: string; chunkUpdates: unknown[]; isFinal: boolean }[] = [];
+    const frames: {
+      full: string;
+      html: string;
+      chunkUpdates: unknown[];
+      isFinal: boolean;
+    }[] = [];
     buf.onFrame = (frame) => {
       frames.push({
         full: frame.full,
@@ -333,5 +348,64 @@ describe('帧间隔 ≥ frameBudget', () => {
 
     expect(frames).toHaveLength(1);
     expect(frames[0]!.delta.length).toBe(100);
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('S3 帧预算超限计数（6ms/8192B 预算热点）', () => {
+  it('非 force 单帧耗时超 frameBudgetMs 时计数 + 条件告警', async () => {
+    // 慢时钟 mock：每调用 performance.now() 推进 20ms > frameBudgetMs=6
+    let perfCalls = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => {
+      perfCalls++;
+      return perfCalls * 20;
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const buf = new StreamRenderBuffer({
+      maxBytesPerFrame: 10_000,
+      frameBudgetMs: 6,
+    });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.push('chunk1');
+    buf.push('chunk2');
+    await buf.flush(false);
+
+    expect(frames.length).toBeGreaterThanOrEqual(1);
+    expect(buf.frameOverruns()).toBeGreaterThanOrEqual(1);
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('force 帧不计超限不告警（终态路径豁免）', async () => {
+    let perfCalls = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => {
+      perfCalls++;
+      return perfCalls * 20;
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const buf = new StreamRenderBuffer({
+      maxBytesPerFrame: 10_000,
+      frameBudgetMs: 6,
+    });
+    buf.onFrame = () => {};
+    buf.push('x'.repeat(100));
+    await buf.flush(true);
+
+    expect(buf.frameOverruns()).toBe(0);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('常态快速帧不计数不告警', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const buf = new StreamRenderBuffer();
+    buf.onFrame = () => {};
+    buf.push('hello world');
+    await buf.flush(false);
+
+    expect(buf.frameOverruns()).toBe(0);
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });

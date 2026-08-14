@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use crate::hydrate_projection::{
     projection_from_session, DocSessionHydrateProjection, HYDRATE_PATH_DOC_SESSION,
 };
-use crate::store_backend::StoreNoteBackend;
+use crate::store_backend::{SlowPathProbe, StoreNoteBackend};
 
 /// 毒丸恢复计数（B1-1 观测化：本文件 sessions 索引锁 / per-doc 锁中毒恢复次数；
 /// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
@@ -103,12 +103,15 @@ impl StoreNoteBackend {
             .remove(doc_id);
         if let Some(old) = old {
             // 排空旧会话在途写（doc 锁长临界）；随后 hydrate 读到最新已提交状态
+            // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+            let mut probe = SlowPathProbe::start(doc_id);
             let _guard = old.lock().unwrap_or_else(|e| {
                 // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
                 tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
                 POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                 e.into_inner()
             });
+            probe.finish_lock();
         }
     }
 
@@ -139,6 +142,8 @@ impl StoreNoteBackend {
         }
         let limit = limit.clamp(1, 200) as usize;
         let arc = self.session_handle(doc_id)?;
+        // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+        let mut probe = SlowPathProbe::start(doc_id);
         let session = arc
             .lock()
             .unwrap_or_else(|e| {
@@ -147,7 +152,9 @@ impl StoreNoteBackend {
                 POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                 e.into_inner()
             });
+        probe.finish_lock();
         let proj = projection_from_session(&session, doc_id, limit);
+        drop(session);
         debug_assert_eq!(proj.hydrate_path, HYDRATE_PATH_DOC_SESSION);
         Ok(proj)
     }

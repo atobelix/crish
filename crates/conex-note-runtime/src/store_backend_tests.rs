@@ -568,3 +568,155 @@ fn concurrent_first_open_distinct_docs_lands_two_sessions() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+// ── S3 性能热点埋点观测测（LogCapture WARN 级，对齐 observability.rs）─
+//
+// 覆盖：② 长锁等待（获取点计时 + 超阈值条件告警「锁等待慢于阈值」）、
+// ①-全文 序列化（document_to_md 全树转 MD 耗时 + 超阈值告警「全文序列化
+// 慢于阈值」）。探针 [crate::store_backend::SlowPathProbe] 为 pub(crate)，
+// 测试可直驱阈值门控（确定性）；锁等待另有真实争抢集成测（channel 同步
+// 持锁 30ms → document_to_md 等待 → 告警捕获）。
+
+/// S3 告警测串行锁：与 B1-1 毒化测共享 capture 无冲突（各自线程隔离），
+/// 但本组测试与既有 with_capture 均为线程局部默认订阅者，互不串扰。
+mod s3_slow_path_tests {
+    use super::*;
+    use crate::store_backend::{SlowPathProbe, SLOW_FULLTEXT_SERIALIZE_WARN_MS};
+    use std::io::Write;
+    use std::sync::mpsc;
+
+    /// 捕获日志的内存缓冲（fmt writer 共享同一缓冲；WARN 级）
+    #[derive(Default)]
+    struct LogCapture {
+        lines: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl LogCapture {
+        fn push(&self, line: &str) {
+            self.lines.lock().unwrap().push(line.to_string());
+        }
+        fn snapshot(&self) -> Vec<String> {
+            self.lines.lock().unwrap().clone()
+        }
+    }
+
+    /// fmt writer：Arc 包装共享缓冲
+    struct ArcWriter(Arc<LogCapture>);
+
+    impl Write for ArcWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let text = String::from_utf8_lossy(buf);
+            for line in text.lines() {
+                self.0.push(line);
+            }
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// 在捕获 subscriber 下执行闭包，返回捕获行（WARN 级——S3 告警为
+    /// warn 级；B1 毒化测的 ERROR 级捕获器会漏掉它）
+    pub fn with_capture_warn<F, R>(f: F) -> (R, Vec<String>)
+    where
+        F: FnOnce() -> R,
+    {
+        let capture = Arc::new(LogCapture::default());
+        let writer = capture.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || ArcWriter(writer.clone()))
+            .with_max_level(tracing::Level::WARN)
+            .with_ansi(false)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let result = f();
+        let lines = capture.snapshot();
+        (result, lines)
+    }
+
+    /// ② 长锁等待（真实争抢集成测）：另起线程持 per-doc 锁 30ms（channel
+    /// 同步确保持锁在先），主线程 document_to_md 等待 > 10ms 阈值 →
+    /// warn「锁等待慢于阈值」被捕获；返回结果不受埋点影响。
+    #[test]
+    fn slow_lock_wait_warns_over_threshold() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+        apply_md(&backend, "slow-lock", "# Slow Lock\n\nbody");
+        let arc = backend
+            .sessions
+            .lock()
+            .unwrap()
+            .get("slow-lock")
+            .unwrap()
+            .clone();
+        let (tx, rx) = mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            let _guard = arc.lock().unwrap();
+            let _ = tx.send(());
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        });
+        rx.recv()
+            .expect("持锁线程已拿到锁（channel 同步）");
+        let (res, lines) = with_capture_warn(|| backend.document_to_md("slow-lock"));
+        let md = res.expect("等待后 document_to_md 正常返回");
+        assert!(md.contains("Slow Lock"), "读路径不受埋点影响: {md:?}");
+        assert!(
+            lines.iter().any(|l| l.contains("锁等待慢于阈值")),
+            "锁等待超阈值必须告警，捕获：\n{}",
+            lines.join("\n")
+        );
+        holder.join().expect("持锁线程不应 panic");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// ② 长锁等待负例：无争抢常态调用 → 零告警（条件告警门控可证伪）。
+    #[test]
+    fn fast_lock_wait_stays_silent() {
+        let (dir, db) = temp_db();
+        let backend = StoreNoteBackend::open(&db).unwrap();
+        apply_md(&backend, "fast-lock", "# Fast Lock\n\nbody");
+        let (res, lines) = with_capture_warn(|| backend.document_to_md("fast-lock"));
+        assert!(res.is_ok(), "常态读正常");
+        assert!(
+            !lines.iter().any(|l| l.contains("锁等待慢于阈值")),
+            "常态零告警，捕获：\n{}",
+            lines.join("\n")
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// ①-全文 序列化（探针级阈值门控正例）：直驱 SlowPathProbe 注入
+    /// 超阈值序列化耗时（≥ SLOW_FULLTEXT_SERIALIZE_WARN_MS=100ms）→
+    /// 析构时 warn「全文序列化慢于阈值」被捕获（确定性，不依赖机器速度）。
+    #[test]
+    fn slow_fulltext_serialize_warns_over_threshold() {
+        let (_, lines) = with_capture_warn(|| {
+            let mut probe = SlowPathProbe::start("doc-slow-md");
+            probe.record_serialize(std::time::Duration::from_millis(
+                SLOW_FULLTEXT_SERIALIZE_WARN_MS + 50,
+            ));
+            drop(probe);
+        });
+        assert!(
+            lines.iter().any(|l| l.contains("全文序列化慢于阈值")),
+            "超阈值序列化必须告警，捕获：\n{}",
+            lines.join("\n")
+        );
+    }
+
+    /// ①-全文 序列化负例：低于阈值 → 零告警（条件告警门控可证伪）。
+    #[test]
+    fn fast_fulltext_serialize_stays_silent() {
+        let (_, lines) = with_capture_warn(|| {
+            let mut probe = SlowPathProbe::start("doc-fast-md");
+            probe.record_serialize(std::time::Duration::from_micros(800));
+            drop(probe);
+        });
+        assert!(
+            !lines.iter().any(|l| l.contains("全文序列化慢于阈值")),
+            "常态零告警，捕获：\n{}",
+            lines.join("\n")
+        );
+    }
+}

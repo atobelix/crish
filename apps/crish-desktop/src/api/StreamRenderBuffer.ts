@@ -50,21 +50,27 @@ export class StreamRenderBuffer {
   private maxBacklogBytes: number | undefined;
   /** 收到 final 标记后不再接收 push，仅 flush 剩余 */
   private finalMarked = false;
+  /**
+   * S3 帧预算超限计数（渲染健康常驻指标）：非 force flush 单帧实际耗时
+   * 超过 frameBudgetMs 的次数；不随渲染修复（G-03/B6）消失。
+   */
+  private frameOverrunCount = 0;
 
   onFrame: ((frame: RenderFrame) => void) | null = null;
 
-  constructor(
-    options?: {
-      frameBudgetMs?: number;
-      maxBytesPerFrame?: number;
-      maxBacklogBytes?: number;
-    },
-  ) {
+  constructor(options?: {
+    frameBudgetMs?: number;
+    maxBytesPerFrame?: number;
+    maxBacklogBytes?: number;
+  }) {
     if (options?.frameBudgetMs != null && options.frameBudgetMs > 0) {
       this.frameBudgetMs = Math.max(1, Math.floor(options.frameBudgetMs));
     }
     if (options?.maxBytesPerFrame != null && options.maxBytesPerFrame > 0) {
-      this.maxBytesPerFrame = Math.max(64, Math.floor(options.maxBytesPerFrame));
+      this.maxBytesPerFrame = Math.max(
+        64,
+        Math.floor(options.maxBytesPerFrame)
+      );
     }
     if (options?.maxBacklogBytes != null && options.maxBacklogBytes > 0) {
       this.maxBacklogBytes = Math.floor(options.maxBacklogBytes);
@@ -162,6 +168,14 @@ export class StreamRenderBuffer {
     return this.fullText + this.pending.join('');
   }
 
+  /**
+   * S3 帧预算超限计数读取（渲染健康常驻指标；条件告警在超限帧发出
+   * console.warn——超阈值才告警，常态零日志）。
+   */
+  frameOverruns(): number {
+    return this.frameOverrunCount;
+  }
+
   // ── 内部 ──
 
   markFinal(): void {
@@ -197,12 +211,22 @@ export class StreamRenderBuffer {
       return;
     }
 
+    const frameStart = performance.now();
     const { batch, remaining } = flushFrame(
       this.pending,
       this.maxBytesPerFrame,
-      performance.now() + this.frameBudgetMs,
+      frameStart + this.frameBudgetMs,
       force
     );
+    const frameElapsed = performance.now() - frameStart;
+    // S3 帧预算超限计数 + 条件告警（渲染健康常驻指标）：非 force 且单帧
+    // 实际耗时超 frameBudgetMs 才计数并 warn——超阈值才告警，常态零日志。
+    if (!force && frameElapsed > this.frameBudgetMs) {
+      this.frameOverrunCount += 1;
+      console.warn(
+        `[StreamRenderBuffer] 帧预算超限：${frameElapsed.toFixed(1)}ms > ${this.frameBudgetMs}ms`
+      );
+    }
     this.pending = remaining;
 
     if (batch.length > 0) {
@@ -211,7 +235,10 @@ export class StreamRenderBuffer {
       this.flushedLength = this.fullText.length;
 
       // 积压降级：非 force 且积压超过 maxBacklogBytes 时跳过渲染
-      const degraded = !force && this.maxBacklogBytes != null && this.bufferedLength() > this.maxBacklogBytes;
+      const degraded =
+        !force &&
+        this.maxBacklogBytes != null &&
+        this.bufferedLength() > this.maxBacklogBytes;
 
       const frame: RenderFrame = {
         delta,
@@ -267,7 +294,7 @@ export function flushFrame(
   pending: readonly string[],
   maxBytes: number,
   deadlineMs: number,
-  force: boolean,
+  force: boolean
 ): { batch: string[]; remaining: string[] } {
   if (pending.length === 0) return { batch: [], remaining: [] };
 

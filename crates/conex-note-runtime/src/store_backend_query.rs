@@ -22,7 +22,7 @@ use conex_workspace_store::{
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::store_backend::{map_store_err, StoreNoteBackend};
+use crate::store_backend::{map_store_err, SlowPathProbe, StoreNoteBackend};
 
 /// 毒丸恢复计数（B1-1 观测化：本文件 sessions 索引锁 / per-doc 锁中毒恢复次数；
 /// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
@@ -57,18 +57,27 @@ impl StoreNoteBackend {
             .cloned();
         match arc {
             Some(arc) => {
+                // S3 埋点：获取点前发起计时（锁外）；acquire 返回后立即结束
+                // （锁内仅一次时钟读，零日志零计数）；告警经析构在锁释放后发出
+                let mut probe = SlowPathProbe::start(doc_id);
                 let session = arc.lock().unwrap_or_else(|e| {
                     // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
                     tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
                     POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                     e.into_inner()
                 });
-                if session.tree().root_children.is_empty() {
+                probe.finish_lock();
+                let serialize_started = std::time::Instant::now();
+                let result = if session.tree().root_children.is_empty() {
                     // 无 session 或空树：与 NoteBackend::get_md 契约一致
                     Ok(String::new())
                 } else {
                     Ok(conex_md_ast::document_to_md(session.tree()))
-                }
+                };
+                probe.record_serialize(serialize_started.elapsed());
+                // 显式释放守卫：确保探针析构（超阈值告警）发生在锁释放之后
+                drop(session);
+                result
             }
             // 无 session 或空树：与 NoteBackend::get_md 契约一致
             None => Ok(String::new()),
@@ -104,13 +113,18 @@ impl StoreNoteBackend {
             .get(doc_id)
             .cloned();
         if let Some(arc) = arc {
+            // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+            let mut probe = SlowPathProbe::start(doc_id);
             let session = arc.lock().unwrap_or_else(|e| {
                 // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
                 tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
                 POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                 e.into_inner()
             });
-            return Ok(session.rev());
+            probe.finish_lock();
+            let rev = session.rev();
+            drop(session);
+            return Ok(rev);
         }
         let loaded = self.store.load_rev(doc_id).map_err(map_store_err)?;
         Ok(if loaded < 0 { 0 } else { loaded as u64 })
@@ -158,13 +172,18 @@ impl StoreNoteBackend {
             // 尽量 ensure：有 blob 则 hydrate；失败不阻断（import 仍可 Conflict）
             match self.session_handle(doc_id) {
                 Ok(arc) => {
+                    // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+                    let mut probe = SlowPathProbe::start(doc_id);
                     let session = arc.lock().unwrap_or_else(|e| {
                         // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
                         tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
                         POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                         e.into_inner()
                     });
-                    Some(session.tree().clone())
+                    probe.finish_lock();
+                    let tree = session.tree().clone();
+                    drop(session);
+                    Some(tree)
                 }
                 Err(_) => None,
             }
@@ -197,12 +216,15 @@ impl StoreNoteBackend {
             return Err(NoteBackendError::Invalid("doc_id must be non-empty".into()));
         }
         let arc = self.session_handle(doc_id)?;
+        // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+        let mut probe = SlowPathProbe::start(doc_id);
         let session = arc.lock().unwrap_or_else(|e| {
             // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
             tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
             POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
             e.into_inner()
         });
+        probe.finish_lock();
         let export_rev = rev.unwrap_or_else(|| session.rev());
         let tree = session.tree().clone();
         drop(session);

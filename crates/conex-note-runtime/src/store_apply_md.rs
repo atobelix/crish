@@ -21,7 +21,7 @@ use conex_workspace_store::commit_ops;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::store_backend::{
-    map_commit_err, origin_from_req, StoreNoteBackend,
+    map_commit_err, origin_from_req, SlowPathProbe, StoreNoteBackend,
 };
 use crate::store_plan_ops::parse_block_id;
 
@@ -123,12 +123,15 @@ impl StoreNoteBackend {
         let origin = origin_from_req(&req);
         // B3：per-doc 锁——mode 生成 ops + commit 全程持 doc 锁（原子性不变）
         let arc = self.session_handle(&req.doc_id)?;
+        // S3 埋点：获取点前发起计时（锁外），acquire 返回后立即结束；告警锁外析构
+        let mut probe = SlowPathProbe::start(&req.doc_id);
         let mut session = arc.lock().unwrap_or_else(|e| {
             // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
             tracing::error!(target: "conex_note_runtime", "sessions per-doc 锁中毒，按恢复模式继续：{e}");
             POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
             e.into_inner()
         });
+        probe.finish_lock();
 
         // 3. 按 mode 生成 Ops + 保留 lossy（W4-A：进 NoteApplyMdResult）
         let (ops, lossy): (Vec<Op>, NoteLossyReport) = match req.mode {
