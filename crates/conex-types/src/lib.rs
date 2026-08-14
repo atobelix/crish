@@ -37,10 +37,11 @@ pub use error::{
     RunTerminal, RunTerminalError, migrate_error_code,
 };
 pub use events::{
-    AgentEvent, AgentEventEnvelope, ApprovalDecision, BackpressureLevel, EVENT_ENVELOPE_SCHEMA_VERSION,
-    MissAttribution, PermissionBehavior, PermissionDecision, PermissionRequest, RunCacheStats,
-    RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation, SubagentEndStatus,
-    SubagentEventKind, SubagentEventPayload, ToolMetadata,
+    AgentEvent, AgentEventEnvelope, ApprovalDecision, BackpressureLevel, DropClass,
+    EVENT_ENVELOPE_SCHEMA_VERSION, EventPolicy, MissAttribution, PermissionBehavior,
+    PermissionDecision, PermissionRequest, PersistenceDecision, RunCacheStats, RunTerminalStatus,
+    SecurityAuditDecision, SecurityAuditOperation, SubagentEndStatus, SubagentEventKind,
+    SubagentEventPayload, ToolMetadata,
 };
 pub use history::HistoryMessage;
 pub use impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};

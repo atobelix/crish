@@ -24,7 +24,9 @@
           "description": "ISO8601 时间戳"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 2,
@@ -58,7 +60,9 @@
           "description": "错误信息（可选）"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 3,
@@ -87,7 +91,9 @@
           "description": "ISO8601 时间戳"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 4,
@@ -123,7 +129,9 @@
           "integer": true
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 5,
@@ -145,7 +153,9 @@
           "description": "消息全文（前端硬依赖）"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 6,
@@ -179,7 +189,9 @@
           "description": "增量块（text/thought）"
         }
       ],
-      "backpressure": "delta"
+      "backpressure": "delta",
+      "persist": false,
+      "bridgePriority": "soft"
     },
     {
       "id": 7,
@@ -208,7 +220,9 @@
           "description": "消息终态全文"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 8,
@@ -242,7 +256,9 @@
           "description": "ISO8601 时间戳"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 9,
@@ -299,7 +315,9 @@
           "description": "ISO8601 时间戳"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 10,
@@ -333,7 +351,9 @@
           "description": "ISO8601 时间戳"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 11,
@@ -373,7 +393,9 @@
           "description": "批内调用列表"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 12,
@@ -407,7 +429,9 @@
           "description": "批内结果列表"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 13,
@@ -447,7 +471,9 @@
           "description": "修复说明列表"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 14,
@@ -482,7 +508,9 @@
           "integer": true
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 15,
@@ -522,7 +550,9 @@
           "description": "错误信息（可选）"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 16,
@@ -550,7 +580,9 @@
           "description": "诊断载荷"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 17,
@@ -584,7 +616,9 @@
           "description": "是否可重试"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 18,
@@ -618,7 +652,9 @@
           "description": "steering 消息"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 19,
@@ -658,7 +694,9 @@
           "description": "人工可读说明"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 20,
@@ -686,7 +724,9 @@
           "description": "ISO8601 时间戳"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 21,
@@ -726,7 +766,9 @@
           "description": "ISO8601 时间戳"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 22,
@@ -754,7 +796,9 @@
           "description": "检查点记录"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 23,
@@ -782,7 +826,9 @@
           "description": "恢复记录"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 24,
@@ -822,7 +868,9 @@
           "description": "错误信息（可选）"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 25,
@@ -850,7 +898,9 @@
           "description": "run 级缓存统计"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 26,
@@ -905,7 +955,9 @@
           "integer": false
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 27,
@@ -948,7 +1000,9 @@
           "integer": true
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 28,
@@ -1006,7 +1060,9 @@
           "description": "工具调用 id（工具侧发射时填充；None = 非工具上下文）"
         }
       ],
-      "backpressure": "critical"
+      "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical"
     },
     {
       "id": 29,
@@ -1015,6 +1071,8 @@
       "domain": "subagent",
       "description": "子代理启动（run_subagent spawn；runId 由信封注入 = 父 run；前端消费 subagentId/subagentRunId/parentRunId/parentToolCallId/description/mode）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1079,6 +1137,8 @@
       "domain": "subagent",
       "description": "子代理过程事件（event 为结构化负载；背压分级随 kind：progress=Delta 可丢、message/tool=Soft 尽力）",
       "backpressure": "delta",
+      "persist": false,
+      "bridgePriority": "critical",
       "kindBackpressure": {
         "progress": "delta",
         "message": "soft",
@@ -1118,6 +1178,8 @@
       "domain": "subagent",
       "description": "子代理结束（status 规范值 completed/failed/cancelled；前端正则映射 stopped/failed/completed；Critical 级必达落库）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1164,6 +1226,8 @@
       "domain": "task",
       "description": "后台任务启动（adopt 成功；Critical 必达落库；ownerRunId 供 orchestrator 按来源过滤——主 agent 与其派发的子 agent run 看到的任务按来源归组，T-AB-18 可见性消费）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1210,6 +1274,8 @@
       "domain": "task",
       "description": "任务输出增量（Delta 可丢不落库；转发器节流推送 60ms，继承旧 task-output 语义；line 或 chunk 二选一）",
       "backpressure": "delta",
+      "persist": false,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1251,6 +1317,8 @@
       "domain": "task",
       "description": "任务资源心跳（Delta 可丢不落库；仅启用 resourceMonitor 的任务由采样 loop 发射）",
       "backpressure": "delta",
+      "persist": false,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1279,6 +1347,8 @@
       "domain": "task",
       "description": "任务疑似卡死（Soft 尽力投递并留痕；健康判定转 Suspicious 时发射，非终态可重复）",
       "backpressure": "soft",
+      "persist": false,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1315,6 +1385,8 @@
       "domain": "task",
       "description": "任务自然退出且退出码为 0（Critical 必达落库；唤醒摘要「任务 <id> 已完成，退出码 0」）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1358,6 +1430,8 @@
       "domain": "task",
       "description": "任务自然退出且退出码非 0（Critical 必达落库；C7 恢复阶梯衔接源，唤醒摘要「任务 <id> 异常退出（exit code N），附最后 20 行日志」）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1400,6 +1474,8 @@
       "domain": "task",
       "description": "任务已被终止（kill 成功含两阶段升级；Critical 必达落库；唤醒摘要「任务 <id> 已被终止」）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1434,6 +1510,8 @@
       "domain": "timer",
       "description": "定时器到期（T-CF-04：TimerRegistry 到期触发；Critical 必达落库——数据面，AI 实际唤醒走 steering 条目，事件与唤醒解耦；runId 由 emit 层信封注入，无 run 归属时置空串或 timer-<id> 伪 runId，02-CF 方案 §4.7）",
       "backpressure": "critical",
+      "persist": false,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1469,6 +1547,8 @@
       "domain": "timer",
       "description": "定时器已取消（T-CF-04：早退命中 / AI 显式取消；Soft 尽力投递；runId 由 emit 层信封注入，无 run 归属时置空串或 timer-<id> 伪 runId，02-CF 方案 §4.7）",
       "backpressure": "soft",
+      "persist": false,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1504,6 +1584,8 @@
       "domain": "cron",
       "description": "cron 已触发（T-CF-08：SchedulerRegistry 触发；Critical 必达落库——数据面，AI 实际唤醒走 steering 条目，事件与唤醒解耦；runId 由 emit 层信封注入，无 run 归属时置空串或 cron-<id> 伪 runId；唤醒摘要「<prompt>（cron <id> 第 <n> 次触发）」，02-CF 方案 §4.7/§4.8）",
       "backpressure": "critical",
+      "persist": false,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1552,6 +1634,8 @@
       "domain": "recovery",
       "description": "恢复阶梯升级留痕（D8 事件登记：阶梯 1 → 阶梯 2 边界证据；双发射方——子代理侧 subagentRunId=Some、熔断侧 subagentRunId=None + detail=circuit-trip，02-定夺 W1；runId 由 emit 层信封注入）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1600,6 +1684,8 @@
       "domain": "recovery",
       "description": "阶梯 2 steering 通知留痕（D8 事件登记：RecoveryNotification serde camelCase 镜像；runId 由 emit 层信封注入）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1660,6 +1746,8 @@
       "domain": "recovery",
       "description": "阶梯 3 fork 重分配留痕（D8 事件登记：ForkRecord 字段镜像；contextMode 为 verbatim/summarized/new；runId 由 emit 层信封注入）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1718,6 +1806,8 @@
       "domain": "recovery",
       "description": "阶梯 4 上报用户留痕（D8 事件登记：UserReport 基元字段镜像，attempts 尝试明细不在事件面；runId 由 emit 层信封注入）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1759,6 +1849,8 @@
       "domain": "recovery",
       "description": "恢复预算拒绝留痕（D8 事件登记：双发射方——D2 主 run 侧 subagentRunId=None、D3 子代理侧 subagentRunId=Some，02-定夺 W6；runId 由 emit 层信封注入）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "sessionId",
@@ -1801,6 +1893,8 @@
       "domain": "goal",
       "description": "goal 新一轮开始（D8 事件登记：envelope 事件不列 sessionId 变体字段——会话归属在事件行，读侧信封已含，02-定夺 B2/S9；round 从 1 计；runId 由 emit 层信封注入）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "round",
@@ -1831,6 +1925,8 @@
       "domain": "goal",
       "description": "goal 一轮完成（D8 事件登记：02-定夺 B2 统一单一字段集；decision 为 Continue/Completed/NoProgress/Blocked/NoGoal；stalledDelta 为本轮增量，stalled 总数在 goal_state 键；envelope 事件不列 sessionId 变体字段；runId 由 emit 层信封注入）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "round",
@@ -1894,6 +1990,8 @@
       "domain": "goal",
       "description": "goal 续轮决策（D8 事件登记：载荷对齐 TS GoalContinuationDecision orchestration.ts:38-44；envelope 事件不列 sessionId 变体字段；runId 由 emit 层信封注入）",
       "backpressure": "critical",
+      "persist": true,
+      "bridgePriority": "critical",
       "fields": [
         {
           "name": "action",

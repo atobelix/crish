@@ -67,6 +67,11 @@ struct EventSpec {
     fields: Vec<FieldSpec>,
     /// 背压级别（I5-M7：delta/soft/critical，静态可判定）
     backpressure: String,
+    /// 持久化决策（D-04 PC-05：是否落库；与 backpressure 正交——
+    /// 同背压可不同持久化，三决策不同构）
+    persist: bool,
+    /// 桥丢帧优先级（D-04 PC-05：soft/critical；缓冲层水位语义）
+    bridge_priority: String,
     /// kind 级背压映射（仅 subagent-event 登记：progress=delta、message/tool=soft）
     kind_backpressure: Option<std::collections::BTreeMap<String, String>>,
 }
@@ -249,6 +254,16 @@ fn registry_event_types_match_enum_declaration_order() {
             ev.wire,
             ev.backpressure
         );
+        // 每个事件都必须标注桥丢帧优先级（D-04 PC-05：soft/critical，
+        // 缓冲层水位语义；与 event_policy 三字段双向锁定）
+        assert!(
+            matches!(ev.bridge_priority.as_str(), "soft" | "critical"),
+            "事件 {} 的 bridgePriority 非法：{}",
+            ev.wire,
+            ev.bridge_priority
+        );
+        // persist 为 bool 由 serde 强校验（缺字段/非布尔即解析失败）；
+        // 决策表语义断言见 event_policy_table_drift_locked 双向锁定
         // kindBackpressure 只允许 subagent-event 登记
         if ev.wire != "subagent-event" {
             assert!(
@@ -803,6 +818,134 @@ fn backpressure_classification_semantics_anchored() {
         "security-audit",
     ] {
         assert_eq!(level_of(wire), "critical", "事件 {wire} 必须保持 Critical（既有语义）");
+    }
+}
+
+// ── 7.5 三字段双向锁定（D-04 PC-05：单一分类函数 event_policy 三值 ==
+//      注册表三字段（backpressure / persist / bridgePriority）；分类唯一
+//      事实源，消灭 event_class / event_backpressure / drop_class_of 多套
+//      分类漂移；消费方（orchestrator is_non_persistent / buffer drop_class_of）
+//      迁移后经本测试同步锁定）──
+
+use conex_types::events::{event_policy, DropClass, EventPolicy, PersistenceDecision};
+
+/// 全事件域（49 类）三决策双向锁定：event_policy(event) 三值逐事件 ==
+/// 注册表三字段（backpressure / persist / bridgePriority）
+#[test]
+fn event_policy_table_drift_locked() {
+    let reg = registry();
+    for ev in &reg.events {
+        let sample = build_event_sample(&reg, ev);
+        let parsed: AgentEvent = serde_json::from_value(sample)
+            .unwrap_or_else(|e| panic!("事件 {} 按注册表样本反序列化失败：{e}", ev.wire));
+        let policy = event_policy(&parsed);
+        // backpressure 双向锁定
+        let expected_bp = match ev.backpressure.as_str() {
+            "delta" => BackpressureLevel::Delta,
+            "soft" => BackpressureLevel::Soft,
+            "critical" => BackpressureLevel::Critical,
+            other => panic!("事件 {} 注册表 backpressure 非法：{other}", ev.wire),
+        };
+        assert_eq!(
+            policy.backpressure,
+            expected_bp,
+            "事件 {} 的背压分级与注册表不一致",
+            ev.wire
+        );
+        // persist 双向锁定
+        let expected_persist = if ev.persist {
+            PersistenceDecision::Persist
+        } else {
+            PersistenceDecision::NoPersist
+        };
+        assert_eq!(
+            policy.persist,
+            expected_persist,
+            "事件 {} 的持久化决策与注册表不一致",
+            ev.wire
+        );
+        // bridgePriority 双向锁定
+        let expected_bridge = match ev.bridge_priority.as_str() {
+            "soft" => DropClass::Soft,
+            "critical" => DropClass::Critical,
+            other => panic!("事件 {} 注册表 bridgePriority 非法：{other}", ev.wire),
+        };
+        assert_eq!(
+            policy.bridge_priority,
+            expected_bridge,
+            "事件 {} 的桥丢帧优先级与注册表不一致",
+            ev.wire
+        );
+    }
+}
+
+/// 定案表逐行显式断言（D-04 §3.3：漂移清零后的定案表，PC-05/PC-01/PC-02
+/// 共用——关键行：task-output=Delta+NoPersist+Critical（增量不落库）、
+/// message-delta=Delta+NoPersist+Soft（唯一桥可丢）、run-terminal=
+/// Critical+Persist+Critical（终态必达落库）、timer/cron 仅实时轨等）
+#[test]
+fn event_policy_decision_table_rows_anchored() {
+    use conex_types::events::{BackpressureLevel as Bp, DropClass as Dc, PersistenceDecision as Pd};
+    let reg = registry();
+    let policy_of = |wire: &str| -> EventPolicy {
+        let ev = reg
+            .events
+            .iter()
+            .find(|e| e.wire == wire)
+            .unwrap_or_else(|| panic!("注册表缺事件 {wire}"));
+        let sample = build_event_sample(&reg, ev);
+        let parsed: AgentEvent = serde_json::from_value(sample)
+            .unwrap_or_else(|e| panic!("事件 {wire} 按注册表样本反序列化失败：{e}"));
+        event_policy(&parsed)
+    };
+    // 行 = (wire, backpressure, persist, bridge_priority)
+    let rows: &[(&str, Bp, Pd, Dc)] = &[
+        ("message-delta", Bp::Delta, Pd::NoPersist, Dc::Soft),
+        ("task-output", Bp::Delta, Pd::NoPersist, Dc::Critical),
+        ("task-heartbeat", Bp::Delta, Pd::NoPersist, Dc::Critical),
+        ("task-suspicious", Bp::Soft, Pd::NoPersist, Dc::Critical),
+        ("timer-fired", Bp::Critical, Pd::NoPersist, Dc::Critical),
+        ("cron-fired", Bp::Critical, Pd::NoPersist, Dc::Critical),
+        ("timer-cancelled", Bp::Soft, Pd::NoPersist, Dc::Critical),
+        ("task-started", Bp::Critical, Pd::Persist, Dc::Critical),
+        ("task-completed", Bp::Critical, Pd::Persist, Dc::Critical),
+        ("task-failed", Bp::Critical, Pd::Persist, Dc::Critical),
+        ("task-killed", Bp::Critical, Pd::Persist, Dc::Critical),
+        ("run-terminal", Bp::Critical, Pd::Persist, Dc::Critical),
+        ("approval-requested", Bp::Critical, Pd::Persist, Dc::Critical),
+        ("message-end", Bp::Critical, Pd::Persist, Dc::Critical),
+    ];
+    for (wire, bp, persist, bridge) in rows {
+        let policy = policy_of(wire);
+        assert_eq!(policy.backpressure, *bp, "定案表行 {wire} backpressure 不符");
+        assert_eq!(policy.persist, *persist, "定案表行 {wire} persist 不符");
+        assert_eq!(
+            policy.bridge_priority, *bridge,
+            "定案表行 {wire} bridgePriority 不符"
+        );
+    }
+}
+
+/// subagent-event kind 级三决策（D-04 PC-05）：progress=Delta+NoPersist+
+/// Critical（可丢增量不落库）、message/tool=Soft+Persist+Critical（尽力
+/// 落库，既有 is_non_persistent 语义保持——orchestrator 测试锚点）
+#[test]
+fn subagent_event_policy_kind_level_decisions() {
+    let sample = |kind: SubagentEventKind| AgentEvent::SubagentEvent {
+        session_id: "s1".into(),
+        subagent_id: "sub-1".into(),
+        subagent_run_id: "sr-1".into(),
+        event: SubagentEventPayload { kind, payload: None },
+    };
+    let progress = event_policy(&sample(SubagentEventKind::Progress));
+    assert_eq!(progress.backpressure, BackpressureLevel::Delta);
+    assert_eq!(progress.persist, PersistenceDecision::NoPersist);
+    assert_eq!(progress.bridge_priority, DropClass::Critical);
+    for kind in [SubagentEventKind::Message, SubagentEventKind::Tool] {
+        let policy = event_policy(&sample(kind));
+        assert_eq!(policy.backpressure, BackpressureLevel::Soft);
+        assert_eq!(policy.persist, PersistenceDecision::Persist);
+        assert_eq!(policy.bridge_priority, DropClass::Critical);
     }
 }
 

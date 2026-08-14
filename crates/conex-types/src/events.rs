@@ -203,6 +203,56 @@ pub enum BackpressureLevel {
     Critical,
 }
 
+// ── 事件策略三决策（D-04 PC-05：分类唯一事实源，单一 event_policy()
+//    同一 match 产出三正交决策，消灭 event_class / event_backpressure /
+//    drop_class_of 三套分类漂移；注册表每条目扩展三字段，registry_drift
+//    三字段双向锁定）──
+
+/// 持久化决策（事件面是否落库；与背压分级正交——同背压可不同持久化：
+/// task-output=Delta+NoPersist、subagent-progress=Delta+NoPersist，
+/// 而 message-delta=Delta+NoPersist 却桥丢帧 Soft，三决策不同构）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PersistenceDecision {
+    /// 落库（EventQueue::push 同步等待 store 持久化）
+    Persist,
+    /// 不落库（增量/实时轨，不阻塞 drive loop）
+    NoPersist,
+}
+
+/// 桥丢帧优先级（缓冲层水位语义；由壳层 buffer.rs 迁入 conex-types，
+/// 单一类型零映射——禁壳层依赖倒挂）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropClass {
+    /// 可丢（唯一：message-delta；message-end 全文兜底）
+    Soft,
+    /// 永不丢（terminal / 审批 / 工具 / message-end 等）
+    Critical,
+}
+
+/// 单一事件策略：同一 match 产出三正交决策（背压 + 持久化 + 桥丢帧），
+/// 新增事件只改 [event_policy] 一处，注册表/消费方随 registry_drift
+/// 三字段锁定同步。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EventPolicy {
+    /// 实时桥投递保证（注册表 backpressure 字段）
+    pub backpressure: BackpressureLevel,
+    /// 是否落库（事件面持久化）
+    pub persist: PersistenceDecision,
+    /// 缓冲层丢帧分级
+    pub bridge_priority: DropClass,
+}
+
+impl EventPolicy {
+    /// 三值正交构造（同处定义，杜绝分头散落）
+    pub const fn new(
+        backpressure: BackpressureLevel,
+        persist: PersistenceDecision,
+        bridge_priority: DropClass,
+    ) -> Self {
+        Self { backpressure, persist, bridge_priority }
+    }
+}
+
 /// 权限请求（approval-requested.request 载荷）
 ///
 /// 前端硬依赖（03 §5.1-9）：`request.toolCallId` 与 `request.toolName`
@@ -747,11 +797,14 @@ pub enum AgentEvent {
 
     // ── 定时器域（T-CF-04：02-CF 方案 §4.1/§4.7 定时器事件；runId 由
     //     emit 层信封注入——定时器事件无 run 归属，发射时置空串或
-    //    timer-<id> 伪 runId，见 [AgentEventEnvelope::run_id] 描述；唤醒走
-    //    steering 面而非事件面，事件仅数据面：落库 + 前端可观测，§4.7）──
+    //     timer-<id> 伪 runId，见 [AgentEventEnvelope::run_id] 描述；唤醒走
+    //     steering 面而非事件面，事件仅实时轨广播、不落库（R-22，R-CF3
+    //     翻转点），触发痕迹的持久事实源 = session_meta timer_<id> +
+    //     steering 条目 + 续 run 事件链（§4.7 读取面声明））──
 
-    /// 定时器到期（TimerRegistry 到期触发；Critical 必达落库；唤醒摘要
-    /// 「<prompt>（定时器 <id> 已到期）」，T-CF-12）
+    /// 定时器到期（TimerRegistry 到期触发；Critical 实时桥必达——仅实时
+    /// 轨广播、不落库（R-22，R-CF3 翻转点）；唤醒摘要「<prompt>（定时器
+    /// <id> 已到期）」，T-CF-12）
     #[serde(rename = "timer-fired", rename_all = "camelCase")]
     TimerFired {
         session_id: String,
@@ -762,8 +815,8 @@ pub enum AgentEvent {
         /// 触发时刻（epoch 毫秒）
         fired_at_ms: u64,
     },
-    /// 定时器已取消（早退命中 / AI 显式取消；Soft 尽力投递；
-    /// reason 规范值 early-exit|cancelled）
+    /// 定时器已取消（早退命中 / AI 显式取消；Soft 尽力投递——仅实时轨
+    /// 广播、不落库（R-22，R-CF3 翻转点）；reason 规范值 early-exit|cancelled）
     #[serde(rename = "timer-cancelled", rename_all = "camelCase")]
     TimerCancelled {
         session_id: String,
@@ -778,11 +831,14 @@ pub enum AgentEvent {
     // ── cron 域（T-CF-08：02-CF 方案 §4.4/§4.7 cron 触发事件；runId 由
     //     emit 层信封注入——cron 事件无 run 归属，发射时置空串或
     //     cron-<id> 伪 runId，见 [AgentEventEnvelope::run_id] 描述；唤醒走
-    //     steering 面而非事件面，事件仅数据面：落库 + 前端可观测，§4.7；
-    //     唤醒摘要「<prompt>（cron <id> 第 <n> 次触发）」，T-CF-12）──
+    //     steering 面而非事件面，事件仅实时轨广播、不落库（R-22，R-CF3
+    //     翻转点），触发痕迹的持久事实源 = session_meta + steering 条目 +
+    //     续 run 事件链（§4.7 读取面声明）；唤醒摘要「<prompt>（cron <id>
+    //     第 <n> 次触发）」，T-CF-12）──
 
-    /// cron 已触发（SchedulerRegistry 触发；Critical 必达落库——数据面，
-    /// AI 实际唤醒走 steering 条目，事件与唤醒解耦）
+    /// cron 已触发（SchedulerRegistry 触发；Critical 实时桥必达——仅实时
+    /// 轨广播、不落库（R-22，R-CF3 翻转点）；AI 实际唤醒走 steering
+    /// 条目，事件与唤醒解耦）
     #[serde(rename = "cron-fired", rename_all = "camelCase")]
     CronFired {
         session_id: String,
@@ -1027,46 +1083,90 @@ engine_event_type_names! {
     GoalContinuationDecided => "goal-continuation-decided",
 }
 
-/// 事件 → 背压级别（静态可判定，04 报告 1e；与事件注册表 backpressure 字段
-/// 一一对应，registry_drift 护栏双向锁定；先例 buffer.rs drop_class_of——
-/// 非 delta 全 Critical）
+/// 单一事件策略（D-04 PC-05：分类唯一事实源）——同一 match 产出
+/// 三正交决策（背压 / 持久化 / 桥丢帧），新增事件只改本函数一处；
+/// 与事件注册表三字段（backpressure / persist / bridgePriority）
+/// 一一对应，registry_drift 护栏三字段双向锁定。
 ///
-/// 分级规则：
-/// - Delta（可丢）：message-delta（既有非持久化语义）、subagent-event 的
-///   progress 类、task-output / task-heartbeat（任务域增量，不落库）；
-/// - Soft（尽力）：subagent-event 的 message/tool 类、task-suspicious
-///   （健康判定通知，尽力投递并留痕）、timer-cancelled（定时器取消通知，
-///   早退命中/显式取消，02-CF §4.7）；
-/// - Critical（必达）：其余全部（含 subagent-started/subagent-ended、终态、
-///   审批、审计、任务域终态 task-started/task-completed/task-failed/
-///   task-killed、定时器域 timer-fired、cron 域 cron-fired 等）。
-pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
+/// 定案表（D-04 §3.3，PC-05/PC-01/PC-02 共用，漂移清零后逐事件显式化）：
+/// - message-delta = Delta + NoPersist + Soft（增量可丢，message-end 全文兜底）；
+/// - subagent progress = Delta + NoPersist + Critical（缓冲不丢）；
+///   message/tool = Soft + Persist + Critical（尽力落库，既有语义）；
+/// - task-output / task-heartbeat = Delta + **NoPersist** + Critical
+///   （PC-02 定案：事实源 = 任务日志文件 / .samples.jsonl）；
+/// - task-suspicious = Soft + **NoPersist** + Critical（PC-02 定案：
+///   notifier + .samples.jsonl + 终态落库）；
+/// - timer-fired / cron-fired = Critical + **NoPersist** + Critical
+///   （PC-01 定案：实时桥必达语义保留，持久化决策正交独立声明——
+///   「仅实时轨，R-CF3 翻转点」= 事件体 sessionId 非空 + 无 run 持久化
+///   通道就绪）；
+/// - timer-cancelled = Soft + **NoPersist** + Critical（PC-01 定案）；
+/// - task 终态 4（started/completed/failed/killed）= Critical + Persist +
+///   Critical（PC-02 定案，D-01 规范化落库点）；
+/// - 其余 Critical 族（agent/turn/tool/message-end/审批/审计/subagent
+///   started-ended/goal/recovery/run-terminal 等）= Critical + Persist + Critical。
+pub fn event_policy(event: &AgentEvent) -> EventPolicy {
     match event {
-        AgentEvent::MessageDelta { .. } => BackpressureLevel::Delta,
+        // message-delta：增量可丢 + 不落库 + 桥 Soft（message-end 全文兜底，
+        // 丢帧不丢 message-end——03 §5.3-6 契约）
+        AgentEvent::MessageDelta { .. } => EventPolicy::new(
+            BackpressureLevel::Delta,
+            PersistenceDecision::NoPersist,
+            DropClass::Soft,
+        ),
+        // subagent-event：kind 级背压（progress=Delta 可丢不落库、
+        // message/tool=Soft 尽力落库），桥缓冲一律不丢
         AgentEvent::SubagentEvent { event, .. } => match event.kind {
-            SubagentEventKind::Progress => BackpressureLevel::Delta,
-            SubagentEventKind::Message | SubagentEventKind::Tool => BackpressureLevel::Soft,
+            SubagentEventKind::Progress => EventPolicy::new(
+                BackpressureLevel::Delta,
+                PersistenceDecision::NoPersist,
+                DropClass::Critical,
+            ),
+            SubagentEventKind::Message | SubagentEventKind::Tool => EventPolicy::new(
+                BackpressureLevel::Soft,
+                PersistenceDecision::Persist,
+                DropClass::Critical,
+            ),
         },
-        // 任务域（01 方案 §4.5 表：output/heartbeat=Delta 可丢不落库、
-        // suspicious=Soft 尽力投递、其余终态=Critical 必达落库）
-        AgentEvent::TaskOutput { .. } | AgentEvent::TaskHeartbeat { .. } => {
-            BackpressureLevel::Delta
-        }
-        AgentEvent::TaskSuspicious { .. } => BackpressureLevel::Soft,
+        // 任务域增量（01 方案 §4.5 表）：output/heartbeat=Delta 可丢不落库
+        // （事实源 = 任务日志文件 / .samples.jsonl，PC-02 定案）、
+        // suspicious=Soft 尽力投递不落库（notifier + .samples.jsonl +
+        // 终态落库，PC-02 定案）
+        AgentEvent::TaskOutput { .. } | AgentEvent::TaskHeartbeat { .. } => EventPolicy::new(
+            BackpressureLevel::Delta,
+            PersistenceDecision::NoPersist,
+            DropClass::Critical,
+        ),
+        AgentEvent::TaskSuspicious { .. } => EventPolicy::new(
+            BackpressureLevel::Soft,
+            PersistenceDecision::NoPersist,
+            DropClass::Critical,
+        ),
+        // 任务终态 4 事件：Critical 必达落库（PC-02 定案，D-01 规范化落库点）
         AgentEvent::TaskStarted { .. }
         | AgentEvent::TaskCompleted { .. }
         | AgentEvent::TaskFailed { .. }
-        | AgentEvent::TaskKilled { .. } => BackpressureLevel::Critical,
-        // 定时器域（02-CF 方案 §4.7 表：timer-fired=Critical 必达落库——
-        // 数据面，唤醒走 steering 面；timer-cancelled=Soft 尽力投递）
-        AgentEvent::TimerFired { .. } => BackpressureLevel::Critical,
-        AgentEvent::TimerCancelled { .. } => BackpressureLevel::Soft,
-        // cron 域（02-CF 方案 §4.7 表：cron-fired=Critical 必达落库——
-        // 数据面，唤醒走 steering 面；由 T-CF-08 登记）
-        AgentEvent::CronFired { .. } => BackpressureLevel::Critical,
-        // 恢复域（任务连续性方案 D8：recovery-* ×5 全 Critical——append_event
-        // 落库必达，数据面）与 goal 域（goal-* ×3 全 Critical——对齐
-        // timer-fired 先例：必达落库，数据面，唤醒走 steering 面）
+        | AgentEvent::TaskKilled { .. } => EventPolicy::new(
+            BackpressureLevel::Critical,
+            PersistenceDecision::Persist,
+            DropClass::Critical,
+        ),
+        // 定时器/cron 域（02-CF 方案 §4.7）：实时桥必达（Critical 分级语义
+        // 保留 = 实时桥必达），持久化正交独立声明 = 不落库（仅实时轨，
+        // R-CF3 翻转点；唤醒走 steering 面而非事件面，事件仅数据面）
+        AgentEvent::TimerFired { .. } | AgentEvent::CronFired { .. } => EventPolicy::new(
+            BackpressureLevel::Critical,
+            PersistenceDecision::NoPersist,
+            DropClass::Critical,
+        ),
+        AgentEvent::TimerCancelled { .. } => EventPolicy::new(
+            BackpressureLevel::Soft,
+            PersistenceDecision::NoPersist,
+            DropClass::Critical,
+        ),
+        // 恢复域（D8：recovery-* ×5 全 Critical——append_event 落库必达，
+        // 数据面）与 goal 域（goal-* ×3 全 Critical——对齐 timer-fired 先例，
+        // 数据面，唤醒走 steering 面）：必达落库
         AgentEvent::RecoveryEscalated { .. }
         | AgentEvent::RecoverySteering { .. }
         | AgentEvent::RecoveryFork { .. }
@@ -1074,9 +1174,26 @@ pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
         | AgentEvent::RecoveryBudgetDenied { .. }
         | AgentEvent::GoalRoundStarted { .. }
         | AgentEvent::GoalRoundCompleted { .. }
-        | AgentEvent::GoalContinuationDecided { .. } => BackpressureLevel::Critical,
-        _ => BackpressureLevel::Critical,
+        | AgentEvent::GoalContinuationDecided { .. } => EventPolicy::new(
+            BackpressureLevel::Critical,
+            PersistenceDecision::Persist,
+            DropClass::Critical,
+        ),
+        // 其余 Critical 族（agent/turn/tool/message-end/审批/审计/
+        // subagent started-ended/run-terminal 等）：必达落库
+        _ => EventPolicy::new(
+            BackpressureLevel::Critical,
+            PersistenceDecision::Persist,
+            DropClass::Critical,
+        ),
     }
+}
+
+/// 事件 → 背压级别（D-04 PC-05 薄壳：单一分类事实源 [event_policy] 唯一
+/// 实现三决策，本函数仅投影 backpressure——保持 device/events.rs 的
+/// event_is_sync_eligible、fanout/ws 等既有调用面零改动）
+pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
+    event_policy(event).backpressure
 }
 
 /// 子代理事件类别 → 背压级别（`subagent-event` 的 kind 级分类；
@@ -1119,7 +1236,9 @@ pub struct AgentEventEnvelope {
     /// 过滤失效）。定时器域事件（timer-fired/timer-cancelled）与 cron 域
     /// 事件（cron-fired）无 run 归属，发射方置空串或 `timer-<id>` /
     /// `cron-<id>` 伪 runId（02-CF 方案 §4.7 定稿）——前端按 timerId/cronId
-    /// 消费，不依赖 runId 分组。
+    /// 消费，不依赖 runId 分组。timer/cron 事件仅实时轨广播、不落库
+    /// （本战役定案 R-22）；完整落库依赖会话化前置（R-CF3 登记后续战役，
+    /// 翻转点 = 事件体 sessionId 非空 + 无 run 持久化通道就绪）。
     pub run_id: Option<String>,
     pub sequence: Option<u64>,
     /// 信封 schema 版本（wire 层注入，camelCase `schemaVersion`；当前恒为 1）

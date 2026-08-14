@@ -19,7 +19,9 @@
 
 use std::sync::Arc;
 
-use conex_types::events::{AgentEvent, AgentEventEnvelope, RunTerminalStatus};
+use conex_types::events::{
+    event_policy, AgentEvent, AgentEventEnvelope, PersistenceDecision, RunTerminalStatus,
+};
 use conex_types::session::AgentEndReason;
 use session_loop::RunOutcome;
 
@@ -31,36 +33,10 @@ use crate::run::{
 };
 use crate::now_iso_utc;
 
-/// 事件类别（持久化分流，05 §2.8）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventClass {
-    /// 持久化事件（同步等待落库）
-    Persistent,
-    /// 非持久化事件（message-delta / thought-delta，不落库不阻塞）
-    NonPersistent,
-}
-
-/// 事件持久化分类（05 §2.8：message-delta/thought-delta 非持久化；
-/// agent-start/agent-end、message-end、approval-requested 等持久化）
-///
-/// M14（I7 事件源补齐）：subagent-event 的 progress 类为 Delta 可丢增量
-/// （M7 背压注册表锁定），同 message-delta 不落库不阻塞 drive loop；
-/// message/tool 类（Soft）与 started/ended（Critical）照常落库。
-pub fn event_class(event: &AgentEvent) -> EventClass {
-    match event {
-        AgentEvent::MessageDelta { .. } => EventClass::NonPersistent,
-        AgentEvent::SubagentEvent { event, .. }
-            if event.kind == conex_types::events::SubagentEventKind::Progress =>
-        {
-            EventClass::NonPersistent
-        }
-        _ => EventClass::Persistent,
-    }
-}
-
-/// 是否非持久化事件（delta 不阻塞 drive loop）
+/// 是否非持久化事件（D-04 PC-05 迁移：单一分类事实源 [event_policy] 的
+/// persist 决策；delta/soft 增量不阻塞 drive loop——05 §2.8 语义不变）
 pub fn is_non_persistent(event: &AgentEvent) -> bool {
-    event_class(event) == EventClass::NonPersistent
+    event_policy(event).persist == PersistenceDecision::NoPersist
 }
 
 /// 事件类型名（顶层 type，落库用；直接取 [AgentEvent::type_name]，

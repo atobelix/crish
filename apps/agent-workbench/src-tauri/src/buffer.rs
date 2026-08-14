@@ -18,27 +18,15 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use conex_types::events::AgentEvent;
+use conex_types::events::{event_policy, AgentEvent, DropClass};
 
-/// 丢帧类目（03 §5.3-6：delta 可丢、terminal/审批/工具不可丢）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DropClass {
-    /// 可丢（message-delta；message-end 全文兜底）
-    Soft,
-    /// 永不丢（terminal / 审批 / 工具 / message-end 等）
-    Critical,
-}
-
-/// 事件类别 → 丢帧类目
-///
-/// 仅 `message-delta` 属 [DropClass::Soft]（T09.1 实时轨/收口轨共用，
-/// 丢帧不丢 message-end——03 §5.3-6 契约）。
+/// 事件类别 → 丢帧类目（D-04 PC-05 迁移：单一分类事实源 [event_policy] 的
+/// bridge_priority 决策——唯一 Soft = message-delta（T09.1 实时轨/收口轨
+/// 共用，丢帧不丢 message-end——03 §5.3-6 契约），与既有语义逐位一致；
+/// `DropClass` 类型本体由本文件迁入 conex-types（单一类型零映射，
+/// 禁壳层依赖倒挂））
 pub fn drop_class_of(event: &AgentEvent) -> DropClass {
-    if matches!(event, AgentEvent::MessageDelta { .. }) {
-        DropClass::Soft
-    } else {
-        DropClass::Critical
-    }
+    event_policy(event).bridge_priority
 }
 
 /// 入队结果（S-8 修复：丢帧可观测，供 [crate::core_event_bridge::EmitReport]
