@@ -11,8 +11,8 @@
 
 import React, { useCallback } from 'react';
 import { SendToNoteButton } from '../note-paper/SendToNoteButton';
-import type { NoteTransport } from '../../api/noteApi';
 import type {
+  NoteTransport,
   SendToNoteResult,
   SendToNoteSink,
 } from '../../bridges/send-to-note';

@@ -91,6 +91,46 @@ describe('onSubagentStarted（I5-M7 信封对齐：Rust 契约字段逐一消费
       mode: 'research',
     });
   });
+
+  it('EngineEnvelope 强类型信封路径：字段正确透传', () => {
+    let captured: unknown;
+    onSubagentStarted(
+      {
+        ...env,
+        callbacks: {
+          onSubagentStarted: (info: unknown) => {
+            captured = info;
+          },
+        },
+      } as unknown as HandlerEnv,
+      {
+        kind: 'engine',
+        type: 'subagent-started',
+        originalType: 'subagent-started',
+        raw: { runId: 'run-parent' },
+        event: {
+          type: 'subagent-started',
+          sessionId: 's1',
+          subagentId: 'sa-typed-1',
+          subagentRunId: 'sr-typed-1',
+          role: 'researcher',
+          capabilityMode: 'readonly',
+          startedAt: '2026-08-03T08:00:00.000Z',
+          description: '强类型子代理',
+          mode: 'research',
+          parentToolCallId: 'tc-typed-9',
+        },
+      }
+    );
+    expect(captured).toEqual({
+      subagentId: 'sa-typed-1',
+      subagentRunId: 'sr-typed-1',
+      parentRunId: 'run-parent',
+      parentToolCallId: 'tc-typed-9',
+      description: '强类型子代理',
+      mode: 'research',
+    });
+  });
 });
 
 describe('onSubagentEvent（I5-M7：event 结构化负载整体透传）', () => {
@@ -128,11 +168,84 @@ describe('onSubagentEvent（I5-M7：event 结构化负载整体透传）', () =>
       { ...env, callbacks: { onSubagentEvent: cb } } as unknown as HandlerEnv,
       legacy('subagent-event', { type: 'subagent-event', subagentId: 'sa-1' })
     );
-    expect(captured).toEqual({ subagentId: 'sa-1', subagentRunId: '', event: {} });
+    expect(captured).toEqual({
+      subagentId: 'sa-1',
+      subagentRunId: '',
+      event: {},
+    });
+  });
+
+  it('EngineEnvelope 强类型信封路径：event 结构化负载透传', () => {
+    let captured: unknown;
+    onSubagentEvent(
+      {
+        ...env,
+        callbacks: {
+          onSubagentEvent: (info: unknown) => {
+            captured = info;
+          },
+        },
+      } as unknown as HandlerEnv,
+      {
+        kind: 'engine',
+        type: 'subagent-event',
+        originalType: 'subagent-event',
+        raw: {
+          event: { kind: 'progress', payload: { step: 'analysis' } },
+        },
+        event: {
+          type: 'subagent-event',
+          sessionId: 's1',
+          subagentId: 'sa-ev-1',
+          subagentRunId: 'sr-ev-1',
+          event: { kind: 'progress', payload: { step: 'analysis' } },
+        },
+      }
+    );
+    expect(captured).toEqual({
+      subagentId: 'sa-ev-1',
+      subagentRunId: 'sr-ev-1',
+      event: { kind: 'progress', payload: { step: 'analysis' } },
+    });
   });
 });
 
 describe('onSubagentEnded（I5-M7：status 正则映射 + summary/endedAt 透传）', () => {
+  it('EngineEnvelope 强类型信封路径：status 正则映射 + summary 消费', () => {
+    let captured: unknown;
+    onSubagentEnded(
+      {
+        ...env,
+        callbacks: {
+          onSubagentEnded: (info: unknown) => {
+            captured = info;
+          },
+        },
+      } as unknown as HandlerEnv,
+      {
+        kind: 'engine',
+        type: 'subagent-ended',
+        originalType: 'subagent-ended',
+        raw: {},
+        event: {
+          type: 'subagent-ended',
+          sessionId: 's1',
+          subagentId: 'sa-end-1',
+          subagentRunId: 'sr-end-1',
+          status: 'completed',
+          summary: '已完成任务',
+          endedAt: '2026-08-03T08:00:00.000Z',
+        },
+      }
+    );
+    expect(captured).toEqual({
+      subagentId: 'sa-end-1',
+      subagentRunId: 'sr-end-1',
+      status: 'completed',
+      summary: '已完成任务',
+    });
+  });
+
   it('Rust 规范值映射：completed→completed、failed→failed、cancelled→stopped', () => {
     const cases: Array<[string, 'completed' | 'failed' | 'stopped']> = [
       ['completed', 'completed'],
@@ -210,7 +323,11 @@ describe('onSubagentEnded（I5-M7：status 正则映射 + summary/endedAt 透传
           },
         },
       } as unknown as HandlerEnv,
-      legacy('subagent-ended', { type: 'subagent-ended', subagentId: 'sa-1', status: 'weird' })
+      legacy('subagent-ended', {
+        type: 'subagent-ended',
+        subagentId: 'sa-1',
+        status: 'weird',
+      })
     );
     expect(captured).toEqual({
       subagentId: 'sa-1',
@@ -299,19 +416,22 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('started 全局消费：父工具卡置 running（running 态才更新）', () => {
-    useLayoutStore.getState().addMessage(
-      useLayoutStore.getState().workspaces[0].id,
-      sid,
-      {
+    useLayoutStore
+      .getState()
+      .addMessage(useLayoutStore.getState().workspaces[0].id, sid, {
         id: 'm1',
         sender: 'assistant',
         text: '',
         timestamp: Date.now(),
         toolCalls: [
-          { id: 'tc-running', name: 'run_subagent', arguments: '', status: 'running' },
+          {
+            id: 'tc-running',
+            name: 'run_subagent',
+            arguments: '',
+            status: 'running',
+          },
         ],
-      }
-    );
+      });
     onSubagentStartedGlobal({
       type: 'subagent-started',
       runId: 'run-parent',
@@ -326,10 +446,9 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('started 全局消费：终态父工具卡不回退为 running', () => {
-    useLayoutStore.getState().addMessage(
-      useLayoutStore.getState().workspaces[0].id,
-      sid,
-      {
+    useLayoutStore
+      .getState()
+      .addMessage(useLayoutStore.getState().workspaces[0].id, sid, {
         id: 'm1',
         sender: 'assistant',
         text: '',
@@ -343,8 +462,7 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
             output: '旧输出',
           },
         ],
-      }
-    );
+      });
     onSubagentStartedGlobal({
       type: 'subagent-started',
       runId: 'run-parent',
@@ -407,19 +525,22 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('ended 全局消费：status/summary/endedAt + 时间线消息收口 + 父工具卡终态', () => {
-    useLayoutStore.getState().addMessage(
-      useLayoutStore.getState().workspaces[0].id,
-      sid,
-      {
+    useLayoutStore
+      .getState()
+      .addMessage(useLayoutStore.getState().workspaces[0].id, sid, {
         id: 'm1',
         sender: 'assistant',
         text: '',
         timestamp: Date.now(),
         toolCalls: [
-          { id: 'tc-spawn', name: 'run_subagent', arguments: '', status: 'running' },
+          {
+            id: 'tc-spawn',
+            name: 'run_subagent',
+            arguments: '',
+            status: 'running',
+          },
         ],
-      }
-    );
+      });
     useLayoutStore.getState().upsertSessionAgent(sid, {
       id: 'sa-1',
       subagentRunId: 'sr-1',
@@ -462,19 +583,22 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('ended 全局消费：failed → 父工具卡 error + 兜底文案', () => {
-    useLayoutStore.getState().addMessage(
-      useLayoutStore.getState().workspaces[0].id,
-      sid,
-      {
+    useLayoutStore
+      .getState()
+      .addMessage(useLayoutStore.getState().workspaces[0].id, sid, {
         id: 'm1',
         sender: 'assistant',
         text: '',
         timestamp: Date.now(),
         toolCalls: [
-          { id: 'tc-spawn', name: 'run_subagent', arguments: '', status: 'running' },
+          {
+            id: 'tc-spawn',
+            name: 'run_subagent',
+            arguments: '',
+            status: 'running',
+          },
         ],
-      }
-    );
+      });
     useLayoutStore.getState().upsertSessionAgent(sid, {
       id: 'sa-1',
       subagentRunId: 'sr-1',

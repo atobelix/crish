@@ -148,12 +148,24 @@ describe('CONN-E2′-tauri · invoke detect 一次（IPC）', () => {
     expect(bridge).toMatch(/if\s*\(\s*!decision\.ok\s*\)/);
     expect(bridge).toMatch(/decision_blocked/);
 
-    const backend = readFileSync(
+    const mirrorBackend = readFileSync(
+      join(REPO, 'apps/agent-workbench/src-tauri/src/note_commands_mirror.rs'),
+      'utf8'
+    );
+    expect(mirrorBackend).toMatch(/silent_overwrite_blocked/);
+
+    const facadeBackend = readFileSync(
       join(REPO, 'apps/agent-workbench/src-tauri/src/note_commands.rs'),
       'utf8'
     );
-    expect(backend).toMatch(/silent_overwrite_blocked/);
-    expect(backend).toMatch(
+    expect(facadeBackend).toMatch(/note_commands_mirror/);
+    expect(facadeBackend).toMatch(/note_import_mirror_proposal/);
+
+    const testBackend = readFileSync(
+      join(REPO, 'apps/agent-workbench/src-tauri/src/note_commands_tests.rs'),
+      'utf8'
+    );
+    expect(testBackend).toMatch(
       /note_import_mirror_proposal_ipc_blocks_silent_overwrite/
     );
 

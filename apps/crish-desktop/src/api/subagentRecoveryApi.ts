@@ -27,14 +27,11 @@ export async function resumeSubagent(
   agentId: string,
   summary?: string
 ): Promise<{ ok: boolean }> {
-  const res = await invokeResult<{ ok?: boolean }>(
-    'workbench_resume_subagent',
-    {
-      parentSessionId,
-      agentId,
-      summary,
-    }
-  );
+  const res = await invokeResult<{ ok?: boolean }>('resume_subagent', {
+    sessionId: parentSessionId,
+    subagentId: agentId,
+    prompt: summary,
+  });
   return { ok: res.status === 'ok' };
 }
 
@@ -43,15 +40,11 @@ export async function killSubagent(
   agentId: string,
   reason?: string
 ): Promise<{ ok: boolean }> {
-  const res = await invokeResult<{ ok?: boolean }>(
-    'workbench_cancel_background_task',
-    {
-      parentSessionId,
-      agentId,
-      taskId: agentId,
-      reason,
-    }
-  );
+  const res = await invokeResult<{ ok?: boolean }>('kill_subagent', {
+    sessionId: parentSessionId,
+    subagentId: agentId,
+    reason,
+  });
   return { ok: res.status === 'ok' };
 }
 
@@ -59,12 +52,9 @@ export async function killAllSubagents(
   parentSessionId: string,
   reason?: string
 ): Promise<{ ok: boolean }> {
-  const res = await invokeResult<{ ok?: boolean }>(
-    'workbench_cancel_all_subagents',
-    {
-      parentSessionId,
-      reason,
-    }
-  );
+  const res = await invokeResult<{ ok?: boolean }>('kill_all', {
+    sessionId: parentSessionId,
+    reason,
+  });
   return { ok: res.status === 'ok' };
 }

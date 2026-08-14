@@ -2,6 +2,7 @@
  * RunNoticeBar：persistent 变体渲染标记（data-persistent，供恢复驱动/测试断言）。
  */
 // @vitest-environment jsdom
+import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { RunNoticeBar } from './RunNoticeBar';

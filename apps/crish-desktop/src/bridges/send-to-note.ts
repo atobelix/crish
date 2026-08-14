@@ -17,6 +17,8 @@
 import { resolveNoteTransport, type NoteTransport } from '../api/noteApi';
 import { notifyNoteDocWritten } from './note-doc-written';
 
+export type { NoteTransport };
+
 // ---------------------------------------------------------------------------
 // Surface 常量（本地；若 contract 后续导出 EditorSurface 可对齐替换）
 // ---------------------------------------------------------------------------

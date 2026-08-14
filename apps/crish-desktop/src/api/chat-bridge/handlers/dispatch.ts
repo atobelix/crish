@@ -168,12 +168,9 @@ export const engineDispatchTable: {
   // 优先生成解析器——完整信封带 sessionId 时走 engine 分支，宽容形态
   // （缺 sessionId 等）走 legacy 分支；两分支都转发 legacy handler
   // （消费 raw 原始信封，subagentHandlers.ts），保证行为一致）
-  'subagent-started':
-    onSubagentStarted as unknown as EngineHandler<'subagent-started'>,
-  'subagent-event':
-    onSubagentEvent as unknown as EngineHandler<'subagent-event'>,
-  'subagent-ended':
-    onSubagentEnded as unknown as EngineHandler<'subagent-ended'>,
+  'subagent-started': onSubagentStarted,
+  'subagent-event': onSubagentEvent,
+  'subagent-ended': onSubagentEnded,
   // 任务域七事件（F3 T-AB-17 数据面；UI 展示层轮询策略下显式空实现，
   // 事件驱动刷新接线待后续轮——taskEventHandlers.ts）
   'task-started': onTaskStarted,

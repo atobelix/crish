@@ -13,7 +13,7 @@
  */
 import { surfaceStreamFailure } from '../BridgeErrorPolicy';
 import { getLayoutChromeState } from '../../../store/storeAccess';
-import type { LegacyEnvelope } from './eventParser';
+import type { EngineEnvelope, LegacyEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
 /** 子代理终态归一（wire status → 展示终态）：cancel/abort/stop → stopped；fail/error → failed；其余 completed */
@@ -27,8 +27,20 @@ function mapSubagentEndStatus(raw: string): 'completed' | 'failed' | 'stopped' {
 
 export function onSubagentStarted(
   env: HandlerEnv,
-  envelope: LegacyEnvelope
+  envelope: LegacyEnvelope | EngineEnvelope<'subagent-started'>
 ): void {
+  if (envelope.kind === 'engine') {
+    const ev = envelope.event;
+    env.callbacks.onSubagentStarted?.({
+      subagentId: ev.subagentId,
+      subagentRunId: ev.subagentRunId,
+      parentRunId: String(envelope.raw.runId ?? env.runId),
+      parentToolCallId: ev.parentToolCallId,
+      description: ev.description ?? '协作 agent',
+      mode: ev.mode ?? 'research',
+    });
+    return;
+  }
   const msg = envelope.raw;
   env.callbacks.onSubagentStarted?.({
     subagentId: String(msg.subagentId ?? ''),
@@ -44,24 +56,43 @@ export function onSubagentStarted(
 
 export function onSubagentEvent(
   env: HandlerEnv,
-  envelope: LegacyEnvelope
+  envelope: LegacyEnvelope | EngineEnvelope<'subagent-event'>
 ): void {
   const msg = envelope.raw;
   const ev =
     msg.event && typeof msg.event === 'object' && !Array.isArray(msg.event)
       ? (msg.event as Record<string, unknown>)
       : {};
+  const subagentId =
+    envelope.kind === 'engine'
+      ? envelope.event.subagentId
+      : String(msg.subagentId ?? '');
+  const subagentRunId =
+    envelope.kind === 'engine'
+      ? envelope.event.subagentRunId
+      : String(msg.subagentRunId ?? '');
   env.callbacks.onSubagentEvent?.({
-    subagentId: String(msg.subagentId ?? ''),
-    subagentRunId: String(msg.subagentRunId ?? ''),
+    subagentId,
+    subagentRunId,
     event: ev,
   });
 }
 
 export function onSubagentEnded(
   env: HandlerEnv,
-  envelope: LegacyEnvelope
+  envelope: LegacyEnvelope | EngineEnvelope<'subagent-ended'>
 ): void {
+  if (envelope.kind === 'engine') {
+    const ev = envelope.event;
+    const st = mapSubagentEndStatus(String(ev.status ?? '').toLowerCase());
+    env.callbacks.onSubagentEnded?.({
+      subagentId: ev.subagentId,
+      subagentRunId: ev.subagentRunId,
+      status: st,
+      summary: ev.summary,
+    });
+    return;
+  }
   const msg = envelope.raw;
   const st = mapSubagentEndStatus(String(msg.status ?? '').toLowerCase());
   env.callbacks.onSubagentEnded?.({
