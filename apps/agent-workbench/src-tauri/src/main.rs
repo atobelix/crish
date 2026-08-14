@@ -190,6 +190,10 @@ command_registry![
     ("core_get_status", core_query_commands::core_get_status),
     ("core_get_run_snapshot", core_query_commands::core_get_run_snapshot),
     ("core_read_session_events", core_query_commands::core_read_session_events),
+    // F-03（DM-07）：core_read_run_events IPC 面恢复激活（T-F 06 退役登记
+    // 撤销；实现委托 read_run_events_impl，与 server 直调体同源——manifest
+    // registered=true + 注册面一致性测试两侧必须同步）
+    ("core_read_run_events", core_query_commands::core_read_run_events),
     ("core_run_task", core_run_commands::core_run_task),
     ("core_run_control", core_run_commands::core_run_control),
     // E2 F4（07 §3 卡 C）：手动压缩（slash /compact → 引擎命令；registered
@@ -609,13 +613,19 @@ fn main() {
             // 只读面就绪事实快照（CoreStateBackend 注入消费；启动时索引
             // 为空 → false 诚实降级，重建后由命令面更新——核心状态查询
             // 与命令面共享同一事实源）
-            let search_state = core_commands::SharedSearchState::new();
+            // C21 接线：托管类型为 Arc<SharedSearchState>（对齐
+            // Arc<CoreRunState> 先例）——命令面（core_search_files /
+            // core_rebuild_search_index / core_get_status）与本地服务后端
+            // （with_search_state 注入，见 ⑪a）经 Arc clone 共享同一实例，
+            // 索引重建立即可见；tauri State 只暴露 &T 引用无法回取 Arc，
+            // 故托管面本身必须是 Arc（未接线命令面为历史直管形态）。
+            let search_state = Arc::new(core_commands::SharedSearchState::new());
             let search_index_ready = !search_state
                 .files
                 .read()
                 .unwrap_or_else(|e| e.into_inner())
                 .is_empty();
-            app.manage(search_state);
+            app.manage(Arc::clone(&search_state));
             let compaction = core_commands::SharedCompactionState::new();
             // 压缩为纯内存能力（conex-compaction），core_compact_messages 已接线）
             compaction.set_ready(true);
@@ -796,11 +806,21 @@ fn main() {
                 //   ——引擎全事件流自动双通道（webview + 跨端广播）；
                 //   并注入 ServerState.event_stream（WS drain task 消费，
                 //   L4-4/6/7 实时推送与续传数据源）
-                let backend: Option<Arc<dyn server::backend::ApiBackend>> = Some(Arc::new(
+                // ⑪a-C21：搜索索引注入（与命令面 SharedSearchState 同一
+                // 实例——with_search_state 取 ⑤ 的 Arc clone，索引重建后
+                // search_files / get_search_index 立即生效，不再
+                // engine_not_ready）+ 工作区根注入（注册表活动根 canonical
+                // 路径，relPath 剥离依据；注册表未托管 / 根不可达 → 不注入
+                // 根，relPath 回退原路径，search_files 本身不受影响）
+                let mut backend =
                     server::core_backend::CoreStateBackend::new(Arc::clone(&core_state))
                         .with_search_index_ready(search_index_ready)
-                        .with_compaction_ready(compaction_ready),
-                ));
+                        .with_compaction_ready(compaction_ready)
+                        .with_search_state(Arc::clone(&search_state));
+                if let Ok(guard) = crate::workspace::resolve_guard(&app_handle, "") {
+                    backend = backend.with_search_root(guard.root().to_string_lossy().into_owned());
+                }
+                let backend: Option<Arc<dyn server::backend::ApiBackend>> = Some(Arc::new(backend));
                 let fanout = Arc::new(server::fanout::FanOutEmitter::new(vec![]));
                 bridge.attach_fanout(Arc::clone(&fanout) as Arc<dyn core_event_bridge::Emitter>);
 

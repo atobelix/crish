@@ -21,7 +21,7 @@
 
 use std::sync::Arc;
 
-use conex_types::events::{AgentEventEnvelope, RunCacheStats};
+use conex_types::events::{AgentEventEnvelope, RunCacheStats, EVENT_ENVELOPE_SCHEMA_VERSION};
 use serde::Serialize;
 use tauri::State;
 
@@ -284,7 +284,8 @@ use crate::core_run_commands::{ActiveRunSummary, CoreRunState, PendingApprovalSu
 ///   同一实例，避免写入侧与读取侧漂移）：diagnostics / lastError；
 /// - `gatekeeper`（SharedGatekeeper）：就绪诊断预留接入点（当前仅占位，未消费）；
 /// - `compaction`（SharedCompactionState，PE-01 T01.2）：compactionReady；
-/// - `search`（SharedSearchState）：searchIndexReady（文件数 > 0 推断）；
+/// - `search`（Arc<SharedSearchState>，C21 托管形态：main.rs manage Arc，本地
+///   服务后端经 Arc clone 共享同一实例）：searchIndexReady（文件数 > 0 推断）；
 /// - `db`（SharedDb）：dbReady。
 #[tauri::command]
 pub async fn core_get_status(
@@ -292,7 +293,7 @@ pub async fn core_get_status(
     diagnostics: State<'_, Arc<StatusDiagnostics>>,
     _gatekeeper: State<'_, SharedGatekeeper>,
     compaction: State<'_, SharedCompactionState>,
-    search: State<'_, SharedSearchState>,
+    search: State<'_, Arc<SharedSearchState>>,
     db: State<'_, crate::session_commands::SharedDb>,
 ) -> Result<CoreStatus, CoreError> {
     let search_index_ready = search
@@ -495,21 +496,169 @@ fn normalize_max_events(max_events: Option<u64>) -> usize {
         .clamp(1, MAX_PAGE_SIZE) as usize
 }
 
-/// 把持久化事件行解析为 (sequence, AgentEventEnvelope)（损坏载荷跳过，防御性——
-/// 写入时已校验，损坏只可能是磁盘故障，跳过不中断整页读取）。
-fn parse_envelopes(events: &[orchestrator::persist::PersistedEvent]) -> Vec<(u64, AgentEventEnvelope)> {
-    events
-        .iter()
-        .filter_map(|event| {
-            let envelope: AgentEventEnvelope = serde_json::from_str(&event.payload).ok()?;
-            Some((event.sequence, envelope))
-        })
-        .collect()
+/// 信封解析三态统计（DM-06 / D-01：消灭「库里躺着读不出」的静默丢弃）。
+///
+/// 计数供调用方告警/观测：corrupt 与 passthrough 是异常形状（磁盘损坏 /
+/// 不可合成行），synthesized 是正常兼容面（legacy / 直写镜像行合成透出）。
+/// 三态均**不抛错、不中断整批**读取（防御语义，写入时已校验的假设不成立
+/// 只能来自磁盘故障或历史直写，跳过/透出保证读面可用）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct EnvelopeParseStats {
+    /// 态 1：非法 JSON（无法解析为任何 JSON 值）——跳过
+    pub corrupt_skipped: usize,
+    /// 态 2：typed 信封（AgentEventEnvelope 反序列化成功）——正常解析 + sequence 回填
+    pub typed: usize,
+    /// 态 3a：合法 JSON 但缺 type 标签（run-interrupted / recovery-* 镜像 /
+    /// legacy 行）——D8 合成 fallback 透出（补 type 键路由 + 原始字段透传）
+    pub synthesized: usize,
+    /// 态 3b：合法 JSON 但非对象（数组/标量，无法合成事件对象）——
+    /// rawPayload 包装透出（显式保留原文，不静默丢弃）
+    pub passthrough: usize,
+}
+
+/// 把持久化事件行解析为 wire JSON（`{type, runId, sequence, schemaVersion, ...}`），
+/// 三态处理（DM-06 / D-01 完成定义 ①）：
+/// 1. **corrupt**：非法 JSON → 跳过 + 计数（保持既有
+///    `parse_envelopes_skips_corrupt_payloads` 语义，磁盘损坏不中断整页）；
+/// 2. **typed 信封**：正常 AgentEventEnvelope → 解析 + **sequence 回填**
+///    （行级 sequence 列 → 信封 sequence 字段，列 = sequence 权威，G-05）；
+/// 3. **无 type 标签的合法 JSON**（run-interrupted / recovery-* 镜像 / legacy
+///    行）→ [synthesize_fallback_wire] D8 合成 fallback 透出，**不丢弃**；
+///    非对象 JSON 经 rawPayload 包装显式透出。
+///
+/// 依赖记录（DM-06 接入点 → DM-07 P3 收口）：`PersistedEvent.run_id` 列
+/// 字段已就绪（DM-01 落库 + DM-03 随 SELECT 列集带出）——runId 取值顺序
+/// = **payload runId 字段 → run_id 列 → 镜像键推断**（DM-07 定案，与
+/// SQL 层 by_run 过滤的列权威口径一致；列仅作兜底，不覆盖 payload 既有
+/// runId，legacy 行行为与现状一致——诚实兼容，不回写）。态 2 与态 3
+/// 的接入点见 [parse_envelopes] / [synthesize_fallback_wire]。
+pub(crate) fn parse_envelopes(
+    events: &[orchestrator::persist::PersistedEvent],
+) -> (Vec<(u64, serde_json::Value)>, EnvelopeParseStats) {
+    let mut stats = EnvelopeParseStats::default();
+    let mut out = Vec::with_capacity(events.len());
+    for event in events {
+        let value: serde_json::Value = match serde_json::from_str(&event.payload) {
+            Ok(value) => value,
+            Err(_) => {
+                // 态 1：非法 JSON 跳过（磁盘损坏防御，不中断整批读取）
+                stats.corrupt_skipped += 1;
+                continue;
+            }
+        };
+        let wire = match serde_json::from_value::<AgentEventEnvelope>(value.clone()) {
+            Ok(mut envelope) => {
+                // 态 2：typed 信封——sequence 列权威回填（G-05，行级列恒存在）；
+                // DM-07 P3：runId 取值 = payload 信封优先，缺失时列值兜底
+                // （列 = 查询权威，与 SQL by_run 过滤口径一致；不覆盖 payload）
+                stats.typed += 1;
+                envelope.sequence = Some(event.sequence);
+                if envelope.run_id.is_none() {
+                    envelope.run_id = event.run_id.clone();
+                }
+                envelope_to_value(&envelope)
+            }
+            Err(_) => {
+                // 态 3：无 type 标签 → D8 合成 fallback（typed 优先顺序不变，
+                // 仅 typed 失败才走合成；对象行合成透出，非对象行 passthrough）
+                if value.is_object() {
+                    stats.synthesized += 1;
+                } else {
+                    stats.passthrough += 1;
+                }
+                Some(synthesize_fallback_wire(event, &value))
+            }
+        };
+        if let Some(wire) = wire {
+            out.push((event.sequence, wire));
+        }
+    }
+    (out, stats)
+}
+
+/// D8 合成 fallback（态 3）：缺 type 标签的合法 JSON（run-interrupted /
+/// recovery-* 镜像 / legacy 行）→ 按列与 payload 已知键合成 wire，原始字段
+/// 全量透传，**不丢弃**（消灭 G-02/G-20 读侧静默丢弃）。
+///
+/// 合成键优先级：
+/// - `type` = 行级 event_type 列（路由权威，镜像行无此键）；
+/// - `sequence` / `schemaVersion` / `sessionId` = 行级列（缺省补全，列权威）；
+/// - `runId` 取值顺序（DM-07 P3，与 [parse_envelopes] 态 2 同口径）：
+///   payload 已有 `runId` 键（透传不覆盖）→ `run_id` 列（列权威兜底）→
+///   镜像键推断（`run_id` snake_case / `subagentRunId`，如 InterruptedRun
+///   record / recovery-* 镜像）→ 均无则省略（前端按类型宽容消费）；
+/// - 其余 payload 键原样透传。
+///
+/// 非对象 JSON（数组/标量）无法合成事件对象 → 包装 `{type, sequence,
+/// schemaVersion, sessionId, rawPayload}` 显式透出原文（skippable 形态，
+/// 计数走 stats.passthrough）。
+fn synthesize_fallback_wire(
+    event: &orchestrator::persist::PersistedEvent,
+    payload: &serde_json::Value,
+) -> serde_json::Value {
+    let mut wire = serde_json::Map::new();
+    match payload {
+        serde_json::Value::Object(map) => {
+            // 原始字段透传（镜像/legacy 行的全部已知键）
+            wire.extend(map.clone());
+            // type 键路由：行级 event_type 列权威（镜像行无此键，列补全）
+            wire.insert("type".into(), serde_json::json!(event.event_type));
+            // 契约键缺省补全（列权威；镜像行无这些键；键显式 String——
+            // serde_json 1.0.151 entry<S: Into<String>> 泛型下 .into() 歧义）
+            wire.entry("schemaVersion".to_string())
+                .or_insert(serde_json::json!(EVENT_ENVELOPE_SCHEMA_VERSION));
+            wire.entry("sessionId".to_string())
+                .or_insert(serde_json::json!(event.session_id));
+            // runId 取值顺序（DM-07 P3）：payload runId 键透传优先 → 列兜底 →
+            // 镜像键推断（列已就绪，优先于 run_id/subagentRunId 键）
+            if !wire.contains_key("runId") {
+                let run_id = event.run_id.as_deref().or_else(|| {
+                    ["run_id", "subagentRunId"]
+                        .iter()
+                        .find_map(|key| map.get(*key).and_then(serde_json::Value::as_str))
+                });
+                if let Some(run_id) = run_id {
+                    wire.insert("runId".into(), serde_json::json!(run_id));
+                }
+            }
+            // sequence 列权威回填（G-05；镜像行无 sequence 键）
+            wire.insert("sequence".into(), serde_json::json!(event.sequence));
+        }
+        other => {
+            // 无法合成事件对象的行：显式透出原文（rawPayload），不静默丢弃
+            wire.insert("type".into(), serde_json::json!(event.event_type));
+            wire.insert("sequence".into(), serde_json::json!(event.sequence));
+            wire.insert(
+                "schemaVersion".into(),
+                serde_json::json!(EVENT_ENVELOPE_SCHEMA_VERSION),
+            );
+            wire.insert("sessionId".into(), serde_json::json!(event.session_id));
+            wire.insert("rawPayload".into(), other.clone());
+        }
+    }
+    serde_json::Value::Object(wire)
 }
 
 /// 信封 → 扁平 wire JSON（`{type, runId, sequence, schemaVersion, ...事件字段}`）。
 fn envelope_to_value(envelope: &AgentEventEnvelope) -> Option<serde_json::Value> {
     serde_json::to_value(envelope).ok()
+}
+
+/// 解析防御统计告警（DM-06：corrupt 跳过与 passthrough 透出是异常形状——
+/// 磁盘损坏 / 不可合成行，告警不静默；synthesized 是正常兼容面不告警防噪音）。
+/// pub(crate)：run/run_commands.rs 两直调体（read_session/read_run_events_impl）
+/// 与 IPC 命令共用（DM-07 同口径）。
+pub(crate) fn warn_parse_stats(scope: &str, session_id: &str, stats: &EnvelopeParseStats) {
+    if stats.corrupt_skipped > 0 || stats.passthrough > 0 {
+        tracing::warn!(
+            scope = %scope,
+            session_id = %session_id,
+            corrupt_skipped = stats.corrupt_skipped,
+            synthesized = stats.synthesized,
+            passthrough = stats.passthrough,
+            "事件解析防御统计（corrupt 跳过 / 非对象行透出）"
+        );
+    }
 }
 
 /// 纯分页：从全量（已按 sequence 升序）切出前 `max_events` 条，返回 (页, hasMore)。
@@ -536,16 +685,18 @@ pub async fn core_read_session_events(
     let after = after_sequence.unwrap_or(0);
 
     let store = core.store();
+    // DM-07：limit 下推（page_size + 1 判 has_more，SQL 层 LIMIT，修复
+    // O(n) 全量读出 + 全量 serde）——has_more 以原始行数判断（corrupt 行
+    // 跳过不缩小「其后仍有行」的判断），游标 = 页内末事件全局 sequence
     let events = store
-        .query_events(&session_id, after)
+        .query_events(&session_id, after, Some(page_size as u64 + 1))
         .await
         .map_err(map_store_err)?;
 
-    let page_items: Vec<(u64, serde_json::Value)> = parse_envelopes(&events)
-        .into_iter()
-        .filter_map(|(seq, envelope)| envelope_to_value(&envelope).map(|v| (seq, v)))
-        .collect();
-    let (page, has_more) = paginate(page_items, page_size);
+    let (page_items, stats) = parse_envelopes(&events);
+    warn_parse_stats("read_session_events", &session_id, &stats);
+    let page = paginate(page_items, page_size).0;
+    let has_more = events.len() > page_size;
     let next_after_sequence = page.last().map(|(seq, _)| *seq).unwrap_or(after);
 
     Ok(EventPage {
@@ -555,15 +706,35 @@ pub async fn core_read_session_events(
     })
 }
 
-/// core_read_run_events：分页读取单个 run 的事件流（按信封 runId 过滤）。
+/// core_read_run_events：分页读取单个 run 的事件流（按 run_id 列归属过滤）。
 ///
 /// 入参对齐 daemon read-run-events：`runId` / `sessionId`（可选，缺省从 run 记录反查）/
 /// `afterSequence` / `maxEvents`。
 ///
-/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（被
-/// `core_read_session_events` 取代，前端唯一事件读取面消费后者；changelog 33
-/// 可查）。函数保留待恢复——如需恢复先接前端消费再翻注册。
-#[allow(dead_code)]
+/// ## 事件归属契约（三分类 · DM-08 唯一执行面，F-04）
+///
+/// events 表行按 run_id 列分三类归属，run 查询的命中面如下：
+/// - **run 收尾区**：同一 runId 的终态后尾事件（审计排空 audit_worker.await /
+///   子代理收尾 subagent-ended）归属该 run，查询返回区间 = [run 首事件,
+///   收尾区末事件]，「run-terminal 是流尾」为陈旧断言——正确语义是
+///   「run-terminal 是该 run 主体流的流尾，收尾区以同 runId 续排」；
+/// - **轮次域（goal-*）**：goal-round-started / goal-round-completed /
+///   goal-continuation-decided 三事件跨 run 边界，run_id 列为 NULL，按 run
+///   查询**不命中**（R-06 裁决 C-2，04 PC-07 口径）；
+/// - **会话域（空闲态）**：runId=None（手动压缩等空闲态事件）归会话域，
+///   按会话查询返回，按 run 查询不命中。
+///
+/// ## 排序契约（R-08 / DM-08）
+///
+/// **排序唯一依据 = sequence**（会话级全局单调，跨 run 不重置）；created_at
+/// 仅作展示不作排序键；payload 内 timestamp 与行级 created_at 为时钟双源
+/// 并存，均不参与排序（前端按 sequence 消费）。
+///
+/// F-03（DM-07）：**T-F 06 退役登记撤销——IPC 面恢复激活**（main.rs
+/// COMMAND_REGISTRY + command_manifest registered=true 同步恢复，注册态
+/// 不得静默再退役）。实现统一委托 [crate::core_run_commands::read_run_events_impl]
+/// （server 直调体同源，避免双实现漂移）：SQL 按 run_id 列过滤 + 全链含
+/// tail + goal-* 轮次域排除 + limit 下推 + 游标 = 页末全局 sequence。
 #[tauri::command]
 pub async fn core_read_run_events(
     run_id: String,
@@ -573,40 +744,14 @@ pub async fn core_read_run_events(
     core: State<'_, Arc<CoreRunState>>,
 ) -> Result<EventPage, CoreError> {
     require_run_id(&run_id)?;
-    let page_size = normalize_max_events(max_events);
-    let after = after_sequence.unwrap_or(0);
-
-    let store = core.store();
-    let session_id = match session_id {
-        Some(id) if !id.trim().is_empty() => id,
-        _ => {
-            // 未提供 sessionId：从 run 记录反查（run.not_found 语义）
-            let runs = store.query_runs().await.map_err(map_store_err)?;
-            runs.into_iter()
-                .find(|run| run.run_id == run_id)
-                .map(|run| run.session_id)
-                .ok_or_else(|| CoreError::NotFound(format!("run not found: {run_id}")))?
-        }
-    };
-
-    let events = store
-        .query_events(&session_id, after)
-        .await
-        .map_err(map_store_err)?;
-
-    let run_events: Vec<(u64, serde_json::Value)> = parse_envelopes(&events)
-        .into_iter()
-        .filter(|(_, envelope)| envelope.run_id.as_deref() == Some(run_id.as_str()))
-        .filter_map(|(seq, envelope)| envelope_to_value(&envelope).map(|v| (seq, v)))
-        .collect();
-    let (page, has_more) = paginate(run_events, page_size);
-    let next_after_sequence = page.last().map(|(seq, _)| *seq).unwrap_or(after);
-
-    Ok(EventPage {
-        events: page.into_iter().map(|(_, value)| value).collect(),
-        next_after_sequence,
-        has_more,
-    })
+    crate::core_run_commands::read_run_events_impl(
+        &core,
+        &run_id,
+        session_id.as_deref(),
+        after_sequence,
+        max_events,
+    )
+    .await
 }
 
 /// core_get_run_snapshot：查询 run 快照（状态 / 游标 / 终态 / usage）。
@@ -920,20 +1065,292 @@ mod tests {
                 sequence: 1,
                 event_type: "agent-start".to_string(),
                 payload: r#"{"type":"agent-start","sessionId":"s1","sequence":1,"schemaVersion":1,"runId":"r1","timestamp":"2026-01-01T00:00:00Z"}"#.to_string(),
+                run_id: None,
+                created_at: "2026-01-01 00:00:00.001".to_string(),
             },
             PersistedEvent {
                 session_id: "s1".to_string(),
                 sequence: 2,
                 event_type: "agent-start".to_string(),
                 payload: "not-json".to_string(),
+                run_id: None,
+                created_at: "2026-01-01 00:00:00.002".to_string(),
             },
         ];
-        let parsed = parse_envelopes(&events);
+        let (parsed, stats) = parse_envelopes(&events);
         assert_eq!(parsed.len(), 1, "损坏载荷跳过");
         assert_eq!(parsed[0].0, 1);
-        assert_eq!(parsed[0].1.run_id.as_deref(), Some("r1"));
-        assert_eq!(parsed[0].1.sequence, Some(1));
-        assert_eq!(parsed[0].1.schema_version, 1);
+        assert_eq!(parsed[0].1["runId"], "r1");
+        assert_eq!(parsed[0].1["sequence"], 1);
+        assert_eq!(parsed[0].1["schemaVersion"], 1);
+        assert_eq!(stats.corrupt_skipped, 1, "态 1 计数不静默");
+        assert_eq!(stats.typed, 1);
+        assert_eq!(stats.synthesized, 0);
+    }
+
+    /// DM-06 态 3：无 type 标签的合法 JSON（run-interrupted / recovery-*
+    /// 镜像 / legacy 行）→ D8 合成 fallback，wire 含
+    /// type/runId/sequence/schemaVersion/sessionId 五键 + 原始字段透传
+    /// （消灭 G-02/G-20 读侧静默丢弃）。
+    #[test]
+    fn parse_envelopes_fallback_synthesizes_body_only_rows() {
+        use orchestrator::persist::PersistedEvent;
+        let events = vec![
+            // run-interrupted 直写镜像（restore_manager 形状：InterruptedRun
+            // record，payload 自带 run_id/session_id 键但**无顶层 type 键**）
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 5,
+                event_type: "run-interrupted".to_string(),
+                payload: r#"{"run_id":"r-9","session_id":"s1","previous_status":"running","status":"failed","reason":"daemon-restarted","error":"connection reset","timestamp":"2026-08-14T00:00:00Z"}"#.to_string(),
+                run_id: None,
+                created_at: "2026-08-14 00:00:00.005".to_string(),
+            },
+            // recovery-escalated 直写镜像（recovery.rs 形状：
+            // {subagentRunId, kind, retries, elapsedMs}，无顶层 type 键）
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 6,
+                event_type: "recovery-escalated".to_string(),
+                payload: r#"{"subagentRunId":"sr-1","kind":"ladder1","retries":2,"elapsedMs":1500}"#.to_string(),
+                run_id: None,
+                created_at: "2026-08-14 00:00:00.006".to_string(),
+            },
+        ];
+        let (parsed, stats) = parse_envelopes(&events);
+        assert_eq!(parsed.len(), 2, "镜像行全部透出，不丢弃");
+        assert_eq!(stats.synthesized, 2, "态 3a 合成计数");
+        assert_eq!(stats.typed, 0, "镜像非 typed，不进态 2");
+        assert_eq!(stats.corrupt_skipped, 0);
+
+        // run-interrupted：五键 + 原始字段透传（type 键 = 列 event_type 权威）
+        let interrupted = &parsed[0].1;
+        assert_eq!(interrupted["type"], "run-interrupted");
+        assert_eq!(interrupted["runId"], "r-9", "run_id 键映射为 runId");
+        assert_eq!(interrupted["sequence"], 5, "sequence 列权威回填");
+        assert_eq!(interrupted["schemaVersion"], 1);
+        assert_eq!(interrupted["sessionId"], "s1");
+        assert_eq!(interrupted["status"], "failed", "原始字段透传");
+        assert_eq!(interrupted["reason"], "daemon-restarted");
+        assert_eq!(interrupted["run_id"], "r-9", "原始键保留（透传不删键）");
+
+        // recovery-* 镜像：五键 + subagentRunId 映射为 runId（归属推断）
+        let escalated = &parsed[1].1;
+        assert_eq!(escalated["type"], "recovery-escalated");
+        assert_eq!(escalated["runId"], "sr-1", "subagentRunId 映射为 runId");
+        assert_eq!(escalated["sequence"], 6);
+        assert_eq!(escalated["schemaVersion"], 1);
+        assert_eq!(escalated["sessionId"], "s1");
+        assert_eq!(escalated["kind"], "ladder1", "原始字段透传");
+        assert_eq!(escalated["retries"], 2);
+    }
+
+    /// DM-06 态 2/态 3：sequence 列权威回填（G-05）——旧行 payload 无
+    /// sequence 键时，wire sequence == 行级列值（typed 与 fallback 双路径）。
+    #[test]
+    fn parse_envelopes_sequence_backfilled() {
+        use orchestrator::persist::PersistedEvent;
+        let events = vec![
+            // 旧帧 typed 信封：无 sequence 键（缺省解析 None → 列回填）
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 11,
+                event_type: "agent-start".to_string(),
+                payload: r#"{"type":"agent-start","sessionId":"s1","runId":"r1","schemaVersion":1,"timestamp":"2026-01-01T00:00:00Z"}"#.to_string(),
+                run_id: None,
+                created_at: "2026-01-01 00:00:00.011".to_string(),
+            },
+            // fallback 镜像：无 sequence 键 → 列回填
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 12,
+                event_type: "run-interrupted".to_string(),
+                payload: r#"{"run_id":"r-9","status":"failed"}"#.to_string(),
+                run_id: None,
+                created_at: "2026-01-01 00:00:00.012".to_string(),
+            },
+        ];
+        let (parsed, _stats) = parse_envelopes(&events);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].1["sequence"], 11, "typed 旧帧列权威回填");
+        assert_eq!(parsed[1].1["sequence"], 12, "fallback 列权威回填");
+    }
+
+    /// DM-06 态 3b：合法 JSON 但非对象（数组/标量）→ rawPayload 包装显式
+    /// 透出（标注 skippable 形态），不静默丢弃，计数走 passthrough。
+    #[test]
+    fn parse_envelopes_passthrough_non_object_rows() {
+        use orchestrator::persist::PersistedEvent;
+        let events = vec![
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 21,
+                event_type: "legacy-weird".to_string(),
+                payload: r#"[1,2,3]"#.to_string(),
+                run_id: None,
+                created_at: "2026-01-01 00:00:00.021".to_string(),
+            },
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 22,
+                event_type: "legacy-weird".to_string(),
+                payload: r#""plain string""#.to_string(),
+                run_id: None,
+                created_at: "2026-01-01 00:00:00.022".to_string(),
+            },
+        ];
+        let (parsed, stats) = parse_envelopes(&events);
+        assert_eq!(parsed.len(), 2, "非对象行也透出，不丢弃");
+        assert_eq!(stats.passthrough, 2, "态 3b 计数");
+        assert_eq!(stats.synthesized, 0);
+        assert_eq!(parsed[0].1["type"], "legacy-weird");
+        assert_eq!(parsed[0].1["sequence"], 21);
+        assert_eq!(parsed[0].1["rawPayload"], serde_json::json!([1, 2, 3]));
+        assert_eq!(parsed[1].1["rawPayload"], "plain string");
+    }
+
+    /// DM-07 P3 收口（态 2）：typed 信封 runId 取值 = payload 优先，缺失时
+    /// run_id 列兜底——列已就绪（DM-01/DM-03），与 SQL by_run 过滤口径一致；
+    /// 列不覆盖 payload 既有 runId（legacy 行诚实兼容，不回写）。
+    #[test]
+    fn parse_envelopes_column_backfills_typed_runid() {
+        use orchestrator::persist::PersistedEvent;
+        let events = vec![
+            // 态 2a：payload 无 runId 键 + 列 Some → 列兜底填充 wire runId
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 31,
+                event_type: "agent-start".to_string(),
+                payload: r#"{"type":"agent-start","sessionId":"s1","schemaVersion":1,"timestamp":"2026-01-01T00:00:00Z"}"#.to_string(),
+                run_id: Some("r-c1".to_string()),
+                created_at: "2026-01-01 00:00:00.031".to_string(),
+            },
+            // 态 2b：payload 有 runId + 列不同 → payload 优先（不覆盖）
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 32,
+                event_type: "agent-start".to_string(),
+                payload: r#"{"type":"agent-start","sessionId":"s1","runId":"r-payload","schemaVersion":1,"timestamp":"2026-01-01T00:00:00Z"}"#.to_string(),
+                run_id: Some("r-column".to_string()),
+                created_at: "2026-01-01 00:00:00.032".to_string(),
+            },
+        ];
+        let (parsed, stats) = parse_envelopes(&events);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(stats.typed, 2);
+        assert_eq!(parsed[0].1["runId"], "r-c1", "payload 缺 runId → 列兜底");
+        assert_eq!(parsed[1].1["runId"], "r-payload", "payload 有 runId → 列不覆盖");
+    }
+
+    /// DM-07 P3 收口（态 3）：fallback 合成 runId 取值顺序 = payload runId
+    /// 键 → run_id 列 → 镜像键推断（列优先于镜像键）。
+    #[test]
+    fn parse_envelopes_fallback_column_priority() {
+        use orchestrator::persist::PersistedEvent;
+        let events = vec![
+            // 3a：payload 无 runId 键、列 Some、payload 有 subagentRunId → 列优先
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 41,
+                event_type: "recovery-escalated".to_string(),
+                payload: r#"{"subagentRunId":"sr-1","kind":"ladder1","retries":2}"#.to_string(),
+                run_id: Some("r-col".to_string()),
+                created_at: "2026-01-01 00:00:00.041".to_string(),
+            },
+            // 3b：payload 有 runId 键 + 列不同 → payload 优先
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 42,
+                event_type: "run-interrupted".to_string(),
+                payload: r#"{"runId":"r-p","run_id":"r-mirror","status":"failed"}"#.to_string(),
+                run_id: Some("r-col".to_string()),
+                created_at: "2026-01-01 00:00:00.042".to_string(),
+            },
+            // 3c：payload 无 runId、列 None → 镜像键推断兜底（既有行为保持）
+            PersistedEvent {
+                session_id: "s1".to_string(),
+                sequence: 43,
+                event_type: "recovery-escalated".to_string(),
+                payload: r#"{"subagentRunId":"sr-2","kind":"ladder2","retries":1}"#.to_string(),
+                run_id: None,
+                created_at: "2026-01-01 00:00:00.043".to_string(),
+            },
+        ];
+        let (parsed, stats) = parse_envelopes(&events);
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(stats.synthesized, 3);
+        assert_eq!(parsed[0].1["runId"], "r-col", "列优先于镜像键推断");
+        assert_eq!(parsed[1].1["runId"], "r-p", "payload runId 键优先于列");
+        assert_eq!(parsed[2].1["runId"], "sr-2", "无列无 payload → 镜像键兜底");
+    }
+
+    /// DM-06 读取面集成：直写镜像（run-interrupted / recovery-*，无 type
+    /// 标签）真实落库（conex-db LocalDb 写面）后，读侧经
+    /// query_events → parse_envelopes 可读回（wire 五键齐全）——「库里躺着
+    /// 读不出」关闭（G-20/G-02 读侧部分）。
+    #[test]
+    fn mirror_rows_written_by_direct_path_are_readable() {
+        let db = conex_db::LocalDb::open_in_memory().expect("内存库");
+        db.insert_session("s1", "s1").expect("会话");
+        // 直写面落库（对齐 restore_manager / recovery.rs 裸镜像形态：无 type 键；
+        // run_id 列 None——存量/直写面列级归属未注入前读侧经镜像键推断）
+        db.append_event(
+            "s1",
+            1,
+            "run-interrupted",
+            r#"{"run_id":"r-9","session_id":"s1","previous_status":"running","status":"failed","reason":"daemon-restarted"}"#,
+            None,
+        )
+        .expect("run-interrupted 落库");
+        db.append_event(
+            "s1",
+            2,
+            "recovery-escalated",
+            r#"{"subagentRunId":"sr-1","kind":"ladder1","retries":2,"elapsedMs":1500}"#,
+            None,
+        )
+        .expect("recovery-escalated 落库");
+        // typed 信封正常行对照（落库后读回也应正常）
+        db.append_event(
+            "s1",
+            3,
+            "agent-start",
+            r#"{"type":"agent-start","sessionId":"s1","sequence":3,"schemaVersion":1,"runId":"r1","timestamp":"2026-01-01T00:00:00Z"}"#,
+            Some("r1"),
+        )
+        .expect("typed 信封落库");
+
+        let store = orchestrator::persist::LocalDbStore::new(db);
+        // Store trait 方法调用需 trait 在作用域（trait 方法非固有方法）
+        use orchestrator::persist::Store as _;
+        let events = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(store.query_events("s1", 0, None))
+            .expect("读回");
+        assert_eq!(events.len(), 3, "三行全部可读");
+
+        let (parsed, stats) = parse_envelopes(&events);
+        assert_eq!(parsed.len(), 3, "读侧零静默丢弃");
+        assert_eq!(stats.synthesized, 2, "两镜像行走 D8 合成");
+        assert_eq!(stats.typed, 1);
+        assert_eq!(stats.corrupt_skipped, 0);
+
+        // run-interrupted 行可读且五键齐全
+        let interrupted = &parsed[0].1;
+        assert_eq!(interrupted["type"], "run-interrupted");
+        assert_eq!(interrupted["runId"], "r-9");
+        assert_eq!(interrupted["sequence"], 1);
+        assert_eq!(interrupted["schemaVersion"], 1);
+        assert_eq!(interrupted["sessionId"], "s1");
+        // recovery-* 行可读且五键齐全
+        let escalated = &parsed[1].1;
+        assert_eq!(escalated["type"], "recovery-escalated");
+        assert_eq!(escalated["runId"], "sr-1");
+        assert_eq!(escalated["sequence"], 2);
+        assert_eq!(escalated["schemaVersion"], 1);
+        assert_eq!(escalated["sessionId"], "s1");
+        // typed 行正常（sequence 列权威回填保持）
+        assert_eq!(parsed[2].1["sequence"], 3);
     }
 
     #[test]

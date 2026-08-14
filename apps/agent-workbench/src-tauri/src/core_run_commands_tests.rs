@@ -190,6 +190,7 @@
         let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
             state.store.clone(),
             0,
+            None,
         )));
         let (bridge, emitter) = recording_bridge();
         let bridge = Arc::new(BufferedRunEventBridge::new(bridge, run_id.to_string()));
@@ -2580,6 +2581,7 @@
         let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
             state.store.clone(),
             0,
+            None,
         )));
         let bridge = Arc::new(BufferedRunEventBridge::new(
             state.bridge.clone(),
@@ -3504,6 +3506,8 @@
             last_sequence: 0,
             snapshot_note: None,
             snapshot_generation: 0,
+            // DM-08（G-29）：对账字段（测试构造零矛盾）
+            reconcile_conflicts: Vec::new(),
         }
     }
 
@@ -8724,6 +8728,7 @@
         let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
             state.store.clone(),
             0,
+            None,
         )));
         let bridge = Arc::new(BufferedRunEventBridge::new(
             state.bridge.clone(),
@@ -9464,4 +9469,535 @@ impl super::CoreRunState {
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = backoff;
     }
+}
+
+// ── DM-07：read_run_events_impl / read_session_events_impl（by_run + limit 下推）──
+
+/// 测试用扁平 typed 信封 payload（wire 形状对齐 AgentEventEnvelope 手工
+/// serde：{type, sessionId, runId, sequence, schemaVersion, timestamp}；
+/// runId 顶层键同时满足 run-terminal 变体对 run_id 字段的依赖）
+fn dm07_envelope(event_type: &str, run_id: Option<&str>, sequence: u64) -> String {
+    serde_json::json!({
+        "type": event_type,
+        "sessionId": "s1",
+        "runId": run_id,
+        "sequence": sequence,
+        "schemaVersion": 1,
+        "timestamp": "2026-08-14T00:00:00Z",
+    })
+    .to_string()
+}
+
+/// DM-07 记录型 store 包装：断言 query_events / query_events_by_run 收到
+/// 的 limit 下推参数（其余方法原样委托内层，行为零改动）
+struct RecordingStore {
+    inner: Arc<dyn Store>,
+    session_limits: Arc<Mutex<Vec<Option<u64>>>>,
+    run_limits: Arc<Mutex<Vec<Option<u64>>>>,
+}
+
+#[async_trait::async_trait]
+impl Store for RecordingStore {
+    async fn insert_run(
+        &self,
+        run_id: &str,
+        session_id: &str,
+        status: conex_db::RunStatus,
+        end_reason: Option<&str>,
+        cursor: i64,
+    ) -> orchestrator::persist::StoreResult<()> {
+        self.inner
+            .insert_run(run_id, session_id, status, end_reason, cursor)
+            .await
+    }
+
+    async fn update_run_status(
+        &self,
+        run_id: &str,
+        status: conex_db::RunStatus,
+        end_reason: Option<&str>,
+        cursor: Option<i64>,
+    ) -> orchestrator::persist::StoreResult<()> {
+        self.inner
+            .update_run_status(run_id, status, end_reason, cursor)
+            .await
+    }
+
+    async fn reserve_sequence(&self, session_id: &str) -> orchestrator::persist::StoreResult<u64> {
+        self.inner.reserve_sequence(session_id).await
+    }
+
+    async fn seed_sequence(
+        &self,
+        session_id: &str,
+        next_sequence: u64,
+    ) -> orchestrator::persist::StoreResult<()> {
+        self.inner.seed_sequence(session_id, next_sequence).await
+    }
+
+    async fn append_event(
+        &self,
+        session_id: &str,
+        sequence: u64,
+        event_type: &str,
+        payload: &str,
+        run_id: Option<&str>,
+    ) -> orchestrator::persist::StoreResult<()> {
+        self.inner
+            .append_event(session_id, sequence, event_type, payload, run_id)
+            .await
+    }
+
+    async fn query_events(
+        &self,
+        session_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
+        self.session_limits
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(limit);
+        self.inner
+            .query_events(session_id, after_sequence, limit)
+            .await
+    }
+
+    async fn query_events_by_run(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
+        self.run_limits
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(limit);
+        self.inner
+            .query_events_by_run(session_id, run_id, after_sequence, limit)
+            .await
+    }
+
+    async fn query_runs(&self) -> orchestrator::persist::StoreResult<Vec<conex_db::StoredRun>> {
+        self.inner.query_runs().await
+    }
+
+    async fn save_pending_input(
+        &self,
+        id: &str,
+        session_id: &str,
+        run_id: Option<&str>,
+        payload: &str,
+    ) -> orchestrator::persist::StoreResult<()> {
+        self.inner
+            .save_pending_input(id, session_id, run_id, payload)
+            .await
+    }
+
+    async fn load_pending_inputs(
+        &self,
+        session_id: &str,
+    ) -> orchestrator::persist::StoreResult<Vec<conex_db::PendingInput>> {
+        self.inner.load_pending_inputs(session_id).await
+    }
+
+    async fn delete_pending_input(&self, id: &str) -> orchestrator::persist::StoreResult<bool> {
+        self.inner.delete_pending_input(id).await
+    }
+
+    fn as_local_db(&self) -> Option<conex_db::LocalDb> {
+        self.inner.as_local_db()
+    }
+}
+
+/// DM-07 验收 ①：run 查询返回全链含终态后 tail——agent-start…run-terminal +
+/// 终态后同 runId 尾事件（audit-flush 收尾区，R-06）；goal-* 轮次域不命中。
+#[tokio::test]
+async fn read_run_events_full_chain_with_tail() {
+    let db = conex_db::LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "s1").unwrap();
+    // run r1 全链：agent-start → message-delta → run-terminal → 终态后 tail
+    // （审计排空 audit-flush 同 runId 归属）；goal-* 轮次域落库 run_id=NULL
+    db.append_event(
+        "s1",
+        1,
+        "agent-start",
+        &dm07_envelope("agent-start", Some("r1"), 1),
+        Some("r1"),
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        2,
+        "goal-round-started",
+        &dm07_envelope("goal-round-started", None, 2),
+        None,
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        3,
+        "message-delta",
+        &dm07_envelope("message-delta", Some("r1"), 3),
+        Some("r1"),
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        4,
+        "run-terminal",
+        &dm07_envelope("run-terminal", Some("r1"), 4),
+        Some("r1"),
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        5,
+        "audit-flush",
+        &dm07_envelope("audit-flush", Some("r1"), 5),
+        Some("r1"),
+    )
+    .unwrap();
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+    let state = core_state_with_store(store);
+    let page = super::read_run_events_impl(&state, "r1", Some("s1"), None, None)
+        .await
+        .unwrap();
+    let types: Vec<&str> = page
+        .events
+        .iter()
+        .map(|value| value["type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec!["agent-start", "message-delta", "run-terminal", "audit-flush"],
+        "run 查询返回全链含终态后 tail，goal-* 不命中"
+    );
+    assert!(!page.has_more, "无更多事件");
+    assert_eq!(page.next_after_sequence, 5, "游标 = 页末全局 sequence");
+    assert_eq!(page.events[0]["runId"], "r1", "wire runId 与 SQL 过滤口径一致");
+}
+
+/// DM-07 验收 ②：交错 run 只返本 run（SQL 按 run_id 列过滤互不串扰）。
+#[tokio::test]
+async fn read_run_events_interleaved_runs_only_own() {
+    let db = conex_db::LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "s1").unwrap();
+    // 交错落库：r1/r2 事件全局 sequence 交织
+    db.append_event(
+        "s1",
+        1,
+        "agent-start",
+        &dm07_envelope("agent-start", Some("r1"), 1),
+        Some("r1"),
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        2,
+        "agent-start",
+        &dm07_envelope("agent-start", Some("r2"), 2),
+        Some("r2"),
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        3,
+        "message-delta",
+        &dm07_envelope("message-delta", Some("r1"), 3),
+        Some("r1"),
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        4,
+        "message-delta",
+        &dm07_envelope("message-delta", Some("r2"), 4),
+        Some("r2"),
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        5,
+        "run-terminal",
+        &dm07_envelope("run-terminal", Some("r1"), 5),
+        Some("r1"),
+    )
+    .unwrap();
+    db.append_event(
+        "s1",
+        6,
+        "run-terminal",
+        &dm07_envelope("run-terminal", Some("r2"), 6),
+        Some("r2"),
+    )
+    .unwrap();
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+    let state = core_state_with_store(store);
+    let seqs = |page: crate::core_query_commands::EventPage| {
+        page.events
+            .iter()
+            .map(|value| value["sequence"].as_u64().unwrap())
+            .collect::<Vec<u64>>()
+    };
+    let r1 = super::read_run_events_impl(&state, "r1", Some("s1"), None, None)
+        .await
+        .unwrap();
+    assert_eq!(seqs(r1), vec![1, 3, 5], "交错 run 只返本 run 事件");
+    let r2 = super::read_run_events_impl(&state, "r2", Some("s1"), None, None)
+        .await
+        .unwrap();
+    assert_eq!(seqs(r2), vec![2, 4, 6]);
+}
+
+/// DM-07 验收 ③：续页游标 = 页末全局 sequence（SQL 过滤后页内末事件即
+/// 本 run 事件流位置），跨页无缝不跳事件。
+#[tokio::test]
+async fn read_run_events_pagination_global_sequence() {
+    let db = conex_db::LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "s1").unwrap();
+    // r1 六事件与 r2 六事件全局交织（sequence 1..=12）
+    for i in 1_u64..=6 {
+        db.append_event(
+            "s1",
+            (i * 2 - 1) as i64,
+            "message-delta",
+            &dm07_envelope("message-delta", Some("r1"), i * 2 - 1),
+            Some("r1"),
+        )
+        .unwrap();
+        db.append_event(
+            "s1",
+            (i * 2) as i64,
+            "message-delta",
+            &dm07_envelope("message-delta", Some("r2"), i * 2),
+            Some("r2"),
+        )
+        .unwrap();
+    }
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+    let state = core_state_with_store(store);
+    let seqs = |page: crate::core_query_commands::EventPage| {
+        page.events
+            .iter()
+            .map(|value| value["sequence"].as_u64().unwrap())
+            .collect::<Vec<u64>>()
+    };
+    // 每页 2 条（page_size=2，limit=3 下推）
+    let p1 = super::read_run_events_impl(&state, "r1", Some("s1"), None, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(seqs(p1.clone()), vec![1, 3]);
+    assert!(p1.has_more);
+    assert_eq!(p1.next_after_sequence, 3, "游标 = 页末全局 sequence");
+    let p2 = super::read_run_events_impl(
+        &state,
+        "r1",
+        Some("s1"),
+        Some(p1.next_after_sequence),
+        Some(2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(seqs(p2.clone()), vec![5, 7], "续页从页末全局 sequence 之后无缝续接");
+    assert!(p2.has_more);
+    assert_eq!(p2.next_after_sequence, 7);
+    let p3 = super::read_run_events_impl(
+        &state,
+        "r1",
+        Some("s1"),
+        Some(p2.next_after_sequence),
+        Some(2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(seqs(p3.clone()), vec![9, 11], "末页取尽");
+    assert!(!p3.has_more);
+}
+
+/// DM-07 验收 ④：limit 下推后 has_more 正确（n+1 语义）——每页 SQL 只取
+/// page_size + 1 行，页末一行仅用于 has_more 判定不返回。
+#[tokio::test]
+async fn read_run_events_limit_pushdown_has_more() {
+    let db = conex_db::LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "s1").unwrap();
+    for i in 1_u64..=5 {
+        db.append_event(
+            "s1",
+            i as i64,
+            "message-delta",
+            &dm07_envelope("message-delta", Some("r1"), i),
+            Some("r1"),
+        )
+        .unwrap();
+    }
+    let session_limits = Arc::new(Mutex::new(Vec::new()));
+    let run_limits = Arc::new(Mutex::new(Vec::new()));
+    let recording = RecordingStore {
+        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db)),
+        session_limits: Arc::clone(&session_limits),
+        run_limits: Arc::clone(&run_limits),
+    };
+    let state = core_state_with_store(Arc::new(recording));
+    let p1 = super::read_run_events_impl(&state, "r1", Some("s1"), None, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(
+        *run_limits.lock().unwrap(),
+        vec![Some(3)],
+        "limit 下推 = page_size + 1"
+    );
+    assert_eq!(p1.events.len(), 2, "页只含 page_size 条");
+    assert!(p1.has_more);
+    let p2 = super::read_run_events_impl(
+        &state,
+        "r1",
+        Some("s1"),
+        Some(p1.next_after_sequence),
+        Some(2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(p2.events.len(), 2);
+    assert!(p2.has_more);
+    let p3 = super::read_run_events_impl(
+        &state,
+        "r1",
+        Some("s1"),
+        Some(p2.next_after_sequence),
+        Some(2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(p3.events.len(), 1, "末页取尽");
+    assert!(!p3.has_more);
+    assert_eq!(
+        *run_limits.lock().unwrap(),
+        vec![Some(3), Some(3), Some(3)],
+        "每页均只取 page_size + 1 行"
+    );
+}
+
+/// DM-07 验收 ⑤：goal-* 三事件轮次域不命中 run 查询；按会话查询仍返回。
+#[tokio::test]
+async fn read_run_events_excludes_goal_round() {
+    let db = conex_db::LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "s1").unwrap();
+    db.append_event(
+        "s1",
+        1,
+        "agent-start",
+        &dm07_envelope("agent-start", Some("r1"), 1),
+        Some("r1"),
+    )
+    .unwrap();
+    for (i, goal_type) in [
+        "goal-round-started",
+        "goal-round-completed",
+        "goal-continuation-decided",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let sequence = (i + 2) as u64;
+        db.append_event(
+            "s1",
+            sequence as i64,
+            goal_type,
+            &dm07_envelope(goal_type, None, sequence),
+            None,
+        )
+        .unwrap();
+    }
+    db.append_event(
+        "s1",
+        5,
+        "run-terminal",
+        &dm07_envelope("run-terminal", Some("r1"), 5),
+        Some("r1"),
+    )
+    .unwrap();
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+    let state = core_state_with_store(store);
+    let page = super::read_run_events_impl(&state, "r1", Some("s1"), None, None)
+        .await
+        .unwrap();
+    let types: Vec<&str> = page
+        .events
+        .iter()
+        .map(|value| value["type"].as_str().unwrap())
+        .collect();
+    assert_eq!(types, vec!["agent-start", "run-terminal"], "goal-* 轮次域不命中 run 查询");
+    let session_page = super::read_session_events_impl(&state, "s1", None, None)
+        .await
+        .unwrap();
+    assert_eq!(session_page.events.len(), 5, "goal-* 按会话查询返回（会话域）");
+}
+
+/// DM-07：sessionId 缺省时从 runs 表反查；未知 run → NotFound（run.not_found 语义）。
+#[tokio::test]
+async fn read_run_events_session_lookup_via_run_record() {
+    let db = conex_db::LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "s1").unwrap();
+    db.insert_run("r1", "s1", conex_db::RunStatus::Running, None, 0)
+        .unwrap();
+    db.append_event(
+        "s1",
+        1,
+        "agent-start",
+        &dm07_envelope("agent-start", Some("r1"), 1),
+        Some("r1"),
+    )
+    .unwrap();
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+    let state = core_state_with_store(store);
+    let page = super::read_run_events_impl(&state, "r1", None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(page.events.len(), 1, "sessionId 缺省从 run 记录反查成功");
+    let err = super::read_run_events_impl(&state, "nope", None, None, None)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, CoreError::NotFound(_)),
+        "未知 run → NotFound"
+    );
+}
+
+/// DM-07 验收 ⑥：会话读 limit 下推——read_session_events_impl 每页只取
+/// page_size + 1 行（store 层记录断言 query_events 收到 limit 参数）。
+#[tokio::test]
+async fn core_read_session_events_limit_pushdown() {
+    let db = conex_db::LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "s1").unwrap();
+    for i in 1_u64..=5 {
+        db.append_event(
+            "s1",
+            i as i64,
+            "agent-start",
+            &dm07_envelope("agent-start", Some("r1"), i),
+            Some("r1"),
+        )
+        .unwrap();
+    }
+    let session_limits = Arc::new(Mutex::new(Vec::new()));
+    let run_limits = Arc::new(Mutex::new(Vec::new()));
+    let recording = RecordingStore {
+        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db)),
+        session_limits: Arc::clone(&session_limits),
+        run_limits: Arc::clone(&run_limits),
+    };
+    let state = core_state_with_store(Arc::new(recording));
+    let page = super::read_session_events_impl(&state, "s1", None, Some(2))
+        .await
+        .unwrap();
+    assert_eq!(
+        *session_limits.lock().unwrap(),
+        vec![Some(3)],
+        "会话读 limit 下推 = page_size + 1"
+    );
+    assert_eq!(page.events.len(), 2, "页只含 page_size 条");
+    assert!(page.has_more);
+    assert_eq!(page.next_after_sequence, 2, "游标 = 页末全局 sequence");
 }

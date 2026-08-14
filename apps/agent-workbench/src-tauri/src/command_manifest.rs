@@ -60,12 +60,13 @@ const fn entry(
     }
 }
 
-/// 命令清单（116 条 = 注册面 110 + 登记先行 6；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（125 条 = 注册面 120 + 登记先行 5；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
 /// workbench_open_workspace / workbench_list_workspaces / workbench_dev_mcp_enabled /
-/// core_resume_run（P2）/ core_compact_now（E2 实现轮翻 true）。
+/// core_resume_run（P2）。
+/// F-03（DM-07）：core_read_run_events 恢复激活（注册面 119 → 120，总数 124 → 125）。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -132,6 +133,10 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_get_status", "core", "engine", true),
         entry("core_get_run_snapshot", "core", "engine", true),
         entry("core_read_session_events", "core", "engine", true),
+        // F-03（DM-07）：core_read_run_events IPC 面恢复激活（T-F 06 退役
+        // 登记撤销——注册表恢复注册 + 本条目 registered=true，与 main.rs
+        // make_handlers! 注册面一致；前端契约文档面同步见 DM-08 收口）
+        entry("core_read_run_events", "core", "engine", true),
         entry("core_run_task", "core", "engine", true),
         entry("core_run_control", "core", "engine", true),
         entry("core_cancel_run", "core", "engine", true),
@@ -268,7 +273,8 @@ mod tests {
      /// note_detect_mirror_drift + note_import_mirror_proposal 后 117 → 119；
      /// note_apply_ops（CONN-B3）后 119 → 120；
      /// 电脑操作四命令（computer_session_* / computer_estop / computer_status）
-     /// 追加后 120 → 124；E2 F4 core_compact_now 接线 114 → 119（登记先行 6 → 5）。
+     /// 追加后 120 → 124；E2 F4 core_compact_now 接线 114 → 119（登记先行 6 → 5）；
+     /// F-03（DM-07）core_read_run_events 恢复激活 124 → 125（注册面 119 → 120）。
      #[test]
      fn manifest_count_matches_registered_surface() {
          let total = COMMAND_MANIFEST.commands.len();
@@ -280,10 +286,10 @@ mod tests {
          let pending = total - registered;
          assert!(pending > 0, "登记先行必须 > 0");
          assert_eq!(
-             total, 124,
-             "总数 124（电脑操作四命令 + note_apply_ops + mirror + hydrate + D4a，与前端同步）"
+             total, 125,
+             "总数 125（电脑操作四命令 + note_apply_ops + mirror + hydrate + D4a + core_read_run_events 恢复，与前端同步）"
          );
-         assert_eq!(registered, 119, "注册面 119（含 core_compact_now 已接线）");
+         assert_eq!(registered, 120, "注册面 120（含 core_compact_now 已接线 + core_read_run_events 恢复激活）");
          assert_eq!(pending, 5, "登记先行 5");
      }
 
@@ -430,7 +436,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 124);
+        assert_eq!(manifest.commands.len(), 125);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

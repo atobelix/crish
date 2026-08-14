@@ -61,8 +61,10 @@ describe('commandManifest', () => {
       //   （120 → 124；114 → 118）
       // E2 F4：core_compact_now 已接线（registered=false → true；118 → 119，
       //   登记先行 6 → 5）
-      expect(registered).toBe(119);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(124);
+      // F-03（DM-07）：core_read_run_events 恢复激活（T-F 06 退役撤销；
+      //   124 → 125，119 → 120）
+      expect(registered).toBe(120);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(125);
     });
 
     it('命令名唯一', () => {
@@ -295,10 +297,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（124；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（125；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(124);
+      expect(total).toBe(125);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

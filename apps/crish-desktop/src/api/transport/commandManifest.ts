@@ -50,8 +50,9 @@ function entry(
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
  * commandManifest.test.ts 的条数/登记断言 + 动态对照测试（直读 Rust 真源）拦截。
- * T-F 06 退役登记：core_read_run_events / delete_session / touch_session /
- * core_md_render_stream / core_md_clear_cache 已随本快照退役（changelog 33 可查）。
+ * T-F 06 退役登记：delete_session / touch_session / core_md_render_stream /
+ * core_md_clear_cache 已随本快照退役（changelog 33 可查）；F-03（DM-07）已
+ * 撤销 core_read_run_events 的退役登记——IPC 面恢复激活，本快照同步恢复。
  */
 export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
   contractVersion: COMMAND_MANIFEST_CONTRACT_VERSION,
@@ -119,6 +120,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('core_get_status', 'core', 'engine'),
     entry('core_get_run_snapshot', 'core', 'engine'),
     entry('core_read_session_events', 'core', 'engine'),
+    // F-03（DM-07）：core_read_run_events IPC 面恢复激活（T-F 06 退役撤销，
+    // 与 Rust command_manifest.rs + main.rs 注册面同步；实现委托直调体）
+    entry('core_read_run_events', 'core', 'engine'),
     entry('core_run_task', 'core', 'engine'),
     entry('core_run_control', 'core', 'engine'),
     entry('core_cancel_run', 'core', 'engine'),
