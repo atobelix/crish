@@ -14,6 +14,9 @@
 
 use std::sync::Arc;
 
+use conex_types::device::commands::{
+    SettingsConfirmAction, SettingsConfirmParams, SettingsConfirmResult, SettingsConfirmStatus,
+};
 use conex_types::device::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
     CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams, EventPageResult,
@@ -22,8 +25,7 @@ use conex_types::device::{
     ListSessionsResult, ListTasksParams, ListTasksResult, PauseAutomationParams,
     PauseAutomationResult, PermissionMode, RunControlLevel, RunControlParams, RunControlResult,
     RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
-    SearchFilesParams, SearchFilesResult, SearchIndexResult, SettingsConfirmAction,
-    SettingsConfirmParams, SettingsConfirmResult, SettingsConfirmStatus,
+    SearchFilesParams, SearchFilesResult, SearchIndexResult,
 };
 use conex_types::events::{AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation};
 use conex_types::impact::ImpactAssessment;
@@ -139,7 +141,8 @@ impl CoreStateBackend {
     fn rel_path_for(&self, path: &str) -> String {
         let normalized = path.replace('\\', "/");
         if let Some(root) = &self.search_root {
-            let root_norm = root.replace('\\', "/").trim_end_matches('/');
+            let root_replaced = root.replace('\\', "/");
+            let root_norm = root_replaced.trim_end_matches('/');
             if let Some(stripped) = normalized.strip_prefix(root_norm) {
                 // 目录边界锚定：剥离后须为空或以 `/` 开头——防
                 // "C:/proj" 误剥 "C:/projects/x.rs"（字符串前缀 ≠ 目录前缀）
@@ -169,7 +172,8 @@ fn is_absolute_path(path: &str) -> bool {
 /// 完整组件序列匹配，目录边界锚定防前缀误匹配；搜索索引仅覆盖工作区，
 /// 无跨根误报）
 fn hit_path_within_root(hit_path: &str, root: &str) -> bool {
-    let root_norm = root.replace('\\', "/").trim_matches('/');
+    let root_replaced = root.replace('\\', "/");
+    let root_norm = root_replaced.trim_matches('/');
     if root_norm.is_empty() {
         return true;
     }
@@ -460,7 +464,7 @@ impl ApiBackend for CoreStateBackend {
         // latestSequence = 服务端该会话当前 max（游标推进判断；M6 C03）
         let store = self.core.store();
         let latest_sequence = store
-            .query_events(&params.session_id, 0)
+            .query_events(&params.session_id, 0, None)
             .await
             .ok()
             .and_then(|all| all.last().map(|event| event.sequence));
@@ -936,7 +940,7 @@ impl ApiBackend for CoreStateBackend {
                 "调度器未装配（Cron 注册表未接线）",
             )
         })?;
-        let paused_until = registry.pause_for(duration_sec);
+        let paused_until = registry.pause_for(u64::from(duration_sec));
         Ok(PauseAutomationResult {
             ok: true,
             paused_until,

@@ -24,10 +24,11 @@ export const lightTokens = {
   textTertiary: 'rgba(85,85,85,0.7)',
   hairline: 'hsl(35,8%,91%)',
   hairlineStrong: 'hsl(35,10%,86%)',
-  colorSuccess: 'hsl(142,35%,42%)',
-  colorWarning: 'hsl(38,92%,50%)',
-  colorError: 'hsl(0,55%,55%)',
-  colorInfo: 'hsl(217,91%,60%)',
+  // R2-05 部分 11（R2-16 走查 §3.3 W-6）：浅色语义色作文字压暗至对比度 ≥4.5:1（R2UX §4.2）
+  colorSuccess: 'hsl(142,35%,35%)',
+  colorWarning: 'hsl(38,92%,30%)',
+  colorError: 'hsl(0,55%,50%)',
+  colorInfo: 'hsl(217,91%,49%)',
   colorSuccessBg: 'hsl(142,35%,96.5%)',
   colorErrorBg: 'hsl(0,55%,97.5%)',
   colorWarningBg: 'hsl(38,100%,96%)',
@@ -50,16 +51,18 @@ export const darkTokens: ThemeTokens = {
   textTertiary: 'rgba(163,163,163,0.62)',
   hairline: 'hsl(0,0%,14%)',
   hairlineStrong: 'hsl(0,0%,18%)',
-  colorSuccess: 'hsl(142,35%,42%)',
+  // R2-05 部分 11：深色语义色作文字提亮/压深至对比度 ≥4.5:1（colorSuccess 提亮、colorError 提亮）
+  colorSuccess: 'hsl(142,35%,50%)',
   colorWarning: 'hsl(38,92%,50%)',
-  colorError: 'hsl(0,55%,55%)',
+  colorError: 'hsl(0,55%,63%)',
   colorInfo: 'hsl(217,91%,60%)',
   colorSuccessBg: 'hsl(142,35%,16%)',
   colorErrorBg: 'hsl(0,55%,16%)',
   colorWarningBg: 'hsl(21,92%,14%)',
   // M4 §3.2：深色 textOnAccent = bgPrimary（炭灰），绿底深字对比度优于白字
   textOnAccent: 'hsl(0,0%,5%)',
-  textOnDanger: '#ffffff',
+  // R2-05 部分 11：深色 textOnDanger 同取炭灰（红底深字优于白字，先例同上），白字红底仅 4.45:1
+  textOnDanger: 'hsl(0,0%,5%)',
   backdrop: 'rgba(0,0,0,0.45)',
 };
 

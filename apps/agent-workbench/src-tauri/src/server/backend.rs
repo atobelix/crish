@@ -17,7 +17,9 @@
 //!   并行任务（R1-05 ws.rs 等）的既有 mock 无需感知新方法即可编译；
 //!   CoreStateBackend 覆盖为真实直调。
 
-use conex_types::device::commands::{TaskOutputParams, TaskOutputResult};
+use conex_types::device::commands::{
+    SettingsConfirmParams, SettingsConfirmResult, TaskOutputParams, TaskOutputResult,
+};
 use conex_types::device::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, AssetUrlParams,
     AssetUrlResult, CancelRunParams, CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams,
@@ -26,7 +28,7 @@ use conex_types::device::{
     ListSessionsResult, ListTasksParams, ListTasksResult, PauseAutomationParams,
     PauseAutomationResult, RunControlParams, RunControlResult, RunEventsParams, RunSnapshotParams,
     RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams, SearchFilesResult,
-    SearchIndexResult, SettingsConfirmParams, SettingsConfirmResult,
+    SearchIndexResult,
 };
 
 use crate::server::ServerError;

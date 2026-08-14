@@ -40,7 +40,9 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use conex_types::device::commands::{TaskOutputParams, TaskOutputResult};
+use conex_types::device::commands::{
+    SettingsConfirmParams, SettingsConfirmResult, TaskOutputParams, TaskOutputResult,
+};
 use conex_types::device::version::PAGE_SIZE_MAX;
 #[cfg(test)]
 use conex_types::device::version::PAGE_SIZE_DEFAULT;
@@ -52,8 +54,7 @@ use conex_types::device::{
     ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult, ListTasksParams,
     ListTasksResult, PauseAutomationParams, PauseAutomationResult, RunControlParams,
     RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
-    RunTaskResult, SearchFilesParams, SearchFilesResult, SearchIndexResult, SettingsConfirmParams,
-    SettingsConfirmResult,
+    RunTaskResult, SearchFilesParams, SearchFilesResult, SearchIndexResult,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -1521,7 +1522,7 @@ mod tests {
             self.fail()?;
             *self.last_settings_confirm.lock().unwrap() = Some(params);
             Ok(SettingsConfirmResult {
-                status: conex_types::device::SettingsConfirmStatus::Withdrawn,
+                status: SettingsConfirmStatus::Withdrawn,
                 reason: Some("mock 回执".to_string()),
             })
         }
@@ -2902,7 +2903,7 @@ mod tests {
         assert_eq!(received.confirm_request_id, "req-1");
         assert_eq!(
             received.action,
-            conex_types::device::SettingsConfirmAction::Withdraw
+            SettingsConfirmAction::Withdraw
         );
     }
 
