@@ -42,48 +42,98 @@ function sessionsIdKey(sessions: ReadonlyArray<{ id: string }>): string {
 
 type AnySet = (partial: unknown, replace?: boolean) => void;
 
-export const withAutoIndex = <
-  S extends SessionsAwareState,
-  Mps extends [StoreMutatorIdentifier, unknown][] = [],
-  Mcs extends [StoreMutatorIdentifier, unknown][] = [],
->(
-  config: StateCreator<S, Mps, Mcs>
-): StateCreator<S, Mps, Mcs> =>
+export const withAutoIndex =
+  <
+    S extends SessionsAwareState,
+    Mps extends [StoreMutatorIdentifier, unknown][] = [],
+    Mcs extends [StoreMutatorIdentifier, unknown][] = [],
+  >(
+    config: StateCreator<S, Mps, Mcs>
+  ): StateCreator<S, Mps, Mcs> =>
   (set, get, api) => {
     let prevSessions: ReadonlyArray<unknown> | null = null;
     const rawSet = set as never as AnySet;
 
     const setWithIndex: AnySet = (partial, replace) => {
+      // 1. 函数形式的 partial（例如未经 immer 或手写函数派发）
       if (typeof partial === 'function') {
         rawSet((state: S) => {
-          const fn = partial as (s: S) => S | void;
+          const fn = partial as (s: S) => Partial<S> | S | void;
           const produced = fn(state);
           const next =
             produced != null && typeof produced === 'object'
               ? (produced as S)
               : state;
 
-          if (!next || !Array.isArray(next.sessions) || next.sessions === prevSessions) {
-            return next;
+          if (
+            !next ||
+            !Array.isArray((next as unknown as SessionsAwareState).sessions)
+          ) {
+            return produced;
           }
-          prevSessions = next.sessions;
+          const nextSessions = (next as unknown as SessionsAwareState).sessions;
+          if (
+            nextSessions === prevSessions &&
+            (next as unknown as SessionsAwareState).sessionsById
+          ) {
+            return produced;
+          }
+          prevSessions = nextSessions;
           return {
             ...next,
-            sessionsById: buildSessionsMap(next.sessions),
+            sessionsById: buildSessionsMap(nextSessions),
           };
         }, replace);
         return;
       }
 
-      rawSet(partial, replace);
+      // 2. 对象形式的 partial（包括 immer produce 后产生的已结算对象）
+      if (partial != null && typeof partial === 'object') {
+        // 若设置 replace === true
+        if (replace) {
+          const nextState = partial as unknown as SessionsAwareState;
+          if (nextState && Array.isArray(nextState.sessions)) {
+            if (
+              nextState.sessions !== prevSessions ||
+              !nextState.sessionsById
+            ) {
+              prevSessions = nextState.sessions;
+              rawSet(
+                {
+                  ...partial,
+                  sessionsById: buildSessionsMap(nextState.sessions),
+                },
+                true
+              );
+              return;
+            }
+          }
+          rawSet(partial, true);
+          return;
+        }
 
-      // partial merge 后根据 get() 校正索引
-      const after = get() as (S & SessionsAwareState) | undefined;
-      if (!after || !Array.isArray(after.sessions) || after.sessions === prevSessions) return;
-      prevSessions = after.sessions;
-      rawSet({
-        sessionsById: buildSessionsMap(after.sessions),
-      } as Partial<S>);
+        // replace 为 false 或 undefined 的常规合并更新
+        if ('sessions' in partial) {
+          const nextSessions = (partial as unknown as SessionsAwareState)
+            .sessions;
+          if (Array.isArray(nextSessions)) {
+            if (nextSessions !== prevSessions || !('sessionsById' in partial)) {
+              prevSessions = nextSessions;
+              rawSet(
+                {
+                  ...partial,
+                  sessionsById: buildSessionsMap(nextSessions),
+                },
+                false
+              );
+              return;
+            }
+          }
+        }
+      }
+
+      // 3. 不涉及 sessions 变更的其他字段更新，单次直接派发
+      rawSet(partial, replace);
     };
 
     const store = config(setWithIndex as never as typeof set, get, api);

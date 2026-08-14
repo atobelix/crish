@@ -41,7 +41,8 @@ vi.mock('../../api/storeAccess', async (importOriginal) => {
 });
 
 vi.mock('../../store/layoutStore', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../store/layoutStore')>();
+  const actual =
+    await importOriginal<typeof import('../../store/layoutStore')>();
   return {
     ...actual,
     useLayoutStore: Object.assign(
@@ -93,24 +94,26 @@ describe('stream frame → streamingStore (not session store)', () => {
     buffer.stop();
   });
 
-  it('commit helper performs a single durable updateMessageText then clears', () => {
+  it('commit helper performs a single durable updateMessageText then clears', async () => {
     setStreamText('s1', 'm1', 'final body');
     commitStreamToSession('s1', 'm1');
     expect(updateMessageText).toHaveBeenCalledTimes(1);
     expect(updateMessageText).toHaveBeenCalledWith('s1', 'm1', 'final body');
+    await Promise.resolve();
     expect(getStreamText('s1', 'm1')).toBeUndefined();
   });
 
-  it('终态重复 commit 仍只 update 同行，不新增 message id', () => {
+  it('终态重复 commit 仍只 update 同行，不新增 message id', async () => {
     setStreamText('s1', 'asst-stable', 'v1');
     commitStreamToSession('s1', 'asst-stable', { text: 'v1', clear: false });
     setStreamText('s1', 'asst-stable', 'v2');
     commitStreamToSession('s1', 'asst-stable', { text: 'v2' });
     // 两次均按同一 messageId update，无 addMessage
     expect(updateMessageText).toHaveBeenCalledTimes(2);
-    expect(updateMessageText.mock.calls.every((c) => c[1] === 'asst-stable')).toBe(
-      true
-    );
+    expect(
+      updateMessageText.mock.calls.every((c) => c[1] === 'asst-stable')
+    ).toBe(true);
+    await Promise.resolve();
     expect(getStreamText('s1', 'asst-stable')).toBeUndefined();
   });
 
@@ -222,7 +225,7 @@ describe('tool progress → streamingStore (not session immer)', () => {
     });
   });
 
-  it('commitStreamToSession flushes remaining lite tools before clear', () => {
+  it('commitStreamToSession flushes remaining lite tools before clear', async () => {
     setStreamText('s1', 'm1', 'done');
     setStreamTool('s1', 'm1', 't1', {
       id: 't1',
@@ -231,8 +234,8 @@ describe('tool progress → streamingStore (not session immer)', () => {
     });
     commitStreamToSession('s1', 'm1');
     expect(addMessageToolCall).toHaveBeenCalled();
+    await Promise.resolve();
     expect(getStreamText('s1', 'm1')).toBeUndefined();
     expect(getStreamTool('s1', 'm1', 't1')).toBeUndefined();
   });
 });
-

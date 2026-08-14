@@ -146,19 +146,41 @@ describe('VirtualScrollManager (messageId + suffix rebuild)', () => {
     expect(vsm.getHeight('x')).toBe(222);
   });
 
-  it('invalidateActual resets actual and estimated so height truly recomputes', () => {
+  it('invalidateActual resets actual and keeps transitional estimate to prevent scroll collapse', () => {
     const vsm = new VirtualScrollManager(100);
     vsm.syncOrder(['a', 'b', 'c']);
     vsm.setActual('a', 40);
     vsm.setActual('b', 60);
     vsm.setActual('c', 80);
     vsm.invalidateActual('b');
-    // setActual 曾把 estimated 同步为 60；invalidate 必须一并重置，否则 getHeight 仍回落旧值
-    expect(vsm.getHeight('b')).toBe(100); // fallback
-    expect(vsm.getOffset(2)).toBe(40 + 100);
-    vsm.setEstimated('b', 70); // actual null，允许新的 estimated
+    // 关键断言：作废 actual 后保持过渡估计 60px，绝不直接回退到 100/120 fallback 导致 2000px 视口抖动
+    expect(vsm.getHeight('b')).toBe(60);
+    expect(vsm.getOffset(2)).toBe(40 + 60);
+    expect(vsm.getActualHeight('b')).toBe(null); // actual 已清空，待重新测量
+    vsm.setEstimated('b', 70); // actual 为 null 时，允许更新 estimate
     expect(vsm.getHeight('b')).toBe(70);
     expect(vsm.getOffset(2)).toBe(40 + 70);
+  });
+
+  it('hydrateHeightMap hydrates measured heights in batch and updates offsets', () => {
+    const vsm = new VirtualScrollManager(120);
+    vsm.syncOrder(['m1', 'm2', 'm3']);
+    vsm.hydrateHeightMap({ m1: 800, m2: 250, m3: 400 });
+
+    expect(vsm.getHeight('m1')).toBe(800);
+    expect(vsm.getHeight('m2')).toBe(250);
+    expect(vsm.getHeight('m3')).toBe(400);
+    expect(vsm.getOffset(0)).toBe(0);
+    expect(vsm.getOffset(1)).toBe(800);
+    expect(vsm.getOffset(2)).toBe(1050);
+    expect(vsm.getTotalHeight(3)).toBe(1450);
+  });
+
+  it('hydrateHeightMap ignores invalid/negative/non-finite heights', () => {
+    const vsm = new VirtualScrollManager(120);
+    vsm.syncOrder(['m1']);
+    vsm.hydrateHeightMap({ m1: -100, '': 200, m2: NaN });
+    expect(vsm.getHeight('m1')).toBe(120); // 未被污染，仍为 fallback
   });
 
   it('clear wipes heights; used on session switch', () => {

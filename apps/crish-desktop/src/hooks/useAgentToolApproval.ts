@@ -1,18 +1,10 @@
 /**
  * 子 agent（侧栏 AgentCard / 内联 InlineAgentPanel）审批：
- * 与主对话 ChatCard 同路径——乐观摘 pending、白名单 remember、busy 防双点。
+ * 与主对话 ChatCard 同路径——乐观摘 pending、白名单 remember、基于 inFlightToolIdsRef 请求级持久锁防重入。
  * 二次确认 UI 在 ApprovalAskCard（ChatToolStack 已挂载）；本 hook 只做决定落地。
- * deny/allow send 失败：回滚或标 error + 可选 toast（与 ChatCard 对称）。
- *
- * 治理防线 #33（DRY）：原实现绕过 action 层、直接 useLayoutStore.setState
- * 修改 agent toolCall（含「残留 pending 防御」扫描其他消息），
- * 现改走 storeAccess.patchAgentTool → sessionAction.patchAgentTool 纯函数路径：
- *   - 类型安全：sanitizeToolCallUpdates + applyMessageToolCallPatch 消除类型逃逸
- *   - 单一职责：终态后忽略 status 回退逻辑集中在 sanitizeToolCallUpdates
- *   - 不再扫描「同 toolId 残留 pending」：daemon 协议保证 toolId 唯一，
- *     若出现重复是 daemon bug，应在 chatBridge 修复而非在视图层兜底
+ * 错误回滚：在 .catch() 中配置状态防倒退守卫，避免后发过期错误覆写已推进的 success/completed 终态或已接收实际输出的 running 态。
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { engineApproveTool, engineDenyTool } from '../api/chatBridge';
 import { rememberPrefixFromToolArgs } from '../api/approvalMeta';
 import { extractCommandForMatch } from '../api/commandPermissions';
@@ -35,12 +27,17 @@ function findAgentTool(
     getSessionAgent(parentSessionId, agentId) ??
     sess?.agents?.find((a) => a.id === agentId);
   const m = ag?.messages?.find((x) => x.id === msgId);
-  const t = m?.toolCalls?.find((x) => x.id === toolId);
+  const t =
+    m?.toolCalls?.find((x) => x.id === toolId) ??
+    ag?.messages
+      ?.flatMap((x) => x.toolCalls ?? [])
+      .find((x) => x.id === toolId);
   return { sess, ag, m, t };
 }
 
 export type AgentApprovalHandlers = {
   approvalBusy: boolean;
+  isToolBusy?: (toolId: string) => boolean;
   onApprovalAllow: (toolId: string, msgId: string, remember?: boolean) => void;
   onApprovalDeny: (toolId: string, msgId: string) => void;
 };
@@ -55,68 +52,146 @@ export function useAgentToolApproval(
   agentId: string,
   onShowToast?: (message: string) => void
 ): AgentApprovalHandlers {
-  const [approvalBusy, setApprovalBusy] = useState(false);
+  // 请求级闭包持久锁：记录在途请求中的 toolId 集合，与 Promise 生命周期强绑定
+  const inFlightToolIdsRef = useRef<Set<string>>(new Set());
+  const [inFlightCount, setInFlightCount] = useState(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const isToolBusy = useCallback((toolId: string): boolean => {
+    return inFlightToolIdsRef.current.has(toolId);
+  }, []);
 
   const onApprovalAllow = useCallback(
-    (toolId: string, msgId: string, remember = false) => {
-      // 与 ChatCard 同路径：trim + busy 防双点（approvalBusy 由父级卡片展示）
+    async (toolId: string, msgId: string, remember = false) => {
       const tid = String(toolId || '').trim();
-      if (!parentSessionId || !agentId || !tid || approvalBusy) return;
-      setApprovalBusy(true);
-      if (remember) {
-        const { t } = findAgentTool(parentSessionId, agentId, msgId, tid);
-        const prefix = rememberPrefixFromToolArgs(
-          t?.name || '',
-          t?.arguments || '',
-          extractCommandForMatch
-        );
-        if (prefix) addCommandPermission(prefix);
+      const mid = String(msgId || '').trim();
+      if (!parentSessionId || !agentId || !tid) return;
+
+      // 严格防重入：已在请求飞行中的 toolId 直接拦截，消除弱网连击与重复派发
+      if (inFlightToolIdsRef.current.has(tid)) {
+        return;
       }
-      // 乐观标 running；send 失败回滚 error
-      // 治理防线 #33：走 patchAgentTool action，复用 sanitizeToolCallUpdates 终态守卫
-      patchAgentTool(parentSessionId, agentId, tid, {
-        status: 'running' as MessageToolCallStatus,
-        output: '执行中…',
-      });
-      void engineApproveTool(tid)
-        .catch(() => {
-          patchAgentTool(parentSessionId, agentId, tid, {
-            status: 'error' as MessageToolCallStatus,
-            output: '批准失败',
-          });
-          onShowToast?.('批准失败，请重试');
-        })
-        .finally(() => {
-          window.setTimeout(() => setApprovalBusy(false), 200);
+
+      inFlightToolIdsRef.current.add(tid);
+      setInFlightCount(inFlightToolIdsRef.current.size);
+
+      try {
+        if (remember) {
+          const { t } = findAgentTool(parentSessionId, agentId, mid, tid);
+          const prefix = rememberPrefixFromToolArgs(
+            t?.name || '',
+            t?.arguments || '',
+            extractCommandForMatch
+          );
+          if (prefix) addCommandPermission(prefix);
+        }
+
+        // 乐观标 running；send 失败回滚 error
+        patchAgentTool(parentSessionId, agentId, tid, {
+          status: 'running' as MessageToolCallStatus,
+          output: '执行中…',
         });
+
+        await engineApproveTool(tid);
+      } catch (_err) {
+        // 关键防倒退守卫：核对当前 Store 中该工具的最新状态
+        const { t: currentTc } = findAgentTool(
+          parentSessionId,
+          agentId,
+          mid,
+          tid
+        );
+        // 若已被并发事件推进至 success / completed 终态，或已有实际执行输出，坚决拦截后发过期 catch 覆写为 error
+        if (
+          currentTc?.status === 'success' ||
+          (currentTc?.status as string) === 'completed' ||
+          (currentTc?.status === 'running' &&
+            currentTc?.output &&
+            currentTc.output !== '执行中…')
+        ) {
+          return;
+        }
+
+        patchAgentTool(parentSessionId, agentId, tid, {
+          status: 'error' as MessageToolCallStatus,
+          output: '批准失败',
+        });
+        onShowToast?.('批准失败，请重试');
+      } finally {
+        inFlightToolIdsRef.current.delete(tid);
+        if (isMountedRef.current) {
+          setInFlightCount(inFlightToolIdsRef.current.size);
+        }
+      }
     },
-    [parentSessionId, agentId, approvalBusy, onShowToast]
+    [parentSessionId, agentId, onShowToast]
   );
 
   const onApprovalDeny = useCallback(
-    (toolId: string, _msgId: string) => {
+    async (toolId: string, msgId: string) => {
       const tid = String(toolId || '').trim();
-      if (!parentSessionId || !agentId || !tid || approvalBusy) return;
-      setApprovalBusy(true);
-      // 乐观标已拒绝；send 失败回滚 pending_approval（与 ChatCard 对称）
-      patchAgentTool(parentSessionId, agentId, tid, {
-        status: 'error' as MessageToolCallStatus,
-        output: '已拒绝',
-      });
-      void engineDenyTool(tid)
-        .catch(() => {
-          patchAgentTool(parentSessionId, agentId, tid, {
-            status: 'pending_approval' as MessageToolCallStatus,
-            output: '拒绝未送达',
-          });
-          onShowToast?.('拒绝未送达，请重试');
-        })
-        .finally(() => {
-          window.setTimeout(() => setApprovalBusy(false), 200);
+      const mid = String(msgId || '').trim();
+      if (!parentSessionId || !agentId || !tid) return;
+
+      // 严格防重入：已在请求飞行中的 toolId 直接拦截
+      if (inFlightToolIdsRef.current.has(tid)) {
+        return;
+      }
+
+      inFlightToolIdsRef.current.add(tid);
+      setInFlightCount(inFlightToolIdsRef.current.size);
+
+      try {
+        // 乐观标已拒绝；send 失败回滚 pending_approval
+        patchAgentTool(parentSessionId, agentId, tid, {
+          status: 'error' as MessageToolCallStatus,
+          output: '已拒绝',
         });
+
+        await engineDenyTool(tid);
+      } catch (_err) {
+        // 关键防倒退守卫：核对当前 Store 中该工具的最新状态
+        const { t: currentTc } = findAgentTool(
+          parentSessionId,
+          agentId,
+          mid,
+          tid
+        );
+        // 若已被并发事件推进至 running / success / completed，坚决拦截后发 catch 覆写为 pending_approval
+        if (
+          currentTc?.status === 'running' ||
+          currentTc?.status === 'success' ||
+          (currentTc?.status as string) === 'completed'
+        ) {
+          return;
+        }
+
+        patchAgentTool(parentSessionId, agentId, tid, {
+          status: 'pending_approval' as MessageToolCallStatus,
+          output: '拒绝未送达',
+        });
+        onShowToast?.('拒绝未送达，请重试');
+      } finally {
+        inFlightToolIdsRef.current.delete(tid);
+        if (isMountedRef.current) {
+          setInFlightCount(inFlightToolIdsRef.current.size);
+        }
+      }
     },
-    [parentSessionId, agentId, approvalBusy, onShowToast]
+    [parentSessionId, agentId, onShowToast]
   );
 
-  return { approvalBusy, onApprovalAllow, onApprovalDeny };
+  return {
+    approvalBusy: inFlightCount > 0,
+    isToolBusy,
+    onApprovalAllow,
+    onApprovalDeny,
+  };
 }

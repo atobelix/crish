@@ -12,6 +12,11 @@ import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/messageWindow';
 import { ChevronDown, Pin, PinOff } from 'lucide-react';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
+import {
+  registerActiveVsm,
+  unregisterActiveVsm,
+} from '../../store/messageSnapshotsBridge';
+import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 
 import type { PermissionMode } from '../../api/permissionModes';
 
@@ -122,6 +127,15 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   useEffect(() => {
     clearHeights();
   }, [activeSessionId, clearHeights]);
+
+  useEffect(() => {
+    registerActiveVsm(activeSessionId, manager);
+    return () => {
+      unregisterActiveVsm(activeSessionId);
+    };
+  }, [activeSessionId, manager]);
+
+  useUndoWithScrollAnchor(containerRef, manager);
 
   // Heights: MESSAGE_ESTIMATED_ROW_HEIGHT fallback until ResizeObserver setActual.
   // No @chenglou/pretext on this path — RO owns measured heights after paint.

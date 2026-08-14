@@ -20,7 +20,8 @@ import type { MessageToolCall } from '../../store/types';
 import type { StreamToolCallPatch } from '../../api/streamTextBatcher';
 import type { TerminalToolReason, TerminalToolPatch } from './types';
 
-type PublishToolDiffsFn = typeof import('../../api/publishToolDiffs').publishToolDiffs;
+type PublishToolDiffsFn =
+  typeof import('../../api/publishToolDiffs').publishToolDiffs;
 let _publishToolDiffs: PublishToolDiffsFn | null = null;
 let _publishToolDiffsLoading: Promise<PublishToolDiffsFn | null> | null = null;
 
@@ -47,7 +48,9 @@ function publishToolDiffsLazy(files: Parameters<PublishToolDiffsFn>[0]): void {
       _publishToolDiffs = m.publishToolDiffs;
       m.publishToolDiffs(files);
     })
-    .catch(() => { /* ignore */ });
+    .catch(() => {
+      /* ignore */
+    });
 }
 
 export function scheduleFinalMarkdownHtml(
@@ -78,7 +81,9 @@ export function scheduleFinalMarkdownHtml(
       const textToKeep = nowClean === cleaned ? now || cleaned : cleaned;
       updateMessageText(sessionId, messageId, textToKeep, html);
     })
-    .catch(() => { /* Worker fail: AsyncMarkdown sync fallback */ });
+    .catch(() => {
+      /* Worker fail: AsyncMarkdown sync fallback */
+    });
 }
 
 /**
@@ -98,8 +103,7 @@ export function commitToolPatchToSession(
     ?.messages?.find((m) => m.id === messageId)
     ?.toolCalls?.find((t) => t.id === toolId);
 
-  const name =
-    patch.name || lite?.name || existing?.name || 'tool';
+  const name = patch.name || lite?.name || existing?.name || 'tool';
   const argumentsText =
     patch.arguments !== undefined
       ? patch.arguments
@@ -141,7 +145,8 @@ export function commitToolPatchToSession(
 
   if (existing) {
     const updates: Partial<MessageToolCall> = {};
-    if (patch.name !== undefined || (!existing.name && name)) updates.name = name;
+    if (patch.name !== undefined || (!existing.name && name))
+      updates.name = name;
     if (argumentsText !== undefined) updates.arguments = argumentsText;
     if (explanation !== undefined) updates.explanation = explanation;
     if (status !== undefined) updates.status = status;
@@ -208,7 +213,7 @@ export function commitStreamToSession(
   }
   const fromStore = getStreamText(sessionId, messageId) || '';
   // Prefer non-empty override; empty string falls through to streaming store.
-  const text = (options?.text || fromStore || '');
+  const text = options?.text || fromStore || '';
   if (text) {
     updateMessageText(sessionId, messageId, text);
   }
@@ -218,8 +223,13 @@ export function commitStreamToSession(
       updateMessageThinking(sessionId, messageId, thinking);
     }
   }
+  // 2. 关键时序闭环：严禁同步 clearStream()！
+  // 必须将清理推迟至微任务（queueMicrotask），确保 React 18 完成对 sessionStore 的 DOM 挂载，
+  // 杜绝组件在切换瞬间因 streamingStore 为空而发生白屏闪烁。
   if (options?.clear !== false) {
-    clearStream(sessionId, messageId);
+    queueMicrotask(() => {
+      clearStream(sessionId, messageId);
+    });
   }
   return text;
 }
@@ -238,10 +248,7 @@ export function snapshotStreamTextToSession(
   messageId: string,
   fallbackText?: string
 ): string {
-  const text =
-    getStreamText(sessionId, messageId) ||
-    fallbackText ||
-    '';
+  const text = getStreamText(sessionId, messageId) || fallbackText || '';
   if (text) {
     const msg = getSessionById(sessionId)?.messages?.find(
       (m) => m.id === messageId
@@ -313,7 +320,11 @@ export function decideSendWhileRunning(
  * @param mode cooperative=L2 / force=L3；省略则走 cancel 默认（兼容旧 () => void）
  */
 export function safeCancelStream(
-  cancel: ((opts?: { mode?: 'cooperative' | 'force' }) => void) | (() => void) | null | undefined,
+  cancel:
+    | ((opts?: { mode?: 'cooperative' | 'force' }) => void)
+    | (() => void)
+    | null
+    | undefined,
   mode?: 'cooperative' | 'force'
 ): boolean {
   if (typeof cancel !== 'function') return false;
@@ -350,7 +361,11 @@ export function stopAssistantPlaceholderText(
 
 export function buildTerminalToolPatches(
   toolCalls:
-    | Array<{ id: string; status?: string | undefined; output?: string | undefined }>
+    | Array<{
+        id: string;
+        status?: string | undefined;
+        output?: string | undefined;
+      }>
     | null
     | undefined,
   reason: TerminalToolReason
@@ -369,14 +384,17 @@ export function buildTerminalToolPatches(
       out.push({
         id: tc.id,
         status: 'error',
-        output: existing || (reason === 'error' ? '运行失败时仍待确认' : '回合结束时仍待确认'),
+        output:
+          existing ||
+          (reason === 'error' ? '运行失败时仍待确认' : '回合结束时仍待确认'),
       });
       continue;
     }
     const placeholder = !existing || /^(执行中|运行中)…?$/.test(existing);
-    const fallback = reason === 'error'
-      ? '运行失败时工具未返回结果'
-      : '回合结束时工具未返回结果';
+    const fallback =
+      reason === 'error'
+        ? '运行失败时工具未返回结果'
+        : '回合结束时工具未返回结果';
     out.push({
       id: tc.id,
       status: 'error',

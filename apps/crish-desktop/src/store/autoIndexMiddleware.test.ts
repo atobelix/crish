@@ -127,8 +127,27 @@ describe('withAutoIndex', () => {
     store.getState().addSession({ id: 'b', title: 'B' });
     unsub();
 
-    expect(seen.length).toBeGreaterThanOrEqual(1);
+    expect(seen.length).toBe(1);
     const last = seen[seen.length - 1]!;
     expect(last).toEqual(['a', 'b']);
+  });
+
+  it('dispatches atomically in a single notification without double dispatch', () => {
+    const store = createTestStore([{ id: 'a', title: 'A' }]);
+    let callCount = 0;
+    const unsub = store.subscribe(() => {
+      callCount += 1;
+      const state = store.getState();
+      // On every single dispatch, sessions and sessionsById must be in sync
+      expect(state.sessions.length).toBe(
+        Object.keys(state.sessionsById).length
+      );
+      expect(state.sessionsById.b?.title).toBe('B');
+    });
+
+    store.getState().addSession({ id: 'b', title: 'B' });
+    unsub();
+
+    expect(callCount).toBe(1);
   });
 });

@@ -1,6 +1,10 @@
 import { MAX_MESSAGES_PER_AGENT } from '@crish/shared-utils/browser';
 import { getSessionForWrite, rebindSessionById } from './sessionIndex';
-import type { SessionActions, SessionStoreSlice, SessionImmerSet } from './sessionActions';
+import type {
+  SessionActions,
+  SessionStoreSlice,
+  SessionImmerSet,
+} from './sessionActions';
 import {
   applyMessageToolCallPatch,
   applySessionAgentPatch,
@@ -12,6 +16,11 @@ import {
   upsertMessageById,
 } from './sessionSharedHelpers';
 import { applySubagentEventToMessages } from '../api/subagentTimeline';
+import {
+  clearSessionStreams,
+  getStreamText,
+  getStreamThinking,
+} from './streamingStore';
 
 export function createSessionAgentActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>
@@ -149,11 +158,7 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
             tc.status = failed || stopped ? 'error' : 'success';
             const body =
               summary.trim() ||
-              (failed
-                ? '协作未完成'
-                : stopped
-                  ? '协作已停止'
-                  : '协作已完成');
+              (failed ? '协作未完成' : stopped ? '协作已停止' : '协作已完成');
             tc.output = body.length > 1200 ? body.slice(0, 1199) + '…' : body;
           }
         }
@@ -171,6 +176,16 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
           if (m.status === 'processing') {
             m.status = 'completed';
             if (m.thinking === '正在处理…') m.thinking = '';
+
+            // 关键补齐：从 streamingStore 提取残余流式正文并合入持久化消息
+            const liveText = getStreamText(sessionId, m.id);
+            if (liveText && (!m.text || liveText.length > m.text.length)) {
+              m.text = liveText;
+            }
+            const liveThinking = getStreamThinking(sessionId, m.id);
+            if (liveThinking && !m.thinking) {
+              m.thinking = liveThinking;
+            }
           }
           for (const tc of m.toolCalls || []) {
             if (tc.status === 'running' || tc.status === 'pending_approval') {
@@ -181,6 +196,11 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
           }
         }
         rebindSessionById(state, sessionId, sess);
+
+        // 异步安全清理关联流
+        queueMicrotask(() => {
+          clearSessionStreams(sessionId);
+        });
       }),
   };
 }

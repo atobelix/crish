@@ -19,9 +19,15 @@ import {
   applyDelta,
   computeDiff,
   estimateBytes,
+  estimateDeltaBytes,
 } from './MessageSnapshots';
+import { VirtualScrollManager } from './VirtualScrollManager';
 
-function msg(id: string, text = id, extra?: Partial<SessionMessage>): SessionMessage {
+function msg(
+  id: string,
+  text = id,
+  extra?: Partial<SessionMessage>
+): SessionMessage {
   return {
     id,
     sender: id.startsWith('a') ? 'assistant' : 'user',
@@ -45,7 +51,12 @@ describe('computeDiff / applyDelta', () => {
       removedCount: 0,
       inserted: [msg('u2'), msg('a2')],
     });
-    expect(applyDelta(diff, after).map((m) => m.id)).toEqual(['u1', 'a1', 'u2', 'a2']);
+    expect(applyDelta(diff, after).map((m) => m.id)).toEqual([
+      'u1',
+      'a1',
+      'u2',
+      'a2',
+    ]);
   });
 
   it('middle delete: only stores local segment', () => {
@@ -55,7 +66,13 @@ describe('computeDiff / applyDelta', () => {
     expect(diff.startIndex).toBe(2);
     expect(diff.removedCount).toBe(0);
     expect(diff.inserted.map((m) => m.id)).toEqual(['c', 'd']);
-    expect(applyDelta(diff, after).map((m) => m.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(applyDelta(diff, after).map((m) => m.id)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+      'e',
+    ]);
   });
 
   it('middle replace: removedCount and inserted are local', () => {
@@ -96,7 +113,12 @@ describe('MessageSnapshots', () => {
 
   it('save stores local reverse delta for append-tail withdraw (not full copy)', () => {
     const sessionId = 's1';
-    const prev = [msg('u1', 'hello'), msg('a1', 'world'), msg('u2', 'bye'), msg('a2', 'ok')];
+    const prev = [
+      msg('u1', 'hello'),
+      msg('a1', 'world'),
+      msg('u2', 'bye'),
+      msg('a2', 'ok'),
+    ];
     const after = [msg('u1', 'hello'), msg('a1', 'world')];
     setLive(sessionId, after);
 
@@ -110,7 +132,7 @@ describe('MessageSnapshots', () => {
         timestamp: Date.now(),
         description: '撤回消息',
       },
-      { afterMessages: after },
+      { afterMessages: after }
     );
 
     const delta = snaps.peekDelta(sessionId);
@@ -137,7 +159,7 @@ describe('MessageSnapshots', () => {
         diffFilePaths: [],
         timestamp: 1,
       },
-      { afterMessages: after },
+      { afterMessages: after }
     );
 
     const delta = snaps.peekDelta(sessionId)!;
@@ -162,7 +184,7 @@ describe('MessageSnapshots', () => {
         timestamp: 10,
         description: '撤回消息',
       },
-      { afterMessages: after },
+      { afterMessages: after }
     );
 
     const entry = snaps.undo(sessionId);
@@ -182,13 +204,25 @@ describe('MessageSnapshots', () => {
 
     snaps.save(
       sessionId,
-      { sessionId, operation: 'withdraw', messages: m0, diffFilePaths: [], timestamp: 1 },
-      { afterMessages: m1 },
+      {
+        sessionId,
+        operation: 'withdraw',
+        messages: m0,
+        diffFilePaths: [],
+        timestamp: 1,
+      },
+      { afterMessages: m1 }
     );
     snaps.save(
       sessionId,
-      { sessionId, operation: 'withdraw', messages: m1, diffFilePaths: [], timestamp: 2 },
-      { afterMessages: m2 },
+      {
+        sessionId,
+        operation: 'withdraw',
+        messages: m1,
+        diffFilePaths: [],
+        timestamp: 2,
+      },
+      { afterMessages: m2 }
     );
 
     setLive(sessionId, m2);
@@ -208,13 +242,25 @@ describe('MessageSnapshots', () => {
 
     snaps.save(
       sessionId,
-      { sessionId, operation: 'withdraw', messages: m0, diffFilePaths: [], timestamp: 1 },
-      { afterMessages: m1 },
+      {
+        sessionId,
+        operation: 'withdraw',
+        messages: m0,
+        diffFilePaths: [],
+        timestamp: 1,
+      },
+      { afterMessages: m1 }
     );
     snaps.save(
       sessionId,
-      { sessionId, operation: 'withdraw', messages: m1, diffFilePaths: [], timestamp: 2 },
-      { afterMessages: m2 },
+      {
+        sessionId,
+        operation: 'withdraw',
+        messages: m1,
+        diffFilePaths: [],
+        timestamp: 2,
+      },
+      { afterMessages: m2 }
     );
     setLive(sessionId, m2);
 
@@ -244,7 +290,7 @@ describe('MessageSnapshots', () => {
           timestamp: i + 1,
           description: `snap-${i}`,
         },
-        { afterMessages: after },
+        { afterMessages: after }
       );
     }
 
@@ -274,11 +320,13 @@ describe('MessageSnapshots', () => {
           timestamp: i + 1,
           description: `big-${i}`,
         },
-        { afterMessages: after },
+        { afterMessages: after }
       );
     }
 
-    expect(snaps.getTotalMemoryBytes()).toBeLessThanOrEqual(snaps.getMaxMemoryBytes());
+    expect(snaps.getTotalMemoryBytes()).toBeLessThanOrEqual(
+      snaps.getMaxMemoryBytes()
+    );
     expect(snaps.getTotalMemoryBytes()).toBeGreaterThan(0);
 
     // 仍应保留若干较新条目
@@ -304,8 +352,14 @@ describe('MessageSnapshots', () => {
     const after = [msg('a')];
     snaps.save(
       sessionId,
-      { sessionId, operation: 'withdraw', messages: prev, diffFilePaths: [], timestamp: 1 },
-      { afterMessages: after },
+      {
+        sessionId,
+        operation: 'withdraw',
+        messages: prev,
+        diffFilePaths: [],
+        timestamp: 1,
+      },
+      { afterMessages: after }
     );
     setLive(sessionId, after);
     snaps.undo(sessionId);
@@ -313,16 +367,28 @@ describe('MessageSnapshots', () => {
 
     snaps.save(
       sessionId,
-      { sessionId, operation: 'withdraw', messages: prev, diffFilePaths: [], timestamp: 2 },
-      { afterMessages: after },
+      {
+        sessionId,
+        operation: 'withdraw',
+        messages: prev,
+        diffFilePaths: [],
+        timestamp: 2,
+      },
+      { afterMessages: after }
     );
     snaps.clearSession(sessionId);
     expect(snaps.getTotalMemoryBytes()).toBe(0);
 
     snaps.save(
       sessionId,
-      { sessionId, operation: 'withdraw', messages: prev, diffFilePaths: [], timestamp: 3 },
-      { afterMessages: after },
+      {
+        sessionId,
+        operation: 'withdraw',
+        messages: prev,
+        diffFilePaths: [],
+        timestamp: 3,
+      },
+      { afterMessages: after }
     );
     snaps.clearAll();
     expect(snaps.getTotalMemoryBytes()).toBe(0);
@@ -342,5 +408,120 @@ describe('MessageSnapshots', () => {
       diffFilePaths: [],
     });
     expect(large).toBeGreaterThan(small + 40_000);
+  });
+
+  it('estimateBytes and estimateDeltaBytes scale with heightMap entries', () => {
+    const withoutMap = estimateBytes({
+      sessionId: 's',
+      operation: 'withdraw',
+      inserted: [msg('a', 'hi')],
+      diffFilePaths: [],
+    });
+    const withMap = estimateBytes({
+      sessionId: 's',
+      operation: 'withdraw',
+      inserted: [msg('a', 'hi')],
+      diffFilePaths: [],
+      heightMap: { a: 800, b: 200, c: 350 },
+    });
+    expect(withMap).toBe(withoutMap + 3 * 24);
+
+    const deltaBytes1 = estimateDeltaBytes({
+      startIndex: 0,
+      removedCount: 0,
+      inserted: [msg('a', 'hi')],
+    });
+    const deltaBytes2 = estimateDeltaBytes({
+      startIndex: 0,
+      removedCount: 0,
+      inserted: [msg('a', 'hi')],
+      heightMap: { a: 800, b: 200 },
+    });
+    expect(deltaBytes2).toBe(deltaBytes1 + 2 * 24);
+  });
+
+  it('computeDiff and save capture heightMap for inserted segment', () => {
+    const sessionId = 's-height';
+    const prev = [msg('u1'), msg('a1'), msg('u2'), msg('a2')];
+    const after = [msg('u1'), msg('a1')];
+    const heightMap: Record<string, number> = {
+      u1: 60,
+      a1: 800,
+      u2: 90,
+      a2: 650,
+    };
+
+    const diff = computeDiff(prev, after, heightMap);
+    expect(diff.heightMap).toBeDefined();
+    expect(diff.heightMap).toEqual({
+      u2: 90,
+      a2: 650,
+    });
+
+    snaps.save(
+      sessionId,
+      {
+        sessionId,
+        operation: 'withdraw',
+        messages: prev,
+        diffFilePaths: [],
+        timestamp: 100,
+      },
+      {
+        afterMessages: after,
+        heightMap,
+      }
+    );
+
+    const peeked = snaps.peekDelta(sessionId);
+    expect(peeked?.heightMap).toEqual({
+      u2: 90,
+      a2: 650,
+    });
+  });
+
+  it('撤销操作回灌 heightMap，VSM 保持实测高度，杜绝 120px 暴跌', () => {
+    const vsm = new VirtualScrollManager(120);
+    const msg1: SessionMessage = {
+      id: 'm1',
+      sender: 'assistant',
+      text: '高度 800px 的卡片',
+      status: 'completed',
+    };
+    const msg2: SessionMessage = {
+      id: 'm2',
+      sender: 'user',
+      text: '普通消息',
+      status: 'completed',
+    };
+
+    vsm.syncOrder(['m1', 'm2']);
+    vsm.setActual('m1', 800);
+    vsm.setActual('m2', 100);
+
+    // 模拟删除 m1 操作并保存快照
+    const heightMap: Record<string, number> = { m1: 800, m2: 100 };
+    const delta = computeDiff([msg1, msg2], [msg2], heightMap);
+
+    // 模拟应用状态变为仅有 [msg2] 并清空 VSM 内存
+    const afterMessages = [msg2];
+    vsm.clear();
+    vsm.syncOrder(['m2']);
+    vsm.setActual('m2', 100);
+
+    // 执行 Undo
+    const restoredMessages = applyDelta(delta, afterMessages);
+    expect(restoredMessages.map((m) => m.id)).toEqual(['m1', 'm2']);
+
+    // 回灌高度映射
+    if (delta.heightMap) {
+      vsm.hydrateHeightMap(delta.heightMap);
+    }
+    vsm.syncOrder(restoredMessages.map((m) => m.id));
+
+    // 断言：m1 的高度由 heightMap 精确还原为 800px，未回退至 120px
+    expect(vsm.getHeight('m1')).toBe(800);
+    expect(vsm.getOffset(0)).toBe(0);
+    expect(vsm.getOffset(1)).toBe(800); // m2 的偏移量精确保持在 800px
   });
 });

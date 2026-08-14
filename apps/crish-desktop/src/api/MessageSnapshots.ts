@@ -27,13 +27,22 @@ export interface MessageDelta {
   startIndex: number;
   removedCount: number;
   inserted: SessionMessage[];
+  /**
+   * 记录 inserted 消息在快照保存时的实测高度映射 (id -> heightPx)。
+   * 占用微乎其微（每条约 16-24 字节），但在还原时能 100% 避免 120px 暴跌。
+   */
+  readonly heightMap?: Readonly<Record<string, number>>;
 }
 
 /**
  * 计算 prev → after 的倒向 patch（最短公共前缀/后缀算法）。
  * 复杂度：O(n)，其中 n 为消息列表长度。
  */
-export function computeDiff(prev: SessionMessage[], after: SessionMessage[]): MessageDelta {
+export function computeDiff(
+  prev: SessionMessage[],
+  after: SessionMessage[],
+  heightMap?: Readonly<Record<string, number>>
+): MessageDelta {
   // 跳过公共前缀
   let prefixLen = 0;
   while (
@@ -60,13 +69,43 @@ export function computeDiff(prev: SessionMessage[], after: SessionMessage[]): Me
   const inserted = prev.slice(prefixLen, prevSuffix);
   const removedCount = afterSuffix - prefixLen; // after 中需要移除的数量
 
-  return { startIndex: prefixLen, removedCount, inserted };
+  let deltaHeightMap: Record<string, number> | undefined;
+  if (heightMap) {
+    deltaHeightMap = {};
+    for (const m of inserted) {
+      const h = heightMap[m.id];
+      if (h != null && Number.isFinite(h) && h > 0) {
+        deltaHeightMap[m.id] = h;
+      }
+    }
+    // 若传入的 heightMap 直接是针对 inserted 构造的映射
+    if (Object.keys(deltaHeightMap).length === 0) {
+      for (const [k, v] of Object.entries(heightMap)) {
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+          deltaHeightMap[k] = v;
+        }
+      }
+    }
+    if (Object.keys(deltaHeightMap).length === 0) {
+      deltaHeightMap = undefined;
+    }
+  }
+
+  return {
+    startIndex: prefixLen,
+    removedCount,
+    inserted,
+    ...(deltaHeightMap ? { heightMap: deltaHeightMap } : {}),
+  };
 }
 
 /**
  * 将 delta 应用于 current 列表，还原出变更前的消息视图。
  */
-export function applyDelta(delta: MessageDelta, current: SessionMessage[]): SessionMessage[] {
+export function applyDelta(
+  delta: MessageDelta,
+  current: SessionMessage[]
+): SessionMessage[] {
   const { startIndex, removedCount, inserted } = delta;
   const result = current.slice();
   result.splice(startIndex, removedCount, ...inserted);
@@ -105,14 +144,38 @@ export interface EstimateBytesInput {
   operation: string;
   inserted: SessionMessage[];
   diffFilePaths: string[];
+  heightMap?: Readonly<Record<string, number>>;
 }
 
 /**
- * 估算快照条目的内存占用（粗略估算，用于全局容量控制）。
- * 主要以 inserted 消息的文本长度 × 2（UTF-16）为基准。
+ * 估算 MessageDelta 增量对象的真实内存占用（字节数）
+ */
+export function estimateDeltaBytes(delta: MessageDelta): number {
+  let bytes = 64; // 基础对象与数值开销
+  if (delta.heightMap) {
+    bytes += Object.keys(delta.heightMap).length * 24; // 键值开销
+  }
+  for (const m of delta.inserted) {
+    bytes += 128; // SessionMessage 基础对象
+    bytes += (m.text?.length || 0) * 2;
+    bytes += (m.thinking?.length || 0) * 2;
+    for (const tc of m.toolCalls || []) {
+      bytes +=
+        96 + (tc.output?.length || 0) * 2 + (tc.arguments?.length || 0) * 2;
+    }
+  }
+  return bytes;
+}
+
+/**
+ * 估算快照条目的内存占用（用于 5MB LRU 全局容量控制）。
+ * 综合考量 inserted 消息文本、思考、工具调用以及 heightMap 映射。
  */
 export function estimateBytes(input: EstimateBytesInput): number {
   let bytes = 256; // 基础开销
+  if (input.heightMap) {
+    bytes += Object.keys(input.heightMap).length * 24;
+  }
   for (const m of input.inserted) {
     bytes += (m.text?.length ?? 0) * 2;
     bytes += (m.thinking?.length ?? 0) * 2;
@@ -132,6 +195,8 @@ export function estimateBytes(input: EstimateBytesInput): number {
 export interface SaveContext {
   /** 操作后（即「现在」的）消息列表，用于 computeDiff */
   afterMessages: SessionMessage[];
+  /** 可选实测高度映射（来自于 VirtualScrollManager） */
+  heightMap?: Readonly<Record<string, number>>;
 }
 
 // ── 主类 ──────────────────────────────────────────────────────────────────
@@ -166,21 +231,22 @@ export class MessageSnapshots {
    * 保存快照。
    * @param sessionId 会话 id
    * @param entry     快照元数据（不含 id/delta/byteSize）
-   * @param ctx       afterMessages 用于 computeDiff
+   * @param ctx       afterMessages 用于 computeDiff，包含可选 heightMap
    * @returns 生成的快照 id
    */
   save(
     sessionId: string,
     entry: Omit<SnapshotEntry, 'id' | 'delta' | 'byteSize'>,
-    ctx: SaveContext,
+    ctx: SaveContext
   ): string {
     const id = crypto.randomUUID();
-    const delta = computeDiff(entry.messages, ctx.afterMessages);
+    const delta = computeDiff(entry.messages, ctx.afterMessages, ctx.heightMap);
     const byteSize = estimateBytes({
       sessionId: entry.sessionId,
       operation: entry.operation,
       inserted: delta.inserted,
       diffFilePaths: entry.diffFilePaths,
+      heightMap: delta.heightMap,
     });
     const snapshot: SnapshotEntry = { ...entry, id, delta, byteSize };
 

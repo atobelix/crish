@@ -1,17 +1,15 @@
 /**
  * Lightweight per-token stream buffer (plain zustand, NO immer).
  *
- * Active assistant text/thinking and intermediate tool progress land here
- * during SSE frames so the session store (immer → messages array new ref →
- * ChatCard re-render) is not touched on every token / dense tool tick.
- * Durable text + final tool results commit once on stream end / cancel /
- * success|error|pending_approval.
- *
  * key = `${sessionId}::${messageId}`
  */
 
 import { create } from 'zustand';
-import type { MessageToolCall, MessageToolCallStatus, MessageImageRef } from './types';
+import type {
+  MessageToolCall,
+  MessageToolCallStatus,
+  MessageImageRef,
+} from './types';
 
 /** Live tool row patch held only while status is intermediate (usually running). */
 export type StreamToolLive = {
@@ -23,7 +21,6 @@ export type StreamToolLive = {
   output?: string;
   startedAt?: number;
   approvalMeta?: MessageToolCall['approvalMeta'];
-  /** 工具调用产出的图片 ref（异步解析完成时通过 updateStreamImage 更新状态） */
   images?: MessageImageRef[];
 };
 
@@ -32,9 +29,7 @@ export type StreamEntry = {
   messageId: string;
   text: string;
   thinking?: string;
-  /** Intermediate tool progress keyed by toolCallId (no immer). */
   tools?: Record<string, StreamToolLive>;
-  /** 流式期间增量解析出的图片 ref（消息级，跨工具聚合） */
   images?: MessageImageRef[];
 };
 
@@ -52,13 +47,11 @@ export type StreamingState = {
     toolId: string,
     patch: StreamToolLive
   ) => void;
-  /** 设置流式消息的图片（直接替换 images 数组） */
   setStreamImages: (
     sessionId: string,
     messageId: string,
     images: MessageImageRef[]
   ) => void;
-  /** 更新单个图片 ref 状态（异步解析完成时调用） */
   updateStreamImage: (
     sessionId: string,
     messageId: string,
@@ -136,12 +129,7 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     set((state) => ({
       byKey: {
         ...state.byKey,
-        [key]: {
-          sessionId,
-          messageId,
-          text,
-          ...preserveRest(prev),
-        },
+        [key]: { sessionId, messageId, text, ...preserveRest(prev) },
       },
     }));
   },
@@ -173,7 +161,10 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
       ? { ...prevTool, ...patch, id: toolId }
       : { ...patch, id: toolId };
     if (prevTool && toolLiveEqual(prevTool, nextTool)) return;
-    const tools = { ...(prev?.tools || Object.create(null)), [toolId]: nextTool };
+    const tools = {
+      ...(prev?.tools || Object.create(null)),
+      [toolId]: nextTool,
+    };
     set((state) => ({
       byKey: {
         ...state.byKey,
@@ -192,7 +183,6 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
   setStreamImages: (sessionId, messageId, images) => {
     const key = streamStoreKey(sessionId, messageId);
     const prev = get().byKey[key];
-    // 浅比较：相同引用直接跳过，避免无谓的新对象分配
     if (prev?.images === images) return;
     set((state) => ({
       byKey: {
@@ -216,9 +206,7 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     const idx = prev.images.findIndex((img) => img.id === imageId);
     if (idx === -1) return;
     const prevImg = prev.images[idx]!;
-    // 浅合并：patch 覆盖既有字段，未提供字段保留
     const nextImg: MessageImageRef = { ...prevImg, ...patch };
-    // 若 patch 未带来任何变化，跳过更新
     let changed = false;
     for (const k of Object.keys(patch) as Array<keyof MessageImageRef>) {
       if (nextImg[k] !== prevImg[k]) {
@@ -230,15 +218,9 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     const images = prev.images.slice();
     images[idx] = nextImg;
     set((state) => {
-      // 重新读取以避免并发覆盖：仅当 entry 仍存在且 images 引用未变时替换
       const cur = state.byKey[key];
       if (!cur?.images || cur.images !== prev.images) return state;
-      return {
-        byKey: {
-          ...state.byKey,
-          [key]: { ...cur, images },
-        },
-      };
+      return { byKey: { ...state.byKey, [key]: { ...cur, images } } };
     });
   },
 
@@ -255,10 +237,7 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
       return {
         byKey: {
           ...state.byKey,
-          [key]: {
-            ...cur,
-            ...(hasTools ? { tools } : { tools: undefined }),
-          },
+          [key]: { ...cur, ...(hasTools ? { tools } : { tools: undefined }) },
         },
       };
     });
@@ -272,12 +251,7 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
       const cur = state.byKey[key];
       if (!cur?.tools) return state;
       const { tools: _drop, ...rest } = cur;
-      return {
-        byKey: {
-          ...state.byKey,
-          [key]: rest,
-        },
-      };
+      return { byKey: { ...state.byKey, [key]: rest } };
     });
   },
 
@@ -308,29 +282,18 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     });
   },
 
-  getStreamText: (sessionId, messageId) => {
-    return get().byKey[streamStoreKey(sessionId, messageId)]?.text;
-  },
-
-  getStreamThinking: (sessionId, messageId) => {
-    return get().byKey[streamStoreKey(sessionId, messageId)]?.thinking;
-  },
-
-  getStreamTools: (sessionId, messageId) => {
-    return get().byKey[streamStoreKey(sessionId, messageId)]?.tools;
-  },
-
-  getStreamTool: (sessionId, messageId, toolId) => {
-    return get().byKey[streamStoreKey(sessionId, messageId)]?.tools?.[toolId];
-  },
-
-  getStreamImages: (sessionId, messageId) => {
-    return get().byKey[streamStoreKey(sessionId, messageId)]?.images;
-  },
-
-  getStreamEntry: (sessionId, messageId) => {
-    return get().byKey[streamStoreKey(sessionId, messageId)];
-  },
+  getStreamText: (sessionId, messageId) =>
+    get().byKey[streamStoreKey(sessionId, messageId)]?.text,
+  getStreamThinking: (sessionId, messageId) =>
+    get().byKey[streamStoreKey(sessionId, messageId)]?.thinking,
+  getStreamTools: (sessionId, messageId) =>
+    get().byKey[streamStoreKey(sessionId, messageId)]?.tools,
+  getStreamTool: (sessionId, messageId, toolId) =>
+    get().byKey[streamStoreKey(sessionId, messageId)]?.tools?.[toolId],
+  getStreamImages: (sessionId, messageId) =>
+    get().byKey[streamStoreKey(sessionId, messageId)]?.images,
+  getStreamEntry: (sessionId, messageId) =>
+    get().byKey[streamStoreKey(sessionId, messageId)],
 }));
 
 /** Imperative helpers (callbacks / batchers; no React). */
@@ -347,7 +310,9 @@ export function setStreamThinking(
   messageId: string,
   thinking: string
 ): void {
-  useStreamingStore.getState().setStreamThinking(sessionId, messageId, thinking);
+  useStreamingStore
+    .getState()
+    .setStreamThinking(sessionId, messageId, thinking);
 }
 
 export function setStreamTool(
@@ -356,7 +321,9 @@ export function setStreamTool(
   toolId: string,
   patch: StreamToolLive
 ): void {
-  useStreamingStore.getState().setStreamTool(sessionId, messageId, toolId, patch);
+  useStreamingStore
+    .getState()
+    .setStreamTool(sessionId, messageId, toolId, patch);
 }
 
 export function clearStreamTool(
@@ -405,7 +372,9 @@ export function getStreamTool(
   messageId: string,
   toolId: string
 ): StreamToolLive | undefined {
-  return useStreamingStore.getState().getStreamTool(sessionId, messageId, toolId);
+  return useStreamingStore
+    .getState()
+    .getStreamTool(sessionId, messageId, toolId);
 }
 
 export function getStreamEntry(
@@ -415,148 +384,7 @@ export function getStreamEntry(
   return useStreamingStore.getState().getStreamEntry(sessionId, messageId);
 }
 
-/**
- * Merge live stream text into a message view-model for timeline rendering.
- * Prefers full cumulative stream text; appends trailing delta after durable
- * blocks when tools already committed a text prefix into the session store.
- */
-export function applyStreamTextToMessage(
-  msg: {
-    text?: string | undefined;
-    blocks?: Array<{ type: string; id?: string; content?: string }> | undefined;
-  },
-  streamText: string | undefined
-): typeof msg {
-  if (streamText == null) return msg;
-  const committed = msg.text || '';
-  if (streamText === committed) return msg;
-
-  if (!msg.blocks?.length) {
-    return { ...msg, text: streamText };
-  }
-
-  const trailing =
-    committed && streamText.startsWith(committed)
-      ? streamText.slice(committed.length)
-      : committed
-        ? null
-        : streamText;
-
-  if (trailing === null) {
-    // Divergence: use stream as authoritative full text for display.
-    return { ...msg, text: streamText };
-  }
-  if (!trailing) {
-    return { ...msg, text: streamText };
-  }
-
-  const blocks = msg.blocks.map((b) => ({ ...b }));
-  const last = blocks[blocks.length - 1];
-  if (last?.type === 'text') {
-    blocks[blocks.length - 1] = {
-      ...last,
-      content: (last.content || '') + trailing,
-    };
-  } else {
-    blocks.push({ type: 'text', content: trailing });
-  }
-  return { ...msg, text: streamText, blocks };
-}
-
-type MsgWithTools = {
-  text?: string | undefined;
-  toolCalls?: MessageToolCall[] | undefined;
-  blocks?: Array<{ type: string; id?: string; content?: string }> | undefined;
-};
-
-/**
- * Merge intermediate tool rows from streamingStore into a message view-model.
- * Does not downgrade terminal session statuses (success/error).
- * Ensures tool_call blocks exist so timeline cards render live.
- */
-export function applyStreamToolsToMessage<T extends MsgWithTools>(
-  msg: T,
-  tools: Record<string, StreamToolLive> | undefined
-): T {
-  if (!tools) return msg;
-  const ids = Object.keys(tools);
-  if (ids.length === 0) return msg;
-
-  const toolCalls = [...(msg.toolCalls || [])];
-  const indexById = new Map(toolCalls.map((t, i) => [t.id, i]));
-  let changed = false;
-
-  for (const toolId of ids) {
-    const live = tools[toolId];
-    if (!live) continue;
-    const idx = indexById.get(toolId);
-    if (idx === undefined) {
-      const tc: MessageToolCall = {
-        id: toolId,
-        name: live.name || 'tool',
-        status: live.status || 'running',
-        ...(live.arguments !== undefined ? { arguments: live.arguments } : {}),
-        ...(live.explanation !== undefined
-          ? { explanation: live.explanation }
-          : {}),
-        ...(live.output !== undefined ? { output: live.output } : {}),
-        ...(live.startedAt !== undefined ? { startedAt: live.startedAt } : {}),
-        ...(live.approvalMeta !== undefined
-          ? { approvalMeta: live.approvalMeta }
-          : {}),
-      };
-      indexById.set(toolId, toolCalls.length);
-      toolCalls.push(tc);
-      changed = true;
-      continue;
-    }
-    const existing = toolCalls[idx]!;
-    // Never let intermediate lite state clobber durable terminal rows.
-    if (existing.status === 'success' || existing.status === 'error') {
-      continue;
-    }
-    const merged: MessageToolCall = {
-      ...existing,
-      ...(live.name !== undefined ? { name: live.name } : {}),
-      ...(live.arguments !== undefined ? { arguments: live.arguments } : {}),
-      ...(live.explanation !== undefined
-        ? { explanation: live.explanation }
-        : {}),
-      ...(live.status !== undefined ? { status: live.status } : {}),
-      ...(live.output !== undefined ? { output: live.output } : {}),
-      ...(live.startedAt !== undefined ? { startedAt: live.startedAt } : {}),
-      ...(live.approvalMeta !== undefined
-        ? { approvalMeta: live.approvalMeta }
-        : {}),
-    };
-    if (
-      merged.name !== existing.name ||
-      merged.arguments !== existing.arguments ||
-      merged.explanation !== existing.explanation ||
-      merged.status !== existing.status ||
-      merged.output !== existing.output ||
-      merged.startedAt !== existing.startedAt ||
-      merged.approvalMeta !== existing.approvalMeta
-    ) {
-      toolCalls[idx] = merged;
-      changed = true;
-    }
-  }
-
-  if (!changed) return msg;
-
-  const blocks = msg.blocks ? msg.blocks.map((b) => ({ ...b })) : [];
-  const inBlocks = new Set(
-    blocks
-      .filter((b) => b.type === 'tool_call' && b.id)
-      .map((b) => b.id as string)
-  );
-  for (const tc of toolCalls) {
-    if (!inBlocks.has(tc.id)) {
-      blocks.push({ type: 'tool_call', id: tc.id });
-      inBlocks.add(tc.id);
-    }
-  }
-
-  return { ...msg, toolCalls, blocks };
-}
+export {
+  applyStreamTextToMessage,
+  applyStreamToolsToMessage,
+} from '../components/chat-message/streamMessageViewModel';

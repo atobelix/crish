@@ -18,10 +18,7 @@ import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { useShallow } from '../store/useShallowSelector';
 import { useLayoutStore } from './layoutStore';
 import { sidebarSessionsEqual } from './sessionListEqual';
-import type {
-  SessionState,
-  SessionAgent,
-} from './types';
+import type { SessionState, SessionAgent } from './types';
 import type { SessionActions } from './sessionActions';
 import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
@@ -96,7 +93,7 @@ export function useSidebarSessions(searching: boolean): SessionState[] {
   return useSyncExternalStore(
     useCallback((cb: () => void) => useSessionStore.subscribe(cb), []),
     getSnapshot,
-    getSnapshot,
+    getSnapshot
   );
 }
 
@@ -185,6 +182,7 @@ export {
 
 export type { SessionActions } from './sessionActions';
 export type { SessionState, SessionAgent, SessionMessage } from './types';
+export { SessionCoordinator, deleteSessionCascade } from './SessionCoordinator';
 
 sessionRuntimeRegistry.registerActiveIdResolver(
   () => useSessionStore.getState().activeSessionId

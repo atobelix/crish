@@ -43,6 +43,8 @@ import {
   dedupeChipLabels,
   localizeRiskChips,
 } from './ApprovalRiskChips';
+import { useApprovalCountdown } from './useApprovalCountdown';
+import { useApprovalKeyboard } from './useApprovalKeyboard';
 
 type Props = {
   msgId: string;
@@ -62,10 +64,7 @@ type Props = {
   onTimeout?: (() => void) | undefined;
 };
 
-/**
- * 归一化风险事实；payload（S9 审批载荷）仅后端来源 MessageToolApprovalMeta
- * 携带，UI 归一形态 ApprovalRiskMeta 无此字段——用 in 收窄后透传。
- */
+/** 归一化风险事实与 payload 载荷 */
 function toRiskMeta(
   riskMeta?: MessageToolApprovalMeta | ApprovalRiskMeta | null
 ): (ApprovalRiskMeta & { payload?: MessageToolApprovalPayload }) | null {
@@ -91,9 +90,7 @@ function chineseZoneHint(riskMeta: ApprovalRiskMeta | null): string {
   const zone = approvalTrustZoneLabel(riskMeta.trustZone);
   const risk = approvalRiskKindLabel(riskMeta.risk);
   if (zone && risk && risk !== zone) return `${zone} · ${risk}`;
-  if (zone) return zone;
-  if (risk) return risk;
-  return '';
+  return zone || risk || '';
 }
 
 export const ApprovalAskCard: React.FC<Props> = ({
@@ -111,17 +108,11 @@ export const ApprovalAskCard: React.FC<Props> = ({
 }) => {
   const [note, setNote] = useState('');
   const [confirmArmed, setConfirmArmed] = useState(false);
-  /** 首次点击「记住并准备允许」时保留意图，二次确认后仍走 remember */
   const [rememberIntent, setRememberIntent] = useState(false);
   const prevToolIdRef = useRef<string | undefined>(toolId);
   const prevMsgIdRef = useRef(msgId);
   const allowBtnRef = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const commitLockRef = useRef(false);
-  /** 超时倒计时百分比 0-100，用于进度条宽度 */
-  const [timeoutPercent, setTimeoutPercent] = useState(100);
-  const timeoutTotalRef = useRef(remainingMs ?? 0);
-  const timeoutFiredRef = useRef(false);
 
   const titleId = useId();
   const descId = useId();
@@ -138,14 +129,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
   const chips = useMemo(() => {
     const raw = buildApprovalRiskChips(riskMeta);
     return dedupeChipLabels(localizeRiskChips(raw, riskMeta));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- riskMeta 每次渲染新引用，字段级依赖有意为之
-  }, [
-    riskMeta?.trustZone,
-    riskMeta?.risk,
-    riskMeta?.riskLevel,
-    riskMeta?.requiresDoubleConfirm,
-    riskMeta?.recommendSnapshot,
-  ]);
+  }, [riskMeta]);
 
   const zoneHint = chineseZoneHint(riskMeta);
   const hasRiskFacts = hasApprovalRiskFacts(riskMeta);
@@ -154,7 +138,6 @@ export const ApprovalAskCard: React.FC<Props> = ({
     approvalTrustZoneHint(riskMeta?.trustZone) ||
     (hasRiskFacts ? approvalRiskSummary(riskMeta) : '') ||
     zoneHint;
-  /** 仅有后端事实时才注入隐藏摘要，避免无 meta 时「缺少…」噪音 */
   const riskAriaSummary = hasRiskFacts ? approvalRiskSummary(riskMeta) : '';
 
   const showSummary = Boolean(summary && summary !== question);
@@ -163,20 +146,14 @@ export const ApprovalAskCard: React.FC<Props> = ({
   );
   const hasCmd = Boolean(cmd && cmd.trim());
   const hasExtraDesc = showSummary || showReason;
-  /** 紧凑：无命令、无长描述、chips ≤2 时降低视觉密度 */
   const density: 'compact' | 'default' =
     !hasCmd && !hasExtraDesc && chips.length <= 2 ? 'compact' : 'default';
 
   const disarm = useCallback(() => {
     setConfirmArmed(false);
     setRememberIntent(false);
-    commitLockRef.current = false;
   }, []);
 
-  /**
-   * toolId / msgId 切换或后端取消二次确认：解除武装。
-   * 与 shouldResetAllowConfirmArmed 策略一致；msgId 变化额外防护跨消息残留。
-   */
   useEffect(() => {
     const prevTool = prevToolIdRef.current;
     const nextTool = toolId;
@@ -192,153 +169,70 @@ export const ApprovalAskCard: React.FC<Props> = ({
     if (shouldReset) {
       setConfirmArmed(false);
       setRememberIntent(false);
-      commitLockRef.current = false;
     }
     prevToolIdRef.current = nextTool;
     prevMsgIdRef.current = msgId;
   }, [toolId, msgId, needsDouble]);
 
-  // busy：提交中解除武装；busy 结束后释放 commit 锁，避免父级未置 busy 时卡死
   useEffect(() => {
     if (busy) {
       setConfirmArmed(false);
       setRememberIntent(false);
-    } else {
-      commitLockRef.current = false;
     }
   }, [busy]);
 
-  // Esc：取消「再次确认」武装，不提交拒绝
-  useEffect(() => {
-    if (!confirmArmed) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        disarm();
+  const fireAllow = useCallback(
+    (remember: boolean) => {
+      if (busy) return;
+      const phase = nextAllowConfirmPhase(needsDouble, confirmArmed);
+      if (phase === 'armed') {
+        setConfirmArmed(true);
+        setRememberIntent(remember);
+        return;
       }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [confirmArmed, disarm]);
+      const doRemember = remember || rememberIntent;
+      setConfirmArmed(false);
+      setRememberIntent(false);
+      if (doRemember) onAllowRemember(note);
+      else onAllow(note);
+    },
+    [
+      busy,
+      needsDouble,
+      confirmArmed,
+      rememberIntent,
+      onAllowRemember,
+      onAllow,
+      note,
+    ]
+  );
 
-  // mount 时自动聚焦到卡片根，键盘用户立即可达。
-  // 旧实现无 auto-focus，用户需手动 Tab 多次才能到达审批按钮。
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      rootRef.current?.focus({ preventScroll: true });
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [msgId, toolId]);
-
-  // 超时倒计时进度条
-  useEffect(() => {
-    if (remainingMs == null || remainingMs <= 0) return;
-    timeoutTotalRef.current = Math.max(remainingMs, 1);
-    timeoutFiredRef.current = false;
-    setTimeoutPercent(100);
-
-    const interval = setInterval(() => {
-      const pct = Math.max(
-        0,
-        Math.min(100, (remainingMs / timeoutTotalRef.current) * 100)
-      );
-      setTimeoutPercent(pct);
-    }, 100);
-    return () => clearInterval(interval);
-  }, [remainingMs]);
-
-  // 超时触发
-  useEffect(() => {
-    if (remainingMs == null || remainingMs > 0) return;
-    if (timeoutFiredRef.current) return;
-    if (busy || commitLockRef.current) return;
-    timeoutFiredRef.current = true;
-    onTimeout?.();
-  }, [remainingMs, busy, onTimeout]);
-
-  // Focus trap：Tab / Shift+Tab 在卡片内循环，不漂回页面其他元素。
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
-      const focusable = root.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      if (e.shiftKey) {
-        if (active === first || !root.contains(active)) {
-          e.preventDefault();
-          last!.focus({ preventScroll: true });
-        }
-      } else {
-        if (active === last) {
-          e.preventDefault();
-          first!.focus({ preventScroll: true });
-        }
-      }
-    };
-    root.addEventListener('keydown', onKey);
-    return () => root.removeEventListener('keydown', onKey);
-  }, [confirmArmed]);
-
-  // Enter 快捷键：武装状态下触发允许，未武装时武装。
-  // 注意：textarea 内 Enter 仍换行（不阻止默认行为），仅在按钮焦点时触发。
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter') return;
-      // textarea 内不拦截——用户可能输入多行 note
-      const target = e.target as HTMLElement | null;
-      if (target?.tagName === 'TEXTAREA') return;
-      e.preventDefault();
-      e.stopPropagation();
-      fireAllow(false);
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-    // fireAllow 依赖 confirmArmed / busy / rememberIntent / note，需重绑
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [confirmArmed, busy, rememberIntent, note]);
-
-  // 武装后把焦点移到主允许按钮，降低误触其它控件概率
-  useEffect(() => {
-    if (!confirmArmed || busy) return;
-    const t = window.setTimeout(() => {
-      allowBtnRef.current?.focus({ preventScroll: true });
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [confirmArmed, busy]);
-
-  const fireAllow = (remember: boolean) => {
-    if (busy || commitLockRef.current) return;
-    const phase = nextAllowConfirmPhase(needsDouble, confirmArmed);
-    if (phase === 'armed') {
-      setConfirmArmed(true);
-      setRememberIntent(remember);
-      return;
-    }
-    // commit：合并首次「记住」意图与本次点击；短锁防双击连发
-    const doRemember = remember || rememberIntent;
-    commitLockRef.current = true;
-    setConfirmArmed(false);
-    setRememberIntent(false);
-    if (doRemember) onAllowRemember(note);
-    else onAllow(note);
-    window.setTimeout(() => {
-      commitLockRef.current = false;
-    }, 480);
-  };
-
-  const handleDeny = () => {
-    // 拒绝前先解除武装，避免残留 is-confirm-armed 样式
+  const handleDeny = useCallback(() => {
     if (confirmArmed || rememberIntent) disarm();
-    if (busy || commitLockRef.current) return;
+    if (busy) return;
     onDeny();
-  };
+  }, [confirmArmed, rememberIntent, disarm, busy, onDeny]);
+
+  const handleEnterAllow = useCallback(() => {
+    fireAllow(false);
+  }, [fireAllow]);
+
+  const { timeoutPercent } = useApprovalCountdown({
+    remainingMs,
+    busy,
+    onTimeout,
+  });
+
+  useApprovalKeyboard({
+    rootRef,
+    allowBtnRef,
+    confirmArmed,
+    busy: Boolean(busy),
+    msgId,
+    toolId,
+    onDisarm: disarm,
+    onEnterAllow: handleEnterAllow,
+  });
 
   const statusText = confirmArmed
     ? rememberIntent
@@ -434,7 +328,9 @@ export const ApprovalAskCard: React.FC<Props> = ({
           </div>
         </Tooltip>
       ) : null}
-      {chips.length > 0 ? <ApprovalRiskChips chips={chips} id={chipsId} /> : null}
+      {chips.length > 0 ? (
+        <ApprovalRiskChips chips={chips} id={chipsId} />
+      ) : null}
       {hasCmd ? (
         <div className={styles.approvalCardCmdWrap}>
           <span className={styles.approvalCardCmdLabel} id={cmdLabelId}>

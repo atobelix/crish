@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   flushFrame,
+  safeGraphemeCutPosition,
   safeUnicodeCutPosition,
   StreamRenderBuffer,
 } from './StreamRenderBuffer';
@@ -407,5 +408,86 @@ describe('S3 帧预算超限计数（6ms/8192B 预算热点）', () => {
 
     expect(buf.frameOverruns()).toBe(0);
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('hasEmittedFinal 终态单次派发与空残余补偿', () => {
+  it('空残余时 push("", true) 自动补偿单次 isFinal 帧', () => {
+    const buf = new StreamRenderBuffer();
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.push('', true);
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.isFinal).toBe(true);
+    expect(frames[0]!.delta).toBe('');
+    expect(frames[0]!.full).toBe('');
+  });
+
+  it('多次 flush 或多次空 final push 绝不重复派发 isFinal 帧', () => {
+    const buf = new StreamRenderBuffer();
+    const finalFrames: RenderFrame[] = [];
+    buf.onFrame = (f) => {
+      if (f.isFinal) finalFrames.push(f);
+    };
+
+    buf.push('hello', true);
+    buf.flush(true);
+    buf.flush(true);
+    buf.push('', true);
+    buf.flush(true);
+
+    expect(finalFrames).toHaveLength(1);
+    expect(finalFrames[0]!.full).toBe('hello');
+  });
+
+  it('分帧流式最后一帧恰好携带 isFinal: true', () => {
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.push('a'.repeat(100), true);
+    buf.flush(false);
+    buf.flush(true);
+
+    expect(frames.length).toBeGreaterThanOrEqual(2);
+    expect(frames[0]!.isFinal).toBe(false);
+    expect(frames[frames.length - 1]!.isFinal).toBe(true);
+    const finalCount = frames.filter((f) => f.isFinal).length;
+    expect(finalCount).toBe(1);
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('Unicode Grapheme 簇边界安全截断 (Intl.Segmenter)', () => {
+  it('safeGraphemeCutPosition 对复杂 ZWJ 表情序列整体保留不切断', () => {
+    // 👩‍💻 = \uD83D\uDC69\u200D\uD83D\uDCBB (woman technologist, UTF-16 len=5, 1 grapheme)
+    const text = 'code: 👩‍💻 rocks';
+    // 'code: ' is len 6. 👩‍💻 starts at index 6, ends at index 11.
+    // Cut at maxLen 7, 8, 9, 10 should all return 6 (the start of the ZWJ grapheme)
+    expect(safeGraphemeCutPosition(text, 7)).toBe(6);
+    expect(safeGraphemeCutPosition(text, 8)).toBe(6);
+    expect(safeGraphemeCutPosition(text, 10)).toBe(6);
+    expect(safeGraphemeCutPosition(text, 11)).toBe(11);
+  });
+
+  it('safeGraphemeCutPosition 对国旗与组合字符安全截断', () => {
+    // 🇺🇸 = \uD83C\uDDFA\uD83C\uDDF8 (Regional indicator symbols, len=4, 1 grapheme)
+    const text = 'flag 🇺🇸 here';
+    // 'flag ' is len 5. 🇺🇸 spans [5, 9).
+    expect(safeGraphemeCutPosition(text, 6)).toBe(5);
+    expect(safeGraphemeCutPosition(text, 8)).toBe(5);
+    expect(safeGraphemeCutPosition(text, 9)).toBe(9);
+  });
+
+  it('flushFrame 在 ZWJ 表情边界安全分帧', () => {
+    // 👩‍💻 = 5 chars
+    const text = 'hello 👩‍💻 world';
+    // maxBytes = 8 ('hello ' = 6, 6 + 5 = 11 > 8)
+    const result = flushFrame([text], 8, performance.now() + 1000, false);
+    expect(result.batch).toEqual(['hello ']);
+    expect(result.remaining).toEqual(['👩‍💻 world']);
   });
 });

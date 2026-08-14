@@ -163,9 +163,13 @@ export const selectSettingsActiveTab = (
   s: Pick<LayoutStore, 'settingsActiveTab'>
 ) => s.settingsActiveTab;
 
-// ── session 域只读面（CT-03 补：等价转发，零行为改动；写面仍走 layoutStore actions）──
+// ── session 域只读与生命周期协调面 ───────────────────────────────────────────
 
-export { getSessionById } from './sessionStore';
+export {
+  getSessionById,
+  SessionCoordinator,
+  deleteSessionCascade,
+} from './sessionStore';
 
 // ── 类型再导出（读面消费方经本模块取类型，避免直连 store 模块）─────────────────
 

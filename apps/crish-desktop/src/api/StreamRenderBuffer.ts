@@ -10,6 +10,7 @@
  * - flush 每帧最多处理 maxBytesPerFrame/6ms（120 FPS 适配），剩余排到下一帧
  * - reset 清空累计状态（切会话/新 run 时调用）
  * - isFinal=true 的帧不会再有后续 delta
+ * - 统一单一时钟源与 Unicode Grapheme 簇边界截断（Intl.Segmenter）
  *
  * 字段演进：
  * - frame.html：预留 JS 增量解析器（IncrementalMarkdownParser）产出的 HTML；
@@ -32,6 +33,17 @@ export interface RenderFrame {
   degraded: boolean;
 }
 
+let segmenter: Intl.Segmenter | null = null;
+function getGraphemeSegmenter(): Intl.Segmenter | null {
+  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+    if (!segmenter) {
+      segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    }
+    return segmenter;
+  }
+  return null;
+}
+
 export class StreamRenderBuffer {
   private pending: string[] = [];
   private fullText = '';
@@ -50,6 +62,8 @@ export class StreamRenderBuffer {
   private maxBacklogBytes: number | undefined;
   /** 收到 final 标记后不再接收 push，仅 flush 剩余 */
   private finalMarked = false;
+  /** 终态单次派发守卫：保证 isFinal 帧恰好派发一次 */
+  private hasEmittedFinal = false;
   /**
    * S3 帧预算超限计数（渲染健康常驻指标）：非 force flush 单帧实际耗时
    * 超过 frameBudgetMs 的次数；不随渲染修复（G-03/B6）消失。
@@ -84,7 +98,15 @@ export class StreamRenderBuffer {
   push(delta: string, isFinal = false): void {
     if (this.finalMarked) return;
     if (!delta) {
-      if (isFinal) this.markFinal();
+      if (isFinal) {
+        this.markFinal();
+        // 若无残余，立即派发终态；若有残余，确保 rAF 调度激活
+        if (this.pending.length > 0) {
+          if (this.rafId == null) this.scheduleFlush();
+        } else {
+          this.flushFrame(true);
+        }
+      }
       return;
     }
     this.pending.push(delta);
@@ -139,6 +161,7 @@ export class StreamRenderBuffer {
     this.fullText = '';
     this.flushedLength = 0;
     this.finalMarked = false;
+    this.hasEmittedFinal = false;
   }
 
   /** 启动 rAF 调度（reset 后重新开始接收 delta） */
@@ -199,15 +222,23 @@ export class StreamRenderBuffer {
   /**
    * 单帧 flush：在 budget 内拼接 delta 并回调。
    * force 时无视 maxBytesPerFrame/frameBudgetMs 全部输出。
-   *
-   * F5-06 根因修复：委托纯函数版 [flushFrame]（同文件 275 行）——旧实现是
-   * 独立副本，两版行为漂移（类方法版「batch.length===0 拆块」分支不可达，
-   * 单块超限整块单帧输出，maxBytesPerFrame/frameBudgetMs 全部失效 → 长任务
-   * 阻塞掉帧，F5-05）；单实现后行为由纯函数测试锁定。
    */
   private flushFrame(force: boolean): void {
     if (this.pending.length === 0) {
-      // 无数据时不做任何事 — push() 会在新 delta 到达时启动 rAF
+      // 空残余终态补偿：处理 pending 为空但收到 isFinal 的时序
+      if (this.finalMarked && !this.hasEmittedFinal) {
+        this.hasEmittedFinal = true;
+        this.onFrame?.({
+          delta: '',
+          full: this.fullText,
+          lastOffset: this.flushedLength,
+          isFinal: true,
+          timestamp: performance.now(),
+          html: '',
+          chunkUpdates: [],
+          degraded: false,
+        });
+      }
       return;
     }
 
@@ -240,11 +271,16 @@ export class StreamRenderBuffer {
         this.maxBacklogBytes != null &&
         this.bufferedLength() > this.maxBacklogBytes;
 
+      const isLastFrame = this.finalMarked && this.pending.length === 0;
+      if (isLastFrame) {
+        this.hasEmittedFinal = true;
+      }
+
       const frame: RenderFrame = {
         delta,
         full: this.fullText,
         lastOffset: this.flushedLength,
-        isFinal: this.finalMarked && this.pending.length === 0,
+        isFinal: isLastFrame,
         timestamp: performance.now(),
         html: '',
         chunkUpdates: [],
@@ -282,6 +318,34 @@ export function safeUnicodeCutPosition(s: string, maxLen: number): number {
 }
 
 /**
+ * 在 Unicode Grapheme (字形簇) 边界安全的位置截断字符串。
+ * 基于 Intl.Segmenter，保证不在 Emoji、ZWJ 序列、变音符号或代理对之间截断。
+ *
+ * @param s 原字符串
+ * @param maxLen 字符数上限
+ * @returns 不超过 maxLen 的最大安全字形簇下标
+ */
+export function safeGraphemeCutPosition(s: string, maxLen: number): number {
+  if (maxLen <= 0) return 0;
+  if (maxLen >= s.length) return s.length;
+
+  const seg = getGraphemeSegmenter();
+  if (seg) {
+    let lastSafeIndex = 0;
+    for (const { index } of seg.segment(s)) {
+      if (index > maxLen) {
+        return lastSafeIndex;
+      }
+      lastSafeIndex = index;
+    }
+    return lastSafeIndex;
+  }
+
+  // 降级：仅代理对检查
+  return safeUnicodeCutPosition(s, maxLen);
+}
+
+/**
  * 单帧批处理的纯函数形式：从 pending 中提取本帧可处理的内容。
  *
  * @param pending       待处理的 delta 块数组（调用方 slice 传入）
@@ -311,10 +375,35 @@ export function flushFrame(
         splitAt = i;
         break;
       }
-      const cutPos = safeUnicodeCutPosition(chunk, maxBytes);
-      if (cutPos < chunk.length) {
+      const budget = maxBytes - bytesInBatch;
+      const cutPos = safeGraphemeCutPosition(chunk, budget);
+      if (cutPos > 0 && cutPos < chunk.length) {
         batch.push(chunk.slice(0, cutPos));
         const remaining = [chunk.slice(cutPos), ...pending.slice(i + 1)];
+        return { batch, remaining };
+      } else if (cutPos === 0) {
+        // 当单字符簇长度超过 budget 时，至少输出 1 个完整字形簇，避免永久阻塞
+        const seg = getGraphemeSegmenter();
+        let firstGraphemeLen = 0;
+        if (seg) {
+          for (const s of seg.segment(chunk)) {
+            firstGraphemeLen = s.segment.length;
+            break;
+          }
+        }
+        if (firstGraphemeLen === 0) {
+          firstGraphemeLen =
+            chunk.length > 1 &&
+            chunk.charCodeAt(0) >= 0xd800 &&
+            chunk.charCodeAt(0) <= 0xdbff
+              ? 2
+              : 1;
+        }
+        batch.push(chunk.slice(0, firstGraphemeLen));
+        const remaining = [
+          chunk.slice(firstGraphemeLen),
+          ...pending.slice(i + 1),
+        ];
         return { batch, remaining };
       }
     }

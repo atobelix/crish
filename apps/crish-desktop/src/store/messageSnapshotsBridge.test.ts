@@ -10,18 +10,30 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionMessage } from './types';
 import { MessageSnapshots } from '../api/MessageSnapshots';
+import { VirtualScrollManager } from '../api/VirtualScrollManager';
 import {
   bindMessageSnapshotsOps,
   clearMessageSnapshots,
+  registerActiveVsm,
+  unregisterActiveVsm,
   saveMessageSnapshot,
+  saveSessionSnapshot,
   type SnapshotSaveEntry,
 } from './messageSnapshotsBridge';
 
 function msg(id: string, text = id): SessionMessage {
-  return { id, sender: id.startsWith('a') ? 'assistant' : 'user', text, timestamp: 1 };
+  return {
+    id,
+    sender: id.startsWith('a') ? 'assistant' : 'user',
+    text,
+    timestamp: 1,
+  };
 }
 
-function makeEntry(sessionId: string, messages: SessionMessage[]): SnapshotSaveEntry {
+function makeEntry(
+  sessionId: string,
+  messages: SessionMessage[]
+): SnapshotSaveEntry {
   return {
     sessionId,
     operation: 'withdraw',
@@ -46,14 +58,18 @@ describe('messageSnapshotsBridge — 接线行为锁', () => {
     const snapshots = new MessageSnapshots();
     bindMessageSnapshotsOps({
       save: (sessionId, entry, options) =>
-        snapshots.save(sessionId, entry, { afterMessages: options?.afterMessages ?? [] }),
+        snapshots.save(sessionId, entry, {
+          afterMessages: options?.afterMessages ?? [],
+        }),
       clearSession: (sessionId) => snapshots.clearSession(sessionId),
     });
 
     const sessionId = 's-save';
     const prev = [msg('u1'), msg('a1'), msg('u2'), msg('a2')];
     const after = [msg('u1'), msg('a1')];
-    const ret = saveMessageSnapshot(sessionId, makeEntry(sessionId, prev), { afterMessages: after });
+    const ret = saveMessageSnapshot(sessionId, makeEntry(sessionId, prev), {
+      afterMessages: after,
+    });
 
     expect(ret).toBeUndefined(); // 包装函数契约：返回 void
     expect(snapshots.getStack(sessionId)).toHaveLength(1);
@@ -68,17 +84,27 @@ describe('messageSnapshotsBridge — 接线行为锁', () => {
     const snapshots = new MessageSnapshots();
     bindMessageSnapshotsOps({
       save: (sessionId, entry, options) =>
-        snapshots.save(sessionId, entry, { afterMessages: options?.afterMessages ?? [] }),
+        snapshots.save(sessionId, entry, {
+          afterMessages: options?.afterMessages ?? [],
+        }),
       clearSession: (sessionId) => snapshots.clearSession(sessionId),
     });
 
     const sessionId = 's-clear';
-    saveMessageSnapshot(sessionId, makeEntry(sessionId, [msg('u1'), msg('a1'), msg('u2')]), {
-      afterMessages: [msg('u1'), msg('a1')],
-    });
-    saveMessageSnapshot(sessionId, makeEntry(sessionId, [msg('u1'), msg('a1')]), {
-      afterMessages: [msg('u1')],
-    });
+    saveMessageSnapshot(
+      sessionId,
+      makeEntry(sessionId, [msg('u1'), msg('a1'), msg('u2')]),
+      {
+        afterMessages: [msg('u1'), msg('a1')],
+      }
+    );
+    saveMessageSnapshot(
+      sessionId,
+      makeEntry(sessionId, [msg('u1'), msg('a1')]),
+      {
+        afterMessages: [msg('u1')],
+      }
+    );
     expect(snapshots.getStack(sessionId)).toHaveLength(2);
 
     clearMessageSnapshots(sessionId);
@@ -92,28 +118,97 @@ describe('messageSnapshotsBridge — 接线行为锁', () => {
     const instanceB = new MessageSnapshots();
     const opsA: Parameters<typeof bindMessageSnapshotsOps>[0] = {
       save: (sessionId, entry, options) =>
-        instanceA.save(sessionId, entry, { afterMessages: options?.afterMessages ?? [] }),
+        instanceA.save(sessionId, entry, {
+          afterMessages: options?.afterMessages ?? [],
+        }),
       clearSession: (sessionId) => instanceA.clearSession(sessionId),
     };
     const opsB: Parameters<typeof bindMessageSnapshotsOps>[0] = {
       save: (sessionId, entry, options) =>
-        instanceB.save(sessionId, entry, { afterMessages: options?.afterMessages ?? [] }),
+        instanceB.save(sessionId, entry, {
+          afterMessages: options?.afterMessages ?? [],
+        }),
       clearSession: (sessionId) => instanceB.clearSession(sessionId),
     };
 
     bindMessageSnapshotsOps(opsA);
     expect(() => bindMessageSnapshotsOps(opsA)).not.toThrow(); // 同实例重复绑定幂等
 
-    saveMessageSnapshot('s-rebind', makeEntry('s-rebind', [msg('u1'), msg('a1')]), {
-      afterMessages: [msg('u1')],
-    });
+    saveMessageSnapshot(
+      's-rebind',
+      makeEntry('s-rebind', [msg('u1'), msg('a1')]),
+      {
+        afterMessages: [msg('u1')],
+      }
+    );
     expect(instanceA.getStack('s-rebind')).toHaveLength(1);
 
     bindMessageSnapshotsOps(opsB); // 替换：以最后一次为准
-    saveMessageSnapshot('s-rebind', makeEntry('s-rebind', [msg('u1'), msg('a1')]), {
-      afterMessages: [msg('u1')],
-    });
+    saveMessageSnapshot(
+      's-rebind',
+      makeEntry('s-rebind', [msg('u1'), msg('a1')]),
+      {
+        afterMessages: [msg('u1')],
+      }
+    );
     expect(instanceB.getStack('s-rebind')).toHaveLength(1); // 新绑定生效
     expect(instanceA.getStack('s-rebind')).toHaveLength(1); // 旧实例不再接收
+  });
+
+  it('自动捕获已注册 VSM 的实测高度并在 delta 中持久化', () => {
+    const snapshots = new MessageSnapshots();
+    bindMessageSnapshotsOps({
+      save: (sessionId, entry, options) =>
+        snapshots.save(sessionId, entry, {
+          afterMessages: options?.afterMessages ?? [],
+          heightMap: options?.heightMap,
+        }),
+      clearSession: (sessionId) => snapshots.clearSession(sessionId),
+    });
+
+    const sessionId = 's-vsm-capture';
+    const vsm = new VirtualScrollManager(120);
+    vsm.syncOrder(['u1', 'a1']);
+    vsm.setActual('u1', 65);
+    vsm.setActual('a1', 750);
+
+    registerActiveVsm(sessionId, vsm);
+
+    const prev = [msg('u1'), msg('a1')];
+    const after = [msg('u1')];
+
+    saveMessageSnapshot(sessionId, makeEntry(sessionId, prev), {
+      afterMessages: after,
+    });
+
+    const delta = snapshots.peekDelta(sessionId);
+    expect(delta?.heightMap).toEqual({
+      a1: 750,
+    });
+
+    unregisterActiveVsm(sessionId);
+  });
+
+  it('saveSessionSnapshot 辅助函数正常工作', () => {
+    const snapshots = new MessageSnapshots();
+    bindMessageSnapshotsOps({
+      save: (sessionId, entry, options) =>
+        snapshots.save(sessionId, entry, {
+          afterMessages: options?.afterMessages ?? [],
+          heightMap: options?.heightMap,
+        }),
+      clearSession: (sessionId) => snapshots.clearSession(sessionId),
+    });
+
+    const sessionId = 's-sess-helper';
+    const prev = [msg('u1'), msg('a1')];
+    const after = [msg('u1')];
+    const vsm = new VirtualScrollManager(120);
+    vsm.setActual('a1', 820);
+
+    saveSessionSnapshot(sessionId, 'withdraw', prev, after, vsm);
+
+    const delta = snapshots.peekDelta(sessionId);
+    expect(delta?.heightMap).toEqual({ a1: 820 });
   });
 });

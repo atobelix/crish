@@ -29,7 +29,10 @@ const FALLBACK_HEIGHT = 120;
 
 export class VirtualScrollManager {
   /** 以 messageId 为键存储高度；estimated 始终为正数，actual 可为 null（待测量） */
-  private heightsById = new Map<string, { estimated: number; actual: number | null }>();
+  private heightsById = new Map<
+    string,
+    { estimated: number; actual: number | null }
+  >();
   /** 当前可见窗口的消息 ID 顺序 */
   private order: string[] = [];
   private fallbackHeight: number;
@@ -44,7 +47,9 @@ export class VirtualScrollManager {
 
   constructor(fallbackHeight?: number) {
     this.fallbackHeight =
-      fallbackHeight != null && Number.isFinite(fallbackHeight) && fallbackHeight > 0
+      fallbackHeight != null &&
+      Number.isFinite(fallbackHeight) &&
+      fallbackHeight > 0
         ? Math.floor(fallbackHeight)
         : FALLBACK_HEIGHT;
   }
@@ -117,7 +122,8 @@ export class VirtualScrollManager {
    * @returns 是否实际变更（同值跳过时 false；T4.1 R-04 断言口径）
    */
   setActual(id: string, height: number, callerGeneration?: number): boolean {
-    if (callerGeneration !== undefined && callerGeneration !== this.generation) return false;
+    if (callerGeneration !== undefined && callerGeneration !== this.generation)
+      return false;
     if (!id) return false;
     if (!Number.isFinite(height) || height <= 0) return false;
     const safeHeight = height;
@@ -153,15 +159,50 @@ export class VirtualScrollManager {
   }
 
   /**
-   * 标记 actual 为 stale，并重置 estimated 到 fallback，
-   * 使 getHeight 真正回落（而非残留旧 actual 同步写入的 estimated），
-   * 以便 ResizeObserver 重新测量。
+   * 关键修复：作废 actual 时，保持 entry.estimated 为上一次测量值或已设值，
+   * 绝对禁止无条件重置为 fallbackHeight (120px)！
+   * 以便 ResizeObserver 重新测量期间平滑过渡，杜绝 120px 阶跃暴跌与视口抖动。
    */
   invalidateActual(id: string): void {
     const entry = this.heightsById.get(id);
     if (entry) {
+      const lastKnownHeight = entry.actual ?? entry.estimated;
       entry.actual = null;
-      entry.estimated = this.fallbackHeight;
+      entry.estimated =
+        lastKnownHeight > 0 ? lastKnownHeight : this.fallbackHeight;
+      this.markDirty();
+    }
+  }
+
+  /**
+   * 预置精确高度映射（批量回灌快照元数据）。
+   * 在撤销或历史还原时，原子回灌实测高度，保持 estimated 处于实测高度，
+   * 使 offsetsCache 与视口位置立即精准生效，杜绝 120px 粗估暴跌。
+   */
+  hydrateHeightMap(heightMap: Readonly<Record<string, number>>): void {
+    if (!heightMap) return;
+    let touched = false;
+    for (const [id, h] of Object.entries(heightMap)) {
+      if (!id || typeof h !== 'number' || !Number.isFinite(h) || h <= 0)
+        continue;
+      const safeHeight = h;
+      const entry = this.heightsById.get(id);
+      if (!entry) {
+        this.heightsById.set(id, { estimated: safeHeight, actual: null });
+        touched = true;
+      } else if (entry.actual == null && entry.estimated !== safeHeight) {
+        entry.estimated = safeHeight;
+        touched = true;
+      } else if (
+        entry.actual != null &&
+        (entry.actual !== safeHeight || entry.estimated !== safeHeight)
+      ) {
+        entry.actual = safeHeight;
+        entry.estimated = safeHeight;
+        touched = true;
+      }
+    }
+    if (touched) {
       this.markDirty();
     }
   }
@@ -207,17 +248,27 @@ export class VirtualScrollManager {
     scrollTop: number,
     viewportHeight: number,
     itemCount: number,
-    overscan: number,
+    overscan: number
   ): VisibleRange {
     const count = normalizeNonNegInt(itemCount);
     if (count === 0) {
-      return { startIndex: 0, endIndex: 0, startOffset: 0, estimatedTotalHeight: 0 };
+      return {
+        startIndex: 0,
+        endIndex: 0,
+        startOffset: 0,
+        estimatedTotalHeight: 0,
+      };
     }
     const safeScrollTop = normalizeNonNegFloat(scrollTop);
     const safeViewportHeight = normalizePositiveFloat(viewportHeight, 600);
     const safeOverscan = normalizeNonNegInt(overscan);
-    const startIndex = Math.max(0, this.findIndexAtOffset(safeScrollTop) - safeOverscan);
-    const visibleEnd = this.findIndexAtOffset(safeScrollTop + safeViewportHeight);
+    const startIndex = Math.max(
+      0,
+      this.findIndexAtOffset(safeScrollTop) - safeOverscan
+    );
+    const visibleEnd = this.findIndexAtOffset(
+      safeScrollTop + safeViewportHeight
+    );
     const endIndex = Math.min(count, visibleEnd + 1 + safeOverscan);
     return {
       startIndex,
@@ -259,7 +310,12 @@ export class VirtualScrollManager {
   }
 
   private ensureOffsets(upTo: number): void {
-    if (!this.dirty && this.offsetsCache != null && this.offsetsCache.length >= upTo) return;
+    if (
+      !this.dirty &&
+      this.offsetsCache != null &&
+      this.offsetsCache.length >= upTo
+    )
+      return;
     this.rebuildOffsets(upTo);
   }
 
@@ -286,16 +342,19 @@ export class VirtualScrollManager {
 // ── 归一化工具 ─────────────────────────────────────────────────────────
 
 function normalizeNonNegInt(value: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    return 0;
   return Math.floor(value);
 }
 
 function normalizeNonNegFloat(value: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    return 0;
   return value;
 }
 
 function normalizePositiveFloat(value: number, fallback: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+    return fallback;
   return value;
 }
